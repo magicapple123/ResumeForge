@@ -1,0 +1,25 @@
+/* 全局基础样式（组件样式由 antd 管理，这里只做布局兜底） */
+body {
+  margin: 0;
+  font-family:
+    -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* 简历预览 iframe 在弹窗中占满可用高度 */
+.resume-iframe {
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+}
+
+/* 生成过程的流式文本区域：等宽字体、可滚动 */
+.stream-text {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

@@ -1,0 +1,12 @@
+# 版本锁定，保证 clone 后环境一致
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.40
+pydantic==2.11.3
+pydantic-settings==2.9.1
+httpx==0.28.1
+jinja2==3.1.6
+
+# 测试
+pytest==8.3.5
+pytest-asyncio==0.25.3

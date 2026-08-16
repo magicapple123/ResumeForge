@@ -1,0 +1,71 @@
+/** 简历相关接口：生成（SSE）、历史、渲染预览、导出下载。 */
+import type { GenerateOptions, Page, ResumeBrief, ResumeContent, ResumeDetail, StreamEvent } from "../types";
+import { ApiError, buildQuery, extractError, request } from "./client";
+import { consumeSSE } from "./stream";
+
+export type ExportFormat = "json" | "md" | "html";
+
+export function listResumes(params: { keyword?: string; page?: number; page_size?: number } = {}): Promise<Page<ResumeBrief>> {
+  return request(`/resumes${buildQuery(params)}`);
+}
+
+export function getResume(id: number): Promise<ResumeDetail> {
+  return request(`/resumes/${id}`);
+}
+
+export function deleteResume(id: number): Promise<void> {
+  return request(`/resumes/${id}`, { method: "DELETE" });
+}
+
+/** 流式生成简历，事件定义见 types/StreamEvent */
+export function generateResume(
+  payload: { job_id: number; options: GenerateOptions },
+  onEvent: (event: StreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return consumeSSE("/resumes/generate", payload, onEvent, signal);
+}
+
+/** 渲染简历内容为 HTML（生成完成后、落库前的即时预览） */
+export async function renderResume(content: ResumeContent): Promise<string> {
+  const resp = await fetch("/api/resumes/render", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(content),
+  });
+  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
+  return resp.text();
+}
+
+/** 导出为文件（html/md/json），返回 blob 与服务端建议的文件名 */
+export async function exportResume(
+  id: number,
+  format: ExportFormat,
+): Promise<{ blob: Blob; filename: string }> {
+  const resp = await fetch(`/api/resumes/${id}/export?format=${format}`);
+  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
+  return {
+    blob: await resp.blob(),
+    filename: getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? `resume.${format}`,
+  };
+}
+
+/** 读取导出 HTML 文本（用于打开打印窗口生成 PDF） */
+export async function fetchResumeHtml(id: number): Promise<string> {
+  const { blob } = await exportResume(id, "html");
+  return blob.text();
+}
+
+function getFilenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf8Match) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const plainMatch = /filename="?([^";]+)"?/i.exec(header);
+  return plainMatch ? plainMatch[1] : null;
+}
