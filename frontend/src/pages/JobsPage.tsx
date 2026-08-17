@@ -1,7 +1,9 @@
 /** 岗位广场：搜索筛选、手动添加、详情与生成简历入口。 */
 import {
+  CheckSquareOutlined,
   CheckOutlined,
-  CloseOutlined,
+  ClearOutlined,
+  CloseCircleOutlined,
   DeleteOutlined,
   PlusOutlined,
   StarFilled,
@@ -49,6 +51,7 @@ export default function JobsPage() {
   const [batchStatus, setBatchStatus] = useState<string>();
   const [batchAction, setBatchAction] = useState<BatchAction>(null);
   const [favoriteJobId, setFavoriteJobId] = useState<number | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
 
   const {
     data: jobs,
@@ -145,6 +148,13 @@ export default function JobsPage() {
     } finally {
       setBatchAction(null);
     }
+  };
+
+  const exitSelectionMode = () => {
+    if (batchAction !== null) return;
+    setSelectionMode(false);
+    setSelectedJobIds([]);
+    setBatchStatus(undefined);
   };
 
   const rowSelection: TableRowSelection<Job> = {
@@ -318,6 +328,23 @@ export default function JobsPage() {
             }}
             options={STATUS_OPTIONS}
           />
+          {selectionMode ? (
+            <Button
+              icon={<CloseCircleOutlined />}
+              disabled={batchAction !== null}
+              onClick={exitSelectionMode}
+            >
+              退出选择
+            </Button>
+          ) : (
+            <Button
+              icon={<CheckSquareOutlined />}
+              disabled={batchAction !== null}
+              onClick={() => setSelectionMode(true)}
+            >
+              选择
+            </Button>
+          )}
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -329,57 +356,59 @@ export default function JobsPage() {
         </Space>
       </div>
 
-      <Space style={{ marginBottom: 12, minHeight: 32 }} wrap>
-        <Typography.Text type="secondary">已选 {selectedJobIds.length} 个岗位</Typography.Text>
-        <Button
-          icon={<CloseOutlined />}
-          disabled={selectedJobIds.length === 0 || batchAction !== null}
-          onClick={() => {
-            setSelectedJobIds([]);
-            setBatchStatus(undefined);
-          }}
-        >
-          清空选择
-        </Button>
-        <Select
-          placeholder="批量设置状态"
-          value={batchStatus}
-          options={STATUS_OPTIONS}
-          style={{ width: 150 }}
-          disabled={selectedJobIds.length === 0 || batchAction !== null}
-          onChange={setBatchStatus}
-        />
-        <Button
-          icon={<CheckOutlined />}
-          disabled={selectedJobIds.length === 0 || !batchStatus || batchAction !== null}
-          loading={batchAction === "status"}
-          onClick={() => void applyBatchStatus()}
-        >
-          应用状态
-        </Button>
-        <Popconfirm
-          title={`确定删除选中的 ${selectedJobIds.length} 个岗位？`}
-          description="删除后无法恢复"
-          okText="删除"
-          cancelText="取消"
-          okButtonProps={{ danger: true }}
-          disabled={selectedJobIds.length === 0 || batchAction !== null}
-          onConfirm={() => removeSelectedJobs()}
-        >
+      {selectionMode && (
+        <Space style={{ marginBottom: 12, minHeight: 32 }} wrap>
+          <Typography.Text type="secondary">已选 {selectedJobIds.length} 个岗位</Typography.Text>
           <Button
-            danger
-            icon={<DeleteOutlined />}
+            icon={<ClearOutlined />}
             disabled={selectedJobIds.length === 0 || batchAction !== null}
-            loading={batchAction === "delete"}
+            onClick={() => {
+              setSelectedJobIds([]);
+              setBatchStatus(undefined);
+            }}
           >
-            批量删除
+            清空选择
           </Button>
-        </Popconfirm>
-      </Space>
+          <Select
+            placeholder="批量设置状态"
+            value={batchStatus}
+            options={STATUS_OPTIONS}
+            style={{ width: 150 }}
+            disabled={selectedJobIds.length === 0 || batchAction !== null}
+            onChange={setBatchStatus}
+          />
+          <Button
+            icon={<CheckOutlined />}
+            disabled={selectedJobIds.length === 0 || !batchStatus || batchAction !== null}
+            loading={batchAction === "status"}
+            onClick={() => void applyBatchStatus()}
+          >
+            应用状态
+          </Button>
+          <Popconfirm
+            title={`确定删除选中的 ${selectedJobIds.length} 个岗位？`}
+            description="删除后无法恢复"
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            disabled={selectedJobIds.length === 0 || batchAction !== null}
+            onConfirm={() => removeSelectedJobs()}
+          >
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              disabled={selectedJobIds.length === 0 || batchAction !== null}
+              loading={batchAction === "delete"}
+            >
+              批量删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      )}
 
       <Table
         rowKey="id"
-        rowSelection={rowSelection}
+        rowSelection={selectionMode ? rowSelection : undefined}
         columns={columns}
         dataSource={jobs?.items ?? []}
         loading={loading}
