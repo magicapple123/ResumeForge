@@ -5,9 +5,13 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.job import Job
+from ..models.job import JOB_STATUSES, Job
 from ..schemas.common import Page
 from ..schemas.job import (
+    JobBatchDeleteResult,
+    JobBatchRequest,
+    JobBatchStatusRequest,
+    JobBatchStatusResult,
     JobCreate,
     JobOut,
     JobTextParseRequest,
@@ -24,10 +28,28 @@ def _to_out(job: Job) -> JobOut:
     return JobOut.model_validate(job)
 
 
+def _get_jobs_or_404(db: Session, job_ids: list[int]) -> list[Job]:
+    jobs = db.query(Job).filter(Job.id.in_(job_ids)).all()
+    found_ids = {job.id for job in jobs}
+    missing_ids = [job_id for job_id in job_ids if job_id not in found_ids]
+    if missing_ids:
+        missing = "、".join(str(job_id) for job_id in missing_ids)
+        raise HTTPException(status_code=404, detail=f"以下岗位不存在或已被删除：{missing}")
+    return jobs
+
+
+def _commit_batch(db: Session) -> None:
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+
 @router.get("", response_model=Page[JobOut])
 def list_jobs(
     db: Session = Depends(get_db),
-    keyword: str = Query(default="", description="按标题/公司/城市/描述模糊匹配"),
+    keyword: str = Query(default="", description="按标题/公司/城市/描述/备注模糊匹配"),
     job_type: str = Query(default=""),
     status: str = Query(default=""),
     page: int = Query(default=1, ge=1),
@@ -37,7 +59,13 @@ def list_jobs(
     if keyword:
         like = f"%{keyword}%"
         query = query.filter(
-            or_(Job.title.like(like), Job.company.like(like), Job.location.like(like), Job.description.like(like))
+            or_(
+                Job.title.like(like),
+                Job.company.like(like),
+                Job.location.like(like),
+                Job.description.like(like),
+                Job.note.like(like),
+            )
         )
     if job_type:
         query = query.filter(Job.job_type == job_type)
@@ -63,6 +91,28 @@ def create_job(payload: JobCreate, db: Session = Depends(get_db)):
 def parse_job_text_draft(payload: JobTextParseRequest):
     """把用户粘贴的招聘信息解析为草稿；确认后仍由新增岗位接口入库。"""
     return parse_job_text(payload.text)
+
+
+@router.post("/batch-status", response_model=JobBatchStatusResult)
+def batch_update_job_status(payload: JobBatchStatusRequest, db: Session = Depends(get_db)):
+    if payload.status not in JOB_STATUSES:
+        allowed = "、".join(JOB_STATUSES)
+        raise HTTPException(status_code=400, detail=f"无效的岗位状态，可选值：{allowed}")
+
+    jobs = _get_jobs_or_404(db, payload.job_ids)
+    for job in jobs:
+        job.status = payload.status
+    _commit_batch(db)
+    return JobBatchStatusResult(updated=len(jobs))
+
+
+@router.post("/batch-delete", response_model=JobBatchDeleteResult)
+def batch_delete_jobs(payload: JobBatchRequest, db: Session = Depends(get_db)):
+    jobs = _get_jobs_or_404(db, payload.job_ids)
+    for job in jobs:
+        db.delete(job)
+    _commit_batch(db)
+    return JobBatchDeleteResult(deleted=len(jobs))
 
 
 @router.get("/{job_id}", response_model=JobOut)

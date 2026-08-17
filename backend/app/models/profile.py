@@ -31,6 +31,7 @@ class UserProfile(Base):
     job_intent: Mapped[str] = mapped_column(String(128), default="")  # 求职意向
     personal_website: Mapped[str] = mapped_column(String(256), default="")
     github: Mapped[str] = mapped_column(String(256), default="")
+    photo: Mapped[str] = mapped_column(Text, default="")  # 受限的 base64 图片 data URL
     summary: Mapped[str] = mapped_column(Text, default="")  # 个人总结/自我评价
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 

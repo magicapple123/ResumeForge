@@ -281,6 +281,8 @@ class ResumeGenerator:
             yield {"type": "error", "message": "模型输出未能解析为有效 JSON，请更换模型或重试"}
             return
 
+        # 照片不发送给 LLM，避免无意义地占用上下文；解析完成后从已校验资料注入。
+        resume = resume.model_copy(update={"photo": profile.photo})
         warnings = check_consistency(resume, profile)
         yield {"type": "done", "resume": resume.model_dump(), "warnings": warnings}
 

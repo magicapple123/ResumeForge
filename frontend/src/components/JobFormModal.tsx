@@ -184,6 +184,14 @@ export default function JobFormModal({ open, initial, onClose, onSaved }: Props)
         <Form.Item name="requirements" label="任职要求（选填）">
           <Input.TextArea rows={3} placeholder="可单独填写任职要求，没有可留空" />
         </Form.Item>
+        <Form.Item name="note" label="备注（选填）">
+          <Input.TextArea
+            rows={3}
+            maxLength={2000}
+            showCount
+            placeholder="记录投递进展、内推联系人、面试安排等"
+          />
+        </Form.Item>
       </Form>
     </Modal>
   );

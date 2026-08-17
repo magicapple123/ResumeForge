@@ -31,6 +31,7 @@ def search(
                     Job.company.like(like),
                     Job.location.like(like),
                     Job.description.like(like),
+                    Job.note.like(like),
                 )
             )
             .order_by(Job.created_at.desc())

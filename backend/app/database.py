@@ -3,9 +3,11 @@
 选用 SQLite：单用户本地应用，零部署成本；后续需要多用户时
 换 PostgreSQL 只需改 DATABASE_URL 并替换 JSON 列写法。
 """
+from collections.abc import Mapping
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import get_settings
@@ -38,6 +40,35 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 class Base(DeclarativeBase):
     """所有 ORM 模型的基类。"""
+
+
+def ensure_sqlite_columns(
+    bind: Engine,
+    required_columns: Mapping[str, Mapping[str, str]],
+) -> None:
+    """为已有 SQLite 表补充缺失列；重复执行不会改动现有结构或数据。
+
+    ``create_all`` 只会创建缺失的表，不会升级旧表。这里保留一个最小的
+    列级兼容层；列定义来自代码内的可信常量，不接受用户输入。
+    """
+    if bind.dialect.name != "sqlite":
+        return
+
+    quote = bind.dialect.identifier_preparer.quote
+    with bind.begin() as connection:
+        inspector = inspect(connection)
+        existing_tables = set(inspector.get_table_names())
+        for table_name, columns in required_columns.items():
+            if table_name not in existing_tables:
+                continue
+            existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+            for column_name, column_ddl in columns.items():
+                if column_name in existing_columns:
+                    continue
+                connection.exec_driver_sql(
+                    f"ALTER TABLE {quote(table_name)} ADD COLUMN {quote(column_name)} {column_ddl}"
+                )
+                existing_columns.add(column_name)
 
 
 def get_db():

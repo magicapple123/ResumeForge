@@ -1,4 +1,4 @@
-"""应用入口：装配中间件与路由、配置日志、启动时建表。"""
+"""应用入口：装配中间件与路由、配置日志、启动时升级数据库。"""
 import logging
 from contextlib import asynccontextmanager
 
@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import models  # noqa: F401 - 确保全部模型注册到 Base.metadata
 from .api import jobs, profile, resumes, search, settings as settings_api, stats
 from .config import get_settings
-from .database import Base, engine
+from .database import Base, engine, ensure_sqlite_columns
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,8 +20,15 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # 本地单用户应用直接建表即可；后续演进可替换为 Alembic 迁移
+    # create_all 不会给已有表加列；本地 SQLite 用幂等兼容升级保留历史数据。
     Base.metadata.create_all(bind=engine)
+    ensure_sqlite_columns(
+        engine,
+        {
+            "job": {"note": "TEXT NOT NULL DEFAULT ''"},
+            "user_profile": {"photo": "TEXT NOT NULL DEFAULT ''"},
+        },
+    )
     yield
 
 

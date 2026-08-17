@@ -1,10 +1,11 @@
 /** 岗位广场：搜索筛选、手动添加、详情与生成简历入口。 */
-import { PlusOutlined } from "@ant-design/icons";
-import { App, Button, Input, Popconfirm, Select, Space, Table, Typography } from "antd";
+import { CheckOutlined, CloseOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { App, Button, Input, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { TableRowSelection } from "antd/es/table/interface";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { deleteJob, listJobs } from "../api/jobs";
+import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, listJobs } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
 import JobFormModal from "../components/JobFormModal";
@@ -15,6 +16,13 @@ import { formatDateTime } from "../utils/format";
 
 const JOB_TYPE_OPTIONS = ["校招", "实习", "社招", "其他"].map((value) => ({ value, label: value }));
 const STATUS_OPTIONS = ["开放中", "已截止", "已投递"].map((value) => ({ value, label: value }));
+const STATUS_COLORS: Record<string, string> = {
+  开放中: "green",
+  已截止: "default",
+  已投递: "blue",
+};
+
+type BatchAction = "status" | "delete" | null;
 
 export default function JobsPage() {
   const [searchParams] = useSearchParams();
@@ -30,8 +38,16 @@ export default function JobsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [generateJob, setGenerateJob] = useState<Job | null>(null);
+  const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
+  const [batchStatus, setBatchStatus] = useState<string>();
+  const [batchAction, setBatchAction] = useState<BatchAction>(null);
 
-  const { data: jobs, loading, reload, error } = useApi(
+  const {
+    data: jobs,
+    loading,
+    reload,
+    error,
+  } = useApi(
     () => listJobs({ keyword, job_type: jobType, status, page, page_size: pageSize }),
     [keyword, jobType, status, page, pageSize],
   );
@@ -44,6 +60,7 @@ export default function JobsPage() {
     async (id: number) => {
       try {
         await deleteJob(id);
+        setSelectedJobIds((current) => current.filter((jobId) => jobId !== id));
         message.success("岗位已删除");
         void reload();
       } catch (err) {
@@ -53,6 +70,72 @@ export default function JobsPage() {
     [message, reload],
   );
 
+  const applyBatchStatus = async () => {
+    if (selectedJobIds.length === 0) {
+      message.warning("请先选择岗位");
+      return;
+    }
+    if (!batchStatus) {
+      message.warning("请选择要设置的状态");
+      return;
+    }
+
+    const jobIds = [...selectedJobIds];
+    const nextStatus = batchStatus;
+    setBatchAction("status");
+    try {
+      const result = await batchUpdateJobStatus({ job_ids: jobIds, status: nextStatus });
+      setSelectedJobIds([]);
+      setBatchStatus(undefined);
+      setDetailJob((current) =>
+        current && jobIds.includes(current.id) ? { ...current, status: nextStatus } : current,
+      );
+      await reload();
+      message.success(`已更新 ${result.updated} 个岗位的状态`);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "批量更新状态失败");
+    } finally {
+      setBatchAction(null);
+    }
+  };
+
+  const removeSelectedJobs = async () => {
+    if (selectedJobIds.length === 0) {
+      message.warning("请先选择岗位");
+      return;
+    }
+
+    const jobIds = [...selectedJobIds];
+    setBatchAction("delete");
+    try {
+      const result = await batchDeleteJobs({ job_ids: jobIds });
+      setSelectedJobIds([]);
+      setBatchStatus(undefined);
+      setDetailJob((current) => (current && jobIds.includes(current.id) ? null : current));
+      if (page !== 1) setPage(1);
+      await reload();
+      message.success(`已删除 ${result.deleted} 个岗位`);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "批量删除失败");
+    } finally {
+      setBatchAction(null);
+    }
+  };
+
+  const rowSelection: TableRowSelection<Job> = {
+    selectedRowKeys: selectedJobIds,
+    preserveSelectedRowKeys: true,
+    onChange: (keys) => {
+      const jobIds = keys.map(Number);
+      if (jobIds.length > 500) {
+        message.warning("一次最多选择 500 个岗位");
+        return;
+      }
+      setSelectedJobIds(jobIds);
+    },
+    getCheckboxProps: () => ({ disabled: batchAction !== null }),
+  };
+
   const columns: ColumnsType<Job> = [
     {
       title: "职位",
@@ -60,7 +143,12 @@ export default function JobsPage() {
       width: 260,
       render: (_, job) => (
         <div>
-          <Typography.Link onClick={() => setDetailJob(job)}>{job.title}</Typography.Link>
+          <Typography.Link
+            disabled={batchAction !== null}
+            onClick={batchAction === null ? () => setDetailJob(job) : undefined}
+          >
+            {job.title}
+          </Typography.Link>
           <div style={{ marginTop: 4 }}>
             <SkillTags tags={job.keywords} max={4} />
           </div>
@@ -71,6 +159,28 @@ export default function JobsPage() {
     { title: "城市", dataIndex: "location", width: 90, render: (value) => value || "-" },
     { title: "薪资", dataIndex: "salary", width: 130, render: (value) => value || "-" },
     { title: "类型", dataIndex: "job_type", width: 80 },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 90,
+      render: (value: string) => (
+        <Tag color={STATUS_COLORS[value] ?? "default"}>{value || "-"}</Tag>
+      ),
+    },
+    {
+      title: "备注",
+      dataIndex: "note",
+      width: 180,
+      render: (value: string) => (
+        <Typography.Text
+          type={value ? undefined : "secondary"}
+          ellipsis={value ? { tooltip: value } : undefined}
+          style={{ display: "block", maxWidth: 160 }}
+        >
+          {value || "-"}
+        </Typography.Text>
+      ),
+    },
     {
       title: "更新时间",
       dataIndex: "created_at",
@@ -83,15 +193,26 @@ export default function JobsPage() {
       width: 220,
       render: (_, job) => (
         <Space size="small">
-          <Button type="link" size="small" onClick={() => setDetailJob(job)}>
+          <Button
+            type="link"
+            size="small"
+            disabled={batchAction !== null}
+            onClick={() => setDetailJob(job)}
+          >
             详情
           </Button>
-          <Button type="link" size="small" onClick={() => setGenerateJob(job)}>
+          <Button
+            type="link"
+            size="small"
+            disabled={batchAction !== null}
+            onClick={() => setGenerateJob(job)}
+          >
             生成简历
           </Button>
           <Button
             type="link"
             size="small"
+            disabled={batchAction !== null}
             onClick={() => {
               setEditingJob(job);
               setFormOpen(true);
@@ -99,8 +220,12 @@ export default function JobsPage() {
           >
             编辑
           </Button>
-          <Popconfirm title="确定删除该岗位？" onConfirm={() => void removeJob(job.id)}>
-            <Button type="link" size="small" danger>
+          <Popconfirm
+            title="确定删除该岗位？"
+            disabled={batchAction !== null}
+            onConfirm={() => void removeJob(job.id)}
+          >
+            <Button type="link" size="small" danger disabled={batchAction !== null}>
               删除
             </Button>
           </Popconfirm>
@@ -111,53 +236,114 @@ export default function JobsPage() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Input.Search
-          placeholder="搜索职位 / 公司 / 城市"
-          allowClear
-          style={{ width: 260 }}
-          defaultValue={keyword}
-          onSearch={(value) => {
-            setKeyword(value);
-            setPage(1);
+      <div style={{ marginBottom: 16 }}>
+        <Space wrap className="jobs-filter-bar">
+          <Input.Search
+            className="jobs-search-input"
+            placeholder="搜索职位 / 公司 / 城市 / 描述 / 备注"
+            allowClear
+            disabled={batchAction !== null}
+            defaultValue={keyword}
+            onSearch={(value) => {
+              setKeyword(value);
+              setPage(1);
+            }}
+          />
+          <Select
+            placeholder="类型"
+            allowClear
+            disabled={batchAction !== null}
+            style={{ width: 110 }}
+            value={jobType || undefined}
+            onChange={(value) => {
+              setJobType(value ?? "");
+              setPage(1);
+            }}
+            options={JOB_TYPE_OPTIONS}
+          />
+          <Select
+            placeholder="状态"
+            allowClear
+            disabled={batchAction !== null}
+            style={{ width: 110 }}
+            value={status || undefined}
+            onChange={(value) => {
+              setStatus(value ?? "");
+              setPage(1);
+            }}
+            options={STATUS_OPTIONS}
+          />
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            disabled={batchAction !== null}
+            onClick={() => setFormOpen(true)}
+          >
+            手动添加
+          </Button>
+        </Space>
+      </div>
+
+      <Space style={{ marginBottom: 12, minHeight: 32 }} wrap>
+        <Typography.Text type="secondary">已选 {selectedJobIds.length} 个岗位</Typography.Text>
+        <Button
+          icon={<CloseOutlined />}
+          disabled={selectedJobIds.length === 0 || batchAction !== null}
+          onClick={() => {
+            setSelectedJobIds([]);
+            setBatchStatus(undefined);
           }}
-        />
-        <Select
-          placeholder="类型"
-          allowClear
-          style={{ width: 110 }}
-          value={jobType || undefined}
-          onChange={(value) => {
-            setJobType(value ?? "");
-            setPage(1);
-          }}
-          options={JOB_TYPE_OPTIONS}
-        />
-        <Select
-          placeholder="状态"
-          allowClear
-          style={{ width: 110 }}
-          value={status || undefined}
-          onChange={(value) => {
-            setStatus(value ?? "");
-            setPage(1);
-          }}
-          options={STATUS_OPTIONS}
-        />
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
-          手动添加
+        >
+          清空选择
         </Button>
+        <Select
+          placeholder="批量设置状态"
+          value={batchStatus}
+          options={STATUS_OPTIONS}
+          style={{ width: 150 }}
+          disabled={selectedJobIds.length === 0 || batchAction !== null}
+          onChange={setBatchStatus}
+        />
+        <Button
+          icon={<CheckOutlined />}
+          disabled={selectedJobIds.length === 0 || !batchStatus || batchAction !== null}
+          loading={batchAction === "status"}
+          onClick={() => void applyBatchStatus()}
+        >
+          应用状态
+        </Button>
+        <Popconfirm
+          title={`确定删除选中的 ${selectedJobIds.length} 个岗位？`}
+          description="删除后无法恢复"
+          okText="删除"
+          cancelText="取消"
+          okButtonProps={{ danger: true }}
+          disabled={selectedJobIds.length === 0 || batchAction !== null}
+          onConfirm={() => removeSelectedJobs()}
+        >
+          <Button
+            danger
+            icon={<DeleteOutlined />}
+            disabled={selectedJobIds.length === 0 || batchAction !== null}
+            loading={batchAction === "delete"}
+          >
+            批量删除
+          </Button>
+        </Popconfirm>
       </Space>
 
       <Table
         rowKey="id"
+        rowSelection={rowSelection}
         columns={columns}
         dataSource={jobs?.items ?? []}
         loading={loading}
+        scroll={{ x: 1260 }}
         pagination={{
           current: page,
           pageSize,
           total: jobs?.total ?? 0,
+          disabled: batchAction !== null,
           showSizeChanger: true,
           showTotal: (total) => `共 ${total} 个岗位`,
           onChange: (nextPage, nextPageSize) => {

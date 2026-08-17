@@ -51,6 +51,8 @@ def export_markdown(resume: ResumeContent) -> str:
     if resume.job_intent:
         header += f" · {resume.job_intent}"
     lines.append(f"# {header}")
+    if resume.photo:
+        lines.append(f"![个人照片]({resume.photo})\n")
     contacts = " | ".join(item for item in [resume.phone, resume.email, resume.city] if item)
     if contacts:
         lines.append(f"{contacts}\n")

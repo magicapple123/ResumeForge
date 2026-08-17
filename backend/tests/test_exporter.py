@@ -27,6 +27,11 @@ RESUME = ResumeContent(
     awards=[ResumeAward(name="奖学金", date="2024.10")],
 )
 
+PHOTO_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl2kAAAAASUVORK5CYII="
+)
+
 
 def test_export_json_roundtrip():
     data = json.loads(export_json(RESUME))
@@ -48,6 +53,16 @@ def test_render_html_escapes_script_tags():
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
     assert "张三" in html
+
+
+def test_exports_render_photo_without_empty_placeholder():
+    with_photo = RESUME.model_copy(update={"photo": PHOTO_DATA_URL})
+
+    html = render_html(with_photo)
+    assert '<img class="profile-photo"' in html
+    assert f'src="{PHOTO_DATA_URL}"' in html
+    assert f"![个人照片]({PHOTO_DATA_URL})" in export_markdown(with_photo)
+    assert '<img class="profile-photo"' not in render_html(RESUME)
 
 
 def test_filename_sanitize_and_build():

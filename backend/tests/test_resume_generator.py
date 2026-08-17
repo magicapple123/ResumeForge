@@ -10,11 +10,17 @@ from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider
 from app.services.resume_generator import (
     ResumeGenerator,
+    build_profile_prompt_data,
     check_consistency,
     coerce_resume,
     extract_json,
     split_commas,
     split_lines,
+)
+
+PHOTO_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl2kAAAAASUVORK5CYII="
 )
 
 # 一份符合要求的模型输出示例
@@ -131,6 +137,19 @@ async def test_generate_success_stream_and_parse():
     assert done["warnings"] == []
 
 
+async def test_generate_injects_profile_photo_without_sending_it_to_llm():
+    profile = make_profile(photo=PHOTO_DATA_URL)
+    prompt_data = build_profile_prompt_data(profile)
+    provider = FakeProvider(stream_text=json.dumps(GOOD_RESUME, ensure_ascii=False))
+
+    events = await collect_events(ResumeGenerator(provider).generate(profile, make_job(), GenerateOptions()))
+    done = next(event for event in events if event["type"] == "done")
+
+    assert "photo" not in prompt_data
+    assert PHOTO_DATA_URL not in json.dumps(prompt_data, ensure_ascii=False)
+    assert done["resume"]["photo"] == PHOTO_DATA_URL
+
+
 async def test_generate_repairs_broken_json_once():
     # 首次流式输出不是 JSON，修复对话返回合法 JSON
     provider = FakeProvider(
@@ -171,6 +190,7 @@ def test_coerce_resume_fills_defaults():
     assert resume.summary == ""
     assert resume.education[0].courses == ["数学", "英语"]
     assert resume.projects == []
+    assert coerce_resume({"photo": PHOTO_DATA_URL}).photo == ""  # 不信任模型回传的照片
 
 
 def test_coerce_resume_handles_garbage():

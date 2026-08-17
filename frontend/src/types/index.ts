@@ -59,6 +59,7 @@ export interface Award {
 
 export interface Profile {
   id: number;
+  photo: string;
   name: string;
   gender: string;
   birth_year: string;
@@ -93,6 +94,7 @@ export interface Job {
   source_url: string;
   posted_at: string;
   status: string;
+  note: string;
   created_at: string;
   updated_at: string;
 }
@@ -108,10 +110,19 @@ export interface JobPayload {
   source_url?: string;
   posted_at?: string;
   status?: string;
+  note?: string;
 }
 
-export interface ParsedJobDraft extends Required<JobPayload> {
+export interface ParsedJobDraft extends Required<Omit<JobPayload, "note">> {
   warnings: string[];
+}
+
+export interface JobBatchStatusResult {
+  updated: number;
+}
+
+export interface JobBatchDeleteResult {
+  deleted: number;
 }
 
 // ===== 简历 =====
@@ -156,6 +167,7 @@ export interface ResumeAward {
 }
 
 export interface ResumeContent {
+  photo: string;
   name: string;
   gender: string;
   birth_year: string;

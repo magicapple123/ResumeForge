@@ -11,29 +11,36 @@ export function ExperienceSection() {
       emptyValue={{ company: "", role: "", start_date: "", end_date: "", description: "" }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
-          <Col span={8}>
-            <Form.Item name={[field.name, "company"]} label="公司" rules={[{ required: true, message: "必填" }]}>
+          <Col xs={24} md={8}>
+            <Form.Item
+              name={[field.name, "company"]}
+              label="公司"
+              rules={[{ required: true, message: "必填" }]}
+            >
               <Input placeholder="如：字节跳动" />
             </Form.Item>
           </Col>
-          <Col span={8}>
+          <Col xs={24} md={8}>
             <Form.Item name={[field.name, "role"]} label="职位">
               <Input placeholder="如：后端开发实习生" />
             </Form.Item>
           </Col>
-          <Col span={4}>
+          <Col xs={12} md={4}>
             <Form.Item name={[field.name, "start_date"]} label="开始">
               <Input placeholder="2025.06" />
             </Form.Item>
           </Col>
-          <Col span={4}>
+          <Col xs={12} md={4}>
             <Form.Item name={[field.name, "end_date"]} label="结束">
               <Input placeholder="2025.09" />
             </Form.Item>
           </Col>
-          <Col span={24}>
+          <Col xs={24}>
             <Form.Item name={[field.name, "description"]} label="工作内容">
-              <Input.TextArea rows={4} placeholder="每行一条工作内容，尽量包含做了什么、用了什么技术、结果如何（数字量化更好）" />
+              <Input.TextArea
+                rows={4}
+                placeholder="每行一条工作内容，尽量包含做了什么、用了什么技术、结果如何（数字量化更好）"
+              />
             </Form.Item>
           </Col>
         </Row>

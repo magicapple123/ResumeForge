@@ -11,12 +11,16 @@ export function SkillSection() {
       emptyValue={{ name: "", level: "" }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
-          <Col span={12}>
-            <Form.Item name={[field.name, "name"]} label="技能名称" rules={[{ required: true, message: "必填" }]}>
+          <Col xs={24} sm={12}>
+            <Form.Item
+              name={[field.name, "name"]}
+              label="技能名称"
+              rules={[{ required: true, message: "必填" }]}
+            >
               <Input placeholder="如：Python / 深度学习 / React" />
             </Form.Item>
           </Col>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item name={[field.name, "level"]} label="熟练程度">
               <Input placeholder="熟练 / 掌握 / 了解" />
             </Form.Item>

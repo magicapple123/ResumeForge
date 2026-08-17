@@ -2,7 +2,9 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .profile import validate_photo_data_url
 
 
 class GenerateOptions(BaseModel):
@@ -59,6 +61,7 @@ class ResumeAward(BaseModel):
 
 class ResumeContent(BaseModel):
     name: str = ""
+    photo: str = ""
     gender: str = ""
     birth_year: str = ""
     phone: str = ""
@@ -71,6 +74,11 @@ class ResumeContent(BaseModel):
     projects: list[ResumeProject] = []
     skills: list[ResumeSkill] = []
     awards: list[ResumeAward] = []
+
+    @field_validator("photo")
+    @classmethod
+    def photo_must_be_safe_image(cls, value: str) -> str:
+        return validate_photo_data_url(value)
 
 
 class ResumeBrief(BaseModel):

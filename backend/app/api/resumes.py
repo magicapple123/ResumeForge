@@ -2,6 +2,7 @@
 import json
 import logging
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
@@ -190,5 +191,5 @@ def export_resume(resume_id: int, format: str = Query(..., pattern="^(json|md|ht
     return Response(
         content,
         media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}"},
     )

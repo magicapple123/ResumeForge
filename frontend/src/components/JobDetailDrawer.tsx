@@ -47,7 +47,20 @@ export default function JobDetailDrawer({ job, onClose, onGenerate }: Props) {
               <Divider orientation="left" plain style={{ margin: "8px 0" }}>
                 任职要求
               </Divider>
-              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>{job.requirements}</Typography.Paragraph>
+              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
+                {job.requirements}
+              </Typography.Paragraph>
+            </>
+          )}
+
+          {job.note && (
+            <>
+              <Divider orientation="left" plain style={{ margin: "8px 0" }}>
+                备注
+              </Divider>
+              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
+                {job.note}
+              </Typography.Paragraph>
             </>
           )}
 

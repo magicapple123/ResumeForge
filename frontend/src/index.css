@@ -9,6 +9,54 @@ body {
   min-height: 100vh;
 }
 
+.app-main {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+}
+
+.app-brand {
+  padding: 18px 20px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.app-brand .anticon {
+  margin-right: 8px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 24px;
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.app-header-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header-repo {
+  flex: 0 0 auto;
+}
+
+.app-content {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 24px;
+  overflow-x: hidden;
+}
+
 /* 简历预览 iframe 在弹窗中占满可用高度 */
 .resume-iframe {
   width: 100%;
@@ -22,4 +70,129 @@ body {
   font-size: 13px;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.profile-page {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.jobs-filter-bar {
+  width: 100%;
+}
+
+.jobs-search-input {
+  width: 260px;
+}
+
+.profile-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.profile-top-card {
+  height: 100%;
+}
+
+.profile-photo-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-photo-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 132px;
+  height: 176px;
+  overflow: hidden;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #f5f5f5;
+}
+
+.profile-photo-frame .ant-image,
+.profile-photo-frame img {
+  width: 100%;
+  height: 100%;
+}
+
+.profile-photo-frame img {
+  object-fit: cover;
+}
+
+.profile-photo-placeholder {
+  color: #8c8c8c;
+  font-size: 52px;
+}
+
+.profile-save-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 24px;
+}
+
+@media (max-width: 575px) {
+  .jobs-filter-bar > .ant-space-item:first-child,
+  .jobs-search-input {
+    width: 100%;
+  }
+
+  .profile-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .profile-page-header > button {
+    display: none;
+  }
+
+  .profile-page {
+    padding-bottom: 72px;
+  }
+
+  .profile-save-bar button {
+    width: 100%;
+  }
+
+  .profile-save-bar {
+    position: fixed;
+    right: 16px;
+    bottom: 0;
+    left: 80px;
+    z-index: 5;
+    padding: 12px 0 16px;
+    background: #fff;
+    border-top: 1px solid #f0f0f0;
+  }
+}
+
+@media (max-width: 991px) {
+  .app-brand {
+    padding: 18px 0;
+    text-align: center;
+  }
+
+  .app-brand .anticon {
+    margin-right: 0;
+  }
+
+  .app-brand-name,
+  .app-header-repo {
+    display: none;
+  }
+
+  .app-header {
+    padding: 0 16px;
+  }
+
+  .app-content {
+    padding: 16px;
+  }
 }

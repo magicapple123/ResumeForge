@@ -33,5 +33,6 @@ class Job(Base):
     source_url: Mapped[str] = mapped_column(String(512), default="")  # 投递链接
     posted_at: Mapped[str] = mapped_column(String(32), default="")  # 发布时间的原始文本
     status: Mapped[str] = mapped_column(String(16), default=JOB_STATUS_OPEN)
+    note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

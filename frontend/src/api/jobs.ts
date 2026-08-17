@@ -1,5 +1,12 @@
 /** 岗位相关接口。 */
-import type { Job, JobPayload, Page, ParsedJobDraft } from "../types";
+import type {
+  Job,
+  JobBatchDeleteResult,
+  JobBatchStatusResult,
+  JobPayload,
+  Page,
+  ParsedJobDraft,
+} from "../types";
 import { buildQuery, request } from "./client";
 
 export interface JobListParams {
@@ -32,4 +39,15 @@ export function parseJobText(payload: { text: string }): Promise<ParsedJobDraft>
 
 export function deleteJob(id: number): Promise<void> {
   return request(`/jobs/${id}`, { method: "DELETE" });
+}
+
+export function batchUpdateJobStatus(payload: {
+  job_ids: number[];
+  status: string;
+}): Promise<JobBatchStatusResult> {
+  return request("/jobs/batch-status", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function batchDeleteJobs(payload: { job_ids: number[] }): Promise<JobBatchDeleteResult> {
+  return request("/jobs/batch-delete", { method: "POST", body: JSON.stringify(payload) });
 }

@@ -23,11 +23,13 @@
     margin: 0 auto;
   }
   /* 页头 */
-  .header { border-bottom: 2px solid var(--accent); padding-bottom: 16px; margin-bottom: 20px; }
+  .header { display: flex; align-items: flex-start; gap: 24px; border-bottom: 2px solid var(--accent); padding-bottom: 16px; margin-bottom: 20px; }
+  .header-main { flex: 1; min-width: 0; }
   .header .name { font-size: 26px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
   .header .intent { font-size: 15px; color: var(--muted); margin-top: 4px; }
   .header .contact { font-size: 13px; color: var(--muted); margin-top: 8px; }
   .header .contact span { margin-right: 16px; }
+  .profile-photo { width: 88px; height: 112px; flex: 0 0 auto; object-fit: cover; border: 1px solid var(--line); border-radius: 4px; }
   /* 区块 */
   .section { margin-bottom: 18px; }
   .section-title {
@@ -65,13 +67,16 @@
 <div class="print-bar"><button onclick="window.print()">打印 / 另存为 PDF</button></div>
 
 <div class="header">
-  <div class="name">{{ resume.name }}{% if resume.gender %} <span style="font-size:14px;font-weight:400;color:var(--muted)">{{ resume.gender }}</span>{% endif %}</div>
-  {% if resume.job_intent %}<div class="intent">求职意向：{{ resume.job_intent }}</div>{% endif %}
-  <div class="contact">
-    {%- for item in [resume.phone, resume.email, resume.city, resume.birth_year] if item -%}
-    <span>{{ item }}</span>
-    {%- endfor -%}
+  <div class="header-main">
+    <div class="name">{{ resume.name }}{% if resume.gender %} <span style="font-size:14px;font-weight:400;color:var(--muted)">{{ resume.gender }}</span>{% endif %}</div>
+    {% if resume.job_intent %}<div class="intent">求职意向：{{ resume.job_intent }}</div>{% endif %}
+    <div class="contact">
+      {%- for item in [resume.phone, resume.email, resume.city, resume.birth_year] if item -%}
+      <span>{{ item }}</span>
+      {%- endfor -%}
+    </div>
   </div>
+  {% if resume.photo %}<img class="profile-photo" src="{{ resume.photo }}" alt="个人照片" />{% endif %}
 </div>
 
 {% if resume.summary %}

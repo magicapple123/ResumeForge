@@ -33,9 +33,9 @@ function MainLayout() {
   return (
     <Layout style={{ minHeight: "100vh" }}>
       <Sider theme="dark" width={200} breakpoint="lg" collapsedWidth={64}>
-        <div style={{ padding: "18px 20px", color: "#fff", fontSize: 18, fontWeight: 700 }}>
-          <UnorderedListOutlined style={{ marginRight: 8 }} />
-          {APP_NAME}
+        <div className="app-brand">
+          <UnorderedListOutlined />
+          <span className="app-brand-name">{APP_NAME}</span>
         </div>
         <Menu
           theme="dark"
@@ -45,25 +45,16 @@ function MainLayout() {
           onClick={({ key }) => navigate(key)}
         />
       </Sider>
-      <Layout>
-        <Header
-          style={{
-            background: "#fff",
-            padding: "0 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            borderBottom: "1px solid #f0f0f0",
-          }}
-        >
-          <Typography.Text strong style={{ fontSize: 16 }}>
+      <Layout className="app-main">
+        <Header className="app-header">
+          <Typography.Text strong className="app-header-title">
             AI 定制化简历生成平台
           </Typography.Text>
-          <Typography.Link href={GITHUB_REPO} target="_blank">
+          <Typography.Link className="app-header-repo" href={GITHUB_REPO} target="_blank">
             {APP_NAME_EN} · 开源项目
           </Typography.Link>
         </Header>
-        <Content style={{ padding: 24 }}>
+        <Content className="app-content">
           <Outlet />
         </Content>
       </Layout>

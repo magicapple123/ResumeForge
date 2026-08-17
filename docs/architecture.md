@@ -31,9 +31,9 @@ flowchart LR
 
 ```
 backend/app/
-├── main.py            # 应用入口：装配路由/中间件/建表
+├── main.py            # 应用入口：装配路由/中间件/建表与兼容升级
 ├── config.py          # 服务端配置（.env）
-├── database.py        # 数据库连接与会话
+├── database.py        # 数据库连接、会话与 SQLite 缺列补齐
 ├── models/            # ORM 模型（profile/job/resume/setting）
 ├── schemas/           # Pydantic 数据结构（前后端契约）
 ├── api/               # 路由层：校验参数、编排服务、组装响应
@@ -49,6 +49,14 @@ backend/app/
 ├── templates/         # 简历 HTML 模板（Jinja2）
 └── data/              # 技能词典
 ```
+
+## 岗位管理与资料照片
+
+- 岗位备注随岗位保存，并纳入岗位列表的关键词搜索。批量状态更新使用 `POST /api/jobs/batch-status`，批量删除使用 `POST /api/jobs/batch-delete`。
+- 两个批量接口都会先去重并校验全部岗位 ID；只要有 ID 不存在就不执行任何修改，全部有效时才在单一事务中提交，提交异常会回滚。
+- 个人照片以通过格式、文件签名和体积校验的 data URL 保存在本地资料中。照片不会发送给大模型，而是在模型输出解析完成后注入结构化简历，供 HTML 预览、浏览器打印及导出使用。
+
+已有 SQLite 数据库启动时先执行 `create_all`，再由 `ensure_sqlite_columns` 幂等补齐已知的新增列。当前会补齐 `job.note` 与 `user_profile.photo`，列默认值为空字符串，因此旧岗位和旧资料不会被重建或丢失。更复杂的表结构变更仍应引入正式迁移工具处理。
 
 ## 核心数据流：AI 生成简历
 
@@ -68,7 +76,9 @@ sequenceDiagram
     G->>L: 流式请求 chat/completions
     L-->>G: SSE 流式输出（JSON 文本）
     G-->>B: progress / delta 事件
-    G->>G: 提取 JSON + 宽松校验 + 一致性检查
+    G->>G: 提取 JSON + 宽松校验
+    G->>G: 从本地资料注入照片（照片不发送给模型）
+    G->>G: 一致性检查
     G-->>B: done 事件（含防虚构 warnings）
     B->>B: 落库 ResumeRecord
     B-->>F: saved 事件（record_id）
@@ -88,6 +98,8 @@ sequenceDiagram
 | 模型输出宽松解析 + 修复重试 | 大模型输出不稳定，先容错提取 JSON，失败后用修复 Prompt 重试一次，再失败友好降级 |
 | 一致性校验（防 AI 虚构） | 对比生成结果与资料中的学校/公司/项目名，可疑内容给用户警告 |
 | 岗位文本使用本地规则解析 | 粘贴内容不发送给大模型，先生成可编辑草稿，用户确认后才入库 |
+| 照片在模型调用后注入 | 避免把无意义的 base64 内容发送给模型，同时保证预览与导出使用已校验的本地照片 |
+| SQLite 启动时补齐已知列 | `create_all` 不会升级旧表，轻量幂等补列可在不重建表的前提下兼容现有本地数据 |
 
 ## 扩展点
 
@@ -98,6 +110,7 @@ sequenceDiagram
 
 ## 测试策略
 
-- 后端核心业务（岗位文本/JD 解析、生成流水线、导出、防虚构校验）有单元测试，生成流水线用假 Provider，不依赖真实网络。
-- API 层有冒烟测试（TestClient），覆盖核心链路。
+- 后端核心业务（岗位文本/JD 解析、生成流水线、照片校验与渲染、导出、防虚构校验）有单元测试，生成流水线用假 Provider，不依赖真实网络。
+- API 层有冒烟测试（TestClient），覆盖岗位备注搜索、批量操作原子性、照片往返与其他核心链路。
+- SQLite 兼容升级使用临时旧表验证新增列、幂等执行与原数据保留，不接触真实用户数据库。
 - 前端为薄展示层，暂不写测试；类型系统（TS strict）+ 构建检查兜底。

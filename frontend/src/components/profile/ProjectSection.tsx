@@ -8,40 +8,52 @@ export function ProjectSection() {
     <ProfileSection
       title="项目经历"
       fieldName="projects"
-      emptyValue={{ name: "", role: "", start_date: "", end_date: "", tech_stack: "", description: "", highlights: "" }}
+      emptyValue={{
+        name: "",
+        role: "",
+        start_date: "",
+        end_date: "",
+        tech_stack: "",
+        description: "",
+        highlights: "",
+      }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
-          <Col span={8}>
-            <Form.Item name={[field.name, "name"]} label="项目名称" rules={[{ required: true, message: "必填" }]}>
+          <Col xs={24} md={8}>
+            <Form.Item
+              name={[field.name, "name"]}
+              label="项目名称"
+              rules={[{ required: true, message: "必填" }]}
+            >
               <Input placeholder="如：AI 简历生成平台" />
             </Form.Item>
           </Col>
-          <Col span={8}>
+          <Col xs={24} md={8}>
             <Form.Item name={[field.name, "role"]} label="担任角色">
               <Input placeholder="如：核心开发" />
             </Form.Item>
           </Col>
-          <Col span={4}>
+          <Col xs={12} md={4}>
             <Form.Item name={[field.name, "start_date"]} label="开始">
               <Input placeholder="2025.01" />
             </Form.Item>
           </Col>
-          <Col span={4}>
+          <Col xs={12} md={4}>
             <Form.Item name={[field.name, "end_date"]} label="结束">
               <Input placeholder="至今" />
             </Form.Item>
           </Col>
-          <Col span={24}>
+          <Col xs={24}>
             <Form.Item name={[field.name, "tech_stack"]} label="技术栈">
               <Input placeholder="逗号分隔，如：Python, FastAPI, React" />
             </Form.Item>
           </Col>
-          <Col span={12}>
+          <Col xs={24} md={12}>
             <Form.Item name={[field.name, "description"]} label="项目描述">
               <Input.TextArea rows={3} placeholder="项目背景、解决了什么问题，每行一条" />
             </Form.Item>
           </Col>
-          <Col span={12}>
+          <Col xs={24} md={12}>
             <Form.Item name={[field.name, "highlights"]} label="亮点/成果">
               <Input.TextArea rows={3} placeholder="量化成果优先，如：接口性能提升 40%，每行一条" />
             </Form.Item>
