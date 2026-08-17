@@ -1,10 +1,12 @@
 /** 简历记录预览弹窗（历史记录用）：加载详情与渲染 HTML 后展示。 */
-import { Alert, Modal, Skeleton, Space, Tag, Typography } from "antd";
+import { EditOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Modal, Skeleton, Space, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
-import { getResume, fetchResumeHtml } from "../api/resumes";
+import { getResume, fetchResumeHtml, renderResume, updateResume } from "../api/resumes";
 import { RESUME_TONES } from "../config";
-import type { ResumeDetail } from "../types";
+import type { ResumeContent, ResumeDetail } from "../types";
 import ExportButtons from "./ExportButtons";
+import ResumeEditorModal from "./ResumeEditorModal";
 import ResumePreview from "./ResumePreview";
 
 interface Props {
@@ -13,15 +15,18 @@ interface Props {
 }
 
 export default function ResumeDetailModal({ recordId, onClose }: Props) {
+  const { message } = App.useApp();
   const [detail, setDetail] = useState<ResumeDetail | null>(null);
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
 
   useEffect(() => {
     if (!recordId) return;
     setDetail(null);
     setHtml("");
     setError("");
+    setEditorOpen(false);
     void Promise.all([getResume(recordId), fetchResumeHtml(recordId)])
       .then(([data, rendered]) => {
         setDetail(data);
@@ -31,6 +36,15 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
   }, [recordId]);
 
   const toneLabel = RESUME_TONES.find((tone) => tone.value === detail?.tone)?.label ?? detail?.tone;
+
+  const saveEditedResume = async (content: ResumeContent) => {
+    if (!detail) return;
+    const updated = await updateResume(detail.id, content);
+    const rendered = await renderResume(updated.content);
+    setDetail(updated);
+    setHtml(rendered);
+    message.success("简历修改已保存");
+  };
 
   return (
     <Modal
@@ -57,11 +71,20 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
             </Typography.Text>
           </Space>
           <ResumePreview html={html} warnings={detail.warnings} />
-          <div style={{ marginTop: 16, textAlign: "right" }}>
+          <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Button icon={<EditOutlined />} onClick={() => setEditorOpen(true)}>
+              微调内容
+            </Button>
             <ExportButtons recordId={detail.id} />
           </div>
         </div>
       )}
+      <ResumeEditorModal
+        open={editorOpen}
+        content={detail?.content ?? null}
+        onClose={() => setEditorOpen(false)}
+        onSave={saveEditedResume}
+      />
     </Modal>
   );
 }

@@ -17,6 +17,11 @@ export function deleteResume(id: number): Promise<void> {
   return request(`/resumes/${id}`, { method: "DELETE" });
 }
 
+/** 替换一份已保存简历的结构化内容。 */
+export function updateResume(id: number, content: ResumeContent): Promise<ResumeDetail> {
+  return request(`/resumes/${id}`, { method: "PUT", body: JSON.stringify(content) });
+}
+
 /** 流式生成简历，事件定义见 types/StreamEvent */
 export function generateResume(
   payload: { job_id: number; options: GenerateOptions },

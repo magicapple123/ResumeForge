@@ -1,0 +1,15 @@
+pytest_asyncio-0.25.3.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+pytest_asyncio-0.25.3.dist-info/LICENSE,sha256=qK0xscP0DcpahBGTUbj6jdyGjt13-tio6_bY8tFvpK4,11324
+pytest_asyncio-0.25.3.dist-info/METADATA,sha256=Kp3Sdbyx9Jh_DPHmtknE6UlFmB8H4zAdC2r9L0NvIQ4,3923
+pytest_asyncio-0.25.3.dist-info/RECORD,,
+pytest_asyncio-0.25.3.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+pytest_asyncio-0.25.3.dist-info/WHEEL,sha256=In9FTNxeP60KnTkGw7wk6mJPYd_dQSjEZmXdBdMCI-8,91
+pytest_asyncio-0.25.3.dist-info/entry_points.txt,sha256=_5TsciE-7mIopUy1NrPCEjHVTDIwhNbyXvP-su1-O7w,43
+pytest_asyncio-0.25.3.dist-info/top_level.txt,sha256=J4BTi9IZbfghCsiVybot1y0AaLUgxp3NMaNpH9fghNI,15
+pytest_asyncio/__init__.py,sha256=EWf0KLgnvHEAZXcbCJ3BxAGeH1OLzMhyh-oCU0Idwew,236
+pytest_asyncio/__pycache__/__init__.cpython-312.pyc,,
+pytest_asyncio/__pycache__/_version.cpython-312.pyc,,
+pytest_asyncio/__pycache__/plugin.cpython-312.pyc,,
+pytest_asyncio/_version.py,sha256=WAZCgo0SVz4U2DvN4bd88NvYl0ugBMftcoN0hrufMnY,413
+pytest_asyncio/plugin.py,sha256=ff9a2VhhF7vX_zEfH6gRsRF7CVFodUMmRLhmRsaIeow,45839
+pytest_asyncio/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0

@@ -123,6 +123,21 @@ def _save_record(
     return record
 
 
+def _to_resume_out(record: ResumeRecord) -> ResumeOut:
+    return ResumeOut(
+        id=record.id,
+        title=record.title,
+        job_title=record.job_title,
+        company=record.company,
+        model=record.model,
+        tone=record.tone,
+        created_at=record.created_at,
+        content=ResumeContent.model_validate(record.content),
+        warnings=record.warnings or [],
+        parse_error=record.parse_error,
+    )
+
+
 @router.get("", response_model=Page[ResumeBrief])
 def list_resumes(
     db: Session = Depends(get_db),
@@ -151,18 +166,23 @@ def get_resume(resume_id: int, db: Session = Depends(get_db)):
     record = db.get(ResumeRecord, resume_id)
     if record is None:
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-    return ResumeOut(
-        id=record.id,
-        title=record.title,
-        job_title=record.job_title,
-        company=record.company,
-        model=record.model,
-        tone=record.tone,
-        created_at=record.created_at,
-        content=ResumeContent.model_validate(record.content),
-        warnings=record.warnings or [],
-        parse_error=record.parse_error,
-    )
+    return _to_resume_out(record)
+
+
+@router.put("/{resume_id}", response_model=ResumeOut)
+def update_resume(resume_id: int, payload: ResumeContent, db: Session = Depends(get_db)):
+    """保存用户对生成简历的手工修改。"""
+    record = db.get(ResumeRecord, resume_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
+
+    record.content = payload.model_dump()
+    # AI 生成阶段的告警不再适用于用户已手工确认过的内容。
+    record.warnings = []
+    record.parse_error = ""
+    db.commit()
+    db.refresh(record)
+    return _to_resume_out(record)
 
 
 @router.delete("/{resume_id}", status_code=204)

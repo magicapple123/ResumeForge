@@ -1,13 +1,14 @@
 /** AI 生成简历弹窗：风格选择 -> 流式生成 -> 预览结果（自动保存历史）。 */
-import { ReloadOutlined } from "@ant-design/icons";
+import { EditOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Modal, Radio, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { generateResume, renderResume } from "../api/resumes";
+import { generateResume, renderResume, updateResume } from "../api/resumes";
 import { getLLMConfig } from "../api/settings";
 import { RESUME_TONES } from "../config";
 import type { Job, ResumeContent, ResumeTone, StreamEvent } from "../types";
 import ExportButtons from "./ExportButtons";
+import ResumeEditorModal from "./ResumeEditorModal";
 import ResumePreview from "./ResumePreview";
 
 type Stage = "config" | "generating" | "preview" | "error";
@@ -36,6 +37,7 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
   const [errorMsg, setErrorMsg] = useState("");
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [previewHtml, setPreviewHtml] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const streamBoxRef = useRef<HTMLDivElement>(null);
@@ -68,6 +70,7 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
     setErrorMsg("");
     setResult(null);
     setPreviewHtml("");
+    setEditorOpen(false);
   }, []);
 
   const startGenerate = async () => {
@@ -77,6 +80,7 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
     setStreamText("");
     setErrorMsg("");
     setResult(null);
+    setEditorOpen(false);
     abortRef.current = new AbortController();
 
     // 事件回调里只更新状态；最终结果收集在闭包变量中，流结束后统一处理
@@ -133,6 +137,17 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
     abortRef.current?.abort();
     reset();
     onClose();
+  };
+
+  const saveEditedResume = async (content: ResumeContent) => {
+    if (!result?.recordId) {
+      throw new Error("简历记录尚未保存完成，请稍后再试");
+    }
+    const updated = await updateResume(result.recordId, content);
+    const html = await renderResume(updated.content);
+    setResult({ resume: updated.content, warnings: updated.warnings, recordId: updated.id });
+    setPreviewHtml(html);
+    message.success("简历修改已保存");
   };
 
   return (
@@ -233,6 +248,13 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
               )}
             </Space>
             <Space>
+              <Button
+                icon={<EditOutlined />}
+                disabled={!result.recordId}
+                onClick={() => setEditorOpen(true)}
+              >
+                微调内容
+              </Button>
               <Button onClick={() => navigate("/resumes")}>去简历中心</Button>
               <Button icon={<ReloadOutlined />} onClick={() => void startGenerate()}>
                 重新生成
@@ -244,6 +266,13 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
           </div>
         </div>
       )}
+
+      <ResumeEditorModal
+        open={editorOpen}
+        content={result?.resume ?? null}
+        onClose={() => setEditorOpen(false)}
+        onSave={saveEditedResume}
+      />
 
       {stage === "error" && (
         <div style={{ textAlign: "center", padding: "24px 0" }}>

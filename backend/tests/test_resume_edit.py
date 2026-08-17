@@ -1,0 +1,72 @@
+"""简历内容手工修改的 API 测试。"""
+from app.models.resume import ResumeRecord
+
+
+def _create_resume(db_session) -> ResumeRecord:
+    record = ResumeRecord(
+        title="张三-后端开发工程师",
+        job_title="后端开发工程师",
+        company="示例公司",
+        model="test-model",
+        tone="tech",
+        content={"name": "旧名字", "summary": "旧总结"},
+        warnings=["请核对学校信息"],
+        parse_error="原始生成结果解析失败",
+    )
+    db_session.add(record)
+    db_session.commit()
+    db_session.refresh(record)
+    return record
+
+
+def test_update_resume_persists_content_and_clears_stale_generation_state(client, db_session):
+    record = _create_resume(db_session)
+    payload = {
+        "name": "新名字",
+        "job_intent": "后端开发工程师",
+        "summary": "手工调整后的总结",
+        "skills": [{"name": "Python", "level": "熟练"}],
+        "projects": [
+            {
+                "name": "简历生成工具",
+                "role": "开发者",
+                "description": ["增加预览中的手工编辑能力"],
+            }
+        ],
+    }
+
+    response = client.put(f"/api/resumes/{record.id}", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == record.id
+    assert body["title"] == record.title
+    assert body["model"] == "test-model"
+    assert body["tone"] == "tech"
+    assert body["content"]["name"] == "新名字"
+    assert body["content"]["projects"][0]["description"] == ["增加预览中的手工编辑能力"]
+    assert body["warnings"] == []
+    assert body["parse_error"] == ""
+
+    db_session.refresh(record)
+    assert record.content["summary"] == "手工调整后的总结"
+    assert record.warnings == []
+    assert record.parse_error == ""
+
+
+def test_update_resume_rejects_invalid_content(client, db_session):
+    record = _create_resume(db_session)
+
+    response = client.put(
+        f"/api/resumes/{record.id}",
+        json={"name": "张三", "photo": "https://example.com/avatar.png"},
+    )
+
+    assert response.status_code == 422
+    assert "base64 data URL" in response.text
+
+
+def test_update_resume_returns_404_for_missing_record(client):
+    response = client.put("/api/resumes/999", json={"name": "张三"})
+
+    assert response.status_code == 404
