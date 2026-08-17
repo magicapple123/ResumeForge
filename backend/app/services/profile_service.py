@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..models.profile import (
     Award,
+    CampusExperience,
     Education,
     Experience,
     Project,
@@ -15,6 +16,7 @@ from ..schemas.profile import ProfileOut, ProfileUpdate
 _SECTION_MODELS = {
     "educations": Education,
     "experiences": Experience,
+    "campus_experiences": CampusExperience,
     "projects": Project,
     "skills": Skill,
     "awards": Award,

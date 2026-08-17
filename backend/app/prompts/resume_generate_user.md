@@ -45,6 +45,12 @@
       "description": ["工作内容，每条一个要点，针对 JD 优化措辞"]
     }
   ],
+  "campus_experience": [
+    {
+      "organization": "组织/部门", "role": "职务/角色", "start_date": "开始时间", "end_date": "结束时间",
+      "description": ["校园工作、活动与成果，每条一个要点，针对 JD 优化措辞"]
+    }
+  ],
   "projects": [
     {
       "name": "项目名", "role": "担任角色", "start_date": "开始时间", "end_date": "结束时间",

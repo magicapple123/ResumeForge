@@ -65,6 +65,14 @@ class ExperienceIn(BaseModel):
     description: str = ""  # 换行分隔
 
 
+class CampusExperienceIn(BaseModel):
+    organization: str = ""
+    role: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    description: str = ""  # 换行分隔
+
+
 class ProjectIn(BaseModel):
     name: str = ""
     role: str = ""
@@ -92,6 +100,11 @@ class EducationOut(EducationIn):
 
 
 class ExperienceOut(ExperienceIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
+class CampusExperienceOut(CampusExperienceIn):
     model_config = ConfigDict(from_attributes=True)
     id: int
 
@@ -128,6 +141,7 @@ class ProfileUpdate(BaseModel):
     summary: str = ""
     educations: list[EducationIn] = []
     experiences: list[ExperienceIn] = []
+    campus_experiences: list[CampusExperienceIn] = []
     projects: list[ProjectIn] = []
     skills: list[SkillIn] = []
     awards: list[AwardIn] = []
@@ -144,6 +158,7 @@ class ProfileOut(ProfileUpdate):
     updated_at: datetime | None = None
     educations: list[EducationOut] = []
     experiences: list[ExperienceOut] = []
+    campus_experiences: list[CampusExperienceOut] = []
     projects: list[ProjectOut] = []
     skills: list[SkillOut] = []
     awards: list[AwardOut] = []

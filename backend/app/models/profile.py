@@ -1,4 +1,4 @@
-"""个人资料相关模型：主表 + 各子表（教育/实习/项目/技能/荣誉）。
+"""个人资料相关模型：主表 + 各子表（教育/实习/校园/项目/技能/荣誉）。
 
 日期统一用字符串（如 "2022.09"）：简历中的时间本就是展示文本，
 避免日期解析带来的兼容性问题。多行文本（经历描述、项目亮点等）
@@ -41,6 +41,9 @@ class UserProfile(Base):
     experiences: Mapped[list["Experience"]] = relationship(
         cascade="all, delete-orphan", order_by="Experience.id"
     )
+    campus_experiences: Mapped[list["CampusExperience"]] = relationship(
+        cascade="all, delete-orphan", order_by="CampusExperience.id"
+    )
     projects: Mapped[list["Project"]] = relationship(
         cascade="all, delete-orphan", order_by="Project.id"
     )
@@ -73,6 +76,18 @@ class Experience(Base):
     start_date: Mapped[str] = mapped_column(String(16), default="")
     end_date: Mapped[str] = mapped_column(String(16), default="")
     description: Mapped[str] = mapped_column(Text, default="")  # 工作内容，换行分隔
+
+
+class CampusExperience(Base):
+    __tablename__ = "campus_experience"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("user_profile.id", ondelete="CASCADE"))
+    organization: Mapped[str] = mapped_column(String(128), default="")  # 学生会/班级/社团等
+    role: Mapped[str] = mapped_column(String(128), default="")  # 职务或担任角色
+    start_date: Mapped[str] = mapped_column(String(16), default="")
+    end_date: Mapped[str] = mapped_column(String(16), default="")
+    description: Mapped[str] = mapped_column(Text, default="")  # 经历描述，换行分隔
 
 
 class Project(Base):

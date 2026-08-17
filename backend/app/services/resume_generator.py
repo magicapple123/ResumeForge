@@ -35,6 +35,8 @@ _LIST_FIELDS = {
                   "list_fields": {"courses", "achievements"}},
     "experience": {"str_fields": {"company", "role", "start_date", "end_date"},
                    "list_fields": {"description"}},
+    "campus_experience": {"str_fields": {"organization", "role", "start_date", "end_date"},
+                           "list_fields": {"description"}},
     "projects": {"str_fields": {"name", "role", "start_date", "end_date"},
                  "list_fields": {"tech_stack", "description", "highlights"}},
 }
@@ -88,6 +90,16 @@ def build_profile_prompt_data(profile: ProfileOut) -> dict:
                 "description": split_lines(e.description),
             }
             for e in profile.experiences
+        ],
+        "campus_experiences": [
+            {
+                "organization": item.organization,
+                "role": item.role,
+                "start_date": item.start_date,
+                "end_date": item.end_date,
+                "description": split_lines(item.description),
+            }
+            for item in profile.campus_experiences
         ],
         "projects": [
             {
@@ -185,6 +197,7 @@ def coerce_resume(data: dict | None) -> ResumeContent:
         summary=as_str(data.get("summary")),
         education=sections["education"],
         experience=sections["experience"],
+        campus_experience=sections["campus_experience"],
         projects=sections["projects"],
         skills=skills,
         awards=awards,
@@ -204,6 +217,9 @@ def check_consistency(resume: ResumeContent, profile: ProfileOut) -> list[str]:
     warnings: list[str] = []
     known_schools = [e.school for e in profile.educations if e.school]
     known_companies = [e.company for e in profile.experiences if e.company]
+    known_campus_organizations = [
+        item.organization for item in profile.campus_experiences if item.organization
+    ]
     known_projects = [p.name for p in profile.projects if p.name]
 
     for edu in resume.education:
@@ -212,6 +228,11 @@ def check_consistency(resume: ResumeContent, profile: ProfileOut) -> list[str]:
     for exp in resume.experience:
         if exp.company and not any(_similar(exp.company, c) for c in known_companies):
             warnings.append(f"实习/工作经历中出现资料中不存在的公司「{exp.company}」，请核对是否为虚构")
+    for item in resume.campus_experience:
+        if item.organization and not any(
+            _similar(item.organization, organization) for organization in known_campus_organizations
+        ):
+            warnings.append(f"校园经历中出现资料中不存在的组织「{item.organization}」，请核对是否为虚构")
     for project in resume.projects:
         if project.name and not any(_similar(project.name, p) for p in known_projects):
             warnings.append(f"项目经历中出现资料中不存在的项目「{project.name}」，请核对是否为虚构")

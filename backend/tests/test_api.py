@@ -37,6 +37,15 @@ def test_profile_roundtrip(client):
         "job_intent": "后端开发工程师",
         "educations": [{"school": "天津工业大学", "major": "软件工程", "degree": "本科"}],
         "experiences": [{"company": "某科技公司", "role": "实习生", "description": "开发\n测试"}],
+        "campus_experiences": [
+            {
+                "organization": "学生会",
+                "role": "宣传部部长",
+                "start_date": "2023.09",
+                "end_date": "2024.06",
+                "description": "策划校园活动\n管理宣传渠道",
+            }
+        ],
         "projects": [],
         "skills": [{"name": "Python", "level": "熟练"}],
         "awards": [],
@@ -45,14 +54,18 @@ def test_profile_roundtrip(client):
     assert response.status_code == 200
     saved = response.json()
     assert saved["name"] == "张三" and len(saved["educations"]) == 1
+    assert saved["campus_experiences"][0]["organization"] == "学生会"
 
     response = client.get("/api/profile")
     assert response.json()["educations"][0]["school"] == "天津工业大学"
+    assert response.json()["campus_experiences"][0]["role"] == "宣传部部长"
 
     # 再次 PUT 是整体替换：清空教育经历
     payload["educations"] = []
+    payload["campus_experiences"] = []
     response = client.put("/api/profile", json=payload)
     assert response.json()["educations"] == []
+    assert response.json()["campus_experiences"] == []
 
 
 def test_job_crud_and_keywords(client):
@@ -200,3 +213,18 @@ def test_generate_requires_profile_and_llm(client):
     client.post("/api/jobs", json={"title": "后端开发工程师", "company": "A公司"})
     response = client.post("/api/resumes/generate", json={"job_id": 1})
     assert response.status_code == 400
+
+
+def test_generate_accepts_campus_experience_as_profile(client):
+    client.post("/api/jobs", json={"title": "客户端开发工程师", "company": "A公司"})
+    profile_response = client.put(
+        "/api/profile",
+        json={
+            "campus_experiences": [{"organization": "学生会", "role": "部长"}],
+        },
+    )
+    assert profile_response.status_code == 200
+
+    response = client.post("/api/resumes/generate", json={"job_id": 1})
+    assert response.status_code == 400
+    assert "配置大模型" in response.json()["detail"]

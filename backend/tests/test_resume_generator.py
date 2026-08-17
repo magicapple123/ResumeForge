@@ -193,6 +193,55 @@ def test_coerce_resume_fills_defaults():
     assert coerce_resume({"photo": PHOTO_DATA_URL}).photo == ""  # 不信任模型回传的照片
 
 
+def test_campus_experience_is_in_prompt_and_model_output():
+    profile = make_profile(
+        campus_experiences=[
+            {
+                "id": 1,
+                "organization": "学生会",
+                "role": "宣传部部长",
+                "start_date": "2023.09",
+                "end_date": "2024.06",
+                "description": "策划校园活动\n管理宣传渠道",
+            }
+        ]
+    )
+
+    prompt_data = build_profile_prompt_data(profile)
+    assert prompt_data["campus_experiences"] == [
+        {
+            "organization": "学生会",
+            "role": "宣传部部长",
+            "start_date": "2023.09",
+            "end_date": "2024.06",
+            "description": ["策划校园活动", "管理宣传渠道"],
+        }
+    ]
+
+    resume = coerce_resume(
+        {
+            "campus_experience": {
+                "organization": "学生会（校级）",
+                "role": "宣传部部长",
+                "description": "策划校园活动\n管理宣传渠道",
+            }
+        }
+    )
+    assert resume.campus_experience[0].description == ["策划校园活动", "管理宣传渠道"]
+    assert check_consistency(resume, profile) == []
+
+
+def test_check_consistency_detects_unknown_campus_organization():
+    profile = make_profile(
+        campus_experiences=[{"id": 1, "organization": "学生会"}]
+    )
+    resume = coerce_resume({"campus_experience": [{"organization": "青年志愿者协会"}]})
+
+    warnings = check_consistency(resume, profile)
+    assert len(warnings) == 1
+    assert "青年志愿者协会" in warnings[0]
+
+
 def test_coerce_resume_handles_garbage():
     resume = coerce_resume(None)
     assert resume.name == "" and resume.skills == []

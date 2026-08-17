@@ -118,6 +118,21 @@
 </div>
 {% endif %}
 
+{% if resume.campus_experience %}
+<div class="section">
+  <div class="section-title">校园经历</div>
+  {% for item in resume.campus_experience %}
+  <div class="entry">
+    <div class="entry-head">
+      <span class="title">{{ item.organization }}{% if item.role %} · {{ item.role }}{% endif %}</span>
+      <span class="meta">{{ item.start_date }} - {{ item.end_date }}</span>
+    </div>
+    {% if item.description %}<ul>{% for detail in item.description %}<li>{{ detail }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if resume.projects %}
 <div class="section">
   <div class="section-title">项目经历</div>

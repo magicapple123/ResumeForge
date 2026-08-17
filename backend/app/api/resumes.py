@@ -53,7 +53,12 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
 
     profile = get_profile_detail(db)
-    if not profile.name and not profile.projects and not profile.experiences:
+    if (
+        not profile.name
+        and not profile.projects
+        and not profile.experiences
+        and not profile.campus_experiences
+    ):
         raise HTTPException(status_code=400, detail="请先在「我的资料」页完善个人信息")
 
     config = get_llm_config(db)

@@ -38,6 +38,14 @@ class ResumeExperience(BaseModel):
     description: list[str] = []
 
 
+class ResumeCampusExperience(BaseModel):
+    organization: str = ""
+    role: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    description: list[str] = []
+
+
 class ResumeProject(BaseModel):
     name: str = ""
     role: str = ""
@@ -71,6 +79,7 @@ class ResumeContent(BaseModel):
     summary: str = ""
     education: list[ResumeEducation] = []
     experience: list[ResumeExperience] = []
+    campus_experience: list[ResumeCampusExperience] = []
     projects: list[ResumeProject] = []
     skills: list[ResumeSkill] = []
     awards: list[ResumeAward] = []

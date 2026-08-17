@@ -81,6 +81,15 @@ def export_markdown(resume: ResumeContent) -> str:
             lines.append(_join_bullets(exp.description))
             lines.append("")
 
+    if resume.campus_experience:
+        lines.append("## 校园经历\n")
+        for item in resume.campus_experience:
+            lines.append(
+                f"### {item.organization} · {item.role}（{item.start_date} - {item.end_date}）\n"
+            )
+            lines.append(_join_bullets(item.description))
+            lines.append("")
+
     if resume.projects:
         lines.append("## 项目经历\n")
         for project in resume.projects:

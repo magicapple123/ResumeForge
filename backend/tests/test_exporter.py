@@ -3,6 +3,7 @@ import json
 
 from app.schemas.resume import (
     ResumeAward,
+    ResumeCampusExperience,
     ResumeContent,
     ResumeEducation,
     ResumeExperience,
@@ -22,6 +23,15 @@ RESUME = ResumeContent(
         ResumeEducation(school="天津工业大学", major="软件工程", degree="本科", gpa="3.8/4.0", courses=["数据结构"])
     ],
     experience=[ResumeExperience(company="某科技公司", role="后端实习生", description=["负责服务开发"])],
+    campus_experience=[
+        ResumeCampusExperience(
+            organization="学生会",
+            role="宣传部部长",
+            start_date="2023.09",
+            end_date="2024.06",
+            description=["策划校园活动"],
+        )
+    ],
     projects=[ResumeProject(name="简历通", tech_stack=["Python", "FastAPI"], highlights=["已开源"])],
     skills=[ResumeSkill(name="Python", level="熟练")],
     awards=[ResumeAward(name="奖学金", date="2024.10")],
@@ -41,9 +51,18 @@ def test_export_json_roundtrip():
 
 def test_export_markdown_contains_sections():
     markdown = export_markdown(RESUME)
-    for section in ("# 张三 · 后端开发工程师", "## 教育经历", "## 实习/工作经历", "## 项目经历", "## 专业技能", "## 荣誉奖项"):
+    for section in (
+        "# 张三 · 后端开发工程师",
+        "## 教育经历",
+        "## 实习/工作经历",
+        "## 校园经历",
+        "## 项目经历",
+        "## 专业技能",
+        "## 荣誉奖项",
+    ):
         assert section in markdown
     assert "- Python（熟练）" in markdown
+    assert "### 学生会 · 宣传部部长" in markdown
 
 
 def test_render_html_escapes_script_tags():
@@ -53,6 +72,8 @@ def test_render_html_escapes_script_tags():
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
     assert "张三" in html
+    assert "校园经历" in html
+    assert "学生会" in html
 
 
 def test_exports_render_photo_without_empty_placeholder():

@@ -33,6 +33,15 @@ export interface Experience {
   description: string;
 }
 
+export interface CampusExperience {
+  id?: number;
+  organization: string;
+  role: string;
+  start_date: string;
+  end_date: string;
+  description: string;
+}
+
 export interface Project {
   id?: number;
   name: string;
@@ -73,6 +82,7 @@ export interface Profile {
   summary: string;
   educations: Education[];
   experiences: Experience[];
+  campus_experiences: CampusExperience[];
   projects: Project[];
   skills: Skill[];
   awards: Award[];
@@ -147,6 +157,14 @@ export interface ResumeExperience {
   description: string[];
 }
 
+export interface ResumeCampusExperience {
+  organization: string;
+  role: string;
+  start_date: string;
+  end_date: string;
+  description: string[];
+}
+
 export interface ResumeProject {
   name: string;
   role: string;
@@ -180,6 +198,7 @@ export interface ResumeContent {
   summary: string;
   education: ResumeEducation[];
   experience: ResumeExperience[];
+  campus_experience: ResumeCampusExperience[];
   projects: ResumeProject[];
   skills: ResumeSkill[];
   awards: ResumeAward[];

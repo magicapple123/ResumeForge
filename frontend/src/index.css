@@ -63,10 +63,16 @@ body {
   justify-content: center;
   width: 34px;
   height: 34px;
+  overflow: hidden;
   border-radius: 8px;
-  background: #16365c;
-  color: #fff;
-  font-size: 17px;
+  background: #eaf1f8;
+}
+
+.app-brand-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .app-brand-copy {

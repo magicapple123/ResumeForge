@@ -4,7 +4,6 @@ import {
   ProfileOutlined,
   SearchOutlined,
   SettingOutlined,
-  UnorderedListOutlined,
 } from "@ant-design/icons";
 import { Layout, Menu, Typography } from "antd";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -41,7 +40,7 @@ function MainLayout() {
       >
         <div className="app-brand">
           <span className="app-brand-mark">
-            <UnorderedListOutlined />
+            <img className="app-brand-image" src="/resumeforge-icon.png" alt="" />
           </span>
           <span className="app-brand-copy">
             <span className="app-brand-name">{APP_NAME}</span>

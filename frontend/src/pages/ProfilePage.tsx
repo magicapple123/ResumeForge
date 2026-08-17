@@ -25,6 +25,7 @@ import type { UploadProps } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { getProfile, saveProfile } from "../api/profile";
 import { AwardSection } from "../components/profile/AwardSection";
+import { CampusExperienceSection } from "../components/profile/CampusExperienceSection";
 import { EducationSection } from "../components/profile/EducationSection";
 import { ExperienceSection } from "../components/profile/ExperienceSection";
 import { ProjectSection } from "../components/profile/ProjectSection";
@@ -61,6 +62,7 @@ function toFormValues(profile: Profile): ProfileFormValues {
     summary: profile.summary,
     educations: profile.educations,
     experiences: profile.experiences,
+    campus_experiences: profile.campus_experiences,
     projects: profile.projects,
     skills: profile.skills,
     awards: profile.awards,
@@ -313,6 +315,7 @@ export default function ProfilePage() {
 
         <EducationSection editable={editing} />
         <ExperienceSection editable={editing} />
+        <CampusExperienceSection editable={editing} />
         <ProjectSection editable={editing} />
         <SkillSection editable={editing} />
         <AwardSection editable={editing} />
