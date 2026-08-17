@@ -167,7 +167,7 @@ export default function ProfilePage() {
   if (loading) return <Skeleton active paragraph={{ rows: 10 }} />;
 
   return (
-    <div className="profile-page">
+    <div className={`profile-page${editing ? " is-editing" : ""}`}>
       <div className="profile-page-header">
         <div>
           <Typography.Title level={3} style={{ margin: 0 }}>

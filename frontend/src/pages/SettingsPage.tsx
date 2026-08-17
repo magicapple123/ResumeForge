@@ -1,7 +1,20 @@
 /** 设置页：大模型配置（含预设与连通测试）。 */
-import { ApiOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Card, Col, Form, Input, InputNumber, Row, Select, Slider, Space } from "antd";
-import { useEffect, useState } from "react";
+import { ApiOutlined, CloseOutlined, EditOutlined, SaveOutlined } from "@ant-design/icons";
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Col,
+  Form,
+  Input,
+  InputNumber,
+  Row,
+  Select,
+  Slider,
+  Typography,
+} from "antd";
+import { useEffect, useRef, useState } from "react";
 import { getLLMConfig, saveLLMConfig, testLLM } from "../api/settings";
 import { LLM_PRESETS } from "../config";
 import type { LLMConfig, LLMTestResult } from "../types";
@@ -16,43 +29,66 @@ export default function SettingsPage() {
   const { message } = App.useApp();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [testResult, setTestResult] = useState<LLMTestResult | null>(null);
+  const savedValues = useRef<SettingsFormValues | null>(null);
 
   // 加载已保存的配置；同时把 provider 预设索引还原到 Select（按 base_url 匹配）
   useEffect(() => {
     void getLLMConfig()
       .then((config) => {
-        form.setFieldsValue(config);
         const matched = LLM_PRESETS.findIndex((preset) => preset.base_url === config.base_url);
-        form.setFieldsValue({ preset: matched >= 0 ? matched : undefined });
+        const values: SettingsFormValues = {
+          ...config,
+          preset: matched >= 0 ? matched : undefined,
+        };
+        form.setFieldsValue(values);
+        savedValues.current = values;
       })
       .catch((err) => message.error(err instanceof Error ? err.message : "加载配置失败"));
   }, [form, message]);
 
   const applyPreset = (index: number) => {
+    if (!editing) return;
     const preset = LLM_PRESETS[index];
     if (!preset) return;
     form.setFieldsValue({ base_url: preset.base_url, model: preset.model });
   };
 
   /** 收集表单值并剔除前端专用的 preset 字段 */
-  const collectValues = async (): Promise<LLMConfig> => {
-    const values = await form.validateFields();
-    return {
-      provider: values.provider,
-      base_url: values.base_url,
-      api_key: values.api_key,
-      model: values.model,
-      temperature: values.temperature,
-      timeout_seconds: values.timeout_seconds,
-      max_tokens: values.max_tokens,
-    };
+  const collectValues = async (): Promise<LLMConfig | null> => {
+    try {
+      const values = await form.validateFields();
+      return {
+        provider: values.provider,
+        base_url: values.base_url,
+        api_key: values.api_key,
+        model: values.model,
+        temperature: values.temperature,
+        timeout_seconds: values.timeout_seconds,
+        max_tokens: values.max_tokens,
+      };
+    } catch {
+      return null;
+    }
   };
 
   const save = async () => {
+    if (!editing || saving || testing) return;
+    const values = await collectValues();
+    if (!values) return;
     setSaving(true);
     try {
-      await saveLLMConfig(await collectValues());
+      const saved = await saveLLMConfig(values);
+      const matched = LLM_PRESETS.findIndex((preset) => preset.base_url === saved.base_url);
+      const nextValues: SettingsFormValues = {
+        ...saved,
+        preset: matched >= 0 ? matched : undefined,
+      };
+      form.setFieldsValue(nextValues);
+      savedValues.current = nextValues;
+      setEditing(false);
+      setTestResult(null);
       message.success("配置已保存");
     } catch (err) {
       message.error(err instanceof Error ? err.message : "保存失败");
@@ -62,10 +98,13 @@ export default function SettingsPage() {
   };
 
   const test = async () => {
+    if (saving || testing) return;
+    const values = await collectValues();
+    if (!values) return;
     setTesting(true);
     setTestResult(null);
     try {
-      setTestResult(await testLLM(await collectValues()));
+      setTestResult(await testLLM(values));
     } catch (err) {
       setTestResult({ ok: false, latency_ms: null, message: err instanceof Error ? err.message : "测试失败" });
     } finally {
@@ -73,21 +112,66 @@ export default function SettingsPage() {
     }
   };
 
+  const cancelEditing = () => {
+    if (saving || testing) return;
+    if (savedValues.current) {
+      form.resetFields();
+      form.setFieldsValue(savedValues.current);
+    }
+    setTestResult(null);
+    setEditing(false);
+  };
+
   return (
-    <div style={{ maxWidth: 960 }}>
-      <Card title="大模型 API 配置" style={{ marginBottom: 16 }}>
+    <div className={`settings-page${editing ? " is-editing" : ""}`}>
+      <div className="settings-page-header">
+        <div>
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            设置
+          </Typography.Title>
+          <Typography.Text type="secondary">配置生成简历时使用的大模型服务</Typography.Text>
+        </div>
+        <div className="profile-page-header-actions">
+          {editing ? (
+            <>
+              <Button
+                icon={<CloseOutlined />}
+                disabled={saving || testing}
+                onClick={cancelEditing}
+              >
+                取消
+              </Button>
+              <Button
+                type="primary"
+                icon={<SaveOutlined />}
+                loading={saving}
+                disabled={testing}
+                onClick={() => void save()}
+              >
+                保存配置
+              </Button>
+            </>
+          ) : (
+            <Button icon={<EditOutlined />} onClick={() => setEditing(true)}>
+              编辑设置
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Card title="大模型 API 配置" className="settings-card">
         <Alert
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
           message="支持所有兼容 OpenAI Chat Completions 协议的模型服务：DeepSeek、豆包（火山方舟）、Kimi、智谱、OpenAI、Ollama 等。API Key 保存在本地数据库中，仅本机可访问。"
         />
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" disabled={!editing || saving || testing}>
           <Form.Item name="preset" label="快速预设（选择后自动填充 Base URL 与模型名）">
             <Select options={PRESET_OPTIONS} onChange={(value) => applyPreset(value as number)} />
           </Form.Item>
-          <Row gutter={12}>
-            <Col span={16}>
+          <Row gutter={[16, 0]}>
+            <Col xs={24} lg={16}>
               <Form.Item
                 name="base_url"
                 label="Base URL"
@@ -97,7 +181,7 @@ export default function SettingsPage() {
                 <Input placeholder="https://api.deepseek.com" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={24} lg={8}>
               <Form.Item
                 name="model"
                 label="模型名称"
@@ -116,32 +200,32 @@ export default function SettingsPage() {
           >
             <Input.Password placeholder="sk-..." autoComplete="off" />
           </Form.Item>
-          <Row gutter={12}>
-            <Col span={8}>
+          <Row gutter={[16, 0]}>
+            <Col xs={24} md={8}>
               <Form.Item name="temperature" label="创意度 temperature">
                 <Slider min={0} max={2} step={0.1} marks={{ 0: "严谨", 1: "均衡", 2: "发散" }} />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={24} md={8}>
               <Form.Item name="timeout_seconds" label="超时时间（秒）">
                 <InputNumber min={10} max={600} style={{ width: "100%" }} />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={24} md={8}>
               <Form.Item name="max_tokens" label="最大输出 Token">
                 <InputNumber min={256} max={65536} step={512} style={{ width: "100%" }} />
               </Form.Item>
             </Col>
           </Row>
-          <Space>
-            <Button type="primary" loading={saving} onClick={() => void save()}>
-              保存配置
-            </Button>
-            <Button icon={<ApiOutlined />} loading={testing} onClick={() => void test()}>
-              测试连接
-            </Button>
-          </Space>
         </Form>
+        <Button
+          icon={<ApiOutlined />}
+          loading={testing}
+          disabled={saving}
+          onClick={() => void test()}
+        >
+          测试连接
+        </Button>
         {testResult && (
           <Alert
             style={{ marginTop: 16 }}

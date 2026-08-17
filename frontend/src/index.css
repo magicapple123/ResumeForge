@@ -78,6 +78,43 @@ body {
   margin: 0 auto;
 }
 
+.settings-page {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.settings-card {
+  margin-bottom: 16px;
+}
+
+.profile-page:not(.is-editing) .ant-input::placeholder,
+.settings-page:not(.is-editing) .ant-input::placeholder,
+.profile-page:not(.is-editing) .ant-input-number-input::placeholder,
+.settings-page:not(.is-editing) .ant-input-number-input::placeholder {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  opacity: 0 !important;
+}
+
+.profile-page:not(.is-editing) .ant-select-selection-placeholder,
+.settings-page:not(.is-editing) .ant-select-selection-placeholder {
+  color: transparent !important;
+  opacity: 0 !important;
+}
+
+.profile-page:not(.is-editing) .ant-input-disabled,
+.settings-page:not(.is-editing) .ant-input-disabled,
+.settings-page:not(.is-editing) .ant-input-number-disabled .ant-input-number-input {
+  color: #262626 !important;
+  -webkit-text-fill-color: #262626;
+  opacity: 1;
+}
+
+.settings-page:not(.is-editing) .ant-select-disabled .ant-select-selection-item {
+  color: #262626 !important;
+}
+
 .jobs-filter-bar {
   width: 100%;
 }
@@ -154,7 +191,8 @@ body {
   border-top: 1px solid #f0f0f0;
 }
 
-.profile-page-header {
+.profile-page-header,
+.settings-page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -212,7 +250,8 @@ body {
     width: 100%;
   }
 
-  .profile-page-header {
+  .profile-page-header,
+  .settings-page-header {
     align-items: flex-start;
     flex-direction: column;
   }

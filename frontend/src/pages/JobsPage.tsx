@@ -183,7 +183,7 @@ export default function JobsPage() {
     },
     {
       title: "更新时间",
-      dataIndex: "created_at",
+      dataIndex: "updated_at",
       width: 150,
       render: (value) => formatDateTime(value),
     },
