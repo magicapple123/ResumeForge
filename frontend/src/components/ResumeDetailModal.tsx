@@ -3,7 +3,7 @@ import { EditOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Modal, Skeleton, Space, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { getResume, fetchResumeHtml, renderResume, updateResume } from "../api/resumes";
-import { RESUME_TONES } from "../config";
+import { RESUME_ENHANCEMENT_LEVELS } from "../config";
 import type { ResumeContent, ResumeDetail } from "../types";
 import ExportButtons from "./ExportButtons";
 import ResumeEditorModal from "./ResumeEditorModal";
@@ -35,7 +35,9 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
       .catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
   }, [recordId]);
 
-  const toneLabel = RESUME_TONES.find((tone) => tone.value === detail?.tone)?.label ?? detail?.tone;
+  const enhancementLabel = RESUME_ENHANCEMENT_LEVELS.find(
+    (item) => item.value === detail?.enhancement_level,
+  )?.label;
 
   const saveEditedResume = async (content: ResumeContent) => {
     if (!detail) return;
@@ -65,7 +67,9 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
             <Tag color="blue">目标岗位：{detail.job_title || "-"}</Tag>
             {detail.company && <Tag>{detail.company}</Tag>}
             <Tag>模型：{detail.model || "-"}</Tag>
-            {toneLabel && <Tag>风格：{toneLabel}</Tag>}
+            <Tag color={detail.enhancement_enabled ? "green" : undefined}>
+              美化拓展：{detail.enhancement_enabled ? enhancementLabel ?? "已开启" : "未开启"}
+            </Tag>
             <Typography.Text type="secondary" style={{ fontSize: 13 }}>
               生成于 {detail.created_at.replace("T", " ").slice(0, 16)}
             </Typography.Text>

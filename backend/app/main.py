@@ -17,21 +17,40 @@ logging.basicConfig(
 
 settings = get_settings()
 
+SQLITE_REQUIRED_COLUMNS = {
+    "job": {
+        "note": "TEXT NOT NULL DEFAULT ''",
+        "favorite": "BOOLEAN NOT NULL DEFAULT 0",
+    },
+    "user_profile": {"photo": "TEXT NOT NULL DEFAULT ''"},
+    "education": {
+        "reference_file_name": "VARCHAR(255) NOT NULL DEFAULT ''",
+        "reference_content": "TEXT NOT NULL DEFAULT ''",
+    },
+    "experience": {
+        "reference_file_name": "VARCHAR(255) NOT NULL DEFAULT ''",
+        "reference_content": "TEXT NOT NULL DEFAULT ''",
+    },
+    "campus_experience": {
+        "reference_file_name": "VARCHAR(255) NOT NULL DEFAULT ''",
+        "reference_content": "TEXT NOT NULL DEFAULT ''",
+    },
+    "project": {
+        "reference_file_name": "VARCHAR(255) NOT NULL DEFAULT ''",
+        "reference_content": "TEXT NOT NULL DEFAULT ''",
+    },
+    "resume_record": {
+        "enhancement_enabled": "BOOLEAN NOT NULL DEFAULT 0",
+        "enhancement_level": "VARCHAR(16) NOT NULL DEFAULT 'balanced'",
+    },
+}
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # create_all 不会给已有表加列；本地 SQLite 用幂等兼容升级保留历史数据。
     Base.metadata.create_all(bind=engine)
-    ensure_sqlite_columns(
-        engine,
-        {
-            "job": {
-                "note": "TEXT NOT NULL DEFAULT ''",
-                "favorite": "BOOLEAN NOT NULL DEFAULT 0",
-            },
-            "user_profile": {"photo": "TEXT NOT NULL DEFAULT ''"},
-        },
-    )
+    ensure_sqlite_columns(engine, SQLITE_REQUIRED_COLUMNS)
     yield
 
 

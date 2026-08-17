@@ -64,6 +64,8 @@ class Education(Base):
     gpa: Mapped[str] = mapped_column(String(32), default="")  # 绩点/排名，如 "3.8/4.0"
     courses: Mapped[str] = mapped_column(Text, default="")  # 核心课程，换行分隔
     achievements: Mapped[str] = mapped_column(Text, default="")  # 在校成果，换行分隔
+    reference_file_name: Mapped[str] = mapped_column(String(255), default="")
+    reference_content: Mapped[str] = mapped_column(Text, default="")
 
 
 class Experience(Base):
@@ -76,6 +78,8 @@ class Experience(Base):
     start_date: Mapped[str] = mapped_column(String(16), default="")
     end_date: Mapped[str] = mapped_column(String(16), default="")
     description: Mapped[str] = mapped_column(Text, default="")  # 工作内容，换行分隔
+    reference_file_name: Mapped[str] = mapped_column(String(255), default="")
+    reference_content: Mapped[str] = mapped_column(Text, default="")
 
 
 class CampusExperience(Base):
@@ -88,6 +92,8 @@ class CampusExperience(Base):
     start_date: Mapped[str] = mapped_column(String(16), default="")
     end_date: Mapped[str] = mapped_column(String(16), default="")
     description: Mapped[str] = mapped_column(Text, default="")  # 经历描述，换行分隔
+    reference_file_name: Mapped[str] = mapped_column(String(255), default="")
+    reference_content: Mapped[str] = mapped_column(Text, default="")
 
 
 class Project(Base):
@@ -102,6 +108,8 @@ class Project(Base):
     tech_stack: Mapped[str] = mapped_column(String(256), default="")  # 逗号分隔
     description: Mapped[str] = mapped_column(Text, default="")  # 项目描述，换行分隔
     highlights: Mapped[str] = mapped_column(Text, default="")  # 亮点/成果，换行分隔
+    reference_file_name: Mapped[str] = mapped_column(String(255), default="")
+    reference_content: Mapped[str] = mapped_column(Text, default="")
 
 
 class Skill(Base):

@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -23,6 +23,10 @@ class ResumeRecord(Base):
     content: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # 结构化简历
     warnings: Mapped[list[str]] = mapped_column(JSON, default=list)  # 一致性校验提醒
     model: Mapped[str] = mapped_column(String(64), default="")
+    # 旧数据库中的 tone 列为 NOT NULL 且没有服务端默认值。继续写入默认值仅为
+    # 兼容历史表结构；API 和前端均不再暴露定制风格功能。
     tone: Mapped[str] = mapped_column(String(32), default="standard")
+    enhancement_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    enhancement_level: Mapped[str] = mapped_column(String(16), default="balanced")
     parse_error: Mapped[str] = mapped_column(Text, default="")  # JSON 解析失败时留痕
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

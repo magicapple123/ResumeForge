@@ -8,8 +8,11 @@ from .profile import validate_photo_data_url
 
 
 class GenerateOptions(BaseModel):
-    # 定制风格：standard 综合均衡 / tech 技术突出 / academic 科研算法
-    tone: Literal["standard", "tech", "academic"] = "standard"
+    """控制是否允许模型基于已有事实做岗位导向的改写和拓展。"""
+
+    model_config = ConfigDict(extra="forbid")
+    enhance: bool = False
+    enhancement_level: Literal["light", "balanced", "strong"] = "balanced"
 
 
 class GenerateRequest(BaseModel):
@@ -99,7 +102,8 @@ class ResumeBrief(BaseModel):
     job_title: str
     company: str
     model: str
-    tone: str
+    enhancement_enabled: bool
+    enhancement_level: Literal["light", "balanced", "strong"]
     created_at: datetime
 
 

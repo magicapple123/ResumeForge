@@ -2,6 +2,7 @@
 import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
 import ProfileSection from "./ProfileSection";
+import ReferenceFileField from "./ReferenceFileField";
 
 interface Props {
   editable: boolean;
@@ -13,7 +14,15 @@ export function ExperienceSection({ editable }: Props) {
       title="实习/工作经历"
       fieldName="experiences"
       editable={editable}
-      emptyValue={{ company: "", role: "", start_date: "", end_date: "", description: "" }}
+      emptyValue={{
+        company: "",
+        role: "",
+        start_date: "",
+        end_date: "",
+        description: "",
+        reference_file_name: "",
+        reference_content: "",
+      }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
           <Col xs={24} md={8}>
@@ -47,6 +56,9 @@ export function ExperienceSection({ editable }: Props) {
                 placeholder="每行一条工作内容，尽量包含做了什么、用了什么技术、结果如何（数字量化更好）"
               />
             </Form.Item>
+          </Col>
+          <Col xs={24}>
+            <ReferenceFileField listName="experiences" fieldName={field.name} editable={editable} />
           </Col>
         </Row>
       )}

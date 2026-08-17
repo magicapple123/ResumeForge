@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 
 MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
+MAX_REFERENCE_FILE_NAME_CHARS = 255
+MAX_REFERENCE_CONTENT_CHARS = 200_000
 _MAX_ENCODED_PHOTO_CHARS = 4 * ((MAX_PROFILE_PHOTO_BYTES + 2) // 3)
 _PHOTO_HEADER_RE = re.compile(r"^data:(image/(?:jpeg|png|webp));base64$", re.IGNORECASE)
 
@@ -46,7 +48,32 @@ def validate_photo_data_url(value: str) -> str:
     return value
 
 
-class EducationIn(BaseModel):
+class ReferenceFileFields(BaseModel):
+    """浏览器读取的参考文件；服务端不接收也不保存本地路径。"""
+
+    reference_file_name: str = ""
+    reference_content: str = ""
+
+    @field_validator("reference_file_name")
+    @classmethod
+    def reference_file_name_must_fit(cls, value: str) -> str:
+        if len(value) > MAX_REFERENCE_FILE_NAME_CHARS:
+            raise ValueError(
+                f"参考文件名不能超过 {MAX_REFERENCE_FILE_NAME_CHARS} 个字符"
+            )
+        return value
+
+    @field_validator("reference_content")
+    @classmethod
+    def reference_content_must_fit(cls, value: str) -> str:
+        if len(value) > MAX_REFERENCE_CONTENT_CHARS:
+            raise ValueError(
+                f"参考文件内容不能超过 {MAX_REFERENCE_CONTENT_CHARS} 个字符"
+            )
+        return value
+
+
+class EducationIn(ReferenceFileFields):
     school: str = ""
     major: str = ""
     degree: str = ""
@@ -57,7 +84,7 @@ class EducationIn(BaseModel):
     achievements: str = ""  # 换行分隔
 
 
-class ExperienceIn(BaseModel):
+class ExperienceIn(ReferenceFileFields):
     company: str = ""
     role: str = ""
     start_date: str = ""
@@ -65,7 +92,7 @@ class ExperienceIn(BaseModel):
     description: str = ""  # 换行分隔
 
 
-class CampusExperienceIn(BaseModel):
+class CampusExperienceIn(ReferenceFileFields):
     organization: str = ""
     role: str = ""
     start_date: str = ""
@@ -73,7 +100,7 @@ class CampusExperienceIn(BaseModel):
     description: str = ""  # 换行分隔
 
 
-class ProjectIn(BaseModel):
+class ProjectIn(ReferenceFileFields):
     name: str = ""
     role: str = ""
     start_date: str = ""

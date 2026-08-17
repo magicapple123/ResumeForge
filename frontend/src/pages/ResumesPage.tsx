@@ -4,7 +4,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useState } from "react";
 import { deleteResume, listResumes } from "../api/resumes";
 import ResumeDetailModal from "../components/ResumeDetailModal";
-import { RESUME_TONES } from "../config";
+import { RESUME_ENHANCEMENT_LEVELS } from "../config";
 import { useApi } from "../hooks/useApi";
 import type { ResumeBrief } from "../types";
 import { formatDateTime } from "../utils/format";
@@ -58,10 +58,16 @@ export default function ResumesPage() {
     },
     { title: "模型", dataIndex: "model", width: 150, render: (value) => value || "-" },
     {
-      title: "风格",
-      dataIndex: "tone",
+      title: "美化拓展",
+      key: "enhancement",
       width: 110,
-      render: (value) => RESUME_TONES.find((tone) => tone.value === value)?.label ?? value,
+      render: (_, record) => {
+        if (!record.enhancement_enabled) return <Typography.Text type="secondary">未开启</Typography.Text>;
+        const label = RESUME_ENHANCEMENT_LEVELS.find(
+          (item) => item.value === record.enhancement_level,
+        )?.label;
+        return <Tag color="green">{label ?? "已开启"}</Tag>;
+      },
     },
     {
       title: "生成时间",

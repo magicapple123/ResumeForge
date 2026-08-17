@@ -47,9 +47,21 @@ export const LLM_PRESETS: LLMPreset[] = [
   },
 ];
 
-/** 简历定制风格（与后端 GenerateOptions.tone 对应） */
-export const RESUME_TONES = [
-  { value: "standard", label: "综合均衡", hint: "教育/实习/项目/技能均衡呈现，适合大多数岗位" },
-  { value: "tech", label: "技术突出", hint: "强化项目技术深度与工程能力，弱化无关经历" },
-  { value: "academic", label: "科研算法", hint: "突出科研竞赛与算法能力，适合 AI 算法岗" },
+/** 经历美化程度（与后端 GenerateOptions.enhancement_level 对应）。 */
+export const RESUME_ENHANCEMENT_LEVELS = [
+  {
+    value: "light",
+    label: "轻度",
+    description: "优化措辞与重点，基本保持原有篇幅",
+  },
+  {
+    value: "balanced",
+    label: "均衡",
+    description: "补足方法、技术细节与成果表达",
+  },
+  {
+    value: "strong",
+    label: "深度",
+    description: "充分利用已有资料，强化岗位匹配度",
+  },
 ] as const;

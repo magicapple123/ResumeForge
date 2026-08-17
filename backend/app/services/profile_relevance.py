@@ -161,6 +161,17 @@ _ASCII_TERM_RE = re.compile(r"[A-Za-z]")
 _LIST_DETAIL_FIELDS = ("courses", "achievements", "description", "highlights")
 _OPTIONAL_TOP_LEVEL_FIELDS = ("summary", "github", "personal_website", "target_city")
 _MIN_PROFILE_CONTEXT_CHARS = 1_000
+_REFERENCE_SECTIONS = ("educations", "experiences", "campus_experiences", "projects")
+_REFERENCE_CONTENT_KEY = "_reference_content"
+_REFERENCE_FILE_KEY = "_reference_file_name"
+_REFERENCE_EXCERPT_MAX_CHARS = 1_800
+_REFERENCE_INSTRUCTION_RE = re.compile(
+    r"(?:忽略|绕过).{0,24}(?:系统|规则|指令|要求|限制)|"
+    r"(?:系统|开发者|用户)\s*(?:消息|指令)|"
+    r"(?:执行|遵循).{0,16}(?:以下|上述|本文).{0,8}(?:命令|指令)|"
+    r"(?:虚构|编造).{0,24}(?:经历|成绩|成果|数据|数字)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -195,8 +206,23 @@ def split_commas(text: str) -> list[str]:
     return [item.strip() for item in re.split(r"[,，、]", text) if item.strip()]
 
 
-def build_profile_prompt_data(profile: ProfileOut) -> dict[str, Any]:
-    """把完整资料规范化为模型可读结构；不包含数据库内部 id。"""
+def _reference_fields(item: Any, include_references: bool) -> dict[str, str]:
+    """内部保留参考原文用于检索；最终发送前会替换为岗位相关节选。"""
+    if not include_references:
+        return {}
+    content = getattr(item, "reference_content", "").strip()
+    if not content:
+        return {}
+    return {
+        _REFERENCE_FILE_KEY: getattr(item, "reference_file_name", "").strip(),
+        _REFERENCE_CONTENT_KEY: content,
+    }
+
+
+def build_profile_prompt_data(
+    profile: ProfileOut, *, include_references: bool = False
+) -> dict[str, Any]:
+    """把完整资料规范化为模型可读结构；默认不携带参考文件。"""
     return {
         "name": profile.name,
         "gender": profile.gender,
@@ -219,6 +245,7 @@ def build_profile_prompt_data(profile: ProfileOut) -> dict[str, Any]:
                 "gpa": item.gpa,
                 "courses": split_lines(item.courses),
                 "achievements": split_lines(item.achievements),
+                **_reference_fields(item, include_references),
             }
             for item in profile.educations
         ],
@@ -229,6 +256,7 @@ def build_profile_prompt_data(profile: ProfileOut) -> dict[str, Any]:
                 "start_date": item.start_date,
                 "end_date": item.end_date,
                 "description": split_lines(item.description),
+                **_reference_fields(item, include_references),
             }
             for item in profile.experiences
         ],
@@ -239,6 +267,7 @@ def build_profile_prompt_data(profile: ProfileOut) -> dict[str, Any]:
                 "start_date": item.start_date,
                 "end_date": item.end_date,
                 "description": split_lines(item.description),
+                **_reference_fields(item, include_references),
             }
             for item in getattr(profile, "campus_experiences", [])
         ],
@@ -251,6 +280,7 @@ def build_profile_prompt_data(profile: ProfileOut) -> dict[str, Any]:
                 "tech_stack": split_commas(item.tech_stack),
                 "description": split_lines(item.description),
                 "highlights": split_lines(item.highlights),
+                **_reference_fields(item, include_references),
             }
             for item in profile.projects
         ],
@@ -428,6 +458,62 @@ def _select_summary(summary: str, focus: JobFocus) -> str:
     return " ".join(matching[:2])
 
 
+def _reference_chunks(content: str) -> list[str]:
+    """按 Markdown 段落切分，并在进入 Prompt 前丢弃明显的指令注入。"""
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        return []
+    chunks = [
+        chunk.replace("```", "").strip()
+        for chunk in re.split(r"\n\s*\n+", normalized)
+        if chunk.strip()
+    ]
+    return [
+        _trim_text(chunk, 700)
+        for chunk in chunks
+        if _REFERENCE_INSTRUCTION_RE.search(chunk) is None
+    ]
+
+
+def _select_reference_excerpt(content: str, section: str, focus: JobFocus) -> str:
+    """选择直接命中 JD 的参考段落，并保持其在原文中的顺序。"""
+    ranked = [
+        (index, chunk, _score_item({"reference": chunk}, section, focus))
+        for index, chunk in enumerate(_reference_chunks(content))
+    ]
+    matching = sorted(
+        (item for item in ranked if item[2] > 0),
+        key=lambda item: (-item[2], item[0]),
+    )
+    selected_indexes: set[int] = set()
+    used_chars = 0
+    for index, chunk, _ in matching:
+        separator_size = 2 if selected_indexes else 0
+        if selected_indexes and used_chars + separator_size + len(chunk) > _REFERENCE_EXCERPT_MAX_CHARS:
+            continue
+        selected_indexes.add(index)
+        used_chars += separator_size + len(chunk)
+        if used_chars >= _REFERENCE_EXCERPT_MAX_CHARS:
+            break
+    return "\n\n".join(
+        chunk for index, chunk, _ in ranked if index in selected_indexes
+    )
+
+
+def _prepare_reference_excerpt(
+    item: dict[str, Any], section: str, focus: JobFocus
+) -> dict[str, Any]:
+    """移除内部参考原文，只暴露可追溯的岗位相关节选。"""
+    result = deepcopy(item)
+    content = str(result.pop(_REFERENCE_CONTENT_KEY, ""))
+    file_name = str(result.pop(_REFERENCE_FILE_KEY, ""))
+    excerpt = _select_reference_excerpt(content, section, focus)
+    if excerpt:
+        result["reference_file_name"] = file_name
+        result["reference_excerpt"] = excerpt
+    return result
+
+
 def _select_entries(
     items: list[dict[str, Any]], section: str, focus: JobFocus
 ) -> list[dict[str, Any]]:
@@ -530,6 +616,18 @@ def build_job_prompt_text(job: JobOut, max_chars: int) -> str:
 
 def _drop_one_detail(data: dict[str, Any]) -> bool:
     """从候选尾部逐条删减要点，优先保留排名靠前的事实。"""
+    # 参考节选只用于美化，不应在预算不足时挤掉用户资料中的核心事实。
+    for section in reversed(_REFERENCE_SECTIONS):
+        for item in reversed(data.get(section) or []):
+            excerpt = item.get("reference_excerpt")
+            if not isinstance(excerpt, str) or not excerpt:
+                continue
+            if len(excerpt) > 360:
+                item["reference_excerpt"] = _trim_text(excerpt, max(360, len(excerpt) // 2))
+            else:
+                item.pop("reference_excerpt", None)
+                item.pop("reference_file_name", None)
+            return True
     for section in ("awards", "campus_experiences", "experiences", "projects", "educations"):
         entries = data.get(section) or []
         for item in reversed(entries):
@@ -640,10 +738,14 @@ def serialize_profile_prompt_data(data: dict[str, Any], max_chars: int) -> str:
 
 
 def build_targeted_profile_context(
-    profile: ProfileOut, job: JobOut, max_chars: int = 12_000
+    profile: ProfileOut,
+    job: JobOut,
+    max_chars: int = 12_000,
+    *,
+    include_references: bool = False,
 ) -> ProfileSelection:
     """构建岗位专属候选资料，并在边界安全的预算内序列化。"""
-    full = build_profile_prompt_data(profile)
+    full = build_profile_prompt_data(profile, include_references=include_references)
     focus = build_job_focus(job, profile)
     selected: dict[str, Any] = {
         key: value for key, value in full.items() if key not in SECTION_LIMITS
@@ -653,7 +755,11 @@ def build_targeted_profile_context(
     selected["summary"] = _select_summary(full["summary"], focus)
     for section in ("educations", "experiences", "campus_experiences", "projects", "awards"):
         selected[section] = [
-            _prioritize_item_details(item, section, focus)
+            _prepare_reference_excerpt(
+                _prioritize_item_details(item, section, focus), section, focus
+            )
+            if include_references and section in _REFERENCE_SECTIONS
+            else _prioritize_item_details(item, section, focus)
             for item in _select_entries(full[section], section, focus)
         ]
     evidence = {
@@ -682,6 +788,10 @@ def build_targeted_profile_context(
     )
 
 
-def build_targeted_profile_prompt_data(profile: ProfileOut, job: JobOut) -> dict[str, Any]:
+def build_targeted_profile_prompt_data(
+    profile: ProfileOut, job: JobOut, *, include_references: bool = False
+) -> dict[str, Any]:
     """公开的纯函数入口，便于测试岗位不同导致的候选资料差异。"""
-    return build_targeted_profile_context(profile, job).data
+    return build_targeted_profile_context(
+        profile, job, include_references=include_references
+    ).data

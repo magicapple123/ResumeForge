@@ -19,7 +19,6 @@ from .profile_relevance import (
     build_job_prompt_text,
     build_profile_prompt_data,
     build_targeted_profile_context,
-    build_targeted_profile_prompt_data,
     split_commas,
     split_lines,
 )
@@ -30,12 +29,26 @@ PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 MAX_JD_CHARS = 5_000
 MAX_PROFILE_CHARS = 9_000
 
-# 不同定制风格对应的指令，与前端 GenerateOptions.tone 一一对应
-TONE_GUIDES = {
-    "standard": "综合均衡型：教育背景、实习经历、项目经历、技能均衡呈现，适合大多数岗位。",
-    "tech": "技术突出型：强化项目技术深度、技术栈细节与工程能力，突出解决过的技术难题，弱化与岗位无关的经历。",
-    "academic": "科研算法型：突出科研/竞赛/模型训练经历，强化算法能力与论文成果，适合 AI、算法类岗位。",
+# 三档只控制对描述性字段的改写幅度；结构化事实始终由代码强制锚定。
+ENHANCEMENT_LEVEL_GUIDES = {
+    "light": (
+        "轻度美化：只优化语序、动词和专业表达，保持原有要点数量与职责边界；"
+        "每条内容应能直接对应原资料或参考节选。"
+    ),
+    "balanced": (
+        "均衡美化：可围绕 JD 重组原有事实，补足动作、方法和业务目的，使表达更扎实；"
+        "允许合并同一条目内的相关证据，但不得推导未明确提供的结果。"
+    ),
+    "strong": (
+        "深度美化：充分挖掘同一条目及参考节选中的岗位相关证据，以专业简历语言展开"
+        "技术决策、实施过程和价值；可以增加描述要点，但每个事实都必须能追溯到来源。"
+    ),
 }
+
+_ENHANCEMENT_DISABLED_GUIDE = (
+    "美化拓展已关闭：只能选择、排序并精确回填候选资料中的原文要点；"
+    "不得合并、改写或扩充 description、highlights 和 summary。"
+)
 
 # 简历结构中的"列表字段"，宽松校验时字符串会被拆分补全
 _LIST_FIELDS = {
@@ -235,7 +248,8 @@ def _ground_list(generated: list[str], source: list[str]) -> list[str]:
 
 
 _QUANTIFIED_VALUE_RE = re.compile(
-    r"\d+(?:\.\d+)?\s*(?:[%％]|倍|万|千|[kK]|次|人|项|毫秒|ms|秒|天|小时|年|个月)"
+    r"\d+(?:\.\d+)?\s*(?:[%％]|倍|万|千|[kK]|次|人|个|项|条|页|张|表|字段|接口|路径|"
+    r"种|端|套|层|模块|功能|毫秒|ms|秒|天|小时|年|个月)"
 )
 
 
@@ -265,6 +279,38 @@ def _ground_or_restore_list(generated: list[str], source: list[str]) -> list[str
     """优先保留模型明确选择的事实；无法验证时回填来源，避免空白或虚构。"""
     grounded = _ground_list(generated, source)
     return grounded or list(source)
+
+
+def _source_evidence_text(source: dict, fields: tuple[str, ...]) -> str:
+    """合并条目录入事实与岗位相关参考节选，供量化结果校验。"""
+    values = [value for field in fields for value in _source_list(source, field)]
+    excerpt = _source_value(source, "reference_excerpt")
+    if excerpt:
+        values.append(excerpt)
+    return "\n".join(values)
+
+
+def _enhance_or_restore_list(
+    generated: list[str], source: list[str], source_evidence: str
+) -> list[str]:
+    """美化模式保留改写，但过滤来源无法支持的量化断言。"""
+    if not source_evidence.strip():
+        return list(source)
+    accepted: list[str] = []
+    seen: set[str] = set()
+    for value in generated:
+        cleaned = value.strip()
+        normalized = _normalize_fact(cleaned)
+        if (
+            not cleaned
+            or not normalized
+            or normalized in seen
+            or _unsupported_quantified_values([cleaned], source_evidence)
+        ):
+            continue
+        seen.add(normalized)
+        accepted.append(cleaned)
+    return accepted or list(source)
 
 
 def _build_grounded_summary(selected_data: dict, job: JobOut) -> str:
@@ -338,12 +384,15 @@ def ground_resume_facts(
     profile: ProfileOut,
     job: JobOut,
     selected_data: dict | None = None,
+    *,
+    enhance: bool = False,
 ) -> ResumeContent:
     """把模型结果中的可验证字段锚定回资料库。
 
-    所有结构字段和要点都回填为候选资料的原始事实；模型只负责从候选中选择
-    和排序。找不到候选源的条目会被丢弃，对应提醒由生成前的
-    ``check_consistency`` 保留给用户。
+    名称、角色、日期、技能和技术栈始终回填为候选资料的原始事实。美化关闭
+    时描述也精确回填；开启时 description/highlights/summary 可基于同条目的
+    录入事实和参考节选改写，但无来源的量化结果会被过滤。找不到候选源的条目
+    会被丢弃，对应提醒由生成前的 ``check_consistency`` 保留给用户。
     """
     source_data = selected_data or build_profile_prompt_data(profile)
     result = resume.model_copy(
@@ -357,13 +406,28 @@ def ground_resume_facts(
             "job_intent": job.title or profile.job_intent,
         }
     )
-    result = result.model_copy(update={"summary": _build_grounded_summary(source_data, job)})
+    grounded_summary = _build_grounded_summary(source_data, job)
+    summary_evidence = json.dumps(source_data, ensure_ascii=False)
+    summary = resume.summary.strip() if enhance else ""
+    if not summary or _unsupported_quantified_values(summary, summary_evidence):
+        summary = grounded_summary
+    result = result.model_copy(update={"summary": summary})
 
     education_items = []
     for item in result.education:
         source = _find_source(item, source_data.get("educations", []), "school", "major")
         if source is None:
             continue
+        source_achievements = _source_list(source, "achievements")
+        achievements = (
+            _enhance_or_restore_list(
+                item.achievements,
+                source_achievements,
+                _source_evidence_text(source, ("achievements",)),
+            )
+            if enhance
+            else _ground_or_restore_list(item.achievements, source_achievements)
+        )
         education_items.append(
             item.model_copy(
                 update={
@@ -374,9 +438,7 @@ def ground_resume_facts(
                     "end_date": _source_value(source, "end_date"),
                     "gpa": _source_value(source, "gpa"),
                     "courses": _ground_or_restore_list(item.courses, _source_list(source, "courses")),
-                    "achievements": _ground_or_restore_list(
-                        item.achievements, _source_list(source, "achievements")
-                    ),
+                    "achievements": achievements,
                 }
             )
         )
@@ -387,6 +449,16 @@ def ground_resume_facts(
         source = _find_source(item, source_data.get("experiences", []), "company", "role")
         if source is None:
             continue
+        source_description = _source_list(source, "description")
+        description = (
+            _enhance_or_restore_list(
+                item.description,
+                source_description,
+                _source_evidence_text(source, ("description",)),
+            )
+            if enhance
+            else _ground_or_restore_list(item.description, source_description)
+        )
         experience_items.append(
             item.model_copy(
                 update={
@@ -394,9 +466,7 @@ def ground_resume_facts(
                     "role": _source_value(source, "role"),
                     "start_date": _source_value(source, "start_date"),
                     "end_date": _source_value(source, "end_date"),
-                    "description": _ground_or_restore_list(
-                        item.description, _source_list(source, "description")
-                    ),
+                    "description": description,
                 }
             )
         )
@@ -407,6 +477,16 @@ def ground_resume_facts(
         source = _find_source(item, source_data.get("campus_experiences", []), "organization", "role")
         if source is None:
             continue
+        source_description = _source_list(source, "description")
+        description = (
+            _enhance_or_restore_list(
+                item.description,
+                source_description,
+                _source_evidence_text(source, ("description",)),
+            )
+            if enhance
+            else _ground_or_restore_list(item.description, source_description)
+        )
         campus_items.append(
             item.model_copy(
                 update={
@@ -414,9 +494,7 @@ def ground_resume_facts(
                     "role": _source_value(source, "role"),
                     "start_date": _source_value(source, "start_date"),
                     "end_date": _source_value(source, "end_date"),
-                    "description": _ground_or_restore_list(
-                        item.description, _source_list(source, "description")
-                    ),
+                    "description": description,
                 }
             )
         )
@@ -427,6 +505,19 @@ def ground_resume_facts(
         source = _find_source(item, source_data.get("projects", []), "name", "role")
         if source is None:
             continue
+        source_description = _source_list(source, "description")
+        source_highlights = _source_list(source, "highlights")
+        source_evidence = _source_evidence_text(source, ("description", "highlights"))
+        description = (
+            _enhance_or_restore_list(item.description, source_description, source_evidence)
+            if enhance
+            else _ground_or_restore_list(item.description, source_description)
+        )
+        highlights = (
+            _enhance_or_restore_list(item.highlights, source_highlights, source_evidence)
+            if enhance
+            else _ground_or_restore_list(item.highlights, source_highlights)
+        )
         project_items.append(
             item.model_copy(
                 update={
@@ -437,12 +528,8 @@ def ground_resume_facts(
                     "tech_stack": _ground_or_restore_list(
                         item.tech_stack, _source_list(source, "tech_stack")
                     ),
-                    "description": _ground_or_restore_list(
-                        item.description, _source_list(source, "description")
-                    ),
-                    "highlights": _ground_or_restore_list(
-                        item.highlights, _source_list(source, "highlights")
-                    ),
+                    "description": description,
+                    "highlights": highlights,
                 }
             )
         )
@@ -515,7 +602,7 @@ def check_consistency(
         source = _find_source(exp, source_data["experiences"], "company", "role")
         if source:
             unsupported = _unsupported_quantified_values(
-                exp.description, "\n".join(_source_list(source, "description"))
+                exp.description, _source_evidence_text(source, ("description",))
             )
             if unsupported:
                 warnings.append(
@@ -529,7 +616,7 @@ def check_consistency(
         source = _find_source(item, source_data["campus_experiences"], "organization", "role")
         if source:
             unsupported = _unsupported_quantified_values(
-                item.description, "\n".join(_source_list(source, "description"))
+                item.description, _source_evidence_text(source, ("description",))
             )
             if unsupported:
                 warnings.append(
@@ -540,9 +627,7 @@ def check_consistency(
             warnings.append(f"项目经历中出现{source_label}未包含的项目「{project.name}」，请核对是否为虚构")
         source = _find_source(project, source_data["projects"], "name", "role")
         if source:
-            source_text = "\n".join(
-                _source_list(source, "description") + _source_list(source, "highlights")
-            )
+            source_text = _source_evidence_text(source, ("description", "highlights"))
             unsupported = _unsupported_quantified_values(
                 project.description + project.highlights, source_text
             )
@@ -587,10 +672,19 @@ class ResumeGenerator:
         - done:     {"type", "resume", "warnings"}  解析成功
         - error:    {"type", "message"}   失败（友好提示，由 API 层直接转发）
         """
-        tone_guide = TONE_GUIDES.get(options.tone, TONE_GUIDES["standard"])
+        enhancement_guide = (
+            ENHANCEMENT_LEVEL_GUIDES[options.enhancement_level]
+            if options.enhance
+            else _ENHANCEMENT_DISABLED_GUIDE
+        )
 
         yield {"type": "progress", "message": "正在分析岗位要求与资料匹配度…"}
-        selection = build_targeted_profile_context(profile, job, max_chars=MAX_PROFILE_CHARS)
+        selection = build_targeted_profile_context(
+            profile,
+            job,
+            max_chars=MAX_PROFILE_CHARS,
+            include_references=options.enhance,
+        )
         counts = selection.selected_counts
         yield {
             "type": "progress",
@@ -605,7 +699,8 @@ class ResumeGenerator:
             profile_json=selection.serialized,
             job=job,
             jd=build_job_prompt_text(job, MAX_JD_CHARS),
-            tone_guide=tone_guide,
+            enhancement_guide=enhancement_guide,
+            enhancement_enabled=options.enhance,
             focus_skills="、".join(selection.focus.skills) or "未识别到明确技能，请以 JD 原文为准",
             focus_domains="、".join(selection.focus.domains) or "通用岗位",
             omitted_count=sum(selection.omitted_counts.values()),
@@ -641,7 +736,13 @@ class ResumeGenerator:
 
         # 先基于原始模型输出记录越界提醒，再过滤/回填本岗位候选事实。
         warnings = check_consistency(resume, profile, selection.data)
-        resume = ground_resume_facts(resume, profile, job, selection.data).model_copy(
+        resume = ground_resume_facts(
+            resume,
+            profile,
+            job,
+            selection.data,
+            enhance=options.enhance,
+        ).model_copy(
             update={"photo": profile.photo}
         )
         resume = restore_selected_sections(resume, selection.data)

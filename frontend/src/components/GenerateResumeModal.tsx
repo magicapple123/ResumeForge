@@ -1,12 +1,12 @@
-/** AI 生成简历弹窗：风格选择 -> 流式生成 -> 预览结果（自动保存历史）。 */
+/** AI 生成简历弹窗：配置岗位导向美化 -> 流式生成 -> 预览结果（自动保存历史）。 */
 import { EditOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Modal, Radio, Space, Spin, Tag, Typography } from "antd";
+import { Alert, App, Button, Modal, Segmented, Space, Spin, Switch, Tag, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateResume, renderResume, updateResume } from "../api/resumes";
 import { getLLMConfig } from "../api/settings";
-import { RESUME_TONES } from "../config";
-import type { Job, ResumeContent, ResumeTone, StreamEvent } from "../types";
+import { RESUME_ENHANCEMENT_LEVELS } from "../config";
+import type { EnhancementLevel, Job, ResumeContent, StreamEvent } from "../types";
 import ExportButtons from "./ExportButtons";
 import ResumeEditorModal from "./ResumeEditorModal";
 import ResumePreview from "./ResumePreview";
@@ -29,7 +29,8 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
   const navigate = useNavigate();
 
   const [stage, setStage] = useState<Stage>("config");
-  const [tone, setTone] = useState<ResumeTone>("standard");
+  const [enhance, setEnhance] = useState(false);
+  const [enhancementLevel, setEnhancementLevel] = useState<EnhancementLevel>("balanced");
   const [modelName, setModelName] = useState("");
   const [llmReady, setLlmReady] = useState(true);
   const [progress, setProgress] = useState<string[]>([]);
@@ -111,7 +112,11 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
     };
 
     try {
-      await generateResume({ job_id: job.id, options: { tone } }, handleEvent, abortRef.current.signal);
+      await generateResume(
+        { job_id: job.id, options: { enhance, enhancement_level: enhancementLevel } },
+        handleEvent,
+        abortRef.current.signal,
+      );
       if (final.resume) {
         const html = await renderResume(final.resume);
         setResult({ resume: final.resume, warnings: final.warnings, recordId: final.recordId });
@@ -176,24 +181,34 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
               showIcon
               style={{ marginBottom: 16 }}
               message={`当前模型：${modelName || "未知"}。生成过程约需 1-2 分钟，请勿关闭弹窗。`}
-              description="系统会根据目标岗位的 JD，从完整个人资料中自动筛选并排序相关经历、项目、校园经历和技能；原始资料不会被修改。"
+              description="系统会根据目标岗位的 JD，从完整个人资料与经历总结文件中筛选并排序相关信息；原始资料不会被修改。"
             />
           )}
-          <Typography.Title level={5}>选择定制风格</Typography.Title>
-          <Radio.Group
-            value={tone}
-            onChange={(event) => setTone(event.target.value as ResumeTone)}
-            style={{ width: "100%" }}
-          >
-            <Space direction="vertical" style={{ width: "100%" }}>
-              {RESUME_TONES.map((item) => (
-                <Radio key={item.value} value={item.value}>
-                  <Typography.Text strong>{item.label}</Typography.Text>
-                  <Typography.Text type="secondary"> - {item.hint}</Typography.Text>
-                </Radio>
-              ))}
+          <Typography.Title level={5}>岗位适配与内容美化</Typography.Title>
+          <Space direction="vertical" size={14} style={{ width: "100%" }}>
+            <Space size={10}>
+              <Switch checked={enhance} onChange={setEnhance} />
+              <Typography.Text strong>根据岗位要求美化拓展经历</Typography.Text>
             </Space>
-          </Radio.Group>
+            <Typography.Text type="secondary">
+              基于已有经历和总结文件补足表达细节，突出与岗位相关的能力，不修改个人资料原文。
+            </Typography.Text>
+            <Segmented
+              block
+              disabled={!enhance}
+              value={enhancementLevel}
+              options={RESUME_ENHANCEMENT_LEVELS.map((item) => ({
+                label: item.label,
+                value: item.value,
+              }))}
+              onChange={(value) => setEnhancementLevel(value as EnhancementLevel)}
+            />
+            <Typography.Text type={enhance ? undefined : "secondary"}>
+              {enhance
+                ? RESUME_ENHANCEMENT_LEVELS.find((item) => item.value === enhancementLevel)?.description
+                : "关闭后仅筛选和整理原有资料，不进行拓展。"}
+            </Typography.Text>
+          </Space>
           <div style={{ marginTop: 24, textAlign: "right" }}>
             <Space>
               <Button onClick={handleClose}>取消</Button>

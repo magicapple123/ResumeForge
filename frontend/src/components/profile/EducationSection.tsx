@@ -2,6 +2,7 @@
 import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
 import ProfileSection from "./ProfileSection";
+import ReferenceFileField from "./ReferenceFileField";
 
 interface Props {
   editable: boolean;
@@ -22,6 +23,8 @@ export function EducationSection({ editable }: Props) {
         gpa: "",
         courses: "",
         achievements: "",
+        reference_file_name: "",
+        reference_content: "",
       }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
@@ -68,6 +71,9 @@ export function EducationSection({ editable }: Props) {
             <Form.Item name={[field.name, "achievements"]} label="在校成果">
               <Input.TextArea rows={2} placeholder="奖学金、竞赛、论文等，每行一条" />
             </Form.Item>
+          </Col>
+          <Col xs={24}>
+            <ReferenceFileField listName="educations" fieldName={field.name} editable={editable} />
           </Col>
         </Row>
       )}

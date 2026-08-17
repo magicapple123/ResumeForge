@@ -2,6 +2,7 @@
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from app.schemas.job import JobOut
 from app.schemas.profile import ProfileOut
@@ -78,6 +79,7 @@ class FakeProvider(BaseLLMProvider):
         self.stream_text = stream_text
         self.chat_replies = chat_replies or []
         self.chunk_size = chunk_size
+        self.messages: list[dict] = []
 
     async def chat(self, messages):
         if not self.chat_replies:
@@ -85,6 +87,7 @@ class FakeProvider(BaseLLMProvider):
         return self.chat_replies.pop(0)
 
     async def stream_chat(self, messages):
+        self.messages = messages
         for i in range(0, len(self.stream_text), self.chunk_size):
             yield self.stream_text[i : i + self.chunk_size]
 
@@ -189,12 +192,42 @@ async def test_generate_fails_gracefully():
     assert "JSON" in events[-1]["message"]
 
 
-async def test_generate_uses_tone_guide():
+@pytest.mark.parametrize(
+    ("level", "instruction"),
+    [
+        ("light", "保持原有要点数量与职责边界"),
+        ("balanced", "补足动作、方法和业务目的"),
+        ("strong", "可以增加描述要点"),
+    ],
+)
+async def test_generate_uses_explicit_enhancement_level_guide(level, instruction):
     provider = FakeProvider(stream_text=json.dumps(GOOD_RESUME, ensure_ascii=False))
+
     events = await collect_events(
-        ResumeGenerator(provider).generate(make_profile(), make_job(), GenerateOptions(tone="tech"))
+        ResumeGenerator(provider).generate(
+            make_profile(),
+            make_job(),
+            GenerateOptions(enhance=True, enhancement_level=level),
+        )
     )
+
     assert events[-1]["type"] == "done"
+    assert instruction in provider.messages[1]["content"]
+
+
+async def test_generate_disables_expansion_by_default():
+    provider = FakeProvider(stream_text=json.dumps(GOOD_RESUME, ensure_ascii=False))
+
+    await collect_events(
+        ResumeGenerator(provider).generate(make_profile(), make_job(), GenerateOptions())
+    )
+
+    assert "美化拓展已关闭" in provider.messages[1]["content"]
+
+
+def test_generate_options_rejects_removed_tone_option():
+    with pytest.raises(ValidationError):
+        GenerateOptions.model_validate({"tone": "tech"})
 
 
 def test_extract_json_tolerates_wrappers():

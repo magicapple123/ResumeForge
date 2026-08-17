@@ -8,7 +8,8 @@ def _create_resume(db_session) -> ResumeRecord:
         job_title="后端开发工程师",
         company="示例公司",
         model="test-model",
-        tone="tech",
+        enhancement_enabled=True,
+        enhancement_level="strong",
         content={"name": "旧名字", "summary": "旧总结"},
         warnings=["请核对学校信息"],
         parse_error="原始生成结果解析失败",
@@ -42,7 +43,9 @@ def test_update_resume_persists_content_and_clears_stale_generation_state(client
     assert body["id"] == record.id
     assert body["title"] == record.title
     assert body["model"] == "test-model"
-    assert body["tone"] == "tech"
+    assert body["enhancement_enabled"] is True
+    assert body["enhancement_level"] == "strong"
+    assert "tone" not in body
     assert body["content"]["name"] == "新名字"
     assert body["content"]["projects"][0]["description"] == ["增加预览中的手工编辑能力"]
     assert body["warnings"] == []

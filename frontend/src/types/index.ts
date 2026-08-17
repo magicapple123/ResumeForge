@@ -22,6 +22,8 @@ export interface Education {
   gpa: string;
   courses: string;
   achievements: string;
+  reference_file_name: string;
+  reference_content: string;
 }
 
 export interface Experience {
@@ -31,6 +33,8 @@ export interface Experience {
   start_date: string;
   end_date: string;
   description: string;
+  reference_file_name: string;
+  reference_content: string;
 }
 
 export interface CampusExperience {
@@ -40,6 +44,8 @@ export interface CampusExperience {
   start_date: string;
   end_date: string;
   description: string;
+  reference_file_name: string;
+  reference_content: string;
 }
 
 export interface Project {
@@ -51,6 +57,8 @@ export interface Project {
   tech_stack: string;
   description: string;
   highlights: string;
+  reference_file_name: string;
+  reference_content: string;
 }
 
 export interface Skill {
@@ -210,7 +218,8 @@ export interface ResumeBrief {
   job_title: string;
   company: string;
   model: string;
-  tone: string;
+  enhancement_enabled: boolean;
+  enhancement_level: EnhancementLevel;
   created_at: string;
 }
 
@@ -220,10 +229,11 @@ export interface ResumeDetail extends ResumeBrief {
   parse_error: string;
 }
 
-export type ResumeTone = "standard" | "tech" | "academic";
+export type EnhancementLevel = "light" | "balanced" | "strong";
 
 export interface GenerateOptions {
-  tone: ResumeTone;
+  enhance: boolean;
+  enhancement_level: EnhancementLevel;
 }
 
 /** 生成接口 SSE 事件（与后端 generator 事件一一对应） */

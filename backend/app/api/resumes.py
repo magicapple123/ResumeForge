@@ -83,7 +83,14 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                 yield _format_sse(event)
             if parsed is not None:
                 record = _save_record(
-                    db, parsed, warnings, job_out, "".join(raw_parts), generator.provider.config.model, payload.options.tone
+                    db,
+                    parsed,
+                    warnings,
+                    job_out,
+                    "".join(raw_parts),
+                    generator.provider.config.model,
+                    payload.options.enhance,
+                    payload.options.enhancement_level,
                 )
                 yield _format_sse({"type": "saved", "record_id": record.id})
         except LLMError as exc:
@@ -101,7 +108,14 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
 
 
 def _save_record(
-    db: Session, content: dict, warnings: list[str], job: JobOut, raw: str, model: str, tone: str
+    db: Session,
+    content: dict,
+    warnings: list[str],
+    job: JobOut,
+    raw: str,
+    model: str,
+    enhancement_enabled: bool,
+    enhancement_level: str,
 ) -> ResumeRecord:
     """生成结果落库（在流结束后的同一请求内调用）。"""
     name = content.get("name") or "简历"
@@ -114,7 +128,8 @@ def _save_record(
         content=content,
         warnings=warnings,
         model=model,
-        tone=tone,
+        enhancement_enabled=enhancement_enabled,
+        enhancement_level=enhancement_level,
     )
     db.add(record)
     db.commit()
@@ -130,7 +145,8 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         job_title=record.job_title,
         company=record.company,
         model=record.model,
-        tone=record.tone,
+        enhancement_enabled=record.enhancement_enabled,
+        enhancement_level=record.enhancement_level,
         created_at=record.created_at,
         content=ResumeContent.model_validate(record.content),
         warnings=record.warnings or [],
