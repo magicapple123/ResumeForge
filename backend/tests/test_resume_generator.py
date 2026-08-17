@@ -66,7 +66,7 @@ GOOD_RESUME = {
         }
     ],
     "skills": [{"name": "Python", "level": "熟练"}],
-    "awards": [{"name": "校级奖学金", "date": "2024.10", "description": ""}],
+    "awards": [],
 }
 
 
@@ -95,10 +95,30 @@ def make_profile(**overrides) -> ProfileOut:
         "name": "张三",
         "email": "zhangsan@example.com",
         "educations": [{"id": 1, "school": "天津工业大学", "major": "软件工程", "degree": "本科"}],
-        "experiences": [{"id": 1, "company": "某科技公司", "role": "后端实习生"}],
-        "projects": [{"id": 1, "name": "简历通", "tech_stack": "Python, FastAPI", "description": "AI 简历平台"}],
+        "experiences": [
+            {
+                "id": 1,
+                "company": "某科技公司",
+                "role": "后端实习生",
+                "start_date": "2025.06",
+                "end_date": "2025.09",
+                "description": "负责 XX 服务开发，性能提升 30%",
+            }
+        ],
+        "projects": [
+            {
+                "id": 1,
+                "name": "简历通",
+                "role": "核心开发",
+                "start_date": "2025.09",
+                "end_date": "2026.08",
+                "tech_stack": "Python, FastAPI, React",
+                "description": "AI 定制化简历生成平台",
+                "highlights": "开源项目，已开源",
+            }
+        ],
         "skills": [{"id": 1, "name": "Python", "level": "熟练"}],
-        "awards": [],
+        "awards": [{"id": 1, "name": "校级奖学金", "date": "2024.10"}],
         **overrides,
     }
     return ProfileOut.model_validate(data)
@@ -114,7 +134,8 @@ def make_job() -> JobOut:
             "title": "后端开发工程师",
             "company": "示例公司",
             "location": "北京",
-            "description": "负责后端服务开发",
+            "description": "负责后端服务开发与 API 设计",
+            "requirements": "熟悉 Python、FastAPI 和 React。",
             "created_at": now,
             "updated_at": now,
         }

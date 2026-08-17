@@ -161,6 +161,7 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
               showIcon
               style={{ marginBottom: 16 }}
               message={`当前模型：${modelName || "未知"}。生成过程约需 1-2 分钟，请勿关闭弹窗。`}
+              description="系统会根据目标岗位的 JD，从完整个人资料中自动筛选并排序相关经历、项目、校园经历和技能；原始资料不会被修改。"
             />
           )}
           <Typography.Title level={5}>选择定制风格</Typography.Title>

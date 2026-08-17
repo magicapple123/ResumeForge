@@ -15,12 +15,20 @@ from ..schemas.job import JobOut
 from ..schemas.profile import ProfileOut
 from ..schemas.resume import GenerateOptions, ResumeContent
 from .llm.base import BaseLLMProvider, LLMError
+from .profile_relevance import (
+    build_job_prompt_text,
+    build_profile_prompt_data,
+    build_targeted_profile_context,
+    build_targeted_profile_prompt_data,
+    split_commas,
+    split_lines,
+)
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
-# 防止超长文本撑爆上下文窗口（JD 与资料分别截断）
-MAX_JD_CHARS = 8000
-MAX_PROFILE_CHARS = 12000
+# 控制总输入体积：先筛选资料，再为 JD 保留独立预算，避免超长资料/JD 挤掉彼此。
+MAX_JD_CHARS = 5_000
+MAX_PROFILE_CHARS = 9_000
 
 # 不同定制风格对应的指令，与前端 GenerateOptions.tone 一一对应
 TONE_GUIDES = {
@@ -40,82 +48,6 @@ _LIST_FIELDS = {
     "projects": {"str_fields": {"name", "role", "start_date", "end_date"},
                  "list_fields": {"tech_stack", "description", "highlights"}},
 }
-
-
-def split_lines(text: str) -> list[str]:
-    """把换行分隔的多行文本拆成列表，过滤空行。"""
-    if not text:
-        return []
-    return [line.strip() for line in text.splitlines() if line.strip()]
-
-
-def split_commas(text: str) -> list[str]:
-    """把逗号/顿号分隔的文本拆成列表。"""
-    return [item.strip() for item in re.split(r"[,，、]", text) if item.strip()]
-
-
-def build_profile_prompt_data(profile: ProfileOut) -> dict:
-    """把资料库数据整理成喂给模型的干净结构：去掉内部 id，多行文本转数组。"""
-    return {
-        "name": profile.name,
-        "gender": profile.gender,
-        "birth_year": profile.birth_year,
-        "phone": profile.phone,
-        "email": profile.email,
-        "city": profile.city,
-        "target_city": profile.target_city,
-        "job_intent": profile.job_intent,
-        "personal_website": profile.personal_website,
-        "github": profile.github,
-        "summary": profile.summary,
-        "educations": [
-            {
-                "school": e.school,
-                "major": e.major,
-                "degree": e.degree,
-                "start_date": e.start_date,
-                "end_date": e.end_date,
-                "gpa": e.gpa,
-                "courses": split_lines(e.courses),
-                "achievements": split_lines(e.achievements),
-            }
-            for e in profile.educations
-        ],
-        "experiences": [
-            {
-                "company": e.company,
-                "role": e.role,
-                "start_date": e.start_date,
-                "end_date": e.end_date,
-                "description": split_lines(e.description),
-            }
-            for e in profile.experiences
-        ],
-        "campus_experiences": [
-            {
-                "organization": item.organization,
-                "role": item.role,
-                "start_date": item.start_date,
-                "end_date": item.end_date,
-                "description": split_lines(item.description),
-            }
-            for item in profile.campus_experiences
-        ],
-        "projects": [
-            {
-                "name": p.name,
-                "role": p.role,
-                "start_date": p.start_date,
-                "end_date": p.end_date,
-                "tech_stack": split_commas(p.tech_stack),
-                "description": split_lines(p.description),
-                "highlights": split_lines(p.highlights),
-            }
-            for p in profile.projects
-        ],
-        "skills": [{"name": s.name, "level": s.level} for s in profile.skills],
-        "awards": [{"name": a.name, "date": a.date, "description": a.description} for a in profile.awards],
-    }
 
 
 def extract_json(text: str) -> dict | None:
@@ -206,36 +138,429 @@ def coerce_resume(data: dict | None) -> ResumeContent:
 
 def _similar(a: str, b: str) -> bool:
     """双向包含判断，容忍模型对名称的轻度改写（如「XX大学（双一流）」）。"""
-    return a in b or b in a
+    return bool(a and b) and (a in b or b in a)
 
 
-def check_consistency(resume: ResumeContent, profile: ProfileOut) -> list[str]:
-    """校验生成结果是否出现资料中不存在的信息（防 AI 虚构）。
+def _similar_skill(a: str, b: str) -> bool:
+    """技能名匹配：避免单字母技能把普通英文单词误判为同一技能。"""
+    left = re.sub(r"\s+", "", a).casefold()
+    right = re.sub(r"\s+", "", b).casefold()
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    if len(left) < 3 or len(right) < 3:
+        return False
+    return left in right or right in left
+
+
+def _source_value(source, field: str) -> str:
+    if isinstance(source, dict):
+        value = source.get(field, "")
+    else:
+        value = getattr(source, field, "")
+    return value if isinstance(value, str) else ""
+
+
+def _find_source(item, sources: list[dict], name_field: str, role_field: str | None = None):
+    """按名称找候选源条目；无法唯一定位时宁可不使用该条输出。"""
+    name = getattr(item, name_field, "")
+    if not name:
+        return None
+    candidates = [
+        source
+        for source in sources
+        if _similar(name, _source_value(source, name_field))
+    ]
+    if len(candidates) > 1 and role_field:
+        role = getattr(item, role_field, "")
+        role_matches = [
+            source
+            for source in candidates
+            if role and _similar(role, _source_value(source, role_field))
+        ]
+        if role_matches:
+            candidates = role_matches
+    if len(candidates) > 1:
+        start_date = getattr(item, "start_date", "")
+        end_date = getattr(item, "end_date", "")
+        date_matches = [
+            source
+            for source in candidates
+            if (not start_date or start_date == _source_value(source, "start_date"))
+            and (not end_date or end_date == _source_value(source, "end_date"))
+        ]
+        if date_matches:
+            candidates = date_matches
+    return candidates[0] if len(candidates) == 1 else None
+
+
+_FACT_SEPARATOR_RE = re.compile(r"[\s,，、;；:：。.!！？!?()（）\[\]【】\"'`]+")
+
+
+def _normalize_fact(value: str) -> str:
+    """规范化要点文本，用于严格匹配，不把多个事实混为一个。"""
+    return _FACT_SEPARATOR_RE.sub("", value).casefold()
+
+
+def _ground_list(generated: list[str], source: list[str]) -> list[str]:
+    """把模型选中的要点映射回同一来源的原始事实。
+
+    只接受完整原文或其明确的子片段，并始终输出原始要点。这样模型可以选择
+    要点，却无法借由「Python」扩写成「Python、Kubernetes」等混合事实。
+    """
+    canonical_sources = [
+        (original, _normalize_fact(original))
+        for original in source
+        if original and _normalize_fact(original)
+    ]
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in generated:
+        normalized = _normalize_fact(value)
+        if not normalized:
+            continue
+        matches = [
+            (original, source_value)
+            for original, source_value in canonical_sources
+            if normalized == source_value or (len(normalized) >= 2 and normalized in source_value)
+        ]
+        if not matches:
+            continue
+        original, source_value = min(matches, key=lambda item: len(item[1]))
+        if source_value not in seen:
+            seen.add(source_value)
+            result.append(original)
+    return result
+
+
+_QUANTIFIED_VALUE_RE = re.compile(
+    r"\d+(?:\.\d+)?\s*(?:[%％]|倍|万|千|[kK]|次|人|项|毫秒|ms|秒|天|小时|年|个月)"
+)
+
+
+def _unsupported_quantified_values(values: list[str] | str, source_text: str) -> list[str]:
+    """找出候选事实中没有出现过的量化结果。
+
+    对描述的语义改写无法做完全自动的真伪判断，但具体数字、比例和次数最容易
+    被模型凭空补出，也最容易造成求职风险，因此单独做确定性保护。
+    """
+    texts = [values] if isinstance(values, str) else values
+    normalized_source = re.sub(r"\s+", "", source_text)
+    unsupported: list[str] = []
+    for text in texts:
+        for value in _QUANTIFIED_VALUE_RE.findall(text):
+            normalized_value = re.sub(r"\s+", "", value)
+            if normalized_value not in normalized_source and value not in unsupported:
+                unsupported.append(value)
+    return unsupported
+
+
+def _source_list(source: dict, field: str) -> list[str]:
+    value = source.get(field, [])
+    return value if isinstance(value, list) else []
+
+
+def _ground_or_restore_list(generated: list[str], source: list[str]) -> list[str]:
+    """优先保留模型明确选择的事实；无法验证时回填来源，避免空白或虚构。"""
+    grounded = _ground_list(generated, source)
+    return grounded or list(source)
+
+
+def _build_grounded_summary(selected_data: dict, job: JobOut) -> str:
+    """用已选事实生成不依赖模型自由发挥的岗位摘要。"""
+    evidence: list[str] = []
+    for item in selected_data.get("experiences", [])[:2]:
+        company = _source_value(item, "company")
+        role = _source_value(item, "role")
+        if company or role:
+            evidence.append(" ".join(value for value in (company, role) if value))
+    for item in selected_data.get("projects", [])[:2]:
+        name = _source_value(item, "name")
+        role = _source_value(item, "role")
+        if name or role:
+            evidence.append(" ".join(value for value in (name, role) if value))
+
+    skills = [
+        _source_value(item, "name")
+        for item in selected_data.get("skills", [])[:6]
+        if _source_value(item, "name")
+    ]
+    sentences: list[str] = []
+    selected_summary = _source_value(selected_data, "summary").strip()
+    if selected_summary:
+        # 这是用户资料中已通过岗位相关性筛选的原文，不是模型生成的断言。
+        sentences.append(selected_summary)
+    if evidence:
+        sentences.append(f"面向{job.title}，具备{'、'.join(evidence)}等相关经历。")
+    else:
+        sentences.append(f"面向{job.title}求职。")
+    if skills:
+        sentences.append(f"已掌握{'、'.join(skills)}等与岗位匹配的技能。")
+    return "".join(sentences)
+
+
+def restore_selected_sections(resume: ResumeContent, selected_data: dict) -> ResumeContent:
+    """回填模型错误遗漏的岗位候选区块。
+
+    模型偶尔会在 JSON 格式正确的情况下把经历、项目或技能数组全部留空。
+    候选资料已经是按岗位筛选后的真实事实，回填这些原始字段能保证简历仍有
+    可用内容，同时不会引入候选资料之外的信息。
+    """
+    fallback = coerce_resume(
+        {
+            "education": selected_data.get("educations", []),
+            "experience": selected_data.get("experiences", []),
+            "campus_experience": selected_data.get("campus_experiences", []),
+            "projects": selected_data.get("projects", []),
+            "skills": selected_data.get("skills", []),
+            "awards": selected_data.get("awards", []),
+        }
+    )
+    sections = {
+        "education": "educations",
+        "experience": "experiences",
+        "campus_experience": "campus_experiences",
+        "projects": "projects",
+        "skills": "skills",
+        "awards": "awards",
+    }
+    updates = {
+        output_field: getattr(fallback, output_field)
+        for output_field, source_field in sections.items()
+        if selected_data.get(source_field) and not getattr(resume, output_field)
+    }
+    return resume.model_copy(update=updates) if updates else resume
+
+
+def ground_resume_facts(
+    resume: ResumeContent,
+    profile: ProfileOut,
+    job: JobOut,
+    selected_data: dict | None = None,
+) -> ResumeContent:
+    """把模型结果中的可验证字段锚定回资料库。
+
+    所有结构字段和要点都回填为候选资料的原始事实；模型只负责从候选中选择
+    和排序。找不到候选源的条目会被丢弃，对应提醒由生成前的
+    ``check_consistency`` 保留给用户。
+    """
+    source_data = selected_data or build_profile_prompt_data(profile)
+    result = resume.model_copy(
+        update={
+            "name": profile.name,
+            "gender": profile.gender,
+            "birth_year": profile.birth_year,
+            "phone": profile.phone,
+            "email": profile.email,
+            "city": profile.city,
+            "job_intent": job.title or profile.job_intent,
+        }
+    )
+    result = result.model_copy(update={"summary": _build_grounded_summary(source_data, job)})
+
+    education_items = []
+    for item in result.education:
+        source = _find_source(item, source_data.get("educations", []), "school", "major")
+        if source is None:
+            continue
+        education_items.append(
+            item.model_copy(
+                update={
+                    "school": _source_value(source, "school"),
+                    "major": _source_value(source, "major"),
+                    "degree": _source_value(source, "degree"),
+                    "start_date": _source_value(source, "start_date"),
+                    "end_date": _source_value(source, "end_date"),
+                    "gpa": _source_value(source, "gpa"),
+                    "courses": _ground_or_restore_list(item.courses, _source_list(source, "courses")),
+                    "achievements": _ground_or_restore_list(
+                        item.achievements, _source_list(source, "achievements")
+                    ),
+                }
+            )
+        )
+    result = result.model_copy(update={"education": education_items})
+
+    experience_items = []
+    for item in result.experience:
+        source = _find_source(item, source_data.get("experiences", []), "company", "role")
+        if source is None:
+            continue
+        experience_items.append(
+            item.model_copy(
+                update={
+                    "company": _source_value(source, "company"),
+                    "role": _source_value(source, "role"),
+                    "start_date": _source_value(source, "start_date"),
+                    "end_date": _source_value(source, "end_date"),
+                    "description": _ground_or_restore_list(
+                        item.description, _source_list(source, "description")
+                    ),
+                }
+            )
+        )
+    result = result.model_copy(update={"experience": experience_items})
+
+    campus_items = []
+    for item in result.campus_experience:
+        source = _find_source(item, source_data.get("campus_experiences", []), "organization", "role")
+        if source is None:
+            continue
+        campus_items.append(
+            item.model_copy(
+                update={
+                    "organization": _source_value(source, "organization"),
+                    "role": _source_value(source, "role"),
+                    "start_date": _source_value(source, "start_date"),
+                    "end_date": _source_value(source, "end_date"),
+                    "description": _ground_or_restore_list(
+                        item.description, _source_list(source, "description")
+                    ),
+                }
+            )
+        )
+    result = result.model_copy(update={"campus_experience": campus_items})
+
+    project_items = []
+    for item in result.projects:
+        source = _find_source(item, source_data.get("projects", []), "name", "role")
+        if source is None:
+            continue
+        project_items.append(
+            item.model_copy(
+                update={
+                    "name": _source_value(source, "name"),
+                    "role": _source_value(source, "role"),
+                    "start_date": _source_value(source, "start_date"),
+                    "end_date": _source_value(source, "end_date"),
+                    "tech_stack": _ground_or_restore_list(
+                        item.tech_stack, _source_list(source, "tech_stack")
+                    ),
+                    "description": _ground_or_restore_list(
+                        item.description, _source_list(source, "description")
+                    ),
+                    "highlights": _ground_or_restore_list(
+                        item.highlights, _source_list(source, "highlights")
+                    ),
+                }
+            )
+        )
+    result = result.model_copy(update={"projects": project_items})
+
+    skill_items = []
+    for item in result.skills:
+        source = next(
+            (
+                skill
+                for skill in source_data.get("skills", [])
+                if _similar_skill(item.name, _source_value(skill, "name"))
+            ),
+            None,
+        )
+        if source is None:
+            continue
+        skill_items.append(
+            item.model_copy(
+                update={
+                    "name": _source_value(source, "name"),
+                    "level": _source_value(source, "level"),
+                }
+            )
+        )
+    result = result.model_copy(update={"skills": skill_items})
+
+    award_items = []
+    for item in result.awards:
+        source = _find_source(item, source_data.get("awards", []), "name")
+        if source is None:
+            continue
+        award_items.append(
+            item.model_copy(
+                update={
+                    "name": _source_value(source, "name"),
+                    "date": _source_value(source, "date"),
+                    "description": _source_value(source, "description"),
+                }
+            )
+        )
+    return result.model_copy(update={"awards": award_items})
+
+
+def check_consistency(
+    resume: ResumeContent, profile: ProfileOut, selected_data: dict | None = None
+) -> list[str]:
+    """校验生成结果是否出现候选资料中不存在的信息（防 AI 虚构）。
 
     仅当资料中已有对应条目时才比对；空值条目不参与检查。
     """
     warnings: list[str] = []
-    known_schools = [e.school for e in profile.educations if e.school]
-    known_companies = [e.company for e in profile.experiences if e.company]
+    source_data = selected_data or build_profile_prompt_data(profile)
+    source_label = "本岗位候选资料" if selected_data is not None else "个人资料"
+    known_schools = [item["school"] for item in source_data["educations"] if item.get("school")]
+    known_companies = [item["company"] for item in source_data["experiences"] if item.get("company")]
     known_campus_organizations = [
-        item.organization for item in profile.campus_experiences if item.organization
+        item["organization"] for item in source_data["campus_experiences"] if item.get("organization")
     ]
-    known_projects = [p.name for p in profile.projects if p.name]
+    known_projects = [item["name"] for item in source_data["projects"] if item.get("name")]
+    known_skills = [item["name"] for item in source_data["skills"] if item.get("name")]
+    known_awards = [item["name"] for item in source_data["awards"] if item.get("name")]
 
     for edu in resume.education:
         if edu.school and not any(_similar(edu.school, s) for s in known_schools):
-            warnings.append(f"教育经历中出现资料中不存在的学校「{edu.school}」，请核对是否为虚构")
+            warnings.append(f"教育经历中出现{source_label}未包含的学校「{edu.school}」，请核对是否为虚构")
     for exp in resume.experience:
         if exp.company and not any(_similar(exp.company, c) for c in known_companies):
-            warnings.append(f"实习/工作经历中出现资料中不存在的公司「{exp.company}」，请核对是否为虚构")
+            warnings.append(f"实习/工作经历中出现{source_label}未包含的公司「{exp.company}」，请核对是否为虚构")
+        source = _find_source(exp, source_data["experiences"], "company", "role")
+        if source:
+            unsupported = _unsupported_quantified_values(
+                exp.description, "\n".join(_source_list(source, "description"))
+            )
+            if unsupported:
+                warnings.append(
+                    f"实习/工作经历「{exp.company}」出现资料未提供的量化结果「{'、'.join(unsupported)}」"
+                )
     for item in resume.campus_experience:
         if item.organization and not any(
             _similar(item.organization, organization) for organization in known_campus_organizations
         ):
-            warnings.append(f"校园经历中出现资料中不存在的组织「{item.organization}」，请核对是否为虚构")
+            warnings.append(f"校园经历中出现{source_label}未包含的组织「{item.organization}」，请核对是否为虚构")
+        source = _find_source(item, source_data["campus_experiences"], "organization", "role")
+        if source:
+            unsupported = _unsupported_quantified_values(
+                item.description, "\n".join(_source_list(source, "description"))
+            )
+            if unsupported:
+                warnings.append(
+                    f"校园经历「{item.organization}」出现资料未提供的量化结果「{'、'.join(unsupported)}」"
+                )
     for project in resume.projects:
         if project.name and not any(_similar(project.name, p) for p in known_projects):
-            warnings.append(f"项目经历中出现资料中不存在的项目「{project.name}」，请核对是否为虚构")
+            warnings.append(f"项目经历中出现{source_label}未包含的项目「{project.name}」，请核对是否为虚构")
+        source = _find_source(project, source_data["projects"], "name", "role")
+        if source:
+            source_text = "\n".join(
+                _source_list(source, "description") + _source_list(source, "highlights")
+            )
+            unsupported = _unsupported_quantified_values(
+                project.description + project.highlights, source_text
+            )
+            if unsupported:
+                warnings.append(
+                    f"项目经历「{project.name}」出现资料未提供的量化结果「{'、'.join(unsupported)}」"
+                )
+    for skill in resume.skills:
+        if skill.name and not any(_similar_skill(skill.name, known) for known in known_skills):
+            warnings.append(f"专业技能中出现{source_label}未包含的技能「{skill.name}」，请核对是否为虚构")
+    for award in resume.awards:
+        if award.name and not any(_similar(award.name, known) for known in known_awards):
+            warnings.append(f"荣誉奖项中出现{source_label}未包含的奖项「{award.name}」，请核对是否为虚构")
+    unsupported_summary = _unsupported_quantified_values(
+        resume.summary, json.dumps(source_data, ensure_ascii=False)
+    )
+    if unsupported_summary:
+        warnings.append(f"个人总结出现资料未提供的量化结果「{'、'.join(unsupported_summary)}」")
     return warnings
 
 
@@ -262,16 +587,28 @@ class ResumeGenerator:
         - done:     {"type", "resume", "warnings"}  解析成功
         - error:    {"type", "message"}   失败（友好提示，由 API 层直接转发）
         """
-        profile_data = build_profile_prompt_data(profile)
         tone_guide = TONE_GUIDES.get(options.tone, TONE_GUIDES["standard"])
 
-        yield {"type": "progress", "message": "正在准备生成材料…"}
+        yield {"type": "progress", "message": "正在分析岗位要求与资料匹配度…"}
+        selection = build_targeted_profile_context(profile, job, max_chars=MAX_PROFILE_CHARS)
+        counts = selection.selected_counts
+        yield {
+            "type": "progress",
+            "message": (
+                "已从完整资料中筛选 "
+                f"{counts['experiences']} 段实习/工作、{counts['projects']} 个项目、"
+                f"{counts['campus_experiences']} 段校园经历和 {counts['skills']} 项技能"
+            ),
+        }
         system_prompt = self._load_prompt("resume_generate_system.md")
         user_prompt = self._env.get_template("resume_generate_user.md").render(
-            profile_json=json.dumps(profile_data, ensure_ascii=False, indent=2)[:MAX_PROFILE_CHARS],
+            profile_json=selection.serialized,
             job=job,
-            jd=f"{job.description}\n{job.requirements}".strip()[:MAX_JD_CHARS],
+            jd=build_job_prompt_text(job, MAX_JD_CHARS),
             tone_guide=tone_guide,
+            focus_skills="、".join(selection.focus.skills) or "未识别到明确技能，请以 JD 原文为准",
+            focus_domains="、".join(selection.focus.domains) or "通用岗位",
+            omitted_count=sum(selection.omitted_counts.values()),
         )
         messages = [
             {"role": "system", "content": system_prompt},
@@ -302,9 +639,12 @@ class ResumeGenerator:
             yield {"type": "error", "message": "模型输出未能解析为有效 JSON，请更换模型或重试"}
             return
 
-        # 照片不发送给 LLM，避免无意义地占用上下文；解析完成后从已校验资料注入。
-        resume = resume.model_copy(update={"photo": profile.photo})
-        warnings = check_consistency(resume, profile)
+        # 先基于原始模型输出记录越界提醒，再过滤/回填本岗位候选事实。
+        warnings = check_consistency(resume, profile, selection.data)
+        resume = ground_resume_facts(resume, profile, job, selection.data).model_copy(
+            update={"photo": profile.photo}
+        )
+        resume = restore_selected_sections(resume, selection.data)
         yield {"type": "done", "resume": resume.model_dump(), "warnings": warnings}
 
     def _parse(self, raw: str) -> ResumeContent | None:

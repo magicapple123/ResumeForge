@@ -23,7 +23,8 @@ export function generateResume(
   onEvent: (event: StreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  return consumeSSE("/resumes/generate", payload, onEvent, signal);
+  // SSE 不经过 request()；这里也必须保留 /api 前缀，才能走 Vite 开发代理。
+  return consumeSSE("/api/resumes/generate", payload, onEvent, signal);
 }
 
 /** 渲染简历内容为 HTML（生成完成后、落库前的即时预览） */
@@ -31,7 +32,8 @@ export async function renderResume(content: ResumeContent): Promise<string> {
   const resp = await fetch("/api/resumes/render", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(content),
+    // 后端 ResumeRenderRequest 的结构是 { content: ResumeContent }。
+    body: JSON.stringify({ content }),
   });
   if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
   return resp.text();
