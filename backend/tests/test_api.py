@@ -161,6 +161,40 @@ def test_settings_roundtrip(client):
     assert response.status_code == 200 and response.json()["ok"] is False
 
 
+def test_settings_config_records_roundtrip_and_upsert(client):
+    config = LLMConfig(
+        provider="deepseek",
+        base_url="https://api.deepseek.com",
+        api_key="sk-record",
+        model="deepseek-chat",
+    )
+    payload = {"name": "校招 DeepSeek", **config.model_dump()}
+
+    created = client.post("/api/settings/llm/records", json=payload)
+    assert created.status_code == 200
+    record = created.json()
+    assert record["name"] == "校招 DeepSeek"
+    assert record["model"] == "deepseek-chat"
+
+    listed = client.get("/api/settings/llm/records")
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()] == [record["id"]]
+
+    updated = client.post(
+        "/api/settings/llm/records",
+        json={**payload, "model": "deepseek-reasoner"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["id"] == record["id"]
+    assert updated.json()["model"] == "deepseek-reasoner"
+    assert len(client.get("/api/settings/llm/records").json()) == 1
+
+    deleted = client.delete(f"/api/settings/llm/records/{record['id']}")
+    assert deleted.status_code == 204
+    assert client.get("/api/settings/llm/records").json() == []
+    assert client.delete(f"/api/settings/llm/records/{record['id']}").status_code == 404
+
+
 def test_generate_requires_profile_and_llm(client):
     # 无资料、无 LLM 配置时生成接口应给出明确的 400 提示
     client.post("/api/jobs", json={"title": "后端开发工程师", "company": "A公司"})

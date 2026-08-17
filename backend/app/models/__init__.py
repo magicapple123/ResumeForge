@@ -2,7 +2,7 @@
 from .job import Job
 from .profile import Award, Education, Experience, Project, Skill, UserProfile
 from .resume import ResumeRecord
-from .setting import AppSetting
+from .setting import AppSetting, LLMConfigRecord
 
 __all__ = [
     "Job",
@@ -14,4 +14,5 @@ __all__ = [
     "Award",
     "ResumeRecord",
     "AppSetting",
+    "LLMConfigRecord",
 ]

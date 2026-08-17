@@ -2,18 +2,49 @@
 import logging
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..schemas.setting import LLMConfig, LLMTestRequest, LLMTestResult
+from ..models.setting import LLMConfigRecord
+from ..schemas.setting import (
+    LLMConfig,
+    LLMConfigRecordCreate,
+    LLMConfigRecordOut,
+    LLMTestRequest,
+    LLMTestResult,
+)
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
-from ..services.settings_service import get_llm_config, save_llm_config
+from ..services.settings_service import (
+    delete_llm_config_record,
+    get_llm_config,
+    list_llm_config_records,
+    save_llm_config,
+    save_llm_config_record,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+
+@router.get("/llm/records", response_model=list[LLMConfigRecordOut])
+def read_llm_config_records(db: Session = Depends(get_db)):
+    return list_llm_config_records(db)
+
+
+@router.post("/llm/records", response_model=LLMConfigRecordOut)
+def write_llm_config_record(payload: LLMConfigRecordCreate, db: Session = Depends(get_db)):
+    return save_llm_config_record(db, payload)
+
+
+@router.delete("/llm/records/{record_id}", status_code=204)
+def remove_llm_config_record(record_id: int, db: Session = Depends(get_db)):
+    record = db.get(LLMConfigRecord, record_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="配置记录不存在或已被删除")
+    delete_llm_config_record(db, record_id)
 
 
 @router.get("/llm", response_model=LLMConfig)

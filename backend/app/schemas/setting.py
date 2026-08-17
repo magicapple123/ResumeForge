@@ -1,5 +1,7 @@
-"""设置 Schema：大模型运行时配置。"""
-from pydantic import BaseModel, Field
+"""设置 Schema：当前大模型配置与用户保存的配置记录。"""
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LLMConfig(BaseModel):
@@ -12,6 +14,28 @@ class LLMConfig(BaseModel):
     temperature: float = Field(default=0.7, ge=0, le=2)
     timeout_seconds: int = Field(default=120, ge=10, le=600)
     max_tokens: int = Field(default=4096, ge=256, le=65536)
+
+
+class LLMConfigRecordCreate(LLMConfig):
+    """命名保存的配置；同名记录会被更新。"""
+
+    name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("配置名称不能为空")
+        return value
+
+
+class LLMConfigRecordOut(LLMConfigRecordCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    updated_at: datetime
 
 
 class LLMTestRequest(LLMConfig):

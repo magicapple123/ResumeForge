@@ -9,8 +9,8 @@ import logging
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from ..models.setting import AppSetting
-from ..schemas.setting import LLMConfig
+from ..models.setting import AppSetting, LLMConfigRecord
+from ..schemas.setting import LLMConfig, LLMConfigRecordCreate, LLMConfigRecordOut
 
 logger = logging.getLogger(__name__)
 
@@ -37,3 +37,29 @@ def save_llm_config(db: Session, config: LLMConfig) -> None:
     else:
         row.value = serialized
     db.commit()
+
+
+def list_llm_config_records(db: Session) -> list[LLMConfigRecordOut]:
+    rows = db.query(LLMConfigRecord).order_by(LLMConfigRecord.updated_at.desc()).all()
+    return [LLMConfigRecordOut.model_validate(row) for row in rows]
+
+
+def save_llm_config_record(db: Session, payload: LLMConfigRecordCreate) -> LLMConfigRecordOut:
+    row = db.query(LLMConfigRecord).filter(LLMConfigRecord.name == payload.name).one_or_none()
+    values = payload.model_dump(exclude={"name"})
+    if row is None:
+        row = LLMConfigRecord(name=payload.name, **values)
+        db.add(row)
+    else:
+        for field, value in values.items():
+            setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return LLMConfigRecordOut.model_validate(row)
+
+
+def delete_llm_config_record(db: Session, record_id: int) -> None:
+    row = db.get(LLMConfigRecord, record_id)
+    if row is not None:
+        db.delete(row)
+        db.commit()

@@ -1,28 +1,91 @@
 /** 设置页：大模型配置（含预设与连通测试）。 */
-import { ApiOutlined, CloseOutlined, EditOutlined, SaveOutlined } from "@ant-design/icons";
+import {
+  ApiOutlined,
+  CloseOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  SaveOutlined,
+  SwapOutlined,
+} from "@ant-design/icons";
 import {
   Alert,
   App,
   Button,
   Card,
   Col,
+  Empty,
   Form,
   Input,
   InputNumber,
+  List,
+  Modal,
+  Popconfirm,
   Row,
   Select,
   Slider,
+  Space,
+  Tag,
+  Tooltip,
   Typography,
 } from "antd";
 import { useEffect, useRef, useState } from "react";
-import { getLLMConfig, saveLLMConfig, testLLM } from "../api/settings";
+import {
+  deleteLLMConfigRecord,
+  getLLMConfig,
+  listLLMConfigRecords,
+  saveLLMConfig,
+  saveLLMConfigRecord,
+  testLLM,
+} from "../api/settings";
 import { LLM_PRESETS } from "../config";
-import type { LLMConfig, LLMTestResult } from "../types";
+import type { LLMConfig, LLMConfigRecord, LLMTestResult } from "../types";
+import { formatDateTime } from "../utils/format";
 
 const PRESET_OPTIONS = LLM_PRESETS.map((preset, index) => ({ value: index, label: preset.label }));
 
 /** 表单字段 = LLM 配置 + 前端专用的预设选择索引 */
 type SettingsFormValues = LLMConfig & { preset?: number };
+
+function formValuesFromConfig(config: LLMConfig): SettingsFormValues {
+  const matched = LLM_PRESETS.findIndex((preset) => preset.base_url === config.base_url);
+  return { ...config, preset: matched >= 0 ? matched : undefined };
+}
+
+function configFromFormValues(values: SettingsFormValues): LLMConfig {
+  return {
+    provider: values.provider,
+    base_url: values.base_url,
+    api_key: values.api_key,
+    model: values.model,
+    temperature: values.temperature,
+    timeout_seconds: values.timeout_seconds,
+    max_tokens: values.max_tokens,
+  };
+}
+
+function configFromRecord(record: LLMConfigRecord): LLMConfig {
+  return {
+    provider: record.provider,
+    base_url: record.base_url,
+    api_key: record.api_key,
+    model: record.model,
+    temperature: record.temperature,
+    timeout_seconds: record.timeout_seconds,
+    max_tokens: record.max_tokens,
+  };
+}
+
+function sameConfig(left: LLMConfig, right: LLMConfig): boolean {
+  return (
+    left.provider === right.provider &&
+    left.base_url === right.base_url &&
+    left.api_key === right.api_key &&
+    left.model === right.model &&
+    left.temperature === right.temperature &&
+    left.timeout_seconds === right.timeout_seconds &&
+    left.max_tokens === right.max_tokens
+  );
+}
 
 export default function SettingsPage() {
   const [form] = Form.useForm<SettingsFormValues>();
@@ -32,20 +95,28 @@ export default function SettingsPage() {
   const [editing, setEditing] = useState(false);
   const [testResult, setTestResult] = useState<LLMTestResult | null>(null);
   const savedValues = useRef<SettingsFormValues | null>(null);
+  const [records, setRecords] = useState<LLMConfigRecord[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(true);
+  const [activeRecordId, setActiveRecordId] = useState<number | null>(null);
+  const [recordModalOpen, setRecordModalOpen] = useState(false);
+  const [recordName, setRecordName] = useState("");
+  const [recordSaving, setRecordSaving] = useState(false);
+  const [recordApplyingId, setRecordApplyingId] = useState<number | null>(null);
+  const [recordDeletingId, setRecordDeletingId] = useState<number | null>(null);
 
-  // 加载已保存的配置；同时把 provider 预设索引还原到 Select（按 base_url 匹配）
+  // 同时加载当前配置与记录，避免页面先显示一套配置、稍后又跳变到另一套状态。
   useEffect(() => {
-    void getLLMConfig()
-      .then((config) => {
-        const matched = LLM_PRESETS.findIndex((preset) => preset.base_url === config.base_url);
-        const values: SettingsFormValues = {
-          ...config,
-          preset: matched >= 0 ? matched : undefined,
-        };
+    setRecordsLoading(true);
+    void Promise.all([getLLMConfig(), listLLMConfigRecords()])
+      .then(([config, loadedRecords]) => {
+        const values = formValuesFromConfig(config);
         form.setFieldsValue(values);
         savedValues.current = values;
+        setRecords(loadedRecords);
+        setActiveRecordId(loadedRecords.find((record) => sameConfig(record, config))?.id ?? null);
       })
-      .catch((err) => message.error(err instanceof Error ? err.message : "加载配置失败"));
+      .catch((err) => message.error(err instanceof Error ? err.message : "加载配置失败"))
+      .finally(() => setRecordsLoading(false));
   }, [form, message]);
 
   const applyPreset = (index: number) => {
@@ -59,15 +130,7 @@ export default function SettingsPage() {
   const collectValues = async (): Promise<LLMConfig | null> => {
     try {
       const values = await form.validateFields();
-      return {
-        provider: values.provider,
-        base_url: values.base_url,
-        api_key: values.api_key,
-        model: values.model,
-        temperature: values.temperature,
-        timeout_seconds: values.timeout_seconds,
-        max_tokens: values.max_tokens,
-      };
+      return configFromFormValues(values);
     } catch {
       return null;
     }
@@ -80,16 +143,13 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       const saved = await saveLLMConfig(values);
-      const matched = LLM_PRESETS.findIndex((preset) => preset.base_url === saved.base_url);
-      const nextValues: SettingsFormValues = {
-        ...saved,
-        preset: matched >= 0 ? matched : undefined,
-      };
+      const nextValues = formValuesFromConfig(saved);
       form.setFieldsValue(nextValues);
       savedValues.current = nextValues;
+      setActiveRecordId(records.find((record) => sameConfig(record, saved))?.id ?? null);
       setEditing(false);
       setTestResult(null);
-      message.success("配置已保存");
+      message.success("配置已保存，可在下方保存为记录");
     } catch (err) {
       message.error(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -109,6 +169,71 @@ export default function SettingsPage() {
       setTestResult({ ok: false, latency_ms: null, message: err instanceof Error ? err.message : "测试失败" });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const openRecordModal = () => {
+    if (editing || recordSaving || !savedValues.current) return;
+    setRecordName("");
+    setRecordModalOpen(true);
+  };
+
+  const saveRecord = async () => {
+    const name = recordName.trim();
+    const saved = savedValues.current;
+    if (!name) {
+      message.warning("请填写配置记录名称");
+      return;
+    }
+    if (!saved) {
+      message.warning("当前配置尚未加载完成");
+      return;
+    }
+
+    setRecordSaving(true);
+    try {
+      const record = await saveLLMConfigRecord({ name, ...configFromFormValues(saved) });
+      setRecords((current) => [record, ...current.filter((item) => item.id !== record.id)]);
+      setActiveRecordId(record.id);
+      setRecordModalOpen(false);
+      message.success("配置记录已保存");
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "保存配置记录失败");
+    } finally {
+      setRecordSaving(false);
+    }
+  };
+
+  const applyRecord = async (record: LLMConfigRecord) => {
+    if (editing || saving || testing || recordApplyingId !== null) return;
+    setRecordApplyingId(record.id);
+    try {
+      const saved = await saveLLMConfig(configFromRecord(record));
+      const nextValues = formValuesFromConfig(saved);
+      form.setFieldsValue(nextValues);
+      savedValues.current = nextValues;
+      setActiveRecordId(record.id);
+      setTestResult(null);
+      message.success(`已切换到配置「${record.name}」`);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "切换配置失败");
+    } finally {
+      setRecordApplyingId(null);
+    }
+  };
+
+  const removeRecord = async (record: LLMConfigRecord) => {
+    if (recordDeletingId !== null || recordApplyingId !== null) return;
+    setRecordDeletingId(record.id);
+    try {
+      await deleteLLMConfigRecord(record.id);
+      setRecords((current) => current.filter((item) => item.id !== record.id));
+      setActiveRecordId((current) => (current === record.id ? null : current));
+      message.success("配置记录已删除");
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "删除配置记录失败");
+    } finally {
+      setRecordDeletingId(null);
     }
   };
 
@@ -239,6 +364,135 @@ export default function SettingsPage() {
           />
         )}
       </Card>
+
+      <Card
+        title="配置记录"
+        className="settings-card"
+        extra={
+          <Button
+            icon={<SaveOutlined />}
+            disabled={
+              editing ||
+              saving ||
+              testing ||
+              recordSaving ||
+              recordApplyingId !== null ||
+              recordsLoading
+            }
+            onClick={openRecordModal}
+          >
+            保存当前配置
+          </Button>
+        }
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+          将当前已保存的配置命名后加入记录；切换记录会直接更新当前使用的配置。
+        </Typography.Paragraph>
+        <List
+          itemLayout="horizontal"
+          loading={recordsLoading}
+          dataSource={records}
+          locale={{
+            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无配置记录" />,
+          }}
+          renderItem={(record) => (
+            <List.Item
+              actions={[
+                <Button
+                  key="apply"
+                  type="link"
+                  icon={<SwapOutlined />}
+                  disabled={
+                    editing ||
+                    saving ||
+                    testing ||
+                    recordApplyingId !== null ||
+                    recordDeletingId !== null
+                  }
+                  loading={recordApplyingId === record.id}
+                  onClick={() => void applyRecord(record)}
+                >
+                  使用
+                </Button>,
+                <Popconfirm
+                  key="delete"
+                  title={`确定删除配置记录“${record.name}”？`}
+                  description="删除记录不会影响当前正在使用的配置"
+                  okText="删除"
+                  cancelText="取消"
+                  okButtonProps={{ danger: true }}
+                  disabled={
+                    editing ||
+                    recordApplyingId !== null ||
+                    recordDeletingId !== null
+                  }
+                  onConfirm={() => void removeRecord(record)}
+                >
+                  <Tooltip title="删除记录">
+                    <Button
+                      type="text"
+                      danger
+                      aria-label={`删除配置记录 ${record.name}`}
+                      icon={<DeleteOutlined />}
+                      loading={recordDeletingId === record.id}
+                    />
+                  </Tooltip>
+                </Popconfirm>,
+              ]}
+            >
+              <List.Item.Meta
+                title={
+                  <Space size={8} wrap>
+                    <Typography.Text strong>{record.name}</Typography.Text>
+                    {activeRecordId === record.id && <Tag color="green">当前</Tag>}
+                  </Space>
+                }
+                description={
+                  <Space size={[8, 4]} wrap>
+                    <Tag>{record.provider || "custom"}</Tag>
+                    <Typography.Text type="secondary">
+                      {record.model || "未填写模型"}
+                    </Typography.Text>
+                    <Typography.Text type="secondary">{record.base_url || "未填写地址"}</Typography.Text>
+                    <Typography.Text type="secondary">
+                      更新于 {formatDateTime(record.updated_at)}
+                    </Typography.Text>
+                  </Space>
+                }
+              />
+            </List.Item>
+          )}
+        />
+      </Card>
+
+      <Modal
+        title="保存为配置记录"
+        open={recordModalOpen}
+        confirmLoading={recordSaving}
+        okText="保存记录"
+        cancelText="取消"
+        onOk={() => void saveRecord()}
+        onCancel={() => {
+          if (!recordSaving) setRecordModalOpen(false);
+        }}
+      >
+        <Form layout="vertical">
+          <Form.Item label="记录名称" required style={{ marginBottom: 8 }}>
+            <Input
+              autoFocus
+              maxLength={64}
+              showCount
+              value={recordName}
+              placeholder="如：DeepSeek 校招、Ollama 本地模型"
+              onChange={(event) => setRecordName(event.target.value)}
+              onPressEnter={() => void saveRecord()}
+            />
+          </Form.Item>
+          <Typography.Text type="secondary">
+            只保存当前已保存的配置，不会保存未点击“保存配置”的编辑内容。
+          </Typography.Text>
+        </Form>
+      </Modal>
     </div>
   );
 }

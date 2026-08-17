@@ -226,6 +226,13 @@ export interface LLMConfig {
   max_tokens: number;
 }
 
+export interface LLMConfigRecord extends LLMConfig {
+  id: number;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface LLMTestResult {
   ok: boolean;
   latency_ms: number | null;
