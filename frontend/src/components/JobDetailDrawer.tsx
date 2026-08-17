@@ -1,6 +1,7 @@
 /** 岗位详情抽屉：JD 全文、技能标签、投递链接与操作入口。 */
-import { FileTextOutlined, LinkOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, FileTextOutlined, LinkOutlined, PushpinOutlined } from "@ant-design/icons";
 import { Button, Descriptions, Divider, Drawer, Space, Typography } from "antd";
+import type { ReactNode } from "react";
 import type { Job } from "../types";
 import SkillTags from "./SkillTags";
 
@@ -10,9 +11,34 @@ interface Props {
   onGenerate: (job: Job) => void;
 }
 
+interface TextSectionProps {
+  title: string;
+  icon: ReactNode;
+  content: string;
+  emptyText: string;
+  variant: "description" | "requirements" | "note";
+}
+
+function TextSection({ title, icon, content, emptyText, variant }: TextSectionProps) {
+  return (
+    <section className={`job-detail-text-section job-detail-text-section--${variant}`}>
+      <div className="job-detail-section-heading">
+        <span className="job-detail-section-icon">{icon}</span>
+        <Typography.Text strong>{title}</Typography.Text>
+      </div>
+      <Typography.Paragraph
+        type={content ? undefined : "secondary"}
+        className="job-detail-text"
+      >
+        {content || emptyText}
+      </Typography.Paragraph>
+    </section>
+  );
+}
+
 export default function JobDetailDrawer({ job, onClose, onGenerate }: Props) {
   return (
-    <Drawer title="岗位详情" width={640} open={!!job} onClose={onClose}>
+    <Drawer title="岗位详情" width="min(640px, 100vw)" open={!!job} onClose={onClose}>
       {job && (
         <>
           <Typography.Title level={4} style={{ marginTop: 0 }}>
@@ -35,36 +61,31 @@ export default function JobDetailDrawer({ job, onClose, onGenerate }: Props) {
             </>
           )}
 
-          <Divider orientation="left" plain style={{ margin: "8px 0" }}>
-            职位描述
-          </Divider>
-          <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-            {job.description || "暂无描述"}
-          </Typography.Paragraph>
+          <div className="job-detail-text-sections">
+            <TextSection
+              title="职位描述"
+              icon={<FileTextOutlined />}
+              content={job.description}
+              emptyText="暂无职位描述"
+              variant="description"
+            />
+            <TextSection
+              title="任职要求"
+              icon={<CheckCircleOutlined />}
+              content={job.requirements}
+              emptyText="暂无任职要求"
+              variant="requirements"
+            />
+            <TextSection
+              title="备注"
+              icon={<PushpinOutlined />}
+              content={job.note}
+              emptyText="暂无备注"
+              variant="note"
+            />
+          </div>
 
-          {job.requirements && (
-            <>
-              <Divider orientation="left" plain style={{ margin: "8px 0" }}>
-                任职要求
-              </Divider>
-              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-                {job.requirements}
-              </Typography.Paragraph>
-            </>
-          )}
-
-          {job.note && (
-            <>
-              <Divider orientation="left" plain style={{ margin: "8px 0" }}>
-                备注
-              </Divider>
-              <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
-                {job.note}
-              </Typography.Paragraph>
-            </>
-          )}
-
-          <Space style={{ marginTop: 16 }}>
+          <Space className="job-detail-actions">
             <Button type="primary" icon={<FileTextOutlined />} onClick={() => onGenerate(job)}>
               用 AI 生成简历
             </Button>
