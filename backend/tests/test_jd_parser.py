@@ -37,6 +37,12 @@ def test_parse_jd_dedupes_skills_case_insensitive():
     assert names.count("Python") == 1
 
 
+def test_parse_jd_matches_english_skill_next_to_chinese_text():
+    result = parse_jd("熟练掌握JavaScript等语言，使用Python开发")
+    names = {tag.name for tag in result["skills"]}
+    assert {"JavaScript", "Python"} <= names
+
+
 def test_parse_jd_takes_highest_degree_and_lowest_years():
     result = parse_jd("硕士及以上，博士优先；5年以上经验，3年以上亦可")
     assert result["degree"] == "博士"

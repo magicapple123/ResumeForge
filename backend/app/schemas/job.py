@@ -1,7 +1,7 @@
 """岗位 Schema。"""
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SkillTag(BaseModel):
@@ -17,7 +17,6 @@ class JobCreate(BaseModel):
     job_type: str = "校招"
     description: str = ""
     requirements: str = ""
-    source: str = "手动添加"
     source_url: str = ""
     posted_at: str = ""
     status: str = "开放中"
@@ -38,27 +37,37 @@ class JobUpdate(BaseModel):
     status: str | None = None
 
 
+class JobTextParseRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=50_000)
+
+    @field_validator("text")
+    @classmethod
+    def text_must_contain_content(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("招聘信息不能为空")
+        return value
+
+
+class JobTextParseResult(BaseModel):
+    """从粘贴文本生成的可编辑草稿，不要求岗位名称已成功识别。"""
+
+    title: str = Field(default="", max_length=128)
+    company: str = Field(default="", max_length=128)
+    location: str = Field(default="", max_length=64)
+    salary: str = Field(default="", max_length=64)
+    job_type: str = Field(default="其他", max_length=32)
+    description: str = ""
+    requirements: str = ""
+    source_url: str = Field(default="", max_length=512)
+    posted_at: str = Field(default="", max_length=32)
+    status: str = Field(default="开放中", max_length=16)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class JobOut(JobCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    source: str = "手动添加"
     keywords: list[SkillTag] = []
     created_at: datetime
     updated_at: datetime
-
-
-class ScrapeRequest(BaseModel):
-    source: str = Field(min_length=1, description="抓取源唯一标识，见 /api/jobs/meta/sources")
-    keyword: str | None = None
-    limit: int = Field(default=20, ge=1, le=100)
-
-
-class ScrapeResult(BaseModel):
-    created: int  # 新增条数
-    skipped: int  # 已存在而跳过的条数
-    jobs: list[JobOut] = []
-
-
-class SourceInfo(BaseModel):
-    name: str
-    display_name: str
-    description: str

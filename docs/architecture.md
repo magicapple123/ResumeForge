@@ -14,16 +14,15 @@ flowchart LR
         ROUTES[api/ 路由层]
         SVC[services/ 业务层]
         LLM[services/llm/ 模型抽象]
-        SCRAPE[services/scrapers/ 抓取源]
+        PARSER[岗位文本与 JD 规则解析]
         PROMPTS[prompts/ 提示词模板]
         DB[(SQLite)]
     end
     LLMAPI[大模型 API<br/>DeepSeek/豆包/OpenAI/...]
-    SITES[招聘网站<br/>（扩展抓取源）]
 
     UI --> API --> ROUTES --> SVC
     SVC --> LLM --> LLMAPI
-    SVC --> SCRAPE --> SITES
+    SVC --> PARSER
     SVC --> PROMPTS
     ROUTES --> DB
 ```
@@ -40,7 +39,7 @@ backend/app/
 ├── api/               # 路由层：校验参数、编排服务、组装响应
 ├── services/          # 业务层：核心逻辑，与框架解耦
 │   ├── llm/           # 大模型抽象（base + openai_compat）
-│   ├── scrapers/      # 抓取源框架（base + registry + sources/）
+│   ├── job_text_parser.py  # 粘贴招聘文本解析为可编辑岗位草稿
 │   ├── jd_parser.py   # JD 规则解析（技能标签/学历/年限）
 │   ├── resume_generator.py  # 简历生成流水线
 │   ├── exporter.py    # 导出 JSON/Markdown/HTML
@@ -48,7 +47,7 @@ backend/app/
 │   └── settings_service.py  # 运行时配置存取
 ├── prompts/           # 提示词模板（独立于代码，方便调参）
 ├── templates/         # 简历 HTML 模板（Jinja2）
-└── data/              # 技能词典、示例岗位数据
+└── data/              # 技能词典
 ```
 
 ## 核心数据流：AI 生成简历
@@ -88,16 +87,17 @@ sequenceDiagram
 | PDF 用浏览器打印实现 | 服务端 PDF 在中文环境依赖系统字体，跨平台极易踩坑；浏览器打印零依赖且排版稳定 |
 | 模型输出宽松解析 + 修复重试 | 大模型输出不稳定，先容错提取 JSON，失败后用修复 Prompt 重试一次，再失败友好降级 |
 | 一致性校验（防 AI 虚构） | 对比生成结果与资料中的学校/公司/项目名，可疑内容给用户警告 |
+| 岗位文本使用本地规则解析 | 粘贴内容不发送给大模型，先生成可编辑草稿，用户确认后才入库 |
 
 ## 扩展点
 
 1. **新增模型提供商**：非 OpenAI 兼容协议时，在 `services/llm/` 新增 Provider 类，并在 `create_provider` 中按 `provider` 字段分发。
-2. **新增抓取源**：在 `services/scrapers/sources/` 新建文件继承 `JobSourceBase`，自动注册，详见 [scraper-guide.md](scraper-guide.md)。
+2. **扩展岗位文本识别规则**：在 `services/job_text_parser.py` 增加字段标签或章节规则，并补充对应离线测试。
 3. **新增导出格式**：在 `services/exporter.py` 加导出函数，`api/resumes.py` 的 `_EXPORT_FORMATS` 加一行。
 4. **新增简历风格**：`resume_generator.py` 的 `TONE_GUIDES` 与前端 `config.ts` 的 `RESUME_TONES` 同步添加。
 
 ## 测试策略
 
-- 后端核心业务（JD 解析、生成流水线、导出、防虚构校验）有单元测试，生成流水线用假 Provider，不依赖真实网络。
+- 后端核心业务（岗位文本/JD 解析、生成流水线、导出、防虚构校验）有单元测试，生成流水线用假 Provider，不依赖真实网络。
 - API 层有冒烟测试（TestClient），覆盖核心链路。
 - 前端为薄展示层，暂不写测试；类型系统（TS strict）+ 构建检查兜底。

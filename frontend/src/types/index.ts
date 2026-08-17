@@ -110,16 +110,8 @@ export interface JobPayload {
   status?: string;
 }
 
-export interface ScrapeResult {
-  created: number;
-  skipped: number;
-  jobs: Job[];
-}
-
-export interface SourceInfo {
-  name: string;
-  display_name: string;
-  description: string;
+export interface ParsedJobDraft extends Required<JobPayload> {
+  warnings: string[];
 }
 
 // ===== 简历 =====

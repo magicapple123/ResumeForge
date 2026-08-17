@@ -1,8 +1,9 @@
 /** 岗位新增/编辑弹窗：手动添加岗位信息。 */
-import { App, Form, Input, Modal, Select } from "antd";
-import { useEffect } from "react";
-import { createJob, updateJob } from "../api/jobs";
-import type { Job } from "../types";
+import { FileSearchOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Form, Input, Modal, Select } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { createJob, parseJobText, updateJob } from "../api/jobs";
+import type { Job, JobPayload } from "../types";
 
 interface Props {
   open: boolean;
@@ -16,19 +17,58 @@ const JOB_TYPE_OPTIONS = ["校招", "实习", "社招", "其他"].map((value) =>
 const STATUS_OPTIONS = ["开放中", "已截止", "已投递"].map((value) => ({ value, label: value }));
 
 export default function JobFormModal({ open, initial, onClose, onSaved }: Props) {
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<JobPayload>();
   const { message } = App.useApp();
+  const [rawText, setRawText] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parseWarnings, setParseWarnings] = useState<string[]>([]);
+  const parseRequestId = useRef(0);
   const isEdit = !!initial;
 
   // 打开时回填编辑数据（或重置为默认值）
   useEffect(() => {
+    parseRequestId.current += 1;
+    setParsing(false);
     if (!open) return;
     if (initial) {
       form.setFieldsValue(initial);
     } else {
       form.resetFields();
+      setRawText("");
+      setParseWarnings([]);
     }
   }, [open, initial, form]);
+
+  const parseText = async () => {
+    const text = rawText.trim();
+    if (!text) {
+      message.warning("请先粘贴招聘信息");
+      return;
+    }
+
+    setParsing(true);
+    const requestId = ++parseRequestId.current;
+    try {
+      const { warnings, ...draft } = await parseJobText({ text });
+      if (requestId !== parseRequestId.current) return;
+      // 空字段也要回填，避免连续识别两段文本时残留上一段的薪资、链接等数据。
+      form.setFieldsValue(draft);
+      setParseWarnings(warnings);
+      message.success("已识别并填入表单，请核对后再保存");
+    } catch (err) {
+      if (requestId !== parseRequestId.current) return;
+      setParseWarnings([]);
+      message.error(err instanceof Error ? err.message : "识别招聘信息失败");
+    } finally {
+      if (requestId === parseRequestId.current) setParsing(false);
+    }
+  };
+
+  const close = () => {
+    parseRequestId.current += 1;
+    setParsing(false);
+    onClose();
+  };
 
   const submit = async () => {
     const values = await form.validateFields();
@@ -41,7 +81,7 @@ export default function JobFormModal({ open, initial, onClose, onSaved }: Props)
         message.success("岗位已添加");
       }
       onSaved();
-      onClose();
+      close();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "保存失败");
     }
@@ -52,14 +92,61 @@ export default function JobFormModal({ open, initial, onClose, onSaved }: Props)
       title={isEdit ? "编辑岗位" : "手动添加岗位"}
       open={open}
       onOk={() => void submit()}
-      onCancel={onClose}
+      onCancel={close}
       okText="保存"
       cancelText="取消"
-      width={640}
+      okButtonProps={{ disabled: parsing }}
+      width={720}
+      styles={{ body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", paddingRight: 8 } }}
       destroyOnClose
     >
       <Form form={form} layout="vertical" initialValues={{ job_type: "校招", status: "开放中" }}>
-        <Form.Item name="title" label="职位名称" rules={[{ required: true, message: "请填写职位名称" }]}>
+        {!isEdit && (
+          <>
+            <Form.Item label="粘贴招聘信息">
+              <Input.TextArea
+                value={rawText}
+                disabled={parsing}
+                onChange={(event) => {
+                  setRawText(event.target.value);
+                  setParseWarnings([]);
+                }}
+                placeholder="粘贴职位名称、地点、职位描述、职位要求等完整招聘信息"
+                style={{ height: 220, resize: "none" }}
+              />
+            </Form.Item>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginTop: -12,
+                marginBottom: 16,
+              }}
+            >
+              <Button
+                type="primary"
+                icon={<FileSearchOutlined />}
+                loading={parsing}
+                onClick={() => void parseText()}
+              >
+                识别并填充
+              </Button>
+            </div>
+            {parseWarnings.length > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                message={parseWarnings.join("；")}
+                style={{ marginBottom: 16 }}
+              />
+            )}
+          </>
+        )}
+        <Form.Item
+          name="title"
+          label="职位名称"
+          rules={[{ required: true, message: "请填写职位名称" }]}
+        >
           <Input placeholder="如：后端开发工程师（校招）" />
         </Form.Item>
         <Form.Item name="company" label="公司名称">
@@ -84,7 +171,14 @@ export default function JobFormModal({ open, initial, onClose, onSaved }: Props)
         >
           <Input placeholder="招聘官网投递链接（选填）" />
         </Form.Item>
-        <Form.Item name="description" label="职位描述（JD）" rules={[{ required: true, message: "请填写职位描述" }]}>
+        <Form.Item name="posted_at" label="发布时间（选填）">
+          <Input placeholder="如：2026-08-15" />
+        </Form.Item>
+        <Form.Item
+          name="description"
+          label="职位描述（JD）"
+          rules={[{ required: true, message: "请填写职位描述" }]}
+        >
           <Input.TextArea rows={7} placeholder="粘贴完整 JD，生成简历时 AI 会据此定制内容" />
         </Form.Item>
         <Form.Item name="requirements" label="任职要求（选填）">

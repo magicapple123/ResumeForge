@@ -1,14 +1,13 @@
-/** 岗位广场：搜索筛选、手动添加、抓取、详情与生成简历入口。 */
-import { PlusOutlined, CloudDownloadOutlined } from "@ant-design/icons";
+/** 岗位广场：搜索筛选、手动添加、详情与生成简历入口。 */
+import { PlusOutlined } from "@ant-design/icons";
 import { App, Button, Input, Popconfirm, Select, Space, Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { deleteJob, listJobs, listSources } from "../api/jobs";
+import { deleteJob, listJobs } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
 import JobFormModal from "../components/JobFormModal";
-import ScrapeModal from "../components/ScrapeModal";
 import SkillTags from "../components/SkillTags";
 import { useApi } from "../hooks/useApi";
 import type { Job } from "../types";
@@ -22,7 +21,6 @@ export default function JobsPage() {
   const { message } = App.useApp();
 
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
-  const [source, setSource] = useState("");
   const [jobType, setJobType] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
@@ -31,13 +29,11 @@ export default function JobsPage() {
   const [detailJob, setDetailJob] = useState<Job | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
-  const [scrapeOpen, setScrapeOpen] = useState(false);
   const [generateJob, setGenerateJob] = useState<Job | null>(null);
 
-  const { data: sources } = useApi(listSources);
   const { data: jobs, loading, reload, error } = useApi(
-    () => listJobs({ keyword, source, job_type: jobType, status, page, page_size: pageSize }),
-    [keyword, source, jobType, status, page, pageSize],
+    () => listJobs({ keyword, job_type: jobType, status, page, page_size: pageSize }),
+    [keyword, jobType, status, page, pageSize],
   );
 
   useEffect(() => {
@@ -75,7 +71,6 @@ export default function JobsPage() {
     { title: "城市", dataIndex: "location", width: 90, render: (value) => value || "-" },
     { title: "薪资", dataIndex: "salary", width: 130, render: (value) => value || "-" },
     { title: "类型", dataIndex: "job_type", width: 80 },
-    { title: "来源", dataIndex: "source", width: 110 },
     {
       title: "更新时间",
       dataIndex: "created_at",
@@ -128,20 +123,6 @@ export default function JobsPage() {
           }}
         />
         <Select
-          placeholder="来源"
-          allowClear
-          style={{ width: 150 }}
-          value={source || undefined}
-          onChange={(value) => {
-            setSource(value ?? "");
-            setPage(1);
-          }}
-          options={[
-            { value: "手动添加", label: "手动添加" },
-            ...(sources ?? []).map((item) => ({ value: item.name, label: item.display_name })),
-          ]}
-        />
-        <Select
           placeholder="类型"
           allowClear
           style={{ width: 110 }}
@@ -165,9 +146,6 @@ export default function JobsPage() {
         />
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setFormOpen(true)}>
           手动添加
-        </Button>
-        <Button icon={<CloudDownloadOutlined />} onClick={() => setScrapeOpen(true)}>
-          抓取岗位
         </Button>
       </Space>
 
@@ -203,7 +181,6 @@ export default function JobsPage() {
         }}
         onSaved={() => void reload()}
       />
-      <ScrapeModal open={scrapeOpen} onClose={() => setScrapeOpen(false)} onFinished={() => void reload()} />
       <GenerateResumeModal job={generateJob} onClose={() => setGenerateJob(null)} />
     </div>
   );

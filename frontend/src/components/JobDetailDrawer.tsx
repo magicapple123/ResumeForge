@@ -23,7 +23,6 @@ export default function JobDetailDrawer({ job, onClose, onGenerate }: Props) {
             <Descriptions.Item label="工作地点">{job.location || "-"}</Descriptions.Item>
             <Descriptions.Item label="薪资范围">{job.salary || "-"}</Descriptions.Item>
             <Descriptions.Item label="岗位类型">{job.job_type || "-"}</Descriptions.Item>
-            <Descriptions.Item label="来源">{job.source || "-"}</Descriptions.Item>
             <Descriptions.Item label="状态">{job.status || "-"}</Descriptions.Item>
           </Descriptions>
 

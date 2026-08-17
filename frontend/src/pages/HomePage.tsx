@@ -110,7 +110,7 @@ export default function HomePage() {
             <List
               size="small"
               dataSource={stats?.latest_jobs ?? []}
-              locale={{ emptyText: <Empty description="暂无岗位，去「岗位广场」抓取或手动添加" /> }}
+              locale={{ emptyText: <Empty description="暂无岗位，去「岗位广场」手动添加" /> }}
               renderItem={(job) => (
                 <List.Item>
                   <Space>

@@ -1,12 +1,9 @@
-/** 设置页：大模型配置（含预设与连通测试）与抓取源列表。 */
-import { ApiOutlined, CloudDownloadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Card, Col, Form, Input, InputNumber, List, Row, Select, Slider, Space, Tag, Typography } from "antd";
+/** 设置页：大模型配置（含预设与连通测试）。 */
+import { ApiOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Card, Col, Form, Input, InputNumber, Row, Select, Slider, Space } from "antd";
 import { useEffect, useState } from "react";
-import { listSources } from "../api/jobs";
 import { getLLMConfig, saveLLMConfig, testLLM } from "../api/settings";
-import ScrapeModal from "../components/ScrapeModal";
 import { LLM_PRESETS } from "../config";
-import { useApi } from "../hooks/useApi";
 import type { LLMConfig, LLMTestResult } from "../types";
 
 const PRESET_OPTIONS = LLM_PRESETS.map((preset, index) => ({ value: index, label: preset.label }));
@@ -20,9 +17,6 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<LLMTestResult | null>(null);
-  const [scrapeSource, setScrapeSource] = useState<string | undefined>(undefined);
-
-  const { data: sources, reload: reloadSources } = useApi(listSources);
 
   // 加载已保存的配置；同时把 provider 预设索引还原到 Select（按 base_url 匹配）
   useEffect(() => {
@@ -43,8 +37,16 @@ export default function SettingsPage() {
 
   /** 收集表单值并剔除前端专用的 preset 字段 */
   const collectValues = async (): Promise<LLMConfig> => {
-    const { preset: _ignored, ...config } = await form.validateFields();
-    return config;
+    const values = await form.validateFields();
+    return {
+      provider: values.provider,
+      base_url: values.base_url,
+      api_key: values.api_key,
+      model: values.model,
+      temperature: values.temperature,
+      timeout_seconds: values.timeout_seconds,
+      max_tokens: values.max_tokens,
+    };
   };
 
   const save = async () => {
@@ -153,47 +155,6 @@ export default function SettingsPage() {
           />
         )}
       </Card>
-
-      <Card title="招聘信息抓取源" style={{ marginBottom: 16 }}>
-        <Typography.Paragraph type="secondary">
-          内置示例源用于演示完整流程；真实来源受网站接口与条款限制，请参考 docs/scraper-guide.md
-          自行扩展（新建一个类即可自动注册）。
-        </Typography.Paragraph>
-        <List
-          dataSource={sources ?? []}
-          locale={{ emptyText: "暂无可用抓取源" }}
-          renderItem={(source) => (
-            <List.Item
-              actions={[
-                <Button
-                  key="fetch"
-                  icon={<CloudDownloadOutlined />}
-                  onClick={() => setScrapeSource(source.name)}
-                >
-                  立即抓取
-                </Button>,
-              ]}
-            >
-              <List.Item.Meta
-                title={
-                  <Space>
-                    {source.display_name}
-                    <Tag>{source.name}</Tag>
-                  </Space>
-                }
-                description={source.description}
-              />
-            </List.Item>
-          )}
-        />
-      </Card>
-
-      <ScrapeModal
-        open={!!scrapeSource}
-        presetSource={scrapeSource}
-        onClose={() => setScrapeSource(undefined)}
-        onFinished={() => void reloadSources()}
-      />
     </div>
   );
 }

@@ -26,11 +26,9 @@ def _build_skill_matchers() -> tuple[list[tuple[re.Pattern, str, str]], list[tup
     for category, words in data["categories"].items():
         for word in words:
             if re.search(r"[a-zA-Z]", word):
-                # C++ 这类含符号的词用前后缀排除法，普通词用 \b 边界
-                if re.fullmatch(r"[A-Za-z0-9]+", word):
-                    pattern = re.compile(rf"\b{re.escape(word)}\b", re.IGNORECASE)
-                else:
-                    pattern = re.compile(rf"(?<![A-Za-z0-9]){re.escape(word)}(?![A-Za-z0-9])", re.IGNORECASE)
+                # Python 的 \b 会把中文也视为“单词字符”，导致「JavaScript等」漏匹配。
+                # 统一只用 ASCII 字母数字做边界，仍能避免把 Java 命中 JavaScript。
+                pattern = re.compile(rf"(?<![A-Za-z0-9]){re.escape(word)}(?![A-Za-z0-9])", re.IGNORECASE)
                 english.append((pattern, word, category))
             else:
                 chinese.append((word, word, category))

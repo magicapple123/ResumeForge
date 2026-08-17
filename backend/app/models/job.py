@@ -1,4 +1,4 @@
-"""岗位模型：手动添加与各抓取源采集的岗位统一入库。"""
+"""岗位模型：保存手动录入或从粘贴文本解析后确认的岗位。"""
 from datetime import datetime
 from typing import Any
 
@@ -28,7 +28,8 @@ class Job(Base):
     requirements: Mapped[str] = mapped_column(Text, default="")  # 任职要求（可选）
     # 规则解析出的技能标签：[{"name": "Python", "category": "编程语言"}, ...]
     keywords: Mapped[list[Any]] = mapped_column(JSON, default=list)
-    source: Mapped[str] = mapped_column(String(64), default="手动添加")  # 来源标识
+    # 保留该列以兼容历史数据；新岗位只会由手动添加接口写入默认值。
+    source: Mapped[str] = mapped_column(String(64), default="手动添加")
     source_url: Mapped[str] = mapped_column(String(512), default="")  # 投递链接
     posted_at: Mapped[str] = mapped_column(String(32), default="")  # 发布时间的原始文本
     status: Mapped[str] = mapped_column(String(16), default=JOB_STATUS_OPEN)
