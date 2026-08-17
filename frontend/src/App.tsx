@@ -31,14 +31,26 @@ function MainLayout() {
   const selectedKey = MENU_ITEMS.find((item) => item.key !== "/" && location.pathname.startsWith(item.key))?.key ?? "/";
 
   return (
-    <Layout style={{ minHeight: "100vh" }}>
-      <Sider theme="dark" width={200} breakpoint="lg" collapsedWidth={64}>
+    <Layout className="app-shell">
+      <Sider
+        className="app-sider"
+        theme="light"
+        width={200}
+        breakpoint="lg"
+        collapsedWidth={64}
+      >
         <div className="app-brand">
-          <UnorderedListOutlined />
-          <span className="app-brand-name">{APP_NAME}</span>
+          <span className="app-brand-mark">
+            <UnorderedListOutlined />
+          </span>
+          <span className="app-brand-copy">
+            <span className="app-brand-name">{APP_NAME}</span>
+            <span className="app-brand-caption">AI 简历工作台</span>
+          </span>
         </div>
         <Menu
-          theme="dark"
+          className="app-nav-menu"
+          theme="light"
           mode="inline"
           selectedKeys={[selectedKey]}
           items={MENU_ITEMS}
