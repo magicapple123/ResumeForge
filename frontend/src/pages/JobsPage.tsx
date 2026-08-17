@@ -1,11 +1,18 @@
 /** 岗位广场：搜索筛选、手动添加、详情与生成简历入口。 */
-import { CheckOutlined, CloseOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Input, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
+import {
+  CheckOutlined,
+  CloseOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  StarFilled,
+  StarOutlined,
+} from "@ant-design/icons";
+import { App, Button, Input, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, listJobs } from "../api/jobs";
+import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, listJobs, updateJob } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
 import JobFormModal from "../components/JobFormModal";
@@ -41,6 +48,7 @@ export default function JobsPage() {
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [batchStatus, setBatchStatus] = useState<string>();
   const [batchAction, setBatchAction] = useState<BatchAction>(null);
+  const [favoriteJobId, setFavoriteJobId] = useState<number | null>(null);
 
   const {
     data: jobs,
@@ -68,6 +76,23 @@ export default function JobsPage() {
       }
     },
     [message, reload],
+  );
+
+  const toggleFavorite = useCallback(
+    async (job: Job) => {
+      if (batchAction !== null || favoriteJobId !== null) return;
+      setFavoriteJobId(job.id);
+      try {
+        const updated = await updateJob(job.id, { favorite: !job.favorite });
+        setDetailJob((current) => (current?.id === job.id ? updated : current));
+        await reload();
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : "更新收藏状态失败");
+      } finally {
+        setFavoriteJobId(null);
+      }
+    },
+    [batchAction, favoriteJobId, message, reload],
   );
 
   const applyBatchStatus = async () => {
@@ -137,6 +162,26 @@ export default function JobsPage() {
   };
 
   const columns: ColumnsType<Job> = [
+    {
+      title: "收藏",
+      key: "favorite",
+      width: 64,
+      align: "center",
+      render: (_, job) => (
+        <Tooltip title={job.favorite ? "取消收藏" : "收藏岗位"}>
+          <Button
+            type="text"
+            size="small"
+            aria-label={job.favorite ? "取消收藏" : "收藏岗位"}
+            className={`job-favorite-button${job.favorite ? " is-favorite" : ""}`}
+            icon={job.favorite ? <StarFilled /> : <StarOutlined />}
+            loading={favoriteJobId === job.id}
+            disabled={batchAction !== null || favoriteJobId !== null}
+            onClick={() => void toggleFavorite(job)}
+          />
+        </Tooltip>
+      ),
+    },
     {
       title: "职位",
       dataIndex: "title",
@@ -357,6 +402,8 @@ export default function JobsPage() {
         job={detailJob}
         onClose={() => setDetailJob(null)}
         onGenerate={(job) => setGenerateJob(job)}
+        onFavorite={(job) => void toggleFavorite(job)}
+        favoriteLoading={favoriteJobId === detailJob?.id}
       />
       <JobFormModal
         open={formOpen}

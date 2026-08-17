@@ -1,6 +1,13 @@
 /** 岗位详情抽屉：JD 全文、技能标签、投递链接与操作入口。 */
-import { CheckCircleOutlined, FileTextOutlined, LinkOutlined, PushpinOutlined } from "@ant-design/icons";
-import { Button, Descriptions, Divider, Drawer, Space, Typography } from "antd";
+import {
+  CheckCircleOutlined,
+  FileTextOutlined,
+  LinkOutlined,
+  PushpinOutlined,
+  StarFilled,
+  StarOutlined,
+} from "@ant-design/icons";
+import { Button, Descriptions, Divider, Drawer, Space, Tooltip, Typography } from "antd";
 import type { ReactNode } from "react";
 import type { Job } from "../types";
 import SkillTags from "./SkillTags";
@@ -9,6 +16,8 @@ interface Props {
   job: Job | null;
   onClose: () => void;
   onGenerate: (job: Job) => void;
+  onFavorite: (job: Job) => void;
+  favoriteLoading?: boolean;
 }
 
 interface TextSectionProps {
@@ -36,14 +45,33 @@ function TextSection({ title, icon, content, emptyText, variant }: TextSectionPr
   );
 }
 
-export default function JobDetailDrawer({ job, onClose, onGenerate }: Props) {
+export default function JobDetailDrawer({
+  job,
+  onClose,
+  onGenerate,
+  onFavorite,
+  favoriteLoading = false,
+}: Props) {
   return (
     <Drawer title="岗位详情" width="min(640px, 100vw)" open={!!job} onClose={onClose}>
       {job && (
         <>
-          <Typography.Title level={4} style={{ marginTop: 0 }}>
-            {job.title}
-          </Typography.Title>
+          <div className="job-detail-title-row">
+            <Typography.Title level={4} style={{ margin: 0 }}>
+              {job.title}
+            </Typography.Title>
+            <Tooltip title={job.favorite ? "取消收藏" : "收藏岗位"}>
+              <Button
+                type="text"
+                aria-label={job.favorite ? "取消收藏" : "收藏岗位"}
+                className={`job-favorite-button${job.favorite ? " is-favorite" : ""}`}
+                icon={job.favorite ? <StarFilled /> : <StarOutlined />}
+                loading={favoriteLoading}
+                disabled={favoriteLoading}
+                onClick={() => onFavorite(job)}
+              />
+            </Tooltip>
+          </div>
           <Descriptions column={2} size="small" style={{ marginBottom: 16 }}>
             <Descriptions.Item label="公司">{job.company || "-"}</Descriptions.Item>
             <Descriptions.Item label="工作地点">{job.location || "-"}</Descriptions.Item>

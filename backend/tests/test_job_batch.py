@@ -31,6 +31,18 @@ def test_job_note_roundtrip_update_and_search(client):
     assert updated.json()["status"] == "已投递"
 
 
+def test_job_favorite_roundtrip(client):
+    job = _create_job(client, "算法工程师")
+
+    assert job["favorite"] is False
+    updated = client.put(f"/api/jobs/{job['id']}", json={"favorite": True})
+    assert updated.status_code == 200
+    assert updated.json()["favorite"] is True
+
+    listed = client.get("/api/jobs").json()["items"]
+    assert listed[0]["favorite"] is True
+
+
 def test_job_note_rejects_oversized_value(client):
     response = client.post("/api/jobs", json={"title": "算法工程师", "note": "x" * 2001})
 

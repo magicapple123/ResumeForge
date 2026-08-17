@@ -22,7 +22,10 @@ def test_ensure_sqlite_columns_preserves_legacy_rows(tmp_path):
             )
 
         required_columns = {
-            "job": {"note": "TEXT NOT NULL DEFAULT ''"},
+            "job": {
+                "note": "TEXT NOT NULL DEFAULT ''",
+                "favorite": "BOOLEAN NOT NULL DEFAULT 0",
+            },
             "user_profile": {"photo": "TEXT NOT NULL DEFAULT ''"},
         }
         ensure_sqlite_columns(legacy_engine, required_columns)
@@ -35,12 +38,12 @@ def test_ensure_sqlite_columns_preserves_legacy_rows(tmp_path):
         }
         with legacy_engine.connect() as connection:
             job = connection.exec_driver_sql(
-                "SELECT title, note FROM job WHERE id = 1"
+                "SELECT title, note, favorite FROM job WHERE id = 1"
             ).mappings().one()
             profile = connection.exec_driver_sql(
                 "SELECT name, photo FROM user_profile WHERE id = 1"
             ).mappings().one()
-        assert dict(job) == {"title": "算法工程师", "note": ""}
+        assert dict(job) == {"title": "算法工程师", "note": "", "favorite": 0}
         assert dict(profile) == {"name": "张三", "photo": ""}
     finally:
         legacy_engine.dispose()

@@ -35,6 +35,7 @@ class JobCreate(BaseModel):
     posted_at: str = ""
     status: str = "开放中"
     note: str = Field(default="", max_length=2000)
+    favorite: bool = False
 
     @field_validator("status")
     @classmethod
@@ -56,6 +57,7 @@ class JobUpdate(BaseModel):
     posted_at: str = ""
     status: str = "开放中"
     note: str = Field(default="", max_length=2000)
+    favorite: bool = False
 
     @field_validator("status")
     @classmethod

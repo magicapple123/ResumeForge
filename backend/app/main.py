@@ -25,7 +25,10 @@ async def lifespan(_app: FastAPI):
     ensure_sqlite_columns(
         engine,
         {
-            "job": {"note": "TEXT NOT NULL DEFAULT ''"},
+            "job": {
+                "note": "TEXT NOT NULL DEFAULT ''",
+                "favorite": "BOOLEAN NOT NULL DEFAULT 0",
+            },
             "user_profile": {"photo": "TEXT NOT NULL DEFAULT ''"},
         },
     )

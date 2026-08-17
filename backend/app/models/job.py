@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -34,5 +34,6 @@ class Job(Base):
     posted_at: Mapped[str] = mapped_column(String(32), default="")  # 发布时间的原始文本
     status: Mapped[str] = mapped_column(String(16), default=JOB_STATUS_OPEN)
     note: Mapped[str] = mapped_column(Text, default="")
+    favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

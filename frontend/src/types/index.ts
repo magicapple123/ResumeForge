@@ -95,6 +95,7 @@ export interface Job {
   posted_at: string;
   status: string;
   note: string;
+  favorite: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -111,9 +112,10 @@ export interface JobPayload {
   posted_at?: string;
   status?: string;
   note?: string;
+  favorite?: boolean;
 }
 
-export interface ParsedJobDraft extends Required<Omit<JobPayload, "note">> {
+export interface ParsedJobDraft extends Required<Omit<JobPayload, "note" | "favorite">> {
   warnings: string[];
 }
 
