@@ -3,11 +3,16 @@ import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
 import ProfileSection from "./ProfileSection";
 
-export function EducationSection() {
+interface Props {
+  editable: boolean;
+}
+
+export function EducationSection({ editable }: Props) {
   return (
     <ProfileSection
       title="教育经历"
       fieldName="educations"
+      editable={editable}
       emptyValue={{
         school: "",
         major: "",

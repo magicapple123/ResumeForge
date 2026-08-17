@@ -3,11 +3,16 @@ import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
 import ProfileSection from "./ProfileSection";
 
-export function SkillSection() {
+interface Props {
+  editable: boolean;
+}
+
+export function SkillSection({ editable }: Props) {
   return (
     <ProfileSection
       title="专业技能"
       fieldName="skills"
+      editable={editable}
       emptyValue={{ name: "", level: "" }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>

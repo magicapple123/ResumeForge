@@ -8,13 +8,21 @@ interface Props {
   title: string;
   /** 表单字段名（对应 profile 的 educations/experiences/...） */
   fieldName: string;
+  /** 只读查看时保留内容，但锁定动态列表操作。 */
+  editable?: boolean;
   /** 新增一行的默认值 */
   emptyValue: Record<string, string>;
   /** 行渲染函数 */
   renderRow: (field: FormListFieldData, remove: FormListOperation["remove"]) => ReactNode;
 }
 
-export default function ProfileSection({ title, fieldName, emptyValue, renderRow }: Props) {
+export default function ProfileSection({
+  title,
+  fieldName,
+  editable = true,
+  emptyValue,
+  renderRow,
+}: Props) {
   return (
     <Card size="small" title={title} style={{ marginBottom: 16 }}>
       <Form.List name={fieldName}>
@@ -37,6 +45,7 @@ export default function ProfileSection({ title, fieldName, emptyValue, renderRow
                   danger
                   size="small"
                   icon={<DeleteOutlined />}
+                  disabled={!editable}
                   style={{ position: "absolute", top: 8, right: 8 }}
                   onClick={() => remove(field.name)}
                 />
@@ -47,6 +56,7 @@ export default function ProfileSection({ title, fieldName, emptyValue, renderRow
               type="dashed"
               block
               icon={<PlusOutlined />}
+              disabled={!editable}
               onClick={() => add({ ...emptyValue })}
             >
               添加一条

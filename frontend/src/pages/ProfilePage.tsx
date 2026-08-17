@@ -1,5 +1,12 @@
 /** 我的资料：基础信息 + 各分区动态列表，整体保存。 */
-import { CameraOutlined, DeleteOutlined, SaveOutlined, UserOutlined } from "@ant-design/icons";
+import {
+  CameraOutlined,
+  CloseOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  SaveOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import {
   App,
   Button,
@@ -38,20 +45,47 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function toFormValues(profile: Profile): ProfileFormValues {
+  return {
+    photo: profile.photo,
+    name: profile.name,
+    gender: profile.gender,
+    birth_year: profile.birth_year,
+    phone: profile.phone,
+    email: profile.email,
+    city: profile.city,
+    target_city: profile.target_city,
+    job_intent: profile.job_intent,
+    personal_website: profile.personal_website,
+    github: profile.github,
+    summary: profile.summary,
+    educations: profile.educations,
+    experiences: profile.experiences,
+    projects: profile.projects,
+    skills: profile.skills,
+    awards: profile.awards,
+  };
+}
+
 export default function ProfilePage() {
   const [form] = Form.useForm<ProfileFormValues>();
   const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [photoReading, setPhotoReading] = useState(false);
   const photoReadId = useRef(0);
+  const savedValues = useRef<ProfileFormValues | null>(null);
   const photo = Form.useWatch("photo", form) ?? "";
 
   useEffect(() => {
     let active = true;
     void getProfile()
       .then((profile) => {
-        if (active) form.setFieldsValue(profile);
+        if (!active) return;
+        const values = toFormValues(profile);
+        form.setFieldsValue(values);
+        savedValues.current = values;
       })
       .catch((err) => {
         if (active) message.error(err instanceof Error ? err.message : "加载资料失败");
@@ -72,10 +106,20 @@ export default function ProfilePage() {
   );
 
   const submit = async () => {
-    const values = await form.validateFields();
+    if (!editing || saving || photoReading) return;
+    let values: ProfileFormValues;
+    try {
+      values = await form.validateFields();
+    } catch {
+      return;
+    }
     setSaving(true);
     try {
-      await saveProfile(values);
+      const profile = await saveProfile(values);
+      const nextValues = toFormValues(profile);
+      form.setFieldsValue(nextValues);
+      savedValues.current = nextValues;
+      setEditing(false);
       message.success("资料已保存，现在可以去岗位广场生成简历了");
     } catch (err) {
       message.error(err instanceof Error ? err.message : "保存失败");
@@ -84,7 +128,17 @@ export default function ProfilePage() {
     }
   };
 
+  const cancelEditing = () => {
+    if (saving || photoReading) return;
+    if (savedValues.current) {
+      form.resetFields();
+      form.setFieldsValue(savedValues.current);
+    }
+    setEditing(false);
+  };
+
   const beforePhotoUpload: UploadProps["beforeUpload"] = (file) => {
+    if (!editing) return Upload.LIST_IGNORE;
     if (!PHOTO_TYPES.has(file.type)) {
       message.error("请选择 JPG、PNG 或 WebP 格式的照片");
       return Upload.LIST_IGNORE;
@@ -121,18 +175,35 @@ export default function ProfilePage() {
           </Typography.Title>
           <Typography.Text type="secondary">维护生成简历时使用的个人信息与经历</Typography.Text>
         </div>
-        <Button
-          type="primary"
-          icon={<SaveOutlined />}
-          loading={saving}
-          disabled={photoReading}
-          onClick={() => void submit()}
-        >
-          保存全部资料
-        </Button>
+        <div className="profile-page-header-actions">
+          {editing ? (
+            <>
+              <Button
+                icon={<CloseOutlined />}
+                disabled={saving || photoReading}
+                onClick={cancelEditing}
+              >
+                取消
+              </Button>
+              <Button
+                type="primary"
+                icon={<SaveOutlined />}
+                loading={saving}
+                disabled={photoReading}
+                onClick={() => void submit()}
+              >
+                保存全部资料
+              </Button>
+            </>
+          ) : (
+            <Button icon={<EditOutlined />} onClick={() => setEditing(true)}>
+              编辑资料
+            </Button>
+          )}
+        </div>
       </div>
 
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" disabled={!editing || saving || photoReading}>
         <Form.Item name="photo" hidden>
           <Input />
         </Form.Item>
@@ -215,7 +286,7 @@ export default function ProfilePage() {
                     beforeUpload={beforePhotoUpload}
                     showUploadList={false}
                     maxCount={1}
-                    disabled={photoReading}
+                    disabled={!editing || saving || photoReading}
                   >
                     <Button icon={<CameraOutlined />} loading={photoReading}>
                       {photo ? "更换照片" : "选择照片"}
@@ -225,7 +296,7 @@ export default function ProfilePage() {
                     <Button
                       danger
                       icon={<DeleteOutlined />}
-                      disabled={photoReading}
+                      disabled={!editing || saving || photoReading}
                       onClick={() => form.setFieldValue("photo", "")}
                     >
                       移除
@@ -240,11 +311,11 @@ export default function ProfilePage() {
           </Col>
         </Row>
 
-        <EducationSection />
-        <ExperienceSection />
-        <ProjectSection />
-        <SkillSection />
-        <AwardSection />
+        <EducationSection editable={editing} />
+        <ExperienceSection editable={editing} />
+        <ProjectSection editable={editing} />
+        <SkillSection editable={editing} />
+        <AwardSection editable={editing} />
 
         <Card size="small" title="个人总结 / 自我评价" style={{ marginBottom: 16 }}>
           <Form.Item name="summary" style={{ marginBottom: 0 }}>
@@ -255,18 +326,6 @@ export default function ProfilePage() {
           </Form.Item>
         </Card>
 
-        <div className="profile-save-bar">
-          <Button
-            type="primary"
-            size="large"
-            icon={<SaveOutlined />}
-            loading={saving}
-            disabled={photoReading}
-            onClick={() => void submit()}
-          >
-            保存全部资料
-          </Button>
-        </div>
       </Form>
     </div>
   );
