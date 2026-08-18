@@ -44,6 +44,7 @@ SQLITE_REQUIRED_COLUMNS = {
     },
     "resume_record": {
         "job_id": "INTEGER",
+        "source": "VARCHAR(16) NOT NULL DEFAULT 'ai'",
         "enhancement_enabled": "BOOLEAN NOT NULL DEFAULT 0",
         "enhancement_level": "VARCHAR(16) NOT NULL DEFAULT 'balanced'",
     },

@@ -1,6 +1,6 @@
 /** 简历微调表单：编辑结构化内容后交由父组件保存并重新渲染。 */
 import { DeleteOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
-import { App, Button, Col, Form, Input, Modal, Row, Space, Tabs } from "antd";
+import { App, Button, Col, Form, Input, Modal, Row, Space, Tabs, Typography } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -11,6 +11,9 @@ interface Props {
   content: ResumeContent | null;
   onClose: () => void;
   onSave: (content: ResumeContent) => Promise<void>;
+  title?: string;
+  description?: string;
+  saveLabel?: string;
 }
 
 interface ListSectionProps {
@@ -313,7 +316,15 @@ function AwardEditor() {
   );
 }
 
-export default function ResumeEditorModal({ open, content, onClose, onSave }: Props) {
+export default function ResumeEditorModal({
+  open,
+  content,
+  onClose,
+  onSave,
+  title = "微调简历内容",
+  description,
+  saveLabel = "保存并更新预览",
+}: Props) {
   const { message } = App.useApp();
   const [form] = Form.useForm<ResumeContent>();
   const [saving, setSaving] = useState(false);
@@ -398,7 +409,7 @@ export default function ResumeEditorModal({ open, content, onClose, onSave }: Pr
 
   return (
     <Modal
-      title="微调简历内容"
+      title={title}
       open={open}
       width="min(1000px, calc(100vw - 24px))"
       zIndex={1100}
@@ -411,12 +422,17 @@ export default function ResumeEditorModal({ open, content, onClose, onSave }: Pr
             取消
           </Button>
           <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => form.submit()}>
-            保存并更新预览
+            {saveLabel}
           </Button>
         </Space>
       }
       styles={{ body: { maxHeight: "calc(100vh - 180px)", overflowY: "auto" } }}
     >
+      {description && (
+        <Typography.Text type="secondary" style={{ display: "block", marginBottom: 16 }}>
+          {description}
+        </Typography.Text>
+      )}
       <Form form={form} layout="vertical" onFinish={(values) => void handleFinish(values as ResumeContent)}>
         <Tabs items={tabItems} />
       </Form>

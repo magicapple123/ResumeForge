@@ -67,6 +67,16 @@ export default function ResumesPage() {
         </Space>
       ),
     },
+    {
+      title: "来源",
+      dataIndex: "source",
+      width: 100,
+      render: (value: ResumeBrief["source"]) => (
+        <Tag color={value === "manual" ? "purple" : "blue"}>
+          {value === "manual" ? "用户编写" : "AI 生成"}
+        </Tag>
+      ),
+    },
     { title: "模型", dataIndex: "model", width: 150, render: (value) => value || "-" },
     {
       title: "美化拓展",
@@ -81,7 +91,7 @@ export default function ResumesPage() {
       },
     },
     {
-      title: "生成时间",
+      title: "创建时间",
       dataIndex: "created_at",
       width: 160,
       render: (value) => formatDateTime(value),

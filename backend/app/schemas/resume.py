@@ -93,6 +93,15 @@ class ResumeContent(BaseModel):
         return validate_photo_data_url(value)
 
 
+class ManualResumeRequest(BaseModel):
+    """用户手写简历的保存请求；内容仍使用统一的结构化格式。"""
+
+    model_config = ConfigDict(extra="forbid")
+    job_id: int | None = None
+    title: str = Field(default="", max_length=256)
+    content: ResumeContent
+
+
 class ResumeBrief(BaseModel):
     """列表页不携带完整 content，避免大 JSON 反复传输。"""
 
@@ -102,6 +111,7 @@ class ResumeBrief(BaseModel):
     job_id: int | None = None
     job_title: str
     company: str
+    source: Literal["ai", "manual"] = "ai"
     model: str
     enhancement_enabled: bool
     enhancement_level: Literal["light", "balanced", "strong"]

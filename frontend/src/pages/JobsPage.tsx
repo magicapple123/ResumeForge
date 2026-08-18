@@ -18,6 +18,7 @@ import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, getJob, listJobs, upd
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
 import JobFormModal from "../components/JobFormModal";
+import ManualResumeModal from "../components/ManualResumeModal";
 import SkillTags from "../components/SkillTags";
 import { useApi } from "../hooks/useApi";
 import type { Job } from "../types";
@@ -48,6 +49,7 @@ export default function JobsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [generateJob, setGenerateJob] = useState<Job | null>(null);
+  const [manualResumeJob, setManualResumeJob] = useState<Job | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [batchStatus, setBatchStatus] = useState<string>();
   const [batchAction, setBatchAction] = useState<BatchAction>(null);
@@ -262,7 +264,7 @@ export default function JobsPage() {
     {
       title: "操作",
       key: "actions",
-      width: 220,
+      width: 290,
       render: (_, job) => (
         <Space size="small">
           <Button
@@ -280,6 +282,14 @@ export default function JobsPage() {
             onClick={() => setGenerateJob(job)}
           >
             生成简历
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            disabled={batchAction !== null}
+            onClick={() => setManualResumeJob(job)}
+          >
+            自行编写
           </Button>
           <Button
             type="link"
@@ -437,7 +447,7 @@ export default function JobsPage() {
         columns={columns}
         dataSource={jobs?.items ?? []}
         loading={loading}
-        scroll={{ x: 1260 }}
+        scroll={{ x: 1330 }}
         pagination={{
           current: page,
           pageSize,
@@ -456,6 +466,7 @@ export default function JobsPage() {
         job={detailJob}
         onClose={() => setDetailJob(null)}
         onGenerate={(job) => setGenerateJob(job)}
+        onWrite={(job) => setManualResumeJob(job)}
         onViewResumes={(job) => navigate(`/resumes?job_id=${job.id}`)}
         onFavorite={(job) => void toggleFavorite(job)}
         favoriteLoading={favoriteJobId === detailJob?.id}
@@ -470,6 +481,7 @@ export default function JobsPage() {
         onSaved={() => void reload()}
       />
       <GenerateResumeModal job={generateJob} onClose={() => setGenerateJob(null)} />
+      <ManualResumeModal job={manualResumeJob} onClose={() => setManualResumeJob(null)} />
     </div>
   );
 }

@@ -79,6 +79,9 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
       ) : (
         <div>
           <Space style={{ marginBottom: 12 }} wrap>
+            <Tag color={detail.source === "manual" ? "purple" : "blue"}>
+              {detail.source === "manual" ? "用户编写" : "AI 生成"}
+            </Tag>
             <Tag color="blue">目标岗位：{detail.job_title || "-"}</Tag>
             {detail.company && <Tag>{detail.company}</Tag>}
             <Tag>模型：{detail.model || "-"}</Tag>
@@ -86,7 +89,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
               美化拓展：{detail.enhancement_enabled ? enhancementLabel ?? "已开启" : "未开启"}
             </Tag>
             <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-              生成于 {detail.created_at.replace("T", " ").slice(0, 16)}
+              创建于 {detail.created_at.replace("T", " ").slice(0, 16)}
             </Typography.Text>
           </Space>
           <ResumePreview html={html} warnings={detail.warnings} />

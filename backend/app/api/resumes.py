@@ -16,6 +16,7 @@ from ..schemas.common import Page
 from ..schemas.job import JobOut
 from ..schemas.resume import (
     GenerateRequest,
+    ManualResumeRequest,
     ResumeBrief,
     ResumeContent,
     ResumeOut,
@@ -118,6 +119,7 @@ def _save_record(
     model: str,
     enhancement_enabled: bool,
     enhancement_level: str,
+    source: str = "ai",
 ) -> ResumeRecord:
     """生成结果落库（在流结束后的同一请求内调用）。"""
     name = str(content.get("name") or "简历").strip()[:48]
@@ -132,6 +134,7 @@ def _save_record(
         company=job.company,
         content=content,
         warnings=warnings,
+        source=source,
         model=model,
         enhancement_enabled=enhancement_enabled,
         enhancement_level=enhancement_level,
@@ -143,6 +146,47 @@ def _save_record(
     return record
 
 
+def _build_manual_title(content: ResumeContent, job: Job | None, requested_title: str) -> str:
+    """生成手写简历默认标题；允许用户传入标题以便在简历中心区分版本。"""
+    title = requested_title.strip()
+    if title:
+        return title[:256]
+    name = content.name.strip()[:48] or "未命名"
+    company = (job.company.strip() if job else "").strip()[:80]
+    job_title = (job.title.strip() if job else "").strip()[:80]
+    target = "-".join(part for part in (company, job_title) if part) or "自定义简历"
+    timestamp = datetime.now().strftime("%Y%m%d%H%M")
+    return f"{name}-{target}-{timestamp}"[:256]
+
+
+@router.post("/manual", response_model=ResumeOut, status_code=201)
+def create_manual_resume(payload: ManualResumeRequest, db: Session = Depends(get_db)):
+    """保存用户自行编写的简历，并可选关联岗位。"""
+    job = db.get(Job, payload.job_id) if payload.job_id is not None else None
+    if payload.job_id is not None and job is None:
+        raise HTTPException(status_code=404, detail="关联岗位不存在或已被删除")
+
+    content = payload.content.model_dump()
+    record = ResumeRecord(
+        title=_build_manual_title(payload.content, job, payload.title),
+        job_id=job.id if job else None,
+        job_title=job.title if job else payload.content.job_intent,
+        company=job.company if job else "",
+        content=content,
+        warnings=[],
+        source="manual",
+        model="",
+        enhancement_enabled=False,
+        enhancement_level="balanced",
+        parse_error="",
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    logger.info("用户手写简历已保存 record_id=%s job=%s", record.id, record.job_title)
+    return _to_resume_out(record)
+
+
 def _to_resume_out(record: ResumeRecord) -> ResumeOut:
     return ResumeOut(
         id=record.id,
@@ -150,6 +194,7 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         job_id=record.job_id,
         job_title=record.job_title,
         company=record.company,
+        source=record.source or "ai",
         model=record.model,
         enhancement_enabled=record.enhancement_enabled,
         enhancement_level=record.enhancement_level,

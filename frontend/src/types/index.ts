@@ -223,6 +223,7 @@ export interface ResumeBrief {
   job_id: number | null;
   job_title: string;
   company: string;
+  source: "ai" | "manual";
   model: string;
   enhancement_enabled: boolean;
   enhancement_level: EnhancementLevel;

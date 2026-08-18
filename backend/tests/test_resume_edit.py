@@ -73,3 +73,51 @@ def test_update_resume_returns_404_for_missing_record(client):
     response = client.put("/api/resumes/999", json={"name": "张三"})
 
     assert response.status_code == 404
+
+
+def test_create_manual_resume_is_linked_and_marked_as_user_written(client):
+    job_response = client.post(
+        "/api/jobs",
+        json={"title": "客户端开发工程师", "company": "示例公司"},
+    )
+    assert job_response.status_code == 201
+    job_id = job_response.json()["id"]
+
+    response = client.post(
+        "/api/resumes/manual",
+        json={
+            "job_id": job_id,
+            "content": {
+                "name": "张三",
+                "job_intent": "客户端开发工程师",
+                "summary": "用户自行整理的简历内容",
+                "projects": [{"name": "简历工具", "description": ["负责功能开发"]}],
+            },
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["source"] == "manual"
+    assert body["job_id"] == job_id
+    assert body["company"] == "示例公司"
+    assert body["model"] == ""
+    assert "张三-示例公司-客户端开发工程师-" in body["title"]
+
+    listed = client.get("/api/resumes", params={"job_id": job_id})
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["source"] == "manual"
+
+
+def test_create_manual_resume_without_job_uses_profile_intent(client):
+    response = client.post(
+        "/api/resumes/manual",
+        json={"content": {"name": "李四", "job_intent": "后端开发工程师"}},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["source"] == "manual"
+    assert body["job_id"] is None
+    assert body["job_title"] == "后端开发工程师"
+    assert body["title"].startswith("李四-自定义简历-")

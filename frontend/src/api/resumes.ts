@@ -32,6 +32,18 @@ export function updateResume(id: number, content: ResumeContent): Promise<Resume
   return request(`/resumes/${id}`, { method: "PUT", body: JSON.stringify(content) });
 }
 
+/** 保存用户自行编写的简历，可选关联岗位。 */
+export function createManualResume(payload: {
+  job_id?: number | null;
+  title?: string;
+  content: ResumeContent;
+}): Promise<ResumeDetail> {
+  return request("/resumes/manual", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function generateResumeSuggestions(id: number): Promise<ResumeSuggestions> {
   return request(`/resumes/${id}/suggestions`, { method: "POST" });
 }

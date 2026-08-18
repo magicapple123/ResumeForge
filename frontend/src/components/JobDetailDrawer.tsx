@@ -1,6 +1,7 @@
 /** 岗位详情抽屉：JD 全文、技能标签、投递链接与操作入口。 */
 import {
   CheckCircleOutlined,
+  EditOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
   LinkOutlined,
@@ -17,6 +18,7 @@ interface Props {
   job: Job | null;
   onClose: () => void;
   onGenerate: (job: Job) => void;
+  onWrite: (job: Job) => void;
   onViewResumes: (job: Job) => void;
   onFavorite: (job: Job) => void;
   favoriteLoading?: boolean;
@@ -51,6 +53,7 @@ export default function JobDetailDrawer({
   job,
   onClose,
   onGenerate,
+  onWrite,
   onViewResumes,
   onFavorite,
   favoriteLoading = false,
@@ -119,6 +122,9 @@ export default function JobDetailDrawer({
           <Space className="job-detail-actions">
             <Button type="primary" icon={<FileTextOutlined />} onClick={() => onGenerate(job)}>
               用 AI 生成简历
+            </Button>
+            <Button icon={<EditOutlined />} onClick={() => onWrite(job)}>
+              自行编写简历
             </Button>
             <Button icon={<FolderOpenOutlined />} onClick={() => onViewResumes(job)}>
               查看生成的简历
