@@ -1,6 +1,6 @@
 /** 经历参考资料：读取小型 UTF-8 文本并直接保存在资料表单中。 */
-import { DeleteOutlined, FileTextOutlined, UploadOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Space, Tag, Typography, Upload } from "antd";
+import { DeleteOutlined, EyeOutlined, FileTextOutlined, UploadOutlined } from "@ant-design/icons";
+import { App, Button, Form, Input, Modal, Space, Tag, Typography, Upload } from "antd";
 import type { UploadProps } from "antd";
 import { useEffect, useRef, useState } from "react";
 
@@ -32,6 +32,7 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
   const { message } = App.useApp();
   const form = Form.useFormInstance();
   const [reading, setReading] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const readId = useRef(0);
   const fieldNameRef = useRef(fieldName);
   const editableRef = useRef(editable);
@@ -49,7 +50,7 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
     [],
   );
 
-  if (!editable && !fileName) return null;
+  if (!editable && !fileName && !content) return null;
 
   const setReference = (name: string, text: string) => {
     const currentFieldName = fieldNameRef.current;
@@ -98,34 +99,37 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
   };
 
   return (
-    <Form.Item
-      label="补充总结文件"
-      extra={editable ? "支持 UTF-8 编码的 .md 或 .txt 文件，最大 200 KB" : undefined}
-    >
-      <Form.Item name={[fieldName, "reference_file_name"]} hidden>
-        <Input />
-      </Form.Item>
-      <Form.Item name={[fieldName, "reference_content"]} hidden>
-        <Input />
-      </Form.Item>
-
-      <Space wrap>
-        {fileName ? (
-          <Space size={6}>
-            <FileTextOutlined />
-            <Typography.Text
-              ellipsis={{ tooltip: fileName }}
-              style={{ maxWidth: "min(420px, 65vw)" }}
-            >
-              {fileName}
-            </Typography.Text>
-            <Tag>{content.length.toLocaleString()} 字</Tag>
-          </Space>
-        ) : (
-          <Typography.Text type="secondary">未添加总结文件</Typography.Text>
-        )}
-        {editable && (
-          <>
+    <div className="profile-reference-field">
+      {editable ? (
+        <>
+          <Form.Item
+            name={[fieldName, "reference_file_name"]}
+            label="补充总结名称"
+            extra="上传文件会自动填入名称；直接输入内容时可自定义名称"
+          >
+            <Input maxLength={MAX_FILE_NAME_CHARS} placeholder="如：项目总结.md" />
+          </Form.Item>
+          <Form.Item
+            name={[fieldName, "reference_content"]}
+            label="补充总结内容"
+            extra="支持直接输入，最多 200,000 字符"
+          >
+            <Input.TextArea
+              rows={5}
+              maxLength={200_000}
+              showCount
+              placeholder="可直接粘贴或输入项目总结、工作成果、校园经历细节等内容"
+              onChange={(event) => {
+                if (event.target.value && !fileName) {
+                  form.setFieldValue(
+                    [listName, fieldName, "reference_file_name"],
+                    "手动输入总结.md",
+                  );
+                }
+              }}
+            />
+          </Form.Item>
+          <Space wrap>
             <Upload
               accept=".md,.txt,text/markdown,text/plain"
               beforeUpload={beforeUpload}
@@ -134,17 +138,49 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
               disabled={reading}
             >
               <Button icon={<UploadOutlined />} loading={reading}>
-                {fileName ? "替换" : "选择文件"}
+                {fileName ? "替换文件" : "导入文件"}
               </Button>
             </Upload>
-            {fileName && (
+            {(fileName || content) && (
               <Button danger icon={<DeleteOutlined />} disabled={reading} onClick={removeReference}>
-                移除
+                移除总结
               </Button>
             )}
-          </>
-        )}
-      </Space>
-    </Form.Item>
+            {content && (
+              <Button icon={<EyeOutlined />} onClick={() => setViewing(true)}>
+                查看内容
+              </Button>
+            )}
+          </Space>
+        </>
+      ) : (
+        <Space wrap>
+          <Space size={6}>
+            <FileTextOutlined />
+            <Typography.Text
+              ellipsis={{ tooltip: fileName || "手动输入总结" }}
+              style={{ maxWidth: "min(420px, 65vw)" }}
+            >
+              {fileName || "手动输入总结"}
+            </Typography.Text>
+            <Tag>{content.length.toLocaleString()} 字</Tag>
+          </Space>
+          <Button icon={<EyeOutlined />} disabled={!content} onClick={() => setViewing(true)}>
+            查看内容
+          </Button>
+        </Space>
+      )}
+      <Modal
+        title={fileName || "补充总结内容"}
+        open={viewing}
+        onCancel={() => setViewing(false)}
+        footer={<Button onClick={() => setViewing(false)}>关闭</Button>}
+        width={760}
+        destroyOnClose
+      >
+        <Typography.Text type="secondary">{content.length.toLocaleString()} 字</Typography.Text>
+        <pre className="profile-reference-preview">{content}</pre>
+      </Modal>
+    </div>
   );
 }

@@ -88,7 +88,7 @@ def test_exports_render_photo_without_empty_placeholder():
     html = render_html(with_photo)
     assert '<img class="profile-photo"' in html
     assert f'src="{PHOTO_DATA_URL}"' in html
-    assert f'<img alt="个人照片" src="{PHOTO_DATA_URL}" />' in export_markdown(with_photo)
+    assert PHOTO_DATA_URL not in export_markdown(with_photo)
     assert '<img class="profile-photo"' not in render_html(RESUME)
 
 

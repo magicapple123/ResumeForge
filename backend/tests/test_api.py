@@ -49,12 +49,14 @@ def test_profile_roundtrip(client):
         "projects": [],
         "skills": [{"name": "Python", "level": "熟练"}],
         "awards": [],
+        "section_order": ["projects", "basic_info"],
     }
     response = client.put("/api/profile", json=payload)
     assert response.status_code == 200
     saved = response.json()
     assert saved["name"] == "张三" and len(saved["educations"]) == 1
     assert saved["campus_experiences"][0]["organization"] == "学生会"
+    assert saved["section_order"][:2] == ["projects", "basic_info"]
 
     response = client.get("/api/profile")
     assert response.json()["educations"][0]["school"] == "天津工业大学"
@@ -66,6 +68,22 @@ def test_profile_roundtrip(client):
     response = client.put("/api/profile", json=payload)
     assert response.json()["educations"] == []
     assert response.json()["campus_experiences"] == []
+
+
+def test_profile_parse_text_returns_draft_without_saving(client):
+    response = client.post(
+        "/api/profile/parse-text",
+        json={
+            "text": "姓名：李四\n\n项目经历\n简历工具｜核心开发｜2025.01-至今\n技术栈：Python、FastAPI\n项目描述：搭建平台",
+        },
+    )
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert draft["name"] == "李四"
+    assert draft["projects"][0]["name"] == "简历工具"
+    assert draft["projects"][0]["tech_stack"] == "Python、FastAPI"
+    assert client.get("/api/profile").json()["name"] == ""
 
 
 def test_job_crud_and_keywords(client):

@@ -4,12 +4,23 @@ import binascii
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
 MAX_REFERENCE_FILE_NAME_CHARS = 255
 MAX_REFERENCE_CONTENT_CHARS = 200_000
+MAX_PROFILE_TEXT_CHARS = 100_000
+PROFILE_SECTION_KEYS = (
+    "basic_info",
+    "educations",
+    "experiences",
+    "campus_experiences",
+    "projects",
+    "skills",
+    "awards",
+    "summary",
+)
 _MAX_ENCODED_PHOTO_CHARS = 4 * ((MAX_PROFILE_PHOTO_BYTES + 2) // 3)
 _PHOTO_HEADER_RE = re.compile(r"^data:(image/(?:jpeg|png|webp));base64$", re.IGNORECASE)
 
@@ -166,6 +177,7 @@ class ProfileUpdate(BaseModel):
     github: str = ""
     photo: str = ""
     summary: str = ""
+    section_order: list[str] = Field(default_factory=lambda: list(PROFILE_SECTION_KEYS))
     educations: list[EducationIn] = []
     experiences: list[ExperienceIn] = []
     campus_experiences: list[CampusExperienceIn] = []
@@ -177,6 +189,29 @@ class ProfileUpdate(BaseModel):
     @classmethod
     def photo_must_be_safe_image(cls, value: str) -> str:
         return validate_photo_data_url(value)
+
+    @field_validator("section_order")
+    @classmethod
+    def section_order_must_be_supported(cls, value: list[str]) -> list[str]:
+        supported = set(PROFILE_SECTION_KEYS)
+        normalized = [key for key in value if key in supported]
+        normalized.extend(key for key in PROFILE_SECTION_KEYS if key not in normalized)
+        return normalized
+
+
+class ProfileTextParseRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_PROFILE_TEXT_CHARS)
+
+    @field_validator("text")
+    @classmethod
+    def text_must_contain_content(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("个人资料不能为空")
+        return value
+
+
+class ProfileTextParseResult(ProfileUpdate):
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ProfileOut(ProfileUpdate):

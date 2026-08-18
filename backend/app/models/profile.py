@@ -6,7 +6,7 @@
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
@@ -33,6 +33,7 @@ class UserProfile(Base):
     github: Mapped[str] = mapped_column(String(256), default="")
     photo: Mapped[str] = mapped_column(Text, default="")  # 受限的 base64 图片 data URL
     summary: Mapped[str] = mapped_column(Text, default="")  # 个人总结/自我评价
+    section_order: Mapped[list[str]] = mapped_column(JSON, default=list)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
     educations: Mapped[list["Education"]] = relationship(

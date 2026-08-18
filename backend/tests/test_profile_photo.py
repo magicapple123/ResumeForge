@@ -92,6 +92,9 @@ def test_saved_resume_preserves_photo_in_detail_and_exports(client, db_session):
     assert detail.status_code == 200
     assert detail.json()["content"]["photo"] == PHOTO_DATA_URL
     assert html.status_code == 200 and f'src="{PHOTO_DATA_URL}"' in html.text
-    assert markdown.status_code == 200 and f'<img alt="个人照片" src="{PHOTO_DATA_URL}" />' in markdown.text
+    assert markdown.status_code == 200
+    assert markdown.headers["content-type"].startswith("text/markdown")
+    assert PHOTO_DATA_URL not in markdown.text
+    assert "个人照片" not in markdown.text
     assert exported_json.status_code == 200
     assert "photo" not in exported_json.json()

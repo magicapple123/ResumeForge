@@ -47,14 +47,12 @@ def _join_bullets(items: list[str]) -> str:
 
 
 def export_markdown(resume: ResumeContent) -> str:
+    """导出不包含照片的 Markdown 文本。"""
     lines: list[str] = []
     header = resume.name
     if resume.job_intent:
         header += f" · {resume.job_intent}"
     lines.append(f"# {header}")
-    if resume.photo:
-        # 许多 Markdown 渲染器不解析超长 data URL 的图片语法，原始 HTML 更兼容。
-        lines.append(f'<img alt="个人照片" src="{resume.photo}" />\n')
     contacts = " | ".join(item for item in [resume.phone, resume.email, resume.city] if item)
     if contacts:
         lines.append(f"{contacts}\n")

@@ -22,7 +22,10 @@ SQLITE_REQUIRED_COLUMNS = {
         "note": "TEXT NOT NULL DEFAULT ''",
         "favorite": "BOOLEAN NOT NULL DEFAULT 0",
     },
-    "user_profile": {"photo": "TEXT NOT NULL DEFAULT ''"},
+    "user_profile": {
+        "photo": "TEXT NOT NULL DEFAULT ''",
+        "section_order": "TEXT NOT NULL DEFAULT '[]'",
+    },
     "education": {
         "reference_file_name": "VARCHAR(255) NOT NULL DEFAULT ''",
         "reference_content": "TEXT NOT NULL DEFAULT ''",

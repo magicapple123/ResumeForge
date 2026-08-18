@@ -402,6 +402,69 @@ body {
   font-size: 52px;
 }
 
+.profile-section-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-section-sortable {
+  position: relative;
+  min-width: 0;
+}
+
+.profile-section-sortable.is-drag-over > .ant-card,
+.profile-section-sortable.is-drag-over > .profile-top-card,
+.profile-section-sortable.is-drag-over > .ant-row {
+  outline: 2px dashed #1677ff;
+  outline-offset: 3px;
+}
+
+.profile-section-drag-handle {
+  position: absolute;
+  z-index: 3;
+  top: 9px;
+  right: 38px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8c8c8c;
+  cursor: grab;
+}
+
+.profile-page.is-editing .profile-section-drag-handle {
+  display: inline-flex;
+}
+
+.profile-section-drag-handle:hover {
+  background: #eef5ff;
+  color: #1677ff;
+}
+
+.profile-section-drag-handle:active {
+  cursor: grabbing;
+}
+
+.profile-reference-preview {
+  max-height: 60vh;
+  margin: 12px 0 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fafafa;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 @media (max-width: 575px) {
   .jobs-filter-bar > .ant-space-item:first-child,
   .jobs-search-input {

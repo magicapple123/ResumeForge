@@ -80,7 +80,7 @@ def test_ensure_sqlite_columns_preserves_legacy_rows(tmp_path):
                 "SELECT title, note, favorite FROM job WHERE id = 1"
             ).mappings().one()
             profile = connection.exec_driver_sql(
-                "SELECT name, photo FROM user_profile WHERE id = 1"
+                "SELECT name, photo, section_order FROM user_profile WHERE id = 1"
             ).mappings().one()
             education = connection.exec_driver_sql(
                 "SELECT school, reference_file_name, reference_content "
@@ -103,7 +103,7 @@ def test_ensure_sqlite_columns_preserves_legacy_rows(tmp_path):
                 "FROM resume_record WHERE id = 1"
             ).mappings().one()
         assert dict(job) == {"title": "算法工程师", "note": "", "favorite": 0}
-        assert dict(profile) == {"name": "张三", "photo": ""}
+        assert dict(profile) == {"name": "张三", "photo": "", "section_order": "[]"}
         assert dict(education) == {
             "school": "示例大学",
             "reference_file_name": "",

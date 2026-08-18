@@ -88,6 +88,7 @@ export interface Profile {
   personal_website: string;
   github: string;
   summary: string;
+  section_order: string[];
   educations: Education[];
   experiences: Experience[];
   campus_experiences: CampusExperience[];
@@ -96,6 +97,10 @@ export interface Profile {
   awards: Award[];
   updated_at?: string;
 }
+
+export type ProfileTextParseResult = Omit<Profile, "id" | "updated_at"> & {
+  warnings: string[];
+};
 
 // ===== 岗位 =====
 export interface Job {
