@@ -7,6 +7,7 @@
 import json
 import re
 from collections.abc import AsyncIterator
+from copy import deepcopy
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -33,17 +34,24 @@ MAX_PROFILE_CHARS = 9_000
 ENHANCEMENT_LEVEL_GUIDES = {
     "light": (
         "轻度美化：只优化语序、动词和专业表达，保持原有要点数量与职责边界；"
-        "每条内容应能直接对应原资料或参考节选。"
+        "每条内容应能直接对应原资料或参考事实。原描述为空但存在 reference_facts 时，"
+        "提炼 1-2 条最相关事实，不能继续留空。"
     ),
     "balanced": (
         "均衡美化：可围绕 JD 重组原有事实，补足动作、方法和业务目的，使表达更扎实；"
-        "允许合并同一条目内的相关证据，但不得推导未明确提供的结果。"
+        "允许合并同一条目内的相关证据，但不得推导未明确提供的结果。含 reference_facts "
+        "的相关条目在可用事实达到 2 条时，应将 description/highlights 合计写成 2-4 条。"
     ),
     "strong": (
-        "深度美化：充分挖掘同一条目及参考节选中的岗位相关证据，以专业简历语言展开"
-        "技术决策、实施过程和价值；可以增加描述要点，但每个事实都必须能追溯到来源。"
+        "深度美化：充分挖掘同一条目及 reference_facts/reference_excerpt 中的岗位相关证据，"
+        "以专业简历语言展开技术决策、实施过程和价值，可以增加描述要点。存在至少 3 条 "
+        "reference_facts 时，"
+        "必须将 description/highlights 合计写成 3-5 条；不足 3 条时全部使用，不得为凑数"
+        "虚构。每个事实都必须能追溯到该条目来源。"
     ),
 }
+
+_REFERENCE_FALLBACK_LIMITS = {"light": 2, "balanced": 3, "strong": 5}
 
 _ENHANCEMENT_DISABLED_GUIDE = (
     "美化拓展已关闭：只能选择、排序并精确回填候选资料中的原文要点；"
@@ -282,8 +290,9 @@ def _ground_or_restore_list(generated: list[str], source: list[str]) -> list[str
 
 
 def _source_evidence_text(source: dict, fields: tuple[str, ...]) -> str:
-    """合并条目录入事实与岗位相关参考节选，供量化结果校验。"""
+    """合并条目录入事实与岗位相关附件证据，供量化结果校验。"""
     values = [value for field in fields for value in _source_list(source, field)]
+    values.extend(_source_list(source, "reference_facts"))
     excerpt = _source_value(source, "reference_excerpt")
     if excerpt:
         values.append(excerpt)
@@ -346,21 +355,60 @@ def _build_grounded_summary(selected_data: dict, job: JobOut) -> str:
     return "".join(sentences)
 
 
-def restore_selected_sections(resume: ResumeContent, selected_data: dict) -> ResumeContent:
+def _reference_fallback_facts(source: dict, enhancement_level: str) -> list[str]:
+    """返回已清洗且实际进入候选上下文的附件事实，不重新读取附件原文。"""
+    limit = _REFERENCE_FALLBACK_LIMITS.get(enhancement_level, 3)
+    return [
+        value.strip()
+        for value in _source_list(source, "reference_facts")[:limit]
+        if isinstance(value, str) and value.strip()
+    ]
+
+
+def _selected_data_with_reference_fallbacks(
+    selected_data: dict, enhancement_level: str
+) -> dict:
+    """为模型整段遗漏的区块补入同条目的附件事实。"""
+    fallback_data = deepcopy(selected_data)
+    for item in fallback_data.get("educations", []):
+        if not item.get("achievements"):
+            item["achievements"] = _reference_fallback_facts(item, enhancement_level)
+    for section in ("experiences", "campus_experiences"):
+        for item in fallback_data.get(section, []):
+            if not item.get("description"):
+                item["description"] = _reference_fallback_facts(item, enhancement_level)
+    for item in fallback_data.get("projects", []):
+        if not item.get("description") and not item.get("highlights"):
+            item["description"] = _reference_fallback_facts(item, enhancement_level)
+    return fallback_data
+
+
+def restore_selected_sections(
+    resume: ResumeContent,
+    selected_data: dict,
+    *,
+    enhance: bool = False,
+    enhancement_level: str = "balanced",
+) -> ResumeContent:
     """回填模型错误遗漏的岗位候选区块。
 
     模型偶尔会在 JSON 格式正确的情况下把经历、项目或技能数组全部留空。
-    候选资料已经是按岗位筛选后的真实事实，回填这些原始字段能保证简历仍有
-    可用内容，同时不会引入候选资料之外的信息。
+    候选资料已经是按岗位筛选后的真实事实。关闭美化时只回填原始字段；开启
+    美化时，原字段为空的条目可回填已清洗并实际进入上下文的附件事实。
     """
+    fallback_source = (
+        _selected_data_with_reference_fallbacks(selected_data, enhancement_level)
+        if enhance
+        else selected_data
+    )
     fallback = coerce_resume(
         {
-            "education": selected_data.get("educations", []),
-            "experience": selected_data.get("experiences", []),
-            "campus_experience": selected_data.get("campus_experiences", []),
-            "projects": selected_data.get("projects", []),
-            "skills": selected_data.get("skills", []),
-            "awards": selected_data.get("awards", []),
+            "education": fallback_source.get("educations", []),
+            "experience": fallback_source.get("experiences", []),
+            "campus_experience": fallback_source.get("campus_experiences", []),
+            "projects": fallback_source.get("projects", []),
+            "skills": fallback_source.get("skills", []),
+            "awards": fallback_source.get("awards", []),
         }
     )
     sections = {
@@ -386,12 +434,13 @@ def ground_resume_facts(
     selected_data: dict | None = None,
     *,
     enhance: bool = False,
+    enhancement_level: str = "balanced",
 ) -> ResumeContent:
     """把模型结果中的可验证字段锚定回资料库。
 
     名称、角色、日期、技能和技术栈始终回填为候选资料的原始事实。美化关闭
     时描述也精确回填；开启时 description/highlights/summary 可基于同条目的
-    录入事实和参考节选改写，但无来源的量化结果会被过滤。找不到候选源的条目
+    录入事实、参考事实和节选改写，但无来源的量化结果会被过滤。找不到候选源的条目
     会被丢弃，对应提醒由生成前的 ``check_consistency`` 保留给用户。
     """
     source_data = selected_data or build_profile_prompt_data(profile)
@@ -428,6 +477,8 @@ def ground_resume_facts(
             if enhance
             else _ground_or_restore_list(item.achievements, source_achievements)
         )
+        if enhance and not achievements:
+            achievements = _reference_fallback_facts(source, enhancement_level)
         education_items.append(
             item.model_copy(
                 update={
@@ -459,6 +510,8 @@ def ground_resume_facts(
             if enhance
             else _ground_or_restore_list(item.description, source_description)
         )
+        if enhance and not description:
+            description = _reference_fallback_facts(source, enhancement_level)
         experience_items.append(
             item.model_copy(
                 update={
@@ -487,6 +540,8 @@ def ground_resume_facts(
             if enhance
             else _ground_or_restore_list(item.description, source_description)
         )
+        if enhance and not description:
+            description = _reference_fallback_facts(source, enhancement_level)
         campus_items.append(
             item.model_copy(
                 update={
@@ -518,6 +573,8 @@ def ground_resume_facts(
             if enhance
             else _ground_or_restore_list(item.highlights, source_highlights)
         )
+        if enhance and not description and not highlights:
+            description = _reference_fallback_facts(source, enhancement_level)
         project_items.append(
             item.model_copy(
                 update={
@@ -686,12 +743,24 @@ class ResumeGenerator:
             include_references=options.enhance,
         )
         counts = selection.selected_counts
+        reference_count = sum(
+            1
+            for section in ("educations", "experiences", "campus_experiences", "projects")
+            for item in selection.data.get(section, [])
+            if item.get("reference_facts") or item.get("reference_excerpt")
+        )
+        reference_message = (
+            f"；已提取 {reference_count} 份总结文件中的岗位相关事实"
+            if options.enhance and reference_count
+            else ""
+        )
         yield {
             "type": "progress",
             "message": (
                 "已从完整资料中筛选 "
                 f"{counts['experiences']} 段实习/工作、{counts['projects']} 个项目、"
                 f"{counts['campus_experiences']} 段校园经历和 {counts['skills']} 项技能"
+                f"{reference_message}"
             ),
         }
         system_prompt = self._load_prompt("resume_generate_system.md")
@@ -742,10 +811,16 @@ class ResumeGenerator:
             job,
             selection.data,
             enhance=options.enhance,
+            enhancement_level=options.enhancement_level,
         ).model_copy(
             update={"photo": profile.photo}
         )
-        resume = restore_selected_sections(resume, selection.data)
+        resume = restore_selected_sections(
+            resume,
+            selection.data,
+            enhance=options.enhance,
+            enhancement_level=options.enhancement_level,
+        )
         yield {"type": "done", "resume": resume.model_dump(), "warnings": warnings}
 
     def _parse(self, raw: str) -> ResumeContent | None:

@@ -46,6 +46,9 @@ DOMAIN_SIGNALS: dict[str, tuple[str, ...]] = {
         "大模型",
         "LLM",
         "AIGC",
+        "RAG",
+        "AI Agent",
+        "智能体",
         "推荐系统",
         "多模态",
         "模型训练",
@@ -165,13 +168,23 @@ _REFERENCE_SECTIONS = ("educations", "experiences", "campus_experiences", "proje
 _REFERENCE_CONTENT_KEY = "_reference_content"
 _REFERENCE_FILE_KEY = "_reference_file_name"
 _REFERENCE_EXCERPT_MAX_CHARS = 1_800
+_REFERENCE_FACT_MAX_CHARS = 320
+_REFERENCE_FACT_LIMIT = 5
 _REFERENCE_INSTRUCTION_RE = re.compile(
     r"(?:忽略|绕过).{0,24}(?:系统|规则|指令|要求|限制)|"
     r"(?:系统|开发者|用户)\s*(?:消息|指令)|"
     r"(?:执行|遵循).{0,16}(?:以下|上述|本文).{0,8}(?:命令|指令)|"
-    r"(?:虚构|编造).{0,24}(?:经历|成绩|成果|数据|数字)",
+    r"(?:虚构|编造).{0,24}(?:经历|成绩|成果|数据|数字)|"
+    r"(?:请勿|不要|无需).{0,24}(?:虚构|编造|弱化|执行)",
     re.IGNORECASE,
 )
+_REFERENCE_META_RE = re.compile(
+    r"用途说明|事实性总结|供后续|简历(?:包装|优化|措辞)|"
+    r"面试(?:准备|要点)|可直接(?:提炼|引用|使用)|不是(?:系统|用户)指令",
+    re.IGNORECASE,
+)
+_MARKDOWN_LIST_PREFIX_RE = re.compile(r"^(?:[-+*]\s+|\d+(?:[.)、]|、)\s*)")
+_MARKDOWN_TABLE_DIVIDER_RE = re.compile(r"^:?-{3,}:?$")
 
 
 @dataclass(frozen=True)
@@ -458,21 +471,107 @@ def _select_summary(summary: str, focus: JobFocus) -> str:
     return " ".join(matching[:2])
 
 
-def _reference_chunks(content: str) -> list[str]:
-    """按 Markdown 段落切分，并在进入 Prompt 前丢弃明显的指令注入。"""
+def _safe_reference_blocks(content: str) -> list[str]:
+    """切分参考文件并移除含明显提示注入的整个段落。"""
     normalized = content.replace("\r\n", "\n").replace("\r", "\n").strip()
     if not normalized:
         return []
-    chunks = [
-        chunk.replace("```", "").strip()
-        for chunk in re.split(r"\n\s*\n+", normalized)
-        if chunk.strip()
-    ]
     return [
-        _trim_text(chunk, 700)
-        for chunk in chunks
-        if _REFERENCE_INSTRUCTION_RE.search(chunk) is None
+        block.replace("```", "").strip()
+        for block in re.split(r"\n\s*\n+", normalized)
+        if block.strip() and _REFERENCE_INSTRUCTION_RE.search(block) is None
     ]
+
+
+def _strip_markdown(value: str) -> str:
+    value = re.sub(r"\[([^\]]+)]\([^)]+\)", r"\1", value)
+    value = re.sub(r"<[^>]+>", "", value)
+    value = value.replace("**", "").replace("__", "").replace("`", "")
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _clean_reference_fact_line(line: str) -> str:
+    """把 Markdown 行转换为可直接追溯的事实句，丢弃标题和元说明。"""
+    stripped = line.strip()
+    if (
+        not stripped
+        or stripped.startswith(("#", ">"))
+        or re.fullmatch(r"[-*_]{3,}", stripped)
+        or _REFERENCE_META_RE.search(stripped)
+    ):
+        return ""
+
+    if stripped.startswith("|") and stripped.endswith("|"):
+        cells = [_strip_markdown(cell) for cell in stripped.strip("|").split("|")]
+        if not cells or all(_MARKDOWN_TABLE_DIVIDER_RE.fullmatch(cell) for cell in cells):
+            return ""
+        if cells[0] in {"层级", "技术", "指标", "数值", "项目", "说明"}:
+            return ""
+        stripped = f"{cells[0]}：{'、'.join(cell for cell in cells[1:] if cell)}"
+    else:
+        stripped = _MARKDOWN_LIST_PREFIX_RE.sub("", stripped)
+
+    cleaned = _strip_markdown(stripped).strip(" -：:")
+    if (
+        len(cleaned) < 12
+        or _REFERENCE_META_RE.search(cleaned)
+        or _REFERENCE_INSTRUCTION_RE.search(cleaned)
+    ):
+        return ""
+    return _trim_text(cleaned, _REFERENCE_FACT_MAX_CHARS)
+
+
+def _reference_fact_candidates(content: str) -> list[str]:
+    """从安全段落中提取自包含的事实行，保留原文而不做语义扩写。"""
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for block in _safe_reference_blocks(content):
+        for line in block.splitlines():
+            fact = _clean_reference_fact_line(line)
+            normalized = re.sub(r"\s+", "", fact).casefold()
+            if not fact or normalized in seen:
+                continue
+            seen.add(normalized)
+            candidates.append(fact)
+    return candidates
+
+
+def _select_reference_facts(content: str, section: str, focus: JobFocus) -> list[str]:
+    """选取少量 JD 相关事实，供模型使用并作为空输出时的确定性回退。"""
+    ranked: list[tuple[int, str, int, set[str]]] = []
+    for index, fact in enumerate(_reference_fact_candidates(content)):
+        score = _score_item({"reference_fact": fact}, section, focus)
+        if score <= 0:
+            continue
+        matched_signals = {
+            f"term:{term.casefold()}" for term in focus.terms if _contains(fact, term)
+        }
+        matched_signals.update(
+            f"domain:{domain}"
+            for domain in focus.domains
+            if any(_contains(fact, signal) for signal in DOMAIN_SIGNALS[domain])
+        )
+        ranked.append((index, fact, score, matched_signals))
+
+    selected: list[str] = []
+    remaining = list(ranked)
+    uncovered = {f"term:{term.casefold()}" for term in focus.terms}
+    uncovered.update(f"domain:{domain}" for domain in focus.domains)
+    while remaining and len(selected) < _REFERENCE_FACT_LIMIT:
+        choice = max(
+            remaining,
+            key=lambda item: (len(item[3] & uncovered), item[2], -item[0]),
+        )
+        remaining.remove(choice)
+        _, fact, _, matched_signals = choice
+        selected.append(fact)
+        uncovered -= matched_signals
+    return selected
+
+
+def _reference_chunks(content: str) -> list[str]:
+    """按 Markdown 段落切分，并在进入 Prompt 前丢弃明显的指令注入。"""
+    return [_trim_text(block, 700) for block in _safe_reference_blocks(content)]
 
 
 def _select_reference_excerpt(content: str, section: str, focus: JobFocus) -> str:
@@ -503,14 +602,18 @@ def _select_reference_excerpt(content: str, section: str, focus: JobFocus) -> st
 def _prepare_reference_excerpt(
     item: dict[str, Any], section: str, focus: JobFocus
 ) -> dict[str, Any]:
-    """移除内部参考原文，只暴露可追溯的岗位相关节选。"""
+    """移除内部原文，只暴露可追溯的岗位相关节选与事实。"""
     result = deepcopy(item)
     content = str(result.pop(_REFERENCE_CONTENT_KEY, ""))
     file_name = str(result.pop(_REFERENCE_FILE_KEY, ""))
     excerpt = _select_reference_excerpt(content, section, focus)
-    if excerpt:
+    facts = _select_reference_facts(content, section, focus)
+    if excerpt or facts:
         result["reference_file_name"] = file_name
+    if excerpt:
         result["reference_excerpt"] = excerpt
+    if facts:
+        result["reference_facts"] = facts
     return result
 
 
@@ -626,7 +729,19 @@ def _drop_one_detail(data: dict[str, Any]) -> bool:
                 item["reference_excerpt"] = _trim_text(excerpt, max(360, len(excerpt) // 2))
             else:
                 item.pop("reference_excerpt", None)
-                item.pop("reference_file_name", None)
+                if not item.get("reference_facts"):
+                    item.pop("reference_file_name", None)
+            return True
+    for section in reversed(_REFERENCE_SECTIONS):
+        for item in reversed(data.get(section) or []):
+            facts = item.get("reference_facts")
+            if not isinstance(facts, list) or not facts:
+                continue
+            facts.pop()
+            if not facts:
+                item.pop("reference_facts", None)
+                if not item.get("reference_excerpt"):
+                    item.pop("reference_file_name", None)
             return True
     for section in ("awards", "campus_experiences", "experiences", "projects", "educations"):
         entries = data.get(section) or []
