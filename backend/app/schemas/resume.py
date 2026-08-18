@@ -99,6 +99,7 @@ class ResumeBrief(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     title: str
+    job_id: int | None = None
     job_title: str
     company: str
     model: str
@@ -111,6 +112,23 @@ class ResumeOut(ResumeBrief):
     content: ResumeContent
     warnings: list[str] = []
     parse_error: str = ""
+
+
+class ResumeSuggestion(BaseModel):
+    """岗位化修改建议；每条建议都必须能回溯到简历或 JD 中的事实。"""
+
+    priority: Literal["high", "medium", "low"] = "medium"
+    section: str = ""
+    issue: str = ""
+    suggestion: str = ""
+    evidence: list[str] = Field(default_factory=list)
+
+
+class ResumeSuggestionsOut(BaseModel):
+    job_id: int
+    job_title: str
+    company: str
+    suggestions: list[ResumeSuggestion] = Field(default_factory=list)
 
 
 class ResumeRenderRequest(BaseModel):

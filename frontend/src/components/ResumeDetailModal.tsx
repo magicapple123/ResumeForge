@@ -1,13 +1,15 @@
 /** 简历记录预览弹窗（历史记录用）：加载详情与渲染 HTML 后展示。 */
-import { EditOutlined } from "@ant-design/icons";
+import { BulbOutlined, EditOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Modal, Skeleton, Space, Tag, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getResume, fetchResumeHtml, renderResume, updateResume } from "../api/resumes";
 import { RESUME_ENHANCEMENT_LEVELS } from "../config";
 import type { ResumeContent, ResumeDetail } from "../types";
 import ExportButtons from "./ExportButtons";
 import ResumeEditorModal from "./ResumeEditorModal";
 import ResumePreview from "./ResumePreview";
+import ResumeSuggestionsModal from "./ResumeSuggestionsModal";
 
 interface Props {
   recordId: number | null;
@@ -16,10 +18,15 @@ interface Props {
 
 export default function ResumeDetailModal({ recordId, onClose }: Props) {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const [detail, setDetail] = useState<ResumeDetail | null>(null);
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestionsGenerated, setSuggestionsGenerated] = useState(false);
+  const [suggestionsResetKey, setSuggestionsResetKey] = useState(0);
+  const loadedRecordId = useRef<number | null>(null);
 
   useEffect(() => {
     if (!recordId) return;
@@ -27,6 +34,12 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     setHtml("");
     setError("");
     setEditorOpen(false);
+    setSuggestionsOpen(false);
+    if (loadedRecordId.current !== recordId) {
+      loadedRecordId.current = recordId;
+      setSuggestionsGenerated(false);
+      setSuggestionsResetKey((value) => value + 1);
+    }
     void Promise.all([getResume(recordId), fetchResumeHtml(recordId)])
       .then(([data, rendered]) => {
         setDetail(data);
@@ -45,6 +58,8 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     const rendered = await renderResume(updated.content);
     setDetail(updated);
     setHtml(rendered);
+    setSuggestionsGenerated(false);
+    setSuggestionsResetKey((value) => value + 1);
     message.success("简历修改已保存");
   };
 
@@ -76,9 +91,25 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
           </Space>
           <ResumePreview html={html} warnings={detail.warnings} />
           <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Button icon={<EditOutlined />} onClick={() => setEditorOpen(true)}>
-              微调内容
-            </Button>
+            <Space wrap>
+              <Button icon={<EditOutlined />} onClick={() => setEditorOpen(true)}>
+                微调内容
+              </Button>
+              <Button
+                icon={<BulbOutlined />}
+                disabled={!detail.job_id}
+                onClick={() => setSuggestionsOpen(true)}
+              >
+                {suggestionsGenerated ? "查看岗位优化建议" : "生成岗位优化建议"}
+              </Button>
+              <Button
+                icon={<FolderOpenOutlined />}
+                disabled={!detail.job_id}
+                onClick={() => detail.job_id && navigate(`/jobs?job_id=${detail.job_id}`)}
+              >
+                查看对应岗位
+              </Button>
+            </Space>
             <ExportButtons recordId={detail.id} />
           </div>
         </div>
@@ -88,6 +119,13 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
         content={detail?.content ?? null}
         onClose={() => setEditorOpen(false)}
         onSave={saveEditedResume}
+      />
+      <ResumeSuggestionsModal
+        open={suggestionsOpen}
+        recordId={detail?.id ?? null}
+        resetKey={suggestionsResetKey}
+        onClose={() => setSuggestionsOpen(false)}
+        onGenerated={() => setSuggestionsGenerated(true)}
       />
     </Modal>
   );

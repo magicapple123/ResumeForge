@@ -20,12 +20,14 @@ from ..schemas.resume import (
     ResumeContent,
     ResumeOut,
     ResumeRenderRequest,
+    ResumeSuggestionsOut,
 )
 from ..services.exporter import build_filename, export_json, export_markdown, render_html
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.profile_service import get_profile_detail, to_profile_out
 from ..services.resume_generator import ResumeGenerator
+from ..services.resume_suggestions import generate_suggestions
 from ..services.settings_service import get_llm_config
 
 logger = logging.getLogger(__name__)
@@ -118,8 +120,11 @@ def _save_record(
     enhancement_level: str,
 ) -> ResumeRecord:
     """生成结果落库（在流结束后的同一请求内调用）。"""
-    name = content.get("name") or "简历"
-    title = f"{name}-{job.title}-{datetime.now().strftime('%Y%m%d%H%M')}"
+    name = str(content.get("name") or "简历").strip()[:48]
+    company = (job.company.strip() or "未命名公司")[:80]
+    job_title = job.title.strip()[:80]
+    timestamp = datetime.now().strftime("%Y%m%d%H%M")
+    title = f"{name}-{company}-{job_title}-{timestamp}"
     record = ResumeRecord(
         title=title,
         job_id=job.id,
@@ -142,6 +147,7 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
     return ResumeOut(
         id=record.id,
         title=record.title,
+        job_id=record.job_id,
         job_title=record.job_title,
         company=record.company,
         model=record.model,
@@ -160,8 +166,11 @@ def list_resumes(
     keyword: str = Query(default=""),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    job_id: int | None = Query(default=None, ge=1),
 ):
     query = db.query(ResumeRecord)
+    if job_id is not None:
+        query = query.filter(ResumeRecord.job_id == job_id)
     if keyword:
         like = f"%{keyword}%"
         query = query.filter(
@@ -175,6 +184,43 @@ def list_resumes(
     total = query.count()
     records = query.order_by(ResumeRecord.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     return Page(items=[ResumeBrief.model_validate(r) for r in records], total=total)
+
+
+@router.post("/{resume_id}/suggestions", response_model=ResumeSuggestionsOut)
+async def suggest_resume_edits(resume_id: int, db: Session = Depends(get_db)):
+    """按需生成当前简历针对关联岗位的修改建议，不修改简历内容。"""
+    record = db.get(ResumeRecord, resume_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
+    if record.job_id is None:
+        raise HTTPException(status_code=400, detail="这份简历没有关联的岗位，无法生成岗位化建议")
+    job = db.get(Job, record.job_id)
+    if job is None:
+        raise HTTPException(status_code=400, detail="关联岗位已被删除，无法生成岗位化建议")
+
+    config = get_llm_config(db)
+    if not config.base_url or not config.model:
+        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+    try:
+        profile = to_profile_out(get_profile_detail(db))
+        suggestions = await generate_suggestions(
+            create_provider(config),
+            ResumeContent.model_validate(record.content),
+            JobOut.model_validate(job),
+            profile,
+        )
+    except LLMError as exc:
+        logger.warning("简历岗位建议生成失败：%s", exc)
+        raise HTTPException(status_code=502, detail=f"生成修改建议失败：{exc}") from exc
+    except Exception as exc:  # noqa: BLE001 - 为用户提供可理解的失败提示
+        logger.exception("简历岗位建议发生内部错误")
+        raise HTTPException(status_code=502, detail="生成修改建议失败，请稍后重试") from exc
+    return ResumeSuggestionsOut(
+        job_id=job.id,
+        job_title=job.title,
+        company=job.company,
+        suggestions=suggestions,
+    )
 
 
 @router.get("/{resume_id}", response_model=ResumeOut)

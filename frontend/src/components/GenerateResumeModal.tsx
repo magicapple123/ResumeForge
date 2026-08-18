@@ -1,5 +1,5 @@
 /** AI 生成简历弹窗：配置岗位导向美化 -> 流式生成 -> 预览结果（自动保存历史）。 */
-import { EditOutlined, ReloadOutlined } from "@ant-design/icons";
+import { BulbOutlined, EditOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Modal, Segmented, Space, Spin, Switch, Tag, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -10,6 +10,7 @@ import type { EnhancementLevel, Job, ResumeContent, StreamEvent } from "../types
 import ExportButtons from "./ExportButtons";
 import ResumeEditorModal from "./ResumeEditorModal";
 import ResumePreview from "./ResumePreview";
+import ResumeSuggestionsModal from "./ResumeSuggestionsModal";
 
 type Stage = "config" | "generating" | "preview" | "error";
 
@@ -39,6 +40,9 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [previewHtml, setPreviewHtml] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestionsGenerated, setSuggestionsGenerated] = useState(false);
+  const [suggestionsResetKey, setSuggestionsResetKey] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
   const streamBoxRef = useRef<HTMLDivElement>(null);
@@ -72,6 +76,9 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
     setResult(null);
     setPreviewHtml("");
     setEditorOpen(false);
+    setSuggestionsGenerated(false);
+    setSuggestionsResetKey((value) => value + 1);
+    setSuggestionsOpen(false);
   }, []);
 
   const startGenerate = async () => {
@@ -82,6 +89,8 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
     setErrorMsg("");
     setResult(null);
     setEditorOpen(false);
+    setSuggestionsGenerated(false);
+    setSuggestionsResetKey((value) => value + 1);
     abortRef.current = new AbortController();
 
     // 事件回调里只更新状态；最终结果收集在闭包变量中，流结束后统一处理
@@ -152,6 +161,8 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
     const html = await renderResume(updated.content);
     setResult({ resume: updated.content, warnings: updated.warnings, recordId: updated.id });
     setPreviewHtml(html);
+    setSuggestionsGenerated(false);
+    setSuggestionsResetKey((value) => value + 1);
     message.success("简历修改已保存");
   };
 
@@ -270,6 +281,16 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
               >
                 微调内容
               </Button>
+              <Button
+                icon={<BulbOutlined />}
+                disabled={!result.recordId}
+                onClick={() => setSuggestionsOpen(true)}
+              >
+                {suggestionsGenerated ? "查看岗位优化建议" : "生成岗位优化建议"}
+              </Button>
+              <Button onClick={() => navigate(`/jobs?job_id=${job?.id ?? ""}`)}>
+                查看对应岗位
+              </Button>
               <Button onClick={() => navigate("/resumes")}>去简历中心</Button>
               <Button icon={<ReloadOutlined />} onClick={() => void startGenerate()}>
                 重新生成
@@ -287,6 +308,13 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
         content={result?.resume ?? null}
         onClose={() => setEditorOpen(false)}
         onSave={saveEditedResume}
+      />
+      <ResumeSuggestionsModal
+        open={suggestionsOpen}
+        recordId={result?.recordId ?? null}
+        resetKey={suggestionsResetKey}
+        onClose={() => setSuggestionsOpen(false)}
+        onGenerated={() => setSuggestionsGenerated(true)}
       />
 
       {stage === "error" && (

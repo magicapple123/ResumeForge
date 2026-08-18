@@ -18,9 +18,11 @@
     background: var(--bg);
     font-size: 14px;
     line-height: 1.7;
-    padding: 40px 48px;
-    max-width: 860px;
-    margin: 0 auto;
+    width: 210mm;
+    height: 297mm;
+    overflow: hidden;
+    padding: 14mm;
+    margin: 0;
   }
   /* 页头 */
   .header { display: flex; align-items: flex-start; gap: 24px; border-bottom: 2px solid var(--accent); padding-bottom: 16px; margin-bottom: 20px; }
@@ -48,24 +50,14 @@
   /* 技能 */
   .skill-list li { list-style: none; display: inline-block; background: #eef2f7; border-radius: 4px; padding: 1px 10px; margin: 0 8px 8px 0; font-size: 13px; }
   .skill-list { padding-left: 0; }
-  /* 打印按钮（打印时隐藏） */
-  .print-bar { position: fixed; top: 16px; right: 16px; z-index: 10; }
-  .print-bar button {
-    background: var(--accent); color: #fff; border: none; border-radius: 6px;
-    padding: 8px 18px; font-size: 14px; cursor: pointer;
-  }
-  .print-bar button:hover { opacity: 0.85; }
-  @page { size: A4; margin: 14mm; }
+  @page { size: A4; margin: 0; }
   @media print {
-    body { padding: 0; max-width: none; }
-    .print-bar { display: none; }
+    body { width: 210mm; height: 297mm; padding: 14mm; overflow: hidden; }
     .section, .entry { break-inside: avoid; }
   }
 </style>
 </head>
 <body>
-<div class="print-bar"><button onclick="window.print()">打印 / 另存为 PDF</button></div>
-
 <div class="header">
   <div class="header-main">
     <div class="name">{{ resume.name }}{% if resume.gender %} <span style="font-size:14px;font-weight:400;color:var(--muted)">{{ resume.gender }}</span>{% endif %}</div>
@@ -169,6 +161,28 @@
   </ul>
 </div>
 {% endif %}
+
+<script>
+  // 内容超过一页时整体缩放，保证导出的打印文档仍是一张 A4。
+  (() => {
+    const fitToA4 = () => {
+      const page = document.body;
+      if (!page) return;
+      page.style.transform = "none";
+      page.style.transformOrigin = "top left";
+      page.style.width = "210mm";
+      page.style.height = "297mm";
+      const scale = Math.min(1, 793.7 / Math.max(page.scrollWidth, 793.7), 1122.5 / Math.max(page.scrollHeight, 1122.5));
+      if (scale < 1) {
+        page.style.width = `${210 / scale}mm`;
+        page.style.height = `${297 / scale}mm`;
+        page.style.transform = `scale(${scale})`;
+      }
+    };
+    window.addEventListener("load", fitToA4);
+    if (document.fonts?.ready) document.fonts.ready.then(fitToA4);
+  })();
+</script>
 
 </body>
 </html>

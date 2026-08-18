@@ -2,6 +2,7 @@
 import { App, Button, Input, Popconfirm, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { deleteResume, listResumes } from "../api/resumes";
 import ResumeDetailModal from "../components/ResumeDetailModal";
 import { RESUME_ENHANCEMENT_LEVELS } from "../config";
@@ -10,15 +11,19 @@ import type { ResumeBrief } from "../types";
 import { formatDateTime } from "../utils/format";
 
 export default function ResumesPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { message } = App.useApp();
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [previewId, setPreviewId] = useState<number | null>(null);
+  const jobIdParam = searchParams.get("job_id");
+  const jobId = jobIdParam && /^\d+$/.test(jobIdParam) ? Number(jobIdParam) : undefined;
 
   const { data, loading, reload, error } = useApi(
-    () => listResumes({ keyword, page, page_size: pageSize }),
-    [keyword, page, pageSize],
+    () => listResumes({ keyword, page, page_size: pageSize, job_id: jobId }),
+    [keyword, page, pageSize, jobId],
   );
 
   useEffect(() => {
@@ -51,7 +56,13 @@ export default function ResumesPage() {
       key: "job",
       render: (_, record) => (
         <Space>
-          <Tag color="blue">{record.job_title || "-"}</Tag>
+          {record.job_id ? (
+            <Typography.Link onClick={() => navigate(`/jobs?job_id=${record.job_id}`)}>
+              <Tag color="blue">{record.job_title || "-"}</Tag>
+            </Typography.Link>
+          ) : (
+            <Tag color="blue">{record.job_title || "-"}</Tag>
+          )}
           {record.company && <Tag>{record.company}</Tag>}
         </Space>
       ),
@@ -96,6 +107,14 @@ export default function ResumesPage() {
 
   return (
     <div>
+      {jobId && (
+        <Space style={{ marginBottom: 12 }}>
+          <Tag color="blue">按岗位筛选：#{jobId}</Tag>
+          <Button type="link" size="small" onClick={() => navigate("/resumes")}>
+            清除筛选
+          </Button>
+        </Space>
+      )}
       <Input.Search
         placeholder="搜索简历记录"
         allowClear

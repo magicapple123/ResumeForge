@@ -49,6 +49,12 @@ def test_export_json_roundtrip():
     assert ResumeContent.model_validate(data) == RESUME
 
 
+def test_export_json_excludes_photo_data_url():
+    with_photo = RESUME.model_copy(update={"photo": PHOTO_DATA_URL})
+    data = json.loads(export_json(with_photo))
+    assert "photo" not in data
+
+
 def test_export_markdown_contains_sections():
     markdown = export_markdown(RESUME)
     for section in (
@@ -82,8 +88,22 @@ def test_exports_render_photo_without_empty_placeholder():
     html = render_html(with_photo)
     assert '<img class="profile-photo"' in html
     assert f'src="{PHOTO_DATA_URL}"' in html
-    assert f"![个人照片]({PHOTO_DATA_URL})" in export_markdown(with_photo)
+    assert f'<img alt="个人照片" src="{PHOTO_DATA_URL}" />' in export_markdown(with_photo)
     assert '<img class="profile-photo"' not in render_html(RESUME)
+
+
+def test_render_html_does_not_include_print_button():
+    html = render_html(RESUME)
+    assert "print-bar" not in html
+    assert "打印 / 另存为 PDF" not in html
+
+
+def test_render_html_uses_single_a4_page_layout():
+    html = render_html(RESUME)
+
+    assert "width: 210mm" in html
+    assert "height: 297mm" in html
+    assert "@page { size: A4; margin: 0; }" in html
 
 
 def test_filename_sanitize_and_build():

@@ -215,6 +215,7 @@ export interface ResumeContent {
 export interface ResumeBrief {
   id: number;
   title: string;
+  job_id: number | null;
   job_title: string;
   company: string;
   model: string;
@@ -227,6 +228,23 @@ export interface ResumeDetail extends ResumeBrief {
   content: ResumeContent;
   warnings: string[];
   parse_error: string;
+}
+
+export type ResumeSuggestionPriority = "high" | "medium" | "low";
+
+export interface ResumeSuggestion {
+  priority: ResumeSuggestionPriority;
+  section: string;
+  issue: string;
+  suggestion: string;
+  evidence: string[];
+}
+
+export interface ResumeSuggestions {
+  job_id: number;
+  job_title: string;
+  company: string;
+  suggestions: ResumeSuggestion[];
 }
 
 export type EnhancementLevel = "light" | "balanced" | "strong";

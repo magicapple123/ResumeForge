@@ -1,11 +1,21 @@
 /** 简历相关接口：生成（SSE）、历史、渲染预览、导出下载。 */
-import type { GenerateOptions, Page, ResumeBrief, ResumeContent, ResumeDetail, StreamEvent } from "../types";
+import type {
+  GenerateOptions,
+  Page,
+  ResumeBrief,
+  ResumeContent,
+  ResumeDetail,
+  ResumeSuggestions,
+  StreamEvent,
+} from "../types";
 import { ApiError, buildQuery, extractError, request } from "./client";
 import { consumeSSE } from "./stream";
 
 export type ExportFormat = "json" | "md" | "html";
 
-export function listResumes(params: { keyword?: string; page?: number; page_size?: number } = {}): Promise<Page<ResumeBrief>> {
+export function listResumes(
+  params: { keyword?: string; page?: number; page_size?: number; job_id?: number } = {},
+): Promise<Page<ResumeBrief>> {
   return request(`/resumes${buildQuery(params)}`);
 }
 
@@ -20,6 +30,10 @@ export function deleteResume(id: number): Promise<void> {
 /** 替换一份已保存简历的结构化内容。 */
 export function updateResume(id: number, content: ResumeContent): Promise<ResumeDetail> {
   return request(`/resumes/${id}`, { method: "PUT", body: JSON.stringify(content) });
+}
+
+export function generateResumeSuggestions(id: number): Promise<ResumeSuggestions> {
+  return request(`/resumes/${id}/suggestions`, { method: "POST" });
 }
 
 /** 流式生成简历，事件定义见 types/StreamEvent */

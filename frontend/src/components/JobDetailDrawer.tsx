@@ -2,6 +2,7 @@
 import {
   CheckCircleOutlined,
   FileTextOutlined,
+  FolderOpenOutlined,
   LinkOutlined,
   PushpinOutlined,
   StarFilled,
@@ -16,6 +17,7 @@ interface Props {
   job: Job | null;
   onClose: () => void;
   onGenerate: (job: Job) => void;
+  onViewResumes: (job: Job) => void;
   onFavorite: (job: Job) => void;
   favoriteLoading?: boolean;
 }
@@ -49,6 +51,7 @@ export default function JobDetailDrawer({
   job,
   onClose,
   onGenerate,
+  onViewResumes,
   onFavorite,
   favoriteLoading = false,
 }: Props) {
@@ -116,6 +119,9 @@ export default function JobDetailDrawer({
           <Space className="job-detail-actions">
             <Button type="primary" icon={<FileTextOutlined />} onClick={() => onGenerate(job)}>
               用 AI 生成简历
+            </Button>
+            <Button icon={<FolderOpenOutlined />} onClick={() => onViewResumes(job)}>
+              查看生成的简历
             </Button>
             {job.source_url && (
               <Button

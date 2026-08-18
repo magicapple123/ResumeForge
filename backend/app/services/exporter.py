@@ -38,7 +38,8 @@ def build_filename(resume: ResumeContent, suffix: str) -> str:
 
 
 def export_json(resume: ResumeContent) -> str:
-    return json.dumps(resume.model_dump(), ensure_ascii=False, indent=2)
+    # 照片是内嵌 data URL，放进 JSON 会产生无意义的大字段；其他资料保持完整。
+    return json.dumps(resume.model_dump(exclude={"photo"}), ensure_ascii=False, indent=2)
 
 
 def _join_bullets(items: list[str]) -> str:
@@ -52,7 +53,8 @@ def export_markdown(resume: ResumeContent) -> str:
         header += f" · {resume.job_intent}"
     lines.append(f"# {header}")
     if resume.photo:
-        lines.append(f"![个人照片]({resume.photo})\n")
+        # 许多 Markdown 渲染器不解析超长 data URL 的图片语法，原始 HTML 更兼容。
+        lines.append(f'<img alt="个人照片" src="{resume.photo}" />\n')
     contacts = " | ".join(item for item in [resume.phone, resume.email, resume.city] if item)
     if contacts:
         lines.append(f"{contacts}\n")

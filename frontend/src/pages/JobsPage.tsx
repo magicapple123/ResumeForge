@@ -13,8 +13,8 @@ import { App, Button, Input, Popconfirm, Select, Space, Table, Tag, Tooltip, Typ
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, listJobs, updateJob } from "../api/jobs";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, getJob, listJobs, updateJob } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
 import JobFormModal from "../components/JobFormModal";
@@ -35,6 +35,7 @@ type BatchAction = "status" | "delete" | null;
 
 export default function JobsPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { message } = App.useApp();
 
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
@@ -52,6 +53,8 @@ export default function JobsPage() {
   const [batchAction, setBatchAction] = useState<BatchAction>(null);
   const [favoriteJobId, setFavoriteJobId] = useState<number | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
+  const linkedJobId = Number(searchParams.get("job_id")) || null;
+  const [openedLinkedJobId, setOpenedLinkedJobId] = useState<number | null>(null);
 
   const {
     data: jobs,
@@ -66,6 +69,20 @@ export default function JobsPage() {
   useEffect(() => {
     if (error) message.error(error);
   }, [error, message]);
+
+  useEffect(() => {
+    if (!linkedJobId || openedLinkedJobId === linkedJobId || loading) return;
+    const listedJob = jobs?.items.find((item) => item.id === linkedJobId);
+    if (listedJob) {
+      setDetailJob(listedJob);
+      setOpenedLinkedJobId(linkedJobId);
+      return;
+    }
+    setOpenedLinkedJobId(linkedJobId);
+    void getJob(linkedJobId)
+      .then(setDetailJob)
+      .catch((err) => message.error(err instanceof Error ? err.message : "岗位不存在或已被删除"));
+  }, [jobs, linkedJobId, loading, message, openedLinkedJobId]);
 
   const removeJob = useCallback(
     async (id: number) => {
@@ -268,6 +285,14 @@ export default function JobsPage() {
             type="link"
             size="small"
             disabled={batchAction !== null}
+            onClick={() => navigate(`/resumes?job_id=${job.id}`)}
+          >
+            相关简历
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            disabled={batchAction !== null}
             onClick={() => {
               setEditingJob(job);
               setFormOpen(true);
@@ -431,6 +456,7 @@ export default function JobsPage() {
         job={detailJob}
         onClose={() => setDetailJob(null)}
         onGenerate={(job) => setGenerateJob(job)}
+        onViewResumes={(job) => navigate(`/resumes?job_id=${job.id}`)}
         onFavorite={(job) => void toggleFavorite(job)}
         favoriteLoading={favoriteJobId === detailJob?.id}
       />

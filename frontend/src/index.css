@@ -164,11 +164,46 @@ body {
   overflow-x: hidden;
 }
 
-/* 简历预览 iframe 在弹窗中占满可用高度 */
-.resume-iframe {
+/* 简历预览按窗口缩放到完整可见，放大后由外层区域承载滚动。 */
+.resume-preview-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 30px;
+  margin-bottom: 4px;
+}
+
+.resume-preview-zoom-label {
+  min-width: 42px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.resume-preview-viewport {
+  display: block;
   width: 100%;
-  border: none;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
+  background: #f5f7fa;
+  cursor: grab;
+  touch-action: none;
+}
+
+.resume-preview-viewport.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.resume-preview-scale-box {
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.resume-iframe {
+  display: block;
+  border: none;
+  flex: 0 0 auto;
+  pointer-events: none;
 }
 
 /* 生成过程的流式文本区域：等宽字体、可滚动 */
