@@ -26,7 +26,7 @@ class LLMConfigRecord(Base):
     base_url: Mapped[str] = mapped_column(String(512), default="")
     api_key: Mapped[str] = mapped_column(Text, default="")
     model: Mapped[str] = mapped_column(String(128), default="")
-    temperature: Mapped[float] = mapped_column(Float, default=0.7)
+    temperature: Mapped[float] = mapped_column(Float, default=0.1)
     timeout_seconds: Mapped[int] = mapped_column(Integer, default=120)
     max_tokens: Mapped[int] = mapped_column(Integer, default=4096)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

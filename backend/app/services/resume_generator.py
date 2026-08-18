@@ -5,6 +5,7 @@
 本模块不直接接触数据库，保持可单测。
 """
 import json
+import logging
 import re
 from collections.abc import AsyncIterator
 from copy import deepcopy
@@ -25,6 +26,8 @@ from .profile_relevance import (
 )
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+
+logger = logging.getLogger(__name__)
 
 # 控制总输入体积：先筛选资料，再为 JD 保留独立预算，避免超长资料/JD 挤掉彼此。
 MAX_JD_CHARS = 5_000
@@ -706,6 +709,103 @@ def check_consistency(
     return warnings
 
 
+def _quality_reference_points(source: dict) -> list[str]:
+    """读取条目中的附件事实，去掉空值并保持原顺序。"""
+    return [
+        value.strip()
+        for value in _source_list(source, "reference_facts")
+        if isinstance(value, str) and value.strip()
+    ]
+
+
+def _quality_generated_points(item, fields: tuple[str, ...]) -> list[str]:
+    """合并模型输出的描述性字段，供质量门槛做确定性检查。"""
+    points: list[str] = []
+    for field in fields:
+        values = getattr(item, field, [])
+        if isinstance(values, list):
+            points.extend(
+                value.strip()
+                for value in values
+                if isinstance(value, str) and value.strip()
+            )
+    return points
+
+
+def _quality_shortfalls(
+    resume: ResumeContent,
+    selected_data: dict,
+    job: JobOut | None = None,
+) -> list[str]:
+    """找出附件事实没有被充分改写的项目内容。
+
+    该检查必须发生在 ``ground_resume_facts``/``restore_selected_sections`` 之前：
+    这些函数会把附件原文确定性回填，回填后再检查会把「模型只原样复制事实」误判为
+    合格。这里只检查项目，避免强制重试不含项目附件的普通简历。
+    """
+    shortfalls: list[str] = []
+    generated_projects = resume.projects
+    reference_projects = [
+        source
+        for source in selected_data.get("projects", [])
+        if _quality_reference_points(source)
+    ]
+
+    for source in reference_projects:
+        source_name = _source_value(source, "name") or "未命名项目"
+        generated = next(
+            (
+                item
+                for item in generated_projects
+                if _find_source(item, [source], "name", "role") is not None
+            ),
+            None,
+        )
+        if generated is None:
+            shortfalls.append(f"项目「{source_name}」未出现在输出中")
+            continue
+
+        points = _quality_generated_points(generated, ("description", "highlights"))
+        unique_points = {_normalize_fact(point) for point in points if _normalize_fact(point)}
+        reference_facts = _quality_reference_points(source)
+        required = min(3, len(reference_facts))
+        if len(unique_points) < required:
+            shortfalls.append(
+                f"项目「{source_name}」只有 {len(unique_points)} 条有效要点，"
+                f"至少需要 {required} 条"
+            )
+        if len(reference_facts) >= 3 and (not generated.description or not generated.highlights):
+            shortfalls.append(
+                f"项目「{source_name}」没有合理分配项目描述与成果亮点"
+            )
+
+        # 原项目没有可供改写的描述时，模型若把附件逐条原样抄回，内容虽然数量达标，
+        # 仍然没有完成用户选择的「美化拓展」，应给它一次机会重新组织表达。
+        source_has_original_details = bool(
+            _source_list(source, "description") or _source_list(source, "highlights")
+        )
+        normalized_references = {
+            _normalize_fact(fact) for fact in reference_facts if _normalize_fact(fact)
+        }
+        if (
+            not source_has_original_details
+            and points
+            and normalized_references
+            and all(_normalize_fact(point) in normalized_references for point in points)
+        ):
+            shortfalls.append(f"项目「{source_name}」的要点仍是附件原文，尚未完成岗位化改写")
+
+    # 摘要短板只在项目本身已经触发重试时附带提示；避免一个合法的详细项目
+    # 因模型省略摘要而额外消耗一次请求。
+    if reference_projects and shortfalls:
+        grounded_summary = _build_grounded_summary(selected_data, job) if job else ""
+        if not resume.summary.strip():
+            shortfalls.append("个人总结为空，未概括与目标岗位相关的能力")
+        elif grounded_summary and resume.summary.strip() == grounded_summary.strip():
+            shortfalls.append("个人总结只是系统兜底文本，未体现岗位化表达")
+    return shortfalls
+
+
 class ResumeGenerator:
     """简历生成器：一次生成 = 一条事件流。"""
 
@@ -802,6 +902,50 @@ class ResumeGenerator:
         if resume is None:
             yield {"type": "error", "message": "模型输出未能解析为有效 JSON，请更换模型或重试"}
             return
+
+        # strong 美化且带附件事实时，先检查模型是否真正完成了岗位化改写。
+        # 必须在 grounding/restore 前检查，否则确定性回填会掩盖模型输出过于简略的问题。
+        has_reference_facts = any(
+            _source_list(item, "reference_facts")
+            for section in ("educations", "experiences", "campus_experiences", "projects")
+            for item in selection.data.get(section, [])
+        )
+        quality_enabled = (
+            options.enhance
+            and options.enhancement_level == "strong"
+            and has_reference_facts
+        )
+        quality_shortfalls = (
+            _quality_shortfalls(resume, selection.data, job) if quality_enabled else []
+        )
+        if quality_shortfalls:
+            yield {"type": "progress", "message": "生成内容较简略，正在重新生成…"}
+            reference_facts = [
+                {
+                    "name": _source_value(source, "name"),
+                    "facts": _quality_reference_points(source),
+                }
+                for source in selection.data.get("projects", [])
+                if _quality_reference_points(source)
+            ]
+            retry_prompt = self._env.get_template("resume_quality_retry.md").render(
+                shortfalls="\n".join(f"- {item}" for item in quality_shortfalls),
+                reference_facts=json.dumps(reference_facts, ensure_ascii=False),
+            )
+            retry_messages = [*messages, {"role": "user", "content": retry_prompt}]
+            retry_resume: ResumeContent | None = None
+            try:
+                retry_raw = await self.provider.chat(retry_messages)
+                retry_resume = self._parse(retry_raw)
+            except Exception as exc:  # noqa: BLE001 - 质量重试失败应保留首轮结果
+                logger.warning("简历质量重试失败，将沿用首轮结果：%s", exc)
+
+            # 只有重试结果通过同一门槛才替换首轮结果；仍然稀疏时继续走现有
+            # grounding/fallback，确保用户至少拿到一份可用且有事实锚定的简历。
+            if retry_resume is not None and not _quality_shortfalls(
+                retry_resume, selection.data, job
+            ):
+                resume = retry_resume
 
         # 先基于原始模型输出记录越界提醒，再过滤/回填本岗位候选事实。
         warnings = check_consistency(resume, profile, selection.data)

@@ -11,7 +11,8 @@ class LLMConfig(BaseModel):
     base_url: str = ""
     api_key: str = ""
     model: str = ""
-    temperature: float = Field(default=0.7, ge=0, le=2)
+    # 简历生成更看重事实稳定性；用户仍可按需调高创意度。
+    temperature: float = Field(default=0.1, ge=0, le=2)
     timeout_seconds: int = Field(default=120, ge=10, le=600)
     max_tokens: int = Field(default=4096, ge=256, le=65536)
 

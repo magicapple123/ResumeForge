@@ -453,6 +453,9 @@ export default function SettingsPage() {
                     <Typography.Text type="secondary">
                       {record.model || "未填写模型"}
                     </Typography.Text>
+                    <Typography.Text type="secondary">
+                      温度 {record.temperature.toFixed(1)}
+                    </Typography.Text>
                     <Typography.Text type="secondary">{record.base_url || "未填写地址"}</Typography.Text>
                     <Typography.Text type="secondary">
                       更新于 {formatDateTime(record.updated_at)}
