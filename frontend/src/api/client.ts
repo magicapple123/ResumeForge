@@ -36,9 +36,11 @@ export async function extractError(resp: Response): Promise<string> {
 }
 
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const resp = await fetch(`/api${path}`, {
-    headers: { "Content-Type": "application/json", ...options.headers },
     ...options,
+    headers,
   });
   if (!resp.ok) {
     throw new ApiError(await extractError(resp), resp.status);

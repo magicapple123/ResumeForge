@@ -21,14 +21,18 @@ export default function JobFormModal({ open, initial, onClose, onSaved }: Props)
   const { message } = App.useApp();
   const [rawText, setRawText] = useState("");
   const [parsing, setParsing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const parseRequestId = useRef(0);
+  const submittingRef = useRef(false);
   const isEdit = !!initial;
 
   // 打开时回填编辑数据（或重置为默认值）
   useEffect(() => {
     parseRequestId.current += 1;
     setParsing(false);
+    setSubmitting(false);
+    submittingRef.current = false;
     if (!open) return;
     if (initial) {
       form.setFieldsValue(initial);
@@ -40,6 +44,7 @@ export default function JobFormModal({ open, initial, onClose, onSaved }: Props)
   }, [open, initial, form]);
 
   const parseText = async () => {
+    if (submittingRef.current) return;
     const text = rawText.trim();
     if (!text) {
       message.warning("请先粘贴招聘信息");
@@ -64,14 +69,26 @@ export default function JobFormModal({ open, initial, onClose, onSaved }: Props)
     }
   };
 
-  const close = () => {
+  const close = (force = false) => {
+    if (submittingRef.current && !force) return;
     parseRequestId.current += 1;
     setParsing(false);
     onClose();
   };
 
   const submit = async () => {
-    const values = await form.validateFields();
+    if (submittingRef.current || parsing) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    let values: JobPayload;
+    try {
+      values = await form.validateFields();
+    } catch {
+      submittingRef.current = false;
+      setSubmitting(false);
+      return;
+    }
+
     try {
       if (isEdit && initial) {
         await updateJob(initial.id, values);
@@ -81,9 +98,12 @@ export default function JobFormModal({ open, initial, onClose, onSaved }: Props)
         message.success("岗位已添加");
       }
       onSaved();
-      close();
+      close(true);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "保存失败");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -92,15 +112,24 @@ export default function JobFormModal({ open, initial, onClose, onSaved }: Props)
       title={isEdit ? "编辑岗位" : "手动添加岗位"}
       open={open}
       onOk={() => void submit()}
-      onCancel={close}
+      onCancel={() => close()}
       okText="保存"
       cancelText="取消"
-      okButtonProps={{ disabled: parsing }}
+      confirmLoading={submitting}
+      okButtonProps={{ disabled: parsing || submitting }}
+      cancelButtonProps={{ disabled: submitting }}
+      maskClosable={!submitting}
+      closable={!submitting}
       width={720}
       styles={{ body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", paddingRight: 8 } }}
-      destroyOnClose
+      destroyOnHidden
     >
-      <Form form={form} layout="vertical" initialValues={{ job_type: "校招", status: "开放中" }}>
+      <Form
+        form={form}
+        layout="vertical"
+        disabled={submitting}
+        initialValues={{ job_type: "校招", status: "开放中" }}
+      >
         {!isEdit && (
           <>
             <Form.Item label="粘贴招聘信息">

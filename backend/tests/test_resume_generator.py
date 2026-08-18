@@ -269,7 +269,17 @@ async def test_generate_success_stream_and_parse():
 
 
 async def test_generate_injects_profile_photo_without_sending_it_to_llm():
-    profile = make_profile(photo=PHOTO_DATA_URL)
+    profile = make_profile(
+        photo=PHOTO_DATA_URL,
+        name="PRIVATE_NAME_TOKEN",
+        gender="PRIVATE_GENDER_TOKEN",
+        birth_year="PRIVATE_BIRTH_TOKEN",
+        phone="PRIVATE_PHONE_TOKEN",
+        email="private-email-token@example.com",
+        city="PRIVATE_CITY_TOKEN",
+        github="https://example.com/private-github-token",
+        personal_website="https://example.com/private-site-token",
+    )
     prompt_data = build_profile_prompt_data(profile)
     provider = FakeProvider(stream_text=json.dumps(GOOD_RESUME, ensure_ascii=False))
 
@@ -278,6 +288,21 @@ async def test_generate_injects_profile_photo_without_sending_it_to_llm():
 
     assert "photo" not in prompt_data
     assert PHOTO_DATA_URL not in json.dumps(prompt_data, ensure_ascii=False)
+    sent_prompt = json.dumps(provider.messages, ensure_ascii=False)
+    for private_value in (
+        profile.name,
+        profile.gender,
+        profile.birth_year,
+        profile.phone,
+        profile.email,
+        profile.city,
+        profile.github,
+        profile.personal_website,
+    ):
+        assert private_value not in sent_prompt
+    assert done["resume"]["name"] == profile.name
+    assert done["resume"]["phone"] == profile.phone
+    assert done["resume"]["email"] == profile.email
     assert done["resume"]["photo"] == PHOTO_DATA_URL
 
 

@@ -3,8 +3,8 @@
 export const APP_NAME = "简历通";
 export const APP_NAME_EN = "ResumeForge";
 
-/** 开源仓库地址（发布前请替换为你自己的仓库） */
-export const GITHUB_REPO = "https://github.com/your-name/ResumeForge";
+/** 发布时可通过 VITE_GITHUB_REPO 配置；未配置时不展示无效占位链接。 */
+export const GITHUB_REPO = import.meta.env.VITE_GITHUB_REPO?.trim() ?? "";
 
 /** 大模型预设：选择后自动填充 Base URL 与模型名，省去查文档的麻烦 */
 export interface LLMPreset {

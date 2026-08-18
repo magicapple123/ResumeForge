@@ -5,14 +5,16 @@ import {
   SearchOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import { Layout, Menu, Typography } from "antd";
+import { Layout, Menu, Skeleton, Typography } from "antd";
+import { lazy, Suspense } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { APP_NAME, APP_NAME_EN, GITHUB_REPO } from "./config";
-import HomePage from "./pages/HomePage";
-import JobsPage from "./pages/JobsPage";
-import ProfilePage from "./pages/ProfilePage";
-import ResumesPage from "./pages/ResumesPage";
-import SettingsPage from "./pages/SettingsPage";
+
+const HomePage = lazy(() => import("./pages/HomePage"));
+const JobsPage = lazy(() => import("./pages/JobsPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const ResumesPage = lazy(() => import("./pages/ResumesPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 const { Sider, Header, Content } = Layout;
 
@@ -27,17 +29,13 @@ const MENU_ITEMS = [
 function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const selectedKey = MENU_ITEMS.find((item) => item.key !== "/" && location.pathname.startsWith(item.key))?.key ?? "/";
+  const selectedKey =
+    MENU_ITEMS.find((item) => item.key !== "/" && location.pathname.startsWith(item.key))?.key ??
+    "/";
 
   return (
     <Layout className="app-shell">
-      <Sider
-        className="app-sider"
-        theme="light"
-        width={200}
-        breakpoint="lg"
-        collapsedWidth={64}
-      >
+      <Sider className="app-sider" theme="light" width={200} breakpoint="lg" collapsedWidth={64}>
         <div className="app-brand">
           <span className="app-brand-mark">
             <img className="app-brand-image" src="/resumeforge-icon.png" alt="" />
@@ -61,12 +59,21 @@ function MainLayout() {
           <Typography.Text strong className="app-header-title">
             AI 定制化简历生成平台
           </Typography.Text>
-          <Typography.Link className="app-header-repo" href={GITHUB_REPO} target="_blank">
-            {APP_NAME_EN} · 开源项目
-          </Typography.Link>
+          {GITHUB_REPO && (
+            <Typography.Link
+              className="app-header-repo"
+              href={GITHUB_REPO}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {APP_NAME_EN} · 开源项目
+            </Typography.Link>
+          )}
         </Header>
         <Content className="app-content">
-          <Outlet />
+          <Suspense fallback={<Skeleton active paragraph={{ rows: 8 }} />}>
+            <Outlet />
+          </Suspense>
         </Content>
       </Layout>
     </Layout>

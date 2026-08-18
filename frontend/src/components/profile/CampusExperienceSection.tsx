@@ -52,10 +52,7 @@ export function CampusExperienceSection({ editable }: Props) {
           </Col>
           <Col span={24}>
             <Form.Item name={[field.name, "description"]} label="经历描述">
-              <Input.TextArea
-                rows={3}
-                placeholder="负责的工作、组织的活动与取得的结果，每行一条"
-              />
+              <Input.TextArea rows={3} placeholder="负责的工作、组织的活动与取得的结果，每行一条" />
             </Form.Item>
           </Col>
           <Col span={24}>

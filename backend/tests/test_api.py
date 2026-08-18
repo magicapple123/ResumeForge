@@ -1,7 +1,11 @@
 """API 冒烟测试：核心链路（资料、岗位、搜索、统计、设置）走通。"""
+import json
+
 import pytest
 
 from app.schemas.setting import LLMConfig
+from app.services.llm.base import BaseLLMProvider
+from app.services.settings_service import API_KEY_MASK, get_llm_config
 
 
 SAMPLE_JOB_TEXT = """AI应用客户端开发工程师 - 剪映CapCut
@@ -148,6 +152,50 @@ def test_create_job_from_parsed_text_extracts_skill_tags(client):
     assert client.get("/api/jobs").json()["total"] == 1
 
 
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "javascript:alert(1)",
+        "file:///C:/secret.txt",
+        "/relative/apply",
+        "not-a-url",
+    ],
+)
+def test_job_rejects_unsafe_source_urls(client, source_url):
+    response = client.post(
+        "/api/jobs",
+        json={"title": "安全测试岗位", "source_url": source_url},
+    )
+
+    assert response.status_code == 422
+
+
+def test_job_accepts_and_normalizes_https_source_url(client):
+    response = client.post(
+        "/api/jobs",
+        json={
+            "title": "后端开发工程师",
+            "source_url": "  https://careers.example.com/jobs/123?from=campus  ",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["source_url"] == "https://careers.example.com/jobs/123?from=campus"
+
+
+def test_representative_request_size_limits(client):
+    assert client.post("/api/jobs", json={"title": "岗" * 129}).status_code == 422
+    assert client.post("/api/jobs/parse-text", json={"text": "A" * 50_001}).status_code == 422
+    assert client.post("/api/jobs/batch-delete", json={"job_ids": list(range(1, 502))}).status_code == 422
+    assert (
+        client.put(
+            "/api/profile",
+            json={"skills": [{"name": f"skill-{index}"} for index in range(201)]},
+        ).status_code
+        == 422
+    )
+
+
 @pytest.mark.parametrize("text", ["", "   \r\n\t"])
 def test_parse_job_text_rejects_blank_input(client, text):
     response = client.post("/api/jobs/parse-text", json={"text": text})
@@ -180,12 +228,25 @@ def test_stats(client):
     assert body["resume_count"] == 0
 
 
-def test_settings_roundtrip(client):
+def test_settings_roundtrip(client, db_session):
     config = LLMConfig(base_url="https://api.example.com/v1", api_key="sk-test", model="test-model")
     response = client.put("/api/settings/llm", json=config.model_dump())
     assert response.status_code == 200
+    assert response.json()["api_key"] == API_KEY_MASK
+    assert "sk-test" not in response.text
     response = client.get("/api/settings/llm")
     assert response.json()["model"] == "test-model"
+    assert response.json()["api_key"] == API_KEY_MASK
+    assert "sk-test" not in response.text
+
+    # 前端原样回传占位符时必须保留原密钥，不能把星号写入数据库。
+    masked_config = response.json()
+    masked_config["model"] = "updated-model"
+    response = client.put("/api/settings/llm", json=masked_config)
+    assert response.status_code == 200
+    assert response.json()["api_key"] == API_KEY_MASK
+    db_session.expire_all()
+    assert get_llm_config(db_session).api_key == "sk-test"
 
     # 测试连接：未填配置或配置无效时应友好返回而非抛 500
     response = client.post("/api/settings/llm/test", json=LLMConfig().model_dump())
@@ -206,10 +267,13 @@ def test_settings_config_records_roundtrip_and_upsert(client):
     record = created.json()
     assert record["name"] == "校招 DeepSeek"
     assert record["model"] == "deepseek-chat"
+    assert record["api_key"] == f"{API_KEY_MASK}:record:{record['id']}"
+    assert "sk-record" not in created.text
 
     listed = client.get("/api/settings/llm/records")
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()] == [record["id"]]
+    assert "sk-record" not in listed.text
 
     updated = client.post(
         "/api/settings/llm/records",
@@ -224,6 +288,98 @@ def test_settings_config_records_roundtrip_and_upsert(client):
     assert deleted.status_code == 204
     assert client.get("/api/settings/llm/records").json() == []
     assert client.delete(f"/api/settings/llm/records/{record['id']}").status_code == 404
+
+
+def test_settings_record_reference_switches_the_correct_secret(client, db_session):
+    """两个记录仅密钥不同时，也必须按记录 ID 选择正确密钥。"""
+    common = LLMConfig(
+        provider="custom",
+        base_url="https://api.example.com/v1",
+        model="same-model",
+    ).model_dump()
+    first = client.post(
+        "/api/settings/llm/records",
+        json={"name": "账号 A", **common, "api_key": "secret-a"},
+    ).json()
+    second_response = client.post(
+        "/api/settings/llm/records",
+        json={"name": "账号 B", **common, "api_key": "secret-b"},
+    )
+    second = second_response.json()
+
+    assert "secret-a" not in str(first)
+    assert "secret-b" not in second_response.text
+    apply_payload = {field: second[field] for field in LLMConfig.model_fields}
+    applied = client.put("/api/settings/llm", json=apply_payload)
+    assert applied.status_code == 200
+    assert applied.json()["api_key"] == second["api_key"]
+    assert "secret-b" not in applied.text
+
+    db_session.expire_all()
+    assert get_llm_config(db_session).api_key == "secret-b"
+
+
+def test_settings_test_connection_resolves_masked_secret(client, monkeypatch):
+    config = LLMConfig(
+        base_url="https://api.example.com/v1",
+        api_key="secret-for-test",
+        model="test-model",
+    )
+    saved = client.put("/api/settings/llm", json=config.model_dump()).json()
+    captured = {}
+
+    class FakeProvider:
+        async def chat(self, _messages):
+            return "正常"
+
+    def fake_create_provider(resolved):
+        captured["api_key"] = resolved.api_key
+        return FakeProvider()
+
+    monkeypatch.setattr("app.api.settings.create_provider", fake_create_provider)
+    response = client.post("/api/settings/llm/test", json=saved)
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert captured["api_key"] == "secret-for-test"
+    assert "secret-for-test" not in response.text
+
+
+def test_masked_api_key_cannot_be_reused_for_another_base_url(client, db_session):
+    config = LLMConfig(
+        base_url="https://api.example.com/v1",
+        api_key="secret-for-test",
+        model="test-model",
+    )
+    masked = client.put("/api/settings/llm", json=config.model_dump()).json()
+    masked["base_url"] = "https://attacker.example/v1"
+
+    save_response = client.put("/api/settings/llm", json=masked)
+    test_response = client.post("/api/settings/llm/test", json=masked)
+
+    assert save_response.status_code == 400
+    assert "重新填写 API Key" in save_response.json()["detail"]
+    assert test_response.status_code == 200
+    assert test_response.json()["ok"] is False
+    assert "重新填写 API Key" in test_response.json()["message"]
+    assert get_llm_config(db_session).base_url == config.base_url
+
+
+def test_masked_api_key_url_binding_normalizes_host_but_preserves_path_case(client):
+    config = LLMConfig(
+        base_url="https://api.example.com/v1",
+        api_key="secret-for-test",
+        model="test-model",
+    )
+    masked = client.put("/api/settings/llm", json=config.model_dump()).json()
+
+    equivalent = {**masked, "base_url": "HTTPS://API.EXAMPLE.COM/v1/"}
+    assert client.put("/api/settings/llm", json=equivalent).status_code == 200
+
+    changed_path = {**masked, "base_url": "https://api.example.com/V1"}
+    response = client.put("/api/settings/llm", json=changed_path)
+    assert response.status_code == 400
+    assert "重新填写 API Key" in response.json()["detail"]
 
 
 def test_generate_requires_profile_and_llm(client):
@@ -246,3 +402,71 @@ def test_generate_accepts_campus_experience_as_profile(client):
     response = client.post("/api/resumes/generate", json={"job_id": 1})
     assert response.status_code == 400
     assert "配置大模型" in response.json()["detail"]
+
+
+def test_generate_saves_before_done_and_persists_resume(client, monkeypatch):
+    job = client.post(
+        "/api/jobs",
+        json={
+            "title": "后端开发工程师",
+            "company": "示例公司",
+            "requirements": "熟悉 Python 与 API 设计",
+        },
+    ).json()
+    profile = client.put(
+        "/api/profile",
+        json={
+            "name": "张三",
+            "projects": [
+                {
+                    "name": "简历通",
+                    "role": "核心开发",
+                    "tech_stack": "Python, FastAPI",
+                    "description": "开发简历生成接口",
+                }
+            ],
+        },
+    )
+    assert profile.status_code == 200
+    config = LLMConfig(
+        base_url="https://api.example.com/v1",
+        api_key="integration-secret",
+        model="integration-model",
+    )
+    assert client.put("/api/settings/llm", json=config.model_dump()).status_code == 200
+
+    class SuccessfulProvider(BaseLLMProvider):
+        async def chat(self, _messages):
+            raise AssertionError("合法流式 JSON 不应触发修复调用")
+
+        async def stream_chat(self, _messages):
+            yield json.dumps(
+                {
+                    "summary": "具备 Python 后端开发经验。",
+                    "projects": [{"name": "简历通", "role": "核心开发"}],
+                },
+                ensure_ascii=False,
+            )
+
+    monkeypatch.setattr(
+        "app.api.resumes.create_provider",
+        lambda resolved: SuccessfulProvider(resolved),
+    )
+    response = client.post("/api/resumes/generate", json={"job_id": job["id"]})
+
+    assert response.status_code == 200
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    event_types = [event["type"] for event in events]
+    assert event_types.index("saved") < event_types.index("done")
+    saved_event = next(event for event in events if event["type"] == "saved")
+    done_event = next(event for event in events if event["type"] == "done")
+
+    persisted = client.get(f"/api/resumes/{saved_event['record_id']}")
+    assert persisted.status_code == 200
+    assert persisted.json()["content"] == done_event["resume"]
+    assert persisted.json()["job_id"] == job["id"]
+    assert persisted.json()["company"] == "示例公司"

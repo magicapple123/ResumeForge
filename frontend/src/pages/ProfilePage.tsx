@@ -91,6 +91,7 @@ interface SortableProfileSectionProps {
     event: ReactPointerEvent<HTMLButtonElement>,
     sectionKey: ProfileSectionKey,
   ) => void;
+  onMoveByOffset: (sectionKey: ProfileSectionKey, offset: -1 | 1) => void;
   children: ReactNode;
 }
 
@@ -101,6 +102,7 @@ function SortableProfileSection({
   compact,
   dragOver,
   onHandlePointerDown,
+  onMoveByOffset,
   children,
 }: SortableProfileSectionProps) {
   return (
@@ -112,12 +114,17 @@ function SortableProfileSection({
       data-profile-section-key={sectionKey}
     >
       {editable && (
-        <Tooltip title={`拖动调整“${SECTION_LABELS[sectionKey]}”顺序`}>
+        <Tooltip title={`拖动或使用上下方向键调整“${SECTION_LABELS[sectionKey]}”顺序`}>
           <button
             type="button"
             className="profile-section-drag-handle"
             aria-label={`拖动调整${SECTION_LABELS[sectionKey]}顺序`}
             onPointerDown={(event) => onHandlePointerDown(event, sectionKey)}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+              event.preventDefault();
+              onMoveByOffset(sectionKey, event.key === "ArrowUp" ? -1 : 1);
+            }}
           >
             <HolderOutlined />
           </button>
@@ -129,9 +136,7 @@ function SortableProfileSection({
           <Typography.Text type="secondary">拖到此处</Typography.Text>
         </div>
       )}
-      <div className={`profile-section-content${compact ? " is-collapsed" : ""}`}>
-        {children}
-      </div>
+      <div className={`profile-section-content${compact ? " is-collapsed" : ""}`}>{children}</div>
     </div>
   );
 }
@@ -335,11 +340,14 @@ export default function ProfilePage() {
     const finishSectionDrag = (event: globalThis.PointerEvent) => {
       event.preventDefault();
       const start = sectionPointerStart.current;
-      const distance = start
-        ? Math.hypot(event.clientX - start.x, event.clientY - start.y)
-        : 0;
+      const distance = start ? Math.hypot(event.clientX - start.x, event.clientY - start.y) : 0;
       const target = findSectionAtPoint(event.clientX, event.clientY);
-      if (sectionDragActivated.current && distance >= SECTION_DRAG_THRESHOLD_PX && target && target !== draggingSection) {
+      if (
+        sectionDragActivated.current &&
+        distance >= SECTION_DRAG_THRESHOLD_PX &&
+        target &&
+        target !== draggingSection
+      ) {
         setSectionOrder((current) => {
           const next = [...current];
           const sourceIndex = next.indexOf(draggingSection);
@@ -375,6 +383,18 @@ export default function ProfilePage() {
         setDragOverSection(null);
       }
       return !current;
+    });
+  };
+
+  const moveSectionByOffset = (sectionKey: ProfileSectionKey, offset: -1 | 1) => {
+    setSectionOrder((current) => {
+      const sourceIndex = current.indexOf(sectionKey);
+      const targetIndex = sourceIndex + offset;
+      if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= current.length) return current;
+      const next = [...current];
+      next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, sectionKey);
+      return next;
     });
   };
 
@@ -480,9 +500,7 @@ export default function ProfilePage() {
         </Form.Item>
 
         <div
-          className={`profile-section-stack${
-            sectionReorderMode ? " is-section-reordering" : ""
-          }`}
+          className={`profile-section-stack${sectionReorderMode ? " is-section-reordering" : ""}`}
         >
           <SortableProfileSection
             sectionKey="basic_info"
@@ -491,6 +509,7 @@ export default function ProfilePage() {
             compact={sectionReorderMode}
             dragOver={dragOverSection === "basic_info"}
             onHandlePointerDown={handleSectionPointerDown}
+            onMoveByOffset={moveSectionByOffset}
           >
             <Row gutter={[16, 16]} align="stretch" style={{ marginBottom: 16 }}>
               <Col xs={{ span: 24, order: 2 }} xl={{ span: 18, order: 1 }}>
@@ -607,6 +626,7 @@ export default function ProfilePage() {
             compact={sectionReorderMode}
             dragOver={dragOverSection === "educations"}
             onHandlePointerDown={handleSectionPointerDown}
+            onMoveByOffset={moveSectionByOffset}
           >
             <EducationSection editable={editing} />
           </SortableProfileSection>
@@ -617,6 +637,7 @@ export default function ProfilePage() {
             compact={sectionReorderMode}
             dragOver={dragOverSection === "experiences"}
             onHandlePointerDown={handleSectionPointerDown}
+            onMoveByOffset={moveSectionByOffset}
           >
             <ExperienceSection editable={editing} />
           </SortableProfileSection>
@@ -627,6 +648,7 @@ export default function ProfilePage() {
             compact={sectionReorderMode}
             dragOver={dragOverSection === "campus_experiences"}
             onHandlePointerDown={handleSectionPointerDown}
+            onMoveByOffset={moveSectionByOffset}
           >
             <CampusExperienceSection editable={editing} />
           </SortableProfileSection>
@@ -637,6 +659,7 @@ export default function ProfilePage() {
             compact={sectionReorderMode}
             dragOver={dragOverSection === "projects"}
             onHandlePointerDown={handleSectionPointerDown}
+            onMoveByOffset={moveSectionByOffset}
           >
             <ProjectSection editable={editing} />
           </SortableProfileSection>
@@ -647,6 +670,7 @@ export default function ProfilePage() {
             compact={sectionReorderMode}
             dragOver={dragOverSection === "skills"}
             onHandlePointerDown={handleSectionPointerDown}
+            onMoveByOffset={moveSectionByOffset}
           >
             <SkillSection editable={editing} />
           </SortableProfileSection>
@@ -657,6 +681,7 @@ export default function ProfilePage() {
             compact={sectionReorderMode}
             dragOver={dragOverSection === "awards"}
             onHandlePointerDown={handleSectionPointerDown}
+            onMoveByOffset={moveSectionByOffset}
           >
             <AwardSection editable={editing} />
           </SortableProfileSection>
@@ -668,6 +693,7 @@ export default function ProfilePage() {
             compact={sectionReorderMode}
             dragOver={dragOverSection === "summary"}
             onHandlePointerDown={handleSectionPointerDown}
+            onMoveByOffset={moveSectionByOffset}
           >
             <Card size="small" title="个人总结 / 自我评价" style={{ marginBottom: 16 }}>
               <Form.Item name="summary" style={{ marginBottom: 0 }}>
@@ -685,7 +711,7 @@ export default function ProfilePage() {
         title="粘贴个人资料并识别"
         open={profileTextOpen}
         onCancel={closeProfileTextModal}
-        destroyOnClose
+        destroyOnHidden
         width={760}
         footer={[
           <Button key="cancel" onClick={closeProfileTextModal} disabled={profileTextParsing}>

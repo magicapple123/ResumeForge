@@ -66,7 +66,12 @@ function ListSection({ title, name, emptyValue, children }: ListSectionProps) {
               {children(field)}
             </div>
           ))}
-          <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add({ ...emptyValue })}>
+          <Button
+            type="dashed"
+            block
+            icon={<PlusOutlined />}
+            onClick={() => add({ ...emptyValue })}
+          >
             添加{title}
           </Button>
         </div>
@@ -94,7 +99,11 @@ function EducationEditor() {
       {(field) => (
         <Row gutter={12}>
           <Col xs={24} md={8}>
-            <Form.Item name={[field.name, "school"]} label="学校" rules={[{ required: true, message: "请填写学校" }]}>
+            <Form.Item
+              name={[field.name, "school"]}
+              label="学校"
+              rules={[{ required: true, message: "请填写学校" }]}
+            >
               <Input />
             </Form.Item>
           </Col>
@@ -149,7 +158,11 @@ function ExperienceEditor() {
       {(field) => (
         <Row gutter={12}>
           <Col xs={24} md={8}>
-            <Form.Item name={[field.name, "company"]} label="公司" rules={[{ required: true, message: "请填写公司" }]}>
+            <Form.Item
+              name={[field.name, "company"]}
+              label="公司"
+              rules={[{ required: true, message: "请填写公司" }]}
+            >
               <Input />
             </Form.Item>
           </Col>
@@ -189,7 +202,11 @@ function CampusEditor() {
       {(field) => (
         <Row gutter={12}>
           <Col xs={24} md={8}>
-            <Form.Item name={[field.name, "organization"]} label="组织/部门" rules={[{ required: true, message: "请填写组织/部门" }]}>
+            <Form.Item
+              name={[field.name, "organization"]}
+              label="组织/部门"
+              rules={[{ required: true, message: "请填写组织/部门" }]}
+            >
               <Input />
             </Form.Item>
           </Col>
@@ -224,12 +241,24 @@ function ProjectEditor() {
     <ListSection
       title="项目经历"
       name="projects"
-      emptyValue={{ name: "", role: "", start_date: "", end_date: "", tech_stack: [], description: [], highlights: [] }}
+      emptyValue={{
+        name: "",
+        role: "",
+        start_date: "",
+        end_date: "",
+        tech_stack: [],
+        description: [],
+        highlights: [],
+      }}
     >
       {(field) => (
         <Row gutter={12}>
           <Col xs={24} md={8}>
-            <Form.Item name={[field.name, "name"]} label="项目名称" rules={[{ required: true, message: "请填写项目名称" }]}>
+            <Form.Item
+              name={[field.name, "name"]}
+              label="项目名称"
+              rules={[{ required: true, message: "请填写项目名称" }]}
+            >
               <Input />
             </Form.Item>
           </Col>
@@ -275,7 +304,11 @@ function SkillEditor() {
       {(field) => (
         <Row gutter={12}>
           <Col xs={24} md={12}>
-            <Form.Item name={[field.name, "name"]} label="技能名称" rules={[{ required: true, message: "请填写技能名称" }]}>
+            <Form.Item
+              name={[field.name, "name"]}
+              label="技能名称"
+              rules={[{ required: true, message: "请填写技能名称" }]}
+            >
               <Input />
             </Form.Item>
           </Col>
@@ -292,11 +325,19 @@ function SkillEditor() {
 
 function AwardEditor() {
   return (
-    <ListSection title="荣誉奖项" name="awards" emptyValue={{ name: "", date: "", description: "" }}>
+    <ListSection
+      title="荣誉奖项"
+      name="awards"
+      emptyValue={{ name: "", date: "", description: "" }}
+    >
       {(field) => (
         <Row gutter={12}>
           <Col xs={24} md={12}>
-            <Form.Item name={[field.name, "name"]} label="奖项名称" rules={[{ required: true, message: "请填写奖项名称" }]}>
+            <Form.Item
+              name={[field.name, "name"]}
+              label="奖项名称"
+              rules={[{ required: true, message: "请填写奖项名称" }]}
+            >
               <Input />
             </Form.Item>
           </Col>
@@ -413,7 +454,7 @@ export default function ResumeEditorModal({
       open={open}
       width="min(1000px, calc(100vw - 24px))"
       zIndex={1100}
-      destroyOnClose
+      destroyOnHidden
       maskClosable={!saving}
       onCancel={onClose}
       footer={
@@ -421,7 +462,12 @@ export default function ResumeEditorModal({
           <Button disabled={saving} onClick={onClose}>
             取消
           </Button>
-          <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={() => form.submit()}>
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            loading={saving}
+            onClick={() => form.submit()}
+          >
             {saveLabel}
           </Button>
         </Space>
@@ -433,7 +479,11 @@ export default function ResumeEditorModal({
           {description}
         </Typography.Text>
       )}
-      <Form form={form} layout="vertical" onFinish={(values) => void handleFinish(values as ResumeContent)}>
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={(values) => void handleFinish(values as ResumeContent)}
+      >
         <Tabs items={tabItems} />
       </Form>
     </Modal>

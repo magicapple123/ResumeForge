@@ -9,12 +9,30 @@ import {
   StarFilled,
   StarOutlined,
 } from "@ant-design/icons";
-import { App, Button, Input, Popconfirm, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
+import {
+  App,
+  Button,
+  Input,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, getJob, listJobs, updateJob } from "../api/jobs";
+import {
+  batchDeleteJobs,
+  batchUpdateJobStatus,
+  deleteJob,
+  getJob,
+  listJobs,
+  updateJob,
+} from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
 import JobFormModal from "../components/JobFormModal";
@@ -217,12 +235,14 @@ export default function JobsPage() {
       width: 260,
       render: (_, job) => (
         <div>
-          <Typography.Link
+          <Button
+            type="link"
+            className="table-text-link"
             disabled={batchAction !== null}
             onClick={batchAction === null ? () => setDetailJob(job) : undefined}
           >
             {job.title}
-          </Typography.Link>
+          </Button>
           <div style={{ marginTop: 4 }}>
             <SkillTags tags={job.keywords} max={4} />
           </div>

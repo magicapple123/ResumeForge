@@ -166,7 +166,11 @@ export default function SettingsPage() {
     try {
       setTestResult(await testLLM(values));
     } catch (err) {
-      setTestResult({ ok: false, latency_ms: null, message: err instanceof Error ? err.message : "测试失败" });
+      setTestResult({
+        ok: false,
+        latency_ms: null,
+        message: err instanceof Error ? err.message : "测试失败",
+      });
     } finally {
       setTesting(false);
     }
@@ -259,11 +263,7 @@ export default function SettingsPage() {
         <div className="profile-page-header-actions">
           {editing ? (
             <>
-              <Button
-                icon={<CloseOutlined />}
-                disabled={saving || testing}
-                onClick={cancelEditing}
-              >
+              <Button icon={<CloseOutlined />} disabled={saving || testing} onClick={cancelEditing}>
                 取消
               </Button>
               <Button
@@ -421,11 +421,7 @@ export default function SettingsPage() {
                   okText="删除"
                   cancelText="取消"
                   okButtonProps={{ danger: true }}
-                  disabled={
-                    editing ||
-                    recordApplyingId !== null ||
-                    recordDeletingId !== null
-                  }
+                  disabled={editing || recordApplyingId !== null || recordDeletingId !== null}
                   onConfirm={() => void removeRecord(record)}
                 >
                   <Tooltip title="删除记录">
@@ -456,7 +452,9 @@ export default function SettingsPage() {
                     <Typography.Text type="secondary">
                       温度 {record.temperature.toFixed(1)}
                     </Typography.Text>
-                    <Typography.Text type="secondary">{record.base_url || "未填写地址"}</Typography.Text>
+                    <Typography.Text type="secondary">
+                      {record.base_url || "未填写地址"}
+                    </Typography.Text>
                     <Typography.Text type="secondary">
                       更新于 {formatDateTime(record.updated_at)}
                     </Typography.Text>

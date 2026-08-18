@@ -1,14 +1,22 @@
 import json
+import re
 
 from app.api.resumes import _save_record
 from app.models.job import Job
 from app.models.resume import ResumeRecord
 from app.schemas.job import JobOut
+from app.schemas.profile import ProfileOut
+from app.schemas.resume import ResumeContent
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider
 from app.services.llm.base import LLMError
-from app.services.resume_suggestions import _protect_existing_project_facts, parse_suggestions
-from app.schemas.profile import ProfileOut
+from app.services.resume_suggestions import (
+    MAX_PROFILE_CHARS,
+    MAX_RESUME_CHARS,
+    _protect_existing_project_facts,
+    generate_suggestions,
+    parse_suggestions,
+)
 
 
 class SuggestionProvider(BaseLLMProvider):
@@ -163,3 +171,87 @@ def test_resume_suggestions_reject_unrelated_record(client, db_session):
 
     assert response.status_code == 400
     assert "没有关联" in response.json()["detail"]
+
+
+async def test_suggestion_prompt_excludes_private_fields_and_keeps_valid_bounded_json():
+    photo = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl2kAAAAASUVORK5CYII="
+    )
+    resume = ResumeContent.model_validate(
+        {
+            "name": "PRIVATE_NAME_TOKEN",
+            "photo": photo,
+            "gender": "PRIVATE_GENDER_TOKEN",
+            "birth_year": "PRIVATE_BIRTH_TOKEN",
+            "phone": "PRIVATE_PHONE_TOKEN",
+            "email": "private-email-token@example.com",
+            "city": "PRIVATE_CITY_TOKEN",
+            "summary": "很长的个人总结" * 6_000,
+            "projects": [
+                {
+                    "name": "RESUME_PROJECT_MARKER",
+                    "description": ["项目事实" * 2_000 for _ in range(8)],
+                }
+            ],
+        }
+    )
+    profile = ProfileOut.model_validate(
+        {
+            "id": 1,
+            "name": "PROFILE_PRIVATE_NAME_TOKEN",
+            "phone": "PROFILE_PRIVATE_PHONE_TOKEN",
+            "email": "profile-private@example.com",
+            "github": "https://example.com/private-github",
+            "personal_website": "https://example.com/private-site",
+            "projects": [
+                {
+                    "id": 1,
+                    "name": "PROFILE_PROJECT_MARKER",
+                    "description": "资料事实" * 20_000,
+                }
+            ],
+        }
+    )
+    provider = SuggestionProvider()
+    await generate_suggestions(provider, resume, _create_job_out(), profile)
+
+    prompt = provider.messages[0][1]["content"]
+    for private_value in (
+        photo,
+        resume.name,
+        resume.gender,
+        resume.birth_year,
+        resume.phone,
+        resume.email,
+        resume.city,
+        profile.name,
+        profile.phone,
+        profile.email,
+        profile.github,
+        profile.personal_website,
+    ):
+        assert private_value not in prompt
+
+    json_blocks = re.findall(r"```json\s*(.*?)\s*```", prompt, re.DOTALL)
+    assert len(json_blocks) == 2
+    resume_data, profile_data = (json.loads(block) for block in json_blocks)
+    assert len(json_blocks[0]) <= MAX_RESUME_CHARS
+    assert len(json_blocks[1]) <= MAX_PROFILE_CHARS
+    assert resume_data["projects"][0]["name"] == "RESUME_PROJECT_MARKER"
+    assert profile_data["projects"][0]["name"] == "PROFILE_PROJECT_MARKER"
+
+
+def _create_job_out() -> JobOut:
+    from datetime import datetime
+
+    now = datetime.now()
+    return JobOut.model_validate(
+        {
+            "id": 1,
+            "title": "后端开发工程师",
+            "company": "示例公司",
+            "created_at": now,
+            "updated_at": now,
+        }
+    )

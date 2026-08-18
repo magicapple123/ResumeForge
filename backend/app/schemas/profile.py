@@ -11,6 +11,8 @@ MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
 MAX_REFERENCE_FILE_NAME_CHARS = 255
 MAX_REFERENCE_CONTENT_CHARS = 200_000
 MAX_PROFILE_TEXT_CHARS = 100_000
+MAX_PROFILE_DETAIL_CHARS = 200_000
+MAX_PROFILE_SECTION_ITEMS = 200
 PROFILE_SECTION_KEYS = (
     "basic_info",
     "educations",
@@ -85,51 +87,51 @@ class ReferenceFileFields(BaseModel):
 
 
 class EducationIn(ReferenceFileFields):
-    school: str = ""
-    major: str = ""
-    degree: str = ""
-    start_date: str = ""
-    end_date: str = ""
-    gpa: str = ""
-    courses: str = ""  # 换行分隔
-    achievements: str = ""  # 换行分隔
+    school: str = Field(default="", max_length=128)
+    major: str = Field(default="", max_length=128)
+    degree: str = Field(default="", max_length=32)
+    start_date: str = Field(default="", max_length=32)
+    end_date: str = Field(default="", max_length=32)
+    gpa: str = Field(default="", max_length=64)
+    courses: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
+    achievements: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
 
 
 class ExperienceIn(ReferenceFileFields):
-    company: str = ""
-    role: str = ""
-    start_date: str = ""
-    end_date: str = ""
-    description: str = ""  # 换行分隔
+    company: str = Field(default="", max_length=128)
+    role: str = Field(default="", max_length=128)
+    start_date: str = Field(default="", max_length=32)
+    end_date: str = Field(default="", max_length=32)
+    description: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
 
 
 class CampusExperienceIn(ReferenceFileFields):
-    organization: str = ""
-    role: str = ""
-    start_date: str = ""
-    end_date: str = ""
-    description: str = ""  # 换行分隔
+    organization: str = Field(default="", max_length=128)
+    role: str = Field(default="", max_length=128)
+    start_date: str = Field(default="", max_length=32)
+    end_date: str = Field(default="", max_length=32)
+    description: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
 
 
 class ProjectIn(ReferenceFileFields):
-    name: str = ""
-    role: str = ""
-    start_date: str = ""
-    end_date: str = ""
-    tech_stack: str = ""  # 逗号分隔
-    description: str = ""  # 换行分隔
-    highlights: str = ""  # 换行分隔
+    name: str = Field(default="", max_length=128)
+    role: str = Field(default="", max_length=64)
+    start_date: str = Field(default="", max_length=32)
+    end_date: str = Field(default="", max_length=32)
+    tech_stack: str = Field(default="", max_length=10_000)  # 逗号分隔
+    description: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
+    highlights: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
 
 
 class SkillIn(BaseModel):
-    name: str = ""
-    level: str = ""
+    name: str = Field(default="", max_length=64)
+    level: str = Field(default="", max_length=32)
 
 
 class AwardIn(BaseModel):
-    name: str = ""
-    date: str = ""
-    description: str = ""
+    name: str = Field(default="", max_length=128)
+    date: str = Field(default="", max_length=32)
+    description: str = Field(default="", max_length=2000)
 
 
 class EducationOut(EducationIn):
@@ -165,25 +167,29 @@ class AwardOut(AwardIn):
 class ProfileUpdate(BaseModel):
     """PUT 语义：整体替换，子表列表会先删后插。"""
 
-    name: str = ""
-    gender: str = ""
-    birth_year: str = ""
-    phone: str = ""
-    email: str = ""
-    city: str = ""
-    target_city: str = ""
-    job_intent: str = ""
-    personal_website: str = ""
-    github: str = ""
+    name: str = Field(default="", max_length=64)
+    gender: str = Field(default="", max_length=64)
+    birth_year: str = Field(default="", max_length=32)
+    phone: str = Field(default="", max_length=32)
+    email: str = Field(default="", max_length=128)
+    city: str = Field(default="", max_length=64)
+    target_city: str = Field(default="", max_length=64)
+    job_intent: str = Field(default="", max_length=128)
+    personal_website: str = Field(default="", max_length=256)
+    github: str = Field(default="", max_length=256)
     photo: str = ""
-    summary: str = ""
-    section_order: list[str] = Field(default_factory=lambda: list(PROFILE_SECTION_KEYS))
-    educations: list[EducationIn] = []
-    experiences: list[ExperienceIn] = []
-    campus_experiences: list[CampusExperienceIn] = []
-    projects: list[ProjectIn] = []
-    skills: list[SkillIn] = []
-    awards: list[AwardIn] = []
+    summary: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)
+    section_order: list[str] = Field(
+        default_factory=lambda: list(PROFILE_SECTION_KEYS), max_length=len(PROFILE_SECTION_KEYS)
+    )
+    educations: list[EducationIn] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
+    experiences: list[ExperienceIn] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
+    campus_experiences: list[CampusExperienceIn] = Field(
+        default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS
+    )
+    projects: list[ProjectIn] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
+    skills: list[SkillIn] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
+    awards: list[AwardIn] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
 
     @field_validator("photo")
     @classmethod
@@ -194,7 +200,7 @@ class ProfileUpdate(BaseModel):
     @classmethod
     def section_order_must_be_supported(cls, value: list[str]) -> list[str]:
         supported = set(PROFILE_SECTION_KEYS)
-        normalized = [key for key in value if key in supported]
+        normalized = list(dict.fromkeys(key for key in value if key in supported))
         normalized.extend(key for key in PROFILE_SECTION_KEYS if key not in normalized)
         return normalized
 
@@ -217,10 +223,14 @@ class ProfileTextParseResult(ProfileUpdate):
 class ProfileOut(ProfileUpdate):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    # 读取历史数据时保持宽容；写入约束由 ProfileUpdate 执行。
+    name: str = ""
     updated_at: datetime | None = None
-    educations: list[EducationOut] = []
-    experiences: list[ExperienceOut] = []
-    campus_experiences: list[CampusExperienceOut] = []
-    projects: list[ProjectOut] = []
-    skills: list[SkillOut] = []
-    awards: list[AwardOut] = []
+    educations: list[EducationOut] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
+    experiences: list[ExperienceOut] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
+    campus_experiences: list[CampusExperienceOut] = Field(
+        default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS
+    )
+    projects: list[ProjectOut] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
+    skills: list[SkillOut] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
+    awards: list[AwardOut] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)

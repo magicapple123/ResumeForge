@@ -176,7 +176,7 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
         onCancel={() => setViewing(false)}
         footer={<Button onClick={() => setViewing(false)}>关闭</Button>}
         width={760}
-        destroyOnClose
+        destroyOnHidden
       >
         <Typography.Text type="secondary">{content.length.toLocaleString()} 字</Typography.Text>
         <pre className="profile-reference-preview">{content}</pre>

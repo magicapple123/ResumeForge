@@ -274,6 +274,13 @@ body {
   width: 260px;
 }
 
+.table-text-link {
+  height: auto;
+  padding: 0;
+  white-space: normal;
+  text-align: left;
+}
+
 .job-detail-title-row {
   display: flex;
   align-items: flex-start;

@@ -39,10 +39,7 @@ function TextSection({ title, icon, content, emptyText, variant }: TextSectionPr
         <span className="job-detail-section-icon">{icon}</span>
         <Typography.Text strong>{title}</Typography.Text>
       </div>
-      <Typography.Paragraph
-        type={content ? undefined : "secondary"}
-        className="job-detail-text"
-      >
+      <Typography.Paragraph type={content ? undefined : "secondary"} className="job-detail-text">
         {content || emptyText}
       </Typography.Paragraph>
     </section>

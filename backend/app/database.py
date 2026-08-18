@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from .config import get_settings
 
@@ -19,13 +20,20 @@ if settings.database_url.startswith("sqlite:///"):
     db_path = Path(settings.database_url.removeprefix("sqlite:///"))
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-engine = create_engine(
-    settings.database_url,
+_is_sqlite = settings.database_url.startswith("sqlite")
+_is_memory_sqlite = settings.database_url in {"sqlite://", "sqlite:///:memory:"}
+engine_options = {
     # FastAPI 在线程池中运行同步接口，SQLite 需要允许跨线程共用连接
-    connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
-)
+    "connect_args": {"check_same_thread": False} if _is_sqlite else {},
+}
+if _is_memory_sqlite:
+    # 内存库默认按线程分配连接；StaticPool 才能让 lifespan、请求和测试
+    # 线程看到同一份数据库内容。
+    engine_options["poolclass"] = StaticPool
 
-if settings.database_url.startswith("sqlite"):
+engine = create_engine(settings.database_url, **engine_options)
+
+if _is_sqlite:
 
     @event.listens_for(engine, "connect")
     def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):

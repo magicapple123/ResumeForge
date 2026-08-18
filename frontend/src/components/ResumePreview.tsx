@@ -80,7 +80,8 @@ export default function ResumePreview({ html, warnings, height = A4_HEIGHT_PX }:
     setZoom(1);
     updateAvailableSpace();
     const container = containerRef.current;
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateAvailableSpace);
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateAvailableSpace);
     if (container) observer?.observe(container);
     window.addEventListener("resize", updateAvailableSpace);
     return () => {
@@ -226,6 +227,7 @@ export default function ResumePreview({ html, warnings, height = A4_HEIGHT_PX }:
             width={A4_WIDTH_PX}
             height={A4_HEIGHT_PX}
             srcDoc={html}
+            sandbox="allow-same-origin"
             scrolling="no"
             onLoad={() => {
               fitFrameContent();

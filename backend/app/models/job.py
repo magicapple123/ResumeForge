@@ -32,8 +32,8 @@ class Job(Base):
     source: Mapped[str] = mapped_column(String(64), default="手动添加")
     source_url: Mapped[str] = mapped_column(String(512), default="")  # 投递链接
     posted_at: Mapped[str] = mapped_column(String(32), default="")  # 发布时间的原始文本
-    status: Mapped[str] = mapped_column(String(16), default=JOB_STATUS_OPEN)
+    status: Mapped[str] = mapped_column(String(16), default=JOB_STATUS_OPEN, index=True)
     note: Mapped[str] = mapped_column(Text, default="")
     favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

@@ -79,7 +79,8 @@ export async function exportResume(
   if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
   return {
     blob: await resp.blob(),
-    filename: getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? `resume.${format}`,
+    filename:
+      getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? `resume.${format}`,
   };
 }
 

@@ -48,7 +48,9 @@ export default function ResumesPage() {
       title: "简历标题",
       dataIndex: "title",
       render: (_, record) => (
-        <Typography.Link onClick={() => setPreviewId(record.id)}>{record.title}</Typography.Link>
+        <Button type="link" className="table-text-link" onClick={() => setPreviewId(record.id)}>
+          {record.title}
+        </Button>
       ),
     },
     {
@@ -57,9 +59,13 @@ export default function ResumesPage() {
       render: (_, record) => (
         <Space>
           {record.job_id ? (
-            <Typography.Link onClick={() => navigate(`/jobs?job_id=${record.job_id}`)}>
+            <Button
+              type="link"
+              className="table-text-link"
+              onClick={() => navigate(`/jobs?job_id=${record.job_id}`)}
+            >
               <Tag color="blue">{record.job_title || "-"}</Tag>
-            </Typography.Link>
+            </Button>
           ) : (
             <Tag color="blue">{record.job_title || "-"}</Tag>
           )}
@@ -83,7 +89,8 @@ export default function ResumesPage() {
       key: "enhancement",
       width: 110,
       render: (_, record) => {
-        if (!record.enhancement_enabled) return <Typography.Text type="secondary">未开启</Typography.Text>;
+        if (!record.enhancement_enabled)
+          return <Typography.Text type="secondary">未开启</Typography.Text>;
         const label = RESUME_ENHANCEMENT_LEVELS.find(
           (item) => item.value === record.enhancement_level,
         )?.label;
@@ -139,6 +146,7 @@ export default function ResumesPage() {
         columns={columns}
         dataSource={data?.items ?? []}
         loading={loading}
+        scroll={{ x: 960 }}
         pagination={{
           current: page,
           pageSize,

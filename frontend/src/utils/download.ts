@@ -14,15 +14,22 @@ export function downloadBlob(blob: Blob, filename: string): void {
 
 /** 在新窗口打开 HTML 并自动调起打印（另存为 PDF） */
 export function printHtml(html: string): void {
-  const win = window.open("", "_blank");
+  // Blob URL 使用独立来源，避免把预览 HTML 通过 document.write 注入当前站点来源。
+  const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+  const win = window.open(url, "_blank");
   if (!win) {
+    URL.revokeObjectURL(url);
     throw new Error("浏览器拦截了弹窗，请允许本站弹窗后重试");
   }
-  win.document.write(html);
-  win.document.close();
-  // 等浏览器完成渲染后再调起打印
-  setTimeout(() => {
-    win.focus();
-    win.print();
-  }, 300);
+  win.addEventListener(
+    "load",
+    () => {
+      setTimeout(() => {
+        win.focus();
+        win.print();
+        URL.revokeObjectURL(url);
+      }, 300);
+    },
+    { once: true },
+  );
 }

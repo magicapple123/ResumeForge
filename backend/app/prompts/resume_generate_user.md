@@ -32,7 +32,9 @@
 {{ enhancement_guide }}
 
 请优先呈现与上述关键技能和岗位方向直接相关的条目。若某个区块没有可靠的匹配事实，
-输出空数组，不要补造内容。`job_intent` 必须填写「{{ job.title }}」。
+输出空数组，不要补造内容。`job_intent` 必须填写「{{ job.title }}」。身份和联系方式没有
+发送给模型，`name`、`gender`、`birth_year`、`phone`、`email`、`city` 必须输出空字符串，
+后端会在本地恢复真实值。
 
 ## 输出 JSON 结构
 
@@ -40,12 +42,12 @@
 
 ```json
 {
-  "name": "姓名",
-  "gender": "性别",
-  "birth_year": "出生年份",
-  "phone": "手机号",
-  "email": "邮箱",
-  "city": "所在城市",
+  "name": "",
+  "gender": "",
+  "birth_year": "",
+  "phone": "",
+  "email": "",
+  "city": "",
   "job_intent": "求职意向（针对目标岗位填写）",
   "summary": "个人总结，2-3 句话，突出与岗位的匹配度",
   "education": [

@@ -103,9 +103,7 @@ function ProfileListBody({
     const finishItemDrag = (event: globalThis.PointerEvent) => {
       event.preventDefault();
       const start = itemPointerStart.current;
-      const distance = start
-        ? Math.hypot(event.clientX - start.x, event.clientY - start.y)
-        : 0;
+      const distance = start ? Math.hypot(event.clientX - start.x, event.clientY - start.y) : 0;
       const targetKey = findItemAtPoint(event.clientX, event.clientY);
       if (
         itemDragActivated.current &&
@@ -135,38 +133,45 @@ function ProfileListBody({
       <div className={`profile-list-items${isReordering ? " is-reordering" : ""}`}>
         {fields.map((field, index) => {
           const label =
-            dragItemLabels[String(field.key)] ||
-            itemLabel?.({}, index) ||
-            `第 ${index + 1} 项`;
+            dragItemLabels[String(field.key)] || itemLabel?.({}, index) || `第 ${index + 1} 项`;
           return (
             <div
               key={field.key}
               data-profile-list-item-key={field.key}
-              className={`profile-list-item${
-                dragOverItemKey === field.key ? " is-drag-over" : ""
-              }`}
+              className={`profile-list-item${dragOverItemKey === field.key ? " is-drag-over" : ""}`}
             >
               {editable && (
-                <Tooltip title={`拖动调整${label}顺序`}>
+                <Tooltip title={`拖动或使用上下方向键调整${label}顺序`}>
                   <button
                     type="button"
                     className="profile-list-item-drag-handle"
                     aria-label={`拖动调整${label}顺序`}
                     onPointerDown={(event) => handleItemPointerDown(event, field)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                      event.preventDefault();
+                      const targetIndex = index + (event.key === "ArrowUp" ? -1 : 1);
+                      if (targetIndex >= 0 && targetIndex < fields.length) {
+                        operations.move(index, targetIndex);
+                      }
+                    }}
                   >
                     <HolderOutlined />
                   </button>
                 </Tooltip>
               )}
-              <Button
-                type="text"
-                danger
-                size="small"
-                icon={<DeleteOutlined />}
-                disabled={!editable || isReordering}
-                className="profile-list-item-delete"
-                onClick={() => operations.remove(field.name)}
-              />
+              <Tooltip title={`删除${label}`}>
+                <Button
+                  type="text"
+                  danger
+                  size="small"
+                  aria-label={`删除${label}`}
+                  icon={<DeleteOutlined />}
+                  disabled={!editable || isReordering}
+                  className="profile-list-item-delete"
+                  onClick={() => operations.remove(field.name)}
+                />
+              </Tooltip>
               {isReordering && (
                 <div className="profile-list-item-summary">
                   <Typography.Text strong ellipsis={{ tooltip: label }}>

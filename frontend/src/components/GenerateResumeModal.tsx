@@ -46,6 +46,9 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
 
   const abortRef = useRef<AbortController | null>(null);
   const streamBoxRef = useRef<HTMLDivElement>(null);
+  const generationVersion = useRef(0);
+  const streamTextBuffer = useRef("");
+  const streamFrame = useRef<number | null>(null);
 
   // 打开弹窗时检查 LLM 配置并展示当前模型
   useEffect(() => {
@@ -65,10 +68,23 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
     }
   }, [streamText, stage]);
 
-  // 关闭时中止未完成的请求
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // 关闭时中止未完成的请求，并清理尚未提交到 React 的流式文本帧。
+  useEffect(
+    () => () => {
+      generationVersion.current += 1;
+      abortRef.current?.abort();
+      if (streamFrame.current !== null) cancelAnimationFrame(streamFrame.current);
+    },
+    [],
+  );
 
   const reset = useCallback(() => {
+    generationVersion.current += 1;
+    streamTextBuffer.current = "";
+    if (streamFrame.current !== null) {
+      cancelAnimationFrame(streamFrame.current);
+      streamFrame.current = null;
+    }
     setStage("config");
     setProgress([]);
     setStreamText("");
@@ -83,6 +99,15 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
 
   const startGenerate = async () => {
     if (!job) return;
+    abortRef.current?.abort();
+    const currentGeneration = ++generationVersion.current;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    streamTextBuffer.current = "";
+    if (streamFrame.current !== null) {
+      cancelAnimationFrame(streamFrame.current);
+      streamFrame.current = null;
+    }
     setStage("generating");
     setProgress([]);
     setStreamText("");
@@ -91,21 +116,34 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
     setEditorOpen(false);
     setSuggestionsGenerated(false);
     setSuggestionsResetKey((value) => value + 1);
-    abortRef.current = new AbortController();
-
     // 事件回调里只更新状态；最终结果收集在闭包变量中，流结束后统一处理
-    const final: { resume: ResumeContent | null; warnings: string[]; recordId: number | null } = {
+    const final: {
+      resume: ResumeContent | null;
+      warnings: string[];
+      recordId: number | null;
+      error: string;
+    } = {
       resume: null,
       warnings: [],
       recordId: null,
+      error: "",
     };
     const handleEvent = (event: StreamEvent) => {
+      if (currentGeneration !== generationVersion.current) return;
       switch (event.type) {
         case "progress":
           setProgress((prev) => [...prev, event.message]);
           break;
         case "delta":
-          setStreamText((prev) => prev + event.text);
+          streamTextBuffer.current += event.text;
+          if (streamFrame.current === null) {
+            streamFrame.current = requestAnimationFrame(() => {
+              streamFrame.current = null;
+              if (currentGeneration === generationVersion.current) {
+                setStreamText(streamTextBuffer.current);
+              }
+            });
+          }
           break;
         case "done":
           final.resume = event.resume;
@@ -115,6 +153,7 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
           final.recordId = event.record_id;
           break;
         case "error":
+          final.error = event.message;
           setErrorMsg(event.message);
           break;
       }
@@ -124,26 +163,34 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
       await generateResume(
         { job_id: job.id, options: { enhance, enhancement_level: enhancementLevel } },
         handleEvent,
-        abortRef.current.signal,
+        controller.signal,
       );
+      if (currentGeneration !== generationVersion.current) return;
+      if (streamFrame.current !== null) {
+        cancelAnimationFrame(streamFrame.current);
+        streamFrame.current = null;
+      }
+      setStreamText(streamTextBuffer.current);
       if (final.resume) {
         const html = await renderResume(final.resume);
+        if (currentGeneration !== generationVersion.current) return;
         setResult({ resume: final.resume, warnings: final.warnings, recordId: final.recordId });
         setPreviewHtml(html);
         setStage("preview");
         message.success("简历已生成并自动保存到简历中心");
       } else {
         setStage("error");
-        if (!errorMsg) setErrorMsg("生成失败：未收到有效结果");
+        setErrorMsg(final.error || "生成失败：未收到有效结果");
       }
     } catch (err) {
+      if (currentGeneration !== generationVersion.current) return;
       // 用户主动取消不报错
       if (!(err instanceof DOMException && err.name === "AbortError")) {
         setStage("error");
         setErrorMsg(err instanceof Error ? err.message : "生成失败，请重试");
       }
     } finally {
-      abortRef.current = null;
+      if (abortRef.current === controller) abortRef.current = null;
     }
   };
 
@@ -175,7 +222,7 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
       footer={null}
       maskClosable={stage !== "generating"}
       closable={stage !== "generating"}
-      destroyOnClose
+      destroyOnHidden
     >
       {stage === "config" && (
         <div>
@@ -216,7 +263,8 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
             />
             <Typography.Text type={enhance ? undefined : "secondary"}>
               {enhance
-                ? RESUME_ENHANCEMENT_LEVELS.find((item) => item.value === enhancementLevel)?.description
+                ? RESUME_ENHANCEMENT_LEVELS.find((item) => item.value === enhancementLevel)
+                    ?.description
                 : "关闭后仅筛选和整理原有资料，不进行拓展。"}
             </Typography.Text>
           </Space>
@@ -265,7 +313,14 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
       {stage === "preview" && result && (
         <div>
           <ResumePreview html={previewHtml} warnings={result.warnings} />
-          <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div
+            style={{
+              marginTop: 16,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <Space>
               {result.recordId ? (
                 <ExportButtons recordId={result.recordId} />
@@ -319,7 +374,12 @@ export default function GenerateResumeModal({ job, onClose }: Props) {
 
       {stage === "error" && (
         <div style={{ textAlign: "center", padding: "24px 0" }}>
-          <Alert type="error" showIcon message={errorMsg || "生成失败"} style={{ marginBottom: 24 }} />
+          <Alert
+            type="error"
+            showIcon
+            message={errorMsg || "生成失败"}
+            style={{ marginBottom: 24 }}
+          />
           <Space>
             <Button onClick={reset}>返回重试</Button>
             <Button type="primary" onClick={() => void startGenerate()}>

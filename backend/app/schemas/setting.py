@@ -7,10 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class LLMConfig(BaseModel):
     """兼容 OpenAI Chat Completions 协议的模型配置（DeepSeek/豆包/Kimi/Ollama 等）。"""
 
-    provider: str = "custom"  # 预设标识，仅用于前端展示
-    base_url: str = ""
-    api_key: str = ""
-    model: str = ""
+    provider: str = Field(default="custom", max_length=32)  # 预设标识，仅用于前端展示
+    base_url: str = Field(default="", max_length=512)
+    api_key: str = Field(default="", max_length=8192)
+    model: str = Field(default="", max_length=128)
     # 简历生成更看重事实稳定性；用户仍可按需调高创意度。
     temperature: float = Field(default=0.1, ge=0, le=2)
     timeout_seconds: int = Field(default=120, ge=10, le=600)
@@ -46,4 +46,4 @@ class LLMTestRequest(LLMConfig):
 class LLMTestResult(BaseModel):
     ok: bool
     latency_ms: int | None = None
-    message: str = ""
+    message: str = Field(default="", max_length=1000)

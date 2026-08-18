@@ -9,7 +9,7 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import cast, or_, String
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..database import SessionLocal, get_db
 from ..models.job import Job
 from ..models.resume import ResumeRecord
 from ..schemas.common import Page
@@ -48,8 +48,8 @@ def _format_sse(payload: dict) -> str:
 async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db)):
     """流式生成简历（SSE）。
 
-    事件类型见 services/resume_generator.py 文档；生成成功后自动落库，
-    并追加一个 saved 事件携带记录 id。
+    事件类型见 services/resume_generator.py 文档；生成结果成功落库后，
+    依次发送携带记录 id 的 saved 事件和最终 done 事件。
     """
     job = db.get(Job, payload.job_id)
     if job is None:
@@ -71,11 +71,14 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
     generator = ResumeGenerator(create_provider(config))
     job_out = JobOut.model_validate(job)
     profile_out = to_profile_out(profile)
+    # 流式模型调用可能持续数分钟；快照完成后立即释放请求 Session，避免占满连接池。
+    db.close()
 
     async def event_stream():
         raw_parts: list[str] = []
         parsed: dict | None = None
         warnings: list[str] = []
+        done_event: dict | None = None
         try:
             async for event in generator.generate(profile_out, job_out, payload.options):
                 if event["type"] == "delta":
@@ -83,19 +86,24 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                 if event["type"] == "done":
                     parsed = event["resume"]
                     warnings = event["warnings"]
+                    done_event = event
+                    continue
                 yield _format_sse(event)
-            if parsed is not None:
-                record = _save_record(
-                    db,
-                    parsed,
-                    warnings,
-                    job_out,
-                    "".join(raw_parts),
-                    generator.provider.config.model,
-                    payload.options.enhance,
-                    payload.options.enhancement_level,
-                )
+            if parsed is not None and done_event is not None:
+                with SessionLocal() as save_db:
+                    record = _save_record(
+                        save_db,
+                        parsed,
+                        warnings,
+                        job_out,
+                        "".join(raw_parts),
+                        generator.provider.config.model,
+                        payload.options.enhance,
+                        payload.options.enhancement_level,
+                    )
+                # 只有持久化成功后才宣布完成；断流不会留下“成功但无历史记录”的状态。
                 yield _format_sse({"type": "saved", "record_id": record.id})
+                yield _format_sse(done_event)
         except LLMError as exc:
             logger.warning("简历生成失败（模型错误）：%s", exc)
             yield _format_sse({"type": "error", "message": str(exc)})
@@ -248,10 +256,14 @@ async def suggest_resume_edits(resume_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
     try:
         profile = to_profile_out(get_profile_detail(db))
+        resume = ResumeContent.model_validate(record.content)
+        job_out = JobOut.model_validate(job)
+        provider = create_provider(config)
+        db.close()
         suggestions = await generate_suggestions(
-            create_provider(config),
-            ResumeContent.model_validate(record.content),
-            JobOut.model_validate(job),
+            provider,
+            resume,
+            job_out,
             profile,
         )
     except LLMError as exc:

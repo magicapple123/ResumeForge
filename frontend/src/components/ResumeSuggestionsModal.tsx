@@ -82,12 +82,16 @@ export default function ResumeSuggestionsModal({
       onCancel={onClose}
       footer={null}
       width={720}
-      destroyOnClose
+      destroyOnHidden
     >
       {error ? (
         <Space direction="vertical" style={{ width: "100%" }}>
           <Alert type="error" showIcon message={error} />
-          <Button icon={<ReloadOutlined />} onClick={() => void loadSuggestions()} loading={loading}>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => void loadSuggestions()}
+            loading={loading}
+          >
             重新生成建议
           </Button>
         </Space>
@@ -97,7 +101,8 @@ export default function ResumeSuggestionsModal({
         <div>
           <Space style={{ marginBottom: 12 }} wrap>
             <Typography.Text type="secondary">
-              目标岗位：{data.company ? `${data.company} · ` : ""}{data.job_title}
+              目标岗位：{data.company ? `${data.company} · ` : ""}
+              {data.job_title}
             </Typography.Text>
             <Button
               type="link"

@@ -25,7 +25,11 @@ export default function SkillTags({ tags, max = 5 }: Props) {
   return (
     <span>
       {visible.map((tag) => (
-        <Tag key={`${tag.category}-${tag.name}`} color={CATEGORY_COLORS[tag.category] ?? "default"} style={{ marginBottom: 4 }}>
+        <Tag
+          key={`${tag.category}-${tag.name}`}
+          color={CATEGORY_COLORS[tag.category] ?? "default"}
+          style={{ marginBottom: 4 }}
+        >
           {tag.name}
         </Tag>
       ))}

@@ -27,8 +27,10 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
   const [suggestionsGenerated, setSuggestionsGenerated] = useState(false);
   const [suggestionsResetKey, setSuggestionsResetKey] = useState(0);
   const loadedRecordId = useRef<number | null>(null);
+  const requestVersion = useRef(0);
 
   useEffect(() => {
+    const currentRequest = ++requestVersion.current;
     if (!recordId) return;
     setDetail(null);
     setHtml("");
@@ -42,10 +44,18 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     }
     void Promise.all([getResume(recordId), fetchResumeHtml(recordId)])
       .then(([data, rendered]) => {
+        if (currentRequest !== requestVersion.current) return;
         setDetail(data);
         setHtml(rendered);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
+      .catch((err) => {
+        if (currentRequest === requestVersion.current) {
+          setError(err instanceof Error ? err.message : "加载失败");
+        }
+      });
+    return () => {
+      if (currentRequest === requestVersion.current) requestVersion.current += 1;
+    };
   }, [recordId]);
 
   const enhancementLabel = RESUME_ENHANCEMENT_LEVELS.find(
@@ -70,7 +80,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
       onCancel={onClose}
       width={860}
       footer={null}
-      destroyOnClose
+      destroyOnHidden
     >
       {error ? (
         <Alert type="error" showIcon message={error} />
@@ -86,14 +96,21 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
             {detail.company && <Tag>{detail.company}</Tag>}
             <Tag>模型：{detail.model || "-"}</Tag>
             <Tag color={detail.enhancement_enabled ? "green" : undefined}>
-              美化拓展：{detail.enhancement_enabled ? enhancementLabel ?? "已开启" : "未开启"}
+              美化拓展：{detail.enhancement_enabled ? (enhancementLabel ?? "已开启") : "未开启"}
             </Tag>
             <Typography.Text type="secondary" style={{ fontSize: 13 }}>
               创建于 {detail.created_at.replace("T", " ").slice(0, 16)}
             </Typography.Text>
           </Space>
           <ResumePreview html={html} warnings={detail.warnings} />
-          <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div
+            style={{
+              marginTop: 16,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <Space wrap>
               <Button icon={<EditOutlined />} onClick={() => setEditorOpen(true)}>
                 微调内容

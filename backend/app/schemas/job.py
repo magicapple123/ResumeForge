@@ -1,6 +1,7 @@
 """岗位 Schema。"""
 from datetime import datetime
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -8,6 +9,7 @@ from ..models.job import JOB_STATUSES
 
 
 MAX_SQLITE_INTEGER = 2**63 - 1
+MAX_JOB_TEXT_CHARS = 200_000
 JobId = Annotated[int, Field(strict=True, ge=1, le=MAX_SQLITE_INTEGER)]
 
 
@@ -18,22 +20,35 @@ def _validate_status(value: str) -> str:
     return value
 
 
+def _validate_source_url(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return ""
+    try:
+        parsed = urlsplit(value)
+    except ValueError as exc:
+        raise ValueError("投递链接必须是有效的 HTTP 或 HTTPS 地址") from exc
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("投递链接只支持 HTTP 或 HTTPS 地址")
+    return value
+
+
 class SkillTag(BaseModel):
-    name: str
-    category: str
+    name: str = Field(max_length=128)
+    category: str = Field(max_length=64)
 
 
 class JobCreate(BaseModel):
     title: str = Field(min_length=1, max_length=128)
-    company: str = ""
-    location: str = ""
-    salary: str = ""
-    job_type: str = "校招"
-    description: str = ""
-    requirements: str = ""
-    source_url: str = ""
-    posted_at: str = ""
-    status: str = "开放中"
+    company: str = Field(default="", max_length=128)
+    location: str = Field(default="", max_length=64)
+    salary: str = Field(default="", max_length=64)
+    job_type: str = Field(default="校招", max_length=32)
+    description: str = Field(default="", max_length=MAX_JOB_TEXT_CHARS)
+    requirements: str = Field(default="", max_length=MAX_JOB_TEXT_CHARS)
+    source_url: str = Field(default="", max_length=512)
+    posted_at: str = Field(default="", max_length=32)
+    status: str = Field(default="开放中", max_length=16)
     note: str = Field(default="", max_length=2000)
     favorite: bool = False
 
@@ -42,20 +57,25 @@ class JobCreate(BaseModel):
     def status_must_be_supported(cls, value: str) -> str:
         return _validate_status(value)
 
+    @field_validator("source_url")
+    @classmethod
+    def source_url_must_be_http(cls, value: str) -> str:
+        return _validate_source_url(value)
+
 
 class JobUpdate(BaseModel):
     """PUT 语义：只更新提交了的字段。"""
 
-    title: str = ""
-    company: str = ""
-    location: str = ""
-    salary: str = ""
-    job_type: str = ""
-    description: str = ""
-    requirements: str = ""
-    source_url: str = ""
-    posted_at: str = ""
-    status: str = "开放中"
+    title: str = Field(default="", max_length=128)
+    company: str = Field(default="", max_length=128)
+    location: str = Field(default="", max_length=64)
+    salary: str = Field(default="", max_length=64)
+    job_type: str = Field(default="", max_length=32)
+    description: str = Field(default="", max_length=MAX_JOB_TEXT_CHARS)
+    requirements: str = Field(default="", max_length=MAX_JOB_TEXT_CHARS)
+    source_url: str = Field(default="", max_length=512)
+    posted_at: str = Field(default="", max_length=32)
+    status: str = Field(default="开放中", max_length=16)
     note: str = Field(default="", max_length=2000)
     favorite: bool = False
 
@@ -64,9 +84,14 @@ class JobUpdate(BaseModel):
     def status_must_be_supported_when_set(cls, value: str) -> str:
         return _validate_status(value)
 
+    @field_validator("source_url")
+    @classmethod
+    def source_url_must_be_http_when_set(cls, value: str) -> str:
+        return _validate_source_url(value)
+
 
 class JobBatchRequest(BaseModel):
-    job_ids: list[JobId]
+    job_ids: list[JobId] = Field(max_length=500)
 
     @field_validator("job_ids")
     @classmethod
@@ -74,8 +99,6 @@ class JobBatchRequest(BaseModel):
         if not value:
             raise ValueError("请至少选择一个岗位")
         unique_ids = list(dict.fromkeys(value))
-        if len(unique_ids) > 500:
-            raise ValueError("一次最多操作 500 个岗位")
         return unique_ids
 
 
@@ -121,7 +144,7 @@ class JobTextParseResult(BaseModel):
 class JobOut(JobCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    source: str = "手动添加"
-    keywords: list[SkillTag] = []
+    source: str = Field(default="手动添加", max_length=64)
+    keywords: list[SkillTag] = Field(default_factory=list, max_length=500)
     created_at: datetime
     updated_at: datetime

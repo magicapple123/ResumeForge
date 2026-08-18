@@ -163,6 +163,17 @@ _TITLE_SPLIT_RE = re.compile(r"[\s\-_/|,，、；;（）()：:]+")
 _ASCII_TERM_RE = re.compile(r"[A-Za-z]")
 _LIST_DETAIL_FIELDS = ("courses", "achievements", "description", "highlights")
 _OPTIONAL_TOP_LEVEL_FIELDS = ("summary", "github", "personal_website", "target_city")
+_LLM_PROFILE_FIELDS = (
+    "target_city",
+    "job_intent",
+    "summary",
+    "educations",
+    "experiences",
+    "campus_experiences",
+    "projects",
+    "skills",
+    "awards",
+)
 _MIN_PROFILE_CONTEXT_CHARS = 1_000
 _REFERENCE_SECTIONS = ("educations", "experiences", "campus_experiences", "projects")
 _REFERENCE_CONTENT_KEY = "_reference_content"
@@ -302,6 +313,14 @@ def build_profile_prompt_data(
             {"name": item.name, "date": item.date, "description": item.description}
             for item in profile.awards
         ],
+    }
+
+
+def build_llm_profile_prompt_data(data: dict[str, Any]) -> dict[str, Any]:
+    """只保留岗位匹配需要的资料，避免把身份和联系方式发送给模型。"""
+    return {
+        key: deepcopy(data.get(key, [] if key in SECTION_LIMITS else ""))
+        for key in _LLM_PROFILE_FIELDS
     }
 
 
@@ -831,21 +850,17 @@ def serialize_profile_prompt_data(data: dict[str, Any], max_chars: int) -> str:
             if len(serialized) <= max_chars:
                 break
     if len(serialized) > max_chars:
-        # 资料字段异常长时，优先保留身份锚点而不是发送超出预算的非法上下文。
+        # 极端输入只保留岗位意图和各区块首条；身份与联系方式不属于模型上下文。
         candidate = {
-            "name": _trim_text(str(candidate.get("name", "")), 32),
-            "gender": _trim_text(str(candidate.get("gender", "")), 16),
-            "birth_year": _trim_text(str(candidate.get("birth_year", "")), 16),
-            "phone": _trim_text(str(candidate.get("phone", "")), 32),
-            "email": _trim_text(str(candidate.get("email", "")), 64),
-            "city": _trim_text(str(candidate.get("city", "")), 32),
             "target_city": "",
             "job_intent": _trim_text(str(candidate.get("job_intent", "")), 64),
-            "personal_website": "",
-            "github": "",
             "summary": "",
-            **{section: [] for section in SECTION_LIMITS},
+            **{
+                section: (candidate.get(section) or [])[:1]
+                for section in SECTION_LIMITS
+            },
         }
+        candidate = _trim_all_strings(candidate, 32)
         serialized = _dump(candidate)
     if len(serialized) > max_chars:
         raise ValueError("个人资料基础字段过长，无法在安全预算内生成简历")
@@ -882,6 +897,7 @@ def build_targeted_profile_context(
         for section in ("educations", "experiences", "campus_experiences", "projects")
     }
     selected["skills"] = _select_skills(full["skills"], evidence, focus)
+    selected = build_llm_profile_prompt_data(selected)
     selected_counts = {section: len(selected[section]) for section in SECTION_LIMITS}
     omitted_counts = {
         section: max(0, len(full[section]) - selected_counts[section]) for section in SECTION_LIMITS

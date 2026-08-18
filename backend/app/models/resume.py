@@ -16,7 +16,7 @@ class ResumeRecord(Base):
     title: Mapped[str] = mapped_column(String(256), default="")
     # 目标岗位（快照保存，岗位被删除后记录仍完整可用）
     job_id: Mapped[int | None] = mapped_column(
-        ForeignKey("job.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("job.id", ondelete="SET NULL"), nullable=True, index=True
     )
     job_title: Mapped[str] = mapped_column(String(128), default="")
     company: Mapped[str] = mapped_column(String(128), default="")
@@ -31,4 +31,4 @@ class ResumeRecord(Base):
     enhancement_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     enhancement_level: Mapped[str] = mapped_column(String(16), default="balanced")
     parse_error: Mapped[str] = mapped_column(Text, default="")  # JSON 解析失败时留痕
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
