@@ -1,5 +1,8 @@
 # 简历通 ResumeForge
 
+[![CI](https://github.com/Magicapple-Coder/ResumeForge/actions/workflows/ci.yml/badge.svg)](https://github.com/Magicapple-Coder/ResumeForge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 > 面向求职场景的个性化简历工具：录入岗位 → 维护个人资料 → AI 生成或自行编写 → 导出多格式文件。
 > 单用户本地运行，业务数据默认保存在本机；AI 功能只把生成所需内容发送给你主动配置的模型服务商。LLM API Key 由你自己配置，代码中不内置任何密钥。
 
@@ -48,6 +51,11 @@
 详细设计（含决策记录与扩展点）见 [docs/architecture.md](docs/architecture.md)。
 
 ## 🚀 快速开始
+
+```powershell
+git clone https://github.com/Magicapple-Coder/ResumeForge.git
+cd ResumeForge
+```
 
 ### 环境要求
 
@@ -98,6 +106,8 @@ npm run dev        # http://localhost:5173，已配置 /api 代理到 8000 端�
 
 ### 4. 使用流程
 
+首次打开网站会自动显示四步使用引导；关闭后不会再次自动弹出，随时可以点击左侧导航底部的 **使用指南** 重新查看。引导完成状态仅保存在当前浏览器的本地存储中，不进入简历数据库。
+
 1. **岗位** 页 → 点「手动添加」，直接填写岗位，或粘贴官网招聘信息后点「识别并填充」，核对草稿并保存；可用备注记录跟进信息，并批量调整状态或删除岗位；
 2. **个人资料** 页 → 填写教育、工作、校园、项目和技能等信息；可上传简历照片，并为每条经历附加 UTF-8 编码的 Markdown/TXT 总结文件（不超过 200 KB）；
 3. **岗位** 页 → 对目标岗位选择「生成简历」或「自行编写」；自行编写会先从个人资料预填，AI 生成可选择是否启用岗位导向美化拓展及拓展程度；
@@ -121,6 +131,23 @@ npm run build    # tsc 类型检查 + 生产构建
 ```
 
 GitHub Actions 会在 Linux 与 Windows 上重复执行关键检查；依赖审计作为提示项运行，避免公告服务或网络短暂不可用误阻断其他质量门禁。
+
+## 🔄 更新而不丢失数据
+
+用户数据默认保存在 `backend/data/resume_forge.db`，配置保存在 `backend/.env`；二者都被 Git 忽略，正常 `git pull --ff-only` 不会覆盖。每次更新前请先关闭服务并运行数据库备份脚本，再拉取代码、重新安装依赖并重启：
+
+```powershell
+cd backend
+$env:PYTHONUTF8 = "1"
+.venv\Scripts\python.exe scripts\backup_database.py
+cd ..
+git pull --ff-only
+.\backend\.venv\Scripts\python.exe -m pip install -r .\backend\requirements.txt
+cd frontend
+npm ci
+```
+
+后端启动时会自动运行 Alembic 数据库迁移，并在有待迁移数据时创建 `backend/data/backups/` 备份。不要使用 `git clean -fdx`，也不要删除整个项目目录后直接覆盖；完整的升级、压缩包更新和回滚步骤见 [docs/upgrading.md](docs/upgrading.md)。
 
 ## ❓ FAQ
 
@@ -153,8 +180,11 @@ GitHub Actions 会在 Linux 与 Windows 上重复执行关键检查；依赖审�
 | ---------------------------------------------- | -------------------------------- |
 | [docs/architecture.md](docs/architecture.md)   | 系统架构、关键设计决策、扩展点   |
 | [docs/prompt-tuning.md](docs/prompt-tuning.md) | 提示词调优指南与防虚构校验说明   |
+| [docs/upgrading.md](docs/upgrading.md)         | 安全升级、备份、迁移与回滚         |
 | [CONTRIBUTING.md](CONTRIBUTING.md)             | 开发环境、代码约定与提交检查     |
+| [AGENTS.md](AGENTS.md)                         | 项目长期维护、测试与安全规则     |
 | [SECURITY.md](SECURITY.md)                     | 安全边界、敏感数据与漏洞报告方式 |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)       | 社区协作与行为准则               |
 | [CHANGELOG.md](CHANGELOG.md)                   | 版本变化与兼容性说明             |
 
 ## 🤝 参与贡献

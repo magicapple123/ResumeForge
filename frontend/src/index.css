@@ -130,6 +130,77 @@ body {
   display: none;
 }
 
+.app-sider-footer {
+  padding: 10px 10px 16px;
+  border-top: 1px solid #eef0f3;
+}
+
+.app-guide-button {
+  width: 100%;
+  height: 40px;
+  justify-content: flex-start;
+  color: #5f6b7a;
+  font-weight: 500;
+}
+
+.app-guide-button:hover {
+  color: #16365c !important;
+  background: #f3f7fb !important;
+}
+
+.user-guide-brand-image {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.user-guide-steps {
+  margin-inline: 4px;
+}
+
+.user-guide-step-content {
+  display: flex;
+  gap: 20px;
+  min-height: 190px;
+  padding: 8px 8px 18px;
+}
+
+.user-guide-step-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: #eaf1f8;
+  color: #16365c;
+  font-size: 26px;
+}
+
+.user-guide-step-copy {
+  min-width: 0;
+}
+
+.user-guide-step-copy .ant-typography {
+  max-width: 560px;
+}
+
+.user-guide-points {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: #4b5563;
+  line-height: 1.9;
+}
+
+.user-guide-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -637,11 +708,39 @@ body {
     padding-left: 8px;
   }
 
+  .app-sider-footer {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .ant-layout-sider-collapsed .app-guide-button {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .ant-layout-sider-collapsed .app-guide-label {
+    display: none;
+  }
+
   .app-header {
     padding: 0 16px;
   }
 
   .app-content {
     padding: 16px;
+  }
+
+  .user-guide-footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .user-guide-footer > .ant-space {
+    justify-content: flex-end;
+  }
+
+  .user-guide-step-content {
+    gap: 12px;
+    padding-inline: 0;
   }
 }
