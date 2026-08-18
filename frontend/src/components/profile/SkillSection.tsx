@@ -14,6 +14,11 @@ export function SkillSection({ editable }: Props) {
       fieldName="skills"
       editable={editable}
       emptyValue={{ name: "", level: "" }}
+      itemLabel={(item, index) => {
+        const name = String(item.name ?? "").trim();
+        const level = String(item.level ?? "").trim();
+        return [name, level].filter(Boolean).join(" · ") || `技能 ${index + 1}`;
+      }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
           <Col xs={24} sm={12}>

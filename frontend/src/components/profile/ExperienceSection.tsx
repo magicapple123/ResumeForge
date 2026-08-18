@@ -23,6 +23,11 @@ export function ExperienceSection({ editable }: Props) {
         reference_file_name: "",
         reference_content: "",
       }}
+      itemLabel={(item, index) => {
+        const company = String(item.company ?? "").trim();
+        const role = String(item.role ?? "").trim();
+        return [company, role].filter(Boolean).join(" · ") || `实习/工作经历 ${index + 1}`;
+      }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
           <Col xs={24} md={8}>

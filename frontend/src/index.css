@@ -42,6 +42,8 @@ body {
   margin-left: 200px;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
   background: #f6f8fb;
 }
 
@@ -253,6 +255,13 @@ body {
   opacity: 1;
 }
 
+/* 文本域调整大小时只重排当前输入控件，避免拖动手柄牵连整页表单。 */
+.profile-page textarea.ant-input {
+  max-height: 360px;
+  contain: layout;
+  resize: vertical;
+}
+
 .settings-page:not(.is-editing) .ant-select-disabled .ant-select-selection-item {
   color: #262626 !important;
 }
@@ -407,14 +416,51 @@ body {
   flex-direction: column;
 }
 
+.profile-section-stack.is-section-reordering {
+  gap: 8px;
+}
+
 .profile-section-sortable {
   position: relative;
   min-width: 0;
+  /* 长资料页只绘制当前视口附近的分区，避免滚动时反复绘制整棵表单树。 */
+  content-visibility: auto;
+  contain-intrinsic-size: 0 420px;
+}
+
+.profile-section-sortable.is-section-reordering {
+  /* 拖动时必须让所有标题条参与布局，不能被屏幕外延迟绘制隐藏。 */
+  content-visibility: visible;
+  min-height: 50px;
+  border: 1px solid #d9e5f5;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.profile-section-compact-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 50px;
+  gap: 12px;
+  padding: 0 76px 0 16px;
+}
+
+.profile-section-compact-label .ant-typography:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-section-sortable.is-section-reordering .profile-section-content.is-collapsed {
+  display: none;
 }
 
 .profile-section-sortable.is-drag-over > .ant-card,
 .profile-section-sortable.is-drag-over > .profile-top-card,
-.profile-section-sortable.is-drag-over > .ant-row {
+.profile-section-sortable.is-drag-over > .ant-row,
+.profile-section-sortable.is-drag-over {
   outline: 2px dashed #1677ff;
   outline-offset: 3px;
 }
@@ -435,6 +481,8 @@ body {
   background: transparent;
   color: #8c8c8c;
   cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 
 .profile-page.is-editing .profile-section-drag-handle {
@@ -448,6 +496,79 @@ body {
 
 .profile-section-drag-handle:active {
   cursor: grabbing;
+}
+
+.profile-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-list-item {
+  position: relative;
+  min-width: 0;
+  padding: 16px 76px 4px 16px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.profile-list-item.is-drag-over {
+  border-color: #1677ff;
+  outline: 2px dashed #1677ff;
+  outline-offset: 2px;
+}
+
+.profile-list-item-drag-handle,
+.profile-list-item-delete {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+}
+
+.profile-list-item-drag-handle {
+  right: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8c8c8c;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.profile-list-item-drag-handle:hover {
+  background: #eef5ff;
+  color: #1677ff;
+}
+
+.profile-list-item-drag-handle:active {
+  cursor: grabbing;
+}
+
+.profile-list-item-delete {
+  right: 8px;
+}
+
+.profile-list-item-summary {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding-right: 4px;
+}
+
+.profile-list-item-summary .ant-typography {
+  min-width: 0;
+}
+
+.profile-list-item-content.is-collapsed {
+  display: none;
 }
 
 .profile-reference-preview {

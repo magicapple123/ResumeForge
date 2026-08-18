@@ -14,6 +14,11 @@ export function AwardSection({ editable }: Props) {
       fieldName="awards"
       editable={editable}
       emptyValue={{ name: "", date: "", description: "" }}
+      itemLabel={(item, index) => {
+        const name = String(item.name ?? "").trim();
+        const date = String(item.date ?? "").trim();
+        return [name, date].filter(Boolean).join(" · ") || `荣誉奖项 ${index + 1}`;
+      }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
           <Col xs={24} md={10}>

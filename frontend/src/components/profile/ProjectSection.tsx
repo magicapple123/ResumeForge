@@ -25,6 +25,11 @@ export function ProjectSection({ editable }: Props) {
         reference_file_name: "",
         reference_content: "",
       }}
+      itemLabel={(item, index) => {
+        const name = String(item.name ?? "").trim();
+        const role = String(item.role ?? "").trim();
+        return [name, role].filter(Boolean).join(" · ") || `项目经历 ${index + 1}`;
+      }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
           <Col xs={24} md={8}>

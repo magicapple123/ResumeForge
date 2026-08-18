@@ -23,6 +23,11 @@ export function CampusExperienceSection({ editable }: Props) {
         reference_file_name: "",
         reference_content: "",
       }}
+      itemLabel={(item, index) => {
+        const organization = String(item.organization ?? "").trim();
+        const role = String(item.role ?? "").trim();
+        return [organization, role].filter(Boolean).join(" · ") || `校园经历 ${index + 1}`;
+      }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
           <Col xs={24} md={8}>

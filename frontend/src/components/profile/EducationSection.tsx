@@ -26,6 +26,12 @@ export function EducationSection({ editable }: Props) {
         reference_file_name: "",
         reference_content: "",
       }}
+      itemLabel={(item, index) => {
+        const school = String(item.school ?? "").trim();
+        const major = String(item.major ?? "").trim();
+        const degree = String(item.degree ?? "").trim();
+        return [school, major, degree].filter(Boolean).join(" · ") || `教育经历 ${index + 1}`;
+      }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
           <Col xs={24} md={8}>
