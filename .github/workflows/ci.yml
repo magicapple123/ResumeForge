@@ -231,33 +231,34 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Start the app the way a Windows user does
+      - name: Start the app and verify it serves (one step, like a user's session)
         # 这份作业就是"一台干净的新电脑"：从空检出开始，走和 start.cmd 完全相同的链路。
         # 它捕的是"新下载的包在这台机器上起不来"这一类问题——2026-09-29 有用户在一台
         # 虚拟机上解压新版本，双击 start.cmd 之后只看到一片空白的页面，而当时 **CI 只对
         # macOS 做了端到端启动**，Windows 侧只有启动器的单元测试，捕不到。
         #
+        # 启动与探活必须**在同一个步骤里**。分开写会间歇性失败：2026-09-29 实测同一个作业
+        # 第一次 1m58s 全过、第二次（同一份启动链代码）就挂在健康检查上，日志里服务是被外部
+        # 收掉的——没有崩溃痕迹、端口只剩 TIME_WAIT。macOS 的端到端作业一开始就是把启动与
+        # curl 写在同一个 run 里，这里照它办。
+        #
         # 这里不直接调 start.cmd：它在失败时会 pause 等按键，在 CI 里会一直挂到作业超时。
         # start.cmd 除了那句 pause 只是转发参数，所以少了它并不改变被测的链路。
-        shell: cmd
-        run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Start-ResumeForge.ps1 -NoBrowser -BackendPort 8123 -FrontendPort 5199
-      - name: Check both health endpoints
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Start-ResumeForge.ps1 -NoBrowser -BackendPort 8123 -FrontendPort 5199
+          if ($LASTEXITCODE -ne 0) { throw "启动器返回了 $LASTEXITCODE" }
+
           foreach ($url in @("http://127.0.0.1:8123/api/health", "http://127.0.0.1:5199/api/health")) {
-            $response = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 20
+            $response = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 30
             if ($response.StatusCode -ne 200) { throw "$url 返回了 $($response.StatusCode)" }
             Write-Host "$url -> 200"
           }
-      - name: Check the frontend really serves its entry module
-        # 端口活着不等于页面能用：Vite 的入口是从 index.html 里引的 /src/main.tsx，
-        # 取不到它浏览器就是一片空白（用户反馈的那个形态）。冷启动要现做依赖预打包，
-        # 所以这里**轮询等**，而不是取一次就判死。
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
+
+          # 端口活着不等于页面能用：Vite 的入口是从 index.html 里引的入口模块，取不到它
+          # 浏览器就是一片空白（用户反馈的那个形态）。冷启动要现做依赖预打包，所以这里
+          # **轮询等**（最多 5 分钟），而不是取一次就判死。
           $deadline = (Get-Date).AddMinutes(5)
           $entry = "/src/main.tsx"
           while ($true) {
