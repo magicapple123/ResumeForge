@@ -1,4 +1,4 @@
-<#
+﻿<#
 ResumeForge updater.
 
 Updates the program files only. User data lives in data\ (database, datasets,
@@ -7,6 +7,9 @@ backups) and in .env, so those paths are never overwritten.
 Two modes:
   * git checkout  -> git pull --ff-only, then sync dependencies
   * plain folder  -> download the repository zip and copy program files over
+
+同步依赖前会先停掉仍在运行的简历通（按 `runtime\*.json` 的记录校验 PID、启动时间与
+命令行），否则 `npm ci` 删不掉被前端占着的 `node_modules`，会以 EPERM 失败。
 
 Run it from the project root with:  update.cmd
 #>
@@ -27,6 +30,11 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptRoot
 $Repository = if ($env:RESUMEFORGE_UPDATE_REPO) { $env:RESUMEFORGE_UPDATE_REPO } else { "magicapple123/ResumeForge" }
 $ArchiveUrl = "https://github.com/$Repository/archive/refs/heads/main.zip"
+
+# Process records and the stop path are shared with start.cmd / stop.cmd: the same
+# PID + start-time + command-line checks decide what may be stopped, so the updater
+# cannot kill an unrelated process that happened to reuse a PID.
+. (Join-Path $ScriptRoot "ResumeForge.Common.ps1")
 
 # Paths that belong to the user or to the local environment; never overwritten.
 $ExcludedNames = @(
@@ -110,6 +118,36 @@ function Stop-FrontendPid {
     if ($LASTEXITCODE -ne 0) {
         throw "Could not stop the ResumeForge frontend (PID $ProcessId)."
     }
+}
+
+<#
+依赖同步要**删掉** `frontend\node_modules` 再重装（npm ci）、还要覆盖
+`backend\.venv` 里的文件，而正在运行的简历通正把这些文件锁在手里：`npm ci` 删不掉
+`node_modules\@esbuild\win32-x64\esbuild.exe` 就会以 EPERM 中断（2026-09-28 有用户
+双击 update.cmd 时就是这么失败的），用户看到的是一页 npm 日志，看不出"关掉应用就能好"。
+
+应用内「检查更新」走的是 -ArchivePath 分支，那里已经先等应用退出、再按传进来的 PID
+停前端。手动双击 update.cmd 没有任何这类机制，所以在这里补上；**只补手动那条路径**——
+在 -ArchivePath 分支里再按记录杀一次，会把正在运行更新器的那个后端连同进程树一起
+杀掉（taskkill /T），更新器自己就没了。
+#>
+function Stop-RunningApplication {
+    foreach ($service in @("frontend", "backend")) {
+        Stop-RecordedProcess `
+            -DisplayName $service `
+            -RecordPath (Join-Path $ProjectRoot "runtime\$service.json") `
+            -CommandPattern (Get-ResumeForgeProcessPattern -Service $service)
+    }
+}
+
+function Write-DependencySyncHint {
+    param([string]$Message)
+    Write-Host ""
+    Write-Host "    Dependency sync failed: $Message" -ForegroundColor Yellow
+    Write-Host "    如果报的是 EPERM / EBUSY / operation not permitted，说明还有进程占着" -ForegroundColor Yellow
+    Write-Host "    frontend\node_modules 或 backend\.venv 里的文件；最常见的原因是简历通还在" -ForegroundColor Yellow
+    Write-Host "    运行（那个 start 窗口没关），杀毒软件也会占同一批文件。" -ForegroundColor Yellow
+    Write-Host "    处理办法：双击 stop.cmd 关掉应用，再运行一次 update.cmd。" -ForegroundColor Yellow
 }
 
 function Copy-ProgramFiles {
@@ -199,24 +237,36 @@ if ($ArchivePath -and -not $DryRun) {
 if ($SkipDependencies) {
     Write-Step "Dependency sync skipped (-SkipDependencies)"
 } else {
-    $requirements = Join-Path $ProjectRoot "backend\requirements.txt"
-    $venvPython = Join-Path $ProjectRoot "backend\.venv\Scripts\python.exe"
-    if ((Test-Path $requirements) -and (Test-Path $venvPython)) {
-        Write-Step "Syncing backend dependencies"
-        Invoke-External -FilePath $venvPython -Arguments @(
-            "-m", "pip", "install", "--disable-pip-version-check", "-r", $requirements
-        ) -WorkingDirectory (Join-Path $ProjectRoot "backend")
-    } else {
-        Write-Host "    Backend virtual environment not found; it will be created on the next start."
+    # 手动更新（没带 -ArchivePath）时先停掉仍在运行的实例：不停就只能等 npm 把
+    # EPERM 甩到屏幕上。应用内更新已经在 -ArchivePath 分支里停过了，别重复。
+    if (-not $ArchivePath -and -not $DryRun) {
+        Write-Step "Stopping a running ResumeForge before touching node_modules / .venv"
+        Stop-RunningApplication
     }
 
+    $requirements = Join-Path $ProjectRoot "backend\requirements.txt"
+    $venvPython = Join-Path $ProjectRoot "backend\.venv\Scripts\python.exe"
     $packageJson = Join-Path $ProjectRoot "frontend\package.json"
     $nodeModules = Join-Path $ProjectRoot "frontend\node_modules"
-    if ((Test-Path $packageJson) -and (Test-Path $nodeModules) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
-        Write-Step "Syncing frontend dependencies (npm ci)"
-        Invoke-External -FilePath "npm" -Arguments @("ci", "--no-audit", "--no-fund") -WorkingDirectory (Join-Path $ProjectRoot "frontend")
-    } else {
-        Write-Host "    Frontend dependencies not installed; they will be installed on the next start."
+    try {
+        if ((Test-Path $requirements) -and (Test-Path $venvPython)) {
+            Write-Step "Syncing backend dependencies"
+            Invoke-External -FilePath $venvPython -Arguments @(
+                "-m", "pip", "install", "--disable-pip-version-check", "-r", $requirements
+            ) -WorkingDirectory (Join-Path $ProjectRoot "backend")
+        } else {
+            Write-Host "    Backend virtual environment not found; it will be created on the next start."
+        }
+
+        if ((Test-Path $packageJson) -and (Test-Path $nodeModules) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
+            Write-Step "Syncing frontend dependencies (npm ci)"
+            Invoke-External -FilePath "npm" -Arguments @("ci", "--no-audit", "--no-fund") -WorkingDirectory (Join-Path $ProjectRoot "frontend")
+        } else {
+            Write-Host "    Frontend dependencies not installed; they will be installed on the next start."
+        }
+    } catch {
+        Write-DependencySyncHint -Message $_.Exception.Message
+        throw
     }
 }
 
