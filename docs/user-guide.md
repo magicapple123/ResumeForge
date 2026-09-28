@@ -806,6 +806,10 @@ HTTP 只允许本机回环地址。图片输入是否可用取决于模型和服
 - 从 Git 克隆的目录走 `git pull --ff-only`，再同步前后端依赖；
 - 从压缩包安装的目录会下载最新源码并覆盖程序文件，`data/`、`.env`、`runtime/`、虚拟环境与
   前端依赖目录一律不动；
+- **手动更新会先停掉还在运行的简历通**（按 `runtime/` 里的进程记录校验 PID、启动时间与命令行，
+  对不上就不动）。同步依赖要删掉 `frontend/node_modules` 重装、还要覆盖 `backend/.venv` 里的文件，
+  运行中的实例会锁住这些文件——不停掉的话 `npm ci` 会以 `EPERM` 失败。应用内安装本来就会先等
+  应用退出，这一步是给手动双击 `update.cmd` 补上的；
 - 想先看它准备做什么：Windows 用 `powershell -File scripts\Update-ResumeForge.ps1 -DryRun`，
   macOS 用 `bash scripts/macos/update.sh --dry-run`。
 
