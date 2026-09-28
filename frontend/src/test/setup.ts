@@ -14,9 +14,98 @@ import { configure } from "@testing-library/react";
 configure({ asyncUtilTimeout: 15000 });
 
 const jsdomGetComputedStyle = window.getComputedStyle.bind(window);
+
+// 只在测试里成立的 display 缺省值。判定依据是 HTML 的 UA 样式表对这几个标签的约定，
+// 不是本项目自己的 CSS。
+const INLINE_TAGS = new Set([
+  "a",
+  "abbr",
+  "b",
+  "bdi",
+  "bdo",
+  "cite",
+  "code",
+  "data",
+  "dfn",
+  "em",
+  "i",
+  "kbd",
+  "label",
+  "mark",
+  "q",
+  "s",
+  "samp",
+  "small",
+  "span",
+  "strong",
+  "sub",
+  "sup",
+  "time",
+  "u",
+  "var",
+]);
+const REPLACED_TAGS = new Set(["button", "input", "select", "textarea", "img", "svg", "iframe"]);
+const NEVER_RENDERED_TAGS = new Set([
+  "script",
+  "style",
+  "link",
+  "meta",
+  "title",
+  "head",
+  "template",
+  "noscript",
+]);
+
+/**
+ * 无障碍查询真正会读的只有 `display` 与 `visibility`，这里按内联样式快速回答，
+ * 读不到就给一个符合 UA 样式的缺省值；其余属性返回 null 表示"照旧交给 jsdom"。
+ */
+function fastStyleProperty(element: Element, property: string): string | null {
+  if (property !== "display" && property !== "visibility") return null;
+  const inline = (element as HTMLElement).style?.getPropertyValue(property);
+  if (inline) return inline;
+  if (property === "visibility") return "visible";
+  const tag = element.tagName.toLowerCase();
+  if (NEVER_RENDERED_TAGS.has(tag)) return "none";
+  if (INLINE_TAGS.has(tag)) return "inline";
+  if (REPLACED_TAGS.has(tag)) return "inline-block";
+  return "block";
+}
+
+// jsdom 的 getComputedStyle 会把文档里每个样式表的规则跑一遍级联匹配，而 antd 的 CSS-in-JS
+// 给每个页面注入三四十张样式表、上千条规则；@testing-library 的 `getByRole` 要对**每个候选
+// 元素**问一次 display / visibility（`isInaccessible` 还要沿祖先链逐级问），于是"挂载之后
+// 第一次按角色查找"实测要 2.6 秒，同一批元素第二次只要 13 毫秒——那 2.6 秒全部花在级联上。
+//
+// 后果落在重页面（设置页、我的资料）上：单个用例光查询就吃掉十几秒，30 秒的用例预算在 CI 上
+// 直接不够用（2026-09-28 CI 上「编辑态可以修改自定义字段名并保留原值」就是等满 30 秒超时的）。
+//
+// 测试不校验视觉，所以这里让 `display` / `visibility` 走内联样式 + UA 缺省值，绕过级联；
+// 代理转发其余一切取法，`toHaveStyle` 之类仍然拿得到 jsdom 的真实值。已知代价：**只由样式表**
+// 设置的 `display: none` 不再被 `getByRole` 当成隐藏，而本项目没有依赖它的用例。
 Object.defineProperty(window, "getComputedStyle", {
   configurable: true,
-  value: (element: Element) => jsdomGetComputedStyle(element),
+  value: (element: Element, pseudoElement?: string | null) => {
+    // ::before / ::after 的内容由样式表决定，没法用缺省值代替。
+    if (pseudoElement) return jsdomGetComputedStyle(element, pseudoElement);
+    // 惰性：只有真要读别的属性时才去调 jsdom（那一次调用才是贵的）。
+    let real: CSSStyleDeclaration | null = null;
+    const realStyle = () => (real ??= jsdomGetComputedStyle(element));
+    return new Proxy({} as CSSStyleDeclaration, {
+      get(_target, property) {
+        if (typeof property === "string") {
+          const fast = fastStyleProperty(element, property);
+          if (fast !== null) return fast;
+          if (property === "getPropertyValue") {
+            return (name: string) =>
+              fastStyleProperty(element, name) ?? realStyle().getPropertyValue(name);
+          }
+        }
+        const value = Reflect.get(realStyle(), property, real);
+        return typeof value === "function" ? value.bind(real) : value;
+      },
+    });
+  },
 });
 
 class ResizeObserverMock {
