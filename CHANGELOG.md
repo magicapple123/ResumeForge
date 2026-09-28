@@ -8,6 +8,12 @@
 
 ### Fixed
 
+### Changed
+
+## 0.14.1 - 2026-09-29
+
+### Fixed
+
 - **手动更新不再因为"应用还开着"而失败。** 双击 `update.cmd` 时如果简历通还在运行，
   `npm ci` 会删不掉被前端占着的 `node_modules\@esbuild\win32-x64\esbuild.exe`，以
   `EPERM: operation not permitted, unlink ...` 中断。用户看到的是一页 npm 日志，
@@ -21,8 +27,6 @@
   占着（杀毒软件也会占同一批文件），失败信息会直接写明"先双击 stop.cmd 关掉应用再运行一次"。
 
   macOS 侧不受影响：Unix 允许删除正在使用的文件，`update.command` 不会遇到这个错。
-
-### Changed
 
 ## 0.14.0 - 2026-09-28
 
