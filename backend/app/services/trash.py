@@ -1,13 +1,13 @@
-"""回收站：十三类内容的软删除、恢复与彻底删除。
+"""回收站：十五类内容的软删除、恢复与彻底删除。
 
 **为什么是软删除**（一个 ``deleted_at`` 时间戳）而不是把行搬到另一张表：搬表意味着外键、快照
 字段、去重判据全部要重建一遍，而这些现在都是好的。软删除只多一句"什么时候删的"，列表查询加
 ``IS NULL``、回收站看非 NULL、恢复就是清空时间戳——三处都极难写错。
 
-**范围克制**：只覆盖用户真正会心疼的十三类——岗位、简历记录、投递记录、事实台账条目、资料箱
-材料、助手会话、面经、内推、提醒、分享包、题库历史、复盘历史、知识库。列级别、模板副本、
-数据集这类要么有明确的沿用关系、要么本来就能重建，不做回收站；每个可删项都进回收站，只会让
-回收站自己变成垃圾场。
+**范围克制**：只覆盖用户真正会心疼的十五类——岗位、简历记录、投递记录、事实台账条目、资料箱
+材料、助手会话、面经、内推、提醒、分享包、题库历史、复盘历史、知识库、网申填充记录。列级别、
+模板副本、数据集这类要么有明确的沿用关系、要么本来就能重建，不做回收站；每个可删项都进回收站，
+只会让回收站自己变成垃圾场。
 
 **完整性红线**：凡是模型里带 ``deleted_at`` 列的表，都必须在这里登记（``TRASH_SPECS``），否则
 就会出现"半软删"——列表里消失、回收站里也找不到、既不能恢复也无法彻底删除，形成永久僵尸行。
@@ -36,6 +36,7 @@ from typing import Any, Callable
 from sqlalchemy.orm import Session
 
 from ..models.assistant import ChatConversation
+from ..models.apply import ApplyTaskItem
 from ..models.claim import ClaimRecord
 from ..models.interview_experience import InterviewExperience
 from ..models.interview_review_record import InterviewReviewRecord
@@ -49,6 +50,7 @@ from ..models.reminder import Reminder
 from ..models.resume import ResumeRecord
 from ..models.share_package import SharePackage
 from ..models.tracker import ApplicationTrack
+from ..models.web_form_record import WebFormFillRecord
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +85,8 @@ def _referral_title(item: Any) -> str:
 
 
 # 顺序即回收站的展示顺序（越靠前越常用）。
-# 前六类来自迁移 0016，中四类来自迁移 0018，后三类来自迁移 0019——**全部含 ``deleted_at`` 列**，
-# 缺一类就是"半软删"。
+# 前六类来自迁移 0016，中四类来自迁移 0018，后三类来自迁移 0019，最后两类来自迁移 0027
+# ——**全部含 ``deleted_at`` 列**，缺一类就是"半软删"。
 TRASH_SPECS: tuple[TrashSpec, ...] = (
     TrashSpec("job", "岗位", Job, "title", "company"),
     TrashSpec("resume", "简历记录", ResumeRecord, "title", "company"),
@@ -107,6 +109,10 @@ TRASH_SPECS: tuple[TrashSpec, ...] = (
         "company",
     ),
     TrashSpec("knowledge_entry", "知识库", KnowledgeEntry, "title"),
+    # 投递记录：一条 = 批次内的一个岗位。界面上按批次折叠，整批删就是逐条软删该批次的记录
+    # （批次 ``ApplyTask`` 本身不删——删了列表会缺组、统计会跳变）。
+    TrashSpec("apply_record", "投递记录", ApplyTaskItem, "job_title", "company"),
+    TrashSpec("web_form_record", "网申填充记录", WebFormFillRecord, "page_title", "url"),
 )
 
 TRASH_SPEC_BY_KEY: dict[str, TrashSpec] = {spec.key: spec for spec in TRASH_SPECS}
@@ -124,7 +130,7 @@ def spec_or_none(key: str) -> TrashSpec | None:
 def live_only(model: Any) -> Any:
     """查询条件：只取**未被软删除**的行。
 
-    抽成一个函数是为了让"哪张表用哪个列名"只写一次——六张表各写一遍 ``deleted_at.is_(None)``，
+    抽成一个函数是为了让"哪张表用哪个列名"只写一次——各表都写一遍 ``deleted_at.is_(None)``，
     总有一次会写成 ``is_(True)`` 或漏掉，而那种错**不会报错**，只会让回收站里的东西继续出现在
     列表里（用户以为删除失败）。
     """

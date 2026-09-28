@@ -30,6 +30,7 @@
 | 收藏夹 | `pages/FavoritesPage.tsx` | `jobs.ts` `resumes.ts` | `/api/jobs` `/api/resumes` | 复用 `job/job_service.py` / 简历服务 | `job.py` `resume.py` |
 | 简历中心 | `pages/ResumesPage.tsx` | `resumes.ts` `resumeTemplates.ts` `resumeWriting.ts` `resumeRisk.ts` | `/api/resumes` `/api/resume-templates` | `resume/resume_generator.py` `resume/resume_content.py` `resume/resume_grounding.py` `resume/resume_layout.py` `pdf_exporter.py` `docx_exporter.py` `export_pipeline.py` | `resume.py` `resume_template.py` |
 | 投递台 | `pages/ApplyPage.tsx` | `apply.ts` `candidateJob.ts` | `/api/apply` `/api/collect` `/api/candidate-jobs` | `services/apply/*` `services/sites/*` `services/browser/*` | `apply.py` `material.py`(CandidateJob) |
+| 网申填表 | `pages/WebFormPage.tsx` + `components/webform/*` | `webform.ts` | `/api/webform` | `services/webform/*`（引擎、匹配、字段目录、快照仓、填充记录、网申资料、实时会话、AI 兜底） | `profile.py`(UserProfile 的网申字段) `web_form_record.py` `web_form_profile.py` |
 | 求职进度 | `pages/TrackerPage.tsx` | `tracker.ts` | `/api/tracker` | `tracker.py` `tracker_extract.py` | `tracker.py` |
 | 求职统计 | `pages/AnalyticsPage.tsx` | `analytics.ts` | `/api/analytics` | `analytics.py` `ratios.py` `resume/resume_health.py` | 只读派生 |
 | 模拟面试 | `pages/InterviewPage.tsx` | `interview.ts` `interviewExperiences.ts` | `/api/interview` `/api/interview-experiences` | `interview/interview.py` `interview/interview_questions.py` `interview/interview_experience_service.py` | `interview.py` `interview_experience.py` `question_bank_record.py` `interview_review_record.py` |
@@ -65,8 +66,9 @@
 | `services/job/` `services/jd/` | 岗位域 / JD 规则 | 服务、匹配、需求解读；技能学历年限规则 |
 | `services/assistant/` `services/interview/` | 助手域 / 面试域 | 服务、技能、来源、搜索；模拟面试、题库、面经 |
 | `services/llm/` | 大模型抽象 | OpenAI 兼容 + Anthropic 原生，一个 Provider 接口 |
-| `services/apply/` | 投递编排 | 任务运行器、采集、投递执行、表单引擎 |
-| `services/browser/` | 浏览器桥接 | CDP 客户端、投递专用浏览器、页面就绪等待 |
+| `services/apply/` | 投递编排 | 任务运行器、采集、投递执行、准入闸门 |
+| `services/webform/` | 网申填表 | 通用表单引擎、取值匹配、字段目录、快照仓、填充记录、网申资料、实时会话、AI 兜底（**只填不交**） |
+| `services/browser/` | 浏览器桥接 | CDP 客户端、受控浏览器、页面就绪等待、可信鼠标事件 |
 | `services/sites/` | 站点适配器 | base 契约 + registry 分发 + 单站点实现 |
 | `services/assistant_tools/` | 助手工具 | 工具注册表与 handler，按域拆 `job_tools`/`data_tools` 等 |
 | `services/job_parser/` `services/profile_parser/` | 文本规则解析 | 粘贴招聘信息/资料的本地规则 |

@@ -46,6 +46,8 @@ from ._queue import (
 )
 from ._records import (
     daily_success_count,
+    delete_record,
+    delete_record_batch,
     list_record_batches,
     list_records,
     mark_queue_done,
@@ -98,6 +100,8 @@ __all__ = [
     "daily_success_count",
     "default_entry_url",
     "delete_match",
+    "delete_record",
+    "delete_record_batch",
     "fail_orphaned_tasks",
     "get_apply_config",
     "get_browser_manager",

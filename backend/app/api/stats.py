@@ -80,9 +80,10 @@ def get_stats(db: Session = Depends(get_db)):
 
     # 最近投递结果：只取成功条目，失败在看板上有专门的地方看。
     # 按 finished_at 排序——"最近投出去的那个"是投递**结束**的时刻，不是入队的时刻。
+    # 用户删掉的投递记录要一并排除（删了就真没了，首页统计与列表口径必须一致）。
     latest_application_rows = (
         db.query(ApplyTaskItem)
-        .filter(ApplyTaskItem.status == ITEM_STATUS_SUCCESS)
+        .filter(ApplyTaskItem.status == ITEM_STATUS_SUCCESS, trash.live_only(ApplyTaskItem))
         .order_by(ApplyTaskItem.finished_at.desc())
         .limit(_LATEST_LIMIT)
         .all()

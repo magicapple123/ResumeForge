@@ -1,9 +1,14 @@
-"""投递回写与记录（按批次分组）。"""
+"""投递回写与记录（按批次分组）。
+
+**投递记录可被用户删除**（软删，进退回收站），所以这里每一处查询都必须过
+``trash.live_only(ApplyTaskItem)``——漏一处不会报错，只会让已删的记录继续出现在列表或计数里。
+"""
 from __future__ import annotations
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from .. import trash
 from ...models.apply import (
     FAILURE_CATEGORY_LABELS,
     QUEUE_STATUS_DONE,
@@ -36,11 +41,20 @@ def mark_queue_done(db: Session, job_id: int | None) -> None:
 
 
 def daily_success_count(db: Session) -> int:
-    """今天（UTC 自然日）已成功的投递数——每日上限**只计成功投递**。"""
+    """今天（UTC 自然日）已成功的投递数——每日上限**只计成功投递**。
+
+    **必须排除用户已删的记录**：每日上限是"你还能投几个"的依据，而用户删掉一条成功记录
+    就是要它不算数（"删了就真没了"）。漏了这个过滤，删记录会**悄悄放宽**每日上限——
+    数字看起来正常，行为却与用户的理解相反。
+    """
     start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     return (
         db.query(func.count(ApplyTaskItem.id))
-        .filter(ApplyTaskItem.status == "success", ApplyTaskItem.finished_at >= start)
+        .filter(
+            ApplyTaskItem.status == "success",
+            ApplyTaskItem.finished_at >= start,
+            trash.live_only(ApplyTaskItem),
+        )
         .scalar()
         or 0
     )
@@ -77,7 +91,7 @@ def list_records(
     query = (
         db.query(ApplyTaskItem)
         .join(ApplyTask, ApplyTaskItem.task_id == ApplyTask.id)
-        .filter(ApplyTask.kind == TASK_KIND_APPLY)
+        .filter(ApplyTask.kind == TASK_KIND_APPLY, trash.live_only(ApplyTaskItem))
     )
     if keyword:
         like = f"%{keyword}%"
@@ -114,7 +128,7 @@ def list_record_batches(
     item_query = (
         db.query(ApplyTaskItem)
         .join(ApplyTask, ApplyTaskItem.task_id == ApplyTask.id)
-        .filter(ApplyTask.kind == TASK_KIND_APPLY)
+        .filter(ApplyTask.kind == TASK_KIND_APPLY, trash.live_only(ApplyTaskItem))
     )
     if keyword:
         like = f"%{keyword}%"
@@ -148,7 +162,9 @@ def list_record_batches(
             (ApplyTaskItem.id == matched_items.c.id)
             & (ApplyTaskItem.task_id == matched_items.c.task_id),
         )
-        .filter(ApplyTaskItem.task_id.in_(batch_id_list))
+        # 这条过滤在 ``matched_items`` 里已经有了，这里再加一次是**故意的**：
+        # 本查询直接查 ``ApplyTaskItem``，将来有人改上面的 `item_query` 时不会想到这里。
+        .filter(ApplyTaskItem.task_id.in_(batch_id_list), trash.live_only(ApplyTaskItem))
         .order_by(ApplyTaskItem.sort_order, ApplyTaskItem.id)
         .all()
     )
@@ -172,4 +188,34 @@ def list_record_batches(
         for task in batch_rows
     ]
     return batches, total
+
+
+# ===== 删除记录（软删，进退回收站）=====
+
+
+def delete_record(db: Session, item_id: int) -> bool:
+    """删掉单条投递记录。不存在或已删返回 False（不抛，由路由决定怎么报）。"""
+    item = trash.get_live(db, ApplyTaskItem, item_id)
+    if item is None:
+        return False
+    trash.soft_delete(db, "apply_record", item)
+    db.commit()
+    return True
+
+
+def delete_record_batch(db: Session, task_id: int) -> bool:
+    """删掉一整批投递记录，返回是否删到了东西。
+
+    **只软删记录，不动 ``ApplyTask`` 批次本身**：批次是列表的分组键，删掉它整组会从列表消失、
+    统计也会跳变；用户想清掉的是"这一批填进去的记录"。批次因此可能变成空组，由界面收起。
+
+    ``synchronize_session=False``：这些行已经取到手，不需要 ORM 再回写会话里的对象状态
+    （回写反而可能在批量软删时逐个 UPDATE，慢且无意义）。
+    """
+    query = db.query(ApplyTaskItem).filter(
+        ApplyTaskItem.task_id == task_id, trash.live_only(ApplyTaskItem)
+    )
+    affected = query.update({ApplyTaskItem.deleted_at: utcnow()}, synchronize_session=False)
+    db.commit()
+    return bool(affected)
 

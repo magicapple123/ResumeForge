@@ -1,6 +1,6 @@
 /** 投递记录（按批次分组）：组头统计、展开看明细、详情 Drawer 完整失败信息（含 URL）。 */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyRecord, ApplyRecordBatch, Page } from "../../types";
 import ApplyRecordsPanel from "./ApplyRecordsPanel";
@@ -8,11 +8,15 @@ import ApplyRecordsPanel from "./ApplyRecordsPanel";
 const apiMocks = vi.hoisted(() => ({
   listRecordBatches: vi.fn(),
   retryRecord: vi.fn(),
+  deleteRecord: vi.fn(),
+  deleteRecordBatch: vi.fn(),
 }));
 
 vi.mock("../../api/apply", () => ({
   listRecordBatches: apiMocks.listRecordBatches,
   retryRecord: apiMocks.retryRecord,
+  deleteRecord: apiMocks.deleteRecord,
+  deleteRecordBatch: apiMocks.deleteRecordBatch,
 }));
 
 const RECORD: ApplyRecord = {
@@ -112,7 +116,7 @@ describe("ApplyRecordsPanel (grouped by batch)", () => {
     expect(screen.getByTestId("record-batch-7")).toBeInTheDocument();
     expect(screen.getByTestId("record-batch-6")).toBeInTheDocument();
     // 组头展示批次号与统计（成功/失败/跳过是该批次自己的账）。
-    const head7 = within(screen.getByTestId("record-batch-7")).getByRole("button");
+    const head7 = batchHead(7);
     expect(within(head7).getByText("批次 #7")).toBeInTheDocument();
     expect(within(head7).getByText(/成功 1/)).toBeInTheDocument();
     expect(within(head7).getByText(/失败 1/)).toBeInTheDocument();
@@ -172,5 +176,53 @@ describe("ApplyRecordsPanel (grouped by batch)", () => {
       </AntdApp>,
     );
     expect(await screen.findByText("还没有投递记录")).toBeInTheDocument();
+  });
+});
+
+describe("删除投递记录", () => {
+  it("整批删：组头的「删除本批」带二次确认，确认后调接口并刷新", async () => {
+    apiMocks.deleteRecordBatch.mockResolvedValue(undefined);
+    await renderPanel();
+
+    fireEvent.click(batchHead(7));
+    await screen.findByText("高级后端工程师（高并发方向）");
+
+    fireEvent.click(screen.getByRole("button", { name: "删除批次 7" }));
+    // 必须二次确认——删除是用户可见的破坏性动作。
+    expect(await screen.findByText(/删除这一批的 2 条记录/)).toBeInTheDocument();
+    expect(apiMocks.deleteRecordBatch).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: "确认删除批次 7" }));
+
+    await waitFor(() => expect(apiMocks.deleteRecordBatch).toHaveBeenCalledWith(7));
+  });
+
+  it("单条删：行内的删除按钮带二次确认，确认后按记录 id 调接口", async () => {
+    apiMocks.deleteRecord.mockResolvedValue(undefined);
+    await renderPanel();
+
+    fireEvent.click(batchHead(7));
+    await screen.findByText("高级后端工程师（高并发方向）");
+
+    fireEvent.click(screen.getByRole("button", { name: /删除记录 高级后端工程师/ }));
+    expect(await screen.findByText("删除这条投递记录？")).toBeInTheDocument();
+    expect(apiMocks.deleteRecord).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: "确认删除记录 1" }));
+
+    await waitFor(() => expect(apiMocks.deleteRecord).toHaveBeenCalledWith(1));
+  });
+
+  it("取消时什么都不做——二次确认必须真的拦得住", async () => {
+    await renderPanel();
+
+    fireEvent.click(batchHead(7));
+    await screen.findByText("高级后端工程师（高并发方向）");
+    fireEvent.click(screen.getByRole("button", { name: "删除批次 7" }));
+    await screen.findByText(/删除这一批/);
+
+    fireEvent.click(await screen.findByRole("button", { name: "取消删除批次 7" }));
+
+    expect(apiMocks.deleteRecordBatch).not.toHaveBeenCalled();
   });
 });

@@ -21,20 +21,8 @@ import {
 import { useEffect, useState } from "react";
 import { getApplyConfig, listSites, updateApplyConfig } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
-import {
-  BROWSER_CHOICE_META,
-  type ApplyConfig,
-  type ApplyConfigOut,
-  type BrowserChoice,
-  type SiteList,
-} from "../../types";
-
-const BROWSER_CHOICE_OPTIONS = (Object.keys(BROWSER_CHOICE_META) as BrowserChoice[]).map(
-  (value) => ({
-    value,
-    label: BROWSER_CHOICE_META[value].label,
-  }),
-);
+import { type ApplyConfig, type ApplyConfigOut, type SiteList } from "../../types";
+import BrowserChoiceFields from "./BrowserChoiceFields";
 
 interface Props {
   open: boolean;
@@ -54,8 +42,6 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
   const { data: siteList } = useApi<SiteList>(listSites, []);
   const [saving, setSaving] = useState(false);
   const defaults = data?.defaults;
-  // 只有选了「自定义路径」才需要填路径。
-  const browserChoice = Form.useWatch("browser_choice", form);
   const siteOptions = (siteList?.sites ?? []).map((site) => ({
     value: site.key,
     label: site.display_name,
@@ -167,26 +153,7 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
 
       <Divider plain style={{ margin: "4px 0 16px" }} />
 
-      <Space size={16} wrap>
-        <Form.Item
-          name="browser_choice"
-          label="投递台使用的浏览器"
-          extra={browserChoice ? BROWSER_CHOICE_META[browserChoice]?.hint : undefined}
-        >
-          <Select options={BROWSER_CHOICE_OPTIONS} style={{ width: 220 }} />
-        </Form.Item>
-        <Form.Item
-          name="browser_path"
-          label="自定义浏览器路径"
-          extra="仅在「自定义路径」时生效；必须是真实存在的可执行文件。"
-        >
-          <Input
-            placeholder="例如：C:\\Program Files\\MyBrowser\\browser.exe"
-            disabled={browserChoice !== "custom"}
-            style={{ width: 320 }}
-          />
-        </Form.Item>
-      </Space>
+      <BrowserChoiceFields label="投递台使用的浏览器" />
 
       <Form.Item
         name="browser_port"

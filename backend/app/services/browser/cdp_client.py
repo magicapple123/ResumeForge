@@ -329,17 +329,22 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
         except CdpError:
             raise
         except Exception as exc:  # noqa: BLE001 - 传输层异常统一收敛为可展示的中文提示
+            # 浏览器重启后，旧页面目标里的 WebSocket 地址也会失效。清掉目标，
+            # 让下一次调用重新从 /json/list 发现当前页面，而不是反复连接旧页面。
+            self._reset_connection(clear_target=True)
             raise CdpError("无法连接投递专用浏览器的调试通道，请确认浏览器仍在运行") from exc
         self._connection = connection
         return connection
 
-    def _reset_connection(self) -> None:
+    def _reset_connection(self, *, clear_target: bool = False) -> None:
         if self._connection is not None:
             try:
                 self._connection.close()
             except Exception:  # noqa: BLE001 - 关闭失败不该阻断后续流程
                 pass
         self._connection = None
+        if clear_target:
+            self._target = None
 
     def send(
         self, method: str, params: dict[str, Any] | None = None, *, timeout: float | None = None
@@ -357,7 +362,7 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
         try:
             connection.send(json.dumps(payload, ensure_ascii=False))
         except Exception as exc:  # noqa: BLE001
-            self._reset_connection()
+            self._reset_connection(clear_target=True)
             raise CdpError(f"CDP 命令 {method} 发送失败，连接可能已断开") from exc
 
         deadline = time.monotonic() + effective_timeout
@@ -367,10 +372,10 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
             try:
                 frame = connection.recv()
             except Exception as exc:  # noqa: BLE001
-                self._reset_connection()
+                self._reset_connection(clear_target=True)
                 raise CdpError(f"CDP 命令 {method} 收发失败或超时，请确认浏览器仍在运行") from exc
             if frame is None or frame == "":
-                self._reset_connection()
+                self._reset_connection(clear_target=True)
                 raise CdpError(f"CDP 连接在等待 {method} 结果时被关闭")
             try:
                 message = json.loads(frame)
@@ -496,6 +501,5 @@ __all__ = [
     "WebsocketCdpClient",
     "WindowAwareMixin",
 ]
-
 
 

@@ -99,9 +99,15 @@ class EducationIn(ReferenceFileFields):
     school: str = Field(default="", max_length=128)
     major: str = Field(default="", max_length=128)
     degree: str = Field(default="", max_length=32)
+    study_mode: str = Field(default="", max_length=32)  # 全日制/非全日制
+    degree_type: str = Field(default="", max_length=32)  # 学士/硕士/博士（学位类型）
+    department: str = Field(default="", max_length=128)  # 院系
     start_date: str = Field(default="", max_length=32)
     end_date: str = Field(default="", max_length=32)
     gpa: str = Field(default="", max_length=64)
+    # 四六级分数：网申表单要具体分数，而成绩属于某段学历期间，所以录在教育经历上。
+    cet4_score: str = Field(default="", max_length=16)
+    cet6_score: str = Field(default="", max_length=16)
     courses: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
     achievements: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
 
@@ -186,6 +192,25 @@ class ProfileUpdate(BaseModel):
     job_intent: str = Field(default="", max_length=128)
     personal_website: str = Field(default="", max_length=256)
     github: str = Field(default="", max_length=256)
+    # ===== 网申专用字段 =====
+    # 公司自建网申系统（腾讯校招那类）的必填项。**只服务「网申填表」**：不进简历导出、
+    # 不进 `ResumeContent`、不编入发给模型的资料提示词（白名单在
+    # `services/profile/profile_relevance_constants.py::_LLM_PROFILE_FIELDS`）。
+    # 其中 `id_number` 属高敏感数据——改那一组白名单时要单独审视。
+    wechat: str = Field(default="", max_length=64)
+    birth_date: str = Field(default="", max_length=32)
+    id_type: str = Field(default="", max_length=32)
+    id_number: str = Field(default="", max_length=64)
+    country_region: str = Field(default="", max_length=64)
+    native_place: str = Field(default="", max_length=64)
+    political_status: str = Field(default="", max_length=32)
+    phone_country_code: str = Field(default="+86", max_length=8)
+    family_info: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)
+    expected_salary: str = Field(default="", max_length=64)
+    qq: str = Field(default="", max_length=32)
+    advisor: str = Field(default="", max_length=64)
+    research_direction: str = Field(default="", max_length=128)
+    preferred_industry: str = Field(default="", max_length=128)
     photo: str = ""
     summary: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)
     section_order: list[str] = Field(

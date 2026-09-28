@@ -147,6 +147,7 @@ def test_send_wraps_a_broken_connection_as_timeout_error():
 
     with pytest.raises(CdpError, match="收发失败或超时"):
         client.send("Runtime.evaluate", {})
+    assert client._target is None, "连接断开后必须忘掉旧页面目标，便于浏览器重启后重新发现页面"
 
 
 def test_send_rejects_an_unparseable_frame():

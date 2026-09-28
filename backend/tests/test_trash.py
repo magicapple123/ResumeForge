@@ -330,8 +330,8 @@ def test_every_deleted_at_table_is_registered():
         name for name, table in Base.metadata.tables.items() if "deleted_at" in table.columns
     }
     assert soft_deleted == set(trash.TRASHED_TABLES)
-    # 6（0016）+ 4（0018）+ 3（0019）= 13 类。
-    assert len(trash.TRASHED_TABLES) == 13
+    # 6（0016）+ 4（0018）+ 3（0019）+ 2（0027）= 15 类。
+    assert len(trash.TRASHED_TABLES) == 15
     assert "job" in trash.TRASHED_TABLES and "chat_conversation" in trash.TRASHED_TABLES
     assert {
         "interview_experience",
@@ -344,6 +344,8 @@ def test_every_deleted_at_table_is_registered():
         "interview_review_record",
         "knowledge_entry",
     } <= set(trash.TRASHED_TABLES)
+    # 0027 新增的两类：投递记录（原本不可删）与网申填充记录（本次新建）。
+    assert {"apply_task_item", "web_form_fill_record"} <= set(trash.TRASHED_TABLES)
 
 
 def test_interview_experience_full_trash_cycle(client):

@@ -16,12 +16,12 @@ import {
 import { Alert, App, Button, Space, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { getBrowserStatus, openBrowserSite, startBrowser, stopBrowser } from "../../api/apply";
-import { useApi } from "../../hooks/useApi";
-import { BROWSER_STATE_META, type BrowserStatus } from "../../types";
+import { useBrowserStatus } from "../../hooks/useBrowserStatus";
+import { BROWSER_STATE_META } from "../../types";
 
 export default function BrowserStatusBar() {
   const { message } = App.useApp();
-  const { data, loading, error, reload, setData } = useApi<BrowserStatus>(getBrowserStatus, []);
+  const { data, loading, error, reload, setData } = useBrowserStatus(getBrowserStatus);
   const [busy, setBusy] = useState(false);
 
   const handleStart = async () => {
@@ -92,7 +92,7 @@ export default function BrowserStatusBar() {
             type="primary"
             icon={<PlayCircleOutlined />}
             loading={busy}
-            disabled={running}
+            disabled={running || busy}
             onClick={() => void handleStart()}
           >
             启动浏览器
@@ -107,7 +107,7 @@ export default function BrowserStatusBar() {
             <Button
               icon={<LinkOutlined />}
               loading={busy}
-              disabled={!canOpenSite}
+              disabled={!canOpenSite || busy}
               onClick={() => void handleOpenSite()}
             >
               打开招聘网站
@@ -116,7 +116,7 @@ export default function BrowserStatusBar() {
           <Button
             icon={<StopOutlined />}
             loading={busy}
-            disabled={!canStop}
+            disabled={!canStop || busy}
             onClick={() => void handleStop()}
           >
             关闭浏览器
@@ -124,6 +124,7 @@ export default function BrowserStatusBar() {
           <Tooltip title="重新检查当前状态">
             <Button
               icon={<ReloadOutlined />}
+              disabled={busy}
               onClick={() => void reload()}
               aria-label="刷新浏览器状态"
             >

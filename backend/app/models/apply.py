@@ -296,3 +296,9 @@ class ApplyTaskItem(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # 软删除时间戳：NULL 表示「没删」。用户能删掉某条投递记录（或整批），删后进回收站。
+    #
+    # **删了就真没了**：列表、首页统计与「每日上限」的已用量都不再算它
+    # （见 ``services/apply/_records.py`` 与 ``api/stats.py`` 里的 ``trash.live_only`` 过滤）——
+    # 这是用户明确选定的语义：他自己删的，就该从计数里消失。
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

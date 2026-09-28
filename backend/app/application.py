@@ -40,6 +40,7 @@ from .api import (
     tracker,
     trash,
     update as update_api,
+    webform,
 )
 from . import database
 from .config import get_settings
@@ -158,6 +159,7 @@ def create_app() -> FastAPI:
         analytics.router,
         apply.router,
         apply.collect_router,
+        webform.router,
         tracker.router,
         settings_api.router,
         datasets.router,

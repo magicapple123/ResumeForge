@@ -4,6 +4,7 @@ import {
   BookOutlined,
   DeleteOutlined,
   FileTextOutlined,
+  FormOutlined,
   FunnelPlotOutlined,
   GithubOutlined,
   HomeOutlined,
@@ -41,6 +42,7 @@ const ClaimsPage = lazy(() => import("./pages/ClaimsPage"));
 const DrillPage = lazy(() => import("./pages/DrillPage"));
 const ResumesPage = lazy(() => import("./pages/ResumesPage"));
 const ApplyPage = lazy(() => import("./pages/ApplyPage"));
+const WebFormPage = lazy(() => import("./pages/WebFormPage"));
 const TrackerPage = lazy(() => import("./pages/TrackerPage"));
 const FavoritesPage = lazy(() => import("./pages/FavoritesPage"));
 const AssistantPage = lazy(() => import("./pages/AssistantPage"));
@@ -72,6 +74,7 @@ export const MENU_ITEMS = [
   { key: "/resumes", icon: <FileTextOutlined />, label: "简历中心" },
   // 投递与跟进
   { key: "/apply", icon: <SendOutlined />, label: "投递台" },
+  { key: "/webform", icon: <FormOutlined />, label: "网申填表" },
   { key: "/tracker", icon: <FunnelPlotOutlined />, label: "求职进度" },
   { key: "/analytics", icon: <BarChartOutlined />, label: "求职统计" },
   // 面试准备
@@ -220,6 +223,7 @@ export default function App() {
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/resumes" element={<ResumesPage />} />
         <Route path="/apply" element={<ApplyPage />} />
+        <Route path="/webform" element={<WebFormPage />} />
         <Route path="/tracker" element={<TrackerPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/favorites" element={<FavoritesPage />} />

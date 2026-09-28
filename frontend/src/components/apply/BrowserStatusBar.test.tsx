@@ -155,4 +155,13 @@ describe("BrowserStatusBar", () => {
 
     expect(screen.queryByText(/关不掉它/)).not.toBeInTheDocument();
   });
+
+  it("提供手动刷新入口，并把刷新动作交给状态 hook", () => {
+    apiState.data = RUNNING_WITH_ENTRY;
+    renderBar();
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新浏览器状态" }));
+
+    expect(apiState.reload).toHaveBeenCalledTimes(1);
+  });
 });
