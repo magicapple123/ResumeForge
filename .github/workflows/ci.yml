@@ -213,6 +213,97 @@ jobs:
           curl -v --max-time 5 http://127.0.0.1:8123/api/health || echo "8123 健康检查失败"
 
 
+  windows-end-to-end:
+    name: Windows end-to-end (clean checkout)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        # 显式装一个窗口内的解释器：这一步不测"找不到 Python 时去下载安装包"那条路
+        # （那条路要走 python.org 的静默安装，在 runner 上会引入与启动链无关的失败），
+        # 测的是纯净检出上的整条启动链：建 venv → 装依赖 → 起 uvicorn 与 vite → 健康检查。
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Start the app the way a Windows user does
+        # 这份作业就是"一台干净的新电脑"：从空检出开始，走和 start.cmd 完全相同的链路。
+        # 它捕的是"新下载的包在这台机器上起不来"这一类问题——2026-09-29 有用户在一台
+        # 虚拟机上解压新版本，双击 start.cmd 之后只看到一片空白的页面，而当时 **CI 只对
+        # macOS 做了端到端启动**，Windows 侧只有启动器的单元测试，捕不到。
+        #
+        # 这里不直接调 start.cmd：它在失败时会 pause 等按键，在 CI 里会一直挂到作业超时。
+        # start.cmd 除了那句 pause 只是转发参数，所以少了它并不改变被测的链路。
+        shell: cmd
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Start-ResumeForge.ps1 -NoBrowser -BackendPort 8123 -FrontendPort 5199
+      - name: Check both health endpoints
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($url in @("http://127.0.0.1:8123/api/health", "http://127.0.0.1:5199/api/health")) {
+            $response = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 20
+            if ($response.StatusCode -ne 200) { throw "$url 返回了 $($response.StatusCode)" }
+            Write-Host "$url -> 200"
+          }
+      - name: Check the frontend really serves its entry module
+        # 端口活着不等于页面能用：Vite 的入口是从 index.html 里引的 /src/main.tsx，
+        # 取不到它浏览器就是一片空白（用户反馈的那个形态）。冷启动要现做依赖预打包，
+        # 所以这里**轮询等**，而不是取一次就判死。
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $deadline = (Get-Date).AddMinutes(5)
+          $entry = "/src/main.tsx"
+          while ($true) {
+            try {
+              $html = [string](Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:5199/" -TimeoutSec 30).Content
+              # Vite 会往头部插一个 /@vite/client（HMR 客户端），它也是 module 脚本；
+              # 应用入口是最后一个非 /@ 开头的 module 脚本。
+              $sources = @(
+                [regex]::Matches($html, '<script[^>]*type="module"[^>]*src="([^"]+)"') |
+                ForEach-Object { $_.Groups[1].Value } |
+                Where-Object { $_ -notmatch '^/@' }
+              )
+              if ($sources.Count -gt 0) { $entry = $sources[-1] }
+              $entryResponse = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:5199$entry" -TimeoutSec 120
+              Write-Host "$entry -> $($entryResponse.StatusCode)（$($entryResponse.Content.Length) 字符）"
+              break
+            }
+            catch {
+              if ((Get-Date) -gt $deadline) { throw "前端入口 $entry 在 5 分钟内一直没有就绪：$_" }
+              Write-Host "还没就绪，10 秒后重试：$_"
+              Start-Sleep -Seconds 10
+            }
+          }
+      - name: Stop the app
+        if: always()
+        shell: cmd
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Stop-ResumeForge.ps1
+      - name: Show the service logs when something failed
+        if: failure()
+        shell: pwsh
+        run: |
+          foreach ($log in @("runtime\backend.stderr.log", "runtime\frontend.stderr.log",
+                             "runtime\backend.stdout.log", "runtime\frontend.stdout.log")) {
+            if (Test-Path $log) {
+              Write-Host "===== $log ====="
+              Get-Content $log -Tail 60
+            }
+          }
+          Write-Host "===== 端口与进程 ====="
+          netstat -ano | Select-String -Pattern ":8123|:5199"
+          Get-Process -Name python,node -ErrorAction SilentlyContinue |
+            Select-Object Id, ProcessName, StartTime
+          Write-Host "===== 健康探针 ====="
+          try { Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8123/api/health" -TimeoutSec 5 } catch { "8123 健康检查失败：$_" }
+
+
   frontend:
     name: Frontend (Node 20)
     runs-on: ubuntu-latest

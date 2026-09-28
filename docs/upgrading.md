@@ -140,7 +140,7 @@ git checkout <previous-stable-tag-or-commit>  # 例如已发布的 v0.1.0 标签
 - **同一个包也要能在 Mac 上开箱即用**，所以自检里还有三条针对 macOS 的断言：`start.command` / `stop.command` / `update.command` 与 `scripts/macos/**` 必须**存在**、里面的行尾必须是 **LF**（CRLF 会让内核把解释器读成 `/bin/bash^M`，macOS 以 `bad interpreter` 启动失败，而这在 Windows 上完全看不出来）、三个 `*.command` 必须在压缩包条目里带**可执行位**（Finder 双击靠它，而 Mac 用户手上只有这个 zip）。
 - 工作区有未提交改动时会给出警告：压缩包内容是该 ref 的提交状态，不包含未提交的改动。**这条对新增文件的改动尤其要紧**——新增的必需文件在提交之前不可能出现在 `HEAD` 的压缩包里，所以加完文件要先提交再出包。
 
-出包后请把 zip 挂到 GitHub Releases（仓库目前只有 tag，没有 Release 附件），而不要用聊天工具零散发文件，否则用户拿到的版本无从核对。CI 在 Windows 上运行 `scripts/tests/Test-Build-Release.ps1`：它会真的打一次包，并断言压缩包包含的文件与 `git ls-tree -r HEAD` 完全一致、必需文件齐备、禁止路径没有泄漏、`.cmd` 保持 CRLF、macOS 入口脚本存在且是 LF 与可执行、以及出包清单与后端 `app/preflight.py` 的运行时清单一致。macOS 侧另有一组 CI 作业（`macos-launcher-guards` / `macos-runtimes` / `macos-end-to-end`）在真 Mac 上跑启动链的守卫测试、真下载一遍便携版运行时校验摘要、以及从干净检出走一次完整启动——维护者手上没有 Mac，那是唯一能自动验证 macOS 链路的地方。
+出包后请把 zip 挂到 GitHub Releases（仓库目前只有 tag，没有 Release 附件），而不要用聊天工具零散发文件，否则用户拿到的版本无从核对。CI 在 Windows 上运行 `scripts/tests/Test-Build-Release.ps1`：它会真的打一次包，并断言压缩包包含的文件与 `git ls-tree -r HEAD` 完全一致、必需文件齐备、禁止路径没有泄漏、`.cmd` 保持 CRLF、macOS 入口脚本存在且是 LF 与可执行、以及出包清单与后端 `app/preflight.py` 的运行时清单一致。macOS 侧另有一组 CI 作业（`macos-launcher-guards` / `macos-runtimes` / `macos-end-to-end`）在真 Mac 上跑启动链的守卫测试、真下载一遍便携版运行时校验摘要、以及从干净检出走一次完整启动——维护者手上没有 Mac，那是唯一能自动验证 macOS 链路的地方。Windows 侧对应的是 `windows-end-to-end`：从干净检出走完整启动链，并在浏览器那一步之前真的取一次前端入口模块（"端口活着但页面一片空白"只有它捕得到）。
 
 ## 保留哪些文件
 

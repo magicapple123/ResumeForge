@@ -99,9 +99,12 @@ ResumeForge/
 ## 3. 守卫与红线
 
 - **覆盖率 80%** 只在全量时开 `--cov`；子集跑覆盖率是假失败。
-- **CI 8 个作业**：Backend ×3（py310/312/win）、Frontend、Dependency audit、macOS ×3
-  （launcher guards / portable runtimes / end-to-end）。macOS 三件是**唯一的真机验证途径**，
-  改了 macOS 侧要在交付说明里写明期望它们验证什么。
+- **CI 9 个作业**：Backend ×3（py310/312/win）、Frontend、Dependency audit、macOS ×3
+  （launcher guards / portable runtimes / end-to-end）、Windows end-to-end。
+  macOS 三件是**唯一的真机验证途径**，改了 macOS 侧要在交付说明里写明期望它们验证什么。
+- **两个端到端作业**（`macos-end-to-end` / `windows-end-to-end`）从**干净检出**走完整启动链并
+  真的取一次前端入口模块——"端口活着但页面一片空白"只有它们捕得到（2026-09-29 用户在虚拟机
+  上解压新版本后只看到空白页，当时 Windows 侧没有这个作业）。改了启动链要跑它们。
 - **提交不写 AI trailer**；数据/密钥/简历不进 git。
 - 单一事实来源：`feature_catalog.py`（功能清单）、README 功能表、版本号 5 处、
   投递准入与状态白名单（各只有一份实现）。
