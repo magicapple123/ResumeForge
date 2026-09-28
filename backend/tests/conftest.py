@@ -6,9 +6,12 @@
 指针（active.json）与 datasets/ 目录都解析成"数据库所在目录"的子项，放在共享目录
 会让不同测试运行互相看到对方的数据集。
 """
+import gc
 import os
 import shutil
 import sqlite3
+import time
+import warnings
 from pathlib import Path
 import tempfile
 
@@ -193,10 +196,54 @@ def client():
     app.dependency_overrides.clear()
 
 
+def _remove_test_dir() -> None:
+    """删掉**本进程**的测试数据目录；删不掉就如实告警，**不静默**。
+
+    ## 为什么要重试，且不能 ``ignore_errors=True``
+
+    Windows 上删不干净是常事（句柄还被持着、杀毒软件正在扫）。这里原本写的是
+    ``shutil.rmtree(_TEST_DIR, ignore_errors=True)``——**失败被吞掉了**，于是没人知道
+    清理没成功。实测跑了很多轮之后攒下几百个目录，看代码的人只会以为"谁忘了清理"，
+    而真实原因是**每次都失败、每次都沉默**。
+
+    实测到的失败形态是**只删掉内容、目录本身留下**（残留的是 0 字节空目录），
+    所以重试几次基本就能收掉。
+
+    另外 ``database.engine.dispose()`` 只覆盖**当前**那一个——``rebind()`` 换数据集时
+    是**新建引擎对象**替换模块属性（见 ``app/database.py``），旧引擎的连接池不在其列。
+    它们的句柄靠进程结束时释放，这也是重试有意义的原因。
+    """
+    database.engine.dispose()
+    for _attempt in range(6):
+        # **先 gc 再删。** `rebind()` 换数据集时是新建引擎替换模块属性，旧引擎从此没人引用；
+        # 它吊着的连接池（连同 sqlite 的文件句柄）要等对象被回收才释放。CPython 靠引用计数
+        # 通常当场就收掉了，但**池里成环**时得等一轮 gc——实测偶发有一个目录带着 `.db` 删不掉，
+        # 正是这一种。
+        gc.collect()
+        shutil.rmtree(_TEST_DIR, ignore_errors=True)
+        if not _TEST_DIR.exists():
+            return
+        time.sleep(0.3)
+    # 都没删掉：如实报一声并**点名路径**。留个空目录无害，但带着 `.db` 的那种会在
+    # PID 复用的时候被下一轮捡到（表现为 `database disk image is malformed`），
+    # 所以不能装作删掉了。
+    warnings.warn(f"测试数据目录没能删干净，请手工删除：{_TEST_DIR}", stacklevel=1)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_test_db():
     """测试全部结束后删除测试数据目录。"""
     yield
-    # Windows 下引擎的连接池仍持有文件句柄，必须先 dispose 才能删除
-    database.engine.dispose()
-    shutil.rmtree(_TEST_DIR, ignore_errors=True)
+    _remove_test_dir()
+
+
+def pytest_unconfigure(config):  # noqa: ARG001 - pytest 钩子签名固定
+    """再清一次——**这一条是为了 controller 进程**。
+
+    并行跑（``-n auto``）时实测每轮留下**一个空目录**：controller 也 import 了本文件、
+    于是建了自己的目录，但它从没跑过测试，session 级 fixture 的 teardown 在它那儿
+    不一定执行到。``pytest_unconfigure`` 在每个进程退出前都会跑到，兜住这一种。
+
+    重复调用是安全的：目录已经不在就直接返回。
+    """
+    _remove_test_dir()

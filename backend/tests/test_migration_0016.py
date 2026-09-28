@@ -53,10 +53,10 @@ def test_the_migration_and_the_service_agree_on_which_tables_are_reclaimed():
     ``Base.metadata``），这里只守住 0016 这份清单不丢。
     """
     assert _migration_tables() <= set(trash.TRASHED_TABLES)
-    # 0016 迁移本体仍只列六张表（它不负责 0018/0019 的新表）。
+    # 0016 迁移本体仍只列六张表（它不负责 0018/0019/0027 的新表）。
     assert len(_migration_tables()) == 6
-    # 全量注册表现在是 6 + 4 + 3 = 13 类。
-    assert len(trash.TRASHED_TABLES) == 13
+    # 全量注册表现在是 6（0016）+ 4（0018）+ 3（0019）+ 2（0027）= 15 类。
+    assert len(trash.TRASHED_TABLES) == 15
 
 
 def _insert_legacy_row(engine, table: str, **values) -> None:

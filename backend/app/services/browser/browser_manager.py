@@ -233,9 +233,24 @@ class BrowserManager:
     # ===== 健康检查 =====
 
     def _probe_ready(self) -> bool:
-        """调试端口是否已经就绪（能拿到 /json/version 就说明可以下命令了）。"""
+        """调试端口是否已经就绪（能拿到 /json/version 就说明可以下命令了）。
+
+        ## 两个都不是"随手写的"参数
+
+        - ``trust_env=False``：默认客户端会去读环境里的代理设置。**本机回环不该走代理**，
+          实测这一项就让一次探测从 0.44s 降到 0.13s。用户机器上真配了 ``HTTP_PROXY`` 时
+          差别更大，而且那种情况下探测会**真的失败**——界面会把正在跑的浏览器报成"未启动"。
+        - ``timeout`` 压到 0.6s：这个探测**每次状态查询都要跑一次**（前端每 1.5 秒问一回），
+          而它只是个"端口通不通"的判断。原来给 1.0s，意味着最坏情况一次状态查询要等 1 秒。
+
+        这两件事加起来曾经把 ``/browser/status`` 拖到 **2 秒**——而前端固定 1.5 秒轮询，
+        于是每个响应都被当成过期丢掉，界面永远停在"未启动 + 转圈"。修的是这一头，前端那边
+        也改成了自定步（见 ``useBrowserStatus``），两边都不依赖对方"够快"。
+        """
         try:
-            with httpx.Client(transport=self._http_transport, timeout=1.0) as client:
+            with httpx.Client(
+                transport=self._http_transport, timeout=0.6, trust_env=False
+            ) as client:
                 response = client.get(f"http://{self._host}:{self._port}/json/version")
                 return response.status_code == 200
         except httpx.HTTPError:

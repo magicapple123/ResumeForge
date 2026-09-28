@@ -207,6 +207,8 @@ def test_apply_tables_match_the_design_contract():
         "started_at",
         "finished_at",
         "created_at",
+        # 投递记录可删：软删标记进回收站，删掉的记录不再计入统计与每日上限。
+        "deleted_at",
     }
     # 投递表只保留展示快照，不留完整资料 blob。
     assert "profile" not in columns["apply_task_item"]
@@ -216,6 +218,35 @@ def test_apply_tables_match_the_design_contract():
 def test_browser_profile_dir_is_gitignored():
     gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "backend/data/browser-profile/" in gitignore
+
+
+def test_config_out_is_exactly_config_in_plus_defaults():
+    """`ApplyConfigOut` 只比 `ApplyConfigIn` 多一个 `defaults`，不能再多。
+
+    **两个 schema 形状不一致会变成用户可见的故障**：`GET /apply/config` 返回 Out，
+    `PUT` 收 In（`extra="forbid"`），前端"整份取回 → 改两个字段 → 整份提交"的写法
+    如果把 Out 的响应体整个回传，就会多出一个 In 不认识的键 → 422
+    「Extra inputs are not permitted」。这个报错里**既没有字段名也没有上下文**，
+    用户只看到"点保存就报错"，无从自查。
+
+    （真实踩过：`BrowserSettingsModal` 把响应体整个 `{...data}` 回传，
+    `defaults` 被送去 PUT，网申页换 Edge 直接报错。前端已改为显式挑字段，
+    这里从 schema 一侧钉住"Out 只许比 In 多 defaults"——将来给 Out 加回显字段时
+    这条会红，提醒同步前端的提交白名单。）
+    """
+    from app.schemas.apply import ApplyConfigOut
+
+    input_fields = set(ApplyConfigIn.model_fields)
+    output_fields = set(ApplyConfigOut.model_fields)
+
+    extra = output_fields - input_fields
+    assert extra == {"defaults"}, (
+        f"ApplyConfigOut 比 ApplyConfigIn 多出的字段必须是且仅是 `defaults`，实际多出：{sorted(extra)}。"
+        "如果这是有意的，请同步更新前端提交时的字段白名单"
+        "（`frontend/src/components/apply/BrowserSettingsModal.tsx` 与它的测试）。"
+    )
+    missing = input_fields - output_fields
+    assert not missing, f"ApplyConfigOut 漏了 ApplyConfigIn 的字段：{sorted(missing)}"
 
 
 # ===== 投递数据只取必需字段，不含完整资料 =====

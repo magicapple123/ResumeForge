@@ -2,7 +2,6 @@
 import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
 import ProfileSection from "./ProfileSection";
-import ReferenceFileField from "./ReferenceFileField";
 
 interface Props {
   editable: boolean;
@@ -69,9 +68,6 @@ export function ProjectSection({ editable }: Props) {
             <Form.Item name={[field.name, "highlights"]} label="亮点/成果">
               <Input.TextArea rows={3} placeholder="量化成果优先，如：接口性能提升 40%，每行一条" />
             </Form.Item>
-          </Col>
-          <Col xs={24}>
-            <ReferenceFileField listName="projects" fieldName={field.name} editable={editable} />
           </Col>
         </Row>
       )}

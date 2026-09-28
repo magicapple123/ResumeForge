@@ -35,11 +35,11 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from typing import Any
 
 from ...models.apply import FAILURE_GREETING_MISSING, FAILURE_SELECTOR_INVALID
 from ..browser.cdp_client import CdpClient, CdpError
+from ..browser.interaction import trusted_click
 from ..browser.page_ready import wait_for_page_state
 from .base import ApplyOutcome, SiteFailure
 from .boss_page import (
@@ -55,9 +55,6 @@ from .boss_page import (
 )
 
 logger = logging.getLogger(__name__)
-
-# 可信鼠标事件在按下/抬起之间的短暂停顿（秒），给页面事件处理留出时间。
-_TRUSTED_CLICK_STEP_SECONDS = 0.06
 
 
 def _entry_script(marker: str, *, click: bool) -> str:
@@ -492,52 +489,12 @@ class BossApplyMixin:
             )
 
     def _trusted_click(self, client: CdpClient, x: float, y: float) -> None:
-        """在视口坐标上发起可信鼠标点击（``Input.dispatchMouseEvent``）。
+        """在视口坐标上发起可信鼠标点击。
 
-        BOSS 现版按钮忽略合成 ``element.click()``（isTrusted=false），只认真实输入事件。
-        点击前先做**窗口可见性保障**（2026-09-20 真实失败根因：窗口最小化/被遮挡时页面
-        ``visibilityState`` 为 ``hidden``，BOSS 对隐藏页面上的点击静默忽略——事件正常到达、
-        页面毫无反应）。``Page.bringToFront`` 与移动事件失败不致命；按下/抬起失败则抛出
-        （归为网络类失败）。
+        实现已提到 ``services/browser/interaction.py``（网申填表要用同一套），这里保留
+        方法只是为了让子类与既有测试仍能按原样调用/patch 它。
         """
-        try:
-            client.send("Page.enable")
-            client.send("Page.bringToFront")
-        except CdpError:
-            pass
-        ensure = getattr(client, "ensure_page_visible", None)
-        if ensure is not None and not ensure():
-            # 无法还原窗口（无头/远程会话等）不在这里打死流程：继续点击并把情况写日志，
-            # 真正点不动时由既有的等待超时给出带 URL/标题的诊断。
-            logger.warning("未能把投递专用浏览器窗口恢复到可见状态，点击可能不会生效")
-        client.send(
-            "Input.dispatchMouseEvent",
-            {"type": "mouseMoved", "x": x, "y": y, "button": "none", "buttons": 0},
-        )
-        time.sleep(_TRUSTED_CLICK_STEP_SECONDS)
-        client.send(
-            "Input.dispatchMouseEvent",
-            {
-                "type": "mousePressed",
-                "x": x,
-                "y": y,
-                "button": "left",
-                "buttons": 1,
-                "clickCount": 1,
-            },
-        )
-        time.sleep(_TRUSTED_CLICK_STEP_SECONDS)
-        client.send(
-            "Input.dispatchMouseEvent",
-            {
-                "type": "mouseReleased",
-                "x": x,
-                "y": y,
-                "button": "left",
-                "buttons": 0,
-                "clickCount": 1,
-            },
-        )
+        trusted_click(client, x, y)
 
     def _page_snapshot(self, client: CdpClient) -> set[str]:
         """当前全部 page 目标的 id 快照（供"点击后新开标签页"比对）。"""

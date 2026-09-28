@@ -49,6 +49,7 @@ from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.settings_service import get_llm_config
 from ..services.site_health import site_health_overview
+from ..services import trash
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +350,27 @@ def stop_task(task_id: int, db: Session = Depends(get_db)):
 
 
 # ===== 记录 =====
+#
+# 投递记录可删（软删，进退回收站）。**路由顺序要紧**：`/records/batches/{task_id}` 是字面量段，
+# 必须排在 `/records/{item_id}/retry` 这类参数段之前，否则 "batches" 会被当成 item_id 抢走。
+
+
+@router.delete("/records/batches/{task_id}", status_code=204)
+def delete_record_batch(task_id: int, db: Session = Depends(get_db)):
+    """删掉整批投递记录（软删，可在回收站恢复）。
+
+    **只软删记录，不删批次本身**（``ApplyTask``）：批次是列表的分组键，删掉它整组会消失、
+    统计也会跳变；而用户想清掉的是"这一批填进去的记录"。
+    """
+    if not apply_service.delete_record_batch(db, task_id):
+        raise HTTPException(status_code=404, detail="该批次没有可删除的投递记录")
+
+
+@router.delete("/records/{item_id}", status_code=204)
+def delete_record(item_id: int, db: Session = Depends(get_db)):
+    """删掉单条投递记录（软删，可在回收站恢复）。"""
+    if not apply_service.delete_record(db, item_id):
+        raise HTTPException(status_code=404, detail="投递记录不存在或已被删除")
 
 
 @router.get("/records", response_model=Page[ApplyRecordOut])
@@ -386,7 +408,9 @@ def list_record_batches(
 
 @router.post("/records/{item_id}/retry", response_model=ApplyTaskOut)
 def retry_record(item_id: int, db: Session = Depends(get_db)):
-    item = db.get(ApplyTaskItem, item_id)
+    # ``trash.get_live`` 而不是 ``db.get``：用户删掉的记录**不该还能重投**。
+    # 用 db.get 会绕过软删过滤，等于给了一条"知道 id 就能复活已删记录"的后门。
+    item = trash.get_live(db, ApplyTaskItem, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="投递记录不存在或已被删除")
     if item.job_id is None:

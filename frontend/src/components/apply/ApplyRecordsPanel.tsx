@@ -9,6 +9,7 @@
  * 后端给的中文分类说明与可操作诊断，用户可以直接把这条信息回传给我们定位站点改版。
  */
 import {
+  DeleteOutlined,
   DownOutlined,
   RedoOutlined,
   ReloadOutlined,
@@ -22,6 +23,7 @@ import {
   Drawer,
   Empty,
   Input,
+  Popconfirm,
   Select,
   Space,
   Spin,
@@ -32,7 +34,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
-import { listRecordBatches, retryRecord } from "../../api/apply";
+import { deleteRecord, deleteRecordBatch, listRecordBatches, retryRecord } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
 import { isFromInnerControl } from "../common/recordDetailCore";
 import { formatDateTime } from "../../utils/format";
@@ -97,6 +99,32 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     );
   };
 
+  /** 删单条。**软删**：进回收站，可恢复；同时从统计与每日上限里去掉。 */
+  const removeRecord = async (record: ApplyRecord) => {
+    try {
+      await deleteRecord(record.id);
+      // 详情抽屉正开着这一条时一并关掉——否则会留着一份已经不存在的数据。
+      if (detail?.id === record.id) setDetail(null);
+      message.success("已移入回收站");
+      await reload();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "删除失败");
+    }
+  };
+
+  /** 删整批。**只删记录、不删批次**：批次是分组键，删掉整组会消失、统计也会跳变。 */
+  const removeBatch = async (batch: ApplyRecordBatch) => {
+    try {
+      await deleteRecordBatch(batch.id);
+      setExpanded((prev) => prev.filter((id) => id !== batch.id));
+      if (detail && batch.items.some((item) => item.id === detail.id)) setDetail(null);
+      message.success("已移入回收站");
+      await reload();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "删除失败");
+    }
+  };
+
   const recordColumns: ColumnsType<ApplyRecord> = [
     {
       title: "岗位",
@@ -155,19 +183,40 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     {
       title: "操作",
       key: "actions",
-      width: 80,
+      width: 160,
       render: (_, record) => (
-        <Tooltip title="以该条目为唯一目标重新投递（仍走去重与每日上限）">
-          <Button
-            size="small"
-            icon={<RedoOutlined />}
-            loading={retrying === record.id}
-            disabled={disabled || record.job_id == null}
-            onClick={() => void retry(record)}
+        <Space size={4}>
+          <Tooltip title="以该条目为唯一目标重新投递（仍走去重与每日上限）">
+            <Button
+              size="small"
+              icon={<RedoOutlined />}
+              loading={retrying === record.id}
+              disabled={disabled || record.job_id == null}
+              onClick={() => void retry(record)}
+            >
+              重投
+            </Button>
+          </Tooltip>
+          <Popconfirm
+            title="删除这条投递记录？"
+            description="会进回收站，之后可以恢复；也会从统计与每日上限里去掉。"
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true, "aria-label": `确认删除记录 ${record.id}` }}
+            cancelButtonProps={{ "aria-label": `取消删除记录 ${record.id}` }}
+            onConfirm={() => void removeRecord(record)}
           >
-            重投
-          </Button>
-        </Tooltip>
+            <Tooltip title="移入回收站（可恢复）">
+              <Button
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                disabled={disabled}
+                aria-label={`删除记录 ${record.job_title || record.id}`}
+              />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
       ),
     },
     {
@@ -233,6 +282,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
             onToggle={() => toggleBatch(batch.id)}
             recordColumns={recordColumns}
             onOpenDetail={setDetail}
+            onDeleteBatch={(batch) => void removeBatch(batch)}
           />
         ))}
       </div>
@@ -322,40 +372,71 @@ interface BatchGroupProps {
   onToggle: () => void;
   recordColumns: ColumnsType<ApplyRecord>;
   onOpenDetail: (record: ApplyRecord) => void;
+  onDeleteBatch: (batch: ApplyRecordBatch) => void;
 }
 
 /** 一个批次 = 一个可展开的组：组头是"批次时间 + 统计"，展开后是组内记录表。 */
-function BatchGroup({ batch, expanded, onToggle, recordColumns, onOpenDetail }: BatchGroupProps) {
+function BatchGroup({
+  batch,
+  expanded,
+  onToggle,
+  recordColumns,
+  onOpenDetail,
+  onDeleteBatch,
+}: BatchGroupProps) {
   const statusMeta = TASK_STATUS_META[batch.status];
   return (
     <div className="apply-records-batch" data-testid={`record-batch-${batch.id}`}>
-      <button
-        type="button"
-        className="apply-records-batch-head"
-        aria-expanded={expanded}
-        onClick={onToggle}
-      >
-        {expanded ? <DownOutlined /> : <RightOutlined />}
-        <Typography.Text strong>批次 #{batch.id}</Typography.Text>
-        <Typography.Text type="secondary">
-          {formatDateTime(batch.finished_at || batch.created_at)}
-        </Typography.Text>
-        <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
-        <span className="apply-records-batch-stats">
+      {/* 组头是按钮（点击展开），所以「删除本批」必须在它**外面**——按钮不能嵌套按钮。 */}
+      <div className="apply-records-batch-head-row">
+        <button
+          type="button"
+          className="apply-records-batch-head"
+          aria-expanded={expanded}
+          onClick={onToggle}
+        >
+          {expanded ? <DownOutlined /> : <RightOutlined />}
+          <Typography.Text strong>批次 #{batch.id}</Typography.Text>
           <Typography.Text type="secondary">
-            {`共 ${batch.items.length} 条`}
-            {batch.succeeded > 0 && (
-              <Typography.Text type="success"> · 成功 {batch.succeeded}</Typography.Text>
-            )}
-            {batch.failed > 0 && (
-              <Typography.Text type="danger"> · 失败 {batch.failed}</Typography.Text>
-            )}
-            {batch.skipped > 0 && (
-              <Typography.Text type="secondary"> · 跳过 {batch.skipped}</Typography.Text>
-            )}
+            {formatDateTime(batch.finished_at || batch.created_at)}
           </Typography.Text>
-        </span>
-      </button>
+          <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
+          <span className="apply-records-batch-stats">
+            <Typography.Text type="secondary">
+              {`共 ${batch.items.length} 条`}
+              {batch.succeeded > 0 && (
+                <Typography.Text type="success"> · 成功 {batch.succeeded}</Typography.Text>
+              )}
+              {batch.failed > 0 && (
+                <Typography.Text type="danger"> · 失败 {batch.failed}</Typography.Text>
+              )}
+              {batch.skipped > 0 && (
+                <Typography.Text type="secondary"> · 跳过 {batch.skipped}</Typography.Text>
+              )}
+            </Typography.Text>
+          </span>
+        </button>
+        <Popconfirm
+          title={`删除这一批的 ${batch.items.length} 条记录？`}
+          description="会进回收站，之后可以恢复；也会从统计与每日上限里去掉。"
+          okText="删除"
+          cancelText="取消"
+          okButtonProps={{ danger: true, "aria-label": `确认删除批次 ${batch.id}` }}
+          cancelButtonProps={{ "aria-label": `取消删除批次 ${batch.id}` }}
+          onConfirm={() => onDeleteBatch(batch)}
+        >
+          <Tooltip title="删除本批记录（移入回收站）">
+            <Button
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              aria-label={`删除批次 ${batch.id}`}
+            >
+              删除本批
+            </Button>
+          </Tooltip>
+        </Popconfirm>
+      </div>
       {expanded && (
         <div className="apply-records-batch-body">
           <Table<ApplyRecord>

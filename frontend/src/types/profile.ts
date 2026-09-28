@@ -5,11 +5,20 @@ import type { RecognitionSource } from "./common";
 export interface Education {
   id?: number;
   school: string;
+  /** 院系——网申表单普遍与「学校」「专业」并列单独问一项。 */
+  department: string;
   major: string;
   degree: string;
+  /** 全日制 / 非全日制（网申表单把"学历"拆成三个独立下拉）。 */
+  study_mode: string;
+  /** 学士 / 硕士 / 博士——学位类型，与 degree（学历层次）是两件事。 */
+  degree_type: string;
   start_date: string;
   end_date: string;
   gpa: string;
+  /** 四六级分数（这一段时间考出来的，所以录在教育经历上）。网申表单要具体分数。 */
+  cet4_score: string;
+  cet6_score: string;
   courses: string;
   achievements: string;
   reference_file_name: string;
@@ -78,6 +87,22 @@ export interface Profile {
   personal_website: string;
   github: string;
   summary: string;
+  // ===== 网申专用字段（与后端 models/profile.py 逐字对应）=====
+  // 只用于「网申填表」，不进简历导出。其中 id_number 属高敏感数据。
+  wechat: string;
+  birth_date: string;
+  id_type: string;
+  id_number: string;
+  country_region: string;
+  native_place: string;
+  political_status: string;
+  phone_country_code: string;
+  family_info: string;
+  expected_salary: string;
+  qq: string;
+  advisor: string;
+  research_direction: string;
+  preferred_industry: string;
   section_order: string[];
   educations: Education[];
   experiences: Experience[];

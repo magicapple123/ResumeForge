@@ -61,16 +61,9 @@ from .profile import (
     Skill,
     UserProfile,
 )
-from .official import (
-    BLOCK_LABELS,
-    RUN_STATUSES,
-    TRANSPORT_FAILURES,
-    VERDICTS,
-    OfficialCollectRun,
-    OfficialDiscoverySearch,
-    OfficialSite,
-)
 from .question_bank_record import QuestionBankRecord
+from .web_form_profile import WebFormProfileEntry
+from .web_form_record import SOURCE_BATCH, SOURCE_LIVE, WebFormFillRecord
 from .referral import REFERRAL_STATUSES, Referral
 from .reminder import REMINDER_KINDS, REMINDER_STATUSES, Reminder
 from .resume import (
@@ -164,11 +157,8 @@ __all__ = [
     "REMINDER_STATUSES",
     "SharePackage",
     "SHARE_PERMISSIONS",
-    "OfficialSite",
-    "OfficialCollectRun",
-    "OfficialDiscoverySearch",
-    "BLOCK_LABELS",
-    "RUN_STATUSES",
-    "TRANSPORT_FAILURES",
-    "VERDICTS",
+    "WebFormFillRecord",
+    "WebFormProfileEntry",
+    "SOURCE_BATCH",
+    "SOURCE_LIVE",
 ]

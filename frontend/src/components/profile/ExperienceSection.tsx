@@ -2,7 +2,6 @@
 import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
 import ProfileSection from "./ProfileSection";
-import ReferenceFileField from "./ReferenceFileField";
 
 interface Props {
   editable: boolean;
@@ -60,9 +59,6 @@ export function ExperienceSection({ editable }: Props) {
                 placeholder="每行一条工作内容，尽量包含做了什么、用了什么方法或工具、结果如何（数字量化更好）"
               />
             </Form.Item>
-          </Col>
-          <Col xs={24}>
-            <ReferenceFileField listName="experiences" fieldName={field.name} editable={editable} />
           </Col>
         </Row>
       )}

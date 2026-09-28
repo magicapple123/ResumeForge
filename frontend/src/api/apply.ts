@@ -203,6 +203,16 @@ export function retryRecord(itemId: number): Promise<ApplyTask> {
   return request(`/apply/records/${itemId}/retry`, { method: "POST" });
 }
 
+/** 删掉单条投递记录（**软删**：进回收站，可恢复；也从统计与每日上限里去掉）。 */
+export function deleteRecord(itemId: number): Promise<void> {
+  return request(`/apply/records/${itemId}`, { method: "DELETE" });
+}
+
+/** 删掉整批投递记录（软删）。**只删记录，不删批次本身**。 */
+export function deleteRecordBatch(taskId: number): Promise<void> {
+  return request(`/apply/records/batches/${taskId}`, { method: "DELETE" });
+}
+
 // ===== 采集 =====
 
 /**

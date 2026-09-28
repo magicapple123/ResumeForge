@@ -56,6 +56,7 @@ _REQUIRED_FILES: Final[tuple[tuple[str, str], ...]] = (
     ("app/prompts/resume_star.md", "简历 STAR 改写提示词"),
     ("app/prompts/resume_suggestions.md", "简历改进建议提示词"),
     ("app/prompts/resume_translate.md", "简历中英互译提示词"),
+    ("app/prompts/web_form_match.md", "网申填表的 AI 字段识别提示词"),
     # 简历模板：三套版式加两段共用片段。缺了它们在生成简历时才会炸，而那时用户
     # 已经等了一轮模型调用；在这里拦住，报的是"包不完整"而不是一段渲染栈。
     ("app/templates/resume.html.j2", "经典简历模板"),

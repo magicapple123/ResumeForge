@@ -233,6 +233,20 @@
   overflow: hidden;
 }
 
+/* 组头那一行：左边是展开按钮（铺满），右边「删除本批」在外面——
+   按钮不能嵌套按钮，所以删除必须与它同级。 */
+.apply-records-batch-head-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fafbfc;
+}
+
+.apply-records-batch-head-row .apply-records-batch-head {
+  flex: 1;
+  min-width: 0;
+}
+
 .apply-records-batch-head {
   display: flex;
   align-items: center;

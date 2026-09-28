@@ -47,15 +47,6 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
         "update_candidate_job",
         "import_candidate_job",
     ),
-    # ===== 官网采集（功能已移除，表为历史数据保留）=====
-    #
-    # 这三张表**还在库里、也还在模型里**：删掉模型会让 ``application_tables()`` 少三张表，
-    # 于是含这些表的旧备份会在导入时被判成"来自更新版本"而**拒收**（见 ``data_backup`` 的
-    # 表集合校验）。所以表留着，但功能与助手工具都已移除，助手不再读它们。
-    "official_site": "不暴露：官网采集功能已移除，这张表只为历史数据保留，助手不再读取。",
-    "official_collect_run": "不暴露：官网采集功能已移除，这张表只为历史数据保留，助手不再读取。",
-    "official_discovery_search": "不暴露：旧版「按岗位找公司」的历史表，该功能与官网采集都已移除，"
-    "表只为历史数据保留，助手不再读取。",
     # ===== 简历 =====
     "resume_record": ("list_resumes", "get_resume", "update_resume_layout"),
     "resume_template": ("create_format_template", "update_format_template"),
@@ -66,7 +57,17 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "apply_queue_item": ("list_apply_queue",),
     "apply_task": "不暴露：一次投递批次的执行记录。助手不代为发起投递（那一步必须用户点击），"
     "也不需要回放执行日志；队列状态用 list_apply_queue 就能答。",
-    "apply_task_item": "不暴露：与 apply_task 同源的单条执行明细，理由同上。",
+    "apply_task_item": "不暴露：与 apply_task 同源的单条执行明细，理由同上。"
+    "（用户可以在「投递记录」里删除它，但那是界面动作，助手不代为删除。）",
+    "web_form_fill_record": "不暴露：网申填充记录里**含用户填进别人页面的真实值**"
+    "（证件号、手机号）。助手既不读也不写它——一旦暴露，这些值会随用户的提问进入对话上下文"
+    "并被发往模型服务商，与「只发字段名、不发值」的既有隐私边界直接冲突。"
+    "回看与删除都在「网申填表 → 填充记录」里做。",
+    "web_form_profile_entry": "不暴露：这是用户专门为网申表单录的补充资料"
+    "（四六级分数、档案所在地、紧急联系人、父母工作单位、身高视力、入党时间…），"
+    "**专供网申填表读取**。里面含证件、家庭与健康类敏感值，暴露给助手会让它们随提问进入"
+    "对话上下文并发往模型服务商；而且工具化的读写在网申表单那条链路上已经有了，"
+    "助手再读一遍没有增量。用户要看/改去「我的资料 → 网申资料」。",
     # ===== 进度、统计、内推 =====
     "application_track": (
         "list_application_tracks",
@@ -166,3 +167,23 @@ def test_assistant_never_gets_a_delete_tool():
     """
     forbidden = [name for name in tool_names() if "delete" in name or "remove" in name]
     assert not forbidden, f"助手不应有删除类工具：{forbidden}"
+
+
+def test_the_learning_path_stays_off_every_assistant_tool():
+    """**学到的字段也只能待在网申那条链路上**，不能因为"它现在自动增长了"就漏进助手。
+
+    ``learnable()`` 的产物会被写进 ``web_form_profile_entry``，而那张表的内容会随用户每次
+    填表**自动变多**——所以"助手读不到"这条边界不能靠"用户没录"来成立，必须靠结构。
+    这里从**工具**那一侧钉住：任何工具都不接受网申资料里的字段做参数，也不返回它们。
+
+    读源码里的表名与工具签名，比调用每个工具更稳：调用要造数据，而这里要证明的是
+    "根本不存在这条通路"。
+    """
+    import inspect
+
+    from app.services.assistant_tools import _registry
+
+    for tool in _registry._TOOLS:
+        source = inspect.getsource(tool.handler)
+        assert "web_form_profile_entry" not in source, f"{tool.name} 读到了网申资料表"
+        assert "web_form" not in source, f"{tool.name} 碰了网申资料那条链路"

@@ -116,8 +116,9 @@ ResumeForge/
 3. 约束：`upgrade`/`downgrade` 都要可用；**表/列不存在时跳过而不是报错**（迁移链会跑在
    "只有部分业务表"的历史库上）；加表/加列类迁移要保证"旧备份仍可导入"（表集合前后一致）。
 4. 新增 `tests/test_migration_00XX.py` 钉住行为。
-5. **待办**：官网采集移除后留下的三张空表（`official_site` / `official_collect_run` /
-   `official_discovery_search`）等下次加迁移时一并删掉（清单见 AGENTS.md「待办」节）。
+5. **减表类迁移**要额外验证"降级能把表按原样建回来"——列、索引、外键的 `ondelete` 都要与
+   建表那次逐字一致。`0025` 删官网采集遗留的三张表时就是这么做的（`sa.inspect` 比对
+   表名 / 列名 / 索引名集合）。
 
 ### 4.2 macOS 启动链
 

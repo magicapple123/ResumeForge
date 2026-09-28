@@ -286,3 +286,49 @@ def test_parse_profile_text_supports_multiline_synonym_fields_without_splitting_
         "Kubernetes",
     }
 
+
+
+def test_cet_scores_survive_the_bounding_step():
+    """四六级分数必须能穿过 ``_bound_parse_result`` 的收窄。
+
+    那道收窄是**白名单**：只按 ``_PARSED_ENTRY_FIELD_LIMITS`` 的键构造结果，没列进去的字段
+    会被**静默丢弃**——粘贴识别看起来"没认出来"，而没有任何报错。这条钉住四六级在名单里，
+    而且是 ``EducationIn`` 认得的字段（不在收窄处丢、也不在保存处被拒）。
+    """
+    from app.schemas.profile import EducationIn
+    from app.services.profile_parser.limits import _PARSED_ENTRY_FIELD_LIMITS
+
+    limits = _PARSED_ENTRY_FIELD_LIMITS["educations"]
+    for field in ("cet4_score", "cet6_score"):
+        assert field in limits, f"{field} 不在收窄白名单里，识别结果会被静默丢弃"
+        # 白名单里的长度上限不能超过 schema 的 max_length，否则改完仍会在保存时被拒。
+        assert field in EducationIn.model_fields, f"{field} 不是 EducationIn 的字段"
+        schema_limit = EducationIn.model_fields[field].metadata
+        assert schema_limit, f"{field} 应在 schema 里声明长度上限"
+
+
+def test_the_education_whitelist_and_schema_cover_each_other():
+    """教育经历的收窄白名单与 ``EducationIn`` 必须**互相覆盖**——两个方向都会出事：
+
+    - 白名单里多写一个 schema 没有的键 → 保存时 422，而错误信息离识别很远；
+    - schema 有、白名单没有 → 识别结果被**静默丢弃**（"认不出这一项"，不报错）。
+
+    后者是这个仓库真实踩过的坑：``department`` / ``study_mode`` / ``degree_type`` /
+    ``cet4_score`` / ``cet6_score`` 五个字段都曾经只加在 schema 与界面上，粘贴识别一直
+    认不出来。这条把那个方向也钉死，以后往 ``EducationIn`` 加字段忘了同步白名单会直接变红。
+    """
+    from app.schemas.profile import EducationIn
+    from app.services.profile_parser.limits import _PARSED_ENTRY_FIELD_LIMITS
+
+    whitelist = set(_PARSED_ENTRY_FIELD_LIMITS["educations"])
+    schema_fields = set(EducationIn.model_fields)
+
+    extra = sorted(whitelist - schema_fields)
+    assert not extra, f"收窄白名单里有 EducationIn 不认的字段，保存会被拒：{extra}"
+
+    missing = sorted(schema_fields - whitelist)
+    assert not missing, (
+        f"EducationIn 有、收窄白名单没有的字段（识别出来会被静默丢弃）：{missing}。"
+        "请到 app/services/profile_parser/limits.py 加一行，"
+        "并在 prompts/profile_text_extract.md 的输出形状里补上。"
+    )
