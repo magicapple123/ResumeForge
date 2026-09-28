@@ -1,5 +1,77 @@
 ﻿# ResumeForge launcher: backend/frontend startup orchestration.
 
+<#
+端口上有一个**健康**的简历通在应答，但它不是从**这个目录**启动的时，启动器会沿用别人的
+进程、跳过自己的依赖安装，而用户看到的是「打开浏览器一片空白、依赖好像没装」——这正是
+2026-09-29 用户在一台虚拟机上解压新版本后遇到的形态：机器上还留着上一次运行（另一个目录）
+的实例，新解压的这份一行代码都没跑起来。
+
+判断「是不是自己人」只有一份依据：本目录 `runtime\*` 里的进程记录，而且 PID、启动时间、
+命令行三者都要对得上（`Get-ProcessRecordMatch` 已经做了这三重校验）。记录不在本目录
+（或对不上）就如实报出来，并给出两条可执行的出路。
+#>
+function Assert-RunningServiceIsOwned {
+    param(
+        [string]$DisplayName,
+        [string]$RecordPath,
+        [string]$CommandPattern,
+        [string]$Port,
+        [string]$PortOption
+    )
+
+    if ($null -ne (Get-ProcessRecordMatch -RecordPath $RecordPath -CommandPattern $CommandPattern)) {
+        return
+    }
+
+    throw ("端口 $Port 上有一个简历通$DisplayName在运行，但它不是从当前目录启动的，所以这次不会沿用它。`n" +
+        "当前目录：$ProjectRoot`n" +
+        "也就是说：刚解压的这份代码一行都没跑起来——浏览器里看到的可能是另一个位置的简历通，" +
+        "也可能是上一次运行留下的残影，那正是「页面一片空白、依赖好像没装」的来源。`n" +
+        "怎么办（二选一）：`n" +
+        "  1) 关掉占用该端口的程序：先双击**当前目录**的 stop.cmd；它认不出来时，到任务管理器结束占用 $Port 的进程；`n" +
+        "  2) 换一个端口启动：start.cmd $PortOption 8010")
+}
+
+<#
+Vite 的 dev server「健康」只说明它在监听。真正让页面渲染出来的是浏览器随后去取入口模块
+（`index.html` 里那个 `type="module"` 的 `/src/main.tsx`）这一步，而 Vite 要现做一次依赖
+预打包——几百个包，慢机器上实测几十秒到几分钟（本机冷启动实测单次取入口 >10 秒）。
+
+启动器原本在健康检查通过后立刻打开浏览器，于是这段等待全部落在用户眼前：**一片空白**，
+看起来就像启动失败（2026-09-29 用户在虚拟机上反馈的就是这个形态）。这里在开浏览器之前
+先把首页与入口各取一遍，把等待挪到「正在准备前端页面」这句话下面；取不到不算失败
+（浏览器打开时还会再取一次），只提示一句。
+#>
+function Invoke-FrontendWarmup {
+    param([string]$Url)
+
+    $entry = "/src/main.tsx"
+    try {
+        $html = [string](Invoke-WebRequest -UseBasicParsing -Uri "$Url/" -TimeoutSec 60).Content
+        # 入口以 index.html 为准（改了名字也照样对得上），但 Vite 会往头部插一个
+        # /@vite/client 的 HMR 客户端——它同样是 module 脚本，取到它就等于没热身。
+        # 所以去掉 /@ 开头的 Vite 内部脚本，取剩下的最后一个。
+        $sources = @(
+            [regex]::Matches($html, '<script[^>]*type="module"[^>]*src="([^"]+)"') |
+            ForEach-Object { $_.Groups[1].Value } |
+            Where-Object { $_ -notmatch '^/@' }
+        )
+        if ($sources.Count -gt 0) { $entry = $sources[-1] }
+    }
+    catch {
+        Write-Warning "取首页失败（不影响启动，浏览器打开时还会再取一次）：$($_.Exception.Message)"
+    }
+
+    Write-Host "正在准备前端页面（第一次要把几百个依赖打包好，慢机器上要等一会儿）..."
+    try {
+        $null = Invoke-WebRequest -UseBasicParsing -Uri "$Url$entry" -TimeoutSec 600
+        Write-Host "前端页面已就绪：$entry"
+    }
+    catch {
+        Write-Warning "前端入口 $entry 这次没取到（浏览器打开时还会再取一次）：$($_.Exception.Message)"
+    }
+}
+
 function Start-ResumeForge {
     if ($BackendPort -eq $FrontendPort) {
         throw "后端端口与前端端口不能相同：两者都是 $BackendPort。请用 -BackendPort / -FrontendPort 指定不同的端口。"
@@ -42,6 +114,8 @@ function Start-ResumeForge {
         }
 
         if ($backendRunning) {
+            Assert-RunningServiceIsOwned -DisplayName "后端" -RecordPath $BackendPidPath `
+                -CommandPattern $backendRecordPattern -Port $BackendPort -PortOption "-BackendPort"
             Write-Host "后端已经在运行：$BackendUrl"
         }
         else {
@@ -161,6 +235,8 @@ function Start-ResumeForge {
         }
 
         if ($frontendRunning) {
+            Assert-RunningServiceIsOwned -DisplayName "前端" -RecordPath $FrontendPidPath `
+                -CommandPattern $frontendRecordPattern -Port $FrontendPort -PortOption "-FrontendPort"
             Write-Host "前端已经在运行：$FrontendUrl"
         }
         else {
@@ -240,6 +316,7 @@ function Start-ResumeForge {
                         -LogPath $frontendLogPath)
             }
             Write-Host "前端已启动：$FrontendUrl"
+            Invoke-FrontendWarmup -Url $FrontendUrl
         }
 
         if (-not $NoBrowser) {
