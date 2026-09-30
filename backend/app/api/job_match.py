@@ -5,7 +5,6 @@
 
 未配置大模型时走**本地降级**并给出中文警告（不阻断流程）；资料为空时应先补资料再分析。
 """
-import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,9 +12,16 @@ from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
 from ..models.job import Job
-from ..models.profile import UserProfile, utcnow
-from ..models.resume import ResumeRecord
+from ..models.profile import utcnow
+from ..models.job_match_batch import JobMatchBatch
 from ..schemas.job_match import JobMatchOut, JobMatchResult
+from ..schemas.job_match_batch import (
+    JobMatchBatchOut,
+    JobMatchBatchRequest,
+    JobMatchBatchSummary,
+)
+from ..schemas.job_match_background import JobMatchBackgroundTask
+from ..services import trash
 from ..services.apply import apply_service
 from ..services.job.job_match import (
     analyze_match,
@@ -23,46 +29,131 @@ from ..services.job.job_match import (
     job_payload,
     local_match_result,
 )
+from ..services.job.job_match_context import match_source_texts, profile_is_empty
+from ..services.job.job_match_batch import (
+    build_batch_inputs,
+    list_batch_summaries,
+    persist_batch,
+    run_batch_match,
+)
+from ..services.job.job_match_background import (
+    JobMatchBackgroundRunnerError,
+    create_job_match_background_task,
+    get_job_match_background_runner,
+    get_job_match_background_task,
+    list_active_job_match_background_tasks,
+)
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.match_scoring import score_match_result
-from ..services.profile.profile_service import get_profile_detail, to_profile_out
 from ..services.settings_service import get_llm_config
 
 router = APIRouter(prefix="/api/jobs", tags=["job-match"])
 logger = logging.getLogger(__name__)
 
 
-def _profile_is_empty(profile: UserProfile) -> bool:
-    return not any(
-        [
-            profile.name,
-            profile.phone,
-            profile.email,
-            profile.summary,
-            profile.job_intent,
-            profile.educations,
-            profile.experiences,
-            profile.projects,
-            profile.skills,
-        ]
-    )
+@router.post("/match-batches", response_model=JobMatchBatchOut)
+async def create_match_batch(
+    payload: JobMatchBatchRequest,
+    db: Session = Depends(get_db),
+):
+    """对用户选中的岗位批量分析，并按参考分保存一份可回看的快照。"""
+    job_ids = list(dict.fromkeys(payload.job_ids))
+    jobs = db.query(Job).filter(trash.live_only(Job), Job.id.in_(job_ids)).all()
+    found = {job.id: job for job in jobs}
+    missing = [job_id for job_id in job_ids if job_id not in found]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}")
+    ordered_jobs = [found[job_id] for job_id in job_ids]
+    try:
+        inputs = build_batch_inputs(db, ordered_jobs, force=payload.force)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    config = get_llm_config(db)
+    # 模型调用期间不占用请求数据库连接。
+    db.close()
+    run = await run_batch_match(inputs, config)
+    session = SessionLocal()
+    try:
+        row = persist_batch(session, run)
+    except Exception as exc:  # noqa: BLE001 - 记录失败要返回可理解的错误，不泄露堆栈
+        session.rollback()
+        logger.exception("保存批量岗位匹配记录失败")
+        raise HTTPException(status_code=500, detail="保存批量匹配记录失败，请稍后重试") from exc
+    finally:
+        session.close()
+    return JobMatchBatchOut.model_validate(row)
 
 
-def _source_texts(db: Session, job: Job) -> tuple[UserProfile, str, ResumeRecord | None, str]:
-    profile = get_profile_detail(db)
-    profile_text = json.dumps(
-        to_profile_out(profile).model_dump(mode="json", exclude={"photo"}),
-        ensure_ascii=False,
-    )
-    resume = apply_service.resolve_resume(db, job.id, None)
-    resume_text = ""
-    if resume is not None:
-        resume_text = json.dumps(
-            {"title": resume.title, "job_title": resume.job_title, "content": resume.content},
-            ensure_ascii=False,
-        )
-    return profile, profile_text, resume, resume_text
+@router.post("/match-batch-tasks", response_model=JobMatchBackgroundTask)
+def create_match_batch_task(
+    payload: JobMatchBatchRequest,
+    db: Session = Depends(get_db),
+):
+    """创建后台批量分析任务；任务结果完成后仍写入同一份历史快照。"""
+    job_ids = list(dict.fromkeys(payload.job_ids))
+    jobs = db.query(Job).filter(trash.live_only(Job), Job.id.in_(job_ids)).all()
+    found = {job.id: job for job in jobs}
+    missing = [job_id for job_id in job_ids if job_id not in found]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}")
+    try:
+        # 在创建任务前先做资料准入校验，避免用户关闭弹窗后才发现资料为空。
+        build_batch_inputs(db, [found[job_id] for job_id in job_ids], force=payload.force)
+        task = create_job_match_background_task(db, job_ids, force=payload.force)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        get_job_match_background_runner().start(task.task_id)
+    except JobMatchBackgroundRunnerError as exc:
+        # 任务记录已经写入，启动失败也必须留下明确终态，不能制造幽灵 pending。
+        get_job_match_background_runner().fail_task(task.task_id, str(exc))
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return task
+
+
+@router.get("/match-batch-tasks", response_model=list[JobMatchBackgroundTask])
+def get_active_match_batch_tasks(db: Session = Depends(get_db)):
+    return list_active_job_match_background_tasks(db)
+
+
+@router.get("/match-batch-tasks/{task_id}", response_model=JobMatchBackgroundTask)
+def get_match_batch_task(task_id: str, db: Session = Depends(get_db)):
+    task = get_job_match_background_task(db, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="后台岗位匹配任务不存在")
+    return task
+
+
+@router.post("/match-batch-tasks/{task_id}/cancel", response_model=JobMatchBackgroundTask)
+def cancel_match_batch_task(task_id: str, db: Session = Depends(get_db)):
+    task = get_job_match_background_task(db, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="后台岗位匹配任务不存在")
+    if task.status not in ("pending", "running"):
+        return task
+    try:
+        get_job_match_background_runner().cancel(task_id)
+    except JobMatchBackgroundRunnerError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    refreshed = get_job_match_background_task(db, task_id)
+    return refreshed or task
+
+
+@router.get("/match-batches", response_model=list[JobMatchBatchSummary])
+def get_match_batch_history(
+    limit: int = Query(default=30, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    return list_batch_summaries(db, limit=limit)
+
+
+@router.get("/match-batches/{batch_id}", response_model=JobMatchBatchOut)
+def get_match_batch(batch_id: int, db: Session = Depends(get_db)):
+    row = db.get(JobMatchBatch, batch_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="批量匹配记录不存在")
+    return JobMatchBatchOut.model_validate(row)
 
 
 @router.post("/{job_id}/match-analysis", response_model=JobMatchResult)
@@ -80,8 +171,8 @@ async def create_match_analysis(
         if existing is not None and isinstance(existing.result, dict) and existing.result:
             return JobMatchResult.model_validate(existing.result)
 
-    profile, profile_text, resume, resume_text = _source_texts(db, job)
-    if _profile_is_empty(profile) and not resume_text.strip():
+    profile, profile_text, resume_text = match_source_texts(db, job)
+    if profile_is_empty(profile) and not resume_text.strip():
         raise HTTPException(
             status_code=400, detail="个人资料为空，请先在「我的资料」中填写后再做匹配分析"
         )
@@ -143,7 +234,7 @@ def get_match_analysis(job_id: int, db: Session = Depends(get_db)):
     # 参考分是派生值：只读、仅展示、不落库。每次现算，且用 admission_of 重推结论后再算，
     # 与准入逻辑完全解耦（参考分不参与、也不改变五类结论与准入闸门）。
     result = finalize_match_result(JobMatchResult.model_validate(row.result))
-    _profile, profile_text, _resume, resume_text = _source_texts(db, job)
+    _profile, profile_text, resume_text = match_source_texts(db, job)
     out.reference_score = score_match_result(
         result,
         job_payload(job),

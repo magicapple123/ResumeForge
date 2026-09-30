@@ -12,7 +12,12 @@ import { CloseCircleOutlined, LoadingOutlined } from "@ant-design/icons";
 import { App, Badge, Button, Popover, Space, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { useBackgroundTasks } from "../hooks/useBackgroundTasks";
+import { useJobMatchBackgroundTasks } from "../hooks/useJobMatchBackgroundTasks";
 import { cancelBackgroundTask, type BackgroundTask } from "../utils/backgroundTasks";
+import {
+  cancelJobMatchBackgroundTask,
+  type JobMatchBackgroundTaskView,
+} from "../utils/jobMatchBackgroundTasks";
 
 /** 一行任务：名称、进度、取消。 */
 function TaskRow({ task, onCancel }: { task: BackgroundTask; onCancel: () => void }) {
@@ -37,12 +42,46 @@ function TaskRow({ task, onCancel }: { task: BackgroundTask; onCancel: () => voi
   );
 }
 
+function JobMatchTaskRow({
+  task,
+  onCancel,
+}: {
+  task: JobMatchBackgroundTaskView;
+  onCancel: () => void;
+}) {
+  const progress = [
+    "已处理 " + (task.completedCount + task.failedCount) + "/" + task.requestedCount + " 个岗位",
+    task.currentJobTitle ? "当前：" + task.currentJobTitle : task.message,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="background-task-row">
+      <Space size={8} align="start">
+        <LoadingOutlined className="background-task-spin" />
+        <div>
+          <Typography.Text strong className="background-task-label">
+            {task.label}
+          </Typography.Text>
+          <Typography.Text type="secondary" className="background-task-progress">
+            {progress || "正在准备…"}
+          </Typography.Text>
+        </div>
+      </Space>
+      <Button size="small" danger type="text" icon={<CloseCircleOutlined />} onClick={onCancel}>
+        取消
+      </Button>
+    </div>
+  );
+}
+
 export default function BackgroundTasksIndicator() {
   const { message } = App.useApp();
   const tasks = useBackgroundTasks();
-  const [cancelling, setCancelling] = useState<number | null>(null);
+  const matchTasks = useJobMatchBackgroundTasks();
+  const [cancelling, setCancelling] = useState<number | string | null>(null);
 
-  if (tasks.length === 0) return null;
+  if (tasks.length === 0 && matchTasks.length === 0) return null;
 
   const cancel = async (task: BackgroundTask) => {
     if (cancelling !== null) return;
@@ -57,11 +96,27 @@ export default function BackgroundTasksIndicator() {
     }
   };
 
+  const cancelMatchTask = async (task: JobMatchBackgroundTaskView) => {
+    if (cancelling !== null) return;
+    setCancelling(task.id);
+    try {
+      await cancelJobMatchBackgroundTask(task.id);
+      message.info("已请求取消「" + task.label + "」");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "取消失败，请稍后重试");
+    } finally {
+      setCancelling(null);
+    }
+  };
+
   // 没有任务时整个入口不渲染（上面已经 return null），所以这里不必再写空态分支。
   const content = (
     <div className="background-tasks-panel">
       {tasks.map((task) => (
         <TaskRow key={task.id} task={task} onCancel={() => void cancel(task)} />
+      ))}
+      {matchTasks.map((task) => (
+        <JobMatchTaskRow key={task.id} task={task} onCancel={() => void cancelMatchTask(task)} />
       ))}
       <Typography.Text type="secondary" className="background-tasks-hint">
         关掉窗口也会继续跑，完成后会弹窗提醒并响一声。
@@ -71,9 +126,9 @@ export default function BackgroundTasksIndicator() {
 
   return (
     <Popover content={content} title="正在进行的任务" trigger="click" placement="bottomRight">
-      <Tooltip title={`${tasks.length} 个任务正在进行`}>
+      <Tooltip title={tasks.length + matchTasks.length + " 个任务正在进行"}>
         <Button className="background-tasks-button" type="text" aria-label="查看后台任务">
-          <Badge count={tasks.length} size="small" offset={[2, -2]}>
+          <Badge count={tasks.length + matchTasks.length} size="small" offset={[2, -2]}>
             <LoadingOutlined /> 后台任务
           </Badge>
         </Button>

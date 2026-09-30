@@ -49,7 +49,11 @@ from .database_compat import SQLITE_REQUIRED_COLUMNS
 from .database_migrations import is_unversioned_legacy_database, run_database_migrations
 from .middleware import RequestContextMiddleware, RequestIdFilter, get_request_id
 from .services.apply import apply_service
+from .services.apply.task_runner import get_task_runner
 from .services.data_backup import cleanup_temp_directories
+from .services.job.job_match_background import get_job_match_background_runner
+from .services.webform import browser as webform_browser
+from .services.webform import stop_live as stop_webform_live
 
 
 logging.basicConfig(
@@ -79,6 +83,7 @@ async def lifespan(_app: FastAPI):
         Base.metadata.create_all(bind=bind)
         ensure_sqlite_columns(bind, SQLITE_REQUIRED_COLUMNS)
     run_database_migrations(bind)
+    job_match_runner = get_job_match_background_runner()
     # 上次运行若中途退出，可能留下未应用的备份包与导出产物，它们不会再用到。
     startup_logger.info("启动自检：清理临时目录")
     cleanup_temp_directories(bind)
@@ -89,8 +94,15 @@ async def lifespan(_app: FastAPI):
             apply_service.fail_orphaned_tasks(session)
         except Exception:  # noqa: BLE001 - 清理失败不应阻断启动
             startup_logger.warning("清理中断的投递任务失败", exc_info=True)
+        try:
+            job_match_runner.fail_orphaned_task(session)
+        except Exception:  # noqa: BLE001 - 清理失败不应阻断启动
+            startup_logger.warning("清理中断的岗位匹配任务失败", exc_info=True)
     startup_logger.info("启动自检完成，开始接收请求")
-    yield
+    try:
+        yield
+    finally:
+        _shutdown_runtime_services(job_match_runner)
 
 
 async def unhandled_exception(_request: Request, exc: Exception):
@@ -108,6 +120,32 @@ async def unhandled_exception(_request: Request, exc: Exception):
 
 def health():
     return {"status": "ok", "name": settings.app_name, "version": settings.app_version}
+
+
+def _shutdown_runtime_services(job_match_runner: object) -> None:
+    """退出前收拢应用拥有的线程、监听器和专用浏览器。"""
+    # 先停后台任务，避免浏览器关闭后工作线程还在发 CDP 请求。
+    try:
+        get_task_runner().shutdown()
+    except Exception:  # noqa: BLE001 - 退出路径必须继续清理其它资源
+        logging.getLogger(__name__).warning("关闭投递/采集任务运行器失败", exc_info=True)
+    try:
+        job_match_runner.shutdown()
+    except Exception:  # noqa: BLE001 - 退出路径必须继续清理其它资源
+        logging.getLogger(__name__).warning("关闭岗位匹配后台任务失败", exc_info=True)
+    try:
+        stop_webform_live()
+    except Exception:  # noqa: BLE001 - 退出路径必须继续清理其它资源
+        logging.getLogger(__name__).warning("关闭网申实时填表监听失败", exc_info=True)
+    try:
+        # 两个管理器都只会停止自己持有的浏览器句柄，不会按 PID 猜测或触碰外部窗口。
+        apply_service.reset_browser_manager()
+    except Exception:  # noqa: BLE001 - 退出路径必须继续清理其它资源
+        logging.getLogger(__name__).warning("关闭投递专用浏览器失败", exc_info=True)
+    try:
+        webform_browser.reset_browser_manager()
+    except Exception:  # noqa: BLE001 - 退出路径必须继续清理其它资源
+        logging.getLogger(__name__).warning("关闭网申专用浏览器失败", exc_info=True)
 
 
 def create_app() -> FastAPI:
@@ -136,8 +174,10 @@ def create_app() -> FastAPI:
         ],
     )
     for router in (
-        jobs.router,
+        # 批量匹配的 `/match-batches` 是岗位路由下的字面量路径，必须先于 jobs.router
+        # 的 `/{job_id}` 参数路径注册，否则 FastAPI 会把它尝试解析成整数并返回 422。
         job_match.router,
+        jobs.router,
         resumes.router,
         resume_writing.router,
         resume_risk.router,
