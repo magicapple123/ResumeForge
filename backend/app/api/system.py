@@ -89,15 +89,21 @@ def _stop_output_encodings() -> tuple[str, ...]:
     return tuple(encodings)
 
 
-def _decode_stop_output(raw: bytes | None) -> str:
+def _decode_stop_output(raw: bytes | None, encodings: tuple[str, ...] | None = None) -> str:
     """把停止脚本的输出解成能进日志的文本。
 
     解码**绝不能抛**：这里的失败会让退出线程死在发信号之前（"点了退出，进程还在"）。
     所以最后一定要有一个 `errors="replace"` 的兜底。
+
+    `encodings` 只为让测试能钉住回退链：真实候选表由 `_stop_output_encodings()` 按
+    **这台机器的代码页**给出（中文 Windows 是 cp936、英文的是 cp1252），而 cp1252 能把
+    GBK 字节解成一串乱码却**不报错**——不注入的话，这条链就变成"测试机是哪国语言"了。
+    真机上那串乱码无害：日志只用于诊断，判定一律看退出码。
     """
     if not raw:
         return ""
-    for encoding in _stop_output_encodings():
+    candidates = _stop_output_encodings() if encodings is None else encodings
+    for encoding in candidates:
         try:
             return raw.decode(encoding)[:_STOP_LOG_CHARS]
         except (UnicodeDecodeError, LookupError):
