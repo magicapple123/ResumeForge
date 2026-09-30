@@ -1,6 +1,6 @@
-/** 大模型配置表单：预设、连接测试、获取可用模型与高级调整。 */
+/** 大模型配置表单：预设、连接测试、获取可用模型、思考模式与高级调整。 */
 
-import { ApiOutlined, CloudDownloadOutlined } from "@ant-design/icons";
+import { ApiOutlined, CloudDownloadOutlined, ExperimentOutlined } from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -15,12 +15,18 @@ import {
   Row,
   Select,
   Slider,
+  Switch,
   Tooltip,
   Typography,
 } from "antd";
 import type { FormInstance } from "antd/es/form";
 import { useRef, useState } from "react";
-import type { LLMModelsResult, LLMTestResult } from "../../types";
+import type { LLMModelsResult, LLMTestResult, LLMThinkingResult } from "../../types";
+import {
+  CUSTOM_EFFORT_OPTION,
+  MAX_REASONING_EFFORT_CHARS,
+  isValidReasoningEffort,
+} from "../../types/assistant";
 import ApiKeyInput from "./ApiKeyInput";
 import {
   DEFAULT_MAX_TOKENS,
@@ -30,6 +36,36 @@ import {
   UNLIMITED_MAX_TOKENS,
   type SettingsFormValues,
 } from "./SettingsConfig";
+
+/** 档位的中文名；表里出现的其它取值（各家自定义的）原样显示。 */
+const EFFORT_LABELS: Record<string, string> = {
+  minimal: "最低",
+  low: "低",
+  medium: "中",
+  high: "高",
+};
+
+/**
+ * 检测之前先给一份通用档位。
+ *
+ * 真正的选项来自后端的「检测思考支持」（各家划分不同），这份兜底只是让控件在还没检测时
+ * 可用；检测结果一到就被替换。
+ */
+const FALLBACK_EFFORTS = ["low", "medium", "high"];
+
+/** 「思考强度」的说明：两个分支（下拉 / 自定义输入框）共用同一份文案。 */
+const EFFORT_TOOLTIP =
+  "档位越高通常越慢也越贵。各家的档位划分不同，选项来自「检测思考支持」；也可以选「自定义…」自己填。" +
+  "自定义值原样发给 OpenAI 兼容接口；Claude 原生协议下填写数字＝思考预算 tokens，填其他词按默认档处理。" +
+  "留空表示不指定档位。";
+
+const THINKING_STYLE_OPTIONS = [
+  { value: "auto", label: "自动（按协议与服务商推断）" },
+  { value: "reasoning_effort", label: "reasoning_effort（OpenAI 系）" },
+  { value: "thinking_object", label: "thinking 开关（智谱等）" },
+  { value: "enable_thinking", label: "enable_thinking（通义 qwen3）" },
+  { value: "budget", label: "thinking 预算（Claude 原生）" },
+];
 
 interface Props {
   form: FormInstance<SettingsFormValues>;
@@ -45,6 +81,8 @@ interface Props {
   onTest: () => void;
   /** 拉取服务商当前可用的模型列表（失败时由 result.message 说明原因）。 */
   onFetchModels: () => Promise<LLMModelsResult>;
+  /** 查思考支持：probe=true 会真的发一次最小请求，用来分辨"生效/被忽略/被拒绝"。 */
+  onCheckThinking: (probe: boolean) => Promise<LLMThinkingResult>;
 }
 
 export default function LLMConfigCard({
@@ -60,9 +98,12 @@ export default function LLMConfigCard({
   onRevealError,
   onTest,
   onFetchModels,
+  onCheckThinking,
 }: Props) {
   const maxTokens = Form.useWatch("max_tokens", form);
   const unlimitedTokens = maxTokens === UNLIMITED_MAX_TOKENS;
+  const thinkingEnabled = Form.useWatch("thinking_enabled", form);
+  const thinkingEffort: string = Form.useWatch("thinking_effort", form) ?? "";
   // 记住勾选「不限制」之前的值，取消勾选时原样还回去，免得用户重填。
   const lastLimitedTokens = useRef(DEFAULT_MAX_TOKENS);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -70,6 +111,58 @@ export default function LLMConfigCard({
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelsMessage, setModelsMessage] = useState("");
+  const [thinkingResult, setThinkingResult] = useState<LLMThinkingResult | null>(null);
+  const [checkingThinking, setCheckingThinking] = useState(false);
+  const [customEffort, setCustomEffort] = useState(false);
+
+  const thinkingEfforts = thinkingResult?.efforts?.length
+    ? thinkingResult.efforts
+    : FALLBACK_EFFORTS;
+  const effortOptions = [
+    { value: "", label: "默认档位（不指定）" },
+    ...thinkingEfforts.map((effort) => ({
+      value: effort,
+      label: EFFORT_LABELS[effort] ? `${EFFORT_LABELS[effort]}（${effort}）` : effort,
+    })),
+  ];
+
+  /**
+   * 是否显示"自定义输入框"。
+   *
+   * **派生**而不是用 state 同步：载入的配置里若是一个不在选项里的档位（自定义值，或换过
+   * 模型后留下的词），它就该直接落在输入框里——用 effect 去追这个状态会在异步载入时
+   * 慢一拍，用户先看到的是一个显示不出来的未知值。
+   */
+  const showingCustomEffort =
+    customEffort ||
+    (thinkingEffort.trim() !== "" &&
+      thinkingEffort.trim() !== CUSTOM_EFFORT_OPTION &&
+      !effortOptions.some((option) => option.value === thinkingEffort.trim()));
+
+  /** 只读后端能力表拿档位选项——**零上游调用**，所以打开开关时就顺手取一次。 */
+  const loadThinkingOptions = async () => {
+    const result = await onCheckThinking(false);
+    setThinkingResult(result);
+  };
+
+  /** 实测：会真的发一次最小请求，按钮旁边写明了这一点。 */
+  const probeThinking = async () => {
+    if (checkingThinking) return;
+    setCheckingThinking(true);
+    try {
+      setThinkingResult(await onCheckThinking(true));
+    } finally {
+      setCheckingThinking(false);
+    }
+  };
+
+  const thinkingAlertType = () => {
+    if (!thinkingResult) return "info" as const;
+    if (thinkingResult.reasoning_seen) return "success" as const;
+    if (thinkingResult.accepted === false) return "error" as const;
+    if (thinkingResult.probed) return "warning" as const;
+    return "info" as const;
+  };
 
   const setUnlimitedTokens = (unlimited: boolean) => {
     if (unlimited) {
@@ -111,6 +204,23 @@ export default function LLMConfigCard({
         disabled={!editing || saving || testing}
         onValuesChange={(changedValues) => {
           if ("base_url" in changedValues) onResetApiKey();
+          // 换了端点/模型/协议，上一次的检测结论就不再适用——清掉比留着误导好。
+          if (
+            "base_url" in changedValues ||
+            "model" in changedValues ||
+            "api_style" in changedValues
+          ) {
+            setThinkingResult(null);
+          }
+          // 打开开关时顺手取一次档位（只读后端能力表，零上游调用）。
+          if ("thinking_enabled" in changedValues && changedValues.thinking_enabled) {
+            void loadThinkingOptions();
+          }
+          // 下拉里选了「自定义…」：把哨兵值从字段里清掉，换成输入框。
+          if (changedValues.thinking_effort === CUSTOM_EFFORT_OPTION) {
+            setCustomEffort(true);
+            form.setFieldValue("thinking_effort", "");
+          }
         }}
       >
         <Form.Item name="provider" hidden>
@@ -157,7 +267,7 @@ export default function LLMConfigCard({
                   「模型名称」标注的控件，而包一层（如 Space.Compact）会让 Form.Item 生成的
                   id 落在那层 div 上，label 就指不到输入框了。addonAfter 两种问题都没有。 */}
               <Input
-                placeholder="deepseek-chat"
+                placeholder="deepseek-v4-flash"
                 addonAfter={
                   <Button
                     type="text"
@@ -237,6 +347,88 @@ export default function LLMConfigCard({
           </Col>
         </Row>
 
+        {/* 思考模式：**只作用于除「求职助手」以外的调用**。助手在它的输入框下方有自己的
+            「思考强度」，两者刻意分开——否则"想换个档位试试"会变成一次全局改动。 */}
+        <Row gutter={[16, 0]}>
+          <Col xs={24} md={8}>
+            <Form.Item
+              name="thinking_enabled"
+              label="思考模式"
+              valuePropName="checked"
+              tooltip="开启后，除「求职助手」以外的 AI 调用（简历生成、岗位解析、匹配分析等）会请求模型先思考再作答。默认关闭；各家对思考参数的写法与档位都不一样，可以先点右边的按钮检测。"
+            >
+              <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            {/* 「下拉 / 自定义输入框」两态共用同一个字段名：**两个分支各自挂 `name`**，
+                同一时刻只挂一个。这样字段始终是注册状态——`Form.useWatch` 只会在注册的
+                字段上收到"配置异步载入"那次通知，不挂 name 的话载入值永远读不到。 */}
+            {showingCustomEffort ? (
+              <>
+                <Form.Item name="thinking_effort" label="思考强度" tooltip={EFFORT_TOOLTIP}>
+                  <Input
+                    aria-label="思考强度"
+                    maxLength={MAX_REASONING_EFFORT_CHARS}
+                    placeholder="如 xhigh / max / 4096"
+                    status={isValidReasoningEffort(thinkingEffort) ? undefined : "error"}
+                  />
+                </Form.Item>
+                <Button
+                  type="link"
+                  size="small"
+                  className="llm-thinking-effort-back"
+                  onClick={() => {
+                    setCustomEffort(false);
+                    form.setFieldValue("thinking_effort", "");
+                  }}
+                >
+                  用预设档位
+                </Button>
+              </>
+            ) : (
+              <Form.Item name="thinking_effort" label="思考强度" tooltip={EFFORT_TOOLTIP}>
+                <Select
+                  aria-label="思考强度"
+                  options={[...effortOptions, { value: CUSTOM_EFFORT_OPTION, label: "自定义…" }]}
+                  disabled={thinkingEnabled ? undefined : true}
+                  placeholder="默认档位（不指定）"
+                />
+              </Form.Item>
+            )}
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item
+              label="支持情况"
+              tooltip="上游没有「查询思考能力」的接口，所以这里分两步：只读内置表给出候选档位，点按钮则真的发一次最小请求——用来分辨「真的生效 / 被静默忽略 / 被上游拒绝」。"
+            >
+              <Button
+                icon={<ExperimentOutlined />}
+                loading={checkingThinking}
+                disabled={saving || testing}
+                onClick={() => void probeThinking()}
+              >
+                检测思考支持
+              </Button>
+            </Form.Item>
+          </Col>
+        </Row>
+        <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
+          「检测思考支持」会发一次最小请求，计入你的模型用量。思考模式只作用于除「求职助手」以外的
+          AI 调用；助手的思考强度在它的输入框下方单独设置。
+        </Typography.Text>
+        {thinkingResult && (
+          <Alert
+            type={thinkingAlertType()}
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={thinkingResult.probed ? thinkingResult.message : thinkingResult.note}
+            description={
+              thinkingResult.probed && thinkingResult.note ? thinkingResult.note : undefined
+            }
+          />
+        )}
+
         <Button
           type="link"
           className="llm-advanced-toggle"
@@ -244,7 +436,7 @@ export default function LLMConfigCard({
         >
           {advancedOpen
             ? "收起高级调整"
-            : "高级调整（Top P / Top K、惩罚项、随机种子、停止词、思考预算）"}
+            : "高级调整（Top P / Top K、惩罚项、随机种子、停止词、思考参数形态）"}
         </Button>
         {advancedOpen && (
           <>
@@ -348,7 +540,7 @@ export default function LLMConfigCard({
                 <Form.Item
                   name="thinking_budget"
                   label="思考预算"
-                  tooltip="Claude 原生协议下的扩展思考 token 预算。填 0 = 明确关闭思考；留空 = 不发送该字段。仅在协议选「Anthropic 原生」时有效。"
+                  tooltip="Claude 原生协议下的扩展思考 token 预算。填 0 = 明确关闭思考；留空 = 不发送该字段。仅在协议选「Anthropic 原生」时有效。填了它就以上面的「思考模式」开关为准——这是给需要精确控制预算的老用法留的。"
                 >
                   <InputNumber
                     min={0}
@@ -357,6 +549,15 @@ export default function LLMConfigCard({
                     style={{ width: "100%" }}
                     placeholder="留空 = 不发送"
                   />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={6}>
+                <Form.Item
+                  name="thinking_style"
+                  label="思考参数形态"
+                  tooltip="开启思考时请求体里用哪种写法。auto = 按接口协议与服务商自动推断（多数情况选这个）；只有走中转站、自建网关，或「检测思考支持」说参数不被接受时，才需要手动换一种。"
+                >
+                  <Select options={THINKING_STYLE_OPTIONS} />
                 </Form.Item>
               </Col>
               <Col xs={24} md={12}>
@@ -378,7 +579,7 @@ export default function LLMConfigCard({
               type="info"
               showIcon
               style={{ marginTop: 4 }}
-              message="协议换成「Anthropic 原生」后，思考预算、Top K 等参数才有意义；换成 OpenAI 兼容时它们会被忽略。"
+              message="协议换成「Anthropic 原生」后，思考预算、Top K 等参数才有意义；换成 OpenAI 兼容时它们会被忽略。思考预算与「思考模式」是同一件事的两代写法：填了预算就以预算为准，留空则由开关与强度决定。"
             />
           </>
         )}

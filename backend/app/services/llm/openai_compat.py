@@ -13,6 +13,7 @@ import httpx
 
 from ...schemas.setting import LLMConfig
 from .base import BaseLLMProvider, LLMDelta, LLMError
+from .thinking import thinking_payload, wants_thinking
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +75,12 @@ def _extract_reasoning(delta: dict) -> str:
 
 
 
-def _looks_like_unsupported_tools(error: LLMError) -> bool:
-    """判断这次失败是否因为服务商不认识 tools 参数。
+def _looks_like_rejected_parameter(error: LLMError) -> bool:
+    """判断这次失败是否像"服务商不认某个可选参数"（tools 或思考参数）。
 
     ``_http_error`` 刻意不把上游正文带进错误消息（可能回显敏感资料），所以这里
-    只能依据状态码。400 也可能是别的原因，但退化成不带工具再试一次是无害的。
+    只能依据状态码。400 也可能是别的原因，但去掉该参数再试一次是无害的——
+    失败的话第二次错误会照常抛出去。
     """
     return "（HTTP 400）" in str(error)
 
@@ -217,24 +219,51 @@ class OpenAICompatProvider(BaseLLMProvider):
         工具调用的参数在协议里是**碎片化**到达的（实测一个短 JSON 会用二十多帧、
         每帧一两个字符），必须按 index 累积拼接；拼接结果才是可直接 json 解析的
         字符串，这一点由本方法保证，调用方不必关心。
+
+        另外兜住两类"服务商不认这个参数"的降级（各自最多一次）：tools 与思考参数。
+        都是 400 之后去掉参数重试一次——把"这个功能整个不可用"降级成"这一次少点东西"。
         """
-        try:
-            async for delta in self._stream_deltas(messages, tools):
-                yield delta
-        except LLMError as exc:
-            # 不少 OpenAI 兼容端点（本地小模型等）不支持 tools，会直接返回 400。
-            # 这里降级成不带工具的普通对话重试一次，而不是让整个功能不可用。
-            if tools and _looks_like_unsupported_tools(exc):
-                logger.warning("模型不支持工具调用，已降级为普通对话：%s", exc)
-                async for delta in self._stream_deltas(messages, None):
+        drop_tools = False
+        drop_thinking = False
+        while True:
+            try:
+                async for delta in self._stream_deltas(
+                    messages,
+                    None if drop_tools else tools,
+                    thinking=not drop_thinking,
+                ):
                     yield delta
                 return
-            raise
+            except LLMError as exc:
+                if not _looks_like_rejected_parameter(exc):
+                    raise
+                # 不少 OpenAI 兼容端点（本地小模型等）不支持 tools，会直接返回 400。
+                if tools and not drop_tools:
+                    drop_tools = True
+                    logger.warning("模型不支持工具调用，已降级为普通对话：%s", exc)
+                    continue
+                # 思考参数被拒同理：去掉它再试一次，而不是"设置页一开开关，所有 AI
+                # 功能一起 400"。
+                if not drop_thinking and self._wants_thinking():
+                    drop_thinking = True
+                    logger.warning("模型拒绝了思考参数，已去掉后重试：%s", exc)
+                    continue
+                raise
+
+    def _wants_thinking(self) -> bool:
+        """这次请求会不会带上思考参数——**配置里的开关与请求级的强度都算**。
+
+        只看配置会漏掉助手那条路：它的配置被 ``without_thinking()`` 剥过，思考强度走的是
+        ``request_overrides``。漏掉的话，助手页选了不被上游接受的档位就只能报错，
+        而这里本该降级成"这一次没有思考"。
+        """
+        effort = str(self.request_overrides.get("reasoning_effort") or "").strip()
+        return bool(effort) or wants_thinking(self.config)
 
     async def _stream_deltas(
-        self, messages: list[dict], tools: list[dict] | None
+        self, messages: list[dict], tools: list[dict] | None, *, thinking: bool = True
     ) -> AsyncIterator[LLMDelta]:
-        payload = self._build_payload(messages, stream=True, tools=tools)
+        payload = self._build_payload(messages, stream=True, tools=tools, thinking=thinking)
         try:
             async with self._client() as client:
                 async with client.stream(
@@ -346,7 +375,12 @@ class OpenAICompatProvider(BaseLLMProvider):
         )
 
     def _build_payload(
-        self, messages: list[dict], stream: bool, tools: list[dict] | None = None
+        self,
+        messages: list[dict],
+        stream: bool,
+        tools: list[dict] | None = None,
+        *,
+        thinking: bool = True,
     ) -> dict:
         payload = {
             "model": self.config.model,
@@ -359,14 +393,14 @@ class OpenAICompatProvider(BaseLLMProvider):
         # 默认值可能小于用户此前手动设置的值。
         if not self.config.uses_unlimited_output:
             payload["max_tokens"] = self.config.max_tokens
-        self._apply_advanced_parameters(payload)
-        self._apply_request_overrides(payload)
+        self._apply_advanced_parameters(payload, thinking=thinking)
+        self._apply_request_overrides(payload, thinking=thinking)
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
         return payload
 
-    def _apply_advanced_parameters(self, payload: dict) -> None:
+    def _apply_advanced_parameters(self, payload: dict, *, thinking: bool = True) -> None:
         """发送用户在「高级调整」里显式开启的参数；未开启（None）就不发送。"""
         for key in (
             "top_p",
@@ -382,23 +416,38 @@ class OpenAICompatProvider(BaseLLMProvider):
         stop = getattr(self.config, "stop", None)
         if stop:
             payload["stop"] = list(stop)
-        # Claude 系（含兼容网关）的扩展思考：0 明确关闭，正数给预算。
+        # 思考参数。`thinking=False` 只在"上游拒绝了它们、降级重试一次"时出现（见
+        # `stream_chat_events`），那时两类参数要一起去掉。
+        #
+        # 两类参数的优先级：显式填过「思考预算」的以它为准（老用户的既有行为不能被新的
+        # 开关改写）；否则按「思考模式」开关与形态生成。**关着时一个字都不加**——默认
+        # 路径的请求体必须与加这个功能之前逐字节一致。
         thinking_budget = getattr(self.config, "thinking_budget", None)
-        if thinking_budget is not None:
-            payload["thinking"] = (
-                {"type": "enabled", "budget_tokens": thinking_budget}
-                if thinking_budget > 0
-                else {"type": "disabled"}
-            )
+        if thinking:
+            if thinking_budget is not None:
+                payload["thinking"] = (
+                    {"type": "enabled", "budget_tokens": thinking_budget}
+                    if thinking_budget > 0
+                    else {"type": "disabled"}
+                )
+            else:
+                for key, value in thinking_payload(self.config).items():
+                    payload.setdefault(key, value)
         # 额外请求体：长尾参数的出口。保留键已在校验层拦掉，这里原样合并。
         extra = getattr(self.config, "extra_body", None)
         if isinstance(extra, dict):
             for key, value in extra.items():
                 payload.setdefault(key, value)
 
-    def _apply_request_overrides(self, payload: dict) -> None:
-        """合并单次请求的覆盖参数（白名单 + 非空值）。"""
+    def _apply_request_overrides(self, payload: dict, *, thinking: bool = True) -> None:
+        """合并单次请求的覆盖参数（白名单 + 非空值）。
+
+        ``thinking=False`` 时连 ``reasoning_effort`` 一起跳过：降级重试要的是**真的不带
+        思考参数**，而助手那条路的强度只在请求级里，漏掉它重试就会以同样的 400 再失败一次。
+        """
         for key, value in self.request_overrides.items():
+            if key == "reasoning_effort" and not thinking:
+                continue
             if key in _OVERRIDABLE_KEYS and value not in (None, ""):
                 payload[key] = value
 

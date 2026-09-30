@@ -3,6 +3,7 @@ import { CloseOutlined, EditOutlined, SaveOutlined } from "@ant-design/icons";
 import { App, Button, Form, Tabs, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  checkLLMThinking,
   deleteLLMConfigRecord,
   getLLMConfig,
   listLLMConfigRecords,
@@ -22,6 +23,7 @@ import ReminderPopupCard from "../components/settings/ReminderPopupCard";
 import SearchCard from "../components/settings/SearchCard";
 import SkillsCard from "../components/settings/SkillsCard";
 import UpdateCard from "../components/settings/UpdateCard";
+import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
 import {
   API_KEY_MASK,
   CUSTOM_PRESET,
@@ -34,7 +36,13 @@ import {
   type SettingsFormValues,
 } from "../components/settings/SettingsConfig";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
-import type { LLMConfig, LLMConfigRecord, LLMModelsResult, LLMTestResult } from "../types";
+import type {
+  LLMConfig,
+  LLMConfigRecord,
+  LLMModelsResult,
+  LLMTestResult,
+  LLMThinkingResult,
+} from "../types";
 
 /** 设置分页。三页各自装同一类东西：改模型配置不用先翻过整套数据备份。 */
 type SettingsTabKey = "model" | "data" | "app";
@@ -195,6 +203,31 @@ export default function SettingsPage() {
       return {
         models: [],
         message: err instanceof Error ? err.message : "获取模型列表失败",
+      };
+    }
+  };
+
+  /**
+   * 查这个模型支持哪种思考形态与哪些强度档位。
+   *
+   * `probe=false` 只读后端的内置能力表（零上游调用，用来出选项）；`probe=true` 会**真的
+   * 发一次最小请求**——上游没有"查询思考能力"的接口，很多服务商对不认识的参数又是静默
+   * 忽略的，只有实发一次才能分辨"生效"与"没效果"。
+   */
+  const checkThinking = async (probe: boolean): Promise<LLMThinkingResult> => {
+    const values = form.getFieldsValue(true) as SettingsFormValues;
+    try {
+      return await checkLLMThinking(configFromFormValues(values), probe);
+    } catch (err) {
+      return {
+        style: "auto",
+        efforts: [],
+        supported: true,
+        note: "",
+        probed: false,
+        accepted: null,
+        reasoning_seen: false,
+        message: err instanceof Error ? err.message : "检测思考支持失败",
       };
     }
   };
@@ -395,6 +428,7 @@ export default function SettingsPage() {
                   onRevealError={(error) => message.error(error)}
                   onTest={() => void test()}
                   onFetchModels={fetchModels}
+                  onCheckThinking={checkThinking}
                 />
 
                 <LLMConfigRecordsCard
@@ -503,6 +537,7 @@ export default function SettingsPage() {
                     </Typography.Text>
                   </div>
                 </div>
+                <NavigationSettingsCard />
                 <ReminderPopupCard />
                 <UpdateCard />
               </>

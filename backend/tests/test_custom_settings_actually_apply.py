@@ -13,6 +13,9 @@
 - 助手技能提示词进 system 消息 → ``test_assistant.py``；
 - 格式模板参数的 CSS 产出 → ``test_resume_templates.py``。
 """
+import json
+
+import httpx
 import pytest
 
 from app.api.assistant import _system_prompt, _web_search_addendum
@@ -23,6 +26,62 @@ from app.services.interview.interview import build_interview_messages
 from app.services.resume.resume_sample import sample_resume_content
 
 SENTINEL = "ZZQR_SENTINEL_9F3A"
+
+
+# ===== 设置页的「思考模式」 =====
+
+
+async def test_the_thinking_switch_reaches_the_request_body(db_session):
+    """设置里开了思考，**除求职助手以外**的调用必须真的带上它。
+
+    这类问题的形态是"存下来了、界面上也显示开着，但请求里根本没有"——只测"存进去了"
+    完全发现不了。这条从**保存配置**一路走到**真实请求体**（走的是各功能共用的那条
+    provider 与 payload 构造路径，不是另写一条捷径）。
+    """
+    from app.schemas.setting import LLMConfig
+    from app.services.llm.openai_compat import OpenAICompatProvider
+    from app.services.settings_service import get_llm_config, save_llm_config
+
+    save_llm_config(
+        db_session,
+        LLMConfig(
+            base_url="https://api.openai.com/v1",
+            api_key="secret",
+            model="gpt-5.1",
+            thinking_enabled=True,
+            thinking_effort="high",
+        ),
+    )
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            text='data: {"choices":[{"delta":{"content":"好"}}]}\n\ndata: [DONE]\n\n',
+            headers={"Content-Type": "text/event-stream"},
+        )
+
+    provider = OpenAICompatProvider(
+        get_llm_config(db_session), transport=httpx.MockTransport(handler)
+    )
+    async for _ in provider.stream_chat_events([{"role": "user", "content": "hi"}]):
+        pass
+
+    assert bodies[0]["reasoning_effort"] == "high"
+
+
+def test_the_thinking_switch_is_off_by_default(db_session):
+    """默认不开启思考：用户没动过开关时，请求体里不该出现任何思考参数。"""
+    from app.services.llm.thinking import thinking_payload, wants_thinking
+    from app.services.settings_service import get_llm_config
+
+    config = get_llm_config(db_session)
+
+    assert config.thinking_enabled is False
+    assert config.thinking_effort == ""
+    assert thinking_payload(config) == {}
+    assert wants_thinking(config) is False
 
 
 # ===== 简历：自定义样式模板 =====

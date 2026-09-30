@@ -59,6 +59,9 @@ SQLITE_REQUIRED_COLUMNS = {
         "repetition_penalty": "FLOAT",
         "stop": "TEXT NOT NULL DEFAULT '[]'",
         "thinking_budget": "INTEGER",
+        "thinking_enabled": "BOOLEAN NOT NULL DEFAULT 0",
+        "thinking_effort": "VARCHAR(32) NOT NULL DEFAULT ''",
+        "thinking_style": "VARCHAR(32) NOT NULL DEFAULT 'auto'",
         "extra_body": "TEXT NOT NULL DEFAULT '{}'",
     },
 }

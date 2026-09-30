@@ -27,6 +27,7 @@ import httpx
 from ...schemas.setting import LLMConfig
 from .base import BaseLLMProvider, LLMDelta, LLMError
 from .openai_compat import http_error_message, validated_base_url
+from .thinking import DEFAULT_EFFORT, EFFORT_BUDGETS, thinking_budget
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +39,8 @@ _MAX_CHAT_RESPONSE_BYTES = 2 * 1024 * 1024
 _MIN_STREAM_CHARS = 64_000
 _MAX_STREAM_CHARS = 2_000_000
 
-# 思考强度 → 思考预算（tokens）。用于助手页的「思考强度」在原生协议下的映射。
-_EFFORT_BUDGETS: dict[str, int] = {
-    "minimal": 1_024,
-    "low": 2_048,
-    "medium": 8_192,
-    "high": 16_384,
-}
+# 思考强度 → 思考预算（tokens）的映射只有一份，在 `thinking.py`：设置页的「思考模式」
+# 与助手页的「思考强度」在原生协议下走的是同一张表。
 
 
 def _data_url_to_image_block(data_url: str) -> dict[str, Any] | None:
@@ -397,16 +393,30 @@ class AnthropicProvider(BaseLLMProvider):
         return self.config.max_tokens
 
     def _thinking_budget(self) -> int:
-        """本次请求的思考预算：请求级「思考强度」优先，其次配置里的预算。"""
+        """本次请求的思考预算。
+
+        优先级：请求级「思考强度」（助手页）> 配置里显式填的「思考预算」> 设置页的
+        「思考模式」开关（按档位换算）> 不发。中间那层是**老字段**，显式填过就以它为准——
+        加新开关不能改写老用户的既有行为。
+
+        **自定义档位**（用户自己填的词）在这里有两种归宿：填的是数字就当思考预算
+        （原生协议要的正是 tokens 数），填的是别的词（如 `xhigh`）则按默认档处理——
+        静默变成"不思考"是最坏的结果，宁可给一个默认深度。
+        """
         effort = str(self.request_overrides.get("reasoning_effort") or "").strip()
         if effort:
             if effort == "none":
                 return 0
-            budget = _EFFORT_BUDGETS.get(effort)
+            budget = EFFORT_BUDGETS.get(effort)
             if budget:
                 return budget
+            if effort.isdigit():
+                return int(effort)
+            return EFFORT_BUDGETS[DEFAULT_EFFORT]
         configured = getattr(self.config, "thinking_budget", None)
-        return int(configured or 0)
+        if configured is not None:
+            return int(configured)
+        return thinking_budget(self.config)
 
     def _build_payload(
         self, messages: list[dict], stream: bool, tools: list[dict] | None = None

@@ -7,6 +7,8 @@ import type {
   LLMConfigRecord,
   LLMModelsResult,
   LLMTestResult,
+  LLMThinkingResult,
+  NavigationVisibility,
   ReminderPopupSetting,
   SearchConfig,
   UpdateCheckResult,
@@ -34,6 +36,20 @@ export function listLLMModels(
   return request("/settings/llm/models", {
     method: "POST",
     body: JSON.stringify(config),
+  });
+}
+
+/**
+ * 查这个模型支持哪种思考形态、有哪些强度档位。
+ *
+ * `probe=false` 只读后端的内置能力表（零上游调用，用来出选项）；`probe=true` 会**真的
+ * 发一次最小请求**——上游没有"查询思考能力"的接口，而且很多服务商对不认识的参数是
+ * 静默忽略的，只有实发一次看响应里有没有思考内容才能分辨。界面上因此必须写明这一点。
+ */
+export function checkLLMThinking(config: LLMConfig, probe = false): Promise<LLMThinkingResult> {
+  return request("/settings/llm/thinking/check", {
+    method: "POST",
+    body: JSON.stringify({ ...config, probe }),
   });
 }
 
@@ -96,6 +112,17 @@ export function getReminderPopupSetting(): Promise<ReminderPopupSetting> {
 
 export function saveReminderPopupSetting(enabled: boolean): Promise<ReminderPopupSetting> {
   return request("/settings/reminder-popup", { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
+export function getNavigationVisibility(): Promise<NavigationVisibility> {
+  return request("/settings/navigation");
+}
+
+export function saveNavigationVisibility(hidden: string[]): Promise<NavigationVisibility> {
+  return request("/settings/navigation", {
+    method: "PUT",
+    body: JSON.stringify({ hidden }),
+  });
 }
 
 export function listDatasets(): Promise<DatasetInfo[]> {

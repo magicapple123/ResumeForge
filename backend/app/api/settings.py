@@ -17,12 +17,16 @@ from ..schemas.setting import (
     LLMModelsResult,
     LLMTestRequest,
     LLMTestResult,
+    LLMThinkingRequest,
+    LLMThinkingResult,
+    NavigationVisibility,
     ReminderPopupSetting,
     SearchConfig,
 )
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.llm.model_catalog import list_available_models
+from ..services.llm.thinking import probe_thinking, thinking_support
 from ..services.settings_service import (
     delete_llm_config_record,
     get_llm_config,
@@ -33,8 +37,10 @@ from ..services.settings_service import (
     resolve_llm_config_api_key,
     save_llm_config,
     save_llm_config_record,
+    save_navigation_visibility,
     save_reminder_popup_on_start,
     save_search_config,
+    get_navigation_visibility,
 )
 
 logger = logging.getLogger(__name__)
@@ -129,6 +135,18 @@ def write_reminder_popup(payload: ReminderPopupSetting, db: Session = Depends(ge
     return ReminderPopupSetting(enabled=save_reminder_popup_on_start(db, payload.enabled))
 
 
+@router.get("/navigation", response_model=NavigationVisibility)
+def read_navigation_visibility(db: Session = Depends(get_db)):
+    return get_navigation_visibility(db)
+
+
+@router.put("/navigation", response_model=NavigationVisibility)
+def write_navigation_visibility(
+    payload: NavigationVisibility, db: Session = Depends(get_db)
+):
+    return save_navigation_visibility(db, payload)
+
+
 @router.post("/llm/models", response_model=LLMModelsResult)
 async def list_llm_models(payload: LLMModelsRequest, db: Session = Depends(get_db)):
     """获取服务商当前可用的模型列表；失败时用 message 说明原因，不抛 5xx。"""
@@ -146,6 +164,41 @@ async def list_llm_models(payload: LLMModelsRequest, db: Session = Depends(get_d
     return LLMModelsResult(models=models, message=f"共获取到 {len(models)} 个模型")
 
 
+@router.post("/llm/thinking/check", response_model=LLMThinkingResult)
+async def check_llm_thinking(payload: LLMThinkingRequest, db: Session = Depends(get_db)):
+    """查这个模型支持哪种思考形态、有哪些强度档位。
+
+    上游**没有**"查询思考能力"的接口（``/v1/models`` 只给模型名），所以分两步：
+    ``probe=False`` 只读内置能力表（零上游调用，用来出选项）；``probe=True`` 再实发一次
+    最小请求——很多服务商对不认识的参数是**静默忽略**的，只有看响应里有没有思考内容
+    才能分辨"真的生效"与"接受了但没效果"。失败一律用 message 说明，不抛 5xx。
+    """
+    if not payload.base_url.strip() or not payload.model.strip():
+        return LLMThinkingResult(message="请先填写 Base URL 与模型名称")
+    try:
+        resolved = resolve_llm_config_api_key(db, payload)
+    except ValueError as exc:
+        return LLMThinkingResult(message=str(exc))
+    support = thinking_support(resolved)
+    result = LLMThinkingResult(
+        style=support.style,
+        efforts=list(support.efforts),
+        supported=support.supported,
+        note=support.note,
+    )
+    if not payload.probe:
+        return result
+    probed = await probe_thinking(resolved)
+    return result.model_copy(
+        update={
+            "probed": True,
+            "accepted": probed.accepted,
+            "reasoning_seen": probed.reasoning_seen,
+            "message": probed.message,
+        }
+    )
+
+
 @router.post("/llm/test", response_model=LLMTestResult)
 async def test_llm(payload: LLMTestRequest, db: Session = Depends(get_db)):
     """测试连通性：用表单当前值发起一次最小对话，不要求先保存。"""
@@ -155,7 +208,8 @@ async def test_llm(payload: LLMTestRequest, db: Session = Depends(get_db)):
         resolved_payload = resolve_llm_config_api_key(db, payload)
     except ValueError as exc:
         return LLMTestResult(ok=False, message=str(exc))
-    provider = create_provider(resolved_payload)
+    # 只测连通性：连思考参数一起测的话，"参数写错"会表现成"连不上"，用户会去查网络。
+    provider = create_provider(resolved_payload.without_thinking())
     started = time.perf_counter()
     try:
         reply = await provider.chat([{"role": "user", "content": "请只回复两个字：正常"}])
