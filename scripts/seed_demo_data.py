@@ -658,7 +658,7 @@ ins(
         row(
             **r,
             warnings=[],
-            model="" if r["source"] == "manual" else "deepseek-chat",
+            model="" if r["source"] == "manual" else "deepseek-v4-flash",
             parse_error="",
             deleted_at=None,
         )
@@ -1420,7 +1420,8 @@ ins(
                     "provider": "deepseek",
                     "base_url": "https://api.deepseek.com/v1",
                     "api_key": "",
-                    "model": "deepseek-chat",
+                    # 演示库当前配置的模型；旧的 deepseek-chat 已于 2026-07-24 停用。
+                    "model": "deepseek-v4-flash",
                     "temperature": 0.1,
                     "timeout_seconds": 120,
                     "max_tokens": 0,
@@ -1488,7 +1489,7 @@ ins(
             context={},
             status="complete",
             error="",
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             created_at=NOW - timedelta(days=2, minutes=9),
         ),
     ],

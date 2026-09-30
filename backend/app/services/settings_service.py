@@ -11,7 +11,15 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..models.setting import AppSetting, LLMConfigRecord
-from ..schemas.setting import LLMConfig, LLMConfigRecordCreate, LLMConfigRecordOut, SearchConfig
+from ..schemas.setting import (
+    NAVIGATION_CORE_KEYS,
+    NAVIGATION_OPTIONAL_KEYS,
+    LLMConfig,
+    LLMConfigRecordCreate,
+    LLMConfigRecordOut,
+    NavigationVisibility,
+    SearchConfig,
+)
 from .api_key_crypto import decrypt_key, encrypt_key
 
 logger = logging.getLogger(__name__)
@@ -19,6 +27,7 @@ logger = logging.getLogger(__name__)
 _LLM_CONFIG_KEY = "llm_config"
 _SEARCH_CONFIG_KEY = "search_config"
 _REMINDER_POPUP_KEY = "reminder_popup_on_start"
+_NAVIGATION_VISIBILITY_KEY = "navigation_visibility"
 API_KEY_MASK = "********"
 _RECORD_API_KEY_PREFIX = f"{API_KEY_MASK}:record:"
 
@@ -86,7 +95,13 @@ def _normalized_base_url(value: str) -> str:
 
 
 def mask_llm_config(db: Session, config: LLMConfig) -> LLMConfig:
-    """脱敏当前配置；若它来自配置记录，则保留可安全回传的记录引用。"""
+    """脱敏当前配置；若它来自配置记录，则保留可安全回传的记录引用。
+
+    匹配元组只收**连接身份**（端点、密钥、模型与几个基础参数），**刻意不含** top_p / seed /
+    api_style / thinking_budget / 思考模式这些可选生成参数：用户从记录加载后改一个开关再保存，
+    仍然认得回原记录，不会因为"只差一个可选参数"就丢掉记录绑定与密钥引用。选错密钥的风险由
+    `api_key` 本身参与比对挡住（两条记录仅密钥不同时不会互相匹配）。
+    """
     record_id = None
     if config.api_key:
         fields = (
@@ -231,4 +246,32 @@ def save_reminder_popup_on_start(db: Session, enabled: bool) -> bool:
     db.commit()
     return bool(enabled)
 
+
+# ===== 导航显示设置 =====
+
+
+def get_navigation_visibility(db: Session) -> NavigationVisibility:
+    row = db.get(AppSetting, _NAVIGATION_VISIBILITY_KEY)
+    if row is None:
+        return NavigationVisibility()
+    try:
+        parsed = NavigationVisibility.model_validate(json.loads(row.value))
+    except (json.JSONDecodeError, ValidationError, TypeError):
+        logger.warning("导航显示设置数据损坏，已重置为默认显示")
+        return NavigationVisibility()
+    allowed = NAVIGATION_OPTIONAL_KEYS - NAVIGATION_CORE_KEYS
+    return NavigationVisibility(hidden=[key for key in parsed.hidden if key in allowed])
+
+
+def save_navigation_visibility(db: Session, config: NavigationVisibility) -> NavigationVisibility:
+    allowed = NAVIGATION_OPTIONAL_KEYS - NAVIGATION_CORE_KEYS
+    cleaned = NavigationVisibility(hidden=[key for key in config.hidden if key in allowed])
+    serialized = json.dumps(cleaned.model_dump(), ensure_ascii=False)
+    row = db.get(AppSetting, _NAVIGATION_VISIBILITY_KEY)
+    if row is None:
+        db.add(AppSetting(key=_NAVIGATION_VISIBILITY_KEY, value=serialized))
+    else:
+        row.value = serialized
+    db.commit()
+    return cleaned
 

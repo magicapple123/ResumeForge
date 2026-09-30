@@ -28,6 +28,23 @@ def test_settings_roundtrip(client, db_session):
     assert response.status_code == 200 and response.json()["ok"] is False
 
 
+def test_navigation_visibility_keeps_optional_keys_and_never_hides_core_entries(client):
+    assert client.get("/api/settings/navigation").json() == {"hidden": []}
+
+    response = client.put(
+        "/api/settings/navigation",
+        json={
+            "hidden": ["/assistant", "/assistant", "/profile", "/not-a-route", "/analytics"]
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"hidden": ["/assistant", "/analytics"]}
+    assert client.get("/api/settings/navigation").json() == {
+        "hidden": ["/assistant", "/analytics"]
+    }
+
+
 def test_settings_accepts_unlimited_output_and_keeps_the_minimum_bound(client):
     config = LLMConfig(base_url="https://api.example.com/v1", model="test-model")
 
@@ -229,6 +246,124 @@ def test_masked_api_key_url_binding_normalizes_host_but_preserves_path_case(clie
     response = client.put("/api/settings/llm", json=changed_path)
     assert response.status_code == 400
     assert "重新填写 API Key" in response.json()["detail"]
+
+
+def test_the_connection_test_ignores_the_thinking_settings(client, monkeypatch):
+    """「测试连接」只测连通性：思考参数写错不该表现成"连不上"，否则用户会去查网络。"""
+    config = LLMConfig(
+        base_url="https://api.example.com/v1",
+        api_key="secret-for-test",
+        model="test-model",
+        thinking_enabled=True,
+        thinking_effort="low",
+        thinking_budget=4096,
+    )
+    saved = client.put("/api/settings/llm", json=config.model_dump()).json()
+    captured = {}
+
+    class FakeProvider:
+        async def chat(self, _messages):
+            return "正常"
+
+    def fake_create_provider(resolved):
+        captured["config"] = resolved
+        return FakeProvider()
+
+    monkeypatch.setattr("app.api.settings.create_provider", fake_create_provider)
+    response = client.post("/api/settings/llm/test", json=saved)
+
+    assert response.status_code == 200 and response.json()["ok"] is True
+    assert captured["config"].thinking_enabled is False
+    assert captured["config"].thinking_budget is None
+
+
+# ===== 「思考模式」的获取接口 =====
+
+
+def test_the_thinking_check_reads_the_table_without_calling_the_vendor(client, monkeypatch):
+    """``probe=false`` 是**零上游调用**的：只回仓库里的能力表，用来出选项。
+
+    这条把"不发请求"钉死——否则每打开一次设置页都会悄悄花一次钱。
+    """
+
+    def exploding_factory(*_args, **_kwargs):  # pragma: no cover - 被调用即失败
+        raise AssertionError("probe=false 不该创建 provider")
+
+    monkeypatch.setattr("app.services.llm.create_provider", exploding_factory)
+    response = client.post(
+        "/api/settings/llm/thinking/check",
+        json={"base_url": "https://api.openai.com/v1", "model": "gpt-5.1", "api_key": "k"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["probed"] is False
+    assert body["style"] == "reasoning_effort"
+    assert body["efforts"] == ["minimal", "low", "medium", "high"]
+    assert body["supported"] is True
+    assert body["note"]
+
+
+def test_the_thinking_check_needs_a_url_and_a_model(client):
+    response = client.post("/api/settings/llm/thinking/check", json={"base_url": "", "model": ""})
+
+    assert response.status_code == 200
+    assert "Base URL" in response.json()["message"]
+
+
+def test_the_thinking_check_probes_and_reports_a_rejection(client, monkeypatch):
+    """``probe=true`` 实发一次：上游拒绝时要说清楚是**参数**被拒，而不是网断了。"""
+    from app.services.llm.base import LLMError
+
+    class FakeProvider:
+        async def stream_chat_events(self, _messages, tools=None):
+            raise LLMError("请求格式错误，请检查模型名称与参数设置（HTTP 400）")
+            yield  # pragma: no cover - 让它是个异步生成器
+
+    monkeypatch.setattr("app.services.llm.create_provider", lambda config, **kw: FakeProvider())
+    response = client.post(
+        "/api/settings/llm/thinking/check",
+        json={
+            "base_url": "https://api.example.com/v1",
+            "model": "some-model",
+            "api_key": "k",
+            "probe": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["probed"] is True
+    assert body["accepted"] is False
+    assert body["reasoning_seen"] is False
+    assert "拒绝" in body["message"]
+
+
+def test_the_thinking_check_probe_keeps_the_masked_key_on_the_server(client, monkeypatch):
+    """探测同样走"脱敏引用 → 后端还原密钥"，明文密钥不会回到前端。"""
+    config = LLMConfig(
+        base_url="https://api.example.com/v1", api_key="secret-for-test", model="some-model"
+    )
+    saved = client.put("/api/settings/llm", json=config.model_dump()).json()
+    captured = {}
+
+    class FakeProvider:
+        async def stream_chat_events(self, _messages, tools=None):
+            from app.services.llm.base import LLMDelta
+
+            yield LLMDelta(reasoning="让我想想")
+
+    def fake_create_provider(resolved, **_kwargs):
+        captured["api_key"] = resolved.api_key
+        return FakeProvider()
+
+    monkeypatch.setattr("app.services.llm.create_provider", fake_create_provider)
+    response = client.post("/api/settings/llm/thinking/check", json={**saved, "probe": True})
+
+    assert response.status_code == 200
+    assert response.json()["reasoning_seen"] is True
+    assert captured["api_key"] == "secret-for-test"
+    assert "secret-for-test" not in response.text
 
 
 def test_create_provider_forwards_request_overrides():

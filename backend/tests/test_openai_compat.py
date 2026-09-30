@@ -356,3 +356,153 @@ async def test_stream_events_falls_back_when_the_provider_rejects_tools():
     assert len(bodies) == 2
     assert "tools" in bodies[0] and "tools" not in bodies[1]
     assert "".join(delta.text for delta in deltas) == "降级后的回答"
+
+
+# ===== 设置页的「思考模式」（作用于除求职助手以外的调用）=====
+
+
+def _thinking_config(**overrides) -> LLMConfig:
+    base = {
+        "base_url": "https://api.openai.com/v1",
+        "api_key": "secret-key",
+        "model": "gpt-5.1",
+        "max_tokens": 4096,
+    }
+    base.update(overrides)
+    return LLMConfig(**base)
+
+
+def test_thinking_off_keeps_the_request_body_unchanged():
+    """**兼容红线**：默认（关）时请求体与加这个功能之前逐字节一致。
+
+    升级不能替用户打开一个他没用过的参数——不支持它的服务商会直接 400，
+    表现成"升级完所有 AI 功能都坏了"。
+    """
+    payload = OpenAICompatProvider(_thinking_config())._build_payload(
+        [{"role": "user", "content": "hi"}], stream=False
+    )
+
+    assert "reasoning_effort" not in payload
+    assert "thinking" not in payload
+
+
+def test_thinking_on_sends_the_effort():
+    payload = OpenAICompatProvider(
+        _thinking_config(thinking_enabled=True, thinking_effort="low")
+    )._build_payload([{"role": "user", "content": "hi"}], stream=False)
+
+    assert payload["reasoning_effort"] == "low"
+
+
+def test_the_explicit_budget_field_still_beats_the_new_switch():
+    """老字段优先：显式填过「思考预算」的，不能被新开关改写（既有行为不变）。"""
+    payload = OpenAICompatProvider(
+        _thinking_config(thinking_budget=4096, thinking_enabled=True, thinking_effort="low")
+    )._build_payload([{"role": "user", "content": "hi"}], stream=False)
+
+    assert payload["thinking"] == {"type": "enabled", "budget_tokens": 4096}
+    assert "reasoning_effort" not in payload
+
+
+def test_the_request_level_effort_works_while_the_settings_switch_is_off():
+    """助手页的「思考强度」与设置页的「思考模式」是**两条独立的路**。
+
+    设置页默认关着，助手选的低/中/高照样要发出去——否则"设置页没开"会把助手的选择
+    一起吃掉，而两者本来就不该互相影响。
+    """
+    payload = OpenAICompatProvider(
+        _thinking_config(), request_overrides={"reasoning_effort": "low"}
+    )._build_payload([{"role": "user", "content": "hi"}], stream=False)
+
+    assert payload["reasoning_effort"] == "low"
+
+
+def test_a_stripped_config_keeps_the_settings_switch_out_of_the_assistant():
+    """助手那条路拿到的是 ``without_thinking()`` 剥过的配置：设置页开着也不发。
+
+    这条钉住"两者分开"的**另一半**——设置页开一次开关，不该把助手的每一轮对话也改掉；
+    助手在页面上选「默认」时，请求体里就该什么都没有。
+    """
+    config = _thinking_config(thinking_enabled=True, thinking_effort="high")
+
+    payload = OpenAICompatProvider(
+        config.without_thinking(), request_overrides={"reasoning_effort": ""}
+    )._build_payload([{"role": "user", "content": "hi"}], stream=False)
+
+    assert "reasoning_effort" not in payload
+    assert "thinking" not in payload
+
+
+async def test_stream_events_drops_the_thinking_parameters_when_rejected():
+    """有的服务商不认思考参数并直接 400：去掉它重试一次，而不是让整个功能不可用。"""
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if "reasoning_effort" in body:
+            return httpx.Response(400, json={"error": {"message": "unsupported parameter"}})
+        return _stream_response(_sse([{"delta": {"content": "降级后的回答"}}]) + "data: [DONE]\n\n")
+
+    provider = OpenAICompatProvider(
+        _thinking_config(thinking_enabled=True, thinking_effort="low"),
+        transport=httpx.MockTransport(handler),
+    )
+    deltas = await _collect_events(provider)
+
+    assert len(bodies) == 2
+    assert bodies[0]["reasoning_effort"] == "low"
+    assert "reasoning_effort" not in bodies[1]
+    assert "".join(delta.text for delta in deltas) == "降级后的回答"
+
+
+async def test_stream_events_drops_a_rejected_request_level_effort():
+    """助手页选的强度被上游拒绝时，同样降级重试一次。
+
+    只看配置里的开关会漏掉这一条：助手的配置是被 ``without_thinking()`` 剥过的，它的思考
+    强度走**请求级**参数。漏掉的话，助手选了一个上游不认的档位就只能报错。
+    """
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if "reasoning_effort" in body:
+            return httpx.Response(400, json={"error": {"message": "unsupported parameter"}})
+        return _stream_response(_sse([{"delta": {"content": "降级后的回答"}}]) + "data: [DONE]\n\n")
+
+    provider = OpenAICompatProvider(
+        _thinking_config().without_thinking(),  # 助手那条路拿到的配置
+        transport=httpx.MockTransport(handler),
+        request_overrides={"reasoning_effort": "none"},
+    )
+    deltas = await _collect_events(provider)
+
+    assert len(bodies) == 2
+    assert bodies[0]["reasoning_effort"] == "none"
+    assert "reasoning_effort" not in bodies[1]
+    assert "".join(delta.text for delta in deltas) == "降级后的回答"
+
+
+async def test_stream_events_can_downgrade_tools_and_thinking_in_turn():
+    """两个参数都被拒时，两次降级都要发生（各一次），最终还是拿到回答。"""
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if "tools" in body or "reasoning_effort" in body:
+            return httpx.Response(400, json={"error": {"message": "unsupported parameter"}})
+        return _stream_response(_sse([{"delta": {"content": "干净的请求"}}]) + "data: [DONE]\n\n")
+
+    provider = OpenAICompatProvider(
+        _thinking_config(thinking_enabled=True, thinking_effort="high"),
+        transport=httpx.MockTransport(handler),
+    )
+    deltas = await _collect_events(provider, TOOLS)
+
+    assert len(bodies) == 3
+    assert "tools" in bodies[0] and "reasoning_effort" in bodies[0]
+    assert "tools" not in bodies[1] and "reasoning_effort" in bodies[1]
+    assert "tools" not in bodies[2] and "reasoning_effort" not in bodies[2]
+    assert "".join(delta.text for delta in deltas) == "干净的请求"

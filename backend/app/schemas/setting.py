@@ -12,6 +12,26 @@ MIN_MAX_TOKENS = 256
 # 接口协议：openai = Chat Completions 兼容（默认），anthropic = Claude Messages 原生。
 API_STYLES = ("openai", "anthropic")
 
+# 思考参数的形态（=请求体里"开启思考"长什么样）。上游没有统一标准，所以由能力表按
+# 服务商/模型推断，必要时用户可手工指定：
+# - auto             按 api_style 推断（openai→reasoning_effort，anthropic→budget）
+# - reasoning_effort 顶层 `reasoning_effort`（OpenAI o/gpt-5、xAI、Groq、OpenRouter）
+# - thinking_object  `thinking:{type:"enabled"}`（智谱 GLM-4.5+、部分 Claude 网关）
+# - enable_thinking  `enable_thinking:true`（通义 qwen3 走 dashscope 兼容模式）
+# - budget           Anthropic 原生 `thinking:{budget_tokens:N}`（按档位换算预算）
+THINKING_STYLES = (
+    "auto",
+    "reasoning_effort",
+    "thinking_object",
+    "enable_thinking",
+    "budget",
+)
+
+# **不参与思考配置**的标记：`without_thinking()` 把它写进 `thinking_style`，表示"这次调用
+# 完全不由设置页的思考设置管"（求职助手、测试连接用它）。它**不在 THINKING_STYLES 里**，
+# 用户存不进来；有它才能让"默认就思考的模型要显式关掉"那条规则不误伤助手。
+THINKING_STYLE_UNMANAGED = "unmanaged"
+
 # 这些键由 provider 自己填写，用户不该通过 extra_body 覆盖它们。
 RESERVED_EXTRA_BODY_KEYS = frozenset(
     {"model", "messages", "stream", "tools", "tool_choice", "system"}
@@ -47,6 +67,31 @@ class LLMConfig(BaseModel):
     stop: list[str] = Field(default_factory=list, max_length=4)
     # Anthropic 扩展思考预算（tokens）；0 表示明确关闭，None 表示不发送该字段。
     thinking_budget: int | None = Field(default=None, ge=0, le=100_000)
+    # —— 思考模式（作用于**除求职助手以外**的 AI 调用）——
+    #
+    # 助手页的「思考强度」是**单次请求**参数、存在浏览器本地，两者刻意分开：助手想随时
+    # 试档位，而这里改一次就影响简历生成、岗位解析等所有其它 AI 功能，混在一起会让
+    # "我只是想换个档位试试"变成一次全局改动。
+    #
+    # 默认关闭：不发送任何思考参数，服务商看到的东西与加这个功能之前完全一致。
+    thinking_enabled: bool = False
+    # 强度档位。**各家划分不同**（OpenAI 系 minimal/low/medium/high、Claude 原生按预算
+    # 映射、智谱与通义只有开关没有档位），所以这里是自由字符串，取值由能力表按当前服务商
+    # 与模型给出；空串 = 不指定档位（只开开关）。
+    thinking_effort: str = Field(default="", max_length=32)
+    # 思考参数的**形态**：auto = 按 api_style 推断（OpenAI 兼容 → reasoning_effort，
+    # 原生 Messages → thinking 预算）；其余取值由能力表/探测结果给出，让用中转站或
+    # 自建网关的用户能手工改对。
+    thinking_style: str = Field(default="auto", max_length=32)
+
+    @field_validator("thinking_style")
+    @classmethod
+    def thinking_style_must_be_known(cls, value: str) -> str:
+        # 形态决定**请求体长什么样**，拼错不是"没效果"而是每次都 400，所以在入口就挡住。
+        style = (value or "auto").strip()
+        if style not in THINKING_STYLES:
+            raise ValueError(f"思考参数形态只能是：{'、'.join(THINKING_STYLES)}")
+        return style
     # 额外的请求体字段：长尾参数的出口（各家自创参数太多，逐个加字段不现实）。
     extra_body: dict[str, Any] = Field(default_factory=dict)
 
@@ -87,6 +132,28 @@ class LLMConfig(BaseModel):
     def uses_unlimited_output(self) -> bool:
         """是否不限制输出长度；为真时发往模型的请求体不含 max_tokens。"""
         return self.max_tokens == UNLIMITED_MAX_TOKENS
+
+    def without_thinking(self) -> "LLMConfig":
+        """剥掉全部思考设置（开关、档位、老字段预算），并标记为**不参与思考配置**。
+
+        给"不该受「思考模式」影响"的两处调用用：
+        - **求职助手**：它有自己的单次请求级「思考强度」，两者必须分开——否则用户在
+          设置页开一次开关，会连助手的对话一起改掉（连老字段预算一起剥，助手才是
+          完全由自己的选择决定）；
+        - **测试连接**：只测连通性，不该因为思考参数写错而"连不上"。
+
+        `thinking_style` 置成 `THINKING_STYLE_UNMANAGED` 而不是默认的 auto：有些模型
+        **不指定就思考**（DeepSeek V4、通义 Qwen3.5+），那种模型要靠显式发关闭参数才能
+        真的关掉——助手不该被那条规则顺手关掉思考。
+        """
+        return self.model_copy(
+            update={
+                "thinking_enabled": False,
+                "thinking_effort": "",
+                "thinking_budget": None,
+                "thinking_style": THINKING_STYLE_UNMANAGED,
+            }
+        )
 
 
 class LLMConfigRecordCreate(LLMConfig):
@@ -139,6 +206,34 @@ class LLMModelsResult(BaseModel):
     message: str = Field(default="", max_length=1000)
 
 
+class LLMThinkingRequest(LLMConfig):
+    """查"这个模型支持哪种思考形态与哪些强度档位"。
+
+    上游没有标准的能力发现接口（``/v1/models`` 只给模型名），所以分两步：
+    ``probe=False`` 只读仓库里的能力表（零上游调用）；``probe=True`` 再实发一次最小请求，
+    用来区分"真的生效 / 服务接受了但没输出思考 / 上游明确拒绝"。
+    """
+
+    probe: bool = False
+
+
+class LLMThinkingResult(BaseModel):
+    """能力表推断 + （可选）实测的结果。
+
+    ``note`` 是能力表给的解释（始终有，给用户当背景）；``message`` 是实测结论
+    （``probed=True`` 才有）。``accepted``/``reasoning_seen`` 没探测时是 ``None``/``False``。
+    """
+
+    style: str = Field(default="auto", max_length=32)
+    efforts: list[str] = Field(default_factory=list, max_length=16)
+    supported: bool = True
+    note: str = Field(default="", max_length=1000)
+    probed: bool = False
+    accepted: bool | None = None
+    reasoning_seen: bool = False
+    message: str = Field(default="", max_length=1000)
+
+
 class SearchConfig(BaseModel):
     """联网搜索设置。
 
@@ -176,3 +271,33 @@ class ReminderPopupSetting(BaseModel):
     """应用打开时是否弹出近期提醒（默认开）。"""
 
     enabled: bool = True
+
+
+NAVIGATION_CORE_KEYS = frozenset({"/", "/jobs", "/resumes", "/profile", "/apply", "/settings"})
+NAVIGATION_OPTIONAL_KEYS = frozenset(
+    {
+        "/webform",
+        "/tracker",
+        "/analytics",
+        "/favorites",
+        "/assistant",
+        "/materials",
+        "/knowledge",
+        "/skills",
+        "/interview",
+        "/claims",
+        "/trash",
+    }
+)
+
+
+class NavigationVisibility(BaseModel):
+    """用户隐藏的导航模块；隐藏只影响入口，不删除数据或路由。"""
+
+    hidden: list[str] = Field(default_factory=list, max_length=32)
+
+    @field_validator("hidden")
+    @classmethod
+    def hidden_must_be_unique_and_safe(cls, value: list[str]) -> list[str]:
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        return list(dict.fromkeys(cleaned))

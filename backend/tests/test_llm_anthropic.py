@@ -262,6 +262,103 @@ async def test_reasoning_effort_maps_to_thinking_budget():
 
 
 @pytest.mark.asyncio
+async def test_the_settings_switch_maps_to_a_budget():
+    """设置页的「思考模式」在原生协议下按档位换算预算（与助手的强度共用一张表）。"""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.read())
+        return httpx.Response(200, content=_sse([{"type": "message_stop"}]))
+
+    provider = AnthropicProvider(
+        _config(thinking_enabled=True, thinking_effort="low"), transport=httpx.MockTransport(handler)
+    )
+    async for _ in provider.stream_chat_events([{"role": "user", "content": "hi"}]):
+        pass
+
+    body = captured["body"]
+    assert body["thinking"] == {"type": "enabled", "budget_tokens": 2_048}
+    assert body["temperature"] == 1.0
+    assert body["max_tokens"] > 2_048
+
+
+@pytest.mark.asyncio
+async def test_thinking_off_keeps_the_native_body_unchanged():
+    """**兼容红线**：默认（关）时原生请求体与加这个功能之前一致（不发 thinking）。"""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.read())
+        return httpx.Response(200, content=_sse([{"type": "message_stop"}]))
+
+    provider = AnthropicProvider(_config(), transport=httpx.MockTransport(handler))
+    async for _ in provider.stream_chat_events([{"role": "user", "content": "hi"}]):
+        pass
+
+    assert "thinking" not in captured["body"]
+    assert captured["body"]["temperature"] == 0.2
+
+
+@pytest.mark.asyncio
+async def test_the_assistant_effort_still_beats_the_settings_switch():
+    """优先级：助手页的请求级强度 > 设置页的开关（两者必须互不干扰）。"""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.read())
+        return httpx.Response(200, content=_sse([{"type": "message_stop"}]))
+
+    provider = AnthropicProvider(
+        _config(thinking_enabled=True, thinking_effort="low"),
+        transport=httpx.MockTransport(handler),
+        request_overrides={"reasoning_effort": "high"},
+    )
+    async for _ in provider.stream_chat_events([{"role": "user", "content": "hi"}]):
+        pass
+
+    assert captured["body"]["thinking"] == {"type": "enabled", "budget_tokens": 16_384}
+
+
+@pytest.mark.asyncio
+async def test_the_assistant_without_its_own_effort_does_not_inherit_the_switch():
+    """助手侧传进来的配置已经被 ``without_thinking()`` 剥干净——它只认自己的选择。
+
+    这条守的是"两者分开"：设置页开一次开关，不该把助手的对话一起改掉。
+    """
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.read())
+        return httpx.Response(200, content=_sse([{"type": "message_stop"}]))
+
+    provider = AnthropicProvider(
+        _config(thinking_enabled=True, thinking_effort="high").without_thinking(),
+        transport=httpx.MockTransport(handler),
+        request_overrides={"reasoning_effort": ""},
+    )
+    async for _ in provider.stream_chat_events([{"role": "user", "content": "hi"}]):
+        pass
+
+    assert "thinking" not in captured["body"]
+    assert captured["body"]["temperature"] == 0.2
+
+
+def test_custom_efforts_map_to_a_budget_or_the_default_depth():
+    """助手页与设置页都允许**自定义档位**：数字当预算，认不得的词按默认档。
+
+    最坏的结果是静默变成"不思考"（用户要的是思考，只是词不认识），所以这里宁可给一个
+    默认深度；OpenAI 兼容侧不受影响——那里是原样透传。
+    """
+    from app.services.llm.thinking import DEFAULT_EFFORT, EFFORT_BUDGETS
+
+    numeric = AnthropicProvider(_config(), request_overrides={"reasoning_effort": "4096"})
+    unknown_word = AnthropicProvider(_config(), request_overrides={"reasoning_effort": "xhigh"})
+
+    assert numeric._thinking_budget() == 4096
+    assert unknown_word._thinking_budget() == EFFORT_BUDGETS[DEFAULT_EFFORT]
+
+
+@pytest.mark.asyncio
 async def test_disabled_thinking_is_explicit():
     captured: dict = {}
 

@@ -34,6 +34,18 @@ export interface LLMConfig {
   /** Anthropic 扩展思考预算（tokens）；0 = 明确关闭，null = 不发送。 */
   thinking_budget: number | null;
   /**
+   * 思考模式开关。**只作用于除「求职助手」以外的 AI 调用**——助手在它的输入框下方
+   * 有自己的「思考强度」，两者刻意分开。
+   *
+   * 默认关闭 = 请求体里不加任何思考参数（各家对不认识参数的处理不同：有的忽略，
+   * 有的直接 400）。
+   */
+  thinking_enabled: boolean;
+  /** 思考强度档位；各家划分不同，取值由「检测思考支持」接口给出，空串 = 不指定档位。 */
+  thinking_effort: string;
+  /** 思考参数的形态：auto = 按协议与服务商推断；其余取值用于中转站/自建网关。 */
+  thinking_style: string;
+  /**
    * 长尾参数的出口：直接并进请求体。没有界面控件，但必须原样往返，否则会被清空。
    *
    * 值类型写 `LLMExtraBodyValue` 而不是 `unknown`：antd 的 Form 要求表单值的每一项都能
@@ -62,6 +74,23 @@ export interface LLMApiKeyRevealResult {
 /** 「获取可用模型」结果。失败时 message 说明原因，models 为空。 */
 export interface LLMModelsResult {
   models: string[];
+  message: string;
+}
+
+/**
+ * 「检测思考支持」结果。
+ *
+ * `note` 是内置能力表给的解释（读表就有）；`message` 是实测结论（`probed` 为真才有）。
+ * 上游没有"查询思考能力"的接口，所以"支不支持"只能靠表推断 + 实发一次请求实测。
+ */
+export interface LLMThinkingResult {
+  style: string;
+  efforts: string[];
+  supported: boolean;
+  note: string;
+  probed: boolean;
+  accepted: boolean | null;
+  reasoning_seen: boolean;
   message: string;
 }
 
@@ -109,6 +138,10 @@ export interface DatasetImportResult extends DatasetInfo {
 /** 应用打开时是否弹出近期提醒（默认开）。 */
 export interface ReminderPopupSetting {
   enabled: boolean;
+}
+
+export interface NavigationVisibility {
+  hidden: string[];
 }
 
 /** 更新检查结果与可安装包信息。 */

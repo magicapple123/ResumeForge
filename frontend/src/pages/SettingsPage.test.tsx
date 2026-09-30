@@ -1,16 +1,23 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LLM_PRESETS } from "../config";
 import SettingsPage from "./SettingsPage";
+
+// 预设里的模型名会随厂商迭代更新，所以断言对着**定义**取，而不是在测试里再抄一份。
+const deepseekPreset = LLM_PRESETS.find((preset) => preset.provider === "deepseek")!;
+const claudePreset = LLM_PRESETS.find((preset) => preset.provider === "anthropic")!;
 
 const apiMocks = vi.hoisted(() => ({
   checkForUpdate: vi.fn(),
+  checkLLMThinking: vi.fn(),
   activateDataset: vi.fn(),
   deleteDataset: vi.fn(),
   deleteLLMConfigRecord: vi.fn(),
   exportAllDatasets: vi.fn(),
   exportDataset: vi.fn(),
   getLLMConfig: vi.fn(),
+  getNavigationVisibility: vi.fn(),
   getReminderPopupSetting: vi.fn(),
   getSearchConfig: vi.fn(),
   getUpdateDownloadStatus: vi.fn(),
@@ -96,6 +103,7 @@ function tooltipTriggerFor(label: string): HTMLElement {
 
 beforeEach(() => {
   apiMocks.getLLMConfig.mockResolvedValue(llmConfig);
+  apiMocks.getNavigationVisibility.mockResolvedValue({ hidden: [] });
   apiMocks.getReminderPopupSetting.mockResolvedValue({ enabled: true });
   apiMocks.getSearchConfig.mockResolvedValue(searchConfig);
   apiMocks.getUpdateDownloadStatus.mockResolvedValue({
@@ -107,6 +115,16 @@ beforeEach(() => {
     total_bytes: null,
     background: false,
     installable: false,
+    message: "",
+  });
+  apiMocks.checkLLMThinking.mockResolvedValue({
+    style: "reasoning_effort",
+    efforts: ["minimal", "low", "medium", "high"],
+    supported: true,
+    note: "内置表给的说明",
+    probed: false,
+    accepted: null,
+    reasoning_seen: false,
     message: "",
   });
   apiMocks.listLLMConfigRecords.mockResolvedValue([]);
@@ -286,12 +304,14 @@ describe("SettingsPage model presets", () => {
     await choosePreset("DeepSeek（深度求索）");
     fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
 
+    // 对着**预设定义**断言（而不是把模型名抄一遍）：模型名会随厂商迭代更新，
+    // 抄进测试里只会让每次更新都要改两处。这条要守的是"预设的内容真的填进了表单"。
     await waitFor(() =>
       expect(apiMocks.saveLLMConfig).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "deepseek",
-          base_url: "https://api.deepseek.com",
-          model: "deepseek-chat",
+          provider: deepseekPreset.provider,
+          base_url: deepseekPreset.base_url,
+          model: deepseekPreset.model,
         }),
       ),
     );
@@ -316,11 +336,11 @@ describe("SettingsPage model presets", () => {
     await waitFor(() =>
       expect(apiMocks.saveLLMConfig).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: "anthropic",
+          provider: claudePreset.provider,
           api_style: "anthropic",
           // /v1 不能省：provider 拼的是 `{base_url}/messages`。
-          base_url: "https://api.anthropic.com/v1",
-          model: "claude-sonnet-5",
+          base_url: claudePreset.base_url,
+          model: claudePreset.model,
         }),
       ),
     );
@@ -930,6 +950,111 @@ describe("SettingsPage 高级参数往返", () => {
         }),
       ),
     );
+  });
+});
+
+describe("SettingsPage 思考模式", () => {
+  const thinkingConfig = {
+    ...llmConfig,
+    thinking_enabled: true,
+    thinking_effort: "low",
+    thinking_style: "auto",
+  };
+
+  async function renderEditing(config: unknown = llmConfig) {
+    apiMocks.getLLMConfig.mockResolvedValue(config);
+    render(
+      <AntdApp>
+        <SettingsPage />
+      </AntdApp>,
+    );
+    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
+  }
+
+  it("saves the switch, the effort and the style along with the rest", async () => {
+    apiMocks.saveLLMConfig.mockImplementation(async (config) => config);
+    await renderEditing(thinkingConfig);
+
+    fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
+
+    // 与 api_style 同一类坑：整份替换语义下，前端没声明的字段会被默认值填回去——
+    // 那意味着用户开好的思考模式在下次保存时被静默关掉。
+    await waitFor(() =>
+      expect(apiMocks.saveLLMConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          thinking_enabled: true,
+          thinking_effort: "low",
+          thinking_style: "auto",
+        }),
+      ),
+    );
+  });
+
+  it("takes the effort options from the backend when the switch is turned on", async () => {
+    await renderEditing();
+
+    fireEvent.click(screen.getByRole("switch", { name: /思考模式/ }));
+
+    // 只读能力表那一次（probe=false）：**不发上游请求**，所以打开开关不花钱。
+    await waitFor(() =>
+      expect(apiMocks.checkLLMThinking).toHaveBeenCalledWith(
+        expect.objectContaining({ base_url: "https://api.openai.com/v1" }),
+        false,
+      ),
+    );
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /思考强度/ }));
+    // 各家档位不同，所以选项必须来自接口而不是写死在前端。
+    expect(await screen.findByText("最低（minimal）")).toBeTruthy();
+  });
+
+  it("lets the user type a custom effort and saves it with the rest", async () => {
+    apiMocks.saveLLMConfig.mockImplementation(async (config) => config);
+    await renderEditing();
+
+    fireEvent.click(screen.getByRole("switch", { name: /思考模式/ }));
+    await waitFor(() => expect(apiMocks.checkLLMThinking).toHaveBeenCalled());
+
+    // 各家档位词汇不同（xhigh / max / adaptive…），选「自定义…」自己填。
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /思考强度/ }));
+    fireEvent.click(await screen.findByText("自定义…"));
+
+    const input = screen.getByPlaceholderText("如 xhigh / max / 4096");
+    fireEvent.change(input, { target: { value: "xhigh" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
+
+    await waitFor(() =>
+      expect(apiMocks.saveLLMConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ thinking_enabled: true, thinking_effort: "xhigh" }),
+      ),
+    );
+  });
+
+  it("shows a stored custom effort in the input instead of an unknown select value", async () => {
+    await renderEditing({ ...thinkingConfig, thinking_effort: "xhigh" });
+
+    expect(await screen.findByPlaceholderText("如 xhigh / max / 4096")).toHaveValue("xhigh");
+  });
+
+  it("shows the probe verdict and tells the user it costs a request", async () => {
+    apiMocks.checkLLMThinking.mockResolvedValue({
+      style: "reasoning_effort",
+      efforts: ["minimal", "low", "medium", "high"],
+      supported: true,
+      note: "内置表给的说明",
+      probed: true,
+      accepted: true,
+      reasoning_seen: true,
+      message: "已确认生效：这次调用真的产出了思考内容。",
+    });
+    await renderEditing();
+
+    expect(screen.getByText(/会发一次最小请求/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /检测思考支持/ }));
+
+    expect(await screen.findByText(/已确认生效/)).toBeTruthy();
+    expect(apiMocks.checkLLMThinking).toHaveBeenCalledWith(expect.anything(), true);
   });
 });
 
