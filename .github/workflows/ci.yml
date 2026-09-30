@@ -36,10 +36,10 @@ jobs:
         working-directory: backend
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -61,12 +61,13 @@ jobs:
       - name: Run Ruff
         run: python -m ruff check .
 
-      - name: Test Windows launcher and release packaging
+      - name: Test Windows launcher, updater and release packaging
         if: runner.os == 'Windows'
         working-directory: .
         shell: powershell
         run: |
           .\scripts\tests\Test-Start-ResumeForge.ps1
+          .\scripts\tests\Test-Update-ResumeForge.ps1
           .\scripts\tests\Test-Build-Release.ps1
 
       - name: Run tests with coverage
@@ -79,7 +80,7 @@ jobs:
 
       - name: Upload coverage report
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-coverage
           path: backend/coverage.xml
@@ -91,7 +92,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Run the macOS launcher guard tests
         # 这一份在真 Mac 上跑，用的就是 macOS 自带的 /bin/bash 3.2——
         # 维护者没有 Mac，这是唯一能自动化验证 macOS 启动链的地方。
@@ -105,7 +106,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Download and verify the pinned portable runtimes
         # 真正下载一遍便携版 Python 与 Node，用仓库里钉死的 SHA-256 校验。
         # 这一步专抓"摘要抄错一位"这类错误：那种错误在别处一律表现为
@@ -174,7 +175,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Start the app the way a Mac user does
         # 维护者没有 Mac，这个作业就是"那台 Mac"：从干净检出开始，
         # 走 start.sh 的完整链路（准备运行时 → 建 venv → 装依赖 →
@@ -213,22 +214,43 @@ jobs:
           curl -v --max-time 5 http://127.0.0.1:8123/api/health || echo "8123 健康检查失败"
 
 
+  windows-runtimes:
+    name: Windows portable runtimes
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Download and verify the pinned runtimes
+        # 真正下载一遍启动器要用的便携版 Node 与 Python 官方安装包，逐个用仓库里钉死的
+        # SHA-256 校验（Node 还会解压出来跑一次 `node --version`）。专抓"下载地址或摘要
+        # 失效"这类错误——它在别处一律表现为"新用户下载后启动失败"，而每个人的网络环境
+        # 都不一样，只有真跑一次才知道。
+        #
+        # 与 macOS 的 `macos-runtimes` 是镜像作业。注意它和 `windows-end-to-end`
+        # **互补而不是重复**：后者用的是 runner 自带的 Python/Node，恰好把这条路径整个
+        # 遮住了——而"一台什么都没装的电脑"上走的正是这条。
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          .\scripts\tests\Test-RuntimeDownloads.ps1
+
   windows-end-to-end:
     name: Windows end-to-end (clean checkout)
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Python
         # 显式装一个窗口内的解释器：这一步不测"找不到 Python 时去下载安装包"那条路
         # （那条路要走 python.org 的静默安装，在 runner 上会引入与启动链无关的失败），
         # 测的是纯净检出上的整条启动链：建 venv → 装依赖 → 起 uvicorn 与 vite → 健康检查。
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Start the app and verify it serves (one step, like a user's session)
@@ -316,10 +338,10 @@ jobs:
         working-directory: frontend
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -349,10 +371,10 @@ jobs:
     continue-on-error: true
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -363,7 +385,7 @@ jobs:
           python -m pip_audit --requirement backend/requirements-dev.txt --index-url https://pypi.org/simple
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
