@@ -40,6 +40,8 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     # ===== 岗位与匹配 =====
     "job": ("list_jobs", "get_job", "create_job", "update_job"),
     "job_match_analysis": ("get_job", "list_jobs", "list_apply_queue"),
+    "job_match_batch": "不暴露：批量岗位匹配快照包含个人资料参与分析后的逐岗位结论与历史排序，"
+    "目前只在「岗位广场 → 分析记录」中回看；助手不读取也不修改，避免把完整匹配依据带入对话上下文。",
     "candidate_job": (
         "list_candidate_jobs",
         "get_candidate_job",
@@ -68,6 +70,11 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "**专供网申填表读取**。里面含证件、家庭与健康类敏感值，暴露给助手会让它们随提问进入"
     "对话上下文并发往模型服务商；而且工具化的读写在网申表单那条链路上已经有了，"
     "助手再读一遍没有增量。用户要看/改去「我的资料 → 网申资料」。",
+    "web_form_profile_record": "不暴露：这是网申资料中的教育、经历、作品和联系人补充记录，"
+    "可能含个人经历及他人联系方式，只在网申填表链路本地使用；助手不读取也不修改，"
+    "用户要看/改去「我的资料 → 网申资料」。",
+    "web_form_url_history": "不暴露：这是用户打开过的网申网址历史，可能暴露投递目标与账号上下文；"
+    "它只服务于网申浏览器的网址选择和删除，助手不读取也不修改。",
     # ===== 进度、统计、内推 =====
     "application_track": (
         "list_application_tracks",
