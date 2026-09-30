@@ -6,6 +6,11 @@
 # 所以 PID 被复用或记录过期时不会误杀无关程序。
 #
 # 用法：双击项目根目录的 stop.command，或 bash scripts/macos/stop.sh
+#      加 --skip-backend 只停前端（应用内的「退出」走这条：后端正在自己退出，停它会把
+#      正在跑的退出流程一起带走）。
+#
+# 参数用 `"$@"` 遍历而不是裸 `$1`：脚本开着 `set -u`，无参调用时裸 `$1` 会直接报错退出，
+# 而 CI 与 stop.command 都是无参调用。
 
 set -euo pipefail
 
@@ -46,8 +51,20 @@ rf_stop_one() {
     stop_recorded_process "$display_name" "$record" "$pattern"
 }
 
+RF_SKIP_BACKEND=0
+for rf_argument in "$@"; do
+    case "$rf_argument" in
+        --skip-backend) RF_SKIP_BACKEND=1 ;;
+        *) log_warn "忽略未知参数：${rf_argument}" ;;
+    esac
+done
+
 log_info "正在停止 ResumeForge..."
-rf_stop_one "backend" "$RF_BACKEND_RECORD" "$RF_BACKEND_COMMAND_PATTERN"
+if [ "$RF_SKIP_BACKEND" -eq 0 ]; then
+    rf_stop_one "backend" "$RF_BACKEND_RECORD" "$RF_BACKEND_COMMAND_PATTERN"
+else
+    log_info "backend：按请求跳过（应用自己在退出）。"
+fi
 rf_stop_one "frontend" "$RF_FRONTEND_RECORD" "$RF_FRONTEND_COMMAND_PATTERN"
 printf '\n'
 log_ok "已完成。数据都在 data/ 目录里，没有被动过。"
