@@ -208,6 +208,7 @@ export default function JobTable({
 
   return (
     <Table
+      className="jobs-table"
       rowKey="id"
       rowSelection={selectionMode ? rowSelection : undefined}
       columns={columns}

@@ -177,6 +177,7 @@ export default function CollectResultPanel({
         ) : (
           <>
             <Table
+              className="apply-collect-table"
               rowKey="id"
               size="small"
               columns={columns}

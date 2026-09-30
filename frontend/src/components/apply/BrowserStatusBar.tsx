@@ -16,7 +16,7 @@ import {
 import { Alert, App, Button, Space, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { getBrowserStatus, openBrowserSite, startBrowser, stopBrowser } from "../../api/apply";
-import { useBrowserStatus } from "../../hooks/useBrowserStatus";
+import { BROWSER_STATUS_POLL_INTERVAL_MS, useBrowserStatus } from "../../hooks/useBrowserStatus";
 import { BROWSER_STATE_META } from "../../types";
 
 export default function BrowserStatusBar() {
@@ -82,10 +82,7 @@ export default function BrowserStatusBar() {
           <ChromeOutlined />
           <Typography.Text strong>投递专用浏览器</Typography.Text>
           <Tag color={meta.color}>{meta.label}</Tag>
-          {loading && <Typography.Text type="secondary">读取中…</Typography.Text>}
-          {data && !loading && (
-            <Typography.Text type="secondary">调试端口 {data.port}</Typography.Text>
-          )}
+          {data && <Typography.Text type="secondary">调试端口 {data.port}</Typography.Text>}
         </Space>
         <Space wrap>
           <Button
@@ -121,7 +118,17 @@ export default function BrowserStatusBar() {
           >
             关闭浏览器
           </Button>
-          <Tooltip title="重新检查当前状态">
+          <Tooltip
+            title={
+              loading
+                ? "正在刷新；平时约每 " +
+                  (BROWSER_STATUS_POLL_INTERVAL_MS / 1000).toFixed(1) +
+                  " 秒自动检查一次"
+                : "平时约每 " +
+                  (BROWSER_STATUS_POLL_INTERVAL_MS / 1000).toFixed(1) +
+                  " 秒自动检查一次；点击立即检查"
+            }
+          >
             <Button
               icon={<ReloadOutlined />}
               disabled={busy}
