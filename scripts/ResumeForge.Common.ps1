@@ -18,20 +18,32 @@ function Invoke-LocalRequest {
     }
 }
 
-function Test-ResumeForgeBackend {
+function Get-ResumeForgeHealth {
     param([string]$Url)
 
+    # Health payload 里带着 `version`，更新器正是靠它判断"新版本到底起来了没有"——
+    # 所以这里返回整个对象，而不只是"健康/不健康"。
     $response = Invoke-LocalRequest "$Url/api/health"
     if ($null -eq $response -or $response.StatusCode -ne 200) {
-        return $false
+        return $null
     }
 
     try {
-        return ($response.Content | ConvertFrom-Json).status -eq "ok"
+        return ($response.Content | ConvertFrom-Json)
     }
     catch {
+        return $null
+    }
+}
+
+function Test-ResumeForgeBackend {
+    param([string]$Url)
+
+    $health = Get-ResumeForgeHealth -Url $Url
+    if ($null -eq $health) {
         return $false
     }
+    return $health.status -eq "ok"
 }
 
 function Test-ResumeForgeFrontend {
