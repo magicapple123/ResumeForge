@@ -253,6 +253,22 @@ try {
     Assert-UpdaterTest -Condition (-not (Test-Path -LiteralPath $StatusPath)) `
         -Message "没有 -InstallId 时不该写状态文件（手动更新不需要握手）。"
 
+    # ---- 6. 干跑一遍：脚本主体必须能从头走到尾 -----------------------------------
+    # 这一条是升级彩排逼出来的。`$FromVersion = Get-InstalledVersion` 曾经写在文件顶部，
+    # 而那个函数定义在后面——PowerShell 从上往下执行，于是脚本一上来就死在"无法将
+    # Get-InstalledVersion 识别为 cmdlet"，连 trap 里那句也一起失效（它同样调用了还没定义
+    # 的函数），用户拿到的是一条与真实故障无关的报错。
+    #
+    # 上面那些用例**看不见这种错**：它们是按 AST 把函数逐个取出来执行的，从来没有真正
+    # 从头跑一遍这个脚本。`-DryRun` 不下载、不解压、不复制、也不写状态文件，所以对着
+    # 真实仓库跑是安全的；单独起一个进程还能避免它把 $ErrorActionPreference 之类带进来。
+    $dryRunOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $UpdaterPath -DryRun 2>&1
+    $dryRunExit = $LASTEXITCODE
+    Assert-UpdaterTest -Condition ($dryRunExit -eq 0) `
+        -Message "更新器 -DryRun 必须能跑通（退出码 $dryRunExit）：$($dryRunOutput -join ' / ')"
+    Assert-UpdaterTest -Condition (($dryRunOutput -join "`n") -notmatch "无法将|not recognized") `
+        -Message "更新器 -DryRun 的输出里有「命令找不到」字样，多半又有函数在定义之前被调用了：$($dryRunOutput -join ' / ')"
+
     Write-Host "Windows updater tests passed."
 }
 finally {
