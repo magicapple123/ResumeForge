@@ -104,8 +104,8 @@ export default function UpdateCard() {
             <div>
               <p>{outcome.message || "更新器没有给出原因。"}</p>
               <p style={{ marginBottom: 0 }}>
-                应用本身还能正常使用，数据没有被改动。日志在 <code>{outcome.log}</code>，
-                也可以双击 <code>update.cmd</code> 重新更新一次。
+                应用本身还能正常使用，数据没有被改动。日志在 <code>{outcome.log}</code>， 也可以双击{" "}
+                <code>update.cmd</code> 重新更新一次。
               </p>
             </div>
           ),
