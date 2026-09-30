@@ -45,6 +45,9 @@ Vite 的 dev server「健康」只说明它在监听。真正让页面渲染出�
 function Invoke-FrontendWarmup {
     param([string]$Url)
 
+    # 这条提示必须在**第一次取页面之前**打：取首页那一步最慢（Vite 冷启动要现做依赖
+    # 预打包），而它原先排在提示语前面，于是最该被解释的那段等待反而是全静默的。
+    Write-Host "正在准备前端页面（第一次要把几百个依赖打包好，慢机器上要等一会儿）..."
     $entry = "/src/main.tsx"
     try {
         $html = [string](Invoke-WebRequest -UseBasicParsing -Uri "$Url/" -TimeoutSec 60).Content
@@ -62,7 +65,6 @@ function Invoke-FrontendWarmup {
         Write-Warning "取首页失败（不影响启动，浏览器打开时还会再取一次）：$($_.Exception.Message)"
     }
 
-    Write-Host "正在准备前端页面（第一次要把几百个依赖打包好，慢机器上要等一会儿）..."
     try {
         $null = Invoke-WebRequest -UseBasicParsing -Uri "$Url$entry" -TimeoutSec 600
         Write-Host "前端页面已就绪：$entry"
@@ -70,6 +72,22 @@ function Invoke-FrontendWarmup {
     catch {
         Write-Warning "前端入口 $entry 这次没取到（浏览器打开时还会再取一次）：$($_.Exception.Message)"
     }
+}
+
+function Test-WarmStart {
+    param(
+        [Parameter(Mandatory = $true)][string]$BackendDirectory,
+        [Parameter(Mandatory = $true)][string]$FrontendDirectory
+    )
+
+    # 热启动 = 上一次已经把依赖装好了。两个标记缺一不可：只有 venv 没有 node_modules
+    # 的话这次仍要跑一遍 npm ci，那就不能承诺"不用再装"。
+    #
+    # 这条只用来决定**要不要多打几句提示**，不参与任何启动判断：说错了顶多多打或少打
+    # 两行字，不会改变装什么、起什么。
+    $pythonExecutable = Join-Path $BackendDirectory ".venv\Scripts\python.exe"
+    $viteCommand = Join-Path $FrontendDirectory "node_modules\.bin\vite.cmd"
+    return (Test-Path -LiteralPath $pythonExecutable) -and (Test-Path -LiteralPath $viteCommand)
 }
 
 function Start-ResumeForge {
@@ -84,6 +102,11 @@ function Start-ResumeForge {
     }
 
     New-Item -ItemType Directory -Path $RuntimeDirectory -Force | Out-Null
+
+    # 热启动：依赖已经装好了，这次只是把服务拉起来。它只决定"要不要多打几句提示"——
+    # 已装过的用户再次双击时，终端在「探测依赖 → 等后端就绪 → 等前端就绪 → 热身取页面」
+    # 这几段里一行字都没有，最容易被当成卡死或启动失败（2026-10-01 的用户反馈）。
+    $isWarmStart = Test-WarmStart -BackendDirectory $BackendDirectory -FrontendDirectory $FrontendDirectory
 
     # Named once and reused by the redirects and by the failure messages, so the
     # path a user is told to look at is always the file the process writes.
@@ -119,6 +142,11 @@ function Start-ResumeForge {
             Write-Host "后端已经在运行：$BackendUrl"
         }
         else {
+            if ($isWarmStart) {
+                Write-Host "`n简历通正在载入（依赖已经装好，这次不需要重新安装）..."
+                Write-Host "接下来会启动后端与前端，中途终端可能几十秒没有新输出——那是在等它们就绪，属于正常现象，请不要关闭这个窗口。"
+            }
+
             $pythonExecutable = Join-Path $BackendDirectory ".venv\Scripts\python.exe"
             $venvConfigPath = Join-Path $BackendDirectory ".venv\pyvenv.cfg"
             if ((Test-Path -LiteralPath $pythonExecutable) -and
@@ -176,6 +204,8 @@ function Start-ResumeForge {
                 $ErrorActionPreference = $probePreference
             }
             if ($dependencyProbeExitCode -ne 0) {
+                # 依赖要现装，后面就不算热启动了——不能对用户说"这次不需要重新安装"。
+                $isWarmStart = $false
                 Write-Host "首次运行：正在安装后端依赖（约 40 个包，第一次要几分钟）..."
                 & $pythonExecutable -m pip install `
                     --timeout 300 `
@@ -204,6 +234,9 @@ function Start-ResumeForge {
                 -PassThru
             Save-ProcessRecord -Process $startedBackend -Path $BackendPidPath
 
+            if ($isWarmStart) {
+                Write-Host "正在等待后端就绪（最多 $BackendStartTimeoutSeconds 秒）..."
+            }
             if (-not (Wait-ForCondition -Condition { Test-ResumeForgeBackend -Url $BackendUrl } `
                     -TimeoutSeconds $BackendStartTimeoutSeconds -FailFastProcess $startedBackend)) {
                 if ($startedBackend.HasExited) {
@@ -245,6 +278,8 @@ function Start-ResumeForge {
 
             $viteCommandPath = Join-Path $FrontendDirectory "node_modules\.bin\vite.cmd"
             if (-not (Test-Path -LiteralPath $viteCommandPath -PathType Leaf)) {
+                # 同后端：要现装依赖就不是热启动，别再承诺"不需要重新安装"。
+                $isWarmStart = $false
                 Write-Host "首次运行：正在安装前端依赖（几百个包，第一次要几分钟）..."
                 Push-Location -LiteralPath $FrontendDirectory
                 try {
@@ -304,6 +339,9 @@ function Start-ResumeForge {
                 -PassThru
             Save-ProcessRecord -Process $startedFrontend -Path $FrontendPidPath
 
+            if ($isWarmStart) {
+                Write-Host "正在等待前端就绪（最多 $FrontendStartTimeoutSeconds 秒）..."
+            }
             if (-not (Wait-ForCondition -Condition { Test-ResumeForgeFrontend -Url $FrontendUrl } `
                     -TimeoutSeconds $FrontendStartTimeoutSeconds -FailFastProcess $startedFrontend)) {
                 if ($startedFrontend.HasExited) {
