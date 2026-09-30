@@ -179,6 +179,8 @@ def test_update_check_does_not_claim_installability_on_non_windows(client, monke
     body = client.get("/api/update/check?refresh=true").json()
     assert body["download_url"].endswith("-macos.zip")
     assert body["installable"] is False
+    # 按钮会隐藏，所以话得说明白：更新是有的，只是这个系统要换种方式装。
+    assert "当前系统" in body["message"]
 
 
 def test_update_check_falls_back_to_the_redirect_probe_when_the_api_is_blocked(
