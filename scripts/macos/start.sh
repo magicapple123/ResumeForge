@@ -254,6 +254,7 @@ rf_start_backend() {
     rf_started_backend_pid=$!
     save_process_record "$rf_started_backend_pid" "$RF_BACKEND_RECORD"
 
+    log_info "正在等待后端就绪（最多 $RF_BACKEND_START_TIMEOUT_SECONDS 秒）..."
     if wait_until_healthy "$(rf_backend_url)" "$RF_BACKEND_START_TIMEOUT_SECONDS" "$rf_started_backend_pid"; then
         log_info "后端已启动：$(rf_backend_url)"
         return 0
@@ -340,6 +341,7 @@ rf_start_frontend() {
     rf_started_frontend_pid=$!
     save_process_record "$rf_started_frontend_pid" "$RF_FRONTEND_RECORD"
 
+    log_info "正在等待前端就绪（最多 $RF_FRONTEND_START_TIMEOUT_SECONDS 秒）..."
     if wait_until_healthy "$(rf_frontend_url)" "$RF_FRONTEND_START_TIMEOUT_SECONDS" "$rf_started_frontend_pid"; then
         log_info "前端已启动：$(rf_frontend_url)"
         return 0

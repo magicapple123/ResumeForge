@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 $ErrorActionPreference = "Stop"
@@ -533,6 +533,90 @@ try {
         -Message "A mismatched record must never stop the process it points at."
     Stop-StartedProcess -Process $reusedProcess
     Remove-Item -LiteralPath $reusedRecordPath -Force -ErrorAction SilentlyContinue
+
+    # 热启动判定只决定"要不要多打两句提示"，说反了的后果是对着正在装依赖的用户
+    # 说"这次不需要重新安装"。两个标记缺一不可。
+    $warmBackend = Join-Path $RuntimeDirectory "warm-backend"
+    $warmFrontend = Join-Path $RuntimeDirectory "warm-frontend"
+    New-Item -ItemType Directory -Path (Join-Path $warmBackend ".venv\Scripts") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $warmFrontend "node_modules\.bin") -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $warmBackend ".venv\Scripts\python.exe") -Value "" -Encoding ascii
+    Set-Content -LiteralPath (Join-Path $warmFrontend "node_modules\.bin\vite.cmd") -Value "" -Encoding ascii
+
+    Assert-LauncherTest `
+        -Condition (Test-WarmStart -BackendDirectory $warmBackend -FrontendDirectory $warmFrontend) `
+        -Message "venv 与 node_modules 都在时必须判定为热启动。"
+
+    $coldBackend = Join-Path $RuntimeDirectory "cold-backend"
+    New-Item -ItemType Directory -Path $coldBackend -Force | Out-Null
+    Assert-LauncherTest `
+        -Condition (-not (Test-WarmStart -BackendDirectory $coldBackend -FrontendDirectory $warmFrontend)) `
+        -Message "缺 venv 时必须判定为冷启动（依赖这次要现装）。"
+
+    $coldFrontend = Join-Path $RuntimeDirectory "cold-frontend"
+    New-Item -ItemType Directory -Path $coldFrontend -Force | Out-Null
+    Assert-LauncherTest `
+        -Condition (-not (Test-WarmStart -BackendDirectory $warmBackend -FrontendDirectory $coldFrontend)) `
+        -Message "缺 node_modules 时必须判定为冷启动：这次还要跑一遍 npm ci。"
+
+    # ---- 一台什么都没装的电脑：引导分支 -----------------------------------------
+    # 覆盖参与判断的函数，断言"找不到 Python / Node 时"走的是哪条路。**真下载**由
+    # windows-runtimes 作业负责（它会真的下 portable Node 与 Python 安装包并校验摘要）；
+    # 这里管的是**决定装哪个**的逻辑，以及失败时那句"怎么办"是否还在。
+    #
+    # 特意放在文件末尾：这些 function 覆盖会影响后面所有代码，前面那些用例不该受它们影响。
+    function Refresh-ProcessPath { }
+    $script:bootstrapCalls = @()
+
+    function Find-SystemPython { return $null }
+    function Try-InstallPythonWithWinget { return $false }
+    function Install-PythonWithOfficialInstaller { $script:bootstrapCalls += "python-official" }
+
+    $pythonFailure = $null
+    try {
+        Ensure-SystemPython | Out-Null
+    }
+    catch {
+        $pythonFailure = $_.Exception.Message
+    }
+    Assert-LauncherTest `
+        -Condition ($script:bootstrapCalls -contains "python-official") `
+        -Message "找不到 Python 且 winget 不可用时，必须落到官方安装包那条路。"
+    Assert-LauncherTest `
+        -Condition ($null -ne $pythonFailure -and $pythonFailure -match "怎么办") `
+        -Message "Python 引导失败时必须给出可照做的步骤（原文里那句「怎么办」）。"
+
+    # winget 装完但当前进程还是找不到（新装的解释器要新进程才看得到）时，不能就此放弃，
+    # 要继续落到官方安装包；这条路径真机上出现过。
+    $script:bootstrapCalls = @()
+    function Try-InstallPythonWithWinget { return $true }
+    try {
+        Ensure-SystemPython | Out-Null
+    }
+    catch {
+        # 预期仍然失败（Find-SystemPython 被覆盖成永远找不到）。
+    }
+    Assert-LauncherTest `
+        -Condition ($script:bootstrapCalls -contains "python-official") `
+        -Message "winget 报告成功但找不到 Python 时，必须改用官方安装包。"
+
+    function Find-SystemNodeRuntime { return $null }
+    function Try-InstallNodeWithWinget { return $false }
+    function Install-PortableNodeRuntime { $script:bootstrapCalls += "node-portable" }
+
+    $nodeFailure = $null
+    try {
+        Ensure-NodeRuntime | Out-Null
+    }
+    catch {
+        $nodeFailure = $_.Exception.Message
+    }
+    Assert-LauncherTest `
+        -Condition ($script:bootstrapCalls -contains "node-portable") `
+        -Message "找不到 Node.js 且 winget 不可用时，必须落到便携版运行时那条路。"
+    Assert-LauncherTest `
+        -Condition ($null -ne $nodeFailure -and $nodeFailure -match "怎么办") `
+        -Message "Node.js 引导失败时必须给出可照做的步骤（原文里那句「怎么办」）。"
 
     Write-Host "Windows launcher tests passed."
 }
