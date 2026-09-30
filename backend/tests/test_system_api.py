@@ -123,23 +123,34 @@ def test_a_failed_stop_is_reported_not_swallowed(monkeypatch, caplog):
     assert any("记录对不上" in message for message in messages), messages
 
 
-def test_stop_output_from_a_non_utf8_console_still_gets_logged(monkeypatch, caplog):
-    """子进程输出按控制台代码页编码（中文 Windows 上是 cp936）。
+def test_stop_output_from_a_console_codepage_can_be_read_back():
+    """按控制台代码页编码的输出要能读出来——**候选表由用例给出，不靠这台机器**。
 
-    两个要求：**不许抛**（抛了后端就不退了），而且**要能读懂**——第一版用 locale 解，
-    在 `PYTHONUTF8=1` 下 locale 也是 utf-8，结果日志里是一串问号，等于白记。
+    第一版用 locale 解，在 `PYTHONUTF8=1` 下 locale 也是 utf-8，得到的是一串问号，
+    日志等于白记；所以真实候选表里显式排了 `mbcs`。但那条链只能在**中文** Windows 上
+    把 GBK 读回来：英文 Windows 的 ANSI 代码页是 cp1252，它会把同一串字节解成乱码而
+    **不报错**，于是"能不能读出来"变成了"跑测试的是哪国机器"（CI 的 windows-latest
+    正是英文的，2026-10-01 因此红过一次）。断言回退链就显式给候选表。
     """
     gbk_output = "已停止 frontend。".encode("gbk")
+
+    assert "已停止 frontend" in system_api._decode_stop_output(gbk_output, ("utf-8", "gbk"))
+
+
+def test_stop_output_never_breaks_the_shutdown_path(monkeypatch, caplog):
+    """无论控制台是什么代码页：不抛，而且这条动作要留下日志。
+
+    只断言**我们自己写的那半句**（脚本输出在英文 Windows 上可能是乱码，那是诊断信息
+    的瑕疵，不是故障：判定一律看退出码，不解析文本）。
+    """
     monkeypatch.setattr(
         system_api.subprocess,
         "run",
-        lambda *_args, **_kwargs: _CompletedRun(stdout=gbk_output),
+        lambda *_args, **_kwargs: _CompletedRun(stdout="已停止 frontend。".encode("gbk")),
     )
 
     with caplog.at_level("INFO"):
         system_api._stop_frontend_process()  # 不抛即通过
 
     messages = [record.getMessage() for record in caplog.records if record.levelname == "INFO"]
-    assert messages, "成功停止也要留下一条日志"
-    if system_api.os.name == "nt":
-        assert any("已停止 frontend" in message for message in messages), messages
+    assert any("已请求停止前端进程" in message for message in messages), messages
