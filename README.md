@@ -429,7 +429,7 @@ npm test && npm run lint && npm run typecheck && npm run build
 
 - **最省事的备份**：**设置 → 数据集 → 导出当前数据集**。照片、助手附件与历史兼容字段都在这个库里，所以导出的 zip 就是完整的一份；换电脑时在新装的应用里「导入备份为新数据集」还原即可（备份不含 API Key，切换后需重填）。
 - **一键更新**：Windows 双击 `update.cmd`，macOS 双击 `update.command`（或 `bash scripts/macos/update.sh`）。两者都只替换程序文件，`data/`、`.env`、`runtime/` 一律不动；Windows 侧还有 `-DryRun` 只预览、`-SkipDependencies` 只拉代码不装依赖。
-- **更新不会动数据库**：Alembic 迁移在下次启动时自动执行，迁移前会在 `backend/data/backups/` 写一份备份。应用内**设置 → 应用 → 软件更新**可直接检查、下载并显示进度；Windows 下载完成后可确认重启安装，程序会原地覆盖并自动重启，`data/`、`.env` 与 `runtime/` 不动。macOS 目前走上面的 `update.command`（同样是"下载新包 → 只覆盖程序文件"）。
+- **更新不会动数据库**：Alembic 迁移在下次启动时自动执行，迁移前会在 `backend/data/backups/` 写一份备份。应用内**设置 → 应用 → 软件更新**可直接检查、下载并显示进度；Windows 下载完成后可确认重启安装，程序会原地覆盖并自动重启，`data/`、`.env` 与 `runtime/` 不动。macOS 目前走上面的 `update.command`（同样是"下载新包 → 只覆盖程序文件"）。更新包按当前平台挑选并核对发布方给的 `.sha256`；**成没成以"现在跑的是哪个版本"为准**——没起来会说出失败原因与日志位置（`runtime/update.log`），不会一律弹"已更新"。
 
 不要使用 `git clean -fdx`，也不要删除整个项目目录后直接覆盖。完整的升级、压缩包更新与回滚步骤见 [docs/upgrading.md](docs/upgrading.md)。
 
