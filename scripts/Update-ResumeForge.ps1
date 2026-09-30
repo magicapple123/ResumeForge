@@ -21,7 +21,12 @@ param(
     [string]$ArchivePath = "",
     [int[]]$WaitForPids = @(),
     [int[]]$StopPids = @(),
-    [switch]$Restart
+    [switch]$Restart,
+    # 应用内更新会带上这两个：`-InstallId` 是"这一次安装"的唯一标识（后端靠它确认
+    # 更新器真的起来了，见 `runtime\update-status.json`），`-TargetVersion` 是要升到的
+    # 版本号，用来核对"新版本到底跑起来没有"。
+    [string]$InstallId = "",
+    [string]$TargetVersion = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,18 +41,55 @@ $ArchiveUrl = "https://github.com/$Repository/archive/refs/heads/main.zip"
 # cannot kill an unrelated process that happened to reuse a PID.
 . (Join-Path $ScriptRoot "ResumeForge.Common.ps1")
 
-# Paths that belong to the user or to the local environment; never overwritten.
-$ExcludedNames = @(
-    "data",
-    "runtime",
+$StatusPath = Join-Path $ProjectRoot "runtime\update-status.json"
+$FromVersion = Get-InstalledVersion
+$InstallStartedAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+# 只有"没有 -ArchivePath 且这个目录是 git 检出"时才为真。显式给初值：下面决定
+# 要不要在依赖同步前停应用时要用到它，而 `-ArchivePath` 分支根本不会走到赋值的那个
+# 分支——依赖未定义变量是碰运气。
+$useGit = $false
+# 重启之后最多等这么久，看新版本有没有真的起来（启动器自己的预算是后端 90s + 前端
+# 120s，所以这里要留得比它们宽）。
+$VerifyTimeoutSeconds = 240
+
+<#
+任何一步失败都要留下"失败"的痕迹再往外抛。
+
+应用内更新是隐藏窗口在跑（`Start-Process -WindowStyle Hidden` + 输出重定向到
+`runtime\update.log`），失败时用户看不到任何东西——只会发现"应用关了，什么都没发生"。
+原先连输出都被丢进 DEVNULL，连事后排查都没有线索；现在状态文件 + 日志两样都在，
+后端下次启动会读状态文件并把原因显示出来。
+
+用 `trap` 而不是把整段主体包进 try/catch：它会捕获脚本作用域里所有终止性错误，不必把
+下面一百多行整体缩进一遍；`break` 让错误照旧往外抛，`update.cmd` 仍能拿到非 0 退出码。
+#>
+trap {
+    Write-InstallStatus -State "failed" -Message ($_.Exception.Message)
+    break
+}
+
+# 更新时要跳过的路径，分两层——因为"名字叫 data"在不同层级含义完全不同：
+#   * 任何层级都是本地环境或缓存：`.git`、`node_modules`、`.venv`、`__pycache__` 之类；
+#   * 只有项目根下的这几个位置才是用户数据与本地运行时。
+# **必须按相对路径判断**：早先的规则是"任意层级下名为 data 的目录"，于是受跟踪的
+# `backend/app/data/`（skills.json、ats_keywords.json，`preflight.py` 必需）被静默跳过
+# ——新版本往那个目录里加的文件永远到不了老用户机器上，preflight 随后会拒绝启动
+# （2026-10-01 发现）。两条规则都不能省：只按名字会误伤 `backend/app/data`，只按
+# 相对路径又会让 `frontend/node_modules` 这种深层目录被复制进去。
+$ExcludedAnyDepthNames = @(
     ".git",
-    ".env",
-    "node_modules",
     ".venv",
-    "dist",
+    "node_modules",
     "__pycache__",
     ".pytest_cache",
-    "coverage"
+    "dist",
+    "coverage",
+    ".env"
+)
+$ExcludedRootRelative = @(
+    "data",
+    "runtime",
+    "backend/data"
 )
 
 function Write-Step {
@@ -82,8 +124,27 @@ function Invoke-External {
 }
 
 function Test-Excluded {
-    param([string]$Name)
-    return $ExcludedNames -contains $Name
+    param([string]$RelativePath)
+
+    # 大小写不敏感：Windows 与 macOS 的默认文件系统都是；压缩包里的名字是原样的大小写，
+    # 所以这里统一小写之后再比。
+    $normalized = $RelativePath.Replace("\", "/").Trim("/").ToLowerInvariant()
+    if (-not $normalized) {
+        return $false
+    }
+
+    foreach ($segment in $normalized.Split("/")) {
+        if ($ExcludedAnyDepthNames -contains $segment) {
+            return $true
+        }
+    }
+    foreach ($rule in $ExcludedRootRelative) {
+        # 带斜杠地比前缀，才不会把 `backend/database.py` 当成 `backend/data` 下的文件。
+        if ($normalized -eq $rule -or $normalized.StartsWith("$rule/")) {
+            return $true
+        }
+    }
+    return $false
 }
 
 function Wait-ForPidsExit {
@@ -150,17 +211,102 @@ function Write-DependencySyncHint {
     Write-Host "    处理办法：双击 stop.cmd 关掉应用，再运行一次 update.cmd。" -ForegroundColor Yellow
 }
 
+function Get-InstalledVersion {
+    $configPath = Join-Path $ProjectRoot "backend\app\config.py"
+    if (-not (Test-Path -LiteralPath $configPath)) { return "" }
+    $match = Select-String -LiteralPath $configPath -Pattern 'app_version:\s*str\s*=\s*"([^"]+)"' |
+        Select-Object -First 1
+    if ($null -eq $match) { return "" }
+    return $match.Matches[0].Groups[1].Value
+}
+
+function Get-DefaultBackendPort {
+    # 更新器不参与启动，拿不到运行时端口；读启动器里的默认值就够——用户若用
+    # `-BackendPort` 起在别的端口上，下面那次核对会超时，而后端会用**版本号**兜底
+    # （见 `update_download.read_install_result`：版本对上就算成功）。
+    $launcherPath = Join-Path $ScriptRoot "Start-ResumeForge.ps1"
+    if (-not (Test-Path -LiteralPath $launcherPath)) { return 8005 }
+    $match = Select-String -LiteralPath $launcherPath -Pattern '\$BackendPort\s*=\s*(\d+)' |
+        Select-Object -First 1
+    if ($null -eq $match) { return 8005 }
+    return [int]$match.Matches[0].Groups[1].Value
+}
+
+<#
+把这次安装的状态写进 `runtime\update-status.json`。
+
+应用内更新是**隐藏窗口**在跑：失败时用户什么都看不到，只会发现"应用关了，什么都没发生"。
+这个文件是唯一能告诉他"这次没成、日志在哪"的东西，后端下次启动时读它并显示出来。
+只按相对路径碰 `runtime\`（更新不会覆盖 runtime），所以它一定还在。
+#>
+function Write-InstallStatus {
+    param(
+        [string]$State,
+        [string]$Message = ""
+    )
+    if (-not $InstallId) { return }
+    # 目录从状态文件自己的路径推出来，而不是另外拼一遍：两者必须是同一个地方。
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $StatusPath) | Out-Null
+    $payload = [ordered]@{
+        install_id     = $InstallId
+        state          = $State
+        from_version   = $script:FromVersion
+        target_version = $TargetVersion
+        started_at     = $script:InstallStartedAt
+        restart        = [bool]$Restart
+        message        = $Message
+        log            = "runtime/update.log"
+    }
+    # `Set-Content -Encoding utf8` 在 Windows PowerShell 5.1 下会带 BOM；后端按
+    # utf-8-sig 读，两种写法都认。
+    ($payload | ConvertTo-Json) | Set-Content -LiteralPath $StatusPath -Encoding utf8
+}
+
+function Wait-ForTargetVersion {
+    param([int]$TimeoutSeconds = 240)
+
+    if (-not $TargetVersion) { return $true }
+    $healthUrl = "http://127.0.0.1:$(Get-DefaultBackendPort)"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $health = Get-ResumeForgeHealth -Url $healthUrl
+        if ($null -ne $health -and [string]$health.version -eq $TargetVersion) {
+            return $true
+        }
+        Start-Sleep -Seconds 2
+    }
+    return $false
+}
+
+function Resolve-ExtractedPackage {
+    param([string]$Staging)
+
+    $extracted = Get-ChildItem -LiteralPath $Staging -Directory | Select-Object -First 1
+    if (-not $extracted) {
+        throw "The downloaded archive did not contain a folder. Download it manually from https://github.com/$Repository/releases"
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $extracted.FullName "start.cmd"))) {
+        # 解压出来的第一个目录未必是我们的包（`__MACOSX` 之类也会是目录）。少了这个
+        # 判断就会"更新完成"地报告成功，而实际上一行文件都没覆盖。
+        throw "The downloaded archive does not look like a ResumeForge package (no start.cmd). Download it manually from https://github.com/$Repository/releases"
+    }
+    return $extracted
+}
+
 function Copy-ProgramFiles {
     param(
         [string]$Source,
-        [string]$Destination
+        [string]$Destination,
+        # 相对项目根的路径，供 Test-Excluded 判断——排除规则看的就是这个，不是名字。
+        [string]$RelativePath = ""
     )
     Get-ChildItem -LiteralPath $Source -Force | ForEach-Object {
-        if (Test-Excluded -Name $_.Name) { return }
+        $childRelative = if ($RelativePath) { "$RelativePath/$($_.Name)" } else { $_.Name }
+        if (Test-Excluded -RelativePath $childRelative) { return }
         $target = Join-Path $Destination $_.Name
         if ($_.PSIsContainer) {
             New-Item -ItemType Directory -Force -Path $target | Out-Null
-            Copy-ProgramFiles -Source $_.FullName -Destination $target
+            Copy-ProgramFiles -Source $_.FullName -Destination $target -RelativePath $childRelative
         } else {
             Copy-Item -LiteralPath $_.FullName -Destination $target -Force
         }
@@ -171,6 +317,12 @@ Write-Host "ResumeForge updater" -ForegroundColor Green
 Write-Host "Project: $ProjectRoot"
 if ($DryRun) {
     Write-Host "Dry run: no file will be changed." -ForegroundColor Yellow
+}
+
+# 起手第一件事就写状态：后端会轮询它确认"更新器真的起来了"，收不到就不退出应用
+# （不然就是"应用关了、什么都没发生"）。写在这里也意味着**解压之前**就已经有凭据了。
+if (-not $DryRun) {
+    Write-InstallStatus -State "installing" -Message "正在覆盖程序文件"
 }
 
 $extracted = $null
@@ -184,16 +336,13 @@ if ($ArchivePath) {
         $staging = Join-Path $ProjectRoot ("runtime\update-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
         New-Item -ItemType Directory -Force -Path $staging | Out-Null
         Expand-Archive -LiteralPath $resolvedArchive -DestinationPath $staging -Force
-        $extracted = Get-ChildItem -LiteralPath $staging -Directory | Select-Object -First 1
-        if (-not $extracted) {
-            throw "The downloaded update archive did not contain a folder."
-        }
+        $extracted = Resolve-ExtractedPackage -Staging $staging
     }
 }
 else {
     Write-Step "Checking repository"
     $gitDirectory = Join-Path $ProjectRoot ".git"
-    $useGit = (Test-Path $gitDirectory) -and (Get-Command git -ErrorAction SilentlyContinue)
+    $useGit = [bool]((Test-Path $gitDirectory) -and (Get-Command git -ErrorAction SilentlyContinue))
 
     if ($useGit) {
         Write-Step "Pulling the latest code (git pull --ff-only)"
@@ -209,12 +358,21 @@ else {
         New-Item -ItemType Directory -Force -Path $staging | Out-Null
         Invoke-WebRequest -Uri $ArchiveUrl -OutFile $archive -UseBasicParsing
         Expand-Archive -LiteralPath $archive -DestinationPath $staging -Force
-        $extracted = Get-ChildItem -LiteralPath $staging -Directory | Select-Object -First 1
-        if (-not $extracted) {
-            throw "The downloaded archive did not contain a folder. Download it manually from https://github.com/$Repository/releases"
-        }
+        $extracted = Resolve-ExtractedPackage -Staging $staging
+
+        # **先停应用再覆盖**。反过来的话，正在运行的实例被覆盖时会锁住文件，`Copy-Item`
+        # 中途抛错就留下一棵"一半新一半旧"的树，而且没有回滚。停在这一步之后（不是之前）
+        # 是有意的：下载或解压失败时不该把用户正在用的应用关掉。
+        Write-Step "Stopping a running ResumeForge before copying program files"
+        Stop-RunningApplication
+
         Write-Step "Copying program files (data, .env and runtime are kept)"
-        Copy-ProgramFiles -Source $extracted.FullName -Destination $ProjectRoot
+        try {
+            Copy-ProgramFiles -Source $extracted.FullName -Destination $ProjectRoot
+        } catch {
+            Write-DependencySyncHint -Message $_.Exception.Message
+            throw
+        }
         Write-Host "    Source kept at: $staging" -ForegroundColor DarkGray
     }
 }
@@ -237,9 +395,12 @@ if ($ArchivePath -and -not $DryRun) {
 if ($SkipDependencies) {
     Write-Step "Dependency sync skipped (-SkipDependencies)"
 } else {
-    # 手动更新（没带 -ArchivePath）时先停掉仍在运行的实例：不停就只能等 npm 把
-    # EPERM 甩到屏幕上。应用内更新已经在 -ArchivePath 分支里停过了，别重复。
-    if (-not $ArchivePath -and -not $DryRun) {
+    # git 分支在这里再停一次：上面只 pull 了代码，还没碰过文件，所以停在这一步之前
+    # 都来得及；而 npm ci 删 node_modules、pip 覆盖 .venv 时必须有文件锁的进程先退出。
+    # 另外两条分支**不能**在这里再调一次：手动 zip 分支在覆盖之前已经停过了，而
+    # `-ArchivePath` 分支更不能停——更新器是那个后端的子进程，`taskkill /T` 会连
+    # 更新器自己一起杀掉。
+    if ($useGit -and -not $DryRun) {
         Write-Step "Stopping a running ResumeForge before touching node_modules / .venv"
         Stop-RunningApplication
     }
@@ -282,6 +443,26 @@ if ($DryRun) {
         if (-not (Test-Path -LiteralPath $launcher)) {
             throw "The update completed, but start.cmd was not found, so the app was not restarted."
         }
-        Start-Process -FilePath $launcher -WorkingDirectory $ProjectRoot -WindowStyle Hidden
+        # 重启也是隐藏窗口，失败时用户看不到任何东西——把它的输出也留一份。
+        Start-Process -FilePath $launcher -WorkingDirectory $ProjectRoot -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $ProjectRoot "runtime\restart.stdout.log") `
+            -RedirectStandardError (Join-Path $ProjectRoot "runtime\restart.stderr.log")
+    }
+
+    # **文件覆盖完不等于更新成功**：依赖同步可能失败、迁移可能中断、端口可能起不来。
+    # 只有 `/api/health` 报出来的版本号等于目标版本，才写 success——写早了界面就会
+    # 在下次打开时撒谎（"已更新"而其实还在跑旧版本）。
+    if ($InstallId) {
+        if ($Restart) {
+            Write-Step "Verifying the new version is running"
+        }
+        if (-not $Restart) {
+            Write-InstallStatus -State "success" -Message "文件已更新；双击 start.cmd 重新打开即可"
+        } elseif (Wait-ForTargetVersion -TimeoutSeconds $VerifyTimeoutSeconds) {
+            Write-InstallStatus -State "success" -Message "已更新到 $TargetVersion"
+        } else {
+            Write-InstallStatus -State "failed" `
+                -Message "文件已覆盖，但 $VerifyTimeoutSeconds 秒内没等到新版本起来；请查看 runtime\restart.stderr.log"
+        }
     }
 }

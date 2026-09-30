@@ -9,6 +9,7 @@ const deepseekPreset = LLM_PRESETS.find((preset) => preset.provider === "deepsee
 const claudePreset = LLM_PRESETS.find((preset) => preset.provider === "anthropic")!;
 
 const apiMocks = vi.hoisted(() => ({
+  acknowledgeUpdateInstallResult: vi.fn(),
   checkForUpdate: vi.fn(),
   checkLLMThinking: vi.fn(),
   activateDataset: vi.fn(),
@@ -21,6 +22,7 @@ const apiMocks = vi.hoisted(() => ({
   getReminderPopupSetting: vi.fn(),
   getSearchConfig: vi.fn(),
   getUpdateDownloadStatus: vi.fn(),
+  getUpdateInstallResult: vi.fn(),
   installDownloadedUpdate: vi.fn(),
   importDataset: vi.fn(),
   listDatasets: vi.fn(),
@@ -117,6 +119,9 @@ beforeEach(() => {
     installable: false,
     message: "",
   });
+  // 没有待汇报的更新结果——有的话 UpdateCard 会弹一个确认框，把设置页的用例搅乱。
+  apiMocks.getUpdateInstallResult.mockResolvedValue(null);
+  apiMocks.acknowledgeUpdateInstallResult.mockResolvedValue(undefined);
   apiMocks.checkLLMThinking.mockResolvedValue({
     style: "reasoning_effort",
     efforts: ["minimal", "low", "medium", "high"],

@@ -419,6 +419,72 @@ else
 fi
 
 printf '\n'
+printf '== 更新器的排除规则 ==\n'
+
+# update.sh 与 Windows 的 Update-ResumeForge.ps1 是镜像实现，两边都曾经按"名字叫 data
+# 就跳过"排除，于是受跟踪的 backend/app/data/（preflight 必需）永远更新不到老用户机器上。
+# 这张路径表两平台各钉一份（Windows 侧在 Test-Update-ResumeForge.ps1 里）。
+# update.sh 有 `BASH_SOURCE = $0` 的主流程保护，source 它只会拿到函数与常量。
+. "$RF_TEST_ROOT/scripts/macos/update.sh"
+set +e   # update.sh 带 set -e，别让它泄漏到后面的检查里
+
+rf_check_excluded() {
+    relative_path=$1
+    expected=$2   # 0 = 应当跳过，1 = 应当复制过去
+    if rf_is_excluded "$relative_path"; then
+        actual=0
+    else
+        actual=1
+    fi
+    if [ "$actual" = "$expected" ]; then
+        rf_check 0 "$relative_path 的排除判断正确"
+    else
+        rf_check 1 "$relative_path 的排除判断不对（应当跳过=${expected}）"
+    fi
+}
+
+# 受跟踪的程序资源：必须复制（这就是修掉的那个 bug）。
+rf_check_excluded "backend/app/data/skills.json" 1
+rf_check_excluded "backend/app/data/ats_keywords.json" 1
+# 前缀陷阱：backend/database.py 不属于 backend/data。
+rf_check_excluded "backend/database.py" 1
+rf_check_excluded "backend/dataset_registry.py" 1
+# .env 是按整段名比的，示例文件照样要复制。
+rf_check_excluded ".env.example" 1
+rf_check_excluded "frontend/.env.demo" 1
+# 用户数据与本地环境：绝不能碰。
+rf_check_excluded "backend/data/app.db" 0
+rf_check_excluded "backend/data/backups/2026.db" 0
+rf_check_excluded "data/legacy.txt" 0
+rf_check_excluded "runtime/backend.json" 0
+rf_check_excluded ".env" 0
+rf_check_excluded "backend/.env" 0
+rf_check_excluded "frontend/node_modules/.bin/vite.cmd" 0
+rf_check_excluded "backend/.venv/bin/python" 0
+rf_check_excluded "backend/app/__pycache__/x.pyc" 0
+rf_check_excluded "frontend/dist/index.html" 0
+
+# 真复制一遍：只看判断不够，还要确认复制函数真的按相对路径递归。
+rf_copy_src="$rf_test_tmp/updater-src/ResumeForge"
+rf_copy_dst="$rf_test_tmp/updater-dst"
+mkdir -p "$rf_copy_src/backend/app/data" "$rf_copy_src/backend/data" "$rf_copy_dst"
+: >"$rf_copy_src/backend/app/data/skills.json"
+: >"$rf_copy_src/backend/data/app.db"
+: >"$rf_copy_src/start.command"
+rf_copy_program_files "$rf_copy_src" "$rf_copy_dst"
+
+if [ -f "$rf_copy_dst/backend/app/data/skills.json" ]; then
+    rf_check 0 "backend/app/data 下的程序资源会被复制"
+else
+    rf_check 1 "backend/app/data 下的程序资源没有被复制"
+fi
+if [ -f "$rf_copy_dst/backend/data/app.db" ]; then
+    rf_check 1 "backend/data 下的用户数据被复制了（绝不该发生）"
+else
+    rf_check 0 "backend/data 下的用户数据留在原地"
+fi
+
+printf '\n'
 if [ "$rf_test_failures" -eq 0 ]; then
     printf 'macOS 启动链测试全部通过。\n'
     exit 0

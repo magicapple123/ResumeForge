@@ -12,6 +12,7 @@ import type {
   ReminderPopupSetting,
   SearchConfig,
   UpdateCheckResult,
+  UpdateInstallResult,
   UpdateStatus,
 } from "../types";
 import { ApiError, extractError, getFilenameFromDisposition, request } from "./client";
@@ -74,6 +75,16 @@ export function installDownloadedUpdate(restart = true): Promise<UpdateStatus> {
     method: "POST",
     body: JSON.stringify({ restart }),
   });
+}
+
+/** 上一次应用内更新的结果；没有需要汇报的返回 null。 */
+export function getUpdateInstallResult(): Promise<UpdateInstallResult | null> {
+  return request("/update/install-result");
+}
+
+/** 用户看过结果之后清掉标记，避免每次打开设置都弹一遍。 */
+export function acknowledgeUpdateInstallResult(): Promise<void> {
+  return request("/update/install-result", { method: "DELETE" });
 }
 
 export function revealLLMApiKey(): Promise<LLMApiKeyRevealResult> {

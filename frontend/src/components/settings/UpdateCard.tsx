@@ -20,8 +20,10 @@ import {
 } from "antd";
 import { useEffect, useState } from "react";
 import {
+  acknowledgeUpdateInstallResult,
   checkForUpdate,
   getUpdateDownloadStatus,
+  getUpdateInstallResult,
   installDownloadedUpdate,
   startUpdateDownload,
 } from "../../api/settings";
@@ -74,20 +76,47 @@ export default function UpdateCard() {
   }, [statusState]);
 
   useEffect(() => {
-    const raw = window.localStorage.getItem(UPDATE_COMPLETED_KEY);
-    if (!raw) return;
+    // 旧版本会在**点击安装时**先写一个"已完成"的标记，于是安装崩了下次打开照样显示
+    // "已更新"。这里只把它清掉，改成向后端要真实结果。
     window.localStorage.removeItem(UPDATE_COMPLETED_KEY);
-    try {
-      const completed = JSON.parse(raw) as { version?: string };
-      modal.success({
-        title: "ResumeForge 已更新",
-        content: completed.version
-          ? `已安装版本 ${completed.version}。你的岗位、简历和设置仍保留在原数据目录中。`
-          : "更新已经完成。你的岗位、简历和设置仍保留在原数据目录中。",
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getUpdateInstallResult()
+      .then(async (outcome) => {
+        if (cancelled || !outcome) return;
+        // 看过了就销掉，别每次打开设置都弹一遍。
+        await acknowledgeUpdateInstallResult().catch(() => undefined);
+        if (cancelled) return;
+
+        if (outcome.state === "success") {
+          modal.success({
+            title: "ResumeForge 已更新",
+            content: `已更新到 ${outcome.target_version}。你的岗位、简历和设置仍保留在原数据目录中。`,
+          });
+          return;
+        }
+        if (outcome.state === "installing") return; // 更新器还在跑，等它写完再说
+        modal.error({
+          title: outcome.state === "interrupted" ? "上次更新没有完成" : "上次更新失败",
+          content: (
+            <div>
+              <p>{outcome.message || "更新器没有给出原因。"}</p>
+              <p style={{ marginBottom: 0 }}>
+                应用本身还能正常使用，数据没有被改动。日志在 <code>{outcome.log}</code>，
+                也可以双击 <code>update.cmd</code> 重新更新一次。
+              </p>
+            </div>
+          ),
+        });
+      })
+      .catch(() => {
+        // 结果接口失败不该让设置页报错：用户仍可以手动检查更新。
       });
-    } catch {
-      modal.success({ title: "ResumeForge 已更新", content: "更新已经完成。你的数据未被覆盖。" });
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [modal]);
 
   const check = async (refresh: boolean) => {
@@ -129,15 +158,10 @@ export default function UpdateCard() {
         setInstalling(true);
         setError("");
         try {
+          // 这里**不写任何"已完成"的标记**：装没装成由更新器写状态、后端读出来告诉界面，
+          // 前端自己记一笔就等于在替结果打包票（旧版本正是这么做的，安装失败也会显示"已更新"）。
           const next = await installDownloadedUpdate(true);
           setStatus(next);
-          window.localStorage.setItem(
-            UPDATE_COMPLETED_KEY,
-            JSON.stringify({
-              version: status.target_version,
-              installed_at: new Date().toISOString(),
-            }),
-          );
         } catch (err) {
           setInstalling(false);
           setError(err instanceof Error ? err.message : "启动安装失败");

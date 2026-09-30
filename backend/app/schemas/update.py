@@ -21,6 +21,9 @@ class UpdateCheckResult(BaseModel):
     download_url: str = Field(default="", max_length=1024)
     download_size: int | None = Field(default=None, ge=0)
     asset_name: str = Field(default="", max_length=256)
+    # 发布时旁边会放一份同名 `.sha256`。下载完拿它核对，能挡住"下载被截断/被中间环节
+    # 改过"这类问题——发行包里是要覆盖到程序目录的代码，值得多这一步。
+    checksum_url: str = Field(default="", max_length=1024)
     installable: bool = False
 
 
@@ -33,6 +36,21 @@ class UpdateDownloadRequest(BaseModel):
 class UpdateInstallRequest(BaseModel):
     """请求下载完成后安排覆盖安装并重启。"""
 
+    restart: bool = True
+
+
+class UpdateInstallResult(BaseModel):
+    """上一次应用内更新的结果。
+
+    由更新器写在 `runtime/update-status.json`，这里只做读取与归一——**成没成以"现在
+    跑的是哪个版本"为准**，更新器的自述只用来解释失败原因。
+    """
+
+    state: Literal["success", "failed", "interrupted", "installing"] = "installing"
+    from_version: str = ""
+    target_version: str = ""
+    message: str = Field(default="", max_length=1000)
+    log: str = Field(default="", max_length=256)
     restart: bool = True
 
 
