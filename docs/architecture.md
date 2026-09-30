@@ -682,6 +682,16 @@ score_match_result(result, job_payload, profile_text, resume_text)
     ``study_mode`` / ``degree_type`` / ``cet4_score`` / ``cet6_score`` 都曾经只加了 schema
     与界面，粘贴识别一直认不出来。
 
+25. **新增/调整厂商的「思考」写法**：形态判定与档位候选集中在
+    `services/llm/thinking.py` 顶部的 `_TABLE`（按主机 + 模型名正则匹配，先匹配先赢）；
+    翻译成请求体的只有 `thinking_payload`（OpenAI 兼容）与 `thinking_budget`（原生 Messages），
+    所以**改表不需要动 provider、也不需要动前端**。`thinking_style` 的取值同时定义在
+    `schemas/setting.py` 的 `THINKING_STYLES`，加一种写法要两处一起加。
+    `EFFORT_BUDGETS` 是**全项目唯一一份**强度→预算映射，助手页的「思考强度」与设置页的
+    「思考模式」共用它。表只负责"猜形态与给选项"，**判定权威是设置页的实测检测**
+    （`probe_thinking`）——上游没有"查询思考能力"的接口，而很多服务商对不认识的参数是
+    静默忽略的，只有实发一次看响应里有没有思考内容才能分辨。
+
 ## 测试策略
 
 - 后端核心业务（跨行业岗位文本/JD 解析、资料参考文件、岗位相关片段筛选、分级生成、照片校验与渲染、岗位解读、助手附件/历史/搜索摘要解析、导出、防虚构校验）有单元测试；模型链路使用模拟传输或假 Provider，默认不依赖真实网络。较长测试已按主题拆分为 `test_job_text_parser_edge_cases.py`、`test_job_text_parser_metadata.py`、`test_profile_text_parser_inference.py`、`test_assistant_search.py` 和 `test_resume_quality_retry.py`，岗位元数据/英文标题/分隔符规则与核心字段测试分别维护，便于定向回归。
@@ -698,6 +708,7 @@ score_match_result(result, job_payload, profile_text, resume_text)
 - 事实台账按层拆测试：`test_claims.py` 钉住校验规则（已确认不得含占位符、枚举、日历日、建议规则的"该报才报"），`test_claims_api.py` 钉住 HTTP 面（固定路径不被 `/{id}` 吃掉、422/502、草拟的两条路径与"模型给未知承担程度时退回最保守取值"），`test_migration_0011.py` 钉住迁移的建表 / 幂等 / downgrade / 与模型常量的默认值一致，`test_resume_completeness.py` 钉住每个区块都被扫到与"不误报"，`test_claim_integration.py` 钉住两个接合点（台账为空时提示词逐字节不变、导出闸门与它的显式出路），`test_assistant_claim_tools.py` 钉住"助手改不了核实状态"。
 - 本批新增模块同样按层拆测试：`test_resume_writing.py` 钉住写作增强（STAR 改写注入 claim 事实边界、纯空白在 schema 层 422、未配置模型降级、提示词登记）；`test_match_scoring.py` 钉住参考分（五维加权、中性分、**不改变准入结论**）；`test_resume_diff.py` 钉住版本对比三态；`test_resume_risk.py` / `test_ats.py` 钉住质量合规与 ATS 免责；`test_watermark.py` 钉住水印后处理（HTML 转义、PDF 页数不变、空文本透传、不支持格式报错）；`test_share_package.py` 钉住离线分享包（脱敏快照、文件清单、token 校验、删除→回收站→恢复→再删→彻底删除闭环）；`test_referral.py` 钉住内推转化派生口径；`test_migration_0018.py` 钉住四张新表的建表 / 幂等 / downgrade。
 - 网申填表按层拆测试，**并且刻意补上旧实现缺失的那类覆盖**：`test_webform_matching.py` 穷举取值决策（占位项永不选、别名、多候选判 `ambiguous` 不猜、日期只有年份时拒绝、`至今` 不算日期），`test_webform_engine.py` 钉住控件识别、单选组整组参与匹配、负向词挡住"紧急联系人姓名"、`file` 控件永不被映射，以及**对着真实缺陷的回归守卫**（`select` 必须用 `HTMLSelectElement` 的 setter 而不是 `HTMLInputElement` 的），`test_webform_data.py` 钉住"取最高学历而不是第一条"，`test_webform_service.py` 钉住冲突项默认不勾选与快照过期语义，`test_webform_api.py` 钉住 HTTP 面。另有两条**机械守卫**把产品边界变成不变量：`test_webform_no_submit.py`（源码里出现 `.submit(` / `requestSubmit` 即红；快照脚本必须跳过提交类控件）与 `test_stop_aware_client_forwarding.py`（反射 `CdpClient` 与 `WindowAwareMixin` 的每个公开方法，断言包装层都转发了——漏转发不报错，只会让该能力在生产里静默失效）。前端 `WebFormPage.test.tsx` 钉住「界面上不存在文案含『提交』的按钮」与「冲突行默认不勾选」。AI 兜底另有三层：`test_webform_ai.py` 钉住**提示词里不含任何资料值**、目录外的字段名被丢弃、`__none__` 与自相矛盾的答案怎么收敛、模型挂了要降级、语义缓存与配额；`test_webform_live.py` 钉住触发条件（**只对真正认不出的问**）、**不阻塞轮询**、过期答案丢弃、`skip_reason` 优先于模型；`test_webform_js_canary.py` 在真浏览器里钉住面板**不盖住输入框、离它够近、跟得住页面重排**、拖动保留的是相对偏移、备选逐条可点，以及卸载要停掉重排定时器。
+- 思考模式按层拆测试：`test_llm_thinking.py` 钉住形态解析、档位归一化（换模型后残留的档位不照发）、请求体片段与探测的四种判定（真的生效 / 被静默忽略 / 被上游拒绝 / 压根没跑起来）；`test_openai_compat.py` 与 `test_llm_anthropic.py` 各自钉住**默认关闭时请求体逐字节不变**与 400 降级重试；`test_api_settings.py` 钉住 `/llm/thinking/check` 的两种模式以及"测试连接不受思考设置影响"；`test_assistant.py` 钉住助手不继承设置页的开关；`test_custom_settings_actually_apply.py` 从保存配置一路断到真实请求体。
 - 前端使用 Vitest 覆盖关键请求封装和核心交互（含投递台的队列准入拦截、暂停 / 停止、采集条件「未生效」、空态与错误态，以及匹配分析的五类结论展示与「不显示百分比」），TypeScript strict、ESLint、Prettier 与生产构建提供静态门禁；复杂用户链路仍需按风险逐步补齐组件或端到端测试。
 - GitHub Actions 在 Linux/Python 3.10、3.12 和 Windows/Python 3.12 上运行后端测试、覆盖率与 Ruff，并在 Node 20 上运行前端测试、格式检查、Lint 和构建。
 - Python 与 npm 依赖审计在 CI 中作为提示项运行，避免外部公告服务短暂不可用阻断功能检查；Dependabot 持续提交可审查的依赖更新。

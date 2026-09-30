@@ -10,7 +10,7 @@
    正是"问水印答没有"的根因；
 4. 写入类工具与 ``build_write_tools_line()`` **双向一致**——单靠 ``Tool.writes`` 或单靠
    目录都不可靠，两边互相校验，新增写工具忘任何一边都会变红；
-5. 目录 domain 与前端 ``App.tsx`` 的 MENU_ITEMS label、``userGuideSteps.ts`` 的 title
+5. 目录 domain 与前端导航配置的 label、``userGuideSteps.ts`` 的 title
    **双向静态断言**（读取前端源文件文本正则提取）——前端仍是 UI 唯一事实来源。
 
 再加上几个新工具的冒烟测试，确认读工具 live_only、写工具真的落库。
@@ -31,7 +31,9 @@ from app.services.feature_catalog import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = REPO_ROOT / "frontend"
-APP_TSX = FRONTEND_DIR / "src" / "App.tsx"
+NAVIGATION_CONFIG_TSX = (
+    FRONTEND_DIR / "src" / "components" / "navigation" / "navigationConfig.tsx"
+)
 GUIDE_STEPS_TS = FRONTEND_DIR / "src" / "components" / "userGuideSteps.ts"
 README_MD = REPO_ROOT / "README.md"
 
@@ -62,6 +64,7 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "收藏夹": ("favorites",),
     "岗位需求解读": ("job_analysis",),
     "岗位匹配度分析": ("job_match",),
+    "批量岗位适配度分析": ("job_match_batch",),
     "匹配度参考分": ("match_reference_score",),
     "求职进度": ("tracker", "tracker_import"),
     "日历提醒": ("reminders",),
@@ -90,7 +93,7 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "离线分享包": ("share_package",),
     "本地模板市场": ("template_market",),
     "首页": ("home_shortcuts", "home_todo"),
-    "界面细节": ("ui_details",),
+    "界面细节": ("ui_details", "navigation_visibility"),
     "全局搜索": ("global_search",),
     "防虚构校验": ("consistency_check",),
     "检查与更新": ("update_check", "dataset"),
@@ -151,7 +154,7 @@ GUIDE_TITLE_DOMAINS = {
 
 
 def _menu_labels() -> set[str]:
-    text = APP_TSX.read_text(encoding="utf-8")
+    text = NAVIGATION_CONFIG_TSX.read_text(encoding="utf-8")
     return set(re.findall(r'label:\s*"([^"]+)"', text))
 
 
@@ -263,9 +266,9 @@ def test_write_tools_are_bidirectionally_consistent_with_catalog():
 
 
 def test_catalog_domains_match_menu_labels_bidirectionally():
-    """目录 domain 与前端 MENU_ITEMS label 双向相等：任一方向多/少一项都会变红。"""
+    """目录 domain 与前端导航 label 双向相等：任一方向多/少一项都会变红。"""
     menu_labels = _menu_labels()
-    assert menu_labels, "未能从 App.tsx 提取到 MENU_ITEMS label"
+    assert menu_labels, "未能从 navigationConfig.tsx 提取到导航 label"
     domains = set(FUNCTIONAL_DOMAINS)
     assert domains == menu_labels, (
         f"目录功能域与菜单不一致：\n"

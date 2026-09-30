@@ -98,7 +98,7 @@ describe("UserGuideModal", () => {
     expect(screen.getByText(/版面诊断/)).toBeInTheDocument();
     expect(screen.getByText(/占了多少|占了页面/)).toBeInTheDocument();
     expect(screen.getByText(/够放下就停/)).toBeInTheDocument();
-    expect(screen.getByText(/12px/)).toBeInTheDocument();
+    expect(screen.getByText(/11px/)).toBeInTheDocument();
   });
 
   it("says the assistant can change data but never delete it", () => {
