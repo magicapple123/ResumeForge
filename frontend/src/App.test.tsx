@@ -111,6 +111,8 @@ describe("application navigation", () => {
     fireEvent.click(await screen.findByRole("button", { name: "回到当前页面顶部" }));
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
-    expect(screen.getByText("岗位广场内容")).toBeInTheDocument();
+    // 页面是懒加载的（`lazy()` + Suspense），这里必须等它解析出来：用 getByText 的话
+    // 成败取决于"这一拍跑得够不够快"——本机过、CI 的慢机器挂（2026-10-01 红过一次）。
+    expect(await screen.findByText("岗位广场内容")).toBeInTheDocument();
   });
 });
