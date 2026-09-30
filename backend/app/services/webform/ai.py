@@ -49,7 +49,7 @@ from ..llm.base import BaseLLMProvider
 from ..llm.structured_output import parse_json_object
 from ..settings_service import get_llm_config
 from .engine import Control
-from .fields import FIELD_LABELS, FORM_FIELDS
+from .fields import FIELD_KEYS, FIELD_LABELS, FORM_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -164,9 +164,12 @@ def _cache_put(key: str, value: tuple[str, ...]) -> None:
 
 
 def _render_fields() -> str:
-    return "\n".join(
-        f"- {spec.key}：{spec.label}（{spec.group}）" for spec in FORM_FIELDS
-    )
+    groups = {spec.key: spec.group for spec in FORM_FIELDS}
+    lines = [
+        f"- {key}：{FIELD_LABELS.get(key, key)}（{groups.get(key, '网申资料重复记录')}）"
+        for key in FIELD_KEYS
+    ]
+    return "\n".join(lines)
 
 
 def _render_controls(controls: Iterable[Control]) -> str:

@@ -27,11 +27,40 @@ class RepeatedBlock:
 
 # 顺序按别名长度从长到短生成正则，避免“项目经历”被更短的“经历”提前截断。
 BLOCK_FAMILY_ALIASES: dict[str, tuple[str, ...]] = {
-    "experience": ("实习经历", "工作经历", "工作经验", "实习工作经历"),
-    "project": ("项目经历", "项目经验"),
-    "campus": ("校园经历", "校内经历", "社会实践"),
-    "education": ("教育经历", "学习经历"),
-    "award": ("获奖信息", "奖项信息", "荣誉奖项", "获奖经历"),
+    "experience": (
+        "实习工作经历",
+        "实习和工作经历",
+        "实习和工作补充",
+        "实习和工作",
+        "实习经历",
+        "工作经历",
+        "工作经验",
+    ),
+    "project": ("项目经历补充", "项目经历", "项目经验"),
+    "campus": (
+        "校园和社会实践经历",
+        "校园和社会实践补充",
+        "校园和社会实践",
+        "校园经历",
+        "校内经历",
+        "社会实践",
+    ),
+    "education": ("教育经历补充", "教育经历", "学习经历"),
+    "award": (
+        "竞赛和获奖补充",
+        "竞赛和获奖",
+        "获奖信息",
+        "奖项信息",
+        "荣誉奖项",
+        "获奖经历",
+    ),
+    "academic": ("学术成果补充", "学术成果", "科研成果", "论文成果"),
+    "language": ("语言能力补充", "语言能力", "语言经历", "外语能力"),
+    "certificate": ("证书补充", "证书信息", "资格证书", "证书经历"),
+    "skill": ("技能补充", "技能信息", "专业技能", "技能特长"),
+    "contact": ("紧急联系人", "紧急联络人"),
+    "portfolio": ("作品和附件", "作品经历", "作品集", "作品展示"),
+    "social": ("社交账号", "社交平台账号"),
 }
 
 _ALIASES_TO_FAMILY = {
@@ -144,14 +173,22 @@ def parse_block_label(text: str) -> RepeatedBlock | None:
 def family_for_field(field_name: str) -> str | None:
     """返回字段所属的重复区块类型。"""
     base, _index = split_repeated_key(field_name)
-    if base.startswith("experience_"):
-        return "experience"
-    if base.startswith("project_"):
-        return "project"
-    if base.startswith("award_"):
-        return "award"
-    if base.startswith("campus_"):
-        return "campus"
+    for family in (
+        "experience",
+        "project",
+        "award",
+        "campus",
+        "education",
+        "academic",
+        "language",
+        "certificate",
+        "skill",
+        "contact",
+        "portfolio",
+        "social",
+    ):
+        if base.startswith(f"{family}_"):
+            return family
     if base in {
         "school",
         "department",
@@ -172,7 +209,7 @@ def family_for_field(field_name: str) -> str | None:
 def split_repeated_key(field_name: str) -> tuple[str, int | None]:
     """把 ``experience_2_company`` 拆成基础字段和序号。"""
     match = re.match(
-        r"^(experience|project|award|campus|education)_(\d+)_(.+)$",
+        r"^(experience|project|award|campus|education|academic|language|certificate|skill|contact|portfolio|social)_(\d+)_(.+)$",
         str(field_name or ""),
     )
     if match is None:
@@ -185,7 +222,24 @@ def split_repeated_key(field_name: str) -> tuple[str, int | None]:
         base = {
             "start": "education_start",
             "end": "education_end",
-        }.get(suffix, suffix)
+        }.get(suffix)
+        if base is None:
+            base = (
+                suffix
+                if suffix
+                in {
+                    "school",
+                    "department",
+                    "major",
+                    "degree",
+                    "degree_type",
+                    "study_mode",
+                    "gpa",
+                    "cet4_score",
+                    "cet6_score",
+                }
+                else f"education_{suffix}"
+            )
     else:
         base = f"{family}_{suffix}"
     return base, index
@@ -198,9 +252,31 @@ def field_key_for_block(field_name: str, family: str | None, index: int | None) 
         return field_name
     if not family or not index or family_for_field(base) != family:
         return field_name
-    if family == "education":
+    if family == "education" and base in {
+        "school",
+        "department",
+        "major",
+        "degree",
+        "degree_type",
+        "study_mode",
+        "gpa",
+        "cet4_score",
+        "cet6_score",
+        "education_start",
+        "education_end",
+    }:
         suffix = base.removeprefix("education_")
-        if base in {"school", "department", "major", "degree", "degree_type", "study_mode", "gpa", "cet4_score", "cet6_score"}:
+        if base in {
+            "school",
+            "department",
+            "major",
+            "degree",
+            "degree_type",
+            "study_mode",
+            "gpa",
+            "cet4_score",
+            "cet6_score",
+        }:
             suffix = base
         return f"education_{index}_{suffix}"
     return f"{family}_{index}_{base.removeprefix(family + '_')}"

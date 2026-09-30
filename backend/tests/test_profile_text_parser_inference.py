@@ -116,7 +116,7 @@ def test_parse_profile_text_supports_employment_aliases_without_splitting_record
     assert result.experiences[0].company == "Acme"
     assert result.experiences[0].role == "Backend Engineer"
     assert result.experiences[0].start_date == "2024"
-    assert result.experiences[0].end_date == "Present"
+    assert result.experiences[0].end_date == "至今"
     assert result.experiences[0].description == "Build APIs"
 
 

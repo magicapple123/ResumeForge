@@ -3,11 +3,11 @@ import { useEffect } from "react";
 import { useApi } from "./useApi";
 import type { BrowserStatus } from "../types";
 
-const DEFAULT_POLL_INTERVAL_MS = 1500;
+export const BROWSER_STATUS_POLL_INTERVAL_MS = 1500;
 
 export function useBrowserStatus(
   fetchStatus: () => Promise<BrowserStatus>,
-  pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+  pollIntervalMs = BROWSER_STATUS_POLL_INTERVAL_MS,
 ) {
   const state = useApi<BrowserStatus>(fetchStatus, []);
   const { reload } = state;

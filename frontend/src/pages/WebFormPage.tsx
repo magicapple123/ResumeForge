@@ -4,7 +4,7 @@
  * **只填不交**——页面上不存在任何"提交"按钮，填完由用户回到浏览器窗口自己核对并提交。
  * 这条不是提示语，是产品边界：`WebFormPage.test.tsx` 里有一条断言钉着"界面上没有提交按钮"。
  *
- * 用同一个受控浏览器窗口（与投递台共享），所以这里只负责状态显示与启停，不另开一份。
+ * 使用网申填表专用的受控浏览器窗口，与投递台分离；这里只负责状态显示与启停。
  *
  * ## 读到的表单与草稿存在 URL / 当前标签页里，不是只存在组件里
  *
@@ -49,6 +49,9 @@ import {
   getWebFormBrowserStatus,
   getWebFormExtraProfile,
   getWebFormLiveStatus,
+  listWebFormUrlHistory,
+  deleteWebFormUrlHistory,
+  openWebFormUrl,
   getWebFormMemoryTargets,
   previewWebForm,
   rememberWebFormLive,
@@ -71,6 +74,7 @@ import WebFormMemoryDialog, {
 import WebFormPendingPanel from "../components/webform/WebFormPendingPanel";
 import WebFormPreviewTable from "../components/webform/WebFormPreviewTable";
 import WebFormRecordsPanel from "../components/webform/WebFormRecordsPanel";
+import WebFormBrowserUrlBar from "../components/webform/WebFormBrowserUrlBar";
 import { useBrowserStatus } from "../hooks/useBrowserStatus";
 import {
   BROWSER_STATE_META,
@@ -81,12 +85,14 @@ import {
   type WebFormMemoryTarget,
   type WebFormPreview,
   type WebFormSnapshot,
+  type WebFormUrlHistory,
 } from "../types";
 
 /** URL 里记住当前这次读取的参数名。 */
 const SNAPSHOT_PARAM = "snapshot";
 /** AI 开关也一起记住：重放预览时要用同一个值，否则"读的时候开了 AI、回来却重算成规则版"。 */
 const AI_PARAM = "ai";
+const WEB_FORM_STATUS_POLL_INTERVAL_MS = 600;
 
 /** 浏览器窗口里正在发生什么，在这边如实显示——不然用户不知道模式开着没有。 */
 const LIVE_STATUS_META: Record<string, { label: string; color: string }> = {
@@ -118,7 +124,7 @@ function useAiAvailable(): boolean | null {
 
 export default function WebFormPage() {
   const { message } = App.useApp();
-  const browser = useBrowserStatus(getWebFormBrowserStatus);
+  const browser = useBrowserStatus(getWebFormBrowserStatus, WEB_FORM_STATUS_POLL_INTERVAL_MS);
   const {
     initial: restoredSession,
     persist: persistWebFormSession,
@@ -146,6 +152,8 @@ export default function WebFormPage() {
   const [learning, setLearning] = useState<WebFormLearningCandidate[]>([]);
   const [learningSaving, setLearningSaving] = useState(false);
   const [browserSettingsOpen, setBrowserSettingsOpen] = useState(false);
+  const [targetUrl, setTargetUrl] = useState("");
+  const [urlHistory, setUrlHistory] = useState<WebFormUrlHistory[]>([]);
   const [memoryTargets, setMemoryTargets] = useState<WebFormMemoryTarget[]>([]);
   const [memoryTargetsLoading, setMemoryTargetsLoading] = useState(false);
   const [memorySaving, setMemorySaving] = useState(false);
@@ -175,6 +183,12 @@ export default function WebFormPage() {
   const rememberPendingSignature = rememberPending
     ? [rememberPending.field_key, rememberPending.value, rememberPending.field_label].join("|")
     : "";
+
+  useEffect(() => {
+    void listWebFormUrlHistory()
+      .then((data) => setUrlHistory(data.items))
+      .catch(() => undefined);
+  }, []);
 
   // 浏览器状态以接口探测为准，表单草稿与当前填写进度留在当前应用标签页。
   useEffect(() => {
@@ -253,18 +267,56 @@ export default function WebFormPage() {
   const handleStart = useCallback(async () => {
     setBusy("start");
     try {
-      const status = await startWebFormBrowser();
+      const status = targetUrl.trim()
+        ? await openWebFormUrl(targetUrl.trim()).then(() => getWebFormBrowserStatus())
+        : await startWebFormBrowser();
       browser.setData(status);
       setSessionActive(true);
       message.success(
-        "浏览器已启动。请在这个窗口里打开目标公司的网申页面，再回来点「读取当前表单」",
+        targetUrl.trim()
+          ? "目标网申页面已打开；已有网页不会被覆盖"
+          : "浏览器已启动。请在这个窗口里打开目标公司的网申页面，再回来点「读取当前表单」",
       );
     } catch (error) {
       message.error(error instanceof Error ? error.message : "启动浏览器失败");
     } finally {
       setBusy(null);
     }
-  }, [browser, message]);
+  }, [browser, message, targetUrl]);
+
+  const handleOpenUrl = useCallback(async () => {
+    const url = targetUrl.trim();
+    if (!url) {
+      await handleStart();
+      return;
+    }
+    setBusy("start");
+    try {
+      await openWebFormUrl(url);
+      const status = await getWebFormBrowserStatus();
+      browser.setData(status);
+      setSessionActive(true);
+      const next = await listWebFormUrlHistory();
+      setUrlHistory(next.items);
+      message.success("目标网申页面已打开；已有网页不会被覆盖");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "打开网申页面失败");
+    } finally {
+      setBusy(null);
+    }
+  }, [browser, handleStart, message, targetUrl]);
+
+  const handleDeleteUrlHistory = useCallback(
+    async (item: WebFormUrlHistory) => {
+      try {
+        await deleteWebFormUrlHistory(item.id);
+        setUrlHistory((previous) => previous.filter((entry) => entry.id !== item.id));
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "删除网址记录失败");
+      }
+    },
+    [message],
+  );
 
   const handleStop = useCallback(async () => {
     setBusy("stop");
@@ -275,6 +327,8 @@ export default function WebFormPage() {
       }
       setLiveOptOut(false);
       await stopWebFormBrowser();
+      setSessionActive(false);
+      setLive(null);
       await browser.reload();
       // 关闭浏览器不等于结束本次填写：用户重新打开后仍应接着刚才的草稿。
     } catch (error) {
@@ -378,15 +432,15 @@ export default function WebFormPage() {
       });
   }, [aiAvailable, aiOn, live?.running, liveOptOut, running]);
 
-  // 浏览器被用户在窗口里直接关掉时，也把后台监听停掉，避免页面继续显示「已开启」。
+  // 浏览器被用户在窗口里直接关掉时，状态轮询会把本地活动标记立即收拢；
+  // 已读快照仍保留，重新打开浏览器后可以继续核对，不把草稿误当成已丢失。
   useEffect(() => {
-    if (browser.data?.state !== "stopped" || !live?.running) return;
-    void Promise.resolve(stopWebFormLive())
-      .then((next) => setLive(next ?? null))
-      .catch(() => setLive(null));
+    if (browser.data?.state !== "stopped") return;
+    setSessionActive(false);
+    setLive(null);
     // 关闭浏览器后再次打开，点击填表应回到默认开启状态。
     setLiveOptOut(false);
-  }, [browser.data?.state, live?.running]);
+  }, [browser.data?.state]);
 
   const handleLiveToggle = useCallback(async () => {
     setBusy("live");
@@ -608,87 +662,100 @@ export default function WebFormPage() {
         description="填充完成后请回到浏览器窗口逐项核对，确认无误后由你自己点击页面上的提交按钮。"
       />
 
-      <Card size="small">
-        <Space size="middle" wrap>
-          <Tag color={stateMeta.color}>{stateMeta.label}</Tag>
-          {browser.loading && !browser.data ? <Spin size="small" /> : null}
-          <Typography.Text type="secondary">
-            与投递台共用同一个受控浏览器窗口（独立于你日常用的浏览器）
-          </Typography.Text>
-          {/* 三个按钮的职责**互不重合**，各管一件事：
-                起停（启动/关闭浏览器）· 配置（浏览器设置）· 重查（刷新状态）。
-              设置不回显状态、刷新不改配置、起停只碰进程——所以这里也不该让它们并行。 */}
-          {running ? (
-            <Tooltip title="停掉这个受控浏览器窗口。里面的登录态会保留，下次启动不用重新登录">
+      <Card size="small" className="webform-browser-card">
+        <WebFormBrowserUrlBar
+          value={targetUrl}
+          history={urlHistory}
+          busy={busy === "start"}
+          onChange={setTargetUrl}
+          onOpen={() => void handleOpenUrl()}
+          onSelectHistory={(item) => setTargetUrl(item.url)}
+          onDeleteHistory={(item) => void handleDeleteUrlHistory(item)}
+        />
+        <div className="webform-browser-status-row">
+          <div className="webform-browser-status">
+            <Tag color={stateMeta.color}>{stateMeta.label}</Tag>
+            {browser.loading && !browser.data ? <Spin size="small" /> : null}
+            <Typography.Text type="secondary">
+              使用独立的网申专用浏览器（不会覆盖投递台或已有网申页面）
+            </Typography.Text>
+          </div>
+          <div className="webform-browser-actions">
+            {/* 三个按钮的职责**互不重合**，各管一件事：
+                  起停（启动/关闭浏览器）· 配置（浏览器设置）· 重查（刷新状态）。
+                设置不回显状态、刷新不改配置、起停只碰进程——所以这里也不该让它们并行。 */}
+            {running ? (
+              <Tooltip title="停掉这个受控浏览器窗口。里面的登录态会保留，下次启动不用重新登录">
+                <Button
+                  icon={<StopOutlined />}
+                  loading={busy === "stop"}
+                  disabled={anyBusy}
+                  onClick={handleStop}
+                >
+                  关闭浏览器
+                </Button>
+              </Tooltip>
+            ) : (
+              <Tooltip title="拉起这个受控浏览器窗口（独立于你日常用的浏览器）">
+                <Button
+                  type="primary"
+                  icon={<ChromeOutlined />}
+                  aria-label="开启专用浏览器"
+                  loading={busy === "start"}
+                  disabled={anyBusy}
+                  onClick={handleStart}
+                >
+                  开启专用浏览器
+                </Button>
+              </Tooltip>
+            )}
+            <Tooltip title="只改「用哪个浏览器」这类配置，不会启动或关闭它——改完要关掉再启动一次才生效">
               <Button
-                icon={<StopOutlined />}
-                loading={busy === "stop"}
+                icon={<SettingOutlined />}
                 disabled={anyBusy}
-                onClick={handleStop}
+                onClick={() => setBrowserSettingsOpen(true)}
               >
-                关闭浏览器
+                浏览器设置
               </Button>
             </Tooltip>
-          ) : (
-            <Tooltip title="拉起这个受控浏览器窗口（独立于你日常用的浏览器）">
+            <Tooltip title="重新读一次运行状态。平时它每 0.6 秒自己会刷；你刚关掉窗口或刚启动时可以用它立刻确认">
               <Button
-                type="primary"
-                icon={<ChromeOutlined />}
-                loading={busy === "start"}
+                icon={<ReloadOutlined />}
+                loading={busy === "refresh"}
                 disabled={anyBusy}
-                onClick={handleStart}
+                onClick={() => void handleRefreshStatus()}
+                aria-label="刷新浏览器状态"
               >
-                启动浏览器
+                刷新状态
               </Button>
             </Tooltip>
-          )}
-          <Tooltip title="只改「用哪个浏览器」这类配置，不会启动或关闭它——改完要关掉再启动一次才生效">
-            <Button
-              icon={<SettingOutlined />}
-              disabled={anyBusy}
-              onClick={() => setBrowserSettingsOpen(true)}
-            >
-              浏览器设置
-            </Button>
-          </Tooltip>
-          <Tooltip title="重新读一次运行状态。平时它每 1.5 秒自己会刷；你刚关掉窗口或刚启动时可以用它立刻确认">
-            <Button
-              icon={<ReloadOutlined />}
-              loading={busy === "refresh"}
-              disabled={anyBusy}
-              onClick={() => void handleRefreshStatus()}
-              aria-label="刷新浏览器状态"
-            >
-              刷新状态
-            </Button>
-          </Tooltip>
-          {sessionActive || running || live?.running || snapshot || preview || result ? (
-            <Tooltip title="结束这一次网申填写：收起面板、不清理资料，下次点「读取当前表单」重来">
-              <Button
-                danger
-                loading={busy === "end"}
-                disabled={anyBusy}
-                onClick={() => void handleEndSession()}
-              >
-                结束本次填写
-              </Button>
-            </Tooltip>
-          ) : null}
-        </Space>
+            {running && (sessionActive || live?.running) ? (
+              <Tooltip title="结束这一次网申填写：收起面板、不清理资料，下次点「读取当前表单」重来">
+                <Button
+                  danger
+                  loading={busy === "end"}
+                  disabled={anyBusy}
+                  onClick={() => void handleEndSession()}
+                >
+                  结束本次填写
+                </Button>
+              </Tooltip>
+            ) : null}
+          </div>
+        </div>
       </Card>
-
       {/* AI 兜底：规则能确定就不调用模型，只有认不出的框才问一次。 */}
-      <Card size="small" title="认不出时让 AI 帮忙">
+      <Card size="small" title="未识别字段智能辅助">
         <Space size="middle" wrap>
           <Switch
             checked={aiOn}
             disabled={aiAvailable !== true}
             onChange={setAiEnabled}
-            aria-label="认不出时让 AI 帮忙"
+            aria-label="AI 字段识别辅助"
           />
           {aiAvailable === true ? (
             <Typography.Text type="secondary">
-              规则认不出的框，交给你在「设置」里配置的模型识别一次。
+              规则未识别的字段，可交由你在「设置」里配置的模型辅助判断。
               <Typography.Text strong>
                 只发页面上本来就有的文字与字段名，不发你的资料内容
               </Typography.Text>
@@ -696,7 +763,7 @@ export default function WebFormPage() {
             </Typography.Text>
           ) : (
             <Typography.Text type="secondary">
-              还没配置大模型，这一步用不了。到「设置」页填好 Base URL
+              尚未配置大模型，暂时无法使用。到「设置」页填好 Base URL
               与模型名之后，规则认不出的框就能交给 AI 识别。
             </Typography.Text>
           )}
@@ -706,13 +773,14 @@ export default function WebFormPage() {
         </Space>
       </Card>
 
-      {/* 「点哪个填哪个」：与上面的「读取当前表单 → 批量填」并存，不是替代。
+      {/* 「智能逐项填表」：与上面的「读取当前表单 → 批量填」并存，不是替代。
           它不做预先快照——点到哪个框才现场匹配，所以不存在"页面一联动序号就失效"。 */}
       <Card
         size="small"
-        title="点哪个填哪个"
+        title="智能逐项填表"
         extra={
           <Button
+            aria-label={live?.running ? "关闭智能逐项填表" : "开启智能逐项填表"}
             type={live?.running ? "default" : "primary"}
             loading={busy === "live"}
             disabled={!running}

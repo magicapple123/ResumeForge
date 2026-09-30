@@ -21,8 +21,9 @@ export interface Education {
   cet6_score: string;
   courses: string;
   achievements: string;
-  reference_file_name: string;
-  reference_content: string;
+  /** 旧版本参考资料字段：仅为读取/保存旧数据兼容，当前界面不再提供入口。 */
+  reference_file_name?: string;
+  reference_content?: string;
 }
 
 export interface Experience {
@@ -32,8 +33,9 @@ export interface Experience {
   start_date: string;
   end_date: string;
   description: string;
-  reference_file_name: string;
-  reference_content: string;
+  /** 旧版本参考资料字段：仅为读取/保存旧数据兼容，当前界面不再提供入口。 */
+  reference_file_name?: string;
+  reference_content?: string;
 }
 
 export interface CampusExperience {
@@ -43,8 +45,9 @@ export interface CampusExperience {
   start_date: string;
   end_date: string;
   description: string;
-  reference_file_name: string;
-  reference_content: string;
+  /** 旧版本参考资料字段：仅为读取/保存旧数据兼容，当前界面不再提供入口。 */
+  reference_file_name?: string;
+  reference_content?: string;
 }
 
 export interface Project {
@@ -56,8 +59,9 @@ export interface Project {
   tech_stack: string;
   description: string;
   highlights: string;
-  reference_file_name: string;
-  reference_content: string;
+  /** 旧版本参考资料字段：仅为读取/保存旧数据兼容，当前界面不再提供入口。 */
+  reference_file_name?: string;
+  reference_content?: string;
 }
 
 export interface Skill {

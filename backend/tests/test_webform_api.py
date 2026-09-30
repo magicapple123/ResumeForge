@@ -10,6 +10,7 @@ from app.models.profile import UserProfile
 from app.services import webform as webform_service
 from app.services.apply import _site_browser, apply_service
 from app.services.webform import FormEngine, get_snapshot_store
+from app.services.webform import browser as webform_browser
 
 
 class FakeBrowserPort:
@@ -37,10 +38,13 @@ def browser_port(monkeypatch) -> FakeBrowserPort:
         return real_manager(**kwargs)
 
     monkeypatch.setattr(_site_browser, "BrowserManager", build)
+    monkeypatch.setattr(webform_browser, "BrowserManager", build)
     apply_service.reset_browser_manager()
+    webform_browser.reset_for_tests()
     get_snapshot_store().clear()
     yield port
     apply_service.reset_browser_manager()
+    webform_browser.reset_for_tests()
     get_snapshot_store().clear()
 
 
@@ -483,6 +487,33 @@ def test_extra_profile_put_is_a_full_overwrite(client, browser_port):
     assert client.get("/api/webform/extra-profile").json()["values"] == {"student_id": "2022012345"}
 
 
+def test_extra_profile_put_rolls_back_single_value_changes_when_repeated_save_fails(
+    client, browser_port, monkeypatch
+):
+    """单值资料与多条资料必须一起提交，后半段失败时不能只保存前半段。"""
+    client.put(
+        "/api/webform/extra-profile",
+        json={"values": {"student_id": "旧学号"}, "repeated": {}},
+    )
+
+    from app.api import webform as webform_api
+
+    def fail(*_args, **_kwargs):
+        raise ValueError("重复资料无效")
+
+    monkeypatch.setattr(webform_api.repeated_profile, "save_groups", fail)
+    response = client.put(
+        "/api/webform/extra-profile",
+        json={"values": {"student_id": "新学号"}, "repeated": {}},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "重复资料无效"
+    assert client.get("/api/webform/extra-profile").json()["values"] == {
+        "student_id": "旧学号"
+    }
+
+
 def test_extra_profile_drops_keys_outside_the_catalog(client, browser_port):
     """目录外的键丢弃但不报错——前端多传一个键不该让整次保存失败。"""
     put = client.put(
@@ -559,14 +590,11 @@ def test_extra_profile_accepts_learned_details(client, browser_port):
     assert put.status_code == 200
     details = put.json()["details"]
     assert details["height"]["source"] == "learned"
-    assert details["referral_code"]["reuse"] == "once"
+    assert details["referral_code"]["reuse"] == "general"
 
 
-def test_once_values_are_not_offered_to_the_fill_engine(client, browser_port, db_session):
-    """**「本次」这一档的端到端含义**：库里在、界面上看得见，但填表读不到。
-
-    这是这个档位唯一的存在理由——内推码、某家的申请编号这类一次性的值，第二次自动填就是错的。
-    """
+def test_all_saved_profile_values_are_offered_to_the_fill_engine(client, browser_port, db_session):
+    """网申资料统一按通用资料参与填表，历史档位只保留兼容显示。"""
     from app.services.webform.data import build_form_data
 
     client.put(
@@ -581,7 +609,7 @@ def test_once_values_are_not_offered_to_the_fill_engine(client, browser_port, db
     )
 
     data = build_form_data(db_session)
-    assert "referral_code" not in data
+    assert data["referral_code"] == "ABC123"
     assert data["height"] == "178"
     # 但读得回来——"只记不填"不是"不记"。
     assert client.get("/api/webform/extra-profile").json()["values"]["referral_code"] == "ABC123"

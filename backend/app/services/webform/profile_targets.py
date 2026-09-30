@@ -29,7 +29,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ...models.web_form_profile import REUSE_GENERAL, REUSE_LEVELS
+from ...models.web_form_profile import REUSE_GENERAL
 from . import extra_profile
 from .fields import FORM_FIELDS, SOURCE_EXTRA
 
@@ -143,7 +143,7 @@ def remember_target(
     """
     cleaned = _clean_value(value)
     target_id = str(target_id or "").strip()
-    if not cleaned or not target_id or reuse not in REUSE_LEVELS:
+    if not cleaned or not target_id:
         return False
 
     if target_id == "custom":
@@ -156,7 +156,7 @@ def remember_target(
             value=cleaned,
             label=custom_label,
             source="manual",
-            reuse=reuse,
+            reuse=REUSE_GENERAL,
         )
 
     if target_id.startswith("extra:"):
@@ -166,7 +166,7 @@ def remember_target(
             value=cleaned,
             label=label,
             source="manual",
-            reuse=reuse,
+            reuse=REUSE_GENERAL,
         )
 
     return False

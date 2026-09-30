@@ -9,7 +9,9 @@ import pytest
 from app.services.webform.matching import (
     SelectOption,
     aliases_of,
+    date_values_match,
     format_date,
+    is_date_hint,
     is_ongoing,
     is_placeholder,
     normalize_option_text,
@@ -144,6 +146,24 @@ def test_no_option_reports_the_value_so_the_user_can_act():
     assert "高中" in result.reason
 
 
+def test_date_options_match_even_when_the_separators_and_padding_differ():
+    options = [
+        SelectOption("", "请选择"),
+        SelectOption("2022-03-09", "2022-03-09"),
+        SelectOption("2022-04-09", "2022-04-09"),
+    ]
+
+    result = resolve_select_option(options, "2022.3.9")
+
+    assert result.status == "matched"
+    assert result.option.value == "2022-03-09"
+
+
+def test_date_values_match_only_when_the_precision_is_the_same():
+    assert date_values_match("2022.3.9", "2022-03-09") is True
+    assert date_values_match("2022.3", "2022-03-09") is False
+
+
 def test_empty_value_is_not_a_match_request():
     assert resolve_select_option(DEGREES, "   ").status == "empty"
 
@@ -154,7 +174,7 @@ def test_empty_value_is_not_a_match_request():
 @pytest.mark.parametrize(
     "raw, kind, expected",
     [
-        ("2022.09", "text", "2022.09"),
+        ("2022.09", "text", "2022-09"),
         ("2022.09", "month", "2022-09"),
         ("2022-09", "month", "2022-09"),
         ("2022/9", "month", "2022-09"),
@@ -168,6 +188,29 @@ def test_format_date_understood_shapes(raw, kind, expected):
     result = format_date(raw, kind=kind)
     assert result.status == "matched"
     assert result.value == expected
+
+
+@pytest.mark.parametrize(
+    "raw, hint, expected",
+    [
+        ("2022.3.9", "YYYY-MM-DD", "2022-03-09"),
+        ("2022.3.9", "选择日期（2022/03/09）", "2022/03/09"),
+        ("2022.3.9", "YYYY.M.D", "2022.3.9"),
+        ("2022.3.9", "出生日期：YYYY年M月D日", "2022年3月9日"),
+        ("2022.3", "YYYY-MM", "2022-03"),
+    ],
+)
+def test_text_dates_follow_the_target_form_hint(raw, hint, expected):
+    result = format_date(raw, kind="text", hint=hint)
+
+    assert result.status == "matched"
+    assert result.value == expected
+
+
+def test_date_hint_detection_avoids_treating_unrelated_text_as_a_date():
+    assert is_date_hint("选择日期") is True
+    assert is_date_hint("education_start") is True
+    assert is_date_hint("内推码") is False
 
 
 def test_a_missing_day_is_assumed_but_flagged():

@@ -375,7 +375,7 @@ def test_learned_entries_keep_their_source_and_level(db_session):
 
     assert details["height"]["source"] == "learned"
     assert details["height"]["reuse"] == "general"
-    assert details["referral_code"]["reuse"] == "once"
+    assert details["referral_code"]["reuse"] == "general"
 
 
 def test_manual_entries_default_to_general(db_session):
@@ -409,8 +409,8 @@ def test_bogus_source_and_level_fall_back_to_the_safe_default(db_session):
     assert details["height"]["reuse"] == "general"
 
 
-def test_once_entries_are_stored_but_never_prefilled(db_session):
-    """**「本次」这一档的全部含义**：留在库里、在界面上看得见，但不参与自动预填。"""
+def test_historical_once_entries_are_stored_and_prefilled(db_session):
+    """历史「本次」档位归一为通用资料，仍保留值且参与自动预填。"""
     _seed_profile(db_session)
     extra_profile.save_entries(
         db_session,
@@ -421,16 +421,15 @@ def test_once_entries_are_stored_but_never_prefilled(db_session):
         },
     )
 
-    # 填表用的那份数据里没有它。
-    assert "referral_code" not in build_form_data(db_session)
+    assert build_form_data(db_session)["referral_code"] == "ABC123"
     assert build_form_data(db_session)["height"] == "178"
     # 但库里还在、界面读得到——"只记不填"，不是"不记"。
     assert extra_profile.list_entries(db_session)["referral_code"] == "ABC123"
-    assert extra_profile.list_details(db_session)["referral_code"]["reuse"] == "once"
+    assert extra_profile.list_details(db_session)["referral_code"]["reuse"] == "general"
 
 
-def test_scenario_entries_are_still_prefilled(db_session):
-    """「场景」档与「通用」一样参与预填——差别只在界面上标出来源。"""
+def test_historical_scenario_entries_are_still_prefilled(db_session):
+    """历史「场景」档与通用资料一样参与预填并归一为通用。"""
     _seed_profile(db_session)
     extra_profile.save_entries(
         db_session,
@@ -439,6 +438,7 @@ def test_scenario_entries_are_still_prefilled(db_session):
     )
 
     assert build_form_data(db_session)["recruit_source"] == "BOSS直聘"
+    assert extra_profile.list_details(db_session)["recruit_source"]["reuse"] == "general"
 
 
 def test_learned_values_never_reach_the_resume_generation_path(db_session):
@@ -763,7 +763,7 @@ def test_remember_target_can_still_create_a_custom_field(db_session):
         is True
     )
     assert extra_profile.list_entries(db_session)["CUSTOM_实验室名称"] == "智能计算实验室"
-    assert extra_profile.list_details(db_session)["CUSTOM_实验室名称"]["reuse"] == "scenario"
+    assert extra_profile.list_details(db_session)["CUSTOM_实验室名称"]["reuse"] == "general"
     # 没有字段名建不出东西来。
     assert remember_target(db_session, target_id="custom", label="", value="x") is False
 

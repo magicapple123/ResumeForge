@@ -1,14 +1,14 @@
 /** 「记住这条」的资料目标选择器。 */
-import { CheckCircleFilled, PlusOutlined, SearchOutlined } from "@ant-design/icons";
-import { App, Card, Empty, Input, Modal, Radio, Space, Tag, Typography } from "antd";
+import { CheckCircleFilled, DownOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
+import { App, Button, Card, Empty, Input, Modal, Radio, Space, Tag, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import type { WebFormMemoryReuse, WebFormMemoryTarget, WebFormRememberPending } from "../../types";
+import type { WebFormMemoryTarget, WebFormRememberPending } from "../../types";
 
 export interface WebFormMemorySelection {
   target_id: string;
   value: string;
   label: string;
-  reuse: WebFormMemoryReuse;
+  reuse: "general";
 }
 
 interface Props {
@@ -21,11 +21,20 @@ interface Props {
   onSubmit: (selection: WebFormMemorySelection) => void;
 }
 
-const REUSE_OPTIONS: Array<{ value: WebFormMemoryReuse; label: string; hint: string }> = [
-  { value: "general", label: "通用", hint: "换家公司也成立，下次优先自动使用" },
-  { value: "scenario", label: "场景", hint: "只在相近投递场景使用，并保留来源提示" },
-  { value: "once", label: "本次", hint: "只记在资料里，不在下次自动填" },
+const GROUP_TONES = [
+  { color: "#2e6da4", border: "#b8d4f2", background: "#f2f7ff" },
+  { color: "#247a65", border: "#a9d9cb", background: "#effaf6" },
+  { color: "#6344a2", border: "#c8b9ed", background: "#f7f3ff" },
+  { color: "#a76720", border: "#f1c58e", background: "#fff8ed" },
+  { color: "#a34d5c", border: "#e9b3bd", background: "#fff3f5" },
+  { color: "#26728a", border: "#a9d3de", background: "#effaff" },
 ];
+
+function groupTone(group: string) {
+  let hash = 0;
+  for (const char of group) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
+  return GROUP_TONES[Math.abs(hash) % GROUP_TONES.length];
+}
 
 function fuzzyIncludes(text: string, keyword: string): boolean {
   const source = text.toLocaleLowerCase();
@@ -65,7 +74,7 @@ export default function WebFormMemoryDialog({
   const [selectedId, setSelectedId] = useState("custom");
   const [customLabel, setCustomLabel] = useState("");
   const [value, setValue] = useState("");
-  const [reuse, setReuse] = useState<WebFormMemoryReuse>("general");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!open || !pending) return;
@@ -74,7 +83,9 @@ export default function WebFormMemoryDialog({
     setSelectedId(preferred?.target_id ?? "custom");
     setCustomLabel(preferred ? "" : pending.field_label || pending.control_label || "");
     setValue(pending.value);
-    setReuse("general");
+    setCollapsedGroups(
+      new Set(targets.map((target) => target.group).filter((group) => group !== "自定义")),
+    );
   }, [open, pending, targets]);
 
   const selectedTarget = targets.find((target) => target.target_id === selectedId);
@@ -99,8 +110,26 @@ export default function WebFormMemoryDialog({
     return [...groups.entries()];
   }, [filteredTargets]);
 
-  const selectedReuse = REUSE_OPTIONS.find((option) => option.value === reuse) ?? REUSE_OPTIONS[0];
   const canSubmit = Boolean(value.trim() && (selectedId !== "custom" || customLabel.trim()));
+  const searching = Boolean(search.trim());
+
+  const toggleGroup = (group: string) => {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  };
+
+  const selectTarget = (target: WebFormMemoryTarget) => {
+    setSelectedId(target.target_id);
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      next.delete(target.group);
+      return next;
+    });
+  };
 
   const handleSubmit = () => {
     if (!canSubmit) {
@@ -111,7 +140,7 @@ export default function WebFormMemoryDialog({
       target_id: selectedId,
       value: value.trim(),
       label: selectedId === "custom" ? customLabel.trim() : (selectedTarget?.label ?? ""),
-      reuse,
+      reuse: "general",
     });
   };
 
@@ -166,10 +195,12 @@ export default function WebFormMemoryDialog({
                 <Radio checked={selectedId === "custom"} />
                 <PlusOutlined style={{ color: "#1677ff", marginTop: 4 }} />
                 <Space direction="vertical" size={2}>
-                  <Typography.Text strong>新增一条网申自定义字段</Typography.Text>
+                  <Space wrap size={6}>
+                    <Typography.Text strong>新增一条网申自定义字段</Typography.Text>
+                    <Tag color="blue">网申资料 · 自定义</Tag>
+                  </Space>
                   <Typography.Text type="secondary">
-                    我的资料和网申资料里都没有对应字段时使用；以后可在「我的资料 →
-                    网申资料」里编辑。
+                    网申资料里没有对应字段时使用；以后可在「我的资料 → 网申资料」里编辑。
                   </Typography.Text>
                 </Space>
               </Space>
@@ -178,46 +209,103 @@ export default function WebFormMemoryDialog({
             {loading ? (
               <Typography.Text type="secondary">正在读取完整资料目录…</Typography.Text>
             ) : groupedTargets.length ? (
-              groupedTargets.map(([group, items]) => (
-                <section key={group} style={{ marginBottom: 14 }}>
-                  <Typography.Title level={5} style={{ margin: "0 0 8px" }}>
-                    {group}
-                  </Typography.Title>
-                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                    {items.map((target) => {
-                      const selected = target.target_id === selectedId;
-                      return (
-                        <Card
-                          key={target.target_id}
-                          size="small"
-                          hoverable
-                          style={{
-                            borderColor: selected ? "#1677ff" : undefined,
-                            background: selected ? "#f5f8ff" : undefined,
-                          }}
-                          onClick={() => setSelectedId(target.target_id)}
-                        >
-                          <Space align="start" style={{ width: "100%" }}>
-                            <Radio checked={selected} />
-                            <Space direction="vertical" size={2} style={{ minWidth: 0, flex: 1 }}>
-                              <Space wrap size={6}>
-                                <Typography.Text strong>{target.label}</Typography.Text>
-                                <Tag color="orange">{SOURCE_LABEL}</Tag>
-                                {selected ? (
-                                  <CheckCircleFilled style={{ color: "#1677ff" }} />
-                                ) : null}
+              groupedTargets.map(([group, items]) => {
+                const expanded = searching || !collapsedGroups.has(group);
+                const tone = groupTone(group);
+                return (
+                  <section key={group} style={{ marginBottom: 14 }}>
+                    <Button
+                      type="text"
+                      block
+                      aria-expanded={expanded}
+                      aria-controls={`webform-memory-group-${group}`}
+                      onClick={() => toggleGroup(group)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        justifyContent: "flex-start",
+                        marginBottom: expanded ? 8 : 0,
+                        padding: "7px 10px",
+                        height: "auto",
+                        border: `1px solid ${tone.border}`,
+                        borderRadius: 8,
+                        color: tone.color,
+                        background: expanded ? tone.background : "#fff",
+                        fontWeight: 700,
+                      }}
+                    >
+                      <DownOutlined rotate={expanded ? 0 : -90} />
+                      <span
+                        style={{
+                          minWidth: 0,
+                          flex: 1,
+                          textAlign: "left",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        网申资料 · {group}
+                      </span>
+                      <Tag
+                        style={{
+                          marginInlineEnd: 0,
+                          color: tone.color,
+                          borderColor: tone.border,
+                          background: "#fff",
+                        }}
+                      >
+                        {items.length} 条
+                      </Tag>
+                    </Button>
+                    {expanded ? (
+                      <Space
+                        id={`webform-memory-group-${group}`}
+                        direction="vertical"
+                        size={8}
+                        style={{ width: "100%" }}
+                      >
+                        {items.map((target) => {
+                          const selected = target.target_id === selectedId;
+                          return (
+                            <Card
+                              key={target.target_id}
+                              size="small"
+                              hoverable
+                              style={{
+                                borderColor: selected ? "#1677ff" : undefined,
+                                background: selected ? "#f5f8ff" : undefined,
+                              }}
+                              onClick={() => selectTarget(target)}
+                            >
+                              <Space align="start" style={{ width: "100%" }}>
+                                <Radio checked={selected} />
+                                <Space
+                                  direction="vertical"
+                                  size={2}
+                                  style={{ minWidth: 0, flex: 1 }}
+                                >
+                                  <Space wrap size={6}>
+                                    <Typography.Text strong>{target.label}</Typography.Text>
+                                    <Tag color="orange">{SOURCE_LABEL}</Tag>
+                                    {selected ? (
+                                      <CheckCircleFilled style={{ color: "#1677ff" }} />
+                                    ) : null}
+                                  </Space>
+                                  <Typography.Text type="secondary" ellipsis>
+                                    当前值：{target.value || "（尚未填写）"}
+                                  </Typography.Text>
+                                </Space>
                               </Space>
-                              <Typography.Text type="secondary" ellipsis>
-                                当前值：{target.value || "（尚未填写）"}
-                              </Typography.Text>
-                            </Space>
-                          </Space>
-                        </Card>
-                      );
-                    })}
-                  </Space>
-                </section>
-              ))
+                            </Card>
+                          );
+                        })}
+                      </Space>
+                    ) : null}
+                  </section>
+                );
+              })
             ) : (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的已有资料" />
             )}
@@ -247,17 +335,9 @@ export default function WebFormMemoryDialog({
             )}
           </Space>
 
-          <Space direction="vertical" size={6} style={{ width: "100%" }}>
-            <Typography.Text strong>下次怎么复用</Typography.Text>
-            <Radio.Group value={reuse} onChange={(event) => setReuse(event.target.value)}>
-              {REUSE_OPTIONS.map((option) => (
-                <Radio.Button key={option.value} value={option.value}>
-                  {option.label}
-                </Radio.Button>
-              ))}
-            </Radio.Group>
-            <Typography.Text type="secondary">{selectedReuse.hint}</Typography.Text>
-          </Space>
+          <Typography.Text type="secondary">
+            保存后会按通用资料复用，下次遇到相同类型的网申字段时自动参与匹配。
+          </Typography.Text>
         </Space>
       ) : null}
     </Modal>

@@ -93,8 +93,8 @@ ResumeForge / 全栈开发 / 2025.01-现在
     assert result.educations[0].school == "华南理工大学"
     assert result.educations[0].major == "计算机科学与技术"
     assert result.educations[0].degree == "本科"
-    assert result.educations[0].start_date == "2022/09"
-    assert result.educations[0].end_date == "2026/06"
+    assert result.educations[0].start_date == "2022-09"
+    assert result.educations[0].end_date == "2026-06"
     assert result.experiences[0].company == "星河科技"
     assert result.experiences[0].role == "后端开发工程师"
     assert result.projects[0].name == "ResumeForge"
@@ -244,7 +244,7 @@ def test_parse_profile_text_supports_english_header_labels_and_degree_names():
     assert result.educations[0].courses == "Algorithms、Databases"
     assert result.experiences[0].company == "Example Inc"
     assert result.experiences[0].role == "Backend Engineer"
-    assert result.experiences[0].end_date == "present"
+    assert result.experiences[0].end_date == "至今"
     assert result.experiences[0].description == "Built internal services."
 
 
@@ -275,7 +275,7 @@ def test_parse_profile_text_supports_multiline_synonym_fields_without_splitting_
     assert len(result.experiences) == 1
     assert result.experiences[0].company == "星河科技有限公司"
     assert result.experiences[0].role == "后端开发工程师"
-    assert result.experiences[0].start_date == "2024.01"
+    assert result.experiences[0].start_date == "2024-01"
     assert result.experiences[0].end_date == "至今"
     assert result.experiences[0].description == "负责服务端开发"
     assert {skill.name for skill in result.skills} >= {

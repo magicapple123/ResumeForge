@@ -4,6 +4,8 @@
 都能在没有浏览器、没有网络的情况下测到位。
 """
 import json
+import threading
+import time
 from typing import Any
 
 import httpx
@@ -119,6 +121,47 @@ def test_send_round_trips_a_command_over_the_websocket():
 
     assert result == {"result": {"value": "hi"}}
     assert ws.sent[0]["method"] == "Runtime.evaluate"
+
+
+def test_concurrent_send_calls_are_serialized_on_one_websocket():
+    class BusyDetectingWebSocket(FakeWebSocket):
+        def __init__(self, responses):
+            super().__init__(responses)
+            self._in_flight = threading.Lock()
+
+        def send(self, payload: str) -> None:
+            if not self._in_flight.acquire(blocking=False):
+                raise AssertionError("CDP 命令没有串行化")
+            super().send(payload)
+
+        def recv(self) -> str:
+            try:
+                time.sleep(0.01)
+                return super().recv()
+            finally:
+                self._in_flight.release()
+
+    ws = BusyDetectingWebSocket(
+        _responder({"Runtime.evaluate": {"result": {"value": "ok"}}})
+    )
+    client = _client_with_ws(ws)
+    results: list[dict] = []
+    errors: list[Exception] = []
+
+    def call() -> None:
+        try:
+            results.append(client.send("Runtime.evaluate", {"expression": "1"}))
+        except Exception as error:  # noqa: BLE001 - 测试线程需要汇总失败
+            errors.append(error)
+
+    threads = [threading.Thread(target=call) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert len(results) == 2
 
 
 def test_send_skips_event_frames_before_the_matching_reply():

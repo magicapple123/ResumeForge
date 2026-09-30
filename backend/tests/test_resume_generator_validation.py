@@ -145,8 +145,8 @@ def test_campus_experience_is_in_prompt_and_model_output():
                 "id": 1,
                 "organization": "学生会",
                 "role": "宣传部部长",
-                "start_date": "2023.09",
-                "end_date": "2024.06",
+                "start_date": "2023-09",
+                "end_date": "2024-06",
                 "description": "策划校园活动\n管理宣传渠道",
             }
         ]
@@ -157,8 +157,8 @@ def test_campus_experience_is_in_prompt_and_model_output():
         {
             "organization": "学生会",
             "role": "宣传部部长",
-            "start_date": "2023.09",
-            "end_date": "2024.06",
+            "start_date": "2023-09",
+            "end_date": "2024-06",
             "description": ["策划校园活动", "管理宣传渠道"],
         }
     ]

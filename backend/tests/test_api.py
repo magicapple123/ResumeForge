@@ -122,7 +122,7 @@ def test_profile_parse_text_accepts_employment_dates_alias(client):
     assert experience["company"] == "Acme"
     assert experience["role"] == "Backend Engineer"
     assert experience["start_date"] == "2024"
-    assert experience["end_date"] == "Present"
+    assert experience["end_date"] == "至今"
     assert experience["description"] == "Build APIs"
 
 

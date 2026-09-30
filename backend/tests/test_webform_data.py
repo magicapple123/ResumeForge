@@ -30,6 +30,8 @@ def _education(**overrides):
         "gpa": "3.8/4.0",
         "cet4_score": "",
         "cet6_score": "",
+        "courses": "",
+        "achievements": "",
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -77,7 +79,9 @@ def _profile(**overrides):
         "preferred_industry": "",
         "educations": [],
         "experiences": [],
+        "campus_experiences": [],
         "projects": [],
+        "skills": [],
         "awards": [],
     }
     base.update(overrides)
@@ -183,6 +187,51 @@ def test_cet_scores_are_absent_when_no_education_record_has_them():
     assert "cet6_score" not in data
 
 
+def test_form_data_carries_every_resume_section_into_matchable_keys():
+    data = profile_to_form_data(
+        _profile(
+            educations=[
+                _education(
+                    courses="Python\n数据库",
+                    achievements="一等奖",
+                )
+            ],
+            campus_experiences=[
+                SimpleNamespace(
+                    organization="学生会",
+                    role="部长",
+                    start_date="2023-09",
+                    end_date="2024-06",
+                    description="组织活动",
+                )
+            ],
+            projects=[
+                SimpleNamespace(
+                    id=1,
+                    name="推荐系统",
+                    role="开发者",
+                    start_date="2024-01",
+                    end_date="2024-06",
+                    tech_stack="Python, FastAPI",
+                    description="搭建服务",
+                    highlights="延迟降低",
+                )
+            ],
+            skills=[SimpleNamespace(id=1, name="Python", level="熟练")],
+        )
+    )
+
+    assert data["courses"] == "Python\n数据库"
+    assert data["education_1_courses"] == "Python；数据库"
+    assert data["education_1_achievements"] == "一等奖"
+    assert data["project_tech_stack"] == "Python, FastAPI"
+    assert data["project_1_highlights"] == "延迟降低"
+    assert data["campus_organization"] == "学生会"
+    assert data["campus_1_description"] == "组织活动"
+    assert data["skill_name"] == "Python"
+    assert data["skill_1_mastery"] == "熟练"
+
+
 def test_empty_values_are_dropped_so_they_never_overwrite_anything():
     data = profile_to_form_data(_profile())
     assert "wechat" not in data
@@ -262,7 +311,7 @@ def test_the_catalog_groups_by_section():
     groups = {item["group"] for item in items}
 
     assert "身份信息" in groups and "联系方式" in groups
-    assert "教育经历 1" in groups and "实习/工作 1" in groups
+    assert "教育经历 1" in groups and "实习和工作 1" in groups
 
 
 def test_the_catalog_does_not_list_the_same_value_twice():
@@ -338,7 +387,7 @@ def test_build_form_data_reads_through_a_real_session(db_session):
     assert data["phone"] == "13900000000"
 
 
-def test_live_form_data_includes_once_entries_but_batch_data_does_not(db_session):
+def test_webform_data_uses_all_saved_entries_for_batch_and_live(db_session):
     db_session.add(
         WebFormProfileEntry(
             field_key="referral_code", value="ABC123", reuse=REUSE_ONCE
@@ -346,7 +395,7 @@ def test_live_form_data_includes_once_entries_but_batch_data_does_not(db_session
     )
     db_session.commit()
 
-    assert "referral_code" not in build_form_data(db_session)
+    assert build_form_data(db_session)["referral_code"] == "ABC123"
     assert build_live_form_data(db_session)["referral_code"] == "ABC123"
 
 

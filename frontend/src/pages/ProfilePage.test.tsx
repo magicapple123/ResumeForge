@@ -162,6 +162,66 @@ describe("ProfilePage 通用简历", () => {
   });
 });
 
+describe("ProfilePage 资料分页", () => {
+  it("默认显示简历资料，切换后显示独立的网申资料板块", async () => {
+    renderPage();
+
+    expect(await screen.findByLabelText("通用简历名称")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "简历资料" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "网申资料" })).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
+    const webFormPanel = await screen.findByRole("tabpanel");
+    expect(
+      within(webFormPanel).getByText("这一区只给「网申填表」用，不会进入简历"),
+    ).toBeInTheDocument();
+    expect(within(webFormPanel).queryByLabelText("通用简历名称")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /全部收起/ })).not.toBeInTheDocument();
+  });
+
+  it("原有网申字段并入统一的网申资料板块", async () => {
+    apiMocks.getWebFormExtraProfile.mockResolvedValue({
+      fields: [
+        {
+          key: "id_number",
+          label: "证件号码",
+          group: "身份信息",
+          kind: "text",
+          sensitive: true,
+        },
+      ],
+      groups: ["身份信息"],
+      values: {},
+      repeated_groups: [],
+    });
+    renderPage();
+
+    const resumePanel = await screen.findByRole("tabpanel");
+    expect(within(resumePanel).queryByText("网申专用资料")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
+    const webFormPanel = await screen.findByRole("tabpanel");
+    expect(within(webFormPanel).getByText("网申资料", { exact: true })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    expect(within(webFormPanel).getByLabelText("证件号码")).toBeEnabled();
+  });
+
+  it("切换资料分页不会丢失当前编辑状态", async () => {
+    renderPage();
+    await screen.findByLabelText("通用简历名称");
+    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+
+    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
+    expect(await screen.findByLabelText("英语六级分数")).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("英语六级分数"), { target: { value: "512" } });
+
+    fireEvent.click(screen.getByRole("tab", { name: "简历资料" }));
+    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
+    expect(screen.getByLabelText("英语六级分数")).toHaveValue("512");
+  });
+});
+
 describe("ProfilePage 分区折叠", () => {
   it("默认展开每个分区，点标题可收起", async () => {
     renderPage();
@@ -204,10 +264,19 @@ describe("ProfilePage 分区折叠", () => {
  * 混进去会让分区顺序看起来莫名其妙地变了（`ProfileSectionConfig` 里有同款说明）。
  */
 describe("ProfilePage 「网申资料」", () => {
+  async function openWebFormTab() {
+    const tab = await screen.findByRole("tab", { name: "网申资料" });
+    fireEvent.click(tab);
+    await waitFor(() => {
+      const panel = screen.getByRole("tabpanel");
+      expect(within(panel).getByText("这一区只给「网申填表」用，不会进入简历")).toBeInTheDocument();
+    });
+  }
+
   it("渲染出「网申资料」区块，并说明它不进简历", async () => {
     renderPage();
 
-    expect(await screen.findByText("网申资料")).toBeInTheDocument();
+    await openWebFormTab();
     expect(screen.getByText("这一区只给「网申填表」用，不会进入简历")).toBeInTheDocument();
   });
 
@@ -227,6 +296,7 @@ describe("ProfilePage 「网申资料」", () => {
       values: { cet6_score: "512" },
     });
     renderPage();
+    await openWebFormTab();
 
     // 填过的那条显示出来。
     expect(await screen.findByText("512")).toBeInTheDocument();
@@ -244,6 +314,7 @@ describe("ProfilePage 「网申资料」", () => {
       values: { height: "178" },
     });
     renderPage();
+    await openWebFormTab();
 
     expect(await screen.findByText("身高(cm)")).toBeInTheDocument();
     expect(screen.queryByText("只存本机", { exact: true })).not.toBeInTheDocument();
@@ -251,7 +322,7 @@ describe("ProfilePage 「网申资料」", () => {
 
   it("编辑态所有字段都可输入（含空的那些）", async () => {
     renderPage();
-    await screen.findByText("网申资料");
+    await openWebFormTab();
 
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
 
@@ -262,7 +333,7 @@ describe("ProfilePage 「网申资料」", () => {
 
   it("保存全部资料时，网申资料也跟着存一次", async () => {
     renderPage();
-    await screen.findByText("网申资料");
+    await openWebFormTab();
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
 
     const input = await screen.findByLabelText("英语六级分数");
@@ -271,13 +342,17 @@ describe("ProfilePage 「网申资料」", () => {
 
     await waitFor(() =>
       // 第二个参数是每条的来源与档位——保存时一起提交，用户在界面上改的档位才会生效。
-      expect(apiMocks.updateWebFormExtraProfile).toHaveBeenCalledWith({ cet6_score: "512" }, {}),
+      expect(apiMocks.updateWebFormExtraProfile).toHaveBeenCalledWith(
+        { cet6_score: "512" },
+        {},
+        {},
+      ),
     );
   });
 
   it("编辑态可以新增自定义网申字段并随资料一起保存", async () => {
     renderPage();
-    await screen.findByText("网申资料");
+    await openWebFormTab();
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
 
     fireEvent.change(screen.getByLabelText("英语六级分数"), { target: { value: "512" } });
@@ -308,6 +383,7 @@ describe("ProfilePage 「网申资料」", () => {
             label: "实验室",
           },
         },
+        {},
       ),
     );
   });
@@ -336,6 +412,7 @@ describe("ProfilePage 「网申资料」", () => {
       },
     });
     renderPage();
+    await openWebFormTab();
     await screen.findByText("实验室");
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
 
@@ -356,6 +433,7 @@ describe("ProfilePage 「网申资料」", () => {
             label: "导师姓名",
           },
         },
+        {},
       ),
     );
   });
@@ -384,13 +462,78 @@ describe("ProfilePage 「网申资料」", () => {
       },
     });
     renderPage();
+    await openWebFormTab();
     await screen.findByText("实验室");
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
     fireEvent.click(screen.getByRole("button", { name: "删除自定义字段：实验室" }));
     fireEvent.click(screen.getByRole("button", { name: /确\s*定/ }));
     fireEvent.click(screen.getByRole("button", { name: /保存全部资料/ }));
 
-    await waitFor(() => expect(apiMocks.updateWebFormExtraProfile).toHaveBeenCalledWith({}, {}));
+    await waitFor(() =>
+      expect(apiMocks.updateWebFormExtraProfile).toHaveBeenCalledWith({}, {}, {}),
+    );
+  });
+
+  it("可新增多条教育补充记录，删除后按剩余顺序保存", async () => {
+    apiMocks.getWebFormExtraProfile.mockResolvedValue({
+      fields: [],
+      groups: [],
+      values: {},
+      repeated_groups: [
+        {
+          key: "education",
+          label: "教育经历补充",
+          family: "education",
+          fields: [
+            {
+              key: "education_class_rank",
+              label: "班级排名",
+              kind: "text",
+              sensitive: false,
+            },
+          ],
+          records: [],
+        },
+      ],
+    });
+    apiMocks.updateWebFormExtraProfile.mockResolvedValue({
+      fields: [],
+      groups: [],
+      values: {},
+      repeated_groups: [],
+    });
+    renderPage();
+    await openWebFormTab();
+    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: "新增教育经历补充" }));
+    fireEvent.change(await screen.findByLabelText("教育经历补充第1条班级排名"), {
+      target: { value: "3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "新增教育经历补充" }));
+    fireEvent.change(screen.getByLabelText("教育经历补充第2条班级排名"), {
+      target: { value: "1" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "删除教育经历补充第1条" }));
+    expect(screen.getByLabelText("教育经历补充第1条班级排名")).toHaveValue("1");
+
+    fireEvent.click(screen.getByRole("button", { name: /保存全部资料/ }));
+
+    await waitFor(() =>
+      expect(apiMocks.updateWebFormExtraProfile).toHaveBeenCalledWith(
+        {},
+        {},
+        {
+          education: [
+            {
+              id: undefined,
+              values: { education_class_rank: "1" },
+            },
+          ],
+        },
+      ),
+    );
   });
 
   it("「网申资料」不进可拖拽排序的分区栈", () => {

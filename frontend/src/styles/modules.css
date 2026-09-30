@@ -23,6 +23,158 @@
   overscroll-behavior: contain;
 }
 
+/* ===== 弹窗统一视觉 =====
+   用同一套表面、标题和操作区建立层级，再通过语义 class 给危险/辅助/编辑类弹窗加
+   顶部色带。这样不同模块不会各自长出一套互不相容的卡片外观。 */
+.ant-modal-root .ant-modal-mask {
+  background: rgb(15 23 42 / 38%);
+}
+
+.ant-modal-content {
+  overflow: hidden;
+  border: 1px solid #e4eaf2;
+  border-radius: 16px;
+  box-shadow:
+    0 24px 70px rgb(15 23 42 / 18%),
+    0 8px 24px rgb(15 23 42 / 10%);
+}
+
+.ant-modal-header {
+  margin-bottom: 0;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid #edf1f6;
+  background: linear-gradient(135deg, #fbfdff 0%, #f4f8fc 100%);
+}
+
+.ant-modal-title {
+  color: #16365c;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ant-modal-close {
+  top: 14px;
+  inset-inline-end: 14px;
+  border-radius: 8px;
+}
+
+.ant-modal-close:hover {
+  background: #eaf1f8;
+}
+
+.ant-modal-body {
+  padding: 20px 22px 22px;
+}
+
+.ant-modal-footer {
+  margin-top: 0;
+  padding: 14px 22px 18px;
+  border-top: 1px solid #edf1f6;
+  background: #fbfcfe;
+}
+
+.ant-modal-confirm .ant-modal-content {
+  border-top: 3px solid #91caff;
+}
+
+.ant-modal-confirm .ant-modal-confirm-title {
+  color: #16365c;
+  font-weight: 700;
+}
+
+.ant-modal-confirm .ant-modal-confirm-content {
+  color: #526173;
+  line-height: 1.7;
+}
+
+.rf-modal-danger .ant-modal-content {
+  border-top: 3px solid #ff7875;
+}
+
+.rf-modal-assist .ant-modal-content {
+  border-top: 3px solid #8b7cf6;
+}
+
+.rf-modal-editor .ant-modal-content {
+  border-top: 3px solid #52c41a;
+}
+
+/* 所有可勾选表格统一使用品牌浅蓝，覆盖 antd 默认的深灰选中背景。 */
+.ant-table-tbody > tr.ant-table-row-selected > td,
+.ant-table-tbody > tr.ant-table-row-selected:hover > td {
+  background: #eaf1f8 !important;
+}
+
+/* ===== 网申浏览器工具区 =====
+   地址输入、运行状态和操作按钮分成两层：宽屏仍是一块紧凑工具条，窄屏会自然换行，
+   不再让长网址、状态说明和四个按钮互相挤压。 */
+
+.webform-browser-card .ant-card-body {
+  padding: 16px;
+}
+
+.webform-url-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.webform-url-input {
+  min-width: 0;
+}
+
+.webform-url-actions {
+  justify-content: flex-end;
+}
+
+.webform-browser-status-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px 20px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.webform-browser-status {
+  display: flex;
+  min-width: 240px;
+  flex: 1 1 320px;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.webform-browser-status .ant-typography {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.webform-browser-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 760px) {
+  .webform-url-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .webform-url-actions,
+  .webform-browser-actions {
+    justify-content: flex-start;
+  }
+
+  .webform-browser-actions {
+    width: 100%;
+  }
+}
+
 /* ===== 列表行操作 ===== */
 
 /* 主操作 + 「更多」下拉：让操作区高度固定，不会因为按钮数量不同而参差。 */
@@ -58,6 +210,91 @@
 .job-note-image-tag {
   align-self: flex-start;
   margin-inline-end: 0;
+}
+
+/* 网申专用浏览器页签助手：用一组低饱和色阶保持区分度，避免默认彩色标签挤成
+   一片；布局允许换行并限制每项宽度，长标题用省略号保护可读性。 */
+.webform-target-floating-balls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: fixed;
+  right: 18px;
+  bottom: 24px;
+  z-index: 1000;
+}
+
+.webform-target-floating-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 58px;
+  height: 38px;
+  border: 1px solid #b8d4f5;
+  border-radius: 999px;
+  color: #155eef;
+  background: #edf5ff;
+  box-shadow: 0 8px 22px rgb(31 55 88 / 12%);
+  cursor: pointer;
+}
+
+.webform-target-floating-toggle span {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.webform-target-floating-ball {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 230px;
+  min-height: 48px;
+  padding: 5px;
+  border: 1px solid #d9e2f0;
+  border-radius: 999px;
+  background: #f5f8fc;
+  box-shadow: 0 8px 22px rgb(31 55 88 / 12%);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.webform-target-floating-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #344054;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.webform-target-floating-more {
+  align-self: flex-end;
+  padding: 2px 9px;
+  color: #667085;
+  font-size: 11px;
+}
+
+.webform-target-floating-ball:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgb(31 55 88 / 18%);
+}
+
+.webform-target-floating-ball.is-on {
+  border-color: #b8d4f5;
+  background: #edf5ff;
+}
+
+.webform-target-floating-ball.is-off {
+  border-color: #d9dde5;
+  background: #f5f6f8;
+}
+
+.webform-target-floating-ball .ant-switch {
+  flex: 0 0 auto;
 }
 
 .job-note-image-item {
@@ -250,6 +487,22 @@
 
 .assistant-reasoning-select {
   min-width: 84px;
+}
+
+/* 自定义档位：输入框与"用预设"并排，宽度与下拉相当——换过去时工具条不该跳一下。 */
+.assistant-reasoning-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.assistant-reasoning-input {
+  width: 120px;
+}
+
+.assistant-reasoning-back {
+  padding: 0;
+  height: auto;
 }
 
 /* 技能下拉：用真实勾选框表达"已启用"（菜单自带高亮在浅色主题下几乎看不出来）。 */

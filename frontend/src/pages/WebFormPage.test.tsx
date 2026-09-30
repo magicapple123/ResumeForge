@@ -31,6 +31,11 @@ const apiMocks = vi.hoisted(() => ({
   listWebFormRecords: vi.fn(),
   getWebFormRecord: vi.fn(),
   deleteWebFormRecord: vi.fn(),
+  listWebFormUrlHistory: vi.fn(),
+  deleteWebFormUrlHistory: vi.fn(),
+  openWebFormUrl: vi.fn(),
+  listWebFormBrowserTargets: vi.fn(),
+  setWebFormBrowserTargetLive: vi.fn(),
 }));
 
 vi.mock("../api/webform", () => apiMocks);
@@ -120,6 +125,16 @@ function renderPage(initialEntries: string[] = ["/webform"]) {
 }
 
 beforeEach(() => {
+  apiMocks.listWebFormUrlHistory.mockResolvedValue({ items: [] });
+  apiMocks.listWebFormBrowserTargets.mockResolvedValue({ items: [] });
+  apiMocks.deleteWebFormUrlHistory.mockResolvedValue(undefined);
+  apiMocks.openWebFormUrl.mockResolvedValue({ target_id: "target-1", url: "https://example.com" });
+  apiMocks.setWebFormBrowserTargetLive.mockImplementation(
+    async (targetId: string, enabled: boolean) => ({
+      target_id: targetId,
+      live_enabled: enabled,
+    }),
+  );
   window.sessionStorage.clear();
   apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus());
   apiMocks.takeWebFormSnapshot.mockResolvedValue({
@@ -165,7 +180,7 @@ describe("WebFormPage", () => {
   });
 
   it("disables reading the form until the browser is running", async () => {
-    apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
+    apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "running" }));
     renderPage();
 
     await waitFor(() =>
@@ -174,14 +189,16 @@ describe("WebFormPage", () => {
   });
 
   it("允许手动刷新浏览器状态，并把已关闭的窗口显示成未启动", async () => {
+    apiMocks.getWebFormBrowserStatus
+      .mockResolvedValueOnce(browserStatus({ state: "running" }))
+      .mockResolvedValue(browserStatus({ state: "stopped" }));
     renderPage();
     await waitFor(() => expect(apiMocks.getWebFormBrowserStatus).toHaveBeenCalled());
 
-    apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
     fireEvent.click(screen.getByRole("button", { name: "刷新浏览器状态" }));
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /启动浏览器/ })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: "开启专用浏览器" })).toBeInTheDocument(),
     );
     expect(apiMocks.getWebFormBrowserStatus.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
@@ -231,16 +248,16 @@ describe("WebFormPage", () => {
     expect(screen.queryByText("请输入导师")).not.toBeInTheDocument();
   });
 
-  it("offers 点哪个填哪个 as a separate mode from the bulk fill", async () => {
+  it("offers 智能逐项填表 as a separate mode from the bulk fill", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole("button", { name: /读取当前表单/ })).toBeEnabled());
 
-    // 两种模式并存：批量填说的是"整页读一遍再填"，这个是"点哪个给哪个"。
-    expect(screen.getByText("点哪个填哪个")).toBeInTheDocument();
+    // 两种模式并存：批量填说的是"整页读一遍再填"，这个是"逐项核对后填写"。
+    expect(screen.getByText("智能逐项填表")).toBeInTheDocument();
     expect(screen.getByText(/点到哪个框，就在框旁边给出资料里对应的值/)).toBeInTheDocument();
   });
 
-  it("turns 点哪个填哪个 on automatically after the browser is ready", async () => {
+  it("turns 智能逐项填表 on automatically after the browser is ready", async () => {
     renderPage();
 
     await waitFor(() => expect(apiMocks.startWebFormLive).toHaveBeenCalledWith(true));
@@ -277,7 +294,9 @@ describe("WebFormPage", () => {
       WEB_FORM_SESSION_STORAGE_KEY,
       JSON.stringify({ sessionActive: true, aiEnabled: true, liveOptOut: false }),
     );
-    apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
+    apiMocks.getWebFormBrowserStatus
+      .mockResolvedValueOnce(browserStatus({ state: "running" }))
+      .mockResolvedValue(browserStatus({ state: "stopped" }));
 
     renderPage();
 
@@ -296,7 +315,9 @@ describe("WebFormPage", () => {
     apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
     renderPage();
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /开\s*启/ })).toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "开启智能逐项填表" })).toBeDisabled(),
+    );
   });
 
   it("shows what the panel is doing in the browser window", async () => {
@@ -343,7 +364,7 @@ describe("WebFormPage", () => {
 
   it("honours the AI switch being turned off", async () => {
     renderPage();
-    const toggle = () => screen.getByRole("switch", { name: "认不出时让 AI 帮忙" });
+    const toggle = () => screen.getByRole("switch", { name: "AI 字段识别辅助" });
     await waitFor(() => expect(toggle()).toBeEnabled());
 
     // `fireEvent` 会包一层 act——不用它的话状态更新还没落地，下一次点击拿到的仍是有 AI 的那份
@@ -362,9 +383,9 @@ describe("WebFormPage", () => {
     renderPage();
 
     await waitFor(() =>
-      expect(screen.getByRole("switch", { name: "认不出时让 AI 帮忙" })).toBeDisabled(),
+      expect(screen.getByRole("switch", { name: "AI 字段识别辅助" })).toBeDisabled(),
     );
-    expect(screen.getByText(/还没配置大模型/)).toBeInTheDocument();
+    expect(screen.getByText(/尚未配置大模型/)).toBeInTheDocument();
   });
 
   it("leaves AI suggestions unchecked and offers one click to take them all", async () => {
@@ -422,7 +443,7 @@ describe("WebFormPage", () => {
 
   it("passes the AI switch to the click-to-fill mode too", async () => {
     renderPage();
-    const toggle = () => screen.getByRole("switch", { name: "认不出时让 AI 帮忙" });
+    const toggle = () => screen.getByRole("switch", { name: "AI 字段识别辅助" });
     await waitFor(() => expect(toggle()).toBeEnabled());
 
     fireEvent.click(toggle());
@@ -431,9 +452,9 @@ describe("WebFormPage", () => {
     // 默认已经开启；关闭后再开启，验证新的设置会传到下一次会话。
     fireEvent.click(screen.getByRole("button", { name: /关\s*闭/ }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /开\s*启/ })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: "开启智能逐项填表" })).toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByRole("button", { name: /开\s*启/ }));
+    fireEvent.click(screen.getByRole("button", { name: "开启智能逐项填表" }));
 
     await waitFor(() => expect(apiMocks.startWebFormLive).toHaveBeenLastCalledWith(false));
   });
@@ -500,13 +521,15 @@ describe("填充记录", () => {
 });
 
 describe("浏览器设置", () => {
-  it("提供一个改浏览器的入口（与投递台共用同一份配置）", async () => {
+  it("提供一个改浏览器的入口（与投递台共用浏览器类型配置）", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByRole("button", { name: /浏览器设置/ })).toBeEnabled());
 
     screen.getByRole("button", { name: /浏览器设置/ }).click();
 
-    await waitFor(() => expect(screen.getByText(/共用同一个浏览器窗口/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/分别打开独立浏览器窗口与登录态/)).toBeInTheDocument(),
+    );
   });
 });
 

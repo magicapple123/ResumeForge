@@ -18,6 +18,7 @@ class WebFormFieldOut(BaseModel):
     label: str
     group: str
     kind: str
+    options: list[str] = Field(default_factory=list)
     sensitive: bool = False
 
 
@@ -36,6 +37,23 @@ class WebFormPageOut(BaseModel):
 class WebFormSnapshotOut(BaseModel):
     snapshot_id: str
     page: WebFormPageOut
+
+
+class WebFormUrlHistoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    url: str
+    title: str = ""
+    last_used_at: datetime
+
+
+class WebFormUrlHistoryListOut(BaseModel):
+    items: list[WebFormUrlHistoryOut] = Field(default_factory=list)
+
+
+class WebFormOpenUrlIn(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
 
 
 class PreviewItemOut(BaseModel):
@@ -288,6 +306,40 @@ class WebFormExtraEntryOut(BaseModel):
     label: str = ""
 
 
+class WebFormRepeatedFieldOut(BaseModel):
+    """一组可重复网申资料中的字段。"""
+
+    key: str
+    label: str
+    kind: str = "text"
+    options: list[str] = Field(default_factory=list)
+    sensitive: bool = False
+
+
+class WebFormRepeatedRecordOut(BaseModel):
+    """一条可重复网申资料记录。"""
+
+    id: int
+    values: dict[str, str] = Field(default_factory=dict)
+
+
+class WebFormRepeatedGroupOut(BaseModel):
+    """一组可新增多条的网申资料。"""
+
+    key: str
+    label: str
+    family: str
+    fields: list[WebFormRepeatedFieldOut] = Field(default_factory=list)
+    records: list[WebFormRepeatedRecordOut] = Field(default_factory=list)
+
+
+class WebFormRepeatedRecordIn(BaseModel):
+    """前端提交的一条重复资料；id 只用于兼容回显，不作为写入依据。"""
+
+    id: int | None = None
+    values: dict[str, str] = Field(default_factory=dict)
+
+
 class WebFormExtraProfileOut(BaseModel):
     """「网申资料」的读取结果：要录的字段清单 + 已填的值。"""
 
@@ -299,6 +351,8 @@ class WebFormExtraProfileOut(BaseModel):
     # 与 ``values`` 同键的补充信息。**分开一个字段而不是把 values 改成对象**：``values``
     # 的形状（key→字符串）已经被保存流程用着，改它会让每次保存都要适配一层。
     details: dict[str, WebFormExtraEntryOut] = Field(default_factory=dict)
+    # 可重复网申资料（教育补充、实习和工作补充、论文、证书等）。
+    repeated_groups: list[WebFormRepeatedGroupOut] = Field(default_factory=list)
 
 
 class WebFormExtraProfileIn(BaseModel):
@@ -309,6 +363,8 @@ class WebFormExtraProfileIn(BaseModel):
 
     values: dict[str, str] = Field(default_factory=dict)
     details: dict[str, WebFormExtraEntryOut] = Field(default_factory=dict)
+    # ``None`` 表示旧客户端没有提交这一部分，服务端必须保留已有重复记录。
+    repeated: dict[str, list[WebFormRepeatedRecordIn]] | None = None
 
 
 __all__ = [
@@ -321,6 +377,10 @@ __all__ = [
     "WebFormExtraFieldOut",
     "WebFormExtraProfileIn",
     "WebFormExtraProfileOut",
+    "WebFormRepeatedFieldOut",
+    "WebFormRepeatedGroupOut",
+    "WebFormRepeatedRecordIn",
+    "WebFormRepeatedRecordOut",
     "WebFormFieldOut",
     "WebFormFieldsOut",
     "WebFormFillRecordOut",
@@ -337,6 +397,7 @@ __all__ = [
     "WebFormFillItemIn",
     "WebFormFillOut",
     "WebFormOutcomeOut",
+    "WebFormOpenUrlIn",
     "WebFormPageOut",
     "WebFormPreviewIn",
     "WebFormPreviewOut",

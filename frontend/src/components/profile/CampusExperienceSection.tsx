@@ -1,6 +1,7 @@
 /** 校园经历分区：学生会、团支部、班级与社团等校内经历。 */
 import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
+import PartialDateSelect from "./PartialDateSelect";
 import ProfileSection from "./ProfileSection";
 
 interface Props {
@@ -18,8 +19,6 @@ export function CampusExperienceSection({ editable }: Props) {
         start_date: "",
         end_date: "",
         description: "",
-        reference_file_name: "",
-        reference_content: "",
       }}
       itemLabel={(item, index) => {
         const organization = String(item.organization ?? "").trim();
@@ -40,12 +39,12 @@ export function CampusExperienceSection({ editable }: Props) {
           </Col>
           <Col xs={12} md={4}>
             <Form.Item name={[field.name, "start_date"]} label="开始时间">
-              <Input placeholder="2023.09" />
+              <PartialDateSelect label={`校园经历${field.name + 1}开始时间`} />
             </Form.Item>
           </Col>
           <Col xs={12} md={4}>
             <Form.Item name={[field.name, "end_date"]} label="结束时间">
-              <Input placeholder="2024.06 / 至今" />
+              <PartialDateSelect label={`校园经历${field.name + 1}结束时间`} allowOngoing />
             </Form.Item>
           </Col>
           <Col span={24}>

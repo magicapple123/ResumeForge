@@ -41,8 +41,10 @@ interface Props {
   onAddToQueue: (job: Job) => void;
   onAskAssistant: (job: Job) => void;
   onFavorite: (job: Job) => void;
+  onOpenWebForm: (job: Job) => void;
   favoriteLoading?: boolean;
   queueLoading?: boolean;
+  webFormLoading?: boolean;
 }
 
 interface TextSectionProps {
@@ -78,8 +80,10 @@ export default function JobDetailDrawer({
   onAddToQueue,
   onAskAssistant,
   onFavorite,
+  onOpenWebForm,
   favoriteLoading = false,
   queueLoading = false,
+  webFormLoading = false,
 }: Props) {
   return (
     <Drawer
@@ -136,9 +140,9 @@ export default function JobDetailDrawer({
             {job.source_url && (
               <Button
                 icon={<LinkOutlined />}
-                href={job.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
+                loading={webFormLoading}
+                disabled={webFormLoading}
+                onClick={() => onOpenWebForm(job)}
               >
                 前往投递
               </Button>
