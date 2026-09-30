@@ -228,8 +228,8 @@ export default function ResumeDetailPreview({
         </Button>
         <div className="resume-detail-footer-export">
           <ExportButtons recordId={detail.id} pdfDirectAvailable={pdfDirectAvailable} />
+          {extraActions ? <span className="resume-detail-footer-extra">{extraActions}</span> : null}
         </div>
-        {extraActions ? <div className="resume-detail-footer-extra">{extraActions}</div> : null}
       </div>
 
       <ResumeEditorModal

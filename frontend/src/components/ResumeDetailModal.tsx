@@ -5,7 +5,7 @@
  * 数据与重渲染的动作准备好，交给共享组件渲染。
  */
 import type { ResumeFormatConfig } from "../types/resumeFormat";
-import { Alert, App, Modal, Skeleton } from "antd";
+import { Alert, App, Button, Modal, Skeleton, Space } from "antd";
 import { useEffect, useRef, useState } from "react";
 import {
   fetchResumeHtml,
@@ -38,6 +38,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
   const [layout, setLayout] = useState<ResumeLayout>(DEFAULT_LAYOUT);
+  const [savedLayout, setSavedLayout] = useState<ResumeLayout>(DEFAULT_LAYOUT);
   const [layoutStatus, setLayoutStatus] = useState<{
     pages: number;
     scale: number;
@@ -45,6 +46,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
   } | null>(null);
   const [pdfDirectAvailable, setPdfDirectAvailable] = useState(true);
   const [relayouting, setRelayouting] = useState(false);
+  const [layoutSaving, setLayoutSaving] = useState(false);
   // 预览量到的实测高度：只有浏览器能量准，所以由预览上报、这里转交给诊断面板。
   const [measure, setMeasure] = useState<LayoutMeasure | null>(null);
   const previewRef = useRef<ResumePreviewHandle>(null);
@@ -53,6 +55,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
   const loadedRecordId = useRef<number | null>(null);
   const requestVersion = useRef(0);
   const saveRequestVersion = useRef(0);
+  const layoutDirty = JSON.stringify(layout) !== JSON.stringify(savedLayout);
 
   useEffect(() => {
     const currentRequest = ++requestVersion.current;
@@ -72,7 +75,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
         setDetail(data);
         setHtml(rendered);
         // 版式跟着记录走：上次用的是哪套，这次打开还是哪套。
-        setLayout({
+        const nextLayout = {
           template: data.template || DEFAULT_LAYOUT.template,
           format_name: data.format_name ?? DEFAULT_LAYOUT.format_name,
           // 必须带上按简历的覆盖：后面每次重渲染都从这份 layout 出发，
@@ -80,7 +83,9 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
           format_config: data.format_config ?? {},
           page_limit: data.page_limit || DEFAULT_LAYOUT.page_limit,
           font_scale: data.font_scale || DEFAULT_LAYOUT.font_scale,
-        });
+        } satisfies ResumeLayout;
+        setLayout(nextLayout);
+        setSavedLayout(nextLayout);
       })
       .catch((err) => {
         if (currentRequest === requestVersion.current) {
@@ -120,15 +125,13 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     message.success("简历修改已保存");
   };
 
-  /** 换模板 / 加页数 / 改字号：写回记录并重新渲染，不重新生成内容。 */
+  /** 换模板 / 加页数 / 改字号：先改本地草稿并重新渲染，不立即写回记录。 */
   const applyLayout = async (next: ResumeLayout) => {
     if (!detail || relayouting) return;
     setRelayouting(true);
     setLayout(next);
     try {
-      const updated = await updateResumeLayout(detail.id, next);
-      setDetail(updated);
-      setHtml(await renderResume(updated.content, next));
+      setHtml(await renderResume(detail.content, next));
     } catch (err) {
       message.error(err instanceof Error ? err.message : "按新版式渲染失败");
     } finally {
@@ -136,7 +139,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     }
   };
 
-  /** 「自动一页」已由诊断卡写回配置，这里只需按新配置重渲染一次。 */
+  /** 「自动一页」也只写入当前草稿，用户确认后再保存。 */
   const applyFittedFormat = async (formatConfig: ResumeFormatConfig) => {
     if (!detail) return;
     const next: ResumeLayout = { ...layout, format_config: formatConfig };
@@ -146,6 +149,43 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
       setHtml(await renderResume(detail.content, next));
     } catch (err) {
       message.error(err instanceof Error ? err.message : "按新版式渲染失败");
+    } finally {
+      setRelayouting(false);
+    }
+  };
+
+  const saveLayout = async () => {
+    if (!detail || !layoutDirty || layoutSaving) return;
+    setLayoutSaving(true);
+    try {
+      const updated = await updateResumeLayout(detail.id, layout);
+      const nextLayout: ResumeLayout = {
+        template: updated.template || layout.template,
+        format_name: updated.format_name ?? layout.format_name,
+        format_config: updated.format_config ?? layout.format_config ?? {},
+        page_limit: updated.page_limit || layout.page_limit,
+        font_scale: updated.font_scale || layout.font_scale,
+      };
+      setDetail(updated);
+      setLayout(nextLayout);
+      setSavedLayout(nextLayout);
+      setHtml(await renderResume(updated.content, nextLayout));
+      message.success("简历版式修改已保存");
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "保存版式修改失败");
+    } finally {
+      setLayoutSaving(false);
+    }
+  };
+
+  const cancelLayout = async () => {
+    if (!detail || !layoutDirty || relayouting || layoutSaving) return;
+    setRelayouting(true);
+    setLayout(savedLayout);
+    try {
+      setHtml(await renderResume(detail.content, savedLayout));
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "恢复已保存版式失败");
     } finally {
       setRelayouting(false);
     }
@@ -183,6 +223,23 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
           onMeasure={setMeasure}
           onApplyLayout={(next) => void applyLayout(next)}
           onApplyFittedFormat={(formatConfig) => void applyFittedFormat(formatConfig)}
+          extraActions={
+            layoutDirty ? (
+              <Space size={8}>
+                <Button onClick={() => void cancelLayout()} disabled={relayouting || layoutSaving}>
+                  取消修改
+                </Button>
+                <Button
+                  type="primary"
+                  loading={layoutSaving}
+                  disabled={relayouting}
+                  onClick={() => void saveLayout()}
+                >
+                  保存修改
+                </Button>
+              </Space>
+            ) : null
+          }
           onSaveEditedResume={(content) => saveEditedResume(content)}
           suggestionsGenerated={suggestionsGenerated}
           suggestionsResetKey={suggestionsResetKey}

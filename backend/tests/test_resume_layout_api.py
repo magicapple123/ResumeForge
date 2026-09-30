@@ -59,7 +59,7 @@ def test_analyze_reports_the_font_floor_so_the_button_is_not_a_surprise(client):
         json={"measure": {"used_height": PAGE * 1.3, "page_content_height": PAGE, "page_limit": 1}},
     ).json()
     room = body["fit_room"]
-    assert room["font_floor_px"] == 12.0
+    assert room["font_floor_px"] == 11.0
     assert room["has_room"] is True
     assert "9pt" in room["font_floor_note"]
 

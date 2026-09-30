@@ -28,9 +28,9 @@ export const FONT_SCALE_ADJUST_KEY = "font_scale_adjust";
  * 就成了与后端 `FONT_SCALES` 并存的第二份真相，改档位时两边会悄悄分叉。
  */
 const FALLBACK_TIERS: FontTier[] = [
-  { name: "small", basePx: 12.0, label: "小字号" },
+  { name: "small", basePx: 11.0, label: "小字号" },
   { name: "standard", basePx: 14.0, label: "标准字号" },
-  { name: "large", basePx: 15.5, label: "大字号" },
+  { name: "large", basePx: 18.0, label: "大字号" },
 ];
 const DEFAULT_TIER: ResumeFontScale = "standard";
 

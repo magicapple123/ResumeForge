@@ -197,7 +197,6 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   }, [html, pageCount, updateAvailableSpace]);
 
   const handleFrameLoad = useCallback(() => {
-    console.log("HOVER: iframe load");
     fitFrameContent();
     updateAvailableSpace();
     bindFrameInteractions();
