@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$SkipBackend
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -16,7 +18,9 @@ Stop-RecordedProcess `
     -DisplayName "frontend" `
     -RecordPath (Join-Path $RuntimeDirectory "frontend.json") `
     -CommandPattern (Get-ResumeForgeProcessPattern -Service "frontend")
-Stop-RecordedProcess `
-    -DisplayName "backend" `
-    -RecordPath (Join-Path $RuntimeDirectory "backend.json") `
-    -CommandPattern (Get-ResumeForgeProcessPattern -Service "backend")
+if (-not $SkipBackend) {
+    Stop-RecordedProcess `
+        -DisplayName "backend" `
+        -RecordPath (Join-Path $RuntimeDirectory "backend.json") `
+        -CommandPattern (Get-ResumeForgeProcessPattern -Service "backend")
+}
