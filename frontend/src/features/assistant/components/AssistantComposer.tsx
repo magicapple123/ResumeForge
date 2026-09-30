@@ -1,5 +1,6 @@
 /** 求职助手消息输入、上下文选择、技能开关与附件预览。 */
 
+import { useState } from "react";
 import {
   CloseOutlined,
   ExperimentOutlined,
@@ -31,7 +32,13 @@ import {
   type PendingAttachment,
 } from "../assistantUtils";
 import type { AssistantQuotedMessage, AssistantSkill } from "../../../types";
-import { REASONING_EFFORT_OPTIONS, type ReasoningEffort } from "../../../types";
+import {
+  CUSTOM_EFFORT_OPTION,
+  MAX_REASONING_EFFORT_CHARS,
+  REASONING_EFFORT_OPTIONS,
+  isValidReasoningEffort,
+  type ReasoningEffort,
+} from "../../../types/assistant";
 import FileDropZone from "../../../components/common/FileDropZone";
 
 /** 文档按扩展名区分图标：pdf 和 docx 混在一串标签里时，图标比文件名更好认。 */
@@ -105,6 +112,11 @@ export default function AssistantComposer({
 }: Props) {
   const { message } = App.useApp();
   const enabledSkills = skills.filter((skill) => skill.enabled);
+  // 自定义档位是**界面态**（值本身仍然由页面受控）：从本地存回来的自定义值一打开就
+  // 直接落在输入框里，而不是让下拉把它当未知值空着显示。
+  const [customEffort, setCustomEffort] = useState(
+    () => !REASONING_EFFORT_OPTIONS.some((option) => option.value === reasoningEffort),
+  );
 
   return (
     <FileDropZone
@@ -289,18 +301,66 @@ export default function AssistantComposer({
                 <span>联网搜索</span>
               </label>
               {/* 带文字标签：只放一个「默认」下拉，用户看不出这是在调什么（截图反馈）。 */}
-              <Tooltip title="有思考模式的大模型可以在这里调推理强度；不支持该参数的服务商会忽略它">
+              <Tooltip title="有思考模式的大模型可以在这里调推理强度。各家档位词汇不同（low/medium/high、minimal、xhigh、max…），选「自定义…」可以自己填；不支持该参数的服务商会忽略它，被拒绝时还会自动去掉重试一次">
                 <span className="assistant-reasoning-control">
                   <span className="assistant-reasoning-label">思考强度</span>
-                  <Select
-                    size="small"
-                    className="assistant-reasoning-select"
-                    value={reasoningEffort}
-                    options={REASONING_EFFORT_OPTIONS}
-                    disabled={sending}
-                    onChange={onReasoningEffortChange}
-                    aria-label="思考强度"
-                  />
+                  {customEffort ? (
+                    <span className="assistant-reasoning-custom">
+                      <Input
+                        size="small"
+                        className="assistant-reasoning-input"
+                        value={reasoningEffort}
+                        maxLength={MAX_REASONING_EFFORT_CHARS}
+                        placeholder="如 xhigh / max / 4096"
+                        disabled={sending}
+                        status={isValidReasoningEffort(reasoningEffort) ? undefined : "error"}
+                        onChange={(event) => onReasoningEffortChange(event.target.value)}
+                        onBlur={(event) => {
+                          // 填了空就退回预设：留一个空输入框在工具条上只会让人以为是坏了。
+                          // 看**输入框当前的值**而不是 prop——父组件不一定同步回填。
+                          if (!event.target.value.trim()) {
+                            setCustomEffort(false);
+                            onReasoningEffortChange("");
+                          }
+                        }}
+                        aria-label="自定义思考强度"
+                      />
+                      <Button
+                        type="link"
+                        size="small"
+                        className="assistant-reasoning-back"
+                        disabled={sending}
+                        onClick={() => {
+                          setCustomEffort(false);
+                          onReasoningEffortChange("");
+                        }}
+                      >
+                        用预设
+                      </Button>
+                    </span>
+                  ) : (
+                    <Select
+                      size="small"
+                      showSearch
+                      optionFilterProp="label"
+                      className="assistant-reasoning-select"
+                      value={reasoningEffort}
+                      options={[
+                        ...REASONING_EFFORT_OPTIONS,
+                        { value: CUSTOM_EFFORT_OPTION, label: "自定义…" },
+                      ]}
+                      disabled={sending}
+                      onChange={(value) => {
+                        if (value === CUSTOM_EFFORT_OPTION) {
+                          setCustomEffort(true);
+                          onReasoningEffortChange("");
+                          return;
+                        }
+                        onReasoningEffortChange(value);
+                      }}
+                      aria-label="思考强度"
+                    />
+                  )}
                 </span>
               </Tooltip>
             </div>

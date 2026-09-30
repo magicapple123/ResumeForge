@@ -318,7 +318,10 @@ async def send_message(
     # 思考强度只作用于本次调用：助手页可以随时切换，不必改写设置里的模型配置。
     # 直接设在实例上而不是走 create_provider 的参数：测试与自定义 provider 只实现
     # `(config)` 这一个签名，给工厂加参数会让它们全部失效。
-    provider = create_provider(config)
+    #
+    # `without_thinking()` 剥掉设置页的「思考模式」：那是**除助手以外**的 AI 调用的开关，
+    # 助手只认上面这个单次请求级的选择——设置页开一次开关不该把助手的对话也改掉。
+    provider = create_provider(config.without_thinking())
     provider.request_overrides = {"reasoning_effort": payload.reasoning_effort}
     db.close()
 

@@ -70,6 +70,80 @@ def _successful_provider(monkeypatch, captured: dict | None = None, reply: str =
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: Provider())
 
 
+def test_the_assistant_never_inherits_the_settings_thinking_switch(client, monkeypatch):
+    """设置页的「思考模式」**只作用于除助手以外的调用**。
+
+    助手有自己的单次请求级「思考强度」，两者必须分开：在设置页开一次开关，不该把助手的
+    每一轮对话也一起改掉——用户可能正用一个不认识该参数的服务商，那样连聊天都会失败。
+    """
+    config = LLMConfig(
+        base_url="https://api.example.com/v1",
+        api_key="assistant-secret",
+        model="assistant-model",
+        thinking_enabled=True,
+        thinking_effort="high",
+        thinking_budget=4096,
+    )
+    assert client.put("/api/settings/llm", json=config.model_dump()).status_code == 200
+    captured = {}
+
+    class Provider(_FakeProvider):
+        async def stream_chat(self, _messages):
+            yield "好的"
+
+    def fake_create_provider(received):
+        captured["config"] = received
+        return Provider()
+
+    monkeypatch.setattr("app.api.assistant.create_provider", fake_create_provider)
+    conversation = _create_conversation(client)
+
+    _send(client, conversation["id"], "你好")
+
+    assert captured["config"].thinking_enabled is False
+    assert captured["config"].thinking_budget is None
+
+
+def test_a_custom_reasoning_effort_reaches_the_provider(client, monkeypatch):
+    """自定义档位（各家自创的词，如 `xhigh`）必须被接受并原样交给 provider。
+
+    它以前是 Literal：填 `xhigh` 直接 422——而"各家档位划分不同"恰恰是允许自定义的理由。
+    """
+    _configure_llm(client)
+    captured = {}
+
+    class Provider(_FakeProvider):
+        async def stream_chat(self, _messages):
+            yield "好的"
+
+    def fake_create_provider(_config):
+        captured["provider"] = Provider()
+        return captured["provider"]
+
+    monkeypatch.setattr("app.api.assistant.create_provider", fake_create_provider)
+    conversation = _create_conversation(client)
+
+    response = client.post(
+        f"/api/assistant/conversations/{conversation['id']}/messages",
+        json={"content": "你好", "reasoning_effort": "xhigh"},
+    )
+
+    assert response.status_code == 200
+    assert captured["provider"].request_overrides == {"reasoning_effort": "xhigh"}
+
+
+def test_a_malformed_reasoning_effort_is_rejected(client):
+    """格式约束仍然要有：空白/中文/超长串一定发不出去，早拒绝比让上游 400 好。"""
+    conversation = _create_conversation(client)
+
+    for bad in ("有中文", "with space", "x" * 33):
+        response = client.post(
+            f"/api/assistant/conversations/{conversation['id']}/messages",
+            json={"content": "你好", "reasoning_effort": bad},
+        )
+        assert response.status_code == 422, bad
+
+
 def test_conversation_crud_and_soft_delete(client, db_session, monkeypatch):
     _configure_llm(client)
     _successful_provider(monkeypatch)

@@ -17,8 +17,13 @@ export interface AssistantConversationBrief {
 /** 会话列表筛选：全部 / 收藏 / 已归档。 */
 export type ConversationFilter = "all" | "favorite" | "archived";
 
-/** 思考强度：空串表示不发送该参数，沿用服务商默认。 */
-export type ReasoningEffort = "" | "none" | "low" | "medium" | "high";
+/**
+ * 思考强度：空串表示不发送该参数，沿用服务商默认。
+ *
+ * **不是白名单**——各家的档位词汇不一样（`minimal`/`xhigh`/`max`…），所以界面上允许
+ * 自定义填写，这里只约束格式（见 `isValidReasoningEffort`）。
+ */
+export type ReasoningEffort = string;
 
 export const REASONING_EFFORT_OPTIONS: { value: ReasoningEffort; label: string }[] = [
   { value: "", label: "默认" },
@@ -27,6 +32,23 @@ export const REASONING_EFFORT_OPTIONS: { value: ReasoningEffort; label: string }
   { value: "medium", label: "中" },
   { value: "high", label: "高" },
 ];
+
+/** 选「自定义…」时给 Select 用的哨兵值：它不是真的档位，只是让输入框冒出来。 */
+export const CUSTOM_EFFORT_OPTION = "__custom__";
+
+/** 自定义档位的长度上限；与后端 `MAX_REASONING_EFFORT_CHARS` 一致。 */
+export const MAX_REASONING_EFFORT_CHARS = 32;
+
+/**
+ * 自定义档位的格式校验，规则与后端 `normalize_reasoning_effort` 一致。
+ *
+ * 挡住的是空白、中文、超长串这类一定发不出去的值；放行的是服务商自创的词。
+ */
+export function isValidReasoningEffort(value: string): boolean {
+  const effort = value.trim();
+  if (effort.length > MAX_REASONING_EFFORT_CHARS) return false;
+  return /^[A-Za-z0-9._-]*$/.test(effort);
+}
 
 export interface AssistantConversationForkPayload {
   title?: string;
