@@ -1,5 +1,6 @@
 """AI 求职助手请求、会话和消息结构。"""
 
+import re
 from datetime import datetime
 from typing import Any, Literal
 
@@ -27,9 +28,27 @@ class AssistantAttachmentInput(BaseModel):
         return value
 
 
-# 思考强度："" 表示不发送该参数（沿用服务商默认），其余透传给支持推理的模型。
-REASONING_EFFORTS = ("", "none", "low", "medium", "high")
-ReasoningEffort = Literal["", "none", "low", "medium", "high"]
+# 思考强度的**常见取值**（不含"不发送"的空串）：`none`=明确关闭、low/medium/high=档位，
+# `minimal`/`xhigh`/`max` 见各家的推理模型文档。**它只是建议，不是白名单**——各家的档位
+# 词汇不一样，所以界面上允许自定义，这里只约束格式。
+REASONING_EFFORT_SUGGESTIONS = ("none", "low", "medium", "high")
+
+# 自定义档位的格式：ASCII 标识符风格，长度 ≤32。放行的是"服务商自创的词"（xhigh、max…），
+# 挡住的是空白、中文、超长串这类一定发不出去的值。
+REASONING_EFFORT_PATTERN = r"^[A-Za-z0-9._-]*$"
+MAX_REASONING_EFFORT_CHARS = 32
+
+
+def normalize_reasoning_effort(value: str) -> str:
+    """校验并归一化思考强度；空串表示"不发送该参数"（沿用服务商默认）。"""
+    effort = str(value or "").strip()
+    if not effort:
+        return ""
+    if len(effort) > MAX_REASONING_EFFORT_CHARS:
+        raise ValueError(f"思考强度不能超过 {MAX_REASONING_EFFORT_CHARS} 个字符")
+    if not re.fullmatch(REASONING_EFFORT_PATTERN, effort):
+        raise ValueError("思考强度只能包含字母、数字、点、下划线和连字符")
+    return effort
 
 
 class AssistantMessageCreate(BaseModel):
@@ -43,7 +62,13 @@ class AssistantMessageCreate(BaseModel):
     include_profile: bool = True
     web_search: bool = False
     # 有思考模式的大模型可以在这里调整推理强度；不支持该参数的服务商会被忽略。
-    reasoning_effort: ReasoningEffort = ""
+    # 取值可以自定义（各家档位词汇不同），格式见 `normalize_reasoning_effort`。
+    reasoning_effort: str = Field(default="", max_length=MAX_REASONING_EFFORT_CHARS)
+
+    @field_validator("reasoning_effort")
+    @classmethod
+    def check_reasoning_effort(cls, value: str) -> str:
+        return normalize_reasoning_effort(value)
     # 「引用某条消息追问」：指向同一会话里的某条消息，模型会在引用上下文中作答。
     quoted_message_id: int | None = Field(default=None, ge=1)
     attachments: list[AssistantAttachmentInput] = Field(default_factory=list, max_length=4)

@@ -20,6 +20,7 @@ import type {
   AssistantQuotedMessage,
   ReasoningEffort,
 } from "../types";
+import { isValidReasoningEffort } from "../types/assistant";
 
 export {
   AssistantMessageContent,
@@ -33,9 +34,9 @@ const REASONING_EFFORT_STORAGE_KEY = "resumeforge.assistant.reasoning_effort";
 
 function readStoredEffort(): ReasoningEffort {
   const raw = window.localStorage.getItem(REASONING_EFFORT_STORAGE_KEY) ?? "";
-  return (["", "none", "low", "medium", "high"] as const).includes(raw as ReasoningEffort)
-    ? (raw as ReasoningEffort)
-    : "";
+  // 校验的是**格式**而不是候选列表：档位允许自定义（各家词汇不同），用白名单会把
+  // 用户自己填的值在下次打开时静默丢掉。
+  return isValidReasoningEffort(raw) ? raw.trim() : "";
 }
 
 export default function AssistantPage() {
