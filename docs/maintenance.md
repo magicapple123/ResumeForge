@@ -99,9 +99,12 @@ ResumeForge/
 ## 3. 守卫与红线
 
 - **覆盖率 80%** 只在全量时开 `--cov`；子集跑覆盖率是假失败。
-- **CI 9 个作业**：Backend ×3（py310/312/win）、Frontend、Dependency audit、macOS ×3
-  （launcher guards / portable runtimes / end-to-end）、Windows end-to-end。
+- **CI 10 个作业**：Backend ×3（py310/312/win）、Frontend、Dependency audit、macOS ×3
+  （launcher guards / portable runtimes / end-to-end）、Windows end-to-end、Windows portable runtimes。
   macOS 三件是**唯一的真机验证途径**，改了 macOS 侧要在交付说明里写明期望它们验证什么。
+  `windows-runtimes` 与 macOS 那个同名作业是镜像：**真的下载**启动器要用的便携版 Node
+  与 Python 官方安装包并逐个校验 SHA-256，专抓"下载地址或摘要失效"——`windows-end-to-end`
+  用的是 runner 自带的解释器，恰好把这条路径整个遮住，而"一台什么都没装的电脑"走的正是它。
 - **两个端到端作业**（`macos-end-to-end` / `windows-end-to-end`）从**干净检出**走完整启动链并
   真的取一次前端入口模块——"端口活着但页面一片空白"只有它们捕得到（2026-09-29 用户在虚拟机
   上解压新版本后只看到空白页，当时 Windows 侧没有这个作业）。改了启动链要跑它们。
