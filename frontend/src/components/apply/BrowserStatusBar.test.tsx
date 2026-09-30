@@ -164,4 +164,13 @@ describe("BrowserStatusBar", () => {
 
     expect(apiState.reload).toHaveBeenCalledTimes(1);
   });
+
+  it("刷新状态时保留上一次的调试端口，但不持续显示刷新文字", () => {
+    apiState.data = RUNNING_WITH_ENTRY;
+    apiState.loading = true;
+    renderBar();
+
+    expect(screen.getByText("调试端口 9333")).toBeInTheDocument();
+    expect(screen.queryByText("正在刷新")).not.toBeInTheDocument();
+  });
 });

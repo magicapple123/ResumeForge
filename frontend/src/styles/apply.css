@@ -89,7 +89,11 @@
 /* 投递队列勾选行：覆盖 antd 默认的灰底（.ant-table-row-selected），
    换成品牌浅蓝，选中态与悬停态一致，避免"勾一下就变成一坨灰"。 */
 .apply-queue-panel .ant-table-tbody > tr.ant-table-row-selected > td,
-.apply-queue-panel .ant-table-tbody > tr.ant-table-row-selected:hover > td {
+.apply-queue-panel .ant-table-tbody > tr.ant-table-row-selected:hover > td,
+.apply-collect-table .ant-table-tbody > tr.ant-table-row-selected > td,
+.apply-collect-table .ant-table-tbody > tr.ant-table-row-selected:hover > td,
+.jobs-table .ant-table-tbody > tr.ant-table-row-selected > td,
+.jobs-table .ant-table-tbody > tr.ant-table-row-selected:hover > td {
   background: #eaf1f8 !important;
 }
 
