@@ -91,7 +91,14 @@ ResumeForge/
 ### ⑥ 发布
 
 1. `python scripts/bump_version.py`（5 处版本号一次同步；破坏性变更显式 `--bump major`）。
-2. `scripts/Build-Release.ps1`（Windows / macOS 各一包 + SHA256）。
+2. `scripts/Build-Release.ps1`：**三个包**，`-Platform windows`、`-Platform macos`，以及
+   默认的 `-Platform all`（各带一份 `.sha256`，共 6 个资产）。
+   - Windows / macOS 两个包给官网的两个下载按钮；
+   - **全平台包（`ResumeForge-<版本>-all.zip`）是必需的，别省。** 已经装在 0.14.2 及更早
+     版本上的用户，应用内更新跑的是他们机器上那份旧代码——它按文件名排序取第一个 `.zip`，
+     而 `-all.zip` 排在最前（`a` < `m` < `w`）。少了这个包，那些用户点「重启并安装」就
+     必然下到 macOS 包、必然报「更新包缺少 start.cmd」。**名字本身是契约**，
+     `Test-Build-Release.ps1` 钉着它。
 3. 官网仓库：更新文案 → `node tools/audit.js` 全绿 → 重采截图 / 重建 demo-app → 提交推送。
 4. 打 tag、建 GitHub Release（附双平台包与校验文件）。
 5. 更新公告图：写清**怎么更新**与**旧数据怎么导入**（导出数据集 → 新版导入为新数据集）。

@@ -112,9 +112,10 @@ $RequiredFiles = @(
     "frontend/index.html"
 )
 
-# Per-platform launcher sets. The "all" archive carries both (that is the one the
-# GitHub release attaches); the website's two download buttons hand out the pruned
-# ones, so nobody has to guess which file to double-click.
+# Per-platform launcher sets. The "all" archive carries both launcher sets; the
+# website's two download buttons hand out the pruned ones, so nobody has to guess
+# which file to double-click. The GitHub release attaches all three -- see the
+# naming note above `$suffix` for why the all-platform one is not optional.
 $PlatformLaunchers = @{
     windows = @(
         "start.cmd",
@@ -307,7 +308,14 @@ else {
     $activePrunePatterns = @($PrunePatterns[$Platform])
 }
 
-$suffix = if ($Platform -eq "all") { "" } else { "-$Platform" }
+# The all-platform archive's *file name* is load-bearing, not cosmetic. The in-app
+# updater in 0.14.2 and earlier picks the first ".zip" after sorting by name, so
+# "-all.zip" (a < m < w) is what those users download when they press
+# "restart and install" -- a package that actually installs, instead of the macOS
+# one that always fails validation. Renaming it back to ResumeForge-<version>.zip
+# sorts last and turns the in-app update into a button that always errors for
+# every existing user, so Test-Build-Release.ps1 pins the name.
+$suffix = if ($Platform -eq "all") { "-all" } else { "-$Platform" }
 $archiveName = "ResumeForge-$version$suffix.zip"
 $archivePath = Join-Path $OutputDirectory $archiveName
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null

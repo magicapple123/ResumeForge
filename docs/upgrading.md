@@ -135,13 +135,21 @@ git checkout <previous-stable-tag-or-commit>  # 例如已发布的 v0.1.0 标签
 `scripts/Build-Release.ps1` 是唯一推荐的出包方式：
 
 ```powershell
-# 打包某个标签（发布用）
-.\scripts\Build-Release.ps1 -Ref v0.6.0
+# 发布时要出三个包（各带一份 .sha256）
+.\scripts\Build-Release.ps1 -Ref v0.15.0                       # 全平台 → ResumeForge-0.15.0-all.zip
+.\scripts\Build-Release.ps1 -Ref v0.15.0 -Platform windows     # 官网 Windows 按钮
+.\scripts\Build-Release.ps1 -Ref v0.15.0 -Platform macos       # 官网 macOS 按钮
 # 打包当前提交（本地试验）；输出目录默认是 <项目>\dist
 .\scripts\Build-Release.ps1 -OutputDirectory D:\tmp
 ```
 
-它用 `git archive` 从指定的 ref 生成 `ResumeForge-<版本>.zip`（顶层是一个同名文件夹），所以：
+三个包都要挂到 GitHub Release 上。**全平台包不是可选项**：已经装在 0.14.2 及更早版本上的
+用户，应用内更新跑的是他们本机那份旧代码，它按文件名排序取第一个 `.zip`——只有
+`ResumeForge-<版本>-all.zip` 排在 `-macos.zip` / `-windows.zip` 前面（`a` < `m` < `w`）。
+少了它，那些用户点「重启并安装」必然下到 macOS 包、必然报「更新包缺少 start.cmd」。
+`Test-Build-Release.ps1` 把这条名字钉成了断言。
+
+它用 `git archive` 从指定的 ref 生成 `ResumeForge-<版本>-<平台>.zip`（顶层是一个同名文件夹），所以：
 
 - **不会漏文件**：压缩包内容就是该 ref 跟踪的文件全集，`git ls-files` 里有什么就有什么。手工压缩最容易漏掉 `backend/app/data/`（内置技能词典），那种包在别的电脑上必然起不来。
 - **不会夹带私人数据**：`backend/data/`（数据库与迁移前备份）、`backend/.env`、`runtime/`、`node_modules/`、各种缓存都被 `.gitignore` 排除，因此不进包。`.env.example` 是例外，它本就要随包发送。
