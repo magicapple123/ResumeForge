@@ -36,8 +36,14 @@ RF_RESTART=0
 
 RF_DOWNLOAD_TIMEOUT_SECONDS=1800
 
-# 属于用户或本地环境的名字，一律不覆盖。
-RF_EXCLUDED_NAMES='data runtime .git .env node_modules .venv dist __pycache__ .pytest_cache coverage'
+# 更新时要跳过的路径，分两层——"名字叫 data"在不同层级含义完全不同：
+#   * 任何层级都是本地环境或缓存；
+#   * 只有项目根下的这几个位置才是用户数据与本地运行时。
+# **必须按相对路径判断**：早先按"名字叫 data 就跳过"，于是受跟踪的
+# `backend/app/data/`（skills.json、ats_keywords.json，preflight 必需）被静默跳过，
+# 新版本往那里加的文件永远到不了老用户机器上（与 Windows 侧同一个 bug，2026-10-01 修）。
+RF_EXCLUDED_ANY_DEPTH_NAMES='.git .venv node_modules __pycache__ .pytest_cache dist coverage .env'
+RF_EXCLUDED_ROOT_RELATIVE='data runtime backend/data'
 
 rf_usage() {
     cat <<'USAGE'
@@ -83,29 +89,56 @@ rf_parse_arguments() {
     done
 }
 
+# 参数是**相对项目根**的路径（如 backend/app/data/skills.json）。
 rf_is_excluded() {
-    for excluded in $RF_EXCLUDED_NAMES; do
-        if [ "$1" = "$excluded" ]; then
-            return 0
-        fi
+    rel=$1
+    case "$rel" in
+        /*) rel=${rel#/} ;;
+    esac
+    [ -n "$rel" ] || return 1
+
+    # 任何层级都不该出现的名字
+    rest=$rel
+    while [ -n "$rest" ]; do
+        segment=${rest%%/*}
+        case " $RF_EXCLUDED_ANY_DEPTH_NAMES " in
+            *" $segment "*) return 0 ;;
+        esac
+        case "$rest" in
+            */*) rest=${rest#*/} ;;
+            *) rest="" ;;
+        esac
     done
+
+    # 只在项目根下的这几个位置。带斜杠地比前缀，才不会把 backend/database.py
+    # 当成 backend/data 下的文件。
+    case "/$rel" in
+        /data/* | /runtime/* | /backend/data/*) return 0 ;;
+    esac
     return 1
 }
 
 # 递归合并复制程序文件。"$src"/.[!.]* 用来覆盖隐藏文件；没有隐藏文件时
 # glob 不展开，[ -e ] 会把它挡掉。
+# `rel` 是相对项目根的路径，排除规则看的就是它。
 rf_copy_program_files() {
     src=$1
     dst=$2
+    rel=${3:-}
     mkdir -p "$dst"
     for entry in "$src"/* "$src"/.[!.]*; do
         [ -e "$entry" ] || continue
         name=$(basename "$entry")
-        if rf_is_excluded "$name"; then
+        if [ -n "$rel" ]; then
+            child_rel="$rel/$name"
+        else
+            child_rel="$name"
+        fi
+        if rf_is_excluded "$child_rel"; then
             continue
         fi
         if [ -d "$entry" ]; then
-            rf_copy_program_files "$entry" "$dst/$name"
+            rf_copy_program_files "$entry" "$dst/$name" "$child_rel"
         else
             cp -f "$entry" "$dst/$name"
         fi

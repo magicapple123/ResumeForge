@@ -7,9 +7,16 @@ from ..schemas.update import (
     UpdateCheckResult,
     UpdateDownloadRequest,
     UpdateInstallRequest,
+    UpdateInstallResult,
     UpdateStatus,
 )
-from ..services.update_download import download_status, schedule_install, start_download
+from ..services.update_download import (
+    clear_install_result,
+    download_status,
+    read_install_result,
+    schedule_install,
+    start_download,
+)
 from ..services.update_check import check_for_update
 
 logger = logging.getLogger(__name__)
@@ -48,3 +55,21 @@ def install_update(payload: UpdateInstallRequest):
         return schedule_install(restart=payload.restart)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/install-result", response_model=UpdateInstallResult | None)
+def read_last_install_result():
+    """上一次应用内更新的结果；没有需要汇报的就返回 ``null``。
+
+    界面靠它决定"要不要弹成功"——成功与否以**当前版本号**为准，不是以更新器
+    自己写的状态为准（它报失败但新版本其实起来了，仍然算成功）。
+    """
+    result = read_install_result()
+    return UpdateInstallResult(**result) if result else None
+
+
+@router.delete("/install-result", status_code=204)
+def acknowledge_install_result():
+    """用户看过结果之后清掉标记，避免每次打开设置都弹一遍。"""
+    clear_install_result()
+    return None

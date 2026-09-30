@@ -158,7 +158,26 @@ export interface UpdateCheckResult {
   download_url: string;
   download_size: number | null;
   asset_name: string;
+  /** 发布时旁边的 `.sha256` 附件地址；下载完用它核对。 */
+  checksum_url: string;
   installable: boolean;
+}
+
+export type UpdateInstallState = "success" | "failed" | "interrupted" | "installing";
+
+/**
+ * 上一次应用内更新的结果，由后端读更新器写的状态文件得出。
+ *
+ * **成没成以后端为准**：前端不再自己记"我点过安装了"——那种记法在安装失败时
+ * 会对着用户说"已更新"。
+ */
+export interface UpdateInstallResult {
+  state: UpdateInstallState;
+  from_version: string;
+  target_version: string;
+  message: string;
+  log: string;
+  restart: boolean;
 }
 
 export type UpdateDownloadState = "idle" | "downloading" | "ready" | "installing" | "failed";
