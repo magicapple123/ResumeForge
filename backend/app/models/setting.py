@@ -1,7 +1,7 @@
 """运行时配置模型：当前配置与可切换的大模型配置记录。"""
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -43,6 +43,17 @@ class LLMConfigRecord(Base):
     # 停止词（最多 4 条）与 Anthropic 扩展思考预算。
     stop: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     thinking_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 思考模式（作用于除求职助手以外的 AI 调用）：默认关，值语义见 schemas.setting。
+    # `server_default` 与迁移里的列定义保持一致，老库补列后存量记录取到的就是"关"。
+    thinking_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="0"
+    )
+    thinking_effort: Mapped[str] = mapped_column(
+        String(32), default="", nullable=False, server_default=""
+    )
+    thinking_style: Mapped[str] = mapped_column(
+        String(32), default="auto", nullable=False, server_default="auto"
+    )
     # 额外的请求体字段（原样合并，白名单过滤后生效），给长尾参数留出口。
     extra_body: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

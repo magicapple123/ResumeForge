@@ -49,6 +49,7 @@ from .interview_experience import (
 )
 from .interview_review_record import InterviewReviewRecord
 from .job import Job
+from .job_match_batch import JobMatchBatch
 from .knowledge_entry import KnowledgeEntry
 from .material import MATERIAL_CATEGORIES, CandidateJob, Material
 from .profile import (
@@ -63,7 +64,9 @@ from .profile import (
 )
 from .question_bank_record import QuestionBankRecord
 from .web_form_profile import WebFormProfileEntry
+from .web_form_profile_record import WebFormProfileRecord
 from .web_form_record import SOURCE_BATCH, SOURCE_LIVE, WebFormFillRecord
+from .web_form_url_history import WebFormUrlHistory
 from .referral import REFERRAL_STATUSES, Referral
 from .reminder import REMINDER_KINDS, REMINDER_STATUSES, Reminder
 from .resume import (
@@ -83,6 +86,7 @@ from .share_package import SHARE_PERMISSIONS, SharePackage
 
 __all__ = [
     "Job",
+    "JobMatchBatch",
     "ChatConversation",
     "ChatMessage",
     "AssistantSkill",
@@ -159,6 +163,8 @@ __all__ = [
     "SHARE_PERMISSIONS",
     "WebFormFillRecord",
     "WebFormProfileEntry",
+    "WebFormProfileRecord",
     "SOURCE_BATCH",
     "SOURCE_LIVE",
+    "WebFormUrlHistory",
 ]
