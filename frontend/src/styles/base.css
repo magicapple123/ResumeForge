@@ -87,9 +87,25 @@ body {
   gap: 10px;
   min-height: 72px;
   padding: 0 18px;
-  border-bottom: 1px solid #eef0f3;
   color: #16365c;
   white-space: nowrap;
+}
+
+.app-brand-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  padding: 0 18px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.app-brand-button:hover {
+  background: #f7faff;
 }
 
 .app-brand-mark {
@@ -102,6 +118,19 @@ body {
   overflow: hidden;
   border-radius: 8px;
   background: #eaf1f8;
+}
+
+.app-brand-mark-button {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.app-brand-mark-button::after {
+  display: none !important;
+  content: none;
 }
 
 .app-brand-image {
@@ -405,12 +434,31 @@ body {
   white-space: nowrap;
 }
 
-/* 标题靠左，右侧依次是「数据集 + 头像 │ GitHub + 退出」。 */
+/* 标题靠左，右侧依次是「我的空间 + 数据集 + 头像 │ 后台任务 + GitHub + 退出」。 */
 .app-header-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 8px;
+}
+
+.app-space-menu-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #e3e9f1;
+  border-radius: 999px;
+  color: #4a5768;
+  font-size: 12px;
+}
+
+.app-space-menu-button:hover {
+  color: #16365c !important;
+  background: #eef4fb !important;
+  border-color: #c9d8ea !important;
 }
 
 /* 页头右侧的「当前数据集 + 头像」：只读展示，尺寸与页头 64px 高对齐。 */
@@ -453,6 +501,61 @@ body {
   border: 1px solid #e3e9f1;
   background: #eef2f7;
   color: #7b8798;
+}
+
+.app-user-avatar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.app-user-avatar-button:focus-visible,
+.app-dataset-chip:focus-visible,
+.app-brand-mark-button:focus-visible {
+  outline: 2px solid #91caff;
+  outline-offset: 2px;
+}
+
+.app-dataset-arrow {
+  color: #9aa7b8;
+  font-size: 9px;
+}
+
+.app-header-context-error {
+  max-width: 220px;
+  color: #ff4d4f;
+  font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  .app-header {
+    gap: 8px;
+  }
+
+  .app-header-actions {
+    gap: 4px;
+  }
+
+  .app-space-menu-button {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+
+  .app-space-menu-button .anticon {
+    font-size: 14px;
+  }
+
+  .app-dataset-chip {
+    max-width: 120px;
+    padding-inline: 7px;
+  }
 }
 
 /* 页头的「后台任务」入口：只在真有任务在跑时渲染，所以它出现即意味着"有活在干"。 */

@@ -11,6 +11,17 @@ vi.mock("./pages/ResumesPage", () => ({ default: () => <div>简历中心内容</
 vi.mock("./pages/FavoritesPage", () => ({ default: () => <div>收藏夹内容</div> }));
 vi.mock("./pages/AssistantPage", () => ({ default: () => <div>求职助手内容</div> }));
 vi.mock("./pages/SettingsPage", () => ({ default: () => <div>设置内容</div> }));
+vi.mock("./pages/ClaimsPage", () => ({ default: () => <div>事实台账内容</div> }));
+vi.mock("./pages/DrillPage", () => ({ default: () => <div>事实核对内容</div> }));
+vi.mock("./pages/ApplyPage", () => ({ default: () => <div>投递台内容</div> }));
+vi.mock("./pages/WebFormPage", () => ({ default: () => <div>网申填表内容</div> }));
+vi.mock("./pages/TrackerPage", () => ({ default: () => <div>求职进度内容</div> }));
+vi.mock("./pages/MaterialsPage", () => ({ default: () => <div>资料箱内容</div> }));
+vi.mock("./pages/KnowledgePage", () => ({ default: () => <div>知识库内容</div> }));
+vi.mock("./pages/SkillsPage", () => ({ default: () => <div>工作台内容</div> }));
+vi.mock("./pages/InterviewPage", () => ({ default: () => <div>模拟面试内容</div> }));
+vi.mock("./pages/AnalyticsPage", () => ({ default: () => <div>求职统计内容</div> }));
+vi.mock("./pages/TrashPage", () => ({ default: () => <div>回收站内容</div> }));
 
 afterEach(() => {
   cleanup();
@@ -46,7 +57,7 @@ describe("first-visit guide", () => {
 });
 
 describe("application navigation", () => {
-  it("opens the favorites and assistant pages from the sidebar", async () => {
+  it("opens private pages from the top-level 我的空间 menu", async () => {
     window.localStorage.setItem("resumeforge.user-guide.seen", "1");
     render(
       <MemoryRouter>
@@ -54,9 +65,11 @@ describe("application navigation", () => {
       </MemoryRouter>,
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: /我的空间/ }));
     fireEvent.click(await screen.findByText("收藏夹"));
     expect(await screen.findByText("收藏夹内容")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: /我的空间/ }));
     fireEvent.click(screen.getByText("求职助手"));
     expect(await screen.findByText("求职助手内容")).toBeInTheDocument();
   });
@@ -81,5 +94,23 @@ describe("application navigation", () => {
     // 页头里必须和「退出」并排，且页脚不再有第二个源码入口。
     expect(headerActions?.textContent).toContain("退出");
     expect(container.querySelector(".app-sider-footer .app-repo-button")).toBeNull();
+  });
+
+  it("clicking the ResumeForge icon scrolls the current page to the top", async () => {
+    window.localStorage.setItem("resumeforge.user-guide.seen", "1");
+    const scrollTo = vi.fn();
+    render(
+      <MemoryRouter initialEntries={["/jobs"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const scroller = document.querySelector<HTMLElement>(".app-main");
+    expect(scroller).not.toBeNull();
+    scroller!.scrollTo = scrollTo;
+    fireEvent.click(await screen.findByRole("button", { name: "回到当前页面顶部" }));
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
+    expect(screen.getByText("岗位广场内容")).toBeInTheDocument();
   });
 });
