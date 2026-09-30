@@ -140,8 +140,8 @@ describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
     });
     const slider = await screen.findByRole("slider");
 
-    // 15.5px 往下 18 格 → 13.7px，最近档是标准档（14），系数 13.7 / 14 ≈ 0.979（< 1）。
-    for (let i = 0; i < 18; i += 1) pressArrow(slider, "ArrowLeft");
+    // 18px 往下 43 格 → 13.7px，最近档是标准档（14），系数 13.7 / 14 ≈ 0.979（< 1）。
+    for (let i = 0; i < 43; i += 1) pressArrow(slider, "ArrowLeft");
 
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
     expect(onChange.mock.calls[0][0]).toMatchObject({ font_scale: "standard" });

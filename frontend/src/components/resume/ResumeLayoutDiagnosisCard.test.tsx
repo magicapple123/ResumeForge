@@ -54,7 +54,7 @@ function analysis(overrides: Partial<ResumeLayoutAnalysis> = {}): ResumeLayoutAn
       steps: 3,
       font_floor_px: 12,
       font_adjust_floor: 0.88,
-      font_floor_note: "正文字号最多缩到 12px（≈9pt）。",
+      font_floor_note: "正文字号最多缩到 11px。",
     },
     ...overrides,
   };
@@ -251,7 +251,7 @@ describe("ResumeLayoutDiagnosisCard", () => {
     renderCard({ previewRef: fakePreview("12"), onAddPage });
 
     await screen.findByRole("button", { name: /自动一页/ });
-    expect(screen.getByText(/最多缩到 12px/)).toBeInTheDocument();
+    expect(screen.getByText(/最多缩到 11px/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /增加到 2 页/ }));
     expect(onAddPage).toHaveBeenCalled();
   });

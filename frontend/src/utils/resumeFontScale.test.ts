@@ -18,8 +18,8 @@ import {
 } from "./resumeFontScale";
 
 const OPTIONS: ResumeFontScaleOption[] = [
-  { name: "large", label: "大字号", description: "", base_px: 15.5 },
-  { name: "small", label: "小字号", description: "", base_px: 12 },
+  { name: "large", label: "大字号", description: "", base_px: 18 },
+  { name: "small", label: "小字号", description: "", base_px: 11 },
   { name: "standard", label: "标准字号", description: "", base_px: 14 },
 ];
 
@@ -38,12 +38,12 @@ function layout(overrides: Partial<ResumeLayout> = {}): ResumeLayout {
 describe("fontTiers", () => {
   it("按基准像素升序排列，即使后端给的顺序是乱的", () => {
     expect(TIERS.map((tier) => tier.name)).toEqual(["small", "standard", "large"]);
-    expect(TIERS.map((tier) => tier.basePx)).toEqual([12, 14, 15.5]);
+    expect(TIERS.map((tier) => tier.basePx)).toEqual([11, 14, 18]);
   });
 
   it("目录尚未加载（空数组）时静默退回内置三档，不告警", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(fontTiers([]).map((tier) => tier.basePx)).toEqual([12, 14, 15.5]);
+    expect(fontTiers([]).map((tier) => tier.basePx)).toEqual([11, 14, 18]);
     // 首屏目录还没到是正常态：每次都刷告警等于把真正的信号淹掉。
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
@@ -54,7 +54,7 @@ describe("fontTiers", () => {
     const tiers = fontTiers([
       { name: "standard", label: "标准", description: "", base_px: Number.NaN },
     ]);
-    expect(tiers.map((tier) => tier.basePx)).toEqual([12, 14, 15.5]);
+    expect(tiers.map((tier) => tier.basePx)).toEqual([11, 14, 18]);
     // 这条断言就是"回退不能无声"的牙齿：后端漏发 base_px 时台面上必须看得见。
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0][0])).toContain("base_px");
@@ -63,7 +63,7 @@ describe("fontTiers", () => {
 
   it("目录正常（都带合法 base_px）时既不回退也不告警", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(fontTiers(OPTIONS).map((tier) => tier.basePx)).toEqual([12, 14, 15.5]);
+    expect(fontTiers(OPTIONS).map((tier) => tier.basePx)).toEqual([11, 14, 18]);
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
@@ -71,7 +71,7 @@ describe("fontTiers", () => {
 
 describe("fontPxBounds", () => {
   it("范围取所有档位基准像素的最小 / 最大", () => {
-    expect(fontPxBounds(TIERS)).toEqual({ min: 12, max: 15.5 });
+    expect(fontPxBounds(TIERS)).toEqual({ min: 11, max: 18 });
   });
 });
 
@@ -84,7 +84,7 @@ describe("layoutToFontPx", () => {
         TIERS,
       ),
     ).toBe(12.6);
-    expect(layoutToFontPx(layout({ font_scale: "large" }), TIERS)).toBe(15.5);
+    expect(layoutToFontPx(layout({ font_scale: "large" }), TIERS)).toBe(18);
   });
 
   it("系数是字符串（后端 JSON 可能回成字符串）时也能解析", () => {
@@ -114,13 +114,13 @@ describe("layoutForFontPx", () => {
       font_scale: "standard",
       format_config: { [FONT_SCALE_ADJUST_KEY]: 0.936 },
     });
-    expect(layoutForFontPx(layout(), 15, TIERS)).toMatchObject({
+    expect(layoutForFontPx(layout(), 17, TIERS)).toMatchObject({
       font_scale: "large",
-      format_config: { [FONT_SCALE_ADJUST_KEY]: 0.968 },
+      format_config: { [FONT_SCALE_ADJUST_KEY]: 0.944 },
     });
     expect(layoutForFontPx(layout(), 12.5, TIERS)).toMatchObject({
       font_scale: "small",
-      format_config: { [FONT_SCALE_ADJUST_KEY]: 1.042 },
+      format_config: { [FONT_SCALE_ADJUST_KEY]: 1.136 },
     });
   });
 
@@ -138,7 +138,7 @@ describe("layoutForFontPx", () => {
   });
 
   it("整段范围内的系数都落在后端 [0.88, 1.16] 内（越界会被后端静默丢弃）", () => {
-    for (let px = 12; px <= 15.5 + 1e-9; px = Math.round((px + 0.1) * 10) / 10) {
+    for (let px = 11; px <= 18 + 1e-9; px = Math.round((px + 0.1) * 10) / 10) {
       const next = layoutForFontPx(layout(), px, TIERS);
       const adjust = next.format_config?.[FONT_SCALE_ADJUST_KEY];
       if (adjust === undefined) continue;

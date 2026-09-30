@@ -44,14 +44,16 @@ export function calculatePreviewGeometry({
 }: PreviewGeometryInput): PreviewGeometry {
   const viewportWidth = availableSpace.width || A4_WIDTH_PX;
   const viewportHeight = availableSpace.height || paperHeight;
-  const contentUnitHeight = overflow ? A4_HEIGHT_PX : paperHeight;
-  const totalVisualPages = overflow
-    ? Math.max(pageCount + 1, Math.round(naturalWidth / A4_WIDTH_PX))
-    : pageCount;
-  const contentTotalWidth = overflow
+  // 选择 2/3 页时即使内容没有溢出，也固定按 A4 列横向展示；溢出只是把列数继续扩展。
+  const horizontalPages = pageCount > 1 || overflow;
+  const totalVisualPages = horizontalPages
+    ? Math.max(overflow ? pageCount + 1 : pageCount, Math.round(naturalWidth / A4_WIDTH_PX))
+    : 1;
+  const contentUnitHeight = horizontalPages ? A4_HEIGHT_PX : paperHeight;
+  const contentTotalWidth = horizontalPages
     ? Math.max(naturalWidth, A4_WIDTH_PX * totalVisualPages)
     : A4_WIDTH_PX;
-  const contentTotalHeight = overflow ? A4_HEIGHT_PX : paperHeight;
+  const contentTotalHeight = horizontalPages ? A4_HEIGHT_PX : paperHeight;
   const fitScale = Math.min(1, viewportWidth / A4_WIDTH_PX, viewportHeight / contentUnitHeight);
   const scale = Math.min(MAX_ZOOM, fitScale * zoom);
   const viewportHeightForPage = Math.min(contentUnitHeight * fitScale, viewportHeight);
@@ -82,7 +84,7 @@ export function calculatePreviewGeometry({
     pagesNeeded,
     overflowAmount,
     totalVisualPages,
-    separatorCount: overflow ? totalVisualPages - 1 : 0,
+    separatorCount: horizontalPages ? totalVisualPages - 1 : 0,
     overflowAmountText,
   };
 }

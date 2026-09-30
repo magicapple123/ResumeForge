@@ -22,10 +22,10 @@ export const TEMPLATE_CATALOG: ResumeTemplateCatalog = {
       name: "small",
       label: "小字号",
       description: "字更小、信息密度更高，适合内容偏多",
-      base_px: 12,
+      base_px: 11,
     },
     { name: "standard", label: "标准字号", description: "默认档位，兼顾可读性与篇幅", base_px: 14 },
-    { name: "large", label: "大字号", description: "字更大更醒目，适合内容较少", base_px: 15.5 },
+    { name: "large", label: "大字号", description: "字更大更醒目，适合内容较少", base_px: 18 },
   ],
   section_options: [
     { key: "summary", label: "个人总结" },

@@ -583,7 +583,7 @@ FONT_SCALES: dict[str, dict] = {
     "small": {
         "name": "small",
         "label": "小字号",
-        "base_px": 12.0,
+        "base_px": 11.0,
         "description": "字更小、信息密度更高，适合内容偏多",
     },
     "standard": {
@@ -595,7 +595,7 @@ FONT_SCALES: dict[str, dict] = {
     "large": {
         "name": "large",
         "label": "大字号",
-        "base_px": 15.5,
+        "base_px": 18.0,
         "description": "字更大更醒目，适合内容较少",
     },
 }
@@ -675,5 +675,4 @@ __all__ = [
     "template_spec",
     "validated_format_config",
 ]
-
 

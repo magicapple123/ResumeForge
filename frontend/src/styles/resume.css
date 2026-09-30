@@ -56,7 +56,8 @@
   border-radius: 8px;
   background: #fff;
 }
-是真实分页。 */ .resume-preview-page-separator {
+/* 简历分页位置参考线：只用于预览，不会成为简历内容。 */
+.resume-preview-page-separator {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -298,13 +299,21 @@
 .resume-detail-footer-export {
   grid-column: 1 / -1;
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px 12px;
 }
 
 /* 生成弹窗里插入的额外操作（重新生成 / 去简历中心 / 完成）也独占整行。 */
 .resume-detail-footer-extra {
-  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.resume-detail-footer-extra .ant-space {
+  display: inline-flex;
 }
 
 /* ===== 版面诊断与「自动一页」 ===== */

@@ -60,12 +60,15 @@ export function layoutFrame({
 
   const pagesNeeded = measured ? pagesNeededFor(measured) : overflow ? pageCount + 1 : pageCount;
   overflow = overflow || pagesNeeded > pageCount;
-  const visualPages = overflow ? Math.max(pageCount + 1, pagesNeeded) : pageCount;
-  style.textContent = overflow ? columnsCss(visualPages) : "html,body{overflow:hidden!important}";
+  // 选择多页本身就是横向分页，不要等内容溢出后才切 columns；否则 2/3 页内容较少时
+  // 会被错误地画成一张纵向长纸。
+  const useColumns = pageCount > 1 || overflow;
+  const visualPages = useColumns ? Math.max(overflow ? pageCount + 1 : pageCount, pagesNeeded) : 1;
+  style.textContent = useColumns ? columnsCss(visualPages) : "html,body{overflow:hidden!important}";
 
   // 令 columns 真正参与布局；宽度不再用于反推页数，只作为画布尺寸。
-  if (overflow) void body.offsetWidth;
-  const naturalWidth = overflow ? A4_WIDTH_PX * visualPages : A4_WIDTH_PX;
+  if (useColumns) void body.offsetWidth;
+  const naturalWidth = useColumns ? A4_WIDTH_PX * visualPages : A4_WIDTH_PX;
 
   return {
     measure: measured,
