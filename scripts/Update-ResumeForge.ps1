@@ -42,7 +42,6 @@ $ArchiveUrl = "https://github.com/$Repository/archive/refs/heads/main.zip"
 . (Join-Path $ScriptRoot "ResumeForge.Common.ps1")
 
 $StatusPath = Join-Path $ProjectRoot "runtime\update-status.json"
-$FromVersion = Get-InstalledVersion
 $InstallStartedAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 # 只有"没有 -ArchivePath 且这个目录是 git 检出"时才为真。显式给初值：下面决定
 # 要不要在依赖同步前停应用时要用到它，而 `-ArchivePath` 分支根本不会走到赋值的那个
@@ -51,6 +50,50 @@ $useGit = $false
 # 重启之后最多等这么久，看新版本有没有真的起来（启动器自己的预算是后端 90s + 前端
 # 120s，所以这里要留得比它们宽）。
 $VerifyTimeoutSeconds = 240
+
+# 这两个函数**必须在 `trap` 之前定义**：PowerShell 从上往下执行，函数在定义处才可见，
+# 而 trap 里会调 `Write-InstallStatus`——它若还没定义，真正的故障就会被一句"无法将
+# Write-InstallStatus 识别为 cmdlet"盖掉，用户拿到的是一条与原因无关的报错。
+# 2026-10-01 的升级彩排逮到过这一处（当时 `$FromVersion = Get-InstalledVersion` 写在
+# 文件顶部，脚本一上来就死了）。其余函数放在后面无妨，它们只在主体里被调用。
+function Get-InstalledVersion {
+    $configPath = Join-Path $ProjectRoot "backend\app\config.py"
+    if (-not (Test-Path -LiteralPath $configPath)) { return "" }
+    $match = Select-String -LiteralPath $configPath -Pattern 'app_version:\s*str\s*=\s*"([^"]+)"' |
+        Select-Object -First 1
+    if ($null -eq $match) { return "" }
+    return $match.Matches[0].Groups[1].Value
+}
+
+<#
+把这次安装的状态写进 `runtime\update-status.json`。
+
+应用内更新是**隐藏窗口**在跑：失败时用户什么都看不到，只会发现"应用关了，什么都没发生"。
+这个文件是唯一能告诉他"这次没成、日志在哪"的东西，后端下次启动时读它并显示出来。
+只按相对路径碰 `runtime\`（更新不会覆盖 runtime），所以它一定还在。
+#>
+function Write-InstallStatus {
+    param(
+        [string]$State,
+        [string]$Message = ""
+    )
+    if (-not $InstallId) { return }
+    # 目录从状态文件自己的路径推出来，而不是另外拼一遍：两者必须是同一个地方。
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $StatusPath) | Out-Null
+    $payload = [ordered]@{
+        install_id     = $InstallId
+        state          = $State
+        from_version   = $script:FromVersion
+        target_version = $TargetVersion
+        started_at     = $script:InstallStartedAt
+        restart        = [bool]$Restart
+        message        = $Message
+        log            = "runtime/update.log"
+    }
+    # `Set-Content -Encoding utf8` 在 Windows PowerShell 5.1 下会带 BOM；后端按
+    # utf-8-sig 读，两种写法都认。
+    ($payload | ConvertTo-Json) | Set-Content -LiteralPath $StatusPath -Encoding utf8
+}
 
 <#
 任何一步失败都要留下"失败"的痕迹再往外抛。
@@ -211,15 +254,6 @@ function Write-DependencySyncHint {
     Write-Host "    处理办法：双击 stop.cmd 关掉应用，再运行一次 update.cmd。" -ForegroundColor Yellow
 }
 
-function Get-InstalledVersion {
-    $configPath = Join-Path $ProjectRoot "backend\app\config.py"
-    if (-not (Test-Path -LiteralPath $configPath)) { return "" }
-    $match = Select-String -LiteralPath $configPath -Pattern 'app_version:\s*str\s*=\s*"([^"]+)"' |
-        Select-Object -First 1
-    if ($null -eq $match) { return "" }
-    return $match.Matches[0].Groups[1].Value
-}
-
 function Get-DefaultBackendPort {
     # 更新器不参与启动，拿不到运行时端口；读启动器里的默认值就够——用户若用
     # `-BackendPort` 起在别的端口上，下面那次核对会超时，而后端会用**版本号**兜底
@@ -230,36 +264,6 @@ function Get-DefaultBackendPort {
         Select-Object -First 1
     if ($null -eq $match) { return 8005 }
     return [int]$match.Matches[0].Groups[1].Value
-}
-
-<#
-把这次安装的状态写进 `runtime\update-status.json`。
-
-应用内更新是**隐藏窗口**在跑：失败时用户什么都看不到，只会发现"应用关了，什么都没发生"。
-这个文件是唯一能告诉他"这次没成、日志在哪"的东西，后端下次启动时读它并显示出来。
-只按相对路径碰 `runtime\`（更新不会覆盖 runtime），所以它一定还在。
-#>
-function Write-InstallStatus {
-    param(
-        [string]$State,
-        [string]$Message = ""
-    )
-    if (-not $InstallId) { return }
-    # 目录从状态文件自己的路径推出来，而不是另外拼一遍：两者必须是同一个地方。
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $StatusPath) | Out-Null
-    $payload = [ordered]@{
-        install_id     = $InstallId
-        state          = $State
-        from_version   = $script:FromVersion
-        target_version = $TargetVersion
-        started_at     = $script:InstallStartedAt
-        restart        = [bool]$Restart
-        message        = $Message
-        log            = "runtime/update.log"
-    }
-    # `Set-Content -Encoding utf8` 在 Windows PowerShell 5.1 下会带 BOM；后端按
-    # utf-8-sig 读，两种写法都认。
-    ($payload | ConvertTo-Json) | Set-Content -LiteralPath $StatusPath -Encoding utf8
 }
 
 function Wait-ForTargetVersion {
@@ -318,6 +322,12 @@ Write-Host "Project: $ProjectRoot"
 if ($DryRun) {
     Write-Host "Dry run: no file will be changed." -ForegroundColor Yellow
 }
+
+# **必须放在所有函数定义之后**：PowerShell 从上往下执行，函数在定义之前不可见。
+# 这里调用 `Get-InstalledVersion` 与 `Write-InstallStatus`，把它们放到文件顶部会以
+# "无法将 … 识别为 cmdlet" 在脚本一开始就死掉——而且 trap 里那句也一起失效（它同样
+# 调用未定义的函数），用户看到的会是完全无关的报错。2026-10-01 的升级彩排逮到过这一处。
+$FromVersion = Get-InstalledVersion
 
 # 起手第一件事就写状态：后端会轮询它确认"更新器真的起来了"，收不到就不退出应用
 # （不然就是"应用关了、什么都没发生"）。写在这里也意味着**解压之前**就已经有凭据了。
