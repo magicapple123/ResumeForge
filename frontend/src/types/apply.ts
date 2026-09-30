@@ -65,6 +65,64 @@ export interface JobMatchOut {
   reference_score: MatchReferenceScore | null;
 }
 
+export type JobMatchBatchItemStatus = "completed" | "failed";
+export type JobMatchBatchAnalysisSource = "new" | "existing" | "local";
+
+export interface JobMatchBatchItem {
+  job_id: number;
+  job_title: string;
+  company: string;
+  status: JobMatchBatchItemStatus;
+  rank: number | null;
+  reference_score: MatchReferenceScore | null;
+  result: JobMatchResult | null;
+  model: string;
+  analysis_source: JobMatchBatchAnalysisSource | null;
+  error: string;
+}
+
+export interface JobMatchBatchOut {
+  id: number;
+  requested_count: number;
+  completed_count: number;
+  failed_count: number;
+  items: JobMatchBatchItem[];
+  model: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobMatchBatchSummary {
+  id: number;
+  requested_count: number;
+  completed_count: number;
+  failed_count: number;
+  top_score: number | null;
+  model: string;
+  created_at: string;
+}
+
+export type JobMatchBackgroundTaskStatus =
+  "pending" | "running" | "completed" | "failed" | "cancelled";
+
+export interface JobMatchBackgroundTask {
+  task_id: string;
+  status: JobMatchBackgroundTaskStatus;
+  job_ids: number[];
+  force: boolean;
+  requested_count: number;
+  completed_count: number;
+  failed_count: number;
+  current_job_id: number | null;
+  current_job_title: string;
+  batch_id: number | null;
+  message: string;
+  error: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
 /** 五类状态的中文名与展示色；`admission` 与后端闸门映射一致，仅用于说明，不用于判定。 */
 export const MATCH_STATUS_META: Record<
   MatchStatus,

@@ -5,15 +5,18 @@ import {
   ClearOutlined,
   CloseCircleOutlined,
   DeleteOutlined,
+  HistoryOutlined,
   InboxOutlined,
   PlusOutlined,
   ReloadOutlined,
+  RobotOutlined,
 } from "@ant-design/icons";
-import { App, Button, Input, Popconfirm, Select, Space, Typography } from "antd";
+import { App, Button, Dropdown, Input, Popconfirm, Select, Space, Typography } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { markCandidateJobImported } from "../api/candidateJob";
+import { openWebFormUrl } from "../api/webform";
 import { addToQueue, QueueConflictError, startBackfill } from "../api/apply";
 import {
   batchDeleteJobs,
@@ -28,6 +31,7 @@ import JobAnalysisModal from "../components/JobAnalysisModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
 import JobFormModal from "../components/JobFormModal";
 import JobMatchModal from "../components/JobMatchModal";
+import JobMatchBatchPanel from "../components/JobMatchBatchPanel";
 import ManualResumeModal from "../components/ManualResumeModal";
 import { candidateImportSource } from "../utils/jobSource";
 import CandidateJobsDrawer, { candidateToJobPayload } from "../components/jobs/CandidateJobsDrawer";
@@ -44,6 +48,7 @@ const SOURCE_KIND_OPTIONS = [
   { value: "manual", label: "手动添加" },
 ];
 type BatchAction = "status" | "delete" | null;
+type MatchBatchRunMode = "immediate" | "background";
 
 export default function JobsPage() {
   const [searchParams] = useSearchParams();
@@ -64,7 +69,11 @@ export default function JobsPage() {
   const [manualResumeJob, setManualResumeJob] = useState<Job | null>(null);
   const [analysisJob, setAnalysisJob] = useState<Job | null>(null);
   const [matchJob, setMatchJob] = useState<Job | null>(null);
+  const [matchBatchOpen, setMatchBatchOpen] = useState(false);
+  const [matchBatchAutoRun, setMatchBatchAutoRun] = useState(false);
+  const [matchBatchRunMode, setMatchBatchRunMode] = useState<MatchBatchRunMode>("immediate");
   const [queueJobId, setQueueJobId] = useState<number | null>(null);
+  const [webFormJobId, setWebFormJobId] = useState<number | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [batchStatus, setBatchStatus] = useState<string>();
   const [batchAction, setBatchAction] = useState<BatchAction>(null);
@@ -225,6 +234,22 @@ export default function JobsPage() {
     [message, modal],
   );
 
+  const openJobWebForm = useCallback(
+    async (job: Job) => {
+      if (!job.source_url || webFormJobId !== null) return;
+      setWebFormJobId(job.id);
+      try {
+        await openWebFormUrl(job.source_url);
+        message.success("已在网申专用浏览器中打开投递页面");
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "打开网申页面失败");
+      } finally {
+        setWebFormJobId(null);
+      }
+    },
+    [message, webFormJobId],
+  );
+
   const backfillDetails = async () => {
     // 批量优先：选择模式下有勾选就补勾选的，否则补当前这页所有 JD 为空的岗位。
     const target =
@@ -302,6 +327,20 @@ export default function JobsPage() {
     setSelectionMode(false);
     setSelectedJobIds([]);
     setBatchStatus(undefined);
+  };
+
+  const openMatchBatch = (autoRun: boolean, runMode: MatchBatchRunMode = "immediate") => {
+    if (autoRun && selectedJobIds.length === 0) {
+      message.warning("请先选择岗位");
+      return;
+    }
+    if (autoRun && selectedJobIds.length > 50) {
+      message.warning("一次最多分析 50 个岗位");
+      return;
+    }
+    setMatchBatchAutoRun(autoRun);
+    setMatchBatchRunMode(runMode);
+    setMatchBatchOpen(true);
   };
 
   const rowSelection: TableRowSelection<Job> = {
@@ -387,6 +426,27 @@ export default function JobsPage() {
               选择
             </Button>
           )}
+          <Dropdown.Button
+            type="primary"
+            icon={<RobotOutlined />}
+            disabled={batchAction !== null}
+            onClick={() => openMatchBatch(true)}
+            menu={{
+              items: [{ key: "background", label: "后台运行分析" }],
+              onClick: ({ key }) => {
+                if (key === "background") openMatchBatch(true, "background");
+              },
+            }}
+          >
+            AI 分析适配度
+          </Dropdown.Button>
+          <Button
+            icon={<HistoryOutlined />}
+            disabled={batchAction !== null}
+            onClick={() => openMatchBatch(false)}
+          >
+            分析记录
+          </Button>
           <Button
             icon={<InboxOutlined />}
             disabled={batchAction !== null}
@@ -504,8 +564,10 @@ export default function JobsPage() {
         onAddToQueue={(job) => void addJobToQueue(job)}
         onAskAssistant={(job) => navigate(`/assistant?job_id=${job.id}`)}
         onFavorite={(job) => void toggleFavorite(job)}
+        onOpenWebForm={(job) => void openJobWebForm(job)}
         favoriteLoading={favoriteJobId === detailJob?.id}
         queueLoading={queueJobId === detailJob?.id}
+        webFormLoading={webFormJobId === detailJob?.id}
       />
       <JobFormModal
         open={formOpen}
@@ -557,6 +619,13 @@ export default function JobsPage() {
       />
       <JobAnalysisModal job={analysisJob} onClose={() => setAnalysisJob(null)} />
       <JobMatchModal job={matchJob} onClose={() => setMatchJob(null)} />
+      <JobMatchBatchPanel
+        open={matchBatchOpen}
+        jobIds={matchBatchAutoRun ? selectedJobIds : []}
+        autoRun={matchBatchAutoRun}
+        runMode={matchBatchRunMode}
+        onClose={() => setMatchBatchOpen(false)}
+      />
     </div>
   );
 }

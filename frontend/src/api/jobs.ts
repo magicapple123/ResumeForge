@@ -8,6 +8,9 @@ import type {
   JobAnalysisResult,
   JobMatchOut,
   JobMatchResult,
+  JobMatchBatchOut,
+  JobMatchBatchSummary,
+  JobMatchBackgroundTask,
   JobPayload,
   Page,
   JobMultiParseResult,
@@ -99,4 +102,46 @@ export function getJobMatch(id: number): Promise<JobMatchOut> {
 
 export function deleteJobMatch(id: number): Promise<void> {
   return request(`/jobs/${id}/match-analysis`, { method: "DELETE" });
+}
+
+export function generateJobMatchBatch(payload: {
+  job_ids: number[];
+  force?: boolean;
+}): Promise<JobMatchBatchOut> {
+  return request("/jobs/match-batches", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listJobMatchBatches(limit = 30): Promise<JobMatchBatchSummary[]> {
+  return request(`/jobs/match-batches?limit=${encodeURIComponent(limit)}`);
+}
+
+export function startJobMatchBatchTask(payload: {
+  job_ids: number[];
+  force?: boolean;
+}): Promise<JobMatchBackgroundTask> {
+  return request("/jobs/match-batch-tasks", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listJobMatchBatchTasks(): Promise<JobMatchBackgroundTask[]> {
+  return request("/jobs/match-batch-tasks");
+}
+
+export function getJobMatchBatchTask(taskId: string): Promise<JobMatchBackgroundTask> {
+  return request("/jobs/match-batch-tasks/" + encodeURIComponent(taskId));
+}
+
+export function cancelJobMatchBatchTask(taskId: string): Promise<JobMatchBackgroundTask> {
+  return request("/jobs/match-batch-tasks/" + encodeURIComponent(taskId) + "/cancel", {
+    method: "POST",
+  });
+}
+
+export function getJobMatchBatch(id: number): Promise<JobMatchBatchOut> {
+  return request(`/jobs/match-batches/${id}`);
 }
