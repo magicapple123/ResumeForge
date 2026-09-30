@@ -44,13 +44,6 @@ function rowCheckbox(rowIndex: number): HTMLElement {
   return box;
 }
 
-/** 第 `rowIndex` 条数据行里文案为 `label` 的档位标签。同文案会出现多份，所以按行取。 */
-function tagInRow(rowIndex: number, label: string): Element | undefined {
-  return Array.from(dataRows()[rowIndex].querySelectorAll(".ant-tag")).find(
-    (tag) => tag.textContent?.trim() === label,
-  );
-}
-
 function renderDialog(candidates: WebFormLearningCandidate[] = CANDIDATES, onSubmit = vi.fn()) {
   render(
     <AntdApp>
@@ -108,18 +101,16 @@ describe("WebFormLearningDialog", () => {
     expect(onSubmit).toHaveBeenCalledWith([{ candidate: CANDIDATES[1], reuse: "general" }]);
   });
 
-  it("改成「本次」后，档位跟着提交——否则用户以为改了其实没改", async () => {
+  it("不再提供复用档位选择，提交时统一按通用资料保存", async () => {
     const onSubmit = renderDialog();
 
-    // 三档标签在每行的「下次」列里，同文案会出现多份，所以按行取。
-    const onceTag = tagInRow(0, "本次");
-    expect(onceTag).toBeTruthy();
-    fireEvent.click(onceTag as Element);
+    expect(screen.queryByText("本次", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText("场景", { exact: true })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /记住选中的 2 项/ }));
 
     expect(onSubmit).toHaveBeenCalledWith([
-      { candidate: CANDIDATES[0], reuse: "once" },
+      { candidate: CANDIDATES[0], reuse: "general" },
       { candidate: CANDIDATES[1], reuse: "general" },
     ]);
   });

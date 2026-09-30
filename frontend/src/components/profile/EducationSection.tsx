@@ -1,6 +1,7 @@
 /** 教育经历分区。 */
-import { Col, Form, Input, Row } from "antd";
+import { Col, Form, Input, Row, Select } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
+import PartialDateSelect from "./PartialDateSelect";
 import ProfileSection from "./ProfileSection";
 
 interface Props {
@@ -26,8 +27,6 @@ export function EducationSection({ editable }: Props) {
         cet6_score: "",
         courses: "",
         achievements: "",
-        reference_file_name: "",
-        reference_content: "",
       }}
       itemLabel={(item, index) => {
         const school = String(item.school ?? "").trim();
@@ -58,28 +57,46 @@ export function EducationSection({ editable }: Props) {
           </Col>
           <Col xs={24} md={8}>
             <Form.Item name={[field.name, "degree"]} label="学历">
-              <Input placeholder="本科 / 硕士 / 博士" />
+              <Select
+                allowClear
+                placeholder="请选择"
+                options={["高中", "大专", "本科", "硕士", "博士"].map((value) => ({
+                  value,
+                  label: value,
+                }))}
+              />
             </Form.Item>
           </Col>
           {/* 网申表单把"学历"拆成三个独立下拉，这两项只在填表时用得到。 */}
           <Col xs={12} md={6}>
             <Form.Item name={[field.name, "study_mode"]} label="学习形式">
-              <Input placeholder="全日制 / 非全日制" />
+              <Select
+                allowClear
+                placeholder="请选择"
+                options={["全日制", "非全日制"].map((value) => ({ value, label: value }))}
+              />
             </Form.Item>
           </Col>
           <Col xs={12} md={6}>
             <Form.Item name={[field.name, "degree_type"]} label="学位">
-              <Input placeholder="学士 / 硕士 / 博士" />
+              <Select
+                allowClear
+                placeholder="请选择"
+                options={["学士", "硕士学位", "博士学位", "其他"].map((value) => ({
+                  value,
+                  label: value,
+                }))}
+              />
             </Form.Item>
           </Col>
           <Col xs={12} md={6}>
             <Form.Item name={[field.name, "start_date"]} label="开始时间">
-              <Input placeholder="2022.09" />
+              <PartialDateSelect label={`教育经历${field.name + 1}开始时间`} />
             </Form.Item>
           </Col>
           <Col xs={12} md={6}>
             <Form.Item name={[field.name, "end_date"]} label="结束时间">
-              <Input placeholder="2026.06" />
+              <PartialDateSelect label={`教育经历${field.name + 1}结束时间`} allowOngoing />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>

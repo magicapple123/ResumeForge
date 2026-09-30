@@ -1,26 +1,21 @@
 /** 我的资料：基础信息 + 各分区动态列表，整体保存。 */
-import {
-  CloseOutlined,
-  DownOutlined,
-  EditOutlined,
-  FileSearchOutlined,
-  HolderOutlined,
-  SaveOutlined,
-  UpOutlined,
-} from "@ant-design/icons";
-import { App, Button, Form, Input, Skeleton, Typography } from "antd";
+import { App, ConfigProvider, Form, Input, Skeleton } from "antd";
 import { useCallback, useState } from "react";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import ManualResumeModal from "../components/ManualResumeModal";
 import GeneralResumeSection from "../components/profile/GeneralResumeSection";
 import { DEFAULT_SECTION_ORDER } from "../components/profile/ProfileSectionConfig";
 import type { ProfileSectionKey } from "../components/profile/ProfileSectionConfig";
+import ProfilePageHeader from "../components/profile/ProfilePageHeader";
 import ProfileSectionStack from "../components/profile/ProfileSectionStack";
 import ProfileTextModal from "../components/profile/ProfileTextModal";
+import ProfileWorkspaceTabs, {
+  type ProfileWorkspaceKey,
+} from "../components/profile/ProfileWorkspaceTabs";
 import WebFormProfileSection from "../components/profile/WebFormProfileSection";
 import { updateWebFormExtraProfile } from "../api/webform";
 import { useProfilePage } from "../features/profile/useProfilePage";
-import type { WebFormExtraEntry, WebFormExtraProfile } from "../types";
+import type { WebFormExtraEntry, WebFormExtraProfile, WebFormRepeatedGroup } from "../types";
 
 export default function ProfilePage() {
   const { message } = App.useApp();
@@ -28,6 +23,7 @@ export default function ProfilePage() {
   const [generalTitle, setGeneralTitle] = useState("");
   const [generateOpen, setGenerateOpen] = useState(false);
   const [writeOpen, setWriteOpen] = useState(false);
+  const [activeWorkspace, setActiveWorkspace] = useState<ProfileWorkspaceKey>("resume");
   // 「网申资料」：值由本页持有，这样它能和资料表单**一起**提交。
   // 目录也存下来：提交时按它收窄字段，不把界面上的临时键发出去。
   const [extraProfile, setExtraProfile] = useState<WebFormExtraProfile | null>(null);
@@ -35,6 +31,7 @@ export default function ProfilePage() {
   // 每条的来源与档位（手录的/学到的、下次还填不填）。与 extraValues 一起提交，
   // 这样用户在界面上改档位之后，下次预填就按新的来。
   const [extraDetails, setExtraDetails] = useState<Record<string, WebFormExtraEntry>>({});
+  const [extraRepeatedGroups, setExtraRepeatedGroups] = useState<WebFormRepeatedGroup[]>([]);
   const [extraSaving, setExtraSaving] = useState(false);
   // 查看态默认**全展开**：这一页是"我的资料"，用户进来就是要看/改内容的，
   // 一屏折叠标题栏既看不到内容、又要多点好几下（用户反馈"应该默认展开"）。
@@ -94,14 +91,6 @@ export default function ProfilePage() {
     setExtraValues((current) => ({ ...current, [key]: value }));
   }, []);
 
-  /** 改某一条的档位（通用/场景/本次）。来源不改——它记的是"当初怎么来的"，是历史。 */
-  const handleExtraReuseChange = useCallback((key: string, reuse: WebFormExtraEntry["reuse"]) => {
-    setExtraDetails((current) => ({
-      ...current,
-      [key]: { value: current[key]?.value ?? "", source: current[key]?.source ?? "manual", reuse },
-    }));
-  }, []);
-
   /** 自定义字段改名只改显示标签，保持 key 不变，避免已记住的值失去关联。 */
   const handleExtraFieldLabelChange = useCallback((key: string, label: string) => {
     setExtraDetails((current) => ({
@@ -149,6 +138,7 @@ export default function ProfilePage() {
     // 后端只回有值的项；这里补全成"每个字段都有一个键"，输入框才不会从非受控变受控。
     setExtraValues(profile.values);
     setExtraDetails(profile.details ?? {});
+    setExtraRepeatedGroups(profile.repeated_groups ?? []);
   }, []);
 
   /**
@@ -169,10 +159,17 @@ export default function ProfilePage() {
       for (const [key, value] of Object.entries(extraValues)) {
         if (allowed.has(key)) payload[key] = value;
       }
-      const saved = await updateWebFormExtraProfile(payload, extraDetails);
+      const repeated = Object.fromEntries(
+        extraRepeatedGroups.map((group) => [
+          group.key,
+          group.records.map((record) => ({ id: record.id, values: record.values })),
+        ]),
+      );
+      const saved = await updateWebFormExtraProfile(payload, extraDetails, repeated);
       setExtraProfile(saved);
       setExtraValues(saved.values);
       setExtraDetails(saved.details ?? {});
+      setExtraRepeatedGroups(saved.repeated_groups ?? []);
     } catch (err) {
       // 资料表单已经存进去了，所以要如实说明"存了一半"，而不是笼统说保存失败。
       message.error(
@@ -189,109 +186,77 @@ export default function ProfilePage() {
 
   return (
     <div className={`profile-page${editing ? " is-editing" : ""}`}>
-      <div className="profile-page-header">
-        <div>
-          <Typography.Title level={3} style={{ margin: 0 }}>
-            我的资料
-          </Typography.Title>
-          <Typography.Text type="secondary">维护生成简历时使用的个人信息与经历</Typography.Text>
-        </div>
-        <div className="profile-page-header-actions">
-          {editing ? (
-            <>
-              <Button
-                icon={<HolderOutlined />}
-                disabled={saving || photoReading || profileTextParsing}
-                onClick={toggleSectionReorderMode}
-              >
-                {sectionReorderMode ? "完成模块排序" : "调整模块顺序"}
-              </Button>
-              <Button
-                icon={<FileSearchOutlined />}
-                disabled={saving || photoReading || profileTextParsing}
-                onClick={openProfileTextModal}
-              >
-                粘贴文本识别
-              </Button>
-              <Button
-                icon={<CloseOutlined />}
-                disabled={saving || photoReading}
-                onClick={cancelEditing}
-              >
-                取消
-              </Button>
-              <Button
-                type="primary"
-                icon={<SaveOutlined />}
-                loading={saving || extraSaving}
-                disabled={photoReading}
-                onClick={() => void submitAll()}
-              >
-                保存全部资料
-              </Button>
-            </>
-          ) : (
-            <>
-              {/* 资料分区默认折叠，这里给一个一键开关；标签随当前状态翻转。 */}
-              <Button
-                icon={allExpanded ? <UpOutlined /> : <DownOutlined />}
-                onClick={toggleExpandAll}
-              >
-                {allExpanded ? "全部收起" : "全部展开"}
-              </Button>
-              <Button icon={<EditOutlined />} onClick={() => setEditing(true)}>
-                编辑资料
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* 通用简历放在资料分区之前：它不属于资料表单，以前沉在页面最底下，资料一多就得滚到底才看得到。 */}
-      <GeneralResumeSection
-        onGenerate={(title) => {
-          setGeneralTitle(title);
-          setGenerateOpen(true);
-        }}
-        onWrite={(title) => {
-          setGeneralTitle(title);
-          setWriteOpen(true);
-        }}
+      <ProfilePageHeader
+        editing={editing}
+        activeWorkspace={activeWorkspace}
+        saving={saving}
+        extraSaving={extraSaving}
+        photoReading={photoReading}
+        profileTextParsing={profileTextParsing}
+        sectionReorderMode={sectionReorderMode}
+        allExpanded={allExpanded}
+        onToggleSectionReorderMode={toggleSectionReorderMode}
+        onOpenProfileTextModal={openProfileTextModal}
+        onCancelEditing={cancelEditing}
+        onSubmitAll={submitAll}
+        onToggleExpandAll={toggleExpandAll}
+        onStartEditing={() => setEditing(true)}
       />
 
+      {/* 通用简历放在资料分区之前：它不属于资料表单，以前沉在页面最底下，资料一多就得滚到底才看得到。 */}
       <Form form={form} layout="vertical" disabled={!editing || saving || photoReading}>
         <Form.Item name="photo" hidden>
           <Input />
         </Form.Item>
-
-        <ProfileSectionStack
-          sectionOrder={sectionOrder}
-          sectionReorderMode={sectionReorderMode}
-          editing={editing}
-          saving={saving}
-          photo={photo}
-          dragOverSection={dragOverSection}
-          collapsedSections={collapsedSections}
-          onToggleCollapsed={toggleSection}
-          onPhotoSelect={(dataUrl) => form.setFieldValue("photo", dataUrl)}
-          onHandlePointerDown={handleSectionPointerDown}
-          onMoveByOffset={moveSectionByOffset}
+        <ProfileWorkspaceTabs
+          resumeContent={
+            <>
+              <ConfigProvider componentDisabled={false}>
+                <GeneralResumeSection
+                  onGenerate={(title) => {
+                    setGeneralTitle(title);
+                    setGenerateOpen(true);
+                  }}
+                  onWrite={(title) => {
+                    setGeneralTitle(title);
+                    setWriteOpen(true);
+                  }}
+                />
+              </ConfigProvider>
+              <ProfileSectionStack
+                sectionOrder={sectionOrder}
+                sectionReorderMode={sectionReorderMode}
+                editing={editing}
+                saving={saving}
+                photo={photo}
+                dragOverSection={dragOverSection}
+                collapsedSections={collapsedSections}
+                onToggleCollapsed={toggleSection}
+                onPhotoSelect={(dataUrl) => form.setFieldValue("photo", dataUrl)}
+                onHandlePointerDown={handleSectionPointerDown}
+                onMoveByOffset={moveSectionByOffset}
+              />
+            </>
+          }
+          webFormContent={
+            <>
+              <WebFormProfileSection
+                editing={editing}
+                saving={saving || extraSaving}
+                values={extraValues}
+                details={extraDetails}
+                onChange={handleExtraChange}
+                onFieldLabelChange={handleExtraFieldLabelChange}
+                onFieldDelete={handleExtraFieldDelete}
+                repeatedGroups={extraRepeatedGroups}
+                onRepeatedGroupsChange={setExtraRepeatedGroups}
+                onLoaded={handleExtraLoaded}
+              />
+            </>
+          }
+          onActiveKeyChange={setActiveWorkspace}
         />
       </Form>
-
-      {/* 「网申资料」在资料表单**之外**：它存在独立的表里、走自己的接口，也不参与分区排序
-          （后端会按 PROFILE_SECTION_KEYS 丢掉不认识的 section_order 键）。 */}
-      <WebFormProfileSection
-        editing={editing}
-        saving={saving || extraSaving}
-        values={extraValues}
-        details={extraDetails}
-        onChange={handleExtraChange}
-        onReuseChange={handleExtraReuseChange}
-        onFieldLabelChange={handleExtraFieldLabelChange}
-        onFieldDelete={handleExtraFieldDelete}
-        onLoaded={handleExtraLoaded}
-      />
 
       <GenerateResumeModal
         job={null}

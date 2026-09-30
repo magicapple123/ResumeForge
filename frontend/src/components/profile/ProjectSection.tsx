@@ -1,6 +1,7 @@
 /** 项目经历分区。 */
 import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
+import PartialDateSelect from "./PartialDateSelect";
 import ProfileSection from "./ProfileSection";
 
 interface Props {
@@ -20,8 +21,6 @@ export function ProjectSection({ editable }: Props) {
         tech_stack: "",
         description: "",
         highlights: "",
-        reference_file_name: "",
-        reference_content: "",
       }}
       itemLabel={(item, index) => {
         const name = String(item.name ?? "").trim();
@@ -46,12 +45,12 @@ export function ProjectSection({ editable }: Props) {
           </Col>
           <Col xs={12} md={4}>
             <Form.Item name={[field.name, "start_date"]} label="开始">
-              <Input placeholder="2025.01" />
+              <PartialDateSelect label={`项目经历${field.name + 1}开始时间`} />
             </Form.Item>
           </Col>
           <Col xs={12} md={4}>
             <Form.Item name={[field.name, "end_date"]} label="结束">
-              <Input placeholder="至今" />
+              <PartialDateSelect label={`项目经历${field.name + 1}结束时间`} allowOngoing />
             </Form.Item>
           </Col>
           <Col xs={24}>

@@ -25,15 +25,19 @@ from ..schemas.webform import (
     WebFormLiveIn,
     WebFormLiveOut,
     WebFormMemoryTargetsOut,
+    WebFormOpenUrlIn,
     WebFormPreviewIn,
     WebFormPreviewOut,
     WebFormRememberIn,
     WebFormRememberOut,
     WebFormSnapshotOut,
+    WebFormUrlHistoryListOut,
+    WebFormUrlHistoryOut,
 )
 from ..services import webform as webform_service
-from ..services.apply import _site_browser
-from ..services.webform import ai, extra_profile, history, profile_targets
+from ..services.webform import ai, extra_profile, history, profile_targets, url_history
+from ..services.webform import live_targets, repeated_profile
+from ..services.webform import browser as webform_browser
 from ..services.webform.engine import FormEngine
 from ..services.webform.fields import FIELD_LABELS
 
@@ -71,6 +75,7 @@ def read_extra_profile(db: Session = Depends(get_db)):
         **webform_service.list_extra_fields(db),
         "values": extra_profile.list_entries(db),
         "details": extra_profile.list_details(db),
+        "repeated_groups": repeated_profile.list_groups(db),
     }
 
 
@@ -80,15 +85,34 @@ def write_extra_profile(payload: WebFormExtraProfileIn, db: Session = Depends(ge
 
     ``details`` 只用于给**学到的**那几条指定来源与档位（``source`` / ``reuse``）。
     """
-    extra_profile.save_entries(
-        db,
-        payload.values,
-        details={key: entry.model_dump() for key, entry in payload.details.items()},
-    )
+    try:
+        extra_profile.save_entries(
+            db,
+            payload.values,
+            details={key: entry.model_dump() for key, entry in payload.details.items()},
+            commit=False,
+        )
+        if payload.repeated is not None:
+            repeated_profile.save_groups(
+                db,
+                {
+                    key: [record.model_dump() for record in records]
+                    for key, records in payload.repeated.items()
+                },
+                commit=False,
+            )
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
     return {
         **webform_service.list_extra_fields(db),
         "values": extra_profile.list_entries(db),
         "details": extra_profile.list_details(db),
+        "repeated_groups": repeated_profile.list_groups(db),
     }
 
 
@@ -100,14 +124,13 @@ def list_memory_targets(db: Session = Depends(get_db)):
 
 # ===== 浏览器 =====
 #
-# 复用投递台那套浏览器生命周期（同一个受控窗口、同一份登录态），只是这里**不打开任何
-# 招聘站点**：用户自己导航到目标公司的网申页面。多开一份实现会让"浏览器在跑"变成两件
-# 互相不知道的事。
+# 网申使用独立的浏览器生命周期、CDP 端口和用户目录。这样投递台打开入口页时不会覆盖
+# 用户正在填写的网申页面，两个功能可以同时使用。
 
 
 @router.get("/browser/status", response_model=BrowserStatusOut)
 def browser_status(db: Session = Depends(get_db)):
-    status = _site_browser.browser_status(db)
+    status = webform_browser.browser_status(db)
     # 浏览器可能由用户直接关掉，不能只让前端看到 stopped；后台实时会话也要
     # 同步收摊，否则浏览器重新打开后页面会误以为旧监听仍然有效。
     if status.state == "stopped" and webform_service.is_live_running():
@@ -118,14 +141,36 @@ def browser_status(db: Session = Depends(get_db)):
 @router.post("/browser/start", response_model=BrowserStatusOut)
 def browser_start(db: Session = Depends(get_db)):
     try:
-        return _site_browser.start_browser(db, open_entry=False)
+        return webform_browser.start_browser(db)
     except Exception as exc:  # noqa: BLE001 - 与投递台同一套错误映射
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/browser/open-url")
+def browser_open_url(payload: WebFormOpenUrlIn, db: Session = Depends(get_db)):
+    try:
+        url = url_history.normalize_url(payload.url)
+        result = webform_browser.open_url(db, url)
+        url_history.remember_url(db, url)
+        return result
+    except (ValueError, webform_browser.BrowserError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/url-history", response_model=WebFormUrlHistoryListOut)
+def list_url_history(db: Session = Depends(get_db)):
+    return {"items": [WebFormUrlHistoryOut.model_validate(item) for item in url_history.list_urls(db)]}
+
+
+@router.delete("/url-history/{item_id}", status_code=204)
+def delete_url_history(item_id: int, db: Session = Depends(get_db)):
+    if not url_history.delete_url(db, item_id):
+        raise HTTPException(status_code=404, detail="网址历史不存在")
+
+
 @router.post("/browser/stop", status_code=204)
 def browser_stop(db: Session = Depends(get_db)):
-    _site_browser.stop_browser(db)
+    webform_browser.stop_browser(db)
     webform_service.stop_live()
 
 
@@ -144,16 +189,39 @@ def live_status():
     return webform_service.live_status()
 
 
+@router.get("/browser/targets")
+def browser_targets(db: Session = Depends(get_db)):
+    targets = webform_browser.list_page_targets(db)
+    states = live_targets.snapshot({str(item["id"]) for item in targets})
+    return {
+        "items": [
+            {
+                **item,
+                "target_id": str(item["id"]),
+                "live_enabled": states.get(str(item["id"]), True),
+            }
+            for item in targets
+        ]
+    }
+
+
+@router.post("/browser/targets/{target_id}/live")
+def set_browser_target_live(
+    target_id: str, payload: dict[str, bool], db: Session = Depends(get_db)
+):
+    del db
+    enabled = live_targets.set_enabled(target_id, bool(payload.get("enabled", True)))
+    return {"target_id": target_id, "live_enabled": enabled}
+
+
 @router.post("/live/start", response_model=WebFormLiveOut)
 def live_start(payload: WebFormLiveIn | None = None, db: Session = Depends(get_db)):
-    manager = _site_browser.get_browser_manager(db)
+    manager = webform_browser.get_browser_manager(db)
     if not manager.is_active():
         raise HTTPException(
             status_code=409,
             detail="受控浏览器还没启动，请先点「启动浏览器」并打开网申页面",
         )
-    if webform_service.is_apply_running():
-        raise HTTPException(status_code=409, detail="投递任务正在运行，请等它结束再开")
     # 开着 AI 但没配模型时 `build_provider` 返回 None，会话内部把开关一并降级为关——
     # **不报错**：没配模型照样能用规则填，那是这个功能本来的样子。
     want_ai = payload is None or payload.ai
@@ -178,6 +246,20 @@ def live_start(payload: WebFormLiveIn | None = None, db: Session = Depends(get_d
         session = SessionLocal()
         try:
             return profile_targets.build_memory_targets(session)
+        finally:
+            session.close()
+
+    def load_live_clients() -> list[tuple[str, Any]]:
+        """每轮同步网申浏览器的标签页，并为每个页面绑定独立 CDP 客户端。"""
+        session = SessionLocal()
+        try:
+            browser = webform_browser.get_browser_manager(session)
+            clients: list[tuple[str, Any]] = []
+            for target in browser.list_page_targets():
+                target_id = str(target.get("id") or "").strip()
+                if target_id:
+                    clients.append((target_id, browser.client_for_target(target_id)))
+            return clients
         finally:
             session.close()
 
@@ -243,6 +325,7 @@ def live_start(payload: WebFormLiveIn | None = None, db: Session = Depends(get_d
             data_loader=load_live_data,
             memory_targets=memory_targets,
             memory_targets_loader=load_memory_targets,
+            target_clients_loader=load_live_clients,
         )
     except webform_service.WebFormError as exc:
         _raise(exc)
@@ -276,7 +359,7 @@ def live_stop():
 @router.post("/snapshot", response_model=WebFormSnapshotOut)
 def take_snapshot(db: Session = Depends(get_db)):
     """读取**当前标签页**上的控件清单并存档。不写页面，纯读。"""
-    manager = _site_browser.get_browser_manager(db)
+    manager = webform_browser.get_browser_manager(db)
     if not manager.is_active():
         raise HTTPException(
             status_code=409,
@@ -329,11 +412,9 @@ def fill(payload: WebFormFillIn, db: Session = Depends(get_db)):
     严格用 ``snapshot_id`` 对应的那份快照：中间重新读页面会让用户确认的映射与落地的
     不一致，而这种不一致用户看不见。
     """
-    manager = _site_browser.get_browser_manager(db)
+    manager = webform_browser.get_browser_manager(db)
     if not manager.is_active():
         raise HTTPException(status_code=409, detail="受控浏览器已关闭，请重新启动并读取表单")
-    if webform_service.is_apply_running():
-        raise HTTPException(status_code=409, detail="投递任务正在运行，请等它结束再填充")
     try:
         snapshot = webform_service.get_snapshot_store().get(payload.snapshot_id)
         outcomes = webform_service.apply_fill(

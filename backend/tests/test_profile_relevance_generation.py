@@ -78,7 +78,7 @@ async def test_generator_uses_targeted_context_and_grounds_factual_fields():
     assert resume["city"] == profile.city
     assert resume["job_intent"] == job.title
     assert resume["experience"][0]["role"] == "后端开发实习生"
-    assert resume["experience"][0]["start_date"] == "2025.03"
+    assert resume["experience"][0]["start_date"] == "2025-03"
     assert resume["projects"][0]["role"] == "后端开发"
     assert resume["projects"][0]["tech_stack"] == ["Python"]
     assert resume["skills"][0] == {"name": "Python", "level": "熟练"}

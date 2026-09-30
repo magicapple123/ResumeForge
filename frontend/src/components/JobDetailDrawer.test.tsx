@@ -49,6 +49,7 @@ function renderDrawer(job: Job) {
         onAddToQueue={noop}
         onAskAssistant={noop}
         onFavorite={noop}
+        onOpenWebForm={noop}
       />
     </AntdApp>,
   );
@@ -106,6 +107,7 @@ describe("JobDetailDrawer 投递来源闸门", () => {
           onAddToQueue={onAddToQueue}
           onAskAssistant={noop}
           onFavorite={noop}
+          onOpenWebForm={noop}
         />
       </AntdApp>,
     );
@@ -113,5 +115,34 @@ describe("JobDetailDrawer 投递来源闸门", () => {
     screen.getByRole("button", { name: /加入投递台/ }).click();
 
     expect(onAddToQueue).toHaveBeenCalledOnce();
+  });
+
+  it("打开网申时禁用按钮并显示加载态，避免重复拉起浏览器", () => {
+    renderDrawer({ ...BASE_JOB, source_url: "https://example.com/apply" });
+
+    const button = screen.getByRole("button", { name: /前往投递/ });
+    expect(button).toBeEnabled();
+
+    cleanup();
+    render(
+      <AntdApp>
+        <JobDetailDrawer
+          job={BASE_JOB}
+          onClose={() => undefined}
+          onGenerate={() => undefined}
+          onWrite={() => undefined}
+          onViewResumes={() => undefined}
+          onAnalyze={() => undefined}
+          onMatch={() => undefined}
+          onAddToQueue={() => undefined}
+          onAskAssistant={() => undefined}
+          onFavorite={() => undefined}
+          onOpenWebForm={() => undefined}
+          webFormLoading
+        />
+      </AntdApp>,
+    );
+
+    expect(screen.getByRole("button", { name: /前往投递/ })).toBeDisabled();
   });
 });

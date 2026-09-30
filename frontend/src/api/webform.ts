@@ -11,7 +11,10 @@ import type {
   WebFormMemoryTargets,
   WebFormPreview,
   WebFormRememberInput,
+  WebFormRepeatedRecord,
   WebFormSnapshot,
+  WebFormUrlHistoryList,
+  WebFormBrowserTargetList,
 } from "../types";
 import { request } from "./client";
 
@@ -40,20 +43,56 @@ export function getWebFormMemoryTargets(): Promise<WebFormMemoryTargets> {
 export function updateWebFormExtraProfile(
   values: Record<string, string>,
   details?: Record<string, WebFormExtraEntry>,
+  repeated?: Record<string, WebFormRepeatedRecord[]>,
 ): Promise<WebFormExtraProfile> {
+  const body: {
+    values: Record<string, string>;
+    details: Record<string, WebFormExtraEntry>;
+    repeated?: Record<string, WebFormRepeatedRecord[]>;
+  } = { values, details: details ?? {} };
+  if (repeated !== undefined) body.repeated = repeated;
   return request("/webform/extra-profile", {
     method: "PUT",
-    body: JSON.stringify({ values, details: details ?? {} }),
+    body: JSON.stringify(body),
   });
 }
 
-/** 浏览器状态与投递台共享同一个受控窗口。 */
+/** 网申专用浏览器状态；它与投递台使用不同窗口、端口和登录态。 */
 export function getWebFormBrowserStatus(): Promise<BrowserStatus> {
   return request("/webform/browser/status");
 }
 
 export function startWebFormBrowser(): Promise<BrowserStatus> {
   return request("/webform/browser/start", { method: "POST" });
+}
+
+export function openWebFormUrl(url: string): Promise<{ target_id: string; url: string }> {
+  return request("/webform/browser/open-url", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function listWebFormUrlHistory(): Promise<WebFormUrlHistoryList> {
+  return request("/webform/url-history");
+}
+
+export function deleteWebFormUrlHistory(id: number): Promise<void> {
+  return request(`/webform/url-history/${id}`, { method: "DELETE" });
+}
+
+export function listWebFormBrowserTargets(): Promise<WebFormBrowserTargetList> {
+  return request("/webform/browser/targets");
+}
+
+export function setWebFormBrowserTargetLive(
+  targetId: string,
+  enabled: boolean,
+): Promise<{ target_id: string; live_enabled: boolean }> {
+  return request(`/webform/browser/targets/${encodeURIComponent(targetId)}/live`, {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 export function stopWebFormBrowser(): Promise<void> {
@@ -78,7 +117,7 @@ export function previewWebForm(snapshotId: string, ai = true): Promise<WebFormPr
   });
 }
 
-/** 「点哪个填哪个」：开启后，你在页面里点到哪个框，就在框旁边给出该填的值。 */
+/** 智能逐项填表：聚焦页面字段时，在字段旁给出对应资料建议。 */
 export function startWebFormLive(ai = true): Promise<WebFormLive> {
   return request("/webform/live/start", {
     method: "POST",

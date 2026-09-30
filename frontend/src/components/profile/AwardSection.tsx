@@ -1,6 +1,7 @@
 /** 荣誉奖项分区。 */
 import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";
+import PartialDateSelect from "./PartialDateSelect";
 import ProfileSection from "./ProfileSection";
 
 interface Props {
@@ -31,7 +32,7 @@ export function AwardSection({ editable }: Props) {
           </Col>
           <Col xs={24} sm={8} md={6}>
             <Form.Item name={[field.name, "date"]} label="获得时间">
-              <Input placeholder="2024.10" />
+              <PartialDateSelect label={`荣誉奖项${field.name + 1}获得时间`} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={16} md={8}>

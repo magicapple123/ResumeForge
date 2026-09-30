@@ -124,6 +124,91 @@ def raw_control(**overrides) -> dict:
     return base
 
 
+def test_first_autofill_request_is_acknowledged_and_dispatched_once():
+    client = FakeLiveClient()
+    requests: list[int] = []
+
+    def evaluate(expression, *, timeout=None):
+        if "rf:live-state" in expression:
+            return json.dumps(
+                {
+                    "seq": 0,
+                    "control": None,
+                    "accept": None,
+                    "remember": None,
+                    "live_control": {"enabled": True, "seq": 0},
+                    "installed": True,
+                    "autofill": {"seq": 1},
+                }
+            )
+        return FakeLiveClient.evaluate(client, expression, timeout=timeout)
+
+    client.evaluate = evaluate
+    session = LiveSession(client, {"name": "张三"})
+
+    class Worker:
+        def request(self, sequence: int) -> bool:
+            requests.append(sequence)
+            return True
+
+        def close(self) -> None:
+            pass
+
+    session._autofill_worker = Worker()
+    session._tick()
+    session._tick()
+
+    assert requests == [1]
+    assert any("rf:autofill-ack" in expression for expression in client.expressions)
+
+
+def test_autofill_request_is_rearmed_after_page_navigation():
+    client = FakeLiveClient()
+    requests: list[int] = []
+    original_evaluate = client.evaluate
+
+    def evaluate(expression, *, timeout=None):
+        if "rf:live-state" in expression:
+            payload = json.loads(original_evaluate(expression, timeout=timeout))
+            payload["autofill"] = {"seq": 1}
+            return json.dumps(payload)
+        return original_evaluate(expression, timeout=timeout)
+
+    client.evaluate = evaluate
+    session = LiveSession(client, {"name": "张三"})
+    session._last_autofill_sequence = 1
+
+    class Worker:
+        def request(self, sequence: int) -> bool:
+            requests.append(sequence)
+            return True
+
+        def close(self) -> None:
+            pass
+
+    session._autofill_worker = Worker()
+    session._tick()  # 页面刚刷新，先重新注入并清掉上一页的请求游标。
+    session._tick()  # 新页面第一次点击使用同样的 seq=1，也必须被派发。
+
+    assert requests == [1]
+
+
+def test_autofill_failure_is_published_as_terminal_error(monkeypatch):
+    client = FakeLiveClient()
+    session = LiveSession(client, {"name": "张三"})
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("读取失败")
+
+    monkeypatch.setattr(live_module, "fill_current_page", fail)
+    session._run_autofill(1)
+
+    assert any(
+        "rf:autofill-status" in expression and '"state": "error"' in expression
+        for expression in client.expressions
+    )
+
+
 # ===== 单控件建议 =====
 
 
@@ -495,6 +580,24 @@ def test_the_reinstall_also_pushes_the_catalog_again():
         pushed = [e for e in client.expressions if "rf:live-catalog" in e]
         assert pushed, "重装时没有重新推送清单"
         assert "张三" in pushed[0]
+    finally:
+        session.stop()
+
+
+def test_disabled_live_session_reinstalls_the_control_ball_after_page_reload():
+    """关闭填表响应后，页面跳转仍要保留可重新开启的悬浮球。"""
+    client = FakeLiveClient()
+    session = LiveSession(client, {"name": "张三"})
+    session.start()
+    try:
+        session.set_enabled(False)
+        client.installed = False
+        client.expressions.clear()
+
+        session._tick()
+
+        assert client.installed is True
+        assert any("rf:live-control" in expression for expression in client.expressions)
     finally:
         session.stop()
 

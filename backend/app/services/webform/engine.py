@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -56,7 +57,9 @@ from .matching import (
     SelectOption,
     SelectResolution,
     format_date,
+    is_date_hint,
     is_placeholder,
+    meaningful_options,
     resolve_choice,
     resolve_select_option,
 )
@@ -69,6 +72,9 @@ from .repeated_fields import (
 )
 
 logger = logging.getLogger(__name__)
+
+_DEPENDENT_SELECT_WAIT_SECONDS = 2.0
+_DEPENDENT_SELECT_POLL_SECONDS = 0.1
 
 CONTROL_TYPES = (
     "text",
@@ -170,10 +176,17 @@ _CONTROL_HELPERS_JS = [
     "  if (/校园|校内|社会实践/.test(alias)) { return 'campus'; }\n",
     "  if (/教育|学习/.test(alias)) { return 'education'; }\n",
     "  if (/获奖|奖项|荣誉/.test(alias)) { return 'award'; }\n",
+    "  if (/学术|科研|论文/.test(alias)) { return 'academic'; }\n",
+    "  if (/语言|外语/.test(alias)) { return 'language'; }\n",
+    "  if (/证书/.test(alias)) { return 'certificate'; }\n",
+    "  if (/技能/.test(alias)) { return 'skill'; }\n",
+    "  if (/紧急联系人|紧急联络人/.test(alias)) { return 'contact'; }\n",
+    "  if (/作品/.test(alias)) { return 'portfolio'; }\n",
+    "  if (/社交/.test(alias)) { return 'social'; }\n",
     "  return '';\n",
     "};\n",
     "const parseBlockChunk = (chunk) => {\n",
-    "  const aliases = '(实习经历|工作经历|工作经验|实习工作经历|项目经历|项目经验|校园经历|校内经历|社会实践|教育经历|学习经历|获奖信息|奖项信息|荣誉奖项|获奖经历)';\n",
+    "  const aliases = '(实习和工作补充|实习和工作经历|实习经历|工作经历|工作经验|实习工作经历|项目经历|项目经验|校园和社会实践|校园经历|校内经历|社会实践|教育经历|学习经历|获奖信息|奖项信息|荣誉奖项|获奖经历|学术成果|语言能力|证书信息|技能信息|紧急联系人|作品和附件|作品经历|作品集|作品展示|社交账号|社交平台账号)';\n",
     "  let match = chunk.match(new RegExp('第\\s*([0-9０-９一二三四五六七八九十百千万]+)\\s*(?:条|段|项|个|份)?\\s*' + aliases));\n",
     "  let alias = ''; let rawIndex = '';\n",
     "  if (match) { alias = match[2]; rawIndex = match[1]; }\n",
@@ -268,6 +281,13 @@ _CONTROL_HELPERS_JS = [
     "    // \u8bfb\u5230\u5c31\u662f\u9ad8\u7f6e\u4fe1\u547d\u4e2d\uff08Chrome \u7684\u81ea\u52a8\u586b\u5145\u4e5f\u628a\u5b83\u5f53\u7b2c\u4e00\u4f18\u5148\u7ea7\uff09\u3002\n",
     "    autocomplete: (el.getAttribute('autocomplete') || '').trim().toLowerCase(),\n",
     "    required: el.required === true || el.getAttribute('aria-required') === 'true',\n",
+    "    // 原生联动下拉的子级首次读取时可能只有占位项；只标记有明确联动信号的 select，\n",
+    "    // 普通的「请选择」不能因此被误当成可延迟填充。\n",
+    "    linked_select: tag === 'select' && (\n",
+    "      el.getAttribute('data-rf-dependent') === 'true' ||\n",
+    "      el.hasAttribute('data-parent') || el.hasAttribute('data-cascade') ||\n",
+    "      !!el.getAttribute('aria-controls')\n",
+    "    ),\n",
     "    // 只读 = 值不由用户敲进来。**级联选择器（省/市/区那类）的输入框几乎都是只读的**：\n",
     "    // 它是把内部状态显示出来，脚本直接写 `.value` 只会让框里出现一行字，组件的状态\n",
     "    // 一点没变——表单交上去还是空的。所以这类控件不能当普通文本框填。\n",
@@ -344,86 +364,148 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "  shadow.innerHTML = [\n",
     "    '<style>',\n",
     "    '  *{box-sizing:border-box}',\n",
-    "    '  .p{position:fixed;width:min(500px,calc(100vw - 16px));max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);background:#fff;border:1px solid #d9d9d9;border-radius:10px;',\n",
-    "    '     box-shadow:0 6px 16px rgba(0,0,0,.16);font:13px/1.5 -apple-system,\"Segoe UI\",',\n",
-    "    '     \"Microsoft YaHei\",sans-serif;color:#222;overflow:hidden}',\n",
-    "    '  .body{padding:12px 14px}',\n",
-    "    '  .head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}',\n",
-    "    '  .f{color:#888;font-size:12px;display:flex;gap:6px;align-items:center}',\n",
+    "    // **面板是竖排的 flex 列**：`.body`（固定的头部与按钮）、`.alts`、`.pick`（可滚的资料区）\n",
+    "    // 依次排下去。这样 `.pick` 拿到的是「面板上限减去上面几块」，而不是自己写一个\n",
+    "    // `max-height`——两处各写一个的话它们互不知情：窗口偏矮或「其他候选」多几行时，\n",
+    "    // 资料区会被面板的 `overflow:hidden` 裁掉，最后几行资料滚也看不到。\n",
+    "    '  .p{position:fixed;display:flex;flex-direction:column;width:min(620px,calc(100vw - 16px));max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);background:#fff;border:1px solid #d6e0eb;border-radius:14px;',\n",
+    "    '     box-shadow:0 14px 34px rgba(31,56,88,.16),0 3px 10px rgba(31,56,88,.08);font:13px/1.5 -apple-system,\"Segoe UI\",',\n",
+    "    '     \"Microsoft YaHei\",sans-serif;color:#24364a;overflow:hidden}',\n",
+    "    '  .body{padding:15px 16px 16px;background:linear-gradient(180deg,#f8fbfe 0%,#fff 74%)}',\n",
+    "    '  .head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;cursor:grab;user-select:none}',\n",
+    "    '  .head:active{cursor:grabbing}',\n",
+    "    '  .drag-hint{margin-top:3px;color:#8b9bad;font-size:10px;line-height:1.4;user-select:none}',\n",
+    "    '  .f{color:#435a72;font-size:12px;font-weight:600;display:flex;gap:6px;align-items:center;min-width:0}',\n",
     "    '  .src{display:none;padding:0 6px;border-radius:8px;font-size:11px;',\n",
-    "    '       background:#eef4ff;color:#1677ff;flex:0 0 auto}',\n",
-    "    '  .v{margin:4px 0 10px;word-break:break-word;font-weight:600;max-height:84px;overflow:auto}',\n",
-    "    '  .close{flex:0 0 auto;padding:0 6px;background:transparent;color:#888;font-size:20px;line-height:20px}',\n",
-    "    '  .close:hover{background:#f0f0f0;color:#222}',\n",
-    "    '  .r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}',\n",
-    "    '  button{cursor:pointer;border:0;border-radius:6px;padding:3px 12px;font-size:12px;',\n",
-    "    '         background:#1677ff;color:#fff;font-family:inherit;white-space:nowrap}',\n",
-    "    '  button.ghost{background:#f0f0f0;color:#333}',\n",
-    "    '  button:disabled{background:#d9d9d9;cursor:default}',\n",
+    "    '       background:#eef4ff;color:#3978b0;border:1px solid #d9e7f6;flex:0 0 auto}',\n",
+    "    '  .v{margin:7px 0 13px;word-break:break-word;font-weight:600;line-height:1.65;max-height:96px;overflow:auto;padding:9px 11px;border:1px solid #e4ebf3;border-radius:9px;background:#fff;color:#1f344a}',\n",
+    "    '  .close{width:28px;height:28px;display:grid;place-items:center;flex:0 0 auto;padding:0;border:1px solid transparent;border-radius:8px;background:transparent;color:#8291a2;font-size:18px;line-height:1;transition:background .12s,border-color .12s,color .12s}',\n",
+    "    '  .close:hover{background:#eef4f9;border-color:#d9e4ee;color:#263b50}',\n",
+    "    '  .r{display:flex;gap:7px;align-items:center;flex-wrap:wrap}',\n",
+    "    '  button{cursor:pointer;border:1px solid transparent;border-radius:8px;min-height:30px;padding:5px 12px;font-size:12px;font-weight:600;',\n",
+    "    '         background:#3d82bd;color:#fff;font-family:inherit;white-space:nowrap;transition:background .12s,border-color .12s,box-shadow .12s}',\n",
+    "    '  button:not(.navchip):not(.close):not(.navhead):hover:not(:disabled){background:#3475ad;box-shadow:0 2px 6px rgba(61,130,189,.18)}',\n",
+    "    '  button.ghost{background:#f7f9fb;border-color:#dbe4ed;color:#4f647a}',\n",
+    "    '  button.ghost:hover:not(:disabled){background:#eef4f9;border-color:#c7d6e4;color:#304b65;box-shadow:none}',\n",
+    "    '  button:focus-visible,.navchip:focus-visible{outline:2px solid #8eb8dc;outline-offset:2px}',\n",
+    "    '  button:disabled{background:#dce3ea;border-color:#dce3ea;color:#8794a2;cursor:default}',\n",
     "    // 提示**独占一行**（`flex:1 1 100%`）。原先它和按钮挤在同一行里，而按钮默认会被\n",
     "    // 压缩换行——提示写长一点（比如只读控件那句）就会把「填入」「收起」挤成竖排的两行。\n",
     "    // 上面那条 `flex-wrap:wrap` 是配套的：提示换到下一行，按钮留在原位。\n",
     "    '  .n{flex:1 1 100%;margin-top:6px;color:#999;font-size:12px;line-height:1.6}',\n",
     "    '  /* \u5176\u4ed6\u5019\u9009\uff1aAI \u62ff\u4e0d\u51c6\u65f6\u7ed9\u7684\u7b2c 2\u30013 \u540d\uff0c\u6bcf\u6761\u81ea\u5e26\u300c\u586b\u5165\u300d */',\n",
-    "    '  .alts{display:none;border-top:1px solid #f0f0f0}',\n",
+    "    '  .alts{display:none;border-top:1px solid #e7edf3;background:#fbfcfe}',\n",
     "    '  .alts.on{display:block}',\n",
-    "    '  .alt{display:flex;gap:8px;align-items:center;padding:5px 12px}',\n",
-    "    '  .alt:hover{background:#f5f8ff}',\n",
-    "    '  .alt .al{color:#555;font-size:12px;flex:0 0 auto}',\n",
-    "    '  .alt .av{color:#222;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',\n",
-    "    '  .alt button{flex:0 0 auto;padding:2px 10px}',\n",
+    "    '  .alt{display:flex;gap:8px;align-items:center;padding:7px 14px}',\n",
+    "    '  .alt:hover{background:#f3f7fb}',\n",
+    "    '  .alt .al{color:#536b82;font-size:12px;flex:0 0 auto;font-weight:600}',\n",
+    "    '  .alt .av{color:#263b50;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',\n",
+    "    '  .alt button{flex:0 0 auto;padding:4px 10px;min-height:28px}',\n",
     "    '  /* \u5c55\u5f00\u533a\uff1a\u641c\u7d22 + \u5206\u7ec4\u8df3\u8f6c + \u6309\u5206\u533a\u5217\u51fa\u5168\u90e8\u8d44\u6599 */',\n",
-    "    '  .pick{border-top:1px solid #e8e8e8;display:none;max-height:min(560px,70vh);overflow:auto}',\n",
+    "    '  .pick{border-top:1px solid #e1e8f0;display:none;flex:1 1 auto;min-height:0;overflow:auto;background:#fbfcfe}',\n",
     "    '  .pick.on{display:block}',\n",
-    "    '  .search{position:sticky;top:0;z-index:2;background:#fff;padding:8px 12px 6px;border-bottom:1px solid #eef2f7}',\n",
-    "    '  .search input{width:100%;box-sizing:border-box;border:1px solid #d9d9d9;border-radius:6px;',\n",
-    "    '                padding:4px 8px;font:12px/1.5 inherit;outline:none}',\n",
-    "    '  .search input:focus{border-color:#1677ff}',\n",
-    "    '  .hits{color:#999;font-size:11px;margin-top:4px}',\n",
+    "    '  .search{position:sticky;top:0;z-index:2;background:rgba(248,251,254,.98);padding:11px 14px 10px;border-bottom:1px solid #e3eaf2;box-shadow:0 3px 9px rgba(31,56,88,.06)}',\n",
+    "    '  .search input{width:100%;box-sizing:border-box;height:34px;border:1px solid #d4dfe9;border-radius:9px;',\n",
+    "    '                padding:7px 10px;background:#fff;color:#263b50;font-family:inherit;font-size:12px;line-height:1.5;outline:none;transition:border-color .12s,box-shadow .12s}',\n",
+    "    '  .search input::placeholder{color:#9aa8b7}',\n",
+    "    '  .search input:focus{border-color:#78a8d0;box-shadow:0 0 0 3px rgba(120,168,208,.16)}',\n",
+    "    '  .hits{color:#7d8ea1;font-size:11px;margin-top:5px;min-height:16px}',\n",
     "    '  .hits:empty{display:none}',\n",
     "    // **换行铺开，不横向滚动。** 资料一多分组就有十几个，横向排会溢出去：用户得先横向\n",
     "    // 滚一段才能看见后面的组、再点——那和纵向滚着找条目是同一种累，等于白做了跳转。\n",
     "    // 换行之后所有组一眼可见，代价是占两三行高度（比\"找不到\"便宜得多）。\n",
-    "    '  .nav{display:flex;flex-wrap:wrap;gap:5px;padding-top:6px}',\n",
-    "    '  .navchip{flex:0 0 auto;border:1px solid #e3e8ef;background:#fff;border-radius:999px;padding:0 8px;',\n",
-    "    '           font:12px/1.6 inherit;color:#555;cursor:pointer;white-space:nowrap}',\n",
-    "    '  .navchip:hover{border-color:#91caff;color:#1677ff}',\n",
-    "    '  .navchip.on{background:#e8f1ff;border-color:#bcd8ff;color:#1677ff;font-weight:600}',\n",
+    "    //\n",
+    "    // 但换行**必须配一个高度上限，整块还得能折起来**：这块挂在 `position:sticky` 的搜索块\n",
+    "    // 里，分组一多（真实资料库 50 组）胶囊能铺十几行，sticky 块便跟着长到超过资料区的可见\n",
+    "    // 高度，把下面的「可能是这几个」和完整清单整片盖住——用户滚也滚不出来。所以拆成\n",
+    "    // 折叠头（`.navhead`）+ 有上限的胶囊区（`.navbody`）：最坏情况只占一行。\n",
+    "    '  .nav{display:flex;flex-direction:column;margin-top:8px;background:#f3f6fa;border:1px solid #e1e8f0;border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}',\n",
+    "    '  .navhead{display:flex;align-items:center;gap:6px;width:100%;min-height:0;border:0;border-radius:9px 9px 0 0;background:transparent;padding:7px 9px;color:#74869a;',\n",
+    "    '           font-family:inherit;font-size:11px;font-weight:600;line-height:16px;text-align:left;white-space:nowrap;cursor:pointer}',\n",
+    "    '  .nav.fold .navhead{border-radius:9px}',\n",
+    "    '  .navhead:hover{background:#e9f0f8}',\n",
+    "    '  .navhead:focus-visible{outline:2px solid #8eb8dc;outline-offset:-2px}',\n",
+    "    '  .navhead .caret{flex:0 0 10px;color:#7d94b4;transition:transform .12s}',\n",
+    "    '  .nav.fold .navhead .caret{transform:rotate(-90deg)}',\n",
+    "    '  .navhead .sum{margin-left:auto;color:#8ea1b5;font-weight:500;font-variant-numeric:tabular-nums}',\n",
+    "    // 胶囊区的上限由脚本按「资料区可见高度的三分之一」写进 `--rf-navmax`（那才是真正\n",
+    "    // 保证跳转条吃不到资料区的那个值）；后面两个写死的数是没算出来之前的兜底。\n",
+    "    '  .navbody{display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;padding:0 8px 8px;max-height:min(22vh,132px,var(--rf-navmax,132px));',\n",
+    "    '           overflow:auto;overscroll-behavior:contain}',\n",
+    "    '  .nav.fold .navbody{display:none}',\n",
+    "    // 同类分组（「荣誉奖项 1 / 2 / 3」）**聚成一块**：家族胶囊 + 它的成员胶囊。家族胶囊的\n",
+    "    // 折叠语义与列表里的 `.grp` 分组标题一致（点一下展开/收起），真正跳过去的是成员胶囊。\n",
+    "    '  .navfam{display:flex;flex-wrap:wrap;align-items:center;gap:4px;flex:0 1 auto;max-width:100%}',\n",
+    "    '  .navfam .navkids{display:none;flex-wrap:wrap;align-items:center;gap:4px}',\n",
+    "    '  .navfam.open .navkids{display:flex}',\n",
+    "    // 展开着的家族胶囊、以及\"人就在这一族里\"的家族胶囊，都点出来；成员胶囊自己另有 `.on`。\n",
+    "    '  .navfam.open>.navchip,.navfam.active:not(.open)>.navchip{font-weight:700;box-shadow:0 0 0 2px rgba(82,125,165,.12)}',\n",
+    "    '  .navchip.kid{min-height:25px;gap:5px;padding:2px 7px 2px 6px;font-size:11px}',\n",
+    "    '  .navchip.kid .c{min-width:16px;padding:0 4px;line-height:15px}',\n",
+    "    '  .navchip{--chip-border:#d5e0ea;--chip-bg:#f5f8fb;--chip-text:#40566e;--chip-accent:#82a7c8;display:inline-flex;align-items:center;gap:6px;flex:0 1 auto;max-width:100%;min-height:29px;border:1px solid var(--chip-border);background:#fff;border-radius:8px;padding:4px 8px 4px 7px;',\n",
+    "    '           font-family:inherit;font-size:12px;line-height:1.35;color:var(--chip-text);cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s,box-shadow .12s}',\n",
+    "    '  .navchip::before{content:\"\";width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:var(--chip-accent);box-shadow:0 0 0 2px var(--chip-bg)}',\n",
+    "    '  .navchip:hover{background:var(--chip-bg);border-color:var(--chip-accent);box-shadow:0 2px 6px rgba(31,56,88,.08)}',\n",
+    "    '  .navchip.on{background:var(--chip-bg);border-color:var(--chip-accent);color:var(--chip-text);font-weight:700;box-shadow:0 0 0 2px rgba(82,125,165,.12)}',\n",
+    "    '  .navchip .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',\n",
+    "    '  .navchip[data-tone=\"0\"]{--chip-border:#c9dbe9;--chip-bg:#f4f8fb;--chip-text:#2e6da4;--chip-accent:#7fa7ca}',\n",
+    "    '  .navchip[data-tone=\"1\"]{--chip-border:#c9ddd7;--chip-bg:#f4f9f7;--chip-text:#3d7668;--chip-accent:#78a996}',\n",
+    "    '  .navchip[data-tone=\"2\"]{--chip-border:#d4cfe4;--chip-bg:#f8f7fb;--chip-text:#64598e;--chip-accent:#968bc4}',\n",
+    "    '  .navchip[data-tone=\"3\"]{--chip-border:#dfd2bc;--chip-bg:#fbf9f4;--chip-text:#8b6e3f;--chip-accent:#b59a6e}',\n",
+    "    '  .navchip[data-tone=\"4\"]{--chip-border:#dfcbd1;--chip-bg:#fbf8f9;--chip-text:#945d6b;--chip-accent:#b98b99}',\n",
+    "    '  .navchip[data-tone=\"5\"]{--chip-border:#c8dadd;--chip-bg:#f4f9fa;--chip-text:#3d747d;--chip-accent:#77aab1}',\n",
     "    // 条数做成独立的小胶囊。分组名常以数字结尾（「专业技能 1」），跟条数拼在一起\n",
     "    // （「专业技能 1 2」）会被读成「专业技能12」——有边界就不会。\n",
-    "    '  .navchip .c{margin-left:5px;padding:0 5px;border-radius:8px;background:#eef2f8;',\n",
-    "    '               color:#7b8aa3;font-size:11px;font-weight:400}',\n",
-    "    '  .navchip.on .c{background:#d6e7ff;color:#1677ff}',\n",
-    "    '  .grp{position:sticky;top:var(--rf-stick,0);z-index:1;display:flex;align-items:center;gap:6px;',\n",
-    "    '       padding:7px 12px;color:#1677ff;font-size:12px;font-weight:600;background:#f5f8ff;',\n",
-    "    '       border-bottom:1px solid #e7efff;cursor:pointer}',\n",
-    "    '  .grp:focus-visible{outline:2px solid #91caff;outline-offset:-2px}',\n",
-    "    '  .grp .caret{flex:0 0 auto;width:10px;color:#7aa7e0;transition:transform .12s}',\n",
+    "    '  .navchip .c{min-width:19px;margin-left:1px;padding:1px 5px;border:1px solid #e0e7ee;border-radius:999px;background:#f0f3f7;',\n",
+    "    '               color:#718196;font-size:11px;line-height:16px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}',\n",
+    "    '  .navchip.on .c{background:#fff;border-color:var(--chip-accent);color:var(--chip-text)}',\n",
+    "    '  .navchip .caret{flex:0 0 9px;margin-left:1px;color:var(--chip-accent);font-size:10px;line-height:1;transition:transform .12s}',\n",
+    "    '  .navfam.open>.navchip .caret{transform:rotate(180deg)}',\n",
+    "    '  .grp{--grp-border:#d5e0ea;--grp-bg:#f7f9fb;--grp-text:#40566e;--grp-accent:#82a7c8;position:relative;display:flex;align-items:center;gap:7px;',\n",
+    "    '       padding:9px 14px 9px 11px;color:var(--grp-text);font-size:12px;font-weight:700;background:var(--grp-bg);',\n",
+    "    '       border-bottom:1px solid #e5ebf1;border-left:3px solid var(--grp-accent);cursor:pointer;transition:background .12s}',\n",
+    "    '  .grp:hover{background:#f1f5f9}',\n",
+    "    '  .grp[data-tone=\"0\"]{--grp-border:#c9dbe9;--grp-bg:#f4f8fb;--grp-text:#2e6da4;--grp-accent:#7fa7ca}',\n",
+    "    '  .grp[data-tone=\"1\"]{--grp-border:#c9ddd7;--grp-bg:#f4f9f7;--grp-text:#3d7668;--grp-accent:#78a996}',\n",
+    "    '  .grp[data-tone=\"2\"]{--grp-border:#d4cfe4;--grp-bg:#f8f7fb;--grp-text:#64598e;--grp-accent:#968bc4}',\n",
+    "    '  .grp[data-tone=\"3\"]{--grp-border:#dfd2bc;--grp-bg:#fbf9f4;--grp-text:#8b6e3f;--grp-accent:#b59a6e}',\n",
+    "    '  .grp[data-tone=\"4\"]{--grp-border:#dfcbd1;--grp-bg:#fbf8f9;--grp-text:#945d6b;--grp-accent:#b98b99}',\n",
+    "    '  .grp[data-tone=\"5\"]{--grp-border:#c8dadd;--grp-bg:#f4f9fa;--grp-text:#3d747d;--grp-accent:#77aab1}',\n",
+    "    '  .grp:focus-visible{outline:2px solid #8eb8dc;outline-offset:-2px}',\n",
+    "    '  .grp .caret{flex:0 0 auto;width:10px;color:var(--grp-accent);transition:transform .12s}',\n",
     "    '  .grp.fold .caret{transform:rotate(-90deg)}',\n",
-    "    '  .grp .gt{flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',\n",
-    "    '  .grp .gc{flex:0 0 auto;color:#93a7c4;font-weight:400}',\n",
-    "    '  .row{padding:8px 12px;cursor:pointer;display:flex;gap:8px;align-items:center;border-bottom:1px solid #f2f2f2}',\n",
-    "    '  .row:hover,.row:focus-visible{background:#f5f8ff}',\n",
-    "    '  .row:focus-visible{outline:2px solid #91caff;outline-offset:-2px}',\n",
-    "    '  .row .l{color:#555;flex:0 1 auto;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',\n",
-    "    '  .row .t{color:#222;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}',\n",
-    "    '  .row .from{flex:0 0 auto;font-size:10px;line-height:16px;color:#8c6d1f;background:#fff7e6;',\n",
-    "    '              border:1px solid #ffe0a3;border-radius:4px;padding:0 4px}',\n",
-    "    '  .row .go{flex:0 0 auto;border:1px solid #d9d9d9;background:#fff;border-radius:6px;padding:1px 8px;',\n",
-    "    '           font:12px/1.6 inherit;color:#1677ff;cursor:pointer;opacity:0}',\n",
-    "    '  .row:hover .go,.row:focus-within .go,.row:focus-visible .go{opacity:1}',\n",
+    "    '  .grp .gt{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',\n",
+    "    '  .grp .gc{flex:0 0 auto;padding:1px 6px;border:1px solid #e0e7ee;border-radius:999px;background:#fff;color:#8090a2;font-size:11px;font-weight:600;line-height:16px}',\n",
+    "    '  .row{padding:10px 14px;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border-bottom:1px solid #edf1f5;min-height:64px;background:#fff;transition:background .12s}',\n",
+    "    '  .row:hover,.row:focus-visible{background:#f6f9fc}',\n",
+    "    '  .row:focus-visible{outline:2px solid #8eb8dc;outline-offset:-2px}',\n",
+    "    '  .row .main{min-width:0;display:grid;gap:4px}',\n",
+    "    '  .row .meta{display:flex;align-items:center;gap:6px;min-width:0;line-height:1.35}',\n",
+    "    '  .row .l{color:var(--row-text,#53657c);font-weight:650;min-width:0;max-width:100%;display:-webkit-box;',\n",
+    "    '           -webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}',\n",
+    "    '  .row .group{flex:0 1 auto;min-width:0;max-width:48%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',\n",
+    "    '              color:var(--row-text,#2e6da4);font-size:10px;line-height:16px;padding:0 6px;',\n",
+    "    '              border:1px solid var(--row-border,#b8d4f2);background:var(--row-bg,#f2f7ff);border-radius:999px}',\n",
+    "    '  .row .t{color:#253a50;min-width:0;max-width:100%;display:-webkit-box;-webkit-box-orient:vertical;',\n",
+    "    '           -webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere;word-break:break-word;text-align:left;line-height:1.55}',\n",
+    "    '  .row .from{flex:0 0 auto;font-size:10px;line-height:16px;color:#527ca4;',\n",
+    "    '              background:#f1f6fb;border:1px solid #d6e3ef;border-radius:999px;padding:0 6px}',\n",
+    "    '  .row .go{align-self:center;min-width:56px;min-height:30px;border:1px solid #cbd9e6;background:#fff;border-radius:8px;padding:5px 10px;',\n",
+    "    '           font-family:inherit;font-size:12px;line-height:1.5;font-weight:600;color:#3978b0;cursor:pointer;opacity:1;white-space:nowrap;transition:background .12s,border-color .12s,box-shadow .12s}',\n",
+    "    '  .row .go:hover{border-color:var(--row-border,#b8d4f2);background:var(--row-bg,#f2f7ff);box-shadow:none}',\n",
+    "    '  .row .go:focus-visible{outline:2px solid #8eb8dc;outline-offset:2px}',\n",
     "    '  .gofold{display:none}',\n",
-    "    '  .empty{padding:12px;color:#999;font-size:12px;line-height:1.7}',\n",
+    "    '  .empty{padding:22px 14px;color:#8796a6;font-size:12px;line-height:1.7;text-align:center}',\n",
     "    // 「可能是这几个」：按**当前这个框**的文字挑出的前几条，压在完整清单上面。\n",
     "    // 用浅蓝底与下面的清单区分开——它是「很可能就是这个」的意思，不是另一个分区。\n",
-    "    '  .related{display:none;background:#f7fbff;border-bottom:1px solid #e7efff;padding-bottom:4px}',\n",
+    "    '  .related{display:none;background:#f7fbfe;border-bottom:1px solid #e1edf6;padding-bottom:5px}',\n",
     "    '  .related.on{display:block}',\n",
-    "    '  .rlt{padding:7px 12px 3px;color:#1677ff;font-size:11px;font-weight:600}',\n",
+    "    '  .rlt{padding:9px 14px 4px;color:#527da4;font-size:11px;font-weight:700}',\n",
     "    '  .related .row{border-bottom:0}',\n",
     "    '</style>',\n",
     "    '<div class=\"p\" style=\"display:none\">',\n",
     "    '  <div class=\"body\">',\n",
-    "    '    <div class=\"head\"><div class=\"f\"><span class=\"src\"></span><span class=\"fl\"></span></div><button class=\"close\" type=\"button\" aria-label=\"Close click-to-fill panel\">x</button></div><div class=\"v\"></div>',\n",
+    "    '    <div class=\"head\"><div><div class=\"f\"><span class=\"src\"></span><span class=\"fl\"></span></div><div class=\"drag-hint\">可拖动标题栏调整位置</div></div><button class=\"close\" type=\"button\" aria-label=\"Close click-to-fill panel\">x</button></div><div class=\"v\"></div>',\n",
     "    '    <div class=\"r\">',\n",
     "    '      <button class=\"fill\">\u586b\u5165</button>',\n",
     "    '      <button class=\"ghost remember\">\u8bb0\u4f4f\u8fd9\u6761</button>',\n",
@@ -436,7 +518,10 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "    '    <div class=\"search\">',\n",
     "    '      <input type=\"text\" placeholder=\"\u641c\u7d22\u8d44\u6599\uff08\u5982\uff1a\u624b\u673a\u3001\u5b66\u6821\u3001\u5b9e\u4e60\uff09\">',\n",
     "    '      <div class=\"hits\"></div>',\n",
-    "    '      <div class=\"nav\"></div>',\n",
+    "    '      <div class=\"nav\" role=\"group\" aria-label=\"分组快速定位\">',\n",
+    "    '<button class=\"navhead\" type=\"button\" aria-expanded=\"true\"><span class=\"caret\">▾</span><span class=\"nhl\">分组快速定位</span><span class=\"sum\"></span></button>',\n",
+    "    '<div class=\"navbody\"></div>',\n",
+    "    '</div>',\n",
     "    '    </div>',\n",
     "    '    <div class=\"related\"></div>',\n",
     "    '    <div class=\"list\"></div>',\n",
@@ -458,6 +543,9 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "  const elSearchBox = shadow.querySelector('.search');\n",
     "  const elSearch = shadow.querySelector('.search input');\n",
     "  const elNav = shadow.querySelector('.nav');\n",
+    "  const elNavHead = shadow.querySelector('.navhead');\n",
+    "  const elNavBody = shadow.querySelector('.navbody');\n",
+    "  const elNavSum = shadow.querySelector('.navhead .sum');\n",
     "  const elHits = shadow.querySelector('.hits');\n",
     "  const elRelated = shadow.querySelector('.related');\n",
     "  const elList = shadow.querySelector('.list');\n",
@@ -594,20 +682,33 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "  const catalog = () => (Array.isArray(window.__rfCatalog) ? window.__rfCatalog : []);\n",
     "\n",
     "  /** \u6e05\u5355\u4e0e\u300c\u53ef\u80fd\u662f\u8fd9\u51e0\u4e2a\u300d\u5171\u7528\u7684\u4e00\u884c\uff1a\u6807\u7b7e + \u503c + \u6765\u6e90\u6807\u8bb0 + \u300c\u586b\u5165\u300d\u3002 */\n",
-    "  const makePickerRow = (item) => {\n",
+    "  const makePickerRow = (item, toneByGroup = null) => {\n",
     "    const row = document.createElement('div');\n",
     "    row.className = 'row';\n",
     "    row.tabIndex = 0;\n",
+    "    const group = String(item.group || '\u5176\u4ed6');\n",
+    "    const tone = groupTone(group, toneByGroup || buildGroupTones());\n",
+    "    row.dataset.group = group;\n",
+    "    applyTone(row, tone);\n",
     "    // \u5b8c\u6574\u5185\u5bb9\u6302\u5728 title \u4e0a\uff1a\u540d\u5b57\u88ab\u622a\u65ad\u4e4b\u540e\uff0c\u9f20\u6807\u505c\u4e00\u4e0b\u5c31\u770b\u5f97\u5168\u3002\n",
     "    row.title = `${item.label || ''}\uff1a${item.value || ''}`;\n",
+    "    const main = document.createElement('div');\n",
+    "    main.className = 'main';\n",
+    "    const meta = document.createElement('div');\n",
+    "    meta.className = 'meta';\n",
     "    const label = document.createElement('span');\n",
     "    label.className = 'l';\n",
-    "    label.textContent = item.label;\n",
+    "    label.textContent = item.label || '';\n",
+    "    label.title = item.label || '';\n",
+    "    const groupTag = document.createElement('span');\n",
+    "    groupTag.className = 'group';\n",
+    "    groupTag.textContent = group;\n",
+    "    groupTag.title = group;\n",
     "    const text = document.createElement('span');\n",
     "    text.className = 't';\n",
-    "    text.textContent = item.value;\n",
-    "    row.appendChild(label);\n",
-    "    row.appendChild(text);\n",
+    "    text.textContent = item.value || '';\n",
+    "    text.title = item.value || '';\n",
+    "    meta.append(label, groupTag);\n",
     "    if (item.source === 'extra') {\n",
     "      // \u7c7b\u540d\u7528 `from` \u800c\u4e0d\u662f `src`\uff1a\u9762\u677f\u9876\u4e0a\u90a3\u4e2a `.src` \u662f AI \u5efa\u8bae\u5fbd\u6807\uff0c\u5b83\u7684\u57fa\u7840\u89c4\u5219\u662f\n",
     "      // `display:none`\uff08\u7b49 showPanel \u53bb\u70b9\u4eae\uff09\u3002\u540c\u540d\u7684\u8bdd\u8fd9\u6761\u6807\u7b7e\u4f1a\u88ab\u90a3\u6761\u89c4\u5219\u6309\u6389\uff0c\n",
@@ -616,8 +717,10 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "      from.className = 'from';\n",
     "      from.textContent = '\u7f51\u7533\u8d44\u6599';\n",
     "      from.title = '\u8fd9\u6761\u6765\u81ea\u300c\u7f51\u7533\u8d44\u6599\u300d\uff0c\u4e0d\u5728\u7b80\u5386\u91cc';\n",
-    "      row.appendChild(from);\n",
+    "      meta.appendChild(from);\n",
     "    }\n",
+    "    main.append(meta, text);\n",
+    "    row.appendChild(main);\n",
     "    const go = document.createElement('button');\n",
     "    go.type = 'button';\n",
     "    go.className = 'go';\n",
@@ -670,8 +773,28 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "   * \u7528\u6237\u521a\u6298\u597d\u7684\u7ec4\u767d\u6298\u4e86\u3002\n",
     "   */\n",
     "  const collapsed = new Set();\n",
+    "  const autoExpanded = new Set();\n",
     "  let groupEls = new Map();\n",
     "  let groupRows = new Map();\n",
+    "  let activeGroup = '';\n",
+    "\n",
+    "  // —— 「分组快速定位」那一层的状态 ——\n",
+    "  // 家族 = 同类分组（「荣誉奖项 1/2/3」）。序号是后端拼上去的（`data.py` 与\n",
+    "  // `repeated_profile.py` 都写 `名字 + ' ' + 序号`），所以「去掉结尾的 ` 数字`」就是\n",
+    "  // 认出它们的办法。`familyEls` 只放**多成员**家族：单成员家族就是一张普通胶囊。\n",
+    "  let familyEls = new Map();    // 家族名 -> .navfam\n",
+    "  let navChipEls = new Map();   // 分组名 -> 代表这个分组的胶囊（成员胶囊，或单成员家族自己）\n",
+    "  let activeFamily = '';\n",
+    "  const openFamilies = new Set();  // 展开的家族：跨重绘保留（理由同 `collapsed`）\n",
+    "  let navFold = null;           // null = 用户还没手动折过，按规模自动决定\n",
+    "  let navFamilies = 0;\n",
+    "  let navEntries = 0;\n",
+    "  // 家族多到这个数就默认把整条折起来：跳转条本来就是\"分组多到找不到\"时的解药，\n",
+    "  // 但它自己长到十几行时又变成了同一个病——折起来只占一行。\n",
+    "  const NAV_FOLD_AT = 12;\n",
+    "\n",
+    "  const familyOf = (name) => String(name || '其他').replace(/\\s+\\d+$/, '') || '其他';\n",
+    "  const kidLabel = (name, base) => String(name).slice(base.length).trim() || String(name);\n",
     "\n",
     "  const paintGroup = (name) => {\n",
     "    const fold = collapsed.has(name);\n",
@@ -679,6 +802,118 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "    if (head) { head.classList.toggle('fold', fold); }\n",
     "    for (const row of groupRows.get(name) || []) { row.classList.toggle('gofold', fold); }\n",
     "  };\n",
+    "\n",
+    "  /**\n",
+    "   * 活动的那一格可能滚在胶囊区自己的视野之外（那块有高度上限），把它挪进来。\n",
+    "   * 不这么做的话\"你在哪\"这个提示对用户根本不可见。\n",
+    "   */\n",
+    "  const revealInNav = (node) => {\n",
+    "    if (!node || elNav.classList.contains('fold')) { return; }\n",
+    "    const box = node.getBoundingClientRect();\n",
+    "    const view = elNavBody.getBoundingClientRect();\n",
+    "    if (!box.height || !view.height) { return; }\n",
+    "    const pad = 6;\n",
+    "    if (box.top < view.top + pad) { elNavBody.scrollTop -= (view.top + pad - box.top); }\n",
+    "    else if (box.bottom > view.bottom - pad) { elNavBody.scrollTop += (box.bottom - view.bottom + pad); }\n",
+    "  };\n",
+    "\n",
+    "  // 只涂 class、**不重建 DOM**：它会跟着滚动反复触发（每滚过一个分组就重算一次）。\n",
+    "  const paintNav = () => {\n",
+    "    for (const [base, node] of familyEls) {\n",
+    "      node.classList.toggle('open', openFamilies.has(base));\n",
+    "      node.classList.toggle('active', base === activeFamily);\n",
+    "    }\n",
+    "    for (const [name, chip] of navChipEls) { chip.classList.toggle('on', name === activeGroup); }\n",
+    "    // 活动分组的成员胶囊只在家族展开时才可见，那时改盯家族本身。\n",
+    "    const chip = navChipEls.get(activeGroup);\n",
+    "    revealInNav((chip && chip.getBoundingClientRect().height) ? chip : familyEls.get(activeFamily));\n",
+    "  };\n",
+    "\n",
+    "  /**\n",
+    "   * 记下\"现在活动的是哪个分组\"并刷新胶囊的涂色。\n",
+    "   *\n",
+    "   * **这里刻意不自动展开家族**：展开会改变胶囊区（它挂在 sticky 的搜索块里）的高度，\n",
+    "   * 于是资料整体上下平移，而\"当前分组\"正是按位置算出来的——两个方向互相追着跑，\n",
+    "   * 在家族交界处会来回闪。展开只由用户点（点家族胶囊），位置计算因此是单向的。\n",
+    "   */\n",
+    "  const setActiveGroup = (name) => {\n",
+    "    activeGroup = name || '';\n",
+    "    activeFamily = activeGroup ? familyOf(activeGroup) : '';\n",
+    "    paintNav();\n",
+    "  };\n",
+    "\n",
+    "  const syncActiveGroup = () => {\n",
+    "    if (elNav.style.display === 'none' || !groupEls.size) {\n",
+    "      setActiveGroup('');\n",
+    "      return;\n",
+    "    }\n",
+    "    const pickTop = elPick.getBoundingClientRect().top;\n",
+    "    const anchor = pickTop + elSearchBox.offsetHeight + 8;\n",
+    "    let candidate = '';\n",
+    "    let bestTop = -Infinity;\n",
+    "    for (const [name, head] of groupEls) {\n",
+    "      const top = head.getBoundingClientRect().top;\n",
+    "      if (top <= anchor && top > bestTop) {\n",
+    "        candidate = name;\n",
+    "        bestTop = top;\n",
+    "      }\n",
+    "    }\n",
+    "    if (!candidate) { candidate = groupEls.keys().next().value || ''; }\n",
+    "    setActiveGroup(candidate);\n",
+    "  };\n",
+    "\n",
+    "  const TONE_PALETTE = [\n",
+    "    { border: '#c9dbe9', bg: '#f4f8fb', text: '#2e6da4', accent: '#7fa7ca' },\n",
+    "    { border: '#c9ddd7', bg: '#f4f9f7', text: '#3d7668', accent: '#78a996' },\n",
+    "    { border: '#d4cfe4', bg: '#f8f7fb', text: '#64598e', accent: '#968bc4' },\n",
+    "    { border: '#dfd2bc', bg: '#fbf9f4', text: '#8b6e3f', accent: '#b59a6e' },\n",
+    "    { border: '#dfcbd1', bg: '#fbf8f9', text: '#945d6b', accent: '#b98b99' },\n",
+    "    { border: '#c8dadd', bg: '#f4f9fa', text: '#3d747d', accent: '#77aab1' },\n",
+    "    { border: '#d0dbea', bg: '#f6f8fb', text: '#526b91', accent: '#8da7ca' },\n",
+    "    { border: '#ddd4b9', bg: '#fbfaf4', text: '#806c3c', accent: '#b6a16f' },\n",
+    "    { border: '#cddfc9', bg: '#f5faf4', text: '#4f7c4b', accent: '#83ae7c' },\n",
+    "    { border: '#dfccdc', bg: '#fbf7fb', text: '#865f80', accent: '#b08caf' },\n",
+    "    { border: '#c9dedb', bg: '#f5faf9', text: '#3e7771', accent: '#7eaca6' },\n",
+    "    { border: '#e0cec6', bg: '#fbf8f6', text: '#875e50', accent: '#b78d7d' },\n",
+    "  ];\n",
+    "  const toneStyle = (tone) => {\n",
+    "    const index = Math.max(0, Number(tone) || 0);\n",
+    "    if (index < TONE_PALETTE.length) { return TONE_PALETTE[index]; }\n",
+    "    const hue = Math.round((index * 137.508 + 17) % 360);\n",
+    "    return { border: 'hsl(' + hue + ' 34% 78%)', bg: 'hsl(' + hue + ' 35% 97%)', text: 'hsl(' + hue + ' 32% 36%)', accent: 'hsl(' + hue + ' 38% 62%)' };\n",
+    "  };\n",
+    "  const applyTone = (element, tone) => {\n",
+    "    const style = toneStyle(tone);\n",
+    "    element.dataset.tone = String(tone);\n",
+    "    element.style.setProperty('--chip-border', style.border);\n",
+    "    element.style.setProperty('--chip-bg', style.bg);\n",
+    "    element.style.setProperty('--chip-text', style.text);\n",
+    "    element.style.setProperty('--chip-accent', style.accent || style.border);\n",
+    "    element.style.setProperty('--grp-border', style.border);\n",
+    "    element.style.setProperty('--grp-bg', style.bg);\n",
+    "    element.style.setProperty('--grp-text', style.text);\n",
+    "    element.style.setProperty('--grp-accent', style.accent || style.border);\n",
+    "    element.style.setProperty('--row-border', style.border);\n",
+    "    element.style.setProperty('--row-bg', style.bg);\n",
+    "    element.style.setProperty('--row-text', style.text);\n",
+    "    element.style.setProperty('--row-accent', style.accent || style.border);\n",
+    "  };\n",
+    "  const buildGroupTones = () => {\n",
+    "    const counts = new Map();\n",
+    "    const order = [];\n",
+    "    for (const item of catalog()) {\n",
+    "      const name = String(item.group || '\u5176\u4ed6');\n",
+    "      if (!counts.has(name)) { order.push(name); counts.set(name, 0); }\n",
+    "      counts.set(name, counts.get(name) + 1);\n",
+    "    }\n",
+    "    const tones = new Map();\n",
+    "    let nextTone = 1;\n",
+    "    for (const name of order) {\n",
+    "      tones.set(name, counts.get(name) > 1 ? String(nextTone++) : '0');\n",
+    "    }\n",
+    "    return tones;\n",
+    "  };\n",
+    "  const groupTone = (name, tones = buildGroupTones()) => tones.get(String(name || '\u5176\u4ed6')) || '0';\n",
     "\n",
     "  const jumpTo = (name) => {\n",
     "    const head = groupEls.get(name);\n",
@@ -697,14 +932,149 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "    // \u90a3\u4e00\u7ec4\u8d34\u5728\u80fd\u5230\u7684\u6700\u9ad8\u5904\uff0c\u81f3\u5c11\u662f\u770b\u5f97\u89c1\u7684\u3002\n",
     "    const offset = head.getBoundingClientRect().top\n",
     "      - elPick.getBoundingClientRect().top\n",
-    "      - elSearchBox.offsetHeight;\n",
-    "    elPick.scrollTop += offset;\n",
-    "    for (const chip of elNav.children) { chip.classList.toggle('on', chip.dataset.group === name); }\n",
+    "      - elSearchBox.offsetHeight\n",
+    "      - 2;\n",
+    "    const maxTop = Math.max(0, elPick.scrollHeight - elPick.clientHeight);\n",
+    "    elPick.scrollTop = Math.max(0, Math.min(maxTop, elPick.scrollTop + offset));\n",
+    "    setActiveGroup(name);\n",
+    "  };\n",
+    "\n",
+    "  /**\n",
+    "   * 一张跳转胶囊。**名字与条数分成两个元素**：拼在一起（「专业技能 1」+「2」）会被读成\n",
+    "   * 「专业技能12」，而分组名以数字结尾是常态（「专业技能 1」「教育经历 1」）。\n",
+    "   *\n",
+    "   * `groupName` 为空 = 家族胶囊（它代表若干分组，自己不跳转，点击展开成员）。\n",
+    "   */\n",
+    "  const makeNavChip = (label, count, tone, groupName) => {\n",
+    "    const chip = document.createElement('button');\n",
+    "    chip.type = 'button';\n",
+    "    chip.className = 'navchip';\n",
+    "    applyTone(chip, tone);\n",
+    "    const name = document.createElement('span');\n",
+    "    name.className = 'nm';\n",
+    "    name.textContent = label;\n",
+    "    const num = document.createElement('span');\n",
+    "    num.className = 'c';\n",
+    "    num.textContent = String(count);\n",
+    "    chip.append(name, num);\n",
+    "    if (groupName) {\n",
+    "      chip.dataset.group = groupName;\n",
+    "      chip.title = `跳到「${groupName}」（${count} 条）`;\n",
+    "      chip.addEventListener('click', (event) => {\n",
+    "        event.preventDefault();\n",
+    "        event.stopPropagation();\n",
+    "        jumpTo(groupName);\n",
+    "      });\n",
+    "    }\n",
+    "    return chip;\n",
+    "  };\n",
+    "\n",
+    "  const toggleFamily = (base) => {\n",
+    "    const wrap = familyEls.get(base);\n",
+    "    if (!wrap) { return; }\n",
+    "    const open = !openFamilies.has(base);\n",
+    "    if (open) { openFamilies.add(base); } else { openFamilies.delete(base); }\n",
+    "    wrap.querySelector('.navchip').setAttribute('aria-expanded', String(open));\n",
+    "    paintNav();\n",
+    "  };\n",
+    "\n",
+    "  /**\n",
+    "   * 折叠头的状态与文案。**默认看规模**：家族少（跳转条本来就矮）就摊开，多就折起来——\n",
+    "   * 跳转条本是\"分组多到找不到\"的解药，可它自己长到十几行时又变成同一个病。\n",
+    "   * 用户点过之后一律以他的选择为准（`navFold`）。\n",
+    "   */\n",
+    "  const applyNavFold = () => {\n",
+    "    const folded = navFold === null ? navFamilies > NAV_FOLD_AT : navFold;\n",
+    "    elNav.classList.toggle('fold', folded);\n",
+    "    elNavHead.setAttribute('aria-expanded', String(!folded));\n",
+    "    elNavHead.title = folded ? '点开快速跳转到某个分组' : '收起分组跳转条';\n",
+    "    elNavSum.textContent = `${navFamilies} 组 · ${navEntries} 条`;\n",
+    "  };\n",
+    "\n",
+    "  /**\n",
+    "   * 胶囊区的高度上限**从资料区的可见高度里倒推**，而不是按比例切一刀。\n",
+    "   *\n",
+    "   * 判据是\"资料区至少还剩多少\"：矮窗口里留一半，正常窗口里不少于 150px。这样\n",
+    "   * 一个偏矮的窗口（实测 484px 高）里跳转条最多占掉一半，下面一定还看得见资料——\n",
+    "   * 用户报的\"完全被挡住\"就是这条约束缺失时发生的事。折叠头与搜索框是**减掉**的：\n",
+    "   * 它们是固定开销，不算进胶囊区的预算。\n",
+    "   */\n",
+    "  const measureNavLimit = () => {\n",
+    "    const pickH = elPick.clientHeight || 0;\n",
+    "    const chromeH = Math.max(0, elSearchBox.offsetHeight - elNavBody.offsetHeight);\n",
+    "    const reserve = Math.max(150, Math.round(pickH * 0.5));\n",
+    "    const limit = Math.min(132, Math.max(46, pickH - reserve - chromeH));\n",
+    "    elPick.style.setProperty('--rf-navmax', (pickH ? limit : 70) + 'px');\n",
+    "  };\n",
+    "\n",
+    "  /**\n",
+    "   * 画「分组快速定位」：**按家族聚类**，并把折叠头刷成当前规模的样子。\n",
+    "   *\n",
+    "   * 单成员家族仍是一张普通胶囊（和以前一模一样，就是它自己）；多成员的聚成一块：\n",
+    "   * 家族胶囊管展开、成员胶囊管跳转。折叠语义与列表里的 `.grp` 分组标题一致。\n",
+    "   */\n",
+    "  const renderNav = (groups, toneByGroup) => {\n",
+    "    elNavBody.textContent = '';\n",
+    "    familyEls = new Map();\n",
+    "    navChipEls = new Map();\n",
+    "    const families = new Map();\n",
+    "    for (const [name, items] of groups) {\n",
+    "      const base = familyOf(name);\n",
+    "      if (!families.has(base)) { families.set(base, []); }\n",
+    "      families.get(base).push({ name: name, count: items.length });\n",
+    "    }\n",
+    "    navFamilies = families.size;\n",
+    "    navEntries = 0;\n",
+    "    for (const members of families.values()) {\n",
+    "      for (const member of members) { navEntries += member.count; }\n",
+    "    }\n",
+    "    for (const [base, members] of families) {\n",
+    "      const total = members.reduce((sum, member) => sum + member.count, 0);\n",
+    "      if (members.length === 1) {\n",
+    "        const chip = makeNavChip(members[0].name, total, groupTone(members[0].name, toneByGroup), members[0].name);\n",
+    "        navChipEls.set(members[0].name, chip);\n",
+    "        elNavBody.appendChild(chip);\n",
+    "        continue;\n",
+    "      }\n",
+    "      const wrap = document.createElement('div');\n",
+    "      wrap.className = 'navfam';\n",
+    "      wrap.dataset.family = base;\n",
+    "      const head = makeNavChip(base, total, groupTone(members[0].name, toneByGroup));\n",
+    "      head.dataset.family = base;\n",
+    "      head.setAttribute('aria-expanded', String(openFamilies.has(base)));\n",
+    "      head.title = `「${base}」共 ${members.length} 组、${total} 条，点击展开每一组`;\n",
+    "      const caret = document.createElement('span');\n",
+    "      caret.className = 'caret';\n",
+    "      caret.textContent = '\\u25be';\n",
+    "      head.appendChild(caret);\n",
+    "      const kids = document.createElement('div');\n",
+    "      kids.className = 'navkids';\n",
+    "      for (const member of members) {\n",
+    "        const kid = makeNavChip(kidLabel(member.name, base), member.count, groupTone(member.name, toneByGroup), member.name);\n",
+    "        kid.classList.add('kid');\n",
+    "        kids.appendChild(kid);\n",
+    "        navChipEls.set(member.name, kid);\n",
+    "      }\n",
+    "      head.addEventListener('click', (event) => {\n",
+    "        event.preventDefault();\n",
+    "        event.stopPropagation();\n",
+    "        toggleFamily(base);\n",
+    "      });\n",
+    "      wrap.append(head, kids);\n",
+    "      familyEls.set(base, wrap);\n",
+    "      elNavBody.appendChild(wrap);\n",
+    "    }\n",
+    "    applyNavFold();\n",
+    "    paintNav();\n",
     "  };\n",
     "\n",
     "  const renderList = (keyword) => {\n",
     "    const raw = (keyword || '').trim();\n",
     "    const needle = raw.toLowerCase();\n",
+    "    if (!needle && autoExpanded.size) {\n",
+    "      for (const name of autoExpanded) { collapsed.add(name); }\n",
+    "      autoExpanded.clear();\n",
+    "    }\n",
     "    const fuzzy = (text) => { let cursor = 0; for (const char of text) { if (char === needle[cursor]) { cursor += 1; if (cursor === needle.length) return true; } } return false; };\n",
     "    const items = catalog().filter((item) => {\n",
     "      if (!needle) { return true; }\n",
@@ -723,11 +1093,18 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "      if (!groups.has(name)) { groups.set(name, []); }\n",
     "      groups.get(name).push(item);\n",
     "    }\n",
+    "    if (needle) {\n",
+    "      for (const name of groups.keys()) {\n",
+    "        if (collapsed.has(name)) { autoExpanded.add(name); collapsed.delete(name); }\n",
+    "      }\n",
+    "    }\n",
     "\n",
-    "    elNav.textContent = '';\n",
+    "    elNavBody.textContent = '';\n",
     "    elList.textContent = '';\n",
     "    groupEls = new Map();\n",
     "    groupRows = new Map();\n",
+    "    familyEls = new Map();\n",
+    "    navChipEls = new Map();\n",
     "\n",
     "    if (!items.length) {\n",
     "      const empty = document.createElement('div');\n",
@@ -736,16 +1113,23 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "        ? `\u6ca1\u6709\u5339\u914d\u300c${raw}\u300d\u7684\u8d44\u6599\u3002\u6362\u4e2a\u8bcd\uff0c\u6216\u8005\u6e05\u7a7a\u641c\u7d22\u770b\u5168\u90e8\u3002`\n",
     "        : '\u8d44\u6599\u8fd8\u662f\u7a7a\u7684\uff0c\u5148\u53bb\u300c\u6211\u7684\u8d44\u6599\u300d\u586b\u4e00\u4e9b';\n",
     "      elList.appendChild(empty);\n",
+    "      // \u4e00\u6761\u90fd\u6ca1\u6709\u65f6\u8df3\u8f6c\u6761**\u6574\u5757\u6536\u6389**\uff1a\u7559\u7740\u53ea\u5269\u4e00\u4e2a\"0 \u7ec4 \u00b7 0 \u6761\"\u7684\u7a7a\u58f3\u3002\n",
+    "      elNav.style.display = 'none';\n",
+    "      setActiveGroup('');\n",
     "      return;\n",
     "    }\n",
     "\n",
     "    // \u53ea\u5728**\u771f\u9700\u8981\u8df3**\u7684\u65f6\u5019\u7ed9\u8df3\u8f6c\u6761\uff1a\u6574\u5c4f\u5c31\u4e00\u4e2a\u5206\u7ec4\u65f6\u5b83\u662f\u7eaf\u5360\u4f4d\uff0c\u8fd8\u5360\u6389\u4e00\u884c\u9ad8\u5ea6\u3002\n",
     "    const showNav = !needle && groups.size > 1;\n",
     "    elNav.style.display = showNav ? 'flex' : 'none';\n",
+    "    if (!showNav) { setActiveGroup(''); }\n",
+    "    const toneByGroup = buildGroupTones();\n",
+    "    if (showNav) { renderNav(groups, toneByGroup); }\n",
     "\n",
     "    for (const [name, groupItems] of groups) {\n",
     "      const head = document.createElement('div');\n",
     "      head.className = 'grp';\n",
+    "      applyTone(head, groupTone(name, toneByGroup));\n",
     "      head.tabIndex = 0;\n",
     "      head.setAttribute('role', 'button');\n",
     "      head.title = `\u300c${name}\u300d\u5171 ${groupItems.length} \u6761\uff0c\u70b9\u51fb\u6298\u53e0\u6216\u5c55\u5f00`;\n",
@@ -762,8 +1146,10 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "      head.appendChild(gtitle);\n",
     "      head.appendChild(gcount);\n",
     "      const toggle = () => {\n",
+    "        autoExpanded.delete(name);\n",
     "        if (collapsed.has(name)) { collapsed.delete(name); } else { collapsed.add(name); }\n",
     "        paintGroup(name);\n",
+    "        syncActiveGroup();\n",
     "      };\n",
     "      head.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); toggle(); });\n",
     "      head.addEventListener('keydown', (event) => {\n",
@@ -772,28 +1158,9 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "      elList.appendChild(head);\n",
     "      groupEls.set(name, head);\n",
     "\n",
-    "      if (showNav) {\n",
-    "        const chip = document.createElement('button');\n",
-    "        chip.type = 'button';\n",
-    "        chip.className = 'navchip';\n",
-    "        chip.dataset.group = name;\n",
-    "        // **\u540d\u5b57\u548c\u6761\u6570\u8981\u5206\u5f97\u5f00\u3002** \u539f\u6765\u62fc\u6210\u4e00\u4e2a\u5b57\u7b26\u4e32\uff08`\u4e13\u4e1a\u6280\u80fd 1 2`\uff09\uff0c\u800c\u5206\u7ec4\u540d\n",
-    "        // \u672c\u8eab\u5c31\u4ee5\u6570\u5b57\u7ed3\u5c3e\u2014\u2014\u90a3\u4e32\u6570\u5b57\u88ab\u8bfb\u6210\u300c\u4e13\u4e1a\u6280\u80fd12\u300d\u662f\u5fc5\u7136\u7684\u3002\u73b0\u5728\u6761\u6570\u662f\u4e00\u4e2a\n",
-    "        // \u72ec\u7acb\u7684\u5c0f\u80f6\u56ca\uff0c\u89c6\u89c9\u4e0a\u6709\u8fb9\u754c\uff0c\u8bfb\u4e0d\u51fa\u6765\u6b67\u4e49\u3002\n",
-    "        const chipName = document.createElement('span');\n",
-    "        chipName.textContent = name;\n",
-    "        const chipCount = document.createElement('span');\n",
-    "        chipCount.className = 'c';\n",
-    "        chipCount.textContent = String(groupItems.length);\n",
-    "        chip.append(chipName, chipCount);\n",
-    "        chip.title = `\u8df3\u5230\u300c${name}\u300d\uff08${groupItems.length} \u6761\uff09`;\n",
-    "        chip.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); jumpTo(name); });\n",
-    "        elNav.appendChild(chip);\n",
-    "      }\n",
-    "\n",
     "      const rows = [];\n",
     "      for (const item of groupItems) {\n",
-    "        const row = makePickerRow(item);\n",
+    "        const row = makePickerRow(item, toneByGroup);\n",
     "        rows.push(row);\n",
     "        elList.appendChild(row);\n",
     "      }\n",
@@ -801,8 +1168,9 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "      groupRows.set(name, rows);\n",
     "      paintGroup(name);\n",
     "    }\n",
-    "    // \u7ec4\u5934\u7684 sticky \u504f\u79fb\u91cf\u5f97\u7b49\u4e8e\u641c\u7d22\u5757\u7684\u5b9e\u9645\u9ad8\u5ea6\u2014\u2014\u5199\u6b7b\u4f1a\u51fa\u73b0\"\u641c\u7d22\u6846\u76d6\u4f4f\u7ec4\u5934\"\u3002\n",
-    "    elPick.style.setProperty('--rf-stick', elSearchBox.offsetHeight + 'px');\n",
+    "    // \u8df3\u8f6c\u6761\u7684\u9ad8\u5ea6\u4e0a\u9650\u8ddf\u7740\u8d44\u6599\u533a\u7684\u53ef\u89c1\u9ad8\u5ea6\u8d70\uff08\u5199\u6b7b\u7684 22vh \u5728\u77ee\u7a97\u53e3\u91cc\u4ecd\u7136\u504f\u5927\uff09\u3002\n",
+    "    measureNavLimit();\n",
+    "    syncActiveGroup();\n",
     "  };\n",
     "\n",
     "  /**\n",
@@ -930,8 +1298,21 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "  document.addEventListener('input', onInput, true);\n",
     "  document.addEventListener('change', onInput, true);\n",
     "  document.addEventListener('focusout', onFocusOut, true);\n",
+    "  elPick.addEventListener('scroll', syncActiveGroup, { passive: true });\n",
     "  window.addEventListener('scroll', position, true);\n",
-    "  window.addEventListener('resize', position, true);\n",
+    "  // 窗口一变，资料区的高度就变了——跳转条的上限跟着重算（它与资料区按比例分）。\n",
+    "  const onResize = () => { position(); measureNavLimit(); };\n",
+    "  window.addEventListener('resize', onResize, true);\n",
+    "  // 折叠头：整条都是按钮。折起来之后胶囊区不再参与布局，sticky 的搜索块于是只剩一行，\n",
+    "  // 资料区无论如何都有地方——这就是\"分组再多也盖不住下面的资料\"的那道闸。\n",
+    "  elNavHead.addEventListener('click', (event) => {\n",
+    "    event.preventDefault();\n",
+    "    event.stopPropagation();\n",
+    "    navFold = !elNav.classList.contains('fold');\n",
+    "    applyNavFold();\n",
+    "    // 刚摊开时把\"我在哪一族\"重新对一次：折着的时候胶囊区不参与布局，位置全变了。\n",
+    "    if (!navFold) { syncActiveGroup(); }\n",
+    "  });\n",
     "\n",
     "  function hide() {\n",
     "    panel.style.display = 'none';\n",
@@ -992,8 +1373,9 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "      document.removeEventListener('input', onInput, true);\n",
     "      document.removeEventListener('change', onInput, true);\n",
     "      document.removeEventListener('focusout', onFocusOut, true);\n",
+    "      elPick.removeEventListener('scroll', syncActiveGroup);\n",
     "      window.removeEventListener('scroll', position, true);\n",
-    "      window.removeEventListener('resize', position, true);\n",
+    "      window.removeEventListener('resize', onResize, true);\n",
     "      // \u91cd\u6392\u8ddf\u8e2a\u7684\u5b9a\u65f6\u5668**\u5fc5\u987b\u4e00\u8d77\u505c**\uff0c\u5426\u5219\u91cd\u590d\u542f\u505c\u4f1a\u6512\u4e0b\u4e00\u5806\u6c38\u8fdc\u5728\u8dd1\u7684\u5b9a\u65f6\u5668\u3002\n",
     "      window.clearInterval(reflowTimer);\n",
     "      document.querySelectorAll('[data-rf-focus]').forEach((el) => el.removeAttribute('data-rf-focus'));\n",
@@ -1004,6 +1386,8 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "    window.__rfFocus = null;\n",
     "    window.__rfAccept = null;\n",
     "    window.__rfRemember = null;\n",
+    "    window.__rfAutoFillRequest = null;\n",
+    "    window.__rfAutoFillStatus = null;\n",
     "    window.__rfFocusSeq = 0;\n",
     "    window.__rfCatalog = null;\n",
     "    dragOffset = null;\n",
@@ -1012,6 +1396,7 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "    delete window.__rfShowPanel;\n",
     "    delete window.__rfHidePanel;\n",
     "    delete window.__rfUninstall;\n",
+    "    delete window.__rfSetAutoFillStatus;\n",
     "    return '1';\n",
     "  };\n",
     "\n",
@@ -1033,7 +1418,7 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "    elFill.textContent = payload.status === 'filled' ? '\u5df2\u586b\u5165' : '\u586b\u5165';\n",
     "    renderAlternatives(payload.alternatives);\n",
     "    renderRelated(payload.related);\n",
-    "    panel.style.display = 'block';\n",
+    "    panel.style.display = 'flex';\n",
     "    // \u5c55\u5f00\u72b6\u6001\u8de8\u7126\u70b9\u4fdd\u7559\uff0c\u4f46\u5185\u5bb9\u8981\u6309\u5f53\u524d\u662f\u5426\u5c55\u5f00\u91cd\u753b\u4e00\u904d\u3002\n",
     "    elPick.classList.toggle('on', expanded);\n",
     "    elMore.textContent = expanded ? '\u6536\u8d77' : '\u6362\u4e2a\u8d44\u6599\u2026';\n",
@@ -1130,6 +1515,24 @@ def _select_option_script(selector: str, option_value: str) -> str:
     )
 
 
+def _read_select_options_script(selector: str) -> str:
+    """读取当前页面里的原生 ``<select>`` 选项。
+
+    联动下拉在首次读取表单时经常只有「请选择」一个占位项；父级选择完成后，
+    子级选项才会异步出现。这里重新读取**当前 DOM**，而不是复用旧快照里的空列表。
+    这个脚本只读原生 select，不碰自定义弹层/级联组件。
+    """
+    return "".join(
+        [
+            "(() => { /* rf:select-options */\n",
+            f"  const el = document.querySelector({json.dumps(selector)});\n",
+            "  if (!el || el.tagName.toLowerCase() !== 'select') { return JSON.stringify({ ok: false, reason: 'no_select' }); }\n",
+            "  return JSON.stringify({ ok: true, options: [...el.options].map((o) => ({ v: String(o.value), t: (o.textContent || '').trim(), d: o.disabled === true })) });\n",
+            "})()",
+        ]
+    )
+
+
 def _set_richtext_script(selector: str, value: str) -> str:
     return "".join(
         [
@@ -1196,6 +1599,8 @@ class Control:
     # 点开会弹层的输入框（`aria-haspopup` / `role=combobox`）：自定义下拉、级联选择器。
     # 同样不该直接写值——值该由点选产生。
     has_popup: bool = False
+    # 原生 `<select>` 的联动标记；只有它允许在填充阶段重新读取 options。
+    linked_select: bool = False
     selector: str = ""
     options: tuple[SelectOption, ...] = ()
     nearby_text: str = ""
@@ -1442,6 +1847,7 @@ class FormEngine:
                     required=bool(raw.get("required", False)),
                     readonly=bool(raw.get("readonly", False)),
                     has_popup=bool(raw.get("has_popup", False)),
+                    linked_select=bool(raw.get("linked_select", False)),
                     selector=str(raw.get("selector", "")),
                     options=self._parse_options(raw.get("options")),
                     nearby_text=str(raw.get("nearby_text", "")),
@@ -1646,6 +2052,20 @@ class FormEngine:
         """按控件类型把值整理成"真正要写进去的东西"；整理不出来就放弃这一条。"""
         if control.type == "select":
             resolution = resolve_select_option(control.options, value)
+            if (
+                resolution.status == "no_option"
+                and control.linked_select
+                and not meaningful_options(control.options)
+            ):
+                # 联动原生下拉可能在首次快照时还只有占位项；先保留这条映射，
+                # 真正填充时会在父级选中后重新读取当前 DOM 的 options。
+                return FieldMapping(
+                    control=control,
+                    field=field_name,
+                    value=value,
+                    select=resolution,
+                    low_confidence=low_confidence,
+                )
             if resolution.status != "matched":
                 return None
             return FieldMapping(
@@ -1696,6 +2116,26 @@ class FormEngine:
                 low_confidence=low_confidence or resolution.assumed_day,
             )
 
+        if control.type == "text":
+            date_hint = " ".join(
+                (
+                    field_name,
+                    control.signature(),
+                    control.value,
+                    control.display,
+                )
+            )
+            if is_date_hint(date_hint):
+                resolution = format_date(value, kind="text", hint=date_hint)
+                if resolution.status == "matched":
+                    return FieldMapping(
+                        control=control,
+                        field=field_name,
+                        value=value,
+                        date=resolution,
+                        low_confidence=low_confidence,
+                    )
+
         return FieldMapping(
             control=control, field=field_name, value=value, low_confidence=low_confidence
         )
@@ -1745,7 +2185,6 @@ class FormEngine:
         return any(word in signature for word in FIELD_EXCLUDE_HINTS.get(field_name, ()))
 
     @classmethod
-    @classmethod
     def _rank_controls(
         cls,
         controls: list[Control],
@@ -1777,9 +2216,23 @@ class FormEngine:
                 target_index=target_index,
             ):
                 continue
+            key = evidence_key(control, field_name, synonyms)
+            if key is None:
+                continue
             # 区块限定：多段经历里的短词（"职位"、"描述"、"起止时间"）必须靠它才不会
             # 在别的区块上误命中——见 FIELD_BLOCK_HINTS 的说明。
-            if block_hint and block_hint not in control.signature() and not control.block_family:
+            # 没有区块标题的旧页面仍可用控件自己的 label / placeholder / name 识别明确字段；
+            # 只有旁文这一档的弱证据才继续要求区块标题。这样“是否境外教育”等明确字段
+            # 不会因为页面没有输出“教育经历-1”标题而被无故跳过。
+            choice_field = any("是否" in synonym for synonym in synonyms)
+            choice_without_block = choice_field and control.type in ("select", "radio", "checkbox")
+            if (
+                block_hint
+                and block_hint not in control.signature()
+                and not control.block_family
+                and key[0] < 1
+                and not choice_without_block
+            ):
                 continue
             if block_hint and control.block_family and not compatible_block(
                 field_name, control.block_family, control.block_index, target_index=target_index
@@ -1787,9 +2240,6 @@ class FormEngine:
                 continue
             expected_date_order = 1 if field_name.endswith("_start") else 2 if field_name.endswith("_end") else None
             if expected_date_order and control.date_order and control.date_order != expected_date_order:
-                continue
-            key = evidence_key(control, field_name, synonyms)
-            if key is None:
                 continue
             bonus = 5 if preferred_types and control.type in preferred_types else 0
             scored.append(((key[0], key[1] + bonus, -control.index), control))
@@ -1885,9 +2335,10 @@ class FormEngine:
             if not control.selector:
                 outcomes.append(ApplyOutcome(control.index, mapping.field, "skipped", "控件没有定位符"))
                 continue
+            applied_mapping = mapping
             try:
                 if control.type == "select":
-                    self._apply_select(client, mapping, timeout=timeout)
+                    applied_mapping = self._apply_select(client, mapping, timeout=timeout)
                 elif control.type in ("radio", "checkbox"):
                     self._apply_choice(client, mapping, timeout=timeout)
                 elif control.type == "richtext":
@@ -1910,17 +2361,53 @@ class FormEngine:
                 )
                 continue
 
-            outcomes.append(self._verify(client, mapping, timeout=timeout))
+            outcomes.append(self._verify(client, applied_mapping, timeout=timeout))
         return outcomes
 
     @staticmethod
     def _apply_select(
         client: CdpClient, mapping: FieldMapping, *, timeout: float | None
-    ) -> None:
+    ) -> FieldMapping:
+        selected_value = mapping.write_value()
+        if mapping.select is None or mapping.select.status != "matched":
+            # 父级 select 触发的异步加载可能在快照之后才完成；每次轮询都只读当前
+            # 原生 select 的真实 option，最终仍由 resolve_select_option 做严格匹配。
+            deadline = time.monotonic() + (
+                _DEPENDENT_SELECT_WAIT_SECONDS
+                if timeout is None
+                else min(_DEPENDENT_SELECT_WAIT_SECONDS, max(float(timeout), 0.0))
+            )
+            resolution = SelectResolution("no_option", reason="联动下拉的选项尚未加载")
+            while True:
+                payload = client.evaluate(
+                    _read_select_options_script(mapping.control.selector), timeout=timeout
+                )
+                if isinstance(payload, str):
+                    try:
+                        payload = json.loads(payload)
+                    except ValueError:
+                        payload = None
+                options = (
+                    FormEngine._parse_options(payload.get("options"))
+                    if isinstance(payload, dict) and payload.get("ok")
+                    else ()
+                )
+                resolution = resolve_select_option(options, mapping.value)
+                if resolution.status == "matched" and resolution.option is not None:
+                    selected_value = resolution.option.value
+                    break
+                if time.monotonic() >= deadline or resolution.status not in {"no_option", "empty"}:
+                    raise RuntimeError(
+                        f"联动下拉未出现与“{mapping.value}”匹配的选项：{resolution.reason}"
+                    )
+                time.sleep(_DEPENDENT_SELECT_POLL_SECONDS)
         client.evaluate(
-            _select_option_script(mapping.control.selector, mapping.write_value()),
+            _select_option_script(mapping.control.selector, selected_value),
             timeout=timeout,
         )
+        if mapping.select is None or mapping.select.status != "matched":
+            return replace(mapping, select=resolution)
+        return mapping
 
     @staticmethod
     def _apply_choice(

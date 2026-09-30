@@ -61,8 +61,8 @@ describe("WebFormMemoryDialog", () => {
   it("按模块展示网申资料，并支持非连续字符的模糊搜索", () => {
     renderDialog();
 
-    expect(screen.getByText("学籍与档案")).toBeInTheDocument();
-    expect(screen.getByText("身体情况")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /网申资料 · 学籍与档案/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /网申资料 · 身体情况/ })).toBeInTheDocument();
     expect(screen.queryByText("专业")).not.toBeInTheDocument();
     // **简历资料不是落点**：界面上不该再出现「我的资料」这一区。
     expect(screen.queryByText("我的资料")).not.toBeInTheDocument();
@@ -73,6 +73,38 @@ describe("WebFormMemoryDialog", () => {
 
     expect(screen.getByText("学号")).toBeInTheDocument();
     expect(screen.queryByText("身高(cm)")).not.toBeInTheDocument();
+  });
+
+  it("默认收起已有模块，搜索时展开，清空后恢复收起状态", () => {
+    renderDialog();
+
+    const group = screen.getByRole("button", { name: /网申资料 · 学籍与档案/ });
+    expect(group).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("学号")).not.toBeInTheDocument();
+
+    const search = screen.getByPlaceholderText(/搜索字段、模块或当前值/);
+    fireEvent.change(search, { target: { value: "学号" } });
+    expect(screen.getByText("学号")).toBeInTheDocument();
+    expect(group).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.change(search, { target: { value: "" } });
+    expect(screen.queryByText("学号")).not.toBeInTheDocument();
+    expect(group).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("不再提供复用档位选择，保存统一按通用资料处理", () => {
+    const onSubmit = renderDialog();
+
+    expect(screen.queryByRole("radio", { name: "场景" })).not.toBeInTheDocument();
+    expect(screen.queryByText("下次怎么复用", { exact: true })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "保存到选中的资料" }));
+    expect(onSubmit).toHaveBeenCalledWith({
+      target_id: "custom",
+      value: "王教授",
+      label: "导师",
+      reuse: "general",
+    });
   });
 
   it("没有对应字段时可以新增自定义网申字段并提交", () => {

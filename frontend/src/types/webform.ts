@@ -19,6 +19,7 @@ export interface WebFormField {
   label: string;
   group: string;
   kind: string;
+  options?: string[];
   sensitive: boolean;
   /**
    * 能不能被自动匹配填进页面。目录字段都是 `true`；用户自己攒的**自定义字段是 `false`**
@@ -55,6 +56,27 @@ export interface WebFormExtraEntry {
   label?: string;
 }
 
+export interface WebFormRepeatedField {
+  key: string;
+  label: string;
+  kind: string;
+  options?: string[];
+  sensitive: boolean;
+}
+
+export interface WebFormRepeatedRecord {
+  id?: number;
+  values: Record<string, string>;
+}
+
+export interface WebFormRepeatedGroup {
+  key: string;
+  label: string;
+  family: string;
+  fields: WebFormRepeatedField[];
+  records: WebFormRepeatedRecord[];
+}
+
 export interface WebFormExtraProfile {
   fields: WebFormField[];
   groups: string[];
@@ -62,6 +84,8 @@ export interface WebFormExtraProfile {
   values: Record<string, string>;
   /** 与 `values` 同键的来源与档位。 */
   details: Record<string, WebFormExtraEntry>;
+  /** 可以新增多条的网申补充资料组。 */
+  repeated_groups: WebFormRepeatedGroup[];
 }
 
 /** 填表时发现的、简历通里没有的一条。 */
@@ -77,6 +101,28 @@ export interface WebFormPage {
   url: string;
   title: string;
   control_count: number;
+}
+
+export interface WebFormUrlHistory {
+  id: number;
+  url: string;
+  title: string;
+  last_used_at: string;
+}
+
+export interface WebFormUrlHistoryList {
+  items: WebFormUrlHistory[];
+}
+
+export interface WebFormBrowserTarget {
+  target_id: string;
+  url: string;
+  title?: string;
+  live_enabled: boolean;
+}
+
+export interface WebFormBrowserTargetList {
+  items: WebFormBrowserTarget[];
 }
 
 export interface WebFormSnapshot {
@@ -173,7 +219,7 @@ export interface WebFormRememberInput {
   reuse: WebFormMemoryReuse;
 }
 
-/** 「点哪个填哪个」模式的当前状态。 */
+/** 智能逐项填表模式的当前状态。 */
 export interface WebFormLive {
   running: boolean;
   field_label: string;

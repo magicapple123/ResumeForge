@@ -18,8 +18,9 @@ from ...models.profile import Education
 from ...models.web_form_profile import CUSTOM_KEY_PREFIX
 from . import extra_profile
 from .extra_profile import list_entries
-from .fields import FORM_FIELDS, SOURCE_EXTRA
+from .fields import FIELD_SYNONYMS, FORM_FIELDS, SOURCE_EXTRA
 from .repeated_fields import field_key_for_block
+from . import repeated_profile
 from ..profile.profile_service import get_profile_detail
 
 # 学历层次排序：取"最高"那一条去填表。认不出的学历排最低，同级时按资料里的顺序。
@@ -128,6 +129,7 @@ def profile_to_form_data(profile: Any, *, job_title: str = "") -> dict[str, str]
     education, _total = pick_top_education(profile.educations)
     experiences = list(profile.experiences or [])
     projects = list(profile.projects or [])
+    skills = list(profile.skills or [])
     awards = list(profile.awards or [])
     educations = list(profile.educations or [])
     campus_experiences = list(getattr(profile, "campus_experiences", []) or [])
@@ -167,6 +169,8 @@ def profile_to_form_data(profile: Any, *, job_title: str = "") -> dict[str, str]
         "education_start": education.start_date if education else "",
         "education_end": education.end_date if education else "",
         "gpa": education.gpa if education else "",
+        "courses": education.courses if education else "",
+        "achievements": education.achievements if education else "",
         # 四六级分数跟着最高学历那一条走（与上面这些教育字段同源同规则）——
         # 它们是某段学历期间考出来的成绩，所以录在教育经历上而不是基本信息里。
         "cet4_score": education.cet4_score if education else "",
@@ -204,6 +208,21 @@ def profile_to_form_data(profile: Any, *, job_title: str = "") -> dict[str, str]
         "project_description": _as_block_text(
             first_project.description if first_project else ""
         ),
+        "project_tech_stack": first_project.tech_stack if first_project else "",
+        "project_highlights": _as_block_text(
+            first_project.highlights if first_project else ""
+        ),
+        "campus_organization": (
+            campus_experiences[0].organization if campus_experiences else ""
+        ),
+        "campus_role": campus_experiences[0].role if campus_experiences else "",
+        "campus_start": campus_experiences[0].start_date if campus_experiences else "",
+        "campus_end": campus_experiences[0].end_date if campus_experiences else "",
+        "campus_description": _as_block_text(
+            campus_experiences[0].description if campus_experiences else ""
+        ),
+        "skill_name": skills[0].name if skills else "",
+        "skill_mastery": skills[0].level if skills else "",
         "award_name": first_award.name if first_award else "",
         "award_date": first_award.date if first_award else "",
         "award_description": first_award.description if first_award else "",
@@ -223,6 +242,8 @@ def profile_to_form_data(profile: Any, *, job_title: str = "") -> dict[str, str]
             ("education_start", "start_date"),
             ("education_end", "end_date"),
             ("gpa", "gpa"),
+            ("education_courses", "courses"),
+            ("education_achievements", "achievements"),
             ("cet4_score", "cet4_score"),
             ("cet6_score", "cet6_score"),
         ),
@@ -275,6 +296,12 @@ def profile_to_form_data(profile: Any, *, job_title: str = "") -> dict[str, str]
             ("campus_description", "description"),
         ),
     )
+    _expand_repeated_records(
+        data,
+        skills,
+        "skill",
+        (("skill_name", "name"), ("skill_mastery", "level")),
+    )
     return {key: value.strip() for key, value in data.items() if (value or "").strip()}
 
 
@@ -283,6 +310,12 @@ def _combine_profile_and_extra_data(
 ) -> dict[str, str]:
     """合并简历资料与网申资料；由调用方明确选择是否过滤「本次」档位。"""
     profile_data = profile_to_form_data(get_profile_detail(db), job_title=job_title)
+    # 简历资料里的基础经历与网申资料里的补充字段按同一条记录序号展开；两者仍然
+    # 分开存储，所以这里是网申填表取数时才发生的合并。
+    for key, value in repeated_profile.expand_form_data(db).items():
+        # 同一序号既有简历记录又有网申记录时，简历里的基础内容优先；独有的
+        # 网申经历仍能补齐简历资料里没有的学校、单位或项目字段。
+        profile_data.setdefault(key, value)
     return {**profile_data, **list_entries(db, reusable_only=reusable_only)}
 
 
@@ -337,9 +370,10 @@ def _with_unique_custom_label_values(
     for field in FORM_FIELDS:
         if field.source != SOURCE_EXTRA:
             continue
-        normalized_label = _normalize_field_label(field.label)
-        if normalized_label:
-            field_keys_by_label.setdefault(normalized_label, []).append(field.key)
+        for candidate in (field.label, *FIELD_SYNONYMS.get(field.key, ())):
+            normalized_label = _normalize_field_label(candidate)
+            if normalized_label:
+                field_keys_by_label.setdefault(normalized_label, []).append(field.key)
 
     result = dict(data)
     for normalized_label, custom_keys in custom_keys_by_label.items():
@@ -375,7 +409,7 @@ _EDUCATION_FIELDS: tuple[tuple[str, str], ...] = (
     ("degree_type", "学位"),
     ("start_date", "入学时间"),
     ("end_date", "毕业时间"),
-    ("gpa", "绩点/排名"),
+    ("gpa", "绩点或排名"),
     ("cet4_score", "英语四级分数"),
     ("cet6_score", "英语六级分数"),
     ("courses", "核心课程"),
@@ -393,13 +427,13 @@ _PROJECT_FIELDS: tuple[tuple[str, str], ...] = (
     ("role", "担任角色"),
     ("start_date", "开始时间"),
     ("end_date", "结束时间"),
-    ("tech_stack", "技术栈 / 工具 / 方法"),
+    ("tech_stack", "技术栈、工具和方法"),
     ("description", "项目描述"),
-    ("highlights", "亮点 / 成果"),
+    ("highlights", "亮点与成果"),
 )
 _CAMPUS_FIELDS: tuple[tuple[str, str], ...] = (
-    ("organization", "组织 / 部门"),
-    ("role", "职务 / 角色"),
+    ("organization", "组织或部门"),
+    ("role", "职务或角色"),
     ("start_date", "开始时间"),
     ("end_date", "结束时间"),
     ("description", "经历描述"),
@@ -440,12 +474,56 @@ _MIRRORED_BY_RECORDS: frozenset[str] = frozenset(
 
 _RECORD_GROUPS: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("educations", "教育经历", _EDUCATION_FIELDS),
-    ("experiences", "实习/工作", _EXPERIENCE_FIELDS),
+    ("experiences", "实习和工作", _EXPERIENCE_FIELDS),
     ("campus_experiences", "校园经历", _CAMPUS_FIELDS),
     ("projects", "项目经历", _PROJECT_FIELDS),
     ("skills", "专业技能", _SKILL_FIELDS),
     ("awards", "荣誉奖项", _AWARD_FIELDS),
 )
+
+# 清单中的子表列名不一定就是匹配目录里的字段 key（例如 ``project.name`` 不能
+# 使用裸 ``name``，否则会与用户姓名共用同义词）。统一在这里做一次映射，
+# 让“人工挑选”和批量匹配使用同一套字段语义。
+_RECORD_FORM_KEYS: dict[str, dict[str, str]] = {
+    "educations": {
+        "start_date": "education_start",
+        "end_date": "education_end",
+        "courses": "education_courses",
+        "achievements": "education_achievements",
+    },
+    "experiences": {
+        "company": "experience_company",
+        "role": "experience_role",
+        "start_date": "experience_start",
+        "end_date": "experience_end",
+        "description": "experience_description",
+    },
+    "projects": {
+        "name": "project_name",
+        "role": "project_role",
+        "start_date": "project_start",
+        "end_date": "project_end",
+        "description": "project_description",
+        "tech_stack": "project_tech_stack",
+        "highlights": "project_highlights",
+    },
+    "campus_experiences": {
+        "organization": "campus_organization",
+        "role": "campus_role",
+        "start_date": "campus_start",
+        "end_date": "campus_end",
+        "description": "campus_description",
+    },
+    "skills": {
+        "name": "skill_name",
+        "level": "skill_mastery",
+    },
+    "awards": {
+        "name": "award_name",
+        "date": "award_date",
+        "description": "award_description",
+    },
+}
 
 
 def catalog_from_profile(profile: Any, *, job_title: str = "") -> list[dict[str, str]]:
@@ -482,7 +560,14 @@ def catalog_from_profile(profile: Any, *, job_title: str = "") -> list[dict[str,
                     # 子表字段的 key 直接用字段名（`school` / `company`…）：排序时靠它去
                     # `FIELD_SYNONYMS` 取同义词表，取不到才退回按标签比。
                     entries.append(
-                        {"group": group, "label": label, "value": value, "key": field_name}
+                        {
+                            "group": group,
+                            "label": label,
+                            "value": value,
+                            "key": _RECORD_FORM_KEYS.get(attribute, {}).get(
+                                field_name, field_name
+                            ),
+                        }
                     )
 
     # 长文本（工作内容、项目描述）压成一行：清单是给人扫的，多行会把一屏吃掉。
@@ -494,6 +579,7 @@ def catalog_from_profile(profile: Any, *, job_title: str = "") -> list[dict[str,
 def build_catalog(db: Session, *, job_title: str = "") -> list[dict[str, str]]:
     """返回完整可挑选目录，并把已记住的网申字段也放进来。"""
     entries = catalog_from_profile(get_profile_detail(db), job_title=job_title)
+    entries.extend(repeated_profile.catalog_entries(db))
     values = list_entries(db)
     details = extra_profile.list_details(db)
     known_keys = {entry.get("key", "") for entry in entries}

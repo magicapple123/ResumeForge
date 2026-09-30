@@ -233,6 +233,38 @@ def test_repeated_experience_blocks_use_the_matching_record_number():
     assert by_index[1].field == "experience_2_company"
 
 
+def test_repeated_education_yes_no_choices_match_without_a_block_title():
+    engine = FormEngine()
+    controls = engine.snapshot_controls(
+        [
+            {
+                "index": 0,
+                "type": "radio",
+                "label": "是",
+                "nearby_text": "是否境外教育 是 否",
+                "group": "education-overseas",
+                "value": "1",
+                "selector": '[data-rf-index="0"]',
+            },
+            {
+                "index": 1,
+                "type": "radio",
+                "label": "否",
+                "nearby_text": "是否境外教育 是 否",
+                "group": "education-overseas",
+                "value": "0",
+                "selector": '[data-rf-index="1"]',
+            },
+        ]
+    )
+
+    result = engine.match_fields(controls, {"education_1_is_overseas": "是"})
+
+    assert len(result.mappings) == 1
+    assert result.mappings[0].field == "education_1_is_overseas"
+    assert result.mappings[0].control.index == 0
+
+
 def test_tencent_style_referral_education_dates_and_supplement_are_mapped():
     engine = FormEngine()
     controls = engine.snapshot_controls(
@@ -285,6 +317,72 @@ def test_tencent_style_referral_education_dates_and_supplement_are_mapped():
     assert mappings["education_start"].control.index == 1
     assert mappings["education_end"].control.index == 2
     assert mappings["summary"].control.index == 3
+
+
+def test_text_date_controls_are_formatted_like_the_target_page():
+    engine = FormEngine()
+    controls = engine.snapshot_controls(
+        [
+            {
+                "index": 0,
+                "type": "text",
+                "label": "入学日期",
+                "placeholder": "YYYY-MM-DD",
+                "selector": '[data-rf-index="0"]',
+            }
+        ]
+    )
+
+    result = engine.match_fields(controls, {"education_start": "2022.3.9"})
+
+    assert len(result.mappings) == 1
+    assert result.mappings[0].date is not None
+    assert result.mappings[0].write_value() == "2022-03-09"
+
+
+def test_date_option_mapping_uses_the_page_option_value_after_normalizing_the_date():
+    engine = FormEngine()
+    controls = engine.snapshot_controls(
+        [
+            {
+                "index": 0,
+                "type": "select",
+                "label": "毕业日期",
+                "options": [
+                    {"v": "", "t": "请选择"},
+                    {"v": "2022-03-09", "t": "2022-03-09"},
+                ],
+                "selector": '[data-rf-index="0"]',
+            }
+        ]
+    )
+
+    result = engine.match_fields(controls, {"education_end": "2022.3.9"})
+
+    assert len(result.mappings) == 1
+    assert result.mappings[0].write_value() == "2022-03-09"
+
+
+def test_linked_native_select_is_kept_for_resolution_after_parent_options_load():
+    engine = FormEngine()
+    controls = engine.snapshot_controls(
+        [
+            {
+                "index": 0,
+                "type": "select",
+                "label": "当前所处地",
+                "options": [{"v": "", "t": "请选择"}],
+                "linked_select": True,
+                "selector": '[data-rf-index="0"]',
+            }
+        ]
+    )
+
+    result = engine.match_fields(controls, {"city": "天津"})
+
+    assert len(result.mappings) == 1
+    assert result.mappings[0].select is not None
+    assert result.mappings[0].select.status == "no_option"
 
 
 def test_match_fields_never_reuses_one_control_for_two_fields():
@@ -810,6 +908,36 @@ def test_select_uses_the_select_prototype_not_the_input_one():
     assert "HTMLInputElement.prototype" not in script
     assert "'change'" in script and "'input'" in script
     assert '"3"' in script, "写进去的必须是 option 的 value"
+
+
+def test_linked_native_select_re_reads_current_options_before_writing():
+    engine = FormEngine()
+    control = Control(
+        index=1,
+        type="select",
+        selector='[data-rf-index="1"]',
+        options=(SelectOption("", "请选择"),),
+        linked_select=True,
+    )
+    mapping = FieldMapping(
+        control=control,
+        field="city",
+        value="天津",
+        select=SelectResolution("no_option", reason="联动选项尚未加载"),
+    )
+    fake = FakeCdpClient(
+        replies={
+            "rf:select-options": '{"ok": true, "options": [{"v": "tj", "t": "天津市"}]}',
+            "rf:read-back": '{"ok": true, "value": "tj"}',
+        }
+    )
+
+    outcomes = engine.apply(fake, [mapping])
+
+    assert outcomes[0].status == "filled"
+    expressions = "\n".join(fake.expressions)
+    assert "rf:select-options" in expressions
+    assert '"tj"' in expressions
 
 
 def test_text_and_textarea_use_their_own_prototypes():

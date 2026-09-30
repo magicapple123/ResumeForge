@@ -17,6 +17,14 @@
   height: auto;
 }
 
+.profile-workspace-tabs {
+  margin-top: 8px;
+}
+
+.profile-workspace-tabs > .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
 .profile-photo-panel {
   display: flex;
   flex-direction: column;

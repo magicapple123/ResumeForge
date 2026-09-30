@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
@@ -210,6 +211,7 @@ class WindowAwareMixin:
         if current_id == wanted and self._connection is not None:
             return True
         self._target = target
+        self._target_id = wanted
         # 目标变了，旧 WebSocket 必须重连（与 new_tab 同一套纪律）。
         self._reset_connection()
         try:
@@ -227,6 +229,7 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
         host: str = DEFAULT_HOST,
         port: int = 0,
         *,
+        target_id: str | None = None,
         http_transport: httpx.BaseTransport | None = None,
         websocket_factory: Callable[[str], Any] | None = None,
         connect_timeout: float = DEFAULT_CONNECT_TIMEOUT,
@@ -235,6 +238,7 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
     ) -> None:
         self._host = host
         self._port = port
+        self._target_id = str(target_id or "").strip() or None
         self._http_transport = http_transport
         self._websocket_factory = websocket_factory or _default_websocket_factory
         self._connect_timeout = connect_timeout
@@ -246,6 +250,10 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
         self._capture_methods: set[str] = set()
         self._captured_events: list[dict[str, Any]] = []
         self._command_id = 0
+        # WebSocket 的同步收发不能由多个线程同时进行。网申当前页自动填写在后台线程
+        # 运行，而实时监听线程仍会轮询同一个标签页；不串行化时两个线程会互相读走对方
+        # 的响应，表现为页面按钮一直停在「正在填写中」。
+        self._command_lock = threading.RLock()
 
     # ===== 浏览器级端点（HTTP）=====
 
@@ -293,6 +301,7 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
         if not isinstance(target, dict):
             raise CdpError("投递专用浏览器返回了无法解析的响应")
         self._target = target
+        self._target_id = str(target.get("id", "") or "").strip() or None
         # 目标变了，旧的 WebSocket 连接不再可用。
         self._reset_connection()
         return str(target.get("id", ""))
@@ -301,7 +310,24 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
 
     def _websocket_url(self) -> str:
         target = self._target
-        if target is None or not target.get("webSocketDebuggerUrl"):
+        if self._target_id:
+            if target is not None and str(target.get("id", "")) == self._target_id and target.get("webSocketDebuggerUrl"):
+                return str(target["webSocketDebuggerUrl"])
+            targets = self.list_targets()
+            target = next(
+                (
+                    item
+                    for item in targets
+                    if item.get("type") == "page"
+                    and str(item.get("id", "")) == self._target_id
+                    and item.get("webSocketDebuggerUrl")
+                ),
+                None,
+            )
+            if target is None:
+                raise CdpError("目标网申标签页已关闭或暂时没有可用的调试通道")
+            self._target = target
+        elif target is None or not target.get("webSocketDebuggerUrl"):
             targets = self.list_targets()
             page = next(
                 (
@@ -337,16 +363,24 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
         return connection
 
     def _reset_connection(self, *, clear_target: bool = False) -> None:
-        if self._connection is not None:
-            try:
-                self._connection.close()
-            except Exception:  # noqa: BLE001 - 关闭失败不该阻断后续流程
-                pass
-        self._connection = None
-        if clear_target:
-            self._target = None
+        with self._command_lock:
+            if self._connection is not None:
+                try:
+                    self._connection.close()
+                except Exception:  # noqa: BLE001 - 关闭失败不该阻断后续流程
+                    pass
+            self._connection = None
+            if clear_target:
+                self._target = None
 
     def send(
+        self, method: str, params: dict[str, Any] | None = None, *, timeout: float | None = None
+    ) -> dict[str, Any]:
+        """串行发送一条 CDP 命令，避免共享 WebSocket 的响应互相串线。"""
+        with self._command_lock:
+            return self._send_unlocked(method, params, timeout=timeout)
+
+    def _send_unlocked(
         self, method: str, params: dict[str, Any] | None = None, *, timeout: float | None = None
     ) -> dict[str, Any]:
         """发送一条 CDP 命令并按 id 匹配响应；错误、超时、连接断开均抛 CdpError。"""
@@ -501,5 +535,3 @@ __all__ = [
     "WebsocketCdpClient",
     "WindowAwareMixin",
 ]
-
-

@@ -14,6 +14,7 @@ from .extraction import (
     ExtractionDocumentInput,
     ExtractionImageInput,
 )
+from ..services.date_format import normalize_partial_date
 
 
 MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
@@ -111,6 +112,11 @@ class EducationIn(ReferenceFileFields):
     courses: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
     achievements: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
 
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def dates_use_short_dash_format(cls, value: str) -> str:
+        return normalize_partial_date(value)
+
 
 class ExperienceIn(ReferenceFileFields):
     company: str = Field(default="", max_length=128)
@@ -119,6 +125,11 @@ class ExperienceIn(ReferenceFileFields):
     end_date: str = Field(default="", max_length=32)
     description: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
 
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def dates_use_short_dash_format(cls, value: str) -> str:
+        return normalize_partial_date(value)
+
 
 class CampusExperienceIn(ReferenceFileFields):
     organization: str = Field(default="", max_length=128)
@@ -126,6 +137,11 @@ class CampusExperienceIn(ReferenceFileFields):
     start_date: str = Field(default="", max_length=32)
     end_date: str = Field(default="", max_length=32)
     description: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
+
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def dates_use_short_dash_format(cls, value: str) -> str:
+        return normalize_partial_date(value)
 
 
 class ProjectIn(ReferenceFileFields):
@@ -137,6 +153,11 @@ class ProjectIn(ReferenceFileFields):
     description: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
     highlights: str = Field(default="", max_length=MAX_PROFILE_DETAIL_CHARS)  # 换行分隔
 
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def dates_use_short_dash_format(cls, value: str) -> str:
+        return normalize_partial_date(value)
+
 
 class SkillIn(BaseModel):
     name: str = Field(default="", max_length=64)
@@ -147,6 +168,11 @@ class AwardIn(BaseModel):
     name: str = Field(default="", max_length=128)
     date: str = Field(default="", max_length=32)
     description: str = Field(default="", max_length=2000)
+
+    @field_validator("date")
+    @classmethod
+    def date_uses_short_dash_format(cls, value: str) -> str:
+        return normalize_partial_date(value)
 
 
 class EducationOut(EducationIn):
@@ -224,6 +250,11 @@ class ProfileUpdate(BaseModel):
     projects: list[ProjectIn] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
     skills: list[SkillIn] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
     awards: list[AwardIn] = Field(default_factory=list, max_length=MAX_PROFILE_SECTION_ITEMS)
+
+    @field_validator("birth_date")
+    @classmethod
+    def birth_date_uses_short_dash_format(cls, value: str) -> str:
+        return normalize_partial_date(value)
 
     @field_validator("photo")
     @classmethod

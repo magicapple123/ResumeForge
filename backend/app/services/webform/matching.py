@@ -31,6 +31,19 @@ _DECORATION = " \t\r\n-—–:：·.、,，*＊[]【】()（）<>《》\"'“”
 # 「月」被写进了"日"那一组，末尾的「月」没人消费。先规范化再匹配既短又不容易出错。
 _DATE_SEPARATORS = ".-/ "
 _DATE_RE = re.compile(r"^(?P<year>\d{4})(?:[.\-/](?P<month>\d{1,2})(?:[.\-/](?P<day>\d{1,2}))?)?$")
+_DATE_SAMPLE_RE = re.compile(
+    r"(?P<year>\d{4})(?P<first>[.\-/])(?P<month>\d{1,2})"
+    r"(?:(?P<second>[.\-/])(?P<day>\d{1,2}))?"
+)
+_DATE_TOKEN_RE = re.compile(
+    r"(?i)y{4}\s*([.\-/])\s*(m{1,2})"
+    r"(?:\s*([.\-/])\s*(d{1,2}))?"
+)
+_DATE_HINT_RE = re.compile(
+    r"date|日期|年月|年/月|选择日期|出生|入学|毕业|起止时间|开始时间|结束时间"
+    r"|(?:^|[_-])(start|end|begin|finish)(?:$|[_-])",
+    re.IGNORECASE,
+)
 
 # 表示"仍在进行"的说法。它们是**合法答案**，但不是具体日期。
 _PRESENT_TEXTS = frozenset(
@@ -168,6 +181,16 @@ def resolve_select_option(options: Sequence[SelectOption], value: str) -> Select
                 "ambiguous", reason=f"有 {len(alias_hits)} 个选项都对应“{value}”"
             )
 
+    date_hits = [
+        option
+        for option in candidates
+        if date_values_match(value, option.display()) or date_values_match(value, option.value)
+    ]
+    if best := _unique(date_hits):
+        return SelectResolution("matched", option=best)
+    if date_hits:
+        return SelectResolution("ambiguous", reason=f"有 {len(date_hits)} 个日期选项对应“{value}”")
+
     def _contains(option: SelectOption) -> bool:
         return any(target in key or key in target for key in option_keys(option))
 
@@ -213,7 +236,54 @@ def is_ongoing(raw: str) -> bool:
     return (raw or "").strip().casefold() in _PRESENT_TEXTS
 
 
-def format_date(raw: str, *, kind: str = "text") -> DateResolution:
+def is_date_hint(text: str) -> bool:
+    """判断控件描述是否明确表示日期/时间字段。"""
+    return bool(_DATE_HINT_RE.search(text or ""))
+
+
+def date_values_match(left: str, right: str) -> bool:
+    """判断两个日期文本是否表示同一天或同一个年月。"""
+    left_parsed = parse_date(left)
+    right_parsed = parse_date(right)
+    return left_parsed is not None and left_parsed == right_parsed
+
+
+def _format_text_date(raw: str, hint: str) -> str:
+    parsed = parse_date(raw)
+    if parsed is None:
+        return raw.strip()
+    year, month, day = parsed
+    if month is None:
+        return raw.strip()
+    if re.search(r"年.*月", hint or ""):
+        return f"{year}年{month}月" + (f"{day}日" if day is not None else "")
+
+    sample = _DATE_SAMPLE_RE.search(hint or "")
+    if sample is not None:
+        first = sample.group("first")
+        second = sample.group("second") or first
+        month_text = f"{month:02d}" if len(sample.group("month")) == 2 else str(month)
+        if day is None or sample.group("day") is None:
+            return f"{year:04d}{first}{month_text}"
+        day_text = f"{day:02d}" if len(sample.group("day")) == 2 else str(day)
+        return f"{year:04d}{first}{month_text}{second}{day_text}"
+
+    token = _DATE_TOKEN_RE.search(hint or "")
+    if token is not None:
+        first = token.group(1)
+        month_text = f"{month:02d}" if len(token.group(2)) == 2 else str(month)
+        if day is None or token.group(4) is None:
+            return f"{year:04d}{first}{month_text}"
+        second = token.group(3) or first
+        day_text = f"{day:02d}" if len(token.group(4)) == 2 else str(day)
+        return f"{year:04d}{first}{month_text}{second}{day_text}"
+
+    if day is None:
+        return f"{year:04d}-{month:02d}"
+    return f"{year:04d}-{month:02d}-{day:02d}"
+
+
+def format_date(raw: str, *, kind: str = "text", hint: str = "") -> DateResolution:
     """把资料里的日期字符串写成目标控件要的形状。
 
     ``kind`` 是目标控件期望的粒度：``date``（``YYYY-MM-DD``）、``month``（``YYYY-MM``）、
@@ -233,7 +303,7 @@ def format_date(raw: str, *, kind: str = "text") -> DateResolution:
     year, month, day = parsed
 
     if kind == "text":
-        return DateResolution("matched", value=raw.strip())
+        return DateResolution("matched", value=_format_text_date(raw, hint))
 
     if month is None:
         if kind == "year":
@@ -260,7 +330,9 @@ __all__ = [
     "SelectOption",
     "SelectResolution",
     "aliases_of",
+    "date_values_match",
     "format_date",
+    "is_date_hint",
     "is_ongoing",
     "is_placeholder",
     "meaningful_options",

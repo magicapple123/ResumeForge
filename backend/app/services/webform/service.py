@@ -24,6 +24,7 @@ from ._base import WebFormBadRequest, WebFormConflict
 from .engine import ApplyOutcome, Control, FieldMapping, FormEngine, MatchResult, evidence_key
 from .extra_profile import custom_fields_of
 from .fields import (
+    FIELD_EXCLUDE_HINTS,
     FIELD_LABELS,
     FIELD_SYNONYMS,
     FORM_FIELDS,
@@ -33,6 +34,7 @@ from .fields import (
 from .matching import (
     format_date,
     is_placeholder,
+    meaningful_options,
     normalize_option_text,
     resolve_select_option,
 )
@@ -107,6 +109,7 @@ def list_fields() -> dict[str, Any]:
                 "label": field_item.label,
                 "group": field_item.group,
                 "kind": field_item.kind,
+                "options": list(field_item.options),
                 "sensitive": field_item.sensitive,
             }
             for field_item in FORM_FIELDS
@@ -143,6 +146,7 @@ def list_extra_fields(db: Session | None = None) -> dict[str, Any]:
             "label": field_item.label,
             "group": field_item.group,
             "kind": field_item.kind,
+            "options": list(field_item.options),
             "sensitive": field_item.sensitive,
             "matchable": True,
         }
@@ -179,8 +183,14 @@ def recognize_field(control: Control) -> str | None:
     """
     best_field = ""
     best_key = (0, 0)
+    signature = control.signature()
     for field_name, synonyms in FIELD_SYNONYMS.items():
         if not compatible_block(field_name, control.block_family, control.block_index):
+            continue
+        if any(
+            hint in signature
+            for hint in FIELD_EXCLUDE_HINTS.get(field_name, ())
+        ):
             continue
         key = evidence_key(control, field_name, synonyms)
         if key is not None and key > best_key:
@@ -592,6 +602,14 @@ def _rebuild_mapping(control: Control, field_name: str, value: str) -> FieldMapp
         return None
     if control.type == "select":
         resolution = resolve_select_option(control.options, text)
+        if (
+            resolution.status == "no_option"
+            and control.linked_select
+            and not meaningful_options(control.options)
+        ):
+            # 联动原生下拉在父级选中前只有占位项；保留映射，填充阶段会重新读取
+            # 当前 DOM 的选项，而不是把这条安全的延迟匹配误报成“资料没有”。
+            return FieldMapping(control=control, field=field_name, value=text, select=resolution)
         if resolution.status != "matched":
             return None
         return FieldMapping(control=control, field=field_name, value=text, select=resolution)

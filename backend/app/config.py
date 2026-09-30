@@ -32,6 +32,10 @@ def captures_dir() -> Path:
 # 而在改端口时漏改一处。运行期真正生效的端口由 ApplyConfig.browser_port 驱动。
 DEFAULT_BROWSER_PORT = 9333
 
+# 网申填表专用浏览器使用固定的另一条调试端口，不与投递台共享进程或用户目录。
+# 这个端口不暴露为投递配置项，避免用户误把两类浏览器配置成同一个实例。
+DEFAULT_WEBFORM_BROWSER_PORT = 9334
+
 
 class Settings(BaseSettings):
     app_name: str = "ResumeForge"

@@ -36,7 +36,7 @@ def test_parse_profile_text_supports_english_month_date_ranges():
     )
 
     assert result.experiences[0].start_date == "Jan 2024"
-    assert result.experiences[0].end_date == "Present"
+    assert result.experiences[0].end_date == "至今"
     assert result.projects[0].start_date == "September 2023"
     assert result.projects[0].end_date == "June 2024"
 

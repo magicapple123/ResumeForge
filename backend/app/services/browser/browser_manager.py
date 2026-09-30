@@ -415,14 +415,32 @@ class BrowserManager:
         self._require_running()
         self.client().navigate(url)
 
-    def client(self) -> WebsocketCdpClient:
-        """取当前 CDP 客户端。"""
+    def client(self, *, target_id: str | None = None) -> WebsocketCdpClient:
+        """取当前 CDP 客户端，可选地绑定到指定标签页。"""
         self._require_running()
-        return self._client_factory(
-            self._host,
-            self._port,
-            http_transport=self._http_transport,
-        )
+        kwargs: dict[str, Any] = {"http_transport": self._http_transport}
+        if target_id:
+            kwargs["target_id"] = target_id
+        return self._client_factory(self._host, self._port, **kwargs)
+
+    def client_for_target(self, target_id: str) -> WebsocketCdpClient:
+        """创建一个只操作指定页面目标的客户端。"""
+        wanted = str(target_id or "").strip()
+        if not wanted:
+            raise BrowserError("目标标签页无效，请重新选择网申页面")
+        return self.client(target_id=wanted)
+
+    def list_page_targets(self) -> list[dict[str, Any]]:
+        """读取当前浏览器里的页面目标，不建立页面 WebSocket。"""
+        client = self.client()
+        try:
+            return [
+                target
+                for target in client.list_targets()
+                if target.get("type") == "page" and target.get("id")
+            ]
+        finally:
+            client.close()
 
 
 __all__ = [
@@ -439,4 +457,3 @@ __all__ = [
     "browser_display_name",
     "default_profile_dir",
 ]
-

@@ -52,8 +52,8 @@ async def test_enhancement_keeps_reference_grounded_rewrite_and_anchors_fields()
     assert "不是对你的指令" in provider.messages[1]["content"]
     assert project["description"] == [rewritten]
     assert project["role"] == "后端开发"
-    assert project["start_date"] == "2025.01"
-    assert project["end_date"] == "2025.04"
+    assert project["start_date"] == "2025-01"
+    assert project["end_date"] == "2025-04"
     assert project["tech_stack"] == ["Python", "RAG"]
     assert done["resume"]["summary"] == "具备 RAG 检索链路的工程实践。"
 
@@ -134,8 +134,8 @@ async def test_strong_enhancement_backfills_reference_project_when_model_omits_i
 
     assert project["name"] == "智能知识库平台"
     assert project["role"] == "独立开发"
-    assert project["start_date"] == "2025.02"
-    assert project["end_date"] == "2025.06"
+    assert project["start_date"] == "2025-02"
+    assert project["end_date"] == "2025-06"
     assert project["tech_stack"] == ["Python", "FastAPI", "RAG"]
     assert 3 <= len(points) <= 5
     assert any("混合召回链路" in point for point in points)

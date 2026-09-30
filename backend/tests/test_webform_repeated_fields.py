@@ -18,6 +18,13 @@ def test_block_labels_support_numeric_and_chinese_indexes():
     assert parse_block_label("教育经历 2").index == 2
 
 
+def test_block_labels_accept_the_repeated_profile_group_names():
+    assert parse_block_label("实习和工作补充-2").family == "experience"
+    assert parse_block_label("校园和社会实践第2条").family == "campus"
+    assert parse_block_label("竞赛和获奖 3").family == "award"
+    assert parse_block_label("证书补充第4条").family == "certificate"
+
+
 def test_chinese_index_parser_handles_tens():
     assert parse_index("十") == 10
     assert parse_index("二十一") == 21

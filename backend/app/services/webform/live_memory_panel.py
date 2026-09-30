@@ -29,22 +29,32 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   let payload = {};
   let selectedId = 'custom';
   let originalLabel = '';
+  let pickerWasOpen = false;
+  let pickerInlineDisplay = '';
+  let moreInlineDisplay = '';
+  let collapsedGroups = new Set();
 
   const style = document.createElement('style');
   style.textContent = [
-    '.rf-memory{display:none;border-top:1px solid #e8e8e8;padding:12px;background:#fbfdff}',
-    '.rf-memory-title{font-weight:600;color:#1677ff;margin-bottom:8px}',
-    '.rf-memory-label{display:block;color:#555;font-size:12px;margin:6px 0}',
-    '.rf-memory input[type=text]{display:block;width:100%;border:1px solid #d9d9d9;border-radius:6px;padding:6px 8px;font-size:12px;outline:none}',
-    '.rf-memory input[type=text]:focus{border-color:#1677ff}',
-    '.rf-memory-targets{max-height:min(280px,42vh);overflow:auto;border:1px solid #edf0f5;border-radius:6px;background:#fff}',
-    '.rf-memory-group{position:sticky;top:0;padding:6px 9px;color:#1677ff;font-size:11px;font-weight:600;background:#f5f8ff;z-index:1}',
-    '.rf-memory-row{display:flex;gap:8px;padding:7px 9px;cursor:pointer;border-bottom:1px solid #f2f2f2}',
+    '.rf-memory{display:none;border-top:1px solid #e8e8e8;padding:16px;background:linear-gradient(180deg,#f7fbff 0%,#fff 42%);max-height:min(680px,76vh);overflow:hidden}',
+    '.rf-memory-title{font-weight:700;color:#1557a6;margin-bottom:3px;font-size:14px}',
+    '.rf-memory-subtitle{color:#718096;font-size:11px;line-height:1.6;margin-bottom:10px}',
+    '.rf-memory-label{display:block;color:#44546a;font-size:12px;font-weight:600;margin:8px 0}',
+    '.rf-memory input[type=text]{display:block;width:100%;min-height:32px;border:1px solid #d9e2ef;border-radius:8px;padding:7px 9px;font-size:12px;outline:none;background:#fff}',
+    '.rf-memory input[type=text]:focus{border-color:#1677ff;box-shadow:0 0 0 2px rgba(22,119,255,.12)}',
+    '.rf-memory-targets{max-height:min(430px,50vh);overflow:auto;border:1px solid #dfe8f3;border-radius:10px;background:#fff;box-shadow:0 2px 8px rgba(31,56,88,.04)}',
+    '.rf-memory-group{position:relative;display:flex;align-items:center;gap:6px;width:100%;border:0;border-bottom:1px solid #e4edf8;padding:8px 10px;color:#1557a6;font-size:11px;font-weight:700;background:#f2f7ff;cursor:pointer;text-align:left}',
+    '.rf-memory-group:hover{background:#e8f2ff}',
+    '.rf-memory-group .caret{width:12px;flex:none;color:#6a91c5;transition:transform .12s}',
+    '.rf-memory-group.collapsed .caret{transform:rotate(-90deg)}',
+    '.rf-memory-group .group-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.rf-memory-group .group-count{margin-left:auto;flex:none;color:#7d94b4;font-weight:500}',
+    '.rf-memory-row{display:flex;gap:8px;align-items:flex-start;padding:9px 10px;cursor:pointer;border-bottom:1px solid #f0f4f8;min-width:0}',
     '.rf-memory-row:hover,.rf-memory-row.selected{background:#f5f8ff}',
     '.rf-memory-radio{width:14px;flex:none;color:#1677ff}',
     '.rf-memory-content{min-width:0;flex:1}',
-    '.rf-memory-name{font-weight:600;color:#222}',
-    '.rf-memory-value{color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.rf-memory-name{font-weight:600;color:#222;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.rf-memory-value{color:#78879a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;margin-top:2px}',
     '.rf-memory-hint{color:#888;font-size:11px;min-height:18px;margin-top:6px}',
     '.rf-memory-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}',
     '.rf-memory-empty{padding:12px;color:#999}',
@@ -54,6 +64,7 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   editor.className = 'rf-memory';
   editor.innerHTML = [
     '<div class="rf-memory-title">记住这条：确认字段名与保存位置</div>',
+    '<div class="rf-memory-subtitle">默认先保存到网申资料·自定义；如果已有对应字段，也可以在下面展开后选择。</div>',
     '<label class="rf-memory-label">字段名<input class="rf-memory-label-input" type="text" maxlength="40"></label>',
     '<label class="rf-memory-label">保存到哪里（支持模糊搜索）<input class="rf-memory-search" type="text" placeholder="搜索资料模块、字段名或当前值"></label>',
     '<div class="rf-memory-targets"></div>',
@@ -68,11 +79,42 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   const search = editor.querySelector('.rf-memory-search');
   const list = editor.querySelector('.rf-memory-targets');
   const hint = editor.querySelector('.rf-memory-hint');
+  const picker = root.querySelector('.pick');
+  const moreButton = root.querySelector('.more');
   const targets = () => Array.isArray(window.__rfMemoryTargets) ? window.__rfMemoryTargets : [];
   const control = () => window.__rfFocus || {};
+  const cleanLabel = (raw) => String(raw || '')
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .replace(/[＊*]+/g, '')
+    .replace(/[\s:：\-—–·]+$/g, '')
+    .replace(/^[\s:：\-—–·]+/g, '')
+    .trim();
+  const cleanPlaceholder = (raw) => {
+    let text = cleanLabel(raw);
+    if (!text) { return ''; }
+    text = text.replace(/^(?:如有|若有|如果有|如需|若需)\s*/u, '');
+    text = text.replace(/^(?:请输入|请填写|请录入|请提供|请选择|请先选择|请搜索|请在此|请于此)\s*/u, '');
+    text = text.replace(/(?:可在此|请在此|可填写|可输入|填写|输入|选择|录入)[\s\S]*$/u, '');
+    text = text.replace(/[（(](?:必填|选填|可选)[)）]$/u, '');
+    return cleanLabel(text);
+  };
+  const nearbyLabel = (field) => {
+    const nearby = cleanLabel(field.nearby_text);
+    const placeholder = cleanLabel(field.placeholder);
+    if (!nearby) { return ''; }
+    const chunks = nearby.split(/[\s|/\\·•:：,，;；]+/u)
+      .map(cleanLabel)
+      .filter((item) => item && item !== placeholder && item.length <= 32)
+      .filter((item) => !/^(?:请输入|请填写|请录入|请选择|如有|若有|如果有)/u.test(item));
+    return chunks.sort((left, right) => left.length - right.length)[0] || '';
+  };
   const formLabel = () => {
     const field = control();
-    return String(field.label || field.placeholder || field.aria_label || field.nearby_text || field.name || '').trim();
+    const direct = [field.label, field.aria_label, field.aria_labelledby, field.legend, field.title]
+      .map(cleanLabel)
+      .filter(Boolean)[0];
+    return direct || nearbyLabel(field) || cleanPlaceholder(field.placeholder) || cleanLabel(field.name);
   };
   const normalize = (text) => String(text || '').normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
   const fuzzy = (text, term) => {
@@ -111,44 +153,70 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
       [item.group, item.label, item.value, item.field_key, '网申资料'].join(' '), search.value,
     ));
     list.textContent = '';
-    let lastGroup = '';
+    const groups = new Map();
     for (const item of matches) {
-      const group = '网申资料 · ' + (item.group || '其他');
-      if (group !== lastGroup) {
-        const title = document.createElement('div');
-        title.className = 'rf-memory-group';
-        title.textContent = group;
-        list.appendChild(title);
-        lastGroup = group;
-      }
-      const row = document.createElement('div');
-      row.className = 'rf-memory-row' + (item.target_id === selectedId ? ' selected' : '');
-      const icon = document.createElement('span');
-      icon.className = 'rf-memory-radio';
-      icon.textContent = item.target_id === selectedId ? '●' : '○';
-      const content = document.createElement('div');
-      content.className = 'rf-memory-content';
-      const label = document.createElement('div');
-      label.className = 'rf-memory-name';
-      label.textContent = item.label;
-      const value = document.createElement('div');
-      value.className = 'rf-memory-value';
-      value.textContent = item.target_id === 'custom' ? '使用上方字段名' : '当前值：' + (item.value || '（尚未填写）');
-      content.append(label, value);
-      row.append(icon, content);
-      row.addEventListener('click', () => {
-        selectedId = item.target_id;
-        if (selectedId !== 'custom') { name.value = item.label; }
-        render();
-        updateHint();
-      });
-      list.appendChild(row);
+      const group = String(item.group || '其他');
+      if (!groups.has(group)) { groups.set(group, []); }
+      groups.get(group).push(item);
     }
-    if (!matches.length) {
+    if (!groups.size) {
       const empty = document.createElement('div');
       empty.className = 'rf-memory-empty';
       empty.textContent = '没有匹配的保存位置';
       list.appendChild(empty);
+      return;
+    }
+    const searching = Boolean(String(search.value || '').trim());
+    for (const [group, items] of groups) {
+      const expanded = searching || !collapsedGroups.has(group);
+      const title = document.createElement('button');
+      title.type = 'button';
+      title.className = 'rf-memory-group' + (expanded ? '' : ' collapsed');
+      title.setAttribute('aria-expanded', String(expanded));
+      title.title = expanded ? '点击折叠这一组' : '点击展开这一组';
+      const caret = document.createElement('span');
+      caret.className = 'caret';
+      caret.textContent = '▾';
+      const groupName = document.createElement('span');
+      groupName.className = 'group-name';
+      groupName.textContent = '网申资料 · ' + group;
+      const groupCount = document.createElement('span');
+      groupCount.className = 'group-count';
+      groupCount.textContent = `${items.length} 条`;
+      title.append(caret, groupName, groupCount);
+      title.addEventListener('click', () => {
+        if (collapsedGroups.has(group)) { collapsedGroups.delete(group); }
+        else { collapsedGroups.add(group); }
+        render();
+      });
+      list.appendChild(title);
+      if (!expanded) { continue; }
+      for (const item of items) {
+        const row = document.createElement('div');
+        row.className = 'rf-memory-row' + (item.target_id === selectedId ? ' selected' : '');
+        row.title = `${item.label || ''}：${item.target_id === 'custom' ? '使用上方字段名' : (item.value || '（尚未填写）')}`;
+        const icon = document.createElement('span');
+        icon.className = 'rf-memory-radio';
+        icon.textContent = item.target_id === selectedId ? '●' : '○';
+        const content = document.createElement('div');
+        content.className = 'rf-memory-content';
+        const label = document.createElement('div');
+        label.className = 'rf-memory-name';
+        label.textContent = item.label;
+        const value = document.createElement('div');
+        value.className = 'rf-memory-value';
+        value.textContent = item.target_id === 'custom' ? '使用上方字段名' : '当前值：' + (item.value || '（尚未填写）');
+        content.append(label, value);
+        row.append(icon, content);
+        row.addEventListener('click', () => {
+          selectedId = item.target_id;
+          collapsedGroups.delete(group);
+          if (selectedId !== 'custom') { name.value = item.label; }
+          render();
+          updateHint();
+        });
+        list.appendChild(row);
+      }
     }
   };
   const close = () => {
@@ -156,6 +224,11 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
     editor.style.display = 'none';
     panel.style.width = '';
     button.style.display = '';
+    if (moreButton) { moreButton.style.display = moreInlineDisplay; }
+    if (picker) {
+      picker.style.display = pickerInlineDisplay;
+      picker.classList.toggle('on', pickerWasOpen);
+    }
   };
   button.addEventListener('click', (event) => {
     event.preventDefault();
@@ -167,6 +240,13 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
     selectedId = defaultTarget(originalLabel);
     name.value = selected() ? selected().label : originalLabel;
     search.value = '';
+    collapsedGroups = new Set(targets().map((item) => String(item.group || '其他')));
+    collapsedGroups.delete('自定义');
+    pickerWasOpen = Boolean(picker && picker.classList.contains('on'));
+    pickerInlineDisplay = picker ? picker.style.display : '';
+    moreInlineDisplay = moreButton ? moreButton.style.display : '';
+    if (picker) { picker.classList.remove('on'); picker.style.display = 'none'; }
+    if (moreButton) { moreButton.style.display = 'none'; }
     editor.style.display = 'block';
     panel.style.width = 'min(680px,calc(100vw - 16px))';
     button.style.display = 'none';
@@ -177,6 +257,7 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   name.addEventListener('input', () => {
     // 改名意味着新自定义字段；用户随后仍可手动选回原有字段。
     if (selected() && normalize(name.value) !== normalize(selected().label)) { selectedId = 'custom'; }
+    collapsedGroups.delete('自定义');
     render();
     updateHint();
   });

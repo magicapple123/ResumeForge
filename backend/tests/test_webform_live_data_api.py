@@ -1,10 +1,10 @@
 """「点哪个填哪个」的数据读取 API 回归测试。"""
 
 from app.services import webform as webform_service
-from app.services.apply import _site_browser
+from app.services.webform import browser as webform_browser
 
 
-def test_live_start_and_refresh_include_once_profile_values(client, monkeypatch):
+def test_live_start_and_refresh_include_all_profile_values(client, monkeypatch):
     captured: dict[str, object] = {}
 
     class ActiveBrowserManager:
@@ -19,7 +19,7 @@ def test_live_start_and_refresh_include_once_profile_values(client, monkeypatch)
         captured["data_loader"] = kwargs["data_loader"]
 
     monkeypatch.setattr(
-        _site_browser, "get_browser_manager", lambda _db: ActiveBrowserManager()
+        webform_browser, "get_browser_manager", lambda _db: ActiveBrowserManager()
     )
     monkeypatch.setattr(webform_service, "is_apply_running", lambda: False)
     monkeypatch.setattr(webform_service, "start_live", capture_start_live)
@@ -33,7 +33,7 @@ def test_live_start_and_refresh_include_once_profile_values(client, monkeypatch)
                 "referral_code": {
                     "value": "FIRST123",
                     "source": "learned",
-                    "reuse": "once",
+                    "reuse": "general",
                 }
             },
         },
@@ -54,7 +54,7 @@ def test_live_start_and_refresh_include_once_profile_values(client, monkeypatch)
                 "referral_code": {
                     "value": "UPDATED456",
                     "source": "learned",
-                    "reuse": "once",
+                    "reuse": "general",
                 }
             },
         },
@@ -80,7 +80,7 @@ def test_live_start_and_refresh_map_a_matching_custom_label(client, monkeypatch)
         captured["data_loader"] = kwargs["data_loader"]
 
     monkeypatch.setattr(
-        _site_browser, "get_browser_manager", lambda _db: ActiveBrowserManager()
+        webform_browser, "get_browser_manager", lambda _db: ActiveBrowserManager()
     )
     monkeypatch.setattr(webform_service, "is_apply_running", lambda: False)
     monkeypatch.setattr(webform_service, "start_live", capture_start_live)

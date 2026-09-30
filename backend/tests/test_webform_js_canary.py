@@ -376,6 +376,11 @@ CATALOG = [
     {"group": "教育经历 1", "label": "专业", "value": "软件工程"},
 ]
 
+COLOR_CATALOG = CATALOG + [
+    {"group": "实习经历 2", "label": "公司", "value": "星河科技"},
+    {"group": "实习经历 2", "label": "职位", "value": "产品实习生"},
+]
+
 
 def _open_panel(page_client, catalog=CATALOG) -> None:
     """装监听、推清单、聚焦一个框——把面板带到"推荐已给出"的状态。"""
@@ -388,7 +393,12 @@ def _open_panel(page_client, catalog=CATALOG) -> None:
 
 
 def _shadow(js: str) -> str:
-    return f"document.getElementById('__rf_live_host__').shadowRoot.{js}"
+    body = js
+    for name in ("querySelectorAll", "querySelector"):
+        body = body.replace(f"{name}(", f"root.{name}(")
+    if body == "textContent":
+        body = "root.textContent"
+    return f"(() => {{ const root = document.getElementById('__rf_live_host__').shadowRoot; return {body}; }})()"
 
 
 def test_the_picker_is_collapsed_until_asked_for(page_client):
@@ -458,7 +468,9 @@ def test_clicking_a_row_keeps_the_panel_and_the_target_alive(page_client):
     page_client.evaluate("document.querySelector('#ac-tel').focus()")
     page_client.evaluate(_shadow("querySelector('.row').dispatchEvent(new MouseEvent('mouseup', {bubbles: true}))"))
 
-    assert page_client.evaluate(_shadow("querySelector('.p').style.display")) == "block"
+    # 面板是**竖排 flex**：资料区因此拿的是"面板上限减去上面几块"，而不是自己写死一个
+    # max-height——两处各写一个的话窗口偏矮时资料区底部会被面板裁掉。
+    assert page_client.evaluate(_shadow("querySelector('.p').style.display")) == "flex"
 
 
 def test_the_expanded_state_survives_moving_to_another_field(page_client):
@@ -642,43 +654,63 @@ def test_the_panel_follows_a_layout_shift_without_any_scroll(page_client):
     assert after - before >= 120, f"面板没跟上页面重排：{before} → {after}"
 
 
-def test_a_dragged_panel_still_follows_the_next_field(page_client):
-    """拖动记的是**相对输入框的偏移**，不是绝对坐标。
+DRAG_DELTA = 40
 
-    这样"挪开一点别挡着"和"换个框还贴着"能同时成立。记绝对坐标的话，拖过一次之后就再也
-    不跟了——而那恰恰是这个功能的意义。
+
+def _offset_after_switching_field(page_client, delta: int) -> dict:
+    """装面板 → 聚焦第一个框 → 可选拖 delta 像素 → 换第二个框 → 量面板落点。
+
+    每次都从干净状态开始（拖完卸载），否则上一次的拖动偏移会串到下一次。
     """
     _install(page_client)
     _focus(page_client, "#deep-name")
     page_client.evaluate(
         "window.__rfShowPanel({status: 'matched', field_label: '姓名', value: '张三'})"
     )
-
-    delta = 40
-    page_client.evaluate(
-        "(() => {"
-        " const root = document.getElementById('__rf_live_host__').shadowRoot;"
-        " const panel = root.querySelector('.p');"
-        " const r = panel.getBoundingClientRect();"
-        " const x = r.left + 12; const y = r.top + 6;"
-        " panel.dispatchEvent(new MouseEvent('mousedown',"
-        "   {bubbles: true, button: 0, clientX: x, clientY: y}));"
-        f" window.dispatchEvent(new MouseEvent('mousemove',"
-        f"   {{bubbles: true, clientX: x, clientY: y + {delta}}}));"
-        " window.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));"
-        "})()"
-    )
-
+    if delta:
+        page_client.evaluate(
+            "(() => {"
+            " const root = document.getElementById('__rf_live_host__').shadowRoot;"
+            " const panel = root.querySelector('.p');"
+            " const r = panel.getBoundingClientRect();"
+            " const x = r.left + 12; const y = r.top + 6;"
+            " panel.dispatchEvent(new MouseEvent('mousedown',"
+            "   {bubbles: true, button: 0, clientX: x, clientY: y}));"
+            " window.dispatchEvent(new MouseEvent('mousemove',"
+            f"   {{bubbles: true, clientX: x, clientY: y + {delta}}}));"
+            " window.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));"
+            "})()"
+        )
     # 换一个框，像 Python 侧那样重新推一次面板。
     _focus(page_client, "#ac-tel")
     page_client.evaluate(
         "window.__rfShowPanel({status: 'matched', field_label: '手机号', value: '13500000000'})"
     )
-
     box = page_client.evaluate(_box("#ac-tel"))
-    assert box["panel"]["left"] >= box["field"]["right"], f"拖过之后不再贴着输入框：{box}"
-    offset = box["panel"]["top"] - box["field"]["top"]
-    assert abs(offset - delta) <= 6, f"相对偏移没保留下来：{offset}（期望 {delta}）"
+    page_client.evaluate("window.__rfUninstall()")
+    return box
+
+
+def test_a_dragged_panel_still_follows_the_next_field(page_client):
+    """拖动记的是**相对输入框的偏移**，不是绝对坐标。
+
+    这样"挪开一点别挡着"和"换个框还贴着"能同时成立。记绝对坐标的话，拖过一次之后就再也
+    不跟了——而那恰恰是这个功能的意义。
+
+    断言写成**拖动前后两次的差值**，而不是"面板一定在输入框右边"：面板 620px 宽、视口只有
+    762px 时右边根本放不下，`targetPosition` 会按设计退到输入框下方（那条分支本来就是为了
+    "左右都放不下"写的）。所以这里只钉两件真事——不盖住那个框，以及拖动量原样保留。
+    """
+    plain = _offset_after_switching_field(page_client, 0)
+    dragged = _offset_after_switching_field(page_client, DRAG_DELTA)
+
+    assert not _overlaps(dragged["panel"], dragged["field"]), f"拖过之后盖住了输入框：{dragged}"
+    moved = (
+        dragged["panel"]["top"] - dragged["field"]["top"]
+    ) - (
+        plain["panel"]["top"] - plain["field"]["top"]
+    )
+    assert abs(moved - DRAG_DELTA) <= 6, f"相对偏移没保留下来：{moved}（期望 {DRAG_DELTA}）"
 
 
 def test_the_reflow_timer_is_stopped_on_uninstall(page_client):
@@ -852,7 +884,7 @@ def test_clicking_a_user_choice_control_hides_the_panel_left_over_from_the_last_
     "不给它提示"和"把它上面的提示清掉"是两件事，这条守的是后者。
     """
     _open_panel(page_client)
-    assert page_client.evaluate(_shadow("querySelector('.p').style.display")) == "block"
+    assert page_client.evaluate(_shadow("querySelector('.p').style.display")) == "flex"
 
     for selector in ("#gender-male", "#agree", "#degree"):
         _focus(page_client, selector)
@@ -971,11 +1003,14 @@ def test_the_remember_editor_lists_exactly_the_targets_it_was_given(page_client)
 
     text = page_client.evaluate(_shadow("querySelector('.rf-memory').textContent"))
     assert "网申资料" in text, f"编辑器没渲染出来：{text!r}"
-    assert "身高(cm)" in text, f"目标没列出来：{text!r}"
-    # **行数 = 后端给的 1 条 + 固定那条「新增自定义」，不多不少。**
-    assert page_client.evaluate(_shadow("querySelectorAll('.rf-memory-row').length")) == 2, (
-        f"编辑器多画了候选：{text!r}"
+    assert "身体情况" in text, f"目标分组没列出来：{text!r}"
+    # 默认只展开「自定义」；已有网申字段先折叠，避免一打开就把屏幕撑满。
+    assert page_client.evaluate(_shadow("querySelectorAll('.rf-memory-row').length")) == 1, (
+        f"编辑器默认展开了过多候选：{text!r}"
     )
+    assert page_client.evaluate(
+        _shadow("querySelector(\".rf-memory-group[aria-expanded='false']\") !== null")
+    ) is True
     # 简历资料的落点不该出现。
     assert "我的资料" not in text, f"编辑器里出现了简历资料：{text!r}"
     # 打开编辑器只是"准备保存"，页面上那个框仍然没被写。
@@ -990,6 +1025,9 @@ def test_the_remember_editor_records_the_chosen_target_without_writing_the_page(
         "window.__rfShowPanel({status: 'matched', field_label: '姓名', value: '张三'})"
     )
     page_client.evaluate(_shadow("querySelector('.remember').click()"))
+    page_client.evaluate(
+        _shadow("querySelectorAll('.rf-memory-group')[1].click()")
+    )
     rows = _shadow("querySelectorAll('.rf-memory-row')")
     page_client.evaluate(f"[...{rows}].find((r) => r.textContent.includes('身高')).click()")
     page_client.evaluate(_shadow("querySelector('.rf-memory-save').click()"))
@@ -1003,12 +1041,60 @@ def test_the_remember_editor_records_the_chosen_target_without_writing_the_page(
     assert page_client.evaluate("window.__rfAccept") is None
 
 
+def test_remember_editor_uses_the_real_form_label_before_the_placeholder(page_client):
+    """通用提示语不能直接变成字段名；没有真实 label 时要清理出字段语义。"""
+    _install_editor(page_client, EDITOR_TARGETS)
+    _focus(page_client, "#deep-name")
+    page_client.evaluate(
+        "window.__rfFocus = Object.assign({}, window.__rfFocus, {"
+        "label: '', aria_label: '', aria_labelledby: '', legend: '', title: '', name: '',"
+        "placeholder: '如有内推串码可在此填写',"
+        "nearby_text: '内推串码* 如有内推串码可在此填写'});"
+    )
+    page_client.evaluate(
+        "window.__rfShowPanel({status: 'matched', field_label: 'AI 错认字段', value: '345354543'})"
+    )
+    page_client.evaluate(_shadow("querySelector('.remember').click()"))
+
+    label = page_client.evaluate(_shadow("querySelector('.rf-memory-label-input').value"))
+    assert label == "内推串码", label
+
+
+def test_remember_editor_switches_views_instead_of_stacking_on_the_picker(page_client):
+    _install_editor(page_client, EDITOR_TARGETS)
+    _focus(page_client, "#deep-name")
+    page_client.evaluate(
+        "window.__rfShowPanel({status: 'matched', field_label: '姓名', value: '张三'})"
+    )
+    page_client.evaluate(_shadow("querySelector('.more').click()"))
+    assert page_client.evaluate(_shadow("querySelector('.pick').classList.contains('on')")) is True
+
+    page_client.evaluate(_shadow("querySelector('.remember').click()"))
+
+    state = page_client.evaluate(
+        "(() => { const r = document.getElementById('__rf_live_host__').shadowRoot;"
+        " return {editor: getComputedStyle(r.querySelector('.rf-memory')).display,"
+        " pick: getComputedStyle(r.querySelector('.pick')).display,"
+        " more: getComputedStyle(r.querySelector('.more')).display,"
+        " groupPosition: getComputedStyle(r.querySelector('.rf-memory-group')).position}; })()"
+    )
+    assert state == {
+        "editor": "block",
+        "pick": "none",
+        "more": "none",
+        "groupPosition": "relative",
+    }, state
+
+    page_client.evaluate(_shadow("querySelector('.rf-memory-cancel').click()"))
+    assert page_client.evaluate(_shadow("querySelector('.pick').classList.contains('on')")) is True
+
+
 # ===== 「换个资料…」那一屏：分组跳转 / 折叠 / 命中数 / 截断 =====
 #
 # 起因是用户的反馈：内容一多就只能在面板里上下滚着翻找；单条字段名过长时会把整行
 # 撑乱。改法是给三样东西——顶部的分组跳转条、每组可折叠、搜索时给出命中数。
 #
-# 面板最宽 500px（`.p{width:min(500px,calc(100vw - 16px))}`），装不下左侧栏，
+# 面板最宽 620px（`.p{width:min(620px,calc(100vw - 16px))}`），装不下左侧栏，
 # 所以跳转条是**横着排在搜索框下面**的，不是 Codex 计划里写的左侧目录。
 #
 # 同样是真机验证：这一屏是注入脚本现场渲染的，离线测试只能断言"脚本里有某个标记"。
@@ -1032,10 +1118,21 @@ def _chip(group: str) -> str:
     )
 
 
+def _unfold_nav(page_client) -> None:
+    """把「分组快速定位」摊开。
+
+    分组多（家族超过 12 个）时它默认是折起来的——那正是"跳转条不该先占掉半屏"的默认值。
+    折叠头是真按钮，所以点它一次就摊开；已经摊开时什么都不做。
+    """
+    if page_client.evaluate(_shadow("querySelector('.nav').classList.contains('fold')")):
+        page_client.evaluate(_shadow("querySelector('.navhead').click()"))
+
+
 def _open_picker(page_client, catalog=None) -> None:
-    """装面板 → 展开「换个资料…」。"""
+    """装面板 → 展开「换个资料…」→ 摊开跳转条（后面按胶囊定位的用例都从这里开始）。"""
     _open_panel(page_client, catalog or CATALOG)
     page_client.evaluate(_shadow("querySelector('.more').click()"))
+    _unfold_nav(page_client)
 
 
 def test_the_picker_lists_a_jump_chip_per_group_with_its_count(page_client):
@@ -1057,9 +1154,54 @@ def test_the_picker_lists_a_jump_chip_per_group_with_its_count(page_client):
         {"name": "联系方式", "count": "1", "group": "联系方式"},
         {"name": "教育经历 1", "count": "2", "group": "教育经历 1"},
     ], chips
+    assert page_client.evaluate(
+        f"[...{_ROOT}.querySelectorAll('.navchip')].every((c) => c.firstChild.className === 'nm')"
+    ) is True
+    assert page_client.evaluate(_shadow("querySelector('.nav').getAttribute('role')")) == "group"
     # 条数**不在名字里**，这才是不产生歧义的原因。
     assert all(not c["name"].endswith(c["count"]) or not c["name"][:-1].endswith(" " + c["count"])
                for c in chips)
+
+
+def test_group_headers_and_jump_chips_keep_stable_color_tones(page_client):
+    _open_picker(page_client, catalog=COLOR_CATALOG)
+
+    tones = page_client.evaluate(
+        f"({{headers: [...{_ROOT}.querySelectorAll('.grp')].map((el) => el.dataset.tone),"
+        f"chips: [...{_ROOT}.querySelectorAll('.navchip')].map((el) => el.dataset.tone),"
+        f"rows: [...{_ROOT}.querySelectorAll('.row')].map((el) => "
+        "({group: el.dataset.group, tone: el.dataset.tone}))})"
+    )
+    assert tones["headers"] == ["0", "0", "1", "2"], tones
+    assert tones["headers"] == tones["chips"], tones
+    assert all(
+        row["tone"] == {"教育经历 1": "1", "实习经历 2": "2"}.get(row["group"], "0")
+        for row in tones["rows"]
+    ), tones
+    colors = page_client.evaluate(
+        f"[...{_ROOT}.querySelectorAll('.grp')].map((el) => "
+        "getComputedStyle(el).getPropertyValue('--grp-text').trim())"
+    )
+    assert colors[0] == colors[1] == "#2e6da4", colors
+    assert colors[2] != colors[0] and colors[3] != colors[0] and colors[2] != colors[3], colors
+
+    first_group = f"[...{_ROOT}.querySelectorAll('.grp')][0]"
+    page_client.evaluate(f"{first_group}.click()")
+    after_toggle = page_client.evaluate(
+        f"[...{_ROOT}.querySelectorAll('.grp')].map((el) => el.dataset.tone)"
+    )
+    assert after_toggle == tones["headers"]
+
+    page_client.evaluate(_shadow("querySelector('.search input').value = '实习'"))
+    page_client.evaluate(_shadow("querySelector('.search input').dispatchEvent(new Event('input'))"))
+    assert page_client.evaluate(
+        _shadow("querySelector('.grp').dataset.tone")
+    ) == "2"
+    page_client.evaluate(_shadow("querySelector('.search input').value = ''"))
+    page_client.evaluate(_shadow("querySelector('.search input').dispatchEvent(new Event('input'))"))
+    assert page_client.evaluate(
+        f"[...{_ROOT}.querySelectorAll('.grp')].map((el) => el.dataset.tone)"
+    ) == tones["headers"]
 
 
 def test_jumping_from_a_chip_expands_that_group_and_marks_the_chip(page_client):
@@ -1124,18 +1266,21 @@ LONG_CATALOG = [
 ]
 
 
-def test_a_long_field_name_is_truncated_and_keeps_the_full_text_in_the_title(page_client):
-    """长字段名**单行截断**，完整名字挂 title——这是用户直接反馈的那条。
-
-    断言的是"真的被裁了"（`scrollWidth > clientWidth`）而不是"样式表里有
-    `text-overflow`"：后者在元素没被约束住时照样成立，而用户看到的正是没被约束住的样子。
-    """
+def test_a_long_field_name_is_clamped_to_two_lines_and_keeps_the_full_text_in_the_title(page_client):
+    """长字段名最多展示两行，完整名字仍挂在 title 上，避免把整条资料撑乱。"""
     _open_picker(page_client, catalog=LONG_CATALOG)
     row = _rows_matching("特别长")
 
-    assert page_client.evaluate(
-        f"{row}.querySelector('.l').scrollWidth > {row}.querySelector('.l').clientWidth"
-    ) is True, "长字段名没有被截断，整行会被撑乱"
+    layout = page_client.evaluate(
+        f"(() => {{ const el = {row}.querySelector('.l');"
+        "const style = getComputedStyle(el);"
+        "return {display: style.display, lineClamp: style.webkitLineClamp,"
+        "overflow: style.overflow, height: el.getBoundingClientRect().height,"
+        "lineHeight: parseFloat(style.lineHeight)}; })()"
+    )
+    assert layout["lineClamp"] == "2", layout
+    assert layout["overflow"] == "hidden", layout
+    assert layout["height"] <= layout["lineHeight"] * 2 + 1, layout
     # 完整内容仍然拿得到。
     assert page_client.evaluate(f"{row}.title.includes('{LONG_LABEL}')") is True
 
@@ -1273,13 +1418,12 @@ def test_the_group_nav_wraps_instead_of_scrolling_sideways(page_client):
     横向溢出会让"跳转"退化成两步：先横向滚着找到那个组、再点——那和纵向滚着找条目
     是同一种累，等于白做了跳转条。这条用 14 个分组把它钉住。
     """
-    _open_panel(page_client, catalog=MANY_GROUPS)
-    page_client.evaluate(_shadow("querySelector('.more').click()"))
+    _open_picker(page_client, catalog=MANY_GROUPS)
 
-    nav = _shadow("querySelector('.nav')")
-    overflow = page_client.evaluate(f"{nav}.scrollWidth - {nav}.clientWidth")
+    body = _shadow("querySelector('.navbody')")
+    overflow = page_client.evaluate(f"{body}.scrollWidth - {body}.clientWidth")
     assert overflow <= 1, f"跳转条横向溢出了 {overflow}px"
-    assert page_client.evaluate(f"getComputedStyle({nav}).flexWrap") == "wrap"
+    assert page_client.evaluate(f"getComputedStyle({body}).flexWrap") == "wrap"
     assert page_client.evaluate(_shadow("querySelectorAll('.navchip').length")) == 14
 
 
@@ -1290,8 +1434,7 @@ def test_jumping_to_a_group_actually_brings_it_into_view(page_client):
     **可见性**断言（而不是"它一定贴在最顶上"）：靠后的分组下面没有足够内容，
     本来就滚不到顶部，那时候"滚到能看见"就是正确行为。
     """
-    _open_panel(page_client, catalog=MANY_GROUPS)
-    page_client.evaluate(_shadow("querySelector('.more').click()"))
+    _open_picker(page_client, catalog=MANY_GROUPS)
 
     for name in ("分组3", "分组8", "分组13", "分组5", "分组14"):
         page_client.evaluate(f"{_chip(name)}.click()")
@@ -1306,6 +1449,229 @@ def test_jumping_to_a_group_actually_brings_it_into_view(page_client):
         )
         assert state["found"], f"找不到「{name}」那一组"
         assert state["visible"], f"点「{name}」之后它没被带到眼前：{state}"
+
+
+# ===== 跳转条"盖住资料"与同类分组的聚类 =====
+#
+# 用户报的是：分组一多，跳转条就把下面的「可能是这几个」和完整清单**整片盖住**，滚也
+# 滚不出来。根因是几何的——跳转条挂在 `position:sticky` 的搜索块里，而它自己的高度
+# **没有上限**；真实资料库有 50 个左右的分组，胶囊铺十几行，sticky 块于是高过资料区的
+# 可见高度。所以这些用例断言的是**位置关系**（资料区里还能看见几行、sticky 块占几成），
+# 不是"某个 class 在不在"。
+#
+# 同类分组（「荣誉奖项 1/2/3」）聚成一块：序号是后端拼的（`data.py` / `repeated_profile.py`
+# 都写 `名字 + ' ' + 序号`），按"去掉结尾的序号"认族。
+
+_BIG_REPEATED = (
+    ("教育经历", 3),
+    ("实习和工作", 5),
+    ("校园经历", 2),
+    ("项目经历", 2),
+    ("专业技能", 6),
+    ("荣誉奖项", 3),
+    ("学术成果", 2),
+    ("证书", 3),
+    ("语言能力", 2),
+    ("技能", 2),
+    ("紧急联系人", 2),
+    ("作品和附件", 3),
+    ("社交账号", 2),
+    ("校园和社会实践", 2),
+    ("竞赛和获奖", 3),
+    ("实习和工作补充", 2),
+    ("教育经历补充", 2),
+    ("证书补充", 2),
+    ("语言能力补充", 2),
+    ("项目经历补充", 1),
+)
+
+# 接近真实规模：50 个左右的分组，其中大半是"同名不同序号"的同类分组。
+BIG_CATALOG = [
+    {"group": "身份信息", "label": "姓名", "value": "张三"},
+    {"group": "联系方式", "label": "手机号", "value": "13800000000"},
+    {"group": "其他", "label": "备注", "value": "无"},
+] + [
+    {"group": f"{name} {index}", "label": f"{name}字段", "value": f"{name}值"}
+    for name, count in _BIG_REPEATED
+    for index in range(1, count + 1)
+]
+BIG_GROUP_COUNT = len(BIG_CATALOG)
+BIG_FAMILY_COUNT = 3 + len(_BIG_REPEATED)
+
+# 资料区的几何：sticky 块占多高、里面还剩几行、胶囊区被限到多高。
+_LAYOUT_PROBE = (
+    "(() => { const r = document.getElementById('__rf_live_host__').shadowRoot;"
+    " const pick = r.querySelector('.pick');"
+    " const search = r.querySelector('.search');"
+    " const body = r.querySelector('.navbody');"
+    " const pr = pick.getBoundingClientRect();"
+    " const sr = search.getBoundingClientRect();"
+    " const top = Math.max(pr.top, sr.bottom);"
+    " const rows = [...r.querySelectorAll('.row')].filter((row) => {"
+    "   const b = row.getBoundingClientRect();"
+    "   return b.height > 0 && b.top >= top - 1 && b.bottom <= pr.bottom + 1; });"
+    " return {sticky: Math.round(sr.height), pick: Math.round(pr.height), rows: rows.length,"
+    "         navBody: Math.round(body.getBoundingClientRect().height),"
+    "         navMax: Math.round(parseFloat(getComputedStyle(body).maxHeight)),"
+    "         folded: r.querySelector('.nav').classList.contains('fold')}; })()"
+)
+
+
+def _open_picker_in_viewport(page_client, width: int, height: int) -> None:
+    """把视口缩到指定尺寸再开资料面板：窗口越矮，资料区的可见高度越小。
+
+    **用完必须清掉**（用例自己 try/finally）——覆盖是挂在调试目标上的，留着会影响同
+    一个标签页后面的断言。
+    """
+    page_client.send(
+        "Emulation.setDeviceMetricsOverride",
+        {"width": width, "height": height, "deviceScaleFactor": 1, "mobile": False},
+    )
+
+
+def test_a_long_group_list_can_never_cover_the_details_below(page_client):
+    """**这就是用户报的那个 bug 的正面约束**：跳转条再长也不许把资料区吃光。
+
+    摊开跳转条（最坏情况）+ 50 个分组 + 偏矮的窗口，三者叠起来正是复现条件。断言
+    "资料区里还看得见行、sticky 块不超过资料区高度的 55%"——按原实现，此时跳转条
+    （实测 544px）比资料区（372px）还高，可见行数是 0，这条必然红。
+    """
+    try:
+        _open_picker_in_viewport(page_client, 1000, 560)
+        _open_picker(page_client, catalog=BIG_CATALOG)
+
+        state = page_client.evaluate(_LAYOUT_PROBE)
+        assert state["folded"] is False, f"这条要的是摊开后的最坏情况：{state}"
+        assert state["rows"] >= 1, f"资料区一行都看不见了：{state}"
+        assert state["sticky"] <= state["pick"] * 0.55, f"跳转条把资料区吃掉了：{state}"
+    finally:
+        page_client.send("Emulation.clearDeviceMetricsOverride")
+
+
+def test_the_nav_body_is_capped_so_the_details_keep_their_room(page_client):
+    """胶囊区的上限**从资料区的可见高度里倒推**，不是一个写死的数。
+
+    判据是"资料区至少还剩多少"（矮窗口里留一半、正常窗口里不少于 150px）——写死的高度
+    在矮窗口里迟早翻车。
+    """
+    try:
+        _open_picker_in_viewport(page_client, 1000, 560)
+        _open_picker(page_client, catalog=BIG_CATALOG)
+
+        state = page_client.evaluate(_LAYOUT_PROBE)
+        assert state["navBody"] <= state["navMax"] + 1, state
+        assert state["pick"] - state["sticky"] >= 140, f"资料区没留住地方：{state}"
+    finally:
+        page_client.send("Emulation.clearDeviceMetricsOverride")
+
+
+def test_a_long_group_list_starts_with_the_nav_folded(page_client):
+    """分组多时跳转条**默认折起来**：只留一行说明自己有什么，点一下才摊开。
+
+    跳转条本是"分组多到找不到"的解药，可它自己长到十几行时又变成同一个病。折起来只占
+    一行，资料区因此永远有地方——这是"盖不住"的第一道闸。
+    """
+    _open_panel(page_client, catalog=BIG_CATALOG)
+    page_client.evaluate(_shadow("querySelector('.more').click()"))
+
+    assert page_client.evaluate(_shadow("querySelector('.nav').classList.contains('fold')")) is True
+    assert page_client.evaluate(
+        _shadow("querySelector('.navhead .sum').textContent")
+    ) == f"{BIG_FAMILY_COUNT} 组 · {BIG_GROUP_COUNT} 条"
+    # 折起来 = 胶囊区不参与布局（元素还在 DOM 里，只是没有高度）。
+    assert page_client.evaluate(_shadow("querySelector('.navbody').getBoundingClientRect().height")) == 0
+    folded = page_client.evaluate(_LAYOUT_PROBE)
+    assert folded["rows"] >= 1, f"折起来之后资料区还是看不见：{folded}"
+    assert folded["sticky"] <= folded["pick"] * 0.35, f"折起来的一行也不该占这么多：{folded}"
+
+    page_client.evaluate(_shadow("querySelector('.navhead').click()"))
+
+    assert page_client.evaluate(_shadow("querySelector('.nav').classList.contains('fold')")) is False
+    assert page_client.evaluate(_shadow("querySelector('.navbody').getBoundingClientRect().height")) > 0
+    assert page_client.evaluate(_shadow("querySelector('.navhead').getAttribute('aria-expanded')")) == "true"
+
+
+FAMILY_CATALOG = [
+    {"group": "身份信息", "label": "姓名", "value": "张三"},
+    {"group": "荣誉奖项 1", "label": "奖项名称", "value": "校级一等奖"},
+    {"group": "荣誉奖项 1", "label": "获奖时间", "value": "2024-06"},
+    {"group": "荣誉奖项 2", "label": "奖项名称", "value": "院级二等奖"},
+    {"group": "荣誉奖项 3", "label": "奖项名称", "value": "院级三等奖"},
+]
+
+
+def test_same_kind_groups_are_clustered_into_one_family(page_client):
+    """「荣誉奖项 1/2/3」聚成**一块**：一张家族胶囊 + 折着的三个成员。
+
+    用户的原话是"同一个类型的多个字段放到一起"。单成员的分组（身份信息）仍然是老样子
+    的一张胶囊——聚类不该把没有同类的东西也塞进一个壳里。
+    """
+    _open_picker(page_client, catalog=FAMILY_CATALOG)
+
+    families = page_client.evaluate(
+        f"[...{_ROOT}.querySelectorAll('.navfam')].map((f) => ({{"
+        " family: f.dataset.family,"
+        " head: f.querySelector('.navchip .nm').textContent,"
+        " total: f.querySelector('.navchip .c').textContent,"
+        " kids: [...f.querySelectorAll('.navchip.kid')].map((k) => ({"
+        "   label: k.querySelector('.nm').textContent,"
+        "   count: k.querySelector('.c').textContent, group: k.dataset.group})),"
+        " open: f.classList.contains('open')}))"
+    )
+    assert families == [
+        {
+            "family": "荣誉奖项",
+            "head": "荣誉奖项",
+            "total": "4",
+            "kids": [
+                {"label": "1", "count": "2", "group": "荣誉奖项 1"},
+                {"label": "2", "count": "1", "group": "荣誉奖项 2"},
+                {"label": "3", "count": "1", "group": "荣誉奖项 3"},
+            ],
+            "open": False,
+        }
+    ], families
+    singles = page_client.evaluate(
+        f"[...{_ROOT}.querySelectorAll('.navchip')]"
+        ".filter((c) => !c.classList.contains('kid') && !c.dataset.family)"
+        ".map((c) => c.dataset.group)"
+    )
+    assert singles == ["身份信息"], singles
+
+
+def test_a_family_chip_expands_its_members_and_members_jump(page_client):
+    """家族胶囊管展开、成员胶囊管跳转；人进了哪一族，那一族要看得出来。"""
+    _open_picker(page_client, catalog=FAMILY_CATALOG)
+    family = f"{_ROOT}.querySelector('.navfam')"
+    kids = f"[...{family}.querySelectorAll('.navchip.kid')]"
+
+    assert page_client.evaluate(f"{kids}.every((k) => k.getBoundingClientRect().height === 0)") is True
+
+    page_client.evaluate(f"{family}.querySelector('.navchip').click()")
+
+    assert page_client.evaluate(f"{family}.classList.contains('open')") is True
+    assert page_client.evaluate(f"{kids}.every((k) => k.getBoundingClientRect().height > 0)") is True
+    assert page_client.evaluate(
+        f"{family}.querySelector('.navchip').getAttribute('aria-expanded')"
+    ) == "true"
+
+    page_client.evaluate(f"{kids}[1].click()")
+
+    assert page_client.evaluate(f"{kids}[1].classList.contains('on')") is True, "跳过去的那一格没点亮"
+    assert page_client.evaluate(f"{family}.classList.contains('active')") is True, "看不出人在哪一族"
+    jumped = page_client.evaluate(
+        "(() => { const r = document.getElementById('__rf_live_host__').shadowRoot;"
+        " const pr = r.querySelector('.pick').getBoundingClientRect();"
+        " const head = [...r.querySelectorAll('.grp')].find((g) => g.textContent.includes('荣誉奖项 2'));"
+        " if (!head) { return null; }"
+        " const h = head.getBoundingClientRect();"
+        " return {visible: h.top >= pr.top - 2 && h.bottom <= pr.bottom + 2}; })()"
+    )
+    assert jumped == {"visible": True}, jumped
+
+    page_client.evaluate(f"{family}.querySelector('.navchip').click()")
+
+    assert page_client.evaluate(f"{family}.classList.contains('open')") is False
 
 
 def test_the_action_buttons_never_wrap_their_own_labels(page_client):
@@ -1330,3 +1696,17 @@ def test_the_action_buttons_never_wrap_their_own_labels(page_client):
     # 提示独占一行，所以它自己也不该把按钮挤走。
     text = page_client.evaluate(_shadow("querySelector('.more').textContent"))
     assert text == "换个资料…", text
+
+
+def test_panel_explains_that_the_title_bar_can_be_dragged(page_client):
+    """拖动能力要在界面上自解释，且提示不能变成一个可误触的按钮。"""
+    _open_panel(page_client)
+
+    hint = page_client.evaluate(_shadow("querySelector('.drag-hint').textContent"))
+    assert hint == "可拖动标题栏调整位置", hint
+    assert page_client.evaluate(
+        _shadow("getComputedStyle(querySelector('.drag-hint')).fontSize")
+    ) == "10px"
+    assert page_client.evaluate(
+        _shadow("getComputedStyle(querySelector('.head')).cursor")
+    ) == "grab"

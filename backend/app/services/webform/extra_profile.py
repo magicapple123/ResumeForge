@@ -19,7 +19,8 @@
 提示；用户勾选后仍走 ``save_entries`` 落库（**不另开写入接口**）。两件事都在这个模块里，
 因为它们是同一张表的读与写。
 
-``reuse="once"`` 的值**只记不填**：``list_entries(reusable_only=True)`` 会把它们滤掉。
+历史版本曾提供 ``general / scenario / once`` 三档；现在网申资料统一按通用资料复用，
+读取端会把历史档位归一化为 ``general``。
 
 ## 自定义字段（``CUSTOM_`` 前缀，2026-09-27）
 
@@ -55,27 +56,53 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from ...models.profile import UserProfile
 from ...models.web_form_profile import (
     CUSTOM_KEY_PREFIX,
     REUSE_GENERAL,
-    REUSE_LEVELS,
-    REUSE_ONCE,
     SOURCE_LEARNED,
     SOURCE_MANUAL,
     WebFormProfileEntry,
 )
+from ..date_format import normalize_partial_date
 from .fields import FIELD_LABELS, FORM_FIELDS, SOURCE_EXTRA
 
 # 目录里 ``source="extra"`` 的那些 key。**目录内的**合法 key 就是这一批。
 EXTRA_FIELD_KEYS: frozenset[str] = frozenset(
     field.key for field in FORM_FIELDS if field.source == SOURCE_EXTRA
 )
+EXTRA_FIELDS_BY_KEY = {
+    field.key: field for field in FORM_FIELDS if field.source == SOURCE_EXTRA
+}
 
 # 单个值最长多少字符。与资料里其它长文本字段同量级；超长多半是误粘贴。
 MAX_VALUE_CHARS = 2000
 
 # 自定义字段的标签最长多少字符（``field_key`` 那一列是 64，前缀也占位置）。
 MAX_CUSTOM_LABEL_CHARS = 40
+
+
+def _normalized_reuse(_value: str | None = None) -> str:
+    """网申资料统一按通用资料复用，兼容历史记录但不再暴露旧档位。"""
+    return REUSE_GENERAL
+
+# 旧版「网申专用资料」曾经直接存在 ``UserProfile``。这些列保留用于旧库兼容，新的网申资料
+# 界面把它们当作独立网申字段读取和保存；``salary`` 是填表目录键，对应旧列
+# ``expected_salary``。
+LEGACY_EXTRA_FIELD_COLUMNS: dict[str, str] = {
+    "birth_date": "birth_date",
+    "country_region": "country_region",
+    "native_place": "native_place",
+    "political_status": "political_status",
+    "id_type": "id_type",
+    "id_number": "id_number",
+    "phone_country_code": "phone_country_code",
+    "family_info": "family_info",
+    "salary": "expected_salary",
+    "preferred_industry": "preferred_industry",
+    "advisor": "advisor",
+    "research_direction": "research_direction",
+}
 
 # 规范标签时要剥掉的装饰性符号（与 ``matching._DECORATION`` 同一批：表单里"（"与"("混用
 # 是常态，必填星号也常见）。
@@ -90,6 +117,14 @@ def _accepts(key: str) -> bool:
     下一次它们会被当成"库里已有的字段"参与判据，把不该学的东西挡掉或放进来。
     """
     return key in EXTRA_FIELD_KEYS or key.startswith(CUSTOM_KEY_PREFIX)
+
+
+def _normalize_value(key: str, value: str) -> str:
+    """按字段目录规范化可识别的日期；自定义字段保持用户原文。"""
+    field = EXTRA_FIELDS_BY_KEY.get(key)
+    if field is not None and field.kind == "date":
+        return normalize_partial_date(value)
+    return value
 
 
 def custom_key(label: str) -> str:
@@ -172,17 +207,32 @@ def list_entries(db: Session, *, reusable_only: bool = False) -> dict[str, str]:
     **只返回目录里认得的 key**：目录删掉某个字段后，库里那条旧值不该再被读出来
     （否则会填进一个我们已经不认识的字段）。
 
-    ``reusable_only=True`` 时再滤掉 ``reuse="once"`` 的那些——那是"只记不填"的档位
-    （内推码、某家的申请编号），留着它们参与预填正是这个档位要避免的事。
+    ``reusable_only`` 保留在签名中兼容旧调用方；当前所有网申资料都是通用资料，
+    因此历史 ``once`` / ``scenario`` 也会参与预填。
     """
     rows = db.query(WebFormProfileEntry).all()
-    return {
-        row.field_key: row.value
-        for row in rows
-        if _accepts(row.field_key)
-        and row.value
-        and not (reusable_only and row.reuse == REUSE_ONCE)
-    }
+    stored_keys = {row.field_key for row in rows if _accepts(row.field_key)}
+    result: dict[str, str] = {}
+    for row in rows:
+        if not _accepts(row.field_key):
+            continue
+        value = _normalize_value(row.field_key, str(row.value or "").strip())
+        if value:
+            result[row.field_key] = value
+    profile = db.query(UserProfile).order_by(UserProfile.id).first()
+    if profile is not None:
+        for key, column in LEGACY_EXTRA_FIELD_COLUMNS.items():
+            if key in stored_keys:
+                continue
+            value = _normalize_value(
+                key, str(getattr(profile, column, "") or "").strip()
+            )
+            if key == "phone_country_code" and value == "+86":
+                # 这是旧模型的默认值，不等于用户在网申资料里主动填写过。
+                continue
+            if value:
+                result[key] = value
+    return result
 
 
 def list_details(db: Session) -> dict[str, dict[str, str]]:
@@ -192,16 +242,34 @@ def list_details(db: Session) -> dict[str, dict[str, str]]:
     （还要显示来源与档位）。合成一个会让前者多返回三个它永远不看的字段。
     """
     rows = db.query(WebFormProfileEntry).all()
-    return {
+    result = {
         row.field_key: {
-            "value": row.value,
+            "value": _normalize_value(row.field_key, str(row.value or "").strip()),
             "source": row.source or SOURCE_MANUAL,
-            "reuse": row.reuse or REUSE_GENERAL,
+            "reuse": _normalized_reuse(row.reuse),
             "label": display_label(row.field_key, row.label),
         }
         for row in rows
         if _accepts(row.field_key) and row.value
     }
+    profile = db.query(UserProfile).order_by(UserProfile.id).first()
+    if profile is not None:
+        for key, column in LEGACY_EXTRA_FIELD_COLUMNS.items():
+            if key in result:
+                continue
+            value = _normalize_value(
+                key, str(getattr(profile, column, "") or "").strip()
+            )
+            if key == "phone_country_code" and value == "+86":
+                continue
+            if value:
+                result[key] = {
+                    "value": value,
+                    "source": SOURCE_MANUAL,
+                    "reuse": REUSE_GENERAL,
+                    "label": display_label(key),
+                }
+    return result
 
 
 def save_entries(
@@ -209,6 +277,7 @@ def save_entries(
     values: Mapping[str, str],
     *,
     details: Mapping[str, Mapping[str, str]] | None = None,
+    commit: bool = True,
 ) -> dict[str, str]:
     """整份覆盖写入。返回落库后的结果，供调用方回显（不必再查一次）。
 
@@ -220,7 +289,7 @@ def save_entries(
     for key, raw in values.items():
         if not _accepts(key):
             continue  # 目录外且非自定义的键直接丢弃，不报错——前端多传一个键不该让整次保存失败。
-        value = (raw or "").strip()[:MAX_VALUE_CHARS]
+        value = _normalize_value(key, (raw or "").strip())[:MAX_VALUE_CHARS]
         if value:
             cleaned[key] = value
 
@@ -228,11 +297,8 @@ def save_entries(
     for key, value in cleaned.items():
         extra = (details or {}).get(key) or {}
         source = extra.get("source") or SOURCE_MANUAL
-        reuse = extra.get("reuse") or REUSE_GENERAL
         if source not in (SOURCE_MANUAL, SOURCE_LEARNED):
             source = SOURCE_MANUAL
-        if reuse not in REUSE_LEVELS:
-            reuse = REUSE_GENERAL
         # 标签没给就留空串（读取端回落到目录名）。**不从 key 倒推**——自定义 key 里那个
         # 后缀虽然长得像标签，但它是规范化过的（剥过标点），倒推会让界面上的名字和用户
         # 当初填的那个逐渐对不上。
@@ -241,19 +307,26 @@ def save_entries(
         if row is None:
             db.add(
                 WebFormProfileEntry(
-                    field_key=key, value=value, label=label, source=source, reuse=reuse
+                    field_key=key, value=value, label=label, source=source, reuse=REUSE_GENERAL
                 )
             )
         else:
             row.value = value
             row.label = label
             row.source = source
-            row.reuse = reuse
+            row.reuse = REUSE_GENERAL
+    profile = db.query(UserProfile).order_by(UserProfile.id).first()
+    if profile is not None:
+        # ``save_entries`` 是整份覆盖写入：旧列也要同步清空，否则用户在新界面清掉的
+        # 值会从旧的 UserProfile 兼容列里再次回流到网申填表数据。
+        for key, column in LEGACY_EXTRA_FIELD_COLUMNS.items():
+            setattr(profile, column, cleaned.get(key, ""))
     # 本次没提到的（含被清空的）一律删掉——见模块说明里的"整份覆盖"。
     for key, row in existing.items():
         if key not in cleaned:
             db.delete(row)
-    db.commit()
+    if commit:
+        db.commit()
     return cleaned
 
 
@@ -277,7 +350,7 @@ def remember(
     """
     if not _accepts(key):
         return False
-    cleaned_value = (value or "").strip()[:MAX_VALUE_CHARS]
+    cleaned_value = _normalize_value(key, (value or "").strip())[:MAX_VALUE_CHARS]
     if not cleaned_value:
         return False
 
@@ -293,7 +366,7 @@ def remember(
                 value=cleaned_value,
                 label=label[:64],
                 source=source,
-                reuse=reuse,
+                reuse=REUSE_GENERAL,
             )
         )
     else:
@@ -301,7 +374,10 @@ def remember(
         if label:
             row.label = label[:64]
         row.source = source
-        row.reuse = reuse
+        row.reuse = REUSE_GENERAL
+    profile = db.query(UserProfile).order_by(UserProfile.id).first()
+    if profile is not None and key in LEGACY_EXTRA_FIELD_COLUMNS:
+        setattr(profile, LEGACY_EXTRA_FIELD_COLUMNS[key], cleaned_value)
     db.commit()
     return True
 
