@@ -147,9 +147,13 @@ try {
     $configContent = Read-TextFileAsUtf8 -Path $ConfigPath
     $version = [regex]::Match($configContent, 'app_version:\s*str\s*=\s*"([^"]+)"').Groups[1].Value
     Assert-ReleaseTest -Condition (-not [string]::IsNullOrWhiteSpace($version)) -Message "Could not read app_version."
+    # `-all` 是**契约**，不是命名口味：应用内更新的挑包逻辑（0.14.2 及更早）按文件名排序
+    # 取第一个 `.zip`，`-all.zip` 排在 `-macos.zip` / `-windows.zip` 前面，老用户因此能
+    # 拿到一个装得上的包。改回不带后缀的名字（`ResumeForge-<版本>.zip`）会让它排到最后，
+    # 0.14.2 用户的应用内更新重新变成"一点就报错"。
     Assert-ReleaseTest `
-        -Condition ($archive.Name -eq "ResumeForge-$version.zip") `
-        -Message "The archive must be named after the packaged version (got $($archive.Name))."
+        -Condition ($archive.Name -eq "ResumeForge-$version-all.zip") `
+        -Message "The all-platform archive must be named ResumeForge-<version>-all.zip so older in-app updaters pick it (got $($archive.Name))."
 
     $prefix = "ResumeForge-$version/"
     Add-Type -AssemblyName System.IO.Compression.FileSystem
