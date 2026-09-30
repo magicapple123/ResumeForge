@@ -341,6 +341,10 @@ async def check_for_update(*, refresh: bool = False) -> UpdateCheckResult:
             message = f"已是最新版本（{current}）"
         elif not choice.installable:
             message = f"有新版本 {latest}，但{choice.reason}；请到发布页手动下载"
+        elif not _install_supported():
+            # 挑得到包、但这台机器不走应用内安装（目前只有 Windows 那条链路）。按钮会
+            # 隐藏，所以得在这里说清"更新是有的，只是要换种方式"，否则界面看起来像没反应。
+            message = f"有新版本 {latest} 可用；当前系统请用 update 脚本或到发布页手动下载"
         elif choice.reason:
             message = f"有新版本 {latest} 可用（{choice.reason}）"
         else:
