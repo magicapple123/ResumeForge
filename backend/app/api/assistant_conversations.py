@@ -14,6 +14,7 @@ from ..schemas.assistant import (
     ChatConversationDetail,
     ChatConversationForkRequest,
     ChatConversationUpdate,
+    ConversationSurface,
 )
 from ..services import trash
 
@@ -36,8 +37,14 @@ def welcome_message() -> str:
         return "你好，我是简历通的求职助手。可以在下方输入框直接提问，或先关联岗位、简历和资料。"
 
 
-def conversation_or_404(db: Session, conversation_id: int) -> ChatConversation:
-    conversation = db.get(ChatConversation, conversation_id)
+def conversation_or_404(
+    db: Session, conversation_id: int, surface: ConversationSurface = "page"
+) -> ChatConversation:
+    conversation = (
+        db.query(ChatConversation)
+        .filter(ChatConversation.id == conversation_id, ChatConversation.surface == surface)
+        .one_or_none()
+    )
     if conversation is None:
         raise HTTPException(status_code=404, detail="会话不存在或已被删除")
     return conversation
@@ -60,6 +67,7 @@ def _to_brief(conversation: ChatConversation, message_count: int = 0) -> ChatCon
     return ChatConversationBrief(
         id=conversation.id,
         title=conversation.title,
+        surface=conversation.surface,
         pinned=conversation.pinned,
         favorite=conversation.favorite,
         archived=conversation.archived,
@@ -72,7 +80,7 @@ def _to_brief(conversation: ChatConversation, message_count: int = 0) -> ChatCon
 
 def create_conversation(payload: ChatConversationCreate, db: Session) -> ChatConversationBrief:
     title = " ".join(payload.title.split()) or DEFAULT_TITLE
-    conversation = ChatConversation(title=title[:120])
+    conversation = ChatConversation(title=title[:120], surface=payload.surface)
     db.add(conversation)
     db.flush()
     message_count = 0
@@ -92,11 +100,13 @@ def create_conversation(payload: ChatConversationCreate, db: Session) -> ChatCon
     return _to_brief(conversation, message_count)
 
 
-def list_conversations(limit: int, db: Session) -> list[ChatConversationBrief]:
+def list_conversations(
+    limit: int, db: Session, surface: ConversationSurface = "page"
+) -> list[ChatConversationBrief]:
     """按置顶、更新时间排序返回会话（含已归档，由前端按筛选展示）。"""
     rows = (
         db.query(ChatConversation)
-        .filter(trash.live_only(ChatConversation))
+        .filter(trash.live_only(ChatConversation), ChatConversation.surface == surface)
         .order_by(
             ChatConversation.pinned.desc(),
             ChatConversation.updated_at.desc(),
@@ -109,10 +119,12 @@ def list_conversations(limit: int, db: Session) -> list[ChatConversationBrief]:
     return [_to_brief(row, counts.get(row.id, 0)) for row in rows]
 
 
-def read_conversation(conversation_id: int, db: Session) -> ChatConversationDetail:
+def read_conversation(
+    conversation_id: int, db: Session, surface: ConversationSurface = "page"
+) -> ChatConversationDetail:
     conversation = (
         db.query(ChatConversation)
-        .filter(trash.live_only(ChatConversation))
+        .filter(trash.live_only(ChatConversation), ChatConversation.surface == surface)
         .options(selectinload(ChatConversation.messages))
         .filter(ChatConversation.id == conversation_id)
         .one_or_none()
@@ -123,9 +135,12 @@ def read_conversation(conversation_id: int, db: Session) -> ChatConversationDeta
 
 
 def update_conversation(
-    conversation_id: int, payload: ChatConversationUpdate, db: Session
+    conversation_id: int,
+    payload: ChatConversationUpdate,
+    db: Session,
+    surface: ConversationSurface = "page",
 ) -> ChatConversationBrief:
-    conversation = conversation_or_404(db, conversation_id)
+    conversation = conversation_or_404(db, conversation_id, surface)
     if payload.title is not None:
         conversation.title = payload.title
     if payload.pinned is not None:
@@ -149,14 +164,17 @@ def update_conversation(
 
 
 def fork_conversation(
-    conversation_id: int, payload: ChatConversationForkRequest, db: Session
+    conversation_id: int,
+    payload: ChatConversationForkRequest,
+    db: Session,
+    surface: ConversationSurface = "page",
 ) -> ChatConversationDetail:
     """「在新对话中继续」：把原会话最近若干条消息复制成一段新会话。
 
     只复制文本：附件（尤其是图片 data URL）原样搬运会让同一份大文件在库里存两份，
     所以只在正文后附上文件名的提示，需要时用户可以重新上传。
     """
-    source = conversation_or_404(db, conversation_id)
+    source = conversation_or_404(db, conversation_id, surface)
     rows = (
         db.query(ChatMessage)
         .filter(
@@ -169,7 +187,7 @@ def fork_conversation(
         .all()
     )
     title = " ".join(payload.title.split())[:120] or f"{source.title}（续）"[:120]
-    conversation = ChatConversation(title=title)
+    conversation = ChatConversation(title=title, surface=source.surface)
     db.add(conversation)
     db.flush()
     for row in reversed(rows):
@@ -192,10 +210,12 @@ def fork_conversation(
         )
     db.commit()
     db.refresh(conversation)
-    return read_conversation(conversation.id, db)
+    return read_conversation(conversation.id, db, source.surface)
 
 
-def delete_conversation(conversation_id: int, db: Session) -> None:
+def delete_conversation(
+    conversation_id: int, db: Session, surface: ConversationSurface = "page"
+) -> None:
     """移入回收站（软删除）。
 
     以前是 `db.delete(conversation)` —— 连带消息一起真删（`cascade="all, delete-orphan"`）。
@@ -205,21 +225,26 @@ def delete_conversation(conversation_id: int, db: Session) -> None:
     已经在回收站里的会话**再删一次返回 404**（与其余五类内容一致）：不这么判的话，
     `soft_delete` 是幂等的，界面上会得到"删成功"的假象，而它其实早就删过了。
     """
-    conversation = conversation_or_404(db, conversation_id)
+    conversation = conversation_or_404(db, conversation_id, surface)
     if trash.is_deleted(conversation):
         raise HTTPException(status_code=404, detail="会话不存在或已被删除")
     trash.soft_delete(db, "conversation", conversation)
     db.commit()
 
 
-def delete_messages(db: Session, conversation_id: int, message_ids: list[int]) -> int:
+def delete_messages(
+    db: Session,
+    conversation_id: int,
+    message_ids: list[int],
+    surface: ConversationSurface = "page",
+) -> int:
     """删除会话里的若干条消息，返回实际删除的条数。
 
     引用关系要显式解除：`quoted_message_id` 没有外键（SQLite 不支持给已有表加外键列），
     所以这里先把指向被删消息的引用置空——否则界面上会出现指向不存在消息的引用块。
     引用消息的 `context.quoted` 快照保留，正文里的引用内容仍然可读。
     """
-    conversation = conversation_or_404(db, conversation_id)
+    conversation = conversation_or_404(db, conversation_id, surface)
     rows = (
         db.query(ChatMessage)
         .filter(

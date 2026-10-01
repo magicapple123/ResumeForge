@@ -273,6 +273,12 @@ class ReminderPopupSetting(BaseModel):
     enabled: bool = True
 
 
+class AssistantOrbSetting(BaseModel):
+    """是否显示全局「投投」求职助手悬浮球（默认开）。"""
+
+    enabled: bool = True
+
+
 NAVIGATION_CORE_KEYS = frozenset({"/", "/jobs", "/resumes", "/profile", "/apply", "/settings"})
 NAVIGATION_OPTIONAL_KEYS = frozenset(
     {

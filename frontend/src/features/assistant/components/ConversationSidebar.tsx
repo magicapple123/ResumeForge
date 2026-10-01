@@ -29,7 +29,11 @@ import {
   Typography,
 } from "antd";
 import { useState } from "react";
-import type { AssistantConversationBrief, ConversationFilter } from "../../../types";
+import type {
+  AssistantConversationBrief,
+  AssistantSurface,
+  ConversationFilter,
+} from "../../../types";
 import { conversationToMaterial, exportConversation } from "../../../api/assistant";
 import { copyText } from "../../../utils/clipboard";
 import { downloadBlob } from "../../../utils/download";
@@ -38,6 +42,8 @@ import { RowContextMenu, type RowActionItem } from "../../../components/common/R
 import { ConversationTitle } from "./AssistantMessageContent";
 
 interface Props {
+  className?: string;
+  surface?: AssistantSurface;
   conversations: AssistantConversationBrief[] | undefined;
   loading: boolean;
   activeId: number | null;
@@ -52,6 +58,8 @@ interface Props {
 }
 
 export default function ConversationSidebar({
+  className,
+  surface = "page",
   conversations,
   loading,
   activeId,
@@ -91,7 +99,7 @@ export default function ConversationSidebar({
 
   const copyShareLink = async (conversation: AssistantConversationBrief) => {
     setActionMenuId(null);
-    const link = `${window.location.origin}/assistant?conversation=${conversation.id}`;
+    const link = `${window.location.origin}/assistant?conversation=${conversation.id}&surface=${surface}`;
     const ok = await copyText(link);
     if (ok) {
       message.success("已复制会话链接，在本应用打开即可回到这段对话");
@@ -110,7 +118,7 @@ export default function ConversationSidebar({
   const exportToFile = async (conversation: AssistantConversationBrief) => {
     setActionMenuId(null);
     try {
-      const { blob, filename } = await exportConversation(conversation.id, "md");
+      const { blob, filename } = await exportConversation(conversation.id, "md", surface);
       downloadBlob(blob, filename);
       message.success("已导出为 Markdown 文件");
     } catch (error) {
@@ -122,7 +130,7 @@ export default function ConversationSidebar({
   const saveToMaterials = async (conversation: AssistantConversationBrief) => {
     setActionMenuId(null);
     try {
-      await conversationToMaterial(conversation.id, { title: conversation.title });
+      await conversationToMaterial(conversation.id, { title: conversation.title }, surface);
       message.success("已存进资料箱");
     } catch (error) {
       message.error(error instanceof Error ? error.message : "存进资料箱失败");
@@ -222,7 +230,7 @@ export default function ConversationSidebar({
   ];
 
   return (
-    <aside className="assistant-sidebar">
+    <aside className={`assistant-sidebar${className ? ` ${className}` : ""}`}>
       <Button type="primary" block icon={<PlusOutlined />} onClick={onCreate}>
         新对话
       </Button>

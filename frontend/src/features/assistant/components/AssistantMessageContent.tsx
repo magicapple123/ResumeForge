@@ -241,6 +241,7 @@ export function MessageAttachments({
  * 后端新增工具时这里要一起补（`services/assistant_tools.py` 的 `_TOOLS`）。
  */
 const TOOL_LABELS: Record<string, string> = {
+  search_product_docs: "查阅简历通本地文档",
   get_overview: "查看整体概览",
   list_jobs: "查询岗位",
   get_job: "查看岗位详情",

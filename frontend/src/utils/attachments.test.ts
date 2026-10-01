@@ -10,6 +10,7 @@ import {
   RECOGNITION_ACCEPT,
   canPreviewImage,
   classifyAttachment,
+  clipboardImages,
 } from "./attachments";
 
 function fileOf(name: string, type: string, size = 8): File {
@@ -98,6 +99,51 @@ describe("canPreviewImage", () => {
     expect(canPreviewImage("image/png")).toBe(true);
     expect(canPreviewImage("image/bmp")).toBe(true);
     expect(canPreviewImage("image/tiff")).toBe(false);
+  });
+});
+
+describe("clipboardImages", () => {
+  function clipboardOf(items: Array<{ kind: string; type: string; file?: File }>) {
+    return {
+      items: items.map((item) => ({
+        kind: item.kind,
+        type: item.type,
+        getAsFile: () => item.file ?? null,
+      })),
+    } as unknown as DataTransfer;
+  }
+
+  it("只取图片，文本条目一律略过", () => {
+    const image = fileOf("shot.png", "image/png");
+    const files = clipboardImages(
+      clipboardOf([
+        { kind: "string", type: "text/plain" },
+        { kind: "file", type: "image/png", file: image },
+        { kind: "file", type: "application/pdf", file: fileOf("x.pdf", "application/pdf") },
+      ]),
+    );
+
+    expect(files.map((file) => file.name)).toEqual(["shot.png"]);
+  });
+
+  it("给没有文件名的 blob 补一个能过 classifyAttachment 的名字", () => {
+    // 有些截图工具给的 blob 没有名字，而类型判定是按扩展名来做的。
+    const nameless = new File([new Uint8Array(8)], "", { type: "image/png" });
+
+    const files = clipboardImages(
+      clipboardOf([
+        { kind: "file", type: "image/png", file: nameless },
+        { kind: "file", type: "image/webp", file: new File([], "", { type: "image/webp" }) },
+      ]),
+    );
+
+    expect(files.map((file) => file.name)).toEqual(["clipboard-1.png", "clipboard-2.webp"]);
+    expect(classifyAttachment(files[0])).toEqual({ kind: "image", mimeType: "image/png" });
+  });
+
+  it("没有图片、或根本没有剪贴板数据时返回空数组", () => {
+    expect(clipboardImages(null)).toEqual([]);
+    expect(clipboardImages(clipboardOf([{ kind: "string", type: "text/plain" }]))).toEqual([]);
   });
 });
 

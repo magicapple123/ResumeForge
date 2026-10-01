@@ -10,6 +10,7 @@ from .material import MAX_MATERIAL_TITLE_CHARS
 
 MAX_ASSISTANT_MESSAGE_CHARS = 20_000
 MAX_ATTACHMENT_DATA_CHARS = 7_100_000
+ConversationSurface = Literal["page", "floating"]
 
 
 class AssistantAttachmentInput(BaseModel):
@@ -86,6 +87,7 @@ class ChatConversationCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(default="", max_length=120)
+    surface: ConversationSurface = "page"
     # 为真时自动附上一条引导消息（介绍助手功能与用法），用于首次进入创建默认会话。
     welcome: bool = False
 
@@ -197,6 +199,7 @@ class ChatConversationBrief(BaseModel):
 
     id: int
     title: str
+    surface: ConversationSurface = "page"
     pinned: bool
     favorite: bool
     archived: bool = False

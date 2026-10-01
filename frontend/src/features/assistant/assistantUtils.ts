@@ -15,6 +15,7 @@ export {
   MAX_TOTAL_ATTACHMENT_BYTES,
   canPreviewImage,
   classifyAttachment,
+  clipboardImages,
   readAsDataUrl,
   type AttachmentClassification,
 } from "../../utils/attachments";

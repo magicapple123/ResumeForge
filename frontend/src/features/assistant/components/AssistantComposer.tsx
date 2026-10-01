@@ -29,6 +29,7 @@ import {
   ASSISTANT_ACCEPT,
   MAX_ATTACHMENT_COUNT,
   canPreviewImage,
+  clipboardImages,
   type PendingAttachment,
 } from "../assistantUtils";
 import type { AssistantQuotedMessage, AssistantSkill } from "../../../types";
@@ -52,6 +53,7 @@ function attachmentIcon(attachment: PendingAttachment) {
 }
 
 interface Props {
+  compact?: boolean;
   content: string;
   attachments: PendingAttachment[];
   sending: boolean;
@@ -83,6 +85,7 @@ interface Props {
 }
 
 export default function AssistantComposer({
+  compact = false,
   content,
   attachments,
   sending,
@@ -118,37 +121,57 @@ export default function AssistantComposer({
     () => !REASONING_EFFORT_OPTIONS.some((option) => option.value === reasoningEffort),
   );
 
+  /**
+   * 直接往输入框里粘贴截图。
+   *
+   * 只有剪贴板里**真的有图片**时才拦：粘贴文本、链接、代码时必须原样放行，
+   * 否则换行会被吃掉（`clipboardImages` 对非图片返回空数组，这里直接 return）。
+   * 截图粘贴是加速器，「附件」按钮才是键盘、读屏和手机上的正式入口。
+   */
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (sending) return;
+    const pasted = clipboardImages(event.clipboardData);
+    if (pasted.length === 0) return;
+    event.preventDefault();
+    // 额度在 addAttachment 里同步预占，连着粘几张也不会超额。
+    pasted.forEach((file) => onAddAttachment(file));
+  };
+
   return (
     <FileDropZone
       accept={ASSISTANT_ACCEPT}
-      disabled={sending || attachmentReads > 0 || attachments.length >= MAX_ATTACHMENT_COUNT}
+      disabled={
+        compact || sending || attachmentReads > 0 || attachments.length >= MAX_ATTACHMENT_COUNT
+      }
       hint="松开即可把文件加进对话"
       onFiles={(dropped) => dropped.forEach((file) => onAddAttachment(file))}
       onRejected={(count) => message.warning(`已忽略 ${count} 个不支持的附件`)}
     >
       <div className="assistant-composer">
-        <div className="assistant-context-controls">
-          <div className="assistant-context-selects">
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              placeholder="关联岗位"
-              value={jobId}
-              options={jobOptions}
-              onChange={onJobChange}
-            />
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              placeholder="关联简历"
-              value={resumeId}
-              options={resumeOptions}
-              onChange={onResumeChange}
-            />
+        {!compact && (
+          <div className="assistant-context-controls">
+            <div className="assistant-context-selects">
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="关联岗位"
+                value={jobId}
+                options={jobOptions}
+                onChange={onJobChange}
+              />
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder="关联简历"
+                value={resumeId}
+                options={resumeOptions}
+                onChange={onResumeChange}
+              />
+            </div>
           </div>
-        </div>
+        )}
         {quoted ? (
           <div className="assistant-quote-chip">
             <span className="assistant-quote-chip-label">
@@ -165,7 +188,7 @@ export default function AssistantComposer({
             />
           </div>
         ) : null}
-        {attachments.length > 0 && (
+        {!compact && attachments.length > 0 && (
           <Alert type="info" showIcon message="已选择的附件或个人资料会发送给当前配置的模型服务" />
         )}
         {attachments.length > 0 && (
@@ -206,9 +229,10 @@ export default function AssistantComposer({
         )}
         <Input.TextArea
           value={content}
-          autoSize={{ minRows: 3, maxRows: 8 }}
+          autoSize={{ minRows: compact ? 2 : 3, maxRows: 8 }}
           disabled={sending}
           placeholder="输入求职、岗位、简历或项目经历相关问题"
+          onPaste={handlePaste}
           onChange={(event) => onContentChange(event.target.value)}
           onPressEnter={(event) => {
             if (!event.shiftKey) {
@@ -231,70 +255,87 @@ export default function AssistantComposer({
                 return Upload.LIST_IGNORE;
               }}
             >
-              <Tooltip title="添加文本、图片或文档附件">
+              <Tooltip
+                title={
+                  compact
+                    ? "添加图片或文档（也可以直接粘贴截图）；附件会发送给当前配置的模型服务"
+                    : "添加文本、图片或文档附件（也可以直接粘贴截图）"
+                }
+              >
                 <Button
                   aria-label="添加附件"
                   icon={<PaperClipOutlined />}
                   loading={attachmentReads > 0}
-                  disabled={sending || attachmentReads > 0}
+                  // 选满时 Upload 自己会吞掉点击，但按钮还亮着——看起来能点却没反应。
+                  // 把同一个条件写全，界面上才是"真的不能点"。
+                  disabled={
+                    sending || attachmentReads > 0 || attachments.length >= MAX_ATTACHMENT_COUNT
+                  }
                 >
                   附件
                 </Button>
               </Tooltip>
             </Upload>
-            <Dropdown
-              trigger={["click"]}
-              placement="topLeft"
-              menu={{
-                // 用真实的 Checkbox 表达"已启用"：菜单自带的高亮在浅色主题下几乎看不出来，
-                // 用户会以为点击没生效。这里每项左侧都是可勾选的方框，点整行即切换。
-                items: [
-                  {
-                    key: "hint",
-                    label: <span className="assistant-skill-menu-hint">勾选要启用的技能</span>,
-                    disabled: true,
-                  },
-                  { type: "divider" as const },
-                  ...skills.map((skill) => ({
-                    key: String(skill.id),
-                    label: (
-                      <span className="assistant-skill-option">
-                        <Checkbox checked={skill.enabled} disabled={togglingSkillId === skill.id} />
-                        <span className="assistant-skill-option-text">
-                          <span className="assistant-skill-option-name">{skill.name}</span>
-                          {skill.description ? (
-                            <span className="assistant-skill-option-desc">{skill.description}</span>
-                          ) : null}
+            {!compact && (
+              <Dropdown
+                trigger={["click"]}
+                placement="topLeft"
+                menu={{
+                  // 用真实的 Checkbox 表达"已启用"：菜单自带的高亮在浅色主题下几乎看不出来，
+                  // 用户会以为点击没生效。这里每项左侧都是可勾选的方框，点整行即切换。
+                  items: [
+                    {
+                      key: "hint",
+                      label: <span className="assistant-skill-menu-hint">勾选要启用的技能</span>,
+                      disabled: true,
+                    },
+                    { type: "divider" as const },
+                    ...skills.map((skill) => ({
+                      key: String(skill.id),
+                      label: (
+                        <span className="assistant-skill-option">
+                          <Checkbox
+                            checked={skill.enabled}
+                            disabled={togglingSkillId === skill.id}
+                          />
+                          <span className="assistant-skill-option-text">
+                            <span className="assistant-skill-option-name">{skill.name}</span>
+                            {skill.description ? (
+                              <span className="assistant-skill-option-desc">
+                                {skill.description}
+                              </span>
+                            ) : null}
+                          </span>
                         </span>
-                      </span>
-                    ),
-                    disabled: togglingSkillId === skill.id,
-                  })),
-                  { type: "divider" as const },
-                  { key: "manage", label: "打开工作台" },
-                ],
-                onClick: ({ key }) => {
-                  if (key === "manage") {
-                    onManageSkills();
-                    return;
-                  }
-                  const skill = skills.find((item) => String(item.id) === key);
-                  if (skill) onToggleSkill(skill, !skill.enabled);
-                },
-              }}
-              disabled={sending}
-            >
-              <Tooltip title="点击开关助手技能；勾选表示已启用">
-                <Button
-                  aria-label="技能"
-                  icon={<ExperimentOutlined />}
-                  loading={!skillsLoaded}
-                  disabled={sending}
-                >
-                  技能{enabledSkills.length > 0 ? `（${enabledSkills.length}）` : ""}
-                </Button>
-              </Tooltip>
-            </Dropdown>
+                      ),
+                      disabled: togglingSkillId === skill.id,
+                    })),
+                    { type: "divider" as const },
+                    { key: "manage", label: "打开工作台" },
+                  ],
+                  onClick: ({ key }) => {
+                    if (key === "manage") {
+                      onManageSkills();
+                      return;
+                    }
+                    const skill = skills.find((item) => String(item.id) === key);
+                    if (skill) onToggleSkill(skill, !skill.enabled);
+                  },
+                }}
+                disabled={sending}
+              >
+                <Tooltip title="点击开关助手技能；勾选表示已启用">
+                  <Button
+                    aria-label="技能"
+                    icon={<ExperimentOutlined />}
+                    loading={!skillsLoaded}
+                    disabled={sending}
+                  >
+                    技能{enabledSkills.length > 0 ? `（${enabledSkills.length}）` : ""}
+                  </Button>
+                </Tooltip>
+              </Dropdown>
+            )}
             <div className="assistant-context-toggles">
               <label className="assistant-context-toggle">
                 <Switch size="small" checked={webSearch} onChange={onWebSearchChange} />

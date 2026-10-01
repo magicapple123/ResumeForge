@@ -71,6 +71,40 @@ const TEXT_CANONICAL_MIME_BY_EXTENSION: Record<string, string> = {
 /** 有些系统给不出准确 MIME，这几种按"没声明"处理。 */
 const BLANK_DECLARED_MIMES = new Set(["", "application/octet-stream"]);
 
+/** 剪贴板给的 blob 可能没有文件名，按 MIME 补一个。 */
+const EXTENSION_BY_MIME: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/bmp": "bmp",
+  "image/tiff": "tif",
+};
+
+function clipboardFileName(file: File, index: number): File {
+  const extension = fileExtension(file.name);
+  if (IMAGE_MIME_BY_EXTENSION[extension] || DOCUMENT_MIME_BY_EXTENSION[extension]) return file;
+  const suffix = EXTENSION_BY_MIME[file.type.split(";", 1)[0].trim().toLowerCase()] ?? "png";
+  return new File([file], `clipboard-${index + 1}.${suffix}`, { type: file.type });
+}
+
+/**
+ * 取剪贴板里的图片，顺带给没名字的 blob 补一个能通过 `classifyAttachment` 的文件名。
+ *
+ * **只回图片**：粘贴的是文本或链接时必须返回空数组，调用方才会放行原生粘贴行为，
+ * 不把换行、富文本一并吃掉。识别链路（岗位/资料截图）与助手对话框共用这一份。
+ */
+export function clipboardImages(clipboardData: DataTransfer | null): File[] {
+  if (!clipboardData) return [];
+  const files: File[] = [];
+  for (const item of Array.from(clipboardData.items ?? [])) {
+    if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+    const file = item.getAsFile();
+    if (file) files.push(clipboardFileName(file, files.length));
+  }
+  return files;
+}
+
 export interface AttachmentClassification {
   kind: "text" | "image" | "document";
   mimeType: string;

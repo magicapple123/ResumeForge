@@ -1,0 +1,31 @@
+/* 投投的响应式、减弱动态效果与弹窗层级保护。 */
+
+@media (max-width: 767px) {
+  .tt-shell {
+    --tt-size: 56px;
+    --tt-edge: 16px;
+  }
+
+  .tt-tip {
+    bottom: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tt-float,
+  .tt-breathe,
+  .tt-turn,
+  .tt-zzz,
+  .tt.is-pressed .tt-scale {
+    animation: none;
+  }
+
+  /* 关掉动画就没有"飘"的提示了，让它老老实实停在球旁边。 */
+  .tt-zzz {
+    opacity: 1;
+  }
+
+  .tt-scale {
+    transition: none;
+  }
+}

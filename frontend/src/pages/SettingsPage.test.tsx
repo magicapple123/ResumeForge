@@ -10,6 +10,7 @@ const claudePreset = LLM_PRESETS.find((preset) => preset.provider === "anthropic
 
 const apiMocks = vi.hoisted(() => ({
   acknowledgeUpdateInstallResult: vi.fn(),
+  getAssistantOrbSetting: vi.fn(),
   checkForUpdate: vi.fn(),
   checkLLMThinking: vi.fn(),
   activateDataset: vi.fn(),
@@ -31,6 +32,7 @@ const apiMocks = vi.hoisted(() => ({
   revealLLMApiKey: vi.fn(),
   saveLLMConfig: vi.fn(),
   saveLLMConfigRecord: vi.fn(),
+  saveAssistantOrbSetting: vi.fn(),
   saveReminderPopupSetting: vi.fn(),
   saveSearchConfig: vi.fn(),
   startUpdateDownload: vi.fn(),
@@ -106,6 +108,7 @@ function tooltipTriggerFor(label: string): HTMLElement {
 beforeEach(() => {
   apiMocks.getLLMConfig.mockResolvedValue(llmConfig);
   apiMocks.getNavigationVisibility.mockResolvedValue({ hidden: [] });
+  apiMocks.getAssistantOrbSetting.mockResolvedValue({ enabled: true });
   apiMocks.getReminderPopupSetting.mockResolvedValue({ enabled: true });
   apiMocks.getSearchConfig.mockResolvedValue(searchConfig);
   apiMocks.getUpdateDownloadStatus.mockResolvedValue({
@@ -133,6 +136,7 @@ beforeEach(() => {
     message: "",
   });
   apiMocks.listLLMConfigRecords.mockResolvedValue([]);
+  apiMocks.saveAssistantOrbSetting.mockImplementation(async (enabled) => ({ enabled }));
   apiMocks.listDatasets.mockResolvedValue([mainDataset]);
   apiMocks.revealLLMApiKey.mockResolvedValue({ api_key: "sk-revealed" });
   skillMocks.listSkills.mockResolvedValue([]);
@@ -1084,5 +1088,28 @@ describe("SettingsPage 提醒弹窗开关", () => {
     fireEvent.click(toggle);
 
     await waitFor(() => expect(apiMocks.saveReminderPopupSetting).toHaveBeenCalledWith(false));
+  });
+});
+
+describe("SettingsPage 投投悬浮球开关", () => {
+  async function renderAppTab() {
+    render(
+      <AntdApp>
+        <SettingsPage />
+      </AntdApp>,
+    );
+    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("tab", { name: "应用" }));
+  }
+
+  it("toggles and persists the assistant orb switch", async () => {
+    await renderAppTab();
+
+    const toggle = await screen.findByRole("switch", { name: "开启投投悬浮球" });
+    await waitFor(() => expect(toggle).toBeChecked());
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => expect(apiMocks.saveAssistantOrbSetting).toHaveBeenCalledWith(false));
   });
 });

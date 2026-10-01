@@ -15,10 +15,15 @@ import { listJobs } from "../../../api/jobs";
 import { listResumes } from "../../../api/resumes";
 import { useApi } from "../../../hooks/useApi";
 import { hasShownAssistantWelcome, markAssistantWelcomeShown } from "../welcomeGate";
-import type { AssistantConversationDetail, AssistantConversationBrief } from "../../../types";
+import type {
+  AssistantConversationBrief,
+  AssistantConversationDetail,
+  AssistantSurface,
+} from "../../../types";
 
 interface Options {
   message: ReturnType<typeof App.useApp>["message"];
+  surface?: AssistantSurface;
   /** 为真时进入「新对话」模式：不自动恢复最近会话（由页面负责新建空会话）。 */
   /** 是否以"新对话"进入（`?new=1`）。会话钩子不再用它——草稿状态由页面侧决定；
    *  保留参数是为了不打断调用方签名，也留下"这个入口存在"的痕迹。 */
@@ -30,7 +35,7 @@ export type ConversationPatch = Partial<
   Pick<AssistantConversationBrief, "pinned" | "favorite" | "archived" | "group_name">
 >;
 
-export function useAssistantConversations({ message }: Options) {
+export function useAssistantConversations({ message, surface = "page" }: Options) {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [detail, setDetail] = useState<AssistantConversationDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -43,7 +48,10 @@ export function useAssistantConversations({ message }: Options) {
     loading: conversationsLoading,
     error: conversationsError,
     reload: reloadConversations,
-  } = useApi(listAssistantConversations, []);
+  } = useApi(
+    () => (surface === "page" ? listAssistantConversations() : listAssistantConversations(surface)),
+    [surface],
+  );
 
   const { data: contextOptions } = useApi(async () => {
     const [jobs, resumes] = await Promise.all([
@@ -74,7 +82,10 @@ export function useAssistantConversations({ message }: Options) {
       const requestId = ++detailRequestRef.current;
       setDetailLoading(true);
       try {
-        const next = await getAssistantConversation(conversationId);
+        const next =
+          surface === "page"
+            ? await getAssistantConversation(conversationId)
+            : await getAssistantConversation(conversationId, surface);
         if (requestId === detailRequestRef.current) setDetail(next);
       } catch (error) {
         if (requestId === detailRequestRef.current) {
@@ -85,7 +96,7 @@ export function useAssistantConversations({ message }: Options) {
         if (requestId === detailRequestRef.current) setDetailLoading(false);
       }
     },
-    [message],
+    [message, surface],
   );
 
   useEffect(() => {
@@ -110,7 +121,10 @@ export function useAssistantConversations({ message }: Options) {
 
   const createConversation = useCallback(async () => {
     try {
-      const created = await createAssistantConversation();
+      const created =
+        surface === "page"
+          ? await createAssistantConversation()
+          : await createAssistantConversation("", { surface });
       selectConversation(created.id);
       setDetail({ ...created, messages: [] });
       await reloadConversations();
@@ -119,7 +133,7 @@ export function useAssistantConversations({ message }: Options) {
       message.error(error instanceof Error ? error.message : "创建对话失败");
       return null;
     }
-  }, [message, reloadConversations, selectConversation]);
+  }, [message, reloadConversations, selectConversation, surface]);
 
   /**
    * 内置引导对话：**第一次**用助手且一条会话都没有时，自动建一条带欢迎消息的会话。
@@ -133,7 +147,10 @@ export function useAssistantConversations({ message }: Options) {
     welcomeRequestedRef.current = true;
     if (hasShownAssistantWelcome()) return;
     try {
-      const created = await createAssistantConversation("", { welcome: true });
+      const created =
+        surface === "page"
+          ? await createAssistantConversation("", { welcome: true })
+          : await createAssistantConversation("", { welcome: true, surface });
       markAssistantWelcomeShown();
       selectConversation(created.id);
       await loadDetail(created.id);
@@ -141,12 +158,13 @@ export function useAssistantConversations({ message }: Options) {
     } catch (error) {
       message.error(error instanceof Error ? error.message : "创建引导对话失败");
     }
-  }, [loadDetail, message, reloadConversations, selectConversation]);
+  }, [loadDetail, message, reloadConversations, selectConversation, surface]);
 
   const removeConversation = useCallback(
     async (id: number) => {
       try {
-        await deleteAssistantConversation(id);
+        if (surface === "page") await deleteAssistantConversation(id);
+        else await deleteAssistantConversation(id, surface);
         if (activeIdRef.current === id) {
           selectConversation(null);
           setDetail(null);
@@ -156,7 +174,7 @@ export function useAssistantConversations({ message }: Options) {
         message.error(error instanceof Error ? error.message : "删除对话失败");
       }
     },
-    [message, reloadConversations, selectConversation],
+    [message, reloadConversations, selectConversation, surface],
   );
 
   const saveConversationTitle = useCallback(
@@ -167,7 +185,10 @@ export function useAssistantConversations({ message }: Options) {
         return;
       }
       try {
-        const updated = await renameAssistantConversation(id, title);
+        const updated =
+          surface === "page"
+            ? await renameAssistantConversation(id, title)
+            : await renameAssistantConversation(id, title, surface);
         setDetail((current) =>
           current?.id === id ? { ...current, title: updated.title } : current,
         );
@@ -176,13 +197,16 @@ export function useAssistantConversations({ message }: Options) {
         message.error(error instanceof Error ? error.message : "重命名失败");
       }
     },
-    [message, reloadConversations],
+    [message, reloadConversations, surface],
   );
 
   const updateConversation = useCallback(
     async (id: number, patch: ConversationPatch) => {
       try {
-        const updated = await updateAssistantConversation(id, patch);
+        const updated =
+          surface === "page"
+            ? await updateAssistantConversation(id, patch)
+            : await updateAssistantConversation(id, patch, surface);
         setDetail((current) => (current?.id === id ? { ...current, ...updated } : current));
         await reloadConversations();
         return updated;
@@ -191,7 +215,7 @@ export function useAssistantConversations({ message }: Options) {
         return null;
       }
     },
-    [message, reloadConversations],
+    [message, reloadConversations, surface],
   );
 
   /** 兼容旧调用点：切换置顶/收藏。 */
@@ -209,10 +233,14 @@ export function useAssistantConversations({ message }: Options) {
   const forkConversation = useCallback(
     async (id: number) => {
       try {
-        const created = await forkAssistantConversation(id, {
+        const forkPayload = {
           message_limit: 10,
           title: `${(conversations ?? []).find((item) => item.id === id)?.title ?? ""}（续）`,
-        });
+        };
+        const created =
+          surface === "page"
+            ? await forkAssistantConversation(id, forkPayload)
+            : await forkAssistantConversation(id, forkPayload, surface);
         selectConversation(created.id);
         setDetail(created);
         await reloadConversations();
@@ -222,7 +250,7 @@ export function useAssistantConversations({ message }: Options) {
         return null;
       }
     },
-    [conversations, message, reloadConversations, selectConversation],
+    [conversations, message, reloadConversations, selectConversation, surface],
   );
 
   return {

@@ -2,6 +2,7 @@
 import type {
   DatasetImportResult,
   DatasetInfo,
+  AssistantOrbSetting,
   LLMApiKeyRevealResult,
   LLMConfig,
   LLMConfigRecord,
@@ -123,6 +124,17 @@ export function getReminderPopupSetting(): Promise<ReminderPopupSetting> {
 
 export function saveReminderPopupSetting(enabled: boolean): Promise<ReminderPopupSetting> {
   return request("/settings/reminder-popup", { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
+export function getAssistantOrbSetting(): Promise<AssistantOrbSetting> {
+  return request("/settings/assistant-orb");
+}
+
+export function saveAssistantOrbSetting(enabled: boolean): Promise<AssistantOrbSetting> {
+  return request("/settings/assistant-orb", {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 export function getNavigationVisibility(): Promise<NavigationVisibility> {

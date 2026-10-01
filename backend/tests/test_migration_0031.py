@@ -18,7 +18,7 @@ from sqlalchemy import create_engine, inspect, text
 from app.database_migrations import build_alembic_config
 
 PREVIOUS_REVISION = "0030_extra_profile_source_reuse"
-HEAD_REVISION = "0035_llm_thinking"
+HEAD_REVISION = "0036_chat_conversation_surface"
 
 TABLE = "web_form_profile_entry"
 

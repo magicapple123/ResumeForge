@@ -3,6 +3,7 @@
 export interface AssistantConversationBrief {
   id: number;
   title: string;
+  surface: AssistantSurface;
   pinned: boolean;
   favorite: boolean;
   /** 已归档的会话默认收进「已归档」筛选，不参与置顶排序。 */
@@ -13,6 +14,9 @@ export interface AssistantConversationBrief {
   created_at: string;
   updated_at: string;
 }
+
+/** 助手入口作用域：侧栏主助手与投投悬浮球历史彼此隔离。 */
+export type AssistantSurface = "page" | "floating";
 
 /** 会话列表筛选：全部 / 收藏 / 已归档。 */
 export type ConversationFilter = "all" | "favorite" | "archived";

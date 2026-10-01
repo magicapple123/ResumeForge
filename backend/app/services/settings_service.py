@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 _LLM_CONFIG_KEY = "llm_config"
 _SEARCH_CONFIG_KEY = "search_config"
 _REMINDER_POPUP_KEY = "reminder_popup_on_start"
+_ASSISTANT_ORB_KEY = "assistant_orb_enabled"
 _NAVIGATION_VISIBILITY_KEY = "navigation_visibility"
 API_KEY_MASK = "********"
 _RECORD_API_KEY_PREFIX = f"{API_KEY_MASK}:record:"
@@ -247,6 +248,34 @@ def save_reminder_popup_on_start(db: Session, enabled: bool) -> bool:
     return bool(enabled)
 
 
+# ===== 投投悬浮球设置 =====
+
+
+def get_assistant_orb_enabled(db: Session) -> bool:
+    """读取「投投」悬浮球开关；缺失或脏数据退回默认开。"""
+    row = db.get(AppSetting, _ASSISTANT_ORB_KEY)
+    if row is None:
+        return True
+    try:
+        value = json.loads(row.value)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("投投悬浮球设置数据损坏，已重置为默认开启")
+        return True
+    return value if isinstance(value, bool) else True
+
+
+def save_assistant_orb_enabled(db: Session, enabled: bool) -> bool:
+    """持久化「投投」悬浮球开关。"""
+    row = db.get(AppSetting, _ASSISTANT_ORB_KEY)
+    serialized = json.dumps(bool(enabled))
+    if row is None:
+        db.add(AppSetting(key=_ASSISTANT_ORB_KEY, value=serialized))
+    else:
+        row.value = serialized
+    db.commit()
+    return bool(enabled)
+
+
 # ===== 导航显示设置 =====
 
 
@@ -274,4 +303,3 @@ def save_navigation_visibility(db: Session, config: NavigationVisibility) -> Nav
         row.value = serialized
     db.commit()
     return cleaned
-

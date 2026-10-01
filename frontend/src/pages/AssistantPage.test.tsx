@@ -61,6 +61,7 @@ const CONVERSATIONS: AssistantConversationBrief[] = [
   {
     id: 1,
     title: "会话一",
+    surface: "page",
     pinned: false,
     favorite: false,
     archived: false,
@@ -72,6 +73,7 @@ const CONVERSATIONS: AssistantConversationBrief[] = [
   {
     id: 2,
     title: "会话二",
+    surface: "page",
     pinned: false,
     favorite: false,
     archived: false,
@@ -983,5 +985,51 @@ describe("消息多选删除", () => {
 
     await waitFor(() => expect(screen.queryByText("已选 1 条")).not.toBeInTheDocument());
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+});
+
+describe("投投浮窗（compact）", () => {
+  function renderFloating() {
+    return render(
+      <MemoryRouter initialEntries={["/assistant"]}>
+        <AntdApp>
+          <AssistantPage compact surface="floating" />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+  }
+
+  function pasteImage(name: string) {
+    const file = new File([new Uint8Array([137, 80, 78, 71])], name, { type: "image/png" });
+    return fireEvent.paste(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题"), {
+      clipboardData: { items: [{ kind: "file", type: "image/png", getAsFile: () => file }] },
+    });
+  }
+
+  it("输入框里直接粘贴的截图会变成待发送附件", async () => {
+    renderFloating();
+
+    expect(pasteImage("shot.png")).toBe(false);
+
+    expect(await screen.findByAltText("shot.png")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "移除附件 shot.png" })).toBeInTheDocument();
+  });
+
+  it("历史抽屉有背板，点背板或按 Esc 都能关掉", async () => {
+    renderFloating();
+    const historyButton = screen.getByRole("button", { name: "查看投投历史" });
+    expect(historyButton).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(historyButton);
+
+    const backdrop = await screen.findByRole("button", { name: "关闭历史记录" });
+    expect(historyButton).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(backdrop);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "关闭历史记录" })).toBeNull());
+
+    fireEvent.click(historyButton);
+    await screen.findByRole("button", { name: "关闭历史记录" });
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "关闭历史记录" })).toBeNull());
   });
 });
