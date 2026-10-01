@@ -54,6 +54,7 @@ from .data_tools import (
     _tool_update_material,
     _tool_update_skill,
 )
+from .docs_tools import _tool_search_product_docs
 from .report_tools import (
     _tool_create_knowledge,
     _tool_create_reminder,
@@ -79,6 +80,22 @@ from .tracker_tools import (
     _tool_update_application_track,
 )
 _TOOLS: tuple[Tool, ...] = (
+    Tool(
+        name="search_product_docs",
+        description=(
+            "检索简历通本地产品文档，回答功能在哪里、怎么用、有哪些限制。"
+            "用户问简历通本身的问题时优先使用；不要用联网搜索替代本地文档。"
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "用户的问题或关键短语"},
+                "limit": {"type": "integer", "description": "可选，最多返回 8 个相关章节"},
+            },
+            "required": ["query"],
+        },
+        handler=_tool_search_product_docs,
+    ),
     Tool(
         name="read_skill_knowledge",
         description=(

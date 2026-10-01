@@ -45,6 +45,28 @@ def test_navigation_visibility_keeps_optional_keys_and_never_hides_core_entries(
     }
 
 
+def test_assistant_orb_setting_defaults_and_roundtrips(client):
+    assert client.get("/api/settings/assistant-orb").json() == {"enabled": True}
+
+    response = client.put("/api/settings/assistant-orb", json={"enabled": False})
+    assert response.status_code == 200
+    assert response.json() == {"enabled": False}
+    assert client.get("/api/settings/assistant-orb").json() == {"enabled": False}
+
+    response = client.put("/api/settings/assistant-orb", json={"enabled": True})
+    assert response.status_code == 200
+    assert response.json() == {"enabled": True}
+
+
+def test_assistant_orb_setting_ignores_corrupt_values(client, db_session):
+    from app.models.setting import AppSetting
+
+    db_session.add(AppSetting(key="assistant_orb_enabled", value='"not-a-boolean"'))
+    db_session.commit()
+
+    assert client.get("/api/settings/assistant-orb").json() == {"enabled": True}
+
+
 def test_settings_accepts_unlimited_output_and_keeps_the_minimum_bound(client):
     config = LLMConfig(base_url="https://api.example.com/v1", model="test-model")
 

@@ -140,6 +140,11 @@ export interface ReminderPopupSetting {
   enabled: boolean;
 }
 
+/** 是否显示全局「投投」求职助手悬浮球（默认开）。 */
+export interface AssistantOrbSetting {
+  enabled: boolean;
+}
+
 export interface NavigationVisibility {
   hidden: string[];
 }

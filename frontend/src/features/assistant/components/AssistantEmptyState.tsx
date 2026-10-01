@@ -4,6 +4,7 @@ import { Button, Empty, Typography } from "antd";
 import { STARTER_PROMPTS, type StarterPrompt } from "../assistantTypes";
 
 interface Props {
+  variant?: "page" | "floating";
   onChoosePrompt: (prompt: StarterPrompt) => void;
   /** 已启用的技能数量，用于判断要不要提示"还有技能这个功能"。 */
   enabledSkillCount: number;
@@ -13,22 +14,26 @@ interface Props {
 }
 
 export default function AssistantEmptyState({
+  variant = "page",
   onChoosePrompt,
   enabledSkillCount,
   skillsLoaded,
   onManageSkills,
 }: Props) {
   // 有技能在生效时页头已经写着，这里只在"一个都没启用"时负责让用户知道有这回事。
-  const showSkillDiscovery = skillsLoaded && enabledSkillCount === 0;
+  const floating = variant === "floating";
+  const showSkillDiscovery = !floating && skillsLoaded && enabledSkillCount === 0;
   return (
     <div className="assistant-empty-state">
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
         description={
           <div className="assistant-empty-state-copy">
-            <Typography.Text strong>可以这样问</Typography.Text>
+            <Typography.Text strong>{floating ? "你好，我是投投" : "可以这样问"}</Typography.Text>
             <Typography.Text type="secondary">
-              可先关联岗位或简历，再按需开启资料和联网搜索。
+              {floating
+                ? "我可以帮你解决简历通使用问题、分析简历和岗位，并在你明确要求时操作允许的数据。"
+                : "可先关联岗位或简历，再按需开启资料和联网搜索。"}
             </Typography.Text>
           </div>
         }

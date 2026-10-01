@@ -129,11 +129,38 @@ def attachment_text_block(attachments: list[dict[str, Any]], max_chars: int) -> 
     return "".join(parts)
 
 
-def history_messages_for_model(history: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """只携带最近的已完成文本历史，并按字符预算从旧到新裁剪。"""
-    selected: list[dict[str, str]] = []
+def image_content_blocks(attachments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """把图片附件转成模型要的 content 块（与当前消息用的是同一个形状）。"""
+    return [
+        {"type": "image_url", "image_url": {"url": item["data_url"]}}
+        for item in attachments
+        if item.get("kind") == "image" and item.get("data_url")
+    ]
+
+
+def history_messages_for_model(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """只携带最近的已完成历史，并按字符预算从旧到新裁剪。
+
+    图片只在**紧邻的上一轮**里重复带上：贴着岗位截图问「这个岗位匹配吗」，接着追问
+    「那简历该怎么改」时模型还看得见那张图。再往前的图片一律不带——每轮都回灌历史
+    图片会让用量随对话轮数一路上涨。
+
+    图片不计入字符预算：它本来就是 data URL，按字符算没有意义，大小上限在入库时
+    （`services/attachments.py`）已经卡过了。
+    """
+    window = history[-MAX_HISTORY_MESSAGES:]
+    last_user_index = next(
+        (index for index in range(len(window) - 1, -1, -1) if window[index].get("role") == "user"),
+        None,
+    )
+    carried_images: list[dict[str, Any]] = []
+    if last_user_index is not None:
+        carried_images = image_content_blocks(window[last_user_index].get("attachments") or [])
+
+    selected: list[dict[str, Any]] = []
     used = 0
-    for item in reversed(history[-MAX_HISTORY_MESSAGES:]):
+    for offset, item in enumerate(reversed(window)):
+        index = len(window) - 1 - offset
         content = str(item.get("content") or "")
         if item.get("role") == "user":
             content += attachment_text_block(item.get("attachments") or [], 4_000)
@@ -141,7 +168,13 @@ def history_messages_for_model(history: list[dict[str, Any]]) -> list[dict[str, 
         if remaining <= 0:
             break
         content = _trim(content, remaining)
-        selected.append({"role": str(item["role"]), "content": content})
+        images = carried_images if index == last_user_index else []
+        if images:
+            selected.append(
+                {"role": "user", "content": [{"type": "text", "text": content}, *images]}
+            )
+        else:
+            selected.append({"role": str(item["role"]), "content": content})
         used += len(content)
     selected.reverse()
     return selected
@@ -168,12 +201,8 @@ def current_user_message_for_model(
             context_blocks
         )
     text += attachment_text_block(attachments, MAX_CURRENT_ATTACHMENT_TEXT_CHARS)
-    images = [item for item in attachments if item.get("kind") == "image"]
+    images = image_content_blocks(attachments)
     if not images:
         return {"role": "user", "content": text}
-    content_parts: list[dict[str, Any]] = [{"type": "text", "text": text}]
-    content_parts.extend(
-        {"type": "image_url", "image_url": {"url": item["data_url"]}} for item in images
-    )
-    return {"role": "user", "content": content_parts}
+    return {"role": "user", "content": [{"type": "text", "text": text}, *images]}
 

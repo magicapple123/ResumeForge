@@ -1,12 +1,15 @@
 /** AI 求职助手：流式对话、历史记录、技能开关、附件与项目上下文联动。 */
-import { CheckSquareOutlined, CloseOutlined, DeleteOutlined } from "@ant-design/icons";
-import { App, Button, Input, Modal, Space, Typography } from "antd";
+import { CheckSquareOutlined, HistoryOutlined } from "@ant-design/icons";
+import { App, Button, Space, Typography } from "antd";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { deleteAssistantMessage, deleteAssistantMessages } from "../api/assistant";
 import AssistantComposer from "../features/assistant/components/AssistantComposer";
+import AssistantGroupModal from "../features/assistant/components/AssistantGroupModal";
 import AssistantMessageList from "../features/assistant/components/AssistantMessageList";
+import AssistantSelectBar from "../features/assistant/components/AssistantSelectBar";
 import ConversationSidebar from "../features/assistant/components/ConversationSidebar";
+import { readStoredReasoningEffort } from "../features/assistant/readStoredReasoningEffort";
 import type { StarterPrompt } from "../features/assistant/assistantTypes";
 import { positiveId } from "../features/assistant/assistantUtils";
 import { markAssistantWelcomeShown } from "../features/assistant/welcomeGate";
@@ -14,13 +17,14 @@ import { useAssistantAttachments } from "../features/assistant/hooks/useAssistan
 import { useAssistantConversations } from "../features/assistant/hooks/useAssistantConversations";
 import { useAssistantSkills } from "../features/assistant/hooks/useAssistantSkills";
 import { useAssistantStream } from "../features/assistant/hooks/useAssistantStream";
+import type { AssistantPageProps } from "./assistantPageTypes";
 import type {
   AssistantConversationBrief,
   AssistantMessage,
   AssistantQuotedMessage,
+  AssistantSurface,
   ReasoningEffort,
 } from "../types";
-import { isValidReasoningEffort } from "../types/assistant";
 
 export {
   AssistantMessageContent,
@@ -29,20 +33,15 @@ export {
   StreamingStatus,
 } from "../features/assistant/components/AssistantMessageContent";
 
-/** 思考强度是本机偏好，跟着浏览器而不是数据库走（换数据集时不该被重置）。 */
-const REASONING_EFFORT_STORAGE_KEY = "resumeforge.assistant.reasoning_effort";
-
-function readStoredEffort(): ReasoningEffort {
-  const raw = window.localStorage.getItem(REASONING_EFFORT_STORAGE_KEY) ?? "";
-  // 校验的是**格式**而不是候选列表：档位允许自定义（各家词汇不同），用白名单会把
-  // 用户自己填的值在下次打开时静默丢掉。
-  return isValidReasoningEffort(raw) ? raw.trim() : "";
-}
-
-export default function AssistantPage() {
-  const { message, modal } = App.useApp();
+export default function AssistantPage({
+  compact = false,
+  surface: surfaceProp,
+}: AssistantPageProps = {}) {
+  const { message } = App.useApp();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const surface: AssistantSurface =
+    surfaceProp ?? (searchParams.get("surface") === "floating" ? "floating" : "page");
   // 从工作台等页面跳转过来时可用 ?ask=... 预填提问（例如「帮我把格式模板调松一点」）。
   // 只预填、**不自动发送**：用户能改完再点发送，避免一个链接就替用户发起一次模型调用。
   const [content, setContent] = useState(() => (searchParams.get("ask") ?? "").slice(0, 4000));
@@ -53,11 +52,13 @@ export default function AssistantPage() {
     positiveId(searchParams.get("resume_id")),
   );
   const [webSearch, setWebSearch] = useState(false);
-  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(readStoredEffort);
+  const [reasoningEffort, setReasoningEffort] =
+    useState<ReasoningEffort>(readStoredReasoningEffort);
   const [groupTarget, setGroupTarget] = useState<AssistantConversationBrief | null>(null);
   const [groupValue, setGroupValue] = useState("");
   /** 多选删除：进入后每条消息左侧出勾选框，可一次删掉几条。 */
   const [selecting, setSelecting] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<number>>(() => new Set());
   const mountedRef = useRef(true);
   const messageEndRef = useRef<HTMLDivElement>(null);
@@ -67,7 +68,7 @@ export default function AssistantPage() {
   // ?new=1：从简历详情等入口进来时默认新开一个空对话，而不是续接/恢复上次会话。
   const startNew = searchParams.get("new") === "1";
   const newConversationAppliedRef = useRef(false);
-  const conversationsState = useAssistantConversations({ message, startNew });
+  const conversationsState = useAssistantConversations({ message, startNew, surface });
   const {
     startDraft,
     activeId,
@@ -123,14 +124,15 @@ export default function AssistantPage() {
     async (target: AssistantMessage) => {
       if (!activeId) return;
       try {
-        await deleteAssistantMessage(activeId, target.id);
+        if (surface === "page") await deleteAssistantMessage(activeId, target.id);
+        else await deleteAssistantMessage(activeId, target.id, surface);
         await loadDetail(activeId);
         message.success("消息已删除");
       } catch (error) {
         message.error(error instanceof Error ? error.message : "删除消息失败");
       }
     },
-    [activeId, loadDetail, message],
+    [activeId, loadDetail, message, surface],
   );
 
   const exitSelecting = useCallback(() => {
@@ -165,14 +167,17 @@ export default function AssistantPage() {
   const removeSelected = useCallback(async () => {
     if (!activeId || selectedIds.size === 0) return;
     try {
-      const { deleted } = await deleteAssistantMessages(activeId, [...selectedIds]);
+      const { deleted } =
+        surface === "page"
+          ? await deleteAssistantMessages(activeId, [...selectedIds])
+          : await deleteAssistantMessages(activeId, [...selectedIds], surface);
       await loadDetail(activeId);
       exitSelecting();
       message.success(`已删除 ${deleted} 条消息`);
     } catch (error) {
       message.error(error instanceof Error ? error.message : "删除消息失败");
     }
-  }, [activeId, exitSelecting, loadDetail, message, selectedIds]);
+  }, [activeId, exitSelecting, loadDetail, message, selectedIds, surface]);
 
   const stream = useAssistantStream({
     activeIdRef,
@@ -189,6 +194,7 @@ export default function AssistantPage() {
     resumeId,
     webSearch,
     reasoningEffort,
+    surface,
   });
   const {
     sending,
@@ -217,7 +223,7 @@ export default function AssistantPage() {
 
   // 思考强度：切一次记一次，下次打开助手页沿用上次的选择。
   useEffect(() => {
-    window.localStorage.setItem(REASONING_EFFORT_STORAGE_KEY, reasoningEffort);
+    window.localStorage.setItem("resumeforge.assistant.reasoning_effort", reasoningEffort);
   }, [reasoningEffort]);
 
   // 深链：从「复制分享链接」打开时直接定位到那一段对话。
@@ -348,23 +354,51 @@ export default function AssistantPage() {
     streamingText,
   ]);
 
+  // 浮窗的历史抽屉是盖在内容上的：除了点背板，键盘用户还需要一条直接退出的路。
+  useEffect(() => {
+    if (!compact || !historyOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setHistoryOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [compact, historyOpen]);
+
   return (
-    <div className="assistant-page">
-      <ConversationSidebar
-        conversations={conversations}
-        loading={conversationsLoading}
-        activeId={activeId}
-        onCreate={() => void createConversation()}
-        onSelect={selectConversation}
-        onDelete={(id) => void removeConversation(id)}
-        onRename={(id, title) => void saveConversationTitle(id, title)}
-        onToggleFlag={(conversation, field) => void updateConversationFlags(conversation, field)}
-        onArchive={(conversation, archived) =>
-          void updateConversation(conversation.id, { archived })
-        }
-        onFork={(conversation) => void forkConversation(conversation.id)}
-        onMoveToGroup={openGroupModal}
-      />
+    <div className={`assistant-page${compact ? " assistant-page--floating" : ""}`}>
+      {compact && historyOpen && (
+        <button
+          type="button"
+          className="assistant-sidebar-backdrop"
+          aria-label="关闭历史记录"
+          onClick={() => setHistoryOpen(false)}
+        />
+      )}
+      {(!compact || historyOpen) && (
+        <ConversationSidebar
+          surface={surface}
+          conversations={conversations}
+          loading={conversationsLoading}
+          activeId={activeId}
+          onCreate={() => {
+            setHistoryOpen(false);
+            void createConversation();
+          }}
+          onSelect={(id) => {
+            setHistoryOpen(false);
+            selectConversation(id);
+          }}
+          onDelete={(id) => void removeConversation(id)}
+          onRename={(id, title) => void saveConversationTitle(id, title)}
+          onToggleFlag={(conversation, field) => void updateConversationFlags(conversation, field)}
+          onArchive={(conversation, archived) =>
+            void updateConversation(conversation.id, { archived })
+          }
+          onFork={(conversation) => void forkConversation(conversation.id)}
+          onMoveToGroup={openGroupModal}
+          className={compact ? "assistant-sidebar--floating" : undefined}
+        />
+      )}
       <section className={`assistant-workspace${selecting ? " is-selecting" : ""}`}>
         <header className="assistant-header">
           <div className="assistant-header-titles">
@@ -384,34 +418,27 @@ export default function AssistantPage() {
               多选
             </Button>
           )}
-        </header>
-        {selecting && (
-          <div className="assistant-select-bar">
-            <Typography.Text type="secondary">已选 {selectedIds.size} 条</Typography.Text>
-            <Space size={8}>
+          {compact && (
+            <Space size={4}>
               <Button
-                danger
-                size="small"
-                icon={<DeleteOutlined />}
-                disabled={selectedIds.size === 0}
-                onClick={() =>
-                  modal.confirm({
-                    title: `删除选中的 ${selectedIds.size} 条消息？`,
-                    content: "删除后无法恢复。引用这些消息的提问仍会保留引用内容。",
-                    okText: "删除",
-                    okButtonProps: { danger: true },
-                    cancelText: "取消",
-                    onOk: () => removeSelected(),
-                  })
-                }
+                type="text"
+                icon={<HistoryOutlined />}
+                aria-label="查看投投历史"
+                aria-expanded={historyOpen}
+                onClick={() => setHistoryOpen((current) => !current)}
               >
-                删除所选
-              </Button>
-              <Button size="small" icon={<CloseOutlined />} onClick={exitSelecting}>
-                退出多选
+                历史
               </Button>
             </Space>
-          </div>
+          )}
+        </header>
+        {selecting && (
+          <AssistantSelectBar
+            selectedCount={selectedIds.size}
+            disabled={selectedIds.size === 0}
+            onDelete={removeSelected}
+            onExit={exitSelecting}
+          />
         )}
         <AssistantMessageList
           detail={detail}
@@ -431,6 +458,8 @@ export default function AssistantPage() {
           messageEndRef={messageEndRef}
           enabledSkillCount={enabledSkills.length}
           skillsLoaded={skillsLoaded}
+          assistantLabel={compact ? "投投" : "求职助手"}
+          emptyVariant={compact ? "floating" : "page"}
           onChoosePrompt={chooseStarterPrompt}
           onManageSkills={openSkillWorkbench}
           onQuote={quoteMessage}
@@ -440,6 +469,7 @@ export default function AssistantPage() {
           onToggleSelected={toggleSelected}
         />
         <AssistantComposer
+          compact={compact}
           content={content}
           attachments={attachments}
           sending={sending}
@@ -468,23 +498,13 @@ export default function AssistantPage() {
           onStop={stop}
         />
       </section>
-      <Modal
-        title="移动到分组"
+      <AssistantGroupModal
         open={groupTarget !== null}
-        okText="保存"
-        onCancel={() => setGroupTarget(null)}
-        onOk={() => void confirmGroup()}
-      >
-        <Typography.Paragraph type="secondary">
-          给这段对话归个类（例如「字节」「面试准备」）。留空表示移出分组。分组只影响侧栏的显示，不会动对话内容。
-        </Typography.Paragraph>
-        <Input
-          value={groupValue}
-          maxLength={64}
-          placeholder="分组名称"
-          onChange={(event) => setGroupValue(event.target.value)}
-        />
-      </Modal>
+        onClose={() => setGroupTarget(null)}
+        onConfirm={() => void confirmGroup()}
+        value={groupValue}
+        onChange={setGroupValue}
+      />
     </div>
   );
 }

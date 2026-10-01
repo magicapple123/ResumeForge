@@ -26,6 +26,8 @@ import type { PendingAttachment } from "../assistantUtils";
 import type { StarterPrompt } from "../assistantTypes";
 
 interface Props {
+  assistantLabel?: string;
+  emptyVariant?: "page" | "floating";
   detail: AssistantConversationDetail | null;
   showLoading: boolean;
   activeStream: boolean;
@@ -57,6 +59,8 @@ interface Props {
 }
 
 export default function AssistantMessageList({
+  assistantLabel = "求职助手",
+  emptyVariant = "page",
   detail,
   showLoading,
   activeStream,
@@ -120,6 +124,7 @@ export default function AssistantMessageList({
         <Skeleton active paragraph={{ rows: 6 }} />
       ) : historyMessages.length === 0 && !(sending && activeStream) ? (
         <AssistantEmptyState
+          variant={emptyVariant}
           onChoosePrompt={onChoosePrompt}
           enabledSkillCount={enabledSkillCount}
           skillsLoaded={skillsLoaded}
@@ -134,7 +139,9 @@ export default function AssistantMessageList({
               }`}
             >
               <div className="assistant-message-head">
-                <Typography.Text strong>{item.role === "user" ? "你" : "求职助手"}</Typography.Text>
+                <Typography.Text strong>
+                  {item.role === "user" ? "你" : assistantLabel}
+                </Typography.Text>
                 <Typography.Text type="secondary" className="assistant-message-time">
                   {formatDateTime(item.created_at)}
                 </Typography.Text>
@@ -194,7 +201,7 @@ export default function AssistantMessageList({
       {activeStream && sending && (
         <article className="assistant-message assistant-message--assistant">
           <div className="assistant-message-head">
-            <Typography.Text strong>求职助手</Typography.Text>
+            <Typography.Text strong>{assistantLabel}</Typography.Text>
             <Typography.Text type="secondary" className="assistant-message-time">
               {formatDateTime(pendingSentAt)}
             </Typography.Text>

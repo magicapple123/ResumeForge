@@ -9,12 +9,11 @@
 import { App } from "antd";
 import { useCallback, useRef, useState } from "react";
 import {
-  DOCUMENT_MIME_BY_EXTENSION,
-  IMAGE_MIME_BY_EXTENSION,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENT_COUNT,
   MAX_TOTAL_ATTACHMENT_BYTES,
   classifyAttachment,
+  clipboardImages,
   readAsDataUrl,
 } from "../utils/attachments";
 
@@ -27,34 +26,6 @@ export interface StagedFile {
   /** base64 data URL，直接进请求体。 */
   data: string;
   size: number;
-}
-
-/** 剪贴板给的 blob 可能没有文件名，按 MIME 补一个。 */
-const EXTENSION_BY_MIME: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-  "image/gif": "gif",
-  "image/bmp": "bmp",
-  "image/tiff": "tif",
-};
-
-function withUsableName(file: File, index: number): File {
-  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-  if (IMAGE_MIME_BY_EXTENSION[extension] || DOCUMENT_MIME_BY_EXTENSION[extension]) return file;
-  const suffix = EXTENSION_BY_MIME[file.type] ?? "png";
-  return new File([file], `clipboard-${index + 1}.${suffix}`, { type: file.type });
-}
-
-function clipboardImages(clipboardData: DataTransfer | null): File[] {
-  if (!clipboardData) return [];
-  const files: File[] = [];
-  for (const item of Array.from(clipboardData.items ?? [])) {
-    if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
-    const file = item.getAsFile();
-    if (file) files.push(withUsableName(file, files.length));
-  }
-  return files;
 }
 
 /** 把暂存区里的文件按类型拆成请求体需要的两组入参（图片与文档是两个字段）。 */

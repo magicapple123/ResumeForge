@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.setting import LLMConfigRecord
 from ..schemas.setting import (
+    AssistantOrbSetting,
     LLMConfig,
     LLMApiKeyRevealResult,
     LLMConfigRecordCreate,
@@ -29,6 +30,7 @@ from ..services.llm.model_catalog import list_available_models
 from ..services.llm.thinking import probe_thinking, thinking_support
 from ..services.settings_service import (
     delete_llm_config_record,
+    get_assistant_orb_enabled,
     get_llm_config,
     get_reminder_popup_on_start,
     get_search_config,
@@ -37,6 +39,7 @@ from ..services.settings_service import (
     resolve_llm_config_api_key,
     save_llm_config,
     save_llm_config_record,
+    save_assistant_orb_enabled,
     save_navigation_visibility,
     save_reminder_popup_on_start,
     save_search_config,
@@ -133,6 +136,17 @@ def read_reminder_popup(db: Session = Depends(get_db)):
 @router.put("/reminder-popup", response_model=ReminderPopupSetting)
 def write_reminder_popup(payload: ReminderPopupSetting, db: Session = Depends(get_db)):
     return ReminderPopupSetting(enabled=save_reminder_popup_on_start(db, payload.enabled))
+
+
+@router.get("/assistant-orb", response_model=AssistantOrbSetting)
+def read_assistant_orb(db: Session = Depends(get_db)):
+    """读取全局「投投」求职助手悬浮球开关（默认开）。"""
+    return AssistantOrbSetting(enabled=get_assistant_orb_enabled(db))
+
+
+@router.put("/assistant-orb", response_model=AssistantOrbSetting)
+def write_assistant_orb(payload: AssistantOrbSetting, db: Session = Depends(get_db)):
+    return AssistantOrbSetting(enabled=save_assistant_orb_enabled(db, payload.enabled))
 
 
 @router.get("/navigation", response_model=NavigationVisibility)

@@ -22,6 +22,7 @@ from ..schemas.assistant import (
     ChatMessageDeleteRequest,
     ChatMessageDeleteResult,
     ConversationToMaterialRequest,
+    ConversationSurface,
 )
 from ..schemas.material import (
     MAX_MATERIAL_CONTENT_CHARS,
@@ -123,28 +124,39 @@ def create_conversation(payload: ChatConversationCreate, db: Session = Depends(g
 
 @router.get("/conversations", response_model=list[ChatConversationBrief])
 def list_conversations(
-    limit: int = Query(default=100, ge=1, le=200), db: Session = Depends(get_db)
+    limit: int = Query(default=100, ge=1, le=200),
+    surface: ConversationSurface = Query(default="page"),
+    db: Session = Depends(get_db),
 ):
-    return list_conversation_records(limit, db)
+    return list_conversation_records(limit, db, surface)
 
 
 @router.get("/conversations/{conversation_id}", response_model=ChatConversationDetail)
-def read_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    return read_conversation_record(conversation_id, db)
+def read_conversation(
+    conversation_id: int,
+    surface: ConversationSurface = Query(default="page"),
+    db: Session = Depends(get_db),
+):
+    return read_conversation_record(conversation_id, db, surface)
 
 
 @router.patch("/conversations/{conversation_id}", response_model=ChatConversationBrief)
 def rename_conversation(
     conversation_id: int,
     payload: ChatConversationUpdate,
+    surface: ConversationSurface = Query(default="page"),
     db: Session = Depends(get_db),
 ):
-    return update_conversation_record(conversation_id, payload, db)
+    return update_conversation_record(conversation_id, payload, db, surface)
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
-def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
-    delete_conversation_record(conversation_id, db)
+def delete_conversation(
+    conversation_id: int,
+    surface: ConversationSurface = Query(default="page"),
+    db: Session = Depends(get_db),
+):
+    delete_conversation_record(conversation_id, db, surface)
 
 
 @router.post(
@@ -155,10 +167,11 @@ def delete_conversation(conversation_id: int, db: Session = Depends(get_db)):
 def fork_conversation(
     conversation_id: int,
     payload: ChatConversationForkRequest,
+    surface: ConversationSurface = Query(default="page"),
     db: Session = Depends(get_db),
 ):
     """「在新对话中继续」：带着这段对话最近的上下文开一段新会话。"""
-    return fork_conversation_record(conversation_id, payload, db)
+    return fork_conversation_record(conversation_id, payload, db, surface)
 
 
 def _conversation_messages(db: Session, conversation_id: int) -> list[ChatMessage]:
@@ -174,6 +187,7 @@ def _conversation_messages(db: Session, conversation_id: int) -> list[ChatMessag
 def export_conversation(
     conversation_id: int,
     format: str = Query("md", pattern="^(md|txt|json)$"),
+    surface: ConversationSurface = Query(default="page"),
     db: Session = Depends(get_db),
 ):
     """把一段对话导出成文件：Markdown / 纯文本 / JSON。
@@ -181,7 +195,7 @@ def export_conversation(
     导出内容包含消息正文、时间、附件名、助手做过的操作与参考来源——用户要的是
     "带得走的记录"，不是只有一问一答。
     """
-    conversation = conversation_or_404(db, conversation_id)
+    conversation = conversation_or_404(db, conversation_id, surface)
     media_type, builder = EXPORT_FORMATS[format]
     body = builder(conversation, _conversation_messages(db, conversation_id))
     filename = build_conversation_filename(conversation, format)
@@ -202,13 +216,14 @@ def export_conversation(
 def conversation_to_material(
     conversation_id: int,
     payload: ConversationToMaterialRequest,
+    surface: ConversationSurface = Query(default="page"),
     db: Session = Depends(get_db),
 ):
     """把这段对话存进资料箱。
 
     存进去的是导出的 Markdown：助手之后能直接读它、总结它，或按用户要求整理进个人资料。
     """
-    conversation = conversation_or_404(db, conversation_id)
+    conversation = conversation_or_404(db, conversation_id, surface)
     markdown = conversation_to_markdown(conversation, _conversation_messages(db, conversation_id))
     truncated = len(markdown) > MAX_MATERIAL_CONTENT_CHARS
     if truncated:
@@ -238,19 +253,25 @@ def conversation_to_material(
 def delete_messages(
     conversation_id: int,
     payload: ChatMessageDeleteRequest,
+    surface: ConversationSurface = Query(default="page"),
     db: Session = Depends(get_db),
 ):
     """批量删除消息（前端勾选多条后走这里；单条删除见下面的 DELETE 路由）。"""
-    deleted = delete_message_records(db, conversation_id, payload.message_ids)
+    deleted = delete_message_records(db, conversation_id, payload.message_ids, surface)
     if deleted == 0:
         raise HTTPException(status_code=404, detail="消息不存在或已被删除")
     return ChatMessageDeleteResult(deleted=deleted)
 
 
 @router.delete("/conversations/{conversation_id}/messages/{message_id}", status_code=204)
-def delete_message(conversation_id: int, message_id: int, db: Session = Depends(get_db)):
+def delete_message(
+    conversation_id: int,
+    message_id: int,
+    surface: ConversationSurface = Query(default="page"),
+    db: Session = Depends(get_db),
+):
     """删除单条消息（引用它的消息会解除引用，正文里的引用快照保留）。"""
-    if delete_message_records(db, conversation_id, [message_id]) == 0:
+    if delete_message_records(db, conversation_id, [message_id], surface) == 0:
         raise HTTPException(status_code=404, detail="消息不存在或已被删除")
 
 
@@ -259,8 +280,9 @@ async def send_message(
     conversation_id: int,
     payload: AssistantMessageCreate,
     db: Session = Depends(get_db),
+    surface: ConversationSurface = "page",
 ):
-    conversation = conversation_or_404(db, conversation_id)
+    conversation = conversation_or_404(db, conversation_id, surface)
     try:
         attachments = normalize_attachments(payload.attachments)
     except ValueError as exc:

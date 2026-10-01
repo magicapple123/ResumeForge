@@ -53,6 +53,7 @@
 | 离线分享包 | `components/SharePackageModal.tsx` | `sharePackages.ts` | `/api/share-packages` | `share_package.py` |
 | ATS 检测 | `components/AtsCheckPanel.tsx` | `ats.ts` | `/api/resumes/...` | `ats_check.py` |
 | 匹配度分析 | `components/JobMatchModal.tsx` | `jobs.ts` | `/api/jobs/.../match` | `job/job_match.py` |
+| 投投悬浮球 | `features/tou-tou/*` + `App.tsx` 的 `MainLayout` | `settings.ts` `assistant.ts` | `/api/settings/assistant-orb` `/api/assistant*?surface=floating` | `settings_service.py`（`AppSetting` 键值）`assistant_conversations.py` `assistant_stream.py` | `setting.py` `assistant.py`（surface 隔离） |
 
 ## 后端目录速览（backend/app/）
 

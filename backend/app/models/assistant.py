@@ -15,6 +15,10 @@ class ChatConversation(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(120), default="新对话")
+    # 对话入口作用域：主助手与投投悬浮球历史必须物理隔离。
+    surface: Mapped[str] = mapped_column(
+        String(16), default="page", nullable=False, server_default="page", index=True
+    )
     pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 归档：默认从侧栏列表里收起来，可以切到「已归档」查看或恢复。

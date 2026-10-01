@@ -1,0 +1,294 @@
+/* 投投 · 求职助手悬浮球。只使用 CSS transform / opacity，不引入动画依赖。 */
+
+.tt-shell {
+  --tt-size: 64px;
+  --tt-edge: 24px;
+  --tt-hide-keep: 0.3;
+  --tt-float: 8px;
+  --tt-turn: 12deg;
+  --tt-breathe: 1.03;
+  --tt-ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --tt-ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: fixed;
+  right: var(--tt-edge);
+  bottom: var(--tt-edge);
+  z-index: 40;
+  width: var(--tt-size);
+  height: var(--tt-size);
+  pointer-events: none;
+  isolation: isolate;
+}
+
+.tt-shell.is-webform {
+  bottom: 120px;
+}
+
+.tt-shell.is-edge-left .tt-tip {
+  left: calc(100% + 12px);
+  right: auto;
+  bottom: 50%;
+  transform: translateY(50%);
+}
+
+.tt-shell.is-edge-right .tt-tip {
+  right: calc(100% + 12px);
+  left: auto;
+  bottom: 50%;
+  transform: translateY(50%);
+}
+
+.tt-shell.is-edge-top .tt-tip {
+  top: calc(100% + 12px);
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tt-shell.is-edge-bottom .tt-tip {
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tt {
+  position: relative;
+  display: block;
+  width: var(--tt-size);
+  height: var(--tt-size);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.tt:focus-visible {
+  outline: 2px solid #91caff;
+  outline-offset: 4px;
+}
+
+.tt.is-dragging {
+  cursor: grabbing;
+}
+
+.tt-hide,
+.tt-scale,
+.tt-float,
+.tt-breathe,
+.tt-turn {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.tt-hide {
+  transition: transform 480ms var(--tt-ease-soft);
+}
+
+.tt-shell.is-edge-right .tt.is-hidden .tt-hide {
+  transform: translateX(calc(var(--tt-size) * (1 - var(--tt-hide-keep)) + var(--tt-edge)));
+}
+
+.tt-shell.is-edge-left .tt.is-hidden .tt-hide {
+  transform: translateX(calc((var(--tt-size) * (1 - var(--tt-hide-keep)) + var(--tt-edge)) * -1));
+}
+
+.tt-shell.is-edge-top .tt.is-hidden .tt-hide {
+  transform: translateY(calc((var(--tt-size) * (1 - var(--tt-hide-keep)) + var(--tt-edge)) * -1));
+}
+
+.tt-shell.is-edge-bottom .tt.is-hidden .tt-hide {
+  transform: translateY(calc(var(--tt-size) * (1 - var(--tt-hide-keep)) + var(--tt-edge)));
+}
+
+/* 睡着了就多留一点在屏幕里：收纳成 30% 的细边时，闭着的眼睛根本看不出来。 */
+.tt.is-sleep.is-hidden .tt-hide {
+  --tt-hide-keep: 0.62;
+}
+
+.tt-scale {
+  transition: transform 180ms ease-out;
+}
+
+.tt:hover .tt-scale {
+  transform: scale(1.08);
+}
+
+.tt.is-pressed .tt-scale {
+  animation: tt-pop 320ms var(--tt-ease-pop);
+}
+
+@keyframes tt-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.tt-float {
+  animation: tt-float 2.4s var(--tt-ease-soft) infinite;
+}
+
+.tt-breathe {
+  animation: tt-breathe 2.4s var(--tt-ease-soft) infinite;
+}
+
+.tt-turn {
+  position: relative;
+  z-index: 0;
+  transform-style: preserve-3d;
+  animation: tt-turn 3.6s var(--tt-ease-soft) infinite;
+}
+
+@keyframes tt-float {
+  0%,
+  100% {
+    transform: translateY(calc(var(--tt-float) * -1));
+  }
+  50% {
+    transform: translateY(var(--tt-float));
+  }
+}
+
+@keyframes tt-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(var(--tt-breathe));
+  }
+}
+
+@keyframes tt-turn {
+  0%,
+  100% {
+    transform: perspective(400px) rotateY(calc(var(--tt-turn) * -1));
+  }
+  50% {
+    transform: perspective(400px) rotateY(var(--tt-turn));
+  }
+}
+
+.tt-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms var(--tt-ease-soft);
+}
+
+.tt-face.is-active {
+  opacity: 1;
+}
+
+.tt.is-sleep .tt-float,
+.tt.is-sleep .tt-breathe {
+  animation-duration: 4.8s;
+}
+
+.tt.is-sleep .tt-float {
+  --tt-float: 4px;
+}
+
+.tt.is-dragging .tt-float,
+.tt.is-dragging .tt-breathe,
+.tt.is-dragging .tt-turn {
+  animation-play-state: paused;
+}
+
+/*
+ * 睡着时飘出来的 Zzz。
+ *
+ * 用真元素而不是 `::after`：生成内容在部分读屏里会被念出来，这个标记纯粹是装饰。
+ * 位置按吸附边翻边——收纳时球是往吸附的那一侧移出去的，剩下可见的正好是反方向那一半。
+ */
+.tt-zzz {
+  position: absolute;
+  top: calc(var(--tt-size) * -0.12);
+  left: calc(var(--tt-size) * -0.12);
+  z-index: 1;
+  color: #6b8cb5;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  pointer-events: none;
+  animation: tt-zzz 3.2s ease-in-out infinite;
+}
+
+.tt-shell.is-edge-left .tt-zzz {
+  right: calc(var(--tt-size) * -0.12);
+  left: auto;
+}
+
+.tt-shell.is-edge-top .tt-zzz {
+  top: auto;
+  bottom: calc(var(--tt-size) * -0.12);
+}
+
+@keyframes tt-zzz {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.9);
+  }
+  20% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(1.05);
+  }
+}
+
+.tt-tip {
+  position: absolute;
+  bottom: 6px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid #d7e7f7;
+  border-radius: 12px;
+  color: #244364;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 12px 30px rgb(42 83 125 / 16%);
+  font-size: 12px;
+  line-height: 1.55;
+  pointer-events: auto;
+}
+
+.tt-tip-close {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #66809b;
+  background: #eef6fd;
+  cursor: pointer;
+  line-height: 20px;
+}
+
+.tt-tip-close:focus-visible {
+  outline: 2px solid #91caff;
+  outline-offset: 2px;
+}

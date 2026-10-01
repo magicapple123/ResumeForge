@@ -8,9 +8,11 @@ import type {
   AssistantSourceNumber,
   AssistantStreamEvent,
   AssistantToolCall,
+  AssistantSurface,
   ReasoningEffort,
 } from "../../../types";
 import type { PendingAttachment } from "../assistantUtils";
+import { useTouTou } from "../../tou-tou/touTouContext";
 
 interface Options {
   activeIdRef: MutableRefObject<number | null>;
@@ -25,6 +27,7 @@ interface Options {
   resumeId: number | undefined;
   webSearch: boolean;
   reasoningEffort: ReasoningEffort;
+  surface?: AssistantSurface;
   /** 当前引用的消息 id；发送时随请求带上，之后清空。 */
   quotedMessageId: number | null;
   clearQuote: () => void;
@@ -43,9 +46,11 @@ export function useAssistantStream({
   resumeId,
   webSearch,
   reasoningEffort,
+  surface = "page",
   quotedMessageId,
   clearQuote,
 }: Options) {
+  const { setStatus: setTouTouStatus } = useTouTou();
   const [sending, setSending] = useState(false);
   const [sendingConversationId, setSendingConversationId] = useState<number | null>(null);
   const [pendingUserText, setPendingUserText] = useState("");
@@ -61,6 +66,7 @@ export function useAssistantStream({
   const [streamError, setStreamError] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
+  const requestErrorRef = useRef(false);
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
 
@@ -75,11 +81,24 @@ export function useAssistantStream({
         return;
       }
       sendingRef.current = true;
+      requestErrorRef.current = false;
       setSending(true);
-      const conversationId = activeIdRef.current ?? (await createConversation());
+      setTouTouStatus("thinking");
+      let conversationId: number | null;
+      try {
+        conversationId = activeIdRef.current ?? (await createConversation());
+      } catch (error) {
+        sendingRef.current = false;
+        setSending(false);
+        setStreamError(error instanceof Error ? error.message : "创建会话失败");
+        setTouTouStatus("error");
+        return;
+      }
       if (!conversationId) {
         sendingRef.current = false;
         setSending(false);
+        setStreamError("创建会话失败");
+        setTouTouStatus("error");
         return;
       }
       const attachmentPayload = attachmentsRef.current.map(({ name, mime_type, data }) => ({
@@ -106,53 +125,71 @@ export function useAssistantStream({
       const controller = new AbortController();
       abortRef.current = controller;
       try {
-        await sendAssistantMessage(
-          conversationId,
-          {
-            content: trimmedText,
-            job_id: jobId,
-            resume_id: resumeId,
-            // 后端保留这个字段只是兼容旧客户端；助手现在始终读取本地个人资料。
-            include_profile: true,
-            web_search: webSearch,
-            reasoning_effort: reasoningEffort,
-            quoted_message_id: quotedMessageId,
-            attachments: attachmentPayload,
-          },
-          (event: AssistantStreamEvent) => {
-            if (abortRef.current !== controller) return;
-            if (event.type === "delta") setStreamingText((current) => current + event.text);
-            if (event.type === "reasoning")
-              setStreamingReasoning((current) => current + event.text);
-            if (event.type === "progress") setProgressText(event.message);
-            if (event.type === "sources") {
-              setStreamingSources(event.sources);
-              setStreamingSourceMap(event.source_map ?? []);
-              if (event.error) setProgressText(event.error);
-            }
-            if (event.type === "tool") {
-              // 显式挑字段，而不是解构剔除 type：仓库的 lint 不允许未使用的变量。
-              setStreamingTools((current) => [
-                ...current,
-                {
-                  name: event.name,
-                  arguments: event.arguments,
-                  summary: event.summary,
-                  link: event.link,
-                  ok: event.ok,
-                  error: event.error,
-                  changed: event.changed,
-                },
-              ]);
-            }
-            if (event.type === "error") setStreamError(event.message);
-            if (event.type === "start") void reloadConversations();
-          },
-          controller.signal,
-        );
+        const requestPayload = {
+          content: trimmedText,
+          job_id: jobId,
+          resume_id: resumeId,
+          // 后端保留这个字段只是兼容旧客户端；助手现在始终读取本地个人资料。
+          include_profile: true,
+          web_search: webSearch,
+          reasoning_effort: reasoningEffort,
+          quoted_message_id: quotedMessageId,
+          attachments: attachmentPayload,
+        };
+        const handleEvent = (event: AssistantStreamEvent) => {
+          if (abortRef.current !== controller) return;
+          if (event.type === "delta") setStreamingText((current) => current + event.text);
+          if (event.type === "reasoning") setStreamingReasoning((current) => current + event.text);
+          if (event.type === "progress") setProgressText(event.message);
+          if (event.type === "sources") {
+            setStreamingSources(event.sources);
+            setStreamingSourceMap(event.source_map ?? []);
+            if (event.error) setProgressText(event.error);
+          }
+          if (event.type === "tool") {
+            // 显式挑字段，而不是解构剔除 type：仓库的 lint 不允许未使用的变量。
+            setStreamingTools((current) => [
+              ...current,
+              {
+                name: event.name,
+                arguments: event.arguments,
+                summary: event.summary,
+                link: event.link,
+                ok: event.ok,
+                error: event.error,
+                changed: event.changed,
+              },
+            ]);
+          }
+          if (event.type === "error") {
+            requestErrorRef.current = true;
+            setStreamError(event.message);
+            setTouTouStatus("error");
+          }
+          if (event.type === "done") setTouTouStatus("done");
+          if (event.type === "start") void reloadConversations();
+        };
+        if (surface === "page") {
+          await sendAssistantMessage(
+            conversationId,
+            requestPayload,
+            handleEvent,
+            controller.signal,
+          );
+        } else {
+          await sendAssistantMessage(
+            conversationId,
+            requestPayload,
+            handleEvent,
+            controller.signal,
+            surface,
+          );
+        }
       } catch (error) {
         if (!controller.signal.aborted) {
+          requestErrorRef.current = true;
           setStreamError(error instanceof Error ? error.message : "发送消息失败");
+          setTouTouStatus("error");
         }
       } finally {
         if (abortRef.current === controller) abortRef.current = null;
@@ -167,6 +204,11 @@ export function useAssistantStream({
           const refreshes: Promise<unknown>[] = [reloadConversations()];
           if (activeIdRef.current === conversationId) refreshes.push(loadDetail(conversationId));
           await Promise.all(refreshes);
+          if (mountedRef.current) {
+            setTouTouStatus(
+              controller.signal.aborted ? "idle" : requestErrorRef.current ? "error" : "done",
+            );
+          }
         }
       }
     },
@@ -184,6 +226,8 @@ export function useAssistantStream({
       reasoningEffort,
       reloadConversations,
       resumeId,
+      setTouTouStatus,
+      surface,
       webSearch,
     ],
   );

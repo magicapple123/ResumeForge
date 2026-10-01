@@ -17,6 +17,7 @@ import { LLM_PRESETS } from "../config";
 import { useSettingsDatasets } from "../features/settings/useSettingsDatasets";
 import { useSettingsSkills } from "../features/settings/useSettingsSkills";
 import DatasetsCard from "../components/settings/DatasetsCard";
+import AssistantOrbCard from "../components/settings/AssistantOrbCard";
 import LLMConfigCard from "../components/settings/LLMConfigCard";
 import LLMConfigRecordsCard from "../components/settings/LLMConfigRecordsCard";
 import ReminderPopupCard from "../components/settings/ReminderPopupCard";
@@ -538,6 +539,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <NavigationSettingsCard />
+                <AssistantOrbCard />
                 <ReminderPopupCard />
                 <UpdateCard />
               </>

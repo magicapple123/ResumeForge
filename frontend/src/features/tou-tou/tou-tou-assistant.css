@@ -1,0 +1,243 @@
+/* 投投浮窗：无遮罩的小型助手卡片，简历预览打开时仍可用。 */
+
+.tt-assistant-card {
+  position: fixed;
+  right: 24px;
+  bottom: 96px;
+  z-index: 1100;
+  width: min(760px, calc(100vw - 24px));
+  height: min(680px, calc(100vh - 132px));
+  overflow: hidden;
+  border: 1px solid #cfe0f3;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 20px 55px rgb(25 61 99 / 24%);
+}
+
+.tt-assistant-card.is-edge-left {
+  right: auto;
+  left: 24px;
+}
+
+.tt-assistant-card.is-edge-top {
+  top: 96px;
+  bottom: auto;
+}
+
+.tt-assistant-card.is-edge-bottom {
+  top: auto;
+  bottom: 96px;
+}
+
+/* 浮窗是"页面的缩略版"而不是页面本身：下面这批规则只作用在浮窗里，
+   `styles/assistant-*.css` 里给整页用的尺度（24px 的 h3、104px 的输入框、
+   880px 的行宽）在 760×680 的卡片里会显得又挤又糙。 */
+
+.tt-assistant-card .assistant-page {
+  height: 100%;
+  min-height: 0;
+  padding: 16px;
+  /* 全站默认是 content-box：`height: 100%` 要再加上 32px 内边距，整块比卡片高出一截，
+     底部（发送按钮那一行）被卡片的 `overflow: hidden` 裁掉——输入区一旦长高就看得出来。 */
+  box-sizing: border-box;
+}
+
+.tt-assistant-card .assistant-page--floating {
+  display: block;
+}
+
+.tt-assistant-card .assistant-page--floating .assistant-workspace {
+  height: 100%;
+  max-height: none;
+  /*
+   * 消息区的主行不能留 320px 下限。
+   *
+   * 基类（styles/assistant-layout.css）写的是 `minmax(320px, 1fr)`，而浮窗高度是固定的：
+   * 输入区里多一排待发送附件的缩略图，三项加起来就超过卡片高度，多出来的部分被
+   * `.tt-assistant-card` 的 `overflow: hidden` 裁掉——被裁的正是发送按钮。
+   * 下限交还给内容，让消息区自己滚动，这才是浮窗该有的行为。
+   */
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.tt-assistant-card .assistant-page--floating .assistant-workspace.is-selecting {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+/* 左右各留 16 + 8 = 24px：基类的 4px 让正文几乎贴着面板边框。 */
+.tt-assistant-card .assistant-page--floating .assistant-messages {
+  min-height: 0;
+  padding: 16px 8px 20px;
+}
+
+/* 行宽收在 600px：760px 的面板里铺满会让长段落读起来很累。 */
+.tt-assistant-card .assistant-page--floating .assistant-message {
+  max-width: min(92%, 600px);
+}
+
+.tt-assistant-card .assistant-page--floating .assistant-header {
+  padding-right: 56px;
+  padding-bottom: 10px;
+}
+
+.tt-assistant-card .assistant-page--floating .assistant-header h3.ant-typography {
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.tt-assistant-card .assistant-page--floating .assistant-header .ant-typography-secondary {
+  font-size: 12px;
+}
+
+/*
+ * 空态四层（图标 / 标题 / 说明 / 常用问题）之间的节奏。
+ *
+ * 只写 padding-block：横向留给基类与 `styles/responsive.css` 在 ≤575px 的
+ * `padding-inline: 8px`——这里要是写 `padding: 24px 20px`，那条窄屏规则就被压死了。
+ */
+.tt-assistant-card .assistant-page--floating .assistant-empty-state {
+  padding-block: 24px;
+}
+
+/* `margin-inline: auto` 是必要的：空态那层盒子是"按最宽的子元素收缩"的，
+   文案（420px）比常用问题按钮组窄时会被顶到左边，整块看着偏。 */
+.tt-assistant-card .assistant-page--floating .assistant-empty-state-copy {
+  margin-inline: auto;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.tt-assistant-card
+  .assistant-page--floating
+  .assistant-empty-state-copy
+  > .ant-typography:first-child {
+  font-size: 16px;
+}
+
+.tt-assistant-card .assistant-page--floating .assistant-empty-state .ant-empty-image {
+  margin-bottom: 16px;
+}
+
+.tt-assistant-card .assistant-page--floating .assistant-starter-prompts {
+  max-width: 520px;
+  margin-top: 20px;
+}
+
+/* 输入框：浮窗里不需要整页那么高的输入区，缩到 72px 把空间还给消息区。 */
+.tt-assistant-card .assistant-page--floating .assistant-composer {
+  gap: 10px;
+  border-radius: 14px;
+}
+
+/*
+ * 选择器直接落在 textarea 上，中间**不能**再串一层 `.ant-input-textarea`：
+ * 当前 antd 版本的 `Input.TextArea` 不再渲染那层包装（实测 DOM 里 textarea 的父节点
+ * 就是 `.assistant-composer`），`styles/assistant-composer.css` 里那条 104px 的规则
+ * 因此一直没生效——这里不要再踩同一个坑。
+ *
+ * `!important` 是必需的：`autoSize` 会把 `height` / `min-height` 写成**内联样式**，
+ * 非 important 的样式表规则压不过它。
+ */
+.tt-assistant-card .assistant-page--floating .assistant-composer textarea.ant-input {
+  min-height: 72px !important;
+  padding: 10px 12px;
+}
+
+/* 待发送附件：最多 4 个长文件名也能换行，但不许把输入区顶穿。 */
+.tt-assistant-card .assistant-page--floating .assistant-composer-attachments {
+  gap: 8px;
+  max-height: 112px;
+  overflow-y: auto;
+}
+
+.tt-assistant-card
+  .assistant-page--floating
+  .assistant-composer-image-item
+  .assistant-message-image {
+  width: 80px;
+  height: 60px;
+}
+
+.tt-assistant-card .assistant-sidebar--floating {
+  position: absolute;
+  inset: 16px auto 16px 16px;
+  z-index: 3;
+  width: 250px;
+  overflow-y: auto;
+  border: 1px solid #d8e5f2;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 16px 36px rgb(31 65 100 / 22%);
+}
+
+/*
+ * 历史抽屉的背板：抽屉是不透明板，直接盖在消息上时下层文字会被裁在它的边缘，
+ * 看着像界面坏了。压暗一层之后下层退成背景，"点外面关掉"也才有了可见的落点。
+ *
+ * 它参照的是 `position: fixed` 的卡片（`.assistant-page` 与 `.assistant-workspace`
+ * 都没有 position），所以 `inset: 0` 正好铺满卡片——**不要**给
+ * `.assistant-page--floating` 加 `position: relative`，那会让抽屉的 inset 双重偏移。
+ * 层级：背板 2 < 抽屉 3 < 关闭按钮 4，关闭按钮始终可点。
+ */
+.tt-assistant-card .assistant-sidebar-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 0;
+  border: 0;
+  background: rgb(15 35 60 / 16%);
+  backdrop-filter: blur(1.5px);
+  cursor: default;
+}
+
+.tt-assistant-card-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #5b7187;
+  background: #eef5fb;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 28px;
+}
+
+.tt-assistant-card-close:hover {
+  color: #16365c;
+  background: #dcecfb;
+}
+
+.tt-assistant-card-close:focus-visible {
+  outline: 2px solid #91caff;
+  outline-offset: 2px;
+}
+
+.tt-assistant-card-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 767px) {
+  .tt-assistant-card,
+  .tt-assistant-card.is-edge-left,
+  .tt-assistant-card.is-edge-top,
+  .tt-assistant-card.is-edge-bottom {
+    top: auto;
+    right: 12px;
+    bottom: 82px;
+    left: 12px;
+    width: auto;
+    height: min(720px, calc(100vh - 96px));
+  }
+}

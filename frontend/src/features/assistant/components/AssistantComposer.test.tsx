@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AssistantComposer from "./AssistantComposer";
+import { MAX_ATTACHMENT_COUNT } from "../assistantUtils";
 import type { AssistantQuotedMessage } from "../../../types";
 
 function composerProps(overrides: Partial<Parameters<typeof AssistantComposer>[0]> = {}) {
@@ -117,6 +118,83 @@ describe("AssistantComposer 引用追问", () => {
     expect(closeButton).toBeInTheDocument();
     fireEvent.click(closeButton);
     expect(props.onClearQuote).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AssistantComposer 粘贴与附件", () => {
+  const imageItem = (file: File) => ({
+    kind: "file",
+    type: file.type,
+    getAsFile: () => file,
+  });
+  const pasteIntoComposer = (items: unknown[]) =>
+    fireEvent.paste(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题"), {
+      clipboardData: { items },
+    });
+
+  it("粘贴截图交给附件流程，并拦下这次粘贴", () => {
+    const { props } = renderComposer({ compact: true });
+    const file = new File([new Uint8Array(8)], "shot.png", { type: "image/png" });
+
+    // 返回值是"事件没有被 preventDefault"，false 表示这次粘贴被接管了。
+    const notPrevented = pasteIntoComposer([imageItem(file)]);
+
+    expect(props.onAddAttachment).toHaveBeenCalledWith(file);
+    expect(notPrevented).toBe(false);
+  });
+
+  it("粘贴纯文本原样放行，不吃掉换行和正常输入", () => {
+    const { props } = renderComposer({ compact: true });
+
+    const notPrevented = pasteIntoComposer([{ kind: "string", type: "text/plain" }]);
+
+    expect(props.onAddAttachment).not.toHaveBeenCalled();
+    expect(notPrevented).toBe(true);
+  });
+
+  it("剪贴板里没有文件名的截图会被补一个能通过校验的名字", () => {
+    const { props } = renderComposer({ compact: true });
+    const nameless = new File([new Uint8Array(8)], "", { type: "image/png" });
+
+    pasteIntoComposer([imageItem(nameless)]);
+
+    expect(props.onAddAttachment).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(props.onAddAttachment).mock.calls[0][0].name).toBe("clipboard-1.png");
+  });
+
+  it("浮窗里也渲染已选附件，并能逐个移除", () => {
+    const attachment = {
+      id: 3,
+      name: "岗位截图.png",
+      mime_type: "image/png",
+      data: "data:image/png;base64,AAAA",
+      size: 4,
+      kind: "image" as const,
+    };
+    const { props } = renderComposer({ compact: true, attachments: [attachment] });
+
+    expect(screen.getByAltText("岗位截图.png")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "移除附件 岗位截图.png" }));
+
+    expect(props.onRemoveAttachment).toHaveBeenCalledWith(3);
+  });
+
+  it("浮窗里保留「附件」入口，选满 4 个后不可再选", () => {
+    renderComposer({ compact: true });
+    expect(screen.getByRole("button", { name: "添加附件" })).toBeEnabled();
+
+    cleanup();
+    const four = Array.from({ length: MAX_ATTACHMENT_COUNT }, (_, index) => ({
+      id: index + 1,
+      name: `${index}.png`,
+      mime_type: "image/png",
+      data: "data:image/png;base64,AAAA",
+      size: 4,
+      kind: "image" as const,
+    }));
+    renderComposer({ compact: true, attachments: four });
+
+    expect(screen.getByRole("button", { name: "添加附件" })).toBeDisabled();
   });
 });
 

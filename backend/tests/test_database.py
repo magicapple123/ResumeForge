@@ -14,7 +14,7 @@ from app.main import SQLITE_REQUIRED_COLUMNS
 # 断言悄悄变成过时的期望值（而真出问题时是用户先发现）。
 _APPLICATION_TABLES = set(application_tables())
 # 当前迁移 head；每次新增 revision 时同步这里。
-_HEAD_REVISION = "0035_llm_thinking"
+_HEAD_REVISION = "0036_chat_conversation_surface"
 
 
 def _assert_head_schema(bind) -> None:
@@ -36,6 +36,9 @@ def _assert_head_schema(bind) -> None:
         for item in inspector.get_foreign_keys("resume_record")
     )
     assert "ix_chat_conversation_updated_at" in {
+        item["name"] for item in inspector.get_indexes("chat_conversation")
+    }
+    assert "ix_chat_conversation_surface" in {
         item["name"] for item in inspector.get_indexes("chat_conversation")
     }
     assert {"ix_chat_message_conversation_id", "ix_chat_message_created_at"} <= {

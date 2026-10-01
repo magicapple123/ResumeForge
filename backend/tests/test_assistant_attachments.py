@@ -99,6 +99,77 @@ def test_attachment_count_and_size_limits(client):
         normalize_attachments(items)
 
 
+def test_follow_up_turn_carries_the_previous_turn_image(client, monkeypatch):
+    """贴着图追问时，上一轮的图片要再发一次。
+
+    图片只在发出去的那一轮有效的话，"这张岗位截图匹配吗 → 那我简历该怎么改"
+    这种追问就接不上，用户会以为助手把它忘了。
+    """
+    _configure_llm(client)
+    captured: dict = {}
+    _successful_provider(monkeypatch, captured)
+    conversation = _create_conversation(client)
+    image_bytes = b"\x89PNG\r\n\x1a\n" + b"jd-screenshot"
+    image_url = "data:image/png;base64," + base64.b64encode(image_bytes).decode()
+
+    first = client.post(
+        f"/api/assistant/conversations/{conversation['id']}/messages",
+        json={
+            "content": "这个岗位匹配吗",
+            "attachments": [{"name": "jd.png", "mime_type": "image/png", "data": image_url}],
+        },
+    )
+    assert first.status_code == 200
+    follow_up = client.post(
+        f"/api/assistant/conversations/{conversation['id']}/messages",
+        json={"content": "那我的简历该怎么改"},
+    )
+    assert follow_up.status_code == 200
+
+    messages = captured["messages"]
+    carried = [item for item in messages if isinstance(item.get("content"), list)]
+    # 只有上一轮那条带图；当前这条是纯文本，不该被重复塞一份。
+    assert len(carried) == 1
+    assert carried[0] == {
+        "role": "user",
+        "content": [
+            # 历史里的正文保持原文（「用户问题：」那层是当前消息才加的）。
+            {"type": "text", "text": "这个岗位匹配吗"},
+            {"type": "image_url", "image_url": {"url": image_url}},
+        ],
+    }
+    # 当前这条是纯文本（后面还会缀上本地资料上下文，所以只看开头）。
+    assert messages[-1]["role"] == "user"
+    assert isinstance(messages[-1]["content"], str)
+    assert messages[-1]["content"].startswith("用户问题：\n那我的简历该怎么改")
+
+
+def test_image_is_not_carried_beyond_the_next_turn(client, monkeypatch):
+    """再往后一轮就不带了：每轮都回灌历史图片会让用量随对话轮数一路上涨。"""
+    _configure_llm(client)
+    captured: dict = {}
+    _successful_provider(monkeypatch, captured)
+    conversation = _create_conversation(client)
+    image_url = "data:image/png;base64," + base64.b64encode(
+        b"\x89PNG\r\n\x1a\n" + b"once"
+    ).decode()
+
+    for payload in (
+        {
+            "content": "这个岗位匹配吗",
+            "attachments": [{"name": "jd.png", "mime_type": "image/png", "data": image_url}],
+        },
+        {"content": "那我的简历该怎么改"},
+        {"content": "再给一版更短的"},
+    ):
+        response = client.post(
+            f"/api/assistant/conversations/{conversation['id']}/messages", json=payload
+        )
+        assert response.status_code == 200
+
+    assert all(not isinstance(item.get("content"), list) for item in captured["messages"])
+
+
 def test_document_attachment_is_extracted_locally_and_sent_as_text(client, monkeypatch):
     """文档在本机提取成文字后再进模型：不需要多模态，原始文件也不会外发。"""
     _configure_llm(client)

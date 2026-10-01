@@ -4,6 +4,7 @@ import type {
   AssistantConversationBrief,
   AssistantConversationDetail,
   AssistantConversationForkPayload,
+  AssistantSurface,
   AssistantStreamEvent,
   ReasoningEffort,
 } from "../types";
@@ -11,8 +12,14 @@ import type { Material } from "../types";
 import { ApiError, getFilenameFromDisposition, request, extractError } from "./client";
 import { consumeSSE } from "./stream";
 
-export function listAssistantConversations(): Promise<AssistantConversationBrief[]> {
-  return request("/assistant/conversations?limit=100");
+function surfaceQuery(surface: AssistantSurface): string {
+  return `surface=${encodeURIComponent(surface)}`;
+}
+
+export function listAssistantConversations(
+  surface: AssistantSurface = "page",
+): Promise<AssistantConversationBrief[]> {
+  return request(`/assistant/conversations?limit=100&${surfaceQuery(surface)}`);
 }
 
 /** 导出格式：Markdown（可读可贴）、纯文本（去掉标记）、JSON（结构化，便于再加工）。 */
@@ -22,9 +29,12 @@ export type ConversationExportFormat = "md" | "txt" | "json";
 export async function exportConversation(
   id: number,
   format: ConversationExportFormat = "md",
+  surface: AssistantSurface = "page",
 ): Promise<{ blob: Blob; filename: string }> {
   // 裸 fetch：响应是文件内容，不是 JSON。
-  const resp = await fetch(`/api/assistant/conversations/${id}/export?format=${format}`);
+  const resp = await fetch(
+    `/api/assistant/conversations/${id}/export?format=${format}&${surfaceQuery(surface)}`,
+  );
   if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
   return {
     blob: await resp.blob(),
@@ -42,8 +52,9 @@ export async function exportConversation(
 export function conversationToMaterial(
   id: number,
   payload: { title?: string; category?: string; note?: string } = {},
+  surface: AssistantSurface = "page",
 ): Promise<Material> {
-  return request(`/assistant/conversations/${id}/to-material`, {
+  return request(`/assistant/conversations/${id}/to-material?${surfaceQuery(surface)}`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -55,23 +66,31 @@ export function conversationToMaterial(
  */
 export function createAssistantConversation(
   title = "",
-  options: { welcome?: boolean } = {},
+  options: { welcome?: boolean; surface?: AssistantSurface } = {},
 ): Promise<AssistantConversationBrief> {
   return request("/assistant/conversations", {
     method: "POST",
-    body: JSON.stringify({ title, welcome: options.welcome ?? false }),
+    body: JSON.stringify({
+      title,
+      welcome: options.welcome ?? false,
+      surface: options.surface ?? "page",
+    }),
   });
 }
 
-export function getAssistantConversation(id: number): Promise<AssistantConversationDetail> {
-  return request(`/assistant/conversations/${id}`);
+export function getAssistantConversation(
+  id: number,
+  surface: AssistantSurface = "page",
+): Promise<AssistantConversationDetail> {
+  return request(`/assistant/conversations/${id}?${surfaceQuery(surface)}`);
 }
 
 export function renameAssistantConversation(
   id: number,
   title: string,
+  surface: AssistantSurface = "page",
 ): Promise<AssistantConversationBrief> {
-  return request(`/assistant/conversations/${id}`, {
+  return request(`/assistant/conversations/${id}?${surfaceQuery(surface)}`, {
     method: "PATCH",
     body: JSON.stringify({ title }),
   });
@@ -86,8 +105,9 @@ export function updateAssistantConversation(
     archived?: boolean;
     group_name?: string;
   },
+  surface: AssistantSurface = "page",
 ): Promise<AssistantConversationBrief> {
-  return request(`/assistant/conversations/${id}`, {
+  return request(`/assistant/conversations/${id}?${surfaceQuery(surface)}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
@@ -97,15 +117,19 @@ export function updateAssistantConversation(
 export function forkAssistantConversation(
   id: number,
   payload: AssistantConversationForkPayload = {},
+  surface: AssistantSurface = "page",
 ): Promise<AssistantConversationDetail> {
-  return request(`/assistant/conversations/${id}/fork`, {
+  return request(`/assistant/conversations/${id}/fork?${surfaceQuery(surface)}`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function deleteAssistantConversation(id: number): Promise<void> {
-  return request(`/assistant/conversations/${id}`, { method: "DELETE" });
+export function deleteAssistantConversation(
+  id: number,
+  surface: AssistantSurface = "page",
+): Promise<void> {
+  return request(`/assistant/conversations/${id}?${surfaceQuery(surface)}`, { method: "DELETE" });
 }
 
 /**
@@ -113,10 +137,15 @@ export function deleteAssistantConversation(id: number): Promise<void> {
  *
  * 引用它的消息不会被级联删除：引用块是快照，删掉原消息后引用仍然可读。
  */
-export function deleteAssistantMessage(conversationId: number, messageId: number): Promise<void> {
-  return request(`/assistant/conversations/${conversationId}/messages/${messageId}`, {
-    method: "DELETE",
-  });
+export function deleteAssistantMessage(
+  conversationId: number,
+  messageId: number,
+  surface: AssistantSurface = "page",
+): Promise<void> {
+  return request(
+    `/assistant/conversations/${conversationId}/messages/${messageId}?${surfaceQuery(surface)}`,
+    { method: "DELETE" },
+  );
 }
 
 /**
@@ -128,11 +157,15 @@ export function deleteAssistantMessage(conversationId: number, messageId: number
 export function deleteAssistantMessages(
   conversationId: number,
   messageIds: number[],
+  surface: AssistantSurface = "page",
 ): Promise<{ deleted: number }> {
-  return request(`/assistant/conversations/${conversationId}/messages/delete`, {
-    method: "POST",
-    body: JSON.stringify({ message_ids: messageIds }),
-  });
+  return request(
+    `/assistant/conversations/${conversationId}/messages/delete?${surfaceQuery(surface)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ message_ids: messageIds }),
+    },
+  );
 }
 
 export function sendAssistantMessage(
@@ -150,6 +183,12 @@ export function sendAssistantMessage(
   },
   onEvent: (event: AssistantStreamEvent) => void,
   signal?: AbortSignal,
+  surface: AssistantSurface = "page",
 ): Promise<void> {
-  return consumeSSE(`/api/assistant/conversations/${id}/messages`, payload, onEvent, signal);
+  return consumeSSE(
+    `/api/assistant/conversations/${id}/messages?${surfaceQuery(surface)}`,
+    payload,
+    onEvent,
+    signal,
+  );
 }
