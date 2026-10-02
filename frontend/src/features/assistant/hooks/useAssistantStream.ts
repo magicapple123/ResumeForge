@@ -1,6 +1,6 @@
 /** 求职助手流式发送、停止、乐观消息和刷新收尾。 */
 
-import type { MutableRefObject } from "react";
+import type { RefObject } from "react";
 import { useCallback, useRef, useState } from "react";
 import { sendAssistantMessage } from "../../../api/assistant";
 import type {
@@ -15,14 +15,14 @@ import type { PendingAttachment } from "../assistantUtils";
 import { useTouTou } from "../../tou-tou/touTouContext";
 
 interface Options {
-  activeIdRef: MutableRefObject<number | null>;
+  activeIdRef: RefObject<number | null>;
   reloadConversations: () => Promise<unknown>;
   loadDetail: (id: number) => Promise<void>;
   createConversation: () => Promise<number | null>;
   clearAttachments: () => void;
-  attachmentReadsRef: MutableRefObject<number>;
-  attachmentsRef: MutableRefObject<PendingAttachment[]>;
-  mountedRef: MutableRefObject<boolean>;
+  attachmentReadsRef: RefObject<number>;
+  attachmentsRef: RefObject<PendingAttachment[]>;
+  mountedRef: RefObject<boolean>;
   jobId: number | undefined;
   resumeId: number | undefined;
   webSearch: boolean;

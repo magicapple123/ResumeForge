@@ -60,7 +60,7 @@ interface Props {
   pdfDirectAvailable: boolean;
   relayouting: boolean;
   /** 预览句柄：版式控件 / 诊断卡需要用它注入探针 CSS 与量高。 */
-  previewRef: RefObject<ResumePreviewHandle>;
+  previewRef: RefObject<ResumePreviewHandle | null>;
   onLayoutStatus: (status: LayoutStatus | null) => void;
   onMeasure: (measure: LayoutMeasure | null) => void;
   onApplyLayout: (next: ResumeLayout) => void;

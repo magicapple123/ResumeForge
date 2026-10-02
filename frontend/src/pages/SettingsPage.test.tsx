@@ -456,11 +456,13 @@ describe("SettingsPage API key reveal", () => {
 
     await waitFor(() => expect(apiMocks.revealLLMApiKey).toHaveBeenCalledOnce());
     await waitFor(() => expect(input).toHaveValue("sk-revealed"));
-    expect(input).toHaveAttribute("type", "text");
+    // antd 6 Password 的受控 visible 通过内部 effect 同步，React 19 下比我们的
+    // 状态更新晚一拍落地，type 翻转要用 waitFor 等（真实浏览器同样只是晚几毫秒）。
+    await waitFor(() => expect(input).toHaveAttribute("type", "text"));
 
     fireEvent.click(passwordToggle());
     await waitFor(() => expect(input).toHaveValue("********"));
-    expect(input).toHaveAttribute("type", "password");
+    await waitFor(() => expect(input).toHaveAttribute("type", "password"));
 
     fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
     fireEvent.click(passwordToggle());
@@ -495,7 +497,8 @@ describe("SettingsPage API key reveal", () => {
 
     expect(await screen.findByText("读取密钥失败")).toBeInTheDocument();
     expect(input).toHaveValue("********");
-    expect(input).toHaveAttribute("type", "password");
+    // 同上：antd 6 的受控 visible 晚一拍同步，type 断言等待落地。
+    await waitFor(() => expect(input).toHaveAttribute("type", "password"));
   });
 });
 

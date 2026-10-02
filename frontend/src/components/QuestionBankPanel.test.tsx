@@ -140,7 +140,13 @@ describe("QuestionBankPanel", () => {
       resume_id: null,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /收起参考答案/ }));
+    // antd 6 Button 的 loading 有防抖：loading 变 false 后 spinner 仍会短暂保留，
+    // 这段时间内 antd 内部会直接吞掉点击（Button.handleClick 里 innerLoading 时
+    // preventDefault + return）。React 19 下渲染落点使下面的立即点击会确定性落进
+    // 这个窗口，必须等按钮真正退出 loading 态再点——真实用户在窗口期内同样点不动。
+    const collapseBtn = screen.getByRole("button", { name: /收起参考答案/ });
+    await waitFor(() => expect(collapseBtn.querySelector(".ant-btn-loading-icon")).toBeNull());
+    fireEvent.click(collapseBtn);
     await waitFor(() => expect(screen.queryByText(/围绕过往经历/)).not.toBeInTheDocument());
   });
 
