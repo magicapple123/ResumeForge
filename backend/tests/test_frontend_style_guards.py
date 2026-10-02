@@ -37,7 +37,7 @@ def test_orb_position_supports_all_four_edges():
     )
     for edge in ("left", "right", "top", "bottom"):
         assert f'"{edge}"' in hook
-        assert f'is-edge-${{position.side}}' in component
+        assert 'is-edge-${position.side}' in component
 
 
 def test_floating_panel_layout_prerequisites_stay_in_place():
