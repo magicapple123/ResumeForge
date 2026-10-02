@@ -177,90 +177,90 @@ export default function DatasetsCard({
 
         {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
         <Spin spinning={loading}>
-        {datasets.length === 0 ? (
-          <div style={{ marginTop: 16 }}>
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据集" />
-          </div>
-        ) : (
-        <Listy
-          style={{ marginTop: 16 }}
-          items={datasets}
-          rowKey={(dataset) => dataset.id}
-          itemRender={(dataset) => (
-            <ListyItem
-              actions={[
-                <Tooltip key="switch" title={dataset.is_active ? "正在使用" : "切换到这份数据"}>
-                  <Button
-                    type="link"
-                    icon={<SwapOutlined />}
-                    disabled={dataset.is_active || busy || !dataset.exists}
-                    loading={switchingId === dataset.id}
-                    onClick={() => onActivate(dataset)}
-                  >
-                    切换
-                  </Button>
-                </Tooltip>,
-                <Tooltip
-                  key="rename"
-                  title={isProtected(dataset) ? "主数据不支持重命名" : "重命名"}
-                >
-                  <Button
-                    type="text"
-                    aria-label={`重命名 ${dataset.name}`}
-                    icon={<EditOutlined />}
-                    disabled={isProtected(dataset) || busy}
-                    onClick={() => onOpenRename(dataset)}
-                  />
-                </Tooltip>,
-                <Popconfirm
-                  key="delete"
-                  title={`确定删除数据集“${dataset.name}”？`}
-                  description="会移入 data/datasets/.trash/，需要时可以手动找回"
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true }}
-                  disabled={dataset.is_active || busy || isProtected(dataset)}
-                  onConfirm={() => onDelete(dataset)}
-                >
-                  <Tooltip title={dataset.is_active ? "不能删除正在使用的数据集" : "删除"}>
-                    <Button
-                      type="text"
-                      danger
-                      aria-label={`删除数据集 ${dataset.name}`}
-                      icon={<DeleteOutlined />}
-                      loading={deletingId === dataset.id}
+          {datasets.length === 0 ? (
+            <div style={{ marginTop: 16 }}>
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据集" />
+            </div>
+          ) : (
+            <Listy
+              style={{ marginTop: 16 }}
+              items={datasets}
+              rowKey={(dataset) => dataset.id}
+              itemRender={(dataset) => (
+                <ListyItem
+                  actions={[
+                    <Tooltip key="switch" title={dataset.is_active ? "正在使用" : "切换到这份数据"}>
+                      <Button
+                        type="link"
+                        icon={<SwapOutlined />}
+                        disabled={dataset.is_active || busy || !dataset.exists}
+                        loading={switchingId === dataset.id}
+                        onClick={() => onActivate(dataset)}
+                      >
+                        切换
+                      </Button>
+                    </Tooltip>,
+                    <Tooltip
+                      key="rename"
+                      title={isProtected(dataset) ? "主数据不支持重命名" : "重命名"}
+                    >
+                      <Button
+                        type="text"
+                        aria-label={`重命名 ${dataset.name}`}
+                        icon={<EditOutlined />}
+                        disabled={isProtected(dataset) || busy}
+                        onClick={() => onOpenRename(dataset)}
+                      />
+                    </Tooltip>,
+                    <Popconfirm
+                      key="delete"
+                      title={`确定删除数据集“${dataset.name}”？`}
+                      description="会移入 data/datasets/.trash/，需要时可以手动找回"
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
                       disabled={dataset.is_active || busy || isProtected(dataset)}
-                    />
-                  </Tooltip>
-                </Popconfirm>,
-              ]}
-            >
-              <ListyMeta
-                title={
-                  <>
-                    {dataset.name}
-                    {dataset.is_active && (
-                      // “当前”单独看指代不明；顺带说明它为什么不能删、不能切。
-                      <Tooltip title="当前正在使用的数据集">
-                        <Tag color="blue" style={{ marginLeft: 8 }}>
-                          当前
-                        </Tag>
+                      onConfirm={() => onDelete(dataset)}
+                    >
+                      <Tooltip title={dataset.is_active ? "不能删除正在使用的数据集" : "删除"}>
+                        <Button
+                          type="text"
+                          danger
+                          aria-label={`删除数据集 ${dataset.name}`}
+                          icon={<DeleteOutlined />}
+                          loading={deletingId === dataset.id}
+                          disabled={dataset.is_active || busy || isProtected(dataset)}
+                        />
                       </Tooltip>
-                    )}
-                  </>
-                }
-                description={
-                  <>
-                    {formatSize(dataset.size_bytes)}
-                    {dataset.created_at ? ` · ${formatDateTime(dataset.created_at)}` : ""}
-                    {dataset.source ? ` · ${dataset.source}` : ""}
-                  </>
-                }
-              />
-            </ListyItem>
+                    </Popconfirm>,
+                  ]}
+                >
+                  <ListyMeta
+                    title={
+                      <>
+                        {dataset.name}
+                        {dataset.is_active && (
+                          // “当前”单独看指代不明；顺带说明它为什么不能删、不能切。
+                          <Tooltip title="当前正在使用的数据集">
+                            <Tag color="blue" style={{ marginLeft: 8 }}>
+                              当前
+                            </Tag>
+                          </Tooltip>
+                        )}
+                      </>
+                    }
+                    description={
+                      <>
+                        {formatSize(dataset.size_bytes)}
+                        {dataset.created_at ? ` · ${formatDateTime(dataset.created_at)}` : ""}
+                        {dataset.source ? ` · ${dataset.source}` : ""}
+                      </>
+                    }
+                  />
+                </ListyItem>
+              )}
+            />
           )}
-        />
-        )}
         </Spin>
       </Card>
 

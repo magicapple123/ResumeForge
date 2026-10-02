@@ -473,9 +473,7 @@ export default function HomePage() {
                       </Link>
                       <Tag>{job.company}</Tag>
                       <Tag color="blue">{job.location}</Tag>
-                      <Typography.Text type="secondary">
-                        {job.salary || "薪资面议"}
-                      </Typography.Text>
+                      <Typography.Text type="secondary">{job.salary || "薪资面议"}</Typography.Text>
                     </Space>
                   </ListyItem>
                 )}

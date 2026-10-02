@@ -249,109 +249,114 @@ export default function ConversationSidebar({
       />
       {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
       <Spin spinning={loading}>
-      {visibleConversations.length === 0 ? (
-        <div className="assistant-conversation-list">
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无对话" />
-        </div>
-      ) : (
-      <Listy
-        className="assistant-conversation-list"
-        items={visibleConversations}
-        rowKey={(conversation) => conversation.id}
-        itemRender={(conversation) => (
-          <RowContextMenu items={actionsFor(conversation)}>
-            <ListyItem
-              className={conversation.id === activeId ? "is-active" : ""}
-              actions={[
-                <Popover
-                  key="more"
-                  trigger="click"
-                  placement="bottomRight"
-                  open={actionMenuId === conversation.id}
-                  onOpenChange={(open) => setActionMenuId(open ? conversation.id : null)}
-                  content={
-                    <div className="assistant-conversation-actions-menu">
-                      {actionsFor(conversation).map((item) =>
-                        item.confirm ? (
-                          <Popconfirm
-                            key={item.key}
-                            title={item.confirm}
-                            onConfirm={() => {
-                              setActionMenuId(null);
-                              item.onClick?.();
-                            }}
-                          >
-                            <Button type="text" size="small" danger={item.danger} icon={item.icon}>
-                              {item.label}
-                            </Button>
-                          </Popconfirm>
-                        ) : (
+        {visibleConversations.length === 0 ? (
+          <div className="assistant-conversation-list">
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无对话" />
+          </div>
+        ) : (
+          <Listy
+            className="assistant-conversation-list"
+            items={visibleConversations}
+            rowKey={(conversation) => conversation.id}
+            itemRender={(conversation) => (
+              <RowContextMenu items={actionsFor(conversation)}>
+                <ListyItem
+                  className={conversation.id === activeId ? "is-active" : ""}
+                  actions={[
+                    <Popover
+                      key="more"
+                      trigger="click"
+                      placement="bottomRight"
+                      open={actionMenuId === conversation.id}
+                      onOpenChange={(open) => setActionMenuId(open ? conversation.id : null)}
+                      content={
+                        <div className="assistant-conversation-actions-menu">
+                          {actionsFor(conversation).map((item) =>
+                            item.confirm ? (
+                              <Popconfirm
+                                key={item.key}
+                                title={item.confirm}
+                                onConfirm={() => {
+                                  setActionMenuId(null);
+                                  item.onClick?.();
+                                }}
+                              >
+                                <Button
+                                  type="text"
+                                  size="small"
+                                  danger={item.danger}
+                                  icon={item.icon}
+                                >
+                                  {item.label}
+                                </Button>
+                              </Popconfirm>
+                            ) : (
+                              <Button
+                                key={item.key}
+                                type="text"
+                                size="small"
+                                danger={item.danger}
+                                icon={item.icon}
+                                onClick={item.onClick}
+                              >
+                                {item.label}
+                              </Button>
+                            ),
+                          )}
+                        </div>
+                      }
+                    >
+                      <Tooltip title="更多操作（也可以直接右键这条对话）">
+                        <Button
+                          type="text"
+                          size="small"
+                          aria-label="更多对话操作"
+                          className="assistant-conversation-more-button"
+                          icon={<MoreOutlined />}
+                        />
+                      </Tooltip>
+                    </Popover>,
+                  ]}
+                >
+                  {editingId === conversation.id ? (
+                    <Input
+                      size="small"
+                      value={editingTitle}
+                      autoFocus
+                      maxLength={128}
+                      suffix={
+                        <Tooltip title="保存标题（回车也可以）">
                           <Button
-                            key={item.key}
                             type="text"
                             size="small"
-                            danger={item.danger}
-                            icon={item.icon}
-                            onClick={item.onClick}
-                          >
-                            {item.label}
-                          </Button>
-                        ),
-                      )}
-                    </div>
-                  }
-                >
-                  <Tooltip title="更多操作（也可以直接右键这条对话）">
-                    <Button
-                      type="text"
-                      size="small"
-                      aria-label="更多对话操作"
-                      className="assistant-conversation-more-button"
-                      icon={<MoreOutlined />}
+                            aria-label="保存对话标题"
+                            icon={<SaveOutlined />}
+                            onClick={() => saveTitle(conversation.id)}
+                          />
+                        </Tooltip>
+                      }
+                      onChange={(event) => setEditingTitle(event.target.value)}
+                      onPressEnter={() => saveTitle(conversation.id)}
                     />
-                  </Tooltip>
-                </Popover>,
-              ]}
-            >
-              {editingId === conversation.id ? (
-                <Input
-                  size="small"
-                  value={editingTitle}
-                  autoFocus
-                  maxLength={128}
-                  suffix={
-                    <Tooltip title="保存标题（回车也可以）">
-                      <Button
-                        type="text"
-                        size="small"
-                        aria-label="保存对话标题"
-                        icon={<SaveOutlined />}
-                        onClick={() => saveTitle(conversation.id)}
+                  ) : (
+                    <div className="assistant-conversation-item">
+                      <ConversationTitle
+                        title={conversation.title}
+                        pinned={conversation.pinned}
+                        favorite={conversation.favorite}
+                        onSelect={() => onSelect(conversation.id)}
                       />
-                    </Tooltip>
-                  }
-                  onChange={(event) => setEditingTitle(event.target.value)}
-                  onPressEnter={() => saveTitle(conversation.id)}
-                />
-              ) : (
-                <div className="assistant-conversation-item">
-                  <ConversationTitle
-                    title={conversation.title}
-                    pinned={conversation.pinned}
-                    favorite={conversation.favorite}
-                    onSelect={() => onSelect(conversation.id)}
-                  />
-                  <Typography.Text type="secondary" className="assistant-conversation-meta">
-                    {conversation.group_name ? `${conversation.group_name} · ` : ""}
-                    {conversation.message_count} 条 · {formatDateTime(conversation.updated_at)}
-                  </Typography.Text>
-                </div>
-              )}
-            </ListyItem>
-          </RowContextMenu>
+                      <Typography.Text type="secondary" className="assistant-conversation-meta">
+                        {conversation.group_name ? `${conversation.group_name} · ` : ""}
+                        {conversation.message_count} 条 · {formatDateTime(conversation.updated_at)}
+                      </Typography.Text>
+                    </div>
+                  )}
+                </ListyItem>
+              </RowContextMenu>
+            )}
+          />
         )}
-      />
-      )}
       </Spin>
     </aside>
   );

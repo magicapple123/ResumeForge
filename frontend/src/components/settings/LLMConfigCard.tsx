@@ -265,7 +265,11 @@ export default function LLMConfigCard({
                 Form.Item（只管 label/tooltip）+ 内层 noStyle Form.Item（把 value 与 id="model"
                 注回输入框），并用 htmlFor 把 label 重新指回输入框——否则 id 会落在
                 Space.Compact 的 div 上，getByLabelText("模型名称") 就找不到输入框了。 */}
-            <Form.Item label="模型名称" htmlFor="model" tooltip="各厂商模型名不同：可以点输入框右侧的「获取可用模型」按当前账号拉取，也可以照官方文档手填">
+            <Form.Item
+              label="模型名称"
+              htmlFor="model"
+              tooltip="各厂商模型名不同：可以点输入框右侧的「获取可用模型」按当前账号拉取，也可以照官方文档手填"
+            >
               <Space.Compact block>
                 <Form.Item name="model" noStyle>
                   <Input placeholder="deepseek-v4-flash" />

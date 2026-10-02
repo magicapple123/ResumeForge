@@ -78,43 +78,43 @@ export default function NavigationSettingsCard() {
       </Typography.Paragraph>
       {/* List 的 loading 是内容外层的 Spin。 */}
       <Spin spinning={loading}>
-      <Listy
-        items={NAVIGATION_ITEMS}
-        rowKey={(item) => item.key}
-        itemRender={(item) => {
-          const required = CORE_NAVIGATION_KEYS.has(item.key);
-          const visible = required || !hidden.has(item.key);
-          return (
-            <ListyItem
-              className="navigation-settings-item"
-              actions={[
-                <Switch
-                  key="toggle"
-                  checked={visible}
-                  disabled={required || loading || savingKey !== null}
-                  loading={savingKey === item.key}
-                  onChange={(checked) => toggle(item, checked)}
-                  aria-label={item.label + "导航入口"}
-                />,
-              ]}
-            >
-              <ListyMeta
-                avatar={<span className="navigation-settings-icon">{item.icon}</span>}
-                title={
-                  <Space size={8}>
-                    <span>{item.label}</span>
-                    {required ? <Tag color="blue">固定显示</Tag> : null}
-                    <Typography.Text type="secondary">
-                      {item.group === "primary" ? "主导航" : "我的空间"}
-                    </Typography.Text>
-                  </Space>
-                }
-                description={itemDescription(item)}
-              />
-            </ListyItem>
-          );
-        }}
-      />
+        <Listy
+          items={NAVIGATION_ITEMS}
+          rowKey={(item) => item.key}
+          itemRender={(item) => {
+            const required = CORE_NAVIGATION_KEYS.has(item.key);
+            const visible = required || !hidden.has(item.key);
+            return (
+              <ListyItem
+                className="navigation-settings-item"
+                actions={[
+                  <Switch
+                    key="toggle"
+                    checked={visible}
+                    disabled={required || loading || savingKey !== null}
+                    loading={savingKey === item.key}
+                    onChange={(checked) => toggle(item, checked)}
+                    aria-label={item.label + "导航入口"}
+                  />,
+                ]}
+              >
+                <ListyMeta
+                  avatar={<span className="navigation-settings-icon">{item.icon}</span>}
+                  title={
+                    <Space size={8}>
+                      <span>{item.label}</span>
+                      {required ? <Tag color="blue">固定显示</Tag> : null}
+                      <Typography.Text type="secondary">
+                        {item.group === "primary" ? "主导航" : "我的空间"}
+                      </Typography.Text>
+                    </Space>
+                  }
+                  description={itemDescription(item)}
+                />
+              </ListyItem>
+            );
+          }}
+        />
       </Spin>
     </Card>
   );

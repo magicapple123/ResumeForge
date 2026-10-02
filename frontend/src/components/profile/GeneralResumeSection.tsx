@@ -131,98 +131,98 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
 
         {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
         <Spin spinning={loading}>
-        {items.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有通用简历" />
-        ) : (
-        <Listy
-          items={items}
-          rowKey={(record) => record.id}
-          itemRender={(record) => (
-            <ListyItem
-              actions={[
-                <Tooltip key="rename" title="重命名">
-                  <Button
-                    type="text"
-                    aria-label={`重命名通用简历 ${record.title}`}
-                    icon={<EditOutlined />}
-                    disabled={renamingId !== null || deletingId !== null}
-                    onClick={() => {
-                      setRenameValue(record.title);
-                      setRenamingId(record.id);
-                    }}
-                  />
-                </Tooltip>,
-                <Popconfirm
-                  key="delete"
-                  title={`确定删除「${record.title}」？`}
-                  description="删除后无法恢复，简历正文也会一起删除"
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true }}
-                  onConfirm={() => void remove(record)}
-                >
-                  <Tooltip title="删除">
-                    <Button
-                      type="text"
-                      danger
-                      aria-label={`删除通用简历 ${record.title}`}
-                      icon={<DeleteOutlined />}
-                      loading={deletingId === record.id}
-                      disabled={renamingId !== null || deletingId !== null}
-                    />
-                  </Tooltip>
-                </Popconfirm>,
-              ]}
-            >
-              {renamingId === record.id ? (
-                <Space.Compact style={{ width: "100%" }}>
-                  <Input
-                    aria-label="重命名输入框"
-                    value={renameValue}
-                    maxLength={64}
-                    onChange={(event) => setRenameValue(event.target.value)}
-                    onPressEnter={() => void confirmRename(record)}
-                  />
-                  <Button
-                    type="primary"
-                    loading={savingRename}
-                    onClick={() => void confirmRename(record)}
-                  >
-                    保存
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setRenamingId(null);
-                      setRenameValue("");
-                    }}
-                  >
-                    取消
-                  </Button>
-                </Space.Compact>
-              ) : (
-                <ListyMeta
-                  title={
-                    <Button
-                      type="link"
-                      style={{ padding: 0 }}
-                      onClick={() => setPreviewId(record.id)}
+          {items.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有通用简历" />
+          ) : (
+            <Listy
+              items={items}
+              rowKey={(record) => record.id}
+              itemRender={(record) => (
+                <ListyItem
+                  actions={[
+                    <Tooltip key="rename" title="重命名">
+                      <Button
+                        type="text"
+                        aria-label={`重命名通用简历 ${record.title}`}
+                        icon={<EditOutlined />}
+                        disabled={renamingId !== null || deletingId !== null}
+                        onClick={() => {
+                          setRenameValue(record.title);
+                          setRenamingId(record.id);
+                        }}
+                      />
+                    </Tooltip>,
+                    <Popconfirm
+                      key="delete"
+                      title={`确定删除「${record.title}」？`}
+                      description="删除后无法恢复，简历正文也会一起删除"
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={() => void remove(record)}
                     >
-                      {record.title}
-                    </Button>
-                  }
-                  description={
-                    <>
-                      <Tag color="purple">通用简历</Tag>
-                      {record.job_title ? `求职意向：${record.job_title}` : "未填写求职意向"}
-                      {record.created_at ? ` · ${formatDateTime(record.created_at)}` : ""}
-                    </>
-                  }
-                />
+                      <Tooltip title="删除">
+                        <Button
+                          type="text"
+                          danger
+                          aria-label={`删除通用简历 ${record.title}`}
+                          icon={<DeleteOutlined />}
+                          loading={deletingId === record.id}
+                          disabled={renamingId !== null || deletingId !== null}
+                        />
+                      </Tooltip>
+                    </Popconfirm>,
+                  ]}
+                >
+                  {renamingId === record.id ? (
+                    <Space.Compact style={{ width: "100%" }}>
+                      <Input
+                        aria-label="重命名输入框"
+                        value={renameValue}
+                        maxLength={64}
+                        onChange={(event) => setRenameValue(event.target.value)}
+                        onPressEnter={() => void confirmRename(record)}
+                      />
+                      <Button
+                        type="primary"
+                        loading={savingRename}
+                        onClick={() => void confirmRename(record)}
+                      >
+                        保存
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setRenamingId(null);
+                          setRenameValue("");
+                        }}
+                      >
+                        取消
+                      </Button>
+                    </Space.Compact>
+                  ) : (
+                    <ListyMeta
+                      title={
+                        <Button
+                          type="link"
+                          style={{ padding: 0 }}
+                          onClick={() => setPreviewId(record.id)}
+                        >
+                          {record.title}
+                        </Button>
+                      }
+                      description={
+                        <>
+                          <Tag color="purple">通用简历</Tag>
+                          {record.job_title ? `求职意向：${record.job_title}` : "未填写求职意向"}
+                          {record.created_at ? ` · ${formatDateTime(record.created_at)}` : ""}
+                        </>
+                      }
+                    />
+                  )}
+                </ListyItem>
               )}
-            </ListyItem>
+            />
           )}
-        />
-        )}
         </Spin>
       </Card>
 
