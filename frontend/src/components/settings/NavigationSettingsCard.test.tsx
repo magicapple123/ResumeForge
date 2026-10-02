@@ -55,7 +55,12 @@ describe("NavigationSettingsCard", () => {
     renderCard();
 
     expect(await screen.findByRole("switch", { name: "求职助手导航入口" })).not.toBeChecked();
-    fireEvent.click(screen.getByRole("button", { name: "恢复默认显示" }));
+    // 卡片挂载时会异步拉取可见性配置，loading 期间按钮是 disabled 的，React 会吞掉
+    // disabled 按钮上的 click（Linux CI 上 mock 解析慢于下面的点击，此前把用例打挂）；
+    // 等按钮真正可用再点，断言本身不变。
+    const resetBtn = screen.getByRole("button", { name: "恢复默认显示" });
+    await waitFor(() => expect(resetBtn).toBeEnabled());
+    fireEvent.click(resetBtn);
 
     await waitFor(() => expect(apiMocks.saveNavigationVisibility).toHaveBeenCalledWith([]));
     expect(screen.getByRole("switch", { name: "求职助手导航入口" })).toBeChecked();
