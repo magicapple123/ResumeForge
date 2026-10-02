@@ -421,11 +421,7 @@ export default function InterviewReviewPanel({
         viewSuggestions.length > 0 && (
           <Card size="small" title="简历改进建议">
             {viewSuggestions.length === 0 ? (
-              <Alert
-                type="info"
-                showIcon
-                title="没有产出建议，试试补充更多面试暴露的短板或追问"
-              />
+              <Alert type="info" showIcon title="没有产出建议，试试补充更多面试暴露的短板或追问" />
             ) : (
               <List
                 dataSource={viewSuggestions}

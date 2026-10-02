@@ -604,9 +604,7 @@ describe("SettingsPage output limit", () => {
     fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
     fireEvent.click(checkbox);
     // antd 6 的 Form.useWatch 异步通知：取消勾选后输入框恢复可用要等一拍。
-    await waitFor(() =>
-      expect(screen.getByLabelText("最大输出 Token")).not.toBeDisabled(),
-    );
+    await waitFor(() => expect(screen.getByLabelText("最大输出 Token")).not.toBeDisabled());
 
     fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
 

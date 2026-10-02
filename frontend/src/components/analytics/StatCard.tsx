@@ -25,12 +25,7 @@ export default function StatCard({
 }: Props) {
   const body = (
     <>
-      <Statistic
-        title={title}
-        value={value}
-        suffix={suffix}
-        styles={{ content: valueStyle }}
-      />
+      <Statistic title={title} value={value} suffix={suffix} styles={{ content: valueStyle }} />
       {hint ? <Typography.Text type="secondary">{hint}</Typography.Text> : null}
     </>
   );

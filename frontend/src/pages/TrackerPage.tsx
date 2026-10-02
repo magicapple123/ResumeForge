@@ -162,7 +162,11 @@ export default function TrackerPage() {
         <Statistic title="总数" value={data?.total ?? 0} />
         <Statistic title="进行中" value={data?.active_count ?? 0} prefix={<FunnelPlotOutlined />} />
         <Statistic title="本月投递" value={data?.month_count ?? 0} />
-        <Statistic title="Offer" value={data?.offer_count ?? 0} styles={{ content: { color: "#389e0d" } }} />
+        <Statistic
+          title="Offer"
+          value={data?.offer_count ?? 0}
+          styles={{ content: { color: "#389e0d" } }}
+        />
         <Statistic title="已结束" value={data?.rejected_count ?? 0} />
       </div>
 

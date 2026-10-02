@@ -69,8 +69,7 @@ beforeEach(() => {
       success: (config) => notices.push({ title: String(config.title), modal: false }),
       warning: (config) =>
         notices.push({ title: String(config.title), modal: false, kind: "warning" }),
-      error: (config) =>
-        notices.push({ title: String(config.title), modal: false, kind: "error" }),
+      error: (config) => notices.push({ title: String(config.title), modal: false, kind: "error" }),
       info: (config) => notices.push({ title: String(config.title), modal: false }),
     },
     modal: {
