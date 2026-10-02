@@ -86,6 +86,12 @@ def _text_runs(content: bytes) -> list[tuple[float, float, float, str]]:
     runs: list[tuple[float, float, float, str]] = []
 
     def visit(text: str, cm, tm, font_dict, font_size) -> None:  # noqa: ANN001 - pypdf 回调签名
+        # fpdf2 >= 2.8.8 对 CID-keyed CFF 字体（如 Linux 的 NotoSansCJK）按规范以
+        # raw CFF + 内嵌 /Encoding CMap 嵌入（fpdf2#1874）；pypdf 尚不解析内嵌
+        # Encoding CMap，把 2 字节码按单字节读出，于是每个字形前多出一个 U+0000
+        # （"\x00张\x00三"）。几何（x/y/字号）不受影响；剥掉 NUL 即还原真实文本，
+        # 断言强度不变。pypdf 支持内嵌 CMap 后此清理自动变成 no-op。
+        text = text.replace("\x00", "")
         if text.strip():
             runs.append((round(float(tm[4]), 3), round(float(tm[5]), 3), round(float(font_size), 4), text))
 
