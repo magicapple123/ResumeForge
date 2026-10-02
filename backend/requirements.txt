@@ -23,7 +23,7 @@ pypdf==6.19.0
 # downloaded directly. fonttools is its font-parsing backend; pinning it keeps
 # the first-run install reproducible.
 fpdf2==2.8.9
-fonttools==4.65.0
+fonttools==4.66.0
 # Browser automation for the apply center: the CDP client talks to a user's real
 # Chrome/Edge over the DevTools WebSocket. Pure Python (no compiler, has wheels),
 # and the HTTP side reuses the existing httpx dependency.
