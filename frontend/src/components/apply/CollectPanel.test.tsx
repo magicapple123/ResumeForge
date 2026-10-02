@@ -200,6 +200,9 @@ describe("CollectPanel 岗位类型", () => {
   it("默认配置（社招）显示「站点筛选」标签——BOSS 官方参数已实测生效", async () => {
     renderPanel();
     const label = await jobTypeLabel();
+    // antd 6 的 Form.useWatch 订阅通知是异步时序：表单初值经 setFieldsValue 注入后，
+    // 标签的重渲染可能晚于 label 定位。先等「站点筛选」真正落地，断言值不变。
+    await screen.findByText("站点筛选");
     expect(label.textContent).toContain("站点筛选");
     // 旧文案不能再出现：岗位类型不再只是标注。
     expect(screen.queryByText("仅标注")).not.toBeInTheDocument();
