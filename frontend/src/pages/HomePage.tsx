@@ -23,7 +23,7 @@ import {
   Col,
   Empty,
   Input,
-  List,
+  Listy,
   Modal,
   Row,
   Segmented,
@@ -32,6 +32,7 @@ import {
   Tag,
   Typography,
 } from "antd";
+import { ListyItem } from "../components/common/ListyItem";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createSearchParams, Link } from "react-router-dom";
 import { MENU_ITEMS } from "../App";
@@ -40,7 +41,7 @@ import { getStats, searchAll } from "../api/search";
 import { getReminderPopupSetting } from "../api/settings";
 import { useApi } from "../hooks/useApi";
 import { REMINDER_URGENCY_COLORS } from "../types";
-import type { ReminderUpcoming, SearchHitType, SearchResult } from "../types";
+import type { SearchHitType, SearchResult } from "../types";
 import { formatDateTime } from "../utils/format";
 import CalendarView from "../components/tracker/CalendarView";
 
@@ -240,7 +241,7 @@ export default function HomePage() {
   return (
     <div>
       {statsError && (
-        <Alert type="error" showIcon message={statsError} style={{ marginBottom: 16 }} />
+        <Alert type="error" showIcon title={statsError} style={{ marginBottom: 16 }} />
       )}
 
       <Row gutter={[16, 16]}>
@@ -308,14 +309,14 @@ export default function HomePage() {
         ) : (upcomingReminders ?? []).length === 0 ? (
           <Empty description="近期没有待办提醒" />
         ) : (
-          <List
-            size="small"
-            dataSource={upcomingReminders ?? []}
-            renderItem={(item: ReminderUpcoming) => (
-              <List.Item
+          <Listy
+            items={upcomingReminders ?? []}
+            rowKey={(item) => item.id}
+            itemRender={(item) => (
+              <ListyItem
                 style={{ cursor: "pointer" }}
                 onClick={() => setPopupVisible(true)}
-                aria-label={`查看提醒：${item.title}`}
+                ariaLabel={`查看提醒：${item.title}`}
               >
                 <Space size={8} wrap>
                   <span
@@ -335,7 +336,7 @@ export default function HomePage() {
                     {formatDateTime(item.remind_at)}
                   </Typography.Text>
                 </Space>
-              </List.Item>
+              </ListyItem>
             )}
           />
         )}
@@ -451,49 +452,55 @@ export default function HomePage() {
           onSearch={(value) => void onSearch(value)}
         />
         {searchError && (
-          <Alert type="error" showIcon message={searchError} style={{ marginTop: 16 }} />
+          <Alert type="error" showIcon title={searchError} style={{ marginTop: 16 }} />
         )}
         {searched && (
           <div className="home-search-results">
             <Typography.Title level={5} type="secondary" style={{ margin: "8px 0" }}>
               匹配的岗位（{result?.jobs.length ?? 0}）
             </Typography.Title>
-            <List
-              size="small"
-              dataSource={result?.jobs ?? []}
-              locale={{ emptyText: <Empty description="没有匹配的岗位" /> }}
-              renderItem={(job) => (
-                <List.Item>
-                  <Space>
-                    <Link to={`/jobs?${createSearchParams({ keyword: resultKeyword })}`}>
-                      {job.title}
-                    </Link>
-                    <Tag>{job.company}</Tag>
-                    <Tag color="blue">{job.location}</Tag>
-                    <Typography.Text type="secondary">{job.salary || "薪资面议"}</Typography.Text>
-                  </Space>
-                </List.Item>
-              )}
-            />
+            {(result?.jobs.length ?? 0) === 0 ? (
+              <Empty description="没有匹配的岗位" />
+            ) : (
+              <Listy
+                items={result?.jobs ?? []}
+                rowKey={(job) => job.id}
+                itemRender={(job) => (
+                  <ListyItem>
+                    <Space>
+                      <Link to={`/jobs?${createSearchParams({ keyword: resultKeyword })}`}>
+                        {job.title}
+                      </Link>
+                      <Tag>{job.company}</Tag>
+                      <Tag color="blue">{job.location}</Tag>
+                      <Typography.Text type="secondary">{job.salary || "薪资面议"}</Typography.Text>
+                    </Space>
+                  </ListyItem>
+                )}
+              />
+            )}
             <Typography.Title level={5} type="secondary" style={{ margin: "8px 0" }}>
               匹配的简历记录（{result?.resumes.length ?? 0}）
             </Typography.Title>
-            <List
-              size="small"
-              dataSource={result?.resumes ?? []}
-              locale={{ emptyText: <Empty description="没有匹配的简历记录" /> }}
-              renderItem={(resume) => (
-                <List.Item>
-                  <Space>
-                    <Link to="/resumes">{resume.title}</Link>
-                    <Tag>{resume.job_title}</Tag>
-                    <Typography.Text type="secondary">
-                      {formatDateTime(resume.created_at)}
-                    </Typography.Text>
-                  </Space>
-                </List.Item>
-              )}
-            />
+            {(result?.resumes.length ?? 0) === 0 ? (
+              <Empty description="没有匹配的简历记录" />
+            ) : (
+              <Listy
+                items={result?.resumes ?? []}
+                rowKey={(resume) => resume.id}
+                itemRender={(resume) => (
+                  <ListyItem>
+                    <Space>
+                      <Link to="/resumes">{resume.title}</Link>
+                      <Tag>{resume.job_title}</Tag>
+                      <Typography.Text type="secondary">
+                        {formatDateTime(resume.created_at)}
+                      </Typography.Text>
+                    </Space>
+                  </ListyItem>
+                )}
+              />
+            )}
             {(result?.more.length ?? 0) > 0 && (
               <div style={{ marginTop: 8 }}>
                 <Typography.Title level={5} type="secondary" style={{ margin: "8px 0" }}>
@@ -511,18 +518,18 @@ export default function HomePage() {
                           {meta.label}（{hits.length}）
                         </Typography.Text>
                       </Space>
-                      <List
-                        size="small"
-                        dataSource={hits}
-                        renderItem={(hit) => (
-                          <List.Item>
+                      <Listy
+                        items={hits}
+                        rowKey={(hit) => `${hit.type}-${hit.id}`}
+                        itemRender={(hit) => (
+                          <ListyItem>
                             <Space>
                               <Link to={hit.path}>{hit.title}</Link>
                               {hit.subtitle && (
                                 <Typography.Text type="secondary">{hit.subtitle}</Typography.Text>
                               )}
                             </Space>
-                          </List.Item>
+                          </ListyItem>
                         )}
                       />
                     </div>
@@ -537,43 +544,47 @@ export default function HomePage() {
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
           <Card title="最近岗位" extra={<Link to="/jobs">查看全部</Link>}>
-            <List
-              size="small"
-              dataSource={stats?.latest_jobs ?? []}
-              locale={{ emptyText: <Empty description="暂无岗位，去「岗位广场」手动添加" /> }}
-              renderItem={(job) => (
-                <List.Item>
-                  <Space>
-                    <Link to="/jobs">{job.title}</Link>
-                    <Tag>{job.company}</Tag>
-                    <Typography.Text type="secondary">
-                      {formatDateTime(job.created_at)}
-                    </Typography.Text>
-                  </Space>
-                </List.Item>
-              )}
-            />
+            {(stats?.latest_jobs.length ?? 0) === 0 ? (
+              <Empty description="暂无岗位，去「岗位广场」手动添加" />
+            ) : (
+              <Listy
+                items={stats?.latest_jobs ?? []}
+                rowKey={(job) => job.id}
+                itemRender={(job) => (
+                  <ListyItem>
+                    <Space>
+                      <Link to="/jobs">{job.title}</Link>
+                      <Tag>{job.company}</Tag>
+                      <Typography.Text type="secondary">
+                        {formatDateTime(job.created_at)}
+                      </Typography.Text>
+                    </Space>
+                  </ListyItem>
+                )}
+              />
+            )}
           </Card>
         </Col>
         <Col xs={24} lg={12}>
           <Card title="最近生成的简历" extra={<Link to="/resumes">查看全部</Link>}>
-            <List
-              size="small"
-              dataSource={stats?.latest_resumes ?? []}
-              locale={{
-                emptyText: <Empty description="暂无简历记录，去「岗位广场」选个岗位试试" />,
-              }}
-              renderItem={(resume) => (
-                <List.Item>
-                  <Space>
-                    <Link to="/resumes">{resume.title}</Link>
-                    <Typography.Text type="secondary">
-                      {formatDateTime(resume.created_at)}
-                    </Typography.Text>
-                  </Space>
-                </List.Item>
-              )}
-            />
+            {(stats?.latest_resumes.length ?? 0) === 0 ? (
+              <Empty description="暂无简历记录，去「岗位广场」选个岗位试试" />
+            ) : (
+              <Listy
+                items={stats?.latest_resumes ?? []}
+                rowKey={(resume) => resume.id}
+                itemRender={(resume) => (
+                  <ListyItem>
+                    <Space>
+                      <Link to="/resumes">{resume.title}</Link>
+                      <Typography.Text type="secondary">
+                        {formatDateTime(resume.created_at)}
+                      </Typography.Text>
+                    </Space>
+                  </ListyItem>
+                )}
+              />
+            )}
           </Card>
         </Col>
       </Row>
@@ -584,11 +595,11 @@ export default function HomePage() {
           title="最近投出去的"
           extra={<Link to="/tracker">看进度</Link>}
         >
-          <List
-            size="small"
-            dataSource={stats?.latest_applications ?? []}
-            renderItem={(item) => (
-              <List.Item>
+          <Listy
+            items={stats?.latest_applications ?? []}
+            rowKey={(item) => item.id}
+            itemRender={(item) => (
+              <ListyItem>
                 <Space>
                   <Link to="/tracker">{item.job_title || "未命名岗位"}</Link>
                   <Tag>{item.company}</Tag>
@@ -596,7 +607,7 @@ export default function HomePage() {
                     {formatDateTime(item.updated_at)}
                   </Typography.Text>
                 </Space>
-              </List.Item>
+              </ListyItem>
             )}
           />
         </Card>
@@ -612,11 +623,11 @@ export default function HomePage() {
           </Button>
         }
       >
-        <List
-          size="small"
-          dataSource={upcomingReminders ?? []}
-          renderItem={(item: ReminderUpcoming) => (
-            <List.Item>
+        <Listy
+          items={upcomingReminders ?? []}
+          rowKey={(item) => item.id}
+          itemRender={(item) => (
+            <ListyItem>
               <Space size={6} wrap>
                 <Tag color={REMINDER_URGENCY_COLORS[item.urgency] ?? "default"}>
                   {item.due_label}
@@ -626,7 +637,7 @@ export default function HomePage() {
                 </Link>
                 <Typography.Text type="secondary">{formatDateTime(item.remind_at)}</Typography.Text>
               </Space>
-            </List.Item>
+            </ListyItem>
           )}
         />
       </Modal>

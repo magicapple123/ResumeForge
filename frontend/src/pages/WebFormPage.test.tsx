@@ -304,8 +304,12 @@ describe("WebFormPage", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /填充到页面/ })).toBeInTheDocument(),
     );
-    expect(screen.getByRole("button", { name: /结束本次填写/ })).toBeInTheDocument();
-    expect(screen.getByDisplayValue("手动改过的姓名")).toBeInTheDocument();
+    // 「结束本次填写」除会话恢复外还依赖浏览器状态轮询的 running 落地，
+    // 与「填充到页面」不在同一次状态提交里；CI 高负载下可能晚一拍
+    // （#58 在 router 7.18.4 上的一次偶发失败）。这里等待它出现再断言，
+    // 断言本身（role / name / 值）不放松。
+    expect(await screen.findByRole("button", { name: /结束本次填写/ })).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("手动改过的姓名")).toBeInTheDocument();
   });
 
   it("ends the session, stops the browser workflow, and clears the unfinished state", async () => {

@@ -79,7 +79,7 @@ export default function ClaimsPage() {
   return (
     <div className="claims-page">
       <div className="claims-page-head">
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Title level={4} style={{ margin: 0 }}>
             事实台账
           </Typography.Title>
@@ -114,12 +114,12 @@ export default function ClaimsPage() {
         <Statistic
           title="已确认（可进正式简历）"
           value={data?.confirmed_count ?? 0}
-          valueStyle={{ color: "#389e0d" }}
+          styles={{ content: { color: "#389e0d" } }}
         />
         <Statistic
           title="待确认"
           value={data?.pending_count ?? 0}
-          valueStyle={{ color: "#d48806" }}
+          styles={{ content: { color: "#d48806" } }}
         />
         <Statistic
           title="生成时可用的事实"
@@ -130,7 +130,7 @@ export default function ClaimsPage() {
           <Statistic
             title="会被避开的未确认说法"
             value={baseline.data?.blocked_wording.length ?? 0}
-            valueStyle={{ color: "#d4380d" }}
+            styles={{ content: { color: "#d4380d" } }}
           />
         )}
       </div>

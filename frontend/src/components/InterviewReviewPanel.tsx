@@ -22,7 +22,7 @@ import {
   Collapse,
   Empty,
   Input,
-  List,
+  Listy,
   Select,
   Space,
   Tag,
@@ -38,6 +38,7 @@ import {
   updateReview,
 } from "../api/interview";
 import { RowActions } from "./common/RowActions";
+import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { useApi } from "../hooks/useApi";
 import type { InterviewAnalysis, InterviewOptimizeResult, InterviewReviewRecord } from "../types";
 
@@ -225,7 +226,7 @@ export default function InterviewReviewPanel({
       </Space>
     ),
     children: (
-      <Space direction="vertical" style={{ width: "100%" }}>
+      <Space orientation="vertical" style={{ width: "100%" }}>
         {review.questions.length > 0 && (
           <>
             <Typography.Text strong>真实问题</Typography.Text>
@@ -275,12 +276,12 @@ export default function InterviewReviewPanel({
   }));
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       {record && (
         <Alert
           type="info"
           showIcon
-          message={`正在查看历史复盘 #${record.id}（${record.created_at.replace("T", " ").slice(0, 16)}）`}
+          title={`正在查看历史复盘 #${record.id}（${record.created_at.replace("T", " ").slice(0, 16)}）`}
           action={
             onCloseRecord && (
               <Button size="small" onClick={onCloseRecord}>
@@ -293,7 +294,7 @@ export default function InterviewReviewPanel({
 
       {!record && (
         <Card size="small" title="面试复盘">
-          <Space direction="vertical" style={{ width: "100%" }} size={8}>
+          <Space orientation="vertical" style={{ width: "100%" }} size={8}>
             <Input.TextArea
               value={question}
               autoSize={{ minRows: 2, maxRows: 4 }}
@@ -410,7 +411,7 @@ export default function InterviewReviewPanel({
           <Alert
             type="warning"
             showIcon
-            message="此为旧版记录，仅可查看"
+            title="此为旧版记录，仅可查看"
             description="旧版历史以纯文本保存，无法还原为结构化复盘，仅展示原始内容。"
           />
           <Typography.Paragraph style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
@@ -421,17 +422,14 @@ export default function InterviewReviewPanel({
         viewSuggestions.length > 0 && (
           <Card size="small" title="简历改进建议">
             {viewSuggestions.length === 0 ? (
-              <Alert
-                type="info"
-                showIcon
-                message="没有产出建议，试试补充更多面试暴露的短板或追问"
-              />
+              <Alert type="info" showIcon title="没有产出建议，试试补充更多面试暴露的短板或追问" />
             ) : (
-              <List
-                dataSource={viewSuggestions}
-                renderItem={(item) => (
-                  <List.Item>
-                    <List.Item.Meta
+              <Listy
+                items={viewSuggestions}
+                rowKey={(item) => `${item.section}|${item.issue}|${item.suggestion}`}
+                itemRender={(item) => (
+                  <ListyItem>
+                    <ListyMeta
                       title={
                         <Space size={6} wrap>
                           <Tag color={priorityColor(item.priority)}>{item.priority}</Tag>
@@ -440,7 +438,7 @@ export default function InterviewReviewPanel({
                         </Space>
                       }
                       description={
-                        <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                        <Space orientation="vertical" size={2} style={{ width: "100%" }}>
                           <span>
                             <BulbOutlined /> {item.suggestion}
                           </span>
@@ -452,7 +450,7 @@ export default function InterviewReviewPanel({
                         </Space>
                       }
                     />
-                  </List.Item>
+                  </ListyItem>
                 )}
               />
             )}
@@ -475,9 +473,9 @@ export default function InterviewReviewPanel({
         }
       >
         {reviews.loading && !reviews.data ? (
-          <Alert type="info" showIcon message="加载中…" />
+          <Alert type="info" showIcon title="加载中…" />
         ) : reviews.error ? (
-          <Alert type="error" showIcon message={reviews.error} />
+          <Alert type="error" showIcon title={reviews.error} />
         ) : (reviews.data ?? []).length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有保存过复盘" />
         ) : (

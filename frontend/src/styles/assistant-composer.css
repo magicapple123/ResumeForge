@@ -88,7 +88,7 @@
 }
 
 /*
- * 104px 输入框规则。选择器**直接落在 textarea 上**：当前 antd 5 的 `Input.TextArea`
+ * 104px 输入框规则。选择器**直接落在 textarea 上**：当前 antd 6 的 `Input.TextArea`
  * 不再渲染那层历史包装（textarea 的父节点就是 `.assistant-composer`），选择器串上
  * 任何中间层都会整条静默失效——这就是它此前"看起来存在却没效果"的原因。
  *

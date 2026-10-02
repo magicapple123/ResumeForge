@@ -355,7 +355,7 @@ export default function CandidateJobsDrawer({
   return (
     <Drawer
       title="备选岗位"
-      width="min(880px, 100vw)"
+      size="min(880px, 100vw)"
       open={open}
       onClose={onClose}
       extra={
@@ -472,7 +472,7 @@ export default function CandidateJobsDrawer({
                   </Tag>
                 }
               >
-                <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                <Space orientation="vertical" size={6} style={{ width: "100%" }}>
                   <Typography.Text type="secondary">
                     {[candidate.company || "未识别公司", candidate.location, candidate.salary]
                       .filter(Boolean)
@@ -582,7 +582,7 @@ export default function CandidateJobsDrawer({
             />
           </Form.Item>
           <Form.Item label={`招聘截图（最多 ${MAX_CANDIDATE_IMAGES} 张，单张不超过 2 MB）`}>
-            <Space direction="vertical" style={{ width: "100%" }}>
+            <Space orientation="vertical" style={{ width: "100%" }}>
               <FileDropZone
                 accept="image/jpeg,image/png,image/webp"
                 disabled={formState.images.length >= MAX_CANDIDATE_IMAGES}

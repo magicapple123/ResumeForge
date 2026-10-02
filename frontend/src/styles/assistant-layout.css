@@ -20,22 +20,19 @@
   margin-top: 12px;
 }
 
-.assistant-conversation-list .ant-list-item {
-  gap: 4px;
+/* List → Listy 迁移：行外壳类名由 .ant-list-item 换成 .ant-listy-item，
+   「当前对话」高亮经 :has() 作用到行外壳，行内布局（ListyItem）自带 flex。 */
+.assistant-conversation-list .ant-listy-item {
   padding: 8px 4px;
   border-radius: 6px;
 }
 
-.assistant-conversation-list .ant-list-item.is-active {
+.assistant-conversation-list .ant-listy-item:has(.is-active) {
   background: #eef4ff;
 }
 
-.assistant-conversation-list.ant-list .ant-list-item .ant-list-item-action {
-  margin-inline-start: 0;
-}
-
-.assistant-conversation-list .ant-list-item-action > li {
-  padding: 0;
+.assistant-conversation-list .listy-item-actions {
+  gap: 0;
 }
 
 .assistant-conversation-more-button {
@@ -43,7 +40,7 @@
 }
 
 .assistant-conversation-more-button:hover,
-.assistant-conversation-list .ant-list-item.is-active .assistant-conversation-more-button {
+.assistant-conversation-list .ant-listy-item:has(.is-active) .assistant-conversation-more-button {
   color: #1677ff;
 }
 

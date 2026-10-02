@@ -24,8 +24,8 @@ interface Props {
   separatorCount: number;
   totalVisualPages: number;
   html: string;
-  containerRef: RefObject<HTMLDivElement>;
-  iframeRef: RefObject<HTMLIFrameElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
+  iframeRef: RefObject<HTMLIFrameElement | null>;
   onIframeLoad: () => void;
 }
 
@@ -57,7 +57,7 @@ export default function ResumePreviewCanvas({
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
-          message="发现以下内容需要人工核对（可能存在 AI 虚构）"
+          title="发现以下内容需要人工核对（可能存在 AI 虚构）"
           description={
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {warnings.map((warning) => (
@@ -72,7 +72,7 @@ export default function ResumePreviewCanvas({
           type="warning"
           showIcon
           className="resume-preview-overflow"
-          message={`按当前设置约需 ${pagesNeeded} 页（上限 ${pageCount} 页）；字号已降到最小，仍然放不下。`}
+          title={`按当前设置约需 ${pagesNeeded} 页（上限 ${pageCount} 页）；字号已降到最小，仍然放不下。`}
           description={
             <>
               {overflowAmountText} {APPROXIMATE_PAGINATION_NOTE}

@@ -192,7 +192,7 @@ export default function ResumeEditorModal({
       width={referencePanel ? "min(1320px, calc(100vw - 24px))" : "min(1000px, calc(100vw - 24px))"}
       zIndex={1100}
       destroyOnHidden
-      maskClosable={!saving}
+      mask={{ closable: !saving }}
       keyboard={!saving}
       onCancel={() => {
         if (!saving) onClose();

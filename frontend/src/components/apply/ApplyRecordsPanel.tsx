@@ -130,7 +130,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       dataIndex: "job_title",
       ellipsis: true,
       render: (title: string, record) => (
-        <Space direction="vertical" size={0} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={0} style={{ width: "100%" }}>
           <Typography.Text ellipsis>{title || "（岗位已删除）"}</Typography.Text>
           {record.company && (
             <Typography.Text type="secondary" ellipsis>
@@ -318,10 +318,10 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       <Drawer
         title="投递记录详情"
         placement="right"
-        width={480}
+        size={480}
         open={detail !== null}
         onClose={() => setDetail(null)}
-        destroyOnClose
+        destroyOnHidden
       >
         {detail && (
           <Descriptions column={1} bordered size="small" colon>

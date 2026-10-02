@@ -250,7 +250,7 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
   };
 
   if (loading && !data) return <Skeleton active paragraph={{ rows: 6 }} />;
-  if (error && !data) return <Alert type="error" showIcon message={error} />;
+  if (error && !data) return <Alert type="error" showIcon title={error} />;
 
   const unmapped = unmappedConditions(collectTask);
   const filtered = filterSummary(collectTask);
@@ -264,7 +264,7 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
         className="apply-collect-flow"
         type="info"
         showIcon
-        message="采集之后还有两步才轮到投递"
+        title="采集之后还有两步才轮到投递"
         description={
           <ol style={{ margin: 0, paddingLeft: 18 }}>
             <li>
@@ -438,7 +438,7 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
           className="apply-collect-unmapped"
           type="warning"
           showIcon
-          message="以下条件未生效"
+          title="以下条件未生效"
           description={
             <Typography.Paragraph style={{ marginBottom: 0 }}>
               这批采集里，{unmapped.join("、")} 无法映射到该站点的查询参数，因此
@@ -456,7 +456,7 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
           className="apply-collect-site-filtered"
           type={siteFiltered.unapplied.length > 0 ? "warning" : "success"}
           showIcon
-          message={
+          title={
             siteFiltered.applied.length > 0
               ? `招聘网站已按这些条件筛掉不符合的岗位：${siteFiltered.applied.join("、")}`
               : "有筛选条件没能生效"
@@ -486,9 +486,9 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
           className="apply-collect-filtered"
           type="success"
           showIcon
-          message={`已按${filtered.applied.join(" / ")}在采集后筛选`}
+          title={`已按${filtered.applied.join(" / ")}在采集后筛选`}
           description={
-            <Space direction="vertical" size={2}>
+            <Space orientation="vertical" size={2}>
               <Typography.Text>
                 {filtered.filtered > 0
                   ? `本次筛掉 ${filtered.filtered} 个不符合条件的岗位。`

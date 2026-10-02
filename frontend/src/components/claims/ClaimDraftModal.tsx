@@ -123,7 +123,7 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
         </Space>
       }
     >
-      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={12} style={{ width: "100%" }}>
         <Typography.Text type="secondary">
           粘贴一段经历、项目说明或获奖情况。提取出来的条目一律是「待确认」，请逐条核对后再标为已确认。
         </Typography.Text>

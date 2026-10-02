@@ -7,7 +7,9 @@
  * 组件默认自拉 ``listReminders``；传入 ``reminders`` 时用它覆盖（测试 / 父组件已取数时）。
  */
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
-import { Button, Empty, List, Modal, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, Listy, Modal, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { ListyItem, ListyMeta } from "../common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useMemo, useState } from "react";
@@ -226,12 +228,13 @@ export default function CalendarView({
         {detailItems.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这一天没有安排" />
         ) : (
-          <List
-            size="small"
-            dataSource={detailItems}
-            renderItem={(item) => (
-              <List.Item>
-                <List.Item.Meta
+          <Listy
+            items={detailItems}
+            rowKey={(item) => item.id}
+            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+            itemRender={(item) => (
+              <ListyItem>
+                <ListyMeta
                   title={
                     <Space size={6} wrap>
                       <span>{item.title}</span>
@@ -242,7 +245,7 @@ export default function CalendarView({
                     </Space>
                   }
                   description={
-                    <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                    <Space orientation="vertical" size={2} style={{ width: "100%" }}>
                       <Typography.Text type="secondary">
                         {formatDateTime(item.remind_at)}
                       </Typography.Text>
@@ -250,7 +253,7 @@ export default function CalendarView({
                     </Space>
                   }
                 />
-              </List.Item>
+              </ListyItem>
             )}
           />
         )}

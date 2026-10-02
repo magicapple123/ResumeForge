@@ -11,8 +11,10 @@
  * 那类区块本版不处理。一股脑铺开会让用户以为这个功能什么都没干成，其实能填的都已经
  * 列在上面了。
  */
-import { Alert, Card, Collapse, Empty, List, Space, Tag, Typography } from "antd";
+import { Alert, Card, Collapse, Empty, Listy, Space, Tag, Typography } from "antd";
 import { Link } from "react-router-dom";
+import { ListyItem } from "../common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
 import type { WebFormPendingItem } from "../../types";
 
 interface Props {
@@ -23,11 +25,12 @@ interface Props {
 
 function Lines({ items }: { items: WebFormPendingItem[] }) {
   return (
-    <List
-      size="small"
-      dataSource={items}
-      renderItem={(item) => (
-        <List.Item>
+    <Listy
+      items={items}
+      rowKey={(item) => item.index}
+      styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+      itemRender={(item) => (
+        <ListyItem>
           <Space size={8} wrap>
             <Typography.Text>{item.label || `第 ${item.index + 1} 个控件`}</Typography.Text>
             {item.required ? <Tag color="red">必填</Tag> : null}
@@ -35,7 +38,7 @@ function Lines({ items }: { items: WebFormPendingItem[] }) {
               <Typography.Text type="secondary">{item.field_label}</Typography.Text>
             ) : null}
           </Space>
-        </List.Item>
+        </ListyItem>
       )}
     />
   );
@@ -49,7 +52,7 @@ export default function WebFormPendingPanel({ missingData, unrecognized, blocked
   }
 
   return (
-    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       {missingData.length ? (
         <Card
           size="small"
@@ -66,7 +69,7 @@ export default function WebFormPendingPanel({ missingData, unrecognized, blocked
             type="info"
             showIcon
             style={{ marginBottom: 8 }}
-            message="这些不会自动填：密码与验证码是刻意的安全边界；简历附件、他人信息与「我已阅读并同意」这类确认项也不该由程序代填。"
+            title="这些不会自动填：密码与验证码是刻意的安全边界；简历附件、他人信息与「我已阅读并同意」这类确认项也不该由程序代填。"
           />
           <Lines items={blocked} />
         </Card>
@@ -80,7 +83,7 @@ export default function WebFormPendingPanel({ missingData, unrecognized, blocked
               key: "unrecognized",
               label: `没认出来（${unrecognized.length} 项，点开查看）`,
               children: (
-                <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                <Space orientation="vertical" size={8} style={{ width: "100%" }}>
                   <Typography.Text type="secondary">
                     多半是「可添加多条」的区块（实习经历 / 项目经历 / 获奖信息）里的字段，
                     以及这张表特有的问题（导师、实验室、研究方向等）——这一类目前没有对应的资料可填，

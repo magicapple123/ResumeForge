@@ -11,6 +11,18 @@ updates:
     labels:
       - dependencies
       - backend
+    ignore:
+      # fonttools 4.66+ requires Python >=3.11, but this repo still
+      # supports Python 3.10. Remove this ignore once the Python floor
+      # rises to 3.11. (2026-10-02)
+      - dependency-name: fonttools
+        versions: [">=4.66"]
+      - dependency-name: "sqlalchemy"
+        versions: [">=2.1"]
+      # sqlalchemy 2.1.x requires Python >=3.11 (repo supports 3.10), and
+      # 2.1 URL.render_as_string() percent-encodes paths, which breaks
+      # alembic configparser interpolation in database_migrations.py.
+      # Re-evaluate after the Python floor rises to 3.11. (2026-10-02)
     commit-message:
       prefix: deps
 
@@ -25,6 +37,13 @@ updates:
     labels:
       - dependencies
       - frontend
+    ignore:
+      # TypeScript 7 (Go-native compiler) is outside typescript-eslint
+      # 8.71.0's peer range (>=4.8.4 <6.1.0) — npm ci fails with ERESOLVE
+      # (#55). Remove this ignore once typescript-eslint announces TS 7
+      # support. (2026-10-02)
+      - dependency-name: typescript
+        versions: [">=7"]
     commit-message:
       prefix: deps
 

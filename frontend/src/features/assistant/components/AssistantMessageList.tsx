@@ -44,7 +44,7 @@ interface Props {
   streamingTools: AssistantToolCall[];
   progressText: string;
   streamError: string;
-  messageEndRef: RefObject<HTMLDivElement>;
+  messageEndRef: RefObject<HTMLDivElement | null>;
   enabledSkillCount: number;
   skillsLoaded: boolean;
   onChoosePrompt: (prompt: StarterPrompt) => void;
@@ -163,7 +163,7 @@ export default function AssistantMessageList({
               <MessageAttachments attachments={item.attachments} />
               <MessageSources sources={item.context.sources ?? []} />
               <MessageToolCalls calls={item.context.tool_calls ?? []} />
-              {item.status === "error" && item.error && <Alert type="error" message={item.error} />}
+              {item.status === "error" && item.error && <Alert type="error" title={item.error} />}
             </article>
           );
           // 多选时不挂右键菜单：那套操作（引用、复制）此时都用不上，右键还要和勾选抢交互。
@@ -218,7 +218,7 @@ export default function AssistantMessageList({
           <MessageToolCalls calls={streamingTools} />
         </article>
       )}
-      {activeStream && streamError && <Alert type="error" showIcon message={streamError} />}
+      {activeStream && streamError && <Alert type="error" showIcon title={streamError} />}
       <div ref={messageEndRef} />
     </div>
   );

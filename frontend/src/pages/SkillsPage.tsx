@@ -175,7 +175,7 @@ export default function SkillsPage() {
       title: "技能",
       dataIndex: "name",
       render: (_, skill) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Button type="link" className="table-text-link" onClick={() => openEditor(skill)}>
             {skill.name}
           </Button>
@@ -317,7 +317,7 @@ export default function SkillsPage() {
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            message="启用的技能越多，系统提示越长：技能提示词总量超过预算时，后面的技能不会被加载（助手会用一句话说明）。"
+            title="启用的技能越多，系统提示越长：技能提示词总量超过预算时，后面的技能不会被加载（助手会用一句话说明）。"
           />
 
           {loading ? (
