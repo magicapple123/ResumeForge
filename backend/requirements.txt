@@ -13,7 +13,7 @@ pydantic==2.13.5
 pydantic-settings==2.9.1
 httpx==0.28.1
 jinja2==3.1.6
-alembic==1.19.1
+alembic==1.20.0
 # Uploaded documents and images are decoded locally: pypdf reads PDF text,
 # Pillow converts formats no model accepts (bmp/tiff) into PNG. Both are pure
 # or wheel-published, so the first-run installer stays build-tool free.
