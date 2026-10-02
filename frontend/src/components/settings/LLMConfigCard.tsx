@@ -10,11 +10,12 @@ import {
   Form,
   Input,
   InputNumber,
-  List,
+  Listy,
   Modal,
   Row,
   Select,
   Slider,
+  Space,
   Switch,
   Tooltip,
   Typography,
@@ -28,6 +29,8 @@ import {
   isValidReasoningEffort,
 } from "../../types/assistant";
 import ApiKeyInput from "./ApiKeyInput";
+import { ListyItem } from "../common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
 import {
   DEFAULT_MAX_TOKENS,
   MAX_MAX_TOKENS,
@@ -196,7 +199,7 @@ export default function LLMConfigCard({
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="默认支持所有兼容 OpenAI Chat Completions 协议的模型服务：DeepSeek、豆包（火山方舟）、Kimi、通义千问、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Ollama 等；把「接口协议」切到 Anthropic 原生后也可以直连 Claude。API Key 保存在本地数据库中，仅本机可访问。"
+        title="默认支持所有兼容 OpenAI Chat Completions 协议的模型服务：DeepSeek、豆包（火山方舟）、Kimi、通义千问、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Ollama 等；把「接口协议」切到 Anthropic 原生后也可以直连 Claude。API Key 保存在本地数据库中，仅本机可访问。"
       />
       <Form
         form={form}
@@ -258,29 +261,30 @@ export default function LLMConfigCard({
             </Form.Item>
           </Col>
           <Col xs={24} lg={8}>
+            {/* addonAfter 已废弃（v6）：按官方指引改为 Space.Compact。拆成外层无 name 的
+                Form.Item（只管 label/tooltip）+ 内层 noStyle Form.Item（把 value 与 id="model"
+                注回输入框），并用 htmlFor 把 label 重新指回输入框——否则 id 会落在
+                Space.Compact 的 div 上，getByLabelText("模型名称") 就找不到输入框了。 */}
             <Form.Item
-              name="model"
               label="模型名称"
+              htmlFor="model"
               tooltip="各厂商模型名不同：可以点输入框右侧的「获取可用模型」按当前账号拉取，也可以照官方文档手填"
             >
-              {/* 按钮放输入框的后缀里，不放 label 里也不另包一层：进 label 的按钮会被算成
-                  「模型名称」标注的控件，而包一层（如 Space.Compact）会让 Form.Item 生成的
-                  id 落在那层 div 上，label 就指不到输入框了。addonAfter 两种问题都没有。 */}
-              <Input
-                placeholder="deepseek-v4-flash"
-                addonAfter={
-                  <Button
-                    type="text"
-                    size="small"
-                    className="llm-fetch-models-button"
-                    icon={<CloudDownloadOutlined />}
-                    loading={fetchingModels}
-                    onClick={() => void fetchModels()}
-                  >
-                    获取可用模型
-                  </Button>
-                }
-              />
+              <Space.Compact block>
+                <Form.Item name="model" noStyle>
+                  <Input placeholder="deepseek-v4-flash" />
+                </Form.Item>
+                <Button
+                  type="text"
+                  size="small"
+                  className="llm-fetch-models-button"
+                  icon={<CloudDownloadOutlined />}
+                  loading={fetchingModels}
+                  onClick={() => void fetchModels()}
+                >
+                  获取可用模型
+                </Button>
+              </Space.Compact>
             </Form.Item>
           </Col>
         </Row>
@@ -422,7 +426,7 @@ export default function LLMConfigCard({
             type={thinkingAlertType()}
             showIcon
             style={{ marginBottom: 12 }}
-            message={thinkingResult.probed ? thinkingResult.message : thinkingResult.note}
+            title={thinkingResult.probed ? thinkingResult.message : thinkingResult.note}
             description={
               thinkingResult.probed && thinkingResult.note ? thinkingResult.note : undefined
             }
@@ -444,7 +448,7 @@ export default function LLMConfigCard({
               type="info"
               showIcon
               style={{ marginBottom: 12 }}
-              message="留空的参数不会发送给模型服务，由服务商使用默认值。这些参数并非所有服务商都支持，填写前请先看官方文档。"
+              title="留空的参数不会发送给模型服务，由服务商使用默认值。这些参数并非所有服务商都支持，填写前请先看官方文档。"
             />
             <Row gutter={[16, 0]}>
               <Col xs={24} md={6}>
@@ -579,7 +583,7 @@ export default function LLMConfigCard({
               type="info"
               showIcon
               style={{ marginTop: 4 }}
-              message="协议换成「Anthropic 原生」后，思考预算、Top K 等参数才有意义；换成 OpenAI 兼容时它们会被忽略。思考预算与「思考模式」是同一件事的两代写法：填了预算就以预算为准，留空则由开关与强度决定。"
+              title="协议换成「Anthropic 原生」后，思考预算、Top K 等参数才有意义；换成 OpenAI 兼容时它们会被忽略。思考预算与「思考模式」是同一件事的两代写法：填了预算就以预算为准，留空则由开关与强度决定。"
             />
           </>
         )}
@@ -592,7 +596,7 @@ export default function LLMConfigCard({
           style={{ marginTop: 16 }}
           type={testResult.ok ? "success" : "error"}
           showIcon
-          message={
+          title={
             testResult.ok
               ? `${testResult.message}（耗时 ${testResult.latency_ms}ms）`
               : `连接失败：${testResult.message}`
@@ -606,12 +610,16 @@ export default function LLMConfigCard({
         onCancel={() => setModelPickerOpen(false)}
       >
         <Typography.Paragraph type="secondary">{modelsMessage}</Typography.Paragraph>
-        <List
-          size="small"
-          dataSource={modelOptions}
-          style={{ maxHeight: 360, overflowY: "auto", overflowX: "hidden" }}
-          renderItem={(model) => (
-            <List.Item
+        <Listy
+          height={360}
+          items={modelOptions}
+          rowKey={(model) => model}
+          styles={{
+            root: { overflowX: "hidden" },
+            item: { ...LISTY_ITEM_PADDING_SMALL },
+          }}
+          itemRender={(model) => (
+            <ListyItem
               actions={[
                 <Button
                   key="pick"
@@ -627,7 +635,7 @@ export default function LLMConfigCard({
               ]}
             >
               <Typography.Text code>{model}</Typography.Text>
-            </List.Item>
+            </ListyItem>
           )}
         />
       </Modal>

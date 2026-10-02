@@ -1,7 +1,7 @@
 /** 求职助手附件读取、容量预留和待发送状态。 */
 
 import { App } from "antd";
-import type { MutableRefObject } from "react";
+import type { RefObject } from "react";
 import { useCallback, useRef, useState } from "react";
 import {
   MAX_ATTACHMENT_BYTES,
@@ -13,7 +13,7 @@ import {
 } from "../assistantUtils";
 
 interface Options {
-  mountedRef: MutableRefObject<boolean>;
+  mountedRef: RefObject<boolean>;
 }
 
 export function useAssistantAttachments({ mountedRef }: Options) {

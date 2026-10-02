@@ -60,7 +60,7 @@ const itemColumns: ColumnsType<WebFormRecordItem> = [
     render: (_, item) => {
       const meta = ITEM_STATUS_META[item.status] ?? { color: "default", label: item.status };
       return (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Tag color={meta.color}>{meta.label}</Tag>
           {item.detail ? (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -191,7 +191,7 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
             </span>
           ),
           children: (
-            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={12} style={{ width: "100%" }}>
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label="页面">
                   {record.page_title || "（无标题）"}
@@ -213,7 +213,7 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
               {record.page_snapshot.length > 0 ? (
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   填完后页面上共 {record.page_snapshot.filter((row) => row.filled).length}{" "}
-                  个框是我们 填的；其余为你原有的内容或页面自己算出来的。
+                  个框是我们填的；其余为你原有的内容或页面自己算出来的。
                 </Typography.Text>
               ) : null}
             </Space>

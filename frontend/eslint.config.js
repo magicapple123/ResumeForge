@@ -21,7 +21,12 @@ export default tseslint.config(
       "react-refresh": reactRefresh,
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      // react-hooks v7 的 configs.recommended 默认启用了 Compiler 系新规则
+      // （set-state-in-effect / refs / use-memo / immutability 等，全量启用会在
+      // 现有代码上产生 ~80 个新 error）。这里显式只保留 v5 recommended 等价的
+      // 两条经典规则，保持 lint 基线不变；Compiler 系规则的采用留待独立 PR。
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
     },
   },

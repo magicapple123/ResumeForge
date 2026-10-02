@@ -95,7 +95,7 @@ export default function CollectResultPanel({
       title: "岗位",
       dataIndex: "title",
       render: (value: string, row) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Text strong>{value || "（未识别到岗位名）"}</Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {row.company || "（未识别到公司）"}
@@ -134,7 +134,7 @@ export default function CollectResultPanel({
 
   return (
     <div className="apply-collect-result">
-      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={8} style={{ width: "100%" }}>
         <Space size={8} wrap>
           <Typography.Text strong>本次采集结果</Typography.Text>
           <Typography.Text type="secondary">
@@ -142,7 +142,7 @@ export default function CollectResultPanel({
           </Typography.Text>
         </Space>
 
-        {error && <Alert type="error" showIcon message={error} />}
+        {error && <Alert type="error" showIcon title={error} />}
 
         {lastResult && problemResults.length > 0 && (
           <Alert
@@ -150,7 +150,7 @@ export default function CollectResultPanel({
             showIcon
             closable
             onClose={() => setLastResult(null)}
-            message={`有 ${problemResults.length} 个岗位没有新建（其余已处理）`}
+            title={`有 ${problemResults.length} 个岗位没有新建（其余已处理）`}
             description={
               <ul style={{ margin: 0, paddingLeft: 18 }}>
                 {problemResults.map((item) => (

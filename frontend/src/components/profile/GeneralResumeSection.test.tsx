@@ -73,8 +73,9 @@ describe("GeneralResumeSection", () => {
     await waitFor(() => expect(apiMocks.listResumes).toHaveBeenCalledOnce());
     expect(apiMocks.listResumes.mock.calls[0][0]).toMatchObject({ has_job: false });
     const title = await screen.findByText("研发通用版");
-    // 「通用简历」既是卡片标题也是每行的标签，这里限定在该行内查
-    const row = title.closest("li");
+    // 「通用简历」既是卡片标题也是每行的标签，这里限定在该行内查。
+    // List → Listy 迁移后行外壳由 <li> 变为 .ant-listy-item（div），行作用域语义不变。
+    const row = title.closest(".ant-listy-item");
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText("通用简历")).toBeInTheDocument();
     expect(within(row as HTMLElement).getByText(/求职意向：后端开发/)).toBeInTheDocument();

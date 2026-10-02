@@ -88,7 +88,7 @@ export default function JobDetailDrawer({
   return (
     <Drawer
       title="岗位详情"
-      width="min(640px, 100vw)"
+      size="min(640px, 100vw)"
       open={!!job}
       onClose={onClose}
       // 操作栏交给抽屉的 footer 插槽：它由抽屉布局常驻底部，内容不足一屏时
@@ -176,7 +176,7 @@ export default function JobDetailDrawer({
               type="info"
               showIcon
               style={{ marginTop: 12 }}
-              message="这个岗位不能用投递台自动投递"
+              title="这个岗位不能用投递台自动投递"
               description={
                 <Typography.Text type="secondary">
                   投递台只能自动投递<Typography.Text strong>招聘网站上的岗位</Typography.Text>
@@ -202,7 +202,7 @@ export default function JobDetailDrawer({
 
           {job.keywords.length > 0 && (
             <>
-              <Divider orientation="left" plain style={{ margin: "8px 0" }}>
+              <Divider titlePlacement="start" plain style={{ margin: "8px 0" }}>
                 岗位技能标签
               </Divider>
               <SkillTags tags={job.keywords} max={20} />

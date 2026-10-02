@@ -128,7 +128,7 @@ export default function TemplateImportModal({ open, onClose, onImported }: Props
       <Alert
         type="info"
         showIcon
-        message="识别需要已配置的大模型"
+        title="识别需要已配置的大模型"
         description="图片会作为图片发给模型；PDF / DOCX 先在本地抽出文字再分析（原始文件不外发）。识别结果是一份格式模板，随时可以删掉或再手动微调。"
       />
     </Modal>

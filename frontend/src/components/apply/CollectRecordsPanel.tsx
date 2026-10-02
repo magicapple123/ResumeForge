@@ -84,7 +84,7 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
     [refreshKey],
   );
 
-  if (error) return <Alert type="error" showIcon message={error} />;
+  if (error) return <Alert type="error" showIcon title={error} />;
   if (loading && !data) return <Skeleton active paragraph={{ rows: 5 }} />;
 
   const records = data ?? [];
@@ -117,8 +117,8 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
             </Space>
           ),
           children: (
-            <Space direction="vertical" size={8} style={{ width: "100%" }}>
-              {record.message && <Alert type="info" showIcon message={record.message} />}
+            <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+              {record.message && <Alert type="info" showIcon title={record.message} />}
               <CollectResultPanel taskId={record.id} disabled={disabled} />
             </Space>
           ),

@@ -116,7 +116,7 @@ export default function ApplyPage() {
   return (
     <div className="apply-page">
       <div className="apply-page-head">
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Title level={4} style={{ margin: 0 }}>
             投递台
           </Typography.Title>

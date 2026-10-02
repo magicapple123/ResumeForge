@@ -96,7 +96,7 @@ describe("InterviewReviewPanel", () => {
     // 选简历后再次点击：产出建议列表。
     const resumeSelect = screen
       .getByText("关联简历（反向优化必选）")
-      .closest(".ant-select-selector");
+      .closest(".ant-select-content");
     fireEvent.mouseDown(resumeSelect!);
     fireEvent.click(await screen.findByText("我的简历"));
 

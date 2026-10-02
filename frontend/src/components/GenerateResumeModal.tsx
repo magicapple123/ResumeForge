@@ -254,10 +254,25 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   }, [taskId]);
 
   // 弹窗开着时声明"界面在看这个任务"：完成后用右上角卡片提醒，不弹居中弹窗打断用户。
+  //
+  // detach 只跟随弹窗关闭，不跟随 taskId 置空：任务进入终态时弹窗收尾会把 taskId
+  // 置空（见下面的完成分支），但弹窗仍开着展示预览——若跟着 detach，registry 稍后
+  // 的完成通知会误判"用户已经走开"，给正看着预览的用户升级成居中弹窗。React 19 的
+  // 被动副作用落点让这个竞态从偶发变成确定性发生，"在看"的生命周期必须跟随弹窗。
+  const detachTaskUiRef = useRef<(() => void) | null>(null);
   useEffect(() => {
-    if (!open || taskId == null) return;
-    return attachTaskUi(taskId);
+    if (!open) {
+      detachTaskUiRef.current?.();
+      detachTaskUiRef.current = null;
+      return;
+    }
+    if (taskId == null || detachTaskUiRef.current) return;
+    detachTaskUiRef.current = attachTaskUi(taskId);
   }, [open, taskId]);
+  useEffect(() => {
+    // 组件卸载兜底释放，防止登记表泄漏。
+    return () => detachTaskUiRef.current?.();
+  }, []);
 
   // 任务进入终态后的收尾：完成→取简历进预览并提醒；取消→回配置；失败→错误。
   useEffect(() => {
@@ -390,14 +405,14 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
               type="warning"
               showIcon
               style={{ marginBottom: 16 }}
-              message="尚未配置大模型 API，请先到「设置」页完成配置（支持 DeepSeek / 豆包 / Kimi / OpenAI 等）"
+              title="尚未配置大模型 API，请先到「设置」页完成配置（支持 DeepSeek / 豆包 / Kimi / OpenAI 等）"
             />
           ) : (
             <Alert
               type="info"
               showIcon
               style={{ marginBottom: 16 }}
-              message={`当前模型：${modelName || "未知"}。生成过程约需 1-2 分钟，生成在后台进行，期间可关闭弹窗，完成后会自动提醒。`}
+              title={`当前模型：${modelName || "未知"}。生成过程约需 1-2 分钟，生成在后台进行，期间可关闭弹窗，完成后会自动提醒。`}
               description={
                 job
                   ? "系统会根据目标岗位的 JD，从完整个人资料与经历总结文件中筛选并排序相关信息；原始资料不会被修改。"
@@ -419,7 +434,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
             </div>
           )}
           <Typography.Title level={5}>{job ? "岗位适配与内容美化" : "内容美化"}</Typography.Title>
-          <Space direction="vertical" size={14} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={14} style={{ width: "100%" }}>
             <Space size={10}>
               <Switch checked={enhance} onChange={setEnhance} />
               <Typography.Text strong>
@@ -505,7 +520,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            message="生成已在后台开始：现在关闭弹窗不会中断，完成后会自动提醒并打开结果。"
+            title="生成已在后台开始：现在关闭弹窗不会中断，完成后会自动提醒并打开结果。"
           />
           <div style={{ marginTop: 16, textAlign: "right" }}>
             <Space>
@@ -557,7 +572,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           <Alert
             type="error"
             showIcon
-            message={errorMsg || "生成失败"}
+            title={errorMsg || "生成失败"}
             style={{ marginBottom: 24 }}
           />
           <Space>

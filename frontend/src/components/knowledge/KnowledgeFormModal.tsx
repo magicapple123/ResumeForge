@@ -62,7 +62,7 @@ export default function KnowledgeFormModal({
       open={open}
       width={760}
       onCancel={onCancel}
-      maskClosable={!submitting}
+      mask={{ closable: !submitting }}
       footer={
         <Space>
           <Button onClick={onCancel} disabled={submitting}>

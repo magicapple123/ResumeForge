@@ -1,6 +1,19 @@
 /** 针对关联岗位生成简历修改建议的按需弹窗；每条建议可一键采纳并直接修改简历。 */
 import { BulbOutlined, CheckOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, List, Modal, Skeleton, Space, Tag, Typography } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  Empty,
+  Listy,
+  Modal,
+  Skeleton,
+  Space,
+  Tag,
+  Typography,
+  theme,
+} from "antd";
+import { ListyItem } from "./common/ListyItem";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { generateResumeSuggestions, reviseResume } from "../api/resumes";
 import type { ResumeDetail, ResumeSuggestion, ResumeSuggestions } from "../types";
@@ -31,6 +44,7 @@ export default function ResumeSuggestionsModal({
   onApplied,
 }: Props) {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [data, setData] = useState<ResumeSuggestions | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -120,8 +134,8 @@ export default function ResumeSuggestionsModal({
       destroyOnHidden
     >
       {error ? (
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <Alert type="error" showIcon message={error} />
+        <Space orientation="vertical" style={{ width: "100%" }}>
+          <Alert type="error" showIcon title={error} />
           <Button
             icon={<ReloadOutlined />}
             onClick={() => void loadSuggestions()}
@@ -149,14 +163,23 @@ export default function ResumeSuggestionsModal({
             </Button>
           </Space>
           {data.suggestions.length > 0 ? (
-            <List
-              bordered
-              dataSource={data.suggestions}
-              renderItem={(item, index) => {
+            <Listy
+              items={data.suggestions}
+              rowKey={(item) => `${item.issue}|${item.suggestion}`}
+              /* List 的 bordered（1px 边框 + 大圆角）以语义样式还原。 */
+              styles={{
+                root: {
+                  border: `${token.lineWidth}px ${token.lineType} ${token.colorBorder}`,
+                  borderRadius: token.borderRadiusLG,
+                },
+              }}
+              itemRender={(item) => {
+                // Listy 的 itemRender 不提供下标，按对象引用从原数组取回（建议对象引用唯一）。
+                const index = data.suggestions.indexOf(item);
                 const priority = PRIORITY_META[item.priority];
                 const adopting = adoptingIndex === index;
                 return (
-                  <List.Item
+                  <ListyItem
                     actions={[
                       <Button
                         key="adopt"
@@ -170,7 +193,7 @@ export default function ResumeSuggestionsModal({
                       </Button>,
                     ]}
                   >
-                    <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                    <Space orientation="vertical" size={6} style={{ width: "100%" }}>
                       <Space wrap>
                         <Tag color={priority.color}>{priority.label}</Tag>
                         {item.section && <Tag>{item.section}</Tag>}
@@ -185,7 +208,7 @@ export default function ResumeSuggestionsModal({
                         </Typography.Text>
                       )}
                     </Space>
-                  </List.Item>
+                  </ListyItem>
                 );
               }}
             />

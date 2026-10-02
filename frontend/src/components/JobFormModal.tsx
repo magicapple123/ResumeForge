@@ -351,7 +351,7 @@ export default function JobFormModal({
       confirmLoading={submitting}
       okButtonProps={{ disabled: parsing || submitting }}
       cancelButtonProps={{ disabled: submitting }}
-      maskClosable={!submitting}
+      mask={{ closable: !submitting }}
       closable={!submitting}
       width={720}
       styles={{
@@ -430,7 +430,7 @@ export default function JobFormModal({
                 <Alert
                   type="warning"
                   showIcon
-                  message={parseWarnings.join("；")}
+                  title={parseWarnings.join("；")}
                   style={{ marginBottom: 16 }}
                 />
               )}
@@ -500,7 +500,7 @@ export default function JobFormModal({
             />
           </Form.Item>
           <Form.Item label={`备注图片（选填，最多 ${MAX_NOTE_IMAGES} 张）`}>
-            <Space direction="vertical" style={{ width: "100%" }}>
+            <Space orientation="vertical" style={{ width: "100%" }}>
               <Space wrap>
                 <Upload
                   accept="image/jpeg,image/png,image/webp"

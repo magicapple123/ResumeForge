@@ -96,12 +96,12 @@ export function RecordDetailDrawer({
     <Drawer
       title={title}
       placement="right"
-      width={width}
+      size={width}
       open={open}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
     >
-      <Space direction="vertical" size="small" style={{ width: "100%" }}>
+      <Space orientation="vertical" size="small" style={{ width: "100%" }}>
         {subtitle && <Typography.Text type="secondary">{subtitle}</Typography.Text>}
         {tags}
       </Space>

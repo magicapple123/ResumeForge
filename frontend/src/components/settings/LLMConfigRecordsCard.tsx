@@ -7,7 +7,8 @@ import {
   Empty,
   Form,
   Input,
-  List,
+  Listy,
+  Spin,
   Modal,
   Space,
   Tag,
@@ -18,6 +19,7 @@ import { RowActions } from "../common/RowActions";
 import type { LLMConfigRecord } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { CUSTOM_PRESET_LABEL, matchingPreset } from "./SettingsConfig";
+import { ListyItem, ListyMeta } from "../common/ListyItem";
 
 interface Props {
   records: LLMConfigRecord[];
@@ -83,81 +85,84 @@ export default function LLMConfigRecordsCard({
         <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
           将当前已保存的配置命名后加入记录；切换记录会直接更新当前使用的配置。
         </Typography.Paragraph>
-        <List
-          itemLayout="horizontal"
-          loading={recordsLoading}
-          dataSource={records}
-          locale={{
-            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无配置记录" />,
-          }}
-          renderItem={(record) => (
-            <List.Item
-              actions={[
-                <Button
-                  key="apply"
-                  type="link"
-                  icon={<SwapOutlined />}
-                  disabled={
-                    editing ||
-                    saving ||
-                    testing ||
-                    recordApplyingId !== null ||
-                    recordDeletingId !== null
-                  }
-                  loading={recordApplyingId === record.id}
-                  onClick={() => onApplyRecord(record)}
-                >
-                  使用
-                </Button>,
-                // 删除收进「···」菜单：不再以红图标裸露在行内（全局约定）。
-                <RowActions
-                  key="more"
-                  disabled={editing || recordApplyingId !== null || recordDeletingId !== null}
-                  more={[
-                    {
-                      key: "delete",
-                      label: "删除记录",
-                      danger: true,
-                      confirm: `确定删除配置记录“${record.name}”？删除记录不会影响当前正在使用的配置`,
-                      onClick: () => onRemoveRecord(record),
-                    },
+        {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
+        <Spin spinning={recordsLoading}>
+          {records.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无配置记录" />
+          ) : (
+            <Listy
+              items={records}
+              rowKey={(record) => record.id}
+              itemRender={(record) => (
+                <ListyItem
+                  actions={[
+                    <Button
+                      key="apply"
+                      type="link"
+                      icon={<SwapOutlined />}
+                      disabled={
+                        editing ||
+                        saving ||
+                        testing ||
+                        recordApplyingId !== null ||
+                        recordDeletingId !== null
+                      }
+                      loading={recordApplyingId === record.id}
+                      onClick={() => onApplyRecord(record)}
+                    >
+                      使用
+                    </Button>,
+                    // 删除收进「···」菜单：不再以红图标裸露在行内（全局约定）。
+                    <RowActions
+                      key="more"
+                      disabled={editing || recordApplyingId !== null || recordDeletingId !== null}
+                      more={[
+                        {
+                          key: "delete",
+                          label: "删除记录",
+                          danger: true,
+                          confirm: `确定删除配置记录“${record.name}”？删除记录不会影响当前正在使用的配置`,
+                          onClick: () => onRemoveRecord(record),
+                        },
+                      ]}
+                    />,
                   ]}
-                />,
-              ]}
-            >
-              <List.Item.Meta
-                title={
-                  <Space size={8} wrap>
-                    <Typography.Text strong>{record.name}</Typography.Text>
-                    {activeRecordId === record.id && (
-                      // “当前”容易和"表单里现在填着的"混淆，说清是哪一份在生效。
-                      <Tooltip title="当前生效的配置：简历生成与求职助手正在用它">
-                        <Tag color="green">当前</Tag>
-                      </Tooltip>
-                    )}
-                  </Space>
-                }
-                description={
-                  <Space size={[8, 4]} wrap>
-                    <Tag>{matchingPreset(record)?.label ?? CUSTOM_PRESET_LABEL}</Tag>
-                    <Typography.Text type="secondary">
-                      {record.model || "未填写模型"}
-                    </Typography.Text>
-                    <Typography.Text type="secondary">
-                      温度 {record.temperature.toFixed(1)}
-                    </Typography.Text>
-                    <Typography.Text type="secondary">
-                      {record.base_url || "未填写地址"}
-                    </Typography.Text>
-                    <Typography.Text type="secondary">
-                      更新于 {formatDateTime(record.updated_at)}
-                    </Typography.Text>
-                  </Space>
-                }
-              />
-            </List.Item>
+                >
+                  <ListyMeta
+                    title={
+                      <Space size={8} wrap>
+                        <Typography.Text strong>{record.name}</Typography.Text>
+                        {activeRecordId === record.id && (
+                          // “当前”容易和"表单里现在填着的"混淆，说清是哪一份在生效。
+                          <Tooltip title="当前生效的配置：简历生成与求职助手正在用它">
+                            <Tag color="green">当前</Tag>
+                          </Tooltip>
+                        )}
+                      </Space>
+                    }
+                    description={
+                      <Space size={[8, 4]} wrap>
+                        <Tag>{matchingPreset(record)?.label ?? CUSTOM_PRESET_LABEL}</Tag>
+                        <Typography.Text type="secondary">
+                          {record.model || "未填写模型"}
+                        </Typography.Text>
+                        <Typography.Text type="secondary">
+                          温度 {record.temperature.toFixed(1)}
+                        </Typography.Text>
+                        <Typography.Text type="secondary">
+                          {record.base_url || "未填写地址"}
+                        </Typography.Text>
+                        <Typography.Text type="secondary">
+                          更新于 {formatDateTime(record.updated_at)}
+                        </Typography.Text>
+                      </Space>
+                    }
+                  />
+                </ListyItem>
+              )}
+            />
           )}
-        />
+        </Spin>
       </Card>
 
       <Modal

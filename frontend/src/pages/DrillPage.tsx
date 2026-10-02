@@ -17,7 +17,7 @@ import {
   Card,
   Empty,
   Input,
-  List,
+  Listy,
   Modal,
   Checkbox,
   Popconfirm,
@@ -32,6 +32,8 @@ import {
 import BatchActionBar from "../components/common/BatchActionBar";
 import { RowActions } from "../components/common/RowActions";
 import { useBatchSelection } from "../hooks/useBatchSelection";
+import { ListyItem } from "../components/common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../components/common/listyPadding";
 import {
   ArrowLeftOutlined,
   CheckCircleOutlined,
@@ -153,11 +155,11 @@ function StartPanel({ onStarted }: { onStarted: (session: DrillSession) => void 
           </Space>
         }
       >
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={12} style={{ width: "100%" }}>
           <Alert
             type="info"
             showIcon
-            message="每道题的评分标准会在你看到问题**之前**定下来，之后不因答得流利而放宽。"
+            title="每道题的评分标准会在你看到问题**之前**定下来，之后不因答得流利而放宽。"
             description="深挖不评总分——它回答的是「这条主张我讲不讲得清、哪里还站不住」。"
           />
           <div>
@@ -275,11 +277,12 @@ function RehearsalPanel({ sessionId }: { sessionId: number }) {
       <Typography.Paragraph type="secondary">
         复练不重复原题，换一个角度再问一次——把上次的答案背一遍不算会了。
       </Typography.Paragraph>
-      <List
-        size="small"
-        dataSource={rows}
-        renderItem={(row) => (
-          <List.Item
+      <Listy
+        items={rows}
+        rowKey={(row) => `${row.claim_title}-${row.kind}`}
+        styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+        itemRender={(row) => (
+          <ListyItem
             actions={[
               <Button
                 key="go"
@@ -292,7 +295,7 @@ function RehearsalPanel({ sessionId }: { sessionId: number }) {
               </Button>,
             ]}
           >
-            <Space direction="vertical" size={2} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={2} style={{ width: "100%" }}>
               <Space size={6} wrap>
                 <Typography.Text strong>{row.claim_title}</Typography.Text>
                 <Tag>{row.kind_label || REHEARSE_LABELS[row.kind as never] || row.kind}</Tag>
@@ -303,7 +306,7 @@ function RehearsalPanel({ sessionId }: { sessionId: number }) {
                 </Typography.Text>
               )}
             </Space>
-          </List.Item>
+          </ListyItem>
         )}
       />
       <Modal
@@ -329,26 +332,27 @@ function RehearsalPanel({ sessionId }: { sessionId: number }) {
 function ReviewPanel({ session }: { session: DrillSession }) {
   const review = session.review;
   return (
-    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={12} style={{ width: "100%" }}>
       {review.covered && (
         <Typography.Paragraph style={{ marginBottom: 0 }}>{review.covered}</Typography.Paragraph>
       )}
       {review.verified_summary && (
-        <Alert type="success" showIcon message="讲得清的" description={review.verified_summary} />
+        <Alert type="success" showIcon title="讲得清的" description={review.verified_summary} />
       )}
       {review.gaps_summary && (
-        <Alert type="warning" showIcon message="还站不住的" description={review.gaps_summary} />
+        <Alert type="warning" showIcon title="还站不住的" description={review.gaps_summary} />
       )}
 
       {(review.actions?.length ?? 0) > 0 && (
         <div>
           <Typography.Text strong>面试前的行动清单</Typography.Text>
-          <List
-            size="small"
-            dataSource={review.actions ?? []}
-            renderItem={(item) => (
-              <List.Item>
-                <Space direction="vertical" size={2} style={{ width: "100%" }}>
+          <Listy
+            items={review.actions ?? []}
+            rowKey={(item) => `${item.kind}|${item.claim_title}|${item.detail}`}
+            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+            itemRender={(item) => (
+              <ListyItem>
+                <Space orientation="vertical" size={2} style={{ width: "100%" }}>
                   <Space size={6} wrap>
                     <Tag
                       color={
@@ -366,7 +370,7 @@ function ReviewPanel({ session }: { session: DrillSession }) {
                     </Typography.Text>
                   )}
                 </Space>
-              </List.Item>
+              </ListyItem>
             )}
           />
         </div>
@@ -438,7 +442,7 @@ function ActiveSession({
   };
 
   return (
-    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={12} style={{ width: "100%" }}>
       {lastVerdict && (
         <Alert
           type={
@@ -449,9 +453,9 @@ function ActiveSession({
                 : "warning"
           }
           showIcon
-          message={`上一轮判定：${EVIDENCE_LABELS[lastVerdict.status]}`}
+          title={`上一轮判定：${EVIDENCE_LABELS[lastVerdict.status]}`}
           description={
-            <Space direction="vertical" size={2}>
+            <Space orientation="vertical" size={2}>
               {/* 真实模拟模式下不展示"还缺什么"——那等于把判分标准念出来。 */}
               {deferred && lastVerdict.feedback === "" ? (
                 <Typography.Text type="secondary">
@@ -475,7 +479,7 @@ function ActiveSession({
 
       {pending ? (
         <Card size="small" title={`第 ${session.current_index} / ${session.max_questions} 题`}>
-          <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={10} style={{ width: "100%" }}>
             <Typography.Title level={5} style={{ margin: 0 }}>
               {pending.question}
             </Typography.Title>
@@ -487,7 +491,7 @@ function ActiveSession({
             {/* 契约对整个会话可见：用户有权知道自己在被怎么衡量。 */}
             <details className="drill-contract">
               <summary>这道题的评分标准（提问前已锁定）</summary>
-              <Space direction="vertical" size={4} style={{ marginTop: 8 }}>
+              <Space orientation="vertical" size={4} style={{ marginTop: 8 }}>
                 {pending.intent && (
                   <Typography.Text type="secondary">想验证：{pending.intent}</Typography.Text>
                 )}
@@ -544,7 +548,7 @@ function ActiveSession({
         <Alert
           type="info"
           showIcon
-          message="正在生成下一题…"
+          title="正在生成下一题…"
           description="如果长时间没有变化，可以点「提前结束」先拿现有的判定出复盘。"
           action={
             <Button size="small" loading={busy} onClick={() => void stop()}>
@@ -557,13 +561,14 @@ function ActiveSession({
       {session.turns.length > 0 && (
         <details className="drill-transcript">
           <summary>逐轮记录（{session.turns.length} 轮）</summary>
-          <List
-            size="small"
+          <Listy
             style={{ marginTop: 8 }}
-            dataSource={session.turns}
-            renderItem={(turn) => (
-              <List.Item>
-                <Space direction="vertical" size={4} style={{ width: "100%" }}>
+            items={session.turns}
+            rowKey={(turn) => `${turn.question}|${turn.answer}`}
+            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+            itemRender={(turn) => (
+              <ListyItem>
+                <Space orientation="vertical" size={4} style={{ width: "100%" }}>
                   <Typography.Text strong>问：{turn.question}</Typography.Text>
                   <Typography.Text>答：{turn.answer}</Typography.Text>
                   {turn.status && (
@@ -577,7 +582,7 @@ function ActiveSession({
                     </Space>
                   )}
                 </Space>
-              </List.Item>
+              </ListyItem>
             )}
           />
         </details>
@@ -677,7 +682,7 @@ export default function DrillPage() {
   return (
     <div className="drill-page">
       <div className="drill-page-head">
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           {/* 深挖是从台账「拿去深挖」进来的子页面，但它是独立路由——浏览器后退之外
               界面上没有别的出口，用户会以为"进去就出不来了"。 */}
           <Button
@@ -712,20 +717,20 @@ export default function DrillPage() {
           <Statistic
             title="讲得清"
             value={stats.verified_count}
-            valueStyle={{ color: "#389e0d" }}
+            styles={{ content: { color: "#389e0d" } }}
             prefix={<CheckCircleOutlined />}
           />
           <Statistic
             title="部分验证"
             value={stats.partial_count}
-            valueStyle={{ color: "#d48806" }}
+            styles={{ content: { color: "#d48806" } }}
           />
           <Statistic title="未验证" value={stats.unverified_count} />
           {stats.contradictory_count > 0 && (
             <Statistic
               title="存在矛盾"
               value={stats.contradictory_count}
-              valueStyle={{ color: "#cf1322" }}
+              styles={{ content: { color: "#cf1322" } }}
               prefix={<ExclamationCircleOutlined />}
             />
           )}
@@ -786,11 +791,12 @@ export default function DrillPage() {
             description="还没有深挖记录。先在「事实台账」确认几条主张，再回来开一场。"
           />
         ) : (
-          <List
-            size="small"
-            dataSource={history}
-            renderItem={(item) => (
-              <List.Item
+          <Listy
+            items={history}
+            rowKey={(item) => item.id}
+            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+            itemRender={(item) => (
+              <ListyItem
                 actions={
                   batch.selecting
                     ? [
@@ -836,7 +842,7 @@ export default function DrillPage() {
                     {item.created_at.replace("T", " ").slice(0, 16)}
                   </Typography.Text>
                 </Space>
-              </List.Item>
+              </ListyItem>
             )}
           />
         )}

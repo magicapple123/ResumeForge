@@ -188,7 +188,7 @@ export default function TemplateWorkbench({ onChanged }: Props) {
       title: "模板",
       dataIndex: "name",
       render: (value: string, row) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Space size={6}>
             <b>{value}</b>
             {row.source_name ? <Tag>来自 {row.source_name}</Tag> : null}

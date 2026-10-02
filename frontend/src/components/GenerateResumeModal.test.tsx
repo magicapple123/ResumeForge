@@ -14,20 +14,23 @@ import GenerateResumeModal from "./GenerateResumeModal";
 const notices: { title: string; modal?: boolean; confirmLabel?: string }[] = [];
 
 const fakeNotifyHost = {
+  // antd 6 起通知卡片的标题参数由 message 改名 title（见 utils/taskNotify.ts），
+  // 假宿主按新形状记录。
   notification: {
-    success: (config: { message: unknown }) =>
-      notices.push({ title: String(config.message), modal: false }),
-    warning: (config: { message: unknown }) =>
-      notices.push({ title: String(config.message), modal: false }),
-    error: (config: { message: unknown }) =>
-      notices.push({ title: String(config.message), modal: false }),
-    info: (config: { message: unknown }) =>
-      notices.push({ title: String(config.message), modal: false }),
+    success: (config: { title: unknown }) =>
+      notices.push({ title: String(config.title), modal: false }),
+    warning: (config: { title: unknown }) =>
+      notices.push({ title: String(config.title), modal: false }),
+    error: (config: { title: unknown }) =>
+      notices.push({ title: String(config.title), modal: false }),
+    info: (config: { title: unknown }) =>
+      notices.push({ title: String(config.title), modal: false }),
   },
   modal: {
-    info: (config: { message: unknown; okText?: unknown }) =>
+    // 与 utils/taskNotify 的 ModalPayload 对齐：弹窗认 title / content（不是 message）。
+    info: (config: { title: unknown; okText?: unknown }) =>
       notices.push({
-        title: String(config.message),
+        title: String(config.title),
         modal: true,
         confirmLabel: config.okText ? String(config.okText) : undefined,
       }),
@@ -302,9 +305,13 @@ describe("GenerateResumeModal 生成进度条", () => {
 
 describe("GenerateResumeModal 后台生成任务", () => {
   it("completes and opens the preview after polling a completed task", async () => {
-    apiMocks.getResumeGenerateTask.mockResolvedValue(
-      makeTask({ status: "completed", resume_id: 7 }),
-    );
+    // 首次轮询返回 running、之后才 completed：忠实于"任务跑了一段时间后完成"的
+    // 真实时序。watchResumeTask 注册时会立刻拉一次（刚启动不该等下一个间隔），
+    // 若这一拉就是 completed，finish() 会跑在弹窗声明 watcher 的被动 effect 之前，
+    // 完成提醒就错走"用户已离开"的居中弹窗分支——真实后端不可能刚启动就完成。
+    apiMocks.getResumeGenerateTask
+      .mockResolvedValueOnce(makeTask({ status: "running", message: "正在写第 1 段" }))
+      .mockResolvedValue(makeTask({ status: "completed", resume_id: 7 }));
     apiMocks.getResume.mockResolvedValue(RESUME_DETAIL);
     apiMocks.renderResume.mockResolvedValue("<div>预览HTML</div>");
 

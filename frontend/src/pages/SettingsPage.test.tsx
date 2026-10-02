@@ -456,11 +456,13 @@ describe("SettingsPage API key reveal", () => {
 
     await waitFor(() => expect(apiMocks.revealLLMApiKey).toHaveBeenCalledOnce());
     await waitFor(() => expect(input).toHaveValue("sk-revealed"));
-    expect(input).toHaveAttribute("type", "text");
+    // antd 6 Password 的受控 visible 通过内部 effect 同步，React 19 下比我们的
+    // 状态更新晚一拍落地，type 翻转要用 waitFor 等（真实浏览器同样只是晚几毫秒）。
+    await waitFor(() => expect(input).toHaveAttribute("type", "text"));
 
     fireEvent.click(passwordToggle());
     await waitFor(() => expect(input).toHaveValue("********"));
-    expect(input).toHaveAttribute("type", "password");
+    await waitFor(() => expect(input).toHaveAttribute("type", "password"));
 
     fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
     fireEvent.click(passwordToggle());
@@ -495,7 +497,8 @@ describe("SettingsPage API key reveal", () => {
 
     expect(await screen.findByText("读取密钥失败")).toBeInTheDocument();
     expect(input).toHaveValue("********");
-    expect(input).toHaveAttribute("type", "password");
+    // 同上：antd 6 的受控 visible 晚一拍同步，type 断言等待落地。
+    await waitFor(() => expect(input).toHaveAttribute("type", "password"));
   });
 });
 
@@ -531,10 +534,12 @@ describe("SettingsPage configuration record lifecycle", () => {
     );
 
     await screen.findByText("DeepSeek 校招");
-    fireEvent.click(screen.getByRole("button", { name: "删除配置记录 DeepSeek 校招" }));
+    // 删除收进行内「···」菜单：打开菜单 → 点「删除记录」→ 二次确认。
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("删除记录"));
     const confirmDelete = await waitFor(() => {
       const button = document.querySelector<HTMLButtonElement>(
-        ".ant-popconfirm-buttons .ant-btn-primary",
+        ".ant-modal-confirm-btns .ant-btn-primary",
       );
       if (!button) throw new Error("未找到删除确认按钮");
       return button;
@@ -543,9 +548,7 @@ describe("SettingsPage configuration record lifecycle", () => {
 
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledTimes(2), { timeout: 1000 });
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: "删除配置记录 DeepSeek 校招" }),
-      ).not.toBeInTheDocument(),
+      expect(screen.queryByRole("button", { name: "更多操作" })).not.toBeInTheDocument(),
     );
     expect(screen.queryByText("DeepSeek 校招")).not.toBeInTheDocument();
     expect(screen.getByLabelText("API Key（选填）")).toHaveValue("********");
@@ -572,7 +575,10 @@ describe("SettingsPage output limit", () => {
     expect(limitInput).not.toBeDisabled();
 
     fireEvent.click(screen.getByRole("checkbox", { name: /不限制/ }));
-    expect(limitInput).toBeDisabled();
+    // antd 6 的 Form.useWatch 改为异步通知（下一拍才触发重渲染），勾选后输入框
+    // 的 disabled 是派生态，必须等它落地。真实浏览器中同样有一帧延迟，jsdom 里
+    // 不等的话后续断言会读到旧 DOM。
+    await waitFor(() => expect(limitInput).toBeDisabled());
 
     fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
 
@@ -600,7 +606,8 @@ describe("SettingsPage output limit", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
     fireEvent.click(checkbox);
-    expect(screen.getByLabelText("最大输出 Token")).not.toBeDisabled();
+    // antd 6 的 Form.useWatch 异步通知：取消勾选后输入框恢复可用要等一拍。
+    await waitFor(() => expect(screen.getByLabelText("最大输出 Token")).not.toBeDisabled());
 
     fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
 
@@ -625,7 +632,12 @@ describe("SettingsPage output limit", () => {
     fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
     const checkbox = screen.getByRole("checkbox", { name: /不限制/ });
     fireEvent.click(checkbox);
+    // antd 6 的 Form.useWatch 异步通知：两次点击之间必须等受控 checkbox 的
+    // checked 状态落地，否则第二次 click 读到旧 DOM，会再发出一次 checked=true，
+    // 「取消勾选恢复原值」就永远不会发生（真实浏览器里两次点击之间必有重渲染）。
+    await waitFor(() => expect(checkbox).toBeChecked());
     fireEvent.click(checkbox);
+    await waitFor(() => expect(checkbox).not.toBeChecked());
 
     fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
 
@@ -752,7 +764,9 @@ describe("SettingsPage datasets", () => {
     apiMocks.renameDataset.mockResolvedValue({ ...imported, name: "校招专用" });
     await renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: `重命名 ${imported.name}` }));
+    // 重命名收进所在行的「···」菜单：主数据在前，可操作的那份在后。
+    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[1]);
+    fireEvent.click(await screen.findByText("重命名"));
     const dialog = await screen.findByRole("dialog");
     fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "校招专用" } });
     fireEvent.click(within(dialog).getByRole("button", { name: /保\s*存/ }));
@@ -767,7 +781,8 @@ describe("SettingsPage datasets", () => {
     apiMocks.renameDataset.mockRejectedValue(new Error("名称不能为空"));
     await renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: `重命名 ${imported.name}` }));
+    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[1]);
+    fireEvent.click(await screen.findByText("重命名"));
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /保\s*存/ }));
 
@@ -781,11 +796,13 @@ describe("SettingsPage datasets", () => {
     apiMocks.deleteDataset.mockResolvedValue(undefined);
     await renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: `删除数据集 ${imported.name}` }));
+    // 删除收进所在行的「···」菜单，且必须二次确认。
+    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[1]);
+    fireEvent.click(await screen.findByText("删除"));
 
     expect(apiMocks.deleteDataset).not.toHaveBeenCalled();
     const confirm = await waitFor(() =>
-      document.querySelector<HTMLButtonElement>(".ant-popconfirm-buttons .ant-btn-primary")!,
+      document.querySelector<HTMLButtonElement>(".ant-modal-confirm-btns .ant-btn-primary")!,
     );
     fireEvent.click(confirm);
 
@@ -796,8 +813,13 @@ describe("SettingsPage datasets", () => {
     await renderPage();
 
     expect(screen.getByRole("button", { name: /切换/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "删除数据集 主数据" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重命名 主数据" })).toBeDisabled();
+
+    // 保护项的「重命名/删除」不再用禁用按钮表达，而是收进「···」菜单的禁用菜单项。
+    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[0]);
+    const renameItem = await screen.findByRole("menuitem", { name: "重命名" });
+    expect(renameItem).toHaveAttribute("aria-disabled", "true");
+    const deleteItem = await screen.findByRole("menuitem", { name: "删除" });
+    expect(deleteItem).toHaveAttribute("aria-disabled", "true");
   });
 });
 

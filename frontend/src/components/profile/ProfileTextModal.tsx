@@ -92,7 +92,7 @@ export default function ProfileTextModal({
       />
       <RecognitionOutcome source={recognitionSource} text={recognizedText} />
       {warnings.length > 0 && (
-        <Alert type="warning" showIcon style={{ marginTop: 12 }} message={warnings.join("；")} />
+        <Alert type="warning" showIcon style={{ marginTop: 12 }} title={warnings.join("；")} />
       )}
     </Modal>
   );

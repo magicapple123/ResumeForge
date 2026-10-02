@@ -44,10 +44,10 @@ export default function ResumeRiskPanel({ resumeId }: Props) {
   const total = data?.points.length ?? 0;
 
   if (loading) return <Spin />;
-  if (error) return <Alert type="error" showIcon message={error} />;
+  if (error) return <Alert type="error" showIcon title={error} />;
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Space wrap>
         <Typography.Text strong>共 {total} 条风险点</Typography.Text>
         {CATEGORY_ORDER.map((item) => {
@@ -66,7 +66,7 @@ export default function ResumeRiskPanel({ resumeId }: Props) {
       </Space>
 
       {data?.notes?.map((note) => (
-        <Alert key={note} type="warning" showIcon message={note} />
+        <Alert key={note} type="warning" showIcon title={note} />
       ))}
 
       {total === 0 ? (
@@ -84,7 +84,7 @@ export default function ResumeRiskPanel({ resumeId }: Props) {
                 </Space>
               }
             >
-              <Space direction="vertical" style={{ width: "100%" }} size="small">
+              <Space orientation="vertical" style={{ width: "100%" }} size="small">
                 {group.points.map((point, index) => (
                   <RiskPointItem key={index} point={point} />
                 ))}

@@ -281,7 +281,7 @@ export default function QuestionBankPanel({
       </Space>
     ),
     children: (
-      <Space direction="vertical" style={{ width: "100%" }}>
+      <Space orientation="vertical" style={{ width: "100%" }}>
         {bank.groups.map((group) => (
           <div key={group.type}>
             <Typography.Text strong>{group.type}</Typography.Text>
@@ -324,12 +324,12 @@ export default function QuestionBankPanel({
   }));
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       {record && (
         <Alert
           type="info"
           showIcon
-          message={`正在查看历史题库 #${record.id}（${record.created_at.replace("T", " ").slice(0, 16)}）`}
+          title={`正在查看历史题库 #${record.id}（${record.created_at.replace("T", " ").slice(0, 16)}）`}
           action={
             onCloseRecord && (
               <Button size="small" onClick={onCloseRecord}>
@@ -396,7 +396,7 @@ export default function QuestionBankPanel({
       {loading ? (
         <Spin />
       ) : error ? (
-        <Alert type="error" showIcon message={error} />
+        <Alert type="error" showIcon title={error} />
       ) : !viewData ? (
         <Empty description={record ? "该历史记录为空" : "选择岗位或简历后生成题库"} />
       ) : legacyText ? (
@@ -404,7 +404,7 @@ export default function QuestionBankPanel({
           <Alert
             type="warning"
             showIcon
-            message="此为旧版记录，仅可查看"
+            title="此为旧版记录，仅可查看"
             description="旧版历史以纯文本保存，无法还原为结构化题库，仅展示原始内容。"
           />
           <Typography.Paragraph style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
@@ -414,9 +414,9 @@ export default function QuestionBankPanel({
       ) : (
         <>
           {viewData.notes.map((note) => (
-            <Alert key={note} type="warning" showIcon message={note} />
+            <Alert key={note} type="warning" showIcon title={note} />
           ))}
-          {answerError && <Alert type="error" showIcon message={answerError} />}
+          {answerError && <Alert type="error" showIcon title={answerError} />}
           <Space wrap>
             <Typography.Text strong>共 {total} 题</Typography.Text>
             {viewData.groups.map((group) =>
@@ -437,7 +437,7 @@ export default function QuestionBankPanel({
             if (!group || group.questions.length === 0) return null;
             return (
               <Card key={type} size="small" title={type}>
-                <Space direction="vertical" style={{ width: "100%" }} size="small">
+                <Space orientation="vertical" style={{ width: "100%" }} size="small">
                   {group.questions.map((item, index) => {
                     const key = `${group.type}-${index}`;
                     const answer = answerMap[key];
@@ -531,7 +531,7 @@ export default function QuestionBankPanel({
         {banks.loading && !banks.data ? (
           <Spin />
         ) : banks.error ? (
-          <Alert type="error" showIcon message={banks.error} />
+          <Alert type="error" showIcon title={banks.error} />
         ) : (banks.data ?? []).length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有保存过题库" />
         ) : (

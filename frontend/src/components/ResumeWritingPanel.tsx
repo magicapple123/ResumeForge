@@ -88,7 +88,7 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
   };
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Input.TextArea
         rows={4}
         value={text}
@@ -153,7 +153,7 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
       )}
 
       {!loading && phrasesResult && (
-        <Space direction="vertical" style={{ width: "100%" }} size="small">
+        <Space orientation="vertical" style={{ width: "100%" }} size="small">
           {(
             [
               ["star", "STAR 版"],

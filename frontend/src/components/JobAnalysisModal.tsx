@@ -1,6 +1,7 @@
 /** 按需生成岗位需求总结和通用求职建议。 */
 import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, List, Modal, Skeleton, Space, Tag, Typography } from "antd";
+import { Alert, Button, Empty, Listy, Modal, Skeleton, Space, Tag, Typography } from "antd";
+import { ListyItem } from "./common/ListyItem";
 import { announceBackgroundFailure, announceBackgroundResult } from "../utils/backgroundTask";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { generateJobAnalysis } from "../api/jobs";
@@ -84,8 +85,8 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
       destroyOnHidden
     >
       {error ? (
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <Alert type="error" showIcon message={error} />
+        <Space orientation="vertical" style={{ width: "100%" }}>
+          <Alert type="error" showIcon title={error} />
           <Button
             aria-label="重新生成解读"
             icon={<ReloadOutlined />}
@@ -104,7 +105,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
             type="info"
             showIcon
             style={{ marginTop: 12 }}
-            message="生成期间可以关掉这个弹窗去做别的，完成后会提醒你（弹窗 + 提示音）。"
+            title="生成期间可以关掉这个弹窗去做别的，完成后会提醒你（弹窗 + 提示音）。"
           />
           <div style={{ marginTop: 12, textAlign: "right" }}>
             <Button
@@ -140,13 +141,14 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
 
           <Typography.Title level={5}>核心需求</Typography.Title>
           {data.requirements.length ? (
-            <List
-              dataSource={data.requirements}
-              renderItem={(item) => {
+            <Listy
+              items={data.requirements}
+              rowKey={(item) => `${item.requirement}|${item.category ?? ""}`}
+              itemRender={(item) => {
                 const priority = PRIORITY_META[item.priority];
                 return (
-                  <List.Item>
-                    <Space direction="vertical" size={5} style={{ width: "100%" }}>
+                  <ListyItem>
+                    <Space orientation="vertical" size={5} style={{ width: "100%" }}>
                       <Space wrap>
                         <Tag color={priority.color}>{priority.label}</Tag>
                         {item.category && <Tag>{item.category}</Tag>}
@@ -156,7 +158,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
                         <Typography.Text type="secondary">依据：{item.evidence}</Typography.Text>
                       )}
                     </Space>
-                  </List.Item>
+                  </ListyItem>
                 );
               }}
             />
@@ -166,18 +168,19 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
 
           <Typography.Title level={5}>求职建议</Typography.Title>
           {data.advice.length ? (
-            <List
-              dataSource={data.advice}
-              renderItem={(item) => (
-                <List.Item>
-                  <Space direction="vertical" size={4}>
+            <Listy
+              items={data.advice}
+              rowKey={(item) => `${item.title}|${item.action}`}
+              itemRender={(item) => (
+                <ListyItem>
+                  <Space orientation="vertical" size={4}>
                     <Typography.Text strong>{item.title}</Typography.Text>
                     <Typography.Text>{item.action}</Typography.Text>
                     {item.rationale && (
                       <Typography.Text type="secondary">原因：{item.rationale}</Typography.Text>
                     )}
                   </Space>
-                </List.Item>
+                </ListyItem>
               )}
             />
           ) : (

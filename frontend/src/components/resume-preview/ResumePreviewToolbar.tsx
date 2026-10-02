@@ -19,7 +19,7 @@ interface Props {
    * React 状态，"hover 生效 → 父重渲染 → 绑定 effect 重跑 → cleanup 清空"会形成振荡
    * （实测 hover 一生效就被清掉）。
    */
-  hoverChipRef: RefObject<HTMLSpanElement>;
+  hoverChipRef: RefObject<HTMLSpanElement | null>;
   onRewriteHoverTarget?: (path: string) => void;
   interactionMode: InteractionMode;
   scale: number;

@@ -14,11 +14,12 @@ import {
   App,
   Button,
   Card,
+  Checkbox,
   DatePicker,
   Empty,
   Form,
   Input,
-  List,
+  Listy,
   Modal,
   Segmented,
   Select,
@@ -26,20 +27,21 @@ import {
   Spin,
   Tag,
   Typography,
-  Checkbox,
 } from "antd";
-import { RowActions } from "./common/RowActions";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
-import BatchActionBar from "../components/common/BatchActionBar";
-import { useBatchSelection } from "../hooks/useBatchSelection";
 import { createReminder, deleteReminder, listReminders, updateReminder } from "../api/reminders";
 import { REMINDER_KINDS, REMINDER_KIND_LABELS, REMINDER_STATUS_LABELS } from "../types";
 import type { Reminder, ReminderKind, ReminderStatus } from "../types";
 import { formatDateTime } from "../utils/format";
 import { RecordDetailDrawer } from "./common/RecordDetail";
 import { isFromInnerControl } from "./common/recordDetailCore";
+import { ListyItem, ListyMeta } from "./common/ListyItem";
+import { LISTY_ITEM_PADDING_DEFAULT } from "./common/listyPadding";
+import { RowActions } from "./common/RowActions";
+import BatchActionBar from "./common/BatchActionBar";
+import { useBatchSelection } from "../hooks/useBatchSelection";
 import CalendarView from "./tracker/CalendarView";
 
 interface Option {
@@ -184,7 +186,7 @@ export default function ReminderPanel({
   };
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Card size="small" title="日历提醒">
         <Space wrap>
           <Select
@@ -232,13 +234,15 @@ export default function ReminderPanel({
               </Button>
             </BatchActionBar>
           )}
-          <List
-            dataSource={items}
-            renderItem={(item) => {
+          <Listy
+            items={items}
+            rowKey={(item) => item.id}
+            styles={{ item: { ...LISTY_ITEM_PADDING_DEFAULT } }}
+            itemRender={(item) => {
               // 多选模式：行简化为勾选框 + 点行切换，不提供单行操作。
               if (batch.selecting) {
                 return (
-                  <List.Item
+                  <ListyItem
                     className="detail-trigger"
                     actions={[
                       <Checkbox
@@ -250,11 +254,8 @@ export default function ReminderPanel({
                     ]}
                     onClick={() => batch.toggle(item.id)}
                   >
-                    <List.Item.Meta
-                      title={item.title}
-                      description={formatDateTime(item.remind_at)}
-                    />
-                  </List.Item>
+                    <ListyMeta title={item.title} description={formatDateTime(item.remind_at)} />
+                  </ListyItem>
                 );
               }
               // 「详情」放在第一位：列表只放得下摘要，备注、绑定对象这些都得点进去看。
@@ -310,7 +311,7 @@ export default function ReminderPanel({
                 />,
               );
               return (
-                <List.Item
+                <ListyItem
                   className="detail-trigger"
                   actions={actions}
                   // 整条点开详情；行内按钮与二次确认不会被这一层抢走。
@@ -319,7 +320,7 @@ export default function ReminderPanel({
                     setDetail(item);
                   }}
                 >
-                  <List.Item.Meta
+                  <ListyMeta
                     title={
                       <Space size={6} wrap>
                         <span>{item.title}</span>
@@ -344,7 +345,7 @@ export default function ReminderPanel({
                       </Typography.Text>
                     }
                   />
-                </List.Item>
+                </ListyItem>
               );
             }}
           />

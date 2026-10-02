@@ -164,7 +164,7 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
       width="min(680px, 94vw)"
       destroyOnHidden
     >
-      <Space direction="vertical" style={{ width: "100%" }} size="middle">
+      <Space orientation="vertical" style={{ width: "100%" }} size="middle">
         <div>
           <Typography.Text strong>分享权限</Typography.Text>
           <Radio.Group
@@ -242,7 +242,7 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
 
             <div>
               <Typography.Text strong>文件清单</Typography.Text>
-              <Space direction="vertical" style={{ width: "100%", marginTop: 8 }} size={4}>
+              <Space orientation="vertical" style={{ width: "100%", marginTop: 8 }} size={4}>
                 {result.files.map((file) => (
                   <Space key={file.name} style={{ width: "100%" }} wrap>
                     <Button
@@ -266,7 +266,7 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
                 <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
                   把收件人回传的评论内容粘贴进来导入（Markdown 或 JSON）。
                 </Typography.Paragraph>
-                <Space direction="vertical" style={{ width: "100%" }} size="small">
+                <Space orientation="vertical" style={{ width: "100%" }} size="small">
                   <Radio.Group
                     value={commentFormat}
                     onChange={(event) => setCommentFormat(event.target.value)}

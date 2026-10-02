@@ -40,7 +40,7 @@ export interface UseTouTouCardDragOptions {
 }
 
 export interface CardDragState {
-  gripRef: RefObject<HTMLDivElement>;
+  gripRef: RefObject<HTMLDivElement | null>;
   /** 存在自由位置时叠在卡片上的内联定位（优先级高于一切默认定位规则）。 */
   cardStyle: CSSProperties;
   dragging: boolean;

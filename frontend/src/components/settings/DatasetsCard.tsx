@@ -7,7 +7,8 @@ import {
   Card,
   Empty,
   Input,
-  List,
+  Listy,
+  Spin,
   Modal,
   Space,
   Tag,
@@ -19,6 +20,7 @@ import { RowActions } from "../common/RowActions";
 import type { DatasetInfo } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import FileDropZone from "../common/FileDropZone";
+import { ListyItem, ListyMeta } from "../common/ListyItem";
 
 /** 备份包导入后默认用的数据集名字：去掉扩展名，空文件名时给一个兜底。 */
 function datasetNameFrom(file: File): string {
@@ -166,75 +168,81 @@ export default function DatasetsCard({
           </Upload>
         </FileDropZone>
 
-        <List
-          style={{ marginTop: 16 }}
-          loading={loading}
-          dataSource={datasets}
-          locale={{
-            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据集" />,
-          }}
-          renderItem={(dataset) => (
-            <List.Item
-              actions={[
-                <Tooltip key="switch" title={dataset.is_active ? "正在使用" : "切换到这份数据"}>
-                  <Button
-                    type="link"
-                    icon={<SwapOutlined />}
-                    disabled={dataset.is_active || busy || !dataset.exists}
-                    loading={switchingId === dataset.id}
-                    onClick={() => onActivate(dataset)}
-                  >
-                    切换
-                  </Button>
-                </Tooltip>,
-                // 编辑/删除收进「···」菜单：删除不再以红图标裸露在行内（全局约定）。
-                <RowActions
-                  key="more"
-                  disabled={busy}
-                  more={[
-                    {
-                      key: "rename",
-                      label: "重命名",
-                      disabled: isProtected(dataset),
-                      onClick: () => onOpenRename(dataset),
-                    },
-                    {
-                      key: "delete",
-                      label: "删除",
-                      danger: true,
-                      disabled: dataset.is_active || isProtected(dataset),
-                      confirm: `确定删除数据集“${dataset.name}”？会移入 data/datasets/.trash/，需要时可以手动找回`,
-                      onClick: () => onDelete(dataset),
-                    },
+        {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
+        <Spin spinning={loading}>
+          {datasets.length === 0 ? (
+            <div style={{ marginTop: 16 }}>
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据集" />
+            </div>
+          ) : (
+            <Listy
+              style={{ marginTop: 16 }}
+              items={datasets}
+              rowKey={(dataset) => dataset.id}
+              itemRender={(dataset) => (
+                <ListyItem
+                  actions={[
+                    <Tooltip key="switch" title={dataset.is_active ? "正在使用" : "切换到这份数据"}>
+                      <Button
+                        type="link"
+                        icon={<SwapOutlined />}
+                        disabled={dataset.is_active || busy || !dataset.exists}
+                        loading={switchingId === dataset.id}
+                        onClick={() => onActivate(dataset)}
+                      >
+                        切换
+                      </Button>
+                    </Tooltip>,
+                    // 编辑/删除收进「···」菜单：删除不再以红图标裸露在行内（全局约定）。
+                    <RowActions
+                      key="more"
+                      disabled={busy}
+                      more={[
+                        {
+                          key: "rename",
+                          label: "重命名",
+                          disabled: isProtected(dataset),
+                          onClick: () => onOpenRename(dataset),
+                        },
+                        {
+                          key: "delete",
+                          label: "删除",
+                          danger: true,
+                          disabled: dataset.is_active || isProtected(dataset),
+                          confirm: `确定删除数据集“${dataset.name}”？会移入 data/datasets/.trash/，需要时可以手动找回`,
+                          onClick: () => onDelete(dataset),
+                        },
+                      ]}
+                    />,
                   ]}
-                />,
-              ]}
-            >
-              <List.Item.Meta
-                title={
-                  <>
-                    {dataset.name}
-                    {dataset.is_active && (
-                      // “当前”单独看指代不明；顺带说明它为什么不能删、不能切。
-                      <Tooltip title="当前正在使用的数据集">
-                        <Tag color="blue" style={{ marginLeft: 8 }}>
-                          当前
-                        </Tag>
-                      </Tooltip>
-                    )}
-                  </>
-                }
-                description={
-                  <>
-                    {formatSize(dataset.size_bytes)}
-                    {dataset.created_at ? ` · ${formatDateTime(dataset.created_at)}` : ""}
-                    {dataset.source ? ` · ${dataset.source}` : ""}
-                  </>
-                }
-              />
-            </List.Item>
+                >
+                  <ListyMeta
+                    title={
+                      <>
+                        {dataset.name}
+                        {dataset.is_active && (
+                          // “当前”单独看指代不明；顺带说明它为什么不能删、不能切。
+                          <Tooltip title="当前正在使用的数据集">
+                            <Tag color="blue" style={{ marginLeft: 8 }}>
+                              当前
+                            </Tag>
+                          </Tooltip>
+                        )}
+                      </>
+                    }
+                    description={
+                      <>
+                        {formatSize(dataset.size_bytes)}
+                        {dataset.created_at ? ` · ${formatDateTime(dataset.created_at)}` : ""}
+                        {dataset.source ? ` · ${dataset.source}` : ""}
+                      </>
+                    }
+                  />
+                </ListyItem>
+              )}
+            />
           )}
-        />
+        </Spin>
       </Card>
 
       <Modal
@@ -251,7 +259,7 @@ export default function DatasetsCard({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="名称只用于在列表里区分，不影响数据内容。"
+          title="名称只用于在列表里区分，不影响数据内容。"
         />
         <Input
           value={renameValue}
@@ -274,7 +282,7 @@ export default function DatasetsCard({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="新建后进入数据集列表，可随时切换过去；激活后是一份空数据（岗位、简历、资料都从零开始）。"
+          title="新建后进入数据集列表，可随时切换过去；激活后是一份空数据（岗位、简历、资料都从零开始）。"
         />
         <Input
           value={createName}
