@@ -6,7 +6,7 @@
 fastapi==0.141.1
 starlette==1.6.0
 # Multipart form parsing for the referral note-image upload endpoint.
-python-multipart==0.0.20
+python-multipart==0.0.32
 uvicorn[standard]==0.53.0
 sqlalchemy==2.0.40
 pydantic==2.11.3
