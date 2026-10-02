@@ -27,7 +27,7 @@ fonttools==4.65.0
 # Browser automation for the apply center: the CDP client talks to a user's real
 # Chrome/Edge over the DevTools WebSocket. Pure Python (no compiler, has wheels),
 # and the HTTP side reuses the existing httpx dependency.
-websocket-client==1.8.0
+websocket-client==1.9.2
 # Word (.docx) export (R-16): pure-Python with wheels, no build toolchain, so the
 # first-run installer stays compiler-free. Layout reuses ResumeLayout instead of
 # introducing a second layout engine.
