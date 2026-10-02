@@ -201,7 +201,7 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
   const convertedRate = stats?.total ? Math.round((stats.rate ?? 0) * 100) : 0;
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Card size="small" title="内推转化率">
         <Row gutter={16}>
           <Col span={8}>
@@ -215,7 +215,7 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
               title="转化率"
               value={convertedRate}
               suffix="%"
-              valueStyle={{ color: convertedRate >= 50 ? "#389e0d" : undefined }}
+              styles={{ content: { color: convertedRate >= 50 ? "#389e0d" : undefined } }}
             />
           </Col>
         </Row>
@@ -307,7 +307,7 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
                   </Space>
                 }
                 description={
-                  <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                  <Space orientation="vertical" size={2} style={{ width: "100%" }}>
                     <Typography.Text type="secondary">
                       {item.company}
                       {item.relation ? ` · ${item.relation}` : ""}

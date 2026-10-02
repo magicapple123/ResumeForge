@@ -59,11 +59,11 @@ export default function MultiJobDraftList({
       <Alert
         type="info"
         showIcon
-        message={`识别出 ${drafts.length} 份招聘信息（${engineLabel}）`}
+        title={`识别出 ${drafts.length} 份招聘信息（${engineLabel}）`}
         description="确认拆分是否正确，取消勾选不想保存的那些。保存后它们会各自成为岗位广场里的一条岗位。"
       />
 
-      <Space direction="vertical" style={{ width: "100%", marginTop: 12 }}>
+      <Space orientation="vertical" style={{ width: "100%", marginTop: 12 }}>
         {drafts.map((draft, index) => (
           <Card
             key={`${index}-${draft.title}-${draft.company}`}

@@ -230,7 +230,7 @@ export default function WebFormProfileSection({
         type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        message="这一区只给「网申填表」用，不会进入简历"
+        title="这一区只给「网申填表」用，不会进入简历"
         description="这里补充简历资料中没有的网申字段；网申填表会合并读取简历资料和这里的补充资料，但生成简历不会读取这里。证件、家庭与健康信息只存本机。"
       />
 

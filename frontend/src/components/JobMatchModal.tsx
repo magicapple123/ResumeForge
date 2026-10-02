@@ -181,7 +181,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
   return (
     <Modal
       title={
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Space>
             <RobotOutlined />
             岗位匹配度分析
@@ -201,7 +201,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
         <Alert
           type="error"
           showIcon
-          message={error}
+          title={error}
           style={{ marginBottom: 12 }}
           action={
             <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()}>
@@ -216,14 +216,14 @@ export default function JobMatchModal({ job, onClose }: Props) {
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          message="分析期间可以关掉这个窗口去做别的，完成后会弹通知并响一声（只要页面没刷新）。"
+          title="分析期间可以关掉这个窗口去做别的，完成后会弹通知并响一声（只要页面没刷新）。"
         />
       ) : null}
 
       {loading && !data ? (
         <Skeleton active paragraph={{ rows: 8 }} />
       ) : !hasResult ? (
-        <Space direction="vertical" style={{ width: "100%" }} size={12}>
+        <Space orientation="vertical" style={{ width: "100%" }} size={12}>
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这个岗位还没有做过匹配分析" />
           <Typography.Paragraph type="secondary">
             分析会读取你的个人资料与简历，对每条招聘要求给出「已匹配 / 表达缺口 / 证据不足 /
@@ -263,7 +263,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
                 type="error"
                 showIcon
                 style={{ marginBottom: 12 }}
-                message="存在真实缺口：默认不自动投递，需要你在加入投递台时逐条确认。"
+                title="存在真实缺口：默认不自动投递，需要你在加入投递台时逐条确认。"
               />
             )}
             {result.admission === "needs_confirm" && (
@@ -271,7 +271,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
                 type="warning"
                 showIcon
                 style={{ marginBottom: 12 }}
-                message="含证据不足或待确认的条目：加入投递台时需要你逐条确认。"
+                title="含证据不足或待确认的条目：加入投递台时需要你逐条确认。"
               />
             )}
 

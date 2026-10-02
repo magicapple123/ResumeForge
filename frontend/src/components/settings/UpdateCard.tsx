@@ -250,7 +250,7 @@ export default function UpdateCard() {
       )}
 
       {checking && !result && <Spin style={{ marginTop: 16 }} />}
-      {error && <Alert style={{ marginTop: 16 }} type="error" showIcon message={error} />}
+      {error && <Alert style={{ marginTop: 16 }} type="error" showIcon title={error} />}
       {status?.state === "downloading" && (
         <div style={{ marginTop: 16 }}>
           <Typography.Text>
@@ -265,18 +265,18 @@ export default function UpdateCard() {
           style={{ marginTop: 16 }}
           type="info"
           showIcon
-          message="更新器已启动，应用即将退出并自动重启。"
+          title="更新器已启动，应用即将退出并自动重启。"
         />
       )}
       {status?.state === "failed" && status.message && (
-        <Alert style={{ marginTop: 16 }} type="error" showIcon message={status.message} />
+        <Alert style={{ marginTop: 16 }} type="error" showIcon title={status.message} />
       )}
       {status?.state === "ready" && (
         <Alert
           style={{ marginTop: 16 }}
           type="success"
           showIcon
-          message="更新包已下载完成"
+          title="更新包已下载完成"
           description="点击「重启并安装」后，应用会在原路径覆盖旧版本并自动重启。"
         />
       )}
@@ -285,9 +285,9 @@ export default function UpdateCard() {
           style={{ marginTop: 16 }}
           type={result.update_available ? "success" : "info"}
           showIcon
-          message={result.message || "检查完成"}
+          title={result.message || "检查完成"}
           description={
-            <Space direction="vertical" size={4} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={4} style={{ width: "100%" }}>
               {result.latest_version && <span>最新版本：{result.latest_version}</span>}
               {result.published_at && <span>发布时间：{result.published_at.slice(0, 10)}</span>}
               {result.notes && (

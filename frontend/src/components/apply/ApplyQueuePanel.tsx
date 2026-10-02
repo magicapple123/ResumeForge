@@ -333,7 +333,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
       width: 220,
       render: (title: string, item) => (
         <Tooltip title={`加入队列于 ${formatDateTime(item.created_at)}`}>
-          <Space direction="vertical" size={0} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={0} style={{ width: "100%" }}>
             <Button
               type="link"
               className="table-text-link"
@@ -382,7 +382,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
       key: "assets",
       width: 260,
       render: (_, item) => (
-        <Space direction="vertical" size={0} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={0} style={{ width: "100%" }}>
           <Typography.Text
             type="secondary"
             ellipsis={{ tooltip: item.resume_title || "按默认规则解析" }}
@@ -458,7 +458,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
         className="apply-queue-flow"
         type="info"
         showIcon
-        message="队列里放的是「准备投、但还没投」的岗位"
+        title="队列里放的是「准备投、但还没投」的岗位"
         description={
           <ol style={{ margin: 0, paddingLeft: 18 }}>
             <li>
@@ -490,7 +490,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
-          message={`队列里有 ${unsupportedPending.length} 个岗位不能用投递台自动投递`}
+          title={`队列里有 ${unsupportedPending.length} 个岗位不能用投递台自动投递`}
           description={
             <span>
               它们的来源不在投递台支持的招聘网站内（已在「岗位」列标出
@@ -527,7 +527,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
       {items.length === 0 ? (
         <Empty
           description={
-            <Space direction="vertical" size={4}>
+            <Space orientation="vertical" size={4}>
               <Typography.Text>队列还是空的：先去「岗位广场」挑几个岗位。</Typography.Text>
               <Typography.Text type="secondary">
                 在「岗位广场」点岗位名打开详情 → 点「加入投递台」，就能把它加到这里；

@@ -96,7 +96,7 @@ function ReportCard({
         <Alert
           type="warning"
           showIcon
-          message="报告没有生成成功"
+          title="报告没有生成成功"
           description={
             report.summary || "可以在资料箱里找到这场面试的问答记录，重新体验一次也可以。"
           }

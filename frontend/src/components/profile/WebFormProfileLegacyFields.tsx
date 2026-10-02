@@ -14,7 +14,7 @@ export default function WebFormProfileLegacyFields() {
         type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        message="这些只存在你自己的电脑上，只在你点「填充」时写进网页，不会进入简历导出，也不会随简历发给大模型。"
+        title="这些只存在你自己的电脑上，只在你点「填充」时写进网页，不会进入简历导出，也不会随简历发给大模型。"
       />
       <Row gutter={12}>
         <Col xs={24} sm={12} lg={8}>

@@ -87,7 +87,7 @@ export default function TemplatePreviewModal({ template, formatPresets, onClose 
         </Typography.Text>
       </Space>
       {error ? (
-        <Alert type="error" showIcon message="预览渲染失败" description={error} />
+        <Alert type="error" showIcon title="预览渲染失败" description={error} />
       ) : loading ? (
         <div className="template-preview-loading">
           <Spin />

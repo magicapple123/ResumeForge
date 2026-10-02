@@ -93,7 +93,7 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
       title={skillId === null ? "新建助手技能" : "技能详情与编辑"}
       open={open}
       width={760}
-      maskClosable={!saving}
+      mask={{ closable: !saving }}
       onCancel={onClose}
       footer={
         <Space>
@@ -114,7 +114,7 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            message="技能提示词会加进助手的系统提示，等于给它加一条长期要求；知识文件是助手按需查阅的参考资料。"
+            title="技能提示词会加进助手的系统提示，等于给它加一条长期要求；知识文件是助手按需查阅的参考资料。"
           />
           <Form.Item label="技能名称" required>
             <Input
@@ -160,10 +160,10 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
                 type="warning"
                 showIcon
                 style={{ marginBottom: 12 }}
-                message="这个技能的知识文件体积很大，本次没有加载全部内容；保存时不会改动知识文件（只更新提示词与开关）。"
+                title="这个技能的知识文件体积很大，本次没有加载全部内容；保存时不会改动知识文件（只更新提示词与开关）。"
               />
             )}
-            <Space direction="vertical" style={{ width: "100%" }}>
+            <Space orientation="vertical" style={{ width: "100%" }}>
               {files.map((file, index) => (
                 <div key={`${file.path}-${index}`} className="skill-file-editor">
                   <Space style={{ width: "100%" }} align="start">

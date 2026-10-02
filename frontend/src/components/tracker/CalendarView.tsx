@@ -242,7 +242,7 @@ export default function CalendarView({
                     </Space>
                   }
                   description={
-                    <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                    <Space orientation="vertical" size={2} style={{ width: "100%" }}>
                       <Typography.Text type="secondary">
                         {formatDateTime(item.remind_at)}
                       </Typography.Text>

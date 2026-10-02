@@ -112,7 +112,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
         </Space>
       }
     >
-      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={12} style={{ width: "100%" }}>
         <Typography.Text type="secondary">
           把招聘邮件、短信或站内通知的内容粘贴进来（也可以贴截图）。识别结果先给你看"会发生什么"，
           你确认之后才会写入。

@@ -199,7 +199,7 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
       title={editing ? "编辑台账条目" : "新建台账条目"}
       onCancel={onClose}
       width={760}
-      destroyOnClose
+      destroyOnHidden
       footer={
         <Space>
           <Button onClick={onClose}>取消</Button>

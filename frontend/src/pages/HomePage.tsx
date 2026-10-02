@@ -240,7 +240,7 @@ export default function HomePage() {
   return (
     <div>
       {statsError && (
-        <Alert type="error" showIcon message={statsError} style={{ marginBottom: 16 }} />
+        <Alert type="error" showIcon title={statsError} style={{ marginBottom: 16 }} />
       )}
 
       <Row gutter={[16, 16]}>
@@ -451,7 +451,7 @@ export default function HomePage() {
           onSearch={(value) => void onSearch(value)}
         />
         {searchError && (
-          <Alert type="error" showIcon message={searchError} style={{ marginTop: 16 }} />
+          <Alert type="error" showIcon title={searchError} style={{ marginTop: 16 }} />
         )}
         {searched && (
           <div className="home-search-results">

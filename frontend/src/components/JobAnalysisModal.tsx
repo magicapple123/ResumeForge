@@ -84,8 +84,8 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
       destroyOnHidden
     >
       {error ? (
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <Alert type="error" showIcon message={error} />
+        <Space orientation="vertical" style={{ width: "100%" }}>
+          <Alert type="error" showIcon title={error} />
           <Button
             aria-label="重新生成解读"
             icon={<ReloadOutlined />}
@@ -104,7 +104,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
             type="info"
             showIcon
             style={{ marginTop: 12 }}
-            message="生成期间可以关掉这个弹窗去做别的，完成后会提醒你（弹窗 + 提示音）。"
+            title="生成期间可以关掉这个弹窗去做别的，完成后会提醒你（弹窗 + 提示音）。"
           />
           <div style={{ marginTop: 12, textAlign: "right" }}>
             <Button
@@ -146,7 +146,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
                 const priority = PRIORITY_META[item.priority];
                 return (
                   <List.Item>
-                    <Space direction="vertical" size={5} style={{ width: "100%" }}>
+                    <Space orientation="vertical" size={5} style={{ width: "100%" }}>
                       <Space wrap>
                         <Tag color={priority.color}>{priority.label}</Tag>
                         {item.category && <Tag>{item.category}</Tag>}
@@ -170,7 +170,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
               dataSource={data.advice}
               renderItem={(item) => (
                 <List.Item>
-                  <Space direction="vertical" size={4}>
+                  <Space orientation="vertical" size={4}>
                     <Typography.Text strong>{item.title}</Typography.Text>
                     <Typography.Text>{item.action}</Typography.Text>
                     {item.rationale && (

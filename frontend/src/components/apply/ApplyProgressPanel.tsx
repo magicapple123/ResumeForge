@@ -63,7 +63,7 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
       title: "岗位",
       dataIndex: "job_title",
       render: (title: string, item) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Text>{title || "（岗位已删除）"}</Typography.Text>
           {item.company && (
             <Typography.Text type="secondary" className="apply-progress-company">
@@ -152,7 +152,7 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
         <Alert
           type={alertType(task.status)}
           showIcon
-          message={alertMessage}
+          title={alertMessage}
           className="apply-progress-alert"
         />
       )}

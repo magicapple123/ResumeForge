@@ -100,7 +100,7 @@ export default function CollectSiteFilters({ disabled }: Props) {
       <Alert
         type="warning"
         showIcon
-        message="没能读到招聘网站的筛选条件"
+        title="没能读到招聘网站的筛选条件"
         description="不影响采集：关键词与城市照常生效。点下面的「重新读取」可以再试一次。"
         action={
           <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()}>
@@ -150,7 +150,7 @@ export default function CollectSiteFilters({ disabled }: Props) {
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          message="想拿到你这个账号可见的完整选项，请先启动投递专用浏览器"
+          title="想拿到你这个账号可见的完整选项，请先启动投递专用浏览器"
           description="个别选项因人而异（例如学生账号在「求职类型」里能看到「实习」），只有在你已登录的浏览器里才读得到。当前用的是全网通用清单，够用但不一定全。"
         />
       )}

@@ -157,7 +157,7 @@ export default function MaterialFormModal({
       open={open}
       width={720}
       onCancel={onCancel}
-      maskClosable={!submitting}
+      mask={{ closable: !submitting }}
       footer={
         <Space>
           <Button onClick={onCancel} disabled={submitting}>
@@ -173,7 +173,7 @@ export default function MaterialFormModal({
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="资料箱用来放还没整理进简历的零散材料：证书、作品说明、链接、笔记等。求职助手可以读取这里的内容并按需引用。"
+        title="资料箱用来放还没整理进简历的零散材料：证书、作品说明、链接、笔记等。求职助手可以读取这里的内容并按需引用。"
       />
       <Form layout="vertical">
         <Form.Item label="标题">
