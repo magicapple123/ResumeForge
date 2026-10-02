@@ -128,13 +128,13 @@ export default function SearchCard() {
           type="warning"
           showIcon
           style={{ marginBottom: 16 }}
-          message="没能读取已保存的设置"
+          title="没能读取已保存的设置"
           description={`${loadError}。下面显示的是默认值，保存会覆盖服务端当前的设置。`}
         />
       )}
 
       <Spin spinning={loading}>
-        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+        <Space orientation="vertical" size="large" style={{ width: "100%" }}>
           <div>
             <Typography.Text strong>搜索来源</Typography.Text>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
@@ -167,7 +167,7 @@ export default function SearchCard() {
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
               对排序最靠前的几条结果打开页面读取正文。关闭时助手只能看到搜索摘要。
             </Typography.Paragraph>
-            <Space direction="vertical">
+            <Space orientation="vertical">
               {FETCH_PAGE_OPTIONS.map((option) => (
                 <Checkbox
                   key={option.value}

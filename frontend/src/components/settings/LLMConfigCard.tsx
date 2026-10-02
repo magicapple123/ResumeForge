@@ -196,7 +196,7 @@ export default function LLMConfigCard({
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="默认支持所有兼容 OpenAI Chat Completions 协议的模型服务：DeepSeek、豆包（火山方舟）、Kimi、通义千问、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Ollama 等；把「接口协议」切到 Anthropic 原生后也可以直连 Claude。API Key 保存在本地数据库中，仅本机可访问。"
+        title="默认支持所有兼容 OpenAI Chat Completions 协议的模型服务：DeepSeek、豆包（火山方舟）、Kimi、通义千问、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Ollama 等；把「接口协议」切到 Anthropic 原生后也可以直连 Claude。API Key 保存在本地数据库中，仅本机可访问。"
       />
       <Form
         form={form}
@@ -422,7 +422,7 @@ export default function LLMConfigCard({
             type={thinkingAlertType()}
             showIcon
             style={{ marginBottom: 12 }}
-            message={thinkingResult.probed ? thinkingResult.message : thinkingResult.note}
+            title={thinkingResult.probed ? thinkingResult.message : thinkingResult.note}
             description={
               thinkingResult.probed && thinkingResult.note ? thinkingResult.note : undefined
             }
@@ -444,7 +444,7 @@ export default function LLMConfigCard({
               type="info"
               showIcon
               style={{ marginBottom: 12 }}
-              message="留空的参数不会发送给模型服务，由服务商使用默认值。这些参数并非所有服务商都支持，填写前请先看官方文档。"
+              title="留空的参数不会发送给模型服务，由服务商使用默认值。这些参数并非所有服务商都支持，填写前请先看官方文档。"
             />
             <Row gutter={[16, 0]}>
               <Col xs={24} md={6}>
@@ -579,7 +579,7 @@ export default function LLMConfigCard({
               type="info"
               showIcon
               style={{ marginTop: 4 }}
-              message="协议换成「Anthropic 原生」后，思考预算、Top K 等参数才有意义；换成 OpenAI 兼容时它们会被忽略。思考预算与「思考模式」是同一件事的两代写法：填了预算就以预算为准，留空则由开关与强度决定。"
+              title="协议换成「Anthropic 原生」后，思考预算、Top K 等参数才有意义；换成 OpenAI 兼容时它们会被忽略。思考预算与「思考模式」是同一件事的两代写法：填了预算就以预算为准，留空则由开关与强度决定。"
             />
           </>
         )}
@@ -592,7 +592,7 @@ export default function LLMConfigCard({
           style={{ marginTop: 16 }}
           type={testResult.ok ? "success" : "error"}
           showIcon
-          message={
+          title={
             testResult.ok
               ? `${testResult.message}（耗时 ${testResult.latency_ms}ms）`
               : `连接失败：${testResult.message}`

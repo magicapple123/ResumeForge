@@ -120,7 +120,7 @@ export default function TrackerPage() {
   return (
     <div className="tracker-page">
       <div className="tracker-page-head">
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Title level={4} style={{ margin: 0 }}>
             求职进度
           </Typography.Title>
@@ -162,7 +162,7 @@ export default function TrackerPage() {
         <Statistic title="总数" value={data?.total ?? 0} />
         <Statistic title="进行中" value={data?.active_count ?? 0} prefix={<FunnelPlotOutlined />} />
         <Statistic title="本月投递" value={data?.month_count ?? 0} />
-        <Statistic title="Offer" value={data?.offer_count ?? 0} valueStyle={{ color: "#389e0d" }} />
+        <Statistic title="Offer" value={data?.offer_count ?? 0} styles={{ content: { color: "#389e0d" } }} />
         <Statistic title="已结束" value={data?.rejected_count ?? 0} />
       </div>
 

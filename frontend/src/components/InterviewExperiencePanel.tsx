@@ -124,7 +124,7 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
   };
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Card size="small" title="面经知识库">
         <Space wrap>
           <Input.Search
@@ -212,7 +212,7 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
                   </Space>
                 }
                 description={
-                  <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                  <Space orientation="vertical" size={2} style={{ width: "100%" }}>
                     <Typography.Text type="secondary">
                       {item.company}
                       {item.position ? ` · ${item.position}` : ""}

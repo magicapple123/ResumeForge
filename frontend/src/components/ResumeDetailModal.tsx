@@ -206,7 +206,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
       destroyOnHidden
     >
       {error ? (
-        <Alert type="error" showIcon message={error} />
+        <Alert type="error" showIcon title={error} />
       ) : !detail || !html ? (
         <Skeleton active paragraph={{ rows: 8 }} />
       ) : (

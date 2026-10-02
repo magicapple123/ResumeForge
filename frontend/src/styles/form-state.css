@@ -7,8 +7,11 @@
   opacity: 0 !important;
 }
 
-.profile-page:not(.is-editing) .ant-select-selection-placeholder,
-.settings-page:not(.is-editing) .ant-select-selection-placeholder {
+/* antd 6 起占位符类名由 .ant-select-selection-placeholder 改为
+   .ant-select-placeholder（jsdom 实测 DOM：.ant-select-placeholder 直接挂在
+   .ant-select-content 内），选择器跟着换，规则才不会静默失效。 */
+.profile-page:not(.is-editing) .ant-select-placeholder,
+.settings-page:not(.is-editing) .ant-select-placeholder {
   color: transparent !important;
   opacity: 0 !important;
 }
@@ -28,6 +31,8 @@
   resize: vertical;
 }
 
-.settings-page:not(.is-editing) .ant-select-disabled .ant-select-selection-item {
+/* antd 6 起选中值不再渲染 .ant-select-selection-item，值文本落在
+   .ant-select-content 内（jsdom 实测），选择器同步更新。 */
+.settings-page:not(.is-editing) .ant-select-disabled .ant-select-content {
   color: #262626 !important;
 }

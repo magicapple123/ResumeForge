@@ -71,7 +71,7 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
 
   return (
     <>
-      <Modal open={open && loading} footer={null} closable={false} maskClosable={false} centered>
+      <Modal open={open && loading} footer={null} closable={false} mask={{ closable: false }} centered>
         <div style={{ textAlign: "center", padding: "28px 0" }}>
           <Spin />
           <div style={{ marginTop: 12 }}>正在读取我的资料…</div>

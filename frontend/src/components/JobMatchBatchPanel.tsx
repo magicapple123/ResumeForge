@@ -76,7 +76,7 @@ function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
         const meta = MATCH_STATUS_META[condition.status];
         return (
           <List.Item>
-            <Space direction="vertical" size={2} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={2} style={{ width: "100%" }}>
               <Space size={6} wrap>
                 <Tag color={meta.color}>{meta.label}</Tag>
                 <Typography.Text strong>{condition.label}</Typography.Text>
@@ -97,7 +97,7 @@ function MatchDetail({ item }: { item: JobMatchBatchItem }) {
   if (!result) return null;
   const admission = ADMISSION_META[result.admission];
   return (
-    <Space direction="vertical" size="small" style={{ width: "100%" }}>
+    <Space orientation="vertical" size="small" style={{ width: "100%" }}>
       <Space wrap>
         <Tag color={admission.color}>准入：{admission.label}</Tag>
         <Tag>
@@ -123,7 +123,7 @@ function BatchItemCard({ item }: { item: JobMatchBatchItem }) {
   if (item.status === "failed") {
     return (
       <Card size="small" title={`${item.job_title}${item.company ? ` · ${item.company}` : ""}`}>
-        <Alert type="error" showIcon message={item.error || "本岗位分析失败"} />
+        <Alert type="error" showIcon title={item.error || "本岗位分析失败"} />
       </Card>
     );
   }
@@ -150,7 +150,7 @@ function BatchItemCard({ item }: { item: JobMatchBatchItem }) {
           percent={score}
           format={(value) => <span>{value}</span>}
         />
-        <Space direction="vertical" size={2}>
+        <Space orientation="vertical" size={2}>
           <Typography.Text strong>匹配度参考分：{score}</Typography.Text>
           <Typography.Text type="secondary">
             {item.result ? `准入：${ADMISSION_META[item.result.admission].label}` : "暂无结论"}
@@ -269,11 +269,11 @@ export default function JobMatchBatchPanel({
     loading && !batch ? (
       <Skeleton active paragraph={{ rows: 8 }} />
     ) : batch ? (
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
         <Alert
           type={batch.failed_count > 0 ? "warning" : "success"}
           showIcon
-          message={`已完成 ${batch.completed_count} 个岗位，${batch.failed_count} 个岗位失败`}
+          title={`已完成 ${batch.completed_count} 个岗位，${batch.failed_count} 个岗位失败`}
           description={`结果已保存，可在「历史记录」中回看；已按匹配度参考分从高到低排列。${batch.model ? `本批使用模型：${batch.model}` : "本批未配置模型，使用本地降级结果。"}`}
         />
         <List
@@ -339,7 +339,7 @@ export default function JobMatchBatchPanel({
         </Space>
       }
     >
-      {error ? <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} /> : null}
+      {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
       <Tabs
         activeKey={activeTab}
         onChange={setActiveTab}

@@ -205,7 +205,7 @@ export default function ResumeLayoutDiagnosisCard({
           type="warning"
           showIcon
           className="resume-diagnosis-floor"
-          message={`内容超出了 ${layout.page_limit} 页：预览已经整体缩小，字会偏小。暂时读不到详细诊断，可以稍后重试。`}
+          title={`内容超出了 ${layout.page_limit} 页：预览已经整体缩小，字会偏小。暂时读不到详细诊断，可以稍后重试。`}
         />
       )}
 
@@ -225,7 +225,7 @@ export default function ResumeLayoutDiagnosisCard({
           type="info"
           showIcon
           className="resume-diagnosis-floor"
-          message={fitRoom.font_floor_note}
+          title={fitRoom.font_floor_note}
           action={
             layout.page_limit < 3 && (
               <Button size="small" disabled={disabled || fitting !== null} onClick={onAddPage}>

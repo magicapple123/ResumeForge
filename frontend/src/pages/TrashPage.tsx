@@ -119,7 +119,7 @@ export default function TrashPage() {
       title: "名称",
       dataIndex: "title",
       render: (value: string, row) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Text strong>{value || "（无标题）"}</Typography.Text>
           {row.subtitle && (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -190,7 +190,7 @@ export default function TrashPage() {
   return (
     <div className="trash-page">
       <div className="trash-page-head">
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Title level={4} style={{ margin: 0 }}>
             回收站
           </Typography.Title>
@@ -241,11 +241,11 @@ export default function TrashPage() {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="回收站里的内容不会出现在其它页面"
+        title="回收站里的内容不会出现在其它页面"
         description="岗位、简历、投递记录、台账条目、资料箱材料与助手会话——删除后它们立刻从各自的列表、首页统计和搜索里消失，只在这里可见。"
       />
 
-      {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
+      {error && <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} />}
 
       {data && data.total > 0 && (
         <Segmented
@@ -266,7 +266,7 @@ export default function TrashPage() {
       ) : (
         <Table
           rowKey={(row) => `${row.type}-${row.id}`}
-          size="middle"
+          size="medium"
           columns={columns}
           dataSource={items}
           pagination={false}

@@ -76,7 +76,7 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
   }
   if (error && !data) {
     return (
-      <Space direction="vertical" style={{ width: "100%" }}>
+      <Space orientation="vertical" style={{ width: "100%" }}>
         <Typography.Text type="danger">{error}</Typography.Text>
         <Button onClick={onClose}>关闭</Button>
       </Space>

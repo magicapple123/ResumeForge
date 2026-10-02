@@ -116,7 +116,7 @@ describe("InterviewReviewPanel 自动保存与历史富还原", () => {
     // 选简历后点击「反向优化简历」。
     const resumeSelect = screen
       .getByText("关联简历（反向优化必选）")
-      .closest(".ant-select-selector");
+      .closest(".ant-select-content");
     fireEvent.mouseDown(resumeSelect!);
     fireEvent.click(await screen.findByText("我的简历"));
 

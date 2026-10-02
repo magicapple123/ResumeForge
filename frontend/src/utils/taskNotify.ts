@@ -26,9 +26,9 @@ export interface TaskDoneNotice {
   onConfirm?: () => void;
 }
 
-/** 右上角卡片（AntD `notification`）的字段名。 */
+/** 右上角卡片（AntD `notification`）的字段名。antd 6 起标题参数叫 `title`。 */
 interface NotificationPayload {
-  message: ReactNode;
+  title: ReactNode;
   description?: ReactNode;
   duration?: number;
   actions?: ReactNode;
@@ -38,8 +38,10 @@ interface NotificationPayload {
  * 居中弹窗（AntD `modal`）的字段名。
  *
  * **必须与上面的卡片分开**：AntD 的 `modal.info` 认的是 `title` / `content`，而
- * `notification` 认的是 `message` / `description`。曾经两者共用一个 `message` 形状，
- * 结果弹窗**标题与正文都是空的**（AntD 收不到它认识的键，不报错，只是什么都不显示）。
+ * `notification` 认的是 `title` / `description`（antd 6 起通知卡片的标题参数由
+ * `message` 改名 `title`，但正文仍是 `description`，与弹窗的 `content` 不同）。
+ * 曾经两者共用一个 `message` 形状，结果弹窗**标题与正文都是空的**（AntD 收不到
+ * 它认识的键，不报错，只是什么都不显示）。
  */
 interface ModalPayload {
   title: ReactNode;
@@ -96,7 +98,9 @@ export function notifyTaskDone(notice: TaskDoneNotice): void {
   }
   const kind = notice.kind ?? "success";
   host.notification[kind]({
-    message: notice.title,
+    // antd 6 起通知卡片的标题字段由 message 改名 title（渲染类同为
+    // .ant-notification-notice-title，见 taskNotify.modal.test.tsx 的选择器）。
+    title: notice.title,
     description: notice.description,
     actions: notice.actions,
     duration: 6,

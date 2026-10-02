@@ -69,7 +69,7 @@ export default function ReminderPopupCard() {
         打开应用时，若还有未完成的日历提醒，是否弹出「近期提醒」列表。
       </Typography.Paragraph>
       <Spin spinning={loading}>
-        <Space direction="vertical" size={4}>
+        <Space orientation="vertical" size={4}>
           <Switch
             checked={enabled}
             loading={saving}
@@ -86,7 +86,7 @@ export default function ReminderPopupCard() {
         生成类任务（简历生成、岗位解读、匹配度分析等）与投递 /
         采集批次**完成时**，是否播放一声提示音。 弹窗提醒不受这个开关影响。
       </Typography.Paragraph>
-      <Space direction="vertical" size={4}>
+      <Space orientation="vertical" size={4}>
         <Switch
           checked={sound}
           checkedChildren="开"

@@ -189,7 +189,7 @@ export default function AssistantComposer({
           </div>
         ) : null}
         {!compact && attachments.length > 0 && (
-          <Alert type="info" showIcon message="已选择的附件或个人资料会发送给当前配置的模型服务" />
+          <Alert type="info" showIcon title="已选择的附件或个人资料会发送给当前配置的模型服务" />
         )}
         {attachments.length > 0 && (
           <div className="assistant-composer-attachments">

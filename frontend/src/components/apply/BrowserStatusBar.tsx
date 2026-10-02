@@ -161,7 +161,7 @@ export default function BrowserStatusBar() {
       )}
 
       {data?.logged_in_hint && (
-        <Alert type="info" showIcon message={data.logged_in_hint} style={{ marginTop: 8 }} />
+        <Alert type="info" showIcon title={data.logged_in_hint} style={{ marginTop: 8 }} />
       )}
       {data?.entry_url && (
         <Typography.Paragraph type="secondary" className="apply-browser-path">
@@ -174,7 +174,7 @@ export default function BrowserStatusBar() {
           {data.browser_name ? `${data.browser_name}（${data.browser_path}）` : data.browser_path}
         </Typography.Paragraph>
       )}
-      {error && <Alert type="error" showIcon message={error} style={{ marginTop: 8 }} />}
+      {error && <Alert type="error" showIcon title={error} style={{ marginTop: 8 }} />}
     </div>
   );
 }
