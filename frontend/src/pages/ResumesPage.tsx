@@ -26,7 +26,9 @@ import {
   updateResumeNote,
 } from "../api/resumes";
 import { diffResume } from "../api/resumeWriting";
+import BatchActionBar from "../components/common/BatchActionBar";
 import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
+import { useBatchSelection } from "../hooks/useBatchSelection";
 import ResumeDetailModal from "../components/ResumeDetailModal";
 import ResumeFieldDiffView from "../components/ResumeFieldDiffView";
 import { computeFieldDiff } from "../utils/resumeFieldDiff";
@@ -39,7 +41,9 @@ import { formatDateTime } from "../utils/format";
 export default function ResumesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
+  // 批量选择：勾选若干份简历后一次删除（全部进回收站，可恢复）。
+  const batch = useBatchSelection<number>();
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -224,7 +228,12 @@ export default function ResumesPage() {
       key: "actions",
       width: 150,
       render: (_, record) => (
-        <RowActions primary={primaryActions(record)} more={secondaryActions(record)} />
+        <RowActions
+          primary={primaryActions(record)}
+          more={secondaryActions(record)}
+          // 多选模式下收起行内操作，避免勾选与单行操作互相干扰。
+          disabled={batch.selecting}
+        />
       ),
     },
   ];
@@ -282,6 +291,29 @@ export default function ResumesPage() {
     ...primaryActions(record),
     ...secondaryActions(record),
   ];
+
+  /** 批量删除：逐条走同一个软删除接口（全部进回收站），全部完成后一次性刷新。 */
+  const removeSelected = useCallback(() => {
+    const ids = [...batch.selectedIds];
+    if (ids.length === 0) return;
+    modal.confirm({
+      title: `删除选中的 ${ids.length} 份简历？`,
+      content: "会移入回收站，之后可以在「回收站」里恢复。",
+      okText: "删除",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        const results = await Promise.allSettled(ids.map((id) => deleteResume(id)));
+        const failed = results.filter((item) => item.status === "rejected").length;
+        if (failed === 0) {
+          message.success(`已删除 ${ids.length} 份简历，可在「回收站」里恢复`);
+        } else {
+          message.warning(`已删除 ${ids.length - failed} 份，${failed} 份删除失败，请重试`);
+        }
+        batch.exitSelecting();
+        void reload();
+      },
+    });
+  }, [batch, message, modal, reload]);
 
   const confirmRename = async () => {
     if (!renameTarget || renaming) return;
@@ -386,12 +418,32 @@ export default function ResumesPage() {
             { value: false, label: "通用简历" },
           ]}
         />
+        {!batch.selecting && (
+          <Button onClick={batch.enterSelecting} disabled={loading || (data?.total ?? 0) === 0}>
+            批量选择
+          </Button>
+        )}
       </Space>
+      {batch.selecting && (
+        <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+          <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
+            删除所选
+          </Button>
+        </BatchActionBar>
+      )}
       <Table
         rowKey="id"
         columns={columns}
         dataSource={data?.items ?? []}
         loading={loading}
+        rowSelection={
+          batch.selecting
+            ? {
+                selectedRowKeys: [...batch.selectedIds],
+                onChange: (keys) => batch.setSelected(keys as number[]),
+              }
+            : undefined
+        }
         components={{
           body: {
             // 整行右键即可重命名、收藏或删除，不必先找到右侧的按钮。
@@ -400,7 +452,7 @@ export default function ResumesPage() {
               const record = (data?.items ?? []).find((item) => String(item.id) === rowKey);
               if (!record) return <tr {...props} />;
               return (
-                <RowContextMenu items={contextActions(record)}>
+                <RowContextMenu items={batch.selecting ? [] : contextActions(record)}>
                   <tr {...props} />
                 </RowContextMenu>
               );

@@ -1,6 +1,11 @@
 import { Alert } from "antd";
 import type { RefObject } from "react";
-import { A4_WIDTH_PX, APPROXIMATE_PAGINATION_NOTE, type InteractionMode } from "./config";
+import {
+  A4_WIDTH_PX,
+  APPROXIMATE_PAGINATION_NOTE,
+  type InteractionMode,
+  PAGE_GAP_PX,
+} from "./config";
 
 interface Props {
   warnings: string[];
@@ -105,10 +110,16 @@ export default function ResumePreviewCanvas({
           {Array.from({ length: separatorCount }, (_, index) => {
             const pageNumber = index + 2;
             return (
+              // 页间隙：盖住连续纸面的分页处，露出视口底色 + 双侧纸边阴影，
+              // 观感是两张并排的独立 A4 纸（替代旧的两点虚线）。间隙压住的是
+              // 简历自身的页边距区域，不遮正文。
               <div
                 key={pageNumber}
                 className="resume-preview-page-separator"
-                style={{ left: (index + 1) * A4_WIDTH_PX * scale }}
+                style={{
+                  left: (index + 1) * A4_WIDTH_PX * scale,
+                  width: PAGE_GAP_PX * scale,
+                }}
               >
                 <span className="resume-preview-page-separator-line" />
                 <span className="resume-preview-page-separator-label">

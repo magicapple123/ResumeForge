@@ -130,10 +130,16 @@ export function getAssistantOrbSetting(): Promise<AssistantOrbSetting> {
   return request("/settings/assistant-orb");
 }
 
-export function saveAssistantOrbSetting(enabled: boolean): Promise<AssistantOrbSetting> {
+/**
+ * 保存「投投」悬浮球设置。**整对象 PUT**：两个开关保存时都带全量当前值，
+ * 只带一个的话后端整份落库会把另一个静默打回默认。
+ */
+export function saveAssistantOrbSetting(
+  setting: AssistantOrbSetting,
+): Promise<AssistantOrbSetting> {
   return request("/settings/assistant-orb", {
     method: "PUT",
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify(setting),
   });
 }
 

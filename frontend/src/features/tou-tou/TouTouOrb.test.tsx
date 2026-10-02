@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import TouTouOrb from "./TouTouOrb";
 import { TOU_TOU_FACE_SOURCES } from "./touTouFaces";
+import { defaultTouTouContext, TouTouContext } from "./touTouContext";
 
 afterEach(() => {
   cleanup();
@@ -27,15 +28,55 @@ describe("TouTouOrb", () => {
   });
 
   it("opens the assistant from click, Enter and Space", () => {
+    vi.useFakeTimers();
+    const onOpen = vi.fn();
+    render(<TouTouOrb onOpen={onOpen} />);
+    const button = screen.getByRole("button", { name: "打开求职助手" });
+
+    // 单击要等双击判窗（280ms）过去才打开；键盘没有双击手势，立即打开。
+    fireEvent.click(button);
+    expect(onOpen).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(280);
+    });
+    expect(onOpen).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(button, { key: "Enter" });
+    fireEvent.keyDown(button, { key: " " });
+    expect(onOpen).toHaveBeenCalledTimes(3);
+  });
+
+  it("opens the clipboard on double click instead of the assistant", () => {
+    vi.useFakeTimers();
+    const onOpen = vi.fn();
+    const onOpenClipboard = vi.fn();
+    render(<TouTouOrb onOpen={onOpen} onOpenClipboard={onOpenClipboard} />);
+    const button = screen.getByRole("button", { name: "打开求职助手" });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(onOpenClipboard).toHaveBeenCalledTimes(1);
+    // 挂起的单击打开已被取消，判窗后再推进也不会打开助手。
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("falls back to opening the assistant when clipboard entry is not wired", () => {
+    vi.useFakeTimers();
     const onOpen = vi.fn();
     render(<TouTouOrb onOpen={onOpen} />);
     const button = screen.getByRole("button", { name: "打开求职助手" });
 
     fireEvent.click(button);
-    fireEvent.keyDown(button, { key: "Enter" });
-    fireEvent.keyDown(button, { key: " " });
+    fireEvent.click(button);
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
 
-    expect(onOpen).toHaveBeenCalledTimes(3);
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the error face until the caller changes the status", () => {
@@ -46,11 +87,9 @@ describe("TouTouOrb", () => {
       vi.advanceTimersByTime(120_000);
     });
 
+    // 助手忙时 inactivity 计时被清、球不会收纳，所以探头脸根本不参与——出错脸全程保持。
     expect(document.querySelector(".tt")).toHaveClass("is-error");
-    expect(document.querySelector(".tt-face.is-active")).toHaveAttribute(
-      "src",
-      expect.stringContaining("ball-error"),
-    );
+    expect(activeFaceSrc()).toContain("ball-error");
   });
 
   it("keeps a keyboard-accessible edge sliver after inactivity", () => {
@@ -197,10 +236,158 @@ describe("TouTouOrb", () => {
       );
 
       // 眨眼是 JS 定时换脸，CSS 的媒体查询拦不住它——这里要真的不眨。
+      // 20s 时球已静置收纳：探头张望的脸是 JS 态（不受 motion 偏好影响），
+      // 但此刻它显示好奇而不是眨眼借用的睡脸，即证明眨眼被关掉了。
       act(() => {
         vi.advanceTimersByTime(20_000);
       });
-      expect(activeFaceSrc()).toContain("ball-idle");
+      expect(activeFaceSrc()).toContain("ball-curious");
+      expect(screen.getByRole("button", { name: "打开求职助手" })).toHaveClass("is-hidden");
+    } finally {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: originalMatchMedia,
+      });
+    }
+  });
+
+  it("peeks with the curious face on all four hidden edges and restores on wake", () => {
+    vi.useFakeTimers();
+    render(<TouTouOrb />);
+
+    act(() => {
+      vi.advanceTimersByTime(12_000);
+    });
+
+    const button = screen.getByRole("button", { name: "打开求职助手" });
+    expect(button).toHaveClass("is-hidden");
+    // 探头张望：露出近一半 + 好奇脸朝屏幕内（CSS 动画在样式表里，jsdom 只能钉 JS 侧的脸）。
+    expect(activeFaceSrc()).toContain("ball-curious");
+
+    fireEvent.mouseEnter(button);
+    expect(button).not.toHaveClass("is-hidden");
+    expect(activeFaceSrc()).toContain("ball-idle");
+  });
+
+  it("keeps the sleeping face while hidden — a peeking orb is still asleep", () => {
+    vi.useFakeTimers();
+    render(<TouTouOrb />);
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(screen.getByRole("button", { name: "打开求职助手" })).toHaveClass("is-hidden");
+    expect(activeFaceSrc()).toContain("ball-sleep");
+  });
+
+  it("stops popping tips when tipsEnabled is off, and resumes when on", () => {
+    vi.useFakeTimers();
+    function renderOrb(tipsEnabled: boolean) {
+      return render(
+        <TouTouContext.Provider value={{ ...defaultTouTouContext, tipsEnabled }}>
+          <TouTouOrb />
+        </TouTouContext.Provider>,
+      );
+    }
+
+    const off = renderOrb(false);
+    act(() => {
+      vi.advanceTimersByTime(1_500); // 出场好奇归位：标语计时器随 effect 重排
+    });
+    act(() => {
+      vi.advanceTimersByTime(6_000); // 重排后的首条标语到点（5s + 余量越过边界）
+    });
+    expect(document.querySelector(".tt-tip")).toBeNull();
+    off.unmount();
+
+    // 开关是独立的：关标语不影响球本身，重新开启后周期自然恢复（无需刷新）。
+    renderOrb(true);
+    act(() => {
+      vi.advanceTimersByTime(1_500);
+    });
+    act(() => {
+      vi.advanceTimersByTime(6_000);
+    });
+    expect(document.querySelector(".tt-tip")).not.toBeNull();
+  });
+
+  it("shows the content face when petted quickly, then returns to idle", () => {
+    vi.useFakeTimers();
+    render(<TouTouOrb />);
+    const button = screen.getByRole("button", { name: "打开求职助手" });
+
+    act(() => {
+      vi.advanceTimersByTime(1_500); // 出场的好奇先回落到正常
+    });
+    // 700ms 窗口内快速划过 ≥3 笔（每笔间隔 ≥120ms 的节流）→ 被抚摸。
+    act(() => {
+      fireEvent.mouseMove(button);
+      vi.advanceTimersByTime(150);
+      fireEvent.mouseMove(button);
+      vi.advanceTimersByTime(150);
+      fireEvent.mouseMove(button);
+    });
+
+    expect(button).toHaveClass("is-petted");
+    expect(activeFaceSrc()).toContain("ball-done");
+
+    act(() => {
+      vi.advanceTimersByTime(1_500);
+    });
+    expect(button).not.toHaveClass("is-petted");
+    expect(activeFaceSrc()).toContain("ball-idle");
+  });
+
+  it("does not show the pet face while the assistant is busy", () => {
+    vi.useFakeTimers();
+    render(<TouTouOrb status="thinking" />);
+    const button = screen.getByRole("button", { name: "打开求职助手" });
+
+    act(() => {
+      fireEvent.mouseMove(button);
+      vi.advanceTimersByTime(150);
+      fireEvent.mouseMove(button);
+      vi.advanceTimersByTime(150);
+      fireEvent.mouseMove(button);
+    });
+
+    expect(button).not.toHaveClass("is-petted");
+    expect(activeFaceSrc()).toContain("ball-thinking");
+  });
+
+  it("swaps faces but not the sway class when reduced motion is requested", () => {
+    vi.useFakeTimers();
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn().mockReturnValue({
+        matches: true,
+        media: "(prefers-reduced-motion: reduce)",
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    });
+
+    try {
+      render(<TouTouOrb />);
+      const button = screen.getByRole("button", { name: "打开求职助手" });
+      act(() => {
+        vi.advanceTimersByTime(1_500);
+        fireEvent.mouseMove(button);
+        vi.advanceTimersByTime(150);
+        fireEvent.mouseMove(button);
+        vi.advanceTimersByTime(150);
+        fireEvent.mouseMove(button);
+      });
+
+      // reduced-motion：只换脸不摇（不加 is-petted 摇摆类），脸照常换成满足的 done。
+      expect(button).not.toHaveClass("is-petted");
+      expect(activeFaceSrc()).toContain("ball-done");
     } finally {
       Object.defineProperty(window, "matchMedia", {
         configurable: true,

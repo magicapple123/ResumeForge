@@ -134,12 +134,14 @@ class ResumeGenerateRunner:
             generator = ResumeGenerator(provider)
             resume: dict | None = None
             warnings: list[str] = []
+            coverage_notes: list[dict] = []
+            rationale = ""
             raw_parts: list[str] = []
             last_char_commit = 0
 
             try:
                 async def consume() -> None:
-                    nonlocal resume, warnings, last_char_commit
+                    nonlocal resume, warnings, coverage_notes, rationale, last_char_commit
                     async for event in generator.generate(
                         profile_out, job_out, options, baseline=baseline
                     ):
@@ -160,6 +162,8 @@ class ResumeGenerateRunner:
                         elif event["type"] == "done":
                             resume = event["resume"]
                             warnings = event["warnings"]
+                            coverage_notes = event.get("coverage_notes") or []
+                            rationale = event.get("rationale") or ""
 
                 asyncio.run(consume())
             except _GenerationCancelled:
@@ -230,6 +234,8 @@ class ResumeGenerateRunner:
                     page_limit=options.page_limit,
                     font_scale=options.font_scale,
                     custom_instruction=options.custom_instruction,
+                    coverage_notes=coverage_notes,
+                    rationale=rationale,
                     commit=False,
                 )
             except Exception:  # noqa: BLE001 - 落库失败不能让任务停在 running

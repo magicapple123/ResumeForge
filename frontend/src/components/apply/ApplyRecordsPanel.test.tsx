@@ -187,12 +187,14 @@ describe("删除投递记录", () => {
     fireEvent.click(batchHead(7));
     await screen.findByText("高级后端工程师（高并发方向）");
 
-    fireEvent.click(screen.getByRole("button", { name: "删除批次 7" }));
+    // 组头的删除收进了「···」菜单：打开菜单 → 点「删除本批」→ 确认。
+    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[0]);
+    fireEvent.click(await screen.findByText(/删除本批（2 条）/));
     // 必须二次确认——删除是用户可见的破坏性动作。
-    expect(await screen.findByText(/删除这一批的 2 条记录/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/删除这一批的 2 条记录/)).length).toBeGreaterThan(0);
     expect(apiMocks.deleteRecordBatch).not.toHaveBeenCalled();
 
-    fireEvent.click(await screen.findByRole("button", { name: "确认删除批次 7" }));
+    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
 
     await waitFor(() => expect(apiMocks.deleteRecordBatch).toHaveBeenCalledWith(7));
   });
@@ -204,11 +206,14 @@ describe("删除投递记录", () => {
     fireEvent.click(batchHead(7));
     await screen.findByText("高级后端工程师（高并发方向）");
 
-    fireEvent.click(screen.getByRole("button", { name: /删除记录 高级后端工程师/ }));
-    expect(await screen.findByText("删除这条投递记录？")).toBeInTheDocument();
+    // 单条删除同样收进行内「···」菜单。
+    const row = screen.getByText("高级后端工程师（高并发方向）").closest("tr") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("删除"));
+    expect((await screen.findAllByText(/删除这条投递记录/)).length).toBeGreaterThan(0);
     expect(apiMocks.deleteRecord).not.toHaveBeenCalled();
 
-    fireEvent.click(await screen.findByRole("button", { name: "确认删除记录 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
 
     await waitFor(() => expect(apiMocks.deleteRecord).toHaveBeenCalledWith(1));
   });
@@ -218,10 +223,12 @@ describe("删除投递记录", () => {
 
     fireEvent.click(batchHead(7));
     await screen.findByText("高级后端工程师（高并发方向）");
-    fireEvent.click(screen.getByRole("button", { name: "删除批次 7" }));
-    await screen.findByText(/删除这一批/);
+    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[0]);
+    fireEvent.click(await screen.findByText(/删除本批/));
+    await screen.findAllByText(/删除这一批/);
 
-    fireEvent.click(await screen.findByRole("button", { name: "取消删除批次 7" }));
+    // 无 locale 时取消键是 "Cancel"。
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
 
     expect(apiMocks.deleteRecordBatch).not.toHaveBeenCalled();
   });

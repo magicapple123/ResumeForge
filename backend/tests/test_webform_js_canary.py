@@ -1710,3 +1710,110 @@ def test_panel_explains_that_the_title_bar_can_be_dragged(page_client):
     assert page_client.evaluate(
         _shadow("getComputedStyle(querySelector('.head')).cursor")
     ) == "grab"
+
+
+# ===== 历历悬浮球的注入脚本 =====
+
+# 球的脚本要 shadow host 先存在（它只往里装东西，自己不建 host）。
+LIVE_CONTROL_FIXTURE = """
+<!doctype html><html><body>
+  <div id="__rf_live_host__"></div>
+  <script>document.getElementById('__rf_live_host__').attachShadow({ mode: 'open' });</script>
+</body></html>
+"""
+
+# 悬停用例**不能**用上面那份：监听脚本只在"host 还不存在"时才建它，也才会顺手装上
+# 那份面板样式（里面那条通配 `button:hover` 正是把球刷成蓝色的元凶）。自己预建 host
+# 的话，这条用例会永远绿——等于没测。
+HOVER_FIXTURE = """
+<!doctype html><html><body>
+  <input id="rf-hover-field" type="text">
+</body></html>
+"""
+
+
+def test_the_control_ball_refreshes_its_styles_when_reinstalled(page_client):
+    """重复注入要**刷新样式表**，而不是"球已经在了就直接返回"。
+
+    这段脚本跟着应用版本走，而页面里那颗球是注入那一刻的样子：升级后如果不重载页面，
+    老样式会一直留着。用户反馈的"鼠标放上去仍有一圈深蓝底色"就是这么来的——那条
+    `:hover` 阴影早删了，页面上用的还是旧样式表（`object-fit` 那次也踩过同一个坑）。
+    """
+    from app.services.webform.live_control import install_live_control_script
+
+    page_client.navigate(f"data:text/html;charset=utf-8,{_urlencode(LIVE_CONTROL_FIXTURE)}")
+    script = install_live_control_script(True)
+    page_client.evaluate(script)
+
+    # 把样式表改写成"上一版"的样子，模拟页面里那颗老球。
+    page_client.evaluate(
+        # 标记必须是不可能出现在真样式表里的字符串：`#1677ff` 这类颜色值真表里也有，
+        # 拿它当哨兵会让"旧样式还在"永远为真。
+        "(() => { const style = document.getElementById('__rf_live_host__')"
+        ".shadowRoot.querySelector('style');"
+        " style.textContent = '.rf-stale-style-marker{outline:9px dashed red}'; return 'ok'; })()"
+    )
+
+    page_client.evaluate(script)
+
+    report = json.loads(
+        page_client.evaluate(
+            "(() => { const shadow = document.getElementById('__rf_live_host__').shadowRoot;"
+            " const style = shadow.querySelector('style');"
+            " return JSON.stringify({"
+            "   stillOld: style.textContent.indexOf('rf-stale-style-marker') >= 0,"
+            "   refreshed: style.textContent.indexOf('.has-avatar:hover') >= 0,"
+            "   balls: shadow.querySelectorAll('.rf-live-switch').length,"
+            "   avatars: shadow.querySelectorAll('.rf-live-avatar').length }); })()"
+        )
+    )
+    assert report["refreshed"] is True, "重复注入没有刷新样式表"
+    assert report["stillOld"] is False, "旧样式表还在"
+    assert report["balls"] == 1, "重复注入不该再建一颗球"
+    assert report["avatars"] == 1
+
+
+def test_the_mascot_button_keeps_its_own_look_on_hover(page_client):
+    """鼠标放到历历球上，它的底色不该被**面板的通配按钮规则**刷成蓝色。
+
+    面板那条 `button:not(.navchip)…:hover:not(:disabled)` 的特异性是 (0,5,1)，压得过球自己的
+    `.rf-live-switch.has-avatar:hover`（0,3,0）——两个脚本同住一个 shadow root，用户看到的就是
+    "鼠标一放上去多出一圈深蓝底"。**必须真的悬停再量计算样式**：只看静态断言的话，这条规则
+    与球的关系（谁压过谁）根本看不出来，这正是上一次漏掉它的原因。
+    """
+    from app.services.webform.engine import FOCUS_LISTENER_SCRIPT
+    from app.services.webform.live_control import install_live_control_script
+
+    page_client.navigate(f"data:text/html;charset=utf-8,{_urlencode(HOVER_FIXTURE)}")
+    page_client.evaluate(FOCUS_LISTENER_SCRIPT)
+    page_client.evaluate(install_live_control_script(True))
+    assert page_client.evaluate("Boolean(document.getElementById('__rf_live_host__'))"), (
+        "监听脚本没有建出 shadow host，这条会变成假绿"
+    )
+
+    center = json.loads(
+        page_client.evaluate(
+            "(() => { const host = document.getElementById('__rf_live_host__');"
+            " const b = host.shadowRoot.querySelector('.rf-live-switch').getBoundingClientRect();"
+            " return JSON.stringify({ x: b.x + b.width / 2, y: b.y + b.height / 2 }); })()"
+        )
+    )
+    page_client.send(
+        "Input.dispatchMouseEvent",
+        {"type": "mouseMoved", "x": center["x"], "y": center["y"], "buttons": 0},
+    )
+    time.sleep(0.3)
+
+    style = json.loads(
+        page_client.evaluate(
+            "(() => { const host = document.getElementById('__rf_live_host__');"
+            " const ball = host.shadowRoot.querySelector('.rf-live-switch');"
+            " const s = getComputedStyle(ball);"
+            " return JSON.stringify({ hovering: ball.matches(':hover'),"
+            "   background: s.backgroundColor, boxShadow: s.boxShadow }); })()"
+        )
+    )
+    # **先证明鼠标真的落在球上**：不证明的话，悬停没生效时这条会空过（踩过）。
+    assert style["hovering"] is True, f"鼠标没有停在球上，这条等于没测：{style}"
+    assert style["background"] == "rgba(0, 0, 0, 0)", f"悬停时球被刷上了底色：{style}"
+    assert style["boxShadow"] == "none", f"悬停时球多出了阴影：{style}"

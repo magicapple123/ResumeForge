@@ -3,7 +3,8 @@
 .tt-shell {
   --tt-size: 64px;
   --tt-edge: 24px;
-  --tt-hide-keep: 0.3;
+  /* 0.45：四边收纳后露出近一半（探头张望的姿态），睡着时另有 0.62 的覆写。 */
+  --tt-hide-keep: 0.45;
   --tt-float: 8px;
   --tt-turn: 12deg;
   --tt-breathe: 1.03;
@@ -12,7 +13,12 @@
   position: fixed;
   right: var(--tt-edge);
   bottom: var(--tt-edge);
-  z-index: 40;
+  /*
+   * 3000：高于 .app-exited-overlay（2000）、antd v5 Modal/Drawer（1000+）与
+   * .webform-target-floating-balls（1000）——任何覆盖层之上都能点到投投；
+   * 浏览器按命中测试派发点击，遮罩不会吞掉球的点击。
+   */
+  z-index: 3000;
   width: var(--tt-size);
   height: var(--tt-size);
   pointer-events: none;
@@ -103,6 +109,52 @@
 
 .tt-shell.is-edge-bottom .tt.is-hidden .tt-hide {
   transform: translateY(calc(var(--tt-size) * (1 - var(--tt-hide-keep)) + var(--tt-edge)));
+}
+
+/*
+ * 探头张望：hidden 时球露出近一半，再周期性朝屏幕内侧探一探（方向按边翻转）。
+ * 动画作用在 .tt-scale 上，不与 .tt-hide 的位移动画叠加，避免复合 transform 冲突。
+ * 表情（curious）由 TouTouOrb 的渲染层选择，不改 visualStatus。
+ */
+.tt-shell.is-edge-right .tt.is-hidden {
+  --tt-peek-x: -9px;
+  --tt-peek-y: 0px;
+}
+
+.tt-shell.is-edge-left .tt.is-hidden {
+  --tt-peek-x: 9px;
+  --tt-peek-y: 0px;
+}
+
+.tt-shell.is-edge-top .tt.is-hidden {
+  --tt-peek-x: 0px;
+  --tt-peek-y: 9px;
+}
+
+.tt-shell.is-edge-bottom .tt.is-hidden {
+  --tt-peek-x: 0px;
+  --tt-peek-y: -9px;
+}
+
+.tt.is-hidden .tt-scale {
+  animation: tt-peek 5.2s var(--tt-ease-soft) infinite;
+}
+
+@keyframes tt-peek {
+  0%,
+  55%,
+  100% {
+    transform: translate(0, 0);
+  }
+  70%,
+  85% {
+    transform: translate(var(--tt-peek-x, 0px), var(--tt-peek-y, 0px));
+  }
+}
+
+/* 鼠标移到探头的部分就完整滑出（hidden 时球仍露出 45%，hover 命中没问题）。 */
+.tt.is-hidden:hover .tt-hide {
+  transform: translate(0, 0);
 }
 
 /* 睡着了就多留一点在屏幕里：收纳成 30% 的细边时，闭着的眼睛根本看不出来。 */
@@ -206,6 +258,24 @@
 .tt.is-dragging .tt-breathe,
 .tt.is-dragging .tt-turn {
   animation-play-state: paused;
+}
+
+/* 被抚摸：身体左右轻轻摇摆 1.5s（配合 done 脸）。reduced-motion 下由 JS 只换脸不摇。 */
+.tt.is-petted .tt-turn {
+  animation: tt-pet-sway 1.5s var(--tt-ease-soft);
+}
+
+@keyframes tt-pet-sway {
+  0%,
+  100% {
+    transform: perspective(400px) rotateY(0deg);
+  }
+  25% {
+    transform: perspective(400px) rotateY(10deg);
+  }
+  75% {
+    transform: perspective(400px) rotateY(-10deg);
+  }
 }
 
 /*

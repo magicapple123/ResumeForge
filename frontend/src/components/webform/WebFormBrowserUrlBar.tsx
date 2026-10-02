@@ -1,5 +1,5 @@
 import { DeleteOutlined, LinkOutlined } from "@ant-design/icons";
-import { Button, Dropdown, Input, Space, Tooltip, Typography } from "antd";
+import { Button, Dropdown, Input, Popconfirm, Space, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
 import type { WebFormUrlHistory } from "../../types";
 
@@ -29,17 +29,23 @@ export default function WebFormBrowserUrlBar({
         <Typography.Text ellipsis={{ tooltip: item.url }} style={{ width: 330 }}>
           {item.title || item.url}
         </Typography.Text>
-        <Button
-          type="text"
-          size="small"
-          danger
-          icon={<DeleteOutlined />}
-          aria-label={`删除网址 ${item.url}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onDeleteHistory(item);
-          }}
-        />
+        <Popconfirm
+          title="删除这条历史网址？"
+          okText="删除"
+          cancelText="取消"
+          okButtonProps={{ danger: true }}
+          onConfirm={() => onDeleteHistory(item)}
+        >
+          {/* 阻止冒泡：删除不应顺带选中这条网址；确认气泡弹在菜单之上。 */}
+          <Button
+            type="text"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            aria-label={`删除网址 ${item.url}`}
+            onClick={(event) => event.stopPropagation()}
+          />
+        </Popconfirm>
       </Space>
     ),
   }));

@@ -36,6 +36,7 @@ from ..schemas.resume import (
     ResumeNoteUpdate,
     ResumeOut,
     ResumeRenderRequest,
+    ResumeReviseRequest,
     ResumeSuggestionsOut,
     ResumeTitleUpdate,
 )
@@ -60,6 +61,7 @@ from ..services.resume.resume_record import (
     resolved_style_name,
     save_record,
 )
+from ..services.resume.resume_revision import revise_resume
 from ..services.resume.resume_layout import (
     STATUS_OVERFLOW,
     build_fit_ladder,
@@ -223,6 +225,8 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                         page_limit=payload.options.page_limit,
                         font_scale=payload.options.font_scale,
                         custom_instruction=payload.options.custom_instruction,
+                        coverage_notes=done_event.get("coverage_notes") or [],
+                        rationale=done_event.get("rationale") or "",
                     )
                 # 只有持久化成功后才宣布完成；断流不会留下“成功但无历史记录”的状态。
                 yield _format_sse({"type": "saved", "record_id": record.id})
@@ -377,6 +381,8 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         content=ResumeContent.model_validate(record.content),
         warnings=record.warnings or [],
         parse_error=record.parse_error,
+        rationale=record.rationale or "",
+        coverage_notes=record.coverage_notes or [],
     )
 
 
@@ -454,6 +460,53 @@ async def suggest_resume_edits(resume_id: int, db: Session = Depends(get_db)):
         company=job.company,
         suggestions=suggestions,
     )
+
+
+@router.post("/{resume_id}/revise", response_model=ResumeOut)
+async def revise_existing_resume(
+    resume_id: int, payload: ResumeReviseRequest, db: Session = Depends(get_db)
+):
+    """按用户指令修订简历并更新当前记录。
+
+    指令为空 = 整体重新生成（事实口径不变，表达重写）；非空 = 只改提出的部分。
+    修订**不新建记录**：预览界面里的"这份简历"始终是同一条记录，用户不满意时
+    可以继续改或手动调整。旧的内容告警基于修订前的正文，一并清空。
+    """
+    record = db.get(ResumeRecord, resume_id)
+    if record is None or trash.is_deleted(record):
+        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
+    job = db.get(Job, record.job_id) if record.job_id is not None else None
+    if record.job_id is not None and (job is None or trash.is_deleted(job)):
+        # 关联岗位被删不该挡住修订：修订只需要简历本身，岗位只是可选的上下文。
+        job = None
+
+    config = get_llm_config(db)
+    if not config.base_url or not config.model:
+        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+    try:
+        resume = ResumeContent.model_validate(record.content)
+        job_out = JobOut.model_validate(job) if job is not None else None
+        provider = create_provider(config)
+        # 这里**不**像建议接口那样先 close：修订要更新这条记录，模型返回后还要
+        # 用同一个 session 落库；先关再重取反而容易拿到过期的对象状态。
+        revised = await revise_resume(provider, resume, job_out, payload.instructions)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LLMError as exc:
+        logger.warning("简历修订失败：%s", exc)
+        raise HTTPException(status_code=502, detail=f"修订简历失败：{exc}") from exc
+    except Exception as exc:  # noqa: BLE001 - 为用户提供可理解的失败提示
+        logger.exception("简历修订发生内部错误")
+        raise HTTPException(status_code=502, detail="修订简历失败，请稍后重试") from exc
+
+    record.content = revised.model_dump()
+    record.warnings = []
+    # 修订后的内容不再对应"生成时"的筛选状态：说明与未收录清单一并清空。
+    record.coverage_notes = []
+    record.rationale = ""
+    db.commit()
+    db.refresh(record)
+    return _to_resume_out(record)
 
 
 @router.get("/{resume_id}", response_model=ResumeOut)

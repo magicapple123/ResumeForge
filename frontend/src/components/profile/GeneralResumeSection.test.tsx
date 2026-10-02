@@ -107,7 +107,9 @@ describe("GeneralResumeSection", () => {
     renderSection();
     await screen.findByText("研发通用版");
 
-    fireEvent.click(screen.getByRole("button", { name: "重命名通用简历 研发通用版" }));
+    // 行操作收进了「···」菜单。
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("重命名"));
     fireEvent.change(screen.getByLabelText("重命名输入框"), {
       target: { value: "研发通用版 v2" },
     });
@@ -122,13 +124,11 @@ describe("GeneralResumeSection", () => {
     renderSection();
     await screen.findByText("研发通用版");
 
-    fireEvent.click(screen.getByRole("button", { name: "删除通用简历 研发通用版" }));
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("删除"));
 
     expect(apiMocks.deleteResume).not.toHaveBeenCalled();
-    const confirm = await waitFor(() =>
-      document.querySelector<HTMLButtonElement>(".ant-popconfirm-buttons .ant-btn-primary")!,
-    );
-    fireEvent.click(confirm);
+    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
 
     await waitFor(() => expect(apiMocks.deleteResume).toHaveBeenCalledWith(7));
     expect(await screen.findByText("还没有通用简历")).toBeInTheDocument();

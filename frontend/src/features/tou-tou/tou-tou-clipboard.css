@@ -1,0 +1,116 @@
+/* 投投剪贴板卡片：双击悬浮球弹出的小卡片，与助手卡片同一形态（把手拖动 + 关闭按钮）。 */
+
+.tt-clipboard-card {
+  position: fixed;
+  /* 默认停在悬浮球上方：球贴右下时占 bottom 24~88，剪贴板从 120 起，互不遮挡。
+     拖动后由内联 left/top 接管（freePosition 写进卡片仓库）。 */
+  right: 24px;
+  bottom: 120px;
+  z-index: 2985;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(600px, calc(100vh - 140px));
+  overflow: hidden;
+  border: 1px solid #cfe0f3;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 20px 55px rgb(25 61 99 / 24%);
+}
+
+.tt-clipboard-card.is-dragging {
+  cursor: grabbing;
+  box-shadow: 0 24px 60px rgb(25 61 99 / 30%);
+}
+
+.tt-clipboard-card-grip {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 12px 44px 10px 14px;
+  border-bottom: 1px solid #e5eef8;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tt-clipboard-card.is-dragging .tt-clipboard-card-grip {
+  cursor: grabbing;
+}
+
+.tt-clipboard-card-grip:focus-visible {
+  outline: 2px solid #91caff;
+  outline-offset: 2px;
+}
+
+.tt-clipboard-card-title {
+  color: #244364;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tt-clipboard-card-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #5b7187;
+  background: #eef5fb;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 26px;
+}
+
+.tt-clipboard-card-close:hover {
+  color: #16365c;
+  background: #dcecfb;
+}
+
+.tt-clipboard-card-close:focus-visible {
+  outline: 2px solid #91caff;
+  outline-offset: 2px;
+}
+
+.tt-clipboard-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.tt-clipboard-card-hint {
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.tt-clipboard-card-list {
+  margin-top: 12px;
+}
+
+.tt-clipboard-card-list .ant-list-item {
+  gap: 8px;
+  padding: 8px 4px;
+}
+
+.tt-clipboard-card-item-content {
+  margin-bottom: 0;
+  white-space: pre-wrap;
+}
+
+/* antd 的 showCount 计数（如 "0/4000"）被绝对定位悬在 textarea 包装盒下方一行、
+   不占布局高度，水平贴右——紧随其后的按钮行也是右对齐，两者会叠在一起（用户反馈）。
+   这里把计数拉回文档流（作用域限定在本卡，不动全局 antd 样式），按钮行自然让位。 */
+.tt-clipboard-card .ant-input-textarea-show-count .ant-input-data-count {
+  position: static;
+  display: block;
+  margin-top: 4px;
+  text-align: right;
+}

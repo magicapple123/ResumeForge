@@ -235,12 +235,14 @@ describe("ResumePreview 溢出时的多页视图", () => {
     expect(injected).toContain("column-fill");
     expect(injected).not.toContain("overflow-y:visible");
 
-    // 页分隔线是竖直的：定位用 left（水平），不再用 top（垂直）。
+    // 页间隙是竖直的：定位用 left（水平），不再用 top（垂直）；宽度随缩放给出的
+    // “裁切间隙”——观感是两张并排的独立 A4 纸，不是贯穿虚线。
     const separator = container.querySelector(
       ".resume-preview-page-separator",
     ) as HTMLElement | null;
     expect(separator).toBeTruthy();
     expect(separator?.style.left).toBeTruthy();
     expect(separator?.style.top).toBe("");
+    expect(Number.parseFloat(separator?.style.width ?? "")).toBeGreaterThan(0);
   });
 });

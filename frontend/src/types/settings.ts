@@ -140,9 +140,16 @@ export interface ReminderPopupSetting {
   enabled: boolean;
 }
 
-/** 是否显示全局「投投」求职助手悬浮球（默认开）。 */
+/**
+ * 「投投」悬浮球的设置（入口与提示标语，默认均开）。
+ *
+ * **每个后端字段都必须在这里出现**：这个接口是整份替换语义，少声明一个字段就会在
+ * 保存时被默认值填回去（与 `LLMConfig` 同一类坑）。
+ */
 export interface AssistantOrbSetting {
   enabled: boolean;
+  /** 悬浮球是否弹出轮换提示标语；默认开，兼容老数据。 */
+  tips_enabled: boolean;
 }
 
 export interface NavigationVisibility {

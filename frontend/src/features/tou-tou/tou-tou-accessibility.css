@@ -16,7 +16,9 @@
   .tt-breathe,
   .tt-turn,
   .tt-zzz,
-  .tt.is-pressed .tt-scale {
+  .tt.is-pressed .tt-scale,
+  .tt.is-hidden .tt-scale,
+  .tt.is-petted .tt-turn {
     animation: none;
   }
 

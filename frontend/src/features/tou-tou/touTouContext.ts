@@ -5,6 +5,8 @@ import type { TouTouEdge, TouTouStatus } from "./touTouTypes";
 
 export interface TouTouContextValue {
   enabled: boolean;
+  /** 悬浮球是否弹出轮换提示标语；与 `enabled` 分开——关标语不该连助手入口一起关掉。 */
+  tipsEnabled: boolean;
   edge: TouTouEdge;
   status: TouTouStatus;
   setEdge: (edge: TouTouEdge) => void;
@@ -13,6 +15,7 @@ export interface TouTouContextValue {
 
 export const defaultTouTouContext: TouTouContextValue = {
   enabled: true,
+  tipsEnabled: true,
   edge: "right",
   status: "idle",
   setEdge: () => undefined,

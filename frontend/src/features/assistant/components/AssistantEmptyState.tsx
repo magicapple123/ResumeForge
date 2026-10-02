@@ -1,7 +1,9 @@
 /** 新会话的引导提示和常用问题。 */
 
 import { Button, Empty, Typography } from "antd";
+import promoPlane from "../../../assets/toutou/promo-plane.png";
 import { STARTER_PROMPTS, type StarterPrompt } from "../assistantTypes";
+import { greetingForHour } from "../greetingText";
 
 interface Props {
   variant?: "page" | "floating";
@@ -22,18 +24,24 @@ export default function AssistantEmptyState({
 }: Props) {
   // 有技能在生效时页头已经写着，这里只在"一个都没启用"时负责让用户知道有这回事。
   const floating = variant === "floating";
+  // 时间感知：深夜/凌晨补一句休息提醒（本地单用户，浏览器时间即用户时间）。
+  const greeting = greetingForHour(new Date().getHours());
   const showSkillDiscovery = !floating && skillsLoaded && enabledSkillCount === 0;
   return (
     <div className="assistant-empty-state">
       <Empty
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        // 投投宣传图替代 antd 灰托盘图：主界面与悬浮卡都用同一张（悬浮卡用 CSS 缩小）。
+        image={<img src={promoPlane} alt="" className="assistant-empty-state-brand" />}
         description={
           <div className="assistant-empty-state-copy">
-            <Typography.Text strong>{floating ? "你好，我是投投" : "可以这样问"}</Typography.Text>
+            <Typography.Text strong>{greeting.headline}</Typography.Text>
+            {greeting.care ? (
+              <Typography.Text type="warning">{greeting.care}</Typography.Text>
+            ) : null}
             <Typography.Text type="secondary">
               {floating
                 ? "我可以帮你解决简历通使用问题、分析简历和岗位，并在你明确要求时操作允许的数据。"
-                : "可先关联岗位或简历，再按需开启资料和联网搜索。"}
+                : "能帮你打磨简历、对照岗位查缺补漏、解答求职问题。可先关联岗位或简历，再按需开启资料和联网搜索。"}
             </Typography.Text>
           </div>
         }

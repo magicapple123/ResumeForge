@@ -82,6 +82,19 @@ export function generateResumeSuggestions(id: number): Promise<ResumeSuggestions
   return request(`/resumes/${id}/suggestions`, { method: "POST" });
 }
 
+/**
+ * 按用户指令修订简历并更新当前记录。
+ *
+ * `instructions` 为空表示整体重新生成（事实不变、表达重写）；非空表示只修改
+ * 提出的内容——「只改提出的内容」这条约束由后端提示词强制，前端无法绕过。
+ */
+export function reviseResume(id: number, instructions: string): Promise<ResumeDetail> {
+  return request(`/resumes/${id}/revise`, {
+    method: "POST",
+    body: JSON.stringify({ instructions }),
+  });
+}
+
 /** 流式生成简历，事件定义见 types/StreamEvent；job_id 为 null 表示生成通用简历。 */
 export function generateResume(
   payload: { job_id: number | null; title?: string; options: GenerateOptions },

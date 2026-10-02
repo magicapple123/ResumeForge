@@ -94,6 +94,12 @@ describe("application navigation", () => {
     // 页头里必须和「退出」并排，且页脚不再有第二个源码入口。
     expect(headerActions?.textContent).toContain("退出");
     expect(container.querySelector(".app-sider-footer .app-repo-button")).toBeNull();
+
+    // 点击除直跳仓库外，还要弹出 Star 提示（Modal 挂在 document.body 上）。
+    fireEvent.click(repoLink!);
+    expect(await screen.findByText(/点一个 Star/)).toBeInTheDocument();
+    // 带 href 的 antd Button 渲染成 <a>，角色是 link。
+    expect(screen.getByRole("link", { name: "去点 Star" })).toHaveAttribute("href", GITHUB_REPO);
   });
 
   it("clicking the ResumeForge icon scrolls the current page to the top", async () => {

@@ -77,6 +77,8 @@ _SCALAR_FIELD_LABELS = {
     "phone": "电话",
     "email": "邮箱",
     "city": "城市",
+    "personal_website": "个人主页",
+    "github": "GitHub 主页",
     "job_intent": "求职意向",
     "summary": "个人总结",
 }

@@ -255,12 +255,18 @@ export default function AssistantComposer({
                 return Upload.LIST_IGNORE;
               }}
             >
+              {/*
+                compact 卡片里用短文案 + 限宽 + 显式抬层：
+                - 卡片 z-index 2990 高于 antd Tooltip 默认的 1070，不抬层会被卡片盖住；
+                - maxWidth 240 让长文案换行，贴近视口边缘时 autoAdjustOverflow 翻转，
+                  Tooltip 不会水平溢出；保持挂 body（挂进卡片会被 overflow: hidden 裁掉）。
+              */}
               <Tooltip
                 title={
-                  compact
-                    ? "添加图片或文档（也可以直接粘贴截图）；附件会发送给当前配置的模型服务"
-                    : "添加文本、图片或文档附件（也可以直接粘贴截图）"
+                  compact ? "添加图片或文档附件" : "添加文本、图片或文档附件（也可以直接粘贴截图）"
                 }
+                placement="top"
+                overlayStyle={compact ? { maxWidth: 240, zIndex: 3100 } : undefined}
               >
                 <Button
                   aria-label="添加附件"

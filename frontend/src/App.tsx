@@ -1,5 +1,5 @@
 import { GithubOutlined, QuestionCircleOutlined } from "@ant-design/icons";
-import { Button, Layout, Menu, Skeleton, Tooltip, Typography } from "antd";
+import { Button, Layout, Menu, Modal, Skeleton, Tooltip, Typography } from "antd";
 import {
   lazy,
   Suspense,
@@ -26,6 +26,7 @@ import TaskCompletionNotifier from "./components/TaskCompletionNotifier";
 import UpdateCheckButton from "./components/UpdateCheckButton";
 import { APP_NAME, GITHUB_REPO } from "./config";
 import TouTouAssistantCard from "./features/tou-tou/TouTouAssistantCard";
+import TouTouClipboardCard from "./features/tou-tou/TouTouClipboardCard";
 import TouTouOrb from "./features/tou-tou/TouTouOrb";
 import { TouTouProvider } from "./features/tou-tou/TouTouProvider";
 import { useNavigationVisibility } from "./hooks/useNavigationVisibility";
@@ -35,6 +36,8 @@ import { consumeFirstVisitGuide } from "./utils/userGuide";
 // 特意用 src/assets/ 的副本而不是 public/ 下的同名文件：引用 public/ 里的资源不会
 // 经过 Vite 的 base 重写，等于没修。
 import brandIcon from "./assets/resumeforge-icon.png";
+// 投投宣传图（透明底抠图）：GitHub Star 提示弹窗用。
+import promoPlane from "./assets/toutou/promo-plane.png";
 
 type LazyPage<Props = Record<string, never>> = LazyExoticComponent<ComponentType<Props>> & {
   preload: () => Promise<{ default: ComponentType<Props> }>;
@@ -88,7 +91,10 @@ function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [guideOpen, setGuideOpen] = useState(false);
+  // GitHub Star 提示：点页头 GitHub 图标时随直跳弹一次轻提示（不做持久化，用户要求每次都提醒）。
+  const [starModalOpen, setStarModalOpen] = useState(false);
   const [floatingAssistantOpen, setFloatingAssistantOpen] = useState(false);
+  const [clipboardOpen, setClipboardOpen] = useState(false);
   const { hiddenKeys } = useNavigationVisibility();
   const visiblePrimaryItems = useMemo(
     () => filterNavigationItems(PRIMARY_NAVIGATION_ITEMS, hiddenKeys, location.pathname),
@@ -179,6 +185,7 @@ function MainLayout() {
             void AssistantPage.preload();
             setFloatingAssistantOpen(true);
           }}
+          onOpenClipboard={() => setClipboardOpen(true)}
         />
         <TouTouAssistantCard
           open={floatingAssistantOpen}
@@ -188,6 +195,7 @@ function MainLayout() {
             <AssistantPage compact surface="floating" />
           </Suspense>
         </TouTouAssistantCard>
+        <TouTouClipboardCard open={clipboardOpen} onClose={() => setClipboardOpen(false)} />
         <Layout className="app-shell">
           <Sider
             className="app-sider"
@@ -278,6 +286,7 @@ function MainLayout() {
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`在 GitHub 上查看 ${APP_NAME} 源码`}
+                      onClick={() => setStarModalOpen(true)}
                     />
                   </Tooltip>
                 )}
@@ -299,6 +308,34 @@ function MainLayout() {
               onNavigate={navigateFromGuide}
             />
           </Suspense>
+        )}
+        {starModalOpen && (
+          <Modal open onCancel={() => setStarModalOpen(false)} footer={null} width={380} centered>
+            <div style={{ textAlign: "center", paddingBlock: 8 }}>
+              <img
+                src={promoPlane}
+                alt=""
+                style={{ height: 72, width: "auto", objectFit: "contain" }}
+              />
+              <Typography.Title level={5} style={{ marginTop: 12, marginBottom: 4 }}>
+                如果 {APP_NAME} 对你有帮助
+              </Typography.Title>
+              <Typography.Text type="secondary">
+                欢迎去 GitHub 给项目点一个 Star ⭐——这是对独立开发最实在的支持。
+              </Typography.Text>
+              <div style={{ marginTop: 16 }}>
+                <Button
+                  type="primary"
+                  href={GITHUB_REPO}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setStarModalOpen(false)}
+                >
+                  去点 Star
+                </Button>
+              </div>
+            </div>
+          </Modal>
         )}
       </>
     </TouTouProvider>

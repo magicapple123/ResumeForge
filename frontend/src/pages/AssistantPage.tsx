@@ -389,6 +389,10 @@ export default function AssistantPage({
             selectConversation(id);
           }}
           onDelete={(id) => void removeConversation(id)}
+          onBatchDelete={(ids) => {
+            // 批量删除：逐条走同一条删除通路（内部会刷新列表）。
+            for (const id of ids) void removeConversation(id);
+          }}
           onRename={(id, title) => void saveConversationTitle(id, title)}
           onToggleFlag={(conversation, field) => void updateConversationFlags(conversation, field)}
           onArchive={(conversation, archived) =>
@@ -407,19 +411,22 @@ export default function AssistantPage({
             </Typography.Title>
             <Typography.Text type="secondary">当前回复由「设置」中的模型配置提供。</Typography.Text>
           </div>
-          {/* 多选只在有历史消息时才有意义；流式回复期间也不给进——那两条临时气泡还不在
-              数据库里，勾不上。 */}
-          {messageCount > 0 && !selecting && (
-            <Button
-              icon={<CheckSquareOutlined />}
-              disabled={sending}
-              onClick={() => setSelecting(true)}
-            >
-              多选
-            </Button>
-          )}
-          {compact && (
-            <Space size={4}>
+          {/* 多选与历史并成右侧一组：header 是 space-between 布局，浮窗里有
+              "标题/多选/历史"三个子元素时多选会被挤到正中，看着像被选中（用户反馈）。
+              合并后只剩两个子元素，操作全部靠右。 */}
+          <Space size={4} className="assistant-header-actions">
+            {/* 多选只在有历史消息时才有意义；流式回复期间也不给进——那两条临时气泡还不在
+                数据库里，勾不上。 */}
+            {messageCount > 0 && !selecting && (
+              <Button
+                icon={<CheckSquareOutlined />}
+                disabled={sending}
+                onClick={() => setSelecting(true)}
+              >
+                多选
+              </Button>
+            )}
+            {compact && (
               <Button
                 type="text"
                 icon={<HistoryOutlined />}
@@ -429,8 +436,8 @@ export default function AssistantPage({
               >
                 历史
               </Button>
-            </Space>
-          )}
+            )}
+          </Space>
         </header>
         {selecting && (
           <AssistantSelectBar

@@ -14,6 +14,7 @@ from ..models.setting import AppSetting, LLMConfigRecord
 from ..schemas.setting import (
     NAVIGATION_CORE_KEYS,
     NAVIGATION_OPTIONAL_KEYS,
+    AssistantOrbSetting,
     LLMConfig,
     LLMConfigRecordCreate,
     LLMConfigRecordOut,
@@ -251,29 +252,42 @@ def save_reminder_popup_on_start(db: Session, enabled: bool) -> bool:
 # ===== 投投悬浮球设置 =====
 
 
-def get_assistant_orb_enabled(db: Session) -> bool:
-    """读取「投投」悬浮球开关；缺失或脏数据退回默认开。"""
+def get_assistant_orb_setting(db: Session) -> AssistantOrbSetting:
+    """读取「投投」悬浮球设置（整对象）；缺失或脏数据退回默认双开。
+
+    **存量兼容**：这个 key 历史上存的是裸 bool（`json.dumps(enabled)`），升级后库里
+    还躺着 `"true"` 这类旧值。读取分三种形态兜底——缺失/损坏回默认；裸 bool 视为
+    只换过入口开关、标语保持默认开；对象按模型校验（校验不过也回默认）。这样老用户
+    升级后看到的开关状态与升级前一致，不会被悄悄重置。
+    """
     row = db.get(AppSetting, _ASSISTANT_ORB_KEY)
     if row is None:
-        return True
+        return AssistantOrbSetting()
     try:
         value = json.loads(row.value)
     except (json.JSONDecodeError, TypeError):
         logger.warning("投投悬浮球设置数据损坏，已重置为默认开启")
-        return True
-    return value if isinstance(value, bool) else True
+        return AssistantOrbSetting()
+    if isinstance(value, bool):
+        return AssistantOrbSetting(enabled=value, tips_enabled=True)
+    if isinstance(value, dict):
+        try:
+            return AssistantOrbSetting.model_validate(value)
+        except ValidationError:
+            logger.warning("投投悬浮球设置数据损坏，已重置为默认开启")
+    return AssistantOrbSetting()
 
 
-def save_assistant_orb_enabled(db: Session, enabled: bool) -> bool:
-    """持久化「投投」悬浮球开关。"""
+def save_assistant_orb_setting(db: Session, setting: AssistantOrbSetting) -> AssistantOrbSetting:
+    """持久化「投投」悬浮球设置。**整对象落库**：只写 `enabled` 会把标语开关静默丢掉。"""
     row = db.get(AppSetting, _ASSISTANT_ORB_KEY)
-    serialized = json.dumps(bool(enabled))
+    serialized = json.dumps(setting.model_dump(), ensure_ascii=False)
     if row is None:
         db.add(AppSetting(key=_ASSISTANT_ORB_KEY, value=serialized))
     else:
         row.value = serialized
     db.commit()
-    return bool(enabled)
+    return setting
 
 
 # ===== 导航显示设置 =====

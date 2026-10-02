@@ -125,6 +125,20 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     message.success("简历修改已保存");
   };
 
+  /**
+   * AI 修订（AI 修改 / 采纳建议）成功后的刷新：修订接口已在服务端落库，这里只需
+   * 按新内容重渲染预览。旧建议基于修订前的正文，一并重置。
+   */
+  const applyRevisedDetail = async (updated: ResumeDetail) => {
+    const requestAtStart = requestVersion.current;
+    const rendered = await renderResume(updated.content, layout);
+    if (requestAtStart !== requestVersion.current) return;
+    setDetail(updated);
+    setHtml(rendered);
+    setSuggestionsGenerated(false);
+    setSuggestionsResetKey((value) => value + 1);
+  };
+
   /** 换模板 / 加页数 / 改字号：先改本地草稿并重新渲染，不立即写回记录。 */
   const applyLayout = async (next: ResumeLayout) => {
     if (!detail || relayouting) return;
@@ -241,6 +255,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
             ) : null
           }
           onSaveEditedResume={(content) => saveEditedResume(content)}
+          onResumeRevised={(updated) => applyRevisedDetail(updated)}
           suggestionsGenerated={suggestionsGenerated}
           suggestionsResetKey={suggestionsResetKey}
           onSuggestionsGenerated={() => setSuggestionsGenerated(true)}

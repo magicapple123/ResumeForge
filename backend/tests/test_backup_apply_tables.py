@@ -24,7 +24,7 @@ from app.services.data_backup import (
 
 # 投递功能出现之前的那一版 revision，用来伪造一份"旧版本导出的备份"。
 PREVIOUS_REVISION = "0009_templates_and_interview"
-HEAD_REVISION = "0036_chat_conversation_surface"
+HEAD_REVISION = "0037_resume_generation_notes"
 APPLY_TABLES = ("job_match_analysis", "apply_queue_item", "apply_task", "apply_task_item")
 
 

@@ -87,8 +87,19 @@
   cursor: pointer;
 }
 
-.assistant-composer .ant-input-textarea textarea.ant-input {
+/*
+ * 104px 输入框规则。选择器**直接落在 textarea 上**：当前 antd 5 的 `Input.TextArea`
+ * 不再渲染那层历史包装（textarea 的父节点就是 `.assistant-composer`），选择器串上
+ * 任何中间层都会整条静默失效——这就是它此前"看起来存在却没效果"的原因。
+ *
+ * `max-height`/`overflow-y` 必须 `!important`：`autoSize` 把 height/min-height 写成
+ * **内联样式**，非 important 的样式表规则压不过它。上下同时锁高，粘贴超长文本时
+ * textarea 内部滚动，不再无限撑高布局。
+ */
+.assistant-composer textarea.ant-input {
   min-height: 104px !important;
+  max-height: 104px !important;
+  overflow-y: auto !important;
   padding: 12px 14px;
   line-height: 1.7;
 }

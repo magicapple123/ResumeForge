@@ -198,6 +198,29 @@ describe("AssistantComposer 粘贴与附件", () => {
   });
 });
 
+describe("AssistantComposer 附件 Tooltip", () => {
+  it("浮窗里使用短文案，并限宽抬层避免被卡片盖住或溢出视口", async () => {
+    renderComposer({ compact: true });
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "添加附件" }));
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("添加图片或文档附件");
+    // 卡片提到 2990 后，antd Tooltip 默认 1070 会被盖住；maxWidth 保证换行不水平溢出。
+    // overlayStyle 落在 .ant-tooltip 根节点上（role=tooltip 的是内层内容节点）。
+    const overlay = tooltip.closest(".ant-tooltip") as HTMLElement;
+    expect(overlay.style.zIndex).toBe("3100");
+    expect(overlay.style.maxWidth).toBe("240px");
+  });
+
+  it("整页分支保留完整文案", async () => {
+    renderComposer();
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "添加附件" }));
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("添加文本、图片或文档附件（也可以直接粘贴截图）");
+  });
+});
+
 describe("AssistantComposer 思考强度", () => {
   /** 打开下拉并选中某一项（antd 的下拉是虚拟列表，用键盘回车选更稳）。 */
   function chooseEffort(label: string) {

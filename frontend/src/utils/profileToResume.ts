@@ -78,6 +78,8 @@ export function profileToResumeContent(profile: Profile, job?: Job | null): Resu
     phone: profile.phone,
     email: profile.email,
     city: profile.city,
+    personal_website: profile.personal_website ?? "",
+    github: profile.github ?? "",
     job_intent: job?.title || profile.job_intent || "",
     summary: profile.summary,
     education,

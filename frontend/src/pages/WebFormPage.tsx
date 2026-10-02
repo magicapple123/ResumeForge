@@ -122,6 +122,13 @@ function useAiAvailable(): boolean | null {
   return available;
 }
 
+/** 一键填充成功率：按「已填 / (已填+失败)」计；没有任何尝试过的项时不显示。 */
+function FillRateTag({ filled, failed }: { filled: number; failed: number }) {
+  const attempted = filled + failed;
+  if (attempted === 0) return null;
+  return <Tag color="processing">成功率 {Math.round((filled * 100) / attempted)}%</Tag>;
+}
+
 export default function WebFormPage() {
   const { message } = App.useApp();
   const browser = useBrowserStatus(getWebFormBrowserStatus, WEB_FORM_STATUS_POLL_INTERVAL_MS);
@@ -416,12 +423,17 @@ export default function WebFormPage() {
 
   // 默认开启：浏览器一旦真正可用就自动装上监听。用户明确点过「关闭」后，
   // 本次页面生命周期内不再擅自打开，避免把用户的关闭操作变成反复弹出的打扰。
+  //
+  // **先读状态、没开才启动**：浏览器路由已经在后端顺手开过一次（见 `api/webform.py`），
+  // 这里再无条件发一次 `/live/start` 不但多余，回来的旧响应还会把刚读到的"已开启"
+  // 覆盖回"未开启"（用户会看到卡片先亮再灭）。
   useEffect(() => {
     if (!running || liveOptOut || aiAvailable === null || live?.running || liveStarting.current) {
       return;
     }
     liveStarting.current = true;
-    void Promise.resolve(startWebFormLive(aiOn))
+    void getWebFormLiveStatus()
+      .then((current) => (current?.running ? current : startWebFormLive(aiOn)))
       .then((next) => {
         setLive(next ?? null);
         if (next?.running) setSessionActive(true);
@@ -783,7 +795,9 @@ export default function WebFormPage() {
             aria-label={live?.running ? "关闭智能逐项填表" : "开启智能逐项填表"}
             type={live?.running ? "default" : "primary"}
             loading={busy === "live"}
-            disabled={!running}
+            // `live.running` 为真时后端一定已经开着浏览器（会话起不来会报 409），
+            // 所以它可以单独解除禁用：浏览器状态轮询慢半拍时按钮不会白灰着。
+            disabled={!running && !live?.running}
             onClick={handleLiveToggle}
           >
             {live?.running ? "关闭" : "开启"}
@@ -917,6 +931,7 @@ export default function WebFormPage() {
             <Tag color="success">已填 {result.filled}</Tag>
             {result.unverified ? <Tag color="warning">待确认 {result.unverified}</Tag> : null}
             {result.failed ? <Tag color="error">失败 {result.failed}</Tag> : null}
+            <FillRateTag filled={result.filled} failed={result.failed} />
           </Space>
           {result.unverified || result.failed ? (
             <ul style={{ marginTop: 8, marginBottom: 0 }}>

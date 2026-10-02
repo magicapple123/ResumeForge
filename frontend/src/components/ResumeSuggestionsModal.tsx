@@ -1,9 +1,9 @@
-/** 针对关联岗位生成简历修改建议的按需弹窗。 */
-import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, List, Modal, Skeleton, Space, Tag, Typography } from "antd";
+/** 针对关联岗位生成简历修改建议的按需弹窗；每条建议可一键采纳并直接修改简历。 */
+import { BulbOutlined, CheckOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Empty, List, Modal, Skeleton, Space, Tag, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { generateResumeSuggestions } from "../api/resumes";
-import type { ResumeSuggestion, ResumeSuggestions } from "../types";
+import { generateResumeSuggestions, reviseResume } from "../api/resumes";
+import type { ResumeDetail, ResumeSuggestion, ResumeSuggestions } from "../types";
 
 interface Props {
   open: boolean;
@@ -12,6 +12,8 @@ interface Props {
   resetKey?: number;
   onClose: () => void;
   onGenerated?: () => void;
+  /** 采纳建议成功后把更新后的记录交回父组件刷新预览。 */
+  onApplied?: (detail: ResumeDetail) => Promise<void> | void;
 }
 
 const PRIORITY_META: Record<ResumeSuggestion["priority"], { label: string; color: string }> = {
@@ -26,11 +28,15 @@ export default function ResumeSuggestionsModal({
   resetKey = 0,
   onClose,
   onGenerated,
+  onApplied,
 }: Props) {
+  const { message } = App.useApp();
   const [data, setData] = useState<ResumeSuggestions | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [hasAttempted, setHasAttempted] = useState(false);
+  /** 正在采纳的建议下标；一次只允许采纳一条，避免两份修订并发写同一份简历。 */
+  const [adoptingIndex, setAdoptingIndex] = useState<number | null>(null);
   const requestVersion = useRef(0);
   const lastRecordId = useRef<number | null>(null);
   const lastResetKey = useRef(resetKey);
@@ -45,6 +51,7 @@ export default function ResumeSuggestionsModal({
     setError("");
     setLoading(false);
     setHasAttempted(false);
+    setAdoptingIndex(null);
   }, [recordId, resetKey]);
 
   const loadSuggestions = useCallback(async () => {
@@ -69,6 +76,34 @@ export default function ResumeSuggestionsModal({
   useEffect(() => {
     if (open && recordId && !hasAttempted) void loadSuggestions();
   }, [hasAttempted, loadSuggestions, open, recordId]);
+
+  /**
+   * 采纳单条建议：把建议格式化成修订指令交给后端，模型只改这一条涉及的内容。
+   * 采纳成功后关掉弹窗——预览已经刷新，继续留在建议列表里容易对着旧内容点第二次。
+   */
+  const adopt = async (item: ResumeSuggestion, index: number) => {
+    if (!recordId || adoptingIndex !== null) return;
+    setAdoptingIndex(index);
+    setError("");
+    try {
+      const instructions = [
+        `请按以下建议修改简历（目标分区：${item.section || "未指定"}）：`,
+        `问题：${item.issue}`,
+        `修改建议：${item.suggestion}`,
+        item.evidence.length ? `依据：${item.evidence.join("；")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const updated = await reviseResume(recordId, instructions);
+      await onApplied?.(updated);
+      message.success("已采纳这条建议并更新简历");
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "采纳建议失败，请稍后重试");
+    } finally {
+      setAdoptingIndex(null);
+    }
+  };
 
   return (
     <Modal
@@ -117,10 +152,24 @@ export default function ResumeSuggestionsModal({
             <List
               bordered
               dataSource={data.suggestions}
-              renderItem={(item) => {
+              renderItem={(item, index) => {
                 const priority = PRIORITY_META[item.priority];
+                const adopting = adoptingIndex === index;
                 return (
-                  <List.Item>
+                  <List.Item
+                    actions={[
+                      <Button
+                        key="adopt"
+                        size="small"
+                        icon={<CheckOutlined />}
+                        loading={adopting}
+                        disabled={adoptingIndex !== null && !adopting}
+                        onClick={() => void adopt(item, index)}
+                      >
+                        采纳并修改
+                      </Button>,
+                    ]}
+                  >
                     <Space direction="vertical" size={6} style={{ width: "100%" }}>
                       <Space wrap>
                         <Tag color={priority.color}>{priority.label}</Tag>

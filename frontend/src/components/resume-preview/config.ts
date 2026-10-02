@@ -2,6 +2,8 @@ import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 
 export const A4_WIDTH_PX = 794;
 export const A4_HEIGHT_PX = 1123;
+/** 多页并排时页与页之间“裁切间隙”的未缩放宽（px）。两侧纸边阴影让它看起来是两张独立的纸。 */
+export const PAGE_GAP_PX = 32;
 export const PREVIEW_BOTTOM_RESERVE = 150;
 export const PREVIEW_HEIGHT_RATIO = 0.62;
 export const MIN_PREVIEW_HEIGHT = 360;

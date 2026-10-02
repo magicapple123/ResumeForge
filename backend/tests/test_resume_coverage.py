@@ -78,7 +78,7 @@ def test_missing_entry_says_whether_it_reached_the_model():
     assert "「会员增长系统」" in project_warning
     assert "模型没有把它写进简历" in project_warning
     # 提醒必须带着下一步，不能只说"少了东西"。
-    assert "微调内容" in project_warning
+    assert "手动调整" in project_warning
 
 
 def test_written_entries_are_never_reported():

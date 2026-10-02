@@ -50,6 +50,7 @@ _REQUIRED_FILES: Final[tuple[tuple[str, str], ...]] = (
     ("app/prompts/resume_phrases.md", "简历话术生成器提示词"),
     ("app/prompts/resume_polish.md", "简历多风格润色提示词"),
     ("app/prompts/resume_quality_retry.md", "简历质量重试提示词"),
+    ("app/prompts/resume_revise.md", "按用户指令修订简历的提示词"),
     ("app/prompts/resume_rewrite_field.md", "按栏定向改写提示词"),
     ("app/prompts/resume_template_import.md", "目标模板导入分析提示词"),
     ("app/prompts/resume_risk.md", "简历风险深挖提示词"),

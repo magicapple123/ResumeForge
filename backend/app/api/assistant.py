@@ -1,6 +1,7 @@
 """AI 求职助手：会话历史、显式上下文和流式模型回复。"""
 
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -96,6 +97,22 @@ def _web_search_addendum(fetch_pages: int = 0) -> str:
     return f"{_WEB_SEARCH_ADDENDUM_HEAD}{body}{_WEB_SEARCH_ADDENDUM_TAIL}"
 
 
+def _local_time_note() -> str:
+    """用户本地时间行：本应用是本地单用户，服务器本地时间即用户时间。
+
+    每次请求实时生成（``_system_prompt`` 本就不缓存），模型据此才能给出时段化建议
+    （例如深夜/凌晨提醒休息）；用 ``astimezone`` 取本地时区，与 data_backup/datasets
+    的既有写法一致，不用存库用的 ``utcnow``。
+    """
+    now = datetime.now().astimezone()
+    weekday = "星期" + "一二三四五六日"[now.weekday()]
+    return (
+        f"【当前时间】{now:%Y-%m-%d %H:%M} {weekday}（用户本地时间）。"
+        "你可以自然地结合时段给出合适建议（例如深夜或凌晨时分提醒用户适当休息），"
+        "但不要生硬重复。"
+    )
+
+
 def _system_prompt(db: Session, *, web_search: bool = False, fetch_pages: int = 0) -> str:
     """基础系统提示 + 用户启用的技能 + 联网工具说明。
 
@@ -111,6 +128,7 @@ def _system_prompt(db: Session, *, web_search: bool = False, fetch_pages: int = 
         build_capability_map(),
         _web_search_addendum(fetch_pages) if web_search else "",
     ]
+    parts.append(_local_time_note())
     skill_prompt = build_skill_prompt(db)
     if skill_prompt:
         parts.append(skill_prompt)

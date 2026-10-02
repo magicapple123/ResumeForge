@@ -8,7 +8,7 @@
  */
 import {
   BulbOutlined,
-  DeleteOutlined,
+  CheckSquareOutlined,
   HistoryOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
@@ -20,15 +20,16 @@ import {
   App,
   Button,
   Card,
+  Checkbox,
   Collapse,
   Empty,
-  Popconfirm,
   Select,
   Space,
   Spin,
   Tag,
   Typography,
 } from "antd";
+import { RowActions } from "./common/RowActions";
 import { useEffect, useState } from "react";
 import {
   deleteQuestionBank,
@@ -38,7 +39,9 @@ import {
   saveQuestionBank,
   updateQuestionBank,
 } from "../api/interview";
+import BatchActionBar from "../components/common/BatchActionBar";
 import { useApi } from "../hooks/useApi";
+import { useBatchSelection } from "../hooks/useBatchSelection";
 import { QUESTION_BANK_TYPES } from "../types";
 import type { QuestionAnswer, QuestionBankOut, QuestionBankRecord } from "../types";
 
@@ -62,7 +65,7 @@ export default function QuestionBankPanel({
   onOpenRecord,
   onCloseRecord,
 }: Props) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [jobId, setJobId] = useState<number | undefined>();
   const [resumeId, setResumeId] = useState<number | undefined>();
   const [loading, setLoading] = useState(false);
@@ -172,6 +175,31 @@ export default function QuestionBankPanel({
     onStartSession(questions);
   };
 
+  const batch = useBatchSelection<number>();
+
+  /** 批量删除：确认后逐条走同一个删除接口，全部完成再刷新一次。 */
+  const removeSelected = () => {
+    const ids = [...batch.selectedIds];
+    if (ids.length === 0) return;
+    modal.confirm({
+      title: `删除选中的 ${ids.length} 份题库历史？`,
+      okText: "删除",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        const results = await Promise.allSettled(
+          (banks.data ?? [])
+            .filter((bank) => batch.isSelected(bank.id))
+            .map((bank) => deleteQuestionBank(bank.id)),
+        );
+        const failed = results.filter((item) => item.status === "rejected").length;
+        if (failed === 0) message.success(`已删除 ${ids.length} 份题库历史`);
+        else message.warning(`已删除 ${ids.length - failed} 份，${failed} 份失败，请重试`);
+        batch.exitSelecting();
+        await banks.reload();
+      },
+    });
+  };
+
   const removeBank = async (id: number) => {
     try {
       await deleteQuestionBank(id);
@@ -265,22 +293,31 @@ export default function QuestionBankPanel({
           </div>
         ))}
         <Space wrap>
-          {onOpenRecord && (
-            <Button size="small" onClick={() => onOpenRecord(bank)}>
-              查看详情
-            </Button>
+          {batch.selecting ? (
+            <Checkbox
+              aria-label={`选择题库 ${bank.resume_title || bank.job_title || bank.id}`}
+              checked={batch.isSelected(bank.id)}
+              onChange={() => batch.toggle(bank.id)}
+            />
+          ) : (
+            onOpenRecord && (
+              <Button size="small" onClick={() => onOpenRecord(bank)}>
+                查看详情
+              </Button>
+            )
           )}
-          <Popconfirm
-            title="删除这条题库历史？"
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true, "aria-label": `确认删除题库历史 ${bank.id}` }}
-            onConfirm={() => void removeBank(bank.id)}
-          >
-            <Button size="small" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
+          {/* 删除收进「···」菜单：除回收站外，删除不再以按钮裸露（全局约定）。 */}
+          <RowActions
+            more={[
+              {
+                key: "delete",
+                label: "删除",
+                danger: true,
+                confirm: "删除这条题库历史？",
+                onClick: () => void removeBank(bank.id),
+              },
+            ]}
+          />
         </Space>
       </Space>
     ),
@@ -476,7 +513,21 @@ export default function QuestionBankPanel({
             历史题库
           </Space>
         }
+        extra={
+          !batch.selecting && (banks.data ?? []).length > 0 ? (
+            <Button size="small" icon={<CheckSquareOutlined />} onClick={batch.enterSelecting}>
+              批量选择
+            </Button>
+          ) : undefined
+        }
       >
+        {batch.selecting && (
+          <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+            <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
+              删除所选
+            </Button>
+          </BatchActionBar>
+        )}
         {banks.loading && !banks.data ? (
           <Spin />
         ) : banks.error ? (

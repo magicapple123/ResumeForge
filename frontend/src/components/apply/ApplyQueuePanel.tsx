@@ -33,6 +33,7 @@ import {
   Tag,
   Tooltip,
   Typography,
+  Popconfirm,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
@@ -604,16 +605,20 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
               >
                 编辑
               </Button>
-              <Button
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => {
+              <Popconfirm
+                title="移出投递队列？"
+                okText="移出"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => {
                   void remove(detail);
                   setDetail(null);
                 }}
               >
-                移出队列
-              </Button>
+                <Button danger icon={<DeleteOutlined />}>
+                  移出队列
+                </Button>
+              </Popconfirm>
             </Space>
           )
         }

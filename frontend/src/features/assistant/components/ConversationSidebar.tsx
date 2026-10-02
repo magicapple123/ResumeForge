@@ -1,6 +1,7 @@
 /** 求职助手会话列表：筛选、按需管理操作与整行右键菜单。 */
 
 import {
+  CheckSquareOutlined,
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
@@ -19,6 +20,7 @@ import {
 import {
   App,
   Button,
+  Checkbox,
   Empty,
   Input,
   List,
@@ -38,7 +40,9 @@ import { conversationToMaterial, exportConversation } from "../../../api/assista
 import { copyText } from "../../../utils/clipboard";
 import { downloadBlob } from "../../../utils/download";
 import { formatDateTime } from "../../../utils/format";
+import BatchActionBar from "../../../components/common/BatchActionBar";
 import { RowContextMenu, type RowActionItem } from "../../../components/common/RowActions";
+import { useBatchSelection } from "../../../hooks/useBatchSelection";
 import { ConversationTitle } from "./AssistantMessageContent";
 
 interface Props {
@@ -55,6 +59,8 @@ interface Props {
   onArchive: (conversation: AssistantConversationBrief, archived: boolean) => void;
   onFork: (conversation: AssistantConversationBrief) => void;
   onMoveToGroup: (conversation: AssistantConversationBrief) => void;
+  /** 批量删除所选会话（传入才显示「批量选择」入口）；父级负责接口调用与刷新。 */
+  onBatchDelete?: (ids: number[]) => void;
 }
 
 export default function ConversationSidebar({
@@ -71,8 +77,11 @@ export default function ConversationSidebar({
   onArchive,
   onFork,
   onMoveToGroup,
+  onBatchDelete,
 }: Props) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
+  // 批量选择：勾选若干段对话后一次删除。
+  const batch = useBatchSelection<number>();
   const [filter, setFilter] = useState<ConversationFilter>("all");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -229,11 +238,45 @@ export default function ConversationSidebar({
     },
   ];
 
+  /** 批量删除：确认后交给父级（接口调用与刷新在父级的删除通路上）。 */
+  const removeSelected = () => {
+    const ids = [...batch.selectedIds];
+    if (!onBatchDelete || ids.length === 0) return;
+    modal.confirm({
+      title: `删除选中的 ${ids.length} 段对话？`,
+      okText: "删除",
+      okButtonProps: { danger: true },
+      onOk: () => {
+        onBatchDelete(ids);
+        batch.exitSelecting();
+      },
+    });
+  };
+
   return (
     <aside className={`assistant-sidebar${className ? ` ${className}` : ""}`}>
       <Button type="primary" block icon={<PlusOutlined />} onClick={onCreate}>
         新对话
       </Button>
+      {onBatchDelete && !batch.selecting && (
+        <Button
+          block
+          style={{ marginTop: 8 }}
+          icon={<CheckSquareOutlined />}
+          onClick={batch.enterSelecting}
+        >
+          批量选择
+        </Button>
+      )}
+      {onBatchDelete && batch.selecting && (
+        <div style={{ marginTop: 8 }}>
+          <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+            <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
+              删除所选
+            </Button>
+          </BatchActionBar>
+        </div>
+      )}
       <Segmented
         className="assistant-conversation-filter"
         block
@@ -253,59 +296,76 @@ export default function ConversationSidebar({
           emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无对话" />,
         }}
         renderItem={(conversation) => (
-          <RowContextMenu items={actionsFor(conversation)}>
+          <RowContextMenu items={batch.selecting ? [] : actionsFor(conversation)}>
             <List.Item
               className={conversation.id === activeId ? "is-active" : ""}
-              actions={[
-                <Popover
-                  key="more"
-                  trigger="click"
-                  placement="bottomRight"
-                  open={actionMenuId === conversation.id}
-                  onOpenChange={(open) => setActionMenuId(open ? conversation.id : null)}
-                  content={
-                    <div className="assistant-conversation-actions-menu">
-                      {actionsFor(conversation).map((item) =>
-                        item.confirm ? (
-                          <Popconfirm
-                            key={item.key}
-                            title={item.confirm}
-                            onConfirm={() => {
-                              setActionMenuId(null);
-                              item.onClick?.();
-                            }}
-                          >
-                            <Button type="text" size="small" danger={item.danger} icon={item.icon}>
-                              {item.label}
-                            </Button>
-                          </Popconfirm>
-                        ) : (
+              actions={
+                batch.selecting
+                  ? [
+                      // 多选模式：行动作区换成勾选框，点行（标题）也切换勾选。
+                      <Checkbox
+                        key="pick"
+                        aria-label={`选择对话 ${conversation.title}`}
+                        checked={batch.isSelected(conversation.id)}
+                        onChange={() => batch.toggle(conversation.id)}
+                      />,
+                    ]
+                  : [
+                      <Popover
+                        key="more"
+                        trigger="click"
+                        placement="bottomRight"
+                        open={actionMenuId === conversation.id}
+                        onOpenChange={(open) => setActionMenuId(open ? conversation.id : null)}
+                        content={
+                          <div className="assistant-conversation-actions-menu">
+                            {actionsFor(conversation).map((item) =>
+                              item.confirm ? (
+                                <Popconfirm
+                                  key={item.key}
+                                  title={item.confirm}
+                                  onConfirm={() => {
+                                    setActionMenuId(null);
+                                    item.onClick?.();
+                                  }}
+                                >
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    danger={item.danger}
+                                    icon={item.icon}
+                                  >
+                                    {item.label}
+                                  </Button>
+                                </Popconfirm>
+                              ) : (
+                                <Button
+                                  key={item.key}
+                                  type="text"
+                                  size="small"
+                                  danger={item.danger}
+                                  icon={item.icon}
+                                  onClick={item.onClick}
+                                >
+                                  {item.label}
+                                </Button>
+                              ),
+                            )}
+                          </div>
+                        }
+                      >
+                        <Tooltip title="更多操作（也可以直接右键这条对话）">
                           <Button
-                            key={item.key}
                             type="text"
                             size="small"
-                            danger={item.danger}
-                            icon={item.icon}
-                            onClick={item.onClick}
-                          >
-                            {item.label}
-                          </Button>
-                        ),
-                      )}
-                    </div>
-                  }
-                >
-                  <Tooltip title="更多操作（也可以直接右键这条对话）">
-                    <Button
-                      type="text"
-                      size="small"
-                      aria-label="更多对话操作"
-                      className="assistant-conversation-more-button"
-                      icon={<MoreOutlined />}
-                    />
-                  </Tooltip>
-                </Popover>,
-              ]}
+                            aria-label="更多对话操作"
+                            className="assistant-conversation-more-button"
+                            icon={<MoreOutlined />}
+                          />
+                        </Tooltip>
+                      </Popover>,
+                    ]
+              }
             >
               {editingId === conversation.id ? (
                 <Input
@@ -333,7 +393,9 @@ export default function ConversationSidebar({
                     title={conversation.title}
                     pinned={conversation.pinned}
                     favorite={conversation.favorite}
-                    onSelect={() => onSelect(conversation.id)}
+                    onSelect={() =>
+                      batch.selecting ? batch.toggle(conversation.id) : onSelect(conversation.id)
+                    }
                   />
                   <Typography.Text type="secondary" className="assistant-conversation-meta">
                     {conversation.group_name ? `${conversation.group_name} · ` : ""}

@@ -47,7 +47,7 @@ def test_current_page_fill_streams_each_field_and_skips_existing_values(monkeypa
     assert result.failed == 0
     assert [item.state for item in progress] == ["filling", "filling", "done"]
     assert progress[1].current_label == "姓名"
-    assert progress[-1].message == "已完成 1/1 项，请回到页面核对"
+    assert progress[-1].message == "已完成 1/1 项（成功率 100%），请回到页面核对"
 
 
 def test_current_page_fill_stops_between_fields_without_losing_progress(monkeypatch):

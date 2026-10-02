@@ -104,6 +104,10 @@ class ResumeContent(BaseModel):
     phone: str = Field(default="", max_length=32)
     email: str = Field(default="", max_length=128)
     city: str = Field(default="", max_length=64)
+    # 公开作品链接：与电话/邮箱不同，它们本来就是放简历用的（模型生成时会从资料
+    # 里读到，修订时也允许按指令改写）；没有就是空串，模板渲染时跳过。
+    personal_website: str = Field(default="", max_length=256)
+    github: str = Field(default="", max_length=256)
     job_intent: str = Field(default="", max_length=128)
     summary: str = Field(default="", max_length=MAX_RESUME_TEXT_CHARS)
     education: list[ResumeEducation] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
@@ -128,6 +132,13 @@ class ManualResumeRequest(BaseModel):
     job_id: int | None = Field(default=None, ge=1)
     title: str = Field(default="", max_length=256)
     content: ResumeContent
+
+
+class ResumeReviseRequest(BaseModel):
+    """修订已有简历的请求：指令为空表示整体重新生成，非空表示只改提出的内容。"""
+
+    model_config = ConfigDict(extra="forbid")
+    instructions: str = Field(default="", max_length=MAX_CUSTOM_INSTRUCTION_CHARS)
 
 
 class ResumeBrief(BaseModel):
@@ -160,6 +171,10 @@ class ResumeOut(ResumeBrief):
     content: ResumeContent
     warnings: list[str] = []
     parse_error: str = ""
+    # 生成说明与"没写进这份简历"的结构化清单：只对 AI 生成的记录有意义，
+    # 手写/修订后的记录为空（修订后筛选状态已不再适用）。
+    rationale: str = ""
+    coverage_notes: list[dict] = []
 
 
 class GenerateTaskOut(BaseModel):

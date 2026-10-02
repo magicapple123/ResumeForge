@@ -20,6 +20,8 @@ function makeBase(): ResumeContent {
     phone: "13800000000",
     email: "zhang@x.com",
     city: "北京",
+    personal_website: "",
+    github: "",
     job_intent: "后端工程师",
     summary: "热爱编程",
     education: [

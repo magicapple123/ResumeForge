@@ -57,6 +57,9 @@ export interface ResumeContent {
   phone: string;
   email: string;
   city: string;
+  /** 公开作品链接：生成时从资料带入，可留空。 */
+  personal_website: string;
+  github: string;
   job_intent: string;
   summary: string;
   education: ResumeEducation[];
@@ -252,6 +255,24 @@ export interface ResumeDetail extends ResumeBrief {
   content: ResumeContent;
   warnings: string[];
   parse_error: string;
+  /** 生成说明：这份简历是怎么选出来的（只对 AI 生成的记录有意义，修订/手写为空）。 */
+  rationale: string;
+  /** "资料里有、但没写进这份简历"的结构化清单（岗位导向筛选的正常结果）。 */
+  coverage_notes: ResumeCoverageNote[];
+}
+
+/** 一条"没写进这份简历"的分区级清单。 */
+export interface ResumeCoverageNote {
+  /** 资料分区键（projects/experience/...），与简历字段同名。 */
+  section: string;
+  section_label: string;
+  /** 全部未写入的条目身份名。 */
+  names: string[];
+  /** 被岗位筛选/预算拦下的（没进候选资料）。 */
+  filtered: string[];
+  /** 进了候选但模型没写的。 */
+  model_omitted: string[];
+  total: number;
 }
 
 export type ResumeSuggestionPriority = "high" | "medium" | "low";
@@ -286,7 +307,13 @@ export interface GenerateOptions {
 export type StreamEvent =
   | { type: "progress"; message: string }
   | { type: "delta"; text: string }
-  | { type: "done"; resume: ResumeContent; warnings: string[] }
+  | {
+      type: "done";
+      resume: ResumeContent;
+      warnings: string[];
+      coverage_notes?: ResumeCoverageNote[];
+      rationale?: string;
+    }
   | { type: "saved"; record_id: number }
   | { type: "error"; message: string };
 

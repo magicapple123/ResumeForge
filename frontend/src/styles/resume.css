@@ -56,26 +56,32 @@
   border-radius: 8px;
   background: #fff;
 }
-/* 简历分页位置参考线：只用于预览，不会成为简历内容。 */
+/* 页与页之间的“裁切间隙”：把连续纸面在分页处切开，观感等同两张并排的独立 A4 纸。
+   间隙里露出预览视口的底色（#f5f7fa），两侧的柔和阴影扮演每张纸的纸边。
+   宽度由组件按 PAGE_GAP_PX × scale 内联给出；压住的是简历自身的页边距区域，不遮正文。 */
 .resume-preview-page-separator {
   position: absolute;
   top: 0;
   bottom: 0;
   pointer-events: none;
   z-index: 1;
-  transform: translateX(-1px);
+  transform: translateX(-50%);
 }
 
 .resume-preview-page-separator-line {
   display: block;
   height: 100%;
-  border-left: 2px dashed rgba(173, 104, 0, 0.55);
+  background: #f5f7fa;
+  box-shadow:
+    -5px 0 9px -3px rgb(15 40 80 / 0.16),
+    5px 0 9px -3px rgb(15 40 80 / 0.16);
 }
 
 .resume-preview-page-separator-label {
   position: absolute;
-  left: 10px;
+  left: 50%;
   top: 8px;
+  transform: translateX(-50%);
   padding: 2px 8px;
   background: #fff7e6;
   color: #ad6800;

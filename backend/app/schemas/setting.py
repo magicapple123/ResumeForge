@@ -274,9 +274,12 @@ class ReminderPopupSetting(BaseModel):
 
 
 class AssistantOrbSetting(BaseModel):
-    """是否显示全局「投投」求职助手悬浮球（默认开）。"""
+    """「投投」悬浮球的用户设置（入口默认开，提示标语默认弹）。"""
 
     enabled: bool = True
+    # 是否弹出悬浮球的轮换提示标语。**默认开以兼容老数据**：存量库存的是裸 bool，读回时
+    # 会被补成 `tips_enabled=True`，老用户的体验与升级前一致。
+    tips_enabled: bool = True
 
 
 NAVIGATION_CORE_KEYS = frozenset({"/", "/jobs", "/resumes", "/profile", "/apply", "/settings"})

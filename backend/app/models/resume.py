@@ -53,6 +53,12 @@ class ResumeRecord(Base):
     # 用户给这份简历写的备注（列表默认可见、详情可编辑）。
     note: Mapped[str] = mapped_column(Text, default="", server_default="")
     parse_error: Mapped[str] = mapped_column(Text, default="")  # JSON 解析失败时留痕
+    # 结构化的"没写进这份简历"清单（JSON 数组：section/names/filtered/model_omitted）。
+    # 与 warnings 分开：那是"疑似虚构"的红色核对项，这是岗位导向筛选的正常结果。
+    coverage_notes: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # 生成说明：这份简历是怎么选出来的（岗位信号、候选组成、省略原因、事实约束），
+    # 在预览里折叠展示，回答"为什么是这样一份简历"。
+    rationale: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     # 软删除时间戳：NULL 表示「没删」。列表查询一律加 `deleted_at IS NULL`，
     # 回收站里则只看非 NULL 的行（见 ``services/trash.py``）。

@@ -126,6 +126,45 @@ def test_browser_status_is_shared_with_the_apply_console(client, browser_port):
     assert body["state"] != "stopped"
 
 
+def test_starting_the_browser_also_opens_the_click_to_fill_session(
+    client, browser_port, monkeypatch
+):
+    """打开浏览器就顺手把「智能逐项填表」开上。
+
+    这是"点开浏览器 → 历历球随页面出现"那条链路的入口：路由自己调一次 `start_live`，
+    前端不必等浏览器状态轮询翻牌、也不必再补发一次（那正是用户反馈的"要等一会儿"）。
+    """
+    browser_port.listening = True
+    calls: list[dict] = []
+
+    def fake_start_live(*args, **kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(webform_service, "start_live", fake_start_live)
+
+    response = client.post("/api/webform/browser/start")
+
+    assert response.status_code == 200
+    assert calls, "打开浏览器时必须顺手开启实时填表"
+
+
+def test_a_failed_auto_start_does_not_break_the_browser_response(
+    client, browser_port, monkeypatch
+):
+    """自动开启失败（页面还没就绪）不能让"打开浏览器"本身失败——会话内的轮询会自愈重装。"""
+    browser_port.listening = True
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("页面还没就绪")
+
+    monkeypatch.setattr(webform_service, "start_live", boom)
+
+    response = client.post("/api/webform/browser/start")
+
+    assert response.status_code == 200
+    assert response.json()["state"] != "stopped"
+
+
 def test_memory_targets_endpoint_returns_only_the_web_form_profile(
     client, browser_port, db_session
 ):

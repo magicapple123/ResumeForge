@@ -33,7 +33,17 @@ async function start() {
     <React.StrictMode>
       <ConfigProvider
         locale={zhCN}
-        theme={{ token: { colorPrimary: "#16365c", borderRadius: 6 } }}
+        theme={{
+          token: {
+            colorPrimary: "#16365c",
+            borderRadius: 6,
+            // 弹层基准 z 提到 3100：投投助手卡（2990）/剪贴板卡（2985）都高于 antd
+            // 默认弹层（1000-1070 派生），浮窗里的右键菜单、下拉、confirm、message
+            // 会被自己的卡片整个盖住（看起来就是"点了没反应"）。全局提基准后所有
+            // 弹层 ≥3100，项目层级约定（球 3000 < 弹层）也随之成立，不必逐处 overlayStyle。
+            zIndexPopupBase: 3100,
+          },
+        }}
         // 弹窗内容在**卡片自己身上**滚动，而不是让整页滚动。
         // antd 默认把 Modal 当作文档流里的普通元素（它只是 position: fixed 的遮罩），
         // 卡片一高，撑大的就是 <body>——于是滚动条跑到整个窗口的右边，用户得先滑页面
