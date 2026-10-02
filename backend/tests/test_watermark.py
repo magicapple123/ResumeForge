@@ -69,7 +69,12 @@ def test_pdf_watermark_tiles_and_keeps_page_count_and_original_text():
     # 叠加不增删页。
     assert len(after.pages) == len(before.pages)
     # 水印文案与原文内容都在（叠加是合并，不是覆盖删除）。
-    merged = "\n".join((page.extract_text() or "") for page in after.pages)
+    # replace("\x00", "")：fpdf2 >= 2.8.8 以 raw CFF + 内嵌 /Encoding CMap 嵌入
+    # CID 字体（fpdf2#1874），pypdf 暂不解析内嵌 CMap，把 2 字节码按单字节读出，
+    # 每个字形前多出一个 U+0000；剥掉即还原真实文本（详见 test_pdf_exporter._text_runs）。
+    merged = "\n".join(
+        (page.extract_text() or "").replace("\x00", "") for page in after.pages
+    )
     assert "内部使用" in merged
     assert "个人总结" in merged or "实习/工作经历" in merged
     # 平铺：同一页里水印不止出现一次（单行居中水印只会出现一次）。
