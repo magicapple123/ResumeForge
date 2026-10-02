@@ -27,6 +27,15 @@ updates:
       - frontend
     commit-message:
       prefix: deps
+    ignore:
+      # TODO(antd-6-migration): antd 5 的 peer 依赖锁定 react ^16||^17||^18，react 19
+      # 会让 `npm ci` 直接 ERESOLVE（同 dependabot PR #21 只升一半导致失败的坑）。
+      # react 与 react-dom 必须同 major，只 ignore react 的话 react-dom@19 仍会挂。
+      # antd 6 迁移完成、前后端适配就绪后删除本段，恢复 react 主版本升级。
+      - dependency-name: react
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-dom
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
