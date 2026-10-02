@@ -12,7 +12,8 @@ import {
   Card,
   Empty,
   Input,
-  List,
+  Listy,
+  Spin,
   Popconfirm,
   Space,
   Tag,
@@ -24,6 +25,7 @@ import { deleteResume, listResumes, renameResume } from "../../api/resumes";
 import type { ResumeBrief } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import ResumeDetailModal from "../ResumeDetailModal";
+import { ListyItem, ListyMeta } from "../common/ListyItem";
 
 const PAGE_SIZE = 50;
 
@@ -127,14 +129,16 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
           </Button>
         </Space>
 
-        <List
-          loading={loading}
-          dataSource={items}
-          locale={{
-            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有通用简历" />,
-          }}
-          renderItem={(record) => (
-            <List.Item
+        {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
+        <Spin spinning={loading}>
+        {items.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有通用简历" />
+        ) : (
+        <Listy
+          items={items}
+          rowKey={(record) => record.id}
+          itemRender={(record) => (
+            <ListyItem
               actions={[
                 <Tooltip key="rename" title="重命名">
                   <Button
@@ -196,7 +200,7 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
                   </Button>
                 </Space.Compact>
               ) : (
-                <List.Item.Meta
+                <ListyMeta
                   title={
                     <Button
                       type="link"
@@ -215,9 +219,11 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
                   }
                 />
               )}
-            </List.Item>
+            </ListyItem>
           )}
         />
+        )}
+        </Spin>
       </Card>
 
       <ResumeDetailModal

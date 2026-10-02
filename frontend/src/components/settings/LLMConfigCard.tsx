@@ -10,11 +10,12 @@ import {
   Form,
   Input,
   InputNumber,
-  List,
+  Listy,
   Modal,
   Row,
   Select,
   Slider,
+  Space,
   Switch,
   Tooltip,
   Typography,
@@ -28,6 +29,8 @@ import {
   isValidReasoningEffort,
 } from "../../types/assistant";
 import ApiKeyInput from "./ApiKeyInput";
+import { ListyItem } from "../common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
 import {
   DEFAULT_MAX_TOKENS,
   MAX_MAX_TOKENS,
@@ -258,29 +261,26 @@ export default function LLMConfigCard({
             </Form.Item>
           </Col>
           <Col xs={24} lg={8}>
-            <Form.Item
-              name="model"
-              label="模型名称"
-              tooltip="各厂商模型名不同：可以点输入框右侧的「获取可用模型」按当前账号拉取，也可以照官方文档手填"
-            >
-              {/* 按钮放输入框的后缀里，不放 label 里也不另包一层：进 label 的按钮会被算成
-                  「模型名称」标注的控件，而包一层（如 Space.Compact）会让 Form.Item 生成的
-                  id 落在那层 div 上，label 就指不到输入框了。addonAfter 两种问题都没有。 */}
-              <Input
-                placeholder="deepseek-v4-flash"
-                addonAfter={
-                  <Button
-                    type="text"
-                    size="small"
-                    className="llm-fetch-models-button"
-                    icon={<CloudDownloadOutlined />}
-                    loading={fetchingModels}
-                    onClick={() => void fetchModels()}
-                  >
-                    获取可用模型
-                  </Button>
-                }
-              />
+            {/* addonAfter 已废弃（v6）：按官方指引改为 Space.Compact。拆成外层无 name 的
+                Form.Item（只管 label/tooltip）+ 内层 noStyle Form.Item（把 value 与 id="model"
+                注回输入框），并用 htmlFor 把 label 重新指回输入框——否则 id 会落在
+                Space.Compact 的 div 上，getByLabelText("模型名称") 就找不到输入框了。 */}
+            <Form.Item label="模型名称" htmlFor="model" tooltip="各厂商模型名不同：可以点输入框右侧的「获取可用模型」按当前账号拉取，也可以照官方文档手填">
+              <Space.Compact block>
+                <Form.Item name="model" noStyle>
+                  <Input placeholder="deepseek-v4-flash" />
+                </Form.Item>
+                <Button
+                  type="text"
+                  size="small"
+                  className="llm-fetch-models-button"
+                  icon={<CloudDownloadOutlined />}
+                  loading={fetchingModels}
+                  onClick={() => void fetchModels()}
+                >
+                  获取可用模型
+                </Button>
+              </Space.Compact>
             </Form.Item>
           </Col>
         </Row>
@@ -606,12 +606,16 @@ export default function LLMConfigCard({
         onCancel={() => setModelPickerOpen(false)}
       >
         <Typography.Paragraph type="secondary">{modelsMessage}</Typography.Paragraph>
-        <List
-          size="small"
-          dataSource={modelOptions}
-          style={{ maxHeight: 360, overflowY: "auto", overflowX: "hidden" }}
-          renderItem={(model) => (
-            <List.Item
+        <Listy
+          height={360}
+          items={modelOptions}
+          rowKey={(model) => model}
+          styles={{
+            root: { overflowX: "hidden" },
+            item: { ...LISTY_ITEM_PADDING_SMALL },
+          }}
+          itemRender={(model) => (
+            <ListyItem
               actions={[
                 <Button
                   key="pick"
@@ -627,7 +631,7 @@ export default function LLMConfigCard({
               ]}
             >
               <Typography.Text code>{model}</Typography.Text>
-            </List.Item>
+            </ListyItem>
           )}
         />
       </Modal>

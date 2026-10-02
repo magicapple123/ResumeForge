@@ -21,7 +21,8 @@ import {
   Button,
   Empty,
   Input,
-  List,
+  Listy,
+  Spin,
   Popconfirm,
   Popover,
   Segmented,
@@ -39,6 +40,7 @@ import { copyText } from "../../../utils/clipboard";
 import { downloadBlob } from "../../../utils/download";
 import { formatDateTime } from "../../../utils/format";
 import { RowContextMenu, type RowActionItem } from "../../../components/common/RowActions";
+import { ListyItem } from "../../../components/common/ListyItem";
 import { ConversationTitle } from "./AssistantMessageContent";
 
 interface Props {
@@ -245,16 +247,20 @@ export default function ConversationSidebar({
         ]}
         onChange={(value) => setFilter(value as ConversationFilter)}
       />
-      <List
+      {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
+      <Spin spinning={loading}>
+      {visibleConversations.length === 0 ? (
+        <div className="assistant-conversation-list">
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无对话" />
+        </div>
+      ) : (
+      <Listy
         className="assistant-conversation-list"
-        loading={loading}
-        dataSource={visibleConversations}
-        locale={{
-          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无对话" />,
-        }}
-        renderItem={(conversation) => (
+        items={visibleConversations}
+        rowKey={(conversation) => conversation.id}
+        itemRender={(conversation) => (
           <RowContextMenu items={actionsFor(conversation)}>
-            <List.Item
+            <ListyItem
               className={conversation.id === activeId ? "is-active" : ""}
               actions={[
                 <Popover
@@ -341,10 +347,12 @@ export default function ConversationSidebar({
                   </Typography.Text>
                 </div>
               )}
-            </List.Item>
+            </ListyItem>
           </RowContextMenu>
         )}
       />
+      )}
+      </Spin>
     </aside>
   );
 }

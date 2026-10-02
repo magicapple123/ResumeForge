@@ -9,7 +9,7 @@ import {
   Empty,
   Form,
   Input,
-  List,
+  Listy,
   Modal,
   Select,
   Space,
@@ -31,6 +31,7 @@ import type { ExperienceSource, InterviewExperience, InterviewExperiencePayload 
 import { formatDateTime } from "../utils/format";
 import { RecordDetailDrawer } from "./common/RecordDetail";
 import { isFromInnerControl } from "./common/recordDetailCore";
+import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { useRowActionMenu } from "./common/rowActionMenu";
 
 interface Props {
@@ -155,10 +156,11 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
       ) : items.length === 0 ? (
         <Empty description="还没有面经，把面试里被问到的问题记下来吧" />
       ) : (
-        <List
-          dataSource={items}
-          renderItem={(item) => (
-            <List.Item
+        <Listy
+          items={items}
+          rowKey={(item) => item.id}
+          itemRender={(item) => (
+            <ListyItem
               className="detail-trigger"
               // 整条点开详情；行内的「详情 / 更多」按钮不会被这一层抢走。
               onClick={(event) => {
@@ -200,7 +202,7 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
                 </Dropdown>,
               ]}
             >
-              <List.Item.Meta
+              <ListyMeta
                 title={
                   <Space size={6} wrap>
                     <span>{item.title || "未命名面经"}</span>
@@ -233,7 +235,7 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
                   </Space>
                 }
               />
-            </List.Item>
+            </ListyItem>
           )}
         />
       )}

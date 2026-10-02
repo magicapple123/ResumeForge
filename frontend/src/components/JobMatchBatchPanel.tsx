@@ -7,7 +7,7 @@ import {
   Card,
   Collapse,
   Empty,
-  List,
+  Listy,
   Modal,
   Progress,
   Skeleton,
@@ -17,6 +17,8 @@ import {
   Tag,
   Typography,
 } from "antd";
+import { ListyItem, ListyMeta } from "./common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "./common/listyPadding";
 import { useCallback, useEffect, useState } from "react";
 import {
   generateJobMatchBatch,
@@ -69,13 +71,14 @@ function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
     return <Typography.Text type="secondary">暂无条目</Typography.Text>;
   }
   return (
-    <List
-      size="small"
-      dataSource={conditions}
-      renderItem={(condition) => {
+    <Listy
+      items={conditions}
+      rowKey={(condition) => `${condition.label}|${condition.jd_quote}`}
+      styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+      itemRender={(condition) => {
         const meta = MATCH_STATUS_META[condition.status];
         return (
-          <List.Item>
+          <ListyItem>
             <Space orientation="vertical" size={2} style={{ width: "100%" }}>
               <Space size={6} wrap>
                 <Tag color={meta.color}>{meta.label}</Tag>
@@ -85,7 +88,7 @@ function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
                 <Typography.Text type="secondary">依据：{condition.evidence}</Typography.Text>
               ) : null}
             </Space>
-          </List.Item>
+          </ListyItem>
         );
       }}
     />
@@ -276,17 +279,21 @@ export default function JobMatchBatchPanel({
           title={`已完成 ${batch.completed_count} 个岗位，${batch.failed_count} 个岗位失败`}
           description={`结果已保存，可在「历史记录」中回看；已按匹配度参考分从高到低排列。${batch.model ? `本批使用模型：${batch.model}` : "本批未配置模型，使用本地降级结果。"}`}
         />
-        <List
-          dataSource={batch.items}
-          locale={{ emptyText: "没有可展示的分析结果" }}
-          renderItem={(item) => (
-            <List.Item key={`${batch.id}-${item.job_id}`}>
-              <div style={{ width: "100%" }}>
-                <BatchItemCard item={item} />
-              </div>
-            </List.Item>
-          )}
-        />
+        {batch.items.length === 0 ? (
+          <Typography.Text type="secondary">没有可展示的分析结果</Typography.Text>
+        ) : (
+          <Listy
+            items={batch.items}
+            rowKey={(item) => `${batch.id}-${item.job_id}`}
+            itemRender={(item) => (
+              <ListyItem>
+                <div style={{ width: "100%" }}>
+                  <BatchItemCard item={item} />
+                </div>
+              </ListyItem>
+            )}
+          />
+        )}
       </Space>
     ) : (
       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择岗位后开始批量分析" />
@@ -297,22 +304,22 @@ export default function JobMatchBatchPanel({
   ) : history.length === 0 ? (
     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有批量分析记录" />
   ) : (
-    <List
-      dataSource={history}
-      renderItem={(item) => (
-        <List.Item
-          key={item.id}
+    <Listy
+      items={history}
+      rowKey={(item) => item.id}
+      itemRender={(item) => (
+        <ListyItem
           actions={[
             <Button key="view" type="link" onClick={() => void openHistory(item.id)}>
               查看结果
             </Button>,
           ]}
         >
-          <List.Item.Meta
+          <ListyMeta
             title={`第 ${item.id} 批 · ${formatTime(item.created_at)}`}
             description={`共 ${item.requested_count} 个岗位，完成 ${item.completed_count} 个，失败 ${item.failed_count} 个${item.top_score === null ? "" : `，最高参考分 ${item.top_score}`}`}
           />
-        </List.Item>
+        </ListyItem>
       )}
     />
   );

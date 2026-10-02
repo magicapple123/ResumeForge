@@ -7,7 +7,8 @@ import {
   Empty,
   Form,
   Input,
-  List,
+  Listy,
+  Spin,
   Modal,
   Popconfirm,
   Space,
@@ -18,6 +19,7 @@ import {
 import type { LLMConfigRecord } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { CUSTOM_PRESET_LABEL, matchingPreset } from "./SettingsConfig";
+import { ListyItem, ListyMeta } from "../common/ListyItem";
 
 interface Props {
   records: LLMConfigRecord[];
@@ -83,15 +85,16 @@ export default function LLMConfigRecordsCard({
         <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
           将当前已保存的配置命名后加入记录；切换记录会直接更新当前使用的配置。
         </Typography.Paragraph>
-        <List
-          itemLayout="horizontal"
-          loading={recordsLoading}
-          dataSource={records}
-          locale={{
-            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无配置记录" />,
-          }}
-          renderItem={(record) => (
-            <List.Item
+        {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
+        <Spin spinning={recordsLoading}>
+        {records.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无配置记录" />
+        ) : (
+        <Listy
+          items={records}
+          rowKey={(record) => record.id}
+          itemRender={(record) => (
+            <ListyItem
               actions={[
                 <Button
                   key="apply"
@@ -131,7 +134,7 @@ export default function LLMConfigRecordsCard({
                 </Popconfirm>,
               ]}
             >
-              <List.Item.Meta
+              <ListyMeta
                 title={
                   <Space size={8} wrap>
                     <Typography.Text strong>{record.name}</Typography.Text>
@@ -161,9 +164,11 @@ export default function LLMConfigRecordsCard({
                   </Space>
                 }
               />
-            </List.Item>
+            </ListyItem>
           )}
         />
+        )}
+        </Spin>
       </Card>
 
       <Modal

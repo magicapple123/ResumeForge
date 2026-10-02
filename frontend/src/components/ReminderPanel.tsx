@@ -18,7 +18,7 @@ import {
   Empty,
   Form,
   Input,
-  List,
+  Listy,
   Modal,
   Popconfirm,
   Segmented,
@@ -38,6 +38,8 @@ import type { Reminder, ReminderKind, ReminderStatus } from "../types";
 import { formatDateTime } from "../utils/format";
 import { RecordDetailDrawer } from "./common/RecordDetail";
 import { isFromInnerControl } from "./common/recordDetailCore";
+import { ListyItem, ListyMeta } from "./common/ListyItem";
+import { LISTY_ITEM_PADDING_DEFAULT } from "./common/listyPadding";
 import CalendarView from "./tracker/CalendarView";
 
 interface Option {
@@ -193,9 +195,11 @@ export default function ReminderPanel({
       ) : items.length === 0 ? (
         <Empty description="还没有提醒，把面试、测评截止这些时点记下来吧" />
       ) : (
-        <List
-          dataSource={items}
-          renderItem={(item) => {
+        <Listy
+          items={items}
+          rowKey={(item) => item.id}
+          styles={{ item: { ...LISTY_ITEM_PADDING_DEFAULT } }}
+          itemRender={(item) => {
             // 「详情」放在第一位：列表只放得下摘要，备注、绑定对象这些都得点进去看。
             const actions = [
               <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
@@ -258,7 +262,7 @@ export default function ReminderPanel({
               </Popconfirm>,
             );
             return (
-              <List.Item
+              <ListyItem
                 className="detail-trigger"
                 actions={actions}
                 // 整条点开详情；行内按钮与二次确认不会被这一层抢走。
@@ -267,7 +271,7 @@ export default function ReminderPanel({
                   setDetail(item);
                 }}
               >
-                <List.Item.Meta
+                <ListyMeta
                   title={
                     <Space size={6} wrap>
                       <span>{item.title}</span>
@@ -292,7 +296,7 @@ export default function ReminderPanel({
                     </Typography.Text>
                   }
                 />
-              </List.Item>
+              </ListyItem>
             );
           }}
         />

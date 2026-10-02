@@ -14,7 +14,8 @@ import {
   Card,
   Empty,
   Input,
-  List,
+  Listy,
+  Spin,
   Modal,
   Popconfirm,
   Space,
@@ -26,6 +27,7 @@ import {
 import type { DatasetInfo } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import FileDropZone from "../common/FileDropZone";
+import { ListyItem, ListyMeta } from "../common/ListyItem";
 
 /** 备份包导入后默认用的数据集名字：去掉扩展名，空文件名时给一个兜底。 */
 function datasetNameFrom(file: File): string {
@@ -173,15 +175,19 @@ export default function DatasetsCard({
           </Upload>
         </FileDropZone>
 
-        <List
+        {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
+        <Spin spinning={loading}>
+        {datasets.length === 0 ? (
+          <div style={{ marginTop: 16 }}>
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据集" />
+          </div>
+        ) : (
+        <Listy
           style={{ marginTop: 16 }}
-          loading={loading}
-          dataSource={datasets}
-          locale={{
-            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据集" />,
-          }}
-          renderItem={(dataset) => (
-            <List.Item
+          items={datasets}
+          rowKey={(dataset) => dataset.id}
+          itemRender={(dataset) => (
+            <ListyItem
               actions={[
                 <Tooltip key="switch" title={dataset.is_active ? "正在使用" : "切换到这份数据"}>
                   <Button
@@ -229,7 +235,7 @@ export default function DatasetsCard({
                 </Popconfirm>,
               ]}
             >
-              <List.Item.Meta
+              <ListyMeta
                 title={
                   <>
                     {dataset.name}
@@ -251,9 +257,11 @@ export default function DatasetsCard({
                   </>
                 }
               />
-            </List.Item>
+            </ListyItem>
           )}
         />
+        )}
+        </Spin>
       </Card>
 
       <Modal

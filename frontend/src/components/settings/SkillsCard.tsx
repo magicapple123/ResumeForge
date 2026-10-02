@@ -6,7 +6,8 @@ import {
   Button,
   Card,
   Empty,
-  List,
+  Listy,
+  Spin,
   Space,
   Switch,
   Tag,
@@ -16,6 +17,8 @@ import {
 } from "antd";
 import type { AssistantSkill } from "../../types";
 import FileDropZone from "../common/FileDropZone";
+import { ListyItem, ListyMeta } from "../common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
 import { RowActions } from "../common/RowActions";
 import { formatDateTime } from "../../utils/format";
 
@@ -93,15 +96,20 @@ export default function SkillsCard({
         </Upload>
       </FileDropZone>
 
-      <List
+      {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
+      <Spin spinning={loading}>
+      {skills.length === 0 ? (
+        <div style={{ marginTop: 16 }}>
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有导入技能" />
+        </div>
+      ) : (
+      <Listy
         style={{ marginTop: 16 }}
-        loading={loading}
-        dataSource={skills}
-        locale={{
-          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有导入技能" />,
-        }}
-        renderItem={(skill) => (
-          <List.Item
+        items={skills}
+        rowKey={(skill) => skill.id}
+        styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+        itemRender={(skill) => (
+          <ListyItem
             actions={[
               <Tooltip
                 key="toggle"
@@ -135,7 +143,7 @@ export default function SkillsCard({
               />,
             ]}
           >
-            <List.Item.Meta
+            <ListyMeta
               title={
                 <Space size={8} wrap>
                   {/* 技能名可点击：查看提示词全文与知识文件，也能就地改。 */}
@@ -149,9 +157,11 @@ export default function SkillsCard({
               }
               description={describe(skill)}
             />
-          </List.Item>
+          </ListyItem>
         )}
       />
+      )}
+      </Spin>
     </Card>
   );
 }

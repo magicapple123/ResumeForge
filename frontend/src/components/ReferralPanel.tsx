@@ -21,7 +21,7 @@ import {
   Empty,
   Form,
   Input,
-  List,
+  Listy,
   Modal,
   Row,
   Select,
@@ -49,6 +49,7 @@ import { classifyAttachment, IMAGE_ACCEPT, MAX_ATTACHMENT_BYTES } from "../utils
 import { formatDateTime } from "../utils/format";
 import { RecordDetailDrawer } from "./common/RecordDetail";
 import { isFromInnerControl } from "./common/recordDetailCore";
+import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { useRowActionMenu } from "./common/rowActionMenu";
 
 /** 与后端 ``schemas/referral.MAX_NOTE_IMAGES`` 保持一致。 */
@@ -248,10 +249,11 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
       ) : items.length === 0 ? (
         <Empty description="还没有内推记录，把找人内推的机会记下来吧" />
       ) : (
-        <List
-          dataSource={items}
-          renderItem={(item) => (
-            <List.Item
+        <Listy
+          items={items}
+          rowKey={(item) => item.id}
+          itemRender={(item) => (
+            <ListyItem
               className="detail-trigger"
               // 整条可点开详情；内层的「详情 / 更多」按钮不会被这一层抢走。
               onClick={(event) => {
@@ -293,7 +295,7 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
                 </Dropdown>,
               ]}
             >
-              <List.Item.Meta
+              <ListyMeta
                 title={
                   <Space size={6} wrap>
                     <span>
@@ -334,7 +336,7 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
                   </Space>
                 }
               />
-            </List.Item>
+            </ListyItem>
           )}
         />
       )}
