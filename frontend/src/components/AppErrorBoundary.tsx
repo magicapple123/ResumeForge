@@ -69,7 +69,7 @@ export default class AppErrorBoundary extends Component<Props, State> {
             : "界面运行时发生异常，请重新加载后再试。"
         }
         extra={
-          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={8} style={{ width: "100%" }}>
             <Button type="primary" onClick={this.reload}>
               重新加载
             </Button>

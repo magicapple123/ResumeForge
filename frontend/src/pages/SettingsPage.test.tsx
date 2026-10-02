@@ -572,7 +572,10 @@ describe("SettingsPage output limit", () => {
     expect(limitInput).not.toBeDisabled();
 
     fireEvent.click(screen.getByRole("checkbox", { name: /不限制/ }));
-    expect(limitInput).toBeDisabled();
+    // antd 6 的 Form.useWatch 改为异步通知（下一拍才触发重渲染），勾选后输入框
+    // 的 disabled 是派生态，必须等它落地。真实浏览器中同样有一帧延迟，jsdom 里
+    // 不等的话后续断言会读到旧 DOM。
+    await waitFor(() => expect(limitInput).toBeDisabled());
 
     fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
 
@@ -600,7 +603,8 @@ describe("SettingsPage output limit", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
     fireEvent.click(checkbox);
-    expect(screen.getByLabelText("最大输出 Token")).not.toBeDisabled();
+    // antd 6 的 Form.useWatch 异步通知：取消勾选后输入框恢复可用要等一拍。
+    await waitFor(() => expect(screen.getByLabelText("最大输出 Token")).not.toBeDisabled());
 
     fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
 
@@ -625,7 +629,12 @@ describe("SettingsPage output limit", () => {
     fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
     const checkbox = screen.getByRole("checkbox", { name: /不限制/ });
     fireEvent.click(checkbox);
+    // antd 6 的 Form.useWatch 异步通知：两次点击之间必须等受控 checkbox 的
+    // checked 状态落地，否则第二次 click 读到旧 DOM，会再发出一次 checked=true，
+    // 「取消勾选恢复原值」就永远不会发生（真实浏览器里两次点击之间必有重渲染）。
+    await waitFor(() => expect(checkbox).toBeChecked());
     fireEvent.click(checkbox);
+    await waitFor(() => expect(checkbox).not.toBeChecked());
 
     fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
 

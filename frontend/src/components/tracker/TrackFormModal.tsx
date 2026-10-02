@@ -116,7 +116,7 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
       title={editing ? "编辑进度" : "添加进度"}
       onCancel={onClose}
       width={680}
-      destroyOnClose
+      destroyOnHidden
       footer={
         <Space>
           <Button onClick={onClose}>取消</Button>

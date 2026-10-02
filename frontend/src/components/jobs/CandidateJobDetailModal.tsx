@@ -39,7 +39,7 @@ export default function CandidateJobDetailModal({
       width={760}
     >
       {candidate && (
-        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Descriptions size="small" column={1} bordered>
             <Descriptions.Item label="公司">{candidate.company || "未识别公司"}</Descriptions.Item>
             <Descriptions.Item label="地点">{candidate.location || "-"}</Descriptions.Item>

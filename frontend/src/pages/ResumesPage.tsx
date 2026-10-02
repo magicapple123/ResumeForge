@@ -466,7 +466,7 @@ export default function ResumesPage() {
         }}
       >
         {diffBase && (
-          <Space direction="vertical" style={{ width: "100%" }} size="middle">
+          <Space orientation="vertical" style={{ width: "100%" }} size="middle">
             <Space wrap>
               <Typography.Text>基准版本：</Typography.Text>
               <Typography.Text strong>{diffBase.title}</Typography.Text>

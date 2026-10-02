@@ -49,7 +49,7 @@ export default function WebFormPendingPanel({ missingData, unrecognized, blocked
   }
 
   return (
-    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       {missingData.length ? (
         <Card
           size="small"
@@ -66,7 +66,7 @@ export default function WebFormPendingPanel({ missingData, unrecognized, blocked
             type="info"
             showIcon
             style={{ marginBottom: 8 }}
-            message="这些不会自动填：密码与验证码是刻意的安全边界；简历附件、他人信息与「我已阅读并同意」这类确认项也不该由程序代填。"
+            title="这些不会自动填：密码与验证码是刻意的安全边界；简历附件、他人信息与「我已阅读并同意」这类确认项也不该由程序代填。"
           />
           <Lines items={blocked} />
         </Card>
@@ -80,7 +80,7 @@ export default function WebFormPendingPanel({ missingData, unrecognized, blocked
               key: "unrecognized",
               label: `没认出来（${unrecognized.length} 项，点开查看）`,
               children: (
-                <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                <Space orientation="vertical" size={8} style={{ width: "100%" }}>
                   <Typography.Text type="secondary">
                     多半是「可添加多条」的区块（实习经历 / 项目经历 / 获奖信息）里的字段，
                     以及这张表特有的问题（导师、实验室、研究方向等）——这一类目前没有对应的资料可填，

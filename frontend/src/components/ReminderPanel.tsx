@@ -158,7 +158,7 @@ export default function ReminderPanel({
   };
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Card size="small" title="日历提醒">
         <Space wrap>
           <Select

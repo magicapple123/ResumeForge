@@ -50,7 +50,7 @@ export default function AtsCheckPanel({ resumeId }: Props) {
   }, [data]);
 
   return (
-    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+    <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Space.Compact style={{ width: "100%" }}>
         <Input.TextArea
           rows={2}
@@ -64,11 +64,11 @@ export default function AtsCheckPanel({ resumeId }: Props) {
         </Button>
       </Space.Compact>
 
-      {error && <Alert type="error" showIcon message={error} />}
+      {error && <Alert type="error" showIcon title={error} />}
 
       {data && !loading && (
         <>
-          <Alert type="info" showIcon message={data.disclaimer} />
+          <Alert type="info" showIcon title={data.disclaimer} />
           <Space wrap align="center">
             <Typography.Text strong>ATS 参考分</Typography.Text>
             <Progress
@@ -129,7 +129,7 @@ export default function AtsCheckPanel({ resumeId }: Props) {
                     </Space>
                   }
                 >
-                  <Space direction="vertical" style={{ width: "100%" }} size="small">
+                  <Space orientation="vertical" style={{ width: "100%" }} size="small">
                     {group.issues.map((issue, index) => (
                       <div
                         key={index}

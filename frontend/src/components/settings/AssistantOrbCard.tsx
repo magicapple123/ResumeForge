@@ -52,7 +52,7 @@ export default function AssistantOrbCard() {
         不会遮挡主要内容。
       </Typography.Paragraph>
       <Spin spinning={loading}>
-        <Space direction="vertical" size={4}>
+        <Space orientation="vertical" size={4}>
           <Switch
             checked={enabled}
             loading={saving}

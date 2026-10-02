@@ -377,14 +377,14 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
               type="warning"
               showIcon
               style={{ marginBottom: 16 }}
-              message="尚未配置大模型 API，请先到「设置」页完成配置（支持 DeepSeek / 豆包 / Kimi / OpenAI 等）"
+              title="尚未配置大模型 API，请先到「设置」页完成配置（支持 DeepSeek / 豆包 / Kimi / OpenAI 等）"
             />
           ) : (
             <Alert
               type="info"
               showIcon
               style={{ marginBottom: 16 }}
-              message={`当前模型：${modelName || "未知"}。生成过程约需 1-2 分钟，生成在后台进行，期间可关闭弹窗，完成后会自动提醒。`}
+              title={`当前模型：${modelName || "未知"}。生成过程约需 1-2 分钟，生成在后台进行，期间可关闭弹窗，完成后会自动提醒。`}
               description={
                 job
                   ? "系统会根据目标岗位的 JD，从完整个人资料与经历总结文件中筛选并排序相关信息；原始资料不会被修改。"
@@ -406,7 +406,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
             </div>
           )}
           <Typography.Title level={5}>{job ? "岗位适配与内容美化" : "内容美化"}</Typography.Title>
-          <Space direction="vertical" size={14} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={14} style={{ width: "100%" }}>
             <Space size={10}>
               <Switch checked={enhance} onChange={setEnhance} />
               <Typography.Text strong>
@@ -492,7 +492,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            message="生成已在后台开始：现在关闭弹窗不会中断，完成后会自动提醒并打开结果。"
+            title="生成已在后台开始：现在关闭弹窗不会中断，完成后会自动提醒并打开结果。"
           />
           <div style={{ marginTop: 16, textAlign: "right" }}>
             <Space>
@@ -542,7 +542,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           <Alert
             type="error"
             showIcon
-            message={errorMsg || "生成失败"}
+            title={errorMsg || "生成失败"}
             style={{ marginBottom: 24 }}
           />
           <Space>

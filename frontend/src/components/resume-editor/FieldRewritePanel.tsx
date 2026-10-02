@@ -130,7 +130,7 @@ export default function FieldRewritePanel({ resumeId, content, path, onChange }:
 
   return (
     <div className="resume-field-rewrite">
-      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={8} style={{ width: "100%" }}>
         <Typography.Text strong>
           <ThunderboltOutlined /> 让 AI 按我的要求改「{label}」
         </Typography.Text>

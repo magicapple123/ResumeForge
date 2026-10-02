@@ -14,15 +14,17 @@ import GenerateResumeModal from "./GenerateResumeModal";
 const notices: { title: string; modal?: boolean; confirmLabel?: string }[] = [];
 
 const fakeNotifyHost = {
+  // antd 6 起通知卡片的标题参数由 message 改名 title（见 utils/taskNotify.ts），
+  // 假宿主按新形状记录。
   notification: {
-    success: (config: { message: unknown }) =>
-      notices.push({ title: String(config.message), modal: false }),
-    warning: (config: { message: unknown }) =>
-      notices.push({ title: String(config.message), modal: false }),
-    error: (config: { message: unknown }) =>
-      notices.push({ title: String(config.message), modal: false }),
-    info: (config: { message: unknown }) =>
-      notices.push({ title: String(config.message), modal: false }),
+    success: (config: { title: unknown }) =>
+      notices.push({ title: String(config.title), modal: false }),
+    warning: (config: { title: unknown }) =>
+      notices.push({ title: String(config.title), modal: false }),
+    error: (config: { title: unknown }) =>
+      notices.push({ title: String(config.title), modal: false }),
+    info: (config: { title: unknown }) =>
+      notices.push({ title: String(config.title), modal: false }),
   },
   modal: {
     info: (config: { message: unknown; okText?: unknown }) =>

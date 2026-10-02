@@ -85,8 +85,8 @@ export default function ResumeSuggestionsModal({
       destroyOnHidden
     >
       {error ? (
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <Alert type="error" showIcon message={error} />
+        <Space orientation="vertical" style={{ width: "100%" }}>
+          <Alert type="error" showIcon title={error} />
           <Button
             icon={<ReloadOutlined />}
             onClick={() => void loadSuggestions()}
@@ -121,7 +121,7 @@ export default function ResumeSuggestionsModal({
                 const priority = PRIORITY_META[item.priority];
                 return (
                   <List.Item>
-                    <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                    <Space orientation="vertical" size={6} style={{ width: "100%" }}>
                       <Space wrap>
                         <Tag color={priority.color}>{priority.label}</Tag>
                         {item.section && <Tag>{item.section}</Tag>}

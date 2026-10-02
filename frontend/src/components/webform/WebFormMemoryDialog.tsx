@@ -155,12 +155,12 @@ export default function WebFormMemoryDialog({
       okButtonProps={{ disabled: !canSubmit }}
       onCancel={onCancel}
       onOk={handleSubmit}
-      destroyOnClose
+      destroyOnHidden
     >
       {pending ? (
-        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Card size="small" style={{ background: "#f5f8ff" }}>
-            <Space direction="vertical" size={4}>
+            <Space orientation="vertical" size={4}>
               <Typography.Text type="secondary">当前浏览器字段</Typography.Text>
               <Typography.Text strong>
                 {pending.control_label || pending.field_label || "未命名字段"}
@@ -194,7 +194,7 @@ export default function WebFormMemoryDialog({
               <Space align="start">
                 <Radio checked={selectedId === "custom"} />
                 <PlusOutlined style={{ color: "#1677ff", marginTop: 4 }} />
-                <Space direction="vertical" size={2}>
+                <Space orientation="vertical" size={2}>
                   <Space wrap size={6}>
                     <Typography.Text strong>新增一条网申自定义字段</Typography.Text>
                     <Tag color="blue">网申资料 · 自定义</Tag>
@@ -262,7 +262,7 @@ export default function WebFormMemoryDialog({
                     {expanded ? (
                       <Space
                         id={`webform-memory-group-${group}`}
-                        direction="vertical"
+                        orientation="vertical"
                         size={8}
                         style={{ width: "100%" }}
                       >
@@ -282,7 +282,7 @@ export default function WebFormMemoryDialog({
                               <Space align="start" style={{ width: "100%" }}>
                                 <Radio checked={selected} />
                                 <Space
-                                  direction="vertical"
+                                  orientation="vertical"
                                   size={2}
                                   style={{ minWidth: 0, flex: 1 }}
                                 >
@@ -322,7 +322,7 @@ export default function WebFormMemoryDialog({
             />
           ) : null}
 
-          <Space direction="vertical" size={6} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={6} style={{ width: "100%" }}>
             <Typography.Text strong>要保存的值</Typography.Text>
             {inputKind(selectedTarget) === "textarea" ? (
               <Input.TextArea

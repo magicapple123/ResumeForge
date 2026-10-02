@@ -54,7 +54,7 @@ const itemColumns: ColumnsType<WebFormRecordItem> = [
     render: (_, item) => {
       const meta = ITEM_STATUS_META[item.status] ?? { color: "default", label: item.status };
       return (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Tag color={meta.color}>{meta.label}</Tag>
           {item.detail ? (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -135,7 +135,7 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
           </Popconfirm>
         ),
         children: (
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={12} style={{ width: "100%" }}>
             <Descriptions size="small" column={1}>
               <Descriptions.Item label="页面">
                 {record.page_title || "（无标题）"}

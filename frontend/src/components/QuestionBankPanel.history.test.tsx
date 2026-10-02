@@ -87,7 +87,7 @@ describe("QuestionBankPanel 自动保存与历史富还原", () => {
     });
 
     const placeholder = screen.getByText("关联岗位（选填）");
-    fireEvent.mouseDown(placeholder.closest(".ant-select-selector")!);
+    fireEvent.mouseDown(placeholder.closest(".ant-select-content")!);
     fireEvent.click(await screen.findByText("后端开发工程师"));
     fireEvent.click(screen.getByRole("button", { name: /生成题库/ }));
 

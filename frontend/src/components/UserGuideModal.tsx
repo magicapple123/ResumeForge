@@ -101,13 +101,13 @@ export default function UserGuideModal({ open, onClose, onNavigate }: UserGuideM
       <div className="user-guide-body">
         <Steps
           className="user-guide-steps"
-          direction="vertical"
+          orientation="vertical"
           size="small"
           current={current}
           items={GUIDE_STEPS.map(({ title }) => ({ title }))}
           onChange={setCurrent}
         />
-        <Divider type="vertical" className="user-guide-divider" />
+        <Divider orientation="vertical" className="user-guide-divider" />
         <section className="user-guide-step-content" aria-live="polite">
           <div className="user-guide-step-icon" aria-hidden="true">
             <StepIcon />

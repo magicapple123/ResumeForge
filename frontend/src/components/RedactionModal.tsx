@@ -64,7 +64,7 @@ export default function RedactionModal({ recordId, open, onClose }: Props) {
       width="min(560px, 92vw)"
       destroyOnHidden
     >
-      <Space direction="vertical" style={{ width: "100%" }} size="middle">
+      <Space orientation="vertical" style={{ width: "100%" }} size="middle">
         <div>
           <Typography.Text strong>遮罩范围</Typography.Text>
           <div style={{ marginTop: 8 }}>

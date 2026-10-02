@@ -63,7 +63,7 @@ describe("完成提醒的真实呈现", () => {
     notifyTaskDone({ title: "岗位解读完成", description: "结果已经可以查看了。" });
 
     await waitFor(() => {
-      expect(document.querySelector(".ant-notification-notice-message")?.textContent).toBe(
+      expect(document.querySelector(".ant-notification-notice-title")?.textContent).toBe(
         "岗位解读完成",
       );
     });

@@ -654,11 +654,11 @@ export default function WebFormPage() {
   }, [preview, result, running]);
 
   return (
-    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       <Alert
         type="warning"
         showIcon
-        message="这个功能只负责把资料填进页面，不会替你提交"
+        title="这个功能只负责把资料填进页面，不会替你提交"
         description="填充完成后请回到浏览器窗口逐项核对，确认无误后由你自己点击页面上的提交按钮。"
       />
 
@@ -935,7 +935,7 @@ export default function WebFormPage() {
             style={{ marginTop: 12 }}
             type="info"
             showIcon
-            message="请回到浏览器窗口核对，确认无误后由你自己点击提交"
+            title="请回到浏览器窗口核对，确认无误后由你自己点击提交"
           />
         </Card>
       ) : null}

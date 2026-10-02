@@ -39,7 +39,7 @@ const RESULT = {
 
 async function pickJob(optionText: string) {
   const placeholder = screen.getByText("关联岗位（选填）");
-  const selector = placeholder.closest(".ant-select-selector");
+  const selector = placeholder.closest(".ant-select-content");
   fireEvent.mouseDown(selector!);
   fireEvent.click(await screen.findByText(optionText));
 }

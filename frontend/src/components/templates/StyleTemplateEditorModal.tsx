@@ -156,7 +156,7 @@ export default function StyleTemplateEditorModal({
                 onChange={(event) => setDescription(event.target.value)}
               />
             </Form.Item>
-            <Alert type="info" showIcon message={STARTER_HINT} style={{ marginBottom: 12 }} />
+            <Alert type="info" showIcon title={STARTER_HINT} style={{ marginBottom: 12 }} />
             <Form.Item label="模板 HTML">
               <Input.TextArea
                 value={html}
@@ -177,7 +177,7 @@ export default function StyleTemplateEditorModal({
           </Form>
           <div className="style-template-preview">
             {previewError ? (
-              <Alert type="error" showIcon message="模板渲染失败" description={previewError} />
+              <Alert type="error" showIcon title="模板渲染失败" description={previewError} />
             ) : previewing ? (
               <div className="style-template-preview-loading">
                 <Spin />

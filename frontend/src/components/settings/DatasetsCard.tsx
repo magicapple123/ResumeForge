@@ -270,7 +270,7 @@ export default function DatasetsCard({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="名称只用于在列表里区分，不影响数据内容。"
+          title="名称只用于在列表里区分，不影响数据内容。"
         />
         <Input
           value={renameValue}
@@ -293,7 +293,7 @@ export default function DatasetsCard({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="新建后进入数据集列表，可随时切换过去；激活后是一份空数据（岗位、简历、资料都从零开始）。"
+          title="新建后进入数据集列表，可随时切换过去；激活后是一份空数据（岗位、简历、资料都从零开始）。"
         />
         <Input
           value={createName}

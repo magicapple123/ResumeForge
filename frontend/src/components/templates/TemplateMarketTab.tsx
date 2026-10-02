@@ -88,7 +88,7 @@ function MarketPreviewModal({
       destroyOnHidden
     >
       {error ? (
-        <Alert type="error" showIcon message="预览渲染失败" description={error} />
+        <Alert type="error" showIcon title="预览渲染失败" description={error} />
       ) : loading ? (
         <div style={{ textAlign: "center", padding: 40 }}>
           <Spin />
@@ -124,7 +124,7 @@ export default function TemplateMarketTab() {
       <Typography.Paragraph type="secondary">
         按求职场景给出「样式 + 版式 + 字号」的组合建议。所有预设都映射到内置模板，全离线、无需联网。
       </Typography.Paragraph>
-      {error && <Alert type="error" showIcon message="读取模板市场失败" description={error} />}
+      {error && <Alert type="error" showIcon title="读取模板市场失败" description={error} />}
       <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
         需要自定义模板？在下方工作台点「导入 HTML」或「复制改一份」即可。
       </Typography.Paragraph>

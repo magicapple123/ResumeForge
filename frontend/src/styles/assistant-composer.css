@@ -87,7 +87,10 @@
   cursor: pointer;
 }
 
-.assistant-composer .ant-input-textarea textarea.ant-input {
+/* antd 6 的 Input.TextArea 不再渲染 `.ant-input-textarea` 包装层（jsdom 实测
+   textarea 的父节点就是 `.assistant-composer` 本身），选择器必须直落 textarea，
+   否则这条 104px 高度规则一声不吭地失效。 */
+.assistant-composer textarea.ant-input {
   min-height: 104px !important;
   padding: 12px 14px;
   line-height: 1.7;

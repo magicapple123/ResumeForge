@@ -64,12 +64,13 @@ beforeEach(() => {
   apiMocks.cancelResumeGenerateTask.mockReset();
   registerNotifyHost({
     notification: {
-      success: (config) => notices.push({ title: String(config.message), modal: false }),
+      // antd 6 起通知卡片的标题参数由 message 改名 title（见 utils/taskNotify.ts），
+      // 假宿主按新形状记录。
+      success: (config) => notices.push({ title: String(config.title), modal: false }),
       warning: (config) =>
-        notices.push({ title: String(config.message), modal: false, kind: "warning" }),
-      error: (config) =>
-        notices.push({ title: String(config.message), modal: false, kind: "error" }),
-      info: (config) => notices.push({ title: String(config.message), modal: false }),
+        notices.push({ title: String(config.title), modal: false, kind: "warning" }),
+      error: (config) => notices.push({ title: String(config.title), modal: false, kind: "error" }),
+      info: (config) => notices.push({ title: String(config.title), modal: false }),
     },
     modal: {
       // AntD 的 modal 认 title / content（不是 message）——曾经就因为传了 message，
