@@ -44,7 +44,7 @@ interface Props {
   streamingTools: AssistantToolCall[];
   progressText: string;
   streamError: string;
-  messageEndRef: RefObject<HTMLDivElement>;
+  messageEndRef: RefObject<HTMLDivElement | null>;
   enabledSkillCount: number;
   skillsLoaded: boolean;
   onChoosePrompt: (prompt: StarterPrompt) => void;

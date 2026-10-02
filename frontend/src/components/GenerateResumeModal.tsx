@@ -254,10 +254,25 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   }, [taskId]);
 
   // 弹窗开着时声明"界面在看这个任务"：完成后用右上角卡片提醒，不弹居中弹窗打断用户。
+  //
+  // detach 只跟随弹窗关闭，不跟随 taskId 置空：任务进入终态时弹窗收尾会把 taskId
+  // 置空（见下面的完成分支），但弹窗仍开着展示预览——若跟着 detach，registry 稍后
+  // 的完成通知会误判"用户已经走开"，给正看着预览的用户升级成居中弹窗。React 19 的
+  // 被动副作用落点让这个竞态从偶发变成确定性发生，"在看"的生命周期必须跟随弹窗。
+  const detachTaskUiRef = useRef<(() => void) | null>(null);
   useEffect(() => {
-    if (!open || taskId == null) return;
-    return attachTaskUi(taskId);
+    if (!open) {
+      detachTaskUiRef.current?.();
+      detachTaskUiRef.current = null;
+      return;
+    }
+    if (taskId == null || detachTaskUiRef.current) return;
+    detachTaskUiRef.current = attachTaskUi(taskId);
   }, [open, taskId]);
+  useEffect(() => {
+    // 组件卸载兜底释放，防止登记表泄漏。
+    return () => detachTaskUiRef.current?.();
+  }, []);
 
   // 任务进入终态后的收尾：完成→取简历进预览并提醒；取消→回配置；失败→错误。
   useEffect(() => {
