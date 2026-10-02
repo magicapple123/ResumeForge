@@ -37,6 +37,13 @@ updates:
     labels:
       - dependencies
       - frontend
+    ignore:
+      # TypeScript 7 (Go-native compiler) is outside typescript-eslint
+      # 8.71.0's peer range (>=4.8.4 <6.1.0) — npm ci fails with ERESOLVE
+      # (#55). Remove this ignore once typescript-eslint announces TS 7
+      # support. (2026-10-02)
+      - dependency-name: typescript
+        versions: [">=7"]
     commit-message:
       prefix: deps
 
