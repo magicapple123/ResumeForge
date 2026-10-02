@@ -22,6 +22,11 @@ from .profile_relevance_constants import (
     _TITLE_SPLIT_RE,
 )
 
+# 技能候选的下限：低于这个数就按分数补足零分条目。设 3 是因为一份简历的技能区
+# 通常有 6-10 项，候选只给 1-2 项时模型必然要自拟技能，而自拟的技能过不了
+# 一致性检查（会被误报成"候选资料未包含"）。
+_MIN_SKILL_CANDIDATES = 3
+
 
 def _unique(values: list[str]) -> list[str]:
     result: list[str] = []
@@ -244,7 +249,18 @@ def _select_skills(
     ranked.sort(key=lambda value: (-value[0], value[1]))
     matching = [item for score, _, item in ranked if score > 0]
     if matching:
-        return matching[: SECTION_LIMITS["skills"]]
+        if len(matching) >= _MIN_SKILL_CANDIDATES:
+            return matching[: SECTION_LIMITS["skills"]]
+        # 匹配数低于下限时按分数补足：技能候选太少，模型只能从项目描述里自拟技能区，
+        # 而自拟的技能会被一致性检查误报成"候选资料未包含"。补足的高分零分项仍然
+        # 来自用户资料，不存在虚构风险。
+        padded = list(matching)
+        for _, _, item in ranked:
+            if len(padded) >= _MIN_SKILL_CANDIDATES:
+                break
+            if item not in padded:
+                padded.append(item)
+        return padded[: SECTION_LIMITS["skills"]]
     if focus.skills or focus.domains or focus.terms:
         return []
     # JD 未给出可识别信号时保留有限技能作为兜底，避免生成空技能区。

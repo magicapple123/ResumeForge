@@ -4,7 +4,12 @@
   position: fixed;
   right: 24px;
   bottom: 96px;
-  z-index: 1100;
+  /*
+   * 2990：略低于悬浮球（.tt-shell 的 3000），保证球压在卡片之上、随时可以再点球收起；
+   * 高于 antd Modal/Drawer（1000+）与 .app-exited-overlay（2000）。
+   * 后续新增覆盖层不得落在 2990~3100 区间（3100 是附件 Tooltip 的 overlayStyle）。
+   */
+  z-index: 2990;
   width: min(760px, calc(100vw - 24px));
   height: min(680px, calc(100vh - 132px));
   overflow: hidden;
@@ -14,14 +19,53 @@
   box-shadow: 0 20px 55px rgb(25 61 99 / 24%);
 }
 
+.tt-assistant-card.is-dragging {
+  cursor: grabbing;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/*
+ * 拖动把手：卡片顶部的窄条。cursor: grab、禁用文本选择与触摸滚动；
+ * z-index 1 在关闭按钮（4）之下——把手区域内没有其它交互元素，拖拽与点击天然互斥。
+ */
+.tt-assistant-card-grip {
+  position: absolute;
+  top: 0;
+  right: 48px;
+  left: 0;
+  z-index: 1;
+  height: 24px;
+  border-radius: 14px 14px 0 0;
+  /* 不画任何底色：把手只需要"能拖"，一条蓝色渐变横在卡片顶上看着像渲染错误
+     （用户反馈原话："挪动的时候上方有蓝色的阴影"）。交互提示交给 cursor: grab。 */
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.tt-assistant-card-grip:focus-visible {
+  outline: 2px solid #91caff;
+  outline-offset: -2px;
+}
+
 .tt-assistant-card.is-edge-left {
   right: auto;
   left: 24px;
 }
 
 .tt-assistant-card.is-edge-top {
-  top: 96px;
+  /*
+   * 140px：球贴顶边时占 64~128px（HEADER_OFFSET 64 + 直径 64），
+   * 140 = 球下缘 128 + 12px 间隙——原来的 96px 会让卡片盖住球的大半，
+   * 用户没法再点球收起。
+   */
+  top: 140px;
   bottom: auto;
+  /* 顶边让出 44px 后可用高度同步收缩，避免卡片底部溢出视口。 */
+  height: min(680px, calc(100vh - 172px));
 }
 
 .tt-assistant-card.is-edge-bottom {
@@ -118,6 +162,11 @@
   margin-bottom: 16px;
 }
 
+/* 悬浮卡空间有限：宣传图比主界面（128px）小一号。 */
+.tt-assistant-card .assistant-page--floating .assistant-empty-state-brand {
+  height: 72px;
+}
+
 .tt-assistant-card .assistant-page--floating .assistant-starter-prompts {
   max-width: 520px;
   margin-top: 20px;
@@ -140,6 +189,8 @@
  */
 .tt-assistant-card .assistant-page--floating .assistant-composer textarea.ant-input {
   min-height: 72px !important;
+  max-height: 72px !important;
+  overflow-y: auto !important;
   padding: 10px 12px;
 }
 
@@ -168,6 +219,16 @@
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 16px 36px rgb(31 65 100 / 22%);
+}
+
+/*
+ * 浮窗历史抽屉的统一内边距：基类（styles/assistant-sidebar.css）只有 padding-right，
+ * 「新对话」按钮、筛选组和会话列表项会贴着抽屉边框——250px 的窄板里尤其挤。
+ * 只作用在浮窗内，整页 sidebar 零影响。
+ */
+.tt-assistant-card .assistant-sidebar--floating {
+  box-sizing: border-box; /* 必需：width 固定 250px，content-box 下 padding 会外扩 */
+  padding: 12px;
 }
 
 /*

@@ -205,9 +205,10 @@ describe("QuestionBankPanel", () => {
     fireEvent.click(screen.getByText("后端开发工程师"));
     expect(await screen.findByText("请自我介绍")).toBeInTheDocument();
 
-    // 删除需二次确认，确认后走删除接口。
-    fireEvent.click(screen.getByRole("button", { name: /删除/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "确认删除题库历史 1" }));
+    // 删除收进了「···」菜单：打开菜单 → 点删除 → 确认（无 locale 时确认键是 "OK"）。
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("删除"));
+    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
 
     await waitFor(() => expect(apiMocks.deleteQuestionBank).toHaveBeenCalledWith(1));
   });

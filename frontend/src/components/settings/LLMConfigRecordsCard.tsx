@@ -1,6 +1,6 @@
 /** 已保存的大模型配置记录及切换/删除操作。 */
 
-import { DeleteOutlined, SaveOutlined, SwapOutlined } from "@ant-design/icons";
+import { SaveOutlined, SwapOutlined } from "@ant-design/icons";
 import {
   Button,
   Card,
@@ -9,12 +9,12 @@ import {
   Input,
   List,
   Modal,
-  Popconfirm,
   Space,
   Tag,
   Tooltip,
   Typography,
 } from "antd";
+import { RowActions } from "../common/RowActions";
 import type { LLMConfigRecord } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { CUSTOM_PRESET_LABEL, matchingPreset } from "./SettingsConfig";
@@ -109,26 +109,20 @@ export default function LLMConfigRecordsCard({
                 >
                   使用
                 </Button>,
-                <Popconfirm
-                  key="delete"
-                  title={`确定删除配置记录“${record.name}”？`}
-                  description="删除记录不会影响当前正在使用的配置"
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true }}
+                // 删除收进「···」菜单：不再以红图标裸露在行内（全局约定）。
+                <RowActions
+                  key="more"
                   disabled={editing || recordApplyingId !== null || recordDeletingId !== null}
-                  onConfirm={() => onRemoveRecord(record)}
-                >
-                  <Tooltip title="删除记录">
-                    <Button
-                      type="text"
-                      danger
-                      aria-label={`删除配置记录 ${record.name}`}
-                      icon={<DeleteOutlined />}
-                      loading={recordDeletingId === record.id}
-                    />
-                  </Tooltip>
-                </Popconfirm>,
+                  more={[
+                    {
+                      key: "delete",
+                      label: "删除记录",
+                      danger: true,
+                      confirm: `确定删除配置记录“${record.name}”？删除记录不会影响当前正在使用的配置`,
+                      onClick: () => onRemoveRecord(record),
+                    },
+                  ]}
+                />,
               ]}
             >
               <List.Item.Meta

@@ -1,18 +1,18 @@
 /** 离线分享包：选择分享版本 + 权限 + 脱敏范围 → 生成 → 展示本地路径 / 文件清单 / 评论导入。 */
-import { CopyOutlined, DeleteOutlined, FolderOpenOutlined } from "@ant-design/icons";
+import { CopyOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
   Checkbox,
   Descriptions,
   Modal,
-  Popconfirm,
   Radio,
   Space,
   Spin,
   Tag,
   Typography,
 } from "antd";
+import { RowActions } from "./common/RowActions";
 import { useState } from "react";
 import {
   createSharePackage,
@@ -301,18 +301,18 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
               </div>
             )}
 
-            <Popconfirm
-              title="删除此分享包？"
-              description="删除后可在回收站里找回，不会立刻彻底删除。"
-              okText="删除"
-              cancelText="取消"
-              okButtonProps={{ danger: true, "aria-label": `确认删除分享包 ${result.title}` }}
-              onConfirm={() => void removePackage()}
-            >
-              <Button danger icon={<DeleteOutlined />} loading={deleting}>
-                删除此分享包
-              </Button>
-            </Popconfirm>
+            {/* 删除收进「···」菜单：不再以红按钮裸露（全局约定）。 */}
+            <RowActions
+              more={[
+                {
+                  key: "delete",
+                  label: "删除此分享包",
+                  danger: true,
+                  confirm: "删除此分享包？删除后可在回收站里找回，不会立刻彻底删除。",
+                  onClick: () => void removePackage(),
+                },
+              ]}
+            />
           </>
         )}
 

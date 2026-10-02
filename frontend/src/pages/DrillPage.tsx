@@ -19,6 +19,7 @@ import {
   Input,
   List,
   Modal,
+  Checkbox,
   Popconfirm,
   Select,
   Skeleton,
@@ -28,13 +29,16 @@ import {
   Tooltip,
   Typography,
 } from "antd";
+import BatchActionBar from "../components/common/BatchActionBar";
+import { RowActions } from "../components/common/RowActions";
+import { useBatchSelection } from "../hooks/useBatchSelection";
 import {
   ArrowLeftOutlined,
   CheckCircleOutlined,
-  DeleteOutlined,
   ExclamationCircleOutlined,
   PlusOutlined,
   ThunderboltOutlined,
+  CheckSquareOutlined,
 } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -587,6 +591,7 @@ export default function DrillPage() {
   const navigate = useNavigate();
   const [current, setCurrent] = useState<DrillSession | null>(null);
   const [history, setHistory] = useState<DrillSessionBrief[]>([]);
+  const batch = useBatchSelection<number>();
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [openId, setOpenId] = useState<number | null>(null);
 
@@ -637,6 +642,29 @@ export default function DrillPage() {
     } catch (error) {
       message.error(error instanceof Error ? error.message : "删除失败");
     }
+  };
+
+  /** 批量删除：确认后逐条走同一个删除接口，全部完成再刷新一次。 */
+  const removeSelected = () => {
+    const ids = [...batch.selectedIds];
+    if (ids.length === 0) return;
+    Modal.confirm({
+      title: `删除选中的 ${ids.length} 场深挖？`,
+      okText: "删除",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        const results = await Promise.allSettled(
+          history
+            .filter((item) => batch.isSelected(item.id))
+            .map((item) => deleteDrillSession(item.id)),
+        );
+        const failed = results.filter((item) => item.status === "rejected").length;
+        if (failed === 0) message.success(`已删除 ${ids.length} 场深挖`);
+        else message.warning(`已删除 ${ids.length - failed} 场，${failed} 场失败，请重试`);
+        batch.exitSelecting();
+        await refreshHistory();
+      },
+    });
   };
 
   const stats = useMemo(() => {
@@ -731,11 +759,25 @@ export default function DrillPage() {
         size="small"
         title="历史记录"
         extra={
-          <Button size="small" onClick={() => void refreshHistory()} loading={loadingHistory}>
-            刷新
-          </Button>
+          <Space size={8}>
+            <Button size="small" onClick={() => void refreshHistory()} loading={loadingHistory}>
+              刷新
+            </Button>
+            {!batch.selecting && history.length > 0 && (
+              <Button size="small" icon={<CheckSquareOutlined />} onClick={batch.enterSelecting}>
+                批量选择
+              </Button>
+            )}
+          </Space>
         }
       >
+        {batch.selecting && (
+          <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+            <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
+              删除所选
+            </Button>
+          </BatchActionBar>
+        )}
         {loadingHistory ? (
           <Skeleton active paragraph={{ rows: 3 }} />
         ) : history.length === 0 ? (
@@ -749,25 +791,40 @@ export default function DrillPage() {
             dataSource={history}
             renderItem={(item) => (
               <List.Item
-                actions={[
-                  <Button
-                    key="open"
-                    size="small"
-                    type="link"
-                    onClick={() => void openHistory(item.id)}
-                  >
-                    {item.status === "active" ? "继续" : "看复盘"}
-                  </Button>,
-                  <Popconfirm
-                    key="del"
-                    title="删除这场深挖？"
-                    okText="确认删除"
-                    cancelText="取消"
-                    onConfirm={() => void remove(item.id)}
-                  >
-                    <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-                  </Popconfirm>,
-                ]}
+                actions={
+                  batch.selecting
+                    ? [
+                        <Checkbox
+                          key="pick"
+                          aria-label={`选择深挖 ${item.title}`}
+                          checked={batch.isSelected(item.id)}
+                          onChange={() => batch.toggle(item.id)}
+                        />,
+                      ]
+                    : [
+                        <Button
+                          key="open"
+                          size="small"
+                          type="link"
+                          onClick={() => void openHistory(item.id)}
+                        >
+                          {item.status === "active" ? "继续" : "看复盘"}
+                        </Button>,
+                        // 删除收进「···」菜单：除回收站外，删除不再以红图标裸露（全局约定）。
+                        <RowActions
+                          key="more"
+                          more={[
+                            {
+                              key: "delete",
+                              label: "删除",
+                              danger: true,
+                              confirm: "删除这场深挖？",
+                              onClick: () => void remove(item.id),
+                            },
+                          ]}
+                        />,
+                      ]
+                }
               >
                 <Space size={8} wrap>
                   <Typography.Text strong={openId === item.id}>{item.title}</Typography.Text>

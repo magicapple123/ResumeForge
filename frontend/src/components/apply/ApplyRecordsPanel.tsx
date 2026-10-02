@@ -9,7 +9,6 @@
  * 后端给的中文分类说明与可操作诊断，用户可以直接把这条信息回传给我们定位站点改版。
  */
 import {
-  DeleteOutlined,
   DownOutlined,
   RedoOutlined,
   ReloadOutlined,
@@ -23,7 +22,6 @@ import {
   Drawer,
   Empty,
   Input,
-  Popconfirm,
   Select,
   Space,
   Spin,
@@ -34,6 +32,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
+import { RowActions } from "../common/RowActions";
 import { deleteRecord, deleteRecordBatch, listRecordBatches, retryRecord } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
 import { isFromInnerControl } from "../common/recordDetailCore";
@@ -197,25 +196,17 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
               重投
             </Button>
           </Tooltip>
-          <Popconfirm
-            title="删除这条投递记录？"
-            description="会进回收站，之后可以恢复；也会从统计与每日上限里去掉。"
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true, "aria-label": `确认删除记录 ${record.id}` }}
-            cancelButtonProps={{ "aria-label": `取消删除记录 ${record.id}` }}
-            onConfirm={() => void removeRecord(record)}
-          >
-            <Tooltip title="移入回收站（可恢复）">
-              <Button
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-                disabled={disabled}
-                aria-label={`删除记录 ${record.job_title || record.id}`}
-              />
-            </Tooltip>
-          </Popconfirm>
+          <RowActions
+            more={[
+              {
+                key: "delete",
+                label: "删除",
+                danger: true,
+                confirm: "删除这条投递记录？会进回收站，之后可以恢复；也会从统计与每日上限里去掉。",
+                onClick: () => void removeRecord(record),
+              },
+            ]}
+          />
         </Space>
       ),
     },
@@ -416,26 +407,17 @@ function BatchGroup({
             </Typography.Text>
           </span>
         </button>
-        <Popconfirm
-          title={`删除这一批的 ${batch.items.length} 条记录？`}
-          description="会进回收站，之后可以恢复；也会从统计与每日上限里去掉。"
-          okText="删除"
-          cancelText="取消"
-          okButtonProps={{ danger: true, "aria-label": `确认删除批次 ${batch.id}` }}
-          cancelButtonProps={{ "aria-label": `取消删除批次 ${batch.id}` }}
-          onConfirm={() => onDeleteBatch(batch)}
-        >
-          <Tooltip title="删除本批记录（移入回收站）">
-            <Button
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              aria-label={`删除批次 ${batch.id}`}
-            >
-              删除本批
-            </Button>
-          </Tooltip>
-        </Popconfirm>
+        <RowActions
+          more={[
+            {
+              key: "delete-batch",
+              label: `删除本批（${batch.items.length} 条）`,
+              danger: true,
+              confirm: `删除这一批的 ${batch.items.length} 条记录？会进回收站，之后可以恢复；也会从统计与每日上限里去掉。`,
+              onClick: () => onDeleteBatch(batch),
+            },
+          ]}
+        />
       </div>
       {expanded && (
         <div className="apply-records-batch-body">

@@ -21,9 +21,11 @@ import {
   MessageOutlined,
   SafetyCertificateOutlined,
   ShareAltOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Button, Space, Tag, Tooltip, Typography } from "antd";
-import { useRef, useState } from "react";
+import { Button, Collapse, Space, Tag, Tooltip, Typography } from "antd";
+import { Alert } from "antd";
+import { useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { RESUME_ENHANCEMENT_LEVELS } from "../../config";
@@ -39,6 +41,7 @@ import ResumeEditorModal from "../ResumeEditorModal";
 import ResumeLayoutControls from "../ResumeLayoutControls";
 import ResumeQualityModal from "../ResumeQualityModal";
 import ResumeSuggestionsModal from "../ResumeSuggestionsModal";
+import ResumeReviseModal from "./ResumeReviseModal";
 import SharePackageModal from "../SharePackageModal";
 import ResumePreview, { type ResumePreviewHandle } from "../ResumePreview";
 import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
@@ -71,6 +74,15 @@ interface Props {
   suggestionsGenerated: boolean;
   suggestionsResetKey: number;
   onSuggestionsGenerated: () => void;
+  /**
+   * 修订（AI 修改 / 采纳建议）成功后刷新预览的回调：父组件负责 setDetail + 重渲染。
+   * 建议「采纳并修改」依赖它刷新预览，两个宿主都应该传；「AI 修改 / 重新生成」
+   * 按钮的显隐由 ``showReviseAction`` 单独控制——生成弹窗预览阶段已有自己的
+   * 「重新生成」向导，再显示一个同名入口只会让人困惑。
+   */
+  onResumeRevised?: (detail: ResumeDetail) => Promise<void> | void;
+  /** 是否显示「AI 修改 / 重新生成」按钮；缺省跟随 ``onResumeRevised`` 是否传入。 */
+  showReviseAction?: boolean;
   /** 额外操作（如生成弹窗里的「重新生成 / 去简历中心 / 完成」）插在底部按钮区。 */
   extraActions?: ReactNode;
 }
@@ -92,12 +104,16 @@ export default function ResumeDetailPreview({
   suggestionsGenerated,
   suggestionsResetKey,
   onSuggestionsGenerated,
+  onResumeRevised,
+  showReviseAction,
   extraActions,
 }: Props) {
   const navigate = useNavigate();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorTarget, setEditorTarget] = useState<string | null>(null);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [reviseOpen, setReviseOpen] = useState(false);
+  const [reviseInstructions, setReviseInstructions] = useState("");
   const [qualityOpen, setQualityOpen] = useState(false);
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -108,10 +124,24 @@ export default function ResumeDetailPreview({
   // 内部再包一层引用：父组件可能传 null（尚未量到），子组件需要一份稳定的 ref 传入 ResumePreview。
   const fallbackRef = useRef<ResumePreviewHandle>(null);
   const resolvedPreviewRef = previewRef ?? fallbackRef;
+  // 缺省跟随 onResumeRevised：能刷新预览就有意义，不能刷新就不该摆出这个入口。
+  const showRevise = showReviseAction ?? Boolean(onResumeRevised);
 
   const enhancementLabel = RESUME_ENHANCEMENT_LEVELS.find(
     (item) => item.value === detail.enhancement_level,
   )?.label;
+
+  /**
+   * 警告分级（#3）：「疑似虚构」与「岗位筛选没选上」性质完全不同，不该共用一面
+   * 红墙。新生成的记录直接用结构化 coverage_notes；旧记录的未收录警告混在
+   * warnings 文本里，按特征句拆出来（那句措辞由 resume_coverage 写死，稳定）。
+   */
+  const { fabricationWarnings, legacyCoverageWarnings } = useMemo(() => {
+    const legacy = detail.warnings.filter((warning) => warning.includes("没有出现在这份简历里"));
+    const rest = detail.warnings.filter((warning) => !warning.includes("没有出现在这份简历里"));
+    return { fabricationWarnings: rest, legacyCoverageWarnings: legacy };
+  }, [detail.warnings]);
+  const coverageNotes = detail.coverage_notes ?? [];
 
   return (
     <div>
@@ -150,6 +180,27 @@ export default function ResumeDetailPreview({
         />
         {relayouting && <Typography.Text type="secondary">正在按新版式渲染…</Typography.Text>}
       </div>
+      {/* 生成说明（折叠）：回答"为什么是这样一份简历"。 */}
+      {detail.rationale ? (
+        <Collapse
+          size="small"
+          items={[
+            {
+              key: "rationale",
+              label: "为什么是这样一份简历（生成说明）",
+              children: (
+                <Typography.Paragraph
+                  style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: 13 }}
+                  type="secondary"
+                >
+                  {detail.rationale}
+                </Typography.Paragraph>
+              ),
+            },
+          ]}
+          style={{ marginBottom: 12 }}
+        />
+      ) : null}
       <ResumeLayoutDiagnosisCard
         resumeId={detail.id}
         measure={measure}
@@ -160,11 +211,72 @@ export default function ResumeDetailPreview({
         onApplied={(formatConfig) => onApplyFittedFormat(formatConfig)}
         onAddPage={() => onApplyLayout({ ...layout, page_limit: layout.page_limit + 1 })}
       />
+      {/* 「没写进这份简历」的中性分组（#3/#5）：与"疑似虚构"分开呈现，并给出处理入口。 */}
+      {(coverageNotes.length > 0 || legacyCoverageWarnings.length > 0) && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="这些资料内容没有写进这份简历"
+          description={
+            <div style={{ display: "grid", gap: 10 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                这是岗位导向筛选的正常结果：与岗位关键词交集不足的内容不会进入生成，资料本身没有任何丢失。
+              </Typography.Text>
+              {coverageNotes.map((note) => (
+                <div key={note.section}>
+                  <Typography.Text strong style={{ fontSize: 13 }}>
+                    {note.section_label}（{note.total} 条）：
+                  </Typography.Text>
+                  <Typography.Text style={{ fontSize: 13 }}>
+                    {note.names.map((name) => `「${name}」`).join("、")}
+                  </Typography.Text>
+                  <Space size={8} style={{ marginTop: 6 }} wrap>
+                    <Button
+                      size="small"
+                      type="primary"
+                      ghost
+                      onClick={() => {
+                        setReviseInstructions(
+                          `请把资料中的以下内容补进这份简历的${note.section_label}（只新增这些内容，其余部分保持不变）：` +
+                            note.names.map((name) => `「${name}」`).join("、") +
+                            "。补充时使用这些条目在个人资料中的原文事实，不要虚构细节。",
+                        );
+                        setReviseOpen(true);
+                      }}
+                    >
+                      AI 补上这段
+                    </Button>
+                  </Space>
+                </div>
+              ))}
+              {legacyCoverageWarnings.map((warning) => (
+                <Typography.Paragraph key={warning} style={{ margin: 0, fontSize: 13 }}>
+                  {warning}
+                </Typography.Paragraph>
+              ))}
+              {coverageNotes.length > 0 && (
+                <Space size={8} wrap>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setEditorTarget(null);
+                      setEditorOpen(true);
+                    }}
+                  >
+                    打开手动调整
+                  </Button>
+                </Space>
+              )}
+            </div>
+          }
+        />
+      )}
       <ResumePreview
         ref={resolvedPreviewRef}
         html={html}
         pages={layout.page_limit}
-        warnings={detail.warnings}
+        warnings={fabricationWarnings}
         onLayoutStatus={onLayoutStatus}
         onMeasure={onMeasure}
         // 鼠标划过纸面时，工具栏要说出"现在指向的是哪一栏"——这要靠简历内容才起得准
@@ -191,6 +303,11 @@ export default function ResumeDetailPreview({
         <Button block icon={<ZoomInOutlined />} onClick={() => setZoomOpen(true)}>
           查看大图
         </Button>
+        {showRevise && (
+          <Button block icon={<ThunderboltOutlined />} onClick={() => setReviseOpen(true)}>
+            AI 修改 / 重新生成
+          </Button>
+        )}
         <Button
           block
           icon={<BulbOutlined />}
@@ -252,7 +369,17 @@ export default function ResumeDetailPreview({
         resetKey={suggestionsResetKey}
         onClose={() => setSuggestionsOpen(false)}
         onGenerated={onSuggestionsGenerated}
+        onApplied={(detail) => onResumeRevised?.(detail)}
       />
+      {showRevise && (
+        <ResumeReviseModal
+          open={reviseOpen}
+          recordId={detail.id}
+          initialInstructions={reviseInstructions}
+          onClose={() => setReviseOpen(false)}
+          onApplied={(detail) => onResumeRevised?.(detail)}
+        />
+      )}
       <ResumeQualityModal
         open={qualityOpen}
         resumeId={detail.id}

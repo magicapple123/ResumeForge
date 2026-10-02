@@ -5,6 +5,7 @@
  * 会明确显示"第 N/6 轮"，用户始终知道还剩几个问题；助手那边则是自由对话。
  */
 import {
+  CheckSquareOutlined,
   ArrowLeftOutlined,
   DeleteOutlined,
   PlayCircleOutlined,
@@ -17,6 +18,7 @@ import {
   App,
   Button,
   Card,
+  Checkbox,
   Empty,
   Form,
   Input,
@@ -47,7 +49,9 @@ import { listResumes } from "../api/resumes";
 import InterviewExperiencePanel from "../components/InterviewExperiencePanel";
 import InterviewReviewPanel from "../components/InterviewReviewPanel";
 import QuestionBankPanel from "../components/QuestionBankPanel";
+import BatchActionBar from "../components/common/BatchActionBar";
 import { RowActions } from "../components/common/RowActions";
+import { useBatchSelection } from "../hooks/useBatchSelection";
 import type {
   InterviewBrief,
   InterviewDetail,
@@ -162,6 +166,7 @@ export default function InterviewPage() {
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<InterviewBrief[]>([]);
+  const batch = useBatchSelection<number>();
   const [loadingList, setLoadingList] = useState(true);
   const [active, setActive] = useState<InterviewDetail | null>(null);
   const [starting, setStarting] = useState(false);
@@ -300,6 +305,30 @@ export default function InterviewPage() {
     } catch (error) {
       message.error(error instanceof Error ? error.message : "删除失败");
     }
+  };
+
+  /** 批量删除：确认后逐条走同一个软删除接口，全部完成再刷新一次。 */
+  const removeSelected = () => {
+    const ids = [...batch.selectedIds];
+    if (ids.length === 0) return;
+    Modal.confirm({
+      title: `删除选中的 ${ids.length} 场面试？`,
+      content: "删除后可在回收站找回。",
+      okText: "删除",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        const results = await Promise.allSettled(
+          sessions
+            .filter((item) => batch.isSelected(item.id))
+            .map((item) => deleteInterview(item.id)),
+        );
+        const failed = results.filter((item) => item.status === "rejected").length;
+        if (failed === 0) message.success(`已删除 ${ids.length} 场面试`);
+        else message.warning(`已删除 ${ids.length - failed} 场，${failed} 场失败，请重试`);
+        batch.exitSelecting();
+        await loadList();
+      },
+    });
   };
 
   const saveReport = async () => {
@@ -446,7 +475,29 @@ export default function InterviewPage() {
                     className="settings-card"
                     title="历史面试"
                     style={{ marginTop: 16 }}
+                    extra={
+                      !batch.selecting && sessions.length > 0 ? (
+                        <Button
+                          size="small"
+                          icon={<CheckSquareOutlined />}
+                          onClick={batch.enterSelecting}
+                        >
+                          批量选择
+                        </Button>
+                      ) : undefined
+                    }
                   >
+                    {batch.selecting && (
+                      <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+                        <Button
+                          danger
+                          disabled={batch.selectedCount === 0}
+                          onClick={removeSelected}
+                        >
+                          删除所选
+                        </Button>
+                      </BatchActionBar>
+                    )}
                     {loadingList ? (
                       <Spin />
                     ) : sessions.length === 0 ? (
@@ -457,28 +508,39 @@ export default function InterviewPage() {
                         dataSource={sessions}
                         renderItem={(item) => (
                           <List.Item
-                            actions={[
-                              <RowActions
-                                key="actions"
-                                primary={[
-                                  {
-                                    key: "open",
-                                    label: item.status === "active" ? "继续" : "看报告",
-                                    onClick: () => void openSession(item.id),
-                                  },
-                                ]}
-                                more={[
-                                  {
-                                    key: "delete",
-                                    label: "删除这场面试",
-                                    danger: true,
-                                    icon: <DeleteOutlined />,
-                                    confirm: "删除这场面试？删除后可在回收站找回。",
-                                    onClick: () => void remove(item),
-                                  },
-                                ]}
-                              />,
-                            ]}
+                            actions={
+                              batch.selecting
+                                ? [
+                                    <Checkbox
+                                      key="pick"
+                                      aria-label={`选择面试 ${item.title}`}
+                                      checked={batch.isSelected(item.id)}
+                                      onChange={() => batch.toggle(item.id)}
+                                    />,
+                                  ]
+                                : [
+                                    <RowActions
+                                      key="actions"
+                                      primary={[
+                                        {
+                                          key: "open",
+                                          label: item.status === "active" ? "继续" : "看报告",
+                                          onClick: () => void openSession(item.id),
+                                        },
+                                      ]}
+                                      more={[
+                                        {
+                                          key: "delete",
+                                          label: "删除这场面试",
+                                          danger: true,
+                                          icon: <DeleteOutlined />,
+                                          confirm: "删除这场面试？删除后可在回收站找回。",
+                                          onClick: () => void remove(item),
+                                        },
+                                      ]}
+                                    />,
+                                  ]
+                            }
                           >
                             <List.Item.Meta
                               title={

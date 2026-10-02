@@ -108,7 +108,7 @@ function tooltipTriggerFor(label: string): HTMLElement {
 beforeEach(() => {
   apiMocks.getLLMConfig.mockResolvedValue(llmConfig);
   apiMocks.getNavigationVisibility.mockResolvedValue({ hidden: [] });
-  apiMocks.getAssistantOrbSetting.mockResolvedValue({ enabled: true });
+  apiMocks.getAssistantOrbSetting.mockResolvedValue({ enabled: true, tips_enabled: true });
   apiMocks.getReminderPopupSetting.mockResolvedValue({ enabled: true });
   apiMocks.getSearchConfig.mockResolvedValue(searchConfig);
   apiMocks.getUpdateDownloadStatus.mockResolvedValue({
@@ -136,7 +136,7 @@ beforeEach(() => {
     message: "",
   });
   apiMocks.listLLMConfigRecords.mockResolvedValue([]);
-  apiMocks.saveAssistantOrbSetting.mockImplementation(async (enabled) => ({ enabled }));
+  apiMocks.saveAssistantOrbSetting.mockImplementation(async (setting) => setting);
   apiMocks.listDatasets.mockResolvedValue([mainDataset]);
   apiMocks.revealLLMApiKey.mockResolvedValue({ api_key: "sk-revealed" });
   skillMocks.listSkills.mockResolvedValue([]);
@@ -1110,6 +1110,12 @@ describe("SettingsPage 投投悬浮球开关", () => {
 
     fireEvent.click(toggle);
 
-    await waitFor(() => expect(apiMocks.saveAssistantOrbSetting).toHaveBeenCalledWith(false));
+    // 保存走整对象：入口开关变更时也带上标语开关的当前值，互不覆盖。
+    await waitFor(() =>
+      expect(apiMocks.saveAssistantOrbSetting).toHaveBeenCalledWith({
+        enabled: false,
+        tips_enabled: true,
+      }),
+    );
   });
 });

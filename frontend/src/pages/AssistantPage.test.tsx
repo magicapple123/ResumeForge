@@ -215,14 +215,14 @@ describe("进入助手页 = 一段草稿对话", () => {
     renderPage();
 
     // 引导提示就地渲染（AssistantEmptyState），不需要为它建一条数据库记录。
-    expect(await screen.findByText("可以这样问")).toBeInTheDocument();
+    expect(await screen.findByText("你好，我是投投")).toBeInTheDocument();
     expect(apiMocks.createAssistantConversation).not.toHaveBeenCalled();
   });
 
   it("已有会话时也不自动打开最近那条（进来就是新对话）", async () => {
     renderPage();
 
-    expect(await screen.findByText("可以这样问")).toBeInTheDocument();
+    expect(await screen.findByText("你好，我是投投")).toBeInTheDocument();
     // 既没打开历史会话，也没新建记录。
     expect(apiMocks.getAssistantConversation).not.toHaveBeenCalled();
     expect(apiMocks.createAssistantConversation).not.toHaveBeenCalled();
@@ -304,7 +304,7 @@ describe("助手新对话入口", () => {
   it("?new=1 进入草稿：不建记录、不恢复最近会话", async () => {
     renderPage("/assistant?new=1");
 
-    expect(await screen.findByText("可以这样问")).toBeInTheDocument();
+    expect(await screen.findByText("你好，我是投投")).toBeInTheDocument();
     expect(apiMocks.createAssistantConversation).not.toHaveBeenCalled();
     expect(apiMocks.getAssistantConversation).not.toHaveBeenCalled();
   });
@@ -312,7 +312,7 @@ describe("助手新对话入口", () => {
   it("草稿里发出第一条消息时才创建对话记录", async () => {
     apiMocks.createAssistantConversation.mockResolvedValue({ ...CONVERSATIONS[0], id: 99 });
     renderPage("/assistant?new=1");
-    await screen.findByText("可以这样问");
+    await screen.findByText("你好，我是投投");
 
     // 还没发：一条记录都不该有。
     expect(apiMocks.createAssistantConversation).not.toHaveBeenCalled();
@@ -353,7 +353,7 @@ describe("AssistantPage", () => {
   it("offers starter prompts for an empty conversation", async () => {
     renderPage();
 
-    expect(await screen.findByText("可以这样问")).toBeInTheDocument();
+    expect(await screen.findByText("你好，我是投投")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "查找招聘信息" }));
 
     expect(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题")).toHaveValue(
@@ -370,7 +370,7 @@ describe("AssistantPage", () => {
     renderPage();
     delayedList.resolve(CONVERSATIONS);
 
-    expect(await screen.findByText("可以这样问")).toBeInTheDocument();
+    expect(await screen.findByText("你好，我是投投")).toBeInTheDocument();
     // 进来是草稿：不会自动打开最近那条会话（那正是"进来先看到上次对话"的老行为）。
     await waitFor(() => expect(apiMocks.listAssistantConversations).toHaveBeenCalled());
     expect(apiMocks.getAssistantConversation).not.toHaveBeenCalled();

@@ -46,25 +46,60 @@ def test_navigation_visibility_keeps_optional_keys_and_never_hides_core_entries(
 
 
 def test_assistant_orb_setting_defaults_and_roundtrips(client):
-    assert client.get("/api/settings/assistant-orb").json() == {"enabled": True}
+    assert client.get("/api/settings/assistant-orb").json() == {"enabled": True, "tips_enabled": True}
 
-    response = client.put("/api/settings/assistant-orb", json={"enabled": False})
+    response = client.put(
+        "/api/settings/assistant-orb", json={"enabled": False, "tips_enabled": False}
+    )
     assert response.status_code == 200
-    assert response.json() == {"enabled": False}
-    assert client.get("/api/settings/assistant-orb").json() == {"enabled": False}
+    assert response.json() == {"enabled": False, "tips_enabled": False}
+    assert client.get("/api/settings/assistant-orb").json() == {
+        "enabled": False,
+        "tips_enabled": False,
+    }
 
     response = client.put("/api/settings/assistant-orb", json={"enabled": True})
     assert response.status_code == 200
-    assert response.json() == {"enabled": True}
+    # 旧客户端只发 enabled：新字段落默认值，不丢字段、不 500。
+    assert response.json() == {"enabled": True, "tips_enabled": True}
 
 
-def test_assistant_orb_setting_ignores_corrupt_values(client, db_session):
+def test_assistant_orb_setting_keeps_legacy_bare_boolean_and_corrupt_values(client, db_session):
+    """存量三种形态：裸 bool（老格式原样兼容）、损坏 JSON、非法对象——都不 500。"""
     from app.models.setting import AppSetting
 
-    db_session.add(AppSetting(key="assistant_orb_enabled", value='"not-a-boolean"'))
+    # 老格式：裸 bool。入口开关读同值，标语保持默认开（老用户体验不变）。
+    db_session.add(AppSetting(key="assistant_orb_enabled", value="false"))
     db_session.commit()
+    assert client.get("/api/settings/assistant-orb").json() == {
+        "enabled": False,
+        "tips_enabled": True,
+    }
 
-    assert client.get("/api/settings/assistant-orb").json() == {"enabled": True}
+    db_session.get(AppSetting, "assistant_orb_enabled").value = '"not-a-boolean"'
+    db_session.commit()
+    assert client.get("/api/settings/assistant-orb").json() == {
+        "enabled": True,
+        "tips_enabled": True,
+    }
+
+    # 对象形态但字段非法（enabled 不是 bool）：校验不过也回默认，不抛异常。
+    db_session.get(AppSetting, "assistant_orb_enabled").value = '{"enabled": "yes"}'
+    db_session.commit()
+    assert client.get("/api/settings/assistant-orb").json() == {
+        "enabled": True,
+        "tips_enabled": True,
+    }
+
+    # 新格式对象：两个开关都原样读回。
+    db_session.get(AppSetting, "assistant_orb_enabled").value = (
+        '{"enabled": false, "tips_enabled": false}'
+    )
+    db_session.commit()
+    assert client.get("/api/settings/assistant-orb").json() == {
+        "enabled": False,
+        "tips_enabled": False,
+    }
 
 
 def test_settings_accepts_unlimited_output_and_keeps_the_minimum_bound(client):

@@ -5,21 +5,10 @@
  * 之外：写简历不是改资料，这个区块在非编辑状态下也要能用。
  */
 
-import { DeleteOutlined, EditOutlined, FileSearchOutlined, PlusOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Card,
-  Empty,
-  Input,
-  List,
-  Popconfirm,
-  Space,
-  Tag,
-  Tooltip,
-  Typography,
-} from "antd";
+import { FileSearchOutlined, PlusOutlined } from "@ant-design/icons";
+import { App, Button, Card, Empty, Input, List, Space, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
+import { RowActions } from "../common/RowActions";
 import { deleteResume, listResumes, renameResume } from "../../api/resumes";
 import type { ResumeBrief } from "../../types";
 import { formatDateTime } from "../../utils/format";
@@ -136,38 +125,30 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
           renderItem={(record) => (
             <List.Item
               actions={[
-                <Tooltip key="rename" title="重命名">
-                  <Button
-                    type="text"
-                    aria-label={`重命名通用简历 ${record.title}`}
-                    icon={<EditOutlined />}
-                    disabled={renamingId !== null || deletingId !== null}
-                    onClick={() => {
-                      setRenameValue(record.title);
-                      setRenamingId(record.id);
-                    }}
-                  />
-                </Tooltip>,
-                <Popconfirm
-                  key="delete"
-                  title={`确定删除「${record.title}」？`}
-                  description="删除后无法恢复，简历正文也会一起删除"
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true }}
-                  onConfirm={() => void remove(record)}
-                >
-                  <Tooltip title="删除">
-                    <Button
-                      type="text"
-                      danger
-                      aria-label={`删除通用简历 ${record.title}`}
-                      icon={<DeleteOutlined />}
-                      loading={deletingId === record.id}
-                      disabled={renamingId !== null || deletingId !== null}
-                    />
-                  </Tooltip>
-                </Popconfirm>,
+                // 编辑/删除收进「···」菜单：删除不再以红图标裸露在行内（全局约定）。
+                <RowActions
+                  key="more"
+                  disabled={renamingId !== null || deletingId !== null}
+                  more={[
+                    {
+                      key: "rename",
+                      label: "重命名",
+                      onClick: () => {
+                        setRenameValue(record.title);
+                        setRenamingId(record.id);
+                      },
+                    },
+                    {
+                      key: "delete",
+                      label: "删除",
+                      danger: true,
+                      // 实际行为是移入回收站（remove 内部会提示"已移入回收站"），
+                      // 确认文案必须与行为一致，不能吓唬"无法恢复"。
+                      confirm: `删除「${record.title}」？简历正文会一起删除，之后可在回收站找回。`,
+                      onClick: () => void remove(record),
+                    },
+                  ]}
+                />,
               ]}
             >
               {renamingId === record.id ? (

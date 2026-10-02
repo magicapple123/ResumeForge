@@ -15,13 +15,13 @@ import {
   Form,
   Input,
   InputNumber,
-  Popconfirm,
   Select,
   Skeleton,
   Space,
   Tag,
   Typography,
 } from "antd";
+import { RowActions } from "../common/RowActions";
 import { useEffect, useState } from "react";
 import { createCollectTask, getCollectConfig, updateCollectConfig } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
@@ -297,18 +297,18 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
             label: historySummaryLabel(entry),
           }))}
         />
-        <Popconfirm
-          title="清空历史条件"
-          description="会删除全部已保存的采集条件快照，且不可恢复。"
-          okText="清空"
-          cancelText="取消"
-          okButtonProps={{ danger: true }}
-          onConfirm={clearHistory}
-        >
-          <Button size="small" type="link">
-            清空历史
-          </Button>
-        </Popconfirm>
+        {/* 清空历史不可恢复，同样收进「···」菜单（全局约定：破坏性入口不裸露）。 */}
+        <RowActions
+          more={[
+            {
+              key: "clear-history",
+              label: "清空历史",
+              danger: true,
+              confirm: "清空历史条件？会删除全部已保存的采集条件快照，且不可恢复。",
+              onClick: clearHistory,
+            },
+          ]}
+        />
       </Space>
 
       <Form form={form} layout="vertical">

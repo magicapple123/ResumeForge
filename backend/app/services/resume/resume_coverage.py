@@ -72,6 +72,44 @@ def find_unwritten_items(
     ``selection_data`` 是真正发给模型的候选资料。
     """
     warnings: list[str] = []
+    for note in find_unwritten_details(resume, entry_names, selection_data):
+        parts: list[str] = []
+        if note["filtered"]:
+            preview = _preview_names(note["filtered"])
+            parts.append(
+                f"{preview}与这个岗位的关键词交集不足，没有进入本次生成使用的候选资料"
+            )
+        if note["model_omitted"]:
+            preview = _preview_names(note["model_omitted"])
+            parts.append(f"{preview}在候选资料里，但模型没有把它写进简历")
+        if not parts:
+            continue
+        warnings.append(
+            f"{note['section_label']}中有 {note['total']} 条没有出现在这份简历里：{'；'.join(parts)}。"
+            "如果不是有意省略：把岗位关键词补进该条目的描述后重新生成，"
+            "或在「手动调整」里手动补上这一段。"
+        )
+    return warnings
+
+
+def _preview_names(names: list[str]) -> str:
+    preview = "、".join(f"「{name}」" for name in names[:_MAX_REPORTED])
+    extra = f"（共 {len(names)} 条）" if len(names) > _MAX_REPORTED else ""
+    return f"{preview}{extra}"
+
+
+def find_unwritten_details(
+    resume: ResumeContent,
+    entry_names: dict[str, tuple[str, ...]],
+    selection_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """:meth:`find_unwritten_items` 的结构化版本，供前端按分组渲染与生成说明引用。
+
+    返回的每项：``section_label``（用户可读的分区名）、``names``（全部未写入条目）、
+    ``filtered``（被岗位筛选/预算拦下的）、``model_omitted``（进了候选但模型没写的）、
+    ``total``。文案组装留在调用方。
+    """
+    details: list[dict[str, Any]] = []
     for field, section, identity_field, label in _SECTION_MAP:
         original = set(entry_names.get(section) or ())
         if not original:
@@ -83,28 +121,21 @@ def find_unwritten_items(
         # 关键区分：这条内容**有没有进入**发给模型的候选资料。
         # 没进入 → 关卡 1（相关性/预算）拦的；进入了 → 模型自己取舍的。
         in_candidates = original & _entry_names(selection_data.get(section), identity_field)
-        dropped_early = sorted(missing - in_candidates)
-        dropped_by_model = sorted(missing & in_candidates)
-
-        parts: list[str] = []
-        if dropped_early:
-            preview = "、".join(f"「{name}」" for name in dropped_early[:_MAX_REPORTED])
-            extra = f"（共 {len(dropped_early)} 条）" if len(dropped_early) > _MAX_REPORTED else ""
-            parts.append(
-                f"{preview}{extra}与这个岗位的关键词交集不足，没有进入本次生成使用的候选资料"
-            )
-        if dropped_by_model:
-            preview = "、".join(f"「{name}」" for name in dropped_by_model[:_MAX_REPORTED])
-            extra = f"（共 {len(dropped_by_model)} 条）" if len(dropped_by_model) > _MAX_REPORTED else ""
-            parts.append(f"{preview}{extra}在候选资料里，但模型没有把它写进简历")
-        if not parts:
+        filtered = sorted(missing - in_candidates)
+        model_omitted = sorted(missing & in_candidates)
+        if not filtered and not model_omitted:
             continue
-        warnings.append(
-            f"{label}中有 {len(missing)} 条没有出现在这份简历里：{'；'.join(parts)}。"
-            "如果不是有意省略：把岗位关键词补进该条目的描述后重新生成，"
-            "或在「微调内容」里手动补上这一段。"
+        details.append(
+            {
+                "section": section,
+                "section_label": label,
+                "names": sorted(missing),
+                "filtered": filtered,
+                "model_omitted": model_omitted,
+                "total": len(missing),
+            }
         )
-    return warnings
+    return details
 
 
 def all_entry_names(entry_names: dict[str, tuple[str, ...]]) -> set[str]:

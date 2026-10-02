@@ -27,7 +27,6 @@ import { useCallback, useEffect, useState } from "react";
 import { deleteSkill, importSkill, listSkills, setSkillEnabled } from "../api/skill";
 import { RowActions, RowContextMenu } from "../components/common/RowActions";
 import SkillEditorModal, { type SkillDraft } from "../components/skills/SkillEditorModal";
-import TemplateMarketTab from "../components/templates/TemplateMarketTab";
 import TemplateWorkbench from "../components/templates/TemplateWorkbench";
 import type { AssistantSkill } from "../types";
 import { formatDateTime } from "../utils/format";
@@ -283,10 +282,7 @@ export default function SkillsPage() {
       />
 
       {tab === "templates" ? (
-        <>
-          <TemplateMarketTab />
-          <TemplateWorkbench />
-        </>
+        <TemplateWorkbench />
       ) : (
         <>
           <Card size="small" className="settings-card skills-intro-card">

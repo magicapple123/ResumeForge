@@ -172,3 +172,54 @@ describe("ResumesPage 备注列", () => {
     expect(screen.getByText("重点跟进，本周五前回复")).toBeInTheDocument();
   });
 });
+
+describe("ResumesPage 批量选择", () => {
+  it("进入多选 → 勾 2 项 → 删除所选 → 确认 → 每条各调一次删除接口", async () => {
+    apiMocks.listResumes.mockResolvedValue({
+      items: [RESUME, { ...RESUME, id: 9, title: "另一份简历" }],
+      total: 2,
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "批量选择" }));
+    // rowSelection 勾选框：第一个是表头全选，后两个是数据行。
+    // 每次点击都会触发重渲染，必须现查现点（旧节点引用会失效）。
+    fireEvent.click(screen.getAllByRole("checkbox")[1]!);
+    fireEvent.click(screen.getAllByRole("checkbox")[2]!);
+    expect(screen.getByText("已选 2 项")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    expect((await screen.findAllByText(/删除选中的 2 份简历/)).length).toBeGreaterThan(0);
+    // 未确认前绝不能删。
+    expect(apiMocks.deleteResume).not.toHaveBeenCalled();
+    // 确认弹窗里 antd 会把标题渲染两份（.ant-modal-title 与 .ant-modal-confirm-title），
+    // 用文本查询会撞"Found multiple"——直接等容器出现，再在容器内点确认键
+    // （okText「删除」被 antd 插空格成「删 除」；容器限定避免与操作条「删除所选」撞名）。
+    const confirmRoot = await waitFor(() => {
+      const root = document.querySelector(".ant-modal-confirm");
+      expect(root).not.toBeNull();
+      return root as HTMLElement;
+    });
+    expect(confirmRoot.textContent).toContain("删除选中的 2 份简历");
+    fireEvent.click(within(confirmRoot).getByRole("button", { name: /删\s*除/ }));
+
+    await waitFor(() => expect(apiMocks.deleteResume).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/已删除 2 份简历/)).toBeInTheDocument();
+  });
+
+  it("空选时「删除所选」不可用；退出多选清空选区", async () => {
+    apiMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 1 });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "批量选择" }));
+    const deleteBtn = screen.getByRole("button", { name: "删除所选" });
+    expect(deleteBtn).toBeDisabled();
+
+    const rowCheckbox = screen.getAllByRole("checkbox")[1]!;
+    fireEvent.click(rowCheckbox);
+    expect(screen.getByText("已选 1 项")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "退出多选" }));
+    expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
+    expect(apiMocks.deleteResume).not.toHaveBeenCalled();
+  });
+});

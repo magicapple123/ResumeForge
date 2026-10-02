@@ -12,6 +12,8 @@ const CONTENT: ResumeContent = {
   phone: "",
   email: "",
   city: "",
+  personal_website: "",
+  github: "",
   job_intent: "产品运营专员",
   summary: "",
   education: [],

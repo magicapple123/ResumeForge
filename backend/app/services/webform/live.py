@@ -41,10 +41,12 @@ from .fields import FIELD_LABELS
 from .live_control import (
     LIVE_CONTROL_STATE_SCRIPT,
     install_live_control_script,
+    set_assistant_reply_script,
     set_autofill_status_script,
     set_live_enabled_script,
 )
 from .live_autofill import AutoFillProgress, AutoFillWorker, fill_current_page
+from . import live_assistant
 from .live_memory_panel import REMEMBER_EDITOR_SCRIPT, memory_targets_script
 from . import live_targets
 from .repeated_fields import field_key_for_block, field_label_for_key, split_repeated_key
@@ -97,6 +99,7 @@ _STATE_SCRIPT = (
     " installed: window.__rfInstalled === true"
     ", autofill: window.__rfAutoFillRequest || null"
     ", autofill_status: window.__rfAutoFillStatus || null"
+    ", assistant_ask: window.__rfAssistantAsk || null"
     " }); })()"
 )
 
@@ -143,6 +146,12 @@ _ACK_AUTOFILL_SCRIPT = (
     "(() => { /* rf:autofill-ack */ window.__rfAutoFillRequest = null; return '1'; })()"
 )
 
+# 「问投投」的回执：先清掉问题全局再交给后台线程处理，否则轮询的 350ms 里问题还在，
+# 下一轮会当成新问题再问一遍模型（那可是真金白银）。
+_ACK_ASSISTANT_ASK_SCRIPT = (
+    "(() => { /* rf:assistant-ack */ window.__rfAssistantAsk = null; return '1'; })()"
+)
+
 
 class _AiWorker:
     """一次只跑一个模型调用的工作线程；新任务**顶掉**还没开始的旧任务。
@@ -157,13 +166,13 @@ class _AiWorker:
     最新的焦点永远赢，排在前面的还没开始就已经过期了。
     """
 
-    def __init__(self, run: Callable[[int, Any], None]) -> None:
+    def __init__(self, run: Callable[[int, Any], None], *, name: str = "webform-ai") -> None:
         self._run = run
         self._mailbox: tuple[int, Any] | None = None
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._closed = False
-        self._thread = threading.Thread(target=self._loop, name="webform-ai", daemon=True)
+        self._thread = threading.Thread(target=self._loop, name=name, daemon=True)
 
     def start(self) -> None:
         self._thread.start()
@@ -243,6 +252,14 @@ class LiveSession:
         # 下一个框时面板纹丝不动，看起来就是"卡了"。所以真正的调用挪到自己的工作线程上。
         self._ai_worker = _AiWorker(self._run_ai)
         self._autofill_worker = AutoFillWorker(self._run_autofill)
+        # 「问投投」的工作线程。**独立于填表 AI 开关**：只要配了模型（provider 有值）
+        # 就可以问——ai_enabled 管的是自动字段识别的成本，而问答是用户逐条显式发起的
+        # 单次调用，语义不同。provider 为 None 时 ask() 会如实回「未配置模型服务」。
+        self._ask_worker = _AiWorker(self._run_ask, name="webform-ask")
+        # 问答历史与问题游标都是**每文档**一份：页面跳转即重置（见 _tick 的重装分支），
+        # 否则上一页的对话会接到新页面上、旧 seq 会吞掉新页的第一次提问。
+        self._ask_history = live_assistant.new_history()
+        self._last_ask_sequence: int | None = None
         self._enabled = True
         self._last_control_sequence: int | None = None
         self._last_autofill_sequence: int | None = None
@@ -270,21 +287,18 @@ class LiveSession:
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
             raise WebFormConflict("点击填表模式已经在运行")
-        # **先把窗口唤到前台**：窗口没有系统焦点时，Chrome 不派发 focus/blur 事件
-        # （`document.activeElement` 会照常更新，但 focusin 一次都不来）——而整套交互就挂在
-        # focusin 上。用户点一下窗口本来就会解决，但启动时主动保障一次更省事。
-        ensure = getattr(self._client, "ensure_page_visible", None)
-        if ensure is not None:
-            try:
-                ensure()
-            except Exception as error:  # noqa: BLE001 - 不能还原窗口不该拦住整个模式
-                logger.warning("没能把浏览器窗口恢复到前台：%s", error)
+        # 刻意**不**在这里把窗口唤到前台：实时填表现在随浏览器启动自动开启，
+        # 用户可能把窗口最小化/切走了并不想被打断——启动时强行 activateTarget
+        # 就是用户反馈的"加载出来的时候又弹出一次专用浏览器"。焦点问题（Chrome
+        # 无系统焦点时不派发 focusin）在用户真正点击窗口时自然消失：点击本身
+        # 就会让窗口获得焦点。
         self._attach()
         # 上一轮可能留下了面板，先收干净。
         self._client.evaluate(_clear_state_script())
         self._stop.clear()
         self._ai_worker.start()
         self._autofill_worker.start()
+        self._ask_worker.start()
         self._thread = threading.Thread(target=self._loop, name="webform-live", daemon=True)
         self._thread.start()
         self.state["running"] = True
@@ -390,6 +404,7 @@ class LiveSession:
         # 那些——不然用户关了模式之后，某个回调还会往页面上推一个已经没人看的面板。
         self._ai_worker.close()
         self._autofill_worker.close()
+        self._ask_worker.close()
         try:
             # 真正把监听与面板从页面上撤掉，而不是只藏起来。
             self._client.evaluate(_UNINSTALL_SCRIPT)
@@ -443,6 +458,10 @@ class LiveSession:
             # 上一页的开关变更。
             self._last_control_sequence = None
             self._last_autofill_sequence = None
+            # 「问投投」同样是**每文档**一份：历史与问题游标跟着重置，防止新文档的
+            # seq 从 1 重新编号时被旧游标误判为"已处理过"。
+            self._ask_history = live_assistant.new_history()
+            self._last_ask_sequence = None
             # 上一页的建议已经失效，别让它继续挂在界面上。
             self._publish(
                 {
@@ -482,6 +501,27 @@ class LiveSession:
                             message="已有自动填写正在进行，请稍后再试",
                         )
                     )
+
+        # 「问投投」与自动填写同层处理：即便实时填表开关是关的，悬浮球还在，
+        # 问答就应当可用（它是悬浮球的独立能力，不随填表开关一起下线）。
+        assistant_ask = payload.get("assistant_ask")
+        if isinstance(assistant_ask, dict):
+            ask_sequence = int(assistant_ask.get("seq") or 0)
+            ask_text = str(assistant_ask.get("text") or "")
+            if (
+                ask_sequence
+                and ask_text
+                and (
+                    self._last_ask_sequence is None
+                    or ask_sequence != self._last_ask_sequence
+                )
+            ):
+                self._last_ask_sequence = ask_sequence
+                try:
+                    self._client.evaluate(_ACK_ASSISTANT_ASK_SCRIPT)
+                except Exception as error:  # noqa: BLE001 - ACK 失败不应阻止后台任务
+                    logger.debug("网申填表：确认问投投请求失败：%s", error)
+                self._ask_worker.push(ask_sequence, ask_text)
 
         # 关闭实时填表后仍要保留悬浮球，这样用户可以在专用浏览器里重新开启；
         # 因此即使当前是关闭状态，也要先把新文档里的控制球重新装回去，再跳过焦点处理。
@@ -880,6 +920,28 @@ class LiveSession:
                     message="读取当前页面失败，请刷新页面后重试",
                 )
             )
+
+    # ===== 「问投投」：精简版问答 =====
+    #
+    # 与 AI 兜底同一套纪律：不阻塞轮询（真调用在 _ask_worker 上）、失败不抛（转成
+    # 页面可见的 error 文案）、过期回答由页面侧 seq 比对丢弃。
+
+    def _run_ask(self, sequence: int, question: str) -> None:
+        """跑一次问答并把结果（或错误）写回页面。provider 未配置时 ask() 会如实报错。"""
+        try:
+            reply = live_assistant.ask(self._provider, self._ask_history, question)
+        except live_assistant.AssistantAskError as error:
+            self._publish_assistant_reply({"seq": sequence, "error": str(error)})
+            return
+        # 只有**成功**的一轮才进历史；失败的问题留在上下文里只会污染下一轮。
+        live_assistant.append_exchange(self._ask_history, question, reply)
+        self._publish_assistant_reply({"seq": sequence, "text": reply})
+
+    def _publish_assistant_reply(self, payload: dict[str, Any]) -> None:
+        try:
+            self._client.evaluate(set_assistant_reply_script(payload))
+        except Exception as error:  # noqa: BLE001 - 页面可能已经跳走
+            logger.debug("网申填表：回写问投投的回答失败：%s", error)
 
     # ===== 用户点了「记住这条」 =====
 

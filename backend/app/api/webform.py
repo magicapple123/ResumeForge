@@ -141,9 +141,16 @@ def browser_status(db: Session = Depends(get_db)):
 @router.post("/browser/start", response_model=BrowserStatusOut)
 def browser_start(db: Session = Depends(get_db)):
     try:
-        return webform_browser.start_browser(db)
+        status = webform_browser.start_browser(db)
     except Exception as exc:  # noqa: BLE001 - 与投递台同一套错误映射
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # 浏览器起来就**立即自动开启**智能逐项填表：历历球随首个页面注入，不用等
+    # 用户发现"怎么还没出现"再手动开。失败不阻断——轮询自愈与前端兜底都在。
+    try:
+        _start_live_session(db)
+    except Exception as exc:  # noqa: BLE001 - 页面未就绪时靠轮询自愈重装
+        logger.warning("浏览器启动后自动开启实时填表失败（稍后自愈）：%s", exc)
+    return status
 
 
 @router.post("/browser/open-url")
@@ -152,9 +159,14 @@ def browser_open_url(payload: WebFormOpenUrlIn, db: Session = Depends(get_db)):
         url = url_history.normalize_url(payload.url)
         result = webform_browser.open_url(db, url)
         url_history.remember_url(db, url)
-        return result
     except (ValueError, webform_browser.BrowserError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # 同 browser/start：打开目标页面即自动开启实时填表，历历球随页面就绪出现。
+    try:
+        _start_live_session(db)
+    except Exception as exc:  # noqa: BLE001 - 页面未就绪时靠轮询自愈重装
+        logger.warning("打开页面后自动开启实时填表失败（稍后自愈）：%s", exc)
+    return result
 
 
 @router.get("/url-history", response_model=WebFormUrlHistoryListOut)
@@ -216,6 +228,18 @@ def set_browser_target_live(
 
 @router.post("/live/start", response_model=WebFormLiveOut)
 def live_start(payload: WebFormLiveIn | None = None, db: Session = Depends(get_db)):
+    return _start_live_session(db, want_ai=payload.ai if payload is not None else None)
+
+
+def _start_live_session(
+    db: Session, want_ai: bool | None = None, *, close_db: bool = True
+) -> dict:
+    """开启（或复用正在跑的）实时填表会话；浏览器与页面路由共用这段主体。
+
+    ``start_live`` 本身是幂等的：已在跑的会话只刷新资料与客户端，不会重复注入、
+    也不会再弹浏览器窗口——所以浏览器启动/打开页面后可以放心地自动调一次。
+    ``want_ai=None`` 表示按默认开启 AI（未配模型时会话内部自动降级为纯规则）。
+    """
     manager = webform_browser.get_browser_manager(db)
     if not manager.is_active():
         raise HTTPException(
@@ -224,8 +248,8 @@ def live_start(payload: WebFormLiveIn | None = None, db: Session = Depends(get_d
         )
     # 开着 AI 但没配模型时 `build_provider` 返回 None，会话内部把开关一并降级为关——
     # **不报错**：没配模型照样能用规则填，那是这个功能本来的样子。
-    want_ai = payload is None or payload.ai
-    provider = ai.build_provider(db) if want_ai else None
+    use_ai = True if want_ai is None else want_ai
+    provider = ai.build_provider(db) if use_ai else None
     data = webform_service.build_live_form_data(db)
     catalog = webform_service.build_catalog(db)
     memory_targets = profile_targets.build_memory_targets(db)
@@ -312,14 +336,15 @@ def live_start(payload: WebFormLiveIn | None = None, db: Session = Depends(get_d
         finally:
             session.close()
 
-    db.close()  # 会话会开线程跑模型调用，别占着连接池
+    if close_db:
+        db.close()  # 会话会开线程跑模型调用，别占着连接池
     try:
         webform_service.start_live(
             manager.client(),
             data,
             catalog,
             provider=provider,
-            ai_enabled=want_ai,
+            ai_enabled=use_ai,
             store=store_remember,
             require_memory_choice=False,
             data_loader=load_live_data,

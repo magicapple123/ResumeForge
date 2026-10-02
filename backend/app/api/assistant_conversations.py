@@ -1,5 +1,6 @@
 """求职助手会话的数据库读写。"""
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -32,9 +33,15 @@ def welcome_message() -> str:
     修改、评审；文件缺失时退回一句最小说明，不让"没有引导"变成接口 500。
     """
     try:
-        return _WELCOME_PROMPT_PATH.read_text(encoding="utf-8").strip()
+        text = _WELCOME_PROMPT_PATH.read_text(encoding="utf-8").strip()
     except OSError:
-        return "你好，我是简历通的求职助手。可以在下方输入框直接提问，或先关联岗位、简历和资料。"
+        text = "你好，我是简历通的求职助手。可以在下方输入框直接提问，或先关联岗位、简历和资料。"
+    # 时间感知：欢迎对话只创建一次，这里是"首次打开的当地时间"——深夜/凌晨创建时
+    # 附一句休息提醒，让投投的开场也知道看时候（与主助手 _local_time_note 同口径）。
+    now = datetime.now().astimezone()
+    if now.hour >= 23 or now.hour < 5:
+        return f"{text}\n\n对了——现在已经很晚了，忙完这一阵就早点休息。"
+    return text
 
 
 def conversation_or_404(

@@ -123,8 +123,10 @@ describe("CollectPanel 条件历史", () => {
     fireEvent.click(saveBtn);
     await waitFor(() => expect(localStorage.getItem(HISTORY_KEY)).not.toBeNull());
 
-    fireEvent.click(screen.getByRole("button", { name: /清空历史/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /^清\s*空$/ }));
+    // 清空历史收进了「···」菜单（不可恢复的破坏性入口不裸露）；确认键无 locale 是 "OK"。
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("清空历史"));
+    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
 
     await waitFor(() => expect(localStorage.getItem(HISTORY_KEY)).toBeNull());
   });

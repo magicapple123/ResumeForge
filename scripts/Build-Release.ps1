@@ -62,6 +62,12 @@ if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 $RequiredFiles = @(
     "backend/app/main.py",
     "backend/app/preflight.py",
+    # Not a preflight requirement on purpose: the app starts fine without it and
+    # falls back to a gradient disc. But the RELEASE must carry it -- `git archive`
+    # only ships tracked files, and a missing mascot silently brings back the white
+    # circle the maintainer asked us to remove. Checked against the archive entries
+    # below, so an untracked asset fails the build instead of shipping.
+    "backend/app/assets/lili/lili-orb-128.png",
     "backend/app/data/skills.json",
     "backend/app/data/ats_keywords.json",
     "backend/app/prompts/application_status.md",
@@ -91,6 +97,7 @@ $RequiredFiles = @(
     "backend/app/prompts/resume_phrases.md",
     "backend/app/prompts/resume_polish.md",
     "backend/app/prompts/resume_quality_retry.md",
+    "backend/app/prompts/resume_revise.md",
     "backend/app/prompts/resume_rewrite_field.md",
     "backend/app/prompts/resume_template_import.md",
     "backend/app/prompts/resume_risk.md",

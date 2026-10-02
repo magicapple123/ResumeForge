@@ -53,6 +53,8 @@ const DETAIL: ResumeDetail = {
     phone: "",
     email: "",
     city: "",
+    personal_website: "",
+    github: "",
     job_intent: "后端开发",
     summary: "",
     education: [],
@@ -64,6 +66,8 @@ const DETAIL: ResumeDetail = {
   },
   warnings: [],
   parse_error: "",
+  rationale: "",
+  coverage_notes: [],
 };
 
 const LAYOUT: ResumeLayout = {
@@ -115,6 +119,90 @@ describe("ResumeDetailPreview 的「手动调整」", () => {
 
     // 页签出现 = 调用点确实把简历 id 传给了编辑弹窗；没传的话这里会一直找不到。
     expect(await screen.findByText("写作增强")).toBeInTheDocument();
+  });
+});
+
+describe("生成说明与警告分级", () => {
+  function detailWith(overrides: Partial<ResumeDetail>): ResumeDetail {
+    return {
+      ...DETAIL,
+      ...overrides,
+      content: { ...DETAIL.content, ...overrides.content },
+    };
+  }
+
+  function renderWith(overrides: Partial<ResumeDetail>) {
+    const previewRef = { current: null };
+    return render(
+      <MemoryRouter>
+        <AntdApp>
+          <ResumeDetailPreview
+            detail={detailWith(overrides)}
+            html="<html></html>"
+            layout={LAYOUT}
+            layoutStatus={null}
+            measure={null}
+            pdfDirectAvailable
+            relayouting={false}
+            previewRef={previewRef}
+            onLayoutStatus={vi.fn()}
+            onMeasure={vi.fn()}
+            onApplyLayout={vi.fn()}
+            onApplyFittedFormat={vi.fn()}
+            onSaveEditedResume={vi.fn()}
+            suggestionsGenerated={false}
+            suggestionsResetKey={0}
+            onSuggestionsGenerated={vi.fn()}
+            onResumeRevised={vi.fn()}
+          />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+  }
+
+  it("shows the generation rationale in a collapsible section", async () => {
+    renderWith({ rationale: "目标岗位「产品运营」：候选资料组成：项目 2 条。" });
+
+    fireEvent.click(await screen.findByText("为什么是这样一份简历（生成说明）"));
+
+    expect(await screen.findByText(/候选资料组成：项目 2 条/)).toBeInTheDocument();
+  });
+
+  it("renders structured coverage notes as a neutral group with an action button", async () => {
+    renderWith({
+      coverage_notes: [
+        {
+          section: "projects",
+          section_label: "项目经历",
+          names: ["Amazon ESG"],
+          filtered: ["Amazon ESG"],
+          model_omitted: [],
+          total: 1,
+        },
+      ],
+    });
+
+    expect(await screen.findByText("这些资料内容没有写进这份简历")).toBeInTheDocument();
+    expect(screen.getByText(/「Amazon ESG」/)).toBeInTheDocument();
+
+    // 「AI 补上这段」打开修订弹窗，并把这条内容的补充指令预填好。
+    fireEvent.click(screen.getByRole("button", { name: "AI 补上这段" }));
+    const box = await screen.findByPlaceholderText(/留空则整体重新生成/);
+    expect((box as HTMLTextAreaElement).value).toContain("Amazon ESG");
+    expect((box as HTMLTextAreaElement).value).toContain("项目经历");
+  });
+
+  it("routes legacy plain-text coverage warnings away from the fabrication group", () => {
+    renderWith({
+      warnings: [
+        "专业技能中出现本岗位候选资料未包含的技能「Excel」，请核对是否为虚构",
+        "项目经历中有 1 条没有出现在这份简历里：「Amazon ESG」与这个岗位的关键词交集不足。",
+      ],
+    });
+
+    // 旧记录的未收录文本归入中性组，不再顶在"疑似虚构"的红色警告下。
+    expect(screen.getByText("这些资料内容没有写进这份简历")).toBeInTheDocument();
+    expect(screen.getByText(/项目经历中有 1 条没有出现在这份简历里/)).toBeInTheDocument();
   });
 });
 

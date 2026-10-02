@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from ...schemas.profile import ProfileOut
 from ...schemas.resume import ResumeContent
@@ -14,6 +15,27 @@ from .resume_grounding import (
     _source_evidence_text,
     _unsupported_quantified_values,
 )
+
+
+def _skill_visible_in_candidates(skill_name: str, source_data: dict) -> bool:
+    """技能名是否出现在候选资料的**任何文本**里（skills 名单之外的兜底豁免）。
+
+    技能名常带括号补全说明（「Excel（VLOOKUP、数据透视表）」），候选正文里出现的
+    往往只有主名，所以比对取括号前的主体，大小写无关做包含判断。主名过短
+    （如单字母「R」）时子串会到处命中，退回整词匹配——宁可保留"请核对"，
+    也不把核对门槛放宽到形同虚设。
+    """
+    main = re.split(r"[（(]", skill_name.strip(), maxsplit=1)[0].strip()
+    if not main:
+        return False
+    text = json.dumps(source_data, ensure_ascii=False).casefold()
+    needle = main.casefold()
+    if len(needle) < 2:
+        return False
+    if len(needle) == 2 and needle.isascii():
+        # 两个 ASCII 字符（如 "Go"）的子串太容易撞上无关单词，要求整词出现。
+        return bool(re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", text))
+    return needle in text
 
 
 def check_consistency(
@@ -95,6 +117,11 @@ def check_consistency(
                 )
     for skill in resume.skills:
         if skill.name and not any(_similar_skill(skill.name, known) for known in known_skills):
+            if _skill_visible_in_candidates(skill.name, source_data):
+                # 技能没进 skills 候选名单，但出现在候选资料的正文里（项目描述、
+                # tech_stack 等）——那是模型从条目内容里提炼的，不是虚构。
+                # 只比技能名单会让这类技能全部被冤枉成"疑似虚构"。
+                continue
             warnings.append(
                 f"专业技能中出现{label}未包含的技能「{skill.name}」，请核对是否为虚构"
             )

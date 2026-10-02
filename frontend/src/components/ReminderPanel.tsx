@@ -5,7 +5,7 @@
  */
 import {
   CheckOutlined,
-  DeleteOutlined,
+  CheckSquareOutlined,
   EditOutlined,
   PlusOutlined,
   StopOutlined,
@@ -20,18 +20,20 @@ import {
   Input,
   List,
   Modal,
-  Popconfirm,
   Segmented,
   Select,
   Space,
   Spin,
   Tag,
-  Tooltip,
   Typography,
+  Checkbox,
 } from "antd";
+import { RowActions } from "./common/RowActions";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
+import BatchActionBar from "../components/common/BatchActionBar";
+import { useBatchSelection } from "../hooks/useBatchSelection";
 import { createReminder, deleteReminder, listReminders, updateReminder } from "../api/reminders";
 import { REMINDER_KINDS, REMINDER_KIND_LABELS, REMINDER_STATUS_LABELS } from "../types";
 import type { Reminder, ReminderKind, ReminderStatus } from "../types";
@@ -147,6 +149,30 @@ export default function ReminderPanel({
     }
   };
 
+  const batch = useBatchSelection<number>();
+
+  /** 批量删除：确认后逐条走同一个软删除接口，全部完成再刷新一次。 */
+  const removeSelected = () => {
+    const ids = [...batch.selectedIds];
+    if (ids.length === 0) return;
+    Modal.confirm({
+      title: `删除选中的 ${ids.length} 条提醒？`,
+      content: "删除后可在回收站里找回。",
+      okText: "删除",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        const results = await Promise.allSettled(
+          items.filter((item) => batch.isSelected(item.id)).map((item) => deleteReminder(item.id)),
+        );
+        const failed = results.filter((item) => item.status === "rejected").length;
+        if (failed === 0) message.success(`已删除 ${ids.length} 条提醒`);
+        else message.warning(`已删除 ${ids.length - failed} 条，${failed} 条失败，请重试`);
+        batch.exitSelecting();
+        await loadList();
+      },
+    });
+  };
+
   const remove = async (item: Reminder) => {
     try {
       await deleteReminder(item.id);
@@ -175,6 +201,11 @@ export default function ReminderPanel({
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
             新增提醒
           </Button>
+          {view === "list" && !batch.selecting && items.length > 0 && (
+            <Button icon={<CheckSquareOutlined />} onClick={batch.enterSelecting}>
+              批量选择
+            </Button>
+          )}
           <Segmented
             value={view}
             onChange={(value) => setView(value as "list" | "calendar")}
@@ -193,109 +224,131 @@ export default function ReminderPanel({
       ) : items.length === 0 ? (
         <Empty description="还没有提醒，把面试、测评截止这些时点记下来吧" />
       ) : (
-        <List
-          dataSource={items}
-          renderItem={(item) => {
-            // 「详情」放在第一位：列表只放得下摘要，备注、绑定对象这些都得点进去看。
-            const actions = [
-              <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
-                详情
-              </Button>,
-            ];
-            if (item.status === "pending") {
-              actions.push(
-                <Button
-                  key="done"
-                  type="link"
-                  size="small"
-                  icon={<CheckOutlined />}
-                  aria-label={`完成提醒 ${item.title}`}
-                  onClick={() => void setStatus(item, "done")}
-                >
-                  完成
+        <>
+          {batch.selecting && (
+            <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+              <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
+                删除所选
+              </Button>
+            </BatchActionBar>
+          )}
+          <List
+            dataSource={items}
+            renderItem={(item) => {
+              // 多选模式：行简化为勾选框 + 点行切换，不提供单行操作。
+              if (batch.selecting) {
+                return (
+                  <List.Item
+                    className="detail-trigger"
+                    actions={[
+                      <Checkbox
+                        key="pick"
+                        aria-label={`选择提醒 ${item.title}`}
+                        checked={batch.isSelected(item.id)}
+                        onChange={() => batch.toggle(item.id)}
+                      />,
+                    ]}
+                    onClick={() => batch.toggle(item.id)}
+                  >
+                    <List.Item.Meta
+                      title={item.title}
+                      description={formatDateTime(item.remind_at)}
+                    />
+                  </List.Item>
+                );
+              }
+              // 「详情」放在第一位：列表只放得下摘要，备注、绑定对象这些都得点进去看。
+              const actions = [
+                <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
+                  详情
                 </Button>,
-              );
+              ];
+              if (item.status === "pending") {
+                actions.push(
+                  <Button
+                    key="done"
+                    type="link"
+                    size="small"
+                    icon={<CheckOutlined />}
+                    aria-label={`完成提醒 ${item.title}`}
+                    onClick={() => void setStatus(item, "done")}
+                  >
+                    完成
+                  </Button>,
+                );
+                actions.push(
+                  <Button
+                    key="dismiss"
+                    type="text"
+                    size="small"
+                    icon={<StopOutlined />}
+                    aria-label={`忽略提醒 ${item.title}`}
+                    onClick={() => void setStatus(item, "dismissed")}
+                  >
+                    忽略
+                  </Button>,
+                );
+              }
               actions.push(
-                <Button
-                  key="dismiss"
-                  type="text"
-                  size="small"
-                  icon={<StopOutlined />}
-                  aria-label={`忽略提醒 ${item.title}`}
-                  onClick={() => void setStatus(item, "dismissed")}
-                >
-                  忽略
-                </Button>,
+                // 编辑/删除收进「···」菜单：删除不再以红图标裸露在行内（全局约定）。
+                <RowActions
+                  key="more"
+                  more={[
+                    {
+                      key: "edit",
+                      label: "编辑",
+                      onClick: () => openEdit(item),
+                    },
+                    {
+                      key: "delete",
+                      label: "删除",
+                      danger: true,
+                      confirm: "删除这条提醒？删除后可在回收站里找回，不会立刻彻底删除。",
+                      onClick: () => void remove(item),
+                    },
+                  ]}
+                />,
               );
-            }
-            actions.push(
-              <Tooltip key="edit" title="编辑">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<EditOutlined />}
-                  aria-label={`编辑提醒 ${item.title}`}
-                  onClick={() => openEdit(item)}
-                />
-              </Tooltip>,
-              <Popconfirm
-                key="delete"
-                title="删除这条提醒？"
-                description="删除后可在回收站里找回，不会立刻彻底删除。"
-                okText="删除"
-                okButtonProps={{ danger: true, "aria-label": `确认删除提醒 ${item.title}` }}
-                cancelText="取消"
-                cancelButtonProps={{ "aria-label": `取消删除提醒 ${item.title}` }}
-                onConfirm={() => void remove(item)}
-              >
-                <Button
-                  type="text"
-                  size="small"
-                  danger
-                  icon={<DeleteOutlined />}
-                  aria-label={`删除提醒 ${item.title}`}
-                />
-              </Popconfirm>,
-            );
-            return (
-              <List.Item
-                className="detail-trigger"
-                actions={actions}
-                // 整条点开详情；行内按钮与二次确认不会被这一层抢走。
-                onClick={(event) => {
-                  if (isFromInnerControl(event)) return;
-                  setDetail(item);
-                }}
-              >
-                <List.Item.Meta
-                  title={
-                    <Space size={6} wrap>
-                      <span>{item.title}</span>
-                      <Tag>{REMINDER_KIND_LABELS[item.kind as ReminderKind] ?? item.kind}</Tag>
-                      <Tag
-                        color={
-                          item.status === "pending"
-                            ? "blue"
-                            : item.status === "done"
-                              ? "green"
-                              : "default"
-                        }
-                      >
-                        {REMINDER_STATUS_LABELS[item.status as ReminderStatus] ?? item.status}
-                      </Tag>
-                    </Space>
-                  }
-                  description={
-                    <Typography.Text type="secondary">
-                      {formatDateTime(item.remind_at)}
-                      {item.note ? ` · ${item.note}` : ""}
-                    </Typography.Text>
-                  }
-                />
-              </List.Item>
-            );
-          }}
-        />
+              return (
+                <List.Item
+                  className="detail-trigger"
+                  actions={actions}
+                  // 整条点开详情；行内按钮与二次确认不会被这一层抢走。
+                  onClick={(event) => {
+                    if (isFromInnerControl(event)) return;
+                    setDetail(item);
+                  }}
+                >
+                  <List.Item.Meta
+                    title={
+                      <Space size={6} wrap>
+                        <span>{item.title}</span>
+                        <Tag>{REMINDER_KIND_LABELS[item.kind as ReminderKind] ?? item.kind}</Tag>
+                        <Tag
+                          color={
+                            item.status === "pending"
+                              ? "blue"
+                              : item.status === "done"
+                                ? "green"
+                                : "default"
+                          }
+                        >
+                          {REMINDER_STATUS_LABELS[item.status as ReminderStatus] ?? item.status}
+                        </Tag>
+                      </Space>
+                    }
+                    description={
+                      <Typography.Text type="secondary">
+                        {formatDateTime(item.remind_at)}
+                        {item.note ? ` · ${item.note}` : ""}
+                      </Typography.Text>
+                    }
+                  />
+                </List.Item>
+              );
+            }}
+          />
+        </>
       )}
 
       <Modal

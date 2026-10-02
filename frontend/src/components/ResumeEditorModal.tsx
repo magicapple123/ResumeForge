@@ -123,6 +123,16 @@ export default function ResumeEditorModal({
                 <Input />
               </Form.Item>
             </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="github" label="GitHub 主页">
+                <Input placeholder="https://github.com/用户名" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="personal_website" label="个人主页">
+                <Input placeholder="https://example.com" />
+              </Form.Item>
+            </Col>
             <Col span={24}>
               <Form.Item name="job_intent" label="求职意向">
                 <Input />

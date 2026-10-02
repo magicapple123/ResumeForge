@@ -167,6 +167,14 @@
   text-align: center;
 }
 
+/* 投投宣传图替代 antd 灰托盘图：柔和投影融入页面，不加大边框。 */
+.assistant-empty-state .assistant-empty-state-brand {
+  width: auto;
+  height: 128px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 18px rgb(21 94 239 / 0.14));
+}
+
 .assistant-empty-state .ant-empty {
   margin-block: 0;
 }

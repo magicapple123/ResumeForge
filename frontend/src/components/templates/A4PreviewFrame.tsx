@@ -12,10 +12,8 @@
  * 预览里，写死断点必然在其中一处失真。
  */
 import { useLayoutEffect, useRef, useState } from "react";
-
-/** A4 在 96dpi 下的 CSS 像素尺寸，与后端模板里的 `210mm / 297mm` 对应。 */
-export const A4_WIDTH_PX = 794;
-export const A4_HEIGHT_PX = 1123;
+// A4 尺寸单源化：与简历预览全家桶共用同一份常量（原先两处各写一份，改口径时容易漂移）。
+import { A4_HEIGHT_PX, A4_WIDTH_PX } from "../resume-preview/config";
 
 interface Props {
   html: string;

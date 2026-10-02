@@ -73,10 +73,11 @@ describe("ReminderPanel", () => {
     renderPanel();
     await screen.findByText("参加某司二面");
 
-    fireEvent.click(screen.getByRole("button", { name: /删除提醒 参加某司二面/ }));
-
+    // 删除收进了「···」菜单：未确认前绝不能调用删除。
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
     expect(apiMocks.deleteReminder).not.toHaveBeenCalled();
-    fireEvent.click(await screen.findByRole("button", { name: "确认删除提醒 参加某司二面" }));
+    fireEvent.click(await screen.findByText("删除"));
+    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
 
     await waitFor(() => expect(apiMocks.deleteReminder).toHaveBeenCalledWith(1));
   });

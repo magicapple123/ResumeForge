@@ -1,13 +1,6 @@
 /** 数据集管理：导入多份备份、在它们之间切换，以及导出/重命名/删除。 */
 
-import {
-  DeleteOutlined,
-  DownloadOutlined,
-  EditOutlined,
-  PlusOutlined,
-  SwapOutlined,
-  UploadOutlined,
-} from "@ant-design/icons";
+import { DownloadOutlined, PlusOutlined, SwapOutlined, UploadOutlined } from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -16,13 +9,13 @@ import {
   Input,
   List,
   Modal,
-  Popconfirm,
   Space,
   Tag,
   Tooltip,
   Typography,
   Upload,
 } from "antd";
+import { RowActions } from "../common/RowActions";
 import type { DatasetInfo } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import FileDropZone from "../common/FileDropZone";
@@ -194,39 +187,27 @@ export default function DatasetsCard({
                     切换
                   </Button>
                 </Tooltip>,
-                <Tooltip
-                  key="rename"
-                  title={isProtected(dataset) ? "主数据不支持重命名" : "重命名"}
-                >
-                  <Button
-                    type="text"
-                    aria-label={`重命名 ${dataset.name}`}
-                    icon={<EditOutlined />}
-                    disabled={isProtected(dataset) || busy}
-                    onClick={() => onOpenRename(dataset)}
-                  />
-                </Tooltip>,
-                <Popconfirm
-                  key="delete"
-                  title={`确定删除数据集“${dataset.name}”？`}
-                  description="会移入 data/datasets/.trash/，需要时可以手动找回"
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true }}
-                  disabled={dataset.is_active || busy || isProtected(dataset)}
-                  onConfirm={() => onDelete(dataset)}
-                >
-                  <Tooltip title={dataset.is_active ? "不能删除正在使用的数据集" : "删除"}>
-                    <Button
-                      type="text"
-                      danger
-                      aria-label={`删除数据集 ${dataset.name}`}
-                      icon={<DeleteOutlined />}
-                      loading={deletingId === dataset.id}
-                      disabled={dataset.is_active || busy || isProtected(dataset)}
-                    />
-                  </Tooltip>
-                </Popconfirm>,
+                // 编辑/删除收进「···」菜单：删除不再以红图标裸露在行内（全局约定）。
+                <RowActions
+                  key="more"
+                  disabled={busy}
+                  more={[
+                    {
+                      key: "rename",
+                      label: "重命名",
+                      disabled: isProtected(dataset),
+                      onClick: () => onOpenRename(dataset),
+                    },
+                    {
+                      key: "delete",
+                      label: "删除",
+                      danger: true,
+                      disabled: dataset.is_active || isProtected(dataset),
+                      confirm: `确定删除数据集“${dataset.name}”？会移入 data/datasets/.trash/，需要时可以手动找回`,
+                      onClick: () => onDelete(dataset),
+                    },
+                  ]}
+                />,
               ]}
             >
               <List.Item.Meta

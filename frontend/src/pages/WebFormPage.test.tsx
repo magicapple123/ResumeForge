@@ -264,6 +264,25 @@ describe("WebFormPage", () => {
     expect(screen.getByRole("button", { name: /关\s*闭/ })).toBeInTheDocument();
   });
 
+  it("点「开启专用浏览器」后立刻显示已开启，不等浏览器状态轮询翻牌", async () => {
+    // 后端在这两条浏览器路由里已经顺手把逐项填表打开了（见 api/webform.py），所以前端
+    // 读完一次 /live/status 就该把卡片切成「关闭」。
+    apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
+    apiMocks.startWebFormBrowser.mockResolvedValue(browserStatus({ state: "running" }));
+    // 挂载时那条"从别的界面回来"的 effect 读到的还是"没开"；点击之后才返回"已经开了"。
+    // 另外 startWebFormLive 保持默认（返回 running:false）：这样只有"主动读状态"这条路
+    // 能让卡片翻开，兜底 effect 走不到——用例才真的在验证新行为。
+    apiMocks.getWebFormLiveStatus
+      .mockResolvedValueOnce(liveStatus())
+      .mockResolvedValue(liveStatus({ running: true }));
+
+    renderPage();
+    (await screen.findByRole("button", { name: "开启专用浏览器" })).click();
+
+    await waitFor(() => expect(apiMocks.startWebFormBrowser).toHaveBeenCalled());
+    expect(await screen.findByRole("button", { name: "关闭智能逐项填表" })).toBeEnabled();
+  });
+
   it("restores the unfinished web form session when returning from another page", async () => {
     const savedPreview = preview();
     window.sessionStorage.setItem(

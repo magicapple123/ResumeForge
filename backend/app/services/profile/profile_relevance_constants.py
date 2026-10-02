@@ -157,6 +157,10 @@ _LLM_PROFILE_FIELDS = (
     "target_city",
     "job_intent",
     "summary",
+    # GitHub / 个人主页是用户主动填写的公开作品链接，本来就是放简历用的——
+    # 不属于身份敏感字段（与电话/邮箱/身份证不同），要随候选资料提供给模型。
+    "github",
+    "personal_website",
     "educations",
     "experiences",
     "campus_experiences",

@@ -28,7 +28,7 @@ from .resume_consistency import check_consistency
 from .resume_coverage import (
     all_entry_names,
     confirmed_claims_about,
-    find_unwritten_items,
+    find_unwritten_details,
 )
 from .resume_content import _LIST_FIELDS
 from .resume_content import coerce_resume, extract_json
@@ -55,6 +55,7 @@ from .resume_quality import (
     _quality_reference_points,
     _quality_shortfalls,
 )
+from .resume_rationale import build_generation_rationale
 from .resume_templates import font_scale_spec
 from .resume_wording import cliche_shortfalls, find_cliches
 
@@ -322,7 +323,7 @@ class ResumeGenerator:
                 warnings.append(
                     "生成结果里仍有空话或黑话（"
                     + "、".join(remaining_cliches)
-                    + "）：可以在「微调内容」里改掉，或重新生成一次。"
+                    + "）：可以在「手动调整」里改掉，或重新生成一次。"
                 )
         if general:
             omitted_total = sum(selection.omitted_counts.values())
@@ -332,7 +333,7 @@ class ResumeGenerator:
                 warnings.append(
                     f"这是通用简历（不按岗位筛选）：完整资料中有 {omitted_total} 条内容"
                     "超出单份简历的篇幅预算，已按资料顺序优先保留靠前的条目；"
-                    "需要补充的内容可以在「微调内容」里手动加上。"
+                    "需要补充的内容可以在「手动调整」里手动加上。"
                 )
         resume = ground_resume_facts(
             resume,
@@ -350,19 +351,28 @@ class ResumeGenerator:
         )
         # 覆盖度检查放在**所有**修复/回填之后：它比对的必须是用户最终看到的那份内容，
         # 否则"资料里有 X、简历里没有 X"可能只是中间状态的假象。
-        coverage = find_unwritten_items(resume, selection.entry_names, selection.data)
-        if coverage:
-            # 已确认的台账主张会让提醒更有分量：用户为这条经历做过"可以对外说"的确认，
-            # 它却没进候选资料，这是最需要被点破的一种情况。
-            confirmed_names = confirmed_claims_about(all_entry_names(selection.entry_names), baseline)
-            suffix = (
-                f" 台账里已确认与 {'、'.join(confirmed_names)} 相关的事实，"
-                "它们同样没有进入候选资料。"
-                if confirmed_names
-                else ""
-            )
-            warnings.extend(f"{message}{suffix}" for message in coverage)
-        yield {"type": "done", "resume": resume.model_dump(), "warnings": warnings}
+        #
+        # "没写进简历"是岗位导向筛选的正常结果，与"疑似虚构"性质完全不同——所以它
+        # **不再混进 warnings**（那面红墙），而是作为结构化的 coverage_notes 单独
+        # 落库，前端用中性分组展示并配处理按钮。
+        coverage_details = find_unwritten_details(resume, selection.entry_names, selection.data)
+        confirmed_names = confirmed_claims_about(all_entry_names(selection.entry_names), baseline)
+        rationale = build_generation_rationale(
+            job=job,
+            selection_counts=selection.selected_counts,
+            omitted_counts=selection.omitted_counts,
+            focus_skills=selection.focus.skills,
+            focus_domains=selection.focus.domains,
+            coverage_details=coverage_details,
+            baseline_confirmed=confirmed_names,
+        )
+        yield {
+            "type": "done",
+            "resume": resume.model_dump(),
+            "warnings": warnings,
+            "coverage_notes": coverage_details,
+            "rationale": rationale,
+        }
 
     def _parse(self, raw: str) -> ResumeContent | None:
         data = extract_json(raw)

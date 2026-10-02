@@ -87,6 +87,8 @@ const EMPTY_CONTENT: ResumeContent = {
   phone: "",
   email: "",
   city: "",
+  personal_website: "",
+  github: "",
   job_intent: "",
   summary: "",
   education: [],
@@ -118,6 +120,8 @@ const RESUME_DETAIL: ResumeDetail = {
   content: EMPTY_CONTENT,
   warnings: [],
   parse_error: "",
+  rationale: "",
+  coverage_notes: [],
 };
 
 beforeEach(() => {

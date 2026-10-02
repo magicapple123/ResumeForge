@@ -16,6 +16,8 @@
       {%- if resume.email -%}<span data-resume-path="email">{{ resume.email }}</span>{%- endif -%}
       {%- if resume.city -%}<span data-resume-path="city">{{ resume.city }}</span>{%- endif -%}
       {%- if resume.birth_year -%}<span data-resume-path="birth_year">{{ resume.birth_year }}</span>{%- endif -%}
+      {%- if resume.github -%}<span data-resume-path="github">GitHub：{{ resume.github }}</span>{%- endif -%}
+      {%- if resume.personal_website -%}<span data-resume-path="personal_website">主页：{{ resume.personal_website }}</span>{%- endif -%}
     </div>
   </div>
   {% if resume.photo %}<img class="profile-photo" src="{{ resume.photo }}" alt="个人照片" />{% endif %}

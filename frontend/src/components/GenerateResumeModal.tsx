@@ -323,6 +323,19 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   };
 
   /**
+   * AI 修订（采纳建议）成功后的刷新：修订已在服务端落库，这里按新内容重渲染预览。
+   * 生成弹窗不显示「AI 修改 / 重新生成」入口（``showReviseAction={false}``）——
+   * extraActions 里已有走完整生成流程的「重新生成」，两个同名按钮会互相混淆。
+   */
+  const applyRevisedDetail = async (updated: ResumeDetail) => {
+    const html = await renderResume(updated.content, layout);
+    setResult({ detail: updated });
+    setPreviewHtml(html);
+    setSuggestionsGenerated(false);
+    setSuggestionsResetKey((value) => value + 1);
+  };
+
+  /**
    * 换模板 / 加页数 / 改字号：只重新渲染，不重新调用模型。
    *
    * 记录已经落库，所以同时把版式写回记录——下次从简历中心打开时看到的还是这一套。
@@ -520,6 +533,8 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           onApplyLayout={(next) => void applyLayout(next)}
           onApplyFittedFormat={(formatConfig) => void applyFittedFormat(formatConfig)}
           onSaveEditedResume={(content) => saveEditedResume(content)}
+          onResumeRevised={(updated) => applyRevisedDetail(updated)}
+          showReviseAction={false}
           suggestionsGenerated={suggestionsGenerated}
           suggestionsResetKey={suggestionsResetKey}
           onSuggestionsGenerated={() => setSuggestionsGenerated(true)}

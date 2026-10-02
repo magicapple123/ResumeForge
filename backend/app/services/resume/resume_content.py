@@ -107,6 +107,8 @@ def coerce_resume(data: dict | None) -> ResumeContent:
         phone=as_str(data.get("phone")),
         email=as_str(data.get("email")),
         city=as_str(data.get("city")),
+        personal_website=as_str(data.get("personal_website")),
+        github=as_str(data.get("github")),
         job_intent=as_str(data.get("job_intent")),
         summary=as_str(data.get("summary")),
         education=sections["education"],

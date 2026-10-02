@@ -138,6 +138,8 @@ def fill_current_page(
             time.sleep(delay_seconds)
 
     state = "cancelled" if should_stop is not None and should_stop() else "done"
+    # 完成口径与既有文案一致（filled/total）；total=0 时不算百分比，避免除零与误导。
+    rate_note = f"（成功率 {round(filled * 100 / total)}%）" if total else ""
     report(
         AutoFillProgress(
             state=state,
@@ -146,7 +148,7 @@ def fill_current_page(
             filled=filled,
             failed=failed,
             message=(
-                f"已完成 {filled}/{total} 项，请回到页面核对"
+                f"已完成 {filled}/{total} 项{rate_note}，请回到页面核对"
                 if state == "done"
                 else "已停止当前自动填写"
             ),
