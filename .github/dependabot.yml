@@ -11,6 +11,12 @@ updates:
     labels:
       - dependencies
       - backend
+    ignore:
+      # fonttools 4.66+ requires Python >=3.11, but this repo still
+      # supports Python 3.10. Remove this ignore once the Python floor
+      # rises to 3.11. (2026-10-02)
+      - dependency-name: fonttools
+        versions: [">=4.66"]
     commit-message:
       prefix: deps
 
