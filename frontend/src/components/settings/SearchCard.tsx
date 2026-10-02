@@ -185,13 +185,16 @@ export default function SearchCard() {
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
               1~15 条。条数越多，占用模型的上下文越多。
             </Typography.Paragraph>
-            <InputNumber
-              min={1}
-              max={15}
-              value={config.max_results}
-              onChange={(value) => patch({ max_results: value ?? DEFAULT_CONFIG.max_results })}
-              addonAfter="条"
-            />
+            {/* addonAfter 已废弃（v6）：按官方指引以 Space.Compact + Space.Addon 重组。 */}
+            <Space.Compact>
+              <InputNumber
+                min={1}
+                max={15}
+                value={config.max_results}
+                onChange={(value) => patch({ max_results: value ?? DEFAULT_CONFIG.max_results })}
+              />
+              <Space.Addon>条</Space.Addon>
+            </Space.Compact>
           </div>
 
           <Space wrap>

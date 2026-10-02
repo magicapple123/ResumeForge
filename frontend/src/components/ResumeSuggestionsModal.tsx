@@ -1,6 +1,7 @@
 /** 针对关联岗位生成简历修改建议的按需弹窗。 */
 import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, List, Modal, Skeleton, Space, Tag, Typography } from "antd";
+import { Alert, Button, Empty, Listy, Modal, Skeleton, Space, Tag, Typography, theme } from "antd";
+import { ListyItem } from "./common/ListyItem";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { generateResumeSuggestions } from "../api/resumes";
 import type { ResumeSuggestion, ResumeSuggestions } from "../types";
@@ -27,6 +28,7 @@ export default function ResumeSuggestionsModal({
   onClose,
   onGenerated,
 }: Props) {
+  const { token } = theme.useToken();
   const [data, setData] = useState<ResumeSuggestions | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -114,13 +116,20 @@ export default function ResumeSuggestionsModal({
             </Button>
           </Space>
           {data.suggestions.length > 0 ? (
-            <List
-              bordered
-              dataSource={data.suggestions}
-              renderItem={(item) => {
+            <Listy
+              items={data.suggestions}
+              rowKey={(item) => `${item.issue}|${item.suggestion}`}
+              /* List 的 bordered（1px 边框 + 大圆角）以语义样式还原。 */
+              styles={{
+                root: {
+                  border: `${token.lineWidth}px ${token.lineType} ${token.colorBorder}`,
+                  borderRadius: token.borderRadiusLG,
+                },
+              }}
+              itemRender={(item) => {
                 const priority = PRIORITY_META[item.priority];
                 return (
-                  <List.Item>
+                  <ListyItem>
                     <Space orientation="vertical" size={6} style={{ width: "100%" }}>
                       <Space wrap>
                         <Tag color={priority.color}>{priority.label}</Tag>
@@ -136,7 +145,7 @@ export default function ResumeSuggestionsModal({
                         </Typography.Text>
                       )}
                     </Space>
-                  </List.Item>
+                  </ListyItem>
                 );
               }}
             />

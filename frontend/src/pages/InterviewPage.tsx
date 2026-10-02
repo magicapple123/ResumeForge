@@ -21,7 +21,7 @@ import {
   Form,
   Input,
   InputNumber,
-  List,
+  Listy,
   Modal,
   Progress,
   Select,
@@ -31,6 +31,8 @@ import {
   Tag,
   Typography,
 } from "antd";
+import { ListyItem, ListyMeta } from "../components/common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../components/common/listyPadding";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -114,11 +116,12 @@ function ReportCard({
               {report.summary}
             </Typography.Paragraph>
           </div>
-          <List
-            size="small"
-            dataSource={report.dimensions ?? []}
-            renderItem={(item) => (
-              <List.Item>
+          <Listy
+            items={report.dimensions ?? []}
+            rowKey={(item) => item.name}
+            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+            itemRender={(item) => (
+              <ListyItem>
                 <div className="interview-dimension">
                   <div className="interview-dimension-head">
                     <b>{item.name}</b>
@@ -128,7 +131,7 @@ function ReportCard({
                   </div>
                   <Typography.Text type="secondary">{item.comment}</Typography.Text>
                 </div>
-              </List.Item>
+              </ListyItem>
             )}
           />
           <div className="interview-report-lists">
@@ -452,11 +455,12 @@ export default function InterviewPage() {
                     ) : sessions.length === 0 ? (
                       <Empty description="还没有做过模拟面试" />
                     ) : (
-                      <List
-                        size="small"
-                        dataSource={sessions}
-                        renderItem={(item) => (
-                          <List.Item
+                      <Listy
+                        items={sessions}
+                        rowKey={(item) => item.id}
+                        styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+                        itemRender={(item) => (
+                          <ListyItem
                             actions={[
                               <RowActions
                                 key="actions"
@@ -480,7 +484,7 @@ export default function InterviewPage() {
                               />,
                             ]}
                           >
-                            <List.Item.Meta
+                            <ListyMeta
                               title={
                                 <Space size={6} wrap>
                                   <span>{item.title}</span>
@@ -493,7 +497,7 @@ export default function InterviewPage() {
                               }
                               description={`第 ${item.answered_rounds}/${item.rounds} 轮 · ${formatDateTime(item.created_at)}`}
                             />
-                          </List.Item>
+                          </ListyItem>
                         )}
                       />
                     )}

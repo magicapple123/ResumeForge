@@ -426,20 +426,28 @@ export default function JobsPage() {
               选择
             </Button>
           )}
-          <Dropdown.Button
-            type="primary"
-            icon={<RobotOutlined />}
-            disabled={batchAction !== null}
-            onClick={() => openMatchBatch(true)}
-            menu={{
-              items: [{ key: "background", label: "后台运行分析" }],
-              onClick: ({ key }) => {
-                if (key === "background") openMatchBatch(true, "background");
-              },
-            }}
-          >
-            AI 分析适配度
-          </Dropdown.Button>
+          {/* Dropdown.Button 已废弃（v6）：按官方指引以 Space.Compact + Dropdown + Button 重组。 */}
+          <Space.Compact>
+            <Button
+              type="primary"
+              disabled={batchAction !== null}
+              onClick={() => openMatchBatch(true)}
+            >
+              AI 分析适配度
+            </Button>
+            <Dropdown
+              disabled={batchAction !== null}
+              placement="bottomRight"
+              menu={{
+                items: [{ key: "background", label: "后台运行分析" }],
+                onClick: ({ key }) => {
+                  if (key === "background") openMatchBatch(true, "background");
+                },
+              }}
+            >
+              <Button type="primary" icon={<RobotOutlined />} disabled={batchAction !== null} />
+            </Dropdown>
+          </Space.Compact>
           <Button
             icon={<HistoryOutlined />}
             disabled={batchAction !== null}

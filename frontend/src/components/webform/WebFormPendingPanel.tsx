@@ -11,8 +11,10 @@
  * 那类区块本版不处理。一股脑铺开会让用户以为这个功能什么都没干成，其实能填的都已经
  * 列在上面了。
  */
-import { Alert, Card, Collapse, Empty, List, Space, Tag, Typography } from "antd";
+import { Alert, Card, Collapse, Empty, Listy, Space, Tag, Typography } from "antd";
 import { Link } from "react-router-dom";
+import { ListyItem } from "../common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
 import type { WebFormPendingItem } from "../../types";
 
 interface Props {
@@ -23,11 +25,12 @@ interface Props {
 
 function Lines({ items }: { items: WebFormPendingItem[] }) {
   return (
-    <List
-      size="small"
-      dataSource={items}
-      renderItem={(item) => (
-        <List.Item>
+    <Listy
+      items={items}
+      rowKey={(item) => item.index}
+      styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+      itemRender={(item) => (
+        <ListyItem>
           <Space size={8} wrap>
             <Typography.Text>{item.label || `第 ${item.index + 1} 个控件`}</Typography.Text>
             {item.required ? <Tag color="red">必填</Tag> : null}
@@ -35,7 +38,7 @@ function Lines({ items }: { items: WebFormPendingItem[] }) {
               <Typography.Text type="secondary">{item.field_label}</Typography.Text>
             ) : null}
           </Space>
-        </List.Item>
+        </ListyItem>
       )}
     />
   );

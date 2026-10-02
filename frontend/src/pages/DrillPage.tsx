@@ -17,7 +17,7 @@ import {
   Card,
   Empty,
   Input,
-  List,
+  Listy,
   Modal,
   Popconfirm,
   Select,
@@ -28,6 +28,8 @@ import {
   Tooltip,
   Typography,
 } from "antd";
+import { ListyItem } from "../components/common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../components/common/listyPadding";
 import {
   ArrowLeftOutlined,
   CheckCircleOutlined,
@@ -271,11 +273,12 @@ function RehearsalPanel({ sessionId }: { sessionId: number }) {
       <Typography.Paragraph type="secondary">
         复练不重复原题，换一个角度再问一次——把上次的答案背一遍不算会了。
       </Typography.Paragraph>
-      <List
-        size="small"
-        dataSource={rows}
-        renderItem={(row) => (
-          <List.Item
+      <Listy
+        items={rows}
+        rowKey={(row) => `${row.claim_title}-${row.kind}`}
+        styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+        itemRender={(row) => (
+          <ListyItem
             actions={[
               <Button
                 key="go"
@@ -299,7 +302,7 @@ function RehearsalPanel({ sessionId }: { sessionId: number }) {
                 </Typography.Text>
               )}
             </Space>
-          </List.Item>
+          </ListyItem>
         )}
       />
       <Modal
@@ -339,11 +342,12 @@ function ReviewPanel({ session }: { session: DrillSession }) {
       {(review.actions?.length ?? 0) > 0 && (
         <div>
           <Typography.Text strong>面试前的行动清单</Typography.Text>
-          <List
-            size="small"
-            dataSource={review.actions ?? []}
-            renderItem={(item) => (
-              <List.Item>
+          <Listy
+            items={review.actions ?? []}
+            rowKey={(item) => `${item.kind}|${item.claim_title}|${item.detail}`}
+            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+            itemRender={(item) => (
+              <ListyItem>
                 <Space orientation="vertical" size={2} style={{ width: "100%" }}>
                   <Space size={6} wrap>
                     <Tag
@@ -362,7 +366,7 @@ function ReviewPanel({ session }: { session: DrillSession }) {
                     </Typography.Text>
                   )}
                 </Space>
-              </List.Item>
+              </ListyItem>
             )}
           />
         </div>
@@ -553,12 +557,13 @@ function ActiveSession({
       {session.turns.length > 0 && (
         <details className="drill-transcript">
           <summary>逐轮记录（{session.turns.length} 轮）</summary>
-          <List
-            size="small"
+          <Listy
             style={{ marginTop: 8 }}
-            dataSource={session.turns}
-            renderItem={(turn) => (
-              <List.Item>
+            items={session.turns}
+            rowKey={(turn) => `${turn.question}|${turn.answer}`}
+            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+            itemRender={(turn) => (
+              <ListyItem>
                 <Space orientation="vertical" size={4} style={{ width: "100%" }}>
                   <Typography.Text strong>问：{turn.question}</Typography.Text>
                   <Typography.Text>答：{turn.answer}</Typography.Text>
@@ -573,7 +578,7 @@ function ActiveSession({
                     </Space>
                   )}
                 </Space>
-              </List.Item>
+              </ListyItem>
             )}
           />
         </details>
@@ -744,11 +749,12 @@ export default function DrillPage() {
             description="还没有深挖记录。先在「事实台账」确认几条主张，再回来开一场。"
           />
         ) : (
-          <List
-            size="small"
-            dataSource={history}
-            renderItem={(item) => (
-              <List.Item
+          <Listy
+            items={history}
+            rowKey={(item) => item.id}
+            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+            itemRender={(item) => (
+              <ListyItem
                 actions={[
                   <Button
                     key="open"
@@ -779,7 +785,7 @@ export default function DrillPage() {
                     {item.created_at.replace("T", " ").slice(0, 16)}
                   </Typography.Text>
                 </Space>
-              </List.Item>
+              </ListyItem>
             )}
           />
         )}

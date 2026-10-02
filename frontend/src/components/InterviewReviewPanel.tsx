@@ -22,7 +22,7 @@ import {
   Collapse,
   Empty,
   Input,
-  List,
+  Listy,
   Select,
   Space,
   Tag,
@@ -38,6 +38,7 @@ import {
   updateReview,
 } from "../api/interview";
 import { RowActions } from "./common/RowActions";
+import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { useApi } from "../hooks/useApi";
 import type { InterviewAnalysis, InterviewOptimizeResult, InterviewReviewRecord } from "../types";
 
@@ -423,11 +424,12 @@ export default function InterviewReviewPanel({
             {viewSuggestions.length === 0 ? (
               <Alert type="info" showIcon title="没有产出建议，试试补充更多面试暴露的短板或追问" />
             ) : (
-              <List
-                dataSource={viewSuggestions}
-                renderItem={(item) => (
-                  <List.Item>
-                    <List.Item.Meta
+              <Listy
+                items={viewSuggestions}
+                rowKey={(item) => `${item.section}|${item.issue}|${item.suggestion}`}
+                itemRender={(item) => (
+                  <ListyItem>
+                    <ListyMeta
                       title={
                         <Space size={6} wrap>
                           <Tag color={priorityColor(item.priority)}>{item.priority}</Tag>
@@ -448,7 +450,7 @@ export default function InterviewReviewPanel({
                         </Space>
                       }
                     />
-                  </List.Item>
+                  </ListyItem>
                 )}
               />
             )}
