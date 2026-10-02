@@ -19,8 +19,8 @@ interface Props {
   separatorCount: number;
   totalVisualPages: number;
   html: string;
-  containerRef: RefObject<HTMLDivElement>;
-  iframeRef: RefObject<HTMLIFrameElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
+  iframeRef: RefObject<HTMLIFrameElement | null>;
   onIframeLoad: () => void;
 }
 

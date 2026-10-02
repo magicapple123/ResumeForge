@@ -37,18 +37,6 @@ updates:
     labels:
       - dependencies
       - frontend
-    ignore:
-      # React 19 upgrade is deferred until the antd 6 migration lands
-      # (antd 5 needs a compatibility patch for React 19). Remove this
-      # ignore block once antd 6 + React 19 work is done. (2026-10-02)
-      - dependency-name: react
-        versions: [">=19"]
-      - dependency-name: react-dom
-        versions: [">=19"]
-      - dependency-name: "@types/react"
-        versions: [">=19"]
-      - dependency-name: "@types/react-dom"
-        versions: [">=19"]
     commit-message:
       prefix: deps
 
