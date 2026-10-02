@@ -312,14 +312,17 @@ export default function WebFormMemoryDialog({
           </div>
 
           {selectedId === "custom" ? (
-            <Input
-              autoFocus
-              addonBefore="字段名称"
-              placeholder="如：实验室、导师姓名、家庭住址补充"
-              value={customLabel}
-              onChange={(event) => setCustomLabel(event.target.value)}
-              maxLength={40}
-            />
+            /* addonBefore 已废弃（v6）：按官方指引以 Space.Compact + Space.Addon 重组。 */
+            <Space.Compact block>
+              <Space.Addon>字段名称</Space.Addon>
+              <Input
+                autoFocus
+                placeholder="如：实验室、导师姓名、家庭住址补充"
+                value={customLabel}
+                onChange={(event) => setCustomLabel(event.target.value)}
+                maxLength={40}
+              />
+            </Space.Compact>
           ) : null}
 
           <Space orientation="vertical" size={6} style={{ width: "100%" }}>

@@ -1,6 +1,7 @@
 /** 按需生成岗位需求总结和通用求职建议。 */
 import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, List, Modal, Skeleton, Space, Tag, Typography } from "antd";
+import { Alert, Button, Empty, Listy, Modal, Skeleton, Space, Tag, Typography } from "antd";
+import { ListyItem } from "./common/ListyItem";
 import { announceBackgroundFailure, announceBackgroundResult } from "../utils/backgroundTask";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { generateJobAnalysis } from "../api/jobs";
@@ -140,12 +141,13 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
 
           <Typography.Title level={5}>核心需求</Typography.Title>
           {data.requirements.length ? (
-            <List
-              dataSource={data.requirements}
-              renderItem={(item) => {
+            <Listy
+              items={data.requirements}
+              rowKey={(item) => `${item.requirement}|${item.category ?? ""}`}
+              itemRender={(item) => {
                 const priority = PRIORITY_META[item.priority];
                 return (
-                  <List.Item>
+                  <ListyItem>
                     <Space orientation="vertical" size={5} style={{ width: "100%" }}>
                       <Space wrap>
                         <Tag color={priority.color}>{priority.label}</Tag>
@@ -156,7 +158,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
                         <Typography.Text type="secondary">依据：{item.evidence}</Typography.Text>
                       )}
                     </Space>
-                  </List.Item>
+                  </ListyItem>
                 );
               }}
             />
@@ -166,10 +168,11 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
 
           <Typography.Title level={5}>求职建议</Typography.Title>
           {data.advice.length ? (
-            <List
-              dataSource={data.advice}
-              renderItem={(item) => (
-                <List.Item>
+            <Listy
+              items={data.advice}
+              rowKey={(item) => `${item.title}|${item.action}`}
+              itemRender={(item) => (
+                <ListyItem>
                   <Space orientation="vertical" size={4}>
                     <Typography.Text strong>{item.title}</Typography.Text>
                     <Typography.Text>{item.action}</Typography.Text>
@@ -177,7 +180,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
                       <Typography.Text type="secondary">原因：{item.rationale}</Typography.Text>
                     )}
                   </Space>
-                </List.Item>
+                </ListyItem>
               )}
             />
           ) : (

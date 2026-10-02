@@ -6,7 +6,8 @@ import {
   Button,
   Card,
   Empty,
-  List,
+  Listy,
+  Spin,
   Space,
   Switch,
   Tag,
@@ -16,6 +17,8 @@ import {
 } from "antd";
 import type { AssistantSkill } from "../../types";
 import FileDropZone from "../common/FileDropZone";
+import { ListyItem, ListyMeta } from "../common/ListyItem";
+import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
 import { RowActions } from "../common/RowActions";
 import { formatDateTime } from "../../utils/format";
 
@@ -93,65 +96,72 @@ export default function SkillsCard({
         </Upload>
       </FileDropZone>
 
-      <List
-        style={{ marginTop: 16 }}
-        loading={loading}
-        dataSource={skills}
-        locale={{
-          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有导入技能" />,
-        }}
-        renderItem={(skill) => (
-          <List.Item
-            actions={[
-              <Tooltip
-                key="toggle"
-                title={skill.enabled ? "停用后助手不再使用它" : "启用后助手会照它作答"}
-              >
-                <Switch
-                  size="small"
-                  checked={skill.enabled}
-                  aria-label={`${skill.enabled ? "停用" : "启用"}技能 ${skill.name}`}
-                  loading={togglingId === skill.id}
-                  disabled={busy || (togglingId !== null && togglingId !== skill.id)}
-                  onChange={(checked) => onToggle(skill, checked)}
-                />
-              </Tooltip>,
-              // 删除收进「更多」里并二次确认：这一处此前漏了，仍是一枚常驻的红色图标，
-              // 与岗位/简历/收藏夹/技能工作台四处已经统一的"主操作 + 更多"不一致。
-              <RowActions
-                key="more"
-                disabled={busy}
-                more={[
-                  {
-                    key: "delete",
-                    label: "删除技能",
-                    danger: true,
-                    icon: <DeleteOutlined />,
-                    disabled: deletingId === skill.id,
-                    confirm: `确定删除技能「${skill.name}」？提示词和它附带的知识文件都会被删除，需要时可以重新导入。`,
-                    onClick: () => onDelete(skill),
-                  },
+      {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
+      <Spin spinning={loading}>
+        {skills.length === 0 ? (
+          <div style={{ marginTop: 16 }}>
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有导入技能" />
+          </div>
+        ) : (
+          <Listy
+            style={{ marginTop: 16 }}
+            items={skills}
+            rowKey={(skill) => skill.id}
+            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+            itemRender={(skill) => (
+              <ListyItem
+                actions={[
+                  <Tooltip
+                    key="toggle"
+                    title={skill.enabled ? "停用后助手不再使用它" : "启用后助手会照它作答"}
+                  >
+                    <Switch
+                      size="small"
+                      checked={skill.enabled}
+                      aria-label={`${skill.enabled ? "停用" : "启用"}技能 ${skill.name}`}
+                      loading={togglingId === skill.id}
+                      disabled={busy || (togglingId !== null && togglingId !== skill.id)}
+                      onChange={(checked) => onToggle(skill, checked)}
+                    />
+                  </Tooltip>,
+                  // 删除收进「更多」里并二次确认：这一处此前漏了，仍是一枚常驻的红色图标，
+                  // 与岗位/简历/收藏夹/技能工作台四处已经统一的"主操作 + 更多"不一致。
+                  <RowActions
+                    key="more"
+                    disabled={busy}
+                    more={[
+                      {
+                        key: "delete",
+                        label: "删除技能",
+                        danger: true,
+                        icon: <DeleteOutlined />,
+                        disabled: deletingId === skill.id,
+                        confirm: `确定删除技能「${skill.name}」？提示词和它附带的知识文件都会被删除，需要时可以重新导入。`,
+                        onClick: () => onDelete(skill),
+                      },
+                    ]}
+                  />,
                 ]}
-              />,
-            ]}
-          >
-            <List.Item.Meta
-              title={
-                <Space size={8} wrap>
-                  {/* 技能名可点击：查看提示词全文与知识文件，也能就地改。 */}
-                  <Button type="link" className="table-text-link" onClick={() => onOpen(skill)}>
-                    {skill.name}
-                  </Button>
-                  <Tag color={skill.enabled ? "blue" : "default"}>
-                    {skill.enabled ? "启用中" : "已停用"}
-                  </Tag>
-                </Space>
-              }
-              description={describe(skill)}
-            />
-          </List.Item>
+              >
+                <ListyMeta
+                  title={
+                    <Space size={8} wrap>
+                      {/* 技能名可点击：查看提示词全文与知识文件，也能就地改。 */}
+                      <Button type="link" className="table-text-link" onClick={() => onOpen(skill)}>
+                        {skill.name}
+                      </Button>
+                      <Tag color={skill.enabled ? "blue" : "default"}>
+                        {skill.enabled ? "启用中" : "已停用"}
+                      </Tag>
+                    </Space>
+                  }
+                  description={describe(skill)}
+                />
+              </ListyItem>
+            )}
+          />
         )}
-      />
+      </Spin>
     </Card>
   );
 }
