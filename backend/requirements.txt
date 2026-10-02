@@ -31,4 +31,4 @@ websocket-client==1.8.0
 # Word (.docx) export (R-16): pure-Python with wheels, no build toolchain, so the
 # first-run installer stays compiler-free. Layout reuses ResumeLayout instead of
 # introducing a second layout engine.
-python-docx==1.1.2
+python-docx==1.2.0
