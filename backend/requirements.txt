@@ -22,7 +22,7 @@ pypdf==6.19.0
 # Server-side PDF export: fpdf2 embeds a system CJK font so the resume PDF can be
 # downloaded directly. fonttools is its font-parsing backend; pinning it keeps
 # the first-run install reproducible.
-fpdf2==2.8.4
+fpdf2==2.8.9
 fonttools==4.65.0
 # Browser automation for the apply center: the CDP client talks to a user's real
 # Chrome/Edge over the DevTools WebSocket. Pure Python (no compiler, has wheels),
