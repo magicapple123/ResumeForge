@@ -16,20 +16,7 @@ import {
   ImportOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Card,
-  Col,
-  Collapse,
-  Dropdown,
-  Empty,
-  Row,
-  Space,
-  Table,
-  Tag,
-  Typography,
-} from "antd";
+import { App, Button, Card, Collapse, Dropdown, Empty, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -39,28 +26,14 @@ import {
   fetchBuiltinTemplateSource,
   listResumeTemplates,
 } from "../../api/resumeTemplates";
-import type { ResumeFontScale, ResumeTemplateCatalog, ResumeTemplateDetail } from "../../types";
-import type { TemplateMarketPreset } from "../../types/templateMarket";
+import type { ResumeTemplateCatalog, ResumeTemplateDetail } from "../../types";
 import FileDropZone from "../common/FileDropZone";
 import { RowActions } from "../common/RowActions";
 import BuiltinStyleGallery from "./BuiltinStyleGallery";
 import FormatTemplateEditorModal from "./FormatTemplateEditorModal";
 import TemplateImportModal from "./TemplateImportModal";
 import StyleTemplateEditorModal from "./StyleTemplateEditorModal";
-import TemplatePreviewModal, { type TemplatePresetPreview } from "./TemplatePreviewModal";
-
-function styleLabel(catalog: ResumeTemplateCatalog | null | undefined, name: string): string {
-  return catalog?.templates.find((item) => item.name === name)?.label ?? name;
-}
-
-function formatLabel(catalog: ResumeTemplateCatalog | null | undefined, name: string): string {
-  if (!name) return "模板自带版式";
-  return catalog?.format_presets.find((item) => item.name === name)?.label ?? name;
-}
-
-function fontLabel(catalog: ResumeTemplateCatalog | null | undefined, name: string): string {
-  return catalog?.font_scales.find((item) => item.name === name)?.label ?? name;
-}
+import TemplatePreviewModal from "./TemplatePreviewModal";
 
 interface Props {
   /** 模板增删改之后通知外层（生成弹窗里缓存的目录需要重新取）。 */
@@ -97,8 +70,6 @@ export default function TemplateWorkbench({ onChanged }: Props) {
     template: ResumeTemplateDetail | null;
   }>({ open: false, template: null });
   const [previewTemplate, setPreviewTemplate] = useState<ResumeTemplateDetail | null>(null);
-  // 模板市场（原独立「模板市场」卡片，已并入本工作台）：按场景给「样式+版式+字号」建议组合。
-  const [marketPreset, setMarketPreset] = useState<TemplatePresetPreview | null>(null);
   const [importOpen, setImportOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -140,16 +111,6 @@ export default function TemplateWorkbench({ onChanged }: Props) {
     } catch (error) {
       message.error(error instanceof Error ? error.message : "删除失败");
     }
-  };
-
-  // **这里刻意只说「建议组合」而不是「已选用」**：预设只是"样式 + 版式 + 字号"的一组建议，
-  // 点它并不会套用任何配置（工作台没有一个"当前简历"可套）。文案说「已选用」就是在骗人。
-  const announcePreset = (item: TemplateMarketPreset) => {
-    message.info(
-      `「${item.label}」的建议组合：${styleLabel(catalog, item.template)} 样式 + ` +
-        `${formatLabel(catalog, item.format_name)} 版式 + ${fontLabel(catalog, item.font_scale)} 字号。` +
-        `生成或预览简历时，用「样式」和「版式」按这个组合选一下即可。`,
-    );
   };
 
   /** 从内置模板复制一份开始自制。 */
@@ -336,60 +297,6 @@ export default function TemplateWorkbench({ onChanged }: Props) {
                 />
               ),
             },
-            {
-              // 模板市场并进工作台：同一批内置样式的"场景化建议"，不再单独立一张
-              // 与下面内容重复的卡片。默认收起，需要时展开。
-              key: "market",
-              label: "按场景选：模板市场建议",
-              children: (
-                <>
-                  <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-                    按求职场景给出「样式 + 版式 + 字号」的组合建议。所有预设都映射到内置模板，
-                    全离线、无需联网。
-                  </Typography.Paragraph>
-                  {(catalog?.market ?? []).length === 0 ? (
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无模板市场预设" />
-                  ) : (
-                    <Row gutter={[16, 16]}>
-                      {(catalog?.market ?? []).map((item) => (
-                        <Col key={item.name} xs={24} sm={12} lg={12}>
-                          <Card size="small" title={item.label}>
-                            <Typography.Paragraph type="secondary" style={{ minHeight: 44 }}>
-                              {item.description}
-                            </Typography.Paragraph>
-                            <Space wrap size={4} style={{ marginBottom: 12 }}>
-                              <Tag>样式：{styleLabel(catalog, item.template)}</Tag>
-                              <Tag>版式：{formatLabel(catalog, item.format_name)}</Tag>
-                              <Tag>字号：{fontLabel(catalog, item.font_scale)}</Tag>
-                            </Space>
-                            <Space>
-                              <Button
-                                onClick={() =>
-                                  setMarketPreset({
-                                    title: `模板市场 · ${item.label}`,
-                                    templateName: item.template,
-                                    formatName: item.format_name,
-                                    formatConfig: item.format_config,
-                                    // 目录里 font_scale 是 string（预设可能带新档位），弹窗按枚举收口。
-                                    fontScale: item.font_scale as ResumeFontScale,
-                                    pageLimit: item.page_limit,
-                                  })
-                                }
-                              >
-                                预览
-                              </Button>
-                              <Button type="primary" onClick={() => announcePreset(item)}>
-                                这套怎么选
-                              </Button>
-                            </Space>
-                          </Card>
-                        </Col>
-                      ))}
-                    </Row>
-                  )}
-                </>
-              ),
-            },
           ]}
         />
         {styleTemplates.length === 0 ? (
@@ -478,12 +385,8 @@ export default function TemplateWorkbench({ onChanged }: Props) {
       />
       <TemplatePreviewModal
         template={previewTemplate}
-        preset={marketPreset}
         formatPresets={catalog?.format_presets ?? []}
-        onClose={() => {
-          setPreviewTemplate(null);
-          setMarketPreset(null);
-        }}
+        onClose={() => setPreviewTemplate(null)}
       />
       <TemplateImportModal
         open={importOpen}
