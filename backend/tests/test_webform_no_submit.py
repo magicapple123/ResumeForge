@@ -83,9 +83,14 @@ def test_click_selector_is_only_used_for_choice_controls():
     （行为层面的验证在 ``test_webform_engine.py``：复选框那两条断言了点击只在
     需要改变勾选状态时发生。）
     """
-    tree = ast.parse((WEBFORM_DIR / "engine.py").read_text(encoding="utf-8"))
+    # engine 拆包为 engine/ 后，静态检查覆盖包内全部源文件（断言语义不变）。
+    trees = [
+        ast.parse(path.read_text(encoding="utf-8"))
+        for path in sorted((WEBFORM_DIR / "engine").glob("*.py"))
+    ]
     callers = {
         node.name
+        for tree in trees
         for node in ast.walk(tree)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and any(
