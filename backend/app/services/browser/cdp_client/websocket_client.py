@@ -1,84 +1,28 @@
-"""CDP 客户端：用 HTTP 端点 + WebSocket 与"投递专用浏览器"对话。
-
-设计要点（决定了它为什么长这样）：
-
-- **传输层可注入**。``WebsocketCdpClient`` 的 HTTP 走既有 ``httpx``，WebSocket 走
-  ``websocket-client``；两者都通过构造参数注入（``http_transport`` / ``websocket_factory``），
-  于是测试可以用假的传输层把整条链路离线跑起来，不启动真浏览器、不发真 CDP——这与
-  LLM 层 ``create_provider(transport=httpx.MockTransport(...))`` 是同一个离线注入点思路。
-- **所有调用都有超时**，异常统一收敛成 ``CdpError``，其 message 就是给用户看的中文提示。
-- 只连**后端自己用独立 ``user-data-dir`` 拉起的那个浏览器**：Chrome 136+ 禁止在默认用户
-  数据目录上开远程调试端口，所以不去碰用户日常浏览器。
-"""
+"""``WebsocketCdpClient``：基于 HTTP 端点 + WebSocket 通道的 CDP 客户端实现。"""
 from __future__ import annotations
 
 import json
 import logging
 import threading
 import time
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from typing import Any
 from urllib.parse import quote
 
 import httpx
 
+from .base import (
+    DEFAULT_COMMAND_TIMEOUT,
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_HOST,
+    DEFAULT_HTTP_TIMEOUT,
+    _MAX_FRAMES_PER_COMMAND,
+    CdpClient,
+    CdpError,
+)
+from .window import WindowAwareMixin
+
 logger = logging.getLogger(__name__)
-
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_CONNECT_TIMEOUT = 5.0
-DEFAULT_COMMAND_TIMEOUT = 30.0
-DEFAULT_HTTP_TIMEOUT = 5.0
-_MAX_FRAMES_PER_COMMAND = 5000
-
-
-class CdpError(Exception):
-    """对外暴露的 CDP 调用错误，message 为可直接展示给用户的中文提示。"""
-
-
-class CdpClient(ABC):
-    """页面级 CDP 客户端接口。
-
-    业务层只依赖本抽象，不感知 HTTP / WebSocket 细节，因此可以用 ``FakeCdpClient``
-    在离线测试里替换掉整条对外链路。
-    """
-
-    @abstractmethod
-    def list_targets(self) -> list[dict[str, Any]]:
-        """列出浏览器当前所有标签页（/json/list）。"""
-        """列出浏览器里当前的调试目标（标签页 / 页面）。"""
-
-    @abstractmethod
-    def new_tab(self, url: str = "about:blank") -> str:
-        """打开新标签页并返回 target id；Chrome 111+ 用 PUT，405 退 GET。"""
-        """新建一个标签页并把它设为后续命令的目标，返回目标 id。"""
-
-    @abstractmethod
-    def send(
-        self, method: str, params: dict[str, Any] | None = None, *, timeout: float | None = None
-    ) -> dict[str, Any]:
-        """发送一条 CDP 命令并返回其 ``result``。"""
-
-    @abstractmethod
-    def evaluate(self, expression: str, *, timeout: float | None = None) -> Any:
-        """在页面里执行一段 JS 表达式并拿回值（awaitPromise，返回按值拷贝）。"""
-        """在页面里执行一段脚本并返回按值传递的结果。"""
-
-    # 事件订阅是**可选能力**，所以默认实现是"不支持"而不是 abstractmethod：
-    # 站点适配器据此退回 DOM 解析（那本来就是保留的兜底路径），而假客户端与
-    # 只做简单操作的实现不必为了满足抽象基类去写三个空方法。
-    def start_event_capture(self, methods: Sequence[str]) -> None:
-        """开始收集指定 CDP 方法的事件帧；不支持时什么都不做。"""
-        return None
-
-    def stop_event_capture(self) -> None:
-        return None
-
-    def drain_events(self) -> list[dict[str, Any]]:
-        return []
-
-    def close(self) -> None:
-        """关闭底层连接（不关闭浏览器进程）。"""
 
 
 def _default_websocket_factory(url: str) -> Any:
@@ -94,131 +38,6 @@ def _default_websocket_factory(url: str) -> Any:
         url, timeout=DEFAULT_CONNECT_TIMEOUT, suppress_origin=True
     )
 
-
-class WindowAwareMixin:
-    """窗口可见性保障与标签页切换：只在 ``WebsocketCdpClient`` 上实现。
-
-    **为什么需要**（2026-09-20 真实投递失败的根因）：浏览器窗口被最小化 / 遮挡 /
-    放在未激活的虚拟桌面上时，页面的 ``document.visibilityState`` 是 ``"hidden"``；
-    BOSS 直聘对隐藏页面上的点击**静默忽略**（真实用户不可能点击看不见的页面——这是
-    它的反自动化启发式之一）。而 ``Page.bringToFront`` 只能在窗口内部切标签页，
-    **不能还原最小化的窗口**，所以点击前必须走 ``Browser.setWindowBounds``。
-
-    实测有效的还原顺序：先按窗口当前状态处理（最小化 → 还原成 normal），再
-    ``Page.bringToFront``；若仍不可见，用「最小化 → 还原」切换强制 Windows 重新
-    激活窗口（对被完全遮挡、位于其他虚拟桌面的窗口同样有效）。
-    """
-
-    _VISIBILITY_PROBE = 'document.visibilityState || "unknown"'
-
-    def ensure_page_visible(self, *, timeout_seconds: float = 8.0) -> bool:
-        """确保当前标签页所在窗口可见，返回最终是否 ``visible``。
-
-        失败**不抛异常**、只返回 False：个别环境（无头、远程会话）确实无法还原窗口，
-        此时上层流程按原样继续——等待与超时诊断仍然有效，只是把"为什么点不动"这句
-        话提前写进日志，而不是让用户面对一条莫名的选择器超时。
-
-        还原手段按强度递增（2026-09-20 实测排序）：
-        1. ``Target.activateTarget``——**一步就能把最小化/被遮挡窗口还原并前置**（实测
-           ``windowState=minimized`` 下也生效），首选；
-        2. 最小化 → ``setWindowBounds(normal)`` 还原；
-        3. 「最小化 → 还原」切换强制 Windows 重新激活（对位于其他虚拟桌面的窗口有效）；
-        4. ``Page.bringToFront`` 收尾。
-        """
-        deadline = time.monotonic() + max(timeout_seconds, 0.0)
-        last_state = ""
-        target_id = str((self._target or {}).get("id", "") or "")
-        try:
-            self.send("Page.enable")
-        except CdpError:
-            return False
-
-        def _activate() -> None:
-            if target_id:
-                try:
-                    self.send("Target.activateTarget", {"targetId": target_id})
-                except CdpError:
-                    pass
-
-        while True:
-            try:
-                last_state = str(self.evaluate(self._VISIBILITY_PROBE) or "")
-                if last_state == "visible":
-                    return True
-                _activate()
-                if str(self.evaluate(self._VISIBILITY_PROBE) or "") == "visible":
-                    return True
-                window = self.send("Browser.getWindowForTarget")
-                window_id = window.get("windowId")
-                bounds = window.get("bounds") or {}
-                if not window_id:
-                    return False
-                if bounds.get("windowState") == "minimized":
-                    # 最小化：还原即可。
-                    self.send(
-                        "Browser.setWindowBounds",
-                        {"windowId": window_id, "bounds": {"windowState": "normal"}},
-                    )
-                else:
-                    # 被遮挡 / 在未激活的虚拟桌面：最小化→还原切换一次，
-                    # 强制窗口管理器重新激活（activateTarget 对这种情况可能无效）。
-                    self.send(
-                        "Browser.setWindowBounds",
-                        {"windowId": window_id, "bounds": {"windowState": "minimized"}},
-                    )
-                    time.sleep(0.3)
-                    self.send(
-                        "Browser.setWindowBounds",
-                        {"windowId": window_id, "bounds": {"windowState": "normal"}},
-                    )
-                _activate()
-                try:
-                    self.send("Page.bringToFront")
-                except CdpError:
-                    pass
-            except CdpError as exc:
-                logger.debug("窗口可见性保障失败：%s", exc)
-                return False
-            if time.monotonic() >= deadline:
-                return last_state == "visible"
-            time.sleep(0.5)
-
-    def switch_to_target(self, target_id: str) -> bool:
-        """把后续命令切换到另一个标签页；切换失败返回 False（调用方自行决定回退）。
-
-        用途：点击岗位页的「立即沟通」后，聊天页**可能开在新标签页**而不是整页跳转。
-        调用方先比对 ``list_targets()`` 的前后快照找出新出现的聊天标签页，再切换过去，
-        后续填写 / 发送就落在正确的页面上。
-        """
-        wanted = str(target_id or "").strip()
-        if not wanted:
-            return False
-        try:
-            targets = self.list_targets()
-        except CdpError:
-            return False
-        target = next(
-            (
-                item
-                for item in targets
-                if item.get("type") == "page" and str(item.get("id", "")) == wanted
-            ),
-            None,
-        )
-        if target is None or not target.get("webSocketDebuggerUrl"):
-            return False
-        current_id = str((self._target or {}).get("id", ""))
-        if current_id == wanted and self._connection is not None:
-            return True
-        self._target = target
-        self._target_id = wanted
-        # 目标变了，旧 WebSocket 必须重连（与 new_tab 同一套纪律）。
-        self._reset_connection()
-        try:
-            self._connection_handle()
-        except CdpError:
-            return False
-        return True
 
 
 class WebsocketCdpClient(WindowAwareMixin, CdpClient):
@@ -525,13 +344,3 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
     def close(self) -> None:
         self._reset_connection()
 
-
-__all__ = [
-    "CdpClient",
-    "CdpError",
-    "DEFAULT_COMMAND_TIMEOUT",
-    "DEFAULT_CONNECT_TIMEOUT",
-    "DEFAULT_HOST",
-    "WebsocketCdpClient",
-    "WindowAwareMixin",
-]
