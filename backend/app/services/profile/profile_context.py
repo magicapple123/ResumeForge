@@ -14,6 +14,11 @@ from .profile_relevance_constants import (
     _REFERENCE_FILE_KEY,
 )
 
+# 公开作品链接字段（与 ``_LLM_PROFILE_FIELDS`` 中的名字保持一致）。
+_LINK_FIELDS = ("github", "personal_website")
+# 私密链接标记：值里出现 token（访问凭证）或 private（私密路径）即视为私密资源。
+_PRIVATE_LINK_MARKER_RE = re.compile(r"private|token", re.IGNORECASE)
+
 
 def split_lines(text: str) -> list[str]:
     """把换行文本拆成非空要点。"""
@@ -115,7 +120,17 @@ def build_profile_prompt_data(
 
 def build_llm_profile_prompt_data(data: dict[str, Any]) -> dict[str, Any]:
     """只保留岗位匹配需要的资料，避免把身份和联系方式发送给模型。"""
-    return {
+    result = {
         key: deepcopy(data.get(key, [] if key in SECTION_LIMITS else ""))
         for key in _LLM_PROFILE_FIELDS
     }
+    # 公开链接字段的私密值兜底：github / personal_website 属于用户主动填写的
+    # 公开作品链接，正常值要随候选资料提供给模型；但值里出现 token 或 private
+    # 标记时（如带访问凭证的地址、私有仓库路径），它实际是私密资源——发进模型
+    # 上下文既无必要也有泄露风险（模型上下文只发必需资料，这是红线）。按子串
+    # 大小写无关保守排除：宁可不给模型，也不能把私密链接泄漏进上下文。
+    for field in _LINK_FIELDS:
+        value = result.get(field)
+        if isinstance(value, str) and _PRIVATE_LINK_MARKER_RE.search(value):
+            result[field] = ""
+    return result
