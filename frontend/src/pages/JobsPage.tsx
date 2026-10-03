@@ -1,17 +1,5 @@
 /** 岗位广场：搜索筛选、手动添加、详情与生成简历入口。 */
-import {
-  CheckSquareOutlined,
-  CheckOutlined,
-  ClearOutlined,
-  CloseCircleOutlined,
-  DeleteOutlined,
-  HistoryOutlined,
-  InboxOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  RobotOutlined,
-} from "@ant-design/icons";
-import { App, Button, Dropdown, Input, Popconfirm, Select, Space, Typography } from "antd";
+import { App } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -39,17 +27,9 @@ import { candidateToJobPayload } from "../components/jobs/candidate/candidatePay
 import JobTable from "../components/jobs/JobTable";
 import { useApi } from "../hooks/useApi";
 import type { CandidateJobDetail, Job } from "../types";
-
-const JOB_TYPE_OPTIONS = ["校招", "实习", "社招", "其他"].map((value) => ({ value, label: value }));
-const STATUS_OPTIONS = ["开放中", "已截止", "已投递"].map((value) => ({ value, label: value }));
-// 与后端 `source_kind` 查询参数一一对应；标签用「自动采集 / 手动添加」是因为这是用户能
-// 一眼理解的二分，而不是把 recognition_source 的原始值直接搬上来。
-const SOURCE_KIND_OPTIONS = [
-  { value: "collected", label: "自动采集" },
-  { value: "manual", label: "手动添加" },
-];
-type BatchAction = "status" | "delete" | null;
-type MatchBatchRunMode = "immediate" | "background";
+import { BatchToolbar } from "./jobs/BatchToolbar";
+import { JobFilterBar } from "./jobs/JobFilterBar";
+import type { BatchAction, MatchBatchRunMode } from "./jobs/jobFilterOptions";
 
 export default function JobsPage() {
   const [searchParams] = useSearchParams();
@@ -360,182 +340,38 @@ export default function JobsPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <Space wrap className="jobs-filter-bar">
-          <Input.Search
-            className="jobs-search-input"
-            placeholder="搜索职位 / 公司 / 城市 / 描述 / 备注"
-            allowClear
-            disabled={batchAction !== null}
-            defaultValue={keyword}
-            onSearch={(value) => {
-              setKeyword(value);
-              setPage(1);
-            }}
-          />
-          <Select
-            placeholder="类型"
-            allowClear
-            disabled={batchAction !== null}
-            style={{ width: 110 }}
-            value={jobType || undefined}
-            onChange={(value) => {
-              setJobType(value ?? "");
-              setPage(1);
-            }}
-            options={JOB_TYPE_OPTIONS}
-          />
-          <Select
-            placeholder="状态"
-            allowClear
-            disabled={batchAction !== null}
-            style={{ width: 110 }}
-            value={status || undefined}
-            onChange={(value) => {
-              setStatus(value ?? "");
-              setPage(1);
-            }}
-            options={STATUS_OPTIONS}
-          />
-          <Select
-            aria-label="来源筛选"
-            placeholder="来源"
-            allowClear
-            disabled={batchAction !== null}
-            style={{ width: 120 }}
-            value={sourceKind || undefined}
-            onChange={(value) => {
-              setSourceKind((value ?? "") as "" | "collected" | "manual");
-              setPage(1);
-            }}
-            options={SOURCE_KIND_OPTIONS}
-          />
-          {selectionMode ? (
-            <Button
-              icon={<CloseCircleOutlined />}
-              disabled={batchAction !== null}
-              onClick={exitSelectionMode}
-            >
-              退出选择
-            </Button>
-          ) : (
-            <Button
-              icon={<CheckSquareOutlined />}
-              disabled={batchAction !== null}
-              onClick={() => setSelectionMode(true)}
-            >
-              选择
-            </Button>
-          )}
-          {/* Dropdown.Button 已废弃（v6）：按官方指引以 Space.Compact + Dropdown + Button 重组。 */}
-          <Space.Compact>
-            <Button
-              type="primary"
-              disabled={batchAction !== null}
-              onClick={() => openMatchBatch(true)}
-            >
-              AI 分析适配度
-            </Button>
-            <Dropdown
-              disabled={batchAction !== null}
-              placement="bottomRight"
-              menu={{
-                items: [{ key: "background", label: "后台运行分析" }],
-                onClick: ({ key }) => {
-                  if (key === "background") openMatchBatch(true, "background");
-                },
-              }}
-            >
-              <Button type="primary" icon={<RobotOutlined />} disabled={batchAction !== null} />
-            </Dropdown>
-          </Space.Compact>
-          <Button
-            icon={<HistoryOutlined />}
-            disabled={batchAction !== null}
-            onClick={() => openMatchBatch(false)}
-          >
-            分析记录
-          </Button>
-          <Button
-            icon={<InboxOutlined />}
-            disabled={batchAction !== null}
-            onClick={() => setCandidatesOpen(true)}
-          >
-            备选岗位
-          </Button>
-          {emptyDescriptionJobIds.length > 0 && (
-            // 只在有 JD 为空的岗位时才出现——否则按钮点了什么也不会发生。
-            // 显式 aria-label：antd 会给纯中文按钮做字距处理，用文本当查询条件可能找不到。
-            <Button
-              icon={<ReloadOutlined />}
-              aria-label="补齐详情"
-              disabled={batchAction !== null}
-              loading={backfilling}
-              onClick={() => void backfillDetails()}
-            >
-              补齐详情
-            </Button>
-          )}
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            disabled={batchAction !== null}
-            onClick={() => setFormOpen(true)}
-          >
-            手动添加
-          </Button>
-        </Space>
-      </div>
+      <JobFilterBar
+        keyword={keyword}
+        setKeyword={setKeyword}
+        setPage={setPage}
+        jobType={jobType}
+        setJobType={setJobType}
+        status={status}
+        setStatus={setStatus}
+        sourceKind={sourceKind}
+        setSourceKind={setSourceKind}
+        batchAction={batchAction}
+        selectionMode={selectionMode}
+        setSelectionMode={setSelectionMode}
+        exitSelectionMode={exitSelectionMode}
+        openMatchBatch={openMatchBatch}
+        emptyDescriptionJobIds={emptyDescriptionJobIds}
+        backfilling={backfilling}
+        backfillDetails={backfillDetails}
+        setCandidatesOpen={setCandidatesOpen}
+        setFormOpen={setFormOpen}
+      />
 
-      {selectionMode && (
-        <Space style={{ marginBottom: 12, minHeight: 32 }} wrap>
-          <Typography.Text type="secondary">已选 {selectedJobIds.length} 个岗位</Typography.Text>
-          <Button
-            icon={<ClearOutlined />}
-            disabled={selectedJobIds.length === 0 || batchAction !== null}
-            onClick={() => {
-              setSelectedJobIds([]);
-              setBatchStatus(undefined);
-            }}
-          >
-            清空选择
-          </Button>
-          <Select
-            placeholder="批量设置状态"
-            value={batchStatus}
-            options={STATUS_OPTIONS}
-            style={{ width: 150 }}
-            disabled={selectedJobIds.length === 0 || batchAction !== null}
-            onChange={setBatchStatus}
-          />
-          <Button
-            icon={<CheckOutlined />}
-            disabled={selectedJobIds.length === 0 || !batchStatus || batchAction !== null}
-            loading={batchAction === "status"}
-            onClick={() => void applyBatchStatus()}
-          >
-            应用状态
-          </Button>
-          <Popconfirm
-            title={`确定删除选中的 ${selectedJobIds.length} 个岗位？`}
-            description="删除后无法恢复"
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            disabled={selectedJobIds.length === 0 || batchAction !== null}
-            onConfirm={() => removeSelectedJobs()}
-          >
-            <Button
-              danger
-              icon={<DeleteOutlined />}
-              disabled={selectedJobIds.length === 0 || batchAction !== null}
-              loading={batchAction === "delete"}
-            >
-              批量删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      )}
+      <BatchToolbar
+        selectionMode={selectionMode}
+        selectedJobIds={selectedJobIds}
+        setSelectedJobIds={setSelectedJobIds}
+        batchAction={batchAction}
+        batchStatus={batchStatus}
+        setBatchStatus={setBatchStatus}
+        applyBatchStatus={applyBatchStatus}
+        removeSelectedJobs={removeSelectedJobs}
+      />
 
       <JobTable
         jobs={jobs}
