@@ -99,9 +99,7 @@ export function SearchCard() {
         onChange={(event) => setSearchText(event.target.value)}
         onSearch={(value) => void onSearch(value)}
       />
-      {searchError && (
-        <Alert type="error" showIcon title={searchError} style={{ marginTop: 16 }} />
-      )}
+      {searchError && <Alert type="error" showIcon title={searchError} style={{ marginTop: 16 }} />}
       {searched && (
         <div className="home-search-results">
           <Typography.Title level={5} type="secondary" style={{ margin: "8px 0" }}>

@@ -13,30 +13,11 @@ import {
   PlayCircleOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import {
-  App,
-  Alert,
-  Button,
-  Empty,
-  Skeleton,
-  Space,
-  Tag,
-  Typography,
-  Popconfirm,
-} from "antd";
+import { App, Alert, Button, Empty, Skeleton, Space, Tag, Typography, Popconfirm } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import {
-  createApplyTask,
-  listQueue,
-  removeQueueItem,
-  reorderQueue,
-} from "../../api/apply";
+import { createApplyTask, listQueue, removeQueueItem, reorderQueue } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
-import {
-  QUEUE_STATUS_META,
-  type ApplyQueueItem,
-  type ApplyTask,
-} from "../../types";
+import { QUEUE_STATUS_META, type ApplyQueueItem, type ApplyTask } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { RecordDetailDrawer } from "../common/RecordDetail";
 import { useRowActionMenu } from "../common/rowActionMenu";

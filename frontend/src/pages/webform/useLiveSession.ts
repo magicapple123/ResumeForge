@@ -8,11 +8,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import type { App } from "antd";
-import {
-  getWebFormLiveStatus,
-  getWebFormMemoryTargets,
-  startWebFormLive,
-} from "../../api/webform";
+import { getWebFormLiveStatus, getWebFormMemoryTargets, startWebFormLive } from "../../api/webform";
 import type { WebFormLive, WebFormMemoryTarget } from "../../types";
 
 export function useLiveSession({

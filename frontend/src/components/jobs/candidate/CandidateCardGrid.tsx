@@ -49,9 +49,7 @@ export function CandidateCardGrid({
                   onClick={(event) => event.stopPropagation()}
                   onChange={(event) => onToggleSelected(candidate.id, event.target.checked)}
                 />
-                <Typography.Text strong>
-                  {candidate.title || "（未识别岗位名）"}
-                </Typography.Text>
+                <Typography.Text strong>{candidate.title || "（未识别岗位名）"}</Typography.Text>
               </Space>
             }
             extra={

@@ -5,17 +5,7 @@
  * 岗位列表旁边。
  */
 import { ImportOutlined, PlusOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Checkbox,
-  Drawer,
-  Empty,
-  Input,
-  Space,
-  Spin,
-  Typography,
-} from "antd";
+import { App, Button, Checkbox, Drawer, Empty, Input, Space, Spin, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createCandidateJob,

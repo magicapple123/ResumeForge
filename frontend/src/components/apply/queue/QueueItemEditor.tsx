@@ -4,7 +4,8 @@
  */
 import { App, Button, Form, Input, Modal, Select, Space } from "antd";
 import { useEffect, useState } from "react";
-import { listResumes, previewGreeting, updateQueueItem } from "../../../api/apply";
+import { previewGreeting, updateQueueItem } from "../../../api/apply";
+import { listResumes } from "../../../api/resumes";
 import type { ApplyQueueItem, ResumeBrief } from "../../../types";
 
 export function QueueItemEditor({

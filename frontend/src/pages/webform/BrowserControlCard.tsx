@@ -12,7 +12,7 @@ import {
 import { Button, Card, Spin, Tag, Tooltip, Typography } from "antd";
 import WebFormBrowserUrlBar from "../../components/webform/WebFormBrowserUrlBar";
 import { BROWSER_STATE_META } from "../../types";
-import type { WebFormUrlHistory } from "../../types";
+import type { BrowserState, WebFormUrlHistory } from "../../types";
 import type { WebFormBusyState } from "./constants";
 
 export function BrowserControlCard({
@@ -42,10 +42,10 @@ export function BrowserControlCard({
   busy: WebFormBusyState;
   running: boolean;
   sessionActive: boolean;
-  liveRunning: boolean;
+  liveRunning: boolean | undefined;
   browserLoading: boolean;
   browserHasData: boolean;
-  browserState: string | undefined;
+  browserState: BrowserState | undefined;
   onStart: () => void;
   onStop: () => void;
   onOpenUrl: () => void;
@@ -68,7 +68,8 @@ export function BrowserControlCard({
         onChange={onChangeTargetUrl}
         onOpen={() => void onOpenUrl()}
         onSelectHistory={(item) => onChangeTargetUrl(item.url)}
-        onDeleteHistory={(item) => void onDeleteHistory(item)}      />
+        onDeleteHistory={(item) => void onDeleteHistory(item)}
+      />
       <div className="webform-browser-status-row">
         <div className="webform-browser-status">
           <Tag color={stateMeta.color}>{stateMeta.label}</Tag>

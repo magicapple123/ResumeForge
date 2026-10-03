@@ -15,7 +15,6 @@ import {
   Slider,
   Space,
   Tooltip,
-  Typography,
 } from "antd";
 import type { FormInstance } from "antd/es/form";
 import { useState } from "react";

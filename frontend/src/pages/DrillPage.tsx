@@ -10,7 +10,21 @@
  * - **评分契约在整个会话期间可见**：它是"判定标准"，用户有权看到自己在被怎么衡量——
  *   藏起来才会让人怀疑"是不是看人下菜碟"。
  */
-import { App, Button, Card, Checkbox, Empty, Listy, Modal, Skeleton, Space, Statistic, Tag, Tooltip, Typography } from "antd";
+import {
+  App,
+  Button,
+  Card,
+  Checkbox,
+  Empty,
+  Listy,
+  Modal,
+  Skeleton,
+  Space,
+  Statistic,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import BatchActionBar from "../components/common/BatchActionBar";
 import { RowActions } from "../components/common/RowActions";
 import { useBatchSelection } from "../hooks/useBatchSelection";
@@ -25,11 +39,7 @@ import {
 } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  deleteDrillSession,
-  getDrillSession,
-  listDrillSessions,
-} from "../api/drill";
+import { deleteDrillSession, getDrillSession, listDrillSessions } from "../api/drill";
 import type { DrillSession, DrillSessionBrief } from "../types";
 import { FEEDBACK_LABELS } from "../types";
 import { ActiveSession } from "./drill/ActiveSession";

@@ -4,7 +4,7 @@
  */
 import { CheckSquareOutlined, DeleteOutlined } from "@ant-design/icons";
 import { Button, Card, Checkbox, Empty, Listy, Space, Spin, Tag } from "antd";
-import { BatchActionBar } from "../../components/common/BatchActionBar";
+import BatchActionBar from "../../components/common/BatchActionBar";
 import { ListyItem, ListyMeta } from "../../components/common/ListyItem";
 import { RowActions } from "../../components/common/RowActions";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
@@ -35,11 +35,7 @@ export function HistoryCard({
       style={{ marginTop: 16 }}
       extra={
         !batch.selecting && sessions.length > 0 ? (
-          <Button
-            size="small"
-            icon={<CheckSquareOutlined />}
-            onClick={batch.enterSelecting}
-          >
+          <Button size="small" icon={<CheckSquareOutlined />} onClick={batch.enterSelecting}>
             批量选择
           </Button>
         ) : undefined
@@ -47,11 +43,7 @@ export function HistoryCard({
     >
       {batch.selecting && (
         <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
-          <Button
-            danger
-            disabled={batch.selectedCount === 0}
-            onClick={onRemoveSelected}
-          >
+          <Button danger disabled={batch.selectedCount === 0} onClick={onRemoveSelected}>
             删除所选
           </Button>
         </BatchActionBar>

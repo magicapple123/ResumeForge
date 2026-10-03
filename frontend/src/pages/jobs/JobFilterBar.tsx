@@ -13,10 +13,7 @@ import {
   RobotOutlined,
 } from "@ant-design/icons";
 import { Button, Dropdown, Input, Select, Space } from "antd";
-import type {
-  BatchAction,
-  MatchBatchRunMode,
-} from "./jobFilterOptions";
+import type { BatchAction, MatchBatchRunMode } from "./jobFilterOptions";
 import { JOB_TYPE_OPTIONS, SOURCE_KIND_OPTIONS, STATUS_OPTIONS } from "./jobFilterOptions";
 
 export function JobFilterBar({

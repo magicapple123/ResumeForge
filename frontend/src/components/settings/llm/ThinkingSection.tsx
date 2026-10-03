@@ -4,19 +4,13 @@
  * Form.Item 经 context 注册到卡片持有的同一 form 实例。）
  */
 import { ExperimentOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  Button,
-  Col,
-  Form,
-  Input,
-  Row,
-  Select,
-  Switch,
-  Typography,
-} from "antd";
+import { Alert, Button, Col, Form, Input, Row, Select, Switch, Typography } from "antd";
 import type { LLMThinkingResult } from "../../../types";
-import { CUSTOM_EFFORT_OPTION, MAX_REASONING_EFFORT_CHARS, isValidReasoningEffort } from "../../../types/assistant";
+import {
+  CUSTOM_EFFORT_OPTION,
+  MAX_REASONING_EFFORT_CHARS,
+  isValidReasoningEffort,
+} from "../../../types/assistant";
 import { EFFORT_TOOLTIP } from "./thinkingMeta";
 
 export function ThinkingSection({
@@ -116,8 +110,8 @@ export function ThinkingSection({
         </Col>
       </Row>
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
-        「检测思考支持」会发一次最小请求，计入你的模型用量。思考模式只作用于除「求职助手」以外的
-        AI 调用；助手的思考强度在它的输入框下方单独设置。
+        「检测思考支持」会发一次最小请求，计入你的模型用量。思考模式只作用于除「求职助手」以外的 AI
+        调用；助手的思考强度在它的输入框下方单独设置。
       </Typography.Text>
       {thinkingResult && (
         <Alert

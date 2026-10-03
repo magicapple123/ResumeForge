@@ -4,7 +4,7 @@
  * 供题库「开始模拟面试」的 startFromBank 联动写回考察重点。）
  */
 import { PlayCircleOutlined } from "@ant-design/icons";
-import { Card, Form, Input, InputNumber, Select, Space, Typography } from "antd";
+import { Button, Card, Form, Input, InputNumber, Select, Space, Typography } from "antd";
 import type { FormInstance } from "antd";
 import type { InterviewDifficulty, InterviewType, InterviewerStyle } from "../../types";
 import {
@@ -70,9 +70,7 @@ export function SetupTab({
             />
           </Form.Item>
           <Form.Item label="面试类型" name="interviewType">
-            <Select
-              options={INTERVIEW_TYPES.map((value) => ({ value, label: value }))}
-            />
+            <Select options={INTERVIEW_TYPES.map((value) => ({ value, label: value }))} />
           </Form.Item>
           <Form.Item label="难度" name="difficulty">
             <Select
@@ -83,9 +81,7 @@ export function SetupTab({
             />
           </Form.Item>
           <Form.Item label="面试官风格" name="interviewerStyle">
-            <Select
-              options={INTERVIEWER_STYLES.map((value) => ({ value, label: value }))}
-            />
+            <Select options={INTERVIEWER_STYLES.map((value) => ({ value, label: value }))} />
           </Form.Item>
           <Form.Item
             label="轮数"
@@ -114,12 +110,7 @@ export function SetupTab({
           <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} maxLength={2000} />
         </Form.Item>
         <Space wrap>
-          <Button
-            type="primary"
-            htmlType="submit"
-            icon={<PlayCircleOutlined />}
-            loading={starting}
-          >
+          <Button type="primary" htmlType="submit" icon={<PlayCircleOutlined />} loading={starting}>
             开始面试
           </Button>
           <Typography.Text type="secondary">{CONFIDENCE_TIP}</Typography.Text>
