@@ -44,7 +44,6 @@ import {
 } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getLLMConfig } from "../api/settings";
 import { getDiagnostics } from "../api/system";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
 import {
@@ -80,6 +79,14 @@ import WebFormPreviewTable from "../components/webform/WebFormPreviewTable";
 import WebFormRecordsPanel from "../components/webform/WebFormRecordsPanel";
 import WebFormBrowserUrlBar from "../components/webform/WebFormBrowserUrlBar";
 import { useBrowserStatus } from "../hooks/useBrowserStatus";
+import { FillRateTag } from "./webform/FillRateTag";
+import {
+  AI_PARAM,
+  LIVE_STATUS_META,
+  SNAPSHOT_PARAM,
+  WEB_FORM_STATUS_POLL_INTERVAL_MS,
+} from "./webform/constants";
+import { useAiAvailable } from "./webform/useAiAvailable";
 import {
   BROWSER_STATE_META,
   type WebFormExtraEntry,
@@ -91,50 +98,6 @@ import {
   type WebFormSnapshot,
   type WebFormUrlHistory,
 } from "../types";
-
-/** URL 里记住当前这次读取的参数名。 */
-const SNAPSHOT_PARAM = "snapshot";
-/** AI 开关也一起记住：重放预览时要用同一个值，否则"读的时候开了 AI、回来却重算成规则版"。 */
-const AI_PARAM = "ai";
-const WEB_FORM_STATUS_POLL_INTERVAL_MS = 600;
-
-/** 浏览器窗口里正在发生什么，在这边如实显示——不然用户不知道模式开着没有。 */
-const LIVE_STATUS_META: Record<string, { label: string; color: string }> = {
-  thinking: { label: "正在看这个框", color: "processing" },
-  ai_thinking: { label: "AI 正在识别", color: "processing" },
-  matched: { label: "已给出建议", color: "success" },
-  blocked: { label: "不会自动填", color: "default" },
-  unmatched: { label: "没认出来", color: "warning" },
-  filled: { label: "已填入", color: "success" },
-  failed: { label: "没填进去", color: "error" },
-  "": { label: "等待你点某个框", color: "processing" },
-};
-
-/**
- * 配没配模型决定 AI 开关能不能用。
- *
- * 判据与后端**逐字一致**（`base_url` 与 `model` 都非空，不看 api_key——本地部署的模型服务
- * 常常不需要）。不一致的话会出现"界面说能用、后端静默不用"或者反过来。
- */
-function useAiAvailable(): boolean | null {
-  const [available, setAvailable] = useState<boolean | null>(null);
-  useEffect(() => {
-    void getLLMConfig()
-      .then((config) => setAvailable(Boolean(config.base_url && config.model)))
-      .catch(() => setAvailable(null));
-  }, []);
-  return available;
-}
-
-/** 一键填充成功率：按「成功填写 / 页面表单控件总数」计。 */
-function FillRateTag({ filled, total }: { filled: number; total?: number }) {
-  if (!total || total <= 0) return null;
-  return (
-    <Tag color="processing">
-      成功率 {Math.round((filled * 100) / total)}%（{filled}/{total}）
-    </Tag>
-  );
-}
 
 export default function WebFormPage() {
   const { message } = App.useApp();
