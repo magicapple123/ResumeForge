@@ -12,7 +12,6 @@ from ...browser.interaction import click_selector
 from ..custom_select import select_combobox_option
 from ..fields import (
     AUTOCOMPLETE_DENY,
-    AUTOCOMPLETE_FIELDS,
     CLAIM_LABELS,
     CONSENT_HINTS,
     FIELD_BLOCK_HINTS,
@@ -22,13 +21,11 @@ from ..fields import (
     FIELD_SYNONYMS,
 )
 from ..matching import (
-    DateResolution,
     SelectOption,
     SelectResolution,
     date_component,
     format_date,
     is_date_hint,
-    is_placeholder,
     meaningful_options,
     resolve_choice,
     resolve_select_option,
@@ -40,7 +37,7 @@ from ..repeated_fields import (
     parse_block_label,
     split_repeated_key,
 )
-from .evidence import _longest_synonym, _states_its_field, evidence_key
+from .evidence import evidence_key
 from .model import (
     CONTROL_TYPES,
     ApplyOutcome,
