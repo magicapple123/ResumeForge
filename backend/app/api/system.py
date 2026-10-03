@@ -24,6 +24,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 
+from ..services.diagnostics import diagnostic_snapshot
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
@@ -187,3 +189,9 @@ def shutdown_application(request: Request):
     logger.info("收到退出请求，正在关闭后端")
     threading.Thread(target=_stop_process, name="resumeforge-shutdown", daemon=True).start()
     return {"status": "stopping", "message": "应用正在退出，可以关闭此页面"}
+
+
+@router.get("/diagnostics")
+def diagnostics():
+    """返回脱敏运行事件，方便用户连同截图提交排障。"""
+    return diagnostic_snapshot()

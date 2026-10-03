@@ -22,6 +22,7 @@ from ..schemas.webform import (
     WebFormFillIn,
     WebFormFillOut,
     WebFormFillRecordOut,
+    WebFormLiveEnabledIn,
     WebFormLiveIn,
     WebFormLiveOut,
     WebFormMemoryTargetsOut,
@@ -35,6 +36,7 @@ from ..schemas.webform import (
     WebFormUrlHistoryOut,
 )
 from ..services import webform as webform_service
+from ..services.diagnostics import record_event
 from ..services.webform import ai, extra_profile, history, profile_targets, url_history
 from ..services.webform import live_targets, repeated_profile
 from ..services.webform import browser as webform_browser
@@ -201,6 +203,15 @@ def live_status():
     return webform_service.live_status()
 
 
+@router.post("/live/enabled", response_model=WebFormLiveOut)
+def set_live_enabled(payload: WebFormLiveEnabledIn):
+    """只切换智能逐项填表，不销毁监听会话和页面上的悬浮球。"""
+    webform_service.set_live_enabled(payload.enabled)
+    status = webform_service.live_status()
+    record_event("webform.live_enabled", enabled=payload.enabled, running=status.get("running", False))
+    return status
+
+
 @router.get("/browser/targets")
 def browser_targets(db: Session = Depends(get_db)):
     targets = webform_browser.list_page_targets(db)
@@ -354,7 +365,9 @@ def _start_live_session(
         )
     except webform_service.WebFormError as exc:
         _raise(exc)
-    return webform_service.live_status()
+    status = webform_service.live_status()
+    record_event("webform.live_start", ai=use_ai, enabled=status.get("enabled", True))
+    return status
 
 
 @router.post("/live/remember", response_model=WebFormRememberOut)
@@ -394,6 +407,7 @@ def take_snapshot(db: Session = Depends(get_db)):
         snapshot, page = webform_service.read_snapshot(manager.client())
     except webform_service.WebFormError as exc:
         _raise(exc)
+    record_event("webform.snapshot", control_count=len(snapshot.controls), title=page.get("title", ""))
     return {
         "snapshot_id": snapshot.id,
         "page": page,
@@ -421,6 +435,14 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
     db.close()
     if provider is not None:
         await webform_service.enrich_preview_with_ai(snapshot, data, report, provider)
+    record_event(
+        "webform.preview",
+        control_count=len(snapshot.controls),
+        matched=len(report.items),
+        missing=len(report.missing_data),
+        unrecognized=len(report.unrecognized),
+        blocked=len(report.blocked),
+    )
     return {
         "snapshot_id": snapshot.id,
         "page": {"url": snapshot.url, "title": snapshot.title, "control_count": len(snapshot.controls)},
@@ -459,9 +481,19 @@ def fill(payload: WebFormFillIn, db: Session = Depends(get_db)):
         if outcome.status in counts:
             counts[outcome.status] += 1
     _record_fill(db, manager.client(), snapshot, payload, outcomes)
+    record_event(
+        "webform.fill",
+        form_control_total=len(snapshot.controls),
+        recognized_total=len(outcomes),
+        filled=counts["filled"],
+        unverified=counts["unverified"],
+        failed=counts["failed"],
+    )
     return {
         "outcomes": [outcome.__dict__ for outcome in outcomes],
         **counts,
+        "form_control_total": len(snapshot.controls),
+        "recognized_total": len(outcomes),
     }
 
 

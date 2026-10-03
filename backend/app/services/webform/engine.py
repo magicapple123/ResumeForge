@@ -41,6 +41,7 @@ from typing import Any
 
 from ..browser.cdp_client import CdpClient
 from ..browser.interaction import click_selector
+from .custom_select import select_combobox_option
 from .fields import (
     AUTOCOMPLETE_DENY,
     AUTOCOMPLETE_FIELDS,
@@ -56,6 +57,7 @@ from .matching import (
     DateResolution,
     SelectOption,
     SelectResolution,
+    date_component,
     format_date,
     is_date_hint,
     is_placeholder,
@@ -277,6 +279,9 @@ _CONTROL_HELPERS_JS = [
     "    legend: text(el.closest('fieldset')?.querySelector('legend')).slice(0, 160),\n",
     "    title: (el.getAttribute('title') || '').slice(0, 160),\n",
     "    id: (el.id || '').slice(0, 160),\n",
+    "    date_group: String(el.getAttribute('data-rf-date-group') || ''),\n",
+    "    date_part_name: String(el.getAttribute('data-rf-date-part') || ''),\n",
+    "    date_part_label: String(el.getAttribute('data-rf-date-label') || ''),\n",
     "    // \u6807\u51c6\u5316\u7684\u5b57\u6bb5\u7c7b\u578b\u63d0\u793a\u3002**\u8fd9\u662f\u552f\u4e00\u4e00\u4e2a\u4e0d\u9700\u8981\u731c\u7684\u4fe1\u53f7**\u2014\u2014\u89c4\u8303\u5199\u5f97\u597d\u7684\u8868\u5355\u4f1a\u5e26\u4e0a\uff0c\n",
     "    // \u8bfb\u5230\u5c31\u662f\u9ad8\u7f6e\u4fe1\u547d\u4e2d\uff08Chrome \u7684\u81ea\u52a8\u586b\u5145\u4e5f\u628a\u5b83\u5f53\u7b2c\u4e00\u4f18\u5148\u7ea7\uff09\u3002\n",
     "    autocomplete: (el.getAttribute('autocomplete') || '').trim().toLowerCase(),\n",
@@ -1238,6 +1243,8 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "    // `HTMLInputElement` \u7684 setter\uff0c\u629b Illegal invocation\u3002\u5b9e\u6d4b\u5230\u7684\"\u6311\u4e86\u4e00\u6761\u8d44\u6599\u5374\u5199\u5165\u5931\u8d25\"\n",
     "    // \u5c31\u662f\u8fd9\u6761\u94fe\u3002\n",
     "    if (event.composedPath && event.composedPath().includes(host)) { return; }\n",
+    "    // 关闭后保留气球，但焦点监听不应再显示\"正在看这个框\"占位卡。\n",
+    "    if (window.__rfLiveEnabled === false) { hide(); return; }\n",
     "    const el = event.target;\n",
     "    if (!el || !el.tagName || el === host) { return; }\n",
     "    const type = controlType(el);\n",
@@ -1411,6 +1418,7 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "\n",
     "  window.__rfShowPanel = (payload) => {\n",
     "    payload = payload || {};\n",
+    "    if (window.__rfLiveEnabled === false) { hide(); return; }\n",
     "    if (payload.status === 'hidden') { hide(); return; }\n",
     "    if (!focused) { return; }\n",
     "    let placeholder = '';\n",
@@ -1617,6 +1625,9 @@ class Control:
     block_label: str = ""
     block_family: str = ""
     block_index: int | None = None
+    date_group: str = ""
+    date_part_name: str = ""
+    date_part_label: str = ""
     # 同一区块内两个日期框经常拥有完全相同的文案，采集 DOM 顺序作为额外证据。
     date_order: int | None = None
     # 单选/复选的同组标识（``n:<name>`` 或 ``g:<容器序号>``）。空 = 不属于任何组。
@@ -1653,6 +1664,32 @@ class Control:
             for part in (self.own_text(), self.block_label, self.nearby_text, self.aria_describedby)
             if part
         )
+
+    def date_part(self) -> str | None:
+        """识别「年 / 月 / 日」这种把一个日期拆成多个下拉的控件。"""
+        if self.date_part_name in {"year", "month", "day"}:
+            return self.date_part_name
+        for raw in (self.label, self.placeholder, self.aria_label, self.name, self.element_id):
+            text = "".join(str(raw or "").casefold().split())
+            if not text:
+                continue
+            if text in {"年", "年份", "year", "yyyy"} or text.endswith(("年份", "year")):
+                return "year"
+            if text in {"月", "月份", "month", "mm"} or text.endswith(("月份", "month")):
+                return "month"
+            if text in {"日", "日份", "day", "dd"} or text.endswith(("日", "day")) and not text.endswith("日期"):
+                return "day"
+        return None
+
+    def security_text(self) -> str:
+        """用于不可逆安全拦截的控件自述文本，不包含共享旁文或描述文字。
+
+        ``nearby_text`` / ``aria_describedby`` 适合帮助识别字段，但它们可能复用整页或整块
+        说明。网申页面常在作品链接说明里写“如有密码”，不能因此把姓名、邮箱等控件一起拦下。
+        """
+        return " ".join(
+            part for part in (self.own_text(), self.block_label) if part
+        ).casefold()
 
     def is_filled(self) -> bool:
         """这个控件页面上已经有值了吗（用于"不覆盖用户已填的值"）。"""
@@ -1863,6 +1900,9 @@ class FormEngine:
                     block_label=str(raw.get("block_label", "")),
                     block_family=str(raw.get("block_family", "")),
                     block_index=self._parse_block_index(raw.get("block_index")),
+                    date_group=str(raw.get("date_group", "")),
+                    date_part_name=str(raw.get("date_part_name", "")),
+                    date_part_label=str(raw.get("date_part_label", "")),
                     date_order=self._parse_optional_int(raw.get("date_order")),
                     group=str(raw.get("group", "")),
                     value=str(raw.get("value", "")),
@@ -1922,7 +1962,7 @@ class FormEngine:
         controls = payload.get("controls")
         if not isinstance(controls, list):
             return []
-        return self.snapshot_controls(controls)
+        return self._link_split_date_controls(self.snapshot_controls(controls))
 
     def match_fields(self, controls: list[Control], data: dict[str, Any]) -> MatchResult:
         """把资料字段启发式映射到控件上。
@@ -1933,6 +1973,7 @@ class FormEngine:
         mappings: list[FieldMapping] = []
         skipped: list[SkipNote] = []
         used: set[int] = set()
+        controls = self._link_split_date_controls(controls)
 
         for control in controls:
             reason = self.skip_reason(control)
@@ -1992,19 +2033,31 @@ class FormEngine:
         # 区块里签名完全相同的两个日期框）；再同则按控件顺序（DOM 里靠前的先拿）。
         candidates.sort(key=lambda item: (-item[0][0], -item[0][1], -item[0][2], item[1], item[2]))
 
-        assigned: set[tuple[str, int | None]] = set()
+        assigned: set[tuple[str, int | None, str | None]] = set()
+        date_assigned: set[tuple[str, str]] = set()
         for _key, _order, control_index, raw_field, base_field, target_index, control in candidates:
-            slot = (base_field, target_index) if family_for_field(base_field) else (raw_field, None)
+            date_part = control.date_part()
+            if date_part:
+                # 一个资料日期可以对应页面上的「年 / 月 / 日」多个下拉，
+                # 每个组件都要占一个独立槽位，不能被同一字段的第一项吞掉。
+                slot = (base_field, target_index, date_part)
+            elif family_for_field(base_field):
+                slot = (base_field, target_index, None)
+            else:
+                slot = (raw_field, None, None)
             if control_index in used or slot in assigned:
                 continue
-            mapping = self._build_mapping(
-                controls,
-                control,
-                field_key_for_block(base_field, control.block_family, control.block_index)
+            if control.date_group and (control.date_group, base_field) in date_assigned:
+                continue
+            mapping_field = (
+                base_field
+                if control.date_group and base_field in FIELD_SYNONYMS
+                else field_key_for_block(base_field, control.block_family, control.block_index)
                 if control.block_family and control.block_index
-                else raw_field,
-                str(data[raw_field]).strip(),
-                False,
+                else raw_field
+            )
+            mapping = self._build_mapping(
+                controls, control, mapping_field, str(data[raw_field]).strip(), False
             )
             if mapping is None:
                 continue
@@ -2012,6 +2065,21 @@ class FormEngine:
             used |= self._claimed_indexes(controls, mapping.control)
             assigned.add(slot)
             mappings.append(mapping)
+            if control.date_group:
+                date_assigned.add((control.date_group, base_field))
+                raw_value = str(data[raw_field]).strip()
+                for companion in controls:
+                    if companion.date_group != control.date_group or companion.index == control.index:
+                        continue
+                    companion_mapping = self._build_mapping(
+                        controls, companion, control.date_part_label, raw_value, False
+                    )
+                    if companion_mapping is None:
+                        continue
+                    used.add(companion.index)
+                    companion_slot = (base_field, target_index, companion.date_part())
+                    assigned.add(companion_slot)
+                    mappings.append(companion_mapping)
 
         # 低置信在分配完成之后单独算：判据是该字段自己的冠亚军差距（见 ``_best_control``），
         # 而全局择优决定了它最终拿到的是不是那个冠军。
@@ -2026,6 +2094,70 @@ class FormEngine:
 
         unmatched = [control for control in controls if control.index not in used]
         return MatchResult(mappings=final, unmatched=unmatched, skipped=skipped)
+
+    @staticmethod
+    def _link_split_date_controls(controls: list[Control]) -> list[Control]:
+        """Link adjacent year/month/day controls only when shared text identifies a date field."""
+        linked: list[Control] = []
+        index = 0
+        while index < len(controls):
+            first = controls[index]
+            if first.date_part() is None:
+                linked.append(first)
+                index += 1
+                continue
+
+            group: list[Control] = []
+            parts: set[str] = set()
+            cursor = index
+            while cursor < len(controls) and len(group) < 3:
+                candidate = controls[cursor]
+                part = candidate.date_part()
+                if part is None or part in parts:
+                    break
+                group.append(candidate)
+                parts.add(part)
+                cursor += 1
+            if len(group) < 2:
+                linked.append(first)
+                index += 1
+                continue
+
+            shared_text = " ".join(
+                item.block_label + " " + item.nearby_text + " " + item.aria_describedby
+                for item in group
+            ).casefold()
+            parent_fields = (
+                "birth_date",
+                "birth_year",
+                "education_start",
+                "education_end",
+                "work_start",
+                "work_end",
+            )
+            hits = [
+                (field_name, synonym)
+                for field_name in parent_fields
+                for synonym in FIELD_SYNONYMS[field_name]
+                if synonym.casefold() in shared_text
+            ]
+            if not hits or len({field_name for field_name, _synonym in hits}) != 1:
+                linked.extend(group)
+                index = cursor
+                continue
+
+            field_name, synonym = max(hits, key=lambda item: len(item[1]))
+            group_id = f"date:{group[0].index}:{field_name}"
+            linked.extend(
+                replace(
+                    item,
+                    date_group=group_id,
+                    date_part_label=field_name,
+                )
+                for item in group
+            )
+            index = cursor
+        return linked
 
     @staticmethod
     def _group_key(control: Control) -> str:
@@ -2059,8 +2191,38 @@ class FormEngine:
         low_confidence: bool,
     ) -> FieldMapping | None:
         """按控件类型把值整理成"真正要写进去的东西"；整理不出来就放弃这一条。"""
+        if control.date_group:
+            component_value = date_component(value, control.date_part() or "")
+            if component_value.status != "matched":
+                return None
+            if control.has_popup and not control.options:
+                return FieldMapping(
+                    control=control,
+                    field=field_name,
+                    value=component_value.value,
+                    low_confidence=low_confidence,
+                )
+            resolution = resolve_select_option(control.options, component_value.value)
+            if resolution.status != "matched":
+                return None
+            return FieldMapping(
+                control=control,
+                field=field_name,
+                value=component_value.value,
+                select=resolution,
+                low_confidence=low_confidence,
+            )
+
         if control.type == "select":
-            resolution = resolve_select_option(control.options, value)
+            component = control.date_part()
+            component_value = date_component(value, component) if component else None
+            resolution = (
+                resolve_select_option(control.options, component_value.value)
+                if component_value is not None and component_value.status == "matched"
+                else resolve_select_option(control.options, value)
+            )
+            if component_value is not None and component_value.status != "matched":
+                return None
             if (
                 resolution.status == "no_option"
                 and control.linked_select
@@ -2082,6 +2244,14 @@ class FormEngine:
                 field=field_name,
                 value=value,
                 select=resolution,
+                low_confidence=low_confidence,
+            )
+
+        if control.has_popup and control.type != "select":
+            return FieldMapping(
+                control=control,
+                field=field_name,
+                value=value,
                 low_confidence=low_confidence,
             )
 
@@ -2153,6 +2323,7 @@ class FormEngine:
     def skip_reason(control: Control) -> str | None:
         """这个控件为什么永不自动填；``None`` 表示可以参与匹配。"""
         signature = control.signature()
+        security_text = control.security_text()
         if control.type == "file":
             return "简历附件需要你自己选择文件上传"
         # 只读框 / 点开是弹层的框：**看起来像文本框，其实值只能由点选产生**。
@@ -2162,7 +2333,7 @@ class FormEngine:
         # 内部状态**显示**在只读输入框里，用户点开三级菜单选完才真的产生值。
         #
         # 与"下拉里只有占位项"那条是同一类处置：**宁可如实说"要你自己点"，也不假装填上了**。
-        if control.type != "select" and (control.readonly or control.has_popup):
+        if control.type != "select" and control.readonly and not control.has_popup:
             return "这是个只能点选的选择控件（值不能直接写进去），需要你在页面上自己点选"
         # 站点自己声明的"别自动填"：密码 / 验证码 / 银行卡。这比我们从标签猜更可信——
         # 是表单在明说这是一类不该由程序填的控件。
@@ -2170,7 +2341,7 @@ class FormEngine:
             kind = AUTOCOMPLETE_DENY[control.autocomplete]
             return f"站点标注为{kind}（autocomplete={control.autocomplete}），永不自动填写"
         for word in FIELD_DENYLIST:
-            if word in signature:
+            if word in security_text:
                 return f"涉及“{word}”，永不自动填写"
         # 同意类勾选：代勾等于替你做出法律意义上的同意，只能你自己点。
         if control.type in ("checkbox", "radio"):
@@ -2348,6 +2519,13 @@ class FormEngine:
             try:
                 if control.type == "select":
                     applied_mapping = self._apply_select(client, mapping, timeout=timeout)
+                elif control.has_popup:
+                    resolution = select_combobox_option(
+                        client, control.selector, mapping.value, timeout=timeout
+                    )
+                    if resolution.status != "matched" or resolution.option is None:
+                        raise RuntimeError(resolution.reason or "自定义下拉没有唯一匹配项")
+                    applied_mapping = replace(mapping, select=resolution)
                 elif control.type in ("radio", "checkbox"):
                     self._apply_choice(client, mapping, timeout=timeout)
                 elif control.type == "richtext":
@@ -2451,6 +2629,9 @@ class FormEngine:
             return ApplyOutcome(mapping.control.index, mapping.field, "unverified", "回读不到控件")
 
         expected = mapping.write_value()
+        accepted_values = {expected}
+        if mapping.select is not None and mapping.select.option is not None:
+            accepted_values.add(mapping.select.option.display())
         if mapping.control.type == "select":
             actual = str(payload.get("value", ""))
         elif mapping.control.type in ("radio", "checkbox"):
@@ -2462,7 +2643,7 @@ class FormEngine:
         else:
             actual = str(payload.get("value", ""))
 
-        if actual == expected:
+        if actual in accepted_values:
             return ApplyOutcome(mapping.control.index, mapping.field, "filled")
         return ApplyOutcome(
             mapping.control.index,

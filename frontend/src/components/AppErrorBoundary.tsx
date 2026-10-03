@@ -1,6 +1,7 @@
 import { Button, Result, Space, Typography } from "antd";
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
+import { recordClientDiagnostic } from "../utils/clientDiagnostics";
 
 interface Props {
   children: ReactNode;
@@ -44,6 +45,11 @@ export default class AppErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error("ResumeForge UI crashed", error, info);
+    recordClientDiagnostic("ui.crash", {
+      error: error.name,
+      message: error.message,
+      component_stack: info.componentStack?.slice(0, 160),
+    });
   }
 
   private reload = (): void => {

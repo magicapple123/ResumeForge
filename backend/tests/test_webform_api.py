@@ -295,6 +295,23 @@ def test_live_start_remember_adds_an_unknown_field_to_extra_profile(
     assert extra_profile.list_entries(db_session)["CUSTOM_导师姓名"] == "王教授"
 
 
+def test_live_enabled_toggles_only_the_feature_and_keeps_the_session(client, monkeypatch):
+    calls: list[bool] = []
+    monkeypatch.setattr(webform_service, "set_live_enabled", calls.append)
+    monkeypatch.setattr(
+        webform_service,
+        "live_status",
+        lambda: {"running": True, "enabled": False},
+    )
+
+    response = client.post("/api/webform/live/enabled", json={"enabled": False})
+
+    assert response.status_code == 200
+    assert calls == [False]
+    assert response.json()["running"] is True
+    assert response.json()["enabled"] is False
+
+
 # ===== 预览 =====
 
 

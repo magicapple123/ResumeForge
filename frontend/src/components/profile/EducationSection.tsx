@@ -89,12 +89,12 @@ export function EducationSection({ editable }: Props) {
               />
             </Form.Item>
           </Col>
-          <Col xs={12} md={6}>
+          <Col xs={24} sm={12} md={6}>
             <Form.Item name={[field.name, "start_date"]} label="开始时间">
               <PartialDateSelect label={`教育经历${field.name + 1}开始时间`} />
             </Form.Item>
           </Col>
-          <Col xs={12} md={6}>
+          <Col xs={24} sm={12} md={6}>
             <Form.Item name={[field.name, "end_date"]} label="结束时间">
               <PartialDateSelect label={`教育经历${field.name + 1}结束时间`} allowOngoing />
             </Form.Item>

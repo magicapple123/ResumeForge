@@ -222,6 +222,8 @@ export interface WebFormRememberInput {
 /** 智能逐项填表模式的当前状态。 */
 export interface WebFormLive {
   running: boolean;
+  /** 监听会话仍在运行时，智能逐项填表是否开启；旧后端缺字段时按 running 兼容。 */
+  enabled?: boolean;
   field_label: string;
   value: string;
   status:
@@ -255,6 +257,10 @@ export interface WebFormFillResult {
   filled: number;
   unverified: number;
   failed: number;
+  /** 页面中可安全读取的可见表单控件总数。旧记录可能没有这两个字段。 */
+  form_control_total?: number;
+  /** 本次识别并实际尝试写入的控件数。 */
+  recognized_total?: number;
 }
 
 /** 一次填充是批量还是实时（点哪个填哪个）。 */

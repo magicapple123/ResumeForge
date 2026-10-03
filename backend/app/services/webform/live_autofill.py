@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .engine import ApplyOutcome, FieldMapping, FormEngine
+from ..diagnostics import record_event
 from .fields import FIELD_LABELS
 from .repeated_fields import field_label_for_key, split_repeated_key
 from .service import FillSelection, apply_fill
@@ -31,6 +32,8 @@ class AutoFillProgress:
     completed: int
     filled: int
     failed: int
+    form_control_total: int = 0
+    recognized_total: int = 0
     current_label: str = ""
     message: str = ""
 
@@ -41,6 +44,8 @@ class AutoFillResult:
     completed: int
     filled: int
     failed: int
+    form_control_total: int = 0
+    recognized_total: int = 0
 
 
 def _label(mapping: FieldMapping) -> str:
@@ -77,6 +82,12 @@ def fill_current_page(
     controls = engine.read_controls(client)
     mappings = _fillable_mappings(controls, data, engine)
     total = len(mappings)
+    form_control_total = len(controls)
+    record_event(
+        "webform.autofill_start",
+        form_control_total=form_control_total,
+        recognized_total=total,
+    )
     snapshot = Snapshot(id="live-autofill", controls=controls)
     completed = filled = failed = 0
 
@@ -91,10 +102,11 @@ def fill_current_page(
             completed=0,
             filled=0,
             failed=0,
+            form_control_total=form_control_total,
+            recognized_total=total,
             message="正在识别当前页面…" if total else "当前页面没有可自动填写的空字段",
         )
     )
-
     outcomes_by_index: dict[int, ApplyOutcome] = {}
     try:
         selections = [
@@ -130,6 +142,8 @@ def fill_current_page(
                 completed=completed,
                 filled=filled,
                 failed=failed,
+                form_control_total=form_control_total,
+                recognized_total=total,
                 current_label=_label(mapping),
                 message=("已填入" if outcome and outcome.status == "filled" else "这一项未能确认，请稍后核对"),
             )
@@ -138,8 +152,8 @@ def fill_current_page(
             time.sleep(delay_seconds)
 
     state = "cancelled" if should_stop is not None and should_stop() else "done"
-    # 完成口径与既有文案一致（filled/total）；total=0 时不算百分比，避免除零与误导。
-    rate_note = f"（成功率 {round(filled * 100 / total)}%）" if total else ""
+    # 成功率分母是页面全部可安全读取的控件，而不是规则恰好识别出的那一小部分。
+    rate_note = f"（成功率 {round(filled * 100 / form_control_total)}%）" if form_control_total else ""
     report(
         AutoFillProgress(
             state=state,
@@ -148,13 +162,31 @@ def fill_current_page(
             filled=filled,
             failed=failed,
             message=(
-                f"已完成 {filled}/{total} 项{rate_note}，请回到页面核对"
+                f"已完成 {filled}/{form_control_total} 个表单框{rate_note}（识别并尝试 {total} 个），请回到页面核对"
                 if state == "done"
                 else "已停止当前自动填写"
             ),
+            form_control_total=form_control_total,
+            recognized_total=total,
         )
     )
-    return AutoFillResult(total=total, completed=completed, filled=filled, failed=failed)
+    record_event(
+        "webform.autofill_done",
+        form_control_total=form_control_total,
+        recognized_total=total,
+        completed=completed,
+        filled=filled,
+        failed=failed,
+        state=state,
+    )
+    return AutoFillResult(
+        total=total,
+        completed=completed,
+        filled=filled,
+        failed=failed,
+        form_control_total=form_control_total,
+        recognized_total=total,
+    )
 
 
 class AutoFillWorker:

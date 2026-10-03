@@ -25,6 +25,7 @@ const apiMocks = vi.hoisted(() => ({
   fillWebForm: vi.fn(),
   getWebFormLiveStatus: vi.fn(),
   startWebFormLive: vi.fn(),
+  setWebFormLiveEnabled: vi.fn(),
   stopWebFormLive: vi.fn(),
   getWebFormMemoryTargets: vi.fn(),
   rememberWebFormLive: vi.fn(),
@@ -146,6 +147,7 @@ beforeEach(() => {
   apiMocks.listWebFormRecords.mockResolvedValue([]);
   apiMocks.getWebFormLiveStatus.mockResolvedValue(liveStatus());
   apiMocks.startWebFormLive.mockResolvedValue(liveStatus());
+  apiMocks.setWebFormLiveEnabled.mockResolvedValue(liveStatus({ running: true, enabled: false }));
   apiMocks.stopWebFormLive.mockResolvedValue(liveStatus());
   apiMocks.getWebFormMemoryTargets.mockResolvedValue({ targets: [] });
   apiMocks.rememberWebFormLive.mockResolvedValue({ saved: true, live: liveStatus() });
@@ -262,6 +264,37 @@ describe("WebFormPage", () => {
 
     await waitFor(() => expect(apiMocks.startWebFormLive).toHaveBeenCalledWith(true));
     expect(screen.getByRole("button", { name: /关\s*闭/ })).toBeInTheDocument();
+  });
+
+  it("关闭智能逐项填表只同步 enabled，不销毁运行中的悬浮球会话", async () => {
+    apiMocks.getWebFormLiveStatus.mockResolvedValue(liveStatus({ running: true, enabled: true }));
+    renderPage();
+
+    const closeButton = await screen.findByRole("button", { name: "关闭智能逐项填表" });
+    fireEvent.click(closeButton);
+
+    await waitFor(() => expect(apiMocks.setWebFormLiveEnabled).toHaveBeenCalledWith(false));
+    expect(await screen.findByRole("button", { name: "开启智能逐项填表" })).toBeInTheDocument();
+  });
+
+  it("成功率使用页面表单框总数作为分母", async () => {
+    window.sessionStorage.setItem(
+      WEB_FORM_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        sessionActive: true,
+        result: {
+          outcomes: [],
+          filled: 2,
+          unverified: 0,
+          failed: 1,
+          form_control_total: 5,
+          recognized_total: 3,
+        },
+      }),
+    );
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/成功率 40%（2\/5）/)).toBeInTheDocument());
   });
 
   it("点「开启专用浏览器」后立刻显示已开启，不等浏览器状态轮询翻牌", async () => {

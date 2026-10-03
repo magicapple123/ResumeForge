@@ -584,7 +584,9 @@ score_match_result(result, job_payload, profile_text, resume_text)
 
 18. **给网申填表加字段**：只需在 `services/webform/fields.py` 的 `FORM_FIELDS` 加一条、并在 `FIELD_SYNONYMS` 加同名条目（`tests/test_webform_engine.py::test_catalog_and_synonyms_stay_in_step` 会钉住两者一一对应）。**不需要迁移、不需要改前端**——目录由 `GET /api/webform/fields` 下发，录入界面据此渲染。若值来自资料里的新列，再改 `services/webform/data.py::profile_to_form_data`。**判断逻辑（选哪个下拉项、日期怎么写、单选点哪个）一律写在 `services/webform/matching.py` 的纯函数里**，不要塞进注入的 JS：离线测试用的假客户端不执行 JS，塞进去等于没有覆盖——这正是原先四个缺陷能活到生产的原因。字段值对不上页面的选项时**不猜**，如实报 `no_option`。
 
-    多段经历（实习/项目/获奖）的字段带 `derived=True` 且配了 `FIELD_BLOCK_HINTS`：**区块内的短词（"起止时间""职位""描述"）必须见到区块名才参与匹配**。网申表单把这三类做成「可添加多条」的区块，每条的控件长得一模一样——没有区块限定的话，"起止时间"会在教育、实习、项目三个区块上同时命中，谁抢到全看控件序号。区块里成对的日期控件签名完全相同，靠 DOM 顺序区分开始与结束，并标成需确认。**这一版只填第一条、不点页面上的「添加」按钮**（点按钮是改页面，不只是填值）。
+    多段经历（实习/项目/获奖）的字段带 `derived=True` 且配了 `FIELD_BLOCK_HINTS`：**区块内的短词（"起止时间""职位""描述"）必须见到区块名才参与匹配**。网申表单把这三类做成「可添加多条」的区块，每条的控件长得一模一样——没有区块限定的话，"起止时间"会在教育、实习、项目三个区块上同时命中，谁抢到全看控件序号。区块里成对的日期控件签名完全相同，靠 DOM 顺序区分开始与结束，并标成需确认。**这一版只填第一条、不点页面上的「添加」按钮**（点按钮是改页面，不只是填值）。日期拆成多个年份 / 月份 / 日期下拉时，先按共享标签关联成一组，再为每个组件做日期转换。具备 `role=combobox` / `aria-controls` 的可访问自定义下拉会通过 `services/webform/custom_select.py` 读取选项并用可信鼠标事件选择唯一匹配项；不唯一时仍返回 `ambiguous`，不猜。
+
+    实时填表的 `/api/webform/live/enabled` 只切换功能启用状态，不销毁会话和悬浮球；关闭时页面仍保留灰色球，但焦点事件不会显示提示面板。`/api/system/diagnostics` 返回进程内的脱敏运行事件，诊断事件只能记录计数、状态、耗时、错误类型和请求 ID 等元数据，不记录表单值或凭据。
 
 19. **给网申填表加 AI 兜底 / 调整触发策略**：入口在 `services/webform/ai.py`，提示词在
     `prompts/web_form_match.md`（新增提示词要同时登记 `preflight._REQUIRED_FILES` 与

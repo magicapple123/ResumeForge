@@ -1,5 +1,7 @@
 /** 统一请求封装：JSON 解析、错误信息提取、友好报错。 */
 
+import { recordClientDiagnostic } from "../utils/clientDiagnostics";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -60,13 +62,29 @@ export function getFilenameFromDisposition(header: string | null): string | null
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const resp = await fetch(`/api${path}`, {
-    ...options,
-    headers,
-  });
-  if (!resp.ok) {
-    throw new ApiError(await extractError(resp), resp.status);
+  try {
+    const resp = await fetch(`/api${path}`, {
+      ...options,
+      headers,
+    });
+    if (!resp.ok) {
+      recordClientDiagnostic("api.error", {
+        path,
+        status: resp.status,
+        method: options.method ?? "GET",
+      });
+      throw new ApiError(await extractError(resp), resp.status);
+    }
+    if (resp.status === 204) return undefined as T;
+    return (await resp.json()) as T;
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      recordClientDiagnostic("api.network_error", {
+        path,
+        method: options.method ?? "GET",
+        error: error instanceof Error ? error.name : String(error),
+      });
+    }
+    throw error;
   }
-  if (resp.status === 204) return undefined as T;
-  return (await resp.json()) as T;
 }

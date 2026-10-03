@@ -27,22 +27,22 @@ export function CampusExperienceSection({ editable }: Props) {
       }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
-          <Col xs={24} md={8}>
+          <Col xs={24} md={7}>
             <Form.Item name={[field.name, "organization"]} label="组织/部门">
               <Input placeholder="如：学生会、团支部、学院社团" />
             </Form.Item>
           </Col>
-          <Col xs={24} md={8}>
+          <Col xs={24} md={7}>
             <Form.Item name={[field.name, "role"]} label="职务/角色">
               <Input placeholder="如：团支书、部长、负责人" />
             </Form.Item>
           </Col>
-          <Col xs={12} md={4}>
+          <Col xs={24} sm={12} md={5}>
             <Form.Item name={[field.name, "start_date"]} label="开始时间">
               <PartialDateSelect label={`校园经历${field.name + 1}开始时间`} />
             </Form.Item>
           </Col>
-          <Col xs={12} md={4}>
+          <Col xs={24} sm={12} md={5}>
             <Form.Item name={[field.name, "end_date"]} label="结束时间">
               <PartialDateSelect label={`校园经历${field.name + 1}结束时间`} allowOngoing />
             </Form.Item>

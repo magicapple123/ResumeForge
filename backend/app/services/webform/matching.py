@@ -231,6 +231,29 @@ def parse_date(raw: str) -> tuple[int, int | None, int | None] | None:
     )
 
 
+def date_component(raw: str, part: str) -> DateResolution:
+    """把一个资料日期拆成目标下拉需要的年/月/日组件。"""
+    if not (raw or "").strip():
+        return DateResolution("empty", reason="资料里没有这一项")
+    if is_ongoing(raw):
+        return DateResolution("ongoing", reason=f"“{raw.strip()}”不是具体日期，请按页面选项选择")
+    parsed = parse_date(raw)
+    if parsed is None:
+        return DateResolution("unparsed", reason=f"看不懂“{raw.strip()}”这个日期")
+    year, month, day = parsed
+    if part == "year":
+        return DateResolution("matched", value=f"{year:04d}")
+    if part == "month":
+        if month is None:
+            return DateResolution("unparsed", reason=f"资料里只有年份（{year}），没有月份")
+        return DateResolution("matched", value=f"{month:02d}")
+    if part == "day":
+        if day is None:
+            return DateResolution("unparsed", reason="资料里没有具体日期")
+        return DateResolution("matched", value=f"{day:02d}")
+    return DateResolution("unparsed", reason=f"不支持的日期组件：{part}")
+
+
 def is_ongoing(raw: str) -> bool:
     """这个值是不是"至今"这类"仍在进行"，而不是一个具体日期。"""
     return (raw or "").strip().casefold() in _PRESENT_TEXTS
@@ -330,6 +353,7 @@ __all__ = [
     "SelectOption",
     "SelectResolution",
     "aliases_of",
+    "date_component",
     "date_values_match",
     "format_date",
     "is_date_hint",

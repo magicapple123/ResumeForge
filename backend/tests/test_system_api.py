@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from app.api import system as system_api
 from app.database import SessionLocal, get_db
 from app.main import app
+from app.services.diagnostics import record_event
 
 
 def test_shutdown_rejects_non_loopback_clients():
@@ -154,3 +155,15 @@ def test_stop_output_never_breaks_the_shutdown_path(monkeypatch, caplog):
 
     messages = [record.getMessage() for record in caplog.records if record.levelname == "INFO"]
     assert any("已请求停止前端进程" in message for message in messages), messages
+
+
+def test_diagnostics_endpoint_returns_redacted_runtime_events(client):
+    record_event("test.system", control_count=3, value="private")
+
+    response = client.get("/api/system/diagnostics")
+
+    assert response.status_code == 200
+    event = response.json()["events"][-1]
+    assert event["event"] == "test.system"
+    assert event["details"]["control_count"] == 3
+    assert event["details"]["value"] == "<redacted>"

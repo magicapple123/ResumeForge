@@ -161,6 +161,12 @@ class WebFormLiveIn(BaseModel):
     ai: bool = True
 
 
+class WebFormLiveEnabledIn(BaseModel):
+    """只切换智能逐项填表的启用状态，不销毁悬浮球和监听会话。"""
+
+    enabled: bool
+
+
 class WebFormRememberPendingOut(BaseModel):
     """等待用户选择存到哪一份资料的详情。"""
 
@@ -175,6 +181,8 @@ class WebFormLiveOut(BaseModel):
     """「点哪个填哪个」模式的当前状态（界面据此显示它在做什么）。"""
 
     running: bool = False
+    # running 与 enabled 分开：关闭智能逐项填表时，悬浮球仍需留在页面上以便重新开启。
+    enabled: bool = False
     field_label: str = ""
     value: str = ""
     # thinking | ai_thinking | matched | blocked | unmatched | filled | failed
@@ -228,6 +236,10 @@ class WebFormFillOut(BaseModel):
     filled: int = 0
     unverified: int = 0
     failed: int = 0
+    # 页面中可安全读取的可见表单控件总数；不读取密码框与提交类控件。
+    form_control_total: int = 0
+    # 本次识别并实际尝试写入的控件数。
+    recognized_total: int = 0
 
 
 # ===== 填充记录（回看用）=====
@@ -386,6 +398,7 @@ __all__ = [
     "WebFormFillRecordOut",
     "WebFormLearningOut",
     "WebFormLiveAlternativeOut",
+    "WebFormLiveEnabledIn",
     "WebFormLiveIn",
     "WebFormLiveOut",
     "WebFormMemoryTargetOut",

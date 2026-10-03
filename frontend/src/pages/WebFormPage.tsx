@@ -22,6 +22,7 @@
  */
 import {
   ChromeOutlined,
+  DownloadOutlined,
   FileSearchOutlined,
   ReloadOutlined,
   SettingOutlined,
@@ -44,6 +45,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getLLMConfig } from "../api/settings";
+import { getDiagnostics } from "../api/system";
+import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
 import {
   fillWebForm,
   getWebFormBrowserStatus,
@@ -55,6 +58,7 @@ import {
   getWebFormMemoryTargets,
   previewWebForm,
   rememberWebFormLive,
+  setWebFormLiveEnabled,
   startWebFormBrowser,
   startWebFormLive,
   stopWebFormBrowser,
@@ -122,11 +126,14 @@ function useAiAvailable(): boolean | null {
   return available;
 }
 
-/** 一键填充成功率：按「已填 / (已填+失败)」计；没有任何尝试过的项时不显示。 */
-function FillRateTag({ filled, failed }: { filled: number; failed: number }) {
-  const attempted = filled + failed;
-  if (attempted === 0) return null;
-  return <Tag color="processing">成功率 {Math.round((filled * 100) / attempted)}%</Tag>;
+/** 一键填充成功率：按「成功填写 / 页面表单控件总数」计。 */
+function FillRateTag({ filled, total }: { filled: number; total?: number }) {
+  if (!total || total <= 0) return null;
+  return (
+    <Tag color="processing">
+      成功率 {Math.round((filled * 100) / total)}%（{filled}/{total}）
+    </Tag>
+  );
 }
 
 export default function WebFormPage() {
@@ -144,7 +151,7 @@ export default function WebFormPage() {
   const [result, setResult] = useState<WebFormFillResult | null>(restoredSession.result);
   const [sessionActive, setSessionActive] = useState(restoredSession.sessionActive);
   const [busy, setBusy] = useState<
-    "start" | "read" | "fill" | "stop" | "end" | "live" | "refresh" | null
+    "start" | "read" | "fill" | "stop" | "end" | "live" | "refresh" | "diagnostics" | null
   >(null);
   // 浏览器那几个按钮共用这一个 busy：**任何一个在跑，其余的都禁用**。
   // 它们职责分得开（起停 / 配置 / 重查），但都围绕同一个浏览器进程——并行点开只会让
@@ -176,6 +183,7 @@ export default function WebFormPage() {
   );
 
   const running = browser.data?.state === "running";
+  const liveEnabled = live?.enabled ?? live?.running ?? false;
   // 没配模型时开关不起作用——**说清楚**，否则用户开了却毫无变化，只会以为功能坏了。
   const aiOn = aiEnabled && aiAvailable === true;
   // 后端没重启时这两个字段还不存在（它们是这一次新加的）。用 `?? []` 兜住，
@@ -385,6 +393,37 @@ export default function WebFormPage() {
     }
   }, [browser, message]);
 
+  const handleExportDiagnostics = useCallback(async () => {
+    setBusy("diagnostics");
+    try {
+      let snapshot;
+      try {
+        snapshot = await getDiagnostics();
+      } catch {
+        snapshot = {
+          generated_at: new Date().toISOString(),
+          app_version: "unknown",
+          events: [],
+        };
+      }
+      const payload = { ...snapshot, frontend_events: clientDiagnosticSnapshot() };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `resumeforge-diagnostics-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      message.success("已导出脱敏诊断信息，可连同截图提交排查");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "导出诊断信息失败");
+    } finally {
+      setBusy(null);
+    }
+  }, [message]);
+
   // 模式开着的时候轮询状态（面板在浏览器里，这边要能看到它在做什么）。
   // 关掉就停——不留一个永远转的定时器。
   useEffect(() => {
@@ -458,21 +497,22 @@ export default function WebFormPage() {
     setBusy("live");
     try {
       setSessionActive(true);
-      const stopping = Boolean(live?.running);
-      const next = stopping ? await stopWebFormLive() : await startWebFormLive(aiOn);
+      const next = live?.running
+        ? await setWebFormLiveEnabled(!liveEnabled)
+        : await startWebFormLive(aiOn);
       setLive(next ?? null);
-      setLiveOptOut(stopping);
+      setLiveOptOut(false);
       message.success(
-        next?.running
+        (next?.enabled ?? next?.running)
           ? "已开启。回到浏览器窗口，点到哪个框就在旁边给你要填的值"
-          : "已关闭，页面上的提示面板也撤掉了",
+          : "已关闭，悬浮球保留为灰色，页面不会再显示提示卡",
       );
     } catch (error) {
       message.error(error instanceof Error ? error.message : "切换点击填表失败");
     } finally {
       setBusy(null);
     }
-  }, [aiOn, live?.running, message]);
+  }, [aiOn, live?.running, liveEnabled, message]);
 
   /**
    * 把一份预览铺到界面上。**读取与重放共用这一处**——两处各写一遍的话，
@@ -741,6 +781,16 @@ export default function WebFormPage() {
                 刷新状态
               </Button>
             </Tooltip>
+            <Tooltip title="导出不含简历内容、表单值和密钥的诊断信息，适合连同截图提交排查">
+              <Button
+                icon={<DownloadOutlined />}
+                loading={busy === "diagnostics"}
+                disabled={anyBusy}
+                onClick={() => void handleExportDiagnostics()}
+              >
+                导出诊断
+              </Button>
+            </Tooltip>
             {running && (sessionActive || live?.running) ? (
               <Tooltip title="结束这一次网申填写：收起面板、不清理资料，下次点「读取当前表单」重来">
                 <Button
@@ -792,15 +842,15 @@ export default function WebFormPage() {
         title="智能逐项填表"
         extra={
           <Button
-            aria-label={live?.running ? "关闭智能逐项填表" : "开启智能逐项填表"}
-            type={live?.running ? "default" : "primary"}
+            aria-label={liveEnabled ? "关闭智能逐项填表" : "开启智能逐项填表"}
+            type={liveEnabled ? "default" : "primary"}
             loading={busy === "live"}
             // `live.running` 为真时后端一定已经开着浏览器（会话起不来会报 409），
             // 所以它可以单独解除禁用：浏览器状态轮询慢半拍时按钮不会白灰着。
             disabled={!running && !live?.running}
             onClick={handleLiveToggle}
           >
-            {live?.running ? "关闭" : "开启"}
+            {liveEnabled ? "关闭" : "开启"}
           </Button>
         }
       >
@@ -815,17 +865,21 @@ export default function WebFormPage() {
         </Typography.Paragraph>
         {live?.running ? (
           <Space size="middle" wrap>
-            <Tag color={LIVE_STATUS_META[live.status]?.color ?? "processing"}>
-              {LIVE_STATUS_META[live.status]?.label ?? "等待你点某个框"}
+            <Tag
+              color={
+                liveEnabled ? (LIVE_STATUS_META[live.status]?.color ?? "processing") : "default"
+              }
+            >
+              {liveEnabled ? (LIVE_STATUS_META[live.status]?.label ?? "等待你点某个框") : "已关闭"}
             </Tag>
-            {live.field_label ? (
+            {liveEnabled && live.field_label ? (
               <Typography.Text>
                 {live.field_label}
                 {live.value ? ` → ${live.value}` : ""}
               </Typography.Text>
             ) : null}
-            {live.source === "ai" ? <Tag color="blue">AI 建议</Tag> : null}
-            {alternatives.length ? (
+            {liveEnabled && live.source === "ai" ? <Tag color="blue">AI 建议</Tag> : null}
+            {liveEnabled && alternatives.length ? (
               <Tooltip
                 title={alternatives.map((item) => `${item.label}：${item.value}`).join("\n")}
               >
@@ -834,8 +888,10 @@ export default function WebFormPage() {
                 </Typography.Text>
               </Tooltip>
             ) : null}
-            {live.note ? <Typography.Text type="secondary">{live.note}</Typography.Text> : null}
-            {rememberPending ? (
+            {liveEnabled && live.note ? (
+              <Typography.Text type="secondary">{live.note}</Typography.Text>
+            ) : null}
+            {liveEnabled && rememberPending ? (
               <>
                 <Tag color="warning">等待选择资料目标</Tag>
                 <Button size="small" onClick={() => setMemoryDialogOpen(true)}>
@@ -843,7 +899,9 @@ export default function WebFormPage() {
                 </Button>
               </>
             ) : null}
-            <Typography.Text type="secondary">本次已填 {live.filled} 个</Typography.Text>
+            <Typography.Text type="secondary">
+              {liveEnabled ? `本次已填 ${live.filled} 个` : "悬浮球仍在浏览器中，可随时重新开启"}
+            </Typography.Text>
           </Space>
         ) : (
           <Typography.Text type="secondary">未开启</Typography.Text>
@@ -931,7 +989,7 @@ export default function WebFormPage() {
             <Tag color="success">已填 {result.filled}</Tag>
             {result.unverified ? <Tag color="warning">待确认 {result.unverified}</Tag> : null}
             {result.failed ? <Tag color="error">失败 {result.failed}</Tag> : null}
-            <FillRateTag filled={result.filled} failed={result.failed} />
+            <FillRateTag filled={result.filled} total={result.form_control_total} />
           </Space>
           {result.unverified || result.failed ? (
             <ul style={{ marginTop: 8, marginBottom: 0 }}>

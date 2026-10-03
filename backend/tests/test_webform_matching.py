@@ -9,6 +9,7 @@ import pytest
 from app.services.webform.matching import (
     SelectOption,
     aliases_of,
+    date_component,
     date_values_match,
     format_date,
     is_date_hint,
@@ -186,6 +187,17 @@ def test_empty_value_is_not_a_match_request():
 )
 def test_format_date_understood_shapes(raw, kind, expected):
     result = format_date(raw, kind=kind)
+    assert result.status == "matched"
+    assert result.value == expected
+
+
+@pytest.mark.parametrize(
+    "raw, part, expected",
+    [("2026-06", "year", "2026"), ("2026-06", "month", "06"), ("2026-06-15", "day", "15")],
+)
+def test_date_component_splits_profile_date_for_separate_selects(raw, part, expected):
+    result = date_component(raw, part)
+
     assert result.status == "matched"
     assert result.value == expected
 
