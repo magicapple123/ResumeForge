@@ -603,6 +603,22 @@ def test_disabled_live_session_reinstalls_the_control_ball_after_page_reload():
         session.stop()
 
 
+def test_disabled_live_session_does_not_show_focus_panel():
+    """关闭智能逐项填表后，输入框聚焦不应再出现"正在看这个框"卡片。"""
+    client = FakeLiveClient()
+    session = LiveSession(client, {"name": "张三"})
+    session.start()
+    try:
+        session.set_enabled(False)
+        client.focus_on(raw_control(label="姓名"))
+        session._tick()
+
+        assert session.state["enabled"] is False
+        assert not [expression for expression in client.expressions if "rf:live-panel" in expression]
+    finally:
+        session.stop()
+
+
 def test_a_page_that_never_reports_installed_is_not_reinstalled_every_tick():
     """探测里**没有** ``installed`` 字段时不该每轮重装。
 

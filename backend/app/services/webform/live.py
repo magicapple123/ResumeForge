@@ -271,6 +271,7 @@ class LiveSession:
         # 给 ResumeForge 页面看的状态（页面上要能显示"正在做什么"）。
         self.state: dict[str, Any] = {
             "running": False,
+            "enabled": False,
             "field_label": "",
             "value": "",
             "status": "",
@@ -302,6 +303,7 @@ class LiveSession:
         self._thread = threading.Thread(target=self._loop, name="webform-live", daemon=True)
         self._thread.start()
         self.state["running"] = True
+        self.state["enabled"] = self._enabled
 
     def update_data(
         self, data: dict[str, str], catalog: list[dict[str, str]] | None = None
@@ -340,6 +342,7 @@ class LiveSession:
     def set_enabled(self, enabled: bool) -> None:
         """切换当前标签页是否响应焦点；保留悬浮球，避免关闭后无法重新打开。"""
         next_enabled = bool(enabled)
+        self.state["enabled"] = next_enabled
         if self._enabled == next_enabled:
             return
         self._enabled = next_enabled
@@ -411,6 +414,7 @@ class LiveSession:
         except Exception:  # noqa: BLE001 - 页面可能已经关了
             pass
         self.state["running"] = False
+        self.state["enabled"] = False
 
     @property
     def is_running(self) -> bool:
@@ -884,6 +888,8 @@ class LiveSession:
         payload = {
             "state": progress.state,
             "total": progress.total,
+            "form_control_total": progress.form_control_total,
+            "recognized_total": progress.recognized_total,
             "completed": progress.completed,
             "filled": progress.filled,
             "failed": progress.failed,
@@ -1398,9 +1404,19 @@ class MultiLiveSession:
         )
         result = dict(active)
         result["running"] = bool(states)
+        result["enabled"] = any(bool(item.get("enabled")) for item in states)
         result["filled"] = sum(int(item.get("filled") or 0) for item in states)
         self.state = result
         return result
+
+    def set_enabled(self, enabled: bool) -> None:
+        """同步切换所有网申标签页的智能逐项填表状态，悬浮球仍保留。"""
+        next_enabled = bool(enabled)
+        with self._lock:
+            sessions = list(self._sessions.items())
+        for target_id, session in sessions:
+            live_targets.set_enabled(target_id, next_enabled)
+            session.set_enabled(next_enabled)
 
     def remember_choice(
         self,
@@ -1483,11 +1499,19 @@ def stop_live() -> None:
             _session = None
 
 
+def set_live_enabled(enabled: bool) -> None:
+    """只切换智能逐项填表，不销毁会话和悬浮球。"""
+    with _session_lock:
+        if _session is not None and _session.is_running:
+            _session.set_enabled(bool(enabled))
+
+
 def live_status() -> dict[str, Any]:
     with _session_lock:
         if _session is None:
             return {
                 "running": False,
+                "enabled": False,
                 "field_label": "",
                 "value": "",
                 "status": "",
@@ -1531,6 +1555,7 @@ __all__ = [
     "is_live_running",
     "live_status",
     "remember_live_choice",
+    "set_live_enabled",
     "start_live",
     "stop_live",
 ]

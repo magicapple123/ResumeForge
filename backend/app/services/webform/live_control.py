@@ -274,7 +274,7 @@ def install_live_control_script(enabled: bool = True) -> str:
   let lastClickAt = 0;
   let clickTimer = 0;
   let autoSequence = Number(window.__rfAutoFillRequest && window.__rfAutoFillRequest.seq) || 0;
-  let autoStatus = window.__rfAutoFillStatus || {{state: 'idle', total: 0, completed: 0, filled: 0, failed: 0}};
+  let autoStatus = window.__rfAutoFillStatus || {{state: 'idle', total: 0, form_control_total: 0, recognized_total: 0, completed: 0, filled: 0, failed: 0}};
   let lastTrailAt = 0;
 
   const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
@@ -314,11 +314,13 @@ def install_live_control_script(enabled: bool = True) -> str:
     }}
     if (autoFillProgress) {{
       const total = Number(autoStatus && autoStatus.total) || 0;
+      const formTotal = Number(autoStatus && autoStatus.form_control_total) || total;
+      const recognizedTotal = Number(autoStatus && autoStatus.recognized_total) || total;
       const completed = Number(autoStatus && autoStatus.completed) || 0;
       const filled = Number(autoStatus && autoStatus.filled) || 0;
       const current = String(autoStatus && autoStatus.current_label || '');
-      if (running) autoFillProgress.textContent = current ? `正在填写：${{current}}（${{completed}}/${{total}}）` : '正在识别当前页面…';
-      else if (state === 'done') autoFillProgress.textContent = String(autoStatus.message || `已完成 ${{filled}}/${{total}} 项，请回到页面核对`);
+      if (running) autoFillProgress.textContent = current ? `正在填写：${{current}}（${{completed}}/${{recognizedTotal}}）` : '正在识别当前页面…';
+      else if (state === 'done') autoFillProgress.textContent = String(autoStatus.message || `已完成 ${{filled}}/${{formTotal}} 个表单框，请回到页面核对`);
       else if (state === 'cancelled' || state === 'error') autoFillProgress.textContent = String(autoStatus.message || '自动填写已停止');
       else autoFillProgress.textContent = '识别到的字段会逐项写入，已有内容不会覆盖。';
     }}
@@ -362,7 +364,7 @@ def install_live_control_script(enabled: bool = True) -> str:
       const current = autoStatus;
       window.setTimeout(() => {{
         if (autoStatus === current || autoStatus.state === current.state) {{
-          autoStatus = {{state: 'idle', total: current.total || 0, completed: current.completed || 0, filled: current.filled || 0, failed: current.failed || 0}};
+          autoStatus = {{state: 'idle', total: current.total || 0, form_control_total: current.form_control_total || 0, recognized_total: current.recognized_total || 0, completed: current.completed || 0, filled: current.filled || 0, failed: current.failed || 0}};
           renderAutoFill();
         }}
       }}, 2200);
@@ -444,7 +446,7 @@ def install_live_control_script(enabled: bool = True) -> str:
     if (!enabled || (autoStatus && (autoStatus.state === 'requested' || autoStatus.state === 'filling'))) return;
     autoSequence += 1;
     window.__rfAutoFillRequest = {{seq: autoSequence}};
-    autoStatus = {{state: 'requested', seq: autoSequence, total: 0, completed: 0, filled: 0, failed: 0}};
+    autoStatus = {{state: 'requested', seq: autoSequence, total: 0, form_control_total: 0, recognized_total: 0, completed: 0, filled: 0, failed: 0}};
     expanded = true;
     renderAutoFill();
   }});

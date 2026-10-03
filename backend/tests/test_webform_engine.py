@@ -363,6 +363,64 @@ def test_date_option_mapping_uses_the_page_option_value_after_normalizing_the_da
     assert result.mappings[0].write_value() == "2022-03-09"
 
 
+def test_split_year_and_month_selects_receive_one_profile_date():
+    engine = FormEngine()
+    controls = engine.snapshot_controls(
+        [
+            {
+                "index": 0,
+                "type": "select",
+                "label": "年",
+                "nearby_text": "教育经历 毕业时间",
+                "options": [{"v": "2026", "t": "2026"}, {"v": "2025", "t": "2025"}],
+                "selector": '[data-rf-index="0"]',
+            },
+            {
+                "index": 1,
+                "type": "select",
+                "label": "月",
+                "nearby_text": "教育经历 毕业时间",
+                "options": [{"v": "06", "t": "06"}, {"v": "05", "t": "05"}],
+                "selector": '[data-rf-index="1"]',
+            },
+        ]
+    )
+
+    result = engine.match_fields(controls, {"education_end": "2026-06"})
+
+    assert len(result.mappings) == 2
+    assert [mapping.write_value() for mapping in result.mappings] == ["2026", "06"]
+    assert {mapping.field for mapping in result.mappings} == {"education_end"}
+
+
+def test_ambiguous_start_end_date_label_is_not_linked_as_one_date_group():
+    engine = FormEngine()
+    controls = engine.snapshot_controls(
+        [
+            {
+                "index": 0,
+                "type": "select",
+                "label": "年",
+                "nearby_text": "教育经历 起止时间",
+                "date_order": 1,
+                "options": [{"v": "2026", "t": "2026"}],
+                "selector": '[data-rf-index="0"]',
+            },
+            {
+                "index": 1,
+                "type": "select",
+                "label": "月",
+                "nearby_text": "教育经历 起止时间",
+                "date_order": 1,
+                "options": [{"v": "06", "t": "06"}],
+                "selector": '[data-rf-index="1"]',
+            },
+        ]
+    )
+
+    assert all(not control.date_group for control in controls)
+
+
 def test_linked_native_select_is_kept_for_resolution_after_parent_options_load():
     engine = FormEngine()
     controls = engine.snapshot_controls(
@@ -732,6 +790,82 @@ def test_site_declared_never_fill_tokens_are_skipped(token, kind):
 
     assert result.mappings == []
     assert any(kind in note.reason for note in result.skipped)
+
+
+def test_shared_page_context_does_not_trigger_password_block():
+    """作品链接说明里的“如有密码”不能把整页普通字段误判成密码框。"""
+    engine = FormEngine()
+    shared_context = "如作品无法上传，请提供作品网盘链接（如有密码，用分号分隔）"
+    controls = engine.snapshot_controls(
+        [
+            {
+                "index": 0,
+                "type": "text",
+                "label": "姓名",
+                "nearby_text": shared_context,
+                "aria_describedby": shared_context,
+                "selector": '[data-rf-index="0"]',
+            },
+            {
+                "index": 1,
+                "type": "text",
+                "placeholder": "请输入邮箱",
+                "nearby_text": shared_context,
+                "aria_describedby": shared_context,
+                "selector": '[data-rf-index="1"]',
+            },
+            {
+                "index": 2,
+                "type": "select",
+                "label": "性别",
+                "nearby_text": shared_context,
+                "aria_describedby": shared_context,
+                "options": [
+                    {"v": "", "t": "请选择", "d": False},
+                    {"v": "male", "t": "男", "d": False},
+                    {"v": "female", "t": "女", "d": False},
+                ],
+                "selector": '[data-rf-index="2"]',
+            },
+            {
+                "index": 3,
+                "type": "tel",
+                "label": "手机号",
+                "nearby_text": shared_context,
+                "aria_describedby": shared_context,
+                "selector": '[data-rf-index="3"]',
+            },
+        ]
+    )
+
+    result = engine.match_fields(
+        controls,
+        {
+            "name": "张三",
+            "email": "zhangsan@example.com",
+            "gender": "男",
+            "phone": "13800000000",
+        },
+    )
+
+    assert result.skipped == []
+    assert {mapping.field for mapping in result.mappings} == {"name", "email", "gender", "phone"}
+
+
+@pytest.mark.parametrize(
+    "control, expected_word",
+    [
+        (Control(index=0, type="text", label="密码"), "密码"),
+        (Control(index=1, type="text", placeholder="请输入密码"), "密码"),
+        (Control(index=2, type="text", name="password"), "password"),
+    ],
+)
+def test_explicit_password_text_is_still_blocked(control, expected_word):
+    engine = FormEngine()
+
+    reason = engine.skip_reason(control)
+
+    assert reason == f"涉及“{expected_word}”，永不自动填写"
 
 
 def test_autocomplete_off_is_not_treated_as_a_block():

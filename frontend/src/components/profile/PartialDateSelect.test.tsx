@@ -18,6 +18,7 @@ describe("PartialDateSelect", () => {
   it("提供年、月、日三个选择框，并支持至今选项", () => {
     render(<PartialDateSelect label="教育日期" allowOngoing />);
 
+    expect(document.querySelector(".profile-partial-date-select__controls")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "教育日期年份" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "教育日期月份" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "教育日期日期" })).toBeInTheDocument();

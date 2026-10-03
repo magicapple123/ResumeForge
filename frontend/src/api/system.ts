@@ -6,6 +6,17 @@ export interface ShutdownResult {
   message: string;
 }
 
+export interface DiagnosticsSnapshot {
+  generated_at: string;
+  app_version: string;
+  events: Array<{
+    at: string;
+    event: string;
+    request_id: string;
+    details: Record<string, unknown>;
+  }>;
+}
+
 /**
  * 退出应用（停止前端与后端进程）。
  *
@@ -14,4 +25,8 @@ export interface ShutdownResult {
  */
 export function shutdownApp(): Promise<ShutdownResult> {
   return request("/system/shutdown", { method: "POST" });
+}
+
+export function getDiagnostics(): Promise<DiagnosticsSnapshot> {
+  return request("/system/diagnostics");
 }

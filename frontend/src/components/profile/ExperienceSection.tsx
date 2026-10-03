@@ -27,7 +27,7 @@ export function ExperienceSection({ editable }: Props) {
       }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
-          <Col xs={24} md={8}>
+          <Col xs={24} md={7}>
             <Form.Item
               name={[field.name, "company"]}
               label="公司"
@@ -36,17 +36,17 @@ export function ExperienceSection({ editable }: Props) {
               <Input placeholder="如：字节跳动" />
             </Form.Item>
           </Col>
-          <Col xs={24} md={8}>
+          <Col xs={24} md={7}>
             <Form.Item name={[field.name, "role"]} label="职位">
               <Input placeholder="如：市场部实习生" />
             </Form.Item>
           </Col>
-          <Col xs={12} md={4}>
+          <Col xs={24} sm={12} md={5}>
             <Form.Item name={[field.name, "start_date"]} label="开始">
               <PartialDateSelect label={`实习工作经历${field.name + 1}开始时间`} />
             </Form.Item>
           </Col>
-          <Col xs={12} md={4}>
+          <Col xs={24} sm={12} md={5}>
             <Form.Item name={[field.name, "end_date"]} label="结束">
               <PartialDateSelect label={`实习工作经历${field.name + 1}结束时间`} allowOngoing />
             </Form.Item>

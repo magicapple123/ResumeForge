@@ -98,8 +98,8 @@ export default function PartialDateSelect({
   const unsupported = value.trim() && !parts;
 
   return (
-    <div>
-      <Space.Compact block>
+    <div className="profile-partial-date-select">
+      <Space.Compact block className="profile-partial-date-select__controls">
         <Select
           id={id}
           aria-label={yearOnly ? label : `${label}年份`}

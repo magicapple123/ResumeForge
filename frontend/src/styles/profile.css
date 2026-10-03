@@ -269,3 +269,36 @@
   font-size: 13px;
   line-height: 1.7;
 }
+
+/* 日期控件在经历卡片里常常同时出现年/月/日三个下拉；让它们按可用宽度分配，
+   不再因为外层日期列偏窄而把选择器压成难以点击的细条。 */
+.profile-partial-date-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-partial-date-select__controls {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-partial-date-select__controls > .ant-select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.profile-partial-date-select__controls > .ant-select:first-child {
+  flex-grow: 1.2;
+}
+
+@media (max-width: 640px) {
+  .profile-partial-date-select__controls {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .profile-partial-date-select__controls > .ant-select {
+    flex: 1 1 88px;
+  }
+}

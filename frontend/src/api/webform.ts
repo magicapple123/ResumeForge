@@ -129,6 +129,14 @@ export function stopWebFormLive(): Promise<WebFormLive> {
   return request("/webform/live/stop", { method: "POST" });
 }
 
+/** 只切换智能逐项填表，不销毁监听会话和页面上的悬浮球。 */
+export function setWebFormLiveEnabled(enabled: boolean): Promise<WebFormLive> {
+  return request("/webform/live/enabled", {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 export function getWebFormLiveStatus(): Promise<WebFormLive> {
   return request("/webform/live/status");
 }
