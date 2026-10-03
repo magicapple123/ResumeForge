@@ -52,6 +52,7 @@ class RenderContext:
 
     template: str = "classic"
     template_html: str = ""
+    style_config: dict | None = None
     page_limit: int = 1
     font_scale: str = "standard"
     format_config: dict | None = None
@@ -106,6 +107,7 @@ def _render_html(resume: ResumeContent, context: RenderContext) -> RenderedArtif
             page_limit=context.page_limit,
             font_scale=context.font_scale,
             format_config=context.format_config,
+            style_config=context.style_config,
             template_html=context.template_html,
         ).encode("utf-8"),
         media_type="text/html; charset=utf-8",
@@ -187,6 +189,7 @@ def build_export(
     effective_context = RenderContext(
         template=context.template,
         template_html=context.template_html,
+        style_config=context.style_config,
         page_limit=request.page_limit if request.page_limit is not None else context.page_limit,
         font_scale=request.font_scale or context.font_scale,
         format_config=context.format_config,

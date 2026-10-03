@@ -111,6 +111,17 @@ export interface ResumeFormatField {
   description?: string;
 }
 
+export interface ResumeStyleField {
+  key: string;
+  label: string;
+  type: "color" | "number" | "select";
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: { value: string; label: string }[];
+  description?: string;
+}
+
 export interface ResumeFormatPreset {
   name: string;
   label: string;
@@ -125,6 +136,7 @@ export interface ResumeTemplateCatalog {
   font_scales: ResumeFontScaleOption[];
   /** 格式模板的可调参数清单与内置预设。 */
   format_fields: ResumeFormatField[];
+  style_fields: ResumeStyleField[];
   format_presets: ResumeFormatPreset[];
   /** 正文分区清单（「调整板块顺序」用）。键名、标签与默认顺序都由后端下发。 */
   section_options: { key: string; label: string }[];

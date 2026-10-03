@@ -23,6 +23,7 @@ from .resume.resume_templates import (
     template_spec,
     validated_format_config,
 )
+from .resume.resume_template_style import style_css, validated_style_config
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
@@ -194,6 +195,7 @@ def render_html(
     page_limit: int = 1,
     font_scale: str = DEFAULT_FONT_SCALE,
     format_config: dict | None = None,
+    style_config: dict | None = None,
     template_html: str = "",
 ) -> str:
     """渲染简历 HTML。
@@ -207,7 +209,11 @@ def render_html(
     csp_nonce = secrets.token_hex(16)
     spec = template_spec(template)
     scale = font_scale_spec(font_scale)
-    overrides = validated_format_config(format_config)
+    style_values = validated_style_config(style_config)
+    if spec["name"] == "split" and "column_count" not in style_values:
+        style_values["column_count"] = 2
+    format_values = validated_format_config(format_config)
+    overrides = {**style_values, **format_values}
     base_px = float(scale["base_px"])
     adjust = overrides.get("font_scale_adjust")
     if isinstance(adjust, (int, float)):
@@ -220,6 +226,7 @@ def render_html(
         "base_px": base_px,
         # 正文分区顺序（页眉不参与）。模板里有页码、A4 适配脚本等同样读这个上下文。
         "resume_section_order": resolved_section_order(overrides),
+        "template_config": style_values,
     }
 
     if template_html:
@@ -232,7 +239,12 @@ def render_html(
     else:
         html = _env.get_template(spec["file"]).render(**context)
 
-    css = format_css(overrides)
+    css_blocks = [
+        style_css(style_values),
+        format_css(style_values),
+        format_css(format_values),
+    ]
+    css = "\n".join(block for block in css_blocks if block)
     if css:
         html = _inject_before(html, f"<style>\n{css}\n</style>", "</head>")
     return html

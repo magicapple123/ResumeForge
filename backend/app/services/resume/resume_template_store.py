@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import re
 
 from sqlalchemy.orm import Session
@@ -27,6 +28,7 @@ from .resume_templates import (
     RESUME_TEMPLATES,
     validated_format_config,
 )
+from .resume_template_style import MAX_STYLE_CONFIG_CHARS, validated_style_config
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,13 @@ _CSP_META = (
 
 class TemplateError(ValueError):
     """模板不合法：消息直接展示给用户。"""
+
+
+def _validated_style_config(raw: dict | None) -> dict:
+    normalized = validated_style_config(raw)
+    if len(json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))) > MAX_STYLE_CONFIG_CHARS:
+        raise TemplateError("模板视觉配置过大，请减少自定义图片或装饰后再保存")
+    return normalized
 
 
 def sanitize_template_html(html: str) -> str:
@@ -144,7 +153,7 @@ def create_user_template(
 
     if kind == TEMPLATE_KIND_STYLE:
         template_html = sanitize_template_html(validate_template_html(html))
-        config = {}
+        config = _validated_style_config(config)
     else:
         template_html = ""
         normalized = validated_format_config(config)
@@ -187,11 +196,14 @@ def update_user_template(
         template.description = description.strip()[:255]
     if html is not None and template.kind == TEMPLATE_KIND_STYLE:
         template.html = sanitize_template_html(validate_template_html(html))
-    if config is not None and template.kind == TEMPLATE_KIND_FORMAT:
-        normalized = validated_format_config(config)
-        if not normalized:
-            raise TemplateError("格式模板至少需要设置一项参数")
-        template.config = normalized
+    if config is not None:
+        if template.kind == TEMPLATE_KIND_STYLE:
+            template.config = _validated_style_config(config)
+        elif template.kind == TEMPLATE_KIND_FORMAT:
+            normalized = validated_format_config(config)
+            if not normalized:
+                raise TemplateError("格式模板至少需要设置一项参数")
+            template.config = normalized
     if enabled is not None:
         template.enabled = enabled
     db.commit()
@@ -219,6 +231,17 @@ def resolve_style_template(db: Session, name: str) -> tuple[str, str]:
     if user is not None and user.kind == TEMPLATE_KIND_STYLE and user.enabled and user.html:
         return DEFAULT_TEMPLATE, user.html
     return DEFAULT_TEMPLATE, ""
+
+
+def resolve_style_config(db: Session, name: str) -> dict:
+    """解析用户样式模板的视觉配置；内置模板与旧模板返回空字典。"""
+    key = (name or "").strip()
+    if key in RESUME_TEMPLATES:
+        return {}
+    user = find_by_name(db, key)
+    if user is not None and user.kind == TEMPLATE_KIND_STYLE and user.enabled:
+        return _validated_style_config(user.config)
+    return {}
 
 
 def resolve_format_config(db: Session, name: str) -> dict:
@@ -278,11 +301,11 @@ __all__ = [
     "list_user_templates",
     "resolve_format_config",
     "resolve_style_template",
+    "resolve_style_config",
     "sanitize_template_html",
     "update_user_template",
     "validate_template_html",
     "validate_template_name",
 ]
-
 
 

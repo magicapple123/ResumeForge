@@ -73,8 +73,23 @@ class TemplatePreviewRequest(BaseModel):
     html: str = Field(default="", max_length=MAX_TEMPLATE_HTML_CHARS)
     format_name: str = Field(default="", max_length=64)
     format_config: dict[str, Any] = Field(default_factory=dict)
+    style_config: dict[str, Any] = Field(default_factory=dict)
     page_limit: int = Field(default=1, ge=1, le=3)
     font_scale: Literal["small", "standard", "large"] = "standard"
     content: ResumeContent | None = None
     # 用哪份已保存的简历做预览（优先于内置示例，低于显式传入的 content）。
     resume_id: int | None = Field(default=None, ge=1)
+
+
+class TemplateRecognitionDraft(BaseModel):
+    """参考模板识别草稿：确认前只返回前端，不写入数据库。"""
+
+    name: str = Field(default="导入的模板", max_length=40)
+    description: str = Field(default="", max_length=255)
+    kind: Literal["style"] = "style"
+    html: str = Field(default="", max_length=MAX_TEMPLATE_HTML_CHARS)
+    config: dict[str, Any] = Field(default_factory=dict)
+    confidence: dict[str, float] = Field(default_factory=dict)
+    evidence: list[str] = Field(default_factory=list, max_length=20)
+    warnings: list[str] = Field(default_factory=list, max_length=20)
+    source_names: list[str] = Field(default_factory=list, max_length=8)

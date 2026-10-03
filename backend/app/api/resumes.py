@@ -73,6 +73,7 @@ from ..services.resume.resume_template_store import (
     custom_format_options,
     custom_template_options,
     resolve_format_config,
+    resolve_style_config,
     resolve_style_template,
 )
 from ..services.resume.resume_templates import (
@@ -87,6 +88,7 @@ from ..services.resume.resume_templates import (
     validated_format_config,
     template_options_with_custom,
 )
+from ..services.resume.resume_template_style import style_field_options
 from ..services.resume.resume_sections import DEFAULT_SECTION_ORDER, section_label
 from ..services.settings_service import get_llm_config
 from ..services.watermark import WatermarkError
@@ -112,6 +114,7 @@ def read_resume_templates(db: Session = Depends(get_db)):
         "templates": template_options_with_custom(custom_template_options(db)),
         "font_scales": font_scale_options(),
         "format_fields": format_field_options(),
+        "style_fields": format_field_options() + style_field_options(),
         # 正文分区清单（给「调整板块顺序」用）。键名、标签与顺序定义都在
         # services/resume/resume_sections.py，四个渲染器读的是同一份。
         "section_options": [
@@ -690,6 +693,7 @@ def render_resume(payload: ResumeRenderRequest, db: Session = Depends(get_db)):
             page_limit=payload.page_limit,
             font_scale=payload.font_scale,
             format_config=config,
+            style_config=resolve_style_config(db, payload.template),
             template_html=template_html,
         ),
         media_type="text/html; charset=utf-8",
@@ -723,6 +727,7 @@ def _export_record(
     context = RenderContext(
         template=export_template,
         template_html=export_html,
+        style_config=resolve_style_config(db, record.template),
         page_limit=record.page_limit,
         font_scale=record.font_scale,
         format_config=record_format_config(db, record),

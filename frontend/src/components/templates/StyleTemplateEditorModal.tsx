@@ -8,15 +8,16 @@
  *    模板语法写错时错误信息直接显示在预览区，不会等到保存后才发现。
  */
 import { Alert, App, Button, Form, Input, Modal, Space, Spin, Typography } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { previewResumeTemplate } from "../../api/resumes";
 import {
   createResumeTemplate,
   fetchResumeTemplate,
   updateResumeTemplate,
 } from "../../api/resumeTemplates";
-import type { ResumeFontScale } from "../../types";
+import type { ResumeFontScale, ResumeStyleField } from "../../types";
 import A4PreviewFrame from "./A4PreviewFrame";
+import TemplateStyleControls from "./TemplateStyleControls";
 
 interface Props {
   open: boolean;
@@ -25,6 +26,8 @@ interface Props {
   /** 新建时的初始 HTML（通常是从某个内置模板复制的副本）。 */
   initialHtml?: string;
   initialName?: string;
+  initialConfig?: Record<string, unknown>;
+  fields?: ResumeStyleField[];
   fontScale?: ResumeFontScale;
   onClose: () => void;
   onSaved: () => void;
@@ -39,6 +42,8 @@ export default function StyleTemplateEditorModal({
   templateId,
   initialHtml = "",
   initialName = "",
+  initialConfig = {},
+  fields = [],
   fontScale = "standard",
   onClose,
   onSaved,
@@ -47,16 +52,19 @@ export default function StyleTemplateEditorModal({
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState("");
   const [html, setHtml] = useState(initialHtml);
+  const [config, setConfig] = useState<Record<string, unknown>>(initialConfig);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState("");
   const [previewError, setPreviewError] = useState("");
   const [previewing, setPreviewing] = useState(false);
+  const previewSequence = useRef(0);
 
   useEffect(() => {
     if (!open) return;
     setName(initialName);
     setHtml(initialHtml);
+    setConfig(initialConfig);
     setDescription("");
     setPreview("");
     setPreviewError("");
@@ -67,32 +75,46 @@ export default function StyleTemplateEditorModal({
         setName(detail.name);
         setDescription(detail.description);
         setHtml(detail.html);
+        setConfig(detail.config);
       })
       .catch((error) => message.error(error instanceof Error ? error.message : "读取模板失败"))
       .finally(() => setLoading(false));
-  }, [open, templateId, initialName, initialHtml, message]);
+  }, [open, templateId, initialName, initialHtml, initialConfig, message]);
 
   const runPreview = useCallback(
     async (source: string) => {
       if (!source.trim()) return;
+      const sequence = ++previewSequence.current;
       setPreviewing(true);
       setPreviewError("");
       try {
-        setPreview(await previewResumeTemplate({ html: source, font_scale: fontScale }));
+        const rendered = await previewResumeTemplate({
+          html: source,
+          style_config: config,
+          font_scale: fontScale,
+        });
+        if (sequence === previewSequence.current) setPreview(rendered);
       } catch (error) {
-        setPreview("");
-        setPreviewError(error instanceof Error ? error.message : "预览渲染失败");
+        if (sequence === previewSequence.current) {
+          setPreview("");
+          setPreviewError(error instanceof Error ? error.message : "预览渲染失败");
+        }
       } finally {
-        setPreviewing(false);
+        if (sequence === previewSequence.current) setPreviewing(false);
       }
     },
-    [fontScale],
+    [config, fontScale],
   );
 
-  // 首次打开就渲染一次，用户不用先点"预览"才知道长什么样。
+  // 首次打开及微调后自动预览；短暂停顿合并连续输入，避免每次按键都发请求。
   useEffect(() => {
-    if (open && html.trim()) void runPreview(html);
-  }, [open, html, runPreview]);
+    if (!open || !html.trim()) return;
+    const timer = setTimeout(() => void runPreview(html), 180);
+    return () => {
+      clearTimeout(timer);
+      previewSequence.current += 1;
+    };
+  }, [open, html, config, runPreview]);
 
   const save = async () => {
     if (!name.trim()) {
@@ -106,10 +128,10 @@ export default function StyleTemplateEditorModal({
     setSaving(true);
     try {
       if (templateId) {
-        await updateResumeTemplate(templateId, { name, description, html });
+        await updateResumeTemplate(templateId, { name, description, html, config });
         message.success("模板已更新");
       } else {
-        await createResumeTemplate({ name, description, html, kind: "style" });
+        await createResumeTemplate({ name, description, html, config, kind: "style" });
         message.success("模板已创建，可以在生成简历时选用");
       }
       onSaved();
@@ -156,7 +178,18 @@ export default function StyleTemplateEditorModal({
                 onChange={(event) => setDescription(event.target.value)}
               />
             </Form.Item>
-            <Alert type="info" showIcon title={STARTER_HINT} style={{ marginBottom: 12 }} />
+            <Alert
+              type="info"
+              showIcon
+              title={STARTER_HINT}
+              description="HTML 预览与 HTML 导出使用完整自制样式；PDF / Word 使用后端版式引擎，能沿用强调色、字号、行高和页边距等通用参数，但不会完整复现自定义双栏、装饰图或任意 CSS。"
+              style={{ marginBottom: 12 }}
+            />
+            {fields.length > 0 ? (
+              <Form.Item label="视觉与版式微调">
+                <TemplateStyleControls fields={fields} values={config} onChange={setConfig} />
+              </Form.Item>
+            ) : null}
             <Form.Item label="模板 HTML">
               <Input.TextArea
                 value={html}

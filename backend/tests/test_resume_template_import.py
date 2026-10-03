@@ -19,10 +19,14 @@ from app.services.resume.resume_template_import import (
     TemplateImportError,
     TemplateImportSource,
     build_import_messages,
+    build_design_import_messages,
     derive_format_template,
+    derive_style_template,
     missing_format_keys,
     source_summary,
+    summarize_document_structure,
 )
+from app.services.resume.resume_template_style import validated_style_config
 from app.services.resume.resume_templates import FORMAT_FIELD_KEYS
 
 
@@ -120,6 +124,58 @@ def test_source_summary_says_what_was_analyzed():
     assert source_summary(TemplateImportSource(filename="a.txt")) == "空文件"
 
 
+def test_visual_analysis_sends_document_structure_without_resume_contents():
+    source = TemplateImportSource(
+        filename="张三-真实简历.docx",
+        text="张三\n13800138000\nzhangsan@example.com\n教育经历\n某某大学",
+    )
+    messages = build_design_import_messages(source)
+    serialized = str(messages)
+    assert "张三" not in serialized
+    assert "13800138000" not in serialized
+    assert "zhangsan@example.com" not in serialized
+    assert "某某大学" not in serialized
+    assert "paragraph_count" in serialized
+    assert "education" in summarize_document_structure(source.text)
+
+
+@pytest.mark.asyncio
+async def test_style_import_returns_rich_visual_draft():
+    provider = ImportProvider(
+        '{"name":"社论模板","description":"衬线与双栏","config":'
+        '{"accent":"#8B3A3A","column_count":2,"section_title_style":"underline"},'
+        '"confidence":{"accent":0.9,"column_count":0.8},'
+        '"evidence":["标题使用酒红色"],"warnings":[]}'
+    )
+    result = await derive_style_template(
+        provider,
+        TemplateImportSource(
+            filename="目标-1.png",
+            image_data_urls=["data:image/png;base64,AA", "data:image/png;base64,BB"],
+        ),
+    )
+    assert result["config"] == {
+        "accent": "#8b3a3a",
+        "column_count": 2,
+        "section_title_style": "underline",
+    }
+    assert result["confidence"]["column_count"] == 0.8
+    assert len(provider.messages[-1][1]["content"]) == 3
+
+
+def test_style_config_accepts_embedded_raster_and_rejects_external_image_urls():
+    valid = "data:image/png;base64," + base64.b64encode(TINY_PNG).decode("ascii")
+    config = validated_style_config(
+        {
+            "badges": [
+                {"label": "证书", "image": valid},
+                {"label": "远程图片", "image": "https://example.invalid/image.png"},
+            ]
+        }
+    )
+    assert config["badges"] == [{"image": valid, "label": "证书", "alt": "证书"}]
+
+
 # ===== 接口层 =====
 
 
@@ -181,6 +237,32 @@ def test_endpoint_creates_a_format_template_that_can_be_used(client, db_session,
 
     listed = client.get("/api/resume-templates", params={"kind": "format"}).json()
     assert any(item["id"] == body["id"] for item in listed)
+
+
+def test_analyze_endpoint_returns_a_style_draft_without_saving(client, monkeypatch):
+    from app.api import resume_templates as api_module
+
+    provider = ImportProvider(
+        '{"name":"参考样式","description":"酒红居中","config":{"accent":"#8B3A3A",'
+        '"header_align":"center","column_count":2},"confidence":{"accent":0.9},'
+        '"evidence":["标题为酒红色"],"warnings":[]}'
+    )
+    monkeypatch.setattr(api_module, "get_llm_config", lambda _db: provider.config)
+    monkeypatch.setattr(api_module, "create_provider", lambda _config: provider)
+
+    response = client.post(
+        "/api/resume-templates/analyze-from-files",
+        files=[
+            ("files", ("第一页.png", TINY_PNG, "image/png")),
+            ("files", ("第二页.png", TINY_PNG, "image/png")),
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["kind"] == "style"
+    assert body["config"]["column_count"] == 2
+    assert body["source_names"] == ["第一页.png", "第二页.png"]
+    assert client.get("/api/resume-templates").json() == []
 
 
 def test_endpoint_accepts_a_pdf_and_uses_its_text(client, db_session, monkeypatch):

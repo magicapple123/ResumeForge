@@ -1,5 +1,9 @@
 /** 简历模板工作台接口：自制样式/格式模板的增删改查。 */
-import type { ResumeTemplateDetail, ResumeTemplatePayload } from "../types";
+import type {
+  ResumeTemplateDetail,
+  ResumeTemplatePayload,
+  TemplateRecognitionDraft,
+} from "../types";
 import { ApiError, extractError, request } from "./client";
 
 export function listResumeTemplates(kind?: "style" | "format"): Promise<ResumeTemplateDetail[]> {
@@ -9,7 +13,7 @@ export function listResumeTemplates(kind?: "style" | "format"): Promise<ResumeTe
 /** 读取内置模板源码，用于「从内置模板复制一份」开始自制。 */
 export function fetchBuiltinTemplateSource(
   name: string,
-): Promise<{ name: string; label: string; html: string }> {
+): Promise<{ name: string; label: string; html: string; config?: Record<string, unknown> }> {
   return request(`/resume-templates/builtin-source?name=${encodeURIComponent(name)}`);
 }
 
@@ -50,4 +54,20 @@ export async function importTemplateFromFile(file: File, name = ""): Promise<Res
   });
   if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
   return (await resp.json()) as ResumeTemplateDetail;
+}
+
+/** 分析多份参考图片/文档，只返回可编辑草稿，不落库。 */
+export async function analyzeTemplateFromFiles(
+  files: File[],
+  name = "",
+): Promise<TemplateRecognitionDraft> {
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+  if (name.trim()) formData.append("name", name.trim());
+  const resp = await fetch("/api/resume-templates/analyze-from-files", {
+    method: "POST",
+    body: formData,
+  });
+  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
+  return (await resp.json()) as TemplateRecognitionDraft;
 }

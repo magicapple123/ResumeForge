@@ -16,6 +16,12 @@ export const TEMPLATE_CATALOG: ResumeTemplateCatalog = {
     { name: "elegant", label: "优雅", description: "居中标题与衬线字，留白舒展" },
     { name: "technical", label: "技术", description: "色块标题与等宽辅助信息，信息密度高" },
     { name: "minimal", label: "极简", description: "只用黑灰与字号层级，没有色块与装饰" },
+    {
+      name: "editorial",
+      label: "社论",
+      description: "衬线字体与细线分隔，适合文商科、内容与管理岗位",
+    },
+    { name: "split", label: "分栏", description: "正文双栏、信息密度高，适合经历与技能较多的简历" },
   ],
   font_scales: [
     {
@@ -48,6 +54,30 @@ export const TEMPLATE_CATALOG: ResumeTemplateCatalog = {
   format_fields: [
     { key: "accent", label: "强调色", type: "color" },
     { key: "line_height", label: "行高", type: "number", min: 1.2, max: 2.2, step: 0.05 },
+  ],
+  style_fields: [
+    { key: "accent", label: "强调色", type: "color" },
+    { key: "text_color", label: "正文颜色", type: "color" },
+    { key: "muted_color", label: "辅助文字颜色", type: "color" },
+    { key: "line_color", label: "分隔线颜色", type: "color" },
+    {
+      key: "font_scale_adjust",
+      label: "字号系数",
+      type: "number",
+      min: 0.88,
+      max: 1.16,
+      step: 0.02,
+    },
+    { key: "line_height", label: "行高", type: "number", min: 1.2, max: 2.2, step: 0.05 },
+    { key: "page_padding", label: "页边距（mm）", type: "number", min: 8, max: 26, step: 1 },
+    { key: "section_gap", label: "区块间距", type: "number", min: 0.6, max: 2.2, step: 0.1 },
+    {
+      key: "font_family",
+      label: "字体风格",
+      type: "select",
+      options: [{ value: "sans", label: "无衬线" }],
+    },
+    { key: "column_count", label: "正文栏数", type: "number", min: 1, max: 2, step: 1 },
   ],
   format_presets: [
     { name: "standard", label: "标准", description: "不改动样式模板自身的版式", config: {} },

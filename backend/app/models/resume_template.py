@@ -9,7 +9,7 @@
 - ``format``：一组版式参数（字号基准、页边距、行高、区块间距……），可以叠加在任意
   样式模板之上。
 
-内置模板（classic / modern / compact）不在这个表里——它们是随包发送的 Jinja 文件，
+内置模板（classic / modern / compact / elegant / technical / minimal / editorial / split）不在这个表里——它们是随包发送的 Jinja 文件，
 放在表里会让"升级应用"变成"覆盖用户数据"。表里只存用户自己导入或制作的模板。
 """
 from datetime import datetime

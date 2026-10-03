@@ -53,16 +53,22 @@ _REQUIRED_FILES: Final[tuple[tuple[str, str], ...]] = (
     ("app/prompts/resume_revise.md", "按用户指令修订简历的提示词"),
     ("app/prompts/resume_rewrite_field.md", "按栏定向改写提示词"),
     ("app/prompts/resume_template_import.md", "目标模板导入分析提示词"),
+    ("app/prompts/resume_template_design_import.md", "参考模板视觉分析提示词"),
     ("app/prompts/resume_risk.md", "简历风险深挖提示词"),
     ("app/prompts/resume_star.md", "简历 STAR 改写提示词"),
     ("app/prompts/resume_suggestions.md", "简历改进建议提示词"),
     ("app/prompts/resume_translate.md", "简历中英互译提示词"),
     ("app/prompts/web_form_match.md", "网申填表的 AI 字段识别提示词"),
-    # 简历模板：三套版式加两段共用片段。缺了它们在生成简历时才会炸，而那时用户
+    # 简历模板：内置样式加三段共用片段。缺了它们在生成简历时才会炸，而那时用户
     # 已经等了一轮模型调用；在这里拦住，报的是"包不完整"而不是一段渲染栈。
     ("app/templates/resume.html.j2", "经典简历模板"),
     ("app/templates/resume_modern.html.j2", "现代简历模板"),
     ("app/templates/resume_compact.html.j2", "精简简历模板"),
+    ("app/templates/resume_elegant.html.j2", "优雅简历模板"),
+    ("app/templates/resume_technical.html.j2", "技术简历模板"),
+    ("app/templates/resume_minimal.html.j2", "极简简历模板"),
+    ("app/templates/resume_editorial.html.j2", "社论简历模板"),
+    ("app/templates/resume_split.html.j2", "分栏简历模板"),
     # `_resume_sections.j2` 里 `{% import "_resume_blocks.j2" %}`：少了它，任何一次
     # 简历渲染都会在 Jinja 编译阶段失败（而且报错信息不会指出缺的是哪个文件）。
     # 这个文件曾经只存在于工作区、没进版本库，于是按 HEAD 打包的发行版缺它——

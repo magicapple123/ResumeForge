@@ -239,7 +239,7 @@ def test_resume_template_catalog_and_layout_update(client):
     body = catalog.json()
     names = {item["name"] for item in body["templates"]}
     # 内置样式模板（自制模板以 custom=True 追加在后面，未创建时应为空）。
-    assert {"classic", "modern", "compact", "elegant", "technical", "minimal"} <= names
+    assert {"classic", "modern", "compact", "elegant", "technical", "minimal", "editorial", "split"} <= names
     assert [item for item in body["templates"] if item["custom"]] == []
     assert {item["name"] for item in body["font_scales"]} == {"small", "standard", "large"}
     # 每个档位都必须带 `base_px`，且**与后端唯一的档位表 FONT_SCALES 完全一致**：
@@ -253,6 +253,14 @@ def test_resume_template_catalog_and_layout_update(client):
     assert all(item["base_px"] > 0 for item in body["font_scales"])
     # 格式模板的参数清单与内置预设也要一起下发：生成弹窗与工作台共用这一份。
     assert {item["key"] for item in body["format_fields"]} >= {"accent", "line_height", "page_padding"}
+    assert {item["key"] for item in body["style_fields"]} >= {
+        "accent",
+        "line_height",
+        "page_padding",
+        "font_family",
+        "column_count",
+        "photo_shape",
+    }
     assert "compact" in {item["name"] for item in body["format_presets"]}
     # 四个版式参数的默认值都由后端下发：生成弹窗每次打开按它重置，
     # 前端自行写死的话，改默认值就会变成两处不一致。
