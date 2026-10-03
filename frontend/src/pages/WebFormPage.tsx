@@ -20,28 +20,7 @@
  * 如果只有 URL 而没有当前标签页草稿，重放的是**「读到了什么」**，勾选会回到默认；有草稿时则连
  * 勾选、手改值和填充结果一起恢复。这样既不把临时状态塞进 URL，也不会在正常切页时丢失进度。
  */
-import {
-  ChromeOutlined,
-  DownloadOutlined,
-  FileSearchOutlined,
-  ReloadOutlined,
-  SettingOutlined,
-  StopOutlined,
-} from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Empty,
-  Space,
-  Spin,
-  Steps,
-  Switch,
-  Tag,
-  Tooltip,
-  Typography,
-} from "antd";
+import { Alert, App, Card, Space } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getDiagnostics } from "../api/system";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
@@ -72,17 +51,19 @@ import WebFormMemoryDialog, {
   type WebFormMemorySelection,
 } from "../components/webform/WebFormMemoryDialog";
 import WebFormPendingPanel from "../components/webform/WebFormPendingPanel";
-import WebFormPreviewTable from "../components/webform/WebFormPreviewTable";
 import WebFormRecordsPanel from "../components/webform/WebFormRecordsPanel";
-import WebFormBrowserUrlBar from "../components/webform/WebFormBrowserUrlBar";
 import { useBrowserStatus } from "../hooks/useBrowserStatus";
-import { FillRateTag } from "./webform/FillRateTag";
-import { LIVE_STATUS_META, WEB_FORM_STATUS_POLL_INTERVAL_MS } from "./webform/constants";
+import { AiAssistCard } from "./webform/AiAssistCard";
+import { BrowserControlCard } from "./webform/BrowserControlCard";
+import { FillResultCard } from "./webform/FillResultCard";
+import { LiveModeCard } from "./webform/LiveModeCard";
+import { PreviewCard } from "./webform/PreviewCard";
+import { ReadSnapshotCard } from "./webform/ReadSnapshotCard";
+import { WEB_FORM_STATUS_POLL_INTERVAL_MS } from "./webform/constants";
 import { useAiAvailable } from "./webform/useAiAvailable";
 import { useLiveSession } from "./webform/useLiveSession";
 import { useSnapshotUrl } from "./webform/useSnapshotUrl";
 import {
-  BROWSER_STATE_META,
   type WebFormExtraEntry,
   type WebFormFillResult,
   type WebFormLearningCandidate,
@@ -150,7 +131,6 @@ export default function WebFormPage() {
     () => (preview?.items ?? []).filter((item) => item.source === "ai"),
     [preview],
   );
-  const stateMeta = BROWSER_STATE_META[browser.data?.state ?? "stopped"];
 
   const {
     live,
@@ -523,303 +503,72 @@ export default function WebFormPage() {
         description="填充完成后请回到浏览器窗口逐项核对，确认无误后由你自己点击页面上的提交按钮。"
       />
 
-      <Card size="small" className="webform-browser-card">
-        <WebFormBrowserUrlBar
-          value={targetUrl}
-          history={urlHistory}
-          busy={busy === "start"}
-          onChange={setTargetUrl}
-          onOpen={() => void handleOpenUrl()}
-          onSelectHistory={(item) => setTargetUrl(item.url)}
-          onDeleteHistory={(item) => void handleDeleteUrlHistory(item)}
-        />
-        <div className="webform-browser-status-row">
-          <div className="webform-browser-status">
-            <Tag color={stateMeta.color}>{stateMeta.label}</Tag>
-            {browser.loading && !browser.data ? <Spin size="small" /> : null}
-            <Typography.Text type="secondary">
-              使用独立的网申专用浏览器（不会覆盖投递台或已有网申页面）
-            </Typography.Text>
-          </div>
-          <div className="webform-browser-actions">
-            {/* 三个按钮的职责**互不重合**，各管一件事：
-                  起停（启动/关闭浏览器）· 配置（浏览器设置）· 重查（刷新状态）。
-                设置不回显状态、刷新不改配置、起停只碰进程——所以这里也不该让它们并行。 */}
-            {running ? (
-              <Tooltip title="停掉这个受控浏览器窗口。里面的登录态会保留，下次启动不用重新登录">
-                <Button
-                  icon={<StopOutlined />}
-                  loading={busy === "stop"}
-                  disabled={anyBusy}
-                  onClick={handleStop}
-                >
-                  关闭浏览器
-                </Button>
-              </Tooltip>
-            ) : (
-              <Tooltip title="拉起这个受控浏览器窗口（独立于你日常用的浏览器）">
-                <Button
-                  type="primary"
-                  icon={<ChromeOutlined />}
-                  aria-label="开启专用浏览器"
-                  loading={busy === "start"}
-                  disabled={anyBusy}
-                  onClick={handleStart}
-                >
-                  开启专用浏览器
-                </Button>
-              </Tooltip>
-            )}
-            <Tooltip title="只改「用哪个浏览器」这类配置，不会启动或关闭它——改完要关掉再启动一次才生效">
-              <Button
-                icon={<SettingOutlined />}
-                disabled={anyBusy}
-                onClick={() => setBrowserSettingsOpen(true)}
-              >
-                浏览器设置
-              </Button>
-            </Tooltip>
-            <Tooltip title="重新读一次运行状态。平时它每 0.6 秒自己会刷；你刚关掉窗口或刚启动时可以用它立刻确认">
-              <Button
-                icon={<ReloadOutlined />}
-                loading={busy === "refresh"}
-                disabled={anyBusy}
-                onClick={() => void handleRefreshStatus()}
-                aria-label="刷新浏览器状态"
-              >
-                刷新状态
-              </Button>
-            </Tooltip>
-            <Tooltip title="导出不含简历内容、表单值和密钥的诊断信息，适合连同截图提交排查">
-              <Button
-                icon={<DownloadOutlined />}
-                loading={busy === "diagnostics"}
-                disabled={anyBusy}
-                onClick={() => void handleExportDiagnostics()}
-              >
-                导出诊断
-              </Button>
-            </Tooltip>
-            {running && (sessionActive || live?.running) ? (
-              <Tooltip title="结束这一次网申填写：收起面板、不清理资料，下次点「读取当前表单」重来">
-                <Button
-                  danger
-                  loading={busy === "end"}
-                  disabled={anyBusy}
-                  onClick={() => void handleEndSession()}
-                >
-                  结束本次填写
-                </Button>
-              </Tooltip>
-            ) : null}
-          </div>
-        </div>
-      </Card>
+      <BrowserControlCard
+        targetUrl={targetUrl}
+        onChangeTargetUrl={setTargetUrl}
+        urlHistory={urlHistory}
+        onDeleteHistory={(item) => void handleDeleteUrlHistory(item)}
+        busy={busy}
+        running={running}
+        sessionActive={sessionActive}
+        liveRunning={live?.running}
+        browserLoading={browser.loading}
+        browserHasData={Boolean(browser.data)}
+        browserState={browser.data?.state}
+        onStart={handleStart}
+        onStop={handleStop}
+        onOpenUrl={handleOpenUrl}
+        onOpenBrowserSettings={() => setBrowserSettingsOpen(true)}
+        onRefreshStatus={handleRefreshStatus}
+        onExportDiagnostics={handleExportDiagnostics}
+        onEndSession={handleEndSession}
+      />
       {/* AI 兜底：规则能确定就不调用模型，只有认不出的框才问一次。 */}
-      <Card size="small" title="未识别字段智能辅助">
-        <Space size="middle" wrap>
-          <Switch
-            checked={aiOn}
-            disabled={aiAvailable !== true}
-            onChange={setAiEnabled}
-            aria-label="AI 字段识别辅助"
-          />
-          {aiAvailable === true ? (
-            <Typography.Text type="secondary">
-              规则未识别的字段，可交由你在「设置」里配置的模型辅助判断。
-              <Typography.Text strong>
-                只发页面上本来就有的文字与字段名，不发你的资料内容
-              </Typography.Text>
-              ；命中的行会标上「AI 建议」并且默认不勾选。
-            </Typography.Text>
-          ) : (
-            <Typography.Text type="secondary">
-              尚未配置大模型，暂时无法使用。到「设置」页填好 Base URL
-              与模型名之后，规则认不出的框就能交给 AI 识别。
-            </Typography.Text>
-          )}
-          {live?.running ? (
-            <Typography.Text type="warning">改动会在下次「开启」时生效</Typography.Text>
-          ) : null}
-        </Space>
-      </Card>
+      <AiAssistCard
+        aiOn={aiOn}
+        aiAvailable={aiAvailable}
+        liveRunning={live?.running}
+        onAiEnabledChange={setAiEnabled}
+      />
 
       {/* 「智能逐项填表」：与上面的「读取当前表单 → 批量填」并存，不是替代。
           它不做预先快照——点到哪个框才现场匹配，所以不存在"页面一联动序号就失效"。 */}
-      <Card
-        size="small"
-        title="智能逐项填表"
-        extra={
-          <Button
-            aria-label={liveEnabled ? "关闭智能逐项填表" : "开启智能逐项填表"}
-            type={liveEnabled ? "default" : "primary"}
-            loading={busy === "live"}
-            // `live.running` 为真时后端一定已经开着浏览器（会话起不来会报 409），
-            // 所以它可以单独解除禁用：浏览器状态轮询慢半拍时按钮不会白灰着。
-            disabled={!running && !live?.running}
-            onClick={handleLiveToggle}
-          >
-            {liveEnabled ? "关闭" : "开启"}
-          </Button>
-        }
-      >
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          开启后回到浏览器窗口，
-          <Typography.Text strong>点到哪个框，就在框旁边给出资料里对应的值</Typography.Text>
-          ，你点「填入」才写进去。认不出来的时候点
-          <Typography.Text strong>「换个资料…」</Typography.Text>
-          会列出你填过的全部资料（按分区、可搜索），
-          <Typography.Text strong>你自己挑一条填</Typography.Text>
-          ——所以不必依赖它认得出这个框。适合逐项核对，也能帮到批量填不了的框。
-        </Typography.Paragraph>
-        {live?.running ? (
-          <Space size="middle" wrap>
-            <Tag
-              color={
-                liveEnabled ? (LIVE_STATUS_META[live.status]?.color ?? "processing") : "default"
-              }
-            >
-              {liveEnabled ? (LIVE_STATUS_META[live.status]?.label ?? "等待你点某个框") : "已关闭"}
-            </Tag>
-            {liveEnabled && live.field_label ? (
-              <Typography.Text>
-                {live.field_label}
-                {live.value ? ` → ${live.value}` : ""}
-              </Typography.Text>
-            ) : null}
-            {liveEnabled && live.source === "ai" ? <Tag color="blue">AI 建议</Tag> : null}
-            {liveEnabled && alternatives.length ? (
-              <Tooltip
-                title={alternatives.map((item) => `${item.label}：${item.value}`).join("\n")}
-              >
-                <Typography.Text type="secondary">
-                  另有 {alternatives.length} 个候选（在浏览器窗口里点选）
-                </Typography.Text>
-              </Tooltip>
-            ) : null}
-            {liveEnabled && live.note ? (
-              <Typography.Text type="secondary">{live.note}</Typography.Text>
-            ) : null}
-            {liveEnabled && rememberPending ? (
-              <>
-                <Tag color="warning">等待选择资料目标</Tag>
-                <Button size="small" onClick={() => setMemoryDialogOpen(true)}>
-                  选择保存位置
-                </Button>
-              </>
-            ) : null}
-            <Typography.Text type="secondary">
-              {liveEnabled ? `本次已填 ${live.filled} 个` : "悬浮球仍在浏览器中，可随时重新开启"}
-            </Typography.Text>
-          </Space>
-        ) : (
-          <Typography.Text type="secondary">未开启</Typography.Text>
-        )}
-      </Card>
-
-      <Steps
-        size="small"
-        current={step}
-        items={[
-          { title: "启动浏览器" },
-          { title: "打开网申页" },
-          { title: "核对映射" },
-          { title: "填充" },
-        ]}
+      <LiveModeCard
+        live={live}
+        liveEnabled={liveEnabled}
+        running={running}
+        busy={busy}
+        rememberPending={rememberPending}
+        alternatives={alternatives}
+        onToggle={handleLiveToggle}
+        onRequestMemoryDialog={() => setMemoryDialogOpen(true)}
       />
 
-      <Card size="small">
-        <Space size="middle" wrap>
-          <Button
-            type="primary"
-            icon={<FileSearchOutlined />}
-            disabled={!running}
-            loading={busy === "read"}
-            onClick={handleRead}
-          >
-            读取当前表单
-          </Button>
-          <Typography.Text type="secondary">
-            先在浏览器窗口里打开网申表单页，停在要填的那一步，再点这里。
-          </Typography.Text>
-        </Space>
-        {snapshot ? (
-          <div style={{ marginTop: 8 }}>
-            <Typography.Text type="secondary">
-              已读取：{snapshot.page.title || "（无标题）"} · {snapshot.page.url} · 共{" "}
-              {snapshot.page.control_count} 个控件
-            </Typography.Text>
-          </div>
-        ) : null}
-      </Card>
+      <ReadSnapshotCard
+        step={step}
+        running={running}
+        busy={busy}
+        snapshot={snapshot}
+        onRead={handleRead}
+      />
 
       {preview ? (
-        <Card
-          size="small"
-          title={`核对后填充（已选 ${selected.size} / ${preview.items.length} 项）`}
-          extra={
-            <Space size="small">
-              {/* AI 建议默认不勾——失败形态是"我忘了勾"，而不是"悄悄写了个错值"。
-                  想一次全采纳，这里点一下就好。 */}
-              {aiSuggestions.length ? (
-                <Button onClick={selectAiSuggestions} disabled={busy === "fill"}>
-                  全选 AI 建议（{aiSuggestions.length}）
-                </Button>
-              ) : null}
-              <Button
-                type="primary"
-                loading={busy === "fill"}
-                disabled={!running || selected.size === 0}
-                onClick={handleFill}
-              >
-                填充到页面
-              </Button>
-            </Space>
-          }
-        >
-          {preview.items.length ? (
-            <WebFormPreviewTable
-              items={preview.items}
-              selected={selected}
-              values={values}
-              disabled={busy === "fill"}
-              onToggle={toggle}
-              onValueChange={changeValue}
-            />
-          ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可自动填的字段" />
-          )}
-        </Card>
+        <PreviewCard
+          preview={preview}
+          selected={selected}
+          values={values}
+          aiSuggestions={aiSuggestions}
+          busy={busy}
+          running={running}
+          onSelectAiSuggestions={selectAiSuggestions}
+          onFill={handleFill}
+          onToggle={toggle}
+          onValueChange={changeValue}
+        />
       ) : null}
 
       {result ? (
-        <Card size="small" title="填充结果">
-          <Space size="middle" wrap>
-            <Tag color="success">已填 {result.filled}</Tag>
-            {result.unverified ? <Tag color="warning">待确认 {result.unverified}</Tag> : null}
-            {result.failed ? <Tag color="error">失败 {result.failed}</Tag> : null}
-            <FillRateTag filled={result.filled} total={result.form_control_total} />
-          </Space>
-          {result.unverified || result.failed ? (
-            <ul style={{ marginTop: 8, marginBottom: 0 }}>
-              {result.outcomes
-                .filter((outcome) => outcome.status === "unverified" || outcome.status === "failed")
-                .map((outcome) => (
-                  <li key={outcome.index}>
-                    <Typography.Text type="secondary">
-                      第 {outcome.index + 1} 个控件：{outcome.detail || outcome.status}
-                    </Typography.Text>
-                  </li>
-                ))}
-            </ul>
-          ) : null}
-          <Alert
-            style={{ marginTop: 12 }}
-            type="info"
-            showIcon
-            title="请回到浏览器窗口核对，确认无误后由你自己点击提交"
-          />
-        </Card>
+        <FillResultCard result={result} />
       ) : null}
 
       {preview ? (
