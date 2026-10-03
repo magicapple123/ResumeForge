@@ -42,18 +42,16 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getDiagnostics } from "../api/system";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
 import {
   fillWebForm,
   getWebFormBrowserStatus,
   getWebFormExtraProfile,
-  getWebFormLiveStatus,
   listWebFormUrlHistory,
   deleteWebFormUrlHistory,
   openWebFormUrl,
-  getWebFormMemoryTargets,
   previewWebForm,
   rememberWebFormLive,
   setWebFormLiveEnabled,
@@ -81,14 +79,13 @@ import { useBrowserStatus } from "../hooks/useBrowserStatus";
 import { FillRateTag } from "./webform/FillRateTag";
 import { LIVE_STATUS_META, WEB_FORM_STATUS_POLL_INTERVAL_MS } from "./webform/constants";
 import { useAiAvailable } from "./webform/useAiAvailable";
+import { useLiveSession } from "./webform/useLiveSession";
 import { useSnapshotUrl } from "./webform/useSnapshotUrl";
 import {
   BROWSER_STATE_META,
   type WebFormExtraEntry,
   type WebFormFillResult,
   type WebFormLearningCandidate,
-  type WebFormLive,
-  type WebFormMemoryTarget,
   type WebFormPreview,
   type WebFormSnapshot,
   type WebFormUrlHistory,
@@ -115,9 +112,6 @@ export default function WebFormPage() {
   // 它们职责分得开（起停 / 配置 / 重查），但都围绕同一个浏览器进程——并行点开只会让
   // "关闭还没回来就点了启动"这类交错更难对上账。
   const anyBusy = busy !== null;
-  const [live, setLive] = useState<WebFormLive | null>(null);
-  const [liveOptOut, setLiveOptOut] = useState(restoredSession.liveOptOut);
-  const liveStarting = useRef(false);
   // 填充完成后加一，「填充记录」据此重新拉取。
   const [recordRefresh, setRecordRefresh] = useState(0);
   // 「这次填的几项简历通里没有，要记住吗」的提案；空数组 = 不弹。
@@ -126,11 +120,6 @@ export default function WebFormPage() {
   const [browserSettingsOpen, setBrowserSettingsOpen] = useState(false);
   const [targetUrl, setTargetUrl] = useState("");
   const [urlHistory, setUrlHistory] = useState<WebFormUrlHistory[]>([]);
-  const [memoryTargets, setMemoryTargets] = useState<WebFormMemoryTarget[]>([]);
-  const [memoryTargetsLoading, setMemoryTargetsLoading] = useState(false);
-  const [memorySaving, setMemorySaving] = useState(false);
-  const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
-  const memoryPendingKey = useRef("");
   const aiAvailable = useAiAvailable();
   const [aiEnabled, setAiEnabled] = useState(restoredSession.aiEnabled);
 
@@ -155,21 +144,40 @@ export default function WebFormPage() {
   });
 
   const running = browser.data?.state === "running";
-  const liveEnabled = live?.enabled ?? live?.running ?? false;
   // 没配模型时开关不起作用——**说清楚**，否则用户开了却毫无变化，只会以为功能坏了。
   const aiOn = aiEnabled && aiAvailable === true;
-  // 后端没重启时这两个字段还不存在（它们是这一次新加的）。用 `?? []` 兜住，
-  // 让"前端先更新、后端还没重启"这个窗口期表现成少显示一行，而不是整页白屏。
-  const alternatives = live?.alternatives ?? [];
   const aiSuggestions = useMemo(
     () => (preview?.items ?? []).filter((item) => item.source === "ai"),
     [preview],
   );
   const stateMeta = BROWSER_STATE_META[browser.data?.state ?? "stopped"];
-  const rememberPending = live?.remember_pending ?? null;
-  const rememberPendingSignature = rememberPending
-    ? [rememberPending.field_key, rememberPending.value, rememberPending.field_label].join("|")
-    : "";
+
+  const {
+    live,
+    setLive,
+    liveOptOut,
+    setLiveOptOut,
+    rememberPending,
+    memoryTargets,
+    memoryTargetsLoading,
+    memorySaving,
+    setMemorySaving,
+    memoryDialogOpen,
+    setMemoryDialogOpen,
+  } = useLiveSession({
+    restoredLiveOptOut: restoredSession.liveOptOut,
+    browserState: browser.data?.state,
+    running,
+    aiAvailable,
+    aiOn,
+    setSessionActive,
+    message,
+  });
+
+  const liveEnabled = live?.enabled ?? live?.running ?? false;
+  // 后端没重启时这两个字段还不存在（它们是这一次新加的）。用 `?? []` 兜住，
+  // 让"前端先更新、后端还没重启"这个窗口期表现成少显示一行，而不是整页白屏。
+  const alternatives = live?.alternatives ?? [];
 
   useEffect(() => {
     void listWebFormUrlHistory()
@@ -207,20 +215,6 @@ export default function WebFormPage() {
     persistWebFormSession,
   ]);
 
-  // 页面从「我的资料」等其他界面回来时，实时会话状态由后端恢复，不重新要求用户开启。
-  useEffect(() => {
-    let cancelled = false;
-    void getWebFormLiveStatus()
-      .then((next) => {
-        if (cancelled) return;
-        setLive(next);
-        if (next.running) setSessionActive(true);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleStart = useCallback(async () => {
     setBusy("start");
@@ -367,74 +361,9 @@ export default function WebFormPage() {
     }
   }, [message]);
 
-  // 模式开着的时候轮询状态（面板在浏览器里，这边要能看到它在做什么）。
-  // 关掉就停——不留一个永远转的定时器。
-  useEffect(() => {
-    if (!live?.running) return;
-    const timer = window.setInterval(() => {
-      void getWebFormLiveStatus()
-        .then((next) => {
-          setLive(next);
-          if (next.running) setSessionActive(true);
-        })
-        .catch(() => undefined);
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [live?.running]);
 
-  // 「记住这条」只在用户点过按钮后出现。每个 pending 只拉一次完整资料目录，避免后台轮询
-  // 每 1.5 秒都重复请求；资料目录本身包含我的资料、网申资料和已有自定义字段。
-  useEffect(() => {
-    const key = rememberPendingSignature;
-    if (!key) {
-      memoryPendingKey.current = "";
-      setMemoryDialogOpen(false);
-      return;
-    }
-    if (memoryPendingKey.current === key) return;
-    memoryPendingKey.current = key;
-    setMemoryDialogOpen(true);
-    setMemoryTargetsLoading(true);
-    void getWebFormMemoryTargets()
-      .then((result) => setMemoryTargets(result.targets))
-      .catch((error) => {
-        message.error(error instanceof Error ? error.message : "加载完整资料目录失败");
-      })
-      .finally(() => setMemoryTargetsLoading(false));
-  }, [message, rememberPendingSignature]);
 
-  // 默认开启：浏览器一旦真正可用就自动装上监听。用户明确点过「关闭」后，
-  // 本次页面生命周期内不再擅自打开，避免把用户的关闭操作变成反复弹出的打扰。
-  //
-  // **先读状态、没开才启动**：浏览器路由已经在后端顺手开过一次（见 `api/webform.py`），
-  // 这里再无条件发一次 `/live/start` 不但多余，回来的旧响应还会把刚读到的"已开启"
-  // 覆盖回"未开启"（用户会看到卡片先亮再灭）。
-  useEffect(() => {
-    if (!running || liveOptOut || aiAvailable === null || live?.running || liveStarting.current) {
-      return;
-    }
-    liveStarting.current = true;
-    void getWebFormLiveStatus()
-      .then((current) => (current?.running ? current : startWebFormLive(aiOn)))
-      .then((next) => {
-        setLive(next ?? null);
-        if (next?.running) setSessionActive(true);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        liveStarting.current = false;
-      });
-  }, [aiAvailable, aiOn, live?.running, liveOptOut, running]);
 
-  // 浏览器被用户在窗口里直接关掉时，状态轮询会把本地活动标记立即收拢；
-  // 已读快照仍保留，重新打开浏览器后可以继续核对，不把草稿误当成已丢失。
-  useEffect(() => {
-    if (browser.data?.state !== "stopped") return;
-    setSessionActive(false);
-    setLive(null);
-    // 关闭浏览器后再次打开，点击填表应回到默认开启状态。
-    setLiveOptOut(false);
-  }, [browser.data?.state]);
 
   const handleLiveToggle = useCallback(async () => {
     setBusy("live");
