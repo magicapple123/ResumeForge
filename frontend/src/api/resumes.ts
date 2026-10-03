@@ -148,6 +148,7 @@ export async function previewResumeTemplate(payload: {
   html?: string;
   format_name?: string;
   format_config?: ResumeFormatConfig;
+  style_config?: Record<string, unknown>;
   page_limit?: number;
   font_scale?: ResumeFontScale;
   resume_id?: number;

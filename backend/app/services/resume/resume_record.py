@@ -21,7 +21,7 @@ from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
 from ...schemas.resume import ResumeContent
 from ..exporter import normalize_page_limit
-from .resume_template_store import resolve_format_config, resolve_style_template
+from .resume_template_store import resolve_format_config, resolve_style_config, resolve_style_template
 from .resume_templates import (
     DEFAULT_FONT_SCALE,
     DEFAULT_TEMPLATE,
@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 
 def record_format_config(db: Session, record: ResumeRecord) -> dict:
     """这份简历实际生效的版式配置：具名格式模板 + 只属于它的覆盖。"""
-    config = dict(resolve_format_config(db, record.format_name))
+    config = dict(validated_format_config(resolve_style_config(db, record.template)))
+    config.update(resolve_format_config(db, record.format_name))
     config.update(validated_format_config(record.format_config))
     return config
 

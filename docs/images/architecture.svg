@@ -73,7 +73,7 @@
 
     <rect x="726" y="172" width="222" height="72" rx="8" fill="#ffffff" stroke="#cfdcec"/>
     <text class="t" x="738" y="196" font-size="13.5" font-weight="700" fill="#16365c">简历生成与渲染</text>
-    <text class="t" x="738" y="216" font-size="11.5" fill="#64748b">Jinja2 模板，6 种样式</text>
+    <text class="t" x="738" y="216" font-size="11.5" fill="#64748b">Jinja2 模板，8 种样式</text>
     <text class="t" x="738" y="232" font-size="11.5" fill="#64748b">版式诊断与自动一页</text>
 
     <rect x="496" y="250" width="222" height="72" rx="8" fill="#ffffff" stroke="#cfdcec"/>

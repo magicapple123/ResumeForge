@@ -225,3 +225,31 @@ def test_record_format_config_is_the_single_resolution_point(db_session):
     assert config["line_height"] == 1.9  # 按简历的覆盖赢了
     assert config["accent"] == "#123456"
     assert config["page_padding"] == 11  # 预设里其余项保留
+
+
+def test_style_template_format_values_are_included_for_non_html_exporters(client, db_session):
+    """样式配置中的通用版式值也进入 PDF/Word 共用的解析结果。"""
+    from app.services.resume.resume_template_store import create_user_template
+
+    template = create_user_template(
+        db_session,
+        name="带版式覆盖的样式",
+        kind="style",
+        html="<!doctype html><html><head></head><body>{% include \"_resume_sections.j2\" %}</body></html>",
+        config={"line_height": 1.3, "page_padding": 20, "accent": "#aa0000"},
+    )
+    record = ResumeRecord(
+        title="样式模板覆盖",
+        template=template.name,
+        format_name="compact",
+        format_config={"accent": "#123456"},
+        content={"name": "示例"},
+    )
+    db_session.add(record)
+    db_session.commit()
+
+    config = record_format_config(db_session, record)
+    # 具名版式先覆盖样式默认，再由当前简历自己的按简历覆盖覆盖最后。
+    assert config["line_height"] == 1.45
+    assert config["page_padding"] == 11
+    assert config["accent"] == "#123456"

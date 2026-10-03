@@ -1,15 +1,21 @@
-/** 「导入目标模板」弹窗：选文件 → 提交一次 multipart → 成功后刷新列表。 */
+/** 「导入参考模板」弹窗：识别草稿 → 预览微调 → 保存样式模板。 */
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntdApp } from "antd";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TemplateImportModal from "./TemplateImportModal";
 
-const apiMocks = vi.hoisted(() => ({ importTemplateFromFile: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({
+  analyzeTemplateFromFiles: vi.fn(),
+  createResumeTemplate: vi.fn(),
+}));
+const previewMocks = vi.hoisted(() => ({ previewResumeTemplate: vi.fn() }));
 
 vi.mock("../../api/resumeTemplates", () => ({
-  importTemplateFromFile: apiMocks.importTemplateFromFile,
+  analyzeTemplateFromFiles: apiMocks.analyzeTemplateFromFiles,
+  createResumeTemplate: apiMocks.createResumeTemplate,
 }));
+vi.mock("../../api/resumes", () => previewMocks);
 
 function renderModal(overrides: Partial<{ open: boolean }> = {}) {
   const onClose = vi.fn();
@@ -32,7 +38,9 @@ function pngFile(name = "目标模板.png"): File {
 }
 
 beforeEach(() => {
-  apiMocks.importTemplateFromFile.mockReset();
+  apiMocks.analyzeTemplateFromFiles.mockReset();
+  apiMocks.createResumeTemplate.mockReset();
+  previewMocks.previewResumeTemplate.mockReset().mockResolvedValue("<html></html>");
 });
 
 afterEach(() => {
@@ -44,14 +52,25 @@ afterEach(() => {
 describe("TemplateImportModal", () => {
   it("没选文件时不能提交（按钮禁用）", () => {
     renderModal();
-    expect(screen.getByRole("button", { name: /开始识别/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /识别并预览/ })).toBeDisabled();
   });
 
   it("提交后把文件与名称交给接口，成功后关闭并通知父组件刷新", async () => {
-    apiMocks.importTemplateFromFile.mockResolvedValue({
+    apiMocks.analyzeTemplateFromFiles.mockResolvedValue({
+      name: "导入的样式",
+      description: "按图片识别",
+      kind: "style",
+      html: "<html><head></head><body></body></html>",
+      config: { accent: "#123456" },
+      confidence: { accent: 0.9 },
+      evidence: ["深蓝强调色"],
+      warnings: [],
+      source_names: ["目标模板.png"],
+    });
+    apiMocks.createResumeTemplate.mockResolvedValue({
       id: 9,
-      name: "导入的版式",
-      kind: "format",
+      name: "导入的样式",
+      kind: "style",
     });
     const { onClose, onImported } = renderModal();
 
@@ -60,12 +79,11 @@ describe("TemplateImportModal", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "模板名称" }), {
       target: { value: "深蓝简洁" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /开始识别/ }));
+    fireEvent.click(screen.getByRole("button", { name: /识别并预览/ }));
 
-    await waitFor(() => expect(apiMocks.importTemplateFromFile).toHaveBeenCalledTimes(1));
-    const [file, name] = apiMocks.importTemplateFromFile.mock.calls[0];
-    expect((file as File).name).toBe("目标模板.png");
-    expect(name).toBe("深蓝简洁");
+    await waitFor(() => expect(apiMocks.analyzeTemplateFromFiles).toHaveBeenCalledTimes(1));
+    expect(apiMocks.analyzeTemplateFromFiles.mock.calls[0][1]).toBe("深蓝简洁");
+    fireEvent.click(await screen.findByRole("button", { name: /保存为我的模板/ }));
 
     await waitFor(() =>
       expect(onImported).toHaveBeenCalledWith(expect.objectContaining({ id: 9 })),
@@ -74,26 +92,43 @@ describe("TemplateImportModal", () => {
   });
 
   it("名称留空也能提交（由模型起名）", async () => {
-    apiMocks.importTemplateFromFile.mockResolvedValue({ id: 10, name: "模型起的名字" });
+    apiMocks.analyzeTemplateFromFiles.mockResolvedValue({
+      name: "模型起的名字",
+      description: "",
+      kind: "style",
+      html: "<html><head></head><body></body></html>",
+      config: { line_height: 1.5 },
+      confidence: {},
+      evidence: [],
+      warnings: [],
+      source_names: ["目标模板.png"],
+    });
+    apiMocks.createResumeTemplate.mockResolvedValue({
+      id: 10,
+      name: "模型起的名字",
+      kind: "style",
+    });
     renderModal();
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [pngFile()] } });
-    fireEvent.click(screen.getByRole("button", { name: /开始识别/ }));
+    fireEvent.click(screen.getByRole("button", { name: /识别并预览/ }));
 
-    await waitFor(() => expect(apiMocks.importTemplateFromFile).toHaveBeenCalled());
-    expect(apiMocks.importTemplateFromFile.mock.calls[0][1]).toBe("");
+    await waitFor(() => expect(apiMocks.analyzeTemplateFromFiles).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole("button", { name: /保存为我的模板/ }));
+    await waitFor(() => expect(apiMocks.createResumeTemplate).toHaveBeenCalled());
+    expect(apiMocks.createResumeTemplate.mock.calls[0][0].name).toBe("模型起的名字");
   });
 
   it("接口报错时留在弹窗里，把后端的中文原因显示出来", async () => {
-    apiMocks.importTemplateFromFile.mockRejectedValue(
+    apiMocks.analyzeTemplateFromFiles.mockRejectedValue(
       new Error("没能从这份文件里读出可用的版式参数"),
     );
     const { onClose } = renderModal();
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [pngFile()] } });
-    fireEvent.click(screen.getByRole("button", { name: /开始识别/ }));
+    fireEvent.click(screen.getByRole("button", { name: /识别并预览/ }));
 
     expect(await screen.findByText("没能从这份文件里读出可用的版式参数")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();

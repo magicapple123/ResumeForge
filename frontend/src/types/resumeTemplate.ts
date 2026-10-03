@@ -1,5 +1,3 @@
-import type { ResumeFormatConfig } from "./resumeFormat";
-
 /** 用户自制简历模板（后端 /api/resume-templates）。 */
 
 export type ResumeTemplateKind = "style" | "format";
@@ -17,7 +15,8 @@ export interface ResumeTemplateDetail {
   /** 样式模板的 HTML 源码（格式模板为空）。 */
   html: string;
   /** 格式模板的版式覆盖配置（样式模板为空对象）。 */
-  config: ResumeFormatConfig;
+  /** 格式模板或样式模板的安全配置。旧格式模板仍使用 ResumeFormatConfig 子集。 */
+  config: Record<string, unknown>;
 }
 
 export interface ResumeTemplatePayload {
@@ -26,7 +25,19 @@ export interface ResumeTemplatePayload {
   kind?: ResumeTemplateKind;
   description?: string;
   html?: string;
-  config?: ResumeFormatConfig;
+  config?: Record<string, unknown>;
   source_name?: string;
   enabled?: boolean;
+}
+
+export interface TemplateRecognitionDraft {
+  name: string;
+  description: string;
+  kind: "style";
+  html: string;
+  config: Record<string, unknown>;
+  confidence: Record<string, number>;
+  evidence: string[];
+  warnings: string[];
+  source_names: string[];
 }

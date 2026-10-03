@@ -7,7 +7,7 @@
 import { App, Button, Form, Input, InputNumber, Modal, Space, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { createResumeTemplate, updateResumeTemplate } from "../../api/resumeTemplates";
-import type { ResumeFormatField, ResumeTemplateDetail } from "../../types";
+import type { ResumeFormatConfig, ResumeFormatField, ResumeTemplateDetail } from "../../types";
 
 interface Props {
   open: boolean;
@@ -17,8 +17,6 @@ interface Props {
   onClose: () => void;
   onSaved: () => void;
 }
-
-import type { ResumeFormatConfig } from "../../types/resumeFormat";
 
 type ConfigValue = string | number | string[] | null;
 
@@ -39,7 +37,7 @@ export default function FormatTemplateEditorModal({
     if (!open) return;
     setName(template?.name ?? "");
     setDescription(template?.description ?? "");
-    setValues({ ...(template?.config ?? {}) });
+    setValues({ ...((template?.config ?? {}) as ResumeFormatConfig) });
   }, [open, template]);
 
   const setValue = (key: string, value: ConfigValue) =>

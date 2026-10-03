@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'nonce-{{ csp_nonce }}'; base-uri 'none'; form-action 'none'" />
+<title>{{ resume.name }} - {{ resume.job_intent }} - 简历</title>
+<style>
+  /* 分栏：页头保持横向，正文以两栏网格呈现，适合经历与技能较多的简历。 */
+  :root {
+    --text: #2c2a26;
+    --muted: #77736b;
+    --line: #e1ddd5;
+    --accent: #6b4f2a;
+    --accent-soft: #f3eee6;
+    --bg: #ffffff;
+    --fs: calc({{ base_px }}px * var(--fit-scale, 1));
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    font-size: var(--fs);
+    line-height: 1.6;
+    width: 210mm;
+    height: {{ page_limit * 297 }}mm;
+    padding: 12mm;
+  }
+  .header { display: flex; align-items: center; gap: calc(var(--fs) * 1.6); background: var(--accent-soft); border-radius: calc(var(--fs) * .5); padding: calc(var(--fs) * 1) calc(var(--fs) * 1.1); margin-bottom: calc(var(--fs) * 1.1); }
+  .header-main { flex: 1; min-width: 0; }
+  .header .name { font-size: calc(var(--fs) * 1.8); font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+  .name-extra { font-size: calc(var(--fs) * .95); font-weight: 400; color: var(--muted); }
+  .header .intent { font-size: calc(var(--fs) * 1.04); color: var(--accent); margin-top: calc(var(--fs) * .25); }
+  .header .contact { font-size: calc(var(--fs) * .86); color: var(--muted); margin-top: calc(var(--fs) * .45); }
+  .header .contact span { margin-right: calc(var(--fs) * .9); }
+  .profile-photo { width: calc(var(--fs) * 5.8); height: calc(var(--fs) * 7.4); flex: 0 0 auto; object-fit: cover; border: 1px solid var(--line); border-radius: 4px; }
+  .resume-sections { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); column-gap: calc(var(--fs) * 1.2); align-items: start; }
+  .section { margin-bottom: calc(var(--fs) * 1); }
+  .section-title { font-size: calc(var(--fs) * 1.04); font-weight: 700; color: #fff; background: var(--accent); display: inline-block; padding: calc(var(--fs) * .1) calc(var(--fs) * .71); margin-bottom: calc(var(--fs) * .57); }
+  .entry { margin-bottom: calc(var(--fs) * .64); }
+  .entry-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--fs); }
+  .entry-head .title { font-size: calc(var(--fs) * 1.04); font-weight: 600; }
+  .entry-head .meta { font-size: calc(var(--fs) * .86); color: var(--muted); white-space: nowrap; }
+  .entry .sub { font-size: calc(var(--fs) * .9); color: var(--muted); margin: calc(var(--fs) * .1) 0 calc(var(--fs) * .2); }
+  ul { padding-left: calc(var(--fs) * 1.25); }
+  li { margin-bottom: calc(var(--fs) * .14); }
+  .summary-text { font-size: var(--fs); }
+  .skill-list { padding-left: 0; }
+  .skill-list li { list-style: none; display: inline-block; border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 0 calc(var(--fs) * .6); margin: 0 calc(var(--fs) * .4) calc(var(--fs) * .35) 0; font-size: calc(var(--fs) * .86); }
+  @page { size: A4; margin: 0; }
+  @media print { .section, .entry { break-inside: avoid; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+{% include "_resume_sections.j2" %}
+{% include "_resume_fit_script.j2" %}
+</body>
+</html>

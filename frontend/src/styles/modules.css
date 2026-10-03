@@ -869,6 +869,69 @@
   cursor: pointer;
 }
 
+.template-style-controls {
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.template-style-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 14px;
+}
+
+.template-style-control-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.template-badge-editor {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.template-badge-editor-row {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.template-badge-editor-image {
+  width: 72px;
+  height: 32px;
+  object-fit: contain;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.template-recognition-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+  gap: 16px;
+  align-items: start;
+}
+
+.template-recognition-preview {
+  min-height: 520px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 900px) {
+  .template-recognition-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* 模板一览：每个模板一列缩略图 + 说明，缩略图是真的渲染结果（缩放到卡片里）。 */
 .template-gallery-toolbar {
   display: flex;

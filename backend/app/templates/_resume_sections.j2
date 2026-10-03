@@ -1,4 +1,4 @@
-{# 简历正文的共享片段：六个模板只在样式上不同，结构完全一致。
+{# 简历正文的共享片段：内置模板只在样式上不同，结构完全一致。
    每处文本都带 data-resume-path，供前端「点击纸面字段定位编辑」使用。
 
    分区顺序由 `resume_section_order` 决定（见 services/resume/resume_sections.py）：
@@ -11,7 +11,7 @@
   <div class="header-main">
     <div class="name"><span data-resume-path="name">{{ resume.name }}</span>{% if resume.gender %} <span data-resume-path="gender" class="name-extra">{{ resume.gender }}</span>{% endif %}</div>
     {% if resume.job_intent %}<div class="intent">求职意向：<span data-resume-path="job_intent">{{ resume.job_intent }}</span></div>{% endif %}
-    <div class="contact">
+  <div class="contact">
       {%- if resume.phone -%}<span data-resume-path="phone">{{ resume.phone }}</span>{%- endif -%}
       {%- if resume.email -%}<span data-resume-path="email">{{ resume.email }}</span>{%- endif -%}
       {%- if resume.city -%}<span data-resume-path="city">{{ resume.city }}</span>{%- endif -%}
@@ -19,10 +19,22 @@
       {%- if resume.github -%}<span data-resume-path="github">GitHub：{{ resume.github }}</span>{%- endif -%}
       {%- if resume.personal_website -%}<span data-resume-path="personal_website">主页：{{ resume.personal_website }}</span>{%- endif -%}
     </div>
+    {% if template_config.badges %}
+    <div class="template-badges" aria-label="模板装饰">
+      {% for badge in template_config.badges %}
+      <span class="template-badge">
+        {% if badge.image %}<img src="{{ badge.image }}" alt="{{ badge.alt }}" />{% endif %}
+        {% if badge.label %}<span>{{ badge.label }}</span>{% endif %}
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
   {% if resume.photo %}<img class="profile-photo" src="{{ resume.photo }}" alt="个人照片" />{% endif %}
 </div>
 
+{% set use_section_grid = template_config.column_count|default(1) == 2 %}
+{% if use_section_grid %}<div class="resume-sections" data-columns="2">{% endif %}
 {% for section_key in resume_section_order -%}
 {%- if section_key == "summary" %}{{ blocks.summary_block(resume) }}
 {%- elif section_key == "education" %}{{ blocks.education_block(resume) }}
@@ -33,3 +45,4 @@
 {%- elif section_key == "awards" %}{{ blocks.awards_block(resume) }}
 {%- endif %}
 {% endfor -%}
+{% if use_section_grid %}</div>{% endif %}

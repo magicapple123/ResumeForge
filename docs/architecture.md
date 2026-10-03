@@ -434,10 +434,13 @@ score_match_result(result, job_payload, profile_text, resume_text)
 
 ## 核心数据流：离线分享包与本地模板市场
 
+模板相关实现按职责拆分为 `resume_templates.py`（兼容入口）、`resume_template_format.py`（格式字段与 CSS）、`resume_template_market.py`（市场与字号）和 `resume_template_style.py`（视觉配置白名单）。参考模板识别只返回安全配置草稿，前端确认后复用普通模板保存接口，不让模型直接生成可执行 HTML。
+
+
 - **分享包**（`services/share_package.py` + `api/share_packages.py`，`/api/share-packages`）：把一份
   简历打包成脱敏 HTML/PDF + 只读快照 + 评论回传文件 + 本地 token；权限只读 / 可评论，离线校验
   token、不做在线鉴权。删除走回收站（软删除，磁盘产物不清理）。
-- **模板市场**（`services/resume/resume_templates.py` 的 `TEMPLATE_MARKET_PRESETS`）：互联网大厂 /
+- **模板市场**（`services/resume/resume_template_market.py` 的 `TEMPLATE_MARKET_PRESETS`）：互联网大厂 /
   国企事业单位 / 外企 / 应届校园四套预设，`/api/resumes/templates` 返回带 `market` 字段的目录。
 
 ## 核心数据流：内推 / 提醒 / 面经 / 求职统计 / 知识库 / 历史记录（迁移 0018 / 0019）

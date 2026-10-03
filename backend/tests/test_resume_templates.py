@@ -9,6 +9,7 @@ from app.services.resume.resume_template_store import (
     sanitize_template_html,
     validate_template_name,
 )
+from app.services.resume.resume_template_style import validated_style_config
 from app.services.resume.resume_templates import (
     FORMAT_PRESETS,
     RESUME_TEMPLATES,
@@ -28,7 +29,7 @@ CUSTOM_STYLE = """<!DOCTYPE html>
 
 # 设计上**给技能加"小框"**的模板（底色或边框）。其余两个是刻意的**无框**设计：
 # compact 用 `·` 分隔、minimal 纯文本。这份清单是"快照"——某个模板的框被误删时会立刻红。
-SKILL_TAG_BOX_TEMPLATES = {"classic", "elegant", "modern", "technical"}
+SKILL_TAG_BOX_TEMPLATES = {"classic", "elegant", "modern", "technical", "split"}
 
 
 @pytest.mark.parametrize("name", sorted(RESUME_TEMPLATES))
@@ -118,6 +119,22 @@ def test_format_css_contains_root_and_rules():
     assert format_css({}) == ""
 
 
+def test_style_config_is_whitelisted_and_renders_visual_controls():
+    config = validated_style_config(
+        {
+            "accent": "#1F4E79",
+            "column_count": 2,
+            "section_title_style": "accent_box",
+            "badges": [{"label": "作品集"}],
+            "evil_css": "body { display:none }",
+        }
+    )
+    assert config["accent"] == "#1f4e79"
+    assert config["column_count"] == 2
+    assert config["badges"][0]["label"] == "作品集"
+    assert "evil_css" not in config
+
+
 def test_format_config_scales_font_and_accent():
     html = render_html(
         sample_resume_content(),
@@ -202,6 +219,33 @@ def test_user_style_template_crud_and_render(client, db_session):
 
     assert client.delete(f"/api/resume-templates/{template_id}").status_code == 204
     assert client.get(f"/api/resume-templates/{template_id}").status_code == 404
+
+
+def test_user_style_template_visual_config_is_previewable(client):
+    created = client.post(
+        "/api/resume-templates",
+        json={
+            "name": "分栏视觉模板",
+            "kind": "style",
+            "html": CUSTOM_STYLE,
+            "config": {
+                "accent": "#8b3a3a",
+                "column_count": 2,
+                "section_title_style": "accent_box",
+                "badges": [{"label": "作品集"}],
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["config"]["column_count"] == 2
+    preview = client.post(
+        "/api/resume-templates/preview",
+        json={"template_id": created.json()["id"]},
+    )
+    assert preview.status_code == 200, preview.text
+    assert "resume-sections" in preview.text
+    assert "作品集" in preview.text
+    assert "grid-template-columns" in preview.text
 
 
 def test_user_format_template_changes_layout(client):

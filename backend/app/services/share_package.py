@@ -44,7 +44,7 @@ from .export_pipeline import ExportRequest, RenderContext, build_export
 from .pdf_exporter import ResumePDFError
 from .privacy import RedactionOptions, redact
 from .resume.resume_record import record_format_config
-from .resume.resume_template_store import resolve_style_template
+from .resume.resume_template_store import resolve_style_config, resolve_style_template
 from .resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_PAGE_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -148,6 +148,7 @@ def ensure_package_files(db: Session, package: SharePackage) -> list[str]:
     context = RenderContext(
         template=template_name,
         template_html=template_html,
+        style_config=resolve_style_config(db, record.template) if record else {},
         page_limit=(record.page_limit or DEFAULT_PAGE_LIMIT) if record else DEFAULT_PAGE_LIMIT,
         font_scale=(record.font_scale or DEFAULT_FONT_SCALE) if record else DEFAULT_FONT_SCALE,
         format_config=record_format_config(db, record) if record else {},
@@ -262,6 +263,7 @@ def create_share_package(
     context = RenderContext(
         template=template_name,
         template_html=template_html,
+        style_config=resolve_style_config(db, record.template),
         page_limit=record.page_limit or DEFAULT_PAGE_LIMIT,
         font_scale=record.font_scale or DEFAULT_FONT_SCALE,
         format_config=record_format_config(db, record),
@@ -448,4 +450,3 @@ __all__ = [
     "share_root",
     "verify_share_token",
 ]
-
