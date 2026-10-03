@@ -33,6 +33,9 @@ import {
   Typography,
 } from "antd";
 import { ListyItem } from "../components/common/ListyItem";
+import { LatestCards } from "./home/LatestCards";
+import { ReminderPopup } from "./home/ReminderPopup";
+import { StatsCards } from "./home/StatsCards";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createSearchParams, Link } from "react-router-dom";
 import { MENU_ITEMS } from "../App";
@@ -244,40 +247,7 @@ export default function HomePage() {
         <Alert type="error" showIcon title={statsError} style={{ marginBottom: 16 }} />
       )}
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} xl={6}>
-          <Card loading={loading}>
-            <Statistic title="岗位总数" value={stats?.job_count ?? 0} prefix={<SearchOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <Card loading={loading}>
-            <Statistic
-              title="开放中岗位"
-              value={stats?.open_job_count ?? 0}
-              prefix={<RocketOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <Card loading={loading}>
-            <Statistic
-              title="已生成简历"
-              value={stats?.resume_count ?? 0}
-              prefix={<FileTextOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <Card loading={loading}>
-            <Statistic
-              title="近 7 天生成"
-              value={stats?.week_resume_count ?? 0}
-              prefix={<StarOutlined />}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <StatsCards stats={stats} loading={loading} />
 
       <Card
         style={{ marginTop: 16 }}
@@ -541,106 +511,13 @@ export default function HomePage() {
         )}
       </Card>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} lg={12}>
-          <Card title="最近岗位" extra={<Link to="/jobs">查看全部</Link>}>
-            {(stats?.latest_jobs.length ?? 0) === 0 ? (
-              <Empty description="暂无岗位，去「岗位广场」手动添加" />
-            ) : (
-              <Listy
-                items={stats?.latest_jobs ?? []}
-                rowKey={(job) => job.id}
-                itemRender={(job) => (
-                  <ListyItem>
-                    <Space>
-                      <Link to="/jobs">{job.title}</Link>
-                      <Tag>{job.company}</Tag>
-                      <Typography.Text type="secondary">
-                        {formatDateTime(job.created_at)}
-                      </Typography.Text>
-                    </Space>
-                  </ListyItem>
-                )}
-              />
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="最近生成的简历" extra={<Link to="/resumes">查看全部</Link>}>
-            {(stats?.latest_resumes.length ?? 0) === 0 ? (
-              <Empty description="暂无简历记录，去「岗位广场」选个岗位试试" />
-            ) : (
-              <Listy
-                items={stats?.latest_resumes ?? []}
-                rowKey={(resume) => resume.id}
-                itemRender={(resume) => (
-                  <ListyItem>
-                    <Space>
-                      <Link to="/resumes">{resume.title}</Link>
-                      <Typography.Text type="secondary">
-                        {formatDateTime(resume.created_at)}
-                      </Typography.Text>
-                    </Space>
-                  </ListyItem>
-                )}
-              />
-            )}
-          </Card>
-        </Col>
-      </Row>
+      <LatestCards stats={stats} />
 
-      {(stats?.latest_applications.length ?? 0) > 0 && (
-        <Card
-          style={{ marginTop: 16 }}
-          title="最近投出去的"
-          extra={<Link to="/tracker">看进度</Link>}
-        >
-          <Listy
-            items={stats?.latest_applications ?? []}
-            rowKey={(item) => item.id}
-            itemRender={(item) => (
-              <ListyItem>
-                <Space>
-                  <Link to="/tracker">{item.job_title || "未命名岗位"}</Link>
-                  <Tag>{item.company}</Tag>
-                  <Typography.Text type="secondary">
-                    {formatDateTime(item.updated_at)}
-                  </Typography.Text>
-                </Space>
-              </ListyItem>
-            )}
-          />
-        </Card>
-      )}
-
-      <Modal
+      <ReminderPopup
         open={popupVisible}
-        title="近期提醒"
-        onCancel={() => setPopupVisible(false)}
-        footer={
-          <Button type="primary" onClick={() => setPopupVisible(false)}>
-            知道了
-          </Button>
-        }
-      >
-        <Listy
-          items={upcomingReminders ?? []}
-          rowKey={(item) => item.id}
-          itemRender={(item) => (
-            <ListyItem>
-              <Space size={6} wrap>
-                <Tag color={REMINDER_URGENCY_COLORS[item.urgency] ?? "default"}>
-                  {item.due_label}
-                </Tag>
-                <Link to="/tracker" onClick={() => setPopupVisible(false)}>
-                  {item.title}
-                </Link>
-                <Typography.Text type="secondary">{formatDateTime(item.remind_at)}</Typography.Text>
-              </Space>
-            </ListyItem>
-          )}
-        />
-      </Modal>
+        reminders={upcomingReminders}
+        onClose={() => setPopupVisible(false)}
+      />
     </div>
   );
 }
