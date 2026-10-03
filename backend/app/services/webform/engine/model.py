@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..matching import SelectOption, is_placeholder
+from ..matching import DateResolution, SelectOption, SelectResolution, is_placeholder
 
 _DEPENDENT_SELECT_WAIT_SECONDS = 2.0
 _DEPENDENT_SELECT_POLL_SECONDS = 0.1

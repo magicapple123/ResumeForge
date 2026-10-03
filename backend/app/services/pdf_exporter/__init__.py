@@ -32,36 +32,36 @@
 """
 from __future__ import annotations
 
-from .canvas import _ResumePDF
+from .canvas import _ResumePDF as _ResumePDF
 from .fit import build_resume_pdf, decide_fit_scale, measure_content_height, rendered_page_count
 from .fonts import (
-    FONT_ENV_VAR,
-    FONT_FAMILY,
+    FONT_ENV_VAR as FONT_ENV_VAR,
+    FONT_FAMILY as FONT_FAMILY,
     ResumePDFError,
-    _FONT_CANDIDATES,
-    _resolve_font_paths,
+    _FONT_CANDIDATES as _FONT_CANDIDATES,
+    _resolve_font_paths as _resolve_font_paths,
     font_available,
 )
 from .layout import (
     MIN_FIT_SCALE,
-    PAGE_HEIGHT_MM,
-    PAGE_WIDTH_MM,
+    PAGE_HEIGHT_MM as PAGE_HEIGHT_MM,
+    PAGE_WIDTH_MM as PAGE_WIDTH_MM,
     ResumeLayout,
-    _BODY_TEXT,
-    _FIT_MAX_PASSES,
-    _FIT_MIN_STEP,
-    _FIT_PAGE_STEP,
-    _FIT_RATIO_MARGIN,
-    _FIT_TOLERANCE_MM,
-    _MUTED_TEXT,
-    _PX_TO_MM,
-    _PX_TO_PT,
+    _BODY_TEXT as _BODY_TEXT,
+    _FIT_MAX_PASSES as _FIT_MAX_PASSES,
+    _FIT_MIN_STEP as _FIT_MIN_STEP,
+    _FIT_PAGE_STEP as _FIT_PAGE_STEP,
+    _FIT_RATIO_MARGIN as _FIT_RATIO_MARGIN,
+    _FIT_TOLERANCE_MM as _FIT_TOLERANCE_MM,
+    _MUTED_TEXT as _MUTED_TEXT,
+    _PX_TO_MM as _PX_TO_MM,
+    _PX_TO_PT as _PX_TO_PT,
     resolve_layout,
 )
-from .media import _join, _photo_bytes, crop_image_to_cover
+from .media import _join as _join, _photo_bytes as _photo_bytes, crop_image_to_cover
 from .name_gender import NameGenderPlan, draw_name_gender, plan_name_gender
 from .render import ResumePDF
-from .skill_tags import SkillTagMetrics, skill_tag_metrics, soft_accent, wrap_skill_tags
+from .skill_tags import SkillTagMetrics as SkillTagMetrics, skill_tag_metrics, soft_accent, wrap_skill_tags
 from .theme import resolve_accent, resolve_line
 
 __all__ = [

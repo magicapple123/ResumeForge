@@ -20,41 +20,41 @@ import logging
 # 原单文件 service.py 顶部的 from-import 名字（ApplyOutcome / FormEngine / Snapshot 等）
 # 属于旧命名空间的一部分——测试与调用方会以 ``service.X`` 属性访问（含 monkeypatch），
 # 门面必须原样再导出，缺一个都是行为变化。
-from ...browser.cdp_client import CdpClient
-from .._base import WebFormBadRequest, WebFormConflict
+from ...browser.cdp_client import CdpClient as CdpClient
+from .._base import WebFormBadRequest as WebFormBadRequest, WebFormConflict as WebFormConflict
 from ..engine import (
-    ApplyOutcome,
-    Control,
-    FieldMapping,
-    FormEngine,
-    MatchResult,
-    evidence_key,
+    ApplyOutcome as ApplyOutcome,
+    Control as Control,
+    FieldMapping as FieldMapping,
+    FormEngine as FormEngine,
+    MatchResult as MatchResult,
+    evidence_key as evidence_key,
 )
-from ..extra_profile import custom_fields_of
+from ..extra_profile import custom_fields_of as custom_fields_of
 from ..fields import (
-    FIELD_EXCLUDE_HINTS,
-    FIELD_LABELS,
-    FIELD_SYNONYMS,
-    FORM_FIELDS,
-    RELATIVE_HINTS,
-    SOURCE_EXTRA,
+    FIELD_EXCLUDE_HINTS as FIELD_EXCLUDE_HINTS,
+    FIELD_LABELS as FIELD_LABELS,
+    FIELD_SYNONYMS as FIELD_SYNONYMS,
+    FORM_FIELDS as FORM_FIELDS,
+    RELATIVE_HINTS as RELATIVE_HINTS,
+    SOURCE_EXTRA as SOURCE_EXTRA,
 )
 from ..matching import (
-    format_date,
-    is_placeholder,
-    meaningful_options,
-    normalize_option_text,
-    resolve_select_option,
+    format_date as format_date,
+    is_placeholder as is_placeholder,
+    meaningful_options as meaningful_options,
+    normalize_option_text as normalize_option_text,
+    resolve_select_option as resolve_select_option,
 )
 from ..repeated_fields import (
-    compatible_block,
-    field_key_for_block,
-    field_label_for_key,
-    split_repeated_key,
+    compatible_block as compatible_block,
+    field_key_for_block as field_key_for_block,
+    field_label_for_key as field_label_for_key,
+    split_repeated_key as split_repeated_key,
 )
-from ..session import Snapshot, SnapshotStore, get_snapshot_store
+from ..session import Snapshot as Snapshot, SnapshotStore as SnapshotStore, get_snapshot_store as get_snapshot_store
 from .fill import (
-    _fill_lock,
+    _fill_lock as _fill_lock,
     apply_fill,
     is_apply_running,
     is_filling,
@@ -76,21 +76,21 @@ from .models import (
     default_selections,
 )
 from .preview import (
-    _PAGE_INFO_SCRIPT,
-    _adopt_ai_match,
-    _mapping_note,
-    _same_value,
+    _PAGE_INFO_SCRIPT as _PAGE_INFO_SCRIPT,
+    _adopt_ai_match as _adopt_ai_match,
+    _mapping_note as _mapping_note,
+    _same_value as _same_value,
     build_preview,
     enrich_preview_with_ai,
     read_snapshot,
 )
 from .suggest import (
-    RELATED_LIMIT,
+    RELATED_LIMIT as RELATED_LIMIT,
     Suggestion,
-    _DIAL_CODE_RE,
-    _describe,
+    _DIAL_CODE_RE as _DIAL_CODE_RE,
+    _describe as _describe,
     recognize_field,
-    related_entries,
+    related_entries as related_entries,
     suggest_for,
 )
 

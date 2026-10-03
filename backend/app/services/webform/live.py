@@ -31,7 +31,7 @@ import logging
 import threading
 import unicodedata
 from dataclasses import replace
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from ..browser.cdp_client import CdpClient
 from ._base import WebFormConflict
@@ -72,6 +72,11 @@ from .service import (
     Suggestion,
 )
 from .session import Snapshot
+
+if TYPE_CHECKING:
+    # 仅供静态检查：运行时的 MultiLiveSession 经下方模块级 ``__getattr__`` 延迟提供
+    # （live_multi 单向依赖本模块的 LiveSession，模块级导入会成环）。
+    from .live_multi import MultiLiveSession
 
 logger = logging.getLogger(__name__)
 
@@ -962,3 +967,16 @@ __all__ = [
     "start_live",
     "stop_live",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """PEP 562：恢复「任何时候 ``from ...webform.live import MultiLiveSession`` 都可导入」的契约。
+
+    ``live_multi`` 单向依赖本模块的 ``LiveSession``，模块级导入会成环；真实使用点
+    （``start_live`` / ``live_status``）已在函数体内延迟导入，这里只兜住外部导入路径。
+    """
+    if name == "MultiLiveSession":
+        from .live_multi import MultiLiveSession
+
+        return MultiLiveSession
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -18,13 +18,10 @@ from .layout import (
     _PX_TO_MM,
     _PX_TO_PT,
     PAGE_WIDTH_MM,
-    ResumeLayout,
-    resolve_layout,
 )
 from .media import _join, _photo_bytes, crop_image_to_cover
 from .name_gender import draw_name_gender, plan_name_gender
 from .skill_tags import soft_accent
-from .theme import resolve_accent, resolve_line
 
 logger = logging.getLogger(__name__)
 
