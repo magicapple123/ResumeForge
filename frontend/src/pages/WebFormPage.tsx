@@ -43,7 +43,6 @@ import {
   Typography,
 } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { getDiagnostics } from "../api/system";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
 import {
@@ -80,13 +79,9 @@ import WebFormRecordsPanel from "../components/webform/WebFormRecordsPanel";
 import WebFormBrowserUrlBar from "../components/webform/WebFormBrowserUrlBar";
 import { useBrowserStatus } from "../hooks/useBrowserStatus";
 import { FillRateTag } from "./webform/FillRateTag";
-import {
-  AI_PARAM,
-  LIVE_STATUS_META,
-  SNAPSHOT_PARAM,
-  WEB_FORM_STATUS_POLL_INTERVAL_MS,
-} from "./webform/constants";
+import { LIVE_STATUS_META, WEB_FORM_STATUS_POLL_INTERVAL_MS } from "./webform/constants";
 import { useAiAvailable } from "./webform/useAiAvailable";
+import { useSnapshotUrl } from "./webform/useSnapshotUrl";
 import {
   BROWSER_STATE_META,
   type WebFormExtraEntry,
@@ -138,12 +133,26 @@ export default function WebFormPage() {
   const memoryPendingKey = useRef("");
   const aiAvailable = useAiAvailable();
   const [aiEnabled, setAiEnabled] = useState(restoredSession.aiEnabled);
-  // 当前这次读取记在 URL 里（见文件头的说明）。`replace` 写回，不堆历史。
-  const [searchParams, setSearchParams] = useSearchParams();
-  // 挂载时从 URL 恢复用的一次性标记：只自动重放一次，之后由用户自己点「读取」。
-  const [restoring, setRestoring] = useState(() =>
-    Boolean(searchParams.get(SNAPSHOT_PARAM) && !restoredSession.preview),
-  );
+
+  /**
+   * 把一份预览铺到界面上。**读取与重放共用这一处**——两处各写一遍的话，
+   * 迟早会出现"读出来是这个勾选状态、恢复出来是另一个"。
+   */
+  const applyPreview = useCallback((report: WebFormPreview) => {
+    setPreview(report);
+    // 默认勾选**不含冲突项**——页面上已有的值可能是用户上一轮填了一半的草稿。
+    setSelected(new Set(report.default_indexes));
+    setValues({});
+  }, []);
+
+  const { rememberSnapshot, forgetSnapshot, setRestoring } = useSnapshotUrl({
+    aiAvailable,
+    restoredSessionPreview: restoredSession.preview,
+    applyPreview,
+    setSnapshot,
+    setBusy,
+    message,
+  });
 
   const running = browser.data?.state === "running";
   const liveEnabled = live?.enabled ?? live?.running ?? false;
@@ -212,35 +221,6 @@ export default function WebFormPage() {
       cancelled = true;
     };
   }, []);
-
-  /** 把这次读取记进 URL。**`replace`**：读一次不该往历史里塞一条。 */
-  const rememberSnapshot = useCallback(
-    (snapshotId: string, ai: boolean) => {
-      setSearchParams(
-        (previous) => {
-          const next = new URLSearchParams(previous);
-          next.set(SNAPSHOT_PARAM, snapshotId);
-          next.set(AI_PARAM, ai ? "1" : "0");
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
-
-  /** 忘掉这次读取（填完了、关浏览器了、或后端说它过期了）。 */
-  const forgetSnapshot = useCallback(() => {
-    setSearchParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        next.delete(SNAPSHOT_PARAM);
-        next.delete(AI_PARAM);
-        return next;
-      },
-      { replace: true },
-    );
-  }, [setSearchParams]);
 
   const handleStart = useCallback(async () => {
     setBusy("start");
@@ -477,17 +457,6 @@ export default function WebFormPage() {
     }
   }, [aiOn, live?.running, liveEnabled, message]);
 
-  /**
-   * 把一份预览铺到界面上。**读取与重放共用这一处**——两处各写一遍的话，
-   * 迟早会出现"读出来是这个勾选状态、恢复出来是另一个"。
-   */
-  const applyPreview = useCallback((report: WebFormPreview) => {
-    setPreview(report);
-    // 默认勾选**不含冲突项**——页面上已有的值可能是用户上一轮填了一半的草稿。
-    setSelected(new Set(report.default_indexes));
-    setValues({});
-  }, []);
-
   const handleRead = useCallback(async () => {
     setBusy("read");
     setResult(null);
@@ -507,58 +476,6 @@ export default function WebFormPage() {
       setBusy(null);
     }
   }, [aiOn, applyPreview, message, rememberSnapshot]);
-
-  /**
-   * 回到本页时按 URL 里的 `snapshot_id` 重放一次预览。
-   *
-   * 后端的预览是**纯计算**（快照 + 资料），所以重放出来的与当初读到的一致（资料没变的话）。
-   * 快照有 15 分钟 TTL——过期时后端会抛「这次读取的表单已经过期，请重新点「读取当前表单」」，
-   * 这里**原样转述那句话**（不另编一句，否则同一件事有两个说法），并清掉 URL 参数，
-   * 而不是静默留一个空页面。
-   *
-   * AI 开关按当初那次的值重放，否则"读的时候开了 AI、回来却重算成规则版"，
-   * 用户会以为结果变了。
-   */
-  useEffect(() => {
-    if (!restoring) return;
-    const snapshotId = searchParams.get(SNAPSHOT_PARAM);
-    if (!snapshotId) {
-      setRestoring(false);
-      return;
-    }
-    // AI 要不要用，等模型配置读回来再定——否则 `aiOn` 还是 false，会重放成规则版。
-    if (aiAvailable === null) return;
-
-    let cancelled = false;
-    const restore = async () => {
-      const aiWas = searchParams.get(AI_PARAM) === "1";
-      setBusy("read");
-      try {
-        const report = await previewWebForm(snapshotId, aiWas && aiAvailable);
-        if (cancelled) return;
-        setSnapshot({ snapshot_id: snapshotId, page: report.page });
-        applyPreview(report);
-        message.info("已恢复上次读取的表单；勾选已重置为默认，请核对后再填充");
-      } catch (error) {
-        if (cancelled) return;
-        forgetSnapshot();
-        message.warning(
-          error instanceof Error ? error.message : "上次读取的表单已失效，请重新读取",
-        );
-      } finally {
-        if (!cancelled) {
-          setBusy(null);
-          setRestoring(false);
-        }
-      }
-    };
-    void restore();
-    return () => {
-      cancelled = true;
-    };
-    // 只在挂载时按 URL 重放一次；`restoring` 落下后就不再触发。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restoring, aiAvailable]);
 
   const handleFill = useCallback(async () => {
     if (!preview) return;
