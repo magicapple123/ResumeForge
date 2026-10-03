@@ -95,7 +95,6 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "截图与文档识别": ("recognition",),
     "多格式导出": ("export_formats", "watermark", "redact"),
     "离线分享包": ("share_package",),
-    "本地模板市场": ("template_market",),
     "首页": ("home_shortcuts", "home_todo"),
     "界面细节": ("ui_details", "navigation_visibility"),
     "全局搜索": ("global_search",),

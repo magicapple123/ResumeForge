@@ -6,7 +6,7 @@
  * 钉住跳转 URL 与"只有格式模板行才提供让助手改"这两件事。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
@@ -114,63 +114,5 @@ describe("TemplateWorkbench 的求职助手入口", () => {
     // 菜单确实打开了（预览/编辑/删除都在），但唯独没有交给助手的那一项。
     await screen.findByText("预览效果");
     expect(screen.queryByText("找助手改这个模板")).not.toBeInTheDocument();
-  });
-});
-
-describe("TemplateWorkbench 的模板市场（并入后的场景建议区）", () => {
-  function marketCatalog() {
-    return {
-      ...TEMPLATE_CATALOG,
-      market: [
-        {
-          name: "internet",
-          label: "互联网",
-          category: "互联网",
-          description: "适合研发投递",
-          template: "modern",
-          format_name: "compact",
-          format_config: {},
-          font_scale: "standard",
-          page_limit: 1,
-        },
-      ],
-    };
-  }
-
-  it("展开「按场景选」后能看到预设，预览走预设参数（与工作台共用同一个预览弹窗）", async () => {
-    resumeApiMocks.fetchResumeTemplates.mockResolvedValue(marketCatalog());
-    renderWorkbench();
-
-    fireEvent.click(await screen.findByText("按场景选：模板市场建议"));
-    // 预设卡片作用域内找「预览」——内置样式画廊也有同名按钮，不能全局捞。
-    const presetTitle = await screen.findByText("互联网");
-    const presetCard = presetTitle.closest(".ant-card") as HTMLElement;
-    fireEvent.click(within(presetCard).getByRole("button", { name: /预\s*览/ }));
-
-    await waitFor(() =>
-      expect(resumeApiMocks.previewResumeTemplate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          template_name: "modern",
-          format_name: "compact",
-          font_scale: "standard",
-          page_limit: 1,
-        }),
-      ),
-    );
-    expect(await screen.findByText("模板市场 · 互联网")).toBeInTheDocument();
-  });
-
-  it("「这套怎么选」只说建议组合，不说已经套用", async () => {
-    resumeApiMocks.fetchResumeTemplates.mockResolvedValue(marketCatalog());
-    renderWorkbench();
-
-    fireEvent.click(await screen.findByText("按场景选：模板市场建议"));
-    fireEvent.click(await screen.findByRole("button", { name: "这套怎么选" }));
-
-    expect(
-      await screen.findByText(/「互联网」的建议组合：现代 样式 \+ 紧凑 版式 \+ 标准字号 字号/),
-    ).toBeInTheDocument();
-    // 提示里必须给出"到哪儿去选"，否则用户听完仍不知道下一步做什么。
-    expect(screen.getByText(/用「样式」和「版式」按这个组合选一下即可/)).toBeInTheDocument();
   });
 });
