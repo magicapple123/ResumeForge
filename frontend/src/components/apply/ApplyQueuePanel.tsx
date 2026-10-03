@@ -7,12 +7,9 @@
  * - 未分析的岗位以「未分析」呈现。
  */
 import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
-  MoreOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
@@ -20,19 +17,13 @@ import {
   App,
   Alert,
   Button,
-  Dropdown,
   Empty,
-  Menu,
   Skeleton,
   Space,
-  Table,
   Tag,
-  Tooltip,
   Typography,
   Popconfirm,
 } from "antd";
-import type { ColumnsType } from "antd/es/table";
-import type { TableRowSelection } from "antd/es/table/interface";
 import { useEffect, useMemo, useState } from "react";
 import {
   createApplyTask,
@@ -51,6 +42,7 @@ import { RecordDetailDrawer } from "../common/RecordDetail";
 import { useRowActionMenu } from "../common/rowActionMenu";
 import { AdmissionTag } from "./queue/AdmissionTag";
 import { QueueItemEditor } from "./queue/QueueItemEditor";
+import { QueueTable } from "./queue/QueueTable";
 
 interface Props {
   /** 有任务正在运行时为真：禁止重复开始。 */
@@ -71,12 +63,6 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
   const [editing, setEditing] = useState<ApplyQueueItem | null>(null);
   const [detail, setDetail] = useState<ApplyQueueItem | null>(null);
   const [busy, setBusy] = useState(false);
-  // 右键菜单：记录鼠标位置与目标行，用定位式 Menu 渲染（避免把 <tr> 包进 Dropdown 造成行重建竞态）。
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    record: ApplyQueueItem;
-  } | null>(null);
   const buildMenu = useRowActionMenu();
 
   useEffect(() => {
@@ -193,133 +179,6 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     }
   };
 
-  /**
-   * 列宽全部写死、`tableLayout="fixed"`：
-   * 招呼语是用户可编辑的长文本，之前不设宽度时它会跟「准入 / 状态」抢空间——编辑过一条
-   * 队列条目之后整张表就挤成一团。定宽 + 省略号让每列宽度只由表头决定，内容长短不再影响排版。
-   */
-  const columns: ColumnsType<ApplyQueueItem> = [
-    {
-      title: "岗位",
-      dataIndex: "job_title",
-      width: 220,
-      render: (title: string, item) => (
-        <Tooltip title={`加入队列于 ${formatDateTime(item.created_at)}`}>
-          <Space orientation="vertical" size={0} style={{ width: "100%" }}>
-            <Button
-              type="link"
-              className="table-text-link"
-              onClick={() => setDetail(item)}
-              aria-label={`查看队列条目详情：${title || "岗位已删除"}`}
-            >
-              {title || "（岗位已删除）"}
-            </Button>
-            <Space size={4} wrap>
-              {item.company && (
-                <Typography.Text type="secondary" ellipsis>
-                  {item.company}
-                </Typography.Text>
-              )}
-              {item.apply_supported === false && (
-                // 和岗位广场上的「采集 / 手动」同一个位置放来源类标签：用户看来源就看这里。
-                <Tooltip title="来源不在投递台支持的招聘网站内，无法自动投递；移出队列或到原网站自行投递">
-                  <Tag color="red" style={{ marginInlineEnd: 0 }}>
-                    来源不支持
-                  </Tag>
-                </Tooltip>
-              )}
-            </Space>
-          </Space>
-        </Tooltip>
-      ),
-    },
-    {
-      title: "准入",
-      key: "admission",
-      width: 140,
-      render: (_, item) => <AdmissionTag item={item} />,
-    },
-    {
-      title: "状态",
-      dataIndex: "status",
-      width: 96,
-      align: "center",
-      render: (value: ApplyQueueItem["status"]) => {
-        const meta = QUEUE_STATUS_META[value];
-        return <Tag color={meta.color}>{meta.label}</Tag>;
-      },
-    },
-    {
-      title: "简历 / 招呼语",
-      key: "assets",
-      width: 260,
-      render: (_, item) => (
-        <Space orientation="vertical" size={0} style={{ width: "100%" }}>
-          <Typography.Text
-            type="secondary"
-            ellipsis={{ tooltip: item.resume_title || "按默认规则解析" }}
-          >
-            {item.resume_title || "按默认规则解析"}
-          </Typography.Text>
-          <Typography.Text type="secondary" ellipsis={{ tooltip: item.greeting || "默认招呼语" }}>
-            {item.greeting || "默认招呼语"}
-          </Typography.Text>
-        </Space>
-      ),
-    },
-    {
-      title: "操作",
-      key: "actions",
-      width: 130,
-      // 表头与单元格一起右对齐：否则「操作」两字靠左、按钮靠右，看起来像没对齐（用户反馈过）。
-      align: "right",
-      render: (_, item, index) => (
-        <div
-          className="apply-queue-actions"
-          style={{ display: "flex", justifyContent: "flex-end", marginLeft: "auto" }}
-        >
-          <Space size={4}>
-            <Tooltip title="上移">
-              <Button
-                size="small"
-                aria-label={`上移 ${item.job_title}`}
-                icon={<ArrowUpOutlined />}
-                disabled={index === 0 || busy}
-                onClick={() => void move(index, -1)}
-              />
-            </Tooltip>
-            <Tooltip title="下移">
-              <Button
-                size="small"
-                aria-label={`下移 ${item.job_title}`}
-                icon={<ArrowDownOutlined />}
-                disabled={index === items.length - 1 || busy}
-                onClick={() => void move(index, 1)}
-              />
-            </Tooltip>
-            <Dropdown trigger={["click"]} menu={{ items: rowMenuItems(item) }}>
-              <Button
-                size="small"
-                aria-label={`更多操作 ${item.job_title}`}
-                icon={<MoreOutlined />}
-              />
-            </Dropdown>
-          </Space>
-        </div>
-      ),
-    },
-  ];
-
-  const rowSelection: TableRowSelection<ApplyQueueItem> = {
-    selectedRowKeys: selectedIds,
-    onChange: (keys) => setSelectedIds(keys.map(Number)),
-    getCheckboxProps: (item) => ({
-      // 来源不支持的条目**不可勾选**：勾了也投不出去，不如一开始就不让选（后端还会再拦一次）。
-      disabled:
-        item.status !== "pending" || item.job_id === null || item.apply_supported === false || busy,
-    }),
-  };
-
   if (loading && !data) return <Skeleton active paragraph={{ rows: 5 }} />;
 
   return (
@@ -409,21 +268,14 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
           }
         />
       ) : (
-        <Table<ApplyQueueItem>
-          rowKey="id"
-          size="small"
-          columns={columns}
-          dataSource={items}
-          pagination={false}
-          rowSelection={rowSelection}
-          tableLayout="fixed"
-          scroll={{ x: 880 }}
-          onRow={(record) => ({
-            onContextMenu: (event) => {
-              event.preventDefault();
-              setContextMenu({ x: event.clientX, y: event.clientY, record });
-            },
-          })}
+        <QueueTable
+          items={items}
+          busy={busy}
+          selectedIds={selectedIds}
+          setSelectedIds={setSelectedIds}
+          setDetail={setDetail}
+          move={move}
+          rowMenuItems={rowMenuItems}
         />
       )}
 
@@ -505,31 +357,6 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
             setEditing(null);
           }}
         />
-      )}
-
-      {contextMenu && (
-        <>
-          <div
-            style={{ position: "fixed", inset: 0, zIndex: 1050 }}
-            onClick={() => setContextMenu(null)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              setContextMenu(null);
-            }}
-          />
-          <Menu
-            style={{
-              position: "fixed",
-              left: contextMenu.x,
-              top: contextMenu.y,
-              zIndex: 1060,
-              minWidth: 150,
-              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
-            }}
-            items={rowMenuItems(contextMenu.record)}
-            onClick={() => setContextMenu(null)}
-          />
-        </>
       )}
     </div>
   );
