@@ -4,23 +4,17 @@
  * 放在岗位广场页的抽屉里而不是独立页面：它是"导入前的中转站"，用的时候就该在
  * 岗位列表旁边。
  */
-import { DeleteOutlined, EditOutlined, ImportOutlined, PlusOutlined } from "@ant-design/icons";
+import { ImportOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
-  Card,
   Checkbox,
   Drawer,
   Empty,
-  Form,
-  Image,
   Input,
-  Modal,
   Space,
   Spin,
-  Tag,
   Typography,
-  Upload,
 } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -32,50 +26,12 @@ import {
   updateCandidateJob,
 } from "../../api/candidateJob";
 import { readAsDataUrl } from "../../utils/attachments";
-import { formatDateTime } from "../../utils/format";
-import FileDropZone from "../common/FileDropZone";
-import { RowActions } from "../common/RowActions";
 import CandidateJobDetailModal from "./CandidateJobDetailModal";
-import type {
-  CandidateJob,
-  CandidateJobDetail,
-  CandidateJobPayload,
-  JobPayload,
-} from "../../types";
-
-const MAX_CANDIDATE_IMAGES = 4;
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-
-/**
- * 候选 → 正式岗位表单的预填值。
- *
- * **为什么需要它**：候选有两条来路，它们的字段分布正好相反——手工粘贴的只有 ``raw_text``
- * （采不到的结构化字段一个没有），而采集来的恰恰相反，内容全在 ``description`` /
- * ``requirements`` / ``location`` 这些列里，``raw_text`` 是空的。
- *
- * 之前「导入到岗位」只预填 ``raw_text``，于是**采集来的候选打开的是一个全空的表单**：
- * 用户看到的就是"导入进来什么都没有"，而数据其实一直都在候选里。
- *
- * 空值一律不带上（``JobFormModal`` 那边也是这么处理的）：把空串显式写进表单会让
- * "这个字段是空的"与"这个字段没被填过"分不开。
- */
-export function candidateToJobPayload(candidate: CandidateJobDetail): Partial<JobPayload> {
-  const payload: Partial<JobPayload> = {
-    title: candidate.title,
-    company: candidate.company,
-    location: candidate.location,
-    salary: candidate.salary,
-    job_type: candidate.job_type,
-    source_url: candidate.source_url,
-    description: candidate.description,
-    requirements: candidate.requirements,
-    additional_info: candidate.additional_info,
-    note: candidate.note,
-  };
-  return Object.fromEntries(
-    Object.entries(payload).filter(([, value]) => value !== "" && value != null),
-  ) as Partial<JobPayload>;
-}
+import { CandidateCardGrid } from "./candidate/CandidateCardGrid";
+import { CandidateJobFormModal } from "./candidate/CandidateJobFormModal";
+import type { FormState } from "./candidate/candidateShared";
+import { EMPTY_FORM, MAX_CANDIDATE_IMAGES, MAX_IMAGE_BYTES } from "./candidate/candidateShared";
+import type { CandidateJob, CandidateJobDetail, CandidateJobPayload } from "../../types";
 
 interface Props {
   open: boolean;
@@ -92,16 +48,6 @@ interface Props {
   /** 从采集记录进入时，只显示选中的一条或多条采集批次。 */
   collectTaskIds?: number[];
 }
-
-interface FormState {
-  title: string;
-  company: string;
-  rawText: string;
-  note: string;
-  images: string[];
-}
-
-const EMPTY_FORM: FormState = { title: "", company: "", rawText: "", note: "", images: [] };
 
 export default function CandidateJobsDrawer({
   open,
@@ -440,93 +386,16 @@ export default function CandidateJobsDrawer({
           <Empty description="还没有备选岗位。看到感兴趣但来不及整理的招聘信息，先放到这里。" />
         )
       ) : (
-        <div className="candidate-job-card-grid">
-          {items.map((candidate) => {
-            const selected = selectedIds.includes(candidate.id);
-            return (
-              <Card
-                key={candidate.id}
-                hoverable
-                className={`candidate-job-card${selected ? " is-selected" : ""}`}
-                onClick={(event) => {
-                  const target = event.target as HTMLElement;
-                  if (target.closest("button, a, input, .ant-dropdown, .row-actions")) return;
-                  void openDetails(candidate);
-                }}
-                title={
-                  <Space>
-                    <Checkbox
-                      checked={selected}
-                      disabled={batchAction !== null}
-                      onClick={(event) => event.stopPropagation()}
-                      onChange={(event) => toggleSelected(candidate.id, event.target.checked)}
-                    />
-                    <Typography.Text strong>
-                      {candidate.title || "（未识别岗位名）"}
-                    </Typography.Text>
-                  </Space>
-                }
-                extra={
-                  <Tag color={candidate.status === "imported" ? "green" : "orange"}>
-                    {candidate.status === "imported" ? "已导入" : "待处理"}
-                  </Tag>
-                }
-              >
-                <Space orientation="vertical" size={6} style={{ width: "100%" }}>
-                  <Typography.Text type="secondary">
-                    {[candidate.company || "未识别公司", candidate.location, candidate.salary]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </Typography.Text>
-                  <Space wrap>
-                    <Tag>{candidate.source || "未知来源"}</Tag>
-                    {candidate.images.length > 0 && (
-                      <Tag color="blue">截图 {candidate.images.length} 张</Tag>
-                    )}
-                    {candidate.raw_text && <Tag>原文 {candidate.raw_text.length} 字</Tag>}
-                  </Space>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    更新于 {formatDateTime(candidate.updated_at)}
-                  </Typography.Text>
-                  <RowActions
-                    primary={
-                      candidate.status === "pending"
-                        ? [
-                            {
-                              key: "import",
-                              label: "导入到岗位",
-                              onClick: () => void startImport(candidate),
-                            },
-                          ]
-                        : []
-                    }
-                    more={[
-                      {
-                        key: "detail",
-                        label: "查看详情",
-                        onClick: () => void openDetails(candidate),
-                      },
-                      {
-                        key: "edit",
-                        label: "编辑",
-                        icon: <EditOutlined />,
-                        onClick: () => openEdit(candidate),
-                      },
-                      {
-                        key: "delete",
-                        label: "删除",
-                        danger: true,
-                        icon: <DeleteOutlined />,
-                        confirm: "删除这条备选岗位？",
-                        onClick: () => void remove(candidate),
-                      },
-                    ]}
-                  />
-                </Space>
-              </Card>
-            );
-          })}
-        </div>
+        <CandidateCardGrid
+          items={items}
+          selectedIds={selectedIds}
+          batchAction={batchAction}
+          onToggleSelected={toggleSelected}
+          onOpenDetails={openDetails}
+          onStartImport={startImport}
+          onOpenEdit={openEdit}
+          onRemove={remove}
+        />
       )}
 
       <CandidateJobDetailModal
@@ -540,106 +409,17 @@ export default function CandidateJobsDrawer({
         }}
       />
 
-      <Modal
-        title={editing ? "编辑备选岗位" : "添加备选岗位"}
+      <CandidateJobFormModal
         open={formOpen}
-        width={720}
-        confirmLoading={submitting}
-        onCancel={() => {
-          if (!submitting) setFormOpen(false);
-        }}
-        onOk={() => void submit()}
-      >
-        <Form layout="vertical">
-          <Form.Item label="招聘信息来源">
-            <Typography.Text type="secondary">
-              由系统按你添加的内容自动标注（{formState.images.length > 0 ? "招聘截图" : "粘贴文本"}
-              ）
-            </Typography.Text>
-          </Form.Item>
-          <Form.Item label="岗位名称（可留空，导入时再补）">
-            <Input
-              value={formState.title}
-              maxLength={128}
-              placeholder="如：市场营销专员"
-              onChange={(event) => setFormState((c) => ({ ...c, title: event.target.value }))}
-            />
-          </Form.Item>
-          <Form.Item label="公司名称">
-            <Input
-              value={formState.company}
-              maxLength={128}
-              placeholder="如：字节跳动"
-              onChange={(event) => setFormState((c) => ({ ...c, company: event.target.value }))}
-            />
-          </Form.Item>
-          <Form.Item label="招聘原文">
-            <Input.TextArea
-              value={formState.rawText}
-              autoSize={{ minRows: 6, maxRows: 14 }}
-              placeholder="把招聘信息原样粘贴进来，导入时会用它预填 JD"
-              onChange={(event) => setFormState((c) => ({ ...c, rawText: event.target.value }))}
-            />
-          </Form.Item>
-          <Form.Item label={`招聘截图（最多 ${MAX_CANDIDATE_IMAGES} 张，单张不超过 2 MB）`}>
-            <Space orientation="vertical" style={{ width: "100%" }}>
-              <FileDropZone
-                accept="image/jpeg,image/png,image/webp"
-                disabled={formState.images.length >= MAX_CANDIDATE_IMAGES}
-                hint="松开即可添加招聘截图"
-                onFiles={(dropped) => dropped.forEach((file) => void addImages(file))}
-                onRejected={() => message.error("招聘截图只支持 JPG、PNG 或 WebP")}
-              >
-                <Space wrap>
-                  <Upload
-                    accept="image/jpeg,image/png,image/webp"
-                    showUploadList={false}
-                    beforeUpload={(file) => {
-                      void addImages(file as File);
-                      return Upload.LIST_IGNORE;
-                    }}
-                  >
-                    <Button icon={<PlusOutlined />}>添加截图</Button>
-                  </Upload>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    也可以直接拖进来
-                  </Typography.Text>
-                </Space>
-              </FileDropZone>
-              {formState.images.length > 0 && (
-                <Space wrap>
-                  {formState.images.map((source, index) => (
-                    <div key={`${index}-${source.slice(-16)}`} className="job-note-image-item">
-                      <Image src={source} alt={`招聘截图 ${index + 1}`} width={96} />
-                      <Button
-                        type="text"
-                        size="small"
-                        danger
-                        aria-label={`移除截图 ${index + 1}`}
-                        icon={<DeleteOutlined />}
-                        onClick={() =>
-                          setFormState((c) => ({
-                            ...c,
-                            images: c.images.filter((_, i) => i !== index),
-                          }))
-                        }
-                      />
-                    </div>
-                  ))}
-                </Space>
-              )}
-            </Space>
-          </Form.Item>
-          <Form.Item label="备注" style={{ marginBottom: 0 }}>
-            <Input.TextArea
-              value={formState.note}
-              autoSize={{ minRows: 2, maxRows: 4 }}
-              placeholder="为什么先留着它、准备什么时候投（选填）"
-              onChange={(event) => setFormState((c) => ({ ...c, note: event.target.value }))}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+        editing={editing}
+        submitting={submitting}
+        formState={formState}
+        onChange={setFormState}
+        onAddImages={addImages}
+        onSubmit={submit}
+        onCancel={() => setFormOpen(false)}
+        onRejected={() => message.error("招聘截图只支持 JPG、PNG 或 WebP")}
+      />
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         <ImportOutlined /> 已导入的备选会保留在列表里，方便回看它变成了哪个岗位。
       </Typography.Text>
