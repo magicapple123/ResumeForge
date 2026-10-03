@@ -55,7 +55,12 @@ class ResumeRecord(Base):
     parse_error: Mapped[str] = mapped_column(Text, default="")  # JSON 解析失败时留痕
     # 结构化的"没写进这份简历"清单（JSON 数组：section/names/filtered/model_omitted）。
     # 与 warnings 分开：那是"疑似虚构"的红色核对项，这是岗位导向筛选的正常结果。
-    coverage_notes: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # server_default 让建表（create_all）后就能插入不带该列的遗留行（如匿名/孤立
+    # 简历），旧行读取到 [] 即"没有说明"；alembic 侧由 0037 迁移负责（旧行保持 NULL，
+    # 读取方用 ``or []`` 兜底，两条路径语义一致）。
+    coverage_notes: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, server_default="[]"
+    )
     # 生成说明：这份简历是怎么选出来的（岗位信号、候选组成、省略原因、事实约束），
     # 在预览里折叠展示，回答"为什么是这样一份简历"。
     rationale: Mapped[str] = mapped_column(Text, default="", server_default="")
