@@ -23,12 +23,4 @@ export const LIVE_STATUS_META: Record<string, { label: string; color: string }> 
 
 /** 页面级 busy 联合态：任何一个动作在跑，其余入口都按各自规则禁用。 */
 export type WebFormBusyState =
-  | "start"
-  | "read"
-  | "fill"
-  | "stop"
-  | "end"
-  | "live"
-  | "refresh"
-  | "diagnostics"
-  | null;
+  "start" | "read" | "fill" | "stop" | "end" | "live" | "refresh" | "diagnostics" | null;

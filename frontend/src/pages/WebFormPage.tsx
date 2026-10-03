@@ -89,10 +89,6 @@ export default function WebFormPage() {
   const [busy, setBusy] = useState<
     "start" | "read" | "fill" | "stop" | "end" | "live" | "refresh" | "diagnostics" | null
   >(null);
-  // 浏览器那几个按钮共用这一个 busy：**任何一个在跑，其余的都禁用**。
-  // 它们职责分得开（起停 / 配置 / 重查），但都围绕同一个浏览器进程——并行点开只会让
-  // "关闭还没回来就点了启动"这类交错更难对上账。
-  const anyBusy = busy !== null;
   // 填充完成后加一，「填充记录」据此重新拉取。
   const [recordRefresh, setRecordRefresh] = useState(0);
   // 「这次填的几项简历通里没有，要记住吗」的提案；空数组 = 不弹。
@@ -195,7 +191,6 @@ export default function WebFormPage() {
     persistWebFormSession,
   ]);
 
-
   const handleStart = useCallback(async () => {
     setBusy("start");
     try {
@@ -268,6 +263,7 @@ export default function WebFormPage() {
     } finally {
       setBusy(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setLive/setLiveOptOut 为 useLiveSession 返回的稳定 setter（依赖数组照抄拆分前写法）
   }, [browser, live?.running, message]);
 
   const handleEndSession = useCallback(async () => {
@@ -296,6 +292,7 @@ export default function WebFormPage() {
     } finally {
       setBusy(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setLive/setLiveOptOut/setMemoryDialogOpen/setRestoring 为 hook 返回的稳定 setter（依赖数组照抄拆分前写法）
   }, [browser, clearWebFormSession, forgetSnapshot, message]);
 
   const handleRefreshStatus = useCallback(async () => {
@@ -341,10 +338,6 @@ export default function WebFormPage() {
     }
   }, [message]);
 
-
-
-
-
   const handleLiveToggle = useCallback(async () => {
     setBusy("live");
     try {
@@ -364,6 +357,7 @@ export default function WebFormPage() {
     } finally {
       setBusy(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setLive/setLiveOptOut 为 useLiveSession 返回的稳定 setter（依赖数组照抄拆分前写法）
   }, [aiOn, live?.running, liveEnabled, message]);
 
   const handleRead = useCallback(async () => {
@@ -462,6 +456,7 @@ export default function WebFormPage() {
         setMemorySaving(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setLive/setMemoryDialogOpen/setMemorySaving 为 useLiveSession 返回的稳定 setter（依赖数组照抄拆分前写法）
     [message],
   );
 
@@ -567,9 +562,7 @@ export default function WebFormPage() {
         />
       ) : null}
 
-      {result ? (
-        <FillResultCard result={result} />
-      ) : null}
+      {result ? <FillResultCard result={result} /> : null}
 
       {preview ? (
         <Card size="small" title="页面还要求这些">

@@ -5,16 +5,7 @@
  * aria-label/类名/定宽注释逐字随迁，行为等价。）
  */
 import { ArrowDownOutlined, ArrowUpOutlined, MoreOutlined } from "@ant-design/icons";
-import {
-  Button,
-  Dropdown,
-  Menu,
-  Space,
-  Table,
-  Tag,
-  Tooltip,
-  Typography,
-} from "antd";
+import { Button, Dropdown, Menu, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";

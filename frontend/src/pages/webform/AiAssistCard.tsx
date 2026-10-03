@@ -12,7 +12,7 @@ export function AiAssistCard({
 }: {
   aiOn: boolean;
   aiAvailable: boolean | null;
-  liveRunning: boolean;
+  liveRunning: boolean | undefined;
   onAiEnabledChange: (enabled: boolean) => void;
 }) {
   return (

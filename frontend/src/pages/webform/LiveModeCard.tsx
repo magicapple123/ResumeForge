@@ -57,9 +57,7 @@ export function LiveModeCard({
       {live?.running ? (
         <Space size="middle" wrap>
           <Tag
-            color={
-              liveEnabled ? (LIVE_STATUS_META[live.status]?.color ?? "processing") : "default"
-            }
+            color={liveEnabled ? (LIVE_STATUS_META[live.status]?.color ?? "processing") : "default"}
           >
             {liveEnabled ? (LIVE_STATUS_META[live.status]?.label ?? "等待你点某个框") : "已关闭"}
           </Tag>
@@ -71,9 +69,7 @@ export function LiveModeCard({
           ) : null}
           {liveEnabled && live.source === "ai" ? <Tag color="blue">AI 建议</Tag> : null}
           {liveEnabled && alternatives.length ? (
-            <Tooltip
-              title={alternatives.map((item) => `${item.label}：${item.value}`).join("\n")}
-            >
+            <Tooltip title={alternatives.map((item) => `${item.label}：${item.value}`).join("\n")}>
               <Typography.Text type="secondary">
                 另有 {alternatives.length} 个候选（在浏览器窗口里点选）
               </Typography.Text>

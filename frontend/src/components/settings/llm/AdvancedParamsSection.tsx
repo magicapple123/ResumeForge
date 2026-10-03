@@ -67,12 +67,7 @@ export function AdvancedParamsSection() {
             label="随机种子"
             tooltip="固定种子后同一请求更容易复现相同输出；是否生效取决于服务商。"
           >
-            <InputNumber
-              min={0}
-              step={1}
-              style={{ width: "100%" }}
-              placeholder="留空 = 不发送"
-            />
+            <InputNumber min={0} step={1} style={{ width: "100%" }} placeholder="留空 = 不发送" />
           </Form.Item>
         </Col>
         <Col xs={24} md={6}>

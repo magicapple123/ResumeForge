@@ -45,8 +45,7 @@ export function CandidateJobFormModal({
       <Form layout="vertical">
         <Form.Item label="招聘信息来源">
           <Typography.Text type="secondary">
-            由系统按你添加的内容自动标注（{formState.images.length > 0 ? "招聘截图" : "粘贴文本"}
-            ）
+            由系统按你添加的内容自动标注（{formState.images.length > 0 ? "招聘截图" : "粘贴文本"}）
           </Typography.Text>
         </Form.Item>
         <Form.Item label="岗位名称（可留空，导入时再补）">

@@ -35,9 +35,7 @@ export function ReminderPopup({
         itemRender={(item) => (
           <ListyItem>
             <Space size={6} wrap>
-              <Tag color={REMINDER_URGENCY_COLORS[item.urgency] ?? "default"}>
-                {item.due_label}
-              </Tag>
+              <Tag color={REMINDER_URGENCY_COLORS[item.urgency] ?? "default"}>{item.due_label}</Tag>
               <Link to="/tracker" onClick={onClose}>
                 {item.title}
               </Link>

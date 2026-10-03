@@ -11,7 +11,7 @@
  * 空值一律不带上（``JobFormModal`` 那边也是这么处理的）：把空串显式写进表单会让
  * "这个字段是空的"与"这个字段没被填过"分不开。
  */
-import type { CandidateJobDetail, JobPayload } from "../../types";
+import type { CandidateJobDetail, JobPayload } from "../../../types";
 
 export function candidateToJobPayload(candidate: CandidateJobDetail): Partial<JobPayload> {
   const payload: Partial<JobPayload> = {

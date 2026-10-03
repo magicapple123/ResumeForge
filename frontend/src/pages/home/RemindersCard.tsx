@@ -102,9 +102,7 @@ export function RemindersCard({
                   }}
                 />
                 <span>{item.title}</span>
-                <Typography.Text type="secondary">
-                  {formatDateTime(item.remind_at)}
-                </Typography.Text>
+                <Typography.Text type="secondary">{formatDateTime(item.remind_at)}</Typography.Text>
               </Space>
             </ListyItem>
           )}

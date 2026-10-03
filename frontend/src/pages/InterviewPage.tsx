@@ -4,23 +4,8 @@
  * 与求职助手的差别：这里**流程由代码控制**（轮数、何时结束、什么时候出报告），所以界面上
  * 会明确显示"第 N/6 轮"，用户始终知道还剩几个问题；助手那边则是自由对话。
  */
-import {
-  ArrowLeftOutlined,
-  StopOutlined,
-  ThunderboltOutlined,
-} from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Form,
-  Input,
-  Modal,
-  Space,
-  Spin,
-  Tabs,
-  Tag,
-  Typography,
-} from "antd";
+import { ArrowLeftOutlined, StopOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { App, Button, Form, Input, Modal, Space, Spin, Tabs, Tag, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
