@@ -10,8 +10,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Listy,
-  Modal,
   Row,
   Select,
   Slider,
@@ -21,7 +19,7 @@ import {
   Typography,
 } from "antd";
 import type { FormInstance } from "antd/es/form";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { LLMModelsResult, LLMTestResult, LLMThinkingResult } from "../../types";
 import {
   CUSTOM_EFFORT_OPTION,
@@ -29,46 +27,20 @@ import {
   isValidReasoningEffort,
 } from "../../types/assistant";
 import ApiKeyInput from "./ApiKeyInput";
-import { ListyItem } from "../common/ListyItem";
-import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
+import { ModelPickerModal } from "./llm/ModelPickerModal";
 import {
-  DEFAULT_MAX_TOKENS,
+  EFFORT_LABELS,
+  EFFORT_TOOLTIP,
+  FALLBACK_EFFORTS,
+  THINKING_STYLE_OPTIONS,
+} from "./llm/thinkingMeta";
+import { useUnlimitedTokens } from "./llm/useUnlimitedTokens";
+import {
   MAX_MAX_TOKENS,
   MIN_MAX_TOKENS,
   PRESET_OPTIONS,
-  UNLIMITED_MAX_TOKENS,
   type SettingsFormValues,
 } from "./SettingsConfig";
-
-/** 档位的中文名；表里出现的其它取值（各家自定义的）原样显示。 */
-const EFFORT_LABELS: Record<string, string> = {
-  minimal: "最低",
-  low: "低",
-  medium: "中",
-  high: "高",
-};
-
-/**
- * 检测之前先给一份通用档位。
- *
- * 真正的选项来自后端的「检测思考支持」（各家划分不同），这份兜底只是让控件在还没检测时
- * 可用；检测结果一到就被替换。
- */
-const FALLBACK_EFFORTS = ["low", "medium", "high"];
-
-/** 「思考强度」的说明：两个分支（下拉 / 自定义输入框）共用同一份文案。 */
-const EFFORT_TOOLTIP =
-  "档位越高通常越慢也越贵。各家的档位划分不同，选项来自「检测思考支持」；也可以选「自定义…」自己填。" +
-  "自定义值原样发给 OpenAI 兼容接口；Claude 原生协议下填写数字＝思考预算 tokens，填其他词按默认档处理。" +
-  "留空表示不指定档位。";
-
-const THINKING_STYLE_OPTIONS = [
-  { value: "auto", label: "自动（按协议与服务商推断）" },
-  { value: "reasoning_effort", label: "reasoning_effort（OpenAI 系）" },
-  { value: "thinking_object", label: "thinking 开关（智谱等）" },
-  { value: "enable_thinking", label: "enable_thinking（通义 qwen3）" },
-  { value: "budget", label: "thinking 预算（Claude 原生）" },
-];
 
 interface Props {
   form: FormInstance<SettingsFormValues>;
@@ -103,12 +75,9 @@ export default function LLMConfigCard({
   onFetchModels,
   onCheckThinking,
 }: Props) {
-  const maxTokens = Form.useWatch("max_tokens", form);
-  const unlimitedTokens = maxTokens === UNLIMITED_MAX_TOKENS;
   const thinkingEnabled = Form.useWatch("thinking_enabled", form);
   const thinkingEffort: string = Form.useWatch("thinking_effort", form) ?? "";
-  // 记住勾选「不限制」之前的值，取消勾选时原样还回去，免得用户重填。
-  const lastLimitedTokens = useRef(DEFAULT_MAX_TOKENS);
+  const { unlimitedTokens, setUnlimitedTokens } = useUnlimitedTokens(form);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
@@ -165,17 +134,6 @@ export default function LLMConfigCard({
     if (thinkingResult.accepted === false) return "error" as const;
     if (thinkingResult.probed) return "warning" as const;
     return "info" as const;
-  };
-
-  const setUnlimitedTokens = (unlimited: boolean) => {
-    if (unlimited) {
-      // 只在写入 0 之前读取：此时字段里还是用户原本填的有限值。
-      const current = form.getFieldValue("max_tokens");
-      if (typeof current === "number" && current >= MIN_MAX_TOKENS) {
-        lastLimitedTokens.current = current;
-      }
-    }
-    form.setFieldValue("max_tokens", unlimited ? UNLIMITED_MAX_TOKENS : lastLimitedTokens.current);
   };
 
   const fetchModels = async () => {
@@ -603,42 +561,15 @@ export default function LLMConfigCard({
           }
         />
       )}
-      <Modal
-        title="选择模型"
+      <ModelPickerModal
         open={modelPickerOpen}
-        footer={null}
-        onCancel={() => setModelPickerOpen(false)}
-      >
-        <Typography.Paragraph type="secondary">{modelsMessage}</Typography.Paragraph>
-        <Listy
-          height={360}
-          items={modelOptions}
-          rowKey={(model) => model}
-          styles={{
-            root: { overflowX: "hidden" },
-            item: { ...LISTY_ITEM_PADDING_SMALL },
-          }}
-          itemRender={(model) => (
-            <ListyItem
-              actions={[
-                <Button
-                  key="pick"
-                  type="link"
-                  size="small"
-                  onClick={() => {
-                    form.setFieldValue("model", model);
-                    setModelPickerOpen(false);
-                  }}
-                >
-                  使用
-                </Button>,
-              ]}
-            >
-              <Typography.Text code>{model}</Typography.Text>
-            </ListyItem>
-          )}
-        />
-      </Modal>
+        modelsMessage={modelsMessage}
+        modelOptions={modelOptions}
+        onPick={(model) => {
+          form.setFieldValue("model", model);
+        }}
+        onClose={() => setModelPickerOpen(false)}
+      />
     </Card>
   );
 }
