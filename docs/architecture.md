@@ -562,7 +562,7 @@ score_match_result(result, job_payload, profile_text, resume_text)
 1. **新增模型提供商**：非 OpenAI 兼容协议时，在 `services/llm/` 新增 Provider 类，并在 `create_provider` 中按 `provider` 字段分发。
 2. **扩展岗位文本识别规则**：在 `services/job_parser/` 对应职责模块增加字段标签、候选值或章节规则，并补充 `tests/test_job_text_parser.py` 或 `tests/test_job_text_parser_edge_cases.py` 离线测试；`services/job_text_parser.py` 仅保留兼容门面和解析流程装配。
 3. **扩展 JD 标签规则**：在 `services/jd/jd_parser_constants.py` 增加学历、年限或技能别名，在 `jd_parser_filters.py` 增加必要的上下文过滤，并补充 `tests/test_jd_parser.py`；`services/jd_parser.py` 仅负责公共入口和流程编排。
-4. **新增导出格式**：在 `services/exporter.py` 加导出函数，`api/resumes.py` 的 `_EXPORT_FORMATS` 加一行。
+4. **新增导出格式**：在 `services/export_pipeline.py` 写一个 `_render_<格式>` 渲染函数，挂进 `FORMAT_RENDERERS` 注册表加一行（管线自动接入脱敏与水印），并补充 `tests/test_export_pipeline.py` 测试。
 5. **调整美化拓展策略**：后端 `resume_generator.py` 的分级指令与前端 `config.ts` 的 `RESUME_ENHANCEMENT_LEVELS` 保持一致，并补充 `tests/test_resume_generator.py` 或 `tests/test_resume_quality_retry.py` 测试。
 6. **扩展助手附件格式**：先在 `services/attachments.py` 增加扩展名、MIME 与文件头校验（图片还要在 `image_conversion.py` 补转码），再在 `assistant_service.py` 接入上下文转换并补充边界测试；不要只改前端 `accept`。新增文档类型时把解析放在 `document_text.py`，并同时给识别接口的 `documents` 字段留出入口。
 7. **新增招聘站点适配器**：在 `services/sites/` 增加一个实现 `base.py` 契约的适配器并在 `registry.py` 注册其域名即可，采集与投递业务层不改；站点改版只影响该适配器。表单填写的通用启发式在 `services/webform/engine/`，与具体站点解耦。**前端无需跟着改**：`GET /api/apply/sites` 下发的站点列表（`SiteOptionOut` / `SiteListOut`）是界面展示"当前招聘网站"与站点清单的唯一来源，前端组件里不写死任何站点名，因此新注册的站点会自动出现在界面上；适配器可用 `supports_collect` / `supports_apply` 如实声明本站点支持的能力。
