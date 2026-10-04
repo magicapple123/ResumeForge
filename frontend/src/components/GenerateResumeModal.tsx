@@ -1,19 +1,5 @@
 /** AI 生成简历弹窗：配置岗位导向美化/篇幅 -> 流式生成 -> 预览结果（自动保存历史）。 */
-import type { ResumeFormatConfig } from "../types/resumeFormat";
-import { ReloadOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Input,
-  Modal,
-  Segmented,
-  Space,
-  Steps,
-  Switch,
-  Tooltip,
-  Typography,
-} from "antd";
+import { App, Modal } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { attachTaskUi, watchResumeTask } from "../utils/backgroundTasks";
@@ -28,7 +14,6 @@ import {
   updateResumeLayout,
 } from "../api/resumes";
 import { getLLMConfig } from "../api/settings";
-import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../config";
 import type {
   EnhancementLevel,
   Job,
@@ -37,18 +22,14 @@ import type {
   ResumeGenerateTask,
   ResumeLayout,
 } from "../types";
+import type { ResumeFormatConfig } from "../types/resumeFormat";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
-import ResumeDetailPreview from "./resume/ResumeDetailPreview";
-import ResumeLayoutControls from "./ResumeLayoutControls";
 import type { ResumePreviewHandle } from "./ResumePreview";
-import {
-  RESUME_GENERATION_STAGES,
-  stageForProgressMessage,
-  stageIndexOf,
-} from "./resumeGenerationStages";
-
-/** 自定义提示词上限，与后端 GenerateOptions.custom_instruction 一致。 */
-const MAX_CUSTOM_INSTRUCTION = 2000;
+import GenerationConfigStage from "./generate-resume/GenerationConfigStage";
+import GenerationProgressStage from "./generate-resume/GenerationProgressStage";
+import GenerationErrorStage from "./generate-resume/GenerationErrorStage";
+import GenerationPreviewStage from "./generate-resume/GenerationPreviewStage";
+import type { GenerateResult } from "./generate-resume/GenerationPreviewStage";
 
 type Stage = "config" | "generating" | "preview" | "error";
 
@@ -59,11 +40,6 @@ interface Props {
   /** 通用简历的初始名称，留空则后端按「姓名-通用简历-时间戳」命名。 */
   initialTitle?: string;
   onClose: () => void;
-}
-
-/** 生成完成的简历记录：直接持有完整 detail，预览阶段与简历中心共享同一套界面（B3）。 */
-interface GenerateResult {
-  detail: ResumeDetail;
 }
 
 export default function GenerateResumeModal({ job, open, initialTitle = "", onClose }: Props) {
@@ -399,189 +375,65 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       destroyOnHidden
     >
       {stage === "config" && (
-        <div>
-          {!llmReady ? (
-            <Alert
-              type="warning"
-              showIcon
-              style={{ marginBottom: 16 }}
-              title="尚未配置大模型 API，请先到「设置」页完成配置（支持 DeepSeek / 豆包 / Kimi / OpenAI 等）"
-            />
-          ) : (
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-              title={`当前模型：${modelName || "未知"}。生成过程约需 1-2 分钟，生成在后台进行，期间可关闭弹窗，完成后会自动提醒。`}
-              description={
-                job
-                  ? "系统会根据目标岗位的 JD，从完整个人资料与经历总结文件中筛选并排序相关信息；原始资料不会被修改。"
-                  : "通用简历不针对任何岗位：系统会完整使用你的资料（只受篇幅预算限制），保留各方向的经历与技能；原始资料不会被修改。"
-              }
-            />
-          )}
-          {!job && (
-            <div style={{ marginBottom: 16 }}>
-              <Typography.Text strong>简历名称</Typography.Text>
-              <Input
-                aria-label="简历名称"
-                value={title}
-                maxLength={64}
-                style={{ marginTop: 8 }}
-                placeholder="留空则自动命名为「姓名-通用简历-时间」"
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </div>
-          )}
-          <Typography.Title level={5}>{job ? "岗位适配与内容美化" : "内容美化"}</Typography.Title>
-          <Space orientation="vertical" size={14} style={{ width: "100%" }}>
-            <Space size={10}>
-              <Switch checked={enhance} onChange={setEnhance} />
-              <Typography.Text strong>
-                {job ? "根据岗位要求美化拓展经历" : "用资料里的总结文件补足经历细节"}
-              </Typography.Text>
-            </Space>
-            <Typography.Text type="secondary">
-              {job
-                ? "基于已有经历和总结文件补足表达细节，突出与岗位相关的能力，不修改个人资料原文。"
-                : "基于已有经历和总结文件补足表达细节，突出资料本身的重点，不修改个人资料原文。"}
-            </Typography.Text>
-            <Segmented
-              block
-              disabled={!enhance}
-              value={enhancementLevel}
-              // 下面的说明只讲当前选中的那一档，得先点一下才知道别的档是什么；
-              // 每一档自己带上悬停说明，生成前可以先把三档比一遍。
-              options={RESUME_ENHANCEMENT_LEVELS.map((item) => ({
-                label: (
-                  <Tooltip title={enhancementLevelDescription(item.value, !job)}>
-                    {item.label}
-                  </Tooltip>
-                ),
-                value: item.value,
-              }))}
-              onChange={(value) => setEnhancementLevel(value as EnhancementLevel)}
-            />
-            <Typography.Text type={enhance ? undefined : "secondary"}>
-              {enhance
-                ? enhancementLevelDescription(enhancementLevel, !job)
-                : "关闭后仅筛选和整理原有资料，不进行拓展。"}
-            </Typography.Text>
-          </Space>
-
-          <Typography.Title level={5} style={{ marginTop: 20 }}>
-            篇幅与版式
-          </Typography.Title>
-          <ResumeLayoutControls layout={layout} disabled={!llmReady} onChange={setLayout} />
-          <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
-            默认 1 页 A4 +
-            标准字号。生成后如果内容塞不下，可以在预览里一键增加页数或缩小字号，不必重新生成。
-          </Typography.Text>
-
-          <Typography.Title level={5} style={{ marginTop: 20 }}>
-            补充要求（选填）
-          </Typography.Title>
-          <Input.TextArea
-            value={customInstruction}
-            maxLength={MAX_CUSTOM_INSTRUCTION}
-            showCount
-            disabled={!llmReady}
-            autoSize={{ minRows: 2, maxRows: 5 }}
-            placeholder="例如：突出后端性能优化经历；不要出现「负责…」这类空泛表述；把实习经历放在教育经历前面。"
-            onChange={(event) => setCustomInstruction(event.target.value)}
-          />
-          <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
-            这段要求会附在生成提示词后面，只影响表达方向；事实锚定、篇幅上限和防虚构规则不变。
-          </Typography.Text>
-
-          <div style={{ marginTop: 24, textAlign: "right" }}>
-            <Space>
-              <Button onClick={handleClose}>取消</Button>
-              <Button type="primary" disabled={!llmReady} onClick={() => void startGenerate()}>
-                开始生成
-              </Button>
-            </Space>
-          </div>
-        </div>
+        <GenerationConfigStage
+          job={job}
+          title={title}
+          setTitle={setTitle}
+          enhance={enhance}
+          setEnhance={setEnhance}
+          enhancementLevel={enhancementLevel}
+          setEnhancementLevel={setEnhancementLevel}
+          layout={layout}
+          setLayout={setLayout}
+          customInstruction={customInstruction}
+          setCustomInstruction={setCustomInstruction}
+          llmReady={llmReady}
+          modelName={modelName}
+          onClose={handleClose}
+          onStart={() => void startGenerate()}
+        />
       )}
 
       {stage === "generating" && (
-        <div>
-          <Steps
-            size="small"
-            current={stageIndexOf(stageForProgressMessage(task?.message ?? ""))}
-            items={RESUME_GENERATION_STAGES.map((item) => ({ title: item.title }))}
-            style={{ marginBottom: 8 }}
-          />
-          <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
-            {task?.message || "正在准备…"} · 已接收 {task?.received_chars ?? 0} 字
-          </Typography.Text>
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-            title="生成已在后台开始：现在关闭弹窗不会中断，完成后会自动提醒并打开结果。"
-          />
-          <div style={{ marginTop: 16, textAlign: "right" }}>
-            <Space>
-              <Button onClick={handleClose}>后台继续（关闭弹窗）</Button>
-              <Button danger disabled={taskId == null} onClick={() => void handleCancelGenerate()}>
-                取消生成
-              </Button>
-            </Space>
-          </div>
-        </div>
+        <GenerationProgressStage
+          task={task}
+          taskId={taskId}
+          onClose={handleClose}
+          onCancel={() => void handleCancelGenerate()}
+        />
       )}
 
       {stage === "preview" && result && (
-        <ResumeDetailPreview
-          detail={result.detail}
-          html={previewHtml}
+        <GenerationPreviewStage
+          result={result}
+          previewHtml={previewHtml}
           layout={layout}
           layoutStatus={layoutStatus}
           measure={measure}
           pdfDirectAvailable={pdfDirectAvailable}
           relayouting={relayouting}
           previewRef={previewRef}
-          onLayoutStatus={setLayoutStatus}
-          onMeasure={setMeasure}
-          onApplyLayout={(next) => void applyLayout(next)}
-          onApplyFittedFormat={(formatConfig) => void applyFittedFormat(formatConfig)}
-          onSaveEditedResume={(content) => saveEditedResume(content)}
-          onResumeRevised={(updated) => applyRevisedDetail(updated)}
-          showReviseAction={false}
+          setLayoutStatus={setLayoutStatus}
+          setMeasure={setMeasure}
+          applyLayout={(next) => void applyLayout(next)}
+          applyFittedFormat={(formatConfig) => void applyFittedFormat(formatConfig)}
+          saveEditedResume={(content) => saveEditedResume(content)}
+          applyRevisedDetail={(updated) => applyRevisedDetail(updated)}
           suggestionsGenerated={suggestionsGenerated}
           suggestionsResetKey={suggestionsResetKey}
-          onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
-          extraActions={
-            <Space wrap>
-              <Button onClick={() => navigate("/resumes")}>去简历中心</Button>
-              <Button icon={<ReloadOutlined />} onClick={() => void startGenerate()}>
-                重新生成
-              </Button>
-              <Button type="primary" onClick={handleClose}>
-                完成
-              </Button>
-            </Space>
-          }
+          setSuggestionsGenerated={setSuggestionsGenerated}
+          onGoResumes={() => navigate("/resumes")}
+          onRegenerate={() => void startGenerate()}
+          onClose={handleClose}
         />
       )}
 
       {stage === "error" && (
-        <div style={{ textAlign: "center", padding: "24px 0" }}>
-          <Alert
-            type="error"
-            showIcon
-            title={errorMsg || "生成失败"}
-            style={{ marginBottom: 24 }}
-          />
-          <Space>
-            <Button onClick={reset}>返回重试</Button>
-            <Button type="primary" onClick={() => void startGenerate()}>
-              重新生成
-            </Button>
-          </Space>
-        </div>
+        <GenerationErrorStage
+          errorMsg={errorMsg}
+          onReset={reset}
+          onRegenerate={() => void startGenerate()}
+        />
       )}
     </Modal>
   );
