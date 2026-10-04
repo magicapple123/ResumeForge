@@ -8,10 +8,10 @@ import json
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ..models.resume import ResumeRecord
-from ..schemas.resume import ResumeContent, ResumeOut
-from ..services import trash
-from ..services.resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_TEMPLATE
+from ...models.resume import ResumeRecord
+from ...schemas.resume import ResumeContent, ResumeOut
+from ...services import trash
+from ...services.resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_TEMPLATE
 
 # 服务端 PDF 的实际页数与用户选定的上限。前端靠它们提示"下载下来的页数和你选的不一样"，
 # 因此这两个响应头必须出现在 CORS 的 expose_headers 里（见 application.py）。
