@@ -26,7 +26,7 @@ from ...services.resume.resume_templates import (
     template_options_with_custom,
 )
 from ...services.pdf_exporter import font_available
-from ..database import get_db
+from ...database import get_db
 
 logger = logging.getLogger(__name__)
 
