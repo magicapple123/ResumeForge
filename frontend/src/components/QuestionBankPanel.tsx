@@ -6,7 +6,12 @@
  *
  * 旧版历史记录若为纯文本（groups 是字符串），仅做兼容展示并提示"仅可查看"，不崩。
  */
-import { PlayCircleOutlined, ReloadOutlined, SaveOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import {
+  PlayCircleOutlined,
+  ReloadOutlined,
+  SaveOutlined,
+  ThunderboltOutlined,
+} from "@ant-design/icons";
 import { Alert, App, Button, Card, Empty, Select, Space, Spin, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 import {

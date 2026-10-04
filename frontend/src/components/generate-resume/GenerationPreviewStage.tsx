@@ -8,11 +8,7 @@ import { Button, Space } from "antd";
 import type { RefObject } from "react";
 import ResumeDetailPreview from "../resume/ResumeDetailPreview";
 import type { ResumePreviewHandle } from "../ResumePreview";
-import type {
-  ResumeContent,
-  ResumeDetail,
-  ResumeLayout,
-} from "../../types";
+import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 

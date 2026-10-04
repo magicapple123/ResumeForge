@@ -3,12 +3,7 @@
  * ``converted`` 由后端按关联漏斗后置位派生，前端只展示、不自己算口径。顶部转化率卡展示
  * 有效内推总数、已转化数与转化率。备注图片先上传拿相对路径，再随表单写入 ``note_images``。
  */
-import {
-  DeleteOutlined,
-  EditOutlined,
-  MoreOutlined,
-  PlusOutlined,
-} from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
@@ -334,11 +329,7 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
         />
       </Modal>
 
-      <ReferralDetailDrawer
-        detail={detail}
-        onEdit={openEdit}
-        onClose={() => setDetail(null)}
-      />
+      <ReferralDetailDrawer detail={detail} onEdit={openEdit} onClose={() => setDetail(null)} />
     </Space>
   );
 }

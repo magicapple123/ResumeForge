@@ -378,9 +378,7 @@ export default function JobFormModal({
           <NoteImagesField
             noteImages={noteImages}
             onAddImage={(file) => void addNoteImage(file)}
-            onRemove={(index) =>
-              setNoteImages((current) => current.filter((_, i) => i !== index))
-            }
+            onRemove={(index) => setNoteImages((current) => current.filter((_, i) => i !== index))}
           />
         </Form>
       )}
