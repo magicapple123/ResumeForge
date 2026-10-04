@@ -20,7 +20,7 @@
     const referenceWidth = 793.7;                // 210mm ≈ 793.7px（96dpi）
     const referenceHeight = 1122.5 * pageCount;  // 297mm * 页数
     // 注意：下面的 minScale / maxPasses / 0.995 / 0.001 / +1px 这几个数值，与
-    // `backend/app/services/pdf_exporter.py` 里的 MIN_FIT_SCALE / _FIT_MAX_PASSES /
+    // `backend/app/services/pdf_exporter/` 里的 MIN_FIT_SCALE / _FIT_MAX_PASSES /
     // _FIT_RATIO_MARGIN / _FIT_MIN_STEP / _FIT_TOLERANCE_MM 是同一套口径的两份实现。
     // 两套引擎（JS 与 Python）无法共享同一份常量，只能靠测试钉住同步：
     // `tests/test_pdf_exporter.py::test_fit_scale_constants_match_the_preview_script`

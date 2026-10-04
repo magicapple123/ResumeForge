@@ -298,7 +298,7 @@ describe("WebFormPage", () => {
   });
 
   it("点「开启专用浏览器」后立刻显示已开启，不等浏览器状态轮询翻牌", async () => {
-    // 后端在这两条浏览器路由里已经顺手把逐项填表打开了（见 api/webform.py），所以前端
+    // 后端在这两条浏览器路由里已经顺手把逐项填表打开了（见 api/webform/），所以前端
     // 读完一次 /live/status 就该把卡片切成「关闭」。
     apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
     apiMocks.startWebFormBrowser.mockResolvedValue(browserStatus({ state: "running" }));

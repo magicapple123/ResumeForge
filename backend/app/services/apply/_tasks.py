@@ -124,7 +124,7 @@ def create_apply_task(db: Session, payload: ApplyTaskCreate) -> ApplyTask:
         raise ApplyConflict("已有任务正在进行中，请先停止或等待其完成")
 
     # 反向互斥的另一半：网申填表与投递会驱动**同一个受控浏览器窗口**，同时跑会互相抢页面。
-    # 另一半（填充前看投递）在 ``services/webform/service.py::is_apply_running``。
+    # 另一半（填充前看投递）在 ``services/webform/service/fill.py::is_apply_running``。
     from ..webform.service import is_filling
 
     if is_filling():

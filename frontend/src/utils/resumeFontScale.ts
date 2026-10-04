@@ -3,7 +3,7 @@
  *
  * **为什么复用 `font_scale_adjust` 而不是新增一个"字号像素"字段**：它本来就是
  * `format_config` 里的标准字段，HTML 与 PDF 渲染时都会把所选档位的基准字号乘上它
- * （见 `services/exporter.py` 与 `pdf_exporter.py`，同一个乘数）。复用它可以做到
+ * （见 `services/exporter.py` 与 `pdf_exporter/`，同一个乘数）。复用它可以做到
  * **不改数据库列、不改 Pydantic 枚举、已有简历零迁移**；而且预览 / 浏览器打印 /
  * 直出 PDF 天然走同一条乘数路径——"同一口径"这正是我们反复修过的那类 bug 的防线。
  * 自动一页也已经在用这个字段生成候选阶梯，所以滑块与它共用同一份语义。
