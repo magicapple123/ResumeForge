@@ -28,7 +28,7 @@ from app.models.job import JOB_STATUS_OPEN, Job
 from app.services.apply import apply_service, task_apply, task_runner
 from app.services.sites.registry import get_registry
 
-FRONTEND_TYPES = Path(__file__).resolve().parents[2] / "frontend/src/types/apply.ts"
+FRONTEND_TYPES = Path(__file__).resolve().parents[2] / "frontend/src/types/apply/failures.ts"
 
 
 class FakeRunner:
