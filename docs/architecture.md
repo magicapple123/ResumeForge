@@ -77,9 +77,9 @@ backend/app/
 │   ├── profile_text_parser.py # 个人资料解析兼容门面
 │   ├── job_text_parser.py     # 粘贴招聘文本解析兼容门面
 │   ├── jd_parser.py           # JD 规则解析兼容门面（技能标签/学历/年限）
-│   ├── pdf_exporter.py / docx_exporter.py / txt_exporter.py # 服务端多格式导出（复用同一版式口径）
+│   ├── pdf_exporter/ docx_exporter.py / txt_exporter.py # 服务端多格式导出（复用同一版式口径）
 │   ├── exporter.py / export_pipeline.py / watermark.py / privacy.py # 导出管线（渲染→水印→脱敏）
-│   ├── data_backup.py / datasets.py # 备份包导出、校验、恢复与多数据集切换
+│   ├── data_backup/ datasets.py # 备份包导出、校验、恢复与多数据集切换
 │   ├── analytics.py / tracker.py / tracker_extract.py # 求职统计与进度
 │   ├── claims.py / claim_draft.py # 事实台账（草拟 + 校验）
 │   ├── text_extraction.py / document_text.py / attachments.py / image_conversion.py # 识别与附件处理
@@ -565,8 +565,8 @@ score_match_result(result, job_payload, profile_text, resume_text)
 4. **新增导出格式**：在 `services/exporter.py` 加导出函数，`api/resumes.py` 的 `_EXPORT_FORMATS` 加一行。
 5. **调整美化拓展策略**：后端 `resume_generator.py` 的分级指令与前端 `config.ts` 的 `RESUME_ENHANCEMENT_LEVELS` 保持一致，并补充 `tests/test_resume_generator.py` 或 `tests/test_resume_quality_retry.py` 测试。
 6. **扩展助手附件格式**：先在 `services/attachments.py` 增加扩展名、MIME 与文件头校验（图片还要在 `image_conversion.py` 补转码），再在 `assistant_service.py` 接入上下文转换并补充边界测试；不要只改前端 `accept`。新增文档类型时把解析放在 `document_text.py`，并同时给识别接口的 `documents` 字段留出入口。
-7. **新增招聘站点适配器**：在 `services/sites/` 增加一个实现 `base.py` 契约的适配器并在 `registry.py` 注册其域名即可，采集与投递业务层不改；站点改版只影响该适配器。表单填写的通用启发式在 `services/webform/engine.py`，与具体站点解耦。**前端无需跟着改**：`GET /api/apply/sites` 下发的站点列表（`SiteOptionOut` / `SiteListOut`）是界面展示"当前招聘网站"与站点清单的唯一来源，前端组件里不写死任何站点名，因此新注册的站点会自动出现在界面上；适配器可用 `supports_collect` / `supports_apply` 如实声明本站点支持的能力。
-8. **调整匹配分析或招呼语提示词**：改 `prompts/job_match.md` / `prompts/apply_greeting.md`；若输出结构变化，需同步 `schemas/job_match.py` 的校验 schema 与 `frontend/src/types/apply.ts` 的类型镜像（前端类型与 `models/apply.py` 常量逐字对应）。
+7. **新增招聘站点适配器**：在 `services/sites/` 增加一个实现 `base.py` 契约的适配器并在 `registry.py` 注册其域名即可，采集与投递业务层不改；站点改版只影响该适配器。表单填写的通用启发式在 `services/webform/engine/`，与具体站点解耦。**前端无需跟着改**：`GET /api/apply/sites` 下发的站点列表（`SiteOptionOut` / `SiteListOut`）是界面展示"当前招聘网站"与站点清单的唯一来源，前端组件里不写死任何站点名，因此新注册的站点会自动出现在界面上；适配器可用 `supports_collect` / `supports_apply` 如实声明本站点支持的能力。
+8. **调整匹配分析或招呼语提示词**：改 `prompts/job_match.md` / `prompts/apply_greeting.md`；若输出结构变化，需同步 `schemas/job_match.py` 的校验 schema 与 `frontend/src/types/apply/` 的类型镜像（前端类型与 `models/apply.py` 常量逐字对应）。
 9. **扩展面试深挖**：证据状态、追问类型、复练题型的取值只在 `models/drill.py` 定义一次，新增要同步 `frontend/src/types/drill.ts`（前端枚举逐字对应）。**改状态机只改 `should_promote()` 一处**——判定、界面、复盘都走它；"有证据才 verified"那道闸门在 `services/drill.parse_verdict`。四个提示词（`drill_contract.md` / `drill_evaluate.md` / `drill_review.md` / 共用的 `drill_common.md`）与 `preflight.py` 的完整性清单要一起维护，漏登记会被测试拦下。
 10. **调整版面诊断规则**：阈值与下限集中在 `services/resume/resume_layout.py` 顶部（`FILL_*` / `MIN_*`），建议文案在 `_suggestions()`，改完补 `tests/test_resume_layout.py`。**模板的版式默认值必须与模板文件一致**——`TEMPLATE_LAYOUT_DEFAULTS` 与 `TEMPLATES_DIR` 下的 CSS 由 `test_resume_templates.py` / `test_resume_layout.py` 逐项核对，改了模板不更新会直接测试失败。新增样式模板要同时加：模板文件、`RESUME_TEMPLATES` 条目、`TEMPLATE_LAYOUT_DEFAULTS` 条目（三处缺一不可，测试会指出来）。
 11. **扩展求职进度**：状态与来源的取值只在 `models/tracker.py` 定义一次，新增要同步 `frontend/src/types/tracker.ts`（前端枚举逐字对应）并在 `api/tracker.py` 的筛选校验里放行。**改合并规则只改 `resolve_status()` 一处**——预览、执行、投递台回写都走它。识别提示词改 `prompts/application_status.md`；本地降级的状态信号表在 `services/tracker_extract.py` 的 `_STATUS_SIGNALS`，顺序是"越明确越优先"，调整时注意别让「感谢投递…安排面试」这类自动回执被判成面试邀请。
@@ -585,7 +585,7 @@ score_match_result(result, job_payload, profile_text, resume_text)
    直接拦下；`autocomplete="off"` **既不匹配也不拦**，当"没有信息"（字节简历页给 6 个
    控件标了 off，其中就有我们能填对的框——当禁令会让它们全废，Chrome 也当提示而非禁令）。
 
-18. **给网申填表加字段**：只需在 `services/webform/fields.py` 的 `FORM_FIELDS` 加一条、并在 `FIELD_SYNONYMS` 加同名条目（`tests/test_webform_engine.py::test_catalog_and_synonyms_stay_in_step` 会钉住两者一一对应）。**不需要迁移、不需要改前端**——目录由 `GET /api/webform/fields` 下发，录入界面据此渲染。若值来自资料里的新列，再改 `services/webform/data.py::profile_to_form_data`。**判断逻辑（选哪个下拉项、日期怎么写、单选点哪个）一律写在 `services/webform/matching.py` 的纯函数里**，不要塞进注入的 JS：离线测试用的假客户端不执行 JS，塞进去等于没有覆盖——这正是原先四个缺陷能活到生产的原因。字段值对不上页面的选项时**不猜**，如实报 `no_option`。
+18. **给网申填表加字段**：只需在 `services/webform/fields.py` 的 `FORM_FIELDS` 加一条、并在 `FIELD_SYNONYMS` 加同名条目（`tests/test_webform_engine.py::test_catalog_and_synonyms_stay_in_step` 会钉住两者一一对应）。**不需要迁移、不需要改前端**——目录由 `GET /api/webform/fields` 下发，录入界面据此渲染。若值来自资料里的新列，再改 `services/webform/data/profile_map.py::profile_to_form_data`。**判断逻辑（选哪个下拉项、日期怎么写、单选点哪个）一律写在 `services/webform/matching.py` 的纯函数里**，不要塞进注入的 JS：离线测试用的假客户端不执行 JS，塞进去等于没有覆盖——这正是原先四个缺陷能活到生产的原因。字段值对不上页面的选项时**不猜**，如实报 `no_option`。
 
     多段经历（实习/项目/获奖）的字段带 `derived=True` 且配了 `FIELD_BLOCK_HINTS`：**区块内的短词（"起止时间""职位""描述"）必须见到区块名才参与匹配**。网申表单把这三类做成「可添加多条」的区块，每条的控件长得一模一样——没有区块限定的话，"起止时间"会在教育、实习、项目三个区块上同时命中，谁抢到全看控件序号。区块里成对的日期控件签名完全相同，靠 DOM 顺序区分开始与结束，并标成需确认。**这一版只填第一条、不点页面上的「添加」按钮**（点按钮是改页面，不只是填值）。日期拆成多个年份 / 月份 / 日期下拉时，先按共享标签关联成一组，再为每个组件做日期转换。具备 `role=combobox` / `aria-controls` 的可访问自定义下拉会通过 `services/webform/custom_select.py` 读取选项并用可信鼠标事件选择唯一匹配项；不唯一时仍返回 `ambiguous`，不猜。
 
@@ -616,10 +616,10 @@ score_match_result(result, job_payload, profile_text, resume_text)
 20. **扩展网申填表的历史记录**：新表在 `models/web_form_record.py`，读写在
     `services/webform/history.py`（照 `services/interview/interview_history.py` 的形状：
     `list_records` 走 `trash.live_only`、`create_record`、`record_or_none`、`delete_record`），
-    路由挂 `/api/webform/records`。**写入失败绝不能导致填充失败**——`api/webform.py::_record_fill()`
+    路由挂 `/api/webform/records`。**写入失败绝不能导致填充失败**——`api/webform/fill_routes.py::_record_fill()`
     吞掉全部异常，历史是附加物、不是填充的前置条件。
 
-    两个接缝要一起看：批量模式的落点在 `api/webform.py::fill`（拿到 `outcomes` 之后落一条），
+    两个接缝要一起看：批量模式的落点在 `api/webform/fill_routes.py::fill`（拿到 `outcomes` 之后落一条），
     实时模式在 `live.LiveSession.stop_live()` 时**按会话汇总落一条**（不是每个框一条）。
     `_clean_item` / `_clean_snapshot` 是**白名单**（只留已定义的键），新增明细字段要同时改它们，
     否则字段会被静默丢掉。

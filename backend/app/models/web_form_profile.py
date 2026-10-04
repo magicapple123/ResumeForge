@@ -7,7 +7,8 @@
 
 - 简历生成走 ``get_profile_detail()`` → ``UserProfile``（``resume_generate_runner.py``），
   它不碰本表，所以"不读"不是一句约定，是**代码路径上到不了**；
-- 网申填表走 ``webform/data.py::extra_to_form_data()``，只在这里读。
+- 网申填表走 ``webform/data/source.py::build_form_data()``（经 ``_combine_profile_and_extra_data``
+  合并 ``webform/extra_profile.py::list_entries``），只在这里读。
 
 若改为往 ``UserProfile`` 加列，两件事都会发生：简历生成会**自动**带上这些内容（因为它读整份
 资料），而"别读"就得靠在生成侧逐列排除——那是"漏一列就静默破防"的形状。
@@ -35,7 +36,7 @@
 - ``reuse``：**下次还要不要自动填**？学到的值里混着一次性的东西（某家的内推码、某个申请
   编号），把它们和生日一样自动预填是错的。所以给三档，默认 ``general``。
 
-``once`` 的值**留在库里但不过滤进预填**（见 ``webform/data.py::list_entries``）——"只记不填"
+``once`` 的值**留在库里但不过滤进预填**（见 ``webform/extra_profile.py::list_entries``）——"只记不填"
 是这个档位的全部含义，光靠"删掉"表达不了它。
 
 ## 隐私

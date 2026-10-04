@@ -28,7 +28,7 @@
 | 首页 | `pages/HomePage.tsx` | `analytics.ts` `reminders.ts` | `/api/stats` `/api/analytics` `/api/reminders` | `analytics.py` `reminder_service.py` | 只读派生 |
 | 岗位广场 | `pages/JobsPage.tsx` | `jobs.ts` | `/api/jobs` | `job/job_service.py` `jd/jd_parser*.py` `job/job_analysis.py` `text_extraction.py` | `job.py` |
 | 收藏夹 | `pages/FavoritesPage.tsx` | `jobs.ts` `resumes.ts` | `/api/jobs` `/api/resumes` | 复用 `job/job_service.py` / 简历服务 | `job.py` `resume.py` |
-| 简历中心 | `pages/ResumesPage.tsx` | `resumes.ts` `resumeTemplates.ts` `resumeWriting.ts` `resumeRisk.ts` | `/api/resumes` `/api/resume-templates` | `resume/resume_generator.py` `resume/resume_content.py` `resume/resume_grounding.py` `resume/resume_layout.py` `pdf_exporter.py` `docx_exporter.py` `export_pipeline.py` | `resume.py` `resume_template.py` |
+| 简历中心 | `pages/ResumesPage.tsx` | `resumes.ts` `resumeTemplates.ts` `resumeWriting.ts` `resumeRisk.ts` | `/api/resumes` `/api/resume-templates` | `resume/resume_generator.py` `resume/resume_content.py` `resume/resume_grounding.py` `resume/resume_layout.py` `pdf_exporter/` `docx_exporter.py` `export_pipeline.py` | `resume.py` `resume_template.py` |
 | 投递台 | `pages/ApplyPage.tsx` | `apply.ts` `candidateJob.ts` | `/api/apply` `/api/collect` `/api/candidate-jobs` | `services/apply/*` `services/sites/*` `services/browser/*` | `apply.py` `material.py`(CandidateJob) |
 | 网申填表 | `pages/WebFormPage.tsx` + `components/webform/*` | `webform.ts` | `/api/webform` | `services/webform/*`（引擎、匹配、字段目录、快照仓、填充记录、网申资料、实时会话、AI 兜底） | `profile.py`(UserProfile 的网申字段) `web_form_record.py` `web_form_profile.py` |
 | 求职进度 | `pages/TrackerPage.tsx` | `tracker.ts` | `/api/tracker` | `tracker.py` `tracker_extract.py` | `tracker.py` |
@@ -42,7 +42,7 @@
 | 事实台账 | `pages/ClaimsPage.tsx` | `claims.ts` | `/api/claims` | `claims.py` `claim_draft.py` | `claim.py` |
 | 面试深挖 | `pages/DrillPage.tsx`（路由 `/claims/drill`） | `drill.ts` | `/api/drill` | `drill.py` | `drill.py` |
 | 回收站 | `pages/TrashPage.tsx` | `trash.ts` | `/api/trash` | `trash.py`（`TRASH_SPECS` 注册表） | 多表软删 |
-| 设置 | `pages/SettingsPage.tsx` | `settings.ts` `system.ts` `update.ts` | `/api/settings` `/api/system` `/api/update` | `settings_service.py` `datasets.py` `data_backup.py` `update_check.py` | `setting.py` |
+| 设置 | `pages/SettingsPage.tsx` | `settings.ts` `system.ts` `update.ts` | `/api/settings` `/api/system` `/api/update` | `settings_service.py` `datasets.py` `data_backup/` `update_check.py` | `setting.py` |
 
 页面内的功能组件（不占独立菜单，但常被问起）：
 

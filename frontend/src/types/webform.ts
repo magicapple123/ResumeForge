@@ -1,7 +1,7 @@
 /**
  * 网申填表。
  *
- * 状态取值与后端 `services/webform/service.py` 的常量逐字对应。
+ * 状态取值与后端 `services/webform/service/` 的常量逐字对应。
  */
 
 /** 预览里一条映射的状态。 */
