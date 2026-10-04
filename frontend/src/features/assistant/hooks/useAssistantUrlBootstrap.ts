@@ -89,6 +89,7 @@ export function useAssistantUrlBootstrap({
     // （用户要的是"没发送就不产生记录"）。标记仍然记下，语义不变：引导文案只需要出现一次。
     markAssistantWelcomeShown();
     if (conversations.length === 0) startDraft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 依赖数组逐字照抄原页面（startDraft 为稳定 useCallback，行为等价）
   }, [
     conversations,
     conversationsError,
