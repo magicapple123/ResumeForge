@@ -1,28 +1,15 @@
 /** 岗位新增/编辑弹窗：手动添加、识别导入、备注图片与来源标注。 */
-import { DeleteOutlined, FileSearchOutlined, PictureOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  DatePicker,
-  Form,
-  Image,
-  Input,
-  Modal,
-  Select,
-  Space,
-  Typography,
-  Upload,
-} from "antd";
-import dayjs from "dayjs";
-import type { Dayjs } from "dayjs";
+import { App, Form, Modal } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { createJob, parseJobsMultiple, updateJob } from "../api/jobs";
 import { attachmentInputs, useRecognitionFiles } from "../hooks/useRecognitionFiles";
 import { readAsDataUrl } from "../utils/attachments";
 import MultiJobDraftList from "./jobs/MultiJobDraftList";
-import RecognitionFileField from "./RecognitionFileField";
-import RecognitionOutcome from "./RecognitionOutcome";
+import JobFormFields from "./jobs/form/JobFormFields";
+import NoteImagesField from "./jobs/form/NoteImagesField";
+import RecognitionSourceSection from "./jobs/form/RecognitionSourceSection";
+import { RECOGNIZED_CONTENT_FIELDS } from "./jobs/form/jobFormOptions";
+import { MAX_NOTE_IMAGES } from "./jobs/form/NoteImagesField";
 import type {
   Job,
   JobPayload,
@@ -31,8 +18,7 @@ import type {
   RecognitionSource,
 } from "../types";
 
-/** 与后端 MAX_JOB_NOTE_IMAGES / 图片体积上限一致（服务端仍是权威校验）。 */
-const MAX_NOTE_IMAGES = 2;
+/** 与后端图片体积上限一致（服务端仍是权威校验）。 */
 const MAX_NOTE_IMAGE_BYTES = 2 * 1024 * 1024;
 
 type RecognitionInputKind = "text" | "image" | "document";
@@ -58,22 +44,6 @@ interface Props {
   /** 保存成功回调；新建时带上新岗位 id（备选岗位导入用它标记） 。 */
   onSaved: (jobId?: number) => void;
 }
-
-const JOB_TYPE_OPTIONS = ["校招", "实习", "社招", "其他"].map((value) => ({ value, label: value }));
-const STATUS_OPTIONS = ["开放中", "已截止", "已投递"].map((value) => ({ value, label: value }));
-
-/** 判断"这次识别到底有没有读出东西"时只看这些字段：job_type 与 status 恒有默认值。 */
-const RECOGNIZED_CONTENT_FIELDS = [
-  "title",
-  "company",
-  "location",
-  "salary",
-  "description",
-  "requirements",
-  "additional_info",
-  "source_url",
-  "posted_at",
-] as const;
 
 export default function JobFormModal({
   open,
@@ -383,160 +353,35 @@ export default function JobFormModal({
           initialValues={{ job_type: "校招", status: "开放中" }}
         >
           {!isEdit && (
-            <>
-              <Form.Item label="完整招聘信息">
-                <Input.TextArea
-                  aria-label="完整招聘信息"
-                  value={rawText}
-                  disabled={parsing}
-                  onPaste={onPaste}
-                  onChange={(event) => {
-                    // 内容改了，上一次识别的来源与抄录都不再对应当前内容。
-                    setRawText(event.target.value);
-                    setParseWarnings([]);
-                    setRecognizedText("");
-                    setRecognitionSource(null);
-                  }}
-                  placeholder="粘贴职位名称、地点、职位描述、职位要求等完整招聘信息，或按 Ctrl+V 直接贴招聘截图（也可以上传 pdf/docx 招聘文档）"
-                  style={{ height: 220, resize: "none" }}
-                />
-              </Form.Item>
-              <RecognitionFileField
-                files={files}
-                reading={reading}
-                disabled={parsing}
-                onAddFiles={(incoming) => void addFiles(incoming)}
-                onRemove={removeFile}
-              />
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  marginTop: -12,
-                  marginBottom: 16,
-                }}
-              >
-                <Button
-                  type="primary"
-                  icon={<FileSearchOutlined />}
-                  loading={parsing}
-                  onClick={() => void parseImport()}
-                >
-                  识别并填充
-                </Button>
-              </div>
-              <RecognitionOutcome source={recognitionSource} text={recognizedText} />
-              {parseWarnings.length > 0 && (
-                <Alert
-                  type="warning"
-                  showIcon
-                  title={parseWarnings.join("；")}
-                  style={{ marginBottom: 16 }}
-                />
-              )}
-            </>
+            <RecognitionSourceSection
+              rawText={rawText}
+              files={files}
+              reading={reading}
+              parsing={parsing}
+              recognizedText={recognizedText}
+              recognitionSource={recognitionSource}
+              parseWarnings={parseWarnings}
+              onRawTextChange={(event) => {
+                // 内容改了，上一次识别的来源与抄录都不再对应当前内容。
+                setRawText(event.target.value);
+                setParseWarnings([]);
+                setRecognizedText("");
+                setRecognitionSource(null);
+              }}
+              onAddFiles={(incoming) => void addFiles(incoming)}
+              onRemoveFile={removeFile}
+              onPaste={onPaste}
+              onParse={() => void parseImport()}
+            />
           )}
-          <Form.Item
-            name="title"
-            label="职位名称"
-            rules={[{ required: true, message: "请填写职位名称" }]}
-          >
-            <Input placeholder="如：市场营销专员（校招）" />
-          </Form.Item>
-          <Form.Item name="company" label="公司名称">
-            <Input placeholder="如：字节跳动" />
-          </Form.Item>
-          <Form.Item name="location" label="工作地点">
-            <Input placeholder="如：北京" />
-          </Form.Item>
-          <Form.Item name="salary" label="薪资范围">
-            <Input placeholder="如：25-40K·15薪" />
-          </Form.Item>
-          <Form.Item name="job_type" label="岗位类型">
-            <Select options={JOB_TYPE_OPTIONS} />
-          </Form.Item>
-          <Form.Item name="status" label="状态">
-            <Select options={STATUS_OPTIONS} />
-          </Form.Item>
-          <Form.Item
-            name="source_url"
-            label="投递链接"
-            rules={[{ type: "url", message: "请输入合法的 URL" }]}
-          >
-            <Input placeholder="招聘官网投递链接（选填）" />
-          </Form.Item>
-          <Form.Item
-            name="posted_at"
-            label="发布时间（选填）"
-            // DatePicker 值走 Dayjs，但 JobPayload.posted_at 是字符串：getValueProps 把存的
-            // 字符串转成 Dayjs 给控件，normalize 再把 Dayjs 转回 YYYY-MM-DD 存进表单。
-            getValueProps={(value: string) => ({ value: value ? dayjs(value) : null })}
-            normalize={(value: Dayjs | null) => (value ? value.format("YYYY-MM-DD") : "")}
-          >
-            <DatePicker style={{ width: "100%" }} />
-          </Form.Item>
-          <Form.Item
-            name="description"
-            label="职位描述（JD）"
-            rules={[{ required: true, message: "请填写职位描述" }]}
-          >
-            <Input.TextArea rows={7} placeholder="粘贴完整 JD，生成简历时 AI 会据此定制内容" />
-          </Form.Item>
-          <Form.Item name="requirements" label="任职要求（选填）">
-            <Input.TextArea rows={3} placeholder="可单独填写任职要求，没有可留空" />
-          </Form.Item>
-          <Form.Item name="additional_info" label="其他招聘信息（选填）">
-            <Input.TextArea
-              rows={4}
-              placeholder="如：公司与团队介绍、职位编号、福利待遇、工作安排、申请或面试流程"
-            />
-          </Form.Item>
-          <Form.Item name="note" label="备注（选填）">
-            <Input.TextArea
-              rows={3}
-              maxLength={2000}
-              showCount
-              placeholder="记录投递进展、内推联系人、面试安排等；保存时会自动补一行「来源：…」"
-            />
-          </Form.Item>
-          <Form.Item label={`备注图片（选填，最多 ${MAX_NOTE_IMAGES} 张）`}>
-            <Space orientation="vertical" style={{ width: "100%" }}>
-              <Space wrap>
-                <Upload
-                  accept="image/jpeg,image/png,image/webp"
-                  showUploadList={false}
-                  beforeUpload={(file) => {
-                    void addNoteImage(file as File);
-                    return Upload.LIST_IGNORE;
-                  }}
-                >
-                  <Button icon={<PictureOutlined />}>添加图片</Button>
-                </Upload>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  招聘截图、内推码等，每张不超过 2 MB
-                </Typography.Text>
-              </Space>
-              {noteImages.length > 0 && (
-                <Space wrap>
-                  {noteImages.map((source, index) => (
-                    <div key={`${index}-${source.slice(-16)}`} className="job-note-image-item">
-                      <Image src={source} alt={`备注图片 ${index + 1}`} width={96} />
-                      <Button
-                        type="text"
-                        size="small"
-                        danger
-                        aria-label={`移除备注图片 ${index + 1}`}
-                        icon={<DeleteOutlined />}
-                        onClick={() =>
-                          setNoteImages((current) => current.filter((_, i) => i !== index))
-                        }
-                      />
-                    </div>
-                  ))}
-                </Space>
-              )}
-            </Space>
-          </Form.Item>
+          <JobFormFields />
+          <NoteImagesField
+            noteImages={noteImages}
+            onAddImage={(file) => void addNoteImage(file)}
+            onRemove={(index) =>
+              setNoteImages((current) => current.filter((_, i) => i !== index))
+            }
+          />
         </Form>
       )}
     </Modal>
