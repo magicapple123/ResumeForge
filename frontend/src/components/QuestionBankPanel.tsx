@@ -6,30 +6,8 @@
  *
  * 旧版历史记录若为纯文本（groups 是字符串），仅做兼容展示并提示"仅可查看"，不崩。
  */
-import {
-  BulbOutlined,
-  CheckSquareOutlined,
-  HistoryOutlined,
-  PlayCircleOutlined,
-  ReloadOutlined,
-  SaveOutlined,
-  ThunderboltOutlined,
-} from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Checkbox,
-  Collapse,
-  Empty,
-  Select,
-  Space,
-  Spin,
-  Tag,
-  Typography,
-} from "antd";
-import { RowActions } from "./common/RowActions";
+import { PlayCircleOutlined, ReloadOutlined, SaveOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Card, Empty, Select, Space, Spin, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 import {
   deleteQuestionBank,
@@ -39,11 +17,11 @@ import {
   saveQuestionBank,
   updateQuestionBank,
 } from "../api/interview";
-import BatchActionBar from "../components/common/BatchActionBar";
 import { useApi } from "../hooks/useApi";
 import { useBatchSelection } from "../hooks/useBatchSelection";
-import { QUESTION_BANK_TYPES } from "../types";
 import type { QuestionAnswer, QuestionBankOut, QuestionBankRecord } from "../types";
+import QuestionGroupCards from "./questionbank/QuestionGroupCards";
+import BankHistoryCard from "./questionbank/BankHistoryCard";
 
 interface Props {
   jobOptions: { value: number; label: string }[];
@@ -270,58 +248,6 @@ export default function QuestionBankPanel({
   const total = Array.isArray(viewData?.groups)
     ? viewData.groups.reduce((sum, group) => sum + group.questions.length, 0)
     : 0;
-  const historyItems = (banks.data ?? []).map((bank) => ({
-    key: String(bank.id),
-    label: (
-      <Space wrap>
-        <span>{bank.resume_title || bank.job_title || "题库"}</span>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {bank.created_at.replace("T", " ").slice(0, 16)}
-        </Typography.Text>
-      </Space>
-    ),
-    children: (
-      <Space orientation="vertical" style={{ width: "100%" }}>
-        {bank.groups.map((group) => (
-          <div key={group.type}>
-            <Typography.Text strong>{group.type}</Typography.Text>
-            <ul style={{ paddingLeft: 20, margin: "4px 0" }}>
-              {group.questions.map((item) => (
-                <li key={item.question}>{item.question}</li>
-              ))}
-            </ul>
-          </div>
-        ))}
-        <Space wrap>
-          {batch.selecting ? (
-            <Checkbox
-              aria-label={`选择题库 ${bank.resume_title || bank.job_title || bank.id}`}
-              checked={batch.isSelected(bank.id)}
-              onChange={() => batch.toggle(bank.id)}
-            />
-          ) : (
-            onOpenRecord && (
-              <Button size="small" onClick={() => onOpenRecord(bank)}>
-                查看详情
-              </Button>
-            )
-          )}
-          {/* 删除收进「···」菜单：除回收站外，删除不再以按钮裸露（全局约定）。 */}
-          <RowActions
-            more={[
-              {
-                key: "delete",
-                label: "删除",
-                danger: true,
-                confirm: "删除这条题库历史？",
-                onClick: () => void removeBank(bank.id),
-              },
-            ]}
-          />
-        </Space>
-      </Space>
-    ),
-  }));
 
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
@@ -432,112 +358,22 @@ export default function QuestionBankPanel({
               </Button>
             )}
           </Space>
-          {QUESTION_BANK_TYPES.map((type) => {
-            const group = viewData.groups.find((item) => item.type === type);
-            if (!group || group.questions.length === 0) return null;
-            return (
-              <Card key={type} size="small" title={type}>
-                <Space orientation="vertical" style={{ width: "100%" }} size="small">
-                  {group.questions.map((item, index) => {
-                    const key = `${group.type}-${index}`;
-                    const answer = answerMap[key];
-                    return (
-                      <div
-                        key={key}
-                        style={{
-                          borderTop: index ? "1px solid #f0f0f0" : "none",
-                          paddingTop: index ? 8 : 0,
-                        }}
-                      >
-                        <Typography.Text strong>
-                          {index + 1}. {item.question}
-                        </Typography.Text>
-                        {item.purpose && (
-                          <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-                            考察：{item.purpose}
-                          </Typography.Paragraph>
-                        )}
-                        {item.answer_hint && (
-                          <Typography.Paragraph style={{ margin: "4px 0 0" }}>
-                            <Typography.Text type="success">提示：</Typography.Text>
-                            {item.answer_hint}
-                          </Typography.Paragraph>
-                        )}
-                        <div style={{ marginTop: 4 }}>
-                          <Button
-                            size="small"
-                            type="link"
-                            icon={<BulbOutlined />}
-                            loading={answerLoading === key}
-                            onClick={() => void toggleAnswer(key, item.question, group.type, index)}
-                          >
-                            {answer ? "收起参考答案" : "参考答案"}
-                          </Button>
-                        </div>
-                        {answer && (
-                          <div style={{ marginTop: 4 }}>
-                            <Typography.Paragraph
-                              style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}
-                            >
-                              {answer.answer}
-                            </Typography.Paragraph>
-                            {answer.key_points.length > 0 && (
-                              <ul style={{ margin: "4px 0 0", paddingLeft: 20 }}>
-                                {answer.key_points.map((point) => (
-                                  <li key={point}>{point}</li>
-                                ))}
-                              </ul>
-                            )}
-                            {answer.sample_phrasing && (
-                              <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-                                话术参考：{answer.sample_phrasing}
-                              </Typography.Paragraph>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </Space>
-              </Card>
-            );
-          })}
+          <QuestionGroupCards
+            groups={viewData.groups}
+            answerMap={answerMap}
+            answerLoading={answerLoading}
+            toggleAnswer={toggleAnswer}
+          />
         </>
       )}
 
-      <Card
-        size="small"
-        title={
-          <Space>
-            <HistoryOutlined />
-            历史题库
-          </Space>
-        }
-        extra={
-          !batch.selecting && (banks.data ?? []).length > 0 ? (
-            <Button size="small" icon={<CheckSquareOutlined />} onClick={batch.enterSelecting}>
-              批量选择
-            </Button>
-          ) : undefined
-        }
-      >
-        {batch.selecting && (
-          <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
-            <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
-              删除所选
-            </Button>
-          </BatchActionBar>
-        )}
-        {banks.loading && !banks.data ? (
-          <Spin />
-        ) : banks.error ? (
-          <Alert type="error" showIcon title={banks.error} />
-        ) : (banks.data ?? []).length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有保存过题库" />
-        ) : (
-          <Collapse items={historyItems} />
-        )}
-      </Card>
+      <BankHistoryCard
+        banks={banks}
+        batch={batch}
+        onOpenRecord={onOpenRecord}
+        onRemoveBank={removeBank}
+        removeSelected={removeSelected}
+      />
     </Space>
   );
 }
