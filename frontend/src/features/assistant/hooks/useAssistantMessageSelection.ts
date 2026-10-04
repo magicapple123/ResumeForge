@@ -15,12 +15,7 @@ interface Options {
   surface: AssistantSurface;
 }
 
-export function useAssistantMessageSelection({
-  activeId,
-  loadDetail,
-  message,
-  surface,
-}: Options) {
+export function useAssistantMessageSelection({ activeId, loadDetail, message, surface }: Options) {
   /** 多选删除：进入后每条消息左侧出勾选框，可一次删掉几条。 */
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<number>>(() => new Set());

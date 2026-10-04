@@ -23,11 +23,7 @@ import {
   writeConfigHistory,
 } from "./collect/collectConfigHistory";
 import type { CollectConfigSnapshot } from "./collect/collectConfigHistory";
-import {
-  filterSummary,
-  siteFilterSummary,
-  unmappedConditions,
-} from "./collect/collectTaskSummary";
+import { filterSummary, siteFilterSummary, unmappedConditions } from "./collect/collectTaskSummary";
 
 interface Props {
   disabled: boolean;
@@ -195,11 +191,7 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
         onStart={() => void start()}
       />
 
-      <CollectOutcomeAlerts
-        unmapped={unmapped}
-        filtered={filtered}
-        siteFiltered={siteFiltered}
-      />
+      <CollectOutcomeAlerts unmapped={unmapped} filtered={filtered} siteFiltered={siteFiltered} />
 
       {/* 采集结果只陈列、不入库：勾选后才进岗位广场。 */}
       <CollectResultPanel

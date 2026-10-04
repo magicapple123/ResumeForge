@@ -5,17 +5,7 @@
  * 渲染 Form.Item；`Form.Item` 经 Form context 注册到同一个 form，零独立状态。
  */
 import { PlayCircleOutlined, SaveOutlined } from "@ant-design/icons";
-import {
-  Button,
-  Checkbox,
-  Form,
-  Input,
-  InputNumber,
-  Select,
-  Space,
-  Tag,
-  Typography,
-} from "antd";
+import { Button, Checkbox, Form, Input, InputNumber, Select, Space, Tag, Typography } from "antd";
 import type { FormInstance } from "antd";
 import type { CollectConfig } from "../../../types";
 import CollectSiteFilters from "../CollectSiteFilters";
@@ -91,12 +81,7 @@ export default function CollectConfigForm({
           }
           extra={JOB_TYPE_EXTRA}
         >
-          <Select
-            allowClear
-            placeholder="不限"
-            style={{ width: 160 }}
-            options={JOB_TYPE_OPTIONS}
-          />
+          <Select allowClear placeholder="不限" style={{ width: 160 }} options={JOB_TYPE_OPTIONS} />
         </Form.Item>
       </Space>
 

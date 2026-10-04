@@ -1,13 +1,5 @@
-import type {
-  AdmissionResult,
-  HardGateResult,
-} from "./match";
-import type {
-  QueueStatus,
-  TaskItemStatus,
-  TaskKind,
-  TaskStatus,
-} from "./tasks";
+import type { AdmissionResult, HardGateResult } from "./match";
+import type { QueueStatus, TaskItemStatus, TaskKind, TaskStatus } from "./tasks";
 
 // ===== ⑦ 队列 =====
 export interface ApplyQueueItem {

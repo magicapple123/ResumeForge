@@ -3,16 +3,7 @@
  * 纯展示受控组件——全部配置状态与开始动作由 GenerateResumeModal 持有，经 props 回传；
  * 零 api 导入。
  */
-import {
-  Alert,
-  Button,
-  Input,
-  Segmented,
-  Space,
-  Switch,
-  Tooltip,
-  Typography,
-} from "antd";
+import { Alert, Button, Input, Segmented, Space, Switch, Tooltip, Typography } from "antd";
 import type { EnhancementLevel, Job, ResumeLayout } from "../../types";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../../config";
 import ResumeLayoutControls from "../ResumeLayoutControls";
@@ -111,9 +102,7 @@ export default function GenerationConfigStage({
           // 每一档自己带上悬停说明，生成前可以先把三档比一遍。
           options={RESUME_ENHANCEMENT_LEVELS.map((item) => ({
             label: (
-              <Tooltip title={enhancementLevelDescription(item.value, !job)}>
-                {item.label}
-              </Tooltip>
+              <Tooltip title={enhancementLevelDescription(item.value, !job)}>{item.label}</Tooltip>
             ),
             value: item.value,
           }))}

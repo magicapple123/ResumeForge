@@ -14,10 +14,20 @@ interface Props {
   groups: QuestionBankOut["groups"];
   answerMap: Record<string, QuestionAnswer>;
   answerLoading: string | null;
-  toggleAnswer: (key: string, question: string, groupType?: string, index?: number) => Promise<void>;
+  toggleAnswer: (
+    key: string,
+    question: string,
+    groupType?: string,
+    index?: number,
+  ) => Promise<void>;
 }
 
-export default function QuestionGroupCards({ groups, answerMap, answerLoading, toggleAnswer }: Props) {
+export default function QuestionGroupCards({
+  groups,
+  answerMap,
+  answerLoading,
+  toggleAnswer,
+}: Props) {
   return (
     <>
       {QUESTION_BANK_TYPES.map((type) => {
@@ -64,9 +74,7 @@ export default function QuestionGroupCards({ groups, answerMap, answerLoading, t
                     </div>
                     {answer && (
                       <div style={{ marginTop: 4 }}>
-                        <Typography.Paragraph
-                          style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}
-                        >
+                        <Typography.Paragraph style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
                           {answer.answer}
                         </Typography.Paragraph>
                         {answer.key_points.length > 0 && (

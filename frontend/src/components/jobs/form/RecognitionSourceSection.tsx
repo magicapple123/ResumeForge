@@ -67,12 +67,7 @@ export default function RecognitionSourceSection({
           marginBottom: 16,
         }}
       >
-        <Button
-          type="primary"
-          icon={<FileSearchOutlined />}
-          loading={parsing}
-          onClick={onParse}
-        >
+        <Button type="primary" icon={<FileSearchOutlined />} loading={parsing} onClick={onParse}>
           识别并填充
         </Button>
       </div>
