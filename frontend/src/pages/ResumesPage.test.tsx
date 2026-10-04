@@ -181,7 +181,10 @@ describe("ResumesPage 批量选择", () => {
     });
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "批量选择" }));
+    // CI 慢机上「批量选择」按钮先于列表数据就绪（数据未到时它是 disabled，点它无效、
+    // 表格还是 No data）——先等第一条数据渲染出来再进入多选，等待放宽到 5s 安全网。
+    await screen.findByText(RESUME.title, {}, { timeout: 5000 });
+    fireEvent.click(screen.getByRole("button", { name: "批量选择" }));
     // rowSelection 勾选框：第一个是表头全选，后两个是数据行。
     // 每次点击都会触发重渲染，必须现查现点（旧节点引用会失效）。
     fireEvent.click(screen.getAllByRole("checkbox")[1]!);
@@ -189,22 +192,29 @@ describe("ResumesPage 批量选择", () => {
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
-    expect((await screen.findAllByText(/删除选中的 2 份简历/)).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText(/删除选中的 2 份简历/, {}, { timeout: 5000 })).length,
+    ).toBeGreaterThan(0);
     // 未确认前绝不能删。
     expect(apiMocks.deleteResume).not.toHaveBeenCalled();
     // 确认弹窗里 antd 会把标题渲染两份（.ant-modal-title 与 .ant-modal-confirm-title），
     // 用文本查询会撞"Found multiple"——直接等容器出现，再在容器内点确认键
     // （okText「删除」被 antd 插空格成「删 除」；容器限定避免与操作条「删除所选」撞名）。
-    const confirmRoot = await waitFor(() => {
-      const root = document.querySelector(".ant-modal-confirm");
-      expect(root).not.toBeNull();
-      return root as HTMLElement;
-    });
+    const confirmRoot = await waitFor(
+      () => {
+        const root = document.querySelector(".ant-modal-confirm");
+        expect(root).not.toBeNull();
+        return root as HTMLElement;
+      },
+      { timeout: 5000 },
+    );
     expect(confirmRoot.textContent).toContain("删除选中的 2 份简历");
     fireEvent.click(within(confirmRoot).getByRole("button", { name: /删\s*除/ }));
 
-    await waitFor(() => expect(apiMocks.deleteResume).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(/已删除 2 份简历/)).toBeInTheDocument();
+    await waitFor(() => expect(apiMocks.deleteResume).toHaveBeenCalledTimes(2), {
+      timeout: 5000,
+    });
+    expect(await screen.findByText(/已删除 2 份简历/, {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
   it("空选时「删除所选」不可用；退出多选清空选区", async () => {

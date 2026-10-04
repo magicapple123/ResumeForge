@@ -166,8 +166,10 @@ describe("AssistantPage", () => {
 
     // 页头那枚常驻提示已经去掉了（截图反馈：右上角不需要技能模块），数量改由输入框
     // 旁的技能按钮承担——它同时也是一键开关的入口。
-    const control = await screen.findByRole("button", { name: "技能" });
-    expect(control).toHaveTextContent("技能（2）");
+    // CI 慢机上按钮挂载和技能列表响应都可能超过默认 1s：找到按钮时它可能还在 loading、
+    // 文本还是「技能」。两段等待都放宽预算——等的就是正确值出现，就绪即返回不增加耗时。
+    const control = await screen.findByRole("button", { name: "技能" }, { timeout: 5000 });
+    await waitFor(() => expect(control).toHaveTextContent("技能（2）"), { timeout: 5000 });
     // 没有启用的技能不参与作答，因此不计入数量。
     expect(control).not.toHaveTextContent("3");
   });
