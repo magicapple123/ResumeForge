@@ -67,7 +67,7 @@ export function useLiveSession({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时拉取一次实时状态，其余值由轮询 effect 维护
   }, []);
 
   // 模式开着的时候轮询状态（面板在浏览器里，这边要能看到它在做什么）。
@@ -83,7 +83,7 @@ export function useLiveSession({
         .catch(() => undefined);
     }, 1500);
     return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 轮询只需跟随 running 开关，startWebFormLive 为模块级稳定引用
   }, [live?.running]);
 
   // 「记住这条」只在用户点过按钮后出现。每个 pending 只拉一次完整资料目录，避免后台轮询
@@ -128,7 +128,7 @@ export function useLiveSession({
       .finally(() => {
         liveStarting.current = false;
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 自启动只在上述五个外部输入变化时触发一次，liveStarting 守卫防重入
   }, [aiAvailable, aiOn, live?.running, liveOptOut, running]);
 
   // 浏览器被用户在窗口里直接关掉时，状态轮询会把本地活动标记立即收拢；
