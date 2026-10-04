@@ -7,9 +7,9 @@
 豁免必须在本文件 _EXEMPTIONS 里登记并附书面理由；豁免是白名单不是许可，
 新增豁免条目应同步到 `.workbuddy/split-plan/` 对应方案或交付报告。
 
-范围仅限生产代码（backend/app + frontend/src，排除同目录共置的
-*.test.* / *.spec.*）；测试文件与脚本暂不在预算内（后端 24 个 + 前端
-4 个超长测试文件是独立的后续拆分任务，落地时应追加测试文件预算）。
+范围除生产代码外（backend/app + frontend/src），还包括测试文件
+（backend/tests/test_*.py 与 frontend/src 共置 *.test.*）——WaveT 拆分后全部
+测试文件同样受 500 行预算约束，豁免单独登记在 _TEST_EXEMPTIONS。
 """
 
 from __future__ import annotations
@@ -21,6 +21,23 @@ SCAN_ROOTS = ("backend/app", "frontend/src")
 SCAN_SUFFIXES = {".py", ".ts", ".tsx"}
 TEST_NAME_MARKERS = (".test.", ".spec.")
 LINE_BUDGET = 500
+
+# 测试文件扫描范围：后端按 tests/ 目录命名约定（test_*.py），
+# 前端按共置命名约定（*.test.ts / *.test.tsx）。
+TEST_SCAN_GLOBS = (
+    "backend/tests/test_*.py",
+    "frontend/src/**/*.test.ts",
+    "frontend/src/**/*.test.tsx",
+)
+
+# 测试文件书面豁免清单（路径相对仓库根；理由必须具体，禁止「暂缓拆分」式空话）
+_TEST_EXEMPTIONS: dict[str, str] = {
+    # 刚过线 44 行（544 vs 500）；4 个模块 mock 骨架 + renderPage 占 ~120 行，
+    # 拆出的第二文件也要整份复制骨架，重复/漂移成本大于收益；5 个 describe
+    # 内聚于同一页面生命周期（通用简历卡/资料分页/折叠/网申资料），无天然缝。
+    # 触发条件：>800 行或新增第三个大编辑域（届时拆 ProfilePage.webform.test.tsx）。
+    "frontend/src/pages/ProfilePage.test.tsx": "刚过线 44 行，mock 骨架复制成本大于收益",
+}
 
 # 书面豁免清单（路径相对仓库根；理由必须具体，禁止「暂缓拆分」式空话）
 _EXEMPTIONS: dict[str, str] = {
@@ -87,9 +104,32 @@ def test_production_files_stay_under_line_budget() -> None:
     )
 
 
+def test_test_files_stay_under_line_budget() -> None:
+    """测试文件同样受 500 行预算约束（WaveT 拆分后的守门测试）。"""
+    offenders: list[str] = []
+    missing_exemptions = sorted(
+        set(_TEST_EXEMPTIONS) - {p for p in _TEST_EXEMPTIONS if (REPO_ROOT / p).exists()}
+    )
+    for pattern in TEST_SCAN_GLOBS:
+        for path in sorted(REPO_ROOT.glob(pattern)):
+            rel = path.relative_to(REPO_ROOT).as_posix()
+            if rel in _TEST_EXEMPTIONS:
+                continue
+            lines = _count_lines(path)
+            if lines > LINE_BUDGET:
+                offenders.append(f"{rel} = {lines} 行")
+    assert not missing_exemptions, f"测试豁免清单里有已不存在的文件（请清理）：{missing_exemptions}"
+    assert not offenders, (
+        f"{len(offenders)} 个测试文件超过 {LINE_BUDGET} 行预算：\n"
+        + "\n".join(offenders)
+        + "\n请拆分，或在 test_file_size_budget._TEST_EXEMPTIONS 登记书面豁免理由。"
+    )
+
+
 def test_exemption_reasons_are_documented() -> None:
     """豁免必须带理由——防空话式白名单（如「暂缓拆分」）。"""
     vague = {"todo", "tbd", "暂缓", "待定", "later", "wip"}
-    for rel, reason in _EXEMPTIONS.items():
-        assert reason.strip(), f"豁免缺理由：{rel}"
-        assert reason.strip().lower() not in vague, f"豁免理由是空话：{rel} -> {reason!r}"
+    for exemptions in (_EXEMPTIONS, _TEST_EXEMPTIONS):
+        for rel, reason in exemptions.items():
+            assert reason.strip(), f"豁免缺理由：{rel}"
+            assert reason.strip().lower() not in vague, f"豁免理由是空话：{rel} -> {reason!r}"
