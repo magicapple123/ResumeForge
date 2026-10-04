@@ -4,36 +4,28 @@
  * 有效内推总数、已转化数与转化率。备注图片先上传拿相对路径，再随表单写入 ``note_images``。
  */
 import {
-  CloseOutlined,
   DeleteOutlined,
   EditOutlined,
   MoreOutlined,
   PlusOutlined,
-  UploadOutlined,
 } from "@ant-design/icons";
 import {
   App,
   Button,
   Card,
-  Col,
-  DatePicker,
   Dropdown,
   Empty,
   Form,
   Input,
   Listy,
   Modal,
-  Row,
   Select,
   Space,
   Spin,
-  Statistic,
   Tag,
   Typography,
   Upload,
 } from "antd";
-import dayjs from "dayjs";
-import type { Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import {
   createReferral,
@@ -45,15 +37,15 @@ import {
 } from "../api/referrals";
 import { REFERRAL_STATUS_COLORS, REFERRAL_STATUS_LABELS, referralImageUrl } from "../types";
 import type { Referral, ReferralPayload, ReferralStats, ReferralStatus } from "../types";
-import { classifyAttachment, IMAGE_ACCEPT, MAX_ATTACHMENT_BYTES } from "../utils/attachments";
-import { formatDateTime } from "../utils/format";
-import { RecordDetailDrawer } from "./common/RecordDetail";
+import { classifyAttachment, MAX_ATTACHMENT_BYTES } from "../utils/attachments";
+import ReferralStatsCard from "./referral/ReferralStatsCard";
+import ReferralFormFields from "./referral/ReferralFormFields";
+import ReferralDetailDrawer from "./referral/ReferralDetailDrawer";
+import { REFERRAL_STATUS_LABELS_OPTIONS } from "./referral/ReferralFormFields";
+import { MAX_NOTE_IMAGES } from "./referral/ReferralFormFields";
 import { isFromInnerControl } from "./common/recordDetailCore";
 import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { useRowActionMenu } from "./common/rowActionMenu";
-
-/** 与后端 ``schemas/referral.MAX_NOTE_IMAGES`` 保持一致。 */
-const MAX_NOTE_IMAGES = 9;
 
 interface Option {
   value: number;
@@ -199,28 +191,9 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
     }
   };
 
-  const convertedRate = stats?.total ? Math.round((stats.rate ?? 0) * 100) : 0;
-
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
-      <Card size="small" title="内推转化率">
-        <Row gutter={16}>
-          <Col span={8}>
-            <Statistic title="有效内推" value={stats?.total ?? 0} />
-          </Col>
-          <Col span={8}>
-            <Statistic title="已转化" value={stats?.converted ?? 0} />
-          </Col>
-          <Col span={8}>
-            <Statistic
-              title="转化率"
-              value={convertedRate}
-              suffix="%"
-              styles={{ content: { color: convertedRate >= 50 ? "#389e0d" : undefined } }}
-            />
-          </Col>
-        </Row>
-      </Card>
+      <ReferralStatsCard stats={stats} />
 
       <Card size="small" title="内推记录">
         <Space wrap>
@@ -350,186 +323,22 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
         okText="保存"
         cancelText="取消"
       >
-        <Form form={form} layout="vertical" initialValues={{ status: "active" }}>
-          <Space style={{ display: "flex" }} align="start">
-            <Form.Item label="公司" name="company" style={{ flex: 1 }}>
-              <Input maxLength={128} placeholder="公司名" />
-            </Form.Item>
-            <Form.Item label="内推岗位" name="position" style={{ flex: 1 }}>
-              <Input maxLength={128} placeholder="岗位名" />
-            </Form.Item>
-          </Space>
-          <Form.Item label="内推人" name="referrer_name">
-            <Input maxLength={128} placeholder="姓名 / 称呼" />
-          </Form.Item>
-          <Space style={{ display: "flex" }} align="start">
-            <Form.Item label="联系方式" name="referrer_contact" style={{ flex: 1 }}>
-              <Input maxLength={128} placeholder="微信 / 邮箱等" />
-            </Form.Item>
-            <Form.Item label="关系" name="relation" style={{ flex: 1 }}>
-              <Input maxLength={64} placeholder="朋友 / 前同事 / 网友…" />
-            </Form.Item>
-          </Space>
-          <Space style={{ display: "flex" }} align="start">
-            <Form.Item label="渠道" name="channel" style={{ flex: 1 }}>
-              <Input maxLength={32} placeholder="牛客 / 脉脉 / 熟人直递…" />
-            </Form.Item>
-            <Form.Item label="内推码" name="referral_code" style={{ flex: 1 }}>
-              <Input maxLength={64} placeholder="官网内推码（选填）" />
-            </Form.Item>
-          </Space>
-          <Form.Item label="状态" name="status">
-            <Select options={REFERRAL_STATUS_LABELS_OPTIONS()} />
-          </Form.Item>
-          <Form.Item label="关联岗位（选填，删除岗位不影响内推）" name="job_id">
-            <Select allowClear showSearch optionFilterProp="label" options={jobOptions} />
-          </Form.Item>
-          <Form.Item label="转化关联漏斗（选填，进入面试及以上即视为转化）" name="track_id">
-            <Select allowClear showSearch optionFilterProp="label" options={trackOptions} />
-          </Form.Item>
-          <Form.Item
-            label="投递日期"
-            name="submitted_at"
-            extra="留空表示未知"
-            getValueProps={(value: string) => ({ value: value ? dayjs(value) : null })}
-            normalize={(value: Dayjs | null) => (value ? value.format("YYYY-MM-DD") : "")}
-          >
-            <DatePicker style={{ width: "100%" }} />
-          </Form.Item>
-          <Form.Item label="图片备注（选填，最多 9 张）">
-            <Upload
-              accept={IMAGE_ACCEPT}
-              multiple
-              showUploadList={false}
-              beforeUpload={beforeImageUpload}
-              disabled={uploadingImages}
-            >
-              <Button
-                icon={<UploadOutlined />}
-                loading={uploadingImages}
-                disabled={noteImages.length >= MAX_NOTE_IMAGES}
-              >
-                上传备注图
-              </Button>
-            </Upload>
-            {noteImages.length > 0 && (
-              <Space wrap size={4} style={{ marginTop: 8 }}>
-                {noteImages.map((path, index) => (
-                  <span
-                    key={path}
-                    style={{ position: "relative", display: "inline-block", lineHeight: 0 }}
-                  >
-                    <img
-                      src={referralImageUrl(path)}
-                      alt={`备注图 ${index + 1}`}
-                      style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 4 }}
-                    />
-                    <Button
-                      type="text"
-                      size="small"
-                      danger
-                      icon={<CloseOutlined />}
-                      aria-label={`移除备注图 ${index + 1}`}
-                      style={{ position: "absolute", top: -10, right: -10 }}
-                      onClick={() => removeImage(path)}
-                    />
-                  </span>
-                ))}
-              </Space>
-            )}
-          </Form.Item>
-          <Form.Item label="备注" name="note">
-            <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="补充说明（选填）" />
-          </Form.Item>
-        </Form>
+        <ReferralFormFields
+          form={form}
+          jobOptions={jobOptions}
+          trackOptions={trackOptions}
+          noteImages={noteImages}
+          uploadingImages={uploadingImages}
+          beforeImageUpload={beforeImageUpload}
+          removeImage={removeImage}
+        />
       </Modal>
 
-      <RecordDetailDrawer
-        open={detail !== null}
-        title={detail?.position || detail?.company || "内推详情"}
-        subtitle={detail?.company}
-        tags={
-          detail && (
-            <Space size={6} wrap>
-              <Tag color={REFERRAL_STATUS_COLORS[detail.status as ReferralStatus] ?? "default"}>
-                {REFERRAL_STATUS_LABELS[detail.status as ReferralStatus] ?? detail.status}
-              </Tag>
-              {detail.converted && <Tag color="green">已转化</Tag>}
-            </Space>
-          )
-        }
-        fields={
-          detail
-            ? [
-                { label: "公司", value: detail.company || "-" },
-                { label: "内推岗位", value: detail.position || "-" },
-                { label: "内推人", value: detail.referrer_name || "未记录" },
-                { label: "联系方式", value: detail.referrer_contact || "-" },
-                { label: "关系", value: detail.relation || "-" },
-                { label: "渠道", value: detail.channel || "-" },
-                { label: "内推码", value: detail.referral_code || "-" },
-                { label: "投递日期", value: detail.submitted_at || "未知" },
-                { label: "关联岗位", value: detail.job_title || "-" },
-                { label: "创建时间", value: formatDateTime(detail.created_at) },
-                { label: "更新时间", value: formatDateTime(detail.updated_at) },
-              ]
-            : []
-        }
-        sections={
-          detail
-            ? [
-                { title: "备注", content: detail.note || "（无）" },
-                {
-                  title: `图片备注（${(detail.note_images ?? []).length}）`,
-                  content:
-                    (detail.note_images ?? []).length === 0 ? (
-                      "（无）"
-                    ) : (
-                      <Space size={8} wrap>
-                        {(detail.note_images ?? []).map((path) => (
-                          <a
-                            key={path}
-                            href={referralImageUrl(path)}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <img
-                              src={referralImageUrl(path)}
-                              alt="备注图"
-                              style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 4 }}
-                            />
-                          </a>
-                        ))}
-                      </Space>
-                    ),
-                },
-              ]
-            : []
-        }
-        actions={
-          detail && (
-            <Button
-              type="primary"
-              icon={<EditOutlined />}
-              onClick={() => {
-                openEdit(detail);
-                setDetail(null);
-              }}
-            >
-              编辑
-            </Button>
-          )
-        }
+      <ReferralDetailDrawer
+        detail={detail}
+        onEdit={openEdit}
         onClose={() => setDetail(null)}
       />
     </Space>
   );
-}
-
-/** 状态选项：分色在列表 Tag 上体现，这里只给标签。 */
-function REFERRAL_STATUS_LABELS_OPTIONS(): { value: ReferralStatus; label: string }[] {
-  return (Object.keys(REFERRAL_STATUS_LABELS) as ReferralStatus[]).map((value) => ({
-    value,
-    label: REFERRAL_STATUS_LABELS[value],
-  }));
 }
