@@ -4,10 +4,8 @@ import {
   App,
   Button,
   Input,
-  Modal,
   Select,
   Space,
-  Spin,
   Table,
   Tag,
   Tooltip,
@@ -30,13 +28,15 @@ import BatchActionBar from "../components/common/BatchActionBar";
 import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import ResumeDetailModal from "../components/ResumeDetailModal";
-import ResumeFieldDiffView from "../components/ResumeFieldDiffView";
 import { computeFieldDiff } from "../utils/resumeFieldDiff";
 import type { DiffViewData } from "../types/resumeFieldDiff";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../config";
 import { useApi } from "../hooks/useApi";
 import type { ResumeBrief } from "../types";
 import { formatDateTime } from "../utils/format";
+import ResumeRenameModal from "./resumes/ResumeRenameModal";
+import ResumeNoteModal from "./resumes/ResumeNoteModal";
+import ResumeDiffModal from "./resumes/ResumeDiffModal";
 
 export default function ResumesPage() {
   const navigate = useNavigate();
@@ -472,75 +472,37 @@ export default function ResumesPage() {
         }}
       />
       <ResumeDetailModal recordId={previewId} onClose={() => setPreviewId(null)} />
-      <Modal
-        title="重命名简历"
+      <ResumeRenameModal
         open={renameTarget !== null}
-        okText="保存"
+        value={renameValue}
         confirmLoading={renaming}
+        onChange={setRenameValue}
         onCancel={() => {
           if (!renaming) setRenameTarget(null);
         }}
         onOk={() => void confirmRename()}
-      >
-        <Input
-          value={renameValue}
-          maxLength={256}
-          placeholder="简历名称"
-          onChange={(event) => setRenameValue(event.target.value)}
-        />
-      </Modal>
-      <Modal
-        title="编辑备注"
+      />
+      <ResumeNoteModal
         open={noteTarget !== null}
-        okText="保存"
+        value={noteValue}
         confirmLoading={savingNote}
+        onChange={setNoteValue}
         onCancel={() => {
           if (!savingNote) setNoteTarget(null);
         }}
         onOk={() => void confirmNote()}
-      >
-        <Input.TextArea
-          value={noteValue}
-          maxLength={2000}
-          showCount
-          rows={4}
-          placeholder="备注会显示在简历列表里（选填）"
-          onChange={(event) => setNoteValue(event.target.value)}
-        />
-      </Modal>
-      <Modal
-        title="版本对比"
-        open={diffBase !== null}
-        width="min(880px, calc(100vw - 24px))"
-        footer={null}
-        onCancel={() => {
+      />
+      <ResumeDiffModal
+        diffBase={diffBase}
+        diffAgainstId={diffAgainstId}
+        diffResult={diffResult}
+        diffLoading={diffLoading}
+        items={data?.items ?? []}
+        onSelect={(value) => void selectDiffAgainst(value)}
+        onClose={() => {
           if (!diffLoading) setDiffBase(null);
         }}
-      >
-        {diffBase && (
-          <Space orientation="vertical" style={{ width: "100%" }} size="middle">
-            <Space wrap>
-              <Typography.Text>基准版本：</Typography.Text>
-              <Typography.Text strong>{diffBase.title}</Typography.Text>
-              <Typography.Text type="secondary">对比：</Typography.Text>
-              <Select
-                style={{ minWidth: 240 }}
-                placeholder="选择要对比的版本"
-                value={diffAgainstId ?? undefined}
-                onChange={(value) => void selectDiffAgainst(value)}
-                options={(data?.items ?? [])
-                  .filter((item) => item.id !== diffBase.id)
-                  .map((item) => ({ value: item.id, label: item.title }))}
-              />
-            </Space>
-            {diffLoading && <Spin />}
-            {!diffLoading && diffResult && <ResumeFieldDiffView data={diffResult} />}
-            {!diffLoading && !diffResult && (
-              <Typography.Text type="secondary">选择一份其它简历后展示三态差异。</Typography.Text>
-            )}
-          </Space>
-        )}
-      </Modal>
+      />
     </div>
   );
 }
