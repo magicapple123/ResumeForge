@@ -703,7 +703,7 @@
 
   **已知限制（没有解决，如实记下）**：模型只在**规则认不出**时出手。规则"自信但认错"时
   （例如「导师姓名」被同义词「姓名」抢走，于是建议填**本人**姓名）AI 不会来纠正——
-  `test_webform_live.py::test_a_confidently_wrong_rule_match_is_not_rechecked_by_the_model`
+  `test_webform_live_ai.py::test_a_confidently_wrong_rule_match_is_not_rechecked_by_the_model`
   把这个现状钉着，哪天改了触发策略它会红。
 
 - **「点哪个填哪个」的面板：定位加固与拖动。** 面板本来就已经锚定在输入框旁
