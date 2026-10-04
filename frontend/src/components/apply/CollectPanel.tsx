@@ -6,162 +6,34 @@
  * 不符合条件的岗位也采了进来。后端把这些条件写进 `task.config["unmapped_conditions"]`，
  * 界面据此显示。
  */
-import { PlayCircleOutlined, SaveOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Checkbox,
-  Form,
-  Input,
-  InputNumber,
-  Select,
-  Skeleton,
-  Space,
-  Tag,
-  Typography,
-} from "antd";
+import { Alert, App, Form, Select, Skeleton, Space, Typography } from "antd";
 import { RowActions } from "../common/RowActions";
 import { useEffect, useState } from "react";
 import { createCollectTask, getCollectConfig, updateCollectConfig } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
-import { formatDateTime } from "../../utils/format";
 import type { ApplyTask, ApplyTaskDetail, CollectConfig, CollectConfigOut } from "../../types";
 import CollectResultPanel from "./CollectResultPanel";
-import CollectSiteFilters from "./CollectSiteFilters";
+import CollectConfigForm from "./collect/CollectConfigForm";
+import CollectOutcomeAlerts from "./collect/CollectOutcomeAlerts";
+import {
+  CONFIG_HISTORY_KEY,
+  CONFIG_HISTORY_MAX,
+  historySummaryLabel,
+  readConfigHistory,
+  writeConfigHistory,
+} from "./collect/collectConfigHistory";
+import type { CollectConfigSnapshot } from "./collect/collectConfigHistory";
+import {
+  filterSummary,
+  siteFilterSummary,
+  unmappedConditions,
+} from "./collect/collectTaskSummary";
 
 interface Props {
   disabled: boolean;
   onStarted: (task: ApplyTask) => void;
   /** 最近一次采集批次：用来读取「未生效」条件。 */
   collectTask: ApplyTaskDetail | null;
-}
-
-/** 采集结果的岗位类型（C7）。
- *
- * 实习/社招：BOSS 有官方「求职类型」参数（真实实测 jobType=1902/1901，站点侧严格过滤），
- * 另外采集后按接口返回的岗位类型编码做第二道本地筛选；校招：BOSS 无官方参数（校招是
- * 独立专区），只走采集后本地筛选（接口编码 5，实测校准）。BOSS 以外的站点将来接入时，
- * 由适配器声明各自的能力。
- */
-const JOB_TYPE_OPTIONS = [
-  { value: "校招", label: "校招" },
-  { value: "实习", label: "实习" },
-  { value: "社招", label: "社招" },
-];
-
-/** 岗位类型的筛选方式随所选值变化：能映射到站点参数的标「站点筛选」，否则标「采集后筛选」。 */
-const JOB_TYPE_TAG: Record<string, { color: string; text: string }> = {
-  实习: { color: "green", text: "站点筛选" },
-  社招: { color: "green", text: "站点筛选" },
-  校招: { color: "blue", text: "采集后筛选" },
-};
-
-const JOB_TYPE_EXTRA =
-  "实习/社招由招聘网站在搜索时就筛掉（更准更快）；校招由网站无此筛选，采回后按岗位的类型标记筛。岗位没给类型标记时会保留并如实计数";
-
-function unmappedConditions(task: ApplyTaskDetail | null): string[] {
-  const raw = task?.config?.unmapped_conditions;
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((value): value is string => typeof value === "string" && value.length > 0);
-}
-
-// ===== 历史条件（localStorage 快照）=====
-
-const CONFIG_HISTORY_KEY = "rf.collect.configHistory";
-const CONFIG_HISTORY_LIMIT = 20;
-
-/** 一份采集条件的完整快照：保存时间与全部字段。 */
-interface CollectConfigSnapshot {
-  savedAt: string;
-  config: CollectConfig;
-}
-
-/** 读取历史条件；缺省/损坏时回退空数组。 */
-function readConfigHistory(): CollectConfigSnapshot[] {
-  try {
-    const raw = localStorage.getItem(CONFIG_HISTORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (entry): entry is CollectConfigSnapshot =>
-        entry && typeof entry === "object" && "savedAt" in entry && "config" in entry,
-    );
-  } catch {
-    return [];
-  }
-}
-
-/** 把条件快照写成 localStorage（覆盖写）。 */
-function writeConfigHistory(list: CollectConfigSnapshot[]): void {
-  localStorage.setItem(CONFIG_HISTORY_KEY, JSON.stringify(list));
-}
-
-/** 历史下拉的展示文案：保存时间 + 关键词/城市/类型摘要。 */
-function historySummaryLabel(snapshot: CollectConfigSnapshot): string {
-  const { config, savedAt } = snapshot;
-  const keywords = (config.keywords ?? []).slice(0, 3).join("、");
-  const keywordText = keywords || "无关键词";
-  const cityText = config.city?.trim() || "无城市";
-  const typeText = config.job_type?.trim() || "不限";
-  return `${formatDateTime(savedAt)} · ${keywordText} / ${cityText} / ${typeText}`;
-}
-
-function stringList(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && item.length > 0)
-    : [];
-}
-
-interface FilterSummary {
-  /** 按条件明确筛掉的条数。 */
-  filtered: number;
-  /** 这次实际启用的本地筛选条件。 */
-  applied: string[];
-  /** 有岗位缺字段、没能判断的条件（那些岗位已保留）。 */
-  undecided: string[];
-  undecidedCount: number;
-  /** 用户填了但没能识别的条件——**必须明说**，否则等于静默失效。 */
-  unapplied: string[];
-}
-
-/** 从批次 config 里读出本地筛选的账目（后端写在 task.config，不新增数据库列）。 */
-function filterSummary(task: ApplyTaskDetail | null): FilterSummary | null {
-  const config = task?.config;
-  if (!config) return null;
-  const applied = stringList(config.filter_applied);
-  if (applied.length === 0) return null;
-  return {
-    filtered: Number(config.filtered_out) || 0,
-    applied,
-    undecided: stringList(config.filter_undecided),
-    undecidedCount: Number(config.filter_undecided_count) || 0,
-    unapplied: stringList(config.filter_unapplied),
-  };
-}
-
-interface SiteFilterSummary {
-  /** 这次真正生效的站点筛选条件（形如「学历要求：本科」）。 */
-  applied: string[];
-  /** 选了、但没能生效的——**必须说出来**，否则用户以为筛过了。 */
-  unapplied: string[];
-}
-
-/**
- * 站点侧筛选的账目。
- *
- * 后端把「哪几条生效 / 哪几条没生效」写进了 `task.config`，这里只是把它摆到用户眼前。
- * **不显示就等于没记账**：用户选了「公司规模：1000人以上」却拿到各种规模的岗位时，
- * 这句话是唯一的解释来源。
- */
-function siteFilterSummary(task: ApplyTaskDetail | null): SiteFilterSummary | null {
-  const config = task?.config;
-  if (!config) return null;
-  const applied = stringList(config.site_filter_applied);
-  const unapplied = stringList(config.site_filter_unapplied);
-  if (applied.length === 0 && unapplied.length === 0) return null;
-  return { applied, unapplied };
 }
 
 export default function CollectPanel({ disabled, onStarted, collectTask }: Props) {
@@ -189,7 +61,7 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
       const next = [
         { savedAt, config },
         ...prev.filter((entry) => JSON.stringify(entry.config) !== JSON.stringify(config)),
-      ].slice(0, CONFIG_HISTORY_LIMIT);
+      ].slice(0, CONFIG_HISTORY_MAX);
       writeConfigHistory(next);
       return next;
     });
@@ -311,206 +183,23 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
         />
       </Space>
 
-      <Form form={form} layout="vertical">
-        <Form.Item name="keywords" label="关键词" extra="最多 10 个；与城市至少要填一个。">
-          <Select mode="tags" placeholder="例如：市场营销、财务会计" open={false} />
-        </Form.Item>
-        <Space size={16} wrap>
-          <Form.Item name="city" label="城市">
-            <Input placeholder="例如：北京" style={{ width: 180 }} />
-          </Form.Item>
-          <Form.Item name="per_task_limit" label="单批上限">
-            <InputNumber min={1} max={200} style={{ width: 140 }} />
-          </Form.Item>
-          <Form.Item
-            name="job_type"
-            label={
-              <Space size={4}>
-                岗位类型
-                <Tag color={JOB_TYPE_TAG[jobTypeValue ?? ""]?.color ?? "default"}>
-                  {JOB_TYPE_TAG[jobTypeValue ?? ""]?.text ?? "选择后生效"}
-                </Tag>
-              </Space>
-            }
-            extra={JOB_TYPE_EXTRA}
-          >
-            <Select
-              allowClear
-              placeholder="不限"
-              style={{ width: 160 }}
-              options={JOB_TYPE_OPTIONS}
-            />
-          </Form.Item>
-        </Space>
+      <CollectConfigForm
+        form={form}
+        jobTypeValue={jobTypeValue}
+        saveSamples={saveSamples}
+        onSaveSamplesChange={setSaveSamples}
+        disabled={disabled}
+        saving={saving}
+        starting={starting}
+        onSave={() => void save()}
+        onStart={() => void start()}
+      />
 
-        {/* 站点侧筛选：招聘网站自己的筛选栏。放在"我的条件"之前——它是粗筛，先筛掉大部分
-            不符合的岗位，后面的本地筛选才只对少量结果做判断。 */}
-        <CollectSiteFilters disabled={disabled} />
-
-        {/* 「我的条件」：与上面的站点筛选语义不同——这里填的是**你自己**的情况，
-            用来筛掉你投不了的岗位（岗位要求高于你）。两条一起用时先站点筛、再本地筛。 */}
-        <Typography.Text type="secondary" style={{ display: "block", marginBottom: 4 }}>
-          按你的条件筛（采集后）——填你自己的情况，要求高于它的岗位会被筛掉
-        </Typography.Text>
-        <Space size={16} wrap>
-          <Form.Item
-            name="salary_min"
-            label={
-              <Space size={4}>
-                我的期望薪资（K）
-                <Tag color="blue">采集后筛选</Tag>
-              </Space>
-            }
-            extra="按岗位薪资上限判断；岗位没给可判断的薪资时会保留，并标记为未能判断"
-          >
-            <InputNumber min={0} max={1000} style={{ width: 140 }} />
-          </Form.Item>
-          <Form.Item
-            name="experience"
-            label={
-              <Space size={4}>
-                我的经验
-                <Tag color="blue">采集后筛选</Tag>
-              </Space>
-            }
-            extra="与它没有重叠的岗位会被筛掉"
-          >
-            <Input placeholder="例如：3-5 年" style={{ width: 180 }} />
-          </Form.Item>
-          <Form.Item
-            name="education"
-            label={
-              <Space size={4}>
-                我的学历
-                <Tag color="blue">采集后筛选</Tag>
-              </Space>
-            }
-            extra="要求高于它的岗位会被筛掉"
-          >
-            <Input placeholder="例如：本科" style={{ width: 180 }} />
-          </Form.Item>
-        </Space>
-
-        <Space size={16} wrap>
-          <Form.Item name="interval_seconds" label="岗位间隔（秒）">
-            <InputNumber min={1} max={600} style={{ width: 140 }} />
-          </Form.Item>
-          <Form.Item name="interval_jitter_seconds" label="随机抖动（秒）">
-            <InputNumber min={0} max={300} style={{ width: 140 }} />
-          </Form.Item>
-        </Space>
-
-        {/* 保存站点原文：这是排查解析问题 / 做真实样例回归的通道，属于支持路径而非日常流程，
-            所以放在「开始采集」旁边、默认不勾，并把"存什么、存哪、会不会外传"一次说清——
-            用户不知道它会往磁盘写东西就会用错。 */}
-        <Form.Item style={{ marginBottom: 12 }}>
-          <Checkbox
-            checked={saveSamples}
-            onChange={(event) => setSaveSamples(event.target.checked)}
-            aria-label="保存本次抓到的站点原文（用于排查解析问题）"
-          >
-            保存本次抓到的站点原文（用于排查解析问题）
-          </Checkbox>
-          <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>
-            会保存搜索与详情两个接口的响应原文；只存到本机
-            backend/data/captures/，不进仓库、不进备份。
-          </Typography.Text>
-        </Form.Item>
-
-        <Space>
-          <Button icon={<SaveOutlined />} loading={saving} onClick={() => void save()}>
-            保存条件
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlayCircleOutlined />}
-            loading={starting}
-            disabled={disabled}
-            onClick={() => void start()}
-          >
-            开始采集
-          </Button>
-        </Space>
-      </Form>
-
-      {unmapped.length > 0 && (
-        <Alert
-          className="apply-collect-unmapped"
-          type="warning"
-          showIcon
-          title="以下条件未生效"
-          description={
-            <Typography.Paragraph style={{ marginBottom: 0 }}>
-              这批采集里，{unmapped.join("、")} 无法映射到该站点的查询参数，因此
-              <Typography.Text strong>没有</Typography.Text>
-              按它们筛选；结果里可能包含不满足这些条件的岗位。关键词、城市与翻页正常生效。
-            </Typography.Paragraph>
-          }
-        />
-      )}
-
-      {/* 站点侧筛选的账目：**哪几条真的生效了**，以及**哪几条没能生效**。后端早就把这两笔账
-          写进了批次配置，一直没在界面上露面——那等于记了账不给看。 */}
-      {siteFiltered && (
-        <Alert
-          className="apply-collect-site-filtered"
-          type={siteFiltered.unapplied.length > 0 ? "warning" : "success"}
-          showIcon
-          title={
-            siteFiltered.applied.length > 0
-              ? `招聘网站已按这些条件筛掉不符合的岗位：${siteFiltered.applied.join("、")}`
-              : "有筛选条件没能生效"
-          }
-          description={
-            siteFiltered.unapplied.length > 0 ? (
-              <Typography.Text type="danger">
-                这些条件本次
-                <Typography.Text strong>没有生效</Typography.Text>：
-                {siteFiltered.unapplied.join("、")}
-                ——编码没能在站点当前的清单里核对上，所以没有发出去（发一个对不上的编码，
-                网站会照常返回结果，你会以为筛过了）。点上面「重新读取」刷新清单后再试。
-              </Typography.Text>
-            ) : (
-              <Typography.Text type="secondary">
-                网站在搜索时就完成了这些筛选，所以结果里不会有不符合的岗位。
-              </Typography.Text>
-            )
-          }
-        />
-      )}
-
-      {/* 本地筛选的账目：筛掉几条、有几条因为岗位没写字段而没能判断、以及自己的条件有没有
-          被识别。三者都不说，用户就不知道"少了几个"是筛掉的还是没采到。 */}
-      {filtered && (
-        <Alert
-          className="apply-collect-filtered"
-          type="success"
-          showIcon
-          title={`已按${filtered.applied.join(" / ")}在采集后筛选`}
-          description={
-            <Space orientation="vertical" size={2}>
-              <Typography.Text>
-                {filtered.filtered > 0
-                  ? `本次筛掉 ${filtered.filtered} 个不符合条件的岗位。`
-                  : "本次没有岗位被筛掉。"}
-              </Typography.Text>
-              {filtered.undecidedCount > 0 && (
-                <Typography.Text type="secondary">
-                  其中 {filtered.undecidedCount} 个岗位没有写
-                  {filtered.undecided.join("、")}，无法判断，已保留在结果里（宁可多给你看，
-                  也不误删）。
-                </Typography.Text>
-              )}
-              {filtered.unapplied.length > 0 && (
-                <Typography.Text type="danger">
-                  注意：{filtered.unapplied.join("、")}
-                  这条条件没能识别，本次没有生效——换个写法试试（例如「本科」「3-5 年」）。
-                </Typography.Text>
-              )}
-            </Space>
-          }
-        />
-      )}
+      <CollectOutcomeAlerts
+        unmapped={unmapped}
+        filtered={filtered}
+        siteFiltered={siteFiltered}
+      />
 
       {/* 采集结果只陈列、不入库：勾选后才进岗位广场。 */}
       <CollectResultPanel
