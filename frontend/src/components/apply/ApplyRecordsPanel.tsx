@@ -33,6 +33,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { RowActions } from "../common/RowActions";
 import { deleteRecord, deleteRecordBatch, listRecordBatches, retryRecord } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
@@ -267,6 +268,12 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
         <Button icon={<ReloadOutlined />} onClick={() => void reload()}>
           刷新
         </Button>
+        {/* 投递记录的"下一步"在求职进度：补一个小入口，不用用户自己找。 */}
+        <Link to="/tracker">
+          <Button type="link" size="small" style={{ padding: 0 }}>
+            去求职进度跟进
+          </Button>
+        </Link>
         <Typography.Text type="secondary">
           按投递批次分组：一次投出的多个岗位归在一组，点击展开看明细
         </Typography.Text>

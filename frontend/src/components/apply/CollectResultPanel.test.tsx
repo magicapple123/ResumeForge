@@ -6,6 +6,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CandidateJob } from "../../types";
 import CollectResultPanel from "./CollectResultPanel";
@@ -45,9 +46,11 @@ function candidate(overrides: Partial<CandidateJob> = {}): CandidateJob {
 
 function renderPanel(props: Partial<React.ComponentProps<typeof CollectResultPanel>> = {}) {
   return render(
-    <AntdApp>
-      <CollectResultPanel taskId={7} {...props} />
-    </AntdApp>,
+    <MemoryRouter>
+      <AntdApp>
+        <CollectResultPanel taskId={7} {...props} />
+      </AntdApp>
+    </MemoryRouter>,
   );
 }
 
@@ -108,6 +111,26 @@ describe("CollectResultPanel", () => {
     expect(screen.getAllByText("已存在岗位").length).toBeGreaterThan(0);
   });
 
+  it("导入成功后给出「去岗位广场查看」的下一步入口", async () => {
+    apiMocks.listCandidateJobs.mockResolvedValue([candidate({ id: 1, title: "新岗位" })]);
+    apiMocks.importCandidateJobs.mockResolvedValue({
+      imported: 1,
+      duplicate: 0,
+      invalid: 0,
+      missing: 0,
+      results: [{ candidate_id: 1, title: "新岗位", outcome: "imported", job_id: 11 }],
+    });
+    renderPanel();
+    await screen.findByText("新岗位");
+
+    fireEvent.click(screen.getByRole("button", { name: "全选" }));
+    fireEvent.click(screen.getByRole("button", { name: /导入选中的 1 个岗位/ }));
+
+    // 成功提示必须带下一步动作，不能只说"已导入"就完了。
+    const link = await screen.findByRole("button", { name: "去岗位广场查看" });
+    expect(link).toBeInTheDocument();
+  });
+
   it("一条都没有时给出空态而不是一张空表", async () => {
     apiMocks.listCandidateJobs.mockResolvedValue([]);
     renderPanel();
@@ -122,9 +145,11 @@ describe("CollectResultPanel", () => {
     expect(apiMocks.listCandidateJobs).toHaveBeenCalledTimes(1);
 
     view.rerender(
-      <AntdApp>
-        <CollectResultPanel taskId={7} refreshKey="completed" />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <CollectResultPanel taskId={7} refreshKey="completed" />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     await waitFor(() => expect(apiMocks.listCandidateJobs).toHaveBeenCalledTimes(2));
@@ -149,9 +174,11 @@ describe("CollectResultPanel", () => {
     expect(screen.getByRole("button", { name: /导入选中的 1 个岗位/ })).toBeEnabled();
 
     view.rerender(
-      <AntdApp>
-        <CollectResultPanel taskId={8} />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <CollectResultPanel taskId={8} />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     await screen.findByText("第二批岗位");

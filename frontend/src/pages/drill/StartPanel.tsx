@@ -67,7 +67,7 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
       </Button>
       <Modal
         open={open}
-        title="按台账深挖：先定标准，再提问"
+        title="按事实台账深挖：先定标准，再提问"
         width={640}
         onCancel={() => setOpen(false)}
         footer={
@@ -94,7 +94,7 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
             ) : available.length === 0 ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="台账里还没有「已确认」的条目。先去「事实台账」确认几条。"
+                description="事实台账里还没有「已确认」的条目。先去「事实台账」确认几条。"
               />
             ) : (
               <Select

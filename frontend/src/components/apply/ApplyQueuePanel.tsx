@@ -15,7 +15,13 @@ import {
 } from "@ant-design/icons";
 import { App, Alert, Button, Empty, Skeleton, Space, Tag, Typography, Popconfirm } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { createApplyTask, listQueue, removeQueueItem, reorderQueue } from "../../api/apply";
+import {
+  createApplyTask,
+  getBrowserStatus,
+  listQueue,
+  removeQueueItem,
+  reorderQueue,
+} from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
 import { QUEUE_STATUS_META, type ApplyQueueItem, type ApplyTask } from "../../types";
 import { formatDateTime } from "../../utils/format";
@@ -147,6 +153,13 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     }
     setBusy(true);
     try {
+      // 投递由受控浏览器执行：浏览器没启动时后端必然失败。按钮不禁用（保留可发现性），
+      // 但点击时先查一次状态并给出引导，而不是让用户去读一条后端报错。
+      const browser = await getBrowserStatus();
+      if (browser.state !== "running") {
+        message.warning("请先启动浏览器再开始投递");
+        return;
+      }
       const task = await createApplyTask(
         chosen ? { job_ids: chosen, use_queue: false } : { use_queue: true },
       );

@@ -8,19 +8,52 @@
  * 数据来自 `utils/backgroundTasks`（模块级登记表，关掉弹窗也照跑），所以它天然对
  * "换个页面"免疫：任务由登记表追踪，不是由某个组件的生命周期持有。
  */
-import { CloseCircleOutlined, LoadingOutlined } from "@ant-design/icons";
+import { CloseCircleOutlined, LoadingOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import { App, Badge, Button, Popover, Space, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { useBackgroundTasks } from "../hooks/useBackgroundTasks";
 import { useJobMatchBackgroundTasks } from "../hooks/useJobMatchBackgroundTasks";
-import { cancelBackgroundTask, type BackgroundTask } from "../utils/backgroundTasks";
+import {
+  cancelBackgroundTask,
+  dismissBackgroundTask,
+  type BackgroundTask,
+} from "../utils/backgroundTasks";
 import {
   cancelJobMatchBackgroundTask,
   type JobMatchBackgroundTaskView,
 } from "../utils/jobMatchBackgroundTasks";
 
-/** 一行任务：名称、进度、取消。 */
-function TaskRow({ task, onCancel }: { task: BackgroundTask; onCancel: () => void }) {
+/** 一行任务：名称、进度、取消。状态未知时给出「移除」而不是「取消」——后端都不认识
+ * 这个任务了，再发取消请求只会再吃一个 404。 */
+function TaskRow({
+  task,
+  onCancel,
+  onDismiss,
+}: {
+  task: BackgroundTask;
+  onCancel: () => void;
+  onDismiss: () => void;
+}) {
+  if (task.unknown) {
+    return (
+      <div className="background-task-row">
+        <Space size={8} align="start">
+          <QuestionCircleOutlined />
+          <div>
+            <Typography.Text strong className="background-task-label">
+              {task.label}
+            </Typography.Text>
+            <Typography.Text type="secondary" className="background-task-progress">
+              {task.message || "任务状态未知"}
+            </Typography.Text>
+          </div>
+        </Space>
+        <Button size="small" type="text" icon={<CloseCircleOutlined />} onClick={onDismiss}>
+          移除
+        </Button>
+      </div>
+    );
+  }
   const progress = [`已接收 ${task.receivedChars} 字`, task.message].filter(Boolean).join(" · ");
   return (
     <div className="background-task-row">
@@ -113,7 +146,15 @@ export default function BackgroundTasksIndicator() {
   const content = (
     <div className="background-tasks-panel">
       {tasks.map((task) => (
-        <TaskRow key={task.id} task={task} onCancel={() => void cancel(task)} />
+        <TaskRow
+          key={task.id}
+          task={task}
+          onCancel={() => void cancel(task)}
+          onDismiss={() => {
+            dismissBackgroundTask(task.id);
+            message.info(`已移除「${task.label}」`);
+          }}
+        />
       ))}
       {matchTasks.map((task) => (
         <JobMatchTaskRow key={task.id} task={task} onCancel={() => void cancelMatchTask(task)} />

@@ -24,7 +24,7 @@ export default function AssistantSelectBar({ disabled, onDelete, onExit, selecte
           onClick={() =>
             modal.confirm({
               title: `删除选中的 ${selectedCount} 条消息？`,
-              content: "删除后无法恢复。引用这些消息的提问仍会保留引用内容。",
+              content: "将移入回收站，可随时恢复。引用这些消息的提问仍会保留引用内容。",
               okText: "删除",
               okButtonProps: { danger: true },
               cancelText: "取消",

@@ -169,7 +169,7 @@ export default function ClaimsPage() {
           description={
             keyword || category || status
               ? "没有符合条件的条目"
-              : "台账还是空的。可以先「从资料生成」一批草稿，或者手工新建一条。"
+              : "事实台账还是空的。可以先「从资料生成」一批草稿，或者手工新建一条。"
           }
         >
           <Button type="primary" onClick={() => setDraftOpen(true)}>

@@ -7,6 +7,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyQueueItem, ApplyTask, ApplyTaskDetail } from "../types";
 import ApplyPage from "./ApplyPage";
@@ -140,9 +141,11 @@ describe("ApplyPage 暂停 / 继续 交互", () => {
     apiMocks.pauseTask.mockResolvedValue({ ...task("running"), status: "paused" });
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     const pause = await screen.findByRole("button", { name: /暂停/ });
@@ -160,9 +163,11 @@ describe("ApplyPage 暂停 / 继续 交互", () => {
     apiMocks.resumeTask.mockResolvedValue({ ...task("running"), status: "running" });
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     const resume = await screen.findByRole("button", { name: /继续/ });
@@ -189,9 +194,11 @@ describe("投递队列准入拦截分支", () => {
     ]);
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText("不投")).toBeInTheDocument();
@@ -204,12 +211,15 @@ describe("投递队列准入拦截分支", () => {
       queueItem({ id: 1, job_id: 11 }),
       queueItem({ id: 2, job_id: 12, job_title: "数据开发" }),
     ]);
+    apiMocks.getBrowserStatus.mockResolvedValue({ ...BROWSER, state: "running" });
     apiMocks.createApplyTask.mockResolvedValue(task("running"));
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     const start = await screen.findByRole("button", { name: /开始投递/ });
@@ -219,17 +229,41 @@ describe("投递队列准入拦截分支", () => {
     await waitFor(() => expect(apiMocks.createApplyTask).toHaveBeenCalledWith({ use_queue: true }));
   });
 
+  it("blocks the start with guidance when the browser is not running", async () => {
+    // 浏览器没启动就点开始：不发给后端、给引导提示（按钮保持可点，由点击引导）。
+    apiMocks.listQueue.mockResolvedValue([queueItem({ id: 1, job_id: 11 })]);
+    apiMocks.getBrowserStatus.mockResolvedValue(BROWSER);
+
+    render(
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+
+    const start = await screen.findByRole("button", { name: /开始投递/ });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
+
+    expect(await screen.findByText("请先启动浏览器再开始投递")).toBeInTheDocument();
+    expect(apiMocks.createApplyTask).not.toHaveBeenCalled();
+  });
+
   it("submits selected job ids instead of queue row ids", async () => {
     apiMocks.listQueue.mockResolvedValue([
       queueItem({ id: 1, job_id: 11 }),
       queueItem({ id: 2, job_id: 12, job_title: "数据开发" }),
     ]);
+    apiMocks.getBrowserStatus.mockResolvedValue({ ...BROWSER, state: "running" });
     apiMocks.createApplyTask.mockResolvedValue(task("running"));
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     await screen.findByText("数据开发");
@@ -250,9 +284,11 @@ describe("投递队列准入拦截分支", () => {
     apiMocks.listQueue.mockResolvedValue([queueItem({ id: 1, job_id: 11 })]);
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     const start = await screen.findByRole("button", { name: /开始投递/ });

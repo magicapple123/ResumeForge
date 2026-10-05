@@ -84,7 +84,7 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
       for (const row of picked) {
         saved.push(await createClaim(row.payload));
       }
-      message.success(`已加入台账 ${saved.length} 条，状态都是「待确认」`);
+      message.success(`已加入事实台账 ${saved.length} 条，状态都是「待确认」`);
       onSaved(saved);
       reset();
       onClose();
@@ -99,7 +99,7 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
   return (
     <Modal
       open={open}
-      title="从资料生成台账草稿"
+      title="从资料生成事实台账草稿"
       width={760}
       onCancel={() => {
         reset();

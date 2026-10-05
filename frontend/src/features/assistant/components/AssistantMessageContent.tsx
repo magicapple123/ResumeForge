@@ -278,9 +278,9 @@ const TOOL_LABELS: Record<string, string> = {
   update_material: "修改资料",
   // 事实台账
   list_claims: "查询事实台账",
-  get_claim: "查看台账条目",
-  create_claim: "新增台账条目",
-  update_claim: "修改台账条目",
+  get_claim: "查看事实台账条目",
+  create_claim: "新增事实台账条目",
+  update_claim: "修改事实台账条目",
   // 备选岗位
   list_candidate_jobs: "查询备选岗位",
   get_candidate_job: "查看备选岗位详情",

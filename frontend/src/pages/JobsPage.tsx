@@ -32,16 +32,21 @@ import { JobFilterBar } from "./jobs/JobFilterBar";
 import type { BatchAction, MatchBatchRunMode } from "./jobs/jobFilterOptions";
 
 export default function JobsPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
 
+  // 筛选 / 分页 / 详情的初值从 URL 读：链接可分享、刷新后状态不丢（与 WebFormPage 的
+  // URL 化同一模式）。用户改动后由下面的 effect 用 replace 语义写回，不堆历史栈。
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
-  const [jobType, setJobType] = useState("");
-  const [status, setStatus] = useState("");
-  const [sourceKind, setSourceKind] = useState<"" | "collected" | "manual">("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [jobType, setJobType] = useState(searchParams.get("job_type") ?? "");
+  const [status, setStatus] = useState(searchParams.get("status") ?? "");
+  const [sourceKind, setSourceKind] = useState<"" | "collected" | "manual">(() => {
+    const raw = searchParams.get("source_kind");
+    return raw === "collected" || raw === "manual" ? raw : "";
+  });
+  const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
+  const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
 
   const [detailJob, setDetailJob] = useState<Job | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -100,6 +105,59 @@ export default function JobsPage() {
       }),
     [keyword, jobType, status, sourceKind, page, pageSize],
   );
+
+  // 筛选 / 分页写回 URL（replace 语义）。effect 只依赖这些状态本身，不依赖 searchParams：
+  // 写回触发的重渲染里 deps 没变、不会再写，因此不会形成循环重渲染。
+  // 其余参数（job_id、collect_task_ids）通过 functional 更新原样保留。
+  useEffect(() => {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        const values: [string, string][] = [
+          ["keyword", keyword],
+          ["job_type", jobType],
+          ["status", status],
+          ["source_kind", sourceKind],
+          ["page", page > 1 ? String(page) : ""],
+          ["page_size", pageSize !== 10 ? String(pageSize) : ""],
+        ];
+        for (const [key, value] of values) {
+          if (value) next.set(key, value);
+          else next.delete(key);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }, [keyword, jobType, status, sourceKind, page, pageSize, setSearchParams]);
+
+  // 详情与 ?job_id= 同步：打开详情写进 URL（可分享/刷新后恢复），关闭就移除。
+  const openDetail = useCallback(
+    (job: Job) => {
+      setDetailJob(job);
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          next.set("job_id", String(job.id));
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const closeDetail = useCallback(() => {
+    setDetailJob(null);
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete("job_id");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   useEffect(() => {
     if (error) message.error(error);
@@ -293,9 +351,19 @@ export default function JobsPage() {
       setSelectedJobIds([]);
       setBatchStatus(undefined);
       setDetailJob((current) => (current && jobIds.includes(current.id) ? null : current));
-      if (page !== 1) setPage(1);
+      // 当前页因此变空且还有上一页时回退一页，避免停在一页空白上；其余情况原地刷新，
+      // 不无脑跳回首页。
+      const listedJobs = jobs?.items ?? [];
+      if (listedJobs.length > 0 && listedJobs.every((job) => jobIds.includes(job.id)) && page > 1) {
+        setPage(page - 1);
+      }
       await reload();
-      message.success(`已删除 ${result.deleted} 个岗位`);
+      const failed = jobIds.length - result.deleted;
+      if (failed > 0) {
+        message.warning(`成功 ${result.deleted} 个，${failed} 个未能删除；已删除的可在回收站恢复`);
+      } else {
+        message.success(`已删除 ${result.deleted} 个岗位，可在回收站恢复`);
+      }
     } catch (err) {
       message.error(err instanceof Error ? err.message : "批量删除失败");
     } finally {
@@ -311,6 +379,13 @@ export default function JobsPage() {
   };
 
   const openMatchBatch = (autoRun: boolean, runMode: MatchBatchRunMode = "immediate") => {
+    if (autoRun && !selectionMode) {
+      // 「AI 分析适配度」分析的是勾选的岗位：没进选择模式说明用户还没机会勾选——
+      // 直接带他进选择模式，而不是丢一句「请先选择岗位」的死路提示。
+      setSelectionMode(true);
+      message.info("已进入选择模式，勾选岗位后点分析");
+      return;
+    }
     if (autoRun && selectedJobIds.length === 0) {
       message.warning("请先选择岗位");
       return;
@@ -383,7 +458,7 @@ export default function JobsPage() {
         page={page}
         pageSize={pageSize}
         onToggleFavorite={(job) => void toggleFavorite(job)}
-        onOpenDetail={setDetailJob}
+        onOpenDetail={openDetail}
         onGenerate={setGenerateJob}
         onWrite={setManualResumeJob}
         onViewResumes={(job) => navigate("/resumes?job_id=" + job.id)}
@@ -400,7 +475,7 @@ export default function JobsPage() {
 
       <JobDetailDrawer
         job={detailJob}
-        onClose={() => setDetailJob(null)}
+        onClose={closeDetail}
         onGenerate={(job) => setGenerateJob(job)}
         onWrite={(job) => setManualResumeJob(job)}
         onViewResumes={(job) => navigate(`/resumes?job_id=${job.id}`)}

@@ -84,6 +84,13 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
         method: options.method ?? "GET",
         error: error instanceof Error ? error.name : String(error),
       });
+      // 走到这里说明 fetch 本身就失败了（服务没启动 / 网络不可达），原始错误是英文的
+      // "TypeError: Failed to fetch"，用户看不懂；换成中文提示，原始错误挂在 cause 上
+      // 不丢诊断信息。后端有响应的（ApiError）行为不变。
+      // （Error 的 cause 选项需要 ES2022 lib，项目 tsconfig 尚未开到——用赋值等价实现。）
+      const wrapped: Error & { cause?: unknown } = new Error("无法连接本地服务，请确认应用已启动");
+      wrapped.cause = error;
+      throw wrapped;
     }
     throw error;
   }

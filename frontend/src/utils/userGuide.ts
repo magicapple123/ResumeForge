@@ -58,3 +58,37 @@ export function consumeFirstVisitGuide(
   markUserGuideSeen(storage);
   return true;
 }
+
+/**
+ * 引导弹窗当前是否正开着（由 App 布局同步；模块级状态与 SPA 会话同生命周期）。
+ *
+ * 首页的「近期提醒」启动弹窗据此排队：欢迎引导在前、提醒弹窗在后——两个启动弹窗
+ * 叠在一起时提醒会被引导盖住，等于白弹。只服务这一处序列化，不是通用事件总线。
+ */
+let userGuideVisible = false;
+const guideCloseWaiters = new Set<() => void>();
+
+export function isUserGuideVisible(): boolean {
+  return userGuideVisible;
+}
+
+/** 引导开关状态变化时调用；关闭瞬间依次唤醒排队的等待者。 */
+export function setUserGuideVisible(visible: boolean): void {
+  const was = userGuideVisible;
+  userGuideVisible = visible;
+  if (was && !visible) {
+    const waiters = [...guideCloseWaiters];
+    guideCloseWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+}
+
+/** 引导关闭后执行一次（当前没开着则立即执行）；返回退订函数。 */
+export function onceUserGuideClosed(waiter: () => void): () => void {
+  if (!userGuideVisible) {
+    waiter();
+    return () => {};
+  }
+  guideCloseWaiters.add(waiter);
+  return () => guideCloseWaiters.delete(waiter);
+}

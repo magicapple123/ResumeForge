@@ -54,7 +54,12 @@ export default function JobFormFields() {
         label="职位描述（JD）"
         rules={[{ required: true, message: "请填写职位描述" }]}
       >
-        <Input.TextArea rows={7} placeholder="粘贴完整 JD，生成简历时 AI 会据此定制内容" />
+        <Input.TextArea
+          rows={7}
+          maxLength={20000}
+          showCount
+          placeholder="粘贴完整 JD，生成简历时 AI 会据此定制内容"
+        />
       </Form.Item>
       <Form.Item name="requirements" label="任职要求（选填）">
         <Input.TextArea rows={3} placeholder="可单独填写任职要求，没有可留空" />

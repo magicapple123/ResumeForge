@@ -1,6 +1,7 @@
 /** 投递记录（按批次分组）：组头统计、展开看明细、详情 Drawer 完整失败信息（含 URL）。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyRecord, ApplyRecordBatch, Page } from "../../types";
 import ApplyRecordsPanel from "./ApplyRecordsPanel";
@@ -94,7 +95,9 @@ afterEach(() => {
 async function renderPanel() {
   render(
     <AntdApp>
-      <ApplyRecordsPanel disabled={false} onRetried={vi.fn()} />
+      <MemoryRouter>
+        <ApplyRecordsPanel disabled={false} onRetried={vi.fn()} />
+      </MemoryRouter>
     </AntdApp>,
   );
   // 等组头渲染完成。
@@ -155,7 +158,9 @@ describe("ApplyRecordsPanel (grouped by batch)", () => {
   it("does not enable a horizontal scroll bar (no scroll.x on the table)", async () => {
     const { container } = render(
       <AntdApp>
-        <ApplyRecordsPanel disabled={false} onRetried={vi.fn()} />
+        <MemoryRouter>
+          <ApplyRecordsPanel disabled={false} onRetried={vi.fn()} />
+        </MemoryRouter>
       </AntdApp>,
     );
     await screen.findByTestId("record-batch-7");
@@ -172,7 +177,9 @@ describe("ApplyRecordsPanel (grouped by batch)", () => {
     apiMocks.listRecordBatches.mockResolvedValue({ items: [], total: 0 });
     render(
       <AntdApp>
-        <ApplyRecordsPanel disabled={false} onRetried={vi.fn()} />
+        <MemoryRouter>
+          <ApplyRecordsPanel disabled={false} onRetried={vi.fn()} />
+        </MemoryRouter>
       </AntdApp>,
     );
     expect(await screen.findByText("还没有投递记录")).toBeInTheDocument();

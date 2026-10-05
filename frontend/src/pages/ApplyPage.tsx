@@ -83,7 +83,7 @@ export default function ApplyPage() {
     [task?.kind],
   );
 
-  const { detail, error, refresh } = useTaskPolling(fetchDetail, task?.id ?? null);
+  const { detail, error, refresh, notFound } = useTaskPolling(fetchDetail, task?.id ?? null);
 
   useEffect(() => {
     if (error) message.error(error);
@@ -143,8 +143,20 @@ export default function ApplyPage() {
           onStop={() => void control("stop")}
         />
       )}
-      {!detail && task && (
+      {!detail && task && !notFound && (
         <Typography.Paragraph type="secondary">正在读取任务进度…</Typography.Paragraph>
+      )}
+      {/* 任务记录已经不存在（被清理 / 后端重启）时如实说明并给「重试」——否则这里会
+          永远停在「正在读取任务进度…」，看起来像卡死。 */}
+      {!detail && task && notFound && (
+        <Space orientation="vertical" size={4} style={{ marginBottom: 8 }}>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            任务记录不存在，可能已被清理。
+          </Typography.Paragraph>
+          <Button size="small" onClick={() => void refresh()}>
+            重试
+          </Button>
+        </Space>
       )}
 
       <Tabs

@@ -183,7 +183,7 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
     const payload = toPayload(values);
     try {
       const saved = editing ? await updateClaim(claim.id, payload) : await createClaim(payload);
-      message.success(editing ? "已保存" : "已加入台账");
+      message.success(editing ? "已保存" : "已加入事实台账");
       onSaved(saved);
       onClose();
     } catch (error) {
@@ -196,7 +196,7 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
   return (
     <Modal
       open={open}
-      title={editing ? "编辑台账条目" : "新建台账条目"}
+      title={editing ? "编辑事实台账条目" : "新建事实台账条目"}
       onCancel={onClose}
       width={760}
       destroyOnHidden

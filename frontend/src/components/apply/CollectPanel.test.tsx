@@ -1,6 +1,7 @@
 /** 采集条件历史：保存写入 localStorage、去重、回填、清空。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyTaskDetail, CollectConfigOut } from "../../types";
 import CollectPanel from "./CollectPanel";
@@ -57,7 +58,9 @@ afterEach(() => {
 function renderPanel() {
   return render(
     <AntdApp>
-      <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={null} />
+      <MemoryRouter>
+        <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={null} />
+      </MemoryRouter>
     </AntdApp>,
   );
 }
@@ -154,7 +157,9 @@ function renderWithCollectTask(config: Record<string, unknown>) {
   } as unknown as ApplyTaskDetail;
   return render(
     <AntdApp>
-      <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={task} />
+      <MemoryRouter>
+        <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={task} />
+      </MemoryRouter>
     </AntdApp>,
   );
 }

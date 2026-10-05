@@ -24,7 +24,6 @@ vi.mock("../api/trash", () => ({
   purgeTrashItem: apiMocks.purgeTrashItem,
   emptyTrash: apiMocks.emptyTrash,
 }));
-
 function summary(overrides: Partial<TrashSummary> = {}): TrashSummary {
   return {
     total: 2,
@@ -103,6 +102,24 @@ describe("TrashPage", () => {
 
     await waitFor(() => expect(apiMocks.restoreTrashItem).toHaveBeenCalledWith("job", 7));
     // 恢复之后要重新拉一次，否则列表里还留着已经恢复的那条。
+    await waitFor(() => expect(apiMocks.getTrash).toHaveBeenCalledTimes(2));
+  });
+
+  it("批量恢复部分失败时如实报成功数与失败数", async () => {
+    renderPage();
+    await screen.findByText("全栈工程师");
+
+    // 勾选两条（第 0 个是表头全选框）。
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[1]);
+    fireEvent.click(checkboxes[2]);
+
+    // 第二条恢复失败：提示必须说"恢复了几条、几条失败"，不能只报成功。
+    apiMocks.restoreTrashItem.mockRejectedValueOnce(new Error("条目已被占用"));
+    fireEvent.click(screen.getByRole("button", { name: /批量恢复/ }));
+
+    expect(await screen.findByText(/已恢复 1 条，1 条恢复失败/)).toBeInTheDocument();
+    // 失败也要刷新：列表里不该留着已经恢复成功的那条。
     await waitFor(() => expect(apiMocks.getTrash).toHaveBeenCalledTimes(2));
   });
 

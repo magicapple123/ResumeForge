@@ -70,9 +70,9 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function renderPage() {
+function renderPage(initialEntries: string[] = ["/favorites"]) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <AntdApp>
         <FavoritesPage />
       </AntdApp>
@@ -149,5 +149,13 @@ describe("FavoritesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "取消收藏" }));
 
     await waitFor(() => expect(apiMocks.updateJob).toHaveBeenCalledTimes(2));
+  });
+
+  it("从 URL 恢复页签（简历页签直接打开）", async () => {
+    renderPage(["/favorites?kind=resumes"]);
+
+    // URL 指定 resumes 时直接落在简历页签上，而不是先渲染岗位再切换。
+    expect(await screen.findByText("数据分析岗位简历")).toBeInTheDocument();
+    expect(apiMocks.listResumes).toHaveBeenCalledWith(expect.objectContaining({ favorite: true }));
   });
 });

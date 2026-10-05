@@ -6,7 +6,7 @@
  * 不能因为 `admission` 为空就一律显示「未分析」而吞掉这个准入要求。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyQueueItem } from "../../types";
 import ApplyQueuePanel from "./ApplyQueuePanel";
@@ -14,6 +14,7 @@ import ApplyQueuePanel from "./ApplyQueuePanel";
 const apiMocks = vi.hoisted(() => ({
   listQueue: vi.fn(),
   createApplyTask: vi.fn(),
+  getBrowserStatus: vi.fn(),
   reorderQueue: vi.fn(),
   removeQueueItem: vi.fn(),
   updateQueueItem: vi.fn(),
@@ -24,6 +25,7 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("../../api/apply", () => ({
   listQueue: apiMocks.listQueue,
   createApplyTask: apiMocks.createApplyTask,
+  getBrowserStatus: apiMocks.getBrowserStatus,
   reorderQueue: apiMocks.reorderQueue,
   removeQueueItem: apiMocks.removeQueueItem,
   updateQueueItem: apiMocks.updateQueueItem,
@@ -56,6 +58,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.listQueue.mockResolvedValue([]);
   apiMocks.listResumes.mockResolvedValue({ items: [], total: 0 });
+  // 浏览器默认已启动：绝大多数用例不关心浏览器前置检查这一层。
+  apiMocks.getBrowserStatus.mockResolvedValue({ state: "running" });
 });
 
 afterEach(() => {
@@ -122,6 +126,25 @@ describe("ApplyQueuePanel 准入徽标", () => {
     );
 
     expect(await screen.findByRole("button", { name: /开始投递/ })).toBeDisabled();
+  });
+
+  it("浏览器未启动时点开始投递：给引导提示且不发创建任务请求", async () => {
+    // 按钮保持可点（保留可发现性），但点击被引导——比 disable 或后端报错都好。
+    apiMocks.listQueue.mockResolvedValue([{ ...BASE_ITEM }]);
+    apiMocks.getBrowserStatus.mockResolvedValue({ state: "stopped" });
+
+    render(
+      <AntdApp>
+        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+      </AntdApp>,
+    );
+
+    const start = await screen.findByRole("button", { name: /开始投递/ });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
+
+    expect(await screen.findByText("请先启动浏览器再开始投递")).toBeInTheDocument();
+    expect(apiMocks.createApplyTask).not.toHaveBeenCalled();
   });
 });
 

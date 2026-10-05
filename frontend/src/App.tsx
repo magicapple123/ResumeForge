@@ -30,7 +30,7 @@ import TouTouClipboardCard from "./features/tou-tou/TouTouClipboardCard";
 import TouTouOrb from "./features/tou-tou/TouTouOrb";
 import { TouTouProvider } from "./features/tou-tou/TouTouProvider";
 import { useNavigationVisibility } from "./hooks/useNavigationVisibility";
-import { consumeFirstVisitGuide } from "./utils/userGuide";
+import { consumeFirstVisitGuide, setUserGuideVisible } from "./utils/userGuide";
 // 侧栏品牌图标。走 import 而不是写死 "/resumeforge-icon.png"——Vite 会按 `base`
 // 重写成正确前缀（在线体验产物部署在 Pages 子路径下，写死绝对路径会 404）。
 // 特意用 src/assets/ 的副本而不是 public/ 下的同名文件：引用 public/ 里的资源不会
@@ -191,6 +191,11 @@ function MainLayout() {
   useEffect(() => {
     if (consumeFirstVisitGuide()) setGuideOpen(true);
   }, []);
+
+  // 引导开关状态同步给首页的「近期提醒」启动弹窗：欢迎在前、提醒在后，两个不叠。
+  useEffect(() => {
+    setUserGuideVisible(guideOpen);
+  }, [guideOpen]);
 
   /**
    * 在线体验模式：接收官网 iframe 发来的切页指令。

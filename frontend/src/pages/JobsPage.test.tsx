@@ -1,6 +1,6 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CandidateJobDetail, Job } from "../types";
 import JobsPage from "./JobsPage";
@@ -59,6 +59,23 @@ function renderPage(initialEntries: string[] = ["/jobs"]) {
     <AntdApp>
       <MemoryRouter initialEntries={initialEntries}>
         <JobsPage />
+      </MemoryRouter>
+    </AntdApp>,
+  );
+}
+
+/** 把当前 search 显示出来，供 URL 状态化断言用。 */
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.search}</div>;
+}
+
+function renderPageWithProbe(initialEntries: string[] = ["/jobs"]) {
+  return render(
+    <AntdApp>
+      <MemoryRouter initialEntries={initialEntries}>
+        <JobsPage />
+        <LocationProbe />
       </MemoryRouter>
     </AntdApp>,
   );
@@ -207,6 +224,16 @@ describe("JobsPage", () => {
     );
   });
 
+  it("未进选择模式点「AI 分析适配度」时直接进入选择模式并提示", async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "AI 分析适配度" }));
+
+    // 不是「请先选择岗位」的死路提示，而是把用户带进选择模式。
+    expect(await screen.findByText("已进入选择模式，勾选岗位后点分析")).toBeInTheDocument();
+    expect(screen.getByText("退出选择")).toBeInTheDocument();
+  });
+
   it("后端因来源不支持拒收时只给提示，不给「仍然加入」的按钮", async () => {
     // 这是**兜底**分支：正常情况下按钮对这类岗位已经禁用了；万一前端数据里没有
     // apply_supported（旧缓存 / 旧版本），后端仍会拦下，界面必须说清楚而不能弹"确认继续"。
@@ -230,6 +257,57 @@ describe("JobsPage", () => {
     // 这一类确认也没用，所以不能出现"仍然加入"。
     expect(screen.queryByRole("button", { name: /仍然加入/ })).not.toBeInTheDocument();
     spy.mockRestore();
+  });
+});
+
+describe("JobsPage URL 状态化", () => {
+  afterEach(cleanup);
+
+  beforeEach(() => {
+    mocks.jobs = [makeJob()];
+    mocks.startBackfill.mockReset();
+    mocks.startBackfill.mockResolvedValue({} as never);
+    for (const mock of Object.values(candidateMocks)) mock.mockReset();
+  });
+
+  it("改筛选后写回 URL（replace 语义由 useSearchParams 的 replace 选项保证）", async () => {
+    renderPageWithProbe();
+
+    const searchBox = screen.getByPlaceholderText("搜索职位 / 公司 / 城市 / 描述 / 备注");
+    fireEvent.change(searchBox, { target: { value: "算法工程师" } });
+    fireEvent.keyDown(searchBox, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        `keyword=${encodeURIComponent("算法工程师")}`,
+      ),
+    );
+  });
+
+  it("进页面时从 URL 恢复筛选与页码", () => {
+    mocks.jobs = Array.from({ length: 12 }, (_, index) =>
+      makeJob({ id: index + 1, title: `示例岗位${index + 1}` }),
+    );
+    renderPageWithProbe(["/jobs?keyword=%E6%8A%A4%E5%A3%AB&page=2"]);
+
+    const searchInput = screen.getByPlaceholderText(
+      "搜索职位 / 公司 / 城市 / 描述 / 备注",
+    ) as HTMLInputElement;
+    expect(searchInput.value).toBe("护士");
+    // 分页器停在恢复出的第 2 页（12 条 × 每页 10 条 → 共 2 页）。
+    expect(document.querySelector(".ant-pagination-item-active")?.getAttribute("title")).toBe("2");
+  });
+
+  it("打开详情时把 job_id 写进 URL，关闭时移除", async () => {
+    renderPageWithProbe();
+
+    fireEvent.click(screen.getByRole("button", { name: "护士" }));
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("job_id=1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => expect(screen.getByTestId("location").textContent).not.toContain("job_id"));
   });
 });
 
