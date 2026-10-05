@@ -1,19 +1,12 @@
 /** 岗位广场：搜索筛选、手动添加、详情与生成简历入口。 */
 import { App } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { markCandidateJobImported } from "../api/candidateJob";
 import { openWebFormUrl } from "../api/webform";
 import { addToQueue, QueueConflictError, startBackfill } from "../api/apply";
-import {
-  batchDeleteJobs,
-  batchUpdateJobStatus,
-  deleteJob,
-  getJob,
-  listJobs,
-  updateJob,
-} from "../api/jobs";
+import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, updateJob } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobAnalysisModal from "../components/JobAnalysisModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
@@ -25,30 +18,43 @@ import { candidateImportSource } from "../utils/jobSource";
 import CandidateJobsDrawer from "../components/jobs/CandidateJobsDrawer";
 import { candidateToJobPayload } from "../components/jobs/candidate/candidatePayload";
 import JobTable from "../components/jobs/JobTable";
-import { useApi } from "../hooks/useApi";
 import type { CandidateJobDetail, Job } from "../types";
 import { BatchToolbar } from "./jobs/BatchToolbar";
 import { JobFilterBar } from "./jobs/JobFilterBar";
 import type { BatchAction, MatchBatchRunMode } from "./jobs/jobFilterOptions";
+import { useJobsPageState } from "./jobs/useJobsPageState";
 
 export default function JobsPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
 
-  // 筛选 / 分页 / 详情的初值从 URL 读：链接可分享、刷新后状态不丢（与 WebFormPage 的
-  // URL 化同一模式）。用户改动后由下面的 effect 用 replace 语义写回，不堆历史栈。
-  const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
-  const [jobType, setJobType] = useState(searchParams.get("job_type") ?? "");
-  const [status, setStatus] = useState(searchParams.get("status") ?? "");
-  const [sourceKind, setSourceKind] = useState<"" | "collected" | "manual">(() => {
-    const raw = searchParams.get("source_kind");
-    return raw === "collected" || raw === "manual" ? raw : "";
-  });
-  const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
-  const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
+  // 筛选 / 分页 / 详情 job_id 的 URL 状态化与由它驱动的列表查询都收在 hook 里：
+  // 初值从 URL 读、改动写回，链接可分享、刷新后状态不丢。
+  const {
+    keyword,
+    setKeyword,
+    jobType,
+    setJobType,
+    status,
+    setStatus,
+    sourceKind,
+    setSourceKind,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    detailJob,
+    setDetailJob,
+    openDetail,
+    closeDetail,
+    collectTaskIdsKey,
+    collectTaskIds,
+    jobs,
+    loading,
+    reload,
+    error,
+  } = useJobsPageState();
 
-  const [detailJob, setDetailJob] = useState<Job | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
   const [generateJob, setGenerateJob] = useState<Job | null>(null);
@@ -72,92 +78,7 @@ export default function JobsPage() {
   const [importCandidate, setImportCandidate] = useState<CandidateJobDetail | null>(null);
   const [importedCandidateId, setImportedCandidateId] = useState<number | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
-  const linkedJobId = Number(searchParams.get("job_id")) || null;
-  const collectTaskIdsKey = searchParams.get("collect_task_ids") ?? "";
-  const collectTaskIds = useMemo(
-    () => [
-      ...new Set(
-        collectTaskIdsKey
-          .split(",")
-          .map(Number)
-          .filter((value) => Number.isInteger(value) && value > 0),
-      ),
-    ],
-    [collectTaskIdsKey],
-  );
   const [openedCollectTaskIdsKey, setOpenedCollectTaskIdsKey] = useState("");
-  const [openedLinkedJobId, setOpenedLinkedJobId] = useState<number | null>(null);
-
-  const {
-    data: jobs,
-    loading,
-    reload,
-    error,
-  } = useApi(
-    () =>
-      listJobs({
-        keyword,
-        job_type: jobType,
-        status,
-        source_kind: sourceKind || undefined,
-        page,
-        page_size: pageSize,
-      }),
-    [keyword, jobType, status, sourceKind, page, pageSize],
-  );
-
-  // 筛选 / 分页写回 URL（replace 语义）。effect 只依赖这些状态本身，不依赖 searchParams：
-  // 写回触发的重渲染里 deps 没变、不会再写，因此不会形成循环重渲染。
-  // 其余参数（job_id、collect_task_ids）通过 functional 更新原样保留。
-  useEffect(() => {
-    setSearchParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        const values: [string, string][] = [
-          ["keyword", keyword],
-          ["job_type", jobType],
-          ["status", status],
-          ["source_kind", sourceKind],
-          ["page", page > 1 ? String(page) : ""],
-          ["page_size", pageSize !== 10 ? String(pageSize) : ""],
-        ];
-        for (const [key, value] of values) {
-          if (value) next.set(key, value);
-          else next.delete(key);
-        }
-        return next;
-      },
-      { replace: true },
-    );
-  }, [keyword, jobType, status, sourceKind, page, pageSize, setSearchParams]);
-
-  // 详情与 ?job_id= 同步：打开详情写进 URL（可分享/刷新后恢复），关闭就移除。
-  const openDetail = useCallback(
-    (job: Job) => {
-      setDetailJob(job);
-      setSearchParams(
-        (previous) => {
-          const next = new URLSearchParams(previous);
-          next.set("job_id", String(job.id));
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
-
-  const closeDetail = useCallback(() => {
-    setDetailJob(null);
-    setSearchParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        next.delete("job_id");
-        return next;
-      },
-      { replace: true },
-    );
-  }, [setSearchParams]);
 
   useEffect(() => {
     if (error) message.error(error);
@@ -174,20 +95,6 @@ export default function JobsPage() {
   const emptyDescriptionJobIds = (jobs?.items ?? [])
     .filter((job) => !job.description.trim())
     .map((job) => job.id);
-
-  useEffect(() => {
-    if (!linkedJobId || openedLinkedJobId === linkedJobId || loading) return;
-    const listedJob = jobs?.items.find((item) => item.id === linkedJobId);
-    if (listedJob) {
-      setDetailJob(listedJob);
-      setOpenedLinkedJobId(linkedJobId);
-      return;
-    }
-    setOpenedLinkedJobId(linkedJobId);
-    void getJob(linkedJobId)
-      .then(setDetailJob)
-      .catch((err) => message.error(err instanceof Error ? err.message : "岗位不存在或已被删除"));
-  }, [jobs, linkedJobId, loading, message, openedLinkedJobId]);
 
   const removeJob = useCallback(
     async (id: number) => {
@@ -217,7 +124,7 @@ export default function JobsPage() {
         setFavoriteJobId(null);
       }
     },
-    [batchAction, favoriteJobId, message, reload],
+    [batchAction, favoriteJobId, message, reload, setDetailJob],
   );
 
   const addJobToQueue = useCallback(
