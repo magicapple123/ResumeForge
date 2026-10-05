@@ -494,7 +494,7 @@ score_match_result(result, job_payload, profile_text, resume_text)
 | 粘贴文本采用 AI 优先、本地兜底 | 本地规则保证离线可用，大模型负责跨行业语义分区和字段纠错；结果经过来源锚定、白名单和 Pydantic 校验，模型异常不阻断现有流程 |
 | 招聘信息默认粘贴导入、按需才访问站点 | 岗位粘贴识别在已配置模型时优先由大模型用结构化 Prompt 抽取字段，并通过原文锚点验证；未配置模型或模型失败则退回本地规则生成的可编辑草稿。**默认不读取远程岗位详情**；仅当用户显式开启「投递台」的采集或投递时，才由浏览器桥接层访问招聘网站，投递链接仍由用户手动核对并填写 |
 | 输出上限可设为不限制           | 设置页可勾选「不限制」，此时请求体省略 `max_tokens`，把输出上限交回服务商和模型决定（并非真的无限，部分服务商默认值偏小）；本地流式字符硬上限只用于兜住异常响应，不随该选项收紧 |
-| 备份即一个数据库快照           | 全部用户数据（含照片、参考文件、助手图片附件）都在同一个 SQLite 文件里，所以导出 = 一致性快照 + 元信息 JSON；导出物不含 API Key，且清空密钥必须配合 `VACUUM` 重建文件，只 `UPDATE` 会留下空闲页残留 |
+| 备份即一个数据库快照           | 全部用户数据（含照片、参考文件、助手图片附件）都在同一个 SQLite 文件里，所以导出 = 一致性快照 + 元信息 JSON；导出物**默认**不含 API Key（用户显式勾选后按本机存储形态随包走，格式号升到 3 让老版本明确拒收），且清空密钥必须配合 `VACUUM` 重建文件，只 `UPDATE` 会留下空闲页残留 |
 | 多份数据 = 多份真实数据库文件   | 数据集文件本身就是活动文件，切换只重绑引擎、不搬运数据，因此不存在"改动没写回原数据集"的隐患。重绑手法是有区别的：`engine` 必须新建对象（URL 在 `create_engine` 时就烤进了连接池的 creator 闭包，改属性无效），而 `SessionLocal` 用 `configure(bind=...)` 原地改绑以保持对象 identity——否则按值导入它的模块（助手流式写入、简历保存）会静默继续写旧库 |
 | 切换前先等连接还回池子         | 有并发的 AI 流式请求时换引擎，该请求后续打开的会话会落到刚切过去的库上，等于把数据写进别处。切换前轮询 `engine.pool.checkedout()`，非零就返回 409 让用户稍后重试 |
 | “其他信息”独立保存             | 避免把福利、团队介绍、职位 ID、流程等内容强塞进职责/要求，同时让搜索和岗位化生成仍能使用这些信息    |
@@ -584,10 +584,32 @@ score_match_result(result, job_payload, profile_text, resume_text)
    否定信号也有两档：站点声明的"别自动填"（`AUTOCOMPLETE_DENY`：密码 / 验证码 / 银行卡）
    直接拦下；`autocomplete="off"` **既不匹配也不拦**，当"没有信息"（字节简历页给 6 个
    控件标了 off，其中就有我们能填对的框——当禁令会让它们全废，Chrome 也当提示而非禁令）。
+   另有两道**防错**信号（2026-10 真机实测后加）：**跨族否决**（`engine/families.py`）——
+   日期族的字段不认识"自述是电话 / 区号"的控件，且只认控件**自己说**的话（label /
+   placeholder / name）：mokahr 类页面把整表标签串累积进每个控件的**旁文**，按签名判断
+   会把同页正常的日期框一并漏掉。**跨字段争抢**（`evidence.competing_fields`）——同一控件
+   被两个不同字段同档同分争抢时（旁文「学校名称 专业名称」），照常填但标成"需确认"，
+   不再按字段表顺序静默选一个。**弹层类控件在候选排序里降 2 分**（`_rank_controls`）：
+   字节页实测，+86 区号框（popup）与只读的证件类型选择器分别抢走了手机号和证件号码，
+   两个真输入框一起落空。这条现在只剩排序层的意义——弹层控件的**分配**已被「只填不点」
+   整条挡掉（见扩展点第 27 条），降分影响的是低置信判断里的冠亚军比较：别让一个永远不会
+   被填的框把真输入框挤成"需确认"。
+
+   占位符的**权威性**有三条边界（2026-10-05 四站实测后定，见 `evidence._states_its_field`）：
+   ① 光杆「请输入 / 请选择」不含字段信息，不是陈述——只回退到旁文**开头那一段**
+   （`_leading_label_segment`，京东页的姓名 / 手机 / 邮箱靠它认出来；**不许**拿整段旁文，
+   那会把区块级文本里的"就读时间"带进学历框）；② 长说明文（多行 / "您可以…建议…"）是在
+   教怎么填，不是一对一点名（腾讯「补充信息」）；③ 真正一对一的陈述才走权威分支、并列时
+   弃权。另有三条配套机制：**整表标签串剥离**（`engine/pollution.py`，同一段 ≥60 字文本
+   出现在 ≥3 个控件的旁文里 → 从旁文减掉、保留各自前缀）、**区块准入共用**
+   （`evidence.block_hint_satisfied`，引擎与 `recognize_field` 同一份判据——鹰角「游戏经历」
+   一度在面板上被报成「实习描述」就是因为这里分叉）、**紧邻日期组配对**
+   （`FormEngine._complete_split_date_pairs`：同区块两对年 / 月都只写"就读时间"时，
+   第二对按结构补成 `*_end`；两组之间隔着别的控件则不配——那是可重复区块的第二条）。
 
 18. **给网申填表加字段**：只需在 `services/webform/fields.py` 的 `FORM_FIELDS` 加一条、并在 `FIELD_SYNONYMS` 加同名条目（`tests/test_webform_engine.py::test_catalog_and_synonyms_stay_in_step` 会钉住两者一一对应）。**不需要迁移、不需要改前端**——目录由 `GET /api/webform/fields` 下发，录入界面据此渲染。若值来自资料里的新列，再改 `services/webform/data/profile_map.py::profile_to_form_data`。**判断逻辑（选哪个下拉项、日期怎么写、单选点哪个）一律写在 `services/webform/matching.py` 的纯函数里**，不要塞进注入的 JS：离线测试用的假客户端不执行 JS，塞进去等于没有覆盖——这正是原先四个缺陷能活到生产的原因。字段值对不上页面的选项时**不猜**，如实报 `no_option`。
 
-    多段经历（实习/项目/获奖）的字段带 `derived=True` 且配了 `FIELD_BLOCK_HINTS`：**区块内的短词（"起止时间""职位""描述"）必须见到区块名才参与匹配**。网申表单把这三类做成「可添加多条」的区块，每条的控件长得一模一样——没有区块限定的话，"起止时间"会在教育、实习、项目三个区块上同时命中，谁抢到全看控件序号。区块里成对的日期控件签名完全相同，靠 DOM 顺序区分开始与结束，并标成需确认。**这一版只填第一条、不点页面上的「添加」按钮**（点按钮是改页面，不只是填值）。日期拆成多个年份 / 月份 / 日期下拉时，先按共享标签关联成一组，再为每个组件做日期转换。具备 `role=combobox` / `aria-controls` 的可访问自定义下拉会通过 `services/webform/custom_select.py` 读取选项并用可信鼠标事件选择唯一匹配项；不唯一时仍返回 `ambiguous`，不猜。
+    多段经历（实习/项目/获奖）的字段带 `derived=True` 且配了 `FIELD_BLOCK_HINTS`：**区块内的短词（"起止时间""职位""描述"）必须见到区块名才参与匹配**。网申表单把这三类做成「可添加多条」的区块，每条的控件长得一模一样——没有区块限定的话，"起止时间"会在教育、实习、项目三个区块上同时命中，谁抢到全看控件序号。区块里成对的日期控件签名完全相同，靠 DOM 顺序区分开始与结束，并标成需确认。**这一版只填第一条、不点页面上的「添加」按钮**（点按钮是改页面，不只是填值）。日期拆成多个年份 / 月份 / 日期**下拉**时，先把它们按共享标签关联成一组（免得当成几个独立字段各自乱配）——但「只填不点」之后这些下拉本身不自动填，**只有文本形态**的年 / 月框才会做组件级日期转换。具备 `role=combobox` / `aria-controls`（或组件库的 select / dropdown 外壳）的可访问自定义下拉由 `services/webform/custom_select.py` 读选项、用可信鼠标事件选唯一匹配项——这条路现在只服务**显式填充**（`/fill`），自动匹配不会走到它。
 
     实时填表的 `/api/webform/live/enabled` 只切换功能启用状态，不销毁会话和悬浮球；关闭时页面仍保留灰色球，但焦点事件不会显示提示面板。`/api/system/diagnostics` 返回进程内的脱敏运行事件，诊断事件只能记录计数、状态、耗时、错误类型和请求 ID 等元数据，不记录表单值或凭据。
 
@@ -606,6 +628,11 @@ score_match_result(result, job_payload, profile_text, resume_text)
     - **`skip_reason` 是终局判定，模型没有投票权。** 顺序不能反：先问模型再拦，等于给它机会
       说服我们填验证码。触发点因此是"**规则认不出**"（不是"规则没结果"——`suggest_for` 原本
       把"认得出但资料为空"也报成 `unmatched`，那个已经分开了，否则会白花钱）。
+    - **采纳前与规则共用同一组否决。** 负向词（"紧急联系人姓名"之于姓名）与跨族否决在
+      `preview` 与 `live` 的采纳点会再跑一遍（`engine.evidence.excluded_by_hints` /
+      `engine.families.foreign_marker`）——模型猜的字段**不因为来自模型就免检**。
+      调用失败（网络 / 解析）自动重试一次并记诊断事件；"合法 JSON 但一个都不像"是模型的
+      真实回答，**不重试**（重试只会烧钱，还可能逼它下一轮硬猜一个）。
 
     实时链路的接缝在 `live.LiveSession._on_focus`，模型调用跑在**单槽工作线程**
     （`_AiWorker`）里——`_on_focus` 在 350ms 一轮的轮询线程上，在那里同步等一次网络调用会
@@ -697,6 +724,52 @@ score_match_result(result, job_payload, profile_text, resume_text)
     （`probe_thinking`）——上游没有"查询思考能力"的接口，而很多服务商对不认识的参数是
     静默忽略的，只有实发一次看响应里有没有思考内容才能分辨。
 
+26. **调整网申填表的写入与恢复**：`engine/core.py::apply` 是"每个控件：写一次 → 回读判定 →
+    按 `engine/recovery.py` 的阶梯最多重试 `MAX_RETRIES` 轮"。几条 2026-10-05 真机实测后
+    定下的规矩：**弹层与选择类控件只服务显式填充**（"只填不点"，见扩展点第 27 条）——
+    只读弹层（自定义下拉/级联）走"点开→选唯一匹配项"，原生 `select` 走
+    `HTMLSelectElement` 的原生 setter，单选/复选走可信鼠标点击且**已勾选的不再点**
+    （再点会反选）；自动匹配已经不会给它们分配字段，所以这些分支只在 `/fill`
+    收到用户确认过的选择时被走到；**电话类字段重试时换纯数字写法**
+    （`_retry_mapping`：字节页会清空带分隔符的值，腾讯页会自己规范化）；**超长值不写**
+    （`_value_over_max_length`：超过控件 `maxlength` 的值会被页面截成残码）；
+    **整页填充收尾复读一次**（`service/fill.py::_downgrade_reverted`，`SETTLE_RECHECK_SECONDS`）
+    把"当场有值、组件随后还原"的伪已填降级——逐项模式与离线测试不传这个参数，保持即时
+    反馈、不吃墙钟。改这块前先读 `recovery.py`
+    的模块 docstring，三条纪律不可放宽：**重试前先探查页面现状**（值已对就判成功、被别的
+    值占住就不覆盖、单选已勾上就不再点——再点会反选，快照里的 `checked` 可能过期，
+    所以重试点击走 `RetryStrategy.force_choice_click`）；`no_option` 只允许"重读选项 +
+    严格匹配"，**永不模糊选**；`no_control` 不重试（页面已重渲染，重写只会再失败一次）。
+    写入脚本（`engine/writers.py`）默认只发 `input + change`，**blur 只进重试路径**
+    （`RetryStrategy.full_events`）——happy path 发 blur 会触发站点校验、个别站点还会在
+    onblur 里清掉未通过校验的值。**回读失败（读不到，而不是"值不对"）一律记 `unverified`
+    而不是 `filled`**：一键填充的"成功率"就建立在这条上，改回去等于让数字说谎。结果里的
+    `reason`（原因码）是闭环的：重试决策、`/fill` 的 `reason_counts` 与诊断事件共用同一组
+    常量。真机上 `focus()` / `blur()` 的**事件**只在文档本身有焦点时派发（后台标签里
+    activeElement 照样设、值照样写，只是没有事件）——排查"填了没反应"时先确认页面在前台。
+
+27. **「只填不点」——自动填充的控件边界**（2026-10-05 维护者定的产品边界；别再放宽回
+    "事实类可以填"）：**自动匹配只产出文本类控件的映射**。`engine/core.py::skip_reason`
+    先按类型挡下 `select` / `radio` / `checkbox` / `date` / `month` 与一切 `has_popup`
+    控件（快照 JS 的 `looksLikePopup`：`aria-haspopup` / `role=combobox`，**外加祖上三层
+    内出现 select / dropdown / picker / cascader 类名**——2026-10-05 鹰角（MokaHR）实测，
+    性别 / 学校名称 / 专业名称 / 年 / 月是 Semi Design 的 Select，`<input>` 上看不到任何
+    aria 标注，不认外壳就会把它们当普通文本框填掉），命中即进 `MatchResult.skipped`
+    并带上给用户看的中文理由；`preview` 把它们列进
+    「不会自动填」，`suggest_for`（实时模式）判 blocked，**AI 也拿不到**——
+    `enrich_preview_with_ai` 只问「没认出来」与低置信两桶。两条理由：这些框的值是
+    **用户的选择**而不是资料里的一行字；程序往只读展示框 / 组件状态里写值，常常是
+    "看着填上了、交上去还是空的"。
+    随之删掉的是匹配层的整套选择逻辑：`_build_mapping` 的 select / 单选复选 / 弹层 / 日期
+    分支、单选组"整组参与匹配"（`matching.py::resolve_choice` 留着，但只服务显式填充一侧）。
+    **显式填充（`/fill`）不在禁令内**：用户在预览里确认过的选择走
+    `service/fill.py::_rebuild_mapping`，引擎的写入 / 回读 / 重试（`_apply_select` /
+    `_apply_choice` / 弹层点选）都保留着；执行语料用 `selections` 字段驱动这条路
+    （见 `tests/fixtures/webform/README.md`）。
+    改这条边界要同时动：`skip_reason`、`test_webform_engine_*` 的边界用例、语料里
+    `forbidden` 的期待、`docs/user-guide.md` 的「它不会做什么」与
+    `frontend/src/components/userGuideSteps.ts`。
+
 ## 测试策略
 
 - 后端核心业务（跨行业岗位文本/JD 解析、资料参考文件、岗位相关片段筛选、分级生成、照片校验与渲染、岗位解读、助手附件/历史/搜索摘要解析、导出、防虚构校验）有单元测试；模型链路使用模拟传输或假 Provider，默认不依赖真实网络。较长测试已按主题拆分为 `test_job_text_parser_edge_cases.py`、`test_job_text_parser_metadata.py`、`test_profile_text_parser_inference.py`、`test_assistant_search.py` 和 `test_resume_quality_retry.py`，岗位元数据/英文标题/分隔符规则与核心字段测试分别维护，便于定向回归。
@@ -712,7 +785,7 @@ score_match_result(result, job_payload, profile_text, resume_text)
 - 求职进度按层拆测试：`test_tracker.py` 钉住核心规则（归一只做不会误合并的事、状态只能前进、拒信覆盖、同批折叠、合并不抹掉用户填过的字段、投递台回写不把进度打回去），`test_tracker_extract.py` 钉住解析与本地降级（缺公司或岗位就丢掉、「感谢投递」不会被读成面试、公司名取更完整的那一个），`test_tracker_api.py` 钉住 HTTP 面（固定路径不被 `/{id}` 吃掉、**预览不写库**、预览与执行一致、导出与筛选），`test_migration_0012.py` 钉住迁移的建表 / 唯一约束 / 幂等 / downgrade，`test_apply_task_runner.py` 里有一条钉住"投递成功会落一条进度记录"。
 - 事实台账按层拆测试：`test_claims.py` 钉住校验规则（已确认不得含占位符、枚举、日历日、建议规则的"该报才报"），`test_claims_api.py` 钉住 HTTP 面（固定路径不被 `/{id}` 吃掉、422/502、草拟的两条路径与"模型给未知承担程度时退回最保守取值"），`test_migration_0011.py` 钉住迁移的建表 / 幂等 / downgrade / 与模型常量的默认值一致，`test_resume_completeness.py` 钉住每个区块都被扫到与"不误报"，`test_claim_integration.py` 钉住两个接合点（台账为空时提示词逐字节不变、导出闸门与它的显式出路），`test_assistant_claim_tools.py` 钉住"助手改不了核实状态"。
 - 本批新增模块同样按层拆测试：`test_resume_writing.py` 钉住写作增强（STAR 改写注入 claim 事实边界、纯空白在 schema 层 422、未配置模型降级、提示词登记）；`test_match_scoring.py` 钉住参考分（五维加权、中性分、**不改变准入结论**）；`test_resume_diff.py` 钉住版本对比三态；`test_resume_risk.py` / `test_ats.py` 钉住质量合规与 ATS 免责；`test_watermark.py` 钉住水印后处理（HTML 转义、PDF 页数不变、空文本透传、不支持格式报错）；`test_share_package.py` 钉住离线分享包（脱敏快照、文件清单、token 校验、删除→回收站→恢复→再删→彻底删除闭环）；`test_referral.py` 钉住内推转化派生口径；`test_migration_0018.py` 钉住四张新表的建表 / 幂等 / downgrade。
-- 网申填表按层拆测试，**并且刻意补上旧实现缺失的那类覆盖**：`test_webform_matching.py` 穷举取值决策（占位项永不选、别名、多候选判 `ambiguous` 不猜、日期只有年份时拒绝、`至今` 不算日期），`test_webform_engine.py` 钉住控件识别、单选组整组参与匹配、负向词挡住"紧急联系人姓名"、`file` 控件永不被映射，以及**对着真实缺陷的回归守卫**（`select` 必须用 `HTMLSelectElement` 的 setter 而不是 `HTMLInputElement` 的），`test_webform_data.py` 钉住"取最高学历而不是第一条"，`test_webform_service.py` 钉住冲突项默认不勾选与快照过期语义，`test_webform_api.py` 钉住 HTTP 面。另有两条**机械守卫**把产品边界变成不变量：`test_webform_no_submit.py`（源码里出现 `.submit(` / `requestSubmit` 即红；快照脚本必须跳过提交类控件）与 `test_stop_aware_client_forwarding.py`（反射 `CdpClient` 与 `WindowAwareMixin` 的每个公开方法，断言包装层都转发了——漏转发不报错，只会让该能力在生产里静默失效）。前端 `WebFormPage.test.tsx` 钉住「界面上不存在文案含『提交』的按钮」与「冲突行默认不勾选」。AI 兜底另有三层：`test_webform_ai.py` 钉住**提示词里不含任何资料值**、目录外的字段名被丢弃、`__none__` 与自相矛盾的答案怎么收敛、模型挂了要降级、语义缓存与配额；`test_webform_live.py` 钉住触发条件（**只对真正认不出的问**）、**不阻塞轮询**、过期答案丢弃、`skip_reason` 优先于模型；`test_webform_js_canary.py` 在真浏览器里钉住面板**不盖住输入框、离它够近、跟得住页面重排**、拖动保留的是相对偏移、备选逐条可点，以及卸载要停掉重排定时器。
+- 网申填表按层拆测试，**并且刻意补上旧实现缺失的那类覆盖**：`test_webform_matching.py` 穷举取值决策（占位项永不选、别名、多候选判 `ambiguous` 不猜、日期只有年份时拒绝、`至今` 不算日期），`test_webform_engine.py` 钉住控件识别、负向词挡住"紧急联系人姓名"、`file` 控件永不被映射，以及**对着真实缺陷的回归守卫**（`select` 必须用 `HTMLSelectElement` 的 setter 而不是 `HTMLInputElement` 的；`test_webform_engine_*` 另外钉住「只填不点」——下拉 / 单选 / 复选 / 日期控件一律进 `skipped`、显式填充那条路照常能写），`test_webform_data.py` 钉住"取最高学历而不是第一条"，`test_webform_service.py` 钉住冲突项默认不勾选与快照过期语义，`test_webform_api.py` 钉住 HTTP 面。另有两条**机械守卫**把产品边界变成不变量：`test_webform_no_submit.py`（源码里出现 `.submit(` / `requestSubmit` 即红；快照脚本必须跳过提交类控件）与 `test_stop_aware_client_forwarding.py`（反射 `CdpClient` 与 `WindowAwareMixin` 的每个公开方法，断言包装层都转发了——漏转发不报错，只会让该能力在生产里静默失效）。前端 `WebFormPage.test.tsx` 钉住「界面上不存在文案含『提交』的按钮」与「冲突行默认不勾选」。AI 兜底另有四层：`test_webform_ai.py` 钉住**提示词里不含任何资料值**、目录外的字段名被丢弃、`__none__` 与自相矛盾的答案怎么收敛、模型挂了要降级、语义缓存与配额、**一次抖动要重试而"都不像"不重试**；`test_webform_ai_guard.py` 钉住采纳前的共用否决（亲属 / 跨族）；`test_webform_live.py` 钉住触发条件（**只对真正认不出的问**）、**不阻塞轮询**、过期答案丢弃、`skip_reason` 优先于模型；`test_webform_js_canary.py` 在真浏览器里钉住面板**不盖住输入框、离它够近、跟得住页面重排**、拖动保留的是相对偏移、备选逐条可点，以及卸载要停掉重排定时器。另有**离线评测语料**把准确率变成数字：`tests/fixtures/webform/pages/*.json`（一 incident 一文件：真实页面的控件清单 + 人工确认的期望映射，`scripts/collect_webform_sample.py` 从真机采样并自动剥值），`test_webform_match_corpus.py` 跑分回归（**错填为零**、基线单调不可回退——只许变好），`scripts/webform_match_report.py` 出人读报告；执行侧对应 `fixtures/webform/execution/*.json` + `test_webform_execution_corpus.py` 与 `test_webform_engine_recovery.py`（按调用顺序应答的 `ScriptedCdpClient` 钉住重试阶梯：写几次、回读几次、有没有多余的点击）。新增真机 incident 的流程是**先落语料、再补单测**：没有 case 背书的规则不加。
 - 思考模式按层拆测试：`test_llm_thinking.py` 钉住形态解析、档位归一化（换模型后残留的档位不照发）、请求体片段与探测的四种判定（真的生效 / 被静默忽略 / 被上游拒绝 / 压根没跑起来）；`test_openai_compat.py` 与 `test_llm_anthropic.py` 各自钉住**默认关闭时请求体逐字节不变**与 400 降级重试；`test_api_settings.py` 钉住 `/llm/thinking/check` 的两种模式以及"测试连接不受思考设置影响"；`test_assistant.py` 钉住助手不继承设置页的开关；`test_custom_settings_actually_apply.py` 从保存配置一路断到真实请求体。
 - 前端使用 Vitest 覆盖关键请求封装和核心交互（含投递台的队列准入拦截、暂停 / 停止、采集条件「未生效」、空态与错误态，以及匹配分析的五类结论展示与「不显示百分比」），TypeScript strict、ESLint、Prettier 与生产构建提供静态门禁；复杂用户链路仍需按风险逐步补齐组件或端到端测试。
 - GitHub Actions 在 Linux/Python 3.10、3.12 和 Windows/Python 3.12 上运行后端测试、覆盖率与 Ruff，并在 Node 20 上运行前端测试、格式检查、Lint 和构建。
