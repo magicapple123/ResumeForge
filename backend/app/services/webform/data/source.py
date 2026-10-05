@@ -92,11 +92,13 @@ def _with_unique_custom_label_values(
 
     result = dict(data)
     for normalized_label, custom_keys in custom_keys_by_label.items():
-        field_keys = field_keys_by_label.get(normalized_label, [])
+        # 标准字段的 label 普遍也出现在自己的同义词表里，同一字段会对同一标签
+        # 贡献两次；唯一性判定针对「字段」，按 key 去重后再看是否恰好一个。
+        field_keys = set(field_keys_by_label.get(normalized_label, []))
         if len(custom_keys) != 1 or len(field_keys) != 1:
             continue
 
-        field_key = field_keys[0]
+        field_key = next(iter(field_keys))
         if (result.get(field_key) or "").strip():
             continue
         value = (details[custom_keys[0]].get("value") or "").strip()
