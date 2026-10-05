@@ -74,6 +74,8 @@ export default function SettingsPage() {
     datasetsLoading,
     datasetExporting,
     datasetImporting,
+    includeApiKeys,
+    setIncludeApiKeys,
     switchingDatasetId,
     renamingDatasetId,
     deletingDatasetId,
@@ -231,6 +233,8 @@ export default function SettingsPage() {
                   loading={datasetsLoading}
                   exporting={datasetExporting}
                   importing={datasetImporting}
+                  includeApiKeys={includeApiKeys}
+                  onIncludeApiKeysChange={setIncludeApiKeys}
                   switchingId={switchingDatasetId}
                   renamingId={renamingDatasetId}
                   deletingId={deletingDatasetId}

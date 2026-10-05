@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ..database import get_db
 from ..models.assistant import AssistantSkill
@@ -133,7 +134,9 @@ async def import_skill(request: Request, db: Session = Depends(get_db)):
             async for chunk in request.stream():
                 target.write(chunk)
         parser = parse_zip_skill if suffix == ".zip" else parse_markdown_skill
-        skill = upsert_skill(db, parser(candidate, source_name))
+        # zip 解析/落库是同步 IO，下沉线程池避免阻塞事件循环。
+        parsed = await run_in_threadpool(parser, candidate, source_name)
+        skill = upsert_skill(db, parsed)
     except SkillImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:

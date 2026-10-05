@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 
 from .. import database
 from ..services.datasets import (
@@ -122,8 +123,14 @@ async def import_archive(request: Request) -> dict:
                         detail=f"备份文件过大，最大允许 {settings.max_backup_upload_mb} MB",
                     )
                 target.write(chunk)
-        created = import_dataset(
-            staging, request.query_params.get("name", ""), database.engine, directory
+        # zip 校验、逐成员解压、sqlite 快照复制与候选库迁移都是同步重活，
+        # 下沉线程池避免导入期间整个后端无响应。
+        created = await run_in_threadpool(
+            import_dataset,
+            staging,
+            request.query_params.get("name", ""),
+            database.engine,
+            directory,
         )
     except HTTPException:
         staging.unlink(missing_ok=True)
@@ -172,37 +179,50 @@ def remove(request: Request, dataset_id: str) -> None:
 
 
 @router.get("/export-all")
-def export_all(request: Request) -> FileResponse:
+def export_all(request: Request, include_api_keys: bool = False) -> FileResponse:
     """把**全部数据集**导出为一个备份包（活动的那份 + 其余每一份）。
 
     与 ``/{dataset_id}/export`` 的区别是"包里有没有其余数据集"。两个都给，是因为它们
     对应两种真实意图：**迁移走**（要全部）与**单独拷一份出去**（只要那一份）。
 
-    路由声明在 ``/{dataset_id}/export`` 之前只是习惯；两者段数不同（``/export-all`` 是一段、
-    ``/{id}/export`` 是两段），本来就不会互相截胡。
+    ``include_api_keys`` 是用户显式勾选的选项（默认关）：勾选后密钥按本机存储形态随包走，
+    格式号升到 3，老版本会明确拒收。路由声明在 ``/{dataset_id}/export`` 之前只是习惯；
+    两者段数不同（``/export-all`` 是一段、``/{id}/export`` 是两段），本来就不会互相截胡。
     """
     _require_loopback(request)
     staging = export_directory(database.engine)
     try:
-        archive_path = export_all_datasets(database.engine, staging)
+        archive_path = export_all_datasets(
+            database.engine, staging, include_api_keys=include_api_keys
+        )
     except Exception as exc:
         raise _translate(exc) from exc
 
-    logger.info("已导出全部数据集 file=%s", archive_path.name)
+    logger.info(
+        "已导出全部数据集 file=%s api_key_included=%s", archive_path.name, include_api_keys
+    )
     return _archive_response(archive_path)
 
 
 @router.get("/{dataset_id}/export")
-def export(request: Request, dataset_id: str) -> FileResponse:
-    """把指定数据集导出为备份包。"""
+def export(request: Request, dataset_id: str, include_api_keys: bool = False) -> FileResponse:
+    """把指定数据集导出为备份包（``include_api_keys`` 语义同 ``export_all``）。"""
     _require_loopback(request)
     staging = export_directory(database.engine)
     try:
-        archive_path = export_dataset(_require_valid_id(dataset_id), database.engine, staging)
+        archive_path = export_dataset(
+            _require_valid_id(dataset_id), database.engine, staging,
+            include_api_keys=include_api_keys,
+        )
     except Exception as exc:
         raise _translate(exc) from exc
 
-    logger.info("已导出数据集 id=%s file=%s", dataset_id, archive_path.name)
+    logger.info(
+        "已导出数据集 id=%s file=%s api_key_included=%s",
+        dataset_id,
+        archive_path.name,
+        include_api_keys,
+    )
     return _archive_response(archive_path)
 
 

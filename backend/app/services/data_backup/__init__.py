@@ -9,9 +9,11 @@ base64 存在数据库列中，磁盘上没有其它用户文件。所以一次�
 老版本照常可读）与连同其余数据集一并导出（格式 2，老版本会明确拒收而不是安静地
 只恢复一份）。见 ``create_backup_archive`` 与 ``ExtraDatabase``。
 
-导出物**不包含**大模型 API Key：用户可能长期保存或转发这个包。SECURITY: 清空
-密钥必须配合 ``VACUUM`` 重建文件，只 UPDATE 是不够的——见 ``_strip_api_keys``；
-随包带走的**每一份**数据集都要各做一次，不能只做活动的那份。
+**API Key 默认被剥离**：用户可能长期保存或转发这个包。SECURITY: 清空密钥必须配合
+``VACUUM`` 重建文件，只 UPDATE 是不够的——见 ``_strip_api_keys``；随包带走的**每一份**
+数据集都要各做一次，不能只做活动的那份。用户可以在导出时**显式勾选**包含 API Key
+（格式 3）：密钥按本机存储形态随包走（Windows 上是 DPAPI 密文），导入侧要求清单
+显式声明密钥状态，老版本则会在格式校验处明确拒收。
 """
 import logging
 
@@ -26,10 +28,13 @@ from .export import (
 )
 from .import_archive import (
     _assert_member_is_a_dataset as _assert_member_is_a_dataset,
+    _best_effort_checkpoint as _best_effort_checkpoint,
     _check_candidate_revision as _check_candidate_revision,
     _database_info as _database_info,
     _read_candidate_revision as _read_candidate_revision,
     _read_manifest as _read_manifest,
+    _remove_candidate_files as _remove_candidate_files,
+    _remove_sqlite_sidecars as _remove_sqlite_sidecars,
     _upgrade_candidate as _upgrade_candidate,
     declared_datasets as declared_datasets,
     extract_database as extract_database,
@@ -45,7 +50,9 @@ from .manifest import (
 )
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME as ARCHIVE_DATASETS_DIRNAME,
+    BACKUP_FORMAT_MULTI_DATASET as BACKUP_FORMAT_MULTI_DATASET,
     BACKUP_FORMAT_VERSION as BACKUP_FORMAT_VERSION,
+    BACKUP_FORMAT_WITH_KEYS as BACKUP_FORMAT_WITH_KEYS,
     BackupError as BackupError,
     DATABASE_MEMBER as DATABASE_MEMBER,
     EXPORT_DIRNAME as EXPORT_DIRNAME,

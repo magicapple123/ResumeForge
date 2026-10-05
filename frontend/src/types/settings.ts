@@ -133,6 +133,8 @@ export interface DatasetInfo {
  */
 export interface DatasetImportResult extends DatasetInfo {
   restored_datasets?: DatasetInfo[];
+  /** 导出方勾选过「包含 API Key」时为 true：密钥已随包恢复（解不开时仍需重填）。 */
+  api_key_included?: boolean;
 }
 
 /** 应用打开时是否弹出近期提醒（默认开）。 */

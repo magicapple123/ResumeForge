@@ -31,12 +31,17 @@ def create_backup_archive(
     staging_dir: Path,
     *,
     extra_databases: Sequence[ExtraDatabase] = (),
+    include_api_keys: bool = False,
 ) -> Path:
     """生成导出用的压缩包并返回其路径；调用方负责在响应结束后删除。
 
-    ``extra_databases`` 非空时会把那些数据集一并装进包里，并把清单的 ``format`` 标成 2。
-    **格式号是要紧的**：它让老版本遇到这种包时明确拒收（"请先升级应用再导入"），而不是
-    只恢复活动数据集、把其余几份安静地丢掉。
+    ``extra_databases`` 非空时会把那些数据集一并装进包里。``include_api_keys`` 是用户
+    **显式勾选**的选项：勾选时密钥按本机存储形态原样带走（Windows 上是 DPAPI 密文，
+    绑定当前用户与机器；换环境恢复解不开时应用按"未配置"处理，不会半途报错），而不是
+    解密成明文——备份包是用户可能长期保存或转发的东西，这次导出不该新造出一份明文密钥。
+
+    **格式号是要紧的**（见 ``build_manifest``）：含密钥标 3、带其余数据集标 2，都是让
+    老版本遇到读不懂的包时明确拒收（"请先升级应用再导入"），而不是安静地误读。
     """
     database_path(bind)  # 内存库等无文件情况在此给出明确错误
     staging_dir.mkdir(parents=True, exist_ok=True)
@@ -50,8 +55,11 @@ def create_backup_archive(
     try:
         # **每一份数据库各剥离一次密钥**：把不同数据集的明文 Key 收集到一起再统一校验，
         # 是为了让"包内任何位置都不该出现明文密钥"成为一条可断言的性质，而不是逐份靠自觉。
-        secrets_to_find = _plaintext_api_keys_in(snapshot)
-        _strip_api_keys(snapshot)
+        # 用户勾选包含密钥时跳过剥离与最终闸——这正是该选项的语义。
+        secrets_to_find: list[str] = []
+        if not include_api_keys:
+            secrets_to_find = _plaintext_api_keys_in(snapshot)
+            _strip_api_keys(snapshot)
         for item in extra_databases:
             if not item.source.exists():
                 raise BackupError(
@@ -61,18 +69,21 @@ def create_backup_archive(
                 )
             copy = staging_dir / f"{secrets.token_hex(8)}.db"
             snapshot_sqlite_file(item.source, copy)
-            secrets_to_find.extend(_plaintext_api_keys_in(copy))
-            _strip_api_keys(copy)
+            if not include_api_keys:
+                secrets_to_find.extend(_plaintext_api_keys_in(copy))
+                _strip_api_keys(copy)
             extras.append((item, copy))
-        _assert_no_plaintext_key(snapshot, secrets_to_find)
-        for _, copy in extras:
-            _assert_no_plaintext_key(copy, secrets_to_find)
+        if not include_api_keys:
+            _assert_no_plaintext_key(snapshot, secrets_to_find)
+            for _, copy in extras:
+                _assert_no_plaintext_key(copy, secrets_to_find)
 
         manifest = build_manifest(
             bind,
             datasets=[
                 item.manifest_entry(copy.stat().st_size) for item, copy in extras
             ],
+            api_key_included=include_api_keys,
         )
         with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.write(snapshot, DATABASE_MEMBER)
