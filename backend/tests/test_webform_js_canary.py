@@ -146,6 +146,26 @@ def test_a_component_library_dropdown_is_recognized_by_its_wrapper(page_client):
     assert picker["readonly"] is False, picker
 
 
+def test_utility_classes_and_false_aria_are_not_popups(page_client):
+    """Tailwind 工具类包着的普通文本框、``aria-haspopup="false"`` 都不算弹层。
+
+    2026-10-06 收紧类名判据：**整个类名恰好是** user-select 工具族（select-none
+    一族）或选中态词（selected / selection…）的 token 不再算组件外壳——它们是
+    样式标记，把普通文本框误判成弹层就会被「只填不点」白白跳过。真组件外壳
+    （``sd-Dropdown-container``，上一个用例）与 semi-datepicker 这类复合类名
+    不受影响。``aria-haspopup`` 的字面值 "false" 是字符串、按真值判断恒为真，
+    必须按取值判——"false" 正是规范里「明确声明无弹层」。
+    """
+    controls = _snapshot(page_client)
+    utility = next((c for c in controls if c.get("id") == "utility-wrap"), None)
+    aria_false = next((c for c in controls if c.get("id") == "aria-false"), None)
+
+    assert utility is not None, "select-none 包着的输入框没进快照"
+    assert utility["has_popup"] is False, utility
+    assert aria_false is not None, "aria-haspopup=false 的输入框没进快照"
+    assert aria_false["has_popup"] is False, aria_false
+
+
 def test_max_length_is_captured(page_client):
     """``maxlength`` 要采回来：超长的值写进去会被页面截断，匹配阶段靠它提前拦下。
 

@@ -243,7 +243,7 @@ FIELD_SYNONYMS: dict[str, tuple[str, ...]] = {
     # 填进亲属栏——那正是这类功能最典型的低级错误（见 FIELD_EXCLUDE_HINTS 的说明）。
     "emergency_contact_name": ("紧急联系人姓名", "紧急联系人", "紧急联络人"),
     "emergency_contact_relation": ("与本人关系", "紧急联系人关系", "联系人关系", "与联系人关系"),
-    "emergency_contact_phone": ("紧急联系人电话", "紧急联系人手机", "紧急联络电话"),
+    "emergency_contact_phone": ("紧急联系人电话", "紧急联系人手机", "紧急联络电话", "紧急联系电话"),
     "father_name": ("父亲姓名", "父姓名", "父亲名字"),
     "father_workplace": ("父亲工作单位", "父亲单位", "父亲工作"),
     "mother_name": ("母亲姓名", "母姓名", "母亲名字"),

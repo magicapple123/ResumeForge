@@ -193,13 +193,35 @@ def evidence_key(
     referral_style = (
         placeholder.startswith("如有") and "填写" in placeholder and len(placeholder) <= 40
     )
+    tier1 = " ".join(
+        (
+            control.label,
+            control.aria_label,
+            control.aria_labelledby,
+            control.legend,
+            control.title,
+            control.name,
+        )
+    ).casefold()
     if stated or referral_style:
         # 权威性建立在"一对一"上：占位符被多个互不配对的字段并列最高分时，它已经
         # 说不清自己要什么——对**所有**字段如实报"认不出"（见 _placeholder_leaders_conflict）。
         if _placeholder_leaders_conflict(placeholder):
             return None
         best = _longest_synonym(placeholder, synonyms)
-        return (2, best) if best > 0 else None
+        if best > 0:
+            return (2, best)
+        # 占位符点名的字段（"请输入姓名" → name）在这个控件上**全部**被负向词拦下时
+        # （框其实长在紧急联系人/亲属区块里，见 FIELD_EXCLUDE_HINTS 的 RELATIVE_HINTS），
+        # 占位符的权威落空——否则这类框会两头落空：本人字段被负向词拦下、
+        # 紧急联系人字段又被权威规则挡在 label 之外，永远进"没认出来"
+        # （2026-10-06 实测：紧急联系人三框全无人认领）。回退**只到 label 档**、
+        # 不退旁文：label 一对一指向控件，旁文可能混进整表标签——退旁文会把
+        # 被污染的本人姓名框送给紧急联系人字段（那是比漏填更糟的错填）。
+        if not _placeholder_owners_excluded(control, placeholder):
+            return None
+        best = _longest_synonym(tier1, synonyms)
+        return (1, best) if best > 0 else None
     # 光杆「请输入 / 请选择」：占位符没在陈述字段（见 ``_states_its_field``），但也**不许**
     # 掉进整段旁文——只认旁文**开头那一段**，它通常就是这个控件的真标签。
     if _bare_prefix_placeholder(placeholder):
@@ -216,16 +238,6 @@ def evidence_key(
         best = _longest_synonym(placeholder, synonyms)
         if best > 0:
             return (2, best)
-    tier1 = " ".join(
-        (
-            control.label,
-            control.aria_label,
-            control.aria_labelledby,
-            control.legend,
-            control.title,
-            control.name,
-        )
-    ).casefold()
     for tier, hay in ((1, tier1), (0, control.nearby_text.casefold())):
         best = _longest_synonym(hay, synonyms)
         if best > 0:
@@ -342,11 +354,33 @@ def _pair_resolved_elsewhere(field_name: str, other_name: str) -> bool:
     my_variant = _repeated_variant_base(field_name)
     if my_variant == other_name or _repeated_variant_base(other_name) == field_name:
         return True
-    if FIELD_SYNONYMS.get(field_name) == FIELD_SYNONYMS.get(other_name):
+    # 同义冗余按**集合**比（顺序无关）：逐条资料的 contact_* 组与主目录的
+    # emergency_contact_* 是同一份紧急联系人数据的两个槽位，同义词几乎相同但
+    # 各差一条——按元组逐字比认不出这对"同义冗余"，占位符「请输入与本人关系」
+    # 会被两个并列最高分判成说不清，整框进"没认出来"（2026-10-06 实测）。
+    if set(FIELD_SYNONYMS.get(field_name) or ()) == set(FIELD_SYNONYMS.get(other_name) or ()):
         return True
     my_block = FIELD_BLOCK_HINTS.get(field_name)
     other_block = FIELD_BLOCK_HINTS.get(other_name)
     return bool(my_block and other_block and my_block != other_block)
+
+
+@lru_cache(maxsize=1024)
+def _placeholder_leaders(placeholder: str) -> tuple[str, ...]:
+    """占位符在全字段目录下的并列最高分字段。
+
+    `_placeholder_leaders_conflict` 与 `_placeholder_owners_excluded` 共用这一次
+    全表计分（~136 个字段 × 各自同义词，按占位符原文缓存——同一页面上占位符
+    高度重复，只算一次）。
+    """
+    scores = {
+        name: _longest_synonym(placeholder, synonyms)
+        for name, synonyms in FIELD_SYNONYMS.items()
+    }
+    top = max(scores.values(), default=0)
+    if top <= 0:
+        return ()
+    return tuple(name for name, score in scores.items() if score == top)
 
 
 @lru_cache(maxsize=1024)
@@ -360,22 +394,29 @@ def _placeholder_leaders_conflict(placeholder: str) -> bool:
     是猜，不是识别。
 
     返回 ``True`` 表示该占位符已说不清自己要什么：``evidence_key`` 对**所有**
-    字段如实报"认不出"——宁可漏填，不可错填。按占位符原文缓存：同一页面上
-    占位符高度重复，全表计分只算一次。
+    字段如实报"认不出"——宁可漏填，不可错填。
     """
-    scores = {
-        name: _longest_synonym(placeholder, synonyms)
-        for name, synonyms in FIELD_SYNONYMS.items()
-    }
-    top = max(scores.values(), default=0)
-    if top <= 0:
+    leaders = _placeholder_leaders(placeholder)
+    if not leaders:
         return False
-    leaders = [name for name, score in scores.items() if score == top]
     for i, first in enumerate(leaders):
         for second in leaders[i + 1 :]:
             if not _pair_resolved_elsewhere(first, second):
                 return True
     return False
+
+
+def _placeholder_owners_excluded(control: Control, placeholder: str) -> bool:
+    """占位符点名的**全部**并列字段，都在这个控件上被负向词拦下。
+
+    拦截来源与 ``excluded_by_hints``（规则引擎 / 实时识别 / AI 守门共用）一致：
+    紧急联系人、亲属栏里的「请输入姓名 / 请输入电话」框，本人字段（name / phone）
+    被 RELATIVE_HINTS 拦下——这时占位符"这个框是姓名"的权威声明已经没有合法
+    主人了。只要有任何一个并列字段仍有权认领，权威就照旧（保守：只对"两头落空"
+    的框放行回退）。
+    """
+    leaders = _placeholder_leaders(placeholder)
+    return bool(leaders) and all(excluded_by_hints(control, name) for name in leaders)
 
 
 # 「请输入 / 请选择 / 请填写」之后什么都不剩，就说明占位符没在陈述任何字段。
