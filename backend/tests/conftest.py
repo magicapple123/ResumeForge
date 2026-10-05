@@ -61,9 +61,15 @@ def _relax_test_database_durability(dbapi_connection, _connection_record) -> Non
         return
     cursor = dbapi_connection.cursor()
     try:
-        # journal_mode 会返回一行结果，必须取走，否则连接上会留着一个未读完的语句。
-        cursor.execute("PRAGMA journal_mode=MEMORY")
-        cursor.fetchone()
+        # 生产引擎（app.database.build_engine）已把库切到 WAL；WAL 是库级持久模式，
+        # 只要还有其他连接在用就不能切回 MEMORY（会报 database is locked）。
+        # 退而求其次只关 synchronous：WAL + synchronous=OFF 的提交同样不落盘同步，
+        # 建表开销与 MEMORY 日志基本一致。
+        cursor.execute("PRAGMA journal_mode")
+        if cursor.fetchone()[0] != "wal":
+            # journal_mode 会返回一行结果，必须取走，否则连接上会留着一个未读完的语句。
+            cursor.execute("PRAGMA journal_mode=MEMORY")
+            cursor.fetchone()
         cursor.execute("PRAGMA synchronous=OFF")
     finally:
         cursor.close()

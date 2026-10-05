@@ -2,7 +2,7 @@
 from alembic import command
 from sqlalchemy import create_engine, inspect, text
 
-from app.database import Base, ensure_sqlite_columns
+from app.database import Base, build_engine, ensure_sqlite_columns
 from app.database_migrations import (
     application_tables,
     build_alembic_config,
@@ -52,6 +52,22 @@ def _assert_head_schema(bind) -> None:
     with bind.connect() as connection:
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
         assert revision == _HEAD_REVISION
+
+
+def test_sqlite_engine_enables_wal_and_busy_timeout(tmp_path):
+    """基于文件的引擎每个新连接都应启用 WAL 与 busy_timeout。
+
+    conftest 的测试库本身就是文件库，但这里按生产同一路径自建引擎，
+    避免依赖 conftest 的环境设置。内存库不支持 WAL，故不用内存库测。
+    """
+    engine = build_engine(f"sqlite:///{tmp_path / 'pragma.db'}")
+    try:
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("PRAGMA journal_mode").scalar() == "wal"
+            assert connection.exec_driver_sql("PRAGMA busy_timeout").scalar() == 5000
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+    finally:
+        engine.dispose()
 
 
 def test_ensure_sqlite_columns_preserves_legacy_rows(tmp_path):

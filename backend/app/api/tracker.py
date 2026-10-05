@@ -15,6 +15,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ..database import SessionLocal, get_db
 from ..models.tracker import STATUSES
@@ -68,7 +69,11 @@ def read_tracks(
     if status and status not in STATUSES:
         raise HTTPException(status_code=422, detail="未知的进度状态")
     records = list_tracks(db, status=status, keyword=keyword)
-    return TrackListOut(items=[track_out(item) for item in records], **summarize(records))
+    # 统计走 SQL 聚合（全量口径）：列表被 MAX_LIST_LIMIT 截断时漏斗数字仍准确。
+    return TrackListOut(
+        items=[track_out(item) for item in records],
+        **summarize(db, status=status, keyword=keyword),
+    )
 
 
 @router.post("", response_model=TrackOut, status_code=201)
@@ -86,7 +91,9 @@ def export_tracks(
     """导出当前筛选条件下的进度记录。"""
     if status and status not in STATUSES:
         raise HTTPException(status_code=422, detail="未知的进度状态")
-    records = list_tracks(db, status=status, keyword=keyword)
+    # 导出必须**全量**（limit=None）：导出截断等于悄悄丢用户数据，与列表的
+    # MAX_LIST_LIMIT 兜底是两回事。
+    records = list_tracks(db, status=status, keyword=keyword, limit=None)
     if format == "json":
         content, media_type, suffix = to_json(records), "application/json; charset=utf-8", "json"
     else:
@@ -104,7 +111,8 @@ async def parse_tracks(payload: TrackParseRequest, db: Session = Depends(get_db)
     """从一段通知材料里识别进度条目；**只返回预览，不写库**。"""
     try:
         images = normalize_extraction_images(payload.images)
-        documents = extract_documents_text(payload.documents)
+        # PDF/DOCX 解析是同步 CPU/IO 重活（pypdf 最多 30 页），下沉线程池。
+        documents = await run_in_threadpool(extract_documents_text, payload.documents)
         assert_attachment_budget(
             count=len(payload.images) + len(payload.documents),
             total_bytes=total_attachment_bytes(images) + documents.size_bytes,

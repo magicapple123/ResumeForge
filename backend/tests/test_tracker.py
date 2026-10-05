@@ -300,7 +300,7 @@ def test_summarize_counts_each_stage_and_this_month(db_session):
             _record(title="C 岗", status=STATUS_REJECTED, applied_at="2020-01-01"),
         ],
     )
-    summary = summarize(list_tracks(db_session))
+    summary = summarize(db_session)
     assert summary["total"] == 3
     assert summary["status_counts"][STATUS_APPLIED] == 1
     assert summary["status_counts"][STATUS_INTERVIEW] == 1

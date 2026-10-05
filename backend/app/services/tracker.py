@@ -16,7 +16,8 @@ import logging
 from datetime import date
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy import case, func
+from sqlalchemy.orm import Query, Session
 
 from . import trash
 from ..models.tracker import (
@@ -62,11 +63,12 @@ def track_or_none(db: Session, track_id: int) -> ApplicationTrack | None:
     return record
 
 
-def list_tracks(db: Session, *, status: str = "", keyword: str = "") -> list[ApplicationTrack]:
-    """按状态 / 关键词检索。
+def _filtered_query(
+    db: Session, *, status: str = "", keyword: str = ""
+) -> Query[ApplicationTrack]:
+    """list_tracks 与 summarize **共用的过滤口径**：软删过滤 + 状态 + 关键词。
 
-    默认排序刻意是"进行中的排在前面、越靠后的阶段越靠前"：用户打开这一页最想先看到的是
-    还在推进的那几家，而不是三个月前就结束了的。
+    抽出来是为了让统计永远跟列表同一口径——两处各写一遍过滤条件，迟早会改漏一边。
     """
     query = db.query(ApplicationTrack).filter(trash.live_only(ApplicationTrack))
     if status:
@@ -80,8 +82,37 @@ def list_tracks(db: Session, *, status: str = "", keyword: str = "") -> list[App
             | ApplicationTrack.note.like(like)
             | ApplicationTrack.next_action.like(like)
         )
-    records = query.all()
-    return sorted(records, key=_sort_key)
+    return query
+
+
+def _stage_expression() -> Any:
+    """``_STATUS_ORDER`` 的 SQL 形态：阶段序作为第一排序键。"""
+    return case(_STATUS_ORDER, value=ApplicationTrack.status, else_=9)
+
+
+def list_tracks(
+    db: Session, *, status: str = "", keyword: str = "", limit: int | None = MAX_LIST_LIMIT
+) -> list[ApplicationTrack]:
+    """按状态 / 关键词检索。
+
+    默认排序刻意是"进行中的排在前面、越靠后的阶段越靠前"：用户打开这一页最想先看到的是
+    还在推进的那几家，而不是三个月前就结束了的。排序已**下推 SQL**（2026-10-05 性能审查：
+    旧实现把全表拉回内存再用 Python 排序，是求职看板的主读路径）。
+
+    ``limit`` 默认取 :data:`MAX_LIST_LIMIT` 给列表响应兜个上限；``limit=None`` 表示
+    不限量——**导出与助手工具必须传 None**：导出截断等于丢用户数据，助手工具自己
+    有一层 limit 语义（见 tracker_tools），两层各管各的。
+    """
+    query = _filtered_query(db, status=status, keyword=keyword).order_by(
+        _stage_expression(),
+        # SQLite 的 DESC 把 NULL 排在最后，与旧实现 None→datetime.min→排在末尾一致；
+        # updated_at 同值时按 id 新的在前，也与旧实现的 -id 次序键一致。
+        ApplicationTrack.updated_at.desc(),
+        ApplicationTrack.id.desc(),
+    )
+    if limit is not None:
+        query = query.limit(limit)
+    return query.all()
 
 
 _STATUS_ORDER = {
@@ -96,39 +127,35 @@ _STATUS_ORDER = {
 }
 
 
-def _sort_key(record: ApplicationTrack) -> tuple:
-    """先按阶段、再按最近更新倒序。
+def summarize(db: Session, *, status: str = "", keyword: str = "") -> dict[str, Any]:
+    """列表接口的统计部分：漏斗各阶段计数 + 几个一眼要看到的数字。
 
-    第二项取负的时间戳不能用 ``-timestamp``（datetime 不支持取负），所以用
-    ``datetime.max`` 减它得到"越小越新"的等效键。
+    从 **SQL 聚合**取数，过滤口径与列表共用（``_filtered_query``）：列表行数被
+    :data:`MAX_LIST_LIMIT` 截断后，统计仍要反映筛选条件下的**全部**记录，而不是
+    只数返回的那一页。状态计数沿用旧行为：目录之外的状态也会出现在 ``status_counts``。
     """
-    from datetime import datetime
-
-    updated = record.updated_at or datetime.min
-    return (
-        _STATUS_ORDER.get(record.status, 9),
-        datetime.max - updated,
-        -record.id,
+    base = _filtered_query(db, status=status, keyword=keyword)
+    rows = (
+        base.with_entities(ApplicationTrack.status, func.count(ApplicationTrack.id))
+        .group_by(ApplicationTrack.status)
+        .all()
     )
-
-
-def summarize(records: list[ApplicationTrack]) -> dict[str, Any]:
-    """列表接口的统计部分：漏斗各阶段计数 + 几个一眼要看到的数字。"""
-    counts = {status: 0 for status in STATUSES}
-    for record in records:
-        counts[record.status] = counts.get(record.status, 0) + 1
+    counts: dict[str, int] = {status: 0 for status in STATUSES}
+    for status_name, count in rows:
+        counts[status_name] = counts.get(status_name, 0) + count
     # 「本月投递」按**用户本地的自然月**算：applied_at 是用户自己填的日期，
     # 拿 UTC 去比会让月初的头八个小时落在上个月里，和用户看到的日历对不上。
+    # SQL 用 LIKE 前缀匹配（applied_at 形如 YYYY-MM-DD）；NULL 与空串不命中，
+    # 与旧实现 ``(applied_at or "").startswith(...)`` 语义一致。
     month_prefix = date.today().strftime("%Y-%m")
+    month_count = base.filter(ApplicationTrack.applied_at.like(f"{month_prefix}%")).count()
     return {
-        "total": len(records),
+        "total": sum(counts.values()),
         "status_counts": counts,
-        "active_count": sum(1 for item in records if is_active(item.status)),
+        "active_count": sum(n for name, n in counts.items() if is_active(name)),
         "offer_count": counts.get(STATUS_OFFER, 0),
         "rejected_count": counts.get(STATUS_REJECTED, 0),
-        "month_count": sum(
-            1 for item in records if (item.applied_at or "").startswith(month_prefix)
-        ),
+        "month_count": month_count,
     }
 
 

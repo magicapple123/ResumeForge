@@ -65,6 +65,9 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
         self._http_timeout = http_timeout
         self._target: dict[str, Any] | None = None
         self._connection: Any | None = None
+        # HTTP 端点连接池：懒创建、跨请求复用（/json/list 在连接失效/目标切换时会被
+        # 频繁调用，每次新建 Client 等于每次重建 TCP 连接）。close() 时收尾。
+        self._http_client: httpx.Client | None = None
         # 事件收集：见 start_event_capture 的说明。
         self._capture_methods: set[str] = set()
         self._captured_events: list[dict[str, Any]] = []
@@ -79,12 +82,22 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
     def _base_url(self) -> str:
         return f"http://{self._host}:{self._port}"
 
+    def _http(self) -> httpx.Client:
+        """返回实例级共享的 HTTP 客户端（httpx.Client 线程安全）。
+
+        创建用既有的命令锁串行化，避免并发首次调用时重复建池；请求本身不持锁，
+        与原行为一样可并发。
+        """
+        with self._command_lock:
+            if self._http_client is None:
+                self._http_client = httpx.Client(
+                    transport=self._http_transport, timeout=self._http_timeout
+                )
+            return self._http_client
+
     def _request(self, method: str, path: str) -> httpx.Response:
         try:
-            with httpx.Client(
-                transport=self._http_transport, timeout=self._http_timeout
-            ) as client:
-                return client.request(method, f"{self._base_url()}{path}")
+            return self._http().request(method, f"{self._base_url()}{path}")
         except httpx.TimeoutException as exc:
             raise CdpError("连接投递专用浏览器超时，请确认浏览器已启动且未被安全软件拦截") from exc
         except httpx.RequestError as exc:
@@ -343,4 +356,10 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
 
     def close(self) -> None:
         self._reset_connection()
+        if self._http_client is not None:
+            try:
+                self._http_client.close()
+            except Exception:  # noqa: BLE001 - 关闭失败不该阻断后续流程
+                pass
+            self._http_client = None
 

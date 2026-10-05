@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ..database import get_db
 from ..services import trash
@@ -136,7 +137,8 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
     """把用户粘贴的招聘信息（或截图、文档）解析为草稿；确认后仍由新增岗位接口入库。"""
     try:
         images = normalize_extraction_images(payload.images)
-        documents = extract_documents_text(payload.documents)
+        # PDF/DOCX 解析是同步 CPU/IO 重活（pypdf 最多 30 页），下沉线程池。
+        documents = await run_in_threadpool(extract_documents_text, payload.documents)
         assert_attachment_budget(
             count=len(payload.images) + len(payload.documents),
             total_bytes=total_attachment_bytes(images) + documents.size_bytes,
@@ -185,7 +187,8 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
     """
     try:
         images = normalize_extraction_images(payload.images)
-        documents = extract_documents_text(payload.documents)
+        # PDF/DOCX 解析是同步 CPU/IO 重活（pypdf 最多 30 页），下沉线程池。
+        documents = await run_in_threadpool(extract_documents_text, payload.documents)
         assert_attachment_budget(
             count=len(payload.images) + len(payload.documents),
             total_bytes=total_attachment_bytes(images) + documents.size_bytes,
