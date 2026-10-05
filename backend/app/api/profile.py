@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ..database import get_db
 from ..schemas.photo import ProfilePhotoCreate, ProfilePhotoOut, ProfilePhotoUpdate
@@ -95,7 +96,8 @@ async def parse_profile_text_draft(payload: ProfileTextParseRequest, db: Session
     """把用户粘贴的个人资料（或截图、文档）拆成可编辑草稿，不写入数据库。"""
     try:
         images = normalize_extraction_images(payload.images)
-        documents = extract_documents_text(payload.documents)
+        # PDF/DOCX 解析是同步 CPU/IO 重活（pypdf 最多 30 页），下沉线程池。
+        documents = await run_in_threadpool(extract_documents_text, payload.documents)
         assert_attachment_budget(
             count=len(payload.images) + len(payload.documents),
             total_bytes=total_attachment_bytes(images) + documents.size_bytes,

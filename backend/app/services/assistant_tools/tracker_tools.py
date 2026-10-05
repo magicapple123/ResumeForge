@@ -72,6 +72,8 @@ def _tool_list_application_tracks(db: Session, arguments: dict) -> ToolResult:
         db,
         status=status,
         keyword=str(arguments.get("keyword") or "").strip(),
+        # 工具自己有一层 limit 语义（含"总数"上报），列表的 MAX_LIST_LIMIT 不叠加。
+        limit=None,
     )
     shown = records[:limit]
     payload = {

@@ -37,7 +37,23 @@ class ResumePDFError(Exception):
     """对外暴露的 PDF 生成错误，message 可直接展示给用户。"""
 
 
+# 探测结果进程内缓存：字体文件在进程生命周期内不会增减，而每次导出/模板列表都会
+# 走到这里，逐个候选路径 is_file() 纯属重复扫描。探测不到也缓存 None——重扫同样
+# 找不到，只是白花时间。
+_font_paths_cache: tuple[str, str] | None = None
+_font_resolved = False
+
+
 def _resolve_font_paths() -> tuple[str, str] | None:
+    global _font_paths_cache, _font_resolved
+    if _font_resolved:
+        return _font_paths_cache
+    _font_paths_cache = _probe_font_paths()
+    _font_resolved = True
+    return _font_paths_cache
+
+
+def _probe_font_paths() -> tuple[str, str] | None:
     override = os.environ.get(FONT_ENV_VAR, "").strip()
     if override:
         path = Path(override)

@@ -21,14 +21,22 @@ def database_url_for(path: Path) -> str:
     return f"sqlite:///{path.as_posix()}"
 
 
-def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
-    """SQLite 默认不启用外键约束，显式打开以保证级联删除等行为正确。
+def _configure_sqlite_connection(dbapi_connection, _connection_record):
+    """新连接建立时设置 SQLite PRAGMA。
+
+    - foreign_keys：SQLite 默认不启用外键约束，显式打开以保证级联删除等行为正确。
+    - busy_timeout：写事务持锁时读/写请求等待最多 5 秒而不是立刻抛
+      「database is locked」，覆盖后台任务写状态与前端轮询读的并发窗口。
+    - journal_mode=WAL：读写不互斥，消除 TaskRunner 写库期间读请求被阻塞；
+      幂等且持久化到库文件，对内存库会静默保持默认模式（WAL 不支持）。
 
     这个监听器是**绑定在 Engine 实例上**的，所以每次新建引擎都必须重新注册；
     漏掉的话新数据集的外键级联会静默失效。
     """
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.execute("PRAGMA journal_mode=WAL")
     cursor.close()
 
 
@@ -44,7 +52,7 @@ def build_engine(database_url: str) -> Engine:
         options["poolclass"] = StaticPool
     built = create_engine(database_url, **options)
     if is_sqlite:
-        event.listen(built, "connect", _enable_sqlite_foreign_keys)
+        event.listen(built, "connect", _configure_sqlite_connection)
     return built
 
 
