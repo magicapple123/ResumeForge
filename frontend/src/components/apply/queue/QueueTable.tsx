@@ -9,7 +9,7 @@ import { Button, Dropdown, Menu, Space, Table, Tag, Tooltip, Typography } from "
 import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ApplyQueueItem } from "../../../types";
 import { QUEUE_STATUS_META } from "../../../types";
 import { formatDateTime } from "../../../utils/format";
@@ -38,6 +38,25 @@ export function QueueTable({
     y: number;
     record: ApplyQueueItem;
   } | null>(null);
+  // 打开菜单时记下当时的焦点元素，关闭时还回去（Esc 关闭也不能把焦点丢在 body 上）。
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
+    const restoreTo = restoreFocusRef.current;
+    restoreFocusRef.current = null;
+    restoreTo?.focus({ preventScroll: true });
+  };
+
+  // Esc 关闭：遮罩层收不到键盘事件（焦点不在它上面），挂 window 监听并随菜单开关装卸。
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeContextMenu();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [contextMenu]);
 
   /**
    * 列宽全部写死、`tableLayout="fixed"`：
@@ -119,40 +138,45 @@ export function QueueTable({
       width: 130,
       // 表头与单元格一起右对齐：否则「操作」两字靠左、按钮靠右，看起来像没对齐（用户反馈过）。
       align: "right",
-      render: (_, item, index) => (
-        <div
-          className="apply-queue-actions"
-          style={{ display: "flex", justifyContent: "flex-end", marginLeft: "auto" }}
-        >
-          <Space size={4}>
-            <Tooltip title="上移">
-              <Button
-                size="small"
-                aria-label={`上移 ${item.job_title}`}
-                icon={<ArrowUpOutlined />}
-                disabled={index === 0 || busy}
-                onClick={() => void move(index, -1)}
-              />
-            </Tooltip>
-            <Tooltip title="下移">
-              <Button
-                size="small"
-                aria-label={`下移 ${item.job_title}`}
-                icon={<ArrowDownOutlined />}
-                disabled={index === items.length - 1 || busy}
-                onClick={() => void move(index, 1)}
-              />
-            </Tooltip>
-            <Dropdown trigger={["click"]} menu={{ items: rowMenuItems(item) }}>
-              <Button
-                size="small"
-                aria-label={`更多操作 ${item.job_title}`}
-                icon={<MoreOutlined />}
-              />
-            </Dropdown>
-          </Space>
-        </div>
-      ),
+      // 下标不能用 render 的第三个参数：开了分页后它是**页内序号**，翻页后 move() 会
+      // 错位。这里从全量 items 里取真实下标，保证跨页也能正确上移/下移。
+      render: (_, item) => {
+        const index = items.indexOf(item);
+        return (
+          <div
+            className="apply-queue-actions"
+            style={{ display: "flex", justifyContent: "flex-end", marginLeft: "auto" }}
+          >
+            <Space size={4}>
+              <Tooltip title="上移">
+                <Button
+                  size="small"
+                  aria-label={`上移 ${item.job_title}`}
+                  icon={<ArrowUpOutlined />}
+                  disabled={index === 0 || busy}
+                  onClick={() => void move(index, -1)}
+                />
+              </Tooltip>
+              <Tooltip title="下移">
+                <Button
+                  size="small"
+                  aria-label={`下移 ${item.job_title}`}
+                  icon={<ArrowDownOutlined />}
+                  disabled={index === items.length - 1 || busy}
+                  onClick={() => void move(index, 1)}
+                />
+              </Tooltip>
+              <Dropdown trigger={["click"]} menu={{ items: rowMenuItems(item) }}>
+                <Button
+                  size="small"
+                  aria-label={`更多操作 ${item.job_title}`}
+                  icon={<MoreOutlined />}
+                />
+              </Dropdown>
+            </Space>
+          </div>
+        );
+      },
     },
   ];
 
@@ -173,13 +197,15 @@ export function QueueTable({
         size="small"
         columns={columns}
         dataSource={items}
-        pagination={false}
+        pagination={{ pageSize: 50, hideOnSinglePage: true, showSizeChanger: false }}
         rowSelection={rowSelection}
         tableLayout="fixed"
         scroll={{ x: 880 }}
         onRow={(record) => ({
           onContextMenu: (event) => {
             event.preventDefault();
+            restoreFocusRef.current =
+              document.activeElement instanceof HTMLElement ? document.activeElement : null;
             setContextMenu({ x: event.clientX, y: event.clientY, record });
           },
         })}
@@ -188,10 +214,10 @@ export function QueueTable({
         <>
           <div
             style={{ position: "fixed", inset: 0, zIndex: 1050 }}
-            onClick={() => setContextMenu(null)}
+            onClick={closeContextMenu}
             onContextMenu={(event) => {
               event.preventDefault();
-              setContextMenu(null);
+              closeContextMenu();
             }}
           />
           <Menu
@@ -204,7 +230,7 @@ export function QueueTable({
               boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
             }}
             items={rowMenuItems(contextMenu.record)}
-            onClick={() => setContextMenu(null)}
+            onClick={closeContextMenu}
           />
         </>
       )}

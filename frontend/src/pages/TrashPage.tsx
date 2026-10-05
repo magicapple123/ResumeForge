@@ -269,7 +269,9 @@ export default function TrashPage() {
           size="medium"
           columns={columns}
           dataSource={items}
-          pagination={false}
+          // 回收站可能积攒上千条；分页后批量恢复/彻底删除仍按选中 key 在全量
+          // items 里匹配（见 selectedItems()），跨页勾选不受影响。
+          pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
           rowSelection={rowSelection}
         />
       )}

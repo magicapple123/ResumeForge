@@ -43,7 +43,17 @@ export default function ResumeZoomModal({
       onCancel={onClose}
       footer={null}
       width="min(1240px, 96vw)"
-      styles={{ body: { paddingTop: 8 } }}
+      // 弹窗自身滚动：预览的纵向空间本来就归外层管理（见 ResumePreview），内容比视口高时
+      // 只滚这里，卡片整体始终完整呈现在视口内，不再需要在弹窗外整页滚动。
+      centered
+      styles={{
+        body: {
+          maxHeight: "calc(100vh - 170px)",
+          overflowY: "auto",
+          overflowX: "hidden",
+          paddingTop: 8,
+        },
+      }}
       destroyOnHidden
     >
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>

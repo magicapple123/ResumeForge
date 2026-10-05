@@ -11,7 +11,7 @@ import {
   StarFilled,
 } from "@ant-design/icons";
 import { Collapse, Image, Tag, Tooltip, Typography } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   AssistantAttachment,
@@ -33,7 +33,7 @@ function attachmentIcon(name: string, kind: string) {
   return name.toLowerCase().endsWith(".pdf") ? <FilePdfOutlined /> : <FileWordOutlined />;
 }
 
-export function AssistantMessageContent({
+function AssistantMessageContentBase({
   content,
   sourceMap,
 }: {
@@ -41,74 +41,88 @@ export function AssistantMessageContent({
   /** [来源N] 的「编号 → url」映射；缺省时正文里的 [来源N] 保持纯文本。 */
   sourceMap?: AssistantSourceNumber[];
 }) {
-  const lines = content.split(/\r?\n/);
-  const blocks: ReactNode[] = [];
+  // 解析结果按 content 缓存：历史消息的 content 不变时，逐行解析（含表格重组）不必重跑。
+  const blocks = useMemo<ReactNode[]>(() => {
+    const lines = content.split(/\r?\n/);
+    const result: ReactNode[] = [];
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const tableHeader = parseMarkdownTableRow(lines[index]);
-    if (tableHeader && isMarkdownTableDivider(lines[index + 1] ?? "", tableHeader.length)) {
-      const rows: string[][] = [];
-      let nextIndex = index + 2;
-      while (nextIndex < lines.length) {
-        const row = parseMarkdownTableRow(lines[nextIndex]);
-        if (!row || row.length !== tableHeader.length) break;
-        rows.push(row);
-        nextIndex += 1;
-      }
-      blocks.push(
-        <div key={`table-${index}`} className="assistant-markdown-table-wrap" tabIndex={0}>
-          <table>
-            <thead>
-              <tr>
-                {tableHeader.map((cell, cellIndex) => (
-                  <th key={`header-${cellIndex}`}>{renderInlineMarkdown(cell, sourceMap)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, rowIndex) => (
-                <tr key={`row-${rowIndex}`}>
-                  {row.map((cell, cellIndex) => (
-                    <td key={`cell-${rowIndex}-${cellIndex}`}>
-                      {renderInlineMarkdown(cell, sourceMap)}
-                    </td>
+    for (let index = 0; index < lines.length; index += 1) {
+      const tableHeader = parseMarkdownTableRow(lines[index]);
+      if (tableHeader && isMarkdownTableDivider(lines[index + 1] ?? "", tableHeader.length)) {
+        const rows: string[][] = [];
+        let nextIndex = index + 2;
+        while (nextIndex < lines.length) {
+          const row = parseMarkdownTableRow(lines[nextIndex]);
+          if (!row || row.length !== tableHeader.length) break;
+          rows.push(row);
+          nextIndex += 1;
+        }
+        result.push(
+          <div key={`table-${index}`} className="assistant-markdown-table-wrap" tabIndex={0}>
+            <table>
+              <thead>
+                <tr>
+                  {tableHeader.map((cell, cellIndex) => (
+                    <th key={`header-${cellIndex}`}>{renderInlineMarkdown(cell, sourceMap)}</th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>,
-      );
-      index = nextIndex - 1;
-      continue;
+              </thead>
+              <tbody>
+                {rows.map((row, rowIndex) => (
+                  <tr key={`row-${rowIndex}`}>
+                    {row.map((cell, cellIndex) => (
+                      <td key={`cell-${rowIndex}-${cellIndex}`}>
+                        {renderInlineMarkdown(cell, sourceMap)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>,
+        );
+        index = nextIndex - 1;
+        continue;
+      }
+
+      const line = lines[index];
+      const heading = line.match(/^#{1,3}\s+(.+)$/);
+      const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
+      const ordered = line.match(/^\s*(\d+)[.)]\s+(.+)$/);
+      if (heading) {
+        result.push(
+          <h4 key={`heading-${index}`}>{renderInlineMarkdown(heading[1], sourceMap)}</h4>,
+        );
+        continue;
+      }
+      if (bullet || ordered) {
+        result.push(
+          <div key={`list-${index}`} className="assistant-markdown-list-item">
+            <span aria-hidden="true">{ordered ? `${ordered[1]}.` : "•"}</span>
+            <div>{renderInlineMarkdown(bullet?.[1] ?? ordered?.[2] ?? "", sourceMap)}</div>
+          </div>,
+        );
+        continue;
+      }
+      if (!line.trim()) {
+        result.push(<div key={`space-${index}`} className="assistant-markdown-spacer" />);
+        continue;
+      }
+      result.push(<p key={`paragraph-${index}`}>{renderInlineMarkdown(line, sourceMap)}</p>);
     }
 
-    const line = lines[index];
-    const heading = line.match(/^#{1,3}\s+(.+)$/);
-    const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
-    const ordered = line.match(/^\s*(\d+)[.)]\s+(.+)$/);
-    if (heading) {
-      blocks.push(<h4 key={`heading-${index}`}>{renderInlineMarkdown(heading[1], sourceMap)}</h4>);
-      continue;
-    }
-    if (bullet || ordered) {
-      blocks.push(
-        <div key={`list-${index}`} className="assistant-markdown-list-item">
-          <span aria-hidden="true">{ordered ? `${ordered[1]}.` : "•"}</span>
-          <div>{renderInlineMarkdown(bullet?.[1] ?? ordered?.[2] ?? "", sourceMap)}</div>
-        </div>,
-      );
-      continue;
-    }
-    if (!line.trim()) {
-      blocks.push(<div key={`space-${index}`} className="assistant-markdown-spacer" />);
-      continue;
-    }
-    blocks.push(<p key={`paragraph-${index}`}>{renderInlineMarkdown(line, sourceMap)}</p>);
-  }
+    return result;
+  }, [content, sourceMap]);
 
   return <div className="assistant-message-content assistant-message-content--rich">{blocks}</div>;
 }
+
+/**
+ * 流式期间每个 delta 都会让页面级 state（streamingText）更新、整棵助手页重渲染；
+ * 历史气泡的 props（content 字符串 + sourceMap 数组引用）不变，包一层 memo 把它们挡在
+ * 渲染之外——否则长对话下每次 delta 都要对全部历史消息重新 split 全文 + 逐行解析。
+ */
+export const AssistantMessageContent = memo(AssistantMessageContentBase);
 
 export function StreamingStatus({ message }: { message: string }) {
   return (

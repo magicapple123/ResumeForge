@@ -28,6 +28,7 @@ import {
   startUpdateDownload,
 } from "../../api/settings";
 import type { UpdateCheckResult, UpdateStatus } from "../../types";
+import { isDocumentHidden, onVisibilityChange } from "../../utils/visibility";
 
 const UPDATE_COMPLETED_KEY = "resumeforge.update.completed";
 
@@ -67,12 +68,24 @@ export default function UpdateCard() {
 
   useEffect(() => {
     if (!statusState || !["downloading", "installing"].includes(statusState)) return;
-    const timer = window.setInterval(() => {
+    // 页面在后台时跳过本轮 tick；回到前台由 visibilitychange 立即补一次。
+    const poll = () => {
       void getUpdateDownloadStatus()
         .then((current) => setStatus(current))
         .catch(() => undefined);
+    };
+    const timer = window.setInterval(() => {
+      if (isDocumentHidden()) return;
+      poll();
     }, 800);
-    return () => window.clearInterval(timer);
+    const unsubscribeVisibility = onVisibilityChange(() => {
+      if (isDocumentHidden()) return;
+      poll();
+    });
+    return () => {
+      window.clearInterval(timer);
+      unsubscribeVisibility();
+    };
   }, [statusState]);
 
   useEffect(() => {

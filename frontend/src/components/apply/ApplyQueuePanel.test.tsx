@@ -267,6 +267,30 @@ describe("ApplyQueuePanel 右键菜单与操作按钮位置", () => {
     expect(screen.getByText("移出队列")).toBeInTheDocument();
   });
 
+  it("右键菜单按 Esc 关闭，焦点归还触发行内元素", async () => {
+    apiMocks.listQueue.mockResolvedValue([{ ...BASE_ITEM }]);
+
+    render(
+      <AntdApp>
+        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+      </AntdApp>,
+    );
+
+    const titleCell = await screen.findByText("后端开发");
+    // 行内的岗位链接是可聚焦元素：先聚焦它，再右键唤出菜单。
+    const link = titleCell.closest("button");
+    expect(link).not.toBeNull();
+    (link as HTMLElement).focus();
+
+    fireEvent.contextMenu(titleCell.closest("tr") as HTMLElement);
+    expect(await screen.findByText("编辑")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByText("编辑")).not.toBeInTheDocument();
+    expect(link).toHaveFocus();
+  });
+
   it("操作按钮容器位于最右（flex + justifyContent: flex-end）", async () => {
     apiMocks.listQueue.mockResolvedValue([{ ...BASE_ITEM }]);
 

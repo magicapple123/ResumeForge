@@ -6,6 +6,7 @@
 import { StarFilled, StarOutlined } from "@ant-design/icons";
 import { Button, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { memo, useMemo } from "react";
 import type { HTMLAttributes } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
@@ -15,6 +16,94 @@ import type { Page } from "../../types";
 import type { ResumeBrief } from "../../types";
 import type { DiffViewData } from "../../types/resumeFieldDiff";
 import { formatDateTime } from "../../utils/format";
+
+/** 行操作动作的依赖集：全部是 setState 与 useCallback 回调，引用跨渲染稳定，
+ * 行组件据此做 memo——页面其它 state 变化时已渲染的行不必重跑。 */
+interface RowActionDeps {
+  setPreviewId: (id: number | null) => void;
+  setRenameTarget: (target: ResumeBrief | null) => void;
+  setRenameValue: (value: string) => void;
+  setNoteTarget: (target: ResumeBrief | null) => void;
+  setNoteValue: (value: string) => void;
+  setDiffBase: (target: ResumeBrief | null) => void;
+  setDiffAgainstId: (id: number | null) => void;
+  setDiffResult: (result: DiffViewData | null) => void;
+  toggleFavorite: (record: ResumeBrief) => Promise<void>;
+  remove: (id: number) => Promise<void>;
+}
+
+function primaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActionItem[] {
+  return [{ key: "preview", label: "预览 / 导出", onClick: () => deps.setPreviewId(record.id) }];
+}
+
+function secondaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActionItem[] {
+  return [
+    {
+      key: "rename",
+      label: "重命名",
+      onClick: () => {
+        deps.setRenameTarget(record);
+        deps.setRenameValue(record.title);
+      },
+    },
+    {
+      key: "note",
+      label: "编辑备注",
+      onClick: () => {
+        deps.setNoteTarget(record);
+        deps.setNoteValue(record.note ?? "");
+      },
+    },
+    {
+      key: "diff",
+      label: "版本对比",
+      onClick: () => {
+        deps.setDiffBase(record);
+        deps.setDiffAgainstId(null);
+        deps.setDiffResult(null);
+      },
+    },
+    {
+      key: "favorite",
+      label: record.favorite ? "取消收藏" : "收藏",
+      onClick: () => void deps.toggleFavorite(record),
+    },
+    {
+      key: "delete",
+      label: "删除",
+      danger: true,
+      confirm: "确定删除这条记录？",
+      onClick: () => void deps.remove(record.id),
+    },
+  ];
+}
+
+interface ContextMenuRowProps extends HTMLAttributes<HTMLTableRowElement> {
+  record?: ResumeBrief;
+  /** 批量选择模式下右键菜单收起，与行内操作保持一致。 */
+  selecting: boolean;
+  deps: RowActionDeps;
+}
+
+/** 带右键菜单的表格行：props 全是稳定引用（antd 的 tr 属性 + record + deps），
+ * 用 React.memo 让页面级 state 变化不触发整表行级重渲染。 */
+const ContextMenuRow = memo(function ContextMenuRow({
+  record,
+  selecting,
+  deps,
+  ...rest
+}: ContextMenuRowProps) {
+  if (!record) return <tr {...rest} />;
+  return (
+    <RowContextMenu
+      items={
+        selecting ? [] : [...primaryActionsFor(record, deps), ...secondaryActionsFor(record, deps)]
+      }
+    >
+      <tr {...rest} />
+    </RowContextMenu>
+  );
+});
 
 interface Props {
   data: Page<ResumeBrief> | undefined;
@@ -63,56 +152,47 @@ export default function ResumeTable({
   /**
    * 行操作分两层，两层**不重叠**：主操作是行上的蓝色链接，「更多」里只放其余操作。
    * 菜单里再出现一遍「预览 / 导出」会让人以为那是另一个入口。
+   * 动作定义在模块级 builder 里（ContextMenuRow 复用同一份），这里只做绑定。
    */
-  const primaryActions = (record: ResumeBrief): RowActionItem[] => [
-    { key: "preview", label: "预览 / 导出", onClick: () => setPreviewId(record.id) },
-  ];
+  const actionDeps = useMemo<RowActionDeps>(
+    () => ({
+      setPreviewId,
+      setRenameTarget,
+      setRenameValue,
+      setNoteTarget,
+      setNoteValue,
+      setDiffBase,
+      setDiffAgainstId,
+      setDiffResult,
+      toggleFavorite,
+      remove,
+    }),
+    [
+      setPreviewId,
+      setRenameTarget,
+      setRenameValue,
+      setNoteTarget,
+      setNoteValue,
+      setDiffBase,
+      setDiffAgainstId,
+      setDiffResult,
+      toggleFavorite,
+      remove,
+    ],
+  );
 
-  const secondaryActions = (record: ResumeBrief): RowActionItem[] => [
-    {
-      key: "rename",
-      label: "重命名",
-      onClick: () => {
-        setRenameTarget(record);
-        setRenameValue(record.title);
-      },
-    },
-    {
-      key: "note",
-      label: "编辑备注",
-      onClick: () => {
-        setNoteTarget(record);
-        setNoteValue(record.note ?? "");
-      },
-    },
-    {
-      key: "diff",
-      label: "版本对比",
-      onClick: () => {
-        setDiffBase(record);
-        setDiffAgainstId(null);
-        setDiffResult(null);
-      },
-    },
-    {
-      key: "favorite",
-      label: record.favorite ? "取消收藏" : "收藏",
-      onClick: () => void toggleFavorite(record),
-    },
-    {
-      key: "delete",
-      label: "删除",
-      danger: true,
-      confirm: "确定删除这条记录？",
-      onClick: () => void remove(record.id),
-    },
-  ];
+  const primaryActions = (record: ResumeBrief): RowActionItem[] =>
+    primaryActionsFor(record, actionDeps);
 
-  /** 整行右键：鼠标不在行内链接上，给完整清单更方便。 */
-  const contextActions = (record: ResumeBrief): RowActionItem[] => [
-    ...primaryActions(record),
-    ...secondaryActions(record),
-  ];
+  const secondaryActions = (record: ResumeBrief): RowActionItem[] =>
+    secondaryActionsFor(record, actionDeps);
+
+  /** rowKey → record：行渲染 O(1) 取值，替代对 items 的逐条 find（O(n²)）。 */
+  const itemsByRowKey = useMemo(() => {
+    const map = new Map<string, ResumeBrief>();
+    for (const item of data?.items ?? []) map.set(String(item.id), item);
+    return map;
+  }, [data]);
 
   const columns: ColumnsType<ResumeBrief> = [
     {
@@ -256,14 +336,16 @@ export default function ResumeTable({
       components={{
         body: {
           // 整行右键即可重命名、收藏或删除，不必先找到右侧的按钮。
+          // record 用 Map 以 rowKey 查找（列表里逐条 find 是 O(n²)），行组件 memo 化。
           row: (props: HTMLAttributes<HTMLTableRowElement>) => {
             const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
-            const record = (data?.items ?? []).find((item) => String(item.id) === rowKey);
-            if (!record) return <tr {...props} />;
             return (
-              <RowContextMenu items={batch.selecting ? [] : contextActions(record)}>
-                <tr {...props} />
-              </RowContextMenu>
+              <ContextMenuRow
+                {...props}
+                record={itemsByRowKey.get(rowKey)}
+                selecting={batch.selecting}
+                deps={actionDeps}
+              />
             );
           },
         },

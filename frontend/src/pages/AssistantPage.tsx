@@ -230,10 +230,60 @@ export default function AssistantPage({
     [message, reloadSkills, toggleSkill],
   );
 
-  const openGroupModal = (conversation: AssistantConversationBrief) => {
+  // 会话列表的操作回调全部 useCallback：ConversationSidebar 包了 memo，流式期间
+  // 页面级 state（streamingText）每个 delta 都在变，props 引用不稳定的话 memo 形同虚设。
+  const handleSidebarCreate = useCallback(() => {
+    setHistoryOpen(false);
+    void createConversation();
+  }, [createConversation]);
+
+  const handleSidebarSelect = useCallback(
+    (id: number) => {
+      setHistoryOpen(false);
+      selectConversation(id);
+    },
+    [selectConversation],
+  );
+
+  const handleSidebarDelete = useCallback(
+    (id: number) => void removeConversation(id),
+    [removeConversation],
+  );
+
+  const handleSidebarBatchDelete = useCallback(
+    (ids: number[]) => {
+      // 批量删除：逐条走同一条删除通路（内部会刷新列表）。
+      for (const id of ids) void removeConversation(id);
+    },
+    [removeConversation],
+  );
+
+  const handleSidebarRename = useCallback(
+    (id: number, title: string) => void saveConversationTitle(id, title),
+    [saveConversationTitle],
+  );
+
+  const handleSidebarToggleFlag = useCallback(
+    (conversation: AssistantConversationBrief, field: "pinned" | "favorite") =>
+      void updateConversationFlags(conversation, field),
+    [updateConversationFlags],
+  );
+
+  const handleSidebarArchive = useCallback(
+    (conversation: AssistantConversationBrief, archived: boolean) =>
+      void updateConversation(conversation.id, { archived }),
+    [updateConversation],
+  );
+
+  const handleSidebarFork = useCallback(
+    (conversation: AssistantConversationBrief) => void forkConversation(conversation.id),
+    [forkConversation],
+  );
+
+  const openGroupModal = useCallback((conversation: AssistantConversationBrief) => {
     setGroupTarget(conversation);
     setGroupValue(conversation.group_name);
-  };
+  }, []);
 
   const confirmGroup = async () => {
     if (!groupTarget) return;
@@ -291,25 +341,14 @@ export default function AssistantPage({
           conversations={conversations}
           loading={conversationsLoading}
           activeId={activeId}
-          onCreate={() => {
-            setHistoryOpen(false);
-            void createConversation();
-          }}
-          onSelect={(id) => {
-            setHistoryOpen(false);
-            selectConversation(id);
-          }}
-          onDelete={(id) => void removeConversation(id)}
-          onBatchDelete={(ids) => {
-            // 批量删除：逐条走同一条删除通路（内部会刷新列表）。
-            for (const id of ids) void removeConversation(id);
-          }}
-          onRename={(id, title) => void saveConversationTitle(id, title)}
-          onToggleFlag={(conversation, field) => void updateConversationFlags(conversation, field)}
-          onArchive={(conversation, archived) =>
-            void updateConversation(conversation.id, { archived })
-          }
-          onFork={(conversation) => void forkConversation(conversation.id)}
+          onCreate={handleSidebarCreate}
+          onSelect={handleSidebarSelect}
+          onDelete={handleSidebarDelete}
+          onBatchDelete={handleSidebarBatchDelete}
+          onRename={handleSidebarRename}
+          onToggleFlag={handleSidebarToggleFlag}
+          onArchive={handleSidebarArchive}
+          onFork={handleSidebarFork}
           onMoveToGroup={openGroupModal}
           className={compact ? "assistant-sidebar--floating" : undefined}
         />

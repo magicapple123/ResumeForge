@@ -54,6 +54,12 @@ function lazyPage<Props = Record<string, never>>(
   return Object.assign(lazy(load), { preload: load });
 }
 
+/** 首屏预热：起始延迟、每批 chunk 数与空闲调度参数。 */
+const PRELOAD_START_DELAY_MS = 800;
+const PRELOAD_BATCH_SIZE = 3;
+const PRELOAD_IDLE_TIMEOUT_MS = 3_000;
+const PRELOAD_IDLE_FALLBACK_MS = 200;
+
 const HomePage = lazyPage(() => import("./pages/HomePage"));
 const JobsPage = lazyPage(() => import("./pages/JobsPage"));
 const ProfilePage = lazyPage(() => import("./pages/ProfilePage"));
@@ -144,10 +150,42 @@ function MainLayout() {
 
   useEffect(() => {
     // 首屏稳定后预热页面代码块，但不触发页面数据请求；首次点击侧栏时只需挂载组件。
+    // 18 个 chunk 一次性发起会挤占带宽并触发一串编译，改为空闲时分批（每批 3 个）。
+    // jsdom / 旧环境没有 requestIdleCallback：特性检测后回退 setTimeout。
+    const requestIdle =
+      typeof window.requestIdleCallback === "function"
+        ? (task: () => void) =>
+            window.requestIdleCallback(() => task(), { timeout: PRELOAD_IDLE_TIMEOUT_MS })
+        : (task: () => void) => window.setTimeout(task, PRELOAD_IDLE_FALLBACK_MS);
+    const cancelIdle =
+      typeof window.cancelIdleCallback === "function"
+        ? (handle: number) => window.cancelIdleCallback(handle)
+        : (handle: number) => window.clearTimeout(handle);
+
+    let cancelled = false;
+    let idleHandle: number | null = null;
+    const paths = Object.keys(preloaders);
+    let index = 0;
+    const runNextBatch = () => {
+      if (cancelled) return;
+      const end = Math.min(index + PRELOAD_BATCH_SIZE, paths.length);
+      for (; index < end; index += 1) {
+        const preload = preloaders[paths[index]];
+        if (typeof preload === "function") void preload();
+      }
+      if (index < paths.length) {
+        idleHandle = requestIdle(runNextBatch);
+      }
+    };
+
     const timer = window.setTimeout(() => {
-      for (const preload of Object.values(preloaders)) void preload();
-    }, 800);
-    return () => window.clearTimeout(timer);
+      idleHandle = requestIdle(runNextBatch);
+    }, PRELOAD_START_DELAY_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      if (idleHandle !== null) cancelIdle(idleHandle);
+    };
   }, [preloaders]);
 
   useEffect(() => {

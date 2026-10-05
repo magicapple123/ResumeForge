@@ -131,6 +131,10 @@ export default function ResumeSuggestionsModal({
       onCancel={onClose}
       footer={null}
       width={720}
+      // 建议条数不固定：限高让超长内容只滚弹窗内部，卡片整体不出视口。
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       destroyOnHidden
     >
       {error ? (

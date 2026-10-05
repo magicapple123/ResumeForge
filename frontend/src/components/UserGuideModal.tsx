@@ -62,6 +62,11 @@ export default function UserGuideModal({ open, onClose, onNavigate }: UserGuideM
       // 会横向溢出。
       width={880}
       style={{ maxWidth: "calc(100vw - 32px)" }}
+      // 弹窗自身滚动：步骤多、要点长的内容只滚弹窗内部，卡片整体始终完整呈现在视口内。
+      centered
+      styles={{
+        body: { maxHeight: "calc(100vh - 230px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       onCancel={onClose}
       footer={
         <div className="user-guide-footer">

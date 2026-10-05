@@ -11,12 +11,18 @@ import ProfilePage from "./ProfilePage";
 
 const apiMocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
+  saveProfile: vi.fn(),
   listResumes: vi.fn(),
   getWebFormExtraProfile: vi.fn(),
   updateWebFormExtraProfile: vi.fn(),
 }));
 
-vi.mock("../api/profile", () => ({ getProfile: apiMocks.getProfile }));
+// 「保存全部资料」的第一半走 saveProfile；此前没假它，submit 内部会静默失败——
+// 未保存防护的用例要靠它成功来断言"警示解除"，所以一并 mock。
+vi.mock("../api/profile", () => ({
+  getProfile: apiMocks.getProfile,
+  saveProfile: apiMocks.saveProfile,
+}));
 // 「网申资料」走自己的接口（独立的表），这里一并假掉——不假的话这一页会去真发请求。
 vi.mock("../api/webform", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/webform")>()),
@@ -89,6 +95,7 @@ function renderPage() {
 
 beforeEach(() => {
   apiMocks.getProfile.mockReset().mockResolvedValue(PROFILE);
+  apiMocks.saveProfile.mockReset().mockResolvedValue(PROFILE);
   apiMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
   apiMocks.getWebFormExtraProfile.mockReset().mockResolvedValue({
     fields: [
@@ -219,6 +226,53 @@ describe("ProfilePage 资料分页", () => {
     fireEvent.click(screen.getByRole("tab", { name: "简历资料" }));
     fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
     expect(screen.getByLabelText("英语六级分数")).toHaveValue("512");
+  });
+});
+
+/**
+ * 未保存防护：这一页是整页表单、只有「保存全部资料」一个提交口，中途刷新/关闭
+ * 浏览器会静默丢掉全部未保存编辑。这里钉住 beforeunload 的挂载/解除时机——
+ * 有更改就挂上（浏览器出原生的"未保存的更改将丢失"），两次提交都成功才解除。
+ */
+describe("ProfilePage 未保存防护", () => {
+  function spyBeforeUnload() {
+    const addSpy = vi.spyOn(window, "addEventListener");
+    const removeSpy = vi.spyOn(window, "removeEventListener");
+    return { addSpy, removeSpy };
+  }
+
+  it("表单有更改后挂上 beforeunload 监听，刷新/关闭不再静默丢稿", async () => {
+    const { addSpy, removeSpy } = spyBeforeUnload();
+    renderPage();
+    await screen.findByText("还没有通用简历");
+
+    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
+    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.change(await screen.findByLabelText("英语六级分数"), { target: { value: "512" } });
+
+    await waitFor(() => expect(addSpy).toHaveBeenCalledWith("beforeunload", expect.any(Function)));
+    // 未保存期间不能提前拆掉警示。
+    expect(removeSpy).not.toHaveBeenCalledWith("beforeunload", expect.any(Function));
+  });
+
+  it("保存全部成功后移除 beforeunload 监听", async () => {
+    const { addSpy, removeSpy } = spyBeforeUnload();
+    renderPage();
+    await screen.findByText("还没有通用简历");
+
+    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
+    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.change(await screen.findByLabelText("英语六级分数"), { target: { value: "512" } });
+    await waitFor(() => expect(addSpy).toHaveBeenCalledWith("beforeunload", expect.any(Function)));
+
+    fireEvent.click(screen.getByRole("button", { name: /保存全部资料/ }));
+
+    // 两次提交都成功（saveProfile 与 updateWebFormExtraProfile 均已 mock 成功）→ 解除警示。
+    await waitFor(() =>
+      expect(removeSpy).toHaveBeenCalledWith("beforeunload", expect.any(Function)),
+    );
+    expect(apiMocks.saveProfile).toHaveBeenCalled();
+    expect(apiMocks.updateWebFormExtraProfile).toHaveBeenCalledWith({ cet6_score: "512" }, {}, {});
   });
 });
 

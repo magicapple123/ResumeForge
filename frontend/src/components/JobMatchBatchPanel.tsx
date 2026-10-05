@@ -334,6 +334,10 @@ export default function JobMatchBatchPanel({
         </Space>
       }
       width={900}
+      // 批量结果逐岗位输出：限高让超长内容只滚弹窗内部。
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       onCancel={onClose}
       footer={
         <Space>

@@ -31,7 +31,7 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import { useState } from "react";
+import { memo, useState } from "react";
 import type {
   AssistantConversationBrief,
   AssistantSurface,
@@ -65,7 +65,7 @@ interface Props {
   onBatchDelete?: (ids: number[]) => void;
 }
 
-export default function ConversationSidebar({
+function ConversationSidebar({
   className,
   surface = "page",
   conversations,
@@ -420,3 +420,6 @@ export default function ConversationSidebar({
     </aside>
   );
 }
+
+/** 流式期间页面每来一个 delta 都会重渲染；props 稳定（父级已 useCallback）时 memo 掉，会话列表不再陪跑。 */
+export default memo(ConversationSidebar);

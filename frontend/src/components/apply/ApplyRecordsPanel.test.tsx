@@ -179,6 +179,28 @@ describe("ApplyRecordsPanel (grouped by batch)", () => {
   });
 });
 
+describe("投递记录分页器", () => {
+  it("多页时渲染分页器，翻页携带 page 重新加载；单页时不出现", async () => {
+    // 12 个批次、每页 5 个 → 两页，分页器应出现。
+    apiMocks.listRecordBatches.mockResolvedValue({ items: BATCHES.items, total: 12 });
+    await renderPanel();
+    expect(await screen.findByTitle("2")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("2"));
+    await waitFor(() => {
+      const calls = apiMocks.listRecordBatches.mock.calls;
+      expect(calls[calls.length - 1][0]).toMatchObject({ page: 2 });
+    });
+
+    // 只有一页时分页器隐藏（hideOnSinglePage，与旧文字链行为对齐）。
+    cleanup();
+    document.body.innerHTML = "";
+    apiMocks.listRecordBatches.mockResolvedValue(BATCHES);
+    await renderPanel();
+    expect(screen.queryByTitle("2")).not.toBeInTheDocument();
+  });
+});
+
 describe("删除投递记录", () => {
   it("整批删：组头的「删除本批」带二次确认，确认后调接口并刷新", async () => {
     apiMocks.deleteRecordBatch.mockResolvedValue(undefined);
@@ -231,5 +253,48 @@ describe("删除投递记录", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
 
     expect(apiMocks.deleteRecordBatch).not.toHaveBeenCalled();
+  });
+});
+
+describe("投递记录搜索框（受控化）", () => {
+  /** Input.Search 里的文本输入框。 */
+  function searchInput(): HTMLInputElement {
+    return screen.getByPlaceholderText("搜索岗位 / 公司").closest("input") as HTMLInputElement;
+  }
+
+  it("点 × 清空后立即按空关键词重新加载（不再沿用旧关键词筛选）", async () => {
+    await renderPanel();
+    const input = searchInput();
+
+    // 输入关键词并回车搜索。
+    fireEvent.change(input, { target: { value: "后端" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => {
+      const calls = apiMocks.listRecordBatches.mock.calls;
+      expect(calls[calls.length - 1][0]).toMatchObject({ keyword: "后端" });
+    });
+
+    // 点 × 清空：输入框变空的同时，筛选也要跟着变空。
+    fireEvent.change(input, { target: { value: "" } });
+    await waitFor(() => {
+      const calls = apiMocks.listRecordBatches.mock.calls;
+      expect(calls[calls.length - 1][0]).toMatchObject({ keyword: "" });
+    });
+    expect(input.value).toBe("");
+  });
+
+  it("回车搜索后输入框与筛选保持一致（受控镜像回填）", async () => {
+    await renderPanel();
+    const input = searchInput();
+
+    fireEvent.change(input, { target: { value: "前端" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      const calls = apiMocks.listRecordBatches.mock.calls;
+      expect(calls[calls.length - 1][0]).toMatchObject({ keyword: "前端" });
+    });
+    // 受控镜像从 keyword 同步回来，输入框不会被antd内部状态带跑。
+    expect(input.value).toBe("前端");
   });
 });

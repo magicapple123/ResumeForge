@@ -371,7 +371,10 @@ export default function ResumeDetailPreview({
         onGenerated={onSuggestionsGenerated}
         onApplied={(detail) => onResumeRevised?.(detail)}
       />
-      {showRevise && (
+      {/* 修订弹窗（承载「AI 补上这段」与「采纳建议」）只看 onResumeRevised 是否传入：
+          生成弹窗的预览阶段虽然藏起底部「AI 修改 / 重新生成」按钮（showReviseAction=false，
+          避免与它自己的「重新生成」向导重复），但「AI 补上这段」仍要能弹出修订窗口。 */}
+      {onResumeRevised ? (
         <ResumeReviseModal
           open={reviseOpen}
           recordId={detail.id}
@@ -379,7 +382,7 @@ export default function ResumeDetailPreview({
           onClose={() => setReviseOpen(false)}
           onApplied={(detail) => onResumeRevised?.(detail)}
         />
-      )}
+      ) : null}
       <ResumeQualityModal
         open={qualityOpen}
         resumeId={detail.id}
