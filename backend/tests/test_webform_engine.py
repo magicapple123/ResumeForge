@@ -227,6 +227,126 @@ def test_exclude_hints_keep_relative_fields_out_of_personal_ones():
     assert {control.index for control in result.unmatched} == {1}
 
 
+def test_emergency_contact_boxes_with_generic_placeholders_are_matched():
+    """紧急联系人三框占位符是通用词（"请输入姓名"）时不该被放弃。
+
+    占位符权威规则会把"请输入姓名"点名的 ``name`` 当唯一主人，而 ``name`` 又被
+    RELATIVE_HINTS 拦下——两头落空，三框全进"没认出来"（2026-10-06 实测）。
+    修法：占位符点名的字段全被负向词拦下时，权威落空、只回退到 label 档。
+    """
+    engine = FormEngine()
+    controls = engine.snapshot_controls(
+        [
+            {
+                "index": 0,
+                "type": "text",
+                "label": "紧急联系人姓名",
+                "placeholder": "请输入姓名",
+                "nearby_text": "紧急联系人姓名*",
+                "selector": '[data-rf-index="0"]',
+            },
+            {
+                "index": 1,
+                "type": "text",
+                "label": "与本人关系",
+                "placeholder": "请输入与本人关系",
+                "nearby_text": "与本人关系*",
+                "selector": '[data-rf-index="1"]',
+            },
+            {
+                "index": 2,
+                "type": "tel",
+                "label": "紧急联系人电话",
+                "placeholder": "请输入手机号码",
+                "nearby_text": "紧急联系人电话*",
+                "selector": '[data-rf-index="2"]',
+            },
+        ]
+    )
+
+    result = engine.match_fields(
+        controls,
+        {
+            "emergency_contact_name": "张建设",
+            "emergency_contact_relation": "父女",
+            "emergency_contact_phone": "139-0000-0001",
+        },
+    )
+    by_field = {m.field: (m.control.index, m.value) for m in result.mappings}
+
+    assert by_field == {
+        "emergency_contact_name": (0, "张建设"),
+        "emergency_contact_relation": (1, "父女"),
+        "emergency_contact_phone": (2, "139-0000-0001"),
+    }
+    assert not result.unmatched
+
+
+def test_polluted_personal_name_box_never_receives_emergency_contact_values():
+    """红线：旁文被紧急联系人标签污染的本人姓名框，绝不能被填进别人的名字/电话。
+
+    占位符权威落空后的回退**只到 label 档**——这类框没有 label，旁文再热闹
+    也不许借（2026-10-05 mokahr apply 页实测：每个控件的旁文都累积整表标签）。
+    """
+    engine = FormEngine()
+    controls = engine.snapshot_controls(
+        [
+            {
+                "index": 0,
+                "type": "text",
+                "placeholder": "请输入姓名",
+                "nearby_text": "紧急联系人姓名 紧急联系人电话 与本人关系 手机号码",
+                "selector": '[data-rf-index="0"]',
+            },
+            {
+                "index": 1,
+                "type": "text",
+                "label": "姓名",
+                "placeholder": "请输入姓名",
+                "nearby_text": "姓名*",
+                "selector": '[data-rf-index="1"]',
+            },
+        ]
+    )
+
+    result = engine.match_fields(
+        controls,
+        {
+            "name": "王小明",
+            "emergency_contact_name": "张建设",
+            "emergency_contact_phone": "139-0000-0001",
+        },
+    )
+    by_control = {m.control.index: (m.field, m.value) for m in result.mappings}
+
+    assert by_control[1] == ("name", "王小明")
+    assert 0 not in by_control, "被污染的本人姓名框必须保持没认出来"
+
+
+def test_emergency_contact_box_is_also_fed_from_the_repeated_profile_slot():
+    """逐条资料里的 contact_* 组与主目录的 emergency_contact_* 是同一份数据的两个
+    槽位——同义词集合必须对齐，否则占位符「请输入紧急联系人姓名」被两个并列最高分
+    判成说不清，整框进"没认出来"。任一槽位有值都应该能填。"""
+    engine = FormEngine()
+    controls = engine.snapshot_controls(
+        [
+            {
+                "index": 0,
+                "type": "text",
+                "label": "紧急联系人姓名",
+                "placeholder": "请输入紧急联系人姓名",
+                "nearby_text": "紧急联系人姓名*",
+                "selector": '[data-rf-index="0"]',
+            }
+        ]
+    )
+
+    result = engine.match_fields(controls, {"contact_name": "张建设"})
+
+    assert [m.field for m in result.mappings] == ["contact_name"]
+    assert result.mappings[0].value == "张建设"
+
+
 @pytest.mark.parametrize("label", ["无实习经历", "无项目经历", "无获奖信息", "至今"])
 def test_declaration_checkboxes_are_never_auto_checked(label):
     """勾上它们等于替用户**陈述事实**（"我没有这段经历"/"这段还在进行"），不是填一个值。

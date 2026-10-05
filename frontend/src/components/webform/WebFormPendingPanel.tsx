@@ -44,6 +44,22 @@ function Lines({ items }: { items: WebFormPendingItem[] }) {
   );
 }
 
+/**
+ * 「换个资料…」的出口提示。批量预览面板没有逐框写值的入口（那在浏览器里的
+ * 智能逐项填表面板上），所以这里不复刻一套选择器，只把路指清楚：
+ * 智能逐项填表对**任何**状态（包括「不会自动填」）都留有「换个资料…」，
+ * 展开就是完整资料清单，没有匹配项也能自己挑。
+ */
+function LiveExitHint() {
+  return (
+    <Typography.Text type="secondary">
+      想自己挑一条资料填进某个框？开启「智能逐项填表」回到浏览器点开那个框， 点
+      <Typography.Text strong>「换个资料…」</Typography.Text>
+      就能从完整资料清单里自己挑一条——没有匹配项也能展开全清单。
+    </Typography.Text>
+  );
+}
+
 export default function WebFormPendingPanel({ missingData, unrecognized, blocked }: Props) {
   if (!missingData.length && !unrecognized.length && !blocked.length) {
     return (
@@ -72,6 +88,7 @@ export default function WebFormPendingPanel({ missingData, unrecognized, blocked
             title="这些不会自动填：下拉、单选、复选与日期控件的值该由你在页面上点选；密码与验证码是刻意的安全边界；简历附件、他人信息与「我已阅读并同意」这类确认项也不该由程序代填。"
           />
           <Lines items={blocked} />
+          <LiveExitHint />
         </Card>
       ) : null}
 
@@ -90,6 +107,7 @@ export default function WebFormPendingPanel({ missingData, unrecognized, blocked
                     不会硬猜一个值写进去。上面「将填入」列出的才是这次真正会填的。
                   </Typography.Text>
                   <Lines items={unrecognized} />
+                  <LiveExitHint />
                 </Space>
               ),
             },

@@ -48,6 +48,11 @@ FIXTURE = """
     <div style="height: 3000px"></div>
     <input id="far-away" type="text">
     <button id="submit-btn">提交</button>
+    <!-- 2026-10-06 收紧后的反例：Tailwind 工具类包着的普通文本框、
+         aria-haspopup="false"（字面值是字符串，不能按真值判断）。放在
+         submit 之后，避免挤动前面控件的 DOM 序号。 -->
+    <div class="select-none"><input id="utility-wrap" type="text"></div>
+    <input id="aria-false" type="text" aria-haspopup="false">
   </div>
 </body></html>
 """

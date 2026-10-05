@@ -273,9 +273,9 @@ REPEATED_FIELD_SYNONYMS: dict[str, tuple[str, ...]] = {
     "skill_category": ("技能类别", "技能分类"),
     "skill_mastery": ("技能掌握程度", "熟练程度", "技能水平"),
     "skill_other": ("其他技能", "其他能力"),
-    "contact_name": ("紧急联系人姓名", "紧急联系人"),
-    "contact_relation": ("紧急联系人关系", "与本人关系", "联系人关系"),
-    "contact_phone": ("紧急联系人电话", "紧急联系人手机", "紧急联系电话"),
+    "contact_name": ("紧急联系人姓名", "紧急联系人", "紧急联络人"),
+    "contact_relation": ("紧急联系人关系", "与本人关系", "联系人关系", "与联系人关系"),
+    "contact_phone": ("紧急联系人电话", "紧急联系人手机", "紧急联系电话", "紧急联络电话"),
 }
 REPEATED_FIELD_SYNONYMS.update(ADDITIONAL_SYNONYMS)
 
