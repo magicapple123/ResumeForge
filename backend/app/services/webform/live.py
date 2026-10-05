@@ -98,6 +98,17 @@ POLL_INTERVAL_SECONDS = 0.35
 IDLE_POLL_INTERVAL_SECONDS = 1.5
 IDLE_AFTER_QUIET_TICKS = 8
 
+# 浏览器整个被关掉后，页面级 WebSocket 已经死了：``evaluate`` 会**连续**失败（页面跳转
+# 通常只失败一轮，下一轮就能重新装上监听，所以单次失败绝不能触发）。连续失败达到阈值后，
+# 再用浏览器级端点确认一次，不可达才判定浏览器已关闭、自动结束本次填写——否则会话永远
+# 显示「运行中」，用户只能手动停。
+#
+# 确认不用进程句柄：浏览器有意活得比后端久，后端重启后句柄必然是死的（见
+# browser_manager.is_running 的说明）；浏览器级 HTTP 端点（/json/list）不走页面通道，
+# 端口活着就说明浏览器还在，是这里唯一可靠的外部信号。
+BROWSER_CLOSED_FAILURES = 3
+BROWSER_CLOSED_REASON = "browser_closed"
+
 # 一次会话最多问几次模型。**这是钱**：一个长表单上认不出的框可能有几十个，而用户来回点
 # 同一个框也会重复触发。到顶就停止询问并如实说明，不静默变成"没认出来"。
 # 同一控件重复问不会真的再花一次（``ai.fingerprint`` 的语义缓存挡在前面），所以这个数
@@ -186,6 +197,9 @@ class LiveSession(LiveRememberMixin):
             "alternatives": [],
             "filled": 0,
             "remember_pending": None,
+            # 会话结束原因："" = 正常（没结束或用户手动停）；browser_closed = 浏览器被
+            # 关闭后自动结束。前端据此给一条中性提示而不是报错。
+            "stop_reason": "",
         }
 
     # ===== 生命周期 =====
@@ -205,10 +219,13 @@ class LiveSession(LiveRememberMixin):
         self._ai_worker.start()
         self._autofill_worker.start()
         self._ask_worker.start()
-        self._thread = threading.Thread(target=self._loop, name="webform-live", daemon=True)
-        self._thread.start()
+        # running 先落状态再开线程：自动结束可能跑得比这行赋值还快（浏览器在启动的
+        # 同一瞬间就被关掉），后写会把它覆盖回 True，会话就永远显示「运行中」。
         self.state["running"] = True
         self.state["enabled"] = self._enabled
+        self.state["stop_reason"] = ""
+        self._thread = threading.Thread(target=self._loop, name="webform-live", daemon=True)
+        self._thread.start()
 
     def update_data(
         self, data: dict[str, str], catalog: list[dict[str, str]] | None = None
@@ -312,7 +329,8 @@ class LiveSession(LiveRememberMixin):
     def stop(self) -> None:
         self._stop.set()
         thread, self._thread = self._thread, None
-        if thread is not None:
+        # 自动结束跑在轮询线程自己身上，join 自己会抛 RuntimeError——跳过。
+        if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=2.0)
         # 还在飞的模型调用不等它（那是网络时间，等下去只会卡住停用按钮），但要丢掉排队中的
         # 那些——不然用户关了模式之后，某个回调还会往页面上推一个已经没人看的面板。
@@ -335,6 +353,7 @@ class LiveSession(LiveRememberMixin):
 
     def _loop(self) -> None:
         quiet = 0
+        failures = 0
         while not self._stop.is_set():
             try:
                 busy = bool(self._tick())
@@ -342,6 +361,16 @@ class LiveSession(LiveRememberMixin):
                 logger.warning("点击填表的一轮出错了：%s", error)
                 # 出错保持快档：连接恢复、页面跳转这类情况要尽快跟上。
                 busy = True
+                failures += 1
+                # 连续失败达到阈值且浏览器级端点也确认不可达：浏览器已被关掉，自动结束
+                # 本次填写。单次失败（页面跳转）到不了阈值；浏览器还在时到不了确认。
+                if failures >= BROWSER_CLOSED_FAILURES and self._browser_is_gone():
+                    logger.info("浏览器已关闭，实时填表会话已自动结束")
+                    self.state["stop_reason"] = BROWSER_CLOSED_REASON
+                    self.stop()
+                    return
+            else:
+                failures = 0
             if busy:
                 quiet = 0
                 delay = POLL_INTERVAL_SECONDS
@@ -353,6 +382,19 @@ class LiveSession(LiveRememberMixin):
                     else IDLE_POLL_INTERVAL_SECONDS
                 )
             self._stop.wait(delay)
+
+    def _browser_is_gone(self) -> bool:
+        """连续失败达到阈值后的一次**确认**：浏览器级端点是否也不可达。
+
+        页面级 WebSocket 死掉有两种原因：整个浏览器被关掉（要自动结束），或只是当前
+        标签页没了（多标签模式由外层清理，会话本身保持重试）。区分二者用浏览器级
+        HTTP 端点（``/json/list``）——它不走页面通道，端口活着就说明浏览器还在。
+        """
+        try:
+            self._client.list_targets()
+        except Exception:  # noqa: BLE001 - 探测失败就是"不在了"，具体原因无需关心
+            return True
+        return False
 
     def _tick(self) -> bool:
         """拉一次页面状态并处理；返回本轮是否遇到需要跟进的事件（供空闲退避判断）。"""
@@ -1024,6 +1066,7 @@ def live_status() -> dict[str, Any]:
                 "alternatives": [],
                 "filled": 0,
                 "remember_pending": None,
+                "stop_reason": "",
             }
         if isinstance(_session, MultiLiveSession):
             return dict(_session._active_state())
@@ -1055,6 +1098,8 @@ __all__ = [
     "POLL_INTERVAL_SECONDS",
     "IDLE_POLL_INTERVAL_SECONDS",
     "IDLE_AFTER_QUIET_TICKS",
+    "BROWSER_CLOSED_FAILURES",
+    "BROWSER_CLOSED_REASON",
     "LiveSession",
     "MultiLiveSession",
     "is_live_running",

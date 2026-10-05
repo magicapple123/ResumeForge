@@ -237,6 +237,11 @@ export interface WebFormLive {
   filled: number;
   /** 点「记住这条」后，等待用户选择写入哪个资料目标。 */
   remember_pending: WebFormRememberPending | null;
+  /**
+   * 会话结束原因。空串 = 正常（没结束或用户手动停）；
+   * `browser_closed` = 浏览器被关闭后本次填写自动结束（界面给中性提示，不按故障处理）。
+   */
+  stop_reason?: "" | "browser_closed";
 }
 
 export interface WebFormFillItem {
