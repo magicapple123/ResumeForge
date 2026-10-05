@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import type { App } from "antd";
 import { getWebFormLiveStatus, getWebFormMemoryTargets, startWebFormLive } from "../../api/webform";
 import type { WebFormLive, WebFormMemoryTarget } from "../../types";
+import { isDocumentHidden, onVisibilityChange } from "../../utils/visibility";
 
 export function useLiveSession({
   restoredLiveOptOut,
@@ -72,17 +73,29 @@ export function useLiveSession({
 
   // 模式开着的时候轮询状态（面板在浏览器里，这边要能看到它在做什么）。
   // 关掉就停——不留一个永远转的定时器。
+  // 页面在后台时跳过本轮 tick；回到前台由 visibilitychange 立即补一次。
   useEffect(() => {
     if (!live?.running) return;
-    const timer = window.setInterval(() => {
+    const poll = () => {
       void getWebFormLiveStatus()
         .then((next) => {
           setLive(next);
           if (next.running) setSessionActive(true);
         })
         .catch(() => undefined);
+    };
+    const timer = window.setInterval(() => {
+      if (isDocumentHidden()) return;
+      poll();
     }, 1500);
-    return () => window.clearInterval(timer);
+    const unsubscribeVisibility = onVisibilityChange(() => {
+      if (isDocumentHidden()) return;
+      poll();
+    });
+    return () => {
+      window.clearInterval(timer);
+      unsubscribeVisibility();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 轮询只需跟随 running 开关，startWebFormLive 为模块级稳定引用
   }, [live?.running]);
 

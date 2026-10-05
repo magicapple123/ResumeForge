@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "id": "meituan-2026-10-05-block-hint-placeholder-pair",
+  "site": "美团",
+  "captured_at": "2026-10-05",
+  "source_test": "test_webform_engine_ambiguity.test_placeholder_pair_resolved_by_block_hints_still_matches",
+  "note": "裸占位符「请输入描述」在两个区块并列——区块限定互不相同，由区块机制裁决，不消歧。",
+  "controls": [
+    {"index": 0, "type": "textarea", "placeholder": "请输入描述", "nearby_text": "描述* 实习经历-1 删除经历 公司* 职位*", "selector": "[data-rf-index=\"0\"]"},
+    {"index": 1, "type": "textarea", "placeholder": "请输入描述", "nearby_text": "描述* 项目经历-1 删除经历 项目名称* 角色*", "selector": "[data-rf-index=\"1\"]"}
+  ],
+  "profile": {
+    "experience_description": "实习描述内容",
+    "project_description": "项目描述内容"
+  },
+  "expect": {
+    "mappings": [
+      {"field": "experience_description", "index": 0},
+      {"field": "project_description", "index": 1}
+    ]
+  }
+}

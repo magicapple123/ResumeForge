@@ -55,6 +55,7 @@ from ..repeated_fields import (
 from ..session import Snapshot as Snapshot, SnapshotStore as SnapshotStore, get_snapshot_store as get_snapshot_store
 from .fill import (
     _fill_lock as _fill_lock,
+    SETTLE_RECHECK_SECONDS as SETTLE_RECHECK_SECONDS,
     apply_fill,
     is_apply_running,
     is_filling,

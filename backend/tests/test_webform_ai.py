@@ -15,7 +15,7 @@ import json
 import pytest
 
 from app.schemas.setting import LLMConfig
-from app.services.llm.base import BaseLLMProvider
+from app.services.llm.base import BaseLLMProvider, LLMError
 from app.services.webform import ai
 from app.services.webform.engine import Control, FormEngine
 from app.services.webform.fields import FIELD_KEYS
@@ -142,3 +142,39 @@ async def test_prompt_carries_the_control_text_but_not_the_page_url():
     assert "请选择你的实验室" in heard
     assert "导师信息 实验室名称" in heard
     assert "一号实验室" in heard
+
+
+class FlakyProvider(FakeProvider):
+    """第一次调用抛错、第二次正常回答——重试语义的最小替身。"""
+
+    def __init__(self, payload=None):
+        super().__init__(payload)
+        self.calls = 0
+
+    async def chat(self, messages):
+        self.calls += 1
+        self.messages.append(messages)
+        if self.calls == 1:
+            raise LLMError("临时故障")
+        return json.dumps(self.payload, ensure_ascii=False)
+
+
+async def test_a_transient_model_failure_is_retried_once():
+    """网络/解析失败重试一次：一次抖动不该把整页的 AI 兜底打掉。"""
+    provider = FlakyProvider({"matches": [{"index": 0, "field": "advisor"}]})
+
+    found = await ai.identify_fields(provider, _controls(_raw(0, **UNKNOWN)))
+
+    assert found == {0: ("advisor",)}
+    assert provider.calls == 2
+
+
+async def test_a_valid_but_empty_answer_is_not_retried():
+    """合法 JSON 但一个都没认出来是模型的**真实回答**——不重试：重试只会烧钱，
+    还可能逼它下一轮硬猜一个（那正是这套提示词在防的事）。"""
+    provider = FakeProvider({"matches": []})
+
+    found = await ai.identify_fields(provider, _controls(_raw(0, **UNKNOWN)))
+
+    assert found == {}
+    assert len(provider.messages) == 1

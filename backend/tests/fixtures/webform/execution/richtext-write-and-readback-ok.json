@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "richtext-write-and-readback-ok",
+  "note": "contenteditable 富文本框：回读必须读 textContent（读 el.value 恒为空串，旧实现把富文本填完一律判 unverified）。",
+  "controls": [
+    {"index": 0, "type": "richtext", "label": "自我评价", "selector": "[data-rf-index=\"0\"]", "has_popup": false, "readonly": false}
+  ],
+  "profile": {"summary": "熟悉 Python"},
+  "script": [
+    {"needle": "rf:set-richtext", "reply": "{\"ok\": true}"},
+    {"needle": "rf:read-back", "reply": "{\"ok\": true, \"value\": \"熟悉 Python\", \"checked\": false}"}
+  ],
+  "expect": {
+    "outcomes": [{"field": "summary", "status": "filled"}]
+  }
+}

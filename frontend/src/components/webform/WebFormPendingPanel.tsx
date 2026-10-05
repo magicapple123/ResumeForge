@@ -69,7 +69,7 @@ export default function WebFormPendingPanel({ missingData, unrecognized, blocked
             type="info"
             showIcon
             style={{ marginBottom: 8 }}
-            title="这些不会自动填：密码与验证码是刻意的安全边界；简历附件、他人信息与「我已阅读并同意」这类确认项也不该由程序代填。"
+            title="这些不会自动填：下拉、单选、复选与日期控件的值该由你在页面上点选；密码与验证码是刻意的安全边界；简历附件、他人信息与「我已阅读并同意」这类确认项也不该由程序代填。"
           />
           <Lines items={blocked} />
         </Card>

@@ -129,6 +129,38 @@ def test_a_readonly_or_popup_control_is_captured_as_such(page_client):
     assert plain["readonly"] is False and plain["has_popup"] is False, plain
 
 
+def test_a_component_library_dropdown_is_recognized_by_its_wrapper(page_client):
+    """组件库渲染的自定义下拉：input 上没有任何 aria 标注，靠**祖先类名**认出来。
+
+    2026-10-05 鹰角（MokaHR）实测：性别是一个 Semi Design 的 Dropdown
+    （``<div class="sd-Dropdown-container"><label …><input type="text">``），
+    `aria-haspopup` 与 `role` 都读不到——不补这条判据，性别会被当普通文本框填掉，
+    正是「只填不点」要挡的那一类。真机验证在这里是必须的：这个字段是
+    `describeControl` **现场读 DOM 结构**得来的，离线测试只能断言脚本里有这个 key。
+    """
+    controls = _snapshot(page_client)
+    picker = next((control for control in controls if control.get("id") == "component-picker"), None)
+
+    assert picker is not None, "组件库下拉里的输入框没进快照"
+    assert picker["has_popup"] is True, picker
+    assert picker["readonly"] is False, picker
+
+
+def test_max_length_is_captured(page_client):
+    """``maxlength`` 要采回来：超长的值写进去会被页面截断，匹配阶段靠它提前拦下。
+
+    2026-10-05 美团页实测：内推码框限 9 个字，12 个字的码被截成 ``RF-BOSS-``。
+    """
+    controls = _snapshot(page_client)
+    capped = next((control for control in controls if control.get("id") == "capped"), None)
+
+    assert capped is not None, "带 maxlength 的输入框没进快照"
+    assert capped["max_length"] == 5, capped
+    # 没有限制的控件报 0（JS 侧 ``el.maxLength`` 为 -1），不是缺字段。
+    plain = next((control for control in controls if control.get("id") == "deep-name"), None)
+    assert plain is not None and plain["max_length"] == 0, plain
+
+
 def test_autocomplete_is_captured_and_normalized(page_client):
     """`autocomplete` 是唯一不需要猜的信号，采回来时必须**规整过**——
     大小写、前后空格、以及 `section-*`/`shipping` 这类前缀在规范里都是合法写法。"""

@@ -1,0 +1,118 @@
+{
+ "version": 1,
+ "id": "basic-form-happy-path",
+ "site": "综合示例",
+ "captured_at": "2026-10-05",
+ "source_test": "test_webform_engine.test_match_fields_maps_by_label_placeholder_and_aria",
+ "note": "基础快乐路径：label / placeholder / aria 三种命中；file 与验证码框不得产生映射；「期望工作地点」是原生下拉——只填不点，连选项都不许被写进去。",
+ "controls": [
+  {
+   "index": 0,
+   "type": "text",
+   "name": "realName",
+   "label": "姓名",
+   "placeholder": "请输入姓名",
+   "required": true,
+   "selector": "[data-rf-index=\"0\"]"
+  },
+  {
+   "index": 1,
+   "type": "text",
+   "name": "mobile",
+   "label": "手机号",
+   "required": true,
+   "selector": "[data-rf-index=\"1\"]"
+  },
+  {
+   "index": 2,
+   "type": "text",
+   "name": "",
+   "placeholder": "请输入邮箱",
+   "aria_label": "邮箱",
+   "selector": "[data-rf-index=\"2\"]"
+  },
+  {
+   "index": 3,
+   "type": "select",
+   "name": "",
+   "label": "期望工作地点",
+   "options": [
+    {
+     "v": "",
+     "t": "请选择",
+     "d": false
+    },
+    {
+     "v": "110000",
+     "t": "北京",
+     "d": false
+    },
+    {
+     "v": "310000",
+     "t": "上海",
+     "d": false
+    }
+   ],
+   "selector": "[data-rf-index=\"3\"]"
+  },
+  {
+   "index": 4,
+   "type": "file",
+   "name": "resume",
+   "label": "上传简历",
+   "selector": "[data-rf-index=\"4\"]"
+  },
+  {
+   "index": 5,
+   "type": "textarea",
+   "name": "",
+   "label": "自我评价",
+   "selector": "[data-rf-index=\"5\"]"
+  },
+  {
+   "index": 6,
+   "type": "text",
+   "name": "captcha",
+   "label": "验证码",
+   "required": true,
+   "selector": "[data-rf-index=\"6\"]"
+  }
+ ],
+ "profile": {
+  "name": "张三",
+  "phone": "13800000000",
+  "email": "zhangsan@example.com",
+  "target_city": "北京",
+  "summary": "熟悉 Python"
+ },
+ "expect": {
+  "mappings": [
+   {
+    "field": "name",
+    "index": 0,
+    "value": "张三"
+   },
+   {
+    "field": "phone",
+    "index": 1,
+    "value": "13800000000"
+   },
+   {
+    "field": "email",
+    "index": 2,
+    "value": "zhangsan@example.com"
+   },
+   {
+    "field": "summary",
+    "index": 5,
+    "value": "熟悉 Python"
+   }
+  ],
+  "forbidden": [
+   {
+    "field": "target_city",
+    "index": 3
+   }
+  ]
+ }
+}

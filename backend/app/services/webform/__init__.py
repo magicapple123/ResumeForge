@@ -43,6 +43,7 @@ from .matching import (
     resolve_select_option,
 )
 from .service import (
+    SETTLE_RECHECK_SECONDS,
     SOURCE_AI,
     SOURCE_RULE,
     STATUS_CONFLICT,
@@ -70,6 +71,7 @@ __all__ = [
     "FIELD_LABELS",
     "FORM_FIELDS",
     "SENSITIVE_FIELD_KEYS",
+    "SETTLE_RECHECK_SECONDS",
     "SOURCE_AI",
     "SOURCE_RULE",
     "STATUS_CONFLICT",

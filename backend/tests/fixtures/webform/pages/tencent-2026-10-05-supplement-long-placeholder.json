@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "tencent-2026-10-05-supplement-long-placeholder",
+  "site": "腾讯校招",
+  "captured_at": "2026-10-05",
+  "source_test": "test_webform_engine_placeholders.test_a_long_instructional_placeholder_falls_back_to_its_label",
+  "note": "腾讯校招的补充信息框：占位符是一整段「建议格式」说明文（把 自我评价/爱好特长/补充信息 三个概念揉在一起），按权威解析会因并列整个放弃；长说明文不是一对一的字段陈述，退回后由真标签（补充信息*）命中 summary。",
+  "controls": [
+    {"index": 66, "type": "textarea", "label": "", "placeholder": "请输入其他相关信息，如自我评价，爱好特长，补充信息等。您可以按照如下建议格式填写：\n1、自我评价：您可以从专业技能、软性素质几个方面对自己的情况进行综合评价\n2、爱好特长：您可以分享您的兴趣爱好，个人特长及闪光点\n3、补充信息：您可以补充您的其他相关信息，全面的信息将有助于增加您简历曝光的机会。", "aria_label": "", "name": "", "title": "", "nearby_text": "0/500 补充信息* 0/500 补充信息* 0/500", "block_label": "", "block_family": "", "block_index": null, "date_part_name": "", "date_order": null, "required": false, "readonly": false, "has_popup": false, "selector": "[data-rf-index=\"66\"]"}
+  ],
+  "profile": {"summary": "示例自我评价"},
+  "expect": {
+    "mappings": [{"field": "summary", "index": 66, "value": "示例自我评价"}]
+  }
+}

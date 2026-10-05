@@ -1,0 +1,50 @@
+{
+ "version": 1,
+ "id": "select-write-and-readback-ok",
+ "note": "原生 select：按页面 option 的真实 value 写入并回读（display 参与比对）。（走显式填充：自动匹配永远不给下拉分配字段，见 skip_reason 的「只填不点」。）",
+ "selections": [
+  {
+   "index": 0,
+   "field": "target_city",
+   "value": "北京"
+  }
+ ],
+ "controls": [
+  {
+   "index": 0,
+   "type": "select",
+   "label": "期望工作地点",
+   "options": [
+    {
+     "v": "",
+     "t": "请选择",
+     "d": false
+    },
+    {
+     "v": "110000",
+     "t": "北京",
+     "d": false
+    }
+   ],
+   "selector": "[data-rf-index=\"0\"]"
+  }
+ ],
+ "script": [
+  {
+   "needle": "rf:select-option",
+   "reply": "{\"ok\": true, \"value\": \"110000\", \"display\": \"北京\"}"
+  },
+  {
+   "needle": "rf:read-back",
+   "reply": "{\"ok\": true, \"value\": \"110000\", \"display\": \"北京\", \"checked\": false}"
+  }
+ ],
+ "expect": {
+  "outcomes": [
+   {
+    "field": "target_city",
+    "status": "filled"
+   }
+  ]
+ }
+}

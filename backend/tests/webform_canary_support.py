@@ -39,6 +39,14 @@ FIXTURE = """
     <input id="secret" type="password" value="hunter2">
     <input id="readonly-picker" type="text" readonly value="中国大陆 / 天津 / 天津市">
     <input id="popup-input" type="text" role="combobox" aria-haspopup="listbox">
+    <div class="sd-Dropdown-container">
+      <label class="sd-Input-container"><input id="component-picker" type="text"></label>
+    </div>
+    <div contenteditable="true" id="rich-note"></div>
+    <textarea id="long-note"></textarea>
+    <input id="capped" type="text" maxlength="5">
+    <div style="height: 3000px"></div>
+    <input id="far-away" type="text">
     <button id="submit-btn">提交</button>
   </div>
 </body></html>

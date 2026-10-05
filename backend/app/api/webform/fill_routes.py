@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ...database import get_db
 from ...models.web_form_record import SOURCE_BATCH
@@ -61,11 +62,16 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
     """
     try:
         snapshot = webform_service.get_snapshot_store().get(payload.snapshot_id)
-        data = webform_service.build_form_data(db)
-        report = webform_service.build_preview(snapshot, data)
+        # build_form_data/build_preview（规则匹配是纯计算热路径）都是同步重活，
+        # 下沉线程池避免阻塞事件循环；db 会话按 resume_template_import 的既有
+        # 模式直接作为参数传入线程池。
+        data = await run_in_threadpool(webform_service.build_form_data, db)
+        report = await run_in_threadpool(webform_service.build_preview, snapshot, data)
         # 「要记下来吗」的提案。**必须在 db.close() 之前算**——它要查库，而下面那行
         # 为了 await 模型调用已经把连接关了。`data` 复用上面那一份，不再查第二次。
-        learning = webform_service.extra_profile.learnable(db, report.items, data)
+        learning = await run_in_threadpool(
+            webform_service.extra_profile.learnable, db, report.items, data
+        )
     except webform_service.WebFormError as exc:
         _raise(exc)
     # provider 要拿 db 配置，模型调用要等网络——**先取配置、关连接，再 await**。
@@ -111,13 +117,18 @@ def fill(payload: WebFormFillIn, db: Session = Depends(get_db)):
                 )
                 for item in payload.items
             ],
+            # 整页填充收尾复读一次：组件事后还原的"伪已填"要如实降级（见 apply_fill）。
+            settle_recheck=webform_service.SETTLE_RECHECK_SECONDS,
         )
     except webform_service.WebFormError as exc:
         _raise(exc)
     counts = {"filled": 0, "unverified": 0, "failed": 0}
+    reason_counts: dict[str, int] = {}
     for outcome in outcomes:
         if outcome.status in counts:
             counts[outcome.status] += 1
+        if outcome.reason:
+            reason_counts[outcome.reason] = reason_counts.get(outcome.reason, 0) + 1
     _record_fill(db, manager.client(), snapshot, payload, outcomes)
     diagnostics.record_event(
         "webform.fill",
@@ -126,10 +137,12 @@ def fill(payload: WebFormFillIn, db: Session = Depends(get_db)):
         filled=counts["filled"],
         unverified=counts["unverified"],
         failed=counts["failed"],
+        reason_counts=reason_counts,
     )
     return {
         "outcomes": [outcome.__dict__ for outcome in outcomes],
         **counts,
+        "reason_counts": reason_counts,
         "form_control_total": len(snapshot.controls),
         "recognized_total": len(outcomes),
     }

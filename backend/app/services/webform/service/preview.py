@@ -5,7 +5,15 @@ import logging
 from typing import Any
 
 from ...browser.cdp_client import CdpClient
-from ..engine import Control, FieldMapping, FormEngine, MatchResult
+from ..engine import (
+    Control,
+    FieldMapping,
+    FormEngine,
+    MatchResult,
+    excluded_by_hints,
+    foreign_marker,
+    has_ambiguous_field_evidence,
+)
 from ..fields import FIELD_LABELS
 from ..matching import is_placeholder, resolve_select_option
 from ..repeated_fields import (
@@ -91,19 +99,9 @@ def build_preview(
 
     for control in result.unmatched:
         label = _describe(control)
-        # 勾选/单选类：目录里没有任何字段是"勾选值"，所以**未匹配到的勾选一定不该由程序动**。
-        # 它们通常是"接受调剂""服从分配"这类**表态**，与同意条款同性质，交给用户自己决定。
-        # 放进「没认出来」是错的——那个措辞会让人以为程序没看懂，其实是刻意不碰。
-        if control.type in ("checkbox", "radio"):
-            report.blocked.append(
-                PendingItem(
-                    index=control.index,
-                    label=label,
-                    required=control.required,
-                    field_label="这是个勾选项（多为表态或声明），需要你自己判断",
-                )
-            )
-            continue
+        # 下拉 / 单选 / 复选 / 日期 / 弹层选择器到不了这里——``skip_reason`` 在匹配层
+        # 就把它们收进 ``result.skipped`` 并给了"需要你自己点选"的说法（见下方循环）。
+        #
         # 只是个"请选择"的占位控件：多半是框架渲染的自定义下拉，程序按普通输入框填不进去。
         # 如实说明比归到"没认出来"更有用。
         #
@@ -207,13 +205,33 @@ async def enrich_preview_with_ai(
         logger.warning("网申表单的 AI 字段识别失败，已回落为本地规则：%s", error)
         return 0
 
-    report.unrecognized = [item for item in report.unrecognized if item.index not in matches]
+    accepted_matches: dict[int, tuple[str, ...]] = {}
     for index, candidates in sorted(matches.items()):
         control = by_index.get(index)
         if control is None or not candidates:
             continue
-        if not compatible_block(candidates[0], control.block_family, control.block_index):
+        # 采纳前逐个候选过守卫：区块兼容、负向词（"紧急联系人姓名"之于姓名）、
+        # 跨族否决（"区号"框之于日期字段）。模型只是兜底，不是绕过这些闸门的许可。
+        allowed = tuple(
+            key
+            for key in candidates
+            if compatible_block(key, control.block_family, control.block_index)
+            and not excluded_by_hints(control, key)
+            and foreign_marker(control, key) is None
+        )
+        if not allowed:
             continue
+        # AI is a fallback, not permission to guess when the page's shared
+        # nearby text names several unrelated fields (e.g. 姓名 + 手机号码).
+        if has_ambiguous_field_evidence(control):
+            continue
+        accepted_matches[index] = allowed
+
+    report.unrecognized = [
+        item for item in report.unrecognized if item.index not in accepted_matches
+    ]
+    for index, candidates in sorted(accepted_matches.items()):
+        control = by_index[index]
         if index in low_confidence:
             # AI 对低置信规则结果有投票权，但不是最终裁判。
             report.items = [item for item in report.items if item.index != index]
@@ -234,6 +252,12 @@ def _adopt_ai_match(
     取值走 ``_rebuild_mapping``——**与用户手动改值、与填充时是同一条路径**。模型只贡献了
     一个字段名，能不能填、写什么字符串仍由这套纯函数决定。
     """
+    if has_ambiguous_field_evidence(control):
+        return
+    # 「只填不点」在这里兜一道：这类控件根本到不了模型面前（``enrich_preview_with_ai``
+    # 只问「没认出来」与低置信两桶），但采纳点自己也不该成为绕过边界的缺口。
+    if FormEngine.skip_reason(control) is not None:
+        return
     if not compatible_block(field_name, control.block_family, control.block_index):
         return
     shown_field = field_key_for_block(field_name, control.block_family, control.block_index)

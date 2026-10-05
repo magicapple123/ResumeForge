@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "id": "hypergryph-2026-10-05-bare-placeholders-polluted",
+  "site": "鹰角",
+  "captured_at": "2026-10-05",
+  "source_test": "test_webform_engine_ambiguity.test_bare_placeholders_survive_a_form_level_label_list",
+  "note": "mokahr 把标签写进占位符（裸词），每个框的旁文累积整张表标签——裸占位符必须仍能一对一命中。",
+  "controls": [
+    {"index": 3, "type": "text", "placeholder": "姓名", "nearby_text": "姓名手机号码+86邮箱性别出生日期 (年龄)国籍毕业时间", "selector": "[data-rf-index=\"3\"]"},
+    {"index": 6, "type": "text", "placeholder": "邮箱", "nearby_text": "姓名手机号码+86邮箱性别出生日期 (年龄)国籍毕业时间", "selector": "[data-rf-index=\"6\"]"},
+    {"index": 9, "type": "text", "placeholder": "国籍", "nearby_text": "姓名手机号码+86邮箱性别出生日期 (年龄)国籍毕业时间", "selector": "[data-rf-index=\"9\"]"}
+  ],
+  "profile": {"name": "张三", "email": "test@example.com", "country_region": "中国"},
+  "expect": {
+    "mappings": [
+      {"field": "name", "index": 3},
+      {"field": "email", "index": 6},
+      {"field": "country_region", "index": 9}
+    ]
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "cases": {
+    "2026-09-26-repeated-experience-blocks": {
+      "correct": 2,
+      "missing": 0
+    },
+    "2026-10-05-placeholder-pair-date-order-family": {
+      "correct": 2,
+      "missing": 0
+    },
+    "basic-form-happy-path": {
+      "correct": 4,
+      "missing": 0
+    },
+    "bytedance-2026-10-05-education-date-pair-dom-order": {
+      "correct": 2,
+      "missing": 0
+    },
+    "hypergryph-2026-10-05-area-code-error-text": {
+      "correct": 1,
+      "missing": 0
+    },
+    "hypergryph-2026-10-05-bare-placeholders-polluted": {
+      "correct": 3,
+      "missing": 0
+    },
+    "hypergryph-2026-10-05-education-dates-are-library-selects": {
+      "correct": 0,
+      "missing": 0
+    },
+    "hypergryph-2026-10-05-game-experience-not-description": {
+      "correct": 0,
+      "missing": 0
+    },
+    "hypergryph-2026-10-05-polluted-plain-date-box": {
+      "correct": 1,
+      "missing": 0
+    },
+    "hypergryph-2026-10-05-portfolio-netdisk-link": {
+      "correct": 1,
+      "missing": 0
+    },
+    "hypergryph-2026-10-05-school-major-not-in-year-month": {
+      "correct": 0,
+      "missing": 0
+    },
+    "hypergryph-2026-10-05-year-month-library-selects": {
+      "correct": 1,
+      "missing": 0
+    },
+    "jd-2026-10-05-generic-placeholder-nearby-label": {
+      "correct": 3,
+      "missing": 0
+    },
+    "meituan-2026-10-05-block-hint-placeholder-pair": {
+      "correct": 2,
+      "missing": 0
+    },
+    "pdd-2026-10-05-placeholder-names-two-fields": {
+      "correct": 1,
+      "missing": 0
+    },
+    "tencent-2026-09-27-four-adjacent-boxes": {
+      "correct": 4,
+      "missing": 0
+    },
+    "tencent-2026-09-27-own-text-beats-nearby": {
+      "correct": 1,
+      "missing": 0
+    },
+    "tencent-2026-09-27-referral-education-dates": {
+      "correct": 4,
+      "missing": 0
+    },
+    "tencent-2026-10-05-supplement-long-placeholder": {
+      "correct": 1,
+      "missing": 0
+    }
+  }
+}

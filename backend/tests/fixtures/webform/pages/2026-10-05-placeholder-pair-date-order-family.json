@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "id": "2026-10-05-placeholder-pair-date-order-family",
+  "site": "综合示例",
+  "captured_at": "2026-10-05",
+  "source_test": "test_webform_engine_ambiguity.test_placeholder_pair_resolved_by_date_order_family_still_matches",
+  "note": "占位符直接写全「请输入起止时间」，start/end 家族跨家族并列——由字段表顺序与 DOM 顺序裁决。",
+  "controls": [
+    {"index": 0, "type": "text", "placeholder": "请输入起止时间", "selector": "[data-rf-index=\"0\"]"},
+    {"index": 1, "type": "text", "placeholder": "请输入起止时间", "selector": "[data-rf-index=\"1\"]"}
+  ],
+  "profile": {"education_start": "2021-09", "education_end": "2025-06"},
+  "expect": {
+    "mappings": [
+      {"field": "education_start", "index": 0},
+      {"field": "education_end", "index": 1}
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "id": "jd-2026-10-05-generic-placeholder-nearby-label",
+  "site": "京东校招",
+  "captured_at": "2026-10-05",
+  "source_test": "test_webform_engine_placeholders.test_a_bare_placeholder_falls_back_to_the_leading_nearby_label",
+  "note": "京东校招简历页的姓名/手机号/邮箱三个框占位符都只是光杆「请输入」，真标签在旁文（*姓名: / *手机号码: / *电子邮箱:）。光杆占位符不含字段信息，不许当成权威——否则三个最基础的框全体『认不出』。",
+  "controls": [
+    {"index": 3, "type": "text", "label": "", "placeholder": "请输入", "aria_label": "", "name": "", "title": "", "nearby_text": "*姓名:", "block_label": "", "block_family": "", "block_index": null, "date_part_name": "", "date_order": null, "required": false, "readonly": false, "has_popup": false, "selector": "[data-rf-index=\"3\"]"},
+    {"index": 6, "type": "text", "label": "", "placeholder": "请输入", "aria_label": "", "name": "", "title": "", "nearby_text": "*手机号码:", "block_label": "", "block_family": "", "block_index": null, "date_part_name": "", "date_order": null, "required": false, "readonly": false, "has_popup": false, "selector": "[data-rf-index=\"6\"]"},
+    {"index": 7, "type": "text", "label": "", "placeholder": "请输入", "aria_label": "", "name": "", "title": "", "nearby_text": "*电子邮箱:请务必确认邮箱地址无误，避免影响后续流程", "block_label": "", "block_family": "", "block_index": null, "date_part_name": "", "date_order": null, "required": false, "readonly": false, "has_popup": false, "selector": "[data-rf-index=\"7\"]"}
+  ],
+  "profile": {"name": "张示例", "phone": "13800000000", "email": "zhang.example@example.com"},
+  "expect": {
+    "mappings": [
+      {"field": "name", "index": 3, "value": "张示例"},
+      {"field": "phone", "index": 6, "value": "13800000000"},
+      {"field": "email", "index": 7, "value": "zhang.example@example.com"}
+    ]
+  }
+}

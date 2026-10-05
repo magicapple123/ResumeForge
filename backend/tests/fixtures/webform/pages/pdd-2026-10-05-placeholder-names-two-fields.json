@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "id": "pdd-2026-10-05-placeholder-names-two-fields",
+  "site": "拼多多",
+  "captured_at": "2026-10-05",
+  "source_test": "test_webform_engine_ambiguity.test_placeholder_naming_two_fields_claims_neither",
+  "note": "占位符「请输入毕业学校专业」同时点名 school 与 major——该框谁都不认（宁可漏填），对照框照常。",
+  "controls": [
+    {"index": 0, "type": "text", "placeholder": "请输入毕业学校专业", "nearby_text": "毕业学校专业*", "selector": "[data-rf-index=\"0\"]"},
+    {"index": 1, "type": "text", "placeholder": "请输入学校名称", "nearby_text": "学校名称*", "selector": "[data-rf-index=\"1\"]"}
+  ],
+  "profile": {"school": "示例大学", "major": "计算机科学"},
+  "expect": {
+    "mappings": [{"field": "school", "index": 1}],
+    "forbidden": [{"field": "school", "index": 0}, {"field": "major", "index": 0}]
+  }
+}

@@ -3,25 +3,39 @@ from __future__ import annotations
 
 import json
 
-def _set_value_script(selector: str, value: str, *, prototype: str) -> str:
+def _set_value_script(
+    selector: str, value: str, *, prototype: str, full_events: bool = False
+) -> str:
     """给输入框赋值并触发 input/change（用原生 setter，绕开前端框架对 value 的拦截）。
 
     ``prototype`` 由调用方按控件类型给出——**这正是原先那个 bug 的根源**：类型搞错会抛
     ``Illegal invocation``，而且只有真跑 JS 才会暴露。
+
+    写值前先 ``scrollIntoView`` + ``focus``：一部分组件只在获得焦点后才把值同步进内部
+    状态，也有页面用 IntersectionObserver 判断"这个框真的被看到了"。``full_events=True``
+    （重试路径）在最后补一个 ``blur``——有些站点把校验挂在 onblur 上；happy path 不发
+    blur，它会触发站点校验提示，个别站点还会在 onblur 里清掉未通过校验的值。
     """
-    return "".join(
+    lines = [
+        "(() => { /* rf:set-value */\n",
+        f"  const el = document.querySelector({json.dumps(selector)});\n",
+        "  if (!el) { return JSON.stringify({ ok: false, reason: 'no_control' }); }\n",
+        "  el.scrollIntoView({ block: 'center', behavior: 'instant' });\n",
+        "  if (el.focus) { el.focus({ preventScroll: true }); }\n",
+        f"  const setter = Object.getOwnPropertyDescriptor({prototype}.prototype, 'value').set;\n",
+        f"  setter.call(el, {json.dumps(value)});\n",
+        "  el.dispatchEvent(new Event('input', { bubbles: true }));\n",
+        "  el.dispatchEvent(new Event('change', { bubbles: true }));\n",
+    ]
+    if full_events:
+        lines.append("  if (el.blur) { el.blur(); }\n")
+    lines.extend(
         [
-            "(() => { /* rf:set-value */\n",
-            f"  const el = document.querySelector({json.dumps(selector)});\n",
-            "  if (!el) { return JSON.stringify({ ok: false, reason: 'no_control' }); }\n",
-            f"  const setter = Object.getOwnPropertyDescriptor({prototype}.prototype, 'value').set;\n",
-            f"  setter.call(el, {json.dumps(value)});\n",
-            "  el.dispatchEvent(new Event('input', { bubbles: true }));\n",
-            "  el.dispatchEvent(new Event('change', { bubbles: true }));\n",
             "  return JSON.stringify({ ok: true, value: String(el.value) });\n",
             "})()",
         ]
     )
+    return "".join(lines)
 
 
 def _select_option_script(selector: str, option_value: str) -> str:
@@ -73,22 +87,45 @@ def _read_select_options_script(selector: str) -> str:
     )
 
 
-def _set_richtext_script(selector: str, value: str) -> str:
-    return "".join(
+def _set_richtext_script(selector: str, value: str, *, full_events: bool = False) -> str:
+    """contenteditable 富文本：写 textContent 并派发 input/change。
+
+    与文本类同样的滚入视口 + 聚焦；``change`` 此前漏发——只发 ``input`` 会让
+    "提交时读 change 才同步的编辑器"读到空值。``full_events`` 同 ``_set_value_script``。
+    """
+    lines = [
+        "(() => { /* rf:set-richtext */\n",
+        f"  const el = document.querySelector({json.dumps(selector)});\n",
+        "  if (!el) { return JSON.stringify({ ok: false, reason: 'no_control' }); }\n",
+        "  el.scrollIntoView({ block: 'center', behavior: 'instant' });\n",
+        "  if (el.focus) { el.focus({ preventScroll: true }); }\n",
+        f"  el.textContent = {json.dumps(value)};\n",
+        "  el.dispatchEvent(new Event('input', { bubbles: true }));\n",
+        "  el.dispatchEvent(new Event('change', { bubbles: true }));\n",
+    ]
+    if full_events:
+        lines.append("  if (el.blur) { el.blur(); }\n")
+    lines.extend(
         [
-            "(() => { /* rf:set-richtext */\n",
-            f"  const el = document.querySelector({json.dumps(selector)});\n",
-            "  if (!el) { return JSON.stringify({ ok: false, reason: 'no_control' }); }\n",
-            f"  el.textContent = {json.dumps(value)};\n",
-            "  el.dispatchEvent(new Event('input', { bubbles: true }));\n",
             "  return JSON.stringify({ ok: true });\n",
             "})()",
         ]
     )
+    return "".join(lines)
 
 
-def _read_back_script(selector: str) -> str:
-    """回读控件的当前值，用于填充后校验"看起来填了、其实没进去"。"""
+def _read_back_script(selector: str, *, rich: bool = False) -> str:
+    """回读控件的当前值，用于填充后校验"看起来填了、其实没进去"。
+
+    ``rich=True``（contenteditable）读 ``textContent``：富文本元素没有 ``value``
+    属性，读 ``el.value`` 恒为空串——富文本框填完会被判成 ``unverified``，
+    与真实结果无关。
+    """
+    value_expr = (
+        "String(el.textContent == null ? '' : el.textContent).trim()"
+        if rich
+        else "String(el.value == null ? '' : el.value)"
+    )
     return "".join(
         [
             "(() => { /* rf:read-back */\n",
@@ -97,7 +134,7 @@ def _read_back_script(selector: str) -> str:
             "  const selected = el.tagName.toLowerCase() === 'select' && el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null;\n",
             "  return JSON.stringify({\n",
             "    ok: true,\n",
-            "    value: String(el.value == null ? '' : el.value),\n",
+            f"    value: {value_expr},\n",
             "    display: selected ? (selected.textContent || '').trim() : '',\n",
             "    checked: el.checked === true,\n",
             "  });\n",

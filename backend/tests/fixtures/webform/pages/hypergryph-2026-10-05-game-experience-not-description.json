@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "id": "hypergryph-2026-10-05-game-experience-not-description",
+  "captured_at": "2026-10-05",
+  "site": "鹰角",
+  "source_test": "test_webform_engine_ambiguity.test_a_block_short_word_never_claims_a_control_without_its_block",
+  "note": "mokahr 的「游戏经历」大文本框：旁文只提到『描述您的游戏经历』，没有任何区块名。区块限定的短词（experience_description 的『描述』）没有区块名就不许认领——它一度被认成『实习描述（第一条）』（批量匹配里被拦下，但实时面板漏了同一条判据，两处已统一）。",
+  "controls": [
+    {"index": 21, "type": "textarea", "label": "", "placeholder": "", "aria_label": "", "name": "", "title": "", "nearby_text": "请尽可能多而全面地描述您的游戏经历，包括但不限于游戏名称、时长、成就、付费（如有） 游戏经历请尽可能多而全面地描述您的游戏经历，包括但不限于游戏名称、时长、成就、付费（如有） 游戏经历请尽可能多而全面地描述您的游戏经历，包括但不限于游戏名称、时长、成就、付费（如有） 自我描述游戏经历请尽可能多而全面地描述您的游戏经历，包括但不限于游戏名称、时长、成就、付费（如有）", "block_label": "", "block_family": "", "block_index": null, "date_part_name": "", "date_order": null, "required": false, "readonly": false, "has_popup": false, "selector": "[data-rf-index=\"21\"]"}
+  ],
+  "profile": {"experience_1_description": "示例实习描述", "summary": "示例自我评价", "hobbies": "长跑"},
+  "expect": {
+    "mappings": [],
+    "forbidden": [
+      {"field": "experience_1_description", "index": 21},
+      {"field": "summary", "index": 21}
+    ]
+  }
+}

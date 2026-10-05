@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "id": "2026-09-26-repeated-experience-blocks",
+  "site": "综合示例",
+  "captured_at": "2026-09-26",
+  "source_test": "test_webform_engine_match.test_repeated_experience_blocks_use_the_matching_record_number",
+  "note": "两段实习经历区块的「公司」框同名同占位符，按记录序号对号入座。",
+  "controls": [
+    {"index": 0, "type": "text", "placeholder": "请输入实习公司", "nearby_text": "公司*", "block_label": "实习经历-1", "block_family": "experience", "block_index": 1, "selector": "[data-rf-index=\"0\"]"},
+    {"index": 1, "type": "text", "placeholder": "请输入实习公司", "nearby_text": "公司*", "block_label": "实习经历-2", "block_family": "experience", "block_index": 2, "selector": "[data-rf-index=\"1\"]"}
+  ],
+  "profile": {"experience_1_company": "甲公司", "experience_2_company": "乙公司"},
+  "expect": {
+    "mappings": [
+      {"field": "experience_1_company", "index": 0, "value": "甲公司"},
+      {"field": "experience_2_company", "index": 1, "value": "乙公司"}
+    ]
+  }
+}

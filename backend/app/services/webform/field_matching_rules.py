@@ -72,6 +72,9 @@ FIELD_EXCLUDE_HINTS: dict[str, tuple[str, ...]] = {
     # 「所在部门意见」是反馈/评价类栏目，不是经历里的任职部门；网申页面常把两者
     # 放在同一张表里，单纯包含「所在部门」会误填。
     "experience_department": ("意见", "评价", "建议"),
+    # 日期族的电话词保护**不在这里逐字段登记**：签名级匹配（含旁文）会把被整表
+    # 标签污染的普通日期框一并漏掉（2026-10-05 实测：污染页上的「毕业时间」文本框
+    # 完全不填）。已改为只看控件自述的跨族否决——见 ``engine/families.py``。
 }
 
 # 永不自动填的控件：签名命中任一即拦下。与"遇到验证码不绕过"同一条纪律。
@@ -175,6 +178,11 @@ OPTION_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 # 字段更"适配"的控件类型（命中加权重分，避免把"姓名"填进下拉框）。
+#
+# 「只填不点」之后，只含 select / radio / date / month 的那几条**已经不起作用**——那些
+# 控件在 `engine.skip_reason` 就被挡下、根本进不了候选（例如 gender）。留着是因为它们
+# 准确描述了这个字段在页面上的样子；带 "text" 的那几条（birth_date、education_* 等）
+# 仍是活的判据。
 FIELD_PREFERRED_TYPES: dict[str, tuple[str, ...]] = {
     "summary": ("textarea", "richtext"),
     "family_info": ("textarea", "richtext"),

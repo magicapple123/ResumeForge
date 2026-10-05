@@ -71,7 +71,16 @@ from ..repeated_fields import (
     split_repeated_key as split_repeated_key,
 )
 from .core import FormEngine
-from .evidence import _longest_synonym as _longest_synonym, _states_its_field as _states_its_field, evidence_key as evidence_key
+from .evidence import (
+    _longest_synonym as _longest_synonym,
+    _states_its_field as _states_its_field,
+    block_hint_satisfied as block_hint_satisfied,
+    competing_fields as competing_fields,
+    evidence_key as evidence_key,
+    excluded_by_hints as excluded_by_hints,
+    has_ambiguous_field_evidence as has_ambiguous_field_evidence,
+)
+from .families import foreign_marker as foreign_marker
 from .model import (
     CONTROL_TYPES,
     ApplyOutcome,

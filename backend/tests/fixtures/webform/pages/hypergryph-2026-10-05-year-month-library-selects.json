@@ -1,0 +1,56 @@
+{
+ "version": 1,
+ "id": "hypergryph-2026-10-05-year-month-library-selects",
+ "site": "鹰角",
+ "captured_at": "2026-10-05",
+ "source_test": "test_webform_engine_dates.test_polluted_year_month_text_components_split_one_profile_date",
+ "note": "毕业时间的年/月看着像文本框，其实是组件库下拉（MokaHR 用 Semi Design：`<div class=\"sd-Dropdown-container\"><label class=\"sd-Select-container\"><input type=\"text\">`，input 上没有任何 aria 标注）——**只填不点，一律不自动填**，靠容器类名认出来。同一页的手机号框照常填：旁文里的整表标签串（含「手机号码」）不得把年/月组件误杀成电话类。（2026-10-05 复核真实 DOM 后改正：早先按文本框采集过，那是快照脚本还认不出组件外壳时的样子。）",
+ "controls": [
+  {
+   "index": 10,
+   "type": "text",
+   "placeholder": "年",
+   "nearby_text": "姓名手机号码+86邮箱性别毕业时间*",
+   "selector": "[data-rf-index=\"10\"]",
+   "has_popup": true
+  },
+  {
+   "index": 11,
+   "type": "text",
+   "placeholder": "月",
+   "nearby_text": "姓名手机号码+86邮箱性别毕业时间*",
+   "selector": "[data-rf-index=\"11\"]",
+   "has_popup": true
+  },
+  {
+   "index": 5,
+   "type": "text",
+   "placeholder": "请输入手机号",
+   "nearby_text": "手机号码（含区号）*",
+   "selector": "[data-rf-index=\"5\"]"
+  }
+ ],
+ "profile": {
+  "education_end": "2023-06",
+  "phone": "13500000000"
+ },
+ "expect": {
+  "mappings": [
+   {
+    "field": "phone",
+    "index": 5,
+    "value": "13500000000"
+   }
+  ],
+  "forbidden": [
+   {
+    "field": "education_end",
+    "index": 10
+   },
+   {
+    "field": "education_end",
+    "index": 11
+   }
+  ]
+ }
+}

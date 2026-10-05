@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "id": "readback-error-recovers-on-probe",
+  "note": "回读通道抖了一下（抛异常）：重试前先探一眼页面，值其实已经写进去了 → 直接判成功，不再重写一遍。",
+  "controls": [
+    {"index": 0, "type": "text", "label": "姓名", "placeholder": "请输入姓名", "selector": "[data-rf-index=\"0\"]"}
+  ],
+  "profile": {"name": "张三"},
+  "script": [
+    {"needle": "rf:set-value", "reply": "{\"ok\": true, \"value\": \"张三\"}"},
+    {"needle": "rf:read-back", "reply": {"raise": "RuntimeError", "message": "client hiccup"}},
+    {"needle": "rf:read-back", "reply": "{\"ok\": true, \"value\": \"张三\", \"checked\": false}"}
+  ],
+  "expect": {
+    "outcomes": [{"field": "name", "status": "filled", "attempts": 1}]
+  }
+}

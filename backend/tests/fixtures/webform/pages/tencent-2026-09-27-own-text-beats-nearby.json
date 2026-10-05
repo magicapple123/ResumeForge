@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "id": "tencent-2026-09-27-own-text-beats-nearby",
+  "site": "腾讯校招",
+  "captured_at": "2026-09-27",
+  "source_test": "test_webform_engine_ambiguity.test_own_text_beats_surrounding_text",
+  "note": "实验室/研究方向两框共享同段旁文；占位符自述必须压过旁文，研究方向落在自己的框。",
+  "controls": [
+    {"index": 0, "type": "text", "placeholder": "请输入实验室", "nearby_text": "导师* 实验室* 研究方向*", "selector": "[data-rf-index=\"0\"]"},
+    {"index": 1, "type": "text", "placeholder": "请输入研究方向", "nearby_text": "导师* 实验室* 研究方向*", "selector": "[data-rf-index=\"1\"]"}
+  ],
+  "profile": {"research_direction": "推荐系统"},
+  "expect": {
+    "mappings": [{"field": "research_direction", "index": 1}],
+    "forbidden": [{"field": "research_direction", "index": 0}]
+  }
+}

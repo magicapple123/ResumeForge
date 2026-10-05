@@ -73,6 +73,37 @@ def test_fill_reports_a_conflict_when_another_fill_is_running():
     assert is_filling() is False
 
 
+def test_a_value_reverted_after_the_fill_is_downgraded():
+    """写入后组件把值还原了：收尾复读把 filled 降级为未验证。
+
+    2026-10-05 字节页实测：意向城市框当场回读有值（filled），几秒后组件自己重渲染
+    把值清空——用户看到"填好了"，其实没有。整页填充收尾复读一次，如实降级。
+    """
+    from webform_engine_support import ScriptedCdpClient
+
+    snapshot = _snapshot(
+        [{"index": 0, "type": "text", "label": "姓名", "selector": '[data-rf-index="0"]'}]
+    )
+    client = ScriptedCdpClient(
+        [
+            {"needle": "rf:set-value", "reply": '{"ok": true, "value": "张示例"}'},
+            {"needle": "rf:read-back", "reply": '{"ok": true, "value": "张示例", "checked": false}'},
+            {"needle": "rf:read-back", "reply": '{"ok": true, "value": "", "checked": false}'},
+        ]
+    )
+
+    outcomes = apply_fill(
+        client,
+        snapshot,
+        [FillSelection(index=0, field="name", value="张示例")],
+        settle_recheck=0.0,
+    )
+
+    assert [outcome.status for outcome in outcomes] == ["unverified"]
+    assert "还原" in outcomes[0].detail
+    client.assert_finished()
+
+
 def test_fill_writes_and_verifies():
     snapshot = _snapshot(
         [{"index": 0, "type": "text", "label": "姓名", "selector": '[data-rf-index="0"]'}]

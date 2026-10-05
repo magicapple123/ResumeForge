@@ -1,0 +1,83 @@
+{
+ "version": 1,
+ "id": "hypergryph-2026-10-05-school-major-not-in-year-month",
+ "site": "鹰角",
+ "captured_at": "2026-10-05",
+ "source_test": "test_webform_engine_ambiguity.test_school_and_major_values_never_enter_year_month_components",
+ "note": "学校名称、专业名称与年/月一样都是组件库下拉（Semi Design 的 Select 外壳）——只填不点，一个都不自动填；这条同时守着「学校/专业名不得被塞进年框月框」那套槽位判据：即使有人把下拉的判定放宽，槽位也不许把文本值塞进年/月组件。",
+ "controls": [
+  {
+   "index": 14,
+   "type": "text",
+   "placeholder": "年",
+   "nearby_text": "就读时间-学校名称专业名称学历",
+   "selector": "[data-rf-index=\"14\"]",
+   "has_popup": true
+  },
+  {
+   "index": 15,
+   "type": "text",
+   "placeholder": "月",
+   "nearby_text": "就读时间-学校名称专业名称学历",
+   "selector": "[data-rf-index=\"15\"]",
+   "has_popup": true
+  },
+  {
+   "index": 18,
+   "type": "text",
+   "placeholder": "请输入就读学校",
+   "nearby_text": "学校名称*",
+   "selector": "[data-rf-index=\"18\"]",
+   "has_popup": true
+  },
+  {
+   "index": 19,
+   "type": "text",
+   "placeholder": "请输入专业名称",
+   "nearby_text": "专业名称*",
+   "selector": "[data-rf-index=\"19\"]",
+   "has_popup": true
+  }
+ ],
+ "profile": {
+  "school": "示例大学",
+  "major": "市场营销"
+ },
+ "expect": {
+  "mappings": [],
+  "forbidden": [
+   {
+    "field": "major",
+    "index": 14
+   },
+   {
+    "field": "major",
+    "index": 15
+   },
+   {
+    "field": "major",
+    "index": 18
+   },
+   {
+    "field": "major",
+    "index": 19
+   },
+   {
+    "field": "school",
+    "index": 14
+   },
+   {
+    "field": "school",
+    "index": 15
+   },
+   {
+    "field": "school",
+    "index": 18
+   },
+   {
+    "field": "school",
+    "index": 19
+   }
+  ]
+ }
+}

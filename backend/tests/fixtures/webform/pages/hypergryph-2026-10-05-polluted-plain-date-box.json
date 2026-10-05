@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "hypergryph-2026-10-05-polluted-plain-date-box",
+  "site": "鹰角",
+  "captured_at": "2026-10-05",
+  "source_test": "test_webform_engine_families.test_polluted_nearby_text_does_not_veto_a_plain_date_control",
+  "note": "同一 mokahr 污染布局下的普通「毕业时间」文本框（不是年月组件）：签名级电话负向词曾把它整体漏掉；跨族否决只看控件自述后必须照常填。",
+  "controls": [
+    {"index": 10, "type": "text", "placeholder": "毕业时间", "nearby_text": "姓名手机号码+86邮箱性别毕业时间*", "selector": "[data-rf-index=\"10\"]"}
+  ],
+  "profile": {"education_end": "2023-06"},
+  "expect": {
+    "mappings": [{"field": "education_end", "index": 10, "value": "2023-06"}]
+  }
+}

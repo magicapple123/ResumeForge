@@ -106,14 +106,8 @@ def test_recognized_but_empty_does_not_waste_a_call():
         session.stop()
 
 
-def test_a_confidently_wrong_rule_match_is_not_rechecked_by_the_model():
-    """**已知限制**：规则"自信但认错"时 AI 不会来纠正。
-
-    「导师姓名」会被同义词「姓名」抢走，于是程序自信地建议填**本人**姓名。这不是本次引入
-    的行为——AI 只在**规则认不出**时出手，而这类"认得出但认错"要靠「换个资料…」自己挑。
-
-    把它写成用例是为了把现状摆在明处：哪天改了触发策略，这条会红，改的人就会看到这条权衡。
-    """
+def test_ambiguous_name_context_is_not_presented_as_a_name_value():
+    """多个字段候选时宁可让用户挑，也不能把本人姓名静默填进别的栏目。"""
     provider = ScriptedProvider()
     client = FakeLiveClient()
     session = _ai_session(client, provider, data={"name": "张三"})
@@ -123,8 +117,9 @@ def test_a_confidently_wrong_rule_match_is_not_rechecked_by_the_model():
         session._tick()
 
         assert provider.calls == 0
-        assert client.panels[-1]["status"] == "matched"
-        assert client.panels[-1]["value"] == "张三", "规则确实自信地填了本人姓名"
+        assert client.panels[-1]["status"] == "unmatched"
+        assert client.panels[-1]["value"] == ""
+        assert "未自动猜测" in client.panels[-1]["note"]
     finally:
         session.stop()
 

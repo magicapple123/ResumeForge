@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "id": "hypergryph-2026-10-05-portfolio-netdisk-link",
+  "site": "鹰角",
+  "captured_at": "2026-10-05",
+  "source_test": "test_webform_engine_controls.test_a_parenthetical_password_hint_does_not_block_the_control_itself",
+  "note": "作品网盘链接框：占位符里的『（如有密码，用分号分隔）』是提示，不是控件名——安全词判定先去掉括号内容，才不会被『密码』误拦成永不填写；『网盘链接』已收进 portfolio_link 词表。",
+  "controls": [
+    {"index": 12, "type": "text", "label": "", "placeholder": "如作品无法上传，请提供作品网盘链接（如有密码，用分号分隔)", "aria_label": "", "name": "", "title": "", "nearby_text": "如作品无法上传，请提供作品网盘链接（如有密码，用分号分隔) 姓名手机号码+86邮箱性别出生日期 (年龄)国籍毕业时间如作品无法上传，请提供作品网盘链接（如有密码，用分号分隔)是否服从岗位调剂", "block_label": "", "block_family": "", "block_index": null, "date_part_name": "", "date_order": null, "required": false, "readonly": false, "has_popup": false, "selector": "[data-rf-index=\"12\"]"}
+  ],
+  "profile": {"portfolio_1_link": "https://example.com/portfolio/campaign-report"},
+  "expect": {
+    "mappings": [
+      {"field": "portfolio_1_link", "index": 12, "value": "https://example.com/portfolio/campaign-report"}
+    ]
+  }
+}

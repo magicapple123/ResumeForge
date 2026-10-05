@@ -1,14 +1,23 @@
 from app.services.webform import live_autofill
 from app.services.webform.engine import ApplyOutcome, Control, FormEngine
+from app.services.webform.service import build_preview, default_selections
+from app.services.webform.session import Snapshot
 
 
-def _control(index: int, label: str, *, value: str = "") -> Control:
+def _control(
+    index: int,
+    label: str,
+    *,
+    value: str = "",
+    nearby_text: str = "",
+) -> Control:
     return Control(
         index=index,
         type="text",
         label=label,
         selector=f'[data-rf-index="{index}"]',
         value=value,
+        nearby_text=nearby_text,
     )
 
 
@@ -16,7 +25,7 @@ def _run_with_controls(monkeypatch, controls, *, stop=None):
     writes = []
     monkeypatch.setattr(FormEngine, "read_controls", lambda self, _client: controls)
 
-    def apply(_client, _snapshot, selections, *, engine):
+    def apply(_client, _snapshot, selections, *, engine, **_kwargs):
         selections = list(selections)
         writes.extend(selections)
         return [ApplyOutcome(selection.index, selection.field, "filled") for selection in selections]
@@ -73,3 +82,35 @@ def test_current_page_fill_reports_an_empty_page_without_running_a_write(monkeyp
     assert result.total == result.completed == result.filled == result.failed == 0
     assert progress[0].state == progress[-1].state == "done"
     assert progress[0].message == "当前页面没有可自动填写的空字段"
+
+
+def test_current_page_fill_uses_the_main_page_date_components(monkeypatch):
+    controls = [
+        _control(0, "年*", nearby_text="教育经历 毕业时间"),
+        _control(1, "月*", nearby_text="教育经历 毕业时间"),
+    ]
+    writes = []
+    monkeypatch.setattr(FormEngine, "read_controls", lambda self, _client: controls)
+
+    def apply(_client, _snapshot, selections, *, engine, **_kwargs):
+        selections = list(selections)
+        writes.extend(selections)
+        return [ApplyOutcome(selection.index, selection.field, "filled") for selection in selections]
+
+    monkeypatch.setattr(live_autofill, "apply_fill", apply)
+    result = live_autofill.fill_current_page(
+        object(), {"education_end": "2023-06"}, delay_seconds=0
+    )
+
+    main_snapshot = Snapshot(id="main", controls=controls)
+    main_report = build_preview(main_snapshot, {"education_end": "2023-06"})
+    main_values = [
+        (selection.field, selection.value)
+        for selection in default_selections(main_report)
+    ]
+
+    assert [(item.field, item.value) for item in writes] == main_values == [
+        ("education_end", "2023"),
+        ("education_end", "06"),
+    ]
+    assert result.filled == 2
