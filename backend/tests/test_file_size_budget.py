@@ -37,6 +37,16 @@ _TEST_EXEMPTIONS: dict[str, str] = {
     # 内聚于同一页面生命周期（通用简历卡/资料分页/折叠/网申资料），无天然缝。
     # 触发条件：>800 行或新增第三个大编辑域（届时拆 ProfilePage.webform.test.tsx）。
     "frontend/src/pages/ProfilePage.test.tsx": "刚过线 44 行，mock 骨架复制成本大于收益",
+    # 2026-10-05 网申自定义字段修复批新增 3 条别名守卫（+58 行）后 515 行，超线 15 行；
+    # 用例与既有别名边界测试共置同一 db_session fixture 与资料构造辅助，拆出文件需整份
+    # 复制这套脚手架，重复成本大于收益。
+    # 触发条件：>600 行或下批再增用例（届时拆 test_webform_data_alias.py）。
+    "backend/tests/test_webform_data.py": "过线 15 行，fixture 脚手架复制成本大于收益",
+    # 2026-10-05 网申自定义字段修复批新增 4 条逐框建议守卫（+63 行）后 527 行，超线 27 行；
+    # 本文件还被 test_file_size_budget 之外的哨兵用例以模块命名空间 monkeypatch 钉死
+    # （见 _EXEMPTIONS 中 live.py 条目说明），拆文件会分散哨兵落点。
+    # 触发条件：>600 行或下批再增用例（届时拆 test_webform_live_custom.py）。
+    "backend/tests/test_webform_live.py": "过线 27 行，monkeypatch 哨兵与脚手架耦合",
 }
 
 # 书面豁免清单（路径相对仓库根；理由必须具体，禁止「暂缓拆分」式空话）

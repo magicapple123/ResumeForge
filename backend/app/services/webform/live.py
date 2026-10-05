@@ -585,14 +585,20 @@ class LiveSession(LiveRememberMixin):
         自定义字段没有内置同义词表，不能把模糊相似当成自动填写依据；字段重命名后，
         目标浏览器拿到的新标签会在下一次聚焦时立即参与这条精确匹配。
         """
-        signature = self._normalize_label(
-            " ".join(
-                part
-                for part in (control.label, control.placeholder, control.aria_label, control.name)
-                if part
+        # 逐属性精确匹配：label / placeholder / aria_label / name 各自单独归一，
+        # 任一属性与某自定义字段标签完全相等即命中。拼接整串归一会被控件 name
+        # 属性（如 Google 表单的 entry.123456）污染，导致同名也匹配不上。
+        signatures = {
+            normalized
+            for normalized in (
+                self._normalize_label(control.label),
+                self._normalize_label(control.placeholder),
+                self._normalize_label(control.aria_label),
+                self._normalize_label(control.name),
             )
-        )
-        if not signature:
+            if normalized
+        }
+        if not signatures:
             return None
         candidates = [*self._memory_targets, *self._catalog]
         matches = []
@@ -603,7 +609,12 @@ class LiveSession(LiveRememberMixin):
                 continue
             key = str(target.get("field_key") or target.get("key") or "")
             label = str(target.get("label") or "")
-            if not key.startswith("CUSTOM_") or self._normalize_label(label) != signature:
+            normalized_label = self._normalize_label(label)
+            if (
+                not key.startswith("CUSTOM_")
+                or not normalized_label
+                or normalized_label not in signatures
+            ):
                 continue
             if key in seen:
                 continue

@@ -455,3 +455,61 @@ def test_live_form_data_does_not_alias_ambiguous_custom_labels(db_session):
     db_session.commit()
 
     assert "referral_code" not in build_live_form_data(db_session)
+
+
+def test_live_form_data_maps_custom_label_when_the_field_label_is_also_a_synonym(db_session):
+    """**回归守卫**：`salary` 的 label「期望薪资」同时也在自己的同义词表里。
+
+    同一字段会对同一标签贡献两次，唯一性判定若不按字段去重，就会把唯一命中
+    误判成歧义——别名支线对这类字段（全部 source="extra" 字段都是）全部失效。
+    """
+    db_session.add(
+        WebFormProfileEntry(
+            field_key="CUSTOM_期望薪资",
+            value="25k",
+            label="期望薪资",
+        )
+    )
+    db_session.commit()
+
+    live_data = build_live_form_data(db_session)
+
+    assert live_data["salary"] == "25k"
+
+
+def test_live_form_data_does_not_alias_when_two_custom_fields_share_a_standard_label(db_session):
+    """同名（归一后）的两条自定义字段仍是歧义，不映射到标准字段。"""
+    db_session.add_all(
+        [
+            WebFormProfileEntry(
+                field_key="CUSTOM_salary_one",
+                value="25k",
+                label="期望薪资",
+            ),
+            WebFormProfileEntry(
+                field_key="CUSTOM_salary_two",
+                value="30k",
+                label="期望薪资",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    assert "salary" not in build_live_form_data(db_session)
+
+
+def test_live_form_data_keeps_the_preset_standard_value_over_a_same_named_custom_field(db_session):
+    """已有规范字段值优先——即使自定义标签与标准标签精确同名也不覆盖。"""
+    db_session.add_all(
+        [
+            WebFormProfileEntry(field_key="salary", value="30k"),
+            WebFormProfileEntry(
+                field_key="CUSTOM_期望薪资",
+                value="25k",
+                label="期望薪资",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    assert build_live_form_data(db_session)["salary"] == "30k"

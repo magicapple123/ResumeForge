@@ -462,3 +462,66 @@ def test_a_page_that_never_reports_installed_is_not_reinstalled_every_tick():
         )
     finally:
         session.stop()
+
+
+# ===== 自定义字段的精确同名建议（逐属性匹配）=====
+
+
+def _custom_field_session(data: dict, catalog: list[dict]) -> LiveSession:
+    return LiveSession(FakeLiveClient(), data, catalog)
+
+
+def test_custom_field_suggestion_hits_when_the_control_has_a_name_attribute():
+    """**回归守卫**：真实网站的控件几乎都带 name（如 Google 表单的 entry.123456）。
+
+    曾经把 label/placeholder/aria_label/name 拼成一串再归一——name 一非空，
+    拼接结果就永远不等于自定义标签的归一结果，同名建议全部失效。
+    """
+    catalog = [{"group": "自定义", "label": "导师姓名", "value": "王教授", "key": "CUSTOM_导师姓名"}]
+    session = _custom_field_session({"CUSTOM_导师姓名": "王教授"}, catalog)
+    control = LiveSession._build_control(raw_control(label="导师姓名", name="entry.123456"))
+
+    suggestion = session._suggest_custom_field(control, {"CUSTOM_导师姓名": "王教授"})
+
+    assert suggestion is not None
+    assert suggestion.status == "matched"
+    assert suggestion.field == "CUSTOM_导师姓名"
+    assert suggestion.value == "王教授"
+
+
+def test_custom_field_suggestion_hits_when_the_name_is_the_label_itself():
+    """name 本身等于标签也要命中（还是同一个字段，不是第二个信号源）。"""
+    catalog = [{"group": "自定义", "label": "导师姓名", "value": "王教授", "key": "CUSTOM_导师姓名"}]
+    session = _custom_field_session({"CUSTOM_导师姓名": "王教授"}, catalog)
+    control = LiveSession._build_control(raw_control(label="导师姓名", name="导师姓名"))
+
+    suggestion = session._suggest_custom_field(control, {"CUSTOM_导师姓名": "王教授"})
+
+    assert suggestion is not None
+    assert suggestion.status == "matched"
+    assert suggestion.field == "CUSTOM_导师姓名"
+
+
+def test_custom_field_suggestion_gives_up_when_two_custom_fields_share_the_label():
+    """同名（归一后）的自定义字段有两条时不猜。"""
+    catalog = [
+        {"group": "自定义", "label": "导师姓名", "value": "王教授", "key": "CUSTOM_导师一"},
+        {"group": "自定义", "label": "导师姓名", "value": "李教授", "key": "CUSTOM_导师二"},
+    ]
+    session = _custom_field_session({"CUSTOM_导师一": "王教授", "CUSTOM_导师二": "李教授"}, catalog)
+    control = LiveSession._build_control(raw_control(label="导师姓名"))
+
+    assert session._suggest_custom_field(control, session._data) is None
+
+
+def test_custom_field_suggestion_reports_unmatched_when_the_custom_field_has_no_value():
+    """命中了字段但资料里没有值 → unmatched（面板留「换个资料…」的出口）。"""
+    catalog = [{"group": "自定义", "label": "导师姓名", "value": "", "key": "CUSTOM_导师姓名"}]
+    session = _custom_field_session({}, catalog)
+    control = LiveSession._build_control(raw_control(label="导师姓名"))
+
+    suggestion = session._suggest_custom_field(control, {})
+
+    assert suggestion is not None
+    assert suggestion.status == "unmatched"
+    assert suggestion.field == "CUSTOM_导师姓名"
