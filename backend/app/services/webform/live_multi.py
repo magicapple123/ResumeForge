@@ -11,11 +11,16 @@ from typing import Any, Callable
 
 from ..browser.cdp_client import CdpClient
 from ._base import WebFormConflict
-from .live import LiveSession
+from .live import BROWSER_CLOSED_REASON, LiveSession
 from .live_control import LIVE_CONTROL_STATE_SCRIPT
 from . import live_targets
 
 logger = logging.getLogger(__name__)
+
+# 标签页同步连续失败的阈值。loader 走的就是浏览器调试端口（HTTP）——它失败本身就是
+# 比页面级 WebSocket 更强的信号（整条链路只有浏览器级端点，不涉及任何具体标签页），
+# 连续两次（约 1.6 秒）即可确认浏览器已被关掉，自动结束整个会话。
+BROWSER_CLOSED_SYNC_FAILURES = 2
 
 
 class MultiLiveSession:
@@ -57,6 +62,7 @@ class MultiLiveSession:
         self._sessions: dict[str, LiveSession] = {}
         self._clients: dict[str, CdpClient] = {}
         self._control_sequences: dict[str, int] = {}
+        self._sync_failures = 0
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -71,6 +77,8 @@ class MultiLiveSession:
             "alternatives": [],
             "filled": 0,
             "remember_pending": None,
+            # 与 LiveSession.state 同名同义：browser_closed = 浏览器被关闭后自动结束。
+            "stop_reason": "",
         }
 
     def _new_session(self, client: CdpClient) -> LiveSession:
@@ -108,8 +116,17 @@ class MultiLiveSession:
         try:
             loaded = self._target_clients_loader()
         except Exception as error:  # noqa: BLE001 - 浏览器短暂不可用时保留现有页面
+            self._sync_failures += 1
+            if self._sync_failures >= BROWSER_CLOSED_SYNC_FAILURES:
+                # loader 走的是浏览器调试端口：连续失败即浏览器已被关掉。自动结束整个
+                # 会话（各标签页会话随 stop 一并收掉），别让状态永远停在「运行中」。
+                logger.info("浏览器已关闭，实时填表会话已自动结束")
+                self.state["stop_reason"] = BROWSER_CLOSED_REASON
+                self.stop()
+                return
             logger.warning("网申填表：同步多个标签页失败：%s", error)
             return
+        self._sync_failures = 0
 
         seen: set[str] = set()
         for index, item in enumerate(loaded):
@@ -196,15 +213,20 @@ class MultiLiveSession:
         if self._thread is not None and self._thread.is_alive():
             raise WebFormConflict("点击填表模式已经在运行")
         self._stop.clear()
+        self._sync_failures = 0
         self._ensure_targets()
+        # running 先落状态再开线程：自动结束可能跑得比这行赋值还快（浏览器在启动的
+        # 同一瞬间就被关掉），后写会把它覆盖回 True，会话就永远显示「运行中」。
+        self.state["running"] = True
+        self.state["stop_reason"] = ""
         self._thread = threading.Thread(target=self._loop, name="webform-live-tabs", daemon=True)
         self._thread.start()
-        self.state["running"] = True
 
     def stop(self) -> None:
         self._stop.set()
         thread, self._thread = self._thread, None
-        if thread is not None:
+        # 自动结束跑在同步线程自己身上，join 自己会抛 RuntimeError——跳过。
+        if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=2.0)
         with self._lock:
             sessions = list(self._sessions.values())
@@ -283,6 +305,12 @@ class MultiLiveSession:
     def _active_state(self) -> dict[str, Any]:
         with self._lock:
             states = [dict(session.state) for session in self._sessions.values()]
+        if not states:
+            # 标签页会话已经全部收掉（浏览器被关掉后的自动结束走这里）：外层状态是
+            # 唯一还留着结束原因的地方，别让它被空列表冲掉。
+            result = dict(self.state)
+            result["running"] = False
+            return result
         active = next(
             (
                 item

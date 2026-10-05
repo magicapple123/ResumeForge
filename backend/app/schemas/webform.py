@@ -200,6 +200,9 @@ class WebFormLiveOut(BaseModel):
     filled: int = 0
     # 点「记住这条」后不直接覆盖，先让用户选目标。
     remember_pending: WebFormRememberPendingOut | None = None
+    # 会话结束原因：空串 = 正常；browser_closed = 浏览器被关闭后自动结束（界面给中性
+    # 提示，不按故障处理）。
+    stop_reason: str = ""
 
 
 class WebFormMemoryTargetOut(BaseModel):

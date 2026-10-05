@@ -90,6 +90,12 @@ export function LiveModeCard({
             {liveEnabled ? `本次已填 ${live.filled} 个` : "悬浮球仍在浏览器中，可随时重新开启"}
           </Typography.Text>
         </Space>
+      ) : live?.stop_reason === "browser_closed" ? (
+        // 浏览器被关掉后本次填写自动结束：这是正常流程，不是故障——沿用结束态的展示
+        // 路径给一条中性说明，不弹错误样式。
+        <Typography.Text type="secondary">
+          浏览器已关闭，本次填写已自动结束。重新打开浏览器后会再次自动开启。
+        </Typography.Text>
       ) : (
         <Typography.Text type="secondary">未开启</Typography.Text>
       )}
