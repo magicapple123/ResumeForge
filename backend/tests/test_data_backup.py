@@ -6,6 +6,7 @@
 import json
 import sqlite3
 import zipfile
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 import pytest
@@ -15,13 +16,15 @@ from app.models.job import Job
 from app.models.setting import LLMConfigRecord
 from app.schemas.setting import LLMConfig
 from app.services.data_backup import (
-    BACKUP_FORMAT_VERSION,
+    BACKUP_FORMAT_MULTI_DATASET,
+    BACKUP_FORMAT_WITH_KEYS,
     DATABASE_MEMBER,
     MANIFEST_MEMBER,
     BackupError,
     ExtraDatabase,
     build_manifest,
     create_backup_archive,
+    database_path,
     inspect_archive,
 )
 from app.services.settings_service import get_llm_config, save_llm_config
@@ -46,7 +49,7 @@ def _manifest(archive_path: Path) -> dict:
 def _config_api_key(archive_path: Path, tmp_path: Path) -> str:
     extracted = tmp_path / "read-config.db"
     extracted.write_bytes(_database_bytes(archive_path))
-    with sqlite3.connect(extracted) as connection:
+    with _tweaked_sqlite(extracted) as connection:
         row = connection.execute(
             "SELECT value FROM app_setting WHERE key = 'llm_config'"
         ).fetchone()
@@ -57,13 +60,30 @@ def _export(tmp_path: Path) -> Path:
     return create_backup_archive(engine, tmp_path / "staging")
 
 
+@contextmanager
+def _tweaked_sqlite(database: Path):
+    """打开测试库做改动，退出时提交、checkpoint 并**真正关闭**连接。
+
+    备份快照继承生产库的 WAL 文件头（journal_mode=WAL 持久化在文件里），而 WAL
+    模式下 ``with sqlite3.connect(...)`` 的语义只是提交不关闭——未 checkpoint 的
+    改动仍留在 ``-wal`` 文件里，随后裸读 ``.db`` 字节做篡改会拿到旧内容。
+    """
+    connection = sqlite3.connect(database)
+    try:
+        with connection:
+            yield connection
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        connection.close()
+
+
 def _set_revision(database: Path, revision: str) -> None:
     """给测试库补上 ``alembic_version`` 并指定版本。
 
     测试库是 ``create_all`` 建出来的，没有这张表；而真实导出物里它是存在的，伪造
     旧备份时必须补上，否则"版本"这个维度根本没参与校验。
     """
-    with sqlite3.connect(database) as connection:
+    with _tweaked_sqlite(database) as connection:
         connection.execute(
             "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"
         )
@@ -76,6 +96,20 @@ def _settings_with_key(session, api_key: str = SECRET) -> None:
         session,
         LLMConfig(base_url="https://api.example.com/v1", api_key=api_key, model="test-model"),
     )
+
+
+def _stored_llm_api_key() -> str:
+    """读测试库里 ``llm_config`` 中 Key 的**存储原值**（Windows 上是 DPAPI 密文）。
+
+    勾选"包含 API Key"的导出随包带走的就是这个原值，而不是解密后的明文——按它断言
+    有无，在加密与非加密平台上都成立。
+    """
+    database = database_path(engine)
+    with closing(sqlite3.connect(f"{database.as_uri()}?mode=ro", uri=True)) as connection:
+        row = connection.execute(
+            "SELECT value FROM app_setting WHERE key = 'llm_config'"
+        ).fetchone()
+    return "" if row is None else json.loads(row[0]).get("api_key", "")
 
 
 def test_export_excludes_the_saved_api_key(db_session, tmp_path):
@@ -116,6 +150,28 @@ def test_export_blanks_a_masked_record_reference(db_session, tmp_path):
     assert _config_api_key(archive, tmp_path) == ""
 
 
+def test_export_keeps_api_keys_when_the_user_opts_in(db_session, tmp_path):
+    """显式勾选"包含 API Key"时，密钥按**存储原值**随包走，格式号升到 3。
+
+    带走的是存储原值（Windows 上是 DPAPI 密文，绑定当前用户与机器），不是解密后的
+    明文——备份包是用户可能长期保存或转发的东西，导出不该新造出一份明文密钥。
+    """
+    _settings_with_key(db_session)
+    archive = create_backup_archive(engine, tmp_path / "staging-keys", include_api_keys=True)
+
+    stored = _stored_llm_api_key()
+    assert stored
+    assert stored.encode() in _database_bytes(archive)
+    manifest = _manifest(archive)
+    assert manifest["api_key_included"] is True
+    assert manifest["format"] == BACKUP_FORMAT_WITH_KEYS
+
+    # 同一份库，默认导出仍然剥离：选择权在用户，默认安全不变。
+    default = _export(tmp_path)
+    assert stored.encode() not in _database_bytes(default)
+    assert _manifest(default)["api_key_included"] is False
+
+
 def test_export_writes_a_manifest_describing_the_data(db_session, tmp_path):
     db_session.add(Job(title="后端开发", description="职责", requirements="要求"))
     db_session.commit()
@@ -133,7 +189,7 @@ def test_export_writes_a_manifest_describing_the_data(db_session, tmp_path):
 
 
 def test_manifest_marks_the_format_when_datasets_ride_along(tmp_path):
-    """带上其余数据集时必须升到当前格式号。
+    """带上其余数据集时必须升到多数据集格式（2）。
 
     格式号是**给老版本看的信号**：它读不懂 ``datasets/`` 这一段，若还按格式 1 放行，用户会
     以为"恢复成功"，实际那几份数据集根本没被恢复——而这类故障通常很久以后才发现。
@@ -148,9 +204,31 @@ def test_manifest_marks_the_format_when_datasets_ride_along(tmp_path):
         ],
     )
 
-    assert manifest["format"] == BACKUP_FORMAT_VERSION
+    assert manifest["format"] == BACKUP_FORMAT_MULTI_DATASET
     assert manifest["datasets"][0]["name"] == "校招线"
     assert manifest["datasets"][0]["file"] == f"datasets/{'a' * 16}.db"
+
+
+def test_manifest_marks_the_format_when_keys_ride_along(tmp_path):
+    """勾选包含 API Key 的包格式号必须是 3：不认识这个选项的老版本必须明确拒收。
+
+    含密钥的优先级高于"带其余数据集"——两者同时出现时，老版本无论如何都该拿到
+    "请先升级"的信号，而不是按自己读得懂的那部分误处理。
+    """
+    extra = tmp_path / "extra.db"
+    extra.write_bytes(b"")
+
+    manifest = build_manifest(
+        engine,
+        datasets=[
+            ExtraDatabase(dataset_id="a" * 16, name="校招线", source=extra).manifest_entry(1)
+        ],
+        api_key_included=True,
+    )
+
+    assert manifest["format"] == BACKUP_FORMAT_WITH_KEYS
+    assert manifest["api_key_included"] is True
+    assert manifest["datasets"][0]["name"] == "校招线"
 
 
 def test_inspect_rejects_a_payload_that_is_not_a_zip(tmp_path):
@@ -170,20 +248,36 @@ def test_inspect_rejects_an_archive_without_a_manifest(db_session, tmp_path):
         inspect_archive(stripped, engine, tmp_path / "staging")
 
 
-def test_inspect_rejects_a_manifest_that_claims_to_include_api_keys(db_session, tmp_path):
+def test_inspect_accepts_an_opt_in_export_with_keys(db_session, tmp_path):
+    """勾选包含密钥的导出是合法输入：清单显式声明 true，校验照常通过。"""
+    _settings_with_key(db_session)
+    archive = create_backup_archive(engine, tmp_path / "staging-keys", include_api_keys=True)
+
+    preview = inspect_archive(archive, engine, tmp_path / "staging")
+
+    assert preview["manifest"]["api_key_included"] is True
+    assert preview["manifest"]["format"] == BACKUP_FORMAT_WITH_KEYS
+
+
+def test_inspect_rejects_a_manifest_without_a_key_declaration(db_session, tmp_path):
+    """fail-closed 保留：清单缺了密钥声明就拒收。
+
+    旧的规则是"见到 true 就拒收"；现在 true 是导入侧明确处理的合法声明，但
+    **缺失或乱值**仍然拒收——不给"将来格式变更后静默放行读不懂的声明"留门。
+    """
     archive = _export(tmp_path)
-    tampered = tmp_path / "tampered.zip"
+    tampered = tmp_path / "no-declaration.zip"
 
     with zipfile.ZipFile(archive) as source, zipfile.ZipFile(tampered, "w") as target:
         for name in source.namelist():
             if name == MANIFEST_MEMBER:
                 manifest = json.loads(source.read(name))
-                manifest["api_key_included"] = True
+                del manifest["api_key_included"]
                 target.writestr(name, json.dumps(manifest))
             else:
                 target.writestr(name, source.read(name))
 
-    with pytest.raises(BackupError, match="可能包含明文 API Key"):
+    with pytest.raises(BackupError, match="未声明密钥状态"):
         inspect_archive(tampered, engine, tmp_path / "staging")
 
 
@@ -191,7 +285,7 @@ def test_inspect_rejects_a_database_with_unknown_tables(db_session, tmp_path):
     archive = _export(tmp_path)
     foreign = tmp_path / "foreign.db"
     foreign.write_bytes(_database_bytes(archive))
-    with sqlite3.connect(foreign) as connection:
+    with _tweaked_sqlite(foreign) as connection:
         connection.execute("CREATE TABLE cookies (value TEXT)")
 
     tampered = _replace_member(archive, DATABASE_MEMBER, foreign.read_bytes(), tmp_path / "foreign.zip")
@@ -204,7 +298,7 @@ def test_inspect_rejects_a_newer_revision(db_session, tmp_path):
     archive = _export(tmp_path)
     database = tmp_path / "newer.db"
     database.write_bytes(_database_bytes(archive))
-    with sqlite3.connect(database) as connection:
+    with _tweaked_sqlite(database) as connection:
         connection.execute("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32))")
         connection.execute("DELETE FROM alembic_version")
         connection.execute("INSERT INTO alembic_version VALUES ('9999_from_the_future')")
@@ -228,7 +322,7 @@ def test_inspect_accepts_a_backup_exported_before_the_skill_tables(db_session, t
 
     old_database = tmp_path / "old.db"
     old_database.write_bytes(_database_bytes(archive))
-    with sqlite3.connect(old_database) as connection:
+    with _tweaked_sqlite(old_database) as connection:
         connection.execute("DROP TABLE assistant_skill_file")
         connection.execute("DROP TABLE assistant_skill")
     _set_revision(old_database, PREVIOUS_REVISION)

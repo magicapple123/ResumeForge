@@ -188,9 +188,12 @@ export function deleteDataset(id: string): Promise<void> {
   return request(`/settings/datasets/${id}`, { method: "DELETE" });
 }
 
-/** 导出指定数据集（不含大模型 API Key）。 */
-export async function exportDataset(id: string): Promise<{ blob: Blob; filename: string }> {
-  return downloadArchive(`/api/settings/datasets/${id}/export`);
+/** 导出指定数据集（默认不含大模型 API Key；显式勾选后密钥按本机存储形态随包走）。 */
+export async function exportDataset(
+  id: string,
+  includeApiKeys = false,
+): Promise<{ blob: Blob; filename: string }> {
+  return downloadArchive(exportUrl(`/api/settings/datasets/${id}/export`, includeApiKeys));
 }
 
 /**
@@ -199,8 +202,15 @@ export async function exportDataset(id: string): Promise<{ blob: Blob; filename:
  * 与 `exportDataset` 的区别是"包里有没有其余数据集"。默认的导出只带当前这一份——多份
  * 数据集的用户如果按默认方式备份，其余几份不会进包，而这种事通常要到需要恢复时才发现。
  */
-export async function exportAllDatasets(): Promise<{ blob: Blob; filename: string }> {
-  return downloadArchive("/api/settings/datasets/export-all");
+export async function exportAllDatasets(
+  includeApiKeys = false,
+): Promise<{ blob: Blob; filename: string }> {
+  return downloadArchive(exportUrl("/api/settings/datasets/export-all", includeApiKeys));
+}
+
+/** 不勾选时保持 URL 干净，与旧行为一致；勾选才带上布尔查询参数。 */
+function exportUrl(base: string, includeApiKeys: boolean): string {
+  return includeApiKeys ? `${base}?include_api_keys=true` : base;
 }
 
 async function downloadArchive(url: string): Promise<{ blob: Blob; filename: string }> {

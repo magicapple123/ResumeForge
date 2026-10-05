@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import shutil
 import sqlite3
@@ -27,10 +28,44 @@ from .paths import (
     MANIFEST_MEMBER,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def extract_database(archive_path: Path, destination: Path) -> Path:
     """把压缩包里的数据库成员写到 destination 并返回该路径。"""
     return extract_member(archive_path, DATABASE_MEMBER, destination)
+
+
+def _remove_sqlite_sidecars(path: Path) -> None:
+    """删除一个 SQLite 库文件的 WAL / 回滚日志边车文件（主文件不动）。
+
+    生产引擎开启 WAL 后，候选库在迁移、校验期间会在旁边产生 ``-wal`` / ``-shm``
+    边车；只读连接关闭时无法清理它们，会残留在 staging 目录里越积越多。
+    """
+    for suffix in ("-wal", "-shm", "-journal"):
+        Path(f"{path}{suffix}").unlink(missing_ok=True)
+
+
+def _best_effort_checkpoint(path: Path) -> None:
+    """对候选库做一次尽力而为的 WAL checkpoint，把 -wal 里的已提交帧写回主文件。
+
+    SQLite 只在「最后一个连接干净关闭」时才自动 checkpoint；校验链路上若存在
+    未经干净关闭的连接（inspect 用例暴露的边车残留正说明这类路径存在），``-wal``
+    里可能有尚未落回主文件的数据。**保留候选库**之前必须先补一次 checkpoint，
+    否则随后删边车就是静默丢数据。失败（文件损坏、被锁等）一律吞掉：这只影响
+    垃圾文件残留，不该阻断用户的恢复流程。
+    """
+    try:
+        with closing(sqlite3.connect(path)) as connection:
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except sqlite3.Error:
+        logger.warning("候选库 %s 的 WAL checkpoint 未完成，按原样保留", path.name)
+
+
+def _remove_candidate_files(path: Path) -> None:
+    """删除候选库主文件及其全部边车文件；确保在引擎 dispose / 连接关闭之后调用。"""
+    _remove_sqlite_sidecars(path)
+    path.unlink(missing_ok=True)
 
 
 def extract_member(archive_path: Path, member: str, destination: Path) -> Path:
@@ -89,7 +124,7 @@ def inspect_extra_dataset(
         _upgrade_candidate(candidate)
         _database_info(candidate, bind)
     except BaseException:
-        candidate.unlink(missing_ok=True)
+        _remove_candidate_files(candidate)
         raise
     return candidate
 
@@ -110,9 +145,12 @@ def _read_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
         raise BackupError(
             "备份来自更新版本的 ResumeForge，当前版本无法恢复；请先升级应用再导入"
         )
-    # fail-closed：只有清单明确声明不含密钥才继续，避免将来格式变更后静默放行。
-    if manifest.get("api_key_included") is not False:
-        raise BackupError("备份包可能包含明文 API Key，为安全起见已拒绝恢复")
+    # fail-closed：清单必须**显式**声明密钥是否在包里，缺失或乱值一律拒收——将来格式
+    # 再变更时，不会静默放行一个自己读不懂的声明。true 表示用户导出时勾选了"包含
+    # API Key"（格式 3）：密钥按本机存储形态随包走，恢复后解不开（换机器/换用户）时
+    # 应用按未配置处理，由用户重填；不认识这个选项的老版本会在上面的格式校验处拒收。
+    if manifest.get("api_key_included") not in (True, False):
+        raise BackupError("备份包的元信息未声明密钥状态，为安全起见已拒绝恢复")
     return manifest
 
 
@@ -228,7 +266,7 @@ def inspect_archive(archive_path: Path, bind: Engine, staging_dir: Path) -> dict
         _upgrade_candidate(candidate)
         info = _database_info(candidate, bind)
     finally:
-        candidate.unlink(missing_ok=True)
+        _remove_candidate_files(candidate)
 
     return {
         "manifest": manifest,

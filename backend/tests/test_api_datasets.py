@@ -1,13 +1,15 @@
 """数据集接口测试：本机限制、类型校验、导入/切换/重命名/删除与导出。"""
 import io
 import json
+import sqlite3
 import zipfile
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 
 from app import database
 from app.api import datasets as datasets_api
-from app.services.data_backup import create_backup_archive
+from app.services.data_backup import DATABASE_MEMBER, create_backup_archive
 
 MAIN = "main"
 
@@ -43,6 +45,22 @@ def _list_datasets(client) -> list[dict]:
     response = client.get("/api/settings/datasets")
     assert response.status_code == 200
     return response.json()
+
+
+def _stored_llm_api_key() -> str:
+    """读测试库里 ``llm_config`` 中 Key 的**存储原值**（Windows 上是 DPAPI 密文）。
+
+    与 ``test_data_backup.py`` 的同名辅助一致：勾选"包含 API Key"时随包走的就是这个
+    原值，按它断言在加密与非加密平台上都成立。
+    """
+    from app.services.data_backup import database_path
+
+    path = database_path(database.engine)
+    with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as connection:
+        row = connection.execute(
+            "SELECT value FROM app_setting WHERE key = 'llm_config'"
+        ).fetchone()
+    return "" if row is None else json.loads(row[0]).get("api_key", "")
 
 
 def test_list_datasets_starts_with_only_the_main_dataset(client):
@@ -226,6 +244,42 @@ def test_export_downloads_a_dataset_as_a_zip(client, tmp_path):
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         manifest = json.loads(archive.read("manifest.json"))
     assert manifest["api_key_included"] is False
+
+
+def test_export_includes_api_keys_only_on_explicit_request(client, db_session):
+    """默认导出剥离密钥；显式传 ``include_api_keys=true`` 才随包走，导入要如实回报。"""
+    from app.schemas.setting import LLMConfig
+    from app.services.settings_service import save_llm_config
+
+    save_llm_config(
+        db_session,
+        LLMConfig(
+            base_url="https://api.example.com/v1",
+            api_key="sk-api-roundtrip-0123456789abcdef",
+            model="test-model",
+        ),
+    )
+    stored = _stored_llm_api_key()
+    assert stored
+
+    # 默认（不带参数）：密钥不出包——既有承诺不变。
+    default = client.get(f"/api/settings/datasets/{MAIN}/export")
+    assert default.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(default.content)) as archive:
+        assert stored.encode() not in archive.read(DATABASE_MEMBER)
+
+    # 显式勾选：存储原值随包走，格式号升到 3（不认识该选项的老版本会明确拒收）。
+    response = client.get(f"/api/settings/datasets/{MAIN}/export?include_api_keys=true")
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert stored.encode() in archive.read(DATABASE_MEMBER)
+        manifest = json.loads(archive.read("manifest.json"))
+    assert manifest["api_key_included"] is True
+    assert manifest["format"] == 3
+
+    # 导入这份包：接口要如实告诉前端"密钥已随包恢复"。
+    created = _import(client, response.content, name="带 Key 的备份").json()
+    assert created["api_key_included"] is True
 
 
 def test_a_round_trip_preserves_every_kind_of_content_including_the_trash(

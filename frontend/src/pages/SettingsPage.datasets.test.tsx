@@ -171,8 +171,29 @@ describe("SettingsPage datasets", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /导出当前数据集/ }));
 
-    await waitFor(() => expect(apiMocks.exportDataset).toHaveBeenCalledWith("main"));
+    // 默认不包含 API Key：密钥不出包是既有承诺，勾选项只在用户显式勾选时生效。
+    await waitFor(() => expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", false));
     expect(click).toHaveBeenCalledOnce();
+    click.mockRestore();
+  });
+
+  it("includes API keys in the backup only while the checkbox is checked", async () => {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    apiMocks.exportDataset.mockResolvedValue({
+      blob: new Blob(["zip-bytes"], { type: "application/zip" }),
+      filename: "resumeforge-backup-20260915.zip",
+    });
+    await renderPage();
+
+    const checkbox = screen.getByRole("checkbox", { name: /备份中包含大模型 API Key/ });
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: /导出当前数据集/ }));
+    await waitFor(() => expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", true));
+
+    // 取消勾选后恢复默认：选择权始终跟着勾选状态走，而不是一次勾选永久生效。
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: /导出当前数据集/ }));
+    await waitFor(() => expect(apiMocks.exportDataset).toHaveBeenLastCalledWith("main", false));
     click.mockRestore();
   });
 

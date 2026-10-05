@@ -21,6 +21,8 @@ export function useSettingsDatasets() {
   const [datasetsLoading, setDatasetsLoading] = useState(true);
   const [datasetExporting, setDatasetExporting] = useState(false);
   const [datasetImporting, setDatasetImporting] = useState(false);
+  // 导出是否随包带走大模型 API Key。默认关（密钥不出包），由用户在导出前显式勾选。
+  const [includeApiKeys, setIncludeApiKeys] = useState(false);
   const [switchingDatasetId, setSwitchingDatasetId] = useState<string | null>(null);
   const [renamingDatasetId, setRenamingDatasetId] = useState<string | null>(null);
   const [deletingDatasetId, setDeletingDatasetId] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export function useSettingsDatasets() {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename } = await exportDataset(dataset.id);
+      const { blob, filename } = await exportDataset(dataset.id, includeApiKeys);
       downloadBlob(blob, filename);
       message.success(`已导出「${dataset.name}」到浏览器的下载目录`);
     } catch (err) {
@@ -63,7 +65,7 @@ export function useSettingsDatasets() {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename } = await exportAllDatasets();
+      const { blob, filename } = await exportAllDatasets(includeApiKeys);
       downloadBlob(blob, filename);
       message.success(`已把全部 ${datasets.length} 份数据集导出到浏览器的下载目录`);
     } catch (err) {
@@ -82,11 +84,11 @@ export function useSettingsDatasets() {
       // "导出全部数据集"产生的包里会随行带上其余几份，导入时它们也各成一份新数据集。
       // 只报主数据集的名字会让用户以为另外几份没被恢复。
       const extras = created.restored_datasets?.length ?? 0;
-      message.success(
-        extras > 0
-          ? `已导入数据集「${created.name}」，并随包恢复了另外 ${extras} 份数据集；当前数据未受影响`
-          : `已导入数据集「${created.name}」，当前数据未受影响`,
-      );
+      // 勾选过"包含 API Key"的包要如实告诉用户密钥也回来了（换机器解不开时仍需重填）。
+      const parts = [`已导入数据集「${created.name}」`];
+      if (extras > 0) parts.push(`并随包恢复了另外 ${extras} 份数据集`);
+      if (created.api_key_included) parts.push("备份中的大模型 API Key 已一并恢复");
+      message.success(`${parts.join("，")}；当前数据未受影响`);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "导入备份失败");
     } finally {
@@ -163,6 +165,8 @@ export function useSettingsDatasets() {
     datasetsLoading,
     datasetExporting,
     datasetImporting,
+    includeApiKeys,
+    setIncludeApiKeys,
     switchingDatasetId,
     renamingDatasetId,
     deletingDatasetId,

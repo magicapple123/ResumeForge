@@ -8,6 +8,7 @@
 import json
 import sqlite3
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -46,8 +47,25 @@ def _rebuild_archive(archive: Path, destination: Path, replacements: dict[str, b
     return destination
 
 
+@contextmanager
+def _tweaked_sqlite(database: Path):
+    """打开测试库做改动，退出时提交、checkpoint 并**真正关闭**连接。
+
+    备份快照继承生产库的 WAL 文件头，WAL 模式下 ``with sqlite3.connect(...)``
+    只提交不关闭——未 checkpoint 的改动留在 ``-wal`` 文件里，随后裸读
+    ``.db`` 字节重建压缩包会拿到旧内容。
+    """
+    connection = sqlite3.connect(database)
+    try:
+        with connection:
+            yield connection
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        connection.close()
+
+
 def _set_revision(database: Path, revision: str) -> None:
-    with sqlite3.connect(database) as connection:
+    with _tweaked_sqlite(database) as connection:
         connection.execute(
             "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"
         )
@@ -63,7 +81,7 @@ def test_inspect_accepts_a_backup_exported_before_the_apply_tables(db_session, t
 
     old_database = tmp_path / "old.db"
     old_database.write_bytes(_database_bytes(archive))
-    with sqlite3.connect(old_database) as connection:
+    with _tweaked_sqlite(old_database) as connection:
         for name in APPLY_TABLES:
             connection.execute(f"DROP TABLE {name}")
     _set_revision(old_database, PREVIOUS_REVISION)
@@ -95,7 +113,7 @@ def test_inspect_rejects_a_head_revision_backup_missing_the_apply_tables(db_sess
 
     tampered_database = tmp_path / "head-but-missing.db"
     tampered_database.write_bytes(_database_bytes(archive))
-    with sqlite3.connect(tampered_database) as connection:
+    with _tweaked_sqlite(tampered_database) as connection:
         for name in APPLY_TABLES:
             connection.execute(f"DROP TABLE {name}")
     # 声明自己已经在 head：这样迁移不会补表，缺表就会被表集合校验抓到。

@@ -11,7 +11,7 @@ from sqlalchemy import Engine, text
 
 from ...config import get_settings
 
-from .paths import BACKUP_FORMAT_VERSION
+from .paths import BACKUP_FORMAT_MULTI_DATASET, BACKUP_FORMAT_WITH_KEYS
 from ...database_migrations import _APPLICATION_TABLES, build_alembic_config
 
 
@@ -38,25 +38,37 @@ def _table_counts(bind: Engine) -> dict[str, int]:
 
 
 def build_manifest(
-    bind: Engine, *, datasets: Sequence[dict[str, Any]] = ()
+    bind: Engine,
+    *,
+    datasets: Sequence[dict[str, Any]] = (),
+    api_key_included: bool = False,
 ) -> dict[str, Any]:
     """生成包内清单。
 
-    **格式号随"包里有没有其余数据集"变化**：只有活动数据集时仍是格式 1，老版本照常可读；
-    一旦带上了其余数据集就标成 2，老版本会明确拒收。这是刻意的——老版本读不懂
-    ``datasets/`` 这一段，若还按格式 1 放行，用户会以为"恢复成功"，实际上那几份数据集
-    根本没被恢复，而**这类故障通常要到很久以后翻旧记录时才发现**。
+    **格式号按内容分级、显式计算**（分级定义见 ``paths.py``）：只有活动数据集且不含
+    密钥时仍是格式 1，老版本照常可读；带上其余数据集标 2（老版本读不懂 ``datasets/``
+    这一段，放行会让用户以为"恢复成功"而实际只恢复了一份）；用户勾选"包含 API Key"
+    时标 3——这个选项老版本完全没有对应逻辑，必须让它们拿到"请先升级"的明确信号，
+    所以它的优先级最高。
     """
     settings = get_settings()
     extras = list(datasets)
+    if api_key_included:
+        format_version = BACKUP_FORMAT_WITH_KEYS
+    elif extras:
+        format_version = BACKUP_FORMAT_MULTI_DATASET
+    else:
+        format_version = 1
     manifest: dict[str, Any] = {
-        "format": BACKUP_FORMAT_VERSION if extras else 1,
+        "format": format_version,
         "app": settings.app_name,
         "app_version": settings.app_version,
         "alembic_revision": current_head_revision(bind),
         "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "tables": _table_counts(bind),
-        "api_key_included": False,
+        # 与 export 侧的剥离/保留逻辑对应：False 是默认（密钥已清空），True 只能来自
+        # 用户的显式勾选。导入侧 fail-closed：这个字段缺失或乱值都拒收。
+        "api_key_included": bool(api_key_included),
     }
     if extras:
         manifest["datasets"] = extras

@@ -14,7 +14,18 @@ from typing import Any
 from sqlalchemy import Engine
 
 
-BACKUP_FORMAT_VERSION = 2
+# 备份包格式号是**给老版本看的信号**：老版本只接受 ≤ 自己常量的格式，遇到更大的会
+# 明确提示"请先升级应用"，而不是安静地误读包内容。按内容分级：
+#   1 = 单数据集、不含密钥（初始格式，所有版本可读）；
+#   2 = 多数据集（读不懂 ``datasets/`` 段的老版本必须拒收）；
+#   3 = 含 API Key——用户显式勾选后，密钥按**本机存储形态**随包走（Windows 上是
+#       DPAPI 密文，绑定当前用户与机器）。不认识这个选项的老版本必须拒收。
+# 当前代码能读/写的**最高**格式，导入侧用它拒绝"来自更新版本"的包。写包时的 format
+# 由 ``build_manifest`` 按内容显式计算，**不能**直接套这个常量——否则"导出全部数据集
+# （不含密钥）"会被错误标成 3，老版本会拒收一份本可以安全读的包。
+BACKUP_FORMAT_VERSION = 3
+BACKUP_FORMAT_MULTI_DATASET = 2
+BACKUP_FORMAT_WITH_KEYS = 3
 DATABASE_MEMBER = "resume_forge.db"
 MANIFEST_MEMBER = "manifest.json"
 # 归档里"其余数据集"的存放前缀。

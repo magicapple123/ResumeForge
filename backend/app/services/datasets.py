@@ -46,6 +46,11 @@ from .data_backup import (
     inspect_archive,
     inspect_extra_dataset,
 )
+from .data_backup.import_archive import (
+    _best_effort_checkpoint,
+    _remove_candidate_files,
+    _remove_sqlite_sidecars,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,10 +134,14 @@ def import_dataset(archive_path: Path, name: str, bind: Engine, staging_dir: Pat
             # 随包带走的其余数据集各落成一份新数据集。**用新 id**：包里的 id 在本机可能早就
             # 存在（那是另一份数据），沿用会覆盖它——而覆盖用户的另一份数据集是不可逆的。
             result["restored_datasets"] = restored
+        # 回给前端做提示用：勾选过"包含 API Key"的包恢复成功后，界面要如实告诉用户
+        # 密钥也跟着回来了（解不开时应用按未配置处理，仍需重填）。
+        result["api_key_included"] = manifest.get("api_key_included") is True
         return result
     finally:
         for _, candidate in staged:
-            candidate.unlink(missing_ok=True)
+            # 候选库在 staging 校验（迁移）时会产生 WAL 边车，主文件与边车一起清。
+            _remove_candidate_files(candidate)
 
 
 def _place_packaged_datasets(staged: list[tuple[dict[str, Any], Path]]) -> list[dict[str, Any]]:
@@ -144,6 +153,13 @@ def _place_packaged_datasets(staged: list[tuple[dict[str, Any], Path]]) -> list[
         target.parent.mkdir(parents=True, exist_ok=True)
         partial = target.with_suffix(".partial")
         try:
+            # rename 之前先把 -wal 里的已提交帧 checkpoint 回主文件：SQLite 只在
+            # 「最后一个连接干净关闭」时才自动 checkpoint，校验链路存在未干净关闭的
+            # 异常路径（边车残留即证据），此时直接删边车会静默丢数据。失败只告警
+            # 不阻断——垃圾残留好过恢复流程整个失败。随后清掉边车：replace 只搬
+            # 主文件，边车会变成 staging 里的孤儿垃圾。
+            _best_effort_checkpoint(candidate)
+            _remove_sqlite_sidecars(candidate)
             # 同盘内改名是原子的：中途失败不会在列表里留下半截的数据集。
             candidate.replace(partial)
             partial.replace(target)
@@ -277,7 +293,9 @@ def delete_dataset(dataset_id: str) -> None:
     logger.info("数据集已移入回收目录 id=%s", dataset_id)
 
 
-def export_all_datasets(bind: Engine, staging_dir: Path) -> Path:
+def export_all_datasets(
+    bind: Engine, staging_dir: Path, *, include_api_keys: bool = False
+) -> Path:
     """导出**全部数据集**：活动的那份 + 其余每一份都在包里。
 
     为什么需要它：默认的导出只带**当前活动**的那一份，其余数据集（用户可能有好几份，
@@ -297,19 +315,23 @@ def export_all_datasets(bind: Engine, staging_dir: Path) -> Path:
                 metadata=dict(read_metadata(item["id"]) or {}),
             )
         )
-    return create_backup_archive(bind, staging_dir, extra_databases=extras)
+    return create_backup_archive(
+        bind, staging_dir, extra_databases=extras, include_api_keys=include_api_keys
+    )
 
 
-def export_dataset(dataset_id: str, bind: Engine, staging_dir: Path) -> Path:
+def export_dataset(
+    dataset_id: str, bind: Engine, staging_dir: Path, *, include_api_keys: bool = False
+) -> Path:
     """导出指定数据集为备份包。"""
     target = dataset_database_file(dataset_id)
     if not target.exists():
         raise DatasetError("数据集文件已不存在", status_code=404)
     if dataset_id == read_active_dataset_id():
-        return create_backup_archive(bind, staging_dir)
+        return create_backup_archive(bind, staging_dir, include_api_keys=include_api_keys)
     # 非活动数据集：临时建一个引擎取一致快照，用完立即释放（Windows 文件句柄）。
     temporary = database.build_engine(database.database_url_for(target))
     try:
-        return create_backup_archive(temporary, staging_dir)
+        return create_backup_archive(temporary, staging_dir, include_api_keys=include_api_keys)
     finally:
         temporary.dispose()
