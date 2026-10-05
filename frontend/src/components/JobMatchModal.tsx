@@ -195,6 +195,10 @@ export default function JobMatchModal({ job, onClose }: Props) {
       onCancel={onClose}
       footer={null}
       width={760}
+      // 匹配分析逐条输出，条数不固定：限高让超长内容只滚弹窗内部。
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       destroyOnHidden
     >
       {error && (

@@ -162,6 +162,9 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
       onCancel={onClose}
       footer={null}
       width="min(680px, 94vw)"
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       destroyOnHidden
     >
       <Space orientation="vertical" style={{ width: "100%" }} size="middle">

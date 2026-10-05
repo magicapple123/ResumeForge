@@ -10,12 +10,15 @@
  * 1. **完成/失败时用统一出口提醒**（弹窗 + 提示音，见 utils/taskNotify）；
  * 2. **一份可订阅的任务列表**，让页头能显示"正在进行的任务 + 进度 + 取消"。
  *
- * 仍然**不跨页面刷新**：浏览器刷新会丢掉这份内存状态。后端任务本身不受影响（它有自己的
- * 记录），只是刷新后不再由前端提示——这一点在界面上没有承诺过"刷新后还能收到通知"。
+ * 跨页面刷新：任务元数据（id / label / 登记时间，**不含回调**）在登记时写进 localStorage；
+ * 刷新后应用挂载时调用 `restoreBackgroundTasks()` 恢复——已完成的补发完成提醒、仍在运行的
+ * 重新拉起轮询。后端任务记录本身不受刷新影响（它有自己的记录），这里补的只是前端这一侧的
+ * 提醒与追踪。localStorage 不可用（隐私模式等）时全部静默降级为原来的行为。
  */
 import { cancelResumeGenerateTask, getResumeGenerateTask } from "../api/resumes";
 import type { ResumeGenerateTask, ResumeGenerateTaskStatus } from "../types";
 import { notifyTaskDone } from "./taskNotify";
+import { isDocumentHidden, onVisibilityChange } from "./visibility";
 
 /** 界面要显示的运行时快照（不直接暴露后端原始对象，避免组件依赖它的全部字段）。 */
 export interface BackgroundTask {
@@ -34,6 +37,60 @@ type Listener = (tasks: BackgroundTask[]) => void;
 
 /** 轮询间隔：与原来的弹窗内轮询一致，1.5s 足够跟手又不至于太吵。 */
 export const POLL_INTERVAL_MS = 1500;
+
+/** 跨刷新持久化的 localStorage 键：只存元数据，不存回调。 */
+const STORAGE_KEY = "rf.backgroundTasks.v1";
+
+interface PersistedTaskEntry {
+  taskId: number;
+  label: string;
+  registeredAt: string;
+}
+
+/** localStorage 的读写全部 try/catch：隐私模式 / 配额满都不能影响主流程。 */
+function readPersistedEntries(): PersistedTaskEntry[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry): entry is PersistedTaskEntry =>
+        typeof entry === "object" &&
+        entry !== null &&
+        typeof (entry as PersistedTaskEntry).taskId === "number" &&
+        typeof (entry as PersistedTaskEntry).label === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writePersistedEntries(entries: PersistedTaskEntry[]): void {
+  try {
+    if (entries.length === 0) {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    }
+  } catch {
+    // 写不进去就当没有持久化能力，行为退回刷新即丢。
+  }
+}
+
+function persistAddTask(taskId: number, label: string): void {
+  const entries = readPersistedEntries();
+  if (entries.some((entry) => entry.taskId === taskId)) return;
+  entries.push({ taskId, label, registeredAt: new Date().toISOString() });
+  writePersistedEntries(entries);
+}
+
+function persistRemoveTask(taskId: number): void {
+  const entries = readPersistedEntries();
+  const next = entries.filter((entry) => entry.taskId !== taskId);
+  if (next.length === entries.length) return;
+  writePersistedEntries(next);
+}
 
 const tasks = new Map<number, BackgroundTask>();
 /** 任务终态时要通知谁（弹窗打开时要刷新预览；关掉之后没人需要）。 */
@@ -71,8 +128,19 @@ function stopPollingIfIdle(): void {
 
 function ensurePolling(): void {
   if (timer !== null || typeof window === "undefined") return;
-  timer = window.setInterval(() => void tick(), POLL_INTERVAL_MS);
+  timer = window.setInterval(() => {
+    // 页面在后台时跳过本轮：标签页不可见时秒级轮询纯属浪费；
+    // 回到前台由下面的 visibilitychange 订阅立即补一次。
+    if (isDocumentHidden()) return;
+    void tick();
+  }, POLL_INTERVAL_MS);
 }
+
+// 回到前台立即补一轮：隐藏期间 interval 被跳过，进度不该等下一个 1.5s。
+// 模块级单例与页面同生命周期，无需退订。
+onVisibilityChange(() => {
+  if (!isDocumentHidden() && tasks.size > 0) void tick();
+});
 
 function isTerminal(status: ResumeGenerateTaskStatus): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
@@ -114,6 +182,8 @@ function applyUpdate(id: number, latest: ResumeGenerateTask): void {
 
 function finish(id: number, task: BackgroundTask): void {
   tasks.delete(id);
+  // 任务到终态：持久化条目一并清掉（提醒由下面的统一出口发，恢复逻辑不再管这个任务）。
+  persistRemoveTask(id);
   stopPollingIfIdle();
   // **必须 emit**：`applyUpdate` 在调用这里之前已经 emit 过一次（那一次的列表里还有这个
   // 任务），如果删掉之后不再通知，订阅者看到的永远是"任务还在"，而快照缓存也停在旧值上
@@ -167,6 +237,7 @@ export function watchResumeTask(
     error: task.error,
   });
   if (onFinished) finishHandlers.set(task.id, onFinished);
+  persistAddTask(task.id, label);
   ensurePolling();
   emit();
   // 立刻拉一次：刚启动的任务不该等到下一个间隔才有进度。
@@ -209,5 +280,57 @@ export function resetBackgroundTasks(): void {
   finishHandlers.clear();
   attached.clear();
   stopPollingIfIdle();
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // 忽略：localStorage 不可用时本来也没有东西可清。
+  }
   emit();
+}
+
+/**
+ * 刷新后恢复登记表（应用挂载时由 NotifyHostBridge 调一次，不阻塞首屏）。
+ *
+ * 对每条存留的 localStorage 条目查一次后端状态：
+ * - 已完成 / 失败 → 走 `taskNotify` 的统一出口补发提醒（刷新后没有界面"在看"，与常规
+ *   流程一样用居中弹窗 / 错误提示），并清掉条目；
+ * - 仍在运行 → 重新 `watchResumeTask` 拉起轮询；
+ * - 查不到（任务记录已清理 / 后端重启）→ 静默清掉条目，不提醒。
+ *
+ * 返回 Promise 只为测试可以等到全部恢复完成；调用方 fire-and-forget 即可。
+ */
+export async function restoreBackgroundTasks(): Promise<void> {
+  const entries = readPersistedEntries();
+  if (entries.length === 0) return;
+  await Promise.all(
+    entries.map(async (entry) => {
+      try {
+        const task = await getResumeGenerateTask(entry.taskId);
+        if (task.status === "completed") {
+          persistRemoveTask(entry.taskId);
+          notifyTaskDone({
+            modal: true,
+            title: "简历已生成",
+            description: "刷新前开始的生成任务已完成，简历已自动保存到简历中心。",
+            confirmLabel: "知道了",
+          });
+        } else if (task.status === "failed") {
+          persistRemoveTask(entry.taskId);
+          notifyTaskDone({
+            kind: "error",
+            title: "简历生成失败",
+            description: task.error || "可以回到简历中心重试。",
+          });
+        } else if (isTerminal(task.status)) {
+          persistRemoveTask(entry.taskId);
+        } else {
+          // 仍在运行：重新登记（watchResumeTask 会把条目写回 localStorage，并立即拉一次进度）。
+          watchResumeTask(task, entry.label);
+        }
+      } catch {
+        // 任务记录已清理或后端不认识这个 id：静默清掉，不提醒。
+        persistRemoveTask(entry.taskId);
+      }
+    }),
+  );
 }

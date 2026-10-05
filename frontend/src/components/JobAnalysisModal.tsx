@@ -82,6 +82,10 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
       onCancel={onClose}
       footer={null}
       width={760}
+      // 解读是 AI 长文：限高让超长内容只滚弹窗内部，卡片整体不出视口。
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       destroyOnHidden
     >
       {error ? (

@@ -22,6 +22,7 @@ import {
   Drawer,
   Empty,
   Input,
+  Pagination,
   Select,
   Space,
   Spin,
@@ -63,6 +64,10 @@ const BATCH_PAGE_SIZE = 5;
 export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
   const { message } = App.useApp();
   const [keyword, setKeyword] = useState("");
+  // 搜索框受控镜像：点 × 清空时立即把筛选也清掉——之前非受控时清空后列表仍按
+  // 旧关键词过滤（这里 keyword 只来自本组件，镜像仅承担受控化）。
+  const [searchText, setSearchText] = useState("");
+  useEffect(() => setSearchText(keyword), [keyword]);
   const [result, setResult] = useState("");
   const [page, setPage] = useState(1);
   const [retrying, setRetrying] = useState<number | null>(null);
@@ -233,7 +238,17 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
           allowClear
           enterButton={<SearchOutlined />}
           style={{ width: 260 }}
+          value={searchText}
+          onChange={(event) => {
+            const value = event.target.value;
+            setSearchText(value);
+            if (value === "" && keyword !== "") {
+              setKeyword("");
+              setPage(1);
+            }
+          }}
           onSearch={(value) => {
+            setSearchText(value);
             setKeyword(value);
             setPage(1);
           }}
@@ -278,42 +293,18 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
         ))}
       </div>
 
-      {total > BATCH_PAGE_SIZE && (
-        <div style={{ textAlign: "right", marginTop: 12 }}>
-          <a
-            role="button"
-            tabIndex={0}
-            onClick={(event) => {
-              event.preventDefault();
-              setPage((prev) => prev + 1);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") setPage((prev) => prev + 1);
-            }}
-          >
-            下一页
-          </a>
-          <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-            第 {page} / {Math.ceil(total / BATCH_PAGE_SIZE)} 页 · 共 {total} 个批次
-          </Typography.Text>
-          {page > 1 && (
-            <a
-              role="button"
-              tabIndex={0}
-              style={{ marginLeft: 8 }}
-              onClick={(event) => {
-                event.preventDefault();
-                setPage((prev) => Math.max(1, prev - 1));
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") setPage((prev) => Math.max(1, prev - 1));
-              }}
-            >
-              上一页
-            </a>
-          )}
-        </div>
-      )}
+      {/* 分页器沿用原容器（右对齐）：hideOnSinglePage 与旧行为对齐——只有一页时不出现。 */}
+      <div style={{ textAlign: "right", marginTop: 12 }}>
+        <Pagination
+          current={page}
+          total={total}
+          pageSize={BATCH_PAGE_SIZE}
+          onChange={(next) => setPage(next)}
+          hideOnSinglePage
+          showSizeChanger={false}
+          showTotal={(batchTotal) => `共 ${batchTotal} 个批次`}
+        />
+      </div>
 
       <Drawer
         title="投递记录详情"
@@ -426,7 +417,10 @@ function BatchGroup({
             size="small"
             columns={recordColumns}
             dataSource={batch.items}
-            pagination={false}
+            // 批内记录可能很多（一次投几十个岗位），固定 20 条一页；单页以内不显示分页。
+            // 表内没有"上移/下移"类依赖 render 序号的操作（只有重投/详情/删除，都按 record 定位），
+            // 页内分页不影响任何下标逻辑。
+            pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
             scroll={{ y: 320 }}
             // 整行点击也能看详情；行内的「重投」按钮不会被这一层抢走。
             onRow={(record) => ({

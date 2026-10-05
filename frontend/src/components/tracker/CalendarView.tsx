@@ -224,6 +224,9 @@ export default function CalendarView({
         onCancel={() => setDetailDate(null)}
         footer={null}
         width={520}
+        styles={{
+          body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        }}
       >
         {detailItems.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这一天没有安排" />

@@ -11,10 +11,14 @@ import {
   cancelBackgroundTask,
   getBackgroundTasks,
   resetBackgroundTasks,
+  restoreBackgroundTasks,
   subscribeBackgroundTasks,
   watchResumeTask,
 } from "./backgroundTasks";
 import { registerNotifyHost } from "./taskNotify";
+
+/** 与 backgroundTasks.ts 内部约定一致：跨刷新持久化的键。 */
+const STORAGE_KEY = "rf.backgroundTasks.v1";
 
 const apiMocks = vi.hoisted(() => ({
   getResumeGenerateTask: vi.fn(),
@@ -159,5 +163,91 @@ describe("后台任务登记表", () => {
     expect(apiMocks.cancelResumeGenerateTask).toHaveBeenCalledWith(7);
     expect(notices.some((item) => item.title === "简历生成已取消")).toBe(true);
     expect(getBackgroundTasks()).toEqual([]);
+  });
+});
+
+describe("后台任务跨刷新恢复", () => {
+  it("登记任务时把元数据写进 localStorage，到终态时清掉", async () => {
+    apiMocks.getResumeGenerateTask.mockResolvedValue(makeTask({ status: "running" }));
+    watchResumeTask(makeTask(), "生成通用简历");
+
+    const stored: unknown = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "[]");
+    expect(stored).toEqual([expect.objectContaining({ taskId: 7, label: "生成通用简历" })]);
+
+    apiMocks.getResumeGenerateTask.mockResolvedValue(
+      makeTask({ status: "completed", resume_id: 42 }),
+    );
+    await runOneTick();
+
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("刷新后恢复：已完成的任务补发完成提醒并清掉条目", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([{ taskId: 9, label: "生成通用简历", registeredAt: "2026-10-05T00:00:00" }]),
+    );
+    apiMocks.getResumeGenerateTask.mockResolvedValue(
+      makeTask({ id: 9, status: "completed", resume_id: 42 }),
+    );
+
+    await restoreBackgroundTasks();
+
+    expect(notices.some((item) => item.title === "简历已生成")).toBe(true);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("刷新后恢复：仍在运行的任务重新拉起轮询，完成时照常提醒", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([{ taskId: 11, label: "生成通用简历", registeredAt: "2026-10-05T00:00:00" }]),
+    );
+    apiMocks.getResumeGenerateTask.mockResolvedValue(makeTask({ id: 11, status: "running" }));
+
+    await restoreBackgroundTasks();
+
+    expect(getBackgroundTasks().map((task) => task.id)).toContain(11);
+
+    apiMocks.getResumeGenerateTask.mockResolvedValue(
+      makeTask({ id: 11, status: "completed", resume_id: 1 }),
+    );
+    await runOneTick();
+    expect(notices.some((item) => item.title === "简历已生成")).toBe(true);
+  });
+
+  it("刷新后恢复：任务查不到（记录已清理/后端重启）时静默清掉条目", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([{ taskId: 12, label: "生成通用简历", registeredAt: "2026-10-05T00:00:00" }]),
+    );
+    apiMocks.getResumeGenerateTask.mockRejectedValue(new Error("任务不存在"));
+
+    await restoreBackgroundTasks();
+
+    expect(notices).toEqual([]);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("localStorage 不可用（隐私模式）时静默降级，注册与提醒不受影响", async () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("localStorage 被禁用");
+    });
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("localStorage 被禁用");
+    });
+
+    try {
+      apiMocks.getResumeGenerateTask.mockResolvedValue(
+        makeTask({ status: "completed", resume_id: 42 }),
+      );
+      watchResumeTask(makeTask(), "生成通用简历");
+      await runOneTick();
+
+      expect(notices.some((item) => item.title === "简历已生成")).toBe(true);
+      expect(getBackgroundTasks()).toEqual([]);
+    } finally {
+      getItemSpy.mockRestore();
+      setItemSpy.mockRestore();
+    }
   });
 });

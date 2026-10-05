@@ -137,14 +137,16 @@ export function useProfilePage() {
     setProfileTextOpen(false);
   };
 
-  const submit = async () => {
-    if (!editing || saving || photoReading) return;
+  /** 提交资料表单；返回是否真的保存成功（校验不过 / 请求失败都算没存上），
+   * 供调用方决定"未保存更改"警示是否可以解除。 */
+  const submit = async (): Promise<boolean> => {
+    if (!editing || saving || photoReading) return false;
     let values: ProfileFormValues;
     try {
       const formValues = await form.validateFields();
       values = { ...formValues, section_order: sectionOrder } as ProfileFormValues;
     } catch {
-      return;
+      return false;
     }
     setSaving(true);
     try {
@@ -155,8 +157,10 @@ export function useProfilePage() {
       resetSectionReorder(normalizeSectionOrder(nextValues.section_order));
       setEditing(false);
       message.success("资料已保存，现在可以去岗位广场生成简历了");
+      return true;
     } catch (err) {
       message.error(err instanceof Error ? err.message : "保存失败");
+      return false;
     } finally {
       setSaving(false);
     }

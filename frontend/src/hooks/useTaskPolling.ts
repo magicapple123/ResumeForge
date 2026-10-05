@@ -6,6 +6,7 @@
  */
 import { DependencyList, useCallback, useEffect, useRef, useState } from "react";
 import type { ApplyTaskDetail, TaskStatus } from "../types";
+import { isDocumentHidden, onVisibilityChange } from "../utils/visibility";
 
 /** 仍在推进的状态：只有这些状态下才需要继续轮询。 */
 export const ACTIVE_TASK_STATUSES: readonly TaskStatus[] = [
@@ -70,14 +71,23 @@ export function useTaskPolling(
   }, [taskId, refresh]);
 
   // 仅在任务仍处于推进状态时轮询；进入终态后自动停止，避免空转。
+  // 页面在后台时跳过本轮 tick（秒级轮询在后台纯属浪费），回到前台立即补一次。
   useEffect(() => {
     if (taskId == null) return;
     const status = detail?.status;
     if (status && !isActiveTaskStatus(status)) return;
     const timer = window.setInterval(() => {
+      if (isDocumentHidden()) return;
       void refresh();
     }, POLL_INTERVAL_MS);
-    return () => window.clearInterval(timer);
+    const unsubscribeVisibility = onVisibilityChange(() => {
+      if (isDocumentHidden()) return;
+      void refresh();
+    });
+    return () => {
+      window.clearInterval(timer);
+      unsubscribeVisibility();
+    };
   }, [taskId, detail?.status, refresh]);
 
   return {

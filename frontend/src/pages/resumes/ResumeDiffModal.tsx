@@ -35,6 +35,10 @@ export default function ResumeDiffModal({
       open={diffBase !== null}
       width="min(880px, calc(100vw - 24px))"
       footer={null}
+      // 版本对比内容随简历长度伸缩：限高让超长内容只滚弹窗内部。
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       onCancel={onClose}
     >
       {diffBase && (

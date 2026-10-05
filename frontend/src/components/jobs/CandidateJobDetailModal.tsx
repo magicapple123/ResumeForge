@@ -37,6 +37,10 @@ export default function CandidateJobDetailModal({
         ) : null
       }
       width={760}
+      // 岗位原文可能很长：限高让超长内容只滚弹窗内部，卡片整体不出视口。
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
     >
       {candidate && (
         <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
