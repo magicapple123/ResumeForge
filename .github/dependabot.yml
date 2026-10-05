@@ -3,8 +3,7 @@ updates:
   - package-ecosystem: pip
     directory: /backend
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: "02:00"
       timezone: Asia/Shanghai
     open-pull-requests-limit: 5
@@ -29,8 +28,7 @@ updates:
   - package-ecosystem: npm
     directory: /frontend
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: "02:30"
       timezone: Asia/Shanghai
     open-pull-requests-limit: 5
