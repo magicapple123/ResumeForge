@@ -54,6 +54,10 @@ export default function WebFormLearningDialog({
       onCancel={onCancel}
       onOk={() => onSubmit(selected.map((candidate) => ({ candidate, reuse: "general" })))}
       width={720}
+      // 候选字段随页面而定：限高让超长表格只滚弹窗内部。
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
         记住之后，下次遇到同一个框会自动填。所有记住的字段都按通用资料保存，你随时可以在 「我的资料

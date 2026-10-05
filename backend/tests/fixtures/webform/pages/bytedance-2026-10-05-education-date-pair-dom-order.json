@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "id": "bytedance-2026-10-05-education-date-pair-dom-order",
+  "site": "字节跳动",
+  "captured_at": "2026-10-05",
+  "source_test": "test_webform_engine_dates.test_education_date_pair_takes_dom_order_when_evidence_ties",
+  "note": "教育区块两个日期框签名完全相同、只有「起止时间」——start 必须拿 DOM 靠前的那个（入学/毕业写反是实测 bug）。",
+  "controls": [
+    {"index": 0, "type": "text", "placeholder": "选择日期", "nearby_text": "起止时间*", "selector": "[data-rf-index=\"0\"]"},
+    {"index": 1, "type": "text", "placeholder": "选择日期", "nearby_text": "起止时间*", "selector": "[data-rf-index=\"1\"]"}
+  ],
+  "profile": {"education_start": "2021-09", "education_end": "2025-06"},
+  "expect": {
+    "mappings": [
+      {"field": "education_start", "index": 0},
+      {"field": "education_end", "index": 1}
+    ]
+  }
+}

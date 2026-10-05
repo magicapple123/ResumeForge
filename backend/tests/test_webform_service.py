@@ -197,11 +197,10 @@ def test_relative_fields_are_blocked_not_reported_as_missing_data():
     assert "别人" in report.blocked[0].field_label
 
 
-def test_unmatched_checkboxes_are_reported_as_your_call_not_unrecognized():
-    """目录里没有任何字段是"勾选值"，所以未匹配到的勾选一定不该由程序动。
+def test_checkboxes_are_reported_as_click_only_not_unrecognized():
+    """勾选项一律不自动填（"只填不点"），如实列进「需要你自己点选」。
 
-    它们通常是"接受调剂""服从分配"这类**表态**，与同意条款同性质。归到「没认出来」是错的
-    ——那个措辞会让人以为程序没看懂，其实是刻意不碰。
+    归到「没认出来」是错的——那个措辞会让人以为程序没看懂，其实是刻意不碰。
     """
     snapshot = _snapshot(
         [
@@ -219,17 +218,15 @@ def test_unmatched_checkboxes_are_reported_as_your_call_not_unrecognized():
 
     assert report.unrecognized == []
     assert len(report.blocked) == 1
-    assert "你自己判断" in report.blocked[0].field_label
+    assert "点选" in report.blocked[0].field_label
 
 
-def test_a_matched_factual_radio_is_still_filled():
-    """**事实类的单选照填**——「只挡表态类」不等于「挡掉所有选择框」。
+def test_a_factual_radio_is_click_only_and_never_filled():
+    """**连"事实类"的单选也不自动填**——2026-10-05 维护者把边界收成了"只填不点"。
 
-    性别 radio 是这里最典型的：`FIELD_PREFERRED_TYPES` 里性别本来就偏好 `select`/`radio`，
-    它是**一个事实**，不是用户的表态，没有理由让用户每次自己点。
-
-    这条与下面那几条**成对**：一起看才是完整的规则——**分界在"它是不是在替你表态"，
-    不在"它是不是选择框"**。
+    性别是这里最典型的：它是个事实，不是表态；但它是**你的选择**，工具不代选，也不
+    代点。这条与下面几条一起看才是完整的规则——**分界不在"它是不是在替你表态"，
+    而在"它的值是不是点出来的"**。（旧边界是反的：事实类单选照填，只挡表态类。）
     """
     snapshot = _snapshot(
         [
@@ -256,10 +253,10 @@ def test_a_matched_factual_radio_is_still_filled():
 
     report = build_preview(snapshot, {"gender": "女"})
 
-    assert [(item.index, item.field) for item in report.items] == [(1, "gender")]
-    assert report.blocked == []
-    # 单选要勾上就默认勾上——与其它命中项一视同仁。
-    assert [selection.index for selection in default_selections(report)] == [1]
+    assert report.items == []
+    # 同组两个都列出来：用户看到的不是"男也没认出来"，而是"这一组要你自己点"。
+    assert [item.index for item in report.blocked] == [0, 1]
+    assert all("点选" in item.field_label for item in report.blocked)
 
 
 def test_consent_checkboxes_are_blocked_with_their_own_reason():
@@ -334,7 +331,7 @@ def test_an_unmatched_intent_checkbox_is_your_call_not_unrecognized():
     assert report.items == []
     assert report.unrecognized == []
     assert len(report.blocked) == 1
-    assert "需要你自己判断" in report.blocked[0].field_label
+    assert "点选" in report.blocked[0].field_label
 
 
 
@@ -381,7 +378,12 @@ def test_a_control_with_no_own_text_is_not_mistaken_for_a_dropdown():
     assert "别人" in report.blocked[0].field_label, "该走「他人信息」那条判据"
 
 
-def test_preview_exposes_select_options_so_the_user_can_repick():
+def test_a_select_is_reported_as_click_only_not_as_a_fillable_row():
+    """下拉没有"将填入"的行：值该由你在页面上点选。
+
+    这里曾经反过来——预览把选项摊出来让用户改挑一个，工具照着写进去。2026-10-05
+    的「只填不点」把那条路也收了：**连"重新挑一个选项"都不代劳**。
+    """
     snapshot = _snapshot(
         [
             {
@@ -398,19 +400,28 @@ def test_preview_exposes_select_options_so_the_user_can_repick():
         ]
     )
 
-    item = build_preview(snapshot, {"gender": "女"}).items[0]
+    report = build_preview(snapshot, {"gender": "女"})
 
-    assert item.value == "2"
-    assert [option["text"] for option in item.options] == ["请选择", "男", "女"]
+    assert report.items == []
+    assert [item.index for item in report.blocked] == [0]
+    assert "点选" in report.blocked[0].field_label
 
 
-def test_an_assumed_day_is_surfaced_as_a_note():
+def test_a_partial_date_is_written_in_the_pages_shape_without_inventing_a_day():
+    """资料里只有年月（"2026.06"）、页面提示要 ``YYYY-MM-DD``：**不编造日**，就写 2026-06。
+
+    「缺日补 1 号」只发生在页面**明确要完整日期**的时候（见
+    ``test_webform_matching.py`` 的 assumed_day 用例）——原生 ``<input type="date">``
+    曾经走那条路，现在它属于「只填不点」的日期控件，不再自动填。文本框按页面提示的
+    形状写，缺的部分宁可空着。
+    """
     snapshot = _snapshot(
         [
             {
                 "index": 0,
-                "type": "date",
+                "type": "text",
                 "label": "毕业时间",
+                "placeholder": "YYYY-MM-DD",
                 "selector": '[data-rf-index="0"]',
             }
         ]
@@ -418,8 +429,8 @@ def test_an_assumed_day_is_surfaced_as_a_note():
 
     item = build_preview(snapshot, {"education_end": "2026.06"}).items[0]
 
-    assert item.value == "2026-06-01"
-    assert "1 号" in item.note
+    assert item.value == "2026-06"
+    assert item.note == ""
 
 
 def test_recognize_field_ignores_controls_with_no_text():

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import replace
 from typing import Any
@@ -16,7 +17,6 @@ from ..fields import (
     CONSENT_HINTS,
     FIELD_BLOCK_HINTS,
     FIELD_DENYLIST,
-    FIELD_EXCLUDE_HINTS,
     FIELD_PREFERRED_TYPES,
     FIELD_SYNONYMS,
 )
@@ -26,9 +26,9 @@ from ..matching import (
     date_component,
     format_date,
     is_date_hint,
-    meaningful_options,
-    resolve_choice,
+    is_date_like_value,
     resolve_select_option,
+    same_phone_number,
 )
 from ..repeated_fields import (
     compatible_block,
@@ -37,7 +37,28 @@ from ..repeated_fields import (
     parse_block_label,
     split_repeated_key,
 )
-from .evidence import evidence_key
+from .date_grouping import START_END_DATE_FIELDS, link_split_date_controls
+from .evidence import (
+    block_hint_satisfied,
+    competing_fields,
+    evidence_key,
+    excluded_by_hints,
+    has_ambiguous_field_evidence,
+)
+from .families import foreign_marker
+from .pollution import strip_shared_nearby
+from .recovery import (
+    MAX_RETRIES,
+    OptionUnavailable,
+    REASON_NO_CONTROL,
+    REASON_NO_SELECTOR,
+    REASON_NOT_CHECKED,
+    REASON_READBACK_ERROR,
+    REASON_VALUE_MISMATCH,
+    RetryStrategy,
+    classify_write_error,
+    retry_plan,
+)
 from .model import (
     CONTROL_TYPES,
     ApplyOutcome,
@@ -47,6 +68,7 @@ from .model import (
     SkipNote,
     _DEPENDENT_SELECT_POLL_SECONDS,
     _DEPENDENT_SELECT_WAIT_SECONDS,
+    _RECHECK_DELAY_SECONDS,
 )
 from .scripts import CONTROLS_SCRIPT
 from .writers import (
@@ -59,6 +81,40 @@ from .writers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _retry_mapping(mapping: FieldMapping, outcome: ApplyOutcome | None) -> FieldMapping:
+    """重试时换个值写法：**电话类字段改写纯数字**。
+
+    2026-10-05 字节页实测：资料里的手机号带分隔符（``138-0000-0000``），写进去被页面
+    清空（那个框只收 11 位数字）；而同一个值在腾讯页却被页面自己规范化成
+    ``13800000000``。重试时换纯数字写法，两种页面都能落。首次尝试保持原样——
+    有些站点显示上就带分隔符。
+    """
+    if outcome is None or not mapping.field.startswith("phone"):
+        return mapping
+    value = mapping.write_value()
+    digits = re.sub(r"\D", "", value)
+    if len(digits) < 7 or digits == value:
+        return mapping
+    return replace(mapping, value=digits, select=None, date=None)
+
+
+def _value_over_max_length(mapping: FieldMapping) -> str | None:
+    """值比控件允许的长度还长时返回一句如实说明；没超就返回 ``None``。
+
+    2026-10-05 美团页实测：内推码框限 9 个字，资料里的码 12 个字——脚本写进去绕过了
+    ``maxlength``，但页面自己把它截成了 ``RF-BOSS-``（残码），用户提交的就是这个残值。
+    宁可不填、如实说明，也不写一个必然被截断的值。
+    """
+    limit = mapping.control.max_length
+    if limit <= 0:
+        return None
+    value = mapping.write_value()
+    if len(value) <= limit:
+        return None
+    return f"这个框最多 {limit} 个字，资料里的值有 {len(value)} 个字，请精简后自己填"
+
 
 class FormEngine:
     """通用表单理解与填写。"""
@@ -91,6 +147,7 @@ class FormEngine:
                     element_id=str(raw.get("id", "")),
                     autocomplete=str(raw.get("autocomplete", "")).strip().casefold(),
                     required=bool(raw.get("required", False)),
+                    max_length=self._parse_optional_int(raw.get("max_length")) or 0,
                     readonly=bool(raw.get("readonly", False)),
                     has_popup=bool(raw.get("has_popup", False)),
                     linked_select=bool(raw.get("linked_select", False)),
@@ -173,6 +230,9 @@ class FormEngine:
         mappings: list[FieldMapping] = []
         skipped: list[SkipNote] = []
         used: set[int] = set()
+        # 先洗掉"整表标签串"（mokahr 类页面把全表标签串进每个控件的旁文，
+        # 让每个框都像命中所有字段）——见 engine/pollution.py。
+        controls = strip_shared_nearby(controls)
         controls = self._link_split_date_controls(controls)
 
         for control in controls:
@@ -237,9 +297,12 @@ class FormEngine:
         date_assigned: set[tuple[str, str]] = set()
         for _key, _order, control_index, raw_field, base_field, target_index, control in candidates:
             date_part = control.date_part()
-            if date_part:
+            if date_part and is_date_like_value(str(data[raw_field])):
                 # 一个资料日期可以对应页面上的「年 / 月 / 日」多个下拉，
                 # 每个组件都要占一个独立槽位，不能被同一字段的第一项吞掉。
+                # **槽位只对日期形状的值开放**：school 这类文本字段的值（学校名）
+                # 哪怕命中了年下拉（区块标签污染），也走普通槽位——一字段一控件，
+                # 不许把学校名塞进「年」「月」每一个框。
                 slot = (base_field, target_index, date_part)
             elif family_for_field(base_field):
                 slot = (base_field, target_index, None)
@@ -257,12 +320,11 @@ class FormEngine:
                 else raw_field
             )
             mapping = self._build_mapping(
-                controls, control, mapping_field, str(data[raw_field]).strip(), False
+                control, mapping_field, str(data[raw_field]).strip(), False
             )
             if mapping is None:
                 continue
-            # 单选/复选要把同组兄弟一起占掉，否则下一个字段会挑到同一组的另一个选项。
-            used |= self._claimed_indexes(controls, mapping.control)
+            used |= self._claimed_indexes(mapping.control)
             assigned.add(slot)
             mappings.append(mapping)
             if control.date_group:
@@ -271,8 +333,13 @@ class FormEngine:
                 for companion in controls:
                     if companion.date_group != control.date_group or companion.index == control.index:
                         continue
+                    # ``used`` 里既有"已被别的字段认领"，也有"skip_reason 判了永不自动填"
+                    # ——后者正是"只填不点"：同一个年月组里，文本「年」填上了、下拉「月」
+                    # 是只能点选的控件，不能顺着这条边把它也写掉。
+                    if companion.index in used:
+                        continue
                     companion_mapping = self._build_mapping(
-                        controls, companion, control.date_part_label, raw_value, False
+                        companion, control.date_part_label, raw_value, False
                     )
                     if companion_mapping is None:
                         continue
@@ -281,10 +348,21 @@ class FormEngine:
                     assigned.add(companion_slot)
                     mappings.append(companion_mapping)
 
+        # 起止日期组的第二轮（见 ``_complete_split_date_pairs``）：一个区块里"就读时间"
+        # 标着两对年/月（起、止）时，候选循环只会把两组都算成 education_start，
+        # 槽位被第一组占掉，第二组永远填不上。
+        mappings.extend(self._complete_split_date_pairs(controls, data, used, mappings))
+
         # 低置信在分配完成之后单独算：判据是该字段自己的冠亚军差距（见 ``_best_control``），
         # 而全局择优决定了它最终拿到的是不是那个冠军。
         final: list[FieldMapping] = []
         for mapping in mappings:
+            overflow = _value_over_max_length(mapping)
+            if overflow is not None:
+                # 值比框允许的长度还长：**不填**并如实说明——写进去只会被页面截成
+                # 前半截（美团内推码实测），用户提交的是个残值，比不填更糟。
+                skipped.append(SkipNote(control=mapping.control, reason=overflow))
+                continue
             final.append(
                 replace(
                     mapping,
@@ -295,207 +373,120 @@ class FormEngine:
         unmatched = [control for control in controls if control.index not in used]
         return MatchResult(mappings=final, unmatched=unmatched, skipped=skipped)
 
+    def _complete_split_date_pairs(
+        self,
+        controls: list[Control],
+        data: dict[str, Any],
+        used: set[int],
+        mappings: list[FieldMapping],
+    ) -> list[FieldMapping]:
+        """补上"起止"里的第二组拆分日期（紧挨着的两组年/月，第二组是"止"）。
+
+        场景：教育背景的"就读时间"是四个连排控件（年/月/年/月），两组的上下文一模一样，
+        分组把两组都解析成 ``education_start``——候选循环按槽位把第一组分配掉，第二组
+        没有任何字段能认领，永远填不上。（源自 2026-10-05 鹰角 apply 页的一次实测；
+        同日复核发现那一页的四个控件其实是组件库下拉、已归入「只填不点」，所以这条规则
+        现在只对**文本形态**的年/月连排生效。）
+
+        条件刻意收紧，缺一不可：两组**紧挨着**（中间没有任何控件）、父字段相同且
+        是 ``*_start``、第一组确实拿到了它、第二组还没被任何字段认领、值是日期形状、
+        **资料里有对应的 ``*_end``**。可重复区块（"添加一条教育经历"）的第二条不会
+        紧挨着第一条的日期组（中间隔着学校/专业等控件），因此不会被误配成"止"。
+        """
+        groups: dict[str, list[Control]] = {}
+        for control in controls:
+            if control.date_group:
+                groups.setdefault(control.date_group, []).append(control)
+        ordered = sorted(groups.values(), key=lambda group: group[0].index)
+
+        added: list[FieldMapping] = []
+        for first, second in zip(ordered, ordered[1:]):
+            if second[0].index != first[-1].index + 1:
+                continue
+            parent = first[0].date_part_label
+            if second[0].date_part_label != parent:
+                continue
+            end_field = START_END_DATE_FIELDS.get(parent)
+            value = str(data.get(end_field or "", "")).strip()
+            if end_field is None or not value or not is_date_like_value(value):
+                continue
+            if not any(
+                split_repeated_key(mapping.field)[0] == parent
+                and mapping.control.index == first[0].index
+                for mapping in mappings
+            ):
+                continue
+            if any(control.index in used for control in second):
+                continue
+            for control in second:
+                mapping = self._build_mapping(control, end_field, value, False)
+                if mapping is None:
+                    continue
+                used.add(control.index)
+                added.append(mapping)
+        return added
+
     @staticmethod
     def _link_split_date_controls(controls: list[Control]) -> list[Control]:
-        """Link adjacent year/month/day controls only when shared text identifies a date field."""
-        linked: list[Control] = []
-        index = 0
-        while index < len(controls):
-            first = controls[index]
-            if first.date_part() is None:
-                linked.append(first)
-                index += 1
-                continue
-
-            group: list[Control] = []
-            parts: set[str] = set()
-            cursor = index
-            while cursor < len(controls) and len(group) < 3:
-                candidate = controls[cursor]
-                part = candidate.date_part()
-                if part is None or part in parts:
-                    break
-                group.append(candidate)
-                parts.add(part)
-                cursor += 1
-            if len(group) < 2:
-                linked.append(first)
-                index += 1
-                continue
-
-            shared_text = " ".join(
-                item.block_label + " " + item.nearby_text + " " + item.aria_describedby
-                for item in group
-            ).casefold()
-            parent_fields = (
-                "birth_date",
-                "birth_year",
-                "education_start",
-                "education_end",
-                "work_start",
-                "work_end",
-            )
-            hits = [
-                (field_name, synonym)
-                for field_name in parent_fields
-                for synonym in FIELD_SYNONYMS[field_name]
-                if synonym.casefold() in shared_text
-            ]
-            if not hits or len({field_name for field_name, _synonym in hits}) != 1:
-                linked.extend(group)
-                index = cursor
-                continue
-
-            field_name, synonym = max(hits, key=lambda item: len(item[1]))
-            group_id = f"date:{group[0].index}:{field_name}"
-            linked.extend(
-                replace(
-                    item,
-                    date_group=group_id,
-                    date_part_label=field_name,
-                )
-                for item in group
-            )
-            index = cursor
-        return linked
+        """Keep the historical method path while delegating date grouping."""
+        return link_split_date_controls(controls)
 
     @staticmethod
     def _group_key(control: Control) -> str:
         """单选/复选的分组键；空串表示分不出组（那就只能当它自成一组）。"""
         return control.group or control.name
 
-    @classmethod
-    def _claimed_indexes(cls, controls: list[Control], control: Control) -> set[int]:
+    @staticmethod
+    def _claimed_indexes(control: Control) -> set[int]:
         """这条映射占掉了哪些控件。
 
-        单选/复选要把**同组兄弟一起占掉**：只占被选中的那一个的话，同组的"女"会留在
-        「没认出来」里当噪声，更糟的是可能被后面某个字段认领去。
+        曾经还要把单选/复选的**同组兄弟一并占掉**（只占被选中的那个，同组的"女"会留在
+        「没认出来」里当噪声）。「只填不点」之后单选/复选不再产生映射，那段随
+        ``_build_mapping`` 一并删掉了——同组兄弟现在统一由 ``skip_reason`` 标成
+        "需要你自己点选"，一个都不会漏。
         """
-        if control.type not in ("radio", "checkbox"):
-            return {control.index}
-        key = cls._group_key(control)
-        if not key:
-            return {control.index}
-        return {
-            item.index
-            for item in controls
-            if item.type == control.type and cls._group_key(item) == key
-        }
+        return {control.index}
 
     def _build_mapping(
         self,
-        controls: list[Control],
         control: Control,
         field_name: str,
         value: str,
         low_confidence: bool,
     ) -> FieldMapping | None:
-        """按控件类型把值整理成"真正要写进去的东西"；整理不出来就放弃这一条。"""
+        """把值整理成"真正要写进去的东西"；整理不出来就放弃这一条。
+
+        **只处理文本类控件**（"只填不点"，2026-10-05 的产品边界）：下拉 / 单选 / 复选 /
+        日期控件 / 弹层选择器在 ``skip_reason`` 就被挡在匹配之外，到不了这里。"选哪个
+        option、点哪个兄弟"那套整理逻辑随之删除；显式填充（``/fill``）那条路在
+        ``service.fill._rebuild_mapping`` 里另有一份。
+        """
         if control.date_group:
+            # 「年 / 月 / 日」拆分组件：资料给的是完整日期（"2023-06"）时，只写属于这个
+            # 组件的那部分（年框拿 "2023"）。拆不出来就放弃这一条——写整串只会被页面截断。
             component_value = date_component(value, control.date_part() or "")
             if component_value.status != "matched":
-                return None
-            if control.has_popup and not control.options:
-                return FieldMapping(
-                    control=control,
-                    field=field_name,
-                    value=component_value.value,
-                    low_confidence=low_confidence,
-                )
-            resolution = resolve_select_option(control.options, component_value.value)
-            if resolution.status != "matched":
                 return None
             return FieldMapping(
                 control=control,
                 field=field_name,
                 value=component_value.value,
-                select=resolution,
                 low_confidence=low_confidence,
-            )
-
-        if control.type == "select":
-            component = control.date_part()
-            component_value = date_component(value, component) if component else None
-            resolution = (
-                resolve_select_option(control.options, component_value.value)
-                if component_value is not None and component_value.status == "matched"
-                else resolve_select_option(control.options, value)
-            )
-            if component_value is not None and component_value.status != "matched":
-                return None
-            if (
-                resolution.status == "no_option"
-                and control.linked_select
-                and not meaningful_options(control.options)
-            ):
-                # 联动原生下拉可能在首次快照时还只有占位项；先保留这条映射，
-                # 真正填充时会在父级选中后重新读取当前 DOM 的 options。
-                return FieldMapping(
-                    control=control,
-                    field=field_name,
-                    value=value,
-                    select=resolution,
-                    low_confidence=low_confidence,
-                )
-            if resolution.status != "matched":
-                return None
-            return FieldMapping(
-                control=control,
-                field=field_name,
-                value=value,
-                select=resolution,
-                low_confidence=low_confidence,
-            )
-
-        if control.has_popup and control.type != "select":
-            return FieldMapping(
-                control=control,
-                field=field_name,
-                value=value,
-                low_confidence=low_confidence,
-            )
-
-        if control.type in ("radio", "checkbox"):
-            # 单选/复选的"选项"是同一 name 下的兄弟控件集合，必须**整组**参与匹配，
-            # 才能知道"性别=男"该点哪一个。文本优先用各自的 label，没有就退回它的 value。
-            key = self._group_key(control)
-            group = [
-                item
-                for item in controls
-                if item.type == control.type and self._group_key(item) == key
-            ]
-            options = tuple(
-                SelectOption(value=item.value, text=item.label or item.value) for item in group
-            )
-            resolution = resolve_choice(options, value)
-            if resolution.status != "matched" or resolution.option is None:
-                return None
-            chosen = next(
-                (item for item in group if item.value == resolution.option.value), None
-            )
-            if chosen is None:
-                return None
-            return FieldMapping(
-                control=chosen,
-                field=field_name,
-                value=value,
-                select=resolution,
-                low_confidence=low_confidence,
-            )
-
-        if control.type in ("date", "month"):
-            resolution = format_date(value, kind=control.type)
-            if resolution.status != "matched":
-                return None
-            return FieldMapping(
-                control=control,
-                field=field_name,
-                value=value,
-                date=resolution,
-                low_confidence=low_confidence or resolution.assumed_day,
             )
 
         if control.type == "text":
+            # 没有 ``date_group`` 但自述里带日期单位（"年"/"月"）的文本框：同样只写属于
+            # 它的那部分。判据见 ``Control.date_part``。
+            component = control.date_part()
+            if component:
+                component_value = date_component(value, component)
+                if component_value.status == "matched":
+                    return FieldMapping(
+                        control=control,
+                        field=field_name,
+                        value=component_value.value,
+                        low_confidence=low_confidence,
+                    )
             date_hint = " ".join(
                 (
                     field_name,
@@ -556,13 +547,23 @@ class FormEngine:
                 return f"“{label}”是声明类勾选，需要你自己判断"
             if label in CLAIM_LABELS:
                 return f"“{label}”是声明类勾选，需要你自己判断"
+        # **"只填不点"**（2026-10-05 维护者定下的产品边界）：凡是值由"点选"产生的控件
+        # ——下拉、单选、复选、日期控件、自定义弹层/只读选择器——一律不自动填。
+        # 工具只往**文本类**控件（文本框 / 多行文本 / 富文本）里写值，需要鼠标交互的
+        # 一律如实列出来让你自己点。理由有两层：
+        #
+        # 1. 诚实：程序往只读展示框 / 组件状态里写值，常常是"看着填上了、交上去是空的"；
+        # 2. 边界：性别、学历、意向城市、日期这些是**你的选择**，不是从资料里抄一行字
+        #    ——代选等于替你表态，和"不代勾同意条款"是同一条纪律。
+        if control.type in ("select", "radio", "checkbox"):
+            return "这是个需要你自己点选的控件（下拉 / 单选 / 复选），不会自动填写"
+        if control.type in ("date", "month"):
+            # 原生日期控件虽然能敲键盘，但交互是"点开日历挑一个"，写进去的值也常被
+            # 组件自己的状态盖掉（回读为空）。
+            return "这是日期选择控件，需要你在页面上自己点选"
+        if control.has_popup:
+            return "这是个点开弹层的控件（自定义下拉 / 日期选择器一类），需要你自己点选"
         return None
-
-    @staticmethod
-    def _hinted_out(control: Control, field_name: str) -> bool:
-        """命中该字段的负向词（如"紧急联系人姓名"之于"姓名"）。"""
-        signature = control.signature()
-        return any(word in signature for word in FIELD_EXCLUDE_HINTS.get(field_name, ()))
 
     @classmethod
     def _rank_controls(
@@ -587,7 +588,13 @@ class FormEngine:
         block_hint = FIELD_BLOCK_HINTS.get(field_name)
         scored: list[tuple[tuple[int, int, int], Control]] = []
         for control in controls:
-            if cls._hinted_out(control, field_name):
+            if has_ambiguous_field_evidence(control):
+                continue
+            if excluded_by_hints(control, field_name):
+                continue
+            if foreign_marker(control, field_name) is not None:
+                # 控件自述属于别的族（"区号"框之于日期字段）：跨族否决。
+                # 只看控件自己说的话，旁文污染不算——见 families.py。
                 continue
             if not compatible_block(
                 field_name,
@@ -600,19 +607,9 @@ class FormEngine:
             if key is None:
                 continue
             # 区块限定：多段经历里的短词（"职位"、"描述"、"起止时间"）必须靠它才不会
-            # 在别的区块上误命中——见 FIELD_BLOCK_HINTS 的说明。
-            # 没有区块标题的旧页面仍可用控件自己的 label / placeholder / name 识别明确字段；
-            # 只有旁文这一档的弱证据才继续要求区块标题。这样“是否境外教育”等明确字段
-            # 不会因为页面没有输出“教育经历-1”标题而被无故跳过。
-            choice_field = any("是否" in synonym for synonym in synonyms)
-            choice_without_block = choice_field and control.type in ("select", "radio", "checkbox")
-            if (
-                block_hint
-                and block_hint not in control.signature()
-                and not control.block_family
-                and key[0] < 1
-                and not choice_without_block
-            ):
+            # 在别的区块上误命中——见 FIELD_BLOCK_HINTS 的说明。判据抽到
+            # ``block_hint_satisfied`` 里与 recognize_field 共用。
+            if not block_hint_satisfied(control, field_name, key, synonyms):
                 continue
             if block_hint and control.block_family and not compatible_block(
                 field_name, control.block_family, control.block_index, target_index=target_index
@@ -622,6 +619,13 @@ class FormEngine:
             if expected_date_order and control.date_order and control.date_order != expected_date_order:
                 continue
             bonus = 5 if preferred_types and control.type in preferred_types else 0
+            # 「点开是弹层」的控件在同分竞争里靠后站：弹层路径要点击、等选项、再选，
+            # 比直写脆弱得多，而它常常是**只读的展示框**。2026-10-05 字节页实测两处
+            # 抢单：+86 区号框（popup）抢走了手机号、只读的「证件类型」抢走了证件号码，
+            # 真正的输入框双双落空。只在同分/近分竞争时起作用——证据明显更强的弹层
+            # 控件（分差 ≥3）照样赢。
+            if control.has_popup:
+                bonus -= 2
             scored.append(((key[0], key[1] + bonus, -control.index), control))
         scored.sort(key=lambda item: item[0], reverse=True)
         return scored
@@ -647,11 +651,13 @@ class FormEngine:
     ) -> bool:
         """这条映射要不要标"需确认"。
 
-        判据是**该字段自己的冠亚军差距**：负向词能挡掉一部分（见 ``_hinted_out``），
-        挡不住的那部分靠它暴露给用户。
+        判据是**该字段自己的冠亚军差距**：负向词能挡掉一部分（见 ``excluded_by_hints``），
+        挡不住的那部分靠它暴露给用户。另加**跨字段争抢**（``competing_fields``）——
+        同一控件也是别的字段的同档同分候选时（学校 vs 专业），只比本字段的冠亚军
+        看不见这种争抢，会按字段表顺序静默硬分。
 
         同组单选/复选除外：性别那两个选项本来就由 ``_build_mapping`` 在组内按值再挑一次，
-        旗子插上去只是噪声。
+        旗子插上去只是噪声（跨字段争抢仍然算，那是另一回事）。
         """
         base_field, explicit_index = split_repeated_key(field_name)
         family = family_for_field(base_field)
@@ -663,16 +669,19 @@ class FormEngine:
             base_field,
             target_index=target_index,
         )
+        competes = bool(competing_fields(chosen, base_field))
         if len(ranked) < 2:
-            return False
+            return competes
         best_key, best = ranked[0]
         runner_key, runner = ranked[1]
         if best.index != chosen.index:
             # 全局择优把冠军让给了别的字段（对方证据更强），这一条本来就是退而求其次的。
             return True
         if cls._group_key(best) and cls._group_key(best) == cls._group_key(runner):
-            return False
-        return best_key[0] == runner_key[0] and (best_key[1] - runner_key[1]) < 2
+            return competes
+        return competes or (
+            best_key[0] == runner_key[0] and (best_key[1] - runner_key[1]) < 2
+        )
 
     @classmethod
     def _best_control(
@@ -701,55 +710,163 @@ class FormEngine:
         ]
 
     def apply(
-        self, client: CdpClient, mappings: list[FieldMapping], *, timeout: float | None = None
+        self,
+        client: CdpClient,
+        mappings: list[FieldMapping],
+        *,
+        timeout: float | None = None,
+        recheck_delay: float = _RECHECK_DELAY_SECONDS,
+        max_retries: int = MAX_RETRIES,
     ) -> list[ApplyOutcome]:
         """逐字段写入页面，并**逐条返回结果**（原先返回 ``None`` 且吞掉异常）。
 
-        写完后回读一次页面值：受控组件有时"看起来填了、其实没进去"（值出现在界面上，
-        但框架的内部状态没更新，提交时又报"请填写"）。回读不一致的如实标成
-        ``unverified``，而不是当作成功。
+        每个控件：写一次 → 回读判定；不一致/读不到时按 ``recovery`` 的阶梯最多重试
+        ``max_retries`` 轮，每轮重试前先探一眼页面现状（值已对就不写、已被别的值占住
+        就不覆盖、单选已勾上就不再点）。结果逐条如实返回，失败带原因码。
         """
-        outcomes: list[ApplyOutcome] = []
-        for mapping in mappings:
-            control = mapping.control
-            if not control.selector:
-                outcomes.append(ApplyOutcome(control.index, mapping.field, "skipped", "控件没有定位符"))
-                continue
-            applied_mapping = mapping
-            try:
-                if control.type == "select":
-                    applied_mapping = self._apply_select(client, mapping, timeout=timeout)
-                elif control.has_popup:
-                    resolution = select_combobox_option(
-                        client, control.selector, mapping.value, timeout=timeout
-                    )
-                    if resolution.status != "matched" or resolution.option is None:
-                        raise RuntimeError(resolution.reason or "自定义下拉没有唯一匹配项")
-                    applied_mapping = replace(mapping, select=resolution)
-                elif control.type in ("radio", "checkbox"):
-                    self._apply_choice(client, mapping, timeout=timeout)
-                elif control.type == "richtext":
-                    client.evaluate(
-                        _set_richtext_script(control.selector, mapping.value), timeout=timeout
-                    )
-                else:
-                    client.evaluate(
-                        _set_value_script(
-                            control.selector,
-                            mapping.write_value(),
-                            prototype=_PROTOTYPE_BY_TYPE.get(control.type, "HTMLInputElement"),
-                        ),
-                        timeout=timeout,
-                    )
-            except Exception as error:  # noqa: BLE001 - 单个控件失败不该中断整轮
-                logger.warning("填充控件 %s 失败：%s", control.index, error)
-                outcomes.append(
-                    ApplyOutcome(control.index, mapping.field, "failed", f"{type(error).__name__}")
-                )
-                continue
+        return [
+            self._apply_one(
+                client,
+                mapping,
+                timeout=timeout,
+                recheck_delay=recheck_delay,
+                max_retries=max_retries,
+            )
+            for mapping in mappings
+        ]
 
-            outcomes.append(self._verify(client, applied_mapping, timeout=timeout))
-        return outcomes
+    def _apply_one(
+        self,
+        client: CdpClient,
+        mapping: FieldMapping,
+        *,
+        timeout: float | None,
+        recheck_delay: float,
+        max_retries: int,
+    ) -> ApplyOutcome:
+        """单个控件的"写入 + 判定 + 有限重试"。"""
+        control = mapping.control
+        if not control.selector:
+            return ApplyOutcome(
+                control.index, mapping.field, "skipped", "控件没有定位符", reason=REASON_NO_SELECTOR
+            )
+
+        outcome: ApplyOutcome | None = None
+        strategy = RetryStrategy()
+        for attempt in range(1, max_retries + 2):
+            if outcome is not None:
+                guard = self._retry_guard(client, mapping, timeout=timeout)
+                if guard == "done":
+                    # 上一次多半只是回读抖动或落定延迟：值其实已经对了，不需要再写。
+                    return replace(outcome, status="filled", detail="", reason="", attempts=attempt - 1)
+                if guard == "occupied":
+                    # 页面上已有**别的**值（用户填的、页面自己回填的）：不覆盖，如实上报。
+                    return replace(outcome, attempts=attempt - 1)
+            outcome = replace(
+                self._apply_once(
+                    client,
+                    _retry_mapping(mapping, outcome),
+                    strategy=strategy,
+                    timeout=timeout,
+                    recheck_delay=recheck_delay,
+                ),
+                attempts=attempt,
+            )
+            if outcome.status == "filled":
+                return outcome
+            strategy = retry_plan(outcome.reason, attempt)
+            if strategy is None:
+                return outcome
+        assert outcome is not None  # 循环至少执行一次，任何分支都会赋值
+        return outcome
+
+    def _apply_once(
+        self,
+        client: CdpClient,
+        mapping: FieldMapping,
+        *,
+        strategy: RetryStrategy,
+        timeout: float | None,
+        recheck_delay: float,
+    ) -> ApplyOutcome:
+        """写一次 + 回读判定；不参与任何重试决策（那在 ``_apply_one``）。"""
+        control = mapping.control
+        applied_mapping = mapping
+        try:
+            if control.type == "select":
+                applied_mapping = self._apply_select(client, mapping, timeout=timeout)
+            elif control.has_popup:
+                # 自定义弹层（只读选择器 / 级联 / 日期选择器一类）：值由点选产生。
+                # **匹配层已经不会把字段分配给这类控件**（"只填不点"，见 skip_reason），
+                # 这里保留这条路径只为程序化构造的映射（测试与显式调用）。
+                resolution = select_combobox_option(
+                    client, control.selector, mapping.value, timeout=timeout
+                )
+                if resolution.status != "matched" or resolution.option is None:
+                    raise OptionUnavailable(resolution.reason or "自定义下拉没有唯一匹配项")
+                applied_mapping = replace(mapping, select=resolution)
+            elif control.type in ("radio", "checkbox"):
+                self._apply_choice(
+                    client,
+                    mapping,
+                    timeout=timeout,
+                    force=strategy.force_choice_click,
+                )
+            elif control.type == "richtext":
+                client.evaluate(
+                    _set_richtext_script(
+                        control.selector, mapping.value, full_events=strategy.full_events
+                    ),
+                    timeout=timeout,
+                )
+            else:
+                client.evaluate(
+                    _set_value_script(
+                        control.selector,
+                        mapping.write_value(),
+                        prototype=_PROTOTYPE_BY_TYPE.get(control.type, "HTMLInputElement"),
+                        full_events=strategy.full_events,
+                    ),
+                    timeout=timeout,
+                )
+        except Exception as error:  # noqa: BLE001 - 单个控件失败不该中断整轮
+            logger.warning("填充控件 %s 失败：%s", control.index, error)
+            return ApplyOutcome(
+                control.index,
+                mapping.field,
+                "failed",
+                # 异常自带的中文说明比类名有用得多（联动下拉给出的是"未出现匹配的选项…"）；
+                # 没有说明时才退回类名。
+                str(error) or type(error).__name__,
+                reason=classify_write_error(error),
+            )
+        return self._verify(
+            client, applied_mapping, timeout=timeout, recheck_delay=recheck_delay
+        )
+
+    @classmethod
+    def _retry_guard(
+        cls, client: CdpClient, mapping: FieldMapping, *, timeout: float | None
+    ) -> str:
+        """重试前探一眼页面现状：``"done"`` / ``"occupied"`` / ``"retry"``。
+
+        - ``done``：读回来已经是期望值（上一次只是回读抖动）——直接判成功，别再写；
+        - ``occupied``：页面上有一个**别的**值——不覆盖（这是"不覆盖已填"的重试版）；
+        - ``retry``：空值、或没留下痕迹，可以再试。
+        """
+        try:
+            payload = cls._read_back_payload(client, mapping, timeout=timeout)
+        except Exception:  # noqa: BLE001 - 读不到就不拦，让重试自己去试
+            return "retry"
+        if cls._judge(payload, mapping).status == "filled":
+            return "done"
+        if mapping.control.type in ("radio", "checkbox"):
+            # 勾选态只看 checked：没勾上就允许再点（点了只会勾上，不会反选）。
+            return "retry"
+        actual = str(payload.get("value", "")) if isinstance(payload, dict) else ""
+        if actual and actual not in cls._accepted_values(mapping):
+            return "occupied"
+        return "retry"
 
     @staticmethod
     def _apply_select(
@@ -784,7 +901,7 @@ class FormEngine:
                     selected_value = resolution.option.value
                     break
                 if time.monotonic() >= deadline or resolution.status not in {"no_option", "empty"}:
-                    raise RuntimeError(
+                    raise OptionUnavailable(
                         f"联动下拉未出现与“{mapping.value}”匹配的选项：{resolution.reason}"
                     )
                 time.sleep(_DEPENDENT_SELECT_POLL_SECONDS)
@@ -798,56 +915,112 @@ class FormEngine:
 
     @staticmethod
     def _apply_choice(
-        client: CdpClient, mapping: FieldMapping, *, timeout: float | None
+        client: CdpClient,
+        mapping: FieldMapping,
+        *,
+        timeout: float | None,
+        force: bool = False,
     ) -> None:
         """单选/复选：**只在需要改变状态时才点**。
 
         对已勾选的复选框再点一下会把它取消——而"取消用户的勾选"比不填更糟。
+        ``force=True`` 用在重试路径：调用方刚刚回读过勾选态、确认没勾上，
+        不能再被可能已过期的快照 ``checked`` 拦住。
         """
-        if mapping.control.checked:
+        if mapping.control.checked and not force:
             return
         click_selector(client, mapping.control.selector, timeout=timeout)
 
     @staticmethod
-    def _verify(
+    def _read_back_payload(
         client: CdpClient, mapping: FieldMapping, *, timeout: float | None
-    ) -> ApplyOutcome:
-        """回读页面值，与期望比对。"""
-        try:
-            payload = client.evaluate(
-                _read_back_script(mapping.control.selector), timeout=timeout
-            )
-        except Exception:  # noqa: BLE001 - 回读失败不影响"已经填过"这个事实
-            return ApplyOutcome(mapping.control.index, mapping.field, "filled", "未能回读校验")
-
+    ) -> Any:
+        """回读一次，返回解析后的 payload（解析不出来返回 ``None``）。"""
+        payload = client.evaluate(
+            _read_back_script(
+                mapping.control.selector, rich=mapping.control.type == "richtext"
+            ),
+            timeout=timeout,
+        )
         if isinstance(payload, str):
             try:
                 payload = json.loads(payload)
             except ValueError:
-                payload = None
-        if not isinstance(payload, dict) or not payload.get("ok"):
-            return ApplyOutcome(mapping.control.index, mapping.field, "unverified", "回读不到控件")
+                return None
+        return payload
 
-        expected = mapping.write_value()
-        accepted_values = {expected}
+    @staticmethod
+    def _accepted_values(mapping: FieldMapping) -> set[str]:
+        """回读可接受的值集合（下拉还要认 option 的展示文本）。"""
+        accepted = {mapping.write_value()}
         if mapping.select is not None and mapping.select.option is not None:
-            accepted_values.add(mapping.select.option.display())
-        if mapping.control.type == "select":
-            actual = str(payload.get("value", ""))
-        elif mapping.control.type in ("radio", "checkbox"):
+            accepted.add(mapping.select.option.display())
+        return accepted
+
+    @classmethod
+    def _judge(cls, payload: Any, mapping: FieldMapping) -> ApplyOutcome:
+        """把一次回读结果判成 filled / unverified（附原因码）。"""
+        if not isinstance(payload, dict) or not payload.get("ok"):
+            return ApplyOutcome(
+                mapping.control.index, mapping.field, "unverified", "回读不到控件",
+                reason=REASON_NO_CONTROL,
+            )
+        if mapping.control.type in ("radio", "checkbox"):
             if not payload.get("checked"):
                 return ApplyOutcome(
-                    mapping.control.index, mapping.field, "unverified", "点击后仍未勾选"
+                    mapping.control.index, mapping.field, "unverified", "点击后仍未勾选",
+                    reason=REASON_NOT_CHECKED,
                 )
             return ApplyOutcome(mapping.control.index, mapping.field, "filled")
-        else:
-            actual = str(payload.get("value", ""))
 
-        if actual in accepted_values:
+        actual = str(payload.get("value", ""))
+        if actual in cls._accepted_values(mapping) or same_phone_number(
+            mapping.field, mapping.write_value(), actual
+        ):
             return ApplyOutcome(mapping.control.index, mapping.field, "filled")
         return ApplyOutcome(
             mapping.control.index,
             mapping.field,
             "unverified",
             f"页面上的值是 {actual!r}，与期望不符，可能未生效",
+            reason=REASON_VALUE_MISMATCH,
         )
+
+    @classmethod
+    def _verify(
+        cls,
+        client: CdpClient,
+        mapping: FieldMapping,
+        *,
+        timeout: float | None,
+        recheck_delay: float = _RECHECK_DELAY_SECONDS,
+    ) -> ApplyOutcome:
+        """回读页面值并与期望比对；不一致时稍候复读一次再下结论。
+
+        **回读失败不再记 filled**：读不到就是没验证过，如实报 ``unverified``
+        （旧实现记 filled 并附注"未能回读校验"，成功率因此虚高）。
+        """
+        control = mapping.control
+        try:
+            payload = cls._read_back_payload(client, mapping, timeout=timeout)
+        except Exception:  # noqa: BLE001 - 回读失败是"没验证过"，不是"没填上"
+            return ApplyOutcome(
+                control.index,
+                mapping.field,
+                "unverified",
+                "未能回读校验（读取页面值时出错）",
+                reason=REASON_READBACK_ERROR,
+            )
+        outcome = cls._judge(payload, mapping)
+        if outcome.status == "filled":
+            return outcome
+        # 受控组件把内部状态落定有延迟，"填了立刻读"可能读到还没更新的旧值：
+        # 给一点时间复读一次（只在**不一致**时付这个等待，happy path 不等）。
+        if recheck_delay:
+            time.sleep(recheck_delay)
+        try:
+            payload = cls._read_back_payload(client, mapping, timeout=timeout)
+        except Exception:  # noqa: BLE001 - 复读也失败：保留第一次的判定
+            return outcome
+        second = cls._judge(payload, mapping)
+        return second if second.status == "filled" else outcome

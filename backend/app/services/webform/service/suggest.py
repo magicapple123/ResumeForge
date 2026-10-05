@@ -5,8 +5,16 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
-from ..engine import Control, FormEngine, evidence_key
-from ..fields import FIELD_EXCLUDE_HINTS, FIELD_LABELS, FIELD_SYNONYMS, RELATIVE_HINTS
+from ..engine import (
+    Control,
+    FormEngine,
+    block_hint_satisfied,
+    evidence_key,
+    excluded_by_hints,
+    foreign_marker,
+    has_ambiguous_field_evidence,
+)
+from ..fields import FIELD_LABELS, FIELD_SYNONYMS, RELATIVE_HINTS
 from ..matching import normalize_option_text
 from ..repeated_fields import (
     compatible_block,
@@ -38,17 +46,21 @@ def recognize_field(control: Control) -> str | None:
     """
     best_field = ""
     best_key = (0, 0)
-    signature = control.signature()
+    if has_ambiguous_field_evidence(control):
+        return None
     for field_name, synonyms in FIELD_SYNONYMS.items():
         if not compatible_block(field_name, control.block_family, control.block_index):
             continue
-        if any(
-            hint in signature
-            for hint in FIELD_EXCLUDE_HINTS.get(field_name, ())
-        ):
+        # 负向词与跨族否决与引擎共用同一实现（先前这里抄了一份、还少了 date_part
+        # 豁免，同一页面上引擎认得出、面板认不出的分叉就从这类复制开始）。
+        if excluded_by_hints(control, field_name) or foreign_marker(control, field_name):
             continue
         key = evidence_key(control, field_name, synonyms)
-        if key is not None and key > best_key:
+        # 区块限定的短词（"描述"/"职位"）没见到区块名就不算认出来——与引擎同一条判据
+        # （先前这里少了它，同一个「游戏经历」框引擎认不出、面板却报"实习描述"）。
+        if key is None or not block_hint_satisfied(control, field_name, key, synonyms):
+            continue
+        if key > best_key:
             best_field, best_key = field_name, key
     return best_field or None
 
@@ -98,9 +110,8 @@ def suggest_for(
     reason = engine.skip_reason(control)
     if reason:
         return Suggestion("blocked", note=reason, field_label="不会自动填")
-    # 单选/复选**不在这里按类型一刀切**——「只挡表态类」的判据是 `skip_reason`，上面已经
-    # 过了一遍。（实时模式实际压根不会把选择框报进焦点——注入脚本的 `allowed` 白名单里
-    # 没有它们——所以这里按类型再挡一次既够不到、又和那条判据说法不一。）
+    # 下拉 / 单选 / 复选 / 日期 / 弹层选择器的"不自动填"由上面这一处说了算（"只填不点"）；
+    # 这里不再按类型补刀，免得同一个边界有两种说法。
     if hinted := relative_hint(control):
         return Suggestion(
             "blocked",
@@ -122,15 +133,8 @@ def suggest_for(
 
     result = engine.match_fields([control], data)
     if not result.mappings:
-        # 没匹配上的选择框**不是"没认出来"**：目录里压根没有"勾选值"这种字段，
-        # 「接受其他职位调剂」这类本来就该由用户表态。归到「没认出来」会让人以为程序
-        # 没看懂——其实是刻意不碰。批量模式早就这么分了，这里用同一句话。
-        if control.type in ("radio", "checkbox"):
-            return Suggestion(
-                "blocked",
-                note="这是选项框，需要你自己点选",
-                field_label="需要你自己点",
-            )
+        # 选择框到不了这里（上面 ``skip_reason`` 已经判成 blocked 了）；剩下的是
+        # "认不出这个文本框要填什么"。
         return Suggestion("unmatched", note="没认出来这个框要填什么")
 
     mapping = result.mappings[0]

@@ -35,7 +35,14 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from ..browser.cdp_client import CdpClient
 from ._base import WebFormConflict
-from .engine import FOCUS_LISTENER_SCRIPT, Control, FormEngine
+from .engine import (
+    FOCUS_LISTENER_SCRIPT,
+    Control,
+    FormEngine,
+    excluded_by_hints,
+    foreign_marker,
+    has_ambiguous_field_evidence,
+)
 from .fields import FIELD_LABELS
 from .live_control import (
     install_live_control_script,
@@ -83,6 +90,14 @@ logger = logging.getLogger(__name__)
 # 轮询间隔。CDP 是本地回环，350ms 足够跟手，又不至于把一秒钟塞满几十次往返。
 POLL_INTERVAL_SECONDS = 0.35
 
+# 空闲退避（2026-10-05 性能审查）：0.35s 恒定轮询在页面完全静止时也在持续消耗
+# 前后端 CPU——每轮都是 WebSocket 往返 + 整页状态序列化 + JSON 解析。连续
+# IDLE_AFTER_QUIET_TICKS 轮没有任何事件（约 2.8 秒）就把间隔放大到
+# IDLE_POLL_INTERVAL_SECONDS；任何事件（焦点 / 请求 / 页面跳转 / 开关变更 /
+# 出错）立刻回到快档，交互手感不变。
+IDLE_POLL_INTERVAL_SECONDS = 1.5
+IDLE_AFTER_QUIET_TICKS = 8
+
 # 一次会话最多问几次模型。**这是钱**：一个长表单上认不出的框可能有几十个，而用户来回点
 # 同一个框也会重复触发。到顶就停止询问并如实说明，不静默变成"没认出来"。
 # 同一控件重复问不会真的再花一次（``ai.fingerprint`` 的语义缓存挡在前面），所以这个数
@@ -105,6 +120,7 @@ class LiveSession(LiveRememberMixin):
         store: Callable[[dict[str, str]], bool] | None = None,
         require_memory_choice: bool = False,
         data_loader: Callable[[], tuple[dict[str, str], list[dict[str, str]]]] | None = None,
+        autofill_data_loader: Callable[[], dict[str, str]] | None = None,
         memory_targets: list[dict[str, Any]] | None = None,
         memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
     ) -> None:
@@ -125,6 +141,8 @@ class LiveSession(LiveRememberMixin):
         self._memory_targets_loader = memory_targets_loader
         # 资料可能在另一个界面被补充；每次聚焦新控件前按需重新读取，避免会话持有旧快照。
         self._data_loader = data_loader
+        # 悬浮球的整页快捷填充必须使用主界面的可复用资料口径；逐框建议仍可包含“本次”资料。
+        self._autofill_data_loader = autofill_data_loader
         self._engine = FormEngine()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -216,6 +234,12 @@ class LiveSession(LiveRememberMixin):
     ) -> None:
         """替换资料刷新回调，供页面切换回来时复用同一会话。"""
         self._data_loader = loader
+
+    def set_autofill_data_loader(
+        self, loader: Callable[[], dict[str, str]] | None
+    ) -> None:
+        """替换悬浮球整页快捷填充使用的批量资料读取回调。"""
+        self._autofill_data_loader = loader
 
     def set_client(self, client: CdpClient) -> None:
         """切换到当前浏览器客户端。
@@ -310,19 +334,35 @@ class LiveSession(LiveRememberMixin):
     # ===== 主循环 =====
 
     def _loop(self) -> None:
+        quiet = 0
         while not self._stop.is_set():
             try:
-                self._tick()
+                busy = bool(self._tick())
             except Exception as error:  # noqa: BLE001 - 单轮失败不该让会话整个垮掉
                 logger.warning("点击填表的一轮出错了：%s", error)
-            self._stop.wait(POLL_INTERVAL_SECONDS)
+                # 出错保持快档：连接恢复、页面跳转这类情况要尽快跟上。
+                busy = True
+            if busy:
+                quiet = 0
+                delay = POLL_INTERVAL_SECONDS
+            else:
+                quiet += 1
+                delay = (
+                    POLL_INTERVAL_SECONDS
+                    if quiet < IDLE_AFTER_QUIET_TICKS
+                    else IDLE_POLL_INTERVAL_SECONDS
+                )
+            self._stop.wait(delay)
 
-    def _tick(self) -> None:
+    def _tick(self) -> bool:
+        """拉一次页面状态并处理；返回本轮是否遇到需要跟进的事件（供空闲退避判断）。"""
+        busy = False
         payload = self._client.evaluate(_STATE_SCRIPT)
         if isinstance(payload, str):
             payload = json.loads(payload)
         if not isinstance(payload, dict):
-            return
+            # 状态拿不到（假客户端 / 旧页面 / 异常返回）：按"有事"处理保持快档。
+            return True
 
         control = payload.get("live_control")
         if isinstance(control, dict):
@@ -332,6 +372,7 @@ class LiveSession(LiveRememberMixin):
             elif sequence != self._last_control_sequence:
                 self._last_control_sequence = sequence
                 self.set_enabled(bool(control.get("enabled", True)))
+                busy = True
         # 页面跳转或刷新会把监听与面板一起带走。这里**自己发现、自己装回去**——
         # 否则模式会一直显示「运行中」而实际上什么都点不动（用户看到的就是"没生效"，
         # 且没有任何提示能解释为什么）。
@@ -364,7 +405,7 @@ class LiveSession(LiveRememberMixin):
                     "alternatives": [],
                 }
             )
-            return
+            return True
 
         autofill = payload.get("autofill")
         if self._enabled and isinstance(autofill, dict):
@@ -377,6 +418,7 @@ class LiveSession(LiveRememberMixin):
                 )
             ):
                 self._last_autofill_sequence = sequence
+                busy = True
                 try:
                     self._client.evaluate(_ACK_AUTOFILL_SCRIPT)
                 except Exception as error:  # noqa: BLE001 - ACK 失败不应阻止后台任务
@@ -408,6 +450,7 @@ class LiveSession(LiveRememberMixin):
                 )
             ):
                 self._last_ask_sequence = ask_sequence
+                busy = True
                 try:
                     self._client.evaluate(_ACK_ASSISTANT_ASK_SCRIPT)
                 except Exception as error:  # noqa: BLE001 - ACK 失败不应阻止后台任务
@@ -417,20 +460,24 @@ class LiveSession(LiveRememberMixin):
         # 关闭实时填表后仍要保留悬浮球，这样用户可以在专用浏览器里重新开启；
         # 因此即使当前是关闭状态，也要先把新文档里的控制球重新装回去，再跳过焦点处理。
         if not self._enabled:
-            return
+            return busy
 
         seq = int(payload.get("seq") or 0)
         if seq != self._seq:
             self._seq = seq
+            busy = True
             self._on_focus(payload.get("control"))
 
         accept = payload.get("accept")
         if isinstance(accept, dict):
+            busy = True
             self._on_accept(accept)
 
         remember = payload.get("remember")
         if isinstance(remember, dict):
+            busy = True
             self._on_remember(remember)
+        return busy
 
     # ===== 焦点变化：算建议、显示面板 =====
 
@@ -490,6 +537,13 @@ class LiveSession(LiveRememberMixin):
                 source=SOURCE_RULE,
                 field_label=label,
                 field_key=shown_key,
+            )
+            return
+
+        if has_ambiguous_field_evidence(control):
+            self._publish_unmatched(
+                "页面附近有多个相似字段，未自动猜测，请从资料清单中选择",
+                source=SOURCE_RULE,
             )
             return
 
@@ -622,8 +676,16 @@ class LiveSession(LiveRememberMixin):
         """
         with self._lock:
             data = dict(self._data)
+        # 采纳前逐个候选过守卫，与规则引擎、批量预览共用同一实现：负向词
+        # （"紧急联系人姓名"框不该认成"姓名"）与跨族否决（"区号"框之于日期字段）
+        # 不因为答案来自模型就免检。
+        usable = tuple(
+            key
+            for key in candidates
+            if not excluded_by_hints(control, key) and foreign_marker(control, key) is None
+        )
         fillable: list[tuple[str, str]] = []
-        for key in candidates:
+        for key in usable:
             value = resolve_value_for(control, key, data)
             if value:
                 shown_key = field_key_for_block(key, control.block_family, control.block_index)
@@ -637,10 +699,19 @@ class LiveSession(LiveRememberMixin):
                 )
 
         if not fillable:
-            key = candidates[0] if candidates else ""
+            if usable:
+                key = usable[0]
+                note = self._ai_dead_end(usable)
+            elif candidates:
+                # 所有候选都被守卫拦下：这是"猜的和框对不上"，不是"资料里没填"。
+                key = candidates[0]
+                note = "AI 猜的字段和这个框的语义对不上，未采纳"
+            else:
+                key = ""
+                note = self._ai_dead_end(())
             shown_key = field_key_for_block(key, control.block_family, control.block_index) if key else ""
             self._publish_unmatched(
-                self._ai_dead_end(candidates),
+                note,
                 source=SOURCE_AI,
                 field_label=(
                     field_label_for_key(
@@ -738,7 +809,12 @@ class LiveSession(LiveRememberMixin):
 
         snapshot = Snapshot(id="live", controls=[control])
         results = apply_fill(
-            self._client, snapshot, [FillSelection(index=control.index, field="", value=value)]
+            self._client,
+            snapshot,
+            [FillSelection(index=control.index, field="", value=value)],
+            # 逐项模式不等"落定复读"：用户正对着这个框看，即时反馈优先；
+            # 批量的伪已填复读（settle_recheck）留给整页填充那条路。
+            settle_recheck=0,
         )
         outcome = results[0] if results else None
         ok = outcome is not None and outcome.status == "filled"
@@ -793,6 +869,11 @@ class LiveSession(LiveRememberMixin):
         self._refresh_data()
         with self._lock:
             data = dict(self._data)
+        if self._autofill_data_loader is not None:
+            try:
+                data = dict(self._autofill_data_loader())
+            except Exception as error:  # noqa: BLE001 - 快捷填充失败时沿用当前会话资料
+                logger.warning("网申填表：刷新快捷填充资料失败，继续使用当前资料：%s", error)
         try:
             fill_current_page(
                 self._client,
@@ -854,6 +935,7 @@ def start_live(
     store: Callable[[dict[str, str]], bool] | None = None,
     require_memory_choice: bool = False,
     data_loader: Callable[[], tuple[dict[str, str], list[dict[str, str]]]] | None = None,
+    autofill_data_loader: Callable[[], dict[str, str]] | None = None,
     memory_targets: list[dict[str, Any]] | None = None,
     memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
     target_clients_loader: Callable[[], list[tuple[str, CdpClient]]] | None = None,
@@ -866,6 +948,7 @@ def start_live(
             _session.set_client(client)
             _session.update_data(data, catalog)
             _session.set_data_loader(data_loader)
+            _session.set_autofill_data_loader(autofill_data_loader)
             _session.set_memory_choice_required(require_memory_choice)
             _session.set_memory_targets_loader(memory_targets_loader)
             if memory_targets is not None:
@@ -884,6 +967,7 @@ def start_live(
             store=store,
             require_memory_choice=require_memory_choice,
             data_loader=data_loader,
+            autofill_data_loader=autofill_data_loader,
             memory_targets=memory_targets,
             memory_targets_loader=memory_targets_loader,
             **(
@@ -958,6 +1042,8 @@ def is_live_running() -> bool:
 __all__ = [
     "MAX_AI_CALLS",
     "POLL_INTERVAL_SECONDS",
+    "IDLE_POLL_INTERVAL_SECONDS",
+    "IDLE_AFTER_QUIET_TICKS",
     "LiveSession",
     "MultiLiveSession",
     "is_live_running",

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "id": "tencent-2026-09-27-referral-education-dates",
+  "site": "腾讯校招",
+  "captured_at": "2026-09-27",
+  "source_test": "test_webform_engine_dates.test_tencent_style_referral_education_dates_and_supplement_are_mapped",
+  "note": "内推串码 + 「起止时间」两个日期框（靠 date_order 分 start/end）+ 补充信息。",
+  "controls": [
+    {"index": 0, "type": "text", "placeholder": "如有内推串码可在此填写", "selector": "[data-rf-index=\"0\"]"},
+    {"index": 1, "type": "text", "placeholder": "选择日期", "nearby_text": "- 起止时间* -", "date_order": 1, "selector": "[data-rf-index=\"1\"]"},
+    {"index": 2, "type": "text", "placeholder": "选择日期", "nearby_text": "- 起止时间* -", "date_order": 2, "selector": "[data-rf-index=\"2\"]"},
+    {"index": 3, "type": "textarea", "placeholder": "请输入其他相关信息，如自我评价，爱好特长，补充信息等。", "nearby_text": "补充信息*", "selector": "[data-rf-index=\"3\"]"}
+  ],
+  "profile": {
+    "referral_code": "345354543",
+    "education_start": "2022.09",
+    "education_end": "2026.06",
+    "summary": "个人补充说明"
+  },
+  "expect": {
+    "mappings": [
+      {"field": "referral_code", "index": 0},
+      {"field": "education_start", "index": 1},
+      {"field": "education_end", "index": 2},
+      {"field": "summary", "index": 3}
+    ]
+  }
+}

@@ -44,6 +44,7 @@ from typing import Any, Iterable
 
 from sqlalchemy.orm import Session
 
+from ..diagnostics import record_event
 from ..llm import create_provider
 from ..llm.base import BaseLLMProvider
 from ..llm.structured_output import parse_json_object
@@ -221,17 +222,32 @@ def _parse_matches(raw: Any, allowed: set[int]) -> dict[int, tuple[str, ...]]:
     return {index: tuple(fields) for index, fields in ranked.items()}
 
 
+# 网络/解析失败时的重试次数（含首次）。**只治"调用挂了"与"响应不是合法 JSON"**：
+# 合法 JSON 但一个都没认出来是模型的真实回答（"都不像"），重试只会烧钱，还可能
+# 逼它下一轮硬猜一个——那正是这套提示词在防的事。
+_ASK_ATTEMPTS = 2
+
+
 async def _ask(provider: BaseLLMProvider, controls: list[Control]) -> dict[int, tuple[str, ...]]:
     prompt = build_prompt(controls)
-    reply = await provider.chat(
-        [
-            {"role": "system", "content": _UNTRUSTED_SYSTEM},
-            {"role": "user", "content": prompt},
-        ]
-    )
-    # ``label`` 会拼进用户可见的错误文案（"模型未返回有效的网申字段识别 JSON"）。
-    payload = parse_json_object(reply, label="网申字段识别")
-    return _parse_matches(payload.get("matches"), {control.index for control in controls})
+    messages = [
+        {"role": "system", "content": _UNTRUSTED_SYSTEM},
+        {"role": "user", "content": prompt},
+    ]
+    for attempt in range(1, _ASK_ATTEMPTS + 1):
+        try:
+            reply = await provider.chat(messages)
+            # ``label`` 会拼进用户可见的错误文案（"模型未返回有效的网申字段识别 JSON"）。
+            payload = parse_json_object(reply, label="网申字段识别")
+        except Exception as error:  # noqa: BLE001 - 重试后仍失败就交给调用方降级
+            if attempt == _ASK_ATTEMPTS:
+                raise
+            logger.info("网申字段识别的模型调用失败，重试一次：%s", error)
+            # 重试要留痕：只写异常类名，不进消息正文（可能含服务商返回的 URL 等）。
+            record_event("webform.ai_retry", error=type(error).__name__)
+            continue
+        return _parse_matches(payload.get("matches"), {control.index for control in controls})
+    raise AssertionError("unreachable：循环最后一步必然 raise 或 return")
 
 
 async def identify_fields(
@@ -259,6 +275,10 @@ async def identify_fields(
         elif cached:
             found[control.index] = cached
 
+    cache_hits = len(controls) - len(pending)
+    # 「重复问答占比」的埋点：同一条控件描述在这个进程里被问过几次。
+    # 站点记忆/缓存落盘这类改动要以它为判据（见方案 D3），先攒数据不先上机制。
+    record_event("webform.ai_identify", asked=len(pending), cache_hits=cache_hits)
     if not pending:
         return found
 

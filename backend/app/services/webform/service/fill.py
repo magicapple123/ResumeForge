@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import threading
+import time
+from dataclasses import replace
 from typing import Any, Iterable
 
 from sqlalchemy.orm import Session
@@ -9,15 +11,26 @@ from sqlalchemy.orm import Session
 from ...browser.cdp_client import CdpClient
 from .._base import WebFormBadRequest, WebFormConflict
 from ..engine import ApplyOutcome, Control, FieldMapping, FormEngine
+from ..engine.recovery import REASON_VALUE_MISMATCH
 from ..extra_profile import custom_fields_of
 from ..fields import FORM_FIELDS, SOURCE_EXTRA
-from ..matching import format_date, meaningful_options, resolve_select_option
+from ..matching import (
+    date_component,
+    format_date,
+    meaningful_options,
+    resolve_select_option,
+)
 from ..repeated_fields import field_key_for_block, split_repeated_key
 from ..session import Snapshot
 from .models import FillSelection
 
 # 同一时刻只允许一次填充：两个请求交错会往同一个页面里写两套值。
 _fill_lock = threading.Lock()
+
+# 批量填充收尾时等多久再复读"已填"的控件（见 ``_downgrade_reverted``）。
+# **默认关闭**（``apply_fill(settle_recheck=...)`` 的默认值是 0）：逐项模式与离线测试
+# 都不该为它付等待；整页填充那条路显式传这个常量。测试里不要传非零值。
+SETTLE_RECHECK_SECONDS = 1.2
 
 
 def is_filling() -> bool:
@@ -112,11 +125,17 @@ def apply_fill(
     *,
     engine: FormEngine | None = None,
     timeout: float | None = None,
+    settle_recheck: float | None = None,
 ) -> list[ApplyOutcome]:
     """按用户确认过的选择写入页面。
 
     ``selections`` 里出现快照中不存在的控件索引一律拒绝——那说明前端的预览与后端这份
     快照对不上了，继续写就是往未知的框里填值。
+
+    ``settle_recheck`` **不给默认值（None = 不复读）**：给了秒数就在整批写完后等这么久
+    再回读一遍"已填"的控件——有些组件会事后重渲染、把外来值还原（字节页实测：意向城市框
+    当场回读有值，几秒后组件把它清空）。整页填充那条路显式传 ``SETTLE_RECHECK_SECONDS``；
+    逐项模式与离线测试不传，保持即时反馈且不吃墙钟。
     """
     engine = engine or FormEngine()
     by_index = {control.index: control for control in snapshot.controls}
@@ -136,9 +155,58 @@ def apply_fill(
     if not _fill_lock.acquire(blocking=False):
         raise WebFormConflict("另一次填充正在进行，请稍候")
     try:
-        return engine.apply(client, mappings, timeout=timeout)
+        outcomes = engine.apply(client, mappings, timeout=timeout)
     finally:
         _fill_lock.release()
+    if settle_recheck is not None:
+        outcomes = _downgrade_reverted(client, outcomes, mappings, settle_recheck)
+    return outcomes
+
+
+def _downgrade_reverted(
+    client: CdpClient,
+    outcomes: list[ApplyOutcome],
+    mappings: list[FieldMapping],
+    delay: float,
+) -> list[ApplyOutcome]:
+    """复读一遍"已填"的控件，把被页面事后还原的降级为未验证。
+
+    这类"伪已填"当场回读是抓不到的：写入立刻回读有值，组件随后自己重渲染又清掉。
+    批量填充在收尾多花一次等待（默认 1.2 秒）把这件事说清楚，比让用户对着一个
+    看起来填好了、其实空着的框提交要好。
+    """
+    by_index = {mapping.control.index: mapping for mapping in mappings}
+    filled_indexes = {
+        outcome.index
+        for outcome in outcomes
+        if outcome.status == "filled" and outcome.index in by_index
+    }
+    if not filled_indexes:
+        return outcomes
+    time.sleep(delay)
+    revised: list[ApplyOutcome] = []
+    for outcome in outcomes:
+        if outcome.index not in filled_indexes:
+            revised.append(outcome)
+            continue
+        mapping = by_index[outcome.index]
+        try:
+            payload = FormEngine._read_back_payload(client, mapping, timeout=None)
+        except Exception:  # noqa: BLE001 - 复读失败就保留原判定，别把成功改成失败
+            revised.append(outcome)
+            continue
+        if FormEngine._judge(payload, mapping).status == "filled":
+            revised.append(outcome)
+        else:
+            revised.append(
+                replace(
+                    outcome,
+                    status="unverified",
+                    detail="填写后页面又把它还原了，这个框需要你在页面上自己选/填",
+                    reason=REASON_VALUE_MISMATCH,
+                )
+            )
+    return revised
 
 
 def _rebuild_mapping(control: Control, field_name: str, value: str) -> FieldMapping | None:
@@ -164,6 +232,13 @@ def _rebuild_mapping(control: Control, field_name: str, value: str) -> FieldMapp
         if resolution.status != "matched":
             return None
         return FieldMapping(control=control, field=field_name, value=text, date=resolution)
+    # 「年 / 月 / 日」拆分组件（文本框形态）：AI 兜底或手动改值给的可能是完整日期
+    # （"2023-06"），写进「年」框的必须是属于组件的那部分（"2023"），而不是整串。
+    component = control.date_part()
+    if component:
+        component_value = date_component(text, component)
+        if component_value.status == "matched":
+            return FieldMapping(control=control, field=field_name, value=component_value.value)
     return FieldMapping(control=control, field=field_name, value=text)
 
 

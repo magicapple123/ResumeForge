@@ -1,0 +1,52 @@
+{
+ "version": 1,
+ "id": "already-checked-radio-is-not-clicked",
+ "note": "已勾选的单选不做任何点击——再点一下会把它取消，「取消用户的勾选」比不填更糟。（走显式填充：自动匹配永远不给单选分配字段，见 skip_reason 的「只填不点」。）",
+ "selections": [
+  {
+   "index": 1,
+   "field": "gender",
+   "value": "女"
+  }
+ ],
+ "controls": [
+  {
+   "index": 0,
+   "type": "radio",
+   "name": "g",
+   "value": "男",
+   "label": "男",
+   "nearby_text": "性别* 男 女",
+   "group": "g",
+   "checked": false,
+   "selector": "[data-rf-index=\"0\"]"
+  },
+  {
+   "index": 1,
+   "type": "radio",
+   "name": "g",
+   "value": "女",
+   "label": "女",
+   "nearby_text": "性别* 男 女",
+   "group": "g",
+   "checked": true,
+   "selector": "[data-rf-index=\"1\"]"
+  }
+ ],
+ "script": [
+  {
+   "needle": "rf:read-back",
+   "reply": "{\"ok\": true, \"value\": \"女\", \"checked\": true}"
+  }
+ ],
+ "expect": {
+  "outcomes": [
+   {
+    "field": "gender",
+    "status": "filled"
+   }
+  ],
+  "mouse_events": 0,
+  "no_click_rect": true
+ }
+}

@@ -100,6 +100,24 @@ def test_autofill_failure_is_published_as_terminal_error(monkeypatch):
     )
 
 
+def test_autofill_uses_the_batch_data_loader(monkeypatch):
+    client = FakeLiveClient()
+    captured: dict[str, object] = {}
+    session = LiveSession(
+        client,
+        {"name": "逐框资料"},
+        autofill_data_loader=lambda: {"name": "批量资料"},
+    )
+
+    def capture(_client, data, **_kwargs):
+        captured["data"] = data
+
+    monkeypatch.setattr(live_module, "fill_current_page", capture)
+    session._run_autofill(1)
+
+    assert captured["data"] == {"name": "批量资料"}
+
+
 # ===== 单控件建议 =====
 
 
@@ -108,6 +126,17 @@ def test_a_plain_field_gets_a_value():
     assert suggestion.status == "matched"
     assert suggestion.field_label == "姓名"
     assert suggestion.value == "张三"
+
+
+def test_ambiguous_name_phone_context_is_not_presented_as_phone():
+    control = Control(index=0, type="text", nearby_text="姓名* 手机号* 邮箱*")
+    suggestion = suggest_for(
+        control,
+        {"name": "张三", "phone": "13800000000", "email": "z@example.com"},
+    )
+
+    assert suggestion.status == "unmatched"
+    assert suggestion.field != "phone"
 
 
 def test_denylisted_controls_are_blocked_with_the_reason_not_silently_skipped():
@@ -124,21 +153,19 @@ def test_consent_and_declaration_controls_are_blocked(label):
     assert suggestion.status == "blocked"
 
 
-def test_a_factual_radio_is_not_blocked_for_being_a_radio():
-    """**事实类的单选不再因为"它是单选"被挡**——分界在"是不是替你表态"，不在控件类型。
+def test_a_factual_radio_is_blocked_because_its_value_comes_from_a_click():
+    """**事实类的单选也不给「填入」**——「只填不点」（2026-10-05）。
 
-    实时模式实际不会把选择框报进焦点（注入脚本的 `allowed` 白名单里没有它们），所以这条
-    守的是**判据本身**：将来若把选择框放进来，性别这种该填的不会被误挡。
+    性别是事实、不是表态，但它的值是**点出来的**；工具只往文本类控件里写值。这条守的是
+    判据本身（实时模式的注入脚本压根不会把选择框报进焦点，白名单里没有它们）。
 
-    **只断言状态，不断言值**：单选的"选哪个"要靠**同组兄弟**才定得下来（页面上是「男」
-    「女」两个 radio），而 `suggest_for` 是单控件接口、拿不到兄弟——值恒为空。带兄弟的
-    那条链在批量预览里，值由 `test_a_matched_factual_radio_is_still_filled` 覆盖。
-    真要把选择框接进实时模式，`suggest_for` 需要能拿到同组控件，那是另一件事。
+    旧边界是反的：事实类单选照填、只挡表态类。现在按控件类型一刀切，理由见
+    ``FormEngine.skip_reason``。
     """
     control = Control(index=0, type="radio", label="男", nearby_text="性别 男 女")
     suggestion = suggest_for(control, {"gender": "男"})
-    assert suggestion.status == "matched"
-    assert suggestion.field == "gender"
+    assert suggestion.status == "blocked"
+    assert "点选" in suggestion.note
 
 
 def test_an_unmatched_choice_control_is_your_call_not_unrecognized():
@@ -182,7 +209,12 @@ def test_an_unknown_control_is_reported_as_unrecognized():
     assert suggestion.status == "unmatched"
 
 
-def test_a_select_suggestion_carries_the_option_value_not_the_label():
+def test_a_select_gets_a_blocked_suggestion_not_a_value():
+    """下拉框在实时模式下给的是"你自己点"，不是某个选项的 value。
+
+    这条曾经断言"建议里带的是 option 的 value 而不是它的文字"——那是自动填下拉时的
+    要求；「只填不点」之后实时模式也不给下拉「填入」按钮了，请求本身就没了。
+    """
     from app.services.webform.engine import SelectOption
 
     control = Control(
@@ -192,5 +224,6 @@ def test_a_select_suggestion_carries_the_option_value_not_the_label():
         options=(SelectOption("3", "本科"), SelectOption("4", "硕士")),
     )
     suggestion = suggest_for(control, {"degree": "本科"})
-    assert suggestion.status == "matched"
-    assert suggestion.value == "3"
+    assert suggestion.status == "blocked"
+    assert suggestion.value == ""
+    assert "点选" in suggestion.note

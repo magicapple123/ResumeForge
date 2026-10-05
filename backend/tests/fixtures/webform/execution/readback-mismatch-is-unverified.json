@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "readback-mismatch-is-unverified",
+  "note": "回读值与期望不符：复读一次仍不符才判 unverified，绝不记成功。重试前的探查读到一个**非空且不等于期望**的值（页面已有别人的值）→ 不再重写，如实上报——不覆盖是重试路径上的硬纪律。",
+  "controls": [
+    {"index": 0, "type": "text", "label": "姓名", "placeholder": "请输入姓名", "selector": "[data-rf-index=\"0\"]"}
+  ],
+  "profile": {"name": "张三"},
+  "script": [
+    {"needle": "rf:set-value", "reply": "{\"ok\": true, \"value\": \"张三\"}"},
+    {"needle": "rf:read-back", "reply": "{\"ok\": true, \"value\": \"李四\", \"checked\": false}"},
+    {"needle": "rf:read-back", "reply": "{\"ok\": true, \"value\": \"李四\", \"checked\": false}"},
+    {"needle": "rf:read-back", "reply": "{\"ok\": true, \"value\": \"李四\", \"checked\": false}"}
+  ],
+  "expect": {
+    "outcomes": [
+      {
+        "field": "name",
+        "status": "unverified",
+        "note_contains": "与期望不符",
+        "reason": "value_mismatch",
+        "attempts": 1
+      }
+    ]
+  }
+}

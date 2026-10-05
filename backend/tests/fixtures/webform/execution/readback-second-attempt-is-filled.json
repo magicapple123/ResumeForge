@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "id": "readback-second-attempt-is-filled",
+  "note": "受控组件落定延迟：第一次回读读到旧值、重试前探查发现是空的（不是被占用）→ 带完整事件序列重写一次，复读即成功。复读只为消除时序抖动，不放松判定标准。",
+  "controls": [
+    {"index": 0, "type": "text", "label": "姓名", "placeholder": "请输入姓名", "selector": "[data-rf-index=\"0\"]"}
+  ],
+  "profile": {"name": "张三"},
+  "script": [
+    {"needle": "rf:set-value", "reply": "{\"ok\": true, \"value\": \"张三\"}"},
+    {"needle": "rf:read-back", "reply": "{\"ok\": true, \"value\": \"\", \"checked\": false}"},
+    {"needle": "rf:read-back", "reply": "{\"ok\": true, \"value\": \"\", \"checked\": false}"},
+    {"needle": "rf:read-back", "reply": "{\"ok\": true, \"value\": \"\", \"checked\": false}"},
+    {"needle": "rf:set-value", "reply": "{\"ok\": true, \"value\": \"张三\"}"},
+    {"needle": "rf:read-back", "reply": "{\"ok\": true, \"value\": \"张三\", \"checked\": false}"}
+  ],
+  "expect": {
+    "outcomes": [{"field": "name", "status": "filled", "attempts": 2}]
+  }
+}

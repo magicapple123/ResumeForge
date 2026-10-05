@@ -264,6 +264,36 @@ def is_date_hint(text: str) -> bool:
     return bool(_DATE_HINT_RE.search(text or ""))
 
 
+_DATE_LIKE_RE = re.compile(
+    r"^\s*\d{4}\s*(?:[-./年]\s*\d{1,2}\s*(?:[-./月]\s*\d{1,2}\s*日?)?)?\s*$"
+)
+
+
+def same_phone_number(field_name: str, expected: str, actual: str) -> bool:
+    """号码类字段：去掉分隔符后与期望一致，就算写对了。
+
+    2026-10-05 腾讯校招页实测：我们写 ``138-0000-0000``，页面自己重排成
+    ``13800000000``——数字完全一致，只是它去掉了横线。这种"页面规范化了格式"不该
+    报"待确认"（那不是没生效）。只在 ``phone`` 前缀的字段上生效，且两侧数字都
+    要够长（≥7 位），避免把日期一类的"数字恰好相同"误判成一致。
+    """
+    if not field_name.startswith("phone"):
+        return False
+    digits_expected = re.sub(r"\D", "", expected or "")
+    digits_actual = re.sub(r"\D", "", actual or "")
+    return len(digits_expected) >= 7 and digits_expected == digits_actual
+
+
+def is_date_like_value(value: str) -> bool:
+    """值本身是不是日期/年份形状（「2023-06」「2019.9」「2001」「2027年6月」）。
+
+    「年 / 月 / 日」拆分组件的**槽位**只对日期形状的值开放：school 这类文本字段
+    即使命中了年下拉（区块标签污染），也不该按拆分槽位把同一个值塞进每一个组件
+    ——那会把学校名填进「年」「月」两个框。
+    """
+    return bool(_DATE_LIKE_RE.match(value or ""))
+
+
 def date_values_match(left: str, right: str) -> bool:
     """判断两个日期文本是否表示同一天或同一个年月。"""
     left_parsed = parse_date(left)
@@ -364,4 +394,5 @@ __all__ = [
     "parse_date",
     "resolve_choice",
     "resolve_select_option",
+    "same_phone_number",
 ]

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "id": "hypergryph-2026-10-05-area-code-error-text",
+  "site": "鹰角",
+  "captured_at": "2026-10-05",
+  "source_test": "test_webform_engine_ambiguity.test_date_fields_refuse_controls_with_phone_words",
+  "note": "区号框旁的报错文案含「毕业时间不能晚于当前日期」，education_end 不得经旁文写进区号框。",
+  "controls": [
+    {"index": 0, "type": "text", "name": "areaCode", "placeholder": "区号", "nearby_text": "手机号码（含区号）* 毕业时间不能晚于当前日期", "selector": "[data-rf-index=\"0\"]"},
+    {"index": 1, "type": "text", "placeholder": "选择日期", "nearby_text": "毕业时间*", "selector": "[data-rf-index=\"1\"]"}
+  ],
+  "profile": {"education_end": "2025-06"},
+  "expect": {
+    "mappings": [{"field": "education_end", "index": 1}],
+    "forbidden": [{"field": "education_end", "index": 0}]
+  }
+}

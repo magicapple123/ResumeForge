@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "id": "tencent-2026-09-27-four-adjacent-boxes",
+  "site": "腾讯校招",
+  "captured_at": "2026-09-27",
+  "source_test": "test_webform_engine_ambiguity.test_a_neighbours_label_in_the_nearby_text_cannot_steal_a_control",
+  "note": "导师/实验室/研究方向/论文四框紧挨，label 全空、nearby_text 互相污染（join.qq.com 69 控件页）。",
+  "controls": [
+    {"index": 32, "type": "text", "placeholder": "请输入导师", "nearby_text": "导师 * 导师 * 实验室 研究方向 论文 0/1000", "selector": "[data-rf-index=\"32\"]"},
+    {"index": 33, "type": "text", "placeholder": "请输入实验室", "nearby_text": "实验室 导师 * 实验室 研究方向 论文 0/1000", "selector": "[data-rf-index=\"33\"]"},
+    {"index": 34, "type": "text", "placeholder": "请输入研究方向", "nearby_text": "研究方向 导师 * 实验室 研究方向 论文 0/1000", "selector": "[data-rf-index=\"34\"]"},
+    {"index": 35, "type": "textarea", "placeholder": "请输入已发表论文，如未发表则无需填写", "nearby_text": "0/1000 论文 0/1000 导师 * 实验室 研究方向 论文 0/1000", "selector": "[data-rf-index=\"35\"]"}
+  ],
+  "profile": {
+    "advisor": "王教授",
+    "laboratory": "智能计算实验室",
+    "research_direction": "推荐系统",
+    "paper": "两篇会议论文"
+  },
+  "expect": {
+    "mappings": [
+      {"field": "advisor", "index": 32},
+      {"field": "laboratory", "index": 33},
+      {"field": "research_direction", "index": 34},
+      {"field": "paper", "index": 35}
+    ]
+  }
+}

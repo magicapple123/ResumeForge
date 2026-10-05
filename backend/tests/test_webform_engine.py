@@ -8,8 +8,9 @@
 setter 去写 ``<select>``"这种在 Chrome 里必炸的写法一路活到了生产。教训是：
 **能断言语义就不要只断言字符串**；实在只能断言字符串时，要挑那个真正区分对错的特征。
 
-本文件是主文件（快照/读取、映射守门与杂项守卫）；重复块/日期/文本启发式在
-``test_webform_engine_match.py``，autocomplete/密码/select/radio 在
+本文件是主文件（快照/读取、映射守门与杂项守卫）；基础映射与重复块在
+``test_webform_engine_match.py``，日期映射在 ``test_webform_engine_dates.py``，
+证据消歧在 ``test_webform_engine_ambiguity.py``，autocomplete/密码/select/radio 在
 ``test_webform_engine_controls.py``，写入分派在 ``test_webform_engine_apply.py``。
 """
 import pytest

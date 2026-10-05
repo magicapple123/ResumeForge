@@ -36,6 +36,7 @@ class MultiLiveSession:
         store: Callable[[dict[str, str]], bool] | None = None,
         require_memory_choice: bool = False,
         data_loader: Callable[[], tuple[dict[str, str], list[dict[str, str]]]] | None = None,
+        autofill_data_loader: Callable[[], dict[str, str]] | None = None,
         memory_targets: list[dict[str, Any]] | None = None,
         memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
         target_clients_loader: Callable[[], list[tuple[str, CdpClient]]] | None = None,
@@ -49,6 +50,7 @@ class MultiLiveSession:
         self._store = store
         self._require_memory_choice = require_memory_choice
         self._data_loader = data_loader
+        self._autofill_data_loader = autofill_data_loader
         self._memory_targets = list(memory_targets or [])
         self._memory_targets_loader = memory_targets_loader
         self._target_clients_loader = target_clients_loader
@@ -81,6 +83,7 @@ class MultiLiveSession:
             store=self._store,
             require_memory_choice=self._require_memory_choice,
             data_loader=self._data_loader,
+            autofill_data_loader=self._autofill_data_loader,
             memory_targets=self._memory_targets,
             memory_targets_loader=self._memory_targets_loader,
         )
@@ -245,6 +248,15 @@ class MultiLiveSession:
         for session in sessions:
             session.set_data_loader(loader)
 
+    def set_autofill_data_loader(
+        self, loader: Callable[[], dict[str, str]] | None
+    ) -> None:
+        self._autofill_data_loader = loader
+        with self._lock:
+            sessions = list(self._sessions.values())
+        for session in sessions:
+            session.set_autofill_data_loader(loader)
+
     def set_memory_choice_required(self, required: bool) -> None:
         self._require_memory_choice = bool(required)
         with self._lock:
@@ -311,4 +323,3 @@ class MultiLiveSession:
                     target_id=target_id, value=value, label=label, reuse=reuse
                 )
         return False
-

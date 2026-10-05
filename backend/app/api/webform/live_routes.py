@@ -114,6 +114,14 @@ def _start_live_session(
         finally:
             session.close()
 
+    def load_autofill_data() -> dict[str, str]:
+        """快捷整页填充复用主界面的批量资料口径。"""
+        session = SessionLocal()
+        try:
+            return webform_service.build_form_data(session)
+        finally:
+            session.close()
+
     def load_memory_targets() -> list[dict[str, Any]]:
         """每次打开逐框记忆编辑器时读取最新的完整资料目标。"""
         session = SessionLocal()
@@ -197,6 +205,7 @@ def _start_live_session(
             store=store_remember,
             require_memory_choice=False,
             data_loader=load_live_data,
+            autofill_data_loader=load_autofill_data,
             memory_targets=memory_targets,
             memory_targets_loader=load_memory_targets,
             target_clients_loader=load_live_clients,
@@ -227,4 +236,3 @@ def live_stop():
     """停用后页面上的监听与面板都会撤掉，不会留东西在别人的页面上。"""
     webform_service.stop_live()
     return webform_service.live_status()
-

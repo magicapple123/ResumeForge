@@ -17,6 +17,7 @@ def test_live_start_and_refresh_include_all_profile_values(client, monkeypatch):
     def capture_start_live(*args, **kwargs):
         captured["initial_data"] = args[1]
         captured["data_loader"] = kwargs["data_loader"]
+        captured["autofill_data_loader"] = kwargs["autofill_data_loader"]
 
     monkeypatch.setattr(
         webform_browser, "get_browser_manager", lambda _db: ActiveBrowserManager()
@@ -33,7 +34,7 @@ def test_live_start_and_refresh_include_all_profile_values(client, monkeypatch):
                 "referral_code": {
                     "value": "FIRST123",
                     "source": "learned",
-                    "reuse": "general",
+                    "reuse": "once",
                 }
             },
         },
@@ -46,6 +47,8 @@ def test_live_start_and_refresh_include_all_profile_values(client, monkeypatch):
 
     refresh = captured["data_loader"]
     assert callable(refresh)
+    autofill_refresh = captured["autofill_data_loader"]
+    assert callable(autofill_refresh)
     second_save = client.put(
         "/api/webform/extra-profile",
         json={
@@ -54,7 +57,7 @@ def test_live_start_and_refresh_include_all_profile_values(client, monkeypatch):
                 "referral_code": {
                     "value": "UPDATED456",
                     "source": "learned",
-                    "reuse": "general",
+                    "reuse": "once",
                 }
             },
         },
@@ -63,6 +66,7 @@ def test_live_start_and_refresh_include_all_profile_values(client, monkeypatch):
 
     refreshed_data, _catalog = refresh()
     assert refreshed_data["referral_code"] == "UPDATED456"
+    assert autofill_refresh()["referral_code"] == "UPDATED456"
 
 
 def test_live_start_and_refresh_map_a_matching_custom_label(client, monkeypatch):

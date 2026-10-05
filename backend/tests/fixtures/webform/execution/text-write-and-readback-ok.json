@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "text-write-and-readback-ok",
+  "note": "文本框写入后回读一致：filled。脚本同时钉住调用序列——写入一次、回读一次。",
+  "controls": [
+    {"index": 0, "type": "text", "label": "姓名", "placeholder": "请输入姓名", "selector": "[data-rf-index=\"0\"]"}
+  ],
+  "profile": {"name": "张三"},
+  "script": [
+    {"needle": "rf:set-value", "reply": "{\"ok\": true, \"value\": \"张三\"}"},
+    {"needle": "rf:read-back", "reply": "{\"ok\": true, \"value\": \"张三\", \"checked\": false}"}
+  ],
+  "expect": {
+    "outcomes": [{"field": "name", "status": "filled"}]
+  }
+}

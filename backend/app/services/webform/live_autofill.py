@@ -13,11 +13,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .engine import ApplyOutcome, FieldMapping, FormEngine
+from .engine import ApplyOutcome, FormEngine
 from ..diagnostics import record_event
-from .fields import FIELD_LABELS
-from .repeated_fields import field_label_for_key, split_repeated_key
-from .service import FillSelection, apply_fill
+from .engine.recovery import REASON_WRITE_ERROR
+from .service.fill import SETTLE_RECHECK_SECONDS
+from .service import FillSelection, apply_fill, build_preview, default_selections
 from .session import Snapshot
 
 logger = logging.getLogger(__name__)
@@ -48,20 +48,19 @@ class AutoFillResult:
     recognized_total: int = 0
 
 
-def _label(mapping: FieldMapping) -> str:
-    base = split_repeated_key(mapping.field)[0]
-    return field_label_for_key(mapping.field, FIELD_LABELS.get(base, base or mapping.field))
+def _fillable_items(
+    controls: list[Any], data: dict[str, str], engine: FormEngine
+) -> tuple[Snapshot, list[Any]]:
+    """Build the same rule/default selection set as the main webform page.
 
-
-def _fillable_mappings(controls: list[Any], data: dict[str, str], engine: FormEngine) -> list[FieldMapping]:
-    matched = engine.match_fields(controls, data)
-    result: list[FieldMapping] = []
-    for mapping in matched.mappings:
-        # 当前页面已有不同值时不覆盖；已有相同值也不必重复触发站点联动。
-        if mapping.control.is_filled():
-            continue
-        result.append(mapping)
-    return result
+    The floating-ball action is a shortcut, not a second matcher. Reusing
+    build_preview and default_selections keeps conflict handling,
+    low-confidence rows, and date formatting on the same path as the main UI.
+    """
+    snapshot = Snapshot(id="live-autofill", controls=controls)
+    report = build_preview(snapshot, data, engine=engine)
+    selected = {item.index for item in default_selections(report)}
+    return snapshot, [item for item in report.items if item.index in selected]
 
 
 def fill_current_page(
@@ -80,15 +79,14 @@ def fill_current_page(
     """
     engine = engine or FormEngine()
     controls = engine.read_controls(client)
-    mappings = _fillable_mappings(controls, data, engine)
-    total = len(mappings)
+    snapshot, items = _fillable_items(controls, data, engine)
+    total = len(items)
     form_control_total = len(controls)
     record_event(
         "webform.autofill_start",
         form_control_total=form_control_total,
         recognized_total=total,
     )
-    snapshot = Snapshot(id="live-autofill", controls=controls)
     completed = filled = failed = 0
 
     def report(progress: AutoFillProgress) -> None:
@@ -110,26 +108,36 @@ def fill_current_page(
     outcomes_by_index: dict[int, ApplyOutcome] = {}
     try:
         selections = [
-            FillSelection(index=item.control.index, field=item.field, value=item.value)
-            for item in mappings
+            FillSelection(index=item.index, field=item.field, value=item.value) for item in items
         ]
         outcomes_by_index = {
             outcome.index: outcome
-            for outcome in apply_fill(client, snapshot, selections, engine=engine)
+            for outcome in apply_fill(
+                client,
+                snapshot,
+                selections,
+                engine=engine,
+                # 整页填充收尾复读一次：组件事后还原的"伪已填"在这条路上要被如实降级。
+                settle_recheck=SETTLE_RECHECK_SECONDS,
+            )
         }
     except Exception as error:  # noqa: BLE001 - 整批失败时报告每项失败，避免永久停在进行中
         logger.warning("当前页面自动填写批次失败：%s", error)
         outcomes_by_index = {
-            item.control.index: ApplyOutcome(
-                item.control.index, item.field, "failed", type(error).__name__
+            item.index: ApplyOutcome(
+                item.index,
+                item.field,
+                "failed",
+                type(error).__name__,
+                reason=REASON_WRITE_ERROR,
             )
-            for item in mappings
+            for item in items
         }
 
-    for mapping in mappings:
+    for item in items:
         if should_stop is not None and should_stop():
             break
-        outcome = outcomes_by_index.get(mapping.control.index)
+        outcome = outcomes_by_index.get(item.index)
         completed += 1
         if outcome is not None and outcome.status == "filled":
             filled += 1
@@ -144,7 +152,7 @@ def fill_current_page(
                 failed=failed,
                 form_control_total=form_control_total,
                 recognized_total=total,
-                current_label=_label(mapping),
+                current_label=item.field_label,
                 message=("已填入" if outcome and outcome.status == "filled" else "这一项未能确认，请稍后核对"),
             )
         )
@@ -170,6 +178,10 @@ def fill_current_page(
             recognized_total=total,
         )
     )
+    reason_counts: dict[str, int] = {}
+    for outcome in outcomes_by_index.values():
+        if outcome.reason:
+            reason_counts[outcome.reason] = reason_counts.get(outcome.reason, 0) + 1
     record_event(
         "webform.autofill_done",
         form_control_total=form_control_total,
@@ -178,6 +190,7 @@ def fill_current_page(
         filled=filled,
         failed=failed,
         state=state,
+        reason_counts=reason_counts,
     )
     return AutoFillResult(
         total=total,

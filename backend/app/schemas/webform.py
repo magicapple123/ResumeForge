@@ -147,6 +147,11 @@ class WebFormOutcomeOut(BaseModel):
     # filled | skipped | failed | conflict | unverified
     status: str
     detail: str = ""
+    # 机器可读的失败/未验证原因码（见 engine/recovery.py 的 REASON_*）；
+    # 中文 detail 只给人看，计数与聚合用 reason。
+    reason: str = ""
+    # 实际尝试次数（含首次；重试上限见 recovery.MAX_RETRIES）。
+    attempts: int = 1
 
 
 class WebFormLiveAlternativeOut(BaseModel):
@@ -236,6 +241,8 @@ class WebFormFillOut(BaseModel):
     filled: int = 0
     unverified: int = 0
     failed: int = 0
+    # 未填成功的原因分布（原因码 → 次数）：哪一类失败最多，一眼可见。
+    reason_counts: dict[str, int] = Field(default_factory=dict)
     # 页面中可安全读取的可见表单控件总数；不读取密码框与提交类控件。
     form_control_total: int = 0
     # 本次识别并实际尝试写入的控件数。

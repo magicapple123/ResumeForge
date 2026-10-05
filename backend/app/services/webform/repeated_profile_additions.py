@@ -73,7 +73,7 @@ ADDITIONAL_SYNONYMS: dict[str, tuple[str, ...]] = {
     "academic_attachment_note": ("论文附件说明",),
     "skill_name": ("技能名称", "IT技能名称"),
     "portfolio_name": ("作品名称", "作品集名称"),
-    "portfolio_link": ("作品链接", "作品集链接", "作品网址"),
+    "portfolio_link": ("作品链接", "作品集链接", "作品网址", "网盘链接"),
     "portfolio_blog_name": ("在线作品名称", "博客名称"),
     "portfolio_blog_link": ("在线作品链接", "博客链接"),
     "portfolio_attachment_note": ("作品附件说明",),

@@ -91,10 +91,13 @@ async def test_recognized_but_empty_lands_in_missing_data():
     assert pending.field_label == "导师"
 
 
-async def test_match_that_cannot_be_applied_says_why():
-    """认出来了、资料里也有，但页面上没有对应选项 → 留在「没认出来」并写明原因。
+async def test_a_select_is_never_handed_to_the_model():
+    """**模型也不能绕过"只填不点"**：下拉 / 单选 / 复选在规则阶段就判成 blocked，
+    ``enrich_preview_with_ai`` 只问「没认出来」和「低置信」，不会把它们送到模型面前。
 
-    不写原因的话，用户看到"没认出来"会以为是模型没帮上忙，其实它答对了。
+    这条曾经是反的：下拉会被交给模型认字段，然后把"AI 认出来是「学历」，但页面上的
+    选项没有对应的值"写进「没认出来」。现在它连问都不问——用户看到的是一句更早、
+    更准的话："这是个需要你自己点选的控件"。
     """
     snapshot = _snapshot(
         _raw(
@@ -107,12 +110,14 @@ async def test_match_that_cannot_be_applied_says_why():
     data = {"degree": "本科"}
     report = build_preview(snapshot, data)
     provider = FakeProvider({"matches": [{"index": 0, "field": "degree"}]})
-    await enrich_preview_with_ai(snapshot, data, report, provider)
+    asked = await enrich_preview_with_ai(snapshot, data, report, provider)
 
+    assert asked == 0, "模型不该被问到一个已经判成「只填不点」的控件"
+    assert provider.messages == [], "一次调用都不该发生"
     assert report.items == []
-    (pending,) = report.unrecognized
-    assert "学历" in pending.field_label
-    assert "选项" in pending.field_label
+    assert report.unrecognized == []
+    (pending,) = report.blocked
+    assert "点选" in pending.field_label
 
 
 async def test_ai_rows_obey_the_conflict_rule():
@@ -148,27 +153,35 @@ async def test_blocked_controls_are_never_asked():
     assert [item.index for item in report.blocked] == [0], "blocked 这一桶不该被动"
 
 
-async def test_ai_fills_a_factual_radio_and_never_sees_a_consent_checkbox():
-    """「只挡表态类」在这条链路上是两半，**缺一不可**。
+async def test_ai_never_fills_a_control_whose_value_comes_from_a_click():
+    """「只填不点」在 AI 这条链路上有两道闸，**缺一不可**。
 
-    只测"能填"会漏掉更重要的那一半：**同意项根本不该出现在模型眼前**。所以这条两边都钉：
-    事实类的单选认出来就正常进「将填入」；表态类的连 `unrecognized` 都进不去——`skip_reason`
-    在匹配之前就把它拦下了，模型从头到尾看不到它。
+    第一道：这类控件根本不进 `unrecognized`（= 不进提示词），模型从头到尾看不到它；
+    第二道：采纳点 `_adopt_ai_match` 自己再过一次 `skip_reason`——将来若有人改了上游的
+    分桶逻辑，模型就算答对了也填不进去。都测，是因为只知道"看不到"挡不住以后的重构。
     """
     from app.services.webform.service import PreviewReport, _adopt_ai_match
 
-    # 事实类：AI 认出来 → 正常进「将填入」。
+    # 第一道：单选（"事实类"的性别也一样）进不了 `unrecognized`，只在 `blocked` 里说明。
+    snapshot = _snapshot(
+        _raw(0, type="radio", name="g", value="女", label="女", nearby_text="性别* 男 女")
+    )
+    report = build_preview(snapshot, {"gender": "女"})
+
+    assert report.unrecognized == []
+    assert [item.index for item in report.blocked] == [0]
+
+    # 第二道：把控件直接递到采纳点也进不了「将填入」。
     control = _controls(
         _raw(0, type="radio", name="g", value="女", label="女", nearby_text="性别* 男 女")
     )[0]
-    report = PreviewReport()
+    adopted = PreviewReport()
 
-    _adopt_ai_match(report, control, "gender", {"gender": "女"})
+    _adopt_ai_match(adopted, control, "gender", {"gender": "女"})
 
-    assert [(item.index, item.field) for item in report.items] == [(0, "gender")]
-    assert report.blocked == []
+    assert adopted.items == []
 
-    # 表态类：进不了 `unrecognized`（= 不会进提示词），只在 `blocked` 里如实说明。
+    # 同意项（第二道闸之外还多一层理由）同样只在 `blocked` 里。
     consent = _snapshot(_raw(0, type="checkbox", label="我已阅读并同意隐私政策"))
     consent_report = build_preview(consent, {})
 
