@@ -3,7 +3,7 @@
 # the locale codec (cp936 on Chinese Windows), so a non-ASCII comment here makes
 # `pip install -r requirements.txt` abort with UnicodeDecodeError before it
 # reads a single pin.
-fastapi==0.141.1
+fastapi==0.142.2
 starlette==1.7.0
 # Multipart form parsing for the referral note-image upload endpoint.
 python-multipart==0.0.32
