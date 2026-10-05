@@ -1,15 +1,15 @@
-/** 投投的运行时表情素材与「状态 → 素材」映射，保持原始 PNG，不做裁切。 */
+/** 投投的运行时表情素材与「状态 → 素材」映射，保持原始 WebP（有透明通道），不做裁切。 */
 
-import idleFace from "../../assets/toutou/ball-idle.png";
-import curiousFace from "../../assets/toutou/ball-curious.png";
-import thinkingFace from "../../assets/toutou/ball-thinking.png";
-import doneFace from "../../assets/toutou/ball-done.png";
-import errorFace from "../../assets/toutou/ball-error.png";
-import sleepFace from "../../assets/toutou/ball-sleep.png";
+import idleFace from "../../assets/toutou/ball-idle.webp";
+import curiousFace from "../../assets/toutou/ball-curious.webp";
+import thinkingFace from "../../assets/toutou/ball-thinking.webp";
+import doneFace from "../../assets/toutou/ball-done.webp";
+import errorFace from "../../assets/toutou/ball-error.webp";
+import sleepFace from "../../assets/toutou/ball-sleep.webp";
 import type { TouTouStatus } from "./touTouTypes";
 
 /**
- * 素材表：一个 key 一张图，渲染时每张图一个 `<img>`（常驻 DOM，靠 `is-active` 淡入淡出）。
+ * 素材表：一个 key 一张图，渲染时只渲染 activeFace 对应的那一张 `<img>`。
  *
  * 加一张新表情＝加一个 key（素材放进 `assets/toutou`），**不需要**改渲染逻辑。
  */
