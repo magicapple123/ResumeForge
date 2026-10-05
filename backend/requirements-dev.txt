@@ -8,5 +8,5 @@ pytest-cov==7.1.0
 # takes minutes to verify; conftest keys its temp database and dataset directory
 # by PID, so workers are already isolated. Keep the ASCII-only rule for this file.
 pytest-xdist==3.8.0
-ruff==0.16.9
+ruff==0.16.10
 pip-audit==2.10.1
