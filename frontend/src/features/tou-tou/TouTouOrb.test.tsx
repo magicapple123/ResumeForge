@@ -1,7 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import TouTouOrb from "./TouTouOrb";
-import { TOU_TOU_FACE_SOURCES } from "./touTouFaces";
 import { defaultTouTouContext, TouTouContext } from "./touTouContext";
 
 afterEach(() => {
@@ -20,11 +19,11 @@ describe("TouTouOrb", () => {
     render(<TouTouOrb onOpen={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "打开求职助手" })).toBeInTheDocument();
-    // 张数跟着素材表走：加一张新表情不用回来改这个数字。
-    expect(document.querySelectorAll(".tt-face")).toHaveLength(
-      Object.keys(TOU_TOU_FACE_SOURCES).length,
-    );
+    // 只渲染 activeFace 对应的一张 img：src 随表情切换，不再 6 张常驻 DOM。
+    // 出场先「好奇」，所以初始脸是 curious 而不是 idle。
+    expect(document.querySelectorAll(".tt-face")).toHaveLength(1);
     expect(document.querySelectorAll(".tt-face.is-active")).toHaveLength(1);
+    expect(activeFaceSrc()).toContain("ball-curious");
   });
 
   it("opens the assistant from click, Enter and Space", () => {
@@ -231,9 +230,7 @@ describe("TouTouOrb", () => {
     try {
       render(<TouTouOrb />);
       expect(screen.getByRole("button", { name: "打开求职助手" })).toBeInTheDocument();
-      expect(document.querySelectorAll(".tt-face")).toHaveLength(
-        Object.keys(TOU_TOU_FACE_SOURCES).length,
-      );
+      expect(document.querySelectorAll(".tt-face")).toHaveLength(1);
 
       // 眨眼是 JS 定时换脸，CSS 的媒体查询拦不住它——这里要真的不眨。
       // 20s 时球已静置收纳：探头张望的脸是 JS 态（不受 motion 偏好影响），

@@ -93,6 +93,9 @@ export default function TouTouOrb({
   const visualStatusRef = useRef(visualStatus);
   isBusyRef.current = isBusy;
   visualStatusRef.current = visualStatus;
+  // 标语轮换 effect 只留开关依赖，瞬态条件经 ref 镜像在回调里读取。
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
 
   /** 「好奇」是过渡态：到点自己回到正常，别一直瞪着。 */
   const scheduleIdle = useCallback((delay: number) => {
@@ -213,6 +216,8 @@ export default function TouTouOrb({
 
   const { buttonRef, dragging, handlePointerDown, position, shellStyle, suppressClickRef } =
     useTouTouOrbDrag({ scheduleIdle, setVisualStatus: requestVisualStatus, wake });
+  const draggingRef = useRef(dragging);
+  draggingRef.current = dragging;
 
   /**
    * 发呆时偶尔眨一下眼。
@@ -250,9 +255,20 @@ export default function TouTouOrb({
   useEffect(() => {
     // 标语开关独立于球开关：关掉后不再弹新标语，已显示的立即收起；
     // 重新开启后 5s / 120s 的周期自然恢复，无需刷新页面。
+    //
+    // 依赖只留真正的开关（context.enabled/tipsEnabled）：hidden/dragging/isBusy/
+    // visualStatus 是"到点了再看"的瞬态条件，放进依赖会让表情每次变化都拆掉
+    // 重建 120s interval 并重排 5s 的首次出现——频繁互动时标语出现频率远高于
+    // 设计值。回调里改读 ref 镜像，取到的一定是最新值。
     if (!context.enabled || !context.tipsEnabled) return;
     const showTip = () => {
-      if (hidden || dragging || isBusy || visualStatus !== "idle") return;
+      if (
+        hiddenRef.current ||
+        draggingRef.current ||
+        isBusyRef.current ||
+        visualStatusRef.current !== "idle"
+      )
+        return;
       setTipVisible(true);
       clearTimer(tipHideTimerRef);
       tipHideTimerRef.current = window.setTimeout(() => setTipVisible(false), 8_000);
@@ -267,7 +283,7 @@ export default function TouTouOrb({
       window.clearInterval(interval);
       clearTimer(tipHideTimerRef);
     };
-  }, [context.enabled, context.tipsEnabled, dragging, hidden, isBusy, visualStatus]);
+  }, [context.enabled, context.tipsEnabled]);
 
   useEffect(() => {
     if (hidden || dragging || isBusy || !context.tipsEnabled) setTipVisible(false);
@@ -391,14 +407,13 @@ export default function TouTouOrb({
             <span className="tt-float">
               <span className="tt-breathe">
                 <span className="tt-turn">
-                  {Object.entries(TOU_TOU_FACE_SOURCES).map(([key, src]) => (
-                    <img
-                      key={key}
-                      className={`tt-face${key === activeFace ? " is-active" : ""}`}
-                      src={src}
-                      alt=""
-                    />
-                  ))}
+                  {/* 只渲染当前表情这一张：6 张常驻 img 全量进首屏（约 1.4MB）太贵，
+                      换 src 即换脸，无需淡入淡出。 */}
+                  <img
+                    className="tt-face is-active"
+                    src={TOU_TOU_FACE_SOURCES[activeFace]}
+                    alt=""
+                  />
                 </span>
               </span>
             </span>

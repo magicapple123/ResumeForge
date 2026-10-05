@@ -3,6 +3,7 @@ import { App, Modal } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { attachTaskUi, watchResumeTask } from "../utils/backgroundTasks";
+import { isDocumentHidden, onVisibilityChange } from "../utils/visibility";
 import {
   cancelResumeGenerateTask,
   fetchResumeTemplates,
@@ -222,10 +223,19 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       }
     };
     void poll();
-    const timer = window.setInterval(poll, 1500);
+    // 页面在后台时跳过本轮 tick；回到前台由 visibilitychange 立即补一次。
+    const timer = window.setInterval(() => {
+      if (isDocumentHidden()) return;
+      void poll();
+    }, 1500);
+    const unsubscribeVisibility = onVisibilityChange(() => {
+      if (isDocumentHidden()) return;
+      void poll();
+    });
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      unsubscribeVisibility();
     };
   }, [taskId]);
 
@@ -370,8 +380,14 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       title={job ? `为「${job.title}」生成简历` : "生成通用简历"}
       open={open}
       onCancel={handleClose}
-      width={860}
+      // 宽度与 body 限高对齐简历中心的预览弹窗（ResumeDetailModal）：预览阶段渲染的是
+      // 同一个 ResumeDetailPreview，两边布局应一致；限高让超长的预览只滚弹窗内部，
+      // 卡片整体始终完整呈现在视口内。
+      width="min(960px, 96vw)"
       footer={null}
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       destroyOnHidden
     >
       {stage === "config" && (
