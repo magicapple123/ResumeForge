@@ -28,6 +28,7 @@ import {
 } from "antd";
 import type { MenuProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { listJobs } from "../api/jobs";
 import { listResumes } from "../api/resumes";
 import { deleteTrack, exportTracks, listTracks } from "../api/tracker";
@@ -42,8 +43,13 @@ import { FUNNEL_STATUSES, TRACK_STATUSES, TRACK_STATUS_LABELS } from "../types";
 
 export default function TrackerPage() {
   const { message } = App.useApp();
-  const [status, setStatus] = useState("");
-  const [keyword, setKeyword] = useState("");
+  // 状态筛选与关键词从 URL 读初值、改动后 replace 写回（模式同 WebFormPage / JobsPage）。
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [status, setStatus] = useState(searchParams.get("status") ?? "");
+  const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
+  // 搜索框受控镜像（同 JobFilterBar 的处理）：URL 恢复的关键词能回填输入框。
+  const [searchText, setSearchText] = useState(keyword);
+  useEffect(() => setSearchText(keyword), [keyword]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Track | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -55,6 +61,21 @@ export default function TrackerPage() {
     () => listTracks({ status, keyword }),
     [status, keyword],
   );
+
+  // 筛选写回 URL（replace 语义）；effect 不依赖 searchParams，不会循环重渲染。
+  useEffect(() => {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (status) next.set("status", status);
+        else next.delete("status");
+        if (keyword) next.set("keyword", keyword);
+        else next.delete("keyword");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [status, keyword, setSearchParams]);
 
   const items = useMemo(() => data?.items ?? [], [data]);
   const trackOptions = useMemo(
@@ -217,7 +238,16 @@ export default function TrackerPage() {
           allowClear
           placeholder="搜索公司、岗位、备注或下一步"
           style={{ width: 280 }}
-          onSearch={setKeyword}
+          value={searchText}
+          onChange={(event) => {
+            const value = event.target.value;
+            setSearchText(value);
+            if (value === "" && keyword !== "") setKeyword("");
+          }}
+          onSearch={(value) => {
+            setSearchText(value);
+            setKeyword(value);
+          }}
         />
       </Space>
 

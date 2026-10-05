@@ -52,7 +52,7 @@ describe("ResumeRiskPanel", () => {
     expect(screen.getByText("深挖风险点")).toBeInTheDocument();
     expect(screen.getByText("合规校验")).toBeInTheDocument();
     expect(screen.getByText("主导交易系统从0到1建设")).toBeInTheDocument();
-    expect(screen.getByText("台账 #42")).toBeInTheDocument();
+    expect(screen.getByText("事实台账 #42")).toBeInTheDocument();
     expect(screen.getByText(/这条强主张会被追问/)).toBeInTheDocument();
     expect(apiMocks.scanResumeRisks).toHaveBeenCalledWith(7);
   });

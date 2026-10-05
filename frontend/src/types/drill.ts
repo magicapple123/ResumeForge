@@ -27,7 +27,7 @@ export const EVIDENCE_HINTS: Record<EvidenceStatus, string> = {
   verified: "必要证据都讲到了",
   partial: "讲到了一部分，还有明确缺口",
   unverified: "没能提供最低限度的事实",
-  contradictory: "与台账或前文对不上",
+  contradictory: "与事实台账或前文对不上",
   not_covered: "这一轮没问到",
 };
 

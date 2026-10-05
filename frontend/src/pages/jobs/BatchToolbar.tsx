@@ -59,7 +59,7 @@ export function BatchToolbar({
       </Button>
       <Popconfirm
         title={`确定删除选中的 ${selectedJobIds.length} 个岗位？`}
-        description="删除后无法恢复"
+        description="将移入回收站，可随时恢复"
         okText="删除"
         cancelText="取消"
         okButtonProps={{ danger: true }}

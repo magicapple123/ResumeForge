@@ -153,7 +153,7 @@ export default function DrillPage() {
             面试深挖
           </Typography.Title>
           <Typography.Text type="secondary">
-            把台账里「已确认」的主张逐条拿出来压力测试：讲不讲得清、哪里还站不住。
+            把事实台账里「已确认」的主张逐条拿出来压力测试：讲不讲得清、哪里还站不住。
             每道题的标准在你看到问题之前就定下来，不评总分。
           </Typography.Text>
         </Space>

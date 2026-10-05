@@ -10,7 +10,7 @@ export const TASK_STATUS_META: Record<TaskStatus, { label: string; color: string
   pending: { label: "等待中", color: "default" },
   running: { label: "进行中", color: "processing" },
   paused: { label: "已暂停", color: "warning" },
-  breaker_paused: { label: "熔断暂停", color: "error" },
+  breaker_paused: { label: "连续失败过多，已自动暂停", color: "error" },
   completed: { label: "已完成", color: "success" },
   stopped: { label: "已停止", color: "default" },
   failed: { label: "失败", color: "error" },

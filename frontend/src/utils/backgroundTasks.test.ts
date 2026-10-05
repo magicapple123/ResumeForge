@@ -5,10 +5,12 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../api/client";
 import type { ResumeGenerateTask } from "../types";
 import {
   attachTaskUi,
   cancelBackgroundTask,
+  dismissBackgroundTask,
   getBackgroundTasks,
   resetBackgroundTasks,
   restoreBackgroundTasks,
@@ -152,6 +154,61 @@ describe("后台任务登记表", () => {
 
     expect(notices).toEqual([]);
     expect(getBackgroundTasks().length).toBe(1);
+  });
+
+  it("连续轮询失败达到 3 次后标记「状态未知」，并可手动移除", async () => {
+    // 后端重启 / 长时间不可用时，任务永远等不到终态；不能让页头永久转圈。
+    apiMocks.getResumeGenerateTask.mockRejectedValue(new Error("后端暂时不可用"));
+    watchResumeTask(makeTask(), "生成通用简历");
+
+    await runOneTick();
+
+    const [task] = getBackgroundTasks();
+    expect(task?.unknown).toBe(true);
+    // 结果真的不知道：不触发成功/失败提醒。
+    expect(notices).toEqual([]);
+
+    // 「状态未知」条目给「移除」：把条目清掉，不再轮询。
+    dismissBackgroundTask(task.id);
+    expect(getBackgroundTasks()).toEqual([]);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("后端明确返回 404 时一轮就标记「状态未知」", async () => {
+    apiMocks.getResumeGenerateTask.mockRejectedValue(new ApiError("任务不存在", 404));
+    watchResumeTask(makeTask(), "生成通用简历");
+
+    await runOneTick();
+
+    expect(getBackgroundTasks()[0]?.unknown).toBe(true);
+    expect(notices).toEqual([]);
+  });
+
+  it("失败几轮后恢复成功会回到正常显示", async () => {
+    apiMocks.getResumeGenerateTask
+      .mockRejectedValueOnce(new Error("后端暂时不可用"))
+      .mockRejectedValueOnce(new Error("后端暂时不可用"))
+      .mockResolvedValue(makeTask({ status: "running", message: "正在写第 2 段" }));
+    watchResumeTask(makeTask(), "生成通用简历");
+
+    await runOneTick(2);
+
+    const task = getBackgroundTasks()[0];
+    expect(task?.unknown).toBe(false);
+    expect(task?.message).toBe("正在写第 2 段");
+  });
+
+  it("取消时后端 404 → 移除条目并提示「任务记录已不存在」", async () => {
+    apiMocks.getResumeGenerateTask.mockRejectedValue(new Error("后端暂时不可用"));
+    watchResumeTask(makeTask(), "生成通用简历");
+    apiMocks.cancelResumeGenerateTask.mockRejectedValue(new ApiError("任务不存在", 404));
+
+    // 抛出的中文信息会被调用方的错误提示原样展示。
+    await expect(cancelBackgroundTask(7)).rejects.toThrow("任务记录已不存在");
+
+    // 条目同时被移除：取消按钮不再对一条已经不存在的任务反复 404。
+    expect(getBackgroundTasks()).toEqual([]);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it("取消会把任务置为取消态并通知", async () => {

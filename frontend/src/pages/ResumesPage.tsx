@@ -25,15 +25,27 @@ import ResumeDiffModal from "./resumes/ResumeDiffModal";
 
 export default function ResumesPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { message, modal } = App.useApp();
   // 批量选择：勾选若干份简历后一次删除（全部进回收站，可恢复）。
   const batch = useBatchSelection<number>();
-  const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [favoriteFilter, setFavoriteFilter] = useState<boolean | undefined>();
-  const [hasJobFilter, setHasJobFilter] = useState<boolean | undefined>();
+  // 筛选 / 分页初值从 URL 读，改动后用 replace 写回（模式同 WebFormPage / JobsPage）。
+  const boolParam = (key: string): boolean | undefined => {
+    const raw = searchParams.get(key);
+    if (raw === "1") return true;
+    if (raw === "0") return false;
+    return undefined;
+  };
+  const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
+  // 搜索框受控镜像（同 JobFilterBar 的处理）：点 × 清空时立即清筛选。
+  const [searchText, setSearchText] = useState(keyword);
+  useEffect(() => setSearchText(keyword), [keyword]);
+  const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
+  const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
+  const [favoriteFilter, setFavoriteFilter] = useState<boolean | undefined>(() =>
+    boolParam("favorite"),
+  );
+  const [hasJobFilter, setHasJobFilter] = useState<boolean | undefined>(() => boolParam("has_job"));
   const [previewId, setPreviewId] = useState<number | null>(null);
   const [favoriteResumeId, setFavoriteResumeId] = useState<number | null>(null);
   const favoriteResumeIdRef = useRef<number | null>(null);
@@ -66,6 +78,29 @@ export default function ResumesPage() {
   useEffect(() => {
     if (error) message.error(error);
   }, [error, message]);
+
+  // 筛选 / 分页写回 URL（replace 语义）。effect 只依赖这些状态，不依赖 searchParams，
+  // 因此写回不会触发循环重渲染；job_id 参数通过 functional 更新原样保留。
+  useEffect(() => {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        const values: [string, string][] = [
+          ["keyword", keyword],
+          ["favorite", favoriteFilter === undefined ? "" : favoriteFilter ? "1" : "0"],
+          ["has_job", hasJobFilter === undefined ? "" : hasJobFilter ? "1" : "0"],
+          ["page", page > 1 ? String(page) : ""],
+          ["page_size", pageSize !== 10 ? String(pageSize) : ""],
+        ];
+        for (const [key, value] of values) {
+          if (value) next.set(key, value);
+          else next.delete(key);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }, [keyword, favoriteFilter, hasJobFilter, page, pageSize, setSearchParams]);
 
   const remove = useCallback(
     async (id: number) => {
@@ -190,7 +225,18 @@ export default function ResumesPage() {
         placeholder="搜索简历记录"
         allowClear
         style={{ width: 300, marginBottom: 16 }}
+        // 受控镜像：URL 恢复的关键词能回填输入框；点 × 清空时立即把筛选也清掉。
+        value={searchText}
+        onChange={(event) => {
+          const value = event.target.value;
+          setSearchText(value);
+          if (value === "" && keyword !== "") {
+            setKeyword("");
+            setPage(1);
+          }
+        }}
         onSearch={(value) => {
+          setSearchText(value);
           setKeyword(value);
           setPage(1);
         }}

@@ -10,6 +10,7 @@ import { PauseOutlined, PlayCircleOutlined, StopOutlined } from "@ant-design/ico
 import { Alert, Button, Descriptions, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import {
   TASK_ITEM_STATUS_META,
   TASK_STATUS_META,
@@ -40,7 +41,7 @@ function alertType(status: TaskStatus): "error" | "warning" | "info" | "success"
 
 const STOP_REASON_LABELS: Record<string, string> = {
   user: "用户停止",
-  breaker: "连续失败熔断",
+  breaker: "连续失败过多，已自动暂停",
   done: "已完成",
   error: "发生错误",
 };
@@ -164,6 +165,15 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
         <Typography.Text type="success">成功 {task.succeeded}</Typography.Text>
         <Typography.Text type="danger">失败 {task.failed}</Typography.Text>
         <Typography.Text type="secondary">已跳过 {task.skipped}</Typography.Text>
+        {/* 投递批次到终态后给下一步入口：投出去的岗位在求职进度里推进，
+            不给入口用户不知道这一批"结束了然后呢"。 */}
+        {!active && task.kind === "apply" && (
+          <Link to="/tracker">
+            <Button type="link" size="small" style={{ padding: 0 }}>
+              去求职进度跟进
+            </Button>
+          </Link>
+        )}
       </Space>
 
       {task.items.length > 0 ? (

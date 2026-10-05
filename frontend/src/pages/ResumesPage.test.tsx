@@ -46,9 +46,9 @@ const RESUME: ResumeBrief = {
   created_at: "2026-08-20T10:00:00",
 };
 
-function renderPage() {
+function renderPage(initialEntries: string[] = ["/resumes"]) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <AntdApp>
         <ResumesPage />
       </AntdApp>
@@ -170,6 +170,20 @@ describe("ResumesPage 备注列", () => {
     await screen.findByText(RESUME.title);
 
     expect(screen.getByText("重点跟进，本周五前回复")).toBeInTheDocument();
+  });
+});
+
+describe("ResumesPage URL 状态化", () => {
+  it("从 URL 恢复关键词与收藏筛选", async () => {
+    renderPage(["/resumes?keyword=%E5%88%B6%E9%80%A0&favorite=0"]);
+
+    await waitFor(() => {
+      expect(apiMocks.listResumes).toHaveBeenLastCalledWith(
+        expect.objectContaining({ keyword: "制造", favorite: false }),
+      );
+    });
+    const searchInput = screen.getByPlaceholderText("搜索简历记录") as HTMLInputElement;
+    expect(searchInput.value).toBe("制造");
   });
 });
 

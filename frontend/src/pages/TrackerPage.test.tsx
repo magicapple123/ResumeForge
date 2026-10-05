@@ -6,6 +6,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Track, TrackList } from "../types";
 import TrackerPage from "./TrackerPage";
@@ -61,11 +62,13 @@ function makeList(items: Track[]): TrackList {
   };
 }
 
-function renderPage() {
+function renderPage(initialEntries: string[] = ["/tracker"]) {
   return render(
-    <AntdApp>
-      <TrackerPage />
-    </AntdApp>,
+    <MemoryRouter initialEntries={initialEntries}>
+      <AntdApp>
+        <TrackerPage />
+      </AntdApp>
+    </MemoryRouter>,
   );
 }
 
@@ -160,6 +163,23 @@ describe("TrackerPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "OK" }));
 
     await waitFor(() => expect(apiMocks.deleteTrack).toHaveBeenCalledWith(1));
+  });
+
+  it("从 URL 恢复状态筛选与关键词", async () => {
+    apiMocks.listTracks.mockResolvedValue(makeList([]));
+    renderPage(["/tracker?status=interview&keyword=%E7%A4%BA%E4%BE%8B"]);
+
+    await waitFor(() => {
+      expect(apiMocks.listTracks).toHaveBeenLastCalledWith({
+        status: "interview",
+        keyword: "示例",
+      });
+    });
+    // 搜索框回填恢复出的关键词。
+    const searchInput = screen.getByPlaceholderText(
+      "搜索公司、岗位、备注或下一步",
+    ) as HTMLInputElement;
+    expect(searchInput.value).toBe("示例");
   });
 });
 

@@ -12,6 +12,7 @@ import { listUpcomingReminders } from "../api/reminders";
 import { getStats } from "../api/search";
 import { getReminderPopupSetting } from "../api/settings";
 import { useApi } from "../hooks/useApi";
+import { onceUserGuideClosed } from "../utils/userGuide";
 import { LatestCards } from "./home/LatestCards";
 import { ReminderPopup } from "./home/ReminderPopup";
 import { RemindersCard } from "./home/RemindersCard";
@@ -36,15 +37,15 @@ export default function HomePage() {
   const [popupVisible, setPopupVisible] = useState(false);
 
   // 打开应用时：设置开启且有未完成提醒 → 弹出近期提醒（本 SPA 会话仅弹一次）。
+  // 欢迎引导还开着时排在它后面（关闭后再弹）：两个启动弹窗叠在一起，提醒会被盖住。
   useEffect(() => {
-    if (
-      !reminderPopupShownThisSession &&
-      popupSetting?.enabled &&
-      (upcomingReminders?.length ?? 0) > 0
-    ) {
+    if (reminderPopupShownThisSession) return;
+    if (!popupSetting?.enabled) return;
+    if ((upcomingReminders?.length ?? 0) === 0) return;
+    return onceUserGuideClosed(() => {
       setPopupVisible(true);
       reminderPopupShownThisSession = true;
-    }
+    });
   }, [popupSetting, upcomingReminders]);
 
   // "接下来做什么"只列**待办**，不列"你已经做了多少"——概览页上能推动人的只有前者。

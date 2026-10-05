@@ -99,7 +99,7 @@ export default function ClaimCard({ claim, onEdit, onDelete, onConfirm }: Props)
                   label: "删除",
                   danger: true,
                   icon: <DeleteOutlined />,
-                  confirm: "删除这条台账记录？",
+                  confirm: "删除这条事实台账记录？",
                   onClick: onDelete,
                 },
               ]),

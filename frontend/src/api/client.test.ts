@@ -61,4 +61,21 @@ describe("request", () => {
     );
     await expect(request("/example", { method: "POST" })).rejects.toBeInstanceOf(ApiError);
   });
+
+  it("fetch 本身失败时抛中文提示，并把原始错误保留在 cause 上", async () => {
+    // 服务没启动 / 网络不可达时 fetch 拒绝的是英文的 TypeError；直接抛出去用户看不懂。
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    const error: Error = await request("/example").then(
+      () => {
+        throw new Error("should not resolve");
+      },
+      (err: Error) => err,
+    );
+    expect(error.message).toBe("无法连接本地服务，请确认应用已启动");
+    // 诊断信息不能丢：原始错误挂在 cause 上。
+    const cause = (error as Error & { cause?: unknown }).cause;
+    expect(cause).toBeInstanceOf(TypeError);
+    expect((cause as TypeError).message).toBe("Failed to fetch");
+  });
 });

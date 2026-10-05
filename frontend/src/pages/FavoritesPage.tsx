@@ -4,7 +4,7 @@ import { App, Button, Empty, Space, Table, Tabs, Tag, Tooltip, Typography } from
 import type { ColumnsType } from "antd/es/table";
 import type { HTMLAttributes } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { listJobs, updateJob } from "../api/jobs";
 import { listResumes, updateResumeFavorite } from "../api/resumes";
 import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
@@ -20,9 +20,13 @@ type FavoritePage =
 export default function FavoritesPage() {
   const navigate = useNavigate();
   const { message } = App.useApp();
-  const [kind, setKind] = useState<FavoriteKind>("jobs");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  // 页签 / 分页从 URL 读初值、改动后 replace 写回（模式同 WebFormPage / JobsPage）。
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [kind, setKind] = useState<FavoriteKind>(
+    searchParams.get("kind") === "resumes" ? "resumes" : "jobs",
+  );
+  const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
+  const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
   const [previewId, setPreviewId] = useState<number | null>(null);
   const [updatingKey, setUpdatingKey] = useState("");
   const updatingKeyRef = useRef("");
@@ -37,6 +41,23 @@ export default function FavoritesPage() {
   useEffect(() => {
     if (error) message.error(error);
   }, [error, message]);
+
+  // 页签 / 分页写回 URL（replace 语义）；effect 不依赖 searchParams，不会循环重渲染。
+  useEffect(() => {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (kind !== "jobs") next.set("kind", kind);
+        else next.delete("kind");
+        if (page > 1) next.set("page", String(page));
+        else next.delete("page");
+        if (pageSize !== 10) next.set("page_size", String(pageSize));
+        else next.delete("page_size");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [kind, page, pageSize, setSearchParams]);
 
   const removeJobFavorite = useCallback(
     async (job: Job) => {

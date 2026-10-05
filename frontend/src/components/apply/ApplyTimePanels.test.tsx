@@ -1,6 +1,7 @@
 /** 投递台时间显示：后端的无时区时间按 UTC 解释，再转换成浏览器本地时间。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyRecord, ApplyRecordBatch, ApplyTaskDetail } from "../../types";
 import { formatDateTime } from "../../utils/format";
@@ -111,7 +112,9 @@ describe("投递台本地时间", () => {
   it("投递记录显示转换后的完成时间（组头与展开后的记录都要转换）", async () => {
     render(
       <AntdApp>
-        <ApplyRecordsPanel disabled={false} onRetried={vi.fn()} />
+        <MemoryRouter>
+          <ApplyRecordsPanel disabled={false} onRetried={vi.fn()} />
+        </MemoryRouter>
       </AntdApp>,
     );
 
@@ -128,13 +131,15 @@ describe("投递台本地时间", () => {
   it("执行进度详情显示转换后的开始和结束时间", () => {
     const { container } = render(
       <AntdApp>
-        <ApplyProgressPanel
-          task={task()}
-          busy={false}
-          onPause={vi.fn()}
-          onResume={vi.fn()}
-          onStop={vi.fn()}
-        />
+        <MemoryRouter>
+          <ApplyProgressPanel
+            task={task()}
+            busy={false}
+            onPause={vi.fn()}
+            onResume={vi.fn()}
+            onStop={vi.fn()}
+          />
+        </MemoryRouter>
       </AntdApp>,
     );
 

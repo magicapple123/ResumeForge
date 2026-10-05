@@ -6,6 +6,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ApplyTaskDetail, ApplyTaskItem } from "../../types";
 import ApplyProgressPanel from "./ApplyProgressPanel";
@@ -60,15 +61,17 @@ function task(items: ApplyTaskItem[]): ApplyTaskDetail {
 
 function renderPanel(items: ApplyTaskItem[]) {
   return render(
-    <AntdApp>
-      <ApplyProgressPanel
-        task={task(items)}
-        busy={false}
-        onPause={() => {}}
-        onResume={() => {}}
-        onStop={() => {}}
-      />
-    </AntdApp>,
+    <MemoryRouter>
+      <AntdApp>
+        <ApplyProgressPanel
+          task={task(items)}
+          busy={false}
+          onPause={() => {}}
+          onResume={() => {}}
+          onStop={() => {}}
+        />
+      </AntdApp>
+    </MemoryRouter>,
   );
 }
 

@@ -16,6 +16,7 @@
  * 提醒与追踪。localStorage 不可用（隐私模式等）时全部静默降级为原来的行为。
  */
 import { cancelResumeGenerateTask, getResumeGenerateTask } from "../api/resumes";
+import { ApiError } from "../api/client";
 import type { ResumeGenerateTask, ResumeGenerateTaskStatus } from "../types";
 import { notifyTaskDone } from "./taskNotify";
 import { isDocumentHidden, onVisibilityChange } from "./visibility";
@@ -31,6 +32,12 @@ export interface BackgroundTask {
   receivedChars: number;
   resumeId: number | null;
   error: string;
+  /**
+   * 连续轮询失败（或后端明确返回 404）后置真：后端重启 / 记录被清理时任务永远不会有
+   * 终态，页头会永久转圈。置真后**不**触发成功/失败提醒（结果真的不知道），界面显示
+   * 「状态未知」并给「移除」按钮；之后某轮轮询成功则自动恢复。
+   */
+  unknown: boolean;
 }
 
 type Listener = (tasks: BackgroundTask[]) => void;
@@ -93,6 +100,10 @@ function persistRemoveTask(taskId: number): void {
 }
 
 const tasks = new Map<number, BackgroundTask>();
+/** 每个登记任务的连续轮询失败计数（成功一轮即清零）。 */
+const failureCounts = new Map<number, number>();
+/** 连续失败多少轮后承认「状态未知」。 */
+const UNKNOWN_AFTER_FAILURES = 3;
 /** 任务终态时要通知谁（弹窗打开时要刷新预览；关掉之后没人需要）。 */
 const finishHandlers = new Map<number, (task: BackgroundTask) => void>();
 /** 哪些任务当前"有界面在看"，决定完成时是右上角卡片还是居中弹窗。 */
@@ -155,12 +166,36 @@ async function tick(): Promise<void> {
     [...tasks.keys()].map(async (id) => {
       try {
         const latest = await getResumeGenerateTask(id);
+        // 这一轮成功了：失败计数清零，「状态未知」也随真实进度恢复为正常显示。
+        failureCounts.delete(id);
         applyUpdate(id, latest);
-      } catch {
-        // 轮询失败（后端短暂不可用）不打断，等下一轮自愈——与原来的弹窗内轮询同策略。
+      } catch (error) {
+        // 单次失败不打断（后端短暂不可用，等下一轮自愈）；但连着失败或明确 404 时
+        // 必须承认"状态未知"，否则任务永不终态，页头永久转圈、取消每次 404。
+        const entry = tasks.get(id);
+        if (!entry) return;
+        if (error instanceof ApiError && error.status === 404) {
+          markTaskUnknown(id);
+          return;
+        }
+        const count = (failureCounts.get(id) ?? 0) + 1;
+        failureCounts.set(id, count);
+        if (count >= UNKNOWN_AFTER_FAILURES) markTaskUnknown(id);
       }
     }),
   );
+}
+
+/** 把条目标成「状态未知」：不触发成功/失败提醒（结果真的不知道），只更新界面。 */
+function markTaskUnknown(id: number): void {
+  const entry = tasks.get(id);
+  if (!entry || entry.unknown) return;
+  tasks.set(id, {
+    ...entry,
+    unknown: true,
+    message: "任务状态未知：后端可能已重启或记录已被清理",
+  });
+  emit();
 }
 
 function applyUpdate(id: number, latest: ResumeGenerateTask): void {
@@ -173,6 +208,7 @@ function applyUpdate(id: number, latest: ResumeGenerateTask): void {
     receivedChars: latest.received_chars,
     resumeId: latest.resume_id,
     error: latest.error,
+    unknown: false,
   };
   tasks.set(id, next);
   emit();
@@ -235,6 +271,7 @@ export function watchResumeTask(
     receivedChars: task.received_chars,
     resumeId: task.resume_id,
     error: task.error,
+    unknown: false,
   });
   if (onFinished) finishHandlers.set(task.id, onFinished);
   persistAddTask(task.id, label);
@@ -268,15 +305,50 @@ export function subscribeBackgroundTasks(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
-/** 取消一个后台任务（后端会把任务置为取消，且不保存半成品）。 */
+/**
+ * 把条目从登记表里移除（页头列表、持久化与轮询一并清理），不触发任何提醒。
+ *
+ * 两个用途：任务到终态时的清理路径（`finish`），以及「状态未知」条目的手动「移除」。
+ */
+function removeTaskEntry(id: number): void {
+  tasks.delete(id);
+  failureCounts.delete(id);
+  finishHandlers.delete(id);
+  attached.delete(id);
+  persistRemoveTask(id);
+  stopPollingIfIdle();
+  emit();
+}
+
+/** 「状态未知」任务的「移除」：结果无从得知，也不再轮询，把条目从页头清掉。 */
+export function dismissBackgroundTask(id: number): void {
+  removeTaskEntry(id);
+}
+
+/**
+ * 取消一个后台任务（后端会把任务置为取消，且不保存半成品）。
+ *
+ * 后端返回 404（任务记录已清理 / 后端重启）时移除条目并抛出「任务记录已不存在」——
+ * 调用方的错误提示会原样展示这句话；不抛的话取消按钮会永远转圈。
+ */
 export async function cancelBackgroundTask(id: number): Promise<void> {
-  const latest = await cancelResumeGenerateTask(id);
+  let latest: ResumeGenerateTask;
+  try {
+    latest = await cancelResumeGenerateTask(id);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      removeTaskEntry(id);
+      throw new ApiError("任务记录已不存在", 404);
+    }
+    throw error;
+  }
   applyUpdate(id, latest);
 }
 
 /** 测试与"换数据集"之类场景用：清空登记表。 */
 export function resetBackgroundTasks(): void {
   tasks.clear();
+  failureCounts.clear();
   finishHandlers.clear();
   attached.clear();
   stopPollingIfIdle();

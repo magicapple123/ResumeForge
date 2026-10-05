@@ -27,14 +27,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useState } from "react";
-import {
-  emptyTrash,
-  getTrash,
-  purgeTrashItem,
-  purgeTrashItems,
-  restoreTrashItem,
-  restoreTrashItems,
-} from "../api/trash";
+import { emptyTrash, getTrash, purgeTrashItem, restoreTrashItem } from "../api/trash";
 import { useApi } from "../hooks/useApi";
 import type { TrashBatchItem, TrashItem } from "../types";
 
@@ -64,30 +57,38 @@ export default function TrashPage() {
       .filter((item) => selectedKeys.includes(`${item.type}-${item.id}`))
       .map((item) => ({ type_key: item.type, id: item.id }));
 
+  /** 批量恢复：逐条调恢复接口（全部 allSettled），有几条失败要如实说，不能只报成功数。 */
   const batchRestore = async () => {
     const chosen = selectedItems();
     if (chosen.length === 0) return;
-    try {
-      const result = await restoreTrashItems(chosen);
-      message.success(`已恢复 ${result.restored} 条`);
-      setSelectedKeys([]);
-      await reload();
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "批量恢复失败");
+    const results = await Promise.allSettled(
+      chosen.map((item) => restoreTrashItem(item.type_key, item.id)),
+    );
+    const failed = results.filter((item) => item.status === "rejected").length;
+    if (failed === 0) {
+      message.success(`已恢复 ${chosen.length} 条`);
+    } else {
+      message.warning(`已恢复 ${chosen.length - failed} 条，${failed} 条恢复失败，请重试`);
     }
+    setSelectedKeys([]);
+    await reload();
   };
 
+  /** 批量彻底删除：同恢复的逐条 allSettled 模式，部分失败如实报。 */
   const batchPurge = async () => {
     const chosen = selectedItems();
     if (chosen.length === 0) return;
-    try {
-      const result = await purgeTrashItems(chosen);
-      message.success(`已彻底删除 ${result.purged} 条`);
-      setSelectedKeys([]);
-      await reload();
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "批量彻底删除失败");
+    const results = await Promise.allSettled(
+      chosen.map((item) => purgeTrashItem(item.type_key, item.id)),
+    );
+    const failed = results.filter((item) => item.status === "rejected").length;
+    if (failed === 0) {
+      message.success(`已彻底删除 ${chosen.length} 条`);
+    } else {
+      message.warning(`已彻底删除 ${chosen.length - failed} 条，${failed} 条删除失败，请重试`);
     }
+    setSelectedKeys([]);
+    await reload();
   };
 
   const options = [
@@ -242,7 +243,7 @@ export default function TrashPage() {
         showIcon
         style={{ marginBottom: 16 }}
         title="回收站里的内容不会出现在其它页面"
-        description="岗位、简历、投递记录、台账条目、资料箱材料与助手会话——删除后它们立刻从各自的列表、首页统计和搜索里消失，只在这里可见。"
+        description="岗位、简历、投递记录、事实台账条目、资料箱材料与助手会话——删除后它们立刻从各自的列表、首页统计和搜索里消失，只在这里可见。"
       />
 
       {error && <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} />}

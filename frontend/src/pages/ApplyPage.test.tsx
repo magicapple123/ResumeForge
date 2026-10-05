@@ -1,5 +1,6 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyQueueItem, ApplyTask, ApplyTaskDetail, CollectConfigOut } from "../types";
 import ApplyPage from "./ApplyPage";
@@ -149,9 +150,11 @@ afterEach(() => {
 describe("ApplyPage", () => {
   it("shows an empty-state hint when the queue is empty", async () => {
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText(/队列还是空的/)).toBeInTheDocument();
@@ -168,9 +171,11 @@ describe("ApplyPage", () => {
     ]);
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText("需逐条确认")).toBeInTheDocument();
@@ -182,9 +187,11 @@ describe("ApplyPage", () => {
 
   it("announces the current job site coming from the backend, not a hardcoded name", async () => {
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText(/当前招聘网站/)).toBeInTheDocument();
@@ -199,9 +206,11 @@ describe("ApplyPage", () => {
     apiMocks.getCollectTaskDetail.mockResolvedValue(detail());
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     // 这条用例渲染的是整个投递台页面（五个面板 + 浏览器工具条），而 vitest 默认开满并行
@@ -231,9 +240,11 @@ describe("ApplyPage", () => {
     );
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText("采集批次", {}, { timeout: 20_000 })).toBeInTheDocument();
@@ -249,9 +260,11 @@ describe("ApplyPage", () => {
     apiMocks.pauseTask.mockResolvedValue({ ...runningTask(), kind: "collect", status: "paused" });
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     fireEvent.click(await screen.findByRole("button", { name: /暂停/ }, { timeout: 20_000 }));
@@ -270,13 +283,15 @@ describe("ApplyPage", () => {
     );
 
     render(
-      <AntdApp>
-        <ApplyPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/自动暂停/)).toBeInTheDocument();
-    expect(screen.getByText("熔断暂停")).toBeInTheDocument();
+    // 熔断状态徽标用新文案（不再叫「熔断暂停」），与顶部提示条并存。
+    expect(await screen.findByText("连续失败过多，已自动暂停")).toBeInTheDocument();
   });
 });
 
@@ -288,9 +303,11 @@ describe("CollectPanel", () => {
     });
 
     render(
-      <AntdApp>
-        <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={collectTask} />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={collectTask} />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     // 断言范围限定在「未生效」提示条内：/薪资/ 在全页还会命中表单的「最低薪资（K）」标签，
@@ -319,9 +336,11 @@ describe("CollectPanel", () => {
     });
 
     render(
-      <AntdApp>
-        <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={collectTask} />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={collectTask} />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText(/已按薪资 \/ 经验 \/ 学历在采集后筛选/)).toBeInTheDocument();
@@ -334,9 +353,11 @@ describe("CollectPanel", () => {
     apiMocks.getCollectConfig.mockRejectedValue(new Error("加载采集条件失败"));
 
     render(
-      <AntdApp>
-        <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={null} />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={null} />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText("加载采集条件失败")).toBeInTheDocument();
@@ -349,9 +370,11 @@ describe("CollectPanel", () => {
     apiMocks.createCollectTask.mockResolvedValue(detail({ kind: "collect" }));
 
     render(
-      <AntdApp>
-        <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={null} />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={null} />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     // 说明文案必须存在：用户得知道"存什么、存哪、会不会外传"。

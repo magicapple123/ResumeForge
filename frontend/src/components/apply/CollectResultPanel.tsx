@@ -13,6 +13,7 @@ import { LinkOutlined, UploadOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Skeleton, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { importCandidateJobs, listCandidateJobs } from "../../api/candidateJob";
 import { useApi } from "../../hooks/useApi";
 import type { CandidateJob, CandidateJobImportResult } from "../../types";
@@ -47,6 +48,7 @@ export default function CollectResultPanel({
   onImported,
 }: Props) {
   const { message } = App.useApp();
+  const navigate = useNavigate();
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [importing, setImporting] = useState(false);
   const [lastResult, setLastResult] = useState<CandidateJobImportResult | null>(null);
@@ -76,7 +78,24 @@ export default function CollectResultPanel({
       const result = await importCandidateJobs(selectedIds);
       setLastResult(result);
       if (result.imported > 0) {
-        message.success(`已导入 ${result.imported} 个岗位到岗位广场`);
+        // 带下一步动作的成功提示：导入的终点是岗位广场，直接给入口（message 的 content
+        // 支持 ReactNode；navigate 用的是本组件闭包里的引用，不依赖挂载点的 Router 上下文）。
+        message.success({
+          content: (
+            <span>
+              已导入 {result.imported} 个岗位到岗位广场，
+              <Button
+                type="link"
+                size="small"
+                style={{ padding: 0 }}
+                onClick={() => navigate("/jobs")}
+              >
+                去岗位广场查看
+              </Button>
+            </span>
+          ),
+          duration: 6,
+        });
       } else {
         message.warning("没有新增岗位，详见下方原因");
       }

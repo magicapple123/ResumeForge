@@ -4,8 +4,9 @@
  * 这是"长任务进度条"最容易出问题的地方：一旦忘了 clearInterval，一个已经离开的页面
  * 会继续每 1.5s 打后端，直到进程结束。
  */
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../api/client";
 import { useTaskPolling } from "./useTaskPolling";
 import type { ApplyTaskDetail } from "../types";
 
@@ -37,8 +38,16 @@ function Harness({
   taskId: number | null;
   fetcher: (taskId: number) => Promise<ApplyTaskDetail>;
 }) {
-  const { detail } = useTaskPolling(fetcher, taskId);
-  return <div data-testid="status">{detail?.status ?? "none"}</div>;
+  const { detail, notFound, refresh } = useTaskPolling(fetcher, taskId);
+  return (
+    <div>
+      <div data-testid="status">{detail?.status ?? "none"}</div>
+      <div data-testid="not-found">{String(notFound)}</div>
+      <button data-testid="retry" onClick={() => void refresh()}>
+        retry
+      </button>
+    </div>
+  );
 }
 
 afterEach(() => {
@@ -94,5 +103,46 @@ describe("useTaskPolling", () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("task 404 时置 notFound 并停止轮询（不再每 1.5s 吃一个 404）", async () => {
+    vi.useFakeTimers();
+    const fetcher = vi.fn(async () => {
+      throw new ApiError("任务不存在", 404);
+    });
+    render(<Harness taskId={3} fetcher={fetcher} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.getByTestId("not-found")).toHaveTextContent("true");
+
+    const callsAfter404 = fetcher.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+    expect(fetcher.mock.calls.length).toBe(callsAfter404);
+  });
+
+  it("404 后点重试会重新拉一次；后端恢复时回到正常显示", async () => {
+    vi.useFakeTimers();
+    const fetcher = vi
+      .fn<(taskId: number) => Promise<ApplyTaskDetail>>()
+      .mockRejectedValueOnce(new ApiError("任务不存在", 404))
+      .mockResolvedValue(makeDetail("running"));
+    render(<Harness taskId={4} fetcher={fetcher} />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.getByTestId("not-found")).toHaveTextContent("true");
+
+    fireEvent.click(screen.getByTestId("retry"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(screen.getByTestId("not-found")).toHaveTextContent("false");
+    expect(screen.getByTestId("status")).toHaveTextContent("running");
   });
 });

@@ -107,7 +107,7 @@ function RiskPointItem({ point }: { point: RiskPoint }) {
       <Space size="small" wrap>
         <Tag color={severity.color}>{severity.label}</Tag>
         {point.location && <Typography.Text type="secondary">{point.location}</Typography.Text>}
-        {point.claim_id != null && <Tag>台账 #{point.claim_id}</Tag>}
+        {point.claim_id != null && <Tag>事实台账 #{point.claim_id}</Tag>}
       </Space>
       {point.text && (
         <Typography.Paragraph style={{ margin: "8px 0 4px" }} code>
