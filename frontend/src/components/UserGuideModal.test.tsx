@@ -1,15 +1,40 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { App as AntdApp } from "antd";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // 路由表就在 App.tsx 里，读它的源码即可——再维护一份页面清单只会多一处会过期的真相。
 import appSource from "../App.tsx?raw";
 import UserGuideModal from "./UserGuideModal";
 import { GUIDE_STEPS } from "./userGuideSteps";
+
+const apiMocks = vi.hoisted(() => ({
+  loadSampleDataset: vi.fn(),
+}));
+
+vi.mock("../api/settings", () => apiMocks);
 
 afterEach(() => {
   cleanup();
   // Ant Design's exit motion is asynchronous; remove a portal left after a mocked close.
   document.body.innerHTML = "";
 });
+
+beforeEach(() => {
+  apiMocks.loadSampleDataset.mockReset();
+  apiMocks.loadSampleDataset.mockResolvedValue({
+    id: "0123456789abcdef",
+    name: "体验示例",
+    sample: true,
+  });
+});
+
+/** 弹窗用了上下文版 message（useApp），渲染必须包在 AntdApp 里。 */
+function renderGuide(props: Partial<Parameters<typeof UserGuideModal>[0]> = {}) {
+  return render(
+    <AntdApp>
+      <UserGuideModal open onClose={vi.fn()} onNavigate={vi.fn()} {...props} />
+    </AntdApp>,
+  );
+}
 
 /** 按标题走到某一步：写死点几次“下一步”的话，插入一步就会连带改一堆断言。 */
 function goToStep(title: string) {
@@ -25,7 +50,7 @@ describe("UserGuideModal", () => {
     const onClose = vi.fn();
     const onNavigate = vi.fn();
 
-    render(<UserGuideModal open onClose={onClose} onNavigate={onNavigate} />);
+    renderGuide({ onClose, onNavigate });
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("选择预设或自定义模型")).toBeInTheDocument();
@@ -57,7 +82,7 @@ describe("UserGuideModal", () => {
   });
 
   it("explains manual entry, auto collection and the apply board on the job step", () => {
-    render(<UserGuideModal open onClose={vi.fn()} onNavigate={vi.fn()} />);
+    renderGuide();
 
     goToStep("导入岗位与投递");
 
@@ -76,7 +101,7 @@ describe("UserGuideModal", () => {
   });
 
   it("explains how to track progress after applying", () => {
-    render(<UserGuideModal open onClose={vi.fn()} onNavigate={vi.fn()} />);
+    renderGuide();
 
     goToStep("跟进求职进度");
 
@@ -90,7 +115,7 @@ describe("UserGuideModal", () => {
   });
 
   it("explains the layout diagnosis and auto-fit on the resume step", () => {
-    render(<UserGuideModal open onClose={vi.fn()} onNavigate={vi.fn()} />);
+    renderGuide();
 
     goToStep("制作简历");
 
@@ -102,7 +127,7 @@ describe("UserGuideModal", () => {
   });
 
   it("says the assistant can change data but never delete it", () => {
-    render(<UserGuideModal open onClose={vi.fn()} onNavigate={vi.fn()} />);
+    renderGuide();
 
     goToStep("求职助手");
 
@@ -117,7 +142,7 @@ describe("UserGuideModal", () => {
   it("finishes by pointing at the data backup step", () => {
     const onClose = vi.fn();
     const onNavigate = vi.fn();
-    render(<UserGuideModal open onClose={onClose} onNavigate={onNavigate} />);
+    renderGuide({ onClose, onNavigate });
 
     goToStep(GUIDE_STEPS[GUIDE_STEPS.length - 1].title);
 
@@ -131,10 +156,34 @@ describe("UserGuideModal", () => {
 
   it("supports closing the guide without navigation", () => {
     const onClose = vi.fn();
-    render(<UserGuideModal open onClose={onClose} onNavigate={vi.fn()} />);
+    renderGuide({ onClose });
 
     fireEvent.click(screen.getAllByRole("button", { name: "稍后查看" })[0]);
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("loads the sample dataset and hands over to the reload hook", async () => {
+    const onClose = vi.fn();
+    const onSampleLoaded = vi.fn();
+    renderGuide({ onClose, onSampleLoaded });
+
+    fireEvent.click(screen.getByRole("button", { name: /载入示例数据体验/ }));
+
+    await waitFor(() => expect(apiMocks.loadSampleDataset).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    // 收尾交给注入的钩子（生产环境是整页刷新，让全部视图落到示例数据集上）。
+    expect(onSampleLoaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays open with an error message when loading the sample fails", async () => {
+    const onClose = vi.fn();
+    apiMocks.loadSampleDataset.mockRejectedValue(new Error("载入失败"));
+    renderGuide({ onClose, onSampleLoaded: vi.fn() });
+
+    fireEvent.click(screen.getByRole("button", { name: /载入示例数据体验/ }));
+
+    await waitFor(() => expect(screen.getByText("载入失败")).toBeTruthy());
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
 

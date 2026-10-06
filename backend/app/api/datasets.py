@@ -38,6 +38,7 @@ from ..services.datasets import (
     rename_dataset,
 )
 from ..services.exporter import sanitize_filename
+from ..services.sample_dataset import load_sample_dataset
 from . import settings as settings_api
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,20 @@ def create(request: Request, payload: _DatasetCreateIn) -> dict:
     _require_loopback(request)
     try:
         return create_dataset(payload.name, database.engine)
+    except Exception as exc:
+        raise _translate(exc) from exc
+
+
+@router.post("/sample/load")
+def load_sample(request: Request) -> dict:
+    """一键载入体验示例：新建「体验示例」数据集、写入纯虚构数据并切换过去。
+
+    供首启动引导与首页空态调用；写的是**独立数据集**，主数据不受影响，
+    用户随时可以在设置页把整份数据集删掉。
+    """
+    _require_loopback(request)
+    try:
+        return load_sample_dataset(database.engine)
     except Exception as exc:
         raise _translate(exc) from exc
 
