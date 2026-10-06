@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     # 内存占用与包大小无关。其余接口仍受 max_request_body_mb 约束。
     max_backup_upload_mb: int = Field(default=512, ge=1, le=4096)
 
+    # 文件日志：在数据目录 logs/ 下追加一份 5MB×5 的滚动日志，防止长期挂机时
+    # 启动器重定向的 stdout/stderr（runtime/*.log）无限膨胀。不想落盘的场景
+    # （如测试）用环境变量 LOG_FILE_ENABLED=false 关闭。
+    log_level: str = "INFO"
+    log_file_enabled: bool = True
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",

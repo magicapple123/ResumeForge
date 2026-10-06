@@ -40,6 +40,21 @@ def _configure_sqlite_connection(dbapi_connection, _connection_record):
     cursor.close()
 
 
+def run_sqlite_maintenance(bind: Engine) -> None:
+    """SQLite 例行维护：截断 WAL 并刷新优化器统计（非 SQLite 直接返回）。
+
+    WAL 让读写不互斥，但 ``-wal`` 文件只在 checkpoint 成功时收缩；长期运行中
+    checkpoint 可能一直被并发读者打断，文件会停在很大的尺寸。启动时做一次
+    ``TRUNCATE`` checkpoint 加 ``optimize`` 是廉价的保险；两步都可能因并发而
+    失败，由调用方吞掉并记警告，绝不阻断启动。
+    """
+    if bind.dialect.name != "sqlite":
+        return
+    with bind.connect() as connection:
+        connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+        connection.exec_driver_sql("PRAGMA optimize")
+
+
 def build_engine(database_url: str) -> Engine:
     is_sqlite = database_url.startswith("sqlite")
     options: dict = {

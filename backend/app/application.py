@@ -2,6 +2,8 @@
 
 import logging
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,8 +45,8 @@ from .api import (
     webform,
 )
 from . import database
-from .config import get_settings
-from .database import Base, ensure_sqlite_columns
+from .config import DATA_DIR, get_settings
+from .database import Base, ensure_sqlite_columns, run_sqlite_maintenance
 from .database_compat import SQLITE_REQUIRED_COLUMNS
 from .database_migrations import is_unversioned_legacy_database, run_database_migrations
 from .middleware import RequestContextMiddleware, RequestIdFilter, get_request_id
@@ -56,17 +58,54 @@ from .services.webform import browser as webform_browser
 from .services.webform import stop_live as stop_webform_live
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(name)s] [request_id=%(request_id)s] %(message)s",
-)
+_LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] [request_id=%(request_id)s] %(message)s"
+# 滚动日志的单文件上限与份数：5MB×5 足够回溯近期排障，又不会吞掉磁盘。
+_LOG_FILE_MAX_BYTES = 5 * 1024 * 1024
+_LOG_FILE_BACKUP_COUNT = 5
+
+
+def _log_level(name: str) -> int:
+    """把配置里的日志级别名转成常量；无法识别时退回 INFO 而不是启动失败。"""
+    level = logging.getLevelName(str(name).upper())
+    return level if isinstance(level, int) else logging.INFO
+
+
+_file_log_handler: logging.Handler | None = None
+
+
+def attach_file_log_handler(log_dir: Path) -> logging.Handler | None:
+    """把滚动文件日志挂到根 logger（幂等；已挂过时返回 None）。
+
+    运行日志原先只有启动器重定向的 stdout/stderr（``runtime/*.log``），没有大小
+    上限，长期挂机会无限膨胀。这里在数据目录下追加一份滚动文件；幂等保证测试里
+    多次装配应用不会挂出一把 handlers。
+    """
+    global _file_log_handler
+    if _file_log_handler is not None:
+        return None
+    log_dir.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(
+        log_dir / "backend.log",
+        maxBytes=_LOG_FILE_MAX_BYTES,
+        backupCount=_LOG_FILE_BACKUP_COUNT,
+        encoding="utf-8",
+    )
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    handler.addFilter(RequestIdFilter())
+    logging.getLogger().addHandler(handler)
+    _file_log_handler = handler
+    return handler
+
+
+settings = get_settings()
+logging.basicConfig(level=_log_level(settings.log_level), format=_LOG_FORMAT)
 # HTTPX 的 INFO 摘要包含完整 URL，可能暴露助手联网搜索词。
 # 业务层会另行记录不含查询参数的主机、状态码和请求 ID。
 logging.getLogger("httpx").setLevel(logging.WARNING)
 for handler in logging.getLogger().handlers:
     handler.addFilter(RequestIdFilter())
-
-settings = get_settings()
+if settings.log_file_enabled:
+    attach_file_log_handler(DATA_DIR / "logs")
 
 
 @asynccontextmanager
@@ -83,6 +122,12 @@ async def lifespan(_app: FastAPI):
         Base.metadata.create_all(bind=bind)
         ensure_sqlite_columns(bind, SQLITE_REQUIRED_COLUMNS)
     run_database_migrations(bind)
+    # WAL 截断与统计刷新都可能因并发读者失败：维护是保险不是门槛，绝不阻断启动。
+    startup_logger.info("启动自检：SQLite 例行维护")
+    try:
+        run_sqlite_maintenance(bind)
+    except Exception:  # noqa: BLE001 - 维护失败不应阻断启动
+        startup_logger.warning("SQLite 例行维护失败", exc_info=True)
     job_match_runner = get_job_match_background_runner()
     # 上次运行若中途退出，可能留下未应用的备份包与导出产物，它们不会再用到。
     startup_logger.info("启动自检：清理临时目录")

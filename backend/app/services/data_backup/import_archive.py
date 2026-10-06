@@ -224,8 +224,15 @@ def _database_info(database: Path, bind: Engine) -> dict[str, Any]:
             raise BackupError(
                 f"备份包中的数据库缺少数据表（{missing[0]} 等），可能不是 ResumeForge 的备份"
             )
-        # sqlite_sequence 由 SQLite 的 AUTOINCREMENT 隐式维护，不是业务表。
-        unexpected = sorted(tables - set(_APPLICATION_TABLES) - {"alembic_version", "sqlite_sequence"})
+        # SQLite 引擎内部表（sqlite_sequence、sqlite_stat1 等）由 SQLite 自己维护，
+        # 不是业务表，更不是"更新版本的新表"：按 ``sqlite_`` 前缀整体放行。逐个枚举
+        # 会漏——optimize/ANALYZE 这类引擎行为随时可能在库里落下新的统计表，把一份
+        # 完全合法的备份误判成"来自更新版本"。
+        unexpected = sorted(
+            name
+            for name in tables - set(_APPLICATION_TABLES) - {"alembic_version"}
+            if not name.startswith("sqlite_")
+        )
         if unexpected:
             raise BackupError(
                 f"备份包中含有当前版本不认识的数据表（{unexpected[0]}），"
