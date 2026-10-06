@@ -17,7 +17,6 @@ from app.database import build_engine
 from app.database_migrations import backup_sqlite_database
 from app.services import tracker
 from app.services.conversation_export import _display_time
-from sqlalchemy import text
 
 
 def test_display_time_renders_stored_wall_clock_without_conversion():

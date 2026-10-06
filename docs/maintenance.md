@@ -105,13 +105,24 @@ ResumeForge/
 
 ## 3. 守卫与红线
 
-- **覆盖率 80%** 只在全量时开 `--cov`；子集跑覆盖率是假失败。
-- **CI 10 个作业**：Backend ×3（py311/313/win）、Frontend、Dependency audit、macOS ×3
-  （launcher guards / portable runtimes / end-to-end）、Windows end-to-end、Windows portable runtimes。
+- **覆盖率 80%** 只在全量时开 `--cov`；子集跑覆盖率是假失败。前端门禁见
+  `frontend/vitest.config.ts` 的 `coverage.thresholds`（基线 −3pt、只升不降）。
+- **CI 作业**：Backend ×3（py311/313/win，含 ruff / pyright / 版本号核对 / 全量覆盖率）、
+  Frontend（Node 22，测试带覆盖率门禁 + artifact）、Dependency audit（生产依赖阻断、
+  开发依赖 advisory）、macOS ×3（launcher guards / portable runtimes / end-to-end，
+  e2e 末尾跑 Playwright 浏览器冒烟）、Windows end-to-end（同样以冒烟收尾）、
+  Windows portable runtimes。另有独立工作流：**CodeQL**（每周安全扫描）与
+  **Nightly**（全量回归 + flaky 标记）。
   macOS 三件是**唯一的真机验证途径**，改了 macOS 侧要在交付说明里写明期望它们验证什么。
   `windows-runtimes` 与 macOS 那个同名作业是镜像：**真的下载**启动器要用的便携版 Node
   与 Python 官方安装包并逐个校验 SHA-256，专抓"下载地址或摘要失效"——`windows-end-to-end`
   用的是 runner 自带的解释器，恰好把这条路径整个遮住，而"一台什么都没装的电脑"走的正是它。
+- **版本号单一事实来源**是 `backend/app/config.py` 的 `app_version`（发布链、更新器、
+  启动器都按同一条正则解析它）；发版用 `python scripts/bump_version.py` 同步 5 处，
+  `scripts/check_version_sync.py` 在 CI 核对 config.py 与 package.json 不漂移。
+- **后端静态检查双件套**：`ruff check .`（E/F/I/UP/B/SIM）与
+  `python -m pyright`（basic，范围见 `backend/pyrightconfig.json`，当前仅
+  `app/models` + `app/schemas`，其余目录随注解补齐渐进纳入）。
 - **两个端到端作业**（`macos-end-to-end` / `windows-end-to-end`）从**干净检出**走完整启动链并
   真的取一次前端入口模块——"端口活着但页面一片空白"只有它们捕得到（2026-09-29 用户在虚拟机
   上解压新版本后只看到空白页，当时 Windows 侧没有这个作业）。改了启动链要跑它们。
@@ -148,6 +159,22 @@ ResumeForge/
   `runtime/demo/tools/readme_capture.py`；视口 1728×1080。
 - 官网（`ResumeForge-official` 仓库）：三页 + `demo-app/`（iframe 内嵌）+ `download/`；
   改完必跑 `node tools/audit.js`；两个部署位置都要在 `demoBridge.ts` 的 `DEFAULT_PARENTS` 里。
+
+### 4.4 运维与数据安全
+
+- **自动备份**：启动后台线程按 `AUTO_BACKUP_INTERVAL_DAYS`（默认 7）节流，到期对当前
+  数据库做一致性快照到 `data/auto-backups/`，按 `AUTO_BACKUP_KEEP`（默认 5）轮转；
+  `AUTO_BACKUP_ENABLED=false` 整体关闭。标记文件按"上次尝试"节流，连续失败不会每次
+  启动都重撞。
+- **更新前快照**：两条更新器在覆盖程序文件前把 `data/*.db` + `datasets/*.db` 快照到
+  `data/pre-update/`（保留 3 份）。Windows 三条覆盖路径都在停应用之后（直接拷文件即
+  一致快照）；macOS 优先用 `sqlite3 .backup` 在线快照。
+- **文件日志**：`data/logs/backend.log`（5MB×5 滚动，`LOG_FILE_ENABLED` / `LOG_LEVEL`
+  可调）；诊断包导出端点 `GET /api/system/diagnostics/export` 出包前对日志尾部做疑似
+  令牌兜底脱敏。
+- **SQLite 维护**：启动时 `wal_checkpoint(TRUNCATE)` + `PRAGMA optimize`；备份快照统一
+  剥离 `sqlite_stat*` 统计表（保证旧版本导入兼容），导入白名单按 `sqlite_` 前缀放行
+  引擎内部表。
 
 ## 5. 本机环境已知坑（速查）
 

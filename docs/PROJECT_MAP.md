@@ -115,6 +115,7 @@
 
 - **后端**：`backend/tests/`，与被测模块同层拆分（`test_xxx.py` 管规则、`test_xxx_api.py` 管 HTTP 面、`test_migration_00NN.py` 管迁移）。命令见 [AGENTS.md](../AGENTS.md)。
 - **前端**：Vitest，测试与被测文件同目录（`XxxPage.tsx` 旁就是 `XxxPage.test.tsx`）。
+- **浏览器冒烟**：`frontend/tests/smoke/`（Playwright + 真实 Chromium，CI 双平台 e2e 作业末尾运行；配置见 `frontend/playwright.config.ts`，端口默认对准启动链的 5199/8123）。
 
 ## 想了解得更深
 
