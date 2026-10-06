@@ -8,11 +8,11 @@ from typing import Any
 
 from ...schemas.job import JobOut
 from .profile_relevance_constants import (
-    SECTION_LIMITS,
     _LIST_DETAIL_FIELDS,
     _MIN_PROFILE_CONTEXT_CHARS,
     _OPTIONAL_TOP_LEVEL_FIELDS,
     _REFERENCE_SECTIONS,
+    SECTION_LIMITS,
 )
 
 

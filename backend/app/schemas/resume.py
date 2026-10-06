@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .profile import validate_photo_data_url
 
-
 MAX_RESUME_SECTION_ITEMS = 200
 MAX_RESUME_LIST_ITEMS = 500
 MAX_RESUME_TEXT_CHARS = 50_000

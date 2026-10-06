@@ -22,7 +22,6 @@ from .extraction import (
 )
 from .profile import validate_photo_data_url
 
-
 MAX_SQLITE_INTEGER = 2**63 - 1
 MAX_JOB_TEXT_CHARS = 200_000
 # 备注图片随岗位表单一次性提交，受默认 8 MB 请求体上限约束，所以只放 2 张。

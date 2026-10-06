@@ -17,18 +17,16 @@ from app.services.sites.base import (
     SearchResult,
     SiteAdapter,
 )
-
 from test_apply_stop_semantics_qa import (
     FakeCdp,
-    _runner,
     GatedAdapter,
     _FastClock,
     _leftover_threads,
     _registry,
+    _runner,
     _wait_no_leftover,
     _wait_thread_exit,
 )
-
 
 # ===== 采集：翻页之间停止 =====
 

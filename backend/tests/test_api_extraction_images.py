@@ -7,7 +7,6 @@ import base64
 import json
 
 import pytest
-
 from app.schemas.extraction import MAX_EXTRACTION_IMAGE_COUNT
 from app.schemas.setting import LLMConfig
 from app.services.attachments import MAX_ATTACHMENTS_TOTAL_BYTES

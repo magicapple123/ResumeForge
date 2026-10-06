@@ -8,9 +8,8 @@
    逐字一致，否则"降级成功"只是看起来成功。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect
 
 PREVIOUS_REVISION = "0024_official_discovery_history"
 HEAD_REVISION = "0025_web_form_fields"

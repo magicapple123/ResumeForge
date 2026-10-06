@@ -7,12 +7,10 @@
 autouse fixture 不会生效（autouse 只来自 conftest / 本模块 / 插件）。
 """
 import pytest
-
 from app.services.llm.base import LLMError
 from app.services.webform import ai
 from app.services.webform.fields import FIELD_KEYS
-
-from test_webform_ai import FakeProvider, UNKNOWN, _controls, _raw
+from test_webform_ai import UNKNOWN, FakeProvider, _controls, _raw
 
 
 @pytest.fixture(autouse=True)

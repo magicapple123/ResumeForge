@@ -3,9 +3,8 @@
 import json
 
 import pytest
-
-from app.schemas.setting import LLMConfig
 from app.schemas.job import JobTextParseResult
+from app.schemas.setting import LLMConfig
 from app.services.job_text_parser import parse_job_text
 from app.services.llm.base import BaseLLMProvider, LLMError
 from app.services.profile_text_parser import parse_profile_text

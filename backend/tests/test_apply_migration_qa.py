@@ -25,8 +25,6 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
 from app.services.data_backup import (
     DATABASE_MEMBER,
@@ -35,6 +33,7 @@ from app.services.data_backup import (
     build_manifest,
     inspect_archive,
 )
+from sqlalchemy import create_engine, inspect, text
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REAL_DATABASE = BACKEND_DIR / "data" / "resume_forge.db"

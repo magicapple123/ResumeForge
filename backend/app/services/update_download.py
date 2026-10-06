@@ -133,21 +133,23 @@ async def _download_archive(
     partial = target.with_suffix(".part")
     headers = {"Accept": "application/octet-stream", "User-Agent": "ResumeForge-updater"}
     try:
-        async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
-            async with client.stream("GET", url, headers=headers) as response:
-                if response.status_code != 200:
-                    raise RuntimeError(f"下载服务器返回 HTTP {response.status_code}")
-                header_size = response.headers.get("Content-Length")
-                total = int(header_size) if header_size and header_size.isdigit() else expected_size
-                _status.total_bytes = total
-                with partial.open("wb") as handle:
-                    async for chunk in response.aiter_bytes(1024 * 1024):
-                        _status.downloaded_bytes += len(chunk)
-                        if _status.downloaded_bytes > MAX_DOWNLOAD_BYTES:
-                            raise RuntimeError("更新包超过 512 MB，已停止下载")
-                        handle.write(chunk)
-                        if total:
-                            _status.progress = min(99.0, _status.downloaded_bytes * 100 / total)
+        async with (
+            httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client,
+            client.stream("GET", url, headers=headers) as response,
+        ):
+            if response.status_code != 200:
+                raise RuntimeError(f"下载服务器返回 HTTP {response.status_code}")
+            header_size = response.headers.get("Content-Length")
+            total = int(header_size) if header_size and header_size.isdigit() else expected_size
+            _status.total_bytes = total
+            with partial.open("wb") as handle:
+                async for chunk in response.aiter_bytes(1024 * 1024):
+                    _status.downloaded_bytes += len(chunk)
+                    if _status.downloaded_bytes > MAX_DOWNLOAD_BYTES:
+                        raise RuntimeError("更新包超过 512 MB，已停止下载")
+                    handle.write(chunk)
+                    if total:
+                        _status.progress = min(99.0, _status.downloaded_bytes * 100 / total)
         _validate_archive(partial)
         # 发行包里是要覆盖到程序目录的代码，值得对着发布方给的摘要再核一次：
         # 能挡住下载被截断、被中间环节替换这类问题。没提供摘要时（例如退回源码包）

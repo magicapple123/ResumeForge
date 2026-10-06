@@ -10,10 +10,10 @@ import gc
 import os
 import shutil
 import sqlite3
+import tempfile
 import time
 import warnings
 from pathlib import Path
-import tempfile
 
 _TEST_DIR = Path(tempfile.gettempdir()) / f"resume_forge_test_{os.getpid()}"
 _TEST_DIR.mkdir(parents=True, exist_ok=True)
@@ -24,10 +24,6 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"  # noqa: E402
 os.environ["LOG_FILE_ENABLED"] = "false"  # noqa: E402
 
 import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import event  # noqa: E402
-from sqlalchemy.engine import Engine  # noqa: E402
-
 from app import database  # noqa: E402
 from app.database import Base, SessionLocal, get_db  # noqa: E402
 from app.dataset_registry import (  # noqa: E402
@@ -36,6 +32,9 @@ from app.dataset_registry import (  # noqa: E402
     write_active_dataset_id,
 )
 from app.main import app  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import event  # noqa: E402
+from sqlalchemy.engine import Engine  # noqa: E402
 
 
 @event.listens_for(Engine, "connect")

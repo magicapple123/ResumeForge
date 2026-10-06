@@ -9,7 +9,6 @@ from types import SimpleNamespace
 from app.models.apply import ApplyTask, ApplyTaskItem
 from app.models.profile import utcnow
 from app.services.apply import apply_service
-
 from test_apply_queue_and_api import _job, browser_port, fake_runner
 
 __all__ = ["browser_port", "fake_runner"]

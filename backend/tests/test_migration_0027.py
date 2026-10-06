@@ -8,9 +8,8 @@
 两处都必须**幂等**（迁移链会跑在"只有部分表/列"的历史库上）且**能在降级后还原**。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0026_form_extra_fields"
 HEAD_REVISION = "0027_fill_record_and_apply_trash"

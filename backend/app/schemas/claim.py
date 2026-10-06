@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, date
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -201,7 +201,7 @@ class ClaimBase(BaseModel):
         return result
 
     @model_validator(mode="after")
-    def must_be_describable(self) -> "ClaimBase":
+    def must_be_describable(self) -> ClaimBase:
         """一条主张至少要写清"原始事实"或"准备怎么表述"，否则它没有内容可核对。"""
         self.title = self.title.strip()
         self.subject = self.subject.strip()
@@ -213,7 +213,7 @@ class ClaimBase(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def confirmed_must_not_be_incomplete(self) -> "ClaimBase":
+    def confirmed_must_not_be_incomplete(self) -> ClaimBase:
         """已确认的主张不能含未完成占位符——这两件事不能同时为真。"""
         if self.verification_status != VERIFICATION_CONFIRMED:
             return self
@@ -289,7 +289,7 @@ class ClaimDraftRequest(BaseModel):
         return cleaned
 
     @model_validator(mode="after")
-    def raw_text_must_have_content(self) -> "ClaimDraftRequest":
+    def raw_text_must_have_content(self) -> ClaimDraftRequest:
         """空资料直接拒绝：没有可拆的内容时返回空草稿只会让人以为"没提取出来"。"""
         self.raw_text = self.raw_text.strip()
         if not self.raw_text:

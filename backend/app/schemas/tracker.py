@@ -84,7 +84,7 @@ class TrackRecordIn(BaseModel):
         return cleaned
 
     @model_validator(mode="after")
-    def must_identify_a_position(self) -> "TrackRecordIn":
+    def must_identify_a_position(self) -> TrackRecordIn:
         """没有公司或没有岗位，就无从判断它该并到哪一条上。"""
         self.company = self.company.strip()
         self.title = self.title.strip()
@@ -156,7 +156,7 @@ class TrackParseRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def require_text_or_attachments(self) -> "TrackParseRequest":
+    def require_text_or_attachments(self) -> TrackParseRequest:
         if not self.text.strip() and not self.images and not self.documents:
             raise ValueError("请粘贴通知内容，或上传至少一张截图或一份文档")
         return self

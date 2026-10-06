@@ -3,7 +3,6 @@
 ``MarkerClient``/常量/state helper 留在主文件（test_boss_apply.py）。
 """
 import pytest
-
 from app.services.sites.base import SiteFailure
 from app.services.sites.boss import BossAdapter
 from app.services.sites.boss_apply import (
@@ -11,9 +10,7 @@ from app.services.sites.boss_apply import (
     _greeting_state_script,
     classify_submit_state,
 )
-
 from test_boss_apply import GREETING, JOB_URL, READY_WAIT, MarkerClient, _entry_rect
-
 
 # ===== startchat 对话框形态（2026-09-20 真实发现：新会话不跳聊天页，详情页弹出打招呼对话框；
 # 发送按钮是 div.send-message，不是 button）=====

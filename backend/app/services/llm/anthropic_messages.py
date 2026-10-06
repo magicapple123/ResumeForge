@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-
 ANTHROPIC_VERSION = "2023-06-01"
 
 
@@ -65,10 +64,9 @@ def _has_tool_history(messages: list[dict] | None) -> bool:
     ``role == "tool"`` 判定：工具结果只在跑完一轮工具后才出现，是"已经在工具循环里"
     最干净的信号。
     """
-    for message in messages or []:
-        if str(message.get("role") or "") == "tool":
-            return True
-    return False
+    return any(
+        str(message.get("role") or "") == "tool" for message in messages or []
+    )
 
 
 def _convert_messages(messages: list[dict]) -> tuple[str, list[dict[str, Any]]]:

@@ -10,17 +10,29 @@
 
 from .catalog import (
     build_catalog as build_catalog,
+)
+from .catalog import (
     catalog_from_profile as catalog_from_profile,
 )
 from .profile_map import (
     DEGREE_RANK as DEGREE_RANK,
+)
+from .profile_map import (
     education_rank as education_rank,
+)
+from .profile_map import (
     pick_latest_experience as pick_latest_experience,
+)
+from .profile_map import (
     pick_top_education as pick_top_education,
+)
+from .profile_map import (
     profile_to_form_data as profile_to_form_data,
 )
 from .source import (
     build_form_data as build_form_data,
+)
+from .source import (
     build_live_form_data as build_live_form_data,
 )
 

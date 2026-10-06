@@ -8,10 +8,10 @@ from typing import Any
 
 from ...schemas.profile import ProfileOut
 from .profile_relevance_constants import (
-    SECTION_LIMITS,
     _LLM_PROFILE_FIELDS,
     _REFERENCE_CONTENT_KEY,
     _REFERENCE_FILE_KEY,
+    SECTION_LIMITS,
 )
 
 # 公开作品链接字段（与 ``_LLM_PROFILE_FIELDS`` 中的名字保持一致）。

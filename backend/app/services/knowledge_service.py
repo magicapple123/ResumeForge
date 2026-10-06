@@ -11,9 +11,9 @@ import logging
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from . import trash
 from ..models.knowledge_entry import KnowledgeEntry
 from ..schemas.knowledge import KnowledgeCreate, KnowledgeUpdate
+from . import trash
 
 logger = logging.getLogger(__name__)
 

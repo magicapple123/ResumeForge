@@ -8,8 +8,9 @@
 """
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from ..schemas.job import JobTextParseResult
 from ..schemas.profile import ProfileTextParseResult

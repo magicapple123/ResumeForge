@@ -36,14 +36,14 @@ from ..schemas.drill import (
     DrillSessionOut,
 )
 from ..services.drill import (
-    load_prompt,
     apply_verdict,
+    current_question,
     evaluate_answer,
     finish_session,
     generate_plan,
     generate_review,
+    load_prompt,
     local_review,
-    current_question,
     open_contract,
     pending_contract,
     select_claims,
@@ -186,7 +186,7 @@ async def create_session(payload: DrillCreate, db: Session = Depends(get_db)):
     except Exception:  # noqa: BLE001 - 外部模型异常不能变成 500
         logger.exception("生成面试深挖契约发生内部错误")
         await _drop_session()
-        raise HTTPException(status_code=502, detail="生成第一题失败，请稍后重试")
+        raise HTTPException(status_code=502, detail="生成第一题失败，请稍后重试") from None
 
     with SessionLocal() as write_db:
         stored = write_db.get(DrillSession, session_id)
@@ -242,7 +242,7 @@ async def answer(session_id: int, payload: DrillAnswerRequest, db: Session = Dep
             raise HTTPException(status_code=502, detail=f"判定这一轮失败：{exc}") from exc
         except Exception:  # noqa: BLE001 - 外部模型异常不能变成 500
             logger.exception("面试深挖判定发生内部错误")
-            raise HTTPException(status_code=502, detail="判定这一轮失败，请稍后重试")
+            raise HTTPException(status_code=502, detail="判定这一轮失败，请稍后重试") from None
     finally:
         read_db.close()
 

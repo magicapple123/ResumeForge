@@ -22,8 +22,8 @@ from ..schemas.assistant import (
     ChatConversationUpdate,
     ChatMessageDeleteRequest,
     ChatMessageDeleteResult,
-    ConversationToMaterialRequest,
     ConversationSurface,
+    ConversationToMaterialRequest,
 )
 from ..schemas.material import (
     MAX_MATERIAL_CONTENT_CHARS,
@@ -37,26 +37,40 @@ from ..services.assistant.assistant_service import (
     normalize_attachments,
 )
 from ..services.assistant.assistant_skills import build_skill_prompt
-from ..services.feature_catalog import build_capability_map
 from ..services.conversation_export import (
     EXPORT_FORMATS,
     build_conversation_filename,
     conversation_to_markdown,
 )
-from ..services.materials import create_material as create_material_record
+from ..services.feature_catalog import build_capability_map
 from ..services.llm import create_provider
+from ..services.materials import create_material as create_material_record
 from ..services.search import aggregate_search
 from ..services.settings_service import get_llm_config, get_search_config
 from .assistant_context import load_local_context
 from .assistant_conversations import (
     DEFAULT_TITLE,
     conversation_or_404,
+)
+from .assistant_conversations import (
     create_conversation as create_conversation_record,
+)
+from .assistant_conversations import (
     delete_conversation as delete_conversation_record,
+)
+from .assistant_conversations import (
     delete_messages as delete_message_records,
+)
+from .assistant_conversations import (
     fork_conversation as fork_conversation_record,
+)
+from .assistant_conversations import (
     list_conversations as list_conversation_records,
+)
+from .assistant_conversations import (
     read_conversation as read_conversation_record,
+)
+from .assistant_conversations import (
     update_conversation as update_conversation_record,
 )
 from .assistant_stream import history_snapshot, stream_message_events

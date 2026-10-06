@@ -9,7 +9,6 @@ helpers 留在本文件，兄弟文件按 0.1 模式导入 fake_runner/browser_p
 
 import httpx
 import pytest
-
 from app.models.apply import (
     ADMISSION_BLOCK,
     JobMatchAnalysis,

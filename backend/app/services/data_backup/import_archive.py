@@ -10,7 +10,6 @@ import secrets
 import shutil
 import sqlite3
 import zipfile
-
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -18,14 +17,13 @@ from typing import Any
 from sqlalchemy import Engine
 
 from ...database_migrations import _APPLICATION_TABLES, run_database_migrations
-
 from .manifest import _revision_chain, _table_counts
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME,
     BACKUP_FORMAT_VERSION,
-    BackupError,
     DATABASE_MEMBER,
     MANIFEST_MEMBER,
+    BackupError,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,9 +72,12 @@ def extract_member(archive_path: Path, member: str, destination: Path) -> Path:
     用 ``ZipFile.open`` 逐块写出，不经过 ``extractall``，从结构上排除了 zip-slip；
     调用方仍需自行校验 ``member`` 是不是自己期望的那一个。
     """
-    with zipfile.ZipFile(archive_path) as archive:
-        with archive.open(member) as source, destination.open("wb") as target:
-            shutil.copyfileobj(source, target)
+    with (
+        zipfile.ZipFile(archive_path) as archive,
+        archive.open(member) as source,
+        destination.open("wb") as target,
+    ):
+        shutil.copyfileobj(source, target)
     return destination
 
 

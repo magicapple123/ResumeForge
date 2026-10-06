@@ -1,6 +1,12 @@
 """资料域工具声明（``_TOOLS`` 中 19 条：资料箱/事实台账/备选岗位/助手技能/格式模板）。"""
 from __future__ import annotations
 
+from ._shared import (
+    MAX_ASSISTANT_SKILL_FILE_CHARS,
+    MAX_ASSISTANT_SKILL_FILES,
+    MAX_ASSISTANT_SKILL_TOTAL_CHARS,
+)
+from ._types import Tool
 from .data_tools import (
     _format_tool_properties,
     _tool_create_candidate_job,
@@ -24,12 +30,6 @@ from .data_tools import (
     _tool_update_material,
     _tool_update_skill,
 )
-from ._shared import (
-    MAX_ASSISTANT_SKILL_FILE_CHARS,
-    MAX_ASSISTANT_SKILL_FILES,
-    MAX_ASSISTANT_SKILL_TOTAL_CHARS,
-)
-from ._types import Tool
 
 DATA_TOOLS: tuple[Tool, ...] = (
     Tool(

@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from datetime import datetime
-from typing import Any, Deque
+from typing import Any
 
 # 问题上限：注入侧 textarea 的 ``maxlength`` 与这里**必须同值**（页面侧拦一层，
 # Python 侧再兜一层——绕过页面的请求照样挡得住）。
@@ -56,7 +56,7 @@ def _local_time_note() -> str:
     )
 
 
-def build_ask_messages(history: Deque[dict[str, str]], question: str) -> list[dict[str, str]]:
+def build_ask_messages(history: deque[dict[str, str]], question: str) -> list[dict[str, str]]:
     """拼模型消息：system + 最近 ≤5 轮 (user/assistant) + 本轮 user。
 
     ``history`` 里只存**已完成**的问答对（每条 ``{"role", "content"}``），本条问题由
@@ -83,7 +83,7 @@ async def _chat(provider: Any, messages: list[dict[str, str]]) -> str:
     return await provider.chat(messages)
 
 
-def ask(provider: Any, history: Deque[dict[str, str]], question: str) -> str:
+def ask(provider: Any, history: deque[dict[str, str]], question: str) -> str:
     """问一次模型并返回回答文本；失败转成用户可读的中文文案上抛。
 
     三个护栏的落点：
@@ -105,7 +105,7 @@ def ask(provider: Any, history: Deque[dict[str, str]], question: str) -> str:
     return _trim_reply(reply)
 
 
-def append_exchange(history: Deque[dict[str, str]], question: str, reply: str) -> None:
+def append_exchange(history: deque[dict[str, str]], question: str, reply: str) -> None:
     """把**成功**的一轮问答追加进历史；deque 的 maxlen 负责只留最近 5 轮。
 
     失败的轮次不进历史：模型没答上的问题留在上下文里，只会让下一轮更混乱。
@@ -114,7 +114,7 @@ def append_exchange(history: Deque[dict[str, str]], question: str, reply: str) -
     history.append({"role": "assistant", "content": str(reply)})
 
 
-def new_history() -> Deque[dict[str, str]]:
+def new_history() -> deque[dict[str, str]]:
     """一份新的问答历史（每文档一份，页面跳转即随会话游标重置）。"""
     return deque(maxlen=HISTORY_TURNS * 2)
 

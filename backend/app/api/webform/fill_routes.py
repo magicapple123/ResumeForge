@@ -23,10 +23,7 @@ from ...schemas.webform import (
 from ...services import diagnostics
 from ...services import webform as webform_service
 from ...services.settings_service import get_webform_relaxed_mode
-
 from ._shared import _raise, logger
-
-
 
 router = APIRouter(prefix="/api/webform", tags=["webform"])
 

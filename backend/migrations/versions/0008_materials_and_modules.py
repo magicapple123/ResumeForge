@@ -5,7 +5,7 @@ Revises: 0007_assistant_skills
 Create Date: 2026-09-16
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

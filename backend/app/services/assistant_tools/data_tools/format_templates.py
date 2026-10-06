@@ -12,10 +12,12 @@ from ....models.resume_template import TEMPLATE_KIND_FORMAT, ResumeTemplate
 from ...resume.resume_template_store import (
     TemplateError,
     create_user_template,
-    find_by_name as find_template_by_name,
     get_user_template,
     list_user_templates,
     update_user_template,
+)
+from ...resume.resume_template_store import (
+    find_by_name as find_template_by_name,
 )
 from ...resume.resume_templates import FORMAT_FIELDS, validated_format_config
 from .._types import ToolResult

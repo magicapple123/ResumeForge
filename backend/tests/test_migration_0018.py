@@ -5,9 +5,8 @@
 这四张表干净地拆掉、回到 0017 时的表集合。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0017_resume_generate_task"
 HEAD_REVISION = "0018_referral_reminder_interview_experience_share_package"

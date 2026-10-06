@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.models.apply import (
     FAILURE_CAPTCHA_REQUIRED,
     FAILURE_GREETING_MISSING,

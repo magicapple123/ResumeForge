@@ -11,7 +11,6 @@ import threading
 import time
 
 import pytest
-
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider
 from app.services.resume.resume_generate_runner import reset_resume_generate_runner
@@ -259,11 +258,10 @@ def test_completed_status_and_resume_id_commit_atomically(client, monkeypatch):
     工厂包一层 commit 检查：每次提交后立刻读库，若任务已是 completed 则记录"resume_id
     是否非空"。只要"resume_id 被拆出去提交"，中间那次 commit 后就会记到 False 而变红。
     """
-    from sqlalchemy import text
-    from sqlalchemy.orm import Session, sessionmaker
-
     from app import database
     from app.services.resume.resume_generate_runner import get_resume_generate_runner
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session, sessionmaker
 
     observations: list[bool] = []
 

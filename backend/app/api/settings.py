@@ -10,8 +10,8 @@ from ..database import get_db
 from ..models.setting import LLMConfigRecord
 from ..schemas.setting import (
     AssistantOrbSetting,
-    LLMConfig,
     LLMApiKeyRevealResult,
+    LLMConfig,
     LLMConfigRecordCreate,
     LLMConfigRecordOut,
     LLMModelsRequest,
@@ -33,20 +33,20 @@ from ..services.settings_service import (
     delete_llm_config_record,
     get_assistant_orb_setting,
     get_llm_config,
+    get_navigation_visibility,
     get_reminder_popup_on_start,
     get_search_config,
     get_webform_relaxed_mode,
     list_llm_config_records,
     mask_llm_config,
     resolve_llm_config_api_key,
+    save_assistant_orb_setting,
     save_llm_config,
     save_llm_config_record,
-    save_assistant_orb_setting,
     save_navigation_visibility,
     save_reminder_popup_on_start,
     save_search_config,
     save_webform_relaxed_mode,
-    get_navigation_visibility,
 )
 
 logger = logging.getLogger(__name__)

@@ -1,8 +1,7 @@
 """``0012_application_tracker`` 迁移：建表、唯一约束、幂等与完整 downgrade。"""
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0011_claim_ledger"
 HEAD_REVISION = "0012_application_tracker"
@@ -52,9 +51,9 @@ def test_upgrade_creates_the_track_table(tmp_path):
         assert {
             item["name"] for item in inspector.get_columns("application_track")
         } == EXPECTED_COLUMNS
-        assert EXPECTED_INDEXES <= {
+        assert {
             item["name"] for item in inspector.get_indexes("application_track")
-        }
+        } >= EXPECTED_INDEXES
 
         # 岗位 / 简历被删掉后记录仍要可读。
         fks = inspector.get_foreign_keys("application_track")

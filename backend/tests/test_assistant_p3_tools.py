@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from app.models.interview_experience import InterviewExperience
 from app.models.job_match_batch import JobMatchBatch
 from app.models.referral import Referral

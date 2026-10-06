@@ -5,7 +5,6 @@
 """
 
 from ..schemas.profile import ProfileTextParseResult
-from .profile_parser.identity_constants import _BASIC_LABELS
 from .profile_parser.basic_fields import (
     _extract_basic,
     _extract_inline_labeled_values,
@@ -28,26 +27,26 @@ from .profile_parser.entry_constants import (
     _BASIC_NAME_RE,
     _BASIC_UNLABELED_CITY_RE,
     _BULLET_RE,
-    _DATE_TOKEN,
     _DATE_RANGE_RE,
     _DATE_RE,
+    _DATE_TOKEN,
     _DEGREE_TERMS,
     _EMAIL_RE,
+    _ENGLISH_COMPANY_HINT_RE,
     _ENTRY_HEADER_FIELDS_BY_KIND,
     _ENTRY_HEADER_PATTERNS,
     _ENTRY_SEPARATOR_RE,
-    _ENGLISH_COMPANY_HINT_RE,
     _HEADER_BOUNDARY_LABELS,
     _HEADER_LABEL_ALIASES,
     _HEADER_SEPARATOR_RE,
     _INLINE_LABEL_SEPARATOR_RE,
+    _MONTH_NAME,
     _NON_NAME_MARKERS,
     _NUMBERED_HEADING_RE,
     _PHONE_RE,
     _PROFILE_CHINESE_ROLE_RE,
     _PROFILE_ENGLISH_TITLE_RE,
     _URL_RE,
-    _MONTH_NAME,
 )
 from .profile_parser.entry_details import _detail_groups
 from .profile_parser.entry_inference import (
@@ -56,6 +55,7 @@ from .profile_parser.entry_inference import (
     _infer_unlabeled_header,
     _looks_like_profile_role_line,
 )
+from .profile_parser.identity_constants import _BASIC_LABELS
 from .profile_parser.limits import (
     _MAX_PARSED_SECTION_ITEMS,
     _PARSED_BASIC_FIELD_LIMITS,
@@ -72,6 +72,7 @@ from .profile_parser.normalization import (
     _normalize_lines,
     _starts_with_field,
 )
+from .profile_parser.result_bounds import _bound_parse_result
 from .profile_parser.section_constants import _RESET_SECTION_ALIASES, _SECTION_ALIASES
 from .profile_parser.section_detection import (
     _infer_section_for_unlabeled_line,
@@ -89,7 +90,6 @@ from .profile_parser.section_parsers import (
     _parse_experience,
     _parse_projects,
 )
-from .profile_parser.result_bounds import _bound_parse_result
 from .profile_parser.skill_constants import _SKILL_LEADING_LEVEL_RE, _SKILL_LEVEL_RE
 from .profile_parser.skill_fields import (
     _normalize_skill_name,

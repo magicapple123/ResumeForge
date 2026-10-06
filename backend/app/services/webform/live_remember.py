@@ -10,9 +10,9 @@ from typing import Any
 from .engine import Control
 from .extra_profile import custom_key
 from .fields import FIELD_LABELS
+from .live_scripts import _HIDE_REMEMBER_SCRIPT
 from .repeated_fields import field_key_for_block, field_label_for_key, split_repeated_key
 from .service import recognize_field
-from .live_scripts import _HIDE_REMEMBER_SCRIPT
 
 logger = logging.getLogger(__name__)
 
@@ -199,11 +199,11 @@ class LiveRememberMixin:
         if ok:
             destination = str(entry.get("destination") or "").strip()
             self._publish_remember(
-                (
+                
                     f"已保存到「{destination}」，下次遇到就能使用"
                     if destination
                     else f"已更新「{label or pending.get('field_label') or '网申资料'}」，下次遇到相同类型的框可以继续使用"
-                )
+                
             )
         else:
             self._publish_remember_pending(pending, "这条资料没能保存，请检查目标后重试")

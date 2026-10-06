@@ -4,9 +4,8 @@
 表集合，所以这里额外验一件事：旧记录升级后新列有默认值，渲染结果与升级前一致。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0012_application_tracker"
 HEAD_REVISION = "0013_resume_format_config"

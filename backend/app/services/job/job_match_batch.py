@@ -1,10 +1,11 @@
 """岗位广场批量适配度分析的编排与历史记录。"""
 from __future__ import annotations
 
-import logging
 import json
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session

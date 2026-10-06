@@ -6,7 +6,6 @@ import json
 import subprocess
 
 from app.services.webform.live import LiveSession
-
 from test_webform_live import FakeLiveClient
 
 
@@ -174,9 +173,8 @@ def test_lili_orb_asset_ships_with_the_repository():
     """
     from pathlib import Path
 
-    from PIL import Image
-
     from app.services.webform import live_control
+    from PIL import Image
 
     asset = live_control._ASSET_DIR / live_control._LILI_ORB_FILE
     assert asset.is_file(), f"历历素材缺失：{asset}"

@@ -12,8 +12,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..models.interview_experience import (
-    EXPERIENCE_SOURCES,
     EXPERIENCE_SOURCE_SELF,
+    EXPERIENCE_SOURCES,
 )
 
 MAX_EXPERIENCE_CONTENT_CHARS = 100_000

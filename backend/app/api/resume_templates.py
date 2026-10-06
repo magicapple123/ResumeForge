@@ -15,10 +15,11 @@ from ..schemas.resume_template import (
     ResumeTemplateUpdate,
     TemplatePreviewRequest,
 )
+from ..services.document_text import (
+    extract_document_text,  # noqa: F401 - legacy monkeypatch surface
+)
 from ..services.exporter import render_html
-from ..services.document_text import extract_document_text  # noqa: F401 - legacy monkeypatch surface
 from ..services.llm import create_provider  # noqa: F401 - legacy monkeypatch surface
-from ..services.settings_service import get_llm_config  # noqa: F401 - legacy monkeypatch surface
 from ..services.resume.resume_sample import sample_resume_content
 from ..services.resume.resume_template_store import (
     TemplateError,
@@ -31,6 +32,7 @@ from ..services.resume.resume_template_store import (
     resolve_style_template,
     update_user_template,
 )
+from ..services.resume.resume_template_style import validated_style_config
 from ..services.resume.resume_templates import (
     RESUME_TEMPLATES,
     TEMPLATES_DIR,
@@ -38,7 +40,7 @@ from ..services.resume.resume_templates import (
     template_spec,
     validated_format_config,
 )
-from ..services.resume.resume_template_style import validated_style_config
+from ..services.settings_service import get_llm_config  # noqa: F401 - legacy monkeypatch surface
 from .resume_template_import import router as template_import_router
 
 logger = logging.getLogger(__name__)

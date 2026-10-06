@@ -12,15 +12,15 @@ from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
 from ..models.job import Job
-from ..models.profile import utcnow
 from ..models.job_match_batch import JobMatchBatch
+from ..models.profile import utcnow
 from ..schemas.job_match import JobMatchOut, JobMatchResult
+from ..schemas.job_match_background import JobMatchBackgroundTask
 from ..schemas.job_match_batch import (
     JobMatchBatchOut,
     JobMatchBatchRequest,
     JobMatchBatchSummary,
 )
-from ..schemas.job_match_background import JobMatchBackgroundTask
 from ..services import trash
 from ..services.apply import apply_service
 from ..services.job.job_match import (
@@ -29,13 +29,6 @@ from ..services.job.job_match import (
     job_payload,
     local_match_result,
 )
-from ..services.job.job_match_context import match_source_texts, profile_is_empty
-from ..services.job.job_match_batch import (
-    build_batch_inputs,
-    list_batch_summaries,
-    persist_batch,
-    run_batch_match,
-)
 from ..services.job.job_match_background import (
     JobMatchBackgroundRunnerError,
     create_job_match_background_task,
@@ -43,6 +36,13 @@ from ..services.job.job_match_background import (
     get_job_match_background_task,
     list_active_job_match_background_tasks,
 )
+from ..services.job.job_match_batch import (
+    build_batch_inputs,
+    list_batch_summaries,
+    persist_batch,
+    run_batch_match,
+)
+from ..services.job.job_match_context import match_source_texts, profile_is_empty
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.match_scoring import score_match_result

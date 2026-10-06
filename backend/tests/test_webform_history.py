@@ -10,7 +10,6 @@
 3. 软删后列表看不到、回收站看得到、能恢复。
 """
 import pytest
-
 from app.models.web_form_record import SOURCE_BATCH, SOURCE_LIVE, WebFormFillRecord
 from app.services import trash
 from app.services.webform import history

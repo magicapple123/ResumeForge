@@ -7,19 +7,12 @@ from starlette.concurrency import run_in_threadpool
 
 from ..database import get_db
 from ..schemas.photo import ProfilePhotoCreate, ProfilePhotoOut, ProfilePhotoUpdate
-from ..schemas.profile import ProfileOut, ProfileTextParseRequest, ProfileTextParseResult, ProfileUpdate
-from ..services.profile.profile_photos import (
-    add_photo,
-    delete_photo,
-    list_photos,
-    rename_photo,
-    set_primary_photo,
+from ..schemas.profile import (
+    ProfileOut,
+    ProfileTextParseRequest,
+    ProfileTextParseResult,
+    ProfileUpdate,
 )
-from ..services.profile_text_parser import parse_profile_text
-from ..services.profile.profile_service import get_profile_detail, to_profile_out, update_profile
-from ..services.llm import create_provider
-from ..services.llm.base import LLMError
-from ..services.settings_service import get_llm_config
 from ..services.attachments import (
     assert_attachment_budget,
     image_data_urls,
@@ -27,6 +20,18 @@ from ..services.attachments import (
     total_attachment_bytes,
 )
 from ..services.document_text import extract_documents_text
+from ..services.llm import create_provider
+from ..services.llm.base import LLMError
+from ..services.profile.profile_photos import (
+    add_photo,
+    delete_photo,
+    list_photos,
+    rename_photo,
+    set_primary_photo,
+)
+from ..services.profile.profile_service import get_profile_detail, to_profile_out, update_profile
+from ..services.profile_text_parser import parse_profile_text
+from ..services.settings_service import get_llm_config
 from ..services.text_extraction import (
     ai_failed_warning,
     extract_profile_text,

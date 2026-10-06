@@ -7,7 +7,6 @@
 单条删与整批删都要（用户原话），且都进退回收站（可恢复、可彻底删除）。
 """
 import pytest
-
 from app.models.apply import (
     ITEM_STATUS_FAILED,
     ITEM_STATUS_SUCCESS,

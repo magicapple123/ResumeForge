@@ -7,7 +7,6 @@
 from datetime import datetime
 
 import pytest
-
 from app.models.claim import ClaimRecord
 from app.models.interview_experience import InterviewExperience
 from app.models.job import Job

@@ -32,7 +32,14 @@ from .models import (
     PendingItem,
     PreviewItem,
 )
-from .suggest import Suggestion, _DIAL_CODE_RE, _describe, popup_display_field, recognize_field, relative_hint
+from .suggest import (
+    _DIAL_CODE_RE,
+    Suggestion,
+    _describe,
+    popup_display_field,
+    recognize_field,
+    relative_hint,
+)
 
 # 放宽代选行的说明文案（预览与实时面板共用同一说法，两处各写一份迟早分叉）。
 RELAXED_NOTE = "放宽模式：程序将代点，填完请核对"
@@ -62,9 +69,8 @@ def _resolve_relaxed_field(control: Control, kind: str) -> str | None:
     # 弹层的「显示值自证」判据（区号/证件类型，与 suggest_for 同源共用，见 popup_display_field）。
     # 实测到的误配：区号弹层被认成 phone（旁文含「手机号码*」）、证件类型弹层被认成
     # id_number（旁文含「居民身份证」）——值装不进，fill 必败。
-    if kind == "popup":
-        if display := popup_display_field(control):
-            return display
+    if kind == "popup" and (display := popup_display_field(control)):
+        return display
     # 非 popup 控件保留 value 判据（与 suggest_for 同判据：框里现有值是 +数字 形状）。
     if _DIAL_CODE_RE.match(control.value.strip()):
         return "phone_country_code"

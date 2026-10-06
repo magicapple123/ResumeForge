@@ -1,9 +1,7 @@
 """岗位、搜索与统计 API 冒烟测试。"""
 
 import pytest
-
 from app.models.job import Job
-
 
 SAMPLE_JOB_TEXT = """AI应用客户端开发工程师 - 剪映CapCut
 深圳、广州

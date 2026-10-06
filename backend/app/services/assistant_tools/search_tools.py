@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..assistant.assistant_sources import SourceNumberer
 from ..assistant.assistant_web_search import is_local_resume_forge_question
 from ._types import ToolResult
+
 # ===== 联网搜索 =====
 
 

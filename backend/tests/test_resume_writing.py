@@ -2,8 +2,6 @@
 import json
 
 import pytest
-from pydantic import ValidationError
-
 from app import preflight
 from app.models.claim import ClaimRecord
 from app.models.resume import ResumeRecord
@@ -16,6 +14,7 @@ from app.services.resume.resume_writing import (
     rewrite_star,
     translate,
 )
+from pydantic import ValidationError
 
 
 class WritingProvider(BaseLLMProvider):

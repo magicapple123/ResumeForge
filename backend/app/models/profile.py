@@ -4,7 +4,7 @@
 避免日期解析带来的兼容性问题。多行文本（经历描述、项目亮点等）
 以换行分隔存储，输入模型时再拆成列表。
 """
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -14,7 +14,7 @@ from ..database import Base
 
 def utcnow() -> datetime:
     """统一时间戳（无时区的 UTC），避免 SQLite 中带时区比较的坑。"""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class UserProfile(Base):

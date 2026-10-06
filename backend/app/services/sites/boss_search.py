@@ -21,31 +21,55 @@ from .boss_filters import (
 )
 from .boss_network import DETAIL_MARKERS, SEARCH_MARKERS, api_error
 from .boss_page import (
-    BOSS_DISPLAY_NAME,
-
-    SELECTOR_SEARCH_READY,
     _SELECTORS,
+    BOSS_DISPLAY_NAME,
+    SELECTOR_SEARCH_READY,
     _as_payload,
     _current_url,
-
     blocker_failure,
     detect_blocker,
     selector_diagnostic,
 )
 from .boss_search_scripts import (
     CONDITIONS_FETCH_WAIT_SECONDS as CONDITIONS_FETCH_WAIT_SECONDS,
+)
+from .boss_search_scripts import (
     FILTER_BAR_POLL_SECONDS as FILTER_BAR_POLL_SECONDS,
+)
+from .boss_search_scripts import (
     FILTER_BAR_URL as FILTER_BAR_URL,
+)
+from .boss_search_scripts import (
     FILTER_BAR_WAIT_SECONDS as FILTER_BAR_WAIT_SECONDS,
+)
+from .boss_search_scripts import (
     JOB_TYPE_QUERY_CODES as JOB_TYPE_QUERY_CODES,
+)
+from .boss_search_scripts import (
     NETWORK_RESPONSE_EVENT as NETWORK_RESPONSE_EVENT,
+)
+from .boss_search_scripts import (
     SESSION_FETCH_POLL_SECONDS as SESSION_FETCH_POLL_SECONDS,
+)
+from .boss_search_scripts import (
     SESSION_FETCH_TIMEOUT as SESSION_FETCH_TIMEOUT,
+)
+from .boss_search_scripts import (
     _bar_present as _bar_present,
+)
+from .boss_search_scripts import (
     _collect_links_script as _collect_links_script,
+)
+from .boss_search_scripts import (
     _collect_script as _collect_script,
+)
+from .boss_search_scripts import (
     _detail_script as _detail_script,
+)
+from .boss_search_scripts import (
     _session_conditions_result_script as _session_conditions_result_script,
+)
+from .boss_search_scripts import (
     _session_conditions_script as _session_conditions_script,
 )
 from .boss_text import looks_like_salary, normalize_text, split_job_fields, split_title_salary
@@ -273,9 +297,13 @@ class BossSearchMixin:
             return FilterResolution()
         resolved = resolve_codes(selected, self.fetch_filter_options(client))
         # 还有没校验过的项、当前页面又没有筛选栏 → 去搜索页读一次再校验。
-        if resolved.unapplied and client is not None and not _bar_present(client):
-            if self._load_filter_bar(client):
-                resolved = resolve_codes(selected, self.fetch_filter_options(client))
+        if (
+            resolved.unapplied
+            and client is not None
+            and not _bar_present(client)
+            and self._load_filter_bar(client)
+        ):
+            resolved = resolve_codes(selected, self.fetch_filter_options(client))
         if resolved.unapplied:
             logger.warning(
                 "这些筛选条件本次没能生效（编码不在站点当前清单里）：%s", resolved.unapplied

@@ -11,15 +11,15 @@ from ...schemas.job import JobOut
 from ...schemas.profile import ProfileOut
 from ..jd_parser import parse_jd
 from .profile_relevance_constants import (
+    _ASCII_TERM_RE,
+    _LIST_DETAIL_FIELDS,
+    _TITLE_SPLIT_RE,
     DOMAIN_CONTEXT_SIGNALS,
     DOMAIN_SIGNALS,
     SECTION_LIMITS,
     SECTION_PRIMARY_FIELDS,
     SKILL_DOMAIN_HINTS,
     JobFocus,
-    _ASCII_TERM_RE,
-    _LIST_DETAIL_FIELDS,
-    _TITLE_SPLIT_RE,
 )
 
 # 技能候选的下限：低于这个数就按分数补足零分条目。设 3 是因为一份简历的技能区

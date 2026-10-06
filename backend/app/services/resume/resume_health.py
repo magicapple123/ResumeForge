@@ -17,11 +17,11 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from .. import trash
-from .resume_completeness import find_incomplete
 from ...models.claim import VERIFICATION_PENDING, ClaimRecord
 from ...models.resume import ResumeRecord
 from ...schemas.resume import ResumeContent
+from .. import trash
+from .resume_completeness import find_incomplete
 
 logger = logging.getLogger(__name__)
 

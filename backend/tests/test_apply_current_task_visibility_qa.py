@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.models.apply import TASK_STATUS_PENDING, TASK_STATUS_RUNNING, ApplyTask
 from app.services.apply import apply_service, task_runner
 

@@ -9,7 +9,6 @@ from app.models.apply import TASK_KIND_COLLECT, ApplyTask
 from app.schemas.apply import DEFAULT_COLLECT_PER_TASK_LIMIT, CollectConfigIn
 from app.services.apply.task_runner import TaskRunner
 
-
 # ===== 任务运行器：配置还原、目标 id 读取、收尾文案 =====
 
 

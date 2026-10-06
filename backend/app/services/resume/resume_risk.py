@@ -143,7 +143,7 @@ def _duplicate_risks(resume: ResumeContent) -> list[RiskPoint]:
             continue
         seen.setdefault(key, []).append((location, text))
 
-    for key, hits in seen.items():
+    for _key, hits in seen.items():
         if len(hits) < 2:
             continue
         risks.append(

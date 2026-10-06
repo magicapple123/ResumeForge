@@ -3,7 +3,6 @@ import json
 from types import SimpleNamespace
 
 import pytest
-
 from app.schemas.job_match import JobMatchResult, MatchCondition
 from app.schemas.setting import LLMConfig
 from app.services.job.job_match import (

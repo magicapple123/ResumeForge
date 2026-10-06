@@ -6,7 +6,7 @@ import json
 
 from ..browser.cdp_client import CdpClient
 from .boss_filters import CONDITIONS_ENDPOINT, FILTER_BAR_SCRIPT, parse_filter_bar
-from .boss_page import SELECTOR_JOB_LINK, _SELECTORS, _js
+from .boss_page import _SELECTORS, SELECTOR_JOB_LINK, _js
 
 NETWORK_RESPONSE_EVENT = "Network.responseReceived"
 

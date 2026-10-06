@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from ...models.reminder import REMINDER_STATUSES
 from ...schemas.reminder import ReminderUpdate
-from ..reminder_service import reminder_or_none, update_reminder as update_reminder_record
+from ..reminder_service import reminder_or_none
+from ..reminder_service import update_reminder as update_reminder_record
 from ._types import ToolResult
 
 _STATUS_LABELS = {

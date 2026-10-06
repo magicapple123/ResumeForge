@@ -28,7 +28,11 @@ def _resolve_template_color(
     颜色唯一来源是 `resume_templates.template_layout_defaults`（共享知识第 10 条）；
     PDF 与 Word 都从这里取同一份颜色，禁止任何渲染器再存一份 `_TEMPLATE_COLORS`。
     """
-    from ..resume.resume_templates import template_layout_defaults, template_spec, validated_format_config
+    from ..resume.resume_templates import (
+        template_layout_defaults,
+        template_spec,
+        validated_format_config,
+    )
 
     spec = template_spec(template)
     overrides = validated_format_config(format_config)

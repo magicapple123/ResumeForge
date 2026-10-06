@@ -14,9 +14,7 @@ from ...profile.profile_service import get_profile_detail
 from .. import extra_profile, repeated_profile
 from ..extra_profile import list_entries
 from ..fields import FORM_FIELDS
-
 from .profile_map import _as_block_text, profile_to_form_data
-
 
 # ===== 供"人工挑选"的完整清单 =====
 #

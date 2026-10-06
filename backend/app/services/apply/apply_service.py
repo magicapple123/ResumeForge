@@ -53,14 +53,6 @@ from ._records import (
     mark_queue_done,
     write_back_job_status,
 )
-from ._tasks import (
-    create_apply_task,
-    create_backfill_task,
-    create_collect_task,
-    current_task,
-    fail_orphaned_tasks,
-    get_task_detail,
-)
 from ._site_browser import (
     browser_status,
     collect_filter_options,
@@ -71,10 +63,18 @@ from ._site_browser import (
     list_sites,
     open_browser_url,
     refresh_browser,
-    restart_browser,
     reset_browser_manager,
+    restart_browser,
     start_browser,
     stop_browser,
+)
+from ._tasks import (
+    create_apply_task,
+    create_backfill_task,
+    create_collect_task,
+    current_task,
+    fail_orphaned_tasks,
+    get_task_detail,
 )
 
 __all__ = [

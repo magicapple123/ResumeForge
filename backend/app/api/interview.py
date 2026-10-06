@@ -28,15 +28,15 @@ from ..schemas.interview import (
     InterviewMessageOut,
     InterviewOptimizeOut,
     InterviewOptimizeRequest,
-    InterviewQuestionAnswerRequest,
     InterviewQuestionAnswerOut,
+    InterviewQuestionAnswerRequest,
     InterviewQuestionGenerateRequest,
     QuestionBankOut,
 )
 from ..schemas.material import MaterialCreate, MaterialOut
 from ..schemas.resume import ResumeContent
-from ..services.interview import interview_questions as interview_questions_service
 from ..services import trash
+from ..services.interview import interview_questions as interview_questions_service
 from ..services.interview.interview import (
     add_message,
     answered_rounds,

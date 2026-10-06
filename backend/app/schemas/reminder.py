@@ -12,10 +12,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..models.reminder import (
-    REMINDER_KINDS,
-    REMINDER_STATUSES,
     REMINDER_KIND_OTHER,
+    REMINDER_KINDS,
     REMINDER_STATUS_PENDING,
+    REMINDER_STATUSES,
 )
 
 MAX_REMINDER_TITLE_CHARS = 200

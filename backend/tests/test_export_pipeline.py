@@ -6,7 +6,6 @@
 import urllib.parse
 
 import pytest
-
 from app.schemas.resume import ResumeContent
 from app.services.export_pipeline import (
     FORMAT_RENDERERS,

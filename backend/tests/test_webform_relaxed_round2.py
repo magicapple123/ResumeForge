@@ -13,10 +13,8 @@
 import json
 
 import pytest
-
 from app.services.llm.base import LLMError
-from app.services.webform import ai
-from app.services.webform import FormEngine
+from app.services.webform import FormEngine, ai
 from app.services.webform.custom_select import (
     select_combobox_options,
     split_multi_values,
@@ -34,7 +32,6 @@ from app.services.webform.service import (
     enrich_preview_with_ai,
 )
 from app.services.webform.session import Snapshot
-
 from test_webform_ai import FakeProvider
 from test_webform_live import FakeLiveClient, raw_control
 from test_webform_live_ai import ScriptedProvider

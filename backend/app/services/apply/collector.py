@@ -19,9 +19,9 @@ from __future__ import annotations
 import logging
 import random
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Callable
+from typing import Any
 
 from sqlalchemy.orm import Session
 

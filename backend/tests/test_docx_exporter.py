@@ -2,12 +2,11 @@
 from io import BytesIO
 
 import pytest
-from docx import Document
-
 from app.schemas.resume import ResumeContent
 from app.services.docx_exporter import build_resume_docx
 from app.services.pdf_exporter import build_resume_pdf, font_available
 from app.services.resume.resume_sample import sample_resume_content
+from docx import Document
 
 needs_font = pytest.mark.skipif(not font_available(), reason="本机没有可用的中文字体")
 
@@ -122,9 +121,8 @@ def test_docx_photo_is_cover_cropped_before_embedding():
     import base64
     from io import BytesIO
 
-    from PIL import Image
-
     from app.services.resume.resume_templates import TEMPLATE_LAYOUT_DEFAULTS
+    from PIL import Image
 
     # 用 Pillow 现造一张 4x1 的横图 PNG（与 classic 照片框 0.7875 比例明显不同）。
     buf = BytesIO()

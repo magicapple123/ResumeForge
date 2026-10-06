@@ -6,7 +6,12 @@
 import json
 
 import pytest
-
+from app.models.claim import (
+    RESPONSIBILITY_MODULE,
+    VERIFICATION_CONFIRMED,
+    VERIFICATION_PENDING,
+    ClaimRecord,
+)
 from app.models.drill import (
     EVIDENCE_CONTRADICTORY,
     EVIDENCE_NOT_COVERED,
@@ -17,12 +22,6 @@ from app.models.drill import (
     evidence_label,
     needs_rehearsal,
     should_promote,
-)
-from app.models.claim import (
-    RESPONSIBILITY_MODULE,
-    VERIFICATION_CONFIRMED,
-    VERIFICATION_PENDING,
-    ClaimRecord,
 )
 from app.schemas.drill import DrillCreate, DrillPlan
 from app.schemas.setting import LLMConfig

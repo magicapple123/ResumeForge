@@ -3,7 +3,6 @@ import json
 import zipfile
 
 import pytest
-
 from app.database import SessionLocal
 from app.database_migrations import application_tables
 from app.models.profile import UserProfile

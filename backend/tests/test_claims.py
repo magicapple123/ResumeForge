@@ -6,8 +6,6 @@
 - 事实基线只喂已确认的内容，未确认的说法必须进"要避开的清单"。
 """
 import pytest
-from pydantic import ValidationError
-
 from app.models.claim import (
     CLAIM_CATEGORY_PROJECT,
     RESPONSIBILITY_LED,
@@ -32,6 +30,7 @@ from app.services.claims import (
     summarize,
     update_claim,
 )
+from pydantic import ValidationError
 
 
 def _payload(**overrides) -> dict:

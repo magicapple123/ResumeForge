@@ -9,7 +9,6 @@ import logging
 
 import httpx
 import pytest
-
 from app.schemas.setting import UNLIMITED_MAX_TOKENS, LLMConfig
 from app.services.llm.base import LLMError
 from app.services.llm.openai_compat import (
@@ -188,9 +187,8 @@ async def test_stream_accepts_output_above_the_limited_floor_when_unlimited():
 async def test_http_error_log_does_not_include_upstream_body(caplog):
     provider = _provider(lambda _request: httpx.Response(500, text="UPSTREAM_PRIVATE_BODY_TOKEN"))
 
-    with caplog.at_level(logging.WARNING):
-        with pytest.raises(LLMError, match="HTTP 500"):
-            await provider.chat([{"role": "user", "content": "test"}])
+    with caplog.at_level(logging.WARNING), pytest.raises(LLMError, match="HTTP 500"):
+        await provider.chat([{"role": "user", "content": "test"}])
 
     assert "UPSTREAM_PRIVATE_BODY_TOKEN" not in caplog.text
 

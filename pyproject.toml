@@ -9,9 +9,24 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-# Start with correctness-oriented rules that match the existing codebase. More
-# opinionated rules can be enabled incrementally without creating a noisy rewrite.
-select = ["E4", "E7", "E9", "F"]
+# Correctness rules (E4/E7/E9/F) plus the low-noise hygiene set: I (import
+# order), UP (py311-modern syntax), B (bugbear footguns), SIM (simplifiable
+# constructs). All four auto-fix mechanically; more opinionated sets (N/ANN/RUF)
+# can be enabled incrementally later.
+# B008 stays allowed: FastAPI's Depends()/Query() in parameter defaults is the
+# framework's own idiom, not the footgun bugbear targets.
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM"]
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# 助手工具/接口的"非法输入必须被拒绝"用例刻意断言任意异常：要测的行为就是
+# "拒绝路径存在"，具体抛什么类型由 handler 自己的单测钉住，这里收窄反而会把
+# 用例绑死在实现细节上。
+"backend/tests/test_assistant_claim_tools.py" = ["B017"]
+"backend/tests/test_assistant_tools.py" = ["B017"]
+"backend/tests/test_drill.py" = ["B017"]
+"backend/tests/test_interview.py" = ["B017"]
+"backend/tests/test_pdf_exporter_photo.py" = ["B017"]
 
 [tool.coverage.run]
 branch = true

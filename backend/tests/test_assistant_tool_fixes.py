@@ -14,7 +14,6 @@ import json
 from datetime import datetime, timedelta
 
 import pytest
-
 from app.models.apply import (
     FAILURE_CAPTCHA_REQUIRED,
     FAILURE_CATEGORY_LABELS,
@@ -25,11 +24,11 @@ from app.models.apply import (
 from app.models.job import Job
 from app.models.resume import ResumeRecord
 from app.models.resume_template import TEMPLATE_KIND_FORMAT
+from app.schemas.reminder import ReminderCreate
 from app.services.assistant_tools import _TOOLS, execute_tool, tool_names
 from app.services.feature_catalog import build_capability_map
 from app.services.reminder_service import create_reminder
 from app.services.resume.resume_template_store import create_user_template
-from app.schemas.reminder import ReminderCreate
 
 
 def _payload(db_session, name: str, arguments: dict) -> dict:

@@ -11,12 +11,12 @@
 DOM、资料目录与 helper 在 ``webform_canary_support.py``。
 """
 from webform_canary_support import (
+    _ROOT,
     CATALOG,
     _chip,
     _open_panel,
     _open_picker,
     _rows_matching,
-    _ROOT,
     _shadow,
     _show_with_related,
     page_client,

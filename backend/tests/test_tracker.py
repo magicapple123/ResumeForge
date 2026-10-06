@@ -7,8 +7,6 @@
 from datetime import date
 
 import pytest
-from pydantic import ValidationError
-
 from app.models.tracker import (
     MERGE_CREATED,
     MERGE_UNCHANGED,
@@ -39,6 +37,7 @@ from app.services.tracker import (
     to_json,
     update_track,
 )
+from pydantic import ValidationError
 
 
 def _record(**overrides) -> TrackRecordIn:

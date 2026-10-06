@@ -12,12 +12,11 @@ import subprocess
 import time
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.api import system as system_api
 from app.database import SessionLocal, get_db
 from app.main import app
 from app.services.diagnostics import record_event
+from fastapi.testclient import TestClient
 
 
 def test_shutdown_rejects_non_loopback_clients():
@@ -100,8 +99,8 @@ def test_stopping_the_frontend_never_raises(monkeypatch):
         RuntimeError("谁知道呢"),
     ]
     for failure in failures:
-        def fake_run(*_args, **_kwargs):
-            raise failure
+        def fake_run(*_args, __failure=failure, **_kwargs):
+            raise __failure
 
         monkeypatch.setattr(system_api.subprocess, "run", fake_run)
         system_api._stop_frontend_process()  # 不抛即通过
@@ -112,7 +111,7 @@ def test_a_failed_stop_is_reported_not_swallowed(monkeypatch, caplog):
     monkeypatch.setattr(
         system_api.subprocess,
         "run",
-        lambda *_args, **_kwargs: _CompletedRun(returncode=1, stderr="拒绝：记录对不上".encode("utf-8")),
+        lambda *_args, **_kwargs: _CompletedRun(returncode=1, stderr="拒绝：记录对不上".encode()),
     )
 
     with caplog.at_level("WARNING"):

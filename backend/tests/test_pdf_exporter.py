@@ -20,23 +20,21 @@ PDF 曾经**完全忽略 `format_config`**、还内置了一套与模板不一�
 跨文件共用的 helper（_pdf_with_font / _text_runs / _body_lines / _hex_to_rgb /
 needs_font / _MM_TO_PT 等）按契约留在本文件，兄弟文件单向导入。
 """
-from io import BytesIO
 import re
+from io import BytesIO
 
 import pytest
-from pypdf import PdfReader
-
 from app.schemas.resume import ResumeAward, ResumeContent
 from app.services.pdf_exporter import (
-    MIN_FIT_SCALE,
     _FIT_MAX_PASSES,
     _FIT_MIN_STEP,
     _FIT_RATIO_MARGIN,
     _FIT_TOLERANCE_MM,
     _PX_TO_MM,
     _PX_TO_PT,
-    _ResumePDF,
+    MIN_FIT_SCALE,
     _resolve_font_paths,
+    _ResumePDF,
     build_resume_pdf,
     font_available,
     resolve_layout,
@@ -49,7 +47,7 @@ from app.services.resume.resume_templates import (
     TEMPLATE_LAYOUT_DEFAULTS,
     TEMPLATES_DIR,
 )
-
+from pypdf import PdfReader
 
 needs_font = pytest.mark.skipif(not font_available(), reason="本机没有可用的中文字体")
 

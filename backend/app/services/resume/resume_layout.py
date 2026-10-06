@@ -21,7 +21,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-
 # ===== 版面健康区间 =====
 # 单页：低于 82% 显得空，高于 96% 显得挤。
 FILL_SPARSE = 0.82

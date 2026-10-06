@@ -1,5 +1,5 @@
 """网申资料补充记录支持多条。"""
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

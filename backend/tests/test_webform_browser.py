@@ -6,7 +6,7 @@ from app.services.webform import browser as webform_browser
 
 
 class _FakeClient:
-    def __init__(self, manager: "_FakeManager", target_id: str = "") -> None:
+    def __init__(self, manager: _FakeManager, target_id: str = "") -> None:
         self.manager = manager
         self.target_id = target_id
         self.closed = False

@@ -8,7 +8,6 @@ from __future__ import annotations
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from .. import trash
 from ...models.apply import (
     FAILURE_CATEGORY_LABELS,
     QUEUE_STATUS_DONE,
@@ -20,6 +19,9 @@ from ...models.apply import (
 from ...models.job import JOB_STATUS_APPLIED, JOB_STATUS_OPEN, Job
 from ...models.profile import utcnow
 from ...schemas.apply import ApplyRecordBatchOut, ApplyRecordOut
+from .. import trash
+
+
 def write_back_job_status(db: Session, job_id: int | None) -> None:
     """投递成功 → 岗位状态置为「已投递」；只在岗位仍是「开放中」时回写，不覆盖用户手改。"""
     if job_id is None:

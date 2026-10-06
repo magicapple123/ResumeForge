@@ -6,7 +6,6 @@ from dataclasses import replace
 from ..fields import FIELD_SYNONYMS
 from .model import Control
 
-
 _DATE_PARENT_FIELDS = (
     "birth_date",
     "birth_year",

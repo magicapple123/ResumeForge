@@ -12,7 +12,6 @@ from ...models.drill import EVIDENCE_NOT_COVERED, DrillContract, DrillSession
 from ...schemas.drill import DrillPlan
 from ..llm.base import BaseLLMProvider, LLMError
 from ..llm.structured_output import parse_json_object
-
 from .common import (
     MAX_CLAIM_CONTEXT_CHARS,
     MAX_QUESTION_CHARS,
@@ -21,7 +20,6 @@ from .common import (
     _clip,
     load_prompt,
 )
-
 
 # ===== 选哪些主张来挖 =====
 

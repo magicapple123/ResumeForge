@@ -4,9 +4,8 @@
 表集合前后不变，以及旧行升级后新列拿到的是空串而不是 null（界面按"没填"处理）。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0019_interview_history_knowledge_referral_fields"
 HEAD_REVISION = "0020_daily_20260920_columns"

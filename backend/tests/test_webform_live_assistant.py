@@ -1,7 +1,6 @@
 """「问历历」精简问答的纯逻辑单测（不涉轮询与注入，只钉护栏）。"""
 
 import pytest
-
 from app.services.webform.live_assistant import (
     ASK_MAX_CHARS,
     ASK_TOO_LONG_NOTE,

@@ -5,9 +5,8 @@
 迁到 head 之后表集合都必须与当前代码一致。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect
 
 PREVIOUS_REVISION = "0022_official_site_collect"
 HEAD_REVISION = "0023_drop_source_trend"

@@ -46,24 +46,30 @@ def _is_contextual_false_positive(text: str, skill: str, match: re.Match[str]) -
         prefix = text[max(0, match.start() - 20) : match.start()]
         if re.search(r"tailwind\s*$", prefix, re.IGNORECASE):
             return True
-    if skill == "Agent" and matched == "agent":
-        # agent 在英文招聘文案中也常指客服/销售岗位；只有 AI/模型/工具
-        # 上下文足够明确时才归一化为人工智能技能。
-        if not re.search(
+    # agent 在英文招聘文案中也常指客服/销售岗位；只有 AI/模型/工具
+    # 上下文足够明确时才归一化为人工智能技能。
+    if (
+        skill == "Agent"
+        and matched == "agent"
+        and not re.search(
             r"人工智能|大模型|语言模型|智能体|机器学习|深度学习|\b(?:ai|llm|rag|aigc|"
             r"model|tool(?:s)?|function\s+calling|agentic)\b",
             context,
             re.IGNORECASE,
-        ):
-            return True
-    if skill == "计算机视觉" and matched in {"cv", "cv技术"}:
-        if not re.search(
+        )
+    ):
+        return True
+    if (
+        skill == "计算机视觉"
+        and matched in {"cv", "cv技术"}
+        and not re.search(
             r"视觉|图像|图片|视频|计算机|模型|深度学习|\b(?:computer\s+vision|image|video|"
             r"vision|model|opencv|pytorch|tensorflow)\b",
             context,
             re.IGNORECASE,
-        ):
-            return True
+        )
+    ):
+        return True
     if skill == "Java" and matched == "java":
         if re.match(r"\s*script\b", text[match.end() :], re.IGNORECASE):
             return True
@@ -74,38 +80,50 @@ def _is_contextual_false_positive(text: str, skill: str, match: re.Match[str]) -
             re.IGNORECASE,
         ):
             return True
-    if skill == "Python" and matched == "py":
-        # PyTorch 的可分词写法（“Py Torch”）不应额外生成 Python 标签。
-        if re.match(r"\s*[- ]?torch\b", text[match.end() :], re.IGNORECASE):
-            return True
+    # PyTorch 的可分词写法（“Py Torch”）不应额外生成 Python 标签。
+    if (
+        skill == "Python"
+        and matched == "py"
+        and re.match(r"\s*[- ]?torch\b", text[match.end() :], re.IGNORECASE)
+    ):
+        return True
     if skill == "SQL" and matched == "sql":
         # Postgre SQL / My SQL 是数据库产品的空格变体，而非独立 SQL 技能。
         prefix = text[max(0, match.start() - 16) : match.start()]
         if re.search(r"(?:postgre|postgres|my)\s*$", prefix, re.IGNORECASE):
             return True
-    if skill == "React" and matched == "react":
-        if not re.search(
+    if (
+        skill == "React"
+        and matched == "react"
+        and not re.search(
             r"开发|框架|组件|前端|页面|\b(?:frontend|front-end|framework|components?|"
             r"ui|web|javascript|typescript|jsx)\b",
             context,
             re.IGNORECASE,
-        ):
-            return True
-    if skill == "C" and matched == "c":
-        if not re.search(
+        )
+    ):
+        return True
+    if (
+        skill == "C"
+        and matched == "c"
+        and not re.search(
             r"语言|开发|编程|代码|\b(?:programming|language|developer|embedded|"
             r"compiler|pointer)\b",
             context,
             re.IGNORECASE,
-        ):
-            return True
-    if skill == "Shell" and matched == "shell":
-        if not re.search(
+        )
+    ):
+        return True
+    if (
+        skill == "Shell"
+        and matched == "shell"
+        and not re.search(
             r"脚本|命令行|终端|bash|zsh|linux|\b(?:script|command|terminal|unix)\b",
             context,
             re.IGNORECASE,
-        ):
-            return True
+        )
+    ):
+        return True
     if skill == "Go" and matched == "go":
         # 普通英语中的动词 “go” 不是编程语言；招聘文本中的技术写法通常
         # 使用大写 Go，或伴随“语言/开发/编程”等上下文。

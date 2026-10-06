@@ -6,21 +6,21 @@ import re
 from copy import deepcopy
 from typing import Any
 
+from .profile_budget import _trim_text
 from .profile_matching import _contains, _score_item
 from .profile_relevance_constants import (
-    DOMAIN_SIGNALS,
     _MARKDOWN_LIST_PREFIX_RE,
     _MARKDOWN_TABLE_DIVIDER_RE,
     _REFERENCE_CONTENT_KEY,
+    _REFERENCE_EXCERPT_MAX_CHARS,
     _REFERENCE_FACT_LIMIT,
     _REFERENCE_FACT_MAX_CHARS,
     _REFERENCE_FILE_KEY,
-    _REFERENCE_EXCERPT_MAX_CHARS,
     _REFERENCE_INSTRUCTION_RE,
     _REFERENCE_META_RE,
+    DOMAIN_SIGNALS,
     JobFocus,
 )
-from .profile_budget import _trim_text
 
 
 def _safe_reference_blocks(content: str) -> list[str]:

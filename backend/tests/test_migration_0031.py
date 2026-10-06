@@ -13,9 +13,8 @@
 - 幂等、可降级，并能跑在"列已存在但版本号还停在上一版"的历史库上。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0030_extra_profile_source_reuse"
 HEAD_REVISION = "0037_resume_generation_notes"

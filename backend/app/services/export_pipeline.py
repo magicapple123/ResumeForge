@@ -10,8 +10,8 @@ docx/txt 是 R-16 新增的两个渲染器（Word 复用 ``ResumeLayout``，纯�
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from ..schemas.resume import ResumeContent
 from .docx_exporter import build_resume_docx

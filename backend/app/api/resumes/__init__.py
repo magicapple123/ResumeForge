@@ -19,10 +19,6 @@ from fastapi import APIRouter
 
 from ...services.llm import create_provider as create_provider
 from ...services.settings_service import get_llm_config as get_llm_config
-from ._shared import (
-    PDF_PAGE_LIMIT_HEADER as PDF_PAGE_LIMIT_HEADER,
-    PDF_PAGES_HEADER as PDF_PAGES_HEADER,
-)
 from . import (
     ai_edits_routes,
     crud_routes,
@@ -30,6 +26,12 @@ from . import (
     generate_routes,
     layout_render_routes,
     templates_routes,
+)
+from ._shared import (
+    PDF_PAGE_LIMIT_HEADER as PDF_PAGE_LIMIT_HEADER,
+)
+from ._shared import (
+    PDF_PAGES_HEADER as PDF_PAGES_HEADER,
 )
 
 router = APIRouter(tags=["resumes"])

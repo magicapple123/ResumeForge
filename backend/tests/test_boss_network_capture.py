@@ -18,9 +18,7 @@ from app.services.sites.boss_network import (
     looks_like_search,
     parse_detail_response,
 )
-
 from test_boss_network import _body_event, _response_event, _search_payload
-
 
 # ===== 详情响应解析 =====
 

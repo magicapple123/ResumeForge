@@ -13,7 +13,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from app.schemas.apply import ApplyConfigIn
 from app.services.apply import _site_browser, apply_service
 from app.services.browser.browser_manager import (
@@ -138,7 +137,7 @@ def test_browser_display_name_is_human_readable(path, expected):
 class _FakeBrowserManager:
     """记录构造参数与 stop 调用的浏览器管理器替身。"""
 
-    instances: list["_FakeBrowserManager"] = []
+    instances: list[_FakeBrowserManager] = []
 
     def __init__(self, *, port, browser_choice, browser_path):
         self.port = port

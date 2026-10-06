@@ -2,10 +2,8 @@
 import base64
 
 import pytest
-
 from app.models.resume import ResumeRecord
 from app.schemas.profile import MAX_PROFILE_PHOTO_BYTES
-
 
 PHOTO_DATA_URL = (
     "data:image/png;base64,"

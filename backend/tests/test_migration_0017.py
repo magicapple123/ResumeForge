@@ -5,9 +5,8 @@
 把这张表干净地拆掉、不回退到 0016 时的表集合。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0016_soft_delete_marks"
 HEAD_REVISION = "0017_resume_generate_task"
@@ -50,9 +49,9 @@ def test_upgrade_creates_the_generate_task_table(tmp_path):
         assert {
             item["name"] for item in inspector.get_columns("resume_generate_task")
         } == EXPECTED_COLUMNS
-        assert EXPECTED_INDEXES <= {
+        assert {
             item["name"] for item in inspector.get_indexes("resume_generate_task")
-        }
+        } >= EXPECTED_INDEXES
     finally:
         engine.dispose()
 

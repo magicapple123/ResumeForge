@@ -2,9 +2,6 @@
 
 import pytest
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.orm import Session
-
 from app.database_migrations import build_alembic_config
 from app.models.assistant import ChatConversation, ChatMessage
 from app.services.assistant.assistant_web_search import (
@@ -16,6 +13,8 @@ from app.services.assistant.assistant_web_search import (
     parse_bing_rss,
     search_web,
 )
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.orm import Session
 
 
 def test_parse_bing_rss_limits_and_sanitizes_results():
@@ -118,7 +117,7 @@ async def test_search_web_rejects_unrelated_results_for_a_career_question(monkey
     xml = """<rss><channel>
     <item><title>如果（汉语假设连词）_百度百科</title>
     <link>https://baike.baidu.com/item/example</link><description>表示假设关系。</description></item>
-    </channel></rss>""".encode("utf-8")
+    </channel></rss>""".encode()
     captured = {}
 
     async def fake_fetch(query: str):
@@ -146,7 +145,7 @@ async def test_search_web_filters_ten_candidates_before_limiting_results(monkeyp
         "<link>https://careers.example.org/jobs</link>"
         "<description>Explore open opportunities.</description></item>"
         "</channel></rss>"
-    ).encode("utf-8")
+    ).encode()
 
     async def fake_fetch(_query: str):
         return xml
@@ -278,7 +277,7 @@ async def test_search_web_raises_on_zero_results_for_a_non_career_question(monke
     xml = """<rss><channel>
     <item><title>帮（汉语汉字）_百度百科</title>
     <link>https://baike.baidu.com/item/help</link><description>汉字释义。</description></item>
-    </channel></rss>""".encode("utf-8")
+    </channel></rss>""".encode()
 
     async def fake_fetch(_query: str):
         return xml

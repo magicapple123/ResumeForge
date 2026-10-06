@@ -14,7 +14,6 @@
 import json
 
 import pytest
-
 from app.services.sites.boss_network import (
     looks_like_search,
     parse_detail_response,

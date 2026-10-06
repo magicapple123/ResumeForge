@@ -6,7 +6,6 @@ import json
 import secrets
 import sqlite3
 import zipfile
-
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +13,6 @@ from pathlib import Path
 from sqlalchemy import Engine
 
 from ...database_migrations import backup_sqlite_database, snapshot_sqlite_file
-
 from .api_keys import _assert_no_plaintext_key, _plaintext_api_keys_in, _strip_api_keys
 from .manifest import build_manifest
 from .paths import (

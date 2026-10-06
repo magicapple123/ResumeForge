@@ -338,9 +338,7 @@ class BossPageMixin:
                     return True
                 # 旧文档防护只在能观测到导航前 URL 时才有意义。离线适配器测试和某些
                 # 轻量 CDP 实现拿不到 previous_url；这时沿用原有兼容语义，交给内容就绪判据。
-                if not previous_url:
-                    return True
-                return False
+                return not previous_url
             return not previous_url or url != previous_url
 
         def _is_ready(state: dict[str, Any]) -> bool:

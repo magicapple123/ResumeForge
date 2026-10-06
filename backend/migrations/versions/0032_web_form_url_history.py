@@ -1,5 +1,5 @@
 """保存网申目标网址历史。"""
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

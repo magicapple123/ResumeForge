@@ -8,7 +8,6 @@
 想要的那条；但必须把"没判断成"如实报出来（``undecided`` / ``unapplied``）。
 """
 import pytest
-
 from app.services.apply.collect_filters import (
     education_level,
     evaluate_filters,
@@ -16,7 +15,6 @@ from app.services.apply.collect_filters import (
     ranges_overlap,
     salary_band,
 )
-
 
 # ===== 学历档位 =====
 

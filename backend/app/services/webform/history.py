@@ -16,8 +16,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from .. import trash
 from ...models.web_form_record import SOURCE_BATCH, WebFormFillRecord
+from .. import trash
 
 logger = logging.getLogger(__name__)
 

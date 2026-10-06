@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ...models.job import JOB_STATUSES
 from ...models.tracker import STATUSES
+from ._types import Tool
 from .docs_tools import _tool_search_product_docs
 from .job_tools import (
     _PROFILE_ENTRY_SECTIONS,
@@ -24,7 +25,6 @@ from .tracker_tools import (
     _tool_list_application_tracks,
     _tool_update_application_track,
 )
-from ._types import Tool
 
 CORE_TOOLS: tuple[Tool, ...] = (
     Tool(

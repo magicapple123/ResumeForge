@@ -11,7 +11,6 @@ import re
 from pathlib import Path
 
 import pytest
-
 from app.models.apply import (
     FAILURE_CATEGORIES,
     FAILURE_CATEGORY_LABELS,

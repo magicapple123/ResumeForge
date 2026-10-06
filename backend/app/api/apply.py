@@ -43,13 +43,13 @@ from ..schemas.apply import (
     SiteListOut,
 )
 from ..schemas.common import Page
+from ..services import trash
 from ..services.apply import apply_service, task_runner
 from ..services.job.job_match import generate_greeting, job_payload
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.settings_service import get_llm_config
 from ..services.site_health import site_health_overview
-from ..services import trash
 
 logger = logging.getLogger(__name__)
 

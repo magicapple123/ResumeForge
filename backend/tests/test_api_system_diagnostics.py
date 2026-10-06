@@ -6,11 +6,9 @@ import zipfile
 from pathlib import Path
 
 import pytest
-
 from app.api import system as system_api
-from fastapi.testclient import TestClient
-
 from app.main import app
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 

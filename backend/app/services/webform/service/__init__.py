@@ -21,41 +21,82 @@ import logging
 # 属于旧命名空间的一部分——测试与调用方会以 ``service.X`` 属性访问（含 monkeypatch），
 # 门面必须原样再导出，缺一个都是行为变化。
 from ...browser.cdp_client import CdpClient as CdpClient
-from .._base import WebFormBadRequest as WebFormBadRequest, WebFormConflict as WebFormConflict
+from .._base import WebFormBadRequest as WebFormBadRequest
+from .._base import WebFormConflict as WebFormConflict
 from ..engine import (
     ApplyOutcome as ApplyOutcome,
+)
+from ..engine import (
     Control as Control,
+)
+from ..engine import (
     FieldMapping as FieldMapping,
+)
+from ..engine import (
     FormEngine as FormEngine,
+)
+from ..engine import (
     MatchResult as MatchResult,
+)
+from ..engine import (
     evidence_key as evidence_key,
 )
 from ..extra_profile import custom_fields_of as custom_fields_of
 from ..fields import (
     FIELD_EXCLUDE_HINTS as FIELD_EXCLUDE_HINTS,
+)
+from ..fields import (
     FIELD_LABELS as FIELD_LABELS,
+)
+from ..fields import (
     FIELD_SYNONYMS as FIELD_SYNONYMS,
+)
+from ..fields import (
     FORM_FIELDS as FORM_FIELDS,
+)
+from ..fields import (
     RELATIVE_HINTS as RELATIVE_HINTS,
+)
+from ..fields import (
     SOURCE_EXTRA as SOURCE_EXTRA,
 )
 from ..matching import (
     format_date as format_date,
+)
+from ..matching import (
     is_placeholder as is_placeholder,
+)
+from ..matching import (
     meaningful_options as meaningful_options,
+)
+from ..matching import (
     normalize_option_text as normalize_option_text,
+)
+from ..matching import (
     resolve_select_option as resolve_select_option,
 )
 from ..repeated_fields import (
     compatible_block as compatible_block,
+)
+from ..repeated_fields import (
     field_key_for_block as field_key_for_block,
+)
+from ..repeated_fields import (
     field_label_for_key as field_label_for_key,
+)
+from ..repeated_fields import (
     split_repeated_key as split_repeated_key,
 )
-from ..session import Snapshot as Snapshot, SnapshotStore as SnapshotStore, get_snapshot_store as get_snapshot_store
+from ..session import Snapshot as Snapshot
+from ..session import SnapshotStore as SnapshotStore
+from ..session import get_snapshot_store as get_snapshot_store
+from .fill import (
+    SETTLE_RECHECK_SECONDS as SETTLE_RECHECK_SECONDS,
+)
 from .fill import (
     _fill_lock as _fill_lock,
-    SETTLE_RECHECK_SECONDS as SETTLE_RECHECK_SECONDS,
+)
+from .fill import (
     apply_fill,
     is_apply_running,
     is_filling,
@@ -78,32 +119,54 @@ from .models import (
     PreviewReport,
     default_selections,
 )
+from .preview import (
+    _PAGE_INFO_SCRIPT as _PAGE_INFO_SCRIPT,
+)
+from .preview import (
+    _adopt_ai_match as _adopt_ai_match,
+)
+from .preview import (
+    _adopt_ai_relaxed_match as _adopt_ai_relaxed_match,
+)
+from .preview import (
+    _mapping_note as _mapping_note,
+)
+from .preview import (
+    _same_value as _same_value,
+)
+from .preview import (
+    build_preview,
+    enrich_preview_with_ai,
+    read_snapshot,
+)
 from .relaxed import (
     CONFIRM_NOTE as CONFIRM_NOTE,
+)
+from .relaxed import (
     RELAXED_NOTE as RELAXED_NOTE,
+)
+from .relaxed import (
     is_relaxed_ai_candidate,
     relaxed_preview_item,
     relaxed_route,
     relaxed_suggestion,
 )
-from .preview import (
-    _PAGE_INFO_SCRIPT as _PAGE_INFO_SCRIPT,
-    _adopt_ai_match as _adopt_ai_match,
-    _adopt_ai_relaxed_match as _adopt_ai_relaxed_match,
-    _mapping_note as _mapping_note,
-    _same_value as _same_value,
-    build_preview,
-    enrich_preview_with_ai,
-    read_snapshot,
+from .suggest import (
+    _DIAL_CODE_RE as _DIAL_CODE_RE,
 )
 from .suggest import (
     RELATED_LIMIT as RELATED_LIMIT,
+)
+from .suggest import (
     Suggestion,
-    _DIAL_CODE_RE as _DIAL_CODE_RE,
-    _describe as _describe,
     recognize_field,
-    related_entries as related_entries,
     suggest_for,
+)
+from .suggest import (
+    _describe as _describe,
+)
+from .suggest import (
+    related_entries as related_entries,
 )
 
 logger = logging.getLogger(__name__)

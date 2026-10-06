@@ -4,11 +4,10 @@ import logging
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text
-
 from app import application
 from app.application import _log_level, attach_file_log_handler
 from app.database import build_engine, run_sqlite_maintenance
+from sqlalchemy import text
 
 
 @pytest.fixture()

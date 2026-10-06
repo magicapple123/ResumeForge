@@ -9,12 +9,11 @@
 - 批次头上的统计（成功/失败/跳过）是**批次自己的账**，不因筛选而变。
 """
 import pytest
-
 from app.models.apply import (
-    TASK_KIND_APPLY,
     ITEM_STATUS_FAILED,
     ITEM_STATUS_SKIPPED,
     ITEM_STATUS_SUCCESS,
+    TASK_KIND_APPLY,
     TASK_STATUS_COMPLETED,
     ApplyTask,
     ApplyTaskItem,

@@ -8,12 +8,11 @@ import io
 import os
 
 import pytest
-from PIL import Image
-
 from app.schemas.assistant import AssistantAttachmentInput
 from app.services.assistant.assistant_service import normalize_attachments
 from app.services.attachments import MAX_ATTACHMENT_BYTES
 from app.services.image_conversion import convert_to_supported_image
+from PIL import Image
 from tests.test_document_text import DOCX_MIME, build_docx, build_pdf, data_url
 
 

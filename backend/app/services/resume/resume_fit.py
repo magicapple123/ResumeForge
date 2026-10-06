@@ -8,18 +8,17 @@ from dataclasses import dataclass
 from typing import Any
 
 from .resume_layout import (
-    MIN_FONT_PX,
-    MIN_LINE_HEIGHT,
-    MIN_PADDING_MM,
-    MIN_SECTION_GAP,
     _FONT_STEP,
     _LINE_HEIGHT_STEP,
     _PADDING_STEP_MM,
     _SECTION_GAP_STEP,
+    MIN_FONT_PX,
+    MIN_LINE_HEIGHT,
+    MIN_PADDING_MM,
+    MIN_SECTION_GAP,
     _round,
 )
-from .resume_templates import format_css, font_scale_spec, template_layout_defaults
-
+from .resume_templates import font_scale_spec, format_css, template_layout_defaults
 
 # ===== 自动一页 =====
 

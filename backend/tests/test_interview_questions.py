@@ -8,11 +8,9 @@
 import json
 
 import pytest
-
 from app.models.job import Job
 from app.models.resume import ResumeRecord
 from app.schemas.resume import ResumeContent
-from app.services.llm.base import LLMError
 from app.services.interview.interview_questions import (
     analyze_question,
     generate_question_answer,
@@ -22,6 +20,7 @@ from app.services.interview.interview_questions import (
     parse_question_answer,
     parse_question_bank,
 )
+from app.services.llm.base import LLMError
 
 _BANK_JSON = json.dumps(
     {

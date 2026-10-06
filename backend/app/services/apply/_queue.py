@@ -24,6 +24,8 @@ from ..sites.registry import get_registry
 from ._base import ApplyConflict, ApplyNotFound, ApplyServiceError, _clip_greeting
 from ._config import get_apply_config
 from ._match import _admission_of_match, _blocking_gaps, _match_requires_confirm, latest_match
+
+
 def _resume_title(db: Session, resume_id: int | None) -> str:
     if resume_id is None:
         return ""
@@ -178,7 +180,9 @@ def add_to_queue(db: Session, request: Any) -> list[ApplyQueueItemOut]:
     except Exception:
         db.rollback()
         raise
-    return [_queue_out(db, item, job) for item, job in zip(created, created_jobs)]
+    # created 与 created_jobs 在同一循环里成对 append，长度恒等：strict=True 让
+    # "两表错位"这种不可能的状态在发生时立刻炸出来，而不是悄悄产出错位队列。
+    return [_queue_out(db, item, job) for item, job in zip(created, created_jobs, strict=True)]
 
 
 def update_queue_item(db: Session, item_id: int, payload: Any) -> ApplyQueueItemOut:

@@ -14,7 +14,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import unquote
 
 import httpx
@@ -237,17 +237,19 @@ async def _fetch_latest_release(repo: str) -> dict:
         "Accept": "application/vnd.github+json",
         "User-Agent": _USER_AGENT,
     }
-    async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client:
-        async with client.stream("GET", RELEASES_API.format(repo=repo), headers=headers) as response:
-            if response.status_code == 404:
-                raise LookupError("仓库还没有发布任何 Release")
-            if response.status_code != 200:
-                raise RuntimeError(_github_error_message(response.status_code, repo))
-            body = bytearray()
-            async for chunk in response.aiter_bytes():
-                if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
-                    raise RuntimeError("GitHub 响应过大，已停止读取")
-                body.extend(chunk)
+    async with (
+        httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client,
+        client.stream("GET", RELEASES_API.format(repo=repo), headers=headers) as response,
+    ):
+        if response.status_code == 404:
+            raise LookupError("仓库还没有发布任何 Release")
+        if response.status_code != 200:
+            raise RuntimeError(_github_error_message(response.status_code, repo))
+        body = bytearray()
+        async for chunk in response.aiter_bytes():
+            if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
+                raise RuntimeError("GitHub 响应过大，已停止读取")
+            body.extend(chunk)
     data = json.loads(body)
     if not isinstance(data, dict):
         raise RuntimeError("GitHub 响应格式不符合预期")
@@ -383,7 +385,7 @@ def _unreachable_result(current: str, repo: str) -> UpdateCheckResult:
 
 def _remember(repo: str, result: UpdateCheckResult) -> UpdateCheckResult:
     """记下这次结果（含失败）并打上时间戳。"""
-    result.checked_at = datetime.now(timezone.utc)
+    result.checked_at = datetime.now(UTC)
     _cache[repo] = (time.time(), result)
     return result
 

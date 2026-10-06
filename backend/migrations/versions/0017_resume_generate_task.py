@@ -15,7 +15,7 @@ Revises: 0016_soft_delete_marks
 Create Date: 2026-09-18
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

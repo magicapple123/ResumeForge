@@ -9,9 +9,8 @@ from __future__ import annotations
 import json
 
 import pytest
-
-from app.schemas.setting import LLMConfig
 from app.schemas.resume import ResumeContent
+from app.schemas.setting import LLMConfig
 from app.services.llm.base import LLMError
 from app.services.resume.resume_revision import MAX_INSTRUCTION_CHARS, revise_resume
 

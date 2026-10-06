@@ -6,11 +6,11 @@ test_webform_js_canary.py 按面板功能拆成主文件 + picker/remember/nav/c
 
 **非 test_ 前缀，pytest 不收集本文件。**
 """
+import contextlib
 import json
 import os
 
 import pytest
-
 from app.services.browser.cdp_client import WebsocketCdpClient
 
 PORT = 9333
@@ -101,10 +101,9 @@ def page_client():
         client.navigate(f"data:text/html;charset=utf-8,{_urlencode(FIXTURE)}")
         yield client
     finally:
-        try:
+        with contextlib.suppress(Exception):
+            # 关不掉不该让测试失败
             client.send("Target.closeTarget", {"targetId": target_id})
-        except Exception:  # noqa: BLE001 - 关不掉不该让测试失败
-            pass
         client.close()
 
 

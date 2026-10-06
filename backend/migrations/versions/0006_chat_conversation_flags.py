@@ -5,7 +5,7 @@ Revises: 0005_chat_assistant
 Create Date: 2026-08-22
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

@@ -24,7 +24,6 @@ from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
 
 from ..schemas.resume import MAX_RESUME_PAGES, ResumeContent
-from .resume.resume_sections import resolved_section_order
 from .pdf_exporter import (
     _PX_TO_MM,
     _PX_TO_PT,
@@ -36,6 +35,7 @@ from .pdf_exporter import (
     resolve_accent,
     resolve_layout,
 )
+from .resume.resume_sections import resolved_section_order
 
 # Word 里写的是字体名，最终由用户机器上的 Word 解析；用微软雅黑与 PDF 首选字体一致。
 DOCX_FONT = "微软雅黑"

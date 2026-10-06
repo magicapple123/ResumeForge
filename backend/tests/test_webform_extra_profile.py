@@ -49,7 +49,7 @@ def test_extra_field_keys_are_exactly_the_catalog_extras():
     from app.services.webform.fields import SOURCE_PROFILE
 
     expected = {field.key for field in FORM_FIELDS if field.source == SOURCE_EXTRA}
-    assert extra_profile.EXTRA_FIELD_KEYS == expected
+    assert expected == extra_profile.EXTRA_FIELD_KEYS
     # 而且这批与"从简历资料取值"的那批**不相交**：同一个字段不该有两个来源。
     profile_keys = {field.key for field in FORM_FIELDS if field.source == SOURCE_PROFILE}
     assert not (expected & profile_keys)

@@ -10,7 +10,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import models  # noqa: F401 - 确保全部模型注册到 Base.metadata
+from . import (
+    database,
+    models,  # noqa: F401 - 确保全部模型注册到 Base.metadata
+)
 from .api import (
     analytics,
     apply,
@@ -31,21 +34,28 @@ from .api import (
     referrals,
     reminders,
     resume_risk,
-    resume_templates as resume_templates_api,
     resume_writing,
     resumes,
     search,
-    settings as settings_api,
     share_packages,
     skills,
     stats,
-    system as system_api,
     tracker,
     trash,
-    update as update_api,
     webform,
 )
-from . import database
+from .api import (
+    resume_templates as resume_templates_api,
+)
+from .api import (
+    settings as settings_api,
+)
+from .api import (
+    system as system_api,
+)
+from .api import (
+    update as update_api,
+)
 from .config import DATA_DIR, get_settings
 from .database import Base, ensure_sqlite_columns, run_sqlite_maintenance
 from .database_compat import SQLITE_REQUIRED_COLUMNS
@@ -58,7 +68,6 @@ from .services.data_backup.auto_backup import run_auto_backup_if_due
 from .services.job.job_match_background import get_job_match_background_runner
 from .services.webform import browser as webform_browser
 from .services.webform import stop_live as stop_webform_live
-
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] [request_id=%(request_id)s] %(message)s"
 # 滚动日志的单文件上限与份数：5MB×5 足够回溯近期排障，又不会吞掉磁盘。

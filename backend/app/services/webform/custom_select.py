@@ -17,11 +17,13 @@ JS 页面协议脚本在 ``custom_select_scripts.py``；本模块只做 Python �
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import time
+from collections.abc import Sequence
+from typing import Any
 from uuid import uuid4
-from typing import Any, Sequence
 
 from ..browser.cdp_client import CdpClient
 from ..browser.interaction import click_selector
@@ -166,12 +168,11 @@ def _open_and_read_options(
     已存在的浮层（文档坐标），后续读选项、滚动、确认都带上这份序列做时序排除。
     """
     preexisting: list[dict[str, float]] = []
-    try:
+    with contextlib.suppress(Exception):
+        # 记录失败只是少一层排除，继续走
         preexisting = parse_preexisting(
             client.evaluate(mark_preexisting_script(), timeout=timeout)
         )
-    except Exception:  # noqa: BLE001 - 记录失败只是少一层排除，继续走
-        pass
     if not click_selector(client, selector, timeout=timeout):
         return [], [], "", preexisting
     marker = f"rf-{uuid4().hex}"
@@ -191,10 +192,9 @@ def _open_and_read_options(
 def _cleanup(client: CdpClient, marker: str, *, timeout: float | None = None) -> None:
     if not marker:
         return
-    try:
+    with contextlib.suppress(Exception):
+        # popup navigation may remove its nodes
         client.evaluate(cleanup_script(marker), timeout=timeout)
-    except Exception:  # noqa: BLE001 - popup navigation may remove its nodes
-        pass
 
 
 def _already_selected(
@@ -310,7 +310,7 @@ def select_combobox_options(
                 return SelectResolution("no_option", reason="无法定位匹配的下拉选项")
             matched.append((resolution.option, selectors[option_index]))
         if matched:
-            for option, option_selector in matched:
+            for _option, option_selector in matched:
                 if not click_selector(client, option_selector, timeout=timeout):
                     return SelectResolution("no_option", reason="匹配选项已消失或不可见，请重新读取表单")
             _confirm_if_any(client, selector, preexisting, timeout=timeout)
@@ -363,10 +363,9 @@ def select_combobox_options(
 def _confirm_if_any(
     client: CdpClient, selector: str, preexisting: Sequence[dict[str, float]], *, timeout: float | None
 ) -> None:
-    try:
+    with contextlib.suppress(Exception):
+        # 确定按钮点不到就交给回读验证说话
         client.evaluate(confirm_script(selector, preexisting), timeout=timeout)
-    except Exception:  # noqa: BLE001 - 确定按钮点不到就交给回读验证说话
-        pass
 
 
 def split_multi_values(value: str) -> list[str]:

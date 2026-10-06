@@ -6,10 +6,9 @@
 _filler / _MM_TO_PT）。
 """
 import pytest
-
 from app.services.pdf_exporter import (
-    MIN_FIT_SCALE,
     _PX_TO_PT,
+    MIN_FIT_SCALE,
     build_resume_pdf,
     decide_fit_scale,
     measure_content_height,
@@ -19,7 +18,6 @@ from app.services.resume.resume_templates import (
     RESUME_TEMPLATES,
     TEMPLATE_LAYOUT_DEFAULTS,
 )
-
 from test_pdf_exporter import (
     _MM_TO_PT,
     _body_lines,
@@ -28,7 +26,6 @@ from test_pdf_exporter import (
     _text_runs,
     needs_font,
 )
-
 
 # ===== 版式合成（纯逻辑，不依赖字体） =====
 

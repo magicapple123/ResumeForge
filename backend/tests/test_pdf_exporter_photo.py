@@ -4,12 +4,10 @@
 不变、plan/draw 互为镜像；照片按目标比例裁剪、坏图兜底跳过。
 复用主文件的 helper（needs_font / _pdf_with_font / _text_runs / _hex_to_rgb）。
 """
-from io import BytesIO
 import base64
+from io import BytesIO
 
 import pytest
-from PIL import Image
-
 from app.schemas.resume import ResumeContent
 from app.services.pdf_exporter import (
     _PX_TO_PT,
@@ -22,14 +20,13 @@ from app.services.resume.resume_templates import (
     RESUME_TEMPLATES,
     TEMPLATE_LAYOUT_DEFAULTS,
 )
-
+from PIL import Image
 from test_pdf_exporter import (
     _hex_to_rgb,
     _pdf_with_font,
     _text_runs,
     needs_font,
 )
-
 
 # ===== 性别字号：不再并入姓名行 =====
 

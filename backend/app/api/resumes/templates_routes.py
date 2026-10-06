@@ -9,6 +9,8 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from ...database import get_db
+from ...services.pdf_exporter import font_available
 from ...services.resume.resume_sections import DEFAULT_SECTION_ORDER, section_label
 from ...services.resume.resume_template_store import (
     custom_format_options,
@@ -25,8 +27,6 @@ from ...services.resume.resume_templates import (
     market_options,
     template_options_with_custom,
 )
-from ...services.pdf_exporter import font_available
-from ...database import get_db
 
 logger = logging.getLogger(__name__)
 

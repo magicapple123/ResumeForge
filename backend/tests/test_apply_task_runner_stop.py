@@ -8,9 +8,7 @@ import threading
 import time
 
 import pytest
-
 from app.models.apply import STEP_FILLING, ApplyTask, ApplyTaskItem
-
 from test_apply_task_runner import (
     FakeAdapter,
     _config,

@@ -29,14 +29,15 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ..models.assistant import ChatConversation
 from ..models.apply import ApplyTaskItem
+from ..models.assistant import ChatConversation
 from ..models.claim import ClaimRecord
 from ..models.interview_experience import InterviewExperience
 from ..models.interview_review_record import InterviewReviewRecord

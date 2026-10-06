@@ -6,9 +6,9 @@ from tests.test_assistant import (
     _configure_llm,
     _create_conversation,
     _events,
+    _ScriptedProvider,
     _successful_provider,
     _tool_call,
-    _ScriptedProvider,
 )
 
 

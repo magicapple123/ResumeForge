@@ -9,27 +9,27 @@ from datetime import date, datetime, timedelta
 from app.models.profile import utcnow
 from app.models.referral import REFERRAL_STATUSES
 from app.models.reminder import Reminder
+from app.models.resume import ResumeRecord
 from app.models.tracker import (
     SOURCE_LABELS,
     SOURCES,
-    STATUSES,
-    STATUS_LABELS,
     STATUS_APPLIED,
     STATUS_ASSESSMENT,
     STATUS_INTERVIEW,
+    STATUS_LABELS,
     STATUS_OFFER,
     STATUS_REJECTED,
     STATUS_SCREENING,
     STATUS_UNKNOWN,
+    STATUSES,
     ApplicationTrack,
     is_stalled,
     normalize_key,
 )
-from app.models.resume import ResumeRecord
-from app.services.resume import resume_health as resume_health_service
 from app.services import trash
 from app.services.analytics import TOP_COMPANY_LIMIT, build_dashboard, dashboard_brief
 from app.services.referral_service import referral_stats
+from app.services.resume import resume_health as resume_health_service
 
 
 def _track(db_session, company, title, status, applied_at=""):

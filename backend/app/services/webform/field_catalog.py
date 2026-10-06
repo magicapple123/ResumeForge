@@ -5,10 +5,8 @@
 
 from __future__ import annotations
 
-from .repeated_profile_catalog import REPEATED_FIELD_LABELS
 from .field_supplement_catalog import SUPPLEMENT_FIELDS
 from .field_types import (
-    FormField,
     GROUP_CONTACT,
     GROUP_EDUCATION,
     GROUP_EXTRA_FAMILY,
@@ -21,8 +19,12 @@ from .field_types import (
     GROUP_IDENTITY,
     GROUP_OTHER,
     SOURCE_EXTRA,
+    FormField,
+)
+from .field_types import (
     SOURCE_PROFILE as SOURCE_PROFILE,
 )
+from .repeated_profile_catalog import REPEATED_FIELD_LABELS
 
 # 能填的字段。顺序即前端分区内的展示顺序。
 FORM_FIELDS: tuple[FormField, ...] = (

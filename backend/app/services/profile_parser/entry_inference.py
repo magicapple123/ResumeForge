@@ -2,13 +2,13 @@
 
 import re
 
+from .entry_blocks import _is_header_metadata_line
 from .entry_constants import (
     _DATE_RANGE_RE,
     _DEGREE_TERMS,
     _PROFILE_CHINESE_ROLE_RE,
     _PROFILE_ENGLISH_TITLE_RE,
 )
-from .entry_blocks import _is_header_metadata_line
 from .normalization import _clean_line
 
 

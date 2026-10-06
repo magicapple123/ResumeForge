@@ -70,10 +70,9 @@ def _truncate(text: str) -> tuple[str, list[str]]:
 def _pdf_text(raw: bytes) -> str:
     try:
         reader = PdfReader(io.BytesIO(raw))
-        if reader.is_encrypted:
-            # 空密码是某些导出工具的常见情况，能打开就不该拦。
-            if not reader.decrypt(""):
-                raise ValueError("文件有密码保护，请先解除限制后再上传")
+        # 空密码是某些导出工具的常见情况，能打开就不该拦。
+        if reader.is_encrypted and not reader.decrypt(""):
+            raise ValueError("文件有密码保护，请先解除限制后再上传")
         pages = reader.pages[:MAX_PDF_PAGES]
         return "\n".join(page.extract_text() or "" for page in pages)
     except ValueError:
@@ -85,10 +84,12 @@ def _pdf_text(raw: bytes) -> str:
 
 def _docx_text(raw: bytes) -> str:
     try:
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            # 只读白名单成员，不走 extractall：docx 是 zip，解压路径由上传者控制。
-            with archive.open(_DOCX_DOCUMENT_XML) as stream:
-                tree = ElementTree.parse(stream)
+        # 只读白名单成员，不走 extractall：docx 是 zip，解压路径由上传者控制。
+        with (
+            zipfile.ZipFile(io.BytesIO(raw)) as archive,
+            archive.open(_DOCX_DOCUMENT_XML) as stream,
+        ):
+            tree = ElementTree.parse(stream)
     except KeyError as exc:
         raise ValueError("文件不是有效的 docx（缺少正文），请另存为 .docx 后重新上传") from exc
     except (zipfile.BadZipFile, ElementTree.ParseError, OSError) as exc:

@@ -5,7 +5,6 @@
 回归样本，所以这里直接照搬，而不是自己编一份"看起来像"的文本。
 """
 import pytest
-
 from app.services.sites.boss_text import (
     looks_like_salary,
     normalize_text,
@@ -13,7 +12,6 @@ from app.services.sites.boss_text import (
     split_job_sections,
     split_title_salary,
 )
-
 
 # ===== 字体反爬：私用区数字 =====
 

@@ -9,7 +9,11 @@ from sqlalchemy.orm import Session
 from ....models.assistant import AssistantSkill
 from ...assistant.assistant_skills import (
     create_skill as create_skill_record,
+)
+from ...assistant.assistant_skills import (
     list_skills,
+)
+from ...assistant.assistant_skills import (
     update_skill as update_skill_record,
 )
 from .._shared import (

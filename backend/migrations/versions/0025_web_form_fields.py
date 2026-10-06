@@ -28,7 +28,7 @@ Revises: 0024_official_discovery_history
 Create Date: 2026-09-26
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

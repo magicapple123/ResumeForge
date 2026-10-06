@@ -8,10 +8,8 @@ from typing import Any
 from ...models.drill import EVIDENCE_VERIFIED, REHEARSE_KINDS, DrillSession, needs_rehearsal
 from ..llm.base import BaseLLMProvider
 from ..llm.structured_output import parse_json_object
-
 from .common import MAX_ACTIONS, MAX_REHEARSAL, MAX_REVIEW_RESPONSE_CHARS, load_prompt
 from .evaluate import _transcript
-
 
 # ===== 复盘 =====
 

@@ -4,8 +4,8 @@
 用户会在下载 PDF 之后才发现字号没变——而那时他已经按预览的样子投出去了。
 所以这里显式钉住"导出走的是同一条解析路径"。
 """
-from app.services.resume.resume_record import record_format_config
 from app.models.resume import ResumeRecord
+from app.services.resume.resume_record import record_format_config
 
 PAGE = 2600.0
 

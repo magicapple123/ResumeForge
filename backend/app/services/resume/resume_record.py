@@ -21,7 +21,11 @@ from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
 from ...schemas.resume import ResumeContent
 from ..exporter import normalize_page_limit
-from .resume_template_store import resolve_format_config, resolve_style_config, resolve_style_template
+from .resume_template_store import (
+    resolve_format_config,
+    resolve_style_config,
+    resolve_style_template,
+)
 from .resume_templates import (
     DEFAULT_FONT_SCALE,
     DEFAULT_TEMPLATE,

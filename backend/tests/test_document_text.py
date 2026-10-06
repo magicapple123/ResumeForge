@@ -10,14 +10,13 @@ import zipfile
 from xml.sax.saxutils import escape
 
 import pytest
-from pypdf import PdfWriter
-
 from app.services.attachments import assert_attachment_budget, total_attachment_bytes
 from app.services.document_text import (
     MAX_DOCUMENT_TEXT_CHARS,
     extract_document_text,
     extract_documents_text,
 )
+from pypdf import PdfWriter
 
 PDF_MIME = "application/pdf"
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

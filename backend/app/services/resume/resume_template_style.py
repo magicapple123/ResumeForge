@@ -15,9 +15,9 @@ from typing import Any
 
 from PIL import Image, UnidentifiedImageError
 
+from ...services.attachments import image_signature_matches
 from .resume_sections import normalized_section_order
 from .resume_template_format import validated_format_config
-from ...services.attachments import image_signature_matches
 
 MAX_STYLE_BADGES = 8
 MAX_STYLE_CONFIG_CHARS = 4_000_000

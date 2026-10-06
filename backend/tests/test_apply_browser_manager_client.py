@@ -7,7 +7,6 @@ _env_with 只被本文件的 choice 组使用，随组迁入。
 from pathlib import Path
 
 import pytest
-
 from app.services.browser.browser_manager import (
     BROWSER_CHOICE_CHROME,
     BROWSER_CHOICE_CUSTOM,
@@ -17,7 +16,6 @@ from app.services.browser.browser_manager import (
     browser_display_name,
 )
 from app.services.browser.cdp_client import WebsocketCdpClient
-
 from test_apply_browser_manager import FakePopen, _manager, _transport
 
 

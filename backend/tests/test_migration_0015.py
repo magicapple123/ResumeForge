@@ -5,9 +5,8 @@
 新列拿到的是**空串**而不是 null（界面按"没填"处理，不必到处判 None）。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0014_interview_drill"
 HEAD_REVISION = "0015_candidate_job_collect_fields"
@@ -29,7 +28,7 @@ def test_upgrade_adds_the_collect_columns(tmp_path):
     try:
         command.upgrade(build_alembic_config(engine), HEAD_REVISION)
         assert _revision(engine) == HEAD_REVISION
-        assert NEW_COLUMNS <= _columns(engine, "candidate_job")
+        assert _columns(engine, "candidate_job") >= NEW_COLUMNS
     finally:
         engine.dispose()
 
@@ -41,7 +40,7 @@ def test_upgrade_is_idempotent(tmp_path):
         command.upgrade(config, HEAD_REVISION)
         command.stamp(config, PREVIOUS_REVISION)
         command.upgrade(config, HEAD_REVISION)
-        assert NEW_COLUMNS <= _columns(engine, "candidate_job")
+        assert _columns(engine, "candidate_job") >= NEW_COLUMNS
         assert _revision(engine) == HEAD_REVISION
     finally:
         engine.dispose()

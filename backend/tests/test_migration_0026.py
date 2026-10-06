@@ -8,9 +8,8 @@
 因此这里除了常规的幂等与降级，还要专门验一件事：**从"跑过旧版 0025"的库升级也能补齐**。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect
 
 PREVIOUS_REVISION = "0025_web_form_fields"
 HEAD_REVISION = "0026_form_extra_fields"

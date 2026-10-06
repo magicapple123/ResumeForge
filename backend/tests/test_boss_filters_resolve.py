@@ -12,7 +12,6 @@ from app.services.sites.base import (
     FilterResolution,
 )
 from app.services.sites.boss import BossAdapter
-from app.services.sites.boss_search import CONDITIONS_FETCH_WAIT_SECONDS
 from app.services.sites.boss_filters import (
     CONDITIONS_ENDPOINT,
     INDUSTRY_ENDPOINT,
@@ -21,14 +20,13 @@ from app.services.sites.boss_filters import (
     resolve_codes,
     snapshot_catalogue,
 )
-
+from app.services.sites.boss_search import CONDITIONS_FETCH_WAIT_SECONDS
 from test_boss_filters import (
     bar_payload,
     conditions_payload,
     fake_fetcher,
     industry_payload,
 )
-
 
 # ===== 编码校验 =====
 

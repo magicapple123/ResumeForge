@@ -17,7 +17,7 @@ from app.services.sites.base import SearchPage, SearchResult, SiteFailure
 # 复用既有替身与运行器辅助：采集/运行器路径的替身散落在别处已是仓库惯例
 # （``test_collect_backfill`` 也这样 import），另一份实现只会与真流程漂移。
 from test_apply_collect_guard import CollectAdapter, FakeCdp, _collect_task, _registry, _wait
-from test_collector import FakeCollectAdapter, _FakeClock, _config
+from test_collector import FakeCollectAdapter, _config, _FakeClock
 from test_site_health_records import _task
 
 

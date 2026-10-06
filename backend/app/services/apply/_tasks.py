@@ -22,7 +22,13 @@ from ...models.job import Job
 from ...models.profile import utcnow
 from ...schemas.apply import MAX_BACKFILL_JOBS, ApplyTaskCreate
 from ..sites.registry import get_registry
-from ._base import ACTIVE_TASK_STATUSES, ApplyBadRequest, ApplyConflict, ApplyNotFound, _clip_greeting
+from ._base import (
+    ACTIVE_TASK_STATUSES,
+    ApplyBadRequest,
+    ApplyConflict,
+    ApplyNotFound,
+    _clip_greeting,
+)
 from ._config import get_apply_config, get_collect_config
 from ._match import _admission_of_match, _blocking_gaps, latest_match
 from ._queue import job_apply_site, resolve_resume

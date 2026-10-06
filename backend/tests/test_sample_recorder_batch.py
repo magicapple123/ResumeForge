@@ -17,13 +17,12 @@ from app.services.browser.sample_recorder import (
 # 复用装饰器单测里的假内层与构造器，避免"同一份夹具两处各写一遍"。
 from test_sample_recorder import (
     MARKERS,
-    _FakeInner,
     _body_result,
+    _FakeInner,
     _recorder,
     _response_event,
     _saved_files,
 )
-
 
 # ===== 三、装饰器对主流程完全透明（这里出错会直接把采集弄坏）=====
 

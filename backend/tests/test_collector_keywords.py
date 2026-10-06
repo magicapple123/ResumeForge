@@ -5,7 +5,6 @@
 （test_collector.py，同时被外部消费方 import）。
 """
 import pytest
-
 from app.models.apply import (
     FAILURE_CAPTCHA_REQUIRED,
     FAILURE_LOGIN_REQUIRED,
@@ -14,8 +13,7 @@ from app.models.material import CandidateJob
 from app.services.apply.collector import Collector
 from app.services.apply.task_runner import TaskStopped
 from app.services.sites.base import SearchPage, SearchResult, SiteFailure
-
-from test_collector import FakeCollectAdapter, _FakeClock, _config, _task
+from test_collector import FakeCollectAdapter, _config, _FakeClock, _task
 
 
 def test_collector_stops_when_checkpoint_signals_stop(db_session):

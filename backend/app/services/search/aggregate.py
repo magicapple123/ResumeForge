@@ -19,6 +19,8 @@ from ..assistant.assistant_web_search import (
     build_search_query,
     filter_relevant_results,
     official_like_score,
+)
+from ..assistant.assistant_web_search import (
     search_web as bing_search,
 )
 from .duckduckgo import search_duckduckgo

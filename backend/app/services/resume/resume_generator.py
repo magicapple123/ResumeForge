@@ -25,13 +25,12 @@ from ..profile.profile_relevance import (
     split_lines,
 )
 from .resume_consistency import check_consistency
+from .resume_content import _LIST_FIELDS, coerce_resume, extract_json
 from .resume_coverage import (
     all_entry_names,
     confirmed_claims_about,
     find_unwritten_details,
 )
-from .resume_content import _LIST_FIELDS
-from .resume_content import coerce_resume, extract_json
 from .resume_grounding import (
     _REFERENCE_FALLBACK_LIMITS,
     _build_grounded_summary,

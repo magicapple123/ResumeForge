@@ -370,21 +370,23 @@ async def _fetch_rss_once(url: str, query: str) -> bytes:
         "User-Agent": "ResumeForge/0.2 (+local career assistant)",
     }
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
-            async with client.stream(
+        async with (
+            httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client,
+            client.stream(
                 "GET",
                 url,
                 params={"q": query, "format": "rss", "mkt": "zh-CN", "setlang": "zh-hans"},
                 headers=headers,
-            ) as response:
-                if response.status_code != 200:
-                    logger.warning("Bing RSS 搜索失败 status=%s", response.status_code)
-                    raise AssistantSearchError("联网搜索服务暂时不可用，请稍后重试")
-                body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
-                        raise AssistantSearchError("联网搜索返回内容过大，已停止读取")
-                    body.extend(chunk)
+            ) as response,
+        ):
+            if response.status_code != 200:
+                logger.warning("Bing RSS 搜索失败 status=%s", response.status_code)
+                raise AssistantSearchError("联网搜索服务暂时不可用，请稍后重试")
+            body = bytearray()
+            async for chunk in response.aiter_bytes():
+                if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
+                    raise AssistantSearchError("联网搜索返回内容过大，已停止读取")
+                body.extend(chunk)
     except httpx.TimeoutException as exc:
         raise AssistantSearchError("联网搜索响应超时，请稍后重试") from exc
     except httpx.RequestError as exc:

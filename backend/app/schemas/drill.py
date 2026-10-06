@@ -135,7 +135,7 @@ class DrillCreate(BaseModel):
         return cleaned
 
     @model_validator(mode="after")
-    def claim_ids_must_be_unique(self) -> "DrillCreate":
+    def claim_ids_must_be_unique(self) -> DrillCreate:
         seen: list[int] = []
         for claim_id in self.claim_ids:
             if claim_id not in seen:
@@ -152,7 +152,7 @@ class DrillAnswerRequest(BaseModel):
     answer: str = Field(default="", max_length=MAX_DRILL_ANSWER_CHARS)
 
     @model_validator(mode="after")
-    def answer_must_not_be_empty(self) -> "DrillAnswerRequest":
+    def answer_must_not_be_empty(self) -> DrillAnswerRequest:
         self.answer = self.answer.strip()
         if not self.answer:
             raise ValueError("请先写下你的回答")

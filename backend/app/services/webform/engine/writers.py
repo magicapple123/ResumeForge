@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 
+
 def _set_value_script(
     selector: str, value: str, *, prototype: str, full_events: bool = False
 ) -> str:

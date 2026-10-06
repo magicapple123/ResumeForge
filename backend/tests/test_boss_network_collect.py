@@ -5,13 +5,11 @@
 ``_detail_payload`` 定义在 capture 文件。
 """
 import pytest
-
 from app.models.apply import FAILURE_SELECTOR_INVALID
 from app.services.apply.task_runner import StopAwareCdpClient, TaskStopped
 from app.services.sites.base import CollectQuery, SiteFailure
 from app.services.sites.boss import NETWORK_RESPONSE_EVENT
 from app.services.sites.boss_network import SEARCH_MARKER
-
 from test_boss_network import (
     READY,
     ScriptedClient,

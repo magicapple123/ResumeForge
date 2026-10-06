@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import threading
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..config import get_settings
@@ -36,7 +36,7 @@ def _safe_value(key: str, value: Any) -> Any:
 def record_event(event: str, **details: Any) -> None:
     """记录不含简历内容和表单值的用户可导出事件。"""
     item = {
-        "at": datetime.now(timezone.utc).isoformat(),
+        "at": datetime.now(UTC).isoformat(),
         "event": str(event),
         "request_id": get_request_id(),
         "details": {key: _safe_value(key, value) for key, value in details.items()},
@@ -50,7 +50,7 @@ def diagnostic_snapshot(*, limit: int = 200) -> dict[str, Any]:
     with _lock:
         events = list(_events)[-max(1, min(int(limit), _MAX_EVENTS)) :]
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "app_version": get_settings().app_version,
         "events": events,
     }

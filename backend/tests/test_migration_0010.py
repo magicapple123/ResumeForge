@@ -4,9 +4,8 @@
 downgrade 把 4 张表干净删掉且不误伤既有表、以及 upgrade/downgrade 往返后既有数据仍在。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 APPLY_TABLES = (
     "job_match_analysis",

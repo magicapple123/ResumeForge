@@ -7,7 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from app.database import build_engine
 from app.services.data_backup import auto_backup as auto_backup_module
 from app.services.data_backup.auto_backup import (

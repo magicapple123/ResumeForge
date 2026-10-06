@@ -17,8 +17,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from ...schemas.job import MAX_MULTI_JOBS, JobTextParseResult
 from ..job_text_parser import parse_job_text
@@ -26,8 +27,8 @@ from ..llm.base import BaseLLMProvider, LLMError
 from ..llm.structured_output import parse_json_object
 from ..text_extraction import (
     IMAGE_ADDENDUM_PROMPT,
-    MAX_JOB_EXTRACTION_INPUT_CHARS,
     MAX_EXTRACTION_RESPONSE_CHARS,
+    MAX_JOB_EXTRACTION_INPUT_CHARS,
     _clip_source,
 )
 from ..text_extraction_normalization import normalize_job_result, transcription_of

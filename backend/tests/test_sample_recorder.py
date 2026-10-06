@@ -297,8 +297,10 @@ def test_records_through_the_real_adapter_capture_path(tmp_path):
         ScriptedClient,
         _adapter,
         _body_event,
-        _response_event as boss_response_event,
         _search_payload,
+    )
+    from test_boss_network import (
+        _response_event as boss_response_event,
     )
 
     events = [

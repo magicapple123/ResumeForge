@@ -20,8 +20,8 @@ from .jd.jd_parser_constants import (
 )
 from .jd.jd_parser_filters import _is_contextual_false_positive, _is_delimited_technical_skill_list
 from .jd.jd_parser_matching import (
-    SKILLS_PATH,
     _SKILL_MATCHERS,
+    SKILLS_PATH,
     _alias_pattern,
     _build_skill_matchers,
     _normalize_text,

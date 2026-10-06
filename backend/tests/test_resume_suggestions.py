@@ -1,15 +1,14 @@
 import json
 import re
 
-from app.services.resume.resume_record import save_record
 from app.models.job import Job
 from app.models.resume import ResumeRecord
 from app.schemas.job import JobOut
 from app.schemas.profile import ProfileOut
 from app.schemas.resume import ResumeContent
 from app.schemas.setting import LLMConfig
-from app.services.llm.base import BaseLLMProvider
-from app.services.llm.base import LLMError
+from app.services.llm.base import BaseLLMProvider, LLMError
+from app.services.resume.resume_record import save_record
 from app.services.resume.resume_suggestions import (
     MAX_PROFILE_CHARS,
     MAX_RESUME_CHARS,

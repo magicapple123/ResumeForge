@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-
 from app.schemas.resume import ResumeContent
 from app.services.profile.profile_matching import _MIN_SKILL_CANDIDATES, _select_skills
 from app.services.resume.resume_consistency import check_consistency

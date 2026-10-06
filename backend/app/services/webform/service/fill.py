@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Iterable
 from dataclasses import replace
-from typing import Any, Iterable
+from typing import Any
 
 from sqlalchemy.orm import Session
 

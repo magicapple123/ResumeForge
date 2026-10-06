@@ -13,12 +13,10 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from app.models.apply import FAILURE_SELECTOR_INVALID
 from app.services.browser.page_ready import ReadyWait, wait_for_page_state
 from app.services.sites.base import CollectQuery, SiteFailure
 from app.services.sites.boss import BossAdapter
-
 from test_qa_collect_load_adversarial import QUERY, REAL_ITEM, ScriptedReadyClient, _adapter
 
 

@@ -1,15 +1,14 @@
 """简历增强质量门槛与重试策略测试。"""
 
 import pytest
-
 from app.schemas.resume import GenerateOptions
 from app.services.llm.base import LLMError
 from app.services.resume.resume_generator import ResumeGenerator
 from tests.test_resume_generator import (
     QualityRetryProvider,
     collect_events,
-    make_reference_job,
     make_profile_with_reference,
+    make_reference_job,
     rich_reference_response,
     sparse_reference_response,
 )

@@ -11,10 +11,8 @@ from ..fields import (
     FIELD_SYNONYMS,
 )
 from ..repeated_fields import family_for_field
-
 from .families import foreign_marker
 from .model import Control
-
 
 _HIGH_RISK_AMBIGUOUS_FIELDS = frozenset(
     {
@@ -463,9 +461,9 @@ def _states_its_field(placeholder: str) -> bool:
     tail = _placeholder_prefix_tail(stripped)
     if tail is None or not tail.strip(_EMPTY_PLACEHOLDER_TAIL):
         return False
-    if len(stripped) > 40 and ("\n" in stripped or any(marker in stripped for marker in _INSTRUCTION_MARKERS)):
-        return False
-    return True
+    return not (
+        len(stripped) > 40 and ("\n" in stripped or any(marker in stripped for marker in _INSTRUCTION_MARKERS))
+    )
 
 
 def _leading_label_segment(text: str) -> str:

@@ -5,7 +5,6 @@
 复用主文件的 FakeCdpClient / _snapshot。
 """
 import pytest
-
 from app.services.webform._base import WebFormBadRequest, WebFormConflict
 from app.services.webform.engine import Control
 from app.services.webform.service import (
@@ -16,9 +15,7 @@ from app.services.webform.service import (
     recognize_field,
     related_entries,
 )
-
 from test_webform_service import FakeCdpClient, _snapshot
-
 
 # ===== 填充 =====
 

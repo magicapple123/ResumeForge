@@ -6,7 +6,6 @@ roundtrip 类断言跨平台成立：Windows 上走 DPAPI，非 Windows 上 ``en
 import sys
 
 import pytest
-
 from app.services.api_key_crypto import decrypt_key, encrypt_key
 
 

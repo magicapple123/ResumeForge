@@ -35,7 +35,7 @@ from .apply_service import (
     update_queue_item,
     write_back_job_status,
 )
-from .collector import CollectReport, Collector
+from .collector import Collector, CollectReport
 from .task_runner import (
     TaskRunner,
     TaskRunnerError,

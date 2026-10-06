@@ -14,7 +14,6 @@
 import re
 
 import pytest
-
 from app.services.resume.resume_layout import (
     FILL_DENSE,
     FILL_SPARSE,
@@ -28,7 +27,6 @@ from app.services.resume.resume_layout import (
     derive_pages,
     diagnose,
 )
-
 
 PAGE = 2600.0  # 一页正文可用高度，约等于 A4 去上下页边距后的像素值
 

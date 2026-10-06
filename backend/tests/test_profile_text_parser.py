@@ -2,7 +2,6 @@
 
 from app.services.profile_text_parser import parse_profile_text
 
-
 PROFILE_TEXT = """姓名：张三
 邮箱：zhangsan@example.com
 手机号：13800000000

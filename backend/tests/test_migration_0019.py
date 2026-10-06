@@ -5,9 +5,8 @@
 downgrade 能把这三张表与两列干净地拆掉、回到 0018 时的形态。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0018_referral_reminder_interview_experience_share_package"
 HEAD_REVISION = "0019_interview_history_knowledge_referral_fields"

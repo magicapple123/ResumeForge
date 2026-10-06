@@ -5,7 +5,6 @@ JS 里搬到 Python，就是为了让"选错选项"这类错误能在单元测�
 留在 JS 里，而假客户端不执行 JS，等于没有覆盖。
 """
 import pytest
-
 from app.services.webform.matching import (
     SelectOption,
     aliases_of,
@@ -18,7 +17,6 @@ from app.services.webform.matching import (
     normalize_option_text,
     resolve_select_option,
 )
-
 
 # ===== 文本规范化与占位项 =====
 

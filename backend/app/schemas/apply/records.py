@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .base import TaskItemStatus, TaskStatus, _check_failure_category
 
-
 # ===== 记录 =====
 
 

@@ -16,13 +16,12 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-
 from app.models.job import Job
 from app.services import trash
 from app.services.apply.collector import Collector
 from app.services.apply.task_runner import TaskStopped
 from app.services.sites.base import FilterResolution, SearchPage, SiteFailure
-from test_collector import FakeCollectAdapter, _FakeClock, _config, _task
+from test_collector import FakeCollectAdapter, _config, _FakeClock, _task
 
 # 一段含明显技能词的 JD：补到正文后若没重算标签，这里就没有 "Python"，标签相关的搜索会失效。
 BACKFILLED_DETAIL = {

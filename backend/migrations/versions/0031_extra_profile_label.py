@@ -22,7 +22,7 @@ Revises: 0030_extra_profile_source_reuse
 Create Date: 2026-09-27
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

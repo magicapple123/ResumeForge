@@ -10,7 +10,6 @@ import json
 
 import httpx
 import pytest
-
 from app.schemas.setting import LLMConfig
 from app.services.llm import create_provider
 from app.services.llm.anthropic import AnthropicProvider

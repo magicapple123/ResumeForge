@@ -7,7 +7,6 @@
 import json
 
 import pytest
-
 from app.services.assistant_tools import execute_tool, tool_names
 
 

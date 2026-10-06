@@ -2,7 +2,6 @@
 from types import SimpleNamespace
 
 import pytest
-
 from app.services.sites.base import RiskProfile, SearchPage, SiteAdapter, SiteFailure
 from app.services.sites.boss import BossAdapter
 from app.services.sites.registry import SiteRegistry, default_registry

@@ -13,7 +13,6 @@ from app.services.resume.resume_templates import (
     TEMPLATES_DIR,
 )
 
-
 # ===== 与模板文件的漂移守卫 =====
 
 

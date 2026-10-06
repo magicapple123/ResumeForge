@@ -6,13 +6,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
-
 from contextlib import closing
 from pathlib import Path
+
 from sqlalchemy import Engine
 
-from ..settings_service import API_KEY_MASK, _LLM_CONFIG_KEY
-
+from ..settings_service import _LLM_CONFIG_KEY, API_KEY_MASK
 from .paths import BackupError, database_path
 
 

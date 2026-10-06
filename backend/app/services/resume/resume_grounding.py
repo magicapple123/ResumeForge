@@ -7,8 +7,8 @@ import json
 from ...schemas.job import JobOut
 from ...schemas.profile import ProfileOut
 from ...schemas.resume import ResumeContent
-from . import resume_grounding_helpers as _grounding_helpers
 from ..profile.profile_context import build_profile_prompt_data
+from . import resume_grounding_helpers as _grounding_helpers
 from .resume_content import coerce_resume
 from .resume_grounding_helpers import (
     _build_grounded_summary,

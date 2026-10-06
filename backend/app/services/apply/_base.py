@@ -10,6 +10,7 @@ from ...models.apply import (
     TASK_STATUS_RUNNING,
 )
 from ...schemas.apply import GREETING_RECORD_MAX_CHARS
+
 APPLY_CONFIG_KEY = "apply_config"
 COLLECT_CONFIG_KEY = "collect_config"
 

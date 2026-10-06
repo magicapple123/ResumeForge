@@ -11,9 +11,9 @@ import logging
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from . import trash
 from ..models.material import Material
 from ..schemas.material import MaterialCreate, MaterialUpdate
+from . import trash
 
 logger = logging.getLogger(__name__)
 

@@ -13,7 +13,6 @@ from .base import (
     MAX_COLLECT_KEYWORDS,
 )
 
-
 # ===== 采集配置 =====
 
 

@@ -4,16 +4,18 @@
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ..browser.cdp_client import CdpClient
+from . import live_targets
 from ._base import WebFormConflict
 from .live import BROWSER_CLOSED_REASON, LiveSession
 from .live_control import LIVE_CONTROL_STATE_SCRIPT
-from . import live_targets
 
 logger = logging.getLogger(__name__)
 
@@ -105,10 +107,9 @@ class MultiLiveSession:
 
     @staticmethod
     def _close_client(client: CdpClient) -> None:
-        try:
+        with contextlib.suppress(Exception):
+            # 页面关闭时连接本来就可能已失效
             client.close()
-        except Exception:  # noqa: BLE001 - 页面关闭时连接本来就可能已失效
-            pass
 
     def _ensure_targets(self) -> None:
         if self._target_clients_loader is None:

@@ -5,6 +5,7 @@ import json
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider
 
+
 def test_generate_requires_profile_and_llm(client):
     # 无资料、无 LLM 配置时生成接口应给出明确的 400 提示
     client.post("/api/jobs", json={"title": "后端开发工程师", "company": "A公司"})
