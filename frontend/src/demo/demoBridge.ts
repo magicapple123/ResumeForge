@@ -34,7 +34,9 @@
  */
 const DEFAULT_PARENTS = [
   "https://magicapple123.github.io",
-  // 个人网站镜像（Nginx / 阿里云）。目前只有 IP、无域名、走 HTTP。
+  // 个人网站镜像（Nginx / 阿里云）：域名 + HTTPS 是主形态，IP + HTTP 的老地址仍可用。
+  // 两个都要收——漏一个，那个站点上点六步引导就静默失效（2026-09-22、2026-10-06 两次踩中）。
+  "https://huangcenguo.top",
   "http://101.200.155.138",
 ];
 

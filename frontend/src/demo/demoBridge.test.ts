@@ -145,6 +145,21 @@ describe("installDemoBridge", () => {
     expect(navigate).toHaveBeenCalledWith("/claims");
   });
 
+  it("个人网站镜像的 HTTPS 域名（huangcenguo.top）也在白名单里", () => {
+    // 镜像已迁到 https://huangcenguo.top（域名 + 证书）。2026-10-06 的教训：
+    // 重建演示实例后镜像站六步引导静默失效——白名单还停在老的 IP+HTTP 形态。
+    pretendEmbedded();
+    const navigate = vi.fn();
+    uninstall = installDemoBridge(navigate);
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: "rf-demo:navigate", path: "/jobs" },
+        origin: "https://huangcenguo.top",
+      }),
+    );
+    expect(navigate).toHaveBeenCalledWith("/jobs");
+  });
+
   it("卸载后不再响应", () => {
     pretendEmbedded();
     const navigate = vi.fn();
