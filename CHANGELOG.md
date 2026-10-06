@@ -2,6 +2,31 @@
 
 所有值得关注的项目变化都会记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## Unreleased
+
+### Added
+
+- **新用户可一键载入「体验示例」数据集。** 首启动引导弹窗新增「载入示例数据体验」：应用自动新建独立的「体验示例」数据集（主数据不受影响，随时可整份删除），写入一个纯虚构的市场运营岗位与一份示例简历，载入后刷新即有内容可看。后端对应 `POST /api/settings/datasets/sample/load`。
+- **设置页新增「帮助与诊断」。** 一键导出脱敏诊断包（zip：脱敏运行事件 + 系统信息 + 近期日志尾部），不含简历数据与密钥；同卡片给出 GitHub Issues 与用户群反馈入口（群号可复制）。
+- **设置页数据分页新增「隐私与数据主权」卡片。** 把"数据只存本机、无账号无埋点、AI 只在主动调用时发送必要内容、导出与彻底删除路径"写成用户可读的条款，与官网新增的隐私专页同一套叙事。
+- **自动备份。** 启动后在后台检查"距上次自动备份是否已到间隔"，到期自动快照当前数据库并只保留最近 5 份（默认每周一次；`AUTO_BACKUP_ENABLED` / `AUTO_BACKUP_INTERVAL_DAYS` / `AUTO_BACKUP_KEEP` 可调）。快照存放在数据目录的 `auto-backups/`，与手动导出互不干扰。
+- **更新前数据快照。** 两条更新器（Windows / macOS）在覆盖程序文件之前先把数据目录的数据库与数据集快照到 `data/pre-update/`（保留最近 3 份）——新版本的迁移万一在旧数据上出问题，还有回头路。
+- **文件日志轮转。** 除启动器重定向的 `runtime/*.log` 外，后端在数据目录 `logs/backend.log` 追加一份 5MB×5 的滚动日志（`LOG_FILE_ENABLED=false` 可关；`LOG_LEVEL` 可调）。
+- **SQLite 启动维护。** 每次启动迁移完成后执行一次 WAL 截断 checkpoint 与 `PRAGMA optimize`，防止长期运行下 `-wal` 文件无限膨胀；失败只记日志不阻断启动。
+- **Playwright 浏览器冒烟。** 三条真实 Chromium 用例（启动入口齐全 / 载入示例后岗位简历可见 / 示例简历导出 PDF）接入 Windows 与 macOS 的干净检出 e2e 作业，补上 jsdom 捕不到的布局与浏览器 API 层。
+- **CI 新增 CodeQL 与 Nightly。** CodeQL 每周对 Python 与 JS/TS 跑静态安全扫描；Nightly 每日全量后端 + 前端回归，失败用例自动重跑两次并在汇总中标记 flaky（只标记不掩盖）。
+
+### Changed
+
+- **Python 下限从 3.10 升到 3.11。** 3.10 已于 2026-10 EOL；随之解锁 `sqlalchemy 2.1.3` 与 `fonttools 4.66.1`（Dependabot 对应 ignore 已移除）。sqlalchemy 2.1 的 URL 百分号编码与 alembic configparser 的冲突已在迁移装配处转义修复，并有"带百分号与空格的库路径"守卫用例。CI 矩阵调整为 3.11 / 3.13（ubuntu）+ 3.12（windows）。
+- **CI 前端作业升 Node 22**，与本地开发一致；解锁 `vitest 5.0.3` 与 `jsdom 30`（此前 5.0.3 在 Node 20 下的确定性失败未再复现，全量 146 文件通过）。
+- **ruff 启用 I / UP / B / SIM 规则集**（B008 与个别"非法输入必须被拒"的测试用例按书面理由豁免），全仓一次性清零。
+- **后端接入 pyright（basic）**，先钉住 `app/models` 与 `app/schemas` 两层类型边界（0 错误）；其余子目录随注解补齐渐进纳入。
+- **前端覆盖率门禁从 0 到 1。** 基线实测（146 文件）语句 66.5% / 分支 61.2% / 函数 59.1% / 行 68.2%，CI 阈值取基线 −3pt 且只升不降。
+- **依赖审计分级门禁。** 生产依赖（`requirements.txt`）出现已知漏洞即失败、npm 生产依赖 high 及以上失败；开发工具链维持 advisory 不阻断。
+- **CI 增加版本号单源核对**（`scripts/check_version_sync.py`）：`config.py` 的 `app_version` 与 `frontend/package.json` 不一致时合并失败。
+- **备份快照剥离 `sqlite_stat*` 统计表**，导入白名单按 `sqlite_` 前缀放行 SQLite 引擎内部表——`PRAGMA optimize` 留下的统计表不再导致合法备份被旧版本拒收。
+
 ## 0.16.0 - 2026-10-06
 
 ### Added
