@@ -51,6 +51,65 @@ def _tool_list_apply_queue(db: Session, arguments: dict) -> ToolResult:
     )
 
 
+def _tool_list_apply_records(db: Session, arguments: dict) -> ToolResult:
+    """投递记录（按批次分组，含每个岗位的结果与失败原因），只读。
+
+    「上次为什么投失败」是高频问题：批次条目（``ApplyTask``）给整体状态与计数，
+    逐岗位条目（``ApplyTaskItem``）给成功/失败与失败分类（``failure_category``
+    的用户可读标签与可操作诊断 ``failure_detail``）。查询口径复用
+    ``apply._records.list_record_batches``——与「投递记录」页签同一份实现，
+    已过 ``live_only`` 软删过滤，不另写一份。
+    """
+    from ..apply._records import list_record_batches  # 局部导入：与 list_apply_queue 同理
+
+    # limit 语义是"最多看多少个批次"（一页几组），组内条目不截断——截了就没法回答
+    # "这一批里哪几个失败了"。
+    limit = min(int(arguments.get("limit") or 10), MAX_LIMIT)
+    batches, total = list_record_batches(
+        db,
+        keyword=str(arguments.get("keyword") or ""),
+        result=str(arguments.get("result") or ""),
+        page=1,
+        page_size=limit,
+    )
+    rows = [
+        {
+            "批次": batch.id,
+            "状态": batch.status,
+            "总数": batch.total,
+            "成功": batch.succeeded,
+            "失败": batch.failed,
+            "跳过": batch.skipped,
+            "提示": batch.message,
+            "岗位结果": [
+                {
+                    "id": item.id,
+                    "company": item.company,
+                    "job_title": item.job_title,
+                    "status": item.status,
+                    "failure_category": item.failure_category,
+                    "failure_label": item.failure_label,
+                    "failure_detail": item.failure_detail,
+                }
+                for item in batch.items
+            ],
+        }
+        for batch in batches
+    ]
+    payload = {
+        "总批次数": total,
+        "返回批次": len(rows),
+        "投递记录": rows,
+        "说明": "这是「投递台 → 投递记录」的按批次分组快照；重投要在页面上操作，助手不代为投递。",
+    }
+    return ToolResult(
+        text=json.dumps(payload, ensure_ascii=False),
+        summary=f"查看了投递记录（{total} 个批次，返回 {len(rows)} 个）",
+        link="/apply",
+    )
+
+
 __all__ = [
     "_tool_list_apply_queue",
+    "_tool_list_apply_records",
 ]

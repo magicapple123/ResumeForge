@@ -1,8 +1,10 @@
 """报告域工具声明（``_TOOLS`` 中 18 条：面试/深挖/复盘/提醒/投递台/知识库/统计等）。"""
 from __future__ import annotations
 
-from .apply_tools import _tool_list_apply_queue
+from .apply_tools import _tool_list_apply_queue, _tool_list_apply_records
 from .data_tools import _tool_get_drill_report, _tool_list_drill_sessions
+from .job_tools import _tool_update_resume
+from .reminder_tools import _tool_update_reminder
 from .report_tools import (
     _tool_create_knowledge,
     _tool_create_reminder,
@@ -342,6 +344,73 @@ REPORT_TOOLS: tuple[Tool, ...] = (
             "required": ["title", "remind_at"],
         },
         handler=_tool_create_reminder,
+        writes=True,
+    ),
+    Tool(
+        name="list_apply_records",
+        description=(
+            "查看投递记录（按投递批次分组）：每个批次的状态与成功/失败/跳过计数，"
+            "以及批次里每个岗位的投递结果、失败分类与可操作诊断。"
+            "用户问「上次投递结果怎么样」「为什么投失败」时用它。"
+            "重投要在投递台上操作，助手不代为投递。"
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "keyword": {"type": "string", "description": "可选，岗位/公司关键词"},
+                "result": {
+                    "type": "string",
+                    "enum": ["pending", "running", "success", "failed", "skipped"],
+                    "description": "可选，按每条记录的结果筛选",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "可选，最多返回多少个批次（组内岗位不截断），默认 10",
+                },
+            },
+            "required": [],
+        },
+        handler=_tool_list_apply_records,
+    ),
+    Tool(
+        name="update_resume",
+        description=(
+            "更新某份简历的收藏状态或备注（只传要改的字段；简历正文与版式不受影响）。"
+            "用户说「把这份简历收藏一下」「给这份简历加个备注」时用它。"
+            "调整版式请用 update_resume_layout，两者互不替代。"
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "resume_id": {"type": "integer", "description": "简历 id"},
+                "favorite": {"type": "boolean", "description": "可选，收藏（true）或取消收藏（false）"},
+                "note": {"type": "string", "description": "可选，备注（列表悬停可见）"},
+            },
+            "required": ["resume_id"],
+        },
+        handler=_tool_update_resume,
+        writes=True,
+    ),
+    Tool(
+        name="update_reminder",
+        description=(
+            "把一条日历提醒标记为 done（已完成）或 dismissed（已忽略），也可改回 pending。"
+            "用户说「那个提醒我弄完了」「这条不用管了」时先用 list_reminders 找到 id 再调用。"
+            "提醒时间、绑定与备注的修改请在「求职进度 → 提醒」页做。"
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "reminder_id": {"type": "integer", "description": "提醒 id"},
+                "status": {
+                    "type": "string",
+                    "enum": ["pending", "done", "dismissed"],
+                    "description": "目标状态：done 已完成 / dismissed 已忽略 / pending 改回待办",
+                },
+            },
+            "required": ["reminder_id", "status"],
+        },
+        handler=_tool_update_reminder,
         writes=True,
     ),
 )

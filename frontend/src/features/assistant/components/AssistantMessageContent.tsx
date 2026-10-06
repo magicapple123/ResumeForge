@@ -301,14 +301,17 @@ const TOOL_LABELS: Record<string, string> = {
   read_skill_knowledge: "查阅技能知识文件",
   // 简历版式与联网
   update_resume_layout: "调整简历版式",
+  update_resume: "更新简历收藏/备注",
   create_format_template: "新建格式模板",
   update_format_template: "修改格式模板",
+  list_format_templates: "查询格式模板",
   web_search: "联网搜索",
   // 提醒 / 内推 / 面经 / 题库 / 复盘 / 知识库 / 统计 / 分享包（知识审计补齐）
   list_reminders: "查询提醒",
   list_referrals: "查询内推",
   // 投递台（覆盖审计补齐：这块此前助手完全不知道）
   list_apply_queue: "查询投递队列",
+  list_apply_records: "查询投递记录",
   list_interview_experiences: "查询面经",
   list_question_banks: "查询题库历史",
   list_reviews: "查询复盘历史",
@@ -319,6 +322,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_analytics_overview: "查看求职统计",
   list_share_packages: "查询分享包",
   create_reminder: "新增提醒",
+  update_reminder: "标记提醒完成/忽略",
 };
 
 export function MessageToolCalls({ calls }: { calls: AssistantToolCall[] }) {

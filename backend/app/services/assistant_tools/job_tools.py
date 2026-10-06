@@ -246,6 +246,43 @@ def _tool_update_job(db: Session, arguments: dict) -> ToolResult:
     )
 
 
+def _tool_update_resume(db: Session, arguments: dict) -> ToolResult:
+    """更新简历的收藏状态与备注（与列表页「星标收藏」「编辑备注」同一套字段）。
+
+    **只碰这两个标记字段**：正文、版式与生成告警一律不动——正文修改走「AI 修改 /
+    重新生成」，版式另有 ``update_resume_layout``。改 ``update_resume_layout`` 的
+    名字会把两件事搅在一起，所以这里是新增工具、旧工具保持原样。
+    """
+    resume_id = int(arguments["resume_id"])
+    record = trash.get_live(db, ResumeRecord, resume_id)
+    if record is None:
+        raise ValueError(f"简历 {resume_id} 不存在")
+    if "favorite" not in arguments and "note" not in arguments:
+        raise ValueError("需要提供 favorite 或 note 中的至少一项")
+    if "favorite" in arguments:
+        record.favorite = bool(arguments["favorite"])
+    if "note" in arguments:
+        record.note = str(arguments["note"])
+    db.commit()
+    db.refresh(record)
+    changed_fields = sorted(set(arguments) & {"favorite", "note"})
+    logger.info("助手更新简历标记 id=%s 字段=%s", record.id, changed_fields)
+    return ToolResult(
+        text=json.dumps(
+            {
+                "id": record.id,
+                "title": record.title,
+                "favorite": record.favorite,
+                "note": record.note,
+            },
+            ensure_ascii=False,
+        ),
+        summary=f"更新了简历「{record.title}」的收藏/备注",
+        link="/resumes",
+        changed=True,
+    )
+
+
 # 助手可以往哪些分区追加条目。与 `PROFILE_EDITABLE_FIELDS` 的取舍不同：这里是
 # **追加一条**而不是替换整个列表，合并语义明确，所以交给助手做是安全的。
 _PROFILE_ENTRY_SECTIONS: dict[str, type] = {
