@@ -168,14 +168,15 @@ def test_the_same_popup_stays_blocked_when_relaxed_mode_is_off():
     assert "点选" in report.blocked[0].field_label
 
 
-def test_a_popup_without_a_matching_field_or_value_stays_blocked():
-    snapshot = _snapshot([_popup(), _popup(index=1, label="神秘代号", nearby_text="神秘代号*")])
+def test_a_popup_without_a_matching_field_stays_blocked():
+    """「神秘代号」压根认不出：留在 blocked（放宽三路分流见 test_webform_relaxed_round2）。"""
+    snapshot = _snapshot([_popup(index=1, label="神秘代号", nearby_text="神秘代号*")])
 
     report = build_preview(snapshot, {}, relaxed=True)
 
-    # 「意向城市」资料里没值，「神秘代号」压根认不出：都留在 blocked。
-    assert report.items == []
-    assert len(report.blocked) == 2
+    assert report.items == [] and report.missing_data == []
+    assert len(report.blocked) == 1
+    assert report.relaxed_ai_candidates == [1]
 
 
 def test_a_native_select_is_matched_through_the_strict_option_resolver():

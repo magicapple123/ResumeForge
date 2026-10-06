@@ -84,7 +84,11 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
     provider = webform_service.ai.build_provider(db) if payload.ai else None
     db.close()
     if provider is not None:
-        await webform_service.enrich_preview_with_ai(snapshot, data, report, provider)
+        # relaxed 与 build_preview 用同一个开关值：开启时放宽候选（点选类、规则没认出
+        # 字段）也一并交给模型，命中后按放宽代选语义采纳。
+        await webform_service.enrich_preview_with_ai(
+            snapshot, data, report, provider, relaxed=relaxed
+        )
     diagnostics.record_event(
         "webform.preview",
         control_count=len(snapshot.controls),
