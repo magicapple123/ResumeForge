@@ -151,7 +151,9 @@ describe("HomePage", () => {
     expect(await screen.findByText("近期提醒")).toBeInTheDocument();
 
     // 默认是列表视图：展示提醒条目，且月历（紧凑 CalendarView）不渲染。
-    expect(screen.getByText("参加某司二面")).toBeInTheDocument();
+    // 「近期提醒」标题不依赖数据就会渲染，条目要等 listUpcomingReminders
+    // 返回——直接 await 条目本身，避免 CI 慢机上标题在数据前出现的竞态。
+    expect(await screen.findByText("参加某司二面")).toBeInTheDocument();
     expect(screen.getByText("催 HR 回复")).toBeInTheDocument();
     expect(screen.queryByText(/\d{4} 年 \d+ 月/)).toBeNull();
 
