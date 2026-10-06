@@ -23,18 +23,24 @@ from ..repeated_fields import (
     split_repeated_key,
 )
 from ..session import Snapshot, SnapshotStore, get_snapshot_store
-from .fill import _rebuild_mapping
+from .fill import _rebuild_mapping, resolve_value_for
 from .models import (
     AI_NOTE,
     SOURCE_AI,
     STATUS_CONFLICT,
     STATUS_LOW_CONFIDENCE,
     STATUS_READY,
+    STATUS_RELAXED_READY,
     PendingItem,
     PreviewItem,
     PreviewReport,
 )
-from .relaxed import relaxed_preview_item
+from .relaxed import (
+    RELAXED_NOTE,
+    _own_text_contains,
+    is_relaxed_ai_candidate,
+    relaxed_route,
+)
 from .suggest import _describe, recognize_field, relative_hint
 
 logger = logging.getLogger(__name__)
@@ -160,10 +166,28 @@ def build_preview(
 
     for note in result.skipped:
         if relaxed:
-            # 放宽模式：blocked 集合内部放行——能匹配到字段+值的点选类控件进预览行，
-            # 整理不出的（含文件 / 日期 / 密码类等终局判定）仍留在 blocked 并保持原文案。
-            if item := relaxed_preview_item(note.control, data):
-                report.items.append(item)
+            # 放宽模式：blocked 集合内部放行——能匹配到字段+值的点选类控件进预览行；
+            # 认得出字段但资料没值 → missing_data（如实引导去补值）；规则没认出字段的
+            # 点选类仍留在 blocked 并记成 AI 兜底候选（enrichment 阶段问模型）；其余
+            # （含文件 / 日期 / 密码类等终局判定）仍留在 blocked 并保持原文案。
+            route = relaxed_route(note.control, data)
+            if route is not None:
+                kind, payload = route
+                if kind == "row":
+                    report.items.append(payload)
+                else:
+                    report.missing_data.append(payload)
+                continue
+            if is_relaxed_ai_candidate(note.control):
+                report.blocked.append(
+                    PendingItem(
+                        index=note.control.index,
+                        label=_describe(note.control),
+                        required=note.control.required,
+                        field_label=note.reason,
+                    )
+                )
+                report.relaxed_ai_candidates.append(note.control.index)
                 continue
         report.blocked.append(
             PendingItem(
@@ -181,6 +205,8 @@ async def enrich_preview_with_ai(
     data: dict[str, str],
     report: PreviewReport,
     provider: Any,
+    *,
+    relaxed: bool = False,
 ) -> int:
     """把规则没认出或置信度不足的控件交给模型复核。
 
@@ -189,6 +215,11 @@ async def enrich_preview_with_ai(
     ``blocked`` 是终局判定，模型没有投票权；``missing_data`` 是"已经认出来了、只是资料里
     没填"，问模型纯属浪费调用。对规则的低置信度结果，模型只作为第二意见；返回不一致时，
     仍要经过本地的区块、选项和日期校验才会替换。
+
+    ``relaxed`` 是「放宽模式」开关（与 ``build_preview`` 同一个值）：开启时，``build_preview``
+    记下的放宽 AI 候选（点选类控件、规则没认出字段的那批）也一并交给模型——命中后走
+    **放宽代选**语义采纳（``_adopt_ai_relaxed_match``），而不是普通文本写入。关闭时本函数
+    行为与从前**完全一致**。
 
     **失败不抛**：AI 是兜底，它挂了不该让整个预览打不开——回落到今天的行为，用户仍能看到
     「没认出来」那一栏，也仍能用「换个资料…」。所以这里吞掉异常只记 warning，
@@ -202,11 +233,15 @@ async def enrich_preview_with_ai(
     low_confidence = {
         item.index: item for item in report.items if item.status == STATUS_LOW_CONFIDENCE
     }
+    relaxed_candidates = set(report.relaxed_ai_candidates) if relaxed else set()
     target_indexes: list[int] = []
     for item in report.unrecognized:
         if item.index in by_index and item.index not in target_indexes:
             target_indexes.append(item.index)
     for index in low_confidence:
+        if index in by_index and index not in target_indexes:
+            target_indexes.append(index)
+    for index in report.relaxed_ai_candidates:
         if index in by_index and index not in target_indexes:
             target_indexes.append(index)
     targets = [by_index[index] for index in target_indexes[:MAX_AI_CONTROLS]]
@@ -249,6 +284,11 @@ async def enrich_preview_with_ai(
         if index in low_confidence:
             # AI 对低置信规则结果有投票权，但不是最终裁判。
             report.items = [item for item in report.items if item.index != index]
+        if index in relaxed_candidates:
+            # 放宽候选：命中后按代选语义采纳；采纳不了（值装不下 / 事实类勾选
+            # 自述对不上）就留在 blocked，与"AI 不识别"同一结果。
+            _adopt_ai_relaxed_match(report, control, candidates[0], data)
+            continue
         # 批量模式一行只能有一个字段，取模型排在第一的那个。**其余候选不是丢掉**——
         # 用户在预览里可以改这一行的字段，而「换个资料…」在实时模式下也给得到全部可能。
         # 把第二名也铺成一行会让同一份资料在预览里出现两次，勾选行为就没法解释了。
@@ -256,6 +296,60 @@ async def enrich_preview_with_ai(
     # 返回值是"成功送到模型面前的控件数"，**不是"命中的数量"**——模型答 `__none__` 也是
     # 问过了，把它算成 0 会让调用方以为这次没帮上忙而给出误导性的提示。
     return len(targets)
+
+
+def _adopt_ai_relaxed_match(
+    report: PreviewReport, control: Control, field_name: str, data: dict[str, str]
+) -> bool:
+    """把"AI 说这个点选类框是 X"按**放宽代选**语义落进预览。
+
+    与 ``_adopt_ai_match`` 的分工：那边走普通文本写入（``skip_reason`` 已挡掉点选类），
+    这边专为放宽候选服务——AI 只贡献字段名，值仍走 ``resolve_value_for`` 与规则命中
+    **同一条路径**；事实类勾选还要过"值必须出现在控件自述里"这道闸。
+
+    返回是否已从 blocked 搬出（``True`` = 进了 items / missing_data；``False`` = 留在
+    blocked，与"AI 不识别"同一结果）。
+    """
+    if has_ambiguous_field_evidence(control):
+        return False
+    value = resolve_value_for(control, field_name, data)
+    kind = FormEngine.relaxed_kind(control)
+    if kind == "choice" and (not value or not _own_text_contains(control, value)):
+        return False
+    shown_field = field_key_for_block(field_name, control.block_family, control.block_index)
+    base_field = split_repeated_key(shown_field)[0]
+    label = field_label_for_key(shown_field, FIELD_LABELS.get(base_field, base_field))
+    report.blocked = [item for item in report.blocked if item.index != control.index]
+    report.relaxed_ai_candidates = [
+        index for index in report.relaxed_ai_candidates if index != control.index
+    ]
+    if value:
+        report.items.append(
+            PreviewItem(
+                index=control.index,
+                field=shown_field,
+                field_label=label,
+                value=value,
+                control_label=_describe(control),
+                control_type=control.type,
+                status=STATUS_RELAXED_READY,
+                # AI 认出来的字段 + 程序代点：两层都要向用户交代。
+                note=f"{AI_NOTE}；{RELAXED_NOTE}",
+                source=SOURCE_AI,
+            )
+        )
+    else:
+        # 认出来了、资料里没有——与规则命中的措辞一致，如实引导去补值。
+        report.missing_data.append(
+            PendingItem(
+                index=control.index,
+                label=_describe(control),
+                required=control.required,
+                field=shown_field,
+                field_label=label,
+            )
+        )
+    return True
 
 
 def _adopt_ai_match(

@@ -120,11 +120,41 @@ def _read_back_script(selector: str, *, rich: bool = False) -> str:
     ``rich=True``（contenteditable）读 ``textContent``：富文本元素没有 ``value``
     属性，读 ``el.value`` 恒为空串——富文本框填完会被判成 ``unverified``，
     与真实结果无关。
+
+    UD Design 一类的自定义下拉把显示值画在触发框容器里，input 的 ``value``
+    恒为空——``value`` 为空时（**不限只读**，过滤型 combobox 的 input 可写但
+    选中值同样不在 ``value`` 里）从父节点向上找**第一个显示文本非空的祖先**
+    （最多 5 层，即组件容器），把它的文本放进 ``display``，判定层用它做包含
+    比对（真机取证 2026-10-06 字节页：点选成功后 input.value 仍是 ''，显示
+    文本是「中国 - 居民身份证」）。不能用 ``closest('[class*="select"]')``——
+    UD 的类名层层都含 "select" 字样，最近祖先命中 innerText 恒空的 search
+    容器。
     """
     value_expr = (
         "String(el.textContent == null ? '' : el.textContent).trim()"
         if rich
         else "String(el.value == null ? '' : el.value)"
+    )
+    display_expr = (
+        "(selected.textContent || '').trim()"
+        if rich
+        else (
+            "selected ? (selected.textContent || '').trim() : boxText"
+        )
+    )
+    box_read = (
+        ""
+        if rich
+        else (
+            "  if (!String(el.value == null ? '' : el.value)) {\n"
+            "    let node = el.parentElement;\n"
+            "    for (let i = 0; i < 5 && node; i++) {\n"
+            "      const text = (node.innerText || '').replace(/\\s+/g, ' ').trim();\n"
+            "      if (text) { boxText = text; break; }\n"
+            "      node = node.parentElement;\n"
+            "    }\n"
+            "  }\n"
+        )
     )
     return "".join(
         [
@@ -132,10 +162,12 @@ def _read_back_script(selector: str, *, rich: bool = False) -> str:
             f"  const el = document.querySelector({json.dumps(selector)});\n",
             "  if (!el) { return JSON.stringify({ ok: false, reason: 'no_control' }); }\n",
             "  const selected = el.tagName.toLowerCase() === 'select' && el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null;\n",
+            "  let boxText = '';\n",
+            box_read,
             "  return JSON.stringify({\n",
             "    ok: true,\n",
             f"    value: {value_expr},\n",
-            "    display: selected ? (selected.textContent || '').trim() : '',\n",
+            f"    display: {display_expr},\n",
             "    checked: el.checked === true,\n",
             "  });\n",
             "})()",

@@ -17,7 +17,7 @@
 """
 from __future__ import annotations
 
-from ..engine import Control, FormEngine, relaxed_kind
+from ..engine import Control, FormEngine, has_ambiguous_field_evidence, relaxed_kind
 from ..fields import FIELD_LABELS
 from ..matching import normalize_option_text
 from ..repeated_fields import (
@@ -26,8 +26,13 @@ from ..repeated_fields import (
     split_repeated_key,
 )
 from .fill import resolve_value_for
-from .models import STATUS_NEEDS_CONFIRM, STATUS_RELAXED_READY, PreviewItem
-from .suggest import Suggestion, _describe, recognize_field, relative_hint
+from .models import (
+    STATUS_NEEDS_CONFIRM,
+    STATUS_RELAXED_READY,
+    PendingItem,
+    PreviewItem,
+)
+from .suggest import Suggestion, _DIAL_CODE_RE, _describe, popup_display_field, recognize_field, relative_hint
 
 # 放宽代选行的说明文案（预览与实时面板共用同一说法，两处各写一份迟早分叉）。
 RELAXED_NOTE = "放宽模式：程序将代点，填完请核对"
@@ -50,25 +55,20 @@ def _own_text_contains(control: Control, value: str) -> bool:
     return False
 
 
-def _resolve_relaxed_value(control: Control, kind: str, data: dict[str, str]) -> tuple[str, str] | None:
-    """认字段 + 取值。返回 ``(field_key, value)``；认不出或值装不下返回 ``None``。
-
-    取值走 ``resolve_value_for``——与实时建议、填充重建**同一条路径**，原生下拉在这里
-    就完成严格选项解析；弹层控件的选项在填充时才存在，这里只带值，严格解析留给
-    ``select_combobox_option``。
-    """
+def _resolve_relaxed_field(control: Control, kind: str) -> str | None:
+    """放宽代选的字段识别（不含取值）。规则认不出返回 ``None``——调用方决定交给谁。"""
     if kind == "confirm":
         return None
-    field_name = recognize_field(control)
-    if not field_name:
-        return None
-    value = resolve_value_for(control, field_name, data)
-    if not value:
-        return None
-    if kind == "choice" and not _own_text_contains(control, value):
-        return None
-    shown_field = field_key_for_block(field_name, control.block_family, control.block_index)
-    return shown_field, value
+    # 弹层的「显示值自证」判据（区号/证件类型，与 suggest_for 同源共用，见 popup_display_field）。
+    # 实测到的误配：区号弹层被认成 phone（旁文含「手机号码*」）、证件类型弹层被认成
+    # id_number（旁文含「居民身份证」）——值装不进，fill 必败。
+    if kind == "popup":
+        if display := popup_display_field(control):
+            return display
+    # 非 popup 控件保留 value 判据（与 suggest_for 同判据：框里现有值是 +数字 形状）。
+    if _DIAL_CODE_RE.match(control.value.strip()):
+        return "phone_country_code"
+    return recognize_field(control)
 
 
 def relaxed_preview_item(control: Control, data: dict[str, str]) -> PreviewItem | None:
@@ -76,6 +76,23 @@ def relaxed_preview_item(control: Control, data: dict[str, str]) -> PreviewItem 
 
     调用方（``build_preview``）只在开关开启时调用，且只喂 ``result.skipped`` 里的控件
     ——放宽只会在 blocked 集合**内部**放行，不扩大匹配的边界。
+    """
+    route = relaxed_route(control, data)
+    if route is not None and route[0] == "row":
+        return route[1]
+    return None
+
+
+def relaxed_route(
+    control: Control, data: dict[str, str]
+) -> tuple[str, PreviewItem | PendingItem] | None:
+    """放宽模式下把一个被 ``skip_reason`` 挡住的控件分到三个去处之一。
+
+    返回 ``("row", PreviewItem)`` / ``("missing", PendingItem)``；``None`` = 保持 blocked
+    （文件 / 日期 / 密码类终局判定，或认不出字段、值装不下）。``("ai", None)`` 那一路
+    由 ``is_relaxed_ai_candidate`` 单独表达——这里是"分到哪一桶"，AI 候选**不留在这里**
+    是因为批量与实时两条链路对它的后续处理完全不同（前者进 enrichment、后者进
+    ``_publish_ai_relaxed``）。
     """
     kind = relaxed_kind(control)
     if kind is None:
@@ -85,7 +102,7 @@ def relaxed_preview_item(control: Control, data: dict[str, str]) -> PreviewItem 
         return None
     if kind == "confirm":
         label = control.label.strip() or _describe(control)
-        return PreviewItem(
+        return "row", PreviewItem(
             index=control.index,
             field="",
             field_label=label,
@@ -95,15 +112,34 @@ def relaxed_preview_item(control: Control, data: dict[str, str]) -> PreviewItem 
             status=STATUS_NEEDS_CONFIRM,
             note=CONFIRM_NOTE,
         )
-    resolved = _resolve_relaxed_value(control, kind, data)
-    if resolved is None:
+    field_name = _resolve_relaxed_field(control, kind)
+    if not field_name:
         return None
-    shown_field, value = resolved
+    shown_field = field_key_for_block(field_name, control.block_family, control.block_index)
     base_field = split_repeated_key(shown_field)[0]
-    return PreviewItem(
+    value = resolve_value_for(control, field_name, data)
+    if value and kind == "choice" and not _own_text_contains(control, value):
+        # 事实类勾选的值与勾选框自述对不上：代点就是猜，保持 blocked。
+        return None
+    if not value:
+        # 认得出字段但资料里没填：如实引导去补值——这正是 missing_data 那一栏的本职。
+        # （放宽模式之前把这种也留在 blocked，文案却是"需要你自己点选"，
+        # 用户看不出该去补哪一项。）
+        return "missing", PendingItem(
+            index=control.index,
+            label=_describe(control),
+            required=control.required,
+            field=shown_field,
+            field_label=field_label_for_key(
+                shown_field, FIELD_LABELS.get(base_field, base_field)
+            ),
+        )
+    return "row", PreviewItem(
         index=control.index,
         field=shown_field,
-        field_label=field_label_for_key(shown_field, FIELD_LABELS.get(base_field, base_field)),
+        field_label=field_label_for_key(
+            shown_field, FIELD_LABELS.get(base_field, base_field)
+        ),
         value=value,
         control_label=_describe(control),
         control_type=control.type,
@@ -115,6 +151,23 @@ def relaxed_preview_item(control: Control, data: dict[str, str]) -> PreviewItem 
         ],
         note=RELAXED_NOTE,
     )
+
+
+def is_relaxed_ai_candidate(control: Control) -> bool:
+    """放宽模式下允许交给 AI 识别字段的点选类控件。
+
+    只放宽 ``relaxed_kind`` 非 ``None``（点选类）且**规则没认出字段**的控件；同意 /
+    声明类（confirm）不需要识别字段，他人信息与多字段并列的框不给模型投票权——
+    与 ``ai.py`` 的纪律同一套：模型只在规则失败后兜底，且终局判定不放宽。
+    """
+    kind = relaxed_kind(control)
+    if kind is None or kind == "confirm":
+        return False
+    if relative_hint(control):
+        return False
+    if has_ambiguous_field_evidence(control):
+        return False
+    return _resolve_relaxed_field(control, kind) is None
 
 
 def relaxed_suggestion(
@@ -142,11 +195,24 @@ def relaxed_suggestion(
             note=f"{CONFIRM_NOTE}，点按即视为你本人确认",
             accept_label=f"帮我勾选：{label}",
         )
-    resolved = _resolve_relaxed_value(control, kind, data)
-    if resolved is None:
+    field_name = _resolve_relaxed_field(control, kind)
+    if not field_name:
         return None
-    shown_field, value = resolved
+    shown_field = field_key_for_block(field_name, control.block_family, control.block_index)
     base_field = split_repeated_key(shown_field)[0]
+    value = resolve_value_for(control, field_name, data)
+    if value and kind == "choice" and not _own_text_contains(control, value):
+        return None
+    if not value:
+        # 认得出字段但资料里没填：面板如实说该去补哪一项，而不是停留在
+        # "需要你自己点选"——那会让用户以为工具帮不上忙，其实差的是资料。
+        label = field_label_for_key(shown_field, FIELD_LABELS.get(base_field, base_field))
+        return Suggestion(
+            "unmatched",
+            field=shown_field,
+            field_label=label,
+            note=f"认出来是「{label}」，但你的资料里还没填这一项",
+        )
     return Suggestion(
         "matched",
         field=shown_field,

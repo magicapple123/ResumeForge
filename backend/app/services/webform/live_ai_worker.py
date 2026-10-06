@@ -21,7 +21,7 @@ class _AiWorker:
     最新的焦点永远赢，排在前面的还没开始就已经过期了。
     """
 
-    def __init__(self, run: Callable[[int, Any], None], *, name: str = "webform-ai") -> None:
+    def __init__(self, run: Callable[..., None], *, name: str = "webform-ai") -> None:
         self._run = run
         self._mailbox: tuple[int, Any] | None = None
         self._lock = threading.Lock()
@@ -32,9 +32,10 @@ class _AiWorker:
     def start(self) -> None:
         self._thread.start()
 
-    def push(self, seq: int, control: Any) -> None:
+    def push(self, seq: int, *items: Any) -> None:
+        """投递一次任务（``seq`` + 任意载荷，``run`` 会原样按位解包）。"""
         with self._lock:
-            self._mailbox = (seq, control)
+            self._mailbox = (seq, *items)
         self._wake.set()
 
     def close(self) -> None:
