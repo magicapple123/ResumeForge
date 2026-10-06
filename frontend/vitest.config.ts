@@ -36,6 +36,15 @@ export default defineConfig({
       reportsDirectory: "./coverage",
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/**/*.test.{ts,tsx}", "src/test/**", "src/main.tsx"],
+      // 覆盖率门禁（QA 评审 P0，2026-10-07 建立）：基线实测 stmts 66.5 / branch 61.2 /
+      // funcs 59.1 / lines 68.2。阈值 = 基线 −3pt，**只升不降**（ratchet）——直接上
+      // 80 会误伤存量，先把"从 0 到 1"立起来；存量低位文件补测后再逐档上调。
+      thresholds: {
+        statements: 63,
+        branches: 58,
+        functions: 56,
+        lines: 65,
+      },
     },
   },
 });

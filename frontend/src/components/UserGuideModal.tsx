@@ -3,13 +3,15 @@ import {
   ArrowRightOutlined,
   CheckOutlined,
   FormOutlined,
+  PlayCircleOutlined,
 } from "@ant-design/icons";
-import { Button, Divider, Modal, Space, Steps, Typography } from "antd";
+import { App as AntdApp, Button, Divider, Modal, Space, Steps, Typography } from "antd";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 // 走 import 让 Vite 按 `base` 重写前缀，别写死 "/resumeforge-icon.png"
 // （在线体验产物部署在 Pages 子路径下，绝对路径会 404）。理由同 App.tsx 侧栏图标。
 import brandIcon from "../assets/resumeforge-icon.png";
+import { loadSampleDataset } from "../api/settings";
 import { GUIDE_STEPS } from "./userGuideSteps";
 
 /** 把文案里的 `**强调**` 渲染成粗体。
@@ -29,10 +31,19 @@ interface UserGuideModalProps {
   open: boolean;
   onClose: () => void;
   onNavigate: (path: string) => void;
+  /** 载入示例成功后的收尾（默认整页刷新）；测试里注入替身避免 jsdom 导航。 */
+  onSampleLoaded?: () => void;
 }
 
-export default function UserGuideModal({ open, onClose, onNavigate }: UserGuideModalProps) {
+export default function UserGuideModal({
+  open,
+  onClose,
+  onNavigate,
+  onSampleLoaded = () => window.location.reload(),
+}: UserGuideModalProps) {
+  const { message } = AntdApp.useApp();
   const [current, setCurrent] = useState(0);
+  const [loadingSample, setLoadingSample] = useState(false);
   const step = GUIDE_STEPS[current];
   const StepIcon = step.icon;
   const isLast = current === GUIDE_STEPS.length - 1;
@@ -44,6 +55,25 @@ export default function UserGuideModal({ open, onClose, onNavigate }: UserGuideM
   const goToStepPage = () => {
     onClose();
     onNavigate(step.path);
+  };
+
+  /**
+   * 一键体验：写入「体验示例」独立数据集并切换过去（主数据不受影响），然后整页
+   * 刷新——首启动时各页面已经按空数据集取过数，SPA 内导航不会触发重取，整页刷新
+   * 是让"所有视图都落到示例数据上"最可靠的方式。
+   */
+  const loadSample = async () => {
+    if (loadingSample) return;
+    setLoadingSample(true);
+    try {
+      await loadSampleDataset();
+      message.success("示例数据已就绪，正在进入首页");
+      onClose();
+      onSampleLoaded();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "示例数据载入失败");
+      setLoadingSample(false);
+    }
   };
 
   return (
@@ -70,6 +100,13 @@ export default function UserGuideModal({ open, onClose, onNavigate }: UserGuideM
       onCancel={onClose}
       footer={
         <div className="user-guide-footer">
+          <Button
+            icon={<PlayCircleOutlined />}
+            loading={loadingSample}
+            onClick={() => void loadSample()}
+          >
+            载入示例数据体验
+          </Button>
           <Button onClick={onClose}>稍后查看</Button>
           <Space wrap>
             <Button

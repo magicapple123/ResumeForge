@@ -176,6 +176,14 @@ export function createDataset(name: string): Promise<DatasetInfo> {
   return request("/settings/datasets", { method: "POST", body: JSON.stringify({ name }) });
 }
 
+/**
+ * 一键载入体验示例：新建「体验示例」数据集、写入纯虚构数据并切换过去。
+ * 主数据不受影响；写完由调用方刷新页面让全部视图落到新数据集上。
+ */
+export function loadSampleDataset(): Promise<DatasetInfo> {
+  return request("/settings/datasets/sample/load", { method: "POST" });
+}
+
 /** 把备份包导入为一份**新数据集**；不触碰当前正在使用的数据。 */
 export async function importDataset(file: File, name: string): Promise<DatasetImportResult> {
   const resp = await fetch(`/api/settings/datasets/import?name=${encodeURIComponent(name)}`, {
