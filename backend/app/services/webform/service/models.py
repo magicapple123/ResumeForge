@@ -72,6 +72,10 @@ class PreviewReport:
     missing_data: list[PendingItem] = field(default_factory=list)
     unrecognized: list[PendingItem] = field(default_factory=list)
     blocked: list[PendingItem] = field(default_factory=list)
+    # 放宽模式下"点选类控件规则没认出字段"的候选（控件 index），交给 AI 兜底识别。
+    # **只在本进程内当路由用，不进 as_dict()**——API 载荷里它们仍然是 blocked，
+    # AI 采纳成功后才搬进 items / missing_data。
+    relaxed_ai_candidates: list[int] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {

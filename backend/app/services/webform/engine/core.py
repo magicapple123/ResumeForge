@@ -10,7 +10,7 @@ from typing import Any
 
 from ...browser.cdp_client import CdpClient
 from ...browser.interaction import click_selector
-from ..custom_select import select_combobox_option
+from ..custom_select import select_combobox_option, select_combobox_options, split_multi_values
 from ..fields import (
     AUTOCOMPLETE_DENY,
     CLAIM_LABELS,
@@ -19,6 +19,7 @@ from ..fields import (
     FIELD_DENYLIST,
     FIELD_PREFERRED_TYPES,
     FIELD_SYNONYMS,
+    is_claim_label,
 )
 from ..matching import (
     SelectOption,
@@ -539,11 +540,11 @@ class FormEngine:
             for word in CONSENT_HINTS:
                 if word in signature:
                     return f"涉及“{word}”的确认项，需要你本人勾选"
-            # 声明类勾选：「无实习经历」勾上是在断言"我没有这段经历"、「至今」是在断言
-            # "这段经历还在进行"。两者都是**替用户陈述事实**，而不只是填一个值——
-            # 与"不替用户表达意愿"是同一条纪律。
+            # 声明类勾选：「无实习经历」「没有实习经历」勾上是在断言"我没有这段经历"、
+            # 「至今」是在断言"这段经历还在进行"。两者都是**替用户陈述事实**，而不只是
+            # 填一个值——与"不替用户表达意愿"是同一条纪律。
             label = control.label.strip()
-            if label.startswith("无") and ("经历" in label or "信息" in label):
+            if is_claim_label(label):
                 return f"“{label}”是声明类勾选，需要你自己判断"
             if label in CLAIM_LABELS:
                 return f"“{label}”是声明类勾选，需要你自己判断"
@@ -599,10 +600,11 @@ class FormEngine:
             for word in CONSENT_HINTS:
                 if word in signature:
                     return "confirm"
-            label = control.label.strip()
-            if label.startswith("无") and ("经历" in label or "信息" in label):
+            # 「没有实习经历」（字节校招页实测措辞）与「无实习经历」同一类声明：
+            # 确认制语义与其它声明类一致——needs_confirm 默认不勾、实时「帮我勾选」。
+            if is_claim_label(control.label):
                 return "confirm"
-            if label in CLAIM_LABELS:
+            if control.label.strip() in CLAIM_LABELS:
                 return "confirm"
             return "choice"
         if control.type == "select":
@@ -845,9 +847,17 @@ class FormEngine:
                 # 自定义弹层（只读选择器 / 级联 / 日期选择器一类）：值由点选产生。
                 # **匹配层已经不会把字段分配给这类控件**（"只填不点"，见 skip_reason），
                 # 这里保留这条路径只为程序化构造的映射（测试与显式调用）。
-                resolution = select_combobox_option(
-                    client, control.selector, mapping.value, timeout=timeout
-                )
+                # 值带多值分隔符（"上海、北京"）时走多值代选：一个弹层里逐个匹配、
+                # 全部命中才动手；单值走原路径，行为不变。
+                parts = split_multi_values(mapping.value)
+                if len(parts) > 1:
+                    resolution = select_combobox_options(
+                        client, control.selector, parts, timeout=timeout
+                    )
+                else:
+                    resolution = select_combobox_option(
+                        client, control.selector, mapping.value, timeout=timeout
+                    )
                 if resolution.status != "matched" or resolution.option is None:
                     raise OptionUnavailable(resolution.reason or "自定义下拉没有唯一匹配项")
                 applied_mapping = replace(mapping, select=resolution)
@@ -997,10 +1007,20 @@ class FormEngine:
 
     @staticmethod
     def _accepted_values(mapping: FieldMapping) -> set[str]:
-        """回读可接受的值集合（下拉还要认 option 的展示文本）。"""
+        """回读可接受的值集合（下拉还要认 option 的展示文本）。
+
+        多值代选（"上海、北京"）的回读口径：页面的显示分隔符未必与资料一致
+        （"上海,北京" / "上海，北京"都见过），把同一顺序下各分隔符的连写都算上——
+        顺序变了或缺了城市仍然判不一致，那是要如实上报的。
+        """
         accepted = {mapping.write_value()}
         if mapping.select is not None and mapping.select.option is not None:
             accepted.add(mapping.select.option.display())
+        for text in tuple(accepted):
+            parts = split_multi_values(text)
+            if len(parts) > 1:
+                for separator in ("、", "，", ",", ";", "；"):
+                    accepted.add(separator.join(parts))
         return accepted
 
     @classmethod
@@ -1023,6 +1043,13 @@ class FormEngine:
         if actual in cls._accepted_values(mapping) or same_phone_number(
             mapping.field, mapping.write_value(), actual
         ):
+            return ApplyOutcome(mapping.control.index, mapping.field, "filled")
+        # 自定义下拉的显示值画在触发框容器里（UD Design 只读 input 的 value 恒空，
+        # 真机取证 2026-10-06 字节页：显示文本是「中国 - 居民身份证」这种"前缀 -
+        # 枚举值"拼法）——回读脚本把容器文本放进 display，这里做包含比对：
+        # 期望值（或其变体）出现在显示区即算生效。
+        display = str(payload.get("display", "")).strip()
+        if display and any(expected and expected in display for expected in cls._accepted_values(mapping)):
             return ApplyOutcome(mapping.control.index, mapping.field, "filled")
         return ApplyOutcome(
             mapping.control.index,

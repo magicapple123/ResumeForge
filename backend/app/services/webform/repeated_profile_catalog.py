@@ -256,8 +256,12 @@ REPEATED_FIELD_SYNONYMS: dict[str, tuple[str, ...]] = {
     "award_scholarship_level": ("奖学金等级",),
     "award_scholarship_date": ("奖学金获奖时间",),
     "award_materials": ("科研获奖资料", "竞赛获奖资料", "获奖资料"),
-    "language_name": ("语言类型", "语种", "外语种类"),
-    "language_level": ("语言水平", "语言等级", "掌握程度"),
+    # 2026-10-06 字节校招页实测：语言弹层控件的自述就是「语言*」「精通程度*」——
+    # 收进这两个词后同分竞争靠档位裁决（语言控件 label 命中 language_name 的档位 1，
+    # 压过旁文里「精通程度」给 language_level 的档位 0；精通控件反之）。
+    # 同义词仍然只收完整措辞：「语言」2 字比「精通程度」短，旁边文共现时短的让长的。
+    "language_name": ("语言类型", "语种", "外语种类", "语言"),
+    "language_level": ("语言水平", "语言等级", "掌握程度", "精通程度"),
     "language_speaking": ("听说能力", "口语能力"),
     "language_reading": ("读写能力", "读写水平"),
     "language_study_experience": ("留学经验", "生活经验", "留学或生活经验"),

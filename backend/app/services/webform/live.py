@@ -68,10 +68,12 @@ from .live_scripts import (
 from .repeated_fields import field_key_for_block, field_label_for_key, split_repeated_key
 from .service import (
     AI_NOTE,
+    RELAXED_NOTE,
     SOURCE_AI,
     SOURCE_RULE,
     FillSelection,
     apply_fill,
+    is_relaxed_ai_candidate,
     recognize_field,
     related_entries,
     relaxed_suggestion,
@@ -79,6 +81,7 @@ from .service import (
     suggest_for,
     Suggestion,
 )
+from .service.relaxed import _own_text_contains
 from .session import Snapshot
 
 if TYPE_CHECKING:
@@ -589,6 +592,20 @@ class LiveSession(LiveRememberMixin):
                     }
                 )
                 return
+            # 放宽模式下规则没认出字段的点选类控件：交给 AI 兜底识别（与批量 enrichment
+            # 同一套纪律——只发字段名、终局判定不放宽、额度上限）。三种"没接住"都保持
+            # blocked 文案不变：没开 AI、额度用完、模型没帮上忙。
+            if is_relaxed_ai_candidate(control) and self._ai_enabled and self._begin_ai_call():
+                self._publish(
+                    {
+                        "status": "ai_thinking",
+                        "note": "AI 正在识别这个框…",
+                        "source": SOURCE_AI,
+                        "remember_field_key": "",
+                    }
+                )
+                self._dispatch_ai(control, relaxed=True)
+                return
         if suggestion.status != "unmatched":
             self._publish(
                 {
@@ -737,10 +754,10 @@ class LiveSession(LiveRememberMixin):
     # 2. **过期即丢**——提交时记下 ``seq``，回调里比对，用户已经点到别的框就丢弃；
     # 3. **失败不抛**——执行器里的异常没人接，``_publish`` 自己兜住。
 
-    def _dispatch_ai(self, control: Control) -> None:
-        self._ai_worker.push(self._seq, control)
+    def _dispatch_ai(self, control: Control, relaxed: bool = False) -> None:
+        self._ai_worker.push(self._seq, control, relaxed)
 
-    def _run_ai(self, seq: int, control: Control) -> None:
+    def _run_ai(self, seq: int, control: Control, relaxed: bool = False) -> None:
         # 惰性导入：``ai`` 会连带拉起 ``services/llm``，而本模块是「网申」包的导入入口之一。
         from .ai import identify_fields
 
@@ -749,13 +766,108 @@ class LiveSession(LiveRememberMixin):
         except Exception as error:  # noqa: BLE001 - 工作线程里的异常没人接
             logger.warning("网申填表的 AI 识别失败：%s", error)
             if seq == self._seq and not self._stop.is_set():
-                self._publish_unmatched("AI 没能识别这个框")
+                # 放宽候选是 blocked 集合里的控件：兜底失败也回到 blocked 文案，
+                # 不让它挂在"AI 正在识别…"上。
+                if relaxed or FormEngine.relaxed_kind(control) is not None:
+                    self._publish_blocked_panel(control)
+                else:
+                    self._publish_unmatched("AI 没能识别这个框")
             return
         if seq != self._seq or self._stop.is_set():
             # 用户已经点到别的框了（或模式已经停用）。丢掉的这一份不能推——否则面板上会
             # 显示上一个框的答案，而那看起来就像是程序答错了。
             return
-        self._publish_ai(control, matches.get(control.index, ()))
+        if relaxed:
+            self._publish_ai_relaxed(control, matches.get(control.index, ()))
+        else:
+            self._publish_ai(control, matches.get(control.index, ()))
+
+    def _publish_ai_relaxed(self, control: Control, candidates: tuple[str, ...]) -> None:
+        """放宽候选的 AI 回答：按**放宽代选**语义落成面板上的一行。
+
+        与 ``_publish_ai`` 的分工：那边服务普通文本框，这边服务被 ``skip_reason`` 挡住的
+        点选类控件——命中且资料里有值 → 「代点选择」建议（点「填入」执行，走引擎的
+        弹层 / 勾选路径）；认出来但没值 → 如实说去补哪一项；守卫全拦下或模型没认出 →
+        **保持 blocked 原文案**，不把"没认出来"的帽子扣到点选控件头上。
+        """
+        with self._lock:
+            data = dict(self._data)
+        kind = FormEngine.relaxed_kind(control)
+        usable = tuple(
+            key
+            for key in candidates
+            if not excluded_by_hints(control, key) and foreign_marker(control, key) is None
+        )
+        fillable: list[tuple[str, str, str]] = []
+        for key in usable:
+            value = resolve_value_for(control, key, data)
+            # 事实类勾选与放宽规则同一道闸：值必须出现在控件自述里，否则代点就是猜。
+            if not value or (
+                kind == "choice"
+                and not _own_text_contains(control, value)
+            ):
+                continue
+            shown_key = field_key_for_block(key, control.block_family, control.block_index)
+            fillable.append(
+                (
+                    shown_key,
+                    field_label_for_key(
+                        shown_key,
+                        FIELD_LABELS.get(split_repeated_key(shown_key)[0], shown_key),
+                    ),
+                    value,
+                )
+            )
+
+        if fillable:
+            shown_key, label, value = fillable[0]
+            self._publish(
+                {
+                    "status": "matched",
+                    "remember_field_key": shown_key,
+                    "field_label": label,
+                    "value": value,
+                    # AI 给的答案必须标明是猜的；程序又将代点——两层都交代。
+                    "note": f"{AI_NOTE}；{RELAXED_NOTE}",
+                    "source": SOURCE_AI,
+                    "alternatives": [
+                        {"label": alt_label, "value": alt_value}
+                        for _key, alt_label, alt_value in fillable[1:]
+                    ],
+                }
+            )
+            return
+
+        if usable:
+            # 模型认出了字段，但资料里没值（或值装不下这个点选控件）。
+            key = usable[0]
+            shown_key = field_key_for_block(key, control.block_family, control.block_index)
+            self._publish_unmatched(
+                self._ai_dead_end(usable),
+                source=SOURCE_AI,
+                field_label=field_label_for_key(
+                    shown_key,
+                    FIELD_LABELS.get(split_repeated_key(shown_key)[0], shown_key),
+                ),
+                field_key=shown_key,
+            )
+            return
+
+        # 模型没认出（或全部候选被守卫拦下）：保持 blocked 原文案。
+        self._publish_blocked_panel(control)
+
+    def _publish_blocked_panel(self, control: Control) -> None:
+        """点选类控件的 blocked 面板：与 ``suggest_for`` 的 blocked 建议同一套措辞。"""
+        reason = FormEngine.skip_reason(control) or "这个框需要你在页面上自己点选"
+        self._publish(
+            {
+                "status": "blocked",
+                "field_label": "不会自动填",
+                "value": "",
+                "note": reason,
+                "source": SOURCE_RULE,
+            }
+        )
 
     def _publish_ai(self, control: Control, candidates: tuple[str, ...]) -> None:
         """把模型的候选落成面板上的一行主推 + 若干备选。

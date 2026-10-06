@@ -86,6 +86,42 @@ def relative_hint(control: Control) -> str:
 # 国际区号：`+86` / `+1` / `+886` 这种形状（框里现有的值就是它）。
 _DIAL_CODE_RE = re.compile(r"^\+\d{1,3}$")
 
+# 独立 +数字 token（前后不能是字母数字或另一个 +）：区号弹层的**显示值**不在 value
+# 属性里（value 为空，显示文本落在触发框旁文），但「+1 +1 +1」这种 token 串只会
+# 出现在区号上下文——普通字段的文案里没有 +数字 形状的独立词。
+_DIAL_CODE_TOKEN = re.compile(r"(?<![\w+])\+\d{1,3}(?!\w)")
+
+# 证件类型弹层的显示值就是枚举项本身（真机取证 2026-10-06 字节页：「中国 - 居民身份证」）。
+# 这些词在普通控件旁文里不出现（证件**号码**框的标签不含它们），可作一对一声纹。
+_ID_TYPE_OPTION_WORDS: tuple[str, ...] = (
+    "居民身份证",
+    "护照",
+    "港澳通行证",
+    "台湾通行证",
+    "永久居留",
+)
+
+
+def popup_display_field(control: Control) -> str | None:
+    """弹层控件用「显示值/枚举」自证的字段（区号、证件类型）；认不出返回 ``None``。
+
+    这两个弹层的**可见标签不在页面上**（字节页实测：标签只剩触发框里的当前值，
+    value 属性却是空的），普通文本证据认不出它们，于是区号被当成 phone、
+    证件类型被当成 id_number——值根本装不进那两个框。识别与取值分开：
+    这里只回答"是什么字段"，有没有值由调用方查资料。
+
+    只对弹层控件调用（调用方限定），否则证件号码文本框旁文里的「居民身份证」
+    会把它从 id_number 抢走。
+    """
+    if _DIAL_CODE_RE.match(control.value.strip()):
+        return "phone_country_code"
+    signature = control.signature()
+    if _DIAL_CODE_TOKEN.search(signature):
+        return "phone_country_code"
+    if any(word in signature for word in _ID_TYPE_OPTION_WORDS):
+        return "id_type"
+    return None
+
 
 @dataclass
 class Suggestion:

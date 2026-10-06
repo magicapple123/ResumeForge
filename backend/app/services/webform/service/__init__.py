@@ -81,12 +81,15 @@ from .models import (
 from .relaxed import (
     CONFIRM_NOTE as CONFIRM_NOTE,
     RELAXED_NOTE as RELAXED_NOTE,
+    is_relaxed_ai_candidate,
     relaxed_preview_item,
+    relaxed_route,
     relaxed_suggestion,
 )
 from .preview import (
     _PAGE_INFO_SCRIPT as _PAGE_INFO_SCRIPT,
     _adopt_ai_match as _adopt_ai_match,
+    _adopt_ai_relaxed_match as _adopt_ai_relaxed_match,
     _mapping_note as _mapping_note,
     _same_value as _same_value,
     build_preview,
@@ -126,10 +129,12 @@ __all__ = [
     "enrich_preview_with_ai",
     "is_apply_running",
     "is_filling",
+    "is_relaxed_ai_candidate",
     "list_fields",
     "read_snapshot",
     "recognize_field",
     "relaxed_preview_item",
+    "relaxed_route",
     "relaxed_suggestion",
     "resolve_value_for",
     "suggest_for",

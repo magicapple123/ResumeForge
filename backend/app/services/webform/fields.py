@@ -29,12 +29,14 @@ from .field_matching_rules import (
     AUTOCOMPLETE_FIELDS,
     AUTOCOMPLETE_OFF,
     CLAIM_LABELS,
+    CLAIM_PREFIXES,
     CONSENT_HINTS,
     FIELD_DENYLIST,
     FIELD_EXCLUDE_HINTS,
     FIELD_PREFERRED_TYPES,
     OPTION_ALIASES,
     PLACEHOLDER_TEXTS,
+    is_claim_label,
 )
 from .field_synonyms import FIELD_BLOCK_HINTS, FIELD_SYNONYMS, RELATIVE_HINTS
 
@@ -43,6 +45,7 @@ __all__ = [
     "AUTOCOMPLETE_FIELDS",
     "AUTOCOMPLETE_OFF",
     "CLAIM_LABELS",
+    "CLAIM_PREFIXES",
     "CONSENT_HINTS",
     "FIELD_BLOCK_HINTS",
     "FIELD_DENYLIST",
@@ -70,4 +73,5 @@ __all__ = [
     "SOURCE_EXTRA",
     "SOURCE_PROFILE",
     "FormField",
+    "is_claim_label",
 ]

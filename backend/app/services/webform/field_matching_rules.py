@@ -75,6 +75,10 @@ FIELD_EXCLUDE_HINTS: dict[str, tuple[str, ...]] = {
     # 日期族的电话词保护**不在这里逐字段登记**：签名级匹配（含旁文）会把被整表
     # 标签污染的普通日期框一并漏掉（2026-10-05 实测：污染页上的「毕业时间」文本框
     # 完全不填）。已改为只看控件自述的跨族否决——见 ``engine/families.py``。
+    # 「学历类型」问的是统招/自考这类学习形式（真机取证 2026-10-06 字节页，选项：
+    # 海外及港澳台/统招全日制/统招非全日制/自考/其他），不是学历层次——degree 的
+    # 值（本科/硕士）在它里面根本不存在，代选必败，直接剥夺 degree 对它的认领权。
+    "degree": ("学历类型",),
 }
 
 # 永不自动填的控件：签名命中任一即拦下。与"遇到验证码不绕过"同一条纪律。
@@ -114,11 +118,26 @@ CONSENT_HINTS: tuple[str, ...] = (
     "同意",
 )
 
-# 声明类勾选的**精确**标签（"无…经历/信息"那类按前缀规则匹配，见 ``_skip_reason``）。
+# 声明类勾选的**精确**标签（"无…经历/信息"那类按前缀规则匹配，见 ``is_claim_label``）。
 #
 # 勾上它们等于替用户**陈述事实**（"我没有这段经历" / "这段还在进行"），而不只是填一个值。
 # 与"不替用户表达意愿"是同一条纪律，所以永不自动勾选。
 CLAIM_LABELS: frozenset[str] = frozenset({"至今", "在职", "在读", "目前仍在", "至今仍在"})
+
+# 「无…经历/信息」类声明勾选的**前缀**。2026-10-06 字节校招页实测：同一类声明的措辞是
+# 「没有实习经历」——只认「无」会让它漏网，所以「无」「没有」都要收。
+CLAIM_PREFIXES: tuple[str, ...] = ("无", "没有")
+
+
+def is_claim_label(label: str) -> bool:
+    """「没有实习经历」这类声明类勾选的判据（``skip_reason`` 与 ``relaxed_kind`` 共用）。
+
+    勾上它等于替用户陈述"我没有这段经历"——与 ``CLAIM_LABELS`` 同一条纪律：
+    程序不替用户陈述事实。前缀之后必须出现「经历」或「信息」，避免「无障碍信息」
+    这类无关栏目被前缀误伤。
+    """
+    label = label.strip()
+    return label.startswith(CLAIM_PREFIXES) and ("经历" in label or "信息" in label)
 
 # 下拉里的占位项：永远不选。规范化后逐字比对（见 ``matching.normalize_option_text``）。
 #
@@ -163,7 +182,9 @@ OPTION_ALIASES: dict[str, tuple[str, ...]] = {
     "大专": ("专科", "高职", "大学专科", "专科（高职）", "associate"),
     "高中": ("普通高中", "高中毕业"),
     # 学习形式
-    "全日制": ("普通全日制", "全日制统招", "统招", "full-time", "fulltime"),
+    # 「统招全日制」是「全日制」在网申页面的原样写法（真机取证 2026-10-06 字节页）；
+    # 不收它会让「全日制」只剩包含匹配，跟「统招非全日制」打成 ambiguous。
+    "全日制": ("普通全日制", "全日制统招", "统招", "统招全日制", "full-time", "fulltime"),
     "非全日制": ("非全", "在职", "part-time", "parttime"),
     # 学位类型
     "学士": ("学士学位", "bachelor degree"),
@@ -214,6 +235,7 @@ __all__ = [
     "AUTOCOMPLETE_FIELDS",
     "AUTOCOMPLETE_OFF",
     "CLAIM_LABELS",
+    "CLAIM_PREFIXES",
     "CONSENT_HINTS",
     "FIELD_DENYLIST",
     "FIELD_EXCLUDE_HINTS",
