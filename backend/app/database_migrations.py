@@ -84,6 +84,26 @@ def snapshot_sqlite_file(source: Path, destination: Path) -> None:
             target_db.commit()
 
 
+def _strip_optimizer_stat_tables(path: Path) -> None:
+    """从快照里删掉 SQLite 优化器统计表（``sqlite_stat1`` 等）。
+
+    ``PRAGMA optimize``/ANALYZE 会在库里维护 ``sqlite_stat*`` 统计表：它们是引擎
+    内部状态而不是用户数据，但留在快照里会被**旧版本**的导入白名单当成"不认识的
+    表"拒收，备份因此失去跨版本兼容。统计信息在恢复后的库里由 optimize 重建，
+    备份里不需要带着。DROP 在 SQLite 里对 stat 表是合法操作。
+    """
+    with closing(sqlite3.connect(path)) as connection:
+        names = {
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        stat_tables = sorted(name for name in names if name.startswith("sqlite_stat"))
+        for name in stat_tables:
+            connection.execute(f'DROP TABLE "{name}"')
+        if stat_tables:
+            connection.commit()
+
+
 def backup_sqlite_database(bind: Engine, output_dir: Path | None = None) -> Path | None:
     """Create a consistent SQLite backup and return its path.
 
@@ -99,6 +119,7 @@ def backup_sqlite_database(bind: Engine, output_dir: Path | None = None) -> Path
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     destination = destination_dir / f"{source.stem}-{timestamp}{source.suffix or '.db'}"
     snapshot_sqlite_file(source, destination)
+    _strip_optimizer_stat_tables(destination)
     logger.info("SQLite 备份已创建 path=%s", destination)
     return destination
 

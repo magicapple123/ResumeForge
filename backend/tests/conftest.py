@@ -19,6 +19,9 @@ _TEST_DIR = Path(tempfile.gettempdir()) / f"resume_forge_test_{os.getpid()}"
 _TEST_DIR.mkdir(parents=True, exist_ok=True)
 _TEST_DB = _TEST_DIR / "resume_forge.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"  # noqa: E402
+# 文件日志只在生产装配时挂：测试进程并发写同一份滚动文件会在 Windows 上触发
+# 轮转竞争（改名时另一进程还握着句柄）。需要验证日志本身的用例自己临时打开。
+os.environ["LOG_FILE_ENABLED"] = "false"  # noqa: E402
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
