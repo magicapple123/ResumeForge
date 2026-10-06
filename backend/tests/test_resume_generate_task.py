@@ -295,6 +295,15 @@ def test_completed_status_and_resume_id_commit_atomically(client, monkeypatch):
     task = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]}).json()
     final = _wait_terminal(client, task["id"])
 
+    # 运行器把 completed 提交之后，工作线程还要再执行一条观察 SELECT 才把结果
+    # 记进 observations——这两步之间只是普通语句边界，CI 负载下工作线程可能恰好
+    # 在 commit 之后被抢占，而轮询线程此刻已经能读到 completed 终态。若拿到终态
+    # 就立刻断言，会误报"spy 未生效"。所以这里等 observations 就绪即返回；
+    # 预算只是安全网（正常情况微秒级就绪），该大就大。
+    deadline = time.monotonic() + 30.0
+    while not observations and time.monotonic() < deadline:
+        time.sleep(0.02)
+
     assert final["status"] == "completed"
     assert final["resume_id"] is not None
     assert observations, "运行器会话未观察到任何 completed 提交，spy 未生效"
