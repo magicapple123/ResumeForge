@@ -10,3 +10,6 @@ pytest-cov==7.1.0
 pytest-xdist==3.8.0
 ruff==0.16.10
 pip-audit==2.10.1
+# Gradual type checking: only app/models + app/schemas are in scope for now
+# (see backend/pyrightconfig.json); extend include as annotations land.
+pyright==1.1.414

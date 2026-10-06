@@ -1,0 +1,19 @@
+{
+  // 渐进类型检查（工程师评审 P1-4）：先钉住类型边界最清晰的两层。
+  // 新增代码按 basic 通过；其余子目录在存量类型注解补齐后逐个加进 include。
+  "include": [
+    "app/models",
+    "app/schemas"
+  ],
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.11",
+  // 本地开发用 backend/.venv；CI 里全局装包时 pyright 会回退到当前解释器的
+  // site-packages（缺失导入只是 warning，不挡门禁——门禁目标是这两层的类型错误）。
+  "venvPath": ".",
+  "venv": ".venv",
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": "none",
+  "exclude": [
+    "**/__pycache__"
+  ]
+}
