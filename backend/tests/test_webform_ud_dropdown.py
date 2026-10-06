@@ -28,6 +28,17 @@ from app.services.webform.custom_select_scripts import (
 )
 
 FRONTEND_NODE_MODULES = Path(__file__).resolve().parents[2] / "frontend" / "node_modules"
+_JSDOM_MODULE = FRONTEND_NODE_MODULES / "jsdom"
+
+
+def _jsdom_available() -> bool:
+    """node 与前端 jsdom 模块都可用才执行真 DOM 契约。
+
+    backend 的 CI 作业不装 frontend 依赖（node_modules 不存在），runner 预装
+    的 node 也不够——require('jsdom') 会直接挂。缺一样就跳过，与 canary
+    的「无受控浏览器跳过」同一惯例。
+    """
+    return shutil.which("node") is not None and _JSDOM_MODULE.is_dir()
 
 # 真机取证 2026-10-06：字节页控件与弹层的形状（类名逐字符保留）。
 _UD_LIST_DROPDOWN = """
@@ -95,8 +106,8 @@ def _page(control: str, *portals: str) -> str:
 
 def _run_jsdom(page: str, script: str) -> str:
     """在 jsdom 里执行一段页面脚本（与后端注入页面的方式一致），返回其返回值。"""
-    if shutil.which("node") is None:  # pragma: no cover - 无 node 的环境跳过真 DOM 契约
-        pytest.skip("node 不可用")
+    if not _jsdom_available():  # pragma: no cover - 无 node 或缺前端依赖的环境跳过真 DOM 契约
+        pytest.skip("node 或 frontend/node_modules/jsdom 不可用")
     runner = f"""
     const {{ JSDOM }} = require({json.dumps(str(FRONTEND_NODE_MODULES / 'jsdom').replace(chr(92), '/'))});
     const dom = new JSDOM({json.dumps(page)}, {{ runScripts: 'dangerously' }});
