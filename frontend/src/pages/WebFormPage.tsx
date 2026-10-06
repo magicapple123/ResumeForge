@@ -59,6 +59,7 @@ import { FillResultCard } from "./webform/FillResultCard";
 import { LiveModeCard } from "./webform/LiveModeCard";
 import { PreviewCard } from "./webform/PreviewCard";
 import { ReadSnapshotCard } from "./webform/ReadSnapshotCard";
+import { RelaxedModeCard } from "./webform/RelaxedModeCard";
 import { WEB_FORM_STATUS_POLL_INTERVAL_MS } from "./webform/constants";
 import { useAiAvailable } from "./webform/useAiAvailable";
 import { useLiveSession } from "./webform/useLiveSession";
@@ -525,6 +526,9 @@ export default function WebFormPage() {
         liveRunning={live?.running}
         onAiEnabledChange={setAiEnabled}
       />
+      {/* 放宽模式快捷入口：与设置页是同一个开关（后端持久化，默认关）。
+          预览每次都会按当前开关重新计算，改完重读表单即可生效。 */}
+      <RelaxedModeCard />
 
       {/* 「智能逐项填表」：与上面的「读取当前表单 → 批量填」并存，不是替代。
           它不做预先快照——点到哪个框才现场匹配，所以不存在"页面一联动序号就失效"。 */}

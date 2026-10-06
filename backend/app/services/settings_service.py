@@ -30,6 +30,7 @@ _SEARCH_CONFIG_KEY = "search_config"
 _REMINDER_POPUP_KEY = "reminder_popup_on_start"
 _ASSISTANT_ORB_KEY = "assistant_orb_enabled"
 _NAVIGATION_VISIBILITY_KEY = "navigation_visibility"
+_WEBFORM_RELAXED_MODE_KEY = "webform_relaxed_mode"
 API_KEY_MASK = "********"
 _RECORD_API_KEY_PREFIX = f"{API_KEY_MASK}:record:"
 
@@ -288,6 +289,39 @@ def save_assistant_orb_setting(db: Session, setting: AssistantOrbSetting) -> Ass
         row.value = serialized
     db.commit()
     return setting
+
+
+# ===== 网申填表放宽模式 =====
+
+
+def get_webform_relaxed_mode(db: Session) -> bool:
+    """读取「网申填表放宽模式」开关；缺失或脏数据退回默认**关**。
+
+    放宽模式会把「只填不点」的一部分选择权交回用户：程序代点自定义下拉等弹层控件、
+    代勾用户逐条确认过的声明项。它改变的是"程序替你做动作"的边界，所以默认必须
+    保持现状（保守），由用户显式开启。
+    """
+    row = db.get(AppSetting, _WEBFORM_RELAXED_MODE_KEY)
+    if row is None:
+        return False
+    try:
+        value = json.loads(row.value)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("网申放宽模式设置数据损坏，已重置为默认关闭")
+        return False
+    return value if isinstance(value, bool) else False
+
+
+def save_webform_relaxed_mode(db: Session, enabled: bool) -> bool:
+    """持久化「网申填表放宽模式」开关。"""
+    row = db.get(AppSetting, _WEBFORM_RELAXED_MODE_KEY)
+    serialized = json.dumps(bool(enabled))
+    if row is None:
+        db.add(AppSetting(key=_WEBFORM_RELAXED_MODE_KEY, value=serialized))
+    else:
+        row.value = serialized
+    db.commit()
+    return bool(enabled)
 
 
 # ===== 导航显示设置 =====

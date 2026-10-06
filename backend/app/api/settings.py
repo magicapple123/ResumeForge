@@ -23,6 +23,7 @@ from ..schemas.setting import (
     NavigationVisibility,
     ReminderPopupSetting,
     SearchConfig,
+    WebFormRelaxedModeSetting,
 )
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
@@ -34,6 +35,7 @@ from ..services.settings_service import (
     get_llm_config,
     get_reminder_popup_on_start,
     get_search_config,
+    get_webform_relaxed_mode,
     list_llm_config_records,
     mask_llm_config,
     resolve_llm_config_api_key,
@@ -43,6 +45,7 @@ from ..services.settings_service import (
     save_navigation_visibility,
     save_reminder_popup_on_start,
     save_search_config,
+    save_webform_relaxed_mode,
     get_navigation_visibility,
 )
 
@@ -148,6 +151,19 @@ def read_assistant_orb(db: Session = Depends(get_db)):
 def write_assistant_orb(payload: AssistantOrbSetting, db: Session = Depends(get_db)):
     # **整模型透传**：这里若只取 `payload.enabled` 落库，新加的 `tips_enabled` 会被静默丢掉。
     return save_assistant_orb_setting(db, payload)
+
+
+@router.get("/webform-relaxed-mode", response_model=WebFormRelaxedModeSetting)
+def read_webform_relaxed_mode(db: Session = Depends(get_db)):
+    """网申填表「放宽模式」（默认关）：代点下拉/弹层与逐条确认过的声明勾选。"""
+    return WebFormRelaxedModeSetting(enabled=get_webform_relaxed_mode(db))
+
+
+@router.put("/webform-relaxed-mode", response_model=WebFormRelaxedModeSetting)
+def write_webform_relaxed_mode(payload: WebFormRelaxedModeSetting, db: Session = Depends(get_db)):
+    return WebFormRelaxedModeSetting(
+        enabled=save_webform_relaxed_mode(db, payload.enabled)
+    )
 
 
 @router.get("/navigation", response_model=NavigationVisibility)

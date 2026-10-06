@@ -151,6 +151,10 @@ def apply_fill(
             # 值对不上页面的选项（例如联动下拉换了内容）——跳过并如实说明，不硬填。
             continue
         mappings.append(mapping)
+    # 按 DOM 顺序写入：级联/依赖控件（省份先于城市、父下拉先于子下拉）只有在父级
+    # 先选中时子级的选项才会出现。放宽模式的代点控件尤其依赖这一点。对纯文本控件
+    # 这只是把写入顺序定死，不改变任何一条的结果。
+    mappings.sort(key=lambda mapping: mapping.control.index)
 
     if not _fill_lock.acquire(blocking=False):
         raise WebFormConflict("另一次填充正在进行，请稍候")

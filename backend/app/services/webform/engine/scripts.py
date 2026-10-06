@@ -1383,7 +1383,9 @@ FOCUS_LISTENER_SCRIPT = "".join(
     "    elSource.style.display = payload.source === 'ai' ? 'inline-block' : 'none';\n",
     "    const canFill = payload.status === 'matched' && payload.value;\n",
     "    elFill.disabled = !canFill;\n",
-    "    elFill.textContent = payload.status === 'filled' ? '\u5df2\u586b\u5165' : '\u586b\u5165';\n",
+    # 放宽模式的「帮我勾选：…」按钮文案由后端随建议下发（accept_label）；
+    # 没有就沿用默认的「填入」。已填入状态仍然优先。
+    "    elFill.textContent = payload.status === 'filled' ? '\u5df2\u586b\u5165' : (payload.accept_label || '\u586b\u5165');\n",
     "    renderAlternatives(payload.alternatives);\n",
     "    renderRelated(payload.related);\n",
     "    panel.style.display = 'flex';\n",

@@ -565,6 +565,52 @@ class FormEngine:
             return "这是个点开弹层的控件（自定义下拉 / 日期选择器一类），需要你自己点选"
         return None
 
+    @staticmethod
+    def relaxed_kind(control: Control) -> str | None:
+        """放宽模式下这个控件允许哪类"代点"；``None`` = 仍保持 blocked。
+
+        这是 ``skip_reason`` 的**放宽模式对照组**（用户显式开启「放宽模式」后生效）：
+        判据与 ``skip_reason`` 用同一批表（``CONSENT_HINTS`` / ``CLAIM_LABELS`` /
+        ``AUTOCOMPLETE_DENY`` / ``FIELD_DENYLIST``），绝不越过那些终局判定。边界：
+
+        - ``confirm``：同意 / 声明类 checkbox——**绝不静默代勾**，只在用户逐条确认后
+          （预览勾选 / 实时点「帮我勾选」）才执行；
+        - ``choice``：事实类 checkbox / radio——还要过"值必须出现在控件自述里"这道
+          闸（调用方负责），纯数字之类对不上就保持 blocked；
+        - ``select``：原生下拉——写入时仍走 ``resolve_select_option`` 严格口径
+          （精确 → 别名 → 包含，纯数字不猜）；
+        - ``popup``：自定义下拉 / 弹层选择器——点开、读选项、严格解析、点选、回读验证。
+
+        **刻意排除**：日期 / 月份的日历类弹层（代点日历极易选错日期，且回读不可靠，
+        "日期选择器与文件上传仍不代做"写进了开关的风险提示）、文件上传、密码 /
+        验证码 / 银行卡（autocomplete 与 denylist 终局判定没有放宽的余地）。
+        只读且无弹层的点选框也不放宽——点不开就没有可读的选项列表，代选无从验证。
+        """
+        if control.type == "file":
+            return None
+        if control.type in ("date", "month"):
+            return None
+        if control.autocomplete in AUTOCOMPLETE_DENY:
+            return None
+        if any(word in control.security_text() for word in FIELD_DENYLIST):
+            return None
+        signature = control.signature()
+        if control.type in ("checkbox", "radio"):
+            for word in CONSENT_HINTS:
+                if word in signature:
+                    return "confirm"
+            label = control.label.strip()
+            if label.startswith("无") and ("经历" in label or "信息" in label):
+                return "confirm"
+            if label in CLAIM_LABELS:
+                return "confirm"
+            return "choice"
+        if control.type == "select":
+            return "select"
+        if control.has_popup:
+            return "popup"
+        return None
+
     @classmethod
     def _rank_controls(
         cls,

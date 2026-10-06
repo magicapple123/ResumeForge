@@ -4,8 +4,15 @@
  * 状态取值与后端 `services/webform/service/` 的常量逐字对应。
  */
 
-/** 预览里一条映射的状态。 */
-export type WebFormItemStatus = "ready" | "low_confidence" | "conflict";
+/**
+ * 预览里一条映射的状态。
+ *
+ * `relaxed_ready` / `needs_confirm` 只在「放宽模式」开启时出现（后端默认关）：
+ * 前者是程序将代点的点选类控件（默认勾选），后者是同意/声明类勾选——**默认不勾**，
+ * 用户勾选后才由程序代点。
+ */
+export type WebFormItemStatus =
+  "ready" | "low_confidence" | "conflict" | "relaxed_ready" | "needs_confirm";
 
 /** 这条映射是怎么来的。与状态正交：AI 命中的行照样可能是 ready 或 conflict。 */
 export type WebFormItemSource = "rule" | "ai";

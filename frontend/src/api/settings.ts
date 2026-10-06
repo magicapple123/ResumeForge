@@ -15,6 +15,7 @@ import type {
   UpdateCheckResult,
   UpdateInstallResult,
   UpdateStatus,
+  WebFormRelaxedModeSetting,
 } from "../types";
 import { ApiError, extractError, getFilenameFromDisposition, request } from "./client";
 
@@ -124,6 +125,18 @@ export function getReminderPopupSetting(): Promise<ReminderPopupSetting> {
 
 export function saveReminderPopupSetting(enabled: boolean): Promise<ReminderPopupSetting> {
   return request("/settings/reminder-popup", { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
+/** 网申填表「放宽模式」：代点下拉/弹层与逐条确认过的声明勾选（默认关）。 */
+export function getWebFormRelaxedMode(): Promise<WebFormRelaxedModeSetting> {
+  return request("/settings/webform-relaxed-mode");
+}
+
+export function saveWebFormRelaxedMode(enabled: boolean): Promise<WebFormRelaxedModeSetting> {
+  return request("/settings/webform-relaxed-mode", {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 export function getAssistantOrbSetting(): Promise<AssistantOrbSetting> {

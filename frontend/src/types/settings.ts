@@ -143,6 +143,16 @@ export interface ReminderPopupSetting {
 }
 
 /**
+ * 网申填表「放宽模式」（默认关）。
+ *
+ * 开启后程序会尝试代点下拉/弹层选项并代勾你逐条确认过的声明项，存在选错可能，
+ * 填完请核对；日期选择器与文件上传仍不代做。
+ */
+export interface WebFormRelaxedModeSetting {
+  enabled: boolean;
+}
+
+/**
  * 「投投」悬浮球的设置（入口与提示标语，默认均开）。
  *
  * **每个后端字段都必须在这里出现**：这个接口是整份替换语义，少声明一个字段就会在

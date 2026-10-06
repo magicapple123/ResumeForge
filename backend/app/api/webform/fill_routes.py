@@ -22,6 +22,7 @@ from ...schemas.webform import (
 )
 from ...services import diagnostics
 from ...services import webform as webform_service
+from ...services.settings_service import get_webform_relaxed_mode
 
 from ._shared import _raise, logger
 
@@ -66,7 +67,12 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
         # 下沉线程池避免阻塞事件循环；db 会话按 resume_template_import 的既有
         # 模式直接作为参数传入线程池。
         data = await run_in_threadpool(webform_service.build_form_data, db)
-        report = await run_in_threadpool(webform_service.build_preview, snapshot, data)
+        # 「放宽模式」是用户设置（默认关）：开着时，点选类控件若匹配到字段+值会以
+        # 「放宽代选」/「需你确认」进预览行。关着时 build_preview 行为与从前一致。
+        relaxed = await run_in_threadpool(get_webform_relaxed_mode, db)
+        report = await run_in_threadpool(
+            webform_service.build_preview, snapshot, data, relaxed=relaxed
+        )
         # 「要记下来吗」的提案。**必须在 db.close() 之前算**——它要查库，而下面那行
         # 为了 await 模型调用已经把连接关了。`data` 复用上面那一份，不再查第二次。
         learning = await run_in_threadpool(

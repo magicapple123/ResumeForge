@@ -24,6 +24,16 @@ const STATUS_META: Record<WebFormItemStatus, { color: string; label: string; hin
     label: "冲突",
     hint: "页面上已经有值，默认保留它（不覆盖你自己填的内容）",
   },
+  relaxed_ready: {
+    color: "processing",
+    label: "放宽代选",
+    hint: "放宽模式：这一项的值由点选产生，程序将代点并回读核对，填完请确认",
+  },
+  needs_confirm: {
+    color: "warning",
+    label: "需你确认",
+    hint: "同意/声明类勾选：默认不勾，你勾选后才由程序代点——勾上即视为你本人同意",
+  },
 };
 
 interface Props {
@@ -137,7 +147,10 @@ export default function WebFormPreviewTable({
       columns={columns}
       dataSource={items}
       pagination={false}
-      rowClassName={(item) => (item.status === "conflict" ? "webform-row-conflict" : "")}
+      rowClassName={(item) =>
+        // 「需你确认」行（同意/声明类）用淡警示底色与事实类区分：勾上它等于代你表态。
+        item.status === "needs_confirm" ? "webform-row-needs-confirm" : ""
+      }
       locale={{ emptyText: "这一页没有能自动填的字段" }}
     />
   );
