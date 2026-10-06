@@ -15,6 +15,7 @@ from .data_tools import (
     _tool_import_candidate_job,
     _tool_list_candidate_jobs,
     _tool_list_claims,
+    _tool_list_format_templates,
     _tool_list_materials,
     _tool_list_skills,
     _tool_update_candidate_job,
@@ -416,5 +417,16 @@ DATA_TOOLS: tuple[Tool, ...] = (
         },
         handler=_tool_update_format_template,
         writes=True,
+    ),
+    Tool(
+        name="list_format_templates",
+        description=(
+            "列出用户自制的格式模板（id、名称、说明、版式参数如强调色/行高/页边距）。"
+            "用户问「我有哪些格式模板」「之前那个模板参数是什么」时用它，"
+            "也用于在 update_format_template 之前确认要改哪一个。"
+            "内置版式与样式模板（完整 HTML）不在此列，它们只能在「工作台」页查看。"
+        ),
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler=_tool_list_format_templates,
     ),
 )

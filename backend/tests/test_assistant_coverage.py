@@ -50,17 +50,19 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
         "import_candidate_job",
     ),
     # ===== 简历 =====
-    "resume_record": ("list_resumes", "get_resume", "update_resume_layout"),
-    "resume_template": ("create_format_template", "update_format_template"),
+    "resume_record": ("list_resumes", "get_resume", "update_resume_layout", "update_resume"),
+    "resume_template": (
+        "create_format_template",
+        "update_format_template",
+        "list_format_templates",
+    ),
     "resume_generate_task": "不暴露：生成任务的实时进度（已收到多少字符、在做什么）。"
     "它是瞬时的过程状态，界面上已经能看到；助手在任务结束后读的是生成好的简历本身。",
     "share_package": ("list_share_packages",),
     # ===== 投递 =====
     "apply_queue_item": ("list_apply_queue",),
-    "apply_task": "不暴露：一次投递批次的执行记录。助手不代为发起投递（那一步必须用户点击），"
-    "也不需要回放执行日志；队列状态用 list_apply_queue 就能答。",
-    "apply_task_item": "不暴露：与 apply_task 同源的单条执行明细，理由同上。"
-    "（用户可以在「投递记录」里删除它，但那是界面动作，助手不代为删除。）",
+    "apply_task": ("list_apply_records",),
+    "apply_task_item": ("list_apply_records",),
     "web_form_fill_record": "不暴露：网申填充记录里**含用户填进别人页面的真实值**"
     "（证件号、手机号）。助手既不读也不写它——一旦暴露，这些值会随用户的提问进入对话上下文"
     "并被发往模型服务商，与「只发字段名、不发值」的既有隐私边界直接冲突。"
@@ -83,7 +85,7 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
         "update_application_track",
     ),
     "referral": ("list_referrals",),
-    "reminder": ("list_reminders", "create_reminder"),
+    "reminder": ("list_reminders", "create_reminder", "update_reminder"),
     # ===== 事实台账 =====
     "claim_record": ("list_claims", "get_claim", "create_claim", "update_claim"),
     # ===== 资料箱、知识库、技能、题库 =====

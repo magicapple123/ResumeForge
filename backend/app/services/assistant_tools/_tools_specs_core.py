@@ -150,7 +150,7 @@ CORE_TOOLS: tuple[Tool, ...] = (
     ),
     Tool(
         name="update_job",
-        description="修改已有岗位的字段（只传要改的那些）。",
+        description="修改已有岗位的字段（只传要改的那些）。收藏/取消收藏用 favorite。",
         parameters={
             "type": "object",
             "properties": {
@@ -166,6 +166,10 @@ CORE_TOOLS: tuple[Tool, ...] = (
                 "source_url": {"type": "string"},
                 "posted_at": {"type": "string"},
                 "status": {"type": "string", "enum": list(JOB_STATUSES)},
+                "favorite": {
+                    "type": "boolean",
+                    "description": "可选，收藏（true）或取消收藏（false）该岗位",
+                },
                 "note": {"type": "string"},
             },
             "required": ["job_id"],

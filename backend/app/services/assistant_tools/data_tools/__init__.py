@@ -33,6 +33,7 @@ from .format_templates import (
     _format_template_or_error as _format_template_or_error,
     _format_tool_properties as _format_tool_properties,
     _tool_create_format_template as _tool_create_format_template,
+    _tool_list_format_templates as _tool_list_format_templates,
     _tool_update_format_template as _tool_update_format_template,
 )
 from .materials import (

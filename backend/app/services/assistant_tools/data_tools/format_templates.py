@@ -14,6 +14,7 @@ from ...resume.resume_template_store import (
     create_user_template,
     find_by_name as find_template_by_name,
     get_user_template,
+    list_user_templates,
     update_user_template,
 )
 from ...resume.resume_templates import FORMAT_FIELDS, validated_format_config
@@ -106,6 +107,38 @@ def _format_template_or_error(db: Session, arguments: dict) -> ResumeTemplate:
             "样式模板的 HTML 请到「工作台」页修改"
         )
     return template
+
+
+def _tool_list_format_templates(db: Session, _arguments: dict) -> ToolResult:
+    """列出**自制格式模板**的清单（id/名称/说明/版式参数），只读。
+
+    用户问「我有哪些格式模板」「之前调的行高在哪个模板里」时先看这份清单再决定
+    ``update_format_template`` 改哪一个。内置版式不在数据库里，列不出来——
+    这里如实说明，免得模型把内置版式当成可改的自制模板。
+    """
+    templates = list_user_templates(db, kind=TEMPLATE_KIND_FORMAT)
+    rows = [
+        {
+            "id": template.id,
+            "name": template.name,
+            "description": template.description,
+            "enabled": template.enabled,
+            "config": template.config or {},
+            "updated_at": template.updated_at.isoformat() if template.updated_at else None,
+        }
+        for template in templates
+    ]
+    payload = {
+        "总数": len(rows),
+        "格式模板": rows,
+        "说明": "这里只列自制的格式模板（版式参数）；样式模板（完整 HTML）与内置版式不在此列，"
+        "后者只能在「工作台」页查看。",
+    }
+    return ToolResult(
+        text=json.dumps(payload, ensure_ascii=False),
+        summary=f"查看了 {len(rows)} 个格式模板",
+        link="/skills",
+    )
 
 
 def _tool_create_format_template(db: Session, arguments: dict) -> ToolResult:
