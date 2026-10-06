@@ -74,6 +74,7 @@ from .service import (
     apply_fill,
     recognize_field,
     related_entries,
+    relaxed_suggestion,
     resolve_value_for,
     suggest_for,
     Suggestion,
@@ -134,6 +135,7 @@ class LiveSession(LiveRememberMixin):
         autofill_data_loader: Callable[[], dict[str, str]] | None = None,
         memory_targets: list[dict[str, Any]] | None = None,
         memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
+        relaxed_mode_loader: Callable[[], bool] | None = None,
     ) -> None:
         self._client = client
         self._data = dict(data)
@@ -154,6 +156,9 @@ class LiveSession(LiveRememberMixin):
         self._data_loader = data_loader
         # 悬浮球的整页快捷填充必须使用主界面的可复用资料口径；逐框建议仍可包含“本次”资料。
         self._autofill_data_loader = autofill_data_loader
+        # 「放宽模式」是用户设置（默认关）：每次聚焦时现读，设置页改完立刻生效，
+        # 不需要重启会话。loader 为 None（单测/未接线）⇒ 恒为关。
+        self._relaxed_mode_loader = relaxed_mode_loader
         self._engine = FormEngine()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -257,6 +262,19 @@ class LiveSession(LiveRememberMixin):
     ) -> None:
         """替换悬浮球整页快捷填充使用的批量资料读取回调。"""
         self._autofill_data_loader = loader
+
+    def set_relaxed_mode_loader(self, loader: Callable[[], bool] | None) -> None:
+        """替换「放宽模式」开关的读取回调（每次聚焦现读，改动即时生效）。"""
+        self._relaxed_mode_loader = loader
+
+    def _relaxed_enabled(self) -> bool:
+        if self._relaxed_mode_loader is None:
+            return False
+        try:
+            return bool(self._relaxed_mode_loader())
+        except Exception:  # noqa: BLE001 - 读不到开关就按关处理，面板回到保守文案
+            logger.debug("网申填表：读取放宽模式开关失败，按关闭处理")
+            return False
 
     def set_client(self, client: CdpClient) -> None:
         """切换到当前浏览器客户端。
@@ -553,6 +571,24 @@ class LiveSession(LiveRememberMixin):
         suggestion = self._suggest_custom_field(control, data) or suggest_for(
             control, data, engine=self._engine
         )
+        # 放宽模式（用户设置，默认关）：对 blocked 的点选控件给「代点选择」建议或
+        # 「帮我勾选」按钮。建议仍是**建议**——用户点按钮这个动作才是确认；日期
+        # 选择器、文件上传等 ``relaxed_kind`` 判为 None 的控件不会走到这里。
+        if suggestion.status == "blocked" and self._relaxed_enabled():
+            relaxed = relaxed_suggestion(control, data, engine=self._engine)
+            if relaxed is not None:
+                self._publish(
+                    {
+                        "status": relaxed.status,
+                        "remember_field_key": relaxed.field,
+                        "field_label": relaxed.field_label,
+                        "value": relaxed.value,
+                        "note": relaxed.note,
+                        "source": SOURCE_RULE,
+                        "accept_label": relaxed.accept_label,
+                    }
+                )
+                return
         if suggestion.status != "unmatched":
             self._publish(
                 {
@@ -823,6 +859,8 @@ class LiveSession(LiveRememberMixin):
             "remember_field_key": str(panel.get("remember_field_key", "")),
             "alternatives": list(panel.get("alternatives", [])),
             "remember_pending": panel.get("remember_pending"),
+            # 放宽模式的「帮我勾选：…」按钮文案。空串 = 页面脚本显示默认的「填入」。
+            "accept_label": str(panel.get("accept_label", "")),
             # 「可能是这几个」。**跟着每一次推送走**：面板上那几个状态（给出建议 / 认不出 /
             # AI 在想）都会用到它，漏一次那一栏就会空掉。
             "related": list(panel.get("related", self._related)),
@@ -871,7 +909,13 @@ class LiveSession(LiveRememberMixin):
         )
         outcome = results[0] if results else None
         ok = outcome is not None and outcome.status == "filled"
-        note = "已填入，请核对" if ok else (outcome.detail if outcome else "没能写入")
+        if ok:
+            note = "已填入，请核对"
+        else:
+            detail = outcome.detail if outcome else "没能写入"
+            # 放宽代点失败的失败形态与"写值失败"不同（弹层没打开/没有匹配选项/没勾上），
+            # 把原因如实写成「代选失败：…」，用户才知道这是程序代点没成，不是资料填错。
+            note = f"代选失败：{detail}" if FormEngine.relaxed_kind(control) else detail
 
         # 「已填入」之后不再留候选——那几个备选是针对"该填什么"的，已经填完了。
         self._publish(
@@ -992,6 +1036,7 @@ def start_live(
     memory_targets: list[dict[str, Any]] | None = None,
     memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
     target_clients_loader: Callable[[], list[tuple[str, CdpClient]]] | None = None,
+    relaxed_mode_loader: Callable[[], bool] | None = None,
 ) -> LiveSession | MultiLiveSession:
     """开一次会话。**已经在跑就直接返回它**——注意 ``provider`` / ``ai_enabled`` 也一并
     被忽略，AI 开关是"开启时"的设置，改动要停掉再开才生效（界面上有这句提示）。"""
@@ -1002,6 +1047,7 @@ def start_live(
             _session.update_data(data, catalog)
             _session.set_data_loader(data_loader)
             _session.set_autofill_data_loader(autofill_data_loader)
+            _session.set_relaxed_mode_loader(relaxed_mode_loader)
             _session.set_memory_choice_required(require_memory_choice)
             _session.set_memory_targets_loader(memory_targets_loader)
             if memory_targets is not None:
@@ -1023,6 +1069,7 @@ def start_live(
             autofill_data_loader=autofill_data_loader,
             memory_targets=memory_targets,
             memory_targets_loader=memory_targets_loader,
+            relaxed_mode_loader=relaxed_mode_loader,
             **(
                 {"target_clients_loader": target_clients_loader}
                 if target_clients_loader is not None

@@ -69,12 +69,20 @@ from .models import (
     SOURCE_RULE,
     STATUS_CONFLICT,
     STATUS_LOW_CONFIDENCE,
+    STATUS_NEEDS_CONFIRM,
     STATUS_READY,
+    STATUS_RELAXED_READY,
     FillSelection,
     PendingItem,
     PreviewItem,
     PreviewReport,
     default_selections,
+)
+from .relaxed import (
+    CONFIRM_NOTE as CONFIRM_NOTE,
+    RELAXED_NOTE as RELAXED_NOTE,
+    relaxed_preview_item,
+    relaxed_suggestion,
 )
 from .preview import (
     _PAGE_INFO_SCRIPT as _PAGE_INFO_SCRIPT,
@@ -104,7 +112,9 @@ __all__ = [
     "SOURCE_RULE",
     "STATUS_CONFLICT",
     "STATUS_LOW_CONFIDENCE",
+    "STATUS_NEEDS_CONFIRM",
     "STATUS_READY",
+    "STATUS_RELAXED_READY",
     "FillSelection",
     "PendingItem",
     "PreviewItem",
@@ -119,6 +129,8 @@ __all__ = [
     "list_fields",
     "read_snapshot",
     "recognize_field",
+    "relaxed_preview_item",
+    "relaxed_suggestion",
     "resolve_value_for",
     "suggest_for",
 ]

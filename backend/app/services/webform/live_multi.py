@@ -45,6 +45,7 @@ class MultiLiveSession:
         memory_targets: list[dict[str, Any]] | None = None,
         memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
         target_clients_loader: Callable[[], list[tuple[str, CdpClient]]] | None = None,
+        relaxed_mode_loader: Callable[[], bool] | None = None,
     ) -> None:
         self._initial_client = initial_client
         self._initial_client_used = False
@@ -59,6 +60,7 @@ class MultiLiveSession:
         self._memory_targets = list(memory_targets or [])
         self._memory_targets_loader = memory_targets_loader
         self._target_clients_loader = target_clients_loader
+        self._relaxed_mode_loader = relaxed_mode_loader
         self._sessions: dict[str, LiveSession] = {}
         self._clients: dict[str, CdpClient] = {}
         self._control_sequences: dict[str, int] = {}
@@ -94,7 +96,12 @@ class MultiLiveSession:
             autofill_data_loader=self._autofill_data_loader,
             memory_targets=self._memory_targets,
             memory_targets_loader=self._memory_targets_loader,
+            relaxed_mode_loader=self._relaxed_mode_loader,
         )
+
+    def set_relaxed_mode_loader(self, loader: Callable[[], bool] | None) -> None:
+        """替换「放宽模式」开关读取回调，随新标签页会话生效。"""
+        self._relaxed_mode_loader = loader
 
     @staticmethod
     def _close_client(client: CdpClient) -> None:

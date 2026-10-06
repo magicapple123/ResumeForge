@@ -273,6 +273,16 @@ class ReminderPopupSetting(BaseModel):
     enabled: bool = True
 
 
+class WebFormRelaxedModeSetting(BaseModel):
+    """网申填表「放宽模式」开关（默认关）。
+
+    开启后程序会尝试代点下拉/弹层选项并代勾用户逐条确认过的声明项；日期选择器与
+    文件上传仍不代做。边界描述见 ``engine.core.relaxed_kind``。
+    """
+
+    enabled: bool = False
+
+
 class AssistantOrbSetting(BaseModel):
     """「投投」悬浮球的用户设置（入口默认开，提示标语默认弹）。"""
 

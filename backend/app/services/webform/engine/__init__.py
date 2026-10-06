@@ -101,6 +101,10 @@ from .writers import (
     _set_value_script as _set_value_script,
 )
 
+# ``relaxed_kind`` 定义在 ``FormEngine`` 上（与 ``skip_reason`` 对称），这里给一个
+# 模块级别的名字，供服务层 ``from ..engine import relaxed_kind`` 使用。
+relaxed_kind = FormEngine.relaxed_kind
+
 logger = logging.getLogger(__name__)
 
 __all__ = [

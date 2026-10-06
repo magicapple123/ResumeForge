@@ -9,6 +9,15 @@ STATUS_READY = "ready"
 STATUS_LOW_CONFIDENCE = "low_confidence"
 STATUS_CONFLICT = "conflict"
 
+# 「放宽模式」新增的两档（默认关，见 settings_service.get_webform_relaxed_mode）：
+# - relaxed_ready：用户开了放宽模式后，点选类控件匹配到字段+值，填充时由程序代点
+#   （下拉 / 弹层严格解析 + 回读验证；事实类 checkbox 同级）。**默认勾选**——与
+#   ready 同一档信任，用户仍可逐行取消。
+# - needs_confirm：同意 / 声明类勾选——**绝不静默代勾**，默认不勾，样式区别于事实类，
+#   用户勾选后填充阶段才代点。
+STATUS_RELAXED_READY = "relaxed_ready"
+STATUS_NEEDS_CONFIRM = "needs_confirm"
+
 # 单选/复选的处理方式：**一律不自动填**（"只填不点"，2026-10-05）。
 #
 # 规则本身不在这里，而在 `engine.skip_reason()`——它先按**控件类型**挡下所有值由
@@ -83,15 +92,20 @@ class FillSelection:
 
 
 def default_selections(report: PreviewReport) -> list[FillSelection]:
-    """预览里**默认勾选**的那些条（冲突项与 AI 建议不在其中）。
+    """预览里**默认勾选**的那些条（冲突项、AI 建议与「需确认」声明项不在其中）。
 
     AI 建议默认不勾，理由与冲突项同源但方向相反：规则命中至少证明页面上有字对上了，
     AI 命中可能纯粹是上下文推的。**默认不勾的失败形态是"我忘了勾"，默认勾的失败形态是
     "悄悄写了个错值"**——后者正是这个功能一直在防的那类。界面上另给一个「全选 AI 建议」，
     用户想批量采纳仍然只是一次点击。
+
+    放宽模式的 ``needs_confirm``（同意 / 声明类）同样默认不勾：代勾等于替用户做出
+    法律意义上的表态，必须是**用户勾了这一行**这个显式动作才授权代点。
     """
     return [
         FillSelection(index=item.index, field=item.field, value=item.value)
         for item in report.items
-        if item.status != STATUS_CONFLICT and item.source != SOURCE_AI
+        if item.status != STATUS_CONFLICT
+        and item.source != SOURCE_AI
+        and item.status != STATUS_NEEDS_CONFIRM
     ]

@@ -34,6 +34,7 @@ from .models import (
     PreviewItem,
     PreviewReport,
 )
+from .relaxed import relaxed_preview_item
 from .suggest import _describe, recognize_field, relative_hint
 
 logger = logging.getLogger(__name__)
@@ -66,8 +67,15 @@ def build_preview(
     data: dict[str, str],
     *,
     engine: FormEngine | None = None,
+    relaxed: bool = False,
 ) -> PreviewReport:
-    """把"资料 vs 页面控件"算成一份可核对的预览（**纯计算，不碰页面**）。"""
+    """把"资料 vs 页面控件"算成一份可核对的预览（**纯计算，不碰页面**）。
+
+    ``relaxed`` 是用户在设置里显式开启的「放宽模式」（默认关）：开启时，``skip_reason``
+    挡下的点选类控件若能匹配到字段+值，就不再进 ``blocked``，而是以「放宽代选」
+    （默认勾选）或「需你确认」（同意/声明类，默认不勾）进入预览行。判类与取值在
+    ``service.relaxed``；开关关闭时本函数行为与从前**完全一致**。
+    """
     engine = engine or FormEngine()
     result: MatchResult = engine.match_fields(snapshot.controls, data)
 
@@ -151,6 +159,12 @@ def build_preview(
         (report.missing_data if field_name else report.unrecognized).append(pending)
 
     for note in result.skipped:
+        if relaxed:
+            # 放宽模式：blocked 集合内部放行——能匹配到字段+值的点选类控件进预览行，
+            # 整理不出的（含文件 / 日期 / 密码类等终局判定）仍留在 blocked 并保持原文案。
+            if item := relaxed_preview_item(note.control, data):
+                report.items.append(item)
+                continue
         report.blocked.append(
             PendingItem(
                 index=note.control.index,

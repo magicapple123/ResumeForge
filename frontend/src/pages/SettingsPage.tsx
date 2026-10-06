@@ -10,6 +10,7 @@ import AssistantOrbCard from "../components/settings/AssistantOrbCard";
 import LLMConfigCard from "../components/settings/LLMConfigCard";
 import LLMConfigRecordsCard from "../components/settings/LLMConfigRecordsCard";
 import ReminderPopupCard from "../components/settings/ReminderPopupCard";
+import WebFormRelaxedModeCard from "../components/settings/WebFormRelaxedModeCard";
 import SearchCard from "../components/settings/SearchCard";
 import SkillsCard from "../components/settings/SkillsCard";
 import UpdateCard from "../components/settings/UpdateCard";
@@ -285,6 +286,7 @@ export default function SettingsPage() {
                 <NavigationSettingsCard />
                 <AssistantOrbCard />
                 <ReminderPopupCard />
+                <WebFormRelaxedModeCard />
                 <UpdateCard />
               </>
             ),

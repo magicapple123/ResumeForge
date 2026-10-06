@@ -18,6 +18,7 @@ from ...schemas.webform import (
 )
 from ...services import diagnostics
 from ...services import webform as webform_service
+from ...services.settings_service import get_webform_relaxed_mode
 
 from ._shared import _raise
 
@@ -122,6 +123,14 @@ def _start_live_session(
         finally:
             session.close()
 
+    def load_relaxed_mode() -> bool:
+        """「放宽模式」开关每次聚焦现读：设置页改完立刻生效，不用重启会话。"""
+        session = SessionLocal()
+        try:
+            return get_webform_relaxed_mode(session)
+        finally:
+            session.close()
+
     def load_memory_targets() -> list[dict[str, Any]]:
         """每次打开逐框记忆编辑器时读取最新的完整资料目标。"""
         session = SessionLocal()
@@ -209,6 +218,7 @@ def _start_live_session(
             memory_targets=memory_targets,
             memory_targets_loader=load_memory_targets,
             target_clients_loader=load_live_clients,
+            relaxed_mode_loader=load_relaxed_mode,
         )
     except webform_service.WebFormError as exc:
         _raise(exc)

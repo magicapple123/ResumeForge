@@ -96,6 +96,9 @@ class Suggestion:
     field_label: str = ""
     value: str = ""
     note: str = ""
+    # 放宽模式专用：主按钮的自定义文案（如「帮我勾选：我已阅读并同意隐私政策」）。
+    # 空串 = 沿用默认的「填入」。页面脚本只认这个键，没有就显示默认文案。
+    accept_label: str = ""
 
 
 def suggest_for(

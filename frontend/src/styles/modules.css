@@ -1467,3 +1467,9 @@
   border: 1px solid #f0f0f0;
   border-radius: 8px;
 }
+
+/* 网申预览表「需你确认」行（同意/声明类勾选，放宽模式）：淡警示底色，
+   与事实类行区分——勾上它等于代你做出表态，视觉上不能和普通值混在一起。 */
+.webform-row-needs-confirm > td {
+  background: #fffbe6;
+}
