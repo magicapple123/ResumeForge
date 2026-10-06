@@ -6,7 +6,7 @@
 
 ## 开始之前
 
-- Python 3.10 或更高版本。
+- Python 3.11 或更高版本。
 - Node.js 20.19.0 或更高版本，并使用随 Node 提供的 npm。
 - Windows 中文环境运行 Python 命令前建议设置 `PYTHONUTF8=1`。
 - 不要提交 `.env`、数据库、真实简历、API Key、构建产物、虚拟环境或其他个人数据。

@@ -148,7 +148,7 @@ mkdir -p "$RF_RUNTIME_DIR"
 # shellcheck source=../macos/lib/node.sh
 . "$RF_TEST_ROOT/scripts/macos/lib/node.sh"
 
-rf_expect_equal "$RF_PYTHON_MIN_MAJOR.$RF_PYTHON_MIN_MINOR" "3.10" "Python 版本窗口下界是 3.10"
+rf_expect_equal "$RF_PYTHON_MIN_MAJOR.$RF_PYTHON_MIN_MINOR" "3.11" "Python 版本窗口下界是 3.11"
 rf_expect_equal "$RF_PYTHON_MAX_MAJOR.$RF_PYTHON_MAX_MINOR" "3.13" "Python 版本窗口上界是 3.13"
 rf_expect_equal "$RF_NODE_MIN_VERSION" "20.19.0" "Node.js 最低版本是 20.19.0"
 rf_expect_equal "$RF_NODE_BOOTSTRAP_VERSION" "24.19.0" "便携版 Node.js 钉在 24.19.0"
@@ -230,7 +230,7 @@ venv_config="$rf_test_tmp/pyvenv.cfg"
 printf 'home = /opt/tools/python\nversion = 3.12.14\n' >"$venv_config"
 if rf_venv_version_supported "$venv_config"; then rf_check 0 "3.12 的 venv 可以复用"; else rf_check 1 "3.12 的 venv 可以复用"; fi
 printf 'home = /opt/tools/python\nversion = 3.10.21\n' >"$venv_config"
-if rf_venv_version_supported "$venv_config"; then rf_check 0 "3.10 的 venv 可以复用"; else rf_check 1 "3.10 的 venv 可以复用"; fi
+if rf_venv_version_supported "$venv_config"; then rf_check 1 "3.10 的 venv 已低于窗口下界，必须被拒绝"; else rf_check 0 "3.10 的 venv 已低于窗口下界，必须被拒绝"; fi
 printf 'home = /opt/tools/python\nversion = 3.13.15\n' >"$venv_config"
 if rf_venv_version_supported "$venv_config"; then rf_check 0 "3.13 的 venv 可以复用"; else rf_check 1 "3.13 的 venv 可以复用"; fi
 printf 'home = /opt/tools/python\nversion = 3.14.7\n' >"$venv_config"

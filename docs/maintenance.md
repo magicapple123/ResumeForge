@@ -106,7 +106,7 @@ ResumeForge/
 ## 3. 守卫与红线
 
 - **覆盖率 80%** 只在全量时开 `--cov`；子集跑覆盖率是假失败。
-- **CI 10 个作业**：Backend ×3（py310/312/win）、Frontend、Dependency audit、macOS ×3
+- **CI 10 个作业**：Backend ×3（py311/313/win）、Frontend、Dependency audit、macOS ×3
   （launcher guards / portable runtimes / end-to-end）、Windows end-to-end、Windows portable runtimes。
   macOS 三件是**唯一的真机验证途径**，改了 macOS 侧要在交付说明里写明期望它们验证什么。
   `windows-runtimes` 与 macOS 那个同名作业是镜像：**真的下载**启动器要用的便携版 Node

@@ -9,14 +9,14 @@
 # 一个"双击就能用"的启动器不该在最开头弹管理员授权；便携版完全在用户目录里，
 # 删掉项目目录就等于卸载干净。
 #
-# 版本窗口：与 Windows 侧同一组常量（3.10 ~ 3.13）。backend/requirements.txt 的钉版
+# 版本窗口：与 Windows 侧同一组常量（3.11 ~ 3.13）。backend/requirements.txt 的钉版
 # 没有 Python 3.14 的轮子，放宽上界等于让用户去编译 pydantic-core（需要 Rust）。
 # 有意**不**把 /usr/bin/python3 当候选：macOS 自带的那条是 Xcode 命令行工具的
 # 转调桩，命令行工具没装时运行它会**弹出一个图形安装提示**——在一个无人值守的
 # 启动脚本里弹窗是最糟的失败方式；而且它对应的是 3.9，本来就不在窗口里。
 
 : "${RF_PYTHON_MIN_MAJOR:=3}"
-: "${RF_PYTHON_MIN_MINOR:=10}"
+: "${RF_PYTHON_MIN_MINOR:=11}"
 : "${RF_PYTHON_MAX_MAJOR:=3}"
 : "${RF_PYTHON_MAX_MINOR:=13}"
 : "${RF_PYTHON_BOOTSTRAP_VERSION:=3.12.14}"
@@ -62,7 +62,7 @@ rf_find_system_python() {
 
     candidates=""
     # 1) PATH 上带版本号的名字先试：它们比裸 python3 更可能正好是窗口内的版本。
-    for name in python3.13 python3.12 python3.11 python3.10 python3; do
+    for name in python3.13 python3.12 python3.11 python3; do
         if command_exists "$name"; then
             candidates="$candidates $(command -v "$name")"
         fi
@@ -70,13 +70,13 @@ rf_find_system_python() {
     # 2) Homebrew（Apple 芯片与 Intel 两种前缀）与 pyenv 的常见位置。
     #    Explorer/Finder 启动的进程不一定继承 shell 的 PATH，所以必须显式列。
     for prefix in /opt/homebrew /usr/local; do
-        for minor in 13 12 11 10; do
+        for minor in 13 12 11; do
             candidates="$candidates $prefix/opt/python@3.$minor/bin/python3.$minor"
         done
         candidates="$candidates $prefix/bin/python3"
     done
     if [ -n "${HOME:-}" ] && [ -d "$HOME/.pyenv/versions" ]; then
-        for pyenv_python in "$HOME"/.pyenv/versions/3.1[0-3]*/bin/python3; do
+        for pyenv_python in "$HOME"/.pyenv/versions/3.1[1-3]*/bin/python3; do
             candidates="$candidates $pyenv_python"
         done
     fi

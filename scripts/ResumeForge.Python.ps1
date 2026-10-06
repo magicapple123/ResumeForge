@@ -37,7 +37,7 @@ function Test-VenvVersionSupported {
     # pyvenv.cfg records the interpreter that built the environment. A venv
     # created by an out-of-window interpreter can never install the pinned
     # wheels, so reusing it makes every run fail the same way. Compare
-    # major.minor only: the file writes "3.12.2", the window is 3.10..3.13.
+    # major.minor only: the file writes "3.12.2", the window is 3.11..3.13.
     if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
         return $false
     }
@@ -372,7 +372,7 @@ function Ensure-SystemPython {
             "  1) 到 https://www.python.org/downloads/windows/ 手动安装 $(Format-PythonWindow)`n" +
             "     （安装时务必勾选 Add python.exe to PATH）；`n" +
             "  2) 装完关掉这个窗口，重新双击 start.cmd。`n" +
-            "注意：本项目目前只支持 Python 3.10 ~ 3.13，3.14 及更新版本还装不上依赖。")
+            "注意：本项目目前只支持 Python 3.11 ~ 3.13，3.14 及更新版本还装不上依赖。")
     }
 
     Refresh-ProcessPath
@@ -380,7 +380,7 @@ function Ensure-SystemPython {
     if ($null -eq $systemPython) {
         throw ("Python 安装程序跑完了，但系统里仍然找不到可用的 Python $(Format-PythonWindow)。`n" +
             "最常见的原因有两个：`n" +
-            "  1) 本项目的依赖还没有 Python 3.14 的现成包，所以只支持 3.10 ~ 3.13；`n" +
+            "  1) 本项目的依赖还没有 Python 3.14 的现成包，所以只支持 3.11 ~ 3.13；`n" +
             "  2) Windows 自带的「应用执行别名」把 python 指向了 Microsoft Store。`n" +
             "怎么办：`n" +
             "  1) 关掉这个窗口，重新双击 start.cmd（安装后需要新进程才能看到新装的 Python）；`n" +

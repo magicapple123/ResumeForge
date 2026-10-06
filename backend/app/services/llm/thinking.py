@@ -359,8 +359,8 @@ async def probe_thinking(config: LLMConfig, *, seconds: float = _PROBE_SECONDS) 
     """实发一次最小请求，看这个端点接不接受思考参数、有没有真的思考。
 
     用**最便宜的档位**、只取一个字，并且看到思考内容就立刻收手（不把整段生成完）。
-    逐帧限时用 ``asyncio.wait_for`` 而不是 ``asyncio.timeout``：后者要 Python 3.11，
-    而本项目承诺 3.10 起可用。
+    逐帧限时用 ``asyncio.wait_for`` 而不是 ``asyncio.timeout``：两者行为等价，
+    前者在更老的写法资料里更常见，没有别的原因。
     """
     from . import create_provider  # 延迟导入：provider 反向引用本模块，模块级会成环
 

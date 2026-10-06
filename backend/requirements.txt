@@ -8,7 +8,7 @@ starlette==1.7.0
 # Multipart form parsing for the referral note-image upload endpoint.
 python-multipart==0.0.32
 uvicorn[standard]==0.54.0
-sqlalchemy==2.0.54
+sqlalchemy==2.1.3
 pydantic==2.13.5
 pydantic-settings==2.9.1
 httpx==0.28.1
@@ -21,9 +21,10 @@ pillow==12.3.0
 pypdf==6.19.0
 # Server-side PDF export: fpdf2 embeds a system CJK font so the resume PDF can be
 # downloaded directly. fonttools is its font-parsing backend; pinning it keeps
-# the first-run install reproducible.
+# the first-run install reproducible. 4.66+ requires Python >=3.11, which is
+# the repo floor since 3.10 went EOL (2026-10).
 fpdf2==2.8.9
-fonttools==4.65.0
+fonttools==4.66.1
 # Browser automation for the apply center: the CDP client talks to a user's real
 # Chrome/Edge over the DevTools WebSocket. Pure Python (no compiler, has wheels),
 # and the HTTP side reuses the existing httpx dependency.

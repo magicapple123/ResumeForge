@@ -8,7 +8,7 @@
 [![Release](https://img.shields.io/github/v/release/magicapple123/ResumeForge?label=release&color=2f81f7)](https://github.com/magicapple123/ResumeForge/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/magicapple123/ResumeForge?style=flat&logo=github)](https://github.com/magicapple123/ResumeForge/stargazers)
-[![Python](https://img.shields.io/badge/Python-3.10--3.13-3776AB?logo=python&logoColor=white)](docs/user-guide.md)
+[![Python](https://img.shields.io/badge/Python-3.11--3.13-3776AB?logo=python&logoColor=white)](docs/user-guide.md)
 [![Node.js](https://img.shields.io/badge/Node.js-20.19%2B-339933?logo=nodedotjs&logoColor=white)](docs/user-guide.md)
 [![Tests](https://img.shields.io/badge/tests-4%2C000%2B%20passing-success)](.github/workflows/ci.yml)
 
@@ -296,7 +296,7 @@ git clone https://github.com/magicapple123/ResumeForge.git
 cd ResumeForge
 ```
 
-**环境要求**：Windows 10/11 或 macOS 13+；Python 3.10 – 3.13、Node.js ≥ 20.19.0。后两项**没装也行**——一键启动器会自动准备（Windows 用 `winget` 或经过校验的便携包，macOS 下载便携版解压进 `runtime/tools/`，**不需要 Homebrew，也不会要管理员密码**）。
+**环境要求**：Windows 10/11 或 macOS 13+；Python 3.11 – 3.13、Node.js ≥ 20.19.0。后两项**没装也行**——一键启动器会自动准备（Windows 用 `winget` 或经过校验的便携包，macOS 下载便携版解压进 `runtime/tools/`，**不需要 Homebrew，也不会要管理员密码**）。
 
 > Python 3.14 暂不支持：锁定的后端依赖还没有对应的 cp314 轮子，装的时候会退化成源码编译并失败。
 

@@ -37,7 +37,7 @@ $PythonBootstrapSha256 = "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d2
 # succeed without a Rust toolchain. Keep the window here, not scattered.
 # The probe is generated from these two values so the message, the discovery
 # order and the venv check cannot drift apart.
-$MinimumPythonVersion = [Version]"3.10"
+$MinimumPythonVersion = [Version]"3.11"
 $MaximumPythonVersion = [Version]"3.13"
 $PythonVersionProbe = 'import sys; raise SystemExit(0 if ({0}, {1}) <= sys.version_info[:2] <= ({2}, {3}) else 1)' -f `
     $MinimumPythonVersion.Major, $MinimumPythonVersion.Minor, `
@@ -45,7 +45,7 @@ $PythonVersionProbe = 'import sys; raise SystemExit(0 if ({0}, {1}) <= sys.versi
 
 # Selector order for the py launcher: 3.12 first because that is the version
 # this launcher installs itself and the only one the Windows CI job tests.
-$PythonSupportedSelectors = @("-3.12", "-3.13", "-3.11", "-3.10")
+$PythonSupportedSelectors = @("-3.12", "-3.13", "-3.11")
 
 # First run runs the migrations inside startup, and antivirus scanning a
 # brand-new .venv or node_modules is slow on a cold machine.
