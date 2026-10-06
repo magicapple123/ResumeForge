@@ -39,9 +39,8 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "award": ("get_profile", "update_profile", "add_profile_entry"),
     # ===== 岗位与匹配 =====
     "job": ("list_jobs", "get_job", "create_job", "update_job"),
-    "job_match_analysis": ("get_job", "list_jobs", "list_apply_queue"),
-    "job_match_batch": "不暴露：批量岗位匹配快照包含个人资料参与分析后的逐岗位结论与历史排序，"
-    "目前只在「岗位广场 → 分析记录」中回看；助手不读取也不修改，避免把完整匹配依据带入对话上下文。",
+    "job_match_analysis": ("get_job", "list_jobs", "list_apply_queue", "list_match_analyses"),
+    "job_match_batch": ("list_match_analyses",),
     "candidate_job": (
         "list_candidate_jobs",
         "get_candidate_job",
@@ -84,7 +83,7 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
         "create_application_track",
         "update_application_track",
     ),
-    "referral": ("list_referrals",),
+    "referral": ("list_referrals", "create_referral"),
     "reminder": ("list_reminders", "create_reminder", "update_reminder"),
     # ===== 事实台账 =====
     "claim_record": ("list_claims", "get_claim", "create_claim", "update_claim"),
@@ -101,7 +100,7 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     # ===== 面试与演练 =====
     "interview_session": ("list_interview_sessions", "get_interview_report"),
     "interview_message": ("get_interview_report",),
-    "interview_experience": ("list_interview_experiences",),
+    "interview_experience": ("list_interview_experiences", "create_interview_experience"),
     "interview_review_record": ("list_reviews",),
     "drill_session": ("list_drill_sessions", "get_drill_report"),
     "drill_contract": ("get_drill_report",),

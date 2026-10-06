@@ -323,6 +323,10 @@ const TOOL_LABELS: Record<string, string> = {
   list_share_packages: "查询分享包",
   create_reminder: "新增提醒",
   update_reminder: "标记提醒完成/忽略",
+  // P3 工具批：匹配分析记录 + 面经/内推写入
+  list_match_analyses: "查询匹配分析记录",
+  create_interview_experience: "新增面经",
+  create_referral: "新增内推",
 };
 
 export function MessageToolCalls({ calls }: { calls: AssistantToolCall[] }) {

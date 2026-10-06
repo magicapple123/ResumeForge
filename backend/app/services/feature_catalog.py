@@ -121,12 +121,14 @@ FEATURES: tuple[FeatureEntry, ...] = (
         "岗位广场",
         "匹配度分析",
         "岗位广场 → 岗位详情 → 「匹配度分析」：五类结论（已匹配/表达缺口/证据不足/真实缺口/待确认），**不显示百分比评分**",
+        ("list_match_analyses",),
     ),
     FeatureEntry(
         "job_match_batch",
         "岗位广场",
         "批量岗位适配度分析",
         "岗位广场 → 进入「选择」模式勾选多个岗位 → 「AI 分析适配度」：结合个人资料逐一分析，按匹配度参考分从高到低展示；可选择立即运行或后台运行，结果会保存到「分析记录」供回看",
+        ("list_match_analyses",),
     ),
     FeatureEntry(
         "drag_drop",
@@ -296,7 +298,7 @@ FEATURES: tuple[FeatureEntry, ...] = (
         "投递台",
         "内推管理",
         "投递台 → 「内推」页签：内推人 / 关系 / 渠道 / 内推码 / 图片备注（最多 9 张）；列表按状态分色；**转化率由关联的求职进度派生，进入面试及以上才算转化**",
-        ("list_referrals",),
+        ("list_referrals", "create_referral"),
     ),
     # ===== 网申填表 =====
     FeatureEntry(
@@ -440,7 +442,7 @@ FEATURES: tuple[FeatureEntry, ...] = (
         "模拟面试",
         "面经知识库",
         "模拟面试 → 「面经」页签：公司 / 岗位 / 被问到的真题 / 标签 / 难度 / 轮次，来源分自己 / 同行 / 公开",
-        ("list_interview_experiences",),
+        ("list_interview_experiences", "create_interview_experience"),
     ),
     # ===== 事实台账 =====
     FeatureEntry(
