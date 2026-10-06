@@ -10,8 +10,8 @@ from .resume_template_catalog import (
     template_spec,
 )
 from .resume_template_format import (
-    FORMAT_FIELDS,
     FORMAT_FIELD_KEYS,
+    FORMAT_FIELDS,
     _format_field,
     format_css,
     format_field_options,
@@ -27,9 +27,6 @@ from .resume_template_market import (
     font_scale_spec,
     market_options,
 )
-
-
-
 
 __all__ = [
     "DEFAULT_FONT_SCALE",

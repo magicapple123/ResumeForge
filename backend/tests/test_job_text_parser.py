@@ -3,9 +3,7 @@
 import re
 
 import pytest
-
 from app.services.job_text_parser import parse_job_text
-
 
 SAMPLE_JOB_TEXT = """AI应用客户端开发工程师 - 剪映CapCut
 深圳、广州

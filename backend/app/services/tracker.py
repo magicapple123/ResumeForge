@@ -19,7 +19,6 @@ from typing import Any
 from sqlalchemy import case, func
 from sqlalchemy.orm import Query, Session
 
-from . import trash
 from ..models.tracker import (
     MERGE_CREATED,
     MERGE_LABELS,
@@ -27,10 +26,10 @@ from ..models.tracker import (
     MERGE_UPDATED,
     SOURCE_APPLY,
     SOURCE_MANUAL,
-    STATUSES,
     STATUS_APPLIED,
     STATUS_OFFER,
     STATUS_REJECTED,
+    STATUSES,
     ApplicationTrack,
     is_active,
     normalize_key,
@@ -46,6 +45,7 @@ from ..schemas.tracker import (
     TrackRecordIn,
     TrackUpdate,
 )
+from . import trash
 
 logger = logging.getLogger(__name__)
 

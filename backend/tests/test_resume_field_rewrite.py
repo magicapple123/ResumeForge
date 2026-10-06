@@ -7,7 +7,6 @@ AI 改的却可能是另一栏。所以这里把"能改哪些位置、指不到�
 from __future__ import annotations
 
 import pytest
-
 from app.schemas.resume import ResumeContent
 from app.services.resume.resume_field_rewrite import (
     FieldPathError,

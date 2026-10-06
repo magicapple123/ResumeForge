@@ -6,7 +6,6 @@ import re
 from ...schemas.resume import ResumeContent
 from ..profile.profile_context import split_lines
 
-
 # 简历结构中的"列表字段"，宽松校验时字符串会被拆分补全。
 _LIST_FIELDS = {
     "education": {

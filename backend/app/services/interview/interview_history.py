@@ -13,7 +13,6 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from .. import trash
 from ...models.interview_review_record import InterviewReviewRecord
 from ...models.job import Job
 from ...models.question_bank_record import QuestionBankRecord
@@ -24,6 +23,7 @@ from ...schemas.interview_history import (
     QuestionBankRecordCreate,
     QuestionBankRecordUpdate,
 )
+from .. import trash
 
 logger = logging.getLogger(__name__)
 

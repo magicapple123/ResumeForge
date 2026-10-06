@@ -68,7 +68,7 @@ def _extract_inline_labeled_values(line: str) -> dict[str, str]:
         selected.append(match)
 
     values: dict[str, str] = {}
-    for index, (start, end, field, _label) in enumerate(selected):
+    for index, (_start, end, field, _label) in enumerate(selected):
         value_start = end
         while value_start < len(line) and line[value_start] in " \t:：":
             value_start += 1

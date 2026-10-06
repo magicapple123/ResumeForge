@@ -1,6 +1,8 @@
 """报告域工具声明（``_TOOLS`` 中 21 条：面试/深挖/复盘/提醒/投递台/知识库/统计等）。"""
 from __future__ import annotations
 
+from ..resume.resume_templates import FONT_SCALES, RESUME_TEMPLATES
+from ._types import Tool
 from .apply_tools import _tool_list_apply_queue, _tool_list_apply_records
 from .data_tools import _tool_get_drill_report, _tool_list_drill_sessions
 from .job_tools import _tool_update_resume
@@ -23,8 +25,6 @@ from .report_tools import (
     _tool_update_knowledge,
     _tool_update_resume_layout,
 )
-from ..resume.resume_templates import FONT_SCALES, RESUME_TEMPLATES
-from ._types import Tool
 
 REPORT_TOOLS: tuple[Tool, ...] = (
     Tool(

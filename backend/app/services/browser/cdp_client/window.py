@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 
@@ -54,10 +55,8 @@ class WindowAwareMixin:
 
         def _activate() -> None:
             if target_id:
-                try:
+                with contextlib.suppress(CdpError):
                     self.send("Target.activateTarget", {"targetId": target_id})
-                except CdpError:
-                    pass
 
         while True:
             try:
@@ -91,10 +90,8 @@ class WindowAwareMixin:
                         {"windowId": window_id, "bounds": {"windowState": "normal"}},
                     )
                 _activate()
-                try:
+                with contextlib.suppress(CdpError):
                     self.send("Page.bringToFront")
-                except CdpError:
-                    pass
             except CdpError as exc:
                 logger.debug("窗口可见性保障失败：%s", exc)
                 return False

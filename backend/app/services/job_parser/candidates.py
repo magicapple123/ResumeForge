@@ -10,8 +10,8 @@ from .candidate_constants import (
     _LOCATION_TERMS,
     _NON_LOCATION_TERMS,
     _TITLE_NON_ROLE_PREFIX_RE,
-    _TITLE_SENTENCE_PREFIXES,
     _TITLE_SENTENCE_PREFIX_RE,
+    _TITLE_SENTENCE_PREFIXES,
     _TITLE_TERMS,
 )
 from .field_constants import _FIELD_LIMITS

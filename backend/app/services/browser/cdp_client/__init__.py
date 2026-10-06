@@ -18,16 +18,30 @@
 from __future__ import annotations
 
 from .base import (
-    DEFAULT_COMMAND_TIMEOUT as DEFAULT_COMMAND_TIMEOUT,
-    DEFAULT_CONNECT_TIMEOUT as DEFAULT_CONNECT_TIMEOUT,
-    DEFAULT_HOST as DEFAULT_HOST,
-    DEFAULT_HTTP_TIMEOUT as DEFAULT_HTTP_TIMEOUT,
     _MAX_FRAMES_PER_COMMAND as _MAX_FRAMES_PER_COMMAND,
+)
+from .base import (
+    DEFAULT_COMMAND_TIMEOUT as DEFAULT_COMMAND_TIMEOUT,
+)
+from .base import (
+    DEFAULT_CONNECT_TIMEOUT as DEFAULT_CONNECT_TIMEOUT,
+)
+from .base import (
+    DEFAULT_HOST as DEFAULT_HOST,
+)
+from .base import (
+    DEFAULT_HTTP_TIMEOUT as DEFAULT_HTTP_TIMEOUT,
+)
+from .base import (
     CdpClient as CdpClient,
+)
+from .base import (
     CdpError as CdpError,
 )
 from .websocket_client import (
     WebsocketCdpClient as WebsocketCdpClient,
+)
+from .websocket_client import (
     _default_websocket_factory as _default_websocket_factory,
 )
 from .window import WindowAwareMixin as WindowAwareMixin

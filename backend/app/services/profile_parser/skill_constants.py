@@ -2,7 +2,6 @@
 
 import re
 
-
 _SKILL_LEVEL_RE = re.compile(
     r"^(熟练掌握|熟练使用|熟练|精通|掌握|熟悉|了解|入门|精通使用|proficient|advanced|intermediate|beginner|basic)$",
     re.IGNORECASE,

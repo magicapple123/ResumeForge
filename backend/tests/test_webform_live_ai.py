@@ -8,13 +8,11 @@ import json
 import time
 
 import pytest
-
 from app.services.llm.base import LLMError
 from app.services.webform import ai as ai_module
 from app.services.webform import live as live_module
 from app.services.webform.engine import Control
 from app.services.webform.live import LiveSession
-
 from test_webform_live import FakeLiveClient, raw_control
 
 # ===== AI 兜底 =====

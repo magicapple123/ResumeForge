@@ -1,8 +1,8 @@
 """联网搜索工具声明（``_TOOLS`` 最后 1 条）。"""
 from __future__ import annotations
 
+from ._types import _WEB_SEARCH_DESC_SUMMARIES, Tool
 from .search_tools import _tool_web_search
-from ._types import Tool, _WEB_SEARCH_DESC_SUMMARIES
 
 SEARCH_TOOLS: tuple[Tool, ...] = (
     Tool(

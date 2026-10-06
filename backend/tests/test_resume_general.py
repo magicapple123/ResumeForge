@@ -7,7 +7,6 @@
 import json
 
 import pytest
-
 from app.schemas.resume import GenerateOptions
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider

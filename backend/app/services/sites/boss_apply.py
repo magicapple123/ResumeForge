@@ -33,7 +33,6 @@
 """
 from __future__ import annotations
 
-
 import logging
 from typing import Any
 
@@ -44,15 +43,35 @@ from ..browser.page_ready import wait_for_page_state
 from .base import ApplyOutcome, SiteFailure
 from .boss_apply_scripts import (
     _apply_entry_script as _apply_entry_script,
+)
+from .boss_apply_scripts import (
     _chat_state_script as _chat_state_script,
+)
+from .boss_apply_scripts import (
     _click_apply_script as _click_apply_script,
+)
+from .boss_apply_scripts import (
     _click_script as _click_script,
+)
+from .boss_apply_scripts import (
     _click_send_script as _click_send_script,
+)
+from .boss_apply_scripts import (
     _entry_rect_script as _entry_rect_script,
+)
+from .boss_apply_scripts import (
     _entry_script as _entry_script,
+)
+from .boss_apply_scripts import (
     _fill_greeting_script as _fill_greeting_script,
+)
+from .boss_apply_scripts import (
     _greeting_state_script as _greeting_state_script,
+)
+from .boss_apply_scripts import (
     _send_rect_script as _send_rect_script,
+)
+from .boss_apply_scripts import (
     _submit_state_script as _submit_state_script,
 )
 from .boss_page import (

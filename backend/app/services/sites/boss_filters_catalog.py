@@ -34,9 +34,11 @@ from typing import Any
 
 from .base import (
     SOURCE_PUBLIC,
-    SOURCE_SESSION as SOURCE_SESSION,
     SOURCE_SNAPSHOT,
     SOURCE_UNAVAILABLE,
+)
+from .base import (
+    SOURCE_SESSION as SOURCE_SESSION,
 )
 
 logger = logging.getLogger(__name__)

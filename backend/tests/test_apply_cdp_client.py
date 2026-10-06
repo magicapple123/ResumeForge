@@ -10,7 +10,6 @@ from typing import Any
 
 import httpx
 import pytest
-
 from app.services.browser.cdp_client import CdpError, WebsocketCdpClient
 
 TARGET = {

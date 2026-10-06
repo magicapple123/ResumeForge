@@ -185,17 +185,16 @@ class OpenAICompatProvider(BaseLLMProvider):
         """同步发一次 OpenAI 兼容 Chat Completions 请求，返回完整文本；错误统一转成 LLMError。"""
         payload = self._build_payload(messages, stream=False)
         try:
-            async with self._client() as client:
-                async with client.stream(
-                    "POST", self._endpoint(), json=payload, headers=self._headers()
-                ) as response:
-                    if response.status_code != 200:
-                        raise self._http_error(response)
-                    body = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        if len(body) + len(chunk) > _MAX_CHAT_RESPONSE_BYTES:
-                            raise LLMError("模型返回内容过大，请调低最大输出长度")
-                        body.extend(chunk)
+            async with self._client() as client, client.stream(
+                "POST", self._endpoint(), json=payload, headers=self._headers()
+            ) as response:
+                if response.status_code != 200:
+                    raise self._http_error(response)
+                body = bytearray()
+                async for chunk in response.aiter_bytes():
+                    if len(body) + len(chunk) > _MAX_CHAT_RESPONSE_BYTES:
+                        raise LLMError("模型返回内容过大，请调低最大输出长度")
+                    body.extend(chunk)
         except httpx.TimeoutException as exc:
             raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
         except httpx.RequestError as exc:
@@ -265,71 +264,70 @@ class OpenAICompatProvider(BaseLLMProvider):
     ) -> AsyncIterator[LLMDelta]:
         payload = self._build_payload(messages, stream=True, tools=tools, thinking=thinking)
         try:
-            async with self._client() as client:
-                async with client.stream(
-                    "POST", self._endpoint(), json=payload, headers=self._headers()
-                ) as response:
-                    if response.status_code != 200:
-                        raise self._http_error(response)
-                    total_chars = 0
-                    pending: dict[int, dict] = {}
-                    finish_reason: str | None = None
-                    emitted = False
-                    async for line in response.aiter_lines():
-                        # SSE 格式：每行 "data: {json}"，流结束标志 "data: [DONE]"
-                        if not line.startswith("data:"):
-                            continue
-                        chunk = line[5:].strip()
-                        if not chunk:
-                            continue
-                        if chunk == "[DONE]":
-                            break
-                        try:
-                            data = json.loads(chunk)
-                        except json.JSONDecodeError as exc:
-                            raise LLMError("模型返回了无法解析的流式响应") from exc
-                        if not isinstance(data, dict):
-                            raise LLMError("模型返回了无法解析的流式响应")
-                        choices = data.get("choices") or []
-                        if not isinstance(choices, list):
-                            raise LLMError("模型返回了无法解析的流式响应")
-                        if not choices:
-                            continue
-                        choice = choices[0]
-                        if not isinstance(choice, dict):
-                            raise LLMError("模型返回了无法解析的流式响应")
-                        if choice.get("finish_reason"):
-                            finish_reason = choice["finish_reason"]
-                        delta = choice.get("delta") or {}
-                        if not isinstance(delta, dict):
-                            raise LLMError("模型返回了无法解析的流式响应")
-                        text = delta.get("content")
-                        if text is not None and not isinstance(text, str):
-                            raise LLMError("模型返回了无法解析的流式响应")
-                        if text:
-                            total_chars += len(text)
-                            if total_chars > self._stream_char_limit():
-                                raise LLMError("模型流式输出过大，请调低最大输出长度")
-                            yield LLMDelta(text=text)
-                        # 思考内容与正文分开产出：它不是要展示给用户的回答，而是"模型
-                        # 在想什么"。同样计入 total_chars——它是真实消耗的输出，且不受
-                        # 限的话一条只会思考的流会无界增长。
-                        reasoning = _extract_reasoning(delta)
-                        if reasoning:
-                            total_chars += len(reasoning)
-                            if total_chars > self._stream_char_limit():
-                                raise LLMError("模型流式输出过大，请调低最大输出长度")
-                            yield LLMDelta(reasoning=reasoning)
-                        _accumulate_tool_calls(pending, delta.get("tool_calls"))
-                        # 有的端点不发 finish_reason 就结束，所以下面还要兜一次。
-                        if finish_reason and pending and not emitted:
-                            emitted = True
-                            yield LLMDelta(
-                                tool_calls=_finalize_tool_calls(pending),
-                                finish_reason=finish_reason,
-                            )
-                    if pending and not emitted:
-                        yield LLMDelta(tool_calls=_finalize_tool_calls(pending))
+            async with self._client() as client, client.stream(
+                "POST", self._endpoint(), json=payload, headers=self._headers()
+            ) as response:
+                if response.status_code != 200:
+                    raise self._http_error(response)
+                total_chars = 0
+                pending: dict[int, dict] = {}
+                finish_reason: str | None = None
+                emitted = False
+                async for line in response.aiter_lines():
+                    # SSE 格式：每行 "data: {json}"，流结束标志 "data: [DONE]"
+                    if not line.startswith("data:"):
+                        continue
+                    chunk = line[5:].strip()
+                    if not chunk:
+                        continue
+                    if chunk == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(chunk)
+                    except json.JSONDecodeError as exc:
+                        raise LLMError("模型返回了无法解析的流式响应") from exc
+                    if not isinstance(data, dict):
+                        raise LLMError("模型返回了无法解析的流式响应")
+                    choices = data.get("choices") or []
+                    if not isinstance(choices, list):
+                        raise LLMError("模型返回了无法解析的流式响应")
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    if not isinstance(choice, dict):
+                        raise LLMError("模型返回了无法解析的流式响应")
+                    if choice.get("finish_reason"):
+                        finish_reason = choice["finish_reason"]
+                    delta = choice.get("delta") or {}
+                    if not isinstance(delta, dict):
+                        raise LLMError("模型返回了无法解析的流式响应")
+                    text = delta.get("content")
+                    if text is not None and not isinstance(text, str):
+                        raise LLMError("模型返回了无法解析的流式响应")
+                    if text:
+                        total_chars += len(text)
+                        if total_chars > self._stream_char_limit():
+                            raise LLMError("模型流式输出过大，请调低最大输出长度")
+                        yield LLMDelta(text=text)
+                    # 思考内容与正文分开产出：它不是要展示给用户的回答，而是"模型
+                    # 在想什么"。同样计入 total_chars——它是真实消耗的输出，且不受
+                    # 限的话一条只会思考的流会无界增长。
+                    reasoning = _extract_reasoning(delta)
+                    if reasoning:
+                        total_chars += len(reasoning)
+                        if total_chars > self._stream_char_limit():
+                            raise LLMError("模型流式输出过大，请调低最大输出长度")
+                        yield LLMDelta(reasoning=reasoning)
+                    _accumulate_tool_calls(pending, delta.get("tool_calls"))
+                    # 有的端点不发 finish_reason 就结束，所以下面还要兜一次。
+                    if finish_reason and pending and not emitted:
+                        emitted = True
+                        yield LLMDelta(
+                            tool_calls=_finalize_tool_calls(pending),
+                            finish_reason=finish_reason,
+                        )
+                if pending and not emitted:
+                    yield LLMDelta(tool_calls=_finalize_tool_calls(pending))
         except httpx.TimeoutException as exc:
             raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
         except httpx.RequestError as exc:

@@ -3,6 +3,7 @@
 from app.schemas.setting import UNLIMITED_MAX_TOKENS, LLMConfig
 from app.services.settings_service import API_KEY_MASK, get_llm_config
 
+
 def test_settings_roundtrip(client, db_session):
     config = LLMConfig(base_url="https://api.example.com/v1", api_key="sk-test", model="test-model")
     response = client.put("/api/settings/llm", json=config.model_dump())

@@ -1,6 +1,7 @@
 """``WebsocketCdpClient``：基于 HTTP 端点 + WebSocket 通道的 CDP 客户端实现。"""
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import threading
@@ -12,11 +13,11 @@ from urllib.parse import quote
 import httpx
 
 from .base import (
+    _MAX_FRAMES_PER_COMMAND,
     DEFAULT_COMMAND_TIMEOUT,
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_HOST,
     DEFAULT_HTTP_TIMEOUT,
-    _MAX_FRAMES_PER_COMMAND,
     CdpClient,
     CdpError,
 )
@@ -197,10 +198,9 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
     def _reset_connection(self, *, clear_target: bool = False) -> None:
         with self._command_lock:
             if self._connection is not None:
-                try:
+                with contextlib.suppress(Exception):
+                    # 关闭失败不该阻断后续流程
                     self._connection.close()
-                except Exception:  # noqa: BLE001 - 关闭失败不该阻断后续流程
-                    pass
             self._connection = None
             if clear_target:
                 self._target = None
@@ -357,9 +357,8 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
     def close(self) -> None:
         self._reset_connection()
         if self._http_client is not None:
-            try:
+            with contextlib.suppress(Exception):
+                # 关闭失败不该阻断后续流程
                 self._http_client.close()
-            except Exception:  # noqa: BLE001 - 关闭失败不该阻断后续流程
-                pass
             self._http_client = None
 

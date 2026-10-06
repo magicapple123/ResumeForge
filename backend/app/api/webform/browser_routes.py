@@ -14,10 +14,7 @@ from ...schemas.webform import (
     WebFormUrlHistoryOut,
 )
 from ...services import webform as webform_service
-
 from ._shared import logger
-
-
 
 router = APIRouter(prefix="/api/webform", tags=["webform"])
 
@@ -40,7 +37,9 @@ def browser_status(db: Session = Depends(get_db)):
 
 @router.post("/browser/start", response_model=BrowserStatusOut)
 def browser_start(db: Session = Depends(get_db)):
-    from .live_routes import _start_live_session  # 延迟导入：保持拆分前 browser 域先于 live 域的路由注册顺序
+    from .live_routes import (
+        _start_live_session,  # 延迟导入：保持拆分前 browser 域先于 live 域的路由注册顺序
+    )
     try:
         status = webform_service.browser.start_browser(db)
     except Exception as exc:  # noqa: BLE001 - 与投递台同一套错误映射
@@ -56,7 +55,9 @@ def browser_start(db: Session = Depends(get_db)):
 
 @router.post("/browser/open-url")
 def browser_open_url(payload: WebFormOpenUrlIn, db: Session = Depends(get_db)):
-    from .live_routes import _start_live_session  # 延迟导入：保持拆分前 browser 域先于 live 域的路由注册顺序
+    from .live_routes import (
+        _start_live_session,  # 延迟导入：保持拆分前 browser 域先于 live 域的路由注册顺序
+    )
     try:
         url = webform_service.url_history.normalize_url(payload.url)
         result = webform_service.browser.open_url(db, url)

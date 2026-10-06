@@ -2,7 +2,6 @@ import json
 from datetime import datetime
 
 import pytest
-
 from app.schemas.job import JobOut
 from app.schemas.setting import LLMConfig
 from app.services.job.job_analysis import (

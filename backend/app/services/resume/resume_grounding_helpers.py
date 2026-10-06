@@ -29,11 +29,8 @@ def _similar_skill(a: str, b: str) -> bool:
 
 
 def _source_value(source, field: str) -> str:
-    if isinstance(source, dict):
-        value = source.get(field, "")
-    else:
-        value = getattr(source, field, "")
-    return value if isinstance(value, str) else ""
+    raw = source.get(field, "") if isinstance(source, dict) else getattr(source, field, "")
+    return raw if isinstance(raw, str) else ""
 
 
 def _find_source(item, sources: list[dict], name_field: str, role_field: str | None = None):

@@ -16,6 +16,8 @@ from ...models.job import Job
 from ...models.profile import utcnow
 from ...schemas.job_match import JobMatchResult
 from ..job.job_match import match_requires_confirmation
+
+
 def latest_match(db: Session, job_id: int | None) -> JobMatchAnalysis | None:
     """取某岗位最近一次匹配结论。"""
     if job_id is None:

@@ -4,9 +4,8 @@
 容易写错又难发现的部分：合并顺序、去重、单来源失败降级、正文只抓前 N 条、
 以及「不允许抓内网地址」这条安全边界。
 """
-import pytest
-
 import app.services.assistant.assistant_web_search as web_search_module
+import pytest
 from app.schemas.setting import SearchConfig
 from app.services.assistant.assistant_web_search import AssistantSearchError, build_search_query
 from app.services.search import aggregate as aggregate_module
@@ -193,7 +192,7 @@ async def test_aggregate_sends_the_rewritten_query_to_every_source(monkeypatch):
             '<rss><channel><item><title>外卖平台项目</title>'
             "<link>https://example.com/a</link>"
             "<description>项目管理说明</description></item></channel></rss>"
-        ).encode("utf-8")
+        ).encode()
 
     async def fake_ddg(query: str, limit: int = 10):
         captured["ddg"] = query

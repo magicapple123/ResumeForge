@@ -12,7 +12,6 @@ import json
 
 import httpx
 import pytest
-
 from app.schemas.setting import LLMConfig
 from app.services.llm import base as llm_base
 from app.services.llm.base import LLMDelta, LLMError

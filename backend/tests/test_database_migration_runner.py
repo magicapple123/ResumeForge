@@ -1,11 +1,7 @@
 """数据库迁移执行器、降级和备份行为测试。"""
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.orm import Session
-
 from alembic import command
-
 from app.database import Base
 from app.database_migrations import (
     BASELINE_REVISION,
@@ -14,6 +10,8 @@ from app.database_migrations import (
     run_database_migrations,
 )
 from app.models import Job, ResumeRecord
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.orm import Session
 from tests.test_database import _APPLICATION_TABLES, _assert_head_schema
 
 

@@ -6,12 +6,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from ....models.profile import Education
-
 from ..repeated_fields import field_key_for_block
-
 
 # 学历层次排序：取"最高"那一条去填表。认不出的学历排最低，同级时按资料里的顺序。
 DEGREE_RANK: dict[str, int] = {

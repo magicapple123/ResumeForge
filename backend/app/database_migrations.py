@@ -83,10 +83,12 @@ def snapshot_sqlite_file(source: Path, destination: Path) -> None:
     某一处忘了关闭连接，备份文件在 Windows 上一直被占着，调用方既删不掉也替换不了。
     """
     # sqlite3 连接的上下文管理器只提交事务、不关闭连接；这里必须显式关闭。
-    with closing(sqlite3.connect(source)) as source_db:
-        with closing(sqlite3.connect(destination)) as target_db:
-            source_db.backup(target_db)
-            target_db.commit()
+    with (
+        closing(sqlite3.connect(source)) as source_db,
+        closing(sqlite3.connect(destination)) as target_db,
+    ):
+        source_db.backup(target_db)
+        target_db.commit()
 
 
 def _strip_optimizer_stat_tables(path: Path) -> None:

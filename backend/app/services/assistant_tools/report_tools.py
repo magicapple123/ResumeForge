@@ -18,12 +18,17 @@ from ..interview.interview_experience_service import list_experiences
 from ..interview.interview_history import list_question_banks, list_reviews
 from ..knowledge_service import (
     create_knowledge as create_knowledge_record,
+)
+from ..knowledge_service import (
     knowledge_or_none,
     list_knowledge,
+)
+from ..knowledge_service import (
     update_knowledge as update_knowledge_record,
 )
 from ..referral_service import list_referrals, referral_out
-from ..reminder_service import create_reminder as create_reminder_record, list_reminders
+from ..reminder_service import create_reminder as create_reminder_record
+from ..reminder_service import list_reminders
 from ..resume.resume_templates import font_scale_spec, template_spec
 from ..share_package import list_share_packages
 from ._shared import (

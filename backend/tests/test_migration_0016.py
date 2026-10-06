@@ -4,14 +4,13 @@
 所以这里额外验两件事：表集合前后不变，以及旧记录升级后新列是 **NULL**（NULL 才是"没删"，
 若默认成某个时间戳，等于把所有历史数据一把塞进回收站）。
 """
-from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 import importlib.util
 from pathlib import Path
 
+from alembic import command
 from app.database_migrations import build_alembic_config
 from app.services import trash
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0015_candidate_job_collect_fields"
 HEAD_REVISION = "0016_soft_delete_marks"

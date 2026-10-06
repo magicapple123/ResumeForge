@@ -17,7 +17,6 @@ import time
 import traceback
 
 import pytest
-
 from app.models.apply import STEP_FILLING, ApplyTask, ApplyTaskItem
 from app.models.job import Job
 from app.models.resume import ResumeRecord

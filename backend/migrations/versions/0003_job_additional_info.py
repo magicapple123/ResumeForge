@@ -4,7 +4,7 @@ Revision ID: 0003_job_additional_info
 Revises: 0002_indexes_resume_fk
 Create Date: 2026-08-20
 """
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

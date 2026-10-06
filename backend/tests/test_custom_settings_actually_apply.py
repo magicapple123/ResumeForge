@@ -17,7 +17,6 @@ import json
 
 import httpx
 import pytest
-
 from app.api.assistant import _system_prompt, _web_search_addendum
 from app.models.interview import InterviewSession
 from app.services.assistant_tools import tool_definitions

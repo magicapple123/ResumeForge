@@ -1,6 +1,5 @@
 """软件更新检查 Schema。"""
 from datetime import datetime
-
 from typing import Literal
 
 from pydantic import BaseModel, Field

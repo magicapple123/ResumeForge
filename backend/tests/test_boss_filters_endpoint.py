@@ -8,12 +8,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-
 from app.services.browser.browser_manager import BrowserError
 from app.services.sites.base import SOURCE_PUBLIC
 from app.services.sites.boss import BossAdapter
 from app.services.sites.boss_filters import CONDITIONS_ENDPOINT, INDUSTRY_ENDPOINT
-
 from test_boss_filters import bar_payload, conditions_payload, fake_fetcher, industry_payload
 
 

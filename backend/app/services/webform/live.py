@@ -26,14 +26,17 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import threading
 import unicodedata
+from collections.abc import Callable
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from ..browser.cdp_client import CdpClient
+from . import live_assistant
 from ._base import WebFormConflict
 from .engine import (
     FOCUS_LISTENER_SCRIPT,
@@ -44,15 +47,14 @@ from .engine import (
     has_ambiguous_field_evidence,
 )
 from .fields import FIELD_LABELS
+from .live_ai_worker import _AiWorker
+from .live_autofill import AutoFillProgress, AutoFillWorker, fill_current_page
 from .live_control import (
     install_live_control_script,
     set_assistant_reply_script,
     set_autofill_status_script,
     set_live_enabled_script,
 )
-from .live_autofill import AutoFillProgress, AutoFillWorker, fill_current_page
-from . import live_assistant
-from .live_ai_worker import _AiWorker
 from .live_memory_panel import REMEMBER_EDITOR_SCRIPT, memory_targets_script
 from .live_remember import LiveRememberMixin
 from .live_scripts import (
@@ -72,6 +74,7 @@ from .service import (
     SOURCE_AI,
     SOURCE_RULE,
     FillSelection,
+    Suggestion,
     apply_fill,
     is_relaxed_ai_candidate,
     recognize_field,
@@ -79,7 +82,6 @@ from .service import (
     relaxed_suggestion,
     resolve_value_for,
     suggest_for,
-    Suggestion,
 )
 from .service.relaxed import _own_text_contains
 from .session import Snapshot
@@ -358,11 +360,10 @@ class LiveSession(LiveRememberMixin):
         self._ai_worker.close()
         self._autofill_worker.close()
         self._ask_worker.close()
-        try:
+        with contextlib.suppress(Exception):
             # 真正把监听与面板从页面上撤掉，而不是只藏起来。
+            # 页面可能已经关了。
             self._client.evaluate(_UNINSTALL_SCRIPT)
-        except Exception:  # noqa: BLE001 - 页面可能已经关了
-            pass
         self.state["running"] = False
         self.state["enabled"] = False
 

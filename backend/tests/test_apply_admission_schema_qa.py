@@ -8,8 +8,6 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from app.models.apply import (
     ADMISSION_ALLOW,
     ADMISSION_BLOCK,
@@ -30,6 +28,7 @@ from app.services.job.job_match import (
     validate_evidence,
 )
 from app.services.llm.base import LLMError
+from pydantic import ValidationError
 
 
 def _condition(label: str, status: str, evidence: str = "", quote: str = "") -> MatchCondition:

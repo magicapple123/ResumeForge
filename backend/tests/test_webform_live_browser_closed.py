@@ -8,10 +8,8 @@
 import time
 
 import pytest
-
 from app.services.webform import live as live_module
 from app.services.webform.live import LiveSession
-
 from test_webform_live import FakeLiveClient
 
 

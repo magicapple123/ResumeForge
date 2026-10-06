@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...models.apply import FAILURE_UNKNOWN, FAILURE_CATEGORY_LABELS
+from ...models.apply import FAILURE_CATEGORY_LABELS, FAILURE_UNKNOWN
 from .base import SiteAdapter, SiteFailure
 
 

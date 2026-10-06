@@ -7,7 +7,6 @@
 from app.models.profile import UserProfile
 from app.services.webform import extra_profile
 from app.services.webform.data import build_form_data
-
 from test_webform_extra_profile import _seed_profile, _string_values
 
 

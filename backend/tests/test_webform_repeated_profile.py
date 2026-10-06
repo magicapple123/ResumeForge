@@ -1,7 +1,7 @@
 """网申资料多条补充记录的存储与填表展开。"""
+from app.models.profile import Education, UserProfile
 from app.services.webform import repeated_profile
 from app.services.webform.data import build_form_data
-from app.models.profile import Education, UserProfile
 from app.services.webform.fields import FORM_FIELDS, SOURCE_EXTRA
 
 

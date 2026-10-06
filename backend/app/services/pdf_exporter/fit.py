@@ -7,12 +7,12 @@ from ...schemas.resume import MAX_RESUME_PAGES, ResumeContent
 from .canvas import _ResumePDF
 from .fonts import FONT_ENV_VAR, ResumePDFError, _resolve_font_paths
 from .layout import (
-    MIN_FIT_SCALE,
     _FIT_MAX_PASSES,
     _FIT_MIN_STEP,
     _FIT_PAGE_STEP,
     _FIT_RATIO_MARGIN,
     _FIT_TOLERANCE_MM,
+    MIN_FIT_SCALE,
     ResumeLayout,
     resolve_layout,
 )

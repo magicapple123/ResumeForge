@@ -3,7 +3,6 @@
 import base64
 
 import pytest
-
 from app.schemas.assistant import AssistantAttachmentInput
 from app.services.assistant.assistant_service import normalize_attachments
 from tests.test_assistant import _configure_llm, _create_conversation, _successful_provider

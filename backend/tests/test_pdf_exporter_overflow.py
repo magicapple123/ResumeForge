@@ -6,7 +6,6 @@
 _hex_to_rgb）。
 """
 import pytest
-
 from app.services.pdf_exporter import (
     MIN_FIT_SCALE,
     _ResumePDF,
@@ -17,7 +16,6 @@ from app.services.pdf_exporter import (
 )
 from app.services.resume.resume_sample import sample_resume_content
 from app.services.resume.resume_templates import TEMPLATE_LAYOUT_DEFAULTS
-
 from test_pdf_exporter import (
     _MINIMAL_ACCENT,
     _blind_spot_resume,
@@ -28,7 +26,6 @@ from test_pdf_exporter import (
     _summary_only_resume,
     needs_font,
 )
-
 
 # ===== 绘制行为 =====
 

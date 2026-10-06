@@ -16,7 +16,6 @@ from ...profile.profile_service import get_profile_detail
 from .. import extra_profile, repeated_profile
 from ..extra_profile import list_entries
 from ..fields import FIELD_SYNONYMS, FORM_FIELDS, SOURCE_EXTRA
-
 from .profile_map import profile_to_form_data
 
 

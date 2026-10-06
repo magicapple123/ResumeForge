@@ -13,7 +13,7 @@ Revises: 0019_interview_history_knowledge_referral_fields
 Create Date: 2026-09-20
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

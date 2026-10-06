@@ -1,8 +1,7 @@
 """``0014_interview_drill`` 迁移：建表、级联、幂等与完整 downgrade。"""
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0013_resume_format_config"
 HEAD_REVISION = "0014_interview_drill"

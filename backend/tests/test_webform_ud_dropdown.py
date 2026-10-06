@@ -18,7 +18,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from app.services.webform.custom_select import _already_selected, _parse_snapshot
 from app.services.webform.custom_select_scripts import (
     mark_preexisting_script,

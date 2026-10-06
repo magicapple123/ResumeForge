@@ -3,9 +3,6 @@
 import json
 
 import pytest
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
-from pydantic import ValidationError
-
 from app.schemas.resume import GenerateOptions
 from app.services.resume.resume_generator import (
     PROMPTS_DIR,
@@ -17,6 +14,8 @@ from app.services.resume.resume_generator import (
     split_commas,
     split_lines,
 )
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from pydantic import ValidationError
 from tests.test_resume_generator import (
     GOOD_RESUME,
     PHOTO_DATA_URL,

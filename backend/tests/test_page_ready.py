@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.services.browser.page_ready import ReadyWait, wait_for_page_state
 
 

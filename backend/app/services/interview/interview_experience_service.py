@@ -15,10 +15,10 @@ import logging
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .. import trash
 from ...models.interview_experience import InterviewExperience
 from ...models.job import Job
 from ...schemas.interview_experience import InterviewExperienceCreate, InterviewExperienceUpdate
+from .. import trash
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,6 @@
 from app.services.webform.engine import FormEngine
 from app.services.webform.engine.recovery import MAX_RETRIES
 from app.services.webform.service.fill import _rebuild_mapping
-
 from webform_engine_support import ScriptedCdpClient
 
 _TEXT_CONTROL = {

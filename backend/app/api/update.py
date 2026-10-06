@@ -10,6 +10,7 @@ from ..schemas.update import (
     UpdateInstallResult,
     UpdateStatus,
 )
+from ..services.update_check import check_for_update
 from ..services.update_download import (
     clear_install_result,
     download_status,
@@ -17,7 +18,6 @@ from ..services.update_download import (
     schedule_install,
     start_download,
 )
-from ..services.update_check import check_for_update
 
 logger = logging.getLogger(__name__)
 

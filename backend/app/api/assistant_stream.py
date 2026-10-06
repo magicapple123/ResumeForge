@@ -17,11 +17,11 @@ from ..services.assistant.assistant_service import (
     history_messages_for_model,
 )
 from ..services.assistant.assistant_sources import SourceNumberer
-from ..services.assistant_tools import execute_tool_async, tool_definitions
 from ..services.assistant.assistant_web_search import (
     AssistantSearchError,
     is_local_resume_forge_question,
 )
+from ..services.assistant_tools import execute_tool_async, tool_definitions
 from ..services.llm.base import BaseLLMProvider, LLMError
 from .assistant_context import web_context
 

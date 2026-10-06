@@ -1,6 +1,5 @@
 """技能的持久化、系统提示拼装与知识读取。"""
 import pytest
-
 from app.models.assistant import AssistantSkill, AssistantSkillFile
 from app.services.assistant.assistant_skills import (
     build_skill_prompt,

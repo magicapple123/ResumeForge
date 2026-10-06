@@ -8,12 +8,10 @@
 from __future__ import annotations
 
 import pytest
-
 from app.models.apply import FAILURE_CAPTCHA_REQUIRED, FAILURE_LOGIN_REQUIRED
 from app.services.browser.page_ready import ReadyWait
 from app.services.sites.base import SiteFailure
 from app.services.sites.boss import BossAdapter
-
 from test_qa_collect_load_adversarial import QUERY, ScriptedReadyClient, _adapter
 
 

@@ -12,10 +12,9 @@
 from __future__ import annotations
 
 import pytest
-
+from app.services.apply.task_runner import StopAwareCdpClient
 from app.services.browser.cdp_client import CdpClient, CdpError
 from app.services.browser.page_ready import ReadyWait
-from app.services.apply.task_runner import StopAwareCdpClient
 from app.services.sites.boss import BossAdapter
 from app.services.sites.boss_apply import _chat_state_script
 

@@ -10,7 +10,6 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 
 import pytest
-
 from app.database import engine
 from app.models.job import Job
 from app.models.setting import LLMConfigRecord

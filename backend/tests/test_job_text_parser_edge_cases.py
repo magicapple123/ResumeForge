@@ -1,7 +1,6 @@
 """岗位文本解析器的行业适配与边界场景测试。"""
 
 import pytest
-
 from app.services.job_text_parser import parse_job_text
 
 

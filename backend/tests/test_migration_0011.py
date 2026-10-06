@@ -4,9 +4,8 @@
 downgrade 只删自己那张表、以及 upgrade/downgrade 往返后既有数据仍在。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0010_apply_center"
 HEAD_REVISION = "0011_claim_ledger"
@@ -54,7 +53,7 @@ def test_upgrade_creates_the_claim_table(tmp_path):
         assert "claim_record" in inspector.get_table_names()
         assert _revision(engine) == HEAD_REVISION
         assert {item["name"] for item in inspector.get_columns("claim_record")} == EXPECTED_COLUMNS
-        assert EXPECTED_INDEXES <= {item["name"] for item in inspector.get_indexes("claim_record")}
+        assert {item["name"] for item in inspector.get_indexes("claim_record")} >= EXPECTED_INDEXES
 
         # 台账不建外键：它记录的是"关于某段经历的主张"，主体用 subject 文本关联，
         # 这样资料库怎么改都不会连带删掉用户已经整理好的事实基线。

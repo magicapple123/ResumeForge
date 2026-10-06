@@ -7,7 +7,6 @@ import json
 
 import httpx
 import pytest
-
 from app.schemas.setting import LLMConfig
 from app.services.job.job_multi_parser import (
     build_multi_job_extraction_messages,

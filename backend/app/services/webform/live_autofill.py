@@ -13,11 +13,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .engine import ApplyOutcome, FormEngine
 from ..diagnostics import record_event
+from .engine import ApplyOutcome, FormEngine
 from .engine.recovery import REASON_WRITE_ERROR
-from .service.fill import SETTLE_RECHECK_SECONDS
 from .service import FillSelection, apply_fill, build_preview, default_selections
+from .service.fill import SETTLE_RECHECK_SECONDS
 from .session import Snapshot
 
 logger = logging.getLogger(__name__)

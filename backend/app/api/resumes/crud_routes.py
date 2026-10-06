@@ -6,7 +6,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import cast, or_, String
+from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session
 
 from ...database import get_db

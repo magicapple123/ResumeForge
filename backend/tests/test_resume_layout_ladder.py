@@ -46,7 +46,8 @@ def test_ladder_is_cumulative_and_only_ever_tightens():
     # 第一档只动页边距
     assert ladder[0].config["page_padding"] < 14
     # 之后每一档都建立在前一档之上：前面的旋钮一个都不能丢，重叠的键只会更紧、不会反弹。
-    for previous, current in zip(ladder, ladder[1:]):
+    # 相邻两档配对比较：两序列长度恒差 1，strict=False 是语义的一部分。
+    for previous, current in zip(ladder, ladder[1:], strict=False):
         assert set(previous.config) <= set(current.config)
         for key, value in previous.config.items():
             assert current.config[key] <= value, f"{key} 反弹了"

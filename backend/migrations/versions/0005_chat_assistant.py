@@ -5,7 +5,7 @@ Revises: 0004_resume_favorite
 Create Date: 2026-08-20
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

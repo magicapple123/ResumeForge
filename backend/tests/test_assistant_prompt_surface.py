@@ -6,14 +6,13 @@
 """
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import LLMDelta
-
 from test_assistant import (
-    _FakeProvider,
-    _ScriptedProvider,
     _configure_llm,
     _create_conversation,
     _empty_search,
+    _FakeProvider,
     _import_skill,
+    _ScriptedProvider,
     _send,
     _tool_call,
 )
@@ -137,7 +136,7 @@ def test_web_search_never_exceeds_the_documented_limit(client, monkeypatch):
     这个 3 次是**总数**，包含打开联网开关时那次自动预搜——它同样真的发了请求。此前那个
     计数从 0 起算，所以两个入口加起来实际是 4 次。
     """
-    from app.api.assistant_stream import MAX_WEB_SEARCHES, MAX_TOOL_ROUNDS
+    from app.api.assistant_stream import MAX_TOOL_ROUNDS, MAX_WEB_SEARCHES
 
     _configure_llm(client)
     executed: list[str] = []

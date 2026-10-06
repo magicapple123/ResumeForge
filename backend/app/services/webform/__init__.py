@@ -15,7 +15,6 @@ from .data import (
 )
 from .engine import ApplyOutcome, Control, FieldMapping, FormEngine, MatchResult, SkipNote
 from .extra_profile import EXTRA_FIELD_KEYS, list_entries, save_entries
-from .history import create_record, delete_record, list_records, record_or_none
 from .fields import (
     FIELD_KEYS,
     FIELD_LABELS,
@@ -23,6 +22,7 @@ from .fields import (
     SENSITIVE_FIELD_KEYS,
     FormField,
 )
+from .history import create_record, delete_record, list_records, record_or_none
 from .live import (
     LiveSession,
     is_live_running,
@@ -32,7 +32,6 @@ from .live import (
     start_live,
     stop_live,
 )
-from .profile_targets import build_memory_targets, remember_target
 from .matching import (
     DateResolution,
     SelectOption,
@@ -42,6 +41,7 @@ from .matching import (
     resolve_choice,
     resolve_select_option,
 )
+from .profile_targets import build_memory_targets, remember_target
 from .service import (
     SETTLE_RECHECK_SECONDS,
     SOURCE_AI,

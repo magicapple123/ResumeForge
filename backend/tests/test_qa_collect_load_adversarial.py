@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from app.models.apply import FAILURE_SELECTOR_INVALID
 from app.services.browser.cdp_client import CdpClient
 from app.services.browser.page_ready import ReadyWait

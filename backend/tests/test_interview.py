@@ -6,7 +6,6 @@
 import json
 
 import pytest
-
 from app.models.interview import InterviewSession
 from app.schemas.interview import InterviewCreate
 from app.services.interview.interview import (
@@ -292,7 +291,7 @@ def test_the_last_answer_does_not_produce_a_dangling_question(client, monkeypatc
     )
     session_id = client.post("/api/interview", json={"rounds": 3}).json()["id"]
 
-    for round_index in range(1, 4):
+    for _round_index in range(1, 4):
         response = client.post(f"/api/interview/{session_id}/answers", json={"content": "回答"})
         assert response.status_code == 200
 

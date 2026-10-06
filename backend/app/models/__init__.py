@@ -10,14 +10,20 @@ from .apply import (
     QUEUE_STATUSES,
     STOP_REASONS,
     TASK_KINDS,
-    TASK_STEPS,
     TASK_STATUSES,
+    TASK_STEPS,
     ApplyQueueItem,
     ApplyTask,
     ApplyTaskItem,
     JobMatchAnalysis,
 )
 from .assistant import AssistantSkill, AssistantSkillFile, ChatConversation, ChatMessage
+from .claim import (
+    CLAIM_CATEGORIES,
+    RESPONSIBILITY_LEVELS,
+    VERIFICATION_STATUSES,
+    ClaimRecord,
+)
 from .drill import (
     DRILL_STATUS_ACTIVE,
     DRILL_STATUS_FINISHED,
@@ -26,12 +32,6 @@ from .drill import (
     DrillContract,
     DrillSession,
     DrillTurn,
-)
-from .claim import (
-    CLAIM_CATEGORIES,
-    RESPONSIBILITY_LEVELS,
-    VERIFICATION_STATUSES,
-    ClaimRecord,
 )
 from .interview import (
     INTERVIEW_DIFFICULTIES,
@@ -63,10 +63,6 @@ from .profile import (
     UserProfile,
 )
 from .question_bank_record import QuestionBankRecord
-from .web_form_profile import WebFormProfileEntry
-from .web_form_profile_record import WebFormProfileRecord
-from .web_form_record import SOURCE_BATCH, SOURCE_LIVE, WebFormFillRecord
-from .web_form_url_history import WebFormUrlHistory
 from .referral import REFERRAL_STATUSES, Referral
 from .reminder import REMINDER_KINDS, REMINDER_STATUSES, Reminder
 from .resume import (
@@ -75,14 +71,23 @@ from .resume import (
     ResumeGenerateTask,
     ResumeRecord,
 )
+from .resume_template import (
+    TEMPLATE_KIND_FORMAT,
+    TEMPLATE_KIND_STYLE,
+    TEMPLATE_KINDS,
+    ResumeTemplate,
+)
+from .setting import AppSetting, LLMConfigRecord
+from .share_package import SHARE_PERMISSIONS, SharePackage
 from .tracker import (
     SOURCES,
     STATUSES,
     ApplicationTrack,
 )
-from .resume_template import TEMPLATE_KIND_FORMAT, TEMPLATE_KIND_STYLE, TEMPLATE_KINDS, ResumeTemplate
-from .setting import AppSetting, LLMConfigRecord
-from .share_package import SHARE_PERMISSIONS, SharePackage
+from .web_form_profile import WebFormProfileEntry
+from .web_form_profile_record import WebFormProfileRecord
+from .web_form_record import SOURCE_BATCH, SOURCE_LIVE, WebFormFillRecord
+from .web_form_url_history import WebFormUrlHistory
 
 __all__ = [
     "Job",

@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.models.apply import FAILURE_SELECTOR_INVALID, TASK_KIND_COLLECT, ApplyTask
 from app.services.site_health import (
     STATUS_DEGRADED,
@@ -14,7 +13,6 @@ from app.services.site_health import (
     recent_collect_summaries,
     site_health_overview,
 )
-
 
 # ===== 读库：按站点归因 =====
 

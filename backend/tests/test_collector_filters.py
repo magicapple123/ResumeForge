@@ -7,8 +7,7 @@ from app.models.job import Job
 from app.models.material import CandidateJob
 from app.services.apply.collector import Collector
 from app.services.sites.base import SearchPage, SearchResult
-
-from test_collector import FakeCollectAdapter, _FakeClock, _config, _task
+from test_collector import FakeCollectAdapter, _config, _FakeClock, _task
 
 
 def test_collector_stamps_the_configured_job_type_on_candidates(db_session):

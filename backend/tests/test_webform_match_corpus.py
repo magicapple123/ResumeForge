@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import pytest
-
 from webform_corpus_support import (
     FIXTURES_DIR,
     PAGES_DIR,

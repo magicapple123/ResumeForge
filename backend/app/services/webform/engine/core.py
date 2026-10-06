@@ -47,29 +47,29 @@ from .evidence import (
     has_ambiguous_field_evidence,
 )
 from .families import foreign_marker
-from .pollution import strip_shared_nearby
-from .recovery import (
-    MAX_RETRIES,
-    OptionUnavailable,
-    REASON_NO_CONTROL,
-    REASON_NO_SELECTOR,
-    REASON_NOT_CHECKED,
-    REASON_READBACK_ERROR,
-    REASON_VALUE_MISMATCH,
-    RetryStrategy,
-    classify_write_error,
-    retry_plan,
-)
 from .model import (
+    _DEPENDENT_SELECT_POLL_SECONDS,
+    _DEPENDENT_SELECT_WAIT_SECONDS,
+    _RECHECK_DELAY_SECONDS,
     CONTROL_TYPES,
     ApplyOutcome,
     Control,
     FieldMapping,
     MatchResult,
     SkipNote,
-    _DEPENDENT_SELECT_POLL_SECONDS,
-    _DEPENDENT_SELECT_WAIT_SECONDS,
-    _RECHECK_DELAY_SECONDS,
+)
+from .pollution import strip_shared_nearby
+from .recovery import (
+    MAX_RETRIES,
+    REASON_NO_CONTROL,
+    REASON_NO_SELECTOR,
+    REASON_NOT_CHECKED,
+    REASON_READBACK_ERROR,
+    REASON_VALUE_MISMATCH,
+    OptionUnavailable,
+    RetryStrategy,
+    classify_write_error,
+    retry_plan,
 )
 from .scripts import CONTROLS_SCRIPT
 from .writers import (
@@ -257,7 +257,7 @@ class FormEngine:
         }
         field_order = {field_name: order for order, field_name in enumerate(FIELD_SYNONYMS)}
         candidates: list[tuple[tuple[int, int, int], int, int, str, str, int | None, Control]] = []
-        for raw_field, raw_value in data.items():
+        for raw_field in data:
             base_field, explicit_index = split_repeated_key(str(raw_field))
             if base_field not in FIELD_SYNONYMS:
                 continue
@@ -401,7 +401,8 @@ class FormEngine:
         ordered = sorted(groups.values(), key=lambda group: group[0].index)
 
         added: list[FieldMapping] = []
-        for first, second in zip(ordered, ordered[1:]):
+        # 相邻分组配对的惯用法：两个序列长度恒差 1，strict=False 是语义的一部分。
+        for first, second in zip(ordered, ordered[1:], strict=False):
             if second[0].index != first[-1].index + 1:
                 continue
             parent = first[0].date_part_label

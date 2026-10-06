@@ -13,7 +13,6 @@
 import json
 
 import pytest
-
 from app.services.settings_service import get_webform_relaxed_mode, save_webform_relaxed_mode
 from app.services.webform import FormEngine, get_snapshot_store
 from app.services.webform.engine import relaxed_kind
@@ -28,7 +27,6 @@ from app.services.webform.service import (
 )
 from app.services.webform.service.fill import _rebuild_mapping
 from app.services.webform.session import Snapshot
-
 from test_webform_api import browser_port  # noqa: F401 - pytest fixture，经本模块解析
 from test_webform_live import FakeLiveClient, raw_control
 

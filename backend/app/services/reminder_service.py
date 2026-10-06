@@ -10,17 +10,17 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from . import trash
 from ..models.job import Job
 from ..models.profile import utcnow
 from ..models.reminder import REMINDER_STATUS_PENDING, Reminder
 from ..models.resume import ResumeRecord
 from ..models.tracker import ApplicationTrack
-from ..schemas.reminder import ReminderCreate, ReminderUpdate, ReminderUpcomingOut
+from ..schemas.reminder import ReminderCreate, ReminderUpcomingOut, ReminderUpdate
+from . import trash
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ def _naive_utc(value: datetime) -> datetime:
     """统一成无时区 UTC，避免带时区与无时区比较抛 TypeError。"""
     if value.tzinfo is None:
         return value
-    return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 def _due_label(remind_at: datetime, now: datetime) -> str:
@@ -154,15 +154,18 @@ def reminder_or_none(db: Session, reminder_id: int) -> Reminder | None:
 
 def _resolve_bindings(db: Session, values: dict) -> dict:
     """校验三个绑定对象：不存在或已软删则置空（SET NULL 语义）。"""
-    if values.get("track_id") is not None:
-        if trash.get_live(db, ApplicationTrack, values["track_id"]) is None:
-            values["track_id"] = None
-    if values.get("job_id") is not None:
-        if trash.get_live(db, Job, values["job_id"]) is None:
-            values["job_id"] = None
-    if values.get("resume_id") is not None:
-        if trash.get_live(db, ResumeRecord, values["resume_id"]) is None:
-            values["resume_id"] = None
+    if (
+        values.get("track_id") is not None
+        and trash.get_live(db, ApplicationTrack, values["track_id"]) is None
+    ):
+        values["track_id"] = None
+    if values.get("job_id") is not None and trash.get_live(db, Job, values["job_id"]) is None:
+        values["job_id"] = None
+    if (
+        values.get("resume_id") is not None
+        and trash.get_live(db, ResumeRecord, values["resume_id"]) is None
+    ):
+        values["resume_id"] = None
     return values
 
 

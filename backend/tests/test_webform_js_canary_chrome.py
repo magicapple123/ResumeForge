@@ -15,10 +15,10 @@ import json
 import time
 
 from webform_canary_support import (
+    _ROOT,
     _open_panel,
     _open_picker,
     _open_picker_in_viewport,
-    _ROOT,
     _shadow,
     _urlencode,
     page_client,

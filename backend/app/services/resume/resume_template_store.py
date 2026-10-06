@@ -10,8 +10,8 @@
 """
 from __future__ import annotations
 
-import logging
 import json
+import logging
 import re
 
 from sqlalchemy.orm import Session
@@ -22,13 +22,13 @@ from ...models.resume_template import (
     TEMPLATE_KINDS,
     ResumeTemplate,
 )
+from .resume_template_style import MAX_STYLE_CONFIG_CHARS, validated_style_config
 from .resume_templates import (
     DEFAULT_TEMPLATE,
     FORMAT_PRESETS,
     RESUME_TEMPLATES,
     validated_format_config,
 )
-from .resume_template_style import MAX_STYLE_CONFIG_CHARS, validated_style_config
 
 logger = logging.getLogger(__name__)
 

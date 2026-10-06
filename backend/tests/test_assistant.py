@@ -10,7 +10,6 @@ import json
 import zipfile
 
 import pytest
-
 from app.api.assistant import send_message
 from app.models.assistant import ChatConversation, ChatMessage
 from app.schemas.assistant import AssistantMessageCreate

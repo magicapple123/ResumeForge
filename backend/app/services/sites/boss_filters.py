@@ -33,25 +33,59 @@ from urllib.request import Request, urlopen
 
 from .base import (
     SOURCE_PUBLIC as SOURCE_PUBLIC,
+)
+from .base import (
     SOURCE_SESSION as SOURCE_SESSION,
+)
+from .base import (
     SOURCE_SNAPSHOT as SOURCE_SNAPSHOT,
+)
+from .base import (
     SOURCE_UNAVAILABLE as SOURCE_UNAVAILABLE,
 )
 from .boss_filters_catalog import (
     CONDITIONS_ENDPOINT as CONDITIONS_ENDPOINT,
+)
+from .boss_filters_catalog import (
     DEFAULT_TIMEOUT_SECONDS as DEFAULT_TIMEOUT_SECONDS,
+)
+from .boss_filters_catalog import (
     GROUP_SPECS as GROUP_SPECS,
+)
+from .boss_filters_catalog import (
     INDUSTRY_ENDPOINT as INDUSTRY_ENDPOINT,
+)
+from .boss_filters_catalog import (
     MAX_RESPONSE_BYTES as MAX_RESPONSE_BYTES,
-    ResolvedFilters as ResolvedFilters,
+)
+from .boss_filters_catalog import (
     UNLIMITED_CODE as UNLIMITED_CODE,
+)
+from .boss_filters_catalog import (
     FilterGroup as FilterGroup,
+)
+from .boss_filters_catalog import (
     FilterOption as FilterOption,
+)
+from .boss_filters_catalog import (
+    ResolvedFilters as ResolvedFilters,
+)
+from .boss_filters_catalog import (
     build_catalogue as build_catalogue,
+)
+from .boss_filters_catalog import (
     parse_conditions as parse_conditions,
+)
+from .boss_filters_catalog import (
     parse_filter_bar as parse_filter_bar,
+)
+from .boss_filters_catalog import (
     parse_industries as parse_industries,
+)
+from .boss_filters_catalog import (
     resolve_codes as resolve_codes,
+)
+from .boss_filters_catalog import (
     snapshot_catalogue as snapshot_catalogue,
 )
 

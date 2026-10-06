@@ -20,7 +20,6 @@ import base64
 import json
 
 import pytest
-
 from app.services.browser.page_ready import ReadyWait
 from app.services.sites.boss import BossAdapter
 from app.services.sites.boss_network import (
@@ -29,7 +28,6 @@ from app.services.sites.boss_network import (
     parse_salary_text,
     parse_search_response,
 )
-
 
 # ===== 薪资格式化 =====
 

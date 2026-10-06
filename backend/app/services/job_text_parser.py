@@ -13,11 +13,43 @@ from .job_parser.candidate_constants import (
     _LOCATION_TERMS,
     _NON_LOCATION_TERMS,
     _TITLE_NON_ROLE_PREFIX_RE,
-    _TITLE_SENTENCE_PREFIXES,
     _TITLE_SENTENCE_PREFIX_RE,
+    _TITLE_SENTENCE_PREFIXES,
     _TITLE_TERMS,
 )
+from .job_parser.candidates import (
+    _discard_location_as_company,
+    _extract_location_from_metadata,
+    _looks_like_company,
+    _looks_like_company_candidate,
+    _looks_like_internship_marker,
+    _looks_like_location,
+    _looks_like_title,
+    _prepare_title_candidate,
+    _split_title_company,
+)
 from .job_parser.field_constants import _ENGLISH_LABELS_REQUIRING_COLON, _FIELD_LIMITS, _LABELS
+from .job_parser.metadata import (
+    _detect_job_type,
+    _extract_posted_at,
+    _is_additional_preamble_line,
+    _looks_like_compact_recruitment_metadata,
+    _mark_type_lines,
+    _mark_unlabeled_metadata,
+    _normalize_job_type,
+    _normalize_status,
+)
+from .job_parser.normalization import (
+    _INLINE_LABEL_PATTERNS,
+    _LABEL_PATTERNS,
+    _compile_inline_label_pattern,
+    _compile_label_pattern,
+    _find_url,
+    _inline_label_matches,
+    _normalize_lines,
+    _strip_inline_salary,
+    _truncate,
+)
 from .job_parser.section_constants import (
     _ADDITIONAL_HEADING_RE,
     _ADDITIONAL_HEADINGS,
@@ -38,45 +70,13 @@ from .job_parser.section_constants import (
     _UPDATED_DATE_RE,
     _URL_RE,
 )
-from .job_parser.normalization import (
-    _INLINE_LABEL_PATTERNS,
-    _LABEL_PATTERNS,
-    _compile_inline_label_pattern,
-    _compile_label_pattern,
-    _find_url,
-    _inline_label_matches,
-    _normalize_lines,
-    _strip_inline_salary,
-    _truncate,
-)
-from .job_parser.candidates import (
-    _discard_location_as_company,
-    _extract_location_from_metadata,
-    _looks_like_company,
-    _looks_like_company_candidate,
-    _looks_like_internship_marker,
-    _looks_like_location,
-    _looks_like_title,
-    _prepare_title_candidate,
-    _split_title_company,
-)
-from .job_parser.title_company import _extract_title_and_company
-from .job_parser.metadata import (
-    _detect_job_type,
-    _extract_posted_at,
-    _is_additional_preamble_line,
-    _looks_like_compact_recruitment_metadata,
-    _mark_type_lines,
-    _mark_unlabeled_metadata,
-    _normalize_job_type,
-    _normalize_status,
-)
 from .job_parser.sections import (
     _extract_labeled_fields,
     _extract_sections,
     _first_section_index,
     _is_generic_additional_heading,
 )
+from .job_parser.title_company import _extract_title_and_company
 
 __all__ = [
     "parse_job_text",

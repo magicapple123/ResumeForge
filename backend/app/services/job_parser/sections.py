@@ -32,7 +32,7 @@ def _extract_labeled_fields(lines: list[str]) -> tuple[dict[str, str], set[int]]
             section_boundaries = [
                 match.start() for match in _INLINE_SECTION_RE.finditer(line) if match.start() > 0
             ]
-            for match_index, (start, end, field, _label) in enumerate(inline_matches):
+            for match_index, (_start, end, field, _label) in enumerate(inline_matches):
                 value_end = (
                     inline_matches[match_index + 1][0]
                     if match_index + 1 < len(inline_matches)
@@ -41,7 +41,7 @@ def _extract_labeled_fields(lines: list[str]) -> tuple[dict[str, str], set[int]]
                 following_sections = [boundary for boundary in section_boundaries if boundary > end]
                 if following_sections:
                     value_end = min(value_end, min(following_sections))
-                value = line[end:value_end].strip(" \t:：|｜丨;,；,，")
+                value = line[end:value_end].strip(" \t:：|｜丨;,；,，")  # noqa: B005 - 这里要的就是按"字符集合"去除行内分隔符，不是去前缀串
                 if value and field not in values:
                     values[field] = value
             consumed.add(index)

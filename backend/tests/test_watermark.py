@@ -10,13 +10,12 @@ import urllib.parse
 from io import BytesIO
 
 import pytest
-from docx import Document
-from pypdf import PdfReader
-
 from app.services.docx_exporter import build_resume_docx
 from app.services.pdf_exporter import build_resume_pdf, font_available
 from app.services.resume.resume_sample import sample_resume_content
 from app.services.watermark import WatermarkError, apply_watermark
+from docx import Document
+from pypdf import PdfReader
 
 needs_font = pytest.mark.skipif(not font_available(), reason="本机没有可用的中文字体")
 
@@ -27,7 +26,7 @@ def test_empty_text_passes_through():
 
 
 def test_html_watermark_escapes_and_injects_tiled_overlay():
-    content = "<html><body><p>正文</p></body></html>".encode("utf-8")
+    content = "<html><body><p>正文</p></body></html>".encode()
     out = apply_watermark(content, '<script>"内部水印"</script>', "html")
     text = out.decode("utf-8")
     decoded = urllib.parse.unquote(text)

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.reminder import REMINDER_KINDS, REMINDER_STATUSES
-from ..schemas.reminder import ReminderCreate, ReminderOut, ReminderUpdate, ReminderUpcomingOut
+from ..schemas.reminder import ReminderCreate, ReminderOut, ReminderUpcomingOut, ReminderUpdate
 from ..services.reminder_service import (
     create_reminder,
     delete_reminder,

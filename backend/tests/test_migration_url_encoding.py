@@ -9,9 +9,8 @@ import sqlite3
 from pathlib import Path
 
 from alembic.migration import MigrationContext
-from sqlalchemy import create_engine
-
 from app.database_migrations import run_database_migrations
+from sqlalchemy import create_engine
 
 
 def test_migrations_run_on_database_path_with_percent_and_space(tmp_path: Path):

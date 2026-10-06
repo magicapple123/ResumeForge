@@ -5,13 +5,12 @@
 """
 from app.api.assistant_stream import MAX_TOOL_ROUNDS
 from app.services.llm.base import LLMDelta
-
 from test_assistant import (
-    _ScriptedProvider,
     _configure_llm,
     _create_conversation,
     _events,
     _import_skill,
+    _ScriptedProvider,
     _send,
     _tool_call,
 )

@@ -6,7 +6,6 @@
 """
 import json
 
-
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider, LLMError
 

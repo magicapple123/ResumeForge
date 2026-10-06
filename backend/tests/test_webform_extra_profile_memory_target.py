@@ -6,7 +6,6 @@
 共享夹具见 ``test_webform_extra_profile.py``。
 """
 from app.services.webform import extra_profile
-
 from test_webform_extra_profile import _seed_profile
 
 

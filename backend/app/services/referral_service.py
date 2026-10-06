@@ -22,18 +22,6 @@ from pathlib import Path
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from . import trash
-from .ratios import rate
-from .attachments import (
-    MAX_ATTACHMENT_BYTES,
-    declared_mime,
-    format_mismatch_error,
-    image_mime_for_extension,
-    image_mime_of_content,
-    image_signature_matches,
-    safe_attachment_name,
-    unsupported_attachment_error,
-)
 from ..config import DATA_DIR
 from ..models.job import Job
 from ..models.referral import (
@@ -44,6 +32,18 @@ from ..models.referral import (
 )
 from ..models.tracker import STATUS_INTERVIEW, STATUS_OFFER, ApplicationTrack
 from ..schemas.referral import ReferralCreate, ReferralOut, ReferralStatsOut, ReferralUpdate
+from . import trash
+from .attachments import (
+    MAX_ATTACHMENT_BYTES,
+    declared_mime,
+    format_mismatch_error,
+    image_mime_for_extension,
+    image_mime_of_content,
+    image_signature_matches,
+    safe_attachment_name,
+    unsupported_attachment_error,
+)
+from .ratios import rate
 
 logger = logging.getLogger(__name__)
 
@@ -170,9 +170,11 @@ def _apply_payload(db: Session, values: dict) -> dict:
                 values["position"] = job.title
             if not values.get("job_title"):
                 values["job_title"] = job.title
-    if values.get("track_id") is not None:
-        if trash.get_live(db, ApplicationTrack, values["track_id"]) is None:
-            values["track_id"] = None
+    if (
+        values.get("track_id") is not None
+        and trash.get_live(db, ApplicationTrack, values["track_id"]) is None
+    ):
+        values["track_id"] = None
     # 第 6 批新增字段：显式传 null 时归一化为空值，避免写入非空列。
     if "referral_code" in values and values["referral_code"] is None:
         values["referral_code"] = ""

@@ -12,12 +12,12 @@
 2. 读取侧对未知来源 / 未知状态 / 超量备注图片**一律如实回显**；
 3. 输入侧校验**照旧生效**——修的是读取容错，不是把闸门拆掉。
 """
-import pytest
 from datetime import datetime
-from pydantic import ValidationError
 
+import pytest
 from app.models.job import Job
-from app.schemas.job import JobCreate, JobOut, RECOGNITION_SOURCES
+from app.schemas.job import RECOGNITION_SOURCES, JobCreate, JobOut
+from pydantic import ValidationError
 
 
 def _row(**overrides) -> dict:

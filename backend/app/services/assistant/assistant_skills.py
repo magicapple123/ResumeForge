@@ -17,9 +17,9 @@ import re
 from sqlalchemy.orm import Session
 
 from ...models.assistant import AssistantSkill, AssistantSkillFile
+from ..profile.profile_budget import _trim_text
 from ..profile.profile_matching import JobFocus
 from ..profile.profile_references import _reference_chunks, _select_reference_excerpt
-from ..profile.profile_budget import _trim_text
 from ..skill_archive import ParsedSkill
 
 logger = logging.getLogger(__name__)

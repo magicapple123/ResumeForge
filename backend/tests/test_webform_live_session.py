@@ -6,12 +6,10 @@
 import json
 
 import pytest
-
 from app.services.webform import live as live_module
 from app.services.webform.engine import Control
 from app.services.webform.live import LiveSession
 from app.services.webform.service import suggest_for
-
 from test_webform_live import FakeLiveClient
 
 

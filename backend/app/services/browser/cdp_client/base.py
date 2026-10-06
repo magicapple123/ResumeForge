@@ -60,6 +60,6 @@ class CdpClient(ABC):
     def drain_events(self) -> list[dict[str, Any]]:
         return []
 
-    def close(self) -> None:
+    def close(self) -> None:  # noqa: B027 - 可选钩子：子类按需覆写资源释放，基类故意留空
         """关闭底层连接（不关闭浏览器进程）。"""
 

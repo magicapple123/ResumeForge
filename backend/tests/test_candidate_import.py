@@ -7,12 +7,12 @@
 from app.models.job import Job
 from app.models.material import CANDIDATE_JOB_IMPORTED, CANDIDATE_JOB_PENDING, CandidateJob
 from app.schemas.material import CandidateJobCreate
-from app.services.sites.boss_text import split_job_fields
 from app.services.candidate_jobs import (
     create_candidate_job,
     import_candidates,
     stage_candidate_job,
 )
+from app.services.sites.boss_text import split_job_fields
 
 
 def _stage(db_session, **overrides) -> CandidateJob:

@@ -11,11 +11,10 @@
 """
 import httpx
 import pytest
-
 from app.services import webform as webform_service
 from app.services.apply import _site_browser, apply_service
-from app.services.webform import get_snapshot_store
 from app.services.webform import browser as webform_browser
+from app.services.webform import get_snapshot_store
 
 
 class FakeBrowserPort:

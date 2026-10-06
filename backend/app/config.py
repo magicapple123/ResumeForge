@@ -9,7 +9,6 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 # 数据目录：数据库、备份、导出、样例等本地产物都落在它下面。其它模块一律从这里推导子目录，
 # 不各自去拼相对路径（拼错一处就会写到仓库里、被误提交）。

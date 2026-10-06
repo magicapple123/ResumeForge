@@ -36,7 +36,7 @@ def test_custom_combobox_clicks_the_unique_matching_option():
 
     assert result.status == "matched"
     assert result.option is not None and result.option.value == "male"
-    assert any("Input.dispatchMouseEvent" == method for method, _params in client.sent)
+    assert any(method == "Input.dispatchMouseEvent" for method, _params in client.sent)
 
 
 def test_custom_combobox_refuses_ambiguous_options():

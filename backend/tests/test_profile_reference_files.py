@@ -1,6 +1,5 @@
 """个人资料条目参考文件的 API 校验与持久化测试。"""
 import pytest
-
 from app.schemas.profile import (
     MAX_REFERENCE_CONTENT_CHARS,
     MAX_REFERENCE_FILE_NAME_CHARS,

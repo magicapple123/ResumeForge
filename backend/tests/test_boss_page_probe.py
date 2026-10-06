@@ -19,16 +19,16 @@
 本身**：必须用可见性判定、必须把导航链接排除在外。这类断言在仓库里已有先例
 （例如"前端生产代码里不得写死站点名"）。
 """
+from app.services.sites.boss_apply import (
+    _entry_script,
+    _greeting_state_script,
+    _submit_state_script,
+)
 from app.services.sites.boss_page import (
     SELECTOR_JOB_LINK,
     SELECTOR_SEARCH_READY,
     _page_probe_script,
     _readiness_script,
-)
-from app.services.sites.boss_apply import (
-    _entry_script,
-    _greeting_state_script,
-    _submit_state_script,
 )
 
 

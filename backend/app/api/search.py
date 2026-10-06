@@ -5,7 +5,7 @@
 ``"resumes"`` 时仍只查单一域，语义不变。
 """
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import cast, or_, String
+from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db

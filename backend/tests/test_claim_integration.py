@@ -7,8 +7,8 @@
 import json
 
 from app.schemas.resume import GenerateOptions, ResumeContent
-from app.services.resume.resume_generator import ResumeGenerator
 from app.services.llm.base import BaseLLMProvider
+from app.services.resume.resume_generator import ResumeGenerator
 
 
 class CapturingProvider(BaseLLMProvider):

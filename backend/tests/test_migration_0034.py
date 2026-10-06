@@ -1,8 +1,7 @@
 """``0034_job_match_batches`` 迁移：保存岗位批量适配度分析快照。"""
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0033_web_form_profile_records"
 HEAD_REVISION = "0034_job_match_batches"

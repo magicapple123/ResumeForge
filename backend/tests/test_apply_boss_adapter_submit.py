@@ -7,7 +7,6 @@
 import json
 
 import pytest
-
 from app.models.apply import (
     FAILURE_CAPTCHA_REQUIRED,
     FAILURE_GREETING_MISSING,
@@ -16,7 +15,6 @@ from app.models.apply import (
 from app.services.sites.base import CollectQuery, SiteFailure
 from app.services.sites.boss import BossAdapter, same_target_page
 from app.services.sites.boss_network import SEARCH_MARKER
-
 from test_apply_boss_adapter import FAKE_JOB, ScriptedCdpClient, boss
 
 

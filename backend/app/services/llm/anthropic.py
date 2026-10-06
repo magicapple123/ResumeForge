@@ -25,16 +25,22 @@ from typing import Any
 import httpx
 
 from ...schemas.setting import LLMConfig
+from .anthropic_messages import (
+    ANTHROPIC_VERSION as ANTHROPIC_VERSION,
+)
+from .anthropic_messages import (
+    _convert_messages as _convert_messages,
+)
+from .anthropic_messages import (
+    _convert_tools as _convert_tools,
+)
+from .anthropic_messages import (
+    _has_tool_history as _has_tool_history,
+)
 from .base import BaseLLMProvider, LLMDelta, LLMError
 from .openai_compat import http_error_message, validated_base_url
 from .thinking import DEFAULT_EFFORT, EFFORT_BUDGETS, thinking_budget
 
-from .anthropic_messages import (
-    ANTHROPIC_VERSION as ANTHROPIC_VERSION,
-    _convert_messages as _convert_messages,
-    _convert_tools as _convert_tools,
-    _has_tool_history as _has_tool_history,
-)
 logger = logging.getLogger(__name__)
 
 # 「不限制输出」时使用的兜底上限：Messages 协议必须给这个字段。
@@ -64,17 +70,16 @@ class AnthropicProvider(BaseLLMProvider):
         """同步发一次 Anthropic 消息请求，返回完整文本；超时/连接/解析错误统一转成 LLMError。"""
         payload = self._build_payload(messages, stream=False)
         try:
-            async with self._client() as client:
-                async with client.stream(
-                    "POST", self._endpoint(), json=payload, headers=self._headers()
-                ) as response:
-                    if response.status_code != 200:
-                        raise self._http_error(response, messages)
-                    body = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        if len(body) + len(chunk) > _MAX_CHAT_RESPONSE_BYTES:
-                            raise LLMError("模型返回内容过大，请调低最大输出长度")
-                        body.extend(chunk)
+            async with self._client() as client, client.stream(
+                "POST", self._endpoint(), json=payload, headers=self._headers()
+            ) as response:
+                if response.status_code != 200:
+                    raise self._http_error(response, messages)
+                body = bytearray()
+                async for chunk in response.aiter_bytes():
+                    if len(body) + len(chunk) > _MAX_CHAT_RESPONSE_BYTES:
+                        raise LLMError("模型返回内容过大，请调低最大输出长度")
+                    body.extend(chunk)
         except httpx.TimeoutException as exc:
             raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
         except httpx.RequestError as exc:
@@ -96,14 +101,13 @@ class AnthropicProvider(BaseLLMProvider):
         """流式发消息请求，逐块产出 LLMDelta（支持工具调用）。"""
         payload = self._build_payload(messages, stream=True, tools=tools)
         try:
-            async with self._client() as client:
-                async with client.stream(
-                    "POST", self._endpoint(), json=payload, headers=self._headers()
-                ) as response:
-                    if response.status_code != 200:
-                        raise self._http_error(response, messages)
-                    async for delta in self._iter_sse(response):
-                        yield delta
+            async with self._client() as client, client.stream(
+                "POST", self._endpoint(), json=payload, headers=self._headers()
+            ) as response:
+                if response.status_code != 200:
+                    raise self._http_error(response, messages)
+                async for delta in self._iter_sse(response):
+                    yield delta
         except httpx.TimeoutException as exc:
             raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
         except httpx.RequestError as exc:

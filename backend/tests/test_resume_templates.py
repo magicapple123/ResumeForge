@@ -1,6 +1,5 @@
 """简历模板体系：内置样式、格式模板校验、用户自制模板的清洗与渲染。"""
 import pytest
-
 from app.database import SessionLocal
 from app.services.exporter import render_html
 from app.services.resume.resume_sample import sample_resume_content

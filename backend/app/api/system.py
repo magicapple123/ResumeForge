@@ -12,8 +12,8 @@
 输出解码出错）都必须被吞掉并记日志——否则退出线程会半途死掉，变成"前端收到 202、
 后端却不退"这种最难查的状态。
 """
-import ipaddress
 import io
+import ipaddress
 import json
 import locale
 import logging
@@ -26,7 +26,7 @@ import sys
 import threading
 import time
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -234,7 +234,7 @@ def _recent_log_tail(max_lines: int = 300) -> str:
 def _system_snapshot() -> dict:
     settings = get_settings()
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "app_version": settings.app_version,
         "python_version": sys.version.split()[0],
         "os": platform.system(),

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from app.database import Base
 from app.models.apply import (
     FAILURE_GREETING_MISSING,
@@ -16,16 +17,14 @@ from app.models.apply import (
 )
 from app.models.job import Job
 from app.models.resume import ResumeRecord
-from app.schemas.apply import ApplyConfigIn, ApplyQueueAddRequest, GREETING_RECORD_MAX_CHARS
+from app.schemas.apply import GREETING_RECORD_MAX_CHARS, ApplyConfigIn, ApplyQueueAddRequest
 from app.services.apply import apply_service
 from app.services.apply.apply_service import _clip_greeting
 from app.services.browser.cdp_client import CdpClient
 from app.services.job.job_match import parse_greeting
 from app.services.llm.base import LLMError
-from app.services.sites.boss import BossAdapter
 from app.services.sites.base import SiteFailure
-
-import pytest
+from app.services.sites.boss import BossAdapter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

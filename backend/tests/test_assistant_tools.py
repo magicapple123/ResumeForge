@@ -2,7 +2,6 @@
 import json
 
 import pytest
-
 from app.schemas.profile import EducationIn, ProfileOut, ProfileUpdate
 from app.services.assistant_tools import execute_tool, tool_definitions, tool_names
 from app.services.profile.profile_service import get_profile_detail, update_profile

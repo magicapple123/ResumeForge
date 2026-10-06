@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from ..database import get_db
-from ..services import trash
 from ..models.job import JOB_STATUSES, Job
 from ..schemas.common import Page
 from ..schemas.job import (
@@ -26,13 +25,7 @@ from ..schemas.job import (
     JobUpdate,
 )
 from ..schemas.job_analysis import JobAnalysisResult
-from ..services.job.job_analysis import generate_job_analysis
-from ..services.job.job_service import create_job_record, update_job_record
-from ..services.job.job_multi_parser import extract_multiple_jobs, local_multi_drafts
-from ..services.job_text_parser import parse_job_text
-from ..services.llm import create_provider
-from ..services.llm.base import LLMError
-from ..services.settings_service import get_llm_config
+from ..services import trash
 from ..services.attachments import (
     assert_attachment_budget,
     image_data_urls,
@@ -40,6 +33,13 @@ from ..services.attachments import (
     total_attachment_bytes,
 )
 from ..services.document_text import extract_documents_text
+from ..services.job.job_analysis import generate_job_analysis
+from ..services.job.job_multi_parser import extract_multiple_jobs, local_multi_drafts
+from ..services.job.job_service import create_job_record, update_job_record
+from ..services.job_text_parser import parse_job_text
+from ..services.llm import create_provider
+from ..services.llm.base import LLMError
+from ..services.settings_service import get_llm_config
 from ..services.text_extraction import (
     ai_failed_warning,
     extract_job_text,

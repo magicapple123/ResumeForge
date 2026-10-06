@@ -8,9 +8,8 @@
 存量行靠 ``server_default`` 拿到空串。
 """
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0028_web_form_profile"
 HEAD_REVISION = "0029_education_cet_scores"

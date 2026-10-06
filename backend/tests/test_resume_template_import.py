@@ -11,15 +11,14 @@ from __future__ import annotations
 import base64
 
 import pytest
-
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider
 from app.services.resume.resume_template_import import (
     MAX_SOURCE_CHARS,
     TemplateImportError,
     TemplateImportSource,
-    build_import_messages,
     build_design_import_messages,
+    build_import_messages,
     derive_format_template,
     derive_style_template,
     missing_format_keys,
@@ -28,7 +27,6 @@ from app.services.resume.resume_template_import import (
 )
 from app.services.resume.resume_template_style import validated_style_config
 from app.services.resume.resume_templates import FORMAT_FIELD_KEYS
-
 
 # 一张 1×1 的合法 PNG：用它验证"按内容判类型"这条路径。
 TINY_PNG = base64.b64decode(

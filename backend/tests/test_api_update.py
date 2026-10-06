@@ -9,7 +9,6 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-
 from app.schemas.update import UpdateCheckResult
 from app.services import update_download
 from app.services.update_check import clear_cache

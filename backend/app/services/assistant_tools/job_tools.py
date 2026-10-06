@@ -26,11 +26,11 @@ from ..job.job_service import create_job_record, update_job_record
 from ..profile.profile_relevance import build_job_prompt_text
 from ..profile.profile_service import update_profile
 from ._shared import (
+    _RESUME_CONTENT_BUDGET,
     DEFAULT_LIST_LIMIT,
     MAX_JOB_RESULT_CHARS,
     MAX_LIST_LIMIT,
     PROFILE_EDITABLE_FIELDS,
-    _RESUME_CONTENT_BUDGET,
     _job_brief,
     _load_profile,
     _profile_snapshot,

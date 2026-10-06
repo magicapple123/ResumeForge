@@ -24,7 +24,7 @@ import json
 import logging
 from collections import OrderedDict
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -78,7 +78,7 @@ def _decode_body(result: Any) -> Any | None:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class SampleRecordingCdpClient(CdpClient):

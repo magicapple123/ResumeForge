@@ -6,13 +6,12 @@ resolve 抛 OSError、软链接逃逸、Windows 大小写/反斜杠等价。
 """
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 
 import pytest
-
 from app.services.apply.task_runner import _is_within
-
 
 # ===== 六、API 形状核实（未知字段必须 422，不是把脏数据当 500 吞掉）=====
 
@@ -50,10 +49,8 @@ def _make_escaping_link(link: Path, target: Path) -> bool:
     跳过，绝不伪造绿灯。
     """
     link.parent.mkdir(parents=True, exist_ok=True)
-    try:
+    with contextlib.suppress(OSError, NotImplementedError):
         os.symlink(target, link, target_is_directory=True)
-    except (OSError, NotImplementedError):
-        pass
     if link.exists() and link.resolve() == target.resolve():
         return True
     if os.name == "nt":

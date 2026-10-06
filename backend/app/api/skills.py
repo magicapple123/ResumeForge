@@ -26,11 +26,15 @@ from ..schemas.skill import (
 )
 from ..services.assistant.assistant_skills import (
     create_skill as create_skill_record,
+)
+from ..services.assistant.assistant_skills import (
     delete_skill,
     list_skills,
     set_skill_enabled,
-    update_skill as update_skill_record,
     upsert_skill,
+)
+from ..services.assistant.assistant_skills import (
+    update_skill as update_skill_record,
 )
 from ..services.data_backup import restore_directory
 from ..services.skill_archive import SkillImportError, parse_markdown_skill, parse_zip_skill

@@ -8,8 +8,8 @@ from pathlib import Path
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
-from ..resume.resume_sections import resolved_section_order
 from ...schemas.resume import ResumeContent
+from ..resume.resume_sections import resolved_section_order
 from .canvas import _ResumePDF
 from .fonts import FONT_FAMILY, ResumePDFError
 from .layout import (

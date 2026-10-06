@@ -19,7 +19,6 @@ from ...models.drill import (
 )
 from ..llm.base import BaseLLMProvider
 from ..llm.structured_output import parse_json_object
-
 from .common import (
     MAX_FEEDBACK_CHARS,
     MAX_QUESTION_CHARS,
@@ -29,7 +28,6 @@ from .common import (
     load_prompt,
 )
 from .contract import _claim_payload
-
 
 # ===== 判定 =====
 

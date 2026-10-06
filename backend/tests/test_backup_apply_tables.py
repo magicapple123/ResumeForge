@@ -12,7 +12,6 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
-
 from app.database import engine
 from app.models.job import Job
 from app.services.data_backup import (

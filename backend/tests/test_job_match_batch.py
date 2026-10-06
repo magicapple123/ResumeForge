@@ -1,6 +1,5 @@
 """岗位广场批量适配度分析的接口与记录测试。"""
 import pytest
-
 from app.models.job import JOB_STATUS_OPEN, Job
 from app.models.profile import UserProfile
 from app.schemas.setting import LLMConfig

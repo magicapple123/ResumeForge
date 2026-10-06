@@ -14,8 +14,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from collections.abc import Sequence
-from typing import Any, Callable
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from sqlalchemy import update
 

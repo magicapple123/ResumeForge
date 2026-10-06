@@ -12,10 +12,15 @@ import json
 import re
 
 import pytest
-
 from app.services.browser.cdp_client import CdpClient
 from app.services.webform import live as live_module
-from app.services.webform.live import LiveSession, is_live_running, live_status, start_live, stop_live
+from app.services.webform.live import (
+    LiveSession,
+    is_live_running,
+    live_status,
+    start_live,
+    stop_live,
+)
 
 
 class FakeLiveClient(CdpClient):
@@ -82,9 +87,9 @@ class FakeLiveClient(CdpClient):
             # 如实记住写进去的值——回读时要原样吐回来，否则会被（正确地）判成"未确认"。
             match = re.search(r"setter\.call\(el, (\".*?\")\);", expression)
             self.written = json.loads(match.group(1)) if match else ""
-            return '{"ok": true, "value": %s}' % json.dumps(self.written, ensure_ascii=False)
+            return f'{{"ok": true, "value": {json.dumps(self.written, ensure_ascii=False)}}}'
         if "rf:read-back" in expression:
-            return '{"ok": true, "value": %s}' % json.dumps(self.written, ensure_ascii=False)
+            return f'{{"ok": true, "value": {json.dumps(self.written, ensure_ascii=False)}}}'
         return None
 
     def focus_on(self, control: dict) -> None:

@@ -54,26 +54,26 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from . import trash
-from .ratios import rate
-from .reminder_service import reminder_urgency_counts
-from .referral_service import referral_stats, referral_status_counts
-from .resume.resume_health import resume_health
 from ..models.profile import utcnow
 from ..models.tracker import (
     SOURCE_LABELS,
     SOURCES,
-    STATUSES,
-    STATUS_LABELS,
-    STATUS_RANK,
     STATUS_ASSESSMENT,
     STATUS_INTERVIEW,
+    STATUS_LABELS,
     STATUS_OFFER,
+    STATUS_RANK,
     STATUS_UNKNOWN,
+    STATUSES,
     ApplicationTrack,
     is_active,
     is_stalled,
 )
+from . import trash
+from .ratios import rate
+from .referral_service import referral_stats, referral_status_counts
+from .reminder_service import reminder_urgency_counts
+from .resume.resume_health import resume_health
 
 TREND_MONTHS = 6
 # 「投递最多的公司」展示前几名；其余合成一个"其他"计数，避免长尾把图撑满。

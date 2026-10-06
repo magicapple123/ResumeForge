@@ -55,13 +55,6 @@ from .profile_references import (
     _strip_markdown,
 )
 from .profile_relevance_constants import (
-    DOMAIN_CONTEXT_SIGNALS,
-    DOMAIN_SIGNALS,
-    SECTION_LIMITS,
-    SECTION_PRIMARY_FIELDS,
-    SKILL_DOMAIN_HINTS,
-    JobFocus,
-    ProfileSelection,
     _ASCII_TERM_RE,
     _LIST_DETAIL_FIELDS,
     _LLM_PROFILE_FIELDS,
@@ -78,8 +71,14 @@ from .profile_relevance_constants import (
     _REFERENCE_META_RE,
     _REFERENCE_SECTIONS,
     _TITLE_SPLIT_RE,
+    DOMAIN_CONTEXT_SIGNALS,
+    DOMAIN_SIGNALS,
+    SECTION_LIMITS,
+    SECTION_PRIMARY_FIELDS,
+    SKILL_DOMAIN_HINTS,
+    JobFocus,
+    ProfileSelection,
 )
-
 
 _EMPTY_FOCUS = JobFocus(skills=(), domains=(), terms=())
 

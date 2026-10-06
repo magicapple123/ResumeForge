@@ -15,6 +15,7 @@ from jinja2.sandbox import SandboxedEnvironment
 
 from ..schemas.resume import MAX_RESUME_PAGES, ResumeContent
 from .resume.resume_sections import DEFAULT_SECTION_ORDER, resolved_section_order
+from .resume.resume_template_style import style_css, validated_style_config
 from .resume.resume_templates import (
     DEFAULT_FONT_SCALE,
     DEFAULT_TEMPLATE,
@@ -23,7 +24,6 @@ from .resume.resume_templates import (
     template_spec,
     validated_format_config,
 )
-from .resume.resume_template_style import style_css, validated_style_config
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 

@@ -4,7 +4,6 @@ import base64
 import json
 
 import pytest
-
 from app.schemas.extraction import MAX_RECOGNIZED_TEXT_CHARS
 from app.schemas.setting import LLMConfig
 from app.services.attachments import normalize_extraction_images

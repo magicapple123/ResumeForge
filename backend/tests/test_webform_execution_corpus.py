@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import pytest
-
 from webform_engine_support import load_execution_cases, run_execution_case
 
 CASES = load_execution_cases()

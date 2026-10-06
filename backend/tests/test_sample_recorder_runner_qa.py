@@ -23,7 +23,6 @@ import time
 from pathlib import Path
 
 import pytest
-
 from app.config import captures_dir
 from app.models.apply import ApplyTask
 from app.schemas.apply import ApplyConfigIn, CollectConfigIn
@@ -42,7 +41,6 @@ from app.services.sites.registry import SiteRegistry
 
 # 复用装饰器单测里的假内层构造器（_NetworkFakeCdp 需要）。
 from test_sample_recorder import _response_event
-
 
 # query 里放一个"像令牌的串"：它绝不允许出现在落盘文件里。
 SECRET = "SECRET123"
@@ -88,9 +86,12 @@ class _NetworkFakeCdp(CdpClient):
         return [_response_event(self._request_id, self._url)]
 
     def send(self, method, params=None, *, timeout=None):
-        if method == "Network.getResponseBody" and isinstance(params, dict):
-            if str(params.get("requestId")) == self._request_id:
-                return {"body": self._body, "base64Encoded": False}
+        if (
+            method == "Network.getResponseBody"
+            and isinstance(params, dict)
+            and str(params.get("requestId")) == self._request_id
+        ):
+            return {"body": self._body, "base64Encoded": False}
         return {}
 
     def list_targets(self):

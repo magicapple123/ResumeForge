@@ -5,7 +5,7 @@ Revises: 0008_materials_and_modules
 Create Date: 2026-09-17
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

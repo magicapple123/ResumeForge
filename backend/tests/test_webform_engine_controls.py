@@ -6,16 +6,14 @@
 ``/fill`` 里，用 ``_rebuild_mapping`` 整理）。主文件与共享替身见 ``test_webform_engine.py``。
 """
 import pytest
-
 from app.services.webform.engine import (
     Control,
-    FormEngine,
     FieldMapping,
+    FormEngine,
     SelectOption,
     SelectResolution,
 )
 from app.services.webform.service.fill import _rebuild_mapping
-
 from test_webform_engine import RAW_CONTROLS, FakeCdpClient
 
 # ===== autocomplete：唯一不需要猜的信号 =====

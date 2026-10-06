@@ -39,8 +39,9 @@ import json
 import logging
 import threading
 from collections import OrderedDict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -81,7 +82,7 @@ MAX_CANDIDATES = 3
 # 与页面无关——"研究方向"在哪家公司都是 research_direction。含 host 反而会让换一家公司
 # 后重复付一次同样的调用。含 ``nearby_text`` 已经足够把不同表单上同名的框区分开。
 _CACHE_MAX = 128
-_cache: "OrderedDict[str, tuple[str, ...]]" = OrderedDict()
+_cache: OrderedDict[str, tuple[str, ...]] = OrderedDict()
 _cache_lock = threading.Lock()
 
 # 不可信输入护栏。与 ``services/resume/resume_writing.py`` 的同名常量是同一套措辞

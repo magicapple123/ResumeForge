@@ -1,7 +1,7 @@
 """网申字段与页面文案的同义词及重复区块提示。"""
 
-from .repeated_profile_catalog import REPEATED_FIELD_BLOCK_HINTS, REPEATED_FIELD_SYNONYMS
 from .field_supplement_catalog import SUPPLEMENT_SYNONYMS
+from .repeated_profile_catalog import REPEATED_FIELD_BLOCK_HINTS, REPEATED_FIELD_SYNONYMS
 
 # 亲属/他人信息的负向词。资料里的是**用户本人**的信息，这些块问的是别人，
 # 命中就打住——否则"姓名"会把父亲的名字填成用户自己的。

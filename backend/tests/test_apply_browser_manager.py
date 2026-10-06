@@ -13,7 +13,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-
 from app.services.browser.browser_manager import (
     BrowserError,
     BrowserManager,

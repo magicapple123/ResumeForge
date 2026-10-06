@@ -8,7 +8,6 @@ detail/open_apply/fill_and_submit 与网络捕获在 test_apply_boss_adapter_sub
 `boss()`/`ScriptedCdpClient`/常量留在本文件，供两个主题文件复用。）
 """
 import pytest
-
 from app.models.apply import (
     FAILURE_CAPTCHA_REQUIRED,
     FAILURE_LOGIN_REQUIRED,
@@ -18,10 +17,10 @@ from app.services.browser.cdp_client import CdpClient
 from app.services.browser.page_ready import ReadyWait
 from app.services.sites.base import CollectQuery, RiskProfile, SiteAdapter, SiteFailure
 from app.services.sites.boss import (
+    _SELECTORS,
     BOSS_DISPLAY_NAME,
     BOSS_KEY,
     BossAdapter,
-    _SELECTORS,
     classify_submit_state,
     detect_blocker,
     parse_job_detail,

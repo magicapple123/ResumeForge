@@ -14,12 +14,15 @@ from ...database import get_db
 from ...models.resume import ResumeRecord
 from ...schemas.export import (
     ExportRequest as ExportRequestSchema,
+)
+from ...schemas.export import (
     RedactionOptions as RedactionOptionsSchema,
 )
 from ...schemas.resume import ResumeContent
 from ...services.export_pipeline import ExportRequest, RenderContext, build_export
 from ...services.pdf_exporter import ResumePDFError
-from ...services.privacy import RedactionOptions as PrivacyRedactionOptions, redact
+from ...services.privacy import RedactionOptions as PrivacyRedactionOptions
+from ...services.privacy import redact
 from ...services.resume.resume_completeness import find_incomplete, incomplete_detail
 from ...services.resume.resume_record import record_format_config
 from ...services.resume.resume_template_store import (

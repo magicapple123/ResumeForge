@@ -15,15 +15,14 @@ from app.services.apply import apply_service
 # 复用主文件的 runner 台架与录制适配器（单向导入，避免循环）。
 from test_sample_recorder_runner_qa import (
     SEARCH_URL,
-    _NetworkFakeCdp,
-    _RecordingAdapter,
     _collect_task,
+    _NetworkFakeCdp,
     _patch_captures,
+    _RecordingAdapter,
     _runner,
     _saved_json_files,
     _wait,
 )
-
 
 # ===== 八、B 的 runner 级牙齿：join 结果越界 → 拒写、任务照常完成 =====
 

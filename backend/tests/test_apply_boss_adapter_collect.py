@@ -6,7 +6,6 @@
 import json
 
 import pytest
-
 from app.models.apply import (
     FAILURE_CAPTCHA_REQUIRED,
     FAILURE_LOGIN_REQUIRED,
@@ -16,7 +15,6 @@ from app.services.apply.task_runner import TaskStopped
 from app.services.sites.base import CollectQuery, SiteFailure
 from app.services.sites.boss import parse_job_detail, parse_search_payload
 from app.services.sites.boss_network import search_has_more
-
 from test_apply_boss_adapter import ScriptedCdpClient, boss
 
 

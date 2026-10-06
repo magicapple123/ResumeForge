@@ -17,7 +17,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from . import trash
 from ..models.claim import (
     CLAIM_CATEGORIES,
     RESPONSIBILITY_PARTICIPATED,
@@ -32,6 +31,7 @@ from ..models.claim import (
     verification_label,
 )
 from ..schemas.claim import ClaimCreate, ClaimDigestOut, ClaimOut, ClaimUpdate
+from . import trash
 
 logger = logging.getLogger(__name__)
 
@@ -175,12 +175,15 @@ def claim_warnings(record: ClaimRecord) -> list[str]:
         )
     if status == VERIFICATION_CONFIRMED and not record.sources:
         warnings.append("已确认但没有留下证据来源，之后需要复核时将无从回溯")
-    if status == VERIFICATION_PENDING and (record.candidate_wording or "").strip():
-        if not has_placeholder(record.candidate_wording):
-            warnings.append(
-                "待确认的表述没有加【待补】占位符；"
-                "导出终稿时会因为看不出它还没核实而被误用"
-            )
+    if (
+        status == VERIFICATION_PENDING
+        and (record.candidate_wording or "").strip()
+        and not has_placeholder(record.candidate_wording)
+    ):
+        warnings.append(
+            "待确认的表述没有加【待补】占位符；"
+            "导出终稿时会因为看不出它还没核实而被误用"
+        )
     if status == VERIFICATION_EXPIRED:
         warnings.append("这条已标记为过期，使用前请更新内容并重新核实")
     if status == VERIFICATION_REJECTED and (record.candidate_wording or "").strip():

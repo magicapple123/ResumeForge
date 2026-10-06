@@ -5,7 +5,6 @@
 预览和导出一起报错。
 """
 import pytest
-
 from app.services.resume.resume_template_store import (
     TemplateError,
     custom_format_options,

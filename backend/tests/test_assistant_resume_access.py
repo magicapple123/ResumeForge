@@ -12,7 +12,6 @@
 import json
 
 import pytest
-
 from app.models.job import Job
 from app.models.material import Material
 from app.models.resume import ResumeRecord

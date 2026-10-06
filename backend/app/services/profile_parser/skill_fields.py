@@ -2,8 +2,8 @@
 
 import re
 
-from .skill_constants import _SKILL_LEADING_LEVEL_RE, _SKILL_LEVEL_RE
 from .normalization import _clean_line
+from .skill_constants import _SKILL_LEADING_LEVEL_RE, _SKILL_LEVEL_RE
 
 
 def _split_tokens(value: str) -> list[str]:

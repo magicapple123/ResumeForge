@@ -7,7 +7,6 @@ AI 命中接进预览的完整链路（来源标记、默认不勾选、冲突�
 autouse fixture 不会生效（autouse 只来自 conftest / 本模块 / 插件）。
 """
 import pytest
-
 from app.services.llm.base import LLMError
 from app.services.webform import ai
 from app.services.webform.service import (
@@ -17,8 +16,7 @@ from app.services.webform.service import (
     default_selections,
     enrich_preview_with_ai,
 )
-
-from test_webform_ai import FakeProvider, UNKNOWN, _controls, _raw, _snapshot
+from test_webform_ai import UNKNOWN, FakeProvider, _controls, _raw, _snapshot
 
 
 @pytest.fixture(autouse=True)

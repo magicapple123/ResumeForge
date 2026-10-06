@@ -8,9 +8,7 @@ _thinking_config）。
 import json
 
 import httpx
-
 from app.services.llm.openai_compat import OpenAICompatProvider
-
 from test_openai_compat import (
     TOOLS,
     _collect_events,

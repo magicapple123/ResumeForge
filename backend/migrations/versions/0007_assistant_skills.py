@@ -5,7 +5,7 @@ Revises: 0006_chat_conversation_flags
 Create Date: 2026-09-15
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

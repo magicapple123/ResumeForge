@@ -1,7 +1,5 @@
 """SQLite 兼容升级测试。"""
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database import Base, build_engine, ensure_sqlite_columns
 from app.database_migrations import (
     application_tables,
@@ -9,6 +7,7 @@ from app.database_migrations import (
     run_database_migrations,
 )
 from app.main import SQLITE_REQUIRED_COLUMNS
+from sqlalchemy import create_engine, inspect, text
 
 # 从模型注册表取，而不是手写清单：手写清单会漏掉新表，让"迁移后的表集合"这条
 # 断言悄悄变成过时的期望值（而真出问题时是用户先发现）。

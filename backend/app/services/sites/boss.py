@@ -25,12 +25,12 @@ from .boss_apply import (
 from .boss_city import CityResolver
 from .boss_network import DETAIL_MARKERS, SEARCH_MARKERS
 from .boss_page import (
+    _SELECTORS,
     BOSS_DISPLAY_NAME,
     BOSS_ENTRY_URL,
     BOSS_HOSTS,
     BOSS_KEY,
     CHAT_PAGE_PATH,
-    BossPageMixin,
     SELECTOR_APPLY_ENTRY,
     SELECTOR_CAPTCHA,
     SELECTOR_DETAIL_READY,
@@ -52,7 +52,7 @@ from .boss_page import (
     SELECTOR_SEARCH_SALARY,
     SELECTOR_SEARCH_TITLE,
     SELECTOR_SUBMIT_BUTTON,
-    _SELECTORS,
+    BossPageMixin,
     _as_payload,
     _current_url,
     _js,

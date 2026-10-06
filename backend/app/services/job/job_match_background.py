@@ -9,7 +9,8 @@ import asyncio
 import json
 import logging
 import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy.orm import Session

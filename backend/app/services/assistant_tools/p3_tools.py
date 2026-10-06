@@ -19,7 +19,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from ._shared import _trim, MAX_PROFILE_RESULT_CHARS
+from ._shared import MAX_PROFILE_RESULT_CHARS, _trim
 from ._types import Tool, ToolResult
 
 DEFAULT_BATCH_LIMIT = 5

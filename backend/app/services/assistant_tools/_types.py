@@ -1,8 +1,10 @@
 """求职助手工具的数据类型与联网搜索描述。"""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
+
+
 @dataclass
 class ToolResult:
     """工具执行结果。

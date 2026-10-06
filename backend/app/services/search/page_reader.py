@@ -120,20 +120,19 @@ async def fetch_page_text(url: str, max_chars: int = MAX_TEXT_CHARS) -> str:
     try:
         async with httpx.AsyncClient(
             timeout=_TIMEOUT, follow_redirects=True, max_redirects=3
-        ) as client:
-            async with client.stream("GET", url, headers=_HEADERS) as response:
-                if response.status_code != 200:
-                    return ""
-                content_type = response.headers.get("content-type", "").casefold()
-                if content_type and not any(
-                    marker in content_type for marker in ("text/html", "text/plain", "xml")
-                ):
-                    return ""
-                body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    if len(body) + len(chunk) > MAX_PAGE_BYTES:
-                        break
-                    body.extend(chunk)
+        ) as client, client.stream("GET", url, headers=_HEADERS) as response:
+            if response.status_code != 200:
+                return ""
+            content_type = response.headers.get("content-type", "").casefold()
+            if content_type and not any(
+                marker in content_type for marker in ("text/html", "text/plain", "xml")
+            ):
+                return ""
+            body = bytearray()
+            async for chunk in response.aiter_bytes():
+                if len(body) + len(chunk) > MAX_PAGE_BYTES:
+                    break
+                body.extend(chunk)
         return extract_text(body.decode("utf-8", errors="replace"), max_chars)
     except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPError) as exc:
         logger.info("正文抓取失败：%s", type(exc).__name__)

@@ -16,7 +16,7 @@ from ..models.material import (
     CANDIDATE_JOB_STATUSES,
     CandidateJob,
 )
-from ..schemas.job import JobCreate, RECOGNITION_SOURCE_OFFICIAL
+from ..schemas.job import RECOGNITION_SOURCE_OFFICIAL, JobCreate
 from ..schemas.material import CandidateJobCreate, CandidateJobUpdate
 from .job.job_service import create_job_record, find_by_job_identity, find_job_by_identity
 from .trash import is_deleted

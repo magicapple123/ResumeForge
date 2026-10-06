@@ -1,9 +1,8 @@
 """0037：简历记录加「生成说明」与「未收录清单」两列。"""
 
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0036_chat_conversation_surface"
 HEAD_REVISION = "0037_resume_generation_notes"

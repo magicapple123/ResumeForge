@@ -13,7 +13,6 @@ import threading
 import time
 
 import pytest
-
 from app.models.apply import ApplyTask, ApplyTaskItem
 from app.models.job import Job
 from app.models.profile import utcnow

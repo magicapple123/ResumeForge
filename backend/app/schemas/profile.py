@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from ..services.date_format import normalize_partial_date
 from .extraction import (
     MAX_EXTRACTION_DOCUMENT_COUNT,
     MAX_EXTRACTION_IMAGE_COUNT,
@@ -14,8 +15,6 @@ from .extraction import (
     ExtractionDocumentInput,
     ExtractionImageInput,
 )
-from ..services.date_format import normalize_partial_date
-
 
 MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
 MAX_REFERENCE_FILE_NAME_CHARS = 255

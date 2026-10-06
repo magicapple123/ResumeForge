@@ -1,8 +1,7 @@
 """``0033_web_form_profile_records`` 迁移：支持多条网申资料补充记录。"""
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
-
 from app.database_migrations import build_alembic_config
+from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0032_web_form_url_history"
 HEAD_REVISION = "0033_web_form_profile_records"

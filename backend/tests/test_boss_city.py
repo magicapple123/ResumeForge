@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.models.apply import FAILURE_SELECTOR_INVALID
 from app.services.sites.base import CollectQuery, SiteFailure
 from app.services.sites.boss import BossAdapter

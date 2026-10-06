@@ -13,7 +13,6 @@ import re
 from pathlib import Path
 
 import pytest
-
 from app import preflight
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent

@@ -10,9 +10,8 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, text
 
 from ...config import get_settings
-
-from .paths import BACKUP_FORMAT_MULTI_DATASET, BACKUP_FORMAT_WITH_KEYS
 from ...database_migrations import _APPLICATION_TABLES, build_alembic_config
+from .paths import BACKUP_FORMAT_MULTI_DATASET, BACKUP_FORMAT_WITH_KEYS
 
 
 def current_head_revision(bind: Engine) -> str | None:

@@ -4,10 +4,8 @@ fake_runner fixture 定义在主文件（test_apply_queue_and_api.py），
 经本模块命名空间解析；显式 re-export。
 """
 import pytest
-
 from app.models.apply import TASK_KIND_COLLECT
 from app.services.apply import apply_service
-
 from test_apply_queue_and_api import browser_port, fake_runner
 
 # fake_runner 依赖 browser_port，两者都必须在本模块命名空间可解析。

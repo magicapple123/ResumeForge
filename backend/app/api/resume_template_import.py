@@ -25,7 +25,6 @@ from ..services.document_text import extract_document_text
 from ..services.image_conversion import convert_to_supported_image
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
-from ..services.settings_service import get_llm_config
 from ..services.resume.resume_template_import import (
     TemplateImportError,
     TemplateImportSource,
@@ -35,6 +34,7 @@ from ..services.resume.resume_template_import import (
 )
 from ..services.resume.resume_template_store import TemplateError, create_user_template
 from ..services.resume.resume_templates import RESUME_TEMPLATES, TEMPLATES_DIR
+from ..services.settings_service import get_llm_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["resume-templates"])
