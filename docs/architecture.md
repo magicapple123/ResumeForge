@@ -63,7 +63,7 @@ backend/app/
 │   ├── assistant/      # 助手域：服务/技能/来源/联网搜索
 │   ├── interview/      # 面试域：模拟面试/题库/面经/历史
 │   ├── apply/          # 采集与投递编排：apply_service / collector / task_runner
-│   ├── webform/        # 网申填表：通用表单引擎 / 取值匹配 / 字段目录 / 快照仓
+│   ├── webform/        # 网申填表：engine 表单引擎（含 relaxed_kind 判类）/ service 填充与放宽执行 / data 字段目录与资料映射
 │   ├── browser/        # 浏览器桥接层：cdp_client + browser_manager + page_ready + network_capture
 │   ├── sites/          # 站点适配器层（写路径）：base + registry + boss（单站点实现）+ boss_network
 │   │                   #   / feeds 各招聘系统适配器 / probe 站源探测 / reconcile 完整性对账 / collector 编排
@@ -769,6 +769,25 @@ score_match_result(result, job_payload, profile_text, resume_text)
     改这条边界要同时动：`skip_reason`、`test_webform_engine_*` 的边界用例、语料里
     `forbidden` 的期待、`docs/user-guide.md` 的「它不会做什么」与
     `frontend/src/components/userGuideSteps.ts`。
+
+28. **放宽模式——「只填不点」唯一的受控例外**（默认关闭；开关存在 `settings_service` 的
+    `webform_relaxed_mode`，`/api/webform/preview` 与实时两条路读同一个开关值）：开启后
+    点选类控件可以由程序代点，判类的**唯一入口**是
+    `engine/core.py::FormEngine.relaxed_kind`（它与 `skip_reason` 共用 `CONSENT_HINTS` /
+    `CLAIM_LABELS` / `AUTOCOMPLETE_DENY` / `FIELD_DENYLIST` 这批判据表，绝不越过终局判定；
+    `service/relaxed.py` 只负责执行与文案，不另立判类标准）。四类放行：
+    - `confirm`——同意 / 声明类勾选，**绝不静默代勾**，逐条确认后才执行；「没有实习
+      经历」这类声明（`is_claim_label`）与「无…」同等待遇，同样进确认制；
+    - `choice`——事实类 checkbox / radio，值必须出现在控件自述里，纯数字不猜；
+    - `select`——原生下拉，写入仍走 `resolve_select_option` 严格口径（精确 → 别名 → 包含）；
+    - `popup`——自定义下拉 / 弹层，点开、严格解析、点选、回读验证；**多值代选**
+      （资料里「上海、北京、广州」这类写法，见 `custom_select.py`）点开**一次**弹层
+      逐个匹配点选，**全部命中才动手**，有一个匹配不上就整体放弃、仍列成需要自己点选。
+    日期 / 月份、文件上传、密码 / 验证码 / 银行卡在 `relaxed_kind` 里直接返回 `None`，
+    没有任何放宽余地；只读且无弹层的点选框也不放宽。程序认得出是点选控件、但资料里
+    没有对应值时，前端如实归进「资料里还没有」（`WebFormPendingPanel`），不静默跳过。
+    改这条要同时动：`skip_reason` / `relaxed_kind` 共用的判据表、
+    `tests/test_webform_engine_*` 的放宽用例与用户侧两份文档。
 
 ## 测试策略
 

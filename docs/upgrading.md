@@ -136,9 +136,9 @@ git checkout <previous-stable-tag-or-commit>  # 例如已发布的 v0.1.0 标签
 
 ```powershell
 # 发布时要出三个包（各带一份 .sha256）
-.\scripts\Build-Release.ps1 -Ref v0.15.0                       # 全平台 → ResumeForge-0.15.0-all.zip
-.\scripts\Build-Release.ps1 -Ref v0.15.0 -Platform windows     # 官网 Windows 按钮
-.\scripts\Build-Release.ps1 -Ref v0.15.0 -Platform macos       # 官网 macOS 按钮
+.\scripts\Build-Release.ps1 -Ref v0.16.0                       # 全平台 → ResumeForge-0.16.0-all.zip
+.\scripts\Build-Release.ps1 -Ref v0.16.0 -Platform windows     # 官网 Windows 按钮
+.\scripts\Build-Release.ps1 -Ref v0.16.0 -Platform macos       # 官网 macOS 按钮
 # 打包当前提交（本地试验）；输出目录默认是 <项目>\dist
 .\scripts\Build-Release.ps1 -OutputDirectory D:\tmp
 ```
