@@ -1,0 +1,44 @@
+name: CodeQL
+
+# 静态安全扫描（SAST）。PR 级扫描交给 ruff/eslint/tsc，这份 weekly 扫描专捕
+# 安全语义类问题（注入、路径穿越、不安全的反序列化等），不必挂在每次 PR 上拖速度。
+# 结果出现在仓库的 Security → Code scanning 里，按 GitHub 默认策略告警。
+on:
+  schedule:
+    # 每周一 03:20 UTC（北京 11:20）：避开整点 runner 高峰。
+    - cron: "20 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

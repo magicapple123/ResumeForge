@@ -23,10 +23,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # 3.11 是支持下限（3.10 已 EOL），3.13 是最新验证过的解释器；
+          # Windows 作业用本机开发所在的 3.12。三个一起构成窗口两端的回归面。
           - os: ubuntu-latest
-            python-version: "3.10"
+            python-version: "3.11"
           - os: ubuntu-latest
-            python-version: "3.12"
+            python-version: "3.13"
           - os: windows-latest
             python-version: "3.12"
     env:
@@ -61,6 +63,16 @@ jobs:
       - name: Run Ruff
         run: python -m ruff check .
 
+      - name: Type check models and schemas (pyright)
+        # pyrightconfig 只把 app/models + app/schemas 纳入 basic 检查（渐进策略）。
+        # CI 把包装在全局解释器里，显式把解释器交给 pyright 才能解析第三方导入；
+        # 本地开发走 backend/.venv（pyrightconfig 的 venvPath）。
+        shell: bash
+        run: python -m pyright --pythonpath "$(command -v python)"
+
+      - name: Check version sync (config.py vs package.json)
+        run: python ../scripts/check_version_sync.py
+
       - name: Test Windows launcher, updater and release packaging
         if: runner.os == 'Windows'
         working-directory: .
@@ -79,11 +91,12 @@ jobs:
           --cov-report=xml
 
       - name: Upload coverage report
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: actions/upload-artifact@v7
         with:
           name: backend-coverage
           path: backend/coverage.xml
+          retention-days: 14
           if-no-files-found: error
 
   macos-launcher-guards:
@@ -191,6 +204,12 @@ jobs:
           echo
           curl -fsS http://127.0.0.1:5199/api/health
           echo
+      - name: Browser smoke (Playwright)
+        working-directory: frontend
+        run: |
+          npx playwright install chromium
+          npx playwright test
+
       - name: Stop the app
         if: always()
         run: bash scripts/macos/stop.sh
@@ -304,6 +323,15 @@ jobs:
               Start-Sleep -Seconds 10
             }
           }
+      - name: Browser smoke (Playwright)
+        # 真实 Chromium 冒烟：jsdom 捕不到的 CSS/构建产物/浏览器 API 差异由这几条
+        # 用例兜住（启动 → 载入示例 → 岗位/简历可见 → 导出 PDF）。端口与本地约定
+        # 一致（前端 5199、后端 8123），playwright.config 的默认值即为此而设。
+        working-directory: frontend
+        run: |
+          npx playwright install chromium
+          npx playwright test
+
       - name: Stop the app
         if: always()
         shell: cmd
@@ -328,9 +356,9 @@ jobs:
 
 
   frontend:
-    name: Frontend (Node 20)
+    name: Frontend (Node 22)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       CI: "true"
     defaults:
@@ -343,17 +371,27 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          # 22 起才满足 vitest 5 / jsdom 30 的 engines（>=20.19 只是运行时下限，
+          # 测试工具链需要 22.12+）。与本地开发版本保持一致，避免双环境漂移。
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
-      - name: Run tests
-        # Limit parallel workers so resource-constrained runners do not starve
-        # jsdom timers used by the async UI tests.
-        run: npm test -- --maxWorkers=2
+      - name: Run tests with coverage
+        # 前端覆盖率门禁（v8 provider，thresholds 见 vitest.config.ts）：
+        # 阈值策略是"基线 −3pt、只升不降"，与后端 fail_under=80 对称。
+        run: npm run test:coverage -- --maxWorkers=2
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          retention-days: 14
+          if-no-files-found: error
 
       - name: Check formatting
         run: npm run format:check
@@ -365,10 +403,9 @@ jobs:
         run: npm run build
 
   dependency-audit:
-    name: Dependency audit (advisory)
+    name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -376,9 +413,16 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
-      - name: Audit Python dependencies
+      - name: Audit production Python dependencies (blocking)
+        # 门禁策略（分级）：生产依赖（requirements.txt）发现任何已知漏洞即失败；
+        # 开发工具链继续走 advisory（continue-on-error），噪音不阻断 PR 但留痕。
+        run: |
+          python -m pip install pip-audit==2.10.1
+          python -m pip_audit --requirement backend/requirements.txt --index-url https://pypi.org/simple
+
+      - name: Audit development Python dependencies (advisory)
         continue-on-error: true
         run: |
           python -m pip install pip-audit==2.10.1
@@ -387,11 +431,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Audit frontend production dependencies
-        continue-on-error: true
+      - name: Audit frontend production dependencies (blocking, high+)
         working-directory: frontend
-        run: npm audit --omit=dev --registry=https://registry.npmjs.org
+        run: npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org
