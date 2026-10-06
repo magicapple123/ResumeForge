@@ -8,6 +8,10 @@ pytest-cov==7.1.0
 # takes minutes to verify; conftest keys its temp database and dataset directory
 # by PID, so workers are already isolated. Keep the ASCII-only rule for this file.
 pytest-xdist==3.8.0
+# Nightly 的 flaky 标记：失败用例重跑至多 2 次并把 rerun 记录在汇总里。
+pytest-rerunfailures==16.1
+# Windows 没有系统时区库：zoneinfo（时区防回归用例）在 CI 的三套矩阵上都要能解析。
+tzdata==2025.2
 ruff==0.16.10
 pip-audit==2.10.1
 # Gradual type checking: only app/models + app/schemas are in scope for now
