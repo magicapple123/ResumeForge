@@ -1,9 +1,10 @@
-"""报告域工具声明（``_TOOLS`` 中 18 条：面试/深挖/复盘/提醒/投递台/知识库/统计等）。"""
+"""报告域工具声明（``_TOOLS`` 中 21 条：面试/深挖/复盘/提醒/投递台/知识库/统计等）。"""
 from __future__ import annotations
 
 from .apply_tools import _tool_list_apply_queue, _tool_list_apply_records
 from .data_tools import _tool_get_drill_report, _tool_list_drill_sessions
 from .job_tools import _tool_update_resume
+from .p3_tools import P3_TOOLS
 from .reminder_tools import _tool_update_reminder
 from .report_tools import (
     _tool_create_knowledge,
@@ -413,4 +414,6 @@ REPORT_TOOLS: tuple[Tool, ...] = (
         handler=_tool_update_reminder,
         writes=True,
     ),
+    # P3 工具批（handlers 与声明同住 p3_tools.py，report spec 文件已到行数上限）。
+    *P3_TOOLS,
 )

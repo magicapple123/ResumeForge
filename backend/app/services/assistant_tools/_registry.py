@@ -12,7 +12,7 @@ from ._tools_specs_report import REPORT_TOOLS
 from ._tools_specs_search import SEARCH_TOOLS
 from ._types import Tool, ToolResult, _WEB_SEARCH_TOOL_NAME, web_search_description
 
-# 54 个工具严格按原文件顺序拼接：core → data → report → search。
+# 工具严格按原文件顺序拼接：core → data → report → search。
 # 顺序是行为契约（tool_definitions 输出顺序 = 发给模型的工具列表顺序），不得重排。
 _TOOLS: tuple[Tool, ...] = (*CORE_TOOLS, *DATA_TOOLS, *REPORT_TOOLS, *SEARCH_TOOLS)
 
