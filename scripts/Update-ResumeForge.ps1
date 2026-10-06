@@ -244,6 +244,61 @@ function Stop-RunningApplication {
     }
 }
 
+<#
+更新前给用户数据拍一份快照。
+
+程序文件覆盖失败可以重跑；但一旦新版本的数据库迁移在旧数据上出了问题，没有这份
+快照就没有回头路——这是更新链上最后一道数据保险。调用点都在"应用已被停掉"之后
+（三条覆盖路径都会先停），SQLite 进程干净退出后 WAL 已合并回主库，直接拷文件就是
+一致快照。
+
+只拷数据库与其旁文件（data\*.db + datasets\*.db）和轻量 json 指针；浏览器登录态、
+既有备份包、采集样例、日志都不属于"要回滚的数据"。保留最近 3 份在 data\pre-update\。
+#>
+function Backup-UserData {
+    if ($DryRun) { return }
+    $dataRoot = Join-Path $ProjectRoot "data"
+    if (-not (Test-Path -LiteralPath $dataRoot)) { return }
+    $destination = Join-Path $dataRoot ("pre-update\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+    New-Item -ItemType Directory -Force -Path $destination | Out-Null
+    $copied = 0
+    foreach ($dbFile in @(Get-ChildItem -LiteralPath $dataRoot -Filter "*.db" -File -ErrorAction SilentlyContinue)) {
+        Copy-Item -LiteralPath $dbFile.FullName -Destination $destination -Force
+        $copied++
+        foreach ($sidecarSuffix in @("-wal", "-shm")) {
+            $sidecar = "$($dbFile.FullName)$sidecarSuffix"
+            if (Test-Path -LiteralPath $sidecar) {
+                Copy-Item -LiteralPath $sidecar -Destination $destination -Force
+            }
+        }
+    }
+    foreach ($jsonFile in @(Get-ChildItem -LiteralPath $dataRoot -Filter "*.json" -File -ErrorAction SilentlyContinue)) {
+        Copy-Item -LiteralPath $jsonFile.FullName -Destination $destination -Force
+        $copied++
+    }
+    $datasets = Join-Path $dataRoot "datasets"
+    if (Test-Path -LiteralPath $datasets) {
+        New-Item -ItemType Directory -Force -Path (Join-Path $destination "datasets") | Out-Null
+        foreach ($dbFile in @(Get-ChildItem -LiteralPath $datasets -Filter "*.db" -File -ErrorAction SilentlyContinue)) {
+            Copy-Item -LiteralPath $dbFile.FullName -Destination (Join-Path $destination "datasets") -Force
+            $copied++
+            foreach ($sidecarSuffix in @("-wal", "-shm")) {
+                $sidecar = "$($dbFile.FullName)$sidecarSuffix"
+                if (Test-Path -LiteralPath $sidecar) {
+                    Copy-Item -LiteralPath $sidecar -Destination (Join-Path $destination "datasets") -Force
+                }
+            }
+        }
+    }
+    Write-Host "    Pre-update data snapshot: $destination ($copied files)"
+    $preUpdateRoot = Join-Path $dataRoot "pre-update"
+    $snapshots = @(Get-ChildItem -LiteralPath $preUpdateRoot -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending)
+    foreach ($old in ($snapshots | Select-Object -Skip 3)) {
+        Remove-Item -LiteralPath $old.FullName -Recurse -Force
+    }
+}
+
 function Write-DependencySyncHint {
     param([string]$Message)
     Write-Host ""
@@ -375,6 +430,7 @@ else {
         # 是有意的：下载或解压失败时不该把用户正在用的应用关掉。
         Write-Step "Stopping a running ResumeForge before copying program files"
         Stop-RunningApplication
+        Backup-UserData
 
         Write-Step "Copying program files (data, .env and runtime are kept)"
         try {
@@ -398,6 +454,7 @@ if ($ArchivePath -and -not $DryRun) {
     if ($StopPids.Count -gt 0) {
         Start-Sleep -Milliseconds 800
     }
+    Backup-UserData
     Write-Step "Copying program files (data, .env and runtime are kept)"
     Copy-ProgramFiles -Source $extracted.FullName -Destination $ProjectRoot
 }
@@ -413,6 +470,7 @@ if ($SkipDependencies) {
     if ($useGit -and -not $DryRun) {
         Write-Step "Stopping a running ResumeForge before touching node_modules / .venv"
         Stop-RunningApplication
+        Backup-UserData
     }
 
     $requirements = Join-Path $ProjectRoot "backend\requirements.txt"

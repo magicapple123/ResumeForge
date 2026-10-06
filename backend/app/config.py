@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_file_enabled: bool = True
 
+    # 自动备份：启动后在后台检查"距上次自动备份是否已到间隔"，到期就滚动快照一份
+    # 数据库并只保留最近 N 份。手动导出的备份包不受影响；全部可用环境变量调整。
+    auto_backup_enabled: bool = True
+    auto_backup_interval_days: int = Field(default=7, ge=1, le=365)
+    auto_backup_keep: int = Field(default=5, ge=1, le=50)
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",

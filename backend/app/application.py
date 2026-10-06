@@ -1,6 +1,7 @@
 """FastAPI 应用装配与生命周期配置。"""
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -53,6 +54,7 @@ from .middleware import RequestContextMiddleware, RequestIdFilter, get_request_i
 from .services.apply import apply_service
 from .services.apply.task_runner import get_task_runner
 from .services.data_backup import cleanup_temp_directories
+from .services.data_backup.auto_backup import run_auto_backup_if_due
 from .services.job.job_match_background import get_job_match_background_runner
 from .services.webform import browser as webform_browser
 from .services.webform import stop_live as stop_webform_live
@@ -108,6 +110,14 @@ if settings.log_file_enabled:
     attach_file_log_handler(DATA_DIR / "logs")
 
 
+def _run_auto_backup_safely() -> None:
+    """后台自动备份线程：备份是保险，任何异常都只记日志。"""
+    try:
+        run_auto_backup_if_due(database.engine)
+    except Exception:  # noqa: BLE001 - 后台线程绝不能把服务拖垮
+        logging.getLogger(__name__).warning("自动备份线程异常退出", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # 只有早期未版本化数据库需要兼容建表/补列；空库与后续升级均由
@@ -144,6 +154,8 @@ async def lifespan(_app: FastAPI):
         except Exception:  # noqa: BLE001 - 清理失败不应阻断启动
             startup_logger.warning("清理中断的岗位匹配任务失败", exc_info=True)
     startup_logger.info("启动自检完成，开始接收请求")
+    # 自动备份放后台线程：快照可能几百 MB，不能让它卡住"开始接收请求"这一行。
+    threading.Thread(target=_run_auto_backup_safely, name="resumeforge-auto-backup", daemon=True).start()
     try:
         yield
     finally:
