@@ -1,4 +1,5 @@
 /** 应用生命周期接口。 */
+import { ApiError, extractError, getFilenameFromDisposition } from "./client";
 import { request } from "./client";
 
 export interface ShutdownResult {
@@ -29,4 +30,19 @@ export function shutdownApp(): Promise<ShutdownResult> {
 
 export function getDiagnostics(): Promise<DiagnosticsSnapshot> {
   return request("/system/diagnostics");
+}
+
+/**
+ * 下载脱敏诊断包（zip）：脱敏运行事件 + 系统信息 + 近期后端日志尾部。
+ * 包里没有简历数据与密钥，可以直接贴进反馈。
+ */
+export async function exportDiagnostics(): Promise<{ blob: Blob; filename: string }> {
+  const resp = await fetch("/api/system/diagnostics/export");
+  if (!resp.ok) {
+    throw new ApiError(await extractError(resp), resp.status);
+  }
+  const filename =
+    getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ??
+    "resumeforge-diagnostics.zip";
+  return { blob: await resp.blob(), filename };
 }

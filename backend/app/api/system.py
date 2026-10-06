@@ -13,17 +13,26 @@
 后端却不退"这种最难查的状态。
 """
 import ipaddress
+import io
+import json
 import locale
 import logging
 import os
+import platform
+import re
 import signal
 import subprocess
+import sys
 import threading
 import time
+import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
 
+from ..config import DATA_DIR, get_settings
 from ..services.diagnostics import diagnostic_snapshot
 
 logger = logging.getLogger(__name__)
@@ -195,3 +204,69 @@ def shutdown_application(request: Request):
 def diagnostics():
     """返回脱敏运行事件，方便用户连同截图提交排障。"""
     return diagnostic_snapshot()
+
+
+# 日志尾部进诊断包前要再过一道闸：业务日志本身不记密钥（见 AGENTS 约束），但这里
+# 面向"用户直接转发给陌生支持者"的场景，兜底抹掉疑似令牌/长随机串，多一道保险。
+_LOG_SECRET_PATTERNS = (
+    re.compile(r"sk-[A-Za-z0-9_-]{8,}"),
+    re.compile(r"\b[A-Za-z0-9+/]{48,}={0,2}\b"),
+)
+
+
+def _recent_log_tail(max_lines: int = 300) -> str:
+    """读滚动文件日志的尾部并做兜底脱敏；文件不存在（被关闭/尚未产生）时返回空。"""
+    log_file = DATA_DIR / "logs" / "backend.log"
+    if not log_file.is_file():
+        return ""
+    try:
+        lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()[-max_lines:]
+    except OSError:
+        return ""
+    cleaned = []
+    for line in lines:
+        for pattern in _LOG_SECRET_PATTERNS:
+            line = pattern.sub("<redacted>", line)
+        cleaned.append(line)
+    return "\n".join(cleaned)
+
+
+def _system_snapshot() -> dict:
+    settings = get_settings()
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "app_version": settings.app_version,
+        "python_version": sys.version.split()[0],
+        "os": platform.system(),
+        "platform": platform.platform(),
+        "log_file_enabled": settings.log_file_enabled,
+    }
+
+
+@router.get("/diagnostics/export")
+def export_diagnostics():
+    """导出脱敏诊断包（zip）：脱敏运行事件 + 系统信息 + 近期后端日志尾部。
+
+    包里**没有**简历数据、密钥或数据库文件——它是给用户直接贴进反馈的，隐私边界
+    与 /diagnostics 的脱敏事件保持同一档。日志尾部会再做一道疑似令牌的兜底脱敏。
+    """
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "diagnostics.json",
+            json.dumps(diagnostic_snapshot(), ensure_ascii=False, indent=2),
+        )
+        archive.writestr(
+            "system.json",
+            json.dumps(_system_snapshot(), ensure_ascii=False, indent=2),
+        )
+        log_tail = _recent_log_tail()
+        if log_tail:
+            archive.writestr("backend-recent.log", log_tail)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"resumeforge-diagnostics-{timestamp}.zip"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

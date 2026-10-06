@@ -14,6 +14,7 @@ import WebFormRelaxedModeCard from "../components/settings/WebFormRelaxedModeCar
 import SearchCard from "../components/settings/SearchCard";
 import SkillsCard from "../components/settings/SkillsCard";
 import UpdateCard from "../components/settings/UpdateCard";
+import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
 import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
 
@@ -288,6 +289,7 @@ export default function SettingsPage() {
                 <ReminderPopupCard />
                 <WebFormRelaxedModeCard />
                 <UpdateCard />
+                <HelpDiagnosticsCard />
               </>
             ),
           },
