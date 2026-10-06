@@ -1,0 +1,87 @@
+name: Nightly
+
+# 定期全量回归：PR CI 只带覆盖率门禁跑一次全量，长周期漂移（依赖环境变化、
+# 偶发用例、平台差异）由 nightly 兜底。带 --reruns 做 flaky 标记——重跑只为
+# 识别"重试后能过"的用例，汇总里单独列出，不用静默重试掩盖问题。
+on:
+  schedule:
+    # 每日 UTC 20:30（北京 04:30）：不影响白天开发时段。
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  backend-full:
+    name: Backend full suite (flaky watch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONUTF8: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run full suite with flaky marking
+        run: |
+          python -m pytest -n auto \
+            --reruns 2 --reruns-delay 1 \
+            --junitxml=nightly-backend.xml \
+            -q
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-backend-report
+          path: backend/nightly-backend.xml
+          retention-days: 14
+          if-no-files-found: error
+
+  frontend-full:
+    name: Frontend full suite (flaky watch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run full suite
+        run: npm test -- --maxWorkers=2
