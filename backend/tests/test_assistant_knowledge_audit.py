@@ -83,6 +83,7 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
         "current_site",
     ),
     "网申填表": ("web_form_fill", "web_form_browser", "web_form_records"),
+    "放宽模式": ("web_form_fill",),
     "网申专用资料": ("web_form_fields",),
     "网申资料": ("web_form_extra_profile",),
     "填表时学到的": ("web_form_learning",),
