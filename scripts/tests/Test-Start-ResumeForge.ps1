@@ -17,12 +17,12 @@ $NodeToolsDirectory = Join-Path $RuntimeDirectory "tools"
 # Mirrors of the constants the launcher defines. The functions loaded below read
 # these from the caller's scope, and the assertions further down pin the
 # launcher's own copies so the two cannot drift.
-$MinimumPythonVersion = [Version]"3.10"
+$MinimumPythonVersion = [Version]"3.11"
 $MaximumPythonVersion = [Version]"3.13"
 $PythonVersionProbe = 'import sys; raise SystemExit(0 if ({0}, {1}) <= sys.version_info[:2] <= ({2}, {3}) else 1)' -f `
     $MinimumPythonVersion.Major, $MinimumPythonVersion.Minor, `
     $MaximumPythonVersion.Major, $MaximumPythonVersion.Minor
-$PythonSupportedSelectors = @("-3.12", "-3.13", "-3.11", "-3.10")
+$PythonSupportedSelectors = @("-3.12", "-3.13", "-3.11")
 $BackendStartTimeoutSeconds = 90
 $FrontendStartTimeoutSeconds = 120
 $NodeBootstrapMirrorBaseUrls = @(
@@ -77,7 +77,7 @@ foreach ($requiredSetting in @(
         '$NodeBootstrapVersion = "24.19.0"',
         '$NodeBootstrapX64Sha256 = "57f71ab3652e797d84acddc79c81cc9ff1c6ddb2a1974cdb83f00fee9bff4c73"',
         '$NodeBootstrapArm64Sha256 = "8502f4a50b458d4cc38ed8f2001556c2cd239d464920f74017926ccb1e1c157f"',
-        '$MinimumPythonVersion = [Version]"3.10"',
+        '$MinimumPythonVersion = [Version]"3.11"',
         '$MaximumPythonVersion = [Version]"3.13"',
         '$BackendStartTimeoutSeconds = 90',
         '$FrontendStartTimeoutSeconds = 120',
@@ -300,7 +300,7 @@ try {
     if ($null -ne $hostPython -and $hostPython.Source -notmatch "\\WindowsApps\\") {
         $reportedVersion = & $hostPython.Source -c "import sys; print('%d.%d' % sys.version_info[:2])"
         & $hostPython.Source -c $PythonVersionProbe *> $null
-        $expectedAccepted = $reportedVersion -in @("3.10", "3.11", "3.12", "3.13")
+        $expectedAccepted = $reportedVersion -in @("3.11", "3.12", "3.13")
         Assert-LauncherTest `
             -Condition (($LASTEXITCODE -eq 0) -eq $expectedAccepted) `
             -Message "The Python version probe disagrees with the interpreter it ran on ($reportedVersion)."

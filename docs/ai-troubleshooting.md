@@ -66,7 +66,7 @@ ResumeForge/
 ## 4. 常见问题排查路径
 
 - **启动失败 / 端口占用**：看 `runtime/backend.stderr.log`（后端）或 `runtime/frontend.stderr.log`（前端）的最后几行。端口被占用时，用 `start.cmd -BackendPort <端口>`（或 `-FrontendPort`）换端口；启动器只结束自己记录并校验过的进程，不会误杀其他程序。
-- **依赖缺失 / venv**：后端依赖在 `backend/requirements.txt`（开发依赖 `requirements-dev.txt`），前端在 `frontend/package.json`（`npm ci` 安装）。虚拟环境在 `backend/.venv`。缺包先确认 venv 已激活 / 已用对 Python（3.10–3.13）。
+- **依赖缺失 / venv**：后端依赖在 `backend/requirements.txt`（开发依赖 `requirements-dev.txt`），前端在 `frontend/package.json`（`npm ci` 安装）。虚拟环境在 `backend/.venv`。缺包先确认 venv 已激活 / 已用对 Python（3.11–3.13）。
 - **数据库迁移（Alembic）**：启动时自动执行 `backend/migrations/` 中未应用的 revision；有用户数据且有待迁移时，会先在 `backend/data/backups/` 建一致性备份。不要在外部手工改库结构。
 - **导出失败**：PDF 直出依赖系统中文字体（`RESUMEFORGE_PDF_FONT` 可覆盖），找不到字体会明确报错并保留浏览器打印作为替代；Word/Markdown/纯文本/JSON 为本地生成。脱敏与分享包始终基于脱敏内容。
 - **前端白屏 / 构建**：`cd frontend && npm ci && npm run build`；生产部署需要 SPA history fallback 并把 `/api` 反代到后端，不能只复制 `dist` 后直接双击打开。

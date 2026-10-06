@@ -42,7 +42,12 @@ def build_alembic_config(bind: Engine) -> Config:
     config = Config(str(ALEMBIC_INI))
     config.attributes["configure_logger"] = False
     config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
-    config.set_main_option("sqlalchemy.url", bind.url.render_as_string(hide_password=False))
+    # SQLAlchemy 2.1 起 render_as_string 会把路径百分号编码（空格 -> %20、% -> %25），
+    # 而 alembic 的 configparser 读回时会做 % 插值——不把 % 转义成 %% 就会直接抛
+    # InterpolationSyntaxError。转义后 get_main_option 拿回的是还原过的原串，两条
+    # 消费路径（attributes["connection"] 与 engine_from_config）都安全。
+    url_string = str(bind.url.render_as_string(hide_password=False))
+    config.set_main_option("sqlalchemy.url", url_string.replace("%", "%%"))
     return config
 
 
