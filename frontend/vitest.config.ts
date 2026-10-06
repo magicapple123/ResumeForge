@@ -6,6 +6,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // 显式限定 src/：默认 include（**/*.spec.ts）会把 tests/smoke 的 Playwright
+    // 用例也当成 vitest 用例收进来。
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
     clearMocks: true,
     restoreMocks: true,
     // Cap concurrent test files. Vitest defaults to one worker per core, and each
