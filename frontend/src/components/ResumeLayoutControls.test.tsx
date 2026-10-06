@@ -89,18 +89,22 @@ describe("ResumeLayoutControls · 选模板即见预览（C2）", () => {
     fireEvent.click(await screen.findByRole("button", { name: "选择简历模板并预览效果" }));
 
     // 主路径：打开后每个模板都用真实渲染接口出一张预览，而不是名字清单。
-    // CI 慢机上 React 19 + antd 6 的面板异步挂载可能超过默认 1s，放宽等待预算。
+    // 点击后弹层内容是异步挂载的（antd Modal + destroyOnHidden），挂载完还要等
+    // 弹层自己的模板清单请求 resolve 才会发预览请求。CI 满负载时这条链路实测可到
+    // 8~12s（见 src/test/setup.ts），所以先等弹层真正出现、再把调用数预算放宽到
+    // 10s——两者都是就绪即返回，预算只是安全网。
+    await screen.findByText("选择简历样式模板");
     await waitFor(
       () =>
         expect(apiMocks.previewResumeTemplate).toHaveBeenCalledTimes(
           TEMPLATE_CATALOG.templates.length,
         ),
-      { timeout: 5000 },
+      { timeout: 10000 },
     );
     expect(apiMocks.previewResumeTemplate).toHaveBeenCalledWith(
       expect.objectContaining({ template_name: "modern" }),
     );
-    expect(await screen.findByTitle("现代 预览", {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByTitle("现代 预览", {}, { timeout: 10000 })).toBeInTheDocument();
 
     // 选模板与看效果是同一步：点「用这个模板」直接写入并重渲染，没有额外确认。
     const useButtons = screen.getAllByRole("button", { name: "用这个模板" });

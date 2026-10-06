@@ -63,5 +63,14 @@ generated-images/
 # 需求/设计/评审等协作过程文档，不属于产品代码；如需纳入版本管理可自行移除本行。
 deliverables/
 
+# ===== 本地调试产物 =====
+# 排查问题时的临时诊断输出与自动化工具的本地工作目录，反复出现、随时可删，
+# 不属于项目代码；不要提交。
+.playwright-cli/
+diag_*.txt
+qa_repro_*
+qa_full_pytest.txt
+mokahr_apply_controls.json
+
 # ===== 日志 =====
 *.log
