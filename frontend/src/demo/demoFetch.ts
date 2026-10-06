@@ -77,6 +77,59 @@ interface AiReplies {
 let routes: Record<string, SnapshotRoute> = {};
 let aiReplies: AiReplies = { replies: [] };
 
+/**
+ * 会话的内存叠加层（只活在当前标签页里，刷新即清）。
+ *
+ * 为什么要它：应用现在的助手页落地是**空态**，访客开口的第一句话会走「新建会话」——
+ * 那是一条写操作，若按只读拒绝，用户永远见不到「AI 预录回放」这件事。所以把
+ * 「新建会话」虚拟成功，把随后的一问一答记进叠加层，详情与列表接口再把它并回去：
+ * 问完之后回答不会因为详情重拉而消失，回放才是一个完整的体验。
+ */
+interface DemoExchange {
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+interface DemoConversationBrief {
+  id: number;
+  title: string;
+  surface: string;
+  pinned: boolean;
+  favorite: boolean;
+  archived: boolean;
+  group_name: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+let virtualConversationSeq = 0;
+const demoConversations = new Map<number, DemoConversationBrief>();
+const demoExchanges = new Map<number, DemoExchange[]>();
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+/** 把叠加层的一条问答补齐成页面可渲染的完整 AssistantMessage
+ *（列表渲染会读 context.quoted / attachments 等字段，缺了就崩）。 */
+function asDemoMessage(id: number, conversationId: number, exchange: DemoExchange) {
+  return {
+    id,
+    conversation_id: conversationId,
+    role: exchange.role,
+    content: exchange.content,
+    quoted_message_id: null,
+    attachments: [],
+    context: {},
+    status: "complete",
+    error: "",
+    model: "",
+    created_at: exchange.created_at,
+  };
+}
+
 /** 把 URL 归一成快照的键：只保留 pathname + search。 */
 export function normalizeKey(input: string): string {
   try {
@@ -180,37 +233,17 @@ function streamReply(
   });
 }
 
-/**
- * 助手消息的回放。
- *
- * 真实后端的事件形状见 `types` 里的 `AssistantStreamEvent`。这里只产出渲染所需的
- * 最小集合：增量文本、结束标记。id/usage 之类的字段补 0 或空值，前端据此渲染即可。
- */
-function replayAssistantStream(body: unknown, signal?: AbortSignal | null): Response {
-  const payload = (body ?? {}) as { content?: string };
-  const userText = typeof payload.content === "string" ? payload.content : "";
-  const text = pickReply(userText);
-  return streamReply(
-    text,
-    (chunk, done) => ({ type: done ? "done" : "delta", content: chunk }),
-    16,
-    signal,
-  );
-}
-
-/** 简历生成的流式回放（`/api/resumes/generate/stream` 一类）。 */
-function replayResumeStream(body: unknown, signal?: AbortSignal | null): Response {
-  const payload = (body ?? {}) as { job_id?: number };
+/** 简历生成的流式回放（该 SSE 入口已无 UI 调用方——生成走后台任务；契约仍按 StreamEvent 对齐）。 */
+function replayResumeStream(_body: unknown, signal?: AbortSignal | null): Response {
   const text =
     aiReplies.resumeDraft ||
     "（在线体验版没有接入真实大模型，这里是预录的回放内容。下载完整版即可用自己的资料真实生成。）";
   return streamReply(
     text,
-    (chunk, done) => ({
-      type: done ? "done" : "chunk",
-      content: chunk,
-      job_id: payload.job_id ?? 0,
-    }),
+    (chunk, done) =>
+      done
+        ? { type: "done", resume: { summary: text }, warnings: [] }
+        : { type: "delta", text: chunk },
     12,
     signal,
   );
@@ -253,6 +286,54 @@ export function installDemoFetch(): () => void {
     const path = key.split("?")[0];
 
     if (method === "GET") {
+      // 会话详情：快照命中时并上本轮新问的一问一答；虚拟会话直接用内存 brief 拼。
+      const detailMatch = /^\/api\/assistant\/conversations\/(\d+)(\?|$)/.exec(key);
+      if (detailMatch) {
+        const id = Number(detailMatch[1]);
+        const extra = demoExchanges.get(id) ?? [];
+        const baseId = Math.max(0, ...(demoExchanges.get(id)?.map((_, i) => i) ?? []));
+        const virtual = demoConversations.get(id);
+        if (virtual) {
+          return jsonResponse({
+            ...virtual,
+            messages: extra.map((exchange, index) => asDemoMessage(index + 1, id, exchange)),
+          });
+        }
+        const hit = lookup(key);
+        if (hit) {
+          const body = hit.body as { messages?: unknown[] } | undefined;
+          return jsonResponse(
+            extra.length && body
+              ? {
+                  ...body,
+                  messages: [
+                    ...(body.messages ?? []),
+                    ...extra.map((exchange, index) =>
+                      asDemoMessage(baseId + index + 1, id, exchange),
+                    ),
+                  ],
+                }
+              : hit.body,
+            hit.status,
+          );
+        }
+        return jsonResponse({ detail: "在线体验版未包含这个接口的数据。" }, 404);
+      }
+      // 会话列表：把本轮虚拟出来的会话插到最前面（真实列表仍是快照回放）。
+      if (path === "/api/assistant/conversations" && demoConversations.size > 0) {
+        const hit = lookup(key);
+        if (hit) {
+          const body = hit.body as { items?: unknown[] } | unknown[];
+          const briefs = [...demoConversations.values()];
+          if (Array.isArray(body)) {
+            return jsonResponse([...briefs, ...body], hit.status);
+          }
+          return jsonResponse(
+            { ...body, items: [...briefs, ...((body.items as unknown[]) ?? [])] },
+            hit.status,
+          );
+        }
+      }
       const hit = lookup(key);
       if (hit) return jsonResponse(hit.body, hit.status);
       // 未命中的只读接口：回空态而不是报错。页面据此走自己的空分支文案。
@@ -265,8 +346,66 @@ export function installDemoFetch(): () => void {
       return jsonResponse({ detail: "在线体验版未包含这个接口的数据。" }, 404);
     }
 
+    // 新建会话：虚拟成功。随后的消息发送会落进流式回放（isStreamPath 只看路径形状）。
+    if (method === "POST" && path === "/api/assistant/conversations") {
+      virtualConversationSeq += 1;
+      const body = parseBody(init) as { title?: string; surface?: string };
+      const stamp = nowIso();
+      const brief: DemoConversationBrief = {
+        id: 99000 + virtualConversationSeq,
+        title: (body?.title || "").trim() || "新对话",
+        surface: body?.surface ?? "page",
+        pinned: false,
+        favorite: false,
+        archived: false,
+        group_name: "",
+        message_count: 0,
+        created_at: stamp,
+        updated_at: stamp,
+      };
+      demoConversations.set(brief.id, brief);
+      return jsonResponse(brief, 201);
+    }
+
     const streamKind = isStreamPath(path);
-    if (streamKind === "assistant") return replayAssistantStream(parseBody(init), init?.signal);
+    if (streamKind === "assistant") {
+      // 一问一答记进叠加层：详情重拉时刚问的内容不会消失。
+      const id = Number(path.split("/")[4]);
+      const payload = parseBody(init) as { content?: string };
+      const reply = pickReply(typeof payload.content === "string" ? payload.content : "");
+      const stamp = nowIso();
+      const list = demoExchanges.get(id) ?? [];
+      list.push(
+        {
+          role: "user",
+          content: typeof payload.content === "string" ? payload.content : "",
+          created_at: stamp,
+        },
+        { role: "assistant", content: reply, created_at: stamp },
+      );
+      demoExchanges.set(id, list);
+      const brief = demoConversations.get(id);
+      if (brief) {
+        brief.message_count = list.length;
+        brief.updated_at = stamp;
+      }
+      return streamReply(
+        reply,
+        (chunk, done) =>
+          done
+            ? {
+                type: "done",
+                message: asDemoMessage(0, id, {
+                  role: "assistant",
+                  content: reply,
+                  created_at: stamp,
+                }),
+              }
+            : { type: "delta", text: chunk },
+        16,
+        init?.signal,
+      );
+    }
     if (streamKind === "resume") return replayResumeStream(parseBody(init), init?.signal);
 
     return readOnlyResponse();
@@ -310,6 +449,10 @@ export async function loadDemoData(settings: DemoSettings): Promise<void> {
   if (repliesResp && repliesResp.ok) {
     aiReplies = (await repliesResp.json()) as AiReplies;
   }
+  // 换了快照就是换了一份演示数据：上一份的虚拟会话与问答叠加层一并作废。
+  virtualConversationSeq = 0;
+  demoConversations.clear();
+  demoExchanges.clear();
 }
 
 /** 测试与诊断用：暴露当前已加载的路由表。 */

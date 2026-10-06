@@ -193,9 +193,74 @@ describe("AI 流式回放", () => {
       .filter((block) => block.startsWith("data: "))
       .map((block) => JSON.parse(block.slice("data: ".length)));
     expect(payloads.length).toBeGreaterThan(1);
-    const joined = payloads.map((p) => p.content).join("");
+    // 事件契约与 AssistantStreamEvent 对齐：增量是 `text` 字段（旧契约的 `content`
+    // 曾让流式文本永远渲染不出来），结束帧带完整 assistant 消息。
+    const joined = payloads.map((p) => p.text).join("");
     expect(joined).toBe("台账回放内容");
-    expect(payloads[payloads.length - 1].type).toBe("done");
+    const done = payloads[payloads.length - 1];
+    expect(done.type).toBe("done");
+    expect(done.message.role).toBe("assistant");
+    expect(done.message.content).toBe("台账回放内容");
+    expect(done.message.status).toBe("complete");
+  });
+
+  it("空态开口第一句：新建会话虚拟成功，问答并进会话详情", async () => {
+    await seedSnapshot({
+      "/api/assistant/conversations?limit=100&surface=page": {
+        status: 200,
+        body: { items: [{ id: 3, title: "快照会话", messages: [] }] },
+      },
+      "/api/assistant/conversations/3?surface=page": {
+        status: 200,
+        body: { id: 3, title: "快照会话", messages: [{ id: 1, role: "user", content: "旧问题" }] },
+      },
+    });
+    const created = await fetch("/api/assistant/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "", surface: "page" }),
+    });
+    expect(created.status).toBe(201);
+    const brief = await created.json();
+    expect(brief.id).toBeGreaterThanOrEqual(99000);
+    expect(brief.title).toBe("新对话");
+    expect(brief.surface).toBe("page");
+
+    // 往虚拟会话里发一条：流式回放 + 问答记进叠加层。
+    const streamResp = await fetch(
+      `/api/assistant/conversations/${brief.id}/messages?surface=page`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "随便问点什么" }),
+      },
+    );
+    expect(streamResp.status).toBe(200);
+    await streamResp.text();
+
+    // 详情重拉：虚拟会话返回 brief + 刚问的一问一答。
+    const detail = await fetch(`/api/assistant/conversations/${brief.id}?surface=page`);
+    const detailBody = await detail.json();
+    expect(detailBody.title).toBe("新对话");
+    expect(detailBody.messages.map((m: { role: string }) => m.role)).toEqual(["user", "assistant"]);
+    expect(detailBody.messages[1].content).toBe("兜底回放内容");
+
+    // 快照会话的详情也要并上新增问答（否则回答会在重拉时消失）。
+    await fetch("/api/assistant/conversations/3/messages?surface=page", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "台账口径" }),
+    });
+    const snapDetail = await fetch("/api/assistant/conversations/3?surface=page");
+    const snapBody = await snapDetail.json();
+    expect(snapBody.messages).toHaveLength(3);
+    expect(snapBody.messages[2].role).toBe("assistant");
+
+    // 列表接口把虚拟会话插到最前面。
+    const list = await fetch("/api/assistant/conversations?limit=100&surface=page");
+    const listBody = await list.json();
+    expect(listBody.items[0].id).toBe(brief.id);
+    expect(listBody.items[1].id).toBe(3);
   });
 
   it("简历生成接口也能回放", async () => {
