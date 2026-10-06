@@ -32,7 +32,6 @@ from .custom_select_scripts import (
     mark_preexisting_script,
     option_snapshot_script,
     parse_preexisting,
-    scroll_options_script,
     trigger_display_script,
 )
 from .matching import (

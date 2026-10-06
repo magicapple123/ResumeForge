@@ -95,7 +95,7 @@ def mark_preexisting_script() -> str:
         "const visible=(el)=>{const r=el.getBoundingClientRect();const s=getComputedStyle(el);return !!(r.width&&r.height)&&s.display!=='none'&&s.visibility!=='hidden';};"
         "const rectOf=(el)=>{const r=el.getBoundingClientRect();"
         "return {l:r.left+window.scrollX,t:r.top+window.scrollY,w:r.width,h:r.height};};"
-        f"return JSON.stringify([...document.querySelectorAll('[class*=\"dropdown\"],[class*=\"popover\"],[class*=\"popup\"]')]"
+        "return JSON.stringify([...document.querySelectorAll('[class*=\"dropdown\"],[class*=\"popover\"],[class*=\"popup\"]')]"
         ".filter(visible).map(rectOf));})()"
     )
 

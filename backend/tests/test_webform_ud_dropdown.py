@@ -161,9 +161,12 @@ def _probe(page: str, index: int) -> dict:
 
     jsdom 不实现 innerText，回读文本用 textContent（真弹层走的是真浏览器）。
     """
+    # option_snapshot_script 的结果先算好再内插：f-string 表达式里不能出现
+    # 反斜杠与外层引号复用（Python 3.10 的 f-string 语法限制，仓库下限）。
+    snapshot_js = option_snapshot_script('[data-rf-index="14"]', "rf-guard", [])
     script = (
         "(() => {"
-        f"const snap = JSON.parse(({option_snapshot_script('[data-rf-index=\"14\"]', 'rf-guard', [])}));"
+        f"const snap = JSON.parse(({snapshot_js}));"
         f"const el = document.querySelector(snap.options[{index}].selector);"
         "return JSON.stringify({text: (el.textContent||''), tag: el.tagName.toLowerCase()});"
         "})()"
