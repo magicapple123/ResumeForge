@@ -235,8 +235,11 @@ describe("ResumesPage 批量选择", () => {
     apiMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 1 });
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "批量选择" }));
-    const deleteBtn = screen.getByRole("button", { name: "删除所选" });
+    // 必须先等数据加载完成：「批量选择」按钮一渲染就存在，但 loading 期间是 disabled，
+    // 过早点击是空操作，多选工具栏永远不会出现（CI 并行负载下偶发）。
+    await screen.findByText(RESUME.title, {}, { timeout: 5000 });
+    fireEvent.click(screen.getByRole("button", { name: "批量选择" }));
+    const deleteBtn = await screen.findByRole("button", { name: "删除所选" }, { timeout: 5000 });
     expect(deleteBtn).toBeDisabled();
 
     const rowCheckbox = screen.getAllByRole("checkbox")[1]!;
