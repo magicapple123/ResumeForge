@@ -94,7 +94,7 @@ foreach ($functionDefinition in $ast.FindAll({
     Invoke-Expression $functionDefinition.Extent.Text
 }
 
-foreach ($required in @("Test-Excluded", "Copy-ProgramFiles", "Resolve-ExtractedPackage", "Write-InstallStatus")) {
+foreach ($required in @("Test-Excluded", "Copy-ProgramFiles", "Resolve-ExtractedPackage", "Write-InstallStatus", "Backup-UserData")) {
     Assert-UpdaterTest -Condition ($null -ne (Get-Command $required -ErrorAction SilentlyContinue)) `
         -Message "更新器里找不到函数 $required。"
 }
@@ -212,6 +212,48 @@ try {
     Assert-UpdaterTest -Condition ($resolved.Name -eq "ResumeForge-99.0.0") `
         -Message "含 start.cmd 的目录应当被认作更新包。"
 
+    # ---- 3.5 更新前数据快照 -----------------------------------------------------
+    # 三条覆盖路径都会先停应用再快照：SQLite 干净退出后直接拷文件就是一致快照。
+    # 只拷 .db 与旁文件、轻量 json 指针；保留最近 3 份，最旧的轮转删除。
+    $realProjectRoot = $ProjectRoot
+    $realDryRun = $DryRun
+    $ProjectRoot = Join-Path $TestDirectory "fake-root"
+    $DryRun = $false
+    $fakeDataRoot = Join-Path $ProjectRoot "data"
+    New-Item -ItemType Directory -Path (Join-Path $fakeDataRoot "datasets") -Force | Out-Null
+    foreach ($name in @("resume_forge.db", "resume_forge.db-wal", "active.json")) {
+        Set-Content -LiteralPath (Join-Path $fakeDataRoot $name) -Value "x" -Encoding ascii
+    }
+    Set-Content -LiteralPath (Join-Path $fakeDataRoot "datasets\extra.db") -Value "x" -Encoding ascii
+
+    Backup-UserData
+    $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $fakeDataRoot "pre-update") -Directory)
+    Assert-UpdaterTest -Condition ($snapshots.Count -eq 1) `
+        -Message "第一次快照应当恰好生成一份 pre-update 目录（实际 $($snapshots.Count)）。"
+    foreach ($relative in @("resume_forge.db", "resume_forge.db-wal", "active.json", "datasets\extra.db")) {
+        Assert-UpdaterTest -Condition (Test-Path -LiteralPath (Join-Path $snapshots[0].FullName $relative)) `
+            -Message "数据快照必须包含 $relative。"
+    }
+
+    # 再铺 3 份旧快照：下一次快照后只保留最近 3 份，最旧的被轮转删除。
+    foreach ($index in 1..3) {
+        New-Item -ItemType Directory -Path (Join-Path $fakeDataRoot ("pre-update\2026010" + $index + "-000000")) -Force | Out-Null
+    }
+    Backup-UserData
+    $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $fakeDataRoot "pre-update") -Directory)
+    Assert-UpdaterTest -Condition ($snapshots.Count -eq 3) `
+        -Message "快照轮转后应当只保留 3 份（实际 $($snapshots.Count)）。"
+    Assert-UpdaterTest -Condition (-not (Test-Path -LiteralPath (Join-Path $fakeDataRoot "pre-update\20260101-000000"))) `
+        -Message "最旧的快照应当被轮转删除。"
+
+    # 演练模式绝不写快照。
+    $DryRun = $true
+    Backup-UserData
+    $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $fakeDataRoot "pre-update") -Directory)
+    Assert-UpdaterTest -Condition ($snapshots.Count -eq 3) -Message "DryRun 下不该再生成快照。"
+    $DryRun = $realDryRun
+    $ProjectRoot = $realProjectRoot
+
     # ---- 4. 顺序不变量（源码级） -----------------------------------------------
     # 先停应用再覆盖程序文件：反过来的话文件锁会让复制中途失败。
     $stopOffset = Get-FirstCommandOffset -Ast $ast -Name "Stop-RunningApplication"
@@ -220,6 +262,13 @@ try {
         -Message "更新器里找不到 Stop-RunningApplication / Copy-ProgramFiles 的调用。"
     Assert-UpdaterTest -Condition ($stopOffset -lt $copyOffset) `
         -Message "覆盖程序文件之前必须先停掉正在运行的应用（现在是先复制后停）。"
+
+    # 数据快照必须落在覆盖程序文件之前：它是"新版本迁移弄坏数据"时的最后一道保险。
+    $backupOffset = Get-FirstCommandOffset -Ast $ast -Name "Backup-UserData"
+    Assert-UpdaterTest -Condition ($backupOffset -ge 0) `
+        -Message "更新器里找不到 Backup-UserData 的调用。"
+    Assert-UpdaterTest -Condition ($backupOffset -lt $copyOffset) `
+        -Message "覆盖程序文件之前必须先拍数据快照（现在 Copy-ProgramFiles 在 Backup-UserData 之前）。"
 
     # 状态文件要在解压之前写好：后端轮询它确认更新器起来了，收不到就不退出应用。
     $statusOffset = Get-FirstCommandOffset -Ast $ast -Name "Write-InstallStatus"

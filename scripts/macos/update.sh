@@ -200,6 +200,63 @@ rf_sync_dependencies() {
     fi
 }
 
+# 更新前给用户数据拍一份快照（保留最近 3 份在 data/pre-update/）。
+#
+# 这是更新链上最后一道数据保险：程序文件覆盖失败可以重跑，但新版本的数据库迁移
+# 一旦在旧数据上出了问题，没有快照就没有回头路。优先用 sqlite3 的 .backup 拿在线
+# 一致快照（macOS 自带 sqlite3，且更新器不强制停应用）；没有 sqlite3 时退回文件
+# 拷贝（应用正在写库时这份拷贝可能不完整，所以只作兜底并留警告）。
+RF_PRE_UPDATE_KEEP=3
+
+rf_backup_user_data() {
+    data_root="$RF_PROJECT_ROOT/data"
+    [ -d "$data_root" ] || return 0
+    destination="$data_root/pre-update/$(date '+%Y%m%d-%H%M%S')"
+    mkdir -p "$destination/datasets"
+    copied=0
+    for db_file in "$data_root"/*.db; do
+        [ -e "$db_file" ] || continue
+        if command_exists sqlite3; then
+            if ! sqlite3 "$db_file" ".backup '$destination/$(basename "$db_file")'"; then
+                log_warn "在线快照失败，退回文件拷贝：$db_file"
+                cp -f "$db_file" "$destination/"
+            fi
+        else
+            cp -f "$db_file" "$destination/"
+        fi
+        copied=$((copied + 1))
+        for sidecar in "$db_file-wal" "$db_file-shm"; do
+            if [ -e "$sidecar" ]; then
+                cp -f "$sidecar" "$destination/"
+            fi
+        done
+    done
+    for json_file in "$data_root"/*.json; do
+        [ -e "$json_file" ] || continue
+        cp -f "$json_file" "$destination/"
+    done
+    for db_file in "$data_root"/datasets/*.db; do
+        [ -e "$db_file" ] || continue
+        if command_exists sqlite3; then
+            if ! sqlite3 "$db_file" ".backup '$destination/datasets/$(basename "$db_file")'"; then
+                log_warn "在线快照失败，退回文件拷贝：$db_file"
+                cp -f "$db_file" "$destination/datasets/"
+            fi
+        else
+            cp -f "$db_file" "$destination/datasets/"
+        fi
+        copied=$((copied + 1))
+    done
+    log_dim "    更新前数据快照：${destination}（${copied} 个数据库）"
+    count=0
+    for old in $(ls -1 "$data_root/pre-update" 2>/dev/null | sort -r); do
+        count=$((count + 1))
+        if [ "$count" -gt "$RF_PRE_UPDATE_KEEP" ]; then
+            rm -rf "$data_root/pre-update/$old"
+        fi
+    done
+}
+
 rf_main() {
     rf_parse_arguments "$@"
 
@@ -256,6 +313,8 @@ rf_main() {
     fi
 
     if [ "$RF_DRY_RUN" -ne 1 ]; then
+        # 数据库迁移在下次启动时才跑：更新程序的任何一步之前先把数据拍下来。
+        rf_backup_user_data
         rf_sync_dependencies
     fi
 
