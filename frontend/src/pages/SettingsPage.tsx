@@ -15,6 +15,7 @@ import SearchCard from "../components/settings/SearchCard";
 import SkillsCard from "../components/settings/SkillsCard";
 import UpdateCard from "../components/settings/UpdateCard";
 import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
+import PrivacyCard from "../components/settings/PrivacyCard";
 import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
 
@@ -269,6 +270,7 @@ export default function SettingsPage() {
                     if (!datasetCreating) setCreateDatasetOpen(false);
                   }}
                 />
+                <PrivacyCard />
               </>
             ),
           },
