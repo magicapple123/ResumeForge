@@ -32,20 +32,36 @@ export function useSettingsDatasets() {
   const [createDatasetOpen, setCreateDatasetOpen] = useState(false);
   const [createDatasetName, setCreateDatasetName] = useState("");
 
-  const loadDatasetList = useCallback(async () => {
-    setDatasetsLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
+  const fetchDatasetList = useCallback(async (): Promise<DatasetInfo[] | null> => {
     try {
-      setDatasets(await listDatasets());
+      return await listDatasets();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "加载数据集失败");
-    } finally {
-      setDatasetsLoading(false);
+      return null;
     }
   }, [message]);
 
+  // Compiler 规范：初始加载的 setState 放 .then 回调（外部数据到达时应用）。
   useEffect(() => {
-    void loadDatasetList();
-  }, [loadDatasetList]);
+    let cancelled = false;
+    void fetchDatasetList().then((items) => {
+      if (cancelled) return;
+      if (items !== null) setDatasets(items);
+      setDatasetsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchDatasetList]);
+
+  // 事件路径（切换/删除/导入后的整表重拉，含 loading 翻动）。
+  const loadDatasetList = useCallback(async () => {
+    setDatasetsLoading(true);
+    const items = await fetchDatasetList();
+    if (items !== null) setDatasets(items);
+    setDatasetsLoading(false);
+  }, [fetchDatasetList]);
 
   const runDatasetExport = async (dataset: DatasetInfo) => {
     if (datasetExporting) return;

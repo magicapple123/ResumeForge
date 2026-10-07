@@ -15,19 +15,35 @@ export function useAssistantSkills() {
   const [loaded, setLoaded] = useState(false);
   const [togglingId, setTogglingId] = useState<number | null>(null);
 
-  const reloadSkills = useCallback(async () => {
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
+  const fetchSkills = useCallback(async (): Promise<AssistantSkill[] | null> => {
     try {
-      setSkills(await listSkills());
+      return await listSkills();
     } catch {
       // 取不到技能列表不影响对话本身，静默退回"没有技能"。
-    } finally {
-      setLoaded(true);
+      return null;
     }
   }, []);
 
+  // Compiler 规范：初始加载的 setState 放 .then 回调（外部数据到达时应用）。
   useEffect(() => {
-    void reloadSkills();
-  }, [reloadSkills]);
+    let cancelled = false;
+    void fetchSkills().then((items) => {
+      if (cancelled) return;
+      if (items !== null) setSkills(items);
+      setLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchSkills]);
+
+  // 事件路径（开关技能后的整表重拉）。
+  const reloadSkills = useCallback(async () => {
+    const items = await fetchSkills();
+    if (items !== null) setSkills(items);
+    setLoaded(true);
+  }, [fetchSkills]);
 
   const toggleSkill = useCallback(async (skill: AssistantSkill, enabled: boolean) => {
     setTogglingId(skill.id);
