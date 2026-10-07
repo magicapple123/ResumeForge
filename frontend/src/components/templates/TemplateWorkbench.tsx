@@ -35,19 +35,8 @@ export default function TemplateWorkbench({ onChanged }: Props) {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<ResumeTemplateDetail[]>([]);
   const [catalog, setCatalog] = useState<ResumeTemplateCatalog | null>(null);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const loadCatalog = useCallback(async () => {
-    setCatalogLoading(true);
-    try {
-      setCatalog(await fetchResumeTemplates());
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取模板目录失败");
-    } finally {
-      setCatalogLoading(false);
-    }
-  }, [message]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   const [styleEditor, setStyleEditor] = useState<{
     open: boolean;
@@ -63,21 +52,56 @@ export default function TemplateWorkbench({ onChanged }: Props) {
   const [previewTemplate, setPreviewTemplate] = useState<ResumeTemplateDetail | null>(null);
   const [importOpen, setImportOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
+  // 返回 null 表示失败（错误提示在这里统一给出）。
+  const fetchTemplates = useCallback(async (): Promise<ResumeTemplateDetail[] | null> => {
     try {
-      setTemplates(await listResumeTemplates());
+      return await listResumeTemplates();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "读取自制模板失败");
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, [message]);
 
+  const fetchCatalog = useCallback(async (): Promise<ResumeTemplateCatalog | null> => {
+    try {
+      return await fetchResumeTemplates();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "读取模板目录失败");
+      return null;
+    }
+  }, [message]);
+
+  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
   useEffect(() => {
-    void load();
-    void loadCatalog();
-  }, [load, loadCatalog]);
+    let cancelled = false;
+    void (async () => {
+      const [templates, catalog] = await Promise.all([fetchTemplates(), fetchCatalog()]);
+      if (cancelled) return;
+      if (templates !== null) setTemplates(templates);
+      if (catalog !== null) setCatalog(catalog);
+      setLoading(false);
+      setCatalogLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchTemplates, fetchCatalog]);
+
+  // 事件路径（保存/删除后的整表重拉，含 loading 翻动）。
+  const load = useCallback(async () => {
+    setLoading(true);
+    const templates = await fetchTemplates();
+    if (templates !== null) setTemplates(templates);
+    setLoading(false);
+  }, [fetchTemplates]);
+
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true);
+    const catalog = await fetchCatalog();
+    if (catalog !== null) setCatalog(catalog);
+    setCatalogLoading(false);
+  }, [fetchCatalog]);
 
   const refreshAll = () => {
     void load();

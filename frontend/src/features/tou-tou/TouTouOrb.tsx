@@ -142,6 +142,9 @@ export default function TouTouOrb({
       return;
     }
     clearTimer(statusTimerRef);
+    // 表情状态机：随外部状态切换可视表情并调度回 idle 定时器——定时器副作用与
+    // 状态迁移在此耦合，拆开反而引入中间态。按书面理由豁免 Compiler 规则。
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (externalStatus === "done") {
       setVisualStatus("done");
       scheduleIdle(DONE_MS);
@@ -157,6 +160,7 @@ export default function TouTouOrb({
       return;
     }
     setVisualStatus("idle");
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [externalStatus, scheduleIdle]);
 
   const scheduleInactivity = useCallback(() => {
@@ -175,6 +179,9 @@ export default function TouTouOrb({
     scheduleInactivity();
   }, [scheduleInactivity]);
 
+  // 忙碌态直接显示并取消隐藏/休眠定时器；空闲态调度休眠。定时器副作用与状态
+  // 迁移耦合，按书面理由豁免 Compiler 规则。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (isBusy) {
       clearTimer(hideTimerRef);
@@ -188,6 +195,7 @@ export default function TouTouOrb({
       clearTimer(sleepTimerRef);
     };
   }, [isBusy, scheduleInactivity]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const wake = useCallback(() => {
     resetInactivity();
@@ -290,9 +298,12 @@ export default function TouTouOrb({
     };
   }, [context.enabled, context.tipsEnabled]);
 
+  // 标语可见性是多个瞬态条件的派生函数：任何条件成立都要立即藏起标语。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (hidden || dragging || isBusy || !context.tipsEnabled) setTipVisible(false);
   }, [context.tipsEnabled, dragging, hidden, isBusy]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleActivate = (options: { immediate?: boolean } = {}) => {
     if (suppressClickRef.current) {

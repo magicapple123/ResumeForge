@@ -126,9 +126,13 @@ export default function JobMatchModal({ job, onClose }: Props) {
     }
   }, [job]);
 
+  // 打开弹窗即拉取匹配分析：与 load 的 loading 置位耦合。按"派生事件"书面
+  // 理由豁免 Compiler 规则。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (job) void load();
   }, [job, load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 用户在分析过程中关掉了弹窗：请求照跑，完成后用通知告诉他（见 utils/backgroundTask）。
   const leftWhileAnalyzing = useRef(false);

@@ -71,12 +71,31 @@ export default function ResumeEditorModal({
   const [rewrittenContent, setRewrittenContent] = useState<ResumeContent | null>(null);
   const screens = Grid.useBreakpoint();
 
+  // Compiler 规范：随 open/content/initialTarget 变化的回填用渲染期守卫式调整；
+  // 表单实例写入与滚动聚焦的定时器副作用留在 effect。
+  const [prevSync, setPrevSync] = useState<{
+    open: boolean;
+    content: ResumeContent | null;
+    initialTarget: string | null | undefined;
+  } | null>(null);
+  if (
+    prevSync === null ||
+    prevSync.open !== open ||
+    prevSync.content !== content ||
+    prevSync.initialTarget !== initialTarget
+  ) {
+    setPrevSync({ open, content, initialTarget });
+    if (open && content) {
+      setRewrittenContent(null);
+      const target = initialTarget ? resolveEditorTarget(initialTarget) : null;
+      setActiveTab(target?.tab ?? "basic");
+    }
+  }
+
   useEffect(() => {
     if (!open || !content) return;
     form.setFieldsValue(content);
-    setRewrittenContent(null);
     const target = initialTarget ? resolveEditorTarget(initialTarget) : null;
-    setActiveTab(target?.tab ?? "basic");
     if (!target || target.name.length === 0) return;
     const timer = window.setTimeout(() => {
       form.scrollToField(target.name, { behavior: "smooth", block: "center" });

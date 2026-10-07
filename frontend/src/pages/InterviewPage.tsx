@@ -54,40 +54,61 @@ export default function InterviewPage() {
   const [bankRecord, setBankRecord] = useState<QuestionBankRecord | null>(null);
   const [reviewRecord, setReviewRecord] = useState<InterviewReviewRecord | null>(null);
 
-  const loadList = useCallback(async () => {
-    setLoadingList(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
+  // 返回 null 表示失败（错误提示在这里统一给出）。
+  const fetchSessions = useCallback(async () => {
     try {
-      setSessions(await listInterviews());
+      return await listInterviews();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "读取面试记录失败");
-    } finally {
-      setLoadingList(false);
+      return null;
     }
   }, [message]);
 
+  // 事件路径（开始面试/生成后重新打开的整表重拉，含 loading 翻动）。
+  const loadList = useCallback(async () => {
+    setLoadingList(true);
+    const sessions = await fetchSessions();
+    if (sessions !== null) setSessions(sessions);
+    setLoadingList(false);
+  }, [fetchSessions]);
+
+  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）；
+  // 选项列表的两个请求本就是 .then 回调形状，保持不变。
   useEffect(() => {
-    void loadList();
+    let cancelled = false;
+    void (async () => {
+      const sessions = await fetchSessions();
+      if (cancelled) return;
+      if (sessions !== null) setSessions(sessions);
+      setLoadingList(false);
+    })();
     listJobs({ page_size: 100 })
-      .then((page) =>
+      .then((page) => {
+        if (cancelled) return;
         setJobOptions(
           page.items.map((job) => ({
             value: job.id,
             label: `${job.title}${job.company ? ` · ${job.company}` : ""}`,
           })),
-        ),
-      )
+        );
+      })
       .catch(() => setJobOptions([]));
     listResumes({ page_size: 100 })
-      .then((page) =>
+      .then((page) => {
+        if (cancelled) return;
         setResumeOptions(
           page.items.map((resume) => ({
             value: resume.id,
             label: resume.title || `简历 #${resume.id}`,
           })),
-        ),
-      )
+        );
+      })
       .catch(() => setResumeOptions([]));
-  }, [loadList]);
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchSessions]);
 
   // 新消息进来后滚到底部，用户不用自己找。
   useEffect(() => {

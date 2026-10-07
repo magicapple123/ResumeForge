@@ -57,15 +57,24 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
   const saveRequestVersion = useRef(0);
   const layoutDirty = JSON.stringify(layout) !== JSON.stringify(savedLayout);
 
-  useEffect(() => {
-    const currentRequest = ++requestVersion.current;
-    if (!recordId) return;
+  // Compiler 规范：随 recordId 变化的重置用渲染期守卫式调整（含首次挂载）；
+  // ref 失效递增与异步取数留在 effect。
+  const [prevRecordId, setPrevRecordId] = useState<number | null | undefined>(recordId);
+  if (prevRecordId !== recordId) {
+    setPrevRecordId(recordId);
     setDetail(null);
     setHtml("");
     setError("");
     setLayoutStatus(null);
-    if (loadedRecordId.current !== recordId) {
-      loadedRecordId.current = recordId;
+  }
+
+  useEffect(() => {
+    const currentRequest = ++requestVersion.current;
+    if (!recordId) return;
+    // "上次加载的记录 id"跨渲染比较属于 ref 读写：按规则必须留在 effect 内。
+    const isNewRecord = loadedRecordId.current !== recordId;
+    loadedRecordId.current = recordId;
+    if (isNewRecord) {
       setSuggestionsGenerated(false);
       setSuggestionsResetKey((value) => value + 1);
     }

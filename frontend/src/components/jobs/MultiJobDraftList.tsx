@@ -7,7 +7,7 @@
  */
 import { FileTextOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Checkbox, Space, Tag, Tooltip, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ParsedJobDraft } from "../../types";
 
 interface Props {
@@ -40,9 +40,12 @@ export default function MultiJobDraftList({
   const [selected, setSelected] = useState<number[]>(() => drafts.map((_, index) => index));
 
   // 识别结果换了（用户又点了一次识别）就重置勾选，避免沿用上一次的下标。
-  useEffect(() => {
+  // Compiler 规范：随 drafts 变化的重置用渲染期守卫式调整。
+  const [prevDrafts, setPrevDrafts] = useState(drafts);
+  if (prevDrafts !== drafts) {
+    setPrevDrafts(drafts);
     setSelected(drafts.map((_, index) => index));
-  }, [drafts]);
+  }
 
   const toggle = (index: number, checked: boolean) => {
     setSelected((current) =>

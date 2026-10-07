@@ -16,20 +16,34 @@ export function RehearsalPanel({ sessionId }: { sessionId: number }) {
     null,
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
+  const fetchRows = useCallback(async () => {
     try {
-      setRows(await listRehearsal(sessionId));
+      return await listRehearsal(sessionId);
     } catch {
-      setRows([]);
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, [sessionId]);
 
+  // Compiler 规范：随 sessionId 变化的加载用渲染期守卫 + 内联 async IIFE。
+  const [prevSessionId, setPrevSessionId] = useState(sessionId);
+  if (prevSessionId !== sessionId) {
+    setPrevSessionId(sessionId);
+    setLoading(true);
+  }
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      const rows = await fetchRows();
+      if (cancelled) return;
+      setRows(rows ?? []);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchRows, sessionId]);
 
   const run = async (row: DrillRehearsalRow) => {
     setBusy(`${row.claim_title}-${row.kind}`);

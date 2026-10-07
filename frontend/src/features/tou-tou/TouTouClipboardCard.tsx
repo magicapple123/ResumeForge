@@ -72,11 +72,16 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
       fallbackHeight: 600,
     });
 
+  // 打开时从浏览器本地剪贴板存储读回条目（同一份实现，事件路径复用）。
+  // Compiler 规范：随 open 变化的加载用渲染期守卫；DOM 定位副作用留在 effect。
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (open) setItems(loadItems());
+  }
+
   useEffect(() => {
-    if (open) {
-      setItems(loadItems());
-      placeNextToOrb();
-    }
+    if (open) placeNextToOrb();
   }, [open, placeNextToOrb]);
 
   if (!open) return null;

@@ -78,17 +78,18 @@ export default function JobsPage() {
   const [importCandidate, setImportCandidate] = useState<CandidateJobDetail | null>(null);
   const [importedCandidateId, setImportedCandidateId] = useState<number | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
-  const [openedCollectTaskIdsKey, setOpenedCollectTaskIdsKey] = useState("");
 
   useEffect(() => {
     if (error) message.error(error);
   }, [error, message]);
 
-  useEffect(() => {
-    if (!collectTaskIdsKey || openedCollectTaskIdsKey === collectTaskIdsKey) return;
+  // 新采集批次到达时自动打开抽屉（一次性锁存：同一批 key 不重复弹）。
+  // Compiler 规范：渲染期守卫式调整。
+  const [prevCollectKey, setPrevCollectKey] = useState<string | null>(null);
+  if (prevCollectKey !== collectTaskIdsKey && collectTaskIdsKey) {
+    setPrevCollectKey(collectTaskIdsKey);
     setCandidatesOpen(true);
-    setOpenedCollectTaskIdsKey(collectTaskIdsKey);
-  }, [collectTaskIdsKey, openedCollectTaskIdsKey]);
+  }
 
   // 只有"职位描述为空"的岗位才值得补详情（补详情要逐个打开页面，很慢），按钮据此出现/消失，
   // 而不是常驻一个点了没反应的按钮。当前只统计这一页已加载的岗位：补的就这一页里空的那些。

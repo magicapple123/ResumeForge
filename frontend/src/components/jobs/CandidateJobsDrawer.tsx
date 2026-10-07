@@ -71,21 +71,19 @@ export default function CandidateJobsDrawer({
     [items, selectedIds],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
+  // 返回 null 表示失败（错误提示在这里统一给出）。
+  const fetchCandidates = useCallback(async () => {
     try {
-      setItems(
-        await listCandidateJobs({
-          ...(taskFilterKey
-            ? { collectTaskIds: taskFilterKey.split(",").map((value) => Number(value)) }
-            : {}),
-          ...(committedKeyword ? { keyword: committedKeyword } : {}),
-        }),
-      );
+      return await listCandidateJobs({
+        ...(taskFilterKey
+          ? { collectTaskIds: taskFilterKey.split(",").map((value) => Number(value)) }
+          : {}),
+        ...(committedKeyword ? { keyword: committedKeyword } : {}),
+      });
     } catch (error) {
       message.error(error instanceof Error ? error.message : "加载备选岗位失败");
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, [committedKeyword, message, taskFilterKey]);
 
@@ -95,26 +93,62 @@ export default function CandidateJobsDrawer({
     return () => window.clearTimeout(timer);
   }, [keyword, open]);
 
-  useEffect(() => {
+  // Compiler 规范：随 open 变化的重置用渲染期守卫；取数在 effect 内联 .then 应用。
+  const [prevOpenSync, setPrevOpenSync] = useState(open);
+  if (prevOpenSync !== open) {
+    setPrevOpenSync(open);
     if (open) {
       setSelectedIds([]);
       // 每次打开都从"未筛选"开始：带着上次的关键词进来会让用户以为候选项丢了。
       setKeyword("");
       setCommittedKeyword("");
-      void load();
+      setLoading(true);
     }
-  }, [load, open, taskFilterKey]);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    void fetchCandidates().then((items) => {
+      if (items !== null) setItems(items);
+      setLoading(false);
+    });
+  }, [fetchCandidates, open]);
+
+  // 事件路径（导入/删除/编辑后的整表重拉，含 loading 翻动）。
+  const load = useCallback(async () => {
+    setLoading(true);
+    const items = await fetchCandidates();
+    if (items !== null) setItems(items);
+    setLoading(false);
+  }, [fetchCandidates]);
 
   // 搜索改变的是"看得见的那一批"，选中集必须跟着清空——否则批量导入/删除会作用到
   // 已经不在屏幕上的条目，用户看到的和实际发生的事对不上。
-  useEffect(() => {
+  // Compiler 规范：镜像清空用渲染期守卫式调整。
+  const [prevCommittedKeyword, setPrevCommittedKeyword] = useState(committedKeyword);
+  if (prevCommittedKeyword !== committedKeyword) {
+    setPrevCommittedKeyword(committedKeyword);
     setSelectedIds([]);
-  }, [committedKeyword]);
+  }
 
   // 父组件完成导入后（拿到正式岗位 id）刷新列表，状态标记随之更新。
+  // Compiler 规范：随 importedCandidateId 变化的拉取用渲染期守卫置 loading，
+  // 取数在 effect 内联 .then 应用。
+  const [prevImportedId, setPrevImportedId] = useState<number | null>(null);
+  if (prevImportedId !== importedCandidateId) {
+    setPrevImportedId(importedCandidateId);
+    if (open && importedCandidateId !== null) setLoading(true);
+  }
+
   useEffect(() => {
-    if (open && importedCandidateId !== null) void load();
-  }, [importedCandidateId, load, open]);
+    if (!open || importedCandidateId === null) return;
+    const cancelled = false;
+    void fetchCandidates().then((items) => {
+      if (cancelled) return;
+      if (items !== null) setItems(items);
+      setLoading(false);
+    });
+  }, [fetchCandidates, importedCandidateId, open]);
 
   const openCreate = () => {
     setEditing(null);

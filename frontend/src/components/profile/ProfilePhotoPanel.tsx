@@ -36,6 +36,25 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
   const [busy, setBusy] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
 
+  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const photos = await listProfilePhotos();
+        if (!cancelled) setPhotos(photos);
+      } catch {
+        // 照片列表取不到不影响资料编辑，静默退回"只有当前照片"。
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 事件路径（上传/删除后的整表重拉）。已由上方内联 IIFE 取代挂载调用。
   const load = useCallback(async () => {
     try {
       setPhotos(await listProfilePhotos());
@@ -45,10 +64,6 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
       setLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   const upload = async (file: File) => {
     if (!PHOTO_TYPES.has(file.type)) {

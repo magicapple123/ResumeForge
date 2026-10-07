@@ -48,10 +48,24 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
     }
   };
 
+  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
+  // 只在进入页面时加载一次；增删后由各操作自行刷新。
   useEffect(() => {
-    void load();
-    // 只在进入页面时加载一次；增删后由各操作自行刷新。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    void (async () => {
+      try {
+        const page = await listResumes({ has_job: false, page: 1, page_size: PAGE_SIZE });
+        if (!cancelled) setItems(page.items);
+      } catch (err) {
+        if (!cancelled) message.error(err instanceof Error ? err.message : "加载通用简历失败");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在进入页面时加载一次
   }, []);
 
   const confirmRename = async (record: ResumeBrief) => {
