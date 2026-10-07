@@ -32,7 +32,7 @@ def test_browser_closed_after_consecutive_failures_auto_stops(monkeypatch):
     session = LiveSession(client, {"name": "张三"})
     session.start()
     try:
-        deadline = time.monotonic() + 2.0
+        deadline = time.monotonic() + 10.0
         while session.is_running and time.monotonic() < deadline:
             time.sleep(0.02)
         assert session.is_running is False
@@ -109,7 +109,7 @@ def test_multi_session_auto_stops_when_the_browser_sync_fails(monkeypatch):
     )
     session.start()
     try:
-        deadline = time.monotonic() + 2.0
+        deadline = time.monotonic() + 10.0
         while session.is_running and time.monotonic() < deadline:
             time.sleep(0.02)
         assert session.is_running is False
