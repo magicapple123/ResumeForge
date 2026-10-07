@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import cast
 
 from ..matching import DateResolution, SelectOption, SelectResolution, is_placeholder
 
@@ -98,7 +99,7 @@ class Control:
 
         与 ``nearby_text``（周围文字）分开，是因为两者的可信度不同——见 ``_best_control``。
         """
-        cached = self._cache.get("own_text")
+        cached = cast("str | None", self._cache.get("own_text"))
         if cached is None:
             cached = " ".join(
                 part
@@ -119,7 +120,7 @@ class Control:
 
     def signature(self) -> str:
         """用于启发式匹配的文本指纹（小写，便于包含判断）。"""
-        cached = self._cache.get("signature")
+        cached = cast("str | None", self._cache.get("signature"))
         if cached is None:
             cached = " ".join(
                 part

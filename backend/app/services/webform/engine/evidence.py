@@ -261,7 +261,27 @@ def competing_fields(
     多段经历靠区块、同义冗余与主字段↔逐条变体各有着落，那些"并列"是常态不是事故。
     命中负向词或跨族否决的字段也不是真竞争者——它本来就无权认领这个控件。
     """
-    fields = fields or FIELD_SYNONYMS
+    if fields is None or fields is FIELD_SYNONYMS:
+        return _competing_fields_default(control, field_name)
+    return _competing_fields_for(control, field_name, fields)
+
+
+@lru_cache(maxsize=8192)
+def _competing_fields_default(control: Control, field_name: str) -> tuple[str, ...]:
+    """默认字段目录下的记忆化入口。
+
+    结果只依赖控件与字段目录（目录固定），按 (控件, 字段) 记忆化——与同文件
+    ``evidence_key`` / ``excluded_by_hints`` 同款。低置信判定对每条最终映射都要问
+    一次"还有谁在争"，不缓存就是「映射数 × 全字段」次目录循环（2026-10-05 性能审查）。
+    """
+    return _competing_fields_for(control, field_name, FIELD_SYNONYMS)
+
+
+def _competing_fields_for(
+    control: Control,
+    field_name: str,
+    fields: dict[str, tuple[str, ...]],
+) -> tuple[str, ...]:
     synonyms = fields.get(field_name)
     if synonyms is None or control.date_part():
         return ()

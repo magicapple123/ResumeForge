@@ -256,6 +256,7 @@ class FormEngine:
             if index is not None
         }
         field_order = {field_name: order for order, field_name in enumerate(FIELD_SYNONYMS)}
+        rank_cache: dict[tuple[str, int | None], list[tuple[tuple[int, int, int], Control]]] = {}
         candidates: list[tuple[tuple[int, int, int], int, int, str, str, int | None, Control]] = []
         for raw_field in data:
             base_field, explicit_index = split_repeated_key(str(raw_field))
@@ -263,14 +264,7 @@ class FormEngine:
                 continue
             family = family_for_field(base_field)
             target_index = explicit_index if explicit_index is not None else (1 if family else None)
-            synonyms = FIELD_SYNONYMS[base_field]
-            for key, control in self._rank_controls(
-                controls,
-                synonyms,
-                FIELD_PREFERRED_TYPES.get(base_field),
-                base_field,
-                target_index=target_index,
-            ):
+            for key, control in self._ranked_for_field(controls, str(raw_field), rank_cache):
                 # 旧版无序号控件沿用静态值；明确的重复区块优先取同一条动态记录。
                 if (
                     explicit_index is None
@@ -367,7 +361,12 @@ class FormEngine:
             final.append(
                 replace(
                     mapping,
-                    low_confidence=self._is_low_confidence(controls, mapping.field, mapping.control),
+                    low_confidence=self._is_low_confidence(
+                        controls,
+                        mapping.field,
+                        mapping.control,
+                        ranked=self._ranked_for_field(controls, mapping.field, rank_cache),
+                    ),
                 )
             )
 
@@ -680,6 +679,37 @@ class FormEngine:
         return scored
 
     @classmethod
+    def _ranked_for_field(
+        cls,
+        controls: list[Control],
+        field_name: str,
+        cache: dict[tuple[str, int | None], list[tuple[tuple[int, int, int], Control]]],
+    ) -> list[tuple[tuple[int, int, int], Control]]:
+        """``_rank_controls`` 的**单次 match_fields 调用级**缓存。
+
+        同一个 ``(基础字段, 目标序号)`` 的排名会在一次匹配里被问多次：候选循环对每个
+        资料字段排一次，收尾的低置信判定又对每条最终映射重排一次（``_is_low_confidence``）。
+        排名是 ``(controls, 同义词, 字段)`` 的纯函数、与分配状态无关，两次结果必然相同——
+        缓存直接省掉一半排名工作。缓存随调用创建，不跨请求共享（跨请求那份在
+        evidence.py 的模块级 lru_cache 里）。
+        """
+        base_field, explicit_index = split_repeated_key(field_name)
+        family = family_for_field(base_field)
+        target_index = explicit_index if explicit_index is not None else (1 if family else None)
+        key = (base_field, target_index)
+        ranked = cache.get(key)
+        if ranked is None:
+            ranked = cls._rank_controls(
+                controls,
+                FIELD_SYNONYMS.get(base_field, ()),
+                FIELD_PREFERRED_TYPES.get(base_field),
+                base_field,
+                target_index=target_index,
+            )
+            cache[key] = ranked
+        return ranked
+
+    @classmethod
     def _top_two(
         cls,
         controls: list[Control],
@@ -696,7 +726,12 @@ class FormEngine:
 
     @classmethod
     def _is_low_confidence(
-        cls, controls: list[Control], field_name: str, chosen: Control
+        cls,
+        controls: list[Control],
+        field_name: str,
+        chosen: Control,
+        *,
+        ranked: list[tuple[tuple[int, int, int], Control]] | None = None,
     ) -> bool:
         """这条映射要不要标"需确认"。
 
@@ -705,19 +740,23 @@ class FormEngine:
         同一控件也是别的字段的同档同分候选时（学校 vs 专业），只比本字段的冠亚军
         看不见这种争抢，会按字段表顺序静默硬分。
 
+        ``ranked`` 给了就沿用调用方已算好的排名（``match_fields`` 的调用级缓存，
+        见 ``_ranked_for_field``），不再重排一遍。
+
         同组单选/复选除外：性别那两个选项本来就由 ``_build_mapping`` 在组内按值再挑一次，
         旗子插上去只是噪声（跨字段争抢仍然算，那是另一回事）。
         """
         base_field, explicit_index = split_repeated_key(field_name)
         family = family_for_field(base_field)
         target_index = explicit_index if explicit_index is not None else (1 if family else None)
-        ranked = cls._rank_controls(
-            controls,
-            FIELD_SYNONYMS.get(base_field, ()),
-            FIELD_PREFERRED_TYPES.get(base_field),
-            base_field,
-            target_index=target_index,
-        )
+        if ranked is None:
+            ranked = cls._rank_controls(
+                controls,
+                FIELD_SYNONYMS.get(base_field, ()),
+                FIELD_PREFERRED_TYPES.get(base_field),
+                base_field,
+                target_index=target_index,
+            )
         competes = bool(competing_fields(chosen, base_field))
         if len(ranked) < 2:
             return competes
