@@ -8,8 +8,8 @@ import { SaveOutlined } from "@ant-design/icons";
 import { App, Button, DatePicker, Form, Input, Modal, Select, Space } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
-import { useEffect } from "react";
-import { createTrack, updateTrack } from "../../api/tracker";
+import { useEffect, useState } from "react";
+import { createTrack, getTrack, updateTrack } from "../../api/tracker";
 import type { Track, TrackPayload, TrackStatus } from "../../types";
 import { TRACK_STATUSES, TRACK_STATUS_LABELS, emptyTrack } from "../../types";
 
@@ -85,11 +85,34 @@ interface Props {
 export default function TrackFormModal({ open, track, onClose, onSaved }: Props) {
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
+  const [full, setFull] = useState<Track | null>(null);
   const editing = track !== null;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setFull(null);
+      return;
+    }
+    // 先用列表行乐观预填（公司/岗位/日期/状态都是全的），note 与依据可能被后端
+    // 截断过，等下面的详情请求回来再覆盖。
     form.setFieldsValue(track ? toValues(track) : EMPTY);
+    if (!track) return;
+    // 列表接口的 note/evidence 是**预览**（超长截断加省略号，见后端 _track_brief）：
+    // 编辑必须回详情拿全文——否则保存（PUT 是整体替换）会把截断文本写回库。
+    let cancelled = false;
+    getTrack(track.id)
+      .then((detail) => {
+        if (cancelled) return;
+        setFull(detail);
+        form.setFieldsValue(toValues(detail));
+      })
+      .catch(() => {
+        // 详情拿不到（后端短暂不可用）就退回预览预填：基本字段仍可编辑，
+        // note 若真被截断，用户保存前的 TextArea 里能看到省略号，不至于无感丢字。
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, track, form]);
 
   const submit = async () => {
@@ -99,9 +122,11 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
     } catch {
       return; // 校验失败时 antd 已在字段旁给出提示
     }
-    const payload = toPayload(values, track);
+    // 回传 evidence / 关联 id 用详情全量（full），拿不到才退回列表行。
+    const source = full ?? track;
+    const payload = toPayload(values, source);
     try {
-      const saved = editing ? await updateTrack(track.id, payload) : await createTrack(payload);
+      const saved = track ? await updateTrack(track.id, payload) : await createTrack(payload);
       message.success(editing ? "已保存" : "已添加");
       onSaved(saved);
       onClose();

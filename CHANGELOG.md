@@ -26,6 +26,7 @@
 - **依赖审计分级门禁。** 生产依赖（`requirements.txt`）出现已知漏洞即失败、npm 生产依赖 high 及以上失败；开发工具链维持 advisory 不阻断。
 - **CI 增加版本号单源核对**（`scripts/check_version_sync.py`）：`config.py` 的 `app_version` 与 `frontend/package.json` 不一致时合并失败。
 - **备份快照剥离 `sqlite_stat*` 统计表**，导入白名单按 `sqlite_` 前缀放行 SQLite 引擎内部表——`PRAGMA optimize` 留下的统计表不再导致合法备份被旧版本拒收。
+- **求职进度列表瘦身。** 列表接口的备注与依据字段改为截断预览（超出上限加省略号，全文走详情接口），求职看板的主读路径不再随列表拖带大文本；编辑表单打开时自动从详情接口取全文回填，保存不会把预览文本写回库。
 
 ## 0.16.0 - 2026-10-06
 

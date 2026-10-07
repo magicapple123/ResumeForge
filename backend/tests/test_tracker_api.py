@@ -91,6 +91,21 @@ def test_list_returns_items_and_funnel_counts(client):
     assert body["status_counts"]["rejected"] == 0
 
 
+def test_list_truncates_note_and_evidence_but_detail_keeps_full_text(client):
+    """列表的 note/evidence 是预览（截断加省略号），全文只在详情接口——主读路径不拖大字段。"""
+    long_note = "很长的备注" * 100  # 500 字 > TRACK_NOTE_PREVIEW_CHARS(200)
+    created = client.post("/api/tracker", json={**VALID, "note": long_note})
+    assert created.status_code == 201
+    track_id = created.json()["id"]
+
+    listed = client.get("/api/tracker").json()["items"][0]
+    assert listed["note"].endswith("…")
+    assert len(listed["note"]) == 200 + 1  # 截断位 + 省略号
+
+    detail = client.get(f"/api/tracker/{track_id}").json()
+    assert detail["note"] == long_note
+
+
 def test_invalid_filters_are_rejected(client):
     assert client.get("/api/tracker", params={"status": "不存在"}).status_code == 422
     assert client.get("/api/tracker/export", params={"status": "不存在"}).status_code == 422

@@ -10,10 +10,13 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import TrackFormModal from "./TrackFormModal";
+import { getTrack } from "../../api/tracker";
 import { todayIsoDate } from "../../utils/format";
+import type { Track } from "../../types";
 
 vi.mock("../../api/tracker", () => ({
   createTrack: vi.fn(),
+  getTrack: vi.fn(),
   updateTrack: vi.fn(),
 }));
 
@@ -25,8 +28,29 @@ function renderModal() {
   );
 }
 
+/** 列表行的形态：note/evidence 可能被后端截成预览（…结尾）。 */
+const LISTED_ROW: Track = {
+  id: 7,
+  company: "示例科技",
+  title: "后端开发实习生",
+  status: "applied",
+  stage_note: "",
+  applied_at: "2026-09-18",
+  status_date: "",
+  next_action: "",
+  next_action_date: "",
+  note: "很长的备注预览…",
+  evidence: "",
+  job_id: null,
+  resume_id: null,
+  source: "manual",
+  created_at: "2026-09-18T08:00:00",
+  updated_at: "2026-09-18T08:00:00",
+};
+
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
   document.body.innerHTML = "";
 });
 
@@ -55,5 +79,18 @@ describe("TrackFormModal 的投递日期", () => {
 
     // 用本地日期而不是 UTC：晚上录的记录不该被写成"昨天"。
     await waitFor(() => expect(screen.getByLabelText("投递日期")).toHaveValue(todayIsoDate()));
+  });
+
+  it("编辑时从详情接口取全文回填——列表行的 note 是截断预览，不能拿它当编辑底稿", async () => {
+    vi.mocked(getTrack).mockResolvedValue({ ...LISTED_ROW, note: "完整备注全文" });
+    render(
+      <AntdApp>
+        <TrackFormModal open track={LISTED_ROW} onClose={() => {}} onSaved={() => {}} />
+      </AntdApp>,
+    );
+
+    // 详情请求回来后覆盖乐观预填的截断预览；保存（PUT 整体替换）以全文为准。
+    await waitFor(() => expect(screen.getByLabelText("备注")).toHaveValue("完整备注全文"));
+    expect(getTrack).toHaveBeenCalledWith(7);
   });
 });

@@ -28,6 +28,11 @@ MAX_TRACK_NOTE_CHARS = 4_000
 MAX_TRACK_EVIDENCE_CHARS = 500
 MAX_TRACK_NEXT_ACTION_CHARS = 255
 MAX_TRACK_DATE_CHARS = 16
+# 列表响应的 note / evidence 是**预览**而非全文：超出截断加省略号，全文走详情
+# 接口 GET /api/tracker/{id}（前端编辑表单打开时预取）。列表一次拖几十条，
+# note 上限 4000 字，不截断的话求职看板的主读路径要白拖几百 KB。
+TRACK_NOTE_PREVIEW_CHARS = 200
+TRACK_EVIDENCE_PREVIEW_CHARS = 120
 # 一次最多处理多少条识别结果：一封邮件通常只对应一条，一次粘贴几十条已经很多了。
 MAX_TRACK_RECORDS = 30
 MAX_TRACK_TEXT_CHARS = 50_000
