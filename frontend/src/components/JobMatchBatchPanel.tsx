@@ -253,9 +253,6 @@ export default function JobMatchBatchPanel({
 
   // 打开即触发的历史拉取与自动运行：runBatch/runInBackground 内部的 setState 是
   // 异步完成回调，但规则的调用图追踪仍会标记——按"派生事件"书面理由豁免。
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  // 打开即触发的历史拉取与自动运行：runBatch/runInBackground 内部的 setState 是
-  // 异步完成回调，但规则的调用图追踪仍会标记——按"派生事件"书面理由豁免。
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!open) return;

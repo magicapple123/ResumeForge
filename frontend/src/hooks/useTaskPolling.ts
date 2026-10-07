@@ -75,7 +75,6 @@ export function useTaskPolling(
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 依赖由调用方通过 deps 控制
     // eslint-disable-next-line react-hooks/use-memo -- 依赖列表同样是调用方传参，无法写成字面量
   }, [taskId, ...deps]);
 
