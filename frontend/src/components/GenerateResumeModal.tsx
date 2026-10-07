@@ -94,10 +94,19 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   }, [generatingInBackground]);
 
   // 打开时把资料页填的名称带进来。reset() 只在关闭时跑，不补这一步的话
-  // 名称输入框永远是空的。
-  useEffect(() => {
+  // 名称输入框永远是空的。Compiler 规范：渲染期守卫式调整（哨兵 null 覆盖挂载即打开）。
+  const [prevTitleSync, setPrevTitleSync] = useState<{
+    open: boolean;
+    initialTitle: string;
+  } | null>(null);
+  if (
+    prevTitleSync === null ||
+    prevTitleSync.open !== open ||
+    prevTitleSync.initialTitle !== initialTitle
+  ) {
+    setPrevTitleSync({ open, initialTitle });
     if (open) setTitle(initialTitle);
-  }, [open, initialTitle]);
+  }
 
   // 重新打开弹窗时回到配置页；唯一例外是上次的生成还在后台跑（生成中关掉的），
   // 此时保持 generating 让用户接着看进度——否则"生成中关掉 → 后台完成 → 再打开"
@@ -261,6 +270,9 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   }, []);
 
   // 任务进入终态后的收尾：完成→取简历进预览并提醒；取消→回配置；失败→错误。
+  // 本质是"派生事件"（后台任务轮询到达终态后的收尾扇出）：状态收尾与 loadPreview
+  // 副作用在此汇合，改为回调直连需要重构轮询器，故按书面理由豁免 Compiler 规则。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!task) return;
     if (task.status === "completed") {
@@ -288,6 +300,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       setStage("error");
     }
   }, [task, notification, message, navigate, loadPreview]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleCancelGenerate = async () => {
     if (taskId == null) return;

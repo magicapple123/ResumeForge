@@ -74,15 +74,42 @@ export default function JobFormModal({
   const submittingRef = useRef(false);
   const isEdit = !!initial;
 
-  // 打开时回填编辑数据（或重置为默认值）
-  useEffect(() => {
-    parseRequestId.current += 1;
+  // 打开时回填编辑数据（或重置为默认值）。Compiler 规范：同步 setState 用渲染期
+  // 守卫；ref 失效、表单实例写入与 clear() 副作用留在 effect。
+  const [prevSync, setPrevSync] = useState<{
+    open: boolean;
+    initial: Job | null;
+    presetRawText: string | undefined;
+    presetJob: Partial<JobPayload> | undefined;
+  } | null>(null);
+  if (
+    prevSync === null ||
+    prevSync.open !== open ||
+    prevSync.initial !== initial ||
+    prevSync.presetRawText !== presetRawText ||
+    prevSync.presetJob !== presetJob
+  ) {
+    setPrevSync({ open, initial, presetRawText, presetJob });
     setParsing(false);
     setSubmitting(false);
-    submittingRef.current = false;
-    // 每次打开都从干净状态开始：上次留下的多份草稿不该出现在这一次的弹窗里。
     setDrafts([]);
     setSavingDrafts(false);
+    if (open && !initial) {
+      setRawText(presetRawText ?? "");
+      setParseWarnings([]);
+      setRecognizedText("");
+      setRecognitionSource(null);
+      setInputKind("text");
+      setNoteImages([]);
+    }
+  }
+
+  // ref 失效递增、表单实例写入与 clear() 副作用是"外部系统同步"（Compiler 规则
+  // 会把表单实例方法视作 setState）——按书面理由豁免。
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    parseRequestId.current += 1;
+    submittingRef.current = false;
     if (!open) return;
     if (initial) {
       form.setFieldsValue(initial);
@@ -99,15 +126,10 @@ export default function JobFormModal({
           ),
         );
       }
-      setRawText(presetRawText ?? "");
-      setParseWarnings([]);
-      setRecognizedText("");
-      setRecognitionSource(null);
-      setInputKind("text");
-      setNoteImages([]);
       clear();
     }
   }, [open, initial, presetRawText, presetJob, form, clear]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const addNoteImage = async (file: File) => {
     if (file.size > MAX_NOTE_IMAGE_BYTES) {

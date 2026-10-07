@@ -48,8 +48,13 @@ export default function TrackerPage() {
   const [status, setStatus] = useState(searchParams.get("status") ?? "");
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
   // 搜索框受控镜像（同 JobFilterBar 的处理）：URL 恢复的关键词能回填输入框。
+  // Compiler 规范：镜像同步用渲染期守卫式调整。
   const [searchText, setSearchText] = useState(keyword);
-  useEffect(() => setSearchText(keyword), [keyword]);
+  const [prevKeyword, setPrevKeyword] = useState(keyword);
+  if (prevKeyword !== keyword) {
+    setPrevKeyword(keyword);
+    setSearchText(keyword);
+  }
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Track | null>(null);
   const [importOpen, setImportOpen] = useState(false);

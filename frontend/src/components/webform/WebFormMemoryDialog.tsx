@@ -1,7 +1,7 @@
 /** 「记住这条」的资料目标选择器。 */
 import { CheckCircleFilled, DownOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import { App, Button, Card, Empty, Input, Modal, Radio, Space, Tag, Typography } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { WebFormMemoryTarget, WebFormRememberPending } from "../../types";
 
 export interface WebFormMemorySelection {
@@ -76,17 +76,31 @@ export default function WebFormMemoryDialog({
   const [value, setValue] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (!open || !pending) return;
-    const preferred = targets.find((target) => target.field_key === pending.field_key);
-    setSearch("");
-    setSelectedId(preferred?.target_id ?? "custom");
-    setCustomLabel(preferred ? "" : pending.field_label || pending.control_label || "");
-    setValue(pending.value);
-    setCollapsedGroups(
-      new Set(targets.map((target) => target.group).filter((group) => group !== "自定义")),
-    );
-  }, [open, pending, targets]);
+  // 打开时按"记忆的待填字段"预填选择。Compiler 规范：随 open/pending/targets 变化
+  // 的回填用渲染期守卫式调整。
+  const [prevSync, setPrevSync] = useState<{
+    open: boolean;
+    pending: WebFormRememberPending | null;
+    targets: WebFormMemoryTarget[];
+  } | null>(null);
+  if (
+    prevSync === null ||
+    prevSync.open !== open ||
+    prevSync.pending !== pending ||
+    prevSync.targets !== targets
+  ) {
+    setPrevSync({ open, pending, targets });
+    if (open && pending) {
+      const preferred = targets.find((target) => target.field_key === pending.field_key);
+      setSearch("");
+      setSelectedId(preferred?.target_id ?? "custom");
+      setCustomLabel(preferred ? "" : pending.field_label || pending.control_label || "");
+      setValue(pending.value);
+      setCollapsedGroups(
+        new Set(targets.map((target) => target.group).filter((group) => group !== "自定义")),
+      );
+    }
+  }
 
   const selectedTarget = targets.find((target) => target.target_id === selectedId);
   const filteredTargets = useMemo(

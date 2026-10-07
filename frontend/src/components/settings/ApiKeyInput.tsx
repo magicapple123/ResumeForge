@@ -32,11 +32,24 @@ export default function ApiKeyInput({
   const revealRequestId = useRef(0);
   const maskedReference = isMaskedApiKey(value) ? value : "";
 
-  useEffect(() => {
-    revealRequestId.current += 1;
+  // Compiler 规范：随 editing/resetToken 变化的重置用渲染期守卫式调整；ref 失效
+  // 递增留在 effect（渲染期禁止写 ref）。
+  const [prevResetKey, setPrevResetKey] = useState<{ editing: boolean; resetToken: number } | null>(
+    null,
+  );
+  if (
+    prevResetKey === null ||
+    prevResetKey.editing !== editing ||
+    prevResetKey.resetToken !== resetToken
+  ) {
+    setPrevResetKey({ editing, resetToken });
     setVisible(false);
     setRevealedKey("");
     setRevealing(false);
+  }
+
+  useEffect(() => {
+    revealRequestId.current += 1;
   }, [editing, resetToken]);
 
   useEffect(

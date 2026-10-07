@@ -5,7 +5,7 @@
  * 越界值后端会直接丢弃，所以界面上也用 InputNumber 限死，不让用户白改一次。
  */
 import { App, Button, Form, Input, InputNumber, Modal, Space, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createResumeTemplate, updateResumeTemplate } from "../../api/resumeTemplates";
 import type { ResumeFormatConfig, ResumeFormatField, ResumeTemplateDetail } from "../../types";
 
@@ -33,12 +33,19 @@ export default function FormatTemplateEditorModal({
   const [values, setValues] = useState<Record<string, ConfigValue>>({});
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    setName(template?.name ?? "");
-    setDescription(template?.description ?? "");
-    setValues({ ...((template?.config ?? {}) as ResumeFormatConfig) });
-  }, [open, template]);
+  // 打开时回填模板内容。Compiler 规范：随 open/template 变化的回填用渲染期守卫。
+  const [prevSync, setPrevSync] = useState<{
+    open: boolean;
+    template: ResumeTemplateDetail | null | undefined;
+  } | null>(null);
+  if (prevSync === null || prevSync.open !== open || prevSync.template !== template) {
+    setPrevSync({ open, template });
+    if (open) {
+      setName(template?.name ?? "");
+      setDescription(template?.description ?? "");
+      setValues({ ...((template?.config ?? {}) as ResumeFormatConfig) });
+    }
+  }
 
   const setValue = (key: string, value: ConfigValue) =>
     setValues((current) => ({ ...current, [key]: value }));

@@ -13,7 +13,7 @@ import {
   RobotOutlined,
 } from "@ant-design/icons";
 import { Button, Dropdown, Input, Select, Space } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { BatchAction, MatchBatchRunMode } from "./jobFilterOptions";
 import { JOB_TYPE_OPTIONS, SOURCE_KIND_OPTIONS, STATUS_OPTIONS } from "./jobFilterOptions";
 
@@ -60,8 +60,13 @@ export function JobFilterBar({
 }) {
   // 搜索框受控：本地镜像同步外部 keyword（URL 带参等外部变化能回填输入框），
   // 点 × 清空时立即把筛选也清掉——之前非受控时清空后列表仍按旧关键词过滤。
+  // Compiler 规范：镜像同步用渲染期守卫式调整。
   const [searchText, setSearchText] = useState(keyword);
-  useEffect(() => setSearchText(keyword), [keyword]);
+  const [prevKeyword, setPrevKeyword] = useState(keyword);
+  if (prevKeyword !== keyword) {
+    setPrevKeyword(keyword);
+    setSearchText(keyword);
+  }
 
   return (
     <div style={{ marginBottom: 16 }}>

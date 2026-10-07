@@ -16,11 +16,8 @@ export default function ReminderPopupCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // 完成提示音：存在浏览器本地（它是一个"这台机器上要不要响"的偏好，不占用户的数据表）。
-  const [sound, setSound] = useState(true);
-
-  useEffect(() => {
-    setSound(isSoundEnabled());
-  }, []);
+  // Compiler 规范：本地偏好的初始读取用 useState 惰性初始化，替代挂载 effect。
+  const [sound, setSound] = useState(() => isSoundEnabled());
 
   const load = useCallback(async () => {
     setLoading(true);
