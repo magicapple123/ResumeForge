@@ -6,28 +6,8 @@
  * 历史记录富还原：传入 record 后用与刚生成时相同的渲染路径展示，「反向优化简历」按钮可点、生成结果
  * 写回同一条记录。旧版纯文本记录（analysis 为字符串）仅做兼容展示并提示"仅可查看"。
  */
-import {
-  BulbOutlined,
-  DeleteOutlined,
-  HistoryOutlined,
-  SaveOutlined,
-  SendOutlined,
-  ThunderboltOutlined,
-} from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Collapse,
-  Empty,
-  Input,
-  Listy,
-  Select,
-  Space,
-  Tag,
-  Typography,
-} from "antd";
+import { SaveOutlined, SendOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Card, Empty, Input, Select, Space, Typography } from "antd";
 import { useState } from "react";
 import {
   analyzeInterviewQuestion,
@@ -37,8 +17,8 @@ import {
   saveReview,
   updateReview,
 } from "../api/interview";
-import { RowActions } from "./common/RowActions";
-import { ListyItem, ListyMeta } from "./common/ListyItem";
+import ReviewHistoryCard from "./interview/ReviewHistoryCard";
+import SuggestionsCard from "./interview/SuggestionsCard";
 import { useApi } from "../hooks/useApi";
 import type { InterviewAnalysis, InterviewOptimizeResult, InterviewReviewRecord } from "../types";
 
@@ -216,69 +196,6 @@ export default function InterviewReviewPanel({
     }
   };
 
-  const priorityColor = (priority: string) =>
-    priority === "high" ? "red" : priority === "medium" ? "gold" : "default";
-
-  const reviewItems = (reviews.data ?? []).map((review) => ({
-    key: String(review.id),
-    label: (
-      <Space wrap>
-        <span>{review.resume_title || review.job_title || "复盘"}</span>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {review.created_at.replace("T", " ").slice(0, 16)}
-        </Typography.Text>
-      </Space>
-    ),
-    children: (
-      <Space orientation="vertical" style={{ width: "100%" }}>
-        {review.questions.length > 0 && (
-          <>
-            <Typography.Text strong>真实问题</Typography.Text>
-            <ul style={{ paddingLeft: 20, margin: "4px 0" }}>
-              {review.questions.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </>
-        )}
-        {review.analysis?.framework && (
-          <Typography.Paragraph style={{ margin: 0 }}>
-            {review.analysis.framework}
-          </Typography.Paragraph>
-        )}
-        {review.suggestions.length > 0 && (
-          <>
-            <Typography.Text strong>简历改进建议</Typography.Text>
-            <ul style={{ paddingLeft: 20, margin: "4px 0" }}>
-              {review.suggestions.map((item) => (
-                <li key={item.suggestion}>{item.suggestion}</li>
-              ))}
-            </ul>
-          </>
-        )}
-        <Space wrap>
-          {onOpenRecord && (
-            <Button size="small" onClick={() => onOpenRecord(review)}>
-              查看详情
-            </Button>
-          )}
-          <RowActions
-            more={[
-              {
-                key: "delete",
-                label: "删除复盘历史",
-                danger: true,
-                icon: <DeleteOutlined />,
-                confirm: "删除这条复盘历史？",
-                onClick: () => void removeReview(review.id),
-              },
-            ]}
-          />
-        </Space>
-      </Space>
-    ),
-  }));
-
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       {record && (
@@ -424,68 +341,17 @@ export default function InterviewReviewPanel({
         </Card>
       ) : (
         viewSuggestions.length > 0 && (
-          <Card size="small" title="简历改进建议">
-            {viewSuggestions.length === 0 ? (
-              <Alert type="info" showIcon title="没有产出建议，试试补充更多面试暴露的短板或追问" />
-            ) : (
-              <Listy
-                items={viewSuggestions}
-                rowKey={(item) => `${item.section}|${item.issue}|${item.suggestion}`}
-                itemRender={(item) => (
-                  <ListyItem>
-                    <ListyMeta
-                      title={
-                        <Space size={6} wrap>
-                          <Tag color={priorityColor(item.priority)}>{item.priority}</Tag>
-                          <span>{item.section}</span>
-                          <Typography.Text type="secondary">{item.issue}</Typography.Text>
-                        </Space>
-                      }
-                      description={
-                        <Space orientation="vertical" size={2} style={{ width: "100%" }}>
-                          <span>
-                            <BulbOutlined /> {item.suggestion}
-                          </span>
-                          {item.evidence.length > 0 && (
-                            <Typography.Text type="secondary">
-                              依据：{item.evidence.join("；")}
-                            </Typography.Text>
-                          )}
-                        </Space>
-                      }
-                    />
-                  </ListyItem>
-                )}
-              />
-            )}
-            {onGoToResume && (
-              <Button type="link" style={{ paddingLeft: 0 }} onClick={onGoToResume}>
-                去简历中心对照修改 →
-              </Button>
-            )}
-          </Card>
+          <SuggestionsCard suggestions={viewSuggestions} onGoToResume={onGoToResume} />
         )
       )}
 
-      <Card
-        size="small"
-        title={
-          <Space>
-            <HistoryOutlined />
-            历史复盘
-          </Space>
-        }
-      >
-        {reviews.loading && !reviews.data ? (
-          <Alert type="info" showIcon title="加载中…" />
-        ) : reviews.error ? (
-          <Alert type="error" showIcon title={reviews.error} />
-        ) : (reviews.data ?? []).length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有保存过复盘" />
-        ) : (
-          <Collapse items={reviewItems} />
-        )}
-      </Card>
+      <ReviewHistoryCard
+        reviews={reviews.data ?? null}
+        loading={reviews.loading}
+        error={reviews.error}
+        onOpenRecord={onOpenRecord}
+        onRemove={(id) => void removeReview(id)}
+      />
     </Space>
   );
 }
