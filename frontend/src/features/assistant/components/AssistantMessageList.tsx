@@ -2,6 +2,7 @@
 
 import { CommentOutlined, CopyOutlined, DeleteOutlined } from "@ant-design/icons";
 import { Alert, App, Checkbox, Skeleton, Typography } from "antd";
+import { memo } from "react";
 import type { RefObject } from "react";
 import type {
   AssistantConversationDetail,
@@ -58,39 +59,35 @@ interface Props {
   onToggleSelected: (message: AssistantMessage) => void;
 }
 
-export default function AssistantMessageList({
-  assistantLabel = "求职助手",
-  emptyVariant = "page",
-  detail,
-  showLoading,
-  activeStream,
-  sending,
-  pendingUserText,
-  pendingSentAt,
-  pendingUserAttachments,
-  streamingText,
-  streamingReasoning,
-  streamingSources,
-  streamingSourceMap,
-  streamingTools,
-  progressText,
-  streamError,
-  messageEndRef,
-  enabledSkillCount,
-  skillsLoaded,
-  onChoosePrompt,
-  onManageSkills,
+interface BubbleProps {
+  item: AssistantMessage;
+  assistantLabel: string;
+  selected: boolean;
+  onQuote: (message: AssistantMessage) => void;
+  onDeleteMessage: (message: AssistantMessage) => void;
+}
+
+/**
+ * 单条历史消息气泡（含右键菜单）。
+ *
+ * 流式期间每个 delta 都会更新页面级 state（streamingText）并让整棵助手页重渲染；
+ * 历史气泡的 props（message 对象引用 + 两个稳定回调 + selected 布尔）在流式期间
+ * 全部不变，包一层 memo 把它们整个挡在渲染之外——否则长对话下每次 delta 都要
+ * 重渲染全部历史气泡（正文解析有内层 useMemo 兜着，但工具调用折叠面板、附件、
+ * 右键菜单这些仍然整树重跑）。右键菜单一并收进 memo 边界：`actionsFor` 每次渲染
+ * 都是新数组，留在外面会连累 RowContextMenu 一起重渲染。
+ */
+const AssistantMessageBubble = memo(function AssistantMessageBubble({
+  item,
+  assistantLabel,
+  selected,
   onQuote,
   onDeleteMessage,
-  selecting,
-  selectedIds,
-  onToggleSelected,
-}: Props) {
+}: BubbleProps) {
   const { message } = App.useApp();
-  const historyMessages = detail?.messages ?? [];
 
   /** 每条消息的操作：整块右键即可唤出（和岗位卡片、会话列表一致）。 */
-  const actionsFor = (item: AssistantMessage): RowActionItem[] => [
+  const actionsFor = (): RowActionItem[] => [
     {
       key: "quote",
       label: "引用这条继续问",
@@ -119,6 +116,72 @@ export default function AssistantMessageList({
   ];
 
   return (
+    <RowContextMenu items={actionsFor()}>
+      <article
+        className={`assistant-message assistant-message--${item.role}${
+          selected ? " assistant-message--selected" : ""
+        }`}
+      >
+        <div className="assistant-message-head">
+          <Typography.Text strong>{item.role === "user" ? "你" : assistantLabel}</Typography.Text>
+          <Typography.Text type="secondary" className="assistant-message-time">
+            {formatDateTime(item.created_at)}
+          </Typography.Text>
+        </div>
+        {item.context.quoted ? (
+          <div className="assistant-quoted-block">
+            <span className="assistant-quoted-label">
+              {item.context.quoted.role === "user" ? "引用你的消息" : "引用助手的回复"}
+            </span>
+            <span className="assistant-quoted-text">{item.context.quoted.excerpt}</span>
+          </div>
+        ) : null}
+        {/* 思考过程置顶（A2）：先给思考，再给正文——用户最关心"它想清楚没"。 */}
+        <MessageReasoning
+          reasoning={item.context.reasoning}
+          truncated={item.context.reasoning_truncated}
+        />
+        <AssistantMessageContent content={item.content} sourceMap={item.context.source_map} />
+        <MessageAttachments attachments={item.attachments} />
+        <MessageSources sources={item.context.sources ?? []} />
+        <MessageToolCalls calls={item.context.tool_calls ?? []} />
+        {item.status === "error" && item.error && <Alert type="error" title={item.error} />}
+      </article>
+    </RowContextMenu>
+  );
+});
+
+export default function AssistantMessageList({
+  assistantLabel = "求职助手",
+  emptyVariant = "page",
+  detail,
+  showLoading,
+  activeStream,
+  sending,
+  pendingUserText,
+  pendingSentAt,
+  pendingUserAttachments,
+  streamingText,
+  streamingReasoning,
+  streamingSources,
+  streamingSourceMap,
+  streamingTools,
+  progressText,
+  streamError,
+  messageEndRef,
+  enabledSkillCount,
+  skillsLoaded,
+  onChoosePrompt,
+  onManageSkills,
+  onQuote,
+  onDeleteMessage,
+  selecting,
+  selectedIds,
+  onToggleSelected,
+}: Props) {
+  const historyMessages = detail?.messages ?? [];
+
+  return (
     <div className="assistant-messages" aria-live="polite">
       {showLoading ? (
         <Skeleton active paragraph={{ rows: 6 }} />
@@ -133,38 +196,13 @@ export default function AssistantMessageList({
       ) : (
         historyMessages.map((item) => {
           const bubble = (
-            <article
-              className={`assistant-message assistant-message--${item.role}${
-                selectedIds.has(item.id) ? " assistant-message--selected" : ""
-              }`}
-            >
-              <div className="assistant-message-head">
-                <Typography.Text strong>
-                  {item.role === "user" ? "你" : assistantLabel}
-                </Typography.Text>
-                <Typography.Text type="secondary" className="assistant-message-time">
-                  {formatDateTime(item.created_at)}
-                </Typography.Text>
-              </div>
-              {item.context.quoted ? (
-                <div className="assistant-quoted-block">
-                  <span className="assistant-quoted-label">
-                    {item.context.quoted.role === "user" ? "引用你的消息" : "引用助手的回复"}
-                  </span>
-                  <span className="assistant-quoted-text">{item.context.quoted.excerpt}</span>
-                </div>
-              ) : null}
-              {/* 思考过程置顶（A2）：先给思考，再给正文——用户最关心"它想清楚没"。 */}
-              <MessageReasoning
-                reasoning={item.context.reasoning}
-                truncated={item.context.reasoning_truncated}
-              />
-              <AssistantMessageContent content={item.content} sourceMap={item.context.source_map} />
-              <MessageAttachments attachments={item.attachments} />
-              <MessageSources sources={item.context.sources ?? []} />
-              <MessageToolCalls calls={item.context.tool_calls ?? []} />
-              {item.status === "error" && item.error && <Alert type="error" title={item.error} />}
-            </article>
+            <AssistantMessageBubble
+              item={item}
+              assistantLabel={assistantLabel}
+              selected={selectedIds.has(item.id)}
+              onQuote={onQuote}
+              onDeleteMessage={onDeleteMessage}
+            />
           );
           // 多选时不挂右键菜单：那套操作（引用、复制）此时都用不上，右键还要和勾选抢交互。
           if (selecting) {
@@ -179,11 +217,7 @@ export default function AssistantMessageList({
               </label>
             );
           }
-          return (
-            <RowContextMenu key={item.id} items={actionsFor(item)}>
-              {bubble}
-            </RowContextMenu>
-          );
+          return bubble;
         })
       )}
       {activeStream && (pendingUserText || pendingUserAttachments.length > 0) && (
