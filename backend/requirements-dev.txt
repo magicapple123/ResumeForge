@@ -13,7 +13,7 @@ pytest-xdist==3.8.0
 pytest-rerunfailures==16.1
 # Windows ships no system tz database: zoneinfo (timezone regression tests)
 # must resolve on every CI matrix entry.
-tzdata==2025.2
+tzdata==2026.5
 ruff==0.16.10
 pip-audit==2.10.1
 # Gradual type checking: only app/models + app/schemas are in scope for now
