@@ -165,7 +165,10 @@ export function useTouTouCardDrag(options: UseTouTouCardDragOptions = {}): CardD
 
   /** selector 在卡片生命周期里不变，放 ref 里避免每次渲染重建监听。 */
   const optionsRef = useRef({ selector, fallback });
-  optionsRef.current = { selector, fallback };
+  // ref 写入放 effect（Compiler 禁止渲染期写 ref）：options 只在事件回调里被读。
+  useEffect(() => {
+    optionsRef.current = { selector, fallback };
+  });
 
   const findCard = (): HTMLElement | null => {
     const card = gripRef.current?.closest(optionsRef.current.selector);

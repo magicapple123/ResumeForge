@@ -15,9 +15,13 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = []):
   const [error, setError] = useState("");
   const requestVersion = useRef(0);
 
-  // 始终调用最新传入的 fetcher；deps 仅控制「何时重新加载」
+  // 始终调用最新传入的 fetcher；deps 仅控制「何时重新加载」。
+  // ref 写入放 effect（Compiler 规则禁止渲染期写 ref）：本 effect 声明在
+  // reload effect 之前，同一轮提交里先更新 ref 再触发重载，取到的是新 fetcher。
   const fetcherRef = useRef(fetcher);
-  fetcherRef.current = fetcher;
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  });
 
   const reload = useCallback(async () => {
     const currentRequest = ++requestVersion.current;
@@ -34,6 +38,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = []):
       if (currentRequest === requestVersion.current) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 依赖由调用方通过 deps 控制
+    // eslint-disable-next-line react-hooks/use-memo -- 依赖列表同样是调用方传参，无法写成字面量
   }, deps);
 
   useEffect(() => {

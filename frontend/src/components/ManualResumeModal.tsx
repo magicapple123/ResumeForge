@@ -22,8 +22,11 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
   const requestVersion = useRef(0);
+  // ref 写入放 effect（Compiler 禁止渲染期写 ref）：onClose 只在异步失败回调里被读。
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     const currentRequest = ++requestVersion.current;

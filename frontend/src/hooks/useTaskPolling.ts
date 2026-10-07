@@ -47,7 +47,10 @@ export function useTaskPolling(
   const version = useRef(0);
 
   const fetcherRef = useRef(fetcher);
-  fetcherRef.current = fetcher;
+  // ref 写入放 effect（Compiler 禁止渲染期写 ref）：声明在重置/重载 effect 之前。
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  });
 
   const refresh = useCallback(async () => {
     if (taskId == null) return;
@@ -73,14 +76,21 @@ export function useTaskPolling(
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 依赖由调用方通过 deps 控制
+    // eslint-disable-next-line react-hooks/use-memo -- 依赖列表同样是调用方传参，无法写成字面量
   }, [taskId, ...deps]);
 
   // 切换任务时清空旧详情，避免把上一个任务的状态显示成新任务的。
-  useEffect(() => {
-    version.current += 1;
+  // Compiler 规范：随 prop 变化的重置改到渲染期「调整状态」模式（守卫式 setState）。
+  const [prevTaskId, setPrevTaskId] = useState(taskId);
+  if (prevTaskId !== taskId) {
+    setPrevTaskId(taskId);
     setDetail(null);
     setError("");
     setNotFound(false);
+  }
+
+  useEffect(() => {
+    version.current += 1;
     if (taskId != null) void refresh();
   }, [taskId, refresh]);
 

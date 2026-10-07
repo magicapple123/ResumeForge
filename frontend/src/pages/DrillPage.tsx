@@ -57,8 +57,11 @@ export default function DrillPage() {
 
   // 用 ref 读"当前是否已打开某一场"：把它写进 refreshHistory 的依赖会让回调
   // 每次都重建，而 refreshHistory 又是 useEffect 的依赖 → 无限重取。
+  // ref 写入放 effect（Compiler 禁止渲染期写 ref）。
   const currentRef = useRef<DrillSession | null>(null);
-  currentRef.current = current;
+  useEffect(() => {
+    currentRef.current = current;
+  });
 
   const refreshHistory = useCallback(async () => {
     setLoadingHistory(true);

@@ -75,8 +75,11 @@ export default function ResumeLayoutControls({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 防抖回调在最后一次拖动之后才跑；用 ref 读"提交那一刻"的 layout，避免这段时间里
   // 父组件改了其它版式（如页数）时被本次字号提交用旧 layout 覆盖回去。
+  // ref 写入放 effect（Compiler 禁止渲染期写 ref）：防抖回调在提交之后才执行。
   const layoutRef = useRef(layout);
-  layoutRef.current = layout;
+  useEffect(() => {
+    layoutRef.current = layout;
+  });
 
   // 布局一被父组件确认（提交成功或外部改动），就交回权威值，避免滑块停在中间态。
   // 用标量签名而不是 layout 对象：父组件每次渲染都新建对象，直接依赖它会不停误触发。

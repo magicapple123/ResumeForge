@@ -35,10 +35,13 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
   const [reading, setReading] = useState(false);
   const [viewing, setViewing] = useState(false);
   const readId = useRef(0);
+  // ref 写入放 effect（Compiler 禁止渲染期写 ref）：两个字段只在异步回调里被读。
   const fieldNameRef = useRef(fieldName);
   const editableRef = useRef(editable);
-  fieldNameRef.current = fieldName;
-  editableRef.current = editable;
+  useEffect(() => {
+    fieldNameRef.current = fieldName;
+    editableRef.current = editable;
+  });
   const fileName =
     (Form.useWatch([listName, fieldName, "reference_file_name"], form) as string | undefined) ?? "";
   const content =
