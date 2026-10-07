@@ -129,7 +129,10 @@ export default function JobsPage() {
 
   // 确认弹窗的 onOk 会再次调用自身（带确认标记跳过弹窗）：用函数声明利用提升，
   // 避免递归引用 useCallback 常量（Compiler 的 immutability 规则会报"先使用后声明"）。
-  async function addJobToQueue(job: Job, confirm: { unanalyzed?: boolean; realGap?: boolean } = {}) {
+  async function addJobToQueue(
+    job: Job,
+    confirm: { unanalyzed?: boolean; realGap?: boolean } = {},
+  ) {
     setQueueJobId(job.id);
     try {
       await addToQueue([
@@ -176,8 +179,8 @@ export default function JobsPage() {
       }
     } finally {
       setQueueJobId(null);
-      }
     }
+  }
 
   const openJobWebForm = useCallback(
     async (job: Job) => {
