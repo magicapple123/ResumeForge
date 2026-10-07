@@ -32,7 +32,7 @@ export default function KnowledgeFormModal({
 
   // 打开时用条目内容（或空值）回填表单。Compiler 规范：随 prop 变化的重置用
   // 渲染期守卫式调整（key = open + entry 引用）。
-  const [prevSync, setPrevSync] = useState<{ open; entry } | null>(null);
+  const [prevSync, setPrevSync] = useState<{ open: boolean; entry: Knowledge | null } | null>(null);
   if (prevSync === null || prevSync.open !== open || prevSync.entry !== entry) {
     setPrevSync({ open, entry });
     if (open) {

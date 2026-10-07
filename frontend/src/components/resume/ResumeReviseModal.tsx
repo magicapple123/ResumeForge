@@ -31,7 +31,7 @@ export default function ResumeReviseModal({
 
   // 预填指令在每次打开时生效（父组件每次带入的都可能是不同条目的指令）。
   // Compiler 规范：随 prop 变化的重置用渲染期守卫式调整。
-  const [prevSync, setPrevSync] = useState<{ open; initialInstructions } | null>(null);
+  const [prevSync, setPrevSync] = useState<{ open: boolean; initialInstructions?: string } | null>(null);
   if (
     prevSync === null ||
     prevSync.open !== open ||
