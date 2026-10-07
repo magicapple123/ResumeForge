@@ -77,28 +77,6 @@ export function useAssistantConversations({ message, surface = "page" }: Options
     setDetail(null);
   }, [selectConversation]);
 
-  const loadDetail = useCallback(
-    async (conversationId: number) => {
-      const requestId = ++detailRequestRef.current;
-      setDetailLoading(true);
-      try {
-        const next =
-          surface === "page"
-            ? await getAssistantConversation(conversationId)
-            : await getAssistantConversation(conversationId, surface);
-        if (requestId === detailRequestRef.current) setDetail(next);
-      } catch (error) {
-        if (requestId === detailRequestRef.current) {
-          setDetail(null);
-          message.error(error instanceof Error ? error.message : "加载对话失败");
-        }
-      } finally {
-        if (requestId === detailRequestRef.current) setDetailLoading(false);
-      }
-    },
-    [message, surface],
-  );
-
   useEffect(() => {
     if (conversationsError) message.error(conversationsError);
   }, [conversationsError, message]);
@@ -108,16 +86,66 @@ export function useAssistantConversations({ message, surface = "page" }: Options
   // 点一下就切过去；?conversation= 深链也照旧能直接定位。
   // （以前这里会自动选中 conversations[0]，于是每次进来先看到上次的对话。）
 
-  useEffect(() => {
+  // 无 activeId 时清空详情。Compiler 规范：随 activeId 变化的重置用渲染期守卫式
+  // 调整（哨兵 undefined 覆盖挂载场景）。
+  const [prevActiveId, setPrevActiveId] = useState<number | null | undefined>(activeId);
+  if (prevActiveId !== activeId) {
+    setPrevActiveId(activeId);
     if (!activeId) {
       setDetail(null);
-      return;
+      setDetailLoading(false);
+    } else {
+      setDetailLoading(true);
     }
-    void loadDetail(activeId);
+  }
+
+  // 纯取数（不含任何 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
+  // 返回 invalidated 标记区分"已被更新请求作废"与"出错/成功"。
+  const fetchDetail = useCallback(
+    async (
+      conversationId: number,
+    ): Promise<{ invalidated: boolean; detail: AssistantConversationDetail | null }> => {
+      const requestId = ++detailRequestRef.current;
+      try {
+        const next =
+          surface === "page"
+            ? await getAssistantConversation(conversationId)
+            : await getAssistantConversation(conversationId, surface);
+        if (requestId !== detailRequestRef.current) return { invalidated: true, detail: null };
+        return { invalidated: false, detail: next };
+      } catch (error) {
+        const invalidated = requestId !== detailRequestRef.current;
+        if (!invalidated) message.error(error instanceof Error ? error.message : "加载对话失败");
+        return { invalidated, detail: null };
+      }
+    },
+    [message, surface],
+  );
+
+  useEffect(() => {
+    if (!activeId) return;
+    let cancelled = false;
+    void fetchDetail(activeId).then((result) => {
+      if (cancelled) return;
+      if (!result.invalidated) setDetail(result.detail);
+      setDetailLoading(false);
+    });
     return () => {
+      cancelled = true;
       detailRequestRef.current += 1;
     };
-  }, [activeId, loadDetail]);
+  }, [activeId, fetchDetail]);
+
+  // 事件路径（切换会话、发消息后刷新）：含 loading 前置，供事件处理器调用。
+  const loadDetail = useCallback(
+    async (conversationId: number) => {
+      setDetailLoading(true);
+      const result = await fetchDetail(conversationId);
+      if (!result.invalidated) setDetail(result.detail);
+      setDetailLoading(false);
+    },
+    [fetchDetail],
+  );
 
   const createConversation = useCallback(async () => {
     try {

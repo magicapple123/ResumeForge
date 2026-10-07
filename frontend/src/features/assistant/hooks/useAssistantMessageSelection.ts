@@ -4,7 +4,7 @@
  * 勾选切换与批量删除回调。api 导入仅 deleteAssistantMessages（partial mock 白名单内）。
  */
 import { App } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { deleteAssistantMessages } from "../../../api/assistant";
 import type { AssistantMessage, AssistantSurface } from "../../../types";
 
@@ -26,10 +26,14 @@ export function useAssistantMessageSelection({ activeId, loadDetail, message, su
   }, []);
 
   // 换会话就退出多选：勾着的是上一条会话的消息 id，留着会让新会话里 id 相同的消息
-  // 出现在"已选"里，一点删除就删错了。
-  useEffect(() => {
-    exitSelecting();
-  }, [activeId, exitSelecting]);
+  // 出现在"已选"里，一点删除就删错了。Compiler 规范：随 activeId 变化的重置用
+  // 渲染期守卫式调整（哨兵 undefined 覆盖挂载场景）。
+  const [prevActiveId, setPrevActiveId] = useState<number | null | undefined>(activeId);
+  if (prevActiveId !== activeId) {
+    setPrevActiveId(activeId);
+    setSelecting(false);
+    setSelectedIds(new Set());
+  }
 
   const toggleSelected = useCallback((target: AssistantMessage) => {
     setSelectedIds((current) => {

@@ -60,8 +60,9 @@ export function useLLMSettings() {
   const resetRevealedApiKey = useCallback(() => setApiKeyResetToken((current) => current + 1), []);
 
   // 同时加载当前配置与记录，避免页面先显示一套配置、稍后又跳变到另一套状态。
+  // recordsLoading 初始即 true（useState），effect 无需同步置位——Compiler 禁止
+  // effect 体内同步 setState。
   useEffect(() => {
-    setRecordsLoading(true);
     void Promise.all([getLLMConfig(), listLLMConfigRecords()])
       .then(([config, loadedRecords]) => {
         const values = formValuesFromConfig(config);

@@ -12,20 +12,36 @@ export function useSettingsSkills() {
   const [skillTogglingId, setSkillTogglingId] = useState<number | null>(null);
   const [skillDeletingId, setSkillDeletingId] = useState<number | null>(null);
 
-  const loadSkillList = useCallback(async () => {
-    setSkillsLoading(true);
+  // 纯取数（不含 setState）：effect 初始加载与事件路径重拉共用同一实现。
+  const fetchSkillList = useCallback(async (): Promise<AssistantSkill[] | null> => {
     try {
-      setSkills(await listSkills());
+      return await listSkills();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "加载技能失败");
-    } finally {
-      setSkillsLoading(false);
+      return null;
     }
   }, [message]);
 
+  // Compiler 规范：初始加载的 setState 放在 .then 回调（外部数据到达时应用）。
   useEffect(() => {
-    void loadSkillList();
-  }, [loadSkillList]);
+    let cancelled = false;
+    void fetchSkillList().then((items) => {
+      if (cancelled) return;
+      if (items !== null) setSkills(items);
+      setSkillsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchSkillList]);
+
+  // 事件路径（导入/保存后的整表重拉，含 loading 翻动）。
+  const loadSkillList = useCallback(async () => {
+    setSkillsLoading(true);
+    const items = await fetchSkillList();
+    if (items !== null) setSkills(items);
+    setSkillsLoading(false);
+  }, [fetchSkillList]);
 
   const importSkillFile = async (file: File) => {
     if (skillImporting) return;

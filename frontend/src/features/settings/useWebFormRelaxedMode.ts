@@ -13,20 +13,34 @@ export function useWebFormRelaxedMode() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const reload = useCallback(async () => {
+  // 纯取数（不含 setState）：effect 与事件路径共用同一实现，避免两份加载逻辑漂移。
+  const fetchEnabled = useCallback(async (): Promise<boolean> => {
     try {
-      setEnabled((await getWebFormRelaxedMode()).enabled);
+      return (await getWebFormRelaxedMode()).enabled;
     } catch {
       // 读不到按默认关处理：放宽模式是加动作的开关，保守显示比假装开着安全。
-      setEnabled(false);
-    } finally {
-      setLoading(false);
+      return false;
     }
   }, []);
 
+  // Compiler 规范：setState 放在 .then 回调里（外部数据到达时应用），而非 effect 体。
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    let cancelled = false;
+    void fetchEnabled().then((value) => {
+      if (cancelled) return;
+      setEnabled(value);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchEnabled]);
+
+  // 事件路径（切换后重拉）：由消费方在事件处理器中调用，不走 effect。
+  const reload = useCallback(async () => {
+    setEnabled(await fetchEnabled());
+    setLoading(false);
+  }, [fetchEnabled]);
 
   const toggle = useCallback(
     async (checked: boolean): Promise<boolean> => {
