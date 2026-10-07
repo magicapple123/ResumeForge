@@ -73,9 +73,10 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
     });
 
   // 打开时从浏览器本地剪贴板存储读回条目（同一份实现，事件路径复用）。
-  // Compiler 规范：随 open 变化的加载用渲染期守卫；DOM 定位副作用留在 effect。
-  const [prevOpen, setPrevOpen] = useState(open);
-  if (prevOpen !== open) {
+  // Compiler 规范：随 open 变化的加载用渲染期守卫（哨兵 null：挂载即打开也加载
+  // 一次，与原 effect 语义一致）；DOM 定位副作用留在 effect。
+  const [prevOpen, setPrevOpen] = useState<boolean | null>(null);
+  if (prevOpen === null || prevOpen !== open) {
     setPrevOpen(open);
     if (open) setItems(loadItems());
   }
