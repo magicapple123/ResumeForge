@@ -31,10 +31,10 @@
    真实站点上会抛 ``CdpError`` 并**中断整轮填充**。现在 ``match_fields`` 不产生 ``file``
    映射，预览里固定提示"简历附件请自己上传"。
 
-本包由 scripts / writers / model / evidence / core 组成，此 ``__init__`` 作为原
-``engine`` 模块路径的兼容门面：``__all__``、来自 ``matching`` 的再导出
-（SelectOption / SelectResolution / DateResolution 等）与私有符号保持原命名空间全集，
-外部导入路径零改动。
+本包由 scripts / writers / model / evidence / placeholder_semantics / core 组成，此
+``__init__`` 作为原 ``engine`` 模块路径的兼容门面：``__all__``、来自 ``matching`` 的
+再导出（SelectOption / SelectResolution / DateResolution 等）与私有符号保持原命名空间
+全集，外部导入路径零改动。
 """
 from __future__ import annotations
 
@@ -114,9 +114,6 @@ from ..repeated_fields import (
 )
 from .core import FormEngine
 from .evidence import (
-    _longest_synonym as _longest_synonym,
-)
-from .evidence import (
     _states_its_field as _states_its_field,
 )
 from .evidence import (
@@ -148,6 +145,9 @@ from .model import (
     FieldMapping,
     MatchResult,
     SkipNote,
+)
+from .placeholder_semantics import (
+    _longest_synonym as _longest_synonym,
 )
 from .scripts import _CONTROL_HELPERS_JS as _CONTROL_HELPERS_JS
 from .scripts import CONTROLS_SCRIPT
