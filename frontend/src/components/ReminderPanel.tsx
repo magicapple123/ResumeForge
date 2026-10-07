@@ -81,8 +81,6 @@ export default function ReminderPanel({
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm<ReminderForm>();
 
-  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
-  // 返回 null 表示失败（错误提示在这里统一给出）。
   const fetchList = useCallback(async () => {
     try {
       return await listReminders({ kind: kind || undefined });
@@ -92,7 +90,7 @@ export default function ReminderPanel({
     }
   }, [kind, message]);
 
-  // Compiler 规范：deps 变化的 loading 置位用渲染期守卫；应用状态放在 .then 回调。
+  // deps 变化的 loading 置位用渲染期守卫；应用状态放在 .then 回调。
   const [prevListKey, setPrevListKey] = useState<string | null>(null);
   const listKey = kind ?? "";
   if (prevListKey !== listKey) {
