@@ -63,29 +63,48 @@ export default function DrillPage() {
     currentRef.current = current;
   });
 
-  const refreshHistory = useCallback(async () => {
-    setLoadingHistory(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
+  // 返回 null 表示失败（错误提示在这里统一给出）。
+  const fetchHistory = useCallback(async () => {
     try {
-      const records = await listDrillSessions();
-      setHistory(records);
-      // 自动打开最近一场**进行中**的：用户回到这一页最可能是想接着答，
-      // 让他再点一次「继续」是多余的一步。没有进行中的就不自动打开，
-      // 免得把一份旧复盘糊在屏幕上。
-      const active = records.find((item) => item.status === "active");
-      if (active && !currentRef.current) {
-        setCurrent(await getDrillSession(active.id));
-        setOpenId(active.id);
-      }
+      return await listDrillSessions();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "读取记录失败");
-    } finally {
-      setLoadingHistory(false);
+      return null;
     }
   }, [message]);
 
+  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
   useEffect(() => {
-    void refreshHistory();
-  }, [refreshHistory]);
+    let cancelled = false;
+    void (async () => {
+      const records = await fetchHistory();
+      if (cancelled) return;
+      if (records !== null) {
+        setHistory(records);
+        // 自动打开最近一场**进行中**的：用户回到这一页最可能是想接着答，
+        // 让他再点一次「继续」是多余的一步。没有进行中的就不自动打开，
+        // 免得把一份旧复盘糊在屏幕上。
+        const active = records.find((item) => item.status === "active");
+        if (active && !currentRef.current) {
+          setCurrent(await getDrillSession(active.id));
+          setOpenId(active.id);
+        }
+      }
+      setLoadingHistory(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchHistory]);
+
+  // 事件路径（提交复盘后的整表重拉，含 loading 翻动）。
+  const refreshHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    const records = await fetchHistory();
+    if (records !== null) setHistory(records);
+    setLoadingHistory(false);
+  }, [fetchHistory]);
 
   const openHistory = async (id: number) => {
     try {

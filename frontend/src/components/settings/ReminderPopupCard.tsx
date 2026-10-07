@@ -6,7 +6,7 @@
  */
 
 import { App, Card, Space, Spin, Switch, Typography } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { getReminderPopupSetting, saveReminderPopupSetting } from "../../api/settings";
 import { isSoundEnabled, playDoneSound, setSoundEnabled } from "../../utils/notifySound";
 
@@ -19,20 +19,23 @@ export default function ReminderPopupCard() {
   // Compiler 规范：本地偏好的初始读取用 useState 惰性初始化，替代挂载 effect。
   const [sound, setSound] = useState(() => isSoundEnabled());
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setEnabled((await getReminderPopupSetting()).enabled);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "加载提醒弹窗设置失败");
-    } finally {
-      setLoading(false);
-    }
-  }, [message]);
-
+  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const saved = await getReminderPopupSetting();
+        if (!cancelled) setEnabled(saved.enabled);
+      } catch (err) {
+        if (!cancelled) message.error(err instanceof Error ? err.message : "加载提醒弹窗设置失败");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [message]);
 
   const toggle = async (checked: boolean) => {
     if (saving) return;

@@ -67,12 +67,16 @@ export default function ResumeLayoutDiagnosisCard({
     ? `${measure.usedHeight.toFixed(1)}:${measure.pageContentHeight.toFixed(1)}:${measure.pageLimit}`
     : "";
 
+  // 无度量时清空分析状态。Compiler 规范：随 measure 变化的重置用渲染期守卫式调整。
+  const [prevMeasure, setPrevMeasure] = useState(measure);
+  if (prevMeasure !== measure && !measure) {
+    setPrevMeasure(measure);
+    setAnalysis(null);
+    setAnalyzing(false);
+  }
+
   useEffect(() => {
-    if (!measure) {
-      setAnalysis(null);
-      setAnalyzing(false);
-      return;
-    }
+    if (!measure) return;
     const current = ++requestId.current;
     // 轻微防抖：预览刚渲染完时可能连着上报几次（字体就绪、缩放变化）。
     const timer = setTimeout(() => {

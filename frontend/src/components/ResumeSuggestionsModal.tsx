@@ -87,9 +87,13 @@ export default function ResumeSuggestionsModal({
     }
   }, [onGenerated, recordId]);
 
+  // 打开弹窗且未尝试过时自动生成建议：hasAttempted 锁存与自动拉取耦合。按
+  // "派生事件"书面理由豁免 Compiler 规则。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (open && recordId && !hasAttempted) void loadSuggestions();
   }, [hasAttempted, loadSuggestions, open, recordId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   /**
    * 采纳单条建议：把建议格式化成修订指令交给后端，模型只改这一条涉及的内容。

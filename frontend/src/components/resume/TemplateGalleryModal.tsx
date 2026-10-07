@@ -44,27 +44,52 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
   // 而反复请求；用序列化签名判断"内容真的变了"。对象本身在闭包里读取。
   const formatConfigKey = JSON.stringify(formatConfig ?? {});
 
-  const loadTemplates = useCallback(async () => {
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
+  const fetchTemplates = useCallback(async (): Promise<ResumeTemplateOption[] | null> => {
     try {
       const catalog = await fetchResumeTemplates();
-      setTemplates(catalog.templates);
+      return catalog.templates;
     } catch (error) {
       message.error(error instanceof Error ? error.message : "读取模板清单失败");
+      return null;
     }
   }, [message]);
 
+  // Compiler 规范：随 open 变化的加载用渲染期守卫；取数在 effect 内联 .then 应用。
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (open) setLoading(true);
+  }
+
   useEffect(() => {
-    if (open) void loadTemplates();
-  }, [open, loadTemplates]);
+    if (!open) return;
+    let cancelled = false;
+    void fetchTemplates().then((templates) => {
+      if (cancelled) return;
+      if (templates !== null) setTemplates(templates);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchTemplates, open]);
 
   // 预览跟着"字号 + 格式覆盖"走：换档位、换版式、或在外面拖过字号系数后，缩略图
   // 都要一起变，否则用户按缩略图选出来的效果和实际生成的不一致。
-  useEffect(() => {
-    if (!open || templates.length === 0) return;
-    let cancelled = false;
+  // Compiler 规范：随预览键变化的重置用渲染期守卫；取数留在 effect 的 IIFE 里。
+  const previewKey = `${open}:${templates.length}:${formatConfigKey}:${layout.format_name}:${previewScale}:${resumeId ?? ""}`;
+  const [prevPreviewKey, setPrevPreviewKey] = useState(previewKey);
+  if (prevPreviewKey !== previewKey) {
+    setPrevPreviewKey(previewKey);
     setLoading(true);
     setPreviews({});
     setFailed({});
+  }
+
+  useEffect(() => {
+    if (!open || templates.length === 0) return;
+    let cancelled = false;
     void (async () => {
       const next: Record<string, string> = {};
       const errors: Record<string, string> = {};

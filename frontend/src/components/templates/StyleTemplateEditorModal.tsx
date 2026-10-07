@@ -60,17 +60,38 @@ export default function StyleTemplateEditorModal({
   const [previewing, setPreviewing] = useState(false);
   const previewSequence = useRef(0);
 
+  // 打开时回填（新建时给空白），编辑既有模板时再拉详情。
+  // Compiler 规范：随 open/templateId 变化的回填用渲染期守卫；取数留在 effect。
+  const [prevSync, setPrevSync] = useState<{
+    open: boolean;
+    templateId: number | null | undefined;
+    initialName: string;
+    initialHtml: string;
+    initialConfig: Record<string, unknown>;
+  } | null>(null);
+  if (
+    prevSync === null ||
+    prevSync.open !== open ||
+    prevSync.templateId !== templateId ||
+    prevSync.initialName !== initialName ||
+    prevSync.initialHtml !== initialHtml ||
+    prevSync.initialConfig !== initialConfig
+  ) {
+    setPrevSync({ open, templateId, initialName, initialHtml, initialConfig });
+    if (open) {
+      setName(initialName);
+      setHtml(initialHtml);
+      setConfig(initialConfig);
+      setDescription("");
+      setPreview("");
+      setPreviewError("");
+      if (templateId) setLoading(true);
+    }
+  }
+
   useEffect(() => {
-    if (!open) return;
-    setName(initialName);
-    setHtml(initialHtml);
-    setConfig(initialConfig);
-    setDescription("");
-    setPreview("");
-    setPreviewError("");
-    if (!templateId) return;
-    setLoading(true);
-    fetchResumeTemplate(templateId)
+    if (!open || !templateId) return;
+    void fetchResumeTemplate(templateId)
       .then((detail) => {
         setName(detail.name);
         setDescription(detail.description);
@@ -79,7 +100,7 @@ export default function StyleTemplateEditorModal({
       })
       .catch((error) => message.error(error instanceof Error ? error.message : "读取模板失败"))
       .finally(() => setLoading(false));
-  }, [open, templateId, initialName, initialHtml, initialConfig, message]);
+  }, [open, templateId, message]);
 
   const runPreview = useCallback(
     async (source: string) => {

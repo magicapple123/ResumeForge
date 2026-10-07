@@ -32,28 +32,37 @@ export default function AppHeaderContext() {
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState("");
 
-  const load = useCallback(async () => {
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
+  // 返回 null 表示失败（页头是全局装饰：读不到就少显示一块，绝不报错或白屏）。
+  const fetchHeaderData = useCallback(async () => {
     try {
       const [datasets, current] = await Promise.all([listDatasets(), getProfile()]);
-      setDatasets(datasets);
-      setDataset(datasets.find((item) => item.is_active) ?? datasets[0] ?? null);
-      setDatasetCount(datasets.length);
-      setProfile(current);
+      return { datasets, current };
     } catch {
-      // 页头是全局装饰：读不到就少显示一块，绝不因此让整个应用报错或白屏。
-      setDataset(null);
-      setProfile(null);
-    } finally {
-      setReady(true);
+      return null;
     }
   }, []);
 
+  // Compiler 规范：应用状态放在 .then 回调（外部数据到达时应用）。
   useEffect(() => {
-    void load();
-    // 换页面时重取一次：用户在设置页切了数据集、或在资料页换了照片，回来就该看到新的。
-    // 两个接口都是本地读，开销可以忽略；不重取的话页头会长期显示过期信息——而它的全部
-    // 价值恰恰在于"我现在在哪个数据集里"。
-  }, [load, location.pathname]);
+    let cancelled = false;
+    void fetchHeaderData().then((result) => {
+      if (cancelled) return;
+      if (result) {
+        setDatasets(result.datasets);
+        setDataset(result.datasets.find((item) => item.is_active) ?? result.datasets[0] ?? null);
+        setDatasetCount(result.datasets.length);
+        setProfile(result.current);
+      } else {
+        setDataset(null);
+        setProfile(null);
+      }
+      setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchHeaderData, location.pathname]);
 
   const handleDatasetSwitch = useCallback(
     async (id: string) => {

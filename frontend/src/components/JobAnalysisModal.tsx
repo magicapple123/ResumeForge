@@ -66,9 +66,13 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
     }
   }, [job]);
 
+  // 打开弹窗且未尝试过时自动生成解读：hasAttempted 锁存与自动拉取耦合（拉取会
+  // 翻转锁存），拆分会导致竞态。按"派生事件"书面理由豁免 Compiler 规则。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (job && !hasAttempted) void load();
   }, [hasAttempted, job, load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <Modal

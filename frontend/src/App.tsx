@@ -188,9 +188,13 @@ function MainLayout() {
     };
   }, [preloaders]);
 
+  // StrictMode 下 consume 会写两次 localStorage 标记，因此必须在 effect 中原子
+  // 消费而不是渲染期求值（渲染期求值会被双调用打断原子性）。按书面理由豁免。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (consumeFirstVisitGuide()) setGuideOpen(true);
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 引导开关状态同步给首页的「近期提醒」启动弹窗：欢迎在前、提醒在后，两个不叠。
   useEffect(() => {

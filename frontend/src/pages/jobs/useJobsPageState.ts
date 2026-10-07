@@ -113,6 +113,9 @@ export function useJobsPageState() {
   }, [setSearchParams]);
 
   // 从 ?job_id= 恢复详情：岗位在当前页就直接用，不在就单独拉一次。
+  // 深链岗位锁存器：列表命中直接用，未命中再单取。openedLinkedJobId 标记防止
+  // 重复拉取——锁存与条件拉取耦合，按书面理由豁免 Compiler 规则。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!linkedJobId || openedLinkedJobId === linkedJobId || loading) return;
     const listedJob = jobs?.items.find((item) => item.id === linkedJobId);
@@ -126,6 +129,7 @@ export function useJobsPageState() {
       .then(setDetailJob)
       .catch((err) => message.error(err instanceof Error ? err.message : "岗位不存在或已被删除"));
   }, [jobs, linkedJobId, loading, message, openedLinkedJobId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return {
     keyword,

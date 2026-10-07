@@ -101,6 +101,9 @@ export function useLiveSession({
 
   // 「记住这条」只在用户点过按钮后出现。每个 pending 只拉一次完整资料目录，避免后台轮询
   // 每 1.5 秒都重复请求；资料目录本身包含我的资料、网申资料和已有自定义字段。
+  // 记忆弹窗锁存器：ref 记录已处理的签名，避免同一签名重复弹窗。ref 写入与
+  // 状态置位在此耦合，按书面理由豁免 Compiler 规则。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const key = rememberPendingSignature;
     if (!key) {
@@ -119,6 +122,7 @@ export function useLiveSession({
       })
       .finally(() => setMemoryTargetsLoading(false));
   }, [message, rememberPendingSignature]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 默认开启：浏览器一旦真正可用就自动装上监听。用户明确点过「关闭」后，
   // 本次页面生命周期内不再擅自打开，避免把用户的关闭操作变成反复弹出的打扰。
@@ -145,14 +149,16 @@ export function useLiveSession({
   }, [aiAvailable, aiOn, live?.running, liveOptOut, running]);
 
   // 浏览器被用户在窗口里直接关掉时，状态轮询会把本地活动标记立即收拢；
+  // 关闭浏览器后复位会话状态，并回到默认开启（再次打开不用重新勾）。
   // 已读快照仍保留，重新打开浏览器后可以继续核对，不把草稿误当成已丢失。
-  useEffect(() => {
-    if (browserState !== "stopped") return;
+  // Compiler 规范：随 browserState 变化的重置用渲染期守卫式调整。
+  const [prevBrowserState, setPrevBrowserState] = useState(browserState);
+  if (prevBrowserState !== browserState && browserState === "stopped") {
+    setPrevBrowserState(browserState);
     setSessionActive(false);
     setLive(null);
-    // 关闭浏览器后再次打开，点击填表应回到默认开启状态。
     setLiveOptOut(false);
-  }, [browserState, setSessionActive]);
+  }
 
   return {
     live,

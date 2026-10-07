@@ -79,13 +79,17 @@ export function useSnapshotUrl({
    * AI 开关按当初那次的值重放，否则"读的时候开了 AI、回来却重算成规则版"，
    * 用户会以为结果变了。
    */
+  // 快照参数缺失时立即退出恢复态。Compiler 规范：渲染期守卫式调整。
+  const [prevRestoring, setPrevRestoring] = useState(restoring);
+  if (prevRestoring !== restoring && restoring && !searchParams.get(SNAPSHOT_PARAM)) {
+    setPrevRestoring(restoring);
+    setRestoring(false);
+  }
+
   useEffect(() => {
     if (!restoring) return;
     const snapshotId = searchParams.get(SNAPSHOT_PARAM);
-    if (!snapshotId) {
-      setRestoring(false);
-      return;
-    }
+    if (!snapshotId) return;
     // AI 要不要用，等模型配置读回来再定——否则 `aiOn` 还是 false，会重放成规则版。
     if (aiAvailable === null) return;
 
