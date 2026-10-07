@@ -420,7 +420,7 @@ export default function AssistantPage({
           onChoosePrompt={chooseStarterPrompt}
           onManageSkills={openSkillWorkbench}
           onQuote={quoteMessage}
-          onDeleteMessage={(target) => void removeMessage(target)}
+          onDeleteMessage={removeMessage}
           selecting={selecting}
           selectedIds={selectedIds}
           onToggleSelected={toggleSelected}
