@@ -10,7 +10,7 @@ pytest-cov==7.1.0
 pytest-xdist==3.8.0
 # Nightly flaky marking: failed tests rerun up to twice, reruns stay visible
 # in the summary instead of silently masking flakes.
-pytest-rerunfailures==16.1
+pytest-rerunfailures==16.7
 # Windows ships no system tz database: zoneinfo (timezone regression tests)
 # must resolve on every CI matrix entry.
 tzdata==2026.5
