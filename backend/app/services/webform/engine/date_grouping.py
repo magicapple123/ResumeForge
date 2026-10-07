@@ -107,16 +107,24 @@ def link_split_date_controls(controls: list[Control]) -> list[Control]:
             continue
 
         group_id = f"date:{group[0].index}:{field_name}"
-        linked.extend(
-            replace(
-                item,
-                date_group=group_id,
-                date_part_label=field_name,
-            )
-            for item in group
-        )
+        linked.extend(_relink(item, group_id, field_name) for item in group)
         index = cursor
     return linked
+
+
+def _relink(item: Control, group_id: str, field_name: str) -> Control:
+    """分组结果与现状一致时**复用原实例**，不 replace。
+
+    ``read_controls`` 在快照时已经链接过一次，``match_fields`` 每次调用还会再跑一遍
+    分组（见 core.py）。分组是确定性计算：重跑得到同样的组号与父字段时，直接沿用
+    原对象——否则每次 ``replace`` 都造出全新 ``Control``，实例级派生缓存
+    （own_text / signature / date_part）每次预览渲染全部作废，热路径白算一遍。
+    值完全相同所以行为等价；分组算法对同一输入恒定产出同一 ``group_id``，不会出现
+    "看起来一致、其实该换新组"的中间态。
+    """
+    if item.date_group == group_id and item.date_part_label == field_name:
+        return item
+    return replace(item, date_group=group_id, date_part_label=field_name)
 
 
 __all__ = ["START_END_DATE_FIELDS", "link_split_date_controls"]
