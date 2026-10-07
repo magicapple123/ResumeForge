@@ -15,20 +15,30 @@ export default function AssistantOrbCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
+  const fetchSetting = useCallback(async (): Promise<AssistantOrbSetting | null> => {
     try {
-      setSetting(await getAssistantOrbSetting());
+      return await getAssistantOrbSetting();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "加载投投悬浮球设置失败");
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, [message]);
 
+  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      const setting = await fetchSetting();
+      if (!cancelled) {
+        if (setting !== null) setSetting(setting);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchSetting]);
 
   /**
    * 保存**全量**设置：两个开关共用一份后端对象，只带被改的那个会把另一个打回默认。

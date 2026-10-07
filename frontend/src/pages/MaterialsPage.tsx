@@ -34,25 +34,49 @@ export default function MaterialsPage() {
   const [detail, setDetail] = useState<Material | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
+  const fetchMaterials = useCallback(async (): Promise<{
+    items: Material[];
+    categories: string[];
+  } | null> => {
     try {
       const [items, categoryList] = await Promise.all([
         listMaterials({ keyword, category }),
         listMaterialCategories(),
       ]);
-      setMaterials(items);
-      setCategories(categoryList);
+      return { items, categories: categoryList };
     } catch (error) {
       message.error(error instanceof Error ? error.message : "加载资料失败");
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, [category, keyword, message]);
 
+  // Compiler 规范：初始加载的 setState 放 .then 回调（外部数据到达时应用）。
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void fetchMaterials().then((result) => {
+      if (cancelled) return;
+      if (result) {
+        setMaterials(result.items);
+        setCategories(result.categories);
+      }
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchMaterials]);
+
+  // 事件路径（提交/删除后的整表重拉，含 loading 翻动）。
+  const load = useCallback(async () => {
+    setLoading(true);
+    const result = await fetchMaterials();
+    if (result) {
+      setMaterials(result.items);
+      setCategories(result.categories);
+    }
+    setLoading(false);
+  }, [fetchMaterials]);
 
   const categoryOptions = useMemo(
     () => [

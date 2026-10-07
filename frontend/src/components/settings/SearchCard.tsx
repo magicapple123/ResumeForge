@@ -66,24 +66,51 @@ export default function SearchCard() {
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
+  // 判别式结果保留原始错误消息（测试钉住它必须原样展示）。
+  const fetchConfig = useCallback(async (): Promise<
+    { config: SearchConfig } | { error: string }
+  > => {
     try {
-      const loaded = await getSearchConfig();
-      setConfig(loaded);
-      setSaved(loaded);
+      return { config: await getSearchConfig() };
     } catch (err) {
-      // 取不到就把默认值当草稿，但要说清楚——否则用户会以为看到的是自己存过的设置。
-      setLoadError(err instanceof Error ? err.message : "加载联网搜索设置失败");
-    } finally {
-      setLoading(false);
+      return { error: err instanceof Error ? err.message : "加载联网搜索设置失败" };
     }
   }, []);
 
+  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）；
+  // loading/loadError 初始值即「加载中/无错误」，无需同步置位。
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      const result = await fetchConfig();
+      if (cancelled) return;
+      if ("config" in result) {
+        setConfig(result.config);
+        setSaved(result.config);
+      } else {
+        setLoadError(result.error);
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchConfig]);
+
+  // 事件路径（手动重试按钮，含 loading/loadError 翻动）。
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    const result = await fetchConfig();
+    if ("config" in result) {
+      setConfig(result.config);
+      setSaved(result.config);
+    } else {
+      setLoadError(result.error);
+    }
+    setLoading(false);
+  }, [fetchConfig]);
 
   const patch = (changes: Partial<SearchConfig>) =>
     setConfig((current) => ({ ...current, ...changes }));

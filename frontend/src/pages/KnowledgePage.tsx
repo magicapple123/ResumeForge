@@ -29,25 +29,49 @@ export default function KnowledgePage() {
   const [viewing, setViewing] = useState<Knowledge | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
+  const fetchEntries = useCallback(async (): Promise<{
+    items: Knowledge[];
+    categories: string[];
+  } | null> => {
     try {
       const [items, categoryList] = await Promise.all([
         listKnowledge({ q: keyword, category }),
         listKnowledgeCategories(),
       ]);
-      setEntries(items);
-      setCategories(categoryList);
+      return { items, categories: categoryList };
     } catch (error) {
       message.error(error instanceof Error ? error.message : "加载知识库失败");
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, [category, keyword, message]);
 
+  // Compiler 规范：初始加载的 setState 放 .then 回调（外部数据到达时应用）。
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void fetchEntries().then((result) => {
+      if (cancelled) return;
+      if (result) {
+        setEntries(result.items);
+        setCategories(result.categories);
+      }
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchEntries]);
+
+  // 事件路径（提交/删除后的整表重拉，含 loading 翻动）。
+  const load = useCallback(async () => {
+    setLoading(true);
+    const result = await fetchEntries();
+    if (result) {
+      setEntries(result.items);
+      setCategories(result.categories);
+    }
+    setLoading(false);
+  }, [fetchEntries]);
 
   const categoryOptions = useMemo(
     () => [
