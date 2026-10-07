@@ -1,7 +1,7 @@
 /** 「网申资料」自定义字段的改名与删除控件。 */
 import { CheckOutlined, CloseOutlined, DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import { Button, Input, Popconfirm, Space, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 interface Props {
   label: string;
@@ -26,9 +26,13 @@ export default function WebFormCustomFieldControls({
   const [draft, setDraft] = useState(label);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  // 非编辑态时草稿始终跟随权威 label。Compiler 规范：随 prop 变化的重置用
+  // 渲染期守卫式调整。
+  const [prevSync, setPrevSync] = useState({ renaming, label });
+  if (prevSync.renaming !== renaming || prevSync.label !== label) {
+    setPrevSync({ renaming, label });
     if (!renaming) setDraft(label);
-  }, [label, renaming]);
+  }
 
   if (!editing) {
     return <Typography.Text type="secondary">{label}</Typography.Text>;

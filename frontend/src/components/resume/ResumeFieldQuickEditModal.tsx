@@ -10,7 +10,7 @@
  */
 import { SaveOutlined } from "@ant-design/icons";
 import { App, Button, Input, Modal, Space, Typography } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ResumeContent } from "../../types";
 import {
   describeResumeFieldPath,
@@ -47,13 +47,27 @@ export default function ResumeFieldQuickEditModal({
   const [saving, setSaving] = useState(false);
 
   // 每次打开/换栏都从简历当前值重新取：不要沿用上一栏的残留文本。
-  useEffect(() => {
-    if (!open || !path) return;
-    setDraft(content);
-    const value = readResumeValueByPath(content, path);
-    // 一段经历的"工作内容 / 要点"是字符串数组：按行编辑，一行一条。
-    setText(Array.isArray(value) ? value.join("\n") : typeof value === "string" ? value : "");
-  }, [open, path, content]);
+  // Compiler 规范：随输入变化的重置用渲染期守卫式调整（守卫键与原 deps 同源；
+  // 哨兵 null 让"挂载即打开"的首次渲染也走一次同步——原 effect 就有这个语义）。
+  const [prevSync, setPrevSync] = useState<{
+    open: boolean;
+    path: string | null;
+    content: ResumeContent;
+  } | null>(null);
+  if (
+    prevSync === null ||
+    prevSync.open !== open ||
+    prevSync.path !== path ||
+    prevSync.content !== content
+  ) {
+    setPrevSync({ open, path, content });
+    if (open && path) {
+      setDraft(content);
+      const value = readResumeValueByPath(content, path);
+      // 一段经历的"工作内容 / 要点"是字符串数组：按行编辑，一行一条。
+      setText(Array.isArray(value) ? value.join("\n") : typeof value === "string" ? value : "");
+    }
+  }
 
   const isList = useMemo(() => {
     if (!path) return false;

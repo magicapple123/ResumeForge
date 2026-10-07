@@ -6,7 +6,7 @@ import {
   PlayCircleOutlined,
 } from "@ant-design/icons";
 import { App as AntdApp, Button, Divider, Modal, Space, Steps, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 // 走 import 让 Vite 按 `base` 重写前缀，别写死 "/resumeforge-icon.png"
 // （在线体验产物部署在 Pages 子路径下，绝对路径会 404）。理由同 App.tsx 侧栏图标。
@@ -48,9 +48,12 @@ export default function UserGuideModal({
   const StepIcon = step.icon;
   const isLast = current === GUIDE_STEPS.length - 1;
 
-  useEffect(() => {
+  // 每次打开都回到第一步。Compiler 规范：随 prop 变化的重置用渲染期守卫式调整。
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
     if (open) setCurrent(0);
-  }, [open]);
+  }
 
   const goToStepPage = () => {
     onClose();

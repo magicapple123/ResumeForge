@@ -1,7 +1,7 @@
 /** 知识库条目编辑：标题、分类、标签、来源与 Markdown 正文。 */
 
 import { App, Button, Form, Input, Modal, Select, Space, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Knowledge, KnowledgePayload } from "../../types";
 import { KNOWLEDGE_CATEGORIES } from "../../types";
 
@@ -30,14 +30,19 @@ export default function KnowledgeFormModal({
   const [source, setSource] = useState("手动录入");
   const [content, setContent] = useState("");
 
-  useEffect(() => {
-    if (!open) return;
-    setTitle(entry?.title ?? "");
-    setCategory(entry?.category || "其他");
-    setTags(entry?.tags ?? []);
-    setSource(entry?.source || "手动录入");
-    setContent(entry?.content ?? "");
-  }, [entry, open]);
+  // 打开时用条目内容（或空值）回填表单。Compiler 规范：随 prop 变化的重置用
+  // 渲染期守卫式调整（key = open + entry 引用）。
+  const [prevSync, setPrevSync] = useState<{ open; entry } | null>(null);
+  if (prevSync === null || prevSync.open !== open || prevSync.entry !== entry) {
+    setPrevSync({ open, entry });
+    if (open) {
+      setTitle(entry?.title ?? "");
+      setCategory(entry?.category || "其他");
+      setTags(entry?.tags ?? []);
+      setSource(entry?.source || "手动录入");
+      setContent(entry?.content ?? "");
+    }
+  }
 
   const options = Array.from(new Set([...categories, ...KNOWLEDGE_CATEGORIES]));
 
