@@ -34,13 +34,20 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
   const { files, reading, addFiles, removeFile, clear, onPaste } = useRecognitionFiles();
 
   // 关闭时清空：否则下次打开会看到上一次的材料和预览，容易误以为已经保存过了。
+  // Compiler 规范：状态重置用渲染期守卫；clear() 外部 store 副作用留在 effect。
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (!open) {
+      setText("");
+      setRows([]);
+      setNotes([]);
+      setEngine("");
+    }
+  }
+
   useEffect(() => {
-    if (open) return;
-    setText("");
-    setRows([]);
-    setNotes([]);
-    setEngine("");
-    clear();
+    if (!open) clear();
   }, [open, clear]);
 
   const recognize = async () => {

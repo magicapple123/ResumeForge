@@ -38,8 +38,13 @@ export default function ResumesPage() {
   };
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
   // 搜索框受控镜像（同 JobFilterBar 的处理）：点 × 清空时立即清筛选。
+  // Compiler 规范：镜像同步用渲染期守卫式调整。
   const [searchText, setSearchText] = useState(keyword);
-  useEffect(() => setSearchText(keyword), [keyword]);
+  const [prevKeyword, setPrevKeyword] = useState(keyword);
+  if (prevKeyword !== keyword) {
+    setPrevKeyword(keyword);
+    setSearchText(keyword);
+  }
   const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
   const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
   const [favoriteFilter, setFavoriteFilter] = useState<boolean | undefined>(() =>
