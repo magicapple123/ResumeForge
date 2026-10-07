@@ -18,8 +18,10 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from ..database import SessionLocal, get_db
-from ..models.tracker import STATUSES
+from ..models.tracker import STATUSES, ApplicationTrack
 from ..schemas.tracker import (
+    TRACK_EVIDENCE_PREVIEW_CHARS,
+    TRACK_NOTE_PREVIEW_CHARS,
     TrackApplyOut,
     TrackApplyRequest,
     TrackCreate,
@@ -59,6 +61,22 @@ router = APIRouter(prefix="/api/tracker", tags=["tracker"])
 logger = logging.getLogger(__name__)
 
 
+def _track_brief(record: ApplicationTrack) -> TrackOut:
+    """列表行只带 note / evidence 的**预览**：超长截断加省略号。
+
+    求职看板的主读路径一次拖几十条，note 上限 4000 字（evidence 500），全文随列表
+    下发等于白拖几百 KB。卡片上显示预览足够；编辑表单打开时前端会调
+    ``GET /{track_id}`` 拿全文回填（TrackFormModal），PUT 的整体替换也是以全文为准，
+    不会把截断文本写回库。导出与助手工具走服务层 ``list_tracks``，不经这里，全文不受影响。
+    """
+    item = track_out(record)
+    if len(item.note) > TRACK_NOTE_PREVIEW_CHARS:
+        item.note = item.note[: TRACK_NOTE_PREVIEW_CHARS] + "…"
+    if len(item.evidence) > TRACK_EVIDENCE_PREVIEW_CHARS:
+        item.evidence = item.evidence[: TRACK_EVIDENCE_PREVIEW_CHARS] + "…"
+    return item
+
+
 @router.get("", response_model=TrackListOut)
 def read_tracks(
     status: str = Query(default=""),
@@ -71,7 +89,7 @@ def read_tracks(
     records = list_tracks(db, status=status, keyword=keyword)
     # 统计走 SQL 聚合（全量口径）：列表被 MAX_LIST_LIMIT 截断时漏斗数字仍准确。
     return TrackListOut(
-        items=[track_out(item) for item in records],
+        items=[_track_brief(item) for item in records],
         **summarize(db, status=status, keyword=keyword),
     )
 
