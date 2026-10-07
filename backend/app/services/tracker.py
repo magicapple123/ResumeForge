@@ -16,7 +16,7 @@ import logging
 from datetime import date
 from typing import Any
 
-from sqlalchemy import case, func
+from sqlalchemy import case, func, tuple_
 from sqlalchemy.orm import Query, Session
 
 from ..models.tracker import (
@@ -229,6 +229,28 @@ def _find_by_key(db: Session, record: TrackRecordIn) -> ApplicationTrack | None:
     )
 
 
+def _find_existing_by_keys(
+    db: Session, records: list[TrackRecordIn]
+) -> dict[tuple[str, str], ApplicationTrack]:
+    """一批记录的合并目标，**一次 IN 查询**取回按键建字典。
+
+    :func:`plan_merges` 旧实现对每条折叠后的记录单独点查——一次粘贴几十条通知就是
+    几十次点查（2026-10-05 性能审查低-4：N+1）。``(company_key, title_key)`` 有唯一
+    约束（``uq_application_track_company_title``），一个键至多命中一行，按键建字典
+    与逐条 :func:`_find_by_key` 完全等价（含"软删记录也可被合并命中"的现状语义——
+    两条路径都不带 live_only 过滤）。
+    """
+    keys = sorted({(normalize_key(r.company), normalize_key(r.title)) for r in records})
+    if not keys:
+        return {}
+    rows = (
+        db.query(ApplicationTrack)
+        .filter(tuple_(ApplicationTrack.company_key, ApplicationTrack.title_key).in_(keys))
+        .all()
+    )
+    return {(row.company_key, row.title_key): row for row in rows}
+
+
 class _Plan:
     """一条记录的处理计划：预览与确认执行的是同一份。"""
 
@@ -279,9 +301,12 @@ def _fold_batch(records: list[TrackRecordIn]) -> list[tuple[TrackRecordIn, int]]
 def plan_merges(db: Session, records: list[TrackRecordIn]) -> list[_Plan]:
     """算出每条记录会新增还是更新，并给出面向用户的原因。**不写库。**"""
     plans: list[_Plan] = []
+    folded = _fold_batch(records)
+    existing_by_key = _find_existing_by_keys(db, [record for record, _count in folded])
 
-    for record, folded_count in _fold_batch(records):
-        existing = _find_by_key(db, record)
+    for record, folded_count in folded:
+        key = (normalize_key(record.company), normalize_key(record.title))
+        existing = existing_by_key.get(key)
         merged_note = f"（本次识别有 {folded_count} 条通知指向这个岗位，已按进展合并）"
 
         if existing is None:
