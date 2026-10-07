@@ -29,21 +29,25 @@ interface DetailTriggerProps {
 
 /** 可点击卡片：整块可点、可用键盘操作，内层按钮不受影响。 */
 export function DetailTrigger({ onOpen, label, className, children }: DetailTriggerProps) {
-  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (isFromInnerControl(event)) return;
-    onOpen();
-  };
+  // Compiler 的 use-memo 规则要求 useCallback 首参是内联函数：直接把两段逻辑内联。
+  const stableClick = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (isFromInnerControl(event)) return;
+      onOpen();
+    },
+    [onOpen],
+  );
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    // 焦点在内层按钮上时，回车/空格归按钮。
-    if (isFromInnerControl(event)) return;
-    event.preventDefault();
-    onOpen();
-  };
-
-  const stableClick = useCallback(handleClick, [onOpen]);
-  const stableKeyDown = useCallback(handleKeyDown, [onOpen]);
+  const stableKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      // 焦点在内层按钮上时，回车/空格归按钮。
+      if (isFromInnerControl(event)) return;
+      event.preventDefault();
+      onOpen();
+    },
+    [onOpen],
+  );
 
   return (
     <div

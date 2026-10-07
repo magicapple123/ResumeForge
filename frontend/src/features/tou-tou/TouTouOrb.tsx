@@ -91,11 +91,14 @@ export default function TouTouOrb({
 
   const isBusyRef = useRef(isBusy);
   const visualStatusRef = useRef(visualStatus);
-  isBusyRef.current = isBusy;
-  visualStatusRef.current = visualStatus;
   // 标语轮换 effect 只留开关依赖，瞬态条件经 ref 镜像在回调里读取。
   const hiddenRef = useRef(hidden);
-  hiddenRef.current = hidden;
+  // ref 写入放 effect（Compiler 禁止渲染期写 ref）：这些镜像只在定时回调里被读。
+  useEffect(() => {
+    isBusyRef.current = isBusy;
+    visualStatusRef.current = visualStatus;
+    hiddenRef.current = hidden;
+  });
 
   /** 「好奇」是过渡态：到点自己回到正常，别一直瞪着。 */
   const scheduleIdle = useCallback((delay: number) => {
@@ -217,7 +220,9 @@ export default function TouTouOrb({
   const { buttonRef, dragging, handlePointerDown, position, shellStyle, suppressClickRef } =
     useTouTouOrbDrag({ scheduleIdle, setVisualStatus: requestVisualStatus, wake });
   const draggingRef = useRef(dragging);
-  draggingRef.current = dragging;
+  useEffect(() => {
+    draggingRef.current = dragging;
+  });
 
   /**
    * 发呆时偶尔眨一下眼。

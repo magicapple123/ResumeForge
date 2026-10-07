@@ -38,8 +38,11 @@ async function fetchDetailSafe(
  */
 export function useTaskCompletionWatcher(onTaskFinished: (event: FinishedTaskEvent) => void): void {
   // 用 ref 持有最新回调，避免回调身份变化导致轮询重启。
+  // ref 写入放 effect（Compiler 禁止渲染期写 ref）：回调只在轮询 tick 里被读。
   const callbackRef = useRef(onTaskFinished);
-  callbackRef.current = onTaskFinished;
+  useEffect(() => {
+    callbackRef.current = onTaskFinished;
+  });
   // 本会话里见过的"进行中"批次（id 与 kind）。它不再被报为进行中时就是完成的时刻。
   const watched = useRef<{ id: number; kind: ApplyTask["kind"] } | null>(null);
 
