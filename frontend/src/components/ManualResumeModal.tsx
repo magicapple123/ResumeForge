@@ -29,15 +29,10 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
   });
 
   useEffect(() => {
+    if (!open) return;
     const currentRequest = ++requestVersion.current;
     // 无岗位（通用简历）同样要读资料预填：这里以前会因为 !job 直接返回，
     // 导致通用简历永远打不开编辑器。
-    if (!open) {
-      setProfile(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
     void getProfile()
       .then((loadedProfile) => {
         if (currentRequest === requestVersion.current) setProfile(loadedProfile);
@@ -51,10 +46,21 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
       .finally(() => {
         if (currentRequest === requestVersion.current) setLoading(false);
       });
-    return () => {
-      if (currentRequest === requestVersion.current) requestVersion.current += 1;
-    };
   }, [open, job, message]);
+
+  // 开/关时的状态归位（loading/profile 复位）。Compiler 规范：同步 setState 移出
+  // effect，用渲染期守卫式调整（哨兵 null：挂载即打开也归位一次）；ref 失效递增
+  // 留在上面的 effect 里。
+  const [prevOpenSync, setPrevOpenSync] = useState<{ open: boolean; job: Job | null } | null>(null);
+  if (prevOpenSync === null || prevOpenSync.open !== open || prevOpenSync.job !== job) {
+    setPrevOpenSync({ open, job });
+    if (!open) {
+      setProfile(null);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+  }
 
   const content = useMemo(
     () => (profile ? profileToResumeContent(profile, job) : null),

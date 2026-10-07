@@ -28,7 +28,7 @@ import {
   Tag,
   Typography,
 } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   analyzeInterviewQuestion,
   deleteReview,
@@ -96,22 +96,26 @@ export default function InterviewReviewPanel({
   const legacyText = record && typeof record.analysis === "string" ? record.analysis : null;
 
   // 打开历史记录时，用其中持久化的分析与建议填充展示状态（不重新调用模型），并预填关联的岗位/简历。
-  useEffect(() => {
-    if (!record) return;
-    setAnalysis((record.analysis as InterviewAnalysis) ?? null);
-    setOptimizeResult(
-      record.suggestions && record.suggestions.length
-        ? {
-            resume_id: record.resume_id ?? 0,
-            suggestions: record.suggestions,
-            llm_used: true,
-            notes: [],
-          }
-        : null,
-    );
-    if (record.job_id) setJobId(record.job_id);
-    if (record.resume_id) setResumeId(record.resume_id);
-  }, [record]);
+  // Compiler 规范：随 record 变化的回填用渲染期守卫式调整（哨兵 null 覆盖挂载场景）。
+  const [prevRecord, setPrevRecord] = useState<InterviewReviewRecord | null | undefined>(record);
+  if (prevRecord !== record) {
+    setPrevRecord(record);
+    if (record) {
+      setAnalysis((record.analysis as InterviewAnalysis) ?? null);
+      setOptimizeResult(
+        record.suggestions && record.suggestions.length
+          ? {
+              resume_id: record.resume_id ?? 0,
+              suggestions: record.suggestions,
+              llm_used: true,
+              notes: [],
+            }
+          : null,
+      );
+      if (record.job_id) setJobId(record.job_id);
+      if (record.resume_id) setResumeId(record.resume_id);
+    }
+  }
 
   const analyze = async () => {
     if (!record && !question.trim()) {
