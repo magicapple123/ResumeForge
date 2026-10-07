@@ -69,7 +69,9 @@ export default function MaterialFormModal({
 
   // 打开时用条目内容（或空值）回填表单。Compiler 规范：随 prop 变化的重置用
   // 渲染期守卫式调整（key = open + material 引用，与原 deps 同源）。
-  const [prevSync, setPrevSync] = useState<{ open: boolean; material: Material | null } | null>(null);
+  const [prevSync, setPrevSync] = useState<{ open: boolean; material: Material | null } | null>(
+    null,
+  );
   if (prevSync === null || prevSync.open !== open || prevSync.material !== material) {
     setPrevSync({ open, material });
     if (open) {
