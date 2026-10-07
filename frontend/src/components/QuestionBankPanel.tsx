@@ -80,8 +80,15 @@ export default function QuestionBankPanel({
   // 打开历史记录时，若其中已持久化参考答案，预填到 answerMap，使其直接渲染出来。
   // Compiler 规范：随 record 变化的派生回填用渲染期守卫式调整（哨兵 null 保证
   // "挂载即带 record"的首次渲染也走一次，与原 effect 语义一致）。
-  const [prevRecordSync, setPrevRecordSync] = useState<{ record: QuestionBankRecord | null | undefined; legacyText: string | null } | null>(null);
-  if (prevRecordSync === null || prevRecordSync.record !== record || prevRecordSync.legacyText !== legacyText) {
+  const [prevRecordSync, setPrevRecordSync] = useState<{
+    record: QuestionBankRecord | null | undefined;
+    legacyText: string | null;
+  } | null>(null);
+  if (
+    prevRecordSync === null ||
+    prevRecordSync.record !== record ||
+    prevRecordSync.legacyText !== legacyText
+  ) {
     setPrevRecordSync({ record, legacyText });
     if (!record || legacyText) {
       setAnswerMap({});
