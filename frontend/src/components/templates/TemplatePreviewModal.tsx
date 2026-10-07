@@ -24,12 +24,20 @@ export default function TemplatePreviewModal({ template, formatPresets, onClose 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!template) return;
-    let cancelled = false;
+  // 模板/字号/格式任一变化都重取预览。Compiler 规范：随输入变化的状态重置改到
+  // 渲染期「调整状态」模式（守卫式 setState），effect 只保留真正的异步请求。
+  const previewKey = `${template?.kind ?? ""}:${template?.id ?? ""}:${template?.name ?? ""}:${fontScale}:${formatName}`;
+  const [prevPreviewKey, setPrevPreviewKey] = useState(previewKey);
+  if (prevPreviewKey !== previewKey) {
+    setPrevPreviewKey(previewKey);
     setLoading(true);
     setError("");
     setHtml("");
+  }
+
+  useEffect(() => {
+    if (!template) return;
+    let cancelled = false;
     void previewResumeTemplate({
       template_id: template.kind === "style" ? template.id : undefined,
       template_name: template.kind === "format" ? "classic" : undefined,
@@ -51,7 +59,7 @@ export default function TemplatePreviewModal({ template, formatPresets, onClose 
     return () => {
       cancelled = true;
     };
-  }, [template, fontScale, formatName]);
+  }, [template, fontScale, formatName, previewKey]);
 
   const title = template ? `模板预览 · ${template.name}` : "模板预览";
 

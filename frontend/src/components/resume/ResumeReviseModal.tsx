@@ -1,7 +1,7 @@
 /** AI 修改简历：输入修改要求（可留空整体重写），修订结果直接更新当前记录。 */
 import { ThunderboltOutlined } from "@ant-design/icons";
 import { Alert, App, Input, Modal, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { reviseResume } from "../../api/resumes";
 import type { ResumeDetail } from "../../types";
 
@@ -30,9 +30,16 @@ export default function ResumeReviseModal({
   const [error, setError] = useState("");
 
   // 预填指令在每次打开时生效（父组件每次带入的都可能是不同条目的指令）。
-  useEffect(() => {
+  // Compiler 规范：随 prop 变化的重置用渲染期守卫式调整。
+  const [prevSync, setPrevSync] = useState<{ open; initialInstructions } | null>(null);
+  if (
+    prevSync === null ||
+    prevSync.open !== open ||
+    prevSync.initialInstructions !== initialInstructions
+  ) {
+    setPrevSync({ open, initialInstructions });
     if (open) setInstructions(initialInstructions);
-  }, [open, initialInstructions]);
+  }
 
   const close = () => {
     setInstructions("");

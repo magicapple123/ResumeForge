@@ -14,7 +14,7 @@ import {
   Typography,
   Upload,
 } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Material, MaterialFile, MaterialPayload } from "../../types";
 import { MATERIAL_CATEGORIES } from "../../types";
 import FileDropZone from "../common/FileDropZone";
@@ -67,15 +67,20 @@ export default function MaterialFormModal({
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<MaterialFile[]>([]);
 
-  useEffect(() => {
-    if (!open) return;
-    setTitle(material?.title ?? "");
-    setCategory(material?.category || "其他");
-    setContent(material?.content ?? "");
-    setUrl(material?.url ?? "");
-    setNote(material?.note ?? "");
-    setFiles(filesFromMaterial(material));
-  }, [material, open]);
+  // 打开时用条目内容（或空值）回填表单。Compiler 规范：随 prop 变化的重置用
+  // 渲染期守卫式调整（key = open + material 引用，与原 deps 同源）。
+  const [prevSync, setPrevSync] = useState<{ open; material } | null>(null);
+  if (prevSync === null || prevSync.open !== open || prevSync.material !== material) {
+    setPrevSync({ open, material });
+    if (open) {
+      setTitle(material?.title ?? "");
+      setCategory(material?.category || "其他");
+      setContent(material?.content ?? "");
+      setUrl(material?.url ?? "");
+      setNote(material?.note ?? "");
+      setFiles(filesFromMaterial(material));
+    }
+  }
 
   const options = Array.from(new Set([...categories, ...MATERIAL_CATEGORIES]));
 

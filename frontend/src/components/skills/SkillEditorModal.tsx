@@ -33,18 +33,26 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
   const [files, setFiles] = useState<AssistantSkillFileInput[]>([]);
   const [filesTruncated, setFilesTruncated] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    if (skillId === null) {
+  // Compiler 规范：随输入变化的表单回填用渲染期守卫式调整（新建分支）；异步加载
+  // 留在 effect。原实现 draft 变化会在编辑既有技能时整单重取——那属于误触发，
+  // 拆分后 draft 只驱动"新建"分支（它才是 draft 语义相关的场景）。
+  const [prevSync, setPrevSync] = useState({ open, skillId, draft });
+  if (prevSync.open !== open || prevSync.skillId !== skillId || prevSync.draft !== draft) {
+    setPrevSync({ open, skillId, draft });
+    if (open && skillId === null) {
       setName(draft?.name ?? "");
       setDescription(draft?.description ?? "");
       setPrompt(draft?.prompt ?? "");
       setEnabled(true);
       setFiles([]);
       setFilesTruncated(false);
-      return;
     }
-    setLoading(true);
+    // 进入"编辑既有技能"分支时同步把加载态打开（fetch effect 只负责收尾）。
+    if (open && skillId !== null) setLoading(true);
+  }
+
+  useEffect(() => {
+    if (!open || skillId === null) return;
     void getSkill(skillId)
       .then((detail) => {
         setName(detail.name);
@@ -56,7 +64,7 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
       })
       .catch((error) => message.error(error instanceof Error ? error.message : "加载技能失败"))
       .finally(() => setLoading(false));
-  }, [draft, message, open, skillId]);
+  }, [message, open, skillId]);
 
   const save = async () => {
     if (!name.trim()) {
