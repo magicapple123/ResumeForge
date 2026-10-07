@@ -12,7 +12,7 @@
 import { LinkOutlined, UploadOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Skeleton, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { importCandidateJobs, listCandidateJobs } from "../../api/candidateJob";
 import { useApi } from "../../hooks/useApi";
@@ -61,11 +61,14 @@ export default function CollectResultPanel({
     [taskId, refreshKey],
   );
 
-  useEffect(() => {
-    // 切换批次时不能保留上一批的候选 id 或导入反馈，否则可能误导入旧批次条目。
+  // 切换批次时不能保留上一批的候选 id 或导入反馈，否则可能误导入旧批次条目。
+  // Compiler 规范：随 taskId 变化的重置用渲染期守卫式调整（哨兵 null 覆盖挂载场景）。
+  const [prevTaskId, setPrevTaskId] = useState(taskId);
+  if (prevTaskId !== taskId) {
+    setPrevTaskId(taskId);
     setSelectedIds([]);
     setLastResult(null);
-  }, [taskId]);
+  }
 
   if (!taskId) return null;
 

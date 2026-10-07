@@ -82,11 +82,14 @@ export default function ResumeLayoutControls({
   });
 
   // 布局一被父组件确认（提交成功或外部改动），就交回权威值，避免滑块停在中间态。
+  // 字号签名一变（提交成功或外部改动），交回权威值并清掉拖动中的即时值。
   // 用标量签名而不是 layout 对象：父组件每次渲染都新建对象，直接依赖它会不停误触发。
   const fontSignature = `${layout.font_scale}:${layout.format_config?.["font_scale_adjust"] ?? ""}`;
-  useEffect(() => {
+  const [prevFontSignature, setPrevFontSignature] = useState(fontSignature);
+  if (prevFontSignature !== fontSignature) {
+    setPrevFontSignature(fontSignature);
     setDraggingPx(null);
-  }, [fontSignature]);
+  }
 
   // 关掉组件时清掉未触发的提交，避免对已卸载的父组件调用 onChange。
   useEffect(

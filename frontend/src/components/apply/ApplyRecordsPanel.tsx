@@ -67,8 +67,13 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
   const [keyword, setKeyword] = useState("");
   // 搜索框受控镜像：点 × 清空时立即把筛选也清掉——之前非受控时清空后列表仍按
   // 旧关键词过滤（这里 keyword 只来自本组件，镜像仅承担受控化）。
+  // Compiler 规范：镜像同步用渲染期守卫式调整。
   const [searchText, setSearchText] = useState("");
-  useEffect(() => setSearchText(keyword), [keyword]);
+  const [prevKeyword, setPrevKeyword] = useState(keyword);
+  if (prevKeyword !== keyword) {
+    setPrevKeyword(keyword);
+    setSearchText(keyword);
+  }
   const [result, setResult] = useState("");
   const [page, setPage] = useState(1);
   const [retrying, setRetrying] = useState<number | null>(null);
