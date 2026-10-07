@@ -68,29 +68,63 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
   const [form] = Form.useForm<ReferralPayload>();
   const buildMenu = useRowActionMenu();
 
-  const loadList = useCallback(async () => {
-    setLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
+  // 返回 null 表示失败（错误提示在这里统一给出）。
+  const fetchList = useCallback(async () => {
     try {
-      setItems(await listReferrals({ status: status || undefined, keyword: keyword.trim() }));
+      return await listReferrals({ status: status || undefined, keyword: keyword.trim() });
     } catch (error) {
       message.error(error instanceof Error ? error.message : "读取内推失败");
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, [status, keyword, message]);
 
-  const loadStats = useCallback(async () => {
+  const fetchStats = useCallback(async () => {
     try {
-      setStats(await getReferralStats());
+      return await getReferralStats();
     } catch {
-      /* 统计卡失败不打断列表，静默即可 */
+      // 统计卡失败不打断列表，静默即可（stats 保持原值）。
+      return null;
     }
   }, []);
 
+  // Compiler 规范：deps 变化的 loading 置位用渲染期守卫；应用状态放在 .then 回调。
+  const [prevListKey, setPrevListKey] = useState<string | null>(null);
+  const listKey = `${status}:${keyword}`;
+  if (prevListKey !== listKey) {
+    setPrevListKey(listKey);
+    setLoading(true);
+  }
+
   useEffect(() => {
-    void loadList();
-    void loadStats();
-  }, [loadList, loadStats]);
+    let cancelled = false;
+    void fetchList().then((items) => {
+      if (cancelled) return;
+      if (items !== null) setItems(items);
+      setLoading(false);
+    });
+    void fetchStats().then((stats) => {
+      if (cancelled || stats === null) return;
+      setStats(stats);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchList, fetchStats, listKey]);
+
+  // 事件路径（保存/删除后的整表重拉，含 loading 翻动）。
+  const loadList = useCallback(async () => {
+    setLoading(true);
+    const items = await fetchList();
+    if (items !== null) setItems(items);
+    setLoading(false);
+  }, [fetchList]);
+
+  // 事件路径（数据变动后的统计卡刷新，静默失败）。
+  const loadStats = useCallback(async () => {
+    const stats = await fetchStats();
+    if (stats !== null) setStats(stats);
+  }, [fetchStats]);
 
   const openCreate = () => {
     setEditing(null);

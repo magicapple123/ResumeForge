@@ -94,20 +94,36 @@ export default function SkillsPage() {
   const [editorSkillId, setEditorSkillId] = useState<number | null>(null);
   const [editorDraft, setEditorDraft] = useState<SkillDraft | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
+  const fetchSkills = useCallback(async (): Promise<AssistantSkill[] | null> => {
     try {
-      setSkills(await listSkills());
+      return await listSkills();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "加载技能失败");
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, [message]);
 
+  // Compiler 规范：初始加载的 setState 放 .then 回调（外部数据到达时应用）。
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void fetchSkills().then((items) => {
+      if (cancelled) return;
+      if (items !== null) setSkills(items);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchSkills]);
+
+  // 事件路径（开关/导入后的整表重拉，含 loading 翻动）。
+  const load = useCallback(async () => {
+    setLoading(true);
+    const items = await fetchSkills();
+    if (items !== null) setSkills(items);
+    setLoading(false);
+  }, [fetchSkills]);
 
   const toggle = async (skill: AssistantSkill, enabled: boolean) => {
     if (togglingId !== null) return;

@@ -51,25 +51,47 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
   const [form] = Form.useForm<InterviewExperiencePayload>();
   const buildMenu = useRowActionMenu();
 
-  const loadList = useCallback(async () => {
-    setLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
+  // 返回 null 表示失败（错误提示在这里统一给出）。
+  const fetchList = useCallback(async () => {
     try {
-      setItems(
-        await listInterviewExperiences({
-          keyword: keyword.trim(),
-          source: source || undefined,
-        }),
-      );
+      return await listInterviewExperiences({
+        keyword: keyword.trim(),
+        source: source || undefined,
+      });
     } catch (error) {
       message.error(error instanceof Error ? error.message : "读取面经失败");
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, [keyword, source, message]);
 
+  // Compiler 规范：deps 变化的 loading 置位用渲染期守卫；应用状态放在 .then 回调。
+  const [prevListKey, setPrevListKey] = useState<string | null>(null);
+  const listKey = `${keyword}:${source}`;
+  if (prevListKey !== listKey) {
+    setPrevListKey(listKey);
+    setLoading(true);
+  }
+
   useEffect(() => {
-    void loadList();
-  }, [loadList]);
+    let cancelled = false;
+    void fetchList().then((items) => {
+      if (cancelled) return;
+      if (items !== null) setItems(items);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchList, listKey]);
+
+  // 事件路径（保存/删除后的整表重拉，含 loading 翻动）。
+  const loadList = useCallback(async () => {
+    setLoading(true);
+    const items = await fetchList();
+    if (items !== null) setItems(items);
+    setLoading(false);
+  }, [fetchList]);
 
   const openCreate = () => {
     setEditing(null);

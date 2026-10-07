@@ -67,25 +67,50 @@ function buildOptions(group: CollectFilterGroup): SelectOptionList {
 
 export default function CollectSiteFilters({ disabled }: Props) {
   const [data, setData] = useState<CollectFilterOptions | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
+  const fetchOptions = useCallback(async (): Promise<CollectFilterOptions | null> => {
     try {
-      setData(await getCollectFilterOptions());
-      setFailed(false);
+      return await getCollectFilterOptions();
     } catch {
-      // 读不到就当"这个站点没有站点侧筛选"：它是可选能力，不该挡住整个采集表单。
-      setFailed(true);
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, []);
 
+  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      const options = await fetchOptions();
+      if (cancelled) return;
+      if (options !== null) {
+        setData(options);
+        setFailed(false);
+      } else {
+        // 读不到就当"这个站点没有站点侧筛选"：它是可选能力，不该挡住整个采集表单。
+        setFailed(true);
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchOptions]);
+
+  // 事件路径（手动重试按钮，含 loading/failed 翻动）。
+  const load = useCallback(async () => {
+    setLoading(true);
+    const options = await fetchOptions();
+    if (options !== null) {
+      setData(options);
+      setFailed(false);
+    } else {
+      setFailed(true);
+    }
+    setLoading(false);
+  }, [fetchOptions]);
 
   const groups = useMemo(
     () => (data?.groups ?? []).filter((group) => group.options.length > 0),
