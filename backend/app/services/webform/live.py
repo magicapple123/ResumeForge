@@ -84,6 +84,7 @@ from .service import (
     suggest_for,
 )
 from .service.relaxed import _own_text_contains
+from .service.relaxed_matching import custom_labels_from_catalog
 from .session import Snapshot
 
 if TYPE_CHECKING:
@@ -572,8 +573,13 @@ class LiveSession(LiveRememberMixin):
         # 「可能是这几个」：**在算建议之前定下来**，所以每一个分支（命中 / 认不出 /
         # AI 在想 / AI 回来了）推出去的面板都带着同一份。
         self._related = related_entries(control, catalog)
+        custom_labels = custom_labels_from_catalog(catalog)
         suggestion = self._suggest_custom_field(control, data) or suggest_for(
-            control, data, engine=self._engine
+            control,
+            data,
+            engine=self._engine,
+            relaxed=self._relaxed_enabled(),
+            custom_labels=custom_labels,
         )
         # 放宽模式（用户设置，默认关）：对 blocked 的点选控件给「代点选择」建议或
         # 「帮我勾选」按钮。建议仍是**建议**——用户点按钮这个动作才是确认；日期
@@ -724,6 +730,61 @@ class LiveSession(LiveRememberMixin):
             return Suggestion("unmatched", field=key, field_label=label)
         return Suggestion("matched", field=key, field_label=label, value=value)
 
+    def _custom_field_labels(self) -> dict[str, str]:
+        """自定义字段 key → 展示名。候选顺序与 ``_suggest_custom_field`` 一致：
+        ``memory_targets`` 在前、``catalog`` 补充，先到先得。"""
+        labels: dict[str, str] = {}
+        for target in (*self._memory_targets, *self._catalog):
+            key = str(target.get("field_key") or target.get("key") or "")
+            if not key.startswith("CUSTOM_") or key in labels:
+                continue
+            label = str(target.get("label") or "").strip()
+            if label:
+                labels[key] = label
+        return labels
+
+    def _ai_custom_candidates(self, limit: int = 15) -> list[tuple[str, str]]:
+        """交给 AI 提示词的有值自定义字段 ``(key, label)``，**只发名字不发值**。
+
+        自定义字段不在目录同义词表里，规则与目录候选都够不到时它们是唯一的补充；
+        量多时限流——目录字段永远全量在前，这里只多给这么多。
+        """
+        labels = self._custom_field_labels()
+        with self._lock:
+            data = dict(self._data)
+        candidates: list[tuple[str, str]] = []
+        for key, label in labels.items():
+            if not (data.get(key) or "").strip():
+                continue
+            candidates.append((key, label))
+            if len(candidates) >= limit:
+                break
+        return candidates
+
+    def _custom_value_by_label(self, key: str, data: dict[str, str]) -> str:
+        """AI 认出的**目录字段**在资料里没值时，按显示名找同名的自定义字段。
+
+        用户常把「项目链接」这类字段记在自定义里。按归一化 label **精确相等**匹配
+        （不做模糊近似——歧义不猜），取到值就交给正常的填写链；取不到返回空串。
+        """
+        if key.startswith("CUSTOM_"):
+            return ""
+        wanted = self._normalize_label(FIELD_LABELS.get(split_repeated_key(key)[0], key))
+        if not wanted:
+            return ""
+        for custom_key, label in self._custom_field_labels().items():
+            if self._normalize_label(label) == wanted and (data.get(custom_key) or "").strip():
+                return str(data[custom_key]).strip()
+        return ""
+
+    def _field_display_label(self, key: str) -> str:
+        """面板上给用户看的字段名；自定义字段用保存时的名字，不带 ``CUSTOM_`` 前缀。"""
+        base = split_repeated_key(key)[0]
+        default = FIELD_LABELS.get(base, base)
+        if key.startswith("CUSTOM_"):
+            default = self._custom_field_labels().get(key, key.removeprefix("CUSTOM_"))
+        return field_label_for_key(key, default)
+
     def _publish_unmatched(
         self,
         note: str,
@@ -760,10 +821,18 @@ class LiveSession(LiveRememberMixin):
 
     def _run_ai(self, seq: int, control: Control, relaxed: bool = False) -> None:
         # 惰性导入：``ai`` 会连带拉起 ``services/llm``，而本模块是「网申」包的导入入口之一。
-        from .ai import identify_fields
+        from .ai import MAX_CUSTOM_FIELDS, identify_fields
 
         try:
-            matches = asyncio.run(identify_fields(self._provider, [control]))
+            matches = asyncio.run(
+                identify_fields(
+                    self._provider,
+                    [control],
+                    # 有值的自定义字段（CUSTOM_*）一并列进候选——只发字段名不发值，
+                    # 数量多时限流（上限与 ai.MAX_CUSTOM_FIELDS 同源）。
+                    extra_fields=self._ai_custom_candidates(MAX_CUSTOM_FIELDS),
+                )
+            )
         except Exception as error:  # noqa: BLE001 - 工作线程里的异常没人接
             logger.warning("网申填表的 AI 识别失败：%s", error)
             if seq == self._seq and not self._stop.is_set():
@@ -801,7 +870,7 @@ class LiveSession(LiveRememberMixin):
         )
         fillable: list[tuple[str, str, str]] = []
         for key in usable:
-            value = resolve_value_for(control, key, data)
+            value = resolve_value_for(control, key, data) or self._custom_value_by_label(key, data)
             # 事实类勾选与放宽规则同一道闸：值必须出现在控件自述里，否则代点就是猜。
             if not value or (
                 kind == "choice"
@@ -810,14 +879,7 @@ class LiveSession(LiveRememberMixin):
                 continue
             shown_key = field_key_for_block(key, control.block_family, control.block_index)
             fillable.append(
-                (
-                    shown_key,
-                    field_label_for_key(
-                        shown_key,
-                        FIELD_LABELS.get(split_repeated_key(shown_key)[0], shown_key),
-                    ),
-                    value,
-                )
+                (shown_key, self._field_display_label(shown_key), value)
             )
 
         if fillable:
@@ -846,10 +908,7 @@ class LiveSession(LiveRememberMixin):
             self._publish_unmatched(
                 self._ai_dead_end(usable),
                 source=SOURCE_AI,
-                field_label=field_label_for_key(
-                    shown_key,
-                    FIELD_LABELS.get(split_repeated_key(shown_key)[0], shown_key),
-                ),
+                field_label=self._field_display_label(shown_key),
                 field_key=shown_key,
             )
             return
@@ -888,16 +947,13 @@ class LiveSession(LiveRememberMixin):
         )
         fillable: list[tuple[str, str]] = []
         for key in usable:
-            value = resolve_value_for(control, key, data)
+            # 目录字段取不到值时再按显示名找同名自定义字段——用户常把「项目链接」
+            # 这类字段记在自定义里，AI 认出的目录名不该因为存的位置而落空。
+            value = resolve_value_for(control, key, data) or self._custom_value_by_label(key, data)
             if value:
                 shown_key = field_key_for_block(key, control.block_family, control.block_index)
                 fillable.append(
-                    (
-                        field_label_for_key(
-                            shown_key, FIELD_LABELS.get(split_repeated_key(shown_key)[0], shown_key)
-                        ),
-                        value,
-                    )
+                    (self._field_display_label(shown_key), value)
                 )
 
         if not fillable:
@@ -915,13 +971,7 @@ class LiveSession(LiveRememberMixin):
             self._publish_unmatched(
                 note,
                 source=SOURCE_AI,
-                field_label=(
-                    field_label_for_key(
-                        shown_key, FIELD_LABELS.get(split_repeated_key(shown_key)[0], shown_key)
-                    )
-                    if shown_key
-                    else ""
-                ),
+                field_label=self._field_display_label(shown_key) if shown_key else "",
                 field_key=shown_key,
             )
             return
@@ -943,14 +993,19 @@ class LiveSession(LiveRememberMixin):
         )
 
     def _ai_dead_end(self, candidates: tuple[str, ...]) -> str:
-        """一个候选都填不了时，如实说明**是哪一种**填不了。"""
+        """一个候选都填不了时，如实说明**是哪一种**填不了。
+
+        自定义字段里同名那条有值时，"资料里没填"就不成立——那不是死胡同，只是值
+        没走通这条框（比如下拉装不进去），措辞按后一种说。
+        """
         if not candidates:
             return "AI 也认不出这个框"
         key = candidates[0]
-        label = FIELD_LABELS.get(key, key)
+        label = self._field_display_label(key)
         with self._lock:
             data = dict(self._data)
-        if not (data.get(key) or "").strip():
+        has_custom_value = bool(self._custom_value_by_label(key, data))
+        if not (data.get(key) or "").strip() and not has_custom_value:
             return f"AI 认出来是「{label}」，但你的资料里还没填这一项"
         return f"AI 认出来是「{label}」，但页面上的选项没有对应的值"
 
@@ -1079,6 +1134,7 @@ class LiveSession(LiveRememberMixin):
         self._refresh_data()
         with self._lock:
             data = dict(self._data)
+            catalog = list(self._catalog)
         if self._autofill_data_loader is not None:
             try:
                 data = dict(self._autofill_data_loader())
@@ -1091,6 +1147,8 @@ class LiveSession(LiveRememberMixin):
                 engine=self._engine,
                 on_progress=self._publish_autofill,
                 should_stop=self._stop.is_set,
+                relaxed=self._relaxed_enabled(),
+                custom_labels=custom_labels_from_catalog(catalog),
             )
         except Exception as error:  # noqa: BLE001 - 失败要回显在悬浮球而不是吞掉
             logger.warning("网申填表：自动填写当前页面失败：%s", error)

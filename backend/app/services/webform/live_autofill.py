@@ -49,7 +49,12 @@ class AutoFillResult:
 
 
 def _fillable_items(
-    controls: list[Any], data: dict[str, str], engine: FormEngine
+    controls: list[Any],
+    data: dict[str, str],
+    engine: FormEngine,
+    *,
+    relaxed: bool = False,
+    custom_labels: dict[str, str] | None = None,
 ) -> tuple[Snapshot, list[Any]]:
     """Build the same rule/default selection set as the main webform page.
 
@@ -58,7 +63,13 @@ def _fillable_items(
     low-confidence rows, and date formatting on the same path as the main UI.
     """
     snapshot = Snapshot(id="live-autofill", controls=controls)
-    report = build_preview(snapshot, data, engine=engine)
+    report = build_preview(
+        snapshot,
+        data,
+        engine=engine,
+        relaxed=relaxed,
+        custom_labels=custom_labels,
+    )
     selected = {item.index for item in default_selections(report)}
     return snapshot, [item for item in report.items if item.index in selected]
 
@@ -71,6 +82,8 @@ def fill_current_page(
     on_progress: Callable[[AutoFillProgress], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
     delay_seconds: float = 0.03,
+    relaxed: bool = False,
+    custom_labels: dict[str, str] | None = None,
 ) -> AutoFillResult:
     """读取当前页并逐个写入可安全识别的空控件。
 
@@ -79,7 +92,13 @@ def fill_current_page(
     """
     engine = engine or FormEngine()
     controls = engine.read_controls(client)
-    snapshot, items = _fillable_items(controls, data, engine)
+    snapshot, items = _fillable_items(
+        controls,
+        data,
+        engine,
+        relaxed=relaxed,
+        custom_labels=custom_labels,
+    )
     total = len(items)
     form_control_total = len(controls)
     record_event(

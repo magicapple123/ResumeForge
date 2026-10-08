@@ -33,6 +33,38 @@ def _combine_profile_and_extra_data(
     return {**profile_data, **list_entries(db, reusable_only=reusable_only)}
 
 
+def _custom_label_values_for_batch(db: Session, data: dict[str, str]) -> dict[str, str]:
+    """将唯一自定义标签映射到唯一标准字段，供批量填表使用。"""
+    details = extra_profile.list_details(db)
+    custom_keys_by_label: dict[str, list[str]] = {}
+    for key, detail in details.items():
+        if not key.startswith(CUSTOM_KEY_PREFIX):
+            continue
+        normalized = _normalize_field_label(detail.get("label", ""))
+        if normalized:
+            custom_keys_by_label.setdefault(normalized, []).append(key)
+
+    field_keys_by_label: dict[str, set[str]] = {}
+    for field in FORM_FIELDS:
+        for candidate in (field.label, *FIELD_SYNONYMS.get(field.key, ())):
+            normalized = _normalize_field_label(candidate)
+            if normalized:
+                field_keys_by_label.setdefault(normalized, set()).add(field.key)
+
+    result = dict(data)
+    for normalized, custom_keys in custom_keys_by_label.items():
+        field_keys = field_keys_by_label.get(normalized, set())
+        if len(custom_keys) != 1 or len(field_keys) != 1:
+            continue
+        field_key = next(iter(field_keys))
+        if result.get(field_key, "").strip():
+            continue
+        value = str(details[custom_keys[0]].get("value", "") or "").strip()
+        if value:
+            result[field_key] = value
+    return result
+
+
 def build_form_data(db: Session, *, job_title: str = "") -> dict[str, str]:
     """读取整页批量预填使用的资料，并排除只供本次使用的值。
 
@@ -43,7 +75,9 @@ def build_form_data(db: Session, *, job_title: str = "") -> dict[str, str]:
     ⚠️ **这条合并只发生在网申填表取数中**。简历生成读的是 ``get_profile_detail()`` →
     ``UserProfile``，完全不经过本函数——所以"生成简历不读网申资料"是结构保证的，不靠约定。
     """
-    return _combine_profile_and_extra_data(db, job_title=job_title, reusable_only=True)
+    return _custom_label_values_for_batch(
+        db, _combine_profile_and_extra_data(db, job_title=job_title, reusable_only=True)
+    )
 
 
 def build_live_form_data(db: Session, *, job_title: str = "") -> dict[str, str]:

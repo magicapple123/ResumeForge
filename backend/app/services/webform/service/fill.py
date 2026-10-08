@@ -88,9 +88,8 @@ def list_extra_fields(db: Session | None = None) -> dict[str, Any]:
     不显示，等于"记住了却找不着"，那比不记还糟。
 
     自定义字段统一归到 ``自定义`` 那一组（放最后），``kind`` 给 ``text``：它们是用户在填表
-    时攒的，没有目录里那份"这是长文本还是电话"的信息。``matchable=False`` 是给界面看的
-    ——**它们不参与自动匹配**（理由见 ``extra_profile`` 模块说明），界面据此不要承诺
-    "下次自动填"。
+    时攒的，没有目录里那份"这是长文本还是电话"的信息。它们只在用户主动开启放宽模式时参与
+    受约束的文本匹配；普通模式保持保守。
     """
     groups: list[str] = []
     for field_item in FORM_FIELDS:

@@ -109,6 +109,30 @@ def test_remembering_clears_the_intent_so_it_is_not_stored_twice():
         session.stop()
 
 
+def test_a_value_edited_in_the_remember_editor_is_saved_verbatim():
+    """编辑器「字段内容」里改过的值要**原样落库**。
+
+    Python 侧只消费 ``remember.value``——不得回头拿面板建议或表单现值覆盖它，否则
+    用户在编辑器里做的修正会被悄悄抹掉。
+    """
+    client = FakeLiveClient()
+    session, saved = _remember_session(client, data={"name": "张三"})
+    session.start()
+    try:
+        control = raw_control(label="姓名")
+        client.focus_on(control)
+        session._tick()  # 面板建议：姓名 = 张三
+        assert session.state["value"] == "张三"
+
+        # 用户在编辑器里把内容改成了别的（补全 / 修正），保存的是改后的值。
+        client.remember_on(control, "张三丰")
+        session._tick()
+
+        assert saved == [{"key": "name", "label": "姓名", "value": "张三丰"}]
+    finally:
+        session.stop()
+
+
 def test_remembering_an_empty_value_is_ignored():
     """空值没什么可记的——库里"没有这一项"与"这一项是空的"是同一件事。"""
     client = FakeLiveClient()

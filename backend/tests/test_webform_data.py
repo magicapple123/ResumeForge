@@ -413,7 +413,7 @@ def test_live_form_data_maps_an_exact_custom_label_to_its_webform_field(db_sessi
 
     assert live_data["CUSTOM_内推码推荐人"] == "345354543"
     assert live_data["referral_code"] == "345354543"
-    assert "referral_code" not in build_form_data(db_session)
+    assert build_form_data(db_session)["referral_code"] == "345354543"
 
 
 def test_live_form_data_prefers_the_existing_preset_value_over_a_custom_label(

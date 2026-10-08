@@ -154,7 +154,8 @@ FIELD_SYNONYMS: dict[str, tuple[str, ...]] = {
     "project_start": ("起止时间", "开始时间", "起始时间"),
     "project_end": ("起止时间", "结束时间", "截止时间"),
     "project_description": ("描述内容", "描述", "项目描述"),
-    "project_tech_stack": ("技术栈", "技术工具", "开发工具", "使用技术", "工具"),
+    # 不收裸“工具”：招聘页常问“AI 工具”，与项目技术栈不是同一概念。
+    "project_tech_stack": ("技术栈", "技术工具", "开发工具", "使用技术"),
     "project_highlights": ("项目成果", "项目亮点", "成果", "业绩"),
     "award_name": ("奖项名称", "获奖名称", "奖项"),
     "award_date": ("获奖时间", "获奖日期", "获奖年月"),
@@ -236,7 +237,6 @@ FIELD_SYNONYMS: dict[str, tuple[str, ...]] = {
         "职业资格",
         "资格证书",
         "执业资格",
-        "证书名称",
         "会计从业",
         "法律职业资格",
     ),

@@ -73,11 +73,12 @@ _ROOTS_JS = (
     "return roots;};"
     "const collectOptions=(roots)=>{"
     "const raw=[];"
-    # 选项行选择器：role="option" / 原生 option / 类名含 option、list__item、menu-item
-    # （UD、Semi、antd 家族），以及 tree__node / tree-node——UD 的城市多选是树形弹层
+    # 选项行选择器：role="option" / 原生 option / 类名含 option、list__item、menu-item、
+    # dropdown__item、cascader-node、select-option、option-item（Element UI、UD、Semi、antd），
+    # 以及 tree__node / tree-node——UD 的城市多选是树形弹层
     # （真机取证 2026-10-06 字节页：行元素是 ud__tree__node，无 role="option"）。
     "for(const root of roots){"
-    "for(const el of [...root.querySelectorAll('[role=\"option\"],option,[class*=\"option\"],[class*=\"list__item\"],[class*=\"menu-item\"],[class*=\"tree__node\"],[class*=\"tree-node\"]')].filter(visible)){"
+    "for(const el of [...root.querySelectorAll('[role=\"option\"],option,[class*=\"option\"],[class*=\"list__item\"],[class*=\"menu-item\"],[class*=\"dropdown__item\"],[class*=\"cascader-node\"],[class*=\"select-option\"],[class*=\"option-item\"],[class*=\"tree__node\"],[class*=\"tree-node\"]')].filter(visible)){"
     "raw.push(el);}}"
     "const kept=raw.filter((el)=>!raw.some((o)=>o!==el&&o.contains(el)));"
     "return kept;};"

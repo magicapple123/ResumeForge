@@ -43,8 +43,12 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
     '.rf-memory input[type=text]{display:block;width:100%;min-height:32px;border:1px solid #d9e2ef;border-radius:8px;padding:7px 9px;font-size:12px;outline:none;background:#fff}',
     '.rf-memory input[type=text]:focus{border-color:#1677ff;box-shadow:0 0 0 2px rgba(22,119,255,.12)}',
     '.rf-memory-targets{max-height:min(430px,50vh);overflow:auto;border:1px solid #dfe8f3;border-radius:10px;background:#fff;box-shadow:0 2px 8px rgba(31,56,88,.04)}',
-    '.rf-memory-group{position:relative;display:flex;align-items:center;gap:6px;width:100%;border:0;border-bottom:1px solid #e4edf8;padding:8px 10px;color:#1557a6;font-size:11px;font-weight:700;background:#f2f7ff;cursor:pointer;text-align:left}',
-    '.rf-memory-group:hover{background:#e8f2ff}',
+    // 选择器必须带 `button` 前缀：焦点面板的基础规则 `button:not(.rf-live-switch)`（深蓝底
+    // 白字）特异性是 (0,1,1)，裸 `.rf-memory-group`(0,1,0) 会输给它——分组头全被染成
+    // 深蓝、糊成选中态（用户反馈）。本样式表挂在面板样式之后，同特异性即可胜出，
+    // 与 scripts.py 里 navchip / button.close 的既有修法同一套。
+    '  button.rf-memory-group{position:relative;display:flex;align-items:center;gap:6px;width:100%;border:0;border-bottom:1px solid #e4edf8;padding:8px 10px;color:#1557a6;font-size:11px;font-weight:700;background:#f2f7ff;cursor:pointer;text-align:left}',
+    '  button.rf-memory-group:hover{background:#e8f2ff}',
     '.rf-memory-group .caret{width:12px;flex:none;color:#6a91c5;transition:transform .12s}',
     '.rf-memory-group.collapsed .caret{transform:rotate(-90deg)}',
     '.rf-memory-group .group-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -66,6 +70,7 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
     '<div class="rf-memory-title">记住这条：确认字段名与保存位置</div>',
     '<div class="rf-memory-subtitle">默认先保存到网申资料·自定义；如果已有对应字段，也可以在下面展开后选择。</div>',
     '<label class="rf-memory-label">字段名<input class="rf-memory-label-input" type="text" maxlength="40"></label>',
+    '<label class="rf-memory-label">字段内容<input class="rf-memory-value-input" type="text" maxlength="2000"></label>',
     '<label class="rf-memory-label">保存到哪里（支持模糊搜索）<input class="rf-memory-search" type="text" placeholder="搜索资料模块、字段名或当前值"></label>',
     '<div class="rf-memory-targets"></div>',
     '<div class="rf-memory-hint"></div>',
@@ -76,6 +81,7 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   const button = oldButton.cloneNode(true);
   oldButton.replaceWith(button);
   const name = editor.querySelector('.rf-memory-label-input');
+  const valueInput = editor.querySelector('.rf-memory-value-input');
   const search = editor.querySelector('.rf-memory-search');
   const list = editor.querySelector('.rf-memory-targets');
   const hint = editor.querySelector('.rf-memory-hint');
@@ -115,6 +121,14 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
       .map(cleanLabel)
       .filter(Boolean)[0];
     return direct || nearbyLabel(field) || cleanPlaceholder(field.placeholder) || cleanLabel(field.name);
+  };
+  // 字段内容的初始值与旧版保存时的取值链完全一致：用户在表单里敲的字 >
+  // 面板建议值 > 控件现值。放进输入框而不是只在保存时现取，用户才能改。
+  const formValue = () => {
+    const field = control();
+    const element = document.querySelector('[data-rf-focus="1"]');
+    const typed = element && (element.getAttribute('contenteditable') === 'true' ? element.textContent : element.value);
+    return String(typed || payload.value || field.value || '');
   };
   const normalize = (text) => String(text || '').normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
   const fuzzy = (text, term) => {
@@ -239,6 +253,7 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
     originalLabel = formLabel() || String(payload.field_label || '').trim();
     selectedId = defaultTarget(originalLabel);
     name.value = selected() ? selected().label : originalLabel;
+    valueInput.value = formValue();
     search.value = '';
     collapsedGroups = new Set(targets().map((item) => String(item.group || '其他')));
     collapsedGroups.delete('自定义');
@@ -266,11 +281,11 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   editor.querySelector('.rf-memory-save').addEventListener('click', () => {
     const label = String(name.value || '').trim();
     const field = control();
-    const element = document.querySelector('[data-rf-focus="1"]');
-    const typed = element && (element.getAttribute('contenteditable') === 'true' ? element.textContent : element.value);
-    const value = String(typed || payload.value || field.value || '').trim();
+    // 字段内容以**编辑器里的值**为准（打开时已按 typed > payload.value > field.value
+    // 初始化，用户可改）。不再保存时回头读表单——那会悄悄覆盖用户改过的内容。
+    const value = String(valueInput.value || '').trim();
     if (!label) { hint.textContent = '请先填写字段名。'; name.focus(); return; }
-    if (!value) { hint.textContent = '请先在目标表单里填写内容。'; return; }
+    if (!value) { hint.textContent = '请先填写字段内容。'; valueInput.focus(); return; }
     window.__rfRemember = {target_id: selectedId, label, value, control: field, selector: field.selector || ''};
     close();
   });

@@ -161,8 +161,8 @@ def test_custom_fields_show_up_in_the_field_list(db_session):
     assert by_key["CUSTOM_导师姓名"]["label"] == "导师姓名"
     assert by_key["CUSTOM_导师姓名"]["group"] == extra_profile.CUSTOM_GROUP
     assert extra_profile.CUSTOM_GROUP in listing["groups"]
-    # **如实标注不参与自动匹配**——目录字段都是 True。
-    assert by_key["CUSTOM_导师姓名"]["matchable"] is False
+    # 自定义字段可参与受约束匹配；目录字段仍显式可匹配。
+    assert by_key["CUSTOM_导师姓名"]["matchable"] is True
     assert by_key["height"]["matchable"] is True
 
 

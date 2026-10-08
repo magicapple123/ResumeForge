@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from functools import lru_cache
 
 from ..fields import (
@@ -130,6 +131,47 @@ def block_hint_satisfied(
         return True
     choice_field = any("是否" in synonym for synonym in synonyms)
     return choice_field and control.type in ("select", "radio", "checkbox")
+
+_EXPLICIT_BLOCK_FAMILY_MARKERS: dict[str, tuple[str, ...]] = {
+    "experience": ("实习经历", "工作经历", "工作经验", "任职经历", "工作描述", "工作内容", "实习描述"),
+    "project": ("项目经历", "项目名称", "项目描述", "项目角色"),
+    "campus": ("校园经历", "社团经历", "社会实践", "校内经历", "校园职务"),
+    "education": ("教育经历", "学习经历", "学历经历", "就读学校", "教育背景"),
+    "award": ("获奖", "奖项", "荣誉", "竞赛", "大赛", "奖学金"),
+    "academic": ("学术成果", "科研成果", "论文成果", "论文名称"),
+    "certificate": ("证书名称", "证书经历", "资格证"),
+    "portfolio": ("作品链接", "作品经历", "作品集"),
+    "social": ("社交账号", "社交平台账号"),
+}
+
+
+def explicit_control_families(control: Control) -> frozenset[str]:
+    """控件自述明确属于其它经历区块时拒绝候选字段；附近文字不参与此判断。"""
+    if control.block_family:
+        return frozenset()
+    own_text = unicodedata.normalize("NFKC", " ".join(
+        part
+        for part in (
+            control.label,
+            control.placeholder,
+            control.aria_label,
+            control.aria_labelledby,
+            control.title,
+        )
+        if part
+    )).casefold()
+    detected = {
+        family
+        for family, markers in _EXPLICIT_BLOCK_FAMILY_MARKERS.items()
+        if any(marker in own_text for marker in markers)
+    }
+    return frozenset(detected)
+
+
+def explicit_foreign_family(control: Control, field_name: str) -> bool:
+    expected = family_for_field(field_name)
+    detected = explicit_control_families(control)
+    return bool(expected and detected and (expected not in detected or len(detected) > 1))
 
 
 # evidence_key 是纯函数（控件快照 frozen 不可变、同义词目录固定），按
