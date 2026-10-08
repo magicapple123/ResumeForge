@@ -44,6 +44,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
 
+      # 与 ci.yml 对齐：2026-10 起的 runner 镜像不再预装 CJK 字体，
+      # 服务端 PDF 导出用例（test_share_package）会因找不到中文字体 409。
+      - name: Install a CJK font for PDF export tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+
       - name: Run full suite with flaky marking
         run: |
           python -m pytest -n auto \
