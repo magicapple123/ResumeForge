@@ -1,4 +1,5 @@
 import { Col, Input, Select, Space, Tag, Tooltip, Typography } from "antd";
+import { memo } from "react";
 import WebFormCustomFieldControls from "./WebFormCustomFieldControls";
 import PartialDateSelect from "./PartialDateSelect";
 import { isCustomField } from "./WebFormProfileFieldUtils";
@@ -6,8 +7,14 @@ import type { WebFormExtraEntry, WebFormField } from "../../types";
 
 const { TextArea } = Input;
 
-const CUSTOM_HINT = "自定义字段默认不参与模糊匹配；唯一同名预设字段可逐框建议，其余需手动挑选";
+const CUSTOM_HINT =
+  "标签与唯一预设字段精确对应时可自动匹配；放宽模式会尝试受约束的文本匹配，歧义项不猜、请复核";
 
+/**
+ * 回调按 (key, ...) 维度收口：Group 传下来的是**稳定引用**（页面级 useCallback），
+ * 字段自身的信息由本组件持有的 `field` 提供。配合 memo，打字时只有值变了的那一个
+ * 字段重渲，同组其余字段（各自的输入框、标签、Select options）整块跳过。
+ */
 interface Props {
   field: WebFormField;
   editing: boolean;
@@ -15,9 +22,9 @@ interface Props {
   value: string;
   entry?: WebFormExtraEntry;
   displayLabel: string;
-  onChange: (value: string) => void;
-  onRename: (label: string) => string | undefined;
-  onDelete: () => void;
+  onChange: (key: string, value: string) => void;
+  onRename: (key: string, label: string) => string | undefined;
+  onDelete: (key: string) => void;
 }
 
 function FieldInput({
@@ -79,7 +86,7 @@ function FieldInput({
   );
 }
 
-export default function WebFormProfileField({
+export default memo(function WebFormProfileField({
   field,
   editing,
   saving,
@@ -116,8 +123,8 @@ export default function WebFormProfileField({
                 label={displayLabel}
                 editing={editing}
                 saving={saving}
-                onRename={onRename}
-                onDelete={onDelete}
+                onRename={(label) => onRename(field.key, label)}
+                onDelete={() => onDelete(field.key)}
               />
             ) : (
               <Typography.Text
@@ -139,7 +146,7 @@ export default function WebFormProfileField({
                 <Tag color="purple">学到</Tag>
               </Tooltip>
             ) : null}
-            {field.matchable === false ? (
+            {isCustomField(field) ? (
               <Tooltip title={CUSTOM_HINT}>
                 <Tag color="cyan">自定义</Tag>
               </Tooltip>
@@ -153,7 +160,7 @@ export default function WebFormProfileField({
               value={value}
               disabled={saving}
               label={displayLabel}
-              onChange={onChange}
+              onChange={(nextValue) => onChange(field.key, nextValue)}
             />
           ) : (
             <Typography.Text
@@ -171,4 +178,4 @@ export default function WebFormProfileField({
       </div>
     </Col>
   );
-}
+});

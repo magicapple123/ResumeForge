@@ -1,6 +1,7 @@
 import { DeleteOutlined, LinkOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Input, Popconfirm, Space, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
+import { useState } from "react";
 import type { WebFormUrlHistory } from "../../types";
 
 interface Props {
@@ -22,6 +23,8 @@ export default function WebFormBrowserUrlBar({
   onSelectHistory,
   onDeleteHistory,
 }: Props) {
+  // 点击「打开目标页」后提示就该收掉，而不是等鼠标移开才消失（受控开关）。
+  const [openTip, setOpenTip] = useState(false);
   const items: MenuProps["items"] = history.map((item) => ({
     key: String(item.id),
     label: (
@@ -62,10 +65,16 @@ export default function WebFormBrowserUrlBar({
         aria-label="网申投递网址"
       />
       <Space className="webform-url-actions" size={8} wrap>
-        <Tooltip title="在网申专用浏览器中打开，不会覆盖已有网页">
-          <Button type="primary" loading={busy} disabled={busy} onClick={onOpen}>
-            打开目标页
-          </Button>
+        <Tooltip
+          open={openTip}
+          onOpenChange={setOpenTip}
+          title="在网申专用浏览器中打开，不会覆盖已有网页"
+        >
+          <span onClick={() => setOpenTip(false)}>
+            <Button type="primary" loading={busy} disabled={busy} onClick={onOpen}>
+              打开目标页
+            </Button>
+          </span>
         </Tooltip>
         <Dropdown menu={{ items }} disabled={busy || history.length === 0} trigger={["click"]}>
           <Button disabled={busy || history.length === 0}>历史网址</Button>

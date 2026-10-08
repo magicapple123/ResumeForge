@@ -5,11 +5,11 @@
   right: 24px;
   bottom: 96px;
   /*
-   * 2990：略低于悬浮球（.tt-shell 的 3000），保证球压在卡片之上、随时可以再点球收起；
-   * 高于 antd Modal/Drawer（1000+）与 .app-exited-overlay（2000）。
-   * 后续新增覆盖层不得落在 2990~3100 区间（3100 是附件 Tooltip 的 overlayStyle）。
+   * 3300：略低于悬浮球（.tt-shell 的 3400），保证球压在卡片之上、随时可以再点球收起；
+   * 高于 antd 弹层基准 zIndexPopupBase（3100，main.tsx）——Modal/Drawer 弹出时
+   * 卡片仍可用。同族梯度：剪贴板卡 3200 < 助手卡 3300 < 球 3400 < 小贴士/Tooltip 3450。
    */
-  z-index: 2990;
+  z-index: 3300;
   width: min(760px, calc(100vw - 24px));
   height: min(680px, calc(100vh - 132px));
   overflow: hidden;

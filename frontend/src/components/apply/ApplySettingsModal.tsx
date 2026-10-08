@@ -8,7 +8,6 @@ import {
   Button,
   Divider,
   Form,
-  Input,
   InputNumber,
   Modal,
   Select,
@@ -21,6 +20,7 @@ import {
 import { useEffect, useState } from "react";
 import { getApplyConfig, listSites, updateApplyConfig } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
+import { HintedTextArea } from "../common/MaxLengthHint";
 import { type ApplyConfig, type ApplyConfigOut, type SiteList } from "../../types";
 import BrowserChoiceFields from "./BrowserChoiceFields";
 
@@ -138,7 +138,7 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
         label="默认招呼语"
         extra="队列条目没有单独填写招呼语时使用；投递前可逐岗位预览并修改。"
       >
-        <Input.TextArea rows={2} maxLength={1000} showCount />
+        <HintedTextArea rows={2} maxLength={1000} />
       </Form.Item>
 
       <Divider plain style={{ margin: "4px 0 16px" }} />

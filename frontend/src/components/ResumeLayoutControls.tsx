@@ -64,6 +64,9 @@ export default function ResumeLayoutControls({
 }: Props) {
   const { data: catalog } = useApi(fetchResumeTemplates, []);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  // 版式下拉是点击触发的：选定后提示就该收掉，而不是等鼠标移开（受控开关）。
+  // 注意下拉选项在 portal 里渲染，点击不会冒泡到触发器，所以 onChange 里也要关。
+  const [formatTipOpen, setFormatTipOpen] = useState(false);
   const templates = catalog?.templates ?? [];
   const formatPresets = catalog?.format_presets ?? [];
 
@@ -188,22 +191,31 @@ export default function ResumeLayoutControls({
       </Space>
       <Space size={6}>
         {!compact && <Typography.Text type="secondary">版式</Typography.Text>}
-        <Tooltip title="版式控制行高、页边距与强调色；可以在工作台里自制更多版式">
-          <Select
-            size="small"
-            value={layout.format_name || ""}
-            disabled={disabled}
-            style={{ minWidth: 120 }}
-            options={[
-              { value: "", label: "模板自带" },
-              ...formatPresets.map((item) => ({
-                value: item.name,
-                label: item.custom ? `${item.label}（自制）` : item.label,
-                title: item.description,
-              })),
-            ]}
-            onChange={(value) => onChange({ ...layout, format_name: value })}
-          />
+        <Tooltip
+          open={formatTipOpen}
+          onOpenChange={setFormatTipOpen}
+          title="版式控制行高、页边距与强调色；可以在工作台里自制更多版式"
+        >
+          <span onClick={() => setFormatTipOpen(false)}>
+            <Select
+              size="small"
+              value={layout.format_name || ""}
+              disabled={disabled}
+              style={{ minWidth: 120 }}
+              options={[
+                { value: "", label: "模板自带" },
+                ...formatPresets.map((item) => ({
+                  value: item.name,
+                  label: item.custom ? `${item.label}（自制）` : item.label,
+                  title: item.description,
+                })),
+              ]}
+              onChange={(value) => {
+                setFormatTipOpen(false);
+                onChange({ ...layout, format_name: value });
+              }}
+            />
+          </span>
         </Tooltip>
       </Space>
       <TemplateGalleryModal

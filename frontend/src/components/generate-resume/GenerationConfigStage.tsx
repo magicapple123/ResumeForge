@@ -6,6 +6,7 @@
 import { Alert, Button, Input, Segmented, Space, Switch, Tooltip, Typography } from "antd";
 import type { EnhancementLevel, Job, ResumeLayout } from "../../types";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../../config";
+import { MaxLengthHint } from "../common/MaxLengthHint";
 import ResumeLayoutControls from "../ResumeLayoutControls";
 
 /** 自定义提示词上限，与后端 GenerateOptions.custom_instruction 一致。 */
@@ -130,12 +131,12 @@ export default function GenerationConfigStage({
       <Input.TextArea
         value={customInstruction}
         maxLength={MAX_CUSTOM_INSTRUCTION}
-        showCount
         disabled={!llmReady}
         autoSize={{ minRows: 2, maxRows: 5 }}
         placeholder="例如：突出后端性能优化经历；不要出现「负责…」这类空泛表述；把实习经历放在教育经历前面。"
         onChange={(event) => setCustomInstruction(event.target.value)}
       />
+      <MaxLengthHint value={customInstruction} maxLength={MAX_CUSTOM_INSTRUCTION} />
       <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
         这段要求会附在生成提示词后面，只影响表达方向；事实锚定、篇幅上限和防虚构规则不变。
       </Typography.Text>

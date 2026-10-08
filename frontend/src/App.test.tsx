@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
+import pkg from "../package.json";
 import { APP_NAME, GITHUB_REPO } from "./config";
 
 vi.mock("./pages/HomePage", () => ({ default: () => <div>首页内容</div> }));
@@ -57,6 +58,23 @@ describe("first-visit guide", () => {
 });
 
 describe("application navigation", () => {
+  it("shows the app version next to the brand name, matching package.json", async () => {
+    window.localStorage.setItem("resumeforge.user-guide.seen", "1");
+    const { container } = render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    // 版本号单源是根 package.json 的 version（CI 与后端 config.py 一起核对），
+    // 页头品牌区展示的必须是同一个值：以 v 开头、hover 有 title 说明。
+    const version = container.querySelector(".app-brand-version");
+    expect(version).not.toBeNull();
+    expect(version!.textContent).toMatch(/^v/);
+    expect(version!.textContent).toBe(`v${pkg.version}`);
+    expect(version).toHaveAttribute("title", "当前版本");
+  });
+
   it("opens private pages from the top-level 我的空间 menu", async () => {
     window.localStorage.setItem("resumeforge.user-guide.seen", "1");
     render(

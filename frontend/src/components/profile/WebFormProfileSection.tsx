@@ -122,12 +122,30 @@ export default function WebFormProfileSection({
     () => profile?.fields.filter((field) => values[field.key]?.trim()).length ?? 0,
     [profile, values],
   );
-  const hasRepeatedValues = repeatedGroups.some((group) =>
-    group.records.some((record) => Object.values(record.values).some((value) => value.trim())),
+  // 击键时 repeatedGroups 引用不变，这条 memo 让该项计算跟着跳过。
+  const hasRepeatedValues = useMemo(
+    () =>
+      repeatedGroups.some((group) =>
+        group.records.some((record) => Object.values(record.values).some((value) => value.trim())),
+      ),
+    [repeatedGroups],
   );
 
   const totalCount = profile?.fields.length ?? 0;
   const normalizedSearch = searchTerm.trim().toLocaleLowerCase();
+
+  // 每个分组的全量字段清单：按 profile 一次建好（数组引用稳定），
+  // Group 的 memo 才不会被「每 render 重建的 groupAllFields 数组」打穿。
+  const fieldsByGroup = useMemo(() => {
+    const map = new Map<string, WebFormField[]>();
+    if (!profile) return map;
+    for (const field of profile.fields) {
+      const list = map.get(field.group);
+      if (list) list.push(field);
+      else map.set(field.group, [field]);
+    }
+    return map;
+  }, [profile]);
 
   /** 先筛选再渲染，避免每个分组里重复写一套查看态/编辑态判断。 */
   const filteredGrouped = useMemo(() => {
@@ -146,39 +164,45 @@ export default function WebFormProfileSection({
       .filter((entry) => entry.fields.length > 0);
   }, [displayLabel, editing, grouped, normalizedSearch, showOnlyFilled, values]);
 
-  const handleRenameCustomField = (key: string, nextLabel: string): string | undefined => {
-    const label = nextLabel.trim();
-    if (!label) return "字段名不能为空";
-    const duplicate = profile?.fields.some(
-      (field) =>
-        field.key !== key &&
-        isCustomField(field) &&
-        normalizeFieldLabel(displayLabel(field)) === normalizeFieldLabel(label),
-    );
-    if (duplicate) return "已经有同名自定义字段，请换一个名称";
+  const handleRenameCustomField = useCallback(
+    (key: string, nextLabel: string): string | undefined => {
+      const label = nextLabel.trim();
+      if (!label) return "字段名不能为空";
+      const duplicate = profile?.fields.some(
+        (field) =>
+          field.key !== key &&
+          isCustomField(field) &&
+          normalizeFieldLabel(displayLabel(field)) === normalizeFieldLabel(label),
+      );
+      if (duplicate) return "已经有同名自定义字段，请换一个名称";
 
-    setProfile((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        fields: current.fields.map((field) => (field.key === key ? { ...field, label } : field)),
-      };
-    });
-    onFieldLabelChange(key, label);
-    setError("");
-    return undefined;
-  };
+      setProfile((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          fields: current.fields.map((field) => (field.key === key ? { ...field, label } : field)),
+        };
+      });
+      onFieldLabelChange(key, label);
+      setError("");
+      return undefined;
+    },
+    [displayLabel, onFieldLabelChange, profile],
+  );
 
-  const handleDeleteCustomField = (key: string) => {
-    setProfile((current) => {
-      if (!current) return current;
-      return { ...current, fields: current.fields.filter((field) => field.key !== key) };
-    });
-    onFieldDelete(key);
-    setError("");
-  };
+  const handleDeleteCustomField = useCallback(
+    (key: string) => {
+      setProfile((current) => {
+        if (!current) return current;
+        return { ...current, fields: current.fields.filter((field) => field.key !== key) };
+      });
+      onFieldDelete(key);
+      setError("");
+    },
+    [onFieldDelete],
+  );
 
-  const handleAddCustomField = () => {
+  const handleAddCustomField = useCallback(() => {
     const label = customLabel.trim();
     const key = customFieldKey(label);
     if (!label || !key || key === "CUSTOM_") return;
@@ -199,7 +223,7 @@ export default function WebFormProfileSection({
       group: "自定义",
       kind: "text",
       sensitive: false,
-      matchable: false,
+      matchable: true,
     };
     const nextProfile: WebFormExtraProfile = {
       ...(profile as WebFormExtraProfile),
@@ -215,7 +239,9 @@ export default function WebFormProfileSection({
     onFieldLabelChange(key, label);
     setCustomLabel("");
     setError("");
-  };
+  }, [customLabel, details, displayLabel, onChange, onFieldLabelChange, onLoaded, profile, values]);
+
+  const toggleShowOnlyFilled = useCallback(() => setShowOnlyFilled((current) => !current), []);
 
   if (loading) return <Skeleton active paragraph={{ rows: 4 }} />;
 
@@ -241,7 +267,7 @@ export default function WebFormProfileSection({
         searchTerm={searchTerm}
         showOnlyFilled={showOnlyFilled}
         onSearchChange={setSearchTerm}
-        onToggleShowOnlyFilled={() => setShowOnlyFilled((current) => !current)}
+        onToggleShowOnlyFilled={toggleShowOnlyFilled}
       />
 
       {error ? <Typography.Text type="danger">{error}</Typography.Text> : null}
@@ -265,7 +291,8 @@ export default function WebFormProfileSection({
       ) : null}
 
       {filteredGrouped.map(({ group, fields }) => {
-        const groupAllFields = profile?.fields.filter((field) => field.group === group) ?? fields;
+        // 全量清单来自 fieldsByGroup（引用稳定），不在这里每 render 重新 filter。
+        const groupAllFields = fieldsByGroup.get(group) ?? fields;
         return (
           <WebFormProfileGroup
             key={group}

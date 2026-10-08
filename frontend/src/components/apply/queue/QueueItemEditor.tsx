@@ -2,10 +2,11 @@
  * 编辑某条队列条目的招呼语与简历；招呼语可先按岗位生成一版再改。
  * （自 ApplyQueuePanel 拆出，逐字搬运，行为等价；App.useApp() 原本就在本组件内调用。）
  */
-import { App, Button, Form, Input, Modal, Select, Space } from "antd";
+import { App, Button, Form, Modal, Select, Space } from "antd";
 import { useEffect, useState } from "react";
 import { previewGreeting, updateQueueItem } from "../../../api/apply";
 import { listResumes } from "../../../api/resumes";
+import { HintedTextArea } from "../../common/MaxLengthHint";
 import type { ApplyQueueItem, ResumeBrief } from "../../../types";
 
 export function QueueItemEditor({
@@ -97,7 +98,7 @@ export function QueueItemEditor({
           />
         </Form.Item>
         <Form.Item name="greeting" label="招呼语">
-          <Input.TextArea rows={3} maxLength={1000} showCount />
+          <HintedTextArea rows={3} maxLength={1000} />
         </Form.Item>
       </Form>
       <Space>

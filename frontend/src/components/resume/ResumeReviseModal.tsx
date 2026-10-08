@@ -3,6 +3,7 @@ import { ThunderboltOutlined } from "@ant-design/icons";
 import { Alert, App, Input, Modal, Typography } from "antd";
 import { useState } from "react";
 import { reviseResume } from "../../api/resumes";
+import { MaxLengthHint } from "../common/MaxLengthHint";
 import type { ResumeDetail } from "../../types";
 
 interface Props {
@@ -94,9 +95,9 @@ export default function ResumeReviseModal({
         placeholder={`可选。例：把个人总结改得更突出数据分析能力；项目经历里补充量化结果。留空则整体重新生成。最多 ${MAX_CHARS} 字。`}
         autoSize={{ minRows: 4, maxRows: 10 }}
         maxLength={MAX_CHARS}
-        showCount
         disabled={submitting}
       />
+      <MaxLengthHint value={instructions} maxLength={MAX_CHARS} />
       {error ? <Alert type="error" showIcon message={error} style={{ marginTop: 12 }} /> : null}
     </Modal>
   );

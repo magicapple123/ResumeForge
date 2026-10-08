@@ -1,32 +1,48 @@
-import { App, Button, Card, Listy, Space, Spin, Switch, Tag, Typography } from "antd";
-import { ListyItem, ListyMeta } from "../common/ListyItem";
+import { App, Button, Card, Spin, Switch, Tag, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { saveNavigationVisibility } from "../../api/settings";
 import { useNavigationVisibility } from "../../hooks/useNavigationVisibility";
 import {
   CORE_NAVIGATION_KEYS,
   NAVIGATION_ITEMS,
+  type NavigationGroup,
   type NavigationItem,
 } from "../navigation/navigationConfig";
 import { publishHiddenNavigationKeys } from "../../utils/navigationVisibility";
+import "./navigationSettings.css";
 
-const NAVIGATION_HINTS: Record<string, string> = {
-  "/webform": "在专用浏览器中读取并填写网申表单",
-  "/tracker": "跟踪岗位投递、面试和后续进展",
-  "/interview": "练习面试并生成复盘记录",
-  "/assistant": "使用求职助手整理资料和问题",
-  "/favorites": "集中查看收藏的岗位",
-  "/materials": "管理附件、作品和求职材料",
-  "/knowledge": "沉淀求职知识与经验",
-  "/skills": "维护技能和自定义工作台内容",
-  "/analytics": "查看投递与求职数据统计",
-  "/claims": "核对简历事实和证据来源",
-  "/trash": "恢复或清理已软删除的记录",
+const GROUPS: NavigationGroup[] = ["primary", "space"];
+const GROUP_LABELS: Record<NavigationGroup, string> = {
+  primary: "核心入口",
+  space: "我的空间",
 };
 
-function itemDescription(item: NavigationItem): string {
-  if (CORE_NAVIGATION_KEYS.has(item.key)) return "核心入口，始终显示";
-  return NAVIGATION_HINTS[item.key] ?? "可按需要隐藏的功能模块";
+interface ItemRowProps {
+  item: NavigationItem;
+  hidden: Set<string>;
+  loading: boolean;
+  savingKey: string | null;
+  onToggle: (item: NavigationItem, visible: boolean) => void;
+}
+
+/** 一行导航入口：图标 + 名称（核心入口带「固定显示」Tag）+ 右侧开关。 */
+function NavigationItemRow({ item, hidden, loading, savingKey, onToggle }: ItemRowProps) {
+  const required = CORE_NAVIGATION_KEYS.has(item.key);
+  const visible = required || !hidden.has(item.key);
+  return (
+    <div className="navigation-settings-item">
+      <span className="navigation-settings-icon">{item.icon}</span>
+      <span className="navigation-settings-label">{item.label}</span>
+      {required ? <Tag color="blue">固定显示</Tag> : null}
+      <Switch
+        checked={visible}
+        disabled={required || loading || savingKey !== null}
+        loading={savingKey === item.key}
+        onChange={(checked) => onToggle(item, checked)}
+        aria-label={item.label + "导航入口"}
+      />
+    </div>
+  );
 }
 
 export default function NavigationSettingsCard() {
@@ -61,60 +77,42 @@ export default function NavigationSettingsCard() {
       className="settings-card navigation-settings-card"
       title="界面与导航"
       extra={
-        <Space size={8}>
-          <Button
-            size="small"
-            disabled={loading || savingKey !== null || hiddenKeys.length === 0}
-            loading={savingKey === "all"}
-            onClick={() => void save([])}
-          >
-            恢复默认显示
-          </Button>
-        </Space>
+        <Button
+          size="small"
+          disabled={loading || savingKey !== null || hiddenKeys.length === 0}
+          loading={savingKey === "all"}
+          onClick={() => void save([])}
+        >
+          恢复默认显示
+        </Button>
       }
     >
       <Typography.Paragraph type="secondary" className="navigation-settings-intro">
         隐藏只会移除导航入口，不会删除数据，也不会禁止直接访问对应页面。首页、岗位广场、简历中心、我的资料、投递台和设置始终保留。
       </Typography.Paragraph>
-      {/* List 的 loading 是内容外层的 Spin。 */}
+      {/* 按 group 分「核心入口 / 我的空间」两块，组内两列网格（窄屏单列）的紧凑布局。 */}
       <Spin spinning={loading}>
-        <Listy
-          items={NAVIGATION_ITEMS}
-          rowKey={(item) => item.key}
-          itemRender={(item) => {
-            const required = CORE_NAVIGATION_KEYS.has(item.key);
-            const visible = required || !hidden.has(item.key);
-            return (
-              <ListyItem
-                className="navigation-settings-item"
-                actions={[
-                  <Switch
-                    key="toggle"
-                    checked={visible}
-                    disabled={required || loading || savingKey !== null}
-                    loading={savingKey === item.key}
-                    onChange={(checked) => toggle(item, checked)}
-                    aria-label={item.label + "导航入口"}
-                  />,
-                ]}
-              >
-                <ListyMeta
-                  avatar={<span className="navigation-settings-icon">{item.icon}</span>}
-                  title={
-                    <Space size={8}>
-                      <span>{item.label}</span>
-                      {required ? <Tag color="blue">固定显示</Tag> : null}
-                      <Typography.Text type="secondary">
-                        {item.group === "primary" ? "主导航" : "我的空间"}
-                      </Typography.Text>
-                    </Space>
-                  }
-                  description={itemDescription(item)}
-                />
-              </ListyItem>
-            );
-          }}
-        />
+        <div className="navigation-settings-groups">
+          {GROUPS.map((group) => (
+            <section key={group} className="navigation-settings-group">
+              <Typography.Text type="secondary" className="navigation-settings-group-title">
+                {GROUP_LABELS[group]}
+              </Typography.Text>
+              <div className="navigation-settings-grid">
+                {NAVIGATION_ITEMS.filter((item) => item.group === group).map((item) => (
+                  <NavigationItemRow
+                    key={item.key}
+                    item={item}
+                    hidden={hidden}
+                    loading={loading}
+                    savingKey={savingKey}
+                    onToggle={toggle}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       </Spin>
     </Card>
   );

@@ -209,7 +209,11 @@ export default function ResumeEditorModal({
       title={title}
       open={open}
       width={referencePanel ? "min(1320px, calc(100vw - 24px))" : "min(1000px, calc(100vw - 24px))"}
-      zIndex={1100}
+      // 必须高于宿主弹窗（ResumeDetailModal / GenerateResumeModal）：全局主题把
+      // zIndexPopupBase 提到了 3100，宿主 Modal 因此在 3100；这里写死 3110 才能稳稳
+      // 盖在宿主之上。旧的 1100 反而比宿主低——编辑器被宿主弹窗整个压住，看起来就是
+      // 「手动调整」卡片被挡住了。
+      zIndex={3110}
       destroyOnHidden
       // 必须垂直居中：body 限高后弹窗总高仍接近满视口，antd 默认 top:100px 会让
       // 底部（保存按钮一带）被推出视口外，看起来就是"弹出的卡片被挡住了"。

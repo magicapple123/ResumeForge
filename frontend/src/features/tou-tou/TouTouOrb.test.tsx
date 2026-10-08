@@ -2,9 +2,12 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import TouTouOrb from "./TouTouOrb";
 import { defaultTouTouContext, TouTouContext } from "./touTouContext";
+import { setProfileSaveControl } from "./profileSaveBridge";
 
 afterEach(() => {
   cleanup();
+  // profileSaveBridge 是模块级单例：清掉本文件注册的 control，避免泄漏到其它用例。
+  setProfileSaveControl(null);
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -24,6 +27,85 @@ describe("TouTouOrb", () => {
     expect(document.querySelectorAll(".tt-face")).toHaveLength(1);
     expect(document.querySelectorAll(".tt-face.is-active")).toHaveLength(1);
     expect(activeFaceSrc()).toContain("ball-curious");
+  });
+
+  it("shows a hover tooltip describing click and double-click actions", async () => {
+    vi.useFakeTimers();
+    render(<TouTouOrb onOpen={vi.fn()} />);
+    const button = screen.getByRole("button", { name: "打开求职助手" });
+
+    fireEvent.mouseEnter(button);
+    act(() => {
+      vi.advanceTimersByTime(300); // 覆盖 antd Tooltip 默认的 mouseEnterDelay
+    });
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("单击：打开求职助手；双击：打开投递剪贴板");
+    // overlayStyle 落在 .ant-tooltip 根节点上（role=tooltip 的是内层内容节点）；
+    // 3450 高于球的 3400——球被压住的 antd 默认 Tooltip（1070）等于没有。
+    const overlay = tooltip.closest(".ant-tooltip") as HTMLElement;
+    expect(overlay.style.zIndex).toBe("3450");
+  });
+
+  it("still opens the assistant while the tooltip is armed (hover does not eat clicks)", () => {
+    vi.useFakeTimers();
+    const onOpen = vi.fn();
+    render(<TouTouOrb onOpen={onOpen} />);
+    const button = screen.getByRole("button", { name: "打开求职助手" });
+
+    fireEvent.mouseEnter(button);
+    fireEvent.click(button);
+    act(() => {
+      vi.advanceTimersByTime(280); // 双击判窗过去后单击才生效
+    });
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the save/cancel card only while a profile save control is registered", () => {
+    vi.useFakeTimers();
+    const onSave = vi.fn();
+    const onCancel = vi.fn();
+    const onOpen = vi.fn();
+    render(<TouTouOrb onOpen={onOpen} />);
+
+    // 无 control 时完全不渲染。
+    expect(document.querySelector(".tt-save-card")).toBeNull();
+    expect(screen.queryByRole("button", { name: "保存资料" })).toBeNull();
+
+    act(() => {
+      setProfileSaveControl({ onSave, onCancel });
+    });
+
+    expect(document.querySelector(".tt-save-card")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "保存资料" }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    // antd 两字按钮 DOM 可访问名带空格（"取 消"）。
+    fireEvent.click(screen.getByRole("button", { name: "取 消" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    // 卡片是球的兄弟节点，点击不应触发球的单/双击开卡逻辑。
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(onOpen).not.toHaveBeenCalled();
+
+    // 页面保存/取消后撤掉 control，卡片随即消失。
+    act(() => {
+      setProfileSaveControl(null);
+    });
+    expect(document.querySelector(".tt-save-card")).toBeNull();
+  });
+
+  it("shows the loading state on the save button while saving", () => {
+    vi.useFakeTimers();
+    render(<TouTouOrb onOpen={vi.fn()} />);
+
+    act(() => {
+      setProfileSaveControl({ onSave: vi.fn(), onCancel: vi.fn(), saving: true });
+    });
+
+    // loading 时 antd 会注入带 aria-label="loading" 的图标，按钮可访问名带前缀——用正则匹配。
+    expect(screen.getByRole("button", { name: /保存资料/ })).toHaveClass("ant-btn-loading");
   });
 
   it("opens the assistant from click, Enter and Space", () => {

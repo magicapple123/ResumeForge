@@ -1,6 +1,13 @@
 /** 我的资料：基础信息 + 各分区动态列表，整体保存。 */
 import { App, ConfigProvider, Form, Input, Skeleton } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import ManualResumeModal from "../components/ManualResumeModal";
 import GeneralResumeSection from "../components/profile/GeneralResumeSection";
@@ -14,6 +21,7 @@ import ProfileWorkspaceTabs, {
 } from "../components/profile/ProfileWorkspaceTabs";
 import WebFormProfileSection from "../components/profile/WebFormProfileSection";
 import { updateWebFormExtraProfile } from "../api/webform";
+import { setProfileSaveControl } from "../features/tou-tou/profileSaveBridge";
 import { useProfilePage } from "../features/profile/useProfilePage";
 import type { WebFormExtraEntry, WebFormExtraProfile, WebFormRepeatedGroup } from "../types";
 
@@ -42,18 +50,18 @@ export default function ProfilePage() {
   );
   const allExpanded = collapsedSections.size === 0;
 
-  const toggleSection = (sectionKey: ProfileSectionKey) => {
+  const toggleSection = useCallback((sectionKey: ProfileSectionKey) => {
     setCollapsedSections((current) => {
       const next = new Set(current);
       if (next.has(sectionKey)) next.delete(sectionKey);
       else next.add(sectionKey);
       return next;
     });
-  };
+  }, []);
 
-  const toggleExpandAll = () => {
+  const toggleExpandAll = useCallback(() => {
     setCollapsedSections(allExpanded ? new Set(DEFAULT_SECTION_ORDER) : new Set());
-  };
+  }, [allExpanded]);
   const {
     form,
     loading,
@@ -103,6 +111,9 @@ export default function ProfilePage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
 
+  // setExtraValues 与 setDirty(true) 是两次 setState：React 18 自动批处理把它们合成
+  // **一次**渲染，且 dirty 已为 true 时 setDirty 直接跳过——所以击键路径上没有多余的
+  // 重复渲染；这里再给 onChange 一个稳定引用，让网申资料子树能凭 memo 跳过无关重渲。
   const handleExtraChange = useCallback(
     (key: string, value: string) => {
       setExtraValues((current) => ({ ...current, [key]: value }));
@@ -169,6 +180,36 @@ export default function ProfilePage() {
     setExtraRepeatedGroups(profile.repeated_groups ?? []);
   }, []);
 
+  // 重复经历编辑同样走「改数组 + 置脏」两级 setState（批处理下一次渲染）；
+  // 稳定引用让 memo 化的 WebFormProfileRecords 在打字时整棵跳过。
+  const handleRepeatedGroupsChange = useCallback(
+    (groups: WebFormRepeatedGroup[]) => {
+      setExtraRepeatedGroups(groups);
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const handlePhotoSelect = useCallback(
+    (dataUrl: string) => {
+      form.setFieldValue("photo", dataUrl);
+      markDirty();
+    },
+    [form, markDirty],
+  );
+
+  const openGenerateModal = useCallback((title: string) => {
+    setGeneralTitle(title);
+    setGenerateOpen(true);
+  }, []);
+
+  const openWriteModal = useCallback((title: string) => {
+    setGeneralTitle(title);
+    setWriteOpen(true);
+  }, []);
+
+  const handleStartEditing = useCallback(() => setEditing(true), [setEditing]);
+
   /**
    * 「保存全部资料」= 资料表单 + 网申资料，**两次都成功才算成功**。
    *
@@ -217,6 +258,133 @@ export default function ProfilePage() {
     }
   };
 
+  // useProfilePage / useProfileSectionReorder 返回的处理函数每次渲染都是新引用；
+  // 简历资料子树要靠「元素引用不变」跳过与网申资料击键无关的重渲（见 resumeContent
+  // 的 useMemo），所以经 ref 转发——子树拿到的是稳定回调，行为不变。
+  const sectionReorderHandlersRef = useRef({ handleSectionPointerDown, moveSectionByOffset });
+  useEffect(() => {
+    sectionReorderHandlersRef.current = { handleSectionPointerDown, moveSectionByOffset };
+  });
+  const handleSectionPointerDownStable = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>, sectionKey: ProfileSectionKey) => {
+      sectionReorderHandlersRef.current.handleSectionPointerDown(event, sectionKey);
+    },
+    [],
+  );
+  const moveSectionByOffsetStable = useCallback((sectionKey: ProfileSectionKey, offset: -1 | 1) => {
+    sectionReorderHandlersRef.current.moveSectionByOffset(sectionKey, offset);
+  }, []);
+
+  // 取消编辑：顶部保存条与悬浮球桥共用同一份逻辑（放弃未保存更改 → 解除警示）。
+  const cancelEditingRef = useRef(cancelEditing);
+  useEffect(() => {
+    cancelEditingRef.current = cancelEditing;
+  });
+  const handleCancelEditing = useCallback(() => {
+    cancelEditingRef.current();
+    setDirty(false);
+  }, []);
+
+  // submitAll 依赖 extraValues 等每次击键都会变的状态；桥的 onSave 经 ref 转发到
+  // 最新实现，悬浮球按下的永远是当前这版草稿的保存逻辑（含两次提交与失败提示）。
+  const submitAllRef = useRef(submitAll);
+  useEffect(() => {
+    submitAllRef.current = submitAll;
+  });
+  const handleBridgeSave = useCallback(() => {
+    void submitAllRef.current();
+  }, []);
+
+  // 悬浮球「保存资料/取消」桥（features/tou-tou/profileSaveBridge）：页面表单脏时挂上
+  // 控制块，悬浮球旁出现与顶部保存条等价的动作入口；保存/取消让 dirty 翻回 false 即
+  // 自动收起，卸载时也收起。effect 只依赖 dirty/saving——击键不会反复 setProfileSaveControl。
+  useEffect(() => {
+    if (!dirty) {
+      setProfileSaveControl(null);
+      return undefined;
+    }
+    setProfileSaveControl({
+      onSave: handleBridgeSave,
+      onCancel: handleCancelEditing,
+      saving: saving || extraSaving,
+    });
+    return () => setProfileSaveControl(null);
+  }, [dirty, saving, extraSaving, handleBridgeSave, handleCancelEditing]);
+
+  // 简历资料子树与网申资料的输入无关：用 useMemo 钉住元素引用（依赖里没有
+  // extraValues/extraDetails），网申资料打字时 React 直接跳过这棵最重的子树。
+  // 注意 ProfileWorkspaceTabs 两 tab 常驻挂载（destroyOnHidden=false），这里的
+  // 引用稳定化正是消除「另一 tab 无辜重渲」的那一环。
+  const resumeContent = useMemo(
+    () => (
+      <>
+        <ConfigProvider componentDisabled={false}>
+          <GeneralResumeSection onGenerate={openGenerateModal} onWrite={openWriteModal} />
+        </ConfigProvider>
+        <ProfileSectionStack
+          sectionOrder={sectionOrder}
+          sectionReorderMode={sectionReorderMode}
+          editing={editing}
+          saving={saving}
+          photo={photo}
+          dragOverSection={dragOverSection}
+          collapsedSections={collapsedSections}
+          onToggleCollapsed={toggleSection}
+          onPhotoSelect={handlePhotoSelect}
+          onHandlePointerDown={handleSectionPointerDownStable}
+          onMoveByOffset={moveSectionByOffsetStable}
+        />
+      </>
+    ),
+    [
+      collapsedSections,
+      dragOverSection,
+      editing,
+      handlePhotoSelect,
+      handleSectionPointerDownStable,
+      moveSectionByOffsetStable,
+      openGenerateModal,
+      openWriteModal,
+      photo,
+      saving,
+      sectionOrder,
+      sectionReorderMode,
+      toggleSection,
+    ],
+  );
+
+  // 网申资料子树的值就来自本页 state：打字时它本来就要重渲（输入值在这里），
+  // 这里 useMemo 的意义是把「其余原因引起的整页重渲」挡在这一子树之外。
+  const webFormContent = useMemo(
+    () => (
+      <WebFormProfileSection
+        editing={editing}
+        saving={saving || extraSaving}
+        values={extraValues}
+        details={extraDetails}
+        onChange={handleExtraChange}
+        onFieldLabelChange={handleExtraFieldLabelChange}
+        onFieldDelete={handleExtraFieldDelete}
+        repeatedGroups={extraRepeatedGroups}
+        onRepeatedGroupsChange={handleRepeatedGroupsChange}
+        onLoaded={handleExtraLoaded}
+      />
+    ),
+    [
+      editing,
+      extraDetails,
+      extraRepeatedGroups,
+      extraSaving,
+      extraValues,
+      handleExtraChange,
+      handleExtraFieldDelete,
+      handleExtraFieldLabelChange,
+      handleExtraLoaded,
+      handleRepeatedGroupsChange,
+      saving,
+    ],
+  );
+
   if (loading) return <Skeleton active paragraph={{ rows: 10 }} />;
 
   return (
@@ -233,13 +401,10 @@ export default function ProfilePage() {
         onToggleSectionReorderMode={toggleSectionReorderMode}
         onOpenProfileTextModal={openProfileTextModal}
         // 取消编辑即放弃未保存更改（表单回滚到已存值），警示随之解除。
-        onCancelEditing={() => {
-          cancelEditing();
-          setDirty(false);
-        }}
+        onCancelEditing={handleCancelEditing}
         onSubmitAll={submitAll}
         onToggleExpandAll={toggleExpandAll}
-        onStartEditing={() => setEditing(true)}
+        onStartEditing={handleStartEditing}
       />
 
       {/* 通用简历放在资料分区之前：它不属于资料表单，以前沉在页面最底下，资料一多就得滚到底才看得到。 */}
@@ -255,57 +420,8 @@ export default function ProfilePage() {
           <Input />
         </Form.Item>
         <ProfileWorkspaceTabs
-          resumeContent={
-            <>
-              <ConfigProvider componentDisabled={false}>
-                <GeneralResumeSection
-                  onGenerate={(title) => {
-                    setGeneralTitle(title);
-                    setGenerateOpen(true);
-                  }}
-                  onWrite={(title) => {
-                    setGeneralTitle(title);
-                    setWriteOpen(true);
-                  }}
-                />
-              </ConfigProvider>
-              <ProfileSectionStack
-                sectionOrder={sectionOrder}
-                sectionReorderMode={sectionReorderMode}
-                editing={editing}
-                saving={saving}
-                photo={photo}
-                dragOverSection={dragOverSection}
-                collapsedSections={collapsedSections}
-                onToggleCollapsed={toggleSection}
-                onPhotoSelect={(dataUrl) => {
-                  form.setFieldValue("photo", dataUrl);
-                  markDirty();
-                }}
-                onHandlePointerDown={handleSectionPointerDown}
-                onMoveByOffset={moveSectionByOffset}
-              />
-            </>
-          }
-          webFormContent={
-            <>
-              <WebFormProfileSection
-                editing={editing}
-                saving={saving || extraSaving}
-                values={extraValues}
-                details={extraDetails}
-                onChange={handleExtraChange}
-                onFieldLabelChange={handleExtraFieldLabelChange}
-                onFieldDelete={handleExtraFieldDelete}
-                repeatedGroups={extraRepeatedGroups}
-                onRepeatedGroupsChange={(groups) => {
-                  setExtraRepeatedGroups(groups);
-                  markDirty();
-                }}
-                onLoaded={handleExtraLoaded}
-              />
-            </>
-          }
+          resumeContent={resumeContent}
+          webFormContent={webFormContent}
           onActiveKeyChange={setActiveWorkspace}
         />
       </Form>

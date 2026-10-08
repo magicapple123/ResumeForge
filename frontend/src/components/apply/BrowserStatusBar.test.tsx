@@ -32,8 +32,11 @@ const apiState = vi.hoisted(() => ({
   setData: vi.fn(),
 }));
 
-vi.mock("../../hooks/useApi", () => ({
-  useApi: () => apiState,
+// useBrowserStatus 已自持 data/loading/error 状态并做了轮询响应浅比较（不再经过 useApi），
+// 这里改为在 hook 边界上注入同一形状的状态块，断言全部保持不变。
+vi.mock("../../hooks/useBrowserStatus", () => ({
+  useBrowserStatus: () => apiState,
+  BROWSER_STATUS_POLL_INTERVAL_MS: 1500,
 }));
 
 const RUNNING_WITH_ENTRY: BrowserStatus = {

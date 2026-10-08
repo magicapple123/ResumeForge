@@ -27,6 +27,9 @@ interface Props {
 export default function ExportButtons({ recordId, pdfDirectAvailable = true }: Props) {
   const { message, modal } = App.useApp();
   const [downloading, setDownloading] = useState(false);
+  // 主按钮的提示是说明文字，不是操作引导：点击后开始导出，提示就该收掉，
+  // 而不是等鼠标移开才消失。受控开关在点击时统一关闭。
+  const [pdfTipOpen, setPdfTipOpen] = useState(false);
 
   /**
    * 导出被"正文还有未完成标记"拦下时（409），问一次是否仍要导草稿。
@@ -135,21 +138,33 @@ export default function ExportButtons({ recordId, pdfDirectAvailable = true }: P
   return (
     <Space>
       {pdfDirectAvailable ? (
-        <Tooltip title="服务端直接生成，不用打开打印窗口。它用自己的一套排版（强调色跟随所选模板），版式与预览不逐像素一致；想要和预览完全一样，请用「浏览器打印 / 另存为 PDF」">
-          <Button
-            type="primary"
-            icon={<DownloadOutlined />}
-            loading={downloading}
-            onClick={() => void downloadPdf()}
-          >
-            下载 PDF
-          </Button>
+        <Tooltip
+          open={pdfTipOpen}
+          onOpenChange={setPdfTipOpen}
+          title="服务端直接生成，不用打开打印窗口。它用自己的一套排版（强调色跟随所选模板），版式与预览不逐像素一致；想要和预览完全一样，请用「浏览器打印 / 另存为 PDF」"
+        >
+          <span onClick={() => setPdfTipOpen(false)}>
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              loading={downloading}
+              onClick={() => void downloadPdf()}
+            >
+              下载 PDF
+            </Button>
+          </span>
         </Tooltip>
       ) : (
-        <Tooltip title="系统里没有找到中文字体，PDF 由浏览器打印生成">
-          <Button type="primary" icon={<PrinterOutlined />} onClick={() => void printPdf()}>
-            打印 / 另存为 PDF
-          </Button>
+        <Tooltip
+          open={pdfTipOpen}
+          onOpenChange={setPdfTipOpen}
+          title="系统里没有找到中文字体，PDF 由浏览器打印生成"
+        >
+          <span onClick={() => setPdfTipOpen(false)}>
+            <Button type="primary" icon={<PrinterOutlined />} onClick={() => void printPdf()}>
+              打印 / 另存为 PDF
+            </Button>
+          </span>
         </Tooltip>
       )}
       <Dropdown menu={{ items: menuItems, onClick: onMenuClick }}>

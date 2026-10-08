@@ -4,6 +4,7 @@ import { App, Button, Form, Input, Modal, Space, Tag, Typography, Upload } from 
 import type { UploadProps } from "antd";
 import { useEffect, useRef, useState } from "react";
 import FileDropZone from "../common/FileDropZone";
+import { HintedTextArea } from "../common/MaxLengthHint";
 
 const MAX_FILE_BYTES = 200_000;
 const MAX_FILE_NAME_CHARS = 255;
@@ -133,10 +134,9 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
             label="补充总结内容"
             extra="支持直接输入，最多 200,000 字符"
           >
-            <Input.TextArea
+            <HintedTextArea
               rows={5}
               maxLength={200_000}
-              showCount
               placeholder="可直接粘贴或输入项目总结、工作成果、校园经历细节等内容"
               onChange={(event) => {
                 if (event.target.value && !fileName) {

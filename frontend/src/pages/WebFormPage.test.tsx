@@ -315,4 +315,25 @@ describe("WebFormPage", () => {
     await waitFor(() => expect(apiMocks.startWebFormBrowser).toHaveBeenCalled());
     expect(await screen.findByRole("button", { name: "关闭智能逐项填表" })).toBeEnabled();
   });
+
+  it("表单草稿防抖落盘：手改值稍后写入 sessionStorage，而不是每击键一次", async () => {
+    // 持久化已改为 trailing 防抖（击键路径上不再每次全量 JSON.stringify 整份会话）；
+    // 这条钉住「手改值最终一定落盘」的语义——恢复逻辑读的就是这份草稿。
+    renderPage();
+    await waitFor(() => expect(screen.getByRole("button", { name: /读取当前表单/ })).toBeEnabled());
+
+    screen.getByRole("button", { name: /读取当前表单/ }).click();
+    await waitFor(() => expect(screen.getByLabelText("选择填入姓名")).toBeChecked());
+
+    fireEvent.change(screen.getByDisplayValue("张三"), { target: { value: "手改的姓名" } });
+
+    await waitFor(
+      () => {
+        const saved = window.sessionStorage.getItem(WEB_FORM_SESSION_STORAGE_KEY);
+        expect(saved).not.toBeNull();
+        expect(JSON.parse(saved as string).values["0"]).toBe("手改的姓名");
+      },
+      { timeout: 2000 },
+    );
+  });
 });

@@ -26,6 +26,7 @@ import type { Dayjs } from "dayjs";
 import { useEffect } from "react";
 import { createClaim, updateClaim } from "../../api/claims";
 import type { Claim, ClaimPayload, ClaimSource, SourceType } from "../../types";
+import { HintedTextArea } from "../common/MaxLengthHint";
 import {
   CLAIM_CATEGORIES,
   RESPONSIBILITY_LEVELS,
@@ -199,7 +200,13 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
       title={editing ? "编辑事实台账条目" : "新建事实台账条目"}
       onCancel={onClose}
       width={760}
+      centered
       destroyOnHidden
+      // 表单字段多（证据来源 + 面试细节两组），全展开很容易超出视口：限高让弹窗
+      // 在内部滚动、垂直居中，底部「保存」不会被推出屏幕外。
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       footer={
         <Space>
           <Button onClick={onClose}>取消</Button>
@@ -236,12 +243,9 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
           extra="照实写，不做包装。它是之后核对一切表述的基准。"
           rules={[{ required: true, message: "请写清原始事实" }]}
         >
-          <Input.TextArea
-            rows={3}
-            maxLength={8000}
-            showCount
-            placeholder="我实际做了什么、做到了什么程度"
-          />
+          {/* showCount 已移除（统一用 MaxLengthHint 模式）：只有顶到 8000 字上限时，
+              才在输入框下方出现一行小号红字提醒。 */}
+          <HintedTextArea rows={3} maxLength={8000} placeholder="我实际做了什么、做到了什么程度" />
         </Form.Item>
 
         <Form.Item
