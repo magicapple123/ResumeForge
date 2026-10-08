@@ -10,6 +10,7 @@
  */
 import { Checkbox, Input, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { memo, useMemo } from "react";
 import type { WebFormItemStatus, WebFormPreviewItem } from "../../types";
 
 const STATUS_META: Record<WebFormItemStatus, { color: string; label: string; hint: string }> = {
@@ -45,7 +46,12 @@ interface Props {
   onValueChange: (index: number, value: string) => void;
 }
 
-export default function WebFormPreviewTable({
+/**
+ * **React.memo 的收益点**：浏览器状态/实时会话的轮询会周期性重渲整页，
+ * memo 让本表在 props（items/selected/values/回调引用）都没变时整棵跳过。
+ * 击键时 values 引用必变、本表必然重渲（输入值就在表里），这是数据流本身决定的。
+ */
+function WebFormPreviewTableImpl({
   items,
   selected,
   values,
@@ -53,92 +59,97 @@ export default function WebFormPreviewTable({
   onToggle,
   onValueChange,
 }: Props) {
-  const columns: ColumnsType<WebFormPreviewItem> = [
-    {
-      title: "填入",
-      key: "pick",
-      width: 62,
-      render: (_, item) => (
-        <Checkbox
-          checked={selected.has(item.index)}
-          disabled={disabled}
-          onChange={() => onToggle(item.index)}
-          aria-label={`选择填入${item.field_label}`}
-        />
-      ),
-    },
-    {
-      title: "字段",
-      dataIndex: "field_label",
-      key: "field",
-      width: 130,
-      render: (_, item) => (
-        <div>
-          <Space size={4}>
-            <span>{item.field_label}</span>
-            {item.source === "ai" ? <Tag color="blue">AI 建议</Tag> : null}
-          </Space>
-          {item.control_label && item.control_label !== item.field_label ? (
-            <div>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                页面：{item.control_label}
-              </Typography.Text>
-            </div>
-          ) : null}
-        </div>
-      ),
-    },
-    {
-      title: "将填入的值",
-      key: "value",
-      render: (_, item) =>
-        item.options.length > 0 ? (
-          <Select
-            style={{ width: "100%" }}
-            value={values[item.index] ?? item.value}
+  // 列定义里的 render 闭包引用了 selected/values/disabled 与回调，按真实依赖缓存：
+  // 仅在上述引用变化时重建，避免「无关的父组件重渲也重建一遍 columns」。
+  const columns: ColumnsType<WebFormPreviewItem> = useMemo(
+    () => [
+      {
+        title: "填入",
+        key: "pick",
+        width: 62,
+        render: (_, item) => (
+          <Checkbox
+            checked={selected.has(item.index)}
             disabled={disabled}
-            onChange={(next: string) => onValueChange(item.index, next)}
-            options={item.options.map((option) => ({
-              value: option.value,
-              label: option.text || option.value,
-            }))}
-          />
-        ) : (
-          <Input
-            value={values[item.index] ?? item.value}
-            disabled={disabled}
-            onChange={(event) => onValueChange(item.index, event.target.value)}
+            onChange={() => onToggle(item.index)}
+            aria-label={`选择填入${item.field_label}`}
           />
         ),
-    },
-    {
-      title: "状态",
-      key: "status",
-      width: 130,
-      render: (_, item) => {
-        const meta = STATUS_META[item.status];
-        return (
-          <Tooltip title={meta.hint}>
-            <Tag color={meta.color}>{meta.label}</Tag>
-            {item.status === "conflict" && item.current_value ? (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  页面上：{item.current_value}
-                </Typography.Text>
-              </div>
-            ) : null}
-            {item.note && item.status !== "conflict" ? (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {item.note}
-                </Typography.Text>
-              </div>
-            ) : null}
-          </Tooltip>
-        );
       },
-    },
-  ];
+      {
+        title: "字段",
+        dataIndex: "field_label",
+        key: "field",
+        width: 130,
+        render: (_, item) => (
+          <div>
+            <Space size={4}>
+              <span>{item.field_label}</span>
+              {item.source === "ai" ? <Tag color="blue">AI 建议</Tag> : null}
+            </Space>
+            {item.control_label && item.control_label !== item.field_label ? (
+              <div>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  页面：{item.control_label}
+                </Typography.Text>
+              </div>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        title: "将填入的值",
+        key: "value",
+        render: (_, item) =>
+          item.options.length > 0 ? (
+            <Select
+              style={{ width: "100%" }}
+              value={values[item.index] ?? item.value}
+              disabled={disabled}
+              onChange={(next: string) => onValueChange(item.index, next)}
+              options={item.options.map((option) => ({
+                value: option.value,
+                label: option.text || option.value,
+              }))}
+            />
+          ) : (
+            <Input
+              value={values[item.index] ?? item.value}
+              disabled={disabled}
+              onChange={(event) => onValueChange(item.index, event.target.value)}
+            />
+          ),
+      },
+      {
+        title: "状态",
+        key: "status",
+        width: 130,
+        render: (_, item) => {
+          const meta = STATUS_META[item.status];
+          return (
+            <Tooltip title={meta.hint}>
+              <Tag color={meta.color}>{meta.label}</Tag>
+              {item.status === "conflict" && item.current_value ? (
+                <div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    页面上：{item.current_value}
+                  </Typography.Text>
+                </div>
+              ) : null}
+              {item.note && item.status !== "conflict" ? (
+                <div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {item.note}
+                  </Typography.Text>
+                </div>
+              ) : null}
+            </Tooltip>
+          );
+        },
+      },
+    ],
+    [disabled, onToggle, onValueChange, selected, values],
+  );
 
   return (
     <Table
@@ -155,3 +166,5 @@ export default function WebFormPreviewTable({
     />
   );
 }
+
+export default memo(WebFormPreviewTableImpl);

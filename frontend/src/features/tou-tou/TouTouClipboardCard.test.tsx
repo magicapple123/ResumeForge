@@ -60,6 +60,25 @@ describe("TouTouClipboardCard", () => {
     expect(stored[0].content).toBe("你好，我是一名前端工程师。");
   });
 
+  it("drops the antd counter and shows a red limit hint only at the hard cap", () => {
+    renderCard(<TouTouClipboardCard open onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /新增片段/ }));
+    // 未达上限：既没有 antd 的常驻计数（"0/4000"），也没有红色提示。
+    fireEvent.change(screen.getByPlaceholderText(/片段内容/), {
+      target: { value: "还没写满" },
+    });
+    expect(screen.queryByText(/\/4000/)).toBeNull();
+    expect(screen.queryByText("已达 4000 字上限")).toBeNull();
+
+    // 达到 maxLength 硬上限：出现一行小号红色提示（不再用 showCount 常驻计数）。
+    fireEvent.change(screen.getByPlaceholderText(/片段内容/), {
+      target: { value: "字".repeat(4000) },
+    });
+    expect(screen.getByText("已达 4000 字上限")).toBeInTheDocument();
+    expect(screen.queryByText(/\/4000/)).toBeNull();
+  });
+
   it("copies a snippet to the system clipboard", async () => {
     seedStorage([{ id: 1, title: "联系方式", content: "13800000000" }]);
     vi.mocked(copyText).mockResolvedValue(true);

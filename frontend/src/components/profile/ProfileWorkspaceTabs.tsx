@@ -1,4 +1,5 @@
 import { Tabs } from "antd";
+import { memo } from "react";
 import type { ReactNode } from "react";
 
 interface Props {
@@ -13,11 +14,13 @@ function isProfileWorkspaceKey(key: string): key is ProfileWorkspaceKey {
   return key === "resume" || key === "web-form";
 }
 
-export default function ProfileWorkspaceTabs({
-  resumeContent,
-  webFormContent,
-  onActiveKeyChange,
-}: Props) {
+/**
+ * **memo**：两个 tab 常驻挂载（destroyOnHidden=false）。页面因网申资料击键重渲时，
+ * 只要传进来的子树元素引用不变（ProfilePage 侧用 useMemo 钉住了），整个 Tabs
+ * 连同其中所有内容子树一起跳过重渲。activeKey 由 Tabs 自身管理（非受控），
+ * 切 tab 的更新不经过这里，memo 不会挡住它。
+ */
+function ProfileWorkspaceTabsImpl({ resumeContent, webFormContent, onActiveKeyChange }: Props) {
   return (
     <Tabs
       className="profile-workspace-tabs"
@@ -41,3 +44,5 @@ export default function ProfileWorkspaceTabs({
     />
   );
 }
+
+export default memo(ProfileWorkspaceTabsImpl);

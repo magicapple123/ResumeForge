@@ -5,6 +5,7 @@
 import { DatePicker, Form, Input, Select } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
+import { HintedTextArea } from "../../common/MaxLengthHint";
 import { JOB_TYPE_OPTIONS, STATUS_OPTIONS } from "./jobFormOptions";
 
 export default function JobFormFields() {
@@ -54,10 +55,9 @@ export default function JobFormFields() {
         label="职位描述（JD）"
         rules={[{ required: true, message: "请填写职位描述" }]}
       >
-        <Input.TextArea
+        <HintedTextArea
           rows={7}
           maxLength={20000}
-          showCount
           placeholder="粘贴完整 JD，生成简历时 AI 会据此定制内容"
         />
       </Form.Item>
@@ -71,10 +71,9 @@ export default function JobFormFields() {
         />
       </Form.Item>
       <Form.Item name="note" label="备注（选填）">
-        <Input.TextArea
+        <HintedTextArea
           rows={3}
           maxLength={2000}
-          showCount
           placeholder="记录投递进展、内推联系人、面试安排等；保存时会自动补一行「来源：…」"
         />
       </Form.Item>

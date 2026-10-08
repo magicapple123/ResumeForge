@@ -11,9 +11,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResumeDetail, ResumeLayout } from "../../types";
-import ResumeDetailPreview from "./ResumeDetailPreview";
-
-// 预览是真的 iframe + 量高，与本用例无关，替掉以免拖慢/拖挂。
+import ResumeDetailPreview from "./ResumeDetailPreview"; // 预览是真的 iframe + 量高，与本用例无关，替掉以免拖慢/拖挂。
 // 预览本身由 ResumePreview.test.tsx 覆盖；这里把它替成一个能"点中某一栏"的桩，
 // 用来验证**调用点**的接线：点中的那一栏应打开"只编辑这一部分"。
 vi.mock("../ResumePreview", () => ({
@@ -190,6 +188,31 @@ describe("生成说明与警告分级", () => {
     const box = await screen.findByPlaceholderText(/留空则整体重新生成/);
     expect((box as HTMLTextAreaElement).value).toContain("Amazon ESG");
     expect((box as HTMLTextAreaElement).value).toContain("项目经历");
+  });
+
+  it("「打开手动调整」打开的编辑器盖在宿主弹窗之上（zIndex 不低于全局弹层基准）", async () => {
+    renderWith({
+      coverage_notes: [
+        {
+          section: "projects",
+          section_label: "项目经历",
+          names: ["Amazon ESG"],
+          filtered: ["Amazon ESG"],
+          model_omitted: [],
+          total: 1,
+        },
+      ],
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "打开手动调整" }));
+
+    // 回归：编辑器弹窗曾写死 zIndex=1100，而全局主题把 zIndexPopupBase 提到了
+    // 3100（宿主 Modal 都在 3100），编辑器整张被宿主压住——看起来就是"卡片被挡"。
+    // 这里钉住：编辑器节点存在，且 zIndex（在 .ant-modal-wrap 上）高于宿主弹窗。
+    await screen.findByText("手动调整简历内容");
+    const editorWrap = document.querySelector<HTMLElement>(".ant-modal-wrap");
+    expect(editorWrap).not.toBeNull();
+    expect(Number(editorWrap!.style.zIndex)).toBeGreaterThanOrEqual(3100);
   });
 
   it("routes legacy plain-text coverage warnings away from the fabrication group", () => {

@@ -1,0 +1,9 @@
+/* 首页「近期提醒」启动弹窗。 */
+
+/* 打开瞬间 antd 会把焦点程序化地放到右上角关闭按钮上，:focus-visible 会在鼠标
+   操作下也画出边框（键盘用户不受影响：Esc 仍可关闭、Tab 仍能移动焦点）。
+   这里只对鼠标路径去边框：outline 在 :focus-visible 下才出现，说明是程序聚焦，
+   不是用户 Tab 上去的，去掉不损失可访问性。 */
+.rf-reminder-modal .ant-modal-close:focus-visible {
+  outline: none;
+}

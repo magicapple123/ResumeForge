@@ -183,15 +183,50 @@
 }
 
 .track-card {
+  position: relative;
   padding: 14px 16px;
   background: var(--rf-surface, #fff);
   border: 1px solid var(--rf-border, #f0f0f0);
   border-radius: 8px;
 }
 
-/* 进行中的记录左侧加一条竖线：一屏十几条时，扫一眼就知道哪些还要跟。 */
-.track-card.is-active {
-  border-left: 3px solid #1677ff;
+/* 阶段色与漏斗共用一套（见 .tracker-funnel-step 的定义），0-5 一一对应：
+   已投递 / 筛选中 / 测评·笔试 / 面试 / Offer / 第 6 阶段。 */
+.track-card[data-stage-index="0"] {
+  --rf-stage-color: #8c8c8c;
+}
+
+.track-card[data-stage-index="1"] {
+  --rf-stage-color: #5b8ff9;
+}
+
+.track-card[data-stage-index="2"] {
+  --rf-stage-color: #61ddaa;
+}
+
+.track-card[data-stage-index="3"] {
+  --rf-stage-color: #f6bd16;
+}
+
+.track-card[data-stage-index="4"] {
+  --rf-stage-color: #7262fd;
+}
+
+.track-card[data-stage-index="5"] {
+  --rf-stage-color: #f08bb4;
+}
+
+/* 进行中的记录左侧加一条内嵌圆角 pill（用阶段色）：一屏十几条时，
+   扫一眼就知道哪些还要跟。内嵌而不占 border，不再像直角粗竖条那样顶着卡片边缘。 */
+.track-card.is-active::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 12px;
+  bottom: 12px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--rf-stage-color, #1677ff);
 }
 
 .track-card-head {

@@ -103,6 +103,22 @@ describe("useTouTouCardDrag", () => {
     expect(style).toMatchObject({ left: 84, top: 300 });
   });
 
+  it("snaps next to the orb using the card's measured size, not the fallback", () => {
+    stubOrbAt(900, 500, "right");
+    render(<Harness fallbackWidth={760} fallbackHeight={680} />);
+    // 模拟卡片真实渲染尺寸（360×240，如剪贴板卡）：jsdom 的 rect 全 0，这里手动钉死。
+    const card = document.querySelector<HTMLElement>(".tt-assistant-card")!;
+    card.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 360, height: 240, right: 360, bottom: 240 }) as DOMRect;
+
+    fireEvent.click(screenByPlace());
+
+    const style = readStyle();
+    // 兜底 680 的高度会把 top 算成 500 + 64 - 680 = -116，被夹到 8（卡片跑到屏幕
+    // 左上角的老 bug）；实测尺寸下：left = 900 - 360 - 12 = 528，top = 500 + 64 - 240 = 324。
+    expect(style).toMatchObject({ left: 528, top: 324 });
+  });
+
   it("re-computes the position on every open instead of restoring the last drag", () => {
     stubOrbAt(900, 500, "right");
     const first = render(<Harness />);

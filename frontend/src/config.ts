@@ -1,7 +1,14 @@
 /** 前端常量配置：品牌信息与展示类配置集中在此。 */
 
+// 版本号的单源是根 package.json 的 version 字段（CI 有一致性核对把它与后端
+// config.py 的 app_version 钉在一起），这里直接读它，前端展示永远不与单源脱节。
+import pkg from "../package.json";
+
 export const APP_NAME = "简历通";
 export const APP_NAME_EN = "ResumeForge";
+
+/** 应用版本号（页头品牌区展示，如 "0.17.0"）。 */
+export const APP_VERSION: string = pkg.version;
 
 /** 公开仓库地址可被部署环境覆盖；默认值用于开源发行版的导航入口。 */
 export const GITHUB_REPO =

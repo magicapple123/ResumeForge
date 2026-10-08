@@ -33,6 +33,16 @@ afterEach(() => {
 });
 
 describe("NavigationSettingsCard", () => {
+  it("按「核心入口 / 我的空间」分组渲染，两块的入口都带开关", async () => {
+    renderCard();
+
+    expect(await screen.findByText("核心入口")).toBeInTheDocument();
+    expect(screen.getByText("我的空间")).toBeInTheDocument();
+    // 两组里的入口各自渲染了开关（核心入口如首页，我的空间如求职统计）。
+    expect(screen.getByRole("switch", { name: "首页导航入口" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "求职统计导航入口" })).toBeInTheDocument();
+  });
+
   it("允许隐藏可选模块，但核心入口始终固定显示", async () => {
     renderCard();
 

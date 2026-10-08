@@ -3,6 +3,7 @@
  * 状态与提交逻辑（confirmNote）留在 ResumesPage，经 props 回传。
  */
 import { Input, Modal } from "antd";
+import { MaxLengthHint } from "../../components/common/MaxLengthHint";
 
 interface Props {
   open: boolean;
@@ -33,11 +34,11 @@ export default function ResumeNoteModal({
       <Input.TextArea
         value={value}
         maxLength={2000}
-        showCount
         rows={4}
         placeholder="备注会显示在简历列表里（选填）"
         onChange={(event) => onChange(event.target.value)}
       />
+      <MaxLengthHint value={value} maxLength={2000} />
     </Modal>
   );
 }

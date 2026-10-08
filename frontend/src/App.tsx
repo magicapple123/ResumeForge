@@ -24,7 +24,7 @@ import {
 } from "./components/navigation/navigationConfig";
 import TaskCompletionNotifier from "./components/TaskCompletionNotifier";
 import UpdateCheckButton from "./components/UpdateCheckButton";
-import { APP_NAME, GITHUB_REPO } from "./config";
+import { APP_NAME, APP_VERSION, GITHUB_REPO } from "./config";
 import TouTouAssistantCard from "./features/tou-tou/TouTouAssistantCard";
 import TouTouClipboardCard from "./features/tou-tou/TouTouClipboardCard";
 import TouTouOrb from "./features/tou-tou/TouTouOrb";
@@ -273,7 +273,14 @@ function MainLayout() {
                 <img className="app-brand-image" src={brandIcon} alt="" />
               </button>
               <span className="app-brand-copy">
-                <span className="app-brand-name">{APP_NAME}</span>
+                <span className="app-brand-name">
+                  {APP_NAME}
+                  {/* 版本号低调跟在应用名旁：次要文字色 + 小字号，不抢视觉；
+                    hover 有 title 说明。值来自 package.json（版本单源）。 */}
+                  <span className="app-brand-version" title="当前版本">
+                    v{APP_VERSION}
+                  </span>
+                </span>
                 <span className="app-brand-caption">AI 简历工作台</span>
               </span>
             </div>

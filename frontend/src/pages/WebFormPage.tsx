@@ -21,7 +21,7 @@
  * 勾选、手改值和填充结果一起恢复。这样既不把临时状态塞进 URL，也不会在正常切页时丢失进度。
  */
 import { Alert, App, Card, Space } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDiagnostics } from "../api/system";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
 import {
@@ -72,6 +72,9 @@ import {
   type WebFormSnapshot,
   type WebFormUrlHistory,
 } from "../types";
+
+/** 会话草稿的持久化防抖间隔：击键停止约半秒后才写 sessionStorage（trailing）。 */
+const WEB_FORM_SESSION_PERSIST_DEBOUNCE_MS = 450;
 
 export default function WebFormPage() {
   const { message } = App.useApp();
@@ -163,12 +166,31 @@ export default function WebFormPage() {
   }, []);
 
   // 浏览器状态以接口探测为准，表单草稿与当前填写进度留在当前应用标签页。
+  //
+  // **持久化防抖**：values/selected 任一变化就把整份会话（含 snapshot 与 preview）
+  // JSON.stringify 一遍——每击键一次全量序列化是这一页输入卡顿的主因。改成 trailing
+  // 防抖后语义不变：恢复逻辑仍读 sessionStorage（webFormSessionStorage.test.ts 钉着），
+  // 只是「落盘」最多晚约半拍；pagehide/beforeunload/卸载时立即 flush，离开页面绝不丢。
+  const pendingSessionRef = useRef<WebFormSessionState | null>(null);
+  const persistTimerRef = useRef(0);
+  const flushPendingSession = useCallback(() => {
+    window.clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = 0;
+    if (pendingSessionRef.current) {
+      persistWebFormSession(pendingSessionRef.current);
+      pendingSessionRef.current = null;
+    }
+  }, [persistWebFormSession]);
+
   useEffect(() => {
     if (!sessionActive && !snapshot && !preview && !result) {
+      // 结束本次填写：丢弃挂起的草稿并立即清掉 sessionStorage（同步语义保持不变）。
+      window.clearTimeout(persistTimerRef.current);
+      pendingSessionRef.current = null;
       clearWebFormSession();
       return;
     }
-    const state: WebFormSessionState = {
+    pendingSessionRef.current = {
       sessionActive,
       snapshot,
       preview,
@@ -178,9 +200,15 @@ export default function WebFormPage() {
       aiEnabled,
       liveOptOut,
     };
-    persistWebFormSession(state);
+    window.clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = window.setTimeout(
+      flushPendingSession,
+      WEB_FORM_SESSION_PERSIST_DEBOUNCE_MS,
+    );
   }, [
     aiEnabled,
+    clearWebFormSession,
+    flushPendingSession,
     liveOptOut,
     preview,
     result,
@@ -188,9 +216,20 @@ export default function WebFormPage() {
     sessionActive,
     snapshot,
     values,
-    clearWebFormSession,
-    persistWebFormSession,
   ]);
+
+  // 页面被隐藏/关闭时浏览器可能随时回收标签页：这一刻必须把挂起的草稿立刻落盘。
+  // SPA 内路由跳转会卸载本页，卸载即 flush——用户从「我的资料」回来时草稿不丢。
+  useEffect(() => {
+    const flush = () => flushPendingSession();
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      flushPendingSession();
+    };
+  }, [flushPendingSession]);
 
   const handleStart = useCallback(async () => {
     setBusy("start");

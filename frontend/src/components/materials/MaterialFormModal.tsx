@@ -163,8 +163,13 @@ export default function MaterialFormModal({
       title={material ? `编辑资料：${material.title || material.category}` : "放入一条新资料"}
       open={open}
       width={720}
+      centered
       onCancel={onCancel}
       mask={{ closable: !submitting }}
+      // 正文与附件清单一多就超出视口：限高让弹窗在卡片内部滚动，底部按钮始终可见。
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       footer={
         <Space>
           <Button onClick={onCancel} disabled={submitting}>
@@ -198,8 +203,10 @@ export default function MaterialFormModal({
             showSearch
             options={options.map((item) => ({ value: item, label: item }))}
             // 允许输入新分类：资料类型很个人化，固定的那几个只能算起点。
+            // 不加 maxCount={1}：antd 在已选数达到 maxCount 时会把下拉里所有
+            // 未选中项置灰禁用，导致编辑时改选不了其他分类；onChange 只取
+            // 最后一位，多选的一瞬间也会收敛回单个分类。
             mode="tags"
-            maxCount={1}
             onChange={(values: string[]) => setCategory(values[values.length - 1] ?? "其他")}
             placeholder="选择或输入一个新分类"
           />

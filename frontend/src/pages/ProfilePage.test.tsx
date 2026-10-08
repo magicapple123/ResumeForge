@@ -5,6 +5,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SECTION_ORDER } from "../components/profile/ProfileSectionConfig";
+import {
+  getProfileSaveControl,
+  setProfileSaveControl,
+} from "../features/tou-tou/profileSaveBridge";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import type { Profile } from "../types";
 import ProfilePage from "./ProfilePage";
@@ -121,6 +125,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  // 保存桥是模块级单例：正常路径下卸载即置 null，这里再兜一道，避免脏态串进下一条用例。
+  setProfileSaveControl(null);
 });
 
 describe("ProfilePage 通用简历", () => {
@@ -451,7 +457,7 @@ describe("ProfilePage 「网申资料」", () => {
           group: "自定义",
           kind: "text",
           sensitive: false,
-          matchable: false,
+          matchable: true,
         },
       ],
       groups: ["自定义"],
@@ -501,7 +507,7 @@ describe("ProfilePage 「网申资料」", () => {
           group: "自定义",
           kind: "text",
           sensitive: false,
-          matchable: false,
+          matchable: true,
         },
       ],
       groups: ["自定义"],
@@ -594,5 +600,21 @@ describe("ProfilePage 「网申资料」", () => {
     // 后端会丢掉它不认识的 section_order 键，混进排序栈会让分区顺序莫名其妙地变。
     // 所以它必须留在 DEFAULT_SECTION_ORDER 与 ProfileSectionKey 的排序白名单之外。
     expect(DEFAULT_SECTION_ORDER).not.toContain("web_form_profile");
+  });
+
+  it("编辑置脏时挂上悬浮球保存桥，保存成功后收起", async () => {
+    // 桥（features/tou-tou/profileSaveBridge）是投投悬浮球「保存资料/取消」的页面侧接线：
+    // 页面表单脏时挂上控制块（onSave/onCancel 复用顶部保存条的同一套逻辑），
+    // 两次保存都成功、dirty 翻回 false 后自动收起。
+    renderPage();
+    await openWebFormTab();
+    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.change(await screen.findByLabelText("英语六级分数"), { target: { value: "512" } });
+
+    await waitFor(() => expect(getProfileSaveControl()).not.toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: /保存全部资料/ }));
+    await waitFor(() => expect(getProfileSaveControl()).toBeNull());
+    expect(apiMocks.updateWebFormExtraProfile).toHaveBeenCalled();
   });
 });

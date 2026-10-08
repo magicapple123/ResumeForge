@@ -1,0 +1,53 @@
+/* 「界面与导航」设置卡：按组分块、组内两列的紧凑布局。 */
+
+.navigation-settings-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.navigation-settings-group-title {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+/* 组内两列网格；窄屏回落单列。 */
+.navigation-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+}
+
+@media (max-width: 640px) {
+  .navigation-settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.navigation-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rf-border, #f0f0f0);
+}
+
+/* 开关靠右，名称与图标靠左。 */
+.navigation-settings-item > .ant-switch {
+  margin-left: auto;
+}
+
+.navigation-settings-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.navigation-settings-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

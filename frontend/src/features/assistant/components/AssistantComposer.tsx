@@ -257,7 +257,7 @@ export default function AssistantComposer({
             >
               {/*
                 compact 卡片里用短文案 + 限宽 + 显式抬层：
-                - 卡片 z-index 2990 高于 antd Tooltip 默认的 1070，不抬层会被卡片盖住；
+                - 卡片 z-index 3300 高于 antd Tooltip 默认的 1070，不抬层会被卡片盖住；
                 - maxWidth 240 让长文案换行，贴近视口边缘时 autoAdjustOverflow 翻转，
                   Tooltip 不会水平溢出；保持挂 body（挂进卡片会被 overflow: hidden 裁掉）。
               */}

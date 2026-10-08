@@ -14,7 +14,7 @@ import type { ReactNode } from "react";
 
 /** 内层可交互元素：点它们时卡片自身不响应。 */
 export const INTERACTIVE_SELECTOR =
-  'button, a, input, textarea, select, summary, [role="button"], [role="link"], [contenteditable="true"]';
+  'button, a, input, textarea, select, summary, [role="button"], [role="link"], [role="menuitem"], [contenteditable="true"]';
 
 /**
  * 这次点击是不是来自卡片里的按钮/链接？

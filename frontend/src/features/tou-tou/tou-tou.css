@@ -14,11 +14,12 @@
   right: var(--tt-edge);
   bottom: var(--tt-edge);
   /*
-   * 3000：高于 .app-exited-overlay（2000）、antd v5 Modal/Drawer（1000+）与
-   * .webform-target-floating-balls（1000）——任何覆盖层之上都能点到投投；
-   * 浏览器按命中测试派发点击，遮罩不会吞掉球的点击。
+   * 3400：投投整族的顶层地标。高于 antd 弹层基准 zIndexPopupBase（3100，main.tsx）——
+   * Modal/Drawer 弹出时球仍可点；同族梯度：剪贴板卡 3200 < 助手卡 3300 < 球 3400
+   * < 小贴士/Tooltip 3450（资料保存卡 3250）。浏览器按命中测试派发点击，遮罩不会
+   * 吞掉球的点击。
    */
-  z-index: 3000;
+  z-index: 3400;
   width: var(--tt-size);
   height: var(--tt-size);
   pointer-events: none;
@@ -328,7 +329,12 @@
 .tt-tip {
   position: absolute;
   bottom: 6px;
-  z-index: 2;
+  /*
+   * 3450：投投族最高层地标。本壳（.tt-shell）是 isolation: isolate 的层叠上下文，
+   * 该值只在壳内生效——用意是压住资料保存卡（.tt-save-card 的 3250），并作为
+   * 「小贴士永远在球族最上面」的文档性地标（悬浮球 Tooltip 的 overlayStyle 同取 3450）。
+   */
+  z-index: 3450;
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -359,6 +365,36 @@
 }
 
 .tt-tip-close:focus-visible {
+  outline: 2px solid #91caff;
+  outline-offset: 2px;
+}
+
+/*
+ * 资料保存卡：简历资料编辑页表单变脏时（profileSaveBridge 有 control），浮在球
+ * 正上方的「保存资料 / 取消」小卡。白底圆角，与小贴士同一套视觉语言。
+ */
+.tt-save-card {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  /*
+   * 3250：介于剪贴板卡（3200）与助手卡（3300）之间的层级地标。本卡是
+   * .tt-shell（3400，isolation: isolate）的子元素，实际排序只发生在壳内——
+   * 壳整体高于 antd 弹层基准 3100，所以有 Modal 弹出时保存卡也照常可点。
+   */
+  z-index: 3250;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #d7e7f7;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(42 83 125 / 16%);
+  /* 壳本身 pointer-events: none（拖拽命中只留给球），卡片要自己接住点击。 */
+  pointer-events: auto;
+}
+
+.tt-save-card:focus-within {
   outline: 2px solid #91caff;
   outline-offset: 2px;
 }

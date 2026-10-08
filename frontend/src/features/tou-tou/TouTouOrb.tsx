@@ -1,6 +1,7 @@
 /** 投投悬浮球：全局助手入口、拖拽吸附、贴边收纳与低打扰小贴士。 */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Button, Tooltip } from "antd";
 import { useTouTou } from "./touTouContext";
 import { TOU_TOU_TIPS } from "./touTouTips";
 import type { TouTouStatus } from "./touTouTypes";
@@ -8,6 +9,7 @@ import TouTouTip from "./TouTouTip";
 import { TOU_TOU_FACE_SOURCES, faceKeyFor } from "./touTouFaces";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 import { useTouTouOrbDrag } from "./useTouTouOrbDrag";
+import { getProfileSaveControl, subscribeProfileSaveControl } from "./profileSaveBridge";
 import "./tou-tou.css";
 import "./tou-tou-accessibility.css";
 
@@ -233,6 +235,15 @@ export default function TouTouOrb({
   });
 
   /**
+   * 简历资料编辑页的「保存资料 / 取消」控制块（profileSaveBridge）。
+   * 页面在表单变脏时 set，保存/取消后清空；有值才在球正上方渲染小卡。
+   */
+  const profileSaveControl = useSyncExternalStore(
+    subscribeProfileSaveControl,
+    getProfileSaveControl,
+  );
+
+  /**
    * 发呆时偶尔眨一下眼。
    *
    * 眨眼目前**借用睡着的闭眼素材**闪一下（130ms，人眼读作眨眼），有了专门的眨眼
@@ -399,43 +410,79 @@ export default function TouTouOrb({
       {tipVisible ? (
         <TouTouTip text={TOU_TOU_TIPS[tipIndex]} onClose={() => setTipVisible(false)} />
       ) : null}
+      {profileSaveControl ? (
+        <div className="tt-save-card" role="group" aria-label="保存简历资料">
+          <Button
+            type="primary"
+            size="small"
+            loading={profileSaveControl.saving === true}
+            onClick={(event) => {
+              // 卡片是球的兄弟节点，事件本就不会落进球的单击/双击判定；
+              // 这里按契约显式拦截，防止未来结构调整后误触发球的开卡逻辑。
+              event.stopPropagation();
+              profileSaveControl.onSave();
+            }}
+          >
+            保存资料
+          </Button>
+          <Button
+            size="small"
+            onClick={(event) => {
+              event.stopPropagation();
+              profileSaveControl.onCancel();
+            }}
+          >
+            取消
+          </Button>
+        </div>
+      ) : null}
       {visualStatus === "sleep" ? (
         // 收纳成细边之后，闭着的眼睛太小了；一个飘着的 Zzz 才看得出"它睡着了"。
         <span className="tt-zzz" aria-hidden="true">
           Zzz
         </span>
       ) : null}
-      <button
-        ref={buttonRef}
-        type="button"
-        className={buttonClasses}
-        aria-label="打开求职助手"
-        title="打开求职助手"
-        onPointerDown={handlePointerDown}
-        onClick={() => handleActivate()}
-        onKeyDown={handleKeyDown}
-        onFocus={wake}
-        onMouseEnter={wake}
-        onMouseMove={handlePetStroke}
+      <Tooltip
+        title="单击：打开求职助手；双击：打开投递剪贴板"
+        placement="top"
+        /*
+         * 球（.tt-shell）已提到 3400，antd Tooltip 默认的 1070 会被盖住；
+         * 抬到与 .tt-tip 同一地标 3450（见 tou-tou.css）。默认的 hover 事件
+         * 不影响 280ms 的单击/双击判定。
+         */
+        overlayStyle={{ zIndex: 3450 }}
       >
-        <span className="tt-hide">
-          <span className="tt-scale">
-            <span className="tt-float">
-              <span className="tt-breathe">
-                <span className="tt-turn">
-                  {/* 只渲染当前表情这一张：6 张常驻 img 全量进首屏（约 1.4MB）太贵，
-                      换 src 即换脸，无需淡入淡出。 */}
-                  <img
-                    className="tt-face is-active"
-                    src={TOU_TOU_FACE_SOURCES[activeFace]}
-                    alt=""
-                  />
+        <button
+          ref={buttonRef}
+          type="button"
+          className={buttonClasses}
+          aria-label="打开求职助手"
+          onPointerDown={handlePointerDown}
+          onClick={() => handleActivate()}
+          onKeyDown={handleKeyDown}
+          onFocus={wake}
+          onMouseEnter={wake}
+          onMouseMove={handlePetStroke}
+        >
+          <span className="tt-hide">
+            <span className="tt-scale">
+              <span className="tt-float">
+                <span className="tt-breathe">
+                  <span className="tt-turn">
+                    {/* 只渲染当前表情这一张：6 张常驻 img 全量进首屏（约 1.4MB）太贵，
+                        换 src 即换脸，无需淡入淡出。 */}
+                    <img
+                      className="tt-face is-active"
+                      src={TOU_TOU_FACE_SOURCES[activeFace]}
+                      alt=""
+                    />
+                  </span>
                 </span>
               </span>
             </span>
           </span>
-        </span>
-      </button>
+        </button>
+      </Tooltip>
     </div>
   );
 }

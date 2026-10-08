@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { createTrack, getTrack, updateTrack } from "../../api/tracker";
 import type { Track, TrackPayload, TrackStatus } from "../../types";
 import { TRACK_STATUSES, TRACK_STATUS_LABELS, emptyTrack } from "../../types";
+import { HintedTextArea } from "../common/MaxLengthHint";
 
 const STATUS_OPTIONS = TRACK_STATUSES.map((value) => ({
   value,
@@ -141,7 +142,12 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
       title={editing ? "编辑进度" : "添加进度"}
       onCancel={onClose}
       width={680}
+      centered
       destroyOnHidden
+      // 日期字段带说明文字，整体高度容易超出视口：限高让弹窗在内部滚动。
+      styles={{
+        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+      }}
       footer={
         <Space>
           <Button onClick={onClose}>取消</Button>
@@ -236,8 +242,10 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
           </Form.Item>
         </div>
 
+        {/* showCount 已移除（统一用 MaxLengthHint 模式）：只有顶到 4000 字上限时，
+            才在输入框下方出现一行小号红字提醒。 */}
         <Form.Item name="note" label="备注">
-          <Input.TextArea rows={3} maxLength={4000} showCount />
+          <HintedTextArea rows={3} maxLength={4000} />
         </Form.Item>
       </Form>
     </Modal>

@@ -201,9 +201,17 @@ export function useTouTouCardDrag(options: UseTouTouCardDragOptions = {}): CardD
     };
   }, [freePosition]);
 
-  /** 打开时摆到球旁边：位置按球当下位置现算，上一次拖到哪里的记录不再使用。 */
+  /**
+   * 打开时摆到球旁边：位置按球当下位置与**卡片实测尺寸**现算，上一次拖到哪里的
+   * 记录不再使用。
+   *
+   * 尺寸必须现量：兜底值（如剪贴板卡的 360×600）比真实卡片高/矮时，贴边计算会被
+   * 系统性推偏，负 top 被 `clampCardPosition` 夹到 (8, 8)＝屏幕左上角（用户实测的
+   * 「剪贴板跑到了左上角」就是这个原因）。
+   */
   const placeNextToOrb = useCallback(() => {
-    setFreePosition(positionNextToOrb(readOrbGeometry(), optionsRef.current.fallback));
+    const metrics = readCardMetrics(findCard(), optionsRef.current.fallback);
+    setFreePosition(positionNextToOrb(readOrbGeometry(), metrics));
   }, []);
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {

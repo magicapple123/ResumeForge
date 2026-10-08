@@ -16,6 +16,7 @@ import {
   Typography,
 } from "antd";
 import { RowActions } from "../common/RowActions";
+import { MaxLengthHint } from "../common/MaxLengthHint";
 import type { LLMConfigRecord } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { CUSTOM_PRESET_LABEL, matchingPreset } from "./SettingsConfig";
@@ -179,12 +180,12 @@ export default function LLMConfigRecordsCard({
             <Input
               autoFocus
               maxLength={64}
-              showCount
               value={recordName}
               placeholder="如：DeepSeek 校招、Ollama 本地模型"
               onChange={(event) => onRecordNameChange(event.target.value)}
               onPressEnter={onSaveRecord}
             />
+            <MaxLengthHint value={recordName} maxLength={64} />
           </Form.Item>
           <Typography.Text type="secondary">
             只保存当前已保存的配置，不会保存未点击“保存配置”的编辑内容。

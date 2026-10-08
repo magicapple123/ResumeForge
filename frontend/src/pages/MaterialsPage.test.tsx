@@ -71,4 +71,21 @@ describe("MaterialsPage", () => {
     expect(screen.getByText("入职时要带原件")).toBeInTheDocument();
     expect(screen.getAllByText(/2024 年通过考试/).length).toBeGreaterThan(0);
   });
+
+  it("点「编辑」菜单项只打开编辑弹窗，不再连带打开详情", async () => {
+    renderPage();
+    await screen.findByText("护士执业资格证");
+
+    // 行操作菜单渲染在 portal 里，点击沿 React 树冒泡回卡片的 DetailTrigger——
+    // 「编辑」曾因此把编辑弹窗和详情抽屉一起弹出来。菜单项本身应被识别为内层
+    // 交互元素，点击后只有编辑弹窗。
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("编辑"));
+
+    expect(
+      await screen.findByPlaceholderText("如：CET-6 成绩单 / 个人作品集链接"),
+    ).toBeInTheDocument();
+    // 详情抽屉没有被打开（详情里会有独立的「正文」区块，编辑表单里只有「正文内容」）。
+    expect(screen.queryByText("正文")).toBeNull();
+  });
 });

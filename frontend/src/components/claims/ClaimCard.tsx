@@ -7,6 +7,7 @@
  */
 import { DeleteOutlined, EditOutlined, MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Space, Tag, Tooltip, Typography } from "antd";
+import { useState } from "react";
 import type { Claim, VerificationStatus } from "../../types";
 import { SOURCE_TYPE_LABELS, hasPlaceholder } from "../../types";
 import { useRowActionMenu } from "../common/rowActionMenu";
@@ -54,6 +55,8 @@ function Wording({ text }: { text: string }) {
 
 export default function ClaimCard({ claim, onEdit, onDelete, onConfirm }: Props) {
   const buildMenu = useRowActionMenu();
+  // 「标记已确认」点击后确认流程就开始了，提示不该继续挂在按钮上（受控开关）。
+  const [confirmTipOpen, setConfirmTipOpen] = useState(false);
   const interview = claim.interview_details;
   const hasInterviewDetail =
     Boolean(interview?.result) ||
@@ -83,10 +86,16 @@ export default function ClaimCard({ claim, onEdit, onDelete, onConfirm }: Props)
         </Space>
         <Space size={4}>
           {claim.verification_status !== "已确认" && (
-            <Tooltip title="确认后这条才会作为事实进入简历生成">
-              <Button size="small" type="link" onClick={onConfirm}>
-                标记已确认
-              </Button>
+            <Tooltip
+              open={confirmTipOpen}
+              onOpenChange={setConfirmTipOpen}
+              title="确认后这条才会作为事实进入简历生成"
+            >
+              <span onClick={() => setConfirmTipOpen(false)}>
+                <Button size="small" type="link" onClick={onConfirm}>
+                  标记已确认
+                </Button>
+              </span>
             </Tooltip>
           )}
           <Dropdown

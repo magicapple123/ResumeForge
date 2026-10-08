@@ -4,7 +4,7 @@
  * 删除走 RowActions 的「更多」菜单 + 二次确认（modal.confirm），编辑/删除用图标按钮而非裸文字。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Knowledge } from "../types";
@@ -135,6 +135,10 @@ describe("KnowledgePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
     fireEvent.click(await screen.findByText("编辑"));
 
+    // 行操作菜单渲染在 portal 里，点击曾沿 React 树冒泡回卡片的 DetailTrigger，
+    // 把详情预览一起弹出来；「编辑」只应打开编辑弹窗。
+    expect(screen.queryByRole("heading", { name: "核心要点" })).toBeNull();
+
     fireEvent.change(await screen.findByPlaceholderText("如：STAR 法则 / 自我介绍模板"), {
       target: { value: "STAR 法则（修订）" },
     });
@@ -146,6 +150,31 @@ describe("KnowledgePage", () => {
     const [id, payload] = apiMocks.updateKnowledge.mock.calls[0];
     expect(id).toBe(1);
     expect(payload.title).toBe("STAR 法则（修订）");
+  });
+
+  it("编辑态改选另一个分类能生效", async () => {
+    renderPage();
+    await screen.findByText("STAR 法则");
+
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("编辑"));
+
+    // 编辑弹窗里的「分类」下拉（tags 模式）：曾因 maxCount={1} 把所有未选中项
+    // 置灰禁用，导致改选不了其他分类；现在点「求职策略」应正常选中。
+    const modal = (await screen.findByText("编辑条目：STAR 法则")).closest(".ant-modal")!;
+    const categorySelect = within(modal as HTMLElement)
+      // 弹窗里分类在前、标签在后。
+      .getAllByRole("combobox")[0];
+    fireEvent.mouseDown(categorySelect);
+    fireEvent.click(await screen.findByText("求职策略"));
+
+    fireEvent.click(screen.getByRole("button", { name: /保\s*存/ }));
+
+    await waitFor(() => {
+      expect(apiMocks.updateKnowledge).toHaveBeenCalledTimes(1);
+    });
+    const [, payload] = apiMocks.updateKnowledge.mock.calls[0];
+    expect(payload.category).toBe("求职策略");
   });
 
   it("renders markdown content in the preview modal", async () => {

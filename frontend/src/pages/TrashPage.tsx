@@ -10,7 +10,7 @@
  * 每条都标出**类型**与**删除时间**：用户来这儿找的往往是"我前几天删的那个岗位"，
  * 只有标题没有时间等于让他一条条点开看。
  */
-import { DeleteOutlined, UndoOutlined } from "@ant-design/icons";
+import { CheckSquareOutlined, DeleteOutlined, UndoOutlined } from "@ant-design/icons";
 import {
   Alert,
   App,
@@ -43,6 +43,9 @@ export default function TrashPage() {
   const { message } = App.useApp();
   const [type, setType] = useState<string>(ALL);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  // 多选模式默认关闭：复选框列平时不占宽度，批量动作从「批量操作」显式进入，
+  // 退出时一并清空已勾选的行，避免残留一个看不见的选择集。
+  const [selectMode, setSelectMode] = useState(false);
   const { data, loading, error, reload } = useApi(
     () => getTrash(type === ALL ? {} : { type }),
     [type],
@@ -183,9 +186,17 @@ export default function TrashPage() {
     },
   ];
 
-  const rowSelection: TableRowSelection<TrashItem> = {
-    selectedRowKeys: selectedKeys,
-    onChange: (keys) => setSelectedKeys(keys.map(String)),
+  const rowSelection: TableRowSelection<TrashItem> | undefined = selectMode
+    ? {
+        selectedRowKeys: selectedKeys,
+        onChange: (keys) => setSelectedKeys(keys.map(String)),
+      }
+    : undefined;
+
+  /** 退出多选：清空选择，复选框列随之消失。 */
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedKeys([]);
   };
 
   return (
@@ -200,21 +211,31 @@ export default function TrashPage() {
           </Typography.Text>
         </Space>
         {items.length > 0 && (
-          <Popconfirm
-            title={`清空${type === ALL ? "回收站" : "这一类"}？`}
-            description={`将永久删除 ${
-              type === ALL ? (data?.total ?? 0) : (counts[type] ?? 0)
-            } 条内容，无法恢复。`}
-            okText="清空"
-            okButtonProps={{ danger: true, "aria-label": "确认清空回收站" }}
-            cancelText="取消"
-            cancelButtonProps={{ "aria-label": "取消清空回收站" }}
-            onConfirm={() => void run(() => emptyTrash(type === ALL ? "" : type), "回收站已清空")}
-          >
-            <Button danger icon={<DeleteOutlined />}>
-              清空{type === ALL ? "回收站" : "这一类"}
-            </Button>
-          </Popconfirm>
+          <Space>
+            <Popconfirm
+              title={`清空${type === ALL ? "回收站" : "这一类"}？`}
+              description={`将永久删除 ${
+                type === ALL ? (data?.total ?? 0) : (counts[type] ?? 0)
+              } 条内容，无法恢复。`}
+              okText="清空"
+              okButtonProps={{ danger: true, "aria-label": "确认清空回收站" }}
+              cancelText="取消"
+              cancelButtonProps={{ "aria-label": "取消清空回收站" }}
+              onConfirm={() => void run(() => emptyTrash(type === ALL ? "" : type), "回收站已清空")}
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                清空{type === ALL ? "回收站" : "这一类"}
+              </Button>
+            </Popconfirm>
+            {/* 多选不常驻：平时隐藏复选框列，要批量处理时显式进入、用完退出。 */}
+            {selectMode ? (
+              <Button onClick={exitSelectMode}>退出多选</Button>
+            ) : (
+              <Button icon={<CheckSquareOutlined />} onClick={() => setSelectMode(true)}>
+                批量操作
+              </Button>
+            )}
+          </Space>
         )}
         {selectedKeys.length > 0 && (
           <Space>

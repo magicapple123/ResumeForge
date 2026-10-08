@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { REMINDER_URGENCY_COLORS } from "../../types";
 import type { ReminderUpcoming } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import "./reminderPopupSurface.css";
 
 export function ReminderPopup({
   open,
@@ -23,6 +24,10 @@ export function ReminderPopup({
       open={open}
       title="近期提醒"
       onCancel={onClose}
+      // className 配合 reminderPopupSurface.css（文件名与组件 stem 刻意不同——
+      // Windows 大小写不敏感，同 stem 的 tsx/css 会让守卫与解析都踩坑）：打开瞬间
+      // antd 程序化聚焦右上角关闭按钮，鼠标路径下不该出现 :focus-visible 边框。
+      className="rf-reminder-modal"
       footer={
         <Button type="primary" onClick={onClose}>
           知道了

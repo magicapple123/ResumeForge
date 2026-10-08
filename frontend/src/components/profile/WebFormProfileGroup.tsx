@@ -1,4 +1,5 @@
 import { Row, Typography } from "antd";
+import { memo } from "react";
 import type { WebFormExtraEntry, WebFormField } from "../../types";
 import WebFormProfileField from "./WebFormProfileField";
 
@@ -16,7 +17,12 @@ interface Props {
   onDelete: (key: string) => void;
 }
 
-export default function WebFormProfileGroup({
+/**
+ * **memo**：Group 本身很薄（一个容器 + 计数），真正的开销在每个字段的输入控件。
+ * Field 改为接收稳定回调后（见 WebFormProfileField），打字时即使 values 引用变了、
+ * 本组件重渲，memo 化的 Field 也只有值变了的那一个会真正重渲。
+ */
+export default memo(function WebFormProfileGroup({
   group,
   fields,
   groupAllFields,
@@ -67,12 +73,12 @@ export default function WebFormProfileGroup({
             value={values[field.key] ?? ""}
             entry={entries[field.key]}
             displayLabel={displayLabel(field)}
-            onChange={(value) => onChange(field.key, value)}
-            onRename={(label) => onRename(field.key, label)}
-            onDelete={() => onDelete(field.key)}
+            onChange={onChange}
+            onRename={onRename}
+            onDelete={onDelete}
           />
         ))}
       </Row>
     </div>
   );
-}
+});

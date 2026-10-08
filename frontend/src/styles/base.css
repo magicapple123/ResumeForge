@@ -159,6 +159,17 @@ body {
   line-height: 1.2;
 }
 
+/* 版本号跟在应用名旁：与 caption 同一套次要视觉（灰、小字、不加粗），
+  nowrap 保证窄屏时不拆行、不挤压应用名。侧栏折叠时随 .app-brand-copy 一起隐藏。 */
+.app-brand-version {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: #8a94a3;
+  white-space: nowrap;
+}
+
 .app-nav-menu {
   flex: 1;
   padding: 12px 10px;

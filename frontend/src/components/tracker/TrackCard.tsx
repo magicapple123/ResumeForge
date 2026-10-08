@@ -8,6 +8,7 @@ import { MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Space, Tag, Tooltip, Typography } from "antd";
 import type { Track } from "../../types";
 import {
+  FUNNEL_STATUSES,
   TRACK_SOURCE_LABELS,
   TRACK_STATUS_COLORS,
   TRACK_STATUS_LABELS,
@@ -36,7 +37,13 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
   const overdue = isOverdue(track.next_action_date);
 
   return (
-    <article className={`track-card${isActiveStatus(track.status) ? " is-active" : ""}`}>
+    // data-stage-index 注入漏斗同款阶段色（--rf-stage-color，见 tracker.css）：
+    // 进行中的记录左侧那条颜色 pill 与漏斗按同一套颜色说话，
+    // 「已结束 / 待确认」不在漏斗主线上（indexOf 为 -1），不参与着色。
+    <article
+      className={`track-card${isActiveStatus(track.status) ? " is-active" : ""}`}
+      data-stage-index={FUNNEL_STATUSES.indexOf(track.status)}
+    >
       <header className="track-card-head">
         <Space size={6} wrap>
           <Typography.Text strong>{track.company || "（未填公司）"}</Typography.Text>

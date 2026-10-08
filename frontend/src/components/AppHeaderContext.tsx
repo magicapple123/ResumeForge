@@ -97,6 +97,9 @@ export default function AppHeaderContext() {
   const displayName = (profile?.name || "").trim();
   const photo = (profile?.photo || "").trim();
   const initial = displayName ? Array.from(displayName)[0] : "";
+  // 数据集切换是点击触发的下拉：点开后 Tooltip 不该继续挂在按钮上，受控开关
+  // 让"点开下拉"的同时把提示收掉，鼠标移开也不再滞留。
+  const [datasetTipOpen, setDatasetTipOpen] = useState(false);
 
   return (
     <div className="app-header-context">
@@ -106,30 +109,34 @@ export default function AppHeaderContext() {
         <>
           {dataset ? (
             <Tooltip
+              open={datasetTipOpen}
+              onOpenChange={setDatasetTipOpen}
               title={
                 datasetCount > 1
                   ? `当前数据集：${dataset.name}（共 ${datasetCount} 套），点击可直接切换`
                   : "当前数据集。点击可查看数据集操作"
               }
             >
-              <Dropdown
-                trigger={["click"]}
-                menu={{
-                  items: datasetMenuItems,
-                  onClick: ({ key }) => void handleDatasetSwitch(String(key)),
-                }}
-              >
-                <button
-                  type="button"
-                  className="app-dataset-chip"
-                  aria-label={`当前数据集：${dataset.name}`}
-                  aria-haspopup="menu"
+              <span onClick={() => setDatasetTipOpen(false)}>
+                <Dropdown
+                  trigger={["click"]}
+                  menu={{
+                    items: datasetMenuItems,
+                    onClick: ({ key }) => void handleDatasetSwitch(String(key)),
+                  }}
                 >
-                  <DatabaseOutlined />
-                  <span className="app-dataset-name">{dataset.name}</span>
-                  <DownOutlined className="app-dataset-arrow" />
-                </button>
-              </Dropdown>
+                  <button
+                    type="button"
+                    className="app-dataset-chip"
+                    aria-label={`当前数据集：${dataset.name}`}
+                    aria-haspopup="menu"
+                  >
+                    <DatabaseOutlined />
+                    <span className="app-dataset-name">{dataset.name}</span>
+                    <DownOutlined className="app-dataset-arrow" />
+                  </button>
+                </Dropdown>
+              </span>
             </Tooltip>
           ) : null}
           <Tooltip title={displayName ? `${displayName}（点击进入我的资料）` : "点击进入我的资料"}>

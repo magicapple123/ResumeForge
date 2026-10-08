@@ -275,11 +275,15 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
               onChange={(event) => setContent(event.target.value.slice(0, MAX_CONTENT_CHARS))}
               placeholder="片段内容（复制时按这里保存的原文粘贴）"
               autoSize={{ minRows: 6, maxRows: 12 }}
-              showCount={{
-                formatter: ({ count }: { count: number }) => `${count}/${MAX_CONTENT_CHARS}`,
-              }}
+              // 不用 antd showCount（"0/4000" 常驻计数打扰且会与按钮行叠字）：
+              // maxLength 作硬上限，达到上限才出现一行红色小字提示。
               maxLength={MAX_CONTENT_CHARS}
             />
+            {content.length >= MAX_CONTENT_CHARS ? (
+              <div className="tt-clipboard-card-limit-hint" role="note">
+                已达 {MAX_CONTENT_CHARS} 字上限
+              </div>
+            ) : null}
             <div style={{ marginTop: 12, textAlign: "right" }}>
               <Button onClick={closeEditor} style={{ marginRight: 8 }}>
                 取消

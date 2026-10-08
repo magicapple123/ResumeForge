@@ -6,7 +6,12 @@
      拖动后由内联 left/top 接管（freePosition 写进卡片仓库）。 */
   right: 24px;
   bottom: 120px;
-  z-index: 2985;
+  /*
+   * 3200：高于 antd 弹层基准 zIndexPopupBase（3100，main.tsx）——Modal 弹出时
+   * 剪贴板仍可用；低于助手卡（3300）与悬浮球（3400），保持 球 > 助手卡 > 剪贴板
+   * 的相对次序。
+   */
+  z-index: 3200;
   display: flex;
   flex-direction: column;
   width: min(360px, calc(100vw - 24px));
@@ -105,12 +110,12 @@
   white-space: pre-wrap;
 }
 
-/* antd 的 showCount 计数（如 "0/4000"）被绝对定位悬在 textarea 包装盒下方一行、
-   不占布局高度，水平贴右——紧随其后的按钮行也是右对齐，两者会叠在一起（用户反馈）。
-   这里把计数拉回文档流（作用域限定在本卡，不动全局 antd 样式），按钮行自然让位。 */
-.tt-clipboard-card .ant-input-textarea-show-count .ant-input-data-count {
-  position: static;
-  display: block;
+/* 内容达到 maxLength 硬上限时的小号红色提示，样式对齐 antd 表单错误文案
+   （showCount 计数已移除，见 TouTouClipboardCard）。 */
+.tt-clipboard-card-limit-hint {
   margin-top: 4px;
+  color: #ff4d4f;
+  font-size: 12px;
+  line-height: 1.5;
   text-align: right;
 }

@@ -3,6 +3,7 @@
 import { FileSearchOutlined } from "@ant-design/icons";
 import { Alert, Button, Input, Modal, Typography } from "antd";
 import type { StagedFile } from "../../hooks/useRecognitionFiles";
+import { MaxLengthHint } from "../common/MaxLengthHint";
 import RecognitionFileField from "../RecognitionFileField";
 import RecognitionOutcome from "../RecognitionOutcome";
 import type { RecognitionSource } from "../../types";
@@ -77,12 +78,12 @@ export default function ProfileTextModal({
         onPaste={onPasteFiles}
         onChange={(event) => onTextChange(event.target.value)}
         maxLength={100_000}
-        showCount
         placeholder={
           "例如：\n姓名：张三\n教育经历\n示例大学｜市场营销｜本科｜2022.09-2026.06\n项目经历\n校园招聘会策划｜负责人｜活动策划、渠道对接"
         }
         autoSize={{ minRows: 14, maxRows: 24 }}
       />
+      <MaxLengthHint value={text} maxLength={100_000} />
       <RecognitionFileField
         files={files}
         reading={filesReading}

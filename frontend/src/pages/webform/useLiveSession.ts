@@ -12,6 +12,17 @@ import { getWebFormLiveStatus, getWebFormMemoryTargets, startWebFormLive } from 
 import type { WebFormLive, WebFormMemoryTarget } from "../../types";
 import { isDocumentHidden, onVisibilityChange } from "../../utils/visibility";
 
+/**
+ * 轮询响应是每次都新建的对象，内容却常常一字未变：先比较再 setState，
+ * 否则 1.5s 一次的轮询会周期性整页重渲（打字时表现为规律性输入卡顿）。
+ * 字段少、值都是短字符串，直接序列化比较即可。
+ */
+function isSameLiveStatus(a: WebFormLive | null, b: WebFormLive | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function useLiveSession({
   restoredLiveOptOut,
   browserState,
@@ -79,7 +90,8 @@ export function useLiveSession({
     const poll = () => {
       void getWebFormLiveStatus()
         .then((next) => {
-          setLive(next);
+          // 内容没变就保留原引用：React 对同值 setState 直接跳过重渲。
+          setLive((previous) => (isSameLiveStatus(previous, next) ? previous : next));
           if (next.running) setSessionActive(true);
         })
         .catch(() => undefined);

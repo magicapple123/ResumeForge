@@ -105,9 +105,28 @@ describe("TrashPage", () => {
     await waitFor(() => expect(apiMocks.getTrash).toHaveBeenCalledTimes(2));
   });
 
+  it("复选框列默认不出现，进入批量操作模式后才可勾选", async () => {
+    renderPage();
+    await screen.findByText("全栈工程师");
+
+    // 默认没有多选：页面上不存在复选框。
+    expect(screen.queryByRole("checkbox")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /批量操作/ }));
+    expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
+
+    // 退出多选后复选框消失，且已勾选的选择集一并清空（批量按钮不再可见）。
+    fireEvent.click(screen.getByRole("button", { name: "退出多选" }));
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: /批量恢复/ })).toBeNull();
+  });
+
   it("批量恢复部分失败时如实报成功数与失败数", async () => {
     renderPage();
     await screen.findByText("全栈工程师");
+
+    // 多选从「批量操作」显式进入，复选框列平时不出现。
+    fireEvent.click(screen.getByRole("button", { name: /批量操作/ }));
 
     // 勾选两条（第 0 个是表头全选框）。
     const checkboxes = screen.getAllByRole("checkbox");

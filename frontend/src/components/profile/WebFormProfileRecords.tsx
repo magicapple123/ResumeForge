@@ -1,4 +1,5 @@
 import { Typography } from "antd";
+import { memo } from "react";
 import type { WebFormRepeatedGroup, WebFormRepeatedRecord } from "../../types";
 import WebFormProfileRecordGroup from "./WebFormProfileRecordGroup";
 
@@ -15,7 +16,12 @@ function blankRecord(group: WebFormRepeatedGroup): WebFormRepeatedRecord {
   };
 }
 
-export default function WebFormProfileRecords({ groups, editing, saving, onChange }: Props) {
+/**
+ * **memo**：groups（extraRepeatedGroups）/editing/saving/onChange 在普通字段打字时
+ * 引用全部不变（onChange 已在页面侧 useCallback 稳定化），重复经历整棵子树随之跳过
+ * 网申资料打字引起的重渲；只有真的增删/编辑记录时才重渲。
+ */
+export default memo(function WebFormProfileRecords({ groups, editing, saving, onChange }: Props) {
   const updateGroup = (
     groupKey: string,
     update: (group: WebFormRepeatedGroup) => WebFormRepeatedGroup,
@@ -74,4 +80,4 @@ export default function WebFormProfileRecords({ groups, editing, saving, onChang
       ))}
     </div>
   );
-}
+});

@@ -76,4 +76,19 @@ describe("WebFormProfileRecords", () => {
     expect(screen.queryByText("特殊情况说明")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "删除教育经历补充第1条" })).not.toBeInTheDocument();
   });
+
+  it("教育经历补充不再展示四个是/否字段", () => {
+    render(
+      <WebFormProfileRecords
+        groups={[EDUCATION_GROUP]}
+        editing
+        saving={false}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("是否境外教育")).not.toBeInTheDocument();
+    expect(screen.queryByText("是否统招")).not.toBeInTheDocument();
+    expect(screen.queryByText("是否最高学历")).not.toBeInTheDocument();
+    expect(screen.queryByText("是否辅修")).not.toBeInTheDocument();
+  });
 });
