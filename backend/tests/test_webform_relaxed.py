@@ -9,13 +9,14 @@
 - 开关开启：弹层代选进预览行且默认勾选；选项/字段对不上仍 blocked；声明类只以
   「需确认」出现且默认不勾；填充执行真点选并回读；实时面板的「帮我勾选」点按即执行；
   日期选择器与文件上传在任何情况下都不放宽；开关持久化（保存后重读）。
+
+控件判类（relaxed_kind）守卫已按主题迁至 test_webform_relaxed_slots.py（用例逐字
+保留、总数不减），这里不再重复。
 """
 import json
 
-import pytest
 from app.services.settings_service import get_webform_relaxed_mode, save_webform_relaxed_mode
 from app.services.webform import FormEngine, get_snapshot_store
-from app.services.webform.engine import relaxed_kind
 from app.services.webform.live import LiveSession
 from app.services.webform.service import (
     STATUS_NEEDS_CONFIRM,
@@ -64,78 +65,6 @@ def _consent(index: int = 0) -> dict:
         "nearby_text": "我已阅读并同意隐私政策",
         "selector": f'[data-rf-index="{index}"]',
     }
-
-
-# ===== 判类（relaxed_kind） =====
-
-
-def test_relaxed_kind_never_widens_beyond_skip_reason():
-    """放宽只会在 blocked 集合**内部**放行：relaxed_kind 认可的控件必然被 skip_reason 挡过。"""
-    controls = [
-        _popup(),
-        {"index": 1, "type": "select", "label": "学历", "selector": '[data-rf-index="1"]'},
-        _consent(2),
-        {
-            "index": 3,
-            "type": "radio",
-            "label": "女",
-            "nearby_text": "性别* 男 女",
-            "selector": '[data-rf-index="3"]',
-        },
-    ]
-    for control in FormEngine().snapshot_controls(controls):
-        if relaxed_kind(control) is not None:
-            assert FormEngine.skip_reason(control) is not None, control.type
-
-
-@pytest.mark.parametrize(
-    "raw",
-    [
-        {"index": 0, "type": "file", "label": "简历附件", "selector": '[data-rf-index="0"]'},
-        {"index": 0, "type": "date", "label": "出生日期", "selector": '[data-rf-index="0"]'},
-        {"index": 0, "type": "month", "label": "入职月份", "selector": '[data-rf-index="0"]'},
-        {
-            "index": 0,
-            "type": "text",
-            "label": "",
-            "autocomplete": "new-password",
-            "selector": '[data-rf-index="0"]',
-        },
-        {"index": 0, "type": "text", "label": "姓名", "selector": '[data-rf-index="0"]'},
-    ],
-)
-def test_file_date_password_and_plain_text_are_never_relaxed(raw):
-    """日期（含日历弹层）、文件上传、密码与普通文本框：放宽模式不碰。"""
-    assert relaxed_kind(FormEngine().snapshot_controls([raw])[0]) is None
-
-
-def test_popup_select_consent_and_fact_choices_are_classified():
-    controls = FormEngine().snapshot_controls(
-        [
-            _popup(),
-            {"index": 1, "type": "select", "label": "学历", "selector": '[data-rf-index="1"]'},
-            _consent(2),
-            {
-                "index": 3,
-                "type": "checkbox",
-                "label": "无实习经历",
-                "nearby_text": "无实习经历",
-                "selector": '[data-rf-index="3"]',
-            },
-            {
-                "index": 4,
-                "type": "radio",
-                "label": "女",
-                "nearby_text": "性别* 男 女",
-                "selector": '[data-rf-index="4"]',
-            },
-        ]
-    )
-    assert relaxed_kind(controls[0]) == "popup"
-    assert relaxed_kind(controls[1]) == "select"
-    assert relaxed_kind(controls[2]) == "confirm"
-    assert relaxed_kind(controls[3]) == "confirm"
-    assert relaxed_kind(controls[4]) == "choice"
 
 
 # ===== 预览 =====

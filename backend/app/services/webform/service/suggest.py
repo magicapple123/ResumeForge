@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from ..engine import (
@@ -21,6 +21,7 @@ from ..repeated_fields import (
     field_label_for_key,
     split_repeated_key,
 )
+from .relaxed_matching import relaxed_text_suggestion
 
 
 def _describe(control: Control) -> str:
@@ -138,7 +139,12 @@ class Suggestion:
 
 
 def suggest_for(
-    control: Control, data: dict[str, str], *, engine: FormEngine | None = None
+    control: Control,
+    data: dict[str, str],
+    *,
+    engine: FormEngine | None = None,
+    relaxed: bool = False,
+    custom_labels: Mapping[str, str] | None = None,
 ) -> Suggestion:
     """就**一个**控件算出该填什么（点哪个填哪个模式的核心）。
 
@@ -172,6 +178,27 @@ def suggest_for(
 
     result = engine.match_fields([control], data)
     if not result.mappings:
+        if relaxed:
+            mapping = relaxed_text_suggestion(
+                control, data, custom_labels=custom_labels, engine=engine
+            )
+            if mapping is not None:
+                base_field, _index = split_repeated_key(mapping.field)
+                if mapping.field.startswith("CUSTOM_"):
+                    field_label = (custom_labels or {}).get(
+                        mapping.field, mapping.field.removeprefix("CUSTOM_")
+                    )
+                else:
+                    field_label = field_label_for_key(
+                        mapping.field, FIELD_LABELS.get(base_field, base_field)
+                    )
+                return Suggestion(
+                    "matched",
+                    field=mapping.field,
+                    field_label=field_label,
+                    value=mapping.write_value(),
+                    note="放宽模式：依据字段标签/上下文匹配，填完请核对",
+                )
         # 选择框到不了这里（上面 ``skip_reason`` 已经判成 blocked 了）；剩下的是
         # "认不出这个文本框要填什么"。
         return Suggestion("unmatched", note="没认出来这个框要填什么")

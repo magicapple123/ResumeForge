@@ -76,6 +76,9 @@ class PreviewReport:
     # **只在本进程内当路由用，不进 as_dict()**——API 载荷里它们仍然是 blocked，
     # AI 采纳成功后才搬进 items / missing_data。
     relaxed_ai_candidates: list[int] = field(default_factory=list)
+    # 放宽模式弱上下文文本匹配需用户明确确认；该集合仅用于后端默认勾选决策，
+    # 不序列化到 API 响应。
+    requires_confirmation: set[int] = field(default_factory=set)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -96,7 +99,7 @@ class FillSelection:
 
 
 def default_selections(report: PreviewReport) -> list[FillSelection]:
-    """预览里**默认勾选**的那些条（冲突项、AI 建议与「需确认」声明项不在其中）。
+    """预览里**默认勾选**的行；冲突、AI 与声明确认项需显式勾选。
 
     AI 建议默认不勾，理由与冲突项同源但方向相反：规则命中至少证明页面上有字对上了，
     AI 命中可能纯粹是上下文推的。**默认不勾的失败形态是"我忘了勾"，默认勾的失败形态是
@@ -105,6 +108,10 @@ def default_selections(report: PreviewReport) -> list[FillSelection]:
 
     放宽模式的 ``needs_confirm``（同意 / 声明类）同样默认不勾：代勾等于替用户做出
     法律意义上的表态，必须是**用户勾了这一行**这个显式动作才授权代点。
+
+    放宽模式中只靠弱上下文匹配的文本行通过 requires_confirmation 默认不勾；
+    精确控件自述和记录数量/顺序完全对应的重复字段可默认填入。普通规则的
+    low_confidence 状态继续沿用既有默认选择行为。
     """
     return [
         FillSelection(index=item.index, field=item.field, value=item.value)
@@ -112,4 +119,5 @@ def default_selections(report: PreviewReport) -> list[FillSelection]:
         if item.status != STATUS_CONFLICT
         and item.source != SOURCE_AI
         and item.status != STATUS_NEEDS_CONFIRM
+        and item.index not in report.requires_confirmation
     ]

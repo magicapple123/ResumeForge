@@ -337,6 +337,21 @@ def compatible_block(
     return True
 
 
+def family_from_control_text(control_text: str) -> str | None:
+    """Infer a repeated-section family from a control's own label/prompt only."""
+    text = unicodedata.normalize("NFKC", str(control_text or "")).casefold()
+    markers = (
+        ("project", ("项目名称", "项目角色", "项目描述", "项目链接", "项目经历")),
+        ("experience", ("公司名称", "职位名称", "工作描述", "实习经历", "工作经历")),
+        ("award", ("荣誉名称", "荣誉描述", "奖项名称", "竞赛名称", "获奖")),
+        ("certificate", ("证书名称", "证书描述", "证书类型", "资格证书")),
+        ("campus", ("校园经历", "社团经历", "校园职务", "实践名称")),
+        ("academic", ("论文名称", "学术成果", "科研成果")),
+    )
+    matches = [family for family, markers_for_family in markers if any(marker in text for marker in markers_for_family)]
+    return matches[0] if len(set(matches)) == 1 else None
+
+
 __all__ = [
     "BLOCK_FAMILY_ALIASES",
     "RepeatedBlock",

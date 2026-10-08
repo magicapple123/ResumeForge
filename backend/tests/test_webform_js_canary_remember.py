@@ -195,6 +195,29 @@ def test_closing_the_panel_hides_it_until_the_next_field(page_client):
     assert page_client.evaluate("window.__rfFocus") is None
 
 
+def test_the_close_button_keeps_its_quiet_look(page_client):
+    """`.close` 是低调的灰字——全局按钮规则 `button:not(.rf-live-switch)`（深蓝底白字，
+    特异性 (0,1,1)）曾把它压成蓝色实心方块（用户反馈）。必须量**计算样式**：光看
+    "脚本里有 .close 规则"看不出谁压过谁。"""
+    import json as _json
+
+    _install(page_client)
+    _focus(page_client, "#deep-name")
+    page_client.evaluate(
+        "window.__rfShowPanel({status: 'matched', field_label: '姓名', value: '张三'})"
+    )
+
+    style = _json.loads(
+        page_client.evaluate(
+            "(() => { const root = document.getElementById('__rf_live_host__').shadowRoot;"
+            " const s = getComputedStyle(root.querySelector('.close'));"
+            " return JSON.stringify({background: s.backgroundColor, color: s.color}); })()"
+        )
+    )
+    assert style["background"] == "rgba(0, 0, 0, 0)", f"关闭按钮被刷成蓝色实心方块：{style}"
+    assert style["color"] != "rgb(255, 255, 255)", f"关闭按钮文字被刷成白色：{style}"
+
+
 def test_remember_uses_the_value_the_user_actually_typed(page_client):
     _install(page_client)
     _focus(page_client, "#deep-name")
@@ -364,3 +387,90 @@ def test_remember_editor_switches_views_instead_of_stacking_on_the_picker(page_c
 
     page_client.evaluate(_shadow("querySelector('.rf-memory-cancel').click()"))
     assert page_client.evaluate(_shadow("querySelector('.pick').classList.contains('on')")) is True
+
+
+def test_the_remember_editor_initializes_the_value_input_from_the_panel(page_client):
+    """「字段内容」打开时默认带上取值链的结果（表单敲的字 > 面板建议 > 控件现值）。
+
+    修的是"字段内容不可编辑"：既然可编辑，就得先有内容可改，且默认与用户在表单里
+    填的一致。
+    """
+    _install_editor(page_client, EDITOR_TARGETS)
+    _focus(page_client, "#deep-name")
+    page_client.evaluate(
+        "window.__rfShowPanel({status: 'matched', field_label: '姓名', value: '张三'})"
+    )
+
+    page_client.evaluate(_shadow("querySelector('.remember').click()"))
+
+    value = page_client.evaluate(_shadow("querySelector('.rf-memory-value-input').value"))
+    assert value == "张三", f"字段内容没有按面板建议初始化：{value!r}"
+
+
+def test_the_remember_editor_saves_the_value_the_user_edited(page_client):
+    """用户改过「字段内容」后，保存的是**编辑器里的值**，不是保存时回头读的表单现值。"""
+    _install_editor(page_client, EDITOR_TARGETS)
+    _focus(page_client, "#deep-name")
+    page_client.evaluate(
+        "window.__rfShowPanel({status: 'matched', field_label: '姓名', value: '张三'})"
+    )
+    page_client.evaluate(_shadow("querySelector('.remember').click()"))
+    page_client.evaluate(
+        "(() => { const root = document.getElementById('__rf_live_host__').shadowRoot;"
+        " root.querySelector('.rf-memory-value-input').value = '编辑后的内容'; })()"
+    )
+
+    page_client.evaluate(_shadow("querySelector('.rf-memory-save').click()"))
+
+    remember = page_client.evaluate("window.__rfRemember")
+    assert isinstance(remember, dict), "「保存这条」没把意图记下来"
+    assert remember["value"] == "编辑后的内容", remember
+    # 依旧只是"记下意图"：页面上的框没被写。
+    assert page_client.evaluate("document.querySelector('#deep-name').value") == ""
+
+
+def test_the_remember_editor_lets_the_user_type_the_value_into_the_editor(page_client):
+    """表单框是空的、面板建议也为空时，用户可以**就地补内容**再保存。
+
+    旧行为是保存时报"请先在目标表单里填写内容"——有了字段内容输入框，这就不再是死路。
+    """
+    _install_editor(page_client, EDITOR_TARGETS)
+    _focus(page_client, "#deep-name")
+    page_client.evaluate("window.__rfShowPanel({status: 'unmatched', field_label: '', value: ''})")
+    page_client.evaluate(_shadow("querySelector('.remember').click()"))
+    page_client.evaluate(
+        "(() => { const root = document.getElementById('__rf_live_host__').shadowRoot;"
+        " root.querySelector('.rf-memory-value-input').value = '就地补上的内容'; })()"
+    )
+
+    page_client.evaluate(_shadow("querySelector('.rf-memory-save').click()"))
+
+    remember = page_client.evaluate("window.__rfRemember")
+    assert isinstance(remember, dict), "就地补的内容没能保存"
+    assert remember["value"] == "就地补上的内容"
+
+
+def test_memory_group_headers_are_not_painted_as_selected_buttons(page_client):
+    """分组头（网申资料·自定义 等）是浅色的——全局按钮规则不得把它们染成深蓝。
+
+    根因是特异性：`button:not(.rf-live-switch)`(0,1,1) 压过裸 `.rf-memory-group`(0,1,0)。
+    修法与 navchip 同一套（`button.rf-memory-group`），这条用**计算样式**钉住结果。
+    """
+    import json as _json
+
+    _install_editor(page_client, EDITOR_TARGETS)
+    _focus(page_client, "#deep-name")
+    page_client.evaluate(
+        "window.__rfShowPanel({status: 'matched', field_label: '姓名', value: '张三'})"
+    )
+    page_client.evaluate(_shadow("querySelector('.remember').click()"))
+
+    style = _json.loads(
+        page_client.evaluate(
+            "(() => { const root = document.getElementById('__rf_live_host__').shadowRoot;"
+            " const s = getComputedStyle(root.querySelector('.rf-memory-group'));"
+            " return JSON.stringify({background: s.backgroundColor, color: s.color}); })()"
+        )
+    )
+    assert style["background"] != "rgb(61, 130, 189)", f"分组头被全局按钮规则染成深蓝：{style}"
+    assert style["color"] != "rgb(255, 255, 255)", f"分组头文字被刷成白色：{style}"

@@ -14,13 +14,7 @@ def test_repeated_profile_groups_expose_the_catalog(db_session):
     assert "certificate" in keys
     assert groups[0]["fields"][0]["key"] == "education_class_rank"
     education_group = next(group for group in groups if group["key"] == "education")
-    yes_no = {
-        field["key"]: field
-        for field in education_group["fields"]
-        if field["key"].startswith("education_is_")
-    }
-    assert {field["kind"] for field in yes_no.values()} == {"select"}
-    assert {tuple(field["options"]) for field in yes_no.values()} == {("是", "否")}
+    assert not any(field["key"].startswith("education_is_") for field in education_group["fields"])
     assert groups[0]["records"] == []
 
 
@@ -30,7 +24,7 @@ def test_repeated_records_can_be_added_several_at_once_and_expand_by_order(db_se
         {
             "education": [
                 {"values": {"education_class_rank": "3", "education_campus": "主校区"}},
-                {"values": {"education_class_rank": "1", "education_is_highest": "是"}},
+                {"values": {"education_class_rank": "1", "education_special_notes": "最高学历"}},
             ],
             "experience": [
                 {
@@ -49,7 +43,7 @@ def test_repeated_records_can_be_added_several_at_once_and_expand_by_order(db_se
         "education_1_class_rank": "3",
         "education_1_campus": "主校区",
         "education_2_class_rank": "1",
-        "education_2_is_highest": "是",
+        "education_2_special_notes": "最高学历",
         "experience_1_department": "研发部",
         "experience_1_location": "天津",
     }

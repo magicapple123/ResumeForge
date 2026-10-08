@@ -59,6 +59,8 @@ class Control:
     # 只读输入框：值不由用户敲进来，**脚本写得进去、组件的状态却不会变**。级联选择器
     # （省/市/区那类）的输入框几乎都是这个形状，所以不能当普通文本框填。
     readonly: bool = False
+    # 禁用控件：页面当前不允许交互（含组件库外壳的 disabled 状态）。
+    disabled: bool = False
     # 点开会弹层的输入框（`aria-haspopup` / `role=combobox`）：自定义下拉、级联选择器。
     # 同样不该直接写值——值该由点选产生。
     has_popup: bool = False

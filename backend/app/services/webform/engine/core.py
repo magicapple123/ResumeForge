@@ -44,6 +44,7 @@ from .evidence import (
     competing_fields,
     evidence_key,
     excluded_by_hints,
+    explicit_foreign_family,
     has_ambiguous_field_evidence,
 )
 from .families import foreign_marker
@@ -150,6 +151,7 @@ class FormEngine:
                     required=bool(raw.get("required", False)),
                     max_length=self._parse_optional_int(raw.get("max_length")) or 0,
                     readonly=bool(raw.get("readonly", False)),
+                    disabled=bool(raw.get("disabled", False)),
                     has_popup=bool(raw.get("has_popup", False)),
                     linked_select=bool(raw.get("linked_select", False)),
                     selector=str(raw.get("selector", "")),
@@ -516,6 +518,8 @@ class FormEngine:
         """这个控件为什么永不自动填；``None`` 表示可以参与匹配。"""
         signature = control.signature()
         security_text = control.security_text()
+        if control.disabled:
+            return "页面当前禁用这个控件，不自动填写"
         if control.type == "file":
             return "简历附件需要你自己选择文件上传"
         # 只读框 / 点开是弹层的框：**看起来像文本框，其实值只能由点选产生**。
@@ -589,7 +593,23 @@ class FormEngine:
         """
         if control.type == "file":
             return None
+        if control.disabled:
+            return None
         if control.type in ("date", "month"):
+            return None
+        if control.has_popup and is_date_hint(
+            " ".join(
+                (
+                    control.signature(),
+                    control.date_part_label,
+                    control.placeholder,
+                    control.name,
+                    control.element_id,
+                )
+            )
+        ):
+            # 文本输入框形式的日期选择器也不能被放宽模式代点；真实站点常把它
+            # 渲染成 readonly + popup 的 text 控件，单看 type 无法区分。
             return None
         if control.autocomplete in AUTOCOMPLETE_DENY:
             return None
@@ -643,6 +663,8 @@ class FormEngine:
             if foreign_marker(control, field_name) is not None:
                 # 控件自述属于别的族（"区号"框之于日期字段）：跨族否决。
                 # 只看控件自己说的话，旁文污染不算——见 families.py。
+                continue
+            if explicit_foreign_family(control, field_name):
                 continue
             if not compatible_block(
                 field_name,
