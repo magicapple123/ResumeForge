@@ -107,7 +107,7 @@
 **AI 定制简历的 A4 成品**（服务端用系统中文字体渲染，PDF 可直接下载，也可以走浏览器打印）：
 
 <p align="center">
-  <img src="docs/images/resume-a4.png" alt="A4 简历成品：单页版式、区块标题带强调色、技能标签带框" width="600">
+  <img src="docs/images/resume-a4.png" alt="A4 简历成品：页眉带形象照，单页版式、区块标题带强调色、技能标签带框" width="600">
 </p>
 
 **一个框搜遍全站**：岗位、简历、内推、提醒、面经、事实台账、资料箱与助手技能一起搜，不用先想「这东西在哪个模块」：
@@ -476,7 +476,6 @@ npm test && npm run lint && npm run typecheck && npm run build
   <img src="docs/images/qq-group.png" alt="简历通 QQ 群 922830167 二维码" width="300">
 </p>
 
-- **LINUX DO 社区**：本项目在 [LINUX DO](https://linux.do) 社区发布与交流，感谢佬友们的反馈与支持。
 - **Bug 与需求**：用 [Issue 模板](.github/ISSUE_TEMPLATE) 提交，附上版本号、系统与复现步骤。
 - **安全问题**：请走私密渠道（见 [SECURITY.md](SECURITY.md)），不要在公开 Issue 里披露可利用细节。
 
