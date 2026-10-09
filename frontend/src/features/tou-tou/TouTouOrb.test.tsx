@@ -1,21 +1,8 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import TouTouOrb from "./TouTouOrb";
-import { defaultTouTouContext, TouTouContext } from "./touTouContext";
 import { setProfileSaveControl } from "./profileSaveBridge";
-
-afterEach(() => {
-  cleanup();
-  // profileSaveBridge 是模块级单例：清掉本文件注册的 control，避免泄漏到其它用例。
-  setProfileSaveControl(null);
-  vi.useRealTimers();
-  vi.restoreAllMocks();
-});
-
-/** 当前显示的那张脸（`is-active` 的那张图的 src）。 */
-function activeFaceSrc(): string {
-  return document.querySelector(".tt-face.is-active")?.getAttribute("src") ?? "";
-}
+import { activeFaceSrc } from "./touTouTestUtils";
 
 describe("TouTouOrb", () => {
   it("renders an accessible assistant entry", () => {
@@ -69,8 +56,11 @@ describe("TouTouOrb", () => {
     const onOpen = vi.fn();
     render(<TouTouOrb onOpen={onOpen} />);
 
-    // 无 control 时完全不渲染。
+    // 无 control 时完全不渲染（连尾巴和圆点也没有）。
     expect(document.querySelector(".tt-save-card")).toBeNull();
+    expect(document.querySelector(".tt-save-card-tail")).toBeNull();
+    expect(document.querySelector(".tt-save-card-dot")).toBeNull();
+    expect(document.querySelector(".tt-save-dot")).toBeNull();
     expect(screen.queryByRole("button", { name: "保存资料" })).toBeNull();
 
     act(() => {
@@ -89,11 +79,35 @@ describe("TouTouOrb", () => {
     });
     expect(onOpen).not.toHaveBeenCalled();
 
-    // 页面保存/取消后撤掉 control，卡片随即消失。
+    // 页面保存/取消后撤掉 control：先播 180ms 退场动画，动画结束才真正卸载。
     act(() => {
       setProfileSaveControl(null);
     });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
     expect(document.querySelector(".tt-save-card")).toBeNull();
+  });
+
+  it("shows a status dot in the title row and a ball-anchored tail on the save card", () => {
+    vi.useFakeTimers();
+    render(<TouTouOrb onOpen={vi.fn()} />);
+
+    act(() => {
+      setProfileSaveControl({ onSave: vi.fn(), onCancel: vi.fn() });
+    });
+
+    const card = document.querySelector(".tt-save-card");
+    expect(card).toBeInTheDocument();
+    expect(screen.getByText("资料有未保存的修改")).toBeInTheDocument();
+    // 脏状态圆点从球上挪进了卡片标题行，纯装饰（读屏隐藏）。
+    const dot = card?.querySelector(".tt-save-card-dot");
+    expect(dot).toBeInTheDocument();
+    expect(dot).toHaveAttribute("aria-hidden", "true");
+    // 球根节点内不再挂脏状态圆点。
+    expect(document.querySelector(".tt-shell .tt-save-dot")).toBeNull();
+    // 尾巴是真实元素（不是 ::after），带 class 便于断言，且对读屏隐藏。
+    expect(card?.querySelector(".tt-save-card-tail")).toBeInTheDocument();
   });
 
   it("shows the loading state on the save button while saving", () => {
@@ -232,66 +246,6 @@ describe("TouTouOrb", () => {
     expect(document.querySelector(".tt-shell")).toHaveClass("is-edge-bottom");
   });
 
-  it("发呆时偶尔眨一下眼，眨完就睁回来", () => {
-    vi.useFakeTimers();
-    // 眨眼间隔是带抖动的；把抖动钉死，间隔就等于下限 6s。
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    render(<TouTouOrb />);
-
-    act(() => {
-      vi.advanceTimersByTime(1_500); // 出场的好奇先回落到正常
-    });
-    expect(activeFaceSrc()).toContain("ball-idle");
-
-    act(() => {
-      vi.advanceTimersByTime(6_000); // 眨眼开始：借用闭眼的素材
-    });
-    expect(activeFaceSrc()).toContain("ball-sleep");
-    expect(document.querySelector(".tt")).toHaveClass("is-idle");
-
-    act(() => {
-      vi.advanceTimersByTime(130); // 眨完睁回来
-    });
-    expect(activeFaceSrc()).toContain("ball-idle");
-  });
-
-  it("久置睡着时留着更多在屏幕里，并飘出 Zzz", () => {
-    vi.useFakeTimers();
-    render(<TouTouOrb />);
-
-    act(() => {
-      vi.advanceTimersByTime(60_000);
-    });
-
-    const button = screen.getByRole("button", { name: "打开求职助手" });
-    expect(button).toHaveClass("is-sleep");
-    expect(button).toHaveClass("is-hidden");
-    expect(activeFaceSrc()).toContain("ball-sleep");
-    // 收纳成细边之后闭着的眼睛太小了，得靠 Zzz 才认得出"它睡着了"。
-    // （放宽后的收纳比例写在 CSS 里，jsdom 不加载样式表，这一条守不到。）
-    expect(document.querySelector(".tt-zzz")).toBeInTheDocument();
-  });
-
-  it("助手在思考时拖拽不会把表情顶掉", () => {
-    vi.useFakeTimers();
-    render(<TouTouOrb status="thinking" />);
-    const button = screen.getByRole("button", { name: "打开求职助手" });
-    expect(activeFaceSrc()).toContain("ball-thinking");
-
-    fireEvent.pointerDown(button, { button: 0, clientX: 900, clientY: 400, pointerId: 1 });
-    expect(activeFaceSrc()).toContain("ball-thinking");
-
-    fireEvent.pointerMove(window, { clientX: 80, clientY: 300, pointerId: 1 });
-    fireEvent.pointerUp(window, { clientX: 80, clientY: 300, pointerId: 1 });
-
-    // 松手后的回弹定时器也不该把思考脸收回正常。
-    act(() => {
-      vi.advanceTimersByTime(5_000);
-    });
-    expect(activeFaceSrc()).toContain("ball-thinking");
-    expect(document.querySelector(".tt-shell")).toHaveClass("is-edge-left");
-  });
-
   it("does not change its DOM contract when reduced motion is requested", () => {
     vi.useFakeTimers();
     const originalMatchMedia = window.matchMedia;
@@ -322,151 +276,6 @@ describe("TouTouOrb", () => {
       });
       expect(activeFaceSrc()).toContain("ball-curious");
       expect(screen.getByRole("button", { name: "打开求职助手" })).toHaveClass("is-hidden");
-    } finally {
-      Object.defineProperty(window, "matchMedia", {
-        configurable: true,
-        value: originalMatchMedia,
-      });
-    }
-  });
-
-  it("peeks with the curious face on all four hidden edges and restores on wake", () => {
-    vi.useFakeTimers();
-    render(<TouTouOrb />);
-
-    act(() => {
-      vi.advanceTimersByTime(12_000);
-    });
-
-    const button = screen.getByRole("button", { name: "打开求职助手" });
-    expect(button).toHaveClass("is-hidden");
-    // 探头张望：露出近一半 + 好奇脸朝屏幕内（CSS 动画在样式表里，jsdom 只能钉 JS 侧的脸）。
-    expect(activeFaceSrc()).toContain("ball-curious");
-
-    fireEvent.mouseEnter(button);
-    expect(button).not.toHaveClass("is-hidden");
-    expect(activeFaceSrc()).toContain("ball-idle");
-  });
-
-  it("keeps the sleeping face while hidden — a peeking orb is still asleep", () => {
-    vi.useFakeTimers();
-    render(<TouTouOrb />);
-
-    act(() => {
-      vi.advanceTimersByTime(60_000);
-    });
-
-    expect(screen.getByRole("button", { name: "打开求职助手" })).toHaveClass("is-hidden");
-    expect(activeFaceSrc()).toContain("ball-sleep");
-  });
-
-  it("stops popping tips when tipsEnabled is off, and resumes when on", () => {
-    vi.useFakeTimers();
-    function renderOrb(tipsEnabled: boolean) {
-      return render(
-        <TouTouContext.Provider value={{ ...defaultTouTouContext, tipsEnabled }}>
-          <TouTouOrb />
-        </TouTouContext.Provider>,
-      );
-    }
-
-    const off = renderOrb(false);
-    act(() => {
-      vi.advanceTimersByTime(1_500); // 出场好奇归位：标语计时器随 effect 重排
-    });
-    act(() => {
-      vi.advanceTimersByTime(6_000); // 重排后的首条标语到点（5s + 余量越过边界）
-    });
-    expect(document.querySelector(".tt-tip")).toBeNull();
-    off.unmount();
-
-    // 开关是独立的：关标语不影响球本身，重新开启后周期自然恢复（无需刷新）。
-    renderOrb(true);
-    act(() => {
-      vi.advanceTimersByTime(1_500);
-    });
-    act(() => {
-      vi.advanceTimersByTime(6_000);
-    });
-    expect(document.querySelector(".tt-tip")).not.toBeNull();
-  });
-
-  it("shows the content face when petted quickly, then returns to idle", () => {
-    vi.useFakeTimers();
-    render(<TouTouOrb />);
-    const button = screen.getByRole("button", { name: "打开求职助手" });
-
-    act(() => {
-      vi.advanceTimersByTime(1_500); // 出场的好奇先回落到正常
-    });
-    // 700ms 窗口内快速划过 ≥3 笔（每笔间隔 ≥120ms 的节流）→ 被抚摸。
-    act(() => {
-      fireEvent.mouseMove(button);
-      vi.advanceTimersByTime(150);
-      fireEvent.mouseMove(button);
-      vi.advanceTimersByTime(150);
-      fireEvent.mouseMove(button);
-    });
-
-    expect(button).toHaveClass("is-petted");
-    expect(activeFaceSrc()).toContain("ball-done");
-
-    act(() => {
-      vi.advanceTimersByTime(1_500);
-    });
-    expect(button).not.toHaveClass("is-petted");
-    expect(activeFaceSrc()).toContain("ball-idle");
-  });
-
-  it("does not show the pet face while the assistant is busy", () => {
-    vi.useFakeTimers();
-    render(<TouTouOrb status="thinking" />);
-    const button = screen.getByRole("button", { name: "打开求职助手" });
-
-    act(() => {
-      fireEvent.mouseMove(button);
-      vi.advanceTimersByTime(150);
-      fireEvent.mouseMove(button);
-      vi.advanceTimersByTime(150);
-      fireEvent.mouseMove(button);
-    });
-
-    expect(button).not.toHaveClass("is-petted");
-    expect(activeFaceSrc()).toContain("ball-thinking");
-  });
-
-  it("swaps faces but not the sway class when reduced motion is requested", () => {
-    vi.useFakeTimers();
-    const originalMatchMedia = window.matchMedia;
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: vi.fn().mockReturnValue({
-        matches: true,
-        media: "(prefers-reduced-motion: reduce)",
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      }),
-    });
-
-    try {
-      render(<TouTouOrb />);
-      const button = screen.getByRole("button", { name: "打开求职助手" });
-      act(() => {
-        vi.advanceTimersByTime(1_500);
-        fireEvent.mouseMove(button);
-        vi.advanceTimersByTime(150);
-        fireEvent.mouseMove(button);
-        vi.advanceTimersByTime(150);
-        fireEvent.mouseMove(button);
-      });
-
-      // reduced-motion：只换脸不摇（不加 is-petted 摇摆类），脸照常换成满足的 done。
-      expect(button).not.toHaveClass("is-petted");
-      expect(activeFaceSrc()).toContain("ball-done");
     } finally {
       Object.defineProperty(window, "matchMedia", {
         configurable: true,

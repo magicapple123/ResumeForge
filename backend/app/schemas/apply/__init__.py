@@ -136,6 +136,15 @@ from .collect import (
     CollectFilterOptionsOut as CollectFilterOptionsOut,
 )
 from .collect import (
+    CollectFilterTestIn as CollectFilterTestIn,
+)
+from .collect import (
+    CollectFilterTestItemOut as CollectFilterTestItemOut,
+)
+from .collect import (
+    CollectFilterTestResultOut as CollectFilterTestResultOut,
+)
+from .collect import (
     CollectTaskCreateIn as CollectTaskCreateIn,
 )
 from .config import (
@@ -207,6 +216,9 @@ __all__ = [
     "CollectFilterGroupOut",
     "CollectFilterOptionOut",
     "CollectFilterOptionsOut",
+    "CollectFilterTestIn",
+    "CollectFilterTestItemOut",
+    "CollectFilterTestResultOut",
     "CollectRunSummaryOut",
     "CollectTaskCreateIn",
     "DEFAULT_BROWSER_CHOICE",
