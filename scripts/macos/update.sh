@@ -200,7 +200,7 @@ rf_sync_dependencies() {
     fi
 }
 
-# 更新前给用户数据拍一份快照（保留最近 3 份在 data/pre-update/）。
+# 更新前给用户数据拍一份快照（保留最近 3 份在 backend/data/pre-update/）。
 #
 # 这是更新链上最后一道数据保险：程序文件覆盖失败可以重跑，但新版本的数据库迁移
 # 一旦在旧数据上出了问题，没有快照就没有回头路。优先用 sqlite3 的 .backup 拿在线
@@ -209,7 +209,9 @@ rf_sync_dependencies() {
 RF_PRE_UPDATE_KEEP=3
 
 rf_backup_user_data() {
-    data_root="$RF_PROJECT_ROOT/data"
+    # 真实用户数据在 backend/data（见 backend/app/config.py 的 DATA_DIR）；项目根下的
+    # data/ 不存在，读错了就会在这里静默提前 return、从不生成快照。
+    data_root="$RF_PROJECT_ROOT/backend/data"
     [ -d "$data_root" ] || return 0
     destination="$data_root/pre-update/$(date '+%Y%m%d-%H%M%S')"
     mkdir -p "$destination/datasets"
@@ -225,7 +227,7 @@ rf_backup_user_data() {
             cp -f "$db_file" "$destination/"
         fi
         copied=$((copied + 1))
-        for sidecar in "$db_file-wal" "$db_file-shm"; do
+        for sidecar in "$db_file-wal" "$db_file-shm" "$db_file-journal"; do
             if [ -e "$sidecar" ]; then
                 cp -f "$sidecar" "$destination/"
             fi
@@ -246,6 +248,11 @@ rf_backup_user_data() {
             cp -f "$db_file" "$destination/datasets/"
         fi
         copied=$((copied + 1))
+        for sidecar in "$db_file-wal" "$db_file-shm" "$db_file-journal"; do
+            if [ -e "$sidecar" ]; then
+                cp -f "$sidecar" "$destination/datasets/"
+            fi
+        done
     done
     log_dim "    更新前数据快照：${destination}（${copied} 个数据库）"
     count=0

@@ -42,6 +42,7 @@ from .api import (
     stats,
     tracker,
     trash,
+    user_files,
     webform,
 )
 from .api import (
@@ -60,7 +61,12 @@ from .config import DATA_DIR, get_settings
 from .database import Base, ensure_sqlite_columns, run_sqlite_maintenance
 from .database_compat import SQLITE_REQUIRED_COLUMNS
 from .database_migrations import is_unversioned_legacy_database, run_database_migrations
-from .middleware import RequestContextMiddleware, RequestIdFilter, get_request_id
+from .middleware import (
+    LoopbackOriginGuardMiddleware,
+    RequestContextMiddleware,
+    RequestIdFilter,
+    get_request_id,
+)
 from .services.apply import apply_service
 from .services.apply.task_runner import get_task_runner
 from .services.data_backup import cleanup_temp_directories
@@ -165,6 +171,11 @@ async def lifespan(_app: FastAPI):
     startup_logger.info("启动自检完成，开始接收请求")
     # 自动备份放后台线程：快照可能几百 MB，不能让它卡住"开始接收请求"这一行。
     threading.Thread(target=_run_auto_backup_safely, name="resumeforge-auto-backup", daemon=True).start()
+    # 用户文件副本的启动回填同样放后台：扫描的是 base64 大字段，但 best-effort、
+    # 幂等，失败只记日志，绝不阻断启动或请求。
+    from .services.user_files import schedule_backfill
+
+    schedule_backfill()
     try:
         yield
     finally:
@@ -239,6 +250,11 @@ def create_app() -> FastAPI:
             "Content-Disposition",
         ],
     )
+    # add_middleware 后添加的在更外层先执行：跨站防线放在最外层，跨站发来的简单写
+    # 请求（不触发 CORS 预检、会直接到达）在进入任何后续处理前就被 403 短路；OPTIONS
+    # 预检不属于被拦方法，CORS 协商行为完全不受影响。CORSMiddleware 自身的
+    # allow_origins 列表管的是"响应头是否放行"，与这道防线互补、职责不同。
+    app.add_middleware(LoopbackOriginGuardMiddleware)
     for router in (
         # 批量匹配的 `/match-batches` 是岗位路由下的字面量路径，必须先于 jobs.router
         # 的 `/{job_id}` 参数路径注册，否则 FastAPI 会把它尝试解析成整数并返回 422。
@@ -277,6 +293,7 @@ def create_app() -> FastAPI:
         update_api.router,
         assistant.router,
         trash.router,
+        user_files.router,
     ):
         app.include_router(router)
     app.add_exception_handler(Exception, unhandled_exception)

@@ -17,33 +17,6 @@ function stringList(value: unknown): string[] {
     : [];
 }
 
-export interface FilterSummary {
-  /** 按条件明确筛掉的条数。 */
-  filtered: number;
-  /** 这次实际启用的本地筛选条件。 */
-  applied: string[];
-  /** 有岗位缺字段、没能判断的条件（那些岗位已保留）。 */
-  undecided: string[];
-  undecidedCount: number;
-  /** 用户填了但没能识别的条件——**必须明说**，否则等于静默失效。 */
-  unapplied: string[];
-}
-
-/** 从批次 config 里读出本地筛选的账目（后端写在 task.config，不新增数据库列）。 */
-export function filterSummary(task: ApplyTaskDetail | null): FilterSummary | null {
-  const config = task?.config;
-  if (!config) return null;
-  const applied = stringList(config.filter_applied);
-  if (applied.length === 0) return null;
-  return {
-    filtered: Number(config.filtered_out) || 0,
-    applied,
-    undecided: stringList(config.filter_undecided),
-    undecidedCount: Number(config.filter_undecided_count) || 0,
-    unapplied: stringList(config.filter_unapplied),
-  };
-}
-
 export interface SiteFilterSummary {
   /** 这次真正生效的站点筛选条件（形如「学历要求：本科」）。 */
   applied: string[];

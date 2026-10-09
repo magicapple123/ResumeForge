@@ -1,8 +1,8 @@
 /**
  * 站点侧筛选项：把招聘网站**自己的筛选栏**搬进采集条件里。
  *
- * 为什么值得单独一块：站点在接口侧就把不符合的岗位筛掉了，所以它比"采回来再本地筛"
- * **更准也更省**——本地筛要先翻页、抓详情，再把结果丢掉。
+ * 为什么值得单独一块：站点在接口侧就把不符合的岗位筛掉了，比采回来再筛更快更准——
+ * 网站搜索时就完成筛选，结果里不会有不符合的岗位。
  *
  * 两条不能让步的性质：
  *
@@ -11,13 +11,21 @@
  * 2. **来源要标明。** 浏览器在跑时读到的是"你这个账号可见"的完整清单；没跑时用的是全网
  *    通用清单。两者可能不一样（实测：「求职类型」里「实习」这一档就因人而异），所以
  *    必须让用户知道自己拿到的是哪一份。
+ *
+ * 「测试是否生效」按钮：把当前选中的项发到后端，在真实站点页面上逐项校验
+ * （必要时会导航到筛选栏页读"这个账号可见"的清单），结果逐项展示。
  */
-import { InfoCircleOutlined, ReloadOutlined } from "@ant-design/icons";
+import { ExperimentOutlined, InfoCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { SelectProps } from "antd";
-import { Alert, Button, Form, Select, Space, Tag, Tooltip, Typography } from "antd";
+import { Alert, App, Button, Form, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getCollectFilterOptions } from "../../api/apply";
-import type { CollectFilterGroup, CollectFilterOptions, CollectFilterSource } from "../../types";
+import { getCollectFilterOptions, testCollectFilters } from "../../api/apply";
+import type {
+  CollectFilterGroup,
+  CollectFilterOptions,
+  CollectFilterSource,
+  CollectFilterTestResult,
+} from "../../types";
 
 /** 来源标签：颜色 + 文案。文案要说清"这份清单的可信度"，不能只说一个英文枚举值。 */
 const SOURCE_TAG: Record<CollectFilterSource, { color: string; text: string; hint: string }> = {
@@ -46,6 +54,8 @@ const SOURCE_TAG: Record<CollectFilterSource, { color: string; text: string; hin
 interface Props {
   /** 是否禁用（有批次在跑时不允许改条件）。 */
   disabled: boolean;
+  /** 读取当前表单里选中的站点筛选项（「测试是否生效」用）。 */
+  getFilters: () => Record<string, string>;
 }
 
 /** antd Select 认得的下拉项形状（含"分组"那一层），用它标注免得 TS 推出一个联合类型。 */
@@ -65,10 +75,13 @@ function buildOptions(group: CollectFilterGroup): SelectOptionList {
   return [...grouped].map(([label, options]) => ({ label, options }));
 }
 
-export default function CollectSiteFilters({ disabled }: Props) {
+export default function CollectSiteFilters({ disabled, getFilters }: Props) {
+  const { message } = App.useApp();
   const [data, setData] = useState<CollectFilterOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<CollectFilterTestResult | null>(null);
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
   const fetchOptions = useCallback(async (): Promise<CollectFilterOptions | null> => {
@@ -120,6 +133,29 @@ export default function CollectSiteFilters({ disabled }: Props) {
   // 那不是在说明来源，只是在制造噪声。混了来源时才逐条列出。
   const sources = useMemo(() => [...new Set(groups.map((group) => group.source))], [groups]);
 
+  // 「测试是否生效」：把当前表单里选中的项发到后端，在真实站点页面上逐项校验。
+  const runTest = useCallback(async () => {
+    if (testing) return;
+    const raw = getFilters();
+    const selected = Object.fromEntries(
+      Object.entries(raw || {}).filter(([, code]) => (code || "").trim() !== ""),
+    );
+    if (Object.keys(selected).length === 0) {
+      message.info("请先选择至少一项站点筛选条件，再测试它是否生效");
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testCollectFilters(selected);
+      setTestResult(result);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "测试筛选条件失败");
+    } finally {
+      setTesting(false);
+    }
+  }, [getFilters, message, testing]);
+
   if (failed && !data) {
     return (
       <Alert
@@ -134,6 +170,19 @@ export default function CollectSiteFilters({ disabled }: Props) {
         }
         style={{ marginBottom: 12 }}
       />
+    );
+  }
+  if (loading && groups.length === 0) {
+    // 清单还在读取：渲染一个占位而不是整个消失——用户进入采集页签时若这块是空的，
+    // 会误以为"没有站点筛选功能"（实测反馈）。
+    return (
+      <div className="apply-collect-site-filters">
+        <Space size={8} wrap style={{ marginBottom: 4 }}>
+          <Typography.Text strong>按招聘网站的条件筛</Typography.Text>
+          <Spin size="small" />
+          <Typography.Text type="secondary">正在读取站点的筛选条件…</Typography.Text>
+        </Space>
+      </div>
     );
   }
   if (groups.length === 0) return null;
@@ -163,6 +212,17 @@ export default function CollectSiteFilters({ disabled }: Props) {
         >
           重新读取
         </Button>
+        <Tooltip title="在真实招聘网站页面上逐项检查你选的条件现在能不能选到（会临时导航到筛选栏，测试完不影响采集）">
+          <Button
+            size="small"
+            type="link"
+            icon={<ExperimentOutlined />}
+            loading={testing}
+            onClick={() => void runTest()}
+          >
+            测试是否生效
+          </Button>
+        </Tooltip>
       </Space>
 
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
@@ -172,7 +232,7 @@ export default function CollectSiteFilters({ disabled }: Props) {
 
       {!sessionRead && (
         <Alert
-          type="info"
+          type="warning"
           showIcon
           style={{ marginBottom: 12 }}
           title="想拿到你这个账号可见的完整选项，请先启动投递专用浏览器"
@@ -180,18 +240,52 @@ export default function CollectSiteFilters({ disabled }: Props) {
         />
       )}
 
-      <Space size={16} wrap>
+      {testing && <Spin size="small" style={{ marginBottom: 8 }} />}
+
+      {testResult && (
+        <Alert
+          type={testResult.unapplied.length > 0 ? "warning" : "success"}
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={
+            testResult.unapplied.length > 0
+              ? `有 ${testResult.unapplied.length} 项条件没能生效`
+              : "选中的条件全部能在站点上真实选到"
+          }
+          description={
+            <Space orientation="vertical" size={4} style={{ width: "100%" }}>
+              {testResult.applied.map((item) => (
+                <Typography.Text key={item.key}>
+                  <Tag color="success" style={{ marginInlineEnd: 4 }}>
+                    已生效
+                  </Tag>
+                  {item.label}：{item.value}
+                </Typography.Text>
+              ))}
+              {testResult.unapplied.map((item) => (
+                <Typography.Text key={item.key} type="warning">
+                  <Tag color="warning" style={{ marginInlineEnd: 4 }}>
+                    未生效
+                  </Tag>
+                  {item.label}：{item.value}——{item.detail}
+                </Typography.Text>
+              ))}
+              {testResult.unlimited.map((item) => (
+                <Typography.Text key={item.key} type="secondary">
+                  <Tag style={{ marginInlineEnd: 4 }}>不限</Tag>
+                  {item.label}——{item.detail}
+                </Typography.Text>
+              ))}
+            </Space>
+          }
+        />
+      )}
+
+      {/* align="start"：说明文字换行会把某项撑高，居中对齐会让旁边的下拉"浮"在半空——
+          顶边对齐后各列控件在同一水平线上。 */}
+      <Space size={16} wrap align="start">
         {groups.map((group) => (
-          <Form.Item
-            key={group.key}
-            name={["filters", group.key]}
-            label={group.label}
-            extra={
-              group.key === "jobType"
-                ? "与下面的「岗位类型」分工：这里按网站自己的分类筛，下面的含「校招」（网站没有校招这一档）"
-                : undefined
-            }
-          >
+          <Form.Item key={group.key} name={["filters", group.key]} label={group.label}>
             <Select
               allowClear
               showSearch

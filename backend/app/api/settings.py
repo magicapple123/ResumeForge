@@ -10,6 +10,9 @@ from ..database import get_db
 from ..models.setting import LLMConfigRecord
 from ..schemas.setting import (
     AssistantOrbSetting,
+    AssistantRelaxedModeSetting,
+    ExportSaveLocationIn,
+    ExportSaveLocationOut,
     LLMApiKeyRevealResult,
     LLMConfig,
     LLMConfigRecordCreate,
@@ -25,6 +28,11 @@ from ..schemas.setting import (
     SearchConfig,
     WebFormRelaxedModeSetting,
 )
+from ..services.export_save_location import (
+    FolderPickerUnavailable,
+    pick_directory,
+    validate_directory,
+)
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.llm.model_catalog import list_available_models
@@ -32,6 +40,8 @@ from ..services.llm.thinking import probe_thinking, thinking_support
 from ..services.settings_service import (
     delete_llm_config_record,
     get_assistant_orb_setting,
+    get_assistant_relaxed_mode,
+    get_export_save_location,
     get_llm_config,
     get_navigation_visibility,
     get_reminder_popup_on_start,
@@ -41,6 +51,8 @@ from ..services.settings_service import (
     mask_llm_config,
     resolve_llm_config_api_key,
     save_assistant_orb_setting,
+    save_assistant_relaxed_mode,
+    save_export_save_location,
     save_llm_config,
     save_llm_config_record,
     save_navigation_visibility,
@@ -164,6 +176,61 @@ def write_webform_relaxed_mode(payload: WebFormRelaxedModeSetting, db: Session =
     return WebFormRelaxedModeSetting(
         enabled=save_webform_relaxed_mode(db, payload.enabled)
     )
+
+
+@router.get("/assistant-relaxed-mode", response_model=AssistantRelaxedModeSetting)
+def read_assistant_relaxed_mode(db: Session = Depends(get_db)):
+    """求职助手「放宽模式」（默认关）：助手可读取完整资料（含敏感信息）。
+
+    开启前的前端卡片会写明解锁范围与始终不解锁的凭据边界。
+    """
+    return AssistantRelaxedModeSetting(enabled=get_assistant_relaxed_mode(db))
+
+
+@router.put("/assistant-relaxed-mode", response_model=AssistantRelaxedModeSetting)
+def write_assistant_relaxed_mode(
+    payload: AssistantRelaxedModeSetting, db: Session = Depends(get_db)
+):
+    return AssistantRelaxedModeSetting(
+        enabled=save_assistant_relaxed_mode(db, payload.enabled)
+    )
+
+
+@router.get("/export-save-location", response_model=ExportSaveLocationOut)
+def read_export_save_location(db: Session = Depends(get_db)):
+    """生成内容保存位置：空串 = 仅浏览器下载（默认行为）。"""
+    return ExportSaveLocationOut(path=get_export_save_location(db))
+
+
+@router.put("/export-save-location", response_model=ExportSaveLocationOut)
+def write_export_save_location(payload: ExportSaveLocationIn, db: Session = Depends(get_db)):
+    """保存导出落盘目录。空串恢复默认；目录不合法时 400 并说明原因。"""
+    path = payload.path.strip()
+    if path:
+        reason = validate_directory(path)
+        if reason is not None:
+            raise HTTPException(status_code=400, detail=reason)
+    return ExportSaveLocationOut(path=save_export_save_location(db, path))
+
+
+@router.post("/export-save-location/pick")
+def pick_export_save_folder(request: Request) -> dict:
+    """弹出本机原生「选择文件夹」对话框，返回所选绝对路径（取消返回 null）。
+
+    后端就跑在用户本机，原生对话框是唯一能拿到**真实绝对路径**的方式（浏览器的
+    File System Access API 拿不到完整路径）。环境不支持时 503，前端回退为手动输入。
+
+    与上方密钥查看同一套回环校验：接口会弹出原生系统对话框，若放任任意来源调用，
+    恶意网页可以反复骚扰用户（对话框是模态的，还会挡住别的窗口），所以只允许
+    直连本机的客户端触发。
+    """
+    if not _is_loopback_request(request):
+        raise HTTPException(status_code=403, detail="选择文件夹只能在运行后端的本机操作")
+    try:
+        picked = pick_directory()
+    except FolderPickerUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"path": picked}
 
 
 @router.get("/navigation", response_model=NavigationVisibility)

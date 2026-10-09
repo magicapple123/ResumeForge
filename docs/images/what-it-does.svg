@@ -35,7 +35,7 @@
   <circle cx="376" cy="136" r="14" fill="#16365c"/>
   <text class="t" x="376" y="141" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">2</text>
   <text class="t ct" x="400" y="142" >判断匹不匹配</text>
-  <text class="t cb" x="368" y="176" >· 五类结论代替百分比评分</text>
+  <text class="t cb" x="368" y="176" >· 五类结论，参考分仅展示辅助</text>
   <text class="t cb" x="368" y="200" >· 每条结论附 JD 原文与你的证据</text>
   <text class="t cb" x="368" y="224" >· 找不到依据就写「资料中未提供」</text>
   <text class="t cb" x="368" y="248" >· 与「岗位需求解读」明确区分</text>

@@ -163,12 +163,13 @@ ResumeForge/
 ### 4.4 运维与数据安全
 
 - **自动备份**：启动后台线程按 `AUTO_BACKUP_INTERVAL_DAYS`（默认 7）节流，到期对当前
-  数据库做一致性快照到 `data/auto-backups/`，按 `AUTO_BACKUP_KEEP`（默认 5）轮转；
+  数据库做一致性快照到 `backend/data/auto-backups/`，按 `AUTO_BACKUP_KEEP`（默认 5）轮转；
   `AUTO_BACKUP_ENABLED=false` 整体关闭。标记文件按"上次尝试"节流，连续失败不会每次
   启动都重撞。
-- **更新前快照**：两条更新器在覆盖程序文件前把 `data/*.db` + `datasets/*.db` 快照到
-  `data/pre-update/`（保留 3 份）。Windows 三条覆盖路径都在停应用之后（直接拷文件即
-  一致快照）；macOS 优先用 `sqlite3 .backup` 在线快照。
+- **更新前快照**：两条更新器在覆盖程序文件前把 `backend/data/*.db` + `datasets/*.db`
+  快照到 `backend/data/pre-update/`（保留 3 份，连同 `-wal` / `-shm` / `-journal` 边车）。
+  Windows 三条覆盖路径都在停应用之后（直接拷文件即一致快照）；macOS 优先用
+  `sqlite3 .backup` 在线快照。
 - **文件日志**：`data/logs/backend.log`（5MB×5 滚动，`LOG_FILE_ENABLED` / `LOG_LEVEL`
   可调）；诊断包导出端点 `GET /api/system/diagnostics/export` 出包前对日志尾部做疑似
   令牌兜底脱敏。
