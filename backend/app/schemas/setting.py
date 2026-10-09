@@ -283,6 +283,17 @@ class WebFormRelaxedModeSetting(BaseModel):
     enabled: bool = False
 
 
+class AssistantRelaxedModeSetting(BaseModel):
+    """求职助手「放宽模式」开关（默认关）。
+
+    开启后助手可读取完整资料：姓名、电话等敏感身份字段，网申填表的真实填写值，
+    以及历史对话。提前告知的边界（前端卡片与系统提示都会写明）：**API 密钥等
+    凭据与全局配置无论如何都不会发送给模型**，简历照片的二进制内容也不发送。
+    """
+
+    enabled: bool = False
+
+
 class AssistantOrbSetting(BaseModel):
     """「投投」悬浮球的用户设置（入口默认开，提示标语默认弹）。"""
 
@@ -290,6 +301,18 @@ class AssistantOrbSetting(BaseModel):
     # 是否弹出悬浮球的轮换提示标语。**默认开以兼容老数据**：存量库存的是裸 bool，读回时
     # 会被补成 `tips_enabled=True`，老用户的体验与升级前一致。
     tips_enabled: bool = True
+
+
+class ExportSaveLocationIn(BaseModel):
+    """导出产物的额外落盘位置。空串 = 恢复默认（仅浏览器下载）。"""
+
+    path: str = Field(default="", max_length=1024)
+
+
+class ExportSaveLocationOut(BaseModel):
+    """当前生效的导出落盘位置（空串 = 默认浏览器下载目录）。"""
+
+    path: str = ""
 
 
 NAVIGATION_CORE_KEYS = frozenset({"/", "/jobs", "/resumes", "/profile", "/apply", "/settings"})

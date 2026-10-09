@@ -194,38 +194,44 @@ describe("CollectPanel 站点筛选账目", () => {
   });
 });
 
-describe("CollectPanel 岗位类型", () => {
-  /** 定位「岗位类型」表单项的 label（其他筛选项也用「采集后筛选」标签，需限定范围）。 */
-  async function jobTypeLabel() {
-    await screen.findByText("岗位类型");
-    const textNode = screen.getByText("岗位类型");
-    const label = textNode.closest("label");
-    if (!label) throw new Error("job_type label not found");
-    return label;
+describe("CollectPanel 采集进行中与翻页账目", () => {
+  const runningTask: ApplyTaskDetail = {
+    id: 9,
+    kind: "collect",
+    status: "running",
+    total: 5,
+    processed: 2,
+    succeeded: 2,
+    failed: 0,
+    skipped: 3,
+    current_step: "正在采集第 2 页",
+    stop_reason: "",
+    config: {},
+    message: "",
+    started_at: "2026-10-09T01:00:00",
+    finished_at: null,
+    created_at: "2026-10-09T00:59:00",
+    items: [],
+  };
+
+  function renderWithTask(task: ApplyTaskDetail) {
+    return render(
+      <AntdApp>
+        <MemoryRouter>
+          <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={task} />
+        </MemoryRouter>
+      </AntdApp>,
+    );
   }
 
-  it("默认配置（社招）显示「站点筛选」标签——BOSS 官方参数已实测生效", async () => {
-    renderPanel();
-    const label = await jobTypeLabel();
-    // antd 6 的 Form.useWatch 订阅通知是异步时序：表单初值经 setFieldsValue 注入后，
-    // 标签的重渲染可能晚于 label 定位。先等「站点筛选」真正落地，断言值不变。
-    await screen.findByText("站点筛选");
-    expect(label.textContent).toContain("站点筛选");
-    // 旧文案不能再出现：岗位类型不再只是标注。
-    expect(screen.queryByText("仅标注")).not.toBeInTheDocument();
-  });
+  it("站点从某页起重复推送时，账目区显示「提前停止翻页」说明", async () => {
+    renderWithTask({
+      ...runningTask,
+      status: "completed",
+      finished_at: "2026-10-09T01:05:00",
+      config: { pagination_stopped_at: 5 },
+    });
 
-  it("切到校招后标签变为「采集后筛选」——BOSS 无校招参数，如实说明", async () => {
-    renderPanel();
-    const label = await jobTypeLabel();
-
-    // 打开岗位类型下拉并选择「校招」。
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: /岗位类型/ }), { button: 0 });
-    const option = await screen.findByText(
-      (content, element) => content === "校招" && !!element?.closest(".ant-select-item-option"),
-    );
-    fireEvent.click(option);
-
-    await waitFor(() => expect(label.textContent).toContain("采集后筛选"));
+    expect(await screen.findByText(/已在第 5 页提前停止翻页/)).toBeInTheDocument();
   });
 });

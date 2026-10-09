@@ -11,12 +11,12 @@ import {
   InputNumber,
   Modal,
   Select,
-  Skeleton,
   Space,
   Switch,
   Typography,
   App,
 } from "antd";
+import PageSkeleton from "../common/PageSkeleton";
 import { useEffect, useState } from "react";
 import { getApplyConfig, listSites, updateApplyConfig } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
@@ -72,7 +72,7 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
   };
 
   if (loading && !data) {
-    return <Skeleton active paragraph={{ rows: 8 }} />;
+    return <PageSkeleton rows={8} card={false} />;
   }
   if (error && !data) {
     return (
@@ -189,7 +189,14 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
         <Switch />
       </Form.Item>
 
-      <Space>
+      {/* 底部操作区：与表单之间留出分隔线，滚到底也不和最后一个字段贴在一起。 */}
+      <Space
+        style={{
+          marginTop: 12,
+          paddingTop: 12,
+          borderTop: "1px solid #f0f2f5",
+        }}
+      >
         <Button onClick={onClose}>取消</Button>
         <Button type="primary" loading={saving} onClick={() => void submit()}>
           保存设置
@@ -208,6 +215,10 @@ export default function ApplySettingsModal({ open, onClose, onSaved }: Props) {
       footer={null}
       width={620}
       destroyOnHidden
+      styles={{
+        // 表单很长：限高滚动，别顶满整屏（与全站弹窗口径一致）。
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", paddingRight: 8 },
+      }}
     >
       {open && <ApplySettingsForm onClose={onClose} onSaved={onSaved} />}
     </Modal>

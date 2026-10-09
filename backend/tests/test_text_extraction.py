@@ -156,6 +156,31 @@ async def test_extract_job_text_propagates_provider_error_for_api_fallback():
         await extract_job_text(FakeProvider(LLMError("服务不可用")), JOB_TEXT, local)
 
 
+@pytest.mark.asyncio
+async def test_extract_job_text_retries_once_before_giving_up():
+    """偶发抖动（第一次没输出有效 JSON、第二次正常）应自动重试，而不是让用户手动重试。"""
+    calls: list[int] = []
+
+    class FlakyProvider(BaseLLMProvider):
+        def __init__(self) -> None:
+            super().__init__(LLMConfig(base_url="https://model.example/v1", model="test-model"))
+
+        async def chat(self, _messages: list[dict]) -> str:
+            calls.append(1)
+            if len(calls) == 1:
+                return "模型这次没有输出有效 JSON"
+            return job_response()
+
+        async def stream_chat(self, _messages):
+            yield ""
+
+    result = await extract_job_text(FlakyProvider(), JOB_TEXT, parse_job_text(JOB_TEXT))
+
+    assert len(calls) == 2
+    assert result.parse_engine == "ai"
+    assert result.title == "全栈开发工程师"
+
+
 def test_normalize_job_result_drops_ungrounded_value_without_local_fallback():
     result = normalize_job_result(
         {"title": "后端开发工程师", "company": "虚构公司"},

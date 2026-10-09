@@ -224,3 +224,48 @@ def test_collector_stages_a_candidate_even_when_the_detail_fetch_fails(db_sessio
     assert staged.location == "天津"
     assert staged.salary == "20-30K"
     assert staged.description == ""
+
+
+def test_collector_stops_early_when_pages_repeat(db_session):
+    """从某一页起站点开始返回与前面**完全相同**的结果：连续两页全重复就提前停。
+
+    真实场景：筛选组合下岗位总量就这么多，站点对深层翻页原样重复推送——旧行为会
+    一路翻满 30 页上限，界面上表现为"卡在某一页 + 一个岗位都采不到"（已处理永远是
+    0，因为进度只算新增）。账目里必须写明停在哪一页，收尾文案据此解释。
+    """
+    unique = [
+        SearchPage(
+            results=[
+                SearchResult(title=f"岗位{index}", company="A公司", url=f"https://example.com/{index}")
+            ],
+            page=index,
+            has_next=True,
+        )
+        for index in range(1, 4)
+    ]
+    repeated = SearchPage(
+        results=[SearchResult(title="岗位1", company="A公司", url="https://example.com/1")],
+        page=4,
+        has_next=True,
+    )
+    adapter = FakeCollectAdapter(unique + [repeated, repeated])
+    task = _task(db_session)
+
+    report = Collector().run(
+        session=db_session,
+        task=task,
+        client=object(),
+        adapter=adapter,
+        config=_config(per_task_limit=10),
+        checkpoint=lambda: None,
+        sleeper=lambda _seconds: None,
+        clock=_FakeClock(),
+    )
+
+    # 页 4、5 连续全重复 → 第 5 页停（给一页宽限，不会翻满 30 页）
+    assert report.pagination_stopped_at == 5
+    assert adapter.searched_pages == [1, 2, 3, 4, 5]
+    assert report.collected == 3
+    assert report.skipped == 2
+    # 账目进 task.config，界面据此显示"提前停止翻页"的说明
+    assert task.config["pagination_stopped_at"] == 5

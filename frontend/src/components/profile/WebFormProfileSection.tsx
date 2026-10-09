@@ -23,8 +23,8 @@
  * 统一触发。**不用独立按钮**——但数据是另一次请求，所以那次保存要**两次都成功才算成功**
  * （见 ProfilePage 的 `submit`）。
  */
-import { Alert, Card, Empty, Skeleton, Tag, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, Card, Empty, Tag, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getWebFormExtraProfile } from "../../api/webform";
 import type {
   WebFormExtraEntry,
@@ -32,6 +32,7 @@ import type {
   WebFormField,
   WebFormRepeatedGroup,
 } from "../../types";
+import PageSkeleton from "../common/PageSkeleton";
 import WebFormProfileCustomFieldAdder from "./WebFormProfileCustomFieldAdder";
 import WebFormProfileGroup from "./WebFormProfileGroup";
 import { customFieldKey, isCustomField, normalizeFieldLabel } from "./WebFormProfileFieldUtils";
@@ -73,6 +74,14 @@ export default function WebFormProfileSection({
   const [error, setError] = useState("");
   const [customLabel, setCustomLabel] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  // 搜索防抖：输入静置 300ms 才提交。搜索会改变字段集合（remount），每敲一个字符
+  // 重挂载一批控件的代价太高；输入框仍即时回显（searchTerm），只是过滤动作延后。
+  const [committedSearchTerm, setCommittedSearchTerm] = useState("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setCommittedSearchTerm(searchTerm.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
   const [showOnlyFilled, setShowOnlyFilled] = useState(false);
 
   useEffect(() => {
@@ -101,9 +110,23 @@ export default function WebFormProfileSection({
   // 缺了它只该少显示一个标记，不该让整页崩掉。
   const entries = useMemo(() => details ?? {}, [details]);
 
+  /**
+   * 展示名按 field.key 先算好一张表：字段名同时被「过滤 haystack」与「渲染」两处读，
+   * 缓存后每字段只算一次，也顺带让 `displayLabel` 在击键时保持同一引用（entries / profile
+   * 不变时），Group 的自定义比较器才不会被它打穿。
+   */
+  const displayLabels = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const field of profile?.fields ?? []) {
+      map.set(field.key, entries[field.key]?.label?.trim() || field.label);
+    }
+    return map;
+  }, [entries, profile]);
+
   const displayLabel = useCallback(
-    (field: WebFormField): string => entries[field.key]?.label?.trim() || field.label,
-    [entries],
+    (field: WebFormField): string =>
+      displayLabels.get(field.key) ?? (entries[field.key]?.label?.trim() || field.label),
+    [displayLabels, entries],
   );
 
   /** 按分组切分，供分区展示（分组顺序来自后端目录）。 */
@@ -117,11 +140,25 @@ export default function WebFormProfileSection({
       .filter((entry) => entry.fields.length > 0);
   }, [profile]);
 
-  /** 查看态只显示**已填**的项——否则一屏空标签，用户找不到自己填过什么。 */
-  const filledCount = useMemo(
-    () => profile?.fields.filter((field) => values[field.key]?.trim()).length ?? 0,
-    [profile, values],
-  );
+  /**
+   * 查看态只显示**已填**的项——否则一屏空标签，用户找不到自己填过什么。
+   *
+   * 总数与「每组已填数」合并成**一遍**扫描：以前总数扫一遍全字段、Group 内部又各扫一遍
+   * 本组字段，击键时叠加成 O(字段数 × 组数)。现在一次 O(字段数) 同时产出两者。
+   */
+  const filledStats = useMemo(() => {
+    const byGroup = new Map<string, number>();
+    let total = 0;
+    if (!profile || editing) return { total, byGroup };
+    for (const field of profile.fields) {
+      if (!values[field.key]?.trim()) continue;
+      total += 1;
+      byGroup.set(field.group, (byGroup.get(field.group) ?? 0) + 1);
+    }
+    return { total, byGroup };
+  }, [editing, profile, values]);
+  // 编辑态输入时不刷新全局计数：计数只用于查看态和筛选工具栏，避免每个字符扫描整份资料。
+  const filledCount = editing ? 0 : filledStats.total;
   // 击键时 repeatedGroups 引用不变，这条 memo 让该项计算跟着跳过。
   const hasRepeatedValues = useMemo(
     () =>
@@ -132,7 +169,7 @@ export default function WebFormProfileSection({
   );
 
   const totalCount = profile?.fields.length ?? 0;
-  const normalizedSearch = searchTerm.trim().toLocaleLowerCase();
+  const normalizedSearch = committedSearchTerm.toLocaleLowerCase();
 
   // 每个分组的全量字段清单：按 profile 一次建好（数组引用稳定），
   // Group 的 memo 才不会被「每 render 重建的 groupAllFields 数组」打穿。
@@ -147,22 +184,47 @@ export default function WebFormProfileSection({
     return map;
   }, [profile]);
 
+  /**
+   * 是否需要真正过滤。查看态永远要隐藏空字段；编辑态只有开了「只看已填」或输入了搜索词才需要。
+   * 都不需要时，`filteredGrouped` 直接复用 `fieldsByGroup` 里**引用稳定**的数组，
+   * Group 的自定义比较器才能对未编辑的组整体 bail。
+   */
+  const needsFilter = !editing || showOnlyFilled || Boolean(normalizedSearch);
+
   /** 先筛选再渲染，避免每个分组里重复写一套查看态/编辑态判断。 */
   const filteredGrouped = useMemo(() => {
     return grouped
-      .map(({ group, fields }) => ({
-        group,
-        fields: fields.filter((field) => {
-          const value = values[field.key] ?? "";
-          if (!editing && !value.trim()) return false;
-          if (editing && showOnlyFilled && !value.trim()) return false;
-          if (!normalizedSearch) return true;
-          const haystack = `${group} ${displayLabel(field)} ${value}`.toLocaleLowerCase();
-          return haystack.includes(normalizedSearch);
-        }),
-      }))
+      .map(({ group, fields }) => {
+        if (!needsFilter) {
+          return { group, fields: fieldsByGroup.get(group) ?? fields };
+        }
+        return {
+          group,
+          fields: fields.filter((field) => {
+            const value = values[field.key] ?? "";
+            if (!editing && !value.trim()) return false;
+            if (editing && showOnlyFilled && !value.trim()) return false;
+            if (!normalizedSearch) return true;
+            const haystack = `${group} ${displayLabel(field)} ${value}`.toLocaleLowerCase();
+            return haystack.includes(normalizedSearch);
+          }),
+        };
+      })
       .filter((entry) => entry.fields.length > 0);
-  }, [displayLabel, editing, grouped, normalizedSearch, showOnlyFilled, values]);
+  }, [
+    displayLabel,
+    editing,
+    fieldsByGroup,
+    grouped,
+    needsFilter,
+    normalizedSearch,
+    showOnlyFilled,
+    values,
+  ]);
+
+  // 编辑态默认展示全部字段时，输入值变化不需要重新构造分组列表。
+  // 这条快路径避免每次按键都执行 map/filter，并保持各组 fields 引用稳定。
+  const visibleGroups = editing && !showOnlyFilled && !normalizedSearch ? grouped : filteredGrouped;
 
   const handleRenameCustomField = useCallback(
     (key: string, nextLabel: string): string | undefined => {
@@ -202,6 +264,13 @@ export default function WebFormProfileSection({
     [onFieldDelete],
   );
 
+  // values/details 每击键都换新，会把 handleAddCustomField 每次重建。改用 ref 读最新值
+  // （点击发生在渲染提交之后，ref 已是最新），把该回调的依赖收敛到稳定项。
+  const addCustomFieldContextRef = useRef({ values, details });
+  useEffect(() => {
+    addCustomFieldContextRef.current = { values, details };
+  });
+
   const handleAddCustomField = useCallback(() => {
     const label = customLabel.trim();
     const key = customFieldKey(label);
@@ -234,16 +303,17 @@ export default function WebFormProfileSection({
     };
     setProfile(nextProfile);
     // onLoaded 会重置父组件的草稿：新增目录项时必须保留用户刚输入、尚未保存的值。
-    onLoaded({ ...nextProfile, values, details });
+    const { values: latestValues, details: latestDetails } = addCustomFieldContextRef.current;
+    onLoaded({ ...nextProfile, values: latestValues, details: latestDetails });
     onChange(key, "");
     onFieldLabelChange(key, label);
     setCustomLabel("");
     setError("");
-  }, [customLabel, details, displayLabel, onChange, onFieldLabelChange, onLoaded, profile, values]);
+  }, [customLabel, displayLabel, onChange, onFieldLabelChange, onLoaded, profile]);
 
   const toggleShowOnlyFilled = useCallback(() => setShowOnlyFilled((current) => !current), []);
 
-  if (loading) return <Skeleton active paragraph={{ rows: 4 }} />;
+  if (loading) return <PageSkeleton rows={4} card={false} />;
 
   return (
     <Card
@@ -276,6 +346,8 @@ export default function WebFormProfileSection({
         groups={repeatedGroups}
         editing={editing}
         saving={saving}
+        showOnlyFilled={showOnlyFilled}
+        searchTerm={committedSearchTerm}
         onChange={onRepeatedGroupsChange}
       />
 
@@ -286,11 +358,11 @@ export default function WebFormProfileSection({
         />
       ) : null}
 
-      {(editing || filledCount > 0) && filteredGrouped.length === 0 && searchTerm.trim() ? (
+      {(editing || filledCount > 0) && visibleGroups.length === 0 && searchTerm.trim() ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的网申资料" />
       ) : null}
 
-      {filteredGrouped.map(({ group, fields }) => {
+      {visibleGroups.map(({ group, fields }) => {
         // 全量清单来自 fieldsByGroup（引用稳定），不在这里每 render 重新 filter。
         const groupAllFields = fieldsByGroup.get(group) ?? fields;
         return (
@@ -299,6 +371,7 @@ export default function WebFormProfileSection({
             group={group}
             fields={fields}
             groupAllFields={groupAllFields}
+            filledCount={editing ? 0 : (filledStats.byGroup.get(group) ?? 0)}
             editing={editing}
             saving={saving}
             values={values}

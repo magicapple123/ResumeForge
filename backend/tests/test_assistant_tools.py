@@ -99,6 +99,35 @@ def test_get_job_reports_a_missing_id_instead_of_guessing(db_session):
         execute_tool(db_session, "get_job", {"job_id": 999})
 
 
+def test_tool_reads_see_data_committed_by_other_sessions(db_session):
+    """工具读取必须看到**别的会话刚提交**的修改（用户在界面改完马上问助手的场景）。
+
+    流式执行器（assistant_stream._execute_tool）每次工具调用都开全新的
+    ``SessionLocal``；这条测试钉住这个契约。如果哪天把它改成复用一个长生命
+    周期会话，SQLite WAL 的读快照会让助手整轮对话都读到旧值——本测试会红。
+    """
+    from app.database import SessionLocal
+    from app.models.job import Job
+
+    # 第 1 轮对话：全新会话里创建岗位（与流式执行器的会话用法一致）
+    with SessionLocal() as turn_one:
+        created = json.loads(
+            execute_tool(turn_one, "create_job", {"title": "运营专员", "company": "示例公司"}).text
+        )
+
+    # 用户随即在「岗位广场」改了薪资（另一个请求、另一个会话提交）
+    with SessionLocal() as editor:
+        job = editor.get(Job, created["id"])
+        assert job is not None
+        job.salary = "18-22K·13薪"
+        editor.commit()
+
+    # 第 2 轮对话：助手必须读到改后的值，而不是第 1 轮的旧快照
+    with SessionLocal() as turn_two:
+        text = execute_tool(turn_two, "get_job", {"job_id": created["id"]}).text
+        assert "18-22K·13薪" in text
+
+
 def test_get_profile_tool_excludes_identity_fields(db_session):
     _seed_profile(db_session)
 

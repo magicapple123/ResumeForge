@@ -101,14 +101,13 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
       open={open}
       title="从资料生成事实台账草稿"
       width={760}
-      centered
       onCancel={() => {
         reset();
         onClose();
       }}
       // 草稿一多（每条三行输入框）就超出视口：限高让弹窗在内部滚动，底部按钮始终可见。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       footer={
         <Space>

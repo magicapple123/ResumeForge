@@ -3,8 +3,8 @@
  * （自 JobsPage 拆出：:489-537 整块逐字随迁；applyBatchStatus/removeSelectedJobs
  * 经 prop 直通页面 handler，零 api 导入。）
  */
-import { CheckOutlined, ClearOutlined, DeleteOutlined } from "@ant-design/icons";
-import { Button, Popconfirm, Select, Space, Typography } from "antd";
+import { CheckOutlined, ClearOutlined, DeleteOutlined, SendOutlined } from "@ant-design/icons";
+import { Button, Popconfirm, Select, Space, Tooltip, Typography } from "antd";
 import type { BatchAction } from "./jobFilterOptions";
 import { STATUS_OPTIONS } from "./jobFilterOptions";
 
@@ -16,6 +16,7 @@ export function BatchToolbar({
   batchStatus,
   setBatchStatus,
   applyBatchStatus,
+  enqueueSelectedJobs,
   removeSelectedJobs,
 }: {
   selectionMode: boolean;
@@ -25,6 +26,7 @@ export function BatchToolbar({
   batchStatus: string | undefined;
   setBatchStatus: (value: string | undefined) => void;
   applyBatchStatus: () => Promise<void>;
+  enqueueSelectedJobs: () => Promise<void>;
   removeSelectedJobs: () => Promise<void>;
 }) {
   if (!selectionMode) return null;
@@ -57,6 +59,18 @@ export function BatchToolbar({
       >
         应用状态
       </Button>
+      {/* 海投效率路径：批量直接入队。Tooltip 必须说清两件看不见的事——双确认会被
+          一并带上（不逐条弹窗）、来源不支持的岗位会静默跳过，否则用户只看到"少进去了几个"。 */}
+      <Tooltip title="海投路径：直接加入投递队列（未分析/真实缺口不再逐条弹确认）；来源不支持的岗位自动跳过并在结果中说明">
+        <Button
+          icon={<SendOutlined />}
+          disabled={selectedJobIds.length === 0 || batchAction !== null}
+          loading={batchAction === "enqueue"}
+          onClick={() => void enqueueSelectedJobs()}
+        >
+          加入投递队列
+        </Button>
+      </Tooltip>
       <Popconfirm
         title={`确定删除选中的 ${selectedJobIds.length} 个岗位？`}
         description="将移入回收站，可随时恢复"

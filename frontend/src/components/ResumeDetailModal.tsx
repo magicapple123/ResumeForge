@@ -5,7 +5,7 @@
  * 数据与重渲染的动作准备好，交给共享组件渲染。
  */
 import type { ResumeFormatConfig } from "../types/resumeFormat";
-import { Alert, App, Button, Modal, Skeleton, Space } from "antd";
+import { Alert, App, Button, Modal, Space } from "antd";
 import { useEffect, useRef, useState } from "react";
 import {
   fetchResumeHtml,
@@ -18,6 +18,7 @@ import {
 import type { ResumeContent, ResumeDetail, ResumeLayout } from "../types";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
 import ResumeDetailPreview from "./resume/ResumeDetailPreview";
+import PageSkeleton from "./common/PageSkeleton";
 import type { ResumePreviewHandle } from "./ResumePreview";
 
 interface Props {
@@ -224,14 +225,14 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
       // 弹窗自身滚动：预览区高度已经与上方内容解耦（见 ResumePreview 的固定预算），
       // 内容再长也只是让这里滚动，不去压缩预览。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       destroyOnHidden
     >
       {error ? (
         <Alert type="error" showIcon title={error} />
       ) : !detail || !html ? (
-        <Skeleton active paragraph={{ rows: 8 }} />
+        <PageSkeleton rows={8} card={false} />
       ) : (
         <ResumeDetailPreview
           detail={detail}

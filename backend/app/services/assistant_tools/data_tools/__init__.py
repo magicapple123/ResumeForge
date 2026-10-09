@@ -1,8 +1,10 @@
-"""资料箱 / 事实台账 / 面试深挖 / 备选岗位 / 助手技能 / 格式模板的工具。
+"""资料箱 / 文件副本库 / 事实台账 / 面试深挖 / 备选岗位 / 助手技能 / 格式模板 /
+网申填充记录 / 助手历史对话的工具。
 
-本包由六个互不重叠的业务域文件组成（materials / claims / drill / candidate_jobs /
-skills / format_templates），此 ``__init__`` 作为原 ``data_tools`` 模块路径的兼容门面：
-``_registry`` 等调用方继续从 ``.data_tools`` 导入全部符号，导入路径零改动。
+本包由九个互不重叠的业务域文件组成（materials / user_files / claims / drill /
+candidate_jobs / skills / format_templates / webform_fills / chat_history），
+此 ``__init__`` 作为原 ``data_tools`` 模块路径的兼容门面：``_registry`` 等调用方
+继续从 ``.data_tools`` 导入全部符号，导入路径零改动。
 """
 from __future__ import annotations
 
@@ -25,6 +27,12 @@ from .candidate_jobs import (
 )
 from .candidate_jobs import (
     _tool_update_candidate_job as _tool_update_candidate_job,
+)
+from .chat_history import (
+    _tool_get_chat_conversation as _tool_get_chat_conversation,
+)
+from .chat_history import (
+    _tool_list_chat_conversations as _tool_list_chat_conversations,
 )
 from .claims import (
     _claim_or_error as _claim_or_error,
@@ -97,6 +105,15 @@ from .skills import (
 )
 from .skills import (
     _tool_update_skill as _tool_update_skill,
+)
+from .user_files import (
+    _tool_list_user_files as _tool_list_user_files,
+)
+from .webform_fills import (
+    _tool_get_web_form_fill as _tool_get_web_form_fill,
+)
+from .webform_fills import (
+    _tool_list_web_form_fills as _tool_list_web_form_fills,
 )
 
 logger = logging.getLogger(__name__)

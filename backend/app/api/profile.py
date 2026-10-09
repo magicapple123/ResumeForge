@@ -40,9 +40,24 @@ from ..services.text_extraction import (
     mark_local_fallback,
     no_model_warning,
 )
+from ..services.user_files import save_from_data_url
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 logger = logging.getLogger(__name__)
+
+
+def _save_photo_copy(db: Session, data_url: str, source_ref: str, fallback_name: str) -> None:
+    """best-effort：把照片 data URL 落一份磁盘副本（失败只记日志）。"""
+    try:
+        save_from_data_url(
+            db,
+            data_url,
+            source_type="photo",
+            source_ref=source_ref,
+            fallback_name=fallback_name,
+        )
+    except Exception:  # noqa: BLE001 - 副本是锦上添花，绝不能挡住照片保存
+        logger.warning("个人照片磁盘副本保存失败 ref=%s", source_ref, exc_info=True)
 
 
 @router.get("", response_model=ProfileOut)
@@ -52,7 +67,10 @@ def get_profile(db: Session = Depends(get_db)):
 
 @router.put("", response_model=ProfileOut)
 def save_profile(payload: ProfileUpdate, db: Session = Depends(get_db)):
-    return to_profile_out(update_profile(db, payload))
+    profile = update_profile(db, payload)
+    if payload.photo:
+        _save_photo_copy(db, payload.photo, f"profile:{profile.id}", f"profile-{profile.id}")
+    return to_profile_out(profile)
 
 
 @router.get("/photos", response_model=list[ProfilePhotoOut])
@@ -64,9 +82,11 @@ def read_photos(db: Session = Depends(get_db)):
 @router.post("/photos", response_model=ProfilePhotoOut, status_code=201)
 def create_photo(payload: ProfilePhotoCreate, db: Session = Depends(get_db)):
     try:
-        return add_photo(db, payload)
+        photo = add_photo(db, payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _save_photo_copy(db, payload.image, f"photo:{photo.id}", photo.name or f"photo-{photo.id}")
+    return photo
 
 
 @router.patch("/photos/{photo_id}", response_model=ProfilePhotoOut)

@@ -27,6 +27,9 @@ export default function MySpaceMenu({ hiddenKeys }: Props) {
   return (
     <Dropdown
       trigger={["click"]}
+      // classNames.root 挂到弹出菜单根节点（antd 6 推荐 API，替代已废弃的
+      // overlayClassName；Dropdown 没有 popupClassName 属性）。
+      classNames={{ root: "rf-nav-dropdown" }}
       menu={{
         items,
         selectedKeys: selectedKey ? [selectedKey] : [],

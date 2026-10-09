@@ -188,17 +188,22 @@ describe("ResumesPage URL 状态化", () => {
 });
 
 describe("ResumesPage 批量选择", () => {
-  it("进入多选 → 勾 2 项 → 删除所选 → 确认 → 每条各调一次删除接口", async () => {
+  /** 在第一条数据行上右键，从菜单里点「批量选择」（入口已从工具栏收进右键菜单）。 */
+  async function enterSelectingViaContextMenu() {
+    const title = await screen.findByText(RESUME.title, {}, { timeout: 5000 });
+    fireEvent.contextMenu(title.closest("tr") as HTMLElement);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+  }
+
+  it("行右键菜单进入多选 → 勾 2 项 → 删除所选 → 确认 → 每条各调一次删除接口", async () => {
     apiMocks.listResumes.mockResolvedValue({
       items: [RESUME, { ...RESUME, id: 9, title: "另一份简历" }],
       total: 2,
     });
     renderPage();
 
-    // CI 慢机上「批量选择」按钮先于列表数据就绪（数据未到时它是 disabled，点它无效、
-    // 表格还是 No data）——先等第一条数据渲染出来再进入多选，等待放宽到 5s 安全网。
-    await screen.findByText(RESUME.title, {}, { timeout: 5000 });
-    fireEvent.click(screen.getByRole("button", { name: "批量选择" }));
+    // CI 慢机上数据晚于表格就绪——先等第一条数据渲染出来再右键进入多选（5s 安全网）。
+    await enterSelectingViaContextMenu();
     // rowSelection 勾选框：第一个是表头全选，后两个是数据行。
     // 每次点击都会触发重渲染，必须现查现点（旧节点引用会失效）。
     fireEvent.click(screen.getAllByRole("checkbox")[1]!);
@@ -235,10 +240,10 @@ describe("ResumesPage 批量选择", () => {
     apiMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 1 });
     renderPage();
 
-    // 必须先等数据加载完成：「批量选择」按钮一渲染就存在，但 loading 期间是 disabled，
-    // 过早点击是空操作，多选工具栏永远不会出现（CI 并行负载下偶发）。
-    await screen.findByText(RESUME.title, {}, { timeout: 5000 });
-    fireEvent.click(screen.getByRole("button", { name: "批量选择" }));
+    // 必须先等数据加载完成：右键菜单要挂在数据行上，行没渲染出来右键是空操作。
+    // 顺带钉住 R8 口径：工具栏不再有直接的「批量选择」按钮。
+    expect(screen.queryByRole("button", { name: /批量选择/ })).not.toBeInTheDocument();
+    await enterSelectingViaContextMenu();
     const deleteBtn = await screen.findByRole("button", { name: "删除所选" }, { timeout: 5000 });
     expect(deleteBtn).toBeDisabled();
 

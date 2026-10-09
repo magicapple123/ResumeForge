@@ -8,9 +8,10 @@
 """
 
 import json
-from collections.abc import Sequence
+import logging
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from ..schemas.job import JobTextParseResult
 from ..schemas.profile import ProfileTextParseResult
@@ -27,6 +28,30 @@ PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 MAX_EXTRACTION_RESPONSE_CHARS = 100_000
 MAX_JOB_EXTRACTION_INPUT_CHARS = 48_000
 MAX_PROFILE_EXTRACTION_INPUT_CHARS = 64_000
+
+logger = logging.getLogger(__name__)
+
+# 视觉/抽取模型有已知的偶发抖动：同一份材料，这一次没抄录图片文字、没输出 jobs
+# 数组、或字段没过锚定校验，紧接着再调一次往往就过了。失败后立即原样重试一次再
+# 放弃——重试只发生在失败路径上，正常请求不多花一次调用，也不放宽任何校验标准。
+EXTRACTION_MAX_ATTEMPTS = 2
+
+_T = TypeVar("_T")
+
+
+async def with_extraction_retry(
+    run_once: Callable[[], Awaitable[_T]], *, label: str
+) -> _T:
+    """执行一次抽取；抛 ``LLMError`` 时立即重试，仍失败才把最后一次的错误抛给调用方。"""
+    last_error: LLMError | None = None
+    for attempt in range(1, EXTRACTION_MAX_ATTEMPTS + 1):
+        try:
+            return await run_once()
+        except LLMError as exc:
+            last_error = exc
+            logger.warning("%s第 %d 次调用失败：%s", label, attempt, exc)
+    assert last_error is not None
+    raise last_error
 
 # 有图片时追加到基础提示之后。基础提示以 JSON 骨架结尾，所以这段要写明自己优先。
 IMAGE_ADDENDUM_PROMPT = "image_extraction_addendum.md"
@@ -131,15 +156,19 @@ async def extract_job_text(
     image_data_urls: Sequence[str] = (),
 ) -> JobTextParseResult:
     """用模型抽取岗位字段：调模型 → 解析 JSON → 规范化（来源锚定），本地草稿兜底。"""
-    raw = await provider.chat(
-        build_job_extraction_messages(source_text, local_draft, image_data_urls)
-    )
-    data = parse_json_object(
-        raw, label="岗位识别", max_chars=MAX_EXTRACTION_RESPONSE_CHARS
-    )
-    return normalize_job_result(
-        data, local_draft, _anchor_for(data, source_text, image_data_urls)
-    )
+
+    async def once() -> JobTextParseResult:
+        raw = await provider.chat(
+            build_job_extraction_messages(source_text, local_draft, image_data_urls)
+        )
+        data = parse_json_object(
+            raw, label="岗位识别", max_chars=MAX_EXTRACTION_RESPONSE_CHARS
+        )
+        return normalize_job_result(
+            data, local_draft, _anchor_for(data, source_text, image_data_urls)
+        )
+
+    return await with_extraction_retry(once, label="岗位识别")
 
 
 async def extract_profile_text(

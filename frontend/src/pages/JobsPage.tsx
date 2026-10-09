@@ -23,6 +23,7 @@ import { BatchToolbar } from "./jobs/BatchToolbar";
 import { JobFilterBar } from "./jobs/JobFilterBar";
 import type { BatchAction, MatchBatchRunMode } from "./jobs/jobFilterOptions";
 import { useJobsPageState } from "./jobs/useJobsPageState";
+import { bulkEnqueueJobs, bulkEnqueueSummary } from "../components/apply/queue/bulkEnqueue";
 
 export default function JobsPage() {
   const navigate = useNavigate();
@@ -281,12 +282,44 @@ export default function JobsPage() {
     }
   };
 
+  const enqueueSelectedJobs = async () => {
+    if (selectedJobIds.length === 0) {
+      message.warning("请先选择岗位");
+      return;
+    }
+
+    // 与「导入并加入投递队列」同一条海投路径（bulkEnqueueJobs）：逐条入队、逐条容错，
+    // 双确认直接带上，最后给聚合账目——bulkEnqueueJobs 正常不会 throw，catch 只兜意外。
+    const jobIds = [...selectedJobIds];
+    setBatchAction("enqueue");
+    try {
+      const outcome = await bulkEnqueueJobs(jobIds);
+      setSelectedJobIds([]);
+      await reload();
+      if (outcome.enqueued > 0) {
+        message.success(bulkEnqueueSummary(outcome));
+      } else {
+        message.warning(bulkEnqueueSummary(outcome));
+      }
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "批量加入投递队列失败");
+    } finally {
+      setBatchAction(null);
+    }
+  };
+
   const exitSelectionMode = () => {
     if (batchAction !== null) return;
     setSelectionMode(false);
     setSelectedJobIds([]);
     setBatchStatus(undefined);
   };
+
+  /** 右键菜单「批量选择」的动作：进入选择模式（批量操作进行中时不给进）。 */
+  const enterSelectionMode = useCallback(() => {
+    if (batchAction !== null) return;
+    setSelectionMode(true);
+  }, [batchAction]);
 
   const openMatchBatch = (autoRun: boolean, runMode: MatchBatchRunMode = "immediate") => {
     if (autoRun && !selectionMode) {
@@ -337,7 +370,6 @@ export default function JobsPage() {
         setSourceKind={setSourceKind}
         batchAction={batchAction}
         selectionMode={selectionMode}
-        setSelectionMode={setSelectionMode}
         exitSelectionMode={exitSelectionMode}
         openMatchBatch={openMatchBatch}
         emptyDescriptionJobIds={emptyDescriptionJobIds}
@@ -355,6 +387,7 @@ export default function JobsPage() {
         batchStatus={batchStatus}
         setBatchStatus={setBatchStatus}
         applyBatchStatus={applyBatchStatus}
+        enqueueSelectedJobs={enqueueSelectedJobs}
         removeSelectedJobs={removeSelectedJobs}
       />
 
@@ -377,6 +410,7 @@ export default function JobsPage() {
           setFormOpen(true);
         }}
         onDelete={(job) => void removeJob(job.id)}
+        onEnterSelecting={enterSelectionMode}
         onPageChange={(nextPage, nextPageSize) => {
           setPage(nextPage);
           setPageSize(nextPageSize);

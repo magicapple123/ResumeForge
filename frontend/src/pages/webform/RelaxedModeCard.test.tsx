@@ -47,15 +47,15 @@ describe("RelaxedModeCard", () => {
   });
 
   it("风险文案常驻，开启状态下额外说明当前行为", () => {
-    const { rerender } = renderCard();
+    // 卡片已 memo（无 props）：父级重渲不再驱动它，状态由 `useWebFormRelaxedMode` 提供，
+    // 所以这里用「全新渲染」来切换 mock 状态，而不是靠 rerender（后者会被 memo 正确拦下）。
+    const closed = renderCard();
     expect(screen.getAllByText(/存在选错可能/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/已开启/)).toBeNull();
+    closed.unmount();
 
     mocks.enabled = () => true;
-    rerender(
-      <AntApp>
-        <RelaxedModeCard />
-      </AntApp>,
-    );
+    renderCard();
     expect(screen.getAllByText(/存在选错可能/).length).toBeGreaterThan(0);
     expect(screen.getByText(/已开启/)).toBeTruthy();
   });

@@ -11,7 +11,7 @@
  * 2. **头像不出本机**。照片存在本地数据库里，这里只是把它显示出来，不发给任何模型。
  */
 import { DatabaseOutlined, DownOutlined, UserOutlined } from "@ant-design/icons";
-import { Avatar, Dropdown, Skeleton, Tooltip } from "antd";
+import { Avatar, Dropdown, Skeleton } from "antd";
 import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -26,7 +26,7 @@ export default function AppHeaderContext() {
   const location = useLocation();
   const [dataset, setDataset] = useState<DatasetInfo | null>(null);
   const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
-  const [datasetCount, setDatasetCount] = useState(0);
+  const [, setDatasetCount] = useState(0); // 计数原先只用于悬停提示，提示移除后仅保留写入
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ready, setReady] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
@@ -97,9 +97,6 @@ export default function AppHeaderContext() {
   const displayName = (profile?.name || "").trim();
   const photo = (profile?.photo || "").trim();
   const initial = displayName ? Array.from(displayName)[0] : "";
-  // 数据集切换是点击触发的下拉：点开后 Tooltip 不该继续挂在按钮上，受控开关
-  // 让"点开下拉"的同时把提示收掉，鼠标移开也不再滞留。
-  const [datasetTipOpen, setDatasetTipOpen] = useState(false);
 
   return (
     <div className="app-header-context">
@@ -108,57 +105,43 @@ export default function AppHeaderContext() {
       ) : (
         <>
           {dataset ? (
-            <Tooltip
-              open={datasetTipOpen}
-              onOpenChange={setDatasetTipOpen}
-              title={
-                datasetCount > 1
-                  ? `当前数据集：${dataset.name}（共 ${datasetCount} 套），点击可直接切换`
-                  : "当前数据集。点击可查看数据集操作"
-              }
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                items: datasetMenuItems,
+                onClick: ({ key }) => void handleDatasetSwitch(String(key)),
+              }}
             >
-              <span onClick={() => setDatasetTipOpen(false)}>
-                <Dropdown
-                  trigger={["click"]}
-                  menu={{
-                    items: datasetMenuItems,
-                    onClick: ({ key }) => void handleDatasetSwitch(String(key)),
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="app-dataset-chip"
-                    aria-label={`当前数据集：${dataset.name}`}
-                    aria-haspopup="menu"
-                  >
-                    <DatabaseOutlined />
-                    <span className="app-dataset-name">{dataset.name}</span>
-                    <DownOutlined className="app-dataset-arrow" />
-                  </button>
-                </Dropdown>
-              </span>
-            </Tooltip>
-          ) : null}
-          <Tooltip title={displayName ? `${displayName}（点击进入我的资料）` : "点击进入我的资料"}>
-            <button
-              type="button"
-              className="app-user-avatar-button"
-              onClick={() => navigate("/profile")}
-              aria-label="进入我的资料"
-            >
-              <Avatar
-                size={36}
-                src={photo || undefined}
-                // AntD 的 Avatar 在有 icon 时会**忽略** children，所以"姓名首字"和"兜底图标"
-                // 只能二选一：有名字就用首字（更像头像），没名字才用图标。
-                icon={!photo && !initial ? <UserOutlined /> : undefined}
-                className="app-user-avatar"
-                alt={displayName ? `${displayName}的头像` : "用户头像"}
+              <button
+                type="button"
+                className="app-dataset-chip"
+                aria-label={`当前数据集：${dataset.name}`}
+                aria-haspopup="menu"
               >
-                {!photo && initial ? initial : undefined}
-              </Avatar>
-            </button>
-          </Tooltip>
+                <DatabaseOutlined />
+                <span className="app-dataset-name">{dataset.name}</span>
+                <DownOutlined className="app-dataset-arrow" />
+              </button>
+            </Dropdown>
+          ) : null}
+          <button
+            type="button"
+            className="app-user-avatar-button"
+            onClick={() => navigate("/profile")}
+            aria-label="进入我的资料"
+          >
+            <Avatar
+              size={36}
+              src={photo || undefined}
+              // AntD 的 Avatar 在有 icon 时会**忽略** children，所以"姓名首字"和"兜底图标"
+              // 只能二选一：有名字就用首字（更像头像），没名字才用图标。
+              icon={!photo && !initial ? <UserOutlined /> : undefined}
+              className="app-user-avatar"
+              alt={displayName ? `${displayName}的头像` : "用户头像"}
+            >
+              {!photo && initial ? initial : undefined}
+            </Avatar>
+          </button>
           {switchError ? <span className="app-header-context-error">{switchError}</span> : null}
         </>
       )}

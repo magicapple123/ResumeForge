@@ -161,7 +161,9 @@ export default function BrowserStatusBar() {
       )}
 
       {data?.logged_in_hint && (
-        <Alert type="info" showIcon title={data.logged_in_hint} style={{ marginTop: 8 }} />
+        // 首次使用的扫码提示用琥珀色：它是"需要你做一个动作"的提醒，和旁边
+        // 纯说明性的蓝色提示区分开（整页提示框全是蓝的会没有视觉层次）。
+        <Alert type="warning" showIcon title={data.logged_in_hint} style={{ marginTop: 8 }} />
       )}
       {data?.entry_url && (
         <Typography.Paragraph type="secondary" className="apply-browser-path">

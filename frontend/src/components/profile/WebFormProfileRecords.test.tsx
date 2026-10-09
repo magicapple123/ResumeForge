@@ -30,6 +30,8 @@ describe("WebFormProfileRecords", () => {
           groups={groups}
           editing
           saving={false}
+          showOnlyFilled={false}
+          searchTerm=""
           onChange={(nextGroups) => {
             onChange(nextGroups);
             setGroups(nextGroups);
@@ -68,6 +70,8 @@ describe("WebFormProfileRecords", () => {
         ]}
         editing={false}
         saving={false}
+        showOnlyFilled={false}
+        searchTerm=""
         onChange={vi.fn()}
       />,
     );
@@ -83,6 +87,8 @@ describe("WebFormProfileRecords", () => {
         groups={[EDUCATION_GROUP]}
         editing
         saving={false}
+        showOnlyFilled={false}
+        searchTerm=""
         onChange={vi.fn()}
       />,
     );
@@ -90,5 +96,91 @@ describe("WebFormProfileRecords", () => {
     expect(screen.queryByText("是否统招")).not.toBeInTheDocument();
     expect(screen.queryByText("是否最高学历")).not.toBeInTheDocument();
     expect(screen.queryByText("是否辅修")).not.toBeInTheDocument();
+  });
+
+  it("编辑态开「只看已填写」：没填过的记录整卡隐藏，填过的保留", () => {
+    // 用户反馈开关"没生效"：它此前只过滤主表字段，重复区块照旧全量显示。
+    function Harness({
+      showOnlyFilled,
+      searchTerm,
+    }: {
+      showOnlyFilled: boolean;
+      searchTerm: string;
+    }) {
+      return (
+        <WebFormProfileRecords
+          groups={[
+            {
+              ...EDUCATION_GROUP,
+              records: [
+                { values: { education_class_rank: "3" } },
+                { values: {} },
+                { values: { education_special_notes: "在校期间拿过奖学金" } },
+              ],
+            },
+          ]}
+          editing
+          saving={false}
+          showOnlyFilled={showOnlyFilled}
+          searchTerm={searchTerm}
+          onChange={vi.fn()}
+        />
+      );
+    }
+
+    const view = render(<Harness showOnlyFilled={false} searchTerm="" />);
+    expect(screen.getByLabelText("教育经历补充第1条班级排名")).toHaveValue("3");
+    expect(screen.getByLabelText("教育经历补充第2条班级排名")).toHaveValue("");
+    expect(screen.getByText("在校期间拿过奖学金")).toBeInTheDocument();
+
+    view.rerender(<Harness showOnlyFilled searchTerm="" />);
+    expect(screen.getByLabelText("教育经历补充第1条班级排名")).toHaveValue("3");
+    expect(screen.queryByLabelText("教育经历补充第2条班级排名")).not.toBeInTheDocument();
+    expect(screen.getByText("在校期间拿过奖学金")).toBeInTheDocument();
+  });
+
+  it("搜索按值 / 字段标签 / 组名过滤记录，无匹配时整组隐藏", () => {
+    function Harness({ searchTerm }: { searchTerm: string }) {
+      return (
+        <WebFormProfileRecords
+          groups={[
+            {
+              ...EDUCATION_GROUP,
+              records: [
+                { values: { education_class_rank: "3" } },
+                { values: { education_special_notes: "拿到了国家奖学金" } },
+              ],
+            },
+          ]}
+          editing
+          saving={false}
+          showOnlyFilled={false}
+          searchTerm={searchTerm}
+          onChange={vi.fn()}
+        />
+      );
+    }
+
+    // 按值命中：只显示第 1 条。
+    const byValue = render(<Harness searchTerm="3" />);
+    expect(screen.getByLabelText("教育经历补充第1条班级排名")).toBeInTheDocument();
+    expect(screen.queryByLabelText("教育经历补充第2条班级排名")).not.toBeInTheDocument();
+    byValue.unmount();
+
+    // 按字段标签命中：只有第 1 条的「班级排名」含这个词。
+    const byLabel = render(<Harness searchTerm="排名" />);
+    expect(screen.getByLabelText("教育经历补充第1条班级排名")).toBeInTheDocument();
+    expect(screen.queryByLabelText("教育经历补充第2条班级排名")).not.toBeInTheDocument();
+    byLabel.unmount();
+
+    // 按组名命中：整组记录都显示。
+    const byGroup = render(<Harness searchTerm="教育经历补充" />);
+    expect(screen.getByLabelText("教育经历补充第1条班级排名")).toBeInTheDocument();
+    expect(screen.getByLabelText("教育经历补充第2条班级排名")).toBeInTheDocument();
+    byGroup.unmount();
+
+    // 无匹配：整组隐藏。
+    render(<Harness searchTerm="不存在的词" />);
+    expect(screen.queryByLabelText(/教育经历补充第\d+条/)).not.toBeInTheDocument();
   });
 });

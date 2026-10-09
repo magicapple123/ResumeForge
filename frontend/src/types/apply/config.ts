@@ -93,6 +93,26 @@ export interface CollectFilterOptions {
   session_read: boolean;
 }
 
+/** 「测试筛选是否实际生效」的单项结论。 */
+export interface CollectFilterTestItem {
+  key: string;
+  /** 分组的人话名称（如「学历要求」）；站点清单里已没有这个分组时回退为分组 key。 */
+  label: string;
+  /** 用户选的选项文案（清单里找不到该选项时回退为原始编码）。 */
+  value: string;
+  /** 给用户看的一句话说明。 */
+  detail: string;
+}
+
+export interface CollectFilterTestResult {
+  /** 能在站点上真实选到的项。 */
+  applied: CollectFilterTestItem[];
+  /** 选不到的项（站点改版 / 仅部分账号可见）。 */
+  unapplied: CollectFilterTestItem[];
+  /** 选的是「不限」——不会向站点发送该参数。 */
+  unlimited: CollectFilterTestItem[];
+}
+
 // ===== ⑥ 浏览器状态 =====
 export interface BrowserStatus {
   state: BrowserState;

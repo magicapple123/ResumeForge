@@ -7,6 +7,7 @@ import { PlayCircleOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, InputNumber, Select, Space, Typography } from "antd";
 import type { FormInstance } from "antd";
 import type { InterviewDifficulty, InterviewType, InterviewerStyle } from "../../types";
+import { JANE_FACE_SOURCES } from "./janeFaces";
 import {
   INTERVIEW_DIFFICULTIES,
   INTERVIEW_TYPES,
@@ -41,9 +42,19 @@ export function SetupTab({
 }) {
   return (
     <Card size="small" className="settings-card">
-      <Typography.Title level={5} style={{ marginTop: 0 }}>
-        面试官设定
-      </Typography.Title>
+      <div className="jane-intro">
+        <img
+          className="jane-avatar jane-avatar--intro"
+          src={JANE_FACE_SOURCES.idle}
+          alt="面试官 Jane"
+        />
+        <div>
+          <Typography.Title level={5} style={{ margin: 0 }}>
+            面试官设定
+          </Typography.Title>
+          <Typography.Text type="secondary">你好，我是 Jane，今天由我来面试你。</Typography.Text>
+        </div>
+      </div>
       <Form
         form={form}
         layout="vertical"

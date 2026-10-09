@@ -7,7 +7,7 @@
  * - 暂停/停止按钮**常驻**（按状态置灰而不是隐藏），用户不用去别处找停止入口。
  */
 import { PauseOutlined, PlayCircleOutlined, StopOutlined } from "@ant-design/icons";
-import { Alert, Button, Descriptions, Space, Table, Tag, Typography } from "antd";
+import { Alert, Button, Descriptions, Space, Spin, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -120,6 +120,9 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
       <div className="apply-progress-head">
         <Space wrap size={12} align="center">
           <Typography.Text strong>{KIND_LABELS[task.kind] ?? "执行批次"}</Typography.Text>
+          {/* 任务进行中时在标题行给一个转动信号：状态 Tag 是静态的，转圈才能一眼看出
+              "这一批正在跑"（页面滚到别处回来时尤其重要）。 */}
+          {active && <Spin size="small" />}
           <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
           {active && (
             <Typography.Text type="secondary">

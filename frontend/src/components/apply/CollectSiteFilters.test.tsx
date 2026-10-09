@@ -10,10 +10,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CollectFilterOptions } from "../../types";
 import CollectSiteFilters from "./CollectSiteFilters";
 
-const apiMocks = vi.hoisted(() => ({ getCollectFilterOptions: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({
+  getCollectFilterOptions: vi.fn(),
+  testCollectFilters: vi.fn(),
+}));
 
 vi.mock("../../api/apply", () => ({
   getCollectFilterOptions: apiMocks.getCollectFilterOptions,
+  testCollectFilters: apiMocks.testCollectFilters,
 }));
 
 function options(sessionRead: boolean): CollectFilterOptions {
@@ -59,7 +63,10 @@ function renderFilters(onValues: (values: Record<string, unknown>) => void = () 
         initialValues={{ filters: {} }}
         onValuesChange={(_, all) => onValues(all as Record<string, unknown>)}
       >
-        <CollectSiteFilters disabled={false} />
+        <CollectSiteFilters
+          disabled={false}
+          getFilters={() => ({ jobType: "1902", industry: "100020" })}
+        />
         <Button htmlType="submit">提交</Button>
       </Form>
     </AntdApp>,
@@ -135,5 +142,62 @@ describe("CollectSiteFilters", () => {
     const { container } = renderFilters();
     await waitFor(() => expect(apiMocks.getCollectFilterOptions).toHaveBeenCalled());
     expect(container.querySelector(".apply-collect-site-filters")).toBeNull();
+  });
+
+  it("「测试是否生效」把当前选中项发给后端，并逐项展示结论", async () => {
+    apiMocks.testCollectFilters.mockResolvedValue({
+      applied: [
+        { key: "jobType", label: "求职类型", value: "实习", detail: "求职类型：实习" },
+        { key: "industry", label: "公司行业", value: "互联网", detail: "公司行业：互联网" },
+      ],
+      unapplied: [],
+      unlimited: [],
+    });
+    renderFilters();
+
+    fireEvent.click(await screen.findByRole("button", { name: /测试是否生效/ }));
+
+    await waitFor(() =>
+      expect(apiMocks.testCollectFilters).toHaveBeenCalledWith({
+        jobType: "1902",
+        industry: "100020",
+      }),
+    );
+    expect(await screen.findByText("选中的条件全部能在站点上真实选到")).toBeInTheDocument();
+    expect(screen.getByText(/求职类型：实习/)).toBeInTheDocument();
+  });
+
+  it("有选不到的项时以警告色逐项说明", async () => {
+    apiMocks.testCollectFilters.mockResolvedValue({
+      applied: [{ key: "jobType", label: "求职类型", value: "实习", detail: "求职类型：实习" }],
+      unapplied: [
+        {
+          key: "industry",
+          label: "公司行业",
+          value: "互联网",
+          detail: "这个选项不在站点当前提供的清单里（站点可能改版，或它只对部分账号可见）",
+        },
+      ],
+      unlimited: [],
+    });
+    renderFilters();
+
+    fireEvent.click(await screen.findByRole("button", { name: /测试是否生效/ }));
+
+    expect(await screen.findByText("有 1 项条件没能生效")).toBeInTheDocument();
+    expect(screen.getByText(/这个选项不在站点当前提供的清单里/)).toBeInTheDocument();
+  });
+
+  it("后端报浏览器未启动（409）时把原因弹给用户", async () => {
+    apiMocks.testCollectFilters.mockRejectedValue(
+      new Error("请先在投递台启动投递专用浏览器，再测试筛选条件"),
+    );
+    renderFilters();
+
+    fireEvent.click(await screen.findByRole("button", { name: /测试是否生效/ }));
+
+    expect(
+      await screen.findByText("请先在投递台启动投递专用浏览器，再测试筛选条件"),
+    ).toBeInTheDocument();
   });
 });

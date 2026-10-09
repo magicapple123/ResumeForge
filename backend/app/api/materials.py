@@ -15,10 +15,32 @@ from ..services.materials import (
     material_or_none,
     update_material,
 )
+from ..services.user_files import save_from_data_url
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/materials", tags=["materials"])
+
+
+def _save_file_copies(db: Session, material) -> None:
+    """best-effort：把资料附件里的 data URL 落一份磁盘副本（失败只记日志）。"""
+    try:
+        for item in material.files or []:
+            if not isinstance(item, dict):
+                continue
+            data_url = str(item.get("data_url") or "")
+            if not data_url:
+                continue
+            save_from_data_url(
+                db,
+                data_url,
+                source_type="material",
+                source_ref=f"material:{material.id}",
+                fallback_name=str(item.get("name") or ""),
+                fallback_mime=str(item.get("mime_type") or ""),
+            )
+    except Exception:  # noqa: BLE001 - 副本是锦上添花，绝不能挡住资料保存
+        logger.warning("资料附件磁盘副本保存失败 material:%s", material.id, exc_info=True)
 
 
 @router.get("", response_model=list[MaterialOut])
@@ -39,7 +61,9 @@ def read_categories(db: Session = Depends(get_db)):
 
 @router.post("", response_model=MaterialOut, status_code=201)
 def create_material_entry(payload: MaterialCreate, db: Session = Depends(get_db)):
-    return create_material(db, payload)
+    material = create_material(db, payload)
+    _save_file_copies(db, material)
+    return material
 
 
 @router.get("/{material_id}", response_model=MaterialOut)
@@ -55,7 +79,9 @@ def save_material(material_id: int, payload: MaterialUpdate, db: Session = Depen
     material = material_or_none(db, material_id)
     if material is None:
         raise HTTPException(status_code=404, detail="资料不存在或已被删除")
-    return update_material(db, material, payload)
+    updated = update_material(db, material, payload)
+    _save_file_copies(db, updated)
+    return updated
 
 
 @router.delete("/{material_id}", status_code=204)

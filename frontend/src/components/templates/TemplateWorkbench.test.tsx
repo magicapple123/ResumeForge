@@ -116,3 +116,18 @@ describe("TemplateWorkbench 的求职助手入口", () => {
     expect(screen.queryByText("找助手改这个模板")).not.toBeInTheDocument();
   });
 });
+
+describe("TemplateWorkbench 的导入 HTML 入口", () => {
+  it("点击「导入 HTML」按钮触发隐藏 file input 的选择文件", async () => {
+    // 回归钉子：按钮点击必须显式调用 input.click()。此前按钮只有
+    // preventDefault()，指望 label 的激活转发把点击转给 hidden input，
+    // 但点击落在交互式后代 button 上时浏览器不会转发，按钮因此无响应。
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+    renderWorkbench();
+
+    fireEvent.click(await screen.findByRole("button", { name: /导入 HTML/ }));
+
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    clickSpy.mockRestore();
+  });
+});

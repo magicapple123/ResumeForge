@@ -67,6 +67,7 @@ from .boss_page import (
     same_target_page,
     selector_diagnostic,
 )
+from .boss_scroll import BossScrollMixin
 from .boss_search import (
     NETWORK_RESPONSE_EVENT,
     BossSearchMixin,
@@ -79,7 +80,7 @@ from .boss_search import (
 )
 
 
-class BossAdapter(BossSearchMixin, BossApplyMixin, BossPageMixin, SiteAdapter):
+class BossAdapter(BossSearchMixin, BossScrollMixin, BossApplyMixin, BossPageMixin, SiteAdapter):
     """BOSS 直聘适配器。"""
 
     key = BOSS_KEY
@@ -89,11 +90,11 @@ class BossAdapter(BossSearchMixin, BossApplyMixin, BossPageMixin, SiteAdapter):
     supports_collect = True
     supports_apply = True
     requires_resume = False
-    # 薪资/经验/学历/岗位类型都走"采集后本地筛选"（岗位类型的原始编码来自列表接口，
-    # DOM 路径没有，按"判断不了就保留"处理）。其中实习/社招**另外**映射到站点官方的
-    # jobType 查询参数做站点侧过滤（见 boss_search.JOB_TYPE_QUERY_CODES），本地筛选作
-    # 第二道闸：站点参数将来若失效（历史上 jobType=4 就不是有效参数），本地仍能兜住。
-    post_filter_conditions = ("薪资", "经验", "学历", "岗位类型")
+    # 2026-10-09 用户决定下线「采集后筛选」：条件过滤全权交给站点侧筛选（``filters``，
+    # 网站在搜索时就筛掉）。这里不再声明任何本地筛选条件；``evaluate_filters`` 及其
+    # 离线测试保留，供未来站点接入时复用。存量配置里的 salary_min / experience /
+    # education / job_type 因此不再参与筛选（schema 字段保留以兼容旧请求）。
+    post_filter_conditions: tuple[str, ...] = ()
     sample_markers = (("search", SEARCH_MARKERS), ("detail", DETAIL_MARKERS))
 
     def __init__(

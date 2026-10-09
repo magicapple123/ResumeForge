@@ -1,5 +1,6 @@
 import { GithubOutlined, QuestionCircleOutlined } from "@ant-design/icons";
-import { Button, Layout, Menu, Modal, Skeleton, Tooltip, Typography } from "antd";
+import { Button, Layout, Menu, Modal, Tooltip, Typography } from "antd";
+import PageSkeleton from "./components/common/PageSkeleton";
 import {
   lazy,
   Suspense,
@@ -238,7 +239,7 @@ function MainLayout() {
           open={floatingAssistantOpen}
           onClose={() => setFloatingAssistantOpen(false)}
         >
-          <Suspense fallback={<Skeleton active paragraph={{ rows: 8 }} />}>
+          <Suspense fallback={<PageSkeleton rows={8} />}>
             <AssistantPage compact surface="floating" />
           </Suspense>
         </TouTouAssistantCard>
@@ -297,17 +298,15 @@ function MainLayout() {
             />
             <div className="app-sider-footer">
               <div className="app-sider-footer-row">
-                <Tooltip title="使用指南" placement="right">
-                  <Button
-                    className="app-guide-button"
-                    type="text"
-                    icon={<QuestionCircleOutlined />}
-                    onClick={() => setGuideOpen(true)}
-                    aria-label="使用指南"
-                  >
-                    <span className="app-guide-label">使用指南</span>
-                  </Button>
-                </Tooltip>
+                <Button
+                  className="app-guide-button"
+                  type="text"
+                  icon={<QuestionCircleOutlined />}
+                  onClick={() => setGuideOpen(true)}
+                  aria-label="使用指南"
+                >
+                  <span className="app-guide-label">使用指南</span>
+                </Button>
                 {/* 开源仓库入口在页头右上角（见下面的 Header）。页脚这一行是
                   「使用指南 + 检查更新」：都是"偶尔想确认一下"的低频动作，凑在左下角。 */}
                 <UpdateCheckButton />
@@ -348,7 +347,7 @@ function MainLayout() {
               </div>
             </Header>
             <Content className="app-content">
-              <Suspense fallback={<Skeleton active paragraph={{ rows: 8 }} />}>
+              <Suspense fallback={<PageSkeleton rows={8} />}>
                 <Outlet />
               </Suspense>
             </Content>
@@ -364,7 +363,7 @@ function MainLayout() {
           </Suspense>
         )}
         {starModalOpen && (
-          <Modal open onCancel={() => setStarModalOpen(false)} footer={null} width={380} centered>
+          <Modal open onCancel={() => setStarModalOpen(false)} footer={null} width={380}>
             <div style={{ textAlign: "center", paddingBlock: 8 }}>
               <img
                 src={promoPlane}

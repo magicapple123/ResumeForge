@@ -4,7 +4,6 @@
  * openMatchBatch/backfillDetails 等经 prop 直通页面 handler，零 api 导入。）
  */
 import {
-  CheckSquareOutlined,
   CloseCircleOutlined,
   HistoryOutlined,
   InboxOutlined,
@@ -29,7 +28,6 @@ export function JobFilterBar({
   setSourceKind,
   batchAction,
   selectionMode,
-  setSelectionMode,
   exitSelectionMode,
   openMatchBatch,
   emptyDescriptionJobIds,
@@ -49,7 +47,6 @@ export function JobFilterBar({
   setSourceKind: (value: "" | "collected" | "manual") => void;
   batchAction: BatchAction;
   selectionMode: boolean;
-  setSelectionMode: (value: boolean) => void;
   exitSelectionMode: () => void;
   openMatchBatch: (autoRun: boolean, runMode?: MatchBatchRunMode) => void;
   emptyDescriptionJobIds: number[];
@@ -128,21 +125,14 @@ export function JobFilterBar({
           }}
           options={SOURCE_KIND_OPTIONS}
         />
-        {selectionMode ? (
+        {/* 进入选择模式的入口在行右键菜单的「批量选择」（R8）；这里只保留退出。 */}
+        {selectionMode && (
           <Button
             icon={<CloseCircleOutlined />}
             disabled={batchAction !== null}
             onClick={exitSelectionMode}
           >
             退出选择
-          </Button>
-        ) : (
-          <Button
-            icon={<CheckSquareOutlined />}
-            disabled={batchAction !== null}
-            onClick={() => setSelectionMode(true)}
-          >
-            选择
           </Button>
         )}
         {/* Dropdown.Button 已废弃（v6）：按官方指引以 Space.Compact + Dropdown + Button 重组。 */}

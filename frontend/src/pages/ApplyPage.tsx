@@ -7,6 +7,7 @@
 import { SettingOutlined } from "@ant-design/icons";
 import { App, Button, Space, Tabs, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   getCollectTaskDetail,
   getCurrentTask,
@@ -29,12 +30,36 @@ import CurrentSiteBar from "../components/apply/CurrentSiteBar";
 import { isActiveTaskStatus, useTaskPolling } from "../hooks/useTaskPolling";
 import type { ApplyTask } from "../types";
 
+/** 投递台的页签 key：URL ?tab= 的合法值域（白名单外回落 queue，不让 Tabs 激活态落空）。 */
+const APPLY_TAB_KEYS = ["queue", "collect", "collect-records", "records", "referrals"];
+
 export default function ApplyPage() {
   const { message } = App.useApp();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [task, setTask] = useState<ApplyTask | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState("queue");
+
+  // 页签 URL 状态化（与岗位广场的筛选/分页同模式）：采集结果里的「去投递队列查看」
+  // navigate("/apply?tab=queue") 才能真正切页签——此前 tab 只在内存里，URL 参数无人解析，
+  // 从采集结果点过去毫无反应。无 query 默认 queue（保持既有 URL 形态）；切页签用
+  // replace 写回且只动 tab 参数，不把每次切换压进历史栈、也不误伤其它 query。
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tab = tabParam && APPLY_TAB_KEYS.includes(tabParam) ? tabParam : "queue";
+  const setTab = useCallback(
+    (next: string) => {
+      setSearchParams(
+        (prev) => {
+          const nextParams = new URLSearchParams(prev);
+          if (next === "queue") nextParams.delete("tab");
+          else nextParams.set("tab", next);
+          return nextParams;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   const [jobOptions, setJobOptions] = useState<{ value: number; label: string }[]>([]);
   const [trackOptions, setTrackOptions] = useState<{ value: number; label: string }[]>([]);
 
@@ -134,7 +159,9 @@ export default function ApplyPage() {
 
       <BrowserStatusBar />
 
-      {detail && (
+      {/* 采集批次的状态卡放在「自动采集」页签里、紧挨本次采集结果（用户实测：分离在
+          页面顶部时，正在跑的状态和结果离得太远）；投递批次保持在页面顶部。 */}
+      {detail && task?.kind !== "collect" && (
         <ApplyProgressPanel
           task={detail}
           busy={busy}
@@ -171,11 +198,25 @@ export default function ApplyPage() {
           {
             key: "collect",
             label: "自动采集",
+            // 进入应用就预渲染（并开始读采集配置与站点筛选清单）：等用户切到这个
+            // 页签时筛选项已经就位，不会看到"筛选区还没加载出来"的空窗。
+            forceRender: true,
             children: (
               <CollectPanel
                 disabled={running}
                 onStarted={adoptTask}
                 collectTask={task?.kind === "collect" ? detail : null}
+                progress={
+                  detail && task?.kind === "collect" ? (
+                    <ApplyProgressPanel
+                      task={detail}
+                      busy={busy}
+                      onPause={() => void control("pause")}
+                      onResume={() => void control("resume")}
+                      onStop={() => void control("stop")}
+                    />
+                  ) : undefined
+                }
               />
             ),
           },

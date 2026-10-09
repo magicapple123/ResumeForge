@@ -293,4 +293,28 @@ describe("JobFormModal 图片识别", () => {
     await waitFor(() => expect(apiMocks.parseJobsMultiple).toHaveBeenCalledOnce());
     expect(screen.getByLabelText("职位名称")).toHaveValue("我手填的岗位");
   });
+
+  it("warns instead of crashing when recognition returns no items", async () => {
+    // 回归：纯截图 + AI 失败时后端曾返回空 items，前端解构 items[0] 直接崩出
+    // "Cannot destructure property 'warnings' of 'result.items[0]'"。
+    apiMocks.parseJobsMultiple.mockResolvedValue({
+      items: [],
+      parse_engine: "local",
+      warnings: [
+        "图片识别失败，可能是当前模型不支持图片输入（需要多模态模型）；已使用本地规则识别，请核对后保存。",
+      ],
+    });
+    renderModal();
+    fireEvent.change(screen.getByLabelText("职位名称"), { target: { value: "我手填的岗位" } });
+    // 纯截图场景：先贴一张截图，否则组件会在前端就被"请先粘贴材料"拦下
+    pasteScreenshot(screen.getByLabelText("完整招聘信息"));
+    await waitFor(() => expect(screen.getByAltText("shot.png")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /识别并填充/ }));
+
+    await waitFor(() => expect(apiMocks.parseJobsMultiple).toHaveBeenCalledOnce());
+    // 不能崩、不能抹掉已填内容，并给出人话提示与原因说明
+    expect(screen.getByLabelText("职位名称")).toHaveValue("我手填的岗位");
+    expect(await screen.findByText("没有识别到内容，请检查材料或稍后重试")).toBeInTheDocument();
+    expect(await screen.findByText(/图片识别失败/)).toBeInTheDocument();
+  });
 });

@@ -20,6 +20,15 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("../api/material", () => apiMocks);
 
+const userFileMocks = vi.hoisted(() => ({
+  listUserFiles: vi.fn(),
+  openUserFile: vi.fn(),
+  lookupUserFiles: vi.fn(),
+  userFileRawUrl: vi.fn((id: number) => `/api/user-files/${id}/raw`),
+}));
+
+vi.mock("../api/userFiles", () => userFileMocks);
+
 const ITEMS: Material[] = [
   {
     id: 1,
@@ -45,6 +54,9 @@ function renderPage() {
 beforeEach(() => {
   apiMocks.listMaterials.mockReset().mockResolvedValue(ITEMS);
   apiMocks.listMaterialCategories.mockReset().mockResolvedValue(["证书"]);
+  userFileMocks.listUserFiles.mockReset().mockResolvedValue({ items: [], total: 0 });
+  userFileMocks.openUserFile.mockReset().mockResolvedValue({ ok: true });
+  userFileMocks.lookupUserFiles.mockReset().mockResolvedValue({ items: [] });
 });
 
 afterEach(() => {
@@ -87,5 +99,29 @@ describe("MaterialsPage", () => {
     ).toBeInTheDocument();
     // 详情抽屉没有被打开（详情里会有独立的「正文」区块，编辑表单里只有「正文内容」）。
     expect(screen.queryByText("正文")).toBeNull();
+  });
+
+  it("切到「文件副本」页签后渲染副本清单（空态）", async () => {
+    renderPage();
+    await screen.findByText("护士执业资格证");
+
+    fireEvent.click(screen.getByText("文件副本"));
+
+    // 副本清单走独立的数据源：切页签后按列表参数拉取，空数据给中文空态。
+    expect(await screen.findByText("暂无文件副本")).toBeInTheDocument();
+    expect(userFileMocks.listUserFiles).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, page_size: 20 }),
+    );
+  });
+
+  it("切回「资料」页签后恢复资料卡片", async () => {
+    renderPage();
+    await screen.findByText("护士执业资格证");
+
+    fireEvent.click(screen.getByText("文件副本"));
+    await screen.findByText("暂无文件副本");
+    fireEvent.click(screen.getByText("资料"));
+
+    expect(await screen.findByText("护士执业资格证")).toBeInTheDocument();
   });
 });

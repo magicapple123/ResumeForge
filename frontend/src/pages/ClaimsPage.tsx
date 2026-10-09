@@ -11,7 +11,8 @@ import {
   SafetyCertificateOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { App, Button, Empty, Input, Select, Skeleton, Space, Statistic, Typography } from "antd";
+import { App, Button, Empty, Input, Select, Space, Statistic, Typography } from "antd";
+import PageSkeleton from "../components/common/PageSkeleton";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { deleteClaim, getClaimBaseline, listClaims, updateClaim } from "../api/claims";
@@ -162,7 +163,7 @@ export default function ClaimsPage() {
         />
       </Space>
 
-      {loading && <Skeleton active paragraph={{ rows: 6 }} />}
+      {loading && <PageSkeleton rows={6} />}
       {error && <Typography.Text type="danger">{error}</Typography.Text>}
       {!loading && !error && items.length === 0 && (
         <Empty

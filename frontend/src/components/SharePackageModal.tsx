@@ -163,7 +163,7 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
       footer={null}
       width="min(680px, 94vw)"
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       destroyOnHidden
     >

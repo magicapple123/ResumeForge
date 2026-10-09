@@ -5,7 +5,7 @@ from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0035_llm_thinking"
-HEAD_REVISION = "0037_resume_generation_notes"
+HEAD_REVISION = "0038_user_files"
 TABLE = "chat_conversation"
 
 

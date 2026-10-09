@@ -21,7 +21,7 @@
  * 勾选、手改值和填充结果一起恢复。这样既不把临时状态塞进 URL，也不会在正常切页时丢失进度。
  */
 import { Alert, App, Card, Space } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDiagnostics } from "../api/system";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
 import {
@@ -68,10 +68,21 @@ import {
   type WebFormExtraEntry,
   type WebFormFillResult,
   type WebFormLearningCandidate,
+  type WebFormLive,
   type WebFormPreview,
   type WebFormSnapshot,
   type WebFormUrlHistory,
 } from "../types";
+
+/**
+ * 两个共享面板在这里用 **memo** 包一层：它们的 props 在击键路径上不变（源自 preview / refreshKey），
+ * 打字时整块跳过重渲。（包在此处而非组件文件内，以把改动半径限制在本页。）
+ */
+const MemoWebFormPendingPanel = memo(WebFormPendingPanel);
+const MemoWebFormRecordsPanel = memo(WebFormRecordsPanel);
+
+/** 稳定空数组：让 `live` 为空时的 `alternatives` 引用恒定，LiveModeCard 的 memo 才不被击穿。 */
+const EMPTY_ALTERNATIVES: WebFormLive["alternatives"] = [];
 
 /** 会话草稿的持久化防抖间隔：击键停止约半秒后才写 sessionStorage（trailing）。 */
 const WEB_FORM_SESSION_PERSIST_DEBOUNCE_MS = 450;
@@ -79,6 +90,11 @@ const WEB_FORM_SESSION_PERSIST_DEBOUNCE_MS = 450;
 export default function WebFormPage() {
   const { message } = App.useApp();
   const browser = useBrowserStatus(getWebFormBrowserStatus, WEB_FORM_STATUS_POLL_INTERVAL_MS);
+  // `reload`/`setData` 是 useBrowserStatus 内部的 useCallback([])，引用恒定；而 browser 这个
+  // 返回对象每次 render 都是新的。handler 依赖改挂在这两个稳定函数上，BrowserControlCard
+  // 的 memo 才能在打字时生效（否则 handler 每次重建成新引用、memo 必被击穿）。
+  const reloadBrowserStatus = browser.reload;
+  const setBrowserStatusData = browser.setData;
   const {
     initial: restoredSession,
     persist: persistWebFormSession,
@@ -157,7 +173,14 @@ export default function WebFormPage() {
   const liveEnabled = live?.enabled ?? live?.running ?? false;
   // 后端没重启时这两个字段还不存在（它们是这一次新加的）。用 `?? []` 兜住，
   // 让"前端先更新、后端还没重启"这个窗口期表现成少显示一行，而不是整页白屏。
-  const alternatives = live?.alternatives ?? [];
+  // 用稳定空数组而非字面量 `[]`：后者每 render 新建，会让 LiveModeCard 的 memo 失灵。
+  const alternatives = live?.alternatives ?? EMPTY_ALTERNATIVES;
+
+  // 稳定引用：作为 LiveModeCard 的 props，每次 render 新建会把它的 memo 击穿。
+  const handleRequestMemoryDialog = useCallback(
+    () => setMemoryDialogOpen(true),
+    [setMemoryDialogOpen],
+  );
 
   useEffect(() => {
     void listWebFormUrlHistory()
@@ -237,7 +260,7 @@ export default function WebFormPage() {
       const status = targetUrl.trim()
         ? await openWebFormUrl(targetUrl.trim()).then(() => getWebFormBrowserStatus())
         : await startWebFormBrowser();
-      browser.setData(status);
+      setBrowserStatusData(status);
       setSessionActive(true);
       message.success(
         targetUrl.trim()
@@ -249,7 +272,7 @@ export default function WebFormPage() {
     } finally {
       setBusy(null);
     }
-  }, [browser, message, targetUrl]);
+  }, [message, setBrowserStatusData, targetUrl]);
 
   const handleOpenUrl = useCallback(async () => {
     const url = targetUrl.trim();
@@ -261,7 +284,7 @@ export default function WebFormPage() {
     try {
       await openWebFormUrl(url);
       const status = await getWebFormBrowserStatus();
-      browser.setData(status);
+      setBrowserStatusData(status);
       setSessionActive(true);
       const next = await listWebFormUrlHistory();
       setUrlHistory(next.items);
@@ -271,7 +294,7 @@ export default function WebFormPage() {
     } finally {
       setBusy(null);
     }
-  }, [browser, handleStart, message, targetUrl]);
+  }, [handleStart, message, setBrowserStatusData, targetUrl]);
 
   const handleDeleteUrlHistory = useCallback(
     async (item: WebFormUrlHistory) => {
@@ -285,6 +308,14 @@ export default function WebFormPage() {
     [message],
   );
 
+  // 下面几个内联回调改成 useCallback：它们是 memo 卡片的 props，每次 render 新建引用会把
+  // BrowserControlCard / LiveModeCard 的 memo 击穿。依赖项都已稳定，引用因此恒定。
+  const handleDeleteHistory = useCallback(
+    (item: WebFormUrlHistory) => void handleDeleteUrlHistory(item),
+    [handleDeleteUrlHistory],
+  );
+  const handleOpenBrowserSettings = useCallback(() => setBrowserSettingsOpen(true), []);
+
   const handleStop = useCallback(async () => {
     setBusy("stop");
     try {
@@ -296,7 +327,7 @@ export default function WebFormPage() {
       await stopWebFormBrowser();
       setSessionActive(false);
       setLive(null);
-      await browser.reload();
+      await reloadBrowserStatus();
       // 关闭浏览器不等于结束本次填写：用户重新打开后仍应接着刚才的草稿。
     } catch (error) {
       message.error(error instanceof Error ? error.message : "关闭浏览器失败");
@@ -304,7 +335,7 @@ export default function WebFormPage() {
       setBusy(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setLive/setLiveOptOut 为 useLiveSession 返回的稳定 setter（依赖数组照抄拆分前写法）
-  }, [browser, live?.running, message]);
+  }, [live?.running, message, reloadBrowserStatus]);
 
   const handleEndSession = useCallback(async () => {
     setBusy("end");
@@ -312,7 +343,7 @@ export default function WebFormPage() {
       // 结束语义与普通离开不同：停止监听、关闭受控浏览器，再清理本次未完成草稿。
       await stopWebFormLive();
       await stopWebFormBrowser();
-      await browser.reload();
+      await reloadBrowserStatus();
       setLive(null);
       setLiveOptOut(false);
       setSessionActive(false);
@@ -333,19 +364,19 @@ export default function WebFormPage() {
       setBusy(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setLive/setLiveOptOut/setMemoryDialogOpen/setRestoring 为 hook 返回的稳定 setter（依赖数组照抄拆分前写法）
-  }, [browser, clearWebFormSession, forgetSnapshot, message]);
+  }, [clearWebFormSession, forgetSnapshot, message, reloadBrowserStatus]);
 
   const handleRefreshStatus = useCallback(async () => {
     setBusy("refresh");
     try {
-      await browser.reload();
+      await reloadBrowserStatus();
       message.success("浏览器状态已刷新");
     } catch (error) {
       message.error(error instanceof Error ? error.message : "刷新浏览器状态失败");
     } finally {
       setBusy(null);
     }
-  }, [browser, message]);
+  }, [message, reloadBrowserStatus]);
 
   const handleExportDiagnostics = useCallback(async () => {
     setBusy("diagnostics");
@@ -542,7 +573,7 @@ export default function WebFormPage() {
         targetUrl={targetUrl}
         onChangeTargetUrl={setTargetUrl}
         urlHistory={urlHistory}
-        onDeleteHistory={(item) => void handleDeleteUrlHistory(item)}
+        onDeleteHistory={handleDeleteHistory}
         busy={busy}
         running={running}
         sessionActive={sessionActive}
@@ -553,7 +584,7 @@ export default function WebFormPage() {
         onStart={handleStart}
         onStop={handleStop}
         onOpenUrl={handleOpenUrl}
-        onOpenBrowserSettings={() => setBrowserSettingsOpen(true)}
+        onOpenBrowserSettings={handleOpenBrowserSettings}
         onRefreshStatus={handleRefreshStatus}
         onExportDiagnostics={handleExportDiagnostics}
         onEndSession={handleEndSession}
@@ -579,7 +610,7 @@ export default function WebFormPage() {
         rememberPending={rememberPending}
         alternatives={alternatives}
         onToggle={handleLiveToggle}
-        onRequestMemoryDialog={() => setMemoryDialogOpen(true)}
+        onRequestMemoryDialog={handleRequestMemoryDialog}
       />
 
       <ReadSnapshotCard
@@ -609,7 +640,7 @@ export default function WebFormPage() {
 
       {preview ? (
         <Card size="small" title="页面还要求这些">
-          <WebFormPendingPanel
+          <MemoWebFormPendingPanel
             missingData={preview.missing_data}
             unrecognized={preview.unrecognized}
             blocked={preview.blocked}
@@ -620,13 +651,13 @@ export default function WebFormPage() {
       {/* 填充记录：每次填充留一笔，供事后回看"我当时到底填了什么"。
           记录里含真实值（证件号、手机号），所以删除是隐私上的必要项，不是便利。 */}
       <Card size="small" title="填充记录">
-        <WebFormRecordsPanel refreshKey={recordRefresh} />
+        <MemoWebFormRecordsPanel refreshKey={recordRefresh} />
       </Card>
 
       <BrowserSettingsModal
         open={browserSettingsOpen}
         onClose={() => setBrowserSettingsOpen(false)}
-        onSaved={() => void browser.reload()}
+        onSaved={() => void reloadBrowserStatus()}
       />
 
       {/* 「要记住吗」的提案。**只在真填进去之后**才可能开（见 handleFill）——一个都没填

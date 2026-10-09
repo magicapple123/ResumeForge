@@ -266,6 +266,16 @@
   margin-bottom: 12px;
 }
 
+/* 页签内分组标题：组名 + 一句说明的轻量分层，让一页里的多张卡能按主题对号入座。
+   上下间距与卡片间距（16px）保持同一节奏。 */
+.settings-group-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0 12px;
+}
+
 .settings-section-titles {
   min-width: 0;
 }

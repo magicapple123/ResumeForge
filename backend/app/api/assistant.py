@@ -46,7 +46,12 @@ from ..services.feature_catalog import build_capability_map
 from ..services.llm import create_provider
 from ..services.materials import create_material as create_material_record
 from ..services.search import aggregate_search
-from ..services.settings_service import get_llm_config, get_search_config
+from ..services.settings_service import (
+    get_assistant_relaxed_mode,
+    get_llm_config,
+    get_search_config,
+)
+from ..services.user_files import save_from_data_url
 from .assistant_context import load_local_context
 from .assistant_conversations import (
     DEFAULT_TITLE,
@@ -76,6 +81,27 @@ from .assistant_conversations import (
 from .assistant_stream import history_snapshot, stream_message_events
 
 logger = logging.getLogger(__name__)
+
+
+def _save_attachment_copies(db: Session, message_id: int, attachments: list[dict[str, Any]]) -> None:
+    """best-effort：把消息附件里的 data URL 落一份磁盘副本（失败只记日志）。"""
+    for item in attachments or []:
+        if not isinstance(item, dict):
+            continue
+        data_url = str(item.get("data_url") or "")
+        if not data_url:
+            continue
+        try:
+            save_from_data_url(
+                db,
+                data_url,
+                source_type="chat_attachment",
+                source_ref=f"chat_message:{message_id}",
+                fallback_name=str(item.get("name") or ""),
+                fallback_mime=str(item.get("mime_type") or ""),
+            )
+        except Exception:  # noqa: BLE001 - 副本是锦上添花，绝不能挡住消息发送
+            logger.warning("助手附件磁盘副本保存失败 chat_message:%s", message_id, exc_info=True)
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
 _PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "assistant_system.md"
@@ -127,12 +153,17 @@ def _local_time_note() -> str:
     )
 
 
-def _system_prompt(db: Session, *, web_search: bool = False, fetch_pages: int = 0) -> str:
-    """基础系统提示 + 用户启用的技能 + 联网工具说明。
+_RELAXED_MODE_NOTE = """【放宽模式已开启】用户已在设置里知情开启助手放宽模式：本次对话允许你读取完整资料——姓名、电话等敏感身份字段（get_profile 现在返回未脱敏视图）、网申填表的真实填写值（list_web_form_fills / get_web_form_fill）以及历史对话（list_chat_conversations / get_chat_conversation）。约束：① 敏感值（证件号、手机号、薪资外的个人身份信息）只在用户的提问需要时才引用，不要罗列或复述无关敏感值；② API 密钥与全局配置仍然读不到，也没有任何工具能读到它们；③ 回答仍只服务当前用户本人，不要建议把敏感内容复制到外部。"""
+
+
+def _system_prompt(
+    db: Session, *, web_search: bool = False, fetch_pages: int = 0, relaxed: bool = False
+) -> str:
+    """基础系统提示 + 用户启用的技能 + 联网工具说明 + 放宽模式说明。
 
     每次请求重读、并按要求拼接技能，而不是在导入时固化成常量——否则改提示词要重启，
     启用的技能也不会即时生效。联网说明只在工具真的下发给模型时才拼，避免提示模型
-    去调用一个不存在的工具。
+    去调用一个不存在的工具；放宽模式说明同理。
     """
     base = _PROMPT_PATH.read_text(encoding="utf-8")
     # 能力地图改为每次请求从 feature_catalog 动态渲染：新增功能只需登记目录，
@@ -141,6 +172,7 @@ def _system_prompt(db: Session, *, web_search: bool = False, fetch_pages: int = 
         base,
         build_capability_map(),
         _web_search_addendum(fetch_pages) if web_search else "",
+        _RELAXED_MODE_NOTE if relaxed else "",
     ]
     parts.append(_local_time_note())
     skill_prompt = build_skill_prompt(db)
@@ -319,8 +351,11 @@ async def send_message(
         attachments = normalize_attachments(payload.attachments)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # 放宽模式在这里读出来：默认上下文（load_local_context）、系统提示与工具下发
+    # 都要用；流式响应期间请求会话已关闭，设置值绑进闭包。
+    relaxed_mode = get_assistant_relaxed_mode(db)
     try:
-        context_blocks, context_metadata = load_local_context(db, payload)
+        context_blocks, context_metadata = load_local_context(db, payload, relaxed=relaxed_mode)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     config = get_llm_config(db)
@@ -368,6 +403,7 @@ async def send_message(
     db.refresh(assistant_message)
     user_message_id = user_message.id
     assistant_message_id = assistant_message.id
+    _save_attachment_copies(db, user_message_id, attachments)
     generated_title = conversation.title
     # 思考强度只作用于本次调用：助手页可以随时切换，不必改写设置里的模型配置。
     # 直接设在实例上而不是走 create_provider 的参数：测试与自定义 provider 只实现
@@ -391,12 +427,16 @@ async def send_message(
             assistant_message_id=assistant_message_id,
             generated_title=generated_title,
             system_prompt=_system_prompt(
-                db, web_search=payload.web_search, fetch_pages=search_config.fetch_pages
+                db,
+                web_search=payload.web_search,
+                fetch_pages=search_config.fetch_pages,
+                relaxed=relaxed_mode,
             ),
             # 多来源聚合（Bing + DuckDuckGo + 可选自建 SearXNG），按设置决定是否抓正文。
             search_web_fn=lambda query: aggregate_search(query, search_config),
             quoted=quoted_snapshot,
             fetch_pages=search_config.fetch_pages,
+            relaxed=relaxed_mode,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

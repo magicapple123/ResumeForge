@@ -1,7 +1,21 @@
 /** 知识库：集中沉淀面经总结、简历技巧、求职策略、行业笔记等成文内容。 */
 import { DeleteOutlined, EditOutlined, FileTextOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Card, Empty, Input, Modal, Select, Space, Spin, Tag, Typography } from "antd";
+import {
+  App,
+  Button,
+  Card,
+  Empty,
+  Input,
+  Modal,
+  Pagination,
+  Select,
+  Space,
+  Tag,
+  Typography,
+} from "antd";
+import LoadingBlock from "../components/common/LoadingBlock";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useClientPagination } from "../hooks/useClientPagination";
 import {
   createKnowledge,
   deleteKnowledge,
@@ -91,6 +105,14 @@ export default function KnowledgePage() {
     () => (tag ? entries.filter((entry) => entry.tags.includes(tag)) : entries),
     [entries, tag],
   );
+
+  // 知识条目持续累积，卡片网格 12 个一页（3 列 × 4 行）；筛选条件变化回第 1 页。
+  const {
+    page,
+    setPage,
+    paged: pagedEntries,
+    total: entryTotal,
+  } = useClientPagination(visibleEntries, 12, `${keyword}|${category}|${tag}`);
 
   const submit = async (payload: KnowledgePayload) => {
     setSubmitting(true);
@@ -196,7 +218,7 @@ export default function KnowledgePage() {
       </Space>
 
       {loading ? (
-        <Spin />
+        <LoadingBlock />
       ) : visibleEntries.length === 0 ? (
         <Empty
           description={
@@ -206,53 +228,66 @@ export default function KnowledgePage() {
           }
         />
       ) : (
-        <div className="knowledge-grid">
-          {visibleEntries.map((entry) => {
-            const { primary, more, all } = actionsFor(entry);
-            return (
-              <RowContextMenu key={entry.id} items={all}>
-                <DetailTrigger
-                  label={`打开知识条目「${entry.title}」的详情`}
-                  onOpen={() => setViewing(entry)}
-                >
-                  <Card size="small" className="knowledge-card">
-                    <div className="knowledge-card-head">
-                      <Tag color="blue">{entry.category}</Tag>
-                      <RowActions primary={primary} more={more} />
-                    </div>
-                    <Typography.Title level={5} ellipsis={{ tooltip: entry.title }}>
-                      {entry.title}
-                    </Typography.Title>
-                    {entry.tags.length > 0 && (
-                      <Space size={4} wrap className="knowledge-card-tags">
-                        {entry.tags.map((tag) => (
-                          <Tag key={tag}>{tag}</Tag>
-                        ))}
-                      </Space>
-                    )}
-                    {entry.content && (
-                      <Typography.Paragraph
-                        type="secondary"
-                        ellipsis={{ rows: 3 }}
-                        className="knowledge-card-content"
-                      >
-                        {entry.content}
-                      </Typography.Paragraph>
-                    )}
-                    <div className="knowledge-card-meta">
-                      {entry.source && (
-                        <Typography.Text type="secondary">{entry.source}</Typography.Text>
+        <>
+          <div className="knowledge-grid">
+            {pagedEntries.map((entry) => {
+              const { primary, more, all } = actionsFor(entry);
+              return (
+                <RowContextMenu key={entry.id} items={all}>
+                  <DetailTrigger
+                    label={`打开知识条目「${entry.title}」的详情`}
+                    onOpen={() => setViewing(entry)}
+                  >
+                    <Card size="small" className="knowledge-card">
+                      <div className="knowledge-card-head">
+                        <Tag color="blue">{entry.category}</Tag>
+                        <RowActions primary={primary} more={more} />
+                      </div>
+                      <Typography.Title level={5} ellipsis={{ tooltip: entry.title }}>
+                        {entry.title}
+                      </Typography.Title>
+                      {entry.tags.length > 0 && (
+                        <Space size={4} wrap className="knowledge-card-tags">
+                          {entry.tags.map((tag) => (
+                            <Tag key={tag}>{tag}</Tag>
+                          ))}
+                        </Space>
                       )}
-                      <Typography.Text type="secondary">
-                        {formatDateTime(entry.updated_at)}
-                      </Typography.Text>
-                    </div>
-                  </Card>
-                </DetailTrigger>
-              </RowContextMenu>
-            );
-          })}
-        </div>
+                      {entry.content && (
+                        <Typography.Paragraph
+                          type="secondary"
+                          ellipsis={{ rows: 3 }}
+                          className="knowledge-card-content"
+                        >
+                          {entry.content}
+                        </Typography.Paragraph>
+                      )}
+                      <div className="knowledge-card-meta">
+                        {entry.source && (
+                          <Typography.Text type="secondary">{entry.source}</Typography.Text>
+                        )}
+                        <Typography.Text type="secondary">
+                          {formatDateTime(entry.updated_at)}
+                        </Typography.Text>
+                      </div>
+                    </Card>
+                  </DetailTrigger>
+                </RowContextMenu>
+              );
+            })}
+          </div>
+          <div style={{ textAlign: "right", marginTop: 12 }}>
+            <Pagination
+              current={page}
+              pageSize={12}
+              total={entryTotal}
+              onChange={setPage}
+              hideOnSinglePage
+              showSizeChanger={false}
+              showTotal={(count) => `共 ${count} 条`}
+            />
+          </div>
+        </>
       )}
 
       <KnowledgeFormModal

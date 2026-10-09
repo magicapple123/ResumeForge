@@ -5,7 +5,8 @@
  * 光看名字（"优雅""技术"）猜不出效果，所以这里用真的渲染结果说话——预览用的是
  * 用户自己的简历（没有简历时用内置示例内容）。
  */
-import { App, Button, Empty, Modal, Segmented, Space, Spin, Tag, Typography } from "antd";
+import { App, Button, Empty, Modal, Segmented, Space, Tag, Typography } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchResumeTemplates, previewResumeTemplate } from "../../api/resumes";
 import type { ResumeFontScale, ResumeLayout, ResumeTemplateOption } from "../../types";
@@ -206,7 +207,7 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
                   <div className="template-gallery-error">{failed[item.name]}</div>
                 ) : (
                   <div className="template-gallery-loading">
-                    <Spin size="small" />
+                    <LoadingBlock size="small" minHeight={120} />
                   </div>
                 )}
               </div>
@@ -249,7 +250,7 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
       footer={null}
       width="min(1080px, 96vw)"
       styles={{
-        body: { maxHeight: "calc(100vh - 220px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       destroyOnHidden
     >
@@ -279,13 +280,17 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
         }
         width="min(900px, 96vw)"
         styles={{
-          body: { maxHeight: "calc(100vh - 220px)", overflow: "auto", background: "#f0f2f5" },
+          body: {
+            maxHeight: "var(--rf-modal-body-max-h)",
+            overflow: "auto",
+            background: "#f0f2f5",
+          },
         }}
         destroyOnHidden
       >
         {zoomLoading ? (
           <div className="template-gallery-zoom-loading">
-            <Spin />
+            <LoadingBlock />
           </div>
         ) : (
           <iframe

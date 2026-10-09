@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, inspect, text
 # 断言悄悄变成过时的期望值（而真出问题时是用户先发现）。
 _APPLICATION_TABLES = set(application_tables())
 # 当前迁移 head；每次新增 revision 时同步这里。
-_HEAD_REVISION = "0037_resume_generation_notes"
+_HEAD_REVISION = "0038_user_files"
 
 
 def _assert_head_schema(bind) -> None:

@@ -5,8 +5,10 @@
  * 岗位列表旁边。
  */
 import { ImportOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Checkbox, Drawer, Empty, Input, Space, Spin, Typography } from "antd";
+import { App, Button, Checkbox, Drawer, Empty, Input, Pagination, Space, Typography } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useClientPagination } from "../../hooks/useClientPagination";
 import {
   createCandidateJob,
   deleteCandidateJob,
@@ -57,10 +59,21 @@ export default function CandidateJobsDrawer({
   const [detailCandidate, setDetailCandidate] = useState<CandidateJobDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [batchAction, setBatchAction] = useState<"import" | "delete" | null>(null);
+  // 多选模式：勾选框常驻，但「批量导入/批量删除」只在多选时出现（入口在卡片右键菜单）。
+  const [selecting, setSelecting] = useState(false);
   // 搜索词与"已提交的搜索词"分开：输入时不打接口，静置 300ms 才带上关键词重新拉取。
   // 备选岗位可能几百条，每敲一个字就请求一次既慢又没意义。
   const [keyword, setKeyword] = useState("");
   const [committedKeyword, setCommittedKeyword] = useState("");
+
+  // 备选岗位是采集候选的蓄水池，卡片网格 12 个一页；搜索词提交后回第 1 页。
+  // 「全选」仍作用于当前筛选结果的全部条目（跨页），与投递队列的口径一致。
+  const {
+    page,
+    setPage,
+    paged: pagedCandidates,
+    total: candidateTotal,
+  } = useClientPagination(items, 12, committedKeyword);
 
   const taskFilterKey = collectTaskIds.join(",");
   const selectedPendingIds = useMemo(
@@ -99,6 +112,7 @@ export default function CandidateJobsDrawer({
     setPrevOpenSync(open);
     if (open) {
       setSelectedIds([]);
+      setSelecting(false);
       // 每次打开都从"未筛选"开始：带着上次的关键词进来会让用户以为候选项丢了。
       setKeyword("");
       setCommittedKeyword("");
@@ -368,34 +382,49 @@ export default function CandidateJobsDrawer({
             全选
           </Checkbox>
           <Typography.Text type="secondary">已选 {selectedIds.length} 条</Typography.Text>
-          <Button
-            size="small"
-            disabled={selectedPendingIds.length === 0 || batchAction !== null}
-            loading={batchAction === "import"}
-            onClick={() => void importSelected()}
-          >
-            批量导入
-          </Button>
-          <Button
-            size="small"
-            danger
-            disabled={selectedIds.length === 0 || batchAction !== null}
-            loading={batchAction === "delete"}
-            onClick={() => void deleteSelected()}
-          >
-            批量删除
-          </Button>
-          <Button
-            size="small"
-            disabled={selectedIds.length === 0 || batchAction !== null}
-            onClick={() => setSelectedIds([])}
-          >
-            清空选择
-          </Button>
+          {/* R8：批量导入/批量删除只在多选模式渲染；入口在卡片右键菜单的「批量选择」。 */}
+          {selecting && (
+            <>
+              <Button
+                size="small"
+                disabled={selectedPendingIds.length === 0 || batchAction !== null}
+                loading={batchAction === "import"}
+                onClick={() => void importSelected()}
+              >
+                批量导入
+              </Button>
+              <Button
+                size="small"
+                danger
+                disabled={selectedIds.length === 0 || batchAction !== null}
+                loading={batchAction === "delete"}
+                onClick={() => void deleteSelected()}
+              >
+                批量删除
+              </Button>
+              <Button
+                size="small"
+                disabled={selectedIds.length === 0 || batchAction !== null}
+                onClick={() => setSelectedIds([])}
+              >
+                清空选择
+              </Button>
+              <Button
+                size="small"
+                disabled={batchAction !== null}
+                onClick={() => {
+                  setSelecting(false);
+                  setSelectedIds([]);
+                }}
+              >
+                退出多选
+              </Button>
+            </>
+          )}
         </Space>
       )}
       {loading ? (
-        <Spin />
+        <LoadingBlock />
       ) : items.length === 0 ? (
         committedKeyword ? (
           <Empty
@@ -410,16 +439,31 @@ export default function CandidateJobsDrawer({
           <Empty description="还没有备选岗位。看到感兴趣但来不及整理的招聘信息，先放到这里。" />
         )
       ) : (
-        <CandidateCardGrid
-          items={items}
-          selectedIds={selectedIds}
-          batchAction={batchAction}
-          onToggleSelected={toggleSelected}
-          onOpenDetails={openDetails}
-          onStartImport={startImport}
-          onOpenEdit={openEdit}
-          onRemove={remove}
-        />
+        <>
+          <CandidateCardGrid
+            items={pagedCandidates}
+            selectedIds={selectedIds}
+            batchAction={batchAction}
+            selecting={selecting}
+            onEnterSelecting={() => setSelecting(true)}
+            onToggleSelected={toggleSelected}
+            onOpenDetails={openDetails}
+            onStartImport={startImport}
+            onOpenEdit={openEdit}
+            onRemove={remove}
+          />
+          <div style={{ textAlign: "right", marginTop: 12 }}>
+            <Pagination
+              current={page}
+              pageSize={12}
+              total={candidateTotal}
+              onChange={setPage}
+              hideOnSinglePage
+              showSizeChanger={false}
+              showTotal={(count) => `共 ${count} 条`}
+            />
+          </div>
+        </>
       )}
 
       <CandidateJobDetailModal

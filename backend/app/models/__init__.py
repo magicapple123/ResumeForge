@@ -84,6 +84,7 @@ from .tracker import (
     STATUSES,
     ApplicationTrack,
 )
+from .user_file import UserFile
 from .web_form_profile import WebFormProfileEntry
 from .web_form_profile_record import WebFormProfileRecord
 from .web_form_record import SOURCE_BATCH, SOURCE_LIVE, WebFormFillRecord
@@ -172,4 +173,5 @@ __all__ = [
     "SOURCE_BATCH",
     "SOURCE_LIVE",
     "WebFormUrlHistory",
+    "UserFile",
 ]

@@ -4,7 +4,8 @@
  * 结果带免责声明（本地规则估计，不代表真实 ATS 解析结果），必须展示给用户。
  */
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Empty, Input, Progress, Space, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Card, Empty, Input, Progress, Space, Tag, Typography } from "antd";
+import LoadingBlock from "./common/LoadingBlock";
 import { useMemo, useRef, useState } from "react";
 import { runAtsCheck } from "../api/ats";
 import { useApi } from "../hooks/useApi";
@@ -163,7 +164,7 @@ export default function AtsCheckPanel({ resumeId }: Props) {
           )}
         </>
       )}
-      {loading && <Spin />}
+      {loading && <LoadingBlock />}
     </Space>
   );
 }

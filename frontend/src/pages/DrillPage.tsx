@@ -18,15 +18,16 @@ import {
   Empty,
   Listy,
   Modal,
-  Skeleton,
+  Pagination,
   Space,
   Statistic,
   Tag,
   Tooltip,
   Typography,
 } from "antd";
+import PageSkeleton from "../components/common/PageSkeleton";
 import BatchActionBar from "../components/common/BatchActionBar";
-import { RowActions } from "../components/common/RowActions";
+import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { ListyItem } from "../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../components/common/listyPadding";
@@ -39,6 +40,7 @@ import {
 } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useClientPagination } from "../hooks/useClientPagination";
 import { deleteDrillSession, getDrillSession, listDrillSessions } from "../api/drill";
 import type { DrillSession, DrillSessionBrief } from "../types";
 import { FEEDBACK_LABELS } from "../types";
@@ -51,6 +53,13 @@ export default function DrillPage() {
   const navigate = useNavigate();
   const [current, setCurrent] = useState<DrillSession | null>(null);
   const [history, setHistory] = useState<DrillSessionBrief[]>([]);
+  // 深挖历史持续累积，一页 10 条（Listy 无内建分页，走通用客户端分页）。
+  const {
+    page,
+    setPage,
+    paged: pagedHistory,
+    total: historyTotal,
+  } = useClientPagination(history, 10);
   const batch = useBatchSelection<number>();
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [openId, setOpenId] = useState<number | null>(null);
@@ -156,6 +165,23 @@ export default function DrillPage() {
 
   const finished = current?.status === "finished";
 
+  /** 历史条目的右键菜单：批量选择（工具栏按钮已收进这里，R8）+ 删除（二次确认）。 */
+  const contextActions = (item: DrillSessionBrief): RowActionItem[] => [
+    {
+      key: "batch_select",
+      label: "批量选择",
+      icon: <CheckSquareOutlined />,
+      onClick: batch.enterSelecting,
+    },
+    {
+      key: "delete",
+      label: "删除",
+      danger: true,
+      confirm: "删除这场深挖？",
+      onClick: () => void remove(item.id),
+    },
+  ];
+
   return (
     <div className="drill-page">
       <div className="drill-page-head">
@@ -241,16 +267,9 @@ export default function DrillPage() {
         size="small"
         title="历史记录"
         extra={
-          <Space size={8}>
-            <Button size="small" onClick={() => void refreshHistory()} loading={loadingHistory}>
-              刷新
-            </Button>
-            {!batch.selecting && history.length > 0 && (
-              <Button size="small" icon={<CheckSquareOutlined />} onClick={batch.enterSelecting}>
-                批量选择
-              </Button>
-            )}
-          </Space>
+          <Button size="small" onClick={() => void refreshHistory()} loading={loadingHistory}>
+            刷新
+          </Button>
         }
       >
         {batch.selecting && (
@@ -261,67 +280,82 @@ export default function DrillPage() {
           </BatchActionBar>
         )}
         {loadingHistory ? (
-          <Skeleton active paragraph={{ rows: 3 }} />
+          <PageSkeleton rows={3} />
         ) : history.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description="还没有深挖记录。先在「事实台账」确认几条主张，再回来开一场。"
           />
         ) : (
-          <Listy
-            items={history}
-            rowKey={(item) => item.id}
-            styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
-            itemRender={(item) => (
-              <ListyItem
-                actions={
-                  batch.selecting
-                    ? [
-                        <Checkbox
-                          key="pick"
-                          aria-label={`选择深挖 ${item.title}`}
-                          checked={batch.isSelected(item.id)}
-                          onChange={() => batch.toggle(item.id)}
-                        />,
-                      ]
-                    : [
-                        <Button
-                          key="open"
-                          size="small"
-                          type="link"
-                          onClick={() => void openHistory(item.id)}
-                        >
-                          {item.status === "active" ? "继续" : "看复盘"}
-                        </Button>,
-                        // 删除收进「···」菜单：除回收站外，删除不再以红图标裸露（全局约定）。
-                        <RowActions
-                          key="more"
-                          more={[
-                            {
-                              key: "delete",
-                              label: "删除",
-                              danger: true,
-                              confirm: "删除这场深挖？",
-                              onClick: () => void remove(item.id),
-                            },
-                          ]}
-                        />,
-                      ]
-                }
-              >
-                <Space size={8} wrap>
-                  <Typography.Text strong={openId === item.id}>{item.title}</Typography.Text>
-                  <Tag color={item.status === "active" ? "processing" : "default"}>
-                    {item.status === "active" ? "进行中" : "已结束"}
-                  </Tag>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {item.current_index}/{item.max_questions} 题 ·{" "}
-                    {item.created_at.replace("T", " ").slice(0, 16)}
-                  </Typography.Text>
-                </Space>
-              </ListyItem>
-            )}
-          />
+          <>
+            <Listy
+              items={pagedHistory}
+              rowKey={(item) => item.id}
+              styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
+              itemRender={(item) => (
+                <RowContextMenu items={batch.selecting ? [] : contextActions(item)}>
+                  <ListyItem
+                    actions={
+                      batch.selecting
+                        ? [
+                            <Checkbox
+                              key="pick"
+                              aria-label={`选择深挖 ${item.title}`}
+                              checked={batch.isSelected(item.id)}
+                              onChange={() => batch.toggle(item.id)}
+                            />,
+                          ]
+                        : [
+                            <Button
+                              key="open"
+                              size="small"
+                              type="link"
+                              onClick={() => void openHistory(item.id)}
+                            >
+                              {item.status === "active" ? "继续" : "看复盘"}
+                            </Button>,
+                            // 删除收进「···」菜单：除回收站外，删除不再以红图标裸露（全局约定）。
+                            <RowActions
+                              key="more"
+                              more={[
+                                {
+                                  key: "delete",
+                                  label: "删除",
+                                  danger: true,
+                                  confirm: "删除这场深挖？",
+                                  onClick: () => void remove(item.id),
+                                },
+                              ]}
+                            />,
+                          ]
+                    }
+                  >
+                    <Space size={8} wrap>
+                      <Typography.Text strong={openId === item.id}>{item.title}</Typography.Text>
+                      <Tag color={item.status === "active" ? "processing" : "default"}>
+                        {item.status === "active" ? "进行中" : "已结束"}
+                      </Tag>
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {item.current_index}/{item.max_questions} 题 ·{" "}
+                        {item.created_at.replace("T", " ").slice(0, 16)}
+                      </Typography.Text>
+                    </Space>
+                  </ListyItem>
+                </RowContextMenu>
+              )}
+            />
+            <div style={{ textAlign: "right", marginTop: 12 }}>
+              <Pagination
+                current={page}
+                pageSize={10}
+                total={historyTotal}
+                onChange={setPage}
+                hideOnSinglePage
+                showSizeChanger={false}
+                showTotal={(count) => `共 ${count} 场`}
+              />
+            </div>
+          </>
         )}
       </Card>
 

@@ -20,45 +20,50 @@ from app.services.sites.boss import BossAdapter
 from test_qa_collect_load_adversarial import QUERY, REAL_ITEM, ScriptedReadyClient, _adapter
 
 
-def test_stale_first_page_document_is_not_mistaken_for_the_second_page():
-    """分页：导航到第 2 页，但探针读到的是第 1 页的 DOM → 不得把上一页结果当成这一页。"""
+def test_stale_document_from_a_detail_fetch_is_not_mistaken_for_the_search_page():
+    """导航到搜索页但探针读到的还是详情页 → 不得把详情页残影当成搜索结果。
+
+    场景来源（2026-10-09 翻页方式改造后）：第 2 页起靠滚动加载、不再导航，这条
+    freshness 守卫现在只作用于**第 1 页导航**——而上一动作往往是抓详情（共享标签页
+    被留在岗位详情页上）。守卫本身必须还在：读到非目标页就不能认。
+    """
     adapter = _adapter()
-    page1 = adapter.build_search_url(QUERY, 1)
-    page2 = adapter.build_search_url(QUERY, 2)
+    detail = "https://www.zhipin.com/job_detail/abc.html"
+    target = adapter.build_search_url(QUERY, 1)
     client = ScriptedReadyClient(
-        # 前两次仍是第 1 页（matched>0 且 complete）——若只看 matched 会误判为就绪。
+        # 前两次仍是详情页（旧文档）——若只看 matched/complete 会误判为就绪。
         readiness=[
-            {"url": page1, "matched": 8, "ready_state": "complete", "explicitly_empty": False},
-            {"url": page1, "matched": 8, "ready_state": "complete", "explicitly_empty": False},
-            {"url": page2, "matched": 3, "ready_state": "complete", "explicitly_empty": False},
+            {"url": detail, "matched": 8, "ready_state": "complete", "explicitly_empty": False},
+            {"url": detail, "matched": 8, "ready_state": "complete", "explicitly_empty": False},
+            {"url": target, "matched": 3, "ready_state": "complete", "explicitly_empty": False},
         ],
-        previous_url=page1,
-        collect_payload=json.dumps({"items": [{"title": "第二页岗位"}], "has_next": False}),
+        previous_url=detail,
+        collect_payload=json.dumps({"items": [{"title": "搜索页岗位"}], "has_next": False}),
     )
 
-    page = adapter.collect_search(client, QUERY, page=2)
+    page = adapter.collect_search(client, QUERY, page=1)
 
-    assert [r.title for r in page.results] == ["第二页岗位"]
-    # 旧文档被跳过，必须轮询到第 3 次才接受第 2 页。
+    assert [r.title for r in page.results] == ["搜索页岗位"]
+    # 旧文档被跳过，必须轮询到第 3 次才接受搜索页。
     assert client.readiness_probes >= 3
-    assert client.navigations == [page2]
+    assert client.navigations == [target]
 
 
 def test_document_that_never_becomes_fresh_fails_instead_of_returning_old_results():
-    """探针永远读到上一页：必须失败，绝不能把第 1 页的结果当成第 2 页返回。"""
+    """探针永远读到详情页残影：必须失败，绝不能把非搜索页的内容当成结果返回。"""
     adapter = _adapter(timeout=0.05, poll=0.002)
-    page1 = adapter.build_search_url(QUERY, 1)
+    detail = "https://www.zhipin.com/job_detail/abc.html"
     client = ScriptedReadyClient(
-        readiness=[{"url": page1, "matched": 8, "ready_state": "complete", "explicitly_empty": False}],
-        previous_url=page1,
-        collect_payload=json.dumps({"items": [{"title": "第一页岗位"}], "has_next": False}),
+        readiness=[{"url": detail, "matched": 8, "ready_state": "complete", "explicitly_empty": False}],
+        previous_url=detail,
+        collect_payload=json.dumps({"items": [{"title": "详情页残影"}], "has_next": False}),
     )
 
     with pytest.raises(SiteFailure) as excinfo:
-        adapter.collect_search(client, QUERY, page=2)
+        adapter.collect_search(client, QUERY, page=1)
 
     assert excinfo.value.category == FAILURE_SELECTOR_INVALID
-    assert client.collect_calls == 0  # 没有把旧页内容当新页采回去
+    assert client.collect_calls == 0  # 没有把旧页内容当搜索结果采回去
 
 
 def test_a_different_redirected_search_is_not_accepted_just_because_url_changed():

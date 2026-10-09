@@ -1,5 +1,5 @@
 /**
- * 投递队列：调整顺序、逐条确认准入、编辑招呼语与简历，然后显式开始投递。
+ * 投递队列：逐条确认准入、编辑招呼语与简历，然后显式开始投递。
  *
  * 准入提示直接读后端返回的 `admission` / `requires_confirm`（不在这里重判一次）：
  * - `block`（真实缺口）显示为「不投」并说明原因；
@@ -13,17 +13,28 @@ import {
   PlayCircleOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { App, Alert, Button, Empty, Skeleton, Space, Tag, Typography, Popconfirm } from "antd";
-import { useEffect, useMemo, useState } from "react";
 import {
-  createApplyTask,
-  getBrowserStatus,
-  listQueue,
-  removeQueueItem,
-  reorderQueue,
-} from "../../api/apply";
+  App,
+  Alert,
+  Button,
+  Empty,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+  Popconfirm,
+  Select,
+} from "antd";
+import PageSkeleton from "../common/PageSkeleton";
+import { useEffect, useMemo, useState } from "react";
+import { createApplyTask, getBrowserStatus, listQueue, removeQueueItem } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
-import { QUEUE_STATUS_META, type ApplyQueueItem, type ApplyTask } from "../../types";
+import {
+  QUEUE_STATUS_META,
+  type ApplyQueueItem,
+  type ApplyTask,
+  type QueueStatus,
+} from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { RecordDetailDrawer } from "../common/RecordDetail";
 import { useRowActionMenu } from "../common/rowActionMenu";
@@ -39,17 +50,37 @@ interface Props {
   onChanged?: () => void;
 }
 
+/** 状态筛选选项：直接从 QUEUE_STATUS_META 取，文案与表格里的状态标签同源。 */
+const STATUS_FILTER_OPTIONS = (
+  Object.entries(QUEUE_STATUS_META) as [QueueStatus, { label: string; color: string }][]
+).map(([value, meta]) => ({ value, label: meta.label }));
+
+/**
+ * 准入筛选选项：与 ADMISSION_META 的标签一致；`admission === null`（未分析）在 Select 里
+ * 用哨兵值承载——Select 的 value 不能是 null（会被当成"未选择"）。
+ */
+const UNANALYZED_FILTER = "unanalyzed";
+const ADMISSION_FILTER_OPTIONS = [
+  { value: "allow", label: "可投递" },
+  { value: "needs_confirm", label: "需确认" },
+  { value: "block", label: "不投" },
+  { value: UNANALYZED_FILTER, label: "未分析" },
+];
+type AdmissionFilterValue = "allow" | "needs_confirm" | "block" | typeof UNANALYZED_FILTER;
+
 export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Props) {
   const { message } = App.useApp();
   const [reloadKey, setReloadKey] = useState(0);
-  const { data, loading, error, reload, setData } = useApi<ApplyQueueItem[]>(
-    () => listQueue(),
-    [reloadKey],
-  );
+  const { data, loading, error, reload } = useApi<ApplyQueueItem[]>(() => listQueue(), [reloadKey]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [editing, setEditing] = useState<ApplyQueueItem | null>(null);
   const [detail, setDetail] = useState<ApplyQueueItem | null>(null);
   const [busy, setBusy] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<QueueStatus | undefined>(undefined);
+  const [admissionFilter, setAdmissionFilter] = useState<AdmissionFilterValue | undefined>(
+    undefined,
+  );
+  const [batchRemoving, setBatchRemoving] = useState(false);
   const buildMenu = useRowActionMenu();
 
   useEffect(() => {
@@ -66,6 +97,33 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
   const unsupportedPending = useMemo(
     () => pendingItems.filter((item) => item.apply_supported === false),
     [pendingItems],
+  );
+
+  // 筛选只影响表格显示：准入告警、开始投递的可用性判断仍看全量 items。
+  const filteredItems = useMemo(
+    () =>
+      items.filter((item) => {
+        if (statusFilter && item.status !== statusFilter) return false;
+        if (admissionFilter) {
+          if (admissionFilter === UNANALYZED_FILTER) return item.admission === null;
+          return item.admission === admissionFilter;
+        }
+        return true;
+      }),
+    [items, statusFilter, admissionFilter],
+  );
+  const filterActive = statusFilter !== undefined || admissionFilter !== undefined;
+  // 「全选队列」= 勾选当前筛选结果里**全部可投**的条目（跨页生效），可选范围与表格
+  // 勾选框的非禁用条件（getCheckboxProps）保持一致。
+  const selectableIds = useMemo(
+    () =>
+      filteredItems
+        .filter(
+          (item) =>
+            item.status === "pending" && item.job_id !== null && item.apply_supported !== false,
+        )
+        .map((item) => item.id),
+    [filteredItems],
   );
 
   const refresh = () => {
@@ -104,23 +162,6 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
       },
     ]);
 
-  const move = async (index: number, delta: number) => {
-    const target = index + delta;
-    if (target < 0 || target >= items.length) return;
-    const order = items.map((item) => item.id);
-    [order[index], order[target]] = [order[target], order[index]];
-    setBusy(true);
-    try {
-      const updated = await reorderQueue(order);
-      setData(updated);
-      onChanged?.();
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "调整顺序失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const remove = async (item: ApplyQueueItem) => {
     setBusy(true);
     try {
@@ -132,6 +173,26 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
       message.error(err instanceof Error ? err.message : "移出队列失败");
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** 批量移出：后端没有批量端点，逐条 DELETE、allSettled 聚合账目——一条失败不拖垮整批。 */
+  const removeSelected = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBatchRemoving(true);
+    try {
+      const results = await Promise.allSettled(ids.map((id) => removeQueueItem(id)));
+      const failed = results.filter((result) => result.status === "rejected").length;
+      setSelectedIds([]);
+      refresh();
+      if (failed > 0) {
+        message.warning(`已移出 ${ids.length - failed} 个岗位，${failed} 个移出失败`);
+      } else {
+        message.success(`已把 ${ids.length} 个岗位移出队列`);
+      }
+    } finally {
+      setBatchRemoving(false);
     }
   };
 
@@ -173,7 +234,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     }
   };
 
-  if (loading && !data) return <Skeleton active paragraph={{ rows: 5 }} />;
+  if (loading && !data) return <PageSkeleton rows={5} />;
 
   return (
     <div className="apply-queue-panel">
@@ -231,10 +292,55 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
 
       <div className="apply-queue-head">
         <Space wrap>
+          <Select
+            allowClear
+            placeholder="按状态筛选"
+            style={{ width: 128 }}
+            value={statusFilter}
+            onChange={(value) => setStatusFilter(value as QueueStatus | undefined)}
+            options={STATUS_FILTER_OPTIONS}
+            aria-label="按状态筛选"
+          />
+          <Select
+            allowClear
+            placeholder="按准入筛选"
+            style={{ width: 128 }}
+            value={admissionFilter}
+            onChange={(value) => setAdmissionFilter(value as AdmissionFilterValue | undefined)}
+            options={ADMISSION_FILTER_OPTIONS}
+            aria-label="按准入筛选"
+          />
           <Typography.Text type="secondary">
-            共 {items.length} 个岗位；勾选后只投选中的，不勾选则整队列按顺序投递。
+            共 {items.length} 个岗位
+            {filterActive ? `，筛选出 ${filteredItems.length} 个` : ""}，已选 {selectedIds.length}{" "}
+            个
           </Typography.Text>
-          <Button icon={<ReloadOutlined />} onClick={() => void reload()}>
+          <Tooltip title="勾选当前列表里的全部可投岗位（跨页生效）；不勾选则整队列按顺序投递">
+            <Button
+              disabled={busy || selectableIds.length === 0}
+              onClick={() => setSelectedIds(selectableIds)}
+            >
+              全选队列
+            </Button>
+          </Tooltip>
+          <Button disabled={busy || selectedIds.length === 0} onClick={() => setSelectedIds([])}>
+            清空选择
+          </Button>
+          <Popconfirm
+            title={`确定把选中的 ${selectedIds.length} 个岗位移出队列？`}
+            okText="移出"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            disabled={busy || selectedIds.length === 0 || batchRemoving}
+            onConfirm={() => void removeSelected()}
+          >
+            <Button danger disabled={busy || selectedIds.length === 0} loading={batchRemoving}>
+              移出所选
+            </Button>
+          </Popconfirm>
+          {/* loading 直接挂 reload 的请求态：本地接口虽快，转圈一闪也是「点到了」的确认
+              （此前点击毫无反馈，用户会以为没点上而连点好几次）。 */}
+          <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void reload()}>
             刷新
           </Button>
         </Space>
@@ -263,12 +369,11 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
         />
       ) : (
         <QueueTable
-          items={items}
+          items={filteredItems}
           busy={busy}
           selectedIds={selectedIds}
           setSelectedIds={setSelectedIds}
           setDetail={setDetail}
-          move={move}
           rowMenuItems={rowMenuItems}
         />
       )}

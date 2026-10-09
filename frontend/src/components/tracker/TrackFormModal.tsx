@@ -142,11 +142,10 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
       title={editing ? "编辑进度" : "添加进度"}
       onCancel={onClose}
       width={680}
-      centered
       destroyOnHidden
       // 日期字段带说明文字，整体高度容易超出视口：限高让弹窗在内部滚动。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       footer={
         <Space>

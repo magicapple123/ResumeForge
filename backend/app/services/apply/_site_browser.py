@@ -14,6 +14,8 @@ from ...schemas.apply import (
     CollectFilterGroupOut,
     CollectFilterOptionOut,
     CollectFilterOptionsOut,
+    CollectFilterTestItemOut,
+    CollectFilterTestResultOut,
     SiteListOut,
     SiteOptionOut,
 )
@@ -295,3 +297,61 @@ def reset_browser_manager() -> None:
             _browser_manager.stop()
         _browser_manager = None
         _browser_manager_key = None
+
+
+def test_collect_filters(db: Session, selected: dict[str, str]) -> CollectFilterTestResultOut:
+    """在真实站点页面上逐项校验用户选的站点筛选条件是否真的能选到。
+
+    复用采集开始前的同一套解析（``prepare_collect_filters``）：选项编码对不上站点当前
+    清单的项会按"未生效"如实报告；必要时它会导航到筛选栏页读一次"这个账号可见"的
+    完整清单（这正是用户要的"在真实 boss 页面上测一遍"）。浏览器没启动时直接 409。
+
+    逐项明细刻意**每组单独**走一遍 ``prepare_collect_filters``：聚合结果里只有"标签：值"
+    的文案，反查脆弱；单组解析返回的 ``applied[0]`` 就是这一项的人话结论。第一次调用
+    之后筛选栏页已经打开（``_bar_present`` 守卫），后续组不会再开新页面。
+    """
+    adapter = current_site(db)
+    if adapter is None:
+        raise ApplyConflict("当前没有可用的招聘网站适配器")
+    manager = get_browser_manager(db)
+    if manager.status().state != BROWSER_STATE_RUNNING:
+        raise ApplyConflict("请先在投递台启动投递专用浏览器，再测试筛选条件")
+    try:
+        client = manager.client()
+    except (BrowserError, CdpError) as exc:
+        raise ApplyConflict(str(exc) or "无法连接投递专用浏览器") from exc
+    try:
+        groups = adapter.fetch_filter_options(client)
+        applied: list[CollectFilterTestItemOut] = []
+        unapplied: list[CollectFilterTestItemOut] = []
+        unlimited: list[CollectFilterTestItemOut] = []
+        for key, code in selected.items():
+            resolution = adapter.prepare_collect_filters({key: code}, client)
+            label, value = _describe_selection(groups, key, code)
+            item = CollectFilterTestItemOut(key=key, label=label, value=value, detail="")
+            if resolution.applied:
+                item.detail = resolution.applied[0]
+                applied.append(item)
+            elif resolution.unapplied:
+                item.detail = "这个选项不在站点当前提供的清单里（站点可能改版，或它只对部分账号可见）"
+                unapplied.append(item)
+            else:
+                item.detail = "选择的是「不限」或未选择，不会向站点发送这个筛选参数"
+                unlimited.append(item)
+        return CollectFilterTestResultOut(applied=applied, unapplied=unapplied, unlimited=unlimited)
+    except (BrowserError, CdpError) as exc:
+        raise ApplyConflict(str(exc)) from exc
+    finally:
+        client.close()
+
+
+def _describe_selection(groups: Any, key: str, code: str) -> tuple[str, str]:
+    """从站点清单里找出分组名与用户所选选项的文案；找不到就回退到原始 key/编码。"""
+    for group in groups or ():
+        if getattr(group, "key", "") != key:
+            continue
+        for option in getattr(group, "options", ()) or ():
+            if str(getattr(option, "code", "")) == str(code):
+                return str(getattr(group, "label", key)), str(getattr(option, "label", code))
+        return str(getattr(group, "label", key)), code
+    return key, code

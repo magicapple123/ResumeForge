@@ -4,11 +4,16 @@
  * 点到哪个框才现场匹配，所以不存在"页面一联动序号就失效"。）
  */
 import { Button, Card, Space, Tag, Tooltip, Typography } from "antd";
+import { memo } from "react";
 import type { WebFormLive } from "../../types";
 import { LIVE_STATUS_META } from "./constants";
 import type { WebFormBusyState } from "./constants";
 
-export function LiveModeCard({
+/**
+ * **memo**：props（live/liveEnabled/running/busy/rememberPending/alternatives + 稳定回调）
+ * 在击键路径上都不变，打字时整块跳过重渲。
+ */
+export const LiveModeCard = memo(function LiveModeCard({
   live,
   liveEnabled,
   running,
@@ -101,4 +106,4 @@ export function LiveModeCard({
       )}
     </Card>
   );
-}
+});

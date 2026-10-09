@@ -3,6 +3,7 @@
 这块最容易出的问题是**静默切错**：把一份拆成两半、或把 A 公司的字段写进 B 公司的
 草稿。所以测试重点在"不该拆的时候不拆"和"字段必须出自它自己那段材料"。
 """
+import base64
 import json
 
 import httpx
@@ -15,6 +16,7 @@ from app.services.job.job_multi_parser import (
     local_multi_drafts,
     split_job_text_local,
 )
+from app.services.llm.base import BaseLLMProvider, LLMError
 from app.services.llm.openai_compat import OpenAICompatProvider
 
 TWO_JOBS = """公司：字节跳动
@@ -183,8 +185,6 @@ async def test_extract_multiple_jobs_falls_back_when_excerpt_is_fabricated():
 
 @pytest.mark.asyncio
 async def test_extract_multiple_jobs_rejects_empty_result():
-    from app.services.llm.base import LLMError
-
     provider = _provider_with({"jobs": []})
     with pytest.raises(LLMError):
         await extract_multiple_jobs(provider, "这里没有任何招聘信息")
@@ -195,6 +195,37 @@ def test_multi_prompt_requires_excerpt():
     system = messages[0]["content"]
     assert "source_excerpt" in system
     assert "原样复制" in system
+
+
+@pytest.mark.asyncio
+async def test_extract_multiple_jobs_retries_transient_failure():
+    """偶发抖动（第一次返回空 jobs、第二次正常）应自动重试一次再决定成败。"""
+    good = {
+        "jobs": [
+            {
+                "source_excerpt": "公司：字节跳动\n岗位：后端开发工程师",
+                "title": "后端开发工程师",
+                "company": "字节跳动",
+            }
+        ]
+    }
+    calls = {"count": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        payload = {"jobs": []} if calls["count"] == 1 else good
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]},
+        )
+
+    provider = OpenAICompatProvider(_config(), transport=httpx.MockTransport(handler))
+
+    results = await extract_multiple_jobs(provider, "公司：字节跳动\n岗位：后端开发工程师")
+
+    assert calls["count"] == 2
+    assert len(results) == 1
+    assert results[0].company == "字节跳动"
 
 
 def test_parse_multiple_endpoint_falls_back_to_local_without_model(client, monkeypatch):
@@ -215,6 +246,69 @@ def test_parse_multiple_endpoint_falls_back_to_local_without_model(client, monke
 def test_parse_multiple_endpoint_requires_input(client):
     response = client.post("/api/jobs/parse-multiple", json={"text": "   "})
     assert response.status_code == 422
+
+
+def _png_data_url() -> str:
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+    return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+
+
+def test_parse_multiple_image_only_without_model_returns_one_empty_draft(client, monkeypatch):
+    """纯截图 + 未配置模型：本地规则读不了图，也要返回**一份**空草稿而不是空 items。
+
+    回归：空 items 曾让前端解构 items[0] 时炸出
+    "Cannot destructure property 'warnings' of 'result.items[0]'"。
+    """
+    monkeypatch.setattr(
+        "app.api.jobs.get_llm_config",
+        lambda _db: LLMConfig(base_url="", api_key="", model=""),
+    )
+    response = client.post(
+        "/api/jobs/parse-multiple",
+        json={"text": "", "images": [{"name": "shot.png", "data": _png_data_url()}]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["parse_engine"] == "local"
+    assert len(body["items"]) == 1
+    draft = body["items"][0]
+    assert draft["title"] == "" and draft["company"] == ""
+    # 原因说明跟着这份草稿走，用户能看懂为什么表单是空的。
+    assert any("图片" in warning for warning in draft["warnings"])
+
+
+def test_parse_multiple_image_only_returns_one_draft_when_ai_fails(client, monkeypatch):
+    """纯截图 + AI 失败：重试仍失败才回退本地，回退结果同样必须非空且说明原因。"""
+
+    class FailingProvider(BaseLLMProvider):
+        def __init__(self) -> None:
+            super().__init__(_config())
+            self.calls = 0
+
+        async def chat(self, _messages):
+            self.calls += 1
+            raise LLMError("模型不可用")
+
+        async def stream_chat(self, _messages):
+            yield ""
+
+    provider = FailingProvider()
+    monkeypatch.setattr("app.api.jobs.get_llm_config", lambda _db: _config())
+    monkeypatch.setattr("app.api.jobs.create_provider", lambda _config: provider)
+
+    response = client.post(
+        "/api/jobs/parse-multiple",
+        json={"text": "", "images": [{"name": "shot.png", "data": _png_data_url()}]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["parse_engine"] == "local"
+    assert len(body["items"]) == 1
+    assert any("图片识别失败" in warning for warning in body["items"][0]["warnings"])
+    # 失败后立即重试过一次：两次调用都失败才回退。
+    assert provider.calls == 2
 
 
 def test_each_draft_carries_the_excerpt_the_confirm_panel_shows():

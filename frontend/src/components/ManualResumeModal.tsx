@@ -1,5 +1,6 @@
 /** 用户手写简历弹窗：用个人资料预填结构化表单，再保存为手写简历记录。 */
-import { App, Modal, Spin } from "antd";
+import { App, Modal } from "antd";
+import LoadingBlock from "./common/LoadingBlock";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createManualResume } from "../api/resumes";
 import { getProfile } from "../api/profile";
@@ -80,15 +81,9 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
 
   return (
     <>
-      <Modal
-        open={open && loading}
-        footer={null}
-        closable={false}
-        mask={{ closable: false }}
-        centered
-      >
+      <Modal open={open && loading} footer={null} closable={false} mask={{ closable: false }}>
         <div style={{ textAlign: "center", padding: "28px 0" }}>
-          <Spin />
+          <LoadingBlock />
           <div style={{ marginTop: 12 }}>正在读取我的资料…</div>
         </div>
       </Modal>

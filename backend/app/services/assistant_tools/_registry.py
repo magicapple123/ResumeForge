@@ -8,22 +8,29 @@ from sqlalchemy.orm import Session
 from ..assistant.assistant_sources import SourceNumberer
 from ._tools_specs_core import CORE_TOOLS
 from ._tools_specs_data import DATA_TOOLS
+from ._tools_specs_relaxed import RELAXED_TOOLS
 from ._tools_specs_report import REPORT_TOOLS
 from ._tools_specs_search import SEARCH_TOOLS
 from ._types import _WEB_SEARCH_TOOL_NAME, Tool, ToolResult, web_search_description
 
-# 工具严格按原文件顺序拼接：core → data → report → search。
-# 顺序是行为契约（tool_definitions 输出顺序 = 发给模型的工具列表顺序），不得重排。
-_TOOLS: tuple[Tool, ...] = (*CORE_TOOLS, *DATA_TOOLS, *REPORT_TOOLS, *SEARCH_TOOLS)
+# 工具严格按原文件顺序拼接：core → data → relaxed（放宽模式，位置与拆分前一致）→
+# report → search。顺序是行为契约（tool_definitions 输出顺序 = 发给模型的工具列表顺序），不得重排。
+_TOOLS: tuple[Tool, ...] = (*CORE_TOOLS, *DATA_TOOLS, *RELAXED_TOOLS, *REPORT_TOOLS, *SEARCH_TOOLS)
 
 
 def tool_definitions(
-    enabled: bool = True, *, web_search: bool = False, fetch_pages: int = 0
+    enabled: bool = True,
+    *,
+    web_search: bool = False,
+    fetch_pages: int = 0,
+    relaxed: bool = False,
 ) -> list[dict]:
     """OpenAI 工具声明。
 
     ``enabled=False`` 返回空列表（用于关闭工具调用）；``web_search=False`` 时不
-    下发联网搜索工具——用户关掉联网开关就是不希望助手联网。
+    下发联网搜索工具——用户关掉联网开关就是不希望助手联网。``relaxed=False``
+    （默认）不下发放宽模式工具——那些工具会读到敏感信息（身份字段、网申填写值、
+    历史对话），只有用户显式开启才可见。
 
     ``fetch_pages`` 是设置里"抓取正文的条数"，只影响联网搜索那条工具的描述措辞
     （见 ``web_search_description``）。
@@ -33,6 +40,8 @@ def tool_definitions(
     definitions = []
     for tool in _TOOLS:
         if tool.requires_web_search and not web_search:
+            continue
+        if tool.requires_relaxed and not relaxed:
             continue
         description = (
             web_search_description(fetch_pages)

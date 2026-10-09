@@ -48,9 +48,27 @@ from ..services.text_extraction import (
     mark_local_fallback,
     no_model_warning,
 )
+from ..services.user_files import save_from_data_url
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 logger = logging.getLogger(__name__)
+
+
+def _save_note_image_copies(db: Session, job_id: int, note_images: list[str]) -> None:
+    """best-effort：把岗位备注图 data URL 落一份磁盘副本（失败只记日志）。"""
+    for index, data_url in enumerate(note_images or []):
+        if not data_url:
+            continue
+        try:
+            save_from_data_url(
+                db,
+                str(data_url),
+                source_type="job_note",
+                source_ref=f"job:{job_id}",
+                fallback_name=f"job-{job_id}-note-{index + 1}",
+            )
+        except Exception:  # noqa: BLE001 - 副本是锦上添花，绝不能挡住岗位保存
+            logger.warning("岗位备注图磁盘副本保存失败 job:%s", job_id, exc_info=True)
 
 
 def _to_out(job: Job) -> JobOut:
@@ -129,7 +147,9 @@ def list_jobs(
 
 @router.post("", response_model=JobOut, status_code=201)
 def create_job(payload: JobCreate, db: Session = Depends(get_db)):
-    return _to_out(create_job_record(db, payload))
+    job = create_job_record(db, payload)
+    _save_note_image_copies(db, job.id, payload.note_images)
+    return _to_out(job)
 
 
 @router.post("/parse-text", response_model=JobTextParseResult)
@@ -183,7 +203,10 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
     """一次粘贴多份招聘信息：拆成多份草稿，用户逐条或全部保存。
 
     与单份 ``/parse-text`` 共用输入校验与兜底策略：没有可用模型、或模型切不出来时，
-    退回本地按显式分隔切分，绝不返回一份"吞掉了其它几份"的草稿。
+    退回本地按显式分隔切分，绝不返回一份"吞掉了其它几份"的草稿。AI 识别偶发抖动
+    （如没抄录图片文字、没输出 jobs 数组）会先原样重试一次再回退。本地兜底对纯图片
+    无字可切时也保证 ``items`` **至少一条**（空内容草稿 + 原因说明）——响应契约是
+    items 非空，前端据此解构第一份草稿的 warnings 与字段。
     """
     try:
         images = normalize_extraction_images(payload.images)
@@ -205,6 +228,12 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
 
     def _local_items(reason: str) -> list[JobTextParseResult]:
         drafts = local_multi_drafts(source_text)
+        if not drafts:
+            # 纯图片输入时本地规则无字可切（本地没有 OCR），但本接口的响应契约是
+            # items 至少一条：前端按 items[0] 解构 warnings 与字段，空列表会让它
+            # 炸出 "Cannot destructure property 'warnings'" 的英文 TypeError。
+            # 返回一份空内容草稿，前端走"没有识别到内容"的正常提示并保留原因说明。
+            drafts = [parse_job_text("")]
         return [mark_local_fallback(draft, reason) for draft in drafts]
 
     config = get_llm_config(db)
@@ -300,7 +329,10 @@ def update_job(job_id: int, payload: JobUpdate, db: Session = Depends(get_db)):
     job = db.get(Job, job_id)
     if job is None or trash.is_deleted(job):
         raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
-    return _to_out(update_job_record(db, job, payload))
+    updated = update_job_record(db, job, payload)
+    if "note_images" in payload.model_fields_set:
+        _save_note_image_copies(db, job.id, payload.note_images)
+    return _to_out(updated)
 
 
 @router.delete("/{job_id}", status_code=204)

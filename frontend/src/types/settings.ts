@@ -164,8 +164,22 @@ export interface AssistantOrbSetting {
   tips_enabled: boolean;
 }
 
+/** 求职助手「放宽模式」：开启后助手可读取完整资料（含敏感信息），默认关。 */
+export interface AssistantRelaxedModeSetting {
+  enabled: boolean;
+}
+
 export interface NavigationVisibility {
   hidden: string[];
+}
+
+/**
+ * 「生成内容保存位置」设置。
+ *
+ * `path` 为空串 = 默认行为（仅浏览器下载）；非空时导出会同时把产物落盘一份到该目录。
+ */
+export interface ExportSaveLocation {
+  path: string;
 }
 
 /** 更新检查结果与可安装包信息。 */

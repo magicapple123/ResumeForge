@@ -43,7 +43,12 @@ def resume_context(record: ResumeRecord) -> str:
     return f"[已选简历开始]\n{trim(serialized, MAX_RESUME_CONTEXT_CHARS)}\n[已选简历结束]"
 
 
-def profile_context(db: Session) -> str:
+def profile_context(db: Session, *, relaxed: bool = False) -> str:
+    """个人资料上下文；``relaxed``（助手放宽模式）时携带姓名/电话/邮箱等身份字段。
+
+    放宽模式由用户在设置里显式开启（默认关），这里只做展示层的放行——私密链接
+    兜底（token/private 标记）在任何模式下都生效；照片二进制任何模式都不发送。
+    """
     profile = (
         db.query(UserProfile)
         .options(
@@ -59,13 +64,16 @@ def profile_context(db: Session) -> str:
     if profile is None:
         return "[已选个人资料]\n当前尚未保存个人资料。"
     profile_out = ProfileOut.model_validate(profile)
-    prompt_data = build_llm_profile_prompt_data(build_profile_prompt_data(profile_out))
-    serialized = serialize_profile_prompt_data(prompt_data, MAX_PROFILE_CONTEXT_CHARS)
+    prompt_data = build_profile_prompt_data(profile_out)
+    serialized = serialize_profile_prompt_data(
+        build_llm_profile_prompt_data(prompt_data, include_identity=relaxed),
+        MAX_PROFILE_CONTEXT_CHARS,
+    )
     return f"[已选个人资料开始]\n{serialized}\n[已选个人资料结束]"
 
 
 def load_local_context(
-    db: Session, payload: AssistantMessageCreate
+    db: Session, payload: AssistantMessageCreate, *, relaxed: bool = False
 ) -> tuple[list[str], dict[str, Any]]:
     blocks: list[str] = []
     metadata: dict[str, Any] = {
@@ -99,8 +107,8 @@ def load_local_context(
             raise ValueError("选择的简历不存在或已被删除")
         blocks.append(resume_context(resume))
     # 个人资料是助手的默认本地上下文，不再由前端开关控制。这样用户直接问“按我的资料…”
-    # 时不会因为忘记勾选而得到一份脱离真实资料的回答。
-    blocks.append(profile_context(db))
+    # 时不会因为忘记勾选而得到一份脱离真实资料的回答。放宽模式时携带身份字段（见 profile_context）。
+    blocks.append(profile_context(db, relaxed=relaxed))
     return blocks, metadata
 
 

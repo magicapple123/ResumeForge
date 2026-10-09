@@ -20,6 +20,7 @@ from ...database_migrations import _APPLICATION_TABLES, run_database_migrations
 from .manifest import _revision_chain, _table_counts
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME,
+    ARCHIVE_REFERRAL_IMAGES_PREFIX,
     BACKUP_FORMAT_VERSION,
     DATABASE_MEMBER,
     MANIFEST_MEMBER,
@@ -79,6 +80,33 @@ def extract_member(archive_path: Path, member: str, destination: Path) -> Path:
     ):
         shutil.copyfileobj(source, target)
     return destination
+
+
+def restore_referral_images(archive_path: Path, destination_dir: Path) -> int:
+    """把包里附带的内推备注图片恢复到目标库同目录，返回恢复的文件数。
+
+    旧备份包没有这些条目——这里只遍历实际存在的成员，缺了就一个也不写，导入
+    照常成功。成员名只认 ``referral_images/<单段文件名>`` 一种形状（杜绝 zip-slip）；
+    目标已存在的同名文件不覆盖（多份数据集共用一个文件系统命名空间，先到先得）。
+    """
+    restored = 0
+    with zipfile.ZipFile(archive_path) as archive:
+        members = [name for name in archive.namelist() if name.startswith(ARCHIVE_REFERRAL_IMAGES_PREFIX)]
+        if not members:
+            return 0
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        for member in members:
+            name = member[len(ARCHIVE_REFERRAL_IMAGES_PREFIX) :]
+            if not name or "/" in name or "\\" in name or name.startswith("."):
+                logger.warning("备份包里的内推图片路径不合法，已跳过：%s", member)
+                continue
+            target = destination_dir / name
+            if target.exists():
+                continue
+            with archive.open(member) as source, target.open("wb") as target_file:
+                shutil.copyfileobj(source, target_file)
+            restored += 1
+    return restored
 
 
 def declared_datasets(manifest: dict[str, Any]) -> list[dict[str, Any]]:

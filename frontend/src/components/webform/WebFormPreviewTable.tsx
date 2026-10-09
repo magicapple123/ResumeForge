@@ -7,6 +7,13 @@
  *
  * `source === "ai"` 的行打「AI 建议」标签，**同样默认不勾选**（后端决定的）：规则命中至少
  * 证明页面上有字对上了，AI 命中可能纯粹是上下文推的，用户核对的怀疑程度应当不同。
+ *
+ * ## 为什么把每一列拆成独立的 memo 组件
+ *
+ * 手改某个框的值会更新整份 `values`，于是本表重渲、antd Table 会把**每一行**的 BodyRow
+ * 都再渲染一遍——未编辑行的 `Input`/`Select`（含 options 映射）也会跟着跑。把 4 列的
+ * `render` 收成 4 个 `memo` 子组件后，未变行的 cell props 全部相等 → 整块 bail，
+ * 只剩真正被编辑的那一行重渲。
  */
 import { Checkbox, Input, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -46,10 +53,117 @@ interface Props {
   onValueChange: (index: number, value: string) => void;
 }
 
+/** 「填入」列的勾选框。只依赖本行 + 稳定回调，未变行走 memo bail。 */
+const PreviewPickCell = memo(function PreviewPickCell({
+  item,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  item: WebFormPreviewItem;
+  checked: boolean;
+  disabled?: boolean;
+  onToggle: (index: number) => void;
+}) {
+  return (
+    <Checkbox
+      checked={checked}
+      disabled={disabled}
+      onChange={() => onToggle(item.index)}
+      aria-label={`选择填入${item.field_label}`}
+    />
+  );
+});
+
+/** 「字段」列：字段名 + 页面控件名 + AI 建议标签。纯展示，只依赖本行。 */
+const PreviewLabelCell = memo(function PreviewLabelCell({ item }: { item: WebFormPreviewItem }) {
+  return (
+    <div>
+      <Space size={4}>
+        <span>{item.field_label}</span>
+        {item.source === "ai" ? <Tag color="blue">AI 建议</Tag> : null}
+      </Space>
+      {item.control_label && item.control_label !== item.field_label ? (
+        <div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            页面：{item.control_label}
+          </Typography.Text>
+        </div>
+      ) : null}
+    </div>
+  );
+});
+
+/** 「将填入的值」列：受控可编辑。options 只在 item 变化时重建。 */
+const PreviewValueCell = memo(function PreviewValueCell({
+  item,
+  value,
+  disabled,
+  onValueChange,
+}: {
+  item: WebFormPreviewItem;
+  value: string;
+  disabled?: boolean;
+  onValueChange: (index: number, value: string) => void;
+}) {
+  const options = useMemo(
+    () =>
+      item.options.map((option) => ({
+        value: option.value,
+        label: option.text || option.value,
+      })),
+    [item.options],
+  );
+
+  if (item.options.length > 0) {
+    return (
+      <Select
+        style={{ width: "100%" }}
+        value={value}
+        disabled={disabled}
+        onChange={(next: string) => onValueChange(item.index, next)}
+        options={options}
+      />
+    );
+  }
+  return (
+    <Input
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onValueChange(item.index, event.target.value)}
+    />
+  );
+});
+
+/** 「状态」列：状态标签 + 冲突页面上值 / 备注。纯展示，只依赖本行。 */
+const PreviewStatusCell = memo(function PreviewStatusCell({ item }: { item: WebFormPreviewItem }) {
+  const meta = STATUS_META[item.status];
+  return (
+    <Tooltip title={meta.hint}>
+      <Tag color={meta.color}>{meta.label}</Tag>
+      {item.status === "conflict" && item.current_value ? (
+        <div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            页面上：{item.current_value}
+          </Typography.Text>
+        </div>
+      ) : null}
+      {item.note && item.status !== "conflict" ? (
+        <div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {item.note}
+          </Typography.Text>
+        </div>
+      ) : null}
+    </Tooltip>
+  );
+});
+
 /**
  * **React.memo 的收益点**：浏览器状态/实时会话的轮询会周期性重渲整页，
  * memo 让本表在 props（items/selected/values/回调引用）都没变时整棵跳过。
- * 击键时 values 引用必变、本表必然重渲（输入值就在表里），这是数据流本身决定的。
+ * 击键时 values 引用必变、本表必然重渲（输入值就在表里），这是数据流本身决定的；
+ * 真正的节省来自上面 4 个 memo 单元格——未变行不再重跑各自的 Input/Select。
  */
 function WebFormPreviewTableImpl({
   items,
@@ -59,8 +173,8 @@ function WebFormPreviewTableImpl({
   onToggle,
   onValueChange,
 }: Props) {
-  // 列定义里的 render 闭包引用了 selected/values/disabled 与回调，按真实依赖缓存：
-  // 仅在上述引用变化时重建，避免「无关的父组件重渲也重建一遍 columns」。
+  // 列定义里的 render 闭包引用了 selected/values/disabled 与回调，按真实依赖缓存；
+  // render 里只把「本行解析后的原始值」交给 memo 子组件，因此未变行 props 恒等、可 bail。
   const columns: ColumnsType<WebFormPreviewItem> = useMemo(
     () => [
       {
@@ -68,11 +182,11 @@ function WebFormPreviewTableImpl({
         key: "pick",
         width: 62,
         render: (_, item) => (
-          <Checkbox
+          <PreviewPickCell
+            item={item}
             checked={selected.has(item.index)}
             disabled={disabled}
-            onChange={() => onToggle(item.index)}
-            aria-label={`选择填入${item.field_label}`}
+            onToggle={onToggle}
           />
         ),
       },
@@ -81,71 +195,25 @@ function WebFormPreviewTableImpl({
         dataIndex: "field_label",
         key: "field",
         width: 130,
-        render: (_, item) => (
-          <div>
-            <Space size={4}>
-              <span>{item.field_label}</span>
-              {item.source === "ai" ? <Tag color="blue">AI 建议</Tag> : null}
-            </Space>
-            {item.control_label && item.control_label !== item.field_label ? (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  页面：{item.control_label}
-                </Typography.Text>
-              </div>
-            ) : null}
-          </div>
-        ),
+        render: (_, item) => <PreviewLabelCell item={item} />,
       },
       {
         title: "将填入的值",
         key: "value",
-        render: (_, item) =>
-          item.options.length > 0 ? (
-            <Select
-              style={{ width: "100%" }}
-              value={values[item.index] ?? item.value}
-              disabled={disabled}
-              onChange={(next: string) => onValueChange(item.index, next)}
-              options={item.options.map((option) => ({
-                value: option.value,
-                label: option.text || option.value,
-              }))}
-            />
-          ) : (
-            <Input
-              value={values[item.index] ?? item.value}
-              disabled={disabled}
-              onChange={(event) => onValueChange(item.index, event.target.value)}
-            />
-          ),
+        render: (_, item) => (
+          <PreviewValueCell
+            item={item}
+            value={values[item.index] ?? item.value}
+            disabled={disabled}
+            onValueChange={onValueChange}
+          />
+        ),
       },
       {
         title: "状态",
         key: "status",
         width: 130,
-        render: (_, item) => {
-          const meta = STATUS_META[item.status];
-          return (
-            <Tooltip title={meta.hint}>
-              <Tag color={meta.color}>{meta.label}</Tag>
-              {item.status === "conflict" && item.current_value ? (
-                <div>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    页面上：{item.current_value}
-                  </Typography.Text>
-                </div>
-              ) : null}
-              {item.note && item.status !== "conflict" ? (
-                <div>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {item.note}
-                  </Typography.Text>
-                </div>
-              ) : null}
-            </Tooltip>
-          );
-        },
+        render: (_, item) => <PreviewStatusCell item={item} />,
       },
     ],
     [disabled, onToggle, onValueChange, selected, values],

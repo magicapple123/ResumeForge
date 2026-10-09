@@ -3,12 +3,24 @@
  * 纯展示组件——删除确认（removeSelected/removeBank）与 useApi 状态由 QuestionBankPanel
  * 传入；零 api 导入（白名单契约：新文件不得触碰 api/interview）。
  */
-import { CheckSquareOutlined, HistoryOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Checkbox, Collapse, Empty, Space, Spin, Typography } from "antd";
-import { RowActions } from "../common/RowActions";
+import { CheckSquareOutlined, DeleteOutlined, HistoryOutlined } from "@ant-design/icons";
+import {
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  Collapse,
+  Empty,
+  Pagination,
+  Space,
+  Spin,
+  Typography,
+} from "antd";
+import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
 import BatchActionBar from "../common/BatchActionBar";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import type { useApi } from "../../hooks/useApi";
+import { useClientPagination } from "../../hooks/useClientPagination";
 import type { QuestionBankRecord } from "../../types";
 
 type BanksState = ReturnType<typeof useApi<QuestionBankRecord[]>>;
@@ -29,15 +41,42 @@ export default function BankHistoryCard({
   onRemoveBank,
   removeSelected,
 }: Props) {
-  const historyItems = (banks.data ?? []).map((bank) => ({
+  // 题库历史每次生成一份、持续累积，Collapse 一页 10 条（Collapse 没有内建分页）。
+  const bankList = banks.data ?? [];
+  const { page, setPage, paged: pagedBanks, total: bankTotal } = useClientPagination(bankList, 10);
+  const historyItems = pagedBanks.map((bank) => ({
     key: String(bank.id),
     label: (
-      <Space wrap>
-        <span>{bank.resume_title || bank.job_title || "题库"}</span>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {bank.created_at.replace("T", " ").slice(0, 16)}
-        </Typography.Text>
-      </Space>
+      // 右键菜单挂在折叠头标题上：批量选择（工具栏按钮已收进这里，R8）+ 删除。
+      <RowContextMenu
+        items={
+          batch.selecting
+            ? []
+            : ([
+                {
+                  key: "batch_select",
+                  label: "批量选择",
+                  icon: <CheckSquareOutlined />,
+                  onClick: batch.enterSelecting,
+                },
+                {
+                  key: "delete",
+                  label: "删除",
+                  danger: true,
+                  icon: <DeleteOutlined />,
+                  confirm: "删除这条题库历史？",
+                  onClick: () => void onRemoveBank(bank.id),
+                },
+              ] satisfies RowActionItem[])
+        }
+      >
+        <Space wrap>
+          <span>{bank.resume_title || bank.job_title || "题库"}</span>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {bank.created_at.replace("T", " ").slice(0, 16)}
+          </Typography.Text>
+        </Space>
+      </RowContextMenu>
     ),
     children: (
       <Space orientation="vertical" style={{ width: "100%" }}>
@@ -91,13 +130,6 @@ export default function BankHistoryCard({
           历史题库
         </Space>
       }
-      extra={
-        !batch.selecting && (banks.data ?? []).length > 0 ? (
-          <Button size="small" icon={<CheckSquareOutlined />} onClick={batch.enterSelecting}>
-            批量选择
-          </Button>
-        ) : undefined
-      }
     >
       {batch.selecting && (
         <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
@@ -113,7 +145,20 @@ export default function BankHistoryCard({
       ) : (banks.data ?? []).length === 0 ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有保存过题库" />
       ) : (
-        <Collapse items={historyItems} />
+        <>
+          <Collapse items={historyItems} />
+          <div style={{ textAlign: "right", marginTop: 12 }}>
+            <Pagination
+              current={page}
+              pageSize={10}
+              total={bankTotal}
+              onChange={setPage}
+              hideOnSinglePage
+              showSizeChanger={false}
+              showTotal={(count) => `共 ${count} 份`}
+            />
+          </div>
+        </>
       )}
     </Card>
   );

@@ -34,6 +34,11 @@ MANIFEST_MEMBER = "manifest.json"
 # 只恢复一份（见 ``_read_manifest`` 的前向兼容守卫）。
 ARCHIVE_DATASETS_DIRNAME = "datasets"
 
+# 备份包里内推备注图片的前缀：``referral_images/<文件名>``。这些文件是主库级磁盘
+# 资产（不进数据库），此前备份包一直不带它们——换机器恢复后内推图片全丢。manifest
+# 格式不动（缺这些条目的旧包照常导入），导入侧只遍历实际存在的成员。
+ARCHIVE_REFERRAL_IMAGES_PREFIX = "referral_images/"
+
 # 临时文件放在数据库同级目录：Windows 上跨盘 os.replace 失败，而恢复正是要做
 # 一次原子替换。上传的待恢复包与导出产物分开放，避免启动清理时误删用户刚上传、
 # 还没确认的包。

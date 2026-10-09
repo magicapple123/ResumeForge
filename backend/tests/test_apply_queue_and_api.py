@@ -244,3 +244,47 @@ def test_match_analysis_missing_job_returns_404(client, fake_runner):
     assert client.post("/api/jobs/9999/match-analysis").status_code == 404
 
 
+
+
+def test_queue_shows_the_latest_import_first(client, db_session, fake_runner):
+    """后导入的排最上（用户实测反馈：海投场景新加入的岗位应该最先看到）。
+
+    ``add_to_queue`` 的新条目 ``sort_order`` 取最大，``list_queue`` 倒序显示——
+    两者配对，缺一不可；``reorder_queue`` 写值时也必须按同一口径倒写。
+    """
+    job_a = _job(db_session, title="先导入的岗位")
+    job_b = _job(db_session, title="后导入的岗位")
+    db_session.commit()
+
+    # 未分析的岗位入队需要显式确认（海投场景：用户自己选择跳过确认）
+    assert (
+        client.post(
+            "/api/apply/queue", json={"items": [{"job_id": job_a.id, "confirm_unanalyzed": True}]}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/apply/queue", json={"items": [{"job_id": job_b.id, "confirm_unanalyzed": True}]}
+        ).status_code
+        == 200
+    )
+
+    listed = client.get("/api/apply/queue").json()
+    assert [item["job_id"] for item in listed] == [job_b.id, job_a.id]
+
+    # 重排序：把 job_a 挪到显示顺序的最上面（界面传"从上到下"的 id 列表）
+    reordered = client.patch("/api/apply/queue/reorder", json={"order": [job_a.id, job_b.id]})
+    assert [item["job_id"] for item in reordered.json()] == [job_a.id, job_b.id]
+
+    # 重排之后新导入的依然排最上（sort_order 继续取最大）
+    job_c = _job(db_session, title="重排后再导入")
+    db_session.commit()
+    assert (
+        client.post(
+            "/api/apply/queue", json={"items": [{"job_id": job_c.id, "confirm_unanalyzed": True}]}
+        ).status_code
+        == 200
+    )
+    listed = client.get("/api/apply/queue").json()
+    assert [item["job_id"] for item in listed] == [job_c.id, job_a.id, job_b.id]

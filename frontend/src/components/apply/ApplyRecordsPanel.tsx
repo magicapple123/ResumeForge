@@ -25,12 +25,12 @@ import {
   Pagination,
   Select,
   Space,
-  Spin,
   Table,
   Tag,
   Tooltip,
   Typography,
 } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -286,7 +286,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
 
       {loading && batches.length === 0 && (
         <div style={{ textAlign: "center", padding: 24 }}>
-          <Spin />
+          <LoadingBlock />
         </div>
       )}
       {!loading && batches.length === 0 && <Empty description="还没有投递记录" />}

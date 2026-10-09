@@ -16,11 +16,11 @@ import {
   Modal,
   Select,
   Space,
-  Spin,
   Tag,
   Typography,
   Upload,
 } from "antd";
+import LoadingBlock from "./common/LoadingBlock";
 import { useCallback, useEffect, useState } from "react";
 import {
   createReferral,
@@ -247,7 +247,7 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
       </Card>
 
       {loading ? (
-        <Spin />
+        <LoadingBlock />
       ) : items.length === 0 ? (
         <Empty description="还没有内推记录，把找人内推的机会记下来吧" />
       ) : (

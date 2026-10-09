@@ -164,3 +164,51 @@ def _detail_script() -> str:
             "})()",
         ]
     )
+
+
+def _card_count_script() -> str:
+    """数当前搜索页上的岗位卡片，顺带探测"没有更多"标志。
+
+    BOSS 的搜索列表在分栏视图下是**内部滚动容器**（左列表 + 右详情），所以只数
+    卡片数量，不关心滚动发生在窗口还是容器上。
+    """
+    return "".join(
+        [
+            "(() => { /* rf:card-count */\n",
+            f"  const CARD = {_js(_SELECTORS['search_card'])};\n",
+            f"  const LINK = {_js(_SELECTORS['search_link'])};\n",
+            "  const cards = document.querySelectorAll(CARD + ', ' + LINK);\n",
+            "  const noMore = document.body.innerText.includes('没有更多');\n",
+            "  return JSON.stringify({ count: cards.length, no_more: noMore });\n",
+            "})()",
+        ]
+    )
+
+
+def _scroll_list_script() -> str:
+    """把岗位列表滚到底部，触发站点的"下滑加载更多"。
+
+    滚动目标按优先级：岗位卡片的**可滚动祖先**（分栏视图下的左列表容器）→ 页面
+    窗口。BOSS 的加载由滚动到底触发，一次滚动通常加载一批（约一页的量）。
+    """
+    return "".join(
+        [
+            "(() => { /* rf:scroll-list */\n",
+            f"  const CARD = {_js(_SELECTORS['search_card'])};\n",
+            f"  const LINK = {_js(_SELECTORS['search_link'])};\n",
+            "  const card = document.querySelector(CARD + ', ' + LINK);\n",
+            "  let el = card ? card.parentElement : null;\n",
+            "  let scrolled = '';\n",
+            "  while (el && el !== document.body) {\n",
+            "    if (el.scrollHeight > el.clientHeight + 4) {\n",
+            "      el.scrollTop = el.scrollHeight;\n",
+            "      scrolled = 'container';\n",
+            "      break;\n",
+            "    }\n",
+            "    el = el.parentElement;\n",
+            "  }\n",
+            "  if (!scrolled) { window.scrollTo(0, document.body.scrollHeight); scrolled = 'window'; }\n",
+            "  return JSON.stringify({ scrolled: scrolled });\n",
+            "})()",
+        ]
+    )

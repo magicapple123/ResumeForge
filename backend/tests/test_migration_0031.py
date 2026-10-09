@@ -17,7 +17,7 @@ from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0030_extra_profile_source_reuse"
-HEAD_REVISION = "0037_resume_generation_notes"
+HEAD_REVISION = "0038_user_files"
 
 TABLE = "web_form_profile_entry"
 

@@ -77,14 +77,12 @@ export default function RecognitionFileField({
                   <Image src={file.data} alt={file.name} className="recognition-image" />
                 ) : (
                   // 浏览器渲染不了的图片（TIFF）和文档都用文件名标签，不做破图预览。
-                  <Tooltip title={file.name}>
-                    <Tag
-                      className="recognition-file-tag"
-                      icon={file.kind === "image" ? <PictureOutlined /> : documentIcon(file.name)}
-                    >
-                      {file.name}
-                    </Tag>
-                  </Tooltip>
+                  <Tag
+                    className="recognition-file-tag"
+                    icon={file.kind === "image" ? <PictureOutlined /> : documentIcon(file.name)}
+                  >
+                    {file.name}
+                  </Tag>
                 )}
                 <Tooltip title={`移除 ${file.name}`}>
                   <Button

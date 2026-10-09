@@ -56,7 +56,7 @@ export default function WebFormLearningDialog({
       width={720}
       // 候选字段随页面而定：限高让超长表格只滚弹窗内部。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>

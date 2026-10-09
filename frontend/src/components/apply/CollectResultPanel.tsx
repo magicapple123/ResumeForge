@@ -9,13 +9,15 @@
  * 岗位广场里已经有了——用户需要知道是哪 3 条、以及为什么，否则他只会看到"导入了 7 条"，
  * 然后去岗位广场里数不出来。
  */
-import { LinkOutlined, UploadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Skeleton, Space, Table, Tag, Typography } from "antd";
+import { LinkOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Empty, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { importCandidateJobs, listCandidateJobs } from "../../api/candidateJob";
 import { useApi } from "../../hooks/useApi";
+import { bulkEnqueueJobs, bulkEnqueueSummary } from "./queue/bulkEnqueue";
+import PageSkeleton from "../common/PageSkeleton";
 import type { CandidateJob, CandidateJobImportResult } from "../../types";
 
 interface Props {
@@ -112,6 +114,53 @@ export default function CollectResultPanel({
     }
   };
 
+  // 海投效率路径：导入岗位广场 + 立即加入投递队列，一步到位（用户实测反馈）。
+  // 只有 imported / duplicate 会带回 job_id（trashed/invalid/missing 没有岗位可入队），
+  // 这几条自动跳过并在结果里说明；入队带显式确认（未分析/真实缺口），投递前仍核对准入。
+  const doImportAndQueue = async () => {
+    if (selectedIds.length === 0) return;
+    setImporting(true);
+    try {
+      const result = await importCandidateJobs(selectedIds);
+      setLastResult(result);
+      const jobIds = (result.results ?? [])
+        .filter(
+          (item) => (item.outcome === "imported" || item.outcome === "duplicate") && item.job_id,
+        )
+        .map((item) => item.job_id as number);
+      if (jobIds.length === 0) {
+        message.warning("没有可加入投递队列的岗位（选中项没有成功导入岗位广场）");
+        await reload();
+        return;
+      }
+      const outcome = await bulkEnqueueJobs(jobIds);
+      const summary = `已导入 ${result.imported} 个岗位，${bulkEnqueueSummary(outcome)}`;
+      message.success({
+        content: (
+          <span>
+            {summary}，
+            <Button
+              type="link"
+              size="small"
+              style={{ padding: 0 }}
+              onClick={() => navigate("/apply?tab=queue")}
+            >
+              去投递队列查看
+            </Button>
+          </span>
+        ),
+        duration: 6,
+      });
+      setSelectedIds([]);
+      await reload();
+      onImported?.(result);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "导入并加入投递队列失败");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const columns: ColumnsType<CandidateJob> = [
     {
       title: "岗位",
@@ -190,7 +239,7 @@ export default function CollectResultPanel({
         )}
 
         {loading && !data ? (
-          <Skeleton active paragraph={{ rows: 4 }} />
+          <PageSkeleton rows={4} card={false} />
         ) : candidates.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -204,7 +253,9 @@ export default function CollectResultPanel({
               size="small"
               columns={columns}
               dataSource={candidates}
-              pagination={false}
+              // 单批采集上限 200 条，不加翻页会把整个页签塞满（其余主列表的分页排查见
+              // deliverables/pagination-audit-2026-10-09.md）。
+              pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
               rowSelection={{
                 selectedRowKeys: selectedIds,
                 onChange: (keys) => setSelectedIds(keys as number[]),
@@ -223,6 +274,17 @@ export default function CollectResultPanel({
               >
                 {importLabel(selectedIds.length)}
               </Button>
+              <Tooltip title="海投模式：先导入岗位广场，再直接加入投递队列（未分析的岗位会跳过确认直接入队，投递前仍会核对准入）">
+                <Button
+                  icon={<SendOutlined />}
+                  loading={importing}
+                  disabled={disabled || selectedIds.length === 0}
+                  aria-label={`导入选中的 ${selectedIds.length} 个岗位并加入投递队列`}
+                  onClick={() => void doImportAndQueue()}
+                >
+                  导入并加入投递队列
+                </Button>
+              </Tooltip>
               <Button
                 aria-label="全选"
                 disabled={disabled || importing}

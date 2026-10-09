@@ -213,6 +213,12 @@ def collect_message(task: ApplyTask) -> str:
         )
     if skipped > 0:
         message = f"本次采集到的岗位都已存在，没有新增（跳过 {skipped} 个重复岗位）"
+        stopped_at = int(config.get("pagination_stopped_at") or 0)
+        if stopped_at:
+            message += (
+                f"。后面的页与前面的结果完全重复，已在第 {stopped_at} 页提前停止翻页——"
+                "该条件下的岗位可能就这么多，换关键词 / 城市或放宽筛选后再试"
+            )
         trashed = int(config.get("skipped_trashed") or 0)
         if trashed:
             message += (

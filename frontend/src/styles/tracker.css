@@ -184,7 +184,9 @@
 
 .track-card {
   position: relative;
-  padding: 14px 16px;
+  /* padding-left 比 16px 大 4px：给贴左缘的阶段竖条让出宽度后，
+     条与文字之间仍保持 16px 间距（此前竖条悬在 8px 处，右缘距文字只有 4px）。 */
+  padding: 14px 16px 14px 20px;
   background: var(--rf-surface, #fff);
   border: 1px solid var(--rf-border, #f0f0f0);
   border-radius: 8px;
@@ -216,17 +218,25 @@
   --rf-stage-color: #f08bb4;
 }
 
-/* 进行中的记录左侧加一条内嵌圆角 pill（用阶段色）：一屏十几条时，
-   扫一眼就知道哪些还要跟。内嵌而不占 border，不再像直角粗竖条那样顶着卡片边缘。 */
+/* 进行中的记录左侧加一条贴左缘满高的阶段色竖条：一屏十几条时，
+   扫一眼就知道哪些还要跟。贴缘后条不再挤占文字空间；右缘带圆角、
+   左缘随卡片 8px 圆角内贴（radius 左侧为 0，避免露出卡片外）。 */
 .track-card.is-active::before {
   content: "";
   position: absolute;
-  left: 8px;
-  top: 12px;
-  bottom: 12px;
+  left: 0;
+  top: 0;
+  bottom: 0;
   width: 4px;
-  border-radius: 2px;
+  border-radius: 0 4px 4px 0;
   background: var(--rf-stage-color, #1677ff);
+}
+
+/* 激活卡整体加一层阶段色调：浅底 + 边框向阶段色靠拢，
+   让"还在进行中的"比单靠一条竖条更早被视觉捕捉到。 */
+.track-card.is-active {
+  background: color-mix(in srgb, var(--rf-stage-color, #5b8ff9) 6%, transparent);
+  border-color: color-mix(in srgb, var(--rf-stage-color, #5b8ff9) 30%, var(--rf-border, #f0f0f0));
 }
 
 .track-card-head {
@@ -237,18 +247,27 @@
   justify-content: space-between;
 }
 
+/* 元信息（投递于/状态更新/来源）：第二层，比标题轻一档。
+   行内文字本身是 type="secondary"，这里再统一压小字号与固定次级色。 */
 .track-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 4px 14px;
   margin-top: 6px;
+  color: #64748b;
   font-size: 12px;
 }
 
+.track-card-meta .ant-typography {
+  color: #64748b;
+  font-size: 12px;
+}
+
+/* 行动项（下一步）：第三层，保留红色强调，上下各留出与元信息、补充信息的间隔。 */
 .track-card-next {
   display: flex;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 10px;
   color: rgba(0, 0, 0, 0.75);
   font-size: 13px;
 }
@@ -266,16 +285,19 @@
   line-height: 21px;
 }
 
+/* 补充信息（心得/依据）：最轻一层——次级色 + 小字号，不与上面三层抢注意力。 */
 .track-card-note {
-  margin: 8px 0 0;
-  color: rgba(0, 0, 0, 0.65);
-  font-size: 13px;
+  margin: 10px 0 0;
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 12px;
+  line-height: 1.6;
   white-space: pre-wrap;
 }
 
 .track-card-evidence {
   display: block;
   margin-top: 6px;
+  color: #64748b;
   font-size: 12px;
 }
 
@@ -341,7 +363,20 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+/* 月份标题加重：它是这一行的"锚点"，翻月时视线先落在它上面。 */
+.calendar-view-head .ant-typography {
+  color: #16365c;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.calendar-view-head .ant-btn:not(:disabled):hover {
+  color: #16365c;
+  border-color: #b8d4f5;
+  background: #eaf1f8;
 }
 
 .calendar-view-grid {
@@ -354,6 +389,7 @@
   padding: 4px 0;
   text-align: center;
   font-size: 12px;
+  font-weight: 500;
   color: #8c8c8c;
 }
 
@@ -361,6 +397,11 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  /* 1fr 轨道的默认最小宽是内容的 min-content：事件标题 nowrap 时会把整列
+     撑到标题宽度、整块栅格顶出弹窗（月历排版炸掉的根因）。必须显式归零，
+     让列宽只由轨道决定，标题交给条目自身的 nowrap+ellipsis 截断。 */
+  min-width: 0;
+  overflow: hidden;
   min-height: 64px;
   padding: 4px;
   border: 1px solid #f0f0f0;
@@ -368,19 +409,40 @@
   background: #fff;
   cursor: pointer;
   text-align: left;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .calendar-view-cell:hover {
-  border-color: #1677ff;
+  border-color: #b8d4f5;
+  background: #f8fbff;
 }
 
 .calendar-view-cell.is-today {
-  border-color: #1677ff;
+  border-color: #5b8ff9;
   background: #f0f7ff;
+  box-shadow: 0 1px 4px rgba(91, 143, 249, 0.18);
 }
 
 .calendar-view-cell.is-dimmed {
   opacity: 0.45;
+}
+
+/* 今日的日期数字做成圆形徽标：主题色实底 + 白字，
+   不只换底色——扫一眼月历就能立刻锁到"今天"。 */
+.calendar-view-cell.is-today .calendar-view-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-bottom: 2px;
+  color: #fff;
+  font-weight: 700;
+  background: #5b8ff9;
+  border-radius: 50%;
 }
 
 .calendar-view-day {
@@ -413,17 +475,23 @@
 
 .calendar-view-dots {
   display: flex;
-  gap: 3px;
+  gap: 4px;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 2px;
   flex-wrap: wrap;
 }
 
+/* 有提醒日的色点：小圆点 + 浅 halo（box-shadow 微光），
+   紧凑模式下不铺标题，靠这点光斑示意"这天有事"。 */
 .calendar-view-dot.ant-tag {
-  width: 10px;
-  height: 10px;
-  min-width: 10px;
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
   margin: 0;
   padding: 0;
   border-radius: 50%;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
 }
 
 @media (max-width: 900px) {

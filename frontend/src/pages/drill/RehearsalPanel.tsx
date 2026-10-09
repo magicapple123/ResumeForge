@@ -1,5 +1,6 @@
 /** 复练队列：点一条就换一个角度出新题。 */
-import { App, Button, Listy, Modal, Skeleton, Space, Tag, Typography } from "antd";
+import { App, Button, Listy, Modal, Space, Tag, Typography } from "antd";
+import PageSkeleton from "../../components/common/PageSkeleton";
 import { useCallback, useEffect, useState } from "react";
 import { listRehearsal, rehearse } from "../../api/drill";
 import { ListyItem } from "../../components/common/ListyItem";
@@ -57,7 +58,7 @@ export function RehearsalPanel({ sessionId }: { sessionId: number }) {
     }
   };
 
-  if (loading) return <Skeleton active paragraph={{ rows: 2 }} />;
+  if (loading) return <PageSkeleton rows={2} card={false} />;
   if (rows.length === 0) {
     return (
       <Typography.Text type="secondary">复练队列是空的——这一场没有需要再练的主张。</Typography.Text>

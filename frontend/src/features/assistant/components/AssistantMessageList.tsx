@@ -1,7 +1,12 @@
 /** 对话消息、流式回复和加载状态展示。 */
 
-import { CommentOutlined, CopyOutlined, DeleteOutlined } from "@ant-design/icons";
-import { Alert, App, Checkbox, Skeleton, Typography } from "antd";
+import {
+  CheckSquareOutlined,
+  CommentOutlined,
+  CopyOutlined,
+  DeleteOutlined,
+} from "@ant-design/icons";
+import { Alert, App, Checkbox, Typography } from "antd";
 import { memo } from "react";
 import type { RefObject } from "react";
 import type {
@@ -14,6 +19,7 @@ import type {
 import { copyText } from "../../../utils/clipboard";
 import { formatDateTime } from "../../../utils/format";
 import { RowContextMenu, type RowActionItem } from "../../../components/common/RowActions";
+import PageSkeleton from "../../../components/common/PageSkeleton";
 import AssistantEmptyState from "./AssistantEmptyState";
 import {
   AssistantMessageContent,
@@ -53,6 +59,8 @@ interface Props {
   /** 引用某条历史消息追问（右键菜单）。 */
   onQuote: (message: AssistantMessage) => void;
   onDeleteMessage: (message: AssistantMessage) => void;
+  /** 右键菜单「批量选择」的动作：进入消息多选模式（页头按钮已收进这里，R8）。 */
+  onEnterSelecting: () => void;
   /** 多选模式：勾选多条后一次删掉。 */
   selecting: boolean;
   selectedIds: ReadonlySet<number>;
@@ -65,6 +73,8 @@ interface BubbleProps {
   selected: boolean;
   onQuote: (message: AssistantMessage) => void;
   onDeleteMessage: (message: AssistantMessage) => void;
+  /** 右键菜单「批量选择」的动作：进入消息多选模式（页头按钮已收进这里，R8）。 */
+  onEnterSelecting: () => void;
 }
 
 /**
@@ -83,11 +93,18 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
   selected,
   onQuote,
   onDeleteMessage,
+  onEnterSelecting,
 }: BubbleProps) {
   const { message } = App.useApp();
 
   /** 每条消息的操作：整块右键即可唤出（和岗位卡片、会话列表一致）。 */
   const actionsFor = (): RowActionItem[] => [
+    {
+      key: "batch_select",
+      label: "批量选择",
+      icon: <CheckSquareOutlined />,
+      onClick: onEnterSelecting,
+    },
     {
       key: "quote",
       label: "引用这条继续问",
@@ -175,6 +192,7 @@ export default function AssistantMessageList({
   onManageSkills,
   onQuote,
   onDeleteMessage,
+  onEnterSelecting,
   selecting,
   selectedIds,
   onToggleSelected,
@@ -184,7 +202,7 @@ export default function AssistantMessageList({
   return (
     <div className="assistant-messages" aria-live="polite">
       {showLoading ? (
-        <Skeleton active paragraph={{ rows: 6 }} />
+        <PageSkeleton rows={6} card={false} />
       ) : historyMessages.length === 0 && !(sending && activeStream) ? (
         <AssistantEmptyState
           variant={emptyVariant}
@@ -202,6 +220,7 @@ export default function AssistantMessageList({
               selected={selectedIds.has(item.id)}
               onQuote={onQuote}
               onDeleteMessage={onDeleteMessage}
+              onEnterSelecting={onEnterSelecting}
             />
           );
           // 多选时不挂右键菜单：那套操作（引用、复制）此时都用不上，右键还要和勾选抢交互。

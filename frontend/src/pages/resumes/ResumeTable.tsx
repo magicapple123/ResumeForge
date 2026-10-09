@@ -3,7 +3,7 @@
  * 受控组件——数据、批量选择、收藏防连点与各入口的打开动作全部由 ResumesPage 经 props
  * 传入（navigate 留页面）；行操作清单（primary/secondary/context）随表格一起下沉。
  */
-import { StarFilled, StarOutlined } from "@ant-design/icons";
+import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
 import { Button, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { memo, useMemo } from "react";
@@ -78,10 +78,22 @@ function secondaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActio
   ];
 }
 
+/** 右键菜单顶部的「批量选择」入口：工具栏按钮已收进这里（R8），点它进入多选模式。 */
+function batchSelectAction(enterSelecting: () => void): RowActionItem {
+  return {
+    key: "batch_select",
+    label: "批量选择",
+    icon: <CheckSquareOutlined />,
+    onClick: enterSelecting,
+  };
+}
+
 interface ContextMenuRowProps extends HTMLAttributes<HTMLTableRowElement> {
   record?: ResumeBrief;
   /** 批量选择模式下右键菜单收起，与行内操作保持一致。 */
   selecting: boolean;
+  /** 进入多选模式（「批量选择」菜单项的动作），页面传入的 useCallback 稳定引用。 */
+  enterSelecting: () => void;
   deps: RowActionDeps;
 }
 
@@ -90,6 +102,7 @@ interface ContextMenuRowProps extends HTMLAttributes<HTMLTableRowElement> {
 const ContextMenuRow = memo(function ContextMenuRow({
   record,
   selecting,
+  enterSelecting,
   deps,
   ...rest
 }: ContextMenuRowProps) {
@@ -97,7 +110,13 @@ const ContextMenuRow = memo(function ContextMenuRow({
   return (
     <RowContextMenu
       items={
-        selecting ? [] : [...primaryActionsFor(record, deps), ...secondaryActionsFor(record, deps)]
+        selecting
+          ? []
+          : [
+              batchSelectAction(enterSelecting),
+              ...primaryActionsFor(record, deps),
+              ...secondaryActionsFor(record, deps),
+            ]
       }
     >
       <tr {...rest} />
@@ -344,6 +363,7 @@ export default function ResumeTable({
                 {...props}
                 record={itemsByRowKey.get(rowKey)}
                 selecting={batch.selecting}
+                enterSelecting={batch.enterSelecting}
                 deps={actionDeps}
               />
             );

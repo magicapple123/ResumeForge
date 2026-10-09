@@ -57,11 +57,21 @@ afterEach(() => {
 });
 
 describe("ConversationSidebar 批量选择", () => {
-  it("进入多选 → 勾 2 项 → 删除所选 → 确认 → 把 id 列表交给父级", async () => {
+  /** 右键会话条目，从菜单点「批量选择」（入口已从侧栏按钮收进右键菜单，R8）。 */
+  async function enterSelectingViaContextMenu(title: string) {
+    fireEvent.contextMenu(screen.getByText(title));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+  }
+
+  it("右键菜单进入多选 → 勾 2 项 → 删除所选 → 确认 → 把 id 列表交给父级", async () => {
     const onBatchDelete = vi.fn();
     renderSidebar(onBatchDelete);
 
-    fireEvent.click(await screen.findByRole("button", { name: /批量选择/ }));
+    await screen.findByText("简历修改讨论");
+    // R8：侧栏不再有直接的「批量选择」按钮。
+    expect(screen.queryByRole("button", { name: /批量选择/ })).not.toBeInTheDocument();
+    await enterSelectingViaContextMenu("简历修改讨论");
+
     fireEvent.click(await screen.findByRole("checkbox", { name: "选择对话 简历修改讨论" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "选择对话 面试复盘" }));
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
@@ -82,7 +92,7 @@ describe("ConversationSidebar 批量选择", () => {
     const onBatchDelete = vi.fn();
     renderSidebar(onBatchDelete);
 
-    fireEvent.click(await screen.findByRole("button", { name: /批量选择/ }));
+    await enterSelectingViaContextMenu("简历修改讨论");
     fireEvent.click(await screen.findByRole("checkbox", { name: "选择对话 简历修改讨论" }));
     expect(screen.getByText("已选 1 项")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "退出多选" }));

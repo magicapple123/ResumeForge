@@ -29,7 +29,6 @@ function StatefulHarness({ onKeywordChange }: { onKeywordChange?: (value: string
       setSourceKind={vi.fn()}
       batchAction={null}
       selectionMode={false}
-      setSelectionMode={vi.fn()}
       exitSelectionMode={vi.fn()}
       openMatchBatch={vi.fn()}
       emptyDescriptionJobIds={[]}
@@ -55,7 +54,6 @@ function ControlledHarness({ keyword }: { keyword: string }) {
       setSourceKind={vi.fn()}
       batchAction={null}
       selectionMode={false}
-      setSelectionMode={vi.fn()}
       exitSelectionMode={vi.fn()}
       openMatchBatch={vi.fn()}
       emptyDescriptionJobIds={[]}

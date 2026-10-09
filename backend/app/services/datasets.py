@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import shutil
 import time
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,7 @@ from .data_backup.import_archive import (
     _best_effort_checkpoint,
     _remove_candidate_files,
     _remove_sqlite_sidecars,
+    restore_referral_images,
 )
 
 logger = logging.getLogger(__name__)
@@ -134,6 +136,15 @@ def import_dataset(archive_path: Path, name: str, bind: Engine, staging_dir: Pat
             # 随包带走的其余数据集各落成一份新数据集。**用新 id**：包里的 id 在本机可能早就
             # 存在（那是另一份数据），沿用会覆盖它——而覆盖用户的另一份数据集是不可逆的。
             result["restored_datasets"] = restored
+        # 包里附带的内推图片恢复到该库同目录；失败只告警，不影响数据集本身。
+        try:
+            restored_images = restore_referral_images(
+                archive_path, target.parent / "referral_images"
+            )
+            if restored_images:
+                result["restored_referral_images"] = restored_images
+        except (OSError, zipfile.BadZipFile):
+            logger.warning("备份包的内推图片恢复失败（不影响数据集本身）", exc_info=True)
         # 回给前端做提示用：勾选过"包含 API Key"的包恢复成功后，界面要如实告诉用户
         # 密钥也跟着回来了（解不开时应用按未配置处理，仍需重填）。
         result["api_key_included"] = manifest.get("api_key_included") is True

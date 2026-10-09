@@ -112,8 +112,12 @@ describe("JobMatchBatchPanel", () => {
       }),
     );
     expect(await screen.findByText("已完成 2 个岗位，0 个岗位失败")).toBeInTheDocument();
-    expect(screen.getByText("匹配度参考分：88")).toBeInTheDocument();
-    expect(screen.getByText("匹配度参考分：61")).toBeInTheDocument();
+    // 新版式：右侧是"匹配度参考分"标签，数字与单位在圆环内（.batch-score-number）
+    expect(screen.getAllByText("匹配度参考分")).toHaveLength(2);
+    const numbers = [...document.querySelectorAll(".batch-score-number")].map(
+      (node) => node.textContent,
+    );
+    expect(numbers).toEqual(["88分", "61分"]);
     expect(screen.getByText("历史记录")).toBeInTheDocument();
   });
 
@@ -136,7 +140,11 @@ describe("JobMatchBatchPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "查看结果" }));
 
     await waitFor(() => expect(apiMocks.getJobMatchBatch).toHaveBeenCalledWith(7));
-    expect(await screen.findByText("匹配度参考分：88")).toBeInTheDocument();
+    // 批次里有两条结果，"匹配度参考分"标签会出现两次；用圆环数字确认渲染完成
+    await waitFor(() =>
+      expect(document.querySelector(".batch-score-number")?.textContent).toBe("88分"),
+    );
+    expect(screen.getAllByText("匹配度参考分").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "重新分析" })).not.toBeInTheDocument();
   });
 

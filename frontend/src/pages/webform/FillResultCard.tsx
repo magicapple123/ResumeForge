@@ -3,10 +3,16 @@
  * （自 WebFormPage 拆出：:986-1014 整块逐字随迁，内用 FillRateTag，纯 props。）
  */
 import { Alert, Card, Space, Tag, Typography } from "antd";
+import { memo } from "react";
 import type { WebFormFillResult } from "../../types";
 import { FillRateTag } from "./FillRateTag";
 
-export function FillResultCard({ result }: { result: WebFormFillResult }) {
+/** **memo**：只在 result 引用变化（填充完成后）时才需要重渲。 */
+export const FillResultCard = memo(function FillResultCard({
+  result,
+}: {
+  result: WebFormFillResult;
+}) {
   return (
     <Card size="small" title="填充结果">
       <Space size="middle" wrap>
@@ -36,4 +42,4 @@ export function FillResultCard({ result }: { result: WebFormFillResult }) {
       />
     </Card>
   );
-}
+});

@@ -31,6 +31,10 @@ _REMINDER_POPUP_KEY = "reminder_popup_on_start"
 _ASSISTANT_ORB_KEY = "assistant_orb_enabled"
 _NAVIGATION_VISIBILITY_KEY = "navigation_visibility"
 _WEBFORM_RELAXED_MODE_KEY = "webform_relaxed_mode"
+_EXPORT_SAVE_LOCATION_KEY = "export_save_location"
+# 求职助手放宽模式：开启后助手可读取完整资料（含姓名、电话等敏感字段）与
+# 网申填写记录、历史对话。默认必须**关**——它扩大的是发往模型的个人信息面。
+_ASSISTANT_RELAXED_MODE_KEY = "assistant_relaxed_mode"
 API_KEY_MASK = "********"
 _RECORD_API_KEY_PREFIX = f"{API_KEY_MASK}:record:"
 
@@ -322,6 +326,66 @@ def save_webform_relaxed_mode(db: Session, enabled: bool) -> bool:
         row.value = serialized
     db.commit()
     return bool(enabled)
+
+
+# ===== 求职助手放宽模式 =====
+
+
+def get_assistant_relaxed_mode(db: Session) -> bool:
+    """读取「求职助手放宽模式」开关；缺失或脏数据退回默认**关**。
+
+    放宽模式会把助手的可读范围从"岗位筛选需要的资料"扩大到**全部资料**：姓名、
+    电话等敏感身份字段、网申填表的真实填写值、历史对话。它改变的是"发往模型的
+    个人信息面"，与网申放宽模式一样默认保守，由用户在知情的前提下显式开启。
+    API 密钥等凭据无论如何都不在解锁范围内。
+    """
+    row = db.get(AppSetting, _ASSISTANT_RELAXED_MODE_KEY)
+    if row is None:
+        return False
+    try:
+        value = json.loads(row.value)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("助手放宽模式设置数据损坏，已重置为默认关闭")
+        return False
+    return value if isinstance(value, bool) else False
+
+
+def save_assistant_relaxed_mode(db: Session, enabled: bool) -> bool:
+    """持久化「求职助手放宽模式」开关。"""
+    row = db.get(AppSetting, _ASSISTANT_RELAXED_MODE_KEY)
+    serialized = json.dumps(bool(enabled))
+    if row is None:
+        db.add(AppSetting(key=_ASSISTANT_RELAXED_MODE_KEY, value=serialized))
+    else:
+        row.value = serialized
+    db.commit()
+    return bool(enabled)
+
+
+# ===== 导出内容保存位置 =====
+
+
+def get_export_save_location(db: Session) -> str:
+    """读取「生成内容保存位置」；缺失退回空串（= 仅浏览器下载，默认行为）。
+
+    存的就是原始路径字符串：路径里什么字符都可能出现，套一层 JSON 反而多一种坏法。
+    """
+    row = db.get(AppSetting, _EXPORT_SAVE_LOCATION_KEY)
+    if row is None:
+        return ""
+    return str(row.value or "").strip()
+
+
+def save_export_save_location(db: Session, path: str) -> str:
+    """持久化「生成内容保存位置」。空串 = 恢复默认（不额外落盘）。"""
+    cleaned = (path or "").strip()
+    row = db.get(AppSetting, _EXPORT_SAVE_LOCATION_KEY)
+    if row is None:
+        db.add(AppSetting(key=_EXPORT_SAVE_LOCATION_KEY, value=cleaned))
+    else:
+        row.value = cleaned
+    db.commit()
+    return cleaned
 
 
 # ===== 导航显示设置 =====

@@ -25,10 +25,28 @@ from ..services.candidate_jobs import (
     mark_candidate_imported,
     update_candidate_job,
 )
+from ..services.user_files import save_from_data_url
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/candidate-jobs", tags=["candidate-jobs"])
+
+
+def _save_image_copies(db: Session, candidate_id: int, images: list[str]) -> None:
+    """best-effort：把备选岗位截图 data URL 落一份磁盘副本（失败只记日志）。"""
+    for index, data_url in enumerate(images or []):
+        if not data_url:
+            continue
+        try:
+            save_from_data_url(
+                db,
+                str(data_url),
+                source_type="candidate_image",
+                source_ref=f"candidate_job:{candidate_id}",
+                fallback_name=f"candidate-{candidate_id}-{index + 1}",
+            )
+        except Exception:  # noqa: BLE001 - 副本是锦上添花，绝不能挡住暂存
+            logger.warning("备选岗位截图副本保存失败 candidate_job:%s", candidate_id, exc_info=True)
 
 
 @router.get("", response_model=list[CandidateJobOut])
@@ -66,7 +84,9 @@ def read_candidate_jobs(
 
 @router.post("", response_model=CandidateJobOut, status_code=201)
 def create_candidate_job_entry(payload: CandidateJobCreate, db: Session = Depends(get_db)):
-    return create_candidate_job(db, payload)
+    candidate = create_candidate_job(db, payload)
+    _save_image_copies(db, candidate.id, payload.images)
+    return candidate
 
 
 @router.post("/import", response_model=CandidateJobBulkImportOut)
@@ -96,7 +116,10 @@ def save_candidate_job(
     candidate = candidate_or_none(db, candidate_id)
     if candidate is None:
         raise HTTPException(status_code=404, detail="备选岗位不存在或已被删除")
-    return update_candidate_job(db, candidate, payload)
+    updated = update_candidate_job(db, candidate, payload)
+    if "images" in payload.model_fields_set:
+        _save_image_copies(db, candidate.id, payload.images)
+    return updated
 
 
 @router.post("/{candidate_id}/imported", response_model=CandidateJobOut)

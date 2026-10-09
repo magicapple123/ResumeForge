@@ -1,5 +1,5 @@
 import { Col, Input, Select, Space, Tag, Tooltip, Typography } from "antd";
-import { memo } from "react";
+import { memo, useCallback, useMemo, type CSSProperties } from "react";
 import WebFormCustomFieldControls from "./WebFormCustomFieldControls";
 import PartialDateSelect from "./PartialDateSelect";
 import { isCustomField } from "./WebFormProfileFieldUtils";
@@ -9,6 +9,21 @@ const { TextArea } = Input;
 
 const CUSTOM_HINT =
   "标签与唯一预设字段精确对应时可自动匹配；放宽模式会尝试受约束的文本匹配，歧义项不猜、请复核";
+
+const FIELD_STYLE: CSSProperties = {
+  height: "100%",
+  padding: "10px 12px",
+  border: "1px solid #edf2f7",
+  borderRadius: 9,
+};
+
+const FIELD_HEADER_STYLE: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 8,
+  minHeight: 24,
+};
 
 /**
  * 回调按 (key, ...) 维度收口：Group 传下来的是**稳定引用**（页面级 useCallback），
@@ -40,6 +55,10 @@ function FieldInput({
   onChange: (value: string) => void;
   label: string;
 }) {
+  const selectOptions = useMemo(
+    () => (field.options ?? []).map((option) => ({ label: option, value: option })),
+    [field.options],
+  );
   if (field.kind === "longtext") {
     return (
       <TextArea
@@ -68,7 +87,7 @@ function FieldInput({
         value={value || undefined}
         disabled={disabled}
         allowClear
-        options={field.options.map((option) => ({ label: option, value: option }))}
+        options={selectOptions}
         onChange={(nextValue) => onChange(nextValue ?? "")}
         aria-label={label}
         style={{ width: "100%" }}
@@ -97,34 +116,31 @@ export default memo(function WebFormProfileField({
   onRename,
   onDelete,
 }: Props) {
+  const handleChange = useCallback(
+    (nextValue: string) => onChange(field.key, nextValue),
+    [field.key, onChange],
+  );
+  const fieldStyle = useMemo(
+    () => ({ ...FIELD_STYLE, background: editing && !value.trim() ? "#fbfcfe" : "#fff" }),
+    [editing, value],
+  );
+  const handleRename = useCallback(
+    (label: string) => onRename(field.key, label),
+    [field.key, onRename],
+  );
+  const handleDelete = useCallback(() => onDelete(field.key), [field.key, onDelete]);
   return (
     <Col xs={24} lg={12}>
-      <div
-        style={{
-          height: "100%",
-          padding: "10px 12px",
-          border: "1px solid #edf2f7",
-          borderRadius: 9,
-          background: editing && !value.trim() ? "#fbfcfe" : "#fff",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 8,
-            minHeight: 24,
-          }}
-        >
+      <div style={fieldStyle}>
+        <div style={FIELD_HEADER_STYLE}>
           <div style={{ minWidth: 0, flex: 1 }} title={displayLabel}>
             {isCustomField(field) ? (
               <WebFormCustomFieldControls
                 label={displayLabel}
                 editing={editing}
                 saving={saving}
-                onRename={(label) => onRename(field.key, label)}
-                onDelete={() => onDelete(field.key)}
+                onRename={handleRename}
+                onDelete={handleDelete}
               />
             ) : (
               <Typography.Text
@@ -160,7 +176,7 @@ export default memo(function WebFormProfileField({
               value={value}
               disabled={saving}
               label={displayLabel}
-              onChange={(nextValue) => onChange(field.key, nextValue)}
+              onChange={handleChange}
             />
           ) : (
             <Typography.Text

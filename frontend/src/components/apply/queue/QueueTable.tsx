@@ -4,7 +4,7 @@
  * contextMenu state 随唯一消费者下沉进本组件；rowMenuItems 经 prop 传入；
  * aria-label/类名/定宽注释逐字随迁，行为等价。）
  */
-import { ArrowDownOutlined, ArrowUpOutlined, MoreOutlined } from "@ant-design/icons";
+import { MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Menu, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -21,7 +21,6 @@ export function QueueTable({
   selectedIds,
   setSelectedIds,
   setDetail,
-  move,
   rowMenuItems,
 }: {
   items: ApplyQueueItem[];
@@ -29,7 +28,6 @@ export function QueueTable({
   selectedIds: number[];
   setSelectedIds: (ids: number[]) => void;
   setDetail: (item: ApplyQueueItem) => void;
-  move: (index: number, delta: number) => Promise<void>;
   rowMenuItems: (record: ApplyQueueItem) => MenuProps["items"];
 }) {
   // 右键菜单：记录鼠标位置与目标行，用定位式 Menu 渲染（避免把 <tr> 包进 Dropdown 造成行重建竞态）。
@@ -135,48 +133,23 @@ export function QueueTable({
     {
       title: "操作",
       key: "actions",
-      width: 130,
+      width: 64,
       // 表头与单元格一起右对齐：否则「操作」两字靠左、按钮靠右，看起来像没对齐（用户反馈过）。
       align: "right",
-      // 下标不能用 render 的第三个参数：开了分页后它是**页内序号**，翻页后 move() 会
-      // 错位。这里从全量 items 里取真实下标，保证跨页也能正确上移/下移。
-      render: (_, item) => {
-        const index = items.indexOf(item);
-        return (
-          <div
-            className="apply-queue-actions"
-            style={{ display: "flex", justifyContent: "flex-end", marginLeft: "auto" }}
-          >
-            <Space size={4}>
-              <Tooltip title="上移">
-                <Button
-                  size="small"
-                  aria-label={`上移 ${item.job_title}`}
-                  icon={<ArrowUpOutlined />}
-                  disabled={index === 0 || busy}
-                  onClick={() => void move(index, -1)}
-                />
-              </Tooltip>
-              <Tooltip title="下移">
-                <Button
-                  size="small"
-                  aria-label={`下移 ${item.job_title}`}
-                  icon={<ArrowDownOutlined />}
-                  disabled={index === items.length - 1 || busy}
-                  onClick={() => void move(index, 1)}
-                />
-              </Tooltip>
-              <Dropdown trigger={["click"]} menu={{ items: rowMenuItems(item) }}>
-                <Button
-                  size="small"
-                  aria-label={`更多操作 ${item.job_title}`}
-                  icon={<MoreOutlined />}
-                />
-              </Dropdown>
-            </Space>
-          </div>
-        );
-      },
+      render: (_, item) => (
+        <div
+          className="apply-queue-actions"
+          style={{ display: "flex", justifyContent: "flex-end", marginLeft: "auto" }}
+        >
+          <Dropdown trigger={["click"]} menu={{ items: rowMenuItems(item) }}>
+            <Button
+              size="small"
+              aria-label={`更多操作 ${item.job_title}`}
+              icon={<MoreOutlined />}
+            />
+          </Dropdown>
+        </div>
+      ),
     },
   ];
 
@@ -197,7 +170,14 @@ export function QueueTable({
         size="small"
         columns={columns}
         dataSource={items}
-        pagination={{ pageSize: 50, hideOnSinglePage: true, showSizeChanger: false }}
+        // 每页 10 条：队列条目行高较高，一页塞太多会把整屏挤满；分页形态与岗位广场 /
+        // 简历中心一致（条数切换 + 总数显示）。hideOnSinglePage：队列很短时不打扰。
+        pagination={{
+          pageSize: 10,
+          hideOnSinglePage: true,
+          showSizeChanger: true,
+          showTotal: (total) => `共 ${total} 条`,
+        }}
         rowSelection={rowSelection}
         tableLayout="fixed"
         scroll={{ x: 880 }}

@@ -78,7 +78,7 @@ describe("CollectResultPanel", () => {
     renderPanel();
     await screen.findByText("全栈工程师");
 
-    expect(screen.getByRole("button", { name: /导入选中的岗位/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /导入选中的岗位$/ })).toBeDisabled();
   });
 
   it("导入后逐条反馈没进去的那几条以及原因", async () => {
@@ -99,9 +99,10 @@ describe("CollectResultPanel", () => {
     renderPanel();
     await screen.findByText("新岗位");
 
-    // 全选后导入。
+    // 全选后导入。正则以 $ 锚定结尾：「导入并加入投递队列」按钮的 aria-label 同样
+    // 含「导入选中的 N 个岗位」前缀，不锚定会被 getByRole 判为双匹配直接报错。
     fireEvent.click(screen.getByRole("button", { name: "全选" }));
-    fireEvent.click(screen.getByRole("button", { name: /导入选中的 2 个岗位/ }));
+    fireEvent.click(screen.getByRole("button", { name: /导入选中的 2 个岗位$/ }));
 
     await waitFor(() => expect(apiMocks.importCandidateJobs).toHaveBeenCalledWith([1, 2]));
     // 「已存在」那一条必须具名出现，而不是仅仅汇报"导入了 1 条"。
@@ -124,7 +125,7 @@ describe("CollectResultPanel", () => {
     await screen.findByText("新岗位");
 
     fireEvent.click(screen.getByRole("button", { name: "全选" }));
-    fireEvent.click(screen.getByRole("button", { name: /导入选中的 1 个岗位/ }));
+    fireEvent.click(screen.getByRole("button", { name: /导入选中的 1 个岗位$/ }));
 
     // 成功提示必须带下一步动作，不能只说"已导入"就完了。
     const link = await screen.findByRole("button", { name: "去岗位广场查看" });
@@ -171,7 +172,7 @@ describe("CollectResultPanel", () => {
     const view = renderPanel({ taskId: 7 });
     await screen.findByText("第一批岗位");
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
-    expect(screen.getByRole("button", { name: /导入选中的 1 个岗位/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /导入选中的 1 个岗位$/ })).toBeEnabled();
 
     view.rerender(
       <MemoryRouter>
@@ -182,7 +183,7 @@ describe("CollectResultPanel", () => {
     );
 
     await screen.findByText("第二批岗位");
-    expect(screen.getByRole("button", { name: /导入选中的岗位/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /导入选中的岗位$/ })).toBeDisabled();
   });
 
   it("没有批次时不渲染", () => {

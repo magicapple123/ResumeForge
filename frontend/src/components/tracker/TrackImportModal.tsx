@@ -109,7 +109,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
       width={780}
       // 识别出的通知条数不固定：限高让超长列表只滚弹窗内部。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       onCancel={onClose}
       footer={

@@ -15,7 +15,7 @@ from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0034_job_match_batches"
-HEAD_REVISION = "0037_resume_generation_notes"
+HEAD_REVISION = "0038_user_files"
 
 TABLE = "llm_config_record"
 
@@ -86,8 +86,8 @@ def test_existing_rows_fall_back_to_thinking_off(tmp_path):
     assert row == (0, "", "auto")
 
 
-def test_upgrade_keeps_the_table_set_unchanged(tmp_path):
-    """**只加列**：表集合前后不变，这是"旧备份仍可导入"成立的前提。"""
+def test_upgrade_only_adds_expected_tables(tmp_path):
+    """只加列不加表：升级到 head 后表集合 = 升级前 + 预期新增，不多不少。"""
     engine = create_engine(f"sqlite:///{tmp_path / 'tables.db'}")
     config = build_alembic_config(engine)
     command.upgrade(config, PREVIOUS_REVISION)
@@ -95,7 +95,8 @@ def test_upgrade_keeps_the_table_set_unchanged(tmp_path):
 
     command.upgrade(config, HEAD_REVISION)
 
-    assert set(inspect(engine).get_table_names()) == before
+    # 0038 新增 user_file 表；其余表集合必须不变——后续若有新的加表迁移，同步扩充该集合
+    assert set(inspect(engine).get_table_names()) == before | {"user_file"}
 
 
 def test_upgrade_is_idempotent_when_already_applied(tmp_path):

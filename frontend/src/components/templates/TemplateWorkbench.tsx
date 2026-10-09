@@ -7,7 +7,7 @@ import {
   UploadOutlined,
 } from "@ant-design/icons";
 import { App, Button, Card, Collapse, Dropdown, Empty, Space, Tag, Typography } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchResumeTemplates } from "../../api/resumes";
 import {
@@ -51,6 +51,9 @@ export default function TemplateWorkbench({ onChanged }: Props) {
   }>({ open: false, template: null });
   const [previewTemplate, setPreviewTemplate] = useState<ResumeTemplateDetail | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  // 隐藏 file input 的引用：按钮点击不能依赖 label 的激活转发（点击落在 button 上
+  // 时浏览器不会把激活转发给 label 的控件），必须显式触发 input.click()。
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
   // 返回 null 表示失败（错误提示在这里统一给出）。
@@ -199,6 +202,7 @@ export default function TemplateWorkbench({ onChanged }: Props) {
             >
               <label className="template-upload-button">
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept=".html,.htm,.j2,.jinja,.txt"
                   hidden
@@ -208,7 +212,13 @@ export default function TemplateWorkbench({ onChanged }: Props) {
                     if (file) void importFile(file);
                   }}
                 />
-                <Button icon={<UploadOutlined />} onClick={(event) => event.preventDefault()}>
+                <Button
+                  icon={<UploadOutlined />}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    fileInputRef.current?.click();
+                  }}
+                >
                   导入 HTML
                 </Button>
               </label>

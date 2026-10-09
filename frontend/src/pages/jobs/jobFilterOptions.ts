@@ -18,5 +18,5 @@ export const SOURCE_KIND_OPTIONS = [
   { value: "manual", label: "手动添加" },
 ];
 
-export type BatchAction = "status" | "delete" | null;
+export type BatchAction = "status" | "delete" | "enqueue" | null;
 export type MatchBatchRunMode = "immediate" | "background";
