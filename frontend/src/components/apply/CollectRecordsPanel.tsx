@@ -6,9 +6,11 @@
  * 结果如何（已暂存 / 重复 / 失败原因）。
  */
 import { HistoryOutlined } from "@ant-design/icons";
-import { Alert, Collapse, Empty, Skeleton, Space, Tag, Typography } from "antd";
+import { Alert, Collapse, Empty, Pagination, Space, Tag, Typography } from "antd";
 import { listApplyTasks } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
+import { useClientPagination } from "../../hooks/useClientPagination";
+import PageSkeleton from "../common/PageSkeleton";
 import { TASK_STATUS_META, type ApplyTask } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import CollectResultPanel from "./CollectResultPanel";
@@ -84,10 +86,19 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
     [refreshKey],
   );
 
-  if (error) return <Alert type="error" showIcon title={error} />;
-  if (loading && !data) return <Skeleton active paragraph={{ rows: 5 }} />;
-
   const records = data ?? [];
+  // 采集批次持续累积，一页 10 条分页展示（Collapse 没有内建分页，走通用客户端分页）。
+  // hook 必须在所有 early return 之前调用。
+  const {
+    page,
+    setPage,
+    paged: pagedRecords,
+    total: recordTotal,
+  } = useClientPagination(records, 10);
+
+  if (error) return <Alert type="error" showIcon title={error} />;
+  if (loading && !data) return <PageSkeleton rows={5} card={false} />;
+
   if (records.length === 0) {
     return (
       <Empty
@@ -98,32 +109,45 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
   }
 
   return (
-    <Collapse
-      className="apply-collect-records"
-      items={records.map((record) => {
-        const meta = TASK_STATUS_META[record.status];
-        const condition = conditionText(record);
-        return {
-          key: String(record.id),
-          label: (
-            <Space size={8} wrap>
-              <HistoryOutlined />
-              <Typography.Text strong>
-                {formatDateTime(record.finished_at || record.created_at)}
-              </Typography.Text>
-              <Tag color={meta?.color}>{meta?.label ?? record.status}</Tag>
-              {condition && <Typography.Text type="secondary">{condition}</Typography.Text>}
-              <Typography.Text>{resultText(record)}</Typography.Text>
-            </Space>
-          ),
-          children: (
-            <Space orientation="vertical" size={8} style={{ width: "100%" }}>
-              {record.message && <Alert type="info" showIcon title={record.message} />}
-              <CollectResultPanel taskId={record.id} disabled={disabled} />
-            </Space>
-          ),
-        };
-      })}
-    />
+    <>
+      <Collapse
+        className="apply-collect-records"
+        items={pagedRecords.map((record) => {
+          const meta = TASK_STATUS_META[record.status];
+          const condition = conditionText(record);
+          return {
+            key: String(record.id),
+            label: (
+              <Space size={8} wrap>
+                <HistoryOutlined />
+                <Typography.Text strong>
+                  {formatDateTime(record.finished_at || record.created_at)}
+                </Typography.Text>
+                <Tag color={meta?.color}>{meta?.label ?? record.status}</Tag>
+                {condition && <Typography.Text type="secondary">{condition}</Typography.Text>}
+                <Typography.Text>{resultText(record)}</Typography.Text>
+              </Space>
+            ),
+            children: (
+              <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+                {record.message && <Alert type="info" showIcon title={record.message} />}
+                <CollectResultPanel taskId={record.id} disabled={disabled} />
+              </Space>
+            ),
+          };
+        })}
+      />
+      <div style={{ textAlign: "right", marginTop: 12 }}>
+        <Pagination
+          current={page}
+          pageSize={10}
+          total={recordTotal}
+          onChange={setPage}
+          hideOnSinglePage
+          showSizeChanger={false}
+          showTotal={(count) => `共 ${count} 次采集`}
+        />
+      </div>
+    </>
   );
 }

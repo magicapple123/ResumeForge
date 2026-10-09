@@ -1,6 +1,6 @@
 /** 岗位列表表格、列渲染和分页。 */
 
-import { StarFilled, StarOutlined } from "@ant-design/icons";
+import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
 import { Button, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
@@ -11,7 +11,10 @@ import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowAct
 import SkillTags from "../SkillTags";
 import { jobSourceKind } from "../../utils/jobSource";
 
-type BatchAction = "status" | "delete" | null;
+// 值域与 pages/jobs/jobFilterOptions.ts 的 BatchAction 保持一致（新增动作两处同步改）；
+// 此处只判「有无批量操作进行中」，不区分具体动作。类型本地持有是因为 components
+// 不反向依赖 pages。
+type BatchAction = "status" | "delete" | "enqueue" | null;
 
 interface Props {
   jobs: Page<Job> | undefined;
@@ -29,6 +32,8 @@ interface Props {
   onViewResumes: (job: Job) => void;
   onEdit: (job: Job) => void;
   onDelete: (job: Job) => void;
+  /** 右键菜单「批量选择」的动作：进入选择模式（工具栏按钮已收进这里，R8）。 */
+  onEnterSelecting: () => void;
   onPageChange: (page: number, pageSize: number) => void;
 }
 
@@ -61,6 +66,7 @@ export default function JobTable({
   onViewResumes,
   onEdit,
   onDelete,
+  onEnterSelecting,
   onPageChange,
 }: Props) {
   const columns: ColumnsType<Job> = [
@@ -200,8 +206,19 @@ export default function JobTable({
     },
   ];
 
-  /** 整行右键：鼠标不在行内链接上，给完整清单更方便。 */
+  /** 整行右键：鼠标不在行内链接上，给完整清单更方便。
+   * 非选择模式时顶部带「批量选择」（工具栏按钮已收进这里，R8）；选择模式下不重复给。 */
   const contextActions = (job: Job): RowActionItem[] => [
+    ...(selectionMode
+      ? []
+      : [
+          {
+            key: "batch_select",
+            label: "批量选择",
+            icon: <CheckSquareOutlined />,
+            onClick: onEnterSelecting,
+          } satisfies RowActionItem,
+        ]),
     ...primaryActions(job),
     ...secondaryActions(job),
   ];

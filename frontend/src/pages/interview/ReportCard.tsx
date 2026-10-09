@@ -7,6 +7,7 @@ import { Alert, Button, Card, Listy, Progress, Tag, Typography } from "antd";
 import { ListyItem } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
 import type { InterviewDetail } from "../../types";
+import { JANE_FACE_SOURCES, janeFaceForScore } from "./janeFaces";
 
 export function ReportCard({
   session,
@@ -38,6 +39,11 @@ export function ReportCard({
               size={120}
               percent={Math.round(report.score ?? 0)}
               format={(value) => `${value} 分`}
+            />
+            <img
+              className="jane-avatar jane-avatar--report"
+              src={JANE_FACE_SOURCES[janeFaceForScore(report.score)]}
+              alt="面试官 Jane"
             />
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
               {report.summary}

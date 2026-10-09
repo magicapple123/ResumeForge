@@ -18,20 +18,73 @@ import {
   Empty,
   Popconfirm,
   Segmented,
-  Skeleton,
   Space,
   Table,
   Tag,
   Typography,
 } from "antd";
+import PageSkeleton from "../components/common/PageSkeleton";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
-import { useState } from "react";
+import type { HTMLAttributes } from "react";
+import { useMemo, useState } from "react";
 import { emptyTrash, getTrash, purgeTrashItem, restoreTrashItem } from "../api/trash";
+import { RowContextMenu, type RowActionItem } from "../components/common/RowActions";
 import { useApi } from "../hooks/useApi";
 import type { TrashBatchItem, TrashItem } from "../types";
 
 const ALL = "__all__";
+
+/** 带右键菜单的表格行：菜单 = 批量选择（进多选）+ 恢复 + 彻底删除（不可逆，二次确认）。 */
+interface ContextMenuRowProps extends HTMLAttributes<HTMLTableRowElement> {
+  record?: TrashItem;
+  /** 多选模式下右键菜单收起，与复选框选择互不打架。 */
+  selectMode: boolean;
+  onEnterSelectMode: () => void;
+  onRestore: (row: TrashItem) => void;
+  onPurge: (row: TrashItem) => void;
+}
+
+function ContextMenuRow({
+  record,
+  selectMode,
+  onEnterSelectMode,
+  onRestore,
+  onPurge,
+  ...rest
+}: ContextMenuRowProps) {
+  if (!record) return <tr {...rest} />;
+  const items: RowActionItem[] = selectMode
+    ? []
+    : [
+        {
+          key: "batch_select",
+          label: "批量选择",
+          icon: <CheckSquareOutlined />,
+          onClick: onEnterSelectMode,
+        },
+        {
+          key: "restore",
+          label: "恢复",
+          icon: <UndoOutlined />,
+          onClick: () => onRestore(record),
+        },
+        {
+          key: "purge",
+          label: "彻底删除",
+          danger: true,
+          icon: <DeleteOutlined />,
+          // 确认文案要把后果说白：这是全应用唯一不可逆的动作。
+          confirm: `「${record.title || record.type_label}」将被永久删除，无法恢复。`,
+          onClick: () => onPurge(record),
+        },
+      ];
+  return (
+    <RowContextMenu items={items}>
+      <tr {...rest} />
+    </RowContextMenu>
+  );
+}
 
 /** 把后端的 ISO 时间显示成"到分钟"的本地时间。 */
 function deletedAtText(value: string | null): string {
@@ -52,7 +105,8 @@ export default function TrashPage() {
   );
 
   const labels = data?.labels ?? {};
-  const items = data?.items ?? [];
+  // 行右键菜单按 rowKey 查条目时依赖它（useMemo），包一层保证引用稳定。
+  const items = useMemo(() => data?.items ?? [], [data]);
   const counts = data?.counts ?? {};
 
   const selectedItems = (): TrashBatchItem[] =>
@@ -199,6 +253,16 @@ export default function TrashPage() {
     setSelectedKeys([]);
   };
 
+  /** 右键菜单「批量选择」的动作：进入多选模式（入口已从页头按钮收进这里，R8）。 */
+  const enterSelectMode = () => setSelectMode(true);
+
+  /** rowKey（`type-id`）→ record：行右键菜单 O(1) 取条目。 */
+  const itemsByRowKey = useMemo(() => {
+    const map = new Map<string, TrashItem>();
+    for (const item of items) map.set(`${item.type}-${item.id}`, item);
+    return map;
+  }, [items]);
+
   return (
     <div className="trash-page">
       <div className="trash-page-head">
@@ -227,17 +291,11 @@ export default function TrashPage() {
                 清空{type === ALL ? "回收站" : "这一类"}
               </Button>
             </Popconfirm>
-            {/* 多选不常驻：平时隐藏复选框列，要批量处理时显式进入、用完退出。 */}
-            {selectMode ? (
-              <Button onClick={exitSelectMode}>退出多选</Button>
-            ) : (
-              <Button icon={<CheckSquareOutlined />} onClick={() => setSelectMode(true)}>
-                批量操作
-              </Button>
-            )}
+            {/* 进入多选的入口在行右键菜单的「批量选择」（R8）；这里只保留退出。 */}
+            {selectMode && <Button onClick={exitSelectMode}>退出多选</Button>}
           </Space>
         )}
-        {selectedKeys.length > 0 && (
+        {selectMode && selectedKeys.length > 0 && (
           <Space>
             <Button icon={<UndoOutlined />} onClick={() => void batchRestore()}>
               批量恢复（{selectedKeys.length}）
@@ -279,7 +337,7 @@ export default function TrashPage() {
       )}
 
       {loading && !data ? (
-        <Skeleton active paragraph={{ rows: 5 }} />
+        <PageSkeleton rows={5} />
       ) : items.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -295,6 +353,28 @@ export default function TrashPage() {
           // items 里匹配（见 selectedItems()），跨页勾选不受影响。
           pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
           rowSelection={rowSelection}
+          components={{
+            body: {
+              // 整行右键：批量选择 / 恢复 / 彻底删除；多选模式下收起。
+              row: (props: HTMLAttributes<HTMLTableRowElement>) => {
+                const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
+                return (
+                  <ContextMenuRow
+                    {...props}
+                    record={itemsByRowKey.get(rowKey)}
+                    selectMode={selectMode}
+                    onEnterSelectMode={enterSelectMode}
+                    onRestore={(row) =>
+                      void run(() => restoreTrashItem(row.type, row.id), `已恢复「${row.title}」`)
+                    }
+                    onPurge={(row) =>
+                      void run(() => purgeTrashItem(row.type, row.id), `已彻底删除「${row.title}」`)
+                    }
+                  />
+                );
+              },
+            },
+          }}
         />
       )}
     </div>

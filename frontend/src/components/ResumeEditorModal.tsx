@@ -217,7 +217,6 @@ export default function ResumeEditorModal({
       destroyOnHidden
       // 必须垂直居中：body 限高后弹窗总高仍接近满视口，antd 默认 top:100px 会让
       // 底部（保存按钮一带）被推出视口外，看起来就是"弹出的卡片被挡住了"。
-      centered
       mask={{ closable: !saving }}
       keyboard={!saving}
       onCancel={() => {
@@ -239,7 +238,7 @@ export default function ResumeEditorModal({
         </Space>
       }
       styles={{
-        body: { maxHeight: "calc(100vh - 180px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
     >
       <div

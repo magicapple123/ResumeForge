@@ -171,7 +171,7 @@ export default function WebFormMemoryDialog({
       onOk={handleSubmit}
       // 可复用的已有资料列表可能很长：限高让超长内容只滚弹窗内部。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       destroyOnHidden
     >

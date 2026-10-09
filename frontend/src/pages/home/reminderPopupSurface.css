@@ -1,4 +1,6 @@
-/* 首页「近期提醒」启动弹窗。 */
+/* 首页「近期提醒」启动弹窗的排版皮肤。
+   全站弹窗已有统一新皮肤（flex 居中 + var(--rf-modal-body-max-h)，见 modules.css），
+   这里不再写死 maxHeight/top，只管这个弹窗自己的条目排版。 */
 
 /* 打开瞬间 antd 会把焦点程序化地放到右上角关闭按钮上，:focus-visible 会在鼠标
    操作下也画出边框（键盘用户不受影响：Esc 仍可关闭、Tab 仍能移动焦点）。
@@ -6,4 +8,55 @@
    不是用户 Tab 上去的，去掉不损失可访问性。 */
 .rf-reminder-modal .ant-modal-close:focus-visible {
   outline: none;
+}
+
+/* 弹窗 body：上下留白舒适一点，列表条目之间有呼吸感。 */
+:where(.rf-reminder-modal) .ant-modal-body {
+  padding-top: 16px;
+  padding-bottom: 18px;
+}
+
+/* 位置比全站默认（垂直居中）稍微偏上：提醒是从上往下滑入视野的信息卡，
+   靠上更符合"通知"的心智，也不挡首页中部内容。全站规则是 flex + margin:auto
+   居中，这里把 margin-top 改成固定值、margin-bottom 保持 auto 即整体上移。 */
+.ant-modal-wrap:has(.rf-reminder-modal) .ant-modal {
+  margin-top: clamp(24px, 24vh, 320px);
+  margin-bottom: auto;
+}
+
+/* 标题图标（铃铛）与标题文字同色系，别抢正文。 */
+:where(.rf-reminder-modal) .ant-modal-title .anticon {
+  color: #16365c;
+  font-size: 16px;
+  vertical-align: -2px;
+}
+
+/* 条目之间用分隔线 + ~12px 垂直留白：多条提醒时一眼分得清条目边界。 */
+:where(.rf-reminder-modal-list) .ant-listy-item {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+:where(.rf-reminder-modal-list) .ant-listy-item + .ant-listy-item {
+  border-top: 1px solid #f0f2f5;
+}
+
+/* 「已逾期 N 天」这类紧迫 Tag 保持自身配色，但压一压默认外边距，
+   让 Tag / 链接 / 日期在 Space 里对齐在同一行基线上。 */
+:where(.rf-reminder-modal-list) .ant-tag {
+  margin-inline-end: 0;
+}
+
+/* 链接色统一：跟全站导航主色一致，hover 加深一档。 */
+:where(.rf-reminder-modal-list) a {
+  color: #5b8ff9;
+}
+
+:where(.rf-reminder-modal-list) a:hover {
+  color: #3d77d6;
+}
+
+/* 日期文字次级色（组件里已是 type="secondary"，这里再统一压小一号）。 */
+:where(.rf-reminder-modal-list) .ant-typography-secondary {
+  font-size: 12px;
 }

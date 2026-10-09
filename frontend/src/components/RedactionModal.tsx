@@ -43,6 +43,9 @@ export default function RedactionModal({ recordId, open, onClose }: Props) {
         redact_options: options,
       });
       downloadBlob(result.blob, result.filename);
+      if (result.savedTo) {
+        message.success(`已同时保存到 ${result.savedTo}`);
+      }
       message.success("脱敏版已开始下载");
     } catch (err) {
       message.error(err instanceof Error ? err.message : "下载脱敏版失败");

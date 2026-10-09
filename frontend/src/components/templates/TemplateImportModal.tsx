@@ -146,7 +146,7 @@ export default function TemplateImportModal({
       width={draft ? "min(1120px, 96vw)" : 680}
       // 微调阶段的 A4 预览接近满高：限高让超长内容只滚弹窗内部。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       destroyOnHidden
     >

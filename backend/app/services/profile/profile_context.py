@@ -118,11 +118,22 @@ def build_profile_prompt_data(
     }
 
 
-def build_llm_profile_prompt_data(data: dict[str, Any]) -> dict[str, Any]:
-    """只保留岗位匹配需要的资料，避免把身份和联系方式发送给模型。"""
+def build_llm_profile_prompt_data(
+    data: dict[str, Any], *, include_identity: bool = False
+) -> dict[str, Any]:
+    """只保留岗位匹配需要的资料，避免把身份和联系方式发送给模型。
+
+    ``include_identity=True``（助手放宽模式）时把姓名、电话、邮箱一并放行——这是
+    用户在设置里知情开启后的显式扩权；私密链接兜底（token/private 标记）不受该
+    开关影响，任何模式下都会拦。
+    """
+    keys = list(_LLM_PROFILE_FIELDS)
+    if include_identity:
+        # 身份字段插在最前：与用户在「我的资料」里看到的顺序一致（姓名最先）。
+        keys = ["name", "gender", "birth_year", "phone", "email"] + keys
     result = {
         key: deepcopy(data.get(key, [] if key in SECTION_LIMITS else ""))
-        for key in _LLM_PROFILE_FIELDS
+        for key in keys
     }
     # 公开链接字段的私密值兜底：github / personal_website 属于用户主动填写的
     # 公开作品链接，正常值要随候选资料提供给模型；但值里出现 token 或 private

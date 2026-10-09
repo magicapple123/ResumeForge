@@ -6,9 +6,13 @@
  * 说清楚，且开启状态下持续显示风险文案（不能只在开的那一瞬间提醒一次）。
  */
 import { App, Card, Space, Switch, Typography } from "antd";
+import { memo } from "react";
 import { useWebFormRelaxedMode } from "../../features/settings/useWebFormRelaxedMode";
 
-export function RelaxedModeCard() {
+/**
+ * **memo**：本卡无 props，父组件因别处击键重渲时它整块跳过（自身 hook 的状态更新照常生效）。
+ */
+export const RelaxedModeCard = memo(function RelaxedModeCard() {
   const { message } = App.useApp();
   const { enabled, loading, saving, toggle } = useWebFormRelaxedMode();
 
@@ -45,4 +49,4 @@ export function RelaxedModeCard() {
       </Space>
     </Card>
   );
-}
+});

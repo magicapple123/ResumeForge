@@ -67,6 +67,7 @@ from ._site_browser import (
     restart_browser,
     start_browser,
     stop_browser,
+    test_collect_filters,
 )
 from ._tasks import (
     create_apply_task,
@@ -126,6 +127,7 @@ __all__ = [
     "save_collect_config",
     "start_browser",
     "stop_browser",
+    "test_collect_filters",
     "update_queue_item",
     "write_back_job_status",
 ]

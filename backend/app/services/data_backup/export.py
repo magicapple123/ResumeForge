@@ -16,6 +16,7 @@ from ...database_migrations import backup_sqlite_database, snapshot_sqlite_file
 from .api_keys import _assert_no_plaintext_key, _plaintext_api_keys_in, _strip_api_keys
 from .manifest import build_manifest
 from .paths import (
+    ARCHIVE_REFERRAL_IMAGES_PREFIX,
     DATABASE_MEMBER,
     MANIFEST_MEMBER,
     BackupError,
@@ -85,6 +86,7 @@ def create_backup_archive(
         )
         with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.write(snapshot, DATABASE_MEMBER)
+            _write_referral_images(archive, database_path(bind).parent)
             for item, copy in extras:
                 archive.write(copy, item.member)
                 archive.writestr(
@@ -102,4 +104,23 @@ def create_backup_archive(
         for _, copy in extras:
             copy.unlink(missing_ok=True)
     return archive_path
+
+
+def _write_referral_images(archive: zipfile.ZipFile, database_parent: Path) -> int:
+    """把库同目录的内推备注图片装进备份包，返回装包的文件数。
+
+    这些图片是主库级磁盘资产（路径存在 referral 表里，内容此前不进包）——换机器
+    恢复后会整体丢失。目录不存在（从没传过内推图）就什么都不装；成员名统一为
+    ``referral_images/<文件名>``，manifest 格式不动，老版本读到多余成员会忽略，
+    而它们的清单校验只看主库成员与 manifest，不受影响。
+    """
+    directory = database_parent / ARCHIVE_REFERRAL_IMAGES_PREFIX.rstrip("/")
+    if not directory.is_dir():
+        return 0
+    written = 0
+    for image in sorted(directory.iterdir()):
+        if image.is_file():
+            archive.write(image, f"{ARCHIVE_REFERRAL_IMAGES_PREFIX}{image.name}")
+            written += 1
+    return written
 

@@ -1,5 +1,5 @@
 /** AI 求职助手：流式对话、历史记录、技能开关、附件与项目上下文联动。 */
-import { CheckSquareOutlined, HistoryOutlined } from "@ant-design/icons";
+import { HistoryOutlined } from "@ant-design/icons";
 import { App, Button, Space, Typography } from "antd";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -168,6 +168,13 @@ export default function AssistantPage({
     send,
     stop,
   } = stream;
+
+  /** 消息右键菜单「批量选择」的动作（页头按钮已收进这里，R8）。
+   *  多选只在有历史消息时才有意义；流式回复期间也不给进——那两条临时气泡还不在
+   *  数据库里，勾不上。 */
+  const enterMessageSelecting = useCallback(() => {
+    if (messageCount > 0 && !sending) setSelecting(true);
+  }, [messageCount, sending, setSelecting]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -356,26 +363,12 @@ export default function AssistantPage({
       <section className={`assistant-workspace${selecting ? " is-selecting" : ""}`}>
         <header className="assistant-header">
           <div className="assistant-header-titles">
-            <Typography.Title level={3} ellipsis={{ tooltip: true }}>
-              {detail?.title || "AI 求职助手"}
-            </Typography.Title>
+            <Typography.Title level={3}>{detail?.title || "AI 求职助手"}</Typography.Title>
             <Typography.Text type="secondary">当前回复由「设置」中的模型配置提供。</Typography.Text>
           </div>
-          {/* 多选与历史并成右侧一组：header 是 space-between 布局，浮窗里有
-              "标题/多选/历史"三个子元素时多选会被挤到正中，看着像被选中（用户反馈）。
-              合并后只剩两个子元素，操作全部靠右。 */}
+          {/* 多选入口已收进消息右键菜单（R8）；浮窗这里只剩历史按钮。
+              header 是 space-between 布局，只剩两个子元素时操作全部靠右。 */}
           <Space size={4} className="assistant-header-actions">
-            {/* 多选只在有历史消息时才有意义；流式回复期间也不给进——那两条临时气泡还不在
-                数据库里，勾不上。 */}
-            {messageCount > 0 && !selecting && (
-              <Button
-                icon={<CheckSquareOutlined />}
-                disabled={sending}
-                onClick={() => setSelecting(true)}
-              >
-                多选
-              </Button>
-            )}
             {compact && (
               <Button
                 type="text"
@@ -421,6 +414,7 @@ export default function AssistantPage({
           onManageSkills={openSkillWorkbench}
           onQuote={quoteMessage}
           onDeleteMessage={removeMessage}
+          onEnterSelecting={enterMessageSelecting}
           selecting={selecting}
           selectedIds={selectedIds}
           onToggleSelected={toggleSelected}

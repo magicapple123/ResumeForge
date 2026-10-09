@@ -26,10 +26,10 @@ import {
   Modal,
   Progress,
   Space,
-  Skeleton,
   Tag,
   Typography,
 } from "antd";
+import PageSkeleton from "./common/PageSkeleton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteJobMatch, generateJobMatch, getJobMatch } from "../api/jobs";
 import { announceBackgroundFailure, announceBackgroundResult } from "../utils/backgroundTask";
@@ -201,7 +201,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
       width={760}
       // 匹配分析逐条输出，条数不固定：限高让超长内容只滚弹窗内部。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       destroyOnHidden
     >
@@ -229,7 +229,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
       ) : null}
 
       {loading && !data ? (
-        <Skeleton active paragraph={{ rows: 8 }} />
+        <PageSkeleton rows={8} card={false} />
       ) : !hasResult ? (
         <Space orientation="vertical" style={{ width: "100%" }} size={12}>
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这个岗位还没有做过匹配分析" />

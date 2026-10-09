@@ -103,7 +103,7 @@ export default function AssistantOrbCard() {
             }
           />
           <Typography.Text type="secondary">
-            关闭后悬浮球不再弹出提示语，其余功能不受影响。
+            关闭后悬浮球不再弹出提示语，也不会在「我的资料」页提示你去改资料，其余功能不受影响。
           </Typography.Text>
         </Space>
       </Spin>

@@ -6,7 +6,8 @@ import {
   PaperClipOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
-import { App, Button, Card, Empty, Input, Select, Space, Spin, Tag, Typography } from "antd";
+import { App, Button, Card, Empty, Input, Segmented, Select, Space, Tag, Typography } from "antd";
+import LoadingBlock from "../components/common/LoadingBlock";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createMaterial,
@@ -16,6 +17,7 @@ import {
   updateMaterial,
 } from "../api/material";
 import MaterialFormModal from "../components/materials/MaterialFormModal";
+import UserFilesPanel from "../components/materials/UserFilesPanel";
 import { DetailTrigger, RecordDetailDrawer } from "../components/common/RecordDetail";
 import { RowActions, RowContextMenu } from "../components/common/RowActions";
 import type { Material, MaterialPayload } from "../types";
@@ -33,6 +35,8 @@ export default function MaterialsPage() {
   const [editing, setEditing] = useState<Material | null>(null);
   const [detail, setDetail] = useState<Material | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // 页面顶部视图切换：资料卡片 / 文件副本清单（副本入口刻意挂在这里，不加新菜单）。
+  const [view, setView] = useState<string>("materials");
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
   const fetchMaterials = useCallback(async (): Promise<{
@@ -155,74 +159,90 @@ export default function MaterialsPage() {
         </Button>
       </div>
 
-      <Space wrap style={{ marginBottom: 16 }}>
-        <Input.Search
-          allowClear
-          placeholder="搜索标题、正文或备注"
-          style={{ width: 260 }}
-          onSearch={setKeyword}
-        />
-        <Select
-          value={category}
-          options={categoryOptions}
-          style={{ width: 160 }}
-          onChange={setCategory}
-        />
-      </Space>
+      <Segmented
+        style={{ marginBottom: 16 }}
+        value={view}
+        onChange={(value) => setView(String(value))}
+        options={[
+          { label: "资料", value: "materials" },
+          { label: "文件副本", value: "files" },
+        ]}
+      />
 
-      {loading ? (
-        <Spin />
-      ) : materials.length === 0 ? (
-        <Empty description="资料箱还是空的，点右上角「放入资料」开始" />
+      {view === "files" ? (
+        <UserFilesPanel />
       ) : (
-        <div className="materials-grid">
-          {materials.map((material) => (
-            <RowContextMenu key={material.id} items={actionsFor(material)}>
-              <DetailTrigger
-                label={`打开资料「${material.title || material.category}」的详情`}
-                onOpen={() => setDetail(material)}
-              >
-                <Card size="small" className="material-card">
-                  <div className="material-card-head">
-                    <Tag color="blue">{material.category}</Tag>
-                    <RowActions more={actionsFor(material)} />
-                  </div>
-                  <Typography.Title level={5} ellipsis={{ tooltip: material.title }}>
-                    {material.title || "（未命名资料）"}
-                  </Typography.Title>
-                  {material.content && (
-                    <Typography.Paragraph
-                      type="secondary"
-                      ellipsis={{ rows: 3 }}
-                      className="material-card-content"
-                    >
-                      {material.content}
-                    </Typography.Paragraph>
-                  )}
-                  <div className="material-card-meta">
-                    {material.files.length > 0 && (
-                      <Typography.Text type="secondary">
-                        <PaperClipOutlined /> {material.files.length} 个附件
-                      </Typography.Text>
-                    )}
-                    {material.url && (
-                      <Typography.Link
-                        href={material.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <LinkOutlined /> 链接
-                      </Typography.Link>
-                    )}
-                    <Typography.Text type="secondary">
-                      {formatDateTime(material.updated_at)}
-                    </Typography.Text>
-                  </div>
-                </Card>
-              </DetailTrigger>
-            </RowContextMenu>
-          ))}
-        </div>
+        <>
+          <Space wrap style={{ marginBottom: 16 }}>
+            <Input.Search
+              allowClear
+              placeholder="搜索标题、正文或备注"
+              style={{ width: 260 }}
+              onSearch={setKeyword}
+            />
+            <Select
+              value={category}
+              options={categoryOptions}
+              style={{ width: 160 }}
+              onChange={setCategory}
+            />
+          </Space>
+
+          {loading ? (
+            <LoadingBlock />
+          ) : materials.length === 0 ? (
+            <Empty description="资料箱还是空的，点右上角「放入资料」开始" />
+          ) : (
+            <div className="materials-grid">
+              {materials.map((material) => (
+                <RowContextMenu key={material.id} items={actionsFor(material)}>
+                  <DetailTrigger
+                    label={`打开资料「${material.title || material.category}」的详情`}
+                    onOpen={() => setDetail(material)}
+                  >
+                    <Card size="small" className="material-card">
+                      <div className="material-card-head">
+                        <Tag color="blue">{material.category}</Tag>
+                        <RowActions more={actionsFor(material)} />
+                      </div>
+                      <Typography.Title level={5} ellipsis={{ tooltip: material.title }}>
+                        {material.title || "（未命名资料）"}
+                      </Typography.Title>
+                      {material.content && (
+                        <Typography.Paragraph
+                          type="secondary"
+                          ellipsis={{ rows: 3 }}
+                          className="material-card-content"
+                        >
+                          {material.content}
+                        </Typography.Paragraph>
+                      )}
+                      <div className="material-card-meta">
+                        {material.files.length > 0 && (
+                          <Typography.Text type="secondary">
+                            <PaperClipOutlined /> {material.files.length} 个附件
+                          </Typography.Text>
+                        )}
+                        {material.url && (
+                          <Typography.Link
+                            href={material.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <LinkOutlined /> 链接
+                          </Typography.Link>
+                        )}
+                        <Typography.Text type="secondary">
+                          {formatDateTime(material.updated_at)}
+                        </Typography.Text>
+                      </div>
+                    </Card>
+                  </DetailTrigger>
+                </RowContextMenu>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <RecordDetailDrawer

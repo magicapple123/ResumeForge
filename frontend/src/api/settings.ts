@@ -3,6 +3,8 @@ import type {
   DatasetImportResult,
   DatasetInfo,
   AssistantOrbSetting,
+  AssistantRelaxedModeSetting,
+  ExportSaveLocation,
   LLMApiKeyRevealResult,
   LLMConfig,
   LLMConfigRecord,
@@ -154,6 +156,45 @@ export function saveAssistantOrbSetting(
     method: "PUT",
     body: JSON.stringify(setting),
   });
+}
+
+/** 求职助手「放宽模式」：开启后助手可读取完整资料（含敏感信息），默认关。 */
+export function getAssistantRelaxedMode(): Promise<AssistantRelaxedModeSetting> {
+  return request("/settings/assistant-relaxed-mode");
+}
+
+export function saveAssistantRelaxedMode(
+  setting: AssistantRelaxedModeSetting,
+): Promise<AssistantRelaxedModeSetting> {
+  return request("/settings/assistant-relaxed-mode", {
+    method: "PUT",
+    body: JSON.stringify(setting),
+  });
+}
+
+/** 生成内容保存位置：空串 = 仅浏览器下载（默认行为）。 */
+export function getExportSaveLocation(): Promise<ExportSaveLocation> {
+  return request("/settings/export-save-location");
+}
+
+/**
+ * 保存生成内容保存位置。传空串恢复默认；目录不合法时后端返回 400，
+ * detail 是可直接展示给用户的中文原因。
+ */
+export function putExportSaveLocation(path: string): Promise<ExportSaveLocation> {
+  return request("/settings/export-save-location", {
+    method: "PUT",
+    body: JSON.stringify({ path }),
+  });
+}
+
+/**
+ * 弹出本机原生「选择文件夹」对话框。后端就跑在用户机器上，只有它能弹原生
+ * 对话框并拿到**真实绝对路径**（浏览器的 File System Access API 拿不到完整
+ * 路径）。取消返回 { path: null }；本机环境不支持时抛出带中文原因的错误。
+ */
+export function pickExportSaveFolder(): Promise<{ path: string | null }> {
+  return request("/settings/export-save-location/pick", { method: "POST" });
 }
 
 export function getNavigationVisibility(): Promise<NavigationVisibility> {

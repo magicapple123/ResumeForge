@@ -36,6 +36,8 @@ from ..schemas.apply import (
     CollectConfigIn,
     CollectConfigOut,
     CollectFilterOptionsOut,
+    CollectFilterTestIn,
+    CollectFilterTestResultOut,
     CollectTaskCreateIn,
     GreetingPreviewOut,
     GreetingPreviewRequest,
@@ -92,6 +94,18 @@ def collect_filters(db: Session = Depends(get_db)):
 @collect_router.put("/config", response_model=CollectConfigOut)
 def update_collect_config(payload: CollectConfigIn, db: Session = Depends(get_db)):
     return apply_service.collect_config_out(apply_service.save_collect_config(db, payload))
+
+
+@collect_router.post("/filters/test", response_model=CollectFilterTestResultOut)
+def test_collect_filters(payload: CollectFilterTestIn, db: Session = Depends(get_db)):
+    """在真实站点页面上逐项校验当前选中的站点筛选条件是否真的能选到。
+
+    浏览器没启动时返回 409，提示先启动投递专用浏览器。
+    """
+    try:
+        return apply_service.test_collect_filters(db, payload.filters)
+    except apply_service.ApplyServiceError as exc:
+        _raise(exc)
 
 
 # ===== 招聘网站（当前站点）=====

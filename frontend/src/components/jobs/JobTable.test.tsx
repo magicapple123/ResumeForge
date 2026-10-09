@@ -55,6 +55,7 @@ function renderTable(jobs: Job[]) {
         onViewResumes={noop}
         onEdit={noop}
         onDelete={noop}
+        onEnterSelecting={noop}
         onPageChange={noop}
       />
     </AntdApp>,

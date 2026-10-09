@@ -1,11 +1,33 @@
 /* 新增模块的样式：行操作菜单、资料箱、技能工作台、助手补充信息、照片面板、版式控件。
    与既有文件的分工：这里只放"这次新增的界面"的规则，老模块的样式仍留在各自文件里。 */
 
+/* ===== 全局设计变量 ===== */
+:root {
+  /* 弹窗内容区统一高度上限：替代各弹窗散落的 170/180/200/220/230px 四档写法。
+     220px ≈ header + footer + 视口安全边距的总和。 */
+  --rf-modal-body-max-h: calc(100vh - 220px);
+  /* 「我的空间」下拉菜单选中项的浅色底（替代 colorPrimary 派生的深藏青实底）。 */
+  --rf-nav-selected-bg: #eef2f7;
+  /* 加载占位块的最小高度：居中的 Spin 不会把区域塌成一条线。 */
+  --rf-loading-min-h: 160px;
+}
+
 /* ===== 弹窗滚动 =====
    内容高的弹窗（投递设置、生成简历…）在卡片内部滚动，而不是把整页撑高。
    两件事配合才成立：ConfigProvider 把弹窗挂到 body（见 main.tsx，卡片因此脱离文档流、
    不再撑大 <body>），这里再给卡片一个高度上限，超出部分由卡片自己的内容区滚动。
    只给上限不给固定高度：内容少时卡片仍然按内容收缩，不会留一大片空白。 */
+.ant-modal-wrap {
+  display: flex;
+}
+
+.ant-modal {
+  /* flex + margin:auto 的标准解法：矮弹窗垂直居中；高弹窗不会被 flex 居中裁切，
+     而是从视口顶部开始整体滚动（margin:auto 在溢出时退化为 0）。 */
+  top: 0;
+  margin: auto;
+}
+
 .ant-modal-content {
   display: flex;
   flex-direction: column;
@@ -611,6 +633,31 @@
   font-size: 13px;
   color: #5c4406;
   white-space: pre-wrap;
+}
+
+/* 「简」面试官头像：素材自带透明底与球形轮廓，方形直出、无需裁圆。 */
+.jane-avatar {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  align-self: center;
+}
+
+.jane-intro {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.jane-avatar--intro {
+  width: 52px;
+  height: 52px;
+}
+
+.jane-avatar--report {
+  width: 64px;
+  height: 64px;
 }
 
 .interview-note {
@@ -1472,4 +1519,87 @@
    与事实类行区分——勾上它等于代你做出表态，视觉上不能和普通值混在一起。 */
 .webform-row-needs-confirm > td {
   background: #fffbe6;
+}
+
+/* 「我的空间」下拉菜单：选中项用浅底深字，替代 colorPrimary 派生的深藏青实底。
+   选择器挂在 Dropdown 的 classNames.root 上（见 MySpaceMenu.tsx，落在 .ant-dropdown
+   弹层根节点）。 specificity 必须压过 antd 运行时注入的同级规则——antd 的样式
+   标签在静态样式表之后插入，同权重会被它赢回去，所以这里用四段选择器。 */
+.ant-dropdown.rf-nav-dropdown
+  .ant-dropdown-menu
+  li.ant-dropdown-menu-item.ant-dropdown-menu-item-selected {
+  background: var(--rf-nav-selected-bg);
+  color: #16365c;
+}
+
+.ant-dropdown.rf-nav-dropdown
+  .ant-dropdown-menu
+  li.ant-dropdown-menu-item.ant-dropdown-menu-item-selected
+  .ant-dropdown-menu-title-content {
+  color: #16365c;
+}
+
+/* 面经等"卡片化列表"（Listy + className="rf-card-list"）：antd 6 的 Listy 默认
+   是纯分隔线的扁列表，多条记录挤在一起分不出边界；这里把每条升级成独立卡片
+   （描边+圆角+浅 hover 阴影），列表整体更像一叠卡片而不是一页流水。 */
+.rf-card-list .ant-listy-item {
+  border: 1px solid #e4eaf2;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.rf-card-list .ant-listy-item:hover {
+  border-color: #c7d7e8;
+  box-shadow: 0 2px 12px rgba(22, 54, 92, 0.07);
+}
+
+.rf-card-list .ant-listy-item:last-child {
+  margin-bottom: 0;
+}
+
+/* 批量适配度分析的评分行：圆环分档配色 + 右侧元信息纵向排布。
+   窄卡片时整行换行而不是把右侧文字截断；模型名超长时省略。 */
+.batch-score-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.batch-score-number {
+  color: #16365c;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.batch-score-unit {
+  margin-left: 2px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.batch-score-meta {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.batch-score-meta .ant-tag {
+  margin-inline-end: 0;
+}
+
+.batch-score-model {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

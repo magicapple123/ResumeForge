@@ -5,7 +5,8 @@
  * 会明确显示"第 N/6 轮"，用户始终知道还剩几个问题；助手那边则是自由对话。
  */
 import { ArrowLeftOutlined, StopOutlined, ThunderboltOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Modal, Space, Spin, Tabs, Tag, Typography } from "antd";
+import { App, Button, Form, Input, Modal, Space, Tabs, Tag, Typography } from "antd";
+import LoadingBlock from "../components/common/LoadingBlock";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -24,6 +25,7 @@ import InterviewReviewPanel from "../components/InterviewReviewPanel";
 import QuestionBankPanel from "../components/QuestionBankPanel";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { HistoryCard } from "./interview/HistoryCard";
+import { JANE_FACE_SOURCES, janeFaceForStyle } from "./interview/janeFaces";
 import { ReportCard } from "./interview/ReportCard";
 import { SetupForm, SetupTab } from "./interview/SetupTab";
 import type {
@@ -372,7 +374,15 @@ export default function InterviewPage() {
                   className={`interview-message interview-message--${item.role === "interviewer" ? "interviewer" : "me"}`}
                 >
                   <div className="interview-message-head">
-                    <b>{item.role === "interviewer" ? "面试官" : "我"}</b>
+                    {item.role === "interviewer" ? (
+                      <img
+                        className="jane-avatar"
+                        src={JANE_FACE_SOURCES[janeFaceForStyle(active.interviewer_style)]}
+                        alt=""
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    <b>{item.role === "interviewer" ? "Jane" : "我"}</b>
                     <Typography.Text type="secondary" className="assistant-message-time">
                       {formatDateTime(item.created_at)}
                     </Typography.Text>
@@ -389,8 +399,17 @@ export default function InterviewPage() {
             )}
             {submitting && !finished ? (
               <div className="interview-message interview-message--interviewer">
+                <div className="interview-message-head">
+                  <img
+                    className="jane-avatar"
+                    src={JANE_FACE_SOURCES.thinking}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <b>Jane</b>
+                </div>
                 <div className="interview-message-body">
-                  <Spin size="small" /> 面试官正在思考下一个问题…
+                  <LoadingBlock tip="正在思考下一个问题…" minHeight={120} />
                 </div>
               </div>
             ) : null}

@@ -156,6 +156,29 @@ describe("JobsPage", () => {
     expect(screen.queryByRole("button", { name: "补齐详情" })).not.toBeInTheDocument();
   });
 
+  /** 右键第一行，从菜单点「批量选择」进入选择模式（入口已从工具栏收进右键菜单，R8）。 */
+  async function enterSelectionModeViaContextMenu() {
+    // 用 findAll：多条岗位可能同名（默认标题相同），取第一行的标题按钮即可。
+    const firstJobButton = (
+      await screen.findAllByRole("button", { name: mocks.jobs[0]!.title })
+    )[0]!;
+    fireEvent.contextMenu(firstJobButton.closest("tr") as HTMLElement);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+  }
+
+  it("「批量选择」入口在行右键菜单里，工具栏不再有直接按钮（R8）", async () => {
+    renderPage();
+
+    expect(screen.queryByRole("button", { name: "选择" })).not.toBeInTheDocument();
+
+    await enterSelectionModeViaContextMenu();
+
+    // 进入选择模式的标志：复选框列出现，退出按钮接管工具栏。
+    // （按钮名带图标的前缀 aria-label，用正则匹配。）
+    expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /退出选择/ })).toBeInTheDocument();
+  });
+
   it("选择模式下有勾选时只补勾选的岗位，而不是本页所有空 JD", async () => {
     mocks.jobs = [
       makeJob({ id: 1, title: "空A", description: "" }),
@@ -163,7 +186,7 @@ describe("JobsPage", () => {
     ];
     renderPage();
 
-    fireEvent.click(screen.getByText("选择"));
+    await enterSelectionModeViaContextMenu();
     // 第 0 个复选框是全选表头，第 1 个才是第一行；只勾第一行。
     fireEvent.click(screen.getAllByRole("checkbox")[1]);
 
@@ -178,20 +201,20 @@ describe("JobsPage", () => {
     mocks.jobs = [makeJob({ id: 1, description: "" }), makeJob({ id: 2, description: "" })];
     renderPage();
 
-    fireEvent.click(screen.getByText("选择"));
+    await enterSelectionModeViaContextMenu();
     fireEvent.click(screen.getByRole("button", { name: "补齐详情" }));
 
     await waitFor(() => expect(mocks.startBackfill).toHaveBeenCalledTimes(1));
     expect(mocks.startBackfill).toHaveBeenCalledWith([1, 2]);
   });
 
-  it("本页没有空 JD 时不出现按钮（即使进了选择模式），因而不存在提交空数组的路径", () => {
+  it("本页没有空 JD 时不出现按钮（即使进了选择模式），因而不存在提交空数组的路径", async () => {
     // 空数组会被后端 400 拒绝。若按钮常驻，用户就会看到一个"点得动、点了报错"的按钮。
     // 这里证明了那条路径不存在：没有空 JD → 按钮不渲染 → 连点击入口都没有。
     mocks.jobs = [makeJob({ id: 1, description: "有正文" })];
     renderPage();
 
-    fireEvent.click(screen.getByText("选择"));
+    await enterSelectionModeViaContextMenu();
 
     expect(screen.queryByRole("button", { name: "补齐详情" })).not.toBeInTheDocument();
     expect(mocks.startBackfill).not.toHaveBeenCalled();
@@ -394,6 +417,9 @@ describe("从备选岗位导入", () => {
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /备选岗位/ }));
+    // R8：批量导入按钮只在多选模式渲染——先在卡片上右键进入多选。
+    fireEvent.contextMenu(await screen.findByText("岗位一"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
     const checkboxes = await screen.findAllByRole("checkbox");
     fireEvent.click(checkboxes[1]);
     fireEvent.click(checkboxes[2]);

@@ -144,7 +144,8 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
       <div className="profile-photo-panel">
         <div className="profile-photo-frame">
           {activePhoto ? (
-            <Image src={activePhoto} alt="简历照片" preview={false} />
+            // 允许点开放大：简历照片是用户文件副本库的一部分，原图预览是最自然的入口。
+            <Image src={activePhoto} alt="简历照片" />
           ) : (
             <UserOutlined className="profile-photo-placeholder" />
           )}

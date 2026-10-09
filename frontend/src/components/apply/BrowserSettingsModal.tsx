@@ -9,10 +9,11 @@
  * 在网申页铺开只会让人困惑。保存时把当前配置整份提交、只改这两个字段——后端是整份覆盖，
  * 所以必须先取回现值再合并，否则会把其它设置清空。
  */
-import { App, Button, Form, Modal, Skeleton } from "antd";
+import { App, Button, Form, Modal } from "antd";
 import { useEffect, useState } from "react";
 import { getApplyConfig, updateApplyConfig } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
+import PageSkeleton from "../common/PageSkeleton";
 import type { ApplyConfigOut, BrowserChoice } from "../../types";
 import BrowserChoiceFields from "./BrowserChoiceFields";
 
@@ -95,7 +96,7 @@ export default function BrowserSettingsModal({ open, onClose, onSaved }: Props) 
       width={640}
     >
       {loading ? (
-        <Skeleton active />
+        <PageSkeleton rows={3} card={false} />
       ) : (
         <>
           <p>

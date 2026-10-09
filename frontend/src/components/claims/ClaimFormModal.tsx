@@ -200,12 +200,11 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
       title={editing ? "编辑事实台账条目" : "新建事实台账条目"}
       onCancel={onClose}
       width={760}
-      centered
       destroyOnHidden
       // 表单字段多（证据来源 + 面试细节两组），全展开很容易超出视口：限高让弹窗
       // 在内部滚动、垂直居中，底部「保存」不会被推出屏幕外。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       footer={
         <Space>

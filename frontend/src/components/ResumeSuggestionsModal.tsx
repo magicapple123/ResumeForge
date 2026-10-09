@@ -1,18 +1,7 @@
 /** 针对关联岗位生成简历修改建议的按需弹窗；每条建议可一键采纳并直接修改简历。 */
 import { BulbOutlined, CheckOutlined, ReloadOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Empty,
-  Listy,
-  Modal,
-  Skeleton,
-  Space,
-  Tag,
-  Typography,
-  theme,
-} from "antd";
+import { Alert, App, Button, Empty, Listy, Modal, Space, Tag, Typography, theme } from "antd";
+import PageSkeleton from "./common/PageSkeleton";
 import { ListyItem } from "./common/ListyItem";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { generateResumeSuggestions, reviseResume } from "../api/resumes";
@@ -137,7 +126,7 @@ export default function ResumeSuggestionsModal({
       width={720}
       // 建议条数不固定：限高让超长内容只滚弹窗内部，卡片整体不出视口。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       destroyOnHidden
     >
@@ -153,7 +142,7 @@ export default function ResumeSuggestionsModal({
           </Button>
         </Space>
       ) : loading ? (
-        <Skeleton active paragraph={{ rows: 5 }} />
+        <PageSkeleton rows={5} card={false} />
       ) : data ? (
         <div>
           <Space style={{ marginBottom: 12 }} wrap>

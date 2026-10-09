@@ -3,7 +3,8 @@
  * 纯展示——diff 状态（diffAgainstId/diffResult/diffLoading）与三并发请求 handler
  * （selectDiffAgainst）保留在 ResumesPage，保证「版本对比」入口的重置语义逐字不变。
  */
-import { Modal, Select, Space, Spin, Typography } from "antd";
+import { Modal, Select, Space, Typography } from "antd";
+import LoadingBlock from "../../components/common/LoadingBlock";
 import ResumeFieldDiffView from "../../components/ResumeFieldDiffView";
 import type { DiffViewData } from "../../types/resumeFieldDiff";
 import type { ResumeBrief } from "../../types";
@@ -37,7 +38,7 @@ export default function ResumeDiffModal({
       footer={null}
       // 版本对比内容随简历长度伸缩：限高让超长内容只滚弹窗内部。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       onCancel={onClose}
     >
@@ -57,7 +58,7 @@ export default function ResumeDiffModal({
                 .map((item) => ({ value: item.id, label: item.title }))}
             />
           </Space>
-          {diffLoading && <Spin />}
+          {diffLoading && <LoadingBlock />}
           {!diffLoading && diffResult && <ResumeFieldDiffView data={diffResult} />}
           {!diffLoading && !diffResult && (
             <Typography.Text type="secondary">选择一份其它简历后展示三态差异。</Typography.Text>

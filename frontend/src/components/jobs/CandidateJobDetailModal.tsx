@@ -1,5 +1,7 @@
-import { LinkOutlined } from "@ant-design/icons";
-import { Button, Descriptions, Divider, Image, Modal, Space, Tag, Typography } from "antd";
+import { FolderOpenOutlined, LinkOutlined } from "@ant-design/icons";
+import { App, Button, Descriptions, Divider, Image, Modal, Space, Tag, Typography } from "antd";
+import { useState } from "react";
+import { lookupUserFiles, openUserFile } from "../../api/userFiles";
 import type { CandidateJobDetail } from "../../types";
 
 interface Props {
@@ -18,6 +20,33 @@ export default function CandidateJobDetailModal({
   onImport,
   onEdit,
 }: Props) {
+  const { message } = App.useApp();
+  const [openingIndex, setOpeningIndex] = useState<number | null>(null);
+
+  // 截图在保存时已按数组顺序落了磁盘副本（source_ref=candidate_job:<id>）；反查
+  // 结果按 id 升序，与保存顺序一致，因此按 index 对应到原图的副本。
+  const openCopy = async (index: number) => {
+    if (!candidate) return;
+    setOpeningIndex(index);
+    try {
+      const result = await lookupUserFiles({
+        source_type: "candidate_image",
+        source_ref: `candidate_job:${candidate.id}`,
+      });
+      const target = result.items[index];
+      if (!target) {
+        message.warning("未找到对应的文件副本");
+        return;
+      }
+      await openUserFile(target.id);
+      message.success("已调用系统程序打开");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "打开失败");
+    } finally {
+      setOpeningIndex(null);
+    }
+  };
+
   return (
     <Modal
       title={candidate?.title || "备选岗位详情"}
@@ -39,7 +68,7 @@ export default function CandidateJobDetailModal({
       width={760}
       // 岗位原文可能很长：限高让超长内容只滚弹窗内部，卡片整体不出视口。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
     >
       {candidate && (
@@ -108,7 +137,20 @@ export default function CandidateJobDetailModal({
               <Typography.Title level={5}>招聘截图</Typography.Title>
               <Space wrap>
                 {candidate.images.map((source, index) => (
-                  <Image key={`${index}-${source.slice(-16)}`} src={source} width={160} />
+                  <div key={`${index}-${source.slice(-16)}`} style={{ textAlign: "center" }}>
+                    <Image src={source} width={160} />
+                    <div>
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<FolderOpenOutlined />}
+                        loading={openingIndex === index}
+                        onClick={() => void openCopy(index)}
+                      >
+                        打开
+                      </Button>
+                    </div>
+                  </div>
                 ))}
               </Space>
             </section>

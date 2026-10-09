@@ -1,6 +1,7 @@
 /** 按需生成岗位需求总结和通用求职建议。 */
 import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, Listy, Modal, Skeleton, Space, Tag, Typography } from "antd";
+import { Alert, Button, Empty, Listy, Modal, Space, Tag, Typography } from "antd";
+import PageSkeleton from "./common/PageSkeleton";
 import { ListyItem } from "./common/ListyItem";
 import { announceBackgroundFailure, announceBackgroundResult } from "../utils/backgroundTask";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -88,7 +89,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
       width={760}
       // 解读是 AI 长文：限高让超长内容只滚弹窗内部，卡片整体不出视口。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       destroyOnHidden
     >
@@ -106,7 +107,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
         </Space>
       ) : loading ? (
         <div>
-          <Skeleton active paragraph={{ rows: 8 }} />
+          <PageSkeleton rows={8} card={false} />
           {/* 「后台继续」：请求不会因为关掉弹窗而中断，完成后会弹通知并响一声。
               没有这个按钮时，用户只能干等——而他根本不知道能不能走开。 */}
           <Alert

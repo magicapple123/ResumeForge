@@ -7,7 +7,8 @@
  * 组件默认自拉 ``listReminders``；传入 ``reminders`` 时用它覆盖（测试 / 父组件已取数时）。
  */
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
-import { Button, Empty, Listy, Modal, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, Listy, Modal, Space, Tag, Tooltip, Typography } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
 import dayjs from "dayjs";
@@ -139,7 +140,7 @@ export default function CalendarView({
       </div>
 
       {loading ? (
-        <Spin style={{ display: "block", margin: "24px auto" }} />
+        <LoadingBlock />
       ) : (
         <div className="calendar-view-grid" role="grid">
           {WEEK_LABELS.map((label) => (
@@ -225,7 +226,7 @@ export default function CalendarView({
         footer={null}
         width={520}
         styles={{
-          body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+          body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
         }}
       >
         {detailItems.length === 0 ? (

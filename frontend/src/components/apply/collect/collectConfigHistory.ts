@@ -40,12 +40,11 @@ export function writeConfigHistory(list: CollectConfigSnapshot[]): void {
 /** 历史上限（去重后最多保留这么多条）。 */
 export const CONFIG_HISTORY_MAX = CONFIG_HISTORY_LIMIT;
 
-/** 历史下拉的展示文案：保存时间 + 关键词/城市/类型摘要。 */
+/** 历史下拉的展示文案：保存时间 + 关键词/城市摘要（岗位类型已随「采集后筛选」下线）。 */
 export function historySummaryLabel(snapshot: CollectConfigSnapshot): string {
   const { config, savedAt } = snapshot;
   const keywords = (config.keywords ?? []).slice(0, 3).join("、");
   const keywordText = keywords || "无关键词";
   const cityText = config.city?.trim() || "无城市";
-  const typeText = config.job_type?.trim() || "不限";
-  return `${formatDateTime(savedAt)} · ${keywordText} / ${cityText} / ${typeText}`;
+  return `${formatDateTime(savedAt)} · ${keywordText} / ${cityText}`;
 }

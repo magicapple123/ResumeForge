@@ -157,6 +157,10 @@ async def import_archive(request: Request) -> dict:
         staging.unlink(missing_ok=True)
 
     logger.info("已导入数据集 id=%s size=%s", created["id"], received)
+    # 注意：**导入路径刻意不立刻回填副本**。回填要对新数据集文件开第二个引擎，
+    # Windows 上会让紧接着的删除/移动失败；而且导入本身不切换激活库——用户真正
+    # 开始用这份数据必然先经过「切换」，切换路径上的回填（见 activate）已经覆盖
+    # 了"备份包在别的机器导出、副本还没生成"的情况。
     return created
 
 
@@ -169,9 +173,15 @@ def activate(request: Request, dataset_id: str) -> dict:
     """
     _require_loopback(request)
     try:
-        return activate_dataset(_require_valid_id(dataset_id), database.engine)
+        result = activate_dataset(_require_valid_id(dataset_id), database.engine)
     except Exception as exc:
         raise _translate(exc) from exc
+    # 切换完成后 best-effort 回填新激活库的用户文件副本（幂等，失败只记日志）——
+    # 数据集可能来自导入或旧版本，副本还没生成过。
+    from ..services.user_files import schedule_backfill
+
+    schedule_backfill()
+    return result
 
 
 @router.patch("/{dataset_id}")

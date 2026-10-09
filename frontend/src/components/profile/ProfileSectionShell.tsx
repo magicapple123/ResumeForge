@@ -90,9 +90,7 @@ export function SortableProfileSection({
         <div className="profile-section-compact-label">
           {/* 调整顺序时标签会被 CSS 截断，而最长的几个（“个人总结 / 自我评价”）
               偏偏最先被截——名字是拖动目标的身份，截了就没法认。 */}
-          <Tooltip title={SECTION_LABELS[sectionKey]}>
-            <Typography.Text strong>{SECTION_LABELS[sectionKey]}</Typography.Text>
-          </Tooltip>
+          <Typography.Text strong>{SECTION_LABELS[sectionKey]}</Typography.Text>
           <Typography.Text type="secondary">拖到此处</Typography.Text>
         </div>
       )}

@@ -8,6 +8,8 @@ export interface ListyItemProps {
   className?: string;
   style?: CSSProperties;
   onClick?: (event: MouseEvent<HTMLDivElement>) => void;
+  /** 整行右键菜单（RowContextMenu 挂在本组件上时）需要的事件：透传给根 div。 */
+  onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
   ariaLabel?: string;
 }
 
@@ -22,6 +24,7 @@ export function ListyItem({
   className,
   style,
   onClick,
+  onContextMenu,
   ariaLabel,
 }: ListyItemProps) {
   const hasActions = actions !== undefined && actions.length > 0;
@@ -30,6 +33,7 @@ export function ListyItem({
       className={className}
       style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, ...style }}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       aria-label={ariaLabel}
     >
       <div style={{ flex: 1, minWidth: 0 }}>{children}</div>

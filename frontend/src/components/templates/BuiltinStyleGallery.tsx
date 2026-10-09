@@ -13,6 +13,7 @@
  *   任何一张失败都只影响它自己，不打断了整个工作台。
  */
 import { Modal, Skeleton, Typography } from "antd";
+import PageSkeleton from "../common/PageSkeleton";
 import { useEffect, useState } from "react";
 import { previewResumeTemplate } from "../../api/resumes";
 import A4PreviewFrame from "./A4PreviewFrame";
@@ -109,7 +110,7 @@ export default function BuiltinStyleGallery({ items }: Props) {
         footer={null}
         width="min(1000px, 96vw)"
         styles={{
-          body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+          body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
         }}
         destroyOnHidden
       >
@@ -120,7 +121,7 @@ export default function BuiltinStyleGallery({ items }: Props) {
           <A4PreviewFrame html={openedHtml} title="内置样式大图预览" />
         ) : (
           <div className="template-preview-loading">
-            <Skeleton active paragraph={{ rows: 6 }} />
+            <PageSkeleton rows={6} card={false} />
           </div>
         )}
       </Modal>

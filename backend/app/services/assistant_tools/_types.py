@@ -29,6 +29,10 @@ class Tool:
     handler: Callable = field(repr=False)
     # 只在用户打开「联网搜索」开关时才下发给模型：关掉开关意味着"别联网"。
     requires_web_search: bool = False
+    # 只在用户打开「助手放宽模式」时才下发给模型：这些工具会读到敏感信息
+    # （姓名/电话等身份字段、网申填表的真实填写值、历史对话），用户知情开启
+    # 才可见。凭据与全局配置没有对应工具，任何模式下都不会发给模型。
+    requires_relaxed: bool = False
     # 是否真的写库（create/update/add/import 类工具）。**人工置位**、与工具注册写在
     # 同一处、便于 review：这样"新增写入工具却忘了在系统提示里点名"会被守卫测试抓住，
     # 但"把 writes 标错"仍要人 review 才能发现——这个字段只是把风险从测试挪到注册处，

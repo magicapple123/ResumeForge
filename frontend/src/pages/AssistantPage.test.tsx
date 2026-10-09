@@ -231,13 +231,19 @@ describe("消息多选删除", () => {
     };
   }
 
+  /** 右键消息气泡，从菜单点「批量选择」（入口已从页头按钮收进右键菜单，R8）。 */
+  async function enterSelectingViaContextMenu() {
+    fireEvent.contextMenu(screen.getByText("user 消息 11"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+  }
+
   it("deletes the checked messages in one request", async () => {
     apiMocks.getAssistantConversation.mockResolvedValue(detailWithMessages());
     renderPage();
     await openFirstConversation();
     await screen.findByText("user 消息 11");
 
-    fireEvent.click(screen.getByRole("button", { name: /多选/ }));
+    await enterSelectingViaContextMenu();
     fireEvent.click(screen.getByRole("checkbox", { name: "选择 你的这条消息" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "选择 助手的这条消息" }));
     expect(screen.getByText("已选 2 条")).toBeInTheDocument();
@@ -259,7 +265,7 @@ describe("消息多选删除", () => {
     await openFirstConversation();
     await screen.findByText("user 消息 11");
 
-    fireEvent.click(screen.getByRole("button", { name: /多选/ }));
+    await enterSelectingViaContextMenu();
 
     expect(screen.getByText("已选 0 条")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /删除所选/ })).toBeDisabled();
@@ -271,8 +277,9 @@ describe("消息多选删除", () => {
     await openFirstConversation();
     await waitFor(() => expect(apiMocks.getAssistantConversation).toHaveBeenCalled());
 
-    // 一条消息都没有时"多选"无从选起，按钮不该出现。
-    expect(screen.queryByRole("button", { name: /多选/ })).not.toBeInTheDocument();
+    // 一条消息都没有时"批量选择"无从选起：没有气泡可右键，也没有批量操作条。
+    expect(screen.queryByText(/已选 \d+ 条/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
   it("leaves multi-select when the user switches conversations", async () => {
@@ -281,7 +288,7 @@ describe("消息多选删除", () => {
     await openFirstConversation();
     await screen.findByText("user 消息 11");
 
-    fireEvent.click(screen.getByRole("button", { name: /多选/ }));
+    await enterSelectingViaContextMenu();
     fireEvent.click(screen.getByRole("checkbox", { name: "选择 你的这条消息" }));
     expect(screen.getByText("已选 1 条")).toBeInTheDocument();
 

@@ -139,3 +139,29 @@ class CollectBackfillIn(BaseModel):
     # 空列表不在 schema 层拦：交给业务层给出「请先选择要补齐详情的岗位」这类可操作的中文提示。
     job_ids: list[int] = Field(default_factory=list, max_length=MAX_BACKFILL_REQUEST_ITEMS)
 
+
+
+class CollectFilterTestIn(BaseModel):
+    """「测试筛选是否实际生效」的请求体：当前表单里选中的站点筛选项。"""
+
+    filters: dict[str, str] = Field(default_factory=dict)
+
+
+class CollectFilterTestItemOut(BaseModel):
+    """一项站点筛选条件的测试结论。"""
+
+    key: str
+    # 分组的人话名称（如「学历要求」）；站点清单里已没有这个分组时回退为分组 key。
+    label: str
+    # 用户选的选项文案（清单里找不到该选项时回退为原始编码）。
+    value: str
+    # 给用户看的一句话说明（已生效的会带上站点解析出的选项名）。
+    detail: str
+
+
+class CollectFilterTestResultOut(BaseModel):
+    """逐项测试结果：applied = 能在站点上真实选到；unapplied = 选不到；unlimited = 选的是「不限」。"""
+
+    applied: list[CollectFilterTestItemOut] = Field(default_factory=list)
+    unapplied: list[CollectFilterTestItemOut] = Field(default_factory=list)
+    unlimited: list[CollectFilterTestItemOut] = Field(default_factory=list)

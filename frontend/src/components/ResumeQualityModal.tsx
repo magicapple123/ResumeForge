@@ -18,7 +18,7 @@ export default function ResumeQualityModal({ open, resumeId, onClose }: Props) {
       width="min(880px, calc(100vw - 24px))"
       footer={null}
       destroyOnHidden
-      styles={{ body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto" } }}
+      styles={{ body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto" } }}
     >
       {resumeId != null && (
         <Tabs

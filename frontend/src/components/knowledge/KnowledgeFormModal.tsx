@@ -66,12 +66,11 @@ export default function KnowledgeFormModal({
       title={entry ? `编辑条目：${entry.title}` : "新增一条知识"}
       open={open}
       width={760}
-      centered
       onCancel={onCancel}
       mask={{ closable: !submitting }}
       // 正文（maxRows=20）撑起来很容易超出视口：限高让弹窗内部滚动，底部按钮始终可见。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       footer={
         <Space>

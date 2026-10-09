@@ -174,7 +174,7 @@ export default function StyleTemplateEditorModal({
       confirmLoading={saving}
       width="min(1120px, 96vw)"
       styles={{
-        body: { maxHeight: "calc(100vh - 220px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       destroyOnHidden
     >

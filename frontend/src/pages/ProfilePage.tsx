@@ -1,5 +1,6 @@
 /** 我的资料：基础信息 + 各分区动态列表，整体保存。 */
-import { App, ConfigProvider, Form, Input, Skeleton } from "antd";
+import { App, ConfigProvider, Form, Input } from "antd";
+import PageSkeleton from "../components/common/PageSkeleton";
 import {
   useCallback,
   useEffect,
@@ -19,11 +20,16 @@ import ProfileTextModal from "../components/profile/ProfileTextModal";
 import ProfileWorkspaceTabs, {
   type ProfileWorkspaceKey,
 } from "../components/profile/ProfileWorkspaceTabs";
-import WebFormProfileSection from "../components/profile/WebFormProfileSection";
+import WebFormProfileWorkspace, {
+  type WebFormProfileWorkspaceHandle,
+} from "../components/profile/WebFormProfileWorkspace";
 import { updateWebFormExtraProfile } from "../api/webform";
-import { setProfileSaveControl } from "../features/tou-tou/profileSaveBridge";
+import {
+  setProfileEditControl,
+  setProfileSaveControl,
+} from "../features/tou-tou/profileSaveBridge";
 import { useProfilePage } from "../features/profile/useProfilePage";
-import type { WebFormExtraEntry, WebFormExtraProfile, WebFormRepeatedGroup } from "../types";
+import type { WebFormExtraProfile } from "../types";
 
 export default function ProfilePage() {
   const { message } = App.useApp();
@@ -32,15 +38,16 @@ export default function ProfilePage() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [writeOpen, setWriteOpen] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState<ProfileWorkspaceKey>("resume");
-  // 「网申资料」：值由本页持有，这样它能和资料表单**一起**提交。
-  // 目录也存下来：提交时按它收窄字段，不把界面上的临时键发出去。
+  // 「网申资料」：**草稿**由 `WebFormProfileWorkspace` 自己持有（击键只重渲那一棵子树），
+  // 本页只留**目录**——提交时按它收窄字段，不把界面上的临时键发出去。
+  //
+  // 目录是 `WebFormProfileSection` 内部目录的**镜像**（加载、增删改自定义字段都同步过来），
+  // 所以取消编辑**不回滚**它：那会让镜像和界面对不上——界面上新增的自定义字段还在（Section
+  // 自己的 state 不跟着回滚），白名单里却没有它，用户再填一次就会静默丢掉。草稿的回滚由
+  // workspace 的基线负责。
   const [extraProfile, setExtraProfile] = useState<WebFormExtraProfile | null>(null);
-  const [extraValues, setExtraValues] = useState<Record<string, string>>({});
-  // 每条的来源与档位（手录的/学到的、下次还填不填）。与 extraValues 一起提交，
-  // 这样用户在界面上改档位之后，下次预填就按新的来。
-  const [extraDetails, setExtraDetails] = useState<Record<string, WebFormExtraEntry>>({});
-  const [extraRepeatedGroups, setExtraRepeatedGroups] = useState<WebFormRepeatedGroup[]>([]);
   const [extraSaving, setExtraSaving] = useState(false);
+  const workspaceRef = useRef<WebFormProfileWorkspaceHandle | null>(null);
   // 查看态默认**全展开**：这一页是"我的资料"，用户进来就是要看/改内容的，
   // 一屏折叠标题栏既看不到内容、又要多点好几下（用户反馈"应该默认展开"）。
   // 想收起来的话，页头「全部收起」一键搞定。折叠只在非编辑态生效
@@ -99,6 +106,9 @@ export default function ProfilePage() {
   // 浏览器会**静默丢掉**全部未保存编辑。dirty 时挂 beforeunload，触发浏览器原生的
   // "未保存的更改将丢失"确认；SPA 内的路由跳转不拦（超出本次范围）。
   const [dirty, setDirty] = useState(false);
+  // 悬浮球那张「去改资料」提示卡本次进入是否已被关掉。放在页面 state（而不是球、也不写本地存储）：
+  // 它的生命周期就是"这一次待在这一页"，离开页面即随组件一起消失，回来自然重新提醒。
+  const [promptDismissed, setPromptDismissed] = useState(false);
   const markDirty = useCallback(() => setDirty(true), []);
   useEffect(() => {
     if (!dirty) return;
@@ -111,84 +121,35 @@ export default function ProfilePage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
 
-  // setExtraValues 与 setDirty(true) 是两次 setState：React 18 自动批处理把它们合成
-  // **一次**渲染，且 dirty 已为 true 时 setDirty 直接跳过——所以击键路径上没有多余的
-  // 重复渲染；这里再给 onChange 一个稳定引用，让网申资料子树能凭 memo 跳过无关重渲。
-  const handleExtraChange = useCallback(
-    (key: string, value: string) => {
-      setExtraValues((current) => ({ ...current, [key]: value }));
-      markDirty();
-    },
-    [markDirty],
-  );
-
-  /** 自定义字段改名只改显示标签，保持 key 不变，避免已记住的值失去关联。 */
-  const handleExtraFieldLabelChange = useCallback(
-    (key: string, label: string) => {
-      setExtraDetails((current) => ({
-        ...current,
-        [key]: {
-          value: current[key]?.value ?? "",
-          source: current[key]?.source ?? "manual",
-          reuse: current[key]?.reuse ?? "general",
-          label,
-        },
-      }));
-      setExtraProfile((current) => {
-        if (!current) return current;
-        return {
-          ...current,
-          fields: current.fields.map((field) => (field.key === key ? { ...field, label } : field)),
-        };
-      });
-      markDirty();
-    },
-    [markDirty],
-  );
-
-  /** 删除交给「保存全部资料」统一提交；父组件同步移除，提交白名单不会把它带回去。 */
-  const handleExtraFieldDelete = useCallback(
-    (key: string) => {
-      setExtraValues((current) => {
-        const next = { ...current };
-        delete next[key];
-        return next;
-      });
-      setExtraDetails((current) => {
-        const next = { ...current };
-        delete next[key];
-        return next;
-      });
-      setExtraProfile((current) => {
-        if (!current) return current;
-        const fields = current.fields.filter((field) => field.key !== key);
-        const groups = current.groups.filter(
-          (group) => group !== "自定义" || fields.some((field) => field.group === group),
-        );
-        return { ...current, fields, groups };
-      });
-      markDirty();
-    },
-    [markDirty],
-  );
-
-  const handleExtraLoaded = useCallback((profile: WebFormExtraProfile) => {
+  // 下面三个回调只维护**目录**（字段清单与显示名）：草稿本身由 workspace 持有，它改完自己的
+  // state 后再通知这里。三个都用稳定引用，`webFormContent` 的 memo 与 memo 化的子树才不会被
+  // 「每次渲染都换新」的回调打穿。
+  const handleCatalogLoaded = useCallback((profile: WebFormExtraProfile) => {
     setExtraProfile(profile);
-    // 后端只回有值的项；这里补全成"每个字段都有一个键"，输入框才不会从非受控变受控。
-    setExtraValues(profile.values);
-    setExtraDetails(profile.details ?? {});
-    setExtraRepeatedGroups(profile.repeated_groups ?? []);
   }, []);
 
-  // 重复经历编辑同样走「改数组 + 置脏」两级 setState（批处理下一次渲染）；
-  // 稳定引用让 memo 化的 WebFormProfileRecords 在打字时整棵跳过。
-  const handleRepeatedGroupsChange = useCallback(
-    (groups: WebFormRepeatedGroup[]) => {
-      setExtraRepeatedGroups(groups);
-      markDirty();
-    },
-    [markDirty],
-  );
+  /** 自定义字段改名只改显示标签，保持 key 不变，避免已记住的值失去关联。 */
+  const handleCatalogFieldLabelChange = useCallback((key: string, label: string) => {
+    setExtraProfile((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        fields: current.fields.map((field) => (field.key === key ? { ...field, label } : field)),
+      };
+    });
+  }, []);
+
+  /** 删除交给「保存全部资料」统一提交；目录里同步移除，提交白名单不会把它带回去。 */
+  const handleCatalogFieldDelete = useCallback((key: string) => {
+    setExtraProfile((current) => {
+      if (!current) return current;
+      const fields = current.fields.filter((field) => field.key !== key);
+      const groups = current.groups.filter(
+        (group) => group !== "自定义" || fields.some((field) => field.group === group),
+      );
+      return { ...current, fields, groups };
+    });
+  }, []);
 
   const handlePhotoSelect = useCallback(
     (dataUrl: string) => {
@@ -219,8 +180,9 @@ export default function ProfilePage() {
    */
   const submitAll = async () => {
     const profileSaved = await submit();
-    if (!extraProfile) {
-      // 只有资料表单要存：存上了才解除未保存警示。
+    const draft = workspaceRef.current?.getDraft() ?? null;
+    if (!extraProfile || !draft) {
+      // 网申资料还没加载（用户没打开过那个分页）：只有资料表单要存，存上了才解除未保存警示。
       if (profileSaved) setDirty(false);
       return;
     }
@@ -229,20 +191,18 @@ export default function ProfilePage() {
       // 按目录收窄：只提交目录里认得的字段（界面上不该有别的键，但别赌）。
       const allowed = new Set(extraProfile.fields.map((field) => field.key));
       const payload: Record<string, string> = {};
-      for (const [key, value] of Object.entries(extraValues)) {
+      for (const [key, value] of Object.entries(draft.values)) {
         if (allowed.has(key)) payload[key] = value;
       }
       const repeated = Object.fromEntries(
-        extraRepeatedGroups.map((group) => [
+        draft.repeatedGroups.map((group) => [
           group.key,
           group.records.map((record) => ({ id: record.id, values: record.values })),
         ]),
       );
-      const saved = await updateWebFormExtraProfile(payload, extraDetails, repeated);
+      const saved = await updateWebFormExtraProfile(payload, draft.details, repeated);
       setExtraProfile(saved);
-      setExtraValues(saved.values);
-      setExtraDetails(saved.details ?? {});
-      setExtraRepeatedGroups(saved.repeated_groups ?? []);
+      workspaceRef.current?.adoptSaved(saved);
       // **两次提交都成功**才算干净：资料表单没存上（profileSaved 为 false）或网申资料
       // 失败（走下面的 catch）都保持 dirty——"存了一半"时未保存更改仍在。
       if (profileSaved) setDirty(false);
@@ -281,11 +241,13 @@ export default function ProfilePage() {
     cancelEditingRef.current = cancelEditing;
   });
   const handleCancelEditing = useCallback(() => {
+    // 草稿回滚交给 workspace：它自己抓了「进入编辑时」的基线（面板懒挂载，页面拿不到草稿）。
+    workspaceRef.current?.cancel();
     cancelEditingRef.current();
     setDirty(false);
   }, []);
 
-  // submitAll 依赖 extraValues 等每次击键都会变的状态；桥的 onSave 经 ref 转发到
+  // submitAll 依赖草稿（提交那一刻从 workspace 取）与目录；桥的 onSave 经 ref 转发到
   // 最新实现，悬浮球按下的永远是当前这版草稿的保存逻辑（含两次提交与失败提示）。
   const submitAllRef = useRef(submitAll);
   useEffect(() => {
@@ -311,10 +273,29 @@ export default function ProfilePage() {
     return () => setProfileSaveControl(null);
   }, [dirty, saving, extraSaving, handleBridgeSave, handleCancelEditing]);
 
-  // 简历资料子树与网申资料的输入无关：用 useMemo 钉住元素引用（依赖里没有
-  // extraValues/extraDetails），网申资料打字时 React 直接跳过这棵最重的子树。
-  // 注意 ProfileWorkspaceTabs 两 tab 常驻挂载（destroyOnHidden=false），这里的
-  // 引用稳定化正是消除「另一 tab 无辜重渲」的那一环。
+  // 悬浮球「去改资料」提示卡（同一个 bridge 的另一个槽）：用户停在这一页、没在编辑、
+  // 本次进入也没关掉它时，就在球旁挂上「去编辑」入口。依赖里只有真会变的几个条件，
+  // 打字与击键都不会把它重算。
+  useEffect(() => {
+    if (loading || editing || promptDismissed) {
+      setProfileEditControl(null);
+      return undefined;
+    }
+    setProfileEditControl({
+      onEdit: () => {
+        // 点过它就算这一轮提醒达成（用户已经知道入口在哪了）：否则进编辑再取消时，
+        // 卡片会立刻弹回来催人。页头的「编辑资料」按钮始终都在。
+        setPromptDismissed(true);
+        handleStartEditing();
+      },
+      onDismiss: () => setPromptDismissed(true),
+    });
+    return () => setProfileEditControl(null);
+  }, [editing, handleStartEditing, loading, promptDismissed]);
+
+  // 简历资料子树与网申资料的输入无关：用 useMemo 钉住元素引用（依赖里没有任何草稿状态），
+  // 网申资料打字时 React 直接跳过这棵最重的子树。注意 ProfileWorkspaceTabs 两 tab 常驻挂载
+  // （destroyOnHidden=false），这里的引用稳定化正是消除「另一 tab 无辜重渲」的那一环。
   const resumeContent = useMemo(
     () => (
       <>
@@ -353,39 +334,62 @@ export default function ProfilePage() {
     ],
   );
 
-  // 网申资料子树的值就来自本页 state：打字时它本来就要重渲（输入值在这里），
-  // 这里 useMemo 的意义是把「其余原因引起的整页重渲」挡在这一子树之外。
+  // 网申资料的**草稿**由 workspace 自持，所以这里的依赖里没有任何随击键变化的状态：打字时
+  // 这个元素引用不变，配合 memo 化的 ProfileWorkspaceTabs，Tabs 与简历资料子树整块跳过。
   const webFormContent = useMemo(
     () => (
-      <WebFormProfileSection
+      <WebFormProfileWorkspace
+        ref={workspaceRef}
         editing={editing}
         saving={saving || extraSaving}
-        values={extraValues}
-        details={extraDetails}
-        onChange={handleExtraChange}
-        onFieldLabelChange={handleExtraFieldLabelChange}
-        onFieldDelete={handleExtraFieldDelete}
-        repeatedGroups={extraRepeatedGroups}
-        onRepeatedGroupsChange={handleRepeatedGroupsChange}
-        onLoaded={handleExtraLoaded}
+        onDirty={markDirty}
+        onCatalogLoaded={handleCatalogLoaded}
+        onCatalogFieldLabelChange={handleCatalogFieldLabelChange}
+        onCatalogFieldDelete={handleCatalogFieldDelete}
       />
     ),
     [
       editing,
-      extraDetails,
-      extraRepeatedGroups,
       extraSaving,
-      extraValues,
-      handleExtraChange,
-      handleExtraFieldDelete,
-      handleExtraFieldLabelChange,
-      handleExtraLoaded,
-      handleRepeatedGroupsChange,
+      handleCatalogFieldDelete,
+      handleCatalogFieldLabelChange,
+      handleCatalogLoaded,
+      markDirty,
       saving,
     ],
   );
 
-  if (loading) return <Skeleton active paragraph={{ rows: 10 }} />;
+  /**
+   * 包住两个 tab 的 `Form` 一并钉住引用：antd 的 `Form` 每次重渲都会换新 context，被它包住的
+   * 每个 `Form.Item` 都会跟着重渲——简历资料那 67 个（含 12 个日期三连选，每个重渲都要重建约
+   * 140 项的年份选项）。页面因为别的原因重渲时（例如编辑态第一次击键把 `dirty` 由假翻真，
+   * 实测这一次在开发构建下要 170ms）不该带上这棵最重的子树。
+   *
+   * 未保存防护：`onValuesChange` 只对用户输入生效；照片走 `setFieldValue`，所以在
+   * `onPhotoSelect` 里单独置脏。
+   */
+  const workspaceTabs = useMemo(
+    () => (
+      <Form
+        form={form}
+        layout="vertical"
+        disabled={!editing || saving || photoReading}
+        onValuesChange={markDirty}
+      >
+        <Form.Item name="photo" hidden>
+          <Input />
+        </Form.Item>
+        <ProfileWorkspaceTabs
+          resumeContent={resumeContent}
+          webFormContent={webFormContent}
+          onActiveKeyChange={setActiveWorkspace}
+        />
+      </Form>
+    ),
+    [editing, form, markDirty, photoReading, resumeContent, saving, webFormContent],
+  );
+
+  if (loading) return <PageSkeleton rows={10} />;
 
   return (
     <div className={`profile-page${editing ? " is-editing" : ""}`}>
@@ -408,23 +412,7 @@ export default function ProfilePage() {
       />
 
       {/* 通用简历放在资料分区之前：它不属于资料表单，以前沉在页面最底下，资料一多就得滚到底才看得到。 */}
-      {/* 未保存防护：onValuesChange 只对用户输入生效；照片走 setFieldValue，
-          所以在 onPhotoSelect 里单独置脏。 */}
-      <Form
-        form={form}
-        layout="vertical"
-        disabled={!editing || saving || photoReading}
-        onValuesChange={markDirty}
-      >
-        <Form.Item name="photo" hidden>
-          <Input />
-        </Form.Item>
-        <ProfileWorkspaceTabs
-          resumeContent={resumeContent}
-          webFormContent={webFormContent}
-          onActiveKeyChange={setActiveWorkspace}
-        />
-      </Form>
+      {workspaceTabs}
 
       <GenerateResumeModal
         job={null}

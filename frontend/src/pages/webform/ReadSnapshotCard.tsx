@@ -4,10 +4,15 @@
  */
 import { FileSearchOutlined } from "@ant-design/icons";
 import { Button, Card, Space, Steps, Typography } from "antd";
+import { memo } from "react";
 import type { WebFormSnapshot } from "../../types";
 import type { WebFormBusyState } from "./constants";
 
-export function ReadSnapshotCard({
+/**
+ * **memo**：props 全部在击键路径上稳定（step/running/busy/snapshot 与稳定的 onRead），
+ * 打字时整块跳过重渲。
+ */
+export const ReadSnapshotCard = memo(function ReadSnapshotCard({
   step,
   running,
   busy,
@@ -59,4 +64,4 @@ export function ReadSnapshotCard({
       </Card>
     </>
   );
-}
+});

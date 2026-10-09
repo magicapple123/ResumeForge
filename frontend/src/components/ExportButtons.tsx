@@ -68,7 +68,7 @@ export default function ExportButtons({ recordId, pdfDirectAvailable = true }: P
         exportResume(recordId, "pdf", allowIncomplete),
       );
       if (result === null) return; // 用户选择先去改简历
-      const { blob, filename, pages, pageLimit } = result;
+      const { blob, filename, pages, pageLimit, savedTo } = result;
       downloadBlob(blob, filename);
       if (pages && pageLimit && pages > pageLimit) {
         // 内容放不下时服务端宁可多出一页也不裁字，所以页数可能多于用户选的上限。
@@ -77,6 +77,9 @@ export default function ExportButtons({ recordId, pdfDirectAvailable = true }: P
           `PDF 共 ${pages} 页，超过你选择的 ${pageLimit} 页上限：服务端排版不裁内容，` +
             "放不下就顺延。想要和预览完全一致的版式，请用「浏览器打印 / 另存为 PDF」。",
         );
+      } else if (savedTo) {
+        // 设置了「生成内容保存位置」：后端已经把同一份产物落盘了一份。
+        message.success(`已同时保存到 ${savedTo}`);
       } else {
         message.success("PDF 已开始下载");
       }
@@ -112,6 +115,9 @@ export default function ExportButtons({ recordId, pdfDirectAvailable = true }: P
       );
       if (result === null) return;
       downloadBlob(result.blob, result.filename);
+      if (result.savedTo) {
+        message.success(`已同时保存到 ${result.savedTo}`);
+      }
     } catch (err) {
       message.error(err instanceof Error ? err.message : "导出失败");
     }

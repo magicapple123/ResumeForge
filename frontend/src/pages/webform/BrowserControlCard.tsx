@@ -10,12 +10,17 @@ import {
   StopOutlined,
 } from "@ant-design/icons";
 import { Button, Card, Spin, Tag, Tooltip, Typography } from "antd";
+import { memo } from "react";
 import WebFormBrowserUrlBar from "../../components/webform/WebFormBrowserUrlBar";
 import { BROWSER_STATE_META } from "../../types";
 import type { BrowserState, WebFormUrlHistory } from "../../types";
 import type { WebFormBusyState } from "./constants";
 
-export function BrowserControlCard({
+/**
+ * **memo**：所有 handler 由页面侧 useCallback 稳定（含浏览器 reload/setData 经稳定引用下发），
+ * 打字时整块跳过重渲。
+ */
+export const BrowserControlCard = memo(function BrowserControlCard({
   targetUrl,
   onChangeTargetUrl,
   urlHistory,
@@ -149,4 +154,4 @@ export function BrowserControlCard({
       </div>
     </Card>
   );
-}
+});

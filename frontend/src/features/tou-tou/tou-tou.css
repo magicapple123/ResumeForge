@@ -370,31 +370,171 @@
 }
 
 /*
- * 资料保存卡：简历资料编辑页表单变脏时（profileSaveBridge 有 control），浮在球
- * 正上方的「保存资料 / 取消」小卡。白底圆角，与小贴士同一套视觉语言。
+ * 球旁浮卡的公共基座：定位、盒模型、进出场动效与指向球心的尾巴。白底圆角，
+ * 与小贴士同一套视觉语言。两种卡共用这套骨架，各写各的内容样式：
+ *   · .tt-save-card —— 表单变脏时的「保存资料 / 取消」；
+ *   · .tt-profile-prompt-card —— 停在「我的资料」时的「去改资料」提示。
  */
-.tt-save-card {
+.tt-card {
   position: absolute;
   right: 0;
   bottom: calc(100% + 12px);
   /*
    * 3250：介于剪贴板卡（3200）与助手卡（3300）之间的层级地标。本卡是
    * .tt-shell（3400，isolation: isolate）的子元素，实际排序只发生在壳内——
-   * 壳整体高于 antd 弹层基准 3100，所以有 Modal 弹出时保存卡也照常可点。
+   * 壳整体高于 antd 弹层基准 3100，所以有 Modal 弹出时卡片也照常可点。
    */
   z-index: 3250;
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  padding: 10px 12px;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 32px));
+  padding: 10px 12px 12px;
   border: 1px solid #d7e7f7;
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 12px 30px rgb(42 83 125 / 16%);
   /* 壳本身 pointer-events: none（拖拽命中只留给球），卡片要自己接住点击。 */
   pointer-events: auto;
+  /* 入场 / 退场都从贴球的那一侧（右下角）缩放上浮，像从球里长出来。 */
+  transform-origin: 100% 100%;
+  animation: tt-card-in 220ms var(--tt-ease-pop);
 }
 
-.tt-save-card:focus-within {
+.tt-card:focus-within {
   outline: 2px solid #91caff;
   outline-offset: 2px;
+}
+
+/*
+ * 资料保存卡的内容：一行说明（脏状态圆点 + 文字）+ 保存/取消两只按钮。
+ * 主文案要交代"为什么冒出来"，别让用户对着两个按钮发懵。
+ */
+.tt-save-card-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: #6b86a3;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.tt-save-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/*
+ * 指向悬浮球的尾巴。球固定居中于 .tt-shell（右下角），卡片右缘与壳右缘对齐，
+ * 故球心距卡片右缘正好 --tt-size / 2；尾巴总宽 14px，右移半个宽度即对准球心。
+ */
+.tt-card-tail {
+  position: absolute;
+  right: calc(var(--tt-size) / 2 - 7px);
+  bottom: -6px;
+  width: 0;
+  height: 0;
+  border-right: 7px solid transparent;
+  border-left: 7px solid transparent;
+  border-top: 7px solid #fff;
+  /* 尾巴压在卡片下边框上，白色填充盖住接缝处的描边。 */
+  filter: drop-shadow(0 2px 1px rgb(42 83 125 / 8%));
+}
+
+@keyframes tt-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 收场：反向缩回球的方向；动画期间不再接收点击，避免误触。 */
+.tt-card.is-leaving {
+  animation: tt-card-out 180ms var(--tt-ease-soft) forwards;
+  pointer-events: none;
+}
+
+@keyframes tt-card-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+}
+
+/*
+ * 脏状态提示点：标题行内的小圆点（不占可点击区域，纯装饰）。沿用原球上圆点的
+ * 配色（#1677ff）与投影，尺寸收到 8px 以贴合说明文字的行高。
+ */
+.tt-save-card-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1677ff;
+  box-shadow: 0 2px 6px rgb(22 119 255 / 35%);
+  animation: tt-save-card-dot-in 200ms var(--tt-ease-pop);
+}
+
+@keyframes tt-save-card-dot-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/*
+ * 去改资料提示卡：用户停在「我的资料」且没在编辑时（profileEditBridge 有 control），
+ * 从球旁升起。骨架全在 .tt-card 里，这里只管内容——一行提示（右上角带关闭键）+ 一只主按钮。
+ */
+.tt-profile-prompt-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: #6b86a3;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* 与小贴士的关闭键同一套视觉（浅蓝圆底 + 灰蓝的 ×），只是位置挪到卡片右上角。 */
+.tt-profile-prompt-card-close {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #66809b;
+  background: #eef6fd;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.tt-profile-prompt-card-close:focus-visible {
+  outline: 2px solid #91caff;
+  outline-offset: 2px;
+}
+
+.tt-profile-prompt-card-actions {
+  display: flex;
+  justify-content: flex-end;
 }

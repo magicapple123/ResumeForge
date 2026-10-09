@@ -163,12 +163,11 @@ export default function MaterialFormModal({
       title={material ? `编辑资料：${material.title || material.category}` : "放入一条新资料"}
       open={open}
       width={720}
-      centered
       onCancel={onCancel}
       mask={{ closable: !submitting }}
       // 正文与附件清单一多就超出视口：限高让弹窗在卡片内部滚动，底部按钮始终可见。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       footer={
         <Space>

@@ -3,8 +3,10 @@
  * （自 WebFormPage 拆出：:809-836 整块逐字随迁，纯 props。）
  */
 import { Card, Space, Switch, Typography } from "antd";
+import { memo } from "react";
 
-export function AiAssistCard({
+/** **memo**：props 在击键路径上稳定，打字时整块跳过重渲。 */
+export const AiAssistCard = memo(function AiAssistCard({
   aiOn,
   aiAvailable,
   liveRunning,
@@ -44,4 +46,4 @@ export function AiAssistCard({
       </Space>
     </Card>
   );
-}
+});

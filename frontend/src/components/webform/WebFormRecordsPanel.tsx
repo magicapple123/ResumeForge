@@ -25,7 +25,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useState } from "react";
 import { CheckSquareOutlined } from "@ant-design/icons";
-import { RowActions } from "../common/RowActions";
+import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
 import { deleteWebFormRecord, listWebFormRecords } from "../../api/webform";
 import BatchActionBar from "../../components/common/BatchActionBar";
 import { useApi } from "../../hooks/useApi";
@@ -128,23 +128,31 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
     return <Empty description={error ? "读取填充记录失败" : "还没有填充记录"} />;
   }
 
+  /** 记录条目的右键菜单：批量选择（工具栏按钮已收进这里，R8）+ 删除（二次确认）。 */
+  const contextActions = (record: WebFormFillRecord): RowActionItem[] => [
+    {
+      key: "batch_select",
+      label: "批量选择",
+      icon: <CheckSquareOutlined />,
+      onClick: batch.enterSelecting,
+    },
+    {
+      key: "delete",
+      label: "删除",
+      danger: true,
+      confirm: "删除这条填充记录？会进回收站，之后可以恢复。",
+      onClick: () => void remove(record.id),
+    },
+  ];
+
   return (
     <div>
-      {batch.selecting ? (
+      {batch.selecting && (
         <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
           <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
             删除所选
           </Button>
         </BatchActionBar>
-      ) : (
-        <Button
-          size="small"
-          icon={<CheckSquareOutlined />}
-          style={{ marginBottom: 12 }}
-          onClick={batch.enterSelecting}
-        >
-          批量选择
-        </Button>
       )}
       <Collapse
         accordion
@@ -156,23 +164,28 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
         items={records.map((record) => ({
           key: String(record.id),
           label: (
-            <Space size={8} wrap>
-              {batch.selecting && (
-                <Checkbox
-                  aria-label={`选择填充记录 ${record.id}`}
-                  checked={batch.isSelected(record.id)}
-                  onChange={() => batch.toggle(record.id)}
-                />
-              )}
-              <span>{shortTime(record.created_at)}</span>
-              <Typography.Text type="secondary">
-                {record.page_title || record.url || "（无标题）"}
-              </Typography.Text>
-              <Tag color="success">成功 {record.filled}</Tag>
-              {record.unverified > 0 ? <Tag color="warning">待核对 {record.unverified}</Tag> : null}
-              {record.failed > 0 ? <Tag color="error">失败 {record.failed}</Tag> : null}
-              {record.source === "live" ? <Tag>逐项填</Tag> : null}
-            </Space>
+            // 右键菜单挂在条目摘要上：批量选择（工具栏按钮已收进这里，R8）+ 删除。
+            <RowContextMenu items={batch.selecting ? [] : contextActions(record)}>
+              <Space size={8} wrap>
+                {batch.selecting && (
+                  <Checkbox
+                    aria-label={`选择填充记录 ${record.id}`}
+                    checked={batch.isSelected(record.id)}
+                    onChange={() => batch.toggle(record.id)}
+                  />
+                )}
+                <span>{shortTime(record.created_at)}</span>
+                <Typography.Text type="secondary">
+                  {record.page_title || record.url || "（无标题）"}
+                </Typography.Text>
+                <Tag color="success">成功 {record.filled}</Tag>
+                {record.unverified > 0 ? (
+                  <Tag color="warning">待核对 {record.unverified}</Tag>
+                ) : null}
+                {record.failed > 0 ? <Tag color="error">失败 {record.failed}</Tag> : null}
+                {record.source === "live" ? <Tag>逐项填</Tag> : null}
+              </Space>
+            </RowContextMenu>
           ),
           extra: batch.selecting ? undefined : (
             // 阻止冒泡，否则点「···」会顺带展开/收起这一条。
@@ -205,7 +218,7 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
               <Table
                 rowKey="index"
                 size="small"
-                pagination={false}
+                pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
                 columns={itemColumns}
                 dataSource={record.items}
                 locale={{ emptyText: "这一轮没有可填的字段" }}

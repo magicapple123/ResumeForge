@@ -68,6 +68,9 @@ export default function ExportOptionsModal({ recordId, open, initialPageLimit, o
           include_photo: includePhoto,
         });
         downloadBlob(result.blob, result.filename);
+        if (result.savedTo) {
+          message.success(`已同时保存到 ${result.savedTo}`);
+        }
         if (result.pages && result.pageLimit && result.pages > result.pageLimit) {
           message.warning(
             `「${format}」共 ${result.pages} 页，超过所选 ${result.pageLimit} 页上限。`,

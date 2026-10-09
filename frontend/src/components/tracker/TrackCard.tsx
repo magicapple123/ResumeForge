@@ -5,7 +5,7 @@
  * 这种带截止时间的事，而不是"我投过这家"。
  */
 import { MoreOutlined } from "@ant-design/icons";
-import { Button, Dropdown, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Dropdown, Space, Tag, Typography } from "antd";
 import type { Track } from "../../types";
 import {
   FUNNEL_STATUSES,
@@ -84,9 +84,7 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
         {track.status_date && (
           <Typography.Text type="secondary">状态更新 {track.status_date}</Typography.Text>
         )}
-        <Tooltip title={TRACK_SOURCE_LABELS[track.source]}>
-          <Typography.Text type="secondary">{TRACK_SOURCE_LABELS[track.source]}</Typography.Text>
-        </Tooltip>
+        <Typography.Text type="secondary">{TRACK_SOURCE_LABELS[track.source]}</Typography.Text>
       </div>
 
       {(track.next_action || track.next_action_date) && (

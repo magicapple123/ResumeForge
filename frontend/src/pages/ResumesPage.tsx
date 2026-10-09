@@ -275,11 +275,6 @@ export default function ResumesPage() {
             { value: false, label: "通用简历" },
           ]}
         />
-        {!batch.selecting && (
-          <Button onClick={batch.enterSelecting} disabled={loading || (data?.total ?? 0) === 0}>
-            批量选择
-          </Button>
-        )}
       </Space>
       {batch.selecting && (
         <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>

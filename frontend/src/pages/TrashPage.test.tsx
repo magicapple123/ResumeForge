@@ -105,14 +105,22 @@ describe("TrashPage", () => {
     await waitFor(() => expect(apiMocks.getTrash).toHaveBeenCalledTimes(2));
   });
 
-  it("复选框列默认不出现，进入批量操作模式后才可勾选", async () => {
+  /** 右键第一行，从菜单点「批量选择」进入多选（入口已从页头按钮收进右键菜单，R8）。 */
+  async function enterSelectModeViaContextMenu() {
+    const title = await screen.findByText("全栈工程师");
+    fireEvent.contextMenu(title.closest("tr") as HTMLElement);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+  }
+
+  it("复选框列默认不出现，右键「批量选择」进入多选模式后才可勾选", async () => {
     renderPage();
     await screen.findByText("全栈工程师");
 
-    // 默认没有多选：页面上不存在复选框。
+    // 默认没有多选：页面上不存在复选框，也没有「批量操作」按钮。
     expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: /批量操作/ })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /批量操作/ }));
+    await enterSelectModeViaContextMenu();
     expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
 
     // 退出多选后复选框消失，且已勾选的选择集一并清空（批量按钮不再可见）。
@@ -125,13 +133,13 @@ describe("TrashPage", () => {
     renderPage();
     await screen.findByText("全栈工程师");
 
-    // 多选从「批量操作」显式进入，复选框列平时不出现。
-    fireEvent.click(screen.getByRole("button", { name: /批量操作/ }));
+    // 多选从行右键菜单的「批量选择」显式进入，复选框列平时不出现。
+    await enterSelectModeViaContextMenu();
 
-    // 勾选两条（第 0 个是表头全选框）。
-    const checkboxes = screen.getAllByRole("checkbox");
-    fireEvent.click(checkboxes[1]);
-    fireEvent.click(checkboxes[2]);
+    // 勾选两条（第 0 个是表头全选框）。每次点击都会触发重渲染，必须现查现点
+    // （行被右键菜单的 Dropdown 包着，旧节点引用会失效）。
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getAllByRole("checkbox")[2]);
 
     // 第二条恢复失败：提示必须说"恢复了几条、几条失败"，不能只报成功。
     apiMocks.restoreTrashItem.mockRejectedValueOnce(new Error("条目已被占用"));

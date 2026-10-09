@@ -58,6 +58,9 @@ from .boss_search_scripts import (
     _bar_present as _bar_present,
 )
 from .boss_search_scripts import (
+    _card_count_script as _card_count_script,
+)
+from .boss_search_scripts import (
     _collect_links_script as _collect_links_script,
 )
 from .boss_search_scripts import (
@@ -65,6 +68,9 @@ from .boss_search_scripts import (
 )
 from .boss_search_scripts import (
     _detail_script as _detail_script,
+)
+from .boss_search_scripts import (
+    _scroll_list_script as _scroll_list_script,
 )
 from .boss_search_scripts import (
     _session_conditions_result_script as _session_conditions_result_script,
@@ -356,7 +362,12 @@ class BossSearchMixin:
             return [], result
 
     def collect_search(self, client: CdpClient, query: CollectQuery, page: int) -> SearchPage:
-        """采集一页搜索结果：网络响应优先、DOM 兜底；明确空结果返回空列表，其余失败抛 SiteFailure。"""
+        """采集一页搜索结果：网络响应优先、DOM 兜底；明确空结果返回空列表。
+
+        翻页方式（2026-10-09 实测）：BOSS 搜索页不吃 URL 的 page 参数、靠下滑加载更多——只有第 1 页导航，其后滚动加载（``boss_scroll.BossScrollMixin``）。
+        """
+        if page > 1:
+            return self._collect_scroll_page(client, page)
         target = self.build_search_url(query, page)
         previous = _current_url(client)
         outcome: dict[str, Any] = {"state": {}, "failure": None}

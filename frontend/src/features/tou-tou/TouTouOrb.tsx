@@ -1,15 +1,22 @@
 /** 投投悬浮球：全局助手入口、拖拽吸附、贴边收纳与低打扰小贴士。 */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Button, Tooltip } from "antd";
+import { Tooltip } from "antd";
 import { useTouTou } from "./touTouContext";
 import { TOU_TOU_TIPS } from "./touTouTips";
 import type { TouTouStatus } from "./touTouTypes";
 import TouTouTip from "./TouTouTip";
+import TouTouSaveCard from "./TouTouSaveCard";
+import TouTouProfilePromptCard from "./TouTouProfilePromptCard";
 import { TOU_TOU_FACE_SOURCES, faceKeyFor } from "./touTouFaces";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 import { useTouTouOrbDrag } from "./useTouTouOrbDrag";
-import { getProfileSaveControl, subscribeProfileSaveControl } from "./profileSaveBridge";
+import {
+  getProfileEditControl,
+  getProfileSaveControl,
+  subscribeProfileEditControl,
+  subscribeProfileSaveControl,
+} from "./profileSaveBridge";
 import "./tou-tou.css";
 import "./tou-tou-accessibility.css";
 
@@ -244,6 +251,27 @@ export default function TouTouOrb({
   );
 
   /**
+   * 「我的资料」的「去改资料」提示卡控制块（同一个 bridge 的另一个槽）。
+   * 页面在「已加载 + 非编辑 + 本次进入还没关掉」时 set；有值才在球旁渲染提示卡。
+   *
+   * 「提示标语」开关是球上主动提示的总开关（设置里也是这么写的），所以关掉后这张卡
+   * 一并闭嘴——页面侧不需要知道这个开关。
+   */
+  const profileEditControl = useSyncExternalStore(
+    subscribeProfileEditControl,
+    getProfileEditControl,
+  );
+  const profilePromptControl = context.tipsEnabled ? profileEditControl : null;
+  // 提示卡在场时压掉旋转标语：两者都贴在球的正上方，底边吸附时更是同一竖带，
+  // 而标语层级更高且可点——不压掉就会盖住卡片、吃掉它的按钮。
+  // 标语那个 effect 的依赖刻意只留开关，所以这里同样用 ref 镜像给它读。
+  const hasProfilePrompt = profilePromptControl !== null;
+  const profilePromptRef = useRef(hasProfilePrompt);
+  useEffect(() => {
+    profilePromptRef.current = hasProfilePrompt;
+  });
+
+  /**
    * 发呆时偶尔眨一下眼。
    *
    * 眨眼目前**借用睡着的闭眼素材**闪一下（130ms，人眼读作眨眼），有了专门的眨眼
@@ -290,6 +318,7 @@ export default function TouTouOrb({
         hiddenRef.current ||
         draggingRef.current ||
         isBusyRef.current ||
+        profilePromptRef.current ||
         visualStatusRef.current !== "idle"
       )
         return;
@@ -310,10 +339,13 @@ export default function TouTouOrb({
   }, [context.enabled, context.tipsEnabled]);
 
   // 标语可见性是多个瞬态条件的派生函数：任何条件成立都要立即藏起标语。
+  // 提示卡在场也算一条：它和标语抢同一块地方（见 profilePromptRef 的说明）。
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (hidden || dragging || isBusy || !context.tipsEnabled) setTipVisible(false);
-  }, [context.tipsEnabled, dragging, hidden, isBusy]);
+    if (hidden || dragging || isBusy || hasProfilePrompt || !context.tipsEnabled) {
+      setTipVisible(false);
+    }
+  }, [context.tipsEnabled, dragging, hasProfilePrompt, hidden, isBusy]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleActivate = (options: { immediate?: boolean } = {}) => {
@@ -410,32 +442,11 @@ export default function TouTouOrb({
       {tipVisible ? (
         <TouTouTip text={TOU_TOU_TIPS[tipIndex]} onClose={() => setTipVisible(false)} />
       ) : null}
-      {profileSaveControl ? (
-        <div className="tt-save-card" role="group" aria-label="保存简历资料">
-          <Button
-            type="primary"
-            size="small"
-            loading={profileSaveControl.saving === true}
-            onClick={(event) => {
-              // 卡片是球的兄弟节点，事件本就不会落进球的单击/双击判定；
-              // 这里按契约显式拦截，防止未来结构调整后误触发球的开卡逻辑。
-              event.stopPropagation();
-              profileSaveControl.onSave();
-            }}
-          >
-            保存资料
-          </Button>
-          <Button
-            size="small"
-            onClick={(event) => {
-              event.stopPropagation();
-              profileSaveControl.onCancel();
-            }}
-          >
-            取消
-          </Button>
-        </div>
-      ) : null}
+      {/* 卡片自带入场/退场动画，故即使 control 为 null 也要常驻（内部渲染 null）。
+          脏状态提示点已从球上挪进卡片标题行，见 TouTouSaveCard。 */}
+      <TouTouSaveCard control={profileSaveControl} />
+      {/* 同样是常驻挂载（内部渲染 null），退场动画才播得完。 */}
+      <TouTouProfilePromptCard control={profilePromptControl} />
       {visualStatus === "sleep" ? (
         // 收纳成细边之后，闭着的眼睛太小了；一个飘着的 Zzz 才看得出"它睡着了"。
         <span className="tt-zzz" aria-hidden="true">

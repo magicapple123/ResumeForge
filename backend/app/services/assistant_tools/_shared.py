@@ -70,6 +70,7 @@ def _job_brief(job: Job) -> dict:
         "title": job.title,
         "company": job.company,
         "location": job.location,
+        "salary": job.salary,
         "status": job.status,
         "favorite": job.favorite,
         "posted_at": job.posted_at,

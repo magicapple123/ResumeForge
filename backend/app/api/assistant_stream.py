@@ -190,6 +190,7 @@ async def stream_message_events(
     search_web_fn: Callable[[str], Awaitable[list[dict[str, str]]]],
     quoted: dict[str, Any] | None = None,
     fetch_pages: int = 0,
+    relaxed: bool = False,
 ) -> AsyncIterator[str]:
     parts: list[str] = []
     metadata = dict(context_metadata)
@@ -249,7 +250,9 @@ async def stream_message_events(
 
         # 只有用户打开联网开关时才把搜索工具下发给模型；关掉开关就是不希望联网。
         # fetch_pages 决定工具描述怎么说（开了抓正文就不能再说"不打开网页"）。
-        tools = tool_definitions(web_search=payload.web_search, fetch_pages=fetch_pages)
+        tools = tool_definitions(
+            web_search=payload.web_search, fetch_pages=fetch_pages, relaxed=relaxed
+        )
         tool_records: list[dict[str, Any]] = []
         # 工具里搜到的来源与手动搜索的来源合并展示，按 URL 去重。
         collected_sources: list[dict[str, Any]] = list(metadata.get("sources") or [])

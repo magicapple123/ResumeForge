@@ -10,13 +10,13 @@ import {
   Listy,
   Modal,
   Progress,
-  Skeleton,
   Space,
-  Spin,
   Tabs,
   Tag,
   Typography,
 } from "antd";
+import PageSkeleton from "./common/PageSkeleton";
+import LoadingBlock from "./common/LoadingBlock";
 import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "./common/listyPadding";
 import { useCallback, useEffect, useState } from "react";
@@ -132,6 +132,9 @@ function BatchItemCard({ item }: { item: JobMatchBatchItem }) {
   }
 
   const score = item.reference_score?.score ?? 0;
+  // 参考分颜色分档：≥70 绿（把握较大）、40–69 主题蓝、<40 琥珀（偏弱）。**纯展示口径**——
+  // 参考分不参与准入，颜色只是帮视线定位高低，不构成第二套结论。
+  const scoreColor = score >= 70 ? "#3f9d63" : score >= 40 ? "#5b8ff9" : "#e6a23c";
   return (
     <Card
       size="small"
@@ -146,23 +149,35 @@ function BatchItemCard({ item }: { item: JobMatchBatchItem }) {
       }
       extra={<Tag>{sourceLabel(item.analysis_source)}</Tag>}
     >
-      <Space align="start" size="middle">
+      <div className="batch-score-row">
         <Progress
           type="circle"
-          size={64}
           percent={score}
-          format={(value) => <span>{value}</span>}
+          size={72}
+          strokeColor={scoreColor}
+          format={(value) => (
+            <span className="batch-score-number">
+              {value}
+              <span className="batch-score-unit">分</span>
+            </span>
+          )}
         />
-        <Space orientation="vertical" size={2}>
-          <Typography.Text strong>匹配度参考分：{score}</Typography.Text>
-          <Typography.Text type="secondary">
-            {item.result ? `准入：${ADMISSION_META[item.result.admission].label}` : "暂无结论"}
-          </Typography.Text>
+        <div className="batch-score-meta">
+          <Typography.Text strong>匹配度参考分</Typography.Text>
+          {item.result ? (
+            <Tag color={ADMISSION_META[item.result.admission].color}>
+              准入：{ADMISSION_META[item.result.admission].label}
+            </Tag>
+          ) : (
+            <Tag>暂无结论</Tag>
+          )}
           {item.model ? (
-            <Typography.Text type="secondary">模型：{item.model}</Typography.Text>
+            <Typography.Text type="secondary" className="batch-score-model">
+              模型：{item.model}
+            </Typography.Text>
           ) : null}
-        </Space>
-      </Space>
+        </div>
+      </div>
       <Collapse
         ghost
         items={[{ key: "detail", label: "查看匹配详情", children: <MatchDetail item={item} /> }]}
@@ -279,7 +294,7 @@ export default function JobMatchBatchPanel({
 
   const resultContent =
     loading && !batch ? (
-      <Skeleton active paragraph={{ rows: 8 }} />
+      <PageSkeleton rows={8} />
     ) : batch ? (
       <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
         <Alert
@@ -309,7 +324,7 @@ export default function JobMatchBatchPanel({
     );
 
   const historyContent = historyLoading ? (
-    <Spin />
+    <LoadingBlock />
   ) : history.length === 0 ? (
     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有批量分析记录" />
   ) : (
@@ -343,11 +358,10 @@ export default function JobMatchBatchPanel({
         </Space>
       }
       width={900}
-      centered
-      // 批量结果逐岗位输出：限高让超长内容只滚弹窗内部；centered 让弹窗垂直居中，
-      // 底部「关闭」不再抵住视口下缘。
+      // 批量结果逐岗位输出：限高让超长内容只滚弹窗内部；全局 flex+margin:auto
+      // 让弹窗垂直居中，底部「关闭」不再抵住视口下缘。
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       onCancel={onClose}
       footer={

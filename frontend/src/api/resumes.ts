@@ -200,13 +200,32 @@ export async function renderResume(
   return resp.text();
 }
 
+/**
+ * 读取「已同时保存到」响应头（URL 编码的本机路径）。
+ * 没有该头（未设置保存位置，或落盘失败）时返回 undefined，调用方保持原提示。
+ */
+function readSavedToHeader(value: string | null): string | undefined {
+  if (!value) return undefined;
+  try {
+    return decodeURIComponent(value) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** 导出为文件（html/md/json/pdf），返回 blob 与服务端建议的文件名 */
 export async function exportResume(
   id: number,
   format: ExportFormat,
   /** 为真时跳过"正文还有未完成标记"的拦截，导出一份草稿自查。 */
   allowIncomplete = false,
-): Promise<{ blob: Blob; filename: string; pages: number | null; pageLimit: number | null }> {
+): Promise<{
+  blob: Blob;
+  filename: string;
+  pages: number | null;
+  pageLimit: number | null;
+  savedTo?: string;
+}> {
   const suffix = allowIncomplete ? "&allow_incomplete=true" : "";
   const resp = await fetch(`/api/resumes/${id}/export?format=${format}${suffix}`);
   if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
@@ -217,6 +236,8 @@ export async function exportResume(
     // 只有服务端 PDF 会带这两个头：它用的是自己那套排版，页数可能多于用户选的上限。
     pages: readCountHeader(resp.headers.get("X-Resume-Pages")),
     pageLimit: readCountHeader(resp.headers.get("X-Resume-Page-Limit")),
+    // 设置里指定了「生成内容保存位置」时，后端已把同一份产物落盘一份，路径随头带回。
+    savedTo: readSavedToHeader(resp.headers.get("X-Saved-To")),
   };
 }
 
@@ -229,7 +250,13 @@ export async function exportResume(
 export async function exportResumeWithOptions(
   id: number,
   options: ExportRequest,
-): Promise<{ blob: Blob; filename: string; pages: number | null; pageLimit: number | null }> {
+): Promise<{
+  blob: Blob;
+  filename: string;
+  pages: number | null;
+  pageLimit: number | null;
+  savedTo?: string;
+}> {
   const resp = await fetch(`/api/resumes/${id}/export`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -243,6 +270,7 @@ export async function exportResumeWithOptions(
       `resume.${options.format}`,
     pages: readCountHeader(resp.headers.get("X-Resume-Pages")),
     pageLimit: readCountHeader(resp.headers.get("X-Resume-Page-Limit")),
+    savedTo: readSavedToHeader(resp.headers.get("X-Saved-To")),
   };
 }
 

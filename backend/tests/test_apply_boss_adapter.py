@@ -135,7 +135,8 @@ def test_salary_experience_education_are_locally_filtered_instead_of_unmapped():
     assert adapter.unmapped_conditions(query) == []
     assert adapter.unmapped_conditions(CollectQuery(keywords=["后端"], city="北京")) == []
     # 声明了这四项，采集器才会执行本地筛选。
-    assert adapter.post_filter_conditions == ("薪资", "经验", "学历", "岗位类型")
+    # 2026-10-09 起「采集后筛选」下线：条件过滤全权交给站点侧筛选（filters），不再声明。
+    assert adapter.post_filter_conditions == ()
     assert adapter.requires_resume is False
 
 

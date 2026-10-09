@@ -12,10 +12,11 @@ from app.models.apply import (
     FAILURE_SELECTOR_INVALID,
 )
 from app.services.apply.task_runner import TaskStopped
+from app.services.browser.page_ready import ReadyWait
 from app.services.sites.base import CollectQuery, SiteFailure
 from app.services.sites.boss import parse_job_detail, parse_search_payload
 from app.services.sites.boss_network import search_has_more
-from test_apply_boss_adapter import ScriptedCdpClient, boss
+from test_apply_boss_adapter import BossAdapter, ScriptedCdpClient, boss
 
 
 def test_collect_search_reuses_the_tab_and_parses_the_page():
@@ -179,23 +180,27 @@ class StaleDocumentClient(ScriptedCdpClient):
 
 
 def test_collect_search_waits_until_the_new_document_takes_over():
-    """导航刚发起时旧文档还在：地址没变成新页就**不能**认这次读取，否则会读到上一页。"""
+    """导航刚发起时旧文档还在（上一动作往往是抓详情）：地址没切到搜索页就**不能**认这次读取。
+
+    共享标签页在抓详情后被留在岗位详情页上；freshness 守卫保证 collect_search 读到的
+    是搜索页自己的文档，而不是详情页的残影。
+    """
     adapter = boss()
-    old = "https://www.zhipin.com/web/geek/job?query=%E5%90%8E%E7%AB%AF&city=&page=1"
-    new = "https://www.zhipin.com/web/geek/job?query=%E5%90%8E%E7%AB%AF&city=&page=2"
+    detail = "https://www.zhipin.com/job_detail/abc.html"
+    search = "https://www.zhipin.com/web/geek/job?query=%E5%90%8E%E7%AB%AF&city=&page=1"
     client = StaleDocumentClient(
         [
-            {"url": old, "matched": 5, "ready_state": "complete"},  # 旧文档，仍在 page=1
-            {"url": old, "matched": 5, "ready_state": "complete"},  # 仍是旧文档
-            {"url": new, "matched": 5, "ready_state": "complete"},  # 新文档已接管
+            {"url": detail, "matched": 0, "ready_state": "complete"},  # 详情页残影
+            {"url": detail, "matched": 0, "ready_state": "complete"},  # 仍是详情页
+            {"url": search, "matched": 5, "ready_state": "complete"},  # 搜索页已接管
         ],
-        previous_url=old,
-        responses={"rf:collect": json.dumps({"items": [{"title": "第二页岗位"}], "has_next": False})},
+        previous_url=detail,
+        responses={"rf:collect": json.dumps({"items": [{"title": "搜索页岗位"}], "has_next": False})},
     )
 
-    page = adapter.collect_search(client, CollectQuery(keywords=["后端"]), page=2)
+    page = adapter.collect_search(client, CollectQuery(keywords=["后端"]), page=1)
 
-    assert [result.title for result in page.results] == ["第二页岗位"]
+    assert [result.title for result in page.results] == ["搜索页岗位"]
     # 旧文档被跳过，至少要轮询到第三次才接受。
     assert client.readiness_polls >= 3
 
@@ -315,3 +320,65 @@ def test_dom_detail_cleans_watermarks_from_the_job_description():
     assert "本科在校生" in detail["description"]
     assert "熟练使用Golang" in detail["description"]
     assert "工作周期：长期兼职" in detail["description"]
+
+
+def test_collect_scroll_page_loads_more_without_navigation():
+    """第 2 页起不再导航：滚动列表加载更多，整表读取（重复由采集器去重筛掉）。
+
+    用户实测：BOSS 搜索页不吃 URL 的 page 参数，靠下滑加载更多——换 page 导航
+    返回的永远是同一批推荐位，表现为"全部重复、一个都采不到"。
+    """
+    adapter = boss()
+
+    class GrowingCardCountClient(ScriptedCdpClient):
+        """卡片计数随读取递增：第一次是基线，滚动后的读取开始变多。"""
+
+        def __init__(self, responses):
+            super().__init__(responses)
+            self._count = 30
+            self._count_reads = 0
+
+        def evaluate(self, expression, *, timeout=None):
+            if "rf:card-count" in expression:
+                self._count_reads += 1
+                if self._count_reads > 1:
+                    self._count += 10
+                return json.dumps({"count": self._count, "no_more": False})
+            return super().evaluate(expression, timeout=timeout)
+
+    client = GrowingCardCountClient(
+        {
+            "rf:scroll-list": json.dumps({"scrolled": "container"}),
+            "rf:collect": json.dumps(
+                {"items": [{"title": "第二批岗位"}], "has_next": True}
+            ),
+        }
+    )
+
+    page = adapter.collect_search(client, CollectQuery(keywords=["后端"]), page=2)
+
+    # 不导航：导航会重置列表，滚动加载的进度就丢了
+    assert client.navigations == []
+    assert any("rf:scroll-list" in expression for expression in client.expressions)
+    # 基线读取 + 滚动后的增长读取，至少各一次（计数脚本被子类拦截，看计数器）
+    assert client._count_reads >= 2
+    assert [result.title for result in page.results] == ["第二批岗位"]
+    assert page.has_next is True
+
+
+def test_collect_scroll_page_stops_when_no_new_cards_render():
+    """滚动后卡片数量没有增长 → 站点的"加载更多"到底了：返回空页让采集器干净收尾。"""
+    adapter = BossAdapter(ready_wait=ReadyWait(timeout=0.2, poll_interval=0.05))
+    client = ScriptedCdpClient(
+        {
+            "rf:card-count": json.dumps({"count": 30, "no_more": True}),
+            "rf:scroll-list": json.dumps({"scrolled": "window"}),
+        }
+    )
+
+    page = adapter.collect_search(client, CollectQuery(keywords=["后端"]), page=2)
+
+    assert page.results == []
+    assert page.has_next is False
+    # 没有新卡片就不该执行采集脚本装作读到了东西
+    assert not any("rf:collect" in expression for expression in client.expressions)

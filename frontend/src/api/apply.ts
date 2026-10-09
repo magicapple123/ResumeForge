@@ -12,6 +12,7 @@ import type {
   CollectConfig,
   CollectConfigOut,
   CollectFilterOptions,
+  CollectFilterTestResult,
   GreetingPreview,
   Page,
   QueueConflictDetail,
@@ -47,6 +48,19 @@ export function updateCollectConfig(payload: CollectConfig): Promise<CollectConf
  */
 export function getCollectFilterOptions(): Promise<CollectFilterOptions> {
   return request("/collect/filters");
+}
+
+/**
+ * 「测试筛选是否实际生效」：在真实站点页面上逐项校验当前选中的站点筛选条件。
+ * 浏览器没启动时后端返回 409，`detail` 里有中文提示。
+ */
+export function testCollectFilters(
+  filters: Record<string, string>,
+): Promise<CollectFilterTestResult> {
+  return request("/collect/filters/test", {
+    method: "POST",
+    body: JSON.stringify({ filters }),
+  });
 }
 
 // ===== 招聘网站（当前站点）=====

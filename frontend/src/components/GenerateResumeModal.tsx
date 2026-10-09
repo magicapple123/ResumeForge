@@ -399,7 +399,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       width="min(960px, 96vw)"
       footer={null}
       styles={{
-        body: { maxHeight: "calc(100vh - 200px)", overflowY: "auto", overflowX: "hidden" },
+        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
       destroyOnHidden
     >

@@ -3,31 +3,25 @@
  * 提醒列表按 ``remind_at`` 升序展示"接下来要做什么"；pending 的提醒可一键标记完成或忽略，
  * 删除走软删除（进回收站）。可绑定漏斗 / 岗位 / 简历，三个都是选填。
  */
-import {
-  CheckOutlined,
-  CheckSquareOutlined,
-  EditOutlined,
-  PlusOutlined,
-  StopOutlined,
-} from "@ant-design/icons";
+import { CheckOutlined, CheckSquareOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
   Card,
-  Checkbox,
   DatePicker,
   Empty,
   Form,
   Input,
   Listy,
   Modal,
+  Pagination,
   Segmented,
   Select,
   Space,
-  Spin,
   Tag,
-  Typography,
 } from "antd";
+import LoadingBlock from "./common/LoadingBlock";
+import { useClientPagination } from "../hooks/useClientPagination";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
@@ -36,13 +30,12 @@ import { REMINDER_KINDS, REMINDER_KIND_LABELS, REMINDER_STATUS_LABELS } from "..
 import type { Reminder, ReminderKind, ReminderStatus } from "../types";
 import { formatDateTime } from "../utils/format";
 import { RecordDetailDrawer } from "./common/RecordDetail";
-import { isFromInnerControl } from "./common/recordDetailCore";
-import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { LISTY_ITEM_PADDING_DEFAULT } from "./common/listyPadding";
-import { RowActions } from "./common/RowActions";
+import type { RowActionItem } from "./common/RowActions";
 import BatchActionBar from "./common/BatchActionBar";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import CalendarView from "./tracker/CalendarView";
+import ReminderListItem from "./tracker/ReminderListItem";
 
 interface Option {
   value: number;
@@ -72,6 +65,13 @@ export default function ReminderPanel({
 }: Props) {
   const { message } = App.useApp();
   const [items, setItems] = useState<Reminder[]>([]);
+  // 提醒持续累积，一页 10 条（Listy 无内建分页，走通用客户端分页）。
+  const {
+    page,
+    setPage,
+    paged: pagedReminders,
+    total: reminderTotal,
+  } = useClientPagination(items, 10);
   const [loading, setLoading] = useState(true);
   const [kind, setKind] = useState<string | undefined>();
   const [view, setView] = useState<"list" | "calendar">("list");
@@ -207,6 +207,23 @@ export default function ReminderPanel({
     }
   };
 
+  /** 提醒条目的右键菜单：批量选择（工具栏按钮已收进这里，R8）+ 删除（二次确认）。 */
+  const contextActions = (item: Reminder): RowActionItem[] => [
+    {
+      key: "batch_select",
+      label: "批量选择",
+      icon: <CheckSquareOutlined />,
+      onClick: batch.enterSelecting,
+    },
+    {
+      key: "delete",
+      label: "删除",
+      danger: true,
+      confirm: "删除这条提醒？删除后可在回收站里找回，不会立刻彻底删除。",
+      onClick: () => void remove(item),
+    },
+  ];
+
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Card size="small" title="日历提醒">
@@ -225,11 +242,7 @@ export default function ReminderPanel({
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
             新增提醒
           </Button>
-          {view === "list" && !batch.selecting && items.length > 0 && (
-            <Button icon={<CheckSquareOutlined />} onClick={batch.enterSelecting}>
-              批量选择
-            </Button>
-          )}
+          {/* 批量选择入口已收进提醒条目的右键菜单（R8）。 */}
           <Segmented
             value={view}
             onChange={(value) => setView(value as "list" | "calendar")}
@@ -244,7 +257,7 @@ export default function ReminderPanel({
       {view === "calendar" ? (
         <CalendarView reminders={items} loading={loading} />
       ) : loading ? (
-        <Spin />
+        <LoadingBlock />
       ) : items.length === 0 ? (
         <Empty description="还没有提醒，把面试、测评截止这些时点记下来吧" />
       ) : (
@@ -257,120 +270,35 @@ export default function ReminderPanel({
             </BatchActionBar>
           )}
           <Listy
-            items={items}
+            items={pagedReminders}
             rowKey={(item) => item.id}
             styles={{ item: { ...LISTY_ITEM_PADDING_DEFAULT } }}
-            itemRender={(item) => {
-              // 多选模式：行简化为勾选框 + 点行切换，不提供单行操作。
-              if (batch.selecting) {
-                return (
-                  <ListyItem
-                    className="detail-trigger"
-                    actions={[
-                      <Checkbox
-                        key="pick"
-                        aria-label={`选择提醒 ${item.title}`}
-                        checked={batch.isSelected(item.id)}
-                        onChange={() => batch.toggle(item.id)}
-                      />,
-                    ]}
-                    onClick={() => batch.toggle(item.id)}
-                  >
-                    <ListyMeta title={item.title} description={formatDateTime(item.remind_at)} />
-                  </ListyItem>
-                );
-              }
-              // 「详情」放在第一位：列表只放得下摘要，备注、绑定对象这些都得点进去看。
-              const actions = [
-                <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
-                  详情
-                </Button>,
-              ];
-              if (item.status === "pending") {
-                actions.push(
-                  <Button
-                    key="done"
-                    type="link"
-                    size="small"
-                    icon={<CheckOutlined />}
-                    aria-label={`完成提醒 ${item.title}`}
-                    onClick={() => void setStatus(item, "done")}
-                  >
-                    完成
-                  </Button>,
-                );
-                actions.push(
-                  <Button
-                    key="dismiss"
-                    type="text"
-                    size="small"
-                    icon={<StopOutlined />}
-                    aria-label={`忽略提醒 ${item.title}`}
-                    onClick={() => void setStatus(item, "dismissed")}
-                  >
-                    忽略
-                  </Button>,
-                );
-              }
-              actions.push(
-                // 编辑/删除收进「···」菜单：删除不再以红图标裸露在行内（全局约定）。
-                <RowActions
-                  key="more"
-                  more={[
-                    {
-                      key: "edit",
-                      label: "编辑",
-                      onClick: () => openEdit(item),
-                    },
-                    {
-                      key: "delete",
-                      label: "删除",
-                      danger: true,
-                      confirm: "删除这条提醒？删除后可在回收站里找回，不会立刻彻底删除。",
-                      onClick: () => void remove(item),
-                    },
-                  ]}
-                />,
-              );
-              return (
-                <ListyItem
-                  className="detail-trigger"
-                  actions={actions}
-                  // 整条点开详情；行内按钮与二次确认不会被这一层抢走。
-                  onClick={(event) => {
-                    if (isFromInnerControl(event)) return;
-                    setDetail(item);
-                  }}
-                >
-                  <ListyMeta
-                    title={
-                      <Space size={6} wrap>
-                        <span>{item.title}</span>
-                        <Tag>{REMINDER_KIND_LABELS[item.kind as ReminderKind] ?? item.kind}</Tag>
-                        <Tag
-                          color={
-                            item.status === "pending"
-                              ? "blue"
-                              : item.status === "done"
-                                ? "green"
-                                : "default"
-                          }
-                        >
-                          {REMINDER_STATUS_LABELS[item.status as ReminderStatus] ?? item.status}
-                        </Tag>
-                      </Space>
-                    }
-                    description={
-                      <Typography.Text type="secondary">
-                        {formatDateTime(item.remind_at)}
-                        {item.note ? ` · ${item.note}` : ""}
-                      </Typography.Text>
-                    }
-                  />
-                </ListyItem>
-              );
-            }}
+            // 行内交互（勾选、操作按钮、右键菜单）收在 ReminderListItem，宿主只传数据与回调。
+            itemRender={(item) => (
+              <ReminderListItem
+                item={item}
+                selecting={batch.selecting}
+                selected={batch.isSelected(item.id)}
+                onToggle={batch.toggle}
+                onDetail={(target) => setDetail(target)}
+                onEdit={openEdit}
+                onRemove={(target) => void remove(target)}
+                onStatus={(target, status) => void setStatus(target, status)}
+                contextActions={contextActions}
+              />
+            )}
           />
+          <div style={{ textAlign: "right", marginTop: 12 }}>
+            <Pagination
+              current={page}
+              pageSize={10}
+              total={reminderTotal}
+              onChange={setPage}
+              hideOnSinglePage
+              showSizeChanger={false}
+              showTotal={(count) => `共 ${count} 条`}
+            />
+          </div>
         </>
       )}
 

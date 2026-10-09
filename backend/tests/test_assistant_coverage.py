@@ -62,10 +62,10 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "apply_queue_item": ("list_apply_queue",),
     "apply_task": ("list_apply_records",),
     "apply_task_item": ("list_apply_records",),
-    "web_form_fill_record": "不暴露：网申填充记录里**含用户填进别人页面的真实值**"
-    "（证件号、手机号）。助手既不读也不写它——一旦暴露，这些值会随用户的提问进入对话上下文"
-    "并被发往模型服务商，与「只发字段名、不发值」的既有隐私边界直接冲突。"
-    "回看与删除都在「网申填表 → 填充记录」里做。",
+    "web_form_fill_record": (
+        "list_web_form_fills",
+        "get_web_form_fill",
+    ),
     "web_form_profile_entry": "不暴露：这是用户专门为网申表单录的补充资料"
     "（四六级分数、档案所在地、紧急联系人、父母工作单位、身高视力、入党时间…），"
     "**专供网申填表读取**。里面含证件、家庭与健康类敏感值，暴露给助手会让它们随提问进入"
@@ -89,6 +89,8 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "claim_record": ("list_claims", "get_claim", "create_claim", "update_claim"),
     # ===== 资料箱、知识库、技能、题库 =====
     "material": ("list_materials", "get_material", "create_material", "update_material"),
+    # 文件副本库只读元数据；内容/落盘名/指纹不进对话，预览与删除在页面做。
+    "user_file": ("list_user_files",),
     "knowledge_entry": (
         "list_knowledge",
         "get_knowledge",
@@ -106,9 +108,9 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "drill_contract": ("get_drill_report",),
     "drill_turn": ("get_drill_report",),
     # ===== 助手自身的会话与技能 =====
-    "chat_conversation": "不暴露：助手自己的会话记录。它就在对话里，不需要再提供一个工具去读它。",
-    "chat_message": "不暴露：助手自己的消息明细。对话内容就在上下文里，"
-    "再给一个「读历史消息」的工具只会让助手绕远路去查它已经看得到的东西。",
+    # 历史对话默认不暴露（内容就在上下文里）；放宽模式（用户知情开启）下开放只读回看。
+    "chat_conversation": ("list_chat_conversations",),
+    "chat_message": ("get_chat_conversation",),
     "assistant_skill": ("read_skill_knowledge",),
     "assistant_skill_file": ("read_skill_knowledge",),
 }
@@ -182,8 +184,11 @@ def test_the_learning_path_stays_off_every_assistant_tool():
 
     ``learnable()`` 的产物会被写进 ``web_form_profile_entry``，而那张表的内容会随用户每次
     填表**自动变多**——所以"助手读不到"这条边界不能靠"用户没录"来成立，必须靠结构。
-    这里从**工具**那一侧钉住：任何工具都不接受网申资料里的字段做参数，也不返回它们。
+    这里从**工具**那一侧钉住：任何工具都不接受网申**资料**里的字段做参数，也不返回它们。
 
+    边界演化（2026-10-09 放宽模式）：网申**填充记录**（``WebFormFillRecord``，操作日志）
+    在用户知情开启放宽模式后开放了只读工具（``requires_relaxed=True``），但网申**资料**
+    表（profile_entry / profile_record / url_history）在任何模式下都不允许出现。
     读源码里的表名与工具签名，比调用每个工具更稳：调用要造数据，而这里要证明的是
     "根本不存在这条通路"。
     """
@@ -191,7 +196,16 @@ def test_the_learning_path_stays_off_every_assistant_tool():
 
     from app.services.assistant_tools import _registry
 
+    # 放宽模式下合法接触网申**填充记录**的两个工具——它们只能碰这一张表。
+    _ALLOWED_WEBFORM_TOOLS = {"list_web_form_fills", "get_web_form_fill"}
+
     for tool in _registry._TOOLS:
         source = inspect.getsource(tool.handler)
         assert "web_form_profile_entry" not in source, f"{tool.name} 读到了网申资料表"
+        assert "web_form_profile_record" not in source, f"{tool.name} 读到了网申资料表"
+        assert "web_form_url_history" not in source, f"{tool.name} 读到了网申网址历史"
+        if tool.name in _ALLOWED_WEBFORM_TOOLS:
+            # 门控必须钉死：没开放宽模式就不下发（双保险，下发处另有断言）。
+            assert tool.requires_relaxed, f"{tool.name} 必须标记 requires_relaxed"
+            continue
         assert "web_form" not in source, f"{tool.name} 碰了网申资料那条链路"

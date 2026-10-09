@@ -13,10 +13,10 @@ import {
   Modal,
   Select,
   Space,
-  Spin,
   Tag,
   Typography,
 } from "antd";
+import LoadingBlock from "./common/LoadingBlock";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
@@ -174,11 +174,12 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
       </Card>
 
       {loading ? (
-        <Spin />
+        <LoadingBlock />
       ) : items.length === 0 ? (
         <Empty description="还没有面经，把面试里被问到的问题记下来吧" />
       ) : (
         <Listy
+          className="rf-card-list"
           items={items}
           rowKey={(item) => item.id}
           itemRender={(item) => (

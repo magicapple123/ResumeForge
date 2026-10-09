@@ -80,10 +80,14 @@ def _queue_out(db: Session, item: ApplyQueueItem, job: Job | None) -> ApplyQueue
 
 
 def list_queue(db: Session) -> list[ApplyQueueItemOut]:
-    """按排序列出投递队列，每行带准入结论与能否投递标记。"""
+    """按排序列出投递队列，每行带准入结论与能否投递标记。
+
+    **后导入的排最上**（用户实测反馈：海投场景新加入的岗位应该最先看到）。``sort_order``
+    大的是新条目，所以倒序取；重排序（``reorder_queue``）写值时与此口径配对。
+    """
     items = (
         db.query(ApplyQueueItem)
-        .order_by(ApplyQueueItem.sort_order, ApplyQueueItem.id)
+        .order_by(ApplyQueueItem.sort_order.desc(), ApplyQueueItem.id.desc())
         .all()
     )
     # 岗位一次性取回，避免每行一次查询（队列条数不多，但这属于该顺手做对的事）。
@@ -212,12 +216,18 @@ def remove_queue_item(db: Session, item_id: int) -> None:
 
 
 def reorder_queue(db: Session, order: list[int]) -> list[ApplyQueueItemOut]:
-    """按给定 id 顺序重排队列。"""
+    """按给定 id 顺序重排队列。
+
+    ``order`` 是**界面显示顺序**（从上到下）。与 ``list_queue`` 的倒序口径配对：
+    显示在越前面的 ``sort_order`` 越大，这样后导入（``sort_order`` 取最大）的条目
+    才会自然排到最上面。
+    """
+    total = len(order)
     for index, item_id in enumerate(order):
         item = db.get(ApplyQueueItem, item_id)
         if item is None:
             continue
-        item.sort_order = index
+        item.sort_order = total - index
         item.updated_at = utcnow()
     db.commit()
     return list_queue(db)

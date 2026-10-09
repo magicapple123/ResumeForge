@@ -20,6 +20,7 @@ from ...schemas.export import (
 )
 from ...schemas.resume import ResumeContent
 from ...services.export_pipeline import ExportRequest, RenderContext, build_export
+from ...services.export_save_location import save_artifact, validate_directory
 from ...services.pdf_exporter import ResumePDFError
 from ...services.privacy import RedactionOptions as PrivacyRedactionOptions
 from ...services.privacy import redact
@@ -29,6 +30,7 @@ from ...services.resume.resume_template_store import (
     resolve_style_config,
     resolve_style_template,
 )
+from ...services.settings_service import get_export_save_location
 from ...services.watermark import WatermarkError
 from ._shared import PDF_PAGE_LIMIT_HEADER, PDF_PAGES_HEADER, _get_live_resume
 
@@ -79,6 +81,17 @@ def _export_record(
         headers[PDF_PAGES_HEADER] = str(artifact.pages)
     if artifact.page_limit is not None:
         headers[PDF_PAGE_LIMIT_HEADER] = str(artifact.page_limit)
+    # 「生成内容保存位置」：设置非空且目录合法时，把同一份产物再落盘一份。**best-effort**：
+    # 写失败只记日志、不阻断下载——用户已经等了一次生成，不能因为本地磁盘的问题白等。
+    saved_location = get_export_save_location(db)
+    if saved_location and validate_directory(saved_location) is None:
+        try:
+            final_path = save_artifact(artifact.content, saved_location, artifact.filename)
+        except OSError as exc:
+            logger.warning("导出产物落盘到「%s」失败：%s", saved_location, exc)
+        else:
+            # 头的值做 URL 编码（路径里可能有中文/反斜杠等非 latin-1 字符），前端解码还原。
+            headers["X-Saved-To"] = quote(final_path, safe="")
     return Response(artifact.content, media_type=artifact.media_type, headers=headers)
 
 

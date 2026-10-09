@@ -199,14 +199,20 @@ def _tool_get_resume(db: Session, arguments: dict) -> ToolResult:
 
 
 def _tool_get_profile(db: Session, _arguments: dict) -> ToolResult:
-    """返回**脱敏**视图：姓名、电话、邮箱、照片不进模型上下文。
+    """返回个人资料视图；默认**脱敏**（姓名、电话、邮箱、照片不进模型上下文）。
 
-    这是项目原有的隐私取舍（见 docs/architecture.md），工具沿用同一套，
-    顺带保证助手不会把用户的手机号复述到对话里。
+    用户在设置里开启「助手放宽模式」后返回未脱敏视图（含姓名/电话/邮箱；照片
+    二进制任何模式都不发送）。这是用户知情显式扩权，见 settings_service。
     """
     from ...api.assistant_context import profile_context
+    from ...services.settings_service import get_assistant_relaxed_mode
 
-    return ToolResult(text=profile_context(db), summary="查看了个人资料", link="/profile")
+    relaxed = get_assistant_relaxed_mode(db)
+    return ToolResult(
+        text=profile_context(db, relaxed=relaxed),
+        summary="查看了个人资料",
+        link="/profile",
+    )
 
 
 # ===== 写工具 =====

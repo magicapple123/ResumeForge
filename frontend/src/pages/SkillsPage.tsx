@@ -12,7 +12,6 @@ import {
   Card,
   Empty,
   Space,
-  Spin,
   Switch,
   Table,
   Tabs,
@@ -21,6 +20,7 @@ import {
   Typography,
   Upload,
 } from "antd";
+import LoadingBlock from "../components/common/LoadingBlock";
 import type { ColumnsType } from "antd/es/table";
 import type { HTMLAttributes } from "react";
 import { useCallback, useEffect, useState } from "react";
@@ -337,7 +337,7 @@ export default function SkillsPage() {
           />
 
           {loading ? (
-            <Spin />
+            <LoadingBlock />
           ) : skills.length === 0 ? (
             <Empty description="还没有技能，先用模板建一个试试" />
           ) : (

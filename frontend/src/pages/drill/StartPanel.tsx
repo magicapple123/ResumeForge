@@ -1,5 +1,6 @@
 /** 开场面板：选主张、定题数与反馈方式。 */
-import { Alert, App, Button, Empty, Modal, Select, Skeleton, Space, Typography } from "antd";
+import { Alert, App, Button, Empty, Modal, Select, Space, Typography } from "antd";
+import PageSkeleton from "../../components/common/PageSkeleton";
 import { ThunderboltOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { createDrillSession } from "../../api/drill";
@@ -90,7 +91,7 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
             <Typography.Text strong>要验证哪些主张</Typography.Text>
             <Typography.Text type="secondary">（留空表示全部已确认的）</Typography.Text>
             {claims.loading ? (
-              <Skeleton active paragraph={{ rows: 2 }} />
+              <PageSkeleton rows={2} card={false} />
             ) : available.length === 0 ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}

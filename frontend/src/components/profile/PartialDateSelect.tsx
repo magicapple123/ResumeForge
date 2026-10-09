@@ -1,4 +1,5 @@
 import { Checkbox, Select, Space, Typography } from "antd";
+import { memo, useMemo } from "react";
 
 interface PartialDate {
   year: string;
@@ -70,7 +71,13 @@ function daysInMonth(year: string, month: string): number {
   return new Date(Number(year), Number(month), 0).getDate();
 }
 
-export default function PartialDateSelect({
+/** 月选项固定 12 项：模块级常量，任何渲染都不再重建。 */
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
+  const month = String(index + 1).padStart(2, "0");
+  return { value: month, label: month };
+});
+
+function PartialDateSelectImpl({
   id,
   value = "",
   onChange,
@@ -81,13 +88,26 @@ export default function PartialDateSelect({
 }: Props) {
   const parts = parsePartialDate(value);
   const selected = parts ?? { year: "", month: "", day: "", ongoing: false };
-  const currentYear = new Date().getFullYear();
-  const minYear = Math.min(1900, Number(selected.year) || 1900);
-  const maxYear = Math.max(currentYear + 15, Number(selected.year) || 0);
-  const years = Array.from({ length: maxYear - minYear + 1 }, (_, index) => {
-    const year = String(maxYear - index);
-    return { value: year, label: year };
-  });
+  // 年份范围几乎恒定（1900 → 当前年+15，已选年份更大时才外扩）。这个组件在「我的资料」
+  // 里同时存在十几个、每次渲染重建 ~142 项 options 是编辑态卡顿的放大器之一（见
+  // deliverables/profile-input-perf-audit-2026-10-09.md），useMemo 掉。
+  const years = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const minYear = Math.min(1900, Number(selected.year) || 1900);
+    const maxYear = Math.max(currentYear + 15, Number(selected.year) || 0);
+    return Array.from({ length: maxYear - minYear + 1 }, (_, index) => {
+      const year = String(maxYear - index);
+      return { value: year, label: year };
+    });
+  }, [selected.year]);
+  const dayOptions = useMemo(
+    () =>
+      Array.from({ length: daysInMonth(selected.year, selected.month) }, (_, index) => {
+        const day = String(index + 1).padStart(2, "0");
+        return { value: day, label: day };
+      }),
+    [selected.year, selected.month],
+  );
   const commit = (year: string, month: string, day: string) => {
     if (!year) {
       onChange?.("");
@@ -125,10 +145,7 @@ export default function PartialDateSelect({
               disabled={disabled || selected.ongoing || !selected.year}
               allowClear
               placeholder="月"
-              options={Array.from({ length: 12 }, (_, index) => {
-                const month = String(index + 1).padStart(2, "0");
-                return { value: month, label: month };
-              })}
+              options={MONTH_OPTIONS}
               onChange={(month?: string) => {
                 const nextMonth = month ?? "";
                 const nextDay =
@@ -144,13 +161,7 @@ export default function PartialDateSelect({
               disabled={disabled || selected.ongoing || !selected.year || !selected.month}
               allowClear
               placeholder="日"
-              options={Array.from(
-                { length: daysInMonth(selected.year, selected.month) },
-                (_, index) => {
-                  const day = String(index + 1).padStart(2, "0");
-                  return { value: day, label: day };
-                },
-              )}
+              options={dayOptions}
               onChange={(day?: string) => commit(selected.year, selected.month, day ?? "")}
             />
           </>
@@ -174,3 +185,22 @@ export default function PartialDateSelect({
     </div>
   );
 }
+
+/**
+ * memo 比较器（导出为纯函数，便于单测）：这个组件同时存在十几个，调用方
+ * （WebFormProfileField / WebFormProfileRecordGroup）每次渲染都新建内联 onChange，
+ * 默认浅比较会全部失效——这里只按渲染结果相关的 props 比较，**故意忽略 onChange**：
+ * 它的行为按字段收口、恒定不变，引用不稳定但语义等价。
+ */
+export function arePartialDatePropsEqual(previous: Props, next: Props): boolean {
+  return (
+    previous.value === next.value &&
+    previous.disabled === next.disabled &&
+    previous.label === next.label &&
+    previous.allowOngoing === next.allowOngoing &&
+    previous.yearOnly === next.yearOnly &&
+    previous.id === next.id
+  );
+}
+
+export default memo(PartialDateSelectImpl, arePartialDatePropsEqual);

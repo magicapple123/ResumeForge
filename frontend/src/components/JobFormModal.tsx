@@ -172,6 +172,15 @@ export default function JobFormModal({
         documents: attachmentInputs(files, "document"),
       });
       if (requestId !== parseRequestId.current) return;
+      if (result.items.length === 0) {
+        // 后端契约是 items 至少一条，这里只防异常响应：绝不能解构 items[0]
+        //（空列表会抛 "Cannot destructure property 'warnings'" 的英文错误）。
+        setParseWarnings(result.warnings ?? []);
+        setRecognizedText("");
+        setRecognitionSource(null);
+        message.warning("没有识别到内容，请检查材料或稍后重试");
+        return;
+      }
       if (result.items.length > 1) {
         // 多份：交给确认面板。这里**不**回填表单——回填只会显示最后一份，用户看不见
         // 其它几份，也看不出拆分对不对。
@@ -348,7 +357,7 @@ export default function JobFormModal({
       width={720}
       styles={{
         body: {
-          maxHeight: "calc(100vh - 200px)",
+          maxHeight: "var(--rf-modal-body-max-h)",
           overflowY: "auto",
           overflowX: "hidden",
           paddingRight: 8,

@@ -12,7 +12,8 @@
  *    原因，整张图没有输入就显示空态而不是零轴。
  * 2. **每张图的 `aria-label` 必须互不相同**，否则读屏软件与测试都分不清是哪张图。
  */
-import { Col, Empty, Row, Segmented, Skeleton, Typography } from "antd";
+import { Col, Empty, Row, Segmented, Typography } from "antd";
+import PageSkeleton from "../components/common/PageSkeleton";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { getAnalyticsDashboard } from "../api/analytics";
@@ -123,7 +124,7 @@ export default function AnalyticsPage() {
       </div>
 
       {loading ? (
-        <Skeleton active paragraph={{ rows: 8 }} />
+        <PageSkeleton rows={8} />
       ) : error ? (
         <Typography.Text type="danger">{error}</Typography.Text>
       ) : !data ? (

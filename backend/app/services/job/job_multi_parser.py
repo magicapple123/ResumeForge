@@ -30,6 +30,7 @@ from ..text_extraction import (
     MAX_EXTRACTION_RESPONSE_CHARS,
     MAX_JOB_EXTRACTION_INPUT_CHARS,
     _clip_source,
+    with_extraction_retry,
 )
 from ..text_extraction_normalization import normalize_job_result, transcription_of
 
@@ -180,35 +181,39 @@ async def extract_multiple_jobs(
     image_data_urls: Sequence[str] = (),
 ) -> list[JobTextParseResult]:
     """用模型把材料拆成多份岗位草稿；拆不出来时抛 ``LLMError`` 由调用方兜底。"""
-    raw = await provider.chat(
-        build_multi_job_extraction_messages(source_text, image_data_urls)
-    )
-    data = parse_json_object(raw, label="多份岗位识别", max_chars=MAX_EXTRACTION_RESPONSE_CHARS)
-    items = _items_from_payload(data)
-    if not items:
-        raise LLMError("模型没有从这段材料里识别出招聘信息")
 
-    transcription = transcription_of(data) if image_data_urls else ""
-    anchor_pool = "\n".join(part for part in (source_text, transcription) if part.strip())
-    if image_data_urls and not transcription:
-        # 与单份识别同样的要求：图片路径必须有抄录，否则字段没有可核对的依据。
-        raise LLMError("模型未抄录图片中的文字，无法核对识别结果，请重试")
-
-    results: list[JobTextParseResult] = []
-    for item in items:
-        excerpt = str(item.get("source_excerpt") or "")
-        grounded = excerpt_is_grounded(excerpt, anchor_pool)
-        if not grounded:
-            logger.info("多份识别：某一份的摘录无法与原文比对，退回整段材料作为锚点")
-        anchor = excerpt if grounded else anchor_pool
-        local = _local_draft_for(excerpt if grounded else source_text, source_text)
-        # 把摘录随结果带回去：确认面板要逐份显示"原文：…"，用户才能核对拆分对不对。
-        # 只带**核对通过**的那份——没通过的可能就是模型编的，展示出来等于让人去核对一段
-        # 原文里根本不存在的文字。
-        results.append(
-            normalize_job_result(item, local, anchor, recognized_text=excerpt if grounded else "")
+    async def once() -> list[JobTextParseResult]:
+        raw = await provider.chat(
+            build_multi_job_extraction_messages(source_text, image_data_urls)
         )
-    return results
+        data = parse_json_object(raw, label="多份岗位识别", max_chars=MAX_EXTRACTION_RESPONSE_CHARS)
+        items = _items_from_payload(data)
+        if not items:
+            raise LLMError("模型没有从这段材料里识别出招聘信息")
+
+        transcription = transcription_of(data) if image_data_urls else ""
+        anchor_pool = "\n".join(part for part in (source_text, transcription) if part.strip())
+        if image_data_urls and not transcription:
+            # 与单份识别同样的要求：图片路径必须有抄录，否则字段没有可核对的依据。
+            raise LLMError("模型未抄录图片中的文字，无法核对识别结果，请重试")
+
+        results: list[JobTextParseResult] = []
+        for item in items:
+            excerpt = str(item.get("source_excerpt") or "")
+            grounded = excerpt_is_grounded(excerpt, anchor_pool)
+            if not grounded:
+                logger.info("多份识别：某一份的摘录无法与原文比对，退回整段材料作为锚点")
+            anchor = excerpt if grounded else anchor_pool
+            local = _local_draft_for(excerpt if grounded else source_text, source_text)
+            # 把摘录随结果带回去：确认面板要逐份显示"原文：…"，用户才能核对拆分对不对。
+            # 只带**核对通过**的那份——没通过的可能就是模型编的，展示出来等于让人去核对一段
+            # 原文里根本不存在的文字。
+            results.append(
+                normalize_job_result(item, local, anchor, recognized_text=excerpt if grounded else "")
+            )
+        return results
+
+    return await with_extraction_retry(once, label="多份岗位识别")
 
 
 def local_multi_drafts(source_text: str) -> list[JobTextParseResult]:

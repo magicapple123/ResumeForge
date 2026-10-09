@@ -20,12 +20,12 @@ import {
   Input,
   Modal,
   Select,
-  Skeleton,
   Space,
   Statistic,
   Tooltip,
   Typography,
 } from "antd";
+import PageSkeleton from "../components/common/PageSkeleton";
 import type { MenuProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -256,7 +256,7 @@ export default function TrackerPage() {
         />
       </Space>
 
-      {loading && <Skeleton active paragraph={{ rows: 6 }} />}
+      {loading && <PageSkeleton rows={6} />}
       {error && <Typography.Text type="danger">{error}</Typography.Text>}
       {!loading && !error && items.length === 0 && (
         <Empty

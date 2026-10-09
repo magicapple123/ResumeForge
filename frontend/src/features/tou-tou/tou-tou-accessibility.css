@@ -18,12 +18,20 @@
   .tt-zzz,
   .tt.is-pressed .tt-scale,
   .tt.is-hidden .tt-scale,
-  .tt.is-petted .tt-turn {
+  .tt.is-petted .tt-turn,
+  .tt-save-card-dot,
+  .tt-card,
+  .tt-card.is-leaving {
     animation: none;
   }
 
   /* 关掉动画就没有"飘"的提示了，让它老老实实停在球旁边。 */
   .tt-zzz {
+    opacity: 1;
+  }
+
+  /* 退场动画被关掉后，卡片要保持实心可见，直到 JS 定时器把它卸载。 */
+  .tt-card.is-leaving {
     opacity: 1;
   }
 
