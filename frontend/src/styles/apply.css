@@ -34,6 +34,11 @@
   border-radius: 8px;
 }
 
+/* 批次状态卡移进「自动采集」页签后，与上方采集表单按钮之间留出间距（顶格会贴死）。 */
+.apply-collect-panel .apply-progress-panel {
+  margin-top: 12px;
+}
+
 .apply-progress-head {
   display: flex;
   flex-wrap: wrap;
@@ -214,11 +219,6 @@
   border-top: 1px solid #eef0f3;
 }
 
-/* 本地筛选的账目（筛掉几条 / 几条没判断成 / 条件有没有被识别）。 */
-.apply-collect-filtered {
-  margin-top: 12px;
-}
-
 .apply-collect-result .ant-typography {
   margin-bottom: 0;
 }
@@ -287,4 +287,14 @@
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* 「未生效条件」/「站点筛选账目」等 Alert 与上面的条件表单之间留白：成功/警告框不再和
+   「开始采集」按钮贴在一起。 */
+.apply-collect-outcomes {
+  margin-top: 12px;
+}
+
+.apply-collect-outcomes .ant-alert {
+  margin-bottom: 12px;
 }

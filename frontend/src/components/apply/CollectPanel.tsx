@@ -1,14 +1,15 @@
 /**
  * 自动采集：设置关键词/城市/筛选条件后显式开始，并把无法映射的条件如实标为「未生效」。
  *
- * 为什么要把「未生效」单独拎出来：关键词 + 城市 + 翻页是站点一定能接受的，而薪资/经验/
- * 学历/岗位类型能不能落到查询参数取决于站点——若不明确提示，用户会以为筛选生效了，实际却把
- * 不符合条件的岗位也采了进来。后端把这些条件写进 `task.config["unmapped_conditions"]`，
- * 界面据此显示。
+ * 为什么要把「未生效」单独拎出来：关键词 + 城市 + 翻页是站点一定能接受的，而「按招聘网站的
+ * 条件筛」里的某一条能不能落到该站点的查询参数取决于站点——若不明确提示，用户会以为筛选
+ * 生效了，实际却把不符合条件的岗位也采了进来。后端把这些条件写进
+ * `task.config["unmapped_conditions"]`，界面据此显示。
  */
-import { Alert, App, Form, Select, Skeleton, Space, Typography } from "antd";
+import { Alert, App, Form, Select, Space, Typography } from "antd";
+import PageSkeleton from "../common/PageSkeleton";
 import { RowActions } from "../common/RowActions";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createCollectTask, getCollectConfig, updateCollectConfig } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
 import type { ApplyTask, ApplyTaskDetail, CollectConfig, CollectConfigOut } from "../../types";
@@ -23,16 +24,19 @@ import {
   writeConfigHistory,
 } from "./collect/collectConfigHistory";
 import type { CollectConfigSnapshot } from "./collect/collectConfigHistory";
-import { filterSummary, siteFilterSummary, unmappedConditions } from "./collect/collectTaskSummary";
+import { siteFilterSummary, unmappedConditions } from "./collect/collectTaskSummary";
 
 interface Props {
   disabled: boolean;
   onStarted: (task: ApplyTask) => void;
   /** 最近一次采集批次：用来读取「未生效」条件。 */
   collectTask: ApplyTaskDetail | null;
+  /** 批次状态卡（进行中/已完成），由外层传入并渲染在账目与结果面板之间——
+   *  用户实测反馈：状态和结果分居两处时不够直观，融合到结果面板旁边。 */
+  progress?: ReactNode;
 }
 
-export default function CollectPanel({ disabled, onStarted, collectTask }: Props) {
+export default function CollectPanel({ disabled, onStarted, collectTask, progress }: Props) {
   const { message } = App.useApp();
   const [form] = Form.useForm<CollectConfig>();
   const { data, loading, error } = useApi<CollectConfigOut>(getCollectConfig, []);
@@ -43,8 +47,6 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
   // 历史条件快照（localStorage 读取，最新在前）。
   const [history, setHistory] = useState<CollectConfigSnapshot[]>(() => readConfigHistory());
   const [historyValue, setHistoryValue] = useState<string | undefined>(undefined);
-  // 岗位类型的筛选方式标签随所选值变化（站点筛选 / 采集后筛选）。
-  const jobTypeValue = Form.useWatch("job_type", form);
 
   useEffect(() => {
     if (data) form.setFieldsValue(data);
@@ -117,11 +119,10 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
     }
   };
 
-  if (loading && !data) return <Skeleton active paragraph={{ rows: 6 }} />;
+  if (loading && !data) return <PageSkeleton rows={6} />;
   if (error && !data) return <Alert type="error" showIcon title={error} />;
 
   const unmapped = unmappedConditions(collectTask);
-  const filtered = filterSummary(collectTask);
   const siteFiltered = siteFilterSummary(collectTask);
 
   return (
@@ -181,7 +182,7 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
 
       <CollectConfigForm
         form={form}
-        jobTypeValue={jobTypeValue}
+        getFilters={() => (form.getFieldValue("filters") as Record<string, string>) || {}}
         saveSamples={saveSamples}
         onSaveSamplesChange={setSaveSamples}
         disabled={disabled}
@@ -191,7 +192,17 @@ export default function CollectPanel({ disabled, onStarted, collectTask }: Props
         onStart={() => void start()}
       />
 
-      <CollectOutcomeAlerts unmapped={unmapped} filtered={filtered} siteFiltered={siteFiltered} />
+      {progress}
+
+      <CollectOutcomeAlerts
+        unmapped={unmapped}
+        siteFiltered={siteFiltered}
+        paginationStoppedAt={
+          typeof collectTask?.config?.pagination_stopped_at === "number"
+            ? (collectTask.config.pagination_stopped_at as number)
+            : 0
+        }
+      />
 
       {/* 采集结果只陈列、不入库：勾选后才进岗位广场。 */}
       <CollectResultPanel

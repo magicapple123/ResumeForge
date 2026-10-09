@@ -252,12 +252,14 @@ function Stop-RunningApplication {
 （三条覆盖路径都会先停），SQLite 进程干净退出后 WAL 已合并回主库，直接拷文件就是
 一致快照。
 
-只拷数据库与其旁文件（data\*.db + datasets\*.db）和轻量 json 指针；浏览器登录态、
-既有备份包、采集样例、日志都不属于"要回滚的数据"。保留最近 3 份在 data\pre-update\。
+只拷数据库与其旁文件（backend\data\*.db + datasets\*.db）和轻量 json 指针；浏览器登录态、
+既有备份包、采集样例、日志都不属于"要回滚的数据"。保留最近 3 份在 backend\data\pre-update\。
 #>
 function Backup-UserData {
     if ($DryRun) { return }
-    $dataRoot = Join-Path $ProjectRoot "data"
+    # 真实用户数据在 backend\data（见 backend/app/config.py 的 DATA_DIR）；项目根下的
+    # data\ 不存在，读错了就会在这里静默提前 return、从不生成快照。
+    $dataRoot = Join-Path $ProjectRoot "backend\data"
     if (-not (Test-Path -LiteralPath $dataRoot)) { return }
     $destination = Join-Path $dataRoot ("pre-update\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
     New-Item -ItemType Directory -Force -Path $destination | Out-Null
@@ -265,7 +267,7 @@ function Backup-UserData {
     foreach ($dbFile in @(Get-ChildItem -LiteralPath $dataRoot -Filter "*.db" -File -ErrorAction SilentlyContinue)) {
         Copy-Item -LiteralPath $dbFile.FullName -Destination $destination -Force
         $copied++
-        foreach ($sidecarSuffix in @("-wal", "-shm")) {
+        foreach ($sidecarSuffix in @("-wal", "-shm", "-journal")) {
             $sidecar = "$($dbFile.FullName)$sidecarSuffix"
             if (Test-Path -LiteralPath $sidecar) {
                 Copy-Item -LiteralPath $sidecar -Destination $destination -Force
@@ -282,7 +284,7 @@ function Backup-UserData {
         foreach ($dbFile in @(Get-ChildItem -LiteralPath $datasets -Filter "*.db" -File -ErrorAction SilentlyContinue)) {
             Copy-Item -LiteralPath $dbFile.FullName -Destination (Join-Path $destination "datasets") -Force
             $copied++
-            foreach ($sidecarSuffix in @("-wal", "-shm")) {
+            foreach ($sidecarSuffix in @("-wal", "-shm", "-journal")) {
                 $sidecar = "$($dbFile.FullName)$sidecarSuffix"
                 if (Test-Path -LiteralPath $sidecar) {
                     Copy-Item -LiteralPath $sidecar -Destination (Join-Path $destination "datasets") -Force

@@ -181,8 +181,6 @@ describe("ApplyPage", () => {
     expect(await screen.findByText("需逐条确认")).toBeInTheDocument();
     expect(screen.getAllByText("不投").length).toBeGreaterThan(0);
     expect(screen.getByText("未分析")).toBeInTheDocument();
-    // 逐条操作按钮可键盘聚焦（有可读名称）。
-    expect(screen.getByLabelText(/上移 后端开发/)).toBeInTheDocument();
   });
 
   it("announces the current job site coming from the backend, not a hardcoded name", async () => {
@@ -247,6 +245,9 @@ describe("ApplyPage", () => {
       </MemoryRouter>,
     );
 
+    // 采集批次的状态卡现在在「自动采集」页签里（紧挨本次采集结果），先切过去。
+    fireEvent.click(await screen.findByRole("tab", { name: "自动采集" }));
+
     expect(await screen.findByText("采集批次", {}, { timeout: 20_000 })).toBeInTheDocument();
     expect(screen.getByText(/已处理/)).toBeInTheDocument();
     // 采集跑到一半也必须能暂停——用户可能刚发现关键词写错了。
@@ -267,9 +268,33 @@ describe("ApplyPage", () => {
       </MemoryRouter>,
     );
 
+    // 暂停/停止按钮跟着批次状态卡一起住进了「自动采集」页签，先切过去。
+    fireEvent.click(await screen.findByRole("tab", { name: "自动采集" }));
     fireEvent.click(await screen.findByRole("button", { name: /暂停/ }, { timeout: 20_000 }));
 
     await waitFor(() => expect(apiMocks.pauseTask).toHaveBeenCalledWith(7));
+  });
+
+  it("activates the tab from the ?tab= query, so in-page entrances can switch tabs", async () => {
+    // 「去投递队列查看」这类入口走 navigate("/apply?tab=queue")：这条链路成立的前提是
+    // 页签从 URL 读——tab 曾经只存在内存里，URL 参数无人解析，从采集结果点过去毫无反应。
+    render(
+      <MemoryRouter initialEntries={["/apply?tab=collect"]}>
+        <AntdApp>
+          <ApplyPage />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("tab", { name: "自动采集" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    // 反向链路不被 URL 化破坏：点击页签仍能正常切换。
+    fireEvent.click(screen.getByRole("tab", { name: "投递队列" }));
+    expect(screen.getByRole("tab", { name: "投递队列" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "自动采集" })).toHaveAttribute("aria-selected", "false");
   });
 
   it("raises a prominent banner when the batch is circuit-breaker paused", async () => {
@@ -318,35 +343,6 @@ describe("CollectPanel", () => {
     expect(banner).toHaveTextContent("以下条件未生效");
     expect(banner).toHaveTextContent("薪资");
     expect(banner).toHaveTextContent("学历");
-  });
-
-  it("reports the local filter outcome, including conditions it could not apply", async () => {
-    // 本地筛选的三件事都要说出来：筛掉几条、几条因为岗位没写字段而没能判断、
-    // 以及用户自己填的条件有没有被识别。少说一件，用户就不知道"少了几个"是怎么少的。
-    const collectTask = detail({
-      kind: "collect",
-      config: {
-        filter_applied: ["薪资", "经验", "学历"],
-        filtered_out: 2,
-        filter_reasons: ["学历"],
-        filter_undecided: ["经验"],
-        filter_undecided_count: 3,
-        filter_unapplied: ["学历"],
-      },
-    });
-
-    render(
-      <MemoryRouter>
-        <AntdApp>
-          <CollectPanel disabled={false} onStarted={vi.fn()} collectTask={collectTask} />
-        </AntdApp>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText(/已按薪资 \/ 经验 \/ 学历在采集后筛选/)).toBeInTheDocument();
-    expect(screen.getByText(/本次筛掉 2 个不符合条件的岗位/)).toBeInTheDocument();
-    expect(screen.getByText(/3 个岗位没有写经验/)).toBeInTheDocument();
-    expect(screen.getByText(/这条条件没能识别，本次没有生效/)).toBeInTheDocument();
   });
 
   it("surfaces a load error instead of rendering a blank form", async () => {

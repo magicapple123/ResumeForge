@@ -214,23 +214,33 @@ try {
 
     # ---- 3.5 更新前数据快照 -----------------------------------------------------
     # 三条覆盖路径都会先停应用再快照：SQLite 干净退出后直接拷文件就是一致快照。
-    # 只拷 .db 与旁文件、轻量 json 指针；保留最近 3 份，最旧的轮转删除。
+    # 只拷 .db 与旁文件（-wal / -shm / -journal）、轻量 json 指针；保留最近 3 份，
+    # 最旧的轮转删除。快照按真实数据布局铺在 backend/data/（backend/app/config.py
+    # 的 DATA_DIR）——此前测试自造假根 <root>/data，与实现一起错了三年没人报警。
     $realProjectRoot = $ProjectRoot
     $realDryRun = $DryRun
     $ProjectRoot = Join-Path $TestDirectory "fake-root"
     $DryRun = $false
-    $fakeDataRoot = Join-Path $ProjectRoot "data"
+    $fakeDataRoot = Join-Path $ProjectRoot "backend\data"
     New-Item -ItemType Directory -Path (Join-Path $fakeDataRoot "datasets") -Force | Out-Null
-    foreach ($name in @("resume_forge.db", "resume_forge.db-wal", "active.json")) {
+    foreach ($name in @(
+            "resume_forge.db", "resume_forge.db-wal", "resume_forge.db-shm", "resume_forge.db-journal",
+            "active.json"
+        )) {
         Set-Content -LiteralPath (Join-Path $fakeDataRoot $name) -Value "x" -Encoding ascii
     }
     Set-Content -LiteralPath (Join-Path $fakeDataRoot "datasets\extra.db") -Value "x" -Encoding ascii
+    Set-Content -LiteralPath (Join-Path $fakeDataRoot "datasets\extra.db-wal") -Value "x" -Encoding ascii
+    Set-Content -LiteralPath (Join-Path $fakeDataRoot "datasets\extra.db-journal") -Value "x" -Encoding ascii
 
     Backup-UserData
     $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $fakeDataRoot "pre-update") -Directory)
     Assert-UpdaterTest -Condition ($snapshots.Count -eq 1) `
         -Message "第一次快照应当恰好生成一份 pre-update 目录（实际 $($snapshots.Count)）。"
-    foreach ($relative in @("resume_forge.db", "resume_forge.db-wal", "active.json", "datasets\extra.db")) {
+    foreach ($relative in @(
+            "resume_forge.db", "resume_forge.db-wal", "resume_forge.db-shm", "resume_forge.db-journal",
+            "active.json", "datasets\extra.db", "datasets\extra.db-wal", "datasets\extra.db-journal"
+        )) {
         Assert-UpdaterTest -Condition (Test-Path -LiteralPath (Join-Path $snapshots[0].FullName $relative)) `
             -Message "数据快照必须包含 $relative。"
     }

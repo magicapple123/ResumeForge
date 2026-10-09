@@ -1,20 +1,35 @@
 /**
- * 采集批次的三张账目 Alert：「未生效条件」/「站点侧筛选」/「本地筛选」。
+ * 采集批次的两张账目 Alert：「未生效条件」/「站点侧筛选」，
+ * 以及可选的「翻页提前停止」说明。
  *
  * 纯展示组件——账目由 collectTaskSummary.ts 从 task.config 解析后经 props 传入。
  */
-import { Alert, Space, Typography } from "antd";
-import type { FilterSummary, SiteFilterSummary } from "./collectTaskSummary";
+import { Alert, Typography } from "antd";
+import type { SiteFilterSummary } from "./collectTaskSummary";
 
 interface Props {
   unmapped: string[];
-  filtered: FilterSummary | null;
   siteFiltered: SiteFilterSummary | null;
+  /** 翻页提前停止的页码（0/缺省 = 没有触发）。 */
+  paginationStoppedAt?: number;
 }
 
-export default function CollectOutcomeAlerts({ unmapped, filtered, siteFiltered }: Props) {
+export default function CollectOutcomeAlerts({
+  unmapped,
+  siteFiltered,
+  paginationStoppedAt = 0,
+}: Props) {
   return (
-    <>
+    <div className="apply-collect-outcomes">
+      {paginationStoppedAt > 0 && (
+        <Alert
+          className="apply-collect-pagination"
+          type="info"
+          showIcon
+          title={`后面的页与前面的结果完全重复，已在第 ${paginationStoppedAt} 页提前停止翻页`}
+          description="该条件下的岗位可能就这么多，或者大多已经采集过。想采更多：换关键词 / 城市，或放宽筛选条件后再跑一次。"
+        />
+      )}
       {unmapped.length > 0 && (
         <Alert
           className="apply-collect-unmapped"
@@ -60,39 +75,6 @@ export default function CollectOutcomeAlerts({ unmapped, filtered, siteFiltered 
           }
         />
       )}
-
-      {/* 本地筛选的账目：筛掉几条、有几条因为岗位没写字段而没能判断、以及自己的条件有没有
-          被识别。三者都不说，用户就不知道"少了几个"是筛掉的还是没采到。 */}
-      {filtered && (
-        <Alert
-          className="apply-collect-filtered"
-          type="success"
-          showIcon
-          title={`已按${filtered.applied.join(" / ")}在采集后筛选`}
-          description={
-            <Space orientation="vertical" size={2}>
-              <Typography.Text>
-                {filtered.filtered > 0
-                  ? `本次筛掉 ${filtered.filtered} 个不符合条件的岗位。`
-                  : "本次没有岗位被筛掉。"}
-              </Typography.Text>
-              {filtered.undecidedCount > 0 && (
-                <Typography.Text type="secondary">
-                  其中 {filtered.undecidedCount} 个岗位没有写
-                  {filtered.undecided.join("、")}，无法判断，已保留在结果里（宁可多给你看，
-                  也不误删）。
-                </Typography.Text>
-              )}
-              {filtered.unapplied.length > 0 && (
-                <Typography.Text type="danger">
-                  注意：{filtered.unapplied.join("、")}
-                  这条条件没能识别，本次没有生效——换个写法试试（例如「本科」「3-5 年」）。
-                </Typography.Text>
-              )}
-            </Space>
-          }
-        />
-      )}
-    </>
+    </div>
   );
 }

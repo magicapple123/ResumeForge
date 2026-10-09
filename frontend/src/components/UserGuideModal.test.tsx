@@ -93,9 +93,6 @@ describe("UserGuideModal", () => {
     // 用 getAllByText：「匹配度分析」在标签和说明里各出现一次，getByText 会因多匹配而报错。
     expect(screen.getAllByText(/匹配度分析/).length).toBeGreaterThan(0);
     expect(screen.getByText(/投递专用浏览器/)).toBeInTheDocument();
-    // 采集条件那一段的措辞：薪资 / 经验 / 学历以前标的是「未生效」，现在它们真的会生效
-    // （采集后按岗位字段筛掉不符合的），所以指南也必须跟着改口——**指南说错比不说更糟**。
-    expect(screen.getByText(/采集之后按岗位字段筛掉不符合的/)).toBeInTheDocument();
     // 采集结果进暂存区（而不是直接入库）是用户最容易误解的一步，必须在指南里写明。
     expect(screen.getByText(/不会直接进岗位广场/)).toBeInTheDocument();
   });
