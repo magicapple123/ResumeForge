@@ -347,3 +347,21 @@ def test_skill_file_path_cannot_break_out_of_its_prompt_bullet(db_session):
     assert stored_path.startswith("a.md")
 
 
+
+
+def test_preview_update_helpers_execute_their_delayed_imports(db_session):
+    """回归（RF-21 Pyright 扩面评估时发现）：previews.py 里三处延迟导入曾把相对
+    层级写成 ``...``（解析到 ``app.`` 顶层，而 claims/knowledge_service/reminder_service
+    都在 ``app.services`` 下），任何一次「更新台账 / 知识库 / 提醒」的预览都会以
+    ``ModuleNotFoundError: app.claims`` 崩掉——模块能导入、单测又没直接调过它们，
+    所以一直没炸出来。这里各调用一次，让延迟导入真的执行（id=0 查不到记录，
+    _update_preview 对 None 有兜底文案，断言只钉"可执行"这件事）。"""
+    from app.services.assistant_tools.previews import (
+        preview_update_claim,
+        preview_update_knowledge,
+        preview_update_reminder,
+    )
+
+    assert preview_update_claim(db_session, {"claim_id": 0, "title": "x"}).scope
+    assert preview_update_knowledge(db_session, {"knowledge_id": 0, "title": "x"}).scope
+    assert preview_update_reminder(db_session, {"reminder_id": 0, "title": "x"}).scope

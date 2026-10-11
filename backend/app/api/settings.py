@@ -19,6 +19,8 @@ from ..schemas.setting import (
     LLMConfigRecordOut,
     LLMModelsRequest,
     LLMModelsResult,
+    LLMSessionKeyIn,
+    LLMSessionKeyOut,
     LLMTestRequest,
     LLMTestResult,
     LLMThinkingRequest,
@@ -28,6 +30,8 @@ from ..schemas.setting import (
     SearchConfig,
     WebFormRelaxedModeSetting,
 )
+from ..services.api_key_crypto import ApiKeyEncryptionError
+from ..services.api_key_session import clear_session_key, session_key_configured, set_session_key
 from ..services.export_save_location import (
     FolderPickerUnavailable,
     pick_directory,
@@ -93,6 +97,8 @@ def write_llm_config_record(payload: LLMConfigRecordCreate, db: Session = Depend
         return save_llm_config_record(db, payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ApiKeyEncryptionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.delete("/llm/records/{record_id}", status_code=204)
@@ -128,7 +134,28 @@ def write_llm_config(payload: LLMConfig, db: Session = Depends(get_db)):
         saved = save_llm_config(db, payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ApiKeyEncryptionError as exc:
+        # DPAPI 失败：密钥未落盘（服务层在 commit 前抛出），显式告知而不是伪装成功。
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return mask_llm_config(db, saved)
+
+
+@router.get("/llm/session-key", response_model=LLMSessionKeyOut)
+def read_llm_session_key() -> LLMSessionKeyOut:
+    """「仅本会话使用」的临时密钥是否存在；密钥本体永不回传。"""
+    return LLMSessionKeyOut(configured=session_key_configured())
+
+
+@router.put("/llm/session-key", response_model=LLMSessionKeyOut)
+def write_llm_session_key(payload: LLMSessionKeyIn) -> LLMSessionKeyOut:
+    """记录仅本会话使用的密钥：只存进程内存，进程重启即失，不落 SQLite/日志/备份。"""
+    set_session_key(payload.api_key)
+    return LLMSessionKeyOut(configured=True)
+
+
+@router.delete("/llm/session-key", status_code=204)
+def delete_llm_session_key() -> None:
+    clear_session_key()
 
 
 @router.get("/search", response_model=SearchConfig)
@@ -320,3 +347,11 @@ async def test_llm(payload: LLMTestRequest, db: Session = Depends(get_db)):
         latency_ms=latency_ms,
         message=f"连接成功，模型回复「{reply.strip()[:30]}」",
     )
+
+
+@router.get("/backup-status")
+def read_backup_status(db: Session = Depends(get_db)) -> dict:
+    """当前数据集的自动备份保护摘要（RF-05）：是否被保护、最近成功、快照清单。"""
+    from ..services.data_backup.status import backup_status
+
+    return backup_status(db.get_bind())

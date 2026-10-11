@@ -1,0 +1,10 @@
+{
+  "case_id": "synthetic_001",
+  "output_text": "张伟\n求职意向：后端开发工程师\n\n工作经历：\n星辰科技 后端开发实习生（2024-07 至 2024-12）\n- 独立负责数据库运维与线上事故值班，完成订单服务的接口联调。\n\n项目经历：\n校园二手交易平台\n- 完成订单服务与消息通知的接口设计与联调。",
+  "meta": {
+    "prompt_version": "known-bad-v1",
+    "model": "handwritten",
+    "generated_at": "2026-10-10",
+    "expected_rules": ["boundary_violation"]
+  }
+}

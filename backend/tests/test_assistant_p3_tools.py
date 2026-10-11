@@ -34,7 +34,7 @@ LABELS_TSX = (
     / "features"
     / "assistant"
     / "components"
-    / "AssistantMessageContent.tsx"
+    / "MessageToolCalls.tsx"
 )
 
 # 分数红线：返回结构里这些键一律不许出现（rank 是按参考分排序派生的名次，同样算泄分）。

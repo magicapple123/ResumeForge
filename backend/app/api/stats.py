@@ -27,6 +27,14 @@ router = APIRouter(prefix="/api/stats", tags=["stats"])
 _LATEST_LIMIT = 5
 
 
+@router.get("/storage")
+def get_storage_stats(db: Session = Depends(get_db)) -> dict:
+    """各项本地目录的磁盘占用（RF-25）：只统计体积与文件数，不返回任何文件内容。"""
+    from ..services.storage_stats import storage_overview
+
+    return storage_overview(db.get_bind())
+
+
 @router.get("", response_model=Stats)
 def get_stats(db: Session = Depends(get_db)):
     week_ago = utcnow() - timedelta(days=7)
@@ -95,6 +103,14 @@ def get_stats(db: Session = Depends(get_db)):
         .filter(trash.live_only(Job), Job.status == JOB_STATUS_OPEN)
         .count(),
         resume_count=db.query(ResumeRecord).filter(trash.live_only(ResumeRecord)).count(),
+        # "第一份交付"进度用的两个总量：台账条目总数（含各核实状态的活跃行）与
+        # 关联了岗位的简历数。都排除回收站，与上面各计数的口径一致。
+        claim_count=db.query(ClaimRecord).filter(trash.live_only(ClaimRecord)).count(),
+        resume_with_job_count=(
+            db.query(ResumeRecord)
+            .filter(trash.live_only(ResumeRecord), ResumeRecord.job_id.isnot(None))
+            .count()
+        ),
         week_resume_count=db.query(ResumeRecord)
         .filter(trash.live_only(ResumeRecord), ResumeRecord.created_at >= week_ago)
         .count(),

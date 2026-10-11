@@ -1,0 +1,10 @@
+{
+  "case_id": "synthetic_045",
+  "output_text": "黄敏\n电话：13912345678\n邮箱：huangmin@163.com\n身份证号：110101200203074512\n求职意向：初中数学教师\n\n工作经历：\n启明教育 助教兼职（2025-03 至今）\n- 参与晚自习答疑与作业批改，完成教案设计相关练习。",
+  "meta": {
+    "prompt_version": "known-bad-v1",
+    "model": "handwritten",
+    "generated_at": "2026-10-10",
+    "expected_rules": ["privacy_leak"]
+  }
+}

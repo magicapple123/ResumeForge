@@ -17,7 +17,7 @@
 """
 from datetime import datetime, timedelta
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -80,6 +80,46 @@ SOURCE_LABELS = {
     SOURCE_RECOGNIZED: "识别导入",
 }
 
+# ===== ②′ 投递渠道（RF-18）：用户自己选的"这份工作从哪来的" =====
+# 与 ``source``（记录来源：这一行**怎么进系统的**）是两个维度，不许混用。
+# 未知是合法取值且是默认值：不知道就是不知道，宁可留空也不替用户编一个渠道。
+CHANNEL_UNKNOWN = "unknown"
+CHANNEL_REFERRAL = "referral"
+CHANNEL_WEBSITE = "official_website"
+CHANNEL_PLATFORM = "job_platform"
+CHANNEL_HEADHUNTER = "headhunter"
+CHANNEL_OTHER = "other"
+CHANNELS = (
+    CHANNEL_UNKNOWN,
+    CHANNEL_REFERRAL,
+    CHANNEL_WEBSITE,
+    CHANNEL_PLATFORM,
+    CHANNEL_HEADHUNTER,
+    CHANNEL_OTHER,
+)
+
+CHANNEL_LABELS = {
+    CHANNEL_UNKNOWN: "未知",
+    CHANNEL_REFERRAL: "内推",
+    CHANNEL_WEBSITE: "官网",
+    CHANNEL_PLATFORM: "招聘平台",
+    CHANNEL_HEADHUNTER: "猎头/中介",
+    CHANNEL_OTHER: "其他",
+}
+
+# ===== ②″ 状态变化事件的来源（RF-18）：谁写的这条事件 =====
+# ``user`` = 用户在表单里亲手改的；``system`` = 识别合并 / 投递台自动记录等程序写入。
+# 是否"用户确认"单独一列（``user_confirmed``）：识别导入虽然由程序落库，
+# 但经过了用户在确认页勾选，与全自动的投递台写入不是一回事。
+EVENT_SOURCE_USER = "user"
+EVENT_SOURCE_SYSTEM = "system"
+EVENT_SOURCES = (EVENT_SOURCE_USER, EVENT_SOURCE_SYSTEM)
+
+EVENT_SOURCE_LABELS = {
+    EVENT_SOURCE_USER: "用户手动",
+    EVENT_SOURCE_SYSTEM: "系统记录",
+}
+
 # ===== ③ 合并结论：让"这次识别改变了什么"能被如实回报 =====
 # 只有三种。没有"跳过"——用户取消勾选的条目根本不会进入请求，让服务层再去区分
 # "没被选中"和"选中了但没变化"只会把两件不同的事混成一个字段。
@@ -107,9 +147,17 @@ def resolve_status(current: str, incoming: str) -> str:
     - 其它情况：只有不比当前更早的阶段才采纳。乱序粘贴旧通知时保留较新的结论，
       调用方据此把这次识别标成「未改变」而不是当作更新。
     - 当前是「待确认」时任何明确状态都能覆盖它（包括已结束）。
+    - 当前已是「已结束」：这是**终态**，非拒信的通知一律不改写（RF-06）。已结束
+      不在 ``STATUS_RANK`` 里，是漏斗之外的另一条分支——没有比它"更晚"的阶段，
+      乱序旧回执更不可能把它复活。用户确要重开一条已结束的记录，走表单显式编辑
+      （``update_track``），那是可追溯的用户动作，不经过自动合并。
     """
     if incoming == STATUS_REJECTED:
         return incoming
+    if current == STATUS_REJECTED:
+        # 终态语义：拒信之后到来的任何非拒信通知（乱序回执、延迟推送）都不能
+        # 把这条记录拉回进行中的阶段。
+        return current
     if incoming not in STATUS_RANK:
         return current
     if current not in STATUS_RANK:
@@ -203,6 +251,12 @@ class ApplicationTrack(Base):
     resume_id: Mapped[int | None] = mapped_column(
         ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
     )
+    # 所用简历的标题快照（RF-17）：简历被删（resume_id 置 NULL）后仍能回答
+    # "当时投的是哪一版"。旧行/未关联为空串，界面如实标注「历史关联未知」。
+    resume_title: Mapped[str] = mapped_column(String(256), default="")
+    # 投递渠道（RF-18）：用户自选的"这份工作从哪来的"。默认未知——历史行一律未知，
+    # 不从任何现有字段推断。与 ``source``（记录来源）是两个维度。
+    channel: Mapped[str] = mapped_column(String(24), default=CHANNEL_UNKNOWN)
     source: Mapped[str] = mapped_column(String(16), default=SOURCE_MANUAL)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -212,9 +266,55 @@ class ApplicationTrack(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class ApplicationTrackEvent(Base):
+    """一次状态变化的留痕（RF-18）：真实时间线的最小单元。
+
+    **只对新增的状态变化写**：功能上线之前的旧记录没有历史可回填——从当前状态或
+    ``updated_at`` 反推"曾经到过哪一步"就是在编造历史，这里刻意不做。旧行没有事件，
+    分析侧据此如实标注覆盖率（见 ``services/track_events.py``）。
+
+    日期有两列、各管一件事：
+
+    - ``event_at``：落库时刻（naive UTC），永远存在，是"这事是什么时候被记录的"。
+    - ``status_date``：通知上写的日期 / 用户填的日期，**可能为空**。阶段耗时用
+      它来算（两列都有时才有资格参与"通知口径"的间隔），因为它代表业务上真实的
+      时间点；``event_at`` 只能代表"什么时候粘贴的"。
+
+    拒信也写事件：终态是时间线上真实发生过的一步，记录它**不会**抹掉之前到过的
+    阶段——事件是追加的，状态字段的合并规则（:func:`resolve_status`）管不了这里。
+    """
+
+    __tablename__ = "application_track_event"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 进度记录被彻底删除时事件跟着删（CASCADE）：孤儿事件对指标毫无意义。
+    track_id: Mapped[int] = mapped_column(
+        ForeignKey("application_track.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    event_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    status_date: Mapped[str] = mapped_column(String(16), default="")
+    source: Mapped[str] = mapped_column(String(16), default=EVENT_SOURCE_SYSTEM)
+    user_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    from_status: Mapped[str] = mapped_column(String(24), default="")
+    to_status: Mapped[str] = mapped_column(String(24), default="")
+
+
 __all__ = [
     "ACTIVE_STATUSES",
     "ApplicationTrack",
+    "ApplicationTrackEvent",
+    "CHANNELS",
+    "CHANNEL_HEADHUNTER",
+    "CHANNEL_LABELS",
+    "CHANNEL_OTHER",
+    "CHANNEL_PLATFORM",
+    "CHANNEL_REFERRAL",
+    "CHANNEL_UNKNOWN",
+    "CHANNEL_WEBSITE",
+    "EVENT_SOURCES",
+    "EVENT_SOURCE_LABELS",
+    "EVENT_SOURCE_SYSTEM",
+    "EVENT_SOURCE_USER",
     "MERGE_CREATED",
     "MERGE_LABELS",
     "MERGE_RESULTS",

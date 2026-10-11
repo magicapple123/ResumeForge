@@ -44,11 +44,13 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         page_limit=record.page_limit or 1,
         font_scale=record.font_scale or DEFAULT_FONT_SCALE,
         created_at=record.created_at,
+        parent_revision_id=record.parent_revision_id,
         content=ResumeContent.model_validate(record.content),
         warnings=record.warnings or [],
         parse_error=record.parse_error,
         rationale=record.rationale or "",
         coverage_notes=record.coverage_notes or [],
+        fact_annotations=record.fact_annotations or [],
     )
 
 

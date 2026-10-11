@@ -1,0 +1,89 @@
+{
+  "id": "synthetic_044",
+  "persona_type": "学生兼职",
+  "language": "中文",
+  "industry": "教育",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "user044@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "方圆",
+    "email": "user044@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "初中数学教师",
+    "summary": "在校学生，课余从事初中数学教师相关工作，兼顾学业与实践。",
+    "educations": [
+      {
+        "school": "星辰理工大学",
+        "major": "初中数学教师相关专业",
+        "degree": "本科",
+        "study_mode": "全日制",
+        "degree_type": "学士",
+        "start_date": "2023-09",
+        "end_date": "2027-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "春晖小学",
+        "role": "助教兼职",
+        "start_date": "2025-03",
+        "end_date": "至今",
+        "description": "参与晚自习答疑与作业批改，记录学生共性错题。"
+      }
+    ],
+    "campus_experiences": [
+      {
+        "organization": "学生会",
+        "role": "干事",
+        "start_date": "2023-10",
+        "end_date": "2025-06",
+        "description": "完成错题记录册与答疑安排表。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "板书与授课",
+        "level": "熟练"
+      },
+      {
+        "name": "教案设计",
+        "level": "掌握"
+      }
+    ]
+  },
+  "job_description": "岗位：初中数学教师（启明教育）\n职责：\n1. 负责初中数学课程的备课与授课；\n2. 完成作业批改与学情反馈，打磨教案设计与讲义；\n3. 参与教研活动并打磨讲义；\n4. 与家长保持定期沟通。\n要求：\n1. 师范类或数学相关专业本科及以上学历；\n2. 持有教师资格证；\n3. 表达清晰，有亲和力；\n4. 有授课经验者优先。\n",
+  "claims": [
+    {
+      "title": "课后答疑角组织参与经历",
+      "category": "项目经历",
+      "subject": "课后答疑角组织",
+      "source_fact": "在课后答疑角组织中参与，完成完成错题记录册与答疑安排表。",
+      "candidate_wording": "参与课后答疑角组织建设，完成教案设计相关任务",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "教案设计"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "板书与授课能力",
+      "category": "专业技能",
+      "subject": "板书与授课",
+      "source_fact": "在课程与项目实践中反复使用板书与授课，能独立完成常规任务。",
+      "candidate_wording": "熟悉板书与授课，能独立完成常规任务",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "板书与授课"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：学生兼职·中文·教育。常规路径样本。"
+}

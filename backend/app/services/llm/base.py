@@ -3,11 +3,30 @@
 新增模型提供商只需继承 BaseLLMProvider 并实现 chat / stream_chat，
 业务代码（简历生成等）只依赖本抽象，不感知具体协议。
 """
+import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
+import httpx
+
 from ...schemas.setting import LLMConfig
+from .usage import LLMUsage, build_usage
+
+
+def build_request_timeout(
+    config: LLMConfig, request_deadline_seconds: float | None
+) -> httpx.Timeout:
+    """两家 provider 共用的分项 timeout 构造（RF-14 §2.1.c）。
+
+    分项 read timeout 是"单请求不挂死"的**下限**保护（现状，保留）；总预算是整链
+    **上限**：``request_deadline_seconds`` 由调用方按所在 child 段剩余注入——deadline
+    只能收紧、不能放宽配置值。connect/write/pool 两家协议取同一组值。
+    """
+    read = config.timeout_seconds
+    if request_deadline_seconds is not None:
+        read = max(1.0, min(read, request_deadline_seconds))
+    return httpx.Timeout(connect=10.0, read=read, write=30.0, pool=10.0)
 
 
 class LLMError(Exception):
@@ -40,6 +59,39 @@ class BaseLLMProvider(ABC):
         # 请求级覆盖参数（如助手页选择的思考强度）：只作用于本次调用，不写回配置。
         # provider 负责按白名单过滤，避免覆盖 model/messages/stream 这些关键字段。
         self.request_overrides = dict(request_overrides or {})
+        # 最后一次调用的用量记录（RF-14 §2.2）：chat() 返回前写入；流式在**所有路径**
+        # 的 finally 中写入（中断也要有记录）。只保留最后一次调用，跨轮累计是调用方
+        # 责任。注意：测试假 Provider 可能不经本构造器、也从不写它——读取方必须容忍
+        # 属性缺失（用 getattr 兜底），缺用量展示「未知」。
+        self.last_usage: LLMUsage | None = None
+        # 请求级 read deadline（RF-14 §2.1.c）：调用方在发起前设置为"本次请求允许的
+        # read 上限秒数"（如格式修复段的 child 剩余），_timeout() 取
+        # min(配置值, 本值)——deadline 只能收紧、不能放宽配置值。None 表示未接预算。
+        # 调用方负责在 finally 中复位为 None（provider 实例不复用，复位是防御性纪律）。
+        self.request_deadline_seconds: float | None = None
+
+    def _deadline_remaining(self) -> float | None:
+        """本次请求的剩余预算秒数；未接预算时为 None（重试治理用它做"剩余不足不重试"）。"""
+        return self.request_deadline_seconds
+
+    def _record_usage(
+        self,
+        *,
+        started: float,
+        finish_reason: str,
+        prompt_tokens: int | None = None,
+        completion_tokens: int | None = None,
+        retries: int = 0,
+    ) -> None:
+        """写入最后一次调用的用量记录（``last_usage`` 约定见构造器注释）。"""
+        self.last_usage = build_usage(
+            self.config.model,
+            elapsed_ms=max(0, int((time.monotonic() - started) * 1000)),
+            finish_reason=finish_reason,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            retries=retries,
+        )
 
     @abstractmethod
     async def chat(self, messages: list[dict]) -> str:

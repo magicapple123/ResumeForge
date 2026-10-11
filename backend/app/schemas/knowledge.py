@@ -82,8 +82,38 @@ class KnowledgeOut(KnowledgeCreate):
     updated_at: datetime
 
 
+# 列表摘要的截断长度（RF-08）：正文最长 20 万字符，随列表下发等于把翻页拖成大响应。
+KNOWLEDGE_CONTENT_EXCERPT_CHARS = 200
+
+
+class KnowledgeEntrySummary(BaseModel):
+    """知识库列表行的摘要视图（RF-08 分页端点 ``GET /api/knowledge/page`` 专用）。
+
+    **不含 ``content`` 全文**：正文是 Markdown 长文（上限 20 万字符），列表只给
+    ``content_excerpt`` 截断摘要，全文走既有详情端点 ``GET /api/knowledge/{id}``。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    category: str
+    tags: list[str] = Field(default_factory=list)
+    source: str = ""
+    content_excerpt: str = Field(default="", max_length=KNOWLEDGE_CONTENT_EXCERPT_CHARS)
+    created_at: datetime
+    updated_at: datetime
+
+
+class KnowledgeTagsOut(BaseModel):
+    """``GET /api/knowledge/tags`` 的响应：全库标签下拉选项（去重、字典序）。"""
+
+    tags: list[str] = Field(default_factory=list)
+
+
 __all__ = [
     "KNOWLEDGE_CATEGORIES",
+    "KNOWLEDGE_CONTENT_EXCERPT_CHARS",
     "MAX_KNOWLEDGE_CATEGORY_CHARS",
     "MAX_KNOWLEDGE_CONTENT_CHARS",
     "MAX_KNOWLEDGE_SOURCE_CHARS",
@@ -91,6 +121,8 @@ __all__ = [
     "MAX_KNOWLEDGE_TAGS",
     "MAX_KNOWLEDGE_TITLE_CHARS",
     "KnowledgeCreate",
+    "KnowledgeEntrySummary",
     "KnowledgeOut",
+    "KnowledgeTagsOut",
     "KnowledgeUpdate",
 ]

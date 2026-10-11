@@ -226,37 +226,76 @@ def create_dataset(name: str, bind: Engine) -> dict[str, Any]:
 
 
 def _wait_for_idle(bind: Engine) -> None:
-    """等正在进行的请求把手里的连接还回池子。
+    """两段式排空（RF-03）：先等逻辑租约清零，再兜底等短请求把连接还回池子。
 
-    切换会换掉引擎：若此刻有请求（尤其是助手的 SSE 流）仍持有旧库连接，它后续打开的
-    会话会落到**新**数据集上，等于把这次的数据写进了别处。宁可让用户重试一次。
+    切换会换掉引擎：若此刻有任务（租约）或请求（连接池）仍停在旧库上，它后续打开
+    的会话会落到**新**数据集上，等于把这次的数据写进了别处。宁可让用户重试一次。
+    失败信息点名正在运行的任务（租约 owner），而不是一句笼统的"有请求"。
     """
+    from ..runtime import dataset_scope
+
     deadline = time.monotonic() + _DRAIN_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
-        if not getattr(bind.pool, "checkedout", lambda: 0)():
+        if dataset_scope.leases_pending() == 0 and not getattr(
+            bind.pool, "checkedout", lambda: 0
+        )():
             return
         time.sleep(0.1)
-    raise DatasetError("有正在进行的请求（例如 AI 生成中），请稍候再切换数据集", status_code=409)
+    owners = dataset_scope.lease_owners()
+    detail = "、".join(sorted(set(owners))) if owners else "例如 AI 生成中"
+    raise DatasetError(f"有正在进行的任务（{detail}），请稍候再切换数据集", status_code=409)
+
+
+def _preview_target(target: Path) -> None:
+    """目标库预检：用**临时引擎**确认它能打开并完成迁移；失败抛 409，原库不受影响。
+
+    预检引擎用完立即 dispose（Windows 文件句柄），随后 rebind 才能独占目标文件。
+    预检把迁移也跑完一遍：真正的 rebind 之后再跑是幂等的（alembic 已在 head）。
+    """
+    preview = database.build_engine(database.database_url_for(target))
+    try:
+        if is_unversioned_legacy_database(preview):
+            Base.metadata.create_all(bind=preview)
+            ensure_sqlite_columns(preview, SQLITE_REQUIRED_COLUMNS)
+        run_database_migrations(preview)
+    except Exception as exc:
+        raise DatasetError(f"目标数据集无法使用（预检失败）：{exc}", status_code=409) from exc
+    finally:
+        preview.dispose()
 
 
 def activate_dataset(dataset_id: str, bind: Engine) -> dict[str, Any]:
-    """把应用切换到指定数据集。"""
+    """把应用切换到指定数据集（RF-03：互斥 → 排空 → 预检 → 指针 → rebind → 发布）。
+
+    顺序是刻意的：**预检通过才写指针**——预检失败时指针与引擎都保持原值，原库
+    毫发无损；rebind 成功后才发布新身份，"检查空闲"与"换绑"之间放进新任务的
+    TOCTOU 由 switch_lock + 租约封死（切换持锁期间 ``acquire_lease`` 直接失败）。
+    """
     if dataset_id != MAIN_DATASET_ID and not is_valid_dataset_id(dataset_id):
         raise DatasetError("数据集标识无效")
     target = dataset_database_file(dataset_id)
     if not target.exists():
         raise DatasetError("数据集文件已不存在，请刷新列表后重试", status_code=404)
 
-    _wait_for_idle(bind)
-    write_active_dataset_id(dataset_id)
-    new_engine = database.rebind(target)
-    # 数据集可能来自更早的版本：建表/补列/迁移要在这里补跑，否则旧表缺列会直接 500。
-    if is_unversioned_legacy_database(new_engine):
-        Base.metadata.create_all(bind=new_engine)
-        ensure_sqlite_columns(new_engine, SQLITE_REQUIRED_COLUMNS)
-    run_database_migrations(new_engine)
-    cleanup_temp_directories(new_engine)
+    from ..runtime import dataset_scope
 
+    with dataset_scope.switch_lock():
+        _wait_for_idle(bind)
+        _preview_target(target)
+        write_active_dataset_id(dataset_id)
+        new_engine = database.rebind(target)
+        # 数据集可能来自更早的版本：建表/补列/迁移要在这里补跑，否则旧表缺列会直接 500。
+        if is_unversioned_legacy_database(new_engine):
+            Base.metadata.create_all(bind=new_engine)
+            ensure_sqlite_columns(new_engine, SQLITE_REQUIRED_COLUMNS)
+        run_database_migrations(new_engine)
+        cleanup_temp_directories(new_engine)
+        dataset_scope.publish_switch(dataset_id, new_engine)
+
+    # 新数据集的备份节奏独立计算：切换后立即唤醒备份调度做一次到期检查（RF-05）。
+    from .data_backup import scheduler as auto_backup_scheduler
+
+    auto_backup_scheduler.trigger_check()
     logger.info("已切换到数据集 id=%s path=%s", dataset_id, target.name)
     return _describe(dataset_id, target)
 

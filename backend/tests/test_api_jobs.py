@@ -339,3 +339,30 @@ def test_a_confirmed_claim_is_no_longer_a_todo(client):
     body = client.get("/api/stats").json()
     assert body["pending_claim_count"] == 0
     assert body["pending_claims"] == []
+
+
+def test_stats_reports_activation_totals(client, db_session):
+    """"第一份交付"进度条用的两个总量口径：claim_count 是台账**总数**
+    （含已确认/待确认等全部活跃态，只有回收站里的不算）；
+    resume_with_job_count 是 job_id 非空的简历数。都排除回收站。"""
+    from app.models.claim import VERIFICATION_CONFIRMED, VERIFICATION_PENDING, ClaimRecord
+    from app.models.resume import ResumeRecord
+    from app.services import trash
+
+    job = Job(title="目标岗位", company="示例公司")
+    db_session.add(job)
+    db_session.flush()
+
+    db_session.add(ClaimRecord(title="待确认", source_fact="x", verification_status=VERIFICATION_PENDING))
+    db_session.add(ClaimRecord(title="已确认", source_fact="x", verification_status=VERIFICATION_CONFIRMED))
+    db_session.add(ResumeRecord(title="无岗位简历", content={}))
+    db_session.add(ResumeRecord(title="关联岗位简历", content={}, job_id=job.id))
+    doomed = ResumeRecord(title="回收站里的简历", content={}, job_id=job.id)
+    db_session.add(doomed)
+    db_session.commit()
+    trash.soft_delete(db_session, "resume", doomed)
+    db_session.commit()
+
+    body = client.get("/api/stats").json()
+    assert body["claim_count"] == 2
+    assert body["resume_with_job_count"] == 1

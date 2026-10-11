@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.material import CANDIDATE_JOB_STATUSES
+from ..schemas.common import Page
 from ..schemas.material import (
     CandidateJobBulkImportOut,
     CandidateJobBulkImportRequest,
@@ -22,6 +23,7 @@ from ..services.candidate_jobs import (
     delete_candidate_job,
     import_candidates,
     list_candidate_jobs,
+    list_candidate_jobs_page,
     mark_candidate_imported,
     update_candidate_job,
 )
@@ -49,6 +51,19 @@ def _save_image_copies(db: Session, candidate_id: int, images: list[str]) -> Non
             logger.warning("备选岗位截图副本保存失败 candidate_job:%s", candidate_id, exc_info=True)
 
 
+def _parse_collect_task_ids(raw: str) -> list[int]:
+    """把逗号分隔的批次 id 串解析成**去重保序**的正整数列表；无效输入统一 422。"""
+    if not raw.strip():
+        return []
+    try:
+        parsed = [int(value) for value in raw.split(",") if value.strip()]
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="采集批次编号无效") from exc
+    if any(value < 1 for value in parsed):
+        raise HTTPException(status_code=422, detail="采集批次编号无效")
+    return list(dict.fromkeys(parsed))
+
+
 @router.get("", response_model=list[CandidateJobOut])
 def read_candidate_jobs(
     status: str = Query(default=""),
@@ -64,22 +79,45 @@ def read_candidate_jobs(
     """
     if status and status not in CANDIDATE_JOB_STATUSES:
         raise HTTPException(status_code=422, detail="无效的备选岗位状态")
-    parsed_ids: list[int] = []
-    if collect_task_ids.strip():
-        try:
-            parsed_ids = [int(value) for value in collect_task_ids.split(",") if value.strip()]
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail="采集批次编号无效") from exc
-        if any(value < 1 for value in parsed_ids):
-            raise HTTPException(status_code=422, detail="采集批次编号无效")
     return list_candidate_jobs(
         db,
         status=status,
         keyword=keyword,
         collect_task_id=collect_task_id,
-        collect_task_ids=list(dict.fromkeys(parsed_ids)),
+        collect_task_ids=_parse_collect_task_ids(collect_task_ids),
         limit=limit,
     )
+
+
+@router.get("/page", response_model=Page[CandidateJobOut])
+def read_candidate_jobs_page(
+    status: str = Query(default=""),
+    keyword: str = Query(default=""),
+    collect_task_id: int | None = Query(default=None, ge=1),
+    collect_task_ids: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """分页列出备选岗位（RF-08）：过滤与排序与旧列表端点完全一致。
+
+    旧端点 ``GET /api/candidate-jobs`` 给 MAX_CANDIDATE_LIST（300）兜底——那是"待处理
+    清单不翻页"的取舍；本端点让长期累积的历史候选**仍然全部可达**。**声明在
+    ``/{candidate_id}`` 之前**：字面量段必须排在参数段前面，否则 "page" 会被当成
+    candidate_id 去解析。
+    """
+    if status and status not in CANDIDATE_JOB_STATUSES:
+        raise HTTPException(status_code=422, detail="无效的备选岗位状态")
+    items, total = list_candidate_jobs_page(
+        db,
+        status=status,
+        keyword=keyword,
+        collect_task_id=collect_task_id,
+        collect_task_ids=_parse_collect_task_ids(collect_task_ids),
+        page=page,
+        page_size=page_size,
+    )
+    return Page(items=items, total=total)
 
 
 @router.post("", response_model=CandidateJobOut, status_code=201)

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "id": "apply_flow_new_tab_adopt",
+  "exercise": "fill_and_submit",
+  "note": "聊天页开在新标签页：点击后收养新出现的聊天 tab 并切换过去继续填写发送；点击前已有的标签页绝不收养。",
+  "expectations": [
+    {"marker": "rf:entry-rect", "states": [
+      {"found": true, "matched": 1, "label": "继续沟通", "x": 500.0, "y": 200.0, "width": 120.0, "height": 40.0, "url": "https://www.zhipin.com/job_detail/new.html", "title": "岗位详情"}
+    ]},
+    {"marker": "rf:chat-state", "states": [
+      {"on_chat": false, "input_found": false, "found": false, "kind": "", "url": "https://www.zhipin.com/job_detail/new.html", "title": "岗位详情"},
+      {"on_chat": false, "input_found": false, "found": false, "kind": "", "url": "https://www.zhipin.com/job_detail/new.html", "title": "岗位详情"},
+      {"on_chat": true, "input_found": true, "found": true, "kind": "contenteditable", "position": "后端开发", "name": "示例先生", "url": "https://www.zhipin.com/web/geek/chat", "title": "聊天"}
+    ]},
+    {"marker": "rf:fill-greeting", "states": [{"ok": true, "value": "您好，我对这个岗位很感兴趣"}]},
+    {"marker": "rf:send-rect", "states": [
+      {"found": true, "disabled": false, "matched": 1, "label": "发送", "x": 900.0, "y": 700.0, "width": 60.0, "height": 36.0, "url": "https://www.zhipin.com/web/geek/chat", "title": "聊天"}
+    ]},
+    {"marker": "rf:submit-state", "states": [
+      {"success": false, "matched": 0, "url": "https://www.zhipin.com/web/geek/chat", "title": "聊天"},
+      {"success": true, "sent_message": true, "matched": 1, "url": "https://www.zhipin.com/web/geek/chat", "title": "聊天"}
+    ]}
+  ],
+  "targets": {
+    "before_click": [],
+    "after_click": [
+      {"type": "page", "id": "chat-tab-1", "url": "https://www.zhipin.com/web/geek/chat"}
+    ]
+  },
+  "expected_outcome": {"success": true, "greeting_sent": "您好，我对这个岗位很感兴趣"},
+  "expected_mouse_points": [[500.0, 200.0], [900.0, 700.0]],
+  "expected_switch_targets": ["chat-tab-1"]
+}

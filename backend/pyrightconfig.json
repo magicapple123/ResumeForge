@@ -1,9 +1,13 @@
 {
   // 渐进类型检查（工程师评审 P1-4）：先钉住类型边界最清晰的两层。
   // 新增代码按 basic 通过；其余子目录在存量类型注解补齐后逐个加进 include。
+  // RF-21 评估（2026-10-11）：app/runtime 试跑 0 错误，直接纳入；services/llm
+  // 3 错、services/assistant_tools 32 错（集中在 reportArgumentType 的 None 收窄），
+  // 扩面需先修存量，见 deliverables 的 RF-21 交付报告。
   "include": [
     "app/models",
-    "app/schemas"
+    "app/schemas",
+    "app/runtime"
   ],
   "typeCheckingMode": "basic",
   "pythonVersion": "3.11",

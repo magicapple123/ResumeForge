@@ -45,6 +45,7 @@ from ..services.conversation_export import (
 from ..services.feature_catalog import build_capability_map
 from ..services.llm import create_provider
 from ..services.materials import create_material as create_material_record
+from ..services.product_knowledge import build_platform_note
 from ..services.search import aggregate_search
 from ..services.settings_service import (
     get_assistant_relaxed_mode,
@@ -170,6 +171,9 @@ def _system_prompt(
     # 不必再改这里的装配顺序或手写提示词。
     parts = [
         base,
+        # 启动/升级/平台支持事实从 product_knowledge 单一来源取：改口径只动那份
+        # 快照，提示词正文（assistant_system.md）不重复维护一份会漂移的副本。
+        build_platform_note(),
         build_capability_map(),
         _web_search_addendum(fetch_pages) if web_search else "",
         _RELAXED_MODE_NOTE if relaxed else "",
@@ -435,8 +439,6 @@ async def send_message(
             # 多来源聚合（Bing + DuckDuckGo + 可选自建 SearXNG），按设置决定是否抓正文。
             search_web_fn=lambda query: aggregate_search(query, search_config),
             quoted=quoted_snapshot,
-            fetch_pages=search_config.fetch_pages,
-            relaxed=relaxed_mode,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

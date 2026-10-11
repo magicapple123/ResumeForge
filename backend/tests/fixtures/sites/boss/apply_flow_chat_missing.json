@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "apply_flow_chat_missing",
+  "exercise": "fill_and_submit",
+  "note": "点击入口后聊天页输入框始终不出现：超时报 selector_invalid（而不是误报成功），且绝不点到发送。",
+  "expectations": [
+    {"marker": "rf:entry-rect", "states": [
+      {"found": true, "matched": 1, "label": "继续沟通", "x": 500.0, "y": 200.0, "width": 120.0, "height": 40.0, "url": "https://www.zhipin.com/job_detail/new.html", "title": "岗位详情"}
+    ]},
+    {"marker": "rf:chat-state", "states": [
+      {"on_chat": false, "input_found": false, "found": false, "kind": "", "url": "https://www.zhipin.com/job_detail/new.html", "title": "岗位详情"}
+    ]}
+  ],
+  "expected_failure": {"category": "selector_invalid", "detail_contains": "聊天页输入框"},
+  "expected_mouse_points": [[500.0, 200.0]]
+}

@@ -98,6 +98,57 @@ class MaterialOut(MaterialCreate):
     updated_at: datetime
 
 
+class MaterialFileSummary(BaseModel):
+    """列表用的附件摘要：只要元信息，**不带 data_url 与提取文字**。
+
+    一份资料的图片 data_url 单个上限就是 4 MB、文字附件各 10 万字符——把它们塞进
+    列表响应会让"打开资料箱"随附件总量线性变重，而列表卡片只显示"几个附件"，
+    详情抽屉才需要图片预览与附件全文（详情接口按需取）。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str = ""
+    mime_type: str = ""
+    size_bytes: int = 0
+    has_image: bool = False
+    text_length: int = 0
+
+    @model_validator(mode="before")
+    @classmethod
+    def from_stored_dict(cls, data: object) -> object:
+        """数据库里 files 是原始 dict 列表：在这里摘出元信息、丢掉大字段。"""
+        if isinstance(data, dict):
+            return {
+                "name": data.get("name", ""),
+                "mime_type": data.get("mime_type", ""),
+                "size_bytes": data.get("size_bytes", 0) or 0,
+                "has_image": bool(data.get("data_url")),
+                "text_length": len(str(data.get("text") or "")),
+            }
+        return data
+
+
+class MaterialSummary(BaseModel):
+    """列表视图（``GET /api/materials``）：与 MaterialOut 的差别只在 files。
+
+    正文 content 保留全量：上限 10 万字符、卡片直接用它做三行预览，且编辑预填
+    也要它；真正的体积大头（附件 data_url / 附件文字）只在详情接口出现。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str = ""
+    category: str = ""
+    content: str = ""
+    url: str = ""
+    note: str = ""
+    files: list[MaterialFileSummary] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
 class CandidateJobCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

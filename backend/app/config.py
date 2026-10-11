@@ -56,12 +56,46 @@ class Settings(BaseSettings):
     # （如测试）用环境变量 LOG_FILE_ENABLED=false 关闭。
     log_level: str = "INFO"
     log_file_enabled: bool = True
+    # 可选：日志按 JSON 行输出（控制台与文件 handler 共用）。默认关闭，保持
+    # 人类可读的现行格式逐字节不变；开启后每行为 time/level/logger/message/
+    # task_id/dataset_id/request_id 等结构化字段，便于机器采集（RF-20）。
+    log_json_format: bool = False
 
     # 自动备份：启动后在后台检查"距上次自动备份是否已到间隔"，到期就滚动快照一份
     # 数据库并只保留最近 N 份。手动导出的备份包不受影响；全部可用环境变量调整。
+    # check_seconds 是常驻调度线程的检查周期（RF-05：长期不重启也会到期检查，
+    # 失败按 1h/6h/24h 退避重试，不再等满整个成功间隔）。
     auto_backup_enabled: bool = True
     auto_backup_interval_days: int = Field(default=7, ge=1, le=365)
     auto_backup_keep: int = Field(default=5, ge=1, le=50)
+    auto_backup_check_seconds: int = Field(default=21600, ge=60, le=604800)
+
+    # 简历生成任务的总预算（秒）：覆盖从模型流式输出到结果落库的全程，到期即断流
+    # 收尾为 failed，防止模型端挂起时任务无限占用生成入口（RF-02）。
+    resume_generate_budget_seconds: int = Field(default=600, ge=1, le=86400)
+
+    # 求职助手一次回复的整链预算（秒）：覆盖全部工具轮次与模型流式输出，到期即在
+    # 下一个事件边界收尾为 error（RF-14 §2.1.b）。运行中的工具不强制中断（协作式，
+    # 与 RF-02 同一约定）；它只防"挂死/无限拖"，不做用户取消语义。
+    assistant_stream_budget_seconds: int = Field(default=600, ge=1, le=86400)
+
+    # 可选：OpenAI 兼容流式请求发送 stream_options.include_usage 以获取 token 用量。
+    # 该开关**会改变默认请求体**，默认关闭（RF-14 §2.2：默认路径请求体逐字节不变的
+    # 纪律，与思考参数同一条）；关闭时只读取服务商自带的 usage 帧。
+    llm_stream_include_usage: bool = False
+
+    # 可选：token 估算遥测（RF-14 §2.5）。默认关闭——现状字符口径完全不变；开启后
+    # 只写 estimated_* 命名的遥测字段，不改任何请求体、不作为截断依据（按 token 截断
+    # 属于 RF-13/RF-17 的产品决策）。
+    llm_token_estimate_enabled: bool = False
+
+    # 应用内更新允许的发布源主机名（英文逗号分隔）。下载包、checksum 与重定向的
+    # **每一跳**都必须命中这里的主机或其子域，否则在发出请求前就拒绝（RF-26 §12.5）。
+    # 默认只放行 GitHub Releases 发行链上的域名；自托管发行源在这里追加。
+    update_allowed_hosts: str = (
+        "github.com,objects.githubusercontent.com,release-assets.githubusercontent.com,"
+        "codeload.github.com,api.github.com"
+    )
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
@@ -86,6 +120,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def update_allowed_host_list(self) -> list[str]:
+        return [host.strip().casefold() for host in self.update_allowed_hosts.split(",") if host.strip()]
 
 
 @lru_cache

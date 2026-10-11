@@ -3,6 +3,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from .authorization import WritePreview
 
 
 @dataclass
@@ -38,6 +44,10 @@ class Tool:
     # 但"把 writes 标错"仍要人 review 才能发现——这个字段只是把风险从测试挪到注册处，
     # 并没有消除。read/list/get 类工具一律不设（默认 False）。
     writes: bool = False
+    # 写入预览（RF-01）：只读复刻 handler 的写入意图（目标/字段差异/影响范围），
+    # **绝不提前执行写入**。writes=True 的工具必须提供（守卫测试钉住）；用户未同意
+    # 写入时，执行层据此生成待确认提案而不是直接跑 handler。
+    preview: Callable[[Session, dict], WritePreview] | None = field(default=None, repr=False)
 
 
 _WEB_SEARCH_TOOL_NAME = "web_search"

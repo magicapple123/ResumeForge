@@ -10,8 +10,10 @@ docx/txt 是 R-16 新增的两个渲染器（Word 复用 ``ResumeLayout``，纯�
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from ..schemas.resume import ResumeContent
 from .docx_exporter import build_resume_docx
@@ -210,11 +212,71 @@ def build_export(
     )
 
 
+@dataclass(frozen=True)
+class ExportDelivery:
+    """带交付标识的导出产物（RF-16）：管线产物 + 不可变交付哈希。
+
+    ``build_export`` 的**并列**出口——既有函数的签名与返回完全不变，现有调用方零破坏；
+    需要「交付记录」语义（内容指纹 + 来源 + 渲染配置指纹）的调用方改走本函数。
+    交付记录落库属 RF-17，本批只提供纯函数与测试，不改 API 响应与数据库。
+    """
+
+    artifact: ExportArtifact
+    content_sha256: str
+    source_resume_id: int | None = None
+    rendered_config_sha256: str = ""
+
+
+def render_config_fingerprint(request: ExportRequest, context: RenderContext) -> str:
+    """把「影响渲染结果」的全部输入序列化成稳定 sha256，用于交付血缘比对。
+
+    覆盖格式、水印、脱敏选项与**生效后**的版式参数（``build_export`` 的覆盖规则：
+    请求显式给出的 ``page_limit`` / ``font_scale`` / ``margin_mm`` 优先于记录值），
+    以及解析后的模板上下文。序列化用排序键的紧凑 JSON，保证同一配置稳定出同一指纹。
+    """
+    payload = {
+        "format": request.format,
+        "watermark": request.watermark,
+        "redact": request.redact,
+        "redact_options": asdict(request.redact_options) if request.redact_options else None,
+        "margin_mm": request.margin_mm,
+        "font_scale": request.font_scale or context.font_scale,
+        "page_limit": request.page_limit if request.page_limit is not None else context.page_limit,
+        "include_photo": request.include_photo,
+        "template": context.template,
+        "template_html": context.template_html,
+        "style_config": context.style_config or {},
+        "format_config": context.format_config or {},
+    }
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def build_export_delivery(
+    request: ExportRequest,
+    resume: ResumeContent,
+    context: RenderContext,
+    *,
+    source_resume_id: int | None = None,
+) -> ExportDelivery:
+    """导出并附带交付标识：内容 sha256、来源简历 ID、渲染配置指纹。"""
+    artifact = build_export(request, resume, context)
+    return ExportDelivery(
+        artifact=artifact,
+        content_sha256=hashlib.sha256(artifact.content).hexdigest(),
+        source_resume_id=source_resume_id,
+        rendered_config_sha256=render_config_fingerprint(request, context),
+    )
+
+
 __all__ = [
     "ExportArtifact",
+    "ExportDelivery",
     "ExportRequest",
     "FORMAT_RENDERERS",
     "RenderContext",
     "RenderedArtifact",
     "build_export",
+    "build_export_delivery",
+    "render_config_fingerprint",
 ]

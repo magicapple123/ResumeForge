@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.material import MATERIAL_CATEGORIES
-from ..schemas.material import MaterialCreate, MaterialOut, MaterialUpdate
+from ..schemas.material import MaterialCreate, MaterialOut, MaterialSummary, MaterialUpdate
 from ..services.materials import (
     create_material,
     delete_material,
@@ -43,12 +43,13 @@ def _save_file_copies(db: Session, material) -> None:
         logger.warning("资料附件磁盘副本保存失败 material:%s", material.id, exc_info=True)
 
 
-@router.get("", response_model=list[MaterialOut])
+@router.get("", response_model=list[MaterialSummary])
 def read_materials(
     keyword: str = Query(default=""),
     category: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
+    """列表只带附件元信息（RF-25）：不带 data_url 与附件文字，详情走 `/{id}`。"""
     return list_materials(db, keyword=keyword, category=category)
 
 

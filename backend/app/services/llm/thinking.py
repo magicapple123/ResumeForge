@@ -208,7 +208,12 @@ _TABLE: tuple[_VendorRule, ...] = (
 )
 
 
-def _host_of(base_url: str) -> str:
+def host_of(base_url: str) -> str:
+    """从 Base URL 取小写主机名；非法地址返回空串。
+
+    （RF-14 §2.3：从私有 ``_host_of`` 提取为可复用纯函数，供 capabilities 的能力表
+    做同构匹配；行为零变化。）
+    """
     try:
         return (urlsplit(str(base_url or "")).hostname or "").casefold()
     except ValueError:
@@ -245,7 +250,7 @@ def resolve_style(config: LLMConfig) -> str:
 
 
 def _match_rule(config: LLMConfig) -> _VendorRule | None:
-    host = _host_of(config.base_url)
+    host = host_of(config.base_url)
     model = str(config.model or "").strip().casefold()
     for rule in _TABLE:
         if rule.host and rule.host not in host:
@@ -429,6 +434,7 @@ __all__ = [
     "ThinkingProbe",
     "ThinkingSupport",
     "effort_budget",
+    "host_of",
     "normalize_effort",
     "probe_thinking",
     "resolve_style",

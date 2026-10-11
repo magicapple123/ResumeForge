@@ -1,0 +1,105 @@
+{
+  "id": "synthetic_015",
+  "persona_type": "学生兼职",
+  "language": "中文",
+  "industry": "IT/互联网",
+  "adversarial_tags": [
+    "pending_placeholder"
+  ],
+  "privacy_placeholders": [
+    "13800138000",
+    "user015@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "何静",
+    "email": "user015@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "后端开发工程师",
+    "phone": "13800138000",
+    "summary": "在校学生，课余从事后端开发工程师相关工作，兼顾学业与实践。",
+    "educations": [
+      {
+        "school": "星辰理工大学",
+        "major": "后端开发工程师相关专业",
+        "degree": "本科",
+        "study_mode": "全日制",
+        "degree_type": "学士",
+        "start_date": "2023-09",
+        "end_date": "2027-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "极光软件",
+        "role": "后端开发实习生",
+        "start_date": "2025-03",
+        "end_date": "至今",
+        "description": "参与订单模块的接口开发与自测，配合测试完成回归。（业绩数据【待补】）"
+      }
+    ],
+    "campus_experiences": [
+      {
+        "organization": "学生会",
+        "role": "干事",
+        "start_date": "2023-10",
+        "end_date": "2025-06",
+        "description": "完成订单服务与消息通知的接口设计与联调。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "Python",
+        "level": "熟练"
+      },
+      {
+        "name": "MySQL",
+        "level": "掌握"
+      }
+    ]
+  },
+  "job_description": "岗位：后端开发工程师（星辰科技）\n职责：\n1. 负责业务服务端接口的设计、开发与维护；\n2. 参与订单服务、支付等核心链路的技术方案评审；\n3. 与前端、测试协作完成功能交付与线上问题排查；\n4. 参与服务的性能优化与稳定性建设。\n要求：\n1. 本科及以上学历，计算机相关专业；\n2. 熟悉 Python 或 Go，了解 MySQL、Redis；\n3. 有良好的沟通能力与代码习惯；\n4. 有实习或项目经验者优先。\n",
+  "claims": [
+    {
+      "title": "校园二手交易平台参与经历",
+      "category": "项目经历",
+      "subject": "校园二手交易平台",
+      "source_fact": "在校园二手交易平台中项目负责人，完成完成订单服务与消息通知的接口设计与联调。",
+      "candidate_wording": "参与校园二手交易平台建设，完成订单服务相关任务",
+      "responsibility_level": "项目负责人",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "订单服务"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "Python能力",
+      "category": "专业技能",
+      "subject": "Python",
+      "source_fact": "在课程与项目实践中反复使用Python，能独立完成常规任务。",
+      "candidate_wording": "熟悉Python，能独立完成常规任务",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "Python"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "业绩数据待核实",
+      "category": "实习/工作",
+      "subject": "极光软件",
+      "source_fact": "该段经历的量化业绩【待补】，需向带教同事确认后再写入简历。",
+      "candidate_wording": "完成【待补】项流程优化（待确认）",
+      "responsibility_level": "参与",
+      "verification_status": "待确认",
+      "boundary": "",
+      "key_terms": [],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：学生兼职·中文·IT/互联网。对抗维度：pending_placeholder。"
+}

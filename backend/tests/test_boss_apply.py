@@ -16,7 +16,7 @@ from app.models.apply import (
     FAILURE_GREETING_MISSING,
     FAILURE_SELECTOR_INVALID,
 )
-from app.services.browser.cdp_client import CdpClient, CdpError
+from app.services.browser.cdp_client import CdpError
 from app.services.browser.page_ready import ReadyWait
 from app.services.sites.base import SiteFailure
 from app.services.sites.boss import BossAdapter
@@ -27,6 +27,11 @@ from app.services.sites.boss_apply import (
     _fill_greeting_script,
     _send_rect_script,
 )
+from site_contract_support import ScriptedSiteClient
+
+# ``MarkerClient`` 已泛化进 site_contract_support.ScriptedSiteClient（RF-19 契约测试基建）；
+# 这里以别名引用保持本文件与 test_boss_apply_dialog.py 的既有写法零变化。
+MarkerClient = ScriptedSiteClient
 
 # **两档预算，别混用**：
 #
@@ -41,53 +46,6 @@ READY_WAIT = ReadyWait(timeout=2.0, poll_interval=0.001)
 JOB_URL = "https://www.zhipin.com/job_detail/new.html"
 CHAT_URL = "https://www.zhipin.com/web/geek/chat"
 GREETING = "您好，我对这个岗位很感兴趣"
-
-
-class MarkerClient(CdpClient):
-    """按 JS 注释 marker 返回脚本结果；send() 记录可信输入事件。"""
-
-    def __init__(self, responses):
-        self.responses = {
-            marker: list(value) if isinstance(value, list) else [value]
-            for marker, value in responses.items()
-        }
-        self.expressions: list[str] = []
-        self.sends: list[tuple[str, dict]] = []
-
-    def list_targets(self):
-        return []
-
-    def new_tab(self, url: str = "about:blank") -> str:
-        return "tab"
-
-    def navigate(self, url: str, *, timeout=None):
-        return {}
-
-    def send(self, method, params=None, *, timeout=None):
-        self.sends.append((method, params or {}))
-        return {}
-
-    def evaluate(self, expression, *, timeout=None):
-        self.expressions.append(expression)
-        for marker, values in self.responses.items():
-            if marker in expression:
-                if len(values) > 1:
-                    return values.pop(0)
-                return values[0]
-        return None
-
-    def close(self):
-        return None
-
-    def mouse_events(self) -> list[tuple[str, float, float]]:
-        return [
-            (params["type"], float(params["x"]), float(params["y"]))
-            for method, params in self.sends
-            if method == "Input.dispatchMouseEvent"
-        ]
-
-    def pressed_points(self) -> list[tuple[float, float]]:
-        return [(x, y) for (kind, x, y) in self.mouse_events() if kind == "mousePressed"]
 
 
 def _entry_rect(**overrides):

@@ -1,0 +1,89 @@
+{
+  "id": "synthetic_039",
+  "persona_type": "转行",
+  "language": "中文",
+  "industry": "医疗",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "13800138000",
+    "user039@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "郭涛",
+    "email": "user039@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "护理专员",
+    "phone": "13800138000",
+    "summary": "从医药代表助理转入护理专员方向，已完成相关技能学习与小项目实践。",
+    "educations": [
+      {
+        "school": "临江职业学院",
+        "major": "医药代表助理相关专业",
+        "degree": "专科",
+        "study_mode": "全日制",
+        "degree_type": "",
+        "start_date": "2013-09",
+        "end_date": "2016-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "济世康复医院",
+        "role": "医药代表助理",
+        "start_date": "2016-07",
+        "end_date": "2024-06",
+        "description": "负责学术会议物料准备与客户拜访预约。"
+      },
+      {
+        "company": "惠民制药",
+        "role": "护理专员",
+        "start_date": "2024-07",
+        "end_date": "至今",
+        "description": "参与病区基础护理工作，协助完成生命体征测量与记录。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "基础护理操作",
+        "level": "熟练"
+      },
+      {
+        "name": "健康宣教",
+        "level": "掌握"
+      }
+    ]
+  },
+  "job_description": "岗位：护理专员（康宁医疗集团）\n职责：\n1. 负责患者基础护理操作与病情观察记录；\n2. 协助完成护理文书书写与交接班；\n3. 参与健康宣教活动的组织与执行；\n4. 配合护士长完成病区物资管理。\n要求：\n1. 护理学专业，持有护士执业资格；\n2. 沟通耐心，服务意识强；\n3. 能适应轮班安排；\n4. 有实习经历者优先。\n",
+  "claims": [
+    {
+      "title": "社区慢病随访支持项目参与经历",
+      "category": "项目经历",
+      "subject": "社区慢病随访支持项目",
+      "source_fact": "在社区慢病随访支持项目中项目负责人，完成完成随访记录归档与宣教手册排版。",
+      "candidate_wording": "参与社区慢病随访支持项目建设，完成护理文书相关任务",
+      "responsibility_level": "项目负责人",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "护理文书"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "基础护理操作能力",
+      "category": "专业技能",
+      "subject": "基础护理操作",
+      "source_fact": "在课程与项目实践中反复使用基础护理操作，能独立完成常规任务。",
+      "candidate_wording": "熟悉基础护理操作，能独立完成常规任务",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "基础护理操作"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：转行·中文·医疗。常规路径样本。"
+}

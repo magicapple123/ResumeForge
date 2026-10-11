@@ -3,13 +3,16 @@ from __future__ import annotations
 
 import logging
 import random
+import time
 from collections.abc import Callable
 from typing import Any
 
 from ...models.apply import (
     FAILURE_CAPTCHA_REQUIRED,
     FAILURE_NETWORK_TIMEOUT,
+    FAILURE_PROFILE_INSUFFICIENT,
     FAILURE_SITE_UNSUPPORTED,
+    FAILURE_UNCONFIRMED,
     FAILURE_UNKNOWN,
     ITEM_STATUS_FAILED,
     ITEM_STATUS_RUNNING,
@@ -34,7 +37,7 @@ from ...models.apply import (
 from ...models.job import Job
 from ...models.profile import utcnow
 from ...schemas.apply import ApplyConfigIn
-from .. import tracker
+from .. import diagnostics, tracker
 from ..browser.cdp_client import CdpClient, CdpError
 from ..sites.base import SiteFailure
 from ..sites.registry import get_registry
@@ -43,7 +46,15 @@ logger = logging.getLogger(__name__)
 
 
 class ItemSkip(Exception):
-    """单个条目的软跳过，不计失败且不触发熔断。"""
+    """单个条目的软跳过，不计失败且不触发熔断。
+
+    ``category`` 可选：给出时写入条目的 ``failure_category``（状态仍是 ``skipped``），
+    让"为什么跳过"有机器可读的分类（如 ``profile_insufficient``），而不是只有一句中文。
+    """
+
+    def __init__(self, detail: str, *, category: str = "") -> None:
+        super().__init__(detail)
+        self.category = category
 
 
 def company_key(company: str) -> str:
@@ -105,6 +116,53 @@ def mark_failed(
     session.commit()
 
 
+def record_step(
+    task: ApplyTask,
+    item: ApplyTaskItem,
+    step: str,
+    *,
+    site_key: str,
+    adapter_version: str,
+    since: float,
+) -> None:
+    """记录投递链路的一步（``apply.step`` 诊断事件）。
+
+    后台线程没有 request_id，事件靠 ``task_id`` / ``item_id`` 串联（RF-20 的请求级串联
+    在这里以任务级字段缓解）。``elapsed_ms`` 是距上一步锚点的耗时。**绝不携带任何资料
+    值 / payload**——招呼语、简历字段都不进诊断事件；``diagnostics`` 的键名脱敏只是
+    兜底，这里主动不传。
+    """
+    diagnostics.record_event(
+        "apply.step",
+        task_id=task.id,
+        item_id=item.id,
+        step=step,
+        site_key=site_key,
+        adapter_version=adapter_version,
+        elapsed_ms=int((time.monotonic() - since) * 1000),
+    )
+
+
+def adapter_snapshot(session: Any, items: list[ApplyTaskItem], registry: Any) -> dict[str, str]:
+    """批次主站点适配器的 ``{key, version}`` 快照；解析不出返回空 dict。
+
+    一个批次在结构上允许跨站点（当前只有 BOSS），这里取**第一条能解析出适配器**的岗位
+    作为"主站点"。解析不出（岗位全被删 / 来源不支持）就不写——诊断里宁可缺一项，也不
+    伪造一个站点名。版本号是适配器自报的 ``version`` 类属性（``0`` = 未标识）。
+    """
+    for item in items:
+        job = session.get(Job, item.job_id) if item.job_id else None
+        if job is None:
+            continue
+        adapter = registry.resolve_for_job(job)
+        if adapter is not None:
+            return {
+                "key": str(adapter.key),
+                "version": str(getattr(adapter, "version", "") or "0"),
+            }
+    return {}
+
+
 def pause_with_message(runner: Any, session: Any, task: ApplyTask, message: str) -> None:
     runner._resume.clear()
     task.status = TASK_STATUS_PAUSED
@@ -132,7 +190,9 @@ def run_apply(
     """执行一个投递批次；生命周期与控制信号由 ``runner`` 提供。"""
     from . import apply_service
 
-    config = runner._load_config(task, ApplyConfigIn)
+    # "adapter" 是运行启动时写入的诊断快照（见下），不属于用户配置；load 时剔除，
+    # 否则 extra="forbid" 的 ApplyConfigIn 会把它当成脏配置整体退回默认值。
+    config = runner._load_config(task, ApplyConfigIn, ignore=("adapter",))
     items = (
         session.query(ApplyTaskItem)
         .filter(ApplyTaskItem.task_id == task.id)
@@ -153,6 +213,12 @@ def run_apply(
 
     wrapped = wrap_client(client)
     registry = runner._registry or get_registry()
+    # 主站点适配器快照写进 task.config：诊断事件、界面与事后排查都能对上"这批用的是
+    # 哪个适配器的哪个版本"（采集链路写 site_key 是同一套做法）。
+    adapter_meta = adapter_snapshot(session, items, registry)
+    if adapter_meta:
+        task.config = {**(task.config or {}), "adapter": adapter_meta}
+        session.commit()
     consecutive = 0
     # 「同公司只投一个岗位」的作用域是**本批次**：这次投过的公司，后面同公司的岗位直接跳过。
     attempted_companies: set[str] = set()
@@ -184,8 +250,17 @@ def run_apply(
                 item.status = ITEM_STATUS_RUNNING
                 item.attempt += 1
                 item.started_at = utcnow()
+                item_started = time.monotonic()
                 task.current_step = STEP_OPENING
                 session.commit()
+                record_step(
+                    task,
+                    item,
+                    STEP_OPENING,
+                    site_key=str(adapter_meta.get("key", "")),
+                    adapter_version=str(adapter_meta.get("version", "")),
+                    since=item_started,
+                )
                 # 动手之前就把公司记下来：失败的条目可能已经把招呼语发出去了。
                 attempted_companies.add(company_key(item.company))
                 runner._execute_item(session, task, item, config, wrapped, registry, apply_service)
@@ -201,6 +276,8 @@ def run_apply(
                 return
             except ItemSkip as exc:
                 item.status = ITEM_STATUS_SKIPPED
+                if getattr(exc, "category", ""):
+                    item.failure_category = exc.category
                 item.failure_detail = str(exc)
                 item.finished_at = utcnow()
                 task.processed += 1
@@ -208,7 +285,10 @@ def run_apply(
                 session.commit()
             except SiteFailure as exc:
                 runner._mark_failed(session, task, item, exc.category, exc.detail)
-                consecutive += 1
+                # 「无法确认」不是站点故障：页面可能已经投出去了，熔断重试反而会重复
+                # 投递。它与软跳过同一方向——不计入连续失败，留给用户去浏览器核对。
+                if exc.category != FAILURE_UNCONFIRMED:
+                    consecutive += 1
             except CdpError as exc:
                 runner._mark_failed(session, task, item, FAILURE_NETWORK_TIMEOUT, str(exc))
                 consecutive += 1
@@ -232,6 +312,8 @@ def run_apply(
                     company=item.company,
                     title=item.job_title,
                     job_id=item.job_id,
+                    resume_id=item.resume_id,
+                    resume_title=item.resume_title,
                 )
                 session.commit()
 
@@ -288,31 +370,67 @@ def execute_item(
         raise SiteFailure(FAILURE_SITE_UNSUPPORTED, apply_service.unsupported_site_message(job))
     resume = apply_service.resolve_resume(session, job.id, item.resume_id)
     if resume is None and adapter.requires_resume:
-        raise ItemSkip("未找到可用简历：请先在简历中心为该岗位生成简历后再投递")
+        # 资料不足是用户可解决的前置条件，按软跳过处理（不计失败、不触发熔断），
+        # 但留下 profile_insufficient 分类，统计与界面才能把它和站点故障区分开。
+        raise ItemSkip(
+            "未找到可用简历：请先在简历中心为该岗位生成简历后再投递",
+            category=FAILURE_PROFILE_INSUFFICIENT,
+        )
     data = apply_service.build_apply_data(session, resume)
     greeting = (item.greeting or "").strip() or config.default_greeting
 
+    step_started = time.monotonic()
     task.current_step = STEP_FILLING
     session.commit()
+    record_step(
+        task,
+        item,
+        STEP_FILLING,
+        site_key=str(adapter.key),
+        adapter_version=str(getattr(adapter, "version", "") or "0"),
+        since=step_started,
+    )
+    step_started = time.monotonic()
     adapter.open_apply(client, job)
     task.current_step = STEP_SUBMITTING
     session.commit()
+    record_step(
+        task,
+        item,
+        STEP_SUBMITTING,
+        site_key=str(adapter.key),
+        adapter_version=str(getattr(adapter, "version", "") or "0"),
+        since=step_started,
+    )
+    step_started = time.monotonic()
     outcome = adapter.fill_and_submit(client, data, greeting)
     task.current_step = STEP_VERIFYING
     session.commit()
+    record_step(
+        task,
+        item,
+        STEP_VERIFYING,
+        site_key=str(adapter.key),
+        adapter_version=str(getattr(adapter, "version", "") or "0"),
+        since=step_started,
+    )
     if not outcome.success:
-        raise SiteFailure(FAILURE_UNKNOWN, "未能确认投递成功，请在浏览器中核对")
+        # 未知状态永不记成功；但"没读到成功凭据"也可能是页面其实已经投出去了——
+        # 落 unconfirmed 而不是 unknown，并且不计入熔断（见 run_apply 的 SiteFailure 分支）。
+        raise SiteFailure(FAILURE_UNCONFIRMED, "未能确认投递成功，请在浏览器中核对")
     if outcome.greeting_sent:
         item.greeting = outcome.greeting_sent
 
 
 __all__ = [
     "ItemSkip",
+    "adapter_snapshot",
     "breaker_pause",
     "execute_item",
     "interruptible_sleep",
     "mark_failed",
     "pause_with_message",
+    "record_step",
     "run_apply",
 ]
 

@@ -21,6 +21,7 @@ ORB_CSS = FRONTEND_SRC / "features" / "tou-tou" / "tou-tou.css"
 CARD_CSS = FRONTEND_SRC / "features" / "tou-tou" / "tou-tou-assistant.css"
 COMPOSER_CSS = FRONTEND_SRC / "styles" / "assistant-composer.css"
 MAIN_TSX = FRONTEND_SRC / "main.tsx"
+TOKENS_TS = FRONTEND_SRC / "theme" / "tokens.ts"
 
 
 def test_popup_zindex_base_stays_above_the_floating_cards():
@@ -30,9 +31,14 @@ def test_popup_zindex_base_stays_above_the_floating_cards():
     1000）派生——不提基准的话，浮窗里的右键菜单、下拉、confirm、message 会被卡片整个
     盖住，表现为"点了没反应"（2026-10-02 用户报告的两处 bug 同根因）。jsdom 测不到
     视觉遮挡，在这里钉住配置防回漂。
+
+    RF-12 之后基准经语义 token 引用（``layer.popupBase``），所以钉整条链：
+    main.tsx 必须引用 token，tokens.ts 必须把值钉在 3100。
     """
     text = MAIN_TSX.read_text(encoding="utf-8")
-    assert "zIndexPopupBase: 3100" in text
+    assert "zIndexPopupBase: layer.popupBase" in text
+    tokens = TOKENS_TS.read_text(encoding="utf-8")
+    assert "popupBase: 3100" in tokens
 
 
 def test_orb_no_longer_renders_satellite_icons():

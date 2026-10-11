@@ -1,0 +1,100 @@
+{
+  "id": "synthetic_031",
+  "persona_type": "应届",
+  "language": "中文",
+  "industry": "制造",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "user031@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "杨帆",
+    "email": "user031@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "工艺工程师",
+    "summary": "工艺工程师方向应届毕业生，在校期间完成装配线工位优化课题等项目实践。",
+    "educations": [
+      {
+        "school": "星辰理工大学",
+        "major": "工艺工程师相关专业",
+        "degree": "本科",
+        "study_mode": "全日制",
+        "degree_type": "学士",
+        "start_date": "2021-09",
+        "end_date": "2025-06",
+        "gpa": "3.4/4.0",
+        "courses": "",
+        "achievements": ""
+      }
+    ],
+    "experiences": [
+      {
+        "company": "恒达制造",
+        "role": "工艺技术实习生",
+        "start_date": "2024-07",
+        "end_date": "2024-12",
+        "description": "参与产线巡检与工艺参数记录，协助编制作业指导书。"
+      }
+    ],
+    "projects": [
+      {
+        "name": "装配线工位优化课题",
+        "role": "核心成员",
+        "start_date": "2023-09",
+        "end_date": "2024-05",
+        "tech_stack": "IE手法, 现场观测",
+        "description": "参与装配线工位节拍观测与改善方案编制的课程设计课题。",
+        "highlights": "完成工时观测记录与改善建议报告。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "CAD制图",
+        "level": "熟练"
+      },
+      {
+        "name": "工艺文件编制",
+        "level": "掌握"
+      },
+      {
+        "name": "SPC统计",
+        "level": "了解"
+      }
+    ]
+  },
+  "job_description": "岗位：工艺工程师（中原精工）\n职责：\n1. 负责产品工艺文件的编制与维护；\n2. 参与新产品试制跟进与工艺验证；\n3. 分析产线质量问题并提出工艺改善建议；\n4. 配合生产完成工装夹具的技术确认。\n要求：\n1. 机械、材料等相关专业本科及以上学历；\n2. 熟悉机械制图与公差配合；\n3. 能适应车间现场工作；\n4. 有改善项目经验者优先。\n",
+  "claims": [
+    {
+      "title": "装配线工位优化课题参与经历",
+      "category": "项目经历",
+      "subject": "装配线工位优化课题",
+      "source_fact": "在装配线工位优化课题中项目负责人，完成完成工时观测记录与改善建议报告。",
+      "candidate_wording": "参与装配线工位优化课题建设，完成工艺文件相关任务",
+      "responsibility_level": "项目负责人",
+      "verification_status": "已确认",
+      "boundary": "不掌握数据库运维，未参与线上事故值班。",
+      "key_terms": [
+        "工艺文件"
+      ],
+      "boundary_forbidden": [
+        "数据库运维"
+      ]
+    },
+    {
+      "title": "CAD制图能力",
+      "category": "专业技能",
+      "subject": "CAD制图",
+      "source_fact": "在课程与项目实践中反复使用CAD制图，能独立完成常规任务。",
+      "candidate_wording": "熟悉CAD制图，能独立完成常规任务",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "CAD制图"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：应届·中文·制造。常规路径样本。"
+}

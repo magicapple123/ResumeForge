@@ -12,7 +12,7 @@ from typing import Any
 
 from ...browser.cdp_client import CdpClient
 from ..engine import FieldMapping, FormEngine, MatchResult
-from ..fields import FIELD_LABELS
+from ..fields import FIELD_LABELS, SENSITIVE_FIELD_KEYS
 from ..matching import is_placeholder
 from ..repeated_fields import (
     field_key_for_block,
@@ -23,7 +23,9 @@ from ..session import Snapshot, SnapshotStore, get_snapshot_store
 from .models import (
     STATUS_CONFLICT,
     STATUS_LOW_CONFIDENCE,
+    STATUS_NEEDS_CONFIRM,
     STATUS_READY,
+    STATUS_RELAXED_READY,
     PendingItem,
     PreviewItem,
     PreviewReport,
@@ -246,6 +248,20 @@ def build_preview(
                 field_label=note.reason,
             )
         )
+    # 敏感字段强制确认（SENSITIVE_FIELD_KEYS 从"仅展示"接线为匹配行为）：身份证、家庭
+    # 住址、紧急联系人这类字段，规则命中了也**默认不勾**，与放宽模式的 needs_confirm
+    # 同一交互形态——写不写由用户逐行决定。冲突行保持 conflict（它的文案已经说明"保留
+    # 页面现值"，比 needs_confirm 更保守）；AI 建议行不在这里（enrichment 在本函数之后
+    # 追加，本就默认不勾）。本批只收紧不放宽：ready / low_confidence / relaxed_ready
+    # 一律升级为 needs_confirm。
+    for item in report.items:
+        base_field = split_repeated_key(item.field)[0]
+        if base_field in SENSITIVE_FIELD_KEYS and item.status in {
+            STATUS_READY,
+            STATUS_LOW_CONFIDENCE,
+            STATUS_RELAXED_READY,
+        }:
+            item.status = STATUS_NEEDS_CONFIRM
     return report
 
 

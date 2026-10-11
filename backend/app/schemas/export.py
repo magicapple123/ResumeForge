@@ -47,6 +47,8 @@ class ExportRequest(BaseModel):
     page_limit: int | None = Field(default=None, ge=1, le=MAX_RESUME_PAGES)
     include_photo: bool = True
     allow_incomplete: bool = False
+    # 正式投递存档（RF-17）：为真时这次导出冻结一份投递快照；默认不落库（预览零膨胀）。
+    record_delivery: bool = False
 
 
 __all__ = ["ExportFormat", "ExportRequest", "RedactionOptions"]

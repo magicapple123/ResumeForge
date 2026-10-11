@@ -107,6 +107,19 @@ class TrackCreate(TrackRecordIn):
 
     job_id: int | None = Field(default=None, ge=1)
     resume_id: int | None = Field(default=None, ge=1)
+    # 投递渠道（RF-18）：用户自选"这份工作从哪来的"，默认未知。
+    # 与 source（记录来源）是两个维度；未知是合法取值，不替用户编一个渠道。
+    channel: str = Field(default="unknown", max_length=24)
+
+    @field_validator("channel")
+    @classmethod
+    def channel_must_be_known(cls, value: str) -> str:
+        from ..models.tracker import CHANNELS
+
+        cleaned = (value or "").strip() or "unknown"
+        if cleaned not in CHANNELS:
+            raise ValueError(f"未知的投递渠道「{cleaned}」")
+        return cleaned
 
 
 class TrackUpdate(TrackCreate):
@@ -118,6 +131,9 @@ class TrackOut(TrackCreate):
 
     id: int
     source: str
+    # 所用简历的标题快照（RF-17）：简历被删（resume_id 变 NULL）后仍可读；
+    # 空 = 历史关联未知。
+    resume_title: str = ""
     created_at: datetime
     updated_at: datetime
 

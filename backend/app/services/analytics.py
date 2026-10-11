@@ -37,15 +37,19 @@
 
 **明确不提供的指标**（数据模型支撑不了，做出来就是编的，别再提）：
 
-- **"投递→面试平均天数""各阶段耗时/流失率"**：只有**当前**状态 + 一个 ``status_date``，
-  没有状态历史表，也没有"曾经到达过的最高阶段"，无法重建时间线。
+- **"投递→面试平均天数""各阶段耗时/流失率"**：旧口径下只有**当前**状态 + 一个
+  ``status_date``，没有状态历史表，无法重建时间线。RF-18 之后**基于状态变化事件表**
+  提供了真实版本（``cohort``，口径与覆盖率说明见 ``services/track_events.py``）——
+  它只回答事件能证明的事，旧记录如实标 ``historical_track_count``，**不从当前状态
+  或 ``updated_at`` 反推历史**。看板顶层那些"当前状态"口径的率（面试率、笔试通过率）
+  仍是原口径，与 cohort 指标是两回事。
 - **"面试通过率"**：``stage_note``（"二面""HR 面"）是自由文本，从里面解析轮次得到的
-  数字用户无从核对。
+  数字用户无从核对。cohort 的"测评→面试转化"只数"事件里真的到过面试"，不解析轮次。
 - **按行业分布**：全库没有行业字段。
-- **按岗位类型（校招/实习）看转化、每份简历的表现**：``job_id`` / ``resume_id`` 目前
-  在录入界面上**没有入口**（表单里没有这两个控件，导入路径也硬编码 ``resume_id=None``），
-  所以不是"暂时没数据"而是**结构性为空**。本轮只下发 ``track_resume_linked_count``
-  把关联覆盖率显示出来，让缺口可见。
+- **每份简历的表现**：``resume_id`` 的关联入口已随 RF-17 落地（表单可选），但
+  "每份简历的面试率"仍刻意不做——关联本身有选择偏差（好岗位才认真配简历），
+  ``track_resume_linked_count`` 继续用来把关联覆盖率显示出来。
+- **"用了产品能提高 X% 面试率"式的宣传口径**：任何指标都只描述过去，不做这类归因。
 """
 from __future__ import annotations
 
@@ -74,6 +78,7 @@ from .ratios import rate
 from .referral_service import referral_stats, referral_status_counts
 from .reminder_service import reminder_urgency_counts
 from .resume.resume_health import resume_health
+from .track_events import track_cohort_metrics
 
 TREND_MONTHS = 6
 # 「投递最多的公司」展示前几名；其余合成一个"其他"计数，避免长尾把图撑满。
@@ -292,6 +297,8 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
         "referral": referral_stats(db).model_dump(),
         "referral_status": referral_status_counts(db),
         "reminder_counts": reminder_urgency_counts(db, now),
+        # ===== 真实时间线（RF-18）：基于状态变化事件表的 cohort 指标 =====
+        "cohort": track_cohort_metrics(db),
         # ===== 简历与健康度 =====
         "track_resume_linked_count": resume_linked,
     }
@@ -303,7 +310,7 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
 # 助手的 ``get_analytics_overview`` 只该看到"标量摘要"：整份看板里最长的几个数组
 # （逐月趋势、周内七桶、招聘公司榜、内推状态）对模型没有用处，却会把上下文稀释掉。
 # 这份投影**保留全部标量**，只裁数组——它是同一份口径的一个视图，不是第二份统计。
-_BRIEF_DROP = ("trend", "weekday", "referral_status")
+_BRIEF_DROP = ("trend", "weekday", "referral_status", "cohort")
 _BRIEF_COMPANY_LIMIT = 5
 
 

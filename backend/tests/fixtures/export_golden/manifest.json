@@ -1,0 +1,81 @@
+{
+  "cases": {
+    "docx-classic-zh-redact": {
+      "pages": 1,
+      "text_chars": 383,
+      "text_sha256": "8f61f6d8f8a60c2a37c34cad329e74541f40754dfeb0425e348761ae9e99edff"
+    },
+    "docx-modern-zh-baseline": {
+      "pages": 1,
+      "text_chars": 418,
+      "text_sha256": "ec4635bcb5f26c131815f2f213fc65497050f5681fc072ae6e4b805169aeb2e6"
+    },
+    "html-classic-zh-watermark-redact": {
+      "pages": null,
+      "text_chars": 3949,
+      "text_sha256": "03f2e97c1a8454057095834484dd04606710aa6318e476ac4fe79e8b3f8ff5ff"
+    },
+    "html-modern-zh-baseline": {
+      "pages": null,
+      "text_chars": 4179,
+      "text_sha256": "c001ee645e1bb47145aa594e50fb59aa3b28a7728d5cb6d877a5106985757d9b"
+    },
+    "json-classic-en-redact": {
+      "pages": null,
+      "text_chars": 1047,
+      "text_sha256": "f6222e6220df4900d0f4ef13ced5e33385eeb8410f58764b8889db170358e5b0"
+    },
+    "md-classic-zh-baseline": {
+      "pages": null,
+      "text_chars": 448,
+      "text_sha256": "54debd5f72d4d29c40937a33813ae62a6c0d91c9a779ce14210a29311ef989ce"
+    },
+    "pdf-classic-en-1p-baseline": {
+      "pages": 1,
+      "text_chars": 630,
+      "text_sha256": "7ec4f606c594421034a40324f1d8dbe375d030f7b3cd65d7d4a4a31f2b834c8e"
+    },
+    "pdf-classic-en-3p-baseline": {
+      "pages": 3,
+      "text_chars": 5924,
+      "text_sha256": "d093461003d95541fc43817689121be7a6b121365d02f6b2a7f60a73db388698"
+    },
+    "pdf-classic-zh-1p-baseline": {
+      "pages": 1,
+      "text_chars": 418,
+      "text_sha256": "40f0fd0a7df2de6315b3b125995891f594930b46ea20c054f15023881e3fa081"
+    },
+    "pdf-classic-zh-1p-redact": {
+      "pages": 1,
+      "text_chars": 383,
+      "text_sha256": "2319d5891617f6da02c918e9b2d3b8bbc9ec3ec3e182f65854b64edbcf9a6953"
+    },
+    "pdf-classic-zh-1p-watermark": {
+      "pages": 1,
+      "text_chars": 458,
+      "text_sha256": "0855a086aa978ef31eb4ef44cd6565dfe9cef14fd9c630437bb8c74a5aac7f76"
+    },
+    "pdf-classic-zh-3p-redact": {
+      "pages": 3,
+      "text_chars": 2295,
+      "text_sha256": "dec8f37c881d5c74aeb869c5e667920a256a94af8dec5616a4958b97611c511c"
+    },
+    "pdf-modern-en-3p-watermark": {
+      "pages": 3,
+      "text_chars": 6044,
+      "text_sha256": "9e2257d752cff5a547ce69cf28ab7896c62ff1699756e8172941bf2612314758"
+    },
+    "pdf-modern-zh-1p-watermark-redact": {
+      "pages": 1,
+      "text_chars": 423,
+      "text_sha256": "55c6b5ceae49918565f57b2df0f2e7f40eb80e144da933c6820b3cec2e176bc0"
+    },
+    "txt-modern-zh-redact": {
+      "pages": null,
+      "text_chars": 376,
+      "text_sha256": "909a22381d6ea9cf0ac96044ddbd7de8e3a835426e24e7d1e448a8e94d430358"
+    }
+  },
+  "description": "RF-16 黄金导出矩阵内容指纹基线：页数 + 规范化提取文本 sha256（非文件字节哈希）。预期内的内容变更应显式重新生成本文件并连同改动一起评审。",
+  "version": 1
+}

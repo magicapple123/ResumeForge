@@ -56,5 +56,9 @@ class Stats(BaseModel):
     pending_claims: list[PendingClaimBrief] = []
     stalled_application_count: int = 0
     apply_queue_count: int = 0
+    # 首次使用"第一份交付"进度条用的两个总量口径（区别于上面的待办口径）：
+    # 台账总数（含已确认/待确认等全部活跃态）与关联了岗位的简历数。
+    claim_count: int = 0
+    resume_with_job_count: int = 0
     # 最近投递结果：给首页一条"投出去之后怎么样了"的线索。
     latest_applications: list[dict] = []

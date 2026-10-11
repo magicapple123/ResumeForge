@@ -1,7 +1,8 @@
 """FastAPI 应用装配与生命周期配置。"""
 
+import json
 import logging
-import threading
+import sys
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -18,6 +19,7 @@ from .api import (
     analytics,
     apply,
     assistant,
+    assistant_proposals,
     ats,
     candidate_jobs,
     claims,
@@ -29,6 +31,7 @@ from .api import (
     job_match,
     jobs,
     knowledge,
+    manual_backups,
     materials,
     profile,
     referrals,
@@ -57,7 +60,7 @@ from .api import (
 from .api import (
     update as update_api,
 )
-from .config import DATA_DIR, get_settings
+from .config import BACKEND_DIR, DATA_DIR, get_settings
 from .database import Base, ensure_sqlite_columns, run_sqlite_maintenance
 from .database_compat import SQLITE_REQUIRED_COLUMNS
 from .database_migrations import is_unversioned_legacy_database, run_database_migrations
@@ -67,18 +70,57 @@ from .middleware import (
     RequestIdFilter,
     get_request_id,
 )
+from .runtime.log_context import LogContextFilter
 from .services.apply import apply_service
 from .services.apply.task_runner import get_task_runner
 from .services.data_backup import cleanup_temp_directories
-from .services.data_backup.auto_backup import run_auto_backup_if_due
 from .services.job.job_match_background import get_job_match_background_runner
+from .services.resume.generate_recovery import fail_orphaned_generate_tasks
+from .services.resume.resume_generate_runner import get_resume_generate_runner
 from .services.webform import browser as webform_browser
 from .services.webform import stop_live as stop_webform_live
+from .static_spa import mount_static_spa
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] [request_id=%(request_id)s] %(message)s"
 # 滚动日志的单文件上限与份数：5MB×5 足够回溯近期排障，又不会吞掉磁盘。
 _LOG_FILE_MAX_BYTES = 5 * 1024 * 1024
 _LOG_FILE_BACKUP_COUNT = 5
+
+# 启动器重定向的 stdout/stderr（runtime/*.log）没有大小上限，属于无界增长的
+# 已知限制（RF-20）：滚动文件日志只覆盖应用内 handler；重定向文件由启动器
+# 与维护脚本治理（scripts 归 RF-21），应用侧不截断进程级 stdout。
+
+
+class JsonLogFormatter(logging.Formatter):
+    """可选的 JSON 行日志格式（RF-20）：每行一个对象，便于机器采集与检索。
+
+    固定键：time/level/logger/message/task_id/dataset_id/request_id；异常走
+    exc 字段。脱敏不在这里做——业务日志本身不记密钥（AGENTS 约束），诊断导出
+    另有一道兜底清洗，格式化器只负责结构化。
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        from datetime import UTC, datetime
+
+        payload = {
+            "time": datetime.fromtimestamp(record.created, UTC).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "task_id": getattr(record, "task_id", "-"),
+            "dataset_id": getattr(record, "dataset_id", "-"),
+            "request_id": getattr(record, "request_id", "-"),
+        }
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+def _build_formatter() -> logging.Formatter:
+    """按配置选格式：默认保持现行文本格式逐字节不变。"""
+    if get_settings().log_json_format:
+        return JsonLogFormatter()
+    return logging.Formatter(_LOG_FORMAT)
 
 
 def _log_level(name: str) -> int:
@@ -96,19 +138,29 @@ def attach_file_log_handler(log_dir: Path) -> logging.Handler | None:
     运行日志原先只有启动器重定向的 stdout/stderr（``runtime/*.log``），没有大小
     上限，长期挂机会无限膨胀。这里在数据目录下追加一份滚动文件；幂等保证测试里
     多次装配应用不会挂出一把 handlers。
+
+    磁盘不可写（目录建不出/文件打不开）时只放弃文件日志、保留控制台输出——
+    RF-20：日志是排障辅助，绝不能让启动因它失败。
     """
     global _file_log_handler
     if _file_log_handler is not None:
         return None
-    log_dir.mkdir(parents=True, exist_ok=True)
-    handler = RotatingFileHandler(
-        log_dir / "backend.log",
-        maxBytes=_LOG_FILE_MAX_BYTES,
-        backupCount=_LOG_FILE_BACKUP_COUNT,
-        encoding="utf-8",
-    )
-    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(
+            log_dir / "backend.log",
+            maxBytes=_LOG_FILE_MAX_BYTES,
+            backupCount=_LOG_FILE_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+    except OSError:
+        logging.getLogger(__name__).warning(
+            "无法创建滚动日志文件（磁盘不可写？），运行日志仅保留控制台输出", exc_info=True
+        )
+        return None
+    handler.setFormatter(_build_formatter())
     handler.addFilter(RequestIdFilter())
+    handler.addFilter(LogContextFilter())
     logging.getLogger().addHandler(handler)
     _file_log_handler = handler
     return handler
@@ -121,16 +173,13 @@ logging.basicConfig(level=_log_level(settings.log_level), format=_LOG_FORMAT)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 for handler in logging.getLogger().handlers:
     handler.addFilter(RequestIdFilter())
+    # RF-20：所有 handler 都注入后台线程的 task_id/dataset_id 关联字段
+    # （LogContextFilter 与 RequestIdFilter 同一模式，缺省 "-"）。
+    handler.addFilter(LogContextFilter())
+    if settings.log_json_format:
+        handler.setFormatter(JsonLogFormatter())
 if settings.log_file_enabled:
     attach_file_log_handler(DATA_DIR / "logs")
-
-
-def _run_auto_backup_safely() -> None:
-    """后台自动备份线程：备份是保险，任何异常都只记日志。"""
-    try:
-        run_auto_backup_if_due(database.engine)
-    except Exception:  # noqa: BLE001 - 后台线程绝不能把服务拖垮
-        logging.getLogger(__name__).warning("自动备份线程异常退出", exc_info=True)
 
 
 @asynccontextmanager
@@ -157,7 +206,8 @@ async def lifespan(_app: FastAPI):
     # 上次运行若中途退出，可能留下未应用的备份包与导出产物，它们不会再用到。
     startup_logger.info("启动自检：清理临时目录")
     cleanup_temp_directories(bind)
-    # 应用重启后，把仍停留在"进行中"的投递/采集任务标记为失败，避免出现幽灵进度。
+    # 应用重启后，把仍停留在"进行中"的投递/采集/匹配/简历生成任务标记为失败，
+    # 避免出现幽灵进度（简历任务还会占住"只跑一个"的生成入口，见 RF-02）。
     startup_logger.info("启动自检：清理中断的投递任务")
     with database.SessionLocal() as session:
         try:
@@ -168,9 +218,18 @@ async def lifespan(_app: FastAPI):
             job_match_runner.fail_orphaned_task(session)
         except Exception:  # noqa: BLE001 - 清理失败不应阻断启动
             startup_logger.warning("清理中断的岗位匹配任务失败", exc_info=True)
+        try:
+            fail_orphaned_generate_tasks(session)
+        except Exception:  # noqa: BLE001 - 清理失败不应阻断启动
+            startup_logger.warning("清理中断的简历生成任务失败", exc_info=True)
     startup_logger.info("启动自检完成，开始接收请求")
-    # 自动备份放后台线程：快照可能几百 MB，不能让它卡住"开始接收请求"这一行。
-    threading.Thread(target=_run_auto_backup_safely, name="resumeforge-auto-backup", daemon=True).start()
+    # 自动备份放后台调度线程（RF-05）：启动时先检查一次"是否到期"，之后每个
+    # check_seconds 周期再查；快照可能几百 MB，不能让它卡住"开始接收请求"这一行。
+    from .services.data_backup import scheduler as auto_backup_scheduler
+
+    auto_backup_scheduler.start_scheduler(get_settings().auto_backup_check_seconds)
+    # 唤醒一次：启动时立即做首轮到期检查（与旧行为一致），之后按周期调度。
+    auto_backup_scheduler.trigger_check()
     # 用户文件副本的启动回填同样放后台：扫描的是 base64 大字段，但 best-effort、
     # 幂等，失败只记日志，绝不阻断启动或请求。
     from .services.user_files import schedule_backfill
@@ -211,6 +270,16 @@ def _shutdown_runtime_services(job_match_runner: object) -> None:
     except Exception:  # noqa: BLE001 - 退出路径必须继续清理其它资源
         logging.getLogger(__name__).warning("关闭岗位匹配后台任务失败", exc_info=True)
     try:
+        get_resume_generate_runner().shutdown()
+    except Exception:  # noqa: BLE001 - 退出路径必须继续清理其它资源
+        logging.getLogger(__name__).warning("关闭简历生成任务运行器失败", exc_info=True)
+    try:
+        from .services.data_backup import scheduler as auto_backup_scheduler
+
+        auto_backup_scheduler.shutdown_scheduler()
+    except Exception:  # noqa: BLE001 - 退出路径必须继续清理其它资源
+        logging.getLogger(__name__).warning("关闭自动备份调度失败", exc_info=True)
+    try:
         stop_webform_live()
     except Exception:  # noqa: BLE001 - 退出路径必须继续清理其它资源
         logging.getLogger(__name__).warning("关闭网申实时填表监听失败", exc_info=True)
@@ -223,6 +292,19 @@ def _shutdown_runtime_services(job_match_runner: object) -> None:
         webform_browser.reset_browser_manager()
     except Exception:  # noqa: BLE001 - 退出路径必须继续清理其它资源
         logging.getLogger(__name__).warning("关闭网申专用浏览器失败", exc_info=True)
+
+
+def _frontend_dist_dir() -> Path:
+    """前端生产静态资产目录：源码形态是仓库根下 ``frontend/dist``。
+
+    PyInstaller 等冻结形态下 ``__file__`` 会落在解包临时目录，那时资产应随可执行
+    文件分发；当前发布链是源码分发（git archive），冻结分支只是不把路径拼错。
+    """
+    if getattr(sys, "frozen", False):
+        frozen_dist = Path(sys.executable).resolve().parent / "frontend" / "dist"
+        if frozen_dist.is_dir():
+            return frozen_dist
+    return BACKEND_DIR.parent / "frontend" / "dist"
 
 
 def create_app() -> FastAPI:
@@ -248,6 +330,8 @@ def create_app() -> FastAPI:
             resumes.PDF_PAGES_HEADER,
             resumes.PDF_PAGE_LIMIT_HEADER,
             "Content-Disposition",
+            "X-Content-Sha256",
+            "X-Render-Config-Sha256",
         ],
     )
     # add_middleware 后添加的在更外层先执行：跨站防线放在最外层，跨站发来的简单写
@@ -292,12 +376,17 @@ def create_app() -> FastAPI:
         system_api.router,
         update_api.router,
         assistant.router,
+        assistant_proposals.router,
         trash.router,
         user_files.router,
+        manual_backups.router,
     ):
         app.include_router(router)
     app.add_exception_handler(Exception, unhandled_exception)
     app.add_api_route("/api/health", health, methods=["GET"])
+    # RF-09 方案 A：dist 存在时由后端同源提供前端静态资产。mount_static_spa 会把
+    # SPA 回退注册成 catch-all，必须排在全部路由（含上面的 /api/health）之后。
+    mount_static_spa(app, _frontend_dist_dir())
     return app
 
 

@@ -1,0 +1,87 @@
+{
+  "id": "synthetic_035",
+  "persona_type": "转行",
+  "language": "英文",
+  "industry": "制造",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "emma.liu35@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "Emma Liu",
+    "email": "emma.liu35@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "工艺工程师",
+    "summary": "Career changer from a related field into 工艺工程师, with self-taught practice.",
+    "educations": [
+      {
+        "school": "Linjiang College",
+        "major": "Related Major",
+        "degree": "Associate",
+        "study_mode": "全日制",
+        "degree_type": "",
+        "start_date": "2013-09",
+        "end_date": "2016-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "Ironbridge Manufacturing",
+        "role": "质检员",
+        "start_date": "2016-07",
+        "end_date": "2024-06",
+        "description": "Handled routine operational tasks of the previous role."
+      },
+      {
+        "company": "Ironbridge Manufacturing",
+        "role": "工艺技术员",
+        "start_date": "2024-07",
+        "end_date": "至今",
+        "description": "Started in the new role and completed onboarding assignments."
+      }
+    ],
+    "skills": [
+      {
+        "name": "CAD制图",
+        "level": "熟练"
+      },
+      {
+        "name": "工艺文件编制",
+        "level": "掌握"
+      }
+    ]
+  },
+  "job_description": "Position: Process Engineer (Ironbridge Manufacturing)\nResponsibilities:\n1. Prepare and maintain process documents;\n2. Support pilot runs and process validation;\n3. Analyze quality issues and propose improvements;\n4. Confirm tooling requirements with production.\nRequirements:\n1. Degree in mechanical or materials engineering;\n2. Familiar with engineering drawing and tolerances;\n3. Comfortable working on the shop floor;\n4. Improvement project experience preferred.\n",
+  "claims": [
+    {
+      "title": "Project: 装配线工位优化课题",
+      "category": "项目经历",
+      "subject": "装配线工位优化课题",
+      "source_fact": "Joined 装配线工位优化课题 as 项目负责人, completed the assigned deliverables.",
+      "candidate_wording": "Participated in 装配线工位优化课题 and delivered assigned tasks.",
+      "responsibility_level": "项目负责人",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "process documents"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "CAD制图能力",
+      "category": "专业技能",
+      "subject": "CAD制图",
+      "source_fact": "Used CAD制图 across coursework and projects for routine tasks.",
+      "candidate_wording": "Familiar with CAD制图 for routine tasks.",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "CAD制图"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：转行·英文·制造。常规路径样本。"
+}

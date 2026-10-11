@@ -1,0 +1,104 @@
+{
+  "id": "synthetic_010",
+  "persona_type": "社招",
+  "language": "英文",
+  "industry": "IT/互联网",
+  "adversarial_tags": [
+    "overlapping_experiences"
+  ],
+  "privacy_placeholders": [
+    "jack.wu10@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "Jack Wu",
+    "email": "jack.wu10@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "后端开发工程师",
+    "summary": "Candidate with 5 years of experience in 后端开发工程师 roles.",
+    "educations": [
+      {
+        "school": "Starlight University",
+        "major": "Related Major",
+        "degree": "本科",
+        "study_mode": "全日制",
+        "degree_type": "学士",
+        "start_date": "2015-09",
+        "end_date": "2019-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "Example Corp",
+        "role": "初级后端工程师",
+        "start_date": "2022-03",
+        "end_date": "2023-08",
+        "description": "参与订单模块的接口开发与自测，配合测试完成回归。"
+      },
+      {
+        "company": "BlueOrchid Tech",
+        "role": "高级后端工程师",
+        "start_date": "2023-01",
+        "end_date": "2024-05",
+        "description": "维护用户中心相关接口，参与代码评审与技术文档整理。"
+      }
+    ],
+    "projects": [
+      {
+        "name": "校园二手交易平台",
+        "role": "Core member",
+        "start_date": "2023-03",
+        "end_date": "2023-12",
+        "tech_stack": "Python, FastAPI, MySQL, Redis",
+        "description": "面向校园场景的二手交易服务，含商品发布、订单与站内消息模块。",
+        "highlights": "完成订单服务与消息通知的接口设计与联调。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "Python",
+        "level": "熟练"
+      },
+      {
+        "name": "MySQL",
+        "level": "掌握"
+      },
+      {
+        "name": "Docker",
+        "level": "了解"
+      }
+    ]
+  },
+  "job_description": "Position: Backend Engineer (Example Corp)\nResponsibilities:\n1. Design, build and maintain backend services and APIs;\n2. Take part in technical reviews for order and payment flows;\n3. Work with frontend and QA to ship features and fix production issues;\n4. Improve service performance and reliability.\nRequirements:\n1. BS or above in Computer Science or a related field;\n2. Familiar with Python or Go, MySQL and Redis;\n3. Good communication and coding habits;\n4. Internship or project experience preferred.\n",
+  "claims": [
+    {
+      "title": "Project: 校园二手交易平台",
+      "category": "项目经历",
+      "subject": "校园二手交易平台",
+      "source_fact": "Joined 校园二手交易平台 as 主导方案或交付, completed the assigned deliverables.",
+      "candidate_wording": "Participated in 校园二手交易平台 and delivered assigned tasks.",
+      "responsibility_level": "主导方案或交付",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "Backend Engineer"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "Python能力",
+      "category": "专业技能",
+      "subject": "Python",
+      "source_fact": "Used Python across coursework and projects for routine tasks.",
+      "candidate_wording": "Familiar with Python for routine tasks.",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "Python"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：社招·英文·IT/互联网。对抗维度：overlapping_experiences。"
+}

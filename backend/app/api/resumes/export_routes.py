@@ -19,12 +19,17 @@ from ...schemas.export import (
     RedactionOptions as RedactionOptionsSchema,
 )
 from ...schemas.resume import ResumeContent
-from ...services.export_pipeline import ExportRequest, RenderContext, build_export
+from ...services.export_pipeline import (
+    ExportRequest,
+    RenderContext,
+    build_export_delivery,
+)
 from ...services.export_save_location import save_artifact, validate_directory
 from ...services.pdf_exporter import ResumePDFError
 from ...services.privacy import RedactionOptions as PrivacyRedactionOptions
 from ...services.privacy import redact
 from ...services.resume.resume_completeness import find_incomplete, incomplete_detail
+from ...services.resume.resume_delivery import freeze_delivery
 from ...services.resume.resume_record import record_format_config
 from ...services.resume.resume_template_store import (
     resolve_style_config,
@@ -45,8 +50,13 @@ def _export_record(
     request: ExportRequest,
     *,
     allow_incomplete: bool,
+    record_delivery: bool = False,
 ) -> Response:
-    """导出闸门 + 管线委托 + 响应头，是 GET / POST 两条导出路径的共用出口。"""
+    """导出闸门 + 管线委托 + 响应头，是 GET / POST 两条导出路径的共用出口。
+
+    ``record_delivery``（RF-17）：为真时把这次导出冻结成一份 ``source="export"``
+    的投递快照（「正式投递存档」语义）。**默认不落**——预览导出零膨胀。
+    """
     resume = ResumeContent.model_validate(record.content)
     # 导出闸门：正文里还留着【待补】之类的标记时拦下来。带占位符的简历投出去，
     # 用户往往直到面试被问起才发现——这道检查的价值全在"导出那一刻"。
@@ -65,7 +75,9 @@ def _export_record(
         format_config=record_format_config(db, record),
     )
     try:
-        artifact = build_export(request, resume, context)
+        # 带交付标识的出口（RF-16）：内容指纹 + 渲染配置指纹与响应头同源。
+        delivery = build_export_delivery(request, resume, context, source_resume_id=record.id)
+        artifact = delivery.artifact
     except ResumePDFError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except WatermarkError as exc:
@@ -74,6 +86,9 @@ def _export_record(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     headers: dict[str, str] = {
         "Content-Disposition": f"attachment; filename*=UTF-8''{quote(artifact.filename, safe='')}",
+        # 交付指纹（RF-17）：用户可拿它核对"下载到的文件"与库里快照的一致性。
+        "X-Content-Sha256": delivery.content_sha256,
+        "X-Render-Config-Sha256": delivery.rendered_config_sha256,
     }
     # 服务端 PDF/Word 用的是自己那套排版，页数未必等于用户选的上限（内容多时会多出一页）。
     # 把实际页数带回去，让界面能提示，而不是让用户下载完才发现。
@@ -92,6 +107,19 @@ def _export_record(
         else:
             # 头的值做 URL 编码（路径里可能有中文/反斜杠等非 latin-1 字符），前端解码还原。
             headers["X-Saved-To"] = quote(final_path, safe="")
+    if record_delivery:
+        # 显式存档：哈希原样沿用 ExportDelivery 的产出，库里证据与响应头逐字一致。
+        freeze_delivery(
+            db,
+            record=record,
+            source="export",
+            export_format=request.format,
+            filename=artifact.filename,
+            pages=artifact.pages,
+            content_sha256=delivery.content_sha256,
+            rendered_config_sha256=delivery.rendered_config_sha256,
+        )
+        db.commit()
     return Response(artifact.content, media_type=artifact.media_type, headers=headers)
 
 
@@ -103,6 +131,10 @@ def export_resume(
         default=False,
         description="为真时允许导出仍含未完成标记的草稿；默认拦下并说明是哪几处",
     ),
+    record_delivery: bool = Query(
+        default=False,
+        description="为真时把这次导出冻结成一份投递快照（正式投递存档）；默认不落库",
+    ),
     db: Session = Depends(get_db),
 ):
     """兼容旧的 GET 导出：仍限四种格式，内部委托管线。全参数导出走 ``POST``。"""
@@ -112,6 +144,7 @@ def export_resume(
         record,
         ExportRequest(format=format),
         allow_incomplete=allow_incomplete,
+        record_delivery=record_delivery,
     )
 
 
@@ -138,7 +171,8 @@ def export_resume_with_options(
         page_limit=payload.page_limit,
         include_photo=payload.include_photo,
     )
-    return _export_record(db, record, request, allow_incomplete=payload.allow_incomplete)
+    return _export_record(db, record, request, allow_incomplete=payload.allow_incomplete,
+                          record_delivery=payload.record_delivery)
 
 
 @router.post("/{resume_id}/redact", response_model=ResumeContent)

@@ -1,0 +1,10 @@
+{
+  "case_id": "synthetic_002",
+  "output_text": "李娜\n求职意向：后端开发工程师\n\n项目经历：\n校园二手交易平台（2023-09 至 2024-05）\n- 参与平台接口设计与联调。\n\n技能：Python、MySQL、Docker",
+  "meta": {
+    "prompt_version": "known-bad-v1",
+    "model": "handwritten",
+    "generated_at": "2026-10-10",
+    "expected_rules": ["fact_omission"]
+  }
+}

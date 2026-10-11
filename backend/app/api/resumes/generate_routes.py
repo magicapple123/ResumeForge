@@ -14,9 +14,11 @@ from sqlalchemy.orm import Session
 
 from app.api import resumes as _api  # patch 锚点：调用期从包命名空间读取
 
-from ...database import SessionLocal, get_db
+from ...database import get_db
 from ...models.job import Job
 from ...models.resume import GENERATE_ACTIVE_STATUSES, ResumeGenerateTask
+from ...runtime import dataset_scope
+from ...runtime.dataset_scope import DatasetScopeError
 from ...schemas.job import JobOut
 from ...schemas.resume import GenerateRequest, GenerateTaskOut
 from ...services import trash
@@ -80,6 +82,14 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         warnings: list[str] = []
         done_event: dict | None = None
         try:
+            # 流级租约（RF-03）：建流先取租约，切换持锁期间给出可读 error 事件；
+            # 拿到租约后按值冻结 engine，保存段写库绝不漂到切换后的新库。
+            lease = dataset_scope.acquire_lease("resume-generate-sse")
+        except DatasetScopeError as exc:
+            yield _format_sse({"type": "error", "message": str(exc)})
+            return
+        factory = dataset_scope.frozen_session_factory()
+        try:
             async for event in generator.generate(
                 profile_out, job_out, payload.options, baseline=baseline
             ):
@@ -92,7 +102,7 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                     continue
                 yield _format_sse(event)
             if parsed is not None and done_event is not None:
-                with SessionLocal() as save_db:
+                with factory() as save_db:
                     record = save_record(
                         save_db,
                         parsed,
@@ -110,6 +120,7 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                         custom_instruction=payload.options.custom_instruction,
                         coverage_notes=done_event.get("coverage_notes") or [],
                         rationale=done_event.get("rationale") or "",
+                        fact_annotations=done_event.get("fact_annotations") or [],
                     )
                 # 只有持久化成功后才宣布完成；断流不会留下“成功但无历史记录”的状态。
                 yield _format_sse({"type": "saved", "record_id": record.id})
@@ -120,6 +131,8 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         except Exception:  # noqa: BLE001 - 流式接口必须兜底，异常转为事件而非中断连接
             logger.exception("简历生成发生内部错误")
             yield _format_sse({"type": "error", "message": "生成过程中发生内部错误，请查看后端日志"})
+        finally:
+            lease.release()
 
     return StreamingResponse(
         event_stream(),

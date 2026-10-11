@@ -1,0 +1,10 @@
+{
+  "case_id": "synthetic_015",
+  "output_text": "周涛\n求职意向：后端开发工程师\n\n工作经历：\n星辰科技 后端开发实习生（2025-03 至今）\n- 参与订单服务的接口开发与自测（业绩数据【待补】）。",
+  "meta": {
+    "prompt_version": "known-bad-v1",
+    "model": "handwritten",
+    "generated_at": "2026-10-10",
+    "expected_rules": ["pending_marker"]
+  }
+}

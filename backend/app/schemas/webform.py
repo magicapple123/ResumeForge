@@ -297,6 +297,27 @@ class WebFormFillRecordOut(BaseModel):
     page_snapshot: list[WebFormRecordSnapshotOut] = Field(default_factory=list)
 
 
+class WebFormRecordSummary(BaseModel):
+    """填充记录列表行的摘要视图（RF-08 分页端点 ``GET /api/apply/webform/records/page`` 专用）。
+
+    **不含 ``items``（填写值明细）与 ``page_snapshot``（页面正文快照）**：这两块含用户
+    填进页面的真实值，随列表下发既慢又没必要——回看单条时走既有详情端点
+    ``GET /api/webform/records/{id}``。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    url: str = ""
+    page_title: str = ""
+    filled: int = 0
+    unverified: int = 0
+    failed: int = 0
+    # batch | live
+    source: str = "batch"
+    created_at: datetime
+
+
 class WebFormExtraFieldOut(BaseModel):
     """「网申资料」里的一条可录字段（只含 ``source="extra"`` 的那些）。
 
@@ -426,5 +447,6 @@ __all__ = [
     "WebFormPreviewOut",
     "WebFormRecordItemOut",
     "WebFormRecordSnapshotOut",
+    "WebFormRecordSummary",
     "WebFormSnapshotOut",
 ]

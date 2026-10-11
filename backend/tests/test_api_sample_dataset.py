@@ -26,6 +26,10 @@ def test_load_sample_creates_switches_and_seeds(client):
     assert len(resumes) == 1
     assert resumes[0]["job_title"] == "市场运营专员"
 
+    # 身份标记：注册表元数据里 source 覆写为 "sample"，列表响应原样带出
+    # （前端页头据此显示「示例」徽标与一键「回到我的数据」）。
+    assert active[0]["source"] == "sample"
+
 
 def test_load_sample_never_touches_main_dataset(client):
     """主数据隔离：先在主数据里放一个岗位，载入示例后主数据原样保留。"""

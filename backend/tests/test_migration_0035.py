@@ -15,7 +15,7 @@ from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0034_job_match_batches"
-HEAD_REVISION = "0038_user_files"
+HEAD_REVISION = "0040_resume_delivery_records"
 
 TABLE = "llm_config_record"
 
@@ -95,8 +95,12 @@ def test_upgrade_only_adds_expected_tables(tmp_path):
 
     command.upgrade(config, HEAD_REVISION)
 
-    # 0038 新增 user_file 表；其余表集合必须不变——后续若有新的加表迁移，同步扩充该集合
-    assert set(inspect(engine).get_table_names()) == before | {"user_file"}
+    # 0038 新增 user_file 表；0040 新增 resume_delivery_record 表；其余表集合必须
+    # 不变——后续若有新的加表迁移，同步扩充该集合
+    assert set(inspect(engine).get_table_names()) == before | {
+        "user_file",
+        "resume_delivery_record",
+    }
 
 
 def test_upgrade_is_idempotent_when_already_applied(tmp_path):

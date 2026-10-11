@@ -124,6 +124,28 @@ class ResumeContent(BaseModel):
         return validate_photo_data_url(value)
 
 
+class FactAnnotation(BaseModel):
+    """一条内容的事实来源标注（RF-13）：这段内容是从哪条资料事实来的。
+
+    ``origin`` 三类由 grounding 收集（纯映射、不调模型）：
+    - ``grounded``：值级替换成功——模型选中的要点映射回了来源原文；
+    - ``restored``：匹配失败，回填了来源原文（或代码重建的事实摘要）；
+    - ``enhanced_kept``：美化模式下模型改写被保留（量化断言已过校验）。
+    ``ai_rewrite`` / ``user_added`` 只出现在审阅预检的待审变更里。
+    """
+
+    path: str = Field(max_length=256)
+    origin: Literal["grounded", "restored", "enhanced_kept", "ai_rewrite", "user_added"]
+    # 台账回指：生成时无法可靠回指（无 DB 上下文），预检/编辑链路可填。
+    claim_id: int | None = None
+    source_subject: str | None = Field(default=None, max_length=256)
+    source_fact: str | None = Field(default=None, max_length=20_000)
+    responsibility: str | None = Field(default=None, max_length=64)
+    boundary: str | None = Field(default=None, max_length=20_000)
+    # AI 改写类标注绝不允许携带"已确认"——前端渲染层也有一道同样的防线。
+    verification_status: str | None = Field(default=None, max_length=16)
+
+
 class ManualResumeRequest(BaseModel):
     """用户手写简历的保存请求；内容仍使用统一的结构化格式。"""
 
@@ -170,10 +192,36 @@ class ResumeOut(ResumeBrief):
     content: ResumeContent
     warnings: list[str] = []
     parse_error: str = ""
+    # 版本血缘（RF-17）：由哪份简历派生而来；NULL = 独立版本，不做推断。
+    parent_revision_id: int | None = None
     # 生成说明与"没写进这份简历"的结构化清单：只对 AI 生成的记录有意义，
     # 手写/修订后的记录为空（修订后筛选状态已不再适用）。
     rationale: str = ""
     coverage_notes: list[dict] = []
+    # 事实来源标注：只对 AI 生成的记录有意义；旧记录读取 `or []` 兜底。
+    fact_annotations: list[FactAnnotation] = []
+
+
+class DeliverySummary(BaseModel):
+    """一条交付记录的摘要（RF-17）：回答"这一版投给了谁、什么时候、内容是什么"。
+
+    刻意**不返回 ``content`` 全文**（含照片 base64，体积大）——列表只需要
+    "有这份证据、指纹是多少"；要正文走导出/详情，不在列表里反复传输。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    source: str
+    job_title: str = ""
+    company: str = ""
+    resume_title: str = ""
+    export_format: str = ""
+    filename: str = ""
+    pages: int | None = None
+    content_sha256: str = ""
+    rendered_config_sha256: str = ""
 
 
 class GenerateTaskOut(BaseModel):
@@ -339,3 +387,40 @@ class LayoutAnalyzeOut(BaseModel):
     # 逐档收紧的版式清单。内容本来就放得下时为空。
     fit_ladder: list[LayoutFitCandidateOut] = Field(default_factory=list)
     fit_room: LayoutFitRoomOut
+
+
+# ===== 待审变更预检（RF-13）：编辑器里的 AI 改写/手填，先过三把既有闸门再落表单 =====
+
+ReviewChangeOrigin = Literal["ai_rewrite", "user_added"]
+
+
+class ReviewChangeIn(BaseModel):
+    """一条待审变更：``path`` 是 data-resume-path 写法的字段路径。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=256)
+    before: str = Field(default="", max_length=MAX_RESUME_TEXT_CHARS)
+    after: str = Field(default="", max_length=MAX_RESUME_TEXT_CHARS)
+    origin: ReviewChangeOrigin = "ai_rewrite"
+    instruction: str = Field(default="", max_length=MAX_CUSTOM_INSTRUCTION_CHARS)
+
+
+class ReviewPrepareRequest(BaseModel):
+    """预检请求：**不落库、不改 content**——纯审阅预检。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    changes: list[ReviewChangeIn] = Field(default_factory=list, max_length=50)
+
+
+class ReviewChangeVerdictOut(BaseModel):
+    """一条变更的预检结论：``ok`` / ``fact_check_needed`` / ``blocked`` + 原因。"""
+
+    path: str
+    verdict: Literal["ok", "fact_check_needed", "blocked"]
+    reasons: list[str] = Field(default_factory=list)
+
+
+class ReviewPrepareOut(BaseModel):
+    results: list[ReviewChangeVerdictOut] = Field(default_factory=list)

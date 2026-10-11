@@ -7,17 +7,14 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import os
-import re
 import subprocess
 import time
 import uuid
-import zipfile
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Literal
 
 import httpx
@@ -25,6 +22,22 @@ import httpx
 from ..config import get_settings
 from ..schemas.update import UpdateStatus
 from .update_check import check_for_update
+from .update_sources import (
+    MAX_REDIRECT_HOPS,
+    candidate_archives,
+    download_client,
+    require_publish_source,
+    verify_checksum,
+)
+from .update_sources import (
+    fetch_expected_checksum as _fetch_expected_checksum,
+)
+from .update_sources import (
+    sha256_of as _sha256_of,
+)
+from .update_sources import (
+    validate_archive as _validate_archive,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +55,9 @@ _INSTALL_HANDSHAKE_ATTEMPTS = 30
 _INSTALL_HANDSHAKE_INTERVAL = 1.0
 # `installing` 停留超过这么久，说明更新器半路死了（覆盖到一半、或被杀掉）。
 _STALE_INSTALL_SECONDS = 120.0
+
+# 本地安装包的命名约定与白名单/逐跳/复验策略都在 `update_sources`：
+# `ResumeForge-<版本>.zip` 的挑选、ZIP 结构与 SHA-256 复验是它的一部分。
 
 
 @dataclass
@@ -76,8 +92,50 @@ def _snapshot() -> UpdateStatus:
     )
 
 
+def _candidate_archives() -> list[tuple[str, Path]]:
+    """下载目录里「比当前版本新且校验通过」的本地包（旧版本在前）。
+
+    挑选与双重校验（ZIP 结构 + SHA-256 复验）的实现都在 `update_sources.candidate_archives`。
+    """
+    return candidate_archives(DOWNLOAD_DIRECTORY, get_settings().app_version)
+
+
+def _restore_ready_from_disk() -> bool:
+    """空闲时从下载目录恢复「已下载完成」状态。
+
+    `_status` / `_archive_path` 只活在进程内存里；后端一旦重启（升级流程里用户关掉应用
+    再打开极常见），磁盘上的安装包还在、状态却丢了——界面于是显示"没有更新包"、安装
+    按钮消失，或陈旧页面点安装被拒。空闲时把符合条件的本地包重新认领回来即可。
+
+    只在 ``idle`` 时恢复：正在下载 / 正在安装 / 失败都比磁盘事实更"新"，不该被顶掉。
+    """
+    global _archive_path
+    if _status.state != "idle":
+        return False
+    candidates = _candidate_archives()
+    if not candidates:
+        return False
+    version, path = candidates[-1]
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return False
+    _archive_path = path
+    _status.state = "ready"
+    _status.current_version = get_settings().app_version
+    _status.target_version = version
+    _status.progress = 100
+    _status.downloaded_bytes = size
+    _status.total_bytes = size
+    _status.background = False
+    _status.installable = True
+    _status.message = "更新包已下载完成，可以重启安装"
+    return True
+
+
 def download_status() -> UpdateStatus:
-    """返回当前进程内的更新任务状态。"""
+    """返回当前进程内的更新任务状态；空闲时先尝试从磁盘恢复已下载的安装包。"""
+    _restore_ready_from_disk()
     return _snapshot()
 
 
@@ -86,81 +144,68 @@ def _safe_archive_path(version: str) -> Path:
     return DOWNLOAD_DIRECTORY / f"ResumeForge-{safe_version or 'latest'}.zip"
 
 
-def _validate_archive(path: Path) -> None:
-    try:
-        with zipfile.ZipFile(path) as archive:
-            names = [name.replace("\\", "/") for name in archive.namelist()]
-            for name in names:
-                parts = PurePosixPath(name).parts
-                if PurePosixPath(name).is_absolute() or ".." in parts:
-                    raise ValueError("更新包包含不安全的路径，已拒绝安装")
-            if not any(name.endswith("/start.cmd") or name == "start.cmd" for name in names):
-                raise ValueError("更新包缺少 start.cmd，无法确认它是 ResumeForge 安装包")
-            if not any(name.endswith("/backend/app/main.py") for name in names):
-                raise ValueError("更新包缺少后端入口，无法确认它是完整安装包")
-            if archive.testzip() is not None:
-                raise ValueError("更新包校验失败，压缩包可能已损坏")
-    except zipfile.BadZipFile as exc:
-        raise ValueError("下载的更新包不是有效 ZIP 文件") from exc
-
-
-def _sha256_of(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-async def _fetch_expected_checksum(url: str) -> str:
-    """取回发布时一并上传的 `.sha256`（内容是 `<64 位十六进制>  <文件名>`）。"""
-    headers = {"Accept": "text/plain", "User-Agent": "ResumeForge-updater"}
-    async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
-        response = await client.get(url, headers=headers)
-        if response.status_code != 200:
-            raise RuntimeError(f"下载校验文件失败：HTTP {response.status_code}")
-        text = response.text
-    match = re.search(r"[0-9a-fA-F]{64}", text)
-    if not match:
-        raise RuntimeError("校验文件内容无法识别，已停止安装")
-    return match.group(0).lower()
-
-
 async def _download_archive(
-    url: str, expected_size: int | None, target: Path, checksum_url: str = ""
+    url: str,
+    expected_size: int | None,
+    target: Path,
+    checksum_url: str = "",
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> None:
     DOWNLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    if not checksum_url:
+        # §12.5 #4：没有摘要就等于没有核对凭据——明确失败，不静默降级为"无摘要也安装"。
+        raise RuntimeError("发布方没有提供 SHA-256 校验文件，已停止下载（无法核对包完整性）")
     partial = target.with_suffix(".part")
     headers = {"Accept": "application/octet-stream", "User-Agent": "ResumeForge-updater"}
     try:
-        async with (
-            httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client,
-            client.stream("GET", url, headers=headers) as response,
-        ):
-            if response.status_code != 200:
-                raise RuntimeError(f"下载服务器返回 HTTP {response.status_code}")
-            header_size = response.headers.get("Content-Length")
-            total = int(header_size) if header_size and header_size.isdigit() else expected_size
-            _status.total_bytes = total
-            with partial.open("wb") as handle:
-                async for chunk in response.aiter_bytes(1024 * 1024):
-                    _status.downloaded_bytes += len(chunk)
-                    if _status.downloaded_bytes > MAX_DOWNLOAD_BYTES:
-                        raise RuntimeError("更新包超过 512 MB，已停止下载")
-                    handle.write(chunk)
-                    if total:
-                        _status.progress = min(99.0, _status.downloaded_bytes * 100 / total)
+        async with download_client(transport) as client:
+            current = url
+            for _hop in range(MAX_REDIRECT_HOPS + 1):
+                await require_publish_source(current)
+                async with client.stream("GET", current, headers=headers) as response:
+                    if response.is_redirect:
+                        location = response.headers.get("location", "")
+                        if not location:
+                            raise RuntimeError("下载重定向缺少 Location，已停止下载")
+                        # 相对 Location 在这里解析成绝对地址，下一跳从循环顶重新校验。
+                        current = str(response.url.join(location))
+                        continue
+                    if response.status_code != 200:
+                        raise RuntimeError(f"下载服务器返回 HTTP {response.status_code}")
+                    header_size = response.headers.get("Content-Length")
+                    total = (
+                        int(header_size) if header_size and header_size.isdigit() else expected_size
+                    )
+                    _status.total_bytes = total
+                    with partial.open("wb") as handle:
+                        async for chunk in response.aiter_bytes(1024 * 1024):
+                            _status.downloaded_bytes += len(chunk)
+                            if _status.downloaded_bytes > MAX_DOWNLOAD_BYTES:
+                                raise RuntimeError("更新包超过 512 MB，已停止下载")
+                            handle.write(chunk)
+                            if total:
+                                _status.progress = min(
+                                    99.0, _status.downloaded_bytes * 100 / total
+                                )
+                    break  # 正文已读完，跳出逐跳循环
+            else:
+                raise RuntimeError(f"下载重定向超过 {MAX_REDIRECT_HOPS} 跳上限，已停止下载")
         _validate_archive(partial)
-        # 发行包里是要覆盖到程序目录的代码，值得对着发布方给的摘要再核一次：
-        # 能挡住下载被截断、被中间环节替换这类问题。没提供摘要时（例如退回源码包）
-        # 就跳过——那说明这次本来就没有可核对的凭据。
-        if checksum_url:
-            expected = await _fetch_expected_checksum(checksum_url)
-            actual = _sha256_of(partial)
-            if actual != expected:
-                raise RuntimeError(
-                    "更新包校验和不匹配（下载可能被截断或被改动），已停止安装"
-                )
+        # 发行包里是要覆盖到程序目录的代码，必须对着发布方给的摘要核对：能挡住下载
+        # 被截断、被中间环节替换这类问题。
+        expected = await _fetch_expected_checksum(checksum_url, transport=transport)
+        actual = _sha256_of(partial)
+        if actual != expected:
+            raise RuntimeError(
+                "更新包校验和不匹配（下载可能被截断或被改动），已停止安装"
+            )
+        # 把摘要留在包旁边（`<包名>.zip.sha256`）：缓存命中、后端重启后的磁盘恢复与
+        # 安装前复验都靠它重新核对 SHA-256（§12.5 #3）。先写摘要再落位：就算中途崩了，
+        # 也只是多一份指向未完成包的摘要——恢复会因包缺失而拒绝，不会误装。
+        target.with_name(target.name + ".sha256").write_text(
+            f"{expected}  {target.name}\n", encoding="utf-8"
+        )
         os.replace(partial, target)
     except Exception:
         logger.exception("下载更新包失败")
@@ -194,12 +239,21 @@ async def start_download(*, background: bool = False) -> UpdateStatus:
         raise RuntimeError(result.message or "当前没有可用更新")
     if not result.installable or not result.download_url:
         raise RuntimeError("这个版本没有可安装的完整更新包，请打开发布页面手动下载")
+    if not result.checksum_url:
+        # §12.5 #4：连摘要都没有的包（例如退回的 GitHub 源码包）不允许应用内安装——
+        # "无摘要也安装"正是这次要修掉的行为；明确失败并给出手动路径。
+        raise RuntimeError(
+            "这个版本没有提供 SHA-256 校验文件，应用内更新已停止；"
+            f"请到发布页面手动下载：{result.release_url or 'GitHub Releases'}"
+        )
 
     target = _safe_archive_path(result.latest_version)
     _archive_path = target
     if target.is_file():
         try:
             _validate_archive(target)
+            # 缓存命中也要重新核对 SHA-256：包可能在上次下载之后被替换/截断（§12.5 #3）。
+            verify_checksum(target)
         except ValueError:
             pass
         else:
@@ -343,8 +397,25 @@ def clear_install_result() -> None:
 def schedule_install(*, restart: bool = True) -> UpdateStatus:
     """启动独立更新器；更新器会等当前服务退出后覆盖文件。"""
     global _status
-    if _status.state != "ready" or _archive_path is None or not _archive_path.is_file():
+    # 陈旧页面直接点安装的兜底：进程内存里可能是 idle（后端刚重启），但磁盘上包还在。
+    _restore_ready_from_disk()
+    if _status.state != "ready":
         raise RuntimeError("更新包还没有下载完成")
+    if _archive_path is None or not _archive_path.is_file():
+        _status.state = "failed"
+        _status.installable = False
+        _status.message = "更新包文件不在了（可能被清理或安全软件移除），请重新下载"
+        raise RuntimeError(_status.message)
+    # 下载与安装可能相隔数天，安装前再校验一次：ZIP 结构挡坏包与路径穿越，SHA-256
+    # 挡"文件被替换/损坏"（§12.5 #3/#5）。
+    try:
+        _validate_archive(_archive_path)
+        verify_checksum(_archive_path)
+    except (ValueError, OSError) as exc:
+        _status.state = "failed"
+        _status.installable = False
+        _status.message = f"更新包已损坏或不可用（{exc}），请重新下载"
+        raise RuntimeError(_status.message) from exc
     if os.name != "nt":
         raise RuntimeError("应用内覆盖安装目前只支持 Windows；其它系统请按升级文档操作")
 

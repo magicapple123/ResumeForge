@@ -1,0 +1,408 @@
+{
+  "version": 1,
+  "description": "RF-15 纯虚构合成评测样本清单；维度统计供测试断言覆盖数。",
+  "total": 50,
+  "dimension_stats": {
+    "persona_type": {
+      "应届": 15,
+      "社招": 20,
+      "转行": 10,
+      "学生兼职": 5
+    },
+    "language": {
+      "中文": 35,
+      "英文": 10,
+      "中英混排": 5
+    },
+    "industry": {
+      "IT/互联网": 15,
+      "运营": 8,
+      "财务": 7,
+      "制造": 6,
+      "医疗": 4,
+      "教育": 5,
+      "设计": 5
+    },
+    "adversarial_tags": {
+      "same_company_repeat": 1,
+      "long_jd": 1,
+      "overlapping_experiences": 1,
+      "pending_placeholder": 1,
+      "prompt_injection_zh": 1,
+      "sparse_profile": 1,
+      "prompt_injection_en": 1,
+      "full_privacy_fields": 1,
+      "no_quantification": 1
+    }
+  },
+  "samples": [
+    {
+      "id": "synthetic_001",
+      "persona_type": "应届",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_002",
+      "persona_type": "应届",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_003",
+      "persona_type": "应届",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_004",
+      "persona_type": "应届",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_005",
+      "persona_type": "应届",
+      "language": "英文",
+      "industry": "IT/互联网",
+      "adversarial_tags": [
+        "same_company_repeat"
+      ]
+    },
+    {
+      "id": "synthetic_006",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_007",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_008",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": [
+        "long_jd"
+      ]
+    },
+    {
+      "id": "synthetic_009",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_010",
+      "persona_type": "社招",
+      "language": "英文",
+      "industry": "IT/互联网",
+      "adversarial_tags": [
+        "overlapping_experiences"
+      ]
+    },
+    {
+      "id": "synthetic_011",
+      "persona_type": "社招",
+      "language": "英文",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_012",
+      "persona_type": "社招",
+      "language": "中英混排",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_013",
+      "persona_type": "转行",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_014",
+      "persona_type": "转行",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_015",
+      "persona_type": "学生兼职",
+      "language": "中文",
+      "industry": "IT/互联网",
+      "adversarial_tags": [
+        "pending_placeholder"
+      ]
+    },
+    {
+      "id": "synthetic_016",
+      "persona_type": "应届",
+      "language": "中文",
+      "industry": "运营",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_017",
+      "persona_type": "应届",
+      "language": "中文",
+      "industry": "运营",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_018",
+      "persona_type": "应届",
+      "language": "英文",
+      "industry": "运营",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_019",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "运营",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_020",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "运营",
+      "adversarial_tags": [
+        "prompt_injection_zh"
+      ]
+    },
+    {
+      "id": "synthetic_021",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "运营",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_022",
+      "persona_type": "社招",
+      "language": "中英混排",
+      "industry": "运营",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_023",
+      "persona_type": "转行",
+      "language": "中文",
+      "industry": "运营",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_024",
+      "persona_type": "应届",
+      "language": "中文",
+      "industry": "财务",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_025",
+      "persona_type": "应届",
+      "language": "中文",
+      "industry": "财务",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_026",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "财务",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_027",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "财务",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_028",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "财务",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_029",
+      "persona_type": "社招",
+      "language": "英文",
+      "industry": "财务",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_030",
+      "persona_type": "转行",
+      "language": "中文",
+      "industry": "财务",
+      "adversarial_tags": [
+        "sparse_profile"
+      ]
+    },
+    {
+      "id": "synthetic_031",
+      "persona_type": "应届",
+      "language": "中文",
+      "industry": "制造",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_032",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "制造",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_033",
+      "persona_type": "社招",
+      "language": "英文",
+      "industry": "制造",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_034",
+      "persona_type": "转行",
+      "language": "中文",
+      "industry": "制造",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_035",
+      "persona_type": "转行",
+      "language": "英文",
+      "industry": "制造",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_036",
+      "persona_type": "学生兼职",
+      "language": "中文",
+      "industry": "制造",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_037",
+      "persona_type": "应届",
+      "language": "中英混排",
+      "industry": "医疗",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_038",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "医疗",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_039",
+      "persona_type": "转行",
+      "language": "中文",
+      "industry": "医疗",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_040",
+      "persona_type": "转行",
+      "language": "英文",
+      "industry": "医疗",
+      "adversarial_tags": [
+        "prompt_injection_en"
+      ]
+    },
+    {
+      "id": "synthetic_041",
+      "persona_type": "应届",
+      "language": "英文",
+      "industry": "教育",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_042",
+      "persona_type": "社招",
+      "language": "中文",
+      "industry": "教育",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_043",
+      "persona_type": "转行",
+      "language": "中文",
+      "industry": "教育",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_044",
+      "persona_type": "学生兼职",
+      "language": "中文",
+      "industry": "教育",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_045",
+      "persona_type": "学生兼职",
+      "language": "中文",
+      "industry": "教育",
+      "adversarial_tags": [
+        "full_privacy_fields"
+      ]
+    },
+    {
+      "id": "synthetic_046",
+      "persona_type": "应届",
+      "language": "中文",
+      "industry": "设计",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_047",
+      "persona_type": "应届",
+      "language": "中英混排",
+      "industry": "设计",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_048",
+      "persona_type": "社招",
+      "language": "英文",
+      "industry": "设计",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_049",
+      "persona_type": "转行",
+      "language": "中英混排",
+      "industry": "设计",
+      "adversarial_tags": []
+    },
+    {
+      "id": "synthetic_050",
+      "persona_type": "学生兼职",
+      "language": "中文",
+      "industry": "设计",
+      "adversarial_tags": [
+        "no_quantification"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "id": "synthetic_050",
+  "persona_type": "学生兼职",
+  "language": "中文",
+  "industry": "设计",
+  "adversarial_tags": [
+    "no_quantification"
+  ],
+  "privacy_placeholders": [
+    "user050@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "董洁",
+    "email": "user050@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "视觉设计师",
+    "summary": "在校学生，课余从事视觉设计相关工作，做事认真细致，乐于学习新工具，兼顾学业与设计实践。",
+    "educations": [
+      {
+        "school": "星辰理工大学",
+        "major": "视觉设计师相关专业",
+        "degree": "本科",
+        "study_mode": "全日制",
+        "degree_type": "学士",
+        "start_date": "2023-09",
+        "end_date": "2027-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "拾光视觉",
+        "role": "视觉设计实习生",
+        "start_date": "2025-03",
+        "end_date": "至今",
+        "description": "课余在工作室参与海报与物料的绘制，跟随设计师学习排版与配色，协助整理素材并完成简单的修改任务。"
+      }
+    ],
+    "campus_experiences": [
+      {
+        "organization": "学生会",
+        "role": "干事",
+        "start_date": "2023-10",
+        "end_date": "2025-06",
+        "description": "参与社团宣传物料的绘制与张贴，协助活动现场的布置与收尾。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "Photoshop",
+        "level": "熟练"
+      },
+      {
+        "name": "Illustrator",
+        "level": "熟练"
+      }
+    ]
+  },
+  "job_description": "岗位：视觉设计师（白泽设计工作室）\n职责：\n1. 负责品牌项目的海报与物料视觉设计；\n2. 参与设计提案的素材整理与排版输出；\n3. 根据反馈完成设计稿修改与交付；\n4. 维护项目素材库与设计规范。\n要求：\n1. 设计相关专业本科及以上学历；\n2. 熟悉主流设计软件；\n3. 有完整作品集；\n4. 有品牌或电商项目经验者优先。\n",
+  "claims": [
+    {
+      "title": "校园文化节主视觉设计参与经历",
+      "category": "项目经历",
+      "subject": "校园文化节主视觉设计",
+      "source_fact": "在校园文化节主视觉设计中参与，完成完成海报初稿与物料延展规范整理。",
+      "candidate_wording": "参与校园文化节主视觉设计建设，完成海报相关任务",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "海报"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "Photoshop能力",
+      "category": "专业技能",
+      "subject": "Photoshop",
+      "source_fact": "在课程与项目实践中反复使用Photoshop，能独立完成常规任务。",
+      "candidate_wording": "熟悉Photoshop，能独立完成常规任务",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "Photoshop"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：学生兼职·中文·设计。对抗维度：no_quantification。"
+}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ..resume.resume_templates import FONT_SCALES, RESUME_TEMPLATES
+from . import previews
 from ._types import Tool
 from .apply_tools import _tool_list_apply_queue, _tool_list_apply_records
 from .data_tools import _tool_get_drill_report, _tool_list_drill_sessions
@@ -116,6 +117,7 @@ REPORT_TOOLS: tuple[Tool, ...] = (
             "required": ["resume_id"],
         },
         handler=_tool_update_resume_layout,
+        preview=previews.preview_update_resume_layout,
         writes=True,
     ),
     Tool(
@@ -273,6 +275,7 @@ REPORT_TOOLS: tuple[Tool, ...] = (
             "required": ["title"],
         },
         handler=_tool_create_knowledge,
+        preview=previews.preview_create_knowledge,
         writes=True,
     ),
     Tool(
@@ -291,6 +294,7 @@ REPORT_TOOLS: tuple[Tool, ...] = (
             "required": ["knowledge_id"],
         },
         handler=_tool_update_knowledge,
+        preview=previews.preview_update_knowledge,
         writes=True,
     ),
     Tool(
@@ -345,6 +349,7 @@ REPORT_TOOLS: tuple[Tool, ...] = (
             "required": ["title", "remind_at"],
         },
         handler=_tool_create_reminder,
+        preview=previews.preview_create_reminder,
         writes=True,
     ),
     Tool(
@@ -390,6 +395,7 @@ REPORT_TOOLS: tuple[Tool, ...] = (
             "required": ["resume_id"],
         },
         handler=_tool_update_resume,
+        preview=previews.preview_update_resume,
         writes=True,
     ),
     Tool(
@@ -412,6 +418,7 @@ REPORT_TOOLS: tuple[Tool, ...] = (
             "required": ["reminder_id", "status"],
         },
         handler=_tool_update_reminder,
+        preview=previews.preview_update_reminder,
         writes=True,
     ),
     # P3 工具批（handlers 与声明同住 p3_tools.py，report spec 文件已到行数上限）。

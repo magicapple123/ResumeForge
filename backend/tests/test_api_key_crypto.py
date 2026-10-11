@@ -6,7 +6,7 @@ roundtrip 类断言跨平台成立：Windows 上走 DPAPI，非 Windows 上 ``en
 import sys
 
 import pytest
-from app.services.api_key_crypto import decrypt_key, encrypt_key
+from app.services.api_key_crypto import ApiKeyEncryptionError, decrypt_key, encrypt_key
 
 
 @pytest.mark.parametrize(
@@ -44,3 +44,25 @@ def test_windows_encrypts_with_prefix() -> None:
     assert encrypted != "sk-abc123"
     # 密文不该包含明文。
     assert "sk-abc123" not in encrypted
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_dpapi_failure_never_falls_back_to_plaintext(monkeypatch, platform):
+    """DPAPI 加密失败必须显式报错，不能静默回退明文（RF-24 修的伪装成功）。"""
+    monkeypatch.setattr(sys, "platform", platform)
+
+    def broken_protect(_data):
+        raise OSError("模拟 DPAPI 故障")
+
+    if platform == "win32":
+        monkeypatch.setattr("app.services.api_key_crypto._protect", broken_protect)
+        with pytest.raises(ApiKeyEncryptionError):
+            encrypt_key("sk-abc123")
+    else:
+        # 非 Windows 保持明文（决策已落档），DPAPI 失败语义只属于 Windows 分支。
+        assert encrypt_key("sk-abc123") == "sk-abc123"
+
+
+def test_empty_key_skips_dpapi_even_when_broken(monkeypatch):
+    monkeypatch.setattr("app.services.api_key_crypto._protect", None)  # 被调用即 TypeError
+    assert encrypt_key("") == ""

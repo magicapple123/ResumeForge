@@ -117,6 +117,25 @@ def list_records(db: Session, *, limit: int = DEFAULT_LIST_LIMIT) -> list[WebFor
     )
 
 
+def list_records_page(
+    db: Session, *, page: int = 1, page_size: int = 20
+) -> tuple[list[WebFormFillRecord], int]:
+    """分页列出未软删除的填充记录（RF-08）：排序与 :func:`list_records` 完全一致。
+
+    服务 ``GET /api/apply/webform/records/page``；列表 DTO 由 API 层组装成摘要
+    （不含填写值 ``items`` 与页面快照 ``page_snapshot``），本函数只负责行与总数。
+    """
+    query = db.query(WebFormFillRecord).filter(trash.live_only(WebFormFillRecord))
+    total = query.count()
+    rows = (
+        query.order_by(WebFormFillRecord.created_at.desc(), WebFormFillRecord.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return rows, total
+
+
 def record_or_none(db: Session, record_id: int) -> WebFormFillRecord | None:
     return trash.get_live(db, WebFormFillRecord, record_id)
 
@@ -137,5 +156,6 @@ __all__ = [
     "create_record",
     "delete_record",
     "list_records",
+    "list_records_page",
     "record_or_none",
 ]

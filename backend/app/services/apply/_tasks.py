@@ -35,6 +35,30 @@ from ._queue import job_apply_site, resolve_resume
 from ._records import daily_success_count
 
 logger = logging.getLogger(__name__)
+
+
+def list_apply_tasks_page(
+    db: Session, *, kind: str = "", page: int = 1, page_size: int = 20
+) -> tuple[list[ApplyTask], int]:
+    """分页列出历史批次（RF-08 收口增量）：与旧列表 ``GET /api/apply/tasks`` 同口径。
+
+    旧列表是 ``id desc`` + ``limit``（上限 100），只服务"最近一批"；批次历史超过
+    100 条之后在界面上不可达。本函数服务 ``GET /api/apply/tasks/page``：过滤（kind）
+    与排序（``id desc``）与旧端点逐字对齐，旧端点本次不动。
+    """
+    query = db.query(ApplyTask)
+    if kind:
+        query = query.filter(ApplyTask.kind == kind)
+    total = query.count()
+    rows = (
+        query.order_by(ApplyTask.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return rows, total
+
+
 def current_task(db: Session, *, kind: str | None = None) -> ApplyTask | None:
     query = db.query(ApplyTask).filter(ApplyTask.status.in_(ACTIVE_TASK_STATUSES))
     if kind is not None:

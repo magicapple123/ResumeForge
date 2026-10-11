@@ -76,6 +76,7 @@ from ._tasks import (
     current_task,
     fail_orphaned_tasks,
     get_task_detail,
+    list_apply_tasks_page,
 )
 
 __all__ = [
@@ -108,6 +109,7 @@ __all__ = [
     "get_browser_manager",
     "get_collect_config",
     "get_task_detail",
+    "list_apply_tasks_page",
     "latest_match",
     "list_queue",
     "list_record_batches",

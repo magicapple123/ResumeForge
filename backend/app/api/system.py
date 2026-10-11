@@ -243,6 +243,50 @@ def _system_snapshot() -> dict:
     }
 
 
+# 导出前预览的固定口径说明（RF-20）：用户在导出前要知道包里有什么、没有什么。
+_DIAGNOSTICS_PREVIEW_NOTE = (
+    "诊断包只包含脱敏运行事件、系统信息与近期后端日志尾部（疑似令牌已兜底抹除）；"
+    "不包含简历全文、表单填写值、Cookie 或提示词。"
+)
+# 预览里最多列出的类别数：事件名是有限的集合，20 个足够覆盖现有埋点。
+_PREVIEW_MAX_CATEGORIES = 20
+
+
+@router.get("/diagnostics/preview")
+def preview_diagnostics():
+    """导出前预览诊断包内容：条数、时间范围、类别与各文件体积，不返回事件正文。
+
+    与 /diagnostics/export 使用同一套数据源与脱敏路径；预览只暴露元信息，
+    用户可据此决定是否导出、并如实转述包内容。
+    """
+    snapshot = diagnostic_snapshot()
+    events = snapshot.get("events", [])
+    times = [event["at"] for event in events if event.get("at")]
+    system = _system_snapshot()
+    files = [
+        {
+            "name": "diagnostics.json",
+            "bytes": len(json.dumps(snapshot, ensure_ascii=False, indent=2).encode("utf-8")),
+        },
+        {
+            "name": "system.json",
+            "bytes": len(json.dumps(system, ensure_ascii=False, indent=2).encode("utf-8")),
+        },
+    ]
+    log_tail = _recent_log_tail()
+    if log_tail:
+        files.append({"name": "backend-recent.log", "bytes": len(log_tail.encode("utf-8"))})
+    categories = sorted({str(event.get("event", "")) for event in events})
+    return {
+        "event_count": len(events),
+        "time_range": {"from": times[0], "to": times[-1]} if times else None,
+        "categories": categories[:_PREVIEW_MAX_CATEGORIES],
+        "files": files,
+        "contains_resume_content": False,
+        "note": _DIAGNOSTICS_PREVIEW_NOTE,
+    }
+
+
 @router.get("/diagnostics/export")
 def export_diagnostics():
     """导出脱敏诊断包（zip）：脱敏运行事件 + 系统信息 + 近期后端日志尾部。

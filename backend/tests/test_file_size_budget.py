@@ -73,8 +73,6 @@ _EXEMPTIONS: dict[str, str] = {
     # 上一轮拆分后的编排核心；captures_dir/get_task_runner 被模块属性
     # patch。触发条件：>650 行或新增批次类型时迁出 StopAwareCdpClient。
     "backend/app/services/apply/task_runner.py": "编排核心 + 两类模块属性 patch",
-    # 刚过线、零耦合；合并计划「预览=执行」是同份代码契约。
-    "backend/app/services/tracker.py": "刚过线，合并契约内聚",
     # 后端 test_assistant_knowledge_audit.py:37 以字面路径读取本文件提取
     # title 做四向交叉验证，另有 4 处治理文档按路径引用。触发条件：~1200 行。
     "frontend/src/components/userGuideSteps.ts": "后端守卫字面路径锚定 + 纯文案数据",

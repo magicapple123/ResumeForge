@@ -1,6 +1,7 @@
 """资料域工具声明（``_TOOLS`` 中 20 条：资料箱/文件副本库/事实台账/备选岗位/助手技能/格式模板（放宽模式工具见 ``_tools_specs_relaxed.py``））。"""
 from __future__ import annotations
 
+from . import previews
 from ._shared import (
     MAX_ASSISTANT_SKILL_FILE_CHARS,
     MAX_ASSISTANT_SKILL_FILES,
@@ -78,6 +79,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": [],
         },
         handler=_tool_create_material,
+        preview=previews.preview_create_material,
         writes=True,
     ),
     Tool(
@@ -96,6 +98,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": ["material_id"],
         },
         handler=_tool_update_material,
+        preview=previews.preview_update_material,
         writes=True,
     ),
     Tool(
@@ -169,6 +172,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": ["source_fact"],
         },
         handler=_tool_create_claim,
+        preview=previews.preview_create_claim,
         writes=True,
     ),
     Tool(
@@ -195,6 +199,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": ["claim_id"],
         },
         handler=_tool_update_claim,
+        preview=previews.preview_update_claim,
         writes=True,
     ),
     Tool(
@@ -242,6 +247,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": [],
         },
         handler=_tool_create_candidate_job,
+        preview=previews.preview_create_candidate_job,
         writes=True,
     ),
     Tool(
@@ -259,6 +265,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": ["candidate_id"],
         },
         handler=_tool_update_candidate_job,
+        preview=previews.preview_update_candidate_job,
         writes=True,
     ),
     Tool(
@@ -277,6 +284,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": ["candidate_id"],
         },
         handler=_tool_import_candidate_job,
+        preview=previews.preview_import_candidate_job,
         writes=True,
     ),
     Tool(
@@ -332,6 +340,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": ["name", "prompt"],
         },
         handler=_tool_create_skill,
+        preview=previews.preview_create_skill,
         writes=True,
     ),
     Tool(
@@ -366,6 +375,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": ["skill_id"],
         },
         handler=_tool_update_skill,
+        preview=previews.preview_update_skill,
         writes=True,
     ),
     Tool(
@@ -390,6 +400,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": ["name"],
         },
         handler=_tool_create_format_template,
+        preview=previews.preview_create_format_template,
         writes=True,
     ),
     Tool(
@@ -417,6 +428,7 @@ DATA_TOOLS: tuple[Tool, ...] = (
             "required": [],
         },
         handler=_tool_update_format_template,
+        preview=previews.preview_update_format_template,
         writes=True,
     ),
     Tool(

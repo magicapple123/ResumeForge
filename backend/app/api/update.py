@@ -49,8 +49,15 @@ async def download_update(payload: UpdateDownloadRequest):
 
 
 @router.post("/install", response_model=UpdateStatus)
-def install_update(payload: UpdateInstallRequest):
-    """安排独立更新器覆盖安装并按需重启。"""
+async def install_update(payload: UpdateInstallRequest):
+    """安排独立更新器覆盖安装并按需重启。
+
+    必须是 ``async def``：``schedule_install`` 在拉起更新器后会用
+    ``asyncio.create_task`` 安排"等更新器接手再退出后端"的协程。若本端点写成同步
+    ``def``，FastAPI 会把它丢进线程池执行，而线程池线程没有运行中的事件循环，
+    ``create_task`` 必然抛 ``RuntimeError: no running event loop``——应用于是停在
+    原地不退出，用户看到的就是"点了安装却什么都没发生"。
+    """
     try:
         return schedule_install(restart=payload.restart)
     except RuntimeError as exc:

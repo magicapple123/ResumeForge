@@ -1,7 +1,17 @@
 """设置 API 与 API Key 脱敏边界测试。"""
 
+import pytest
 from app.schemas.setting import UNLIMITED_MAX_TOKENS, LLMConfig
+from app.services.api_key_session import clear_session_key
 from app.services.settings_service import API_KEY_MASK, get_llm_config
+
+
+@pytest.fixture(autouse=True)
+def _clean_session_key():
+    """会话密钥是模块级内存态，测试间必须清场，否则覆盖 get_llm_config 会污染别的用例。"""
+    clear_session_key()
+    yield
+    clear_session_key()
 
 
 def test_settings_roundtrip(client, db_session):
@@ -443,3 +453,4 @@ def test_create_provider_forwards_request_overrides():
     payload: dict = {}
     ignored._apply_request_overrides(payload)
     assert "messages" not in payload
+

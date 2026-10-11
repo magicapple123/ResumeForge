@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "open_apply_entry_missing",
+  "exercise": "open_apply",
+  "note": "目标岗位页就绪但沟通入口始终找不到：超时后如实报 selector_invalid 并带页面诊断。",
+  "job_url": "https://www.zhipin.com/job_detail/new.html",
+  "expectations": [
+    {"marker": "rf:url", "states": [{"url": "https://www.zhipin.com/"}]},
+    {"marker": "rf:apply-entry", "states": [
+      {"found": false, "matched": 0, "url": "https://www.zhipin.com/job_detail/new.html", "title": "岗位详情"}
+    ]}
+  ],
+  "expected_failure": {"category": "selector_invalid", "detail_contains": "立即沟通"}
+}
