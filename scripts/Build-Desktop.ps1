@@ -54,14 +54,18 @@ Copy-Item -Recurse -Force (Join-Path $projectRoot "frontend\dist") (Join-Path $p
 New-Item -ItemType Directory -Force (Join-Path $payloadDir "runtime\logs") | Out-Null
 
 # Bundled runtime: build once, reuse across packaging runs. The payload gets
-# a copy so first user launch unpacks instead of provisioning.
+# a copy so first user launch unpacks instead of provisioning. Windows-only:
+# the zip holds the amd64 embeddable interpreter, so mac builds skip it (the
+# mac shell falls back to the shipped launcher, which provisions on demand).
 $runtimeZip = Join-Path $desktopDir "python-runtime.zip"
-if (-not (Test-Path $runtimeZip)) {
-    Write-Host "python-runtime.zip missing - building it (one-time, downloads + pip install)..."
-    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "Build-PythonRuntime.ps1")
-    if ($LASTEXITCODE -ne 0) { throw "Build-PythonRuntime failed with $LASTEXITCODE" }
+if ($Target -ne "mac") {
+    if (-not (Test-Path $runtimeZip)) {
+        Write-Host "python-runtime.zip missing - building it (one-time, downloads + pip install)..."
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "Build-PythonRuntime.ps1")
+        if ($LASTEXITCODE -ne 0) { throw "Build-PythonRuntime failed with $LASTEXITCODE" }
+    }
+    Copy-Item -Force $runtimeZip (Join-Path $payloadDir "python-runtime.zip")
 }
-Copy-Item -Force $runtimeZip (Join-Path $payloadDir "python-runtime.zip")
 
 $payloadFiles = (Get-ChildItem -Recurse -File $payloadDir).Count
 Write-Host "Payload assembled: $payloadFiles files"

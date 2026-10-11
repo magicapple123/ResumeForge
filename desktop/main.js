@@ -11,6 +11,7 @@ const { app, BrowserWindow, Tray, Menu, dialog, ipcMain } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
+const { scheduleUpdateCheck } = require("./updater");
 
 // Startup probe: persists which bootstrap step the shell reached. Remove in
 // phase 5 once the packaged pipeline is proven end to end.
@@ -225,6 +226,7 @@ if (!app.requestSingleInstanceLock()) {
       createWindow();
       createTray();
       await startBackendAndSwap();
+      scheduleUpdateCheck(mainWindow, logLine);
     } catch (err) {
       logLine(`startup failed: ${err}`);
       dialog.showErrorBox(
