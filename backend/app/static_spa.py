@@ -122,6 +122,32 @@ def _check_version_pairing(dist_dir: Path, app_version: str) -> None:
         )
 
 
+def _mount_dist_root_files(app: FastAPI, dist_dir: Path) -> None:
+    """把 dist 根目录的散文件（favicon 等 Vite ``public/`` 资产）注册为 GET 路由。
+
+    Vite 会把 ``public/`` 里的文件原样拷到 dist 根（如 ``resumeforge-icon.png``），
+    它们不在 ``/assets`` 挂载点下；不注册的话浏览器请求 favicon 只会拿到
+    SPA 回退页面或 404，标签页图标永远是默认地球。逐文件注册而不挂整个根
+    目录，是为了不引入 FULL-match 的 catch-all 路由、保住 405 语义（QA R1）。
+    缓存用 ``no-cache``：文件名无内容哈希，靠 ETag 协商重验。
+    """
+    for item in sorted(dist_dir.iterdir()):
+        if not item.is_file() or item.name == "index.html":
+            continue
+        file_path: Path = item
+
+        async def serve_root_file(path: Path = file_path) -> FileResponse:
+            return FileResponse(path, headers={"Cache-Control": "no-cache"})
+
+        app.add_api_route(
+            f"/{item.name}",
+            serve_root_file,
+            methods=["GET"],
+            include_in_schema=False,
+            name=f"spa_root_file_{item.stem}",
+        )
+
+
 def mount_static_spa(app: FastAPI, dist_dir: Path) -> None:
     """把 ``dist_dir`` 挂为同源静态资产；目录不存在时保持纯 API 模式。"""
     if not (dist_dir / "index.html").is_file():
@@ -131,6 +157,7 @@ def mount_static_spa(app: FastAPI, dist_dir: Path) -> None:
     assets_dir = dist_dir / "assets"
     if assets_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="spa_assets")
+    _mount_dist_root_files(app, dist_dir)
     # SPA 回退以 404 异常处理器实现：与路由注册顺序无关（不与 /api 抢匹配），
     # partial-match 的 405 语义天然保留——这是 QA 回归 R1 后定下的最终机制。
     _install_spa_404_fallback(app, dist_dir)
