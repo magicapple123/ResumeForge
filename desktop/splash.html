@@ -94,11 +94,19 @@
         var bar = document.getElementById("bar");
         var stage = document.getElementById("stage");
         var errorBox = document.getElementById("error");
-        var progress = { "backend-starting": 30, "health-check": 65, "ready": 95 };
+        var progress = {
+          "preparing-runtime": 18,
+          "backend-starting": 35,
+          "health-check": 65,
+          "ready": 95,
+          "backend-restarting": 50,
+        };
         var labels = {
+          "preparing-runtime": "正在准备运行环境（首次启动）…",
           "backend-starting": "正在启动后端服务…",
           "health-check": "正在等待服务就绪…",
           "ready": "正在加载界面…",
+          "backend-restarting": "服务中断，正在自动恢复…",
         };
         window.splash.onStage(function (payload) {
           if (!payload) return;
