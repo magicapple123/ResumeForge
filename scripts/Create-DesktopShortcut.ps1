@@ -1,4 +1,4 @@
-# Create-DesktopShortcut.ps1 - create a desktop shortcut for ResumeForge.
+﻿# Create-DesktopShortcut.ps1 - create a desktop shortcut for ResumeForge.
 #
 # A downloaded release zip is a folder the user unzips anywhere; double-clicking
 # start.cmd works, but Windows then shows the generic console icon on the
@@ -24,7 +24,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $shortcutPath = Join-Path (
     [Environment]::GetFolderPath("Desktop")
-) "ResumeForge.lnk"
+) "简历通.lnk"
 $startCmd = Join-Path $projectRoot "start.cmd"
 $iconPath = Join-Path $projectRoot "branding\resumeforge.ico"
 

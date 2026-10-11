@@ -1,4 +1,4 @@
-<#
+﻿<#
 ResumeForge uninstaller.
 
 Removes what the launcher created (virtualenv, node_modules, build output and the
@@ -99,8 +99,8 @@ Write-Host ""
 Write-Host "Removing:" -ForegroundColor Cyan
 foreach ($relative in $DependencyTargets) { Remove-Target -Relative $relative }
 
-# The desktop shortcut created by Create-DesktopShortcut.cmd.
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "ResumeForge.lnk"
+# The desktop shortcut created by Create-DesktopShortcut.cmd (named 简历通).
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "简历通.lnk"
 if (Test-Path $desktopShortcut) {
     try {
         Remove-Item -LiteralPath $desktopShortcut -Force -ErrorAction Stop
