@@ -1,0 +1,14 @@
+{
+  "name": "resumeforge-desktop",
+  "productName": "ResumeForge",
+  "version": "0.18.0",
+  "description": "ResumeForge desktop shell",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

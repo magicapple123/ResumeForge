@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>简历通</title>
+    <style>
+      :root {
+        --bg: #f5f7fa;
+        --card: #ffffff;
+        --brand: #1f5eff;
+        --track: #e2e8f0;
+        --text: #1f2329;
+        --muted: #5f6b7a;
+        --error: #d4380d;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { height: 100%; }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+        color: var(--text);
+        user-select: none;
+      }
+      .card {
+        width: 380px;
+        text-align: center;
+        background: var(--card);
+        border: 1px solid var(--track);
+        border-radius: 16px;
+        padding: 48px 40px 40px;
+        box-shadow: 0 8px 30px rgba(31, 35, 41, 0.06);
+      }
+      .logo {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 20px;
+        border-radius: 20px;
+        display: block;
+      }
+      h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+      .subtitle { font-size: 13px; color: var(--muted); margin-bottom: 32px; }
+      .track {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--track);
+        overflow: hidden;
+      }
+      .bar {
+        height: 100%;
+        width: 0%;
+        border-radius: 3px;
+        background: var(--brand);
+        transition: width 0.45s ease;
+      }
+      .bar.indeterminate {
+        width: 36%;
+        animation: slide 1.2s ease-in-out infinite;
+      }
+      @keyframes slide {
+        0% { margin-left: -36%; }
+        100% { margin-left: 100%; }
+      }
+      .stage { margin-top: 18px; font-size: 13px; color: var(--muted); min-height: 18px; }
+      .error {
+        display: none;
+        margin-top: 18px;
+        text-align: left;
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--error);
+        background: #fff2e8;
+        border: 1px solid #ffbb96;
+        border-radius: 8px;
+        padding: 10px 12px;
+        word-break: break-all;
+      }
+      .error.show { display: block; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img class="logo" src="../frontend/public/resumeforge-icon.png" alt="简历通" />
+      <h1>简历通</h1>
+      <div class="subtitle">AI 定制化简历生成 · 本地工作台</div>
+      <div class="track"><div id="bar" class="bar indeterminate"></div></div>
+      <div id="stage" class="stage">正在启动…</div>
+      <div id="error" class="error"></div>
+    </div>
+    <script>
+      (function () {
+        var bar = document.getElementById("bar");
+        var stage = document.getElementById("stage");
+        var errorBox = document.getElementById("error");
+        var progress = { "backend-starting": 30, "health-check": 65, "ready": 95 };
+        var labels = {
+          "backend-starting": "正在启动后端服务…",
+          "health-check": "正在等待服务就绪…",
+          "ready": "正在加载界面…",
+        };
+        window.splash.onStage(function (payload) {
+          if (!payload) return;
+          if (payload.stage === "error") {
+            bar.classList.remove("indeterminate");
+            bar.style.width = "100%";
+            bar.style.background = "var(--error)";
+            stage.textContent = "启动失败";
+            errorBox.textContent = payload.detail || "";
+            errorBox.classList.add("show");
+            return;
+          }
+          errorBox.classList.remove("show");
+          stage.textContent = labels[payload.stage] || payload.stage;
+          bar.classList.remove("indeterminate");
+          bar.style.width = (progress[payload.stage] || 10) + "%";
+        });
+      })();
+    </script>
+  </body>
+</html>
