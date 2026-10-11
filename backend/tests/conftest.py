@@ -6,6 +6,7 @@
 指针（active.json）与 datasets/ 目录都解析成"数据库所在目录"的子项，放在共享目录
 会让不同测试运行互相看到对方的数据集。
 """
+
 import gc
 import os
 import shutil
@@ -95,10 +96,23 @@ def _clear_datasets() -> None:
     数据集目录建在测试库同级，所以同一进程里前一个用例导入的数据集会出现在后一个
     用例的列表里。这里删的是本进程独占的临时目录内容（整个目录在会话结束时统一
     删除），不是用户数据。
+
+    与 ``_remove_test_dir`` 同一套纪律（见其 docstring）：导入/切换路径会为数据集
+    建独立引擎，旧引擎的连接池吊着 ``.db`` 句柄，Windows 上 ``rmtree`` 会删不动——
+    所以先 dispose + gc，再带重试；重试仍失败就如实告警，**不静默**（2026-10-11
+    CI Windows 轮实测：``ignore_errors=True`` 吞掉失败后，脏数据集泄漏进后续用例）。
     """
     directory = datasets_directory()
-    if directory.exists():
+    if not directory.exists():
+        return
+    database.engine.dispose()
+    for _attempt in range(6):
+        gc.collect()
         shutil.rmtree(directory, ignore_errors=True)
+        if not directory.exists():
+            return
+        time.sleep(0.3)
+    warnings.warn(f"测试数据集目录没能删干净，请手工删除：{directory}", stacklevel=1)
 
 
 @pytest.fixture(autouse=True)
@@ -180,7 +194,8 @@ def fake_public_dns(monkeypatch):
             address = host
         except ValueError:
             address = (
-                PRIVATE_IP_FOR_TESTS if str(host).endswith("internal.example")
+                PRIVATE_IP_FOR_TESTS
+                if str(host).endswith("internal.example")
                 else PUBLIC_IP_FOR_TESTS
             )
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, port or 0))]
