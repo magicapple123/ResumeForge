@@ -461,7 +461,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install -r backend/requirements.txt pip-licenses==5.5.5
-          .\scripts\Generate-Sbom.ps1 -OutputDir runtime\sbom
+          .\scripts\Generate-Sbom.ps1 -OutputDir runtime/sbom
           if ($LASTEXITCODE -ne 0) { throw "Generate-Sbom.ps1 failed with $LASTEXITCODE" }
 
       - name: Upload SBOM artifact

@@ -32,11 +32,18 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Python) {
-    $venvPython = Join-Path $repoRoot "backend\.venv\Scripts\python.exe"
+    if ($IsWindows -or $env:OS -eq "Windows_NT") {
+        $venvPython = Join-Path $repoRoot "backend\.venv\Scripts\python.exe"
+    } else {
+        $venvPython = Join-Path $repoRoot "backend/.venv/bin/python"
+    }
     if (Test-Path $venvPython) {
         $Python = $venvPython
     } else {
-        $Python = "python"
+        $cmd = Get-Command python -ErrorAction SilentlyContinue
+        if (-not $cmd) { $cmd = Get-Command python3 -ErrorAction SilentlyContinue }
+        if (-not $cmd) { throw "Python interpreter not found (tried venv, python, python3)" }
+        $Python = $cmd.Source
     }
 }
 if (-not $OutputDir) {
