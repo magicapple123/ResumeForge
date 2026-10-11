@@ -4,6 +4,7 @@
 面试官按设定的类型、难度、风格和轮数推进，结束后给出一份评分报告。因此单独建表，
 而不是塞进 chat_conversation：两者的生命周期和字段都不一样。
 """
+
 from datetime import datetime
 from typing import Any
 
@@ -54,7 +55,11 @@ class InterviewSession(Base):
     difficulty: Mapped[str] = mapped_column(String(16), default="中级")
     interviewer_style: Mapped[str] = mapped_column(String(32), default="严谨专业")
     # 计划轮数：面试官问答满这些轮次后收尾并出报告。
+    # 自动轮数模式下 rounds 兼作**上限**（最迟第 rounds 轮强制收尾）。
     rounds: Mapped[int] = mapped_column(Integer, default=6)
+    # 自动轮数下限：非空表示 AI 按表现判断何时收尾（最早第 rounds_min 轮）；
+    # NULL = 固定轮数模式（rounds 即精确轮数）。
+    rounds_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 用户自定义的面试官人设与考察重点（会拼进系统提示）。
     persona: Mapped[str] = mapped_column(Text, default="")
     focus: Mapped[str] = mapped_column(String(255), default="")

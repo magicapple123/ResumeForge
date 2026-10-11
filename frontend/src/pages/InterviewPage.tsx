@@ -34,6 +34,7 @@ import type {
   InterviewReviewRecord,
   QuestionBankRecord,
 } from "../types";
+import { AUTO_ROUNDS_MAX, AUTO_ROUNDS_MIN } from "../types";
 import { formatDateTime } from "../utils/format";
 
 /** 每页条数之类没有；这里是深链 ?job_id= 的解析：正整数才认，其余按"没带参"处理。 */
@@ -134,7 +135,9 @@ export default function InterviewPage() {
         interview_type: values.interviewType,
         difficulty: values.difficulty,
         interviewer_style: values.interviewerStyle,
-        rounds: values.rounds,
+        // 自动轮数：rounds 兼作区间上限，rounds_min 是下限；AI 按表现判断何时收尾。
+        rounds: values.autoRounds ? AUTO_ROUNDS_MAX : values.rounds,
+        rounds_min: values.autoRounds ? AUTO_ROUNDS_MIN : null,
         focus: values.focus ?? "",
         persona: values.persona ?? "",
       });
@@ -353,7 +356,9 @@ export default function InterviewPage() {
             </Space>
             <Space size={6} wrap>
               <Typography.Text type="secondary">
-                第 {Math.min(answered + (finished ? 0 : 1), active.rounds)} / {active.rounds} 轮
+                {active.rounds_min != null
+                  ? `第 ${Math.min(answered + (finished ? 0 : 1), active.rounds)} 轮 · 面试官按表现收尾（至多 ${active.rounds} 轮）`
+                  : `第 ${Math.min(answered + (finished ? 0 : 1), active.rounds)} / ${active.rounds} 轮`}
               </Typography.Text>
               {!finished && (
                 <Button

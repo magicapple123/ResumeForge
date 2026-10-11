@@ -173,7 +173,7 @@ def test_chat_migration_builds_history_tables_and_cascades(tmp_path):
         with migration_engine.connect() as connection:
             assert (
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "0042_job_origin_source"
+                == "0043_interview_auto_rounds"
             )
 
         with Session(migration_engine) as session:

@@ -3,6 +3,7 @@
 重点验证"流程由代码控制"这条设计：轮数到了必须收尾、报告结构不对时要能容错、
 模型返回残缺 JSON 时要给出可读的错误，而不是把半成品写进界面。
 """
+
 import json
 
 import pytest
@@ -61,8 +62,10 @@ def _configure_provider(monkeypatch, replies: list[str]) -> None:
             self.replies = list(replies)
 
         async def chat(self, _messages):
-            return self.replies.pop(0) if self.replies else json.dumps(
-                {"question": "收尾", "feedback": "", "done": True}
+            return (
+                self.replies.pop(0)
+                if self.replies
+                else json.dumps({"question": "收尾", "feedback": "", "done": True})
             )
 
     async def build_report(_provider, _session_):
@@ -287,7 +290,10 @@ def test_the_last_answer_does_not_produce_a_dangling_question(client, monkeypatc
     """
     _configure(
         monkeypatch,
-        [{"question": f"第 {index} 题", "feedback": "点评", "done": False} for index in range(1, 10)],
+        [
+            {"question": f"第 {index} 题", "feedback": "点评", "done": False}
+            for index in range(1, 10)
+        ],
     )
     session_id = client.post("/api/interview", json={"rounds": 3}).json()["id"]
 
@@ -315,9 +321,7 @@ def test_the_maximum_round_count_can_actually_be_finished(client, monkeypatch):
     # generate_question 里面，替换掉就等于把要测的那行代码删了（这个用例第一版
     # 正是这样写的，去掉修复后依然通过）。改成只替换 provider，让真实流程跑起来。
     _configure_provider(monkeypatch, _turn_jsons(30))
-    session_id = client.post(
-        "/api/interview", json={"rounds": MAX_INTERVIEW_ROUNDS}
-    ).json()["id"]
+    session_id = client.post("/api/interview", json={"rounds": MAX_INTERVIEW_ROUNDS}).json()["id"]
 
     for _ in range(MAX_INTERVIEW_ROUNDS):
         response = client.post(f"/api/interview/{session_id}/answers", json={"content": "回答"})
@@ -352,3 +356,89 @@ def test_prompt_conditionals_are_actually_rendered():
     later = build_interview_messages(_session(), index=2)[0]["content"]
     assert later.count('"feedback"') >= 1
     assert rendered_with.count('"question"') == 1
+
+
+# ===== 自动轮数（rounds_min）：AI 按表现判断收尾，区间上限强制收尾 =====
+
+
+def test_auto_rounds_validation():
+    assert InterviewCreate().rounds_min is None
+    # 下限必须小于上限，否则区间退化成一个数，"未知感"无从谈起。
+    with pytest.raises(Exception):
+        InterviewCreate(rounds=6, rounds_min=6)
+    with pytest.raises(Exception):
+        InterviewCreate(rounds=3, rounds_min=5)
+    assert InterviewCreate(rounds=9, rounds_min=3).rounds_min == 3
+
+
+def test_prompt_auto_rounds_branch_hides_exact_total():
+    """自动轮数模式：提示词改走"自动收尾"分支，不再出现"第 N / M 轮"的精确计划。"""
+    auto = _session(rounds=9, rounds_min=3)
+    fixed = _session(rounds=3)
+
+    auto_system = build_interview_messages(auto, index=2)[0]["content"]
+    fixed_system = build_interview_messages(fixed, index=2)[0]["content"]
+
+    assert "自动收尾" in auto_system
+    assert "最早第 3 轮" in auto_system
+    # 角色设定里的"计划轮数：N 轮"行不再出现（done 字段说明里的措辞共用，不算暴露）。
+    assert "- 计划轮数" not in auto_system
+    # 固定模式一切照旧。
+    assert "计划轮数：3 轮" in fixed_system
+    assert "自动收尾" not in fixed_system
+    for text in (auto_system, fixed_system):
+        assert "{%" not in text
+        assert "{{" not in text
+
+    # 用户消息里的进度同理：自动模式不暴露"第 2 / 9 轮"。
+    auto_user = build_interview_messages(auto, index=2)[1]["content"]
+    fixed_user = build_interview_messages(fixed, index=2)[1]["content"]
+    assert "第 2 轮（自动收尾" in auto_user
+    assert "第 2 / 9 轮" not in auto_user
+    assert "第 2 / 3 轮" in fixed_user
+
+
+def test_api_auto_rounds_model_driven_finish(client, monkeypatch):
+    """自动轮数：AI 置 done 就收尾；rounds_min 原样落库并随详情返回。"""
+    _configure(
+        monkeypatch,
+        [
+            {"question": "第一题", "feedback": "", "done": False},
+            {"question": "第二题", "feedback": "不错", "done": False},
+            {"question": "收尾语：面试结束", "feedback": "可以", "done": True},
+        ],
+    )
+    created = client.post("/api/interview", json={"rounds": 9, "rounds_min": 3})
+    assert created.status_code == 201, created.text
+    session = created.json()
+    assert session["rounds_min"] == 3
+    assert session["status"] == "active"
+
+    for index in range(2):
+        result = client.post(f"/api/interview/{session['id']}/answers", json={"content": "回答"})
+        assert result.status_code == 200
+        assert result.json()["finished"] is (index == 1)
+    detail = client.get(f"/api/interview/{session['id']}").json()
+    assert detail["status"] == "finished"
+    assert detail["rounds_min"] == 3
+
+
+def test_api_auto_rounds_cap_forces_finish(client, monkeypatch):
+    """AI 一直不置 done：答满区间上限（rounds）时代码强制收尾，不会无限问下去。"""
+    _configure(
+        monkeypatch,
+        [
+            {"question": f"第 {index} 题", "feedback": "继续", "done": False}
+            for index in range(1, 5)
+        ],
+    )
+    session_id = client.post("/api/interview", json={"rounds": 4, "rounds_min": 3}).json()["id"]
+
+    for index in range(1, 5):
+        result = client.post(f"/api/interview/{session_id}/answers", json={"content": "回答"})
+        assert result.status_code == 200
+        assert result.json()["finished"] is (index == 4)
+
+    detail = client.get(f"/api/interview/{session_id}").json()
+    assert detail["status"] == "finished"
+    assert detail["answered_rounds"] == 4

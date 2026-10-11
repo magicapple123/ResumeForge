@@ -4,9 +4,10 @@
  * 供题库「开始模拟面试」的 startFromBank 联动写回考察重点。）
  */
 import { PlayCircleOutlined } from "@ant-design/icons";
-import { Button, Card, Form, Input, InputNumber, Select, Space, Typography } from "antd";
+import { Button, Card, Form, Input, InputNumber, Select, Space, Switch, Typography } from "antd";
 import type { FormInstance } from "antd";
 import type { InterviewDifficulty, InterviewType, InterviewerStyle } from "../../types";
+import { AUTO_ROUNDS_MAX, AUTO_ROUNDS_MIN } from "../../types";
 import { JANE_FACE_SOURCES } from "./janeFaces";
 import {
   INTERVIEW_DIFFICULTIES,
@@ -24,6 +25,8 @@ export interface SetupForm {
   interviewType: InterviewType;
   difficulty: InterviewDifficulty;
   interviewerStyle: InterviewerStyle;
+  /** 开启后 AI 按表现决定何时结束（区间保密，制造真实面试的未知感）。 */
+  autoRounds: boolean;
   rounds: number;
   focus: string;
   persona: string;
@@ -44,6 +47,8 @@ export function SetupTab({
   starting: boolean;
   onStart: (values: SetupForm) => void;
 }) {
+  // 是否隐藏固定轮数输入（Form.useWatch 跟随开关实时变化）。
+  const autoRounds = Form.useWatch("autoRounds", form) ?? false;
   return (
     <Card size="small" className="settings-card">
       <div className="jane-intro">
@@ -68,6 +73,7 @@ export function SetupTab({
           interviewType: "综合面",
           difficulty: "中级",
           interviewerStyle: "严谨专业",
+          autoRounds: false,
           rounds: 6,
           focus: "",
           persona: "",
@@ -100,16 +106,26 @@ export function SetupTab({
             <Select options={INTERVIEWER_STYLES.map((value) => ({ value, label: value }))} />
           </Form.Item>
           <Form.Item
-            label="轮数"
-            name="rounds"
-            extra={`${MIN_INTERVIEW_ROUNDS}-${MAX_INTERVIEW_ROUNDS} 轮`}
+            label="自动轮数"
+            name="autoRounds"
+            valuePropName="checked"
+            extra={`开启后由面试官按你的表现决定何时收尾（${AUTO_ROUNDS_MIN}–${AUTO_ROUNDS_MAX} 轮之间），更接近真实面试的不可预期。`}
           >
-            <InputNumber
-              min={MIN_INTERVIEW_ROUNDS}
-              max={MAX_INTERVIEW_ROUNDS}
-              style={{ width: "100%" }}
-            />
+            <Switch />
           </Form.Item>
+          {!autoRounds && (
+            <Form.Item
+              label="轮数"
+              name="rounds"
+              extra={`${MIN_INTERVIEW_ROUNDS}-${MAX_INTERVIEW_ROUNDS} 轮`}
+            >
+              <InputNumber
+                min={MIN_INTERVIEW_ROUNDS}
+                max={MAX_INTERVIEW_ROUNDS}
+                style={{ width: "100%" }}
+              />
+            </Form.Item>
+          )}
           <Form.Item
             label="考察重点（选填）"
             name="focus"

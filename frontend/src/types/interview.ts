@@ -24,6 +24,10 @@ export type InterviewStatus = "active" | "finished";
 export const MIN_INTERVIEW_ROUNDS = 3;
 export const MAX_INTERVIEW_ROUNDS = 12;
 
+/** 自动轮数区间：AI 在 [AUTO_ROUNDS_MIN, AUTO_ROUNDS_MAX] 内按表现判断何时收尾。 */
+export const AUTO_ROUNDS_MIN = 3;
+export const AUTO_ROUNDS_MAX = 9;
+
 export interface InterviewMessage {
   id: number;
   role: "interviewer" | "user" | "note";
@@ -65,6 +69,8 @@ export interface InterviewBrief {
   difficulty: InterviewDifficulty | string;
   interviewer_style: InterviewerStyle | string;
   rounds: number;
+  /** 自动轮数下限：非空 = AI 按表现收尾（rounds 兼作上限），界面不显示精确总轮数。 */
+  rounds_min: number | null;
   status: InterviewStatus;
   created_at: string;
   updated_at: string;
@@ -86,6 +92,7 @@ export interface InterviewCreatePayload {
   difficulty: InterviewDifficulty;
   interviewer_style: InterviewerStyle;
   rounds: number;
+  rounds_min?: number | null;
   persona?: string;
   focus?: string;
 }

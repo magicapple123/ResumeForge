@@ -122,7 +122,11 @@ export function HistoryCard({
                         <Tag>{item.difficulty}</Tag>
                       </Space>
                     }
-                    description={`第 ${item.answered_rounds}/${item.rounds} 轮 · ${formatDateTime(item.created_at)}`}
+                    description={
+                      item.rounds_min != null
+                        ? `${item.answered_rounds} 轮（自动收尾） · ${formatDateTime(item.created_at)}`
+                        : `第 ${item.answered_rounds}/${item.rounds} 轮 · ${formatDateTime(item.created_at)}`
+                    }
                   />
                 </ListyItem>
               </RowContextMenu>
