@@ -82,7 +82,7 @@
   </head>
   <body>
     <div class="card">
-      <img class="logo" src="../frontend/public/resumeforge-icon.png" alt="简历通" />
+      <img id="logo" class="logo" alt="简历通" />
       <h1>简历通</h1>
       <div class="subtitle">AI 定制化简历生成 · 本地工作台</div>
       <div class="track"><div id="bar" class="bar indeterminate"></div></div>
@@ -91,6 +91,9 @@
     </div>
     <script>
       (function () {
+        var logo = document.getElementById("logo");
+        var icon = new URLSearchParams(location.search).get("icon");
+        if (icon) logo.src = icon; // absolute path works for file:// pages
         var bar = document.getElementById("bar");
         var stage = document.getElementById("stage");
         var errorBox = document.getElementById("error");

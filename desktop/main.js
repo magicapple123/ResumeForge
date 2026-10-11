@@ -12,6 +12,20 @@ const fs = require("fs");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 
+// Startup probe: persists which bootstrap step the shell reached. Remove in
+// phase 5 once the packaged pipeline is proven end to end.
+try {
+  const probeDir = path.join(
+    process.env.LOCALAPPDATA || app.getPath("userData"),
+    "ResumeForge",
+  );
+  fs.mkdirSync(probeDir, { recursive: true });
+  fs.appendFileSync(
+    path.join(probeDir, "startup-probe.log"),
+    `${new Date().toISOString()} module-loaded packaged=${app.isPackaged}\n`,
+  );
+} catch {}
+
 let mainWindow = null;
 let backend = null;
 let tray = null;
@@ -25,7 +39,19 @@ const MAX_RESTART_ATTEMPTS = 3;
 const RESTART_BACKOFF_MS = 1500;
 
 function projectRoot() {
-  return path.join(__dirname, "..");
+  // Packaged: the release pipeline assembles resources/payload (backend,
+  // frontend/dist, scripts, branding) next to the shell.
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "payload")
+    : path.join(__dirname, "..");
+}
+
+function shellIcon() {
+  // electron-builder may drop icon.png from the asar (buildResources clash),
+  // so the packaged app reads the extraResources copy next to the payload.
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "icon.png")
+    : path.join(__dirname, "icon.png");
 }
 
 function runtimeDir() {
@@ -55,8 +81,8 @@ function sendStage(stage, detail) {
 }
 
 function trayIconPath() {
-  // Tray wants small imagery; the 512px brand png scales fine on both OSes.
-  return path.join(projectRoot(), "frontend", "public", "resumeforge-icon.png");
+  // Small imagery for the tray; the 512px brand png scales fine on both OSes.
+  return shellIcon();
 }
 
 function createTray() {
@@ -100,7 +126,7 @@ function createWindow() {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: "#f5f7fa",
-    icon: path.join(projectRoot(), "branding", "resumeforge.ico"),
+    icon: shellIcon(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -108,7 +134,9 @@ function createWindow() {
     },
   });
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadFile(path.join(__dirname, "splash.html"));
+  mainWindow.loadFile(path.join(__dirname, "splash.html"), {
+    query: { icon: shellIcon() },
+  });
   mainWindow.once("ready-to-show", () => mainWindow.show());
 
   // Closing the window minimizes to tray; quitting goes through the tray
@@ -155,7 +183,9 @@ async function startBackend() {
 }
 
 async function startBackendAndSwap() {
-  backend = new BackendManager(projectRoot(), runtimeDir());
+  backend = new BackendManager(projectRoot(), runtimeDir(), {
+    packaged: app.isPackaged,
+  });
   backend.onUnexpectedExit = handleUnexpectedExit;
   try {
     await startBackend();
@@ -169,6 +199,16 @@ async function startBackendAndSwap() {
 // Single instance: a second launch focuses the existing window instead of
 // spawning a competing backend on another port.
 if (!app.requestSingleInstanceLock()) {
+  try {
+    const probeDir = path.join(
+      process.env.LOCALAPPDATA || app.getPath("userData"),
+      "ResumeForge",
+    );
+    fs.appendFileSync(
+      path.join(probeDir, "startup-probe.log"),
+      `${new Date().toISOString()} single-instance-lock-denied\n`,
+    );
+  } catch {}
   app.quit();
 } else {
   app.on("second-instance", () => {
@@ -179,10 +219,20 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
-  app.whenReady().then(() => {
-    createWindow();
-    createTray();
-    startBackendAndSwap();
+  app.whenReady().then(async () => {
+    try {
+      logLine("whenReady reached");
+      createWindow();
+      createTray();
+      await startBackendAndSwap();
+    } catch (err) {
+      logLine(`startup failed: ${err}`);
+      dialog.showErrorBox(
+        "简历通",
+        `启动失败：${err && err.message ? err.message : err}`,
+      );
+      app.quit();
+    }
   });
 
   app.on("before-quit", (event) => {
