@@ -3,6 +3,7 @@
 覆盖 DeepSeek、豆包（火山方舟）、Kimi、智谱、OpenAI、Ollama 等
 绝大多数大模型服务；直接用 httpx 实现，保持依赖精简与协议透明。
 """
+
 import asyncio
 import json
 import logging
@@ -15,6 +16,7 @@ from ...schemas.setting import LLMConfig
 from . import payload as payload_rules
 from . import retry
 from .base import BaseLLMProvider, LLMDelta, LLMError, build_request_timeout
+from .client_pool import get_shared_client
 
 # 与"获取可用模型"接口（model_catalog）与 SearXNG 校验共用的请求侧规则：实现已
 # 下沉到 payload 模块（见其模块说明），这里按原路径再导出，既有导入方零改动。
@@ -97,9 +99,6 @@ def _extract_reasoning(delta: dict) -> str:
     return ""
 
 
-
-
-
 def _status_error(status: int) -> LLMError:
     """状态码 → LLMError。实现下沉到 payload.status_error，保留为调用点。"""
     return payload_rules.status_error(status)
@@ -150,8 +149,14 @@ class OpenAICompatProvider(BaseLLMProvider):
         try:
             while True:
                 try:
-                    async with self._client() as client, client.stream(
-                        "POST", self._endpoint(), json=payload, headers=self._headers()
+                    client = self._client()
+                    async with client.stream(
+                        "POST",
+                        self._endpoint(),
+                        json=payload,
+                        headers=self._headers(),
+                        # 超时不烘进共享客户端，按请求传入（read 预算按调用收紧的语义不变）。
+                        timeout=self._timeout(),
                     ) as response:
                         if response.status_code != 200:
                             # 429/5xx 只发生在 body 之前（安全点规则：首个 delta 之前）。
@@ -249,9 +254,7 @@ class OpenAICompatProvider(BaseLLMProvider):
                     # 流正常走到 [DONE]：端点不发 finish_reason 时按 stop 归一（§2.4）。
                     # finish_reason 可能出现在无内容的收尾帧（不产出 delta），所以除了
                     # delta 上携带的，还要看 _stream_deltas 捕获的帧级值。
-                    finish_reason = (
-                        last_finish_reason or self._stream_stop_reason or FINISH_STOP
-                    )
+                    finish_reason = last_finish_reason or self._stream_stop_reason or FINISH_STOP
                     return
                 except StatusRetrySignal as signal:
                     # 状态码阶段（尚未产出任何 delta）的重试：编排在 retry.StatusRetryGate。
@@ -334,8 +337,13 @@ class OpenAICompatProvider(BaseLLMProvider):
     ) -> AsyncIterator[LLMDelta]:
         payload = self._build_payload(messages, stream=True, tools=tools, thinking=thinking)
         try:
-            async with self._client() as client, client.stream(
-                "POST", self._endpoint(), json=payload, headers=self._headers()
+            client = self._client()
+            async with client.stream(
+                "POST",
+                self._endpoint(),
+                json=payload,
+                headers=self._headers(),
+                timeout=self._timeout(),
             ) as response:
                 if response.status_code != 200:
                     # 状态码阶段（尚未产出任何 delta）：交给 stream_chat_events 的重试
@@ -442,7 +450,9 @@ class OpenAICompatProvider(BaseLLMProvider):
         return headers
 
     def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(timeout=self._timeout(), transport=self._transport)
+        # 连接池共享（AI 提速）：同一事件循环 + 同一传输层的请求复用连接，
+        # 省掉每次请求的 TCP/TLS 握手；超时按请求在 stream() 处传入。
+        return get_shared_client(transport=self._transport)
 
     def _stream_char_limit(self) -> int:
         # 不限制输出时 max_tokens 为 0，按乘法派生会落到下界，反而成为最严格的

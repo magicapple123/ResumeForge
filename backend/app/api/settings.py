@@ -1,4 +1,5 @@
 """设置接口：大模型配置的读取、保存与连通性测试。"""
+
 import ipaddress
 import logging
 import time
@@ -200,9 +201,7 @@ def read_webform_relaxed_mode(db: Session = Depends(get_db)):
 
 @router.put("/webform-relaxed-mode", response_model=WebFormRelaxedModeSetting)
 def write_webform_relaxed_mode(payload: WebFormRelaxedModeSetting, db: Session = Depends(get_db)):
-    return WebFormRelaxedModeSetting(
-        enabled=save_webform_relaxed_mode(db, payload.enabled)
-    )
+    return WebFormRelaxedModeSetting(enabled=save_webform_relaxed_mode(db, payload.enabled))
 
 
 @router.get("/assistant-relaxed-mode", response_model=AssistantRelaxedModeSetting)
@@ -218,9 +217,7 @@ def read_assistant_relaxed_mode(db: Session = Depends(get_db)):
 def write_assistant_relaxed_mode(
     payload: AssistantRelaxedModeSetting, db: Session = Depends(get_db)
 ):
-    return AssistantRelaxedModeSetting(
-        enabled=save_assistant_relaxed_mode(db, payload.enabled)
-    )
+    return AssistantRelaxedModeSetting(enabled=save_assistant_relaxed_mode(db, payload.enabled))
 
 
 @router.get("/export-save-location", response_model=ExportSaveLocationOut)
@@ -266,9 +263,7 @@ def read_navigation_visibility(db: Session = Depends(get_db)):
 
 
 @router.put("/navigation", response_model=NavigationVisibility)
-def write_navigation_visibility(
-    payload: NavigationVisibility, db: Session = Depends(get_db)
-):
+def write_navigation_visibility(payload: NavigationVisibility, db: Session = Depends(get_db)):
     return save_navigation_visibility(db, payload)
 
 
@@ -334,7 +329,10 @@ async def test_llm(payload: LLMTestRequest, db: Session = Depends(get_db)):
     except ValueError as exc:
         return LLMTestResult(ok=False, message=str(exc))
     # 只测连通性：连思考参数一起测的话，"参数写错"会表现成"连不上"，用户会去查网络。
-    provider = create_provider(resolved_payload.without_thinking())
+    # 探针同时把 max_tokens 压到 64：连通性只在乎"模型回话了没有"，不需要长输出——
+    # 用户反馈过"快模型测连接也要等很久"，长 max_tokens 会让探针陪跑完整的生成长度。
+    probe_config = resolved_payload.without_thinking().model_copy(update={"max_tokens": 64})
+    provider = create_provider(probe_config)
     started = time.perf_counter()
     try:
         reply = await provider.chat([{"role": "user", "content": "请只回复两个字：正常"}])

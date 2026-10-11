@@ -238,6 +238,10 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        # LLM 共享连接池（AI 提速）：连接绑定在事件循环上，进程收尾时统一关闭。
+        from .services.llm.client_pool import aclose_shared_clients
+
+        await aclose_shared_clients()
         _shutdown_runtime_services(job_match_runner)
 
 
