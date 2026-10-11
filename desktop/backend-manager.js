@@ -17,6 +17,16 @@ const HEALTH_TIMEOUT_MS = 90_000;
 const HEALTH_POLL_INTERVAL_MS = 300;
 const PORT_SCAN_START = 8010;
 const PORT_SCAN_END = 8099;
+// Release archives may carry a zipped Python runtime (phase 3 packaging).
+// When present it is unpacked once into the shared data dir and preferred
+// over the dev-tree venv; dev trees simply keep using the venv.
+const RUNTIME_ZIP_NAME = "python-runtime.zip";
+
+function resolveRuntimePython(runtimeDir) {
+  return process.platform === "win32"
+    ? path.join(runtimeDir, "python", "python.exe")
+    : path.join(runtimeDir, "python", "bin", "python3");
+}
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -41,20 +51,65 @@ function resolvePython(projectRoot) {
   throw new Error(`Python interpreter not found: ${candidates[0]}`);
 }
 
+function extractZip(zipPath, targetDir) {
+  // bsdtar ships with Windows 10+ and macOS and reads zip archives fine;
+  // using it avoids shipping an unzip dependency in the shell.
+  return new Promise((resolve, reject) => {
+    const child = spawn("tar", ["-xf", zipPath, "-C", targetDir], {
+      windowsHide: true,
+    });
+    child.on("error", reject);
+    child.on("exit", (code) =>
+      code === 0
+        ? resolve()
+        : reject(new Error(`tar exited with ${code} while unpacking runtime`)),
+    );
+  });
+}
+
 class BackendManager {
-  constructor(projectRoot) {
+  constructor(projectRoot, runtimeDir) {
     this.projectRoot = projectRoot;
+    this.runtimeDir = runtimeDir;
     this.child = null;
     this.logStream = null;
     this.stopped = false;
+    // Set by the shell: called when the backend dies while we did not ask
+    // it to (crash supervision hook).
+    this.onUnexpectedExit = null;
   }
 
   logFile() {
     return path.join(this.projectRoot, "runtime", "logs", "desktop-backend.log");
   }
 
+  async prepareRuntime(onStage) {
+    const zipPath = path.join(this.projectRoot, "desktop", RUNTIME_ZIP_NAME);
+    if (!fs.existsSync(zipPath)) {
+      // Dev tree: no bundled runtime zip, the venv stays authoritative.
+      return;
+    }
+    const python = resolveRuntimePython(this.runtimeDir);
+    const completeMarker = path.join(this.runtimeDir, ".runtime-complete");
+    if (fs.existsSync(python) && fs.existsSync(completeMarker)) return;
+
+    if (onStage) onStage("preparing-runtime");
+    fs.mkdirSync(this.runtimeDir, { recursive: true });
+    await extractZip(zipPath, this.runtimeDir);
+    if (!fs.existsSync(python)) {
+      throw new Error(
+        `Runtime unpacked but interpreter missing: ${python} (zip layout mismatch?)`,
+      );
+    }
+    fs.writeFileSync(completeMarker, new Date().toISOString());
+  }
+
   async start(onStage) {
-    const python = resolvePython(this.projectRoot);
+    await this.prepareRuntime(onStage);
+    const bundled = resolveRuntimePython(this.runtimeDir);
+    const python = fs.existsSync(bundled)
+      ? bundled
+      : resolvePython(this.projectRoot);
     const port = await findFreePort();
     const logPath = this.logFile();
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
@@ -88,6 +143,9 @@ class BackendManager {
     let earlyExit = null;
     this.child.on("exit", (code, signal) => {
       earlyExit = { code, signal };
+      if (!this.stopped && this.onUnexpectedExit) {
+        this.onUnexpectedExit({ code, signal });
+      }
     });
 
     const url = `http://127.0.0.1:${port}`;
