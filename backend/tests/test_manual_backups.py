@@ -3,6 +3,8 @@
 删除的性质必须钉住：**移动到 backups/.trash/，绝不 unlink**；没有自动清理，
 "全部删除"这类一键入口也不存在。
 """
+
+import os
 import shutil
 from pathlib import Path
 
@@ -32,7 +34,8 @@ def test_manual_backups_list_only_db_files(client):
     assert [item["name"] for item in payload["items"]] == [SNAPSHOT_NAME]
     assert payload["items"][0]["size_bytes"] == 500
     assert payload["trashed_count"] == 1
-    assert payload["directory"] == str(backups)
+    # GitHub Windows runner 的用户目录大小写与环境变量不一致，按大小写不敏感比较。
+    assert os.path.normcase(payload["directory"]) == os.path.normcase(str(backups))
 
 
 def test_trash_manual_backup_moves_file_never_deletes(client):

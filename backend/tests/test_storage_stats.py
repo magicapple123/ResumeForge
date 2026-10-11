@@ -1,4 +1,6 @@
 """存储体积统计（RF-25）：分项体积、只 stat 不读内容、测试库目录隔离。"""
+
+import os
 import shutil
 from pathlib import Path
 
@@ -34,7 +36,8 @@ def test_storage_overview_counts_directories_and_database(client):
     # 汇总 >= 任何分项。
     assert payload["total_bytes"] >= 3000
     assert payload["total_file_count"] >= 2
-    assert payload["data_dir"] == str(base)
+    # GitHub Windows runner 的用户目录大小写与环境变量不一致，按大小写不敏感比较。
+    assert os.path.normcase(payload["data_dir"]) == os.path.normcase(str(base))
 
 
 def test_storage_overview_never_returns_file_contents(client):
