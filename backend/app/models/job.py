@@ -1,4 +1,5 @@
 """岗位模型：保存手动录入或从粘贴文本解析后确认的岗位。"""
+
 from datetime import datetime
 from typing import Any
 
@@ -41,6 +42,10 @@ class Job(Base):
     # 招聘信息的录入方式，用于方便用户溯源：手动填写 / 粘贴文本识别 / 图片识别 /
     # 文档识别 / 备选岗位导入。旧数据为空字符串，界面按"未记录"处理。
     recognition_source: Mapped[str] = mapped_column(String(32), default="", server_default="")
+    # 用户可见、可编辑的「来源」字段（0042）：这条招聘信息从哪来的（如"BOSS直聘"/"内推"）。
+    # 曾经它以「来源：…」一行的形式自动追加在备注末尾——用户删不掉、编辑空备注还会被补回来；
+    # 现在单开一列，备注只存用户自己写的内容。历史备注里的来源行由 0042 迁移迁到这一列。
+    origin_source: Mapped[str] = mapped_column(String(64), default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     # 软删除时间戳：NULL 表示「没删」。列表查询一律加 `deleted_at IS NULL`，

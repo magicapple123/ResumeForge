@@ -4,6 +4,7 @@
 留下重复岗位，写紧了会把用户真正想要的岗位当成"已存在"悄悄丢掉（而界面上只显示"导入 7 条"，
 用户根本不知道少了哪 3 条）。所以这里把四种结果逐一钉住。
 """
+
 from app.models.job import Job
 from app.models.material import CANDIDATE_JOB_IMPORTED, CANDIDATE_JOB_PENDING, CandidateJob
 from app.schemas.material import CandidateJobCreate
@@ -52,8 +53,9 @@ def test_import_creates_a_job_and_marks_the_candidate_imported(db_session):
     assert job.description == "岗位职责：负责后端服务的设计与开发。"
     assert job.requirements == "任职要求：三年以上经验。"
     assert job.additional_info == "福利待遇：六险一金、免费三餐。"
-    # 来源标注（沿用既有约定：写进备注便于溯源）。
-    assert "来源：岗位采集" in job.note
+    # 来源标注（0042 起：来源住独立字段 origin_source，备注不再被追加来源行）。
+    assert job.note == ""
+    assert job.origin_source == "岗位采集"
 
     db_session.refresh(candidate)
     assert candidate.status == CANDIDATE_JOB_IMPORTED
@@ -109,7 +111,8 @@ def test_manual_candidate_is_recorded_with_the_candidate_source(db_session):
     import_candidates(db_session, [candidate.id])
 
     job = db_session.query(Job).one()
-    assert "来源：备选岗位导入" in job.note
+    assert job.origin_source == "备选岗位导入"
+    assert "来源：" not in job.note
     # 没有 description 的候选退回用原文填描述（与改版前的导入行为一致）。
     assert job.description == "粘贴来的招聘原文"
     # 手动候选的 source 与"手动录入"保持一致（不传就会落到默认值「手动添加」）。
@@ -129,7 +132,8 @@ def test_legacy_official_candidate_without_task_id_is_still_collected(db_session
 
     job = db_session.query(Job).one()
     assert job.recognition_source == "岗位采集"
-    assert "来源：岗位采集" in job.note
+    assert job.origin_source == "岗位采集"
+    assert "来源：" not in job.note
 
 
 def test_import_parses_skill_keywords_from_the_jd(db_session):
@@ -252,7 +256,9 @@ def test_import_endpoint_returns_per_candidate_outcomes(db_session, client):
     db_session.add(Job(title="已存在的岗位", company="C公司", source_url="https://example.com/2"))
     db_session.commit()
     kept = _stage(db_session, title="新岗位", company="B公司", source_url="https://example.com/3")
-    duplicate = _stage(db_session, title="已存在的岗位", company="C公司", source_url="https://example.com/2")
+    duplicate = _stage(
+        db_session, title="已存在的岗位", company="C公司", source_url="https://example.com/2"
+    )
 
     response = client.post(
         "/api/candidate-jobs/import", json={"candidate_ids": [kept.id, duplicate.id]}

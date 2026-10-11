@@ -24,6 +24,7 @@ const BASE_JOB: Job = {
   note: "",
   note_images: [],
   recognition_source: "",
+  origin_source: "",
   favorite: false,
   created_at: "2026-08-19T08:00:00",
   updated_at: "2026-08-21T09:30:00",

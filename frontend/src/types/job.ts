@@ -4,7 +4,8 @@ import type { RecognitionSource, SkillTag } from "./common";
 
 /**
  * 招聘信息的录入方式（后端 `RECOGNITION_SOURCES`）。
- * 保存岗位时会自动写进备注，方便用户回溯这条信息是从哪来的。
+ * 它是"这条信息**怎么录进来的**"（驱动列表角标与筛选）；用户可见、可编辑的
+ * 「来源」字段是 `Job.origin_source`，两者是两回事。
  */
 export const JOB_RECOGNITION_SOURCES = [
   "手动填写",
@@ -38,6 +39,11 @@ export interface Job {
   /** 备注里的图片（受限的 base64 data URL，最多 2 张）。 */
   note_images: string[];
   recognition_source: JobRecognitionSource;
+  /**
+   * 用户可见、可编辑的「来源」字段：这条招聘信息从哪来的（如"内推"/"招聘会"）。
+   * 可留空、可随时清空——备注不再自动追加「来源：…」行（0042 起拆成独立字段）。
+   */
+  origin_source: string;
   favorite: boolean;
   /**
    * 这个岗位能不能用「投递台」自动投递：来源 / 投递链接必须能归属到某个招聘网站。
@@ -76,6 +82,7 @@ export interface JobPayload {
   note?: string;
   note_images?: string[];
   recognition_source?: JobRecognitionSource;
+  origin_source?: string;
   favorite?: boolean;
 }
 

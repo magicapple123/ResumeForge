@@ -240,6 +240,8 @@ export default function JobDetailDrawer({
             <Descriptions.Item label="信息来源">
               {job.recognition_source || "未记录"}
             </Descriptions.Item>
+            {/* 0042 起「来源」是用户可编辑的独立字段（不再追加进备注），如实展示、空则留白。 */}
+            <Descriptions.Item label="来源">{job.origin_source || "-"}</Descriptions.Item>
           </Descriptions>
 
           {job.keywords.length > 0 && (

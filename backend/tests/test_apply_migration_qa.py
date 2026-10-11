@@ -14,6 +14,7 @@
 - 真实生产库形态的旧备份（0009、缺 4 张表）能被 ``inspect_archive`` 接受且补齐；
 - 反向：声称在 head 却缺表的数据包被正确拒收。
 """
+
 from __future__ import annotations
 
 import json
@@ -49,7 +50,7 @@ PREVIOUS_REVISION = "0009_templates_and_interview"
 # 本文件的主角：只加表、不动既有列的那个迁移。
 APPLY_MIGRATION_REVISION = "0010_apply_center"
 # 当前迁移链的 head，用于"升级到底"与"声称在 head"的对照。
-HEAD_REVISION = "0041_track_channel_and_events"
+HEAD_REVISION = "0042_job_origin_source"
 
 EXPECTED_INDEXES = {
     "job_match_analysis": {
@@ -150,7 +151,8 @@ def test_round_trip_on_a_copy_of_the_real_database_preserves_existing_data(real_
         for table, indexes in EXPECTED_INDEXES.items():
             assert indexes <= {item["name"] for item in inspector.get_indexes(table)}
         assert any(
-            item["unique"] for item in inspector.get_indexes("job_match_analysis")
+            item["unique"]
+            for item in inspector.get_indexes("job_match_analysis")
             if item["name"] == "ix_job_match_analysis_job_id"
         )
         assert any(
@@ -164,8 +166,7 @@ def test_round_trip_on_a_copy_of_the_real_database_preserves_existing_data(real_
             for item in inspector.get_foreign_keys("apply_task_item")
         )
         assert any(
-            item["referred_table"] == "job"
-            and item["options"].get("ondelete") == "SET NULL"
+            item["referred_table"] == "job" and item["options"].get("ondelete") == "SET NULL"
             for item in inspector.get_foreign_keys("apply_queue_item")
         )
 
@@ -224,9 +225,9 @@ def test_head_schema_matches_a_freshly_migrated_database(real_db_copy, tmp_path)
         command.upgrade(build_alembic_config(fresh), "head")
         assert _column_sets(migrated, APPLY_TABLES) == _column_sets(fresh, APPLY_TABLES)
         for table in APPLY_TABLES:
-            assert {
-                item["name"] for item in inspect(migrated).get_indexes(table)
-            } == {item["name"] for item in inspect(fresh).get_indexes(table)}
+            assert {item["name"] for item in inspect(migrated).get_indexes(table)} == {
+                item["name"] for item in inspect(fresh).get_indexes(table)
+            }
     finally:
         migrated.dispose()
         fresh.dispose()
@@ -279,9 +280,7 @@ def test_head_declared_backup_missing_apply_tables_is_rejected(real_db_copy, tmp
             connection,
         ):
             connection.execute("DELETE FROM alembic_version")
-            connection.execute(
-                "INSERT INTO alembic_version VALUES (?)", (HEAD_REVISION,)
-            )
+            connection.execute("INSERT INTO alembic_version VALUES (?)", (HEAD_REVISION,))
         with zipfile.ZipFile(tmp_path / "tampered.zip", "w", zipfile.ZIP_DEFLATED) as archive:
             archive.write(tampered, DATABASE_MEMBER)
             archive.writestr(MANIFEST_MEMBER, json.dumps(build_manifest(head_engine)))

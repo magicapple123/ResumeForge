@@ -5,6 +5,7 @@
 「按原始 revision 核对 → 迁移到 head → 校验表集合」，因此一份停在 ``0009`` 的旧备份
 被迁到 head 后会自动补上本次新增的 4 张投递表，不该被拒。这里把这件事钉死。
 """
+
 import json
 import sqlite3
 import zipfile
@@ -24,7 +25,7 @@ from app.services.data_backup import (
 
 # 投递功能出现之前的那一版 revision，用来伪造一份"旧版本导出的备份"。
 PREVIOUS_REVISION = "0009_templates_and_interview"
-HEAD_REVISION = "0041_track_channel_and_events"
+HEAD_REVISION = "0042_job_origin_source"
 APPLY_TABLES = ("job_match_analysis", "apply_queue_item", "apply_task", "apply_task_item")
 
 

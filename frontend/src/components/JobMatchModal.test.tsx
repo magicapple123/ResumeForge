@@ -42,6 +42,7 @@ const JOB: Job = {
   note: "",
   note_images: [],
   recognition_source: "岗位采集",
+  origin_source: "岗位采集",
   favorite: false,
   created_at: "2026-09-17T08:00:00",
   updated_at: "2026-09-17T08:00:00",

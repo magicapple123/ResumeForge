@@ -70,11 +70,14 @@ export default function JobFormFields() {
           placeholder="如：公司与团队介绍、职位编号、福利待遇、工作安排、申请或面试流程"
         />
       </Form.Item>
+      <Form.Item name="origin_source" label="来源（选填）">
+        <Input placeholder="这条招聘信息从哪来的，如：内推、招聘会、猎头；可随时修改或清空" />
+      </Form.Item>
       <Form.Item name="note" label="备注（选填）">
         <HintedTextArea
           rows={3}
           maxLength={2000}
-          placeholder="记录投递进展、内推联系人、面试安排等；保存时会自动补一行「来源：…」"
+          placeholder="记录投递进展、内推联系人、面试安排等"
         />
       </Form.Item>
     </>
