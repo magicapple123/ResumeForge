@@ -164,7 +164,8 @@ export default function DatasetsCard({
             style={{ marginBottom: 0, marginTop: 4, fontSize: 12 }}
           >
             按本机存储的形态写入（Windows 上为系统加密、绑定当前用户与这台电脑，换电脑恢复后
-            可能需要重新填写）；勾选后的备份包更敏感，请妥善保管，不要发给不信任的人。
+            可能需要重新填写；macOS/Linux 上密钥以明文随包）。勾选后的备份包更敏感，
+            请妥善保管，不要发给不信任的人。
           </Typography.Paragraph>
         </div>
 
@@ -260,7 +261,9 @@ export default function DatasetsCard({
                       <>
                         {formatSize(dataset.size_bytes)}
                         {dataset.created_at ? ` · ${formatDateTime(dataset.created_at)}` : ""}
-                        {dataset.source ? ` · ${dataset.source}` : ""}
+                        {dataset.source
+                          ? ` · ${dataset.source === "sample" ? "示例体验" : dataset.source}`
+                          : ""}
                       </>
                     }
                   />

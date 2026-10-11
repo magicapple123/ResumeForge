@@ -17,16 +17,44 @@
 import { ThunderboltOutlined } from "@ant-design/icons";
 import { App, Button, Input, Radio, Space, Typography } from "antd";
 import { useState } from "react";
+import { prepareResumeReview } from "../../api/resumes";
 import { rewriteResumeField } from "../../api/resumeWriting";
-import type { ResumeContent } from "../../types";
+import type { ResumeContent, ResumePendingChange } from "../../types";
 import {
   describeResumeFieldPath,
   isLineListPath,
+  parseResumeFieldPath,
   readResumeFieldByPath,
   readResumeLinesByPath,
   toWholeSegmentPath,
   writeResumeValueByPath,
 } from "../../utils/resumeFieldPath";
+import ResumeChangeReviewModal from "../resume/ResumeChangeReviewModal";
+
+/** 区块条目的身份字段（台账检索的 subject 与这里同一口径）。 */
+const IDENTITY_FIELDS: Record<string, string> = {
+  education: "school",
+  experience: "company",
+  campus_experience: "organization",
+  projects: "name",
+  skills: "name",
+  awards: "name",
+};
+
+/** 从路径取变更所属条目的主体名（公司 / 项目名），用于台账跳转链接。 */
+function subjectForPath(path: string, content: ResumeContent): string | undefined {
+  const segments = parseResumeFieldPath(path);
+  if (segments.length < 2) return undefined;
+  const section = String(segments[0]);
+  const identityField = IDENTITY_FIELDS[section];
+  const index = segments[1];
+  if (!identityField || typeof index !== "number") return undefined;
+  const item = (content as unknown as Record<string, Record<string, unknown>[]>)?.[section]?.[
+    index
+  ];
+  const identity = item ? String(item[identityField] ?? "").trim() : "";
+  return identity || undefined;
+}
 
 interface Props {
   resumeId: number;
@@ -63,6 +91,10 @@ export default function FieldRewritePanel({ resumeId, content, path, onChange }:
   /** 点中单条要点时，可以把它扩成"整段"：`…description.1` → `…description`。 */
   const [wholeSegment, setWholeSegment] = useState(false);
   const [applied, setApplied] = useState<string[] | null>(null);
+  // 「审阅后填入」（RF-13）：填入前先打开按条审阅弹窗——diff 过目 + 三把闸门
+  // 预检，接受才写入表单。保持"不自动写入"语义，只是把确认升级成了审阅。
+  const [pendingReview, setPendingReview] = useState<ResumePendingChange[] | null>(null);
+  const [preparing, setPreparing] = useState(false);
   // 「当前内容」默认收起：内容长时靠"展开全文"看全，而不是给一个滚动条。
   const [showAllOriginal, setShowAllOriginal] = useState(false);
 
@@ -106,11 +138,47 @@ export default function FieldRewritePanel({ resumeId, content, path, onChange }:
   };
 
   const apply = () => {
-    if (suggestion.length === 0) return;
+    if (suggestion.length === 0 || preparing) return;
+    // 先过审阅预检（三把闸门在后端），再打开按条审阅弹窗；接受才真正写入表单。
+    const change: ResumePendingChange = {
+      path: targetPath,
+      before: originalLines.join("\n"),
+      after: suggestion.join("\n"),
+      origin: "ai_rewrite",
+      instruction: instruction.trim(),
+      subject: subjectForPath(targetPath, content),
+    };
+    setPreparing(true);
+    prepareResumeReview(resumeId, [change])
+      .then((results) => {
+        const verdict = results[0];
+        setPendingReview([
+          {
+            ...change,
+            verdict: verdict?.verdict,
+            reasons: verdict?.reasons ?? [],
+          },
+        ]);
+      })
+      .catch((error) => {
+        message.error(error instanceof Error ? error.message : "审阅预检失败");
+      })
+      .finally(() => setPreparing(false));
+  };
+
+  const confirmReview = (accepted: ResumePendingChange[]) => {
+    setPendingReview(null);
+    const change = accepted[0];
+    if (!change) return;
     // 记下应用前的值，供「还原」使用——表单里此时已经是新值了。
     setApplied(original);
+    const lines = change.after.split("\n");
     onChange(
-      writeResumeValueByPath(content, targetPath, wholeSegmentTarget ? suggestion : suggestion[0]),
+      writeResumeValueByPath(
+        content,
+        change.path,
+        isLineListPath(change.path) ? lines : (lines[0] ?? ""),
+      ),
     );
     setSuggestion([]);
   };
@@ -213,8 +281,8 @@ export default function FieldRewritePanel({ resumeId, content, path, onChange }:
               ))}
             </div>
             <Space size={8}>
-              <Button type="primary" size="small" onClick={apply}>
-                {wholeSegmentTarget ? "填入整段" : "填入这一条"}
+              <Button type="primary" size="small" loading={preparing} onClick={apply}>
+                {wholeSegmentTarget ? "审阅后填入整段" : "审阅后填入"}
               </Button>
               <Button size="small" onClick={() => setSuggestion([])}>
                 丢弃
@@ -231,6 +299,13 @@ export default function FieldRewritePanel({ resumeId, content, path, onChange }:
           </Space>
         ) : null}
       </Space>
+      <ResumeChangeReviewModal
+        open={pendingReview !== null}
+        pendingChanges={pendingReview ?? []}
+        content={content}
+        onCancel={() => setPendingReview(null)}
+        onConfirm={confirmReview}
+      />
     </div>
   );
 }

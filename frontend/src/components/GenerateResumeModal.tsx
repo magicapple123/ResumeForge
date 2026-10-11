@@ -15,6 +15,7 @@ import {
   updateResumeLayout,
 } from "../api/resumes";
 import { getLLMConfig } from "../api/settings";
+import { formatErrorGuidance } from "../api/errorGuidance";
 import type {
   EnhancementLevel,
   Job,
@@ -210,7 +211,8 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       watchResumeTask(started, job ? `为「${job.title}」生成简历` : "生成通用简历");
     } catch (err) {
       setStage("error");
-      setErrorMsg(err instanceof Error ? err.message : "启动生成失败，请重试");
+      // RF-20：失败不只显示原始异常——给「原因 + 建议 + 编号」指引。
+      setErrorMsg(formatErrorGuidance(err, "启动生成失败，请重试"));
     }
   };
 

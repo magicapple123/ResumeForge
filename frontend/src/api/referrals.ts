@@ -1,6 +1,6 @@
 /** 内推管理接口。 */
 import type { Referral, ReferralImageUpload, ReferralPayload, ReferralStats } from "../types";
-import { ApiError, buildQuery, extractError, request } from "./client";
+import { buildQuery, request } from "./client";
 
 export function listReferrals(
   params: { status?: string; keyword?: string; limit?: number } = {},
@@ -28,10 +28,11 @@ export function deleteReferral(id: number): Promise<void> {
 export async function uploadReferralImage(file: File): Promise<ReferralImageUpload> {
   const formData = new FormData();
   formData.append("file", file);
-  const resp = await fetch("/api/referrals/upload-image", {
+  // request() 对 FormData 不预设 Content-Type（multipart boundary 由浏览器生成）；
+  // 图片上传走 upload 预算（10 分钟），不吃 15s 的默认超时。
+  return request("/referrals/upload-image", {
     method: "POST",
     body: formData,
+    budget: "upload",
   });
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
-  return (await resp.json()) as ReferralImageUpload;
 }

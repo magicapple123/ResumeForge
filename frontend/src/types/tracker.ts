@@ -68,6 +68,29 @@ export const TRACK_SOURCE_LABELS: Record<TrackSource, string> = {
   recognized: "识别导入",
 };
 
+/**
+ * 投递渠道（RF-18）：用户自选"这份工作从哪来的"，与上面的记录来源是两个维度。
+ * 取值与后端 `models/tracker.py` 的 CHANNELS 逐字对应；「未知」是合法默认值。
+ */
+export const TRACK_CHANNELS = [
+  "unknown",
+  "referral",
+  "official_website",
+  "job_platform",
+  "headhunter",
+  "other",
+] as const;
+export type TrackChannel = (typeof TRACK_CHANNELS)[number];
+
+export const TRACK_CHANNEL_LABELS: Record<TrackChannel, string> = {
+  unknown: "未知",
+  referral: "内推",
+  official_website: "官网",
+  job_platform: "招聘平台",
+  headhunter: "猎头/中介",
+  other: "其他",
+};
+
 /** 合并结论：这次识别对这条记录做了什么。 */
 export const MERGE_ACTIONS = ["created", "updated", "unchanged"] as const;
 export type MergeAction = (typeof MERGE_ACTIONS)[number];
@@ -104,9 +127,16 @@ export interface Track extends TrackRecord {
   updated_at: string;
   job_id: number | null;
   resume_id: number | null;
+  /** 所用简历的标题快照（RF-17）：简历被删后仍可读；空 = 历史关联未知。 */
+  resume_title: string;
+  /** 投递渠道（RF-18）：用户自选，默认「未知」。 */
+  channel: TrackChannel;
 }
 
-export type TrackPayload = Omit<Track, "id" | "source" | "created_at" | "updated_at">;
+export type TrackPayload = Omit<
+  Track,
+  "id" | "source" | "created_at" | "updated_at" | "resume_title"
+>;
 
 export interface TrackList {
   items: Track[];
@@ -161,6 +191,7 @@ export function emptyTrack(): TrackPayload {
     evidence: "",
     job_id: null,
     resume_id: null,
+    channel: "unknown",
   };
 }
 
@@ -184,6 +215,7 @@ export function trackPayload(track: Track, patch: Partial<TrackPayload> = {}): T
     evidence: track.evidence,
     job_id: track.job_id,
     resume_id: track.resume_id,
+    channel: track.channel,
     ...patch,
   };
 }

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // 路由表就在 App.tsx 里，读它的源码即可——再维护一份页面清单只会多一处会过期的真相。
 import appSource from "../App.tsx?raw";
 import UserGuideModal from "./UserGuideModal";
+import { QUICK_START_PATHS } from "./quickStartPaths";
 import { GUIDE_STEPS } from "./userGuideSteps";
 
 const apiMocks = vi.hoisted(() => ({
@@ -181,6 +182,78 @@ describe("UserGuideModal", () => {
 
     await waitFor(() => expect(screen.getByText("载入失败")).toBeTruthy());
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("快速开始首屏（initialQuickStart）", () => {
+  it("首屏是三张路径卡，标题与说明齐全", () => {
+    renderGuide({ initialQuickStart: true });
+
+    expect(screen.getByText("从这里开始")).toBeInTheDocument();
+    for (const item of QUICK_START_PATHS) {
+      expect(screen.getByText(item.lead)).toBeInTheDocument();
+      expect(screen.getByText(item.text)).toBeInTheDocument();
+    }
+    // 8 步视图不该同时出现：第 1 步的标题不在首屏里。
+    expect(screen.queryByText("选择预设或自定义模型")).toBeNull();
+  });
+
+  it("不传 initialQuickStart 时行为与从前一致：直接进 8 步视图", () => {
+    renderGuide();
+    expect(screen.getByText("选择预设或自定义模型")).toBeInTheDocument();
+    expect(screen.queryByText("从这里开始")).toBeNull();
+  });
+
+  it("点「我有一份现成简历」关闭弹窗并跳到我的资料", () => {
+    const onClose = vi.fn();
+    const onNavigate = vi.fn();
+    renderGuide({ initialQuickStart: true, onClose, onNavigate });
+
+    fireEvent.click(screen.getByRole("button", { name: /我有一份现成简历/ }));
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onNavigate).toHaveBeenCalledWith("/profile");
+  });
+
+  it("点「查看完整指南（8 步）」切到步骤视图，从第 1 步开始", () => {
+    renderGuide({ initialQuickStart: true });
+
+    fireEvent.click(screen.getByRole("button", { name: /查看完整指南（8 步）/ }));
+    expect(screen.getByText("选择预设或自定义模型")).toBeInTheDocument();
+    // 完整视图的底部按钮原样保留。
+    expect(screen.getByRole("button", { name: /载入示例数据体验/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /下一步/ })).toBeInTheDocument();
+  });
+
+  it("体验示例失败时保持打开并给出错误提示", async () => {
+    const onClose = vi.fn();
+    apiMocks.loadSampleDataset.mockRejectedValue(new Error("载入失败"));
+    renderGuide({ initialQuickStart: true, onClose, onSampleLoaded: vi.fn() });
+
+    fireEvent.click(screen.getByRole("button", { name: /先体验示例数据/ }));
+
+    await waitFor(() => expect(screen.getByText("载入失败")).toBeTruthy());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("QUICK_START_PATHS 文案口径", () => {
+  it("三条路径，短标题 + 一句话说明，与 GUIDE_STEPS 同一口径", () => {
+    expect(QUICK_START_PATHS).toHaveLength(3);
+    for (const item of QUICK_START_PATHS) {
+      expect(item.lead.length).toBeGreaterThan(0);
+      expect(item.lead.length).toBeLessThanOrEqual(8);
+      expect(item.text.length).toBeGreaterThan(0);
+      expect(item.text.length).toBeLessThanOrEqual(160);
+    }
+    // 除示例数据走既有载入流程（path 为空）外，其余路径必须指向真实路由。
+    const routes = [...appSource.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]);
+    for (const item of QUICK_START_PATHS) {
+      if (item.key === "sample") {
+        expect(item.path).toBe("");
+      } else {
+        expect(routes).toContain(item.path);
+      }
+    }
   });
 });
 

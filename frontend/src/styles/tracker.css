@@ -91,7 +91,7 @@
 }
 
 .tracker-funnel-step[data-stage-index="0"] {
-  --rf-stage-color: #8c8c8c;
+  --rf-stage-color: var(--rf-text-description);
 }
 
 .tracker-funnel-step[data-stage-index="1"] {
@@ -167,7 +167,7 @@
 
 .tracker-funnel-percent {
   grid-area: percent;
-  color: #8c8c8c;
+  color: var(--rf-text-description);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -195,7 +195,7 @@
 /* 阶段色与漏斗共用一套（见 .tracker-funnel-step 的定义），0-5 一一对应：
    已投递 / 筛选中 / 测评·笔试 / 面试 / Offer / 第 6 阶段。 */
 .track-card[data-stage-index="0"] {
-  --rf-stage-color: #8c8c8c;
+  --rf-stage-color: var(--rf-text-description);
 }
 
 .track-card[data-stage-index="1"] {
@@ -390,7 +390,7 @@
   text-align: center;
   font-size: 12px;
   font-weight: 500;
-  color: #8c8c8c;
+  color: var(--rf-text-description);
 }
 
 .calendar-view-cell {
@@ -470,7 +470,7 @@
 
 .calendar-view-more {
   font-size: 11px;
-  color: #8c8c8c;
+  color: var(--rf-text-description);
 }
 
 .calendar-view-dots {

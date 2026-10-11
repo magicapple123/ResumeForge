@@ -5,10 +5,12 @@ import {
   EditOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
+  FunnelPlotOutlined,
   InfoCircleOutlined,
   LinkOutlined,
   MessageOutlined,
   PictureOutlined,
+  PlayCircleOutlined,
   PushpinOutlined,
   RobotOutlined,
   SendOutlined,
@@ -27,6 +29,7 @@ import {
   Typography,
 } from "antd";
 import type { ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Job } from "../types";
 import SkillTags from "./SkillTags";
 
@@ -85,6 +88,7 @@ export default function JobDetailDrawer({
   queueLoading = false,
   webFormLoading = false,
 }: Props) {
+  const navigate = useNavigate();
   return (
     <Drawer
       title="岗位详情"
@@ -136,6 +140,20 @@ export default function JobDetailDrawer({
             </Tooltip>
             <Button icon={<MessageOutlined />} onClick={() => onAskAssistant(job)}>
               咨询求职助手
+            </Button>
+            {/* 带 id 的跨模块动作（RF-11）：目标页按 job_id 自行过滤/预填，
+                不必到了那边再选一遍岗位。纯跳页，无回调 prop。 */}
+            <Button
+              icon={<FunnelPlotOutlined />}
+              onClick={() => navigate(`/tracker?job_id=${job.id}`)}
+            >
+              该岗位的投递进度
+            </Button>
+            <Button
+              icon={<PlayCircleOutlined />}
+              onClick={() => navigate(`/interview?job_id=${job.id}`)}
+            >
+              模拟面试
             </Button>
             {job.source_url && (
               <Button

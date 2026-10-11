@@ -51,7 +51,12 @@ export default function ResumesPage() {
     boolParam("favorite"),
   );
   const [hasJobFilter, setHasJobFilter] = useState<boolean | undefined>(() => boolParam("has_job"));
-  const [previewId, setPreviewId] = useState<number | null>(null);
+  // 深链 ?resume_id=（RF-11 搜索直开）：挂载时读一次，数字有效才打开详情；
+  // 关闭详情时把参数从 URL 移除（replace，不打历史）。镜像 JobsPage 的 job_id 模式。
+  const [previewId, setPreviewId] = useState<number | null>(() => {
+    const raw = searchParams.get("resume_id");
+    return raw && /^\d+$/.test(raw) ? Number(raw) : null;
+  });
   const [favoriteResumeId, setFavoriteResumeId] = useState<number | null>(null);
   const favoriteResumeIdRef = useRef<number | null>(null);
   const [renameTarget, setRenameTarget] = useState<ResumeBrief | null>(null);
@@ -250,6 +255,7 @@ export default function ResumesPage() {
         <Select
           allowClear
           placeholder="收藏状态"
+          aria-label="按收藏状态筛选"
           style={{ width: 130 }}
           value={favoriteFilter}
           onChange={(value) => {
@@ -264,6 +270,7 @@ export default function ResumesPage() {
         <Select
           allowClear
           placeholder="岗位关联"
+          aria-label="按岗位关联筛选"
           style={{ width: 140 }}
           value={hasJobFilter}
           onChange={(value) => {
@@ -304,7 +311,22 @@ export default function ResumesPage() {
         setDiffResult={setDiffResult}
         navigate={navigate}
       />
-      <ResumeDetailModal recordId={previewId} onClose={() => setPreviewId(null)} />
+      <ResumeDetailModal
+        recordId={previewId}
+        onClose={() => {
+          setPreviewId(null);
+          // 深链参数随关闭一起清掉（replace，不打历史）；列表页点击打开的不带参数，
+          // 删除一个不存在的键是无操作。
+          setSearchParams(
+            (previous) => {
+              const next = new URLSearchParams(previous);
+              next.delete("resume_id");
+              return next;
+            },
+            { replace: true },
+          );
+        }}
+      />
       <ResumeRenameModal
         open={renameTarget !== null}
         value={renameValue}

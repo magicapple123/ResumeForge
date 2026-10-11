@@ -5,8 +5,9 @@ import {
   ZoomInOutlined,
   ZoomOutOutlined,
 } from "@ant-design/icons";
-import { Button, Segmented, Space, Tooltip, Typography } from "antd";
+import { Button, Popover, Segmented, Space, Tooltip, Typography } from "antd";
 import type { Dispatch, RefObject, SetStateAction } from "react";
+import { useState } from "react";
 import type { InteractionMode } from "./config";
 
 interface Props {
@@ -28,6 +29,13 @@ interface Props {
   onResetZoom: () => void;
 }
 
+/** 角标 hover 时弹出的标注详情（内容来自角标元素上的 data-*，由 ResumePreview 直写）。 */
+interface BadgeAnnotation {
+  origin: string;
+  sourceFact: string;
+  boundary: string;
+}
+
 export default function ResumePreviewToolbar({
   canEdit,
   hoverChipRef,
@@ -38,6 +46,10 @@ export default function ResumePreviewToolbar({
   onAdjustZoom,
   onResetZoom,
 }: Props) {
+  // 角标 Popover 的开关状态只由角标自己的 mouseenter/leave 驱动（React 合成事件
+  // 随渲染正常重绑，没有 iframe 监听器那个振荡问题）；内容读 data-*，写入仍走
+  // ResumePreview 的直改 DOM 通道。
+  const [annotation, setAnnotation] = useState<BadgeAnnotation | null>(null);
   return (
     <div className="resume-preview-toolbar">
       <Space size={8} wrap>
@@ -97,6 +109,39 @@ export default function ResumePreviewToolbar({
             按钮点击时从 data-path 读"当前指向"，保证改的就是用户刚指的那一栏。 */}
         <span ref={hoverChipRef} className="resume-preview-hover-chip" style={{ display: "none" }}>
           <span className="resume-preview-hover-label" />
+          {/* 事实来源角标（RF-13）：当前指向的内容带标注时由 ResumePreview 点亮，
+              悬停可看来源事实 / 个人边界 / 来源类型。 */}
+          <Popover
+            open={annotation !== null}
+            placement="bottom"
+            content={
+              <div style={{ maxWidth: 360 }}>
+                <Typography.Paragraph style={{ margin: 0, fontSize: 12 }}>
+                  依据：{annotation?.sourceFact || "（未提供）"}
+                </Typography.Paragraph>
+                {annotation?.boundary ? (
+                  <Typography.Paragraph style={{ margin: 0, fontSize: 12 }}>
+                    个人边界：{annotation.boundary}
+                  </Typography.Paragraph>
+                ) : null}
+              </div>
+            }
+          >
+            <span
+              className="resume-preview-hover-badge"
+              style={{ display: "none" }}
+              onMouseEnter={(event) => {
+                const el = event.currentTarget;
+                if (!el.dataset.origin) return;
+                setAnnotation({
+                  origin: el.dataset.origin,
+                  sourceFact: el.dataset.sourceFact ?? "",
+                  boundary: el.dataset.boundary ?? "",
+                });
+              }}
+              onMouseLeave={() => setAnnotation(null)}
+            />
+          </Popover>
           <Button
             size="small"
             type="primary"

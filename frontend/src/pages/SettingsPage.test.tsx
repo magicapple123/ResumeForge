@@ -14,6 +14,9 @@ const apiMocks = vi.hoisted(() => ({
   exportAllDatasets: vi.fn(),
   exportDataset: vi.fn(),
   getLLMConfig: vi.fn(),
+  getLLMSessionKeyStatus: vi.fn(),
+  clearLLMSessionKey: vi.fn(),
+  setLLMSessionKey: vi.fn(),
   getNavigationVisibility: vi.fn(),
   getReminderPopupSetting: vi.fn(),
   getSearchConfig: vi.fn(),
@@ -86,6 +89,7 @@ function tooltipTriggerFor(label: string): HTMLElement {
 
 beforeEach(() => {
   apiMocks.getLLMConfig.mockResolvedValue(llmConfig);
+  apiMocks.getLLMSessionKeyStatus.mockResolvedValue({ configured: false });
   apiMocks.getNavigationVisibility.mockResolvedValue({ hidden: [] });
   apiMocks.getAssistantOrbSetting.mockResolvedValue({ enabled: true, tips_enabled: true });
   apiMocks.getReminderPopupSetting.mockResolvedValue({ enabled: true });
@@ -393,6 +397,78 @@ describe("SettingsPage output limit", () => {
       expect(apiMocks.saveLLMConfig).toHaveBeenCalledWith(
         expect.objectContaining({ max_tokens: 8192 }),
       ),
+    );
+  });
+});
+
+describe("SettingsPage session-only API key (RF-24)", () => {
+  it("sends a newly typed key to the session channel and persists an empty key", async () => {
+    apiMocks.saveLLMConfig.mockImplementation(async (config) => config);
+    apiMocks.setLLMSessionKey.mockResolvedValue({ configured: true });
+
+    render(
+      <AntdApp>
+        <SettingsPage />
+      </AntdApp>,
+    );
+
+    const input = await screen.findByLabelText("API Key（选填）");
+    fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
+    fireEvent.change(input, { target: { value: "sk-session-test" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /仅本会话使用/ }));
+    fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
+
+    await waitFor(() => expect(apiMocks.setLLMSessionKey).toHaveBeenCalledWith("sk-session-test"));
+    await waitFor(() =>
+      expect(apiMocks.saveLLMConfig).toHaveBeenCalledWith(expect.objectContaining({ api_key: "" })),
+    );
+  });
+
+  it("refuses to save session-only mode without a usable session key", async () => {
+    apiMocks.saveLLMConfig.mockImplementation(async (config) => config);
+
+    render(
+      <AntdApp>
+        <SettingsPage />
+      </AntdApp>,
+    );
+
+    const input = await screen.findByLabelText("API Key（选填）");
+    await waitFor(() => expect(input).toHaveValue("********"));
+    fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /仅本会话使用/ }));
+    fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
+
+    // 占位符 + 会话密钥不存在：不能把占位符发出去，也不能静默保存。
+    await waitFor(() => expect(screen.getAllByText(/请重新输入密钥/).length).toBeGreaterThan(0));
+    expect(apiMocks.saveLLMConfig).not.toHaveBeenCalled();
+  });
+
+  it("offers a clear button only in session-only mode and deletes the temp key after confirm", async () => {
+    apiMocks.clearLLMSessionKey.mockResolvedValue(undefined);
+
+    render(
+      <AntdApp>
+        <SettingsPage />
+      </AntdApp>,
+    );
+
+    await screen.findByLabelText("API Key（选填）");
+    fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
+    // 未勾选时不出现（落库密钥与临时通道无关，不该诱导误点）。
+    expect(screen.queryByRole("button", { name: /清除临时密钥/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /仅本会话使用/ }));
+    // antd 6 的 Form.useWatch 异步通知：按钮由 watch 值派生，要等一拍。
+    const clearButton = await screen.findByRole("button", { name: /清除临时密钥/ });
+
+    // Popconfirm 二次确认（okText 是两个汉字，antd 自动插空格）。
+    fireEvent.click(clearButton);
+    fireEvent.click(await screen.findByRole("button", { name: /^清\s*除$/ }));
+
+    await waitFor(() => expect(apiMocks.clearLLMSessionKey).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(screen.getAllByText(/临时会话密钥已清除/).length).toBeGreaterThan(0),
     );
   });
 });

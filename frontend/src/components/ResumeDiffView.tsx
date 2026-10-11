@@ -4,7 +4,7 @@
  */
 import { Tag, Typography } from "antd";
 import type { CSSProperties } from "react";
-import type { DiffLine, DiffLineType, ResumeDiff } from "../types/resumeWriting";
+import type { DiffLine, DiffLineType, DiffToken, ResumeDiff } from "../types/resumeWriting";
 
 const LINE_STYLE: Record<DiffLineType, CSSProperties> = {
   added: { background: "#f6ffed", color: "#135200" },
@@ -17,6 +17,22 @@ const TOKEN_STYLE: Record<DiffLineType, CSSProperties> = {
   removed: { background: "#ffccc7", color: "#a8071a", textDecoration: "line-through" },
   unchanged: {},
 };
+
+/**
+ * 词级 DiffToken 序列的渲染（RF-13 抽出复用）：ResumeChangeReviewModal 的逐条
+ * diff 与本视图用同一套三态配色——同一语义两套颜色必然让人困惑。
+ */
+export function DiffTokenText({ tokens }: { tokens: DiffToken[] }) {
+  return (
+    <>
+      {tokens.map((token, index) => (
+        <span key={index} style={TOKEN_STYLE[token.type]}>
+          {token.text}{" "}
+        </span>
+      ))}
+    </>
+  );
+}
 
 const PREFIX: Record<DiffLineType, string> = {
   added: "+ ",

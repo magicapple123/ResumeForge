@@ -18,7 +18,7 @@ import {
   Switch,
   Typography,
 } from "antd";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   acknowledgeUpdateInstallResult,
   checkForUpdate,
@@ -50,19 +50,29 @@ export default function UpdateCard() {
   const [background, setBackground] = useState(false);
   const [error, setError] = useState("");
 
+  /**
+   * 拉取后端真实的下载/安装状态。
+   *
+   * 抽成助手是为了让「安装/下载失败后纠偏」与挂载时的初始拉取走同一条路径：
+   * 失败后不刷新状态的话，陈旧的 ready 会让绿色「已下载完成」与刚弹出的红色错误
+   * 同屏并存——正是用户截图里的现场。
+   */
+  const refreshStatus = useCallback(async (isCancelled?: () => boolean) => {
+    try {
+      const current = await getUpdateDownloadStatus();
+      if (!isCancelled?.()) setStatus(current);
+    } catch {
+      // 状态接口失败不应让整个设置页报错；用户仍可手动检查更新。
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    void getUpdateDownloadStatus()
-      .then((current) => {
-        if (!cancelled) setStatus(current);
-      })
-      .catch(() => {
-        // 状态接口失败不应让整个设置页报错；用户仍可手动检查更新。
-      });
+    void refreshStatus(() => cancelled);
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshStatus]);
 
   const statusState = status?.state;
 
@@ -154,6 +164,8 @@ export default function UpdateCard() {
       setStatus(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "下载更新失败");
+      // 失败后状态多半已经变了（例如包其实已在磁盘上、后端恢复成了 ready）。
+      await refreshStatus();
     } finally {
       setDownloading(false);
     }
@@ -178,6 +190,9 @@ export default function UpdateCard() {
         } catch (err) {
           setInstalling(false);
           setError(err instanceof Error ? err.message : "启动安装失败");
+          // 安装被拒多半是后端状态已经变了（例如后端刚重启、内存里的"已下载"丢了）。
+          // 重新拉一次真实状态：陈旧的绿色成功框会随之消失，不再与错误同屏。
+          await refreshStatus();
         }
       },
     });

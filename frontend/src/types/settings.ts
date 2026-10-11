@@ -231,3 +231,25 @@ export interface UpdateStatus {
   installable: boolean;
   message: string;
 }
+
+/** 自动备份保护状态摘要（RF-05，GET /api/settings/backup-status）。 */
+export interface BackupStatusSnapshot {
+  name: string;
+  size_bytes: number;
+  modified_at: number;
+}
+
+export interface BackupStatus {
+  dataset_id: string;
+  /** 上次成功备份存在且当前没有连续失败——"受保护"的唯一定义。 */
+  protected: boolean;
+  last_success: number | null;
+  last_attempt: number | null;
+  consecutive_failures: number;
+  last_error: string;
+  interval_days: number;
+  /** 有过成功但已超过间隔未再成功（调度线程还没跑到或被阻断）。 */
+  overdue: boolean;
+  snapshot_count: number;
+  snapshots: BackupStatusSnapshot[];
+}

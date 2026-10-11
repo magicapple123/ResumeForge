@@ -1,5 +1,5 @@
 /** 助手技能接口：列出、查看详情、导入、创建、更新、启用/停用与删除。 */
-import { ApiError, extractError, request } from "./client";
+import { request } from "./client";
 import type {
   AssistantSkill,
   AssistantSkillCreatePayload,
@@ -28,16 +28,16 @@ export function getSkill(id: number): Promise<AssistantSkillDetail> {
  */
 export async function importSkill(file: File): Promise<AssistantSkill> {
   const contentType = /\.zip$/i.test(file.name) ? "application/zip" : "text/markdown";
-  const resp = await fetch("/api/assistant/skills/import", {
+  return request("/assistant/skills/import", {
     method: "POST",
     headers: {
       "Content-Type": contentType,
       "X-Skill-Filename": encodeURIComponent(file.name),
     },
     body: file,
+    // 技能包（含知识文件）可能有几 MB，走 upload 预算（10 分钟）。
+    budget: "upload",
   });
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
-  return (await resp.json()) as AssistantSkill;
 }
 
 /** 在工作台手动创建技能。 */

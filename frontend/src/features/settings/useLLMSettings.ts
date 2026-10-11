@@ -10,13 +10,16 @@ import { App, Form } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   checkLLMThinking,
+  clearLLMSessionKey,
   deleteLLMConfigRecord,
   getLLMConfig,
+  getLLMSessionKeyStatus,
   listLLMConfigRecords,
   listLLMModels,
   revealLLMApiKey,
   saveLLMConfig,
   saveLLMConfigRecord,
+  setLLMSessionKey,
   testLLM,
 } from "../../api/settings";
 import { LLM_PRESETS } from "../../config";
@@ -56,8 +59,23 @@ export function useLLMSettings() {
   const [recordApplyingId, setRecordApplyingId] = useState<number | null>(null);
   const [recordDeletingId, setRecordDeletingId] = useState<number | null>(null);
   const [apiKeyResetToken, setApiKeyResetToken] = useState(0);
+  const [clearingSessionKey, setClearingSessionKey] = useState(false);
 
   const resetRevealedApiKey = useCallback(() => setApiKeyResetToken((current) => current + 1), []);
+
+  /** 清除后端内存里的临时会话密钥（RF-24 收尾）：与落库密钥无关，只影响会话通道。 */
+  const clearSessionKey = useCallback(async () => {
+    setClearingSessionKey(true);
+    try {
+      await clearLLMSessionKey();
+      resetRevealedApiKey();
+      message.success("临时会话密钥已清除，重启前的后续请求将改用落库配置的密钥");
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "清除临时会话密钥失败");
+    } finally {
+      setClearingSessionKey(false);
+    }
+  }, [message, resetRevealedApiKey]);
 
   // 同时加载当前配置与记录，避免页面先显示一套配置、稍后又跳变到另一套状态。
   // recordsLoading 初始即 true（useState），effect 无需同步置位——Compiler 禁止
@@ -125,9 +143,38 @@ export function useLLMSettings() {
     if (!editing || saving || testing) return;
     const values = await collectValues();
     if (!values) return;
+    // 「仅本会话使用」（RF-24）：密钥只进后端进程内存的会话通道，PUT /llm 时
+    // 显式带空密钥落库为空——数据库、日志、备份里都不会出现它，重启即失效。
+    const sessionOnly = (form.getFieldsValue(true) as SettingsFormValues).session_only === true;
+    let payload: LLMConfig = values;
+    let keyToSend: string | null = null; // null = 不动会话通道
+    if (sessionOnly) {
+      const typedKey = (values.api_key ?? "").trim();
+      if (typedKey && !isMaskedApiKey(typedKey)) {
+        payload = { ...values, api_key: "" };
+        keyToSend = typedKey;
+      } else {
+        // 输入框是占位符或为空：只有会话密钥还活着才能原样保存，否则发不出去任何请求。
+        try {
+          const status = await getLLMSessionKeyStatus();
+          if (!status.configured) {
+            message.warning(
+              "已勾选「仅本会话使用」：请重新输入密钥后再保存（已保存的密钥不会自动转为会话密钥）",
+            );
+            return;
+          }
+          payload = { ...values, api_key: "" };
+        } catch (err) {
+          message.error(err instanceof Error ? err.message : "检查会话密钥状态失败");
+          return;
+        }
+      }
+    }
     setSaving(true);
     try {
-      const saved = await saveLLMConfig(values);
+      // 先把新密钥送进会话通道，再落空配置：任何时刻后端都至少有一个可用密钥。
+      if (keyToSend !== null) await setLLMSessionKey(keyToSend);
+      const saved = await saveLLMConfig(payload);
       const nextValues = formValuesFromConfig(saved);
       form.setFieldsValue(nextValues);
       savedValues.current = nextValues;
@@ -135,7 +182,11 @@ export function useLLMSettings() {
       resetRevealedApiKey();
       setEditing(false);
       setTestResult(null);
-      message.success("配置已保存，可在下方保存为记录");
+      message.success(
+        sessionOnly
+          ? "配置已保存；密钥仅本次会话有效，重启后需重新填写"
+          : "配置已保存，可在下方保存为记录",
+      );
     } catch (err) {
       message.error(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -336,5 +387,7 @@ export function useLLMSettings() {
     removeRecord,
     cancelEditing,
     resetRevealedApiKey,
+    clearSessionKey,
+    clearingSessionKey,
   };
 }

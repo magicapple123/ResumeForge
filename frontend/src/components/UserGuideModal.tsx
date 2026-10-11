@@ -4,6 +4,7 @@ import {
   CheckOutlined,
   FormOutlined,
   PlayCircleOutlined,
+  RightOutlined,
 } from "@ant-design/icons";
 import { App as AntdApp, Button, Divider, Modal, Space, Steps, Typography } from "antd";
 import { useState } from "react";
@@ -12,6 +13,8 @@ import type { ReactNode } from "react";
 // （在线体验产物部署在 Pages 子路径下，绝对路径会 404）。理由同 App.tsx 侧栏图标。
 import brandIcon from "../assets/resumeforge-icon.png";
 import { loadSampleDataset } from "../api/settings";
+import { QUICK_START_PATHS } from "./quickStartPaths";
+import type { QuickStartPath } from "./quickStartPaths";
 import { GUIDE_STEPS } from "./userGuideSteps";
 
 /** 把文案里的 `**强调**` 渲染成粗体。
@@ -27,12 +30,15 @@ function renderEmphasis(text: string): ReactNode[] {
   );
 }
 
+/** 「快速开始」的一条路径卡：数据见 ``quickStartPaths.ts``，这里只做渲染与分发。 */
 interface UserGuideModalProps {
   open: boolean;
   onClose: () => void;
   onNavigate: (path: string) => void;
   /** 载入示例成功后的收尾（默认整页刷新）；测试里注入替身避免 jsdom 导航。 */
   onSampleLoaded?: () => void;
+  /** 首次自动弹出时先给「快速开始」三路径首屏；侧栏重开不传，行为与从前一致。 */
+  initialQuickStart?: boolean;
 }
 
 export default function UserGuideModal({
@@ -40,24 +46,42 @@ export default function UserGuideModal({
   onClose,
   onNavigate,
   onSampleLoaded = () => window.location.reload(),
+  initialQuickStart = false,
 }: UserGuideModalProps) {
   const { message } = AntdApp.useApp();
   const [current, setCurrent] = useState(0);
+  // 「快速开始」→ 完整 8 步：用户手动切走后就留在步骤视图，本次打开不再弹回。
+  const [view, setView] = useState<"quick-start" | "steps">(
+    initialQuickStart ? "quick-start" : "steps",
+  );
   const [loadingSample, setLoadingSample] = useState(false);
   const step = GUIDE_STEPS[current];
   const StepIcon = step.icon;
   const isLast = current === GUIDE_STEPS.length - 1;
 
-  // 每次打开都回到第一步。Compiler 规范：随 prop 变化的重置用渲染期守卫式调整。
+  // 每次打开都回到第一步（快速开始与否随 initialQuickStart 决定）。
+  // Compiler 规范：随 prop 变化的重置用渲染期守卫式调整。
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {
     setPrevOpen(open);
-    if (open) setCurrent(0);
+    if (open) {
+      setCurrent(0);
+      setView(initialQuickStart ? "quick-start" : "steps");
+    }
   }
 
   const goToStepPage = () => {
     onClose();
     onNavigate(step.path);
+  };
+
+  const goToQuickStartPath = (item: QuickStartPath) => {
+    if (item.key === "sample") {
+      void loadSample();
+      return;
+    }
+    onClose();
+    onNavigate(item.path);
   };
 
   /**
@@ -78,6 +102,8 @@ export default function UserGuideModal({
       setLoadingSample(false);
     }
   };
+
+  const showQuickStart = view === "quick-start";
 
   return (
     <Modal
@@ -101,77 +127,120 @@ export default function UserGuideModal({
       }}
       onCancel={onClose}
       footer={
-        <div className="user-guide-footer">
-          <Button
-            icon={<PlayCircleOutlined />}
-            loading={loadingSample}
-            onClick={() => void loadSample()}
-          >
-            载入示例数据体验
-          </Button>
-          <Button onClick={onClose}>稍后查看</Button>
-          <Space wrap>
+        showQuickStart ? (
+          <div className="user-guide-footer">
+            <Button onClick={onClose}>稍后查看</Button>
+            <Button type="link" onClick={() => setView("steps")}>
+              查看完整指南（8 步）
+            </Button>
+          </div>
+        ) : (
+          <div className="user-guide-footer">
             <Button
-              disabled={current === 0}
-              icon={<ArrowLeftOutlined />}
-              onClick={() => setCurrent(current - 1)}
+              icon={<PlayCircleOutlined />}
+              loading={loadingSample}
+              onClick={() => void loadSample()}
             >
-              上一步
+              载入示例数据体验
             </Button>
-            <Button type="link" icon={<FormOutlined />} onClick={goToStepPage}>
-              {step.actionLabel}
-            </Button>
-            {isLast ? (
-              <Button type="primary" icon={<CheckOutlined />} onClick={onClose}>
-                开始使用
-              </Button>
-            ) : (
+            <Button onClick={onClose}>稍后查看</Button>
+            <Space wrap>
               <Button
-                type="primary"
-                icon={<ArrowRightOutlined />}
-                onClick={() => setCurrent(current + 1)}
+                disabled={current === 0}
+                icon={<ArrowLeftOutlined />}
+                onClick={() => setCurrent(current - 1)}
               >
-                下一步
+                上一步
               </Button>
-            )}
-          </Space>
-        </div>
+              <Button type="link" icon={<FormOutlined />} onClick={goToStepPage}>
+                {step.actionLabel}
+              </Button>
+              {isLast ? (
+                <Button type="primary" icon={<CheckOutlined />} onClick={onClose}>
+                  开始使用
+                </Button>
+              ) : (
+                <Button
+                  type="primary"
+                  icon={<ArrowRightOutlined />}
+                  onClick={() => setCurrent(current + 1)}
+                >
+                  下一步
+                </Button>
+              )}
+            </Space>
+          </div>
+        )
       }
     >
-      {/* 步骤竖排在左侧当导航，内容在右侧。
-          横排一行的做法在模块变多之后标题会互相挤压（截图反馈"小标题有点拥挤"）：
-          9 个步骤平分 720px，每个标题只剩 70 多像素，中文标题被迫折成两三行。
-          竖排后每个标题独占一行，再加模块也不用重新排版。 */}
-      <div className="user-guide-body">
-        <Steps
-          className="user-guide-steps"
-          orientation="vertical"
-          size="small"
-          current={current}
-          items={GUIDE_STEPS.map(({ title }) => ({ title }))}
-          onChange={setCurrent}
-        />
-        <Divider orientation="vertical" className="user-guide-divider" />
-        <section className="user-guide-step-content" aria-live="polite">
-          <div className="user-guide-step-icon" aria-hidden="true">
-            <StepIcon />
-          </div>
-          <div className="user-guide-step-copy">
-            <Typography.Title level={4}>{step.heading}</Typography.Title>
-            <Typography.Paragraph className="user-guide-description">
-              {renderEmphasis(step.description)}
-            </Typography.Paragraph>
-            <ul className="user-guide-points">
-              {step.points.map((point) => (
-                <li key={point.lead}>
-                  <span className="user-guide-point-lead">{point.lead}</span>
-                  <span className="user-guide-point-text">{renderEmphasis(point.text)}</span>
-                </li>
-              ))}
-            </ul>
+      {showQuickStart ? (
+        /* 首启动首屏：三条都通向"第一份可交付简历"，选一条顺的走；
+           完整 8 步保留在「查看完整指南」后面，一步不少。 */
+        <section className="user-guide-quickstart" aria-live="polite">
+          <Typography.Title level={4}>从这里开始</Typography.Title>
+          <Typography.Paragraph className="user-guide-description">
+            三条路都通向你的第一份可交付简历，选一条顺的走。
+          </Typography.Paragraph>
+          <div className="user-guide-quickstart-paths">
+            {QUICK_START_PATHS.map((item) => {
+              const PathIcon = item.icon;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  className="user-guide-quickstart-path"
+                  disabled={item.key === "sample" && loadingSample}
+                  onClick={() => goToQuickStartPath(item)}
+                >
+                  <span className="user-guide-quickstart-icon" aria-hidden="true">
+                    <PathIcon />
+                  </span>
+                  <span className="user-guide-quickstart-copy">
+                    <span className="user-guide-quickstart-lead">{item.lead}</span>
+                    <span className="user-guide-quickstart-text">{item.text}</span>
+                  </span>
+                  <RightOutlined className="user-guide-quickstart-arrow" aria-hidden="true" />
+                </button>
+              );
+            })}
           </div>
         </section>
-      </div>
+      ) : (
+        /* 步骤竖排在左侧当导航，内容在右侧。
+          横排一行的做法在模块变多之后标题会互相挤压（截图反馈"小标题有点拥挤"）：
+          9 个步骤平分 720px，每个标题只剩 70 多像素，中文标题被迫折成两三行。
+          竖排后每个标题独占一行，再加模块也不用重新排版。 */
+        <div className="user-guide-body">
+          <Steps
+            className="user-guide-steps"
+            orientation="vertical"
+            size="small"
+            current={current}
+            items={GUIDE_STEPS.map(({ title }) => ({ title }))}
+            onChange={setCurrent}
+          />
+          <Divider orientation="vertical" className="user-guide-divider" />
+          <section className="user-guide-step-content" aria-live="polite">
+            <div className="user-guide-step-icon" aria-hidden="true">
+              <StepIcon />
+            </div>
+            <div className="user-guide-step-copy">
+              <Typography.Title level={4}>{step.heading}</Typography.Title>
+              <Typography.Paragraph className="user-guide-description">
+                {renderEmphasis(step.description)}
+              </Typography.Paragraph>
+              <ul className="user-guide-points">
+                {step.points.map((point) => (
+                  <li key={point.lead}>
+                    <span className="user-guide-point-lead">{point.lead}</span>
+                    <span className="user-guide-point-text">{renderEmphasis(point.text)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        </div>
+      )}
     </Modal>
   );
 }

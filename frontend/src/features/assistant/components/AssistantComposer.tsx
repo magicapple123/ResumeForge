@@ -1,6 +1,7 @@
 /** 求职助手消息输入、上下文选择、技能开关与附件预览。 */
 
 import { useState } from "react";
+import { layer } from "../../../theme/tokens";
 import {
   CloseOutlined,
   ExperimentOutlined,
@@ -266,7 +267,7 @@ export default function AssistantComposer({
                   compact ? "添加图片或文档附件" : "添加文本、图片或文档附件（也可以直接粘贴截图）"
                 }
                 placement="top"
-                overlayStyle={compact ? { maxWidth: 240, zIndex: 3100 } : undefined}
+                overlayStyle={compact ? { maxWidth: 240, zIndex: layer.popupBase } : undefined}
               >
                 <Button
                   aria-label="添加附件"

@@ -45,6 +45,7 @@ import {
 import FieldRewritePanel from "./resume-editor/FieldRewritePanel";
 import { resolveEditorTarget } from "./resume-editor/ResumeEditorTarget";
 import { readResumeValueByPath } from "../utils/resumeFieldPath";
+import { layer } from "../theme/tokens";
 export default function ResumeEditorModal({
   open,
   content,
@@ -57,7 +58,7 @@ export default function ResumeEditorModal({
   initialTarget,
   resumeId,
 }: Props) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [form] = Form.useForm<ResumeContent>();
   // `FormInstance<ResumeContent>` 的 setFieldValue 只接受"字面量路径联合"，
   // 而这里的字段名是 `resolveEditorTarget` 算出来的数组。两者本来就是同一个东西
@@ -65,6 +66,9 @@ export default function ResumeEditorModal({
   const setFormValue = (name: (string | number)[], value: unknown) =>
     (form.setFieldValue as unknown as (n: (string | number)[], v: unknown) => void)(name, value);
   const [saving, setSaving] = useState(false);
+  // 未保存守卫（RF-13）：表单被改过且还没保存时，取消/遮罩/ESC 都要先过一道确认，
+  // 防止点错一下就把整份编辑丢掉。保存成功即清脏。
+  const [dirty, setDirty] = useState(false);
   const [activeTab, setActiveTab] = useState("basic");
   // AI 改写后的内容快照：表单里只落了被改的那一栏，这里留一份完整内容给面板回显
   // 「当前内容」。父组件的 content 在整个弹窗生命周期里是不变的（保存后才换）。
@@ -87,10 +91,42 @@ export default function ResumeEditorModal({
     setPrevSync({ open, content, initialTarget });
     if (open && content) {
       setRewrittenContent(null);
+      setDirty(false);
       const target = initialTarget ? resolveEditorTarget(initialTarget) : null;
       setActiveTab(target?.tab ?? "basic");
     }
   }
+
+  // 弹窗开着且没保存的修改还在时，挂 beforeunload（照抄 ProfilePage 的模式）：
+  // 刷新/关闭浏览器出原生确认，不再静默丢稿。
+  useEffect(() => {
+    if (!open || !dirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Chrome/Edge 只认 returnValue，两者都给。
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [open, dirty]);
+
+  const requestClose = () => {
+    if (saving) return;
+    if (!dirty) {
+      onClose();
+      return;
+    }
+    modal.confirm({
+      title: "未保存的修改将丢失",
+      content: "这份简历还有改动没有保存，确定要关闭吗？",
+      okText: "放弃修改",
+      cancelText: "继续编辑",
+      onOk: () => {
+        setDirty(false);
+        onClose();
+      },
+    });
+  };
 
   useEffect(() => {
     if (!open || !content) return;
@@ -196,6 +232,7 @@ export default function ResumeEditorModal({
     try {
       // 照片不在本次编辑表单中，始终保留已校验的原始值。
       await onSave({ ...content, ...values, photo: content.photo });
+      setDirty(false);
       onClose();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "保存简历修改失败，请重试");
@@ -213,18 +250,16 @@ export default function ResumeEditorModal({
       // zIndexPopupBase 提到了 3100，宿主 Modal 因此在 3100；这里写死 3110 才能稳稳
       // 盖在宿主之上。旧的 1100 反而比宿主低——编辑器被宿主弹窗整个压住，看起来就是
       // 「手动调整」卡片被挡住了。
-      zIndex={3110}
+      zIndex={layer.editorModal}
       destroyOnHidden
       // 必须垂直居中：body 限高后弹窗总高仍接近满视口，antd 默认 top:100px 会让
       // 底部（保存按钮一带）被推出视口外，看起来就是"弹出的卡片被挡住了"。
       mask={{ closable: !saving }}
       keyboard={!saving}
-      onCancel={() => {
-        if (!saving) onClose();
-      }}
+      onCancel={requestClose}
       footer={
         <Space>
-          <Button disabled={saving} onClick={onClose}>
+          <Button disabled={saving} onClick={requestClose}>
             取消
           </Button>
           <Button
@@ -271,6 +306,7 @@ export default function ResumeEditorModal({
           <Form
             form={form}
             layout="vertical"
+            onValuesChange={() => setDirty(true)}
             onFinish={(values) => void handleFinish(values as ResumeContent)}
           >
             {/* 从预览点某一栏进来时，先把"按我的要求改这一栏"摆在最上面：
@@ -291,6 +327,8 @@ export default function ResumeEditorModal({
                   const target = resolveEditorTarget(initialTarget);
                   setFormValue(target.name, readResumeValueByPath(next, target.name));
                   setRewrittenContent(next);
+                  // AI 填入也是"没保存的修改"：未保存守卫必须同样看住它。
+                  setDirty(true);
                 }}
               />
             ) : null}

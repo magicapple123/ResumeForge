@@ -1,6 +1,6 @@
 /** 收藏夹：集中查看收藏的岗位与简历。 */
 import { FileTextOutlined, SearchOutlined, StarFilled } from "@ant-design/icons";
-import { App, Button, Empty, Space, Table, Tabs, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Space, Table, Tabs, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { HTMLAttributes } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -8,6 +8,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { listJobs, updateJob } from "../api/jobs";
 import { listResumes, updateResumeFavorite } from "../api/resumes";
 import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
+import EmptyState from "../components/common/EmptyState";
 import ResumeDetailModal from "../components/ResumeDetailModal";
 import { useApi } from "../hooks/useApi";
 import type { Job, Page, ResumeBrief } from "../types";
@@ -259,7 +260,7 @@ export default function FavoritesPage() {
         dataSource={items}
         loading={loading}
         locale={{
-          emptyText: <Empty description={kind === "jobs" ? "暂无收藏岗位" : "暂无收藏简历"} />,
+          emptyText: <EmptyState description={kind === "jobs" ? "暂无收藏岗位" : "暂无收藏简历"} />,
         }}
         // 简历列的固定宽度加起来约 620px，比岗位列更窄，在普通窗口里根本不会横向溢出；
         // 硬套 `x: 760` 会在「简历」页签下画出一条用不上的横向滚动条。岗位列更宽，仍保留兜底。

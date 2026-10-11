@@ -277,3 +277,16 @@ export function listApplyTasks(
 ): Promise<ApplyTask[]> {
   return request(`/apply/tasks${buildQuery(params)}`);
 }
+
+/**
+ * 分页列出历史批次（RF-08 收口）：过滤（kind）与排序（id desc）与旧列表完全一致，
+ * 批次历史超过旧端点 limit 100 的窗口后仍然全部可达。响应 `Page{items, total}`，
+ * 行 DTO 与旧列表同款。
+ */
+export function listApplyTasksPage(
+  kind: "collect" | "apply",
+  page: number,
+  pageSize: number,
+): Promise<Page<ApplyTask>> {
+  return request(`/apply/tasks/page${buildQuery({ kind, page, page_size: pageSize })}`);
+}

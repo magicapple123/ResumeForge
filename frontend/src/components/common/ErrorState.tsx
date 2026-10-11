@@ -1,0 +1,36 @@
+/**
+ * 错误态（RF-12 固化的通用模式之一）。
+ *
+ * 与 EmptyState 的分工：错误是**暂时的、可重试的**，必须（a）与"确实没有数据"
+ * 区分开，（b）给用户一条出路（重试），（c）对读屏器可感知——外层 role="alert"
+ * 让错误出现时即被播报，不依赖用户恰好看着这一块。
+ */
+import { Button, Empty } from "antd";
+import type { ReactNode } from "react";
+
+export default function ErrorState({
+  description,
+  onRetry,
+  retrying = false,
+  retryLabel = "重试",
+}: {
+  /** 说明出了什么事、用户能做什么（接口错误信息或一句人话）。 */
+  description: ReactNode;
+  /** 提供即渲染重试按钮；不提供则只展示错误说明。 */
+  onRetry?: () => void;
+  /** 重试请求进行中，按钮转圈并禁用。 */
+  retrying?: boolean;
+  retryLabel?: string;
+}) {
+  return (
+    <div role="alert">
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={description}>
+        {onRetry ? (
+          <Button onClick={onRetry} loading={retrying}>
+            {retryLabel}
+          </Button>
+        ) : null}
+      </Empty>
+    </div>
+  );
+}

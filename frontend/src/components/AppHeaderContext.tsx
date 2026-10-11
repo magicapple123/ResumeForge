@@ -10,8 +10,8 @@
  * 1. 数据集在这里可以直接切换，但切换成功后会整页重载，保证岗位、资料和缓存都来自新数据集。
  * 2. **头像不出本机**。照片存在本地数据库里，这里只是把它显示出来，不发给任何模型。
  */
-import { DatabaseOutlined, DownOutlined, UserOutlined } from "@ant-design/icons";
-import { Avatar, Dropdown, Skeleton } from "antd";
+import { DatabaseOutlined, DownOutlined, HomeOutlined, UserOutlined } from "@ant-design/icons";
+import { Avatar, Dropdown, Skeleton, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -20,6 +20,7 @@ import { activateDataset, listDatasets } from "../api/settings";
 import type { Profile } from "../types";
 import type { DatasetInfo } from "../types/settings";
 import { reloadPage } from "../utils/navigation";
+import { saveActiveDatasetId } from "../utils/datasetScope";
 
 export default function AppHeaderContext() {
   const navigate = useNavigate();
@@ -50,7 +51,11 @@ export default function AppHeaderContext() {
       if (cancelled) return;
       if (result) {
         setDatasets(result.datasets);
-        setDataset(result.datasets.find((item) => item.is_active) ?? result.datasets[0] ?? null);
+        const active = result.datasets.find((item) => item.is_active) ?? result.datasets[0] ?? null;
+        setDataset(active);
+        // 把 active id 落到 localStorage（RF-13）：网申草稿等首帧同步读取方
+        // 等不了接口，只能从这里取上一次会话写下的值。
+        saveActiveDatasetId(active?.id);
         setDatasetCount(result.datasets.length);
         setProfile(result.current);
       } else {
@@ -74,7 +79,9 @@ export default function AppHeaderContext() {
       try {
         await activateDataset(id);
         // 先更新页头，用户能立即知道操作已生效；整页重载负责清理各页面的数据缓存。
+        // active id 必须在 reload 前落盘：重载后的首帧（如网申草稿恢复）只能读到它。
         setDataset(next);
+        saveActiveDatasetId(next.id);
         window.setTimeout(reloadPage, 250);
       } catch (error) {
         setSwitchError(error instanceof Error ? error.message : "切换数据集失败");
@@ -84,15 +91,37 @@ export default function AppHeaderContext() {
     [dataset?.id, datasets, switchingId],
   );
 
-  const datasetMenuItems = useMemo<MenuProps["items"]>(
-    () =>
-      datasets.map((item) => ({
-        key: item.id,
-        label: item.is_active ? `${item.name}（当前）` : item.name,
-        disabled: item.is_active || switchingId !== null,
-      })),
-    [datasets, switchingId],
-  );
+  // 「示例」徽标 + 一键回到主数据：示例数据集（source === "sample"）与用户的真实
+  // 资料相互独立，界面上必须随时说清"现在看的是示例"，并给出回主数据的醒目出路。
+  const isSampleActive = dataset?.source === "sample";
+
+  const datasetMenuItems = useMemo<MenuProps["items"]>(() => {
+    const items: MenuProps["items"] = datasets.map((item) => ({
+      key: item.id,
+      label: (
+        <span className="app-dataset-menu-label">
+          {item.is_active ? `${item.name}（当前）` : item.name}
+          {item.source === "sample" && (
+            <Tooltip title="体验数据，与你的真实资料相互独立">
+              <span className="app-dataset-sample-tag">示例</span>
+            </Tooltip>
+          )}
+        </span>
+      ),
+      disabled: item.is_active || switchingId !== null,
+    }));
+    // 处在示例数据集里时，给第一个非示例数据集（通常是主数据）一条醒目的返回动作；
+    // 仍走既有 activateDataset 流程，只是多一个入口。
+    const mainDataset = datasets.find((item) => item.source !== "sample");
+    if (isSampleActive && mainDataset && !mainDataset.is_active) {
+      items.unshift({
+        key: `return-main:${mainDataset.id}`,
+        icon: <HomeOutlined />,
+        label: <span className="app-dataset-return">回到我的数据</span>,
+      });
+    }
+    return items;
+  }, [datasets, switchingId, isSampleActive]);
 
   const displayName = (profile?.name || "").trim();
   const photo = (profile?.photo || "").trim();
@@ -109,7 +138,13 @@ export default function AppHeaderContext() {
               trigger={["click"]}
               menu={{
                 items: datasetMenuItems,
-                onClick: ({ key }) => void handleDatasetSwitch(String(key)),
+                onClick: ({ key }) => {
+                  // 「回到我的数据」是动作入口：解析出目标数据集 id，仍走切换流程。
+                  const targetId = key.startsWith("return-main:")
+                    ? key.slice("return-main:".length)
+                    : key;
+                  void handleDatasetSwitch(targetId);
+                },
               }}
             >
               <button
@@ -120,6 +155,11 @@ export default function AppHeaderContext() {
               >
                 <DatabaseOutlined />
                 <span className="app-dataset-name">{dataset.name}</span>
+                {isSampleActive && (
+                  <Tooltip title="体验数据，与你的真实资料相互独立">
+                    <span className="app-dataset-sample-tag">示例</span>
+                  </Tooltip>
+                )}
                 <DownOutlined className="app-dataset-arrow" />
               </button>
             </Dropdown>

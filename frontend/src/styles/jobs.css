@@ -22,7 +22,7 @@
 
 .job-favorite-button {
   flex: 0 0 auto;
-  color: #8c8c8c;
+  color: var(--rf-text-description);
 }
 
 .job-favorite-button.is-favorite {

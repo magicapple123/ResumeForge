@@ -6,7 +6,7 @@ import type {
   SharePackageDetail,
   ShareReveal,
 } from "../types";
-import { ApiError, extractError, getFilenameFromDisposition, request } from "./client";
+import { getFilenameFromDisposition, request, requestRaw } from "./client";
 
 export function listSharePackages(): Promise<SharePackageBrief[]> {
   return request("/share-packages");
@@ -51,8 +51,10 @@ export async function downloadSharePackageFile(
   id: number,
   filename: string,
 ): Promise<{ blob: Blob; filename: string }> {
-  const resp = await fetch(`/api/share-packages/${id}/files/${encodeURIComponent(filename)}`);
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
+  // 响应是文件流：requestRaw 统一错误分类；产物可能较大，走 export 预算（10 分钟）。
+  const resp = await requestRaw(`/share-packages/${id}/files/${encodeURIComponent(filename)}`, {
+    budget: "export",
+  });
   return {
     blob: await resp.blob(),
     filename: getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? filename,

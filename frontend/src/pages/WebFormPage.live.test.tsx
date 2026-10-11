@@ -9,7 +9,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrowserStatus, WebFormLive, WebFormPreview, WebFormSnapshot } from "../types";
-import { WEB_FORM_SESSION_STORAGE_KEY } from "../features/webform/webFormSessionStorage";
+import { webFormSessionStorageKey } from "../features/webform/webFormSessionStorage";
 import WebFormPage from "./WebFormPage";
 
 const apiMocks = vi.hoisted(() => ({
@@ -27,6 +27,7 @@ const apiMocks = vi.hoisted(() => ({
   getWebFormMemoryTargets: vi.fn(),
   rememberWebFormLive: vi.fn(),
   listWebFormRecords: vi.fn(),
+  listWebFormRecordsPage: vi.fn(),
   getWebFormRecord: vi.fn(),
   deleteWebFormRecord: vi.fn(),
   listWebFormUrlHistory: vi.fn(),
@@ -141,7 +142,7 @@ beforeEach(() => {
   } as WebFormSnapshot);
   apiMocks.previewWebForm.mockResolvedValue(preview());
   apiMocks.fillWebForm.mockResolvedValue({ outcomes: [], filled: 1, unverified: 0, failed: 0 });
-  apiMocks.listWebFormRecords.mockResolvedValue([]);
+  apiMocks.listWebFormRecordsPage.mockResolvedValue({ items: [], total: 0 });
   apiMocks.getWebFormLiveStatus.mockResolvedValue(liveStatus());
   apiMocks.startWebFormLive.mockResolvedValue(liveStatus());
   apiMocks.setWebFormLiveEnabled.mockResolvedValue(liveStatus({ running: true, enabled: false }));
@@ -164,7 +165,7 @@ describe("WebFormPage", () => {
   it("restores the unfinished web form session when returning from another page", async () => {
     const savedPreview = preview();
     window.sessionStorage.setItem(
-      WEB_FORM_SESSION_STORAGE_KEY,
+      webFormSessionStorageKey("main"),
       JSON.stringify({
         sessionActive: true,
         snapshot: { snapshot_id: "snap-1", page: savedPreview.page },
@@ -192,7 +193,7 @@ describe("WebFormPage", () => {
 
   it("ends the session, stops the browser workflow, and clears the unfinished state", async () => {
     window.sessionStorage.setItem(
-      WEB_FORM_SESSION_STORAGE_KEY,
+      webFormSessionStorageKey("main"),
       JSON.stringify({ sessionActive: true, aiEnabled: true, liveOptOut: false }),
     );
     apiMocks.getWebFormBrowserStatus
@@ -207,7 +208,7 @@ describe("WebFormPage", () => {
     await waitFor(() => expect(apiMocks.stopWebFormLive).toHaveBeenCalled());
     expect(apiMocks.stopWebFormBrowser).toHaveBeenCalled();
     await waitFor(() =>
-      expect(window.sessionStorage.getItem(WEB_FORM_SESSION_STORAGE_KEY)).toBeNull(),
+      expect(window.sessionStorage.getItem(webFormSessionStorageKey("main"))).toBeNull(),
     );
     expect(screen.queryByRole("button", { name: /结束本次填写/ })).not.toBeInTheDocument();
   });

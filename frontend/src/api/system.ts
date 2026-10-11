@@ -1,6 +1,5 @@
 /** 应用生命周期接口。 */
-import { ApiError, extractError, getFilenameFromDisposition } from "./client";
-import { request } from "./client";
+import { getFilenameFromDisposition, request, requestRaw } from "./client";
 
 export interface ShutdownResult {
   status: string;
@@ -32,15 +31,27 @@ export function getDiagnostics(): Promise<DiagnosticsSnapshot> {
   return request("/system/diagnostics");
 }
 
+/** 诊断包导出前预览：只有元信息，不含事件正文（RF-20）。 */
+export interface DiagnosticsPreview {
+  event_count: number;
+  time_range: { from: string; to: string } | null;
+  categories: string[];
+  files: Array<{ name: string; bytes: number }>;
+  contains_resume_content: boolean;
+  note: string;
+}
+
+export function getDiagnosticsPreview(): Promise<DiagnosticsPreview> {
+  return request("/system/diagnostics/preview");
+}
+
 /**
  * 下载脱敏诊断包（zip）：脱敏运行事件 + 系统信息 + 近期后端日志尾部。
  * 包里没有简历数据与密钥，可以直接贴进反馈。
  */
 export async function exportDiagnostics(): Promise<{ blob: Blob; filename: string }> {
-  const resp = await fetch("/api/system/diagnostics/export");
-  if (!resp.ok) {
-    throw new ApiError(await extractError(resp), resp.status);
-  }
+  // 导出响应是文件流：requestRaw 统一处理非 2xx（错误体自行解出中文信息）与超时预算。
+  const resp = await requestRaw("/system/diagnostics/export", { budget: "export" });
   const filename =
     getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ??
     "resumeforge-diagnostics.zip";

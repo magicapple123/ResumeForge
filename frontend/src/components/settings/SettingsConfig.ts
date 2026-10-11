@@ -35,7 +35,8 @@ export const PRESET_OPTIONS = [
   { value: MANUAL_PRESET, label: MANUAL_PRESET_LABEL },
 ];
 
-export type SettingsFormValues = LLMConfig & { preset: string };
+/** session_only 是前端专用开关（密钥走会话通道、不落库），不属于 LLMConfig。 */
+export type SettingsFormValues = LLMConfig & { preset: string; session_only?: boolean };
 
 export function normalizePresetBaseUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, "");

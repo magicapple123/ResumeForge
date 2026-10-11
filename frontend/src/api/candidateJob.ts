@@ -6,6 +6,7 @@ import type {
   CandidateJobPayload,
   CandidateJobUpdatePayload,
 } from "../types";
+import type { Page } from "../types/common";
 import { buildQuery, request } from "./client";
 
 export function listCandidateJobs(
@@ -31,6 +32,34 @@ export function listCandidateJobs(
 
 export function createCandidateJob(payload: CandidateJobPayload): Promise<CandidateJob> {
   return request("/candidate-jobs", { method: "POST", body: JSON.stringify(payload) });
+}
+
+/**
+ * 分页列出备选岗位（RF-08）：过滤与排序与旧列表一致，但不受旧端点 300 条兜底上限约束，
+ * 长期累积的历史候选仍然全部可达。响应是 `Page{items, total}`。
+ */
+export function listCandidateJobsPage(
+  params: {
+    status?: string;
+    keyword?: string;
+    /** 只看某一次采集采到的候选（「本次采集结果」）。 */
+    collectTaskId?: number;
+    /** 查看多条采集记录合并后的候选岗位。 */
+    collectTaskIds?: number[];
+  } = {},
+  page: number,
+  pageSize: number,
+): Promise<Page<CandidateJob>> {
+  const { collectTaskId, collectTaskIds, ...rest } = params;
+  return request(
+    `/candidate-jobs/page${buildQuery({
+      ...rest,
+      ...(collectTaskId ? { collect_task_id: collectTaskId } : {}),
+      ...(collectTaskIds?.length ? { collect_task_ids: collectTaskIds.join(",") } : {}),
+      page,
+      page_size: pageSize,
+    })}`,
+  );
 }
 
 /** 取单条候选的**完整**内容（含 JD）。列表不带正文，要正文就用它。 */

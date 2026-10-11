@@ -8,7 +8,7 @@ import { ArrowLeftOutlined, StopOutlined, ThunderboltOutlined } from "@ant-desig
 import { App, Button, Form, Input, Modal, Space, Tabs, Tag, Typography } from "antd";
 import LoadingBlock from "../components/common/LoadingBlock";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   createInterview,
   deleteInterview,
@@ -36,9 +36,18 @@ import type {
 } from "../types";
 import { formatDateTime } from "../utils/format";
 
+/** 每页条数之类没有；这里是深链 ?job_id= 的解析：正整数才认，其余按"没带参"处理。 */
+function parseLinkedJobId(raw: string | null): number | undefined {
+  const parsed = Number(raw);
+  return raw && Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 export default function InterviewPage() {
   const { message } = App.useApp();
   const navigate = useNavigate();
+  // 岗位详情「模拟面试」深链带来的预填（RF-11）：进页面就把关联岗位选好。
+  const [searchParams] = useSearchParams();
+  const linkedJobId = parseLinkedJobId(searchParams.get("job_id"));
   const [sessions, setSessions] = useState<InterviewBrief[]>([]);
   const batch = useBatchSelection<number>();
   const [loadingList, setLoadingList] = useState(true);
@@ -281,6 +290,7 @@ export default function InterviewPage() {
                   <SetupTab
                     form={form}
                     jobOptions={jobOptions}
+                    initialJobId={linkedJobId}
                     starting={starting}
                     onStart={(values) => void start(values)}
                   />

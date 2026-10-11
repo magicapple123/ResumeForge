@@ -28,12 +28,13 @@ export default function SkillTags({ tags, max = 5 }: Props) {
         <Tag
           key={`${tag.category}-${tag.name}`}
           color={CATEGORY_COLORS[tag.category] ?? "default"}
-          style={{ marginBottom: 4 }}
+          // 标签之间显式留 8px：默认间距在密集卡片里挤成一团（用户实测反馈）。
+          style={{ marginInlineEnd: 8, marginBottom: 4 }}
         >
           {tag.name}
         </Tag>
       ))}
-      {tags.length > max && <Tag>+{tags.length - max}</Tag>}
+      {tags.length > max && <Tag style={{ marginInlineEnd: 8, marginBottom: 4 }}>+{tags.length - max}</Tag>}
     </span>
   );
 }

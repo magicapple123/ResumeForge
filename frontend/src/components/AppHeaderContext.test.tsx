@@ -116,4 +116,41 @@ describe("AppHeaderContext", () => {
 
     await waitFor(() => expect(activateDataset).toHaveBeenCalledWith("a"));
   });
+
+  it("当前是示例数据集：chip 与下拉条目显示「示例」徽标，并提供「回到我的数据」", async () => {
+    listDatasets.mockResolvedValue([
+      { id: "main", name: "我的数据", source: "本机", is_active: false },
+      { id: "demo", name: "体验示例", source: "sample", is_active: true },
+    ]);
+    getProfile.mockResolvedValue({ name: "张示例", photo: "" });
+
+    renderHeader();
+
+    // chip 上有示例徽标。
+    await waitFor(() => expect(screen.getAllByText("示例").length).toBeGreaterThan(0));
+
+    // 打开下拉：示例条目带徽标，「回到我的数据」在列。
+    fireEvent.click(screen.getByRole("button", { name: "当前数据集：体验示例" }));
+    expect(await screen.findByText("回到我的数据")).toBeInTheDocument();
+
+    // 点击它走既有切换流程，目标是主数据。
+    fireEvent.click(screen.getByText("回到我的数据"));
+    await waitFor(() => expect(activateDataset).toHaveBeenCalledWith("main"));
+  });
+
+  it("当前不是示例数据集：不显示「示例」徽标，也没有「回到我的数据」", async () => {
+    listDatasets.mockResolvedValue([
+      { id: "main", name: "我的数据", source: "本机", is_active: true },
+    ]);
+    getProfile.mockResolvedValue({ name: "张示例", photo: "" });
+
+    renderHeader();
+
+    await waitFor(() => expect(screen.getByText("我的数据")).toBeInTheDocument());
+    expect(screen.queryByText("示例")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "当前数据集：我的数据" }));
+    await waitFor(() => expect(screen.getByText("我的数据（当前）")).toBeInTheDocument());
+    expect(screen.queryByText("回到我的数据")).toBeNull();
+  });
 });

@@ -5,16 +5,16 @@
  * 岗位列表旁边。
  */
 import { ImportOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Checkbox, Drawer, Empty, Input, Pagination, Space, Typography } from "antd";
+import { App, Button, Drawer, Empty, Input, Modal, Pagination, Space, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useClientPagination } from "../../hooks/useClientPagination";
+import CandidateBatchToolbar from "./CandidateBatchToolbar";
 import {
   createCandidateJob,
   deleteCandidateJob,
   getCandidateJob,
   importCandidateJobs,
-  listCandidateJobs,
+  listCandidateJobsPage,
   updateCandidateJob,
 } from "../../api/candidateJob";
 import { readAsDataUrl } from "../../utils/attachments";
@@ -24,6 +24,9 @@ import { CandidateJobFormModal } from "./candidate/CandidateJobFormModal";
 import type { FormState } from "./candidate/candidateShared";
 import { EMPTY_FORM, MAX_CANDIDATE_IMAGES, MAX_IMAGE_BYTES } from "./candidate/candidateShared";
 import type { CandidateJob, CandidateJobDetail, CandidateJobPayload } from "../../types";
+
+/** 卡片网格 12 个一页，与迁移前的页内分页口径一致。 */
+const CANDIDATE_PAGE_SIZE = 12;
 
 interface Props {
   open: boolean;
@@ -66,14 +69,11 @@ export default function CandidateJobsDrawer({
   const [keyword, setKeyword] = useState("");
   const [committedKeyword, setCommittedKeyword] = useState("");
 
-  // 备选岗位是采集候选的蓄水池，卡片网格 12 个一页；搜索词提交后回第 1 页。
-  // 「全选」仍作用于当前筛选结果的全部条目（跨页），与投递队列的口径一致。
-  const {
-    page,
-    setPage,
-    paged: pagedCandidates,
-    total: candidateTotal,
-  } = useClientPagination(items, 12, committedKeyword);
+  // 备选岗位走服务端分页（RF-08）：页码/总数来自分页端点，历史候选超过旧端点 300 条
+  // 兜底后仍然全部可达。items 就是当前页；选择集只作用于当前页——「全选」是全选本页
+  // （范围写进文案），翻页/换筛选都会清空选择，不存在跨页多选。
+  const [page, setPage] = useState(1);
+  const [serverTotal, setServerTotal] = useState(0);
 
   const taskFilterKey = collectTaskIds.join(",");
   const selectedPendingIds = useMemo(
@@ -86,19 +86,27 @@ export default function CandidateJobsDrawer({
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
   // 返回 null 表示失败（错误提示在这里统一给出）。
-  const fetchCandidates = useCallback(async () => {
+  const fetchCandidates = useCallback(async (): Promise<{
+    items: CandidateJob[];
+    total: number;
+  } | null> => {
     try {
-      return await listCandidateJobs({
-        ...(taskFilterKey
-          ? { collectTaskIds: taskFilterKey.split(",").map((value) => Number(value)) }
-          : {}),
-        ...(committedKeyword ? { keyword: committedKeyword } : {}),
-      });
+      const pageData = await listCandidateJobsPage(
+        {
+          ...(taskFilterKey
+            ? { collectTaskIds: taskFilterKey.split(",").map((value) => Number(value)) }
+            : {}),
+          ...(committedKeyword ? { keyword: committedKeyword } : {}),
+        },
+        page,
+        CANDIDATE_PAGE_SIZE,
+      );
+      return { items: pageData.items, total: pageData.total };
     } catch (error) {
       message.error(error instanceof Error ? error.message : "加载备选岗位失败");
       return null;
     }
-  }, [committedKeyword, message, taskFilterKey]);
+  }, [committedKeyword, message, taskFilterKey, page]);
 
   useEffect(() => {
     if (!open) return;
@@ -116,33 +124,41 @@ export default function CandidateJobsDrawer({
       // 每次打开都从"未筛选"开始：带着上次的关键词进来会让用户以为候选项丢了。
       setKeyword("");
       setCommittedKeyword("");
+      setPage(1);
       setLoading(true);
     }
   }
 
   useEffect(() => {
     if (!open) return;
-    void fetchCandidates().then((items) => {
-      if (items !== null) setItems(items);
+    void fetchCandidates().then((result) => {
+      if (result !== null) {
+        setItems(result.items);
+        setServerTotal(result.total);
+      }
       setLoading(false);
     });
   }, [fetchCandidates, open]);
 
-  // 事件路径（导入/删除/编辑后的整表重拉，含 loading 翻动）。
+  // 事件路径（导入/删除/编辑后的整页重拉，含 loading 翻动）。
   const load = useCallback(async () => {
     setLoading(true);
-    const items = await fetchCandidates();
-    if (items !== null) setItems(items);
+    const result = await fetchCandidates();
+    if (result !== null) {
+      setItems(result.items);
+      setServerTotal(result.total);
+    }
     setLoading(false);
   }, [fetchCandidates]);
 
   // 搜索改变的是"看得见的那一批"，选中集必须跟着清空——否则批量导入/删除会作用到
-  // 已经不在屏幕上的条目，用户看到的和实际发生的事对不上。
+  // 已经不在屏幕上的条目，用户看到的和实际发生的事对不上。同时回第 1 页。
   // Compiler 规范：镜像清空用渲染期守卫式调整。
   const [prevCommittedKeyword, setPrevCommittedKeyword] = useState(committedKeyword);
   if (prevCommittedKeyword !== committedKeyword) {
     setPrevCommittedKeyword(committedKeyword);
     setSelectedIds([]);
+    setPage(1);
   }
 
   // 父组件完成导入后（拿到正式岗位 id）刷新列表，状态标记随之更新。
@@ -157,9 +173,12 @@ export default function CandidateJobsDrawer({
   useEffect(() => {
     if (!open || importedCandidateId === null) return;
     const cancelled = false;
-    void fetchCandidates().then((items) => {
+    void fetchCandidates().then((result) => {
       if (cancelled) return;
-      if (items !== null) setItems(items);
+      if (result !== null) {
+        setItems(result.items);
+        setServerTotal(result.total);
+      }
       setLoading(false);
     });
   }, [fetchCandidates, importedCandidateId, open]);
@@ -310,31 +329,48 @@ export default function CandidateJobsDrawer({
     }
   };
 
-  const deleteSelected = async () => {
+  const deleteSelected = () => {
     if (selectedIds.length === 0) {
       message.warning("请先选择备选岗位");
       return;
     }
-    setBatchAction("delete");
-    try {
-      const results = await Promise.allSettled(selectedIds.map((id) => deleteCandidateJob(id)));
-      const deleted = results.filter((result) => result.status === "fulfilled").length;
-      const failed = results.length - deleted;
-      setSelectedIds([]);
-      await load();
-      if (failed > 0) {
-        message.warning(`已删除 ${deleted} 个备选岗位，${failed} 个删除失败`);
-      } else {
-        message.success(`已删除 ${deleted} 个备选岗位`);
-      }
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : "批量删除失败");
-    } finally {
-      setBatchAction(null);
-    }
+    const ids = [...selectedIds];
+    // 跨页多选/批量删除必须二次确认并写明实际条数与范围（§2.5 规则 4）：服务端分页后
+    // 选择集只可能来自当前页，文案如实写"当前页内选择"。
+    Modal.confirm({
+      title: `删除选中的 ${ids.length} 条备选岗位？`,
+      content: "均为当前页内的选择，不会被扩大到其他页；删除后进回收站，可恢复。",
+      okText: "删除",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setBatchAction("delete");
+        try {
+          const results = await Promise.allSettled(ids.map((id) => deleteCandidateJob(id)));
+          const deleted = results.filter((result) => result.status === "fulfilled").length;
+          const failed = results.length - deleted;
+          setSelectedIds([]);
+          await load();
+          if (failed > 0) {
+            message.warning(`已删除 ${deleted} 个备选岗位，${failed} 个删除失败`);
+          } else {
+            message.success(`已删除 ${deleted} 个备选岗位`);
+          }
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : "批量删除失败");
+        } finally {
+          setBatchAction(null);
+        }
+      },
+    });
   };
 
   const allSelected = items.length > 0 && selectedIds.length === items.length;
+
+  // 翻页即清空选择集：选择只作用于当前页，翻页后上一页的勾选不再可见也不该生效。
+  const changePage = (next: number) => {
+    setSelectedIds([]);
+    setPage(next);
+  };
 
   return (
     <Drawer
@@ -365,63 +401,28 @@ export default function CandidateJobsDrawer({
         />
         {committedKeyword ? (
           <Typography.Text type="secondary">
-            「{committedKeyword}」匹配 {items.length} 条
+            「{committedKeyword}」匹配 {serverTotal} 条
           </Typography.Text>
         ) : null}
       </Space>
       {items.length > 0 && (
-        <Space wrap style={{ marginBottom: 12 }}>
-          <Checkbox
-            checked={allSelected}
-            indeterminate={selectedIds.length > 0 && !allSelected}
-            disabled={batchAction !== null}
-            onChange={(event) =>
-              setSelectedIds(event.target.checked ? items.map((item) => item.id) : [])
-            }
-          >
-            全选
-          </Checkbox>
-          <Typography.Text type="secondary">已选 {selectedIds.length} 条</Typography.Text>
-          {/* R8：批量导入/批量删除只在多选模式渲染；入口在卡片右键菜单的「批量选择」。 */}
-          {selecting && (
-            <>
-              <Button
-                size="small"
-                disabled={selectedPendingIds.length === 0 || batchAction !== null}
-                loading={batchAction === "import"}
-                onClick={() => void importSelected()}
-              >
-                批量导入
-              </Button>
-              <Button
-                size="small"
-                danger
-                disabled={selectedIds.length === 0 || batchAction !== null}
-                loading={batchAction === "delete"}
-                onClick={() => void deleteSelected()}
-              >
-                批量删除
-              </Button>
-              <Button
-                size="small"
-                disabled={selectedIds.length === 0 || batchAction !== null}
-                onClick={() => setSelectedIds([])}
-              >
-                清空选择
-              </Button>
-              <Button
-                size="small"
-                disabled={batchAction !== null}
-                onClick={() => {
-                  setSelecting(false);
-                  setSelectedIds([]);
-                }}
-              >
-                退出多选
-              </Button>
-            </>
-          )}
-        </Space>
+        <CandidateBatchToolbar
+          selectedCount={selectedIds.length}
+          pageCount={items.length}
+          allSelected={allSelected}
+          someSelected={selectedIds.length > 0}
+          pendingSelectedCount={selectedPendingIds.length}
+          selecting={selecting}
+          batchAction={batchAction}
+          onToggleAll={(checked) => setSelectedIds(checked ? items.map((item) => item.id) : [])}
+          onImport={() => void importSelected()}
+          onDelete={deleteSelected}
+          onClear={() => setSelectedIds([])}
+          onExit={() => {
+            setSelecting(false);
+            setSelectedIds([]);
+          }}
+        />
       )}
       {loading ? (
         <LoadingBlock />
@@ -441,7 +442,7 @@ export default function CandidateJobsDrawer({
       ) : (
         <>
           <CandidateCardGrid
-            items={pagedCandidates}
+            items={items}
             selectedIds={selectedIds}
             batchAction={batchAction}
             selecting={selecting}
@@ -455,9 +456,9 @@ export default function CandidateJobsDrawer({
           <div style={{ textAlign: "right", marginTop: 12 }}>
             <Pagination
               current={page}
-              pageSize={12}
-              total={candidateTotal}
-              onChange={setPage}
+              pageSize={CANDIDATE_PAGE_SIZE}
+              total={serverTotal}
+              onChange={changePage}
               hideOnSinglePage
               showSizeChanger={false}
               showTotal={(count) => `共 ${count} 条`}

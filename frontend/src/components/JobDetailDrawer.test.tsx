@@ -5,8 +5,9 @@
  * 现在闸门在后端，界面负责"别让用户点了才被拒"。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import type { Job } from "../types";
 import JobDetailDrawer from "./JobDetailDrawer";
 
@@ -38,19 +39,22 @@ function renderDrawer(job: Job) {
   const noop = () => undefined;
   return render(
     <AntdApp>
-      <JobDetailDrawer
-        job={job}
-        onClose={noop}
-        onGenerate={noop}
-        onWrite={noop}
-        onViewResumes={noop}
-        onAnalyze={noop}
-        onMatch={noop}
-        onAddToQueue={noop}
-        onAskAssistant={noop}
-        onFavorite={noop}
-        onOpenWebForm={noop}
-      />
+      {/* 抽屉内的跨模块动作直接 navigate（RF-11），渲染必须在 Router 上下文里。 */}
+      <MemoryRouter>
+        <JobDetailDrawer
+          job={job}
+          onClose={noop}
+          onGenerate={noop}
+          onWrite={noop}
+          onViewResumes={noop}
+          onAnalyze={noop}
+          onMatch={noop}
+          onAddToQueue={noop}
+          onAskAssistant={noop}
+          onFavorite={noop}
+          onOpenWebForm={noop}
+        />
+      </MemoryRouter>
     </AntdApp>,
   );
 }
@@ -96,19 +100,21 @@ describe("JobDetailDrawer 投递来源闸门", () => {
     const noop = () => undefined;
     render(
       <AntdApp>
-        <JobDetailDrawer
-          job={{ ...BASE_JOB, apply_supported: true }}
-          onClose={noop}
-          onGenerate={noop}
-          onWrite={noop}
-          onViewResumes={noop}
-          onAnalyze={noop}
-          onMatch={noop}
-          onAddToQueue={onAddToQueue}
-          onAskAssistant={noop}
-          onFavorite={noop}
-          onOpenWebForm={noop}
-        />
+        <MemoryRouter>
+          <JobDetailDrawer
+            job={{ ...BASE_JOB, apply_supported: true }}
+            onClose={noop}
+            onGenerate={noop}
+            onWrite={noop}
+            onViewResumes={noop}
+            onAnalyze={noop}
+            onMatch={noop}
+            onAddToQueue={onAddToQueue}
+            onAskAssistant={noop}
+            onFavorite={noop}
+            onOpenWebForm={noop}
+          />
+        </MemoryRouter>
       </AntdApp>,
     );
 
@@ -126,23 +132,70 @@ describe("JobDetailDrawer 投递来源闸门", () => {
     cleanup();
     render(
       <AntdApp>
-        <JobDetailDrawer
-          job={BASE_JOB}
-          onClose={() => undefined}
-          onGenerate={() => undefined}
-          onWrite={() => undefined}
-          onViewResumes={() => undefined}
-          onAnalyze={() => undefined}
-          onMatch={() => undefined}
-          onAddToQueue={() => undefined}
-          onAskAssistant={() => undefined}
-          onFavorite={() => undefined}
-          onOpenWebForm={() => undefined}
-          webFormLoading
-        />
+        <MemoryRouter>
+          <JobDetailDrawer
+            job={BASE_JOB}
+            onClose={() => undefined}
+            onGenerate={() => undefined}
+            onWrite={() => undefined}
+            onViewResumes={() => undefined}
+            onAnalyze={() => undefined}
+            onMatch={() => undefined}
+            onAddToQueue={() => undefined}
+            onAskAssistant={() => undefined}
+            onFavorite={() => undefined}
+            onOpenWebForm={() => undefined}
+            webFormLoading
+          />
+        </MemoryRouter>
       </AntdApp>,
     );
 
     expect(screen.getByRole("button", { name: /前往投递/ })).toBeDisabled();
+  });
+});
+
+describe("JobDetailDrawer 带 id 的跨模块动作（RF-11）", () => {
+  function LocationProbe() {
+    const location = useLocation();
+    return <span data-testid="location">{location.pathname + location.search}</span>;
+  }
+
+  function renderWithProbe(job: Job) {
+    const noop = () => undefined;
+    return render(
+      <AntdApp>
+        <MemoryRouter>
+          <JobDetailDrawer
+            job={job}
+            onClose={noop}
+            onGenerate={noop}
+            onWrite={noop}
+            onViewResumes={noop}
+            onAnalyze={noop}
+            onMatch={noop}
+            onAddToQueue={noop}
+            onAskAssistant={noop}
+            onFavorite={noop}
+            onOpenWebForm={noop}
+          />
+          <LocationProbe />
+        </MemoryRouter>
+      </AntdApp>,
+    );
+  }
+
+  it("「该岗位的投递进度」携带 job_id 跳到求职进度", () => {
+    renderWithProbe({ ...BASE_JOB, id: 42 });
+
+    fireEvent.click(screen.getByRole("button", { name: /该岗位的投递进度/ }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/tracker?job_id=42");
+  });
+
+  it("「模拟面试」携带 job_id 跳到模拟面试", () => {
+    renderWithProbe({ ...BASE_JOB, id: 42 });
+
+    fireEvent.click(screen.getByRole("button", { name: /模拟面试/ }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/interview?job_id=42");
   });
 });

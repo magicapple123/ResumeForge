@@ -98,6 +98,9 @@ function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [guideOpen, setGuideOpen] = useState(false);
+  // 本次会话是否由「首次访问」自动弹出的：只有这一种打开先给「快速开始」首屏；
+  // 关闭后归位，侧栏「使用指南」重开一律直接进完整 8 步视图。
+  const [guideOpenedAutomatically, setGuideOpenedAutomatically] = useState(false);
   // GitHub Star 提示：点页头 GitHub 图标时随直跳弹一次轻提示（不做持久化，用户要求每次都提醒）。
   const [starModalOpen, setStarModalOpen] = useState(false);
   const [floatingAssistantOpen, setFloatingAssistantOpen] = useState(false);
@@ -193,7 +196,10 @@ function MainLayout() {
   // 消费而不是渲染期求值（渲染期求值会被双调用打断原子性）。按书面理由豁免。
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (consumeFirstVisitGuide()) setGuideOpen(true);
+    if (consumeFirstVisitGuide()) {
+      setGuideOpenedAutomatically(true);
+      setGuideOpen(true);
+    }
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -357,7 +363,13 @@ function MainLayout() {
           <Suspense fallback={null}>
             <UserGuideModal
               open
-              onClose={() => setGuideOpen(false)}
+              // 首次自动弹出先给「快速开始」首屏；侧栏「使用指南」重开时不带该 prop，
+              // 直接进完整 8 步视图。
+              initialQuickStart={guideOpenedAutomatically}
+              onClose={() => {
+                setGuideOpen(false);
+                setGuideOpenedAutomatically(false);
+              }}
               onNavigate={navigateFromGuide}
             />
           </Suspense>

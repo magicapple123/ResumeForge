@@ -124,6 +124,7 @@ const RESUME_DETAIL: ResumeDetail = {
   warnings: [],
   parse_error: "",
   rationale: "",
+  parent_revision_id: null,
   coverage_notes: [],
 };
 

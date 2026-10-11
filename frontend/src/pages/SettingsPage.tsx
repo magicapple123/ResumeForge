@@ -6,6 +6,9 @@ import { useSettingsDatasets } from "../features/settings/useSettingsDatasets";
 import { useSettingsSkills } from "../features/settings/useSettingsSkills";
 import { useLLMSettings } from "../features/settings/useLLMSettings";
 import DatasetsCard from "../components/settings/DatasetsCard";
+import BackupStatusCard from "../components/settings/BackupStatusCard";
+import ManualBackupsCard from "../components/settings/ManualBackupsCard";
+import StorageStatsCard from "../components/settings/StorageStatsCard";
 import AssistantOrbCard from "../components/settings/AssistantOrbCard";
 import LLMConfigCard from "../components/settings/LLMConfigCard";
 import LLMConfigRecordsCard from "../components/settings/LLMConfigRecordsCard";
@@ -68,6 +71,8 @@ export default function SettingsPage() {
     removeRecord,
     cancelEditing,
     resetRevealedApiKey,
+    clearSessionKey,
+    clearingSessionKey,
   } = useLLMSettings();
 
   const {
@@ -191,6 +196,8 @@ export default function SettingsPage() {
                   onTest={() => void test()}
                   onFetchModels={fetchModels}
                   onCheckThinking={checkThinking}
+                  onClearSessionKey={clearSessionKey}
+                  clearingSessionKey={clearingSessionKey}
                 />
 
                 <LLMConfigRecordsCard
@@ -290,9 +297,15 @@ export default function SettingsPage() {
                     if (!datasetCreating) setCreateDatasetOpen(false);
                   }}
                 />
+                {/* 自动备份保护状态（RF-05）：是否被保护、最近成功、快照清单。 */}
+                <BackupStatusCard />
+                {/* 手动备份（RF-25）：backups/ 目录的快照清单与逐份可恢复清理。 */}
+                <ManualBackupsCard />
                 {/* 导出产物落盘位置：本质是"数据存哪里"的选择，与数据集放同一页签。 */}
                 <ExportSaveCard />
                 <PrivacyCard />
+                {/* 存储占用（RF-25）：数据目录各分项的体积与文件数，只读展示。 */}
+                <StorageStatsCard />
               </>
             ),
           },

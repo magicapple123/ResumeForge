@@ -70,6 +70,83 @@ function dashboard(overrides: Record<string, unknown> = {}) {
       { key: "closed", count: 0 },
       { key: "invalid", count: 0 },
     ],
+    cohort: {
+      event_track_count: 4,
+      historical_track_count: 2,
+      undated_event_count: 1,
+      conversions: [
+        {
+          from_status: "applied",
+          to_status: "screening",
+          numerator: 2,
+          denominator: 4,
+          rate: 0.5,
+          small_sample: false,
+        },
+        {
+          from_status: "screening",
+          to_status: "assessment",
+          numerator: 1,
+          denominator: 2,
+          rate: 0.5,
+          small_sample: true,
+        },
+        {
+          from_status: "assessment",
+          to_status: "interview",
+          numerator: 0,
+          denominator: 1,
+          rate: 0.0,
+          small_sample: true,
+        },
+        {
+          from_status: "interview",
+          to_status: "offer",
+          numerator: 0,
+          denominator: 1,
+          rate: 0.0,
+          small_sample: true,
+        },
+      ],
+      durations: [
+        {
+          from_status: "applied",
+          to_status: "screening",
+          numerator: 2,
+          denominator: 4,
+          median_days: 5.0,
+          skipped_negative: 0,
+          small_sample: false,
+        },
+        {
+          from_status: "screening",
+          to_status: "assessment",
+          numerator: 1,
+          denominator: 2,
+          median_days: 3.0,
+          skipped_negative: 0,
+          small_sample: true,
+        },
+        {
+          from_status: "assessment",
+          to_status: "interview",
+          numerator: 0,
+          denominator: 1,
+          median_days: null,
+          skipped_negative: 0,
+          small_sample: true,
+        },
+        {
+          from_status: "interview",
+          to_status: "offer",
+          numerator: 0,
+          denominator: 1,
+          median_days: null,
+          skipped_negative: 0,
+          small_sample: true,
+        },
+      ],
+    },
     resume_count: 22,
     resume_scanned_count: 22,
     resume_with_warnings_count: 1,
@@ -205,5 +282,51 @@ describe("AnalyticsPage", () => {
     fireEvent.click(screen.getByText("近1年"));
 
     await waitFor(() => expect(apiMocks.getAnalyticsDashboard).toHaveBeenCalledWith(12));
+  });
+});
+
+/** 真实时间线（RF-18）：只展示事件能证明的事，缺口与小样本如实亮出。 */
+describe("AnalyticsPage 的真实时间线区块", () => {
+  it("转化与耗时卡带分子分母副文案和小样本徽标", async () => {
+    renderPage();
+
+    await screen.findByText("真实时间线");
+    expect(screen.getByText("已投递 → 筛选中")).toBeInTheDocument();
+    expect(screen.getAllByText("50%").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/样本少于 5 条，仅供参考/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/到下一阶段 2 \/ 到过本阶段 4 条记录/)).toBeInTheDocument();
+    expect(screen.getByText("中位 5 天")).toBeInTheDocument();
+  });
+
+  it("没有可用日期对的耗时显示「暂无可比数据」而不是 0 天", async () => {
+    renderPage();
+
+    await screen.findByText("真实时间线");
+    expect(screen.getAllByText("暂无可比数据").length).toBe(2);
+  });
+
+  it("历史记录早于事件功能时如实说明覆盖率", async () => {
+    renderPage();
+
+    await screen.findByText("真实时间线");
+    expect(screen.getByText(/有 2 条记录早于事件记录功能/)).toBeInTheDocument();
+    expect(screen.getByText(/有 1 次状态变化没写日期/)).toBeInTheDocument();
+  });
+
+  it("全库还没有事件记录时给空态而不是一排零", async () => {
+    apiMocks.getAnalyticsDashboard.mockResolvedValue(
+      dashboard({
+        cohort: {
+          event_track_count: 0,
+          historical_track_count: 6,
+          undated_event_count: 0,
+          conversions: [],
+          durations: [],
+        },
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText(/现有 6 条进度记录早于事件记录功能/)).toBeInTheDocument();
   });
 });

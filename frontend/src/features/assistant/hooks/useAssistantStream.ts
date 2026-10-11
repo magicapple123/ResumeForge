@@ -161,6 +161,16 @@ export function useAssistantStream({
               },
             ]);
           }
+          if (event.type === "write_proposal") {
+            // 写入提案（RF-01）跟在对应 tool 事件之后到达：挂回最近一条工具记录，
+            // 由 MessageToolCalls 渲染确认卡（待确认的写入在折叠面板外一眼可见）。
+            setStreamingTools((current) => {
+              if (current.length === 0) return current;
+              const next = [...current];
+              next[next.length - 1] = { ...next[next.length - 1], proposal: event.proposal };
+              return next;
+            });
+          }
           if (event.type === "error") {
             requestErrorRef.current = true;
             setStreamError(event.message);

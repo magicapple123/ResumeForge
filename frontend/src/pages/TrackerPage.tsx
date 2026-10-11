@@ -7,6 +7,7 @@
  */
 import {
   BellOutlined,
+  CloseOutlined,
   DownloadOutlined,
   FunnelPlotOutlined,
   ImportOutlined,
@@ -19,27 +20,38 @@ import {
   Empty,
   Input,
   Modal,
+  Pagination,
   Select,
   Space,
   Statistic,
+  Tag,
   Tooltip,
   Typography,
 } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
 import type { MenuProps } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { listJobs } from "../api/jobs";
+import { getJob, listJobs } from "../api/jobs";
 import { listResumes } from "../api/resumes";
-import { deleteTrack, exportTracks, listTracks } from "../api/tracker";
+import { deleteTrack, exportTracks, listTracks, listTracksPage } from "../api/tracker";
 import ReminderPanel from "../components/ReminderPanel";
 import TrackCard from "../components/tracker/TrackCard";
 import TrackFormModal from "../components/tracker/TrackFormModal";
 import TrackImportModal from "../components/tracker/TrackImportModal";
 import { useApi } from "../hooks/useApi";
 import { downloadBlob } from "../utils/download";
-import type { Track } from "../types";
+import type { Track, TrackList } from "../types";
 import { FUNNEL_STATUSES, TRACK_STATUSES, TRACK_STATUS_LABELS } from "../types";
+
+/** 每页条数：与后端分页端点默认值一致（page_size 1–100）。 */
+const TRACK_PAGE_SIZE = 20;
+
+/** 深链 ?job_id= 的解析：正整数才认，其余（缺省/非数字/≤0）一律按"没有筛选"处理。 */
+function parseLinkedJobId(raw: string | null): number | null {
+  const parsed = Number(raw);
+  return raw && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 export default function TrackerPage() {
   const { message } = App.useApp();
@@ -62,12 +74,34 @@ export default function TrackerPage() {
   const [jobOptions, setJobOptions] = useState<{ value: number; label: string }[]>([]);
   const [resumeOptions, setResumeOptions] = useState<{ value: number; label: string }[]>([]);
 
+  // 岗位详情深链带来的过滤（RF-11）：只看这个岗位的进度。非法值在解析处就被忽略。
+  const jobId = parseLinkedJobId(searchParams.get("job_id"));
+  // 筛选标签上的岗位名：单独取一次；岗位可能已被删除，失败时仍显示可清除的标签。
+  const [linkedJobLabel, setLinkedJobLabel] = useState<string | null>(null);
+
+  // 列表走分页端点（RF-08）：翻页/筛选变化都重新拉取，历史记录超过旧端点 500 条上限后仍可达。
+  const [page, setPage] = useState(1);
   const { data, loading, error, reload } = useApi(
+    () => listTracksPage({ status, keyword, jobId: jobId ?? undefined }, page, TRACK_PAGE_SIZE),
+    [status, keyword, page, jobId],
+  );
+  // 漏斗与统计字段不在分页端点里，仍走旧列表端点（同一套筛选，响应里的 items 顺便
+  // 供提醒面板的可选进度下拉用——那是它此前就有的一条取数路径）。
+  const { data: stats } = useApi<TrackList>(
     () => listTracks({ status, keyword }),
     [status, keyword],
   );
 
+  // 筛选条件变化时回第 1 页（渲染期守卫式调整，Compiler 规范）；深链 job_id 也算筛选。
+  const filterKey = `${status}|${keyword}|${jobId ?? ""}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
+    setPage(1);
+  }
+
   // 筛选写回 URL（replace 语义）；effect 不依赖 searchParams，不会循环重渲染。
+  // 只写 status/keyword：job_id 通过 functional 更新原样保留，清除走 clearJobFilter。
   useEffect(() => {
     setSearchParams(
       (previous) => {
@@ -82,16 +116,57 @@ export default function TrackerPage() {
     );
   }, [status, keyword, setSearchParams]);
 
+  // 筛选标签的岗位名：单取一次（JobsPage 深链同款做法）。jobId 变化即重取；
+  // 岗位已删除时给出一句实话，标签本身仍可清除。
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (jobId === null) {
+      setLinkedJobLabel(null);
+      return;
+    }
+    let cancelled = false;
+    setLinkedJobLabel(null);
+    void getJob(jobId)
+      .then((job) => {
+        if (cancelled) return;
+        setLinkedJobLabel(
+          job.title ? `${job.title}${job.company ? ` · ${job.company}` : ""}` : `岗位 #${jobId}`,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedJobLabel("该岗位可能已删除");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // 清除岗位筛选 = 从 URL 移除参数：jobId 随之变 null，列表自动重拉、回第 1 页。
+  const clearJobFilter = useCallback(() => {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete("job_id");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
   const items = useMemo(() => data?.items ?? [], [data]);
+  // 提醒面板的进度下拉沿用统计调用带回的列表（与旧行为同源，覆盖同样的范围）。
+  const statItems = useMemo(() => stats?.items ?? [], [stats]);
   const trackOptions = useMemo(
     () =>
-      items.map((track) => ({
+      statItems.map((track) => ({
         value: track.id,
         label: `${track.company} · ${track.title}`,
       })),
-    [items],
+    [statItems],
   );
-  const counts = data?.status_counts ?? {};
+  const counts = stats?.status_counts ?? {};
+  const totalCount = data?.total ?? 0;
   // 漏斗条的宽度按"这条占最大那条的比例"算，这样条目少时也不会全是一小截。
   const funnelMax = Math.max(1, ...FUNNEL_STATUSES.map((key) => counts[key] ?? 0));
 
@@ -167,7 +242,7 @@ export default function TrackerPage() {
               items: exportMenu,
               onClick: ({ key }) => void doExport(key as "csv" | "json"),
             }}
-            disabled={items.length === 0}
+            disabled={totalCount === 0}
           >
             <Button icon={<DownloadOutlined />}>导出</Button>
           </Dropdown>
@@ -185,18 +260,22 @@ export default function TrackerPage() {
       </div>
 
       <div className="tracker-summary">
-        <Statistic title="总数" value={data?.total ?? 0} />
-        <Statistic title="进行中" value={data?.active_count ?? 0} prefix={<FunnelPlotOutlined />} />
-        <Statistic title="本月投递" value={data?.month_count ?? 0} />
+        <Statistic title="总数" value={totalCount} />
+        <Statistic
+          title="进行中"
+          value={stats?.active_count ?? 0}
+          prefix={<FunnelPlotOutlined />}
+        />
+        <Statistic title="本月投递" value={stats?.month_count ?? 0} />
         <Statistic
           title="Offer"
-          value={data?.offer_count ?? 0}
+          value={stats?.offer_count ?? 0}
           styles={{ content: { color: "#389e0d" } }}
         />
-        <Statistic title="已结束" value={data?.rejected_count ?? 0} />
+        <Statistic title="已结束" value={stats?.rejected_count ?? 0} />
       </div>
 
-      {(data?.total ?? 0) > 0 && (
+      {totalCount > 0 && (
         <div className="tracker-funnel">
           {FUNNEL_STATUSES.map((key) => {
             const value = counts[key] ?? 0;
@@ -254,6 +333,23 @@ export default function TrackerPage() {
             setKeyword(value);
           }}
         />
+        {jobId !== null && (
+          <Tag
+            color="blue"
+            icon={<FunnelPlotOutlined />}
+            style={{ marginInlineEnd: 0 }}
+            className="tracker-job-filter-tag"
+          >
+            只看该岗位的投递：{linkedJobLabel ?? "…"}
+            <Button
+              type="text"
+              size="small"
+              aria-label="清除岗位筛选"
+              icon={<CloseOutlined />}
+              onClick={clearJobFilter}
+            />
+          </Tag>
+        )}
       </Space>
 
       {loading && <PageSkeleton rows={6} />}
@@ -282,9 +378,24 @@ export default function TrackerPage() {
         ))}
       </div>
 
+      {/* 服务端分页（RF-08）：页码/总数来自分页端点响应；一页以内不显示翻页条。 */}
+      <div style={{ textAlign: "right", marginTop: 12 }}>
+        <Pagination
+          current={page}
+          pageSize={TRACK_PAGE_SIZE}
+          total={totalCount}
+          onChange={setPage}
+          hideOnSinglePage
+          showSizeChanger={false}
+          showTotal={(count) => `共 ${count} 条`}
+        />
+      </div>
+
       <TrackFormModal
         open={formOpen}
         track={editing}
+        resumeOptions={resumeOptions}
+        jobOptions={jobOptions}
         onClose={() => {
           setFormOpen(false);
           setEditing(null);

@@ -1,11 +1,13 @@
 /**
- * 任务进度轮询：按固定间隔拉取批次详情，任务进入终态后自动停下。
+ * 任务进度轮询：一轮完成后才排下一轮（single-flight），任务进入终态后自动停下。
  *
  * 为什么是轮询而不是 SSE：这是单用户本地应用，一次任务最多几百个岗位、间隔以秒计，
  * 轮询（1.5s）实现简单、断线自愈，成本可忽略；设计也明确采用轮询模型（§4.2）。
+ * 为什么不用 setInterval：慢请求会叠加（上一轮没回来又发起下一轮）。改为「refresh 完成
+ * 后再 setTimeout 下一轮」，进行中的轮次天然不重叠；连续失败按 1.5s→3s→6s 封顶退避。
  */
 import { DependencyList, useCallback, useEffect, useRef, useState } from "react";
-import { ApiError } from "../api/client";
+import { ApiError, isCancellation } from "../api/client";
 import type { ApplyTaskDetail, TaskStatus } from "../types";
 import { isDocumentHidden, onVisibilityChange } from "../utils/visibility";
 
@@ -22,13 +24,16 @@ export function isActiveTaskStatus(status: TaskStatus): boolean {
 }
 
 const POLL_INTERVAL_MS = 1500;
+/** 失败退避序列（毫秒）：连续失败第 1/2/3+ 次后的下一轮间隔，封顶 6s。 */
+const BACKOFF_MS = [1500, 3000, 6000] as const;
 
 interface TaskPollingState {
   detail: ApplyTaskDetail | null;
   error: string;
   /** 后端返回 404（任务记录不存在 / 已被清理）时置真：轮询停止，界面给「重试」入口。 */
   notFound: boolean;
-  refresh: () => Promise<void>;
+  /** 手动拉取一次；返回是否成功（轮询循环据此决定退避，调用方通常 `void refresh()` 即可）。 */
+  refresh: () => Promise<boolean>;
   setDetail: (detail: ApplyTaskDetail | null) => void;
 }
 
@@ -45,6 +50,9 @@ export function useTaskPolling(
   const [error, setError] = useState("");
   const [notFound, setNotFound] = useState(false);
   const version = useRef(0);
+  // single-flight 标记与连续失败计数：轮询循环据此跳过叠加请求并做失败退避。
+  const inFlight = useRef(false);
+  const failures = useRef(0);
 
   const fetcherRef = useRef(fetcher);
   // ref 写入放 effect（Compiler 禁止渲染期写 ref）：声明在重置/重载 effect 之前。
@@ -52,17 +60,19 @@ export function useTaskPolling(
     fetcherRef.current = fetcher;
   });
 
-  const refresh = useCallback(async () => {
-    if (taskId == null) return;
+  const refresh = useCallback(async (): Promise<boolean> => {
+    if (taskId == null) return false;
     const current = ++version.current;
     // 重试时先把 404 态撤掉再拉一次；后端仍返回 404 会重新置真。
     setNotFound(false);
+    inFlight.current = true;
     try {
       const result = await fetcherRef.current(taskId);
       if (current === version.current) {
         setDetail(result);
         setError("");
       }
+      return true;
     } catch (err) {
       if (current === version.current) {
         if (err instanceof ApiError && err.status === 404) {
@@ -70,16 +80,21 @@ export function useTaskPolling(
           // 只会每 1.5s 吃一个 404、界面永远停在「正在读取任务进度…」。
           setError("");
           setNotFound(true);
-        } else {
+        } else if (!isCancellation(err)) {
+          // 取消不进错误态；超时错误（「请求超时，请重试」）本身就是可重试的口径。
           setError(err instanceof Error ? err.message : String(err));
         }
       }
+      return false;
+    } finally {
+      inFlight.current = false;
     }
     // eslint-disable-next-line react-hooks/use-memo -- 依赖列表同样是调用方传参，无法写成字面量
   }, [taskId, ...deps]);
 
   // 切换任务时清空旧详情，避免把上一个任务的状态显示成新任务的。
   // Compiler 规范：随 prop 变化的重置改到渲染期「调整状态」模式（守卫式 setState）。
+  // 失败计数不在这里清（渲染期禁写 ref），放到下面的 taskId effect 里。
   const [prevTaskId, setPrevTaskId] = useState(taskId);
   if (prevTaskId !== taskId) {
     setPrevTaskId(taskId);
@@ -90,26 +105,58 @@ export function useTaskPolling(
 
   useEffect(() => {
     version.current += 1;
+    failures.current = 0;
     if (taskId != null) void refresh();
   }, [taskId, refresh]);
 
   // 仅在任务仍处于推进状态时轮询；进入终态后自动停止，避免空转。
   // 404 同样停止：任务记录已经不存在，轮询没有意义，由界面的「重试」重新拉起。
-  // 页面在后台时跳过本轮 tick（秒级轮询在后台纯属浪费），回到前台立即补一次。
+  // 每轮等上一轮 refresh 完成后再排下一轮（single-flight + 失败退避）；页面在后台时
+  // 跳过本轮 tick，回到前台立即补一次。
   useEffect(() => {
     if (taskId == null || notFound) return;
     const status = detail?.status;
     if (status && !isActiveTaskStatus(status)) return;
-    const timer = window.setInterval(() => {
-      if (isDocumentHidden()) return;
-      void refresh();
-    }, POLL_INTERVAL_MS);
+
+    let disposed = false;
+    let timer: number | undefined;
+
+    const schedule = (delay: number) => {
+      if (!disposed) timer = window.setTimeout(() => void tick(), delay);
+    };
+
+    const tick = async () => {
+      if (disposed) return;
+      // 后台跳过本轮（秒级轮询在后台纯属浪费）；single-flight：上一轮还没回来就不叠加。
+      if (isDocumentHidden() || inFlight.current) {
+        schedule(POLL_INTERVAL_MS);
+        return;
+      }
+      const ok = await refresh();
+      if (disposed) return;
+      if (ok) {
+        failures.current = 0;
+        schedule(POLL_INTERVAL_MS);
+      } else {
+        failures.current += 1;
+        schedule(BACKOFF_MS[Math.min(failures.current, BACKOFF_MS.length) - 1]);
+      }
+    };
+
     const unsubscribeVisibility = onVisibilityChange(() => {
-      if (isDocumentHidden()) return;
-      void refresh();
+      if (disposed || isDocumentHidden()) return;
+      // 前台补拉也别和进行中的请求叠加：in-flight 时它完成后自会排下一轮。
+      if (inFlight.current) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      void tick();
     });
+
+    // 启动轮询链：首轮由挂载 effect 的立即拉取负责，这里排下一轮（上一轮完成后继续）。
+    schedule(POLL_INTERVAL_MS);
+
     return () => {
-      window.clearInterval(timer);
+      disposed = true;
+      if (timer !== undefined) window.clearTimeout(timer);
       unsubscribeVisibility();
     };
   }, [taskId, detail?.status, notFound, refresh]);

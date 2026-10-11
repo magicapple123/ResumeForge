@@ -10,13 +10,24 @@ import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 import { createTrack, getTrack, updateTrack } from "../../api/tracker";
-import type { Track, TrackPayload, TrackStatus } from "../../types";
-import { TRACK_STATUSES, TRACK_STATUS_LABELS, emptyTrack } from "../../types";
+import type { Track, TrackChannel, TrackPayload, TrackStatus } from "../../types";
+import {
+  TRACK_CHANNELS,
+  TRACK_CHANNEL_LABELS,
+  TRACK_STATUSES,
+  TRACK_STATUS_LABELS,
+  emptyTrack,
+} from "../../types";
 import { HintedTextArea } from "../common/MaxLengthHint";
 
 const STATUS_OPTIONS = TRACK_STATUSES.map((value) => ({
   value,
   label: TRACK_STATUS_LABELS[value],
+}));
+
+const CHANNEL_OPTIONS = TRACK_CHANNELS.map((value) => ({
+  value,
+  label: TRACK_CHANNEL_LABELS[value],
 }));
 
 interface FormValues {
@@ -29,6 +40,9 @@ interface FormValues {
   next_action: string;
   next_action_date: Dayjs | null;
   note: string;
+  job_id: number | null;
+  resume_id: number | null;
+  channel: TrackChannel;
 }
 
 const EMPTY: FormValues = {
@@ -41,6 +55,9 @@ const EMPTY: FormValues = {
   next_action: "",
   next_action_date: null,
   note: "",
+  job_id: null,
+  resume_id: null,
+  channel: "unknown",
 };
 
 function toValues(track: Track): FormValues {
@@ -54,6 +71,9 @@ function toValues(track: Track): FormValues {
     next_action: track.next_action,
     next_action_date: track.next_action_date ? dayjs(track.next_action_date) : null,
     note: track.note,
+    job_id: track.job_id,
+    resume_id: track.resume_id,
+    channel: track.channel,
   };
 }
 
@@ -69,10 +89,11 @@ function toPayload(values: FormValues, track: Track | null): TrackPayload {
     next_action: values.next_action.trim(),
     next_action_date: values.next_action_date ? values.next_action_date.format("YYYY-MM-DD") : "",
     note: values.note.trim(),
-    // 手编不碰证据与关联：那是识别/投递台留下的痕迹，不该因为改个状态就丢掉。
+    // 证据是识别/投递台留下的痕迹，手编不碰；岗位与简历关联由本表单显式选择（选填）。
     evidence: track?.evidence ?? "",
-    job_id: track?.job_id ?? null,
-    resume_id: track?.resume_id ?? null,
+    job_id: values.job_id ?? null,
+    resume_id: values.resume_id ?? null,
+    channel: values.channel,
   };
 }
 
@@ -81,9 +102,20 @@ interface Props {
   track: Track | null;
   onClose: () => void;
   onSaved: (track: Track) => void;
+  /** 可选的简历清单（RF-17）：把这条进度显式关联到一版简历，后端会冻结投递快照。 */
+  resumeOptions?: { value: number; label: string }[];
+  /** 可选的岗位清单（RF-18）：把这条进度关联到资料库里的一个岗位（选填）。 */
+  jobOptions?: { value: number; label: string }[];
 }
 
-export default function TrackFormModal({ open, track, onClose, onSaved }: Props) {
+export default function TrackFormModal({
+  open,
+  track,
+  onClose,
+  onSaved,
+  resumeOptions = [],
+  jobOptions = [],
+}: Props) {
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const [full, setFull] = useState<Track | null>(null);
@@ -240,6 +272,44 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
             <DatePicker style={{ width: "100%" }} />
           </Form.Item>
         </div>
+
+        {/* 渠道选择（RF-18）：用户自选"这份工作从哪来的"，默认未知。
+            与记录来源（这一行怎么进系统的）是两回事，界面措辞刻意分开。 */}
+        <Form.Item
+          name="channel"
+          label="投递渠道"
+          extra="选填。这是「从哪投的」，不是记录怎么进系统的；不确定就保留「未知」"
+        >
+          <Select options={CHANNEL_OPTIONS} />
+        </Form.Item>
+
+        {/* 岗位关联（RF-18）：选填。把这条进度挂到资料库里的一个岗位，
+            岗位详情页的「该岗位的投递进度」会把它收进来。 */}
+        <Form.Item name="job_id" label="关联岗位" extra="选填。关联后可在岗位详情里看到这条进度">
+          <Select
+            allowClear
+            placeholder="选择要关联的岗位"
+            options={jobOptions}
+            showSearch
+            optionFilterProp="label"
+          />
+        </Form.Item>
+
+        {/* 简历选择器（RF-17）：选填。显式关联后后端冻结一份投递快照，
+            回答"这一版投给了谁"；清掉关联不影响已有快照。 */}
+        <Form.Item
+          name="resume_id"
+          label="使用的简历"
+          extra="选填。关联后会在简历详情里留一份投递记录（内容快照），投递后修改简历不影响已留的记录"
+        >
+          <Select
+            allowClear
+            placeholder="选择这次投递使用的简历版本"
+            options={resumeOptions}
+            showSearch
+            optionFilterProp="label"
+          />
+        </Form.Item>
 
         {/* showCount 已移除（统一用 MaxLengthHint 模式）：只有顶到 4000 字上限时，
             才在输入框下方出现一行小号红字提醒。 */}

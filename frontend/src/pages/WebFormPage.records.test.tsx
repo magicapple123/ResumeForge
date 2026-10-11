@@ -4,7 +4,7 @@
  * mock 与工具骨架逐字复制自主文件（vi.hoisted mock 必须与 vi.mock 同文件）。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrowserStatus, WebFormLive, WebFormPreview, WebFormSnapshot } from "../types";
@@ -25,6 +25,7 @@ const apiMocks = vi.hoisted(() => ({
   getWebFormMemoryTargets: vi.fn(),
   rememberWebFormLive: vi.fn(),
   listWebFormRecords: vi.fn(),
+  listWebFormRecordsPage: vi.fn(),
   getWebFormRecord: vi.fn(),
   deleteWebFormRecord: vi.fn(),
   listWebFormUrlHistory: vi.fn(),
@@ -139,7 +140,8 @@ beforeEach(() => {
   } as WebFormSnapshot);
   apiMocks.previewWebForm.mockResolvedValue(preview());
   apiMocks.fillWebForm.mockResolvedValue({ outcomes: [], filled: 1, unverified: 0, failed: 0 });
-  apiMocks.listWebFormRecords.mockResolvedValue([]);
+  apiMocks.listWebFormRecordsPage.mockResolvedValue({ items: [], total: 0 });
+  apiMocks.getWebFormRecord.mockResolvedValue(null);
   apiMocks.getWebFormLiveStatus.mockResolvedValue(liveStatus());
   apiMocks.startWebFormLive.mockResolvedValue(liveStatus());
   apiMocks.setWebFormLiveEnabled.mockResolvedValue(liveStatus({ running: true, enabled: false }));
@@ -161,27 +163,117 @@ afterEach(() => {
 // ===== 填充记录与浏览器设置 =====
 
 describe("填充记录", () => {
-  it("回看每次填充：时间、页面、成功与失败计数", async () => {
-    apiMocks.listWebFormRecords.mockResolvedValue([
-      {
-        id: 7,
-        url: "https://example.com/apply",
-        page_title: "某公司网申",
-        filled: 8,
-        unverified: 1,
-        failed: 2,
-        source: "batch",
-        created_at: "2026-09-27T10:30:00",
-        items: [],
-        page_snapshot: [],
-      },
-    ]);
+  it("回看每次填充：时间、页面、成功与失败计数（列表行是摘要）", async () => {
+    apiMocks.listWebFormRecordsPage.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          url: "https://example.com/apply",
+          page_title: "某公司网申",
+          filled: 8,
+          unverified: 1,
+          failed: 2,
+          source: "batch",
+          created_at: "2026-09-27T10:30:00",
+        },
+      ],
+      total: 1,
+    });
     renderPage();
 
     await waitFor(() => expect(screen.getByText("某公司网申")).toBeInTheDocument());
     expect(screen.getByText("成功 8")).toBeInTheDocument();
     expect(screen.getByText("待核对 1")).toBeInTheDocument();
     expect(screen.getByText("失败 2")).toBeInTheDocument();
+  });
+
+  it("展开记录时才取详情：填写值明细与页面快照来自详情端点", async () => {
+    apiMocks.listWebFormRecordsPage.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          url: "https://example.com/apply",
+          page_title: "某公司网申",
+          filled: 1,
+          unverified: 0,
+          failed: 0,
+          source: "batch",
+          created_at: "2026-09-27T10:30:00",
+        },
+      ],
+      total: 1,
+    });
+    apiMocks.getWebFormRecord.mockResolvedValue({
+      id: 7,
+      url: "https://example.com/apply",
+      page_title: "某公司网申",
+      filled: 1,
+      unverified: 0,
+      failed: 0,
+      source: "batch",
+      created_at: "2026-09-27T10:30:00",
+      items: [
+        {
+          index: 0,
+          field: "name",
+          field_label: "姓名",
+          value: "张三",
+          control_label: "姓名",
+          status: "filled",
+          detail: "",
+        },
+      ],
+      page_snapshot: [{ index: 0, label: "姓名", value: "张三", filled: true }],
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByText("某公司网申"));
+
+    await waitFor(() => expect(apiMocks.getWebFormRecord).toHaveBeenCalledWith(7));
+    // 填写值明细来自详情端点，列表摘要响应里没有它。
+    expect(await screen.findByText("张三")).toBeInTheDocument();
+    expect(screen.getByText(/1 个框是我们填的/)).toBeInTheDocument();
+  });
+
+  it("翻页时用新页码重新拉取，取到旧截断之外的记录", async () => {
+    const pageOne = Array.from({ length: 20 }, (_, index) => ({
+      id: index + 1,
+      url: "",
+      page_title: `记录-${index + 1}`,
+      filled: 1,
+      unverified: 0,
+      failed: 0,
+      source: "batch",
+      created_at: "2026-09-27T10:30:00",
+    }));
+    apiMocks.listWebFormRecordsPage
+      .mockResolvedValueOnce({ items: pageOne, total: 21 })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 21,
+            url: "",
+            page_title: "深层历史记录",
+            filled: 1,
+            unverified: 0,
+            failed: 0,
+            source: "batch",
+            created_at: "2026-01-01T00:00:00",
+          },
+        ],
+        total: 21,
+      });
+    renderPage();
+
+    expect(await screen.findByText("记录-1")).toBeInTheDocument();
+    expect(screen.queryByText("深层历史记录")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByTitle("2")[0]);
+
+    await waitFor(() => {
+      expect(apiMocks.listWebFormRecordsPage).toHaveBeenLastCalledWith(2, 20);
+    });
+    expect(await screen.findByText("深层历史记录")).toBeInTheDocument();
   });
 
   it("没有记录时如实说还没有", async () => {
@@ -196,11 +288,11 @@ describe("填充记录", () => {
     screen.getByRole("button", { name: /读取当前表单/ }).click();
     await waitFor(() => expect(screen.getByRole("button", { name: /填充到页面/ })).toBeEnabled());
 
-    apiMocks.listWebFormRecords.mockClear();
+    apiMocks.listWebFormRecordsPage.mockClear();
     screen.getByRole("button", { name: /填充到页面/ }).click();
 
     // 用户刚填完就想看到那一条，不该等下次进页面。
-    await waitFor(() => expect(apiMocks.listWebFormRecords).toHaveBeenCalled());
+    await waitFor(() => expect(apiMocks.listWebFormRecordsPage).toHaveBeenCalled());
   });
 });
 

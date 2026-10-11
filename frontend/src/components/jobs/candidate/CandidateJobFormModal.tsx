@@ -6,6 +6,8 @@
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Form, Image, Input, Modal, Space, Typography, Upload } from "antd";
 import FileDropZone from "../../common/FileDropZone";
+import { MaxLengthHint } from "../../common/MaxLengthHint";
+import { MAX_JOB_TEXT_CHARS } from "../../../config";
 import type { CandidateJob } from "../../../types";
 import type { FormState } from "./candidateShared";
 import { MAX_CANDIDATE_IMAGES } from "./candidateShared";
@@ -65,12 +67,16 @@ export function CandidateJobFormModal({
           />
         </Form.Item>
         <Form.Item label="招聘原文">
+          {/* 硬上限与后端备选岗位 raw_text 的 max_length 对齐（50_000）；
+              提示统一走 MaxLengthHint（全仓禁用 antd showCount）。 */}
           <Input.TextArea
             value={formState.rawText}
+            maxLength={MAX_JOB_TEXT_CHARS}
             autoSize={{ minRows: 6, maxRows: 14 }}
             placeholder="把招聘信息原样粘贴进来，导入时会用它预填 JD"
             onChange={(event) => onChange((c) => ({ ...c, rawText: event.target.value }))}
           />
+          <MaxLengthHint value={formState.rawText} maxLength={MAX_JOB_TEXT_CHARS} />
         </Form.Item>
         <Form.Item label={`招聘截图（最多 ${MAX_CANDIDATE_IMAGES} 张，单张不超过 2 MB）`}>
           <Space orientation="vertical" style={{ width: "100%" }}>

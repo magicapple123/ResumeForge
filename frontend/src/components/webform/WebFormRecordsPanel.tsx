@@ -15,9 +15,10 @@ import {
   Checkbox,
   Collapse,
   Descriptions,
-  Empty,
   Modal,
+  Pagination,
   Space,
+  Spin,
   Table,
   Tag,
   Typography,
@@ -26,11 +27,16 @@ import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useState } from "react";
 import { CheckSquareOutlined } from "@ant-design/icons";
 import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
-import { deleteWebFormRecord, listWebFormRecords } from "../../api/webform";
+import EmptyState from "../common/EmptyState";
+import ErrorState from "../common/ErrorState";
+import { deleteWebFormRecord, getWebFormRecord, listWebFormRecordsPage } from "../../api/webform";
 import BatchActionBar from "../../components/common/BatchActionBar";
 import { useApi } from "../../hooks/useApi";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
-import type { WebFormFillRecord, WebFormRecordItem } from "../../types";
+import type { WebFormFillRecord, WebFormRecordItem, WebFormRecordSummary } from "../../types";
+
+/** 每页条数：与迁移前「最近 20 条」的口径一致（迁移后翻页可达全部历史记录）。 */
+const RECORD_PAGE_SIZE = 20;
 
 /** 记录里那条明细的状态 → 中文与颜色（与填充结果用的是同一套取值）。 */
 const ITEM_STATUS_META: Record<string, { color: string; label: string }> = {
@@ -80,11 +86,49 @@ interface Props {
 
 export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
   const { message } = App.useApp();
-  const { data, loading, error, reload } = useApi<WebFormFillRecord[]>(
-    () => listWebFormRecords(20),
-    [],
+  // 服务端分页（RF-08）：页码/总数来自分页端点；列表行是摘要（无填写值与页面快照），
+  // 展开某条时再取详情（getWebFormRecord），不让真实填写值随列表整体下发。
+  const [page, setPage] = useState(1);
+  const { data, loading, error, reload } = useApi(
+    () => listWebFormRecordsPage(page, RECORD_PAGE_SIZE),
+    [page],
   );
   const [selected, setSelected] = useState<number | null>(null);
+  const [detail, setDetail] = useState<WebFormFillRecord | null>(null);
+  // 详情请求失败标记：失败后不再显示 Spin（如实展示"没有可展示的明细"），
+  // 与「详情还没到」的加载态区分开。
+  const [detailFailed, setDetailFailed] = useState(false);
+  // 选中条目变化时清掉上一次的失败标记（渲染期守卫式 reset，Compiler 规范；
+  // 不在 effect 里同步 setState，避免 react-hooks/set-state-in-effect）。
+  const [prevSelected, setPrevSelected] = useState(selected);
+  if (prevSelected !== selected) {
+    setPrevSelected(selected);
+    setDetailFailed(false);
+  }
+
+  // 加载态由「选中的条目」与「已取回详情是否属于它」推导：展开一条还没有它详情的
+  // 记录时必然在加载。明细是否在加载不进 state，effect 里就只剩异步回调里的 setState。
+  const detailLoading = selected !== null && !detailFailed && detail?.id !== selected;
+
+  // 展开条目变化 → 取那条的全文（填写值明细与页面快照只在详情里）。
+  useEffect(() => {
+    if (selected === null) return;
+    let cancelled = false;
+    getWebFormRecord(selected)
+      .then((full) => {
+        if (!cancelled) setDetail(full);
+      })
+      .catch(() => {
+        // 详情取不到时如实显示"没有可展示的明细"，不把整块炸掉。
+        if (!cancelled) {
+          setDetail(null);
+          setDetailFailed(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
 
   // 填充完成后外部把 refreshKey 加一，这里重新拉一次。
   useEffect(() => {
@@ -100,7 +144,8 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
     [reload, selected],
   );
 
-  // 批量选择：勾选若干次填充记录后一次删除。
+  // 批量选择：勾选若干次填充记录后一次删除。选择集只在当前页内——翻页即清空，
+  // 不存在跨页多选（确认文案因此无需区分"本页/全部"）。
   const batch = useBatchSelection<number>();
 
   /** 批量删除：确认后逐条走同一个删除接口，全部完成再刷新一次。 */
@@ -123,13 +168,27 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
     });
   };
 
-  const records = data ?? [];
+  const records: WebFormRecordSummary[] = data?.items ?? [];
+  const total = data?.total ?? 0;
   if (!loading && records.length === 0) {
-    return <Empty description={error ? "读取填充记录失败" : "还没有填充记录"} />;
+    // 错误与空态分开：失败给重试出路（ErrorState，role=alert 可感知），
+    // 真的没有记录才是 EmptyState——两者混成一句文案会让"坏了"看起来像"没填过"。
+    return error ? (
+      <ErrorState description="读取填充记录失败" onRetry={() => void reload()} />
+    ) : (
+      <EmptyState description="还没有填充记录" />
+    );
   }
 
+  // 翻页即清空展开条与选择集：上一页的展开/勾选对新页没有意义。
+  const changePage = (next: number) => {
+    setSelected(null);
+    batch.exitSelecting();
+    setPage(next);
+  };
+
   /** 记录条目的右键菜单：批量选择（工具栏按钮已收进这里，R8）+ 删除（二次确认）。 */
-  const contextActions = (record: WebFormFillRecord): RowActionItem[] => [
+  const contextActions = (record: WebFormRecordSummary): RowActionItem[] => [
     {
       key: "batch_select",
       label: "批量选择",
@@ -215,24 +274,44 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
                   ) : null}
                 </Descriptions.Item>
               </Descriptions>
-              <Table
-                rowKey="index"
-                size="small"
-                pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
-                columns={itemColumns}
-                dataSource={record.items}
-                locale={{ emptyText: "这一轮没有可填的字段" }}
-              />
-              {record.page_snapshot.length > 0 ? (
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  填完后页面上共 {record.page_snapshot.filter((row) => row.filled).length}{" "}
-                  个框是我们填的；其余为你原有的内容或页面自己算出来的。
-                </Typography.Text>
-              ) : null}
+              {detailLoading ? (
+                <div style={{ textAlign: "center", padding: 16 }}>
+                  <Spin />
+                </div>
+              ) : (
+                <>
+                  <Table
+                    rowKey="index"
+                    size="small"
+                    pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
+                    columns={itemColumns}
+                    dataSource={detail?.items ?? []}
+                    locale={{ emptyText: "这一轮没有可填的字段" }}
+                  />
+                  {(detail?.page_snapshot.length ?? 0) > 0 ? (
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      填完后页面上共 {detail?.page_snapshot.filter((row) => row.filled).length}{" "}
+                      个框是我们填的；其余为你原有的内容或页面自己算出来的。
+                    </Typography.Text>
+                  ) : null}
+                </>
+              )}
             </Space>
           ),
         }))}
       />
+      {/* 服务端分页（RF-08）：页码/总数来自分页端点；翻页即清空展开条与选择集。 */}
+      <div style={{ textAlign: "right", marginTop: 12 }}>
+        <Pagination
+          current={page}
+          pageSize={RECORD_PAGE_SIZE}
+          total={total}
+          onChange={changePage}
+          hideOnSinglePage
+          showSizeChanger={false}
+          showTotal={(count) => `共 ${count} 条`}
+        />
+      </div>
     </div>
   );
 }

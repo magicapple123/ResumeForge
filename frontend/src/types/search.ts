@@ -51,5 +51,8 @@ export interface Stats {
   pending_claims: PendingClaimBrief[];
   stalled_application_count: number;
   apply_queue_count: number;
+  // 首次使用"第一份交付"进度用的两个总量口径：台账总数与关联岗位的简历数。
+  claim_count: number;
+  resume_with_job_count: number;
   latest_applications: LatestApplication[];
 }

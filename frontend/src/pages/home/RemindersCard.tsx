@@ -22,6 +22,14 @@ const URGENCY_DOT_COLORS: Record<string, string> = {
   later: "#d9d9d9",
 };
 
+/** 紧急度的文字名（RF-12：颜色不能是唯一状态信号——点旁必须带可读的紧急度）。 */
+const URGENCY_LABELS: Record<string, string> = {
+  overdue: "已逾期",
+  soon: "即将到期",
+  upcoming: "未到期",
+  later: "较远",
+};
+
 /** 从 localStorage 读取近期提醒视图偏好；缺省为列表。 */
 function loadReminderView(): "list" | "calendar" {
   try {
@@ -90,7 +98,8 @@ export function RemindersCard({
             >
               <Space size={8} wrap>
                 <span
-                  aria-hidden
+                  role="img"
+                  aria-label={`紧急度：${URGENCY_LABELS[item.urgency] ?? "未知"}`}
                   className="reminder-urgency-dot"
                   style={{
                     display: "inline-block",

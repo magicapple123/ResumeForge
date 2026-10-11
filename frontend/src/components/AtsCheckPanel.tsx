@@ -8,8 +8,10 @@ import { Alert, Button, Card, Empty, Input, Progress, Space, Tag, Typography } f
 import LoadingBlock from "./common/LoadingBlock";
 import { useMemo, useRef, useState } from "react";
 import { runAtsCheck } from "../api/ats";
+import { MAX_JOB_TEXT_CHARS } from "../config";
 import { useApi } from "../hooks/useApi";
 import type { AtsIssue, AtsIssueCategory, AtsSeverity } from "../types/ats";
+import { MaxLengthHint } from "./common/MaxLengthHint";
 
 const CATEGORY_ORDER: { key: AtsIssueCategory; label: string; color: string }[] = [
   { key: "format", label: "格式风险", color: "orange" },
@@ -55,6 +57,7 @@ export default function AtsCheckPanel({ resumeId }: Props) {
       <Space.Compact style={{ width: "100%" }}>
         <Input.TextArea
           rows={2}
+          maxLength={MAX_JOB_TEXT_CHARS}
           value={jdText}
           placeholder="可选：粘贴岗位 JD 文本，按 JD 关键词检查覆盖（留空则做通用覆盖）"
           aria-label="JD 文本"
@@ -64,6 +67,8 @@ export default function AtsCheckPanel({ resumeId }: Props) {
           开始检测
         </Button>
       </Space.Compact>
+      {/* 硬上限交给 maxLength；提示统一走 MaxLengthHint（全仓禁用 antd showCount）。 */}
+      <MaxLengthHint value={jdText} maxLength={MAX_JOB_TEXT_CHARS} />
 
       {error && <Alert type="error" showIcon title={error} />}
 

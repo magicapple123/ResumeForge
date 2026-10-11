@@ -6,10 +6,11 @@ import type {
   AssistantConversationForkPayload,
   AssistantSurface,
   AssistantStreamEvent,
+  AssistantWriteProposal,
   ReasoningEffort,
 } from "../types";
 import type { Material } from "../types";
-import { ApiError, getFilenameFromDisposition, request, extractError } from "./client";
+import { getFilenameFromDisposition, request, requestRaw } from "./client";
 import { consumeSSE } from "./stream";
 
 function surfaceQuery(surface: AssistantSurface): string {
@@ -31,11 +32,12 @@ export async function exportConversation(
   format: ConversationExportFormat = "md",
   surface: AssistantSurface = "page",
 ): Promise<{ blob: Blob; filename: string }> {
-  // 裸 fetch：响应是文件内容，不是 JSON。
-  const resp = await fetch(
-    `/api/assistant/conversations/${id}/export?format=${format}&${surfaceQuery(surface)}`,
+  // 响应是文件内容，不是 JSON：走 requestRaw（错误分类与 request() 一致），导出大对话
+  // 走 export 预算（10 分钟）。注意：这条是普通导出，不是流式消息路径（SSE 不走这里）。
+  const resp = await requestRaw(
+    `/assistant/conversations/${id}/export?format=${format}&${surfaceQuery(surface)}`,
+    { budget: "export" },
   );
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
   return {
     blob: await resp.blob(),
     filename:
@@ -191,4 +193,25 @@ export function sendAssistantMessage(
     onEvent,
     signal,
   );
+}
+
+/** 批准并执行一条写入提案（后端在同一次请求里完成"批准→核销→执行"）。 */
+export async function approveWriteProposal(
+  proposalId: string,
+): Promise<{ proposal: AssistantWriteProposal; summary: string; changed: boolean }> {
+  return request(`/assistant/write-proposals/${proposalId}/approve`, { method: "POST" });
+}
+
+/** 拒绝一条写入提案（终态，不可复活）。 */
+export async function rejectWriteProposal(
+  proposalId: string,
+): Promise<{ proposal: AssistantWriteProposal }> {
+  return request(`/assistant/write-proposals/${proposalId}/reject`, { method: "POST" });
+}
+
+/** 读取提案当前状态；404 表示提案已失效（后端重启或不存在）。 */
+export async function getWriteProposal(
+  proposalId: string,
+): Promise<{ proposal: AssistantWriteProposal }> {
+  return request(`/assistant/write-proposals/${proposalId}`);
 }

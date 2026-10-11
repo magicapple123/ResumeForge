@@ -10,6 +10,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Popconfirm,
   Row,
   Select,
   Slider,
@@ -49,6 +50,9 @@ interface Props {
   onFetchModels: () => Promise<LLMModelsResult>;
   /** 查思考支持：probe=true 会真的发一次最小请求，用来分辨"生效/被忽略/被拒绝"。 */
   onCheckThinking: (probe: boolean) => Promise<LLMThinkingResult>;
+  /** 清除后端内存中的临时会话密钥（RF-24 收尾）；不动落库密钥。 */
+  onClearSessionKey: () => Promise<void>;
+  clearingSessionKey: boolean;
 }
 
 export default function LLMConfigCard({
@@ -65,9 +69,12 @@ export default function LLMConfigCard({
   onTest,
   onFetchModels,
   onCheckThinking,
+  onClearSessionKey,
+  clearingSessionKey,
 }: Props) {
   const thinkingEnabled = Form.useWatch("thinking_enabled", form);
   const thinkingEffort: string = Form.useWatch("thinking_effort", form) ?? "";
+  const sessionOnly = Form.useWatch("session_only", form) === true;
   const { unlimitedTokens, setUnlimitedTokens } = useUnlimitedTokens(form);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [fetchingModels, setFetchingModels] = useState(false);
@@ -242,6 +249,34 @@ export default function LLMConfigCard({
             onRevealError={onRevealError}
           />
         </Form.Item>
+        <Form.Item style={{ marginTop: -12 }} name="session_only" valuePropName="checked">
+          {/* RF-24：不想让密钥以任何形态落盘的用户可以勾选——保存时密钥只进后端
+              进程内存（会话通道），数据库里不写、日志与备份也不会包含它，进程
+              重启即失效，需要重新填写。 */}
+          <Checkbox className="session-only-api-key-toggle">
+            仅本会话使用（不保存密钥，重启后需重新填写）
+          </Checkbox>
+        </Form.Item>
+        {sessionOnly && (
+          <Form.Item style={{ marginTop: -16 }}>
+            <Popconfirm
+              title="清除临时密钥？"
+              description="后端内存里的临时密钥会立即删除；落库的配置不受影响。"
+              okText="清除"
+              cancelText="取消"
+              onConfirm={() => void onClearSessionKey()}
+            >
+              <Button
+                size="small"
+                className="clear-session-key-button"
+                disabled={clearingSessionKey}
+                loading={clearingSessionKey}
+              >
+                清除临时密钥
+              </Button>
+            </Popconfirm>
+          </Form.Item>
+        )}
         <Row gutter={[16, 0]}>
           <Col xs={24} md={8}>
             <Form.Item

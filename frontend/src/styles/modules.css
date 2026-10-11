@@ -1183,7 +1183,8 @@
 
 /* 顶栏右侧的退出入口：低调但可点，和仓库链接并排。 */
 .app-exit-button {
-  color: rgba(0, 0, 0, 0.45);
+  /* RF-12 a11y：rgba 黑 45% 对白底只有 3.36:1，换成达标的次级文字色。 */
+  color: var(--rf-text-description);
 }
 
 .app-exit-button:hover {
@@ -1365,9 +1366,108 @@
 }
 
 .home-shortcut-hint {
-  color: #8c8c8c;
+  color: var(--rf-text-description);
   font-size: 12px;
   line-height: 1.5;
+}
+
+/* 「第一份交付」进度面板：只在全部完成前出现。完成态置灰、当前态高亮、未来态弱化。 */
+.first-delivery-stages {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.first-delivery-stage {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.first-delivery-stage + .first-delivery-stage {
+  border-top: 1px solid var(--rf-border, #f0f0f0);
+}
+
+.first-delivery-stage.is-upcoming {
+  opacity: 0.55;
+}
+
+.first-delivery-stage-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--rf-border, #d9d9d9);
+  color: var(--rf-text-description);
+  font-size: 14px;
+}
+
+.first-delivery-stage.is-current .first-delivery-stage-icon {
+  border-color: #16365c;
+  background: #eaf1f8;
+  color: #16365c;
+  font-weight: 600;
+}
+
+.first-delivery-stage.is-done .first-delivery-stage-icon {
+  border: none;
+  background: transparent;
+  color: #52c41a;
+  font-size: 18px;
+}
+
+.first-delivery-stage.is-done .first-delivery-stage-title {
+  color: var(--rf-text-description);
+}
+
+.first-delivery-stage-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.first-delivery-stage-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.first-delivery-stage.is-current .first-delivery-stage-title {
+  color: #16365c;
+}
+
+.first-delivery-cta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.first-delivery-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 12px;
+  border: 1px solid #16365c;
+  border-radius: 6px;
+  background: #16365c;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.first-delivery-cta:hover {
+  color: #fff;
+  background: #24507f;
 }
 
 /* 全局搜索扩域后，结果区与"更多结果"分组要收紧，避免首页搜索区越拉越长。 */
@@ -1381,7 +1481,7 @@
 
 .home-more-heading {
   margin: 4px 0 2px;
-  color: #8c8c8c;
+  color: var(--rf-text-description);
 }
 
 /* 求职统计页：缩小字号让一屏装下更多指标，避免四张卡 + 两张图被撑得太高。 */

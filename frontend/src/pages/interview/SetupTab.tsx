@@ -32,11 +32,15 @@ export interface SetupForm {
 export function SetupTab({
   form,
   jobOptions,
+  initialJobId,
   starting,
   onStart,
 }: {
   form: FormInstance<SetupForm>;
   jobOptions: { value: number; label: string }[];
+  /** 深链带来的预填（RF-11）：岗位详情跳过来时关联岗位已选好。
+   *  id 不在选项里也照设（Select 显示原值），不强造选项。 */
+  initialJobId?: number;
   starting: boolean;
   onStart: (values: SetupForm) => void;
 }) {
@@ -67,6 +71,7 @@ export function SetupTab({
           rounds: 6,
           focus: "",
           persona: "",
+          ...(initialJobId !== undefined ? { jobId: initialJobId } : {}),
         }}
         onFinish={(values) => void onStart(values)}
       >

@@ -11,12 +11,14 @@ import type {
   WebFormMemoryTargets,
   WebFormPreview,
   WebFormRememberInput,
+  WebFormRecordSummary,
   WebFormRepeatedRecord,
   WebFormSnapshot,
   WebFormUrlHistoryList,
   WebFormBrowserTargetList,
 } from "../types";
-import { request } from "./client";
+import type { Page } from "../types/common";
+import { buildQuery, request } from "./client";
 
 export function listWebFormFields(): Promise<WebFormFields> {
   return request("/webform/fields");
@@ -167,6 +169,18 @@ export function fillWebForm(
 /** 填充记录列表（只含未删除的，最近的在最前）。 */
 export function listWebFormRecords(limit = 20): Promise<WebFormFillRecord[]> {
   return request(`/webform/records?limit=${limit}`);
+}
+
+/**
+ * 分页列出填充记录（RF-08）：`created_at desc, id desc`，只含未软删除的，不受旧端点
+ * 200 条上限约束。列表行是摘要（不含填写值与页面快照）；回看单条走 `getWebFormRecord(id)`。
+ * 注意路径在 `/api/apply` 前缀下（与旧列表 `/api/webform/records` 不同）。
+ */
+export function listWebFormRecordsPage(
+  page: number,
+  pageSize: number,
+): Promise<Page<WebFormRecordSummary>> {
+  return request(`/apply/webform/records/page${buildQuery({ page, page_size: pageSize })}`);
 }
 
 export function getWebFormRecord(recordId: number): Promise<WebFormFillRecord> {
