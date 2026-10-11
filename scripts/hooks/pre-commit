@@ -2,6 +2,9 @@
 # ResumeForge pre-commit hook (fast gate only; full check: scripts/Check-All.ps1)
 # Install: git config core.hooksPath scripts/hooks
 
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT" || exit 1
+
 # Collect staged files
 STAGED_P=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.py$' || true)
 STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' || true)
@@ -23,9 +26,13 @@ if [ -n "$STAGED_P" ]; then
 fi
 
 # 2) eslint on staged frontend files (only if node_modules exists)
-if [ -n "$STAGED_TS" ] && [ -d "frontend/node_modules" ]; then
+STAGED_TS_REL=""
+for f in $STAGED_TS; do
+  STAGED_TS_REL="$STAGED_TS_REL ${f#frontend/}"
+done
+if [ -n "$STAGED_TS_REL" ] && [ -d "frontend/node_modules" ]; then
   echo "[pre-commit] eslint on staged files..."
-  (cd frontend && ./node_modules/.bin/eslint $STAGED_TS) || FAIL=1
+  (cd frontend && ./node_modules/.bin/eslint $STAGED_TS_REL) || FAIL=1
 fi
 
 # 3) Backend structural guards (fast tests)
@@ -35,7 +42,7 @@ if [ -n "$STAGED_P" ] || [ -n "$STAGED_TS" ]; then
   if [ -z "$PY" ]; then PY=$(command -v python || true); fi
   if [ -n "$PY" ]; then
     echo "[pre-commit] structural guards (file size budget / import direction)..."
-    (cd backend && "$PY" -m pytest tests/test_file_size_budget.py tests/test_import_direction.py -q -x --no-header 2>&1 | tail -3) || FAIL=1
+    (cd backend && "$ROOT/$PY" -m pytest tests/test_file_size_budget.py tests/test_import_direction.py -q -x --no-header -p no:cacheprovider 2>&1 | tail -3) || FAIL=1
   fi
 fi
 

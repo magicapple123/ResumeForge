@@ -34,7 +34,9 @@ export default function SkillTags({ tags, max = 5 }: Props) {
           {tag.name}
         </Tag>
       ))}
-      {tags.length > max && <Tag style={{ marginInlineEnd: 8, marginBottom: 4 }}>+{tags.length - max}</Tag>}
+      {tags.length > max && (
+        <Tag style={{ marginInlineEnd: 8, marginBottom: 4 }}>+{tags.length - max}</Tag>
+      )}
     </span>
   );
 }
