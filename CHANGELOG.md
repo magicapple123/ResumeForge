@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+### Added
+
+- **桌面启动图标**：新增 `Create-DesktopShortcut.cmd`——双击后在桌面创建带品牌图标（`branding/resumeforge.ico`，内含 16–256 全尺寸）的快捷方式，启动简历通和启动真正的桌面软件一样；`uninstall.cmd` 会一并移除该快捷方式。macOS 发行包同步携带 `branding/resumeforge.icns`。
+
 ### Fixed
 
 - **应用内更新「重启并安装」此前从未走通——点了安装，应用既不退出也不重启。** 根因是 install 端点是同步 `def`，被 FastAPI 丢进线程池执行，而线程池线程没有运行中的事件循环，`schedule_install` 里"等更新器接手再退出后端"的 `asyncio.create_task` 必然抛 `RuntimeError: no running event loop`；端点把它转成 409，退出逻辑永不执行，更新器等不到后端退出、超时后自我了断，用户再次点击只会看到「更新包还没有下载完成」。现在端点改为 `async def`，协程在事件循环线程上被正常调度；并补上「下载完成 → 重启安装」成功路径的端点级回归测试（修复前该用例必然 409）。

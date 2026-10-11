@@ -141,6 +141,11 @@ $PlatformLaunchers = @{
         "stop.cmd",
         "update.cmd",
         "uninstall.cmd",
+        # Desktop-launcher icon: the shortcut created by Create-DesktopShortcut.cmd
+        # points at it (see scripts/Create-DesktopShortcut.ps1). The macOS
+        # archive carries the .icns twin instead (see the prune lists below).
+        "branding/resumeforge.ico",
+        "Create-DesktopShortcut.cmd",
         "scripts/Start-ResumeForge.ps1",
         "scripts/Stop-ResumeForge.ps1",
         "scripts/Update-ResumeForge.ps1",
@@ -150,6 +155,7 @@ $PlatformLaunchers = @{
         "start.command",
         "stop.command",
         "update.command",
+        "branding/resumeforge.icns",
         "scripts/macos/start.sh",
         "scripts/macos/stop.sh",
         "scripts/macos/update.sh",
@@ -179,13 +185,16 @@ $PrunePathspecs = @{
         ":(exclude)stop.command",
         ":(exclude)update.command",
         ":(exclude)scripts/macos",
-        ":(exclude)scripts/tests/test-macos-launcher.sh"
+        ":(exclude)scripts/tests/test-macos-launcher.sh",
+        ":(exclude)branding/resumeforge.icns"
     )
     macos = @(
         ":(exclude)start.cmd",
         ":(exclude)stop.cmd",
         ":(exclude)update.cmd",
         ":(exclude)uninstall.cmd",
+        ":(exclude)branding/resumeforge.ico",
+        ":(exclude)Create-DesktopShortcut.cmd",
         ":(exclude,glob)scripts/*.ps1",
         ":(exclude,glob)scripts/tests/*.ps1"
     )
@@ -196,13 +205,16 @@ $PrunePatterns = @{
         "^start\.command$",
         "^stop\.command$",
         "^update\.command$",
-        "^scripts/macos/"
+        "^scripts/macos/",
+        "^branding/resumeforge\.icns$"
     )
     macos = @(
         "^start\.cmd$",
         "^stop\.cmd$",
         "^update\.cmd$",
         "^uninstall\.cmd$",
+        "^branding/resumeforge\.ico$",
+        "^Create-DesktopShortcut\.cmd$",
         "^scripts/[^/]+\.ps1$",
         "^scripts/tests/.*\.ps1$"
     )
