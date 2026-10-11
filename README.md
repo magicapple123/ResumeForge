@@ -311,10 +311,10 @@ cd ResumeForge
 | Windows 10 / 11 | `start.cmd` | `stop.cmd` |
 | macOS | `start.command` | `stop.command` |
 
-首次运行会自动创建虚拟环境、装齐前后端依赖、启动两个服务并打开浏览器：
+首次运行会自动创建虚拟环境、装齐依赖并打开浏览器。发布包自带构建好的前端页面（`frontend/dist`），由后端同源提供，因此**打开的是后端地址**，运行期不再需要 Node：
 
 ```text
-http://127.0.0.1:5173
+http://127.0.0.1:8005
 ```
 
 之后每次双击开始/停止即可，不需要分别启动前后端；也可以点页头**右上角**的**退出**，把前后端进程一起停掉。
@@ -401,7 +401,32 @@ cd ../frontend
 npm test && npm run lint && npm run typecheck && npm run build
 ```
 
-当前规模：后端 **278 个测试文件 / 3,171 个用例**（覆盖率门槛 80%，实测 92%），前端 **145 个测试文件 / 894 个用例**。GitHub Actions 在 Linux、Windows 与 macOS 上重复执行关键检查——macOS 那几个作业是刻意加的，因为维护者手上没有 Mac，那是唯一能真正跑一遍 macOS 启动链的地方。
+浏览器冒烟（Playwright，`frontend/tests/smoke/`）需要应用先跑起来，用例不对抗启动链——两种形态任选其一：
+
+```powershell
+# 形态一：发布形态（后端同源，默认 smoke 口 8123）
+npm run build
+cd ..
+powershell -File scripts\Start-ResumeForge.ps1 -NoBrowser -BackendPort 8123
+cd frontend
+
+# 形态二：开发形态（Vite 5173 + 后端 8000）
+cd backend
+.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
+cd ../frontend
+npm run dev
+```
+
+然后跑冒烟（发布形态零配置；开发形态把两个地址分别指给前端页面与 API）：
+
+```powershell
+cd frontend
+npm run smoke                                   # 发布形态（默认 http://127.0.0.1:8123）
+$env:SMOKE_FRONTEND_URL = "http://127.0.0.1:5173"; $env:SMOKE_BACKEND_URL = "http://127.0.0.1:8000"
+npm run smoke                                   # 开发形态
+```
+
+当前规模：后端与前端合计 **4,000+ 个测试用例**（后端覆盖率门槛 80%），确切数字以每次 CI 的汇总行为准。GitHub Actions 在 Linux、Windows 与 macOS 上重复执行关键检查——macOS 那几个作业是刻意加的，因为维护者手上没有 Mac，那是唯一能真正跑一遍 macOS 启动链的地方。
 
 </details>
 

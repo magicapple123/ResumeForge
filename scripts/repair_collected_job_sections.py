@@ -22,13 +22,12 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parents[1] / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
-from sqlalchemy import select  # noqa: E402
-
 from app.database import SessionLocal, engine  # noqa: E402
 from app.database_migrations import backup_sqlite_database  # noqa: E402
 from app.models.job import Job  # noqa: E402
 from app.services import trash  # noqa: E402
 from app.services.sites.boss_text import split_job_fields  # noqa: E402
+from sqlalchemy import select  # noqa: E402
 
 # 只处理采集进来的岗位：手动粘贴的描述是用户自己写的，不该被按小标题重切。
 COLLECTED_SOURCE = "岗位采集"

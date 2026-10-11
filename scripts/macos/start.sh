@@ -10,6 +10,11 @@
 # 直接双击项目根目录的 start.command 即可；也可以在终端里执行：
 #   bash scripts/macos/start.sh --backend-port 8010 --frontend-port 5180 --no-browser
 #
+# 前端模式（RF-09 方案 A）：发布包自带 frontend/dist 时，页面由后端同源提供，
+# 运行期不再需要 Node。--frontend-mode auto（默认）= 有 dist 走同源、没有退回
+# dev；dev = 强制 Vite；production = dist 必须在，缺失直接报错。backend/.env
+# 里的 FRONTEND_MODE 是可选覆盖，命令行参数优先。
+#
 # 这个脚本**不修改项目之外的任何东西**：Python 与 Node 的便携版都放在
 # runtime/tools/ 里，不写 /usr/local，不弹管理员授权，也不需要 Homebrew。
 
@@ -26,6 +31,9 @@ RF_RUNTIME_DIR="$RF_PROJECT_ROOT/runtime"
 RF_BACKEND_PORT=8005
 RF_FRONTEND_PORT=5173
 RF_OPEN_BROWSER=1
+# 前端模式：auto / dev / production（语义见文件头注释）。
+RF_FRONTEND_MODE=auto
+RF_FRONTEND_MODE_EXPLICIT=0
 
 # 首次运行要跑数据库迁移，而且冷机器上杀毒软件扫描全新的 .venv / node_modules
 # 会明显拖慢启动，所以超时给得比较宽。
@@ -51,10 +59,61 @@ rf_usage() {
 
 选项：
   --backend-port PORT    后端端口（默认 8005）
-  --frontend-port PORT   前端端口（默认 5173）
+  --frontend-port PORT   前端端口（默认 5173，仅 dev 模式用到）
+  --frontend-mode MODE   auto（默认：有 frontend/dist 走后端同源，没有退回 dev）/
+                         dev（强制 Vite）/ production（必须有 dist，缺失报错）
   --no-browser           启动后不自动打开浏览器
   -h, --help             显示这段说明
 USAGE
+}
+
+rf_frontend_mode_is_valid() {
+    case "$1" in
+        auto | dev | production) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# 从 backend/.env 读可选的 FRONTEND_MODE 覆盖。找到取值时置 RF_FRONTEND_MODE
+# 并返回 0；文件不存在或没有这一项时返回 1（不改动默认值）。
+rf_read_frontend_mode_env() {
+    env_file=$1
+    [ -f "$env_file" ] || return 1
+    while IFS= read -r env_line || [ -n "$env_line" ]; do
+        case "$env_line" in
+            FRONTEND_MODE=*)
+                # 去掉首尾空白与成对引号；行内注释等花哨写法不支持，交给校验报错。
+                rf_env_mode=$(printf '%s' "${env_line#FRONTEND_MODE=}" | tr -d ' \t\r"'"'"'')
+                [ -n "$rf_env_mode" ] || return 1
+                RF_FRONTEND_MODE=$rf_env_mode
+                return 0
+                ;;
+        esac
+    done <"$env_file"
+    return 1
+}
+
+# 返回 0 = 同源静态模式（不起 Node，浏览器开后端地址）；1 = dev 模式（Vite）。
+# 只对 auto / dev / production 三个值有定义；其它取值在调用前必须先校验掉。
+rf_resolve_frontend_mode() {
+    dist_index=$1
+    case "$RF_FRONTEND_MODE" in
+        dev)
+            return 1
+            ;;
+        production)
+            if [ ! -f "$dist_index" ]; then
+                die "--frontend-mode production 需要前端静态资产，但没有找到：${dist_index}" \
+                    "怎么办：" \
+                    "  1) 发布包（zip）自带 frontend/dist，重新下载完整安装包；" \
+                    "  2) 源码检出要先构建一次：在 frontend 目录执行 npm run build；" \
+                    "  3) 只想本地开发：用默认的 auto，或显式 --frontend-mode dev。"
+            fi
+            return 0
+            ;;
+    esac
+    # auto：有 dist 走同源，没有退回 dev（本地源码检出的现状）。
+    [ -f "$dist_index" ]
 }
 
 rf_parse_arguments() {
@@ -70,6 +129,12 @@ rf_parse_arguments() {
                 RF_FRONTEND_PORT=$2
                 shift 2
                 ;;
+            --frontend-mode)
+                [ "$#" -ge 2 ] || rf_argument_error "--frontend-mode 后面缺少模式。"
+                RF_FRONTEND_MODE=$2
+                RF_FRONTEND_MODE_EXPLICIT=1
+                shift 2
+                ;;
             --no-browser)
                 RF_OPEN_BROWSER=0
                 shift
@@ -83,6 +148,11 @@ rf_parse_arguments() {
                 ;;
         esac
     done
+
+    if ! rf_frontend_mode_is_valid "$RF_FRONTEND_MODE"; then
+        rf_argument_error "无效的 --frontend-mode 取值：${RF_FRONTEND_MODE}" \
+            "可选值：auto / dev / production。"
+    fi
 
     for port in "$RF_BACKEND_PORT" "$RF_FRONTEND_PORT"; do
         case "$port" in
@@ -371,24 +441,52 @@ rf_main() {
         fi
     done
 
+    # frontend-mode 的解析顺序：命令行 --frontend-mode > backend/.env 的
+    # FRONTEND_MODE > 默认 auto。显式传了参数就不要让 .env 反过来覆盖它。
+    if [ "$RF_FRONTEND_MODE_EXPLICIT" -eq 0 ]; then
+        if rf_read_frontend_mode_env "$RF_BACKEND_DIR/.env"; then
+            if ! rf_frontend_mode_is_valid "$RF_FRONTEND_MODE"; then
+                rf_argument_error "backend/.env 里的 FRONTEND_MODE 取值无效：${RF_FRONTEND_MODE}" \
+                    "可选值：auto / dev / production。"
+            fi
+        fi
+    fi
+
+    RF_STATIC_FRONTEND=0
+    if rf_resolve_frontend_mode "$RF_FRONTEND_DIR/dist/index.html"; then
+        RF_STATIC_FRONTEND=1
+    fi
+
     mkdir -p "$RF_RUNTIME_DIR"
 
     log_step "启动后端"
     rf_start_backend
 
-    log_step "启动前端"
-    rf_start_frontend
+    if [ "$RF_STATIC_FRONTEND" -eq 1 ]; then
+        # RF-09 方案 A：dist 由后端同源提供（create_app 里的 mount_static_spa）。
+        # 运行期不需要 Node：不起 Vite、不装 node_modules，也不做前端端口的占用检查。
+        log_step "前端（后端同源静态模式）"
+        log_info "前端页面由后端同源提供：$(rf_backend_url)"
+    else
+        log_step "启动前端"
+        rf_start_frontend
+    fi
+
+    rf_page_url="$(rf_frontend_url)"
+    if [ "$RF_STATIC_FRONTEND" -eq 1 ]; then
+        rf_page_url="$(rf_backend_url)"
+    fi
 
     if [ "$RF_OPEN_BROWSER" -eq 1 ]; then
         # 打不开浏览器不该让刚启动好的服务被收掉，所以失败只提示。
-        if ! open "$(rf_frontend_url)" >/dev/null 2>&1; then
-            log_warn "没能自动打开浏览器，请手动访问 $(rf_frontend_url)"
+        if ! open "$rf_page_url" >/dev/null 2>&1; then
+            log_warn "没能自动打开浏览器，请手动访问 ${rf_page_url}"
         fi
     fi
 
     printf '\n'
     log_ok "简历通已就绪。要关闭服务，双击 stop.command（或在终端里执行 bash scripts/macos/stop.sh）。"
-    printf '打开地址：%s\n' "$(rf_frontend_url)"
+    printf '打开地址：%s\n' "$rf_page_url"
 }
 
 # 只有直接执行时才跑主流程。这样 start.sh 也能被 source 进测试脚本

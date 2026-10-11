@@ -1,30 +1,31 @@
 # 项目维护手册
 
 > 规则的权威来源是 [`AGENTS.md`](../AGENTS.md)；本文是按它整理的**操作速查**，两者冲突时以 AGENTS.md 为准。
-> 最后更新：2026-09-25。规模数字随开发变动，以 CI 汇总为准。
+> 最后更新：2026-10-11。规模数字随开发变动，以 CI 汇总为准（本文件刻意不写精确规模，防止漂移）。
 
 ## 1. 项目结构
 
 ```
 ResumeForge/
 ├── backend/                  FastAPI 后端
-│   ├── app/api/                36 个 API 模块（235 个接口）
-│   ├── app/services/           约 200 个服务模块，按域分目录
+│   ├── app/api/                API 模块（接口数以代码为准）
+│   ├── app/services/           服务模块，按域分目录
 │   │                           （resume / profile / job / jd / assistant / interview /
 │   │                            apply / browser …）
-│   ├── app/models/             21 个模型模块（41 张表）
+│   ├── app/models/             模型模块（表数以 models/ 与迁移链为准）
 │   ├── app/schemas/            Pydantic 请求/响应模型
-│   ├── app/prompts/            33 个提示词
-│   ├── app/templates/          9 个 Jinja 简历模板
-│   ├── migrations/versions/    Alembic 迁移链（当前 head：0024）
-│   ├── tests/                  195 个测试文件 / 2,841 个用例
+│   ├── app/prompts/            提示词目录
+│   ├── app/templates/          Jinja 简历模板
+│   ├── migrations/versions/    Alembic 迁移链（head 以目录内最大序号为准；
+│   │                           改迁移前先 grep 上一 head 的字面量，见 §4.1）
+│   ├── tests/                  测试（文件数 / 用例数以 pytest 汇总行为准）
 │   └── data/                   ★ 运行时数据：数据集、备份、浏览器登录态（.gitignore）
-├── frontend/                 React 18 + AntD 5 + Vite
-│   ├── src/pages/              36 个页面（路由在 App.tsx 的 MENU_ITEMS）
-│   ├── src/components/         约 180 个组件（跨模块交互原语在 common/）
+├── frontend/                 React 19 + AntD 5 + Vite
+│   ├── src/pages/              页面（路由在 App.tsx 的 MENU_ITEMS）
+│   ├── src/components/         组件（跨模块交互原语在 common/）
 │   ├── src/api/  src/types/    接口封装与类型
 │   ├── src/utils/  src/hooks/  纯工具与 hooks（测试与被测文件同目录）
-│   └── src/…*.test.tsx         106 个测试文件 / 710 个用例
+│   └── src/…*.test.tsx         前端测试（规模以 vitest 汇总行为准）
 ├── scripts/                  启动与发布链
 │   ├── start.cmd / stop.cmd / update.cmd / uninstall.cmd     Windows 一键脚本
 │   ├── start.command / …      macOS 等价物（bash 3.2 方言）
@@ -68,10 +69,21 @@ ResumeForge/
 注意：
 
 - **`--cov` 不能配子集**（80% 门槛必然假失败）。
-- 本机沙箱会让全量偶发卡死/worker 猝死：并行报 `INTERNALERROR`、串行可能停在半路、
-  vitest 报 "Worker forks emitted error"。**相关子集 + 静态检查过了就推上去让 CI 验证**，
-  不要反复重试。
-- `vite build` 要指定仓库外输出目录：`npx vite build --outDir D:\rf_build_tmp --emptyOutDir`。
+- 交付判定**必须跑一次全量 + 覆盖率**（AGENTS.md：提速只能来自流程，不能来自跳过全量）；
+  相关子集 + 静态检查只是第 1 步，用来快速定位方向。
+- 本机沙箱会让 pytest-cov 收尾的 `.coverage` 写盘被批量删除守卫拦下（并行报
+  `INTERNALERROR`、串行 exit 3 且覆盖率报告跑不到）。**拿到干净覆盖率的办法是绕开
+  pytest-cov**（coverage 只从 cwd 找配置，必须显式 `--rcfile` 指向仓库根，否则会拿到
+  连 tests/ 一起统计的假百分比）：
+
+  ```powershell
+  .venv\Scripts\python.exe -m coverage run --rcfile=..\pyproject.toml -m pytest -q
+  .venv\Scripts\python.exe -m coverage combine --keep
+  .venv\Scripts\python.exe -m coverage report --rcfile=..\pyproject.toml --fail-under=80
+  ```
+
+  判定以汇总行 + 覆盖率报告为准；`vite build` 被拦时指定仓库外输出目录：
+  `npx vite build --outDir D:\rf_build_tmp --emptyOutDir`。
 
 ### ④ 文档同步
 
@@ -90,7 +102,10 @@ ResumeForge/
 
 ### ⑥ 发布
 
-1. `python scripts/bump_version.py`（5 处版本号一次同步；破坏性变更显式 `--bump major`）。
+1. `python scripts/bump_version.py`（5 处版本号一次同步；**当前还在 0.x，破坏性变更
+   显式 `--bump minor`**——semver 对 0.x 的惯例，major 位留给"项目已经稳定"的宣告；
+   正式发布 1.0 之后破坏性变更才改用 `--bump major`。`remove:` 前缀不推动版本号，
+   删功能的发版别信自动判定）。
 2. `scripts/Build-Release.ps1`：**三个包**，`-Platform windows`、`-Platform macos`，以及
    默认的 `-Platform all`（各带一份 `.sha256`，共 6 个资产）。
    - Windows / macOS 两个包给官网的两个下载按钮；
@@ -181,7 +196,7 @@ ResumeForge/
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| pytest 全量卡在半路 / `INTERNALERROR` | 沙箱回收子进程 | 用相关子集 + 静态检查，推上去让 CI 跑全量 |
+| pytest 全量卡在半路 / `INTERNALERROR` | 沙箱回收子进程 | 用相关子集 + 静态检查定位；交付判定改走 §2③ 的 `coverage run --rcfile` 绕开路径 |
 | vitest 报 "Worker forks emitted error" | 同上 | FAIL=0 即可信，别当代码问题 |
 | `vite build` exit 1（清 dist 被拦） | 沙箱批量删除守卫 | `--outDir D:\rf_build_tmp --emptyOutDir` |
 | PowerShell 工具拿不到 stdout | 环境限制 | 重定向到文件再读 |

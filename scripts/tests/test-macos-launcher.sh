@@ -211,6 +211,101 @@ rf_expect_equal "$(grep -c 'RF_BACKEND_URL=' "$RF_TEST_ROOT/scripts/macos/start.
 rf_expect_equal "$(grep -c 'RF_FRONTEND_URL=' "$RF_TEST_ROOT/scripts/macos/start.sh")" "0" \
     "start.sh 没有提前固化前端地址"
 
+printf '\n== frontend-mode（RF-09：有 dist 走后端同源，没有退回 dev）==\n'
+# start.sh 有 BASH_SOURCE = $0 的主流程保护，source 它只会拿到函数与默认值。
+# 但它带 set -euo pipefail，-e 会泄漏进本测试（update.sh 同款坑，见文件末尾
+# 同样的处理）：后面的用例依赖"失败只记 FAIL 不退出"，所以 source 完立刻关掉。
+RF_FRONTEND_DIR="$rf_test_tmp/frontend-mode-fixture"
+# shellcheck source=../macos/start.sh
+. "$RF_TEST_ROOT/scripts/macos/start.sh"
+set +e
+
+rf_parse_arguments --frontend-mode dev
+rf_expect_equal "$RF_FRONTEND_MODE" "dev" "--frontend-mode dev 被解析为 dev"
+rf_expect_equal "$RF_FRONTEND_MODE_EXPLICIT" "1" "显式传参要记下 EXPLICIT 标记（参数优先于 .env）"
+
+( rf_parse_arguments --frontend-mode staging >/dev/null 2>&1 )
+rf_expect_equal "$?" "2" "无效的 --frontend-mode 取值以 2 退出（用法错误）"
+
+dist_fixture="$RF_TEST_ROOT/scripts/macos/no-such-dist-for-tests"
+rm -rf "$dist_fixture"
+RF_FRONTEND_MODE=auto
+if rf_resolve_frontend_mode "$dist_fixture/dist/index.html"; then
+    rf_check 1 "auto 模式没有 dist 必须退回 dev"
+else
+    rf_check 0 "auto 模式没有 dist 必须退回 dev"
+fi
+mkdir -p "$dist_fixture/dist"
+printf '<html></html>' >"$dist_fixture/dist/index.html"
+if rf_resolve_frontend_mode "$dist_fixture/dist/index.html"; then
+    rf_check 0 "auto 模式有 dist 走同源静态"
+else
+    rf_check 1 "auto 模式有 dist 走同源静态"
+fi
+RF_FRONTEND_MODE=dev
+if rf_resolve_frontend_mode "$dist_fixture/dist/index.html"; then
+    rf_check 1 "dev 模式即使有 dist 也要起 Vite"
+else
+    rf_check 0 "dev 模式即使有 dist 也要起 Vite"
+fi
+RF_FRONTEND_MODE=production
+if rf_resolve_frontend_mode "$dist_fixture/dist/index.html"; then
+    rf_check 0 "production 模式有 dist 走同源静态"
+else
+    rf_check 1 "production 模式有 dist 走同源静态"
+fi
+rm -rf "$dist_fixture"
+( rf_resolve_frontend_mode "$dist_fixture/dist/index.html" >/dev/null 2>&1 )
+rf_expect_equal "$?" "1" "production 模式缺 dist 必须直接报错退出（不降级）"
+
+env_fixture="$rf_test_tmp/backend.env"
+RF_FRONTEND_MODE=auto
+printf 'DATABASE_URL=sqlite:///x.db\n' >"$env_fixture"
+if rf_read_frontend_mode_env "$env_fixture"; then
+    rf_check 1 "没有 FRONTEND_MODE 的 .env 不能改动模式"
+else
+    rf_check 0 "没有 FRONTEND_MODE 的 .env 不能改动模式"
+fi
+printf 'DATABASE_URL=sqlite:///x.db\nFRONTEND_MODE=production\n' >"$env_fixture"
+if rf_read_frontend_mode_env "$env_fixture"; then
+    rf_expect_equal "$RF_FRONTEND_MODE" "production" ".env 里的 FRONTEND_MODE 能被读到"
+else
+    rf_check 1 ".env 里的 FRONTEND_MODE 能被读到"
+fi
+printf 'FRONTEND_MODE="dev"\r\n' >"$env_fixture"
+if rf_read_frontend_mode_env "$env_fixture"; then
+    rf_expect_equal "$RF_FRONTEND_MODE" "dev" "FRONTEND_MODE 的引号与 CR 会被剥掉"
+else
+    rf_check 1 "FRONTEND_MODE 的引号与 CR 会被剥掉"
+fi
+if rf_read_frontend_mode_env "$rf_test_tmp/no-such.env"; then
+    rf_check 1 ".env 不存在时返回失败而不报错"
+else
+    rf_check 0 ".env 不存在时返回失败而不报错"
+fi
+
+printf '\n== 停止链面对"没有 node 进程"必须安静成功 ==\n'
+# 升级路径的两个方向：旧版起过 vite、新版同源模式不再起 node。stop 都不许报错：
+# 记录缺失时安静返回；记录存在但进程已死（升级前留下的）时也只提示、以 0 退出。
+rf_stop_proj="$rf_test_tmp/stop-proj"
+mkdir -p "$rf_stop_proj"
+cp -R "$RF_TEST_ROOT/scripts" "$rf_stop_proj/scripts"
+rf_stop_output=$(bash "$rf_stop_proj/scripts/macos/stop.sh" 2>&1)
+rf_stop_status=$?
+rf_expect_equal "$rf_stop_status" "0" "没有任何运行记录时 stop.sh 以 0 退出"
+case "$rf_stop_output" in
+    *已完成*) rf_check 0 "没有任何运行记录时 stop.sh 正常收尾" ;;
+    *) rf_check 1 "没有任何运行记录时 stop.sh 正常收尾" ;;
+esac
+mkdir -p "$rf_stop_proj/runtime"
+printf 'process_id=999999999\nstart_signature=Thu Jan  1 00:00:00 1970\n' \
+    >"$rf_stop_proj/runtime/frontend.macos.pid"
+printf 'process_id=999999999\nstart_signature=Thu Jan  1 00:00:00 1970\n' \
+    >"$rf_stop_proj/runtime/backend.macos.pid"
+rf_stop_output=$(bash "$rf_stop_proj/scripts/macos/stop.sh" 2>&1)
+rf_stop_status=$?
+rf_expect_equal "$rf_stop_status" "0" "记录指向已死进程（升级前的前端）时 stop.sh 也以 0 退出"
+
 printf '\n== 架构识别 ==\n'
 # 用同名函数遮蔽 uname，避免依赖真实的处理器架构。
 uname() { echo "arm64"; }

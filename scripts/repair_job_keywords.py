@@ -30,7 +30,7 @@ import json
 import shutil
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -123,7 +123,7 @@ def apply_plans(
     connection: sqlite3.Connection, plans: list[tuple[sqlite3.Row, list[dict]]]
 ) -> int:
     """把计划写回数据库（批量一次提交）。返回实际改动的行数。"""
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = datetime.now(UTC).isoformat(timespec="seconds")
     for row, keywords in plans:
         connection.execute(
             "UPDATE job SET keywords = ?, updated_at = ? WHERE id = ?",
@@ -173,7 +173,7 @@ def main() -> int:
 
         backup_dir = db_path.parent / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         backup_path = backup_dir / f"{db_path.stem}-before-keyword-repair-{stamp}{db_path.suffix}"
         shutil.copy2(db_path, backup_path)
         print(f"\n已备份数据库 -> {backup_path}")

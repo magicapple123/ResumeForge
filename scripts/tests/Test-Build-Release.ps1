@@ -167,20 +167,54 @@ try {
             -Message "Every archive entry must live under $prefix so extraction creates one folder."
         $relativePaths = @($entries | ForEach-Object { $_.Substring($prefix.Length) })
 
-        # Exactly the tracked tree: this is what a hand-made zip got wrong.
+        # Exactly the tracked tree PLUS the injected frontend\dist (RF-09 plan A:
+        # the launcher serves the built frontend from the backend, so the release
+        # carries the build output even though git does not track it). This is
+        # what a hand-made zip got wrong.
         $trackedFiles = @(& git -C $ProjectRoot ls-tree -r --name-only HEAD)
         Assert-ReleaseTest -Condition ($trackedFiles.Count -gt 0) -Message "git ls-tree returned nothing."
+        $distPaths = @($relativePaths | Where-Object { $_.StartsWith("frontend/dist/") })
         Assert-ReleaseTest `
-            -Condition ($relativePaths.Count -eq $trackedFiles.Count) `
-            -Message "The archive must hold exactly the tracked files: $($relativePaths.Count) in the zip vs $($trackedFiles.Count) in git."
+            -Condition ($distPaths.Count -ge 3) `
+            -Message "The archive must carry the injected frontend\dist assets (got $($distPaths.Count) entries)."
+        $nonDistPaths = @($relativePaths | Where-Object { -not $_.StartsWith("frontend/dist/") })
+        Assert-ReleaseTest `
+            -Condition ($nonDistPaths.Count -eq $trackedFiles.Count) `
+            -Message "Outside frontend\dist, the archive must hold exactly the tracked files: $($nonDistPaths.Count) in the zip vs $($trackedFiles.Count) in git."
         $trackedSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
         foreach ($trackedFile in $trackedFiles) {
             [void]$trackedSet.Add($trackedFile)
         }
-        $unexpected = @($relativePaths | Where-Object { -not $trackedSet.Contains($_) })
+        $unexpected = @($nonDistPaths | Where-Object { -not $trackedSet.Contains($_) })
         Assert-ReleaseTest `
             -Condition ($unexpected.Count -eq 0) `
-            -Message "The archive contains untracked files: $($unexpected -join ', ')"
+            -Message "The archive contains untracked files outside frontend\dist: $($unexpected -join ', ')"
+
+        # The injected assets must be complete and version-paired: index.html is
+        # what the backend's SPA fallback serves, version.json is what the backend
+        # compares against app_version at startup, and assets/ carries the hashed
+        # entry modules the page actually loads.
+        foreach ($required in @(
+                "frontend/dist/index.html",
+                "frontend/dist/version.json"
+            )) {
+            Assert-ReleaseTest `
+                -Condition ($relativePaths -contains $required) `
+                -Message "The archive is missing $required."
+        }
+        $distVersionEntry = $fileEntries | Where-Object { $_.FullName -eq "${prefix}frontend/dist/version.json" } | Select-Object -First 1
+        Assert-ReleaseTest -Condition ($null -ne $distVersionEntry) -Message "frontend/dist/version.json is missing from the archive."
+        $distVersionText = Read-ZipEntryText -Entry $distVersionEntry
+        $distVersion = $null
+        try {
+            $distVersion = ($distVersionText | ConvertFrom-Json).version
+        }
+        catch {
+            Assert-ReleaseTest -Condition $false -Message "frontend/dist/version.json inside the archive is not valid JSON: $distVersionText"
+        }
+        Assert-ReleaseTest `
+            -Condition ($distVersion -eq $version) `
+            -Message "frontend/dist/version.json inside the archive says '$distVersion' but the packaged version is '$version'."
 
         foreach ($required in @(
                 "backend/app/data/skills.json",
@@ -331,8 +365,9 @@ try {
                     -Condition ($platformPaths -notcontains $launcher) `
                     -Message "The $platform archive must not carry the other platform's launcher: $launcher."
             }
-            # 应用本体在两个包里都必须完整：平台拆分只动启动器，绝不能顺手裁掉代码。
-            foreach ($required in @("backend/app/main.py", "backend/app/data/skills.json", "frontend/index.html")) {
+            # 应用本体在两个包里都必须完整：平台拆分只动启动器，绝不能顺手裁掉代码
+            # 或前端生产资产（没有 dist 的包在 auto 模式下会退回 dev，等于要求用户联网装 Node）。
+            foreach ($required in @("backend/app/main.py", "backend/app/data/skills.json", "frontend/index.html", "frontend/dist/index.html", "frontend/dist/version.json")) {
                 Assert-ReleaseTest `
                     -Condition ($platformPaths -contains $required) `
                     -Message "The $platform archive is missing $required; platform pruning must never touch the app itself."
