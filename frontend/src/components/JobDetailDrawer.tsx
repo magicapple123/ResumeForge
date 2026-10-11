@@ -29,8 +29,13 @@ import {
   Typography,
 } from "antd";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Job } from "../types";
+import {
+  getMatchAnalyzingIds,
+  subscribeMatchAnalysis,
+} from "../utils/jobMatchAnalysisState";
 import SkillTags from "./SkillTags";
 
 interface Props {
@@ -89,6 +94,19 @@ export default function JobDetailDrawer({
   webFormLoading = false,
 }: Props) {
   const navigate = useNavigate();
+  // 匹配分析在弹窗（或用户已关掉弹窗）里后台进行时，这里也要看得见：
+  // 订阅全局登记表，按钮转圈 + 文案点名，避免"后台在跑但界面毫无迹象"。
+  const [matchAnalyzingIds, setMatchAnalyzingIds] = useState<ReadonlySet<number>>(
+    getMatchAnalyzingIds,
+  );
+  useEffect(
+    () =>
+      subscribeMatchAnalysis(() => {
+        setMatchAnalyzingIds(new Set(getMatchAnalyzingIds()));
+      }),
+    [],
+  );
+  const matchAnalyzing = job != null && matchAnalyzingIds.has(job.id);
   return (
     <Drawer
       title="岗位详情"
@@ -117,9 +135,15 @@ export default function JobDetailDrawer({
                 岗位需求解读
               </Button>
             </Tooltip>
-            <Tooltip title="读取你的资料与简历，判断你够不够">
-              <Button icon={<RobotOutlined />} onClick={() => onMatch(job)}>
-                匹配度分析
+            <Tooltip
+              title={
+                matchAnalyzing
+                  ? "匹配分析正在后台进行，完成后会弹通知提醒"
+                  : "读取你的资料与简历，判断你够不够"
+              }
+            >
+              <Button icon={<RobotOutlined />} loading={matchAnalyzing} onClick={() => onMatch(job)}>
+                {matchAnalyzing ? "分析中…" : "匹配度分析"}
               </Button>
             </Tooltip>
             <Tooltip
