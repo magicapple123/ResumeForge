@@ -559,6 +559,78 @@ try {
         -Condition (-not (Test-WarmStart -BackendDirectory $warmBackend -FrontendDirectory $coldFrontend)) `
         -Message "缺 node_modules 时必须判定为冷启动：这次还要跑一遍 npm ci。"
 
+    # --- frontend-mode（RF-09 方案 A）---
+
+    # auto = 有 dist 走后端同源（不起 Node）、没有退回 dev；dev 强制 Vite；
+    # production 缺 dist 直接报错（维护者决策：不产出"纯 dev 包"降级）。
+    $distFrontend = Join-Path $RuntimeDirectory "dist-frontend"
+    New-Item -ItemType Directory -Path (Join-Path $distFrontend "dist") -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $distFrontend "dist\index.html") -Value "<html></html>" -Encoding ascii
+    $bareFrontend = Join-Path $RuntimeDirectory "bare-frontend"
+    New-Item -ItemType Directory -Path $bareFrontend -Force | Out-Null
+
+    Assert-LauncherTest `
+        -Condition (Resolve-FrontendMode -Mode "auto" -FrontendDirectory $distFrontend) `
+        -Message "auto 模式下有 dist 必须走后端同源静态。"
+    Assert-LauncherTest `
+        -Condition (-not (Resolve-FrontendMode -Mode "auto" -FrontendDirectory $bareFrontend)) `
+        -Message "auto 模式下没有 dist 必须退回 dev。"
+    Assert-LauncherTest `
+        -Condition (-not (Resolve-FrontendMode -Mode "dev" -FrontendDirectory $distFrontend)) `
+        -Message "dev 模式即使有 dist 也要起 Vite。"
+    Assert-LauncherTest `
+        -Condition (Resolve-FrontendMode -Mode "production" -FrontendDirectory $distFrontend) `
+        -Message "production 模式下有 dist 走后端同源静态。"
+    $productionError = $null
+    try {
+        Resolve-FrontendMode -Mode "production" -FrontendDirectory $bareFrontend | Out-Null
+    }
+    catch {
+        $productionError = $_.Exception.Message
+    }
+    Assert-LauncherTest `
+        -Condition ($null -ne $productionError -and $productionError -match "npm run build") `
+        -Message "production 模式缺 dist 必须明确报错（不降级到 dev），报错里要有可照做的步骤。"
+
+    # backend\.env 的可选覆盖：参数优先由 Start-ResumeForge.ps1 的
+    # PSBoundParameters 判断保证，这里钉 .env 的读取与校验本身。
+    $envFixturePath = Join-Path $RuntimeDirectory "backend.env"
+    Set-Content -LiteralPath $envFixturePath -Encoding ascii -Value @("DATABASE_URL=sqlite:///x.db", "FRONTEND_MODE=production")
+    Assert-LauncherTest `
+        -Condition ((Get-FrontendModeFromEnv -Path $envFixturePath) -eq "production") `
+        -Message ".env 里的 FRONTEND_MODE 必须能被读到。"
+    Set-Content -LiteralPath $envFixturePath -Encoding ascii -Value @("# 注释 FRONTEND_MODE=dev", "FRONTEND_MODE=`"dev`"")
+    Assert-LauncherTest `
+        -Condition ((Get-FrontendModeFromEnv -Path $envFixturePath) -eq "dev") `
+        -Message "FRONTEND_MODE 带引号时必须被剥掉，注释行必须被忽略。"
+    Assert-LauncherTest `
+        -Condition ($null -eq (Get-FrontendModeFromEnv -Path (Join-Path $RuntimeDirectory "no-such.env"))) `
+        -Message ".env 不存在时必须返回 null 而不是报错。"
+    Set-Content -LiteralPath $envFixturePath -Encoding ascii -Value @("FRONTEND_MODE=staging")
+    $envModeError = $null
+    try {
+        Get-FrontendModeFromEnv -Path $envFixturePath | Out-Null
+    }
+    catch {
+        $envModeError = $_.Exception.Message
+    }
+    Assert-LauncherTest `
+        -Condition ($null -ne $envModeError -and $envModeError -match "auto / dev / production") `
+        -Message "FRONTEND_MODE 取值无效必须报错而不是静默忽略。"
+
+    # 停止链面对"没有 node 进程"必须安静成功：升级用户（旧版有 vite、新版没有）
+    # 两个方向都不能让 stop.cmd 变红。记录缺失时它应当直接返回。
+    $missingRecordError = $null
+    try {
+        Stop-RecordedProcess -DisplayName "frontend" -RecordPath (Join-Path $RuntimeDirectory "missing-record.json") -CommandPattern "npm"
+    }
+    catch {
+        $missingRecordError = $_.Exception.Message
+    }
+    Assert-LauncherTest `
+        -Condition ($null -eq $missingRecordError) `
+        -Message "没有运行记录时 Stop-RecordedProcess 必须安静成功（升级路径上 stop.cmd 不能报错）。"
+
     # ---- 一台什么都没装的电脑：引导分支 -----------------------------------------
     # 覆盖参与判断的函数，断言"找不到 Python / Node 时"走的是哪条路。**真下载**由
     # windows-runtimes 作业负责（它会真的下 portable Node 与 Python 安装包并校验摘要）；

@@ -84,6 +84,26 @@ backend\.venv\Scripts\python.exe scripts\seed_demo_data.py --check
 **不要**把自己的真实资料、真实简历或真实岗位链接填进演示数据，也不要直接拿 `backend/data/resume_forge.db`
 截图——那等于把个人信息发到公开仓库首页上。
 
+## 安全敏感改动的审查要求
+
+以下路径承载网申填表安全界限、外部请求边界与数据备份语义，错误改动的代价是"把用户的简历投错、填错或泄露"，而不是普通的功能回归。触及这些路径的 PR，除自动化检查外**必须做一次人工安全审查**：
+
+- `backend/app/services/webform/**`（网申填表引擎）
+- `backend/app/services/apply/**`（投递链路与采集）
+- `backend/app/services/update_sources.py`（外部更新源）
+- `backend/app/middleware/**`（入站请求边界）
+- `backend/app/services/data_backup/**`（备份与恢复）
+
+审查清单（对照 `deliverables/webform-safety-boundaries-2026-10-06.md` 的界限全景图逐条核对）：
+
+- 网申填表的守卫语义没有被放松：同意/声明类不代填、密码/验证码/银行卡拦截、只填不点、超长值不填、页面已有值不覆盖、高风险歧义宁可不猜——这些是"宁可漏填不可错填"的单向界限，调整任何一条都要在 PR 里醒目标注理由；
+- 新增外部输入（页面控件、岗位描述、用户粘贴内容、响应字段）全部按不可信输入处理：验证、限长、安全编码，不进入 `eval`/模板/SQL 拼接；
+- 日志、异常消息与诊断导出不新增敏感字段（Cookie、prompt 原文、完整个人资料）；
+- 备份/恢复路径不引入新的删除语义或路径拼接；
+- 中间件放行的入站来源没有扩大（Host/Origin/CORS 白名单）。
+
+改动者无法自查的边界问题，请按 [SECURITY.md](SECURITY.md) 的渠道先沟通，不要在公开 Issue 里描述可利用细节。
+
 ## Pull Request
 
 - 一个 PR 聚焦一个主题，并说明原因、影响范围和验证结果。

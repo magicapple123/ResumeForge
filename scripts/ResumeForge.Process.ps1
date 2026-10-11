@@ -90,6 +90,58 @@ function Test-WarmStart {
     return (Test-Path -LiteralPath $pythonExecutable) -and (Test-Path -LiteralPath $viteCommand)
 }
 
+<#
+RF-09 方案 A：发布包携带 frontend\dist，由后端同源提供页面。frontend-mode 决定
+这次启动起不起 Vite：
+  auto（默认）= dist 在 → 不起 Node（浏览器开的是后端地址）；dist 不在 → 退回 dev。
+  dev         = 强制 dev，即使 dist 在（本地改前端源码时用）。
+  production  = dist 必须在；缺失直接报错退出（维护者决策：不产出"纯 dev 包"降级）。
+#>
+function Resolve-FrontendMode {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet("auto", "dev", "production")][string]$Mode,
+        [Parameter(Mandatory = $true)][string]$FrontendDirectory
+    )
+
+    $distIndex = Join-Path $FrontendDirectory "dist\index.html"
+    switch ($Mode) {
+        "dev" { return $false }
+        "production" {
+            if (-not (Test-Path -LiteralPath $distIndex)) {
+                throw ("--frontend-mode production 需要前端静态资产，但没有找到：$distIndex。`n" +
+                    "怎么办：`n" +
+                    "  1) 发布包（zip）自带 frontend\dist，重新下载完整安装包；`n" +
+                    "  2) 源码检出要先构建一次：在 frontend 目录执行 npm run build；`n" +
+                    "  3) 只想本地开发：用默认的 auto，或显式 -FrontendMode dev。")
+            }
+            return $true
+        }
+        default { return (Test-Path -LiteralPath $distIndex) }
+    }
+}
+
+function Get-FrontendModeFromEnv {
+    param([string]$Path)
+
+    # .env 的可选覆盖（backend\.env，参数 -FrontendMode 优先于它）。取值非法时
+    # 明确报错而不是静默忽略：把 production 拼错却悄悄退回 auto，用户会以为
+    # 发布包坏了。
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+    foreach ($line in (Get-Content -LiteralPath $Path)) {
+        if ($line -match '^\s*FRONTEND_MODE\s*=\s*(.+?)\s*$') {
+            $value = $Matches[1].Trim('"', "'").ToLowerInvariant()
+            if (@("auto", "dev", "production") -notcontains $value) {
+                throw ("backend\.env 里的 FRONTEND_MODE 取值无效：$value。`n" +
+                    "可选值：auto / dev / production。")
+            }
+            return $value
+        }
+    }
+    return $null
+}
+
 function Start-ResumeForge {
     if ($BackendPort -eq $FrontendPort) {
         throw "后端端口与前端端口不能相同：两者都是 $BackendPort。请用 -BackendPort / -FrontendPort 指定不同的端口。"
@@ -251,121 +303,131 @@ function Start-ResumeForge {
             Write-Host "后端已启动：$BackendUrl"
         }
 
-        $frontendRecordPattern = Get-ResumeForgeProcessPattern -Service "frontend"
-        $frontendRunning = Test-ResumeForgeFrontend -Url $FrontendUrl
-        if (-not $frontendRunning -and (Test-TcpPortInUse -Port $FrontendPort)) {
-            # Same as the backend above: our own leftover Vite process fails the
-            # proxied health check once its backend is gone, and it is ours to stop.
-            if ($null -eq (Get-ProcessRecordMatch -RecordPath $FrontendPidPath -CommandPattern $frontendRecordPattern)) {
-                throw ("端口 $FrontendPort 被另一个前端占用，而且它连的不是本次的后端（所以不会去动它）。`n" +
-                "怎么办（二选一）：`n" +
-                "  1) 关掉占用该端口的程序；`n" +
-                "  2) 换一个端口启动：start.cmd -FrontendPort 5180")
-            }
-            Write-Warning "上一次运行留下的简历通前端正占着端口 $FrontendPort，先停掉它再启动一个新的。"
-            Stop-RecordedProcess -DisplayName "frontend" -RecordPath $FrontendPidPath -CommandPattern $frontendRecordPattern
-            Start-Sleep -Milliseconds 800
-        }
-
-        if ($frontendRunning) {
-            Assert-RunningServiceIsOwned -DisplayName "前端" -RecordPath $FrontendPidPath `
-                -CommandPattern $frontendRecordPattern -Port $FrontendPort -PortOption "-FrontendPort"
-            Write-Host "前端已经在运行：$FrontendUrl"
+        if ($UseStaticFrontend) {
+            # RF-09 方案 A：dist 由后端同源提供（create_app 里的 mount_static_spa）。
+            # 运行期不需要 Node：不起 Vite、不装 node_modules、不做前端端口的占用
+            # 检查，也不需要热身（后端直接回 index.html，没有 Vite 的依赖预打包）。
+            Write-Host "前端页面由后端同源提供：$BackendUrl"
         }
         else {
-            $nodeRuntime = Ensure-NodeRuntime
-            $npmPath = $nodeRuntime.NpmPath
-
-            $viteCommandPath = Join-Path $FrontendDirectory "node_modules\.bin\vite.cmd"
-            if (-not (Test-Path -LiteralPath $viteCommandPath -PathType Leaf)) {
-                # 同后端：要现装依赖就不是热启动，别再承诺"不需要重新安装"。
-                $isWarmStart = $false
-                Write-Host "首次运行：正在安装前端依赖（几百个包，第一次要几分钟）..."
-                Push-Location -LiteralPath $FrontendDirectory
-                try {
-                    $packageLockPath = Join-Path $FrontendDirectory "package-lock.json"
-                    if (Test-Path -LiteralPath $packageLockPath) {
-                        # npm ci resolves package-lock.json relative to the current
-                        # directory; the launcher itself may be started elsewhere.
-                        & $npmPath ci `
-                            --fetch-timeout=1800000 `
-                            --fetch-retries=5 `
-                            --fetch-retry-mintimeout=20000 `
-                            --fetch-retry-maxtimeout=120000
-                    }
-                    else {
-                        # Older source archives may omit the lockfile. Bootstrap
-                        # once with npm install instead of failing with EUSAGE.
-                        Write-Warning "没有找到 frontend/package-lock.json，改用 npm install 现场生成一份（这样装出来的版本可能与发布时不同）。"
-                        & $npmPath install `
-                            --no-audit `
-                            --no-fund `
-                            --fetch-timeout=1800000 `
-                            --fetch-retries=5 `
-                            --fetch-retry-mintimeout=20000 `
-                            --fetch-retry-maxtimeout=120000
-                    }
-                    if ($LASTEXITCODE -ne 0) {
-                        throw ("前端依赖安装失败。`n" +
-                    "可能原因：网络不通、npm 镜像不可达、或磁盘空间不足。`n" +
-                    "怎么办：`n" +
-                    "  1) 手动重试看完整报错：在 frontend 目录执行 `n" +
-                    "     npm install --registry=https://registry.npmmirror.com`n" +
-                    "  2) 空间不足时先清理磁盘（node_modules 需要约 400 MB）；`n" +
-                    "  3) 需要代理时先设好 `$env:HTTP_PROXY / `$env:HTTPS_PROXY；`n" +
-                    "  4) 仍失败：把上面 npm 的报错原文发到 GitHub Issues。")
-                    }
+            $frontendRecordPattern = Get-ResumeForgeProcessPattern -Service "frontend"
+            $frontendRunning = Test-ResumeForgeFrontend -Url $FrontendUrl
+            if (-not $frontendRunning -and (Test-TcpPortInUse -Port $FrontendPort)) {
+                # Same as the backend above: our own leftover Vite process fails the
+                # proxied health check once its backend is gone, and it is ours to stop.
+                if ($null -eq (Get-ProcessRecordMatch -RecordPath $FrontendPidPath -CommandPattern $frontendRecordPattern)) {
+                    throw ("端口 $FrontendPort 被另一个前端占用，而且它连的不是本次的后端（所以不会去动它）。`n" +
+                    "怎么办（二选一）：`n" +
+                    "  1) 关掉占用该端口的程序；`n" +
+                    "  2) 换一个端口启动：start.cmd -FrontendPort 5180")
                 }
-                finally {
-                    Pop-Location
-                }
+                Write-Warning "上一次运行留下的简历通前端正占着端口 $FrontendPort，先停掉它再启动一个新的。"
+                Stop-RecordedProcess -DisplayName "frontend" -RecordPath $FrontendPidPath -CommandPattern $frontendRecordPattern
+                Start-Sleep -Milliseconds 800
             }
 
-            # This process-local override keeps the Vite proxy bound to the backend
-            # started above without changing a user's tracked or local .env files.
-            $env:VITE_BACKEND_URL = $BackendUrl
-            # Hand npm.cmd to Start-Process as the program. PowerShell wraps a
-            # .cmd in cmd.exe itself and, unlike a hand-written
-            # "cmd /c ""<path>" args" line, does the quoting correctly: a path
-            # containing spaces used to arrive unquoted and cmd tried to run
-            # "C:\Program". The recorded process is still cmd.exe, so stop.cmd
-            # keeps recognising it.
-            $startedFrontend = Start-Process -FilePath $npmPath `
-                -ArgumentList @("run", "dev", "--", "--host", "127.0.0.1", "--port", "$FrontendPort", "--strictPort") `
-                -WorkingDirectory $FrontendDirectory `
-                -WindowStyle Hidden `
-                -RedirectStandardOutput $frontendStandardOutputPath `
-                -RedirectStandardError $frontendLogPath `
-                -PassThru
-            Save-ProcessRecord -Process $startedFrontend -Path $FrontendPidPath
-
-            if ($isWarmStart) {
-                Write-Host "正在等待前端就绪（最多 $FrontendStartTimeoutSeconds 秒）..."
+            if ($frontendRunning) {
+                Assert-RunningServiceIsOwned -DisplayName "前端" -RecordPath $FrontendPidPath `
+                    -CommandPattern $frontendRecordPattern -Port $FrontendPort -PortOption "-FrontendPort"
+                Write-Host "前端已经在运行：$FrontendUrl"
             }
-            if (-not (Wait-ForCondition -Condition { Test-ResumeForgeFrontend -Url $FrontendUrl } `
-                    -TimeoutSeconds $FrontendStartTimeoutSeconds -FailFastProcess $startedFrontend)) {
-                if ($startedFrontend.HasExited) {
+            else {
+                $nodeRuntime = Ensure-NodeRuntime
+                $npmPath = $nodeRuntime.NpmPath
+
+                $viteCommandPath = Join-Path $FrontendDirectory "node_modules\.bin\vite.cmd"
+                if (-not (Test-Path -LiteralPath $viteCommandPath -PathType Leaf)) {
+                    # 同后端：要现装依赖就不是热启动，别再承诺"不需要重新安装"。
+                    $isWarmStart = $false
+                    Write-Host "首次运行：正在安装前端依赖（几百个包，第一次要几分钟）..."
+                    Push-Location -LiteralPath $FrontendDirectory
+                    try {
+                        $packageLockPath = Join-Path $FrontendDirectory "package-lock.json"
+                        if (Test-Path -LiteralPath $packageLockPath) {
+                            # npm ci resolves package-lock.json relative to the current
+                            # directory; the launcher itself may be started elsewhere.
+                            & $npmPath ci `
+                                --fetch-timeout=1800000 `
+                                --fetch-retries=5 `
+                                --fetch-retry-mintimeout=20000 `
+                                --fetch-retry-maxtimeout=120000
+                        }
+                        else {
+                            # Older source archives may omit the lockfile. Bootstrap
+                            # once with npm install instead of failing with EUSAGE.
+                            Write-Warning "没有找到 frontend/package-lock.json，改用 npm install 现场生成一份（这样装出来的版本可能与发布时不同）。"
+                            & $npmPath install `
+                                --no-audit `
+                                --no-fund `
+                                --fetch-timeout=1800000 `
+                                --fetch-retries=5 `
+                                --fetch-retry-mintimeout=20000 `
+                                --fetch-retry-maxtimeout=120000
+                        }
+                        if ($LASTEXITCODE -ne 0) {
+                            throw ("前端依赖安装失败。`n" +
+                        "可能原因：网络不通、npm 镜像不可达、或磁盘空间不足。`n" +
+                        "怎么办：`n" +
+                        "  1) 手动重试看完整报错：在 frontend 目录执行 `n" +
+                        "     npm install --registry=https://registry.npmmirror.com`n" +
+                        "  2) 空间不足时先清理磁盘（node_modules 需要约 400 MB）；`n" +
+                        "  3) 需要代理时先设好 `$env:HTTP_PROXY / `$env:HTTPS_PROXY；`n" +
+                        "  4) 仍失败：把上面 npm 的报错原文发到 GitHub Issues。")
+                        }
+                    }
+                    finally {
+                        Pop-Location
+                    }
+                }
+
+                # This process-local override keeps the Vite proxy bound to the backend
+                # started above without changing a user's tracked or local .env files.
+                $env:VITE_BACKEND_URL = $BackendUrl
+                # Hand npm.cmd to Start-Process as the program. PowerShell wraps a
+                # .cmd in cmd.exe itself and, unlike a hand-written
+                # "cmd /c ""<path>" args" line, does the quoting correctly: a path
+                # containing spaces used to arrive unquoted and cmd tried to run
+                # "C:\Program". The recorded process is still cmd.exe, so stop.cmd
+                # keeps recognising it.
+                $startedFrontend = Start-Process -FilePath $npmPath `
+                    -ArgumentList @("run", "dev", "--", "--host", "127.0.0.1", "--port", "$FrontendPort", "--strictPort") `
+                    -WorkingDirectory $FrontendDirectory `
+                    -WindowStyle Hidden `
+                    -RedirectStandardOutput $frontendStandardOutputPath `
+                    -RedirectStandardError $frontendLogPath `
+                    -PassThru
+                Save-ProcessRecord -Process $startedFrontend -Path $FrontendPidPath
+
+                if ($isWarmStart) {
+                    Write-Host "正在等待前端就绪（最多 $FrontendStartTimeoutSeconds 秒）..."
+                }
+                if (-not (Wait-ForCondition -Condition { Test-ResumeForgeFrontend -Url $FrontendUrl } `
+                        -TimeoutSeconds $FrontendStartTimeoutSeconds -FailFastProcess $startedFrontend)) {
+                    if ($startedFrontend.HasExited) {
+                        throw (Format-ServiceStartFailure -DisplayName "Frontend" `
+                                -Reason "exited with code $(Get-ProcessExitCodeText -Process $startedFrontend) before becoming healthy" `
+                                -LogPath $frontendLogPath)
+                    }
                     throw (Format-ServiceStartFailure -DisplayName "Frontend" `
-                            -Reason "exited with code $(Get-ProcessExitCodeText -Process $startedFrontend) before becoming healthy" `
+                            -Reason "did not start within $FrontendStartTimeoutSeconds seconds" `
                             -LogPath $frontendLogPath)
                 }
-                throw (Format-ServiceStartFailure -DisplayName "Frontend" `
-                        -Reason "did not start within $FrontendStartTimeoutSeconds seconds" `
-                        -LogPath $frontendLogPath)
+                Write-Host "前端已启动：$FrontendUrl"
+                Invoke-FrontendWarmup -Url $FrontendUrl
             }
-            Write-Host "前端已启动：$FrontendUrl"
-            Invoke-FrontendWarmup -Url $FrontendUrl
         }
 
         if (-not $NoBrowser) {
             # A machine without a default-browser association makes this throw,
             # and the catch below would then tear down the services we just
             # started. Failing to open a window is not a reason to stop the app.
+            # 同源静态模式下页面在后端端口上；dev 模式才开 Vite 的端口。
+            $pageUrl = if ($UseStaticFrontend) { $BackendUrl } else { $FrontendUrl }
             try {
-                Start-Process $FrontendUrl
+                Start-Process $pageUrl
             }
             catch {
-                Write-Warning "没能自动打开浏览器，请手动访问 $FrontendUrl"
+                Write-Warning "没能自动打开浏览器，请手动访问 $pageUrl"
             }
         }
 

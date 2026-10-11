@@ -52,12 +52,11 @@ DB_PATH = _preparse_out()
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 os.environ["DATABASE_URL"] = "sqlite:///" + DB_PATH.as_posix()
 
-from sqlalchemy import create_engine, insert  # noqa: E402
-
 from app.database import Base  # noqa: E402
 from app.models import __init__ as _models  # noqa: E402,F401
 from app.services.jd_parser import parse_jd  # noqa: E402
 from app.services.resume.resume_sample import sample_resume_content  # noqa: E402
+from sqlalchemy import create_engine, insert  # noqa: E402
 
 
 def keywords_of(job: dict) -> list[dict]:
@@ -1594,9 +1593,8 @@ def run_checks() -> int:
     这里换成一个真正的 HTTP 客户端不合适（要么起服务、要么暴露端口），TestClient 走的是同一套
     路由与同一个序列化层，schema 不匹配一样会 500——而"演示数据不符合 schema"正是要抓的东西。
     """
-    from fastapi.testclient import TestClient  # noqa: PLC0415
-
     from app.main import app  # noqa: PLC0415
+    from fastapi.testclient import TestClient  # noqa: PLC0415
 
     client = TestClient(app, raise_server_exceptions=False)
     failures: list[str] = []
@@ -1620,7 +1618,7 @@ if __name__ == "__main__":
     arguments = parser.parse_args()
 
     print(f"演示数据集已写入 {DB_PATH}")
-    if DB_PATH != Path(arguments.out).expanduser().resolve():
+    if Path(arguments.out).expanduser().resolve() != DB_PATH:
         # --out 与 DB_PATH 理应一致；不一致说明"先解析再导入"的顺序被改坏了。
         print(
             f"警告：实际写入路径 {DB_PATH} 与 --out {arguments.out} 不一致。",

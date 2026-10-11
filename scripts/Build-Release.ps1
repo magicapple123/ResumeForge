@@ -122,7 +122,13 @@ $RequiredFiles = @(
     "backend/alembic.ini",
     "frontend/package.json",
     "frontend/package-lock.json",
-    "frontend/index.html"
+    "frontend/index.html",
+    # RF-09 plan A: the launcher serves the built frontend from the backend, so
+    # the release zip must carry the production assets. They are not tracked in
+    # git (git archive cannot emit them); the build step below injects them into
+    # the archive before verification runs, so a missing build fails loudly.
+    "frontend/dist/index.html",
+    "frontend/dist/version.json"
 )
 
 # Per-platform launcher sets. The "all" archive carries both launcher sets; the
@@ -217,7 +223,6 @@ $ForbiddenPatterns = @(
     "^backend/data/",
     "^backend/\.venv/",
     "^frontend/node_modules/",
-    "^frontend/dist/",
     "^runtime/",
     "^\.git/",
     "(^|/)\.env(\.|$)",
@@ -356,6 +361,94 @@ if ($activePrunePathspecs.Count -gt 0) {
     if ($LASTEXITCODE -ne 0) {
         throw "git archive (pruned) failed for ref '$Ref' (exit $LASTEXITCODE)."
     }
+}
+
+# --- frontend production assets (RF-09 plan A) ---
+#
+# The launcher's frontend-mode "auto" serves frontend\dist from the backend
+# itself, so the release zip must carry the built assets. They are not tracked
+# in git -- git archive can never emit them -- so they are built here and
+# injected into the archive. A failed build aborts the release: shipping a
+# "dev-only" package that needs Node at runtime is a maintainer decision, and
+# the decision was NO.
+$frontendDirectory = Join-Path $ProjectRoot "frontend"
+$distDirectory = Join-Path $frontendDirectory "dist"
+$distVersionFile = Join-Path $distDirectory "version.json"
+$distIndexFile = Join-Path $distDirectory "index.html"
+
+function Get-DistVersion {
+    # Returns the version declared by frontend\dist\version.json, or $null when
+    # the file is missing or unparsable (both mean "not a usable build").
+    if (-not (Test-Path -LiteralPath $distVersionFile -PathType Leaf)) {
+        return $null
+    }
+    try {
+        return [regex]::Match((Get-Content -LiteralPath $distVersionFile -Raw -ErrorAction Stop), '"version"\s*:\s*"([^"]+)"').Groups[1].Value
+    }
+    catch {
+        return $null
+    }
+}
+
+# A fresh dist whose version.json already matches the ref being packaged can be
+# reused -- the guard test runs this script three times, and a release machine
+# re-running the build for an unchanged tree gains nothing. Delete frontend\dist
+# to force a rebuild.
+$distVersion = Get-DistVersion
+if ((Test-Path -LiteralPath $distIndexFile -PathType Leaf) -and ($distVersion -eq $version)) {
+    Write-Host "frontend\dist already matches version $version; reusing it (delete frontend\dist to force a rebuild)."
+}
+else {
+    $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($null -eq $npmCommand) {
+        throw "npm.cmd was not found on PATH. Building frontend\dist needs Node.js 20.19+; install it (or delete frontend\dist if a stale build is blocking the version check)."
+    }
+    Write-Host "Building the frontend (npm ci, then npm run build)..."
+    Push-Location -LiteralPath $frontendDirectory
+    try {
+        & npm.cmd ci --no-audit --no-fund --fetch-timeout=1800000 --fetch-retries=5
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm ci failed (exit $LASTEXITCODE). Release aborted: the archive must carry a working frontend\dist."
+        }
+        & npm.cmd run build
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm run build failed (exit $LASTEXITCODE). Release aborted: shipping without frontend\dist would hand out a launcher that cannot show a page."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+    $distVersion = Get-DistVersion
+}
+
+if (-not (Test-Path -LiteralPath $distIndexFile -PathType Leaf)) {
+    throw "frontend\dist\index.html is missing after the frontend build step. Release aborted."
+}
+if ($distVersion -ne $version) {
+    throw "frontend\dist\version.json reports '$distVersion' but the ref being packaged is '$version'. The frontend assets and the backend must come from the same version; rebuild the frontend at this commit and retry."
+}
+
+# Inject every file under frontend\dist into the archive, byte for byte (the
+# build output is what a browser executes; no line-ending translation here).
+Write-Host "Injecting frontend\dist into the archive..."
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$distRoot = (Get-Item -LiteralPath $distDirectory).FullName
+$distFiles = @(Get-ChildItem -LiteralPath $distDirectory -Recurse -File)
+if ($distFiles.Count -eq 0) {
+    throw "frontend\dist is empty. Release aborted: the archive must carry built frontend assets."
+}
+$releaseArchive = [IO.Compression.ZipFile]::Open($archivePath, [IO.Compression.ZipArchiveMode]::Update)
+try {
+    foreach ($distFile in $distFiles) {
+        $distRelative = $distFile.FullName.Substring($distRoot.Length + 1).Replace("\", "/")
+        $entryName = $prefix + "frontend/dist/" + $distRelative
+        [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $releaseArchive, $distFile.FullName, $entryName, [IO.Compression.CompressionLevel]::Optimal)
+    }
+}
+finally {
+    $releaseArchive.Dispose()
 }
 
 

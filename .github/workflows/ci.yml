@@ -38,10 +38,10 @@ jobs:
         working-directory: backend
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -62,6 +62,15 @@ jobs:
 
       - name: Run Ruff
         run: python -m ruff check .
+
+      - name: Run Ruff on root scripts
+        # 仓库根 scripts/*.py 与 backend 共用根 pyproject.toml 的同一份 ruff
+        # 配置（E4/E7/E9/F/I/UP/B/SIM）。此前只查 backend 范围，scripts 里
+        # 攒了 9 个遗留问题（I001/UP017/SIM300）；RF-21 修复后在这里钉住，
+        # 防止再积累。单独一步而不是并进上一条，因为 backend 作业的默认
+        # working-directory 是 backend/。
+        working-directory: .
+        run: python -m ruff check scripts/
 
       - name: Type check models and schemas (pyright)
         # pyrightconfig 只把 app/models + app/schemas 纳入 basic 检查（渐进策略）。
@@ -92,7 +101,7 @@ jobs:
 
       - name: Upload coverage report
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: backend-coverage
           path: backend/coverage.xml
@@ -105,7 +114,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run the macOS launcher guard tests
         # 这一份在真 Mac 上跑，用的就是 macOS 自带的 /bin/bash 3.2——
         # 维护者没有 Mac，这是唯一能自动化验证 macOS 启动链的地方。
@@ -119,7 +128,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Download and verify the pinned portable runtimes
         # 真正下载一遍便携版 Python 与 Node，用仓库里钉死的 SHA-256 校验。
         # 这一步专抓"摘要抄错一位"这类错误：那种错误在别处一律表现为
@@ -188,24 +197,45 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the production frontend assets
+        # RF-09 方案 A：frontend/dist 存在时启动链走"后端同源静态"模式（不起
+        # Vite）。这个作业要验证的正是发布形态：先构建出 dist，再走完整启动链，
+        # 最后从后端端口真取一次 index.html 引用的入口模块。
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
       - name: Start the app the way a Mac user does
         # 维护者没有 Mac，这个作业就是"那台 Mac"：从干净检出开始，
-        # 走 start.sh 的完整链路（准备运行时 → 建 venv → 装依赖 →
-        # 启动 uvicorn 与 vite → 等健康检查），再用 stop.sh 收尾。
-        # 它比文档更可靠：文档只能描述，这里会真的跑。
+        # 走 start.sh 的完整链路（准备运行时 → 建 venv → 装依赖 → 启动
+        # uvicorn → 等健康检查），再用 stop.sh 收尾。它比文档更可靠：
+        # 文档只能描述，这里会真的跑。
         run: |
           set -euo pipefail
           # 让 uvicorn 打全日志：这个作业的失败通常是"服务没起来"，而默认的 warning
           # 级别只会在 stderr 里留下一份空白，没有任何可定位的线索。
           export RF_UVICORN_LOG_LEVEL=info
-          bash scripts/macos/start.sh --no-browser --backend-port 8123 --frontend-port 5199
+          bash scripts/macos/start.sh --no-browser --backend-port 8123
           curl -fsS http://127.0.0.1:8123/api/health
           echo
-          curl -fsS http://127.0.0.1:5199/api/health
-          echo
+          # 端口活着不等于页面能用：同源模式下 index.html 与入口模块都由后端提供，
+          # 这里真取一次页面里引用的 /assets/<entry>.js（dist 已预构建，无需轮询）。
+          entry=$(curl -fsS http://127.0.0.1:8123/ | grep -oE 'src="/assets/[^"]+"' | grep -oE '/assets/[^"]+' | tail -n 1)
+          if [ -z "$entry" ]; then
+            echo "同源 index.html 里没有解析到 /assets 入口模块" >&2
+            curl -fsS http://127.0.0.1:8123/ >&2
+            exit 1
+          fi
+          echo "入口模块：$entry"
+          curl -fsS "http://127.0.0.1:8123${entry}" -o /dev/null
+          echo "入口模块取回成功"
       - name: Browser smoke (Playwright)
         working-directory: frontend
+        env:
+          # 同源模式：页面与 API 都在后端端口上（见上一节的入口模块验证）。
+          SMOKE_FRONTEND_URL: "http://127.0.0.1:8123"
+          SMOKE_BACKEND_URL: "http://127.0.0.1:8123"
         run: |
           npx playwright install chromium
           npx playwright test
@@ -227,7 +257,6 @@ jobs:
           # 光有日志还不够："进程还活着但端口没人监听"和"进程早就死了"是两种不同的故障，
           # 前者多半卡在启动流程里，后者要看上面的报错。
           lsof -nP -iTCP:8123 -sTCP:LISTEN || echo "8123 没有监听者"
-          lsof -nP -iTCP:5199 -sTCP:LISTEN || echo "5199 没有监听者"
           pgrep -fl "uvicorn|vite" || echo "没有 uvicorn / vite 进程"
           echo "===== 健康探针 ====="
           curl -v --max-time 5 http://127.0.0.1:8123/api/health || echo "8123 健康检查失败"
@@ -239,7 +268,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Download and verify the pinned runtimes
         # 真正下载一遍启动器要用的便携版 Node 与 Python 官方安装包，逐个用仓库里钉死的
         # SHA-256 校验（Node 还会解压出来跑一次 `node --version`）。专抓"下载地址或摘要
@@ -260,18 +289,28 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python
         # 显式装一个窗口内的解释器：这一步不测"找不到 Python 时去下载安装包"那条路
         # （那条路要走 python.org 的静默安装，在 runner 上会引入与启动链无关的失败），
         # 测的是纯净检出上的整条启动链：建 venv → 装依赖 → 起 uvicorn 与 vite → 健康检查。
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
+      - name: Build the production frontend assets
+        # RF-09 方案 A：frontend\dist 存在时启动链走"后端同源静态"模式（不起
+        # Vite）。先构建出 dist，再走完整启动链，最后从后端端口真取一次入口模块。
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          npm ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw "npm ci failed with $LASTEXITCODE" }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw "npm run build failed with $LASTEXITCODE" }
       - name: Start the app and verify it serves (one step, like a user's session)
         # 这份作业就是"一台干净的新电脑"：从空检出开始，走和 start.cmd 完全相同的链路。
         # 它捕的是"新下载的包在这台机器上起不来"这一类问题——2026-09-29 有用户在一台
@@ -288,46 +327,34 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Start-ResumeForge.ps1 -NoBrowser -BackendPort 8123 -FrontendPort 5199
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Start-ResumeForge.ps1 -NoBrowser -BackendPort 8123
           if ($LASTEXITCODE -ne 0) { throw "启动器返回了 $LASTEXITCODE" }
 
-          foreach ($url in @("http://127.0.0.1:8123/api/health", "http://127.0.0.1:5199/api/health")) {
-            $response = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 30
-            if ($response.StatusCode -ne 200) { throw "$url 返回了 $($response.StatusCode)" }
-            Write-Host "$url -> 200"
-          }
+          $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8123/api/health" -TimeoutSec 30
+          if ($response.StatusCode -ne 200) { throw "health 返回了 $($response.StatusCode)" }
+          Write-Host "http://127.0.0.1:8123/api/health -> 200"
 
-          # 端口活着不等于页面能用：Vite 的入口是从 index.html 里引的入口模块，取不到它
-          # 浏览器就是一片空白（用户反馈的那个形态）。冷启动要现做依赖预打包，所以这里
-          # **轮询等**（最多 5 分钟），而不是取一次就判死。
-          $deadline = (Get-Date).AddMinutes(5)
-          $entry = "/src/main.tsx"
-          while ($true) {
-            try {
-              $html = [string](Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:5199/" -TimeoutSec 30).Content
-              # Vite 会往头部插一个 /@vite/client（HMR 客户端），它也是 module 脚本；
-              # 应用入口是最后一个非 /@ 开头的 module 脚本。
-              $sources = @(
-                [regex]::Matches($html, '<script[^>]*type="module"[^>]*src="([^"]+)"') |
-                ForEach-Object { $_.Groups[1].Value } |
-                Where-Object { $_ -notmatch '^/@' }
-              )
-              if ($sources.Count -gt 0) { $entry = $sources[-1] }
-              $entryResponse = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:5199$entry" -TimeoutSec 120
-              Write-Host "$entry -> $($entryResponse.StatusCode)（$($entryResponse.Content.Length) 字符）"
-              break
-            }
-            catch {
-              if ((Get-Date) -gt $deadline) { throw "前端入口 $entry 在 5 分钟内一直没有就绪：$_" }
-              Write-Host "还没就绪，10 秒后重试：$_"
-              Start-Sleep -Seconds 10
-            }
-          }
+          # 端口活着不等于页面能用（AGENTS 的教训）：同源模式下 index.html 与入口
+          # 模块都由后端提供，浏览器取不到入口模块就是一片空白。dist 已预构建、
+          # 无需预热，这里真取一次 index.html 里引用的 /assets/<entry>.js。
+          $html = [string](Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8123/" -TimeoutSec 30).Content
+          $entries = @(
+            [regex]::Matches($html, '<script[^>]*src="([^"]+)"') |
+            ForEach-Object { $_.Groups[1].Value } |
+            Where-Object { $_ -match '^/assets/' }
+          )
+          if ($entries.Count -eq 0) { throw "同源 index.html 里没有解析到 /assets 入口模块" }
+          $entry = $entries[-1]
+          $entryResponse = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8123$entry" -TimeoutSec 120
+          Write-Host "$entry -> $($entryResponse.StatusCode)（$($entryResponse.Content.Length) 字符）"
       - name: Browser smoke (Playwright)
         # 真实 Chromium 冒烟：jsdom 捕不到的 CSS/构建产物/浏览器 API 差异由这几条
-        # 用例兜住（启动 → 载入示例 → 岗位/简历可见 → 导出 PDF）。端口与本地约定
-        # 一致（前端 5199、后端 8123），playwright.config 的默认值即为此而设。
+        # 用例兜住（启动 → 载入示例 → 岗位/简历可见 → 导出 PDF）。同源模式下页面
+        # 与 API 都在后端端口上（见上一节的入口模块验证）。
         working-directory: frontend
+        env:
+          SMOKE_FRONTEND_URL: "http://127.0.0.1:8123"
+          SMOKE_BACKEND_URL: "http://127.0.0.1:8123"
         run: |
           npx playwright install chromium
           npx playwright test
@@ -348,7 +375,7 @@ jobs:
             }
           }
           Write-Host "===== 端口与进程 ====="
-          netstat -ano | Select-String -Pattern ":8123|:5199"
+          netstat -ano | Select-String -Pattern ":8123"
           Get-Process -Name python,node -ErrorAction SilentlyContinue |
             Select-Object Id, ProcessName, StartTime
           Write-Host "===== 健康探针 ====="
@@ -366,10 +393,10 @@ jobs:
         working-directory: frontend
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # 22 起才满足 vitest 5 / jsdom 30 的 engines（>=20.19 只是运行时下限，
           # 测试工具链需要 22.12+）。与本地开发版本保持一致，避免双环境漂移。
@@ -386,7 +413,7 @@ jobs:
         run: npm run test:coverage -- --maxWorkers=2
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frontend-coverage
           path: frontend/coverage/
@@ -408,10 +435,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
 
@@ -428,8 +455,27 @@ jobs:
           python -m pip install pip-audit==2.10.1
           python -m pip_audit --requirement backend/requirements-dev.txt --index-url https://pypi.org/simple
 
+      - name: Generate third-party notices and frozen dependency list
+        # RF-24 发行可信：每次 CI 产出 THIRD-PARTY-NOTICES.txt 与依赖冻结清单，
+        # 作为 artifact 供发布时随包带走/复核。独立脚本，不进 Build-Release.ps1。
+        shell: pwsh
+        run: |
+          python -m pip install -r backend/requirements.txt pip-licenses==5.5.5
+          .\scripts\Generate-Sbom.ps1 -OutputDir runtime\sbom
+          if ($LASTEXITCODE -ne 0) { throw "Generate-Sbom.ps1 failed with $LASTEXITCODE" }
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: third-party-notices
+          path: |
+            runtime/sbom/THIRD-PARTY-NOTICES.txt
+            runtime/sbom/requirements-frozen.txt
+          retention-days: 30
+          if-no-files-found: error
+
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm

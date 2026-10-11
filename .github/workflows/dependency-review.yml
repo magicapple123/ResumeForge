@@ -1,0 +1,25 @@
+name: Dependency review
+
+# PR 依赖变更安全扫描（RF-21 补丁 3）：对比 base 与 head 之间的依赖差异，
+# 命中已知漏洞（moderate 及以上）即失败。与 CI 里的 pip-audit / npm audit
+# 互补：那两个按当前锁文件全量审计，这里按"这次 PR 新引入/升级了什么"增量把关。
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency review (moderate+)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate

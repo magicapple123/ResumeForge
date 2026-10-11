@@ -86,14 +86,15 @@ $env:PYTHONUTF8 = "1"
 
 - **但"串行就没事"这个结论并不成立**（2026-09-18 实测）：本机沙箱下**串行** `pytest --cov`
   同样会在 `pytest-cov` 收尾的 `cov.combine()` 删 `.coverage.*` 时命中批量删除守卫 →
-  `SystemExit(1)`、**退出码 3，而且覆盖率报告那一步整段跑不到**。根因是 coverage 会向上找到
-  仓库根的 `pyproject.toml`（那里 `parallel = true`），所以**即使串行也照样产生 `.coverage.*`**；
-  给 pytest 传 `parallel=false` 也挡不住。**拿到干净覆盖率的办法**是绕开 pytest-cov：
+  `SystemExit(1)`、**退出码 3，而且覆盖率报告那一步整段跑不到**。**拿到干净覆盖率的办法**
+  是绕开 pytest-cov——注意 coverage **只从 cwd 找配置**（`.coveragerc`/`pyproject.toml`），
+  **不会**向上层目录搜索；在 `backend/` 下裸跑会拿到"连 tests/ 一起统计"的假百分比
+  （2026-10-10 实测：假 41% vs 真实 86%），必须显式传 `--rcfile` 指向仓库根配置：
 
   ```powershell
-  .venv\Scripts\python.exe -m coverage run -m pytest -q
+  .venv\Scripts\python.exe -m coverage run --rcfile=..\pyproject.toml -m pytest -q
   .venv\Scripts\python.exe -m coverage combine --keep
-  .venv\Scripts\python.exe -m coverage report --fail-under=80
+  .venv\Scripts\python.exe -m coverage report --rcfile=..\pyproject.toml --fail-under=80
   ```
 
   判定时**以汇总行 + 覆盖率报告为准**；只有两者都正常打印，退出码才可信。

@@ -4,6 +4,11 @@ param(
     [int]$BackendPort = 8005,
     [ValidateRange(1024, 65535)]
     [int]$FrontendPort = 5173,
+    # RF-09 方案 A：auto = 有 dist 走后端同源（不起 Node），没有退回 dev；
+    # dev = 强制 Vite；production = dist 必须在，缺失直接报错。
+    # backend\.env 里的 FRONTEND_MODE 是可选覆盖，命令行参数优先。
+    [ValidateSet("auto", "dev", "production")]
+    [string]$FrontendMode = "auto",
     [switch]$NoBrowser
 )
 
@@ -83,6 +88,15 @@ $NodeToolsDirectory = Join-Path $RuntimeDirectory "tools"
 # a copy of the offending source line before the actual message). start.cmd
 # pauses on a non-zero exit, so the user can read all of it.
 try {
+    # frontend-mode 的解析顺序：命令行 -FrontendMode > backend\.env 的 FRONTEND_MODE
+    # > 默认 auto。显式传了参数就不要让 .env 反过来覆盖它。
+    if (-not $PSBoundParameters.ContainsKey("FrontendMode")) {
+        $envFrontendMode = Get-FrontendModeFromEnv -Path (Join-Path $BackendDirectory ".env")
+        if ($null -ne $envFrontendMode) {
+            $FrontendMode = $envFrontendMode
+        }
+    }
+    $UseStaticFrontend = Resolve-FrontendMode -Mode $FrontendMode -FrontendDirectory $FrontendDirectory
     Start-ResumeForge
 }
 catch {

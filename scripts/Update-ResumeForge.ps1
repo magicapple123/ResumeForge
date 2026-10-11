@@ -301,6 +301,63 @@ function Backup-UserData {
     }
 }
 
+<#
+更新前给**程序文件**拍一份可回滚的快照（RF-26 §12.5 #6）。
+
+用户数据已有 Backup-UserData；这里管另一半：把"旧树里将被新包覆盖的程序文件"按相对
+路径备份到 runtime\pre-update-files\<时间戳>\。覆盖（Copy-ProgramFiles）中途失败时用
+Restore-ProgramFiles 还原这些文件——否则留下的是一棵"一半新一半旧"的树，应用起不来，
+用户只能整包重装。排除规则与覆盖时完全一致（Test-Excluded），用户数据路径不会进来。
+返回备份目录路径；没有会被覆盖的文件（全新目录）或 DryRun 时返回 $null。
+#>
+function Backup-ProgramFiles {
+    param([string]$Source, [string]$Destination)
+    if ($DryRun) { return $null }
+    $backupRoot = Join-Path $ProjectRoot ("runtime\pre-update-files\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+    $count = 0
+    Get-ChildItem -LiteralPath $Source -Recurse -Force -File | ForEach-Object {
+        $relative = $_.FullName.Substring($Source.Length).TrimStart("\")
+        if (-not $relative -or (Test-Excluded -RelativePath $relative)) { return }
+        # 只备份"将被覆盖"的文件：目标树里不存在的（新增文件）无需备份，覆盖失败时
+        # 留着也无害。
+        if (-not (Test-Path -LiteralPath (Join-Path $Destination $relative))) { return }
+        $dest = Join-Path $backupRoot $relative
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+        Copy-Item -LiteralPath $_.FullName -Destination $dest -Force
+        $count++
+    }
+    if ($count -eq 0) { return $null }
+    Write-Host "    Program file backup: $backupRoot ($count files)"
+    # 每份备份可达几十 MB，只留最近 2 份。
+    $root = Join-Path $ProjectRoot "runtime\pre-update-files"
+    $stale = @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending | Select-Object -Skip 2)
+    foreach ($old in $stale) { Remove-Item -LiteralPath $old.FullName -Recurse -Force }
+    return $backupRoot
+}
+
+<#
+把程序文件备份还原回项目根。返回是否还原成功；还原本身失败时如实写日志并返回 $false
+——原错误随后仍会抛给 trap 写 failed 状态，绝不谎报成功。
+#>
+function Restore-ProgramFiles {
+    param([string]$BackupRoot)
+    if (-not $BackupRoot -or -not (Test-Path -LiteralPath $BackupRoot)) { return $false }
+    try {
+        Get-ChildItem -LiteralPath $BackupRoot -Recurse -Force -File | ForEach-Object {
+            $relative = $_.FullName.Substring($BackupRoot.Length).TrimStart("\")
+            $dest = Join-Path $ProjectRoot $relative
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+            Copy-Item -LiteralPath $_.FullName -Destination $dest -Force
+        }
+        Write-Host "    Rolled program files back from: $BackupRoot" -ForegroundColor Yellow
+        return $true
+    } catch {
+        Write-Warning ("Rollback failed; the program files may be half-new. See runtime\update.log: " + $_.Exception.Message)
+        return $false
+    }
+}
+
 function Write-DependencySyncHint {
     param([string]$Message)
     Write-Host ""
@@ -435,9 +492,13 @@ else {
         Backup-UserData
 
         Write-Step "Copying program files (data, .env and runtime are kept)"
+        $programBackup = Backup-ProgramFiles -Source $extracted.FullName -Destination $ProjectRoot
         try {
             Copy-ProgramFiles -Source $extracted.FullName -Destination $ProjectRoot
         } catch {
+            # 覆盖失败：先把旧文件还原回去（还原不了也如实记录），再把错误抛给 trap
+            # 写 failed 状态——绝不留下一棵"一半新一半旧"的树还装作没事。
+            Restore-ProgramFiles -BackupRoot $programBackup | Out-Null
             Write-DependencySyncHint -Message $_.Exception.Message
             throw
         }
@@ -458,7 +519,14 @@ if ($ArchivePath -and -not $DryRun) {
     }
     Backup-UserData
     Write-Step "Copying program files (data, .env and runtime are kept)"
-    Copy-ProgramFiles -Source $extracted.FullName -Destination $ProjectRoot
+    $programBackup = Backup-ProgramFiles -Source $extracted.FullName -Destination $ProjectRoot
+    try {
+        Copy-ProgramFiles -Source $extracted.FullName -Destination $ProjectRoot
+    } catch {
+        # 同上：覆盖失败先还原程序文件，再让错误走到 trap 写 failed 状态。
+        Restore-ProgramFiles -BackupRoot $programBackup | Out-Null
+        throw
+    }
 }
 
 if ($SkipDependencies) {

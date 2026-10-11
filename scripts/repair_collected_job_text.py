@@ -23,19 +23,19 @@ import argparse
 import shutil
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_ROOT = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
+from app.services.apply.collector import COLLECT_RECOGNITION_SOURCE  # noqa: E402
 from app.services.sites.boss_text import (  # noqa: E402  (需要先补 sys.path)
     normalize_text,
     split_job_sections,
     split_title_salary,
 )
-from app.services.apply.collector import COLLECT_RECOGNITION_SOURCE  # noqa: E402
 
 DEFAULT_DB = BACKEND_ROOT / "data" / "resume_forge.db"
 
@@ -108,7 +108,7 @@ def main() -> int:
 
     backup_dir = db_path.parent / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = backup_dir / f"{db_path.stem}-before-text-repair-{stamp}{db_path.suffix}"
     shutil.copy2(db_path, backup_path)
     print(f"\n已备份数据库 -> {backup_path}")
@@ -124,7 +124,7 @@ def main() -> int:
                 repaired["salary"],
                 repaired["description"],
                 repaired["requirements"],
-                datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                datetime.now(UTC).isoformat(timespec="seconds"),
                 job_id,
             ),
         )

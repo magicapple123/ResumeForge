@@ -65,7 +65,7 @@ npm ci
 
 依赖安装完成后，Windows 用户可在项目根目录双击 `start.cmd`、macOS 用户双击 `start.command`，它会启动前后端并自动打开页面。需要关闭服务时双击 `stop.cmd` / `stop.command`。启动器只会终止自己记录且校验通过的 ResumeForge 进程（记录里存了 PID、命令行与启动时刻签名，三者对得上才动手）。
 
-一键启动器默认使用后端端口 8005、前端端口 5173；若端口冲突，Windows 用 `-BackendPort` / `-FrontendPort`（`start.cmd -BackendPort 8010`，参数用空格分隔），macOS 用 `--backend-port` / `--frontend-port`（`bash scripts/macos/start.sh --backend-port 8010`）。手动启动示例中的后端端口 8000 是开发默认值，与一键启动器互不冲突。
+一键启动器默认使用后端端口 8005，页面地址就是它（发布包自带 `frontend/dist`，由后端同源提供，运行期不需要 Node）；只有显式以 dev 模式启动（`--frontend-mode dev`，Windows 为 `-FrontendMode dev`）时才需要前端端口 5173。若端口冲突，Windows 用 `-BackendPort`（`start.cmd -BackendPort 8010`，参数用空格分隔），macOS 用 `--backend-port`（`bash scripts/macos/start.sh --backend-port 8010`）。手动启动示例中的后端端口 8000 是开发默认值，与一键启动器互不冲突。
 
 启动器会在 `frontend/` 目录执行 npm 安装，因此从资源管理器双击启动时不会因为当前工作目录不同而误报缺少 `package-lock.json`。仓库包含锁文件时使用 `npm ci`；旧压缩包缺少锁文件时会回退到一次 `npm install`。
 
