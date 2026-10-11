@@ -7,6 +7,7 @@
 每轮只做一次非流式调用：一轮请求要同时拿到点评和下一条问题，流式反而让"点评先到、
 问题后到"这种半成品状态变得难以处理。
 """
+
 from __future__ import annotations
 
 import json
@@ -71,7 +72,9 @@ def answered_rounds(session: InterviewSession) -> int:
 def _transcript(session: InterviewSession) -> str:
     lines: list[str] = []
     for item in session.messages:
-        speaker = {"interviewer": "面试官", "user": "候选人", "note": "系统"}.get(item.role, item.role)
+        speaker = {"interviewer": "面试官", "user": "候选人", "note": "系统"}.get(
+            item.role, item.role
+        )
         lines.append(f"【{speaker}】{item.content.strip()}")
     text = "\n\n".join(lines)
     if len(text) > MAX_TRANSCRIPT_CHARS:
@@ -100,6 +103,8 @@ def build_interview_messages(
             "difficulty": session.difficulty,
             "interviewer_style": session.interviewer_style,
             "rounds": session.rounds,
+            # 自动轮数：非空时提示词改走"AI 按表现判断收尾"的分支（见 interview_system.md）。
+            "rounds_min": session.rounds_min,
             "index": index,
             "job_title": session.job_title or "未指定（按面试类型提问）",
             "company": session.company,
@@ -114,9 +119,15 @@ def build_interview_messages(
         },
     )
     payload = {
-        "候选人的个人资料": _clip(profile_text, MAX_PROFILE_CONTEXT_CHARS) or "（用户没有维护资料）",
+        "候选人的个人资料": _clip(profile_text, MAX_PROFILE_CONTEXT_CHARS)
+        or "（用户没有维护资料）",
         "目标岗位的招聘信息": _clip(job_text, MAX_JOB_CONTEXT_CHARS) or "（未关联岗位）",
-        "面试进度": f"第 {index} / {session.rounds} 轮",
+        # 自动轮数模式不把精确总轮数写进进度（模型只需知道区间与当前轮）。
+        "面试进度": (
+            f"第 {index} 轮（自动收尾，最早第 {session.rounds_min} 轮、最迟第 {session.rounds} 轮）"
+            if session.rounds_min is not None
+            else f"第 {index} / {session.rounds} 轮"
+        ),
         "此前的对话": _transcript(session) or "（这是第一个问题）",
     }
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))

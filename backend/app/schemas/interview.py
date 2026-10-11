@@ -1,4 +1,5 @@
 """模拟面试的请求/响应结构。"""
+
 from datetime import datetime
 from typing import Any, Literal
 
@@ -49,6 +50,9 @@ class InterviewCreate(BaseModel):
     difficulty: InterviewDifficulty = "中级"
     interviewer_style: InterviewerStyle = "严谨专业"
     rounds: int = Field(default=6, ge=MIN_INTERVIEW_ROUNDS, le=MAX_INTERVIEW_ROUNDS)
+    # 自动轮数下限：非空 = AI 按表现在 [rounds_min, rounds] 内判断何时收尾
+    # （rounds 兼作上限）；NULL = 固定轮数。轮数本身不告诉用户，保留未知感。
+    rounds_min: int | None = Field(default=None, ge=MIN_INTERVIEW_ROUNDS, le=MAX_INTERVIEW_ROUNDS)
     # 自定义面试官人设（会拼进系统提示，优先级高于默认风格）。
     persona: str = Field(default="", max_length=MAX_PERSONA_CHARS)
     focus: str = Field(default="", max_length=MAX_FOCUS_CHARS)
@@ -67,6 +71,12 @@ class InterviewCreate(BaseModel):
     @classmethod
     def style_must_be_supported(cls, value: str) -> str:
         return _validate_choice(value, INTERVIEWER_STYLES, "面试官风格")
+
+    @model_validator(mode="after")
+    def auto_rounds_interval_is_valid(self) -> "InterviewCreate":
+        if self.rounds_min is not None and self.rounds_min >= self.rounds:
+            raise ValueError("自动轮数的下限必须小于上限（rounds_min < rounds）")
+        return self
 
 
 class InterviewAnswerCreate(BaseModel):
@@ -107,6 +117,8 @@ class InterviewBrief(BaseModel):
     difficulty: str
     interviewer_style: str
     rounds: int
+    # 自动轮数下限：非空表示这场面试是自动收尾模式（界面据此显示"第 N 轮"而非"第 N/M 轮"）。
+    rounds_min: int | None = None
     status: InterviewStatus
     created_at: datetime
     updated_at: datetime
@@ -184,7 +196,9 @@ class QuestionBankOut(BaseModel):
     job_title: str = ""
     company: str = ""
     resume_id: int | None = None
-    groups: list[QuestionBankGroup] = Field(default_factory=list, max_length=len(QUESTION_BANK_TYPES))
+    groups: list[QuestionBankGroup] = Field(
+        default_factory=list, max_length=len(QUESTION_BANK_TYPES)
+    )
     llm_used: bool = True
     notes: list[str] = Field(default_factory=list)
 

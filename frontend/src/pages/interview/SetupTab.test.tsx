@@ -69,3 +69,28 @@ describe("SetupTab 关联岗位预填（RF-11）", () => {
     expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ jobId: 7 }));
   });
 });
+
+describe("SetupTab 自动轮数", () => {
+  it("默认关闭：固定轮数输入可见，提交带 autoRounds=false", async () => {
+    const onStart = vi.fn();
+    renderSetup({ onStart });
+
+    expect(screen.getByLabelText("轮数")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /开始面试/ }));
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ autoRounds: false }));
+  });
+
+  it("打开开关：固定轮数输入隐藏，提交带 autoRounds=true", async () => {
+    const onStart = vi.fn();
+    renderSetup({ onStart });
+
+    fireEvent.click(screen.getByRole("switch", { name: /自动轮数/ }));
+    // Form.useWatch 触发重渲需要一个微任务周期。
+    await waitFor(() => expect(screen.queryByLabelText("轮数")).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: /开始面试/ }));
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ autoRounds: true }));
+  });
+});

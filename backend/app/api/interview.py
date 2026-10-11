@@ -2,6 +2,7 @@
 
 不流式：一轮请求要同时拿到"对上一答的点评"和"下一题"，流式会让界面出现半成品状态。
 """
+
 import json
 import logging
 
@@ -82,9 +83,7 @@ def _profile_text(db: Session) -> str:
     会留下 datetime 对象，``json.dumps`` 会直接抛 TypeError 让整个开场请求 500。
     """
     try:
-        profile = to_profile_out(get_profile_detail(db)).model_dump(
-            mode="json", exclude={"photo"}
-        )
+        profile = to_profile_out(get_profile_detail(db)).model_dump(mode="json", exclude={"photo"})
     except Exception:  # noqa: BLE001 - 没有资料不该阻断面试
         logger.warning("读取个人资料失败，模拟面试将不携带资料", exc_info=True)
         return ""
@@ -111,6 +110,7 @@ def _to_out(session: InterviewSession) -> InterviewBrief:
         difficulty=session.difficulty,
         interviewer_style=session.interviewer_style,
         rounds=session.rounds,
+        rounds_min=session.rounds_min,
         status=session.status,
         created_at=session.created_at,
         updated_at=session.updated_at,
@@ -205,14 +205,9 @@ def _claims_json(db: Session) -> str:
 
 
 @router.get("", response_model=list[InterviewBrief])
-def list_sessions(
-    limit: int = Query(default=50, ge=1, le=200), db: Session = Depends(get_db)
-):
+def list_sessions(limit: int = Query(default=50, ge=1, le=200), db: Session = Depends(get_db)):
     sessions = (
-        db.query(InterviewSession)
-        .order_by(InterviewSession.created_at.desc())
-        .limit(limit)
-        .all()
+        db.query(InterviewSession).order_by(InterviewSession.created_at.desc()).limit(limit).all()
     )
     return [_to_out(item) for item in sessions]
 
@@ -231,6 +226,7 @@ async def create_session(payload: InterviewCreate, db: Session = Depends(get_db)
         difficulty=payload.difficulty,
         interviewer_style=payload.interviewer_style,
         rounds=payload.rounds,
+        rounds_min=payload.rounds_min,
         persona=payload.persona.strip(),
         focus=payload.focus.strip(),
         model=model,
@@ -342,7 +338,12 @@ def _report_markdown(session: InterviewSession) -> str:
         f"- 面试官风格：{session.interviewer_style}",
         f"- 目标岗位：{session.job_title or '未关联'}"
         + (f" @ {session.company}" if session.company else ""),
-        f"- 问答轮数：{answered_rounds(session)} / {session.rounds}",
+        # 自动轮数模式：总轮数本来就不固定，如实记"自动收尾"。
+        (
+            f"- 问答轮数：{answered_rounds(session)} 轮（自动收尾，上限 {session.rounds}）"
+            if session.rounds_min is not None
+            else f"- 问答轮数：{answered_rounds(session)} / {session.rounds}"
+        ),
     ]
     if report.get("score"):
         lines.append(f"- 总评分：{report['score']}")
@@ -358,7 +359,9 @@ def _report_markdown(session: InterviewSession) -> str:
     if report.get("dimensions") or report.get("summary"):
         lines.extend(["## 评分报告", ""])
         for item in report.get("dimensions") or []:
-            lines.append(f"- **{item.get('name')}**：{item.get('score')} 分 —— {item.get('comment', '')}")
+            lines.append(
+                f"- **{item.get('name')}**：{item.get('score')} 分 —— {item.get('comment', '')}"
+            )
         if report.get("strengths"):
             lines.extend(["", "### 做得好", *[f"- {text}" for text in report["strengths"]]])
         if report.get("improvements"):
@@ -429,9 +432,7 @@ async def generate_question_bank(
 
 
 @router.post("/analyze", response_model=InterviewAnalysisOut)
-async def analyze_question(
-    payload: InterviewAnalysisRequest, db: Session = Depends(get_db)
-):
+async def analyze_question(payload: InterviewAnalysisRequest, db: Session = Depends(get_db)):
     """输入一道真实问题，分析答题思路（框架/要点/追问/误区）。"""
     provider, _model = _require_provider(db)
 
@@ -439,7 +440,9 @@ async def analyze_question(
     if payload.job_id is not None:
         job = db.get(Job, payload.job_id)
         if job is not None:
-            parts.append(f"## 目标岗位\n{build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW)}")
+            parts.append(
+                f"## 目标岗位\n{build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW)}"
+            )
     if payload.resume_id is not None:
         record = _resume_record_or_none(db, payload.resume_id)
         if record is None:
@@ -499,9 +502,7 @@ async def generate_question_answer_entry(
 
 
 @router.post("/optimize-resume", response_model=InterviewOptimizeOut)
-async def optimize_resume(
-    payload: InterviewOptimizeRequest, db: Session = Depends(get_db)
-):
+async def optimize_resume(payload: InterviewOptimizeRequest, db: Session = Depends(get_db)):
     """把面试暴露的短板与高频追问反向转成简历改写建议（**只产出建议、不改正文**）。"""
     provider, _model = _require_provider(db)
     record = _resume_record_or_none(db, payload.resume_id)
@@ -509,12 +510,12 @@ async def optimize_resume(
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
     resume = ResumeContent.model_validate(record.content or {})
 
-    job = db.get(Job, payload.job_id) if payload.job_id else (
-        db.get(Job, record.job_id) if record.job_id else None
+    job = (
+        db.get(Job, payload.job_id)
+        if payload.job_id
+        else (db.get(Job, record.job_id) if record.job_id else None)
     )
-    job_text = (
-        build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW) if job is not None else ""
-    )
+    job_text = build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW) if job is not None else ""
     weaknesses = [str(item).strip() for item in payload.weaknesses if str(item).strip()]
     follow_ups = [str(item).strip() for item in payload.follow_ups if str(item).strip()]
     db.close()

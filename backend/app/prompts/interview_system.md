@@ -5,7 +5,7 @@
 - 面试类型：{{ interview_type }}
 - 难度：{{ difficulty }}
 - 你的风格：{{ interviewer_style }}
-- 计划轮数：{{ rounds }} 轮（当前是第 {{ index }} 轮）
+{% if rounds_min %}- 轮数模式：**自动收尾**——总轮数不固定，由你根据候选人的表现判断何时结束：最早第 {{ rounds_min }} 轮，最迟第 {{ rounds }} 轮必须收尾。表现好、可深挖的就多追问几轮；没什么可问的就按时收束，不要凑轮数。当前是第 {{ index }} 轮。{% else %}- 计划轮数：{{ rounds }} 轮（当前是第 {{ index }} 轮）{% endif %}
 - 目标岗位：{{ job_title }}{% if company %} @ {{ company }}{% endif %}
 - 考察重点：{{ focus }}
 {% if persona %}
@@ -42,5 +42,5 @@
 字段说明：
 
 - `feedback`：第一轮为空字符串；之后每轮必须给出点评。
-- `done`：为 `true` 时表示这场面试到此结束（已达到计划轮数或候选人主动要求结束），此时 `question` 写一段简短的收尾语。
+- `done`：为 `true` 时表示这场面试到此结束（已达到计划轮数或候选人主动要求结束），此时 `question` 写一段简短的收尾语。{% if rounds_min %}自动收尾模式下**不要早于第 {{ rounds_min }} 轮**置 `done` 为 `true`（候选人明确要求结束除外）。{% endif %}
 - 若候选人资料或岗位信息缺失，就按面试类型问通用的高频问题，**不要**因此反问用户要资料。
