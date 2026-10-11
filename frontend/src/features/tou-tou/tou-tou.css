@@ -19,7 +19,7 @@
    * < 小贴士/Tooltip 3450（资料保存卡 3250）。浏览器按命中测试派发点击，遮罩不会
    * 吞掉球的点击。
    */
-  z-index: 3400;
+  z-index: var(--rf-layer-orb);
   width: var(--tt-size);
   height: var(--tt-size);
   pointer-events: none;
@@ -334,7 +334,7 @@
    * 该值只在壳内生效——用意是压住资料保存卡（.tt-save-card 的 3250），并作为
    * 「小贴士永远在球族最上面」的文档性地标（悬浮球 Tooltip 的 overlayStyle 同取 3450）。
    */
-  z-index: 3450;
+  z-index: var(--rf-layer-orb-tooltip);
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -384,7 +384,7 @@
    * .tt-shell（3400，isolation: isolate）的子元素，实际排序只发生在壳内——
    * 壳整体高于 antd 弹层基准 3100，所以有 Modal 弹出时卡片也照常可点。
    */
-  z-index: 3250;
+  z-index: var(--rf-layer-save-card);
   display: flex;
   flex-direction: column;
   gap: 8px;

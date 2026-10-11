@@ -4,6 +4,7 @@ import { App, Button, Dropdown, Space, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import { useState } from "react";
 import { ApiError } from "../api/client";
+import { formatErrorGuidance } from "../api/errorGuidance";
 import { exportResume, fetchResumeHtml } from "../api/resumes";
 import { downloadBlob, printHtml } from "../utils/download";
 
@@ -119,7 +120,8 @@ export default function ExportButtons({ recordId, pdfDirectAvailable = true }: P
         message.success(`已同时保存到 ${result.savedTo}`);
       }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导出失败");
+      // RF-20：失败不只显示原始异常——给「原因 + 建议 + 编号」指引。
+      message.error(formatErrorGuidance(err, "导出失败"));
     }
   };
 

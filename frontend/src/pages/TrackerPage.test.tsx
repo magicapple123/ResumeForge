@@ -9,10 +9,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Track, TrackList } from "../types";
+import type { Page } from "../types/common";
 import TrackerPage from "./TrackerPage";
 
 const apiMocks = vi.hoisted(() => ({
   listTracks: vi.fn(),
+  listTracksPage: vi.fn(),
   getTrack: vi.fn(),
   createTrack: vi.fn(),
   updateTrack: vi.fn(),
@@ -24,6 +26,12 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("../api/tracker", () => apiMocks);
 vi.mock("../utils/download", () => ({ downloadBlob: vi.fn(), printHtml: vi.fn() }));
+
+// TrackerPage 还会拉岗位/简历做提醒面板下拉、深链标签岗位名；默认让它们失败走静默
+// catch（与真实环境"接口不可达"同路径），深链用例再按需给 getJob 返回值。
+const jobApiMocks = vi.hoisted(() => ({ listJobs: vi.fn(), getJob: vi.fn() }));
+
+vi.mock("../api/jobs", () => jobApiMocks);
 
 function makeTrack(overrides: Partial<Track> = {}): Track {
   return {
@@ -41,6 +49,8 @@ function makeTrack(overrides: Partial<Track> = {}): Track {
     source: "apply",
     job_id: null,
     resume_id: null,
+    resume_title: "",
+    channel: "unknown",
     created_at: "2026-09-18T00:00:00",
     updated_at: "2026-09-18T00:00:00",
     ...overrides,
@@ -62,6 +72,10 @@ function makeList(items: Track[]): TrackList {
   };
 }
 
+function makePage(items: Track[], total = items.length): Page<Track> {
+  return { items, total };
+}
+
 function renderPage(initialEntries: string[] = ["/tracker"]) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
@@ -75,12 +89,18 @@ function renderPage(initialEntries: string[] = ["/tracker"]) {
 beforeEach(() => {
   for (const mock of Object.values(apiMocks)) mock.mockReset();
   apiMocks.listTracks.mockResolvedValue(makeList([]));
+  apiMocks.listTracksPage.mockResolvedValue(makePage([]));
+  jobApiMocks.listJobs.mockReset().mockRejectedValue(new Error("jobs unavailable"));
+  jobApiMocks.getJob.mockReset().mockRejectedValue(new Error("job unavailable"));
 });
 
 afterEach(cleanup);
 
 describe("TrackerPage", () => {
   it("renders a record with its stage and source", async () => {
+    apiMocks.listTracksPage.mockResolvedValue(
+      makePage([makeTrack({ status: "interview", stage_note: "二面" })]),
+    );
     apiMocks.listTracks.mockResolvedValue(
       makeList([makeTrack({ status: "interview", stage_note: "二面" })]),
     );
@@ -95,14 +115,14 @@ describe("TrackerPage", () => {
   });
 
   it("marks a passed deadline as overdue", async () => {
-    apiMocks.listTracks.mockResolvedValue(
-      makeList([
-        makeTrack({
-          next_action: "确认面试时间",
-          next_action_date: "2000-01-01",
-        }),
-      ]),
-    );
+    const tracks = [
+      makeTrack({
+        next_action: "确认面试时间",
+        next_action_date: "2000-01-01",
+      }),
+    ];
+    apiMocks.listTracksPage.mockResolvedValue(makePage(tracks));
+    apiMocks.listTracks.mockResolvedValue(makeList(tracks));
     renderPage();
 
     expect(await screen.findByText(/确认面试时间/)).toBeInTheDocument();
@@ -110,13 +130,13 @@ describe("TrackerPage", () => {
   });
 
   it("shows funnel counts drawn from the server summary", async () => {
-    apiMocks.listTracks.mockResolvedValue(
-      makeList([
-        makeTrack({ id: 1, status: "applied" }),
-        makeTrack({ id: 2, status: "interview", title: "算法实习生" }),
-        makeTrack({ id: 3, status: "offer", title: "前端实习生" }),
-      ]),
-    );
+    const tracks = [
+      makeTrack({ id: 1, status: "applied" }),
+      makeTrack({ id: 2, status: "interview", title: "算法实习生" }),
+      makeTrack({ id: 3, status: "offer", title: "前端实习生" }),
+    ];
+    apiMocks.listTracksPage.mockResolvedValue(makePage(tracks));
+    apiMocks.listTracks.mockResolvedValue(makeList(tracks));
     renderPage();
 
     await screen.findAllByText("示例科技");
@@ -127,15 +147,44 @@ describe("TrackerPage", () => {
   });
 
   it("filters by status when a funnel step is clicked", async () => {
+    apiMocks.listTracksPage.mockResolvedValue(makePage([makeTrack({ status: "interview" })]));
     apiMocks.listTracks.mockResolvedValue(makeList([makeTrack({ status: "interview" })]));
     renderPage();
     await screen.findByText("示例科技");
 
     fireEvent.click(screen.getByRole("button", { name: /面试/ }));
 
+    // 列表与统计都带着同一套筛选重新拉取。
     await waitFor(() => {
+      expect(apiMocks.listTracksPage).toHaveBeenLastCalledWith(
+        { status: "interview", keyword: "" },
+        1,
+        20,
+      );
       expect(apiMocks.listTracks).toHaveBeenLastCalledWith({ status: "interview", keyword: "" });
     });
+  });
+
+  it("翻页时用新页码重新拉取，取到旧截断之外的记录", async () => {
+    // 第 1 页 20 条 + 第 2 页 1 条：旧列表端点 500 条内翻不到的语义由服务端页码保证。
+    const pageOne = Array.from({ length: 20 }, (_, index) =>
+      makeTrack({ id: index + 1, company: `公司-${String(index + 1).padStart(3, "0")}` }),
+    );
+    apiMocks.listTracksPage
+      .mockResolvedValueOnce(makePage(pageOne, 21))
+      .mockResolvedValueOnce(makePage([makeTrack({ id: 21, company: "深层历史公司" })], 21));
+    apiMocks.listTracks.mockResolvedValue(makeList(pageOne));
+    renderPage();
+
+    expect(await screen.findByText("公司-001")).toBeInTheDocument();
+    expect(screen.queryByText("深层历史公司")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByTitle("2")[0]);
+
+    await waitFor(() => {
+      expect(apiMocks.listTracksPage).toHaveBeenLastCalledWith({ status: "", keyword: "" }, 2, 20);
+    });
+    expect(await screen.findByText("深层历史公司")).toBeInTheDocument();
   });
 
   it("offers guidance when there is nothing yet", async () => {
@@ -144,7 +193,7 @@ describe("TrackerPage", () => {
   });
 
   it("shows the error state rather than an empty list when loading fails", async () => {
-    apiMocks.listTracks.mockRejectedValue(new Error("接口不可用"));
+    apiMocks.listTracksPage.mockRejectedValue(new Error("接口不可用"));
     renderPage();
 
     expect(await screen.findByText("接口不可用")).toBeInTheDocument();
@@ -152,6 +201,7 @@ describe("TrackerPage", () => {
   });
 
   it("deletes a record and reloads", async () => {
+    apiMocks.listTracksPage.mockResolvedValue(makePage([makeTrack()]));
     apiMocks.listTracks.mockResolvedValue(makeList([makeTrack()]));
     apiMocks.deleteTrack.mockResolvedValue(undefined);
     renderPage();
@@ -166,20 +216,45 @@ describe("TrackerPage", () => {
   });
 
   it("从 URL 恢复状态筛选与关键词", async () => {
+    apiMocks.listTracksPage.mockResolvedValue(makePage([]));
     apiMocks.listTracks.mockResolvedValue(makeList([]));
     renderPage(["/tracker?status=interview&keyword=%E7%A4%BA%E4%BE%8B"]);
 
     await waitFor(() => {
-      expect(apiMocks.listTracks).toHaveBeenLastCalledWith({
-        status: "interview",
-        keyword: "示例",
-      });
+      expect(apiMocks.listTracksPage).toHaveBeenLastCalledWith(
+        { status: "interview", keyword: "示例" },
+        1,
+        20,
+      );
     });
     // 搜索框回填恢复出的关键词。
     const searchInput = screen.getByPlaceholderText(
       "搜索公司、岗位、备注或下一步",
     ) as HTMLInputElement;
     expect(searchInput.value).toBe("示例");
+  });
+
+  it("筛选条件变化时回第 1 页再拉取", async () => {
+    // 首屏就是 21 条的空页（跨两页），翻页条才可见。
+    apiMocks.listTracksPage.mockResolvedValue({ items: [], total: 21 });
+    apiMocks.listTracks.mockResolvedValue(makeList([]));
+    renderPage();
+    await screen.findByText(/还没有进度记录/);
+
+    // 先翻到第 2 页，再换筛选：页码必须归位，否则会拿着第 2 页去请求新筛选。
+    fireEvent.click(screen.getAllByTitle("2")[0]);
+    await waitFor(() => {
+      expect(apiMocks.listTracksPage).toHaveBeenLastCalledWith({ status: "", keyword: "" }, 2, 20);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /已投递/ }));
+    await waitFor(() => {
+      expect(apiMocks.listTracksPage).toHaveBeenLastCalledWith(
+        { status: "applied", keyword: "" },
+        1,
+        20,
+      );
+    });
   });
 });
 
@@ -307,5 +382,72 @@ describe("TrackImportModal", () => {
 
     // 全都说成"已保存"会让用户以为每条进度都更新了。
     expect(await screen.findByText(/新增 1 条，更新 2 条/)).toBeInTheDocument();
+  });
+});
+
+describe("TrackerPage ?job_id= 深链（RF-11）", () => {
+  it("带 job_id 进入：按其过滤并显示带岗位名的筛选标签", async () => {
+    jobApiMocks.getJob.mockResolvedValue({ id: 7, title: "市场运营专员", company: "示例科技" });
+    renderPage(["/tracker?job_id=7"]);
+
+    // 过滤参数透传给分页端点。
+    await waitFor(() =>
+      expect(apiMocks.listTracksPage).toHaveBeenCalledWith(
+        expect.objectContaining({ jobId: 7 }),
+        1,
+        20,
+      ),
+    );
+    expect(await screen.findByText(/只看该岗位的投递/)).toBeInTheDocument();
+    expect(screen.getByText(/市场运营专员 · 示例科技/)).toBeInTheDocument();
+  });
+
+  it("清除按钮：移除 job_id 参数并重拉（不再带过滤）", async () => {
+    jobApiMocks.getJob.mockResolvedValue({ id: 7, title: "市场运营专员", company: "示例科技" });
+    renderPage(["/tracker?job_id=7"]);
+    await screen.findByText(/只看该岗位的投递/);
+
+    fireEvent.click(screen.getByRole("button", { name: "清除岗位筛选" }));
+
+    await waitFor(() =>
+      expect(apiMocks.listTracksPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ jobId: undefined }),
+        1,
+        20,
+      ),
+    );
+    expect(screen.queryByText(/只看该岗位的投递/)).toBeNull();
+  });
+
+  it("岗位已删除：标签仍显示但写明实话，仍可清除", async () => {
+    jobApiMocks.getJob.mockRejectedValue(new Error("404"));
+    renderPage(["/tracker?job_id=7"]);
+
+    expect(await screen.findByText(/该岗位可能已删除/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "清除岗位筛选" }));
+    await waitFor(() => expect(screen.queryByText(/只看该岗位的投递/)).toBeNull());
+  });
+
+  it("非法 job_id（非数字/≤0）一律忽略：不过滤、不出标签", async () => {
+    renderPage(["/tracker?job_id=abc"]);
+    await waitFor(() =>
+      expect(apiMocks.listTracksPage).toHaveBeenCalledWith(
+        expect.objectContaining({ jobId: undefined }),
+        1,
+        20,
+      ),
+    );
+    expect(screen.queryByText(/只看该岗位的投递/)).toBeNull();
+
+    cleanup();
+    renderPage(["/tracker?job_id=-3"]);
+    await waitFor(() =>
+      expect(apiMocks.listTracksPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ jobId: undefined }),
+        1,
+        20,
+      ),
+    );
+    expect(screen.queryByText(/只看该岗位的投递/)).toBeNull();
   });
 });

@@ -11,7 +11,7 @@
    * 剪贴板仍可用；低于助手卡（3300）与悬浮球（3400），保持 球 > 助手卡 > 剪贴板
    * 的相对次序。
    */
-  z-index: 3200;
+  z-index: var(--rf-layer-clipboard-card);
   display: flex;
   flex-direction: column;
   width: min(360px, calc(100vw - 24px));

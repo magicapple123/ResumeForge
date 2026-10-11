@@ -14,7 +14,7 @@ import {
 import { Alert, Card, Empty, Input, Listy, Space, Tag, Typography } from "antd";
 import { ListyItem } from "../../components/common/ListyItem";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { createSearchParams, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { searchAll } from "../../api/search";
 import type { SearchHitType, SearchResult } from "../../types";
 import { formatDateTime } from "../../utils/format";
@@ -41,7 +41,6 @@ const MORE_HIT_META: Record<SearchHitType, { icon: ReactNode; label: string }> =
 export function SearchCard() {
   const [searchText, setSearchText] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
-  const [resultKeyword, setResultKeyword] = useState("");
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState("");
@@ -61,7 +60,6 @@ export function SearchCard() {
       setSearching(false);
       setSearched(false);
       setResult(null);
-      setResultKeyword("");
       setSearchError("");
       return;
     }
@@ -73,7 +71,6 @@ export function SearchCard() {
       const nextResult = await searchAll(keyword);
       if (currentSearch === searchVersion.current) {
         setResult(nextResult);
-        setResultKeyword(keyword);
       }
     } catch (error) {
       if (currentSearch === searchVersion.current) {
@@ -114,9 +111,8 @@ export function SearchCard() {
               itemRender={(job) => (
                 <ListyItem>
                   <Space>
-                    <Link to={`/jobs?${createSearchParams({ keyword: resultKeyword })}`}>
-                      {job.title}
-                    </Link>
+                    {/* 岗位有 id：直接深链打开该岗位（比 keyword 过滤精确）。 */}
+                    <Link to={`/jobs?job_id=${job.id}`}>{job.title}</Link>
                     <Tag>{job.company}</Tag>
                     <Tag color="blue">{job.location}</Tag>
                     <Typography.Text type="secondary">{job.salary || "薪资面议"}</Typography.Text>
@@ -137,7 +133,8 @@ export function SearchCard() {
               itemRender={(resume) => (
                 <ListyItem>
                   <Space>
-                    <Link to="/resumes">{resume.title}</Link>
+                    {/* 简历深链：落地简历中心并直接打开详情（RF-11 搜索直开）。 */}
+                    <Link to={`/resumes?resume_id=${resume.id}`}>{resume.title}</Link>
                     <Tag>{resume.job_title}</Tag>
                     <Typography.Text type="secondary">
                       {formatDateTime(resume.created_at)}

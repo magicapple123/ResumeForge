@@ -312,3 +312,11 @@ export interface WebFormFillRecord {
   items: WebFormRecordItem[];
   page_snapshot: WebFormRecordSnapshot[];
 }
+
+/**
+ * 填充记录列表行摘要（RF-08 分页端点 `GET /api/apply/webform/records/page` 专用）。
+ *
+ * **不含 `items`（填写值明细）与 `page_snapshot`（页面快照）**：这两块含用户填进页面的
+ * 真实值，随列表下发既慢又没必要；回看单条时走既有详情端点 `getWebFormRecord(id)`。
+ */
+export type WebFormRecordSummary = Omit<WebFormFillRecord, "items" | "page_snapshot">;

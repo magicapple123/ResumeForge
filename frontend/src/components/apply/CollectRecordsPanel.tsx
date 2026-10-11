@@ -6,14 +6,19 @@
  * 结果如何（已暂存 / 重复 / 失败原因）。
  */
 import { HistoryOutlined } from "@ant-design/icons";
-import { Alert, Collapse, Empty, Pagination, Space, Tag, Typography } from "antd";
-import { listApplyTasks } from "../../api/apply";
+import { Alert, Button, Collapse, Empty, Pagination, Space, Tag, Typography } from "antd";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { listApplyTasksPage } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
-import { useClientPagination } from "../../hooks/useClientPagination";
+import { isActiveTaskStatus } from "../../hooks/useTaskPolling";
 import PageSkeleton from "../common/PageSkeleton";
 import { TASK_STATUS_META, type ApplyTask } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import CollectResultPanel from "./CollectResultPanel";
+
+/** 采集批次持续累积，一页 20 条走服务端分页（/api/apply/tasks/page）。 */
+const COLLECT_PAGE_SIZE = 20;
 
 interface Props {
   /** 采集正在跑时禁用展开里的导入动作。 */
@@ -81,20 +86,15 @@ function resultText(task: ApplyTask): string {
 }
 
 export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }: Props) {
-  const { data, loading, error } = useApi<ApplyTask[]>(
-    () => listApplyTasks({ kind: "collect", limit: 30 }),
-    [refreshKey],
+  const [page, setPage] = useState(1);
+  // 服务端分页：total 来自响应的 total 字段，翻页 / refreshKey 变化都重新拉取。
+  const { data, loading, error } = useApi(
+    () => listApplyTasksPage("collect", page, COLLECT_PAGE_SIZE),
+    [page, refreshKey],
   );
 
-  const records = data ?? [];
-  // 采集批次持续累积，一页 10 条分页展示（Collapse 没有内建分页，走通用客户端分页）。
-  // hook 必须在所有 early return 之前调用。
-  const {
-    page,
-    setPage,
-    paged: pagedRecords,
-    total: recordTotal,
-  } = useClientPagination(records, 10);
+  const records = data?.items ?? [];
+  const recordTotal = data?.total ?? 0;
 
   if (error) return <Alert type="error" showIcon title={error} />;
   if (loading && !data) return <PageSkeleton rows={5} card={false} />;
@@ -112,7 +112,7 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
     <>
       <Collapse
         className="apply-collect-records"
-        items={pagedRecords.map((record) => {
+        items={records.map((record) => {
           const meta = TASK_STATUS_META[record.status];
           const condition = conditionText(record);
           return {
@@ -132,6 +132,19 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
               <Space orientation="vertical" size={8} style={{ width: "100%" }}>
                 {record.message && <Alert type="info" showIcon title={record.message} />}
                 <CollectResultPanel taskId={record.id} disabled={disabled} />
+                {/* 批次完成后给下一步入口（RF-Q1）：候选岗位的终点是岗位广场，不给入口
+                    用户不知道"采完/导完然后呢"。投递批次的对应入口在 ApplyProgressPanel
+                    （「去求职进度跟进」→ /tracker），那是另一条链路的终点。 */}
+                {!isActiveTaskStatus(record.status) && (
+                  <Space size={4} wrap align="center">
+                    <Typography.Text type="secondary">挑选导入之后：</Typography.Text>
+                    <Link to="/jobs">
+                      <Button type="link" size="small" style={{ padding: 0 }}>
+                        查看候选岗位
+                      </Button>
+                    </Link>
+                  </Space>
+                )}
               </Space>
             ),
           };
@@ -140,7 +153,7 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
       <div style={{ textAlign: "right", marginTop: 12 }}>
         <Pagination
           current={page}
-          pageSize={10}
+          pageSize={COLLECT_PAGE_SIZE}
           total={recordTotal}
           onChange={setPage}
           hideOnSinglePage

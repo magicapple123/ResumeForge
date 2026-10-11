@@ -13,6 +13,8 @@ import { getStats } from "../api/search";
 import { getReminderPopupSetting } from "../api/settings";
 import { useApi } from "../hooks/useApi";
 import { onceUserGuideClosed } from "../utils/userGuide";
+import { FirstDeliveryPanel } from "../features/activation/FirstDeliveryPanel";
+import { useActivationProgress } from "../features/activation/useActivationProgress";
 import { LatestCards } from "./home/LatestCards";
 import { ReminderPopup } from "./home/ReminderPopup";
 import { RemindersCard } from "./home/RemindersCard";
@@ -29,6 +31,8 @@ let reminderPopupShownThisSession = false;
 
 export default function HomePage() {
   const { data: stats, loading, error: statsError } = useApi(getStats);
+  // 「第一份交付」进度：复用上面已取的 stats，不新增请求。全部完成后面板消失。
+  const { stages: activationStages, allDone: activationAllDone } = useActivationProgress(stats);
   const { data: upcomingReminders, loading: remindersLoading } = useApi(
     () => listUpcomingReminders(8),
     [],
@@ -85,6 +89,8 @@ export default function HomePage() {
       {statsError && (
         <Alert type="error" showIcon title={statsError} style={{ marginBottom: 16 }} />
       )}
+
+      {stats && !activationAllDone && <FirstDeliveryPanel stages={activationStages} />}
 
       <StatsCards stats={stats} loading={loading} />
 

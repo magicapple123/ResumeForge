@@ -10,6 +10,7 @@ import TouTouSaveCard from "./TouTouSaveCard";
 import TouTouProfilePromptCard from "./TouTouProfilePromptCard";
 import { TOU_TOU_FACE_SOURCES, faceKeyFor } from "./touTouFaces";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+import { layer } from "../../theme/tokens";
 import { useTouTouOrbDrag } from "./useTouTouOrbDrag";
 import {
   getProfileEditControl,
@@ -461,7 +462,7 @@ export default function TouTouOrb({
          * 抬到与 .tt-tip 同一地标 3450（见 tou-tou.css）。默认的 hover 事件
          * 不影响 280ms 的单击/双击判定。
          */
-        overlayStyle={{ zIndex: 3450 }}
+        overlayStyle={{ zIndex: layer.orbTooltip }}
       >
         <button
           ref={buttonRef}

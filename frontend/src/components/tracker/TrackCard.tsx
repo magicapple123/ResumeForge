@@ -85,6 +85,14 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
           <Typography.Text type="secondary">状态更新 {track.status_date}</Typography.Text>
         )}
         <Typography.Text type="secondary">{TRACK_SOURCE_LABELS[track.source]}</Typography.Text>
+        {/* 使用的简历版本（RF-17）：有活关联显示名字；只剩标题快照（简历已删、
+            resume_id 被 SET NULL）时如实标注"历史关联"，不臆造还关联着。 */}
+        {(track.resume_id || track.resume_title) && (
+          <Typography.Text type="secondary">
+            简历：{track.resume_title || `#${track.resume_id}`}
+            {!track.resume_id && "（历史关联）"}
+          </Typography.Text>
+        )}
       </div>
 
       {(track.next_action || track.next_action_date) && (

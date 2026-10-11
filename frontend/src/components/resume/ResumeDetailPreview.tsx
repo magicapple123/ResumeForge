@@ -25,7 +25,7 @@ import {
 } from "@ant-design/icons";
 import { Button, Collapse, Space, Tag, Tooltip, Typography } from "antd";
 import { Alert } from "antd";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { RESUME_ENHANCEMENT_LEVELS } from "../../config";
@@ -45,11 +45,27 @@ import ResumeReviseModal from "./ResumeReviseModal";
 import SharePackageModal from "../SharePackageModal";
 import ResumePreview, { type ResumePreviewHandle } from "../ResumePreview";
 import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
+import EvidencePanel from "./EvidencePanel";
+import { ORIGIN_LABELS } from "./factAnnotationMeta";
+import type { FactAnnotation } from "../../types";
 
 interface LayoutStatus {
   pages: number;
   scale: number;
   overflow: boolean;
+}
+
+/** 把一条标注压成预览角标需要的形状（label 显示在角标上，其余进 Popover）。 */
+function toBadge(annotation: FactAnnotation): {
+  label: string;
+  sourceFact: string;
+  boundary: string;
+} {
+  return {
+    label: ORIGIN_LABELS[annotation.origin] ?? annotation.origin,
+    sourceFact: annotation.source_fact ?? "",
+    boundary: annotation.boundary ?? "",
+  };
 }
 
 interface Props {
@@ -142,6 +158,27 @@ export default function ResumeDetailPreview({
     return { fabricationWarnings: rest, legacyCoverageWarnings: legacy };
   }, [detail.warnings]);
   const coverageNotes = detail.coverage_notes ?? [];
+  // 事实来源标注（RF-13）：证据面板 + 预览角标共用同一份数据。
+  const factAnnotations = useMemo(() => detail.fact_annotations ?? [], [detail.fact_annotations]);
+  // 悬停路径（`experience.0.description.1`）与标注路径（`experience.0.description`）
+  // 不是同一粒度：精确命中优先，否则取最长前缀的标注——指向条目里的某一条要点时，
+  // 说得出来源的是它所属的那一栏。
+  const describeAnnotation = useCallback(
+    (path: string): { label: string; sourceFact: string; boundary: string } | null => {
+      let best: FactAnnotation | null = null;
+      for (const annotation of factAnnotations) {
+        if (annotation.path === path) return toBadge(annotation);
+        if (
+          path.startsWith(`${annotation.path}.`) &&
+          (best === null || annotation.path.length > best.path.length)
+        ) {
+          best = annotation;
+        }
+      }
+      return best ? toBadge(best) : null;
+    },
+    [factAnnotations],
+  );
 
   return (
     <div>
@@ -272,6 +309,11 @@ export default function ResumeDetailPreview({
           }
         />
       )}
+      {/* 事实来源展示（RF-13）：与"没写进简历"分开——它回答的是"写进去的内容
+          从哪来"，挂在 coverage Alert 之后、预览之前，先看筛选结果再看来源。 */}
+      {factAnnotations.length > 0 && (
+        <EvidencePanel annotations={factAnnotations} content={detail.content} />
+      )}
       <ResumePreview
         ref={resolvedPreviewRef}
         html={html}
@@ -282,6 +324,8 @@ export default function ResumeDetailPreview({
         // 鼠标划过纸面时，工具栏要说出"现在指向的是哪一栏"——这要靠简历内容才起得准
         // （没有内容只能说出「项目经历的第 2 条要点」，说不出是哪个项目）。
         describePath={(path) => describeResumeFieldPath(path, detail.content)}
+        // 带标注的路径在悬停工具栏上加一枚来源角标（悬停可看依据与边界）。
+        describeAnnotation={describeAnnotation}
         // 预览里点中的那一栏 → 只编辑这一栏（快速编辑），不打开整份编辑器。
         // 通读、跨栏改、写作增强都留给「手动调整」。
         onEditTarget={(path) => setQuickEditPath(path)}

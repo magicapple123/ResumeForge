@@ -1,6 +1,7 @@
 /** 简历相关接口：生成（SSE）、历史、渲染预览、导出下载。 */
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 import type {
+  DeliverySummary,
   ExportFormat,
   ExportRequest,
   GenerateOptions,
@@ -14,11 +15,13 @@ import type {
   ResumeLayout,
   ResumeLayoutAnalysis,
   ResumeLayoutMeasure,
+  ResumePendingChange,
+  ResumeReviewResult,
   ResumeSuggestions,
   ResumeTemplateCatalog,
   StreamEvent,
 } from "../types";
-import { ApiError, buildQuery, extractError, getFilenameFromDisposition, request } from "./client";
+import { buildQuery, getFilenameFromDisposition, request, requestRaw } from "./client";
 import { consumeSSE } from "./stream";
 
 export function listResumes(
@@ -95,6 +98,28 @@ export function reviseResume(id: number, instructions: string): Promise<ResumeDe
   });
 }
 
+/**
+ * 待审变更预检（RF-13）：编辑器的 AI 改写 / 手填在落表单前过三把闸门。
+ * 纯审阅预检——不落库、不改简历内容。
+ */
+export function prepareResumeReview(
+  id: number,
+  changes: ResumePendingChange[],
+): Promise<ResumeReviewResult[]> {
+  return request(`/resumes/${id}/review/prepare`, {
+    method: "POST",
+    body: JSON.stringify({
+      changes: changes.map(({ path, before, after, origin, instruction }) => ({
+        path,
+        before,
+        after,
+        origin,
+        instruction: instruction ?? "",
+      })),
+    }),
+  }).then((payload) => (payload as { results: ResumeReviewResult[] }).results);
+}
+
 /** 流式生成简历，事件定义见 types/StreamEvent；job_id 为 null 表示生成通用简历。 */
 export function generateResume(
   payload: { job_id: number | null; title?: string; options: GenerateOptions },
@@ -153,12 +178,13 @@ export async function previewResumeTemplate(payload: {
   font_scale?: ResumeFontScale;
   resume_id?: number;
 }): Promise<string> {
-  const resp = await fetch("/api/resume-templates/preview", {
+  const resp = await requestRaw("/resume-templates/preview", {
     method: "POST",
+    // 渲染整份简历可能超出 15s 默认预算，走 task 档（30s）。
+    budget: "task",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
   return resp.text();
 }
 
@@ -190,13 +216,13 @@ export async function renderResume(
   content: ResumeContent,
   layout: Partial<ResumeLayout> = {},
 ): Promise<string> {
-  const resp = await fetch("/api/resumes/render", {
+  const resp = await requestRaw("/resumes/render", {
     method: "POST",
+    budget: "task",
     headers: { "Content-Type": "application/json" },
     // 后端 ResumeRenderRequest 的结构是 { content, template, page_limit, font_scale }。
     body: JSON.stringify({ content, ...layout }),
   });
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
   return resp.text();
 }
 
@@ -219,6 +245,8 @@ export async function exportResume(
   format: ExportFormat,
   /** 为真时跳过"正文还有未完成标记"的拦截，导出一份草稿自查。 */
   allowIncomplete = false,
+  /** 为真时让后端把这次导出冻结成一份投递快照（RF-17 正式投递存档）；默认不落。 */
+  recordDelivery = false,
 ): Promise<{
   blob: Blob;
   filename: string;
@@ -226,9 +254,14 @@ export async function exportResume(
   pageLimit: number | null;
   savedTo?: string;
 }> {
-  const suffix = allowIncomplete ? "&allow_incomplete=true" : "";
-  const resp = await fetch(`/api/resumes/${id}/export?format=${format}${suffix}`);
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
+  const suffix =
+    (allowIncomplete ? "&allow_incomplete=true" : "") +
+    (recordDelivery ? "&record_delivery=true" : "");
+  // 导出响应是文件流：走 requestRaw（错误分类与 request() 一致），PDF 渲染可能较慢，
+  // 走 export 预算（10 分钟），不吃 15s 的默认超时。
+  const resp = await requestRaw(`/resumes/${id}/export?format=${format}${suffix}`, {
+    budget: "export",
+  });
   return {
     blob: await resp.blob(),
     filename:
@@ -257,12 +290,12 @@ export async function exportResumeWithOptions(
   pageLimit: number | null;
   savedTo?: string;
 }> {
-  const resp = await fetch(`/api/resumes/${id}/export`, {
+  const resp = await requestRaw(`/resumes/${id}/export`, {
     method: "POST",
+    budget: "export",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(options),
   });
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
   return {
     blob: await resp.blob(),
     filename:
@@ -292,4 +325,12 @@ function readCountHeader(value: string | null): number | null {
 export async function fetchResumeHtml(id: number, allowIncomplete = false): Promise<string> {
   const { blob } = await exportResume(id, "html", allowIncomplete);
   return blob.text();
+}
+
+/**
+ * 一份简历的交付记录摘要（RF-17）：这一版投给了谁、什么时候、指纹是什么。
+ * 不含正文全文——列表只做展示，正文仍在简历详情里。
+ */
+export function listResumeDeliveries(id: number): Promise<DeliverySummary[]> {
+  return request(`/resumes/${id}/deliveries`);
 }

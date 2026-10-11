@@ -24,6 +24,8 @@
     "test:watch": "vitest",
     "test:changed": "vitest run --changed HEAD",
     "test:coverage": "vitest run --coverage",
+    "smoke": "playwright test",
+    "smoke:headed": "playwright test --headed",
     "format": "prettier --write src vite.config.ts vitest.config.ts eslint.config.js package.json index.html",
     "format:check": "prettier --check src vite.config.ts vitest.config.ts eslint.config.js package.json index.html"
   },
@@ -36,6 +38,7 @@
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@testing-library/dom": "^10.4.2",

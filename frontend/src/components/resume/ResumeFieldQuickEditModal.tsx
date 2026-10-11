@@ -10,7 +10,7 @@
  */
 import { SaveOutlined } from "@ant-design/icons";
 import { App, Button, Input, Modal, Space, Typography } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ResumeContent } from "../../types";
 import {
   describeResumeFieldPath,
@@ -41,10 +41,13 @@ export default function ResumeFieldQuickEditModal({
   onClose,
   onSaved,
 }: Props) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [text, setText] = useState("");
   const [draft, setDraft] = useState<ResumeContent>(content);
   const [saving, setSaving] = useState(false);
+  // 未保存守卫（RF-13）：文本框与打开时的初始值不一致即视为脏，取消/遮罩/ESC
+  // 都要先确认；保存成功后随弹窗关闭自然清脏。
+  const [initialText, setInitialText] = useState("");
 
   // 每次打开/换栏都从简历当前值重新取：不要沿用上一栏的残留文本。
   // Compiler 规范：随输入变化的重置用渲染期守卫式调整（守卫键与原 deps 同源；
@@ -65,9 +68,44 @@ export default function ResumeFieldQuickEditModal({
       setDraft(content);
       const value = readResumeValueByPath(content, path);
       // 一段经历的"工作内容 / 要点"是字符串数组：按行编辑，一行一条。
-      setText(Array.isArray(value) ? value.join("\n") : typeof value === "string" ? value : "");
+      const nextText = Array.isArray(value)
+        ? value.join("\n")
+        : typeof value === "string"
+          ? value
+          : "";
+      setText(nextText);
+      setInitialText(nextText);
     }
   }
+
+  const dirty = text !== initialText;
+
+  // 弹窗开着且没保存的修改还在时，挂 beforeunload（照抄 ProfilePage 的模式）。
+  useEffect(() => {
+    if (!open || !dirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Chrome/Edge 只认 returnValue，两者都给。
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [open, dirty]);
+
+  const requestClose = () => {
+    if (saving) return;
+    if (!dirty) {
+      onClose();
+      return;
+    }
+    modal.confirm({
+      title: "未保存的修改将丢失",
+      content: "这一栏还有改动没有保存，确定要关闭吗？",
+      okText: "放弃修改",
+      cancelText: "继续编辑",
+      onOk: onClose,
+    });
+  };
 
   const isList = useMemo(() => {
     if (!path) return false;
@@ -98,12 +136,14 @@ export default function ResumeFieldQuickEditModal({
     <Modal
       title={`编辑：${label}`}
       open={open}
-      onCancel={onClose}
+      onCancel={requestClose}
+      mask={{ closable: !saving }}
+      keyboard={!saving}
       width={620}
       destroyOnHidden
       footer={
         <Space>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={requestClose}>取消</Button>
           <Button
             type="primary"
             icon={<SaveOutlined />}
@@ -146,9 +186,12 @@ export default function ResumeFieldQuickEditModal({
           onChange={(next) => {
             setDraft(next);
             const value = readResumeValueByPath(next, path);
-            setText(
-              Array.isArray(value) ? value.join("\n") : typeof value === "string" ? value : "",
-            );
+            const nextText = Array.isArray(value)
+              ? value.join("\n")
+              : typeof value === "string"
+                ? value
+                : "";
+            setText(nextText);
           }}
         />
       </div>

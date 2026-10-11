@@ -20,7 +20,7 @@
  * 如果只有 URL 而没有当前标签页草稿，重放的是**「读到了什么」**，勾选会回到默认；有草稿时则连
  * 勾选、手改值和填充结果一起恢复。这样既不把临时状态塞进 URL，也不会在正常切页时丢失进度。
  */
-import { Alert, App, Card, Space } from "antd";
+import { Alert, App, Card, Space, Typography } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDiagnostics } from "../api/system";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
@@ -44,6 +44,7 @@ import {
 import BrowserSettingsModal from "../components/apply/BrowserSettingsModal";
 import { useWebFormSession } from "../features/webform/useWebFormSession";
 import type { WebFormSessionState } from "../features/webform/webFormSessionStorage";
+import { readActiveDatasetId } from "../utils/datasetScope";
 import WebFormLearningDialog, {
   type LearningSelection,
 } from "../components/webform/WebFormLearningDialog";
@@ -99,7 +100,9 @@ export default function WebFormPage() {
     initial: restoredSession,
     persist: persistWebFormSession,
     clear: clearWebFormSession,
-  } = useWebFormSession();
+    // 草稿按数据集隔离（RF-13）：切换数据集是整页 reload，本页生命周期内
+    // 数据集不变，挂载时读一次 localStorage 即可（页头负责写入）。
+  } = useWebFormSession(readActiveDatasetId());
   const [snapshot, setSnapshot] = useState<WebFormSnapshot | null>(restoredSession.snapshot);
   const [preview, setPreview] = useState<WebFormPreview | null>(restoredSession.preview);
   const [selected, setSelected] = useState<Set<number>>(() => new Set(restoredSession.selected));
@@ -560,14 +563,27 @@ export default function WebFormPage() {
     return 0;
   }, [preview, result, running]);
 
+  // 渐进展开（RF-12）：浏览器没就绪、也没有进行中的草稿时，只保留「就绪引导」
+  // （浏览器控制卡 + 步骤条/读取卡）——纯说明性的长卡（AI 兜底、放宽模式）此时
+  // 抢的是还没开始填表的人的注意力。就绪（或恢复出未完成草稿）后全部展开。
+  // 说明内容不删，只是推迟到需要时出现；LiveModeCard 的「开启智能逐项填表」
+  // 按钮在未就绪时也要可见可禁用（WebFormPage.live.test.tsx 钉着），因此保留。
+  const controlsExpanded =
+    running || sessionActive || Boolean(snapshot) || Boolean(preview) || Boolean(result);
+
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-      <Alert
-        type="warning"
-        showIcon
-        title="这个功能只负责把资料填进页面，不会替你提交"
-        description="填充完成后请回到浏览器窗口逐项核对，确认无误后由你自己点击页面上的提交按钮。"
-      />
+      {/* 安全说明保留：就绪前只保留标题这一行红线；完整说明在控制项展开后一起出现。 */}
+      {controlsExpanded ? (
+        <Alert
+          type="warning"
+          showIcon
+          title="这个功能只负责把资料填进页面，不会替你提交"
+          description="填充完成后请回到浏览器窗口逐项核对，确认无误后由你自己点击页面上的提交按钮。"
+        />
+      ) : (
+        <Alert type="warning" showIcon title="这个功能只负责把资料填进页面，不会替你提交" />
+      )}
 
       <BrowserControlCard
         targetUrl={targetUrl}
@@ -589,16 +605,19 @@ export default function WebFormPage() {
         onExportDiagnostics={handleExportDiagnostics}
         onEndSession={handleEndSession}
       />
-      {/* AI 兜底：规则能确定就不调用模型，只有认不出的框才问一次。 */}
-      <AiAssistCard
-        aiOn={aiOn}
-        aiAvailable={aiAvailable}
-        liveRunning={live?.running}
-        onAiEnabledChange={setAiEnabled}
-      />
+      {/* AI 兜底：规则能确定就不调用模型，只有认不出的框才问一次。
+          渐进展开：就绪前收起（说明性长卡，与填表动作无直接关系）。 */}
+      {controlsExpanded ? (
+        <AiAssistCard
+          aiOn={aiOn}
+          aiAvailable={aiAvailable}
+          liveRunning={live?.running}
+          onAiEnabledChange={setAiEnabled}
+        />
+      ) : null}
       {/* 放宽模式快捷入口：与设置页是同一个开关（后端持久化，默认关）。
           预览每次都会按当前开关重新计算，改完重读表单即可生效。 */}
-      <RelaxedModeCard />
+      {controlsExpanded ? <RelaxedModeCard /> : null}
 
       {/* 「智能逐项填表」：与上面的「读取当前表单 → 批量填」并存，不是替代。
           它不做预先快照——点到哪个框才现场匹配，所以不存在"页面一联动序号就失效"。 */}
@@ -620,6 +639,12 @@ export default function WebFormPage() {
         snapshot={snapshot}
         onRead={handleRead}
       />
+
+      {controlsExpanded ? null : (
+        <Typography.Text type="secondary">
+          浏览器就绪后，安全说明、AI 辅助、放宽模式等控制项会在这里逐步展开。
+        </Typography.Text>
+      )}
 
       {preview ? (
         <PreviewCard

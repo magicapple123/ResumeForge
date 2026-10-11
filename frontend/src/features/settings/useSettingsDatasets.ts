@@ -11,6 +11,7 @@ import {
   renameDataset,
 } from "../../api/settings";
 import type { DatasetInfo } from "../../types";
+import { formatErrorGuidance } from "../../api/errorGuidance";
 import { downloadBlob } from "../../utils/download";
 import { reloadPage } from "../../utils/navigation";
 
@@ -121,7 +122,8 @@ export function useSettingsDatasets() {
       // 整页重载：切换后所有本地状态都要按新数据集重建。失败时保留 loading 以便重试。
       window.setTimeout(reloadPage, 800);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "切换数据集失败");
+      // RF-20：失败不只显示原始异常——给「原因 + 建议 + 编号」指引。
+      message.error(formatErrorGuidance(err, "切换数据集失败"));
       setSwitchingDatasetId(null);
     }
   };

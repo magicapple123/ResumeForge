@@ -4,7 +4,7 @@ import type {
   ResumeTemplatePayload,
   TemplateRecognitionDraft,
 } from "../types";
-import { ApiError, extractError, request } from "./client";
+import { request } from "./client";
 
 export function listResumeTemplates(kind?: "style" | "format"): Promise<ResumeTemplateDetail[]> {
   return request(`/resume-templates${kind ? `?kind=${kind}` : ""}`);
@@ -48,12 +48,12 @@ export async function importTemplateFromFile(file: File, name = ""): Promise<Res
   const formData = new FormData();
   formData.append("file", file);
   if (name.trim()) formData.append("name", name.trim());
-  const resp = await fetch("/api/resume-templates/import-from-file", {
+  // request() 对 FormData 不预设 Content-Type；简历文件可能几 MB，走 upload 预算。
+  return request("/resume-templates/import-from-file", {
     method: "POST",
     body: formData,
+    budget: "upload",
   });
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
-  return (await resp.json()) as ResumeTemplateDetail;
 }
 
 /** 分析多份参考图片/文档，只返回可编辑草稿，不落库。 */
@@ -64,10 +64,9 @@ export async function analyzeTemplateFromFiles(
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   if (name.trim()) formData.append("name", name.trim());
-  const resp = await fetch("/api/resume-templates/analyze-from-files", {
+  return request("/resume-templates/analyze-from-files", {
     method: "POST",
     body: formData,
+    budget: "upload",
   });
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
-  return (await resp.json()) as TemplateRecognitionDraft;
 }

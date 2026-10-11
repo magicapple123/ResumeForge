@@ -12,6 +12,7 @@ import MaterialsPage from "./MaterialsPage";
 
 const apiMocks = vi.hoisted(() => ({
   listMaterials: vi.fn(),
+  getMaterial: vi.fn(),
   listMaterialCategories: vi.fn(),
   createMaterial: vi.fn(),
   updateMaterial: vi.fn(),
@@ -53,6 +54,8 @@ function renderPage() {
 
 beforeEach(() => {
   apiMocks.listMaterials.mockReset().mockResolvedValue(ITEMS);
+  // 详情与编辑按需取全量（RF-25：列表只带附件元信息）。
+  apiMocks.getMaterial.mockReset().mockResolvedValue(ITEMS[0]);
   apiMocks.listMaterialCategories.mockReset().mockResolvedValue(["证书"]);
   userFileMocks.listUserFiles.mockReset().mockResolvedValue({ items: [], total: 0 });
   userFileMocks.openUserFile.mockReset().mockResolvedValue({ ok: true });

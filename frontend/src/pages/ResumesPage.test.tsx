@@ -1,6 +1,6 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import type { ResumeBrief } from "../types";
@@ -10,6 +10,9 @@ const apiMocks = vi.hoisted(() => ({
   deleteResume: vi.fn(),
   listResumes: vi.fn(),
   updateResumeFavorite: vi.fn(),
+  getResume: vi.fn(),
+  fetchResumeHtml: vi.fn(),
+  renderResume: vi.fn(),
 }));
 
 // 展开真实模块再覆盖：显式列导出时，生产代码新增一个导出就会让调用方直接抛
@@ -19,11 +22,17 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   deleteResume: apiMocks.deleteResume,
   listResumes: apiMocks.listResumes,
   updateResumeFavorite: apiMocks.updateResumeFavorite,
-  getResume: vi.fn(),
-  fetchResumeHtml: vi.fn(),
-  renderResume: vi.fn(),
+  getResume: apiMocks.getResume,
+  fetchResumeHtml: apiMocks.fetchResumeHtml,
+  renderResume: apiMocks.renderResume,
   updateResume: vi.fn(),
   fetchResumeTemplates: vi.fn().mockResolvedValue(TEMPLATE_CATALOG),
+}));
+
+// 深链用例只关心"详情弹窗开了没有、URL 参数有没有清掉"；预览主体是重渲染路径，
+// 由它自己的测试负责，这里桩掉。
+vi.mock("../components/resume/ResumeDetailPreview", () => ({
+  default: () => <div data-testid="resume-preview-stub" />,
 }));
 
 const RESUME: ResumeBrief = {
@@ -60,6 +69,16 @@ beforeEach(() => {
   apiMocks.listResumes.mockReset().mockResolvedValue({ items: [RESUME], total: 1 });
   apiMocks.updateResumeFavorite.mockReset().mockResolvedValue({});
   apiMocks.deleteResume.mockReset().mockResolvedValue(undefined);
+  apiMocks.getResume.mockReset().mockResolvedValue({
+    ...RESUME,
+    content: {},
+    warnings: [],
+    parse_error: "",
+    rationale: "",
+    coverage_notes: [],
+  });
+  apiMocks.fetchResumeHtml.mockReset().mockResolvedValue("<p>预览</p>");
+  apiMocks.renderResume.mockReset().mockResolvedValue("<p>预览</p>");
 });
 
 afterEach(() => {
@@ -184,6 +203,55 @@ describe("ResumesPage URL 状态化", () => {
     });
     const searchInput = screen.getByPlaceholderText("搜索简历记录") as HTMLInputElement;
     expect(searchInput.value).toBe("制造");
+  });
+});
+
+describe("ResumesPage ?resume_id= 深链（RF-11）", () => {
+  function LocationProbe() {
+    const location = useLocation();
+    return <span data-testid="location">{location.pathname + location.search}</span>;
+  }
+
+  function renderPageWithProbe(initialEntries: string[]) {
+    return render(
+      <MemoryRouter initialEntries={initialEntries}>
+        <AntdApp>
+          <ResumesPage />
+          <LocationProbe />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+  }
+
+  it("深链自动打开详情弹窗并按 id 取详情", async () => {
+    renderPage(["/resumes?resume_id=8"]);
+
+    expect(await screen.findByTestId("resume-preview-stub")).toBeInTheDocument();
+    expect(apiMocks.getResume).toHaveBeenCalledWith(8);
+    expect(apiMocks.fetchResumeHtml).toHaveBeenCalledWith(8);
+  });
+
+  it("非法 resume_id 忽略：不打开弹窗、不取详情", async () => {
+    renderPage(["/resumes?resume_id=abc"]);
+
+    await screen.findByText(RESUME.title);
+    expect(screen.queryByTestId("resume-preview-stub")).toBeNull();
+    expect(apiMocks.getResume).not.toHaveBeenCalled();
+  });
+
+  it("关闭弹窗时从 URL 移除 resume_id 参数（replace，不打历史）", async () => {
+    renderPageWithProbe(["/resumes?resume_id=8"]);
+    await screen.findByTestId("resume-preview-stub");
+
+    // antd 弹窗右上角的关闭键可访问名是 Close。
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    // 只断 URL：jsdom 里 antd 的离场动画等不到 transitionend，弹窗内容不会真正
+    // 卸载（onClose 已同步触发），断 DOM 移除会假红。
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).not.toContain("resume_id"),
+    );
+    expect(screen.getByTestId("location").textContent).toBe("/resumes");
   });
 });
 

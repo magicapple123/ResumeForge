@@ -36,6 +36,15 @@ interface Props {
    * 由调用方提供：标签要靠简历内容才起得准，而预览组件本身只拿到渲染好的 HTML。
    */
   describePath?: (path: string) => string;
+  /**
+   * 事实来源标注（RF-13）：路径带标注时返回角标内容（label 显示在角标上，
+   * sourceFact / boundary 放进悬停 Popover）；null 表示这一栏没有标注。
+   */
+  describeAnnotation?: (path: string) => {
+    label: string;
+    sourceFact: string;
+    boundary: string;
+  } | null;
   /** 渲染完成后的版式状态。pages 始终是用户设置的页数上限。 */
   onLayoutStatus?: (status: { pages: number; scale: number; overflow: boolean }) => void;
   /** 实测高度，交给版面诊断使用。 */
@@ -43,7 +52,17 @@ interface Props {
 }
 
 const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePreview(
-  { html, warnings, pages = 1, height, onEditTarget, describePath, onLayoutStatus, onMeasure },
+  {
+    html,
+    warnings,
+    pages = 1,
+    height,
+    onEditTarget,
+    describePath,
+    describeAnnotation,
+    onLayoutStatus,
+    onMeasure,
+  },
   ref,
 ) {
   const pageCount = Math.max(1, Math.round(pages));
@@ -110,9 +129,23 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
       chip.dataset.path = path;
       const label = chip.querySelector(".resume-preview-hover-label");
       if (label) label.textContent = describePath ? describePath(path) : path;
+      // 事实来源角标（RF-13）：带标注的路径点亮角标；详情写进 data-* 供 Popover 读。
+      const badge = chip.querySelector<HTMLElement>(".resume-preview-hover-badge");
+      const annotation = badge && describeAnnotation ? describeAnnotation(path) : null;
+      if (badge) {
+        if (annotation) {
+          badge.textContent = annotation.label;
+          badge.dataset.sourceFact = annotation.sourceFact ?? "";
+          badge.dataset.boundary = annotation.boundary ?? "";
+          badge.style.display = "inline-flex";
+        } else {
+          badge.textContent = "";
+          badge.style.display = "none";
+        }
+      }
       chip.style.display = "inline-flex";
     },
-    [describePath],
+    [describePath, describeAnnotation],
   );
 
   const handleWheel = useCallback((event: globalThis.WheelEvent) => {

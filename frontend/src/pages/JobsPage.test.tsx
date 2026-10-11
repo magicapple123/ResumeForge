@@ -84,6 +84,7 @@ function renderPageWithProbe(initialEntries: string[] = ["/jobs"]) {
 // 备选岗位抽屉与「导入到岗位」都会调它；不挡掉的话 jsdom 里会真发 fetch。
 const candidateMocks = vi.hoisted(() => ({
   listCandidateJobs: vi.fn(),
+  listCandidateJobsPage: vi.fn(),
   getCandidateJob: vi.fn(),
   createCandidateJob: vi.fn(),
   updateCandidateJob: vi.fn(),
@@ -344,9 +345,10 @@ describe("从备选岗位导入", () => {
     // 用户看到的就是"导入进来什么都没有"——数据其实一直都在。
     //
     // 列表接口也刻意不带 JD（最多 300 条 × 单条上限几万字符），所以要取详情那一条。
-    candidateMocks.listCandidateJobs.mockResolvedValue([
-      makeCandidate({ id: 9, title: "后端开发工程师", raw_text: "" }),
-    ]);
+    candidateMocks.listCandidateJobsPage.mockResolvedValue({
+      items: [makeCandidate({ id: 9, title: "后端开发工程师", raw_text: "" })],
+      total: 1,
+    });
     candidateMocks.getCandidateJob.mockResolvedValue(
       makeCandidateDetail({
         id: 9,
@@ -368,13 +370,18 @@ describe("从备选岗位导入", () => {
   });
 
   it("从采集记录跳转时只加载对应批次，并自动打开备选岗位", async () => {
-    candidateMocks.listCandidateJobs.mockResolvedValue([
-      makeCandidate({ id: 12, title: "官网后端工程师", collect_task_id: 8 }),
-    ]);
+    candidateMocks.listCandidateJobsPage.mockResolvedValue({
+      items: [makeCandidate({ id: 12, title: "官网后端工程师", collect_task_id: 8 })],
+      total: 1,
+    });
     renderPage(["/jobs?collect_task_ids=8,9"]);
 
     await waitFor(() =>
-      expect(candidateMocks.listCandidateJobs).toHaveBeenCalledWith({ collectTaskIds: [8, 9] }),
+      expect(candidateMocks.listCandidateJobsPage).toHaveBeenCalledWith(
+        { collectTaskIds: [8, 9] },
+        1,
+        12,
+      ),
     );
     expect(await screen.findByText(/这里只显示选中采集记录的岗位/)).toBeInTheDocument();
     expect(screen.getByText("官网后端工程师")).toBeInTheDocument();
@@ -382,7 +389,7 @@ describe("从备选岗位导入", () => {
 
   it("点击备选岗位卡片会读取并展示完整详情", async () => {
     const candidate = makeCandidate({ id: 21, title: "数据分析师" });
-    candidateMocks.listCandidateJobs.mockResolvedValue([candidate]);
+    candidateMocks.listCandidateJobsPage.mockResolvedValue({ items: [candidate], total: 1 });
     candidateMocks.getCandidateJob.mockResolvedValue(
       makeCandidateDetail({
         id: 21,
@@ -402,10 +409,13 @@ describe("从备选岗位导入", () => {
   });
 
   it("可以批量导入选中的备选岗位", async () => {
-    candidateMocks.listCandidateJobs.mockResolvedValue([
-      makeCandidate({ id: 31, title: "岗位一" }),
-      makeCandidate({ id: 32, title: "岗位二" }),
-    ]);
+    candidateMocks.listCandidateJobsPage.mockResolvedValue({
+      items: [
+        makeCandidate({ id: 31, title: "岗位一" }),
+        makeCandidate({ id: 32, title: "岗位二" }),
+      ],
+      total: 2,
+    });
     candidateMocks.importCandidateJobs.mockResolvedValue({
       imported: 2,
       duplicate: 0,

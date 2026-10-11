@@ -47,7 +47,7 @@ body {
 .app-shell {
   height: 100vh;
   overflow: hidden;
-  background: #f6f8fb;
+  background: var(--rf-surface-alt);
 }
 
 .app-sider {
@@ -57,7 +57,7 @@ body {
   height: 100vh !important;
   overflow: hidden;
   background: #fff !important;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid var(--rf-border-subtle);
   box-shadow: 2px 0 12px rgb(15 23 42 / 4%);
 }
 
@@ -78,7 +78,7 @@ body {
   overflow-y: auto;
   overscroll-behavior-y: contain;
   scrollbar-gutter: stable;
-  background: #f6f8fb;
+  background: var(--rf-surface-alt);
 }
 
 .app-brand {
@@ -87,7 +87,7 @@ body {
   gap: 10px;
   min-height: 72px;
   padding: 0 18px;
-  color: #16365c;
+  color: var(--rf-brand);
   white-space: nowrap;
 }
 
@@ -105,7 +105,7 @@ body {
 }
 
 .app-brand-button:hover {
-  background: #f7faff;
+  background: var(--rf-brand-wash);
 }
 
 .app-brand-mark {
@@ -117,7 +117,7 @@ body {
   height: 34px;
   overflow: hidden;
   border-radius: 8px;
-  background: #eaf1f8;
+  background: var(--rf-brand-tint);
 }
 
 .app-brand-mark-button {
@@ -154,7 +154,7 @@ body {
 }
 
 .app-brand-caption {
-  color: #8a94a3;
+  color: var(--rf-text-tertiary);
   font-size: 11px;
   line-height: 1.2;
 }
@@ -166,7 +166,7 @@ body {
   font-size: 11px;
   font-weight: 400;
   line-height: 1.2;
-  color: #8a94a3;
+  color: var(--rf-text-tertiary);
   white-space: nowrap;
 }
 
@@ -181,7 +181,7 @@ body {
   height: 44px;
   margin: 4px 0;
   border-radius: 8px;
-  color: #5f6b7a;
+  color: var(--rf-text-secondary);
   font-weight: 500;
 }
 
@@ -191,13 +191,13 @@ body {
 }
 
 .app-nav-menu .ant-menu-item-selected {
-  background: #eaf1f8;
-  color: #16365c;
+  background: var(--rf-brand-tint);
+  color: var(--rf-brand);
   font-weight: 600;
 }
 
 .app-nav-menu .ant-menu-item-selected .anticon {
-  color: #16365c;
+  color: var(--rf-brand);
 }
 
 .app-nav-menu .ant-menu-item::after {
@@ -221,12 +221,12 @@ body {
   min-width: 0;
   height: 40px;
   justify-content: flex-start;
-  color: #5f6b7a;
+  color: var(--rf-text-secondary);
   font-weight: 500;
 }
 
 .app-guide-button:hover {
-  color: #16365c !important;
+  color: var(--rf-brand) !important;
   background: #f3f7fb !important;
 }
 
@@ -238,7 +238,7 @@ body {
   min-width: 36px;
   height: 36px !important;
   padding: 0;
-  color: #8a94a3;
+  color: var(--rf-text-tertiary);
 }
 
 .app-repo-button .anticon {
@@ -248,7 +248,7 @@ body {
 }
 
 .app-repo-button:hover {
-  color: #16365c !important;
+  color: var(--rf-brand) !important;
   background: #f3f7fb !important;
 }
 
@@ -260,7 +260,7 @@ body {
   min-width: 32px;
   height: 32px !important;
   padding: 0;
-  color: #8a94a3;
+  color: var(--rf-text-tertiary);
 }
 
 .app-update-button .anticon {
@@ -268,7 +268,7 @@ body {
 }
 
 .app-update-button:hover {
-  color: #16365c !important;
+  color: var(--rf-brand) !important;
   background: #f3f7fb !important;
 }
 
@@ -333,8 +333,8 @@ body {
   width: 56px;
   height: 56px;
   border-radius: 12px;
-  background: #eaf1f8;
-  color: #16365c;
+  background: var(--rf-brand-tint);
+  color: var(--rf-brand);
   font-size: 26px;
 }
 
@@ -353,7 +353,7 @@ body {
    用强调色 + 略大字号，并留出比正文更大的下间距，和下方要点拉开层级。 */
 .user-guide-step-copy h4.ant-typography {
   margin-bottom: 16px;
-  color: #16365c;
+  color: var(--rf-brand);
   font-size: 17px;
   font-weight: 600;
   line-height: 1.5;
@@ -397,7 +397,7 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #16365c;
+  background: var(--rf-brand);
   opacity: 0.35;
 }
 
@@ -407,7 +407,7 @@ body {
    挤折行；行内 + 加粗已经足够让眼睛停住。 */
 .user-guide-point-lead {
   margin-right: 8px;
-  color: #16365c;
+  color: var(--rf-brand);
   font-weight: 600;
 }
 
@@ -422,6 +422,76 @@ body {
   gap: 12px;
 }
 
+/* 「快速开始」首屏：三条路径卡竖排，点击直达对应页面或载入示例。
+   克制样式：与 8 步视图共用同一套层级（标题 / 描述），卡片只是可点的行。 */
+.user-guide-quickstart-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.user-guide-quickstart-path {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-guide-quickstart-path:hover:not(:disabled) {
+  border-color: var(--rf-brand);
+  background: #f8fbfe;
+}
+
+.user-guide-quickstart-path:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.user-guide-quickstart-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--rf-brand-tint);
+  color: var(--rf-brand);
+  font-size: 18px;
+}
+
+.user-guide-quickstart-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-guide-quickstart-lead {
+  color: var(--rf-brand);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-guide-quickstart-text {
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.user-guide-quickstart-arrow {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--rf-text-description);
+  font-size: 12px;
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -433,7 +503,7 @@ body {
   height: 64px;
   padding: 0 24px;
   background: #fff;
-  border-bottom: 1px solid #e7ebf0;
+  border-bottom: 1px solid var(--rf-border);
   box-shadow: 0 1px 8px rgb(15 23 42 / 3%);
 }
 
@@ -467,7 +537,7 @@ body {
 }
 
 .app-space-menu-button:hover {
-  color: #16365c !important;
+  color: var(--rf-brand) !important;
   background: #eef4fb !important;
   border-color: #c9d8ea !important;
 }
@@ -498,13 +568,37 @@ body {
 .app-dataset-chip:hover {
   border-color: #c9d8ea;
   background: #eef4fb;
-  color: #16365c;
+  color: var(--rf-brand);
 }
 
 .app-dataset-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 「示例」小徽标：chip 旁与下拉条目共用，提示当前是体验数据、与真实资料独立。 */
+.app-dataset-sample-tag {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid #ffd591;
+  border-radius: 4px;
+  background: #fff7e6;
+  color: #ad6800;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.app-dataset-menu-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 「回到我的数据」：示例数据集里的一键返回入口，颜色醒目但只是菜单项。 */
+.app-dataset-return {
+  color: var(--rf-brand);
+  font-weight: 600;
 }
 
 .app-user-avatar {
@@ -528,7 +622,7 @@ body {
 .app-user-avatar-button:focus-visible,
 .app-dataset-chip:focus-visible,
 .app-brand-mark-button:focus-visible {
-  outline: 2px solid #91caff;
+  outline: 2px solid var(--rf-focus-ring);
   outline-offset: 2px;
 }
 
@@ -539,7 +633,7 @@ body {
 
 .app-header-context-error {
   max-width: 220px;
-  color: #ff4d4f;
+  color: var(--rf-danger);
   font-size: 12px;
 }
 
@@ -574,7 +668,7 @@ body {
   flex: 0 0 auto;
   height: 32px !important;
   padding: 0 8px;
-  color: #16365c;
+  color: var(--rf-brand);
   font-size: 12px;
 }
 
@@ -621,7 +715,7 @@ body {
 .app-header-divider {
   width: 1px;
   height: 22px;
-  background: #e7ebf0;
+  background: var(--rf-border);
 }
 
 .app-content {
@@ -648,7 +742,7 @@ body {
 
 .detail-trigger:hover .ant-card,
 .detail-trigger:focus-visible .ant-card {
-  border-color: #91caff;
+  border-color: var(--rf-focus-ring);
   box-shadow: 0 2px 8px rgb(22 119 255 / 12%);
 }
 

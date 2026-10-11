@@ -12,14 +12,16 @@ import type { Claim, VerificationStatus } from "../../types";
 import { SOURCE_TYPE_LABELS, hasPlaceholder } from "../../types";
 import { useRowActionMenu } from "../common/rowActionMenu";
 
-const STATUS_COLORS: Record<VerificationStatus, string> = {
+// 色板同时供 EvidencePanel（RF-13 证据展示）复用：同一状态/承担程度必须同色，
+// 否则"台账里绿的、预览里黄的"会让人怀疑两处说的是不是同一条。
+export const STATUS_COLORS: Record<VerificationStatus, string> = {
   已确认: "green",
   待确认: "gold",
   已过期: "volcano",
   不采用: "default",
 };
 
-const RESPONSIBILITY_COLORS: Record<string, string> = {
+export const RESPONSIBILITY_COLORS: Record<string, string> = {
   参与: "default",
   负责模块: "blue",
   主导方案或交付: "purple",

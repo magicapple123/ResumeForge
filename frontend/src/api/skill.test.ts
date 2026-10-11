@@ -46,7 +46,9 @@ describe("importSkill", () => {
     await importSkill(zip);
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(init.headers).toMatchObject({ "Content-Type": "application/zip" });
+    // request() 会把 headers 规整成 Headers 实例，读法保持与其它用例一致。
+    const headers = new Headers(init.headers);
+    expect(headers.get("Content-Type")).toBe("application/zip");
     expect(init.body).toBe(zip);
   });
 

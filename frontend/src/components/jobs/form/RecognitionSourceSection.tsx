@@ -3,10 +3,12 @@
  * 纯展示受控组件——识别逻辑（parseImport 防乱序）与文件状态留在 JobFormModal，经回调回传。
  */
 import { FileSearchOutlined } from "@ant-design/icons";
-import { Alert, Button, Form, Input } from "antd";
+import { Alert, Button, Form } from "antd";
 import type { ChangeEvent, ClipboardEvent } from "react";
+import { MAX_JOB_TEXT_CHARS } from "../../../config";
 import type { StagedFile } from "../../../hooks/useRecognitionFiles";
 import type { RecognitionSource } from "../../../types";
+import { HintedTextArea } from "../../common/MaxLengthHint";
 import RecognitionFileField from "../../RecognitionFileField";
 import RecognitionOutcome from "../../RecognitionOutcome";
 
@@ -42,9 +44,12 @@ export default function RecognitionSourceSection({
   return (
     <>
       <Form.Item label="完整招聘信息">
-        <Input.TextArea
+        {/* HintedTextArea 是 Form.Item 直挂版：注入 value/onChange 的同时顺带渲染
+            达上限提示（全仓禁用 antd showCount）。上限与后端解析接口的 50_000 对齐。 */}
+        <HintedTextArea
           aria-label="完整招聘信息"
           value={rawText}
+          maxLength={MAX_JOB_TEXT_CHARS}
           disabled={parsing}
           onPaste={onPaste}
           onChange={onRawTextChange}

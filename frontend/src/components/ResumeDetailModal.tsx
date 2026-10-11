@@ -5,8 +5,9 @@
  * 数据与重渲染的动作准备好，交给共享组件渲染。
  */
 import type { ResumeFormatConfig } from "../types/resumeFormat";
-import { Alert, App, Button, Modal, Space } from "antd";
+import { Alert, App, Button, Modal, Space, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   fetchResumeHtml,
   fetchResumeTemplates,
@@ -17,6 +18,7 @@ import {
 } from "../api/resumes";
 import type { ResumeContent, ResumeDetail, ResumeLayout } from "../types";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
+import ResumeDeliveryInfo from "./resume/ResumeDeliveryInfo";
 import ResumeDetailPreview from "./resume/ResumeDetailPreview";
 import PageSkeleton from "./common/PageSkeleton";
 import type { ResumePreviewHandle } from "./ResumePreview";
@@ -234,42 +236,66 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
       ) : !detail || !html ? (
         <PageSkeleton rows={8} card={false} />
       ) : (
-        <ResumeDetailPreview
-          detail={detail}
-          html={html}
-          layout={layout}
-          layoutStatus={layoutStatus}
-          measure={measure}
-          pdfDirectAvailable={pdfDirectAvailable}
-          relayouting={relayouting}
-          previewRef={previewRef}
-          onLayoutStatus={setLayoutStatus}
-          onMeasure={setMeasure}
-          onApplyLayout={(next) => void applyLayout(next)}
-          onApplyFittedFormat={(formatConfig) => void applyFittedFormat(formatConfig)}
-          extraActions={
-            layoutDirty ? (
-              <Space size={8}>
-                <Button onClick={() => void cancelLayout()} disabled={relayouting || layoutSaving}>
-                  取消修改
-                </Button>
-                <Button
-                  type="primary"
-                  loading={layoutSaving}
-                  disabled={relayouting}
-                  onClick={() => void saveLayout()}
-                >
-                  保存修改
-                </Button>
-              </Space>
-            ) : null
-          }
-          onSaveEditedResume={(content) => saveEditedResume(content)}
-          onResumeRevised={(updated) => applyRevisedDetail(updated)}
-          suggestionsGenerated={suggestionsGenerated}
-          suggestionsResetKey={suggestionsResetKey}
-          onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
-        />
+        <>
+          {/* 关联上下文（RF-11）：这份简历对着哪个岗位，投递进度与模拟面试都带着
+              job_id 直达，不必到对应模块再找一遍岗位。纯 Link 行、零新增请求；
+              通用简历（无 job_id）没有这行（预览头部的「通用简历」标签照旧）。 */}
+          {detail.job_id ? (
+            <Space size={12} wrap style={{ marginBottom: 12 }}>
+              <Link to={`/jobs?job_id=${detail.job_id}`}>查看关联岗位</Link>
+              <Typography.Text type="secondary">·</Typography.Text>
+              <Link to={`/tracker?job_id=${detail.job_id}`}>该岗位的投递进度</Link>
+              <Typography.Text type="secondary">·</Typography.Text>
+              <Link to={`/interview?job_id=${detail.job_id}`}>模拟面试</Link>
+            </Space>
+          ) : null}
+          {/* 版本信息位（RF-17）：血缘 + 投递记录，弹窗打开时按需拉取一次。 */}
+          <div style={{ marginBottom: 12 }}>
+            <ResumeDeliveryInfo
+              recordId={detail.id}
+              parentRevisionId={detail.parent_revision_id ?? null}
+            />
+          </div>
+          <ResumeDetailPreview
+            detail={detail}
+            html={html}
+            layout={layout}
+            layoutStatus={layoutStatus}
+            measure={measure}
+            pdfDirectAvailable={pdfDirectAvailable}
+            relayouting={relayouting}
+            previewRef={previewRef}
+            onLayoutStatus={setLayoutStatus}
+            onMeasure={setMeasure}
+            onApplyLayout={(next) => void applyLayout(next)}
+            onApplyFittedFormat={(formatConfig) => void applyFittedFormat(formatConfig)}
+            extraActions={
+              layoutDirty ? (
+                <Space size={8}>
+                  <Button
+                    onClick={() => void cancelLayout()}
+                    disabled={relayouting || layoutSaving}
+                  >
+                    取消修改
+                  </Button>
+                  <Button
+                    type="primary"
+                    loading={layoutSaving}
+                    disabled={relayouting}
+                    onClick={() => void saveLayout()}
+                  >
+                    保存修改
+                  </Button>
+                </Space>
+              ) : null
+            }
+            onSaveEditedResume={(content) => saveEditedResume(content)}
+            onResumeRevised={(updated) => applyRevisedDetail(updated)}
+            suggestionsGenerated={suggestionsGenerated}
+            suggestionsResetKey={suggestionsResetKey}
+            onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
+          />
+        </>
       )}
     </Modal>
   );

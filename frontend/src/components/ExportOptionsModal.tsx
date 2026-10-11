@@ -106,6 +106,10 @@ export default function ExportOptionsModal({ recordId, open, initialPageLimit, o
               onChange={(values) => setFormats(values as ExportFormat[])}
             />
           </div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            PDF 与 Word 由服务端排版引擎生成，保证文字可提取；自编 HTML 的复杂版式请在浏览器中打开
+            HTML 文件后打印导出。
+          </Typography.Text>
         </div>
 
         <div>

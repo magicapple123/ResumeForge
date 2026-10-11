@@ -14,6 +14,15 @@ export const APP_VERSION: string = pkg.version;
 export const GITHUB_REPO =
   import.meta.env.VITE_GITHUB_REPO?.trim() || "https://github.com/magicapple123/ResumeForge";
 
+/**
+ * JD/招聘原文类文本输入的统一硬上限（字符数）。
+ *
+ * 对齐后端三处的 `max_length=50_000`（`AtsCheckRequest.jd_text`、`JobTextParseRequest.text`、
+ * 备选岗位 `raw_text`）：前端 maxLength 先挡住，用户顶到上限时由 MaxLengthHint 提示，
+ * 而不是提交后才吃到 422。全仓禁用 antd showCount，提示一律走 common/MaxLengthHint。
+ */
+export const MAX_JOB_TEXT_CHARS = 50_000;
+
 /** 大模型预设：选择后自动填充 Base URL 与模型名，省去查文档的麻烦 */
 export interface LLMPreset {
   label: string;

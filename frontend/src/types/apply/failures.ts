@@ -7,6 +7,8 @@ export const FAILURE_CATEGORIES = [
   "network_timeout",
   "file_upload_failed",
   "site_unsupported",
+  "profile_insufficient",
+  "unconfirmed",
   "unknown",
 ] as const;
 
@@ -20,6 +22,8 @@ export const FAILURE_CATEGORY_LABELS: Record<FailureCategory, string> = {
   network_timeout: "网络超时",
   file_upload_failed: "简历上传失败",
   site_unsupported: "岗位来源不支持自动投递",
+  profile_insufficient: "资料不足，需要先补充简历/网申资料",
+  unconfirmed: "无法确认投递结果，请到浏览器核对",
   unknown: "未知失败",
 };
 

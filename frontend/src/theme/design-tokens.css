@@ -1,0 +1,43 @@
+/*
+ * 语义 token 的 CSS 侧出口（RF-12）。
+ *
+ * 与 `src/theme/tokens.ts` 一一对应——TS 侧供组件/主题引用，这里供全局 CSS 引用。
+ * **只收编既有值**：每个变量都等于替换前的字面量，收编不改变任何渲染结果。
+ * 存量样式按「色值完全相同才替换」的原则逐步迁移，未迁移的字面量仍是合法现状。
+ */
+:root {
+  /* 品牌与中性色（与 tokens.ts palette 对应） */
+  --rf-brand: #16365c;
+  --rf-brand-tint: #eaf1f8;
+  --rf-brand-wash: #f7faff;
+  --rf-surface-alt: #f6f8fb;
+  --rf-text-secondary: #5f6b7a;
+  /* RF-12 a11y：#8a94a3 对白底只有 3.06:1，加深到 4.63:1（与 tokens.ts 同步）。 */
+  --rf-text-tertiary: #6b7683;
+  /* antd 次级说明文字的达标替代（原硬编码 #8c8c8c 只有 3.36:1）。 */
+  --rf-text-description: #5f6b7a;
+  --rf-border: #e7ebf0;
+  --rf-border-subtle: #e5e7eb;
+  --rf-danger: #ff4d4f;
+  --rf-focus-ring: #91caff;
+
+  /* 弹层层级（与 tokens.ts layer 对应；3100 基准 + 投投整族） */
+  --rf-layer-popup-base: 3100;
+  --rf-layer-editor-modal: 3110;
+  --rf-layer-clipboard-card: 3200;
+  --rf-layer-save-card: 3250;
+  --rf-layer-assistant-card: 3300;
+  --rf-layer-orb: 3400;
+  --rf-layer-orb-tooltip: 3450;
+}
+
+/*
+ * RF-12 a11y：antd 预设 Tag 的浅底配色（green/success）前景对浅底不足 4.5:1
+ * （#389e0d/#52c41a on #f6ffed ≈ 2.2–3.4），统一加深前景到 green-7（5.3:1）。
+ * 只改前景色，底色与语义不变——表格/折叠头里的状态标签仍带文字，颜色不是唯一信号。
+ */
+.ant-tag.ant-tag-green,
+.ant-tag.ant-tag-success {
+  /* !important：antd 的 cssinjs 样式注入晚于本文件，同权重会被它覆盖。 */
+  color: #237804 !important;
+}

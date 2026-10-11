@@ -75,8 +75,9 @@ export const BrowserControlCard = memo(function BrowserControlCard({
         onSelectHistory={(item) => onChangeTargetUrl(item.url)}
         onDeleteHistory={(item) => void onDeleteHistory(item)}
       />
+      {/* 轮询状态行：对读屏器 polite 播报状态变化（Tag 文字变化时才触发，不会逐秒骚扰）。 */}
       <div className="webform-browser-status-row">
-        <div className="webform-browser-status">
+        <div className="webform-browser-status" aria-live="polite">
           <Tag color={stateMeta.color}>{stateMeta.label}</Tag>
           {browserLoading && !browserHasData ? <Spin size="small" /> : null}
           <Typography.Text type="secondary">

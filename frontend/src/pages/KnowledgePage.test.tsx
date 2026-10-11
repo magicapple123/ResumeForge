@@ -7,12 +7,13 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Knowledge } from "../types";
+import type { Knowledge, KnowledgeSummary } from "../types";
 import KnowledgePage from "./KnowledgePage";
 
 const apiMocks = vi.hoisted(() => ({
-  listKnowledge: vi.fn(),
+  listKnowledgePage: vi.fn(),
   listKnowledgeCategories: vi.fn(),
+  listKnowledgeTags: vi.fn(),
   getKnowledge: vi.fn(),
   createKnowledge: vi.fn(),
   updateKnowledge: vi.fn(),
@@ -35,6 +36,16 @@ function makeKnowledge(overrides: Partial<Knowledge> = {}): Knowledge {
   };
 }
 
+/** 列表行摘要（分页端点响应）：与 Knowledge 的差别是没有 content 全文。 */
+function makeSummary(entry: Knowledge): KnowledgeSummary {
+  const { content, ...rest } = entry;
+  return { ...rest, content_excerpt: content.slice(0, 200) };
+}
+
+function makePage(items: Knowledge[], total = items.length) {
+  return { items: items.map(makeSummary), total };
+}
+
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -47,8 +58,10 @@ function renderPage() {
 
 beforeEach(() => {
   for (const mock of Object.values(apiMocks)) mock.mockReset();
-  apiMocks.listKnowledge.mockResolvedValue([makeKnowledge()]);
+  apiMocks.listKnowledgePage.mockResolvedValue(makePage([makeKnowledge()]));
+  apiMocks.getKnowledge.mockResolvedValue(makeKnowledge());
   apiMocks.listKnowledgeCategories.mockResolvedValue(["面经", "简历技巧", "求职策略"]);
+  apiMocks.listKnowledgeTags.mockResolvedValue({ tags: ["简历", "STAR", "求职策略"] });
   apiMocks.createKnowledge.mockImplementation(async (payload) =>
     makeKnowledge({ id: 2, ...payload, tags: payload.tags }),
   );
@@ -71,7 +84,11 @@ describe("KnowledgePage", () => {
     expect(screen.getByText("简历技巧")).toBeInTheDocument();
     expect(screen.getByText("简历")).toBeInTheDocument();
     expect(screen.getByText("STAR")).toBeInTheDocument();
-    expect(apiMocks.listKnowledge).toHaveBeenCalledWith({ q: "", category: "" });
+    expect(apiMocks.listKnowledgePage).toHaveBeenCalledWith(
+      { q: "", category: "", tag: "" },
+      1,
+      12,
+    );
   });
 
   it("passes the search keyword to the API", async () => {
@@ -83,20 +100,30 @@ describe("KnowledgePage", () => {
     fireEvent.keyDown(searchInput, { key: "Enter", code: "Enter", keyCode: 13 });
 
     await waitFor(() => {
-      expect(apiMocks.listKnowledge).toHaveBeenLastCalledWith({ q: "量化", category: "" });
+      expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
+        { q: "量化", category: "", tag: "" },
+        1,
+        12,
+      );
     });
   });
 
-  it("filters entries by tag locally", async () => {
-    apiMocks.listKnowledge.mockResolvedValue([
-      makeKnowledge(),
-      makeKnowledge({ id: 2, title: "谈薪话术", tags: ["求职策略"] }),
-    ]);
+  it("标签筛选走服务端：选择标签后带 tag 参数重新请求并回到第 1 页", async () => {
+    // 收口轮：标签从「当前页内再筛选」改为服务端筛选（分页前过滤）。
+    // 先翻到第 2 页，再选标签——应回第 1 页并以 tag 重新拉取。
+    const pageOne = Array.from({ length: 12 }, (_, index) =>
+      makeKnowledge({ id: index + 1, title: `条目-${index + 1}` }),
+    );
+    apiMocks.listKnowledgePage
+      .mockResolvedValueOnce(makePage(pageOne, 13))
+      .mockResolvedValueOnce(makePage([makeKnowledge({ id: 13, title: "第 13 条" })], 13))
+      .mockResolvedValueOnce(makePage([makeKnowledge({ title: "标签命中" })], 1));
     renderPage();
-    await screen.findByText("STAR 法则");
-    expect(screen.getByText("谈薪话术")).toBeInTheDocument();
 
-    // 选中「简历」标签后，只保留带该标签的条目。
+    expect(await screen.findByText("条目-1")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByTitle("2")[0]);
+    expect(await screen.findByText("第 13 条")).toBeInTheDocument();
+
     const combobox = screen.getByRole("combobox", { name: "标签筛选" });
     fireEvent.mouseDown(combobox);
     const option = await screen.findByText(
@@ -105,9 +132,31 @@ describe("KnowledgePage", () => {
     fireEvent.click(option);
 
     await waitFor(() => {
-      expect(screen.queryByText("谈薪话术")).not.toBeInTheDocument();
+      expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
+        { q: "", category: "", tag: "简历" },
+        1,
+        12,
+      );
     });
-    expect(screen.getByText("STAR 法则")).toBeInTheDocument();
+    expect(await screen.findByText("标签命中")).toBeInTheDocument();
+  });
+
+  it("标签下拉选项来自全库标签端点 /knowledge/tags，而非当前页条目的标签", async () => {
+    // 「全库专属标签」不属于当前页任何条目（列表里只有 简历/STAR/求职策略 的条目），
+    // 只有选项来自 listKnowledgeTags 时它才会出现在下拉里。
+    apiMocks.listKnowledgeTags.mockResolvedValue({
+      tags: ["简历", "STAR", "求职策略", "全库专属标签"],
+    });
+    renderPage();
+    await screen.findByText("STAR 法则");
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "标签筛选" }));
+    expect(
+      await screen.findByText(
+        (content, element) =>
+          content === "全库专属标签" && !!element?.closest(".ant-select-item-option"),
+      ),
+    ).toBeInTheDocument();
   });
 
   it("creates a new entry through the form modal", async () => {
@@ -207,9 +256,33 @@ describe("KnowledgePage", () => {
   });
 
   it("shows the empty state when there are no entries", async () => {
-    apiMocks.listKnowledge.mockResolvedValue([]);
+    apiMocks.listKnowledgePage.mockResolvedValue({ items: [], total: 0 });
     renderPage();
 
     expect(await screen.findByText(/知识库还是空的/)).toBeInTheDocument();
+  });
+
+  it("翻到第 2 页取到旧全量之外的新页记录", async () => {
+    const pageOne = Array.from({ length: 12 }, (_, index) =>
+      makeKnowledge({ id: index + 1, title: `条目-${index + 1}` }),
+    );
+    apiMocks.listKnowledgePage
+      .mockResolvedValueOnce(makePage(pageOne, 13))
+      .mockResolvedValueOnce(makePage([makeKnowledge({ id: 13, title: "第 13 条" })], 13));
+    renderPage();
+
+    expect(await screen.findByText("条目-1")).toBeInTheDocument();
+    expect(screen.queryByText("第 13 条")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByTitle("2")[0]);
+
+    await waitFor(() => {
+      expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
+        { q: "", category: "", tag: "" },
+        2,
+        12,
+      );
+    });
+    expect(await screen.findByText("第 13 条")).toBeInTheDocument();
   });
 });

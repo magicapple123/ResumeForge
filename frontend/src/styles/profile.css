@@ -55,7 +55,7 @@
 }
 
 .profile-photo-placeholder {
-  color: #8c8c8c;
+  color: var(--rf-text-description);
   font-size: 52px;
 }
 
@@ -163,7 +163,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #8c8c8c;
+  color: var(--rf-text-description);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -221,7 +221,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #8c8c8c;
+  color: var(--rf-text-description);
   cursor: grab;
   touch-action: none;
   user-select: none;

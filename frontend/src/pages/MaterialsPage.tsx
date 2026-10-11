@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createMaterial,
   deleteMaterial,
+  getMaterial,
   listMaterialCategories,
   listMaterials,
   updateMaterial,
@@ -20,13 +21,14 @@ import MaterialFormModal from "../components/materials/MaterialFormModal";
 import UserFilesPanel from "../components/materials/UserFilesPanel";
 import { DetailTrigger, RecordDetailDrawer } from "../components/common/RecordDetail";
 import { RowActions, RowContextMenu } from "../components/common/RowActions";
-import type { Material, MaterialPayload } from "../types";
+import type { Material, MaterialPayload, MaterialSummary } from "../types";
 import { canPreviewImage } from "../utils/attachments";
 import { formatDateTime } from "../utils/format";
 
 export default function MaterialsPage() {
   const { message } = App.useApp();
-  const [materials, setMaterials] = useState<Material[]>([]);
+  // 列表是摘要（无 data_url / 附件文字）；详情与编辑时再按需取全量。
+  const [materials, setMaterials] = useState<MaterialSummary[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState("");
@@ -40,7 +42,7 @@ export default function MaterialsPage() {
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
   const fetchMaterials = useCallback(async (): Promise<{
-    items: Material[];
+    items: MaterialSummary[];
     categories: string[];
   } | null> => {
     try {
@@ -110,9 +112,9 @@ export default function MaterialsPage() {
     }
   };
 
-  const remove = async (material: Material) => {
+  const remove = async (summary: MaterialSummary) => {
     try {
-      await deleteMaterial(material.id);
+      await deleteMaterial(summary.id);
       message.success("已移入回收站，可在「回收站」里恢复");
       await load();
     } catch (error) {
@@ -125,20 +127,33 @@ export default function MaterialsPage() {
     setFormOpen(true);
   };
 
-  const openEdit = (material: Material) => {
-    setEditing(material);
-    setFormOpen(true);
+  // 列表只有摘要：详情与编辑都要先按 id 取全量（图片 data_url、附件全文在详情接口里）。
+  const openDetail = async (summary: MaterialSummary) => {
+    try {
+      setDetail(await getMaterial(summary.id));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载资料详情失败");
+    }
   };
 
-  const actionsFor = (material: Material) => [
-    { key: "edit", label: "编辑", icon: <EditOutlined />, onClick: () => openEdit(material) },
+  const openEdit = async (summary: MaterialSummary) => {
+    try {
+      setEditing(await getMaterial(summary.id));
+      setFormOpen(true);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载资料失败");
+    }
+  };
+
+  const actionsFor = (summary: MaterialSummary) => [
+    { key: "edit", label: "编辑", icon: <EditOutlined />, onClick: () => void openEdit(summary) },
     {
       key: "delete",
       label: "删除",
       danger: true,
       icon: <DeleteOutlined />,
-      confirm: `删除资料「${material.title || material.category}」？`,
-      onClick: () => void remove(material),
+      confirm: `删除资料「${summary.title || summary.category}」？`,
+      onClick: () => void remove(summary),
     },
   ];
 
@@ -198,7 +213,7 @@ export default function MaterialsPage() {
                 <RowContextMenu key={material.id} items={actionsFor(material)}>
                   <DetailTrigger
                     label={`打开资料「${material.title || material.category}」的详情`}
-                    onOpen={() => setDetail(material)}
+                    onOpen={() => void openDetail(material)}
                   >
                     <Card size="small" className="material-card">
                       <div className="material-card-head">
@@ -314,7 +329,9 @@ export default function MaterialsPage() {
               type="primary"
               icon={<EditOutlined />}
               onClick={() => {
-                openEdit(detail);
+                // 详情里已经是全量数据，不必再按 id 拉一次。
+                setEditing(detail);
+                setFormOpen(true);
                 setDetail(null);
               }}
             >

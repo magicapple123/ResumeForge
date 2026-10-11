@@ -202,6 +202,21 @@ export interface ResumeBrief {
   created_at: string;
 }
 
+/** 版本血缘（RF-17）：由哪份简历派生而来；null = 独立版本，不做推断。 */
+export interface DeliverySummary {
+  id: number;
+  created_at: string;
+  source: string;
+  job_title: string;
+  company: string;
+  resume_title: string;
+  export_format: string;
+  filename: string;
+  pages: number | null;
+  content_sha256: string;
+  rendered_config_sha256: string;
+}
+
 /** 版式覆盖：键取自 `ResumeFormatField.key`，值都是数值（颜色也是十六进制字符串）。
  *  例外是 `section_order`：它是一串分区键，不是 CSS 数值（见 resumeSectionOrder.ts）。 */
 import type { ResumeFormatConfig } from "./resumeFormat";
@@ -267,10 +282,14 @@ export interface ResumeDetail extends ResumeBrief {
   content: ResumeContent;
   warnings: string[];
   parse_error: string;
+  /** 版本血缘（RF-17）：由哪份简历派生而来；null = 独立版本，不做推断。 */
+  parent_revision_id: number | null;
   /** 生成说明：这份简历是怎么选出来的（只对 AI 生成的记录有意义，修订/手写为空）。 */
   rationale: string;
   /** "资料里有、但没写进这份简历"的结构化清单（岗位导向筛选的正常结果）。 */
   coverage_notes: ResumeCoverageNote[];
+  /** 事实来源标注（RF-13）：每段内容来自哪条资料事实；旧记录为空。 */
+  fact_annotations?: FactAnnotation[];
 }
 
 /** 一条"没写进这份简历"的分区级清单。 */
@@ -288,6 +307,44 @@ export interface ResumeCoverageNote {
 }
 
 export type ResumeSuggestionPriority = "high" | "medium" | "low";
+
+/** 一条内容的事实来源标注（RF-13，与后端 FactAnnotation 逐字对齐）。 */
+export type FactAnnotationOrigin =
+  "grounded" | "restored" | "enhanced_kept" | "ai_rewrite" | "user_added";
+
+export interface FactAnnotation {
+  path: string;
+  origin: FactAnnotationOrigin;
+  claim_id?: number | null;
+  source_subject?: string | null;
+  source_fact?: string | null;
+  responsibility?: string | null;
+  boundary?: string | null;
+  verification_status?: string | null;
+}
+
+/**
+ * 一条待审变更（RF-13）：编辑器的 AI 改写 / 手填在落表单前的预检单位。
+ * ``before`` / ``after`` 是该栏的完整文本（多行用 \n 连接）。
+ */
+export interface ResumePendingChange {
+  path: string;
+  before: string;
+  after: string;
+  origin: "ai_rewrite" | "user_added";
+  instruction?: string;
+  /** 变更所属条目的主体名（公司 / 项目名），用于 fact_check_needed 时的台账跳转链接。 */
+  subject?: string;
+  verdict?: "ok" | "fact_check_needed" | "blocked";
+  reasons?: string[];
+}
+
+/** 预检结论（RF-13，与后端 ReviewChangeVerdictOut 对齐）。 */
+export interface ResumeReviewResult {
+  path: string;
+  verdict: "ok" | "fact_check_needed" | "blocked";
+  reasons: string[];
+}
 
 export interface ResumeSuggestion {
   priority: ResumeSuggestionPriority;

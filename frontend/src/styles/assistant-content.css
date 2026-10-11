@@ -389,3 +389,35 @@
   border-radius: 6px;
   cursor: zoom-in;
 }
+
+/* 写入提案确认卡（RF-01）：放在工具折叠面板外，待确认的写入一眼可见。 */
+.assistant-write-proposals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.assistant-write-proposal {
+  padding: 10px 12px;
+  border: 1px solid #f0d596;
+  border-radius: 8px;
+  background: #fffbe9;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-write-proposal-head {
+  display: flex;
+  align-items: center;
+}
+
+.assistant-write-proposal-changes {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.assistant-write-proposal-actions {
+  margin-top: 2px;
+}

@@ -87,4 +87,13 @@ describe("ExportOptionsModal", () => {
     await waitFor(() => expect(screen.getByText(/至少选择一种导出格式/)).toBeInTheDocument());
     expect(apiMocks.exportResumeWithOptions).not.toHaveBeenCalled();
   });
+
+  it("展示能力范围说明：服务端引擎生成 PDF/Word，自编 HTML 复杂版式引导浏览器打印", () => {
+    // RF-16：诚实的能力范围就地提示——只说引擎来源与替代路径，不得出现
+    // "ATS 通过率"之类的承诺。
+    renderModal();
+
+    expect(screen.getByText(/PDF 与 Word 由服务端排版引擎生成/)).toBeInTheDocument();
+    expect(screen.queryByText(/ATS 通过/)).not.toBeInTheDocument();
+  });
 });

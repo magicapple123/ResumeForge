@@ -89,6 +89,40 @@ export interface AssistantSourceNumber {
   url: string;
 }
 
+/**
+ * 写入提案的字段差异（后端 authorization.FieldChange）。
+ * before 为 null 表示新增字段，after 为 null 表示删除字段。
+ */
+export interface AssistantWriteFieldChange {
+  field: string;
+  before?: string | null;
+  after?: string | null;
+}
+
+/** 写工具的写入预览：目标 / 影响范围 / 字段差异。 */
+export interface AssistantWritePreview {
+  target: string;
+  scope: string;
+  changes: AssistantWriteFieldChange[];
+}
+
+/**
+ * 待用户确认的写入提案（RF-01）。
+ *
+ * 助手在用户未同意写入时不会执行写工具，而是生成提案等待确认；批准/拒绝走
+ * REST 端点，用服务端存储的参数执行（模型给的参数不作数）。token 只在服务端
+ * 流转，前端永远拿不到——这里也没有 token 字段。
+ */
+export interface AssistantWriteProposal {
+  proposal_id: string;
+  tool_name: string;
+  dataset_id: string;
+  preview: AssistantWritePreview;
+  created_at: string;
+  expires_at: string;
+  status: "pending" | "approved" | "executed" | "expired" | "rejected" | "failed";
+}
+
 /** 助手调用过一次工具的记录；写在助手消息的 context 里，供历史回看。 */
 export interface AssistantToolCall {
   name: string;
@@ -105,6 +139,11 @@ export interface AssistantToolCall {
    * 就靠它，所以前端不再自己按工具名猜哪些是写操作（猜一份就会与后端漂移）。
    */
   changed?: boolean;
+  /**
+   * 写入提案（RF-01，可选）：这次调用被转成了待确认提案而没有执行。
+   * 更早存下的历史消息里没有这个字段。
+   */
+  proposal?: AssistantWriteProposal;
 }
 
 /** 被引用的那条消息的快照：原消息删掉之后这里仍然可读。 */
@@ -175,6 +214,7 @@ export type AssistantStreamEvent =
   | ({
       type: "tool";
     } & AssistantToolCall)
+  | { type: "write_proposal"; proposal: AssistantWriteProposal }
   | { type: "delta"; text: string }
   | { type: "reasoning"; text: string }
   | { type: "done"; message: AssistantMessage }

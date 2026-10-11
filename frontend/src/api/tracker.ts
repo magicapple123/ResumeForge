@@ -7,10 +7,28 @@ import type {
   TrackPayload,
   TrackRecord,
 } from "../types";
-import { ApiError, buildQuery, extractError, getFilenameFromDisposition, request } from "./client";
+import type { Page } from "../types/common";
+import { buildQuery, getFilenameFromDisposition, request, requestRaw } from "./client";
 
 export function listTracks(params: { status?: string; keyword?: string } = {}): Promise<TrackList> {
   return request(`/tracker${buildQuery(params)}`);
+}
+
+/**
+ * 分页列出求职进度（RF-08）：过滤与排序与旧列表完全一致，不受旧端点 500 条兜底上限约束。
+ * **响应不含漏斗/统计字段**——统计（status_counts 等）仍走旧 `listTracks`（同一套筛选）。
+ * `jobId`（RF-11）：岗位详情「该岗位的投递进度」深链带的过滤；缺省不过滤。
+ */
+export function listTracksPage(
+  params: { status?: string; keyword?: string; jobId?: number } = {},
+  page: number,
+  pageSize: number,
+): Promise<Page<Track>> {
+  // jobId → 后端的蛇形 job_id；余下的 status/keyword 原样透传。
+  const { jobId, ...rest } = params;
+  return request(
+    `/tracker/page${buildQuery({ ...rest, job_id: jobId, page, page_size: pageSize })}`,
+  );
 }
 
 export function getTrack(id: number): Promise<Track> {
@@ -57,12 +75,10 @@ export async function exportTracks(
   format: "csv" | "json",
   params: { status?: string; keyword?: string } = {},
 ): Promise<{ blob: Blob; filename: string }> {
-  const resp = await fetch(`/api/tracker/export${buildQuery({ ...params, format })}`);
-  if (!resp.ok) {
-    // 导出走的是原生 fetch（要拿文件流），错误体得自己解——不处理的话用户只会看到
-    // "下载了一个内容是一段 JSON 错误的文件"。
-    throw new ApiError(await extractError(resp), resp.status);
-  }
+  const resp = await requestRaw(`/tracker/export${buildQuery({ ...params, format })}`, {
+    // 导出响应是文件流；导出走 export 预算（10 分钟），不吃 15s 的默认超时。
+    budget: "export",
+  });
   const filename =
     getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? `求职进度.${format}`;
   return { blob: await resp.blob(), filename };

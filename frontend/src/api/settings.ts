@@ -1,5 +1,6 @@
 /** 设置相关接口。 */
 import type {
+  BackupStatus,
   DatasetImportResult,
   DatasetInfo,
   AssistantOrbSetting,
@@ -19,7 +20,7 @@ import type {
   UpdateStatus,
   WebFormRelaxedModeSetting,
 } from "../types";
-import { ApiError, extractError, getFilenameFromDisposition, request } from "./client";
+import { getFilenameFromDisposition, request, requestRaw } from "./client";
 
 export function getLLMConfig(): Promise<LLMConfig> {
   return request("/settings/llm");
@@ -93,6 +94,26 @@ export function acknowledgeUpdateInstallResult(): Promise<void> {
 
 export function revealLLMApiKey(): Promise<LLMApiKeyRevealResult> {
   return request("/settings/llm/api-key/reveal", { method: "POST" });
+}
+
+/**
+ * 「仅本会话使用」的临时密钥通道（RF-24）：密钥只进后端进程内存，
+ * 进程重启即失，不写数据库、不进日志与备份。状态接口只回是否已设置，
+ * 密钥本体永不回传。
+ */
+export function getLLMSessionKeyStatus(): Promise<{ configured: boolean }> {
+  return request("/settings/llm/session-key");
+}
+
+export function setLLMSessionKey(apiKey: string): Promise<{ configured: boolean }> {
+  return request("/settings/llm/session-key", {
+    method: "PUT",
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+}
+
+export function clearLLMSessionKey(): Promise<void> {
+  return request("/settings/llm/session-key", { method: "DELETE" });
 }
 
 export function testLLM(config: LLMConfig): Promise<LLMTestResult> {
@@ -227,15 +248,15 @@ export function loadSampleDataset(): Promise<DatasetInfo> {
 
 /** 把备份包导入为一份**新数据集**；不触碰当前正在使用的数据。 */
 export async function importDataset(file: File, name: string): Promise<DatasetImportResult> {
-  const resp = await fetch(`/api/settings/datasets/import?name=${encodeURIComponent(name)}`, {
+  return request(`/settings/datasets/import?name=${encodeURIComponent(name)}`, {
     method: "POST",
     // 必须写死 application/zip：浏览器按系统映射给出的 File.type 不可靠，而这个
     // 类型不在 CORS 简单请求允许的范围内，跨站页面无法直接触发导入流程。
     headers: { "Content-Type": "application/zip" },
     body: file,
+    // 备份包可能几十 MB，走 upload 预算（10 分钟），不吃 15s 的默认超时。
+    budget: "upload",
   });
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
-  return (await resp.json()) as DatasetImportResult;
 }
 
 export function activateDataset(id: string): Promise<DatasetInfo> {
@@ -255,7 +276,7 @@ export async function exportDataset(
   id: string,
   includeApiKeys = false,
 ): Promise<{ blob: Blob; filename: string }> {
-  return downloadArchive(exportUrl(`/api/settings/datasets/${id}/export`, includeApiKeys));
+  return downloadArchive(exportUrl(`/settings/datasets/${id}/export`, includeApiKeys));
 }
 
 /**
@@ -267,7 +288,7 @@ export async function exportDataset(
 export async function exportAllDatasets(
   includeApiKeys = false,
 ): Promise<{ blob: Blob; filename: string }> {
-  return downloadArchive(exportUrl("/api/settings/datasets/export-all", includeApiKeys));
+  return downloadArchive(exportUrl("/settings/datasets/export-all", includeApiKeys));
 }
 
 /** 不勾选时保持 URL 干净，与旧行为一致；勾选才带上布尔查询参数。 */
@@ -276,13 +297,18 @@ function exportUrl(base: string, includeApiKeys: boolean): string {
 }
 
 async function downloadArchive(url: string): Promise<{ blob: Blob; filename: string }> {
-  // 走裸 fetch 而不是 request()：这个响应是二进制压缩包，不是 JSON。
-  const resp = await fetch(url);
-  if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
+  // 响应是二进制压缩包，不是 JSON：走 requestRaw（错误分类/诊断与 request() 一致），
+  // 导出大包走 export 预算（10 分钟），不吃 15s 的默认超时。
+  const resp = await requestRaw(url, { budget: "export" });
   return {
     blob: await resp.blob(),
     filename:
       getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ??
       "resumeforge-backup.zip",
   };
+}
+
+/** 当前数据集的自动备份保护摘要（RF-05）。 */
+export function getBackupStatus(): Promise<BackupStatus> {
+  return request<BackupStatus>("/settings/backup-status");
 }

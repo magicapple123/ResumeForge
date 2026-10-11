@@ -75,4 +75,18 @@ describe("AtsCheckPanel", () => {
     expect(await screen.findByText("本地规则估计，不代表真实 ATS 解析结果")).toBeInTheDocument();
     expect(apiMocks.runAtsCheck).toHaveBeenCalledWith(7, "要求熟悉 Python");
   });
+
+  it("JD 输入有 50000 字硬上限，顶到上限时出现提示（不使用 showCount 计数器）", async () => {
+    apiMocks.runAtsCheck.mockResolvedValue(RESULT);
+    render(<AtsCheckPanel resumeId={7} />);
+
+    const jd = screen.getByLabelText("JD 文本") as HTMLTextAreaElement;
+    // 上限与后端 AtsCheckRequest.jd_text 的 max_length（50_000）对齐。
+    expect(jd.maxLength).toBe(50000);
+
+    fireEvent.change(jd, { target: { value: "好".repeat(50000) } });
+    expect(await screen.findByText("已达 50000 字上限")).toBeInTheDocument();
+    // 常驻计数器（antd showCount 的「N/50000」）在全仓禁用。
+    expect(screen.queryByText(/\d+\s*\/\s*50000/)).not.toBeInTheDocument();
+  });
 });

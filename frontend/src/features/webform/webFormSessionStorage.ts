@@ -1,6 +1,21 @@
 import type { WebFormFillResult, WebFormPreview, WebFormSnapshot } from "../../types";
 
-export const WEB_FORM_SESSION_STORAGE_KEY = "resumeforge:webform-session:v1";
+/**
+ * 网申会话草稿的 sessionStorage 作用域（RF-13）：key 按数据集隔离。
+ *
+ * 此前 key 是全局唯一的 `"resumeforge:webform-session:v1"`，切换数据集（整页
+ * reload）后 A 数据集的草稿会残留在 B 数据集的界面里。现在 key 拼上数据集 id
+ * （无 id 回落 "main"）。**旧 key 的存量草稿自然失效**——刻意不迁移、不清理：
+ * 草稿本身是"没填完的临时内容"，跨数据集恢复它才是错误行为；旧 key 里的残留
+ * 会话会随标签页关闭而消失，不会影响新 key 的读写。
+ */
+const WEB_FORM_SESSION_STORAGE_PREFIX = "resumeforge:webform-session:v1";
+const DEFAULT_DATASET_SCOPE = "main";
+
+export function webFormSessionStorageKey(datasetId: string | null | undefined): string {
+  const scope = (datasetId ?? "").trim() || DEFAULT_DATASET_SCOPE;
+  return `${WEB_FORM_SESSION_STORAGE_PREFIX}:${scope}`;
+}
 
 export interface WebFormSessionState {
   sessionActive: boolean;
@@ -39,10 +54,12 @@ function recordOfStrings(value: unknown): Record<number, string> {
   return result;
 }
 
-export function loadWebFormSession(): WebFormSessionState {
+export function loadWebFormSession(
+  datasetId: string | null | undefined = DEFAULT_DATASET_SCOPE,
+): WebFormSessionState {
   if (!storageAvailable()) return { ...EMPTY_SESSION };
   try {
-    const raw = window.sessionStorage.getItem(WEB_FORM_SESSION_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(webFormSessionStorageKey(datasetId));
     if (!raw) return { ...EMPTY_SESSION };
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return { ...EMPTY_SESSION };
@@ -64,11 +81,14 @@ export function loadWebFormSession(): WebFormSessionState {
   }
 }
 
-export function saveWebFormSession(state: WebFormSessionState): void {
+export function saveWebFormSession(
+  state: WebFormSessionState,
+  datasetId: string | null | undefined = DEFAULT_DATASET_SCOPE,
+): void {
   if (!storageAvailable()) return;
   try {
     window.sessionStorage.setItem(
-      WEB_FORM_SESSION_STORAGE_KEY,
+      webFormSessionStorageKey(datasetId),
       JSON.stringify({ ...state, selected: [...state.selected] }),
     );
   } catch {
@@ -76,10 +96,12 @@ export function saveWebFormSession(state: WebFormSessionState): void {
   }
 }
 
-export function clearWebFormSession(): void {
+export function clearWebFormSession(
+  datasetId: string | null | undefined = DEFAULT_DATASET_SCOPE,
+): void {
   if (!storageAvailable()) return;
   try {
-    window.sessionStorage.removeItem(WEB_FORM_SESSION_STORAGE_KEY);
+    window.sessionStorage.removeItem(webFormSessionStorageKey(datasetId));
   } catch {
     // 清理失败不应阻止用户结束本次填写。
   }

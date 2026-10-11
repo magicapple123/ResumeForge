@@ -32,7 +32,20 @@ const STATS = {
   pending_claims: [],
   stalled_application_count: 0,
   apply_queue_count: 0,
+  // 「第一份交付」两个总量：给成"全部完成"的口径，面板不渲染，不打扰下面的既有断言。
+  claim_count: 2,
+  resume_with_job_count: 1,
   latest_applications: [],
+};
+
+// 空库口径：三个阶段全部未完成，首页顶部应出现「第一份交付」面板。
+const EMPTY_STATS: typeof STATS = {
+  ...STATS,
+  job_count: 0,
+  open_job_count: 0,
+  resume_count: 0,
+  claim_count: 0,
+  resume_with_job_count: 0,
 };
 
 function renderPage() {
@@ -75,6 +88,22 @@ describe("HomePage", () => {
     expect(screen.getByRole("link", { name: /模拟面试/ })).toHaveAttribute("href", "/interview");
     expect(screen.getByRole("link", { name: /求职统计/ })).toHaveAttribute("href", "/analytics");
     expect(screen.getByRole("link", { name: /设置/ })).toHaveAttribute("href", "/settings");
+  });
+
+  it("renders the first-delivery panel above the stats when nothing is done yet", async () => {
+    apiMocks.getStats.mockResolvedValue(EMPTY_STATS);
+    renderPage();
+
+    expect(await screen.findByText("从零到第一份可交付简历")).toBeInTheDocument();
+    expect(screen.getByText("准备事实")).toBeInTheDocument();
+    const cta = screen.getByRole("link", { name: /去我的资料录入/ });
+    expect(cta).toHaveAttribute("href", "/profile");
+  });
+
+  it("hides the first-delivery panel once everything is done (sample-data shape)", async () => {
+    renderPage();
+    await screen.findByText("岗位广场");
+    expect(screen.queryByText("从零到第一份可交付简历")).toBeNull();
   });
 
   it("renders grouped more-results that navigate by hit path", async () => {

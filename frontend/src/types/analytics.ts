@@ -57,6 +57,38 @@ export interface ReminderCounts {
   total: number;
 }
 
+/** 一个相邻阶段对的真实转化（RF-18，口径来自状态变化事件表）。 */
+export interface StageConversion {
+  from_status: string;
+  to_status: string;
+  /** 同时到过 from 与 to 的记录数。 */
+  numerator: number;
+  /** 到过 from 的记录数。 */
+  denominator: number;
+  rate: number;
+  small_sample: boolean;
+}
+
+/** 一个相邻阶段对的真实耗时。median_days 为 null 表示没有可用日期对，不显示 0 天。 */
+export interface StageDuration {
+  from_status: string;
+  to_status: string;
+  numerator: number;
+  denominator: number;
+  median_days: number | null;
+  skipped_negative: number;
+  small_sample: boolean;
+}
+
+/** 基于状态变化事件表的真实时间线指标（RF-18）。历史行不回填，覆盖率如实下发。 */
+export interface TrackCohort {
+  event_track_count: number;
+  historical_track_count: number;
+  undated_event_count: number;
+  conversions: StageConversion[];
+  durations: StageDuration[];
+}
+
 export interface AnalyticsDashboard {
   // ===== 概览 =====
   total_applications: number;
@@ -92,6 +124,9 @@ export interface AnalyticsDashboard {
   record_sources: LabeledCount[];
   referral: ReferralBlock;
   referral_status: KeyedCount[];
+
+  // ===== 真实时间线（RF-18，口径来自状态变化事件表）=====
+  cohort: TrackCohort;
 
   // ===== 简历与健康度 =====
   resume_count: number;

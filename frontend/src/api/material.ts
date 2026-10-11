@@ -1,10 +1,11 @@
 /** 资料箱接口：零散资料的增删改查。 */
-import type { Material, MaterialPayload } from "../types";
+import type { Material, MaterialPayload, MaterialSummary } from "../types";
 import { buildQuery, request } from "./client";
 
+/** 列表只带附件元信息（RF-25）：图片预览与附件全文走 getMaterial 详情。 */
 export function listMaterials(
   params: { keyword?: string; category?: string } = {},
-): Promise<Material[]> {
+): Promise<MaterialSummary[]> {
   return request(`/materials${buildQuery(params)}`);
 }
 

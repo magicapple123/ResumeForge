@@ -12,7 +12,7 @@
  *    原因，整张图没有输入就显示空态而不是零轴。
  * 2. **每张图的 `aria-label` 必须互不相同**，否则读屏软件与测试都分不清是哪张图。
  */
-import { Col, Empty, Row, Segmented, Typography } from "antd";
+import { Col, Empty, Row, Segmented, Tag, Typography } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -25,8 +25,14 @@ import HorizontalBarChart from "../components/analytics/HorizontalBarChart";
 import SectionCard from "../components/analytics/SectionCard";
 import StatCard from "../components/analytics/StatCard";
 import { useApi } from "../hooks/useApi";
-import { FUNNEL_STATUSES, REFERRAL_STATUS_LABELS } from "../types";
-import type { AnalyticsDashboard, FunnelStage, ReferralStatus } from "../types";
+import { FUNNEL_STATUSES, REFERRAL_STATUS_LABELS, TRACK_STATUS_LABELS } from "../types";
+import type {
+  AnalyticsDashboard,
+  FunnelStage,
+  ReferralStatus,
+  TrackCohort,
+  TrackStatus,
+} from "../types";
 import { formatRate } from "../utils/format";
 
 /** 提醒四档的展示名。紧急度的判定在后端 `reminder_urgency`（唯一实现），
@@ -95,6 +101,69 @@ function TopCompaniesBlock({ data }: { data: AnalyticsDashboard }) {
           label="投递未填写公司名，未计入排行"
           action={<Link to="/tracker">去补充</Link>}
         />
+      ) : null}
+    </>
+  );
+}
+
+/** 「真实时间线」（RF-18）：基于状态变化事件表的阶段转化与耗时。
+ *
+ * 只展示事件能证明的事：每项带分子/分母副文案与小样本徽标；历史记录（早于事件
+ * 记录功能、无阶段数据）如实说明缺口。**不做**任何「使用产品能提高 X%」式的推断。
+ */
+function CohortBlock({ cohort }: { cohort: TrackCohort }) {
+  if (cohort.event_track_count === 0) {
+    return (
+      <Empty
+        description={
+          cohort.historical_track_count > 0
+            ? `现有 ${cohort.historical_track_count} 条进度记录早于事件记录功能，没有阶段数据；之后的状态变化会开始记录。`
+            : "还没有进度记录"
+        }
+      />
+    );
+  }
+  return (
+    <>
+      {cohort.historical_track_count > 0 ? (
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+          有 {cohort.historical_track_count} 条记录早于事件记录功能（共{" "}
+          {cohort.event_track_count + cohort.historical_track_count}{" "}
+          条），无阶段数据；之后的状态变化会开始记录。
+        </Typography.Paragraph>
+      ) : null}
+      <Row gutter={[16, 16]}>
+        {cohort.conversions.map((item) => (
+          <Col xs={24} sm={12} xl={6} key={`${item.from_status}-${item.to_status}`}>
+            <StatCard
+              title={`${TRACK_STATUS_LABELS[item.from_status as TrackStatus]} → ${TRACK_STATUS_LABELS[item.to_status as TrackStatus]}`}
+              value={formatRate(item.rate)}
+              hint={
+                item.denominator === 0
+                  ? "还没有记录到过这个阶段"
+                  : `到下一阶段 ${item.numerator} / 到过本阶段 ${item.denominator} 条记录`
+              }
+            />
+            {item.small_sample && <Tag>样本少于 5 条，仅供参考</Tag>}
+          </Col>
+        ))}
+      </Row>
+      <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
+        {cohort.durations.map((item) => (
+          <Col xs={24} sm={12} xl={6} key={`${item.from_status}-${item.to_status}`}>
+            <StatCard
+              title={`${TRACK_STATUS_LABELS[item.from_status as TrackStatus]} → ${TRACK_STATUS_LABELS[item.to_status as TrackStatus]} 耗时`}
+              value={item.median_days === null ? "暂无可比数据" : `中位 ${item.median_days} 天`}
+              hint={`基于 ${item.numerator} 对日期（该阶段共 ${item.denominator} 条）`}
+            />
+            {item.small_sample && <Tag>样本少于 5 条，仅供参考</Tag>}
+          </Col>
+        ))}
+      </Row>
+      {cohort.undated_event_count > 0 ? (
+        <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+          有 {cohort.undated_event_count} 次状态变化没写日期，耗时按记录当天兜底。
+        </Typography.Paragraph>
       ) : null}
     </>
   );
@@ -228,6 +297,13 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
             </Typography.Paragraph>
           </Col>
         </Row>
+      </SectionCard>
+
+      <SectionCard
+        title="真实时间线"
+        description="只统计事件记录功能上线之后发生的状态变化：每项的分子分母都写在副文案里，样本不足时亮出徽标。这些数字只描述过去——它们不预测、也不承诺任何「用了会更好」。"
+      >
+        <CohortBlock cohort={data.cohort} />
       </SectionCard>
 
       <SectionCard
