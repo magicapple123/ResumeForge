@@ -1,4 +1,5 @@
 """新增模块的接口测试：资料箱、备选岗位、个人照片、技能工作台、简历版式与备份兼容。"""
+
 import json
 import zipfile
 
@@ -124,8 +125,9 @@ def test_candidate_jobs_crud_and_import_marker(client):
     )
     assert job.status_code == 201
     job_id = job.json()["id"]
-    # 来源标注会被自动写进备注，方便用户回溯这条招聘信息是怎么来的。
-    assert "来源：备选岗位导入" in job.json()["note"]
+    # 来源住独立字段，备注不再被自动追加「来源：…」行。
+    assert job.json()["origin_source"] == "备选岗位导入"
+    assert "来源：" not in job.json()["note"]
 
     marked = client.post(f"/api/candidate-jobs/{candidate['id']}/imported", json={"job_id": job_id})
     assert marked.status_code == 200
@@ -179,7 +181,9 @@ def test_profile_photos_switch_and_follow_the_primary(client):
 
 
 def test_photo_rejects_non_image_payload(client):
-    bad = client.post("/api/profile/photos", json={"name": "坏图", "image": "data:text/plain;base64,aGk="})
+    bad = client.post(
+        "/api/profile/photos", json={"name": "坏图", "image": "data:text/plain;base64,aGk="}
+    )
     assert bad.status_code == 422
 
 
@@ -238,7 +242,16 @@ def test_resume_template_catalog_and_layout_update(client):
     body = catalog.json()
     names = {item["name"] for item in body["templates"]}
     # 内置样式模板（自制模板以 custom=True 追加在后面，未创建时应为空）。
-    assert {"classic", "modern", "compact", "elegant", "technical", "minimal", "editorial", "split"} <= names
+    assert {
+        "classic",
+        "modern",
+        "compact",
+        "elegant",
+        "technical",
+        "minimal",
+        "editorial",
+        "split",
+    } <= names
     assert [item for item in body["templates"] if item["custom"]] == []
     assert {item["name"] for item in body["font_scales"]} == {"small", "standard", "large"}
     # 每个档位都必须带 `base_px`，且**与后端唯一的档位表 FONT_SCALES 完全一致**：
@@ -251,7 +264,11 @@ def test_resume_template_catalog_and_layout_update(client):
     # 光"有"这个字段还不够：值必须是正数，否则前端会算出 0 甚至负数的滑块范围。
     assert all(item["base_px"] > 0 for item in body["font_scales"])
     # 格式模板的参数清单与内置预设也要一起下发：生成弹窗与工作台共用这一份。
-    assert {item["key"] for item in body["format_fields"]} >= {"accent", "line_height", "page_padding"}
+    assert {item["key"] for item in body["format_fields"]} >= {
+        "accent",
+        "line_height",
+        "page_padding",
+    }
     assert {item["key"] for item in body["style_fields"]} >= {
         "accent",
         "line_height",
@@ -406,21 +423,45 @@ def test_resume_pdf_export_reports_its_page_count(client):
     assert int(response.headers["X-Resume-Page-Limit"]) == 1
 
 
-def test_a_long_note_still_keeps_its_source_line():
-    """备注接近上限时，来源标注不能被截掉。
+def test_create_job_keeps_note_verbatim_and_fills_origin_source(client):
+    """0042 起：来源不再追加进备注，住进独立字段 ``origin_source``。
 
-    之前是先拼再整体截断：正文一长，刚加上的"来源："就被裁没了，功能静默失效——
-    用户以为这条是手填的，而实际上它来自图片识别。
+    历史行为（已被替换）：保存岗位时往备注末尾补一行「来源：…」——用户删不掉，
+    编辑空备注还会被补回来。现在备注如实保存；来源字段未填时自动继承录入方式，
+    用户随后可自由改写或清空。
     """
-    from app.services.job.job_service import MAX_JOB_NOTE_CHARS, note_with_source
+    response = client.post(
+        "/api/jobs",
+        json={
+            "title": "溯源岗位",
+            "company": "示例公司",
+            "recognition_source": "图片识别",
+        },
+    )
+    assert response.status_code == 201
+    created = response.json()
+    # 备注一个字都不多：不再有「来源：…」行。
+    assert created["note"] == ""
+    # 来源自动继承录入方式，作为独立字段下发。
+    assert created["origin_source"] == "图片识别"
 
-    long_note = "备" * MAX_JOB_NOTE_CHARS
-    merged = note_with_source(long_note, "图片识别")
+    # 用户显式填了来源：照原样保存，不被覆盖。
+    response = client.post(
+        "/api/jobs",
+        json={
+            "title": "自填来源岗位",
+            "origin_source": "内推",
+            "recognition_source": "手动填写",
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["origin_source"] == "内推"
 
-    assert "来源：图片识别" in merged
-    assert len(merged) <= MAX_JOB_NOTE_CHARS
-    # 用户原文照旧保留在前面，只是被裁到给标注让位。
-    assert merged.startswith("备")
+    # 更新时可以清空来源（PUT 只更新提交了的字段；空串 = 用户清空）。
+    job_id = created["id"]
+    response = client.put(f"/api/jobs/{job_id}", json={"origin_source": ""})
+    assert response.status_code == 200
+    assert response.json()["origin_source"] == ""
 
 
 def test_candidate_detail_carries_the_jd_but_the_list_does_not(db_session, client):

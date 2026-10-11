@@ -29,6 +29,7 @@ const BASE_JOB: Job = {
   note: "",
   note_images: [],
   recognition_source: "",
+  origin_source: "",
   favorite: false,
   apply_supported: true,
   created_at: "2026-08-19T08:00:00",
@@ -197,5 +198,21 @@ describe("JobDetailDrawer 带 id 的跨模块动作（RF-11）", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /模拟面试/ }));
     expect(screen.getByTestId("location")).toHaveTextContent("/interview?job_id=42");
+  });
+});
+
+describe("JobDetailDrawer 来源字段", () => {
+  it("填写了来源时独立展示，备注正文里不再有「来源：…」行", () => {
+    renderDrawer({ ...BASE_JOB, origin_source: "内推", note: "王工帮我递的简历" });
+
+    expect(screen.getByText("内推")).toBeInTheDocument();
+    expect(screen.getByText("王工帮我递的简历")).toBeInTheDocument();
+  });
+
+  it("没填来源时留白显示，不编造值", () => {
+    renderDrawer(BASE_JOB);
+
+    const sourceRow = screen.getByText("来源").closest(".ant-descriptions-item");
+    expect(sourceRow?.textContent).toContain("-");
   });
 });

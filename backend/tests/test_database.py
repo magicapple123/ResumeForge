@@ -1,4 +1,5 @@
 """SQLite 兼容升级测试。"""
+
 from alembic import command
 from app.database import Base, build_engine, ensure_sqlite_columns
 from app.database_migrations import (
@@ -13,7 +14,7 @@ from sqlalchemy import create_engine, inspect, text
 # 断言悄悄变成过时的期望值（而真出问题时是用户先发现）。
 _APPLICATION_TABLES = set(application_tables())
 # 当前迁移 head；每次新增 revision 时同步这里。
-_HEAD_REVISION = "0041_track_channel_and_events"
+_HEAD_REVISION = "0042_job_origin_source"
 
 
 def _assert_head_schema(bind) -> None:
@@ -76,15 +77,11 @@ def test_ensure_sqlite_columns_preserves_legacy_rows(tmp_path):
             connection.exec_driver_sql(
                 "CREATE TABLE job (id INTEGER PRIMARY KEY, title VARCHAR(128) NOT NULL)"
             )
-            connection.exec_driver_sql(
-                "INSERT INTO job (id, title) VALUES (1, '算法工程师')"
-            )
+            connection.exec_driver_sql("INSERT INTO job (id, title) VALUES (1, '算法工程师')")
             connection.exec_driver_sql(
                 "CREATE TABLE user_profile (id INTEGER PRIMARY KEY, name VARCHAR(64) NOT NULL)"
             )
-            connection.exec_driver_sql(
-                "INSERT INTO user_profile (id, name) VALUES (1, '张三')"
-            )
+            connection.exec_driver_sql("INSERT INTO user_profile (id, name) VALUES (1, '张三')")
             connection.exec_driver_sql(
                 "CREATE TABLE education "
                 "(id INTEGER PRIMARY KEY, profile_id INTEGER NOT NULL, school VARCHAR(128) NOT NULL)"
@@ -116,8 +113,7 @@ def test_ensure_sqlite_columns_preserves_legacy_rows(tmp_path):
                 "INSERT INTO project (id, profile_id, name) VALUES (1, 1, '简历通')"
             )
             connection.exec_driver_sql(
-                "CREATE TABLE resume_record "
-                "(id INTEGER PRIMARY KEY, title VARCHAR(256) NOT NULL)"
+                "CREATE TABLE resume_record (id INTEGER PRIMARY KEY, title VARCHAR(256) NOT NULL)"
             )
             connection.exec_driver_sql(
                 "INSERT INTO resume_record (id, title) VALUES (1, '后端岗位简历')"
@@ -128,44 +124,65 @@ def test_ensure_sqlite_columns_preserves_legacy_rows(tmp_path):
 
         inspector = inspect(legacy_engine)
         assert "note" in {column["name"] for column in inspector.get_columns("job")}
-        assert "photo" in {
-            column["name"] for column in inspector.get_columns("user_profile")
-        }
+        assert "photo" in {column["name"] for column in inspector.get_columns("user_profile")}
         for table_name in ("education", "experience", "campus_experience", "project"):
-            column_names = {
-                column["name"] for column in inspector.get_columns(table_name)
-            }
+            column_names = {column["name"] for column in inspector.get_columns(table_name)}
             assert {"reference_file_name", "reference_content"} <= column_names
         assert {"enhancement_enabled", "enhancement_level"} <= {
             column["name"] for column in inspector.get_columns("resume_record")
         }
         with legacy_engine.connect() as connection:
-            job = connection.exec_driver_sql(
-                "SELECT title, note, favorite FROM job WHERE id = 1"
-            ).mappings().one()
-            profile = connection.exec_driver_sql(
-                "SELECT name, photo, section_order FROM user_profile WHERE id = 1"
-            ).mappings().one()
-            education = connection.exec_driver_sql(
-                "SELECT school, reference_file_name, reference_content "
-                "FROM education WHERE id = 1"
-            ).mappings().one()
-            experience = connection.exec_driver_sql(
-                "SELECT company, reference_file_name, reference_content "
-                "FROM experience WHERE id = 1"
-            ).mappings().one()
-            campus = connection.exec_driver_sql(
-                "SELECT organization, reference_file_name, reference_content "
-                "FROM campus_experience WHERE id = 1"
-            ).mappings().one()
-            project = connection.exec_driver_sql(
-                "SELECT name, reference_file_name, reference_content "
-                "FROM project WHERE id = 1"
-            ).mappings().one()
-            resume = connection.exec_driver_sql(
-                "SELECT title, enhancement_enabled, enhancement_level "
-                "FROM resume_record WHERE id = 1"
-            ).mappings().one()
+            job = (
+                connection.exec_driver_sql("SELECT title, note, favorite FROM job WHERE id = 1")
+                .mappings()
+                .one()
+            )
+            profile = (
+                connection.exec_driver_sql(
+                    "SELECT name, photo, section_order FROM user_profile WHERE id = 1"
+                )
+                .mappings()
+                .one()
+            )
+            education = (
+                connection.exec_driver_sql(
+                    "SELECT school, reference_file_name, reference_content "
+                    "FROM education WHERE id = 1"
+                )
+                .mappings()
+                .one()
+            )
+            experience = (
+                connection.exec_driver_sql(
+                    "SELECT company, reference_file_name, reference_content "
+                    "FROM experience WHERE id = 1"
+                )
+                .mappings()
+                .one()
+            )
+            campus = (
+                connection.exec_driver_sql(
+                    "SELECT organization, reference_file_name, reference_content "
+                    "FROM campus_experience WHERE id = 1"
+                )
+                .mappings()
+                .one()
+            )
+            project = (
+                connection.exec_driver_sql(
+                    "SELECT name, reference_file_name, reference_content FROM project WHERE id = 1"
+                )
+                .mappings()
+                .one()
+            )
+            resume = (
+                connection.exec_driver_sql(
+                    "SELECT title, enhancement_enabled, enhancement_level "
+                    "FROM resume_record WHERE id = 1"
+                )
+                .mappings()
+                .one()
+            )
         assert dict(job) == {"title": "算法工程师", "note": "", "favorite": 0}
         assert dict(profile) == {"name": "张三", "photo": "", "section_order": "[]"}
         assert dict(education) == {
@@ -242,7 +259,9 @@ def test_alembic_migration_preserves_rows_repairs_fk_and_is_idempotent(tmp_path)
             additional_info = connection.execute(
                 text("SELECT additional_info FROM job WHERE id = 1")
             ).scalar_one()
-            revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            revision = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
         assert rows == [(1, "有效简历", 1, 0), (2, "孤立简历", None, 0)]
         assert additional_info == ""
         assert revision == _HEAD_REVISION
@@ -286,9 +305,12 @@ def test_chat_flags_migration_preserves_existing_messages(tmp_path):
 
         with migration_engine.connect() as connection:
             assert connection.execute(text("SELECT count(1) FROM chat_message")).scalar_one() == 1
-            assert connection.execute(
-                text("SELECT content FROM chat_message WHERE id = 1")
-            ).scalar_one() == "历史消息"
+            assert (
+                connection.execute(
+                    text("SELECT content FROM chat_message WHERE id = 1")
+                ).scalar_one()
+                == "历史消息"
+            )
             assert connection.execute(
                 text("SELECT pinned, favorite FROM chat_conversation WHERE id = 1")
             ).one() == (0, 0)

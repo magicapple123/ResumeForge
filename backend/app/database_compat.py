@@ -6,6 +6,7 @@ SQLITE_REQUIRED_COLUMNS = {
         "favorite": "BOOLEAN NOT NULL DEFAULT 0",
         "note_images": "TEXT NOT NULL DEFAULT '[]'",
         "recognition_source": "VARCHAR(32) NOT NULL DEFAULT ''",
+        "origin_source": "VARCHAR(64) NOT NULL DEFAULT ''",
     },
     "user_profile": {
         "photo": "TEXT NOT NULL DEFAULT ''",

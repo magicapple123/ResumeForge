@@ -1,4 +1,5 @@
 """岗位 Schema。"""
+
 from datetime import datetime
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -113,6 +114,9 @@ class JobCreate(BaseModel):
     note: str = Field(default="", max_length=2000)
     note_images: list[str] = Field(default_factory=list, max_length=MAX_JOB_NOTE_IMAGES)
     recognition_source: str = Field(default="", max_length=32)
+    # 用户可见、可编辑的「来源」字段（0042 起）：这条招聘信息从哪来的。可留空、可随时
+    # 清空——备注不再自动追加「来源：…」行，溯源信息住在这列里。
+    origin_source: str = Field(default="", max_length=64)
     favorite: bool = False
 
     @field_validator("status")
@@ -153,6 +157,8 @@ class JobUpdate(BaseModel):
     note: str = Field(default="", max_length=2000)
     note_images: list[str] = Field(default_factory=list, max_length=MAX_JOB_NOTE_IMAGES)
     recognition_source: str = Field(default="", max_length=32)
+    # 提交空串 = 用户清空了来源：更新路径必须尊重这个动作，不能当"未提供"。
+    origin_source: str = Field(default="", max_length=64)
     favorite: bool = False
 
     @field_validator("status")
