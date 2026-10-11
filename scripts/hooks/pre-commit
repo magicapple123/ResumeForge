@@ -1,0 +1,50 @@
+#!/bin/sh
+# ResumeForge pre-commit hook (fast gate only; full check: scripts/Check-All.ps1)
+# Install: git config core.hooksPath scripts/hooks
+
+# Collect staged files
+STAGED_P=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.py$' || true)
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' || true)
+
+FAIL=0
+
+# 1) Ruff on staged Python files
+if [ -n "$STAGED_P" ]; then
+  RUFF=""
+  if [ -x "backend/.venv/Scripts/ruff.exe" ]; then RUFF="backend/.venv/Scripts/ruff.exe"; fi
+  if [ -z "$RUFF" ]; then RUFF=$(command -v ruff || true); fi
+  if [ -n "$RUFF" ]; then
+    echo "[pre-commit] ruff check..."
+    "$RUFF" check $STAGED_P || FAIL=1
+    "$RUFF" format --check $STAGED_P || FAIL=1
+  else
+    echo "[pre-commit] WARNING: ruff not found, skipped"
+  fi
+fi
+
+# 2) eslint on staged frontend files (only if node_modules exists)
+if [ -n "$STAGED_TS" ] && [ -d "frontend/node_modules" ]; then
+  echo "[pre-commit] eslint on staged files..."
+  (cd frontend && ./node_modules/.bin/eslint $STAGED_TS) || FAIL=1
+fi
+
+# 3) Backend structural guards (fast tests)
+if [ -n "$STAGED_P" ] || [ -n "$STAGED_TS" ]; then
+  PY=""
+  if [ -x "backend/.venv/Scripts/python.exe" ]; then PY="backend/.venv/Scripts/python.exe"; fi
+  if [ -z "$PY" ]; then PY=$(command -v python || true); fi
+  if [ -n "$PY" ]; then
+    echo "[pre-commit] structural guards (file size budget / import direction)..."
+    (cd backend && "$PY" -m pytest tests/test_file_size_budget.py tests/test_import_direction.py -q -x --no-header 2>&1 | tail -3) || FAIL=1
+  fi
+fi
+
+if [ $FAIL -ne 0 ]; then
+  echo ""
+  echo "[pre-commit] FAILED - commit aborted."
+  echo "  Bypass (not recommended): git commit --no-verify"
+  echo "  Full check: scripts/Check-All.ps1"
+  exit 1
+fi
+echo "[pre-commit] OK"
+exit 0

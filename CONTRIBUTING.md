@@ -47,6 +47,20 @@ npm run dev
 
 ## 提交前检查
 
+推荐直接运行一键全量检查（覆盖下方全部内容，外加 npm audit 与生产构建）：
+
+```powershell
+.\scripts\Check-All.ps1
+```
+
+此外，仓库启用了 pre-commit 钩子（快闸门：ruff、eslint、结构守卫测试）。首次克隆后执行一次：
+
+```powershell
+git config core.hooksPath scripts/hooks
+```
+
+手动检查命令如下。
+
 后端：
 
 ```powershell
