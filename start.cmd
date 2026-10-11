@@ -1,4 +1,5 @@
 @echo off
+title ResumeForge
 setlocal
 rem %* forwards -BackendPort / -FrontendPort / -FrontendMode / -NoBrowser to the
 rem launcher. -FrontendMode is auto (use the bundled frontend\dist via the backend

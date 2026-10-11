@@ -99,6 +99,17 @@ Write-Host ""
 Write-Host "Removing:" -ForegroundColor Cyan
 foreach ($relative in $DependencyTargets) { Remove-Target -Relative $relative }
 
+# The desktop shortcut created by Create-DesktopShortcut.cmd.
+$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "ResumeForge.lnk"
+if (Test-Path $desktopShortcut) {
+    try {
+        Remove-Item -LiteralPath $desktopShortcut -Force -ErrorAction Stop
+        Write-Host "Removed desktop shortcut: $desktopShortcut"
+    } catch {
+        Write-Warning "Could not remove the desktop shortcut: $_"
+    }
+}
+
 # Byte-code caches: safe to delete anywhere in the tree.
 Get-ChildItem -LiteralPath $ProjectRoot -Directory -Recurse -Force -Filter "__pycache__" -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -notlike "*\.venv\*" -and $_.FullName -notlike "*\node_modules\*" } |
