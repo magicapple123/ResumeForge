@@ -12,8 +12,11 @@
 # refreshes the existing shortcut.
 #
 # Optional: -Remove deletes the shortcut instead (uninstall.cmd calls this).
+# Optional: -IfMissing exits silently when the shortcut already exists, so
+# start.cmd can offer it on first launch without touching an existing one.
 param(
-    [switch]$Remove
+    [switch]$Remove,
+    [switch]$IfMissing
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +29,12 @@ $startCmd = Join-Path $projectRoot "start.cmd"
 $iconPath = Join-Path $projectRoot "branding\resumeforge.ico"
 
 $shell = New-Object -ComObject WScript.Shell
+
+if ($IfMissing -and (Test-Path $shortcutPath)) {
+    # First-launch path: the shortcut is already there, nothing to do and
+    # nothing to print -- start.cmd calls us with output suppressed.
+    exit 0
+}
 
 if ($Remove) {
     if (Test-Path $shortcutPath) {
