@@ -1389,8 +1389,12 @@
   border-top: 1px solid var(--rf-border, #f0f0f0);
 }
 
-.first-delivery-stage.is-upcoming {
-  opacity: 0.55;
+/* 未来态弱化：用显式灰而非 opacity——半透明黑在白底上的等效对比度只有 ~3.5:1，
+   过不了 axe 的 color-contrast（2026-10-11 CI 端到端 a11y 冒烟实测）。description
+   灰（#5f6b7a，RF-12 对比度修正后的 token）≈5.4:1，AA 通过，弱化层级感仍在。 */
+.first-delivery-stage.is-upcoming .first-delivery-stage-title,
+.first-delivery-stage.is-upcoming .ant-typography {
+  color: var(--rf-text-description, #5f6b7a);
 }
 
 .first-delivery-stage-icon {

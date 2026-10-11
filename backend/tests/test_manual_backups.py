@@ -34,8 +34,11 @@ def test_manual_backups_list_only_db_files(client):
     assert [item["name"] for item in payload["items"]] == [SNAPSHOT_NAME]
     assert payload["items"][0]["size_bytes"] == 500
     assert payload["trashed_count"] == 1
-    # GitHub Windows runner 的用户目录大小写与环境变量不一致，按大小写不敏感比较。
-    assert os.path.normcase(payload["directory"]) == os.path.normcase(str(backups))
+    # GitHub Windows runner 上 pytest 临时目录可能出现 8.3 短路径名，而 API 侧
+    # ``Path.resolve()`` 会展开成长路径——用 realpath + normcase 做等价比较。
+    assert os.path.normcase(os.path.realpath(payload["directory"])) == os.path.normcase(
+        os.path.realpath(str(backups))
+    )
 
 
 def test_trash_manual_backup_moves_file_never_deletes(client):

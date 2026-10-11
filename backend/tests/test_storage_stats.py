@@ -36,8 +36,11 @@ def test_storage_overview_counts_directories_and_database(client):
     # 汇总 >= 任何分项。
     assert payload["total_bytes"] >= 3000
     assert payload["total_file_count"] >= 2
-    # GitHub Windows runner 的用户目录大小写与环境变量不一致，按大小写不敏感比较。
-    assert os.path.normcase(payload["data_dir"]) == os.path.normcase(str(base))
+    # GitHub Windows runner 上 pytest 临时目录可能出现 8.3 短路径名，而 API 侧
+    # ``Path.resolve()`` 会展开成长路径——用 realpath + normcase 做等价比较。
+    assert os.path.normcase(os.path.realpath(payload["data_dir"])) == os.path.normcase(
+        os.path.realpath(str(base))
+    )
 
 
 def test_storage_overview_never_returns_file_contents(client):
