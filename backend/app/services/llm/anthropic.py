@@ -41,6 +41,7 @@ from .anthropic_messages import (
     _has_tool_history as _has_tool_history,
 )
 from .base import BaseLLMProvider, LLMDelta, LLMError, build_request_timeout
+from .client_pool import get_shared_client
 from .openai_compat import http_error_message, validated_base_url
 from .thinking import DEFAULT_EFFORT, EFFORT_BUDGETS, thinking_budget
 from .usage import FINISH_CANCELLED, FINISH_ERROR, FINISH_STOP
@@ -68,8 +69,10 @@ def _normalize_stop_reason(stop_reason: str | None) -> str | None:
         return None
     return _STOP_REASON_MAP.get(stop_reason, stop_reason)
 
+
 # 思考强度 → 思考预算（tokens）的映射只有一份，在 `thinking.py`：设置页的「思考模式」
 # 与助手页的「思考强度」在原生协议下走的是同一张表。
+
 
 class AnthropicProvider(BaseLLMProvider):
     def __init__(
@@ -103,8 +106,13 @@ class AnthropicProvider(BaseLLMProvider):
         try:
             while True:
                 try:
-                    async with self._client() as client, client.stream(
-                        "POST", self._endpoint(), json=payload, headers=self._headers()
+                    client = self._client()
+                    async with client.stream(
+                        "POST",
+                        self._endpoint(),
+                        json=payload,
+                        headers=self._headers(),
+                        timeout=self._timeout(),
                     ) as response:
                         if response.status_code != 200:
                             # 429/5xx 只发生在 body 之前（安全点规则：首个 delta 之前）；重试编排（计数/退避/终态文案）在 retry.StatusRetryGate。
@@ -151,9 +159,9 @@ class AnthropicProvider(BaseLLMProvider):
                         else None
                     )
                 stop_reason = data.get("stop_reason") if isinstance(data, dict) else None
-                finish_reason = _normalize_stop_reason(
-                    str(stop_reason) if stop_reason else None
-                ) or FINISH_STOP
+                finish_reason = (
+                    _normalize_stop_reason(str(stop_reason) if stop_reason else None) or FINISH_STOP
+                )
                 return self._extract_text(data)
         except asyncio.CancelledError:
             finish_reason = FINISH_CANCELLED
@@ -194,8 +202,13 @@ class AnthropicProvider(BaseLLMProvider):
                 self._stream_completion_tokens = None
                 self._stream_stop_reason = None
                 try:
-                    async with self._client() as client, client.stream(
-                        "POST", self._endpoint(), json=payload, headers=self._headers()
+                    client = self._client()
+                    async with client.stream(
+                        "POST",
+                        self._endpoint(),
+                        json=payload,
+                        headers=self._headers(),
+                        timeout=self._timeout(),
                     ) as response:
                         if response.status_code != 200:
                             # 状态码阶段（尚未产出任何 delta）：交给重试循环处理；编排在 retry.StatusRetryGate。
@@ -216,7 +229,9 @@ class AnthropicProvider(BaseLLMProvider):
                             continue
                         async for delta in self._iter_sse(response):
                             yield delta
-                        finish_reason = _normalize_stop_reason(self._stream_stop_reason) or FINISH_STOP
+                        finish_reason = (
+                            _normalize_stop_reason(self._stream_stop_reason) or FINISH_STOP
+                        )
                         return
                 except httpx.TimeoutException as exc:
                     # 流中途（已可能产出 delta）不重试：安全点规则（§2.4-2），只做文案转换。
@@ -369,7 +384,8 @@ class AnthropicProvider(BaseLLMProvider):
         return headers
 
     def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(timeout=self._timeout(), transport=self._transport)
+        # 连接池共享（AI 提速）：与 OpenAI 兼容层同一份池；超时按请求在 stream() 处传入。
+        return get_shared_client(transport=self._transport)
 
     def _timeout(self) -> httpx.Timeout:
         # 与 openai_compat._timeout 同一契约（RF-14 §2.1.c）：分项 read 的"下限保护 +
@@ -473,9 +489,7 @@ class AnthropicProvider(BaseLLMProvider):
         ]
         return "".join(parts)
 
-    def _http_error(
-        self, response: httpx.Response, messages: list[dict] | None = None
-    ) -> LLMError:
+    def _http_error(self, response: httpx.Response, messages: list[dict] | None = None) -> LLMError:
         status = response.status_code
         logger.warning("Anthropic 调用失败 status=%s", status)
         if status == 400:
@@ -491,9 +505,8 @@ class AnthropicProvider(BaseLLMProvider):
                     "请把「思考强度」调回「关闭」，或改用 OpenAI 兼容协议的服务商后重试。"
                 )
             # 其它情况最常见的 400 是模型名或参数问题，保留更通用的提示。
-            return LLMError(
-                "请求格式错误：请检查模型名称、max_tokens 与思考预算设置（HTTP 400）"
-            )
+            return LLMError("请求格式错误：请检查模型名称、max_tokens 与思考预算设置（HTTP 400）")
         return LLMError(f"{http_error_message(status)}（HTTP {status}）")
+
 
 __all__ = ["AnthropicProvider"]

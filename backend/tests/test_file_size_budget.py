@@ -79,6 +79,13 @@ _EXEMPTIONS: dict[str, str] = {
     # Wave3 拆分后的页面组合层（handlers + 会话持久化 + busy 联合态 +
     # 弹层组合），与 live.py 同等待遇的组合层豁免。
     "frontend/src/pages/WebFormPage.tsx": "页面组合层（编排职责单一）",
+    # 2026-10-12 AI 提速批接入共享连接池（client_pool）后各 +9 行（511/512 vs 500）。
+    # 两文件是协议编排热点：monkeypatch 落点密集（payload/_build_payload/_client/
+    # 模块级 retry 等），拆出"HTTP 调用层"会把重试/降级/用量接线的上下文切成两半。
+    # 触发条件：>600 行或下次功能改动时先把传输层（_client/_timeout/_headers/_endpoint）
+    # 迁入独立模块（届时本豁免撤销）。
+    "backend/app/services/llm/openai_compat.py": "过线 12 行，协议编排热点 + patch 落点密集",
+    "backend/app/services/llm/anthropic.py": "过线 11 行，协议编排热点 + patch 落点密集",
 }
 
 
@@ -89,7 +96,9 @@ def _count_lines(path: Path) -> int:
 
 def test_production_files_stay_under_line_budget() -> None:
     offenders: list[str] = []
-    missing_exemptions = sorted(set(_EXEMPTIONS) - {p for p in _EXEMPTIONS if (REPO_ROOT / p).exists()})
+    missing_exemptions = sorted(
+        set(_EXEMPTIONS) - {p for p in _EXEMPTIONS if (REPO_ROOT / p).exists()}
+    )
     for root in SCAN_ROOTS:
         base = REPO_ROOT / root
         assert base.exists(), f"扫描根目录不存在：{base}"
