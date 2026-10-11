@@ -68,9 +68,10 @@ function extractZip(zipPath, targetDir) {
 }
 
 class BackendManager {
-  constructor(projectRoot, runtimeDir) {
+  constructor(projectRoot, runtimeDir, { packaged = false } = {}) {
     this.projectRoot = projectRoot;
     this.runtimeDir = runtimeDir;
+    this.packaged = packaged;
     this.child = null;
     this.logStream = null;
     this.stopped = false;
@@ -83,10 +84,46 @@ class BackendManager {
     return path.join(this.projectRoot, "runtime", "logs", "desktop-backend.log");
   }
 
+  // Packaged mode reuses the shipped launchers (python/node bootstrap, venv,
+  // uvicorn, health) instead of duplicating that logic in Node: hidden
+  // window, pinned port, no browser.
+  launcherCommand(port) {
+    if (process.platform === "win32") {
+      return {
+        file: "powershell.exe",
+        args: [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          path.join(this.projectRoot, "scripts", "Start-ResumeForge.ps1"),
+          "-BackendPort",
+          String(port),
+          "-NoBrowser",
+        ],
+        cwd: this.projectRoot,
+      };
+    }
+    return {
+      file: "/bin/bash",
+      args: [
+        path.join(this.projectRoot, "scripts", "macos", "start.sh"),
+        "--backend-port",
+        String(port),
+        "--no-browser",
+      ],
+      cwd: this.projectRoot,
+    };
+  }
+
   async prepareRuntime(onStage) {
-    const zipPath = path.join(this.projectRoot, "desktop", RUNTIME_ZIP_NAME);
+    // Dev tree: desktop/python-runtime.zip. Packaged: copied to the payload
+    // root by scripts/Build-Desktop.ps1.
+    const zipPath = path.join(
+      this.projectRoot,
+      this.packaged ? RUNTIME_ZIP_NAME : path.join("desktop", RUNTIME_ZIP_NAME),
+    );
     if (!fs.existsSync(zipPath)) {
-      // Dev tree: no bundled runtime zip, the venv stays authoritative.
       return;
     }
     const python = resolveRuntimePython(this.runtimeDir);
@@ -106,10 +143,6 @@ class BackendManager {
 
   async start(onStage) {
     await this.prepareRuntime(onStage);
-    const bundled = resolveRuntimePython(this.runtimeDir);
-    const python = fs.existsSync(bundled)
-      ? bundled
-      : resolvePython(this.projectRoot);
     const port = await findFreePort();
     const logPath = this.logFile();
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
@@ -118,25 +151,61 @@ class BackendManager {
 
     if (onStage) onStage("backend-starting");
 
-    this.child = spawn(
-      python,
-      [
-        "-m",
-        "uvicorn",
-        "app.main:app",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(port),
-        "--log-level",
-        "warning",
-      ],
-      {
-        cwd: path.join(this.projectRoot, "backend"),
+    const bundled = resolveRuntimePython(this.runtimeDir);
+    if (fs.existsSync(bundled)) {
+      // Preferred: the bundled runtime is a complete env (interpreter +
+      // site-packages), so uvicorn starts directly with no provisioning.
+      this.child = spawn(
+        bundled,
+        [
+          "-m",
+          "uvicorn",
+          "app.main:app",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          String(port),
+          "--log-level",
+          "warning",
+        ],
+        {
+          cwd: path.join(this.projectRoot, "backend"),
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+    } else if (this.packaged) {
+      // Fallback: defer to the shipped launcher (python/node bootstrap, venv,
+      // dependency install). Hidden window, pinned port. Slow on first run -
+      // the bundled runtime exists precisely to avoid this path.
+      const launcher = this.launcherCommand(port);
+      this.child = spawn(launcher.file, launcher.args, {
+        cwd: launcher.cwd,
         windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
+      });
+    } else {
+      const venvPython = resolvePython(this.projectRoot);
+      this.child = spawn(
+        venvPython,
+        [
+          "-m",
+          "uvicorn",
+          "app.main:app",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          String(port),
+          "--log-level",
+          "warning",
+        ],
+        {
+          cwd: path.join(this.projectRoot, "backend"),
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+    }
     this.child.stdout.on("data", (chunk) => this.logStream.write(chunk));
     this.child.stderr.on("data", (chunk) => this.logStream.write(chunk));
 

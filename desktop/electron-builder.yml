@@ -1,0 +1,53 @@
+# electron-builder config for the ResumeForge desktop shell.
+#
+# The shell is packaged separately from the backend: `scripts/Build-Desktop.ps1`
+# assembles desktop/payload (backend + frontend/dist + scripts + branding) and
+# moves it into resources/payload at install time via extraResources. Targets:
+#   win  -> nsis (installer, primary) + dir (portable zip injection)
+#   mac  -> dmg (primary) + dir (zip injection)
+appId: top.huangcenguo.resumeforge
+productName: ResumeForge
+copyright: ResumeForge
+
+directories:
+  output: out
+  buildResources: .
+
+files:
+  - main.js
+  - preload.js
+  - splash.html
+  - backend-manager.js
+  - package.json
+
+extraResources:
+  # Assembled by scripts/Build-Desktop.ps1 before electron-builder runs.
+  - from: payload
+    to: payload
+  - from: icon.png
+    to: icon.png
+
+win:
+  icon: icon.png
+  target:
+    - nsis
+    - dir
+
+nsis:
+  oneClick: true
+  perMachine: false
+  # DeepSeek-style guard: refuse to install while a copy is still running.
+  allowToChangeInstallationDirectory: false
+  shortcutName: 简历通
+  artifactName: ResumeForge-Setup-${version}.${ext}
+
+mac:
+  icon: icon.png
+  target:
+    - dmg
+    - dir
+  category: public.app-category.productivity
+  artifactName: ResumeForge-${version}-${arch}.${ext}
+
+dmg:
+  artifactName: ResumeForge-${version}-${arch}.${ext}

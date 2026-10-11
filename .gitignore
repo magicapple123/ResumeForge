@@ -74,3 +74,8 @@ mokahr_apply_controls.json
 
 # ===== 日志 =====
 *.log
+
+# Desktop shell build artifacts
+desktop/payload/
+desktop/out/
+desktop/python-runtime.zip
