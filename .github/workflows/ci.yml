@@ -58,7 +58,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y fonts-noto-cjk
+          # fonts-wqy-zenhei：TrueType 轮廓的 CJK 字体。fonts-noto-cjk 是 CFF 轮廓，
+          # fpdf2 对 CFF 的子集化会把提取文本弄丢（页数对、探针全 miss，2026-10-11 实测），
+          # 金样导出测试必须落在 TrueType 字体上（下方 RESUMEFORGE_PDF_FONT 强制指定）。
+          sudo apt-get install -y fonts-noto-cjk fonts-wqy-zenhei
 
       - name: Run Ruff
         run: python -m ruff check .
@@ -92,6 +95,11 @@ jobs:
           .\scripts\tests\Test-Build-Release.ps1
 
       - name: Run tests with coverage
+        env:
+          # 强制金样 PDF 用 TrueType 轮廓字体（见上方 apt 安装注释）。该路径在
+          # Windows/macOS runner 上不存在，探测会打一行 warning 后照常回退到
+          # 本机字体（msyh/PingFang），不影响那两个平台。
+          RESUMEFORGE_PDF_FONT: /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
         run: >-
           python -m pytest -n auto
           --cov=app
@@ -221,10 +229,12 @@ jobs:
           echo
           # 端口活着不等于页面能用：同源模式下 index.html 与入口模块都由后端提供，
           # 这里真取一次页面里引用的 /assets/<entry>.js（dist 已预构建，无需轮询）。
-          entry=$(curl -fsS http://127.0.0.1:8123/ | grep -oE 'src="/assets/[^"]+"' | grep -oE '/assets/[^"]+' | tail -n 1)
+          # SPA 回退按"浏览器导航语义"判定（Accept 含 text/html 才回落 index.html，
+          # 程序化请求保持 404 原语义），所以探针必须带上浏览器的 Accept 头。
+          entry=$(curl -fsS -H "Accept: text/html" http://127.0.0.1:8123/ | grep -oE 'src="/assets/[^"]+"' | grep -oE '/assets/[^"]+' | tail -n 1)
           if [ -z "$entry" ]; then
             echo "同源 index.html 里没有解析到 /assets 入口模块" >&2
-            curl -fsS http://127.0.0.1:8123/ >&2
+            curl -fsS -H "Accept: text/html" http://127.0.0.1:8123/ >&2
             exit 1
           fi
           echo "入口模块：$entry"
@@ -337,7 +347,7 @@ jobs:
           # 端口活着不等于页面能用（AGENTS 的教训）：同源模式下 index.html 与入口
           # 模块都由后端提供，浏览器取不到入口模块就是一片空白。dist 已预构建、
           # 无需预热，这里真取一次 index.html 里引用的 /assets/<entry>.js。
-          $html = [string](Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8123/" -TimeoutSec 30).Content
+          $html = [string](Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8123/" -TimeoutSec 30 -Headers @{ Accept = "text/html" }).Content
           $entries = @(
             [regex]::Matches($html, '<script[^>]*src="([^"]+)"') |
             ForEach-Object { $_.Groups[1].Value } |

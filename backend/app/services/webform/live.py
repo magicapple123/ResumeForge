@@ -23,6 +23,7 @@
   面板只说明原因、不给「填入」按钮。
 - 页面**不直接访问本地 API**（那会让任何网站都能读到用户资料），一切经 CDP 来回传。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -124,6 +125,8 @@ MAX_AI_CALLS = 30
 
 # 规则认不出、也没问 AI（没开或问不成）时的兜底措辞。
 UNMATCHED_NOTE = "没认出来这个框要填什么"
+
+
 class LiveSession(LiveRememberMixin):
     """点哪个填哪个的一次会话：装上监听、轮询、按用户确认写入。"""
 
@@ -169,6 +172,8 @@ class LiveSession(LiveRememberMixin):
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
+        # 单轮轮询的互斥：见 _tick 的 docstring（页面一次性事件的"读-清"必须原子）。
+        self._tick_lock = threading.Lock()
         self._seq = 0
         # AI 兜底。``provider`` 为 None（没配模型）时整条路都不存在：**零调用**。
         self._provider = provider
@@ -263,9 +268,7 @@ class LiveSession(LiveRememberMixin):
         """替换资料刷新回调，供页面切换回来时复用同一会话。"""
         self._data_loader = loader
 
-    def set_autofill_data_loader(
-        self, loader: Callable[[], dict[str, str]] | None
-    ) -> None:
+    def set_autofill_data_loader(self, loader: Callable[[], dict[str, str]] | None) -> None:
         """替换悬浮球整页快捷填充使用的批量资料读取回调。"""
         self._autofill_data_loader = loader
 
@@ -308,9 +311,7 @@ class LiveSession(LiveRememberMixin):
         """更新「记住这条」是否需要人工选目标的兼容开关。"""
         self._require_memory_choice = bool(required)
 
-    def set_memory_targets_loader(
-        self, loader: Callable[[], list[dict[str, Any]]] | None
-    ) -> None:
+    def set_memory_targets_loader(self, loader: Callable[[], list[dict[str, Any]]] | None) -> None:
         """替换浏览器内联编辑器的资料目标刷新回调。"""
         self._memory_targets_loader = loader
 
@@ -420,7 +421,17 @@ class LiveSession(LiveRememberMixin):
         return False
 
     def _tick(self) -> bool:
-        """拉一次页面状态并处理；返回本轮是否遇到需要跟进的事件（供空闲退避判断）。"""
+        """拉一次页面状态并处理；返回本轮是否遇到需要跟进的事件（供空闲退避判断）。
+
+        整轮串行（``_tick_lock``）：页面上的 accept/remember 全局是"读到即消费"的
+        一次性事件，两轮 tick 并发跑会同时读到同一份 remember、各自处理一遍——
+        用户的一条「记住这条」被记两次。生产只有轮询线程会 tick，但测试会与
+        轮询线程并发手动 tick，这里的互斥把"读-清"变成原子。
+        """
+        with self._tick_lock:
+            return self._tick_locked()
+
+    def _tick_locked(self) -> bool:
         busy = False
         payload = self._client.evaluate(_STATE_SCRIPT)
         if isinstance(payload, str):
@@ -475,12 +486,8 @@ class LiveSession(LiveRememberMixin):
         autofill = payload.get("autofill")
         if self._enabled and isinstance(autofill, dict):
             sequence = int(autofill.get("seq") or 0)
-            if (
-                sequence
-                and (
-                    self._last_autofill_sequence is None
-                    or sequence != self._last_autofill_sequence
-                )
+            if sequence and (
+                self._last_autofill_sequence is None or sequence != self._last_autofill_sequence
             ):
                 self._last_autofill_sequence = sequence
                 busy = True
@@ -509,10 +516,7 @@ class LiveSession(LiveRememberMixin):
             if (
                 ask_sequence
                 and ask_text
-                and (
-                    self._last_ask_sequence is None
-                    or ask_sequence != self._last_ask_sequence
-                )
+                and (self._last_ask_sequence is None or ask_sequence != self._last_ask_sequence)
             ):
                 self._last_ask_sequence = ask_sequence
                 busy = True
@@ -793,7 +797,7 @@ class LiveSession(LiveRememberMixin):
         field_label: str = "",
         field_key: str = "",
     ) -> None:
-        """"这个框没认出来"的统一出口——面板上永远留着一个「换个资料…」，不会是死路。"""
+        """ "这个框没认出来"的统一出口——面板上永远留着一个「换个资料…」，不会是死路。"""
         self._publish(
             {
                 "status": "unmatched",
@@ -872,15 +876,10 @@ class LiveSession(LiveRememberMixin):
         for key in usable:
             value = resolve_value_for(control, key, data) or self._custom_value_by_label(key, data)
             # 事实类勾选与放宽规则同一道闸：值必须出现在控件自述里，否则代点就是猜。
-            if not value or (
-                kind == "choice"
-                and not _own_text_contains(control, value)
-            ):
+            if not value or (kind == "choice" and not _own_text_contains(control, value)):
                 continue
             shown_key = field_key_for_block(key, control.block_family, control.block_index)
-            fillable.append(
-                (shown_key, self._field_display_label(shown_key), value)
-            )
+            fillable.append((shown_key, self._field_display_label(shown_key), value))
 
         if fillable:
             shown_key, label, value = fillable[0]
@@ -952,9 +951,7 @@ class LiveSession(LiveRememberMixin):
             value = resolve_value_for(control, key, data) or self._custom_value_by_label(key, data)
             if value:
                 shown_key = field_key_for_block(key, control.block_family, control.block_index)
-                fillable.append(
-                    (self._field_display_label(shown_key), value)
-                )
+                fillable.append((self._field_display_label(shown_key), value))
 
         if not fillable:
             if usable:
@@ -967,7 +964,9 @@ class LiveSession(LiveRememberMixin):
             else:
                 key = ""
                 note = self._ai_dead_end(())
-            shown_key = field_key_for_block(key, control.block_family, control.block_index) if key else ""
+            shown_key = (
+                field_key_for_block(key, control.block_family, control.block_index) if key else ""
+            )
             self._publish_unmatched(
                 note,
                 source=SOURCE_AI,
@@ -1186,7 +1185,6 @@ class LiveSession(LiveRememberMixin):
             logger.debug("网申填表：回写问投投的回答失败：%s", error)
 
 
-
 #
 # 同一时刻只允许一个实时会话；会话内部可以绑定多个网申标签页。
 _session: LiveSession | MultiLiveSession | None = None
@@ -1301,9 +1299,7 @@ def remember_live_choice(
     with _session_lock:
         if _session is None or not _session.is_running:
             return False
-        return _session.remember_choice(
-            target_id=target_id, value=value, label=label, reuse=reuse
-        )
+        return _session.remember_choice(target_id=target_id, value=value, label=label, reuse=reuse)
 
 
 def is_live_running() -> bool:
