@@ -125,8 +125,25 @@ def _source_list(source: dict, field: str) -> list[str]:
 
 def _ground_or_restore_list(generated: list[str], source: list[str]) -> list[str]:
     """优先保留模型明确选择的事实；无法验证时回填来源。"""
+    return _ground_or_restore_list_annotated(generated, source)[0]
+
+
+def _ground_or_restore_list_annotated(
+    generated: list[str], source: list[str]
+) -> tuple[list[str], list[dict]]:
+    """:func:`_ground_or_restore_list` 的标注版（RF-13）：同时说明结果的来源。
+
+    返回 ``(values, annotations)``：命中 → ``grounded``（值级替换成功，
+    ``source_fact`` 是映射回的来源原文）；未命中回填 → ``restored``。
+    来源为空时没有内容，也就没有标注。
+    """
     grounded = _ground_list(generated, source)
-    return grounded or list(source)
+    if grounded:
+        return grounded, [{"origin": "grounded", "source_fact": "；".join(grounded)}]
+    restored = list(source)
+    if restored:
+        return restored, [{"origin": "restored", "source_fact": "；".join(restored)}]
+    return restored, []
 
 
 def _source_evidence_text(source: dict, fields: tuple[str, ...]) -> str:
@@ -143,8 +160,22 @@ def _enhance_or_restore_list(
     generated: list[str], source: list[str], source_evidence: str
 ) -> list[str]:
     """美化模式保留改写，但过滤来源无法支持的量化断言。"""
+    return _enhance_or_restore_list_annotated(generated, source, source_evidence)[0]
+
+
+def _enhance_or_restore_list_annotated(
+    generated: list[str], source: list[str], source_evidence: str
+) -> tuple[list[str], list[dict]]:
+    """:func:`_enhance_or_restore_list` 的标注版（RF-13）：改写保留 → ``enhanced_kept``。
+
+    ``source_fact`` 始终是**来源原文**（改写所依据的事实），模型改写文本本身放在
+    结果里、不重复进标注。回填（无证据或全部被过滤）→ ``restored``。
+    """
     if not source_evidence.strip():
-        return list(source)
+        restored = list(source)
+        if restored:
+            return restored, [{"origin": "restored", "source_fact": "；".join(restored)}]
+        return restored, []
     accepted: list[str] = []
     seen: set[str] = set()
     for value in generated:
@@ -159,7 +190,12 @@ def _enhance_or_restore_list(
             continue
         seen.add(normalized)
         accepted.append(cleaned)
-    return accepted or list(source)
+    if accepted:
+        return accepted, [{"origin": "enhanced_kept", "source_fact": "；".join(source)}]
+    restored = list(source)
+    if restored:
+        return restored, [{"origin": "restored", "source_fact": "；".join(restored)}]
+    return restored, []
 
 
 def _build_grounded_summary(selected_data: dict, job: JobOut | None = None) -> str:
@@ -245,8 +281,10 @@ __all__ = [
     "_unsupported_quantified_values",
     "_source_list",
     "_ground_or_restore_list",
+    "_ground_or_restore_list_annotated",
     "_source_evidence_text",
     "_enhance_or_restore_list",
+    "_enhance_or_restore_list_annotated",
     "_build_grounded_summary",
     "_reference_fallback_facts",
     "_selected_data_with_reference_fallbacks",

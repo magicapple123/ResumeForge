@@ -19,6 +19,9 @@ from ...database import SessionLocal
 from ...models.job import Job
 from ...models.profile import utcnow
 from ...models.setting import AppSetting
+from ...runtime import dataset_scope
+from ...runtime.dataset_scope import DatasetLease, DatasetScopeError
+from ...runtime.log_context import run_with_bound_context
 from ...schemas.job_match_background import (
     ACTIVE_JOB_MATCH_BACKGROUND_STATUSES,
     JobMatchBackgroundTask,
@@ -116,12 +119,33 @@ class JobMatchBackgroundRunner:
         with self._lock:
             if self.is_running():
                 raise JobMatchBackgroundRunnerError("已有岗位适配度分析正在后台运行，请稍候")
+            # 先取租约再起线程（RF-03 TOCTOU）：切换持锁期间直接失败（409 语义不变）。
+            try:
+                lease = dataset_scope.acquire_lease("job-match")
+            except DatasetScopeError as exc:
+                raise JobMatchBackgroundRunnerError(str(exc)) from exc
             self._stop.clear()
             self._current_task_id = task_id
             self._thread = threading.Thread(
-                target=self._run, args=(task_id,), name=f"rf-job-match-{task_id[:8]}", daemon=True
+                # RF-20：复制启动方 contextvars 并绑定 task_id/dataset_id（同 apply 运行器）。
+                target=run_with_bound_context(
+                    self._run_releasing_lease,
+                    task_id,
+                    lease,
+                    task_id=task_id,
+                    dataset_id=lease.identity.dataset_id,
+                ),
+                name=f"rf-job-match-{task_id[:8]}",
+                daemon=True,
             )
             self._thread.start()
+
+    def _run_releasing_lease(self, task_id: str, lease: DatasetLease) -> None:
+        """线程入口：保证无论任务怎么收尾，租约都会归还。"""
+        try:
+            self._run(task_id)
+        finally:
+            lease.release()
 
     def cancel(self, task_id: str) -> None:
         if self._current_task_id != task_id or not self.is_running():

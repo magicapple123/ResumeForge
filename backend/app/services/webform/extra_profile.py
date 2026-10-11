@@ -55,7 +55,7 @@ from ...models.web_form_profile import (
     SOURCE_MANUAL,
     WebFormProfileEntry,
 )
-from ..date_format import normalize_partial_date
+from ...schemas.date_format import normalize_partial_date
 from .fields import FIELD_LABELS, FORM_FIELDS, SOURCE_EXTRA
 
 # 目录里 ``source="extra"`` 的那些 key。**目录内的**合法 key 就是这一批。

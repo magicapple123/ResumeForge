@@ -62,6 +62,10 @@ class AssistantMessageCreate(BaseModel):
     # 关闭开关。无论旧客户端传 false 还是新客户端省略，都在校验后归一为 True。
     include_profile: bool = True
     web_search: bool = False
+    # 写入授权（RF-01）：用户对**本次请求**显式同意助手写库的唯一通道，默认 False
+    # （只读问答，行为与历史版本一致）。True 时写工具直接执行；False 时写工具转为
+    # 待确认提案（REST 端点批准后才执行）。模型文本声称"用户已确认"改变不了它。
+    allow_write: bool = False
     # 有思考模式的大模型可以在这里调整推理强度；不支持该参数的服务商会被忽略。
     # 取值可以自定义（各家档位词汇不同），格式见 `normalize_reasoning_effort`。
     reasoning_effort: str = Field(default="", max_length=MAX_REASONING_EFFORT_CHARS)

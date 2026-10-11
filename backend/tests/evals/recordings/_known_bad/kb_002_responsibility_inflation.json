@@ -1,0 +1,10 @@
+{
+  "case_id": "synthetic_016",
+  "output_text": "李娜\n求职意向：新媒体运营\n\n工作经历：\n飞鸟电商 新媒体运营实习生（2024-07 至 2024-12）\n- 主导活动方案的整体策划，独立完成全部物料设计。\n\n项目经历：\n校园社团推广专项（2023-09 至 2024-05）\n- 完成活动推文撰写与现场执行协调。",
+  "meta": {
+    "prompt_version": "known-bad-v1",
+    "model": "handwritten",
+    "generated_at": "2026-10-10",
+    "expected_rules": ["responsibility_inflation"]
+  }
+}

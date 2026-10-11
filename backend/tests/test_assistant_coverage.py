@@ -57,6 +57,9 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     ),
     "resume_generate_task": "不暴露：生成任务的实时进度（已收到多少字符、在做什么）。"
     "它是瞬时的过程状态，界面上已经能看到；助手在任务结束后读的是生成好的简历本身。",
+    "resume_delivery_record": "不暴露：这是投递/导出那一刻冻结的简历快照，含简历全文与"
+    "照片 base64，属敏感证据记录；摘要（投给了谁、时间、指纹）已由"
+    "「GET /api/resumes/{id}/deliveries」供页面查询，助手不需要再读一份。",
     "share_package": ("list_share_packages",),
     # ===== 投递 =====
     "apply_queue_item": ("list_apply_queue",),
@@ -83,6 +86,11 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
         "create_application_track",
         "update_application_track",
     ),
+    # 事件留痕表只读可见于 cohort 指标（/api/analytics 随看板下发聚合结果），
+    # 不单独开工具：单条事件对对话没有增量，聚合口径在 track_events.py 一处。
+    "application_track_event": "不暴露：状态变化留痕只以聚合指标（cohort）出现在"
+    "统计看板里，单条事件对助手没有增量；写入由进度状态变化的既有写点自动完成，"
+    "助手不应代写。",
     "referral": ("list_referrals", "create_referral"),
     "reminder": ("list_reminders", "create_reminder", "update_reminder"),
     # ===== 事实台账 =====

@@ -1,0 +1,100 @@
+{
+  "id": "synthetic_018",
+  "persona_type": "应届",
+  "language": "英文",
+  "industry": "运营",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "13800138000",
+    "henry.zhao18@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "Henry Zhao",
+    "email": "henry.zhao18@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "新媒体运营",
+    "phone": "13800138000",
+    "summary": "Fresh graduate targeting 新媒体运营 roles, with project practice in 校园社团推广专项.",
+    "educations": [
+      {
+        "school": "Starlight University",
+        "major": "Related Major",
+        "degree": "本科",
+        "study_mode": "全日制",
+        "degree_type": "学士",
+        "start_date": "2021-09",
+        "end_date": "2025-06",
+        "gpa": "3.4/4.0",
+        "courses": "",
+        "achievements": ""
+      }
+    ],
+    "experiences": [
+      {
+        "company": "Maple Media Co",
+        "role": "新媒体运营实习生",
+        "start_date": "2024-07",
+        "end_date": "2024-12",
+        "description": "Assisted with daily tasks of the team and completed assigned deliverables."
+      }
+    ],
+    "projects": [
+      {
+        "name": "校园社团推广专项",
+        "role": "Core member",
+        "start_date": "2023-09",
+        "end_date": "2024-05",
+        "tech_stack": "内容策划, 活动执行",
+        "description": "负责校园社团联合推广活动的选题、文案与执行跟进。",
+        "highlights": "完成活动推文撰写与现场执行协调。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "内容策划",
+        "level": "熟练"
+      },
+      {
+        "name": "数据分析",
+        "level": "掌握"
+      },
+      {
+        "name": "社群运营",
+        "level": "了解"
+      }
+    ]
+  },
+  "job_description": "Position: Content Operations Specialist (Sunrise Retail Ltd)\nResponsibilities:\n1. Plan and publish content for brand accounts;\n2. Organize campaign plans for promotion seasons;\n3. Review user feedback and summarize operation data;\n4. Coordinate with designers and support agents.\nRequirements:\n1. Bachelor degree, major open;\n2. Strong writing skills, familiar with major content platforms;\n3. Data aware, able to write basic reviews;\n4. E-commerce experience preferred.\n",
+  "claims": [
+    {
+      "title": "Project: 校园社团推广专项",
+      "category": "项目经历",
+      "subject": "校园社团推广专项",
+      "source_fact": "Joined 校园社团推广专项 as 主导方案或交付, completed the assigned deliverables.",
+      "candidate_wording": "Participated in 校园社团推广专项 and delivered assigned tasks.",
+      "responsibility_level": "主导方案或交付",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "campaign plans"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "内容策划能力",
+      "category": "专业技能",
+      "subject": "内容策划",
+      "source_fact": "Used 内容策划 across coursework and projects for routine tasks.",
+      "candidate_wording": "Familiar with 内容策划 for routine tasks.",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "内容策划"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：应届·英文·运营。常规路径样本。"
+}

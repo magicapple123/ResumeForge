@@ -4,12 +4,21 @@ Windows 上用系统 DPAPI（``CryptProtectData``），密文绑定到当前用�
 无需自管——这正是本地单用户工具想要的：Key 不再以明文躺在 SQLite 里，但同一用户在同一台
 机器上读取时无需任何额外密码。
 
-其他平台保持明文：本项目是本地单用户工具，跨平台钥匙串需要额外依赖（keyring 及其系统
-服务），换来的是"非 Windows 上也不明文"，而 Windows 才是主要运行环境。这里刻意不引依赖，
-代价是 Linux/macOS 上仍按明文存（与历史行为一致）。
+其他平台的评估结论（2026-10-11，RF-24）：非 Windows 仍保持明文，不引入 keyring。
+理由：① headless Linux 服务器上 keyring 没有可用后端，反而会让用户在启动阶段撞上
+NoKeyringError；② keyring 写入失败时的 UX（降级到哪、提示什么）与"DPAPI 失败必须
+显式报错"的新语义组合起来过于复杂；③ 明文落库已有两层兜底——备份/导出会整段剥离
+API Key（data_backup/api_keys.py），诊断输出有脱敏（diagnostics.py），本工具的实际
+运行面是单用户本机，风险可控。
 
 存储格式：``dpapi:v1:`` + base64(密文)。不带前缀的值一律视为历史明文，解密时原样返回，
 下次保存时再加密——老库无需迁移，透明升级。
+
+失败语义（RF-24）：Windows 上 DPAPI 加密失败**不再静默回退明文**——回退会把"加密
+坏了"伪装成"保存成功"，用户以为密钥已受保护。改为抛出 :class:`ApiKeyEncryptionError`，
+调用方（settings_service / api.settings）把它转成显式错误返回给前端，密钥不落盘。
+解密侧维持保守语义：密文损坏或跨机器无法解密时按"未配置"处理（返回空串），让用户
+重新填写，而不是让整个设置页 500。
 """
 from __future__ import annotations
 
@@ -21,6 +30,10 @@ import sys
 logger = logging.getLogger(__name__)
 
 _PREFIX = "dpapi:v1:"
+
+
+class ApiKeyEncryptionError(RuntimeError):
+    """DPAPI 加密失败：密钥未被保护，调用方必须让保存显式失败而不是落明文。"""
 
 
 class _DATA_BLOB(ctypes.Structure):
@@ -65,10 +78,14 @@ def encrypt_key(plaintext: str) -> str:
         return plaintext
     try:
         ciphertext = _protect(plaintext.encode("utf-8"))
-    except OSError:
-        # DPAPI 不可用时退回明文，而不是让用户连设置都保存不了。
-        logger.warning("DPAPI 加密失败，API Key 将按明文保存", exc_info=True)
-        return plaintext
+    except OSError as exc:
+        # 不回退明文：静默回退会把"加密失败"伪装成"保存成功"。让上层报错，
+        # 密钥不落盘（调用方尚未 commit，天然不会写入半成品状态）。
+        logger.warning("DPAPI 加密失败，API Key 未保存", exc_info=True)
+        raise ApiKeyEncryptionError(
+            "本机密钥保护服务（Windows DPAPI）加密失败，API Key 未保存。"
+            "请稍后重试，或改用「仅本会话使用」的密钥。"
+        ) from exc
     return _PREFIX + base64.b64encode(ciphertext).decode("ascii")
 
 

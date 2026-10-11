@@ -48,10 +48,18 @@ def test_tool_call_runs_and_its_result_reaches_the_model(client, monkeypatch):
     assert assistant["context"]["tool_calls"][0]["name"] == "list_jobs"
 
 
-def test_assistant_writes_only_when_asked(client, monkeypatch):
+def test_unconfirmed_writes_become_proposals_and_consent_executes(client, monkeypatch):
+    """RF-01 写入授权契约：未确认 → 提案（不写库）；请求级 allow_write → 直接执行。
+
+    旧契约（提示词纪律）已被执行层授权替换：模型文本说"用户要求过"不产生授权，
+    用户显式同意的唯一通道是请求级 ``allow_write`` 或提案批准（REST 端点）。
+    """
     _configure_llm(client)
+    # 脚本按轮次顺序消耗：第 1 条消息用前两条（提案路径），第 2 条用后两条（同意后执行）。
     provider = _ScriptedProvider(
         [
+            [_tool_call("create_job", {"title": "字节跳动后端实习"})],
+            [LLMDelta(text="已经生成提案，等你确认。")],
             [_tool_call("create_job", {"title": "字节跳动后端实习"})],
             [LLMDelta(text="已经帮你存好了。")],
         ]
@@ -59,11 +67,25 @@ def test_assistant_writes_only_when_asked(client, monkeypatch):
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
     conversation = _create_conversation(client)
 
-    client.post(
-        f"/api/assistant/conversations/{conversation['id']}/messages",
-        json={"content": "帮我把字节跳动的后端实习岗位存进去"},
+    # 未开 allow_write：写工具转待确认提案，数据一个字节都不动。
+    events = _events(
+        client.post(
+            f"/api/assistant/conversations/{conversation['id']}/messages",
+            json={"content": "帮我把字节跳动的后端实习岗位存进去"},
+        )
     )
+    tool_event = next(event for event in events if event["type"] == "tool")
+    assert tool_event["changed"] is False
+    assert any(event["type"] == "write_proposal" for event in events)
+    assert client.get("/api/jobs").json()["total"] == 0
 
+    # 请求级显式同意：写工具直接执行（开关本身就是同意）。
+    _events(
+        client.post(
+            f"/api/assistant/conversations/{conversation['id']}/messages",
+            json={"content": "再存一次", "allow_write": True},
+        )
+    )
     assert client.get("/api/jobs").json()["total"] == 1
 
 
@@ -97,7 +119,8 @@ def test_tool_event_reports_whether_data_changed(client, monkeypatch):
     """工具 SSE 事件必须透传 changed：前端折叠标题的「改动了 N 项」只依据这个字段。
 
     前端刻意不按工具名自己维护一份"写操作清单"（那样必然与后端漂移），所以"哪次调用真的
-    改了数据"只有后端说了才算数——这条就把那条通道钉住。
+    改了数据"只有后端说了才算数——这条就把那条通道钉住。走 ``allow_write=True``
+    的显式同意路径让写入真的执行（RF-01）。
     """
     _configure_llm(client)
     provider = _ScriptedProvider(
@@ -111,7 +134,7 @@ def test_tool_event_reports_whether_data_changed(client, monkeypatch):
 
     response = client.post(
         f"/api/assistant/conversations/{conversation['id']}/messages",
-        json={"content": "帮我把字节跳动的后端实习岗位存进去"},
+        json={"content": "帮我把字节跳动的后端实习岗位存进去", "allow_write": True},
     )
 
     tool_event = next(event for event in _events(response) if event["type"] == "tool")

@@ -11,11 +11,14 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
+from ...config import get_settings
+from ...runtime.operation_budget import OperationBudget
 from ...schemas.claim import ClaimDigestOut
 from ...schemas.job import JobOut
 from ...schemas.profile import ProfileOut
 from ...schemas.resume import GenerateOptions, ResumeContent
 from ..llm.base import BaseLLMProvider, LLMError
+from ..llm.token_estimate import estimate_tokens
 from ..profile.profile_relevance import (
     build_general_profile_context,
     build_job_prompt_text,
@@ -47,6 +50,7 @@ from .resume_grounding import (
     _source_value,
     _unsupported_quantified_values,
     ground_resume_facts,
+    ground_resume_facts_with_annotations,
     restore_selected_sections,
 )
 from .resume_quality import (
@@ -137,6 +141,7 @@ class ResumeGenerator:
         options: GenerateOptions,
         *,
         baseline: ClaimDigestOut | None = None,
+        budget: OperationBudget | None = None,
     ) -> AsyncIterator[dict]:
         """执行生成流程，依次产出进度、增量、完成或错误事件。
 
@@ -146,6 +151,18 @@ class ResumeGenerator:
 
         ``baseline`` 是事实台账已确认的条目。**不传、或台账为空时渲染出的提示词与
         以前逐字节相同**——没启用台账的用户不该因为这次改动而拿到不一样的简历。
+
+        ``budget`` 是整链总预算（RF-14 §2.1.a，可选，None 时行为与以前逐字节一致）。
+        三段模型调用的分段规则：
+        - **主生成流**（stream_chat）：不需要 child——runner 已对每个事件
+          ``raise_if_stopped()``；这里只在流开始前补一次检查（防御"上一段耗尽后才进流"）。
+        - **格式修复 chat / 质量重试 chat**：各自取 ``budget.child()``——它们是两个事件
+          之间的完整 provider.chat，runner 的事件检查对进行中的调用不可见（预算盲区）。
+        谁兜谁（核心语义）：分项 read timeout 是"单请求不挂死"的**下限**（现状，保留）；
+        总预算是整链**上限**。非流式段把 read 压缩到 child 剩余（见 ``_begin_segment``），
+        到期表现为 ``LLMError``——捕获后若 ``budget.is_expired()``，改写成预算文案，
+        **不得把预算耗尽误报成网络慢**。取消传播不变：budget.cancel_event 即 runner 的
+        ``_stop``，generator 只接受预算检查、不接触取消信号。
         """
         general = job is None
         enhancement_guide = (
@@ -229,6 +246,18 @@ class ResumeGenerator:
             {"role": "user", "content": user_prompt},
         ]
 
+        if budget is not None:
+            # 流开始前的预算检查（§2.1.a-2）：防御"上一段耗尽后才进流"。
+            budget.raise_if_stopped()
+        # token 估算遥测（RF-14 §2.5）：默认关。开启时把估算写进 done 事件
+        # （estimated_* 命名），由 runner 并进用量结构化日志——它不改请求体，
+        # 也不作为截断依据（按 token 截断属 RF-13/RF-17 的产品决策，本批明确不做）。
+        estimated_prompt_tokens: int | None = None
+        if get_settings().llm_token_estimate_enabled:
+            estimated_prompt_tokens = sum(
+                estimate_tokens(str(message.get("content") or "")) for message in messages
+            )
+
         yield {"type": "progress", "message": f"正在调用模型 {self.provider.config.model} 生成简历…"}
         parts: list[str] = []
         async for delta in self.provider.stream_chat(messages):
@@ -242,11 +271,24 @@ class ResumeGenerator:
         if resume is None:
             yield {"type": "progress", "message": "输出格式不符合要求，正在自动修复…"}
             fix_prompt = self._env.get_template("resume_fix_json.md").render(raw=raw[:6000])
+            # 格式修复段取 child 预算（§2.1.a）：它是事件之间的完整 provider.chat，
+            # runner 的事件检查对进行中的调用不可见。child 剩余经 provider 的
+            # request_deadline_seconds 压缩该段 read timeout；调用后 finally 复位。
+            segment = budget.child() if budget is not None else None
+            if segment is not None:
+                segment.raise_if_stopped()
             try:
+                self._begin_segment(segment)
                 fixed = await self.provider.chat([{"role": "user", "content": fix_prompt}])
             except LLMError as exc:
+                if budget is not None and budget.is_expired():
+                    # 预算耗尽不得伪装成网络超时（§2.1.a-3）：与 runner 的预算语义一致。
+                    yield {"type": "error", "message": "生成超出时间预算，已终止"}
+                    return
                 yield {"type": "error", "message": f"自动修复调用失败：{exc}"}
                 return
+            finally:
+                self._end_segment()
             resume = self._parse(fixed)
 
         if resume is None:
@@ -293,11 +335,19 @@ class ResumeGenerator:
             )
             retry_messages = [*messages, {"role": "user", "content": retry_prompt}]
             retry_resume: ResumeContent | None = None
+            # 质量重试段同取 child（§2.1.a-2）；重试失败沿用首轮结果（现状语义保留，
+            # 不因预算改变——预算耗尽由 runner 的下一个事件检查兜底）。
+            segment = budget.child() if budget is not None else None
+            if segment is not None:
+                segment.raise_if_stopped()
             try:
+                self._begin_segment(segment)
                 retry_raw = await self.provider.chat(retry_messages)
                 retry_resume = self._parse(retry_raw)
             except Exception as exc:  # noqa: BLE001 - 质量重试失败应保留首轮结果
                 logger.warning("简历质量重试失败，将沿用首轮结果：%s", exc)
+            finally:
+                self._end_segment()
 
             retry_content_shortfalls = (
                 _quality_shortfalls(retry_resume, selection.data, job)
@@ -334,14 +384,17 @@ class ResumeGenerator:
                     "超出单份简历的篇幅预算，已按资料顺序优先保留靠前的条目；"
                     "需要补充的内容可以在「手动调整」里手动加上。"
                 )
-        resume = ground_resume_facts(
+        # 锚定（RF-13）：标注是锚定过程的副产品（纯收集，不调模型），随 done 事件
+        # 带给调用方落库，让前端能说明"这段内容是从哪条资料事实来的"。
+        resume, fact_annotations = ground_resume_facts_with_annotations(
             resume,
             profile,
             job,
             selection.data,
             enhance=options.enhance,
             enhancement_level=options.enhancement_level,
-        ).model_copy(update={"photo": profile.photo})
+        )
+        resume = resume.model_copy(update={"photo": profile.photo})
         resume = restore_selected_sections(
             resume,
             selection.data,
@@ -365,13 +418,33 @@ class ResumeGenerator:
             coverage_details=coverage_details,
             baseline_confirmed=confirmed_names,
         )
-        yield {
+        done_event = {
             "type": "done",
             "resume": resume.model_dump(),
             "warnings": warnings,
             "coverage_notes": coverage_details,
             "rationale": rationale,
+            "fact_annotations": fact_annotations,
         }
+        if estimated_prompt_tokens is not None:
+            # 遥测字段只占位在估算开启时（§2.5-2）；runner 把它并进用量结构化日志。
+            done_event["estimated_prompt_tokens"] = estimated_prompt_tokens
+        yield done_event
+
+    # ===== 预算分段（RF-14 §2.1.c）=====
+
+    def _begin_segment(self, segment: OperationBudget | None) -> None:
+        """把 child 段剩余注入 provider 的请求级 read deadline。
+
+        deadline 只能收紧（provider 的 ``_timeout`` 取 ``min(配置值, 本值)`` 并夹正），
+        不能放宽配置值。provider 实例不复用，这里设置后由调用方在 ``finally`` 里
+        ``_end_segment`` 复位——复位是防御性纪律，不是正确性依赖。
+        """
+        if segment is not None:
+            self.provider.request_deadline_seconds = segment.remaining()
+
+    def _end_segment(self) -> None:
+        self.provider.request_deadline_seconds = None
 
     def _parse(self, raw: str) -> ResumeContent | None:
         data = extract_json(raw)
@@ -383,6 +456,7 @@ __all__ = [
     "coerce_resume",
     "check_consistency",
     "ground_resume_facts",
+    "ground_resume_facts_with_annotations",
     "restore_selected_sections",
     "build_profile_prompt_data",
     "build_job_prompt_text",

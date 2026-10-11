@@ -19,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ..database import SessionLocal, get_db
 from ..models.tracker import STATUSES, ApplicationTrack
+from ..schemas.common import Page
 from ..schemas.tracker import (
     TRACK_EVIDENCE_PREVIEW_CHARS,
     TRACK_NOTE_PREVIEW_CHARS,
@@ -47,6 +48,7 @@ from ..services.tracker import (
     create_track,
     delete_track,
     list_tracks,
+    list_tracks_page,
     preview_merges,
     summarize,
     to_csv,
@@ -92,6 +94,32 @@ def read_tracks(
         items=[_track_brief(item) for item in records],
         **summarize(db, status=status, keyword=keyword),
     )
+
+
+@router.get("/page", response_model=Page[TrackOut])
+def read_tracks_page(
+    status: str = Query(default=""),
+    keyword: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    job_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """分页列出求职进度（RF-08）：过滤与排序与旧列表端点完全一致（阶段序优先）。
+
+    旧端点 ``GET /api/tracker`` 给 MAX_LIST_LIMIT（500）兜底并随列表下发漏斗统计；
+    本端点让历史记录超过 500 条之后**仍然全部可达**。行 DTO 与旧列表同用
+    :func:`_track_brief`：note / evidence 只带预览，全文走详情端点。**声明在
+    ``/{track_id}`` 之前**：字面量段必须排在参数段前面（同 ``/export`` 的理由）。
+
+    ``job_id``（RF-11）：岗位详情「该岗位的投递进度」深链带的过滤；不传时行为不变。
+    """
+    if status and status not in STATUSES:
+        raise HTTPException(status_code=422, detail="未知的进度状态")
+    records, total = list_tracks_page(
+        db, status=status, keyword=keyword, page=page, page_size=page_size, job_id=job_id
+    )
+    return Page(items=[_track_brief(item) for item in records], total=total)
 
 
 @router.post("", response_model=TrackOut, status_code=201)

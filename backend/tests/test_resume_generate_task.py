@@ -18,14 +18,6 @@ from app.services.resume.resume_generate_runner import reset_resume_generate_run
 TERMINAL_STATUSES = {"completed", "cancelled", "failed"}
 
 
-@pytest.fixture(autouse=True)
-def _isolate_runner(clean_db):
-    """每个用例前释放运行器单例，避免上一个用例的后台线程跨用例残留。"""
-    reset_resume_generate_runner()
-    yield
-    reset_resume_generate_runner()
-
-
 def _configure(client):
     config = LLMConfig(base_url="https://api.example.com/v1", api_key="k", model="m")
     assert client.put("/api/settings/llm", json=config.model_dump()).status_code == 200
@@ -57,12 +49,6 @@ def _job(client):
     ).json()
 
 
-def _get_task(client, task_id):
-    response = client.get(f"/api/resumes/generate/tasks/{task_id}")
-    assert response.status_code == 200
-    return response.json()
-
-
 def _wait_terminal(client, task_id, timeout=8.0):
     deadline = time.monotonic() + timeout
     task = _get_task(client, task_id)
@@ -72,6 +58,56 @@ def _wait_terminal(client, task_id, timeout=8.0):
         time.sleep(0.02)
         task = _get_task(client, task_id)
     return task
+
+
+def _get_task(client, task_id):
+    response = client.get(f"/api/resumes/generate/tasks/{task_id}")
+    assert response.status_code == 200
+    return response.json()
+
+
+def _wait_status(client, task_id, status, timeout=8.0):
+    deadline = time.monotonic() + timeout
+    task = _get_task(client, task_id)
+    while task["status"] != status:
+        if time.monotonic() >= deadline:
+            raise AssertionError(f"任务 {task_id} 未在 {timeout}s 内进入 {status}：{task}")
+        time.sleep(0.02)
+        task = _get_task(client, task_id)
+    return task
+
+
+
+class EndlessProvider(BaseLLMProvider):
+    """无限产出 chunk、永不结束，用于在"运行中"取消（否则取消竞态无法稳定复现）。"""
+
+    async def chat(self, _messages):
+        raise AssertionError("不应触发一次性对话")
+
+    async def stream_chat(self, _messages):
+        index = 0
+        while True:
+            yield f'{{"chunk": {index}}}'
+            index += 1
+            await asyncio.sleep(0.001)
+
+
+# ===== RF-02：完整生命周期（孤儿恢复 / 收拢 / 总预算 / 字符计数 / 仲裁守卫）=====
+
+
+
+@pytest.fixture(autouse=True)
+def _isolate_runner(clean_db):
+    """每个用例前释放运行器单例，避免上一个用例的后台线程跨用例残留。"""
+    reset_resume_generate_runner()
+    yield
+    reset_resume_generate_runner()
+
+
+def _get_task(client, task_id):
+    response = client.get(f"/api/resumes/generate/tasks/{task_id}")
+    assert response.status_code == 200
+    return response.json()
 
 
 def _wait_status(client, task_id, status, timeout=8.0):
@@ -99,20 +135,6 @@ class SuccessfulProvider(BaseLLMProvider):
             },
             ensure_ascii=False,
         )
-
-
-class EndlessProvider(BaseLLMProvider):
-    """无限产出 chunk、永不结束，用于在"运行中"取消（否则取消竞态无法稳定复现）。"""
-
-    async def chat(self, _messages):
-        raise AssertionError("不应触发一次性对话")
-
-    async def stream_chat(self, _messages):
-        index = 0
-        while True:
-            yield f'{{"chunk": {index}}}'
-            index += 1
-            await asyncio.sleep(0.001)
 
 
 def test_background_generation_completes_and_persists_resume(client, monkeypatch):
@@ -306,3 +328,5 @@ def test_completed_status_and_resume_id_commit_atomically(client, monkeypatch):
     assert final["resume_id"] is not None
     assert observations, "运行器会话未观察到任何 completed 提交，spy 未生效"
     assert all(observations), f"观察到 completed 但 resume_id 为空的中间态：{observations}"
+
+

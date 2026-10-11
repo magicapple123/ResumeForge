@@ -22,6 +22,7 @@ from ..schemas.setting import (
     SearchConfig,
 )
 from .api_key_crypto import decrypt_key, encrypt_key
+from .api_key_session import get_session_key, session_key_configured
 
 logger = logging.getLogger(__name__)
 
@@ -143,24 +144,41 @@ def _mask_llm_config_record(record: LLMConfigRecord) -> LLMConfigRecordOut:
 
 
 def get_llm_config(db: Session) -> LLMConfig:
-    """读取 LLM 配置（解密 API Key）；缺失或脏数据退回默认。"""
+    """读取 LLM 配置（解密 API Key）；缺失或脏数据退回默认。
+
+    若用户设置了「仅本会话使用」的临时密钥（api_key_session），它**优先**于库里的
+    密钥：临时密钥的存在本身就是"这会儿想用不落盘的密钥"的意思。占位符还原与
+    保存链路因此也自然解析到临时密钥——落库前由 `_strip_session_key` 兜底拦下。
+    """
     row = db.get(AppSetting, _LLM_CONFIG_KEY)
     if row is None:
-        return LLMConfig()
-    try:
-        config = LLMConfig.model_validate(json.loads(row.value))
-        return config.model_copy(update={"api_key": decrypt_key(config.api_key)})
-    except (json.JSONDecodeError, ValidationError):
-        # 脏数据降级为默认配置，不阻塞用户重新填写
-        logger.warning("LLM 配置数据损坏，已重置为默认值")
-        return LLMConfig()
+        config = LLMConfig()
+    else:
+        try:
+            config = LLMConfig.model_validate(json.loads(row.value))
+            config = config.model_copy(update={"api_key": decrypt_key(config.api_key)})
+        except (json.JSONDecodeError, ValidationError):
+            # 脏数据降级为默认配置，不阻塞用户重新填写
+            logger.warning("LLM 配置数据损坏，已重置为默认值")
+            config = LLMConfig()
+    session_key = get_session_key()
+    if session_key:
+        config = config.model_copy(update={"api_key": session_key})
+    return config
+
+
+def _strip_session_key(config: LLMConfig) -> LLMConfig:
+    """会话密钥绝不落库：解析结果若是临时密钥，落库为空串（清掉已保存的密钥）。"""
+    if session_key_configured() and config.api_key == get_session_key():
+        return config.model_copy(update={"api_key": ""})
+    return config
 
 
 def save_llm_config(db: Session, config: LLMConfig) -> LLMConfig:
     """保存 LLM 配置：先还原脱敏占位符，再加密 API Key 后落库。"""
     config = resolve_llm_config_api_key(db, config)
     row = db.get(AppSetting, _LLM_CONFIG_KEY)
-    stored = config.model_copy(update={"api_key": encrypt_key(config.api_key)})
+    stored = config.model_copy(update={"api_key": encrypt_key(_strip_session_key(config).api_key)})
     serialized = json.dumps(stored.model_dump(), ensure_ascii=False)
     if row is None:
         db.add(AppSetting(key=_LLM_CONFIG_KEY, value=serialized))
@@ -180,7 +198,7 @@ def save_llm_config_record(db: Session, payload: LLMConfigRecordCreate) -> LLMCo
     payload = resolve_llm_config_api_key(db, payload)
     row = db.query(LLMConfigRecord).filter(LLMConfigRecord.name == payload.name).one_or_none()
     values = payload.model_dump(exclude={"name"})
-    values["api_key"] = encrypt_key(values["api_key"])
+    values["api_key"] = encrypt_key(_strip_session_key(payload).api_key)
     if row is None:
         row = LLMConfigRecord(name=payload.name, **values)
         db.add(row)

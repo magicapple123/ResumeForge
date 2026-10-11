@@ -122,8 +122,10 @@ async def revise_existing_resume(
 
     record.content = revised.model_dump()
     record.warnings = []
-    # 修订后的内容不再对应"生成时"的筛选状态：说明与未收录清单一并清空。
+    # 修订后的内容不再对应"生成时"的筛选与来源状态：说明、未收录清单与事实来源
+    # 标注一并清空（标注描述的是生成时的锚定结果，修订后已失效）。
     record.coverage_notes = []
+    record.fact_annotations = []
     record.rationale = ""
     db.commit()
     db.refresh(record)

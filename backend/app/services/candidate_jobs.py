@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 
 from ..models.job import JOB_STATUS_OPEN
 from ..models.material import (
@@ -35,16 +35,18 @@ RECOGNITION_SOURCE_COLLECT = "岗位采集"
 RECOGNITION_SOURCE_MANUAL = "备选岗位导入"
 
 
-def list_candidate_jobs(
+def _filtered_query(
     db: Session,
     *,
     status: str = "",
     keyword: str = "",
     collect_task_id: int | None = None,
     collect_task_ids: list[int] | None = None,
-    limit: int = MAX_CANDIDATE_LIST,
-) -> list[CandidateJob]:
-    """按状态/采集批次/关键词分页列出备选岗位。"""
+) -> Query[CandidateJob]:
+    """list_candidate_jobs 与 list_candidate_jobs_page **共用的过滤口径**。
+
+    两处各写一遍过滤条件，迟早会改漏一边（与 tracker._filtered_query 同一取舍）。
+    """
     query = db.query(CandidateJob)
     if status in CANDIDATE_JOB_STATUSES:
         query = query.filter(CandidateJob.status == status)
@@ -63,11 +65,63 @@ def list_candidate_jobs(
             | CandidateJob.description.like(like)
             | CandidateJob.note.like(like)
         )
+    return query
+
+
+def list_candidate_jobs(
+    db: Session,
+    *,
+    status: str = "",
+    keyword: str = "",
+    collect_task_id: int | None = None,
+    collect_task_ids: list[int] | None = None,
+    limit: int = MAX_CANDIDATE_LIST,
+) -> list[CandidateJob]:
+    """按状态/采集批次/关键词分页列出备选岗位。"""
     return (
-        query.order_by(CandidateJob.created_at.desc(), CandidateJob.id.desc())
+        _filtered_query(
+            db,
+            status=status,
+            keyword=keyword,
+            collect_task_id=collect_task_id,
+            collect_task_ids=collect_task_ids,
+        )
+        .order_by(CandidateJob.created_at.desc(), CandidateJob.id.desc())
         .limit(max(1, limit))
         .all()
     )
+
+
+def list_candidate_jobs_page(
+    db: Session,
+    *,
+    status: str = "",
+    keyword: str = "",
+    collect_task_id: int | None = None,
+    collect_task_ids: list[int] | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[CandidateJob], int]:
+    """分页列出备选岗位（RF-08）：过滤与排序与 :func:`list_candidate_jobs` 完全一致。
+
+    与旧列表的分工：旧端点给 MAX_CANDIDATE_LIST 兜底上限（待处理清单不翻页），本函数
+    服务 ``GET /api/candidate-jobs/page``——历史候选超过 300 条之后仍然全部可达。
+    """
+    query = _filtered_query(
+        db,
+        status=status,
+        keyword=keyword,
+        collect_task_id=collect_task_id,
+        collect_task_ids=collect_task_ids,
+    )
+    total = query.count()
+    rows = (
+        query.order_by(CandidateJob.created_at.desc(), CandidateJob.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return rows, total
 
 
 def candidate_or_none(db: Session, candidate_id: int) -> CandidateJob | None:
@@ -358,6 +412,7 @@ __all__ = [
     "find_staged_candidate",
     "import_candidates",
     "list_candidate_jobs",
+    "list_candidate_jobs_page",
     "mark_candidate_imported",
     "stage_candidate_job",
     "update_candidate_job",

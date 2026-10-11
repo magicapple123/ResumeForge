@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "open_apply_login_required",
+  "exercise": "open_apply",
+  "note": "岗位页上登录弹窗可见：立即失败并分类 login_required，不傻等入口超时。",
+  "job_url": "https://www.zhipin.com/job_detail/new.html",
+  "expectations": [
+    {"marker": "rf:url", "states": [{"url": "https://www.zhipin.com/"}]},
+    {"marker": "rf:apply-entry", "states": [
+      {"found": true, "matched": 1, "url": "https://www.zhipin.com/job_detail/new.html", "captcha": false, "login_required": true}
+    ]}
+  ],
+  "expected_failure": {"category": "login_required", "detail_contains": "登录"}
+}

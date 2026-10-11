@@ -1,0 +1,87 @@
+{
+  "id": "synthetic_034",
+  "persona_type": "转行",
+  "language": "中文",
+  "industry": "制造",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "user034@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "周涛",
+    "email": "user034@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "工艺工程师",
+    "summary": "从质检员转入工艺工程师方向，已完成相关技能学习与小项目实践。",
+    "educations": [
+      {
+        "school": "临江职业学院",
+        "major": "质检员相关专业",
+        "degree": "专科",
+        "study_mode": "全日制",
+        "degree_type": "",
+        "start_date": "2013-09",
+        "end_date": "2016-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "临江机械",
+        "role": "质检员",
+        "start_date": "2016-07",
+        "end_date": "2024-06",
+        "description": "负责来料检验与不合格品记录。"
+      },
+      {
+        "company": "昆仑重工",
+        "role": "工艺技术员",
+        "start_date": "2024-07",
+        "end_date": "至今",
+        "description": "参与产线巡检与工艺参数记录，协助编制作业指导书。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "CAD制图",
+        "level": "熟练"
+      },
+      {
+        "name": "工艺文件编制",
+        "level": "掌握"
+      }
+    ]
+  },
+  "job_description": "岗位：工艺工程师（中原精工）\n职责：\n1. 负责产品工艺文件的编制与维护；\n2. 参与新产品试制跟进与工艺验证；\n3. 分析产线质量问题并提出工艺改善建议；\n4. 配合生产完成工装夹具的技术确认。\n要求：\n1. 机械、材料等相关专业本科及以上学历；\n2. 熟悉机械制图与公差配合；\n3. 能适应车间现场工作；\n4. 有改善项目经验者优先。\n",
+  "claims": [
+    {
+      "title": "装配线工位优化课题参与经历",
+      "category": "项目经历",
+      "subject": "装配线工位优化课题",
+      "source_fact": "在装配线工位优化课题中主导方案或交付，完成完成工时观测记录与改善建议报告。",
+      "candidate_wording": "参与装配线工位优化课题建设，完成工艺文件相关任务",
+      "responsibility_level": "主导方案或交付",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "工艺文件"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "CAD制图能力",
+      "category": "专业技能",
+      "subject": "CAD制图",
+      "source_fact": "在课程与项目实践中反复使用CAD制图，能独立完成常规任务。",
+      "candidate_wording": "熟悉CAD制图，能独立完成常规任务",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "CAD制图"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：转行·中文·制造。常规路径样本。"
+}

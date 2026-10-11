@@ -81,6 +81,9 @@ FailureCategory = Literal[
     "greeting_missing",
     "network_timeout",
     "file_upload_failed",
+    "site_unsupported",
+    "profile_insufficient",
+    "unconfirmed",
     "unknown",
 ]
 

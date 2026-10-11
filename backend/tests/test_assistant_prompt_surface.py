@@ -239,7 +239,7 @@ def test_every_tool_has_a_chinese_label_in_the_ui():
         / "features"
         / "assistant"
         / "components"
-        / "AssistantMessageContent.tsx"
+        / "MessageToolCalls.tsx"
     ).read_text(encoding="utf-8")
 
     missing = [tool.name for tool in assistant_tools._TOOLS if f"{tool.name}:" not in labels_source]

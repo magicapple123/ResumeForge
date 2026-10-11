@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ...models.job import JOB_STATUSES
 from ...models.tracker import STATUSES
+from . import previews
 from ._types import Tool
 from .docs_tools import _tool_search_product_docs
 from .job_tools import (
@@ -146,6 +147,7 @@ CORE_TOOLS: tuple[Tool, ...] = (
             "required": ["title"],
         },
         handler=_tool_create_job,
+        preview=previews.preview_create_job,
         writes=True,
     ),
     Tool(
@@ -175,6 +177,7 @@ CORE_TOOLS: tuple[Tool, ...] = (
             "required": ["job_id"],
         },
         handler=_tool_update_job,
+        preview=previews.preview_update_job,
         writes=True,
     ),
     Tool(
@@ -202,6 +205,7 @@ CORE_TOOLS: tuple[Tool, ...] = (
             "required": [],
         },
         handler=_tool_update_profile,
+        preview=previews.preview_update_profile,
         writes=True,
     ),
     Tool(
@@ -260,6 +264,7 @@ CORE_TOOLS: tuple[Tool, ...] = (
             "required": ["company", "title"],
         },
         handler=_tool_create_application_track,
+        preview=previews.preview_create_application_track,
         writes=True,
     ),
     Tool(
@@ -288,6 +293,7 @@ CORE_TOOLS: tuple[Tool, ...] = (
             "required": ["track_id"],
         },
         handler=_tool_update_application_track,
+        preview=previews.preview_update_application_track,
         writes=True,
     ),
     Tool(
@@ -346,6 +352,7 @@ CORE_TOOLS: tuple[Tool, ...] = (
             "required": ["section"],
         },
         handler=_tool_add_profile_entry,
+        preview=previews.preview_add_profile_entry,
         writes=True,
     ),
 )

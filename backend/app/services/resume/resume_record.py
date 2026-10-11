@@ -92,6 +92,7 @@ def save_record(
     custom_instruction: str = "",
     coverage_notes: list[dict] | None = None,
     rationale: str = "",
+    fact_annotations: list[dict] | None = None,
     commit: bool = True,
 ) -> ResumeRecord:
     """生成结果落库（在流结束后的同一请求内调用）。
@@ -99,7 +100,8 @@ def save_record(
     ``job is None`` 是通用简历：没有公司与岗位，``job_title`` 沿用正文里的求职意向
     （与 ``POST /manual`` 在无岗位时已有的约定一致），标题回退到「…-通用简历-时间戳」。
     ``coverage_notes`` / ``rationale`` 是生成时的筛选说明与生成说明（可为空：手写
-    简历、旧测试调用方都没有它们）。
+    简历、旧测试调用方都没有它们）；``fact_annotations`` 是事实来源标注（RF-13，
+    可为空：手写/旧调用方）。
     """
     name = str(content.get("name") or "简历").strip()[:48]
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
@@ -130,6 +132,7 @@ def save_record(
         custom_instruction=custom_instruction.strip()[:2000],
         coverage_notes=coverage_notes or [],
         rationale=rationale or "",
+        fact_annotations=fact_annotations or [],
     )
     db.add(record)
     if commit:

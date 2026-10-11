@@ -276,9 +276,10 @@ async def test_download_task_validates_archive_and_reports_ready(tmp_path, monke
             current_version="0.11.0",
             latest_version="99.0.0",
             update_available=True,
-            download_url="https://example.com/update.zip",
+            download_url="https://github.com/magicapple123/ResumeForge/releases/download/v99.0.0/update.zip",
             download_size=128,
             asset_name="ResumeForge-99.0.0.zip",
+            checksum_url="https://github.com/magicapple123/ResumeForge/releases/download/v99.0.0/update.zip.sha256",
             installable=True,
         )
 
@@ -316,59 +317,57 @@ def _serve_bytes(monkeypatch, body: bytes, status: int = 200) -> None:
 
 
 @pytest.mark.asyncio
-async def test_download_verifies_the_published_checksum(tmp_path, monkeypatch):
+async def test_download_verifies_the_published_checksum(tmp_path, monkeypatch, fake_public_dns):
     """发布时旁边的 `.sha256` 要真拿来核对——不匹配就必须停下。"""
     update_download._status = update_download._MutableStatus()
     archive = tmp_path / "pkg.zip"
     _valid_archive(archive)
     body = archive.read_bytes()
     good = update_download._sha256_of(archive)
+    zip_url = (
+        "https://github.com/magicapple123/ResumeForge/releases/download/v99.0.0/u.zip"
+    )
+    sha_url = zip_url + ".sha256"
     _serve_bytes(monkeypatch, body)
 
-    async def fake_checksum(_url: str) -> str:
+    async def fake_checksum(_url: str, **_kwargs) -> str:
         return good
 
     monkeypatch.setattr(update_download, "_fetch_expected_checksum", fake_checksum)
     # 摘要对得上：正常放行。
-    await update_download._download_archive(
-        "https://example.com/u.zip",
-        len(body),
-        tmp_path / "out.zip",
-        "https://example.com/u.zip.sha256",
-    )
+    await update_download._download_archive(zip_url, len(body), tmp_path / "out.zip", sha_url)
     assert (tmp_path / "out.zip").is_file()
 
-    async def wrong_checksum(_url: str) -> str:
+    async def wrong_checksum(_url: str, **_kwargs) -> str:
         return "0" * 64
 
     monkeypatch.setattr(update_download, "_fetch_expected_checksum", wrong_checksum)
     with pytest.raises(RuntimeError, match="校验和不匹配"):
-        await update_download._download_archive(
-            "https://example.com/u.zip",
-            len(body),
-            tmp_path / "out2.zip",
-            "https://example.com/u.zip.sha256",
-        )
+        await update_download._download_archive(zip_url, len(body), tmp_path / "out2.zip", sha_url)
     assert not (tmp_path / "out2.zip").exists()
 
 
 @pytest.mark.asyncio
-async def test_download_skips_the_checksum_when_the_release_has_none(tmp_path, monkeypatch):
-    """退回源码包时没有摘要可对——跳过而不是报错。"""
+async def test_download_fails_loudly_when_the_release_has_no_checksum(tmp_path, monkeypatch):
+    """RF-26 §12.5 #4：没有摘要就等于没有核对凭据——明确失败，不再"无摘要也安装"。
+
+    空 checksum 在 `_download_archive` 发出任何请求之前就被拒绝（详见
+    test_update_download_security.py），这里走完整 `_run_download` 验证状态收场为 failed。
+    """
     update_download._status = update_download._MutableStatus()
-    seen: list[str] = []
+    monkeypatch.setattr(update_download, "DOWNLOAD_DIRECTORY", tmp_path)
 
-    async def fake_download(_url, _size, target, checksum_url=""):
-        seen.append(checksum_url)
-        _valid_archive(target)
-
-    monkeypatch.setattr(update_download, "_download_archive", fake_download)
     await update_download._run_download(
-        "https://example.com/a.zip", None, tmp_path / "out.zip", ""
+        "https://github.com/magicapple123/ResumeForge/releases/download/v99.0.0/a.zip",
+        None,
+        tmp_path / "out.zip",
+        "",
     )
 
-    assert seen == [""]
-    assert update_download._status.state == "ready"
+    # 不再是 ready：没有 checksum 的包必须以 failed 收场，安装按钮不会亮。
+    assert update_download._status.state == "failed"
+    assert "SHA-256" in update_download._status.message
+    assert not (tmp_path / "out.zip").exists()
 
 
 def test_frontend_pid_is_read_from_a_bom_prefixed_record(tmp_path, monkeypatch):

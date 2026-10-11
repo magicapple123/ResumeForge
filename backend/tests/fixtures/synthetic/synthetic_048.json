@@ -1,0 +1,104 @@
+{
+  "id": "synthetic_048",
+  "persona_type": "社招",
+  "language": "英文",
+  "industry": "设计",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "13800138000",
+    "henry.zhao48@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "Henry Zhao",
+    "email": "henry.zhao48@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "视觉设计师",
+    "phone": "13800138000",
+    "summary": "Candidate with 4 years of experience in 视觉设计师 roles.",
+    "educations": [
+      {
+        "school": "Starlight University",
+        "major": "Related Major",
+        "degree": "本科",
+        "study_mode": "全日制",
+        "degree_type": "学士",
+        "start_date": "2015-09",
+        "end_date": "2019-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "Acme Studio",
+        "role": "视觉设计师",
+        "start_date": "2019-07",
+        "end_date": "2022-06",
+        "description": "跟进印刷打样核对，完成设计稿的细节修正。"
+      },
+      {
+        "company": "Acme Studio",
+        "role": "资深视觉设计师",
+        "start_date": "2022-07",
+        "end_date": "至今",
+        "description": "参与品牌物料的设计初稿绘制，协助整理素材库。"
+      }
+    ],
+    "projects": [
+      {
+        "name": "校园文化节主视觉设计",
+        "role": "Core member",
+        "start_date": "2023-03",
+        "end_date": "2023-12",
+        "tech_stack": "Photoshop, Illustrator",
+        "description": "参与校园文化节主视觉与物料延展设计的课程实践。",
+        "highlights": "完成海报初稿与物料延展规范整理。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "Photoshop",
+        "level": "熟练"
+      },
+      {
+        "name": "Illustrator",
+        "level": "熟练"
+      },
+      {
+        "name": "Figma",
+        "level": "掌握"
+      }
+    ]
+  },
+  "job_description": "Position: Visual Designer (Acme Studio)\nResponsibilities:\n1. Design posters and collateral for brand projects;\n2. Prepare assets and layouts for design proposals;\n3. Revise drafts based on feedback and deliver on time;\n4. Maintain the asset library and design guidelines.\nRequirements:\n1. Degree in design or related field;\n2. Proficient with mainstream design tools;\n3. A complete portfolio is required;\n4. Brand or e-commerce project experience preferred.\n",
+  "claims": [
+    {
+      "title": "Project: 校园文化节主视觉设计",
+      "category": "项目经历",
+      "subject": "校园文化节主视觉设计",
+      "source_fact": "Joined 校园文化节主视觉设计 as 参与, completed the assigned deliverables.",
+      "candidate_wording": "Participated in 校园文化节主视觉设计 and delivered assigned tasks.",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "posters"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "Photoshop能力",
+      "category": "专业技能",
+      "subject": "Photoshop",
+      "source_fact": "Used Photoshop across coursework and projects for routine tasks.",
+      "candidate_wording": "Familiar with Photoshop for routine tasks.",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "Photoshop"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：社招·英文·设计。常规路径样本。"
+}

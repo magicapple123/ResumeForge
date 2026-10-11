@@ -6,6 +6,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import replace
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session
 
@@ -32,6 +33,43 @@ _fill_lock = threading.Lock()
 # **默认关闭**（``apply_fill(settle_recheck=...)`` 的默认值是 0）：逐项模式与离线测试
 # 都不该为它付等待；整页填充那条路显式传这个常量。测试里不要传非零值。
 SETTLE_RECHECK_SECONDS = 1.2
+
+
+def _page_matches(snapshot_url: str, current_url: str) -> bool:
+    """同一页判定：host、路径、查询串一致（忽略 scheme 与 #fragment）。
+
+    切标签页 / 跳到别的步骤页都会改 path 或 query；scheme 升级（http→https）与页内
+    锚点跳动不构成"换页"。
+    """
+    a, b = urlsplit(snapshot_url), urlsplit(current_url)
+    return (a.netloc, a.path.rstrip("/"), a.query) == (b.netloc, b.path.rstrip("/"), b.query)
+
+
+def ensure_same_page(client: CdpClient, snapshot: Snapshot) -> None:
+    """填充前确认页面还是读取快照时的那一页；已经切走则拒绝写入（409）。
+
+    旧快照在换了标签页 / 页面跳转后仍能按索引"写入"，但写的已是另一张表单——结果就是
+    一批 unverified。这里在写入前读一次当前地址（与快照创建用同一个 ``rf:page-info``
+    探针），host 或整 URL（path+query）不一致就显式报「页面已切换，请重新读取表单」。
+
+    两类情况**不拦**、保持既有行为：
+    - 旧快照没有 URL（live 逐项 / 部分离线测试替身直接构造 Snapshot）；
+    - 当前地址读不出来（页面/浏览器已死）——随后真正的写入调用会以同样的原因失败，
+      用户看到的错误不会比现在更含糊；这里只拦"读得到、但不是那一页"。
+    """
+    snapshot_url = (snapshot.url or "").strip()
+    if not snapshot_url:
+        return
+    from .preview import _PAGE_INFO_SCRIPT  # 延迟导入：preview 传递依赖本模块，模块级会成环
+
+    try:
+        payload = client.evaluate(_PAGE_INFO_SCRIPT)
+    except Exception:  # noqa: BLE001 - 读不到当前地址交给写入路径自然失败
+        return
+    current_url = str(payload.get("url") or "").strip() if isinstance(payload, dict) else ""
+    if not current_url or _page_matches(snapshot_url, current_url):
+        return
+    raise WebFormConflict("页面已切换，请重新读取表单")
 
 
 def is_filling() -> bool:
@@ -137,6 +175,7 @@ def apply_fill(
     当场回读有值，几秒后组件把它清空）。整页填充那条路显式传 ``SETTLE_RECHECK_SECONDS``；
     逐项模式与离线测试不传，保持即时反馈且不吃墙钟。
     """
+    ensure_same_page(client, snapshot)
     engine = engine or FormEngine()
     by_index = {control.index: control for control in snapshot.controls}
     mappings: list[FieldMapping] = []

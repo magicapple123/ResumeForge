@@ -80,6 +80,55 @@ class ReminderCountsOut(BaseModel):
     total: int = 0
 
 
+class StageConversionOut(BaseModel):
+    """一个相邻阶段对的真实转化（RF-18，口径来自事件表）。
+
+    ``numerator`` = 同时到过 from 与 to 的记录数；``denominator`` = 到过 from 的
+    记录数。``small_sample`` = 分母低于小样本阈值——前端要显示徽标，不硬算精度。
+    """
+
+    from_status: str = ""
+    to_status: str = ""
+    numerator: int = 0
+    denominator: int = 0
+    rate: float = 0.0
+    small_sample: bool = False
+
+
+class StageDurationOut(BaseModel):
+    """一个相邻阶段对的真实耗时（RF-18，口径来自事件表）。
+
+    ``median_days`` 是同一条记录两个"最早到达日期"的间隔中位数；样本里没有
+    可用日期对时为 ``None``——前端显示"暂无可比数据"，不显示 0 天。间隔为负
+    （乱序补录）的样本计入 ``skipped_negative``，不硬掰成 0。
+    """
+
+    from_status: str = ""
+    to_status: str = ""
+    numerator: int = 0
+    denominator: int = 0
+    median_days: float | None = None
+    skipped_negative: int = 0
+    small_sample: bool = False
+
+
+class TrackCohortOut(BaseModel):
+    """基于状态变化事件表的真实时间线指标（RF-18）。
+
+    覆盖率三兄弟让每个数字可解释：``event_track_count`` 是有事件记录的条数
+    （全部阶段指标的样本空间），``historical_track_count`` 是早于事件功能、
+    无阶段数据的旧记录条数，``undated_event_count`` 是缺业务日期、只能用落库日
+    兜底的事件数。历史行**不回填**：这三个数字就是"我们知道什么、不知道什么"的
+    全部边界。
+    """
+
+    event_track_count: int = 0
+    historical_track_count: int = 0
+    undated_event_count: int = 0
+    conversions: list[StageConversionOut] = Field(default_factory=list)
+    durations: list[StageDurationOut] = Field(default_factory=list)
+
+
 class DashboardOut(BaseModel):
     """看板整体响应：概览指标 + 四个主题区块所需的分组数据。"""
 
@@ -115,6 +164,9 @@ class DashboardOut(BaseModel):
     referral: ReferralBlockOut = Field(default_factory=ReferralBlockOut)
     referral_status: list[KeyedCount] = Field(default_factory=list)
 
+    # ===== 真实时间线（RF-18，口径来自状态变化事件表）=====
+    cohort: TrackCohortOut = Field(default_factory=TrackCohortOut)
+
     # ===== 简历与健康度 =====
     resume_count: int = 0
     resume_scanned_count: int = 0
@@ -132,5 +184,8 @@ __all__ = [
     "LabeledCount",
     "ReferralBlockOut",
     "ReminderCountsOut",
+    "StageConversionOut",
+    "StageDurationOut",
+    "TrackCohortOut",
     "TrendPoint",
 ]

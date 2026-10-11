@@ -17,14 +17,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
 
 from ...schemas.setting import LLMConfig
+from . import retry
 from .anthropic_messages import (
     ANTHROPIC_VERSION as ANTHROPIC_VERSION,
 )
@@ -37,9 +40,10 @@ from .anthropic_messages import (
 from .anthropic_messages import (
     _has_tool_history as _has_tool_history,
 )
-from .base import BaseLLMProvider, LLMDelta, LLMError
+from .base import BaseLLMProvider, LLMDelta, LLMError, build_request_timeout
 from .openai_compat import http_error_message, validated_base_url
 from .thinking import DEFAULT_EFFORT, EFFORT_BUDGETS, thinking_budget
+from .usage import FINISH_CANCELLED, FINISH_ERROR, FINISH_STOP
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +53,20 @@ _FALLBACK_MAX_TOKENS = 8192
 _MAX_CHAT_RESPONSE_BYTES = 2 * 1024 * 1024
 _MIN_STREAM_CHARS = 64_000
 _MAX_STREAM_CHARS = 2_000_000
+
+# Messages 协议的 stop_reason → OpenAI 侧归一口径（RF-14 §2.2-4）；未收录的原样透传。
+_STOP_REASON_MAP = {
+    "end_turn": "stop",
+    "stop_sequence": "stop",
+    "max_tokens": "length",
+    "tool_use": "tool_calls",
+}
+
+
+def _normalize_stop_reason(stop_reason: str | None) -> str | None:
+    if not stop_reason:
+        return None
+    return _STOP_REASON_MAP.get(stop_reason, stop_reason)
 
 # 思考强度 → 思考预算（tokens）的映射只有一份，在 `thinking.py`：设置页的「思考模式」
 # 与助手页的「思考强度」在原生协议下走的是同一张表。
@@ -63,32 +81,94 @@ class AnthropicProvider(BaseLLMProvider):
     ):
         super().__init__(config, request_overrides=request_overrides)
         self._transport = transport
+        # 流式 usage/stop_reason 捕获（见 stream_chat_events 的说明）。
+        self._stream_prompt_tokens: int | None = None
+        self._stream_completion_tokens: int | None = None
+        self._stream_stop_reason: str | None = None
 
     # ===== 公共入口 =====
 
     async def chat(self, messages: list[dict]) -> str:
-        """同步发一次 Anthropic 消息请求，返回完整文本；超时/连接/解析错误统一转成 LLMError。"""
+        """同步发一次 Anthropic 消息请求，返回完整文本；超时/连接/解析错误统一转成 LLMError。
+
+        429/5xx 在状态码阶段按 §2.4 重试（与 OpenAI 兼容层同一份 ``retry`` 策略）；
+        用量经 ``last_usage`` 暴露：返回前写入，异常路径也要有记录（finish_reason=error）。
+        """
         payload = self._build_payload(messages, stream=False)
+        started = time.monotonic()
+        gate = retry.StatusRetryGate(deadline_remaining=self._deadline_remaining())
+        prompt_tokens: int | None = None
+        completion_tokens: int | None = None
+        finish_reason = FINISH_ERROR
         try:
-            async with self._client() as client, client.stream(
-                "POST", self._endpoint(), json=payload, headers=self._headers()
-            ) as response:
-                if response.status_code != 200:
-                    raise self._http_error(response, messages)
-                body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    if len(body) + len(chunk) > _MAX_CHAT_RESPONSE_BYTES:
-                        raise LLMError("模型返回内容过大，请调低最大输出长度")
-                    body.extend(chunk)
-        except httpx.TimeoutException as exc:
-            raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
-        except httpx.RequestError as exc:
-            raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
-        try:
-            data = json.loads(body)
-        except (ValueError, UnicodeError) as exc:
-            raise LLMError("模型返回了无法解析的响应格式") from exc
-        return self._extract_text(data)
+            while True:
+                try:
+                    async with self._client() as client, client.stream(
+                        "POST", self._endpoint(), json=payload, headers=self._headers()
+                    ) as response:
+                        if response.status_code != 200:
+                            # 429/5xx 只发生在 body 之前（安全点规则：首个 delta 之前）；重试编排（计数/退避/终态文案）在 retry.StatusRetryGate。
+                            delay = gate.next_delay(
+                                response.status_code, response.headers.get("retry-after")
+                            )
+                            if delay is None:
+                                raise gate.final_error(
+                                    response.status_code, self._http_error(response, messages)
+                                )
+                            logger.warning(
+                                "Anthropic 调用遇到 HTTP %s，%.1fs 后自动重试（第 %s 次）",
+                                response.status_code,
+                                delay,
+                                gate.retries,
+                            )
+                            await retry.retry_sleep(delay)
+                            continue
+                        body = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            if len(body) + len(chunk) > _MAX_CHAT_RESPONSE_BYTES:
+                                raise LLMError("模型返回内容过大，请调低最大输出长度")
+                            body.extend(chunk)
+                except httpx.TimeoutException as exc:
+                    raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
+                except httpx.RequestError as exc:
+                    raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
+                try:
+                    data = json.loads(body)
+                except (ValueError, UnicodeError) as exc:
+                    raise LLMError("模型返回了无法解析的响应格式") from exc
+                usage = data.get("usage") if isinstance(data, dict) else None
+                if isinstance(usage, dict):
+                    input_tokens = usage.get("input_tokens")
+                    output_tokens = usage.get("output_tokens")
+                    prompt_tokens = (
+                        input_tokens
+                        if isinstance(input_tokens, int) and not isinstance(input_tokens, bool)
+                        else None
+                    )
+                    completion_tokens = (
+                        output_tokens
+                        if isinstance(output_tokens, int) and not isinstance(output_tokens, bool)
+                        else None
+                    )
+                stop_reason = data.get("stop_reason") if isinstance(data, dict) else None
+                finish_reason = _normalize_stop_reason(
+                    str(stop_reason) if stop_reason else None
+                ) or FINISH_STOP
+                return self._extract_text(data)
+        except asyncio.CancelledError:
+            finish_reason = FINISH_CANCELLED
+            raise
+        except Exception:
+            finish_reason = FINISH_ERROR
+            raise
+        finally:
+            self._record_usage(
+                started=started,
+                finish_reason=finish_reason,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                retries=gate.retries,
+            )
 
     async def stream_chat(self, messages: list[dict]) -> AsyncIterator[str]:
         async for delta in self.stream_chat_events(messages):
@@ -98,20 +178,65 @@ class AnthropicProvider(BaseLLMProvider):
     async def stream_chat_events(
         self, messages: list[dict], tools: list[dict] | None = None
     ) -> AsyncIterator[LLMDelta]:
-        """流式发消息请求，逐块产出 LLMDelta（支持工具调用）。"""
+        """流式发消息请求，逐块产出 LLMDelta（支持工具调用）。
+
+        重试治理（RF-14 §2.4）：429/5xx 只在**状态码阶段**（任何 delta 产出之前）按
+        ``retry`` 的策略重试；流中途的错误一律不重试（安全点规则）。``message_start`` /
+        ``message_delta`` 自带的 usage 与 stop_reason 被捕获进 ``last_usage``，缺失不臆造。
+        """
         payload = self._build_payload(messages, stream=True, tools=tools)
+        started = time.monotonic()
+        gate = retry.StatusRetryGate(deadline_remaining=self._deadline_remaining())
+        finish_reason = FINISH_ERROR
         try:
-            async with self._client() as client, client.stream(
-                "POST", self._endpoint(), json=payload, headers=self._headers()
-            ) as response:
-                if response.status_code != 200:
-                    raise self._http_error(response, messages)
-                async for delta in self._iter_sse(response):
-                    yield delta
-        except httpx.TimeoutException as exc:
-            raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
-        except httpx.RequestError as exc:
-            raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
+            while True:
+                self._stream_prompt_tokens = None
+                self._stream_completion_tokens = None
+                self._stream_stop_reason = None
+                try:
+                    async with self._client() as client, client.stream(
+                        "POST", self._endpoint(), json=payload, headers=self._headers()
+                    ) as response:
+                        if response.status_code != 200:
+                            # 状态码阶段（尚未产出任何 delta）：交给重试循环处理；编排在 retry.StatusRetryGate。
+                            delay = gate.next_delay(
+                                response.status_code, response.headers.get("retry-after")
+                            )
+                            if delay is None:
+                                raise gate.final_error(
+                                    response.status_code, self._http_error(response, messages)
+                                )
+                            logger.warning(
+                                "Anthropic 流式请求遇到 HTTP %s，%.1fs 后自动重试（第 %s 次）",
+                                response.status_code,
+                                delay,
+                                gate.retries,
+                            )
+                            await retry.retry_sleep(delay)
+                            continue
+                        async for delta in self._iter_sse(response):
+                            yield delta
+                        finish_reason = _normalize_stop_reason(self._stream_stop_reason) or FINISH_STOP
+                        return
+                except httpx.TimeoutException as exc:
+                    # 流中途（已可能产出 delta）不重试：安全点规则（§2.4-2），只做文案转换。
+                    raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
+                except httpx.RequestError as exc:
+                    raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
+        except (asyncio.CancelledError, GeneratorExit):
+            finish_reason = FINISH_CANCELLED
+            raise
+        except Exception:
+            finish_reason = FINISH_ERROR
+            raise
+        finally:
+            self._record_usage(
+                started=started,
+                finish_reason=finish_reason,
+                prompt_tokens=self._stream_prompt_tokens,
+                completion_tokens=self._stream_completion_tokens,
+                retries=gate.retries,
+            )
 
     # ===== 内部实现 =====
 
@@ -137,6 +262,28 @@ class AnthropicProvider(BaseLLMProvider):
             if not isinstance(event, dict):
                 raise LLMError("模型返回了无法解析的流式响应")
             event_type = event.get("type")
+
+            if event_type == "message_start":
+                # usage 遥测（RF-14 §2.2-3）：message_start 自带 input_tokens。缺失不臆造。
+                message = event.get("message")
+                usage = message.get("usage") if isinstance(message, dict) else None
+                if isinstance(usage, dict):
+                    input_tokens = usage.get("input_tokens")
+                    if isinstance(input_tokens, int) and not isinstance(input_tokens, bool):
+                        self._stream_prompt_tokens = input_tokens
+                continue
+
+            if event_type == "message_delta":
+                # message_delta 自带 output_tokens 与 stop_reason（流收尾时到达）。
+                usage = event.get("usage")
+                if isinstance(usage, dict):
+                    output_tokens = usage.get("output_tokens")
+                    if isinstance(output_tokens, int) and not isinstance(output_tokens, bool):
+                        self._stream_completion_tokens = output_tokens
+                delta_info = event.get("delta")
+                if isinstance(delta_info, dict) and delta_info.get("stop_reason"):
+                    self._stream_stop_reason = str(delta_info["stop_reason"])
+                continue
 
             if event_type == "error":
                 detail = event.get("error") or {}
@@ -225,12 +372,9 @@ class AnthropicProvider(BaseLLMProvider):
         return httpx.AsyncClient(timeout=self._timeout(), transport=self._transport)
 
     def _timeout(self) -> httpx.Timeout:
-        return httpx.Timeout(
-            connect=10.0,
-            read=self.config.timeout_seconds,
-            write=30.0,
-            pool=10.0,
-        )
+        # 与 openai_compat._timeout 同一契约（RF-14 §2.1.c）：分项 read 的"下限保护 +
+        # 预算上限压缩"两家同构，实现下沉到 base.build_request_timeout。
+        return build_request_timeout(self.config, self.request_deadline_seconds)
 
     def _stream_char_limit(self) -> int:
         if self.config.uses_unlimited_output:

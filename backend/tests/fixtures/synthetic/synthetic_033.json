@@ -1,0 +1,104 @@
+{
+  "id": "synthetic_033",
+  "persona_type": "社招",
+  "language": "英文",
+  "industry": "制造",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "13800138000",
+    "carol.zhang33@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "Carol Zhang",
+    "email": "carol.zhang33@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "工艺工程师",
+    "phone": "13800138000",
+    "summary": "Candidate with 4 years of experience in 工艺工程师 roles.",
+    "educations": [
+      {
+        "school": "Starlight University",
+        "major": "Related Major",
+        "degree": "本科",
+        "study_mode": "全日制",
+        "degree_type": "学士",
+        "start_date": "2015-09",
+        "end_date": "2019-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "Ironbridge Manufacturing",
+        "role": "工艺技术员",
+        "start_date": "2019-07",
+        "end_date": "2022-06",
+        "description": "跟进试制件的首件确认，整理检验记录。"
+      },
+      {
+        "company": "Ironbridge Manufacturing",
+        "role": "工艺工程师",
+        "start_date": "2022-07",
+        "end_date": "至今",
+        "description": "参与产线巡检与工艺参数记录，协助编制作业指导书。"
+      }
+    ],
+    "projects": [
+      {
+        "name": "装配线工位优化课题",
+        "role": "Core member",
+        "start_date": "2023-03",
+        "end_date": "2023-12",
+        "tech_stack": "IE手法, 现场观测",
+        "description": "参与装配线工位节拍观测与改善方案编制的课程设计课题。",
+        "highlights": "完成工时观测记录与改善建议报告。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "CAD制图",
+        "level": "熟练"
+      },
+      {
+        "name": "工艺文件编制",
+        "level": "掌握"
+      },
+      {
+        "name": "SPC统计",
+        "level": "了解"
+      }
+    ]
+  },
+  "job_description": "Position: Process Engineer (Ironbridge Manufacturing)\nResponsibilities:\n1. Prepare and maintain process documents;\n2. Support pilot runs and process validation;\n3. Analyze quality issues and propose improvements;\n4. Confirm tooling requirements with production.\nRequirements:\n1. Degree in mechanical or materials engineering;\n2. Familiar with engineering drawing and tolerances;\n3. Comfortable working on the shop floor;\n4. Improvement project experience preferred.\n",
+  "claims": [
+    {
+      "title": "Project: 装配线工位优化课题",
+      "category": "项目经历",
+      "subject": "装配线工位优化课题",
+      "source_fact": "Joined 装配线工位优化课题 as 负责模块, completed the assigned deliverables.",
+      "candidate_wording": "Participated in 装配线工位优化课题 and delivered assigned tasks.",
+      "responsibility_level": "负责模块",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "process documents"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "CAD制图能力",
+      "category": "专业技能",
+      "subject": "CAD制图",
+      "source_fact": "Used CAD制图 across coursework and projects for routine tasks.",
+      "candidate_wording": "Familiar with CAD制图 for routine tasks.",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "CAD制图"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：社招·英文·制造。常规路径样本。"
+}

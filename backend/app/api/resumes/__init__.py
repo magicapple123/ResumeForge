@@ -25,6 +25,7 @@ from . import (
     export_routes,
     generate_routes,
     layout_render_routes,
+    review_routes,
     templates_routes,
 )
 from ._shared import (
@@ -46,5 +47,6 @@ router.include_router(templates_routes.router, prefix="/api/resumes")
 router.include_router(generate_routes.router, prefix="/api/resumes")
 router.include_router(crud_routes.router, prefix="/api/resumes")
 router.include_router(ai_edits_routes.router, prefix="/api/resumes")
+router.include_router(review_routes.router, prefix="/api/resumes")
 router.include_router(layout_render_routes.router, prefix="/api/resumes")
 router.include_router(export_routes.router, prefix="/api/resumes")

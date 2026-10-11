@@ -69,6 +69,15 @@ def build_manifest(
         # 用户的显式勾选。导入侧 fail-closed：这个字段缺失或乱值都拒收。
         "api_key_included": bool(api_key_included),
     }
+    if api_key_included:
+        # RF-24：随包密钥的风险要在包里自带说明——恢复时用户可能早已忘了勾过这个框。
+        # Windows 的 DPAPI 密文绑定原用户与原机器，跨机不可解（应用按"未配置"处理）；
+        # 非 Windows 平台本就按明文存，随包走的就是明文。
+        manifest["api_key_note"] = (
+            "本包包含 API Key：Windows 上导出的是绑定原电脑与原用户的加密密文，"
+            "在其他电脑上无法解密（导入后按未配置处理，请重新填写）；"
+            "在 macOS/Linux 上密钥以明文随包，请妥善保管或传输后立即删除。"
+        )
     if extras:
         manifest["datasets"] = extras
     return manifest

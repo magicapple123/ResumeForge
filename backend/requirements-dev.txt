@@ -16,6 +16,8 @@ pytest-rerunfailures==16.7
 tzdata==2026.5
 ruff==0.16.10
 pip-audit==2.10.1
+# Third-party notices / dependency list for releases (scripts/Generate-Sbom.ps1).
+pip-licenses==5.5.5
 # Gradual type checking: only app/models + app/schemas are in scope for now
 # (see backend/pyrightconfig.json); extend include as annotations land.
 pyright==1.1.414

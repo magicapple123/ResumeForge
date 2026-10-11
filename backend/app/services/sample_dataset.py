@@ -20,6 +20,7 @@ from typing import Any
 from sqlalchemy import Engine
 
 from .. import database
+from ..dataset_registry import read_metadata, write_metadata
 from ..models import Job, ResumeRecord
 from ..models.job import JOB_STATUS_OPEN
 from .datasets import activate_dataset, create_dataset
@@ -54,6 +55,12 @@ def load_sample_dataset(bind: Engine) -> dict[str, Any]:
     返回切换后的数据集描述（带 ``sample: True`` 标记）；调用方是本机 API。
     """
     info = create_dataset(SAMPLE_DATASET_NAME, bind)
+    # 给示例数据集打身份标记：数据集注册表是 JSON 元数据（不是数据库迁移），
+    # ``source`` 是自由文本，直接覆写为 "sample"。页头与数据集列表据此显示
+    # 「示例」标识，并在下拉里提供一键「回到我的数据」。
+    metadata = read_metadata(info["id"])
+    metadata["source"] = "sample"
+    write_metadata(info["id"], metadata)
     activated = activate_dataset(info["id"], bind)
 
     content = sample_resume_content().model_dump()

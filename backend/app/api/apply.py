@@ -52,11 +52,18 @@ from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.settings_service import get_llm_config
 from ..services.site_health import site_health_overview
+from .apply_tasks_page import router as apply_tasks_page_router
+from .webform.records_page import router as webform_records_page_router
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/apply", tags=["apply"])
 collect_router = APIRouter(prefix="/api/collect", tags=["collect"])
+
+# RF-08 分页端点：路径钉在 /api/apply 前缀下，但查询逻辑分属 webform / 批次域，
+# 且 apply.py 行数预算吃紧，所以独立成模块在这里挂载（详见各模块 docstring）。
+router.include_router(webform_records_page_router)
+router.include_router(apply_tasks_page_router)
 
 
 def _raise(exc: apply_service.ApplyServiceError) -> None:

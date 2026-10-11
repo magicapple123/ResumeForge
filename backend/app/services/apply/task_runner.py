@@ -38,6 +38,9 @@ from ...models.apply import (
     ApplyTaskItem,
 )
 from ...models.profile import utcnow
+from ...runtime import dataset_scope
+from ...runtime.dataset_scope import DatasetLease, DatasetScopeError
+from ...runtime.log_context import run_with_bound_context
 from ..browser.cdp_client import CdpClient
 from . import task_apply, task_collect, task_config
 
@@ -183,13 +186,36 @@ class TaskRunner:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 raise TaskRunnerError("已有任务正在进行中，请先停止或等待其完成")
+            # 先取租约再起线程（RF-03 TOCTOU）：切换持锁期间直接失败（409 语义不变）；
+            # 只要租约登记成功，切换的排空就一定会等到本批次结束。
+            try:
+                lease = dataset_scope.acquire_lease("apply-task")
+            except DatasetScopeError as exc:
+                raise TaskRunnerError(str(exc)) from exc
             self._stop.clear()
             self._resume.set()
             self._current_task_id = task_id
             self._thread = threading.Thread(
-                target=self._run, args=(task_id,), name=f"rf-task-{task_id}", daemon=True
+                # RF-20：复制启动方 contextvars（request_id 随行）并绑定 task_id/
+                # dataset_id，让任务线程的日志行能关联到触发请求与数据集。
+                target=run_with_bound_context(
+                    self._run_releasing_lease,
+                    task_id,
+                    lease,
+                    task_id=task_id,
+                    dataset_id=lease.identity.dataset_id,
+                ),
+                name=f"rf-task-{task_id}",
+                daemon=True,
             )
             self._thread.start()
+
+    def _run_releasing_lease(self, task_id: int, lease: DatasetLease) -> None:
+        """线程入口：保证无论批次怎么收尾，租约都会归还。"""
+        try:
+            self._run(task_id)
+        finally:
+            lease.release()
 
     def pause(self, task_id: int) -> None:
         # 先落"暂停"再/与工作线程检查点竞争：若工作线程此刻已跑完并提交终态，

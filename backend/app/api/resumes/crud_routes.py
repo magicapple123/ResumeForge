@@ -14,6 +14,7 @@ from ...models.job import Job
 from ...models.resume import ResumeRecord
 from ...schemas.common import Page
 from ...schemas.resume import (
+    DeliverySummary,
     ManualResumeRequest,
     ResumeBrief,
     ResumeContent,
@@ -23,6 +24,7 @@ from ...schemas.resume import (
     ResumeTitleUpdate,
 )
 from ...services import trash
+from ...services.resume.resume_delivery import list_deliveries
 from ...services.resume.resume_record import build_manual_title
 from ._shared import _to_resume_out
 
@@ -164,6 +166,19 @@ def update_resume_favorite(
     db.commit()
     db.refresh(record)
     return _to_resume_out(record)
+
+
+@router.get("/{resume_id}/deliveries", response_model=list[DeliverySummary])
+def list_resume_deliveries(resume_id: int, db: Session = Depends(get_db)):
+    """一份简历的交付记录摘要（RF-17）：这一版投给了谁、什么时候、指纹是什么。
+
+    只返回摘要（不含 ``content`` 全文，见 ``DeliverySummary``）；简历不存在/已删
+    时 404，与详情接口同一口径。证据不可删，列表不过滤任何行。
+    """
+    record = db.get(ResumeRecord, resume_id)
+    if record is None or trash.is_deleted(record):
+        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
+    return [DeliverySummary.model_validate(item) for item in list_deliveries(db, resume_id)]
 
 
 @router.delete("/{resume_id}", status_code=204)

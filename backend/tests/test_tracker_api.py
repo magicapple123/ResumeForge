@@ -181,6 +181,43 @@ def test_second_import_updates_instead_of_duplicating(client):
     assert stored["items"][0]["status"] == "interview"
 
 
+def test_a_rejection_is_not_revived_by_a_late_stale_receipt(client):
+    """拒信是终态：之后导入的乱序旧「申请已收到」回执不能复活记录或污染阶段字段。"""
+    client.post(
+        "/api/tracker/apply",
+        json={
+            "items": [
+                {
+                    "company": "示例科技",
+                    "title": "后端开发实习生",
+                    "status": "rejected",
+                    "stage_note": "技术面挂了",
+                    "status_date": "2026-09-30",
+                }
+            ]
+        },
+    )
+    result = client.post(
+        "/api/tracker/apply",
+        json={
+            "items": [
+                {
+                    "company": "示例科技",
+                    "title": "后端开发实习生",
+                    "status": "applied",
+                    "stage_note": "简历已收到",
+                    "status_date": "2026-09-01",
+                }
+            ]
+        },
+    ).json()
+    assert result["unchanged"] == 1
+    stored = client.get("/api/tracker").json()["items"][0]
+    assert stored["status"] == "rejected"
+    assert stored["stage_note"] == "技术面挂了"
+    assert stored["status_date"] == "2026-09-30"
+
+
 def test_a_different_company_name_is_not_merged_on_purpose(client):
     """「示例科技」和「示例科技有限公司」是两条——错误合并比留两条重复更难收拾。"""
     client.post(

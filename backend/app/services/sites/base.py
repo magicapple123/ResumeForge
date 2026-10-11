@@ -138,6 +138,9 @@ class SiteAdapter(ABC):
     # 站点标识（用于注册表与 job.source 的匹配）。
     key: str = ""
     display_name: str = ""
+    # 适配器行为版本（自报）。站点改版 → 适配器逻辑/选择器调整时递增，让诊断事件与
+    # task.config 快照能对上"出问题的是哪一版适配器"；``0`` 表示未标识。
+    version: str = "0"
     # 站点主机名（用于从 URL 反查适配器）。
     hosts: tuple[str, ...] = ()
     # 入口地址：启动投递专用浏览器时先打开这一页，用户才有一个能扫码登录的落脚点。

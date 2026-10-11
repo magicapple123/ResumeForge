@@ -1,0 +1,87 @@
+{
+  "id": "synthetic_049",
+  "persona_type": "转行",
+  "language": "中英混排",
+  "industry": "设计",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "user049@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "彭飞",
+    "email": "user049@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "视觉设计师",
+    "summary": "从文案策划转入视觉设计师方向，已完成相关技能学习与小项目实践。",
+    "educations": [
+      {
+        "school": "临江职业学院",
+        "major": "文案策划相关专业",
+        "degree": "专科",
+        "study_mode": "全日制",
+        "degree_type": "",
+        "start_date": "2013-09",
+        "end_date": "2016-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "山丘品牌设计",
+        "role": "文案策划",
+        "start_date": "2016-07",
+        "end_date": "2024-06",
+        "description": "负责活动文案撰写与物料文案校对。"
+      },
+      {
+        "company": "白泽设计工作室",
+        "role": "视觉设计师",
+        "start_date": "2024-07",
+        "end_date": "至今",
+        "description": "参与品牌物料的设计初稿绘制，协助整理素材库。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "Photoshop",
+        "level": "熟练"
+      },
+      {
+        "name": "Illustrator",
+        "level": "熟练"
+      }
+    ]
+  },
+  "job_description": "岗位：视觉设计师（白泽设计工作室）\n职责：\n1. 负责品牌项目的海报与物料视觉设计；\n2. 参与设计提案的素材整理与排版输出；\n3. 根据反馈完成设计稿修改与交付；\n4. 维护项目素材库与设计规范。\n要求：\n1. 设计相关专业本科及以上学历；\n2. 熟悉主流设计软件；\n3. 有完整作品集；\n4. 有品牌或电商项目经验者优先。\nBonus: 加分项：熟悉 Figma / Sketch 协作流程，了解 Design System 规范者优先。\n",
+  "claims": [
+    {
+      "title": "校园文化节主视觉设计参与经历",
+      "category": "项目经历",
+      "subject": "校园文化节主视觉设计",
+      "source_fact": "在校园文化节主视觉设计中负责模块，完成完成海报初稿与物料延展规范整理。",
+      "candidate_wording": "参与校园文化节主视觉设计建设，完成海报相关任务",
+      "responsibility_level": "负责模块",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "海报"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "Photoshop能力",
+      "category": "专业技能",
+      "subject": "Photoshop",
+      "source_fact": "在课程与项目实践中反复使用Photoshop，能独立完成常规任务。",
+      "candidate_wording": "熟悉Photoshop，能独立完成常规任务",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "Photoshop"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：转行·中英混排·设计。常规路径样本。"
+}

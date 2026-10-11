@@ -11,7 +11,15 @@
 常量）、``_registry``（注册表与执行入口）、``job_tools`` / ``data_tools`` /
 ``report_tools`` / ``search_tools``（按域拆分的 handler）。对外只从这里导入。
 """
-from ._registry import _TOOLS, execute_tool, execute_tool_async, tool_definitions, tool_names
+from ._registry import (
+    _TOOLS,
+    execute_tool,
+    execute_tool_async,
+    get_tool,
+    tool_definitions,
+    tool_names,
+    tool_writes,
+)
 from ._shared import (  # noqa: F401 - 历史导出，测试经 assistant_tools.X 访问
     MAX_ASSISTANT_SKILL_FILE_CHARS,
     MAX_ASSISTANT_SKILL_FILES,
@@ -25,7 +33,9 @@ __all__ = [
     "_TOOLS",
     "execute_tool",
     "execute_tool_async",
+    "get_tool",
     "tool_definitions",
     "tool_names",
+    "tool_writes",
     "web_search_description",
 ]

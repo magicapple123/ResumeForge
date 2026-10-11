@@ -1,4 +1,5 @@
 import pytest
+from app.schemas.date_format import normalize_partial_date
 from app.schemas.profile import (
     AwardIn,
     CampusExperienceIn,
@@ -7,7 +8,6 @@ from app.schemas.profile import (
     ProfileUpdate,
     ProjectIn,
 )
-from app.services.date_format import normalize_partial_date
 
 
 @pytest.mark.parametrize(

@@ -71,6 +71,13 @@ from .resume import (
     ResumeGenerateTask,
     ResumeRecord,
 )
+from .resume_delivery import (
+    DELIVERY_SOURCE_APPLY,
+    DELIVERY_SOURCE_EXPORT,
+    DELIVERY_SOURCE_TRACK,
+    DELIVERY_SOURCES,
+    ResumeDeliveryRecord,
+)
 from .resume_template import (
     TEMPLATE_KIND_FORMAT,
     TEMPLATE_KIND_STYLE,
@@ -80,9 +87,12 @@ from .resume_template import (
 from .setting import AppSetting, LLMConfigRecord
 from .share_package import SHARE_PERMISSIONS, SharePackage
 from .tracker import (
+    CHANNELS,
+    EVENT_SOURCES,
     SOURCES,
     STATUSES,
     ApplicationTrack,
+    ApplicationTrackEvent,
 )
 from .user_file import UserFile
 from .web_form_profile import WebFormProfileEntry
@@ -107,6 +117,11 @@ __all__ = [
     "Award",
     "ResumeRecord",
     "ResumeGenerateTask",
+    "ResumeDeliveryRecord",
+    "DELIVERY_SOURCES",
+    "DELIVERY_SOURCE_APPLY",
+    "DELIVERY_SOURCE_EXPORT",
+    "DELIVERY_SOURCE_TRACK",
     "GENERATE_STATUSES",
     "GENERATE_ACTIVE_STATUSES",
     "AppSetting",
@@ -145,6 +160,9 @@ __all__ = [
     "RESPONSIBILITY_LEVELS",
     "VERIFICATION_STATUSES",
     "ApplicationTrack",
+    "ApplicationTrackEvent",
+    "CHANNELS",
+    "EVENT_SOURCES",
     "STATUSES",
     "SOURCES",
     "DrillSession",

@@ -61,6 +61,12 @@ class ResumeRecord(Base):
     coverage_notes: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON, default=list, server_default="[]"
     )
+    # 事实来源标注（RF-13）：生成时每一段内容是从哪条资料事实来的（grounded /
+    # restored / enhanced_kept），纯收集已有映射、不调模型。旧行读取 `or []` 兜底，
+    # 与 coverage_notes 同一套语义；alembic 侧由 0039 迁移负责。
+    fact_annotations: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, server_default="[]"
+    )
     # 生成说明：这份简历是怎么选出来的（岗位信号、候选组成、省略原因、事实约束），
     # 在预览里折叠展示，回答"为什么是这样一份简历"。
     rationale: Mapped[str] = mapped_column(Text, default="", server_default="")
@@ -68,6 +74,11 @@ class ResumeRecord(Base):
     # 软删除时间戳：NULL 表示「没删」。列表查询一律加 `deleted_at IS NULL`，
     # 回收站里则只看非 NULL 的行（见 ``services/trash.py``）。
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 版本血缘（RF-17）：这份简历由哪份简历派生而来（修订/复制当时记下）。
+    # NULL 表示独立版本——旧行与手写简历都是 NULL，读取方不做任何推断。
+    parent_revision_id: Mapped[int | None] = mapped_column(
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 # ===== 简历生成后台任务状态机 =====

@@ -349,7 +349,9 @@ def test_migration_creates_user_file_table(tmp_path):
         "created_at",
     } <= columns
 
-    command.downgrade(config, "-1")
+    # 显式退到「创建 user_file 的迁移之前」：不能写 "-1"——那退的是*当前* head
+    # 的最后一步；0039 加列之后 "-1" 只会退到 0038，user_file 仍在，断言就失真了。
+    command.downgrade(config, "0037_resume_generation_notes")
     assert "user_file" not in set(inspect(engine).get_table_names())
 
 
@@ -374,3 +376,7 @@ def test_backup_roundtrip_restores_referral_images(db_session, tmp_path):
     restored = dataset_file.parent / REFERRAL_IMAGES_DIRNAME / "refimg.png"
     assert restored.is_file()
     assert restored.read_bytes() == PNG_BYTES
+
+    # 这张图片落在测试库同目录：不清掉会污染后续用例的导出断言
+    # （test_api_datasets 的成员集合会多出一个 referral_images/refimg.png）。
+    image.unlink(missing_ok=True)

@@ -20,6 +20,7 @@ import json
 import shutil
 import sqlite3
 import zipfile
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -48,7 +49,7 @@ PREVIOUS_REVISION = "0009_templates_and_interview"
 # 本文件的主角：只加表、不动既有列的那个迁移。
 APPLY_MIGRATION_REVISION = "0010_apply_center"
 # 当前迁移链的 head，用于"升级到底"与"声称在 head"的对照。
-HEAD_REVISION = "0038_user_files"
+HEAD_REVISION = "0041_track_channel_and_events"
 
 EXPECTED_INDEXES = {
     "job_match_analysis": {
@@ -268,7 +269,15 @@ def test_head_declared_backup_missing_apply_tables_is_rejected(real_db_copy, tmp
     try:
         tampered = tmp_path / "tampered.db"
         shutil.copy2(real_db_copy, tampered)
-        with sqlite3.connect(tampered) as connection:
+        # 生产库副本是 WAL 模式：`with sqlite3.connect(...)` 只提交事务、**不关连接**，
+        # 写进 -wal 的 revision 改写不会 checkpoint 回主文件——zip 打包主文件后，
+        # 包内 revision 仍是旧值，inspect_archive 会以「清单与实际不一致」拒绝，
+        # 而不是本用例要验证的「缺少数据表」。显式关闭连接，让最后一个连接干净
+        # 关闭时自动 checkpoint，把改写落回主文件。
+        with (
+            closing(sqlite3.connect(tampered)) as connection,
+            connection,
+        ):
             connection.execute("DELETE FROM alembic_version")
             connection.execute(
                 "INSERT INTO alembic_version VALUES (?)", (HEAD_REVISION,)

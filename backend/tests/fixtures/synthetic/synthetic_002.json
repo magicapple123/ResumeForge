@@ -1,0 +1,111 @@
+{
+  "id": "synthetic_002",
+  "persona_type": "应届",
+  "language": "中文",
+  "industry": "IT/互联网",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "user002@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "李娜",
+    "email": "user002@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "后端开发工程师",
+    "summary": "后端开发工程师方向应届毕业生，在校期间完成校园二手交易平台等项目实践。",
+    "educations": [
+      {
+        "school": "星辰理工大学",
+        "major": "后端开发工程师相关专业",
+        "degree": "本科",
+        "study_mode": "全日制",
+        "degree_type": "学士",
+        "start_date": "2021-09",
+        "end_date": "2025-06",
+        "gpa": "3.4/4.0",
+        "courses": "",
+        "achievements": ""
+      }
+    ],
+    "experiences": [
+      {
+        "company": "云梯网络",
+        "role": "后端开发实习生",
+        "start_date": "2024-07",
+        "end_date": "2024-12",
+        "description": "参与订单模块的接口开发与自测，配合测试完成回归。"
+      }
+    ],
+    "projects": [
+      {
+        "name": "校园二手交易平台",
+        "role": "核心成员",
+        "start_date": "2023-09",
+        "end_date": "2024-05",
+        "tech_stack": "Python, FastAPI, MySQL, Redis",
+        "description": "面向校园场景的二手交易服务，含商品发布、订单与站内消息模块。",
+        "highlights": "完成订单服务与消息通知的接口设计与联调。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "Python",
+        "level": "熟练"
+      },
+      {
+        "name": "MySQL",
+        "level": "掌握"
+      },
+      {
+        "name": "Docker",
+        "level": "了解"
+      }
+    ]
+  },
+  "job_description": "岗位：后端开发工程师（星辰科技）\n职责：\n1. 负责业务服务端接口的设计、开发与维护；\n2. 参与订单服务、支付等核心链路的技术方案评审；\n3. 与前端、测试协作完成功能交付与线上问题排查；\n4. 参与服务的性能优化与稳定性建设。\n要求：\n1. 本科及以上学历，计算机相关专业；\n2. 熟悉 Python 或 Go，了解 MySQL、Redis；\n3. 有良好的沟通能力与代码习惯；\n4. 有实习或项目经验者优先。\n",
+  "claims": [
+    {
+      "title": "校园二手交易平台参与经历",
+      "category": "项目经历",
+      "subject": "校园二手交易平台",
+      "source_fact": "在校园二手交易平台中主导方案或交付，完成完成订单服务与消息通知的接口设计与联调。",
+      "candidate_wording": "参与校园二手交易平台建设，完成订单服务相关任务",
+      "responsibility_level": "主导方案或交付",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "订单服务"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "Python能力",
+      "category": "专业技能",
+      "subject": "Python",
+      "source_fact": "在课程与项目实践中反复使用Python，能独立完成常规任务。",
+      "candidate_wording": "熟悉Python，能独立完成常规任务",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "Python"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "校级奖学金",
+      "category": "荣誉奖项",
+      "subject": "校级奖学金",
+      "source_fact": "获得一次校级二等奖学金（2023-12）。",
+      "candidate_wording": "曾获校级二等奖学金。",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "奖学金"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：应届·中文·IT/互联网。常规路径样本。"
+}

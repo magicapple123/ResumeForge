@@ -1,0 +1,10 @@
+{
+  "case_id": "synthetic_010",
+  "output_text": "David Chen\n求职意向：Backend Engineer\n\nWork Experience:\nExample Corp Junior Backend Engineer (Full-time, 2022-03 to 2023-08)\n- Assisted with order service API development and regression testing.\nBlueOrchid Tech Senior Backend Engineer (Full-time, 2023-01 to 2024-05)\n- Participated in order service interface development and review.\n\nProject:\nCampus Second-hand Trading Platform (2023-03 to 2023-12)\n- Completed assigned deliverables.",
+  "meta": {
+    "prompt_version": "known-bad-v1",
+    "model": "handwritten",
+    "generated_at": "2026-10-10",
+    "expected_rules": ["contradiction"]
+  }
+}

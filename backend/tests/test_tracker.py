@@ -87,6 +87,12 @@ def test_unknown_status_cannot_overwrite_a_concrete_one():
     assert resolve_status(STATUS_INTERVIEW, STATUS_UNKNOWN) == STATUS_INTERVIEW
 
 
+# 7×7 全组合的期望矩阵，逐格写死设计意图（依据 models/tracker.py 的模块注释）：
+# - 拒信永远无条件胜出（incoming=rejected → rejected）；
+# - 已结束是**终态**：current=rejected 时任何非拒信通知都不能把它复活（RF-06）；
+# - 待确认/未知被任何明确状态覆盖；
+# - 其余按漏斗只能前进（STATUS_RANK 比较）。
+
 # ===== 合并计划与执行 =====
 
 
@@ -251,6 +257,27 @@ def test_record_applied_skips_blank_snapshots(db_session):
     record_applied(db_session, company="示例科技", title="  ")
     db_session.commit()
     assert list_tracks(db_session) == []
+
+
+def test_record_applied_records_resume_link_and_title(db_session):
+    """投递条目带上简历时：进度落关联与标题快照（RF-17），快照列可直接读。"""
+    from app.models.resume import ResumeRecord
+
+    resume = ResumeRecord(title="后端岗位简历", content={})
+    db_session.add(resume)
+    db_session.commit()
+
+    record_applied(
+        db_session,
+        company="示例科技",
+        title="后端开发实习生",
+        resume_id=resume.id,
+        resume_title=resume.title,
+    )
+    db_session.commit()
+    stored = list_tracks(db_session)[0]
+    assert stored.resume_id == resume.id
+    assert stored.resume_title == "后端岗位简历"
 
 
 # ===== 增删改查与统计 =====

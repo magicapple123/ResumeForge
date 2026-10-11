@@ -21,25 +21,36 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from sqlalchemy.orm import sessionmaker
+
+from ...config import get_settings
 from ...database import SessionLocal
 from ...models.job import Job
 from ...models.profile import utcnow
 from ...models.resume import (
     GENERATE_STATUS_CANCELLED,
-    GENERATE_STATUS_COMPLETED,
     GENERATE_STATUS_FAILED,
-    GENERATE_STATUS_PENDING,
     GENERATE_STATUS_RUNNING,
     ResumeGenerateTask,
 )
+from ...runtime import dataset_scope
+from ...runtime.dataset_scope import DatasetLease, DatasetScopeError
+from ...runtime.log_context import run_with_bound_context
+from ...runtime.operation_budget import OperationBudget, OperationCancelled
 from ...schemas.job import JobOut
 from ...schemas.resume import GenerateOptions
 from ...services import trash
 from ...services.claims import build_baseline
 from ...services.llm import create_provider
 from ...services.llm.base import LLMError
+from ...services.llm.usage import usage_log_line
 from ...services.profile.profile_service import get_profile_detail, to_profile_out
 from ...services.resume.resume_generator import ResumeGenerator
+from ...services.resume.resume_task_state import (
+    claim_completed,
+    finalize_task,
+    set_cancelled,
+)
 from ...services.settings_service import get_llm_config
 
 logger = logging.getLogger(__name__)
@@ -53,19 +64,19 @@ class ResumeGenerateRunnerError(Exception):
     """运行器控制类错误（任务未在运行等），message 为中文提示。"""
 
 
-class _GenerationCancelled(Exception):
-    """停止信号在流式循环里被检查到时抛出，用于优雅收尾（不是错误）。"""
-
-
 class ResumeGenerateRunner:
     """单例运行器：同一时刻只跑一个生成任务。"""
 
-    def __init__(self, *, session_factory: Callable[[], Any] = SessionLocal) -> None:
+    def __init__(self, *, session_factory: Callable[[], Any] | None = None) -> None:
+        # session_factory 默认 None：任务启动时**按值冻结**当前身份的 engine（RF-03），
+        # rebind 后会话仍写旧库；显式传入（测试注入）时优先生效。
         self._session_factory = session_factory
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._current_task_id: int | None = None
+        self._lease: DatasetLease | None = None
+        self._frozen_factory: Callable[[], Any] | None = None
 
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -78,12 +89,42 @@ class ResumeGenerateRunner:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 raise ResumeGenerateRunnerError("已有简历生成任务正在进行中，请等待其完成")
+            # 先取租约再起线程（RF-03 TOCTOU）：切换持锁期间直接失败，调用方回滚
+            # 刚建的空任务；只要租约登记成功，切换的排空就一定会等到本任务结束。
+            try:
+                lease = dataset_scope.acquire_lease("resume-generate")
+            except DatasetScopeError as exc:
+                raise ResumeGenerateRunnerError(str(exc)) from exc
+            self._lease = lease
+            self._frozen_factory = (
+                self._session_factory
+                if self._session_factory is not None
+                else sessionmaker(
+                    bind=lease.identity.engine, autoflush=False, expire_on_commit=False
+                )
+            )
             self._stop.clear()
             self._current_task_id = task_id
             self._thread = threading.Thread(
-                target=self._run, args=(task_id,), name=f"rf-generate-{task_id}", daemon=True
+                # RF-20：复制启动方 contextvars 并绑定 task_id/dataset_id（同 apply 运行器）。
+                target=run_with_bound_context(
+                    self._run_releasing_lease,
+                    task_id,
+                    lease,
+                    task_id=task_id,
+                    dataset_id=lease.identity.dataset_id,
+                ),
+                name=f"rf-generate-{task_id}",
+                daemon=True,
             )
             self._thread.start()
+
+    def _run_releasing_lease(self, task_id: int, lease: DatasetLease) -> None:
+        """线程入口：保证无论任务怎么收尾，租约都会归还（切换不再被永久挡住）。"""
+        try:
+            self._run(task_id)
+        finally:
+            lease.release()
 
     def cancel(self, task_id: int) -> None:
         # 先落"取消"信号，再与工作线程竞争：若工作线程已跑完并提交终态，终态守卫会拒绝
@@ -104,8 +145,13 @@ class ResumeGenerateRunner:
 
     # ===== 工作线程 =====
 
+    def _open_session(self) -> Any:
+        """开一个任务会话：优先用启动时冻结的工厂（RF-03），退回测试注入，再退回全局。"""
+        factory = self._frozen_factory or self._session_factory or SessionLocal
+        return factory()
+
     def _run(self, task_id: int) -> None:
-        session = self._session_factory()
+        session = self._open_session()
         try:
             task = session.get(ResumeGenerateTask, task_id)
             if task is None:
@@ -114,6 +160,13 @@ class ResumeGenerateRunner:
             if self._stop.is_set():
                 self._finalize(session, task, GENERATE_STATUS_CANCELLED, error="已取消")
                 return
+
+            # 总预算（RF-02）：从任务开始到结果落库全程生效。取消事件与 ``_stop`` 是
+            # **同一个** ``threading.Event``——用户取消与预算到期共用一条信号线，原因
+            # 由 :class:`OperationCancelled` 的 message 区分（取消→cancelled，超时→failed）。
+            budget = OperationBudget.start(
+                get_settings().resume_generate_budget_seconds, cancel_event=self._stop
+            )
 
             try:
                 job_out, profile_out, baseline, provider = self._snapshot(session, task)
@@ -137,42 +190,68 @@ class ResumeGenerateRunner:
             warnings: list[str] = []
             coverage_notes: list[dict] = []
             rationale = ""
+            fact_annotations: list[dict] = []
             raw_parts: list[str] = []
+            received_chars_total = 0
             last_char_commit = 0
+            estimated_prompt_tokens: int | None = None
 
             try:
                 async def consume() -> None:
-                    nonlocal resume, warnings, coverage_notes, rationale, last_char_commit
+                    nonlocal resume, warnings, coverage_notes, rationale, fact_annotations
+                    nonlocal last_char_commit, received_chars_total
+                    nonlocal estimated_prompt_tokens
                     async for event in generator.generate(
-                        profile_out, job_out, options, baseline=baseline
+                        profile_out, job_out, options, baseline=baseline, budget=budget
                     ):
-                        # 每一块事件之后检查停止信号：取消要在下一次模型输出前生效。
-                        if self._stop.is_set():
-                            raise _GenerationCancelled()
+                        # 每一块事件之后检查停止信号、总预算与数据集归属：取消/超时/
+                        # 切换都在下一次模型输出前生效（raise_if_stopped 合并了 _stop
+                        # 检查与预算检查；lease.check 是显式的写入前归属校验）。
+                        budget.raise_if_stopped()
+                        if self._lease is not None:
+                            self._lease.check()
                         if event["type"] == "progress":
                             task.message = event["message"]
                             session.commit()
                         elif event["type"] == "delta":
                             raw_parts.append(event["text"])
-                            received = len("".join(raw_parts))
-                            task.received_chars = received
+                            # 累计计数代替 len("".join(...))：每 chunk 全量拼接是 O(n²)。
+                            received_chars_total += len(event["text"])
+                            task.received_chars = received_chars_total
                             # 按字符粒度节流写库：全量进度不需要每块都落一次。
-                            if received - last_char_commit >= _CHAR_COMMIT_STEP:
-                                last_char_commit = received
+                            if received_chars_total - last_char_commit >= _CHAR_COMMIT_STEP:
+                                last_char_commit = received_chars_total
                                 session.commit()
                         elif event["type"] == "done":
                             resume = event["resume"]
                             warnings = event["warnings"]
                             coverage_notes = event.get("coverage_notes") or []
                             rationale = event.get("rationale") or ""
+                            # 事实来源标注（RF-13）：锚定的副产品，随记录一起落库。
+                            fact_annotations = event.get("fact_annotations") or []
+                            # token 估算遥测（RF-14 §2.5）：估算开启时由 generator 放进
+                            # done 事件，与真实 tokens 一起进同一条用量日志。
+                            estimated_prompt_tokens = event.get("estimated_prompt_tokens")
 
                 asyncio.run(consume())
-            except _GenerationCancelled:
-                self._finalize(session, task, GENERATE_STATUS_CANCELLED, error="已取消")
+            except OperationCancelled as exc:
+                # 用户取消（cancel_event 即 _stop）→ cancelled；预算到期 → failed。
+                # 两者共用一条信号线，用 OperationCancelled 的 message 区分原因。
+                if self._stop.is_set():
+                    self._finalize(session, task, GENERATE_STATUS_CANCELLED, error="已取消")
+                else:
+                    logger.warning("简历生成任务超出总预算 task_id=%s", task_id)
+                    self._finalize(session, task, GENERATE_STATUS_FAILED, error=str(exc))
                 return
             except asyncio.CancelledError:
                 # 防御性：外部取消 async 上下文时同样标 cancelled（照抄 assistant_stream 的中断范式）。
                 self._finalize(session, task, GENERATE_STATUS_CANCELLED, error="已取消")
+                return
+            except DatasetScopeError as exc:
+                # 数据集已切换（防御路径：租约正常时应挡住切换）：按 failed 收尾，
+                # 结果绝不写到新库去。会话是冻结的，终态落在任务所在的旧库里。
+                logger.warning("简历生成任务因数据集切换中止 task_id=%s：%s", task_id, exc)
+                self._finalize(session, task, GENERATE_STATUS_FAILED, error=str(exc))
                 return
             except LLMError as exc:
                 logger.warning("简历生成任务模型调用失败 task_id=%s：%s", task_id, exc)
@@ -189,11 +268,33 @@ class ResumeGenerateRunner:
                 return
 
             # consume() 正常返回（已拿到 done + 解析出简历）后、写库之前**必须**再复查一次
-            # 停止信号：用户可能在 "done 已收到、completed 尚未提交" 这一窗口点取消。不查
-            # 这里，取消会被下面无条件写简历的路径吞掉，造成"前端已取消、后端却悄悄落库"。
-            if self._stop.is_set():
-                self._finalize(session, task, GENERATE_STATUS_CANCELLED, error="已取消")
+            # 停止信号与预算：用户可能在 "done 已收到、completed 尚未提交" 这一窗口点取消，
+            # 预算也可能恰好在这条缝隙里到期。不查这里，取消/超时会被下面无条件写简历的
+            # 路径吞掉，造成"前端已取消/已超时、后端却悄悄落库"。
+            try:
+                budget.raise_if_stopped()
+                if self._lease is not None:
+                    self._lease.check()
+            except OperationCancelled as exc:
+                if self._stop.is_set():
+                    self._finalize(session, task, GENERATE_STATUS_CANCELLED, error="已取消")
+                else:
+                    self._finalize(session, task, GENERATE_STATUS_FAILED, error=str(exc))
                 return
+            except DatasetScopeError as exc:
+                logger.warning("简历生成任务因数据集切换中止 task_id=%s：%s", task_id, exc)
+                self._finalize(session, task, GENERATE_STATUS_FAILED, error=str(exc))
+                return
+
+            # 用量进结构化日志（RF-14 §2.2-5）：字段拼装在 usage.usage_log_line（与
+            # 未来消费方共用）。prompt/response 内容与密钥绝不入日志（隐私边界）。
+            usage = getattr(provider, "last_usage", None)
+            if usage is not None:
+                logger.info(
+                    "简历生成任务模型用量 task_id=%s %s",
+                    task_id,
+                    usage_log_line(usage, estimated_prompt_tokens=estimated_prompt_tokens),
+                )
 
             if resume is None:
                 self._finalize(
@@ -237,6 +338,7 @@ class ResumeGenerateRunner:
                     custom_instruction=options.custom_instruction,
                     coverage_notes=coverage_notes,
                     rationale=rationale,
+                    fact_annotations=fact_annotations,
                     commit=False,
                 )
             except Exception:  # noqa: BLE001 - 落库失败不能让任务停在 running
@@ -263,6 +365,8 @@ class ResumeGenerateRunner:
             with self._lock:
                 self._current_task_id = None
                 self._thread = None
+                self._lease = None
+                self._frozen_factory = None
             self._stop.clear()
 
     def _snapshot(
@@ -287,70 +391,20 @@ class ResumeGenerateRunner:
         return job_out, profile_out, baseline, provider
 
     # ===== 状态写入 =====
+    # 终态仲裁三件套的实现拆在 resume_task_state.py（RF-02 纪律：条件 UPDATE +
+    # 先到者赢）；这里保留薄方法委托，调用点与测试锚点（``runner._finalize`` 直接
+    # 调用、``ResumeGenerateRunner._claim_completed`` monkeypatch）保持不变。
 
     def _finalize(
         self, session: Any, task: ResumeGenerateTask, status: str, error: str = ""
     ) -> None:
-        task.status = status
-        task.finished_at = utcnow()
-        if error:
-            task.error = error
-        session.commit()
+        finalize_task(session, task, status, error)
 
     def _claim_completed(self, session: Any, task_id: int) -> bool:
-        """原子地把任务从 running 认领为 completed，返回是否认领成功（**不提交**）。
-
-        这是"取消 vs 完成"的**唯一仲裁点**：与 cancel 的 running→cancelled 是两个互斥的
-        UPDATE，SQLite 串行化写入下只会有一个成功。认领成功（影响 1 行）后，调用方才在
-        **同一事务**里写入简历记录、回填 resume_id 并一次 commit；影响 0 行说明 cancel 已
-        先把任务翻成 cancelled，调用方按 cancelled 收尾（此时尚未建简历，无孤儿记录）。
-
-        **提交权交给调用方**：这样 resume_id 与 status=completed 才能落在同一个事务里，
-        观察者绝不会看到"completed 但 resume_id 为空"的中间态（旧实现在这里 commit，把
-        终态拆成了两个事务）。``synchronize_session=False`` 让 ORM 不回写这条 raw UPDATE
-        的结果——调用方此后不再通过 ORM 改 status，避免把原子守卫绕过去。
-        """
-        from sqlalchemy import update
-
-        statement = (
-            update(ResumeGenerateTask)
-            .where(ResumeGenerateTask.id == task_id)
-            .where(ResumeGenerateTask.status == GENERATE_STATUS_RUNNING)
-            .values(status=GENERATE_STATUS_COMPLETED)
-            .execution_options(synchronize_session=False)
-        )
-        result = session.execute(statement)
-        return result.rowcount == 1
+        return claim_completed(session, task_id)
 
     def _set_cancelled(self, task_id: int) -> None:
-        """取消接口即时落一次状态，让界面立刻看到"已取消"。
-
-        与工作线程并发写同一行，因此用原子 UPDATE + 活动态守卫：只有当前仍是
-        pending/running 时才改成 cancelled，绝不把已 completed/failed 的终态盖掉。
-        """
-        from sqlalchemy import update
-
-        session = self._session_factory()
-        try:
-            statement = (
-                update(ResumeGenerateTask)
-                .where(ResumeGenerateTask.id == task_id)
-                .where(
-                    ResumeGenerateTask.status.in_(
-                        (GENERATE_STATUS_RUNNING, GENERATE_STATUS_PENDING)
-                    )
-                )
-                .values(
-                    status=GENERATE_STATUS_CANCELLED, error="已取消", finished_at=utcnow()
-                )
-                .execution_options(synchronize_session=False)
-            )
-            session.execute(statement)
-            session.commit()
-        except Exception:  # noqa: BLE001 - 与工作线程并发写时可能短暂锁库，忽略即可
-            logger.warning("更新生成任务取消状态失败 task_id=%s", task_id)
-        finally:
-            session.close()
+        set_cancelled(task_id, open_session=self._open_session)
 
 
 _RUNNER: ResumeGenerateRunner | None = None
@@ -374,6 +428,8 @@ def reset_resume_generate_runner() -> None:
             _RUNNER.shutdown()
         _RUNNER = None
 
+
+from .generate_recovery import fail_orphaned_generate_tasks  # noqa: E402, F401 - 兼容再导出
 
 __all__ = [
     "ResumeGenerateRunner",

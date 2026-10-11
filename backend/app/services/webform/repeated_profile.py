@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ...models.web_form_profile_record import WebFormProfileRecord
-from ..date_format import normalize_partial_date
+from ...schemas.date_format import normalize_partial_date
 from .repeated_fields import field_key_for_block, field_label_for_key
 from .repeated_profile_catalog import (
     REPEATED_PROFILE_GROUPS,

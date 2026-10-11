@@ -1,11 +1,8 @@
-"""求职进度的服务层：合并、增删改查、漏斗统计与导出。
+"""求职进度的服务层：增删改查、漏斗统计、导出与投递台接合点。
 
-**合并是这里唯一有判断的地方，所以只写了一遍**：:func:`plan_merges` 算出"每条会新增
-还是更新、为什么"，预览接口把它原样返回，确认接口再执行同一份计划。两处各写一遍判断
-是这类功能最容易出的错——预览说"会更新"，点了确认却没更新（或反过来），用户再也不会
-相信那个预览。
-
-状态取舍规则见 ``models/tracker.py`` 的 :func:`resolve_status`：只能前进，拒信除外。
+合并（识别通知 → 计划 → 预览/确认）与 track 字段写入的单一实现在
+``tracker_merge.py``：``plan_merges`` 算出"每条会新增还是更新、为什么"，预览接口
+原样返回，确认接口执行同一份计划（"预览=执行"契约）。本文件经门面 re-export。
 """
 from __future__ import annotations
 
@@ -16,14 +13,11 @@ import logging
 from datetime import date
 from typing import Any
 
-from sqlalchemy import case, func, tuple_
+from sqlalchemy import case, func
 from sqlalchemy.orm import Query, Session
 
+from ..models.resume import ResumeRecord
 from ..models.tracker import (
-    MERGE_CREATED,
-    MERGE_LABELS,
-    MERGE_UNCHANGED,
-    MERGE_UPDATED,
     SOURCE_APPLY,
     SOURCE_MANUAL,
     STATUS_APPLIED,
@@ -32,20 +26,24 @@ from ..models.tracker import (
     STATUSES,
     ApplicationTrack,
     is_active,
-    normalize_key,
-    resolve_status,
     status_label,
 )
 from ..schemas.tracker import (
-    TrackApplyItemResult,
-    TrackApplyOut,
     TrackCreate,
-    TrackMergePreview,
     TrackOut,
     TrackRecordIn,
     TrackUpdate,
 )
 from . import trash
+from .resume.resume_delivery import freeze_delivery
+from .track_events import record_status_change, write_source
+from .tracker_merge import (
+    _apply_payload,
+    _find_by_key,
+    apply_merges,
+    plan_merges,
+    preview_merges,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +88,20 @@ def _stage_expression() -> Any:
     return case(_STATUS_ORDER, value=ApplicationTrack.status, else_=9)
 
 
+def _stage_ordered(query: Query[ApplicationTrack]) -> Query[ApplicationTrack]:
+    """list_tracks 与 list_tracks_page **共用的排序**：阶段序 → updated_at → id。
+
+    抽出来是为了让分页端点与旧列表的次序永远一致——两处各写一遍排序，迟早会改漏一边。
+    """
+    return query.order_by(
+        _stage_expression(),
+        # SQLite 的 DESC 把 NULL 排在最后，与旧实现 None→datetime.min→排在末尾一致；
+        # updated_at 同值时按 id 新的在前，也与旧实现的 -id 次序键一致。
+        ApplicationTrack.updated_at.desc(),
+        ApplicationTrack.id.desc(),
+    )
+
+
 def list_tracks(
     db: Session, *, status: str = "", keyword: str = "", limit: int | None = MAX_LIST_LIMIT
 ) -> list[ApplicationTrack]:
@@ -103,16 +115,36 @@ def list_tracks(
     不限量——**导出与助手工具必须传 None**：导出截断等于丢用户数据，助手工具自己
     有一层 limit 语义（见 tracker_tools），两层各管各的。
     """
-    query = _filtered_query(db, status=status, keyword=keyword).order_by(
-        _stage_expression(),
-        # SQLite 的 DESC 把 NULL 排在最后，与旧实现 None→datetime.min→排在末尾一致；
-        # updated_at 同值时按 id 新的在前，也与旧实现的 -id 次序键一致。
-        ApplicationTrack.updated_at.desc(),
-        ApplicationTrack.id.desc(),
-    )
+    query = _stage_ordered(_filtered_query(db, status=status, keyword=keyword))
     if limit is not None:
         query = query.limit(limit)
     return query.all()
+
+
+def list_tracks_page(
+    db: Session,
+    *,
+    status: str = "",
+    keyword: str = "",
+    page: int = 1,
+    page_size: int = 20,
+    job_id: int | None = None,
+) -> tuple[list[ApplicationTrack], int]:
+    """分页列出求职进度（RF-08）：过滤与排序与 :func:`list_tracks` 完全一致。
+
+    与旧列表的分工：旧端点给 MAX_LIST_LIMIT 兜底上限，本函数服务
+    ``GET /api/tracker/page``——历史记录超过 500 条之后仍然全部可达。统计（漏斗）
+    仍由旧端点随列表下发，本函数只负责行。
+
+    ``job_id``（RF-11）：岗位详情深链过来的「该岗位的投递进度」过滤；None 表示
+    不过滤（不传该参数的行为与从前完全一致）。
+    """
+    base = _filtered_query(db, status=status, keyword=keyword)
+    if job_id is not None:
+        base = base.filter(ApplicationTrack.job_id == job_id)
+    total = base.count()
+    rows = _stage_ordered(base).offset((page - 1) * page_size).limit(page_size).all()
+    return rows, total
 
 
 _STATUS_ORDER = {
@@ -162,26 +194,21 @@ def summarize(db: Session, *, status: str = "", keyword: str = "") -> dict[str, 
 # ===== 写入 =====
 
 
-def _apply_payload(record: ApplicationTrack, payload: TrackCreate | TrackUpdate) -> None:
-    record.company = payload.company
-    record.title = payload.title
-    record.company_key = normalize_key(payload.company)
-    record.title_key = normalize_key(payload.title)
-    record.status = payload.status
-    record.stage_note = payload.stage_note
-    # **这里刻意没有"默认今天"**：手工录入不可能知道投递日期（可能投递当天录，也可能
-    # 三周后照着一封通知补录），替他填今天会把记录钉在错误的月份上，在投递趋势里造出
-    # 一个从未发生过的尖峰。投递台的 :func:`record_applied` 默认今天是对的——那条路径
-    # 叫"刚投出去"，日期是确知的。两条路径的差异是正当的，别顺手"统一"掉。
-    # 表单那一侧用一键「填今天」降低留空的摩擦（见 TrackFormModal）。
-    record.applied_at = payload.applied_at
-    record.status_date = payload.status_date
-    record.next_action = payload.next_action
-    record.next_action_date = payload.next_action_date
-    record.note = payload.note
-    record.evidence = payload.evidence
-    record.job_id = payload.job_id
-    record.resume_id = payload.resume_id
+def _freeze_linked_resume(db: Session, record: ApplicationTrack, *, source: str) -> None:
+    """进度显式关联到一份简历时冻结投递快照（RF-17）。
+
+    只在"这份快照还不存在"的意义上不做去重：表单每次把 ``resume_id`` **从无到有**地
+    关联上来才算一次投递血缘，同一份记录反复保存（改备注、推进状态）不产生新快照。
+    简历已删除/不存在时静默跳过——进度记录本身照常保存。
+    """
+    if record.resume_id is None:
+        return
+    resume = db.get(ResumeRecord, record.resume_id)
+    if resume is None:
+        return
+    # 标题快照与外键一起落：简历被删后仍能回答"当时投的是哪一版"。
+    record.resume_title = resume.title or ""
+    freeze_delivery(db, record=resume, track_id=record.id, source=source)
 
 
 def create_track(db: Session, payload: TrackCreate, *, source: str = SOURCE_MANUAL) -> ApplicationTrack:
@@ -191,13 +218,48 @@ def create_track(db: Session, payload: TrackCreate, *, source: str = SOURCE_MANU
     db.add(record)
     db.commit()
     db.refresh(record)
+    # 首个状态事件（RF-18）：新建本身就是一次状态变化（"" → 初始状态）。
+    # 手动添加由用户亲手写入（confirmed），其他来源（助手等）走系统口径。
+    record_status_change(
+        db,
+        record,
+        from_status="",
+        to_status=payload.status,
+        status_date=payload.status_date,
+        source=write_source(manual=source == SOURCE_MANUAL),
+        user_confirmed=True,
+    )
+    db.commit()
+    if payload.resume_id is not None:
+        _freeze_linked_resume(db, record, source="track")
+        db.commit()
+        db.refresh(record)
     return record
 
 
 def update_track(db: Session, record: ApplicationTrack, payload: TrackUpdate) -> ApplicationTrack:
+    previous_resume_id = record.resume_id
+    previous_status = record.status
     _apply_payload(record, payload)
     db.commit()
     db.refresh(record)
+    if previous_status != record.status:
+        # 状态被用户亲手改了（含改成拒信）：追加一条事件。事件不参与合并取舍，
+        # 所以拒信也会留痕——之前的阶段不会因为终态被抹掉。
+        record_status_change(
+            db,
+            record,
+            from_status=previous_status,
+            to_status=record.status,
+            status_date=payload.status_date,
+            source=write_source(manual=True),
+            user_confirmed=True,
+        )
+        db.commit()
+    if payload.resume_id is not None and payload.resume_id != previous_resume_id:
+        _freeze_linked_resume(db, record, source="track")
+        db.commit()
+        db.refresh(record)
     return record
 
 
@@ -215,227 +277,28 @@ def delete_track(db: Session, track_id: int) -> bool:
     return True
 
 
-# ===== 合并 =====
-
-
-def _find_by_key(db: Session, record: TrackRecordIn) -> ApplicationTrack | None:
-    return (
-        db.query(ApplicationTrack)
-        .filter(
-            ApplicationTrack.company_key == normalize_key(record.company),
-            ApplicationTrack.title_key == normalize_key(record.title),
-        )
-        .one_or_none()
-    )
-
-
-def _find_existing_by_keys(
-    db: Session, records: list[TrackRecordIn]
-) -> dict[tuple[str, str], ApplicationTrack]:
-    """一批记录的合并目标，**一次 IN 查询**取回按键建字典。
-
-    :func:`plan_merges` 旧实现对每条折叠后的记录单独点查——一次粘贴几十条通知就是
-    几十次点查（2026-10-05 性能审查低-4：N+1）。``(company_key, title_key)`` 有唯一
-    约束（``uq_application_track_company_title``），一个键至多命中一行，按键建字典
-    与逐条 :func:`_find_by_key` 完全等价（含"软删记录也可被合并命中"的现状语义——
-    两条路径都不带 live_only 过滤）。
-    """
-    keys = sorted({(normalize_key(r.company), normalize_key(r.title)) for r in records})
-    if not keys:
-        return {}
-    rows = (
-        db.query(ApplicationTrack)
-        .filter(tuple_(ApplicationTrack.company_key, ApplicationTrack.title_key).in_(keys))
-        .all()
-    )
-    return {(row.company_key, row.title_key): row for row in rows}
-
-
-class _Plan:
-    """一条记录的处理计划：预览与确认执行的是同一份。"""
-
-    def __init__(
-        self,
-        record: TrackRecordIn,
-        action: str,
-        reason: str,
-        existing: ApplicationTrack | None,
-        current_status: str,
-    ) -> None:
-        self.record = record
-        self.action = action
-        self.reason = reason
-        self.existing = existing
-        self.current_status = current_status
-
-
-def _fold_batch(records: list[TrackRecordIn]) -> list[tuple[TrackRecordIn, int]]:
-    """按合并键折叠同一批里的多条通知，返回 ``(代表记录, 合并了几条)`` 并保序。
-
-    一次粘贴一整段邮箱记录时，同一个岗位往往连着出现好几封（已投递 → 筛选 → 面试）。
-    不折叠的话，后一条会相对前一条（还没落库的那条）判成"更新"，而库里的原记录并不
-    存在——计划里的"更新"找不到可更新的对象。
-
-    折叠时以**进展最靠后的那条**为代表，其余字段也取它的：这条记录表达的是"目前到哪
-    一步了"，就该用走到最远的那封通知里的下一步和备注。
-    """
-    order: list[tuple[str, str]] = []
-    folded: dict[tuple[str, str], TrackRecordIn] = {}
-    counts: dict[tuple[str, str], int] = {}
-
-    for record in records:
-        key = (normalize_key(record.company), normalize_key(record.title))
-        current = folded.get(key)
-        if current is None:
-            order.append(key)
-            folded[key] = record
-            counts[key] = 1
-            continue
-        counts[key] += 1
-        if resolve_status(current.status, record.status) == record.status:
-            folded[key] = record
-
-    return [(folded[key], counts[key]) for key in order]
-
-
-def plan_merges(db: Session, records: list[TrackRecordIn]) -> list[_Plan]:
-    """算出每条记录会新增还是更新，并给出面向用户的原因。**不写库。**"""
-    plans: list[_Plan] = []
-    folded = _fold_batch(records)
-    existing_by_key = _find_existing_by_keys(db, [record for record, _count in folded])
-
-    for record, folded_count in folded:
-        key = (normalize_key(record.company), normalize_key(record.title))
-        existing = existing_by_key.get(key)
-        merged_note = f"（本次识别有 {folded_count} 条通知指向这个岗位，已按进展合并）"
-
-        if existing is None:
-            plans.append(
-                _Plan(
-                    record,
-                    MERGE_CREATED,
-                    f"新增「{record.company} · {record.title}」"
-                    + (merged_note if folded_count > 1 else ""),
-                    None,
-                    "",
-                )
-            )
-            continue
-
-        resolved = resolve_status(existing.status, record.status)
-        if resolved == existing.status:
-            reason = (
-                f"已有记录处于「{status_label(existing.status)}」，这条通知更早，保留现有进度"
-                if record.status != existing.status
-                else f"状态本来就是「{status_label(existing.status)}」，没有新变化"
-            )
-            plans.append(_Plan(record, MERGE_UNCHANGED, reason, existing, existing.status))
-            continue
-
-        plans.append(
-            _Plan(
-                record,
-                MERGE_UPDATED,
-                f"「{status_label(existing.status)}」推进为「{status_label(resolved)}」"
-                + (merged_note if folded_count > 1 else ""),
-                existing,
-                existing.status,
-            )
-        )
-
-    return plans
-
-
-def _merge_into(record: ApplicationTrack, incoming: TrackRecordIn) -> None:
-    """把一条通知合并进已有记录。
-
-    只覆盖这次通知确实带来的字段，不清空用户自己填过的东西：一封只写了"进入面试"的邮件
-    不该把用户记的下一步或备注抹掉。
-    """
-    record.status = resolve_status(record.status, incoming.status)
-    if incoming.stage_note:
-        record.stage_note = incoming.stage_note
-    if incoming.status_date:
-        record.status_date = incoming.status_date
-    if incoming.applied_at and not record.applied_at:
-        record.applied_at = incoming.applied_at
-    if incoming.next_action:
-        record.next_action = incoming.next_action
-        record.next_action_date = incoming.next_action_date
-    if incoming.note:
-        # 备注是追加而不是替换：一条通知里的一句话不该让之前的备注消失。
-        merged = f"{record.note}\n{incoming.note}".strip() if record.note else incoming.note
-        record.note = merged[:4_000]
-    if incoming.evidence:
-        record.evidence = incoming.evidence[:500]
-
-
-def apply_merges(
-    db: Session, records: list[TrackRecordIn], *, source: str = "recognized"
-) -> TrackApplyOut:
-    """执行合并计划；预览说什么，这里就做什么。"""
-    plans = plan_merges(db, records)
-    items: list[TrackApplyItemResult] = []
-    created = updated = unchanged = 0
-
-    for plan in plans:
-        if plan.action == MERGE_CREATED:
-            created_record = ApplicationTrack(source=source)
-            _apply_payload(
-                created_record,
-                TrackCreate(**plan.record.model_dump(), job_id=None, resume_id=None),
-            )
-            db.add(created_record)
-            created += 1
-            status = plan.record.status
-        elif plan.action == MERGE_UPDATED:
-            assert plan.existing is not None  # 计划里说更新，就一定找得到原记录
-            _merge_into(plan.existing, plan.record)
-            updated += 1
-            status = plan.existing.status
-        else:
-            # 未改变也要把来源摘录留下来：用户可能正是为了留下这封通知的原文才导入的。
-            if plan.existing is not None and plan.record.evidence:
-                plan.existing.evidence = plan.record.evidence[:500]
-            unchanged += 1
-            status = plan.current_status
-        items.append(
-            TrackApplyItemResult(
-                company=plan.record.company,
-                title=plan.record.title,
-                action=MERGE_LABELS.get(plan.action, plan.action),
-                status=status,
-                reason=plan.reason,
-            )
-        )
-
-    db.commit()
-    return TrackApplyOut(items=items, created=created, updated=updated, unchanged=unchanged)
-
-
-def preview_merges(db: Session, records: list[TrackRecordIn]) -> list[TrackMergePreview]:
-    """预览粘贴的进度记录与现有记录的合并计划（只算不写，/parse 直接返回）。"""
-    return [
-        TrackMergePreview(
-            record=plan.record,
-            action=plan.action,
-            reason=plan.reason,
-            current_status=plan.current_status,
-        )
-        for plan in plan_merges(db, records)
-    ]
-
-
 # ===== 与投递台的接合点 =====
 
 
 def record_applied(
-    db: Session, *, company: str, title: str, applied_on: str = "", job_id: int | None = None
+    db: Session,
+    *,
+    company: str,
+    title: str,
+    applied_on: str = "",
+    job_id: int | None = None,
+    resume_id: int | None = None,
+    resume_title: str = "",
 ) -> None:
     """投递成功后落一条「已投递」。
 
     刻意**不**覆盖已有记录的更靠后状态：用户可能已经手动把这家推到「面试」了，
     而投递台的批量任务又跑了一次同一个岗位——那时把状态打回「已投递」是错的。
+
+    ``resume_id`` / ``resume_title``（RF-17）：投递条目上记录了这次用的是哪份简历
+    （``ApplyTaskItem.resume_id``）。新建进度记录时落关联与标题快照，并冻结一份
+    ``source="apply"`` 的投递快照；已有记录仅在缺关联时补上（与 ``job_id`` 同一
+    口径），不重复冻结。
     """
     if not company.strip() or not title.strip():
         # 快照字段为空时无从合并，宁可不记也不要造一条"(空) · (空)"。
@@ -448,16 +311,36 @@ def record_applied(
     )
     existing = _find_by_key(db, payload)
     if existing is None:
-        record = ApplicationTrack(source=SOURCE_APPLY)
+        record = ApplicationTrack(source=SOURCE_APPLY, resume_title=resume_title)
         _apply_payload(
-            record, TrackCreate(**payload.model_dump(), job_id=job_id, resume_id=None)
+            record, TrackCreate(**payload.model_dump(), job_id=job_id, resume_id=resume_id)
         )
         db.add(record)
+        db.flush()
+        # 投递台自动写入也留痕（RF-18）：confirmed=False——这是程序自动记的，
+        # 用户没有逐条确认过。乱序通知不会把这条记录拉回去（resolve_status 管合并），
+        # 但"曾被记为已投递"是真实发生过的动作。
+        record_status_change(
+            db,
+            record,
+            from_status="",
+            to_status=STATUS_APPLIED,
+            status_date=payload.applied_at,
+            source=write_source(manual=False),
+            user_confirmed=False,
+        )
+        if resume_id is not None:
+            resume = db.get(ResumeRecord, resume_id)
+            if resume is not None:
+                freeze_delivery(db, record=resume, track_id=record.id, source="apply")
         return
     if not existing.applied_at:
         existing.applied_at = payload.applied_at
     if existing.job_id is None and job_id is not None:
         existing.job_id = job_id
+    if existing.resume_id is None and resume_id is not None:
+        existing.resume_id = resume_id
+        existing.resume_title = resume_title or existing.resume_title
     # 状态交给 resolve_status：已经在面试的不会被这一次投递拉回「已投递」。
 
 
@@ -543,6 +426,7 @@ __all__ = [
     "delete_track",
     "export_rows",
     "list_tracks",
+    "list_tracks_page",
     "plan_merges",
     "preview_merges",
     "record_applied",

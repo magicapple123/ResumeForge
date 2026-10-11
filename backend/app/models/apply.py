@@ -132,6 +132,12 @@ FAILURE_FILE_UPLOAD_FAILED = "file_upload_failed"
 # 它**不是**运行时故障，而是"这个岗位本来就不该走到投递这一步"——所以单列一类，
 # 否则记录里只会写「未知失败」，用户与我们都看不出真正的原因。
 FAILURE_SITE_UNSUPPORTED = "site_unsupported"
+# 「资料不足」是**用户可以自己解决**的前置条件缺失（没有可用简历 / 资料键没值），不是站点
+# 故障——所以按软跳过处理（不触发熔断），但要留下机器可读的分类让统计与界面说清楚。
+FAILURE_PROFILE_INSUFFICIENT = "profile_insufficient"
+# 「无法确认」= 动手了但读不到成功凭据。**未知状态永不记成功**，也不能当成站点故障去熔断
+# （页面可能其实已经投出去了，重试反而会重复投递）——单列一类，让用户去浏览器核对。
+FAILURE_UNCONFIRMED = "unconfirmed"
 FAILURE_UNKNOWN = "unknown"
 FAILURE_CATEGORIES = (
     FAILURE_SELECTOR_INVALID,
@@ -141,6 +147,8 @@ FAILURE_CATEGORIES = (
     FAILURE_NETWORK_TIMEOUT,
     FAILURE_FILE_UPLOAD_FAILED,
     FAILURE_SITE_UNSUPPORTED,
+    FAILURE_PROFILE_INSUFFICIENT,
+    FAILURE_UNCONFIRMED,
     FAILURE_UNKNOWN,
 )
 
@@ -153,6 +161,8 @@ FAILURE_CATEGORY_LABELS = {
     FAILURE_NETWORK_TIMEOUT: "网络超时",
     FAILURE_FILE_UPLOAD_FAILED: "简历上传失败",
     FAILURE_SITE_UNSUPPORTED: "岗位来源不支持自动投递",
+    FAILURE_PROFILE_INSUFFICIENT: "资料不足，需要先补充简历/网申资料",
+    FAILURE_UNCONFIRMED: "无法确认投递结果，请到浏览器核对",
     FAILURE_UNKNOWN: "未知失败",
 }
 

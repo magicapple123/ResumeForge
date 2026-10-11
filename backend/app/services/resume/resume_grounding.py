@@ -13,9 +13,11 @@ from .resume_content import coerce_resume
 from .resume_grounding_helpers import (
     _build_grounded_summary,
     _enhance_or_restore_list,
+    _enhance_or_restore_list_annotated,
     _find_source,
     _ground_list,
     _ground_or_restore_list,
+    _ground_or_restore_list_annotated,
     _normalize_fact,
     _reference_fallback_facts,
     _selected_data_with_reference_fallbacks,
@@ -83,6 +85,48 @@ def ground_resume_facts(
 
     ``job is None`` 表示通用简历：求职意向沿用资料里用户自己写的那份。
     """
+    content, _ = _ground_resume_facts_with_annotations(
+        resume, profile, job, selected_data,
+        enhance=enhance, enhancement_level=enhancement_level,
+    )
+    return content
+
+
+def ground_resume_facts_with_annotations(
+    resume: ResumeContent,
+    profile: ProfileOut,
+    job: JobOut | None,
+    selected_data: dict | None = None,
+    *,
+    enhance: bool = False,
+    enhancement_level: str = "balanced",
+) -> tuple[ResumeContent, list[dict]]:
+    """:func:`ground_resume_facts` 的标注版（RF-13）：同时返回事实来源标注。
+
+    标注是纯收集——锚定过程中"哪个 source 条目匹配上了"本来就算出来了，
+    现在把它留下来，而不是算完就扔。不调模型、不改变任何内容值。
+    """
+    return _ground_resume_facts_with_annotations(
+        resume, profile, job, selected_data,
+        enhance=enhance, enhancement_level=enhancement_level,
+    )
+
+
+def _ground_resume_facts_with_annotations(
+    resume: ResumeContent,
+    profile: ProfileOut,
+    job: JobOut | None,
+    selected_data: dict | None,
+    *,
+    enhance: bool,
+    enhancement_level: str,
+) -> tuple[ResumeContent, list[dict]]:
+    """锚定的唯一实现；``annotations`` 记录每段内容的来源（grounded/restored/enhanced_kept）。
+
+    标注粒度：条目级（``education.0`` 等，来源条目匹配成功 → ``grounded``）+ 字段级
+    （仅 ``restored`` / ``enhanced_kept`` 时补一条，说明这一栏是回填原文或 AI 改写保留）。
+    """
+    annotations: list[dict] = []
     source_data = selected_data or build_profile_prompt_data(profile)
     result = resume.model_copy(
         update={
@@ -100,6 +144,13 @@ def ground_resume_facts(
     summary = resume.summary.strip() if enhance else ""
     if not summary or _unsupported_quantified_values(summary, summary_evidence):
         summary = grounded_summary
+        # 模型的总结被丢弃，用代码从已选事实重建：如实标注为"回填"。
+        annotations.append(
+            {"path": "summary", "origin": "restored", "source_fact": grounded_summary}
+        )
+    elif enhance:
+        # 美化模式下模型写的总结保留了下来（量化断言已过校验）：AI 改写，非已确认。
+        annotations.append({"path": "summary", "origin": "enhanced_kept"})
     result = result.model_copy(update={"summary": summary})
 
     education_items = []
@@ -108,17 +159,25 @@ def ground_resume_facts(
         if source is None:
             continue
         source_achievements = _source_list(source, "achievements")
-        achievements = (
-            _enhance_or_restore_list(
+        if enhance:
+            achievements, achievement_notes = _enhance_or_restore_list_annotated(
                 item.achievements,
                 source_achievements,
                 _source_evidence_text(source, ("achievements",)),
             )
-            if enhance
-            else _ground_or_restore_list(item.achievements, source_achievements)
-        )
+        else:
+            achievements, achievement_notes = _ground_or_restore_list_annotated(
+                item.achievements, source_achievements
+            )
         if enhance and not achievements:
             achievements = _reference_fallback_facts(source, enhancement_level)
+            if achievements:
+                achievement_notes = [
+                    {"origin": "restored", "source_fact": "；".join(achievements)}
+                ]
+        courses, course_notes = _ground_or_restore_list_annotated(
+            item.courses, _source_list(source, "courses")
+        )
         education_items.append(
             item.model_copy(
                 update={
@@ -128,11 +187,26 @@ def ground_resume_facts(
                     "start_date": _source_value(source, "start_date"),
                     "end_date": _source_value(source, "end_date"),
                     "gpa": _source_value(source, "gpa"),
-                    "courses": _ground_or_restore_list(item.courses, _source_list(source, "courses")),
+                    "courses": courses,
                     "achievements": achievements,
                 }
             )
         )
+        item_index = len(education_items) - 1
+        annotations.append(
+            {
+                "path": f"education.{item_index}",
+                "origin": "grounded",
+                "source_subject": _source_value(source, "school"),
+                "source_fact": "；".join(source_achievements) or None,
+            }
+        )
+        for field, notes in (("achievements", achievement_notes), ("courses", course_notes)):
+            annotations.extend(
+                {"path": f"education.{item_index}.{field}", **note}
+                for note in notes
+                if note["origin"] != "grounded"
+            )
     result = result.model_copy(update={"education": education_items})
 
     experience_items = []
@@ -141,17 +215,22 @@ def ground_resume_facts(
         if source is None:
             continue
         source_description = _source_list(source, "description")
-        description = (
-            _enhance_or_restore_list(
+        if enhance:
+            description, description_notes = _enhance_or_restore_list_annotated(
                 item.description,
                 source_description,
                 _source_evidence_text(source, ("description",)),
             )
-            if enhance
-            else _ground_or_restore_list(item.description, source_description)
-        )
+        else:
+            description, description_notes = _ground_or_restore_list_annotated(
+                item.description, source_description
+            )
         if enhance and not description:
             description = _reference_fallback_facts(source, enhancement_level)
+            if description:
+                description_notes = [
+                    {"origin": "restored", "source_fact": "；".join(description)}
+                ]
         experience_items.append(
             item.model_copy(
                 update={
@@ -163,6 +242,20 @@ def ground_resume_facts(
                 }
             )
         )
+        item_index = len(experience_items) - 1
+        annotations.append(
+            {
+                "path": f"experience.{item_index}",
+                "origin": "grounded",
+                "source_subject": _source_value(source, "company"),
+                "source_fact": "；".join(source_description) or None,
+            }
+        )
+        annotations.extend(
+            {"path": f"experience.{item_index}.description", **note}
+            for note in description_notes
+            if note["origin"] != "grounded"
+        )
     result = result.model_copy(update={"experience": experience_items})
 
     campus_items = []
@@ -173,17 +266,22 @@ def ground_resume_facts(
         if source is None:
             continue
         source_description = _source_list(source, "description")
-        description = (
-            _enhance_or_restore_list(
+        if enhance:
+            description, description_notes = _enhance_or_restore_list_annotated(
                 item.description,
                 source_description,
                 _source_evidence_text(source, ("description",)),
             )
-            if enhance
-            else _ground_or_restore_list(item.description, source_description)
-        )
+        else:
+            description, description_notes = _ground_or_restore_list_annotated(
+                item.description, source_description
+            )
         if enhance and not description:
             description = _reference_fallback_facts(source, enhancement_level)
+            if description:
+                description_notes = [
+                    {"origin": "restored", "source_fact": "；".join(description)}
+                ]
         campus_items.append(
             item.model_copy(
                 update={
@@ -195,6 +293,20 @@ def ground_resume_facts(
                 }
             )
         )
+        item_index = len(campus_items) - 1
+        annotations.append(
+            {
+                "path": f"campus_experience.{item_index}",
+                "origin": "grounded",
+                "source_subject": _source_value(source, "organization"),
+                "source_fact": "；".join(source_description) or None,
+            }
+        )
+        annotations.extend(
+            {"path": f"campus_experience.{item_index}.description", **note}
+            for note in description_notes
+            if note["origin"] != "grounded"
+        )
     result = result.model_copy(update={"campus_experience": campus_items})
 
     project_items = []
@@ -205,18 +317,29 @@ def ground_resume_facts(
         source_description = _source_list(source, "description")
         source_highlights = _source_list(source, "highlights")
         source_evidence = _source_evidence_text(source, ("description", "highlights"))
-        description = (
-            _enhance_or_restore_list(item.description, source_description, source_evidence)
-            if enhance
-            else _ground_or_restore_list(item.description, source_description)
-        )
-        highlights = (
-            _enhance_or_restore_list(item.highlights, source_highlights, source_evidence)
-            if enhance
-            else _ground_or_restore_list(item.highlights, source_highlights)
-        )
+        if enhance:
+            description, description_notes = _enhance_or_restore_list_annotated(
+                item.description, source_description, source_evidence
+            )
+            highlights, highlight_notes = _enhance_or_restore_list_annotated(
+                item.highlights, source_highlights, source_evidence
+            )
+        else:
+            description, description_notes = _ground_or_restore_list_annotated(
+                item.description, source_description
+            )
+            highlights, highlight_notes = _ground_or_restore_list_annotated(
+                item.highlights, source_highlights
+            )
         if enhance and not description and not highlights:
             description = _reference_fallback_facts(source, enhancement_level)
+            if description:
+                description_notes = [
+                    {"origin": "restored", "source_fact": "；".join(description)}
+                ]
+        tech_stack, tech_stack_notes = _ground_or_restore_list_annotated(
+            item.tech_stack, _source_list(source, "tech_stack")
+        )
         project_items.append(
             item.model_copy(
                 update={
@@ -224,14 +347,31 @@ def ground_resume_facts(
                     "role": _source_value(source, "role"),
                     "start_date": _source_value(source, "start_date"),
                     "end_date": _source_value(source, "end_date"),
-                    "tech_stack": _ground_or_restore_list(
-                        item.tech_stack, _source_list(source, "tech_stack")
-                    ),
+                    "tech_stack": tech_stack,
                     "description": description,
                     "highlights": highlights,
                 }
             )
         )
+        item_index = len(project_items) - 1
+        annotations.append(
+            {
+                "path": f"projects.{item_index}",
+                "origin": "grounded",
+                "source_subject": _source_value(source, "name"),
+                "source_fact": "；".join([*source_description, *source_highlights]) or None,
+            }
+        )
+        for field, notes in (
+            ("description", description_notes),
+            ("highlights", highlight_notes),
+            ("tech_stack", tech_stack_notes),
+        ):
+            annotations.extend(
+                {"path": f"projects.{item_index}.{field}", **note}
+                for note in notes
+                if note["origin"] != "grounded"
+            )
     result = result.model_copy(update={"projects": project_items})
 
     skill_items = []
@@ -254,6 +394,15 @@ def ground_resume_facts(
                 }
             )
         )
+        item_index = len(skill_items) - 1
+        annotations.append(
+            {
+                "path": f"skills.{item_index}",
+                "origin": "grounded",
+                "source_subject": _source_value(source, "name"),
+                "source_fact": _source_value(source, "name") or None,
+            }
+        )
     result = result.model_copy(update={"skills": skill_items})
 
     award_items = []
@@ -270,12 +419,22 @@ def ground_resume_facts(
                 }
             )
         )
-    return result.model_copy(update={"awards": award_items})
+        item_index = len(award_items) - 1
+        annotations.append(
+            {
+                "path": f"awards.{item_index}",
+                "origin": "grounded",
+                "source_subject": _source_value(source, "name"),
+                "source_fact": _source_value(source, "description") or None,
+            }
+        )
+    return result.model_copy(update={"awards": award_items}), annotations
 
 
 __all__ = [
     "restore_selected_sections",
     "ground_resume_facts",
+    "ground_resume_facts_with_annotations",
     "_similar",
     "_similar_skill",
     "_source_value",
@@ -285,8 +444,10 @@ __all__ = [
     "_unsupported_quantified_values",
     "_source_list",
     "_ground_or_restore_list",
+    "_ground_or_restore_list_annotated",
     "_source_evidence_text",
     "_enhance_or_restore_list",
+    "_enhance_or_restore_list_annotated",
     "_build_grounded_summary",
     "_reference_fallback_facts",
     "_selected_data_with_reference_fallbacks",

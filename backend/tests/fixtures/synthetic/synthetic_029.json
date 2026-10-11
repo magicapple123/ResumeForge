@@ -1,0 +1,102 @@
+{
+  "id": "synthetic_029",
+  "persona_type": "社招",
+  "language": "英文",
+  "industry": "财务",
+  "adversarial_tags": [],
+  "privacy_placeholders": [
+    "ivy.zhou29@example.com"
+  ],
+  "injection_snippets": [],
+  "profile": {
+    "name": "Ivy Zhou",
+    "email": "ivy.zhou29@example.com",
+    "city": "杭州",
+    "target_city": "杭州",
+    "job_intent": "财务专员",
+    "summary": "Candidate with 6 years of experience in 财务专员 roles.",
+    "educations": [
+      {
+        "school": "Starlight University",
+        "major": "Related Major",
+        "degree": "本科",
+        "study_mode": "全日制",
+        "degree_type": "学士",
+        "start_date": "2015-09",
+        "end_date": "2019-06"
+      }
+    ],
+    "experiences": [
+      {
+        "company": "Evergreen Accounting LLP",
+        "role": "财务专员",
+        "start_date": "2019-07",
+        "end_date": "2022-06",
+        "description": "协助月度银行对账，整理往来款项明细。"
+      },
+      {
+        "company": "Evergreen Accounting LLP",
+        "role": "财务主管",
+        "start_date": "2022-07",
+        "end_date": "至今",
+        "description": "参与费用报销单据初审，协助完成凭证录入与装订。"
+      }
+    ],
+    "projects": [
+      {
+        "name": "社团经费管理改革",
+        "role": "Core member",
+        "start_date": "2023-03",
+        "end_date": "2023-12",
+        "tech_stack": "流程梳理, Excel模板",
+        "description": "牵头梳理学生社团经费报销流程并制作统一台账模板。",
+        "highlights": "完成报销流程说明文档与台账模板设计。"
+      }
+    ],
+    "skills": [
+      {
+        "name": "Excel",
+        "level": "熟练"
+      },
+      {
+        "name": "初级会计实务",
+        "level": "掌握"
+      },
+      {
+        "name": "金蝶KIS",
+        "level": "了解"
+      }
+    ]
+  },
+  "job_description": "Position: Accounting Specialist (Evergreen Accounting LLP)\nResponsibilities:\n1. Review expense claims and post vouchers;\n2. Support monthly reconciliation and tax filing paperwork;\n3. Maintain vendor ledgers and follow up payments;\n4. Prepare basic documents for audits.\nRequirements:\n1. Degree in accounting or finance;\n2. Entry-level accounting certificate preferred;\n3. Solid Excel skills;\n4. Detail oriented and responsible.\n",
+  "claims": [
+    {
+      "title": "Project: 社团经费管理改革",
+      "category": "项目经历",
+      "subject": "社团经费管理改革",
+      "source_fact": "Joined 社团经费管理改革 as 负责模块, completed the assigned deliverables.",
+      "candidate_wording": "Participated in 社团经费管理改革 and delivered assigned tasks.",
+      "responsibility_level": "负责模块",
+      "verification_status": "已确认",
+      "boundary": "",
+      "key_terms": [
+        "expense claims"
+      ],
+      "boundary_forbidden": []
+    },
+    {
+      "title": "Excel能力",
+      "category": "专业技能",
+      "subject": "Excel",
+      "source_fact": "Used Excel across coursework and projects for routine tasks.",
+      "candidate_wording": "Familiar with Excel for routine tasks.",
+      "responsibility_level": "参与",
+      "verification_status": "已确认",
+      "key_terms": [
+        "Excel"
+      ],
+      "boundary_forbidden": []
+    }
+  ],
+  "notes": "纯虚构评测样本：社招·英文·财务。常规路径样本。"
+}

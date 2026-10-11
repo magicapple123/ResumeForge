@@ -19,6 +19,7 @@ import re
 
 from sqlalchemy.orm import Session
 
+from . import previews
 from ._shared import MAX_PROFILE_RESULT_CHARS, _trim
 from ._types import Tool, ToolResult
 
@@ -272,6 +273,7 @@ P3_TOOLS: tuple[Tool, ...] = (
             "required": [],
         },
         handler=_tool_create_interview_experience,
+        preview=previews.preview_create_interview_experience,
         writes=True,
     ),
     Tool(
@@ -306,6 +308,7 @@ P3_TOOLS: tuple[Tool, ...] = (
             "required": [],
         },
         handler=_tool_create_referral,
+        preview=previews.preview_create_referral,
         writes=True,
     ),
 )

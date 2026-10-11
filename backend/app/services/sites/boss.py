@@ -85,6 +85,8 @@ class BossAdapter(BossSearchMixin, BossScrollMixin, BossApplyMixin, BossPageMixi
 
     key = BOSS_KEY
     display_name = BOSS_DISPLAY_NAME
+    # 首个带版本标识的适配器：可信点击 + 跨页聊天页 + startchat 对话框形态这一代实现记为 1。
+    version = "1"
     hosts = BOSS_HOSTS
     entry_url = BOSS_ENTRY_URL
     supports_collect = True

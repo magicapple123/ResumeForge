@@ -194,6 +194,18 @@ class LLMApiKeyRevealResult(BaseModel):
     api_key: str = Field(default="", max_length=8192)
 
 
+class LLMSessionKeyIn(BaseModel):
+    """「仅本会话使用」的临时密钥：只进内存，不落库、不进备份。"""
+
+    api_key: str = Field(min_length=1, max_length=8192)
+
+
+class LLMSessionKeyOut(BaseModel):
+    """会话密钥状态；密钥本体永不回传。"""
+
+    configured: bool
+
+
 class LLMModelsRequest(LLMConfig):
     """按表单当前值查询服务商可用的模型列表。
 

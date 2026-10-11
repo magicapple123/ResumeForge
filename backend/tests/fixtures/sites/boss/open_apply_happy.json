@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "open_apply_happy",
+  "exercise": "open_apply",
+  "note": "打开岗位页：先停在别的页面/旧岗位，随后目标岗位的沟通入口出现，open_apply 正常返回。",
+  "job_url": "https://www.zhipin.com/job_detail/new.html",
+  "expectations": [
+    {"marker": "rf:url", "states": [{"url": "https://www.zhipin.com/"}]},
+    {"marker": "rf:apply-entry", "states": [
+      {"found": true, "matched": 1, "url": "https://www.zhipin.com/job_detail/old.html"},
+      {"found": true, "matched": 1, "url": "https://www.zhipin.com/job_detail/new.html"}
+    ]}
+  ],
+  "expected_outcome": {"success": true}
+}
