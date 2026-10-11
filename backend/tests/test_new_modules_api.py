@@ -424,42 +424,27 @@ def test_resume_pdf_export_reports_its_page_count(client):
 
 
 def test_create_job_keeps_note_verbatim_and_fills_origin_source(client):
-    """0042 起：来源不再追加进备注，住进独立字段 ``origin_source``。
-
-    历史行为（已被替换）：保存岗位时往备注末尾补一行「来源：…」——用户删不掉，
-    编辑空备注还会被补回来。现在备注如实保存；来源字段未填时自动继承录入方式，
-    用户随后可自由改写或清空。
-    """
+    """0042 起：来源不再追加进备注，住进独立字段 ``origin_source``（可改可清空）。"""
     response = client.post(
         "/api/jobs",
-        json={
-            "title": "溯源岗位",
-            "company": "示例公司",
-            "recognition_source": "图片识别",
-        },
+        json={"title": "溯源岗位", "recognition_source": "图片识别"},
     )
     assert response.status_code == 201
     created = response.json()
-    # 备注一个字都不多：不再有「来源：…」行。
+    # 备注一个字都不多；来源自动继承录入方式，作为独立字段下发。
     assert created["note"] == ""
-    # 来源自动继承录入方式，作为独立字段下发。
     assert created["origin_source"] == "图片识别"
 
     # 用户显式填了来源：照原样保存，不被覆盖。
     response = client.post(
         "/api/jobs",
-        json={
-            "title": "自填来源岗位",
-            "origin_source": "内推",
-            "recognition_source": "手动填写",
-        },
+        json={"title": "自填来源岗位", "origin_source": "内推", "recognition_source": "手动填写"},
     )
     assert response.status_code == 201
     assert response.json()["origin_source"] == "内推"
 
     # 更新时可以清空来源（PUT 只更新提交了的字段；空串 = 用户清空）。
-    job_id = created["id"]
-    response = client.put(f"/api/jobs/{job_id}", json={"origin_source": ""})
+    response = client.put(f"/api/jobs/{created['id']}", json={"origin_source": ""})
     assert response.status_code == 200
     assert response.json()["origin_source"] == ""
 
