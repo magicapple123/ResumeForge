@@ -32,10 +32,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Job } from "../types";
-import {
-  getMatchAnalyzingIds,
-  subscribeMatchAnalysis,
-} from "../utils/jobMatchAnalysisState";
+import { getMatchAnalyzingIds, subscribeMatchAnalysis } from "../utils/jobMatchAnalysisState";
 import SkillTags from "./SkillTags";
 
 interface Props {
@@ -96,9 +93,8 @@ export default function JobDetailDrawer({
   const navigate = useNavigate();
   // 匹配分析在弹窗（或用户已关掉弹窗）里后台进行时，这里也要看得见：
   // 订阅全局登记表，按钮转圈 + 文案点名，避免"后台在跑但界面毫无迹象"。
-  const [matchAnalyzingIds, setMatchAnalyzingIds] = useState<ReadonlySet<number>>(
-    getMatchAnalyzingIds,
-  );
+  const [matchAnalyzingIds, setMatchAnalyzingIds] =
+    useState<ReadonlySet<number>>(getMatchAnalyzingIds);
   useEffect(
     () =>
       subscribeMatchAnalysis(() => {
@@ -142,7 +138,11 @@ export default function JobDetailDrawer({
                   : "读取你的资料与简历，判断你够不够"
               }
             >
-              <Button icon={<RobotOutlined />} loading={matchAnalyzing} onClick={() => onMatch(job)}>
+              <Button
+                icon={<RobotOutlined />}
+                loading={matchAnalyzing}
+                onClick={() => onMatch(job)}
+              >
                 {matchAnalyzing ? "分析中…" : "匹配度分析"}
               </Button>
             </Tooltip>

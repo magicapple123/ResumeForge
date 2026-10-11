@@ -33,10 +33,7 @@ import PageSkeleton from "./common/PageSkeleton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteJobMatch, generateJobMatch, getJobMatch } from "../api/jobs";
 import { notifyTaskDone } from "../utils/taskNotify";
-import {
-  beginMatchAnalysis,
-  endMatchAnalysis,
-} from "../utils/jobMatchAnalysisState";
+import { beginMatchAnalysis, endMatchAnalysis } from "../utils/jobMatchAnalysisState";
 import {
   ADMISSION_META,
   MATCH_STATUS_META,

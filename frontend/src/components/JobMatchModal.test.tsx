@@ -134,11 +134,22 @@ beforeEach(() => {
   registerNotifyHost({
     notification: {
       success: (config) =>
-        notices.push({ title: String(config.title), description: String(config.description ?? "") }),
+        notices.push({
+          title: String(config.title),
+          description: String(config.description ?? ""),
+        }),
       warning: (config) =>
-        notices.push({ title: String(config.title), kind: "warning", description: String(config.description ?? "") }),
+        notices.push({
+          title: String(config.title),
+          kind: "warning",
+          description: String(config.description ?? ""),
+        }),
       error: (config) =>
-        notices.push({ title: String(config.title), kind: "error", description: String(config.description ?? "") }),
+        notices.push({
+          title: String(config.title),
+          kind: "error",
+          description: String(config.description ?? ""),
+        }),
       info: (config) => notices.push({ title: String(config.title) }),
     },
     modal: { info: (config) => notices.push({ title: String(config.title), kind: "modal" }) },
