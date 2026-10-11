@@ -494,3 +494,65 @@ jobs:
       - name: Audit frontend production dependencies (blocking, high+)
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org
+
+  desktop-shell:
+    name: Desktop shell (windows packaging)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Build frontend production assets
+        working-directory: frontend
+        run: |
+          npm ci --registry=https://registry.npmjs.org
+          npm run build
+
+      - name: Install desktop shell dependencies
+        working-directory: desktop
+        run: npm ci --registry=https://registry.npmjs.org
+
+      - name: Package desktop app (dir + NSIS)
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        # Downloads the pinned embeddable python and installs requirements on
+        # the runner (one-time per runner), then packages dir + installer.
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\Build-Desktop.ps1 -Target win
+
+      - name: Verify packaging outputs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($f in @("desktop\out\win-unpacked\ResumeForge.exe",
+                           "desktop\out\win-unpacked\resources\payload\backend\app\main.py",
+                           "desktop\out\win-unpacked\resources\payload\frontend\dist\index.html",
+                           "desktop\out\win-unpacked\resources\payload\python-runtime.zip")) {
+            if (-not (Test-Path $f)) { throw "packaging output missing: $f" }
+          }
+          # Version-agnostic: the artifact name carries the version from
+          # desktop/package.json, hardcoding it here would break on bumps.
+          $setup = Get-ChildItem "desktop\out\ResumeForge-Setup-*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "installer artifact not found in desktop/out" }
+          $sha = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  $($setup.Name)" | Set-Content "$($setup.FullName).sha256" -Encoding ascii
+          Write-Host "installer sha256: $sha"
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-windows
+          path: |
+            desktop/out/ResumeForge-Setup-*.exe
+            desktop/out/ResumeForge-Setup-*.exe.sha256
+          retention-days: 14
+          if-no-files-found: error
