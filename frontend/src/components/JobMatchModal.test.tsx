@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job, JobMatchOut } from "../types";
 import JobMatchModal from "./JobMatchModal";
+import { registerNotifyHost } from "../utils/taskNotify";
+import { endMatchAnalysis } from "../utils/jobMatchAnalysisState";
 
 const apiMocks = vi.hoisted(() => ({
   getJobMatch: vi.fn(),
@@ -15,6 +17,12 @@ vi.mock("../api/jobs", () => ({
   generateJobMatch: apiMocks.generateJobMatch,
   deleteJobMatch: apiMocks.deleteJobMatch,
 }));
+
+vi.mock("../utils/notifySound", () => ({
+  playDoneSound: vi.fn(),
+}));
+
+const notices: { title: string; kind?: string; description?: string }[] = [];
 
 const JOB: Job = {
   id: 12,
@@ -121,9 +129,24 @@ const NOT_ANALYZED: JobMatchOut = {
 beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.getJobMatch.mockResolvedValue(NOT_ANALYZED);
+  notices.length = 0;
+  registerNotifyHost({
+    notification: {
+      success: (config) =>
+        notices.push({ title: String(config.title), description: String(config.description ?? "") }),
+      warning: (config) =>
+        notices.push({ title: String(config.title), kind: "warning", description: String(config.description ?? "") }),
+      error: (config) =>
+        notices.push({ title: String(config.title), kind: "error", description: String(config.description ?? "") }),
+      info: (config) => notices.push({ title: String(config.title) }),
+    },
+    modal: { info: (config) => notices.push({ title: String(config.title), kind: "modal" }) },
+  });
 });
 
 afterEach(() => {
+  registerNotifyHost(null);
+  endMatchAnalysis(JOB.id);
   cleanup();
   document.body.innerHTML = "";
 });
@@ -217,5 +240,71 @@ describe("JobMatchModal", () => {
 
     expect(await screen.findByText("资料为空，请先完善个人资料")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /重试/ })).toBeInTheDocument();
+  });
+
+  it("分析完成无论人是否还在，都走统一出口提醒（用户反馈过完成无提醒）", async () => {
+    apiMocks.generateJobMatch.mockResolvedValue(ANALYZED.result);
+
+    render(
+      <AntdApp>
+        <JobMatchModal job={JOB} onClose={vi.fn()} />
+      </AntdApp>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /开始分析/ }));
+
+    await waitFor(() =>
+      expect(notices.some((item) => item.title === "匹配度分析已完成")).toBe(true),
+    );
+    // 人还在窗口前：完成通知之后还会重新拉取最新结论（初次挂载 + 完成后各一次）。
+    await waitFor(() => expect(apiMocks.getJobMatch).toHaveBeenCalledTimes(2));
+  });
+
+  it("分析失败同样提醒（kind=error），弹窗内保留错误与重试", async () => {
+    apiMocks.generateJobMatch.mockRejectedValue(new Error("模型调用超时"));
+
+    render(
+      <AntdApp>
+        <JobMatchModal job={JOB} onClose={vi.fn()} />
+      </AntdApp>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /开始分析/ }));
+
+    await waitFor(() =>
+      expect(notices.some((item) => item.title === "匹配度分析失败" && item.kind === "error")).toBe(
+        true,
+      ),
+    );
+    expect(await screen.findByText("模型调用超时")).toBeInTheDocument();
+  });
+
+  it("分析进行中关掉弹窗：完成后仍提醒，文案指路岗位详情", async () => {
+    let resolveGenerate: (value: unknown) => void = () => {};
+    apiMocks.generateJobMatch.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGenerate = resolve;
+      }),
+    );
+
+    const onClose = vi.fn();
+    render(
+      <AntdApp>
+        <JobMatchModal job={JOB} onClose={onClose} />
+      </AntdApp>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /开始分析/ }));
+    // 分析进行中关闭弹窗（antd 关闭按钮的可访问名）。
+    fireEvent.click(await screen.findByRole("button", { name: /close|Close/ }));
+    expect(onClose).toHaveBeenCalled();
+
+    resolveGenerate(undefined);
+    await waitFor(() =>
+      expect(notices.some((item) => item.title === "匹配度分析已完成")).toBe(true),
+    );
+    // 人已经走了：不再对（可能已卸载的）弹窗内容做刷新，文案指路详情页。
+    const notice = notices.find((item) => item.title === "匹配度分析已完成");
+    expect(notice?.description).toContain("岗位详情");
   });
 });

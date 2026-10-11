@@ -32,7 +32,11 @@ import {
 import PageSkeleton from "./common/PageSkeleton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteJobMatch, generateJobMatch, getJobMatch } from "../api/jobs";
-import { announceBackgroundFailure, announceBackgroundResult } from "../utils/backgroundTask";
+import { notifyTaskDone } from "../utils/taskNotify";
+import {
+  beginMatchAnalysis,
+  endMatchAnalysis,
+} from "../utils/jobMatchAnalysisState";
 import {
   ADMISSION_META,
   MATCH_STATUS_META,
@@ -134,30 +138,46 @@ export default function JobMatchModal({ job, onClose }: Props) {
   }, [job, load]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // 用户在分析过程中关掉了弹窗：请求照跑，完成后用通知告诉他（见 utils/backgroundTask）。
+  // 用户在分析过程中关掉了弹窗：请求照跑。人已经走了之后不再 setState（组件可能已卸载），
+  // 完成时改走全局通知；同时全局登记表让岗位列表 / 详情抽屉显示「分析中」标志。
   const leftWhileAnalyzing = useRef(false);
+
+  const handleCancel = () => {
+    if (analyzing) leftWhileAnalyzing.current = true;
+    onClose();
+  };
 
   const analyze = async () => {
     if (!job) return;
+    const jobId = job.id;
     setAnalyzing(true);
     setError("");
     leftWhileAnalyzing.current = false;
+    beginMatchAnalysis(jobId);
     try {
-      await generateJobMatch(job.id, data != null && data.id > 0);
-      if (leftWhileAnalyzing.current) {
-        announceBackgroundResult("匹配度分析", "回到岗位详情再点「匹配度分析」即可看到结论。");
-        return;
-      }
+      await generateJobMatch(jobId, data != null && data.id > 0);
+      // 无论人是否还在弹窗前，完成都走统一出口（通知卡片 + 提醒声）——
+      // 用户反馈过"生成完了没有任何提醒"。区别只在文案指路。
+      notifyTaskDone({
+        title: "匹配度分析已完成",
+        description: leftWhileAnalyzing.current
+          ? "回到岗位详情点「匹配度分析」即可看到结论。"
+          : "结论已在本窗口更新。",
+      });
+      if (leftWhileAnalyzing.current) return;
       await load();
     } catch (analyzeError) {
       const detail =
         analyzeError instanceof Error ? analyzeError.message : "生成匹配分析失败，请稍后重试";
-      if (leftWhileAnalyzing.current) {
-        announceBackgroundFailure("匹配度分析", detail);
-        return;
-      }
+      notifyTaskDone({
+        kind: "error",
+        title: "匹配度分析失败",
+        description: leftWhileAnalyzing.current ? `${detail}（可回到岗位详情重试）` : detail,
+      });
+      if (leftWhileAnalyzing.current) return;
       setError(detail);
     } finally {
+      endMatchAnalysis(jobId);
       if (!leftWhileAnalyzing.current) setAnalyzing(false);
     }
   };
@@ -196,7 +216,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
         </Space>
       }
       open={!!job}
-      onCancel={onClose}
+      onCancel={handleCancel}
       footer={null}
       width={760}
       // 匹配分析逐条输出，条数不固定：限高让超长内容只滚弹窗内部。
