@@ -232,3 +232,64 @@ def test_version_pairing_unparsable_file_does_not_break_startup(tmp_path, payloa
     app = build_app(dist, app_version="0.18.0")
     client = use(app)
     assert client.get("/", headers=HTML_ACCEPT).status_code == 200
+
+
+def test_dist_root_file_served_with_headers(tmp_path):
+    """dist 根目录散文件（favicon 等 public/ 资产）由后端直接服务。
+
+    回归背景：favicon 在 dist 根而非 /assets 下，之前 404 导致浏览器
+    标签页永远显示默认地球图标。
+    """
+    dist = build_dist(tmp_path)
+    (dist / "resumeforge-icon.png").write_bytes(b"\x89PNG-fake-icon")
+    app = build_app(dist)
+    client = use(app)
+    r = client.get("/resumeforge-icon.png")
+    assert r.status_code == 200
+    assert r.content == b"\x89PNG-fake-icon"
+    assert r.headers["content-type"].startswith("image/png")
+    # 文件名无内容哈希：no-cache + ETag 协商重验，而不是 immutable。
+    assert r.headers["cache-control"] == "no-cache"
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["x-frame-options"] == "DENY"
+
+
+def test_dist_root_file_missing_stays_404_for_non_html(tmp_path):
+    dist = build_dist(tmp_path)
+    app = build_app(dist)
+    client = use(app)
+    r = client.get("/resumeforge-icon.png", headers={"accept": "*/*"})
+    assert r.status_code == 404
+    assert "spa-entry" not in r.text
+
+
+def test_dist_root_method_mismatch_returns_405(tmp_path):
+    """根文件路由是 FULL match：方法不对必须 405，不被回退吞成 404（QA R1）。"""
+    dist = build_dist(tmp_path)
+    (dist / "resumeforge-icon.png").write_bytes(b"\x89PNG-fake-icon")
+    app = build_app(dist)
+    client = use(app)
+    r = client.post("/resumeforge-icon.png", headers=HTML_ACCEPT)
+    assert r.status_code == 405
+    assert "spa-entry" not in r.text
+
+
+def test_version_json_at_dist_root_is_served_too(tmp_path):
+    dist = build_dist(tmp_path, version="0.18.0")
+    app = build_app(dist)
+    client = use(app)
+    r = client.get("/version.json")
+    assert r.status_code == 200
+    assert r.json() == {"version": "0.18.0"}
+
+
+def test_index_html_not_shadowed_by_root_file_routes(tmp_path):
+    """index.html 不注册为根文件路由：/ 与深链接仍走 SPA 回退。"""
+    dist = build_dist(tmp_path)
+    (dist / "resumeforge-icon.png").write_bytes(b"\x89PNG-fake-icon")
+    app = build_app(dist)
+    client = use(app)
+    for path in ("/", "/some/deep/link"):
+        r = client.get(path, headers=HTML_ACCEPT)
+        assert r.status_code == 200
+        assert "spa-entry" in r.text
