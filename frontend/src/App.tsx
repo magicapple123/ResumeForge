@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { registerTaskNavigate } from "./utils/taskNotify";
 import AppHeaderContext from "./components/AppHeaderContext";
 import BackgroundTasksIndicator from "./components/BackgroundTasksIndicator";
 import ExitAppButton from "./components/common/ExitAppButton";
@@ -97,6 +98,11 @@ export { MENU_ITEMS };
 function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  // 全局完成通知的动作按钮（如"查看结果"）跳页面用：Router 内注册，Router 外静默。
+  useEffect(() => {
+    registerTaskNavigate(navigate);
+    return () => registerTaskNavigate(null);
+  }, [navigate]);
   const [guideOpen, setGuideOpen] = useState(false);
   // 本次会话是否由「首次访问」自动弹出的：只有这一种打开先给「快速开始」首屏；
   // 关闭后归位，侧栏「使用指南」重开一律直接进完整 8 步视图。

@@ -54,7 +54,7 @@ export default function CandidateBatchToolbar({
   onExportCsv,
 }: Props) {
   return (
-    <Space wrap style={{ marginTop: 8, marginBottom: 12 }}>
+    <Space wrap size={4} style={{ marginTop: 8, marginBottom: 12 }}>
       <Checkbox
         checked={allSelected}
         indeterminate={someSelected && !allSelected}
@@ -64,17 +64,19 @@ export default function CandidateBatchToolbar({
         全选本页
       </Checkbox>
       <Typography.Text type="secondary">
-        已选 {selectedCount} 条（当前页共 {pageCount} 条）
+        已选 {selectedCount} / {totalCount > 0 ? totalCount : pageCount} 条
       </Typography.Text>
       {onSelectAllPages && totalCount > 0 && (
         <Tooltip title={`按当前筛选，一键选中全部 ${totalCount} 条候选（跨页，不止当前页）`}>
           <Button
+            type="link"
             size="small"
+            style={{ padding: 0 }}
             disabled={batchAction !== null}
             loading={selectAllPagesLoading}
             onClick={onSelectAllPages}
           >
-            全选全部（共 {totalCount} 条）
+            全选全部
           </Button>
         </Tooltip>
       )}

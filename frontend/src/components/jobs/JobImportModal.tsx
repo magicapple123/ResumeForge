@@ -111,31 +111,32 @@ export function JobImportModal({
           第一行是表头（岗位名称 / 公司名称 / 工作地点 / 薪资范围 / 岗位类型 / 状态 / 投递链接 /
           发布时间…），也可以先用「导出 CSV」拿一份现成模板
         </p>
-        <Button
-          size="small"
-          icon={<DownloadOutlined />}
-          onClick={() =>
-            downloadCsvTemplate("岗位导入模板.csv", [
-              "岗位名称",
-              "公司名称",
-              "工作地点",
-              "薪资范围",
-              "岗位类型",
-              "状态",
-              "投递链接",
-              "发布时间",
-              "岗位描述",
-              "任职要求",
-              "其他招聘信息",
-              "来源",
-              "备注",
-              "收藏",
-            ])
-          }
-        >
-          下载空模板
-        </Button>
       </Upload.Dragger>
+      {/* 模板按钮放在 Dragger 外面：包在里面时点击会冒泡成"选择文件"对话框。 */}
+      <Button
+        size="small"
+        icon={<DownloadOutlined />}
+        onClick={() =>
+          downloadCsvTemplate("岗位导入模板.csv", [
+            "岗位名称",
+            "公司名称",
+            "工作地点",
+            "薪资范围",
+            "岗位类型",
+            "状态",
+            "投递链接",
+            "发布时间",
+            "岗位描述",
+            "任职要求",
+            "其他招聘信息",
+            "来源",
+            "备注",
+            "收藏",
+          ])
+        }
+      >
+        下载空模板
+      </Button>
 
       {parsing && <Typography.Text type="secondary">正在解析…</Typography.Text>}
 

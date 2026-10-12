@@ -1,7 +1,9 @@
 /** 岗位批量适配度分析的全局后台任务登记表。 */
+import { Button } from "antd";
+import { createElement } from "react";
 import { cancelJobMatchBatchTask, getJobMatchBatchTask, listJobMatchBatchTasks } from "../api/jobs";
 import type { JobMatchBackgroundTask } from "../types";
-import { notifyTaskDone } from "./taskNotify";
+import { navigateForTask, notifyTaskDone } from "./taskNotify";
 
 export interface JobMatchBackgroundTaskView {
   id: string;
@@ -109,6 +111,16 @@ function finish(id: string, task: JobMatchBackgroundTaskView): void {
         " 个岗位，" +
         task.failedCount +
         " 个岗位失败；结果已保存到分析记录。",
+      // 通知卡片上的「查看结果」：跳到岗位广场的分析记录（createElement——本文件是 .ts）。
+      actions: createElement(
+        Button,
+        {
+          size: "small",
+          type: "primary",
+          onClick: () => navigateForTask("/jobs?match_batch=history"),
+        },
+        "查看结果",
+      ),
     });
   } else if (task.status === "failed") {
     notifyTaskDone({

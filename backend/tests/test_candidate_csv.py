@@ -2,7 +2,7 @@
 
 from app.services.candidate_jobs import stage_candidate_job
 
-_HEADERS = "岗位名称,公司名称,工作地点,薪资范围,岗位链接,招聘原文,备注"
+_HEADERS = "岗位名称,公司名称,岗位链接,招聘原文,备注"
 
 
 def _csv(*lines: str) -> str:
@@ -43,6 +43,8 @@ def test_export_roundtrip_preserves_fields(client, db_session):
     assert rows[0][1]["title"] == "后端开发"
     assert rows[0][1]["source_url"] == "https://example.com/1"
     assert rows[0][1]["raw_text"].startswith("岗位职责")
+    # 地点/薪资已从候选 CSV 列集移除（备选阶段不分那么细）。
+    assert "工作地点" not in text and "薪资范围" not in text
 
 
 def test_export_flattens_newlines(client, db_session):
@@ -58,9 +60,9 @@ def test_export_flattens_newlines(client, db_session):
 
 def test_import_preview_reports_line_numbers(client):
     body = _csv(
-        "后端开发,示例科技,天津,20-30K,,,,",
+        "后端开发,示例科技,https://example.com/9,职责：开发,内部推荐",
         "",
-        ",缺名字的,,,,,,,,",
+        ",缺名字的,,,,",
     )
     response = client.post(
         "/api/candidate-jobs/csv/import/preview",
@@ -75,7 +77,7 @@ def test_import_preview_reports_line_numbers(client):
 def test_import_commit_creates_candidates_and_skips_duplicates(client, db_session):
     """提交导入逐行建候选（来源=CSV 导入）；同一文件导两次，第二次整批跳过。"""
     body = _csv(
-        "后端开发,示例科技,天津,20-30K,https://example.com/9,职责：开发,内部推荐",
+        "后端开发,示例科技,https://example.com/9,职责：开发,内部推荐",
     )
     preview = client.post(
         "/api/candidate-jobs/csv/import/preview",
@@ -103,8 +105,8 @@ def test_import_commit_creates_candidates_and_skips_duplicates(client, db_sessio
 def test_import_rejects_non_http_links(client):
     """链接列必须是 http(s)：坏行进错误账目，好行照常导入。"""
     body = _csv(
-        "后端开发,示例科技,,,,,,",
-        "前端开发,另一家,,,javascript:alert(1),,",
+        "后端开发,示例科技,,,,",
+        "前端开发,另一家,javascript:alert(1),,",
     )
     response = client.post(
         "/api/candidate-jobs/csv/import/preview",
