@@ -114,6 +114,9 @@ ResumeForge/
      而 `-all.zip` 排在最前（`a` < `m` < `w`）。少了这个包，那些用户点「重启并安装」就
      必然下到 macOS 包、必然报「更新包缺少 start.cmd」。**名字本身是契约**，
      `Test-Build-Release.ps1` 钉着它。
+   - 想让包里带上桌面安装版：加 `-IncludeDesktop`（只支持 `-Ref HEAD`，`-Platform macos`
+     拒绝）——先跑 `Build-Desktop.ps1 -Target win` 再把 NSIS 安装器注入 `desktop/` 条目。
+     默认关；macOS 桌面（dmg）仍需真 Mac，未接线。
 3. 官网仓库：更新文案 → `node tools/audit.js` 全绿 → 重采截图 / 重建 demo-app → 提交推送。
 4. 打 tag、建 GitHub Release（附双平台包与校验文件）。
 5. 更新公告图：写清**怎么更新**与**旧数据怎么导入**（导出数据集 → 新版导入为新数据集）。

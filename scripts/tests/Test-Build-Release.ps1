@@ -378,6 +378,82 @@ try {
         }
     }
 
+    # --- -IncludeDesktop: the desktop installer rides inside the archive ---
+    #
+    # CI has no desktop\node_modules, so a real electron-builder run cannot be
+    # part of this test. The -DesktopSetupPath hook lets us still verify the
+    # whole contract: the fixture exe is injected under desktop/, the required
+    # list grows accordingly, and a bad combination is rejected before any
+    # build work happens.
+    $paramNames = @($buildAst.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
+    Assert-ReleaseTest `
+        -Condition ($paramNames -contains "IncludeDesktop" -and $paramNames -contains "DesktopSetupPath") `
+        -Message "Build-Release.ps1 must expose -IncludeDesktop and -DesktopSetupPath."
+
+    $rejectedByPlatform = $false
+    try {
+        & $BuildScriptPath -Platform macos -IncludeDesktop -OutputDirectory $RuntimeDirectory 2>$null | Out-Null
+    }
+    catch {
+        $rejectedByPlatform = ($_.Exception.Message -match "not supported with -Platform macos")
+    }
+    Assert-ReleaseTest `
+        -Condition $rejectedByPlatform `
+        -Message "-IncludeDesktop must be rejected with -Platform macos (no mac desktop target is wired)."
+
+    $rejectedByRef = $false
+    try {
+        & $BuildScriptPath -Ref "0000000-not-a-ref" -IncludeDesktop -OutputDirectory $RuntimeDirectory 2>$null | Out-Null
+    }
+    catch {
+        $rejectedByRef = ($_.Exception.Message -match "requires -Ref HEAD")
+    }
+    Assert-ReleaseTest `
+        -Condition $rejectedByRef `
+        -Message "-IncludeDesktop must be rejected with a ref other than HEAD (Build-Desktop assembles its payload from HEAD)."
+
+    $fixtureSetup = Join-Path $RuntimeDirectory "ResumeForge-Setup-$version.exe"
+    $fixtureBytes = New-Object byte[] 2048
+    $fixtureBytes[0] = 0x4D
+    $fixtureBytes[1] = 0x5A  # 'MZ', so the fixture is at least exe-shaped
+    [IO.File]::WriteAllBytes($fixtureSetup, $fixtureBytes)
+    & $BuildScriptPath -OutputDirectory $RuntimeDirectory -Platform windows -IncludeDesktop -DesktopSetupPath $fixtureSetup
+
+    $windowsDesktopArchive = Join-Path $RuntimeDirectory "ResumeForge-$version-windows.zip"
+    Assert-ReleaseTest `
+        -Condition (Test-Path -LiteralPath $windowsDesktopArchive -PathType Leaf) `
+        -Message "The -IncludeDesktop windows run produced no archive."
+    $desktopZip = [System.IO.Compression.ZipFile]::OpenRead($windowsDesktopArchive)
+    try {
+        $setupZipEntry = $desktopZip.Entries |
+            Where-Object { $_.FullName -eq "${prefix}desktop/ResumeForge-Setup-$version.exe" } |
+            Select-Object -First 1
+        Assert-ReleaseTest `
+            -Condition ($null -ne $setupZipEntry) `
+            -Message "The archive must carry the injected desktop installer under ${prefix}desktop/."
+        Assert-ReleaseTest `
+            -Condition ($setupZipEntry.Length -eq $fixtureBytes.Length) `
+            -Message "The injected desktop installer must be byte-identical to the built exe (got $($setupZipEntry.Length) bytes, expected $($fixtureBytes.Length))."
+    }
+    finally {
+        $desktopZip.Dispose()
+    }
+
+    # The default runs stay desktop-free: the plain archive is what older
+    # in-app updaters parse and what the tracked-tree assertion pins, so an
+    # unconditional injection would be a silent contract break.
+    $allArchivePath = Join-Path $RuntimeDirectory "ResumeForge-$version-all.zip"
+    $allZip = [System.IO.Compression.ZipFile]::OpenRead($allArchivePath)
+    try {
+        $desktopLeak = @($allZip.Entries | Where-Object { $_.FullName -like "*desktop/ResumeForge-Setup-*" })
+        Assert-ReleaseTest `
+            -Condition ($desktopLeak.Count -eq 0) `
+            -Message "Without -IncludeDesktop the archive must not carry a desktop installer."
+    }
+    finally {
+        $allZip.Dispose()
+    }
+
     Write-Host "Release packaging tests passed."
 }
 finally {

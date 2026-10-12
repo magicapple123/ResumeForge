@@ -143,6 +143,16 @@ git checkout <previous-stable-tag-or-commit>  # 例如已发布的 v0.1.0 标签
 .\scripts\Build-Release.ps1 -OutputDirectory D:\tmp
 ```
 
+**想顺带打包桌面安装版**：加 `-IncludeDesktop`（只支持 `-Ref HEAD` 与 `-Platform all` / `windows`），
+脚本会先跑 `scripts/Build-Desktop.ps1 -Target win` 产出 NSIS 安装器，再注入压缩包的
+`desktop/ResumeForge-Setup-<版本>.exe` 条目并纳入必需清单校验——解压便携包的用户不用再去
+单独的下载页就能跑安装版。默认**关**：普通包保持"纯源码 + 启动器"，旧版应用内更新器解析的
+正是这个形态。前提：`desktop/node_modules` 已安装（在 `desktop/` 下跑过 `npm install`）；
+`desktop/package.json` 的版本号必须与 `backend/app/config.py` 一致，否则直接报错。
+macOS 桌面目标（dmg）仍未接线——electron-builder 的 mac 包需要真 Mac，依旧是有 Mac 实机
+之后的独立事项。`Test-Build-Release.ps1` 通过 `-DesktopSetupPath` 钩子（仅测试用）在 CI 上
+验证整条注入 + 校验链路。
+
 三个包都要挂到 GitHub Release 上。**全平台包不是可选项**：已经装在 0.14.2 及更早版本上的
 用户，应用内更新跑的是他们本机那份旧代码，它按文件名排序取第一个 `.zip`——只有
 `ResumeForge-<版本>-all.zip` 排在 `-macos.zip` / `-windows.zip` 前面（`a` < `m` < `w`）。

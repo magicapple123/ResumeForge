@@ -30,17 +30,36 @@ start.command. The other platform's launchers are removed AFTER git archive (whi
 always emits the whole tree), and verification runs per platform, so a pruning bug
 fails loudly instead of shipping a half archive.
 
+.PARAMETER IncludeDesktop
+Also build the desktop shell (scripts\Build-Desktop.ps1 -Target win) and inject
+the resulting NSIS installer into the archive under desktop/, so a user who
+unzips the portable archive can run the one-click installer without visiting a
+separate download page. Rejected with -Platform macos (no mac desktop target is
+wired: the dmg still needs a real Mac) and with a -Ref other than HEAD
+(Build-Desktop.ps1 assembles its payload from the working tree's HEAD, so the
+installer would not match the packaged ref). Requires desktop\node_modules.
+
+.PARAMETER DesktopSetupPath
+Test hook for Test-Build-Release.ps1: with -IncludeDesktop, inject this
+pre-built ResumeForge-Setup-<version>.exe instead of running electron-builder.
+Lets the guard test exercise the whole injection + verification path on a
+machine without desktop\node_modules. Never use it for a real release.
+
 .EXAMPLE
 .\scripts\Build-Release.ps1 -Ref v0.6.0
 .EXAMPLE
 .\scripts\Build-Release.ps1 -Ref v0.12.0 -Platform macos
+.EXAMPLE
+.\scripts\Build-Release.ps1 -IncludeDesktop -OutputDirectory D:\dist
 #>
 [CmdletBinding()]
 param(
     [string]$Ref = "HEAD",
     [string]$OutputDirectory = "",
     [ValidateSet("all", "windows", "macos")]
-    [string]$Platform = "all"
+    [string]$Platform = "all",
+    [switch]$IncludeDesktop,
+    [string]$DesktopSetupPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -311,6 +330,17 @@ if ($null -eq (Get-Command git -ErrorAction SilentlyContinue)) {
     throw "git was not found on PATH. This script packages a git ref; install Git, or hand out an existing release zip."
 }
 
+# -IncludeDesktop contract checks run BEFORE anything is built: a bad combination
+# must fail in milliseconds, not after a full npm build has already run.
+if ($IncludeDesktop) {
+    if ($Platform -eq "macos") {
+        throw "-IncludeDesktop is not supported with -Platform macos: no mac desktop target is wired (the dmg still needs a real Mac)."
+    }
+    if ($Ref -ne "HEAD") {
+        throw "-IncludeDesktop requires -Ref HEAD: Build-Desktop.ps1 assembles its payload from the working tree's HEAD via git archive, so the installer would not match the packaged ref '$Ref'."
+    }
+}
+
 $version = Get-RefAppVersion
 $headCommit = @(Invoke-GitCapture -Arguments @("rev-parse", "--short", $Ref))[0]
 # Empty when the ref carries no tag, which is the normal case while developing.
@@ -463,6 +493,74 @@ finally {
     $releaseArchive.Dispose()
 }
 
+# --- desktop shell installer (optional injection) ---
+#
+# The desktop shell (Electron) packages the same backend + frontend\dist into a
+# self-contained NSIS installer via scripts\Build-Desktop.ps1. With
+# -IncludeDesktop the release archive additionally carries that installer under
+# desktop/, so a user who unzips the portable archive can also run the
+# one-click installer. Default OFF: the plain archive stays source + launchers
+# only, which is what the in-app updater and the guard test expect.
+$desktopSetupEntry = ""
+if ($IncludeDesktop) {
+    # desktop\package.json is what electron-builder names the artifact after,
+    # so its version must be bumped in the same commit as backend\app\config.py.
+    $desktopPackageFile = Join-Path $ProjectRoot "desktop\package.json"
+    if (-not (Test-Path -LiteralPath $desktopPackageFile -PathType Leaf)) {
+        throw "desktop\package.json is missing; the desktop shell is not wired into this tree."
+    }
+    try {
+        $desktopVersion = (Get-Content -LiteralPath $desktopPackageFile -Raw -ErrorAction Stop | ConvertFrom-Json).version
+    }
+    catch {
+        throw "desktop\package.json is not valid JSON; cannot verify the desktop version."
+    }
+    if ($desktopVersion -ne $version) {
+        throw "desktop\package.json reports version '$desktopVersion' but the ref being packaged is '$version'. Bump desktop\package.json in the same commit as backend\app\config.py."
+    }
+    $expectedSetupName = "ResumeForge-Setup-$version.exe"
+    $desktopSetupFile = Join-Path $ProjectRoot "desktop\out\$expectedSetupName"
+    if ([string]::IsNullOrWhiteSpace($DesktopSetupPath)) {
+        $desktopNodeModules = Join-Path $ProjectRoot "desktop\node_modules\electron"
+        if (-not (Test-Path -LiteralPath $desktopNodeModules)) {
+            throw "desktop\node_modules is missing - run npm install in desktop\ first (the desktop build needs electron-builder)."
+        }
+        Write-Host "Building the desktop shell (Build-Desktop.ps1 -Target win)..."
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ProjectRoot "scripts\Build-Desktop.ps1") -Target win
+        if ($LASTEXITCODE -ne 0) {
+            throw "Build-Desktop.ps1 failed (exit $LASTEXITCODE). Release aborted."
+        }
+    }
+    else {
+        # Test hook: inject a prebuilt (or fixture) setup exe without running
+        # electron-builder, so Test-Build-Release.ps1 can exercise the whole
+        # injection + verification path on a machine without desktop\node_modules.
+        Write-Host "Using the prebuilt desktop setup passed via -DesktopSetupPath..."
+        $desktopSetupFile = $DesktopSetupPath
+    }
+    if (-not (Test-Path -LiteralPath $desktopSetupFile -PathType Leaf)) {
+        throw "The desktop installer is missing at '$desktopSetupFile'. Release aborted."
+    }
+    if ((Split-Path -Leaf $desktopSetupFile) -ne $expectedSetupName) {
+        throw "The desktop installer must be named '$expectedSetupName' (got '$(Split-Path -Leaf $desktopSetupFile)')."
+    }
+    Write-Host "Injecting the desktop installer into the archive..."
+    $desktopArchive = [IO.Compression.ZipFile]::Open($archivePath, [IO.Compression.ZipArchiveMode]::Update)
+    try {
+        [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $desktopArchive, $desktopSetupFile, $prefix + "desktop/" + $expectedSetupName,
+            [IO.Compression.CompressionLevel]::Optimal)
+    }
+    finally {
+        $desktopArchive.Dispose()
+    }
+    # The verification below works from a fixed required list built earlier, so
+    # the injected installer joins it here -- a silent injection failure must
+    # fail the build like any other missing file would.
+    $platformRequired += "desktop/$expectedSetupName"
+    $desktopSetupEntry = "desktop/$expectedSetupName"
+}
+
 
 $entries = @(Get-ArchiveEntryList -ArchivePath $archivePath)
 $relativePaths = @(
@@ -513,8 +611,10 @@ $sizeInMegabytes = [math]::Round((Get-Item -LiteralPath $archivePath).Length / 1
 # SHA256 sidecar next to the archive. Two reasons it matters here:
 #   1. Users who hit an antivirus / SmartScreen prompt should be able to verify that the
 #      file they downloaded is byte-identical to what was built here.
-#   2. The package ships no .exe/.msi at all (only source, scripts and docs), so the
-#      checksum is the concrete thing a cautious user can actually check.
+#   2. Without -IncludeDesktop the package ships no .exe/.msi at all (only source,
+#      scripts and docs), so the checksum is the concrete thing a cautious user can
+#      actually check. With -IncludeDesktop exactly one exe is added, under
+#      desktop/, and the same hash covers it.
 # Written in the conventional "<hash>  <filename>" format so `sha256sum -c` works.
 $hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
 $checksumPath = "$archivePath.sha256"
@@ -529,6 +629,9 @@ if ($tag) {
     Write-Host "Tag      : $tag"
 }
 Write-Host "Contents : $($entries.Count) files, $sizeInMegabytes MB"
+if ($desktopSetupEntry) {
+    Write-Host "Desktop  : $desktopSetupEntry (NSIS installer, built from the same payload)"
+}
 Write-Host "SHA256   : $hash"
 Write-Host "Checksum : $checksumPath"
 Write-Host "Verified : $($platformRequired.Count) required files present, $($RequiredPrefixes.Count) required directories non-empty, $($ForbiddenPatterns.Count) forbidden patterns absent"
