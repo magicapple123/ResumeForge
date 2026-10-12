@@ -106,6 +106,8 @@ beforeEach(() => {
   apiMocks.listJobMatchBatches.mockResolvedValue([]);
   apiMocks.getJobMatchBatch.mockResolvedValue(BATCH);
   apiMocks.startJobMatchBatchTask.mockResolvedValue(makeTask({ status: "pending" }));
+  // 面板的完成判定轮询会真调这个端点：默认回一个"仍在跑"的任务，个别用例再覆盖。
+  apiMocks.getJobMatchBatchTask.mockResolvedValue(makeTask({ status: "running" }));
   backgroundMocks.cancelJobMatchBackgroundTask.mockResolvedValue(makeTask({ status: "cancelled" }));
   tasksHookMocks.useJobMatchBackgroundTasks.mockReturnValue([]);
 });

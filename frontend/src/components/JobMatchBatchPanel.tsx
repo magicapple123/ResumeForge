@@ -127,13 +127,13 @@ export default function JobMatchBatchPanel({
     if (!open || phase !== "running" || !runningTaskId) return;
     let cancelled = false;
     const check = async () => {
-      let latest;
+      let latest: Awaited<ReturnType<typeof getJobMatchBatchTask>> | undefined;
       try {
         latest = await getJobMatchBatchTask(runningTaskId);
       } catch {
         return; // 后端短暂不可用：下一轮继续，进度展示由注册表兜底。
       }
-      if (cancelled) return;
+      if (cancelled || !latest) return;
       if (latest.status === "completed" && latest.batch_id) {
         try {
           const result = await getJobMatchBatch(latest.batch_id);
