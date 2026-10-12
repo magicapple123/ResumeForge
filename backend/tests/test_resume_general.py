@@ -28,8 +28,14 @@ def make_profile_with_awards(**overrides):
 
 
 def section_names(data: dict, section: str) -> list[str]:
-    field = {"educations": "school", "experiences": "company", "campus_experiences": "organization",
-             "projects": "name", "skills": "name", "awards": "name"}[section]
+    field = {
+        "educations": "school",
+        "experiences": "company",
+        "campus_experiences": "organization",
+        "projects": "name",
+        "skills": "name",
+        "awards": "name",
+    }[section]
     return [item[field] for item in data[section]]
 
 
@@ -57,10 +63,13 @@ def test_general_context_keeps_profile_order_and_respects_limits():
     selection = build_general_profile_context(profile)
 
     # 顺序沿用用户录入顺序，不做任何打分重排
-    assert section_names(selection.data, "experiences") == [
-        "星云云服务",
-        "青年创新中心",
-    ][: len(section_names(selection.data, "experiences"))]
+    assert (
+        section_names(selection.data, "experiences")
+        == [
+            "星云云服务",
+            "青年创新中心",
+        ][: len(section_names(selection.data, "experiences"))]
+    )
     assert selection.data == json.loads(selection.serialized)
 
 
@@ -186,9 +195,7 @@ async def test_general_generation_does_not_claim_a_target_job_in_warnings():
 
 
 def _configure(client):
-    config = LLMConfig(
-        base_url="https://api.example.com/v1", api_key="k", model="m"
-    )
+    config = LLMConfig(base_url="https://api.example.com/v1", api_key="k", model="m")
     assert client.put("/api/settings/llm", json=config.model_dump()).status_code == 200
 
 
@@ -204,7 +211,7 @@ def _seed_profile(client):
 
 def _fake_general_provider(monkeypatch):
     class Provider(BaseLLMProvider):
-        async def chat(self, _messages):
+        async def chat(self, _messages, *, thinking: bool = True):
             raise AssertionError("合法流式 JSON 不应触发修复调用")
 
         async def stream_chat(self, _messages):

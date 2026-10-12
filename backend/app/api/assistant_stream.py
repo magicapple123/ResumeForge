@@ -159,7 +159,15 @@ async def _stream_message_events(
                 relaxed=relaxed_now,
                 writable=payload.allow_write,
             )
-            tools = tool_definitions(ctx)
+            # 写类工具按需下发（AI 提速）：闲聊轮只带查询类工具，用户消息命中写入
+            # 意图（或放宽模式）才全量下发——写工具的描述体积大，常驻每轮请求会
+            # 白白拉长首字延迟。每轮循环重建时重新判定。
+            tools = tool_policy.tools_for_turn(
+                tool_definitions(ctx),
+                latest_user_text=payload.content or "",
+                session_used_writes=False,
+                relaxed=relaxed_now,
+            )
             calls: list[dict[str, Any]] = []
             round_reasoning: list[str] = []
             async for delta in provider.stream_chat_events(messages, tools):
@@ -187,7 +195,9 @@ async def _stream_message_events(
                 assistant_context["reasoning"] = stored
                 if truncated:
                     assistant_context["reasoning_truncated"] = True
-                update_message_context(assistant_message_id, dict(assistant_context), factory=factory)
+                update_message_context(
+                    assistant_message_id, dict(assistant_context), factory=factory
+                )
             if not calls:
                 break
 
@@ -237,9 +247,7 @@ async def _stream_message_events(
                 )
                 if record.get("proposal"):
                     # RF-01：写入提案单独成事件，前端渲染确认卡片；批准/拒绝走 REST。
-                    yield format_sse(
-                        {"type": "write_proposal", "proposal": record["proposal"]}
-                    )
+                    yield format_sse({"type": "write_proposal", "proposal": record["proposal"]})
                 new_sources = [
                     item
                     for item in record.get("sources") or []
@@ -298,7 +306,9 @@ async def _stream_message_events(
         )
         if saved is None:
             raise RuntimeError("assistant message disappeared")
-        yield format_sse({"type": "done", "message": saved.model_dump(mode="json"), "usage": usage_payload})
+        yield format_sse(
+            {"type": "done", "message": saved.model_dump(mode="json"), "usage": usage_payload}
+        )
     except OperationCancelled as exc:
         # RF-14 §2.1.b-4：整链预算到期按 error 收尾，结束原因如实记 budget_exhausted——
         # 不冒充网络错误，也不归入用户取消分支（cancelled）。
@@ -348,9 +358,7 @@ async def _stream_message_events(
         yield format_sse({"type": "error", "message": message})
     finally:
         # Closing an async generator can bypass CancelledError when the browser断开。
-        cancel_pending_assistant_message(
-            assistant_message_id, "".join(parts), factory=factory
-        )
+        cancel_pending_assistant_message(assistant_message_id, "".join(parts), factory=factory)
 
 
 async def stream_message_events(

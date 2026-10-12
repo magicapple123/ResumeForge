@@ -44,20 +44,19 @@ def test_navigation_visibility_keeps_optional_keys_and_never_hides_core_entries(
 
     response = client.put(
         "/api/settings/navigation",
-        json={
-            "hidden": ["/assistant", "/assistant", "/profile", "/not-a-route", "/analytics"]
-        },
+        json={"hidden": ["/assistant", "/assistant", "/profile", "/not-a-route", "/analytics"]},
     )
 
     assert response.status_code == 200
     assert response.json() == {"hidden": ["/assistant", "/analytics"]}
-    assert client.get("/api/settings/navigation").json() == {
-        "hidden": ["/assistant", "/analytics"]
-    }
+    assert client.get("/api/settings/navigation").json() == {"hidden": ["/assistant", "/analytics"]}
 
 
 def test_assistant_orb_setting_defaults_and_roundtrips(client):
-    assert client.get("/api/settings/assistant-orb").json() == {"enabled": True, "tips_enabled": True}
+    assert client.get("/api/settings/assistant-orb").json() == {
+        "enabled": True,
+        "tips_enabled": True,
+    }
 
     response = client.put(
         "/api/settings/assistant-orb", json={"enabled": False, "tips_enabled": False}
@@ -103,9 +102,9 @@ def test_assistant_orb_setting_keeps_legacy_bare_boolean_and_corrupt_values(clie
     }
 
     # 新格式对象：两个开关都原样读回。
-    db_session.get(AppSetting, "assistant_orb_enabled").value = (
-        '{"enabled": false, "tips_enabled": false}'
-    )
+    db_session.get(
+        AppSetting, "assistant_orb_enabled"
+    ).value = '{"enabled": false, "tips_enabled": false}'
     db_session.commit()
     assert client.get("/api/settings/assistant-orb").json() == {
         "enabled": False,
@@ -263,7 +262,7 @@ def test_settings_test_connection_resolves_masked_secret(client, monkeypatch):
     captured = {}
 
     class FakeProvider:
-        async def chat(self, _messages):
+        async def chat(self, _messages, *, thinking: bool = True):
             return "正常"
 
     def fake_create_provider(resolved):
@@ -330,7 +329,7 @@ def test_the_connection_test_ignores_the_thinking_settings(client, monkeypatch):
     captured = {}
 
     class FakeProvider:
-        async def chat(self, _messages):
+        async def chat(self, _messages, *, thinking: bool = True):
             return "正常"
 
     def fake_create_provider(resolved):
@@ -453,4 +452,3 @@ def test_create_provider_forwards_request_overrides():
     payload: dict = {}
     ignored._apply_request_overrides(payload)
     assert "messages" not in payload
-

@@ -258,7 +258,10 @@ class ResumeGenerator:
                 estimate_tokens(str(message.get("content") or "")) for message in messages
             )
 
-        yield {"type": "progress", "message": f"正在调用模型 {self.provider.config.model} 生成简历…"}
+        yield {
+            "type": "progress",
+            "message": f"正在调用模型 {self.provider.config.model} 生成简历…",
+        }
         parts: list[str] = []
         async for delta in self.provider.stream_chat(messages):
             parts.append(delta)
@@ -279,7 +282,9 @@ class ResumeGenerator:
                 segment.raise_if_stopped()
             try:
                 self._begin_segment(segment)
-                fixed = await self.provider.chat([{"role": "user", "content": fix_prompt}])
+                fixed = await self.provider.chat(
+                    [{"role": "user", "content": fix_prompt}], thinking=False
+                )
             except LLMError as exc:
                 if budget is not None and budget.is_expired():
                     # 预算耗尽不得伪装成网络超时（§2.1.a-3）：与 runner 的预算语义一致。
@@ -302,9 +307,7 @@ class ResumeGenerator:
             for item in selection.data.get(section, [])
         )
         quality_enabled = (
-            options.enhance
-            and options.enhancement_level == "strong"
-            and has_reference_facts
+            options.enhance and options.enhancement_level == "strong" and has_reference_facts
         )
         content_shortfalls = (
             _quality_shortfalls(resume, selection.data, job) if quality_enabled else []
@@ -359,7 +362,11 @@ class ResumeGenerator:
                 if retry_resume is not None and wording_enabled
                 else []
             )
-            if retry_resume is not None and not retry_content_shortfalls and not retry_wording_shortfalls:
+            if (
+                retry_resume is not None
+                and not retry_content_shortfalls
+                and not retry_wording_shortfalls
+            ):
                 resume = retry_resume
 
         warnings = check_consistency(
@@ -449,6 +456,7 @@ class ResumeGenerator:
     def _parse(self, raw: str) -> ResumeContent | None:
         data = extract_json(raw)
         return coerce_resume(data) if data is not None else None
+
 
 __all__ = [
     "ResumeGenerator",

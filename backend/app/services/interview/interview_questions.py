@@ -7,6 +7,7 @@
 简历编辑流程完成。未配置模型时不本地降级，由 API 层返回清晰中文错误（与 ``resume_writing``
 一致）。
 """
+
 from __future__ import annotations
 
 import json
@@ -71,7 +72,8 @@ async def _chat_json(provider: BaseLLMProvider, prompt: str, label: str) -> dict
         [
             {"role": "system", "content": _UNTRUSTED_SYSTEM},
             {"role": "user", "content": prompt},
-        ]
+        ],
+        thinking=False,
     )
     try:
         return parse_json_object(raw, label=label)
@@ -84,7 +86,8 @@ async def _chat_json(provider: BaseLLMProvider, prompt: str, label: str) -> dict
         [
             {"role": "system", "content": _UNTRUSTED_SYSTEM},
             {"role": "user", "content": retry_prompt},
-        ]
+        ],
+        thinking=False,
     )
     try:
         return parse_json_object(raw_retry, label=label)
@@ -254,7 +257,11 @@ async def optimize_resume(
         .replace(
             "{{ follow_ups }}",
             json.dumps(
-                {"面试官的高频追问": [str(item).strip() for item in follow_ups if str(item).strip()]},
+                {
+                    "面试官的高频追问": [
+                        str(item).strip() for item in follow_ups if str(item).strip()
+                    ]
+                },
                 ensure_ascii=False,
                 indent=2,
             ),
@@ -264,7 +271,8 @@ async def optimize_resume(
         [
             {"role": "system", "content": _UNTRUSTED_SYSTEM},
             {"role": "user", "content": prompt},
-        ]
+        ],
+        thinking=False,
     )
     suggestions = parse_suggestions(raw)[:MAX_SUGGESTIONS]
     if not suggestions:

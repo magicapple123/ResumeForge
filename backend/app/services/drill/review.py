@@ -90,7 +90,7 @@ def parse_review(raw: str) -> dict[str, Any]:
 
 
 async def generate_review(provider: BaseLLMProvider, session: DrillSession) -> dict[str, Any]:
-    raw = await provider.chat(build_review_messages(session))
+    raw = await provider.chat(build_review_messages(session), thinking=False)
     return parse_review(raw)
 
 
@@ -132,4 +132,3 @@ def local_review(session: DrillSession) -> dict[str, Any]:
         "actions": actions,
         "rehearsal": rehearsal,
     }
-

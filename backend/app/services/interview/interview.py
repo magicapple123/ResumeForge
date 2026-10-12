@@ -239,12 +239,12 @@ async def generate_question(
     messages = build_interview_messages(
         session, index=index, profile_text=profile_text, job_text=job_text
     )
-    return parse_turn(await provider.chat(messages))
+    return parse_turn(await provider.chat(messages, thinking=False))
 
 
 async def generate_report(provider: BaseLLMProvider, session: InterviewSession) -> dict[str, Any]:
     """调模型生成四维评分报告并解析；无可用内容时抛 LLMError 而不是落空报告。"""
-    raw = await provider.chat(build_report_messages(session))
+    raw = await provider.chat(build_report_messages(session), thinking=False)
     report = parse_report(raw)
     if not report["dimensions"] and report["score"] == 0:
         # 完全没有可用内容时不要写进记录：界面上会显示一张空报告，比报错更让人困惑。

@@ -3,6 +3,7 @@
 原文档超 500 行预算后的拆分：生命周期类用例聚在这里，"后台继续"的
 取消/防重复/落库一致性用例留在原文件。共享夹具在 conftest（client/clean_db）。
 """
+
 import asyncio
 import json
 import threading
@@ -14,7 +15,6 @@ from app.services.llm.base import BaseLLMProvider
 from app.services.resume.resume_generate_runner import reset_resume_generate_runner
 
 TERMINAL_STATUSES = {"completed", "cancelled", "failed"}
-
 
 
 def _get_task(client, task_id):
@@ -46,6 +46,7 @@ def _configure(client):
     config = LLMConfig(base_url="https://api.example.com/v1", api_key="k", model="m")
     assert client.put("/api/settings/llm", json=config.model_dump()).status_code == 200
 
+
 def _seed_profile(client):
     assert (
         client.put(
@@ -65,10 +66,10 @@ def _seed_profile(client):
         == 200
     )
 
+
 def _job(client):
-    return client.post(
-        "/api/jobs", json={"title": "后端开发工程师", "company": "示例公司"}
-    ).json()
+    return client.post("/api/jobs", json={"title": "后端开发工程师", "company": "示例公司"}).json()
+
 
 def _wait_terminal(client, task_id, timeout=8.0):
     deadline = time.monotonic() + timeout
@@ -80,10 +81,11 @@ def _wait_terminal(client, task_id, timeout=8.0):
         task = _get_task(client, task_id)
     return task
 
+
 class EndlessProvider(BaseLLMProvider):
     """无限产出 chunk、永不结束，用于在"运行中"取消（否则取消竞态无法稳定复现）。"""
 
-    async def chat(self, _messages):
+    async def chat(self, _messages, *, thinking: bool = True):
         raise AssertionError("不应触发一次性对话")
 
     async def stream_chat(self, _messages):
@@ -171,9 +173,7 @@ def test_shutdown_calls_the_resume_generate_runner(monkeypatch):
         def shutdown(self) -> None:
             calls.append("resume-runner")
 
-    monkeypatch.setattr(
-        application_module, "get_resume_generate_runner", lambda: _SpyRunner()
-    )
+    monkeypatch.setattr(application_module, "get_resume_generate_runner", lambda: _SpyRunner())
 
     _drive_lifespan_startup_and_shutdown()
     assert calls == ["resume-runner"]
@@ -187,7 +187,7 @@ class ChunkedSuccessfulProvider(BaseLLMProvider):
         self.text = text
         self.chunk_size = chunk_size
 
-    async def chat(self, _messages):
+    async def chat(self, _messages, *, thinking: bool = True):
         raise AssertionError("合法流式 JSON 不应触发修复调用")
 
     async def stream_chat(self, _messages):

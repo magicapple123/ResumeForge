@@ -3,6 +3,7 @@
 这个模块唯一会误导用户的地方是**状态**：一个虚高的「已验证」会让他以为这条主张讲得清了，
 然后在真面试里被问穿。所以测试重点全在"什么时候**不**该升级"上。
 """
+
 import json
 
 import pytest
@@ -43,7 +44,7 @@ class ScriptedProvider(BaseLLMProvider):
         self.response = response
         self.messages: list[dict] | None = None
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.messages = messages
         return self.response
 
@@ -80,7 +81,7 @@ def test_contradiction_can_always_overwrite():
 
 
 def test_not_covered_is_never_a_result():
-    """"未覆盖"不是一种结论，任何时候都不该凭它升级。"""
+    """ "未覆盖"不是一种结论，任何时候都不该凭它升级。"""
     for previous in (EVIDENCE_NOT_COVERED, EVIDENCE_UNVERIFIED, EVIDENCE_VERIFIED):
         assert not should_promote(previous, EVIDENCE_NOT_COVERED)
 
@@ -212,9 +213,7 @@ def test_model_cannot_declare_verified_without_naming_any_evidence():
 
 def test_first_verdict_on_an_unanswered_question_is_accepted():
     """`not_covered` 是起点而不是结论——第一次判定必须能生效。"""
-    verdict = parse_verdict(
-        _verdict(status=EVIDENCE_PARTIAL), previous_status=EVIDENCE_NOT_COVERED
-    )
+    verdict = parse_verdict(_verdict(status=EVIDENCE_PARTIAL), previous_status=EVIDENCE_NOT_COVERED)
     assert verdict.status == EVIDENCE_PARTIAL
 
 
@@ -252,9 +251,7 @@ def test_contradiction_is_accepted_even_from_verified():
 
 def test_unknown_status_falls_back_to_unverified():
     """模型给出没见过的状态时不能猜——落到最保守的「未验证」。"""
-    verdict = parse_verdict(
-        _verdict(status="差不多过了吧"), previous_status=EVIDENCE_NOT_COVERED
-    )
+    verdict = parse_verdict(_verdict(status="差不多过了吧"), previous_status=EVIDENCE_NOT_COVERED)
     assert verdict.status == EVIDENCE_UNVERIFIED
 
 
@@ -265,9 +262,7 @@ def test_unknown_followup_kind_is_dropped():
 
 def test_saying_followup_without_a_question_finishes_the_claim():
     """说要追问却没给问题：当作这道题结束，免得界面停在"等面试官说话"。"""
-    verdict = parse_verdict(
-        _verdict(done=False, question="  "), previous_status=EVIDENCE_PARTIAL
-    )
+    verdict = parse_verdict(_verdict(done=False, question="  "), previous_status=EVIDENCE_PARTIAL)
     assert verdict.done is True
 
 

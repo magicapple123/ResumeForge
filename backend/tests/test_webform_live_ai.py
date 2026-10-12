@@ -3,6 +3,7 @@
 FakeLiveClient/raw_control 留在 test_webform_live.py；语义缓存的 autouse 清理
 fixture 在本文件内重声明（import 不会传播 autouse 语义）。
 """
+
 import asyncio
 import json
 import time
@@ -39,7 +40,7 @@ class ScriptedProvider:
         self.error = error
         self.calls = 0
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.calls += 1
         if self.delay:
             await asyncio.sleep(self.delay)

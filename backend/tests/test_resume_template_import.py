@@ -42,7 +42,7 @@ class ImportProvider(BaseLLMProvider):
         self.payload = payload
         self.messages: list[list[dict]] = []
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.messages.append(messages)
         return self.payload
 
@@ -57,7 +57,8 @@ async def test_valid_config_is_kept_and_normalized():
         '"config": {"accent": "#1F4E79", "line_height": 1.6, "page_padding": 20}}'
     )
     result = await derive_format_template(
-        provider, TemplateImportSource(filename="目标模板.png", image_data_urls=["data:image/png;base64,AA"])
+        provider,
+        TemplateImportSource(filename="目标模板.png", image_data_urls=["data:image/png;base64,AA"]),
     )
 
     assert result["name"] == "深蓝简洁"
@@ -271,7 +272,7 @@ def test_endpoint_accepts_a_pdf_and_uses_its_text(client, db_session, monkeypatc
     captured: dict[str, object] = {}
 
     class CapturingProvider(ImportProvider):
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             captured["messages"] = messages
             return self.payload
 
@@ -282,7 +283,11 @@ def test_endpoint_accepts_a_pdf_and_uses_its_text(client, db_session, monkeypatc
         api_module,
         "extract_document_text",
         lambda name, mime, data: ExtractedDocument(
-            name=name or "x.pdf", mime_type=mime, size_bytes=10, text="张三 求职意向 前端开发", warnings=[]
+            name=name or "x.pdf",
+            mime_type=mime,
+            size_bytes=10,
+            text="张三 求职意向 前端开发",
+            warnings=[],
         ),
     )
 

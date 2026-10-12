@@ -91,13 +91,13 @@ class AnthropicProvider(BaseLLMProvider):
 
     # ===== 公共入口 =====
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         """同步发一次 Anthropic 消息请求，返回完整文本；超时/连接/解析错误统一转成 LLMError。
 
         429/5xx 在状态码阶段按 §2.4 重试（与 OpenAI 兼容层同一份 ``retry`` 策略）；
         用量经 ``last_usage`` 暴露：返回前写入，异常路径也要有记录（finish_reason=error）。
         """
-        payload = self._build_payload(messages, stream=False)
+        payload = self._build_payload(messages, stream=False, thinking=thinking)
         started = time.monotonic()
         gate = retry.StatusRetryGate(deadline_remaining=self._deadline_remaining())
         prompt_tokens: int | None = None
@@ -433,7 +433,12 @@ class AnthropicProvider(BaseLLMProvider):
         return thinking_budget(self.config)
 
     def _build_payload(
-        self, messages: list[dict], stream: bool, tools: list[dict] | None = None
+        self,
+        messages: list[dict],
+        stream: bool,
+        tools: list[dict] | None = None,
+        *,
+        thinking: bool = True,
     ) -> dict[str, Any]:
         system_text, converted = _convert_messages(messages)
         max_tokens = self._max_tokens()
@@ -446,7 +451,8 @@ class AnthropicProvider(BaseLLMProvider):
         if system_text:
             payload["system"] = system_text[:60_000]
 
-        budget = self._thinking_budget()
+        # thinking=False（结构化输出类调用）：跳过思考注入，哪怕用户全局开了。
+        budget = 0 if not thinking else self._thinking_budget()
         if budget > 0:
             # 协议要求：开启思考时 temperature 必须为 1，预算要小于 max_tokens。
             payload["thinking"] = {"type": "enabled", "budget_tokens": budget}

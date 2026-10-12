@@ -100,7 +100,9 @@ async def generate_plan(
     job_title: str = "",
     company: str = "",
 ) -> DrillPlan:
-    raw = await provider.chat(build_contract_messages(record, job_title=job_title, company=company))
+    raw = await provider.chat(
+        build_contract_messages(record, job_title=job_title, company=company), thinking=False
+    )
     return parse_plan(raw)
 
 
@@ -126,4 +128,3 @@ def open_contract(session: DrillSession, record: ClaimRecord, plan: DrillPlan) -
     session.contracts.append(contract)
     session.current_index += 1
     return contract
-

@@ -16,6 +16,7 @@
 - **路径必须是简历里真实存在的位置**。解析失败就报错，不做"猜一个最接近的"，
   否则一次输入错误可能改到别的字段上。
 """
+
 from __future__ import annotations
 
 import logging
@@ -267,7 +268,8 @@ async def rewrite_field(
         [
             {"role": "system", "content": _UNTRUSTED_SYSTEM},
             {"role": "user", "content": rendered},
-        ]
+        ],
+        thinking=False,
     )
     data = parse_json_object(raw, label="字段改写")
     if target.kind == "lines":

@@ -8,6 +8,7 @@
 和状态信号**时才产出一条，否则宁可只返回提示让用户自己填——一个错的进度比没有进度更糟，
 用户会照着一个"面试中"去做准备。
 """
+
 from __future__ import annotations
 
 import json
@@ -38,7 +39,10 @@ _MARKDOWN_JSON_RE = re.compile(r"\A```(?:json)?\s*(.*?)\s*```\Z", re.IGNORECASE 
 # 状态信号按「越明确越优先」排列：先找拒信和 Offer，再找面试/测评，最后才是自动回执。
 # 顺序反了的话，「感谢投递，我们会尽快安排面试」会被读成面试邀请。
 _STATUS_SIGNALS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("rejected", ("未通过", "不合适", "不匹配", "遗憾", "流程终止", "已结束", "不予考虑", "未能通过")),
+    (
+        "rejected",
+        ("未通过", "不合适", "不匹配", "遗憾", "流程终止", "已结束", "不予考虑", "未能通过"),
+    ),
     ("offer", ("offer", "录用", "入职邀请", "offer letter", "接受我们的")),
     (
         "interview",
@@ -220,16 +224,14 @@ def local_tracker_records(source_text: str) -> tuple[list[TrackRecordIn], list[s
             "未配置大模型，本地规则只在同一段里同时找到公司名、岗位名和状态关键词时才会"
             "生成记录；这次没有找到，请手动添加，或到「设置」页配置模型后重试。"
         ]
-    return records, [
-        "未配置大模型，已用本地关键词匹配：状态判断比较粗，请逐条核对后再保存。"
-    ]
+    return records, ["未配置大模型，已用本地关键词匹配：状态判断比较粗，请逐条核对后再保存。"]
 
 
 async def extract_tracker_records(
     provider: BaseLLMProvider, source_text: str, image_data_urls: Sequence[str] = ()
 ) -> tuple[list[TrackRecordIn], list[str]]:
     """调用一次模型抽取进度条目；不写数据库。"""
-    raw = await provider.chat(build_tracker_messages(source_text, image_data_urls))
+    raw = await provider.chat(build_tracker_messages(source_text, image_data_urls), thinking=False)
     return parse_tracker_records(raw)
 
 

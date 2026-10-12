@@ -3,6 +3,7 @@
 新增模型提供商只需继承 BaseLLMProvider 并实现 chat / stream_chat，
 业务代码（简历生成等）只依赖本抽象，不感知具体协议。
 """
+
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
@@ -94,8 +95,13 @@ class BaseLLMProvider(ABC):
         )
 
     @abstractmethod
-    async def chat(self, messages: list[dict]) -> str:
-        """一次性对话，返回完整回复。"""
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
+        """一次性对话，返回完整回复。
+
+        ``thinking=False`` 供**结构化输出类**调用（识别/解析/评分/题目生成等）显式
+        关闭思考模式：这类请求要的是严格 JSON，思考对准确率几乎没有增益，却会让
+        快模型也慢上几倍。创作与对话类调用保持默认（跟随用户设置）。
+        """
 
     @abstractmethod
     async def stream_chat(self, messages: list[dict]) -> AsyncIterator[str]:

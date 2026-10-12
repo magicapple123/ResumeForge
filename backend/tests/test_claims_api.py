@@ -4,6 +4,7 @@
 ``/{claim_id}`` 之前。排错了不会 404，而是把 ``baseline`` 当成整数解析失败返回 422，
 看起来像"参数写错了"，很容易查偏。
 """
+
 import json
 
 from app.schemas.setting import LLMConfig
@@ -26,7 +27,7 @@ class ScriptedProvider(BaseLLMProvider):
         self.response = response
         self.messages: list[dict] | None = None
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         self.messages = messages
         return self.response
 
@@ -38,7 +39,7 @@ class FailingProvider(BaseLLMProvider):
     def __init__(self):
         super().__init__(LLMConfig(base_url="http://fake", model="fake-model"))
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         raise LLMError("模型不可用")
 
     async def stream_chat(self, messages: list[dict]):  # pragma: no cover - 未用到
@@ -186,7 +187,11 @@ def test_draft_uses_the_model_and_forces_pending_status(client, monkeypatch):
                         "interview_details": {"decisions": ["先做关键词再做语义"]},
                     },
                     # 模型给了一个不存在的承担程度：必须退回最保守的取值而不是原样落库。
-                    {"title": "越权的一条", "source_fact": "写了一段代码。", "responsibility_level": "首席架构师"},
+                    {
+                        "title": "越权的一条",
+                        "source_fact": "写了一段代码。",
+                        "responsibility_level": "首席架构师",
+                    },
                 ],
                 "notes": ["原文没有量化指标"],
             },

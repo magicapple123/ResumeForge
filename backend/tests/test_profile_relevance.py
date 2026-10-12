@@ -1,4 +1,5 @@
 """岗位定向资料筛选测试：不调用真实模型，也能验证候选事实是否正确。"""
+
 import json
 import re
 from datetime import datetime
@@ -129,7 +130,7 @@ class CapturingProvider(BaseLLMProvider):
         self.response = response
         self.messages: list[dict] = []
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         raise AssertionError("本用例的模型输出应一次解析成功，不应进入修复流程")
 
     async def stream_chat(self, messages: list[dict]):

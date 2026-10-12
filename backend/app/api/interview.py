@@ -5,8 +5,11 @@
 
 import json
 import logging
+import re
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -41,9 +44,11 @@ from ..services.interview import interview_questions as interview_questions_serv
 from ..services.interview.interview import (
     add_message,
     answered_rounds,
+    build_interview_messages,
     generate_question,
     generate_report,
     mark_finished,
+    parse_turn,
     session_persona,
 )
 from ..services.llm import create_provider
@@ -534,4 +539,155 @@ async def optimize_resume(payload: InterviewOptimizeRequest, db: Session = Depen
         suggestions=suggestions,
         llm_used=True,
         notes=[],
+    )
+
+
+# ===== 流式提交回答（AI 提速）：问题像打字一样逐字出现 =====
+#
+# 此前的回答端点是非流式的：模型把"点评 + 下一题"的 JSON 全部生成完，界面才一次性
+# 显示，感知等待 = 全程生成时间。流式版本用同一个提示词与解析（parse_turn），只是在
+# 收集过程中把 ``question`` 字段的明文增量先推给前端——JSON 收齐后仍走原有解析与
+# 存档，协议与数据完全一致。同时这类结构化调用固定 ``thinking=False``（方案 1）。
+
+
+class _QuestionDeltaExtractor:
+    """从模型输出流里增量提取 ``question`` 字段的明文。
+
+    维护原始缓冲与"已下发明文对应的 raw 指针"：每次 feed 返回新解码出来的部分。
+    尾部可能悬着半个转义序列（反斜杠、反斜杠加 u 的四角数字），那种片段留到下一个 delta 再处理，
+    绝不下发半截转义。question 在提示词里固定是第一个键，输出形状稳定。
+    """
+
+    _KEY_RE = re.compile(r'"question"\s*:\s*"')
+    # \n 在 JSON 里表示换行；值的形态是"反转义后的目标字符"。
+    _SIMPLE_ESCAPES = {
+        "n": "\n",
+        "t": "\t",
+        "r": "\r",
+        "b": "\b",
+        "f": "\f",
+        '"': '"',
+        "\\": "\\",
+        "/": "/",
+    }
+
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._raw_ptr = 0
+        self._value_start: int | None = None
+        self._finished = False
+
+    def feed(self, delta: str) -> str:
+        if self._finished:
+            return ""
+        self._buffer += delta
+        if self._value_start is None:
+            match = self._KEY_RE.search(self._buffer)
+            if not match:
+                return ""
+            self._value_start = match.end()
+            self._raw_ptr = self._value_start
+        out: list[str] = []
+        i = max(self._raw_ptr, self._value_start)
+        while i < len(self._buffer):
+            ch = self._buffer[i]
+            if ch == "\\":
+                if i + 1 >= len(self._buffer):
+                    break
+                esc = self._buffer[i + 1]
+                if esc in self._SIMPLE_ESCAPES:
+                    out.append(self._SIMPLE_ESCAPES[esc])
+                    i += 2
+                elif esc == "u":
+                    hex4 = self._buffer[i + 2 : i + 6]
+                    if len(hex4) < 4:
+                        break
+                    out.append(chr(int(hex4, 16)))
+                    i += 6
+                else:
+                    break
+            elif ch == '"':
+                self._finished = True
+                break
+            else:
+                out.append(ch)
+                i += 1
+        self._raw_ptr = i
+        return "".join(out)
+
+
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def _answer_stream_events(
+    db: Session, session: InterviewSession, provider, index: int
+) -> AsyncIterator[str]:
+    """流式生成一轮回答的 SSE 事件流。"""
+    if index >= session.rounds:
+        await _finish_with_report(db, session, provider)
+        result = InterviewAnswerResult(session=_to_detail(session), feedback="", finished=True)
+        yield _sse({"type": "done", "result": json.loads(result.model_dump_json())})
+        return
+
+    extractor = _QuestionDeltaExtractor()
+    parts: list[str] = []
+    try:
+        messages = build_interview_messages(
+            session,
+            index=index,
+            profile_text=_profile_text(db),
+            job_text=_job_text(db, session.job_id),
+        )
+        async for delta in provider.stream_chat_events(messages):
+            if delta.text:
+                parts.append(delta.text)
+                piece = extractor.feed(delta.text)
+                if piece:
+                    yield _sse({"type": "question_delta", "text": piece})
+        question, feedback, done = parse_turn("".join(parts))
+    except LLMError as exc:
+        # 回答已存档（后端先存后问），失败时提示"重试"而不是"重写"。
+        yield _sse({"type": "error", "detail": str(exc)})
+        return
+
+    add_message(
+        session,
+        role="interviewer",
+        content=question,
+        context={"index": index, "rounds": session.rounds, "feedback": feedback},
+    )
+    db.commit()
+    if done:
+        # 模型提前收尾：question 按提示词约定是收尾语。
+        await _finish_with_report(db, session, provider)
+        result = InterviewAnswerResult(
+            session=_to_detail(session), feedback=feedback, finished=True
+        )
+    else:
+        db.refresh(session)
+        result = InterviewAnswerResult(
+            session=_to_detail(session), feedback=feedback, finished=False
+        )
+    yield _sse({"type": "done", "result": json.loads(result.model_dump_json())})
+
+
+@router.post("/{session_id}/answers/stream")
+async def submit_answer_stream(
+    session_id: int, payload: InterviewAnswerCreate, db: Session = Depends(get_db)
+):
+    """流式提交一轮回答：``question_delta``（问题明文增量）→ ``done``（完整结果）。"""
+    session = _session_or_404(db, session_id)
+    if session.status != INTERVIEW_STATUS_ACTIVE:
+        raise HTTPException(status_code=409, detail="这场面试已经结束，请查看报告或新开一场")
+    provider, _model = _require_provider(db)
+
+    add_message(session, role="user", content=payload.content)
+    db.commit()
+    index = answered_rounds(session)
+
+    return StreamingResponse(
+        _answer_stream_events(db, session, provider, index),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

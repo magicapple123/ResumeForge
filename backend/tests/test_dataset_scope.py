@@ -3,6 +3,7 @@
 全部用事件屏障/有限等待协调，禁止毫秒墙钟竞速；数据集文件都建在测试库同级的
 datasets 目录（conftest 会按用例清理），不触碰真实数据。
 """
+
 import json
 import threading
 import time
@@ -309,7 +310,7 @@ def test_resume_generate_runner_holds_a_lease_and_releases_at_terminal(client, m
     _seed_generation_prerequisites(client)
 
     class SuccessfulProvider(BaseLLMProvider):
-        async def chat(self, _messages):  # pragma: no cover
+        async def chat(self, _messages, *, thinking: bool = True):  # pragma: no cover
             raise AssertionError("合法流式 JSON 不应触发修复调用")
 
         async def stream_chat(self, _messages):

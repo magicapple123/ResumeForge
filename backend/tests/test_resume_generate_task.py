@@ -5,6 +5,7 @@
 - 完成才落库（resume_id 回填 + resume_record 确实存在）；
 - 防重复（连点两次不产生两条任务/两份简历）。
 """
+
 import asyncio
 import json
 import threading
@@ -44,9 +45,7 @@ def _seed_profile(client):
 
 
 def _job(client):
-    return client.post(
-        "/api/jobs", json={"title": "后端开发工程师", "company": "示例公司"}
-    ).json()
+    return client.post("/api/jobs", json={"title": "后端开发工程师", "company": "示例公司"}).json()
 
 
 def _wait_terminal(client, task_id, timeout=8.0):
@@ -77,11 +76,10 @@ def _wait_status(client, task_id, status, timeout=8.0):
     return task
 
 
-
 class EndlessProvider(BaseLLMProvider):
     """无限产出 chunk、永不结束，用于在"运行中"取消（否则取消竞态无法稳定复现）。"""
 
-    async def chat(self, _messages):
+    async def chat(self, _messages, *, thinking: bool = True):
         raise AssertionError("不应触发一次性对话")
 
     async def stream_chat(self, _messages):
@@ -93,7 +91,6 @@ class EndlessProvider(BaseLLMProvider):
 
 
 # ===== RF-02：完整生命周期（孤儿恢复 / 收拢 / 总预算 / 字符计数 / 仲裁守卫）=====
-
 
 
 @pytest.fixture(autouse=True)
@@ -124,7 +121,7 @@ def _wait_status(client, task_id, status, timeout=8.0):
 class SuccessfulProvider(BaseLLMProvider):
     """产出合法 JSON 后立刻结束，用于验证"完成才落库"。"""
 
-    async def chat(self, _messages):
+    async def chat(self, _messages, *, thinking: bool = True):
         raise AssertionError("合法流式 JSON 不应触发修复调用")
 
     async def stream_chat(self, _messages):
@@ -262,9 +259,7 @@ def test_start_still_validates_job_and_llm(client):
 
     _configure(client)
     # 岗位不存在：404
-    assert (
-        client.post("/api/resumes/generate/tasks", json={"job_id": 999}).status_code == 404
-    )
+    assert client.post("/api/resumes/generate/tasks", json={"job_id": 999}).status_code == 404
 
 
 def test_status_endpoint_404s_for_unknown_task(client):
@@ -290,9 +285,7 @@ def test_completed_status_and_resume_id_commit_atomically(client, monkeypatch):
     class InspectingSession(Session):
         def commit(self):
             super().commit()
-            row = self.execute(
-                text("SELECT status, resume_id FROM resume_generate_task")
-            ).first()
+            row = self.execute(text("SELECT status, resume_id FROM resume_generate_task")).first()
             if row is not None and row.status == "completed":
                 observations.append(row.resume_id is not None)
 
@@ -328,5 +321,3 @@ def test_completed_status_and_resume_id_commit_atomically(client, monkeypatch):
     assert final["resume_id"] is not None
     assert observations, "运行器会话未观察到任何 completed 提交，spy 未生效"
     assert all(observations), f"观察到 completed 但 resume_id 为空的中间态：{observations}"
-
-

@@ -20,5 +20,9 @@ export function parseProfileText(payload: {
   images?: ExtractionImageInput[];
   documents?: ExtractionDocumentInput[];
 }): Promise<ProfileTextParseResult> {
-  return request("/profile/parse-text", { method: "POST", body: JSON.stringify(payload) });
+  return request("/profile/parse-text", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    budget: "recognition",
+  });
 }

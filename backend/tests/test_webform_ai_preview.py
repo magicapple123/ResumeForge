@@ -6,6 +6,7 @@ AI 命中接进预览的完整链路（来源标记、默认不勾选、冲突�
 ⚠️ 本文件的 autouse ``_clear_ai_cache`` **必须在文件内重新声明**——import 而来的
 autouse fixture 不会生效（autouse 只来自 conftest / 本模块 / 插件）。
 """
+
 import pytest
 from app.services.llm.base import LLMError
 from app.services.webform import ai
@@ -28,6 +29,7 @@ def _clear_ai_cache():
 
 
 # ===== 批量链路：接进预览 =====
+
 
 async def test_ai_match_becomes_a_normal_preview_row():
     """命中的控件从「没认出来」移进「将填入」，并标成 AI 来源。"""
@@ -62,9 +64,7 @@ async def test_ai_rows_are_not_selected_by_default():
 
 async def test_rule_rows_are_still_selected_by_default():
     """对照组：规则命中的行不受影响。"""
-    snapshot = _snapshot(
-        _raw(0, label="姓名"), _raw(1, **UNKNOWN)
-    )
+    snapshot = _snapshot(_raw(0, label="姓名"), _raw(1, **UNKNOWN))
     data = {"name": "张三", "research_direction": "分布式系统"}
     report = build_preview(snapshot, data)
     provider = FakeProvider({"matches": [{"index": 1, "field": "research_direction"}]})
@@ -133,6 +133,7 @@ async def test_ai_rows_obey_the_conflict_rule():
 
 
 # ===== 只动该动的那一桶 =====
+
 
 async def test_blocked_controls_are_never_asked():
     """密码与验证码是**终局判定**——模型没有投票权，一次都不该问。"""
@@ -224,6 +225,7 @@ async def test_only_unrecognized_controls_are_sent():
 
 # ===== 降级 =====
 
+
 async def test_model_failure_degrades_to_todays_behaviour():
     """AI 挂了不该让预览打不开：桶原样不动，不抛。"""
     snapshot = _snapshot(_raw(0, **UNKNOWN))
@@ -240,7 +242,7 @@ async def test_unexpected_error_also_degrades():
     report = build_preview(snapshot, {})
 
     class Exploding(FakeProvider):
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             raise RuntimeError("不该冒到用户面前")
 
     assert await enrich_preview_with_ai(snapshot, {}, report, Exploding()) == 0
@@ -258,6 +260,7 @@ async def test_none_answer_leaves_the_bucket_alone():
 
 # ===== 配额 =====
 
+
 async def test_at_most_max_controls_are_sent_in_one_call():
     raws = [_raw(index, label=f"所在部门意见 {index}") for index in range(ai.MAX_AI_CONTROLS + 5)]
     snapshot = _snapshot(*raws)
@@ -273,6 +276,7 @@ async def test_at_most_max_controls_are_sent_in_one_call():
 
 
 # ===== provider 是否可用 =====
+
 
 def test_build_provider_is_none_without_a_configured_model(db_session):
     """没配模型就返回 None——调用方据此完全不构造 provider，零调用。"""

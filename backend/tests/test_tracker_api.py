@@ -4,6 +4,7 @@
 - ``/parse`` **绝不能写库**（它是预览）；
 - ``/parse`` 说会怎样、``/apply`` 就得那样——两处各判一次是这类功能最容易出的错。
 """
+
 import json
 
 from app.schemas.setting import LLMConfig
@@ -22,7 +23,7 @@ class ScriptedProvider(BaseLLMProvider):
         super().__init__(LLMConfig(base_url="http://fake", model="fake-model"))
         self.response = response
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         return self.response
 
     async def stream_chat(self, messages):  # pragma: no cover - 未用到
@@ -33,7 +34,7 @@ class FailingProvider(BaseLLMProvider):
     def __init__(self):
         super().__init__(LLMConfig(base_url="http://fake", model="fake-model"))
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         raise LLMError("模型不可用")
 
     async def stream_chat(self, messages):  # pragma: no cover - 未用到
@@ -121,7 +122,9 @@ def test_a_record_needs_company_and_title(client):
 
 def test_parse_only_previews_and_never_writes(client):
     """预览写库是最隐蔽的一类 bug：用户取消之后记录却已经在了。"""
-    text = "【示例科技有限公司】您投递的「后端开发实习生」岗位已进入面试环节，请于 2026-09-20 前确认。"
+    text = (
+        "【示例科技有限公司】您投递的「后端开发实习生」岗位已进入面试环节，请于 2026-09-20 前确认。"
+    )
     response = client.post("/api/tracker/parse", json={"text": text})
     assert response.status_code == 200
     body = response.json()

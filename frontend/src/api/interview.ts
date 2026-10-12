@@ -19,6 +19,7 @@ import type {
   QuestionBankRecordPayload,
 } from "../types";
 import { request } from "./client";
+import { consumeSSE } from "./stream";
 
 export function listInterviews(limit = 50): Promise<InterviewBrief[]> {
   return request(`/interview?limit=${limit}`);
@@ -39,6 +40,36 @@ export function submitInterviewAnswer(id: number, content: string): Promise<Inte
     method: "POST",
     body: JSON.stringify({ content }),
   });
+}
+
+export interface InterviewAnswerStreamEvent {
+  type: "question_delta" | "done" | "error";
+  text?: string;
+  detail?: string;
+  result?: InterviewAnswerResult;
+}
+
+/**
+ * 流式提交一轮回答：``question_delta`` 把面试官的问题逐字推来（onQuestionDelta 渐进
+ * 渲染），``done`` 带完整结果（与旧端点同形状）。失败走 ``error`` 事件（回答已存档）。
+ */
+export async function submitInterviewAnswerStream(
+  id: number,
+  content: string,
+  onQuestionDelta: (text: string) => void,
+): Promise<InterviewAnswerResult> {
+  let result: InterviewAnswerResult | null = null;
+  await consumeSSE<InterviewAnswerStreamEvent>(
+    `/interview/${id}/answers/stream`,
+    { content },
+    (event) => {
+      if (event.type === "question_delta" && event.text) onQuestionDelta(event.text);
+      else if (event.type === "done" && event.result) result = event.result;
+      else if (event.type === "error") throw new Error(event.detail || "面试官开不了口，请重试");
+    },
+  );
+  if (!result) throw new Error("面试官开不了口，请重试");
+  return result;
 }
 
 /** 提前结束并出报告。 */

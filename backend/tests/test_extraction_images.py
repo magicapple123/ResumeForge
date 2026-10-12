@@ -34,7 +34,7 @@ class FakeProvider(BaseLLMProvider):
         self.response = response
         self.messages: list[dict] = []
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         self.messages = messages
         if isinstance(self.response, Exception):
             raise self.response
@@ -107,9 +107,7 @@ async def test_extract_job_text_grounds_fields_in_the_transcription():
 @pytest.mark.asyncio
 async def test_extract_job_text_drops_fields_absent_from_the_transcription():
     """本次改动最关键的保证：模型编不进抄录里的事实，仍然进不了字段。"""
-    provider = FakeProvider(
-        job_response(title="全栈开发工程师", salary="30-50K", company="腾讯")
-    )
+    provider = FakeProvider(job_response(title="全栈开发工程师", salary="30-50K", company="腾讯"))
 
     result = await extract_job_text(provider, "", empty_local_job(), [PNG_URL])
 
@@ -233,7 +231,9 @@ def test_image_warnings_say_what_the_user_can_do():
     assert "多模态" in ai_failed_warning(has_images=True, detail="HTTP 400")
     # 纯文本的两条文案必须逐字不变，既有断言依赖它们
     assert no_model_warning(has_images=False) == "未配置大模型，已使用本地规则识别，请核对后保存。"
-    assert ai_failed_warning(has_images=False) == "AI 识别暂不可用，已使用本地规则识别，请核对后保存。"
+    assert (
+        ai_failed_warning(has_images=False) == "AI 识别暂不可用，已使用本地规则识别，请核对后保存。"
+    )
 
 
 @pytest.mark.asyncio

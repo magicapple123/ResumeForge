@@ -5,6 +5,7 @@
 2. 未配置模型时接口返回清晰中文错误（不伪造结果）；
 3. 反向优化只产出 ``ResumeSuggestion`` 建议列表，**不直接改写简历正文**。
 """
+
 import json
 
 import pytest
@@ -64,7 +65,7 @@ class _FakeProvider:
         self.reply = reply
         self.calls = 0
 
-    async def chat(self, _messages):
+    async def chat(self, _messages, *, thinking: bool = True):
         self.calls += 1
         return self.reply
 
@@ -258,9 +259,7 @@ def test_analyze_endpoint_returns_answer_ideas(client, monkeypatch):
 
 
 def test_question_answer_endpoint_requires_model(client):
-    response = client.post(
-        "/api/interview/questions/answer", json={"question": "讲讲项目难点"}
-    )
+    response = client.post("/api/interview/questions/answer", json={"question": "讲讲项目难点"})
     assert response.status_code == 400
     assert "配置大模型" in response.json()["detail"]
 
@@ -272,9 +271,7 @@ def test_question_answer_endpoint_requires_question(client):
 
 def test_question_answer_endpoint_returns_answer(client, monkeypatch):
     _configure_provider(monkeypatch, _ANSWER_JSON)
-    response = client.post(
-        "/api/interview/questions/answer", json={"question": "讲讲项目难点"}
-    )
+    response = client.post("/api/interview/questions/answer", json={"question": "讲讲项目难点"})
     assert response.status_code == 200, response.text
     body = response.json()
     assert "撮合引擎" in body["answer"]

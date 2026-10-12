@@ -1,4 +1,5 @@
 """岗位 AI 解读接口测试。"""
+
 import json
 
 from app.schemas.setting import LLMConfig
@@ -12,7 +13,7 @@ class JobAnalysisProvider(BaseLLMProvider):
         )
         self.messages: list[list[dict]] = []
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         self.messages.append(messages)
         return json.dumps(
             {

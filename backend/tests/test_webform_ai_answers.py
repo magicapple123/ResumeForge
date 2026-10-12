@@ -6,6 +6,7 @@
 ⚠️ 本文件的 autouse ``_clear_ai_cache`` **必须在文件内重新声明**——import 而来的
 autouse fixture 不会生效（autouse 只来自 conftest / 本模块 / 插件）。
 """
+
 import pytest
 from app.services.llm.base import LLMError
 from app.services.webform import ai
@@ -22,6 +23,7 @@ def _clear_ai_cache():
 
 
 # ===== 输出的白名单 =====
+
 
 async def test_field_outside_the_catalog_is_dropped():
     """模型编一个不存在的字段名出来时，**丢弃而不是照单全收**——封闭集合的落点。"""
@@ -116,7 +118,7 @@ async def test_invalid_json_raises_rather_than_silently_returning_nothing():
     """解析失败要抛：调用方得能分清"模型说都不像"和"模型调用挂了"。"""
 
     class BrokenProvider(FakeProvider):
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             return "抱歉，我无法完成这个请求。"
 
     with pytest.raises(LLMError):
@@ -132,6 +134,7 @@ async def test_provider_error_propagates():
 
 # ===== 缓存 =====
 
+
 async def test_same_control_is_asked_only_once():
     provider = FakeProvider({"matches": [{"index": 0, "field": "phone"}]})
     control = _controls(_raw(0, **UNKNOWN))
@@ -142,7 +145,7 @@ async def test_same_control_is_asked_only_once():
 
 
 async def test_a_none_answer_is_cached_too():
-    """"这个框不属于任何字段"本身就是一个可复用的判断，不该反复付调用。"""
+    """ "这个框不属于任何字段"本身就是一个可复用的判断，不该反复付调用。"""
     provider = FakeProvider({"matches": [{"index": 0, "field": ai.NONE_FIELD}]})
     control = _controls(_raw(0, **UNKNOWN))
 

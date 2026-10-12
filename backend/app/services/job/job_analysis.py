@@ -116,7 +116,7 @@ def _validate_evidence(result: JobAnalysisResult, user_message: str) -> None:
 async def generate_job_analysis(provider: BaseLLMProvider, job: JobOut) -> JobAnalysisResult:
     """调用一次模型；不读取个人资料，也不对岗位或简历执行写操作。"""
     messages = build_job_analysis_messages(job)
-    raw = await provider.chat(messages)
+    raw = await provider.chat(messages, thinking=False)
     result = parse_job_analysis(raw)
     _validate_evidence(result, messages[1]["content"])
     logger.info(

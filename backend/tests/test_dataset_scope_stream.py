@@ -3,6 +3,7 @@
 原文档超 500 行预算后的拆分：流级集成用例聚在这里，租约单元与切换互斥用例
 留在原文件。共享夹具在 conftest（client）。
 """
+
 import asyncio
 import json
 from types import SimpleNamespace
@@ -25,7 +26,7 @@ class _StreamOnceProvider(BaseLLMProvider):
         super().__init__(LLMConfig(base_url="http://fake", model="fake-model"))
         self._round = 0
 
-    async def chat(self, _messages):  # pragma: no cover - 不应触发
+    async def chat(self, _messages, *, thinking: bool = True):  # pragma: no cover - 不应触发
         raise AssertionError("流式路径不应触发一次性对话")
 
     async def stream_chat(self, _messages):
@@ -34,7 +35,9 @@ class _StreamOnceProvider(BaseLLMProvider):
     async def stream_chat_events(self, _messages, _tools=None):
         self._round += 1
         if self._round == 1:
-            yield LLMDelta(tool_calls=[{"id": "t1", "function": {"name": "web_search", "arguments": "{}"}}])
+            yield LLMDelta(
+                tool_calls=[{"id": "t1", "function": {"name": "web_search", "arguments": "{}"}}]
+            )
         else:
             yield LLMDelta(text="这是足够长的最终回答正文。")
 
@@ -177,7 +180,7 @@ def test_sse_generate_reports_switch_in_progress(client, monkeypatch):
     job = _job(client)
 
     class SuccessfulProvider(BaseLLMProvider):
-        async def chat(self, _messages):  # pragma: no cover
+        async def chat(self, _messages, *, thinking: bool = True):  # pragma: no cover
             raise AssertionError("合法流式 JSON 不应触发修复调用")
 
         async def stream_chat(self, _messages):
@@ -189,7 +192,9 @@ def test_sse_generate_reports_switch_in_progress(client, monkeypatch):
                 ensure_ascii=False,
             )
 
-    monkeypatch.setattr("app.api.resumes.create_provider", lambda resolved: SuccessfulProvider(resolved))
+    monkeypatch.setattr(
+        "app.api.resumes.create_provider", lambda resolved: SuccessfulProvider(resolved)
+    )
 
     with switch_lock():
         response = client.post("/api/resumes/generate", json={"job_id": job["id"]})

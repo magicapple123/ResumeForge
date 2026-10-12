@@ -12,6 +12,7 @@
 每条草稿都复用单份识别的 ``normalize_job_result``，所以"字段必须能在原文里找到"这条
 规则对多份解析同样成立。
 """
+
 from __future__ import annotations
 
 import json
@@ -184,7 +185,7 @@ async def extract_multiple_jobs(
 
     async def once() -> list[JobTextParseResult]:
         raw = await provider.chat(
-            build_multi_job_extraction_messages(source_text, image_data_urls)
+            build_multi_job_extraction_messages(source_text, image_data_urls), thinking=False
         )
         data = parse_json_object(raw, label="多份岗位识别", max_chars=MAX_EXTRACTION_RESPONSE_CHARS)
         items = _items_from_payload(data)
@@ -209,7 +210,9 @@ async def extract_multiple_jobs(
             # 只带**核对通过**的那份——没通过的可能就是模型编的，展示出来等于让人去核对一段
             # 原文里根本不存在的文字。
             results.append(
-                normalize_job_result(item, local, anchor, recognized_text=excerpt if grounded else "")
+                normalize_job_result(
+                    item, local, anchor, recognized_text=excerpt if grounded else ""
+                )
             )
         return results
 

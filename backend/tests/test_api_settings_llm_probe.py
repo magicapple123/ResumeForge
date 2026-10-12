@@ -11,7 +11,7 @@ def test_probe_caps_max_tokens(client, db_session, monkeypatch):
     captured: dict[str, int] = {}
 
     class FakeProvider:
-        async def chat(self, messages: list[dict]) -> str:
+        async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
             return "正常"
 
     def fake_create_provider(resolved):
@@ -35,7 +35,7 @@ def test_probe_caps_unlimited_output_too(client, db_session, monkeypatch):
     captured: dict[str, int] = {}
 
     class FakeProvider:
-        async def chat(self, messages: list[dict]) -> str:
+        async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
             return "正常"
 
     def fake_create_provider(resolved):

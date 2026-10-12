@@ -43,7 +43,11 @@ def _revised_payload(summary: str = "改过的总结") -> str:
         {
             "summary": summary,
             "experience": [
-                {"company": "示例科技有限公司", "role": "示例岗位", "description": ["负责示例模块开发"]}
+                {
+                    "company": "示例科技有限公司",
+                    "role": "示例岗位",
+                    "description": ["负责示例模块开发"],
+                }
             ],
             "skills": [{"name": "Python", "level": "熟练"}],
         },
@@ -57,7 +61,7 @@ async def test_identity_fields_are_restored_from_the_original_resume():
     captured: dict[str, str] = {}
 
     class FakeProvider:
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             captured["system"] = messages[0]["content"]
             captured["prompt"] = messages[-1]["content"]
             return _revised_payload()
@@ -82,7 +86,7 @@ async def test_targeted_mode_states_the_change_scope():
     captured: dict[str, str] = {}
 
     class FakeProvider:
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             captured["prompt"] = messages[-1]["content"]
             return _revised_payload()
 
@@ -99,7 +103,7 @@ async def test_full_regenerate_mode_is_explicit():
     captured: dict[str, str] = {}
 
     class FakeProvider:
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             captured["prompt"] = messages[-1]["content"]
             return _revised_payload()
 
@@ -116,7 +120,7 @@ async def test_instructions_longer_than_budget_are_truncated():
     captured: dict[str, str] = {}
 
     class FakeProvider:
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             captured["prompt"] = messages[-1]["content"]
             return _revised_payload()
 
@@ -131,7 +135,7 @@ async def test_empty_model_output_is_rejected():
     """模型输出空 JSON 会被解析成"只剩身份字段的空简历"，必须拒绝而不是落库。"""
 
     class FakeProvider:
-        async def chat(self, _messages):
+        async def chat(self, _messages, *, thinking: bool = True):
             return "{}"
 
     with pytest.raises(LLMError):
@@ -141,7 +145,7 @@ async def test_empty_model_output_is_rejected():
 @pytest.mark.asyncio
 async def test_unparsable_output_raises_llm_error():
     class FakeProvider:
-        async def chat(self, _messages):
+        async def chat(self, _messages, *, thinking: bool = True):
             return "这不是 JSON"
 
     with pytest.raises(LLMError):
@@ -190,9 +194,7 @@ def test_revise_requires_llm_config(client, _resume_record):
     assert "配置大模型" in response.json()["detail"]
 
 
-def test_revise_updates_the_record_and_clears_warnings(
-    client, _resume_record, monkeypatch
-):
+def test_revise_updates_the_record_and_clears_warnings(client, _resume_record, monkeypatch):
     config = LLMConfig(
         base_url="https://api.example.com/v1",
         api_key="integration-secret",
@@ -212,7 +214,7 @@ def test_revise_updates_the_record_and_clears_warnings(
         db.close()
 
     class FakeProvider:
-        async def chat(self, _messages):
+        async def chat(self, _messages, *, thinking: bool = True):
             return json.dumps(
                 {
                     "summary": "修订后的总结",
@@ -223,9 +225,7 @@ def test_revise_updates_the_record_and_clears_warnings(
                 ensure_ascii=False,
             )
 
-    monkeypatch.setattr(
-        "app.api.resumes.create_provider", lambda _config: FakeProvider()
-    )
+    monkeypatch.setattr("app.api.resumes.create_provider", lambda _config: FakeProvider())
     response = client.post(
         f"/api/resumes/{_resume_record}/revise", json={"instructions": "把总结改成：修订后的总结"}
     )

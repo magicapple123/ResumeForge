@@ -10,6 +10,7 @@
 ``test_webform_ai_answers.py``，批量链路/守门/降级/配额在
 ``test_webform_ai_preview.py``。
 """
+
 import json
 
 import pytest
@@ -34,7 +35,7 @@ class FakeProvider(BaseLLMProvider):
         self.error = error
         self.messages: list[list[dict]] = []
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.messages.append(messages)
         if self.error is not None:
             raise self.error
@@ -46,9 +47,7 @@ class FakeProvider(BaseLLMProvider):
     def heard(self) -> str:
         """模型实际看到的全部文字（system + user 拼一起，方便做"值有没有泄漏"的断言）。"""
         return "\n".join(
-            str(message.get("content", ""))
-            for exchange in self.messages
-            for message in exchange
+            str(message.get("content", "")) for exchange in self.messages for message in exchange
         )
 
 
@@ -88,6 +87,7 @@ UNKNOWN = {"type": "text", "label": "所在部门意见"}
 
 
 # ===== 提示词的边界 =====
+
 
 async def test_prompt_never_contains_any_profile_value():
     """**最重要的一条**：AI 兜底链路里，用户的资料值一个字都不该发出去。
@@ -150,7 +150,7 @@ class FlakyProvider(FakeProvider):
         super().__init__(payload)
         self.calls = 0
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.calls += 1
         self.messages.append(messages)
         if self.calls == 1:

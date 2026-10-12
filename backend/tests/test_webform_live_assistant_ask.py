@@ -2,6 +2,7 @@
 
 FakeLiveClient 留在 test_webform_live.py。
 """
+
 import json
 import subprocess
 
@@ -78,7 +79,9 @@ def test_assistant_ask_cursor_resets_after_page_reload():
     assert len(session._ask_history) == 0
 
     client.evaluate = lambda e, timeout=None: (
-        _state_with_ask(1, "你好") if "rf:live-state" in e else FakeLiveClient.evaluate(client, e, timeout=timeout)
+        _state_with_ask(1, "你好")
+        if "rf:live-state" in e
+        else FakeLiveClient.evaluate(client, e, timeout=timeout)
     )
     session._tick()
 
@@ -90,7 +93,7 @@ def test_ask_reply_is_written_back_with_sequence(monkeypatch):
     from app.services.webform import live_assistant
 
     class AskProvider:
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             return "这个问题很难一句话说清，但总体是匹配的。"
 
     client = FakeLiveClient()

@@ -57,7 +57,7 @@ class AnalysisProvider(BaseLLMProvider):
         self.response = response
         self.messages: list[dict] | None = None
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         self.messages = messages
         return self.response
 

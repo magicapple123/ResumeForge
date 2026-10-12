@@ -4,6 +4,7 @@
 出错——招聘通知的自动回执长得都差不多，关键词匹配稍一宽松就会把「感谢投递」读成
 「进入面试」，而用户会照着一个错的「面试中」去准备。
 """
+
 import json
 
 import pytest
@@ -23,7 +24,7 @@ class ScriptedProvider(BaseLLMProvider):
         self.response = response
         self.messages: list[dict] | None = None
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.messages = messages
         return self.response
 
@@ -86,9 +87,7 @@ def test_parse_accepts_a_markdown_fenced_response():
 
 def test_unknown_status_from_the_model_falls_back_to_to_be_confirmed():
     """模型给出没见过的状态时不能猜，落到「待确认」让用户自己判断。"""
-    raw = json.dumps(
-        {"records": [{"company": "A", "title": "B", "status": "差不多进面试了吧"}]}
-    )
+    raw = json.dumps({"records": [{"company": "A", "title": "B", "status": "差不多进面试了吧"}]})
     records, _ = parse_tracker_records(raw)
     assert records[0].status == "unknown"
 

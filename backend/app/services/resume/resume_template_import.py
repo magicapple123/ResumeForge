@@ -17,6 +17,7 @@
 3. **没有合法配置就不算成功**。模型给不出任何合法取值时明确报错，而不是存一个空模板
    （空模板在界面上看起来"导入成功了"，套上去却什么都不变）。
 """
+
 from __future__ import annotations
 
 import json
@@ -94,7 +95,9 @@ def build_import_messages(
     body = f"<TEMPLATE_SOURCE>\n{payload}\n</TEMPLATE_SOURCE>"
     system = {
         "role": "system",
-        "content": _load_prompt("resume_template_import.md", with_images=bool(source.image_data_urls)),
+        "content": _load_prompt(
+            "resume_template_import.md", with_images=bool(source.image_data_urls)
+        ),
     }
     if not source.image_data_urls:
         return [system, {"role": "user", "content": f"{instruction}\n{body}"}]
@@ -128,7 +131,9 @@ def build_design_import_messages(source: TemplateImportSource) -> list[dict[str,
     body = f"<TEMPLATE_SOURCE>\n{payload}\n</TEMPLATE_SOURCE>"
     system = {
         "role": "system",
-        "content": _load_prompt("resume_template_design_import.md", with_images=bool(source.image_data_urls)),
+        "content": _load_prompt(
+            "resume_template_design_import.md", with_images=bool(source.image_data_urls)
+        ),
     }
     if not source.image_data_urls:
         return [system, {"role": "user", "content": f"{instruction}\n{body}"}]
@@ -160,7 +165,9 @@ def summarize_document_structure(text: str) -> str:
         "medium_paragraphs": sum(33 <= len(line) <= 96 for line in lines),
         "long_paragraphs": sum(len(line) > 96 for line in lines),
         "bullet_like_lines": sum(bool(re.match(r"^[•·●▪\-*]", line)) for line in lines),
-        "date_like_lines": sum(bool(re.search(r"(?:19|20)\d{2}[./年-](?:\d{1,2})?", line)) for line in lines),
+        "date_like_lines": sum(
+            bool(re.search(r"(?:19|20)\d{2}[./年-](?:\d{1,2})?", line)) for line in lines
+        ),
         "section_heading_candidates": section_counts,
     }
     return json.dumps(stats, ensure_ascii=False, separators=(",", ":"))
@@ -182,9 +189,11 @@ async def derive_format_template(
 
     取不到任何合法格式参数时抛 :class:`TemplateImportError`——不落一个空模板进库。
     """
-    raw = await provider.chat(build_import_messages(source))
+    raw = await provider.chat(build_import_messages(source), thinking=False)
     data = parse_json_object(raw, label="模板分析")
-    config = validated_format_config(data.get("config") if isinstance(data.get("config"), dict) else {})
+    config = validated_format_config(
+        data.get("config") if isinstance(data.get("config"), dict) else {}
+    )
     if not config:
         raise TemplateImportError(
             "没能从这份文件里读出可用的版式参数。可以换一张更清晰、"
@@ -203,7 +212,7 @@ async def derive_style_template(
     """识别参考模板的视觉配置，返回可编辑草稿，不生成 HTML。"""
     from .resume_template_style import validated_style_config
 
-    raw = await provider.chat(build_design_import_messages(source))
+    raw = await provider.chat(build_design_import_messages(source), thinking=False)
     data = parse_json_object(raw, label="模板视觉分析")
     raw_config = data.get("config")
     if not isinstance(raw_config, dict):
@@ -220,9 +229,7 @@ async def derive_style_template(
     normalized_confidence = {
         key: round(max(0.0, min(1.0, float(value))), 2)
         for key, value in confidence.items()
-        if key in config
-        and isinstance(value, (int, float))
-        and math.isfinite(float(value))
+        if key in config and isinstance(value, (int, float)) and math.isfinite(float(value))
     }
     normalized_warnings = [str(item).strip()[:300] for item in warnings[:12] if str(item).strip()]
     if source.text and not source.image_data_urls:

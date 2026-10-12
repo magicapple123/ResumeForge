@@ -133,14 +133,14 @@ class OpenAICompatProvider(BaseLLMProvider):
         # 帧级 finish_reason 捕获：收尾帧可能不产出任何 delta（无正文、无工具调用）。
         self._stream_stop_reason: str | None = None
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         """同步发一次 OpenAI 兼容 Chat Completions 请求，返回完整文本；错误统一转成 LLMError。
 
         429/5xx 在状态码阶段按 §2.4 重试（429 最多 2 次、5xx 最多 1 次，退避见
         ``retry.retry_backoff_seconds``）；非法输出/400/其余 4xx 不重试。用量经
         ``last_usage`` 暴露：返回前写入，异常路径也要有记录（finish_reason=error）。
         """
-        payload = self._build_payload(messages, stream=False)
+        payload = self._build_payload(messages, stream=False, thinking=thinking)
         started = time.monotonic()
         gate = retry.StatusRetryGate(deadline_remaining=self._deadline_remaining())
         prompt_tokens: int | None = None

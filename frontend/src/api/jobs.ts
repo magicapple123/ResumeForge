@@ -58,7 +58,11 @@ export function parseJobText(payload: {
   images?: ExtractionImageInput[];
   documents?: ExtractionDocumentInput[];
 }): Promise<ParsedJobDraft> {
-  return request("/jobs/parse-text", { method: "POST", body: JSON.stringify(payload) });
+  return request("/jobs/parse-text", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    budget: "recognition",
+  });
 }
 
 /**
@@ -72,7 +76,11 @@ export function parseJobsMultiple(payload: {
   images?: ExtractionImageInput[];
   documents?: ExtractionDocumentInput[];
 }): Promise<JobMultiParseResult> {
-  return request("/jobs/parse-multiple", { method: "POST", body: JSON.stringify(payload) });
+  return request("/jobs/parse-multiple", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    budget: "recognition",
+  });
 }
 
 export function deleteJob(id: number): Promise<void> {
