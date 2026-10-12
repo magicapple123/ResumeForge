@@ -17,6 +17,7 @@ from .api_keys import _assert_no_plaintext_key, _plaintext_api_keys_in, _strip_a
 from .manifest import build_manifest
 from .paths import (
     ARCHIVE_REFERRAL_IMAGES_PREFIX,
+    ARCHIVE_USER_FILES_PREFIX,
     DATABASE_MEMBER,
     MANIFEST_MEMBER,
     BackupError,
@@ -79,21 +80,18 @@ def create_backup_archive(
 
         manifest = build_manifest(
             bind,
-            datasets=[
-                item.manifest_entry(copy.stat().st_size) for item, copy in extras
-            ],
+            datasets=[item.manifest_entry(copy.stat().st_size) for item, copy in extras],
             api_key_included=include_api_keys,
         )
         with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.write(snapshot, DATABASE_MEMBER)
             _write_referral_images(archive, database_path(bind).parent)
+            _write_user_files(archive, database_path(bind).parent)
             for item, copy in extras:
                 archive.write(copy, item.member)
                 archive.writestr(
                     item.metadata_member,
-                    json.dumps(
-                        {"name": item.name, **item.metadata}, ensure_ascii=False, indent=2
-                    ),
+                    json.dumps({"name": item.name, **item.metadata}, ensure_ascii=False, indent=2),
                 )
             archive.writestr(MANIFEST_MEMBER, json.dumps(manifest, ensure_ascii=False, indent=2))
     except (OSError, sqlite3.Error) as exc:
@@ -124,3 +122,19 @@ def _write_referral_images(archive: zipfile.ZipFile, database_parent: Path) -> i
             written += 1
     return written
 
+
+def _write_user_files(archive: zipfile.ZipFile, database_parent: Path) -> int:
+    """把库同目录的"我的文件"（用户上传内容的落盘副本）装进备份包，返回装包的文件数。
+
+    与内推图片同一模式：目录不存在（这个数据集从没存过用户文件）就什么都不装；
+    成员名统一 ``user_files/<文件名>``，manifest 格式不动，老版本读到多余成员会忽略。
+    """
+    directory = database_parent / ARCHIVE_USER_FILES_PREFIX.rstrip("/")
+    if not directory.is_dir():
+        return 0
+    written = 0
+    for item in sorted(directory.iterdir()):
+        if item.is_file():
+            archive.write(item, f"{ARCHIVE_USER_FILES_PREFIX}{item.name}")
+            written += 1
+    return written

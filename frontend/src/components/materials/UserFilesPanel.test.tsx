@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 describe("UserFilesPanel", () => {
-  it("渲染文件副本列表（名称、大小、来源）", async () => {
+  it("渲染我的文件列表（名称、大小、来源）", async () => {
     renderPanel();
 
     expect(await screen.findByText("证书.png")).toBeInTheDocument();
@@ -53,11 +53,11 @@ describe("UserFilesPanel", () => {
     expect(screen.getByText("资料箱")).toBeInTheDocument();
   });
 
-  it("空列表显示「暂无文件副本」空态", async () => {
+  it("空列表显示「还没有保存过文件」空态", async () => {
     apiMocks.listUserFiles.mockResolvedValue({ items: [], total: 0 });
     renderPanel();
 
-    expect(await screen.findByText("暂无文件副本")).toBeInTheDocument();
+    expect(await screen.findByText("还没有保存过文件")).toBeInTheDocument();
   });
 
   it("点「打开文件夹」调用 revealUserFile", async () => {

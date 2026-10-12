@@ -3,6 +3,7 @@
 从 ``services/data_backup.py`` 拆出（职责①⑥）：成员名与目录名常量、随包数据集
 描述、对外错误类型，以及数据库路径与 restore/exports 临时目录的清理。
 """
+
 from __future__ import annotations
 
 import time
@@ -38,6 +39,12 @@ ARCHIVE_DATASETS_DIRNAME = "datasets"
 # 资产（不进数据库），此前备份包一直不带它们——换机器恢复后内推图片全丢。manifest
 # 格式不动（缺这些条目的旧包照常导入），导入侧只遍历实际存在的成员。
 ARCHIVE_REFERRAL_IMAGES_PREFIX = "referral_images/"
+
+# 备份包里用户上传文件的前缀：``user_files/<文件名>``。user_files 是"我的文件"
+# 页签的数据源（资料箱附件、照片、岗位备注图、备选截图、助手附件的落盘副本），
+# 与数据库同目录存放——此前备份包不带它们，换机器/导出再导入后用户文件全丢。
+# manifest 格式不动（缺这些条目的旧包照常导入），导入侧只遍历实际存在的成员。
+ARCHIVE_USER_FILES_PREFIX = "user_files/"
 
 # 临时文件放在数据库同级目录：Windows 上跨盘 os.replace 失败，而恢复正是要做
 # 一次原子替换。上传的待恢复包与导出产物分开放，避免启动清理时误删用户刚上传、
@@ -104,7 +111,6 @@ def export_directory(bind: Engine) -> Path:
     return database_path(bind).parent / EXPORT_DIRNAME
 
 
-
 def _purge_stale(directory: Path) -> None:
     """删除上一轮遗留的临时文件；仍在使用的包按修改时间保留。"""
     if not directory.exists():
@@ -127,4 +133,3 @@ def cleanup_temp_directories(bind: Engine) -> None:
         for item in directory.iterdir():
             if item.is_file():
                 item.unlink(missing_ok=True)
-

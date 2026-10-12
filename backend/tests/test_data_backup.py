@@ -3,6 +3,7 @@
 导入/切换数据集的往返验证在 ``test_datasets.py``；这里只管"导出物是否安全"和
 "坏包是否被挡住"。
 """
+
 import json
 import sqlite3
 import zipfile
@@ -287,7 +288,9 @@ def test_inspect_rejects_a_database_with_unknown_tables(db_session, tmp_path):
     with _tweaked_sqlite(foreign) as connection:
         connection.execute("CREATE TABLE cookies (value TEXT)")
 
-    tampered = _replace_member(archive, DATABASE_MEMBER, foreign.read_bytes(), tmp_path / "foreign.zip")
+    tampered = _replace_member(
+        archive, DATABASE_MEMBER, foreign.read_bytes(), tmp_path / "foreign.zip"
+    )
 
     with pytest.raises(BackupError, match="不认识的数据表"):
         inspect_archive(tampered, engine, tmp_path / "staging")
@@ -302,7 +305,9 @@ def test_inspect_rejects_a_newer_revision(db_session, tmp_path):
         connection.execute("DELETE FROM alembic_version")
         connection.execute("INSERT INTO alembic_version VALUES ('9999_from_the_future')")
 
-    tampered = _replace_member(archive, DATABASE_MEMBER, database.read_bytes(), tmp_path / "newer.zip")
+    tampered = _replace_member(
+        archive, DATABASE_MEMBER, database.read_bytes(), tmp_path / "newer.zip"
+    )
 
     with pytest.raises(BackupError, match="更新版本"):
         inspect_archive(tampered, engine, tmp_path / "staging")
@@ -395,3 +400,61 @@ def _rebuild_archive(archive: Path, destination: Path, replacements: dict[str, b
         for name in source.namelist():
             target.writestr(name, replacements.get(name, source.read(name)))
     return destination
+
+
+def test_export_carries_user_files_and_restores_them(db_session, tmp_path):
+    """备份包要带上"我的文件"（user_files/），恢复时原样落回目标库同目录——
+    这些文件是用户主动上传的内容，此前不在包里，换机器后就全丢了。"""
+    import shutil
+
+    from app.services.data_backup.import_archive import restore_user_files
+
+    user_dir = database_path(engine).parent / "user_files"
+    # 同 worker 的前序用例可能留下别的文件：先清空再种 canary，计数断言才稳定。
+    shutil.rmtree(user_dir, ignore_errors=True)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        (user_dir / "resume-attachment.pdf").write_bytes(b"%PDF-1.4 canary")
+        (user_dir / "photo.png").write_bytes(b"\x89PNG canary")
+
+        archive_path = create_backup_archive(engine, tmp_path)
+        with zipfile.ZipFile(archive_path) as archive:
+            names = archive.namelist()
+        assert "user_files/resume-attachment.pdf" in names
+        assert "user_files/photo.png" in names
+
+        # 恢复到"另一台机器"的目标目录：逐个落回、字节数一致。
+        target = tmp_path / "restored" / "user_files"
+        restored = restore_user_files(archive_path, target)
+        assert restored == 2
+        assert (target / "resume-attachment.pdf").read_bytes() == b"%PDF-1.4 canary"
+        assert (target / "photo.png").read_bytes() == b"\x89PNG canary"
+
+        # 再恢复一次：同名不覆盖（内容指纹命名，同名即同内容）。
+        assert restore_user_files(archive_path, target) == 0
+    finally:
+        shutil.rmtree(user_dir, ignore_errors=True)
+
+
+def test_restore_user_files_skips_unsafe_and_missing_members(tmp_path):
+    """zip-slip 成员与目录条目一律跳过；没有 user_files 成员的旧包恢复为零。"""
+    import zipfile as zf
+
+    from app.services.data_backup.import_archive import restore_user_files
+
+    archive_path = tmp_path / "pack.zip"
+    with zf.ZipFile(archive_path, "w") as archive:
+        archive.writestr("user_files/../escape.txt", "nope")
+        archive.writestr("user_files/sub/dir.txt", "nope")
+        archive.writestr("referral_images/other.png", "not-mine")
+
+    target = tmp_path / "restored" / "user_files"
+    assert restore_user_files(archive_path, target) == 0
+    assert not (tmp_path / "escape.txt").exists()
+    assert not (target / "dir.txt").exists()
+
+    # 旧包（无 user_files 成员）：零恢复，不报错。
+    old_pack = tmp_path / "old.zip"
+    with zf.ZipFile(old_pack, "w") as archive:
+        archive.writestr("database.sqlite", b"x")
+    assert restore_user_files(old_pack, target) == 0

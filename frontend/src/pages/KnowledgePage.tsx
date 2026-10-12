@@ -1,5 +1,5 @@
 /** 知识库：集中沉淀面经总结、简历技巧、求职策略、行业笔记等成文内容。 */
-import { DeleteOutlined, EditOutlined, FileTextOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
@@ -16,6 +16,7 @@ import {
 } from "antd";
 import LoadingBlock from "../components/common/LoadingBlock";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
   createKnowledge,
   deleteKnowledge,
@@ -196,14 +197,8 @@ export default function KnowledgePage() {
   };
 
   const actionsFor = (entry: KnowledgeSummary) => {
-    const primary = [
-      {
-        key: "view",
-        label: "查看",
-        icon: <FileTextOutlined />,
-        onClick: () => void openView(entry),
-      },
-    ];
+    // 不再放「查看」按钮：点卡片本身就打开详情（DetailTrigger），重复入口只会占地方。
+    const primary: { key: string; label: string; icon?: ReactNode; onClick: () => void }[] = [];
     const more = [
       { key: "edit", label: "编辑", icon: <EditOutlined />, onClick: () => void openEdit(entry) },
       {

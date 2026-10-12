@@ -37,7 +37,7 @@ export default function MaterialsPage() {
   const [editing, setEditing] = useState<Material | null>(null);
   const [detail, setDetail] = useState<Material | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // 页面顶部视图切换：资料卡片 / 文件副本清单（副本入口刻意挂在这里，不加新菜单）。
+  // 页面顶部视图切换：资料卡片 / 我的文件清单（入口刻意挂在这里，不加新菜单）。
   const [view, setView] = useState<string>("materials");
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
@@ -180,7 +180,7 @@ export default function MaterialsPage() {
         onChange={(value) => setView(String(value))}
         options={[
           { label: "资料", value: "materials" },
-          { label: "文件副本", value: "files" },
+          { label: "我的文件", value: "files" },
         ]}
       />
 
