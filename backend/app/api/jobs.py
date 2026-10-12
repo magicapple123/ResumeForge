@@ -2,10 +2,11 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
+from starlette.responses import Response
 
 from ..database import get_db
 from ..models.job import JOB_STATUSES, Job
@@ -18,6 +19,9 @@ from ..schemas.job import (
     JobBatchStatusRequest,
     JobBatchStatusResult,
     JobCreate,
+    JobImportPreview,
+    JobImportRequest,
+    JobImportResult,
     JobMultiTextParseResult,
     JobOut,
     JobTextParseRequest,
@@ -34,8 +38,15 @@ from ..services.attachments import (
 )
 from ..services.document_text import extract_documents_text
 from ..services.job.job_analysis import generate_job_analysis
+from ..services.job.job_csv import (
+    MAX_IMPORT_FILE_CHARS,
+    decode_csv_bytes,
+    jobs_to_csv_text,
+    parse_job_csv,
+    row_to_payload,
+)
 from ..services.job.job_multi_parser import extract_multiple_jobs, local_multi_drafts
-from ..services.job.job_service import create_job_record, update_job_record
+from ..services.job.job_service import create_job_record, find_job_by_identity, update_job_record
 from ..services.job_text_parser import parse_job_text
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
@@ -141,7 +152,9 @@ def list_jobs(
             )
         ).filter(Job.source != RECOGNITION_SOURCE_OFFICIAL)
     total = query.count()
-    jobs = query.order_by(Job.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    jobs = (
+        query.order_by(Job.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    )
     return Page(items=[_to_out(job) for job in jobs], total=total)
 
 
@@ -192,7 +205,9 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
         )
     except Exception:  # noqa: BLE001 - 外部模型异常不能阻断草稿解析
         logger.exception("岗位文本 AI 识别发生内部错误，已回退本地解析")
-        result = mark_local_fallback(local_draft, ai_failed_warning(has_images, has_documents=has_documents))
+        result = mark_local_fallback(
+            local_draft, ai_failed_warning(has_images, has_documents=has_documents)
+        )
     return finalize_recognition_result(
         result, has_images=has_images, document_warnings=documents.warnings
     )
@@ -314,6 +329,60 @@ async def analyze_job(job_id: int, db: Session = Depends(get_db)):
     except Exception as exc:  # noqa: BLE001 - 外部模型异常统一转为用户可理解的错误
         logger.exception("岗位需求解读发生内部错误")
         raise HTTPException(status_code=502, detail="生成岗位解读失败，请稍后重试") from exc
+
+
+@router.post("/export")
+def export_jobs_csv(payload: JobBatchRequest, db: Session = Depends(get_db)):
+    """把勾选的岗位导出成 CSV（与导入共用同一列集，导出的文件可以直接改完再导回）。"""
+    jobs = _get_jobs_or_404(db, payload.job_ids)
+    # 按用户选择的顺序导出，而不是数据库顺序：导出文件里行的次序与界面勾选一致。
+    by_id = {job.id: job for job in jobs}
+    ordered = [by_id[job_id] for job_id in payload.job_ids if job_id in by_id]
+    text = jobs_to_csv_text(ordered)
+    return Response(
+        content=text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="jobs.csv"'},
+    )
+
+
+@router.post("/import/preview", response_model=JobImportPreview)
+async def preview_job_import(file: UploadFile = File(...)):
+    """解析上传的 CSV，返回可导入行与逐行错误（不落库，等用户确认）。"""
+    raw = await file.read()
+    if len(raw) > MAX_IMPORT_FILE_CHARS:
+        raise HTTPException(status_code=413, detail="CSV 文件过大（上限 2MB）")
+    try:
+        text = decode_csv_bytes(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    rows, errors = parse_job_csv(text)
+    return JobImportPreview(
+        rows=[{"line": line, "data": data} for line, data in rows],
+        errors=errors,
+    )
+
+
+@router.post("/import", response_model=JobImportResult)
+def import_jobs_csv(payload: JobImportRequest, db: Session = Depends(get_db)):
+    """提交导入：逐行建岗、逐行容错；与岗位广场已有岗位重复的行跳过并说明。"""
+    imported = 0
+    failed: list[dict[str, object]] = []
+    for item in payload.rows:
+        try:
+            clean = row_to_payload(item.data)
+            title = str(clean.get("title") or "")
+            company = str(clean.get("company") or "")
+            source_url = str(clean.get("source_url") or "")
+            if find_job_by_identity(db, title=title, company=company, source_url=source_url):
+                failed.append({"line": item.line, "message": "岗位广场已有这个岗位，已跳过"})
+                continue
+            create_job_record(db, JobCreate(**clean))
+            imported += 1
+        except Exception as exc:  # noqa: BLE001 - 单行失败不拖垮整批，逐行给原因
+            db.rollback()
+            failed.append({"line": item.line, "message": str(exc) or "这一行导入失败"})
+    return JobImportResult(imported=imported, failed=failed)
 
 
 @router.get("/{job_id}", response_model=JobOut)

@@ -10,6 +10,7 @@ import {
   PlusOutlined,
   ReloadOutlined,
   RobotOutlined,
+  UploadOutlined,
 } from "@ant-design/icons";
 import { Button, Dropdown, Input, Select, Space } from "antd";
 import { useState } from "react";
@@ -35,6 +36,7 @@ export function JobFilterBar({
   backfillDetails,
   setCandidatesOpen,
   setFormOpen,
+  onImportCsv,
 }: {
   keyword: string;
   setKeyword: (value: string) => void;
@@ -54,6 +56,7 @@ export function JobFilterBar({
   backfillDetails: () => Promise<void>;
   setCandidatesOpen: (value: boolean) => void;
   setFormOpen: (value: boolean) => void;
+  onImportCsv: () => void;
 }) {
   // 搜索框受控：本地镜像同步外部 keyword（URL 带参等外部变化能回填输入框），
   // 点 × 清空时立即把筛选也清掉——之前非受控时清空后列表仍按旧关键词过滤。
@@ -184,6 +187,9 @@ export function JobFilterBar({
             补齐详情
           </Button>
         )}
+        <Button icon={<UploadOutlined />} disabled={batchAction !== null} onClick={onImportCsv}>
+          导入 CSV
+        </Button>
         <Button
           type="primary"
           icon={<PlusOutlined />}

@@ -280,7 +280,21 @@ function ConversationSidebar({
       </Button>
       {onBatchDelete && batch.selecting && (
         <div style={{ marginTop: 8 }}>
-          <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+          <BatchActionBar
+            count={batch.selectedCount}
+            onExit={batch.exitSelecting}
+            pageSelectAll={{
+              allSelected:
+                pagedConversations.length > 0 &&
+                pagedConversations.every((item) => batch.isSelected(item.id)),
+              someSelected: pagedConversations.some((item) => batch.isSelected(item.id)),
+              onToggle: (checked) =>
+                batch.selectPage(
+                  pagedConversations.map((item) => item.id),
+                  checked,
+                ),
+            }}
+          >
             <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
               删除所选
             </Button>

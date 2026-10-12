@@ -132,7 +132,20 @@ export default function BankHistoryCard({
       }
     >
       {batch.selecting && (
-        <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+        <BatchActionBar
+          count={batch.selectedCount}
+          onExit={batch.exitSelecting}
+          pageSelectAll={{
+            allSelected:
+              pagedBanks.length > 0 && pagedBanks.every((item) => batch.isSelected(item.id)),
+            someSelected: pagedBanks.some((item) => batch.isSelected(item.id)),
+            onToggle: (checked) =>
+              batch.selectPage(
+                pagedBanks.map((item) => item.id),
+                checked,
+              ),
+          }}
+        >
           <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
             删除所选
           </Button>

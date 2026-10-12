@@ -207,7 +207,19 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
   return (
     <div>
       {batch.selecting && (
-        <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+        <BatchActionBar
+          count={batch.selectedCount}
+          onExit={batch.exitSelecting}
+          pageSelectAll={{
+            allSelected: records.length > 0 && records.every((item) => batch.isSelected(item.id)),
+            someSelected: records.some((item) => batch.isSelected(item.id)),
+            onToggle: (checked) =>
+              batch.selectPage(
+                records.map((item) => item.id),
+                checked,
+              ),
+          }}
+        >
           <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
             删除所选
           </Button>

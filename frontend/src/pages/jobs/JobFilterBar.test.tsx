@@ -36,6 +36,7 @@ function StatefulHarness({ onKeywordChange }: { onKeywordChange?: (value: string
       backfillDetails={vi.fn()}
       setCandidatesOpen={vi.fn()}
       setFormOpen={vi.fn()}
+      onImportCsv={vi.fn()}
     />
   );
 }
@@ -61,6 +62,7 @@ function ControlledHarness({ keyword }: { keyword: string }) {
       backfillDetails={vi.fn()}
       setCandidatesOpen={vi.fn()}
       setFormOpen={vi.fn()}
+      onImportCsv={vi.fn()}
     />
   );
 }

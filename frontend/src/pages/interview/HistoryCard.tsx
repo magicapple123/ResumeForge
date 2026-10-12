@@ -58,7 +58,20 @@ export function HistoryCard({
   return (
     <Card size="small" className="settings-card" title="历史面试" style={{ marginTop: 16 }}>
       {batch.selecting && (
-        <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+        <BatchActionBar
+          count={batch.selectedCount}
+          onExit={batch.exitSelecting}
+          pageSelectAll={{
+            allSelected:
+              pagedSessions.length > 0 && pagedSessions.every((item) => batch.isSelected(item.id)),
+            someSelected: pagedSessions.some((item) => batch.isSelected(item.id)),
+            onToggle: (checked) =>
+              batch.selectPage(
+                pagedSessions.map((item) => item.id),
+                checked,
+              ),
+          }}
+        >
           <Button danger disabled={batch.selectedCount === 0} onClick={onRemoveSelected}>
             删除所选
           </Button>

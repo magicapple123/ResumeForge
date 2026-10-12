@@ -12,6 +12,8 @@ export interface BatchSelection<TId extends string | number> {
   toggleAll: (ids: TId[]) => void;
   /** 用一份完整 id 列表替换当前已选（Table rowSelection 的 onChange 语义）。 */
   setSelected: (ids: TId[]) => void;
+  /** 全选/取消全选当前页：勾上时跨页保留其他已选，取消时只清当前页。 */
+  selectPage: (ids: TId[], checked: boolean) => void;
   enterSelecting: () => void;
   /** 退出并清空已选——切换筛选/翻页不自动退出，避免用户辛苦勾好的选区被误清。 */
   exitSelecting: () => void;
@@ -52,6 +54,17 @@ export function useBatchSelection<TId extends string | number>(): BatchSelection
     setSelectedIds(new Set(ids));
   }, []);
 
+  const selectPage = useCallback((ids: TId[], checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const id of ids) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }, []);
+
   const isSelected = useCallback((id: TId) => selectedIds.has(id), [selectedIds]);
 
   const enterSelecting = useCallback(() => setSelecting(true), []);
@@ -69,6 +82,7 @@ export function useBatchSelection<TId extends string | number>(): BatchSelection
     toggle,
     toggleAll,
     setSelected,
+    selectPage,
     enterSelecting,
     exitSelecting,
   };
