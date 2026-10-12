@@ -3,6 +3,7 @@
 
 补详情的采集器判定与 ledger 留在主文件（test_collect_backfill.py）。
 """
+
 from __future__ import annotations
 
 from app.models.apply import TASK_KIND_COLLECT, ApplyTask
@@ -99,7 +100,7 @@ def test_backfill_message_reports_full_success():
     """全部补齐：说清补到几条，且不该出现"跳过"字样（没有跳过就别提）。"""
     message = TaskRunner._backfill_message({"backfilled": 3, "backfill_skipped": 0})
 
-    assert "已为 3 条岗位补齐职位描述" in message
+    assert "已为 3 条岗位补齐岗位描述" in message
     assert "跳过" not in message
 
 
@@ -107,7 +108,7 @@ def test_backfill_message_reports_partial_skips():
     """部分跳过：补到的与跳过的都要说，且给出"为什么跳过"的三种成因。"""
     message = TaskRunner._backfill_message({"backfilled": 2, "backfill_skipped": 1})
 
-    assert "已为 2 条岗位补齐职位描述" in message
+    assert "已为 2 条岗位补齐岗位描述" in message
     assert "另有 1 条跳过" in message
     assert "已有描述" in message and "仍然抓不到" in message
 
@@ -117,7 +118,7 @@ def test_backfill_message_says_nothing_was_backfilled():
     绝不能只说"完成"让用户以为补上了。"""
     message = TaskRunner._backfill_message({"backfilled": 0, "backfill_skipped": 2})
 
-    assert "没有补到新的职位描述" in message
+    assert "没有补到新的岗位描述" in message
     assert "2 条岗位已跳过" in message
     assert "重试" in message
 
@@ -164,10 +165,10 @@ def test_backfill_dispatch_does_not_change_search_mode_message():
     search = ApplyTask(kind=TASK_KIND_COLLECT, succeeded=3)
     search_message = TaskRunner._collect_message(search)
     assert "已暂存 3 个岗位" in search_message
-    assert "补齐职位描述" not in search_message
+    assert "补齐岗位描述" not in search_message
 
     backfill = ApplyTask(kind=TASK_KIND_COLLECT, config={"backfill_job_ids": [1], "backfilled": 3})
-    assert "已为 3 条岗位补齐职位描述" in TaskRunner._collect_message(backfill)
+    assert "已为 3 条岗位补齐岗位描述" in TaskRunner._collect_message(backfill)
 
 
 # ===== 跨模块回归：技能标签只有一份重算实现 =====
@@ -184,9 +185,7 @@ def test_create_and_update_recompute_keywords_through_the_same_path(db_session):
     )
     assert "Python" in {tag["name"] for tag in job.keywords}
 
-    updated = update_job_record(
-        db_session, job, JobUpdate(description="维护 Kubernetes 集群。")
-    )
+    updated = update_job_record(db_session, job, JobUpdate(description="维护 Kubernetes 集群。"))
     names = {tag["name"] for tag in updated.keywords}
     assert "Kubernetes" in names
     assert "Python" not in names  # 重算而非追加：旧 JD 里的标签应当消失

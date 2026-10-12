@@ -3,6 +3,7 @@
 这里只做暂存；真正的岗位创建仍走 ``job_service``（同一套字段校验与技能标签解析），
 避免两条写入路径行为漂移。
 """
+
 from __future__ import annotations
 
 import logging
@@ -370,7 +371,9 @@ def candidate_brief(candidate: CandidateJob) -> dict:
     }
 
 
-def candidate_detail_text(candidate: CandidateJob, max_chars: int = MAX_CANDIDATE_TOOL_CHARS) -> str:
+def candidate_detail_text(
+    candidate: CandidateJob, max_chars: int = MAX_CANDIDATE_TOOL_CHARS
+) -> str:
     """备选岗位的详情文本（供助手读取）：采集来的 JD 两段与粘贴来的原文都要带上。"""
     parts = [
         f"岗位：{candidate.title or '（未填写）'}",
@@ -386,7 +389,7 @@ def candidate_detail_text(candidate: CandidateJob, max_chars: int = MAX_CANDIDAT
     # 采集回来的候选把 JD 存在 description / requirements 两段里，粘贴来的候选存在 raw_text。
     # 两者都要读——只读 raw_text 会让助手对采集来的岗位"什么都看不到"。
     if candidate.description:
-        parts.append(f"职位描述：\n{candidate.description}")
+        parts.append(f"岗位描述：\n{candidate.description}")
     if candidate.requirements:
         parts.append(f"任职要求：\n{candidate.requirements}")
     if candidate.raw_text:
@@ -417,5 +420,3 @@ __all__ = [
     "stage_candidate_job",
     "update_candidate_job",
 ]
-
-

@@ -35,7 +35,7 @@ interface Props {
    * 交给父组件打开正式的岗位表单（预填这条候选的字段），保存后回报新岗位 id。
    *
    * **传的是取过详情的那一份**（``CandidateJobDetail``）：列表响应不带 JD，拿列表对象去预填
-   * 会得到一个没有职位描述的表单——那正是"导入进来什么都没有"的来源。
+   * 会得到一个没有岗位描述的表单——那正是"导入进来什么都没有"的来源。
    */
   onImport: (candidate: CandidateJobDetail) => void;
   /** 导入成功的标记：父组件拿到新岗位 id 后传进来，抽屉据此刷新并标记。 */
@@ -259,7 +259,7 @@ export default function CandidateJobsDrawer({
 
   /**
    * 导入前先取这一条的**详情**：列表响应不带 JD（见 ``CandidateJobDetail`` 的说明），
-   * 拿列表对象去预填表单会得到一个没有职位描述的空表单。
+   * 拿列表对象去预填表单会得到一个没有岗位描述的空表单。
    *
    * 只在这一个动作上多一次请求：用户点一次「导入到岗位」换一次，而不是每次打开抽屉
    * 都把所有候选的正文一起拉下来。
@@ -395,7 +395,7 @@ export default function CandidateJobsDrawer({
           allowClear
           value={keyword}
           onChange={(event) => setKeyword(event.target.value)}
-          placeholder="搜职位、公司、原文或备注"
+          placeholder="搜岗位、公司、原文或备注"
           style={{ width: 260 }}
           aria-label="搜索备选岗位"
         />

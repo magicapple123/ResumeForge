@@ -17,7 +17,7 @@ import type { Job, JobRecognitionSource } from "../types";
  */
 const COLLECTED_SOURCES = new Set<JobRecognitionSource>(["岗位采集", "官网采集"]);
 
-/** 这条岗位算"采集来的"还是"手动加的"（列表职位列的角标口径）。 */
+/** 这条岗位算"采集来的"还是"手动加的"（列表岗位列的角标口径）。 */
 export function jobSourceKind(job: Pick<Job, "recognition_source">): "collected" | "manual" {
   return COLLECTED_SOURCES.has(job.recognition_source) ? "collected" : "manual";
 }

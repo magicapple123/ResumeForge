@@ -73,7 +73,7 @@ export function JobFilterBar({
       <Space wrap className="jobs-filter-bar">
         <Input.Search
           className="jobs-search-input"
-          placeholder="搜索职位 / 公司 / 城市 / 描述 / 备注"
+          placeholder="搜索岗位 / 公司 / 城市 / 描述 / 备注"
           allowClear
           disabled={batchAction !== null}
           value={searchText}

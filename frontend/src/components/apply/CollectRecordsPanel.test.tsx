@@ -24,7 +24,7 @@ vi.mock("../../api/apply", async (importOriginal) => {
 vi.mock("./CollectResultPanel", () => ({ default: () => null }));
 
 const BACKFILL_MESSAGE =
-  "已为 1 条岗位补齐职位描述。另有 1 条跳过（已有描述 / 仍然抓不到 / 已在回收站里）。";
+  "已为 1 条岗位补齐岗位描述。另有 1 条跳过（已有描述 / 仍然抓不到 / 已在回收站里）。";
 
 function task(overrides: Partial<ApplyTask> = {}): ApplyTask {
   return {

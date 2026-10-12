@@ -78,7 +78,7 @@ export default function JobsPage() {
   const [candidatesOpen, setCandidatesOpen] = useState(false);
   // CSV 导入弹窗。
   const [importCsvOpen, setImportCsvOpen] = useState(false);
-  // 导入用**详情**那一份：列表不带 JD，用它预填表单会得到一个没有职位描述的空表单。
+  // 导入用**详情**那一份：列表不带 JD，用它预填表单会得到一个没有岗位描述的空表单。
   const [importCandidate, setImportCandidate] = useState<CandidateJobDetail | null>(null);
   const [importedCandidateId, setImportedCandidateId] = useState<number | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -95,7 +95,7 @@ export default function JobsPage() {
     setCandidatesOpen(true);
   }
 
-  // 只有"职位描述为空"的岗位才值得补详情（补详情要逐个打开页面，很慢），按钮据此出现/消失，
+  // 只有"岗位描述为空"的岗位才值得补详情（补详情要逐个打开页面，很慢），按钮据此出现/消失，
   // 而不是常驻一个点了没反应的按钮。当前只统计这一页已加载的岗位：补的就这一页里空的那些。
   const emptyDescriptionJobIds = (jobs?.items ?? [])
     .filter((job) => !job.description.trim())

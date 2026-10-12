@@ -91,7 +91,7 @@ export default function JobTable({
       ),
     },
     {
-      title: "职位",
+      title: "岗位",
       dataIndex: "title",
       width: 260,
       // 悬停整格都能看到导入时间：之前 Tooltip 只挂在岗位名那颗链接上，

@@ -91,7 +91,7 @@ export default function MultiJobDraftList({
               {draft.location ? <Tag>{draft.location}</Tag> : null}
               {draft.salary ? <Tag color="gold">{draft.salary}</Tag> : null}
               {draft.job_type ? <Tag color="purple">{draft.job_type}</Tag> : null}
-              {!draft.description?.trim() ? <Tag color="orange">缺少职位描述</Tag> : null}
+              {!draft.description?.trim() ? <Tag color="orange">缺少岗位描述</Tag> : null}
             </Space>
             {draft.recognized_text ? (
               <Typography.Paragraph type="secondary" className="multi-draft-excerpt">

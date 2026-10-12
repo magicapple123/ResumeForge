@@ -1,4 +1,4 @@
-/** 岗位表单的静态字段（职位名称 → 备注）。
+/** 岗位表单的静态字段（岗位名称 → 备注）。
  *
  * 零 props：Form.Item 经 Form context 注册到 JobFormModal 持有的同一个 form 实例。
  */
@@ -13,8 +13,8 @@ export default function JobFormFields() {
     <>
       <Form.Item
         name="title"
-        label="职位名称"
-        rules={[{ required: true, message: "请填写职位名称" }]}
+        label="岗位名称"
+        rules={[{ required: true, message: "请填写岗位名称" }]}
       >
         <Input placeholder="如：市场营销专员（校招）" />
       </Form.Item>
@@ -52,8 +52,8 @@ export default function JobFormFields() {
       </Form.Item>
       <Form.Item
         name="description"
-        label="职位描述（JD）"
-        rules={[{ required: true, message: "请填写职位描述" }]}
+        label="岗位描述（JD）"
+        rules={[{ required: true, message: "请填写岗位描述" }]}
       >
         <HintedTextArea
           rows={7}
@@ -67,7 +67,7 @@ export default function JobFormFields() {
       <Form.Item name="additional_info" label="其他招聘信息（选填）">
         <Input.TextArea
           rows={4}
-          placeholder="如：公司与团队介绍、职位编号、福利待遇、工作安排、申请或面试流程"
+          placeholder="如：公司与团队介绍、岗位编号、福利待遇、工作安排、申请或面试流程"
         />
       </Form.Item>
       <Form.Item name="origin_source" label="来源（选填）">

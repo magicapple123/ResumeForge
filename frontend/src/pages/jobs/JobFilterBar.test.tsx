@@ -70,7 +70,7 @@ function ControlledHarness({ keyword }: { keyword: string }) {
 /** Input.Search 里的文本输入框。 */
 function searchInput(): HTMLInputElement {
   return screen
-    .getByPlaceholderText("搜索职位 / 公司 / 城市 / 描述 / 备注")
+    .getByPlaceholderText("搜索岗位 / 公司 / 城市 / 描述 / 备注")
     .closest("input") as HTMLInputElement;
 }
 

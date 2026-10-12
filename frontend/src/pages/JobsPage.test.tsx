@@ -151,7 +151,7 @@ describe("JobsPage", () => {
     expect(screen.getByRole("button", { name: "补齐详情" })).toBeInTheDocument();
   });
 
-  it("所有岗位都有职位描述时不显示「补齐详情」按钮", () => {
+  it("所有岗位都有岗位描述时不显示「补齐详情」按钮", () => {
     mocks.jobs = [makeJob({ description: "有正文的岗位描述" })];
     renderPage();
 
@@ -298,7 +298,7 @@ describe("JobsPage URL 状态化", () => {
   it("改筛选后写回 URL（replace 语义由 useSearchParams 的 replace 选项保证）", async () => {
     renderPageWithProbe();
 
-    const searchBox = screen.getByPlaceholderText("搜索职位 / 公司 / 城市 / 描述 / 备注");
+    const searchBox = screen.getByPlaceholderText("搜索岗位 / 公司 / 城市 / 描述 / 备注");
     fireEvent.change(searchBox, { target: { value: "算法工程师" } });
     fireEvent.keyDown(searchBox, { key: "Enter" });
 
@@ -316,7 +316,7 @@ describe("JobsPage URL 状态化", () => {
     renderPageWithProbe(["/jobs?keyword=%E6%8A%A4%E5%A3%AB&page=2"]);
 
     const searchInput = screen.getByPlaceholderText(
-      "搜索职位 / 公司 / 城市 / 描述 / 备注",
+      "搜索岗位 / 公司 / 城市 / 描述 / 备注",
     ) as HTMLInputElement;
     expect(searchInput.value).toBe("护士");
     // 分页器停在恢复出的第 2 页（12 条 × 每页 10 条 → 共 2 页）。
@@ -364,10 +364,10 @@ describe("从备选岗位导入", () => {
     fireEvent.click(await screen.findByRole("button", { name: "导入到岗位" }));
 
     await waitFor(() => expect(candidateMocks.getCandidateJob).toHaveBeenCalledWith(9));
-    // 表单里职位描述那一栏要有内容——这才叫"导入进来了"。
-    const description = await screen.findByLabelText("职位描述（JD）");
+    // 表单里岗位描述那一栏要有内容——这才叫"导入进来了"。
+    const description = await screen.findByLabelText("岗位描述（JD）");
     await waitFor(() => expect(description).toHaveValue("负责服务端开发与维护，参与架构演进。"));
-    expect(screen.getByLabelText("职位名称")).toHaveValue("后端开发工程师");
+    expect(screen.getByLabelText("岗位名称")).toHaveValue("后端开发工程师");
   });
 
   it("从采集记录跳转时只加载对应批次，并自动打开备选岗位", async () => {

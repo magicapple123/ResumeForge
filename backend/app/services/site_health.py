@@ -17,6 +17,7 @@
   **环境或用户侧**问题，把它们算成"站点改版"只会制造噪声。
 - **样本不足时不报警**：宁可不报，也不要制造噪声。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -122,7 +123,9 @@ def evaluate_site_health(recent_tasks: list[dict[str, Any]]) -> SiteHealth:
         # 详情漂移：只有"正常结束"的采集才算，避免把用户中途停止的残缺统计算进来。
         if _as_text(sample.get("status")) != TASK_STATUS_COMPLETED:
             continue
-        if _detail_is_mostly_missing(_as_int(sample.get("succeeded")), _as_int(sample.get("detail_missing"))):
+        if _detail_is_mostly_missing(
+            _as_int(sample.get("succeeded")), _as_int(sample.get("detail_missing"))
+        ):
             detail_drift_runs += 1
 
     # 样本不足：结论不可靠，宁可不报。
@@ -144,7 +147,7 @@ def evaluate_site_health(recent_tasks: list[dict[str, Any]]) -> SiteHealth:
         )
     if detail_drift_runs:
         reasons.append(
-            f"最近 {sampled} 次采集里有 {detail_drift_runs} 次能采到岗位列表、却读不出职位详情"
+            f"最近 {sampled} 次采集里有 {detail_drift_runs} 次能采到岗位列表、却读不出岗位详情"
             "（JD 为空），站点可能改版了——先重试一次；"
             "如果一直这样，请到项目仓库反馈并附上「采集记录」里的这次批次。"
         )

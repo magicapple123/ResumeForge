@@ -76,14 +76,14 @@ const LIST_SUBFIELD_LABELS: Record<string, Record<string, string>> = {
   },
   experience: {
     company: "公司",
-    role: "职位",
+    role: "岗位",
     start_date: "开始时间",
     end_date: "结束时间",
     description: "工作描述",
   },
   campus_experience: {
     organization: "组织",
-    role: "职位",
+    role: "岗位",
     start_date: "开始时间",
     end_date: "结束时间",
     description: "经历描述",

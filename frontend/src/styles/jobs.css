@@ -2,6 +2,12 @@
   width: 100%;
 }
 
+/* 备选岗位卡片网格：antd Card 自身不带下间距，裸堆会一张贴一张；用 grid gap 拉开。 */
+.candidate-job-card-grid {
+  display: grid;
+  gap: 16px;
+}
+
 .jobs-search-input {
   width: 260px;
 }

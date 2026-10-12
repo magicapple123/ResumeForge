@@ -23,12 +23,12 @@ CSV_COLUMNS: list[tuple[str, str]] = [
     ("公司", "company"),
     ("地点", "location"),
     ("薪资", "salary"),
-    ("职位类型", "job_type"),
+    ("岗位类型", "job_type"),
     ("状态", "status"),
     ("来源", "origin_source"),
     ("投递链接", "source_url"),
     ("发布时间", "posted_at"),
-    ("职位描述", "description"),
+    ("岗位描述", "description"),
     ("任职要求", "requirements"),
     ("补充信息", "additional_info"),
     ("备注", "note"),
@@ -36,6 +36,8 @@ CSV_COLUMNS: list[tuple[str, str]] = [
 ]
 HEADER_TO_FIELD = {header: field for header, field in CSV_COLUMNS}
 # 导入宽容表头：同一字段可能被写成别的名字（用户从别处导出的表）。
+# 「职位类型」「职位描述」是 2026-10-12 口径统一（职位→岗位）之前的旧表头，
+# 老文件也要能原样导回，所以留在这里做兼容。
 HEADER_ALIASES: dict[str, str] = {
     "职位名称": "title",
     "岗位名称": "title",
@@ -48,6 +50,8 @@ HEADER_ALIASES: dict[str, str] = {
     "招聘链接": "source_url",
     "JD": "description",
     "岗位描述": "description",
+    "职位描述": "description",
+    "职位类型": "job_type",
     "要求": "requirements",
     "任职要求": "requirements",
 }

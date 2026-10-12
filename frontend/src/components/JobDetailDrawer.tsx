@@ -237,11 +237,16 @@ export default function JobDetailDrawer({
             <Descriptions.Item label="岗位类型">{job.job_type || "-"}</Descriptions.Item>
             <Descriptions.Item label="状态">{job.status || "-"}</Descriptions.Item>
             <Descriptions.Item label="发布时间">{job.posted_at || "-"}</Descriptions.Item>
-            <Descriptions.Item label="信息来源">
+            {/* 「录入方式」是系统记录的这条岗位怎么进来的（手动填写/粘贴识别/采集…），
+                与用户可编辑的「来源」是两回事；标签分开写，避免两个"来源"互相打架。 */}
+            <Descriptions.Item label="录入方式">
               {job.recognition_source || "未记录"}
             </Descriptions.Item>
-            {/* 0042 起「来源」是用户可编辑的独立字段（不再追加进备注），如实展示、空则留白。 */}
-            <Descriptions.Item label="来源">{job.origin_source || "-"}</Descriptions.Item>
+            {/* 0042 起「来源」是用户可编辑的独立字段（不再追加进备注）；没填就不占一行，
+                免得详情里出现一排"-"里唯一有内容的是录入方式，看着像重复。 */}
+            {job.origin_source && (
+              <Descriptions.Item label="来源">{job.origin_source}</Descriptions.Item>
+            )}
           </Descriptions>
 
           {job.keywords.length > 0 && (
@@ -255,10 +260,10 @@ export default function JobDetailDrawer({
 
           <div className="job-detail-text-sections">
             <TextSection
-              title="职位描述"
+              title="岗位描述"
               icon={<FileTextOutlined />}
               content={job.description}
-              emptyText="暂无职位描述"
+              emptyText="暂无岗位描述"
               variant="description"
             />
             <TextSection
