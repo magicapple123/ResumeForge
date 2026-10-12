@@ -338,9 +338,9 @@ def _report_markdown(session: InterviewSession) -> str:
         f"- 面试官风格：{session.interviewer_style}",
         f"- 目标岗位：{session.job_title or '未关联'}"
         + (f" @ {session.company}" if session.company else ""),
-        # 自动轮数模式：总轮数本来就不固定，如实记"自动收尾"。
+        # 自动轮数模式：总轮数本来就不固定，如实记"自动收尾"（硬上限是实现细节，不进报告）。
         (
-            f"- 问答轮数：{answered_rounds(session)} 轮（自动收尾，上限 {session.rounds}）"
+            f"- 问答轮数：{answered_rounds(session)} 轮（自动收尾）"
             if session.rounds_min is not None
             else f"- 问答轮数：{answered_rounds(session)} / {session.rounds}"
         ),

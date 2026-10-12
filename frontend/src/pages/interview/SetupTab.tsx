@@ -7,7 +7,6 @@ import { PlayCircleOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, InputNumber, Select, Space, Switch, Typography } from "antd";
 import type { FormInstance } from "antd";
 import type { InterviewDifficulty, InterviewType, InterviewerStyle } from "../../types";
-import { AUTO_ROUNDS_MAX, AUTO_ROUNDS_MIN } from "../../types";
 import { JANE_FACE_SOURCES } from "./janeFaces";
 import {
   INTERVIEW_DIFFICULTIES,
@@ -109,7 +108,7 @@ export function SetupTab({
             label="自动轮数"
             name="autoRounds"
             valuePropName="checked"
-            extra={`开启后由面试官按你的表现决定何时收尾（${AUTO_ROUNDS_MIN}–${AUTO_ROUNDS_MAX} 轮之间），更接近真实面试的不可预期。`}
+            extra="开启后不再设定轮数，面试官按你的表现自主决定何时收尾（回答有料就深挖、回答空洞就收束），更接近真实面试的不可预期。"
           >
             <Switch />
           </Form.Item>

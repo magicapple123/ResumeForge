@@ -155,15 +155,30 @@ class CandidateJobCreate(BaseModel):
 
     title: str = Field(default="", max_length=128)
     company: str = Field(default="", max_length=128)
+    # 采集多带出来的两个字段（手动添加表单没有；CSV 导入与未来表单扩展会用到）。
+    location: str = Field(default="", max_length=64)
+    salary: str = Field(default="", max_length=64)
     raw_text: str = Field(default="", max_length=MAX_CANDIDATE_JOB_TEXT_CHARS)
     images: list[str] = Field(default_factory=list, max_length=MAX_EXTRACTION_IMAGE_COUNT)
     note: str = Field(default="", max_length=2000)
-    source: Literal["手动添加", "粘贴文本", "招聘截图", "招聘文档", "助手录入"] = "手动添加"
+    # 岗位链接（选填）：手动添加也可以留个"回原站看"的入口；采集链路写同一列。
+    source_url: str = Field(default="", max_length=512)
+    source: Literal["手动添加", "粘贴文本", "招聘截图", "招聘文档", "助手录入", "CSV 导入"] = (
+        "手动添加"
+    )
 
     @field_validator("images")
     @classmethod
     def images_must_be_safe(cls, value: list[str]) -> list[str]:
         return [validate_photo_data_url(item) for item in value]
+
+    @field_validator("source_url")
+    @classmethod
+    def source_url_must_be_http(cls, value: str) -> str:
+        text = value.strip()
+        if text and not text.lower().startswith(("http://", "https://")):
+            raise ValueError("岗位链接必须以 http:// 或 https:// 开头")
+        return text
 
     @model_validator(mode="after")
     def require_content(self) -> "CandidateJobCreate":
@@ -186,6 +201,7 @@ class CandidateJobUpdate(BaseModel):
     raw_text: str | None = Field(default=None, max_length=MAX_CANDIDATE_JOB_TEXT_CHARS)
     images: list[str] | None = Field(default=None, max_length=MAX_EXTRACTION_IMAGE_COUNT)
     note: str | None = Field(default=None, max_length=2000)
+    source_url: str | None = Field(default=None, max_length=512)
 
     @field_validator("images")
     @classmethod
@@ -193,6 +209,16 @@ class CandidateJobUpdate(BaseModel):
         if value is None:
             return None
         return [validate_photo_data_url(item) for item in value]
+
+    @field_validator("source_url")
+    @classmethod
+    def source_url_must_be_http(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        if text and not text.lower().startswith(("http://", "https://")):
+            raise ValueError("岗位链接必须以 http:// 或 https:// 开头")
+        return text
 
 
 class CandidateJobOut(BaseModel):
@@ -275,3 +301,40 @@ class CandidateJobBulkImportOut(BaseModel):
     invalid: int = 0
     missing: int = 0
     results: list[CandidateJobImportOutcome] = Field(default_factory=list)
+
+
+class CandidateCsvExportRequest(BaseModel):
+    """导出勾选的备选岗位为 CSV（列集见 ``services/candidate_csv.CSV_COLUMNS``）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_ids: list[int] = Field(min_length=1, max_length=MAX_CANDIDATE_IMPORT_BATCH)
+
+
+class CandidateCsvRow(BaseModel):
+    """CSV 导入账目里的一行：``line`` 是文件真实行号（表头算第 1 行）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    line: int = Field(ge=1)
+    data: dict[str, str]
+
+
+class CandidateCsvPreview(BaseModel):
+    """CSV 上传后的预览：可导入行与逐行错误（不落库，等用户确认）。"""
+
+    rows: list[CandidateCsvRow] = Field(default_factory=list)
+    errors: list[dict[str, object]] = Field(default_factory=list)
+
+
+class CandidateCsvImportRequest(BaseModel):
+    """确认导入：预览账目原样传回，逐行建候选（重复跳过、单行失败不拖垮整批）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rows: list[CandidateCsvRow] = Field(min_length=1, max_length=500)
+
+
+class CandidateCsvImportResult(BaseModel):
+    imported: int = 0
+    failed: list[dict[str, object]] = Field(default_factory=list)

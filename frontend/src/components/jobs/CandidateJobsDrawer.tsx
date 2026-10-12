@@ -4,8 +4,8 @@
  * 放在岗位广场页的抽屉里而不是独立页面：它是"导入前的中转站"，用的时候就该在
  * 岗位列表旁边。
  */
-import { ImportOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Drawer, Empty, Input, Modal, Pagination, Space, Typography } from "antd";
+import { ImportOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
+import { App, Button, Drawer, Empty, Input, Pagination, Space, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CandidateBatchToolbar from "./CandidateBatchToolbar";
@@ -20,7 +20,9 @@ import {
 import { readAsDataUrl } from "../../utils/attachments";
 import CandidateJobDetailModal from "./CandidateJobDetailModal";
 import { CandidateCardGrid } from "./candidate/CandidateCardGrid";
+import { CandidateImportModal } from "./candidate/CandidateImportModal";
 import { CandidateJobFormModal } from "./candidate/CandidateJobFormModal";
+import { useCandidateBatchTools } from "./candidate/useCandidateBatchTools";
 import type { FormState } from "./candidate/candidateShared";
 import { EMPTY_FORM, MAX_CANDIDATE_IMAGES, MAX_IMAGE_BYTES } from "./candidate/candidateShared";
 import type { CandidateJob, CandidateJobDetail, CandidateJobPayload } from "../../types";
@@ -62,6 +64,8 @@ export default function CandidateJobsDrawer({
   const [detailCandidate, setDetailCandidate] = useState<CandidateJobDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [batchAction, setBatchAction] = useState<"import" | "delete" | null>(null);
+  // CSV 导入弹窗（预览 → 确认两步）；批量动作的 loading 态收在 useCandidateBatchTools。
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
   // 多选模式：勾选框常驻，但「批量导入/批量删除」只在多选时出现（入口在卡片右键菜单）。
   const [selecting, setSelecting] = useState(false);
   // 搜索词与"已提交的搜索词"分开：输入时不打接口，静置 300ms 才带上关键词重新拉取。
@@ -194,6 +198,7 @@ export default function CandidateJobsDrawer({
     setFormState({
       title: candidate.title,
       company: candidate.company,
+      sourceUrl: candidate.source_url,
       rawText: candidate.raw_text,
       note: candidate.note,
       images: candidate.images ?? [],
@@ -223,6 +228,7 @@ export default function CandidateJobsDrawer({
     const payload: CandidateJobPayload = {
       title: formState.title.trim(),
       company: formState.company.trim(),
+      source_url: formState.sourceUrl.trim(),
       raw_text: formState.rawText,
       note: formState.note,
       images: formState.images,
@@ -239,6 +245,7 @@ export default function CandidateJobsDrawer({
         await updateCandidateJob(editing.id, {
           title: payload.title,
           company: payload.company,
+          source_url: payload.source_url,
           raw_text: payload.raw_text,
           note: payload.note,
           images: payload.images,
@@ -329,42 +336,19 @@ export default function CandidateJobsDrawer({
     }
   };
 
-  const deleteSelected = () => {
-    if (selectedIds.length === 0) {
-      message.warning("请先选择备选岗位");
-      return;
-    }
-    const ids = [...selectedIds];
-    // 跨页多选/批量删除必须二次确认并写明实际条数与范围（§2.5 规则 4）：服务端分页后
-    // 选择集只可能来自当前页，文案如实写"当前页内选择"。
-    Modal.confirm({
-      title: `删除选中的 ${ids.length} 条备选岗位？`,
-      content: "均为当前页内的选择，不会被扩大到其他页；删除后进回收站，可恢复。",
-      okText: "删除",
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        setBatchAction("delete");
-        try {
-          const results = await Promise.allSettled(ids.map((id) => deleteCandidateJob(id)));
-          const deleted = results.filter((result) => result.status === "fulfilled").length;
-          const failed = results.length - deleted;
-          setSelectedIds([]);
-          await load();
-          if (failed > 0) {
-            message.warning(`已删除 ${deleted} 个备选岗位，${failed} 个删除失败`);
-          } else {
-            message.success(`已删除 ${deleted} 个备选岗位`);
-          }
-        } catch (error) {
-          message.error(error instanceof Error ? error.message : "批量删除失败");
-        } finally {
-          setBatchAction(null);
-        }
-      },
-    });
-  };
-
   const allSelected = items.length > 0 && selectedIds.length === items.length;
+
+  // 批量动作（跨页全选 / 导出 CSV / 批量删除）收在 hook 里（文件行数预算）：
+  // 状态所有权仍在抽屉，hook 只收"发请求 + 给提示"这段流程。
+  const { selectAllPages, selectAllPagesLoading, exportSelected, exporting, deleteSelected } =
+    useCandidateBatchTools({
+      selectedIds,
+      setSelectedIds,
+      keyword: committedKeyword,
+      collectTaskIdsKey: taskFilterKey,
+      onMutated: load,
+      onBatchActionChange: setBatchAction,
+    });
 
   // 翻页即清空选择集：选择只作用于当前页，翻页后上一页的勾选不再可见也不该生效。
   const changePage = (next: number) => {
@@ -379,9 +363,14 @@ export default function CandidateJobsDrawer({
       open={open}
       onClose={onClose}
       extra={
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          添加备选
-        </Button>
+        <Space>
+          <Button icon={<UploadOutlined />} onClick={() => setCsvImportOpen(true)}>
+            导入 CSV
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+            添加备选
+          </Button>
+        </Space>
       }
     >
       <Typography.Paragraph type="secondary">
@@ -414,6 +403,11 @@ export default function CandidateJobsDrawer({
           pendingSelectedCount={selectedPendingIds.length}
           selecting={selecting}
           batchAction={batchAction}
+          totalCount={serverTotal}
+          selectAllPagesLoading={selectAllPagesLoading}
+          onSelectAllPages={() => void selectAllPages()}
+          exporting={exporting}
+          onExportCsv={() => void exportSelected()}
           onToggleAll={(checked) => setSelectedIds(checked ? items.map((item) => item.id) : [])}
           onImport={() => void importSelected()}
           onDelete={deleteSelected}
@@ -488,6 +482,14 @@ export default function CandidateJobsDrawer({
         onSubmit={submit}
         onCancel={() => setFormOpen(false)}
         onRejected={() => message.error("招聘截图只支持 JPG、PNG 或 WebP")}
+      />
+      <CandidateImportModal
+        open={csvImportOpen}
+        onClose={() => setCsvImportOpen(false)}
+        onImported={(imported) => {
+          message.success(`已从 CSV 导入 ${imported} 条备选岗位`);
+          void load();
+        }}
       />
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         <ImportOutlined /> 已导入的备选会保留在列表里，方便回看它变成了哪个岗位。

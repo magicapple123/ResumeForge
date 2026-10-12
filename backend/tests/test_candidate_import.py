@@ -184,12 +184,31 @@ def test_import_writes_job_type_from_the_candidate(db_session):
 
 
 def test_import_falls_back_to_default_job_type_when_candidate_has_none(db_session):
-    """候选没标岗位类型（手动粘贴/历史数据）时回落「校招」。"""
+    """候选没标岗位类型（手动粘贴/历史数据）且标题推断不出时回落「校招」。"""
     candidate = _stage(db_session)
 
     import_candidates(db_session, [candidate.id])
 
     assert db_session.query(Job).one().job_type == "校招"
+
+
+def test_import_infers_internship_from_the_title(db_session):
+    """标题带「实习」字样的候选即使透传标了校招，也以标题为准——采集卡片不带
+    类型字段，"全栈开发实习生" 被标成校招是用户实踩的误判。"""
+    candidate = _stage(db_session, title="全栈开发实习生", job_type="校招")
+
+    import_candidates(db_session, [candidate.id])
+
+    assert db_session.query(Job).one().job_type == "实习"
+
+
+def test_import_title_inference_does_not_override_meaningful_passthrough(db_session):
+    """标题推断不出类型时仍信采集任务的透传标注（用户明确选的档位）。"""
+    candidate = _stage(db_session, title="后端开发", job_type="社招")
+
+    import_candidates(db_session, [candidate.id])
+
+    assert db_session.query(Job).one().job_type == "社招"
 
 
 def test_import_points_at_the_existing_job_instead_of_creating_a_duplicate(db_session):

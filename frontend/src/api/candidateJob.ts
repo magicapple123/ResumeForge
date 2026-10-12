@@ -1,5 +1,8 @@
 /** 备选岗位接口：暂存招聘信息、编辑、按批次挑选后导入岗位广场。 */
 import type {
+  CandidateCsvImportResult,
+  CandidateCsvPreview,
+  CandidateCsvRow,
   CandidateJob,
   CandidateJobDetail,
   CandidateJobImportResult,
@@ -7,7 +10,7 @@ import type {
   CandidateJobUpdatePayload,
 } from "../types";
 import type { Page } from "../types/common";
-import { buildQuery, request } from "./client";
+import { buildQuery, request, requestRaw } from "./client";
 
 export function listCandidateJobs(
   params: {
@@ -96,4 +99,46 @@ export function importCandidateJobs(candidateIds: number[]): Promise<CandidateJo
 
 export function deleteCandidateJob(id: number): Promise<void> {
   return request(`/candidate-jobs/${id}`, { method: "DELETE" });
+}
+
+/** 当前筛选下全部候选的 id（不分页）：抽屉「全选全部」用；上限由调用方裁决。 */
+export function listCandidateJobIds(
+  params: {
+    status?: string;
+    keyword?: string;
+    collectTaskId?: number;
+    collectTaskIds?: number[];
+  } = {},
+): Promise<number[]> {
+  const { collectTaskId, collectTaskIds, ...rest } = params;
+  return request(
+    `/candidate-jobs/ids${buildQuery({
+      ...rest,
+      ...(collectTaskId ? { collect_task_id: collectTaskId } : {}),
+      ...(collectTaskIds?.length ? { collect_task_ids: collectTaskIds.join(",") } : {}),
+    })}`,
+  );
+}
+
+/** 把勾选的候选导出成 CSV（返回原始 blob，调用方负责触发下载）。 */
+export async function exportCandidatesCsv(candidateIds: number[]): Promise<Blob> {
+  const response = await requestRaw("/candidate-jobs/csv/export", {
+    method: "POST",
+    // requestRaw 不补 Content-Type（见 api/jobs.exportJobsCsv 的注释）：JSON body 必须自带。
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ candidate_ids: candidateIds }),
+  });
+  return response.blob();
+}
+
+/** 候选 CSV 第一步：上传文件解析预览（不落库）。 */
+export function previewCandidateImport(file: File): Promise<CandidateCsvPreview> {
+  const form = new FormData();
+  form.append("file", file);
+  return request("/candidate-jobs/csv/import/preview", { method: "POST", body: form });
+}
+
+/** 候选 CSV 第二步：确认提交，逐行建候选并返回账目。 */
+export function importCandidatesCsv(rows: CandidateCsvRow[]): Promise<CandidateCsvImportResult> {
+  return request("/candidate-jobs/csv/import", { method: "POST", body: JSON.stringify({ rows }) });
 }

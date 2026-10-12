@@ -24,9 +24,11 @@ export type InterviewStatus = "active" | "finished";
 export const MIN_INTERVIEW_ROUNDS = 3;
 export const MAX_INTERVIEW_ROUNDS = 12;
 
-/** 自动轮数区间：AI 在 [AUTO_ROUNDS_MIN, AUTO_ROUNDS_MAX] 内按表现判断何时收尾。 */
-export const AUTO_ROUNDS_MIN = 3;
-export const AUTO_ROUNDS_MAX = 9;
+/** 自动收尾模式：何时结束完全由 AI 判断，界面与提示词都不给出轮数范围；
+ *  AUTO_FINISH_MAX_ROUNDS 只是服务端的硬性保险（防对话失控），不向用户/模型展示。 */
+export const AUTO_FINISH_MAX_ROUNDS = 12;
+/** 自动收尾的模式开关值（随表单发给后端；仅用于区分模式，不表达"最早轮数"）。 */
+export const AUTO_ROUNDS_FLAG = 1;
 
 export interface InterviewMessage {
   id: number;

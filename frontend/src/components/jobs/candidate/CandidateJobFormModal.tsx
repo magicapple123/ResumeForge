@@ -66,6 +66,26 @@ export function CandidateJobFormModal({
             onChange={(event) => onChange((c) => ({ ...c, company: event.target.value }))}
           />
         </Form.Item>
+        <Form.Item
+          label="岗位链接（选填）"
+          validateStatus={
+            formState.sourceUrl.trim() && !/^https?:\/\//i.test(formState.sourceUrl.trim())
+              ? "warning"
+              : undefined
+          }
+          help={
+            formState.sourceUrl.trim() && !/^https?:\/\//i.test(formState.sourceUrl.trim())
+              ? "链接需要以 http:// 或 https:// 开头，否则保存时会无法通过校验"
+              : undefined
+          }
+        >
+          <Input
+            value={formState.sourceUrl}
+            maxLength={512}
+            placeholder="粘贴该岗位在招聘网站上的地址（导入岗位时预填投递链接）"
+            onChange={(event) => onChange((c) => ({ ...c, sourceUrl: event.target.value }))}
+          />
+        </Form.Item>
         <Form.Item label="招聘原文">
           {/* 硬上限与后端备选岗位 raw_text 的 max_length 对齐（50_000）；
               提示统一走 MaxLengthHint（全仓禁用 antd showCount）。 */}

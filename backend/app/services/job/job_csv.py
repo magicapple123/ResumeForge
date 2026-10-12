@@ -15,9 +15,14 @@ from __future__ import annotations
 
 import csv
 import io
-import re
 
 from ...models.job import JOB_STATUSES, Job
+from ..csv_io import (
+    MAX_IMPORT_FILE_CHARS,
+    MAX_IMPORT_ROWS,
+    decode_csv_bytes,
+    records_to_csv_text,
+)
 
 # 列定义：[(中文表头, 字段名)]。导出用它写表头，导入按它映射——**两边共用一份**。
 # 表头用**手动添加岗位表单的字段名**（岗位名称/公司名称/工作地点/薪资范围…），用户在
@@ -67,37 +72,23 @@ HEADER_ALIASES: dict[str, str] = {
     "任职要求": "requirements",
 }
 
-# 一场批量导入的体量上限：与批量操作（选择/删除/分析）的 500 上限对齐。
-MAX_IMPORT_ROWS = 500
-MAX_IMPORT_FILE_CHARS = 2_000_000
+# 体量上限（MAX_IMPORT_ROWS / MAX_IMPORT_FILE_CHARS）从 csv_io 引入：
+# 备选岗位 CSV 共用同一上限，这里不再重复定义。
 
 _TRUE_TOKENS = {"是", "y", "yes", "true", "1", "收藏"}
-
-# 字段内换行（含前后空白）折叠成单个空格：JD/要求是多段文本，直接进 CSV 会在
-# Excel 里把一条岗位撑成十几行（每个换行一行），表格没法看。折叠后每条岗位
-# 恰好一行；换行本身不是语义内容，导回时是干净的一整段也不丢信息。
-_NEWLINE_PATTERN = re.compile(r"\s*[\r\n]+\s*")
-
-
-def _flatten(value: object) -> str:
-    return _NEWLINE_PATTERN.sub(" ", str(value or "")).strip()
 
 
 def jobs_to_csv_text(jobs: list[Job]) -> str:
     """把岗位列表序列化成 CSV 文本（开头带 UTF-8 BOM，Excel 直开不乱码）。"""
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow([header for header, _ in CSV_COLUMNS])
-    for job in jobs:
-        writer.writerow(
-            [
-                ("是" if job.favorite else "")
-                if field == "favorite"
-                else _flatten(getattr(job, field))
-                for _, field in CSV_COLUMNS
-            ]
-        )
-    return "\ufeff" + buffer.getvalue()
+    headers = [header for header, _ in CSV_COLUMNS]
+    records = [
+        [
+            ("是" if job.favorite else "") if field == "favorite" else getattr(job, field)
+            for _, field in CSV_COLUMNS
+        ]
+        for job in jobs
+    ]
+    return records_to_csv_text(headers, records)
 
 
 def _clean_status(value: str) -> str:
@@ -186,18 +177,6 @@ def parse_job_csv(text: str) -> tuple[list[tuple[int, dict[str, str]]], list[dic
             continue
         rows.append((line, row))
     return rows, errors
-
-
-def decode_csv_bytes(raw: bytes) -> str:
-    """解码上传的 CSV 字节：优先 UTF-8（带 BOM 也行），失败退回 GBK（Excel 中文导出常见）。"""
-    try:
-        return raw.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        pass
-    try:
-        return raw.decode("gbk")
-    except UnicodeDecodeError as exc:
-        raise ValueError("无法识别文件编码：请用 UTF-8 或 GBK 保存 CSV 后重试") from exc
 
 
 __all__ = [
