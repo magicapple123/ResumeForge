@@ -2,7 +2,7 @@
 import { App } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { markCandidateJobImported } from "../api/candidateJob";
 import { openWebFormUrl } from "../api/webform";
 import { startBackfill } from "../api/apply";
@@ -10,7 +10,6 @@ import {
   batchDeleteJobs,
   batchUpdateJobStatus,
   deleteJob,
-  listJobIds,
   updateJob,
 } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
@@ -31,6 +30,7 @@ import { JobFilterBar } from "./jobs/JobFilterBar";
 import type { BatchAction } from "./jobs/jobFilterOptions";
 import { useJobQueue } from "./jobs/useJobQueue";
 import { useJobsPageState } from "./jobs/useJobsPageState";
+import { useSelectAllJobs } from "./jobs/useSelectAllJobs";
 import { bulkEnqueueJobs, bulkEnqueueSummary } from "../components/apply/queue/bulkEnqueue";
 
 export default function JobsPage() {
@@ -87,8 +87,26 @@ export default function JobsPage() {
   const [importCandidate, setImportCandidate] = useState<CandidateJobDetail | null>(null);
   const [importedCandidateId, setImportedCandidateId] = useState<number | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
-  // 「全选全部岗位」请求中：按钮 loading，防连点。
-  const [selectAllPagesLoading, setSelectAllPagesLoading] = useState(false);
+
+  // 完成通知的「查看结果」深链（/jobs?match_batch=history）：打开分析记录后清掉参数，
+  // 让刷新/返回不会再弹。useJobsPageState 管它自己的筛选参数，这里只动 match_batch。
+  // URL → state 的镜像同步属"派生事件"，规则按书面理由豁免（与 useJobsPageState 同模式）。
+  /* eslint-disable react-hooks/set-state-in-effect */
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("match_batch") !== "history") return;
+    setMatchBatchView("history");
+    setMatchBatchOpen(true);
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete("match_batch");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (error) message.error(error);
@@ -239,38 +257,6 @@ export default function JobsPage() {
     }
   };
 
-  const selectAllPages = async () => {
-    // 跨页全选：按**当前筛选**向后端要全部 id（与列表同一份筛选器），拿到后整体勾选。
-    // 批量操作（导出/状态/投递/删除）都卡 500 上限，超出就如实拒绝并指路缩小范围——
-    // 悄悄只选前 500 会让"全选了"和"实际选了"对不上，比报错更害人。
-    if (selectAllPagesLoading) return;
-    setSelectAllPagesLoading(true);
-    try {
-      const ids = await listJobIds({
-        keyword,
-        job_type: jobType,
-        status,
-        source_kind: sourceKind || undefined,
-      });
-      if (ids.length === 0) {
-        message.warning("当前筛选下没有岗位");
-        return;
-      }
-      if (ids.length > 500) {
-        message.warning(
-          `当前筛选下共 ${ids.length} 个岗位，批量操作一次最多 500 个；请先用筛选或搜索缩小范围`,
-        );
-        return;
-      }
-      setSelectedJobIds(ids);
-      message.success(`已选中当前筛选下的全部 ${ids.length} 个岗位（所有页）`);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "获取岗位列表失败");
-    } finally {
-      setSelectAllPagesLoading(false);
-    }
-  };
-
   const enqueueSelectedJobs = async () => {
     if (selectedJobIds.length === 0) {
       message.warning("请先选择岗位");
@@ -305,6 +291,14 @@ export default function JobsPage() {
   };
 
   /** 勾选的岗位导出 CSV 由 BatchToolbar 就地处理（纯前端动作）。 */
+
+  const { selectAllPages, selectAllPagesLoading } = useSelectAllJobs({
+    keyword,
+    jobType,
+    status,
+    sourceKind,
+    setSelectedJobIds,
+  });
 
   /** 右键菜单「批量选择」的动作：进入选择模式（批量操作进行中时不给进）。 */
   const enterSelectionMode = useCallback(() => {

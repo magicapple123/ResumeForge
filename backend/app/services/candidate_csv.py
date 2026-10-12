@@ -28,8 +28,6 @@ from .csv_io import (
 CSV_COLUMNS: list[tuple[str, str]] = [
     ("岗位名称", "title"),
     ("公司名称", "company"),
-    ("工作地点", "location"),
-    ("薪资范围", "salary"),
     ("岗位链接", "source_url"),
     ("招聘原文", "raw_text"),
     ("备注", "note"),

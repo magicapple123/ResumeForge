@@ -62,6 +62,18 @@ export interface NotifyHost {
 
 let host: NotifyHost | null = null;
 
+/** 完成通知的跳转通道：App 挂载时注册 react-router 的 navigate（工具模块拿不到 hook）。 */
+let taskNavigate: ((path: string) => void) | null = null;
+
+export function registerTaskNavigate(next: ((path: string) => void) | null): void {
+  taskNavigate = next;
+}
+
+/** 通知动作按钮用的页面跳转；未注册时静默跳过（单测/App 未挂载）。 */
+export function navigateForTask(path: string): void {
+  taskNavigate?.(path);
+}
+
 /** App 挂载时注册一次（AntD 的 App 实例只能在 hooks 里拿，这里只存引用）。 */
 export function registerNotifyHost(next: NotifyHost | null): void {
   host = next;

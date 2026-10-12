@@ -98,7 +98,7 @@ export function CandidateCardGrid({
                     .join(" · ")}
                 </Typography.Text>
                 <Space wrap>
-                  <Tag>{candidate.source || "未知来源"}</Tag>
+                  <Tag>{candidate.source || "手动添加"}</Tag>
                   {candidate.images.length > 0 && (
                     <Tag color="blue">截图 {candidate.images.length} 张</Tag>
                   )}

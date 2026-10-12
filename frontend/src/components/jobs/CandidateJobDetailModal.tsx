@@ -75,11 +75,10 @@ export default function CandidateJobDetailModal({
         <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Descriptions size="small" column={1} bordered>
             <Descriptions.Item label="公司">{candidate.company || "未识别公司"}</Descriptions.Item>
-            <Descriptions.Item label="地点">{candidate.location || "-"}</Descriptions.Item>
-            <Descriptions.Item label="薪资">{candidate.salary || "-"}</Descriptions.Item>
+            {/* 备选阶段不展示地点/薪资：真到投递的时候正式岗位里有更全的版本。 */}
             <Descriptions.Item label="来源">
               <Space>
-                <Tag>{candidate.source || "未知来源"}</Tag>
+                <Tag>{candidate.source || "手动添加"}</Tag>
                 {candidate.status === "imported" ? (
                   <Tag color="green">已导入 #{candidate.imported_job_id ?? ""}</Tag>
                 ) : (

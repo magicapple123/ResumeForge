@@ -111,8 +111,8 @@ export function CandidateImportModal({ open, onClose, onImported }: Props) {
           </p>
           <p className="ant-upload-text">点击或拖拽 CSV 文件到这里</p>
           <p className="ant-upload-hint">
-            第一行是表头（岗位名称 / 公司名称 / 工作地点 / 薪资范围 / 岗位链接 / 招聘原文 /
-            备注），也可以先下载空模板照着填
+            第一行是表头（岗位名称 / 公司名称 / 岗位链接 / 招聘原文 / 备注），
+            也可以先下载空模板照着填
           </p>
         </Upload.Dragger>
         <Button
@@ -122,8 +122,6 @@ export function CandidateImportModal({ open, onClose, onImported }: Props) {
             downloadCsvTemplate("备选岗位导入模板.csv", [
               "岗位名称",
               "公司名称",
-              "工作地点",
-              "薪资范围",
               "岗位链接",
               "招聘原文",
               "备注",
