@@ -89,6 +89,10 @@ export function batchDeleteJobs(payload: { job_ids: number[] }): Promise<JobBatc
 export async function exportJobsCsv(jobIds: number[]): Promise<Blob> {
   const response = await requestRaw("/jobs/export", {
     method: "POST",
+    // requestRaw 不像 request() 那样补 Content-Type：这里是 JSON body 而非
+    // FormData，缺这个头后端会把 body 当空表单解析，Pydantic 直接报
+    // "Input should be a valid dictionary or object to extract fields from"。
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ job_ids: jobIds }),
   });
   return response.blob();
