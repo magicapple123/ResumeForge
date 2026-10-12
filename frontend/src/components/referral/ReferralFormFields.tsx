@@ -4,42 +4,59 @@
  * uploadReferralImage 调用）留在页面经 prop 传入。
  */
 import { CloseOutlined, UploadOutlined } from "@ant-design/icons";
-import { Button, DatePicker, Form, Input, Select, Space, Upload } from "antd";
+import { Button, DatePicker, Form, Input, Progress, Select, Space, Upload } from "antd";
 import type { FormInstance } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
+import { useEffect } from "react";
 import type { ReferralPayload, ReferralStatus } from "../../types";
 import { referralImageUrl } from "../../types";
+import { useJobSearchSelect, useTrackSearchSelect } from "../../hooks/remoteSearchOptions";
 import { IMAGE_ACCEPT } from "../../utils/attachments";
 import { REFERRAL_STATUS_LABELS } from "../../types";
 
 /** 与后端 ``schemas/referral.MAX_NOTE_IMAGES`` 保持一致。 */
 export const MAX_NOTE_IMAGES = 9;
 
-interface Option {
-  value: number;
-  label: string;
-}
-
 interface Props {
   form: FormInstance<ReferralPayload>;
-  jobOptions: Option[];
-  trackOptions: Option[];
+  /** 编辑时的已绑定岗位 id：打开表单后按 id 回查，保证已选值保显示（P0-1）。 */
+  initialJobId?: number | null;
+  /** 编辑时的已绑定漏斗 id：同上。 */
+  initialTrackId?: number | null;
   noteImages: string[];
   uploadingImages: boolean;
+  /** 备注图上传进度（0-100）；null 表示不在上传中。 */
+  imageUploadPercent: number | null;
   beforeImageUpload: (file: File) => Promise<string | boolean> | string | boolean;
   removeImage: (path: string) => void;
 }
 
 export default function ReferralFormFields({
   form,
-  jobOptions,
-  trackOptions,
+  initialJobId = null,
+  initialTrackId = null,
   noteImages,
   uploadingImages,
+  imageUploadPercent,
   beforeImageUpload,
   removeImage,
 }: Props) {
+  // 关联岗位 / 漏斗下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
+  const jobSelect = useJobSearchSelect();
+  const trackSelect = useTrackSearchSelect();
+
+  // 已选值保显示（P0-1）：编辑时绑定的岗位/漏斗往往不在第一页选项里，按 id 回查补进候选；
+  // 打开表单时同时预拉第一页候选（与旧"页面预拉 100 条"的首屏体验对齐）。
+  useEffect(() => {
+    void jobSelect.ensure(initialJobId);
+    void trackSelect.ensure(initialTrackId);
+    void jobSelect.reload();
+    void trackSelect.reload();
+    // hook 的回调引用稳定，只跟随初始绑定变化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialJobId, initialTrackId]);
+
   return (
     <Form form={form} layout="vertical" initialValues={{ status: "active" }}>
       <Space style={{ display: "flex" }} align="start">
@@ -73,10 +90,10 @@ export default function ReferralFormFields({
         <Select options={REFERRAL_STATUS_LABELS_OPTIONS()} />
       </Form.Item>
       <Form.Item label="关联岗位（选填，删除岗位不影响内推）" name="job_id">
-        <Select allowClear showSearch optionFilterProp="label" options={jobOptions} />
+        <Select allowClear placeholder="输入关键词搜索岗位" {...jobSelect.selectProps} />
       </Form.Item>
       <Form.Item label="转化关联漏斗（选填，进入面试及以上即视为转化）" name="track_id">
-        <Select allowClear showSearch optionFilterProp="label" options={trackOptions} />
+        <Select allowClear placeholder="输入关键词搜索进度" {...trackSelect.selectProps} />
       </Form.Item>
       <Form.Item
         label="投递日期"
@@ -103,6 +120,15 @@ export default function ReferralFormFields({
             上传备注图
           </Button>
         </Upload>
+        {imageUploadPercent !== null && (
+          <Progress
+            aria-label="备注图上传进度"
+            percent={imageUploadPercent}
+            size="small"
+            status={imageUploadPercent >= 100 ? "success" : "active"}
+            style={{ marginTop: 4 }}
+          />
+        )}
         {noteImages.length > 0 && (
           <Space wrap size={4} style={{ marginTop: 8 }}>
             {noteImages.map((path, index) => (

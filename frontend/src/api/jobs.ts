@@ -115,7 +115,8 @@ export async function exportJobsCsv(jobIds: number[]): Promise<Blob> {
 export function previewJobImport(file: File): Promise<JobImportPreview> {
   const form = new FormData();
   form.append("file", file);
-  return request("/jobs/import/preview", { method: "POST", body: form });
+  // 文件上传走 upload 预算（10 分钟）：大 CSV 的传输时间不该挤 15s 的 default 预算。
+  return request("/jobs/import/preview", { method: "POST", body: form, budget: "upload" });
 }
 
 /** CSV 导入第二步：确认提交，逐行建岗并返回账目。 */

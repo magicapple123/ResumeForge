@@ -6,7 +6,7 @@
  */
 
 import { CameraOutlined, DeleteOutlined, PictureOutlined, UserOutlined } from "@ant-design/icons";
-import { App, Button, Image, Modal, Space, Tag, Tooltip, Typography, Upload } from "antd";
+import { App, Button, Image, Modal, Progress, Space, Tag, Tooltip, Typography, Upload } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
   createProfilePhoto,
@@ -34,6 +34,9 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
   const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // 照片上传进度（0-100；null 表示不在上传中）：2 MB 照片 base64 后近 2.7 MB，
+  // 在按钮旁画一条进度条比一个 loading 图标更直观。
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
 
   // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
@@ -79,9 +82,14 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
       return;
     }
     setBusy(true);
+    setUploadPercent(0);
     try {
       const dataUrl = await readAsDataUrl(file);
-      const created = await createProfilePhoto(dataUrl, file.name.replace(/\.[^.]+$/, ""));
+      const created = await createProfilePhoto(
+        dataUrl,
+        file.name.replace(/\.[^.]+$/, ""),
+        (percent) => setUploadPercent(percent),
+      );
       await load();
       // 第一张上传的照片会自动成为使用中的那张。
       onSelect(created.image);
@@ -90,6 +98,7 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
       message.error(err instanceof Error ? err.message : "上传照片失败");
     } finally {
       setBusy(false);
+      setUploadPercent(null);
     }
   };
 
@@ -170,6 +179,15 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
             </Button>
           )}
         </Space>
+        {uploadPercent !== null && (
+          <Progress
+            aria-label="照片上传进度"
+            percent={uploadPercent}
+            size="small"
+            status={uploadPercent >= 100 ? "success" : "active"}
+            style={{ maxWidth: 320 }}
+          />
+        )}
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {loading
             ? "正在读取照片…"

@@ -7,6 +7,7 @@
 2. **降级要把三张表原样建回来**：列、索引、外键的 ``ondelete`` 都得与 ``0022``/``0024``
    逐字一致，否则"降级成功"只是看起来成功。
 """
+
 from alembic import command
 from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect
@@ -177,13 +178,14 @@ def test_downgrade_rebuilds_the_official_tables(tmp_path):
         inspector = inspect(engine)
         for table, expected_indexes in OFFICIAL_INDEXES.items():
             indexes = {item["name"] for item in inspector.get_indexes(table)}
-            assert expected_indexes <= indexes, f"{table} 的索引没建全：{expected_indexes - indexes}"
+            assert expected_indexes <= indexes, (
+                f"{table} 的索引没建全：{expected_indexes - indexes}"
+            )
 
         # 外键的删除语义：源删掉时采集账目跟着走（这是 0022 的刻意设计）。
         for table, (referred, ondelete) in OFFICIAL_FOREIGN_KEYS.items():
             assert any(
-                item["referred_table"] == referred
-                and item["options"].get("ondelete") == ondelete
+                item["referred_table"] == referred and item["options"].get("ondelete") == ondelete
                 for item in inspector.get_foreign_keys(table)
             ), f"{table} 指向 {referred} 的外键语义不对"
     finally:
@@ -217,7 +219,13 @@ def test_head_table_set_matches_the_models(tmp_path):
     try:
         command.upgrade(build_alembic_config(engine), "head")
         expected = set(Base.metadata.tables)
-        actual = _tables(engine) - {"alembic_version"}
+        # knowledge_fts* 是 0044 的 FTS5 派生索引（虚拟表+影子表，可由 rebuild 重建），
+        # 不在 Base.metadata 里，也不算业务表。
+        actual = {
+            name
+            for name in _tables(engine)
+            if name != "alembic_version" and not name.startswith("knowledge_fts")
+        }
         assert actual == expected, (
             f"仅库里有 {sorted(actual - expected)}，仅模型里有 {sorted(expected - actual)}"
         )

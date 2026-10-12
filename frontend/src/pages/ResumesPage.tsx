@@ -1,8 +1,9 @@
 /** 简历中心：生成历史列表、收藏、预览与导出。 */
-import { App, Button, Input, Select, Space, Tag } from "antd";
+import { App, Button, Input, Select, Space, Tag, Tooltip } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  batchDeleteResumes,
   deleteResume,
   getResume,
   listResumes,
@@ -22,6 +23,7 @@ import ResumeTable from "./resumes/ResumeTable";
 import ResumeRenameModal from "./resumes/ResumeRenameModal";
 import ResumeNoteModal from "./resumes/ResumeNoteModal";
 import ResumeDiffModal from "./resumes/ResumeDiffModal";
+import { useSelectAllResumes } from "./resumes/useSelectAllResumes";
 
 export default function ResumesPage() {
   const navigate = useNavigate();
@@ -89,6 +91,15 @@ export default function ResumesPage() {
     if (error) message.error(error);
   }, [error, message]);
 
+  // 跨页全选（对齐岗位广场）：按当前筛选拉全部 id，批量删除仍走 500 上限裁决。
+  const { selectAllPages, selectAllPagesLoading } = useSelectAllResumes({
+    keyword,
+    jobId,
+    favoriteFilter,
+    hasJobFilter,
+    setSelectedIds: batch.setSelected,
+  });
+
   // 筛选 / 分页写回 URL（replace 语义）。effect 只依赖这些状态，不依赖 searchParams，
   // 因此写回不会触发循环重渲染；job_id 参数通过 functional 更新原样保留。
   useEffect(() => {
@@ -143,7 +154,7 @@ export default function ResumesPage() {
     [message, reload],
   );
 
-  /** 批量删除：逐条走同一个软删除接口（全部进回收站），全部完成后一次性刷新。 */
+  /** 批量删除：一次请求删完（P2-4，全部进回收站），不再前端逐条 N 连发。 */
   const removeSelected = useCallback(() => {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
@@ -153,12 +164,11 @@ export default function ResumesPage() {
       okText: "删除",
       okButtonProps: { danger: true },
       onOk: async () => {
-        const results = await Promise.allSettled(ids.map((id) => deleteResume(id)));
-        const failed = results.filter((item) => item.status === "rejected").length;
-        if (failed === 0) {
-          message.success(`已删除 ${ids.length} 份简历，可在「回收站」里恢复`);
-        } else {
-          message.warning(`已删除 ${ids.length - failed} 份，${failed} 份删除失败，请重试`);
+        try {
+          const { deleted } = await batchDeleteResumes(ids);
+          message.success(`已删除 ${deleted} 份简历，可在「回收站」里恢复`);
+        } catch (err) {
+          message.error(err instanceof Error ? err.message : "批量删除失败，请重试");
         }
         batch.exitSelecting();
         void reload();
@@ -299,6 +309,13 @@ export default function ResumesPage() {
               ),
           }}
         >
+          {(data?.total ?? 0) > 0 && (
+            <Tooltip title={`按当前筛选，一键选中全部 ${data?.total} 份简历（跨页，不止当前页）`}>
+              <Button loading={selectAllPagesLoading} onClick={() => void selectAllPages()}>
+                全选全部简历（共 {data?.total} 个）
+              </Button>
+            </Tooltip>
+          )}
           <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
             删除所选
           </Button>

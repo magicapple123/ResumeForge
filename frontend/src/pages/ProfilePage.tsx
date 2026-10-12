@@ -83,6 +83,7 @@ export default function ProfilePage() {
     profileText,
     profileTextWarnings,
     profileTextParsing,
+    profileTextUploadPercent,
     profileTextRecognized,
     profileTextSource,
     files,
@@ -432,6 +433,7 @@ export default function ProfilePage() {
         text={profileText}
         warnings={profileTextWarnings}
         parsing={profileTextParsing}
+        uploadPercent={profileTextUploadPercent}
         recognizedText={profileTextRecognized}
         recognitionSource={profileTextSource}
         files={files}

@@ -135,7 +135,12 @@ export async function exportCandidatesCsv(candidateIds: number[]): Promise<Blob>
 export function previewCandidateImport(file: File): Promise<CandidateCsvPreview> {
   const form = new FormData();
   form.append("file", file);
-  return request("/candidate-jobs/csv/import/preview", { method: "POST", body: form });
+  // 文件上传走 upload 预算（10 分钟）：大 CSV 的传输时间不该挤 15s 的 default 预算。
+  return request("/candidate-jobs/csv/import/preview", {
+    method: "POST",
+    body: form,
+    budget: "upload",
+  });
 }
 
 /** 候选 CSV 第二步：确认提交，逐行建候选并返回账目。 */

@@ -29,6 +29,7 @@ function renderModal(overrides: Partial<React.ComponentProps<typeof ProfileTextM
     text: "",
     warnings: [] as string[],
     parsing: false,
+    uploadPercent: null,
     recognizedText: "",
     recognitionSource: null,
     files: [] as (typeof IMAGE | typeof DOCX)[],
@@ -109,6 +110,18 @@ describe("ProfileTextModal", () => {
     expect(screen.queryByText("查看模型识别到的原文（请对照截图核对）")).not.toBeInTheDocument();
     expect(screen.queryByText("AI 识别")).not.toBeInTheDocument();
     expect(screen.queryByText("本地规则")).not.toBeInTheDocument();
+  });
+
+  it("上传中显示附件进度条并推进到当前百分比（C2）", () => {
+    renderModal({ parsing: true, uploadPercent: 40 });
+
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "40");
+  });
+
+  it("上传结束（uploadPercent 回到 null）后进度条消失", () => {
+    renderModal({ parsing: false, uploadPercent: null });
+
+    expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
   it("keeps saying whether AI or local rules produced the fields", async () => {

@@ -7,6 +7,7 @@
 **只加列**，所以要点与 ``0026`` 同：幂等、可降级、能跑在"只有部分列"的历史库上，
 存量行靠 ``server_default`` 拿到空串。
 """
+
 from alembic import command
 from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect, text
@@ -133,5 +134,11 @@ def test_head_table_set_matches_the_models(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'head.db'}")
     command.upgrade(build_alembic_config(engine), "head")
 
-    tables = set(inspect(engine).get_table_names()) - {"alembic_version"}
+    # knowledge_fts* 是 0044 的 FTS5 派生索引（虚拟表+影子表，可由 rebuild 重建），
+    # 不在 Base.metadata 里，也不算业务表。
+    tables = {
+        name
+        for name in inspect(engine).get_table_names()
+        if name != "alembic_version" and not name.startswith("knowledge_fts")
+    }
     assert tables == set(Base.metadata.tables)

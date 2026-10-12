@@ -33,8 +33,9 @@ from app.dataset_registry import (  # noqa: E402
     write_active_dataset_id,
 )
 from app.main import app  # noqa: E402
+from app.services import knowledge_service  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import event  # noqa: E402
+from sqlalchemy import event, text  # noqa: E402
 from sqlalchemy.engine import Engine  # noqa: E402
 
 
@@ -156,10 +157,33 @@ def clean_db():
     _clear_datasets()
     Base.metadata.drop_all(bind=database.engine)
     Base.metadata.create_all(bind=database.engine)
+    _drop_fts_derived_tables()
     yield
     _reset_to_test_database()
     Base.metadata.drop_all(bind=database.engine)
     _clear_datasets()
+
+
+# 迁移 0044 的 FTS5 派生索引不在 ``Base.metadata`` 里：``drop_all`` 删不掉它，而
+# 跑过迁移链的用例（迁移测试、备份演练）会给共享测试库留下 knowledge_fts。残留的
+# 索引是陈旧的（业务表重建后触发器没了、索引指向已消失的 rowid），而检索服务层
+# 按"表存在"切 FTS 路径——不清掉的话，一个迁移用例就能让后续所有知识库检索用例
+# 静默走上一条坏路径。影子表（_data/_idx/_docsize/_config）一并删；缓存按 engine
+# 记忆探测结果，表删了缓存也得跟着失效。
+_FTS_DERIVED_TABLES = (
+    "knowledge_fts",
+    "knowledge_fts_data",
+    "knowledge_fts_idx",
+    "knowledge_fts_docsize",
+    "knowledge_fts_config",
+)
+
+
+def _drop_fts_derived_tables() -> None:
+    with database.engine.begin() as connection:
+        for name in _FTS_DERIVED_TABLES:
+            connection.execute(text(f"DROP TABLE IF EXISTS {name}"))
+    knowledge_service._FTS_CACHE.clear()
 
 
 @pytest.fixture

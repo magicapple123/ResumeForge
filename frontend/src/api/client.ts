@@ -218,3 +218,122 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw networkFailure(path, options.method ?? "GET", error, isReadMethod(options.method));
   }
 }
+
+export interface UploadProgressOptions {
+  /** 请求预算档；上传默认走 upload（10 分钟）。 */
+  budget?: RequestBudgetKind;
+  /**
+   * 上传字节进度回调：percent ∈ [0, 100]。xhr.upload.onload（字节全部发出、
+   * 服务端还在处理）时会收到 100；响应到达后 Promise 才 resolve。
+   */
+  onProgress?: (percent: number) => void;
+  /** 调用方取消。与 fetch 版一致：手动链式（tsconfig 未开 ES2024，不能用 AbortSignal.any）。 */
+  signal?: AbortSignal;
+  /** 额外请求头；Content-Type 由 body 形态决定（FormData 不设，JSON 字符串自动补）。 */
+  headers?: Record<string, string>;
+}
+
+/**
+ * 基于 XHR 的进度上传：fetch 拿不到上传字节进度，大附件（识别材料、图片、头像）
+ * 用它替换 request() 才能给用户画出进度条。错误口径与 request() 完全一致——
+ * 非 2xx 抛同结构的 ApiError（message 仍走 extractError）、预算到期 timeout、
+ * 调用方取消 cancelled、连接失败 network。
+ */
+export function uploadWithProgress<T>(
+  path: string,
+  body: FormData | string | Blob,
+  options: UploadProgressOptions = {},
+): Promise<T> {
+  const { budget = "upload", onProgress, signal, headers } = options;
+
+  // 调用方在发起前就已取消：请求根本不必发出（与 requestRaw 同一口径）。
+  if (signal?.aborted) {
+    return Promise.reject(new ApiError("已取消", undefined, { code: "cancelled" }));
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api${path}`);
+    const limit = BUDGETS_MS[budget];
+    // 预算用 XHR 自带的 timeout：到期触发 ontimeout（不会误触发 onabort），
+    // 与调用方取消天然区分开，语义与 fetch 版的预算一致。
+    if (limit > 0) xhr.timeout = limit;
+
+    const headersLike = new Headers(headers);
+    // 与 request() 同一条规则：FormData 不预设 Content-Type（boundary 由浏览器生成）；
+    // JSON 字符串体自动补 application/json；裸 Blob 补 octet-stream，自带类型的
+    // Blob（File）沿用自身 type，调用方传 headers 时以 headers 为准。
+    if (!headersLike.has("Content-Type")) {
+      if (typeof body === "string") headersLike.set("Content-Type", "application/json");
+      else if (!(body instanceof FormData)) {
+        headersLike.set("Content-Type", body.type || "application/octet-stream");
+      }
+    }
+    headersLike.forEach((value, key) => xhr.setRequestHeader(key, value));
+
+    const callerAbort = () => xhr.abort();
+    signal?.addEventListener("abort", callerAbort);
+
+    const fail = (error: ApiError) => {
+      signal?.removeEventListener("abort", callerAbort);
+      reject(error);
+    };
+    const finish = (value: T) => {
+      signal?.removeEventListener("abort", callerAbort);
+      resolve(value);
+    };
+
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress || !event.lengthComputable || event.total === 0) return;
+      onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    };
+    // 字节全部发出即报 100：剩下的是服务端处理时间，进度条到此已经画满。
+    xhr.upload.onload = () => onProgress?.(100);
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        if (xhr.status === 204) return finish(undefined as T);
+        try {
+          finish(JSON.parse(xhr.responseText) as T);
+        } catch (error) {
+          // 200 但响应体不是合法 JSON：与 request() 同样按网络类失败提示。
+          fail(networkFailure(path, "POST", error, false));
+        }
+        return;
+      }
+      // 非 2xx：message 复用 extractError 的解析（FastAPI detail 形状一致），
+      // 用合成 Response 递交响应文本即可，不必重复实现解析。
+      const requestId = xhr.getResponseHeader("x-request-id") ?? undefined;
+      recordClientDiagnostic("api.error", {
+        path,
+        status: xhr.status,
+        method: "POST",
+        request_id: requestId,
+      });
+      void extractError(new Response(xhr.responseText, { status: xhr.status }))
+        .then((message) =>
+          fail(
+            new ApiError(message, xhr.status, {
+              code: "http",
+              requestId,
+              // 上传是写方法：无论状态码多少都不标记可重试。
+              retryable: false,
+            }),
+          ),
+        )
+        .catch(() =>
+          fail(new ApiError(`请求失败（HTTP ${xhr.status}）`, xhr.status, { code: "http" })),
+        );
+    };
+    // 预算到期：XHR 内部按 timeout 中止，只触发 ontimeout。
+    xhr.ontimeout = () => {
+      recordClientDiagnostic("api.timeout", { path, method: "POST", budget });
+      fail(new ApiError("请求超时，请重试", undefined, { code: "timeout", retryable: false }));
+    };
+    // 只有调用方 abort 会走到这里（timeout 走 ontimeout，onerror 是连接层失败）。
+    xhr.onabort = () => fail(new ApiError("已取消", undefined, { code: "cancelled" }));
+    xhr.onerror = () => fail(networkFailure(path, "POST", new Error("NetworkError"), false));
+
+    xhr.send(body);
+  });
+}

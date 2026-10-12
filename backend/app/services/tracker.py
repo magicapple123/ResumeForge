@@ -4,12 +4,14 @@
 ``tracker_merge.py``：``plan_merges`` 算出"每条会新增还是更新、为什么"，预览接口
 原样返回，确认接口执行同一份计划（"预览=执行"契约）。本文件经门面 re-export。
 """
+
 from __future__ import annotations
 
 import csv
 import io
 import json
 import logging
+from collections.abc import Iterator
 from datetime import date
 from typing import Any
 
@@ -61,9 +63,7 @@ def track_or_none(db: Session, track_id: int) -> ApplicationTrack | None:
     return record
 
 
-def _filtered_query(
-    db: Session, *, status: str = "", keyword: str = ""
-) -> Query[ApplicationTrack]:
+def _filtered_query(db: Session, *, status: str = "", keyword: str = "") -> Query[ApplicationTrack]:
     """list_tracks 与 summarize **共用的过滤口径**：软删过滤 + 状态 + 关键词。
 
     抽出来是为了让统计永远跟列表同一口径——两处各写一遍过滤条件，迟早会改漏一边。
@@ -211,7 +211,9 @@ def _freeze_linked_resume(db: Session, record: ApplicationTrack, *, source: str)
     freeze_delivery(db, record=resume, track_id=record.id, source=source)
 
 
-def create_track(db: Session, payload: TrackCreate, *, source: str = SOURCE_MANUAL) -> ApplicationTrack:
+def create_track(
+    db: Session, payload: TrackCreate, *, source: str = SOURCE_MANUAL
+) -> ApplicationTrack:
     """新增一条求职进度记录。"""
     record = ApplicationTrack(source=source)
     _apply_payload(record, payload)
@@ -360,35 +362,67 @@ _CSV_HEADER = (
 )
 
 
-def export_rows(records: list[ApplicationTrack]) -> list[list[str]]:
-    """把进度记录转成 CSV 导出的行（备注换行压成空格）。"""
+def export_row(item: ApplicationTrack) -> list[str]:
+    """一条进度记录的 CSV 导出行（备注换行压成空格）。"""
     return [
-        [
-            item.company,
-            item.title,
-            status_label(item.status),
-            item.stage_note,
-            item.applied_at,
-            item.status_date,
-            item.next_action,
-            item.next_action_date,
-            item.note.replace("\n", " "),
-        ]
-        for item in records
+        item.company,
+        item.title,
+        status_label(item.status),
+        item.stage_note,
+        item.applied_at,
+        item.status_date,
+        item.next_action,
+        item.next_action_date,
+        item.note.replace("\n", " "),
     ]
 
 
+def export_rows(records: list[ApplicationTrack]) -> list[list[str]]:
+    """把进度记录转成 CSV 导出的行（备注换行压成空格）。"""
+    return [export_row(item) for item in records]
+
+
+def iter_csv_chunks(records) -> Iterator[str]:
+    """逐条产出 CSV 导出文本（含 BOM 与表头行），与 :func:`to_csv` 字节级一致。
+
+    导出走 ``StreamingResponse``（2026-10-12 万级数据优化）：不再 fetchall 全量行
+    拼一个几十 MB 的字符串，而是每写一行就 yield 一段。``records`` 是任意可迭代
+    （通常是 :func:`iter_tracks` 的惰性行迭代器），BOM 与表头先行，行序即记录序。
+    """
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    yield "﻿"
+    writer.writerow(_CSV_HEADER)
+    yield buffer.getvalue()
+    for item in records:
+        buffer.seek(0)
+        buffer.truncate()
+        writer.writerow(export_row(item))
+        yield buffer.getvalue()
+
+
+def iter_tracks(db: Session, *, status: str = "", keyword: str = "") -> Iterator[ApplicationTrack]:
+    """按状态 / 关键词检索的**惰性**版本：排序与 :func:`list_tracks` 完全一致。
+
+    导出（``limit=None`` 全量）专用：``yield_per`` 让 DBAPI 按批取行，端点不再
+    fetchall 把万级记录一次性拖进内存。非导出路径（列表、统计）不经过这里。
+    """
+    query = _stage_ordered(_filtered_query(db, status=status, keyword=keyword))
+    return iter(query.yield_per(200))
+
+
+def count_tracks(db: Session, *, status: str = "", keyword: str = "") -> int:
+    """当前筛选下的记录总数（排序无关）：导出文件名与流式读取各查一次，口径一致。"""
+    return int(_filtered_query(db, status=status, keyword=keyword).count())
+
+
 def to_csv(records: list[ApplicationTrack]) -> str:
-    """导出 CSV。
+    """导出 CSV（一次性全量版本；流式端点走 :func:`iter_csv_chunks`）。
 
     ``\\ufeff`` 是 BOM：Excel 打开不带 BOM 的 UTF-8 CSV 会把中文显示成乱码，
     而这份文件最常见的用途恰恰是用 Excel 打开看看。
     """
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(_CSV_HEADER)
-    writer.writerows(export_rows(records))
-    return "﻿" + buffer.getvalue()
+    return "".join(iter_csv_chunks(records))
 
 
 def to_json(records: list[ApplicationTrack]) -> str:
@@ -422,9 +456,12 @@ def track_out(record: ApplicationTrack) -> TrackOut:
 __all__ = [
     "MAX_LIST_LIMIT",
     "apply_merges",
+    "count_tracks",
     "create_track",
     "delete_track",
     "export_rows",
+    "iter_csv_chunks",
+    "iter_tracks",
     "list_tracks",
     "list_tracks_page",
     "plan_merges",
@@ -437,4 +474,3 @@ __all__ = [
     "track_out",
     "update_track",
 ]
-

@@ -8,7 +8,9 @@ import ResumesPage from "./ResumesPage";
 
 const apiMocks = vi.hoisted(() => ({
   deleteResume: vi.fn(),
+  batchDeleteResumes: vi.fn(),
   listResumes: vi.fn(),
+  listResumeIds: vi.fn(),
   updateResumeFavorite: vi.fn(),
   getResume: vi.fn(),
   fetchResumeHtml: vi.fn(),
@@ -20,7 +22,9 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("../api/resumes", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/resumes")>()),
   deleteResume: apiMocks.deleteResume,
+  batchDeleteResumes: apiMocks.batchDeleteResumes,
   listResumes: apiMocks.listResumes,
+  listResumeIds: apiMocks.listResumeIds,
   updateResumeFavorite: apiMocks.updateResumeFavorite,
   getResume: apiMocks.getResume,
   fetchResumeHtml: apiMocks.fetchResumeHtml,
@@ -67,8 +71,10 @@ function renderPage(initialEntries: string[] = ["/resumes"]) {
 
 beforeEach(() => {
   apiMocks.listResumes.mockReset().mockResolvedValue({ items: [RESUME], total: 1 });
+  apiMocks.listResumeIds.mockReset().mockResolvedValue([RESUME.id]);
   apiMocks.updateResumeFavorite.mockReset().mockResolvedValue({});
   apiMocks.deleteResume.mockReset().mockResolvedValue(undefined);
+  apiMocks.batchDeleteResumes.mockReset().mockResolvedValue({ deleted: 2 });
   apiMocks.getResume.mockReset().mockResolvedValue({
     ...RESUME,
     content: {},
@@ -263,7 +269,7 @@ describe("ResumesPage 批量选择", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
   }
 
-  it("行右键菜单进入多选 → 勾 2 项 → 删除所选 → 确认 → 每条各调一次删除接口", async () => {
+  it("行右键菜单进入多选 → 勾 2 项 → 删除所选 → 确认 → 一次批量删除请求带全部 id（P2-2）", async () => {
     apiMocks.listResumes.mockResolvedValue({
       items: [RESUME, { ...RESUME, id: 9, title: "另一份简历" }],
       total: 2,
@@ -287,8 +293,9 @@ describe("ResumesPage 批量选择", () => {
     expect(
       (await screen.findAllByText(/删除选中的 2 份简历/, {}, { timeout: 5000 })).length,
     ).toBeGreaterThan(0);
-    // 未确认前绝不能删。
+    // 未确认前绝不能删（单删与批量删都不能调）。
     expect(apiMocks.deleteResume).not.toHaveBeenCalled();
+    expect(apiMocks.batchDeleteResumes).not.toHaveBeenCalled();
     // 确认弹窗里 antd 会把标题渲染两份（.ant-modal-title 与 .ant-modal-confirm-title），
     // 用文本查询会撞"Found multiple"——直接等容器出现，再在容器内点确认键
     // （okText「删除」被 antd 插空格成「删 除」；容器限定避免与操作条「删除所选」撞名）。
@@ -303,9 +310,13 @@ describe("ResumesPage 批量选择", () => {
     expect(confirmRoot.textContent).toContain("删除选中的 2 份简历");
     fireEvent.click(within(confirmRoot).getByRole("button", { name: /删\s*除/ }));
 
-    await waitFor(() => expect(apiMocks.deleteResume).toHaveBeenCalledTimes(2), {
+    // P2-2：批量删除改为一次 POST /resumes/batch-delete，不再前端逐条 N 连发。
+    await waitFor(() => expect(apiMocks.batchDeleteResumes).toHaveBeenCalledTimes(1), {
       timeout: 5000,
     });
+    expect(apiMocks.batchDeleteResumes).toHaveBeenCalledWith(
+      expect.arrayContaining([RESUME.id, 9]),
+    );
     expect(await screen.findByText(/已删除 2 份简历/, {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
@@ -326,5 +337,75 @@ describe("ResumesPage 批量选择", () => {
     fireEvent.click(screen.getByRole("button", { name: "退出多选" }));
     expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
     expect(apiMocks.deleteResume).not.toHaveBeenCalled();
+    expect(apiMocks.batchDeleteResumes).not.toHaveBeenCalled();
+  });
+});
+
+describe("ResumesPage 跨页全选（C3）", () => {
+  /** 在第一条数据行上右键进入多选（同上方批量选择用例的入口）。 */
+  async function enterSelectingViaContextMenu() {
+    const title = await screen.findByText(RESUME.title, {}, { timeout: 5000 });
+    fireEvent.contextMenu(title.closest("tr") as HTMLElement);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+  }
+
+  it("「全选全部简历（共 N 个）」拉回全部 id 并计入选区；批量删除收到所有页的 id", async () => {
+    // 页面上只有 1 条，但筛选下共有 3 份（跨页不止当前页）。
+    apiMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 1 });
+    apiMocks.listResumeIds.mockResolvedValue([RESUME.id, 9, 77]);
+    renderPage();
+
+    await enterSelectingViaContextMenu();
+    // 按钮上的 N 取列表端点的 total，而不是当前页条数。
+    fireEvent.click(screen.getByRole("button", { name: "全选全部简历（共 1 个）" }));
+
+    expect(await screen.findByText(/已选中当前筛选下的全部 3 份简历/)).toBeInTheDocument();
+    expect(screen.getByText("已选 3 项")).toBeInTheDocument();
+    expect(apiMocks.listResumeIds).toHaveBeenCalledWith(
+      expect.objectContaining({ keyword: "", favorite: undefined, has_job: undefined }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    const confirmRoot = await waitFor(() => {
+      const root = document.querySelector(".ant-modal-confirm");
+      expect(root).not.toBeNull();
+      return root as HTMLElement;
+    });
+    expect(confirmRoot.textContent).toContain("删除选中的 3 份简历");
+    fireEvent.click(within(confirmRoot).getByRole("button", { name: /删\s*除/ }));
+
+    // 断言批量删除收到**全部页**的 id，而不是只有当前页的那一条。
+    await waitFor(() => expect(apiMocks.batchDeleteResumes).toHaveBeenCalledTimes(1), {
+      timeout: 5000,
+    });
+    expect(apiMocks.batchDeleteResumes).toHaveBeenCalledWith([RESUME.id, 9, 77]);
+  });
+
+  it("筛选下超过 500 份时如实拒绝并提示缩小范围，不进入选区", async () => {
+    apiMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 1 });
+    apiMocks.listResumeIds.mockResolvedValue(Array.from({ length: 501 }, (_, i) => i + 1));
+    renderPage();
+
+    await enterSelectingViaContextMenu();
+    fireEvent.click(screen.getByRole("button", { name: "全选全部简历（共 1 个）" }));
+
+    // 文案对齐岗位广场：说明总数、上限与出路（先筛选缩小范围）。
+    expect(
+      await screen.findByText(/共 501 份简历，批量操作一次最多 500 个；请先用筛选或搜索缩小范围/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("已选 0 项")).toBeInTheDocument();
+    expect(apiMocks.batchDeleteResumes).not.toHaveBeenCalled();
+  });
+
+  it("当前筛选下没有简历时提示为空，不改动选区", async () => {
+    apiMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 1 });
+    apiMocks.listResumeIds.mockResolvedValue([]);
+    renderPage();
+
+    await enterSelectingViaContextMenu();
+    fireEvent.click(screen.getByRole("button", { name: "全选全部简历（共 1 个）" }));
+
+    expect(await screen.findByText("当前筛选下没有简历")).toBeInTheDocument();
+    expect(screen.getByText("已选 0 项")).toBeInTheDocument();
   });
 });

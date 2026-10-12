@@ -13,13 +13,24 @@ from sqlalchemy import create_engine, inspect, text
 # 从模型注册表取，而不是手写清单：手写清单会漏掉新表，让"迁移后的表集合"这条
 # 断言悄悄变成过时的期望值（而真出问题时是用户先发现）。
 _APPLICATION_TABLES = set(application_tables())
+# 0044 的 FTS5 派生索引（虚拟表 + 四张影子表）：不在 Base.metadata 里，但迁移 head
+# 之后的库里必然存在；它们可由 rebuild 重建，不算业务表。
+_FTS_DERIVED_TABLES = {
+    "knowledge_fts",
+    "knowledge_fts_data",
+    "knowledge_fts_idx",
+    "knowledge_fts_docsize",
+    "knowledge_fts_config",
+}
 # 当前迁移 head；每次新增 revision 时同步这里。
-_HEAD_REVISION = "0043_interview_auto_rounds"
+_HEAD_REVISION = "0044_search_fts5"
 
 
 def _assert_head_schema(bind) -> None:
     inspector = inspect(bind)
-    assert set(inspector.get_table_names()) == _APPLICATION_TABLES | {"alembic_version"}
+    assert set(inspector.get_table_names()) == (
+        _APPLICATION_TABLES | {"alembic_version"} | _FTS_DERIVED_TABLES
+    )
     for table_name in _APPLICATION_TABLES:
         expected_columns = {column.name for column in Base.metadata.tables[table_name].columns}
         actual_columns = {column["name"] for column in inspector.get_columns(table_name)}
