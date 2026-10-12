@@ -1,13 +1,30 @@
 /** 面试官设定卡：深链 ?job_id= 预填关联岗位（RF-11），以及提交时把岗位一起带出。 */
 import { App as AntdApp, Form } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SetupTab, type SetupForm } from "./SetupTab";
 
+// 关联岗位下拉已改为组件内部远程搜索（P0-1）：取数与按 id 回查都走这两个 API。
+const jobsMocks = vi.hoisted(() => ({
+  listJobs: vi.fn(),
+  getJob: vi.fn(),
+}));
+
+vi.mock("../../api/jobs", () => jobsMocks);
+
 const JOB_OPTIONS = [
-  { value: 7, label: "市场运营专员 · 示例科技" },
-  { value: 9, label: "后端开发工程师 · 另一家" },
+  { id: 7, title: "市场运营专员", company: "示例科技" },
+  { id: 9, title: "后端开发工程师", company: "另一家" },
 ];
+
+beforeEach(() => {
+  jobsMocks.listJobs.mockReset().mockResolvedValue({ items: JOB_OPTIONS, total: 2 });
+  jobsMocks.getJob
+    .mockReset()
+    .mockImplementation((id: number) =>
+      Promise.resolve(JOB_OPTIONS.find((job) => job.id === id) ?? null),
+    );
+});
 
 /** antd 的 form 实例必须来自 Form.useForm，用一层包装组件注入。 */
 function SetupHarness(props: { initialJobId?: number; onStart: (values: SetupForm) => void }) {
@@ -16,7 +33,6 @@ function SetupHarness(props: { initialJobId?: number; onStart: (values: SetupFor
     <AntdApp>
       <SetupTab
         form={form}
-        jobOptions={JOB_OPTIONS}
         initialJobId={props.initialJobId}
         starting={false}
         onStart={props.onStart}
@@ -37,16 +53,18 @@ afterEach(() => {
 });
 
 describe("SetupTab 关联岗位预填（RF-11）", () => {
-  it("带 initialJobId 进入：关联岗位 Select 已预填该岗位", () => {
+  it("带 initialJobId 进入：按 id 回查后，关联岗位 Select 显示该岗位", async () => {
     renderSetup({ initialJobId: 7 });
 
-    // antd Select 显示选中项的 label。
-    expect(screen.getByText("市场运营专员 · 示例科技")).toBeInTheDocument();
+    // antd Select 显示选中项的 label；label 来自 ensure 的按 id 回查（P0-1）。
+    expect(await screen.findByText("市场运营专员 · 示例科技")).toBeInTheDocument();
   });
 
-  it("id 不在选项里：仍设置值（显示原始 id），不强造选项", () => {
+  it("回查不到的 id：仍设置值（显示原始 id），不强造选项", async () => {
     renderSetup({ initialJobId: 123 });
 
+    // getJob(123) 返回 null（岗位不存在），Select 保持显示原始值。
+    await waitFor(() => expect(jobsMocks.getJob).toHaveBeenCalledWith(123));
     expect(screen.getByText("123")).toBeInTheDocument();
     expect(screen.queryByText(/强造/)).toBeNull();
   });
@@ -64,7 +82,6 @@ describe("SetupTab 关联岗位预填（RF-11）", () => {
     fireEvent.click(screen.getByRole("button", { name: /开始面试/ }));
 
     // 表单校验默认全过（类型/难度/风格/轮数都有初值），预填的 jobId 原样带出。
-    // antd 提交是异步校验，等一个微任务周期。
     await waitFor(() => expect(onStart).toHaveBeenCalled());
     expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ jobId: 7 }));
   });

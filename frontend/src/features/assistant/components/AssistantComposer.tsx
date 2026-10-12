@@ -1,6 +1,6 @@
 /** 求职助手消息输入、上下文选择、技能开关与附件预览。 */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { layer } from "../../../theme/tokens";
 import {
   CloseOutlined,
@@ -41,6 +41,7 @@ import {
   isValidReasoningEffort,
   type ReasoningEffort,
 } from "../../../types/assistant";
+import { useJobSearchSelect, useResumeSearchSelect } from "../../../hooks/remoteSearchOptions";
 import FileDropZone from "../../../components/common/FileDropZone";
 
 /** 文档按扩展名区分图标：pdf 和 docx 混在一串标签里时，图标比文件名更好认。 */
@@ -67,8 +68,6 @@ interface Props {
   skills: AssistantSkill[];
   skillsLoaded: boolean;
   togglingSkillId: number | null;
-  jobOptions: Array<{ value: number; label: string }>;
-  resumeOptions: Array<{ value: number; label: string }>;
   onContentChange: (value: string) => void;
   onJobChange: (value: number | undefined) => void;
   onResumeChange: (value: number | undefined) => void;
@@ -98,8 +97,6 @@ export default function AssistantComposer({
   skills,
   skillsLoaded,
   togglingSkillId,
-  jobOptions,
-  resumeOptions,
   onContentChange,
   onJobChange,
   onResumeChange,
@@ -115,6 +112,27 @@ export default function AssistantComposer({
   onStop,
 }: Props) {
   const { message } = App.useApp();
+  // 关联岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
+  const jobSelect = useJobSearchSelect();
+  const resumeSelect = useResumeSearchSelect();
+  // 深链 / 页面侧带入的已选值保显示（P0-1）：按 id 回查补进候选。
+  useEffect(() => {
+    void jobSelect.ensure(jobId);
+    // hook 的回调引用稳定，只跟随已选值变化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+  useEffect(() => {
+    void resumeSelect.ensure(resumeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeId]);
+  // 页面态下拉常驻可见：挂载即预拉第一页候选（compact 卡不显示上下文选择，跳过）。
+  useEffect(() => {
+    if (compact) return;
+    void jobSelect.reload();
+    void resumeSelect.reload();
+    // hook 的回调引用稳定，只在挂载时执行一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compact]);
   const enabledSkills = skills.filter((skill) => skill.enabled);
   // 自定义档位是**界面态**（值本身仍然由页面受控）：从本地存回来的自定义值一打开就
   // 直接落在输入框里，而不是让下拉把它当未知值空着显示。
@@ -154,21 +172,17 @@ export default function AssistantComposer({
             <div className="assistant-context-selects">
               <Select
                 allowClear
-                showSearch
-                optionFilterProp="label"
-                placeholder="关联岗位"
+                placeholder="关联岗位（输入关键词搜索）"
                 value={jobId}
-                options={jobOptions}
                 onChange={onJobChange}
+                {...jobSelect.selectProps}
               />
               <Select
                 allowClear
-                showSearch
-                optionFilterProp="label"
-                placeholder="关联简历"
+                placeholder="关联简历（输入关键词搜索）"
                 value={resumeId}
-                options={resumeOptions}
                 onChange={onResumeChange}
+                {...resumeSelect.selectProps}
               />
             </div>
           </div>

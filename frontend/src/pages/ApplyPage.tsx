@@ -16,8 +16,6 @@ import {
   resumeTask,
   stopTask,
 } from "../api/apply";
-import { listJobs } from "../api/jobs";
-import { listTracks } from "../api/tracker";
 import ReferralPanel from "../components/ReferralPanel";
 import ApplyProgressPanel from "../components/apply/ApplyProgressPanel";
 import ApplyQueuePanel from "../components/apply/ApplyQueuePanel";
@@ -60,32 +58,6 @@ export default function ApplyPage() {
     },
     [setSearchParams],
   );
-  const [jobOptions, setJobOptions] = useState<{ value: number; label: string }[]>([]);
-  const [trackOptions, setTrackOptions] = useState<{ value: number; label: string }[]>([]);
-
-  // 内推面板需要绑定岗位 / 漏斗，这里拉取可选项；失败静默，不影响投递台本身。
-  useEffect(() => {
-    listJobs({ page_size: 100 })
-      .then((page) =>
-        setJobOptions(
-          page.items.map((job) => ({
-            value: job.id,
-            label: `${job.title}${job.company ? ` · ${job.company}` : ""}`,
-          })),
-        ),
-      )
-      .catch(() => setJobOptions([]));
-    listTracks({})
-      .then((trackList) =>
-        setTrackOptions(
-          trackList.items.map((track) => ({
-            value: track.id,
-            label: `${track.company} · ${track.title}`,
-          })),
-        ),
-      )
-      .catch(() => setTrackOptions([]));
-  }, []);
 
   // 首屏恢复：应用重启或切页回来时，若仍有进行中的投递任务，直接接着显示进度。
   useEffect(() => {
@@ -240,7 +212,8 @@ export default function ApplyPage() {
           {
             key: "referrals",
             label: "内推",
-            children: <ReferralPanel jobOptions={jobOptions} trackOptions={trackOptions} />,
+            // 关联岗位/漏斗下拉由内推面板内部远程搜索（P0-1），页面不再预拉选项。
+            children: <ReferralPanel />,
           },
         ]}
       />

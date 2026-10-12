@@ -3,6 +3,7 @@
 从原 ``api/resumes.py`` 原样搬运（纯切片，无 patch 读取点）；`_to_resume_out` 改从
 ``_shared`` 导入。
 """
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,6 +17,8 @@ from ...schemas.common import Page
 from ...schemas.resume import (
     DeliverySummary,
     ManualResumeRequest,
+    ResumeBatchDeleteResult,
+    ResumeBatchRequest,
     ResumeBrief,
     ResumeContent,
     ResumeFavoriteUpdate,
@@ -61,17 +64,44 @@ def create_manual_resume(payload: ManualResumeRequest, db: Session = Depends(get
     return _to_resume_out(record)
 
 
-@router.get("", response_model=Page[ResumeBrief])
-def list_resumes(
-    db: Session = Depends(get_db),
-    keyword: str = Query(default=""),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    job_id: int | None = Query(default=None, ge=1),
-    favorite: bool | None = Query(default=None),
-    has_job: bool | None = Query(default=None),
+@router.post("/batch-delete", response_model=ResumeBatchDeleteResult)
+def batch_delete_resumes(payload: ResumeBatchRequest, db: Session = Depends(get_db)):
+    """批量移入回收站（软删除，P2-4）：单次上限 500，与岗位批量操作同一口径。
+
+    语义对齐单条 ``DELETE /{resume_id}``：软删除进回收站可恢复；任何一条 id 不存在
+    或已在回收站里即整体 404（与 ``/jobs/batch-delete`` 的 _get_jobs_or_404 一致），
+    不做"删一半"。
+    """
+    records: list[ResumeRecord] = []
+    for resume_id in payload.resume_ids:
+        record = trash.get_live(db, ResumeRecord, resume_id)
+        if record is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"以下简历不存在或已被删除：{resume_id}",
+            )
+        records.append(record)
+    for record in records:
+        trash.soft_delete(db, "resume", record)
+    db.commit()
+    return ResumeBatchDeleteResult(deleted=len(records))
+
+
+def _filtered_query(
+    db: Session,
+    *,
+    keyword: str = "",
+    job_id: int | None = None,
+    favorite: bool | None = None,
+    has_job: bool | None = None,
 ):
-    """列出简历。``has_job=false`` 只返回通用简历（未关联任何岗位）。"""
+    """list_resumes 与 list_resume_ids **共用的过滤口径**。
+
+    四个筛选参数（keyword/job_id/favorite/has_job）与旧 list_resumes 内联逻辑逐行
+    同源：两处各写一遍迟早会改漏一边（``jobs`` 域的 ``_filtered_query`` 同一模式）。
+    keyword 仍走标题/岗位/公司/正文 LIKE——content 是 JSON 文本（cast 后整段扫描），
+    不适合 FTS 分词，与全局搜索的简历分支口径一致，保持不动。
+    """
     query = db.query(ResumeRecord).filter(trash.live_only(ResumeRecord))
     if job_id is not None:
         query = query.filter(ResumeRecord.job_id == job_id)
@@ -91,9 +121,53 @@ def list_resumes(
                 cast(ResumeRecord.content, String).like(like),
             )
         )
+    return query
+
+
+@router.get("", response_model=Page[ResumeBrief])
+def list_resumes(
+    db: Session = Depends(get_db),
+    keyword: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    job_id: int | None = Query(default=None, ge=1),
+    favorite: bool | None = Query(default=None),
+    has_job: bool | None = Query(default=None),
+):
+    """列出简历。``has_job=false`` 只返回通用简历（未关联任何岗位）。"""
+    query = _filtered_query(db, keyword=keyword, job_id=job_id, favorite=favorite, has_job=has_job)
     total = query.count()
-    records = query.order_by(ResumeRecord.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    records = (
+        query.order_by(ResumeRecord.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     return Page(items=[ResumeBrief.model_validate(r) for r in records], total=total)
+
+
+@router.get("/ids", response_model=list[int])
+def list_resume_ids(
+    db: Session = Depends(get_db),
+    keyword: str = Query(default=""),
+    job_id: int | None = Query(default=None, ge=1),
+    favorite: bool | None = Query(default=None),
+    has_job: bool | None = Query(default=None),
+):
+    """当前筛选下**全部**简历的 id（不分页）：批量选择「全选全部简历」用。
+
+    与 ``GET /api/jobs/ids`` 同一模式：筛选参数与列表端点完全同源（共用
+    :func:`_filtered_query`），id 列表本身很轻，把筛选逻辑交给前端分页拉取反而
+    要多轮请求；批量操作 500 的上限由前端在拿到列表后裁决——这里如实返回全量。
+    **声明在 ``/{resume_id}`` 之前**：字面量段必须排在参数段前面。
+    """
+    query = _filtered_query(db, keyword=keyword, job_id=job_id, favorite=favorite, has_job=has_job)
+    return [
+        resume_id
+        for (resume_id,) in query.order_by(ResumeRecord.created_at.desc())
+        .with_entities(ResumeRecord.id)
+        .all()
+    ]
 
 
 @router.get("/{resume_id}", response_model=ResumeOut)

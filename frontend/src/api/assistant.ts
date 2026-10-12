@@ -4,6 +4,7 @@ import type {
   AssistantConversationBrief,
   AssistantConversationDetail,
   AssistantConversationForkPayload,
+  AssistantMessage,
   AssistantSurface,
   AssistantStreamEvent,
   AssistantWriteProposal,
@@ -17,10 +18,18 @@ function surfaceQuery(surface: AssistantSurface): string {
   return `surface=${encodeURIComponent(surface)}`;
 }
 
+/**
+ * 列出会话（P0-2）：服务端分页上限 200，支持按标题 / 首条消息关键词搜索。
+ * 不再硬编码 limit=100——那会把第 101 条之后的会话从列表里"藏掉"。
+ */
 export function listAssistantConversations(
   surface: AssistantSurface = "page",
+  keyword = "",
 ): Promise<AssistantConversationBrief[]> {
-  return request(`/assistant/conversations?limit=100&${surfaceQuery(surface)}`);
+  const params = new URLSearchParams({ limit: "200" });
+  if (keyword.trim()) params.set("keyword", keyword.trim());
+  params.set("surface", surface);
+  return request(`/assistant/conversations?${params.toString()}`);
 }
 
 /** 导出格式：Markdown（可读可贴）、纯文本（去掉标记）、JSON（结构化，便于再加工）。 */
@@ -80,11 +89,31 @@ export function createAssistantConversation(
   });
 }
 
+/**
+ * 会话详情（B5 按需加载）：`options.message_limit > 0` 时后端只下发最新 N 条
+ * （`has_earlier` 标记还有更早的，`messages_total` 如实给全量数）；不传 = 全量（旧行为）。
+ */
 export function getAssistantConversation(
   id: number,
   surface: AssistantSurface = "page",
+  options: { message_limit?: number } = {},
 ): Promise<AssistantConversationDetail> {
-  return request(`/assistant/conversations/${id}?${surfaceQuery(surface)}`);
+  const query = options.message_limit
+    ? `${surfaceQuery(surface)}&message_limit=${options.message_limit}`
+    : surfaceQuery(surface);
+  return request(`/assistant/conversations/${id}?${query}`);
+}
+
+/** 「加载更早」：取 before_id 之前（更旧）的至多 limit 条消息，按时间正序返回。 */
+export function getEarlierAssistantMessages(
+  id: number,
+  beforeId: number,
+  limit = 50,
+  surface: AssistantSurface = "page",
+): Promise<{ items: AssistantMessage[]; has_earlier: boolean }> {
+  return request(
+    `/assistant/conversations/${id}/messages/earlier?before_id=${beforeId}&limit=${limit}&${surfaceQuery(surface)}`,
+  );
 }
 
 export function renameAssistantConversation(

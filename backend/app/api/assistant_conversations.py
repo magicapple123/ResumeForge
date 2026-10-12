@@ -1,11 +1,12 @@
 """求职助手会话的数据库读写。"""
+
 import logging
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import HTTPException
-from sqlalchemy import func
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import func, or_
+from sqlalchemy.orm import Session
 
 from ..models.assistant import ChatConversation, ChatMessage
 from ..models.profile import utcnow
@@ -15,6 +16,7 @@ from ..schemas.assistant import (
     ChatConversationDetail,
     ChatConversationForkRequest,
     ChatConversationUpdate,
+    ChatMessageOut,
     ConversationSurface,
 )
 from ..services import trash
@@ -92,7 +94,7 @@ def create_conversation(payload: ChatConversationCreate, db: Session) -> ChatCon
     db.flush()
     message_count = 0
     if payload.welcome:
-        conversation.title = (title[:120] if title != DEFAULT_TITLE else WELCOME_TITLE)
+        conversation.title = title[:120] if title != DEFAULT_TITLE else WELCOME_TITLE
         db.add(
             ChatMessage(
                 conversation_id=conversation.id,
@@ -108,13 +110,43 @@ def create_conversation(payload: ChatConversationCreate, db: Session) -> ChatCon
 
 
 def list_conversations(
-    limit: int, db: Session, surface: ConversationSurface = "page"
+    limit: int,
+    db: Session,
+    surface: ConversationSurface = "page",
+    keyword: str = "",
 ) -> list[ChatConversationBrief]:
-    """按置顶、更新时间排序返回会话（含已归档，由前端按筛选展示）。"""
+    """按置顶、更新时间排序返回会话（含已归档，由前端按筛选展示）。
+
+    ``keyword``（P0-2）：按标题或**首条消息**正文模糊过滤。会话超过一屏之后
+    "翻不到旧会话"的出路是搜索而不是无限拉全量——首条消息通常是用户的开场提问，
+    命中它就能找回"那次问了什么"的对话。取"每会话 ``min(id)`` 的那条消息"而不是
+    任意消息：只搜开场白，避免搜正文把会话列表变成全文检索（那是搜索页的职责）。
+    """
+    query = db.query(ChatConversation).filter(
+        trash.live_only(ChatConversation), ChatConversation.surface == surface
+    )
+    term = keyword.strip()
+    if term:
+        like = f"%{term}%"
+        first_message_ids = (
+            db.query(func.min(ChatMessage.id).label("min_id"))
+            .group_by(ChatMessage.conversation_id)
+            .subquery()
+        )
+        matched_conversations = (
+            db.query(ChatMessage.conversation_id)
+            .join(first_message_ids, ChatMessage.id == first_message_ids.c.min_id)
+            .filter(ChatMessage.content.like(like))
+            .subquery()
+        )
+        query = query.filter(
+            or_(
+                ChatConversation.title.like(like),
+                ChatConversation.id.in_(db.query(matched_conversations.c.conversation_id)),
+            )
+        )
     rows = (
-        db.query(ChatConversation)
-        .filter(trash.live_only(ChatConversation), ChatConversation.surface == surface)
-        .order_by(
+        query.order_by(
             ChatConversation.pinned.desc(),
             ChatConversation.updated_at.desc(),
             ChatConversation.id.desc(),
@@ -127,18 +159,66 @@ def list_conversations(
 
 
 def read_conversation(
-    conversation_id: int, db: Session, surface: ConversationSurface = "page"
+    conversation_id: int,
+    db: Session,
+    surface: ConversationSurface = "page",
+    message_limit: int = 0,
 ) -> ChatConversationDetail:
+    """会话详情；``message_limit > 0`` 时只下发最新 N 条（B5 按需加载）。
+
+    0 = 全量（完全兼容旧行为）。>0 时按 id 倒序取 N 条再正序返回，``messages_total``
+    如实给全量条数、``has_earlier`` 标记是否还有更早的——更早的消息由
+    ``read_earlier_messages`` 分页补齐，长对话不再一次性全量 selectinload。
+    """
     conversation = (
         db.query(ChatConversation)
         .filter(trash.live_only(ChatConversation), ChatConversation.surface == surface)
-        .options(selectinload(ChatConversation.messages))
         .filter(ChatConversation.id == conversation_id)
         .one_or_none()
     )
     if conversation is None:
         raise HTTPException(status_code=404, detail="会话不存在或已被删除")
-    return ChatConversationDetail.model_validate(conversation)
+    message_query = db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id)
+    messages_total = message_query.count()
+    if message_limit > 0:
+        rows = message_query.order_by(ChatMessage.id.desc()).limit(message_limit).all()
+        rows.reverse()
+        has_earlier = messages_total > len(rows)
+    else:
+        rows = message_query.order_by(ChatMessage.id).all()
+        has_earlier = False
+    # 先验证 brief 再拼 detail：避免 model_validate 触发 conversation.messages 的
+    # 全量懒加载——limit 模式下这正是要省掉的那次查询。
+    brief = ChatConversationBrief.model_validate(conversation)
+    return ChatConversationDetail(
+        **brief.model_dump(),
+        messages=[ChatMessageOut.model_validate(row) for row in rows],
+        messages_total=messages_total,
+        has_earlier=has_earlier,
+    )
+
+
+def read_earlier_messages(
+    conversation_id: int,
+    before_id: int,
+    limit: int,
+    db: Session,
+    surface: ConversationSurface = "page",
+) -> tuple[list[ChatMessageOut], bool]:
+    """取 ``before_id`` 之前（更旧）的最新 ``limit`` 条消息，返回 (消息, 是否还有更早的)。
+
+    surface 校验与 ``read_conversation`` 相同（404 语义一致）；倒序取再正序返回，
+    界面直接 prepend 即可衔接。
+    """
+    conversation_or_404(db, conversation_id, surface)
+    query = db.query(ChatMessage).filter(
+        ChatMessage.conversation_id == conversation_id,
+        ChatMessage.id < before_id,
+    )
+    remaining = query.count()
+    rows = query.order_by(ChatMessage.id.desc()).limit(limit).all()
+    rows.reverse()
+    return [ChatMessageOut.model_validate(row) for row in rows], remaining > len(rows)
 
 
 def update_conversation(
@@ -283,6 +363,7 @@ __all__ = [
     "fork_conversation",
     "list_conversations",
     "read_conversation",
+    "read_earlier_messages",
     "update_conversation",
     "welcome_message",
 ]

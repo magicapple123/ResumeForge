@@ -13,7 +13,7 @@ import {
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import { Alert, App, Button, Card, Empty, Select, Space, Spin, Tag, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   deleteQuestionBank,
   generateQuestionAnswer,
@@ -24,13 +24,12 @@ import {
 } from "../api/interview";
 import { useApi } from "../hooks/useApi";
 import { useBatchSelection } from "../hooks/useBatchSelection";
+import { useJobSearchSelect, useResumeSearchSelect } from "../hooks/remoteSearchOptions";
 import type { QuestionAnswer, QuestionBankOut, QuestionBankRecord } from "../types";
 import QuestionGroupCards from "./questionbank/QuestionGroupCards";
 import BankHistoryCard from "./questionbank/BankHistoryCard";
 
 interface Props {
-  jobOptions: { value: number; label: string }[];
-  resumeOptions: { value: number; label: string }[];
   onStartSession?: (questions: string[]) => void;
   /** 历史记录富还原：传入一条已保存的题库记录后，用完全相同的渲染路径展示并允许"参考答案"回写。 */
   record?: QuestionBankRecord | null;
@@ -41,14 +40,22 @@ interface Props {
 }
 
 export default function QuestionBankPanel({
-  jobOptions,
-  resumeOptions,
   onStartSession,
   record,
   onOpenRecord,
   onCloseRecord,
 }: Props) {
   const { message, modal } = App.useApp();
+  // 岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
+  const jobSelect = useJobSearchSelect();
+  const resumeSelect = useResumeSearchSelect();
+  // 下拉常驻可见：挂载时预拉第一页候选，输入关键词再搜（与旧首屏体验对齐）。
+  useEffect(() => {
+    void jobSelect.reload();
+    void resumeSelect.reload();
+    // hook 的回调引用稳定，只在挂载时执行一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [jobId, setJobId] = useState<number | undefined>();
   const [resumeId, setResumeId] = useState<number | undefined>();
   const [loading, setLoading] = useState(false);
@@ -139,7 +146,7 @@ export default function QuestionBankPanel({
     setSaving(true);
     try {
       const resumeTitle =
-        resumeOptions.find((option) => option.value === result.resume_id)?.label ?? "";
+        resumeSelect.options.find((option) => option.value === result.resume_id)?.label ?? "";
       await saveQuestionBank({
         job_id: result.job_id ?? null,
         job_title: result.job_title,
@@ -287,23 +294,19 @@ export default function QuestionBankPanel({
           <Space wrap>
             <Select
               allowClear
-              showSearch
-              optionFilterProp="label"
               style={{ minWidth: 240 }}
-              placeholder="关联岗位（选填）"
+              placeholder="关联岗位（选填，输入关键词搜索）"
               value={jobId}
               onChange={setJobId}
-              options={jobOptions}
+              {...jobSelect.selectProps}
             />
             <Select
               allowClear
-              showSearch
-              optionFilterProp="label"
               style={{ minWidth: 240 }}
-              placeholder="关联简历（选填）"
+              placeholder="关联简历（选填，输入关键词搜索）"
               value={resumeId}
               onChange={setResumeId}
-              options={resumeOptions}
+              {...resumeSelect.selectProps}
             />
             <Button
               type="primary"

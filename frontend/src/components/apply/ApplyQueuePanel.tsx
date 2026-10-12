@@ -32,6 +32,7 @@ import { useApi } from "../../hooks/useApi";
 import {
   QUEUE_STATUS_META,
   type ApplyQueueItem,
+  type ApplyQueueList,
   type ApplyTask,
   type QueueStatus,
 } from "../../types";
@@ -71,7 +72,8 @@ type AdmissionFilterValue = "allow" | "needs_confirm" | "block" | typeof UNANALY
 export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Props) {
   const { message } = App.useApp();
   const [reloadKey, setReloadKey] = useState(0);
-  const { data, loading, error, reload } = useApi<ApplyQueueItem[]>(() => listQueue(), [reloadKey]);
+  // 列表响应是 { items, total, truncated }（P2-2）：队列封顶 500 条，total 是真实条数。
+  const { data, loading, error, reload } = useApi<ApplyQueueList>(() => listQueue(), [reloadKey]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [editing, setEditing] = useState<ApplyQueueItem | null>(null);
   const [detail, setDetail] = useState<ApplyQueueItem | null>(null);
@@ -87,7 +89,9 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     if (error) message.error(error);
   }, [error, message]);
 
-  const items = useMemo(() => data ?? [], [data]);
+  const items = useMemo(() => data?.items ?? [], [data]);
+  const queueTotal = data?.total ?? 0;
+  const queueTruncated = data?.truncated ?? false;
   const pendingItems = useMemo(
     () => items.filter((item) => item.status === "pending" && item.job_id !== null),
     [items],
@@ -290,6 +294,16 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
         />
       )}
 
+      {/* 队列被封顶展示（P2-2）：如实在说，引导用筛选/开始投递消化，而不是假装队列只有 500 条。 */}
+      {queueTruncated && items.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          title={`队列共 ${queueTotal} 个岗位，列表只显示最新入队的前 ${items.length} 条，请用筛选缩小范围或先投递消化队列。`}
+          style={{ marginBottom: 12 }}
+        />
+      )}
+
       <div className="apply-queue-head">
         <Space wrap>
           <Select
@@ -311,7 +325,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
             aria-label="按准入筛选"
           />
           <Typography.Text type="secondary">
-            共 {items.length} 个岗位
+            共 {queueTotal} 个岗位
             {filterActive ? `，筛选出 ${filteredItems.length} 个` : ""}，已选 {selectedIds.length}{" "}
             个
           </Typography.Text>

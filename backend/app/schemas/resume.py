@@ -1,4 +1,5 @@
 """简历 Schema：生成请求、LLM 输出结构、历史记录。"""
+
 from datetime import datetime
 from typing import Annotated, Literal
 
@@ -109,8 +110,12 @@ class ResumeContent(BaseModel):
     github: str = Field(default="", max_length=256)
     job_intent: str = Field(default="", max_length=128)
     summary: str = Field(default="", max_length=MAX_RESUME_TEXT_CHARS)
-    education: list[ResumeEducation] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
-    experience: list[ResumeExperience] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
+    education: list[ResumeEducation] = Field(
+        default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS
+    )
+    experience: list[ResumeExperience] = Field(
+        default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS
+    )
     campus_experience: list[ResumeCampusExperience] = Field(
         default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS
     )
@@ -424,3 +429,21 @@ class ReviewChangeVerdictOut(BaseModel):
 
 class ReviewPrepareOut(BaseModel):
     results: list[ReviewChangeVerdictOut] = Field(default_factory=list)
+
+
+class ResumeBatchRequest(BaseModel):
+    """批量操作请求：与 ``schemas.job.JobBatchRequest`` 同款口径（去重 + 上限 500）。"""
+
+    resume_ids: list[int] = Field(max_length=500)
+
+    @field_validator("resume_ids")
+    @classmethod
+    def validate_and_deduplicate_ids(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise ValueError("请至少选择一份简历")
+        unique_ids = list(dict.fromkeys(value))
+        return unique_ids
+
+
+class ResumeBatchDeleteResult(BaseModel):
+    deleted: int

@@ -36,6 +36,17 @@ export interface ApplyQueueAddItem {
   confirm_unanalyzed?: boolean;
 }
 
+/**
+ * 队列列表响应（P2-2）：列表**封顶 500 条**（按 sort_order 倒序取最新入队的），
+ * `total` 是队列实际条数，`truncated` 表示还有更早的条目没展示——
+ * 界面要提示用筛选/开始投递消化队列，而不是假装队列只有 500 条。
+ */
+export interface ApplyQueueList {
+  items: ApplyQueueItem[];
+  total: number;
+  truncated: boolean;
+}
+
 /** 入队被 409 拦下时后端回传的结构化原因（用于逐条确认）。 */
 export interface QueueConflictDetail {
   message: string;
@@ -130,6 +141,11 @@ export interface ApplyRecordBatch {
   message: string;
   created_at: string;
   finished_at: string | null;
+  /**
+   * 命中当前筛选的记录数（B4 按需加载）：轻量分页（include_items=false）不携带
+   * items，组头用它展示「N 条记录」；展开时再拉明细。可选：旧响应里没有。
+   */
+  matched_count?: number;
   items: ApplyRecord[];
 }
 

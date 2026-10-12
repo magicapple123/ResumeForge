@@ -7,13 +7,14 @@
 路由顺序有讲究：``/parse`` / ``/apply`` / ``/export`` 必须注册在 ``/{track_id}`` 之前，
 否则会被当成路径参数去解析成整数，返回一个和"路由不存在"很像的 422。
 """
+
 from __future__ import annotations
 
 import logging
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -30,6 +31,7 @@ from ..schemas.tracker import (
     TrackOut,
     TrackParseOut,
     TrackParseRequest,
+    TrackStatsOut,
     TrackUpdate,
 )
 from ..services.attachments import (
@@ -45,13 +47,15 @@ from ..services.settings_service import get_llm_config
 from ..services.text_extraction import llm_is_configured
 from ..services.tracker import (
     apply_merges,
+    count_tracks,
     create_track,
     delete_track,
+    iter_csv_chunks,
+    iter_tracks,
     list_tracks,
     list_tracks_page,
     preview_merges,
     summarize,
-    to_csv,
     to_json,
     track_or_none,
     track_out,
@@ -73,9 +77,9 @@ def _track_brief(record: ApplicationTrack) -> TrackOut:
     """
     item = track_out(record)
     if len(item.note) > TRACK_NOTE_PREVIEW_CHARS:
-        item.note = item.note[: TRACK_NOTE_PREVIEW_CHARS] + "…"
+        item.note = item.note[:TRACK_NOTE_PREVIEW_CHARS] + "…"
     if len(item.evidence) > TRACK_EVIDENCE_PREVIEW_CHARS:
-        item.evidence = item.evidence[: TRACK_EVIDENCE_PREVIEW_CHARS] + "…"
+        item.evidence = item.evidence[:TRACK_EVIDENCE_PREVIEW_CHARS] + "…"
     return item
 
 
@@ -122,6 +126,21 @@ def read_tracks_page(
     return Page(items=[_track_brief(item) for item in records], total=total)
 
 
+@router.get("/stats", response_model=TrackStatsOut)
+def read_track_stats(
+    status: str = Query(default=""),
+    keyword: str = Query(default=""),
+    db: Session = Depends(get_db),
+):
+    """只取漏斗统计（P1-2）：``summarize`` 本就是 SQL 聚合，独立成端点后画漏斗
+    不必再拖 500 行列表大响应。过滤口径与列表共用；状态取值校验同列表。
+    **声明在 ``/{track_id}`` 之前**（同 ``/export`` 的理由）。
+    """
+    if status and status not in STATUSES:
+        raise HTTPException(status_code=422, detail="未知的进度状态")
+    return TrackStatsOut(**summarize(db, status=status, keyword=keyword))
+
+
 @router.post("", response_model=TrackOut, status_code=201)
 def create_track_entry(payload: TrackCreate, db: Session = Depends(get_db)):
     return track_out(create_track(db, payload))
@@ -134,22 +153,38 @@ def export_tracks(
     keyword: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
-    """导出当前筛选条件下的进度记录。"""
+    """导出当前筛选条件下的进度记录。
+
+    CSV 走 ``StreamingResponse``（2026-10-12 万级数据优化）：行由
+    ``iter_tracks`` 惰性按批取、``iter_csv_chunks`` 逐行产出，端点不再
+    fetchall + 全内存拼一个几十 MB 的字符串；产物与旧的 ``to_csv`` 字节级一致
+    （BOM、表头、行序、``\\r\\n`` 行尾都不变）。JSON 保持一次性拼装：它的
+    ``总数`` 字段需要全量计数、indent=2 的嵌套结构逐条重排缩进容易出字节差，
+    流式化收益低风险高，如实不切。
+
+    FastAPI ≥ 0.106 保证 generator 依赖（``get_db``）在响应发送完成后才清理，
+    流式 generator 消费期间请求 session 仍然可用。
+    """
     if status and status not in STATUSES:
         raise HTTPException(status_code=422, detail="未知的进度状态")
-    # 导出必须**全量**（limit=None）：导出截断等于悄悄丢用户数据，与列表的
-    # MAX_LIST_LIMIT 兜底是两回事。
-    records = list_tracks(db, status=status, keyword=keyword, limit=None)
+    # 文件名里的条数需要先知道总数：count 与流式读是两次查询，但排序/过滤口径
+    # 完全一致（同一份 _filtered_query + _stage_ordered），语义不会漂移。
+    total = count_tracks(db, status=status, keyword=keyword)
     if format == "json":
+        records = list_tracks(db, status=status, keyword=keyword, limit=None)
+        assert len(records) == total  # 同口径两次查询必须一致；漂移即 bug
         content, media_type, suffix = to_json(records), "application/json; charset=utf-8", "json"
     else:
         # text/csv 不带 charset 时 Excel 会按本地编码猜，中文列名直接变乱码；
-        # 内容里的 BOM 再兜一层（见 services/tracker.to_csv）。
-        content, media_type, suffix = to_csv(records), "text/csv; charset=utf-8", "csv"
-    stamp = str(len(records))
+        # 内容里的 BOM 再兜一层（见 services/tracker.iter_csv_chunks）。
+        media_type, suffix = "text/csv; charset=utf-8", "csv"
+        content = iter_csv_chunks(iter_tracks(db, status=status, keyword=keyword))
+    stamp = str(total)
     filename = f"求职进度-{stamp}条.{suffix}"
     headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
-    return Response(content, media_type=media_type, headers=headers)
+    if isinstance(content, str):
+        return Response(content, media_type=media_type, headers=headers)
+    return StreamingResponse(content, media_type=media_type, headers=headers)
 
 
 @router.post("/parse", response_model=TrackParseOut)

@@ -206,7 +206,7 @@ def test_queue_reorder_and_delete(client, db_session, fake_runner):
     assert [item["id"] for item in reordered.json()] == [id_b, id_a]
 
     assert client.delete(f"/api/apply/queue/{id_a}").status_code == 204
-    assert len(client.get("/api/apply/queue").json()) == 1
+    assert len(client.get("/api/apply/queue").json()["items"]) == 1
 
 
 # ===== 匹配分析 =====
@@ -244,8 +244,6 @@ def test_match_analysis_missing_job_returns_404(client, fake_runner):
     assert client.post("/api/jobs/9999/match-analysis").status_code == 404
 
 
-
-
 def test_queue_shows_the_latest_import_first(client, db_session, fake_runner):
     """后导入的排最上（用户实测反馈：海投场景新加入的岗位应该最先看到）。
 
@@ -270,7 +268,7 @@ def test_queue_shows_the_latest_import_first(client, db_session, fake_runner):
         == 200
     )
 
-    listed = client.get("/api/apply/queue").json()
+    listed = client.get("/api/apply/queue").json()["items"]
     assert [item["job_id"] for item in listed] == [job_b.id, job_a.id]
 
     # 重排序：把 job_a 挪到显示顺序的最上面（界面传"从上到下"的 id 列表）
@@ -286,5 +284,5 @@ def test_queue_shows_the_latest_import_first(client, db_session, fake_runner):
         ).status_code
         == 200
     )
-    listed = client.get("/api/apply/queue").json()
+    listed = client.get("/api/apply/queue").json()["items"]
     assert [item["job_id"] for item in listed] == [job_c.id, job_a.id, job_b.id]

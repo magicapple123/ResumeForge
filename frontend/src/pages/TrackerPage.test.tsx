@@ -14,6 +14,7 @@ import TrackerPage from "./TrackerPage";
 
 const apiMocks = vi.hoisted(() => ({
   listTracks: vi.fn(),
+  listTrackStats: vi.fn(),
   listTracksPage: vi.fn(),
   getTrack: vi.fn(),
   createTrack: vi.fn(),
@@ -72,6 +73,12 @@ function makeList(items: Track[]): TrackList {
   };
 }
 
+/** P1-2：`GET /tracker/stats` 响应 = TrackList 去掉 items/total。 */
+function makeStats(items: Track[]) {
+  const { status_counts, active_count, offer_count, rejected_count, month_count } = makeList(items);
+  return { status_counts, active_count, offer_count, rejected_count, month_count };
+}
+
 function makePage(items: Track[], total = items.length): Page<Track> {
   return { items, total };
 }
@@ -88,7 +95,7 @@ function renderPage(initialEntries: string[] = ["/tracker"]) {
 
 beforeEach(() => {
   for (const mock of Object.values(apiMocks)) mock.mockReset();
-  apiMocks.listTracks.mockResolvedValue(makeList([]));
+  apiMocks.listTrackStats.mockResolvedValue(makeStats([]));
   apiMocks.listTracksPage.mockResolvedValue(makePage([]));
   jobApiMocks.listJobs.mockReset().mockRejectedValue(new Error("jobs unavailable"));
   jobApiMocks.getJob.mockReset().mockRejectedValue(new Error("job unavailable"));
@@ -101,8 +108,8 @@ describe("TrackerPage", () => {
     apiMocks.listTracksPage.mockResolvedValue(
       makePage([makeTrack({ status: "interview", stage_note: "二面" })]),
     );
-    apiMocks.listTracks.mockResolvedValue(
-      makeList([makeTrack({ status: "interview", stage_note: "二面" })]),
+    apiMocks.listTrackStats.mockResolvedValue(
+      makeStats([makeTrack({ status: "interview", stage_note: "二面" })]),
     );
     renderPage();
 
@@ -122,7 +129,7 @@ describe("TrackerPage", () => {
       }),
     ];
     apiMocks.listTracksPage.mockResolvedValue(makePage(tracks));
-    apiMocks.listTracks.mockResolvedValue(makeList(tracks));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats(tracks));
     renderPage();
 
     expect(await screen.findByText(/确认面试时间/)).toBeInTheDocument();
@@ -136,7 +143,7 @@ describe("TrackerPage", () => {
       makeTrack({ id: 3, status: "offer", title: "前端实习生" }),
     ];
     apiMocks.listTracksPage.mockResolvedValue(makePage(tracks));
-    apiMocks.listTracks.mockResolvedValue(makeList(tracks));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats(tracks));
     renderPage();
 
     await screen.findAllByText("示例科技");
@@ -148,7 +155,7 @@ describe("TrackerPage", () => {
 
   it("filters by status when a funnel step is clicked", async () => {
     apiMocks.listTracksPage.mockResolvedValue(makePage([makeTrack({ status: "interview" })]));
-    apiMocks.listTracks.mockResolvedValue(makeList([makeTrack({ status: "interview" })]));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats([makeTrack({ status: "interview" })]));
     renderPage();
     await screen.findByText("示例科技");
 
@@ -161,7 +168,10 @@ describe("TrackerPage", () => {
         1,
         20,
       );
-      expect(apiMocks.listTracks).toHaveBeenLastCalledWith({ status: "interview", keyword: "" });
+      expect(apiMocks.listTrackStats).toHaveBeenLastCalledWith({
+        status: "interview",
+        keyword: "",
+      });
     });
   });
 
@@ -173,7 +183,7 @@ describe("TrackerPage", () => {
     apiMocks.listTracksPage
       .mockResolvedValueOnce(makePage(pageOne, 21))
       .mockResolvedValueOnce(makePage([makeTrack({ id: 21, company: "深层历史公司" })], 21));
-    apiMocks.listTracks.mockResolvedValue(makeList(pageOne));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats(pageOne));
     renderPage();
 
     expect(await screen.findByText("公司-001")).toBeInTheDocument();
@@ -202,7 +212,7 @@ describe("TrackerPage", () => {
 
   it("deletes a record and reloads", async () => {
     apiMocks.listTracksPage.mockResolvedValue(makePage([makeTrack()]));
-    apiMocks.listTracks.mockResolvedValue(makeList([makeTrack()]));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats([makeTrack()]));
     apiMocks.deleteTrack.mockResolvedValue(undefined);
     renderPage();
     await screen.findByText("示例科技");
@@ -217,7 +227,7 @@ describe("TrackerPage", () => {
 
   it("从 URL 恢复状态筛选与关键词", async () => {
     apiMocks.listTracksPage.mockResolvedValue(makePage([]));
-    apiMocks.listTracks.mockResolvedValue(makeList([]));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats([]));
     renderPage(["/tracker?status=interview&keyword=%E7%A4%BA%E4%BE%8B"]);
 
     await waitFor(() => {
@@ -237,7 +247,7 @@ describe("TrackerPage", () => {
   it("筛选条件变化时回第 1 页再拉取", async () => {
     // 首屏就是 21 条的空页（跨两页），翻页条才可见。
     apiMocks.listTracksPage.mockResolvedValue({ items: [], total: 21 });
-    apiMocks.listTracks.mockResolvedValue(makeList([]));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats([]));
     renderPage();
     await screen.findByText(/还没有进度记录/);
 

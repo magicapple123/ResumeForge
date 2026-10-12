@@ -6,12 +6,23 @@ import type {
   TrackParseResult,
   TrackPayload,
   TrackRecord,
+  TrackStats,
 } from "../types";
 import type { Page } from "../types/common";
 import { buildQuery, getFilenameFromDisposition, request, requestRaw } from "./client";
 
 export function listTracks(params: { status?: string; keyword?: string } = {}): Promise<TrackList> {
   return request(`/tracker${buildQuery(params)}`);
+}
+
+/**
+ * 漏斗/统计摘要（P1-2）：只取统计字段，不整表拉回。
+ * 与 `listTracks` 的筛选语义一致（status/keyword）。
+ */
+export function listTrackStats(
+  params: { status?: string; keyword?: string } = {},
+): Promise<TrackStats> {
+  return request(`/tracker/stats${buildQuery(params)}`);
 }
 
 /**
@@ -56,7 +67,13 @@ export interface TrackParsePayload {
 
 /** 解析通知材料，**只返回预览，不写任何数据**。 */
 export function parseTracks(payload: TrackParsePayload): Promise<TrackParseResult> {
-  return request("/tracker/parse", { method: "POST", body: JSON.stringify(payload) });
+  // 识别类请求走 recognition 档（90s）：大文本/多附件解析与岗位、资料识别同口径，
+  // 不吃 15s 默认档（AI 提速批次的遗漏项，批次 C 补齐）。
+  return request("/tracker/parse", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    budget: "recognition",
+  });
 }
 
 /** 提交用户确认过的条目；与解析共用同一份合并规则。 */

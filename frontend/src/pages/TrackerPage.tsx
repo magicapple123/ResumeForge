@@ -32,16 +32,15 @@ import PageSkeleton from "../components/common/PageSkeleton";
 import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getJob, listJobs } from "../api/jobs";
-import { listResumes } from "../api/resumes";
-import { deleteTrack, exportTracks, listTracks, listTracksPage } from "../api/tracker";
+import { getJob } from "../api/jobs";
+import { deleteTrack, exportTracks, listTrackStats, listTracksPage } from "../api/tracker";
 import ReminderPanel from "../components/ReminderPanel";
 import TrackCard from "../components/tracker/TrackCard";
 import TrackFormModal from "../components/tracker/TrackFormModal";
 import TrackImportModal from "../components/tracker/TrackImportModal";
 import { useApi } from "../hooks/useApi";
 import { downloadBlob } from "../utils/download";
-import type { Track, TrackList } from "../types";
+import type { Track } from "../types";
 import { FUNNEL_STATUSES, TRACK_STATUSES, TRACK_STATUS_LABELS } from "../types";
 
 /** 每页条数：与后端分页端点默认值一致（page_size 1–100）。 */
@@ -71,8 +70,6 @@ export default function TrackerPage() {
   const [editing, setEditing] = useState<Track | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
-  const [jobOptions, setJobOptions] = useState<{ value: number; label: string }[]>([]);
-  const [resumeOptions, setResumeOptions] = useState<{ value: number; label: string }[]>([]);
 
   // 岗位详情深链带来的过滤（RF-11）：只看这个岗位的进度。非法值在解析处就被忽略。
   const jobId = parseLinkedJobId(searchParams.get("job_id"));
@@ -85,12 +82,9 @@ export default function TrackerPage() {
     () => listTracksPage({ status, keyword, jobId: jobId ?? undefined }, page, TRACK_PAGE_SIZE),
     [status, keyword, page, jobId],
   );
-  // 漏斗与统计字段不在分页端点里，仍走旧列表端点（同一套筛选，响应里的 items 顺便
-  // 供提醒面板的可选进度下拉用——那是它此前就有的一条取数路径）。
-  const { data: stats } = useApi<TrackList>(
-    () => listTracks({ status, keyword }),
-    [status, keyword],
-  );
+  // 漏斗与统计字段走专用统计端点（P1-2）：不再为拉统计整表取回，
+  // 记录数上万后页面开销从"全量 items"降到"几十个数字"。
+  const { data: stats } = useApi(() => listTrackStats({ status, keyword }), [status, keyword]);
 
   // 筛选条件变化时回第 1 页（渲染期守卫式调整，Compiler 规范）；深链 job_id 也算筛选。
   const filterKey = `${status}|${keyword}|${jobId ?? ""}`;
@@ -155,44 +149,10 @@ export default function TrackerPage() {
   }, [setSearchParams]);
 
   const items = useMemo(() => data?.items ?? [], [data]);
-  // 提醒面板的进度下拉沿用统计调用带回的列表（与旧行为同源，覆盖同样的范围）。
-  const statItems = useMemo(() => stats?.items ?? [], [stats]);
-  const trackOptions = useMemo(
-    () =>
-      statItems.map((track) => ({
-        value: track.id,
-        label: `${track.company} · ${track.title}`,
-      })),
-    [statItems],
-  );
   const counts = stats?.status_counts ?? {};
   const totalCount = data?.total ?? 0;
   // 漏斗条的宽度按"这条占最大那条的比例"算，这样条目少时也不会全是一小截。
   const funnelMax = Math.max(1, ...FUNNEL_STATUSES.map((key) => counts[key] ?? 0));
-
-  // 提醒面板需要绑定岗位 / 简历，这里只负责把可选项拉下来；失败静默，不影响进度页本身。
-  useEffect(() => {
-    listJobs({ page_size: 100 })
-      .then((page) =>
-        setJobOptions(
-          page.items.map((job) => ({
-            value: job.id,
-            label: `${job.title}${job.company ? ` · ${job.company}` : ""}`,
-          })),
-        ),
-      )
-      .catch(() => setJobOptions([]));
-    listResumes({ page_size: 100 })
-      .then((page) =>
-        setResumeOptions(
-          page.items.map((resume) => ({
-            value: resume.id,
-            label: resume.title || `简历 #${resume.id}`,
-          })),
-        ),
-      )
-      .catch(() => setResumeOptions([]));
-  }, []);
 
   const remove = async (track: Track) => {
     try {
@@ -394,8 +354,6 @@ export default function TrackerPage() {
       <TrackFormModal
         open={formOpen}
         track={editing}
-        resumeOptions={resumeOptions}
-        jobOptions={jobOptions}
         onClose={() => {
           setFormOpen(false);
           setEditing(null);
@@ -415,11 +373,8 @@ export default function TrackerPage() {
         footer={null}
         width={720}
       >
-        <ReminderPanel
-          trackOptions={trackOptions}
-          jobOptions={jobOptions}
-          resumeOptions={resumeOptions}
-        />
+        {/* 绑定目标下拉由 ReminderPanel 内部远程搜索（P0-1），页面不再预拉选项。 */}
+        <ReminderPanel />
       </Modal>
     </div>
   );

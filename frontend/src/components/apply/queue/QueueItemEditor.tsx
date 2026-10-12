@@ -5,9 +5,9 @@
 import { App, Button, Form, Modal, Select, Space } from "antd";
 import { useEffect, useState } from "react";
 import { previewGreeting, updateQueueItem } from "../../../api/apply";
-import { listResumes } from "../../../api/resumes";
+import { useResumeSearchSelectForJob } from "../../../hooks/remoteSearchOptions";
 import { HintedTextArea } from "../../common/MaxLengthHint";
-import type { ApplyQueueItem, ResumeBrief } from "../../../types";
+import type { ApplyQueueItem } from "../../../types";
 
 export function QueueItemEditor({
   item,
@@ -20,7 +20,9 @@ export function QueueItemEditor({
 }) {
   const { message } = App.useApp();
   const [form] = Form.useForm<{ greeting: string; resume_id?: number }>();
-  const [resumes, setResumes] = useState<ResumeBrief[]>([]);
+  // 简历下拉改为远程搜索（P0-1）：候选限定该岗位关联过的简历，
+  // 编辑器挂载即打开，挂载时回查已选值并预拉第一页候选。
+  const resumeSelect = useResumeSearchSelectForJob(item.job_id);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -29,19 +31,12 @@ export function QueueItemEditor({
   }, [form, item]);
 
   useEffect(() => {
-    if (item.job_id == null) return;
-    let cancel = false;
-    void listResumes({ job_id: item.job_id, page_size: 100 })
-      .then((page) => {
-        if (!cancel) setResumes(page.items);
-      })
-      .catch(() => {
-        if (!cancel) setResumes([]);
-      });
-    return () => {
-      cancel = true;
-    };
-  }, [item.job_id]);
+    // 已选简历的保显示（P0-1）：按 id 回查补进候选，再预拉第一页候选。
+    void resumeSelect.ensure(item.resume_id);
+    void resumeSelect.reload();
+    // 编辑目标在本组件生命周期内不变，只在挂载时执行一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const generateGreeting = async () => {
     if (item.job_id == null) return;
@@ -93,8 +88,8 @@ export function QueueItemEditor({
         >
           <Select
             allowClear
-            placeholder="按默认规则解析"
-            options={resumes.map((resume) => ({ value: resume.id, label: resume.title }))}
+            placeholder="按默认规则解析（输入关键词搜索）"
+            {...resumeSelect.selectProps}
           />
         </Form.Item>
         <Form.Item name="greeting" label="招呼语">

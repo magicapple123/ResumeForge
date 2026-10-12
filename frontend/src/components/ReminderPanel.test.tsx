@@ -32,7 +32,8 @@ const ITEMS = [
 function renderPanel() {
   return render(
     <AntApp>
-      <ReminderPanel trackOptions={[]} jobOptions={[]} resumeOptions={[]} />
+      {/* 绑定目标下拉已改为组件内部远程搜索（P0-1），不再从页面传选项。 */}
+      <ReminderPanel />
     </AntApp>,
   );
 }

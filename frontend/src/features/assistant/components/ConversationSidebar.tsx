@@ -65,6 +65,10 @@ interface Props {
   onMoveToGroup: (conversation: AssistantConversationBrief) => void;
   /** 批量删除所选会话（传入才显示「批量选择」入口）；父级负责接口调用与刷新。 */
   onBatchDelete?: (ids: number[]) => void;
+  /** 会话搜索输入框的受控值（P0-2：服务端 keyword 搜索）。缺省不显示搜索框。 */
+  search?: string;
+  /** 搜索输入变化回调（父级负责防抖触发重拉）。 */
+  onSearchChange?: (value: string) => void;
 }
 
 function ConversationSidebar({
@@ -82,6 +86,8 @@ function ConversationSidebar({
   onFork,
   onMoveToGroup,
   onBatchDelete,
+  search,
+  onSearchChange,
 }: Props) {
   const { message, modal } = App.useApp();
   // 批量选择：勾选若干段对话后一次删除。
@@ -300,6 +306,16 @@ function ConversationSidebar({
             </Button>
           </BatchActionBar>
         </div>
+      )}
+      {onSearchChange && (
+        <Input
+          className="assistant-conversation-search"
+          allowClear
+          placeholder="搜索标题或首条消息"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          aria-label="搜索对话"
+        />
       )}
       <Segmented
         className="assistant-conversation-filter"

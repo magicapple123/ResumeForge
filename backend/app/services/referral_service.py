@@ -13,10 +13,12 @@
 - **有效内推** = 状态不是 ``closed``/``invalid``（还在推进中的才算转化率分母）。
 - 删除走软删除，列表查询一律 ``trash.live_only``。
 """
+
 from __future__ import annotations
 
 import logging
 import secrets
+from collections.abc import Sequence
 from pathlib import Path
 
 from sqlalchemy import or_
@@ -76,6 +78,7 @@ def referral_images_dir(bind=None) -> Path:
         return Path(database).resolve().parent / REFERRAL_IMAGES_DIRNAME
     return DATA_DIR / REFERRAL_IMAGES_DIRNAME
 
+
 # 有效内推：还没走到终态（closed/invalid）的才计入转化率分母。
 _VALID_REFERRAL_STATUSES = (REFERRAL_STATUS_ACTIVE, REFERRAL_STATUS_SUBMITTED)
 
@@ -119,6 +122,38 @@ def _is_converted(db: Session, referral: Referral) -> bool:
         return False
     track = trash.get_live(db, ApplicationTrack, referral.track_id)
     return track is not None and track.status in (STATUS_INTERVIEW, STATUS_OFFER)
+
+
+def _converted_track_ids(db: Session, referrals: Sequence[Referral]) -> set[int]:
+    """一次 ``in_`` 预取判定为"已转化"的 track_id 集合（P2-1 消 N+1）。
+
+    逐行调 :func:`trash.get_live` 会让 200 条内推变成 201 次查询；这里的口径与
+    :func:`_is_converted` 完全一致（未软删 + 状态到面试及以上），只是一次取回。
+    """
+    track_ids = sorted({referral.track_id for referral in referrals if referral.track_id})
+    if not track_ids:
+        return set()
+    rows = (
+        db.query(ApplicationTrack.id)
+        .filter(
+            ApplicationTrack.id.in_(track_ids),
+            trash.live_only(ApplicationTrack),
+            ApplicationTrack.status.in_((STATUS_INTERVIEW, STATUS_OFFER)),
+        )
+        .all()
+    )
+    return {row[0] for row in rows}
+
+
+def referrals_out(db: Session, referrals: Sequence[Referral]) -> list[ReferralOut]:
+    """批量转回显结构（P2-1）：track 预取一次，逐行派生 ``converted``。"""
+    converted_ids = _converted_track_ids(db, referrals)
+    outs: list[ReferralOut] = []
+    for referral in referrals:
+        out = ReferralOut.model_validate(referral)
+        out.converted = referral.track_id is not None and referral.track_id in converted_ids
+        outs.append(out)
+    return outs
 
 
 def referral_out(db: Session, referral: Referral) -> ReferralOut:
@@ -223,7 +258,8 @@ def referral_stats(db: Session) -> ReferralStatsOut:
         .filter(trash.live_only(Referral), Referral.status.in_(_VALID_REFERRAL_STATUSES))
         .all()
     )
-    converted = sum(1 for row in rows if _is_converted(db, row))
+    converted_ids = _converted_track_ids(db, rows)
+    converted = sum(1 for row in rows if row.track_id is not None and row.track_id in converted_ids)
     total = len(rows)
     return ReferralStatsOut(total=total, converted=converted, rate=rate(converted, total))
 
@@ -254,7 +290,7 @@ __all__ = [
     "referral_out",
     "referral_stats",
     "referral_status_counts",
+    "referrals_out",
     "save_referral_image",
     "update_referral",
 ]
-

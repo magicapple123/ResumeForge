@@ -110,7 +110,8 @@ def test_queue_add_rejects_job_without_supported_site(client, db_session):
     # 消息里必须说清"支持哪些站点"，否则用户不知道该去哪儿投。
     assert "BOSS直聘" in detail["message"]
     # 而且**没有**被写进队列（不是"先加进去再拦"）。
-    assert client.get("/api/apply/queue").json() == []
+    # P2-2：GET /queue 响应改为 {items, total, truncated}。
+    assert client.get("/api/apply/queue").json()["items"] == []
 
 
 def test_queue_add_accepts_manual_entry_that_points_at_a_supported_site(client, db_session):
@@ -148,7 +149,7 @@ def test_queue_list_marks_supported_and_unsupported_items(client, db_session):
     # 历史遗留条目：闸门上线前就躺在队列里，只能绕过校验写进去。
     _enqueue_directly(db_session, manual, order=2)
 
-    items = client.get("/api/apply/queue").json()
+    items = client.get("/api/apply/queue").json()["items"]
     flags = {item["job_title"]: item["apply_supported"] for item in items}
 
     assert flags[supported.title] is True
@@ -162,7 +163,7 @@ def test_deleted_job_in_queue_is_marked_unsupported(client, db_session):
     db_session.delete(job)
     db_session.commit()
 
-    items = client.get("/api/apply/queue").json()
+    items = client.get("/api/apply/queue").json()["items"]
 
     assert [entry["id"] for entry in items] == [item.id]
     assert items[0]["apply_supported"] is False

@@ -15,6 +15,19 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("../api/interview", () => apiMocks);
 
+// 岗位 / 简历下拉已改为组件内部远程搜索（P0-1）：候选来自这两个 API 的 mock。
+const jobsMocks = vi.hoisted(() => ({
+  listJobs: vi.fn(),
+  getJob: vi.fn(),
+}));
+const resumesMocks = vi.hoisted(() => ({
+  listResumes: vi.fn(),
+  getResume: vi.fn(),
+}));
+
+vi.mock("../api/jobs", () => jobsMocks);
+vi.mock("../api/resumes", () => resumesMocks);
+
 const RESULT = {
   job_id: 1,
   job_title: "后端开发工程师",
@@ -72,6 +85,17 @@ beforeEach(() => {
   apiMocks.saveQuestionBank.mockReset().mockResolvedValue(undefined);
   apiMocks.updateQuestionBank.mockReset().mockResolvedValue(undefined);
   apiMocks.deleteQuestionBank.mockReset().mockResolvedValue(undefined);
+  jobsMocks.listJobs.mockReset().mockResolvedValue({
+    items: [{ id: 1, title: "后端开发工程师", company: "" }],
+    total: 1,
+  });
+  jobsMocks.getJob.mockReset().mockResolvedValue({
+    id: 1,
+    title: "后端开发工程师",
+    company: "",
+  });
+  resumesMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
+  resumesMocks.getResume.mockReset().mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -81,12 +105,9 @@ afterEach(() => {
 
 describe("QuestionBankPanel 自动保存与历史富还原", () => {
   it("生成成功后自动保存被调用", async () => {
-    renderPanel({
-      jobOptions: [{ value: 1, label: "后端开发工程师" }],
-      resumeOptions: [],
-    });
+    renderPanel({});
 
-    const placeholder = screen.getByText("关联岗位（选填）");
+    const placeholder = screen.getByText("关联岗位（选填，输入关键词搜索）");
     fireEvent.mouseDown(placeholder.closest(".ant-select-content")!);
     fireEvent.click(await screen.findByText("后端开发工程师"));
     fireEvent.click(screen.getByRole("button", { name: /生成题库/ }));
@@ -100,11 +121,7 @@ describe("QuestionBankPanel 自动保存与历史富还原", () => {
   it("点击历史「查看详情」把记录交给父组件打开", async () => {
     apiMocks.listQuestionBanks.mockResolvedValue([RECORD]);
     const onOpenRecord = vi.fn();
-    renderPanel({
-      jobOptions: [],
-      resumeOptions: [],
-      onOpenRecord,
-    });
+    renderPanel({ onOpenRecord });
 
     expect(await screen.findByText("后端开发工程师")).toBeInTheDocument();
     fireEvent.click(screen.getByText("后端开发工程师"));
@@ -114,11 +131,7 @@ describe("QuestionBankPanel 自动保存与历史富还原", () => {
   });
 
   it("历史记录富还原：参考答案按钮可点并写回该条记录", async () => {
-    renderPanel({
-      jobOptions: [],
-      resumeOptions: [],
-      record: RECORD,
-    });
+    renderPanel({ record: RECORD });
 
     // 渲染用与生成时相同的路径：题目、参考答案按钮都在。
     expect(await screen.findByText(/请自我介绍/)).toBeInTheDocument();
@@ -153,8 +166,6 @@ describe("QuestionBankPanel 自动保存与历史富还原", () => {
 
   it("旧版纯文本记录仅兼容展示并提示仅可查看", async () => {
     renderPanel({
-      jobOptions: [],
-      resumeOptions: [],
       record: { ...RECORD, groups: "旧版纯文本题库内容……" } as unknown as typeof RECORD,
     });
 

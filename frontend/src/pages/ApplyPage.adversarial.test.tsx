@@ -119,7 +119,7 @@ function detail(status: ApplyTask["status"]): ApplyTaskDetail {
 beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.getBrowserStatus.mockResolvedValue(BROWSER);
-  apiMocks.listQueue.mockResolvedValue([]);
+  apiMocks.listQueue.mockResolvedValue({ items: [], total: 0, truncated: false });
   apiMocks.getCurrentTask.mockResolvedValue(null);
   apiMocks.listRecords.mockResolvedValue({ items: [], total: 0 });
   apiMocks.getApplyConfig.mockResolvedValue({});
@@ -181,17 +181,21 @@ describe("ApplyPage 暂停 / 继续 交互", () => {
 
 describe("投递队列准入拦截分支", () => {
   it("renders 不投 / 需逐条确认 / 未分析 for the three admission shapes", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      queueItem({ id: 1, job_id: 11, job_title: "真实缺口岗", admission: "block" }),
-      queueItem({
-        id: 2,
-        job_id: 12,
-        job_title: "需确认岗",
-        admission: "needs_confirm",
-        requires_confirm: true,
-      }),
-      queueItem({ id: 3, job_id: 13, job_title: "未分析岗", admission: null }),
-    ]);
+    apiMocks.listQueue.mockResolvedValue({
+      items: [
+        queueItem({ id: 1, job_id: 11, job_title: "真实缺口岗", admission: "block" }),
+        queueItem({
+          id: 2,
+          job_id: 12,
+          job_title: "需确认岗",
+          admission: "needs_confirm",
+          requires_confirm: true,
+        }),
+        queueItem({ id: 3, job_id: 13, job_title: "未分析岗", admission: null }),
+      ],
+      total: 3,
+      truncated: false,
+    });
 
     render(
       <MemoryRouter>
@@ -207,10 +211,14 @@ describe("投递队列准入拦截分支", () => {
   });
 
   it("starts the whole queue when nothing is selected (use_queue=true)", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      queueItem({ id: 1, job_id: 11 }),
-      queueItem({ id: 2, job_id: 12, job_title: "数据开发" }),
-    ]);
+    apiMocks.listQueue.mockResolvedValue({
+      items: [
+        queueItem({ id: 1, job_id: 11 }),
+        queueItem({ id: 2, job_id: 12, job_title: "数据开发" }),
+      ],
+      total: 2,
+      truncated: false,
+    });
     apiMocks.getBrowserStatus.mockResolvedValue({ ...BROWSER, state: "running" });
     apiMocks.createApplyTask.mockResolvedValue(task("running"));
 
@@ -231,7 +239,11 @@ describe("投递队列准入拦截分支", () => {
 
   it("blocks the start with guidance when the browser is not running", async () => {
     // 浏览器没启动就点开始：不发给后端、给引导提示（按钮保持可点，由点击引导）。
-    apiMocks.listQueue.mockResolvedValue([queueItem({ id: 1, job_id: 11 })]);
+    apiMocks.listQueue.mockResolvedValue({
+      items: [queueItem({ id: 1, job_id: 11 })],
+      total: 1,
+      truncated: false,
+    });
     apiMocks.getBrowserStatus.mockResolvedValue(BROWSER);
 
     render(
@@ -251,10 +263,14 @@ describe("投递队列准入拦截分支", () => {
   });
 
   it("submits selected job ids instead of queue row ids", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      queueItem({ id: 1, job_id: 11 }),
-      queueItem({ id: 2, job_id: 12, job_title: "数据开发" }),
-    ]);
+    apiMocks.listQueue.mockResolvedValue({
+      items: [
+        queueItem({ id: 1, job_id: 11 }),
+        queueItem({ id: 2, job_id: 12, job_title: "数据开发" }),
+      ],
+      total: 2,
+      truncated: false,
+    });
     apiMocks.getBrowserStatus.mockResolvedValue({ ...BROWSER, state: "running" });
     apiMocks.createApplyTask.mockResolvedValue(task("running"));
 
@@ -281,7 +297,11 @@ describe("投递队列准入拦截分支", () => {
   it("disables 开始投递 when a task is already running", async () => {
     apiMocks.getCurrentTask.mockResolvedValue(task("running"));
     apiMocks.getTaskDetail.mockResolvedValue(detail("running"));
-    apiMocks.listQueue.mockResolvedValue([queueItem({ id: 1, job_id: 11 })]);
+    apiMocks.listQueue.mockResolvedValue({
+      items: [queueItem({ id: 1, job_id: 11 })],
+      total: 1,
+      truncated: false,
+    });
 
     render(
       <MemoryRouter>

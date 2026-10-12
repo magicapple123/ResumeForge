@@ -75,3 +75,13 @@ class ApplyQueueItemOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
+class ApplyQueueListOut(BaseModel):
+    """队列列表（P2-2）：上限内的一页 + 全量口径的 total。
+
+    ``truncated`` 为真时界面必须如实提示"已显示前 N 条"，不悄悄截断。
+    """
+
+    items: list[ApplyQueueItemOut] = Field(default_factory=list)
+    total: int
+    truncated: bool = False

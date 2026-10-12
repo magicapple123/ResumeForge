@@ -8,7 +8,7 @@
  */
 import { SaveOutlined, SendOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Card, Empty, Input, Select, Space, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   analyzeInterviewQuestion,
   deleteReview,
@@ -20,16 +20,10 @@ import {
 import ReviewHistoryCard from "./interview/ReviewHistoryCard";
 import SuggestionsCard from "./interview/SuggestionsCard";
 import { useApi } from "../hooks/useApi";
+import { useJobSearchSelect, useResumeSearchSelect } from "../hooks/remoteSearchOptions";
 import type { InterviewAnalysis, InterviewOptimizeResult, InterviewReviewRecord } from "../types";
 
-interface Option {
-  value: number;
-  label: string;
-}
-
 interface Props {
-  jobOptions: Option[];
-  resumeOptions: Option[];
   onGoToResume?: () => void;
   /** 历史记录富还原：传入一条已保存的复盘记录后，用相同的渲染路径展示并允许「反向优化简历」回写。 */
   record?: InterviewReviewRecord | null;
@@ -40,14 +34,22 @@ interface Props {
 }
 
 export default function InterviewReviewPanel({
-  jobOptions,
-  resumeOptions,
   onGoToResume,
   record,
   onOpenRecord,
   onCloseRecord,
 }: Props) {
   const { message } = App.useApp();
+  // 岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
+  const jobSelect = useJobSearchSelect();
+  const resumeSelect = useResumeSearchSelect();
+  // 下拉常驻可见（未进入历史视图时）：挂载即预拉第一页候选。
+  useEffect(() => {
+    void jobSelect.reload();
+    void resumeSelect.reload();
+    // hook 的回调引用稳定，只在挂载时执行一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [question, setQuestion] = useState("");
   const [jobId, setJobId] = useState<number | undefined>();
   const [resumeId, setResumeId] = useState<number | undefined>();
@@ -97,6 +99,15 @@ export default function InterviewReviewPanel({
     }
   }
 
+  // 历史富还原的已选值保显示（P0-1）：记录里的岗位/简历往往不在第一页候选里，按 id 回查补进候选。
+  useEffect(() => {
+    if (!record) return;
+    void jobSelect.ensure(record.job_id);
+    void resumeSelect.ensure(record.resume_id);
+    // hook 的回调引用稳定，只跟随历史记录变化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record]);
+
   const analyze = async () => {
     if (!record && !question.trim()) {
       message.error("请先录入真实被问的问题");
@@ -128,10 +139,10 @@ export default function InterviewReviewPanel({
     try {
       await saveReview({
         job_id: jobId ?? null,
-        job_title: jobOptions.find((option) => option.value === jobId)?.label ?? "",
+        job_title: jobSelect.options.find((option) => option.value === jobId)?.label ?? "",
         company: "",
         resume_id: resumeId ?? null,
-        resume_title: resumeOptions.find((option) => option.value === resumeId)?.label ?? "",
+        resume_title: resumeSelect.options.find((option) => option.value === resumeId)?.label ?? "",
         questions: analysisObj.question ? [analysisObj.question] : [],
         analysis: analysisObj,
         suggestions: suggestions ?? [],
@@ -225,23 +236,19 @@ export default function InterviewReviewPanel({
             <Space wrap>
               <Select
                 allowClear
-                showSearch
-                optionFilterProp="label"
                 style={{ minWidth: 220 }}
-                placeholder="关联岗位（选填）"
+                placeholder="关联岗位（选填，输入关键词搜索）"
                 value={jobId}
                 onChange={setJobId}
-                options={jobOptions}
+                {...jobSelect.selectProps}
               />
               <Select
                 allowClear
-                showSearch
-                optionFilterProp="label"
                 style={{ minWidth: 220 }}
-                placeholder="关联简历（反向优化必选）"
+                placeholder="关联简历（反向优化必选，输入关键词搜索）"
                 value={resumeId}
                 onChange={setResumeId}
-                options={resumeOptions}
+                {...resumeSelect.selectProps}
               />
               <Button
                 type="primary"
@@ -293,13 +300,11 @@ export default function InterviewReviewPanel({
             {record && (
               <Select
                 allowClear
-                showSearch
-                optionFilterProp="label"
                 style={{ minWidth: 220 }}
-                placeholder="关联简历（反向优化必选）"
+                placeholder="关联简历（反向优化必选，输入关键词搜索）"
                 value={resumeId}
                 onChange={setResumeId}
-                options={resumeOptions}
+                {...resumeSelect.selectProps}
               />
             )}
             <Button
