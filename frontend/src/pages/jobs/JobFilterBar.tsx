@@ -9,12 +9,11 @@ import {
   InboxOutlined,
   PlusOutlined,
   ReloadOutlined,
-  RobotOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
-import { Button, Dropdown, Input, Select, Space } from "antd";
+import { Button, Input, Select, Space } from "antd";
 import { useState } from "react";
-import type { BatchAction, MatchBatchRunMode } from "./jobFilterOptions";
+import type { BatchAction } from "./jobFilterOptions";
 import { JOB_TYPE_OPTIONS, SOURCE_KIND_OPTIONS, STATUS_OPTIONS } from "./jobFilterOptions";
 
 export function JobFilterBar({
@@ -50,7 +49,7 @@ export function JobFilterBar({
   batchAction: BatchAction;
   selectionMode: boolean;
   exitSelectionMode: () => void;
-  openMatchBatch: (autoRun: boolean, runMode?: MatchBatchRunMode) => void;
+  openMatchBatch: (view?: "setup" | "history") => void;
   emptyDescriptionJobIds: number[];
   backfilling: boolean;
   backfillDetails: () => Promise<void>;
@@ -138,32 +137,19 @@ export function JobFilterBar({
             退出选择
           </Button>
         )}
-        {/* Dropdown.Button 已废弃（v6）：按官方指引以 Space.Compact + Dropdown + Button 重组。 */}
-        <Space.Compact>
-          <Button
-            type="primary"
-            disabled={batchAction !== null}
-            onClick={() => openMatchBatch(true)}
-          >
-            AI 分析适配度
-          </Button>
-          <Dropdown
-            disabled={batchAction !== null}
-            placement="bottomRight"
-            menu={{
-              items: [{ key: "background", label: "后台运行分析" }],
-              onClick: ({ key }) => {
-                if (key === "background") openMatchBatch(true, "background");
-              },
-            }}
-          >
-            <Button type="primary" icon={<RobotOutlined />} disabled={batchAction !== null} />
-          </Dropdown>
-        </Space.Compact>
+        {/* 开始分析在面板里确认（设置视图有「开始分析」按钮）；分析一律走后台任务，
+            关掉面板/切页都不会中断，无需单独的"后台运行"入口。 */}
+        <Button
+          type="primary"
+          disabled={batchAction !== null}
+          onClick={() => openMatchBatch("setup")}
+        >
+          AI 分析适配度
+        </Button>
         <Button
           icon={<HistoryOutlined />}
           disabled={batchAction !== null}
-          onClick={() => openMatchBatch(false)}
+          onClick={() => openMatchBatch("history")}
         >
           分析记录
         </Button>

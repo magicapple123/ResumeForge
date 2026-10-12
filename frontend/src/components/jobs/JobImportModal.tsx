@@ -3,11 +3,12 @@
  * 解析在后端做（UTF-8/GBK、表头别名、逐行报错），前端只负责把预览结果讲清楚：
  * 用户在确认前就知道哪些行能进、哪些行会被跳过、为什么。
  */
-import { UploadOutlined } from "@ant-design/icons";
-import { Alert, App, List, Modal, Tag, Typography, Upload } from "antd";
+import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
+import { Alert, App, Button, List, Modal, Tag, Typography, Upload } from "antd";
 import { useState } from "react";
 import { importJobs, previewJobImport } from "../../api/jobs";
 import type { JobImportPreview } from "../../types";
+import { downloadCsvTemplate } from "../../utils/download";
 
 export function JobImportModal({
   open,
@@ -110,6 +111,30 @@ export function JobImportModal({
           第一行是表头（岗位名称 / 公司名称 / 工作地点 / 薪资范围 / 岗位类型 / 状态 / 投递链接 /
           发布时间…），也可以先用「导出 CSV」拿一份现成模板
         </p>
+        <Button
+          size="small"
+          icon={<DownloadOutlined />}
+          onClick={() =>
+            downloadCsvTemplate("岗位导入模板.csv", [
+              "岗位名称",
+              "公司名称",
+              "工作地点",
+              "薪资范围",
+              "岗位类型",
+              "状态",
+              "投递链接",
+              "发布时间",
+              "岗位描述",
+              "任职要求",
+              "其他招聘信息",
+              "来源",
+              "备注",
+              "收藏",
+            ])
+          }
+        >
+          下载空模板
+        </Button>
       </Upload.Dragger>
 
       {parsing && <Typography.Text type="secondary">正在解析…</Typography.Text>}

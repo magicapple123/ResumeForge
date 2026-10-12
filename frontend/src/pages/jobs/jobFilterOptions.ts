@@ -19,4 +19,3 @@ export const SOURCE_KIND_OPTIONS = [
 ];
 
 export type BatchAction = "status" | "delete" | "enqueue" | null;
-export type MatchBatchRunMode = "immediate" | "background";
