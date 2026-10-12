@@ -3,6 +3,7 @@
 状态/失败分类等字符串取值与 ``models/apply`` 里的常量**逐字一致**（前端再镜像一份），
 改一处必须同步另一处。
 """
+
 from .base import (
     BROWSER_PATH_MAX_CHARS as BROWSER_PATH_MAX_CHARS,
 )
@@ -166,7 +167,16 @@ from .queue import (
     ApplyQueueItemUpdate as ApplyQueueItemUpdate,
 )
 from .queue import (
+    ApplyQueueListOut as ApplyQueueListOut,
+)
+from .queue import (
     ApplyQueueReorderRequest as ApplyQueueReorderRequest,
+)
+from .records import (
+    ApplyRecordBatchDeleteRequest as ApplyRecordBatchDeleteRequest,
+)
+from .records import (
+    ApplyRecordBatchDeleteResult as ApplyRecordBatchDeleteResult,
 )
 from .records import (
     ApplyRecordBatchOut as ApplyRecordBatchOut,
@@ -200,7 +210,10 @@ __all__ = [
     "ApplyQueueAddRequest",
     "ApplyQueueItemOut",
     "ApplyQueueItemUpdate",
+    "ApplyQueueListOut",
     "ApplyQueueReorderRequest",
+    "ApplyRecordBatchDeleteRequest",
+    "ApplyRecordBatchDeleteResult",
     "ApplyRecordBatchOut",
     "ApplyRecordOut",
     "ApplyTaskCreate",

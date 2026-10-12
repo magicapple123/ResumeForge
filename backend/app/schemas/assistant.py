@@ -74,6 +74,7 @@ class AssistantMessageCreate(BaseModel):
     @classmethod
     def check_reasoning_effort(cls, value: str) -> str:
         return normalize_reasoning_effort(value)
+
     # 「引用某条消息追问」：指向同一会话里的某条消息，模型会在引用上下文中作答。
     quoted_message_id: int | None = Field(default=None, ge=1)
     attachments: list[AssistantAttachmentInput] = Field(default_factory=list, max_length=4)
@@ -215,4 +216,21 @@ class ChatConversationBrief(BaseModel):
 
 
 class ChatConversationDetail(ChatConversationBrief):
+    """会话详情。
+
+    ``message_limit``（B5 按需加载）：>0 时 ``messages`` 只含最新 N 条，``messages_total``
+    如实给全量条数、``has_earlier`` 标记是否还有更早的消息；=0 时全量下发（旧行为），
+    ``has_earlier`` 恒为 False。更早的消息走
+    ``GET /conversations/{id}/messages/earlier`` 分页补齐。
+    """
+
     messages: list[ChatMessageOut] = Field(default_factory=list)
+    messages_total: int = 0
+    has_earlier: bool = False
+
+
+class ChatEarlierMessagesOut(BaseModel):
+    """「加载更早」分页：``before_id`` 之前（更旧）的一批消息，按时间正序返回。"""
+
+    items: list[ChatMessageOut] = Field(default_factory=list)
+    has_earlier: bool = False
