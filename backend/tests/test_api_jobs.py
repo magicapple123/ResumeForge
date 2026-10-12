@@ -225,6 +225,32 @@ def test_job_list_search_and_pagination(client):
     assert response.json()["total"] == 2 and len(response.json()["items"]) == 1
 
 
+def test_job_ids_matches_list_filter_across_pages(client):
+    """``/jobs/ids`` 与 ``/jobs`` 是同一份筛选器：不分页返回全部匹配 id，跨页全选用。
+
+    两条岗位分属两页（page_size=1），/ids 一次拿全——前端「全选全部岗位」靠它把
+    当前筛选下所有页的岗位整体勾选。
+    """
+    created_ids = []
+    for title in ("后端开发工程师", "前端开发工程师"):
+        created_ids.append(
+            client.post("/api/jobs", json={"title": title, "company": "示例科技"}).json()["id"]
+        )
+
+    all_ids = client.get("/api/jobs/ids").json()
+    assert set(all_ids) == set(created_ids)
+
+    # 与列表同筛选：keyword 命中一条就只返回那一条，且与列表的 total 一致。
+    filtered_list = client.get("/api/jobs", params={"keyword": "后端"}).json()
+    filtered_ids = client.get("/api/jobs/ids", params={"keyword": "后端"}).json()
+    assert filtered_ids == [filtered_list["items"][0]["id"]]
+    assert len(filtered_ids) == filtered_list["total"] == 1
+
+    # 回收站里的岗位不算：软删除后不再被全选命中。
+    client.delete(f"/api/jobs/{created_ids[1]}")
+    assert client.get("/api/jobs/ids").json() == [created_ids[0]]
+
+
 def test_job_list_source_kind_filter(client, db_session):
     """来源筛选只按「自动采集 / 手动添加」二分，而不是去猜 source 站点名。
 
@@ -342,7 +368,7 @@ def test_a_confirmed_claim_is_no_longer_a_todo(client):
 
 
 def test_stats_reports_activation_totals(client, db_session):
-    """"第一份交付"进度条用的两个总量口径：claim_count 是台账**总数**
+    """ "第一份交付"进度条用的两个总量口径：claim_count 是台账**总数**
     （含已确认/待确认等全部活跃态，只有回收站里的不算）；
     resume_with_job_count 是 job_id 非空的简历数。都排除回收站。"""
     from app.models.claim import VERIFICATION_CONFIRMED, VERIFICATION_PENDING, ClaimRecord
@@ -353,8 +379,12 @@ def test_stats_reports_activation_totals(client, db_session):
     db_session.add(job)
     db_session.flush()
 
-    db_session.add(ClaimRecord(title="待确认", source_fact="x", verification_status=VERIFICATION_PENDING))
-    db_session.add(ClaimRecord(title="已确认", source_fact="x", verification_status=VERIFICATION_CONFIRMED))
+    db_session.add(
+        ClaimRecord(title="待确认", source_fact="x", verification_status=VERIFICATION_PENDING)
+    )
+    db_session.add(
+        ClaimRecord(title="已确认", source_fact="x", verification_status=VERIFICATION_CONFIRMED)
+    )
     db_session.add(ResumeRecord(title="无岗位简历", content={}))
     db_session.add(ResumeRecord(title="关联岗位简历", content={}, job_id=job.id))
     doomed = ResumeRecord(title="回收站里的简历", content={}, job_id=job.id)

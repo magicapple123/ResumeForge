@@ -104,20 +104,16 @@ def _commit_batch(db: Session) -> None:
         raise
 
 
-@router.get("", response_model=Page[JobOut])
-def list_jobs(
-    db: Session = Depends(get_db),
-    keyword: str = Query(default="", description="按标题/公司/城市/描述/其他信息/备注模糊匹配"),
-    job_type: str = Query(default=""),
-    status: str = Query(default=""),
-    favorite: bool | None = Query(default=None),
-    # 按录入方式粗筛：collected=任一自动采集链路，manual=其余（手动填写/粘贴/截图/文档/助手等）。
-    # 兼容历史库里的两种来源值，也兼容旧官网导入把 `官网采集` 写进 source、但没有写入
-    # recognition_source 的记录。
-    source_kind: str = Query(default=""),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+def _filtered_query(
+    db: Session,
+    keyword: str,
+    job_type: str,
+    status: str,
+    favorite: bool | None,
+    source_kind: str,
 ):
+    """列表页的共用筛选器：``/jobs``（分页列表）与 ``/jobs/ids``（跨页全选）同吃这一份，
+    保证"看到的筛选结果"和"一键全选拿到的 id"永远是对同一批岗位的两种视图。"""
     query = db.query(Job).filter(trash.live_only(Job))
     if keyword:
         like = f"%{keyword}%"
@@ -151,11 +147,52 @@ def list_jobs(
                 ~Job.recognition_source.in_(RECOGNITION_SOURCE_AUTO),
             )
         ).filter(Job.source != RECOGNITION_SOURCE_OFFICIAL)
+    return query
+
+
+@router.get("", response_model=Page[JobOut])
+def list_jobs(
+    db: Session = Depends(get_db),
+    keyword: str = Query(default="", description="按标题/公司/城市/描述/其他信息/备注模糊匹配"),
+    job_type: str = Query(default=""),
+    status: str = Query(default=""),
+    favorite: bool | None = Query(default=None),
+    # 按录入方式粗筛：collected=任一自动采集链路，manual=其余（手动填写/粘贴/截图/文档/助手等）。
+    # 兼容历史库里的两种来源值，也兼容旧官网导入把 `官网采集` 写进 source、但没有写入
+    # recognition_source 的记录。
+    source_kind: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+):
+    query = _filtered_query(db, keyword, job_type, status, favorite, source_kind)
     total = query.count()
     jobs = (
         query.order_by(Job.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     )
     return Page(items=[_to_out(job) for job in jobs], total=total)
+
+
+@router.get("/ids", response_model=list[int])
+def list_job_ids(
+    db: Session = Depends(get_db),
+    keyword: str = Query(default=""),
+    job_type: str = Query(default=""),
+    status: str = Query(default=""),
+    favorite: bool | None = Query(default=None),
+    source_kind: str = Query(default=""),
+):
+    """当前筛选下**全部**岗位的 id（不分页）：批量选择「全选全部岗位」用。
+
+    id 列表本身很轻（几千条也只是几 KB），把筛选逻辑交给前端分页拉取反而要多轮请求；
+    批量操作 500 的上限由前端在拿到列表后裁决——这里如实返回全量。
+    """
+    return [
+        job_id
+        for (job_id,) in _filtered_query(db, keyword, job_type, status, favorite, source_kind)
+        .order_by(Job.created_at.desc())
+        .with_entities(Job.id)
+        .all()
+    ]
 
 
 @router.post("", response_model=JobOut, status_code=201)
