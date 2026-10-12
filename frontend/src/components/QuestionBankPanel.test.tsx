@@ -14,6 +14,19 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("../api/interview", () => apiMocks);
 
+// 岗位 / 简历下拉已改为组件内部远程搜索（P0-1）：候选来自这两个 API 的 mock。
+const jobsMocks = vi.hoisted(() => ({
+  listJobs: vi.fn(),
+  getJob: vi.fn(),
+}));
+const resumesMocks = vi.hoisted(() => ({
+  listResumes: vi.fn(),
+  getResume: vi.fn(),
+}));
+
+vi.mock("../api/jobs", () => jobsMocks);
+vi.mock("../api/resumes", () => resumesMocks);
+
 const RESULT = {
   job_id: 1,
   job_title: "后端开发工程师",
@@ -38,7 +51,7 @@ const RESULT = {
 };
 
 async function pickJob(optionText: string) {
-  const placeholder = screen.getByText("关联岗位（选填）");
+  const placeholder = screen.getByText("关联岗位（选填，输入关键词搜索）");
   const selector = placeholder.closest(".ant-select-content");
   fireEvent.mouseDown(selector!);
   fireEvent.click(await screen.findByText(optionText));
@@ -58,6 +71,13 @@ beforeEach(() => {
   apiMocks.listQuestionBanks.mockReset().mockResolvedValue([]);
   apiMocks.saveQuestionBank.mockReset();
   apiMocks.deleteQuestionBank.mockReset().mockResolvedValue(undefined);
+  jobsMocks.listJobs.mockReset().mockResolvedValue({
+    items: [{ id: 1, title: "后端开发工程师", company: "" }],
+    total: 1,
+  });
+  jobsMocks.getJob.mockReset().mockResolvedValue({ id: 1, title: "后端开发工程师", company: "" });
+  resumesMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
+  resumesMocks.getResume.mockReset().mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -67,7 +87,7 @@ afterEach(() => {
 
 describe("QuestionBankPanel", () => {
   it("未选择岗位或简历时给出提示且不请求", async () => {
-    renderPanel({ jobOptions: [], resumeOptions: [] });
+    renderPanel({});
     fireEvent.click(screen.getByRole("button", { name: /生成题库/ }));
 
     expect(await screen.findByText(/请至少选择一个岗位或一份简历/)).toBeInTheDocument();
@@ -77,11 +97,7 @@ describe("QuestionBankPanel", () => {
   it("生成后按三类分组渲染并可回传题目开始模拟面试", async () => {
     apiMocks.generateQuestionBank.mockResolvedValue(RESULT);
     const onStartSession = vi.fn();
-    renderPanel({
-      jobOptions: [{ value: 1, label: "后端开发工程师" }],
-      resumeOptions: [],
-      onStartSession,
-    });
+    renderPanel({ onStartSession });
 
     await pickJob("后端开发工程师");
     fireEvent.click(screen.getByRole("button", { name: /生成题库/ }));
@@ -99,10 +115,7 @@ describe("QuestionBankPanel", () => {
 
   it("接口报错时透出中文错误", async () => {
     apiMocks.generateQuestionBank.mockRejectedValue(new Error("生成题库失败：模型超时"));
-    renderPanel({
-      jobOptions: [{ value: 1, label: "后端开发工程师" }],
-      resumeOptions: [],
-    });
+    renderPanel({});
 
     await pickJob("后端开发工程师");
     fireEvent.click(screen.getByRole("button", { name: /生成题库/ }));
@@ -118,10 +131,7 @@ describe("QuestionBankPanel", () => {
       key_points: ["先说结论", "量化结果"],
       sample_phrasing: "我在上一份工作里负责……，最终将耗时缩短了 30%。",
     });
-    renderPanel({
-      jobOptions: [{ value: 1, label: "后端开发工程师" }],
-      resumeOptions: [],
-    });
+    renderPanel({});
 
     await pickJob("后端开发工程师");
     fireEvent.click(screen.getByRole("button", { name: /生成题库/ }));
@@ -164,10 +174,7 @@ describe("QuestionBankPanel", () => {
       created_at: "2026-09-20T10:00:00",
       updated_at: "2026-09-20T10:00:00",
     });
-    renderPanel({
-      jobOptions: [{ value: 1, label: "后端开发工程师" }],
-      resumeOptions: [],
-    });
+    renderPanel({});
 
     await pickJob("后端开发工程师");
     fireEvent.click(screen.getByRole("button", { name: /生成题库/ }));
@@ -203,7 +210,7 @@ describe("QuestionBankPanel", () => {
         updated_at: "2026-09-20T10:00:00",
       },
     ]);
-    renderPanel({ jobOptions: [], resumeOptions: [] });
+    renderPanel({});
 
     expect(await screen.findByText("后端开发工程师")).toBeInTheDocument();
 

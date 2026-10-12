@@ -6,7 +6,9 @@
 import { PlayCircleOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, Select, Space, Typography } from "antd";
 import type { FormInstance } from "antd";
+import { useEffect } from "react";
 import type { InterviewDifficulty, InterviewType, InterviewerStyle } from "../../types";
+import { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
 import { JANE_FACE_SOURCES } from "./janeFaces";
 import {
   INTERVIEW_DIFFICULTIES,
@@ -43,19 +45,29 @@ export interface SetupForm {
 
 export function SetupTab({
   form,
-  jobOptions,
   initialJobId,
   starting,
   onStart,
 }: {
   form: FormInstance<SetupForm>;
-  jobOptions: { value: number; label: string }[];
   /** 深链带来的预填（RF-11）：岗位详情跳过来时关联岗位已选好。
-   *  id 不在选项里也照设（Select 显示原值），不强造选项。 */
+   *  id 不在候选里时由远程搜索 hook 按 id 回查补进候选（P0-1）。 */
   initialJobId?: number;
   starting: boolean;
   onStart: (values: SetupForm) => void;
 }) {
+  // 关联岗位下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
+  const jobSelect = useJobSearchSelect();
+
+  // 深链预填的岗位按 id 回查补进候选（P0-1），否则第 101 条之后的岗位只显示 id；
+  // 设定卡常驻可见，挂载时同时预拉第一页候选。
+  useEffect(() => {
+    void jobSelect.ensure(initialJobId);
+    void jobSelect.reload();
+    // hook 的回调引用稳定，只跟随预填目标变化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialJobId]);
+
   return (
     <Card size="small" className="settings-card">
       <div className="jane-intro">
@@ -91,10 +103,8 @@ export function SetupTab({
           <Form.Item label="关联岗位（选填）" name="jobId">
             <Select
               allowClear
-              showSearch
-              optionFilterProp="label"
-              placeholder="选中后按该岗位的 JD 提问"
-              options={jobOptions}
+              placeholder="选中后按该岗位的 JD 提问（输入关键词搜索）"
+              {...jobSelect.selectProps}
             />
           </Form.Item>
           <Form.Item label="面试类型" name="interviewType">

@@ -26,6 +26,11 @@ import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { createReminder, deleteReminder, listReminders, updateReminder } from "../api/reminders";
+import {
+  useJobSearchSelect,
+  useResumeSearchSelect,
+  useTrackSearchSelect,
+} from "../hooks/remoteSearchOptions";
 import { REMINDER_KINDS, REMINDER_KIND_LABELS, REMINDER_STATUS_LABELS } from "../types";
 import type { Reminder, ReminderKind, ReminderStatus } from "../types";
 import { formatDateTime } from "../utils/format";
@@ -37,17 +42,6 @@ import { useBatchSelection } from "../hooks/useBatchSelection";
 import CalendarView from "./tracker/CalendarView";
 import ReminderListItem from "./tracker/ReminderListItem";
 
-interface Option {
-  value: number;
-  label: string;
-}
-
-interface Props {
-  trackOptions?: Option[];
-  jobOptions?: Option[];
-  resumeOptions?: Option[];
-}
-
 interface ReminderForm {
   title: string;
   remind_at: Dayjs;
@@ -58,12 +52,12 @@ interface ReminderForm {
   resume_id?: number;
 }
 
-export default function ReminderPanel({
-  trackOptions = [],
-  jobOptions = [],
-  resumeOptions = [],
-}: Props) {
+export default function ReminderPanel() {
   const { message } = App.useApp();
+  // 绑定目标下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
+  const trackSelect = useTrackSearchSelect();
+  const jobSelect = useJobSearchSelect();
+  const resumeSelect = useResumeSearchSelect();
   const [items, setItems] = useState<Reminder[]>([]);
   // 提醒持续累积，一页 10 条（Listy 无内建分页，走通用客户端分页）。
   const {
@@ -121,6 +115,10 @@ export default function ReminderPanel({
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
+    // 每次打开都重置一次候选列表（P0-1）：远程搜索结果随上次输入残留。
+    void trackSelect.reload();
+    void jobSelect.reload();
+    void resumeSelect.reload();
     setModalOpen(true);
   };
 
@@ -135,6 +133,13 @@ export default function ReminderPanel({
       job_id: item.job_id ?? undefined,
       resume_id: item.resume_id ?? undefined,
     });
+    // 已绑定目标的保显示（P0-1）：按 id 回查补进候选，再重置搜索列表。
+    void trackSelect.ensure(item.track_id);
+    void jobSelect.ensure(item.job_id);
+    void resumeSelect.ensure(item.resume_id);
+    void trackSelect.reload();
+    void jobSelect.reload();
+    void resumeSelect.reload();
     setModalOpen(true);
   };
 
@@ -174,6 +179,17 @@ export default function ReminderPanel({
   };
 
   const batch = useBatchSelection<number>();
+
+  // 详情抽屉要展示绑定目标的名称（P0-1）：打开时按 id 回查补进候选，
+  // 否则第 101 条之后的绑定在抽屉里只能显示 "-"。
+  useEffect(() => {
+    if (!detail) return;
+    void trackSelect.ensure(detail.track_id);
+    void jobSelect.ensure(detail.job_id);
+    void resumeSelect.ensure(detail.resume_id);
+    // hook 的回调引用稳定，只跟随详情目标变化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail]);
 
   /** 批量删除：确认后逐条走同一个软删除接口，全部完成再刷新一次。 */
   const removeSelected = () => {
@@ -349,13 +365,13 @@ export default function ReminderPanel({
             />
           </Form.Item>
           <Form.Item label="绑定漏斗（选填）" name="track_id">
-            <Select allowClear showSearch optionFilterProp="label" options={trackOptions} />
+            <Select allowClear placeholder="输入关键词搜索进度" {...trackSelect.selectProps} />
           </Form.Item>
           <Form.Item label="绑定岗位（选填）" name="job_id">
-            <Select allowClear showSearch optionFilterProp="label" options={jobOptions} />
+            <Select allowClear placeholder="输入关键词搜索岗位" {...jobSelect.selectProps} />
           </Form.Item>
           <Form.Item label="绑定简历（选填）" name="resume_id">
-            <Select allowClear showSearch optionFilterProp="label" options={resumeOptions} />
+            <Select allowClear placeholder="输入关键词搜索简历" {...resumeSelect.selectProps} />
           </Form.Item>
           <Form.Item label="备注" name="note">
             <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="补充说明（选填）" />
@@ -391,16 +407,20 @@ export default function ReminderPanel({
                 {
                   label: "绑定漏斗",
                   value:
-                    trackOptions.find((option) => option.value === detail.track_id)?.label ?? "-",
+                    trackSelect.options.find((option) => option.value === detail.track_id)?.label ??
+                    "-",
                 },
                 {
                   label: "绑定岗位",
-                  value: jobOptions.find((option) => option.value === detail.job_id)?.label ?? "-",
+                  value:
+                    jobSelect.options.find((option) => option.value === detail.job_id)?.label ??
+                    "-",
                 },
                 {
                   label: "绑定简历",
                   value:
-                    resumeOptions.find((option) => option.value === detail.resume_id)?.label ?? "-",
+                    resumeSelect.options.find((option) => option.value === detail.resume_id)
+                      ?.label ?? "-",
                 },
                 { label: "创建时间", value: formatDateTime(detail.created_at) },
                 { label: "更新时间", value: formatDateTime(detail.updated_at) },

@@ -10,6 +10,7 @@ import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 import { createTrack, getTrack, updateTrack } from "../../api/tracker";
+import { useJobSearchSelect, useResumeSearchSelect } from "../../hooks/remoteSearchOptions";
 import type { Track, TrackChannel, TrackPayload, TrackStatus } from "../../types";
 import {
   TRACK_CHANNELS,
@@ -102,30 +103,30 @@ interface Props {
   track: Track | null;
   onClose: () => void;
   onSaved: (track: Track) => void;
-  /** 可选的简历清单（RF-17）：把这条进度显式关联到一版简历，后端会冻结投递快照。 */
-  resumeOptions?: { value: number; label: string }[];
-  /** 可选的岗位清单（RF-18）：把这条进度关联到资料库里的一个岗位（选填）。 */
-  jobOptions?: { value: number; label: string }[];
 }
 
-export default function TrackFormModal({
-  open,
-  track,
-  onClose,
-  onSaved,
-  resumeOptions = [],
-  jobOptions = [],
-}: Props) {
+export default function TrackFormModal({ open, track, onClose, onSaved }: Props) {
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
+  // 岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量，
+  // 第 101 条之后的历史记录也能通过关键词搜到。
+  const jobSelect = useJobSearchSelect();
+  const resumeSelect = useResumeSearchSelect();
   const [full, setFull] = useState<Track | null>(null);
   const editing = track !== null;
 
   useEffect(() => {
     if (!open) {
+      // 关闭即丢弃详情缓存：随 open 变化的重置（Compiler 规范允许的同步重置模式）。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFull(null);
       return;
     }
+    // 已选值保显示（P0-1）：编辑时绑定的岗位/简历往往不在第一页选项里，按 id 回查。
+    void jobSelect.ensure(track?.job_id);
+    void resumeSelect.ensure(track?.resume_id);
+    void jobSelect.reload();
+    void resumeSelect.reload();
     // 先用列表行乐观预填（公司/岗位/日期/状态都是全的），note 与依据可能被后端
     // 截断过，等下面的详情请求回来再覆盖。
     form.setFieldsValue(track ? toValues(track) : EMPTY);
@@ -146,6 +147,8 @@ export default function TrackFormModal({
     return () => {
       cancelled = true;
     };
+    // hook 的回调引用稳定，只需跟随打开状态与编辑目标变化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, track, form]);
 
   const submit = async () => {
@@ -288,10 +291,8 @@ export default function TrackFormModal({
         <Form.Item name="job_id" label="关联岗位" extra="选填。关联后可在岗位详情里看到这条进度">
           <Select
             allowClear
-            placeholder="选择要关联的岗位"
-            options={jobOptions}
-            showSearch
-            optionFilterProp="label"
+            placeholder="选择要关联的岗位（输入关键词搜索）"
+            {...jobSelect.selectProps}
           />
         </Form.Item>
 
@@ -304,10 +305,8 @@ export default function TrackFormModal({
         >
           <Select
             allowClear
-            placeholder="选择这次投递使用的简历版本"
-            options={resumeOptions}
-            showSearch
-            optionFilterProp="label"
+            placeholder="选择这次投递使用的简历版本（输入关键词搜索）"
+            {...resumeSelect.selectProps}
           />
         </Form.Item>
 

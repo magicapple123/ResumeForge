@@ -15,6 +15,19 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("../api/interview", () => apiMocks);
 
+// 岗位 / 简历下拉已改为组件内部远程搜索（P0-1）：候选来自这两个 API 的 mock。
+const jobsMocks = vi.hoisted(() => ({
+  listJobs: vi.fn(),
+  getJob: vi.fn(),
+}));
+const resumesMocks = vi.hoisted(() => ({
+  listResumes: vi.fn(),
+  getResume: vi.fn(),
+}));
+
+vi.mock("../api/jobs", () => jobsMocks);
+vi.mock("../api/resumes", () => resumesMocks);
+
 const ANALYSIS = {
   question: "这个项目难点怎么解决？",
   framework: "先讲背景，再讲取舍与结果。",
@@ -56,12 +69,7 @@ const RECORD = {
 function renderPanel(props: Partial<React.ComponentProps<typeof InterviewReviewPanel>> = {}) {
   return render(
     <AntApp>
-      <InterviewReviewPanel
-        jobOptions={[{ value: 1, label: "后端开发工程师" }]}
-        resumeOptions={[{ value: 1, label: "我的简历" }]}
-        onGoToResume={() => {}}
-        {...props}
-      />
+      <InterviewReviewPanel onGoToResume={() => {}} {...props} />
     </AntApp>,
   );
 }
@@ -73,6 +81,16 @@ beforeEach(() => {
   apiMocks.saveReview.mockReset().mockResolvedValue(undefined);
   apiMocks.updateReview.mockReset().mockResolvedValue(undefined);
   apiMocks.deleteReview.mockReset().mockResolvedValue(undefined);
+  jobsMocks.listJobs.mockReset().mockResolvedValue({
+    items: [{ id: 1, title: "后端开发工程师", company: "" }],
+    total: 1,
+  });
+  jobsMocks.getJob.mockReset().mockResolvedValue({ id: 1, title: "后端开发工程师", company: "" });
+  resumesMocks.listResumes.mockReset().mockResolvedValue({
+    items: [{ id: 1, title: "我的简历" }],
+    total: 1,
+  });
+  resumesMocks.getResume.mockReset().mockResolvedValue({ id: 1, title: "我的简历" });
 });
 
 afterEach(() => {
@@ -115,7 +133,7 @@ describe("InterviewReviewPanel 自动保存与历史富还原", () => {
 
     // 选简历后点击「反向优化简历」。
     const resumeSelect = screen
-      .getByText("关联简历（反向优化必选）")
+      .getByText("关联简历（反向优化必选，输入关键词搜索）")
       .closest(".ant-select-content");
     fireEvent.mouseDown(resumeSelect!);
     fireEvent.click(await screen.findByText("我的简历"));

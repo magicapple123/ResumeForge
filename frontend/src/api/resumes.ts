@@ -38,6 +38,21 @@ export function listResumes(
   return request(`/resumes${buildQuery(params)}`);
 }
 
+/**
+ * 当前筛选下全部简历的 id（不分页）：批量选择「全选全部简历」用；上限由调用方裁决。
+ * 筛选参数与列表端点同源（keyword/job_id/favorite/has_job），只少分页。
+ */
+export function listResumeIds(
+  params: {
+    keyword?: string;
+    job_id?: number;
+    favorite?: boolean;
+    has_job?: boolean;
+  } = {},
+): Promise<number[]> {
+  return request(`/resumes/ids${buildQuery(params)}`);
+}
+
 /** 只改简历名称，不影响正文与生成告警。 */
 export function renameResume(id: number, title: string): Promise<ResumeDetail> {
   return request(`/resumes/${id}`, { method: "PATCH", body: JSON.stringify({ title }) });
@@ -54,6 +69,17 @@ export function getResume(id: number): Promise<ResumeDetail> {
 
 export function deleteResume(id: number): Promise<void> {
   return request(`/resumes/${id}`, { method: "DELETE" });
+}
+
+/**
+ * 批量软删除简历（P2-4）：一次请求删完（全部进回收站），不再前端逐条 N 连发。
+ * 任一 id 不存在或已删除时整批失败（404），不会出现"删了一半"的状态；一次最多 500 份。
+ */
+export function batchDeleteResumes(resumeIds: number[]): Promise<{ deleted: number }> {
+  return request("/resumes/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ resume_ids: resumeIds }),
+  });
 }
 
 /** 替换一份已保存简历的结构化内容。 */

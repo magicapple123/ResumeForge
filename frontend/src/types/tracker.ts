@@ -148,6 +148,12 @@ export interface TrackList {
   month_count: number;
 }
 
+/**
+ * 漏斗/统计摘要（P1-2）：`GET /tracker/stats` 的响应，与 TrackList 同一套统计字段
+ * 但**不含 items**——页面展示统计不再为拉漏斗而整表取回。
+ */
+export type TrackStats = Omit<TrackList, "items" | "total">;
+
 /** 一条识别结果的合并预览：会新增、会更新，还是没变化。 */
 export interface TrackMergePreview {
   record: TrackRecord;

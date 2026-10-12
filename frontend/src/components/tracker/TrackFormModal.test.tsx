@@ -8,7 +8,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TrackFormModal from "./TrackFormModal";
 import { getTrack } from "../../api/tracker";
 import { todayIsoDate } from "../../utils/format";
@@ -19,6 +19,43 @@ vi.mock("../../api/tracker", () => ({
   getTrack: vi.fn(),
   updateTrack: vi.fn(),
 }));
+
+// 岗位/简历下拉已改为组件内部远程搜索（P0-1）：取数与按 id 回查都在这两个 API 模块上。
+const jobsMocks = vi.hoisted(() => ({
+  listJobs: vi.fn(),
+  getJob: vi.fn(),
+}));
+const resumesMocks = vi.hoisted(() => ({
+  listResumes: vi.fn(),
+  getResume: vi.fn(),
+}));
+
+vi.mock("../../api/jobs", () => jobsMocks);
+vi.mock("../../api/resumes", () => resumesMocks);
+
+const JOB_OPTIONS = [
+  { id: 11, title: "后端开发", company: "示例科技" },
+  { id: 12, title: "前端开发", company: "另一家" },
+];
+const RESUME_OPTIONS = [
+  { id: 3, title: "后端岗位简历" },
+  { id: 4, title: "另一版简历" },
+];
+
+beforeEach(() => {
+  jobsMocks.listJobs.mockReset().mockResolvedValue({ items: JOB_OPTIONS, total: 2 });
+  jobsMocks.getJob
+    .mockReset()
+    .mockImplementation((id: number) =>
+      Promise.resolve(JOB_OPTIONS.find((job) => job.id === id) ?? null),
+    );
+  resumesMocks.listResumes.mockReset().mockResolvedValue({ items: RESUME_OPTIONS, total: 2 });
+  resumesMocks.getResume
+    .mockReset()
+    .mockImplementation((id: number) =>
+      Promise.resolve(RESUME_OPTIONS.find((resume) => resume.id === id) ?? null),
+    );
+});
 
 function renderModal() {
   return render(
@@ -99,47 +136,28 @@ describe("TrackFormModal 的投递日期", () => {
 
 /** 渠道与岗位关联（RF-18）：都选填，「未知」是渠道的合法默认值。 */
 describe("TrackFormModal 的渠道与岗位选择", () => {
-  const JOB_OPTIONS = [
-    { value: 11, label: "后端开发 · 示例科技" },
-    { value: 12, label: "前端开发 · 另一家" },
-  ];
-
   it("渠道默认「未知」，且说明它与记录来源是两回事", async () => {
     renderModal();
     expect(await screen.findByLabelText("投递渠道")).toBeInTheDocument();
     expect(screen.getByText(/这是「从哪投的」，不是记录怎么进系统的/)).toBeInTheDocument();
   });
 
-  it("岗位关联选择器存在且选填", async () => {
-    render(
-      <AntdApp>
-        <TrackFormModal
-          open
-          track={null}
-          jobOptions={JOB_OPTIONS}
-          onClose={() => {}}
-          onSaved={() => {}}
-        />
-      </AntdApp>,
-    );
+  it("岗位关联选择器存在且选填（远程搜索，不再吃页面预拉的选项）", async () => {
+    renderModal();
     expect(await screen.findByLabelText("关联岗位")).toBeInTheDocument();
+    // 打开表单即预拉第一页候选（P0-1）。
+    await waitFor(() => expect(jobsMocks.listJobs).toHaveBeenCalled());
   });
 
-  it("编辑时回填已关联的岗位", async () => {
+  it("编辑时按 id 回查已关联的岗位（保显示）", async () => {
     vi.mocked(getTrack).mockResolvedValue({ ...LISTED_ROW, job_id: 11 });
     render(
       <AntdApp>
-        <TrackFormModal
-          open
-          track={LISTED_ROW}
-          jobOptions={JOB_OPTIONS}
-          onClose={() => {}}
-          onSaved={() => {}}
-        />
+        <TrackFormModal open track={LISTED_ROW} onClose={() => {}} onSaved={() => {}} />
       </AntdApp>,
     );
 
-    // 详情请求回来后，选择器显示已关联岗位的标题。
+    // 详情请求回来后，按 id 回查的岗位以标题显示在选择器里。
     await waitFor(() =>
       expect(screen.getByText("后端开发 · 示例科技").closest(".ant-select")).toBeTruthy(),
     );
@@ -148,40 +166,25 @@ describe("TrackFormModal 的渠道与岗位选择", () => {
 
 /** 使用的简历选择器（RF-17）：选填，把进度显式关联到一版简历。 */
 describe("TrackFormModal 的简历选择器", () => {
-  const RESUME_OPTIONS = [
-    { value: 3, label: "后端岗位简历" },
-    { value: 4, label: "另一版简历" },
-  ];
-
-  function renderWithOptions(track: Track | null = null) {
-    return render(
-      <AntdApp>
-        <TrackFormModal
-          open
-          track={track}
-          resumeOptions={RESUME_OPTIONS}
-          onClose={() => {}}
-          onSaved={() => {}}
-        />
-      </AntdApp>,
-    );
-  }
-
   it("选择器存在且选填（留空也能保存）", async () => {
-    renderWithOptions();
+    renderModal();
     expect(await screen.findByLabelText("使用的简历")).toBeInTheDocument();
     expect(screen.getByText(/选填。关联后会在简历详情里留一份投递记录/)).toBeInTheDocument();
   });
 
-  it("编辑时回填已关联的简历版本", async () => {
+  it("编辑时按 id 回查已关联的简历版本（保显示）", async () => {
     vi.mocked(getTrack).mockResolvedValue({
       ...LISTED_ROW,
       resume_id: 3,
       resume_title: "后端岗位简历",
     });
-    renderWithOptions(LISTED_ROW);
+    render(
+      <AntdApp>
+        <TrackFormModal open track={LISTED_ROW} onClose={() => {}} onSaved={() => {}} />
+      </AntdApp>,
+    );
 
-    // 详情请求回来后，选择器应显示已关联简历的标题（选中项的展示文本）。
+    // 按 id 回查的简历以标题显示在选择器里（选中项的展示文本）。
     await waitFor(() => expect(screen.getByText("后端岗位简历")).toBeInTheDocument());
   });
 });

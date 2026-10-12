@@ -18,8 +18,6 @@ import {
   listInterviews,
   submitInterviewAnswerStream,
 } from "../api/interview";
-import { listJobs } from "../api/jobs";
-import { listResumes } from "../api/resumes";
 import InterviewExperiencePanel from "../components/InterviewExperiencePanel";
 import InterviewReviewPanel from "../components/InterviewReviewPanel";
 import QuestionBankPanel from "../components/QuestionBankPanel";
@@ -60,8 +58,6 @@ export default function InterviewPage() {
   // 流式中的面试官问题（question_delta 渐进填充）；turn 完成后由 setActive 覆盖。
   const [answer, setAnswer] = useState("");
   const [savingReport, setSavingReport] = useState(false);
-  const [jobOptions, setJobOptions] = useState<{ value: number; label: string }[]>([]);
-  const [resumeOptions, setResumeOptions] = useState<{ value: number; label: string }[]>([]);
   const [activeTab, setActiveTab] = useState("session");
   const [form] = Form.useForm<SetupForm>();
   const endRef = useRef<HTMLDivElement>(null);
@@ -88,8 +84,9 @@ export default function InterviewPage() {
     setLoadingList(false);
   }, [fetchSessions]);
 
-  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）；
-  // 选项列表的两个请求本就是 .then 回调形状，保持不变。
+  // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
+  // 岗位/简历选项此前在这里预拉"前 100 条"当全量（P0-1 已移除）：
+  // 各面板与设定卡现在自己走远程搜索 hook，第 101 条之后的历史也能搜到。
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -98,28 +95,6 @@ export default function InterviewPage() {
       if (sessions !== null) setSessions(sessions);
       setLoadingList(false);
     })();
-    listJobs({ page_size: 100 })
-      .then((page) => {
-        if (cancelled) return;
-        setJobOptions(
-          page.items.map((job) => ({
-            value: job.id,
-            label: `${job.title}${job.company ? ` · ${job.company}` : ""}`,
-          })),
-        );
-      })
-      .catch(() => setJobOptions([]));
-    listResumes({ page_size: 100 })
-      .then((page) => {
-        if (cancelled) return;
-        setResumeOptions(
-          page.items.map((resume) => ({
-            value: resume.id,
-            label: resume.title || `简历 #${resume.id}`,
-          })),
-        );
-      })
-      .catch(() => setResumeOptions([]));
     return () => {
       cancelled = true;
     };
@@ -302,7 +277,6 @@ export default function InterviewPage() {
                 <div className="interview-setup">
                   <SetupTab
                     form={form}
-                    jobOptions={jobOptions}
                     initialJobId={linkedJobId}
                     starting={starting}
                     onStart={(values) => void start(values)}
@@ -324,8 +298,6 @@ export default function InterviewPage() {
               label: "题库",
               children: (
                 <QuestionBankPanel
-                  jobOptions={jobOptions}
-                  resumeOptions={resumeOptions}
                   onStartSession={startFromBank}
                   record={bankRecord}
                   onOpenRecord={setBankRecord}
@@ -336,15 +308,13 @@ export default function InterviewPage() {
             {
               key: "experiences",
               label: "面经",
-              children: <InterviewExperiencePanel jobOptions={jobOptions} />,
+              children: <InterviewExperiencePanel />,
             },
             {
               key: "review",
               label: "面试复盘",
               children: (
                 <InterviewReviewPanel
-                  jobOptions={jobOptions}
-                  resumeOptions={resumeOptions}
                   onGoToResume={() => navigate("/resumes")}
                   record={reviewRecord}
                   onOpenRecord={setReviewRecord}

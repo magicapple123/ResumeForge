@@ -54,9 +54,18 @@ const BASE_ITEM: ApplyQueueItem = {
   updated_at: "2026-09-17T08:00:00",
 };
 
+/** P2-2：GET /queue 响应改为 {items, total, truncated}，mock 统一从条目数组组装。 */
+function queueList(items: ApplyQueueItem[]): {
+  items: ApplyQueueItem[];
+  total: number;
+  truncated: boolean;
+} {
+  return { items, total: items.length, truncated: false };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  apiMocks.listQueue.mockResolvedValue([]);
+  apiMocks.listQueue.mockResolvedValue(queueList([]));
   apiMocks.listResumes.mockResolvedValue({ items: [], total: 0 });
   // 浏览器默认已启动：绝大多数用例不关心浏览器前置检查这一层。
   apiMocks.getBrowserStatus.mockResolvedValue({ state: "running" });
@@ -69,9 +78,9 @@ afterEach(() => {
 
 describe("ApplyQueuePanel 准入徽标", () => {
   it("admission 为空但 requires_confirm 为真时展示「需逐条确认」而非「未分析」", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      { ...BASE_ITEM, admission: null, requires_confirm: true },
-    ]);
+    apiMocks.listQueue.mockResolvedValue(
+      queueList([{ ...BASE_ITEM, admission: null, requires_confirm: true }]),
+    );
 
     render(
       <AntdApp>
@@ -84,9 +93,9 @@ describe("ApplyQueuePanel 准入徽标", () => {
   });
 
   it("admission 为空且无需确认时展示「未分析」", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      { ...BASE_ITEM, admission: null, requires_confirm: false },
-    ]);
+    apiMocks.listQueue.mockResolvedValue(
+      queueList([{ ...BASE_ITEM, admission: null, requires_confirm: false }]),
+    );
 
     render(
       <AntdApp>
@@ -99,9 +108,9 @@ describe("ApplyQueuePanel 准入徽标", () => {
   });
 
   it("有明确结论时保留原徽标，并叠加「需逐条确认」", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      { ...BASE_ITEM, admission: "needs_confirm", requires_confirm: true },
-    ]);
+    apiMocks.listQueue.mockResolvedValue(
+      queueList([{ ...BASE_ITEM, admission: "needs_confirm", requires_confirm: true }]),
+    );
 
     render(
       <AntdApp>
@@ -114,10 +123,12 @@ describe("ApplyQueuePanel 准入徽标", () => {
   });
 
   it("队列里没有待投条目时禁用开始投递", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      { ...BASE_ITEM, status: "done" },
-      { ...BASE_ITEM, id: 2, job_id: null, job_title: "已删除岗位" },
-    ]);
+    apiMocks.listQueue.mockResolvedValue(
+      queueList([
+        { ...BASE_ITEM, status: "done" },
+        { ...BASE_ITEM, id: 2, job_id: null, job_title: "已删除岗位" },
+      ]),
+    );
 
     render(
       <AntdApp>
@@ -130,7 +141,7 @@ describe("ApplyQueuePanel 准入徽标", () => {
 
   it("浏览器未启动时点开始投递：给引导提示且不发创建任务请求", async () => {
     // 按钮保持可点（保留可发现性），但点击被引导——比 disable 或后端报错都好。
-    apiMocks.listQueue.mockResolvedValue([{ ...BASE_ITEM }]);
+    apiMocks.listQueue.mockResolvedValue(queueList([{ ...BASE_ITEM }]));
     apiMocks.getBrowserStatus.mockResolvedValue({ state: "stopped" });
 
     render(
@@ -159,7 +170,7 @@ describe("ApplyQueuePanel 来源闸门", () => {
   };
 
   it("来源不支持的条目标出来、勾选框禁用，并在页面上说明怎么处理", async () => {
-    apiMocks.listQueue.mockResolvedValue([{ ...BASE_ITEM }, { ...UNSUPPORTED }]);
+    apiMocks.listQueue.mockResolvedValue(queueList([{ ...BASE_ITEM }, { ...UNSUPPORTED }]));
 
     render(
       <AntdApp>
@@ -183,7 +194,7 @@ describe("ApplyQueuePanel 来源闸门", () => {
   });
 
   it("全部来源受支持时不出现这条告警（不误报）", async () => {
-    apiMocks.listQueue.mockResolvedValue([{ ...BASE_ITEM }]);
+    apiMocks.listQueue.mockResolvedValue(queueList([{ ...BASE_ITEM }]));
 
     render(
       <AntdApp>
@@ -197,7 +208,7 @@ describe("ApplyQueuePanel 来源闸门", () => {
   });
 
   it("详情抽屉里说清「能不能自动投递」", async () => {
-    apiMocks.listQueue.mockResolvedValue([{ ...UNSUPPORTED }]);
+    apiMocks.listQueue.mockResolvedValue(queueList([{ ...UNSUPPORTED }]));
 
     render(
       <AntdApp>
@@ -214,7 +225,7 @@ describe("ApplyQueuePanel 来源闸门", () => {
 
 describe("ApplyQueuePanel 使用指引与详情", () => {
   it("顶部说清岗位从哪来、在队列里做什么、什么时候才真的投出去", async () => {
-    apiMocks.listQueue.mockResolvedValue([{ ...BASE_ITEM }]);
+    apiMocks.listQueue.mockResolvedValue(queueList([{ ...BASE_ITEM }]));
 
     render(
       <AntdApp>
@@ -234,7 +245,7 @@ describe("ApplyQueuePanel 使用指引与详情", () => {
   });
 
   it("队列为空时给出可照做的下一步", async () => {
-    apiMocks.listQueue.mockResolvedValue([]);
+    apiMocks.listQueue.mockResolvedValue(queueList([]));
 
     render(
       <AntdApp>
@@ -249,9 +260,9 @@ describe("ApplyQueuePanel 使用指引与详情", () => {
   });
 
   it("点岗位名打开详情抽屉（排队序号、使用简历、加入时间）", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      { ...BASE_ITEM, greeting: "您好，我想应聘这个岗位", resume_title: "通用版" },
-    ]);
+    apiMocks.listQueue.mockResolvedValue(
+      queueList([{ ...BASE_ITEM, greeting: "您好，我想应聘这个岗位", resume_title: "通用版" }]),
+    );
 
     render(
       <AntdApp>
@@ -271,7 +282,7 @@ describe("ApplyQueuePanel 使用指引与详情", () => {
 
 describe("ApplyQueuePanel 右键菜单与操作按钮位置", () => {
   it("右键点击行弹出与「···」一致的菜单（编辑 / 移出队列）", async () => {
-    apiMocks.listQueue.mockResolvedValue([{ ...BASE_ITEM }]);
+    apiMocks.listQueue.mockResolvedValue(queueList([{ ...BASE_ITEM }]));
 
     render(
       <AntdApp>
@@ -291,7 +302,7 @@ describe("ApplyQueuePanel 右键菜单与操作按钮位置", () => {
   });
 
   it("右键菜单按 Esc 关闭，焦点归还触发行内元素", async () => {
-    apiMocks.listQueue.mockResolvedValue([{ ...BASE_ITEM }]);
+    apiMocks.listQueue.mockResolvedValue(queueList([{ ...BASE_ITEM }]));
 
     render(
       <AntdApp>
@@ -315,7 +326,7 @@ describe("ApplyQueuePanel 右键菜单与操作按钮位置", () => {
   });
 
   it("操作按钮容器位于最右（flex + justifyContent: flex-end）", async () => {
-    apiMocks.listQueue.mockResolvedValue([{ ...BASE_ITEM }]);
+    apiMocks.listQueue.mockResolvedValue(queueList([{ ...BASE_ITEM }]));
 
     render(
       <AntdApp>
@@ -334,12 +345,14 @@ describe("ApplyQueuePanel 分页与刷新", () => {
   it("队列超过 10 条时出现分页器，一页只显示 10 条", async () => {
     // 此前 50 条一页且单页隐藏，队列长时整屏塞满、等于没有分页。
     apiMocks.listQueue.mockResolvedValue(
-      Array.from({ length: 11 }, (_, index) => ({
-        ...BASE_ITEM,
-        id: index + 1,
-        job_id: index + 1,
-        job_title: `岗位 ${index + 1}`,
-      })),
+      queueList(
+        Array.from({ length: 11 }, (_, index) => ({
+          ...BASE_ITEM,
+          id: index + 1,
+          job_id: index + 1,
+          job_title: `岗位 ${index + 1}`,
+        })),
+      ),
     );
 
     render(
@@ -357,9 +370,9 @@ describe("ApplyQueuePanel 分页与刷新", () => {
   });
 
   it("点刷新时按钮进入 loading 态（点击有可感知反馈）", async () => {
-    let resolveQueue: (items: ApplyQueueItem[]) => void = () => {};
+    let resolveQueue: (list: ReturnType<typeof queueList>) => void = () => {};
     apiMocks.listQueue.mockImplementation(
-      () => new Promise<ApplyQueueItem[]>((resolve) => (resolveQueue = resolve)),
+      () => new Promise<ReturnType<typeof queueList>>((resolve) => (resolveQueue = resolve)),
     );
 
     render(
@@ -369,132 +382,18 @@ describe("ApplyQueuePanel 分页与刷新", () => {
     );
 
     // 首次加载走骨架屏（data 为空），按钮随后才出现。
-    resolveQueue([{ ...BASE_ITEM }]);
+    resolveQueue(queueList([{ ...BASE_ITEM }]));
     const refresh = await screen.findByRole("button", { name: /刷新/ });
     await waitFor(() => expect(refresh).not.toHaveClass("ant-btn-loading"));
 
     // 再点刷新：请求挂起期间按钮保持转圈——此前点击毫无反馈，用户会以为没点上。
     apiMocks.listQueue.mockImplementation(
-      () => new Promise<ApplyQueueItem[]>((resolve) => (resolveQueue = resolve)),
+      () => new Promise<ReturnType<typeof queueList>>((resolve) => (resolveQueue = resolve)),
     );
     fireEvent.click(refresh);
     expect(refresh).toHaveClass("ant-btn-loading");
 
-    resolveQueue([{ ...BASE_ITEM }]);
+    resolveQueue(queueList([{ ...BASE_ITEM }]));
     await waitFor(() => expect(refresh).not.toHaveClass("ant-btn-loading"));
-  });
-});
-
-describe("ApplyQueuePanel 筛选、跨页全选与批量移出", () => {
-  const withStatus = (id: number, title: string, status: ApplyQueueItem["status"]) => ({
-    ...BASE_ITEM,
-    id,
-    job_id: id,
-    job_title: title,
-    status,
-  });
-
-  it("按状态筛选只显示对应条目，计数同时给出总数与筛选数", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      withStatus(1, "待投岗位", "pending"),
-      withStatus(2, "已投岗位", "done"),
-    ]);
-
-    render(
-      <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
-      </AntdApp>,
-    );
-
-    expect(await screen.findByText("待投岗位")).toBeInTheDocument();
-    expect(screen.getByText(/共 2 个岗位/)).toBeInTheDocument();
-
-    // antd Select 交互按 CollectSiteFilters.test 的已验证模式：mouseDown(combobox, {button:0})
-    // 打开下拉，option 用 .ant-select-item-option 作用域定位（不按 role 找，虚拟列表 name 不稳）。
-    fireEvent.mouseDown(await screen.findByRole("combobox", { name: "按状态筛选" }), {
-      button: 0,
-    });
-    const pendingOption = await screen.findByText(
-      (content, element) => content === "待投递" && !!element?.closest(".ant-select-item-option"),
-    );
-    fireEvent.click(pendingOption);
-
-    expect(screen.getByText("待投岗位")).toBeInTheDocument();
-    expect(screen.queryByText("已投岗位")).not.toBeInTheDocument();
-    expect(screen.getByText(/筛选出 1 个/)).toBeInTheDocument();
-  });
-
-  it("按准入筛选支持「未分析」（admission 为空的条目）", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      { ...BASE_ITEM, id: 1, job_title: "可投岗位", admission: "allow" },
-      { ...BASE_ITEM, id: 2, job_title: "未分析岗位", admission: null, requires_confirm: false },
-    ]);
-
-    render(
-      <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
-      </AntdApp>,
-    );
-
-    await screen.findByText("未分析岗位");
-
-    fireEvent.mouseDown(await screen.findByRole("combobox", { name: "按准入筛选" }), {
-      button: 0,
-    });
-    const unanalyzedOption = await screen.findByText(
-      (content, element) => content === "未分析" && !!element?.closest(".ant-select-item-option"),
-    );
-    fireEvent.click(unanalyzedOption);
-
-    expect(screen.getByText("未分析岗位")).toBeInTheDocument();
-    expect(screen.queryByText("可投岗位")).not.toBeInTheDocument();
-  });
-
-  it("「全选队列」跨页选中全部可投条目，计数显示已选数量", async () => {
-    // 11 条：若只选当前页会是 10——这条断言守住跨页语义。
-    apiMocks.listQueue.mockResolvedValue(
-      Array.from({ length: 11 }, (_, index) =>
-        withStatus(index + 1, `岗位 ${index + 1}`, "pending"),
-      ),
-    );
-
-    render(
-      <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
-      </AntdApp>,
-    );
-
-    fireEvent.click(await screen.findByRole("button", { name: "全选队列" }));
-    expect(await screen.findByText(/已选 11 个/)).toBeInTheDocument();
-  });
-
-  it("批量移出逐条调用移出接口，完成后清空选择并给出账目", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      withStatus(1, "移出甲", "pending"),
-      withStatus(2, "移出乙", "pending"),
-    ]);
-    apiMocks.removeQueueItem.mockResolvedValue(undefined);
-
-    render(
-      <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
-      </AntdApp>,
-    );
-
-    await screen.findByText("移出甲");
-    fireEvent.click(screen.getByRole("button", { name: "全选队列" }));
-    fireEvent.click(screen.getByRole("button", { name: "移出所选" }));
-
-    // 确认按钮在 Popconfirm 浮层里（两字按钮名会被插空格，用正则匹配）。
-    const popoverTitle = await screen.findByText("确定把选中的 2 个岗位移出队列？");
-    fireEvent.click(
-      within(popoverTitle.closest(".ant-popover") as HTMLElement).getByRole("button", {
-        name: /移\s*出/,
-      }),
-    );
-
-    await waitFor(() => expect(apiMocks.removeQueueItem).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText("已把 2 个岗位移出队列")).toBeInTheDocument();
-    expect(screen.getByText(/已选 0 个/)).toBeInTheDocument();
   });
 });

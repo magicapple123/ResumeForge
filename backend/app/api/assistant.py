@@ -20,6 +20,7 @@ from ..schemas.assistant import (
     ChatConversationDetail,
     ChatConversationForkRequest,
     ChatConversationUpdate,
+    ChatEarlierMessagesOut,
     ChatMessageDeleteRequest,
     ChatMessageDeleteResult,
     ConversationSurface,
@@ -77,6 +78,9 @@ from .assistant_conversations import (
     read_conversation as read_conversation_record,
 )
 from .assistant_conversations import (
+    read_earlier_messages as read_earlier_messages_record,
+)
+from .assistant_conversations import (
     update_conversation as update_conversation_record,
 )
 from .assistant_stream import history_snapshot, stream_message_events
@@ -84,7 +88,9 @@ from .assistant_stream import history_snapshot, stream_message_events
 logger = logging.getLogger(__name__)
 
 
-def _save_attachment_copies(db: Session, message_id: int, attachments: list[dict[str, Any]]) -> None:
+def _save_attachment_copies(
+    db: Session, message_id: int, attachments: list[dict[str, Any]]
+) -> None:
     """best-effort：把消息附件里的 data URL 落一份磁盘副本（失败只记日志）。"""
     for item in attachments or []:
         if not isinstance(item, dict):
@@ -103,6 +109,8 @@ def _save_attachment_copies(db: Session, message_id: int, attachments: list[dict
             )
         except Exception:  # noqa: BLE001 - 副本是锦上添花，绝不能挡住消息发送
             logger.warning("助手附件磁盘副本保存失败 chat_message:%s", message_id, exc_info=True)
+
+
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
 _PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "assistant_system.md"
@@ -132,9 +140,7 @@ _WEB_SEARCH_ADDENDUM_TAIL = "- 找不到可靠来源时如实说明，不要用�
 
 
 def _web_search_addendum(fetch_pages: int = 0) -> str:
-    body = (
-        _WEB_SEARCH_ADDENDUM_WITH_PAGES if fetch_pages > 0 else _WEB_SEARCH_ADDENDUM_SUMMARIES
-    )
+    body = _WEB_SEARCH_ADDENDUM_WITH_PAGES if fetch_pages > 0 else _WEB_SEARCH_ADDENDUM_SUMMARIES
     return f"{_WEB_SEARCH_ADDENDUM_HEAD}{body}{_WEB_SEARCH_ADDENDUM_TAIL}"
 
 
@@ -192,20 +198,43 @@ def create_conversation(payload: ChatConversationCreate, db: Session = Depends(g
 
 @router.get("/conversations", response_model=list[ChatConversationBrief])
 def list_conversations(
-    limit: int = Query(default=100, ge=1, le=200),
+    limit: int = Query(default=100, ge=1, le=500),
+    keyword: str = Query(default="", max_length=200),
     surface: ConversationSurface = Query(default="page"),
     db: Session = Depends(get_db),
 ):
-    return list_conversation_records(limit, db, surface)
+    # P0-2：上限解封到 500 并新增 keyword（标题/首条消息），旧会话靠搜索可达。
+    return list_conversation_records(limit, db, surface, keyword=keyword)
 
 
 @router.get("/conversations/{conversation_id}", response_model=ChatConversationDetail)
 def read_conversation(
     conversation_id: int,
     surface: ConversationSurface = Query(default="page"),
+    message_limit: int = Query(
+        default=0, ge=0, le=500, description="只取最新 N 条；0 = 全量（旧行为）"
+    ),
     db: Session = Depends(get_db),
 ):
-    return read_conversation_record(conversation_id, db, surface)
+    return read_conversation_record(conversation_id, db, surface, message_limit=message_limit)
+
+
+@router.get(
+    "/conversations/{conversation_id}/messages/earlier",
+    response_model=ChatEarlierMessagesOut,
+)
+def read_earlier_messages(
+    conversation_id: int,
+    before_id: int = Query(ge=1, description="取 id 小于该值（更旧）的消息"),
+    limit: int = Query(default=50, ge=1, le=500),
+    surface: ConversationSurface = Query(default="page"),
+    db: Session = Depends(get_db),
+):
+    """「加载更早」（B5 按需加载）：取 before_id 之前最新的 limit 条消息（正序返回）。"""
+    items, has_earlier = read_earlier_messages_record(
+        conversation_id, before_id, limit, db, surface
+    )
+    return ChatEarlierMessagesOut(items=items, has_earlier=has_earlier)
 
 
 @router.patch("/conversations/{conversation_id}", response_model=ChatConversationBrief)
@@ -270,9 +299,7 @@ def export_conversation(
     return Response(
         body,
         media_type=media_type,
-        headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}"
-        },
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}"},
     )
 
 

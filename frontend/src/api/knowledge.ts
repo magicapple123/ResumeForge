@@ -2,10 +2,14 @@
 import type { Knowledge, KnowledgePayload, KnowledgeSummary, KnowledgeTagList } from "../types";
 import type { Page } from "../types/common";
 import { buildQuery, request } from "./client";
-
+/**
+ * 旧版全量列表（P1-6）：现返回**摘要行**（content_excerpt ≤200 字），与后端
+ * `_knowledge_summary` 口径一致——正文是 Markdown 长文，列表不再整库搬运。
+ * 新代码请用 `listKnowledgePage`；回看/编辑全文走 `getKnowledge(id)`。
+ */
 export function listKnowledge(
   params: { q?: string; category?: string } = {},
-): Promise<Knowledge[]> {
+): Promise<KnowledgeSummary[]> {
   return request(`/knowledge${buildQuery(params)}`);
 }
 
@@ -47,4 +51,12 @@ export function updateKnowledge(id: number, payload: KnowledgePayload): Promise<
 
 export function deleteKnowledge(id: number): Promise<void> {
   return request(`/knowledge/${id}`, { method: "DELETE" });
+}
+
+/** 批量移入回收站（软删除）：与简历批量删除同一口径，后端缺失任一 id 即整体 404。 */
+export function batchDeleteKnowledge(knowledgeIds: number[]): Promise<{ deleted: number }> {
+  return request("/knowledge/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ knowledge_ids: knowledgeIds }),
+  });
 }

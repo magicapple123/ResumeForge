@@ -1,4 +1,5 @@
 """投递队列：准入、去重、排序，以及简历 / 招呼语解析。"""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -24,6 +25,9 @@ from ..sites.registry import get_registry
 from ._base import ApplyConflict, ApplyNotFound, ApplyServiceError, _clip_greeting
 from ._config import get_apply_config
 from ._match import _admission_of_match, _blocking_gaps, _match_requires_confirm, latest_match
+
+# 队列列表的兜底上限（P2-2）：超过后前端按 total/truncated 如实提示。
+MAX_QUEUE_LIST = 500
 
 
 def _resume_title(db: Session, resume_id: int | None) -> str:
@@ -79,20 +83,29 @@ def _queue_out(db: Session, item: ApplyQueueItem, job: Job | None) -> ApplyQueue
     )
 
 
-def list_queue(db: Session) -> list[ApplyQueueItemOut]:
+def list_queue(db: Session, limit: int = MAX_QUEUE_LIST) -> list[ApplyQueueItemOut]:
     """按排序列出投递队列，每行带准入结论与能否投递标记。
 
     **后导入的排最上**（用户实测反馈：海投场景新加入的岗位应该最先看到）。``sort_order``
     大的是新条目，所以倒序取；重排序（``reorder_queue``）写值时与此口径配对。
+
+    列表默认按 :data:`MAX_QUEUE_LIST` 兜底上限（P2-2）：海投千级队列时 HTTP 响应不再
+    全量下发；总数走 :func:`count_queue`，由端点拼上 ``truncated`` 如实告知前端。
     """
     items = (
         db.query(ApplyQueueItem)
         .order_by(ApplyQueueItem.sort_order.desc(), ApplyQueueItem.id.desc())
+        .limit(max(1, limit))
         .all()
     )
     # 岗位一次性取回，避免每行一次查询（队列条数不多，但这属于该顺手做对的事）。
     jobs = _jobs_by_id(db, [item.job_id for item in items])
     return [_queue_out(db, item, jobs.get(item.job_id)) for item in items]
+
+
+def count_queue(db: Session) -> int:
+    """队列总条数：与 ``list_queue`` 的上限无关的全量口径。"""
+    return int(db.query(func.count(ApplyQueueItem.id)).scalar() or 0)
 
 
 def _jobs_by_id(db: Session, job_ids: Sequence[int | None]) -> dict[int, Job]:
@@ -109,9 +122,7 @@ def add_to_queue(db: Session, request: Any) -> list[ApplyQueueItemOut]:
     整批要么全部成功、要么全部回滚：任一岗位不满足准入就中断，避免"加了一半"。
     """
     config = get_apply_config(db)
-    next_order = (
-        db.query(func.coalesce(func.max(ApplyQueueItem.sort_order), 0)).scalar() or 0
-    )
+    next_order = db.query(func.coalesce(func.max(ApplyQueueItem.sort_order), 0)).scalar() or 0
     created: list[ApplyQueueItem] = []
     created_jobs: list[Job] = []
     try:
@@ -130,9 +141,7 @@ def add_to_queue(db: Session, request: Any) -> list[ApplyQueueItemOut]:
                     }
                 )
             existing = (
-                db.query(ApplyQueueItem)
-                .filter(ApplyQueueItem.job_id == job.id)
-                .one_or_none()
+                db.query(ApplyQueueItem).filter(ApplyQueueItem.job_id == job.id).one_or_none()
             )
             if existing is not None:
                 raise ApplyConflict(
@@ -271,4 +280,3 @@ def build_apply_data(db: Session, resume: ResumeRecord | None) -> dict[str, Any]
     if resume is not None and resume.title:
         data["job_intent"] = data.get("job_intent") or resume.job_title
     return {key: value for key, value in data.items() if value}
-

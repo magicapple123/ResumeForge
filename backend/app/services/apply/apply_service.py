@@ -11,6 +11,7 @@
 ``_queue``（队列与简历/招呼语）、``_records``（回写与记录）、``_tasks``（任务批次）、
 ``_site_browser``（站点与浏览器）；本文件只做对外门面，重新导出公共符号。
 """
+
 from ...schemas.apply import ApplyConfigIn, ApplyTaskCreate  # noqa: F401 - 历史导出
 from ..browser.browser_manager import BrowserManager  # noqa: F401 - 历史导出
 from ._base import (
@@ -35,6 +36,7 @@ from ._match import delete_match, latest_match, persist_match
 from ._queue import (
     add_to_queue,
     build_apply_data,
+    count_queue,
     job_apply_site,  # noqa: F401 - 历史导出
     list_queue,
     remove_queue_item,
@@ -48,6 +50,7 @@ from ._records import (
     daily_success_count,
     delete_record,
     delete_record_batch,
+    list_batch_items,
     list_record_batches,
     list_records,
     mark_queue_done,
@@ -108,9 +111,11 @@ __all__ = [
     "get_apply_config",
     "get_browser_manager",
     "get_collect_config",
+    "count_queue",
     "get_task_detail",
     "list_apply_tasks_page",
     "latest_match",
+    "list_batch_items",
     "list_queue",
     "list_record_batches",
     "list_records",

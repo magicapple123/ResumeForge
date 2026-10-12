@@ -7,6 +7,7 @@
 写入路径都不接受 `company_key` / `title_key`：合并键由服务层从公司名与岗位名算出，
 不让调用方（包括模型）有机会构造一个"看起来一样但合并不到一起"的键。
 """
+
 from __future__ import annotations
 
 import re
@@ -152,6 +153,21 @@ class TrackListOut(BaseModel):
     month_count: int
 
 
+class TrackStatsOut(BaseModel):
+    """只带漏斗统计、不带列表行（P1-2）：前端画漏斗不再为此拖 500 行大响应。
+
+    字段口径与 :class:`TrackListOut` 的统计部分完全一致；``summarize`` 本就是
+    SQL 聚合，独立成端点后旧列表端点的统计字段保留不动（兼容）。
+    """
+
+    total: int
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    active_count: int
+    offer_count: int
+    rejected_count: int
+    month_count: int
+
+
 class TrackMergePreview(BaseModel):
     """一条识别结果合并后会怎样——**不写库**，只回答"会发生什么"。"""
 
@@ -237,5 +253,6 @@ __all__ = [
     "TrackParseOut",
     "TrackParseRequest",
     "TrackRecordIn",
+    "TrackStatsOut",
     "TrackUpdate",
 ]

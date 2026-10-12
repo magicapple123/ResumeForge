@@ -131,7 +131,7 @@ const COLLECT_CONFIG: CollectConfigOut = {
 beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.getBrowserStatus.mockResolvedValue(BROWSER);
-  apiMocks.listQueue.mockResolvedValue([]);
+  apiMocks.listQueue.mockResolvedValue({ items: [], total: 0, truncated: false });
   apiMocks.getCurrentTask.mockResolvedValue(null);
   apiMocks.listRecords.mockResolvedValue({ items: [], total: 0 });
   apiMocks.getApplyConfig.mockResolvedValue({});
@@ -164,11 +164,15 @@ describe("ApplyPage", () => {
   });
 
   it("marks entries that need per-item confirmation and shows blocked ones as not-to-apply", async () => {
-    apiMocks.listQueue.mockResolvedValue([
-      { ...QUEUE_ITEM, admission: "needs_confirm", requires_confirm: true },
-      { ...QUEUE_ITEM, id: 2, job_id: 12, job_title: "算法工程", admission: "block" },
-      { ...QUEUE_ITEM, id: 3, job_id: 13, job_title: "未分析岗", admission: null },
-    ]);
+    apiMocks.listQueue.mockResolvedValue({
+      items: [
+        { ...QUEUE_ITEM, admission: "needs_confirm", requires_confirm: true },
+        { ...QUEUE_ITEM, id: 2, job_id: 12, job_title: "算法工程", admission: "block" },
+        { ...QUEUE_ITEM, id: 3, job_id: 13, job_title: "未分析岗", admission: null },
+      ],
+      total: 3,
+      truncated: false,
+    });
 
     render(
       <MemoryRouter>

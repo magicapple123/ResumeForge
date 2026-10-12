@@ -5,8 +5,8 @@ import { ThunderboltOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { createDrillSession } from "../../api/drill";
 import { listClaims } from "../../api/claims";
-import { listJobs } from "../../api/jobs";
 import { useApi } from "../../hooks/useApi";
+import { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
 import type { Claim, DrillSession, FeedbackPolicy } from "../../types";
 import { DRILL_QUESTION_OPTIONS, FEEDBACK_LABELS } from "../../types";
 
@@ -17,8 +17,9 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
   const [jobId, setJobId] = useState<number | null>(null);
   const [maxQuestions, setMaxQuestions] = useState(6);
   const [policy, setPolicy] = useState<FeedbackPolicy>("deferred");
-  const [jobOptions, setJobOptions] = useState<{ value: number; label: string }[]>([]);
   const [busy, setBusy] = useState(false);
+  // 关联岗位下拉改为远程搜索（P0-1）：不再预拉"前 100 条"当全量。
+  const jobSelect = useJobSearchSelect();
 
   // 只有「已确认」的主张能挖——待确认的本来就还没定稿。
   const claims = useApi<Claim[]>(
@@ -28,17 +29,12 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
 
   useEffect(() => {
     if (!open) return;
-    void listJobs({ page: 1, page_size: 100 })
-      .then((page) =>
-        setJobOptions(
-          page.items.map((job) => ({
-            value: job.id,
-            label: `${job.title}${job.company ? ` · ${job.company}` : ""}`,
-          })),
-        ),
-      )
-      .catch(() => setJobOptions([]));
-  }, [open]);
+    // 打开弹窗时回查已选岗位并预拉第一页候选（P0-1）。
+    void jobSelect.ensure(jobId);
+    void jobSelect.reload();
+    // hook 的回调引用稳定，只跟随弹窗开关与已选值变化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, jobId]);
 
   const available = claims.data ?? [];
 
@@ -141,10 +137,10 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
             <Select
               allowClear
               style={{ width: "100%", marginTop: 6 }}
-              placeholder="不关联"
+              placeholder="不关联（输入关键词搜索）"
               value={jobId}
               onChange={setJobId}
-              options={jobOptions}
+              {...jobSelect.selectProps}
             />
           </div>
         </Space>
