@@ -6,9 +6,9 @@
  * "这条还没核实"和"导出终稿会被拦下"。
  */
 import { DeleteOutlined, EditOutlined, MoreOutlined } from "@ant-design/icons";
-import { Button, Dropdown, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Checkbox, Dropdown, Space, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
-import type { Claim, VerificationStatus } from "../../types";
+import type { Claim, ClaimSummary, VerificationStatus } from "../../types";
 import { SOURCE_TYPE_LABELS, hasPlaceholder } from "../../types";
 import { useRowActionMenu } from "../common/rowActionMenu";
 
@@ -29,10 +29,15 @@ export const RESPONSIBILITY_COLORS: Record<string, string> = {
 };
 
 interface Props {
-  claim: Claim;
+  /** 全量条目（详情/旧列表）或分页摘要行（GET /api/claims/page，只有 ≤200 字摘要）。 */
+  claim: Claim | ClaimSummary;
   onEdit: () => void;
   onDelete: () => void;
   onConfirm: () => void;
+  /** 批量选择模式（ClaimsPage 传入）：收起行内操作、头部出现勾选框。 */
+  selecting?: boolean;
+  selected?: boolean;
+  onToggleSelected?: (checked: boolean) => void;
 }
 
 /** 把含占位符的文本切出来单独高亮，让"哪里还没写"一眼可见。 */
@@ -55,11 +60,27 @@ function Wording({ text }: { text: string }) {
   );
 }
 
-export default function ClaimCard({ claim, onEdit, onDelete, onConfirm }: Props) {
+export default function ClaimCard({
+  claim,
+  onEdit,
+  onDelete,
+  onConfirm,
+  selecting = false,
+  selected = false,
+  onToggleSelected,
+}: Props) {
   const buildMenu = useRowActionMenu();
   // 「标记已确认」点击后确认流程就开始了，提示不该继续挂在按钮上（受控开关）。
   const [confirmTipOpen, setConfirmTipOpen] = useState(false);
-  const interview = claim.interview_details;
+  // 摘要行（分页列表）只有 excerpt 字段；全量条目用原文/表述全文。
+  const isSummary = "source_fact_excerpt" in claim;
+  const sourceFact = isSummary ? claim.source_fact_excerpt : claim.source_fact;
+  const wording = isSummary ? claim.candidate_wording_excerpt : claim.candidate_wording;
+  // 摘要行没有这些字段（详情接口才有），统一收成 undefined 让下面的条件自然跳过。
+  const interview = isSummary ? undefined : claim.interview_details;
+  const boundary = isSummary ? "" : claim.boundary;
+  const sources = isSummary ? [] : claim.sources;
+  const allowedUses = isSummary ? [] : claim.allowed_uses;
   const hasInterviewDetail =
     Boolean(interview?.result) ||
     (interview?.decisions?.length ?? 0) > 0 ||
@@ -87,42 +108,52 @@ export default function ClaimCard({ claim, onEdit, onDelete, onConfirm }: Props)
           )}
         </Space>
         <Space size={4}>
-          {claim.verification_status !== "已确认" && (
-            <Tooltip
-              open={confirmTipOpen}
-              onOpenChange={setConfirmTipOpen}
-              title="确认后这条才会作为事实进入简历生成"
-            >
-              <span onClick={() => setConfirmTipOpen(false)}>
-                <Button size="small" type="link" onClick={onConfirm}>
-                  标记已确认
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-          <Dropdown
-            trigger={["click"]}
-            menu={{
-              items: buildMenu([
-                { key: "edit", label: "编辑", icon: <EditOutlined />, onClick: onEdit },
-                {
-                  key: "delete",
-                  label: "删除",
-                  danger: true,
-                  icon: <DeleteOutlined />,
-                  confirm: "删除这条事实台账记录？",
-                  onClick: onDelete,
-                },
-              ]),
-            }}
-          >
-            <Button
-              size="small"
-              type="text"
-              icon={<MoreOutlined />}
-              aria-label={`更多操作 ${claim.title || claim.subject || claim.id}`}
+          {selecting && onToggleSelected ? (
+            <Checkbox
+              aria-label={`选择台账条目 ${claim.title || claim.subject || claim.id}`}
+              checked={selected}
+              onChange={(event) => onToggleSelected(event.target.checked)}
             />
-          </Dropdown>
+          ) : (
+            <>
+              {claim.verification_status !== "已确认" && (
+                <Tooltip
+                  open={confirmTipOpen}
+                  onOpenChange={setConfirmTipOpen}
+                  title="确认后这条才会作为事实进入简历生成"
+                >
+                  <span onClick={() => setConfirmTipOpen(false)}>
+                    <Button size="small" type="link" onClick={onConfirm}>
+                      标记已确认
+                    </Button>
+                  </span>
+                </Tooltip>
+              )}
+              <Dropdown
+                trigger={["click"]}
+                menu={{
+                  items: buildMenu([
+                    { key: "edit", label: "编辑", icon: <EditOutlined />, onClick: onEdit },
+                    {
+                      key: "delete",
+                      label: "删除",
+                      danger: true,
+                      icon: <DeleteOutlined />,
+                      confirm: "删除这条事实台账记录？",
+                      onClick: onDelete,
+                    },
+                  ]),
+                }}
+              >
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<MoreOutlined />}
+                  aria-label={`更多操作 ${claim.title || claim.subject || claim.id}`}
+                />
+              </Dropdown>
+            </>
+          )}
         </Space>
       </header>
 
@@ -130,29 +161,29 @@ export default function ClaimCard({ claim, onEdit, onDelete, onConfirm }: Props)
         <div className="claim-card-row">
           <span className="claim-card-label">原始事实</span>
           <div className="claim-card-value">
-            <Wording text={claim.source_fact} />
+            <Wording text={sourceFact} />
           </div>
         </div>
         <div className="claim-card-row">
           <span className="claim-card-label">简历表述</span>
           <div className="claim-card-value">
-            <Wording text={claim.candidate_wording} />
+            <Wording text={wording} />
           </div>
         </div>
-        {claim.boundary && (
+        {boundary && (
           <div className="claim-card-row">
             <span className="claim-card-label">个人边界</span>
-            <div className="claim-card-value">{claim.boundary}</div>
+            <div className="claim-card-value">{boundary}</div>
           </div>
         )}
       </div>
 
-      {(claim.sources.length > 0 || claim.allowed_uses.length > 0 || hasInterviewDetail) && (
+      {(sources.length > 0 || allowedUses.length > 0 || hasInterviewDetail) && (
         <footer className="claim-card-foot">
-          {claim.sources.length > 0 && (
+          {sources.length > 0 && (
             <Space size={4} wrap>
               <span className="claim-card-label">证据</span>
-              {claim.sources.map((source, index) => (
+              {sources.map((source, index) => (
                 <Tooltip
                   key={index}
                   title={`${source.location}${source.public ? "" : "（不公开）"}`}
@@ -162,10 +193,10 @@ export default function ClaimCard({ claim, onEdit, onDelete, onConfirm }: Props)
               ))}
             </Space>
           )}
-          {claim.allowed_uses.length > 0 && (
+          {allowedUses.length > 0 && (
             <Space size={4} wrap>
               <span className="claim-card-label">可用范围</span>
-              {claim.allowed_uses.map((use) => (
+              {allowedUses.map((use) => (
                 <Tag key={use}>{use}</Tag>
               ))}
             </Space>

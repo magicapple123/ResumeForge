@@ -5,18 +5,19 @@
  * 会造成真实后果的失误（用户照着它投出带【待补】的简历）。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Claim, ClaimList } from "../types";
+import type { Claim, ClaimPageList, ClaimSummary } from "../types";
 import ClaimsPage from "./ClaimsPage";
 
 const apiMocks = vi.hoisted(() => ({
-  listClaims: vi.fn(),
+  listClaimsPage: vi.fn(),
   getClaim: vi.fn(),
   createClaim: vi.fn(),
   updateClaim: vi.fn(),
   deleteClaim: vi.fn(),
+  batchDeleteClaims: vi.fn(),
   getClaimBaseline: vi.fn(),
   draftClaims: vi.fn(),
 }));
@@ -46,10 +47,29 @@ function makeClaim(overrides: Partial<Claim> = {}): Claim {
   };
 }
 
-function makeList(items: Claim[]): ClaimList {
+/** 分页列表行摘要（GET /api/claims/page）：原文/表述换成 ≤200 字摘要字段。 */
+function makeSummary(claim: Claim): ClaimSummary {
   return {
-    items,
-    total: items.length,
+    id: claim.id,
+    title: claim.title,
+    category: claim.category,
+    subject: claim.subject,
+    source_fact_excerpt: claim.source_fact,
+    candidate_wording_excerpt: claim.candidate_wording,
+    responsibility_level: claim.responsibility_level,
+    verification_status: claim.verification_status,
+    last_verified: claim.last_verified,
+    warnings: claim.warnings,
+    created_at: claim.created_at,
+    updated_at: claim.updated_at,
+  };
+}
+
+/** 分页端点响应：摘要行 + 全筛选集的 SQL 汇总（与旧端点口径一致）。 */
+function makePage(items: Claim[], total = items.length): ClaimPageList {
+  return {
+    items: items.map(makeSummary),
+    total,
     confirmed_count: items.filter((item) => item.verification_status === "已确认").length,
     pending_count: items.filter((item) => item.verification_status === "待确认").length,
     category_counts: {},
@@ -76,6 +96,9 @@ function renderPage() {
 
 beforeEach(() => {
   for (const mock of Object.values(apiMocks)) mock.mockReset();
+  apiMocks.listClaimsPage.mockResolvedValue(makePage([makeClaim()]));
+  // 「标记已确认」与编辑都要先按 id 取全量（分页行只有 ≤200 字摘要）。
+  apiMocks.getClaim.mockResolvedValue(makeClaim());
   apiMocks.getClaimBaseline.mockResolvedValue(EMPTY_BASELINE);
 });
 
@@ -85,7 +108,7 @@ afterEach(() => {
 
 describe("ClaimsPage", () => {
   it("renders entries with the original fact and the resume wording", async () => {
-    apiMocks.listClaims.mockResolvedValue(makeList([makeClaim()]));
+    apiMocks.listClaimsPage.mockResolvedValue(makePage([makeClaim()]));
     renderPage();
 
     expect(await screen.findByText("检索接口")).toBeInTheDocument();
@@ -94,8 +117,8 @@ describe("ClaimsPage", () => {
   });
 
   it("highlights placeholders so an unverified wording never looks finished", async () => {
-    apiMocks.listClaims.mockResolvedValue(
-      makeList([
+    apiMocks.listClaimsPage.mockResolvedValue(
+      makePage([
         makeClaim({
           candidate_wording: "优化了检索速度【待补：具体倍数】",
         }),
@@ -110,8 +133,8 @@ describe("ClaimsPage", () => {
   });
 
   it("shows server-side warnings instead of judging in the browser", async () => {
-    apiMocks.listClaims.mockResolvedValue(
-      makeList([makeClaim({ warnings: ["待确认的表述没有加【待补】占位符；导出终稿时…"] })]),
+    apiMocks.listClaimsPage.mockResolvedValue(
+      makePage([makeClaim({ warnings: ["待确认的表述没有加【待补】占位符；导出终稿时…"] })]),
     );
     renderPage();
 
@@ -119,7 +142,7 @@ describe("ClaimsPage", () => {
   });
 
   it("confirms an entry through the API and reloads the baseline", async () => {
-    apiMocks.listClaims.mockResolvedValue(makeList([makeClaim()]));
+    apiMocks.listClaimsPage.mockResolvedValue(makePage([makeClaim()]));
     apiMocks.updateClaim.mockResolvedValue(
       makeClaim({ verification_status: "已确认", warnings: [] }),
     );
@@ -128,6 +151,10 @@ describe("ClaimsPage", () => {
     await screen.findByText("检索接口");
     fireEvent.click(screen.getByRole("button", { name: /标记已确认/ }));
 
+    // 分页行只有摘要：确认前必须先按 id 取全量，否则 claimPayload 会丢字段。
+    await waitFor(() => {
+      expect(apiMocks.getClaim).toHaveBeenCalledWith(1);
+    });
     await waitFor(() => {
       expect(apiMocks.updateClaim).toHaveBeenCalledTimes(1);
     });
@@ -141,7 +168,7 @@ describe("ClaimsPage", () => {
   });
 
   it("surfaces the backend rejection when a confirmed entry still has a placeholder", async () => {
-    apiMocks.listClaims.mockResolvedValue(makeList([makeClaim()]));
+    apiMocks.listClaimsPage.mockResolvedValue(makePage([makeClaim()]));
     apiMocks.updateClaim.mockRejectedValue(
       new Error("简历表述里还有「【待补」这样的未完成标记，不能标记为「已确认」"),
     );
@@ -154,14 +181,14 @@ describe("ClaimsPage", () => {
   });
 
   it("offers a way in when the ledger is empty", async () => {
-    apiMocks.listClaims.mockResolvedValue(makeList([]));
+    apiMocks.listClaimsPage.mockResolvedValue(makePage([]));
     renderPage();
 
     expect(await screen.findByText(/台账还是空的/)).toBeInTheDocument();
   });
 
   it("shows the error state rather than an empty list when loading fails", async () => {
-    apiMocks.listClaims.mockRejectedValue(new Error("接口不可用"));
+    apiMocks.listClaimsPage.mockRejectedValue(new Error("接口不可用"));
     renderPage();
 
     expect(await screen.findByText("接口不可用")).toBeInTheDocument();
@@ -171,17 +198,116 @@ describe("ClaimsPage", () => {
 
   it("offers a way into the drill from the ledger", async () => {
     // 深挖的输入就是台账条目，所以入口必须在这里——否则用户找不到它。
-    apiMocks.listClaims.mockResolvedValue(makeList([makeClaim()]));
+    apiMocks.listClaimsPage.mockResolvedValue(makePage([makeClaim()]));
     renderPage();
 
     expect(await screen.findByRole("button", { name: /拿去深挖/ })).toBeInTheDocument();
   });
 
   it("passes the chosen filters to the API", async () => {
-    apiMocks.listClaims.mockResolvedValue(makeList([]));
+    apiMocks.listClaimsPage.mockResolvedValue(makePage([]));
     renderPage();
     await waitFor(() => {
-      expect(apiMocks.listClaims).toHaveBeenCalledWith({ category: "", status: "", keyword: "" });
+      expect(apiMocks.listClaimsPage).toHaveBeenCalledWith(
+        { category: "", status: "", keyword: "" },
+        1,
+        20,
+      );
+    });
+  });
+
+  it("翻到第 2 页按 page=2 重新请求服务端，取到第 21 条", async () => {
+    // 服务端分页（RF-08 续）：一页 20 条，翻页时把页码下发 /claims/page。
+    const pageOne = Array.from({ length: 20 }, (_, index) =>
+      makeClaim({ id: index + 1, title: `条目-${index + 1}` }),
+    );
+    apiMocks.listClaimsPage
+      .mockResolvedValueOnce(makePage(pageOne, 21))
+      .mockResolvedValueOnce(makePage([makeClaim({ id: 21, title: "第 21 条" })], 21));
+    renderPage();
+
+    expect(await screen.findByText("条目-1")).toBeInTheDocument();
+    expect(screen.queryByText("第 21 条")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByTitle("2")[0]);
+
+    await waitFor(() => {
+      expect(apiMocks.listClaimsPage).toHaveBeenLastCalledWith(
+        { category: "", status: "", keyword: "" },
+        2,
+        20,
+      );
+    });
+    expect(await screen.findByText("第 21 条")).toBeInTheDocument();
+  });
+
+  it("选择分类筛选后回第 1 页并把参数下发服务端", async () => {
+    // 筛选变化必须重置页码：停在第 2 页时选分类，若仍请求 page=2 会漏掉第 1 页的命中。
+    const pageOne = Array.from({ length: 20 }, (_, index) =>
+      makeClaim({ id: index + 1, title: `条目-${index + 1}` }),
+    );
+    apiMocks.listClaimsPage
+      .mockResolvedValueOnce(makePage(pageOne, 21))
+      .mockResolvedValueOnce(makePage([makeClaim({ id: 21, title: "第 21 条" })], 21))
+      .mockResolvedValueOnce(makePage([makeClaim({ title: "分类命中" })], 1));
+    renderPage();
+
+    expect(await screen.findByText("条目-1")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByTitle("2")[0]);
+    await screen.findByText("第 21 条");
+
+    fireEvent.mouseDown(screen.getAllByRole("combobox")[0]);
+    // 卡片上也有「项目经历」分类 Tag，必须把匹配收窄到下拉选项本身。
+    const option = await screen.findByText(
+      (content, element) => content === "项目经历" && !!element?.closest(".ant-select-item-option"),
+    );
+    fireEvent.click(option);
+
+    await waitFor(() => {
+      expect(apiMocks.listClaimsPage).toHaveBeenLastCalledWith(
+        { category: "项目经历", status: "", keyword: "" },
+        1,
+        20,
+      );
+    });
+    expect(await screen.findByText("分类命中")).toBeInTheDocument();
+  });
+
+  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除请求带全部 id 并刷新", async () => {
+    apiMocks.listClaimsPage.mockResolvedValue(
+      makePage([makeClaim(), makeClaim({ id: 2, title: "数据分析流水线" })]),
+    );
+    apiMocks.batchDeleteClaims.mockResolvedValue({ deleted: 2 });
+    renderPage();
+
+    await screen.findByText("检索接口");
+    fireEvent.contextMenu(screen.getByText("检索接口"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择台账条目 检索接口" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择台账条目 数据分析流水线" }));
+    expect(screen.getByText("已选 2 项")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    // Popconfirm 确认（文案带数量）；确认前绝不发请求。
+    const popover = await waitFor(() => {
+      const root = document.querySelector(".ant-popover");
+      expect(root).not.toBeNull();
+      return root as HTMLElement;
+    });
+    expect(popover.textContent).toContain("删除选中的 2 条台账");
+    expect(apiMocks.batchDeleteClaims).not.toHaveBeenCalled();
+    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+
+    await waitFor(() => {
+      expect(apiMocks.batchDeleteClaims).toHaveBeenCalledTimes(1);
+    });
+    expect(apiMocks.batchDeleteClaims).toHaveBeenCalledWith([1, 2]);
+    // 成功后清空选择、刷新列表与统计（列表端点被重新调用）。
+    expect(await screen.findByText(/已删除 2 条台账/)).toBeInTheDocument();
+    expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(apiMocks.listClaimsPage.mock.calls.length).toBeGreaterThan(1);
     });
   });
 });

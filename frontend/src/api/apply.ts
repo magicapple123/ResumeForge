@@ -4,6 +4,7 @@ import type {
   ApplyConfigOut,
   ApplyQueueAddItem,
   ApplyQueueItem,
+  ApplyQueueList,
   ApplyRecord,
   ApplyRecordBatch,
   ApplyTask,
@@ -107,7 +108,11 @@ export function stopBrowser(): Promise<void> {
 
 // ===== 队列 =====
 
-export function listQueue(): Promise<ApplyQueueItem[]> {
+/**
+ * 队列列表（P2-2）：响应改为 { items, total, truncated }——列表封顶 500 条
+ *（按 sort_order 倒序，最新入队的优先），队列更长时靠 truncated 提示缩小范围。
+ */
+export function listQueue(): Promise<ApplyQueueList> {
   return request("/apply/queue");
 }
 
@@ -199,6 +204,8 @@ export interface ApplyRecordParams {
   result?: string;
   page?: number;
   page_size?: number;
+  /** false = 轻量分页：批次不带明细，只返回 matched_count（B4 按需加载）。 */
+  include_items?: boolean;
 }
 
 export function listRecords(params: ApplyRecordParams = {}): Promise<Page<ApplyRecord>> {
@@ -213,6 +220,18 @@ export function listRecordBatches(params: ApplyRecordParams = {}): Promise<Page<
   return request(`/apply/records/grouped${buildQuery(params)}`);
 }
 
+/**
+ * 展开某个批次时分页拉取组内明细（B4 按需加载）。
+ * 过滤语义与 listRecordBatches 完全同源：传同样的 keyword/result，组内记录与组头
+ * matched_count 对得上。
+ */
+export function listRecordBatchItems(
+  taskId: number,
+  params: ApplyRecordParams = {},
+): Promise<Page<ApplyRecord>> {
+  return request(`/apply/records/batches/${taskId}/items${buildQuery(params)}`);
+}
+
 export function retryRecord(itemId: number): Promise<ApplyTask> {
   return request(`/apply/records/${itemId}/retry`, { method: "POST" });
 }
@@ -225,6 +244,14 @@ export function deleteRecord(itemId: number): Promise<void> {
 /** 删掉整批投递记录（软删）。**只删记录，不删批次本身**。 */
 export function deleteRecordBatch(taskId: number): Promise<void> {
   return request(`/apply/records/batches/${taskId}`, { method: "DELETE" });
+}
+
+/** 批量删除勾选的投递记录（软删）：与简历批量删除同一口径，后端缺失任一 id 即整体 404。 */
+export function batchDeleteRecords(recordIds: number[]): Promise<{ deleted: number }> {
+  return request("/apply/records/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ record_ids: recordIds }),
+  });
 }
 
 // ===== 采集 =====

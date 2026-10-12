@@ -36,6 +36,23 @@ class ApplyRecordOut(BaseModel):
         return _check_failure_category(value)
 
 
+class ApplyRecordBatchDeleteRequest(BaseModel):
+    """批量删除请求：与 ``schemas.material.MaterialBatchRequest`` 同款口径（去重 + 上限 500）。"""
+
+    record_ids: list[int] = Field(max_length=500)
+
+    @field_validator("record_ids")
+    @classmethod
+    def validate_and_deduplicate_ids(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise ValueError("请至少选择一条投递记录")
+        return list(dict.fromkeys(value))
+
+
+class ApplyRecordBatchDeleteResult(BaseModel):
+    deleted: int
+
+
 class ApplyRecordBatchOut(BaseModel):
     """一个投递批次及其全部记录（投递记录按批次分组展示的载体）。
 
@@ -56,6 +73,9 @@ class ApplyRecordBatchOut(BaseModel):
     message: str = ""
     created_at: datetime
     finished_at: datetime | None = None
+    # 命中当前筛选的记录数（include_items=false 的轻量分页用它展示「N 条记录」，
+    # 展开时再按需拉明细；include_items=true 时与 len(items) 一致）。
+    matched_count: int = 0
     items: list[ApplyRecordOut] = Field(default_factory=list)
 
 
@@ -74,4 +94,3 @@ class GreetingPreviewOut(BaseModel):
     greeting: str = ""
     # 来源：generated（模型生成）/ queue（队列已有值）/ default（默认招呼语）。
     source: str = "default"
-

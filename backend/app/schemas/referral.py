@@ -4,6 +4,7 @@
 是**冗余展示字段**，权威口径由关联的 ``ApplicationTrack`` 后置位派生（有 track 且进入
 面试及以上才算转化），因此**写入侧不接受 ``converted``**——避免在表里再手算一份口径。
 """
+
 import re
 from datetime import datetime
 from typing import Literal
@@ -146,8 +147,27 @@ class ReferralStatsOut(BaseModel):
     rate: float
 
 
+class ReferralBatchRequest(BaseModel):
+    """批量删除请求：与 ``schemas.resume.ResumeBatchRequest`` 同款口径（去重 + 上限 500）。"""
+
+    referral_ids: list[int] = Field(max_length=500)
+
+    @field_validator("referral_ids")
+    @classmethod
+    def validate_and_deduplicate_ids(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise ValueError("请至少选择一条内推")
+        return list(dict.fromkeys(value))
+
+
+class ReferralBatchDeleteResult(BaseModel):
+    deleted: int
+
+
 __all__ = [
     "MAX_CHANNEL_CHARS",
+    "ReferralBatchDeleteResult",
+    "ReferralBatchRequest",
     "MAX_NOTE_CHARS",
     "MAX_NOTE_IMAGES",
     "MAX_REFERRAL_CODE_CHARS",

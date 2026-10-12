@@ -6,44 +6,72 @@
  * 直接取 `/api/claims/baseline`，所以界面显示的就是生成简历时真正会用到的东西。
  */
 import {
+  CheckSquareOutlined,
   FileAddOutlined,
   PlusOutlined,
   SafetyCertificateOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { App, Button, Empty, Input, Select, Space, Statistic, Typography } from "antd";
+import { App, Button, Empty, Input, Pagination, Select, Space, Statistic, Typography } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { deleteClaim, getClaimBaseline, listClaims, updateClaim } from "../api/claims";
+import {
+  batchDeleteClaims,
+  deleteClaim,
+  getClaim,
+  getClaimBaseline,
+  listClaimsPage,
+  updateClaim,
+} from "../api/claims";
 import ClaimCard from "../components/claims/ClaimCard";
 import ClaimDraftModal from "../components/claims/ClaimDraftModal";
 import ClaimFormModal from "../components/claims/ClaimFormModal";
+import { RowContextMenu } from "../components/common/RowActions";
+import BatchActionBar from "../components/common/BatchActionBar";
+import BatchDeleteButton from "../components/common/BatchDeleteButton";
 import { useApi } from "../hooks/useApi";
-import type { Claim } from "../types";
+import { useBatchSelection } from "../hooks/useBatchSelection";
+import type { Claim, ClaimSummary } from "../types";
 import { CLAIM_CATEGORIES, VERIFICATION_STATUSES, claimPayload } from "../types";
+
+/** 列表一页 20 条，与后端 /claims/page 的默认口径一致。 */
+const CLAIMS_PAGE_SIZE = 20;
 
 export default function ClaimsPage() {
   const { message } = App.useApp();
   const navigate = useNavigate();
+  // 批量选择：勾选若干条后一次删除（软删，全部进回收站）。
+  const batch = useBatchSelection<number>();
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [page, setPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Claim | null>(null);
   const [draftOpen, setDraftOpen] = useState(false);
 
+  // 分页在服务端做（RF-08 续）：列表行是摘要（原文/表述 ≤200 字），汇总
+  // （total/confirmed/pending/category_counts）随同一响应下发，不再为统计拉全量。
   const { data, loading, error, reload } = useApi(
-    () => listClaims({ category, status, keyword }),
-    [category, status, keyword],
+    () => listClaimsPage({ category, status, keyword }, page, CLAIMS_PAGE_SIZE),
+    [category, status, keyword, page],
   );
   const baseline = useApi(() => getClaimBaseline(), []);
 
   const items = useMemo(() => data?.items ?? [], [data]);
 
-  const remove = async (claim: Claim) => {
+  // 筛选条件变化时回第 1 页（渲染期守卫式调整，与 KnowledgePage 同一模式）。
+  const filterKey = `${keyword}|${category}|${status}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
+    setPage(1);
+  }
+
+  const remove = async (summary: ClaimSummary) => {
     try {
-      await deleteClaim(claim.id);
+      await deleteClaim(summary.id);
       message.success("已移入回收站，可在「回收站」里恢复");
       await reload();
       await baseline.reload();
@@ -52,12 +80,14 @@ export default function ClaimsPage() {
     }
   };
 
-  const confirm = async (claim: Claim) => {
+  const confirm = async (summary: ClaimSummary) => {
     try {
+      // 摘要行没有 claimPayload 需要的全文与证据字段：先按 id 取全量再提交。
+      const full = await getClaim(summary.id);
       // 后端会再校验一次占位符；前端只负责把当前值原样提交并换个状态。
       const saved = await updateClaim(
-        claim.id,
-        claimPayload(claim, { verification_status: "已确认" }),
+        full.id,
+        claimPayload(full, { verification_status: "已确认" }),
       );
       // 后端可能因为"还留着【待补】"而拒绝，这里要如实说清是哪一条、为什么。
       if (saved.warnings.length > 0) {
@@ -76,6 +106,40 @@ export default function ClaimsPage() {
     await reload();
     await baseline.reload();
   };
+
+  /** 批量删除：一次请求删完（软删），成功后清空选择并刷新列表与统计。 */
+  const removeSelected = async () => {
+    const ids = [...batch.selectedIds];
+    if (ids.length === 0) return;
+    try {
+      const { deleted } = await batchDeleteClaims(ids);
+      message.success(`已删除 ${deleted} 条台账，可在「回收站」里恢复`);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "批量删除失败，请重试");
+    }
+    batch.exitSelecting();
+    await refreshAll();
+  };
+
+  // 摘要行没有表单需要的全文与证据字段：编辑前先按 id 取全量。
+  const openEdit = async (summary: ClaimSummary) => {
+    try {
+      setEditing(await getClaim(summary.id));
+      setFormOpen(true);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "加载条目失败");
+    }
+  };
+
+  // 各分类的条目数来自分页响应的 SQL 汇总（与旧端点内存汇总同口径），渲染进下拉标签。
+  const categoryOptions = useMemo(
+    () =>
+      CLAIM_CATEGORIES.map((value) => {
+        const count = data?.category_counts?.[value];
+        return { value, label: count == null ? value : `${value}（${count}）` };
+      }),
+    [data],
+  );
 
   return (
     <div className="claims-page">
@@ -140,11 +204,8 @@ export default function ClaimsPage() {
         <Select
           value={category}
           onChange={setCategory}
-          style={{ width: 160 }}
-          options={[
-            { value: "", label: "全部分类" },
-            ...CLAIM_CATEGORIES.map((value) => ({ value, label: value })),
-          ]}
+          style={{ width: 180 }}
+          options={[{ value: "", label: "全部分类" }, ...categoryOptions]}
         />
         <Select
           value={status}
@@ -162,6 +223,24 @@ export default function ClaimsPage() {
           onSearch={setKeyword}
         />
       </Space>
+
+      {batch.selecting && (
+        <BatchActionBar
+          count={batch.selectedCount}
+          onExit={batch.exitSelecting}
+          pageSelectAll={{
+            allSelected: items.length > 0 && items.every((item) => batch.isSelected(item.id)),
+            someSelected: items.some((item) => batch.isSelected(item.id)),
+            onToggle: (checked) =>
+              batch.selectPage(
+                items.map((item) => item.id),
+                checked,
+              ),
+          }}
+        >
+          <BatchDeleteButton count={batch.selectedCount} noun="条台账" onDelete={removeSelected} />
+        </BatchActionBar>
+      )}
 
       {loading && <PageSkeleton rows={6} />}
       {error && <Typography.Text type="danger">{error}</Typography.Text>}
@@ -181,17 +260,47 @@ export default function ClaimsPage() {
 
       <div className="claims-list">
         {items.map((claim) => (
-          <ClaimCard
+          // 右键菜单挂在 DOM 元素上（ClaimCard 不透传 ref/事件，直接包它会失效）。
+          <RowContextMenu
             key={claim.id}
-            claim={claim}
-            onEdit={() => {
-              setEditing(claim);
-              setFormOpen(true);
-            }}
-            onDelete={() => void remove(claim)}
-            onConfirm={() => void confirm(claim)}
-          />
+            items={
+              batch.selecting
+                ? []
+                : [
+                    {
+                      key: "batch_select",
+                      label: "批量选择",
+                      icon: <CheckSquareOutlined />,
+                      onClick: batch.enterSelecting,
+                    },
+                  ]
+            }
+          >
+            <div>
+              <ClaimCard
+                claim={claim}
+                selecting={batch.selecting}
+                selected={batch.isSelected(claim.id)}
+                onToggleSelected={() => batch.toggle(claim.id)}
+                onEdit={() => void openEdit(claim)}
+                onDelete={() => void remove(claim)}
+                onConfirm={() => void confirm(claim)}
+              />
+            </div>
+          </RowContextMenu>
         ))}
+      </div>
+
+      <div style={{ textAlign: "right", marginTop: 12 }}>
+        <Pagination
+          current={page}
+          pageSize={CLAIMS_PAGE_SIZE}
+          total={data?.total ?? 0}
+          onChange={setPage}
+          hideOnSinglePage
+          showSizeChanger={false}
+          showTotal={(count) => `共 ${count} 条`}
+        />
       </div>
 
       <ClaimFormModal

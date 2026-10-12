@@ -3,10 +3,11 @@
 **投递记录可被用户删除**（软删，进退回收站），所以这里每一处查询都必须过
 ``trash.live_only(ApplyTaskItem)``——漏一处不会报错，只会让已删的记录继续出现在列表或计数里。
 """
+
 from __future__ import annotations
 
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 
 from ...models.apply import (
     FAILURE_CATEGORY_LABELS,
@@ -81,15 +82,10 @@ def _record_out(item: ApplyTaskItem) -> ApplyRecordOut:
     )
 
 
-def list_records(
-    db: Session,
-    *,
-    keyword: str = "",
-    result: str = "",
-    page: int = 1,
-    page_size: int = 20,
-) -> tuple[list[ApplyRecordOut], int]:
-    """分页列出投递记录（只含投递批次，按关键词/结果筛选），返回 (记录, 总数)。"""
+def _matched_items_query(
+    db: Session, *, keyword: str = "", result: str = ""
+) -> Query[ApplyTaskItem]:
+    """命中筛选的投递记录查询（``list_records`` 与分组明细共用，保证过滤语义同源）。"""
     query = (
         db.query(ApplyTaskItem)
         .join(ApplyTask, ApplyTaskItem.task_id == ApplyTask.id)
@@ -102,6 +98,19 @@ def list_records(
         )
     if result:
         query = query.filter(ApplyTaskItem.status == result)
+    return query
+
+
+def list_records(
+    db: Session,
+    *,
+    keyword: str = "",
+    result: str = "",
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[ApplyRecordOut], int]:
+    """分页列出投递记录（只含投递批次，按关键词/结果筛选），返回 (记录, 总数)。"""
+    query = _matched_items_query(db, keyword=keyword, result=result)
     total = query.count()
     rows = (
         query.order_by(ApplyTaskItem.created_at.desc(), ApplyTaskItem.id.desc())
@@ -119,6 +128,7 @@ def list_record_batches(
     result: str = "",
     page: int = 1,
     page_size: int = 5,
+    include_items: bool = True,
 ) -> tuple[list[ApplyRecordBatchOut], int]:
     """投递记录按**批次**分组：一页返回若干个批次，每个批次带自己的全部（匹配的）记录。
 
@@ -126,25 +136,16 @@ def list_record_batches(
     用户一次性投 N 个岗位时这 N 条记录天然同属一个批次——分组键已经存在，界面要做的只是
     "折叠/展开"。筛选（关键词 / 结果）作用在**记录**上：只有命中的记录出现在组内，没有
     命中记录的批次整体不出现；分页按**批次**数（一页几个组，而不是一页几条）。
+
+    ``include_items=False``（B4 按需加载）：跳过明细查询，``items=[]``，只带
+    ``matched_count``（命中当前筛选的记录数）。5 批 × 每批可达 500 条时，一页不再
+    搬 2500 行明细；明细由 ``list_batch_items`` 在批次展开时单独分页拉取。
     """
-    item_query = (
-        db.query(ApplyTaskItem)
-        .join(ApplyTask, ApplyTaskItem.task_id == ApplyTask.id)
-        .filter(ApplyTask.kind == TASK_KIND_APPLY, trash.live_only(ApplyTaskItem))
-    )
-    if keyword:
-        like = f"%{keyword}%"
-        item_query = item_query.filter(
-            or_(ApplyTaskItem.job_title.like(like), ApplyTaskItem.company.like(like))
-        )
-    if result:
-        item_query = item_query.filter(ApplyTaskItem.status == result)
+    item_query = _matched_items_query(db, keyword=keyword, result=result)
 
     matched_items = item_query.subquery()
     # 只统计"至少有一条命中记录"的批次，分页与总数都以它为准。
-    batch_ids = (
-        db.query(matched_items.c.task_id).distinct().subquery()
-    )
+    batch_ids = db.query(matched_items.c.task_id).distinct().subquery()
     total = db.query(func.count()).select_from(batch_ids).scalar() or 0
     batch_rows = (
         db.query(ApplyTask)
@@ -157,22 +158,32 @@ def list_record_batches(
     if not batch_rows:
         return [], total
     batch_id_list = [task.id for task in batch_rows]
-    item_rows = (
-        db.query(ApplyTaskItem)
-        .join(
-            matched_items,
-            (ApplyTaskItem.id == matched_items.c.id)
-            & (ApplyTaskItem.task_id == matched_items.c.task_id),
-        )
-        # 这条过滤在 ``matched_items`` 里已经有了，这里再加一次是**故意的**：
-        # 本查询直接查 ``ApplyTaskItem``，将来有人改上面的 `item_query` 时不会想到这里。
-        .filter(ApplyTaskItem.task_id.in_(batch_id_list), trash.live_only(ApplyTaskItem))
-        .order_by(ApplyTaskItem.sort_order, ApplyTaskItem.id)
+    # matched_count：在 matched_items 子查询上按批次 group-by 计数（两种模式都填，
+    # 供组头「N 条记录」展示；include_items=true 时与 len(items) 一致）。
+    count_rows = (
+        db.query(matched_items.c.task_id, func.count())
+        .filter(matched_items.c.task_id.in_(batch_id_list))
+        .group_by(matched_items.c.task_id)
         .all()
     )
+    counts_by_task = {task_id: count for task_id, count in count_rows}
     items_by_task: dict[int, list[ApplyRecordOut]] = {task_id: [] for task_id in batch_id_list}
-    for item in item_rows:
-        items_by_task.setdefault(item.task_id, []).append(_record_out(item))
+    if include_items:
+        item_rows = (
+            db.query(ApplyTaskItem)
+            .join(
+                matched_items,
+                (ApplyTaskItem.id == matched_items.c.id)
+                & (ApplyTaskItem.task_id == matched_items.c.task_id),
+            )
+            # 这条过滤在 ``matched_items`` 里已经有了，这里再加一次是**故意的**：
+            # 本查询直接查 ``ApplyTaskItem``，将来有人改 `item_query` 时不会想到这里。
+            .filter(ApplyTaskItem.task_id.in_(batch_id_list), trash.live_only(ApplyTaskItem))
+            .order_by(ApplyTaskItem.sort_order, ApplyTaskItem.id)
+            .all()
+        )
+        for item in item_rows:
+            items_by_task.setdefault(item.task_id, []).append(_record_out(item))
     batches = [
         ApplyRecordBatchOut(
             id=task.id,
@@ -185,11 +196,39 @@ def list_record_batches(
             message=task.message or "",
             created_at=task.created_at,
             finished_at=task.finished_at,
+            matched_count=counts_by_task.get(task.id, 0),
             items=items_by_task.get(task.id, []),
         )
         for task in batch_rows
     ]
     return batches, total
+
+
+def list_batch_items(
+    db: Session,
+    task_id: int,
+    *,
+    keyword: str = "",
+    result: str = "",
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[ApplyRecordOut], int]:
+    """分页返回**一个批次**内命中筛选的投递记录，返回 (记录, 总数)。
+
+    过滤语义与 ``list_record_batches`` 完全同源（同一个 ``_matched_items_query``）：
+    界面展开批次时按当前关键词/结果拉取明细，组内的记录与组头的 matched_count 对得上。
+    """
+    query = _matched_items_query(db, keyword=keyword, result=result).filter(
+        ApplyTaskItem.task_id == task_id
+    )
+    total = query.count()
+    rows = (
+        query.order_by(ApplyTaskItem.sort_order, ApplyTaskItem.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return [_record_out(row) for row in rows], total
 
 
 # ===== 删除记录（软删，进退回收站）=====
@@ -220,4 +259,3 @@ def delete_record_batch(db: Session, task_id: int) -> bool:
     affected = query.update({ApplyTaskItem.deleted_at: utcnow()}, synchronize_session=False)
     db.commit()
     return bool(affected)
-

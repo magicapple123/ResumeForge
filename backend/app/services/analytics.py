@@ -51,6 +51,7 @@
   ``track_resume_linked_count`` 继续用来把关联覆盖率显示出来。
 - **"用了产品能提高 X% 面试率"式的宣传口径**：任何指标都只描述过去，不做这类归因。
 """
+
 from __future__ import annotations
 
 import re
@@ -112,6 +113,8 @@ def clean_company_label(name: str) -> str | None:
     if text.isdigit() or len(text) < 2:
         return None
     return text
+
+
 # 滚动窗口：最近这么多天的"新增记录"（按 created_at，不是 applied_at）。
 RECENT_DAYS = (7, 30)
 _WEEKDAY_LABELS = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
@@ -210,7 +213,25 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
 
     ``trend_months`` 只影响趋势序列的长度，其余指标口径不变。
     """
-    tracks = db.query(ApplicationTrack).filter(trash.live_only(ApplicationTrack)).all()
+    # 只取参与聚合的列（B7）：千级进度记录时省掉整表 ORM 实例化。下游的计数、
+    # 排行、趋势、周分布与缺口统计只读这些字段；SQLAlchemy Row 支持具名属性
+    # 访问，所有辅助函数的口径与行为不变（由既有 analytics 测试钉住）。
+    tracks = (
+        db.query(
+            ApplicationTrack.id,
+            ApplicationTrack.status,
+            ApplicationTrack.company,
+            ApplicationTrack.company_key,
+            ApplicationTrack.source,
+            ApplicationTrack.applied_at,
+            ApplicationTrack.next_action,
+            ApplicationTrack.resume_id,
+            ApplicationTrack.created_at,
+            ApplicationTrack.updated_at,
+        )
+        .filter(trash.live_only(ApplicationTrack))
+        .all()
+    )
     now = utcnow()
 
     counts: dict[str, int] = {status: 0 for status in STATUSES}
@@ -266,7 +287,9 @@ def build_dashboard(db: Session, trend_months: int = TREND_MONTHS) -> dict:
 
     recent = {
         f"recent_{days}d_count": sum(
-            1 for track in tracks if track.created_at and track.created_at >= now - timedelta(days=days)
+            1
+            for track in tracks
+            if track.created_at and track.created_at >= now - timedelta(days=days)
         )
         for days in RECENT_DAYS
     }

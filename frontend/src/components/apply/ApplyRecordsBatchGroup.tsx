@@ -1,0 +1,164 @@
+/**
+ * 投递记录的单个批次组（可展开）：组头是"批次时间 + 统计"，展开后是组内记录表。
+ *
+ * 从 ApplyRecordsPanel 拆出（B4 按需加载改造把该文件顶过了 500 行预算）。
+ * 明细数据由父组件按需拉取（`/records/batches/{id}/items`，服务端分页），本组件
+ * 只负责展示与翻页回调；批次的分组语义与删除入口见 ApplyRecordsPanel。
+ */
+import { CheckSquareOutlined, DownOutlined, RightOutlined } from "@ant-design/icons";
+import { Table, Tag, Typography } from "antd";
+import type { ColumnsType } from "antd/es/table";
+import type { ReactNode } from "react";
+import { RowActions } from "../common/RowActions";
+import { isFromInnerControl } from "../common/recordDetailCore";
+import { formatDateTime } from "../../utils/format";
+import { TASK_STATUS_META, type ApplyRecord, type ApplyRecordBatch } from "../../types";
+
+/** 批次明细的服务端分页大小（B4 按需加载：展开时才拉明细，不整批搬运）。 */
+export const BATCH_ITEM_PAGE_SIZE = 20;
+
+/** 一个已展开批次的明细状态（服务端分页：items 是当前页，total 供分页器用）。 */
+export interface BatchItemsState {
+  items: ApplyRecord[];
+  total: number;
+  page: number;
+  loading: boolean;
+}
+
+interface BatchGroupProps {
+  batch: ApplyRecordBatch;
+  expanded: boolean;
+  /** 展开中批次的明细状态（B4 按需加载：首次展开/翻页时由父组件拉取）。 */
+  itemsState: BatchItemsState | undefined;
+  onToggle: () => void;
+  onItemsPageChange: (page: number) => void;
+  recordColumns: ColumnsType<ApplyRecord>;
+  onOpenDetail: (record: ApplyRecord) => void;
+  onDeleteBatch: (batch: ApplyRecordBatch) => void;
+  /** 批内明细的多选模式（多选范围＝批内明细表）。 */
+  selecting: boolean;
+  selectedRecordIds: number[];
+  onSelectionChange: (ids: number[]) => void;
+  /** 组头「更多」菜单的「批量选择」入口；多选模式收起单条操作。 */
+  onEnterSelecting: () => void;
+  /** 多选模式下的操作条（BatchActionBar），渲染在明细表上方。 */
+  batchToolbar?: ReactNode;
+}
+
+/** 一个批次 = 一个可展开的组：组头是"批次时间 + 统计"，展开后是组内记录表。 */
+export default function BatchGroup({
+  batch,
+  expanded,
+  itemsState,
+  onToggle,
+  onItemsPageChange,
+  recordColumns,
+  onOpenDetail,
+  onDeleteBatch,
+  selecting,
+  selectedRecordIds,
+  onSelectionChange,
+  onEnterSelecting,
+  batchToolbar,
+}: BatchGroupProps) {
+  const statusMeta = TASK_STATUS_META[batch.status];
+  // 组头展示命中当前筛选的记录数（轻量分页不携带明细，这个数由后端给出）。
+  const matchedCount = batch.matched_count ?? batch.items.length;
+  return (
+    <div className="apply-records-batch" data-testid={`record-batch-${batch.id}`}>
+      {/* 组头是按钮（点击展开），所以「删除本批」必须在它**外面**——按钮不能嵌套按钮。 */}
+      <div className="apply-records-batch-head-row">
+        <button
+          type="button"
+          className="apply-records-batch-head"
+          aria-expanded={expanded}
+          onClick={onToggle}
+        >
+          {expanded ? <DownOutlined /> : <RightOutlined />}
+          <Typography.Text strong>批次 #{batch.id}</Typography.Text>
+          <Typography.Text type="secondary">
+            {formatDateTime(batch.finished_at || batch.created_at)}
+          </Typography.Text>
+          <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
+          <span className="apply-records-batch-stats">
+            <Typography.Text type="secondary">
+              {`${matchedCount} 条记录`}
+              {batch.succeeded > 0 && (
+                <Typography.Text type="success"> · 成功 {batch.succeeded}</Typography.Text>
+              )}
+              {batch.failed > 0 && (
+                <Typography.Text type="danger"> · 失败 {batch.failed}</Typography.Text>
+              )}
+              {batch.skipped > 0 && (
+                <Typography.Text type="secondary"> · 跳过 {batch.skipped}</Typography.Text>
+              )}
+            </Typography.Text>
+          </span>
+        </button>
+        <RowActions
+          more={
+            selecting
+              ? []
+              : [
+                  {
+                    key: "batch_select",
+                    label: "批量选择",
+                    icon: <CheckSquareOutlined />,
+                    onClick: onEnterSelecting,
+                  },
+                  {
+                    key: "delete-batch",
+                    label: `删除本批（${matchedCount} 条）`,
+                    danger: true,
+                    confirm: `删除这一批的 ${matchedCount} 条记录？会进回收站，之后可以恢复；也会从统计与每日上限里去掉。`,
+                    onClick: () => onDeleteBatch(batch),
+                  },
+                ]
+          }
+        />
+      </div>
+      {expanded && (
+        <div className="apply-records-batch-body">
+          {selecting && batchToolbar}
+          <Table<ApplyRecord>
+            rowKey="id"
+            size="small"
+            columns={recordColumns}
+            dataSource={itemsState?.items ?? []}
+            loading={itemsState?.loading}
+            rowSelection={
+              selecting
+                ? {
+                    selectedRowKeys: selectedRecordIds,
+                    onChange: (keys) => onSelectionChange(keys as number[]),
+                  }
+                : undefined
+            }
+            // 明细走服务端分页（B4）：一批可能几百条，展开时只拉当前页。
+            // 表内没有"上移/下移"类依赖 render 序号的操作（只有重投/详情/删除，都按 record 定位）。
+            pagination={{
+              current: itemsState?.page ?? 1,
+              pageSize: BATCH_ITEM_PAGE_SIZE,
+              total: itemsState?.total ?? 0,
+              onChange: onItemsPageChange,
+              showSizeChanger: false,
+              hideOnSinglePage: (itemsState?.total ?? 0) <= BATCH_ITEM_PAGE_SIZE,
+            }}
+            scroll={{ y: 320 }}
+            // 整行点击也能看详情；行内的「重投」按钮不会被这一层抢走。
+            onRow={(record) => ({
+              onClick: (event) => {
+                if (isFromInnerControl(event)) return;
+                onOpenDetail(record);
+              },
+              style: { cursor: "pointer" },
+            })}
+            locale={{
+              emptyText: itemsState?.loading ? "正在加载明细…" : "该批次没有命中的记录",
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

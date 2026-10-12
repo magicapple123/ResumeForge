@@ -338,3 +338,20 @@ class CandidateCsvImportRequest(BaseModel):
 class CandidateCsvImportResult(BaseModel):
     imported: int = 0
     failed: list[dict[str, object]] = Field(default_factory=list)
+
+
+class MaterialBatchRequest(BaseModel):
+    """批量删除请求：与 ``schemas.resume.ResumeBatchRequest`` 同款口径（去重 + 上限 500）。"""
+
+    material_ids: list[int] = Field(max_length=500)
+
+    @field_validator("material_ids")
+    @classmethod
+    def validate_and_deduplicate_ids(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise ValueError("请至少选择一份资料")
+        return list(dict.fromkeys(value))
+
+
+class MaterialBatchDeleteResult(BaseModel):
+    deleted: int

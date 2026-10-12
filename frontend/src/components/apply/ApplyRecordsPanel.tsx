@@ -5,16 +5,14 @@
  * 界面把每个批次折叠成一行（批次时间 + 结果统计），点击展开看组内每条记录；
  * 关键词/结果筛选作用在**记录**上——没有命中记录的批次整体不出现。
  *
+ * B4 按需加载：初次分组请求传 `include_items=false`（批次只带 matched_count），
+ * 展开某个批次时才分页拉取明细（`/records/batches/{id}/items`），已拉取的页缓存在
+ * 本组件 state 里、折叠不丢；列表翻页/筛选/删除后缓存作废并按需重拉。
+ *
  * 记录只保存展示快照（岗位、公司、简历名、招呼语），不含完整个人资料——失败条目带上
  * 后端给的中文分类说明与可操作诊断，用户可以直接把这条信息回传给我们定位站点改版。
  */
-import {
-  DownOutlined,
-  RedoOutlined,
-  ReloadOutlined,
-  RightOutlined,
-  SearchOutlined,
-} from "@ant-design/icons";
+import { RedoOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
@@ -25,23 +23,30 @@ import {
   Pagination,
   Select,
   Space,
-  Table,
   Tag,
   Tooltip,
   Typography,
 } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { RowActions } from "../common/RowActions";
-import { deleteRecord, deleteRecordBatch, listRecordBatches, retryRecord } from "../../api/apply";
+import BatchGroup, { BATCH_ITEM_PAGE_SIZE, type BatchItemsState } from "./ApplyRecordsBatchGroup";
+import {
+  batchDeleteRecords,
+  deleteRecord,
+  deleteRecordBatch,
+  listRecordBatchItems,
+  listRecordBatches,
+  retryRecord,
+} from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
-import { isFromInnerControl } from "../common/recordDetailCore";
+import { RowActions } from "../common/RowActions";
+import BatchActionBar from "../common/BatchActionBar";
+import BatchDeleteButton from "../common/BatchDeleteButton";
 import { formatDateTime } from "../../utils/format";
 import {
   TASK_ITEM_STATUS_META,
-  TASK_STATUS_META,
   failureLabel,
   type ApplyRecord,
   type ApplyRecordBatch,
@@ -80,15 +85,77 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
   const [detail, setDetail] = useState<ApplyRecord | null>(null);
   // 当前展开的批次 id 集合（分组展示：点击组头展开/收起）。
   const [expanded, setExpanded] = useState<number[]>([]);
+  // B4 按需加载：明细在批次首次展开时才拉取，折叠不丢（缓存到 batchItems）。
+  const [batchItems, setBatchItems] = useState<Record<number, BatchItemsState>>({});
+  // 批内明细的多选：多选范围＝展开批次的明细表，按批次各存一份选区。
+  const [selectingBatches, setSelectingBatches] = useState<number[]>([]);
+  const [selectedByBatch, setSelectedByBatch] = useState<Record<number, number[]>>({});
 
   const { data, loading, error, reload } = useApi<Page<ApplyRecordBatch>>(
-    () => listRecordBatches({ keyword, result, page, page_size: BATCH_PAGE_SIZE }),
+    () =>
+      listRecordBatches({
+        keyword,
+        result,
+        page,
+        page_size: BATCH_PAGE_SIZE,
+        include_items: false,
+      }),
     [keyword, result, page],
   );
 
   useEffect(() => {
     if (error) message.error(error);
   }, [error, message]);
+
+  /** 拉取某个批次的某页明细（带与列表一致的 keyword/result，与 matched_count 对得上）。 */
+  const fetchBatchItems = useCallback(
+    async (batchId: number, itemPage: number) => {
+      setBatchItems((prev) => ({
+        ...prev,
+        [batchId]: {
+          items: prev[batchId]?.items ?? [],
+          total: prev[batchId]?.total ?? 0,
+          page: itemPage,
+          loading: true,
+        },
+      }));
+      try {
+        const resp = await listRecordBatchItems(batchId, {
+          keyword,
+          result,
+          page: itemPage,
+          page_size: BATCH_ITEM_PAGE_SIZE,
+        });
+        setBatchItems((prev) => ({
+          ...prev,
+          [batchId]: { items: resp.items, total: resp.total, page: itemPage, loading: false },
+        }));
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : "加载批次明细失败");
+        setBatchItems((prev) => ({
+          ...prev,
+          [batchId]: { ...(prev[batchId] as BatchItemsState), loading: false },
+        }));
+      }
+    },
+    [keyword, message, result],
+  );
+
+  // 列表数据一变（翻页/筛选/删除后 reload），旧明细就过期：清空缓存，
+  // 已展开的批次由下面的补拉 effect 重新拉第一页。
+  // Compiler 规范：随 data 变化的重置用渲染期守卫式调整，不用 effect。
+  const [prevData, setPrevData] = useState(data);
+  if (prevData !== data) {
+    setPrevData(data);
+    setBatchItems({});
+  }
+
+  // 每个展开中的批次都必须有一份明细（首次展开 / 缓存被清后补拉）。
+  useEffect(() => {
+    for (const batchId of expanded) {
+      if (!batchItems[batchId]) void fetchBatchItems(batchId, 1);
+    }
+  }, [expanded, batchItems, fetchBatchItems]);
 
   const retry = async (record: ApplyRecord) => {
     setRetrying(record.id);
@@ -127,12 +194,40 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     try {
       await deleteRecordBatch(batch.id);
       setExpanded((prev) => prev.filter((id) => id !== batch.id));
-      if (detail && batch.items.some((item) => item.id === detail.id)) setDetail(null);
+      if (detail?.task_id === batch.id) setDetail(null);
       message.success("已移入回收站");
       await reload();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "删除失败");
     }
+  };
+
+  const enterBatchSelect = (batchId: number) => {
+    setSelectingBatches((prev) => (prev.includes(batchId) ? prev : [...prev, batchId]));
+    setSelectedByBatch((prev) => ({ ...prev, [batchId]: [] }));
+  };
+
+  const exitBatchSelect = (batchId: number) => {
+    setSelectingBatches((prev) => prev.filter((id) => id !== batchId));
+    setSelectedByBatch((prev) => {
+      const next = { ...prev };
+      delete next[batchId];
+      return next;
+    });
+  };
+
+  /** 批量删除勾选的明细（软删）。reload 后明细缓存作废、展开中的批次自动重拉。 */
+  const removeBatchSelected = async (batch: ApplyRecordBatch) => {
+    const ids = selectedByBatch[batch.id] ?? [];
+    if (ids.length === 0) return;
+    try {
+      const { deleted } = await batchDeleteRecords(ids);
+      message.success(`已删除 ${deleted} 条投递记录，可在「回收站」里恢复`);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "批量删除失败，请重试");
+    }
+    exitBatchSelect(batch.id);
+    await reload();
   };
 
   const recordColumns: ColumnsType<ApplyRecord> = [
@@ -236,6 +331,37 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
   const batches = data?.items ?? [];
   const total = data?.total ?? 0;
 
+  /** 某个批次多选模式的操作条：全选当前页明细 + 批量删除（确认文案带数量）。 */
+  const batchToolbarFor = (batch: ApplyRecordBatch) => {
+    const selected = selectedByBatch[batch.id] ?? [];
+    const pageIds = (batchItems[batch.id]?.items ?? []).map((item) => item.id);
+    return (
+      <BatchActionBar
+        count={selected.length}
+        onExit={() => exitBatchSelect(batch.id)}
+        pageSelectAll={{
+          allSelected: pageIds.length > 0 && pageIds.every((id) => selected.includes(id)),
+          someSelected: pageIds.some((id) => selected.includes(id)),
+          onToggle: (checked) =>
+            setSelectedByBatch((prev) => {
+              const next = new Set(prev[batch.id] ?? []);
+              for (const id of pageIds) {
+                if (checked) next.add(id);
+                else next.delete(id);
+              }
+              return { ...prev, [batch.id]: [...next] };
+            }),
+        }}
+      >
+        <BatchDeleteButton
+          count={selected.length}
+          noun="条投递记录"
+          onDelete={() => void removeBatchSelected(batch)}
+        />
+      </BatchActionBar>
+    );
+  };
+
   return (
     <div className="apply-records-panel">
       <Space wrap style={{ marginBottom: 12 }}>
@@ -297,10 +423,19 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
             key={batch.id}
             batch={batch}
             expanded={expanded.includes(batch.id)}
+            itemsState={batchItems[batch.id]}
             onToggle={() => toggleBatch(batch.id)}
+            onItemsPageChange={(itemPage) => void fetchBatchItems(batch.id, itemPage)}
             recordColumns={recordColumns}
             onOpenDetail={setDetail}
             onDeleteBatch={(batch) => void removeBatch(batch)}
+            selecting={selectingBatches.includes(batch.id)}
+            selectedRecordIds={selectedByBatch[batch.id] ?? []}
+            onSelectionChange={(ids) =>
+              setSelectedByBatch((prev) => ({ ...prev, [batch.id]: ids }))
+            }
+            onEnterSelecting={() => enterBatchSelect(batch.id)}
+            batchToolbar={selectingBatches.includes(batch.id) ? batchToolbarFor(batch) : undefined}
           />
         ))}
       </div>
@@ -356,96 +491,6 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
           </Descriptions>
         )}
       </Drawer>
-    </div>
-  );
-}
-
-interface BatchGroupProps {
-  batch: ApplyRecordBatch;
-  expanded: boolean;
-  onToggle: () => void;
-  recordColumns: ColumnsType<ApplyRecord>;
-  onOpenDetail: (record: ApplyRecord) => void;
-  onDeleteBatch: (batch: ApplyRecordBatch) => void;
-}
-
-/** 一个批次 = 一个可展开的组：组头是"批次时间 + 统计"，展开后是组内记录表。 */
-function BatchGroup({
-  batch,
-  expanded,
-  onToggle,
-  recordColumns,
-  onOpenDetail,
-  onDeleteBatch,
-}: BatchGroupProps) {
-  const statusMeta = TASK_STATUS_META[batch.status];
-  return (
-    <div className="apply-records-batch" data-testid={`record-batch-${batch.id}`}>
-      {/* 组头是按钮（点击展开），所以「删除本批」必须在它**外面**——按钮不能嵌套按钮。 */}
-      <div className="apply-records-batch-head-row">
-        <button
-          type="button"
-          className="apply-records-batch-head"
-          aria-expanded={expanded}
-          onClick={onToggle}
-        >
-          {expanded ? <DownOutlined /> : <RightOutlined />}
-          <Typography.Text strong>批次 #{batch.id}</Typography.Text>
-          <Typography.Text type="secondary">
-            {formatDateTime(batch.finished_at || batch.created_at)}
-          </Typography.Text>
-          <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
-          <span className="apply-records-batch-stats">
-            <Typography.Text type="secondary">
-              {`共 ${batch.items.length} 条`}
-              {batch.succeeded > 0 && (
-                <Typography.Text type="success"> · 成功 {batch.succeeded}</Typography.Text>
-              )}
-              {batch.failed > 0 && (
-                <Typography.Text type="danger"> · 失败 {batch.failed}</Typography.Text>
-              )}
-              {batch.skipped > 0 && (
-                <Typography.Text type="secondary"> · 跳过 {batch.skipped}</Typography.Text>
-              )}
-            </Typography.Text>
-          </span>
-        </button>
-        <RowActions
-          more={[
-            {
-              key: "delete-batch",
-              label: `删除本批（${batch.items.length} 条）`,
-              danger: true,
-              confirm: `删除这一批的 ${batch.items.length} 条记录？会进回收站，之后可以恢复；也会从统计与每日上限里去掉。`,
-              onClick: () => onDeleteBatch(batch),
-            },
-          ]}
-        />
-      </div>
-      {expanded && (
-        <div className="apply-records-batch-body">
-          <Table<ApplyRecord>
-            rowKey="id"
-            size="small"
-            columns={recordColumns}
-            dataSource={batch.items}
-            // 批内记录可能很多（一次投几十个岗位），固定 20 条一页；单页以内不显示分页。
-            // 表内没有"上移/下移"类依赖 render 序号的操作（只有重投/详情/删除，都按 record 定位），
-            // 页内分页不影响任何下标逻辑。
-            pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
-            scroll={{ y: 320 }}
-            // 整行点击也能看详情；行内的「重投」按钮不会被这一层抢走。
-            onRow={(record) => ({
-              onClick: (event) => {
-                if (isFromInnerControl(event)) return;
-                onOpenDetail(record);
-              },
-              style: { cursor: "pointer" },
-            })}
-            locale={{ emptyText: "该批次没有命中的记录" }}
-          />
-        </div>
-      )}
     </div>
   );
 }

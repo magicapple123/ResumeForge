@@ -3,6 +3,7 @@
 资料可以是文字、链接、附件（图片缩略图或本机提取出的文档文字）。附件的原始文件
 不落盘、不外发，与助手附件的取舍一致；照片只保存受限的 data URL。
 """
+
 from __future__ import annotations
 
 import json
@@ -21,8 +22,8 @@ logger = logging.getLogger(__name__)
 MAX_MATERIAL_TOOL_CHARS = 6_000
 
 
-def list_materials(db: Session, *, keyword: str = "", category: str = "") -> list[Material]:
-    """按分类/关键词列出资料箱条目（只含未删除，按更新时间倒序）。"""
+def _materials_query(db: Session, *, keyword: str = "", category: str = ""):
+    """列表共用的过滤与排序：旧全量端点与新分页端点必须同源。"""
     query = db.query(Material).filter(trash.live_only(Material))
     if category.strip():
         query = query.filter(Material.category == category.strip())
@@ -37,7 +38,27 @@ def list_materials(db: Session, *, keyword: str = "", category: str = "") -> lis
                 Material.category.like(like),
             )
         )
-    return query.order_by(Material.updated_at.desc(), Material.id.desc()).all()
+    return query.order_by(Material.updated_at.desc(), Material.id.desc())
+
+
+def list_materials(db: Session, *, keyword: str = "", category: str = "") -> list[Material]:
+    """按分类/关键词列出资料箱条目（只含未删除，按更新时间倒序）。"""
+    return _materials_query(db, keyword=keyword, category=category).all()
+
+
+def list_materials_page(
+    db: Session,
+    *,
+    keyword: str = "",
+    category: str = "",
+    page: int = 1,
+    page_size: int = 12,
+) -> tuple[list[Material], int]:
+    """分页取资料：过滤与排序与 :func:`list_materials` 完全一致，total 反映筛选后集合。"""
+    base = _materials_query(db, keyword=keyword, category=category)
+    total = base.count()
+    rows = base.offset((max(1, page) - 1) * page_size).limit(max(1, page_size)).all()
+    return rows, total
 
 
 def material_or_none(db: Session, material_id: int) -> Material | None:
@@ -54,7 +75,9 @@ def create_material(db: Session, payload: MaterialCreate) -> Material:
     db.add(material)
     db.commit()
     db.refresh(material)
-    logger.info("已新增资料 id=%s category=%s 附件=%s", material.id, material.category, len(material.files))
+    logger.info(
+        "已新增资料 id=%s category=%s 附件=%s", material.id, material.category, len(material.files)
+    )
     return material
 
 
@@ -136,10 +159,10 @@ __all__ = [
     "create_material",
     "delete_material",
     "list_materials",
+    "list_materials_page",
     "material_brief",
     "material_categories",
     "material_detail_text",
     "material_or_none",
     "update_material",
 ]
-

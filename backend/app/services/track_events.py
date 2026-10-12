@@ -10,10 +10,12 @@
 刻意不做。特别地，**没有到过测评的面试记录不会被自动当成笔试通过**：转化只看
 "事件里真的出现过那个阶段"。
 """
+
 from __future__ import annotations
 
 import statistics
 from datetime import date
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -90,7 +92,8 @@ class _Timeline:
         self.reached: dict[str, date] = {}
         self.undated_events = 0
 
-    def add(self, event: ApplicationTrackEvent) -> None:
+    def add(self, event: Any) -> None:
+        """吃一条事件：ORM 实例或只含四列的查询 Row（属性名一致即可）。"""
         # 到达日期 = 事件上的业务日期；缺了就用落库日（event_at 永远存在）——
         # "记录的日期"仍是真实数据，只是精度口径要如实标注（undated_events）。
         explicit = _parse_date(event.status_date)
@@ -123,12 +126,23 @@ def track_cohort_metrics(db: Session) -> dict:
       事件缺业务日期（只能用落库日兜底）。每个转化/耗时项各自带分子分母与
       small_sample 提示，前端原样展示，不做任何"用了产品能提高 X%"式的推断。
     """
-    tracks = db.query(ApplicationTrack).filter(trash.live_only(ApplicationTrack)).all()
-    track_ids = [track.id for track in tracks]
-    events: list[ApplicationTrackEvent] = []
+    # 只取 id（B7）：cohort 只需要 id 集合本身，整表 ORM 实例化是纯浪费。
+    track_ids: list[int] = [
+        row[0]
+        for row in db.query(ApplicationTrack.id).filter(trash.live_only(ApplicationTrack)).all()
+    ]
+    events: list[Any] = []
     if track_ids:
+        # 只取时间线用到的四列（track_id/to_status/status_date/event_at）：
+        # 万级事件下省掉 ORM 实例化；排序键不变（track_id, event_at），
+        # Row 的具名属性访问让 _Timeline 的逻辑一字不改。
         events = (
-            db.query(ApplicationTrackEvent)
+            db.query(
+                ApplicationTrackEvent.track_id,
+                ApplicationTrackEvent.to_status,
+                ApplicationTrackEvent.status_date,
+                ApplicationTrackEvent.event_at,
+            )
             .filter(ApplicationTrackEvent.track_id.in_(track_ids))
             .order_by(ApplicationTrackEvent.track_id, ApplicationTrackEvent.event_at)
             .all()
@@ -190,9 +204,7 @@ def track_cohort_metrics(db: Session) -> dict:
         "undated_event_count": undated_event_count,
         # 全库一条面试事件都没有时，"笔试→面试"的分子不可能是真数据：把这条事实
         # 带出去，让前端能说明"还没有事件记录"，而不是显示一张全 0 的表。
-        "has_interview_event": any(
-            STATUS_INTERVIEW in t.reached for t in timelines.values()
-        )
+        "has_interview_event": any(STATUS_INTERVIEW in t.reached for t in timelines.values())
         or any(STATUS_OFFER in t.reached for t in timelines.values()),
         "conversions": conversions,
         "durations": durations,

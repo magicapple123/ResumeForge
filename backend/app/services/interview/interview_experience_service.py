@@ -8,6 +8,7 @@
 - **列表查询一律用 ``trash.live_only``**，回收站里的面经不出现。
 - 创建时若关联岗位且未填公司/岗位名，则从岗位快照回填，减少重复录入。
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,15 +26,14 @@ logger = logging.getLogger(__name__)
 MAX_EXPERIENCE_LIST = 500
 
 
-def list_experiences(
+def _filtered_query(
     db: Session,
     *,
     keyword: str = "",
     company: str = "",
     source: str = "",
-    limit: int = 100,
-) -> list[InterviewExperience]:
-    """按关键词/公司/来源过滤；只取未软删除的行，最近更新的在前。"""
+):
+    """列表共用的过滤与排序：旧全量端点与新分页端点必须同源，语义才不会漂移。"""
     query = db.query(InterviewExperience).filter(trash.live_only(InterviewExperience))
     if company.strip():
         query = query.filter(InterviewExperience.company.like(f"%{company.strip()}%"))
@@ -48,11 +48,39 @@ def list_experiences(
                 InterviewExperience.content.like(like),
             )
         )
+    return query.order_by(InterviewExperience.updated_at.desc(), InterviewExperience.id.desc())
+
+
+def list_experiences(
+    db: Session,
+    *,
+    keyword: str = "",
+    company: str = "",
+    source: str = "",
+    limit: int = 100,
+) -> list[InterviewExperience]:
+    """按关键词/公司/来源过滤；只取未软删除的行，最近更新的在前。"""
     return (
-        query.order_by(InterviewExperience.updated_at.desc(), InterviewExperience.id.desc())
+        _filtered_query(db, keyword=keyword, company=company, source=source)
         .limit(max(1, min(limit, MAX_EXPERIENCE_LIST)))
         .all()
     )
+
+
+def list_experiences_page(
+    db: Session,
+    *,
+    keyword: str = "",
+    company: str = "",
+    source: str = "",
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[InterviewExperience], int]:
+    """分页取面经：过滤与排序与 :func:`list_experiences` 完全一致，total 反映筛选后集合。"""
+    base = _filtered_query(db, keyword=keyword, company=company, source=source)
+    total = base.count()
+    rows = base.offset((max(1, page) - 1) * page_size).limit(max(1, page_size)).all()
+    return rows, total
 
 
 def experience_or_none(db: Session, experience_id: int) -> InterviewExperience | None:
@@ -60,9 +88,7 @@ def experience_or_none(db: Session, experience_id: int) -> InterviewExperience |
     return trash.get_live(db, InterviewExperience, experience_id)
 
 
-def _apply_payload(
-    db: Session, payload: InterviewExperienceCreate
-) -> dict:
+def _apply_payload(db: Session, payload: InterviewExperienceCreate) -> dict:
     """归一化写入值：绑定岗位时回填快照，岗位不存在则置空关联（外键 SET NULL）。"""
     values = payload.model_dump()
     job = db.get(Job, payload.job_id) if payload.job_id else None
@@ -74,9 +100,7 @@ def _apply_payload(
     return values
 
 
-def create_experience(
-    db: Session, payload: InterviewExperienceCreate
-) -> InterviewExperience:
+def create_experience(db: Session, payload: InterviewExperienceCreate) -> InterviewExperience:
     """新增一条面经。"""
     experience = InterviewExperience(**_apply_payload(db, payload))
     db.add(experience)
@@ -112,6 +136,6 @@ __all__ = [
     "delete_experience",
     "experience_or_none",
     "list_experiences",
+    "list_experiences_page",
     "update_experience",
 ]
-

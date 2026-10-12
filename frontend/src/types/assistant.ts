@@ -189,6 +189,10 @@ export interface AssistantMessage {
 
 export interface AssistantConversationDetail extends AssistantConversationBrief {
   messages: AssistantMessage[];
+  /** 会话消息总数（B5 按需加载：messages 被截断到最新 N 条时也如实给全量数）。可选：旧响应没有。 */
+  messages_total?: number;
+  /** 是否还有更早的消息未加载（has_earlier=true 时列表顶部出「加载更早」）。可选：旧响应没有。 */
+  has_earlier?: boolean;
 }
 
 export interface AssistantAttachmentInput {

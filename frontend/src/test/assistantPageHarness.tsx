@@ -87,7 +87,12 @@ export async function openFirstConversation(apiMocks: {
   getAssistantConversation: ReturnType<typeof vi.fn>;
 }) {
   fireEvent.click(await screen.findByRole("button", { name: "会话一" }));
-  await waitFor(() => expect(apiMocks.getAssistantConversation).toHaveBeenCalledWith(1));
+  // B5 按需加载：详情请求带 message_limit=50（首屏只拉最新 50 条）。
+  await waitFor(() =>
+    expect(apiMocks.getAssistantConversation).toHaveBeenCalledWith(1, "page", {
+      message_limit: 50,
+    }),
+  );
 }
 
 export function renderPage(entry = "/assistant") {

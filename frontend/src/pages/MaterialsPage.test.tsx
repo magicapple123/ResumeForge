@@ -5,18 +5,19 @@
  * 所以"点得开"这件事必须有测试守着——它是这一页唯一的阅读入口。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Material } from "../types";
 import MaterialsPage from "./MaterialsPage";
 
 const apiMocks = vi.hoisted(() => ({
-  listMaterials: vi.fn(),
+  listMaterialsPage: vi.fn(),
   getMaterial: vi.fn(),
   listMaterialCategories: vi.fn(),
   createMaterial: vi.fn(),
   updateMaterial: vi.fn(),
   deleteMaterial: vi.fn(),
+  batchDeleteMaterials: vi.fn(),
 }));
 
 vi.mock("../api/material", () => apiMocks);
@@ -44,6 +45,11 @@ const ITEMS: Material[] = [
   },
 ];
 
+/** 分页端点响应（{items, total}）；total 缺省时按 items.length。 */
+function makePage(items: Material[], total = items.length) {
+  return { items, total };
+}
+
 function renderPage() {
   return render(
     <AntdApp>
@@ -53,7 +59,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  apiMocks.listMaterials.mockReset().mockResolvedValue(ITEMS);
+  apiMocks.listMaterialsPage.mockReset().mockResolvedValue(makePage(ITEMS));
   // 详情与编辑按需取全量（RF-25：列表只带附件元信息）。
   apiMocks.getMaterial.mockReset().mockResolvedValue(ITEMS[0]);
   apiMocks.listMaterialCategories.mockReset().mockResolvedValue(["证书"]);
@@ -126,5 +132,108 @@ describe("MaterialsPage", () => {
     fireEvent.click(screen.getByText("资料"));
 
     expect(await screen.findByText("护士执业资格证")).toBeInTheDocument();
+  });
+
+  it("翻到第 2 页按 page=2 重新请求服务端，取到旧全量之外的第 13 条", async () => {
+    // 服务端分页（RF-08 续）：一页 12 张，翻页时把页码下发 /materials/page。
+    const pageOne: Material[] = Array.from({ length: 12 }, (_, index) => ({
+      id: index + 1,
+      title: `资料-${index + 1}`,
+      category: "证书",
+      content: "",
+      url: "",
+      files: [],
+      note: "",
+      created_at: "2026-09-01T08:00:00",
+      updated_at: "2026-09-10T09:30:00",
+    }));
+    apiMocks.listMaterialsPage
+      .mockResolvedValueOnce(makePage(pageOne, 13))
+      .mockResolvedValueOnce(makePage([ITEMS[0]], 13));
+    renderPage();
+
+    expect(await screen.findByText("资料-1")).toBeInTheDocument();
+    expect(screen.queryByText("护士执业资格证")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByTitle("2")[0]);
+
+    await waitFor(() => {
+      expect(apiMocks.listMaterialsPage).toHaveBeenLastCalledWith(
+        { keyword: "", category: "" },
+        2,
+        12,
+      );
+    });
+    expect(await screen.findByText("护士执业资格证")).toBeInTheDocument();
+  });
+
+  it("搜索关键词后回第 1 页并把 keyword 下发服务端", async () => {
+    // 筛选变化必须重置页码：停在第 2 页时搜索，若仍请求 page=2 会漏掉第 1 页的命中。
+    const pageOne: Material[] = Array.from({ length: 12 }, (_, index) => ({
+      id: index + 1,
+      title: `资料-${index + 1}`,
+      category: "证书",
+      content: "",
+      url: "",
+      files: [],
+      note: "",
+      created_at: "2026-09-01T08:00:00",
+      updated_at: "2026-09-10T09:30:00",
+    }));
+    apiMocks.listMaterialsPage
+      .mockResolvedValueOnce(makePage(pageOne, 13))
+      .mockResolvedValueOnce(makePage([ITEMS[0]], 13))
+      .mockResolvedValueOnce(makePage(ITEMS, 1));
+    renderPage();
+
+    expect(await screen.findByText("资料-1")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByTitle("2")[0]);
+    await screen.findByText("护士执业资格证");
+
+    const searchInput = screen.getByPlaceholderText("搜索标题、正文或备注");
+    fireEvent.change(searchInput, { target: { value: "证书" } });
+    fireEvent.keyDown(searchInput, { key: "Enter", code: "Enter", keyCode: 13 });
+
+    await waitFor(() => {
+      expect(apiMocks.listMaterialsPage).toHaveBeenLastCalledWith(
+        { keyword: "证书", category: "" },
+        1,
+        12,
+      );
+    });
+  });
+
+  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除请求带全部 id 并重拉", async () => {
+    const two: Material[] = [ITEMS[0], { ...ITEMS[0], id: 2, title: "英语六级证书" }];
+    apiMocks.listMaterialsPage.mockResolvedValue(makePage(two));
+    apiMocks.batchDeleteMaterials.mockResolvedValue({ deleted: 2 });
+    renderPage();
+
+    await screen.findByText("护士执业资格证");
+    fireEvent.contextMenu(screen.getByText("护士执业资格证"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择资料 护士执业资格证" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择资料 英语六级证书" }));
+    expect(screen.getByText("已选 2 项")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    // Popconfirm 确认（文案带数量）；确认前绝不发请求。
+    const popover = await waitFor(() => {
+      const root = document.querySelector(".ant-popover");
+      expect(root).not.toBeNull();
+      return root as HTMLElement;
+    });
+    expect(popover.textContent).toContain("删除选中的 2 份资料");
+    expect(apiMocks.batchDeleteMaterials).not.toHaveBeenCalled();
+    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+
+    await waitFor(() => {
+      expect(apiMocks.batchDeleteMaterials).toHaveBeenCalledTimes(1);
+    });
+    expect(apiMocks.batchDeleteMaterials).toHaveBeenCalledWith([1, 2]);
+    // 成功后清空选择并重拉当前页。
+    expect(await screen.findByText(/已删除 2 份资料/)).toBeInTheDocument();
+    expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
   });
 });
