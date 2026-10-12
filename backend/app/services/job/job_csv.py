@@ -2,6 +2,8 @@
 
 - **导出**：把勾选的岗位序列化成带 UTF-8 BOM 的 CSV（Excel 双击打开不乱码），
   列集与导入共用同一份 ``CSV_COLUMNS``——导出什么就能原样导回，来回不丢字段。
+  表头用**手动添加岗位表单的字段名**；字段内换行折叠成空格（Excel 里引用字段内的
+  换行会把一行撑成好几行、整个表格看起来"散架"，折叠后每条岗位恰好一行）。
 - **导入**：宽容解析（UTF-8/GBK、表头别名、空行跳过）、逐行报错（行号 + 原因），
   解析与入库分成两步（先预览确认、再提交），用户不会"选完文件就静默进了几百条"。
 
@@ -13,38 +15,46 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 
 from ...models.job import JOB_STATUSES, Job
 
 # 列定义：[(中文表头, 字段名)]。导出用它写表头，导入按它映射——**两边共用一份**。
+# 表头用**手动添加岗位表单的字段名**（岗位名称/公司名称/工作地点/薪资范围…），用户在
+# 表格和表单之间来回对字段不用做翻译；顺序也跟着表单走。「收藏」表单里没有，但导出
+# 要能带回收藏状态，排在最后一列。
 # 「来源」对应 0042 起的独立字段 origin_source；「备注」是用户自己写的内容。
 CSV_COLUMNS: list[tuple[str, str]] = [
-    ("标题", "title"),
-    ("公司", "company"),
-    ("地点", "location"),
-    ("薪资", "salary"),
+    ("岗位名称", "title"),
+    ("公司名称", "company"),
+    ("工作地点", "location"),
+    ("薪资范围", "salary"),
     ("岗位类型", "job_type"),
     ("状态", "status"),
-    ("来源", "origin_source"),
     ("投递链接", "source_url"),
     ("发布时间", "posted_at"),
     ("岗位描述", "description"),
     ("任职要求", "requirements"),
-    ("补充信息", "additional_info"),
+    ("其他招聘信息", "additional_info"),
+    ("来源", "origin_source"),
     ("备注", "note"),
     ("收藏", "favorite"),
 ]
 HEADER_TO_FIELD = {header: field for header, field in CSV_COLUMNS}
-# 导入宽容表头：同一字段可能被写成别的名字（用户从别处导出的表）。
-# 「职位类型」「职位描述」是 2026-10-12 口径统一（职位→岗位）之前的旧表头，
-# 老文件也要能原样导回，所以留在这里做兼容。
+# 导入宽容表头：同一字段可能被写成别的名字（用户从别处导出的表，或 2026-10-12 两次
+# 表头口径调整之前的旧文件：标题/公司/地点/薪资、职位类型/职位描述、-all 表头等）。
+# 老文件也要能原样导回，所以这些名字不撤。
 HEADER_ALIASES: dict[str, str] = {
+    "标题": "title",
     "职位名称": "title",
     "岗位名称": "title",
     "职位": "title",
+    "公司": "company",
     "单位": "company",
     "公司名称": "company",
+    "地点": "location",
     "工作地点": "location",
+    "薪资": "salary",
     "链接": "source_url",
     "网址": "source_url",
     "招聘链接": "source_url",
@@ -52,6 +62,7 @@ HEADER_ALIASES: dict[str, str] = {
     "岗位描述": "description",
     "职位描述": "description",
     "职位类型": "job_type",
+    "补充信息": "additional_info",
     "要求": "requirements",
     "任职要求": "requirements",
 }
@@ -61,6 +72,15 @@ MAX_IMPORT_ROWS = 500
 MAX_IMPORT_FILE_CHARS = 2_000_000
 
 _TRUE_TOKENS = {"是", "y", "yes", "true", "1", "收藏"}
+
+# 字段内换行（含前后空白）折叠成单个空格：JD/要求是多段文本，直接进 CSV 会在
+# Excel 里把一条岗位撑成十几行（每个换行一行），表格没法看。折叠后每条岗位
+# 恰好一行；换行本身不是语义内容，导回时是干净的一整段也不丢信息。
+_NEWLINE_PATTERN = re.compile(r"\s*[\r\n]+\s*")
+
+
+def _flatten(value: object) -> str:
+    return _NEWLINE_PATTERN.sub(" ", str(value or "")).strip()
 
 
 def jobs_to_csv_text(jobs: list[Job]) -> str:
@@ -73,7 +93,7 @@ def jobs_to_csv_text(jobs: list[Job]) -> str:
             [
                 ("是" if job.favorite else "")
                 if field == "favorite"
-                else (getattr(job, field) or "")
+                else _flatten(getattr(job, field))
                 for _, field in CSV_COLUMNS
             ]
         )

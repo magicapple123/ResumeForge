@@ -107,8 +107,8 @@ export function JobImportModal({
         </p>
         <p className="ant-upload-text">点击或拖拽 CSV 文件到这里</p>
         <p className="ant-upload-hint">
-          第一行是表头（标题 / 公司 / 地点 / 薪资 / 岗位类型 / 状态 / 来源 / 投递链接…），
-          也可以先用「导出 CSV」拿一份现成模板
+          第一行是表头（岗位名称 / 公司名称 / 工作地点 / 薪资范围 / 岗位类型 / 状态 / 投递链接 /
+          发布时间…），也可以先用「导出 CSV」拿一份现成模板
         </p>
       </Upload.Dragger>
 

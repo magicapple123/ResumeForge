@@ -2,9 +2,8 @@
 
 from app.services.job.job_csv import decode_csv_bytes, parse_job_csv
 
-_HEADERS = (
-    "标题,公司,地点,薪资,岗位类型,状态,来源,投递链接,发布时间,岗位描述,任职要求,补充信息,备注,收藏"
-)
+# 与手动添加表单同字段名、同顺序（收藏不在表单里，导出带回状态，排最后）。
+_HEADERS = "岗位名称,公司名称,工作地点,薪资范围,岗位类型,状态,投递链接,发布时间,岗位描述,任职要求,其他招聘信息,来源,备注,收藏"
 
 
 def _csv(*lines: str) -> str:
@@ -27,7 +26,7 @@ def test_export_roundtrip_preserves_fields(client):
     text = export.content.decode("utf-8-sig")
     # 表头用统一后的口径（职位→岗位），导出什么就能原样导回。
     assert text.splitlines()[0] == (
-        "标题,公司,地点,薪资,岗位类型,状态,来源,投递链接,发布时间,岗位描述,任职要求,补充信息,备注,收藏"
+        "岗位名称,公司名称,工作地点,薪资范围,岗位类型,状态,投递链接,发布时间,岗位描述,任职要求,其他招聘信息,来源,备注,收藏"
     )
     rows, errors = parse_job_csv(text)
     assert errors == []
@@ -43,10 +42,10 @@ def test_export_roundtrip_preserves_fields(client):
 def test_import_preview_reports_line_numbers(client):
     """预览不落库；错误行带文件真实行号；空行不报错。"""
     body = _csv(
-        "后端开发,示例科技,,,,开放中,内推,https://x.com/1,,,,,,,,",
+        "后端开发,示例科技,,,,开放中,https://x.com/1,,,,,内推,,",
         "",
-        ",某公司,,,,,,,,,,,,",
-        "算法工程师,另一家,,,,已截止,招聘会,,,,,,,,",
+        ",某公司,,,,,,,,,,,",
+        "算法工程师,另一家,,,,已截止,,,,,,,,",
     )
     response = client.post(
         "/api/jobs/import/preview",
@@ -65,8 +64,8 @@ def test_import_preview_reports_line_numbers(client):
 def test_import_commit_creates_jobs_and_skips_duplicates(client):
     """提交导入逐行建岗；同一文件导两次，第二次整批按重复跳过。"""
     body = _csv(
-        "后端开发,示例科技,,,,开放中,内推,https://x.com/1,,,,,,,,",
-        "算法工程师,另一家,,,,不存在,,https://x.com/2,,,,,,,,",
+        "后端开发,示例科技,,,,开放中,https://x.com/1,,,,,内推,,",
+        "算法工程师,另一家,,,,不存在,https://x.com/2,,,,,,,",
     )
     preview = client.post(
         "/api/jobs/import/preview",
@@ -112,6 +111,20 @@ def test_decode_prefers_utf8_and_falls_back_to_gbk():
         assert "编码" in str(exc)
     else:  # pragma: no cover - 防呆分支
         raise AssertionError("乱码字节应当报错")
+
+
+def test_export_flattens_newlines_one_row_per_job(client):
+    """字段内换行折叠成空格：一条岗位在 Excel 里就是一行，不会把表格撑散。"""
+    created = client.post(
+        "/api/jobs",
+        json={"title": "后端开发", "description": "1、负责接口开发\n2、负责联调 3、上线"},
+    )
+    job_id = created.json()["id"]
+    export = client.post("/api/jobs/export", json={"job_ids": [job_id]})
+    text = export.content.decode("utf-8-sig")
+    lines = text.splitlines()
+    assert len(lines) == 2  # 表头 + 一条岗位
+    assert "1、负责接口开发 2、负责联调 3、上线" in lines[1]
 
 
 def test_import_accepts_pre_rename_headers():

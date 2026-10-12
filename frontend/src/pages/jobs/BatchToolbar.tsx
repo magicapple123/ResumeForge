@@ -11,6 +11,7 @@ import {
   SendOutlined,
 } from "@ant-design/icons";
 import { App, Button, Popconfirm, Select, Space, Tooltip, Typography } from "antd";
+import dayjs from "dayjs";
 import { useState } from "react";
 import { exportJobsCsv } from "../../api/jobs";
 import { downloadBlob } from "../../utils/download";
@@ -27,6 +28,9 @@ export function BatchToolbar({
   applyBatchStatus,
   enqueueSelectedJobs,
   removeSelectedJobs,
+  totalCount = 0,
+  selectAllPagesLoading = false,
+  onSelectAllPages,
 }: {
   selectionMode: boolean;
   selectedJobIds: number[];
@@ -37,6 +41,11 @@ export function BatchToolbar({
   applyBatchStatus: () => Promise<void>;
   enqueueSelectedJobs: () => Promise<void>;
   removeSelectedJobs: () => Promise<void>;
+  /** 当前筛选下全部岗位数：>0 时显示「全选全部岗位」按钮。 */
+  totalCount?: number;
+  selectAllPagesLoading?: boolean;
+  /** 一键全选所有页；未传（undefined）时不渲染该入口。 */
+  onSelectAllPages?: () => void;
 }) {
   // 导出 CSV 是纯前端动作（勾选的 id → 后端序列化 → 触发下载）：
   // 状态本地持有，不占用页面级的 batchAction（那边留给会改数据的操作）。
@@ -47,7 +56,10 @@ export function BatchToolbar({
     setExporting(true);
     try {
       const blob = await exportJobsCsv([...selectedJobIds]);
-      downloadBlob(blob, "岗位列表.csv");
+      // 文件名带导出时刻：几次导出的文件落在同一个下载目录里不会互相覆盖、
+      // 也不用靠文件管理器的"副本 (1)"来分辨先后。
+      const stamp = dayjs().format("YYYYMMDD-HHmmss");
+      downloadBlob(blob, `岗位列表-${stamp}.csv`);
       message.success(`已导出 ${selectedJobIds.length} 个岗位`);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "导出失败");
@@ -59,6 +71,17 @@ export function BatchToolbar({
   return (
     <Space style={{ marginBottom: 12, minHeight: 32 }} wrap>
       <Typography.Text type="secondary">已选 {selectedJobIds.length} 个岗位</Typography.Text>
+      {onSelectAllPages && totalCount > 0 && (
+        <Tooltip title={`按当前筛选，一键选中全部 ${totalCount} 个岗位（跨页，不止当前页）`}>
+          <Button
+            disabled={batchAction !== null}
+            loading={selectAllPagesLoading}
+            onClick={onSelectAllPages}
+          >
+            全选全部岗位（共 {totalCount} 个）
+          </Button>
+        </Tooltip>
+      )}
       <Button
         icon={<ClearOutlined />}
         disabled={selectedJobIds.length === 0 || batchAction !== null}

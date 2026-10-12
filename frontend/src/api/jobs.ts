@@ -36,6 +36,11 @@ export function listJobs(params: JobListParams = {}): Promise<Page<Job>> {
   return request(`/jobs${buildQuery(params)}`);
 }
 
+/** 当前筛选下全部岗位的 id（不分页）：批量选择「全选全部岗位」用；上限由调用方裁决。 */
+export function listJobIds(params: JobListParams = {}): Promise<number[]> {
+  return request(`/jobs/ids${buildQuery(params)}`);
+}
+
 export function getJob(id: number): Promise<Job> {
   return request(`/jobs/${id}`);
 }
