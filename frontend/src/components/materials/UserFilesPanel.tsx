@@ -1,5 +1,7 @@
-/** 用户文件副本面板：数据库内用户文件（附件、照片、截图）在磁盘上的副本清单。
+/** 「我的文件」面板：当前数据集里用户上传内容的落盘清单（附件、照片、截图等）。
  *
+ * 这些文件与数据库同目录存放——**属于当前数据集**：随数据集导出/导入、切换数据集
+ * 与应用升级都不会丢（备份包从 2026-10 起附带 user_files/ 目录）。
  * 每一行提供：图片缩略图（antd Image 点开放大）、pdf 的抽屉内嵌预览，以及
  * 「打开文件夹」（后端在文件管理器里定位到副本文件）。
  */
@@ -59,7 +61,7 @@ export default function UserFilesPanel() {
     try {
       return await listUserFiles({ page, page_size: PAGE_SIZE, keyword });
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "加载文件副本失败");
+      message.error(error instanceof Error ? error.message : "加载文件列表失败");
       return null;
     }
   }, [keyword, message, page]);
@@ -188,7 +190,7 @@ export default function UserFilesPanel() {
       {loading ? (
         <LoadingBlock />
       ) : rows.length === 0 ? (
-        <Empty description="暂无文件副本" />
+        <Empty description="还没有保存过文件" />
       ) : (
         <Table
           rowKey="id"

@@ -52,6 +52,7 @@ from .data_backup.import_archive import (
     _remove_candidate_files,
     _remove_sqlite_sidecars,
     restore_referral_images,
+    restore_user_files,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,7 +69,8 @@ def _describe(dataset_id: str, path: Path) -> dict[str, Any]:
         size = 0
     return {
         "id": dataset_id,
-        "name": metadata.get("name") or (MAIN_DATASET_NAME if dataset_id == MAIN_DATASET_ID else "未命名数据集"),
+        "name": metadata.get("name")
+        or (MAIN_DATASET_NAME if dataset_id == MAIN_DATASET_ID else "未命名数据集"),
         "source": metadata.get("source") or ("本机" if dataset_id == MAIN_DATASET_ID else "导入"),
         "size_bytes": size,
         "created_at": metadata.get("created_at"),
@@ -89,7 +91,9 @@ def list_datasets() -> list[dict[str, Any]]:
     return items
 
 
-def import_dataset(archive_path: Path, name: str, bind: Engine, staging_dir: Path) -> dict[str, Any]:
+def import_dataset(
+    archive_path: Path, name: str, bind: Engine, staging_dir: Path
+) -> dict[str, Any]:
     """把上传的备份包校验后落成一份**新数据集**，不触碰当前正在使用的数据。
 
     **先把整包里所有东西都验完，再开始写盘。** 一份包可能带好几份数据集，若边写边验，
@@ -145,6 +149,13 @@ def import_dataset(archive_path: Path, name: str, bind: Engine, staging_dir: Pat
                 result["restored_referral_images"] = restored_images
         except (OSError, zipfile.BadZipFile):
             logger.warning("备份包的内推图片恢复失败（不影响数据集本身）", exc_info=True)
+        # 用户上传文件的落盘副本（"我的文件"）同模式恢复；失败只告警。
+        try:
+            restored_files = restore_user_files(archive_path, target.parent / "user_files")
+            if restored_files:
+                result["restored_user_files"] = restored_files
+        except (OSError, zipfile.BadZipFile):
+            logger.warning("备份包的用户文件恢复失败（不影响数据集本身）", exc_info=True)
         # 回给前端做提示用：勾选过"包含 API Key"的包恢复成功后，界面要如实告诉用户
         # 密钥也跟着回来了（解不开时应用按未配置处理，仍需重填）。
         result["api_key_included"] = manifest.get("api_key_included") is True
@@ -236,9 +247,10 @@ def _wait_for_idle(bind: Engine) -> None:
 
     deadline = time.monotonic() + _DRAIN_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
-        if dataset_scope.leases_pending() == 0 and not getattr(
-            bind.pool, "checkedout", lambda: 0
-        )():
+        if (
+            dataset_scope.leases_pending() == 0
+            and not getattr(bind.pool, "checkedout", lambda: 0)()
+        ):
             return
         time.sleep(0.1)
     owners = dataset_scope.lease_owners()
@@ -343,9 +355,7 @@ def delete_dataset(dataset_id: str) -> None:
     logger.info("数据集已移入回收目录 id=%s", dataset_id)
 
 
-def export_all_datasets(
-    bind: Engine, staging_dir: Path, *, include_api_keys: bool = False
-) -> Path:
+def export_all_datasets(bind: Engine, staging_dir: Path, *, include_api_keys: bool = False) -> Path:
     """导出**全部数据集**：活动的那份 + 其余每一份都在包里。
 
     为什么需要它：默认的导出只带**当前活动**的那一份，其余数据集（用户可能有好几份，

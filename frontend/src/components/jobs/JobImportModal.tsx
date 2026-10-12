@@ -129,7 +129,6 @@ export function JobImportModal({
             "岗位描述",
             "任职要求",
             "其他招聘信息",
-            "来源",
             "备注",
             "收藏",
           ])

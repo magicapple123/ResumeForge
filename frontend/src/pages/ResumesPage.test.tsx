@@ -272,10 +272,15 @@ describe("ResumesPage 批量选择", () => {
 
     // CI 慢机上数据晚于表格就绪——先等第一条数据渲染出来再右键进入多选（5s 安全网）。
     await enterSelectingViaContextMenu();
-    // rowSelection 勾选框：第一个是表头全选，后两个是数据行。
-    // 每次点击都会触发重渲染，必须现查现点（旧节点引用会失效）。
-    fireEvent.click(screen.getAllByRole("checkbox")[1]!);
-    fireEvent.click(screen.getAllByRole("checkbox")[2]!);
+    // rowSelection 勾选框：BatchActionBar 的「全选本页」在最前（index 0），
+    // 然后是表头全选与数据行。每次点击都会触发重渲染，必须现查现点。
+    const pageSelectAll = screen
+      .getAllByRole("checkbox")
+      .find((box) => (box.closest("label")?.textContent ?? "").includes("全选本页"));
+    // 每次点击都触发重渲（checkbox DOM 可能重建），必须现查现点（旧节点引用会失效）。
+    const rowBoxes = () => screen.getAllByRole("checkbox").filter((box) => box !== pageSelectAll);
+    fireEvent.click(rowBoxes()[1]!);
+    fireEvent.click(rowBoxes()[2]!);
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "删除所选" }));

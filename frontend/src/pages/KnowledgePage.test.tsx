@@ -230,7 +230,8 @@ describe("KnowledgePage", () => {
     renderPage();
     await screen.findByText("STAR 法则");
 
-    fireEvent.click(screen.getByRole("button", { name: /查\s*看/ }));
+    // 「查看」按钮已移除：点卡片本身（DetailTrigger）打开预览。
+    fireEvent.click(screen.getByText("STAR 法则"));
 
     // AssistantMessageContent 把「# 核心要点」解析成 h4，而不是显示原始井号。
     expect(await screen.findByRole("heading", { name: "核心要点" })).toBeInTheDocument();

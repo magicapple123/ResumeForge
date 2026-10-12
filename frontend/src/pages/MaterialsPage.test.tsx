@@ -104,14 +104,14 @@ describe("MaterialsPage", () => {
     expect(screen.queryByText("正文")).toBeNull();
   });
 
-  it("切到「文件副本」页签后渲染副本清单（空态）", async () => {
+  it("切到「我的文件」页签后渲染副本清单（空态）", async () => {
     renderPage();
     await screen.findByText("护士执业资格证");
 
-    fireEvent.click(screen.getByText("文件副本"));
+    fireEvent.click(screen.getByText("我的文件"));
 
     // 副本清单走独立的数据源：切页签后按列表参数拉取，空数据给中文空态。
-    expect(await screen.findByText("暂无文件副本")).toBeInTheDocument();
+    expect(await screen.findByText("还没有保存过文件")).toBeInTheDocument();
     expect(userFileMocks.listUserFiles).toHaveBeenCalledWith(
       expect.objectContaining({ page: 1, page_size: 20 }),
     );
@@ -121,8 +121,8 @@ describe("MaterialsPage", () => {
     renderPage();
     await screen.findByText("护士执业资格证");
 
-    fireEvent.click(screen.getByText("文件副本"));
-    await screen.findByText("暂无文件副本");
+    fireEvent.click(screen.getByText("我的文件"));
+    await screen.findByText("还没有保存过文件");
     fireEvent.click(screen.getByText("资料"));
 
     expect(await screen.findByText("护士执业资格证")).toBeInTheDocument();

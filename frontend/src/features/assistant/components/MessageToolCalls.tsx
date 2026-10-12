@@ -91,8 +91,8 @@ const TOOL_LABELS: Record<string, string> = {
   list_match_analyses: "查询匹配分析记录",
   create_interview_experience: "新增面经",
   create_referral: "新增内推",
-  // 文件副本库（只读元数据）
-  list_user_files: "查看文件副本",
+  // 我的文件（只读元数据）
+  list_user_files: "查看我的文件",
   // 放宽模式工具：网申填充记录与历史对话（仅用户开启放宽模式后可见）
   list_web_form_fills: "查看网申填充记录",
   get_web_form_fill: "查看网申填写明细",

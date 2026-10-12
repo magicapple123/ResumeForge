@@ -2,6 +2,7 @@
 
 安全语义（zip-slip 防护、fail-closed manifest、校验顺序）整函数搬运零改动。
 """
+
 from __future__ import annotations
 
 import json
@@ -21,6 +22,7 @@ from .manifest import _revision_chain, _table_counts
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME,
     ARCHIVE_REFERRAL_IMAGES_PREFIX,
+    ARCHIVE_USER_FILES_PREFIX,
     BACKUP_FORMAT_VERSION,
     DATABASE_MEMBER,
     MANIFEST_MEMBER,
@@ -91,7 +93,9 @@ def restore_referral_images(archive_path: Path, destination_dir: Path) -> int:
     """
     restored = 0
     with zipfile.ZipFile(archive_path) as archive:
-        members = [name for name in archive.namelist() if name.startswith(ARCHIVE_REFERRAL_IMAGES_PREFIX)]
+        members = [
+            name for name in archive.namelist() if name.startswith(ARCHIVE_REFERRAL_IMAGES_PREFIX)
+        ]
         if not members:
             return 0
         destination_dir.mkdir(parents=True, exist_ok=True)
@@ -99,6 +103,35 @@ def restore_referral_images(archive_path: Path, destination_dir: Path) -> int:
             name = member[len(ARCHIVE_REFERRAL_IMAGES_PREFIX) :]
             if not name or "/" in name or "\\" in name or name.startswith("."):
                 logger.warning("备份包里的内推图片路径不合法，已跳过：%s", member)
+                continue
+            target = destination_dir / name
+            if target.exists():
+                continue
+            with archive.open(member) as source, target.open("wb") as target_file:
+                shutil.copyfileobj(source, target_file)
+            restored += 1
+    return restored
+
+
+def restore_user_files(archive_path: Path, destination_dir: Path) -> int:
+    """把包里附带的"我的文件"恢复到目标库同目录，返回恢复的文件数。
+
+    与 ``restore_referral_images`` 同一模式：旧备份包没有这些条目就一个也不写；
+    成员名只认 ``user_files/<单段文件名>``（杜绝 zip-slip）；目标已存在的同名文件
+    不覆盖——user_files 按内容指纹命名，同名即同内容，先到先得。
+    """
+    restored = 0
+    with zipfile.ZipFile(archive_path) as archive:
+        members = [
+            name for name in archive.namelist() if name.startswith(ARCHIVE_USER_FILES_PREFIX)
+        ]
+        if not members:
+            return 0
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        for member in members:
+            name = member[len(ARCHIVE_USER_FILES_PREFIX) :]
+            if not name or "/" in name or "\\" in name or name.startswith("."):
+                logger.warning("备份包里的用户文件路径不合法，已跳过：%s", member)
                 continue
             target = destination_dir / name
             if target.exists():
@@ -168,12 +201,14 @@ def _read_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
     format_version = manifest.get("format")
     # 只拒收"比当前代码更新"的格式。这里曾是 `!=`，等于把每一次导出格式升级都变成
     # 用户历史备份的全部失效——用户升级一次应用后就再也导不回旧包了。
-    if not isinstance(format_version, int) or isinstance(format_version, bool) or format_version < 1:
+    if (
+        not isinstance(format_version, int)
+        or isinstance(format_version, bool)
+        or format_version < 1
+    ):
         raise BackupError("备份包格式不受支持，可能来自其它版本的 ResumeForge")
     if format_version > BACKUP_FORMAT_VERSION:
-        raise BackupError(
-            "备份来自更新版本的 ResumeForge，当前版本无法恢复；请先升级应用再导入"
-        )
+        raise BackupError("备份来自更新版本的 ResumeForge，当前版本无法恢复；请先升级应用再导入")
     # fail-closed：清单必须**显式**声明密钥是否在包里，缺失或乱值一律拒收——将来格式
     # 再变更时，不会静默放行一个自己读不懂的声明。true 表示用户导出时勾选了"包含
     # API Key"（格式 3）：密钥按本机存储形态随包走，恢复后解不开（换机器/换用户）时
@@ -204,9 +239,7 @@ def _check_candidate_revision(database: Path, bind: Engine, manifest: dict[str, 
     """
     revision = _read_candidate_revision(database)
     if revision is not None and revision not in _revision_chain(bind):
-        raise BackupError(
-            "备份来自更新版本的 ResumeForge，当前版本无法恢复；请先升级应用再导入"
-        )
+        raise BackupError("备份来自更新版本的 ResumeForge，当前版本无法恢复；请先升级应用再导入")
     declared = manifest.get("alembic_revision")
     if declared and revision and declared != revision:
         raise BackupError("备份包的清单与实际数据库内容不一致，已拒绝恢复")
@@ -309,4 +342,3 @@ def inspect_archive(archive_path: Path, bind: Engine, staging_dir: Path) -> dict
         "database": info,
         "current_tables": _table_counts(bind),
     }
-

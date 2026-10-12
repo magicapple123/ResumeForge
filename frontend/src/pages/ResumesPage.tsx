@@ -284,7 +284,21 @@ export default function ResumesPage() {
         />
       </Space>
       {batch.selecting && (
-        <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+        <BatchActionBar
+          count={batch.selectedCount}
+          onExit={batch.exitSelecting}
+          pageSelectAll={{
+            allSelected:
+              (data?.items ?? []).length > 0 &&
+              (data?.items ?? []).every((item) => batch.isSelected(item.id)),
+            someSelected: (data?.items ?? []).some((item) => batch.isSelected(item.id)),
+            onToggle: (checked) =>
+              batch.selectPage(
+                (data?.items ?? []).map((item) => item.id),
+                checked,
+              ),
+          }}
+        >
           <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
             删除所选
           </Button>
