@@ -16,7 +16,7 @@ import {
   getInterview,
   interviewToMaterial,
   listInterviews,
-  submitInterviewAnswer,
+  submitInterviewAnswerStream,
 } from "../api/interview";
 import { listJobs } from "../api/jobs";
 import { listResumes } from "../api/resumes";
@@ -56,6 +56,8 @@ export default function InterviewPage() {
   const [active, setActive] = useState<InterviewDetail | null>(null);
   const [starting, setStarting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [streamingQuestion, setStreamingQuestion] = useState<string | null>(null);
+  // 流式中的面试官问题（question_delta 渐进填充）；turn 完成后由 setActive 覆盖。
   const [answer, setAnswer] = useState("");
   const [savingReport, setSavingReport] = useState(false);
   const [jobOptions, setJobOptions] = useState<{ value: number; label: string }[]>([]);
@@ -167,8 +169,13 @@ export default function InterviewPage() {
     setSubmitting(true);
     const content = answer.trim();
     setAnswer("");
+    setStreamingQuestion("");
     try {
-      const result = await submitInterviewAnswer(active.id, content);
+      // 流式：面试官的问题逐字出现（后端把 question 字段明文增量推来）；
+      // done 事件的 result 与旧端点同形状，收尾/报告逻辑不变。
+      const result = await submitInterviewAnswerStream(active.id, content, (text) => {
+        setStreamingQuestion((current) => (current ?? "") + text);
+      });
       setActive(result.session);
       if (result.finished) {
         message.success("面试结束，评分报告已生成");
@@ -179,6 +186,7 @@ export default function InterviewPage() {
       message.error(error instanceof Error ? error.message : "提交回答失败，请重试");
       setAnswer(content);
     } finally {
+      setStreamingQuestion(null);
       setSubmitting(false);
     }
   };
@@ -419,14 +427,22 @@ export default function InterviewPage() {
                 <div className="interview-message-head">
                   <img
                     className="jane-avatar"
-                    src={JANE_FACE_SOURCES.thinking}
+                    src={
+                      JANE_FACE_SOURCES[streamingQuestion ? "idle" : "thinking"] ??
+                      JANE_FACE_SOURCES.thinking
+                    }
                     alt=""
                     aria-hidden="true"
                   />
                   <b>Jane</b>
                 </div>
                 <div className="interview-message-body">
-                  <LoadingBlock tip="正在思考下一个问题…" minHeight={120} />
+                  {streamingQuestion ? (
+                    // 流式：问题文本逐字到达（question_delta），像打字一样出现。
+                    <div style={{ whiteSpace: "pre-wrap" }}>{streamingQuestion}</div>
+                  ) : (
+                    <LoadingBlock tip="正在思考下一个问题…" minHeight={120} />
+                  )}
                 </div>
               </div>
             ) : null}

@@ -54,7 +54,7 @@ export function ThinkingSection({
             name="thinking_enabled"
             label="思考模式"
             valuePropName="checked"
-            tooltip="开启后，除「求职助手」以外的 AI 调用（简历生成、岗位解析、匹配分析等）会请求模型先思考再作答。默认关闭；各家对思考参数的写法与档位都不一样，可以先点右边的按钮检测。"
+            tooltip="开启后，AI 对话与简历生成会请求模型先思考再作答——回答更有深度，但每轮都会多一段思考时间；岗位识别、匹配分析等结构化任务不受影响（自动跳过思考以保证速度）。默认关闭；各家对思考参数的写法与档位都不一样，可以先点右边的按钮检测。"
           >
             <Switch checkedChildren="开启" unCheckedChildren="关闭" />
           </Form.Item>

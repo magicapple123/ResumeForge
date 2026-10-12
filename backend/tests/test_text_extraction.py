@@ -18,7 +18,7 @@ class FakeProvider(BaseLLMProvider):
         self.response = response
         self.messages: list[dict] = []
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         self.messages = messages
         if isinstance(self.response, Exception):
             raise self.response
@@ -75,9 +75,13 @@ async def test_extract_job_text_separates_sections_and_uses_ai_result():
 @pytest.mark.asyncio
 async def test_extract_job_text_accepts_markdown_fenced_json_and_grounded_fallback():
     local = parse_job_text(JOB_TEXT)
-    response = "```json\n" + json.dumps(
-        {"title": "不存在的岗位", "description": "负责前端和服务端开发"}, ensure_ascii=False
-    ) + "\n```"
+    response = (
+        "```json\n"
+        + json.dumps(
+            {"title": "不存在的岗位", "description": "负责前端和服务端开发"}, ensure_ascii=False
+        )
+        + "\n```"
+    )
 
     result = await extract_job_text(FakeProvider(response), JOB_TEXT, local)
 
@@ -165,7 +169,7 @@ async def test_extract_job_text_retries_once_before_giving_up():
         def __init__(self) -> None:
             super().__init__(LLMConfig(base_url="https://model.example/v1", model="test-model"))
 
-        async def chat(self, _messages: list[dict]) -> str:
+        async def chat(self, _messages: list[dict], *, thinking: bool = True) -> str:
             calls.append(1)
             if len(calls) == 1:
                 return "模型这次没有输出有效 JSON"

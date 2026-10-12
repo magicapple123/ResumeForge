@@ -3,6 +3,7 @@
 这块最容易出的问题是**静默切错**：把一份拆成两半、或把 A 公司的字段写进 B 公司的
 草稿。所以测试重点在"不该拆的时候不拆"和"字段必须出自它自己那段材料"。
 """
+
 import base64
 import json
 
@@ -286,7 +287,7 @@ def test_parse_multiple_image_only_returns_one_draft_when_ai_fails(client, monke
             super().__init__(_config())
             self.calls = 0
 
-        async def chat(self, _messages):
+        async def chat(self, _messages, *, thinking: bool = True):
             self.calls += 1
             raise LLMError("模型不可用")
 

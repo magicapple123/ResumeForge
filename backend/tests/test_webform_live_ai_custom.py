@@ -12,6 +12,7 @@
 FakeLiveClient/raw_control 在 test_webform_live.py；ScriptedProvider/UNKNOWN_LABEL 在
 test_webform_live_ai.py（"记住这条"与 AI 兜底共用"认不出"这一前提）。
 """
+
 import asyncio
 import json
 
@@ -41,7 +42,7 @@ class RecordingProvider:
         self.messages: list[list[dict]] = []
         self.calls = 0
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.calls += 1
         self.messages.append(messages)
         return json.dumps(self.reply, ensure_ascii=False)
@@ -49,9 +50,7 @@ class RecordingProvider:
     def heard(self) -> str:
         """模型实际看到的全部文字（system + user 拼一起）。"""
         return "\n".join(
-            str(message.get("content", ""))
-            for exchange in self.messages
-            for message in exchange
+            str(message.get("content", "")) for exchange in self.messages for message in exchange
         )
 
 

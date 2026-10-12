@@ -22,7 +22,7 @@ class FakeProvider:
         self.error = error
         self.calls: list[list[dict[str, str]]] = []
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.calls.append(messages)
         if self.error is not None:
             raise self.error

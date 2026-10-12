@@ -5,6 +5,7 @@
   但它正是这个功能最伤信任的失败模式；
 - **状态不能由调用方指定**，只能由服务层按契约判定。
 """
+
 import json
 
 from app.models.claim import VERIFICATION_CONFIRMED, VERIFICATION_PENDING, ClaimRecord
@@ -62,7 +63,7 @@ class ScriptedProvider(BaseLLMProvider):
         self.responses = list(responses)
         self.calls: list[list[dict]] = []
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.calls.append(messages)
         if not self.responses:
             raise LLMError("脚本用完了")
@@ -101,9 +102,7 @@ def _make_claim(client, **overrides) -> int:
 # ===== 开场：契约先锁 =====
 
 
-def test_creating_a_session_returns_the_question_and_stores_the_contract(
-    client, monkeypatch
-):
+def test_creating_a_session_returns_the_question_and_stores_the_contract(client, monkeypatch):
     _make_claim(client)
     _configure_llm(monkeypatch, ScriptedProvider([json.dumps(PLAN, ensure_ascii=False)]))
 
@@ -189,7 +188,9 @@ def test_answering_returns_the_verdict_and_the_followup(client, monkeypatch):
         ],
     )
 
-    response = client.post(f"/api/drill/{session_id}/answer", json={"answer": "因为关键词召回不够。"})
+    response = client.post(
+        f"/api/drill/{session_id}/answer", json={"answer": "因为关键词召回不够。"}
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "partial"
@@ -222,10 +223,15 @@ def test_deferred_policy_hides_the_verdict_until_the_end(client, monkeypatch):
 
 def test_immediate_policy_shows_the_feedback(client, monkeypatch):
     _make_claim(client)
-    _configure_llm(monkeypatch, ScriptedProvider([
-        json.dumps(PLAN, ensure_ascii=False),
-        json.dumps(VERDICT_FOLLOWUP, ensure_ascii=False),
-    ]))
+    _configure_llm(
+        monkeypatch,
+        ScriptedProvider(
+            [
+                json.dumps(PLAN, ensure_ascii=False),
+                json.dumps(VERDICT_FOLLOWUP, ensure_ascii=False),
+            ]
+        ),
+    )
     session_id = client.post(
         "/api/drill", json={"max_questions": 2, "feedback_policy": "immediate"}
     ).json()["id"]
@@ -255,9 +261,7 @@ def test_the_verdict_cannot_be_supplied_by_the_caller(client, monkeypatch):
 
 
 def test_an_empty_answer_is_rejected(client, monkeypatch):
-    session_id, _ = _open_session(
-        client, monkeypatch, [json.dumps(PLAN, ensure_ascii=False)]
-    )
+    session_id, _ = _open_session(client, monkeypatch, [json.dumps(PLAN, ensure_ascii=False)])
     assert client.post(f"/api/drill/{session_id}/answer", json={"answer": "   "}).status_code == 422
 
 
@@ -320,7 +324,9 @@ def test_review_falls_back_locally_when_the_model_fails(client, monkeypatch):
     # 脚本已用完，生成复盘时会失败。
     body = client.post(f"/api/drill/{session_id}/finish").json()
     assert body["status"] == "finished"
-    assert "讲了" in body["review"]["verified_summary"] or "还没站住" in body["review"]["gaps_summary"]
+    assert (
+        "讲了" in body["review"]["verified_summary"] or "还没站住" in body["review"]["gaps_summary"]
+    )
     assert body["review"]["actions"]
 
 
@@ -398,9 +404,7 @@ def test_rehearse_requires_a_model(client):
 
 
 def test_list_and_delete(client, monkeypatch):
-    session_id, _ = _open_session(
-        client, monkeypatch, [json.dumps(PLAN, ensure_ascii=False)]
-    )
+    session_id, _ = _open_session(client, monkeypatch, [json.dumps(PLAN, ensure_ascii=False)])
     listed = client.get("/api/drill").json()
     assert [item["id"] for item in listed] == [session_id]
     assert client.get("/api/drill", params={"status": "不存在"}).status_code == 422

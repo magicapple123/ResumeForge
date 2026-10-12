@@ -12,7 +12,7 @@ class FakeExtractionProvider(BaseLLMProvider):
         super().__init__(LLMConfig(base_url="https://model.example/v1", model="test-model"))
         self.response = response
 
-    async def chat(self, _messages: list[dict]) -> str:
+    async def chat(self, _messages: list[dict], *, thinking: bool = True) -> str:
         if isinstance(self.response, Exception):
             raise self.response
         return self.response

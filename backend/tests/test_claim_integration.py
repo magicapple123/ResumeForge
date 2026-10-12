@@ -4,6 +4,7 @@
 - 生成：台账为空时提示词必须与改动前**逐字节相同**，否则所有老用户拿到的简历都会变；
 - 导出：带占位符时要拦下并说清是哪儿，但用户想要草稿自查时不能把路堵死。
 """
+
 import json
 
 from app.schemas.resume import GenerateOptions, ResumeContent
@@ -18,7 +19,7 @@ class CapturingProvider(BaseLLMProvider):
         super().__init__(LLMConfig(base_url="http://fake", model="fake-model"))
         self.messages: list[dict] = []
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.messages = messages
         return json.dumps({"summary": "示例"}, ensure_ascii=False)
 
@@ -169,4 +170,6 @@ def test_resume_without_placeholders_is_not_affected_by_the_gate(client):
     assert ResumeContent.model_validate(
         client.get(f"/api/resumes/{resume_id}").json()["content"]
     ).summary.startswith("待补充说明")
-    assert client.get(f"/api/resumes/{resume_id}/export", params={"format": "json"}).status_code == 200
+    assert (
+        client.get(f"/api/resumes/{resume_id}/export", params={"format": "json"}).status_code == 200
+    )

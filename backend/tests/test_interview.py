@@ -61,7 +61,7 @@ def _configure_provider(monkeypatch, replies: list[str]) -> None:
         def __init__(self) -> None:
             self.replies = list(replies)
 
-        async def chat(self, _messages):
+        async def chat(self, _messages, *, thinking: bool = True):
             return (
                 self.replies.pop(0)
                 if self.replies

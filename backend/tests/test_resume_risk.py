@@ -1,4 +1,5 @@
 """简历风险扫描：五类风险、只提示不改写、强主张台账联动、LLM 降级与提示词登记。"""
+
 import json
 
 from app import preflight
@@ -24,7 +25,7 @@ class RiskProvider(BaseLLMProvider):
         super().__init__(LLMConfig(base_url="http://fake", api_key="fake", model="fake-model"))
         self.payload = payload
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         return json.dumps(self.payload, ensure_ascii=False)
 
     async def stream_chat(self, messages):
@@ -32,7 +33,7 @@ class RiskProvider(BaseLLMProvider):
 
 
 class BrokenProvider(RiskProvider):
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         raise LLMError("模型调用失败")
 
 
@@ -177,7 +178,9 @@ async def test_llm_enhancement_marks_llm_used_and_merges_points():
             ]
         }
     )
-    result = await scan_resume_risks(ResumeContent(summary="负责后端服务开发"), [], provider=provider, resume_id=1)
+    result = await scan_resume_risks(
+        ResumeContent(summary="负责后端服务开发"), [], provider=provider, resume_id=1
+    )
     assert result.llm_used is True
     assert any(p.text == "模型补充的深挖点" for p in result.points)
 

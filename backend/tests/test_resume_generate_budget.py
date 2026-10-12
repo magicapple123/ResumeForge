@@ -9,6 +9,7 @@
 - 质量重试失败沿用首轮结果（现状语义保留，不因预算改变）；
 - 流开始前的预算检查：已过期的预算在产出任何事件之前就把流程拦下。
 """
+
 import asyncio
 import json
 
@@ -33,7 +34,7 @@ class _DeadlineAwareProvider(FakeProvider):
         self.chat_delay = chat_delay
         self.deadlines_seen: list[float | None] = []
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.deadlines_seen.append(self.request_deadline_seconds)
         if self.chat_delay:
             await asyncio.sleep(self.chat_delay)

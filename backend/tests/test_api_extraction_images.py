@@ -41,7 +41,7 @@ class RecordingProvider(BaseLLMProvider):
         self.response = response
         self.messages: list[dict] = []
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         self.messages = messages
         if isinstance(self.response, Exception):
             raise self.response
@@ -131,7 +131,10 @@ def test_forged_and_unsupported_images_are_rejected(client, path):
     # 文本附件不能混进识别接口
     text_file = client.post(
         path,
-        json={"text": "", "images": [{"name": "笔记.txt", "mime_type": "text/plain", "data": "内容"}]},
+        json={
+            "text": "",
+            "images": [{"name": "笔记.txt", "mime_type": "text/plain", "data": "内容"}],
+        },
     )
     assert text_file.status_code == 422
     assert "仅支持" in text_file.json()["detail"]
@@ -142,18 +145,28 @@ def test_too_many_or_oversized_images_are_rejected(client, path):
     _configure_model(client)
 
     too_many = client.post(
-        path, json={"text": "", "images": [_image(f"{i}.png") for i in range(MAX_EXTRACTION_IMAGE_COUNT + 1)]}
+        path,
+        json={
+            "text": "",
+            "images": [_image(f"{i}.png") for i in range(MAX_EXTRACTION_IMAGE_COUNT + 1)],
+        },
     )
     assert too_many.status_code == 422
 
-    oversized = client.post(path, json={"text": "", "images": [_image(raw=_png(2 * 1024 * 1024 + 1))]})
+    oversized = client.post(
+        path, json={"text": "", "images": [_image(raw=_png(2 * 1024 * 1024 + 1))]}
+    )
     assert oversized.status_code == 422
     assert "2 MB" in oversized.json()["detail"]
 
     # 单张都合法、合计超限：这是请求体不超 8 MB 的保证，必须由服务端拦住。
     # 取刚好越过合计上限、但编码后仍在请求体上限之内的体积，才能走到这条校验
     # （再大就会先被中间件以 413 挡下，那是另一道闸，不是这条规则失效）。
-    over_total = [_image(raw=_png(2 * 1024 * 1024)), _image(raw=_png(2 * 1024 * 1024)), _image(raw=_png(1_500_000))]
+    over_total = [
+        _image(raw=_png(2 * 1024 * 1024)),
+        _image(raw=_png(2 * 1024 * 1024)),
+        _image(raw=_png(1_500_000)),
+    ]
     assert sum(len(item["data"]) for item in over_total) < 8 * 1024 * 1024
     total = client.post(path, json={"text": "", "images": over_total})
     assert total.status_code == 422
@@ -170,7 +183,9 @@ def test_a_text_only_model_degrades_with_an_actionable_warning(client, monkeypat
     _configure_model(client)
     monkeypatch.setattr(
         _factory_path(path),
-        lambda _config: RecordingProvider(LLMError("请求格式错误，请检查模型名称与参数设置（HTTP 400）")),
+        lambda _config: RecordingProvider(
+            LLMError("请求格式错误，请检查模型名称与参数设置（HTTP 400）")
+        ),
     )
 
     result = client.post(path, json={"text": "", "images": [_image()]})

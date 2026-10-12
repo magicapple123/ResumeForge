@@ -87,7 +87,7 @@ async def test_rewrite_field_returns_model_text_without_touching_the_resume():
     captured: dict[str, str] = {}
 
     class FakeProvider:
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             captured["prompt"] = messages[-1]["content"]
             return '{"text": "改写后的要点"}'
 
@@ -125,7 +125,7 @@ async def test_rewrite_whole_segment_asks_for_a_list_and_returns_one():
     captured: dict[str, str] = {}
 
     class FakeProvider:
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             captured["prompt"] = messages[-1]["content"]
             return '{"lines": ["新第一条", "新第二条", "新第三条"]}'
 
@@ -143,7 +143,7 @@ async def test_rewrite_whole_segment_rejects_a_plain_paragraph():
     from app.services.resume.resume_field_rewrite import MAX_FIELD_LINES
 
     class FakeProvider:
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             return '{"text": "一整段话"}'
 
     target = resolve_field_target(_content(), "projects.0.description")
@@ -157,7 +157,7 @@ async def test_rewrite_whole_segment_rejects_a_plain_paragraph():
 @pytest.mark.asyncio
 async def test_rewrite_field_rejects_an_empty_model_answer():
     class FakeProvider:
-        async def chat(self, messages):
+        async def chat(self, messages, *, thinking: bool = True):
             return '{"text": "   "}'
 
     target = resolve_field_target(_content(), "summary")

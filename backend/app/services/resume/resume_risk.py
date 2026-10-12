@@ -18,6 +18,7 @@
 2. **可选 LLM 增强**：配置了模型时，额外让模型找一批「面试会被追问」的深挖点；
    未配置或调用失败时静默降级为本地规则（notes 里说明），不阻断。
 """
+
 from __future__ import annotations
 
 import json
@@ -101,7 +102,12 @@ def _load_prompt(name: str) -> str:
 
 def _section_title(item: object, section: str) -> str:
     """取某个区块条目的可读标题：学校 / 公司 / 组织 / 项目名。"""
-    key = {"education": "school", "experience": "company", "campus_experience": "organization", "projects": "name"}.get(section, "")
+    key = {
+        "education": "school",
+        "experience": "company",
+        "campus_experience": "organization",
+        "projects": "name",
+    }.get(section, "")
     value = getattr(item, key, "") if key else ""
     return str(value or "未命名").strip()
 
@@ -274,8 +280,7 @@ def _deep_dive_risks(resume: ResumeContent, claims: list[ClaimRecord]) -> list[R
                         text=text,
                         location=location,
                         suggestion=(
-                            f"「{phrase}」是强主张，面试时大概率会被追问，"
-                            "请准备个人边界与量化依据"
+                            f"「{phrase}」是强主张，面试时大概率会被追问，请准备个人边界与量化依据"
                         ),
                         follow_up=[f"请能说清：这条「{phrase}」里你本人做了什么、团队做了什么"],
                     )
@@ -314,8 +319,7 @@ def _compliance_risks(resume: ResumeContent) -> list[RiskPoint]:
                     text=keyword,
                     location="正文",
                     suggestion=(
-                        f"出现「{keyword}」，可能涉及保密 / 未公开信息，"
-                        "投递前请确认是否可对外披露"
+                        f"出现「{keyword}」，可能涉及保密 / 未公开信息，投递前请确认是否可对外披露"
                     ),
                 )
             )
@@ -349,7 +353,8 @@ async def _llm_deep_dive(provider: BaseLLMProvider, resume: ResumeContent) -> li
         [
             {"role": "system", "content": _UNTRUSTED_SYSTEM},
             {"role": "user", "content": prompt},
-        ]
+        ],
+        thinking=False,
     )
     data = parse_json_object(raw, label="风险深挖")
     items = data.get("points")
@@ -370,9 +375,7 @@ async def _llm_deep_dive(provider: BaseLLMProvider, resume: ResumeContent) -> li
                 location=str(item.get("location") or "正文"),
                 suggestion=str(item.get("suggestion") or ""),
                 follow_up=[
-                    str(entry)
-                    for entry in (item.get("follow_up") or [])
-                    if str(entry).strip()
+                    str(entry) for entry in (item.get("follow_up") or []) if str(entry).strip()
                 ],
             )
         )

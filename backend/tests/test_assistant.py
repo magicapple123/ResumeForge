@@ -5,6 +5,7 @@
 跨文件共用的 helper（_FakeProvider / _ScriptedProvider / _tool_call / _empty_search /
 _import_skill 等）按契约留在本文件，新文件单向导入。
 """
+
 import io
 import json
 import zipfile
@@ -58,7 +59,7 @@ class _FakeProvider(BaseLLMProvider):
     def __init__(self, _config=None):  # 假 Provider 不使用配置
         pass
 
-    async def chat(self, _messages):  # pragma: no cover - 助手只走流式
+    async def chat(self, _messages, *, thinking: bool = True):  # pragma: no cover - 助手只走流式
         raise NotImplementedError
 
 
@@ -111,6 +112,8 @@ def _tool_call(name, arguments, call_id="call_1"):
         ],
         finish_reason="tool_calls",
     )
+
+
 def test_conversation_crud_and_soft_delete(client, db_session, monkeypatch):
     _configure_llm(client)
     _successful_provider(monkeypatch)
@@ -175,9 +178,7 @@ def test_conversation_list_places_pinned_items_first_and_supports_partial_flags(
     db_session.commit()
     original_second_updated_at = second_row.updated_at
 
-    updated = client.patch(
-        f"/api/assistant/conversations/{second['id']}", json={"pinned": True}
-    )
+    updated = client.patch(f"/api/assistant/conversations/{second['id']}", json={"pinned": True})
     assert updated.status_code == 200
     assert updated.json()["pinned"] is True
     assert updated.json()["favorite"] is False
@@ -187,9 +188,7 @@ def test_conversation_list_places_pinned_items_first_and_supports_partial_flags(
     listed = client.get("/api/assistant/conversations").json()
     assert [item["id"] for item in listed[:2]] == [second["id"], first["id"]]
 
-    unpinned = client.patch(
-        f"/api/assistant/conversations/{second['id']}", json={"pinned": False}
-    )
+    unpinned = client.patch(f"/api/assistant/conversations/{second['id']}", json={"pinned": False})
     assert unpinned.status_code == 200
     listed_after_unpin = client.get("/api/assistant/conversations").json()
     assert [item["id"] for item in listed_after_unpin[:2]] == [first["id"], second["id"]]
@@ -331,9 +330,9 @@ async def test_closing_stream_after_start_marks_pending_message_cancelled(client
     assert '"type": "start"' in first_event
     await stream.aclose()
 
-    assistant = client.get(f"/api/assistant/conversations/{conversation['id']}").json()[
-        "messages"
-    ][1]
+    assistant = client.get(f"/api/assistant/conversations/{conversation['id']}").json()["messages"][
+        1
+    ]
     assert assistant["status"] == "cancelled"
     assert assistant["error"] == "回复已中断"
 
@@ -354,6 +353,8 @@ def _import_skill(client, name: str, prompt: str, files: dict[str, str] | None =
     )
     assert response.status_code == 200
     return response.json()
+
+
 def test_reasoning_streams_persists_and_is_never_fed_back_to_the_model(client, monkeypatch):
     """思考内容要经 SSE 下发、落进助手消息 context，且**绝不回灌给模型**。
 
@@ -418,10 +419,8 @@ def test_reasoning_is_truncated_and_marked_before_storing(client, monkeypatch):
         json={"content": "问题"},
     )
 
-    context = client.get(f"/api/assistant/conversations/{conversation['id']}").json()["messages"][1][
-        "context"
-    ]
+    context = client.get(f"/api/assistant/conversations/{conversation['id']}").json()["messages"][
+        1
+    ]["context"]
     assert len(context["reasoning"]) == MAX_REASONING_CONTEXT_CHARS
     assert context["reasoning_truncated"] is True
-
-

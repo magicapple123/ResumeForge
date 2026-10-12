@@ -1,4 +1,5 @@
 """匹配分析离线测试：五类状态、证据锚定、禁分数、硬门槛、准入映射、本地降级、招呼语。"""
+
 import json
 from types import SimpleNamespace
 
@@ -25,7 +26,7 @@ class ScriptedProvider(BaseLLMProvider):
         self.response = response
         self.messages: list[dict] | None = None
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         self.messages = messages
         return self.response
 
@@ -48,8 +49,12 @@ def _payload() -> dict:
     )
 
 
-_PROFILE_TEXT = json.dumps({"name": "张三", "education": "本科", "skills": ["Python"]}, ensure_ascii=False)
-_RESUME_TEXT = json.dumps({"title": "后端版", "content": {"skills": "Python 后端"}}, ensure_ascii=False)
+_PROFILE_TEXT = json.dumps(
+    {"name": "张三", "education": "本科", "skills": ["Python"]}, ensure_ascii=False
+)
+_RESUME_TEXT = json.dumps(
+    {"title": "后端版", "content": {"skills": "Python 后端"}}, ensure_ascii=False
+)
 
 
 def _valid_result(**overrides) -> dict:
@@ -171,7 +176,9 @@ def test_local_match_result_is_honest_and_never_fabricates():
 
 def test_result_model_forbids_numeric_fields():
     with pytest.raises(LLMError):
-        parse_match_result(json.dumps({"hard_conditions": [], "match_percent": 88}, ensure_ascii=False))
+        parse_match_result(
+            json.dumps({"hard_conditions": [], "match_percent": 88}, ensure_ascii=False)
+        )
 
 
 @pytest.mark.asyncio
@@ -262,13 +269,17 @@ def test_validate_evidence_rejects_fabricated_clause_among_real_ones():
 def test_validate_evidence_handles_evidence_with_no_substantial_clauses():
     """全部子句都短于实质子句阈值时，退化为整段核对：短证据不崩溃、不误放行。"""
     present = JobMatchResult(
-        core_abilities=[MatchCondition(label="学历", status="matched", jd_quote="", evidence="本科")]
+        core_abilities=[
+            MatchCondition(label="学历", status="matched", jd_quote="", evidence="本科")
+        ]
     )
     # 短证据但仍是整段子串 → 放行。
     validate_evidence(present, jd_source="", personal_source="最高学历：本科")
 
     fabricated = JobMatchResult(
-        core_abilities=[MatchCondition(label="学历", status="matched", jd_quote="", evidence="博士")]
+        core_abilities=[
+            MatchCondition(label="学历", status="matched", jd_quote="", evidence="博士")
+        ]
     )
     with pytest.raises(LLMError, match="无法在资料或简历中核对"):
         validate_evidence(fabricated, jd_source="", personal_source="最高学历：本科")

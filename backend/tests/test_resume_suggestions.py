@@ -23,7 +23,7 @@ class SuggestionProvider(BaseLLMProvider):
         super().__init__(LLMConfig(base_url="http://fake", api_key="fake", model="fake-model"))
         self.messages: list[list[dict]] = []
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:
         self.messages.append(messages)
         return json.dumps(
             {

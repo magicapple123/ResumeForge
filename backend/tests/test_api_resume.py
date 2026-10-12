@@ -60,7 +60,7 @@ def test_generate_saves_before_done_and_persists_resume(client, monkeypatch):
     assert client.put("/api/settings/llm", json=config.model_dump()).status_code == 200
 
     class SuccessfulProvider(BaseLLMProvider):
-        async def chat(self, _messages):
+        async def chat(self, _messages, *, thinking: bool = True):
             raise AssertionError("合法流式 JSON 不应触发修复调用")
 
         async def stream_chat(self, _messages):

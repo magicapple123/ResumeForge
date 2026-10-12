@@ -8,6 +8,7 @@
 
 另外验证 `_chat_json` 的"失败自动重试一次"：第一次脏、第二次好，应当成功。
 """
+
 import json
 
 import pytest
@@ -38,7 +39,7 @@ class _FakeProvider:
         self._replies = list(replies) if isinstance(replies, (list, tuple)) else [replies]
         self.calls = 0
 
-    async def chat(self, _messages):
+    async def chat(self, _messages, *, thinking: bool = True):
         self.calls += 1
         return self._replies[min(self.calls, len(self._replies)) - 1]
 
@@ -47,7 +48,9 @@ def _fenced(text: dict) -> str:
     return "```json\n" + json.dumps(text, ensure_ascii=False) + "\n```"
 
 
-def _wrapped(text: dict, prefix: str = "好的，以下是结果：\n", suffix: str = "\n希望对你有帮助。") -> str:
+def _wrapped(
+    text: dict, prefix: str = "好的，以下是结果：\n", suffix: str = "\n希望对你有帮助。"
+) -> str:
     return prefix + json.dumps(text, ensure_ascii=False) + suffix
 
 

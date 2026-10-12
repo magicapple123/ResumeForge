@@ -1,4 +1,5 @@
 """简历生成核心流程测试（使用假 Provider，不发起真实网络请求）。"""
+
 import json
 
 from app.schemas.job import JobOut
@@ -66,14 +67,16 @@ GOOD_RESUME = {
 class FakeProvider(BaseLLMProvider):
     """按脚本回放的假模型：stream 文本可选分块，chat 依次返回队列内容。"""
 
-    def __init__(self, stream_text: str = "", chat_replies: list[str] | None = None, chunk_size: int = 40):
+    def __init__(
+        self, stream_text: str = "", chat_replies: list[str] | None = None, chunk_size: int = 40
+    ):
         super().__init__(LLMConfig(base_url="http://fake", api_key="k", model="fake-model"))
         self.stream_text = stream_text
         self.chat_replies = chat_replies or []
         self.chunk_size = chunk_size
         self.messages: list[dict] = []
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         if not self.chat_replies:
             raise AssertionError("FakeProvider 没有可用的 chat 回复")
         return self.chat_replies.pop(0)
@@ -93,7 +96,7 @@ class QualityRetryProvider(FakeProvider):
         self.retry_response = retry_response
         self.chat_messages: list[list[dict]] = []
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.chat_messages.append(messages)
         if isinstance(self.retry_response, Exception):
             raise self.retry_response

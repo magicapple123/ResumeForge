@@ -1,4 +1,5 @@
 """简历写作增强：四个 LLM 变换 + LLM 未配置降级 + 提示词登记。"""
+
 import json
 
 import pytest
@@ -25,7 +26,7 @@ class WritingProvider(BaseLLMProvider):
         self.payload = payload
         self.messages: list[list[dict]] = []
 
-    async def chat(self, messages):
+    async def chat(self, messages, *, thinking: bool = True):
         self.messages.append(messages)
         return json.dumps(self.payload, ensure_ascii=False)
 

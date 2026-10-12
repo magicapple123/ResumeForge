@@ -12,8 +12,10 @@
 依赖方向：本模块只依赖 ``runtime.dataset_scope``（取数据集身份）；对 ``_registry``
 的引用放在函数体内（函数级导入），因为 ``_registry`` 在模块顶层导入本模块。
 """
+
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from ...runtime import dataset_scope
@@ -98,3 +100,28 @@ def is_allowed(ctx: ToolExecutionContext, name: str) -> bool:
         if tool.name == name:
             return tool_visible(tool, web_search=ctx.web_search, relaxed=ctx.relaxed)
     return False
+
+
+# 「写类工具」的按需下发：写入意图的动词很少在闲聊里出现——把 20+ 个写工具的定义
+# 常驻每轮请求会白白拉长首字延迟（数千 token 输入）。默认只下发查询类；用户消息
+# 命中动作词、或本会话最近用过写工具时，才把写类工具一并下发（每轮重新判定）。
+WRITE_INTENT_RE = re.compile(
+    r"投递|申请|加入队列|收藏|取消收藏|删除|移除|去掉|修改|更新|保存|新增|创建|添加|"
+    r"标记|设置|改成|导入|导出|清空|批量|生成|改写|重写|补齐|恢复|归档|写一?封?|"
+    r"删除掉|帮我? (?:投|删|改|存|加|建|导|写)"
+)
+
+
+def tools_for_turn(
+    tools: list, *, latest_user_text: str, session_used_writes: bool, relaxed: bool
+) -> list:
+    """按本轮输入决定下发给模型的工具集。
+
+    ``relaxed``（放宽模式）与命中写入意图时全量下发；否则剔除写类工具。**查询类
+    工具永远保留**——只读工具的描述体积小，且模型随时可能需要查资料。
+    """
+    if relaxed:
+        return tools
+    if session_used_writes or WRITE_INTENT_RE.search(latest_user_text or ""):
+        return tools
+    return [tool for tool in tools if not getattr(tool, "writes", False)]

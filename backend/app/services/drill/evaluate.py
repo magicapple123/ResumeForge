@@ -156,7 +156,7 @@ async def evaluate_answer(
     contract: DrillContract,
     answer: str,
 ) -> Verdict:
-    raw = await provider.chat(build_evaluate_messages(session, contract, answer))
+    raw = await provider.chat(build_evaluate_messages(session, contract, answer), thinking=False)
     previous = contract.status or EVIDENCE_NOT_COVERED
     return parse_verdict(raw, previous_status=previous)
 
@@ -210,4 +210,3 @@ def apply_verdict(
     )
     session.turns.append(turn)
     return turn
-
