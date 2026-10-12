@@ -50,8 +50,8 @@ class InterviewCreate(BaseModel):
     difficulty: InterviewDifficulty = "中级"
     interviewer_style: InterviewerStyle = "严谨专业"
     rounds: int = Field(default=6, ge=MIN_INTERVIEW_ROUNDS, le=MAX_INTERVIEW_ROUNDS)
-    # 自动轮数下限：非空 = AI 按表现在 [rounds_min, rounds] 内判断何时收尾
-    # （rounds 兼作上限）；NULL = 固定轮数。轮数本身不告诉用户，保留未知感。
+    # 自动收尾的模式开关：非空 = 何时结束完全由 AI 按表现判断（提示词/界面都不出现
+    # 轮数范围；rounds 只作为服务端的硬性保险）；NULL = 固定轮数模式。
     rounds_min: int | None = Field(default=None, ge=MIN_INTERVIEW_ROUNDS, le=MAX_INTERVIEW_ROUNDS)
     # 自定义面试官人设（会拼进系统提示，优先级高于默认风格）。
     persona: str = Field(default="", max_length=MAX_PERSONA_CHARS)

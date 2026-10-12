@@ -34,10 +34,13 @@ win:
     - dir
 
 nsis:
-  oneClick: true
+  # 辅助向导（非一键安装）：用户可以自主选择安装位置（维护者要求——一键直装让想
+  # 装到非默认盘的用户无从下手）。桌面端自动更新仍走 `/S` 静默参数：assisted 安装器
+  # 在静默模式下按上一次的安装目录直装，不弹向导，更新体验不受影响。
+  oneClick: false
   perMachine: false
+  allowToChangeInstallationDirectory: true
   # DeepSeek-style guard: refuse to install while a copy is still running.
-  allowToChangeInstallationDirectory: false
   shortcutName: 简历通
   artifactName: ResumeForge-Setup-${version}.${ext}
 

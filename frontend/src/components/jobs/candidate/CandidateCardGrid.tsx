@@ -107,20 +107,19 @@ export function CandidateCardGrid({
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   更新于 {formatDateTime(candidate.updated_at)}
                 </Typography.Text>
-                {/* 只保留主操作（待处理卡片的「导入到岗位」）；不再渲染「···」下拉。 */}
-                <RowActions
-                  primary={
-                    candidate.status === "pending"
-                      ? [
-                          {
-                            key: "import",
-                            label: "导入到岗位",
-                            onClick: () => void onStartImport(candidate),
-                          },
-                        ]
-                      : []
-                  }
-                />
+                {/* 只保留主操作（待处理卡片的「导入到岗位」）；已导入卡片不渲染操作区，
+                    否则空容器会在卡片底部撑出一截留白。 */}
+                {candidate.status === "pending" && (
+                  <RowActions
+                    primary={[
+                      {
+                        key: "import",
+                        label: "导入到岗位",
+                        onClick: () => void onStartImport(candidate),
+                      },
+                    ]}
+                  />
+                )}
               </Space>
             </Card>
           </RowContextMenu>

@@ -69,6 +69,20 @@ def _normalize_status(value: str) -> str:
     return "开放中"
 
 
+def job_type_from_title(title: str) -> str | None:
+    """从岗位标题推断类型（实习 > 校招 > 社招 > None）。
+
+    采集卡片（BOSS 直聘等）不带类型字段，候选/岗位入库时的类型标注只能靠标题；
+    与 ``_normalize_job_type`` 同一套词表，实习最优先——「2027 届实习转正」这类
+    同时命中校招与实习字样的标题，事实身份是实习。
+    """
+    value = title or ""
+    if not value:
+        return None
+    inferred = _normalize_job_type(value)
+    return None if inferred == "其他" else inferred
+
+
 def _mark_unlabeled_metadata(
     lines: list[str], values: dict[str, str], consumed: set[int], preamble_end: int
 ) -> None:

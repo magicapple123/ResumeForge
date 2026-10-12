@@ -167,6 +167,8 @@ export interface CandidateJobImportResult {
 export interface CandidateJobPayload {
   title?: string;
   company?: string;
+  /** 岗位链接（选填）：添加备选时留个"回原站看"的入口，导入岗位时预填投递链接。 */
+  source_url?: string;
   raw_text?: string;
   images?: string[];
   note?: string;
@@ -176,9 +178,26 @@ export interface CandidateJobPayload {
 export interface CandidateJobUpdatePayload {
   title?: string;
   company?: string;
+  source_url?: string;
   raw_text?: string;
   images?: string[];
   note?: string;
+}
+
+/** 候选 CSV 导入（与岗位 CSV 同一套两步流：预览 → 确认）。 */
+export interface CandidateCsvRow {
+  line: number;
+  data: Record<string, string>;
+}
+
+export interface CandidateCsvPreview {
+  rows: CandidateCsvRow[];
+  errors: { line: number; message: string }[];
+}
+
+export interface CandidateCsvImportResult {
+  imported: number;
+  failed: { line: number; message: string }[];
 }
 
 export interface ParsedJobDraft extends Required<

@@ -122,9 +122,10 @@ def build_interview_messages(
         "候选人的个人资料": _clip(profile_text, MAX_PROFILE_CONTEXT_CHARS)
         or "（用户没有维护资料）",
         "目标岗位的招聘信息": _clip(job_text, MAX_JOB_CONTEXT_CHARS) or "（未关联岗位）",
-        # 自动轮数模式不把精确总轮数写进进度（模型只需知道区间与当前轮）。
+        # 自动轮数模式：总轮数本来就不固定，进度只报当前轮，不向模型透露任何轮数
+        # 范围（何时收尾完全交给模型判断；服务端的硬上限只在代码里兜底）。
         "面试进度": (
-            f"第 {index} 轮（自动收尾，最早第 {session.rounds_min} 轮、最迟第 {session.rounds} 轮）"
+            f"第 {index} 轮（自动收尾，何时结束由你判断）"
             if session.rounds_min is not None
             else f"第 {index} / {session.rounds} 轮"
         ),

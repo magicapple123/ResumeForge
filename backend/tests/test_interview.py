@@ -372,7 +372,8 @@ def test_auto_rounds_validation():
 
 
 def test_prompt_auto_rounds_branch_hides_exact_total():
-    """自动轮数模式：提示词改走"自动收尾"分支，不再出现"第 N / M 轮"的精确计划。"""
+    """自动轮数模式：提示词改走"自动收尾"分支——不出现任何轮数范围或精确计划，
+    何时收尾完全交给模型判断。"""
     auto = _session(rounds=9, rounds_min=3)
     fixed = _session(rounds=3)
 
@@ -380,7 +381,11 @@ def test_prompt_auto_rounds_branch_hides_exact_total():
     fixed_system = build_interview_messages(fixed, index=2)[0]["content"]
 
     assert "自动收尾" in auto_system
-    assert "最早第 3 轮" in auto_system
+    assert "什么时候结束完全由你判断" in auto_system
+    # 任何轮数范围/上限都不再进提示词（3 是 rounds_min，9 是 rounds，都不许出现）。
+    assert "最早第 3 轮" not in auto_system
+    assert "最迟第 9 轮" not in auto_system
+    assert "9 轮" not in auto_system
     # 角色设定里的"计划轮数：N 轮"行不再出现（done 字段说明里的措辞共用，不算暴露）。
     assert "- 计划轮数" not in auto_system
     # 固定模式一切照旧。
@@ -390,10 +395,11 @@ def test_prompt_auto_rounds_branch_hides_exact_total():
         assert "{%" not in text
         assert "{{" not in text
 
-    # 用户消息里的进度同理：自动模式不暴露"第 2 / 9 轮"。
+    # 用户消息里的进度同理：自动模式不暴露"第 2 / 9 轮"，也不报区间。
     auto_user = build_interview_messages(auto, index=2)[1]["content"]
     fixed_user = build_interview_messages(fixed, index=2)[1]["content"]
     assert "第 2 轮（自动收尾" in auto_user
+    assert "最早第" not in auto_user
     assert "第 2 / 9 轮" not in auto_user
     assert "第 2 / 3 轮" in fixed_user
 

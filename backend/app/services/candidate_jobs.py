@@ -20,6 +20,7 @@ from ..models.material import (
 from ..schemas.job import RECOGNITION_SOURCE_OFFICIAL, JobCreate
 from ..schemas.material import CandidateJobCreate, CandidateJobUpdate
 from .job.job_service import create_job_record, find_by_job_identity, find_job_by_identity
+from .job_parser.metadata import job_type_from_title
 from .trash import is_deleted
 
 logger = logging.getLogger(__name__)
@@ -301,8 +302,10 @@ def import_candidates(db: Session, candidate_ids: list[int]) -> dict:
                 company=candidate.company,
                 location=candidate.location,
                 salary=candidate.salary,
-                # 采集透传的岗位类型入库；候选没标（手动粘贴/历史数据）回落「校招」。
-                job_type=candidate.job_type or "校招",
+                # 岗位类型：标题推断最优先（采集卡片不带类型字段，「实习生」字样是
+                # 最强证据，不能让默认值把实习岗标成校招）；推断不出再信采集任务
+                # 的透传标注，最后回落「校招」。
+                job_type=(job_type_from_title(candidate.title) or candidate.job_type or "校招"),
                 source_url=candidate.source_url,
                 # 采集回来的 JD 已经按小标题切成两段，直接各归各位；
                 # 手动粘贴的候选没有这两段，退回用原文填描述（与以前的导入行为一致）。
@@ -420,3 +423,31 @@ __all__ = [
     "stage_candidate_job",
     "update_candidate_job",
 ]
+
+
+def list_candidate_job_ids(
+    db: Session,
+    *,
+    status: str = "",
+    keyword: str = "",
+    collect_task_id: int | None = None,
+    collect_task_ids: list[int] | None = None,
+) -> list[int]:
+    """当前筛选下**全部**候选的 id（不分页）：抽屉「全选全部」用。
+
+    与分页列表共用 ``_filtered_query``——"看到的筛选结果"和"一键全选拿到的 id"
+    是对同一批候选的两种视图。
+    """
+    return [
+        candidate_id
+        for (candidate_id,) in _filtered_query(
+            db,
+            status=status,
+            keyword=keyword,
+            collect_task_id=collect_task_id,
+            collect_task_ids=collect_task_ids,
+        )
+        .order_by(CandidateJob.created_at.desc(), CandidateJob.id.desc())
+        .with_entities(CandidateJob.id)
+        .all()
+    ]
