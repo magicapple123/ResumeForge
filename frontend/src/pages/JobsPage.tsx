@@ -6,12 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { markCandidateJobImported } from "../api/candidateJob";
 import { openWebFormUrl } from "../api/webform";
 import { startBackfill } from "../api/apply";
-import {
-  batchDeleteJobs,
-  batchUpdateJobStatus,
-  deleteJob,
-  updateJob,
-} from "../api/jobs";
+import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, updateJob } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobAnalysisModal from "../components/JobAnalysisModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
