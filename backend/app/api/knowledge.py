@@ -1,4 +1,5 @@
 """知识库接口：条目的增删改查与分类建议。"""
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,12 +11,15 @@ from ..schemas.common import Page
 from ..schemas.knowledge import (
     KNOWLEDGE_CATEGORIES,
     KNOWLEDGE_CONTENT_EXCERPT_CHARS,
+    KnowledgeBatchDeleteResult,
+    KnowledgeBatchRequest,
     KnowledgeCreate,
     KnowledgeEntrySummary,
     KnowledgeOut,
     KnowledgeTagsOut,
     KnowledgeUpdate,
 )
+from ..services import trash
 from ..services.knowledge_service import (
     create_knowledge,
     delete_knowledge,
@@ -32,13 +36,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
 
-@router.get("", response_model=list[KnowledgeOut])
+@router.get("", response_model=list[KnowledgeEntrySummary])
 def read_knowledge(
     q: str = Query(default=""),
     category: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
-    return list_knowledge(db, q=q, category=category)
+    """旧全量列表端点（P1-6）：改用摘要 DTO，``content`` 只带 200 字截断。
+
+    搜索（``q``）与分类过滤的语义不变；全文仍走 ``GET /{knowledge_id}``。条目数千
+    之后全量正文会把响应拖到 MB 级，而列表消费方（历史前端、助手工具）只需要标题、
+    分类、标签与摘要——QA 实测同一份压力数据下搜索响应从 2.12MB 降到 KB 级。
+    """
+    return [_knowledge_summary(entry) for entry in list_knowledge(db, q=q, category=category)]
 
 
 def _knowledge_summary(entry: KnowledgeEntry) -> KnowledgeEntrySummary:
@@ -108,6 +118,33 @@ def read_knowledge_tags(db: Session = Depends(get_db)):
 @router.post("", response_model=KnowledgeOut, status_code=201)
 def create_knowledge_entry(payload: KnowledgeCreate, db: Session = Depends(get_db)):
     return create_knowledge(db, payload)
+
+
+@router.post("/batch-delete", response_model=KnowledgeBatchDeleteResult)
+def batch_delete_knowledge(payload: KnowledgeBatchRequest, db: Session = Depends(get_db)):
+    """批量移入回收站（软删除）：单次上限 500，与简历批量删除同一口径。
+
+    语义对齐单条 ``DELETE /{knowledge_id}``：任何一条 id 不存在或已在回收站里即
+    整体 404 并附缺失 id 清单，不做"删一半"。**声明在 ``/{knowledge_id}`` 之前**
+    （字面量段排在参数段前面，同 ``/categories``）。
+    """
+    entries: list[KnowledgeEntry] = []
+    missing: list[int] = []
+    for knowledge_id in payload.knowledge_ids:
+        entry = trash.get_live(db, KnowledgeEntry, knowledge_id)
+        if entry is None:
+            missing.append(knowledge_id)
+        else:
+            entries.append(entry)
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"以下知识库条目不存在或已被删除：{'、'.join(map(str, missing))}",
+        )
+    for entry in entries:
+        trash.soft_delete(db, "knowledge_entry", entry)
+    db.commit()
+    return KnowledgeBatchDeleteResult(deleted=len(entries))
 
 
 @router.get("/{knowledge_id}", response_model=KnowledgeOut)

@@ -8,6 +8,7 @@
 ``services/webform/``：它服务的是「网申填表」，而这条链路（BOSS）只往聊天框发招呼语、
 从不填表单，留在本包会让依赖方向变成 webform → apply。
 """
+
 from .apply_service import (
     ApplyBadRequest,
     ApplyConflict,
@@ -15,6 +16,7 @@ from .apply_service import (
     ApplyServiceError,
     add_to_queue,
     build_apply_data,
+    count_queue,
     create_apply_task,
     create_collect_task,
     current_task,
@@ -65,6 +67,7 @@ __all__ = [
     "get_browser_manager",
     "get_collect_config",
     "get_task_runner",
+    "count_queue",
     "list_queue",
     "list_records",
     "persist_match",

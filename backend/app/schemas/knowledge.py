@@ -4,6 +4,7 @@
 成文内容」——面经总结、简历技巧、求职策略、行业笔记等。正文允许 Markdown 长文，列表检索
 按标题/正文命中，分类给一组内置常量作起点、仍允许自定义。
 """
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -111,6 +112,23 @@ class KnowledgeTagsOut(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class KnowledgeBatchRequest(BaseModel):
+    """批量删除请求：与 ``schemas.resume.ResumeBatchRequest`` 同款口径（去重 + 上限 500）。"""
+
+    knowledge_ids: list[int] = Field(max_length=500)
+
+    @field_validator("knowledge_ids")
+    @classmethod
+    def validate_and_deduplicate_ids(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise ValueError("请至少选择一份知识库条目")
+        return list(dict.fromkeys(value))
+
+
+class KnowledgeBatchDeleteResult(BaseModel):
+    deleted: int
+
+
 __all__ = [
     "KNOWLEDGE_CATEGORIES",
     "KNOWLEDGE_CONTENT_EXCERPT_CHARS",
@@ -125,4 +143,6 @@ __all__ = [
     "KnowledgeOut",
     "KnowledgeTagsOut",
     "KnowledgeUpdate",
+    "KnowledgeBatchDeleteResult",
+    "KnowledgeBatchRequest",
 ]
