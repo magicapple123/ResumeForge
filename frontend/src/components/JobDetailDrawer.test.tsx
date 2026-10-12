@@ -209,10 +209,15 @@ describe("JobDetailDrawer 来源字段", () => {
     expect(screen.getByText("王工帮我递的简历")).toBeInTheDocument();
   });
 
-  it("没填来源时留白显示，不编造值", () => {
+  it("没填来源时整行不渲染（空值不占一行，避免和「录入方式」看起来重复）", () => {
     renderDrawer(BASE_JOB);
 
-    const sourceRow = screen.getByText("来源").closest(".ant-descriptions-item");
-    expect(sourceRow?.textContent).toContain("-");
+    expect(screen.queryByText("来源")).not.toBeInTheDocument();
+  });
+
+  it("「录入方式」始终展示系统记录的录入途径", () => {
+    renderDrawer({ ...BASE_JOB, recognition_source: "粘贴文本识别" });
+
+    expect(screen.getByText("粘贴文本识别")).toBeInTheDocument();
   });
 });

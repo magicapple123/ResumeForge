@@ -1,7 +1,8 @@
 /**
  * 备选岗位卡片网格：勾选/详情/导入/编辑/删除。
  * （自 CandidateJobsDrawer 拆出，closest() 冒泡守卫逐字随迁，行为等价。）
- * R8：批量选择入口收进卡片右键菜单（批量选择 + 单条删除）；多选模式下右键菜单收起。
+ * R8：批量选择入口收进卡片右键菜单（批量选择 + 编辑 + 单条删除）；多选模式下右键菜单收起。
+ * 卡片上不再放「···」菜单（用户反馈三个点太吵）：编辑/删除走右键，详情走点卡片。
  */
 import { CheckSquareOutlined, DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import { Card, Checkbox, Space, Tag, Typography } from "antd";
@@ -38,7 +39,7 @@ export function CandidateCardGrid({
     <div className="candidate-job-card-grid">
       {items.map((candidate) => {
         const selected = selectedIds.includes(candidate.id);
-        /** 右键菜单：批量选择 + 单条删除（与「···」里的删除同一份确认）；多选时收起。 */
+        /** 右键菜单：批量选择 + 编辑 + 单条删除（与原「···」菜单同一份确认）；多选时收起。 */
         const contextItems: RowActionItem[] = selecting
           ? []
           : [
@@ -47,6 +48,12 @@ export function CandidateCardGrid({
                 label: "批量选择",
                 icon: <CheckSquareOutlined />,
                 onClick: onEnterSelecting,
+              },
+              {
+                key: "edit",
+                label: "编辑",
+                icon: <EditOutlined />,
+                onClick: () => onOpenEdit(candidate),
               },
               {
                 key: "delete",
@@ -100,6 +107,7 @@ export function CandidateCardGrid({
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   更新于 {formatDateTime(candidate.updated_at)}
                 </Typography.Text>
+                {/* 只保留主操作（待处理卡片的「导入到岗位」）；不再渲染「···」下拉。 */}
                 <RowActions
                   primary={
                     candidate.status === "pending"
@@ -112,27 +120,6 @@ export function CandidateCardGrid({
                         ]
                       : []
                   }
-                  more={[
-                    {
-                      key: "detail",
-                      label: "查看详情",
-                      onClick: () => void onOpenDetails(candidate),
-                    },
-                    {
-                      key: "edit",
-                      label: "编辑",
-                      icon: <EditOutlined />,
-                      onClick: () => onOpenEdit(candidate),
-                    },
-                    {
-                      key: "delete",
-                      label: "删除",
-                      danger: true,
-                      icon: <DeleteOutlined />,
-                      confirm: "删除这条备选岗位？",
-                      onClick: () => void onRemove(candidate),
-                    },
-                  ]}
                 />
               </Space>
             </Card>

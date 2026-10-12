@@ -3,7 +3,7 @@
 from app.services.job.job_csv import decode_csv_bytes, parse_job_csv
 
 _HEADERS = (
-    "标题,公司,地点,薪资,职位类型,状态,来源,投递链接,发布时间,职位描述,任职要求,补充信息,备注,收藏"
+    "标题,公司,地点,薪资,岗位类型,状态,来源,投递链接,发布时间,岗位描述,任职要求,补充信息,备注,收藏"
 )
 
 
@@ -25,6 +25,10 @@ def test_export_roundtrip_preserves_fields(client):
     assert export.content.startswith(b"\xef\xbb\xbf")
 
     text = export.content.decode("utf-8-sig")
+    # 表头用统一后的口径（职位→岗位），导出什么就能原样导回。
+    assert text.splitlines()[0] == (
+        "标题,公司,地点,薪资,岗位类型,状态,来源,投递链接,发布时间,岗位描述,任职要求,补充信息,备注,收藏"
+    )
     rows, errors = parse_job_csv(text)
     assert errors == []
     assert len(rows) == 1
@@ -108,6 +112,15 @@ def test_decode_prefers_utf8_and_falls_back_to_gbk():
         assert "编码" in str(exc)
     else:  # pragma: no cover - 防呆分支
         raise AssertionError("乱码字节应当报错")
+
+
+def test_import_accepts_pre_rename_headers():
+    """口径统一（职位→岗位）之前的旧表头文件仍要能导回：别名兼容不撤。"""
+    body = "标题,公司,职位类型,职位描述\n后端开发,示例科技,全职,负责支付系统\n"
+    rows, errors = parse_job_csv(body)
+    assert errors == []
+    assert rows[0][1]["job_type"] == "全职"
+    assert rows[0][1]["description"] == "负责支付系统"
 
 
 def test_import_request_rows_shape_is_validated():

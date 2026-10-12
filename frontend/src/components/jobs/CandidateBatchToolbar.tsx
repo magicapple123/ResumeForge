@@ -40,7 +40,7 @@ export default function CandidateBatchToolbar({
   onExit,
 }: Props) {
   return (
-    <Space wrap style={{ marginBottom: 12 }}>
+    <Space wrap style={{ marginTop: 8, marginBottom: 12 }}>
       <Checkbox
         checked={allSelected}
         indeterminate={someSelected && !allSelected}

@@ -181,7 +181,7 @@ def parse_job_text(text: str) -> JobTextParseResult:
         ]
         description = "\n".join(fallback_lines)
     else:
-        # 标题区仍可能有不属于职责或补充信息的简介，保留在职位描述前言中。
+        # 标题区仍可能有不属于职责或补充信息的简介，保留在岗位描述前言中。
         preamble_metadata = [
             line
             for index, line in enumerate(lines[:preamble_end])
@@ -203,7 +203,7 @@ def parse_job_text(text: str) -> JobTextParseResult:
     if not title:
         warnings.append("未识别到岗位名称，请手动填写。")
     if not substantive_description:
-        warnings.append("未识别到职位描述，请核对原始文本并手动填写。")
+        warnings.append("未识别到岗位描述，请核对原始文本并手动填写。")
 
     source_url = _find_url(values.get("source_url", ""))
     status_context = values.get("status", "") or "\n".join(lines)

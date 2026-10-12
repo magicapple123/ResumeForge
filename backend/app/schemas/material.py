@@ -1,4 +1,5 @@
 """资料箱与备选岗位 Schema。"""
+
 from datetime import datetime
 from typing import Literal
 
@@ -222,7 +223,7 @@ class CandidateJobDetailOut(CandidateJobOut):
 
     **JD 这几项刻意不进列表响应**：列表最多 300 条，而候选的正文单条上限是几万字符——
     把它们塞进列表会让"打开备选岗位"这个动作随着采集量线性变慢，而列表本身根本不显示 JD。
-    要用正文的地方只有一个：从备选岗位导入到岗位广场（那一页要预填职位描述与任职要求）。
+    要用正文的地方只有一个：从备选岗位导入到岗位广场（那一页要预填岗位描述与任职要求）。
 
     这也解释了前端那个类型缺口：``CandidateJob`` 上一直写着有 ``description``，
     而列表接口从未返回过它——类型在说谎，直到有人真的去读它才暴露。

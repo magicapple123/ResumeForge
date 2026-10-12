@@ -37,7 +37,7 @@ export function ExperienceSection({ editable }: Props) {
             </Form.Item>
           </Col>
           <Col xs={24} md={7}>
-            <Form.Item name={[field.name, "role"]} label="职位">
+            <Form.Item name={[field.name, "role"]} label="岗位">
               <Input placeholder="如：市场部实习生" />
             </Form.Item>
           </Col>

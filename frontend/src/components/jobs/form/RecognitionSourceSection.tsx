@@ -53,7 +53,7 @@ export default function RecognitionSourceSection({
           disabled={parsing}
           onPaste={onPaste}
           onChange={onRawTextChange}
-          placeholder="粘贴职位名称、地点、职位描述、职位要求等完整招聘信息，或按 Ctrl+V 直接贴招聘截图（也可以上传 pdf/docx 招聘文档）"
+          placeholder="粘贴岗位名称、地点、岗位描述、任职要求等完整招聘信息，或按 Ctrl+V 直接贴招聘截图（也可以上传 pdf/docx 招聘文档）"
           style={{ height: 220, resize: "none" }}
         />
       </Form.Item>

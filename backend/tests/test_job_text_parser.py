@@ -74,8 +74,7 @@ def test_parse_compact_official_job_header_and_responsibility_requirements():
     assert result.location == "北京市"
     assert result.job_type == "校招"
     assert result.source_url == (
-        "https://talent.baidu.com/jobs/detail/GRADUATE/"
-        "8ded98ee-9ddf-486c-96e9-75d4941d943b"
+        "https://talent.baidu.com/jobs/detail/GRADUATE/8ded98ee-9ddf-486c-96e9-75d4941d943b"
     )
     assert result.posted_at == "2026-07-30"
     assert "负责前端和服务端的业务开发工作" in result.description
@@ -99,13 +98,12 @@ def test_parse_compact_metadata_does_not_treat_deadline_as_posted_date():
 
 
 def test_parse_title_location_prefix_is_used_when_no_location_metadata_exists():
-    result = parse_job_text(
-        "北京-全栈开发工程师(J103963)示例品牌\n工作职责：负责平台开发。"
-    )
+    result = parse_job_text("北京-全栈开发工程师(J103963)示例品牌\n工作职责：负责平台开发。")
 
     assert result.title == "全栈开发工程师(J103963)"
     assert result.company == "示例品牌"
     assert result.location == "北京"
+
 
 def test_parse_labeled_fields():
     text = """职位名称：大模型应用开发工程师
@@ -133,9 +131,7 @@ def test_parse_labeled_fields():
 
 def test_labeled_company_keeps_hyphenated_position_direction_in_title():
     result = parse_job_text(
-        "职位名称：Agent全栈开发实习生 - 数据平台\n"
-        "公司：字节跳动\n"
-        "职位描述：负责数据平台开发。"
+        "职位名称：Agent全栈开发实习生 - 数据平台\n公司：字节跳动\n职位描述：负责数据平台开发。"
     )
 
     assert result.title == "Agent全栈开发实习生 - 数据平台"
@@ -217,7 +213,7 @@ def test_parse_empty_description_warns_even_when_preamble_metadata_is_preserved(
 
     assert result.description == ""
     assert result.additional_info.splitlines() == ["正式", "研发 - 客户端", "职位 ID：A100"]
-    assert any("职位描述" in warning for warning in result.warnings)
+    assert any("岗位描述" in warning for warning in result.warnings)
 
 
 def test_parse_job_text_accepts_label_and_section_variants():
@@ -263,4 +259,3 @@ def test_parse_job_text_splits_bilingual_inline_sections_after_a_period():
 
     assert "Build API services" in result.description
     assert "Familiar with Python" in result.requirements
-

@@ -90,7 +90,7 @@ export function ExperienceEditor() {
             </Form.Item>
           </Col>
           <Col xs={24} md={8}>
-            <Form.Item name={[field.name, "role"]} label="职位">
+            <Form.Item name={[field.name, "role"]} label="岗位">
               <Input />
             </Form.Item>
           </Col>

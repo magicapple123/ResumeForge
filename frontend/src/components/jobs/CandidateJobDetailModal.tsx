@@ -102,7 +102,7 @@ export default function CandidateJobDetailModal({
 
           {candidate.description && (
             <section>
-              <Typography.Title level={5}>职位描述</Typography.Title>
+              <Typography.Title level={5}>岗位描述</Typography.Title>
               <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>
                 {candidate.description}
               </Typography.Paragraph>

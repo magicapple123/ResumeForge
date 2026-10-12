@@ -1,4 +1,5 @@
 """采集批次执行：站点选择、样例录制、失败分类与收尾文案。"""
+
 from __future__ import annotations
 
 import logging
@@ -202,9 +203,7 @@ def collect_message(task: ApplyTask) -> str:
                 f"注意：{'、'.join(str(item) for item in site_unapplied)} "
                 "这条站点筛选条件没能生效（编码没能在站点当前清单里核对上，没有发出去）。"
             )
-        parts.append(
-            "在下方「本次采集结果」里勾选要收进岗位广场的岗位，再点「导入选中的岗位」。"
-        )
+        parts.append("在下方「本次采集结果」里勾选要收进岗位广场的岗位，再点「导入选中的岗位」。")
         return "".join(parts)
     if filtered and not skipped:
         return (
@@ -242,17 +241,17 @@ def backfill_message(config: dict[str, Any]) -> str:
     backfilled = int(config.get("backfilled") or 0)
     skipped = int(config.get("backfill_skipped") or 0)
     if backfilled > 0:
-        message = f"已为 {backfilled} 条岗位补齐职位描述。"
+        message = f"已为 {backfilled} 条岗位补齐岗位描述。"
         if skipped:
             message += f"另有 {skipped} 条跳过（已有描述 / 仍然抓不到 / 已在回收站里）。"
         return message
     if skipped:
         return (
-            f"没有补到新的职位描述：{skipped} 条岗位已跳过"
+            f"没有补到新的岗位描述：{skipped} 条岗位已跳过"
             "（已有描述 / 仍然抓不到 / 已在回收站里）。"
             "若这些岗位在浏览器里确实打不开，请确认岗位仍然在线后重试。"
         )
-    return "没有补到新的职位描述：所选岗位都已无可补充的内容。"
+    return "没有补到新的岗位描述：所选岗位都已无可补充的内容。"
 
 
 __all__ = [
@@ -265,4 +264,3 @@ __all__ = [
     "record_sample_result",
     "run_collect",
 ]
-

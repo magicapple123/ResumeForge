@@ -84,8 +84,8 @@ describe("JobFormModal", () => {
       </AntdApp>,
     );
 
-    fireEvent.change(screen.getByLabelText("职位名称"), { target: { value: "前端工程师" } });
-    fireEvent.change(screen.getByLabelText("职位描述（JD）"), {
+    fireEvent.change(screen.getByLabelText("岗位名称"), { target: { value: "前端工程师" } });
+    fireEvent.change(screen.getByLabelText("岗位描述（JD）"), {
       target: { value: "负责前端应用开发" },
     });
     const saveButton = screen.getByText(/保\s*存/).closest("button");
@@ -151,7 +151,7 @@ describe("JobFormModal 图片识别", () => {
     expect(payload.images[0].data.startsWith("data:image/png;base64,")).toBe(true);
     // 只有图片、没有文本时不该再提示"请先粘贴招聘信息"
     expect(screen.queryByText("请先粘贴招聘信息，或添加截图、上传文档")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("职位名称")).toHaveValue("门店店长");
+    expect(screen.getByLabelText("岗位名称")).toHaveValue("门店店长");
   });
 
   it("sends an uploaded document in its own field", async () => {
@@ -283,7 +283,7 @@ describe("JobFormModal 图片识别", () => {
       ],
     });
     renderModal();
-    fireEvent.change(screen.getByLabelText("职位名称"), { target: { value: "我手填的岗位" } });
+    fireEvent.change(screen.getByLabelText("岗位名称"), { target: { value: "我手填的岗位" } });
 
     pasteScreenshot(screen.getByLabelText("完整招聘信息"));
     await waitFor(() => expect(screen.getByAltText("shot.png")).toBeInTheDocument());
@@ -291,7 +291,7 @@ describe("JobFormModal 图片识别", () => {
 
     // 什么都没识别出来时不能把用户已经填好的内容抹掉
     await waitFor(() => expect(apiMocks.parseJobsMultiple).toHaveBeenCalledOnce());
-    expect(screen.getByLabelText("职位名称")).toHaveValue("我手填的岗位");
+    expect(screen.getByLabelText("岗位名称")).toHaveValue("我手填的岗位");
   });
 
   it("warns instead of crashing when recognition returns no items", async () => {
@@ -305,7 +305,7 @@ describe("JobFormModal 图片识别", () => {
       ],
     });
     renderModal();
-    fireEvent.change(screen.getByLabelText("职位名称"), { target: { value: "我手填的岗位" } });
+    fireEvent.change(screen.getByLabelText("岗位名称"), { target: { value: "我手填的岗位" } });
     // 纯截图场景：先贴一张截图，否则组件会在前端就被"请先粘贴材料"拦下
     pasteScreenshot(screen.getByLabelText("完整招聘信息"));
     await waitFor(() => expect(screen.getByAltText("shot.png")).toBeInTheDocument());
@@ -313,7 +313,7 @@ describe("JobFormModal 图片识别", () => {
 
     await waitFor(() => expect(apiMocks.parseJobsMultiple).toHaveBeenCalledOnce());
     // 不能崩、不能抹掉已填内容，并给出人话提示与原因说明
-    expect(screen.getByLabelText("职位名称")).toHaveValue("我手填的岗位");
+    expect(screen.getByLabelText("岗位名称")).toHaveValue("我手填的岗位");
     expect(await screen.findByText("没有识别到内容，请检查材料或稍后重试")).toBeInTheDocument();
     expect(await screen.findByText(/图片识别失败/)).toBeInTheDocument();
   });
