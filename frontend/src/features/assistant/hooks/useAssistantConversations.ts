@@ -7,12 +7,11 @@ import {
   deleteAssistantConversation,
   forkAssistantConversation,
   getAssistantConversation,
+  getEarlierAssistantMessages,
   listAssistantConversations,
   renameAssistantConversation,
   updateAssistantConversation,
 } from "../../../api/assistant";
-import { listJobs } from "../../../api/jobs";
-import { listResumes } from "../../../api/resumes";
 import { useApi } from "../../../hooks/useApi";
 import { hasShownAssistantWelcome, markAssistantWelcomeShown } from "../welcomeGate";
 import type {
@@ -20,6 +19,11 @@ import type {
   AssistantConversationDetail,
   AssistantSurface,
 } from "../../../types";
+
+/** 会话搜索的防抖间隔（毫秒）：与远程搜索下拉的节奏保持一致。 */
+const SEARCH_DEBOUNCE_MS = 300;
+/** 详情首屏只拉最新 N 条消息（B5 按需加载）；更早的靠「加载更早」分页补齐。 */
+const DETAIL_MESSAGE_LIMIT = 50;
 
 interface Options {
   message: ReturnType<typeof App.useApp>["message"];
@@ -43,23 +47,39 @@ export function useAssistantConversations({ message, surface = "page" }: Options
   const detailRequestRef = useRef(0);
   const welcomeRequestedRef = useRef(false);
 
+  // 会话搜索（P0-2）：输入框值立即回显，防抖后再作为服务端 keyword 触发重拉——
+  // 不再靠"前 100 条"兜底，第 101 条之后的会话也能按关键词搜到。
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const searchTimerRef = useRef<number | null>(null);
+  const handleConversationSearch = useCallback((value: string) => {
+    setConversationSearch(value);
+    if (searchTimerRef.current !== null) window.clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = window.setTimeout(() => {
+      searchTimerRef.current = null;
+      setSearchKeyword(value.trim());
+    }, SEARCH_DEBOUNCE_MS);
+  }, []);
+  // 卸载时清掉未触发的防抖定时器。
+  useEffect(
+    () => () => {
+      if (searchTimerRef.current !== null) window.clearTimeout(searchTimerRef.current);
+    },
+    [],
+  );
+
   const {
     data: conversations,
     loading: conversationsLoading,
     error: conversationsError,
     reload: reloadConversations,
   } = useApi(
-    () => (surface === "page" ? listAssistantConversations() : listAssistantConversations(surface)),
-    [surface],
+    () =>
+      surface === "page"
+        ? listAssistantConversations("page", searchKeyword)
+        : listAssistantConversations(surface, searchKeyword),
+    [surface, searchKeyword],
   );
-
-  const { data: contextOptions } = useApi(async () => {
-    const [jobs, resumes] = await Promise.all([
-      listJobs({ page: 1, page_size: 100 }),
-      listResumes({ page: 1, page_size: 100 }),
-    ]);
-    return { jobs: jobs.items, resumes: resumes.items };
-  }, []);
 
   const selectConversation = useCallback((conversationId: number | null) => {
     activeIdRef.current = conversationId;
@@ -107,10 +127,9 @@ export function useAssistantConversations({ message, surface = "page" }: Options
     ): Promise<{ invalidated: boolean; detail: AssistantConversationDetail | null }> => {
       const requestId = ++detailRequestRef.current;
       try {
-        const next =
-          surface === "page"
-            ? await getAssistantConversation(conversationId)
-            : await getAssistantConversation(conversationId, surface);
+        const next = await getAssistantConversation(conversationId, surface, {
+          message_limit: DETAIL_MESSAGE_LIMIT,
+        });
         if (requestId !== detailRequestRef.current) return { invalidated: true, detail: null };
         return { invalidated: false, detail: next };
       } catch (error) {
@@ -146,6 +165,32 @@ export function useAssistantConversations({ message, surface = "page" }: Options
     },
     [fetchDetail],
   );
+
+  // 「加载更早」（B5）：prepend 到现有消息前，并同步 has_earlier；失败只提示不清屏。
+  const [earlierLoading, setEarlierLoading] = useState(false);
+  const loadEarlier = useCallback(async () => {
+    const current = detail;
+    if (!current || current.id !== activeIdRef.current) return;
+    const oldest = current.messages[0];
+    if (!oldest) return;
+    setEarlierLoading(true);
+    try {
+      const resp = await getEarlierAssistantMessages(current.id, oldest.id, 50, surface);
+      setDetail((prev) =>
+        prev && prev.id === current.id
+          ? {
+              ...prev,
+              messages: [...resp.items, ...prev.messages],
+              has_earlier: resp.has_earlier,
+            }
+          : prev,
+      );
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载更早的消息失败");
+    } finally {
+      setEarlierLoading(false);
+    }
+  }, [detail, message, surface]);
 
   const createConversation = useCallback(async () => {
     try {
@@ -290,9 +335,14 @@ export function useAssistantConversations({ message, surface = "page" }: Options
     conversations,
     conversationsLoading,
     conversationsError,
-    contextOptions,
+    /** 会话搜索输入框的受控值（未防抖，输入即时回显）。 */
+    conversationSearch,
+    /** 输入变化 → 300ms 防抖后触发服务端 keyword 搜索（P0-2）。 */
+    handleConversationSearch,
     reloadConversations,
     loadDetail,
+    loadEarlier,
+    earlierLoading,
     selectConversation,
     createConversation,
     ensureWelcomeConversation,

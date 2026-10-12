@@ -10,6 +10,7 @@ import ApplyRecordsPanel from "./ApplyRecordsPanel";
 
 const apiMocks = vi.hoisted(() => ({
   listRecordBatches: vi.fn(),
+  listRecordBatchItems: vi.fn(),
   retryRecord: vi.fn(),
 }));
 
@@ -18,6 +19,7 @@ vi.mock("../../api/apply", async (importOriginal) => {
   return {
     ...actual,
     listRecordBatches: apiMocks.listRecordBatches,
+    listRecordBatchItems: apiMocks.listRecordBatchItems,
     retryRecord: apiMocks.retryRecord,
   };
 });
@@ -100,6 +102,8 @@ beforeEach(() => {
     items: [record()],
   };
   apiMocks.listRecordBatches.mockResolvedValue({ items: [batch], total: 1 });
+  // B4 按需加载：展开批次后明细改走独立端点（不再随批次响应下发）。
+  apiMocks.listRecordBatchItems.mockResolvedValue({ items: [record()], total: 1 });
 });
 
 afterEach(cleanup);
@@ -123,7 +127,10 @@ describe("投递台本地时间", () => {
     expect(screen.queryByText(FINISHED_AT)).not.toBeInTheDocument();
 
     // 展开后记录行的"时间"列同样是转换过的。
+    // B4 按需加载：明细改为异步到达——findAllByText 在组头时间一出现就会返回，
+    // 必须先等记录行真正渲染出来，否则这里钉的是竞态而非行为。
     fireEvent.click(screen.getByRole("button", { name: /批次 #7/ }));
+    expect(await screen.findByText("后端开发")).toBeInTheDocument();
     const times = await screen.findAllByText(formatDateTime(FINISHED_AT));
     expect(times.length).toBeGreaterThanOrEqual(2);
   });

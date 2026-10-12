@@ -5,6 +5,7 @@ import type {
   ClaimDraft,
   ClaimDraftPayload,
   ClaimList,
+  ClaimPageList,
   ClaimPayload,
 } from "../types";
 import { buildQuery, request } from "./client";
@@ -13,6 +14,19 @@ export function listClaims(
   params: { category?: string; status?: string; keyword?: string } = {},
 ): Promise<ClaimList> {
   return request(`/claims${buildQuery(params)}`);
+}
+
+/**
+ * 分页列出事实台账（RF-08 续）：过滤语义与旧端点一致，汇总（total/confirmed/
+ * pending/category_counts）随响应下发——页面不必再为统计拉全量。行是摘要
+ * （原文/表述 ≤200 字），全文走 getClaim(id)。
+ */
+export function listClaimsPage(
+  params: { category?: string; status?: string; keyword?: string } = {},
+  page: number,
+  pageSize: number,
+): Promise<ClaimPageList> {
+  return request(`/claims/page${buildQuery({ ...params, page, page_size: pageSize })}`);
 }
 
 export function getClaim(id: number): Promise<Claim> {
@@ -29,6 +43,14 @@ export function updateClaim(id: number, payload: ClaimPayload): Promise<Claim> {
 
 export function deleteClaim(id: number): Promise<void> {
   return request(`/claims/${id}`, { method: "DELETE" });
+}
+
+/** 批量移入回收站（软删除）：与简历批量删除同一口径，后端缺失任一 id 即整体 404。 */
+export function batchDeleteClaims(claimIds: number[]): Promise<{ deleted: number }> {
+  return request("/claims/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ claim_ids: claimIds }),
+  });
 }
 
 /** 当前可用于生成的事实基线（已确认事实 + 必须避开的未确认说法）。 */

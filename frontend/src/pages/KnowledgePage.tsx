@@ -1,9 +1,10 @@
 /** 知识库：集中沉淀面经总结、简历技巧、求职策略、行业笔记等成文内容。 */
-import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
+import { CheckSquareOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
   Card,
+  Checkbox,
   Empty,
   Input,
   Modal,
@@ -18,6 +19,7 @@ import LoadingBlock from "../components/common/LoadingBlock";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  batchDeleteKnowledge,
   createKnowledge,
   deleteKnowledge,
   getKnowledge,
@@ -27,6 +29,9 @@ import {
   updateKnowledge,
 } from "../api/knowledge";
 import { RowActions, RowContextMenu } from "../components/common/RowActions";
+import BatchActionBar from "../components/common/BatchActionBar";
+import BatchDeleteButton from "../components/common/BatchDeleteButton";
+import { useBatchSelection } from "../hooks/useBatchSelection";
 import { DetailTrigger } from "../components/common/RecordDetail";
 import KnowledgeFormModal from "../components/knowledge/KnowledgeFormModal";
 import { AssistantMessageContent } from "../features/assistant/components/AssistantMessageContent";
@@ -38,6 +43,8 @@ const KNOWLEDGE_PAGE_SIZE = 12;
 
 export default function KnowledgePage() {
   const { message } = App.useApp();
+  // 批量选择：勾选若干条后一次删除（软删，全部进回收站）。
+  const batch = useBatchSelection<number>();
   const [entries, setEntries] = useState<KnowledgeSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -166,6 +173,20 @@ export default function KnowledgePage() {
     }
   };
 
+  /** 批量删除：一次请求删完（软删），成功后清空选择并重拉当前页。 */
+  const removeSelected = async () => {
+    const ids = [...batch.selectedIds];
+    if (ids.length === 0) return;
+    try {
+      const { deleted } = await batchDeleteKnowledge(ids);
+      message.success(`已删除 ${deleted} 条知识，可在「回收站」里恢复`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "批量删除失败，请重试");
+    }
+    batch.exitSelecting();
+    await load();
+  };
+
   const openCreate = () => {
     setEditing(null);
     setFormOpen(true);
@@ -210,7 +231,20 @@ export default function KnowledgePage() {
         onClick: () => void remove(entry),
       },
     ];
-    return { primary, more, all: [...primary, ...more] };
+    // 右键菜单顶部加「批量选择」入口；多选模式下右键菜单收起。
+    const all = batch.selecting
+      ? []
+      : [
+          {
+            key: "batch_select",
+            label: "批量选择",
+            icon: <CheckSquareOutlined />,
+            onClick: batch.enterSelecting,
+          },
+          ...primary,
+          ...more,
+        ];
+    return { primary, more, all };
   };
 
   return (
@@ -253,6 +287,24 @@ export default function KnowledgePage() {
         />
       </Space>
 
+      {batch.selecting && (
+        <BatchActionBar
+          count={batch.selectedCount}
+          onExit={batch.exitSelecting}
+          pageSelectAll={{
+            allSelected: entries.length > 0 && entries.every((item) => batch.isSelected(item.id)),
+            someSelected: entries.some((item) => batch.isSelected(item.id)),
+            onToggle: (checked) =>
+              batch.selectPage(
+                entries.map((item) => item.id),
+                checked,
+              ),
+          }}
+        >
+          <BatchDeleteButton count={batch.selectedCount} noun="条知识" onDelete={removeSelected} />
+        </BatchActionBar>
+      )}
+
       {loading ? (
         <LoadingBlock />
       ) : entries.length === 0 ? (
@@ -271,45 +323,56 @@ export default function KnowledgePage() {
             {entries.map((entry) => {
               const { primary, more, all } = actionsFor(entry);
               return (
+                // 右键菜单挂在 DOM 元素上（DetailTrigger 不透传 ref/事件，直接包它会失效）。
                 <RowContextMenu key={entry.id} items={all}>
-                  <DetailTrigger
-                    label={`打开知识条目「${entry.title}」的详情`}
-                    onOpen={() => void openView(entry)}
-                  >
-                    <Card size="small" className="knowledge-card">
-                      <div className="knowledge-card-head">
-                        <Tag color="blue">{entry.category}</Tag>
-                        <RowActions primary={primary} more={more} />
-                      </div>
-                      <Typography.Title level={5} ellipsis={{ tooltip: entry.title }}>
-                        {entry.title}
-                      </Typography.Title>
-                      {entry.tags.length > 0 && (
-                        <Space size={4} wrap className="knowledge-card-tags">
-                          {entry.tags.map((tag) => (
-                            <Tag key={tag}>{tag}</Tag>
-                          ))}
-                        </Space>
-                      )}
-                      {entry.content_excerpt && (
-                        <Typography.Paragraph
-                          type="secondary"
-                          ellipsis={{ rows: 3 }}
-                          className="knowledge-card-content"
-                        >
-                          {entry.content_excerpt}
-                        </Typography.Paragraph>
-                      )}
-                      <div className="knowledge-card-meta">
-                        {entry.source && (
-                          <Typography.Text type="secondary">{entry.source}</Typography.Text>
+                  <div>
+                    <DetailTrigger
+                      label={`打开知识条目「${entry.title}」的详情`}
+                      onOpen={() => void openView(entry)}
+                    >
+                      <Card size="small" className="knowledge-card">
+                        <div className="knowledge-card-head">
+                          {batch.selecting && (
+                            <Checkbox
+                              aria-label={`选择知识条目 ${entry.title}`}
+                              checked={batch.isSelected(entry.id)}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={() => batch.toggle(entry.id)}
+                            />
+                          )}
+                          <Tag color="blue">{entry.category}</Tag>
+                          <RowActions primary={primary} more={more} disabled={batch.selecting} />
+                        </div>
+                        <Typography.Title level={5} ellipsis={{ tooltip: entry.title }}>
+                          {entry.title}
+                        </Typography.Title>
+                        {entry.tags.length > 0 && (
+                          <Space size={4} wrap className="knowledge-card-tags">
+                            {entry.tags.map((tag) => (
+                              <Tag key={tag}>{tag}</Tag>
+                            ))}
+                          </Space>
                         )}
-                        <Typography.Text type="secondary">
-                          {formatDateTime(entry.updated_at)}
-                        </Typography.Text>
-                      </div>
-                    </Card>
-                  </DetailTrigger>
+                        {entry.content_excerpt && (
+                          <Typography.Paragraph
+                            type="secondary"
+                            ellipsis={{ rows: 3 }}
+                            className="knowledge-card-content"
+                          >
+                            {entry.content_excerpt}
+                          </Typography.Paragraph>
+                        )}
+                        <div className="knowledge-card-meta">
+                          {entry.source && (
+                            <Typography.Text type="secondary">{entry.source}</Typography.Text>
+                          )}
+                          <Typography.Text type="secondary">
+                            {formatDateTime(entry.updated_at)}
+                          </Typography.Text>
+                        </div>
+                      </Card>
+                    </DetailTrigger>
+                  </div>
                 </RowContextMenu>
               );
             })}

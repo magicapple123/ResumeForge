@@ -73,9 +73,12 @@ export default function AssistantPage({
     conversations,
     conversationsLoading,
     conversationsError,
-    contextOptions,
+    conversationSearch,
+    handleConversationSearch,
     reloadConversations,
     loadDetail,
+    loadEarlier,
+    earlierLoading,
     selectConversation,
     createConversation,
     ensureWelcomeConversation,
@@ -211,14 +214,6 @@ export default function AssistantPage({
   // 而不是骨架屏——用户点进来就是要马上开始写。
   const awaitingConversation =
     activeId !== null && (detail === null || (detailLoading && !hasActiveDetail));
-  const jobOptions = (contextOptions?.jobs ?? []).map((job) => ({
-    value: job.id,
-    label: `${job.company ? `${job.company} · ` : ""}${job.title}`,
-  }));
-  const resumeOptions = (contextOptions?.resumes ?? []).map((resume) => ({
-    value: resume.id,
-    label: resume.title,
-  }));
   const chooseStarterPrompt = (prompt: StarterPrompt) => {
     setContent(prompt.content);
     if (prompt.enableWebSearch) setWebSearch(true);
@@ -302,8 +297,19 @@ export default function AssistantPage({
   };
 
   // 在浏览器绘制前定位到末尾，避免详情刷新时先闪现旧的顶部位置。
+  // 「加载更早」（B5）是往顶部 prepend：这一次变化不该把视口拽到底部，跳过一次滚动，
+  // 让浏览器停在用户当前查看的位置附近。
+  const skipNextScrollRef = useRef(false);
+  const handleLoadEarlier = useCallback(async () => {
+    skipNextScrollRef.current = true;
+    await loadEarlier();
+  }, [loadEarlier]);
   useLayoutEffect(() => {
     if (awaitingConversation || (!historyMessages.length && !isActiveStream)) return;
+    if (skipNextScrollRef.current) {
+      skipNextScrollRef.current = false;
+      return;
+    }
     messageEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
   }, [awaitingConversation, detail?.id, detail?.messages, historyMessages.length, isActiveStream]);
 
@@ -357,6 +363,9 @@ export default function AssistantPage({
           onArchive={handleSidebarArchive}
           onFork={handleSidebarFork}
           onMoveToGroup={openGroupModal}
+          // 会话搜索（P0-2）：输入防抖后走服务端 keyword 过滤。
+          search={conversationSearch}
+          onSearchChange={handleConversationSearch}
           className={compact ? "assistant-sidebar--floating" : undefined}
         />
       )}
@@ -406,6 +415,10 @@ export default function AssistantPage({
           progressText={progressText}
           streamError={streamError}
           messageEndRef={messageEndRef}
+          hasEarlier={detail?.has_earlier ?? false}
+          earlierLoading={earlierLoading}
+          onLoadEarlier={() => void handleLoadEarlier()}
+          messagesTotal={detail?.messages_total ?? 0}
           enabledSkillCount={enabledSkills.length}
           skillsLoaded={skillsLoaded}
           assistantLabel={compact ? "投投" : "求职助手"}
@@ -432,8 +445,6 @@ export default function AssistantPage({
           skills={skills}
           skillsLoaded={skillsLoaded}
           togglingSkillId={togglingSkillId}
-          jobOptions={jobOptions}
-          resumeOptions={resumeOptions}
           onContentChange={setContent}
           onJobChange={setJobId}
           onResumeChange={setResumeId}

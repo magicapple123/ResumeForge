@@ -9,6 +9,7 @@
 其余"建议改进"（例如强主张没填面试细节）走**服务端算出的 ``warnings``** 而不是保存失败：
 它是提醒不是矛盾，硬拦会让用户放弃维护台账，反而拿不到这套规则的好处。
 """
+
 from __future__ import annotations
 
 import re
@@ -259,6 +260,42 @@ class ClaimListOut(BaseModel):
     category_counts: dict[str, int] = Field(default_factory=dict)
 
 
+# 分页列表行的长文本截断长度（与知识库/面经列表摘要同量级）。
+MAX_CLAIM_LIST_EXCERPT_CHARS = 200
+
+
+class ClaimSummary(BaseModel):
+    """分页列表行（``GET /api/claims/page``）。
+
+    ``source_fact`` / ``candidate_wording`` 单条上限 8_000 字符——千级台账带着全文
+    翻页会拖出 MB 级响应，而列表卡片只需要一小段预览；全文走 ``GET /{claim_id}``。
+    服务端改进建议（``warnings``）保留：列表上就要提示哪条需要补内容。
+    """
+
+    id: int
+    title: str = ""
+    category: str = ""
+    subject: str = ""
+    source_fact_excerpt: str = ""
+    candidate_wording_excerpt: str = ""
+    responsibility_level: str = ""
+    verification_status: str = ""
+    last_verified: str = ""
+    warnings: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ClaimPageListOut(BaseModel):
+    """分页列表：当前页摘要行 + 全筛选集的 SQL 汇总（口径与旧端点一致）。"""
+
+    items: list[ClaimSummary]
+    total: int
+    confirmed_count: int
+    pending_count: int
+    category_counts: dict[str, int] = Field(default_factory=dict)
+
+
 class ClaimDigestOut(BaseModel):
     """给生成链路用的事实基线摘要（只含可进入正式材料的内容）。"""
 
@@ -303,14 +340,35 @@ class ClaimDraftOut(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class ClaimBatchRequest(BaseModel):
+    """批量删除请求：与 ``schemas.resume.ResumeBatchRequest`` 同款口径（去重 + 上限 500）。"""
+
+    claim_ids: list[int] = Field(max_length=500)
+
+    @field_validator("claim_ids")
+    @classmethod
+    def validate_and_deduplicate_ids(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise ValueError("请至少选择一条台账条目")
+        return list(dict.fromkeys(value))
+
+
+class ClaimBatchDeleteResult(BaseModel):
+    deleted: int
+
+
 __all__ = [
+    "ClaimBatchDeleteResult",
+    "ClaimBatchRequest",
     "ClaimCreate",
     "ClaimDigestOut",
     "ClaimDraftOut",
     "ClaimDraftRequest",
     "ClaimListOut",
     "ClaimOut",
+    "ClaimPageListOut",
     "ClaimSource",
+    "ClaimSummary",
     "ClaimUpdate",
     "MAX_CLAIM_TITLE_CHARS",
     "SOURCE_TYPES",

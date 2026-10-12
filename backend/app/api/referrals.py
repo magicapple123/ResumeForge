@@ -3,6 +3,7 @@
 内推的增删改查 + 转化率统计。删除走软删除（``trash.live_only`` 列表里不再出现），
 彻底删除在回收站里另做。``/stats`` 注册在 ``/{referral_id}`` 之前，语义更清晰。
 """
+
 import logging
 from pathlib import Path
 
@@ -11,14 +12,17 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.referral import REFERRAL_STATUSES
+from ..models.referral import REFERRAL_STATUSES, Referral
 from ..schemas.referral import (
+    ReferralBatchDeleteResult,
+    ReferralBatchRequest,
     ReferralCreate,
     ReferralImageUploadOut,
     ReferralOut,
     ReferralStatsOut,
     ReferralUpdate,
 )
+from ..services import trash
 from ..services.referral_service import (
     create_referral,
     delete_referral,
@@ -27,6 +31,7 @@ from ..services.referral_service import (
     referral_or_none,
     referral_out,
     referral_stats,
+    referrals_out,
     save_referral_image,
     update_referral,
 )
@@ -57,7 +62,8 @@ def read_referrals(
     if status and status not in REFERRAL_STATUSES:
         raise HTTPException(status_code=422, detail="未知的内推状态")
     rows = list_referrals(db, status=status, keyword=keyword, limit=limit)
-    return [referral_out(db, row) for row in rows]
+    # P2-1：批量预取 track 派生 converted，替代逐行点查（200 条 = 201 查询 → 2 查询）。
+    return referrals_out(db, rows)
 
 
 @router.get("/stats", response_model=ReferralStatsOut)
@@ -94,6 +100,33 @@ def read_referral_image(filename: str, db: Session = Depends(get_db)):
 @router.post("", response_model=ReferralOut, status_code=201)
 def create_referral_entry(payload: ReferralCreate, db: Session = Depends(get_db)):
     return referral_out(db, create_referral(db, payload))
+
+
+@router.post("/batch-delete", response_model=ReferralBatchDeleteResult)
+def batch_delete_referrals(payload: ReferralBatchRequest, db: Session = Depends(get_db)):
+    """批量移入回收站（软删除）：单次上限 500，与简历批量删除同一口径。
+
+    语义对齐单条 ``DELETE /{referral_id}``：任何一条 id 不存在或已在回收站里即
+    整体 404 并附缺失 id 清单，不做"删一半"。单条删除只软删行、不连带清理备注
+    图片文件，这里沿用同一行为。**声明在 ``/{referral_id}`` 之前**（同 ``/stats``）。
+    """
+    referrals: list[Referral] = []
+    missing: list[int] = []
+    for referral_id in payload.referral_ids:
+        referral = trash.get_live(db, Referral, referral_id)
+        if referral is None:
+            missing.append(referral_id)
+        else:
+            referrals.append(referral)
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"以下内推不存在或已被删除：{'、'.join(map(str, missing))}",
+        )
+    for referral in referrals:
+        trash.soft_delete(db, "referral", referral)
+    db.commit()
+    return ReferralBatchDeleteResult(deleted=len(referrals))
 
 
 @router.patch("/{referral_id}", response_model=ReferralOut)

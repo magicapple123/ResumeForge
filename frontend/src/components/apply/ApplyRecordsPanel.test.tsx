@@ -8,16 +8,20 @@ import ApplyRecordsPanel from "./ApplyRecordsPanel";
 
 const apiMocks = vi.hoisted(() => ({
   listRecordBatches: vi.fn(),
+  listRecordBatchItems: vi.fn(),
   retryRecord: vi.fn(),
   deleteRecord: vi.fn(),
   deleteRecordBatch: vi.fn(),
+  batchDeleteRecords: vi.fn(),
 }));
 
 vi.mock("../../api/apply", () => ({
   listRecordBatches: apiMocks.listRecordBatches,
+  listRecordBatchItems: apiMocks.listRecordBatchItems,
   retryRecord: apiMocks.retryRecord,
   deleteRecord: apiMocks.deleteRecord,
   deleteRecordBatch: apiMocks.deleteRecordBatch,
+  batchDeleteRecords: apiMocks.batchDeleteRecords,
 }));
 
 const RECORD: ApplyRecord = {
@@ -62,7 +66,8 @@ const BATCHES: Page<ApplyRecordBatch> = {
       message: "投递任务已完成",
       created_at: "2026-09-17T08:00:00",
       finished_at: "2026-09-17T08:05:00",
-      items: [RECORD, RECORD_SUCCESS],
+      matched_count: 2,
+      items: [],
     },
     {
       id: 6,
@@ -75,15 +80,22 @@ const BATCHES: Page<ApplyRecordBatch> = {
       message: "",
       created_at: "2026-09-16T08:00:00",
       finished_at: "2026-09-16T08:01:00",
+      matched_count: 0,
       items: [],
     },
   ],
   total: 2,
 };
 
+const BATCH_ITEMS: Page<ApplyRecord> = {
+  items: [RECORD, RECORD_SUCCESS],
+  total: 2,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.listRecordBatches.mockResolvedValue(BATCHES);
+  apiMocks.listRecordBatchItems.mockResolvedValue(BATCH_ITEMS);
   apiMocks.retryRecord.mockResolvedValue({ id: 99 } as never);
 });
 
@@ -113,33 +125,68 @@ function batchHead(batchId: number): HTMLElement {
 }
 
 describe("ApplyRecordsPanel (grouped by batch)", () => {
-  it("renders one collapsed group per batch with batch-level stats", async () => {
+  it("初次分组请求走轻量分页（include_items=false），组头展示命中数", async () => {
     await renderPanel();
 
     expect(screen.getByTestId("record-batch-7")).toBeInTheDocument();
     expect(screen.getByTestId("record-batch-6")).toBeInTheDocument();
-    // 组头展示批次号与统计（成功/失败/跳过是该批次自己的账）。
+    // 轻量分页：批次不带明细，只带 matched_count。
+    await waitFor(() => {
+      const calls = apiMocks.listRecordBatches.mock.calls;
+      expect(calls[calls.length - 1][0]).toMatchObject({ include_items: false });
+    });
+    // 组头展示「N 条记录」（来自 matched_count，而不是本地数 items）。
     const head7 = batchHead(7);
     expect(within(head7).getByText("批次 #7")).toBeInTheDocument();
+    expect(within(head7).getByText(/^2 条记录/)).toBeInTheDocument();
     expect(within(head7).getByText(/成功 1/)).toBeInTheDocument();
     expect(within(head7).getByText(/失败 1/)).toBeInTheDocument();
+    // 未展开时不该调明细端点。
+    expect(apiMocks.listRecordBatchItems).not.toHaveBeenCalled();
     // 未展开时看不到岗位明细。
     expect(screen.queryByText("高级后端工程师（高并发方向）")).not.toBeInTheDocument();
   });
 
-  it("expands a batch to reveal its records, then collapses again", async () => {
+  it("展开批次时才调明细端点（带与列表一致的筛选参数），折叠再展开用缓存", async () => {
     await renderPanel();
 
+    // 展开批次 7：调明细端点，参数与列表一致。
     fireEvent.click(batchHead(7));
     expect(await screen.findByText("高级后端工程师（高并发方向）")).toBeInTheDocument();
+    expect(apiMocks.listRecordBatchItems).toHaveBeenCalledTimes(1);
+    expect(apiMocks.listRecordBatchItems).toHaveBeenCalledWith(7, {
+      keyword: "",
+      result: "",
+      page: 1,
+      page_size: 20,
+    });
     expect(screen.getByText("全栈工程师")).toBeInTheDocument();
     // 每条记录都有自己的 详情 / 重投 按钮。
     expect(screen.getAllByRole("button", { name: /详\s*情/ }).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByRole("button", { name: /重投/ }).length).toBeGreaterThanOrEqual(2);
 
-    // 再次点击收起。
+    // 折叠不丢：收起再展开不再重复调明细端点。
     fireEvent.click(batchHead(7));
-    expect(screen.queryByText("高级后端工程师（高并发方向）")).not.toBeInTheDocument();
+    fireEvent.click(batchHead(7));
+    expect(await screen.findByText("高级后端工程师（高并发方向）")).toBeInTheDocument();
+    expect(apiMocks.listRecordBatchItems).toHaveBeenCalledTimes(1);
+  });
+
+  it("明细支持批内服务端翻页", async () => {
+    apiMocks.listRecordBatchItems.mockResolvedValue({
+      items: [RECORD_SUCCESS],
+      total: 22,
+    });
+    await renderPanel();
+
+    fireEvent.click(batchHead(7));
+    expect(await screen.findByText("全栈工程师")).toBeInTheDocument();
+    // total=22 > 20：批内分页器出现，翻到第 2 页携带 page=2。
+    fireEvent.click(await screen.findByTitle("2"));
+    await waitFor(() => {
+      const calls = apiMocks.listRecordBatchItems.mock.calls;
+      expect(calls[calls.length - 1]).toEqual([7, expect.objectContaining({ page: 2 })]);
+    });
   });
 
   it("opens the detail Drawer from an expanded row with full failure info including the URL", async () => {
@@ -260,6 +307,59 @@ describe("删除投递记录", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
 
     expect(apiMocks.deleteRecordBatch).not.toHaveBeenCalled();
+  });
+
+  it("批内多选：组头菜单进选择模式 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除并重拉", async () => {
+    apiMocks.batchDeleteRecords.mockResolvedValue({ deleted: 2 });
+    // reload 后 data 必须是**新对象**（真实后端每次返回新响应），明细缓存才会作废重取；
+    // mockResolvedValue 会复用同一引用，绕开 prevData 守卫让重取断言失真。
+    apiMocks.listRecordBatches.mockImplementation(async () => ({
+      items: BATCHES.items,
+      total: BATCHES.total,
+    }));
+    await renderPanel();
+
+    fireEvent.click(batchHead(7));
+    await screen.findByText("高级后端工程师（高并发方向）");
+
+    // 入口在组头「···」菜单：多选范围＝批内明细表。
+    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[0]);
+    fireEvent.click(await screen.findByText("批量选择"));
+
+    // 明细表出现 rowSelection：第 0 个是工具条「全选本页」，第 1 个是表头全选，之后是数据行。
+    const pageSelectAll = screen
+      .getAllByRole("checkbox")
+      .find((box) => (box.closest("label")?.textContent ?? "").includes("全选本页"));
+    const rowBoxes = () => screen.getAllByRole("checkbox").filter((box) => box !== pageSelectAll);
+    fireEvent.click(rowBoxes()[1]!);
+    fireEvent.click(rowBoxes()[2]!);
+    expect(screen.getByText("已选 2 项")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    // Popconfirm 确认（文案带数量）；确认前绝不发请求。
+    const popover = await waitFor(() => {
+      const root = document.querySelector(".ant-popover");
+      expect(root).not.toBeNull();
+      return root as HTMLElement;
+    });
+    expect(popover.textContent).toContain("删除选中的 2 条投递记录");
+    expect(apiMocks.batchDeleteRecords).not.toHaveBeenCalled();
+    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+
+    await waitFor(() => {
+      expect(apiMocks.batchDeleteRecords).toHaveBeenCalledTimes(1);
+    });
+    expect(apiMocks.batchDeleteRecords).toHaveBeenCalledWith([1, 2]);
+    // 成功后清空选择并 reload：分组列表重拉、展开中的批次明细缓存作废后重取。
+    expect(await screen.findByText(/已删除 2 条投递记录/)).toBeInTheDocument();
+    expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
+    await waitFor(
+      () => {
+        expect(apiMocks.listRecordBatches.mock.calls.length).toBeGreaterThan(1);
+        expect(apiMocks.listRecordBatchItems.mock.calls.length).toBeGreaterThan(1);
+      },
+      { timeout: 5000 },
+    );
   });
 });
 

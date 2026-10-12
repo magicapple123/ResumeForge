@@ -9,12 +9,14 @@
 - **事实基线**（:func:`build_baseline`）：生成简历时注入的已确认事实，以及必须避开
   的未确认说法。台账为空时返回空基线，整条生成链路的行为与以前完全一致。
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..models.claim import (
@@ -68,14 +70,14 @@ def claim_or_none(db: Session, claim_id: int) -> ClaimRecord | None:
     return record
 
 
-def list_claims(
+def _claims_query(
     db: Session,
     *,
     category: str = "",
     status: str = "",
     keyword: str = "",
-) -> list[ClaimRecord]:
-    """按分类 / 核实状态 / 关键词检索；默认按最近更新排序。"""
+):
+    """列表共用的过滤与排序：旧全量端点、分页端点与 SQL 汇总必须同源。"""
     query = db.query(ClaimRecord).filter(trash.live_only(ClaimRecord))
     if category:
         query = query.filter(ClaimRecord.category == category)
@@ -90,7 +92,34 @@ def list_claims(
             | ClaimRecord.source_fact.like(like)
             | ClaimRecord.candidate_wording.like(like)
         )
-    return query.order_by(ClaimRecord.updated_at.desc(), ClaimRecord.id.desc()).all()
+    return query.order_by(ClaimRecord.updated_at.desc(), ClaimRecord.id.desc())
+
+
+def list_claims(
+    db: Session,
+    *,
+    category: str = "",
+    status: str = "",
+    keyword: str = "",
+) -> list[ClaimRecord]:
+    """按分类 / 核实状态 / 关键词检索；默认按最近更新排序。"""
+    return _claims_query(db, category=category, status=status, keyword=keyword).all()
+
+
+def list_claims_page(
+    db: Session,
+    *,
+    category: str = "",
+    status: str = "",
+    keyword: str = "",
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[ClaimRecord], int]:
+    """分页取台账：过滤与排序与 :func:`list_claims` 完全一致，total 反映筛选后集合。"""
+    base = _claims_query(db, category=category, status=status, keyword=keyword)
+    total = base.count()
+    rows = base.offset((max(1, page) - 1) * page_size).limit(max(1, page_size)).all()
+    return rows, total
 
 
 def _apply_payload(record: ClaimRecord, payload: ClaimCreate | ClaimUpdate) -> None:
@@ -181,8 +210,7 @@ def claim_warnings(record: ClaimRecord) -> list[str]:
         and not has_placeholder(record.candidate_wording)
     ):
         warnings.append(
-            "待确认的表述没有加【待补】占位符；"
-            "导出终稿时会因为看不出它还没核实而被误用"
+            "待确认的表述没有加【待补】占位符；导出终稿时会因为看不出它还没核实而被误用"
         )
     if status == VERIFICATION_EXPIRED:
         warnings.append("这条已标记为过期，使用前请更新内容并重新核实")
@@ -216,6 +244,39 @@ def summarize(records: list[ClaimRecord]) -> dict[str, Any]:
             pending += 1
     return {
         "total": len(records),
+        "confirmed_count": confirmed,
+        "pending_count": pending,
+        "category_counts": category_counts,
+    }
+
+
+def summarize_query(
+    db: Session,
+    *,
+    category: str = "",
+    status: str = "",
+    keyword: str = "",
+) -> dict[str, Any]:
+    """:func:`summarize` 的 SQL 版：计数下推数据库，不再把全量记录拉进内存。
+
+    口径与 :func:`summarize` 完全一致（对**同一份过滤集合**计数）——分页端点用
+    它代替"先拉全量再数"，千级台账时省掉整表 ORM 实例化。两侧的一致性由
+    ``test_batch_b_page_endpoints`` 的同数据比对用例钉住。
+    """
+    base = _claims_query(db, category=category, status=status, keyword=keyword)
+    total = base.count()
+    confirmed = base.filter(ClaimRecord.verification_status == VERIFICATION_CONFIRMED).count()
+    pending = base.filter(ClaimRecord.verification_status == VERIFICATION_PENDING).count()
+    rows = (
+        base.with_entities(ClaimRecord.category, func.count(ClaimRecord.id))
+        .group_by(ClaimRecord.category)
+        .all()
+    )
+    category_counts = {cat: 0 for cat in CLAIM_CATEGORIES}
+    for cat, count in rows:
+        category_counts[cat] = category_counts.get(cat, 0) + int(count)
+    return {
+        "total": total,
         "confirmed_count": confirmed,
         "pending_count": pending,
         "category_counts": category_counts,
@@ -312,7 +373,8 @@ __all__ = [
     "create_claim",
     "delete_claim",
     "list_claims",
+    "list_claims_page",
     "summarize",
+    "summarize_query",
     "update_claim",
 ]
-

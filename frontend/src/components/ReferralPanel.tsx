@@ -3,11 +3,18 @@
  * ``converted`` 由后端按关联漏斗后置位派生，前端只展示、不自己算口径。顶部转化率卡展示
  * 有效内推总数、已转化数与转化率。备注图片先上传拿相对路径，再随表单写入 ``note_images``。
  */
-import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  CheckSquareOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  MoreOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
 import {
   App,
   Button,
   Card,
+  Checkbox,
   Dropdown,
   Empty,
   Form,
@@ -23,6 +30,7 @@ import {
 import LoadingBlock from "./common/LoadingBlock";
 import { useCallback, useEffect, useState } from "react";
 import {
+  batchDeleteReferrals,
   createReferral,
   deleteReferral,
   getReferralStats,
@@ -41,19 +49,16 @@ import { MAX_NOTE_IMAGES } from "./referral/ReferralFormFields";
 import { isFromInnerControl } from "./common/recordDetailCore";
 import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { useRowActionMenu } from "./common/rowActionMenu";
+import BatchActionBar from "./common/BatchActionBar";
+import BatchDeleteButton from "./common/BatchDeleteButton";
+import { useBatchSelection } from "../hooks/useBatchSelection";
+import { RowContextMenu } from "./common/RowActions";
 
-interface Option {
-  value: number;
-  label: string;
-}
-
-interface Props {
-  jobOptions?: Option[];
-  trackOptions?: Option[];
-}
-
-export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Props) {
+export default function ReferralPanel() {
   const { message } = App.useApp();
+  // 批量选择：勾选若干条后一次删除（软删，全部进回收站）；列表是全量下发，
+  // 选区即当前已加载的全部条目。
+  const batch = useBatchSelection<number>();
   const [items, setItems] = useState<Referral[]>([]);
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,9 +69,14 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
   const [detail, setDetail] = useState<Referral | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+  // 备注图上传进度（0-100；null 表示不在上传中），在表单上传按钮旁画进度条。
+  const [imageUploadPercent, setImageUploadPercent] = useState<number | null>(null);
   const [noteImages, setNoteImages] = useState<string[]>([]);
   const [form] = Form.useForm<ReferralPayload>();
   const buildMenu = useRowActionMenu();
+  // 编辑时的已绑定岗位 / 漏斗 id（P0-1）：传给 ReferralFormFields 做 ensure-on-edit。
+  const [initialJobId, setInitialJobId] = useState<number | null>(null);
+  const [initialTrackId, setInitialTrackId] = useState<number | null>(null);
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
   // 返回 null 表示失败（错误提示在这里统一给出）。
@@ -128,6 +138,8 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
 
   const openCreate = () => {
     setEditing(null);
+    setInitialJobId(null);
+    setInitialTrackId(null);
     setNoteImages([]);
     form.resetFields();
     setModalOpen(true);
@@ -135,6 +147,8 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
 
   const openEdit = (item: Referral) => {
     setEditing(item);
+    setInitialJobId(item.job_id ?? null);
+    setInitialTrackId(item.track_id ?? null);
     setNoteImages(item.note_images ?? []);
     form.setFieldsValue({
       company: item.company,
@@ -173,13 +187,15 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
       return Upload.LIST_IGNORE;
     }
     setUploadingImages(true);
+    setImageUploadPercent(0);
     try {
-      const { path } = await uploadReferralImage(file);
+      const { path } = await uploadReferralImage(file, (percent) => setImageUploadPercent(percent));
       setNoteImages((prev) => [...prev, path]);
     } catch (error) {
       message.error(error instanceof Error ? error.message : "上传图片失败");
     } finally {
       setUploadingImages(false);
+      setImageUploadPercent(null);
     }
     // 阻止 antd 的默认上传：文件已由 uploadReferralImage 落盘。
     return Upload.LIST_IGNORE;
@@ -220,6 +236,21 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
     }
   };
 
+  /** 批量删除：一次请求删完（软删），成功后清空选择并刷新列表与统计。 */
+  const removeSelected = async () => {
+    const ids = [...batch.selectedIds];
+    if (ids.length === 0) return;
+    try {
+      const { deleted } = await batchDeleteReferrals(ids);
+      message.success(`已删除 ${deleted} 条内推，可在「回收站」里恢复`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "批量删除失败，请重试");
+    }
+    batch.exitSelecting();
+    await loadList();
+    await loadStats();
+  };
+
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <ReferralStatsCard stats={stats} />
@@ -246,6 +277,24 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
         </Space>
       </Card>
 
+      {batch.selecting && (
+        <BatchActionBar
+          count={batch.selectedCount}
+          onExit={batch.exitSelecting}
+          pageSelectAll={{
+            allSelected: items.length > 0 && items.every((item) => batch.isSelected(item.id)),
+            someSelected: items.some((item) => batch.isSelected(item.id)),
+            onToggle: (checked) =>
+              batch.selectPage(
+                items.map((item) => item.id),
+                checked,
+              ),
+          }}
+        >
+          <BatchDeleteButton count={batch.selectedCount} noun="条内推" onDelete={removeSelected} />
+        </BatchActionBar>
+      )}
+
       {loading ? (
         <LoadingBlock />
       ) : items.length === 0 ? (
@@ -263,81 +312,121 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
                 setDetail(item);
               }}
               actions={[
-                <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
-                  详情
-                </Button>,
-                <Dropdown
-                  key="more"
-                  trigger={["click"]}
-                  menu={{
-                    items: buildMenu([
-                      {
-                        key: "edit",
-                        label: "编辑",
-                        icon: <EditOutlined />,
-                        onClick: () => openEdit(item),
-                      },
-                      {
-                        key: "delete",
-                        label: "删除",
-                        danger: true,
-                        icon: <DeleteOutlined />,
-                        confirm: "删除这条内推？删除后可在回收站里找回。",
-                        onClick: () => void remove(item),
-                      },
-                    ]),
-                  }}
-                >
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<MoreOutlined />}
-                    aria-label={`更多操作 ${item.referrer_name || item.position}`}
+                batch.selecting ? (
+                  <Checkbox
+                    key="select"
+                    aria-label={`选择内推 ${item.referrer_name || item.position}`}
+                    checked={batch.isSelected(item.id)}
+                    onChange={() => batch.toggle(item.id)}
                   />
-                </Dropdown>,
+                ) : (
+                  <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
+                    详情
+                  </Button>
+                ),
+                ...(batch.selecting
+                  ? []
+                  : [
+                      <Dropdown
+                        key="more"
+                        trigger={["click"]}
+                        menu={{
+                          items: buildMenu([
+                            {
+                              key: "edit",
+                              label: "编辑",
+                              icon: <EditOutlined />,
+                              onClick: () => openEdit(item),
+                            },
+                            {
+                              key: "delete",
+                              label: "删除",
+                              danger: true,
+                              icon: <DeleteOutlined />,
+                              confirm: "删除这条内推？删除后可在回收站里找回。",
+                              onClick: () => void remove(item),
+                            },
+                          ]),
+                        }}
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<MoreOutlined />}
+                          aria-label={`更多操作 ${item.referrer_name || item.position}`}
+                        />
+                      </Dropdown>,
+                    ]),
               ]}
             >
-              <ListyMeta
-                title={
-                  <Space size={6} wrap>
-                    <span>
-                      {item.referrer_name || "未记内推人"}
-                      {item.position ? ` · ${item.position}` : ""}
-                    </span>
-                    <Tag color={REFERRAL_STATUS_COLORS[item.status as ReferralStatus] ?? "default"}>
-                      {REFERRAL_STATUS_LABELS[item.status as ReferralStatus] ?? item.status}
-                    </Tag>
-                    {item.converted && <Tag color="green">已转化</Tag>}
-                  </Space>
+              {/* 右键菜单挂在条目主体上：多选模式收起（入口只在正常模式的菜单里）。 */}
+              <RowContextMenu
+                items={
+                  batch.selecting
+                    ? []
+                    : [
+                        {
+                          key: "batch_select",
+                          label: "批量选择",
+                          icon: <CheckSquareOutlined />,
+                          onClick: batch.enterSelecting,
+                        },
+                      ]
                 }
-                description={
-                  <Space orientation="vertical" size={2} style={{ width: "100%" }}>
-                    <Typography.Text type="secondary">
-                      {item.company}
-                      {item.relation ? ` · ${item.relation}` : ""}
-                      {item.channel ? ` · ${item.channel}` : ""}
-                    </Typography.Text>
-                    {item.referral_code && (
-                      <Typography.Text type="secondary">
-                        内推码：{item.referral_code}
-                      </Typography.Text>
-                    )}
-                    {item.note && <Typography.Text type="secondary">{item.note}</Typography.Text>}
-                    {(item.note_images ?? []).length > 0 && (
-                      <Space size={4} wrap>
-                        {(item.note_images ?? []).map((path) => (
-                          <img
-                            key={path}
-                            src={referralImageUrl(path)}
-                            alt="备注图"
-                            style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 3 }}
-                          />
-                        ))}
+              >
+                <div>
+                  <ListyMeta
+                    title={
+                      <Space size={6} wrap>
+                        <span>
+                          {item.referrer_name || "未记内推人"}
+                          {item.position ? ` · ${item.position}` : ""}
+                        </span>
+                        <Tag
+                          color={REFERRAL_STATUS_COLORS[item.status as ReferralStatus] ?? "default"}
+                        >
+                          {REFERRAL_STATUS_LABELS[item.status as ReferralStatus] ?? item.status}
+                        </Tag>
+                        {item.converted && <Tag color="green">已转化</Tag>}
                       </Space>
-                    )}
-                  </Space>
-                }
-              />
+                    }
+                    description={
+                      <Space orientation="vertical" size={2} style={{ width: "100%" }}>
+                        <Typography.Text type="secondary">
+                          {item.company}
+                          {item.relation ? ` · ${item.relation}` : ""}
+                          {item.channel ? ` · ${item.channel}` : ""}
+                        </Typography.Text>
+                        {item.referral_code && (
+                          <Typography.Text type="secondary">
+                            内推码：{item.referral_code}
+                          </Typography.Text>
+                        )}
+                        {item.note && (
+                          <Typography.Text type="secondary">{item.note}</Typography.Text>
+                        )}
+                        {(item.note_images ?? []).length > 0 && (
+                          <Space size={4} wrap>
+                            {(item.note_images ?? []).map((path) => (
+                              <img
+                                key={path}
+                                src={referralImageUrl(path)}
+                                alt="备注图"
+                                style={{
+                                  width: 32,
+                                  height: 32,
+                                  objectFit: "cover",
+                                  borderRadius: 3,
+                                }}
+                              />
+                            ))}
+                          </Space>
+                        )}
+                      </Space>
+                    }
+                  />
+                </div>
+              </RowContextMenu>
             </ListyItem>
           )}
         />
@@ -354,10 +443,11 @@ export default function ReferralPanel({ jobOptions = [], trackOptions = [] }: Pr
       >
         <ReferralFormFields
           form={form}
-          jobOptions={jobOptions}
-          trackOptions={trackOptions}
+          initialJobId={initialJobId}
+          initialTrackId={initialTrackId}
           noteImages={noteImages}
           uploadingImages={uploadingImages}
+          imageUploadPercent={imageUploadPercent}
           beforeImageUpload={beforeImageUpload}
           removeImage={removeImage}
         />

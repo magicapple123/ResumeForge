@@ -18,6 +18,7 @@ const apiMocks = vi.hoisted(() => ({
   createKnowledge: vi.fn(),
   updateKnowledge: vi.fn(),
   deleteKnowledge: vi.fn(),
+  batchDeleteKnowledge: vi.fn(),
 }));
 
 vi.mock("../api/knowledge", () => apiMocks);
@@ -285,5 +286,43 @@ describe("KnowledgePage", () => {
       );
     });
     expect(await screen.findByText("第 13 条")).toBeInTheDocument();
+  });
+
+  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除请求带全部 id 并重拉", async () => {
+    apiMocks.listKnowledgePage.mockResolvedValue(
+      makePage([
+        makeKnowledge({ id: 1, title: "条目一" }),
+        makeKnowledge({ id: 2, title: "条目二" }),
+      ]),
+    );
+    apiMocks.batchDeleteKnowledge.mockResolvedValue({ deleted: 2 });
+    renderPage();
+
+    await screen.findByText("条目一");
+    fireEvent.contextMenu(screen.getByText("条目一"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择知识条目 条目一" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择知识条目 条目二" }));
+    expect(screen.getByText("已选 2 项")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    // Popconfirm 确认（文案带数量）；确认前绝不发请求。
+    const popover = await waitFor(() => {
+      const root = document.querySelector(".ant-popover");
+      expect(root).not.toBeNull();
+      return root as HTMLElement;
+    });
+    expect(popover.textContent).toContain("删除选中的 2 条知识");
+    expect(apiMocks.batchDeleteKnowledge).not.toHaveBeenCalled();
+    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+
+    await waitFor(() => {
+      expect(apiMocks.batchDeleteKnowledge).toHaveBeenCalledTimes(1);
+    });
+    expect(apiMocks.batchDeleteKnowledge).toHaveBeenCalledWith([1, 2]);
+    // 成功后清空选择并重拉当前页。
+    expect(await screen.findByText(/已删除 2 条知识/)).toBeInTheDocument();
+    expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
   });
 });

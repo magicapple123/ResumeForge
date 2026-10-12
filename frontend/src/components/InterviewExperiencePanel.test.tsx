@@ -1,5 +1,5 @@
-/** 面经知识库面板：列表渲染、真实问题清单展示、错误透出。 */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+/** 面经知识库面板：列表渲染、真实问题清单展示、错误透出、批量删除。 */
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import InterviewExperiencePanel from "./InterviewExperiencePanel";
@@ -9,6 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   createInterviewExperience: vi.fn(),
   updateInterviewExperience: vi.fn(),
   deleteInterviewExperience: vi.fn(),
+  batchDeleteInterviewExperiences: vi.fn(),
 }));
 
 vi.mock("../api/interviewExperiences", () => apiMocks);
@@ -46,7 +47,8 @@ describe("InterviewExperiencePanel", () => {
     apiMocks.listInterviewExperiences.mockResolvedValue(ITEMS);
     render(
       <AntApp>
-        <InterviewExperiencePanel jobOptions={[]} />
+        {/* 关联岗位下拉已改为内部远程搜索（P0-1），不再从页面传选项。 */}
+        <InterviewExperiencePanel />
       </AntApp>,
     );
 
@@ -61,7 +63,8 @@ describe("InterviewExperiencePanel", () => {
     apiMocks.listInterviewExperiences.mockRejectedValue(new Error("读取面经失败"));
     render(
       <AntApp>
-        <InterviewExperiencePanel jobOptions={[]} />
+        {/* 关联岗位下拉已改为内部远程搜索（P0-1），不再从页面传选项。 */}
+        <InterviewExperiencePanel />
       </AntApp>,
     );
 
@@ -72,7 +75,8 @@ describe("InterviewExperiencePanel", () => {
     apiMocks.listInterviewExperiences.mockResolvedValue(ITEMS);
     render(
       <AntApp>
-        <InterviewExperiencePanel jobOptions={[]} />
+        {/* 关联岗位下拉已改为内部远程搜索（P0-1），不再从页面传选项。 */}
+        <InterviewExperiencePanel />
       </AntApp>,
     );
 
@@ -82,5 +86,46 @@ describe("InterviewExperiencePanel", () => {
     expect(await screen.findByText("正文")).toBeInTheDocument();
     expect(screen.getByText("真实问题（2）")).toBeInTheDocument();
     expect(screen.getByText("先问八股再深挖项目")).toBeInTheDocument();
+  });
+
+  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除请求带全部 id 并重拉", async () => {
+    const two = [ITEMS[0], { ...ITEMS[0], id: 2, title: "某司二面" }];
+    apiMocks.listInterviewExperiences.mockResolvedValue(two);
+    apiMocks.batchDeleteInterviewExperiences.mockResolvedValue({ deleted: 2 });
+    render(
+      <AntApp>
+        <InterviewExperiencePanel />
+      </AntApp>,
+    );
+
+    await screen.findByText("某司一面");
+    fireEvent.contextMenu(screen.getByText("某司一面"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择面经 某司一面" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择面经 某司二面" }));
+    expect(screen.getByText("已选 2 项")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    // Popconfirm 确认（文案带数量）；确认前绝不发请求。
+    const popover = await waitFor(() => {
+      const root = document.querySelector(".ant-popover");
+      expect(root).not.toBeNull();
+      return root as HTMLElement;
+    });
+    expect(popover.textContent).toContain("删除选中的 2 条面经");
+    expect(apiMocks.batchDeleteInterviewExperiences).not.toHaveBeenCalled();
+    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+
+    await waitFor(() => {
+      expect(apiMocks.batchDeleteInterviewExperiences).toHaveBeenCalledTimes(1);
+    });
+    expect(apiMocks.batchDeleteInterviewExperiences).toHaveBeenCalledWith([1, 2]);
+    // 成功后清空选择并重拉列表。
+    expect(await screen.findByText(/已删除 2 条面经/)).toBeInTheDocument();
+    expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(apiMocks.listInterviewExperiences.mock.calls.length).toBeGreaterThan(1);
+    });
   });
 });

@@ -5,8 +5,9 @@ import {
   CommentOutlined,
   CopyOutlined,
   DeleteOutlined,
+  UpOutlined,
 } from "@ant-design/icons";
-import { Alert, App, Checkbox, Typography } from "antd";
+import { Alert, App, Button, Checkbox, Typography } from "antd";
 import { memo } from "react";
 import type { RefObject } from "react";
 import type {
@@ -52,6 +53,13 @@ interface Props {
   progressText: string;
   streamError: string;
   messageEndRef: RefObject<HTMLDivElement | null>;
+  /** 还有更早的消息未加载（B5 按需加载）：列表顶部出「加载更早」。 */
+  hasEarlier?: boolean;
+  /** 「加载更早」请求进行中（按钮转圈，防连点）。 */
+  earlierLoading?: boolean;
+  onLoadEarlier?: () => void;
+  /** 会话消息总数（B5：消息被截断时如实显示全量数；0 = 未知，不显示）。 */
+  messagesTotal?: number;
   enabledSkillCount: number;
   skillsLoaded: boolean;
   onChoosePrompt: (prompt: StarterPrompt) => void;
@@ -186,6 +194,10 @@ export default function AssistantMessageList({
   progressText,
   streamError,
   messageEndRef,
+  hasEarlier = false,
+  earlierLoading = false,
+  onLoadEarlier,
+  messagesTotal = 0,
   enabledSkillCount,
   skillsLoaded,
   onChoosePrompt,
@@ -212,32 +224,52 @@ export default function AssistantMessageList({
           onManageSkills={onManageSkills}
         />
       ) : (
-        historyMessages.map((item) => {
-          const bubble = (
-            <AssistantMessageBubble
-              item={item}
-              assistantLabel={assistantLabel}
-              selected={selectedIds.has(item.id)}
-              onQuote={onQuote}
-              onDeleteMessage={onDeleteMessage}
-              onEnterSelecting={onEnterSelecting}
-            />
-          );
-          // 多选时不挂右键菜单：那套操作（引用、复制）此时都用不上，右键还要和勾选抢交互。
-          if (selecting) {
-            return (
-              <label key={item.id} className="assistant-message-pick">
-                <Checkbox
-                  checked={selectedIds.has(item.id)}
-                  onChange={() => onToggleSelected(item)}
-                  aria-label={`选择 ${item.role === "user" ? "你的" : "助手的"}这条消息`}
-                />
-                {bubble}
-              </label>
+        <>
+          {/* B5 按需加载：消息被截断时，顶部提供「加载更早」并如实展示总条数。 */}
+          {(hasEarlier || messagesTotal > 0) && (
+            <div className="assistant-messages-head">
+              {hasEarlier && (
+                <Button
+                  size="small"
+                  icon={<UpOutlined />}
+                  loading={earlierLoading}
+                  onClick={onLoadEarlier}
+                >
+                  加载更早
+                </Button>
+              )}
+              {messagesTotal > 0 && (
+                <Typography.Text type="secondary">{`共 ${messagesTotal} 条消息`}</Typography.Text>
+              )}
+            </div>
+          )}
+          {historyMessages.map((item) => {
+            const bubble = (
+              <AssistantMessageBubble
+                item={item}
+                assistantLabel={assistantLabel}
+                selected={selectedIds.has(item.id)}
+                onQuote={onQuote}
+                onDeleteMessage={onDeleteMessage}
+                onEnterSelecting={onEnterSelecting}
+              />
             );
-          }
-          return bubble;
-        })
+            // 多选时不挂右键菜单：那套操作（引用、复制）此时都用不上，右键还要和勾选抢交互。
+            if (selecting) {
+              return (
+                <label key={item.id} className="assistant-message-pick">
+                  <Checkbox
+                    checked={selectedIds.has(item.id)}
+                    onChange={() => onToggleSelected(item)}
+                    aria-label={`选择 ${item.role === "user" ? "你的" : "助手的"}这条消息`}
+                  />
+                  {bubble}
+                </label>
+              );
+            }
+            return bubble;
+          })}
+        </>
       )}
       {activeStream && (pendingUserText || pendingUserAttachments.length > 0) && (
         <article className="assistant-message assistant-message--user">

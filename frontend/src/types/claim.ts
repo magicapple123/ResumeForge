@@ -116,6 +116,36 @@ export interface ClaimList {
   category_counts: Partial<Record<ClaimCategory, number>>;
 }
 
+/**
+ * 分页列表行（``GET /api/claims/page``）：原文与表述只带 ≤200 字摘要，
+ * 全文走 ``GET /api/claims/{id}``（编辑/确认前先按 id 取全量）。
+ * 枚举字段与后端校验一致（分类/状态必须是白名单值），所以保持强类型。
+ */
+export interface ClaimSummary {
+  id: number;
+  title: string;
+  category: ClaimCategory;
+  subject: string;
+  source_fact_excerpt: string;
+  candidate_wording_excerpt: string;
+  responsibility_level: ResponsibilityLevel;
+  verification_status: VerificationStatus;
+  last_verified: string;
+  /** 服务端算出的改进建议（列表上就要提示哪条需要补内容）。 */
+  warnings: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+/** 分页列表：当前页摘要行 + 全筛选集的 SQL 汇总（口径与旧端点一致）。 */
+export interface ClaimPageList {
+  items: ClaimSummary[];
+  total: number;
+  confirmed_count: number;
+  pending_count: number;
+  category_counts: Partial<Record<ClaimCategory, number>>;
+}
+
 /** 生成链路用的事实基线摘要。 */
 export interface ClaimDigest {
   confirmed_count: number;

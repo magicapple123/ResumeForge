@@ -157,7 +157,9 @@ describe("AssistantPage", () => {
     );
     expect(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题")).toBeEnabled();
     expect(screen.getByRole("heading", { name: "会话二" })).toBeInTheDocument();
-    expect(apiMocks.getAssistantConversation).toHaveBeenLastCalledWith(2);
+    expect(apiMocks.getAssistantConversation).toHaveBeenLastCalledWith(2, "page", {
+      message_limit: 50,
+    });
   }, 20_000);
 
   it("prevents duplicate sends and aborts the active request", async () => {
@@ -180,7 +182,11 @@ describe("AssistantPage", () => {
 
     renderPage();
     await openFirstConversation();
-    await waitFor(() => expect(apiMocks.getAssistantConversation).toHaveBeenCalledWith(1));
+    await waitFor(() =>
+      expect(apiMocks.getAssistantConversation).toHaveBeenCalledWith(1, "page", {
+        message_limit: 50,
+      }),
+    );
     fireEvent.change(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题"), {
       target: { value: "请给我建议" },
     });
@@ -217,7 +223,11 @@ describe("AssistantPage", () => {
 
     const view = renderPage();
     await openFirstConversation();
-    await waitFor(() => expect(apiMocks.getAssistantConversation).toHaveBeenCalledWith(1));
+    await waitFor(() =>
+      expect(apiMocks.getAssistantConversation).toHaveBeenCalledWith(1, "page", {
+        message_limit: 50,
+      }),
+    );
     fireEvent.change(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题"), {
       target: { value: "保持连接" },
     });

@@ -5,6 +5,7 @@
 
 写入侧做严格校验（来源白名单、日期格式、至少有一项内容）；读取侧只如实回显。
 """
+
 import re
 from datetime import datetime
 from typing import Literal
@@ -75,9 +76,7 @@ class InterviewExperienceCreate(BaseModel):
     @field_validator("questions", "tags")
     @classmethod
     def strings_must_be_clean(cls, value: list[str]) -> list[str]:
-        return [str(item).strip() for item in value if str(item).strip()][
-            : MAX_EXPERIENCE_QUESTIONS
-        ]
+        return [str(item).strip() for item in value if str(item).strip()][:MAX_EXPERIENCE_QUESTIONS]
 
     @model_validator(mode="after")
     def require_something(self) -> "InterviewExperienceCreate":
@@ -101,12 +100,63 @@ class InterviewExperienceOut(InterviewExperienceCreate):
     updated_at: datetime
 
 
+# 列表行的正文截断长度（与知识库列表摘要同量级）。
+MAX_EXPERIENCE_EXCERPT_CHARS = 200
+
+
+class InterviewExperienceSummary(BaseModel):
+    """列表视图（``GET /api/interview-experiences/page``）。
+
+    **``content`` 全文与 ``questions`` 清单刻意不进列表行**：正文单条上限 10 万字符、
+    问题清单最多 200 条——面经上百之后带着它们翻页，每次都是 MB 级响应，而列表卡片
+    只需要标题/公司/来源/标签和一小段预览。全文与完整问题清单走 ``GET /{id}``。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str = ""
+    company: str = ""
+    position: str = ""
+    job_id: int | None = None
+    source: ExperienceSource = EXPERIENCE_SOURCE_SELF
+    difficulty: str = ""
+    round_type: str = ""
+    interview_date: str = ""
+    tags: list[str] = Field(default_factory=list)
+    question_count: int = 0
+    content_excerpt: str = ""
+    created_at: datetime
+    updated_at: datetime
+
+
+class InterviewExperienceBatchRequest(BaseModel):
+    """批量删除请求：与 ``schemas.resume.ResumeBatchRequest`` 同款口径（去重 + 上限 500）。"""
+
+    experience_ids: list[int] = Field(max_length=500)
+
+    @field_validator("experience_ids")
+    @classmethod
+    def validate_and_deduplicate_ids(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise ValueError("请至少选择一条面经")
+        return list(dict.fromkeys(value))
+
+
+class InterviewExperienceBatchDeleteResult(BaseModel):
+    deleted: int
+
+
 __all__ = [
     "ExperienceSource",
+    "InterviewExperienceBatchDeleteResult",
+    "InterviewExperienceBatchRequest",
     "InterviewExperienceCreate",
     "InterviewExperienceOut",
+    "InterviewExperienceSummary",
     "InterviewExperienceUpdate",
     "MAX_EXPERIENCE_CONTENT_CHARS",
+    "MAX_EXPERIENCE_EXCERPT_CHARS",
     "MAX_EXPERIENCE_QUESTIONS",
     "MAX_EXPERIENCE_TAGS",
 ]

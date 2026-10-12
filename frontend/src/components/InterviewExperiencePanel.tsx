@@ -1,32 +1,42 @@
 /** 面经知识库（R-15）：真实面经的增删改查，可绑定岗位、沉淀真实问题清单。 */
-import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  CheckSquareOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  MoreOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
 import {
   App,
   Button,
   Card,
-  DatePicker,
+  Checkbox,
   Dropdown,
   Empty,
   Form,
   Input,
   Listy,
-  Modal,
   Select,
   Space,
   Tag,
   Typography,
 } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
-import dayjs from "dayjs";
-import type { Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import {
+  batchDeleteInterviewExperiences,
   createInterviewExperience,
   deleteInterviewExperience,
   listInterviewExperiences,
   updateInterviewExperience,
 } from "../api/interviewExperiences";
-import { EXPERIENCE_ROUND_TYPES, EXPERIENCE_SOURCES, EXPERIENCE_SOURCE_LABELS } from "../types";
+import { useJobSearchSelect } from "../hooks/remoteSearchOptions";
+import BatchActionBar from "./common/BatchActionBar";
+import BatchDeleteButton from "./common/BatchDeleteButton";
+import { useBatchSelection } from "../hooks/useBatchSelection";
+import { RowContextMenu } from "./common/RowActions";
+import InterviewExperienceFormModal from "./interview/InterviewExperienceFormModal";
+import { EXPERIENCE_SOURCES, EXPERIENCE_SOURCE_LABELS } from "../types";
 import type { ExperienceSource, InterviewExperience, InterviewExperiencePayload } from "../types";
 import { formatDateTime } from "../utils/format";
 import { RecordDetailDrawer } from "./common/RecordDetail";
@@ -34,12 +44,13 @@ import { isFromInnerControl } from "./common/recordDetailCore";
 import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { useRowActionMenu } from "./common/rowActionMenu";
 
-interface Props {
-  jobOptions: { value: number; label: string }[];
-}
-
-export default function InterviewExperiencePanel({ jobOptions }: Props) {
+export default function InterviewExperiencePanel() {
   const { message } = App.useApp();
+  // 批量选择：勾选若干条后一次删除（软删，全部进回收站）；列表是全量下发，
+  // 选区即当前已加载的全部条目。
+  const batch = useBatchSelection<number>();
+  // 关联岗位下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
+  const jobSelect = useJobSearchSelect();
   const [items, setItems] = useState<InterviewExperience[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState("");
@@ -93,9 +104,20 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
     setLoading(false);
   }, [fetchList]);
 
+  // 详情抽屉要展示关联岗位的名称（P0-1）：打开时按 id 回查补进候选，
+  // 否则第 101 条之后的绑定在抽屉里只能显示 "-"。
+  useEffect(() => {
+    if (!detail) return;
+    void jobSelect.ensure(detail.job_id);
+    // hook 的回调引用稳定，只跟随详情目标变化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail]);
+
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
+    // 每次打开都重置一次候选列表（P0-1）：远程搜索结果随上次输入残留。
+    void jobSelect.reload();
     setModalOpen(true);
   };
 
@@ -114,6 +136,9 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
       round_type: experience.round_type,
       interview_date: experience.interview_date,
     });
+    // 已绑定岗位的保显示（P0-1）：按 id 回查补进候选，再重置搜索列表。
+    void jobSelect.ensure(experience.job_id);
+    void jobSelect.reload();
     setModalOpen(true);
   };
 
@@ -146,6 +171,20 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
     }
   };
 
+  /** 批量删除：一次请求删完（软删），成功后清空选择并重拉列表。 */
+  const removeSelected = async () => {
+    const ids = [...batch.selectedIds];
+    if (ids.length === 0) return;
+    try {
+      const { deleted } = await batchDeleteInterviewExperiences(ids);
+      message.success(`已删除 ${deleted} 条面经，可在「回收站」里恢复`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "批量删除失败，请重试");
+    }
+    batch.exitSelecting();
+    await loadList();
+  };
+
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Card size="small" title="面经知识库">
@@ -173,6 +212,24 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
         </Space>
       </Card>
 
+      {batch.selecting && (
+        <BatchActionBar
+          count={batch.selectedCount}
+          onExit={batch.exitSelecting}
+          pageSelectAll={{
+            allSelected: items.length > 0 && items.every((item) => batch.isSelected(item.id)),
+            someSelected: items.some((item) => batch.isSelected(item.id)),
+            onToggle: (checked) =>
+              batch.selectPage(
+                items.map((item) => item.id),
+                checked,
+              ),
+          }}
+        >
+          <BatchDeleteButton count={batch.selectedCount} noun="条面经" onDelete={removeSelected} />
+        </BatchActionBar>
+      )}
+
       {loading ? (
         <LoadingBlock />
       ) : items.length === 0 ? (
@@ -191,158 +248,119 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
                 setDetail(item);
               }}
               actions={[
-                <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
-                  详情
-                </Button>,
-                <Dropdown
-                  key="more"
-                  trigger={["click"]}
-                  menu={{
-                    items: buildMenu([
-                      {
-                        key: "edit",
-                        label: "编辑",
-                        icon: <EditOutlined />,
-                        onClick: () => openEdit(item),
-                      },
-                      {
-                        key: "delete",
-                        label: "删除",
-                        danger: true,
-                        icon: <DeleteOutlined />,
-                        confirm: "删除这条面经？删除后可在回收站里找回。",
-                        onClick: () => void doRemove(item),
-                      },
-                    ]),
-                  }}
-                >
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<MoreOutlined />}
-                    aria-label={`更多操作 ${item.title || item.company}`}
+                batch.selecting ? (
+                  <Checkbox
+                    key="select"
+                    aria-label={`选择面经 ${item.title || item.company}`}
+                    checked={batch.isSelected(item.id)}
+                    onChange={() => batch.toggle(item.id)}
                   />
-                </Dropdown>,
+                ) : (
+                  <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
+                    详情
+                  </Button>
+                ),
+                ...(batch.selecting
+                  ? []
+                  : [
+                      <Dropdown
+                        key="more"
+                        trigger={["click"]}
+                        menu={{
+                          items: buildMenu([
+                            {
+                              key: "edit",
+                              label: "编辑",
+                              icon: <EditOutlined />,
+                              onClick: () => openEdit(item),
+                            },
+                            {
+                              key: "delete",
+                              label: "删除",
+                              danger: true,
+                              icon: <DeleteOutlined />,
+                              confirm: "删除这条面经？删除后可在回收站里找回。",
+                              onClick: () => void doRemove(item),
+                            },
+                          ]),
+                        }}
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<MoreOutlined />}
+                          aria-label={`更多操作 ${item.title || item.company}`}
+                        />
+                      </Dropdown>,
+                    ]),
               ]}
             >
-              <ListyMeta
-                title={
-                  <Space size={6} wrap>
-                    <span>{item.title || "未命名面经"}</span>
-                    <Tag color="geekblue">
-                      {EXPERIENCE_SOURCE_LABELS[item.source as ExperienceSource] ?? item.source}
-                    </Tag>
-                    {item.round_type && <Tag>{item.round_type}</Tag>}
-                    {item.interview_date && <Tag>{item.interview_date}</Tag>}
-                  </Space>
+              {/* 右键菜单挂在条目主体上：多选模式收起（入口只在正常模式的菜单里）。 */}
+              <RowContextMenu
+                items={
+                  batch.selecting
+                    ? []
+                    : [
+                        {
+                          key: "batch_select",
+                          label: "批量选择",
+                          icon: <CheckSquareOutlined />,
+                          onClick: batch.enterSelecting,
+                        },
+                      ]
                 }
-                description={
-                  <Space orientation="vertical" size={2} style={{ width: "100%" }}>
-                    <Typography.Text type="secondary">
-                      {item.company}
-                      {item.position ? ` · ${item.position}` : ""}
-                      {item.difficulty ? ` · ${item.difficulty}` : ""}
-                    </Typography.Text>
-                    {item.questions.length > 0 && (
-                      <Typography.Text type="secondary">
-                        真实问题 {item.questions.length} 个：{item.questions.slice(0, 3).join("；")}
-                      </Typography.Text>
-                    )}
-                    {item.tags.length > 0 && (
-                      <Space size={4} wrap>
-                        {item.tags.map((tag) => (
-                          <Tag key={tag}>{tag}</Tag>
-                        ))}
+              >
+                <div>
+                  <ListyMeta
+                    title={
+                      <Space size={6} wrap>
+                        <span>{item.title || "未命名面经"}</span>
+                        <Tag color="geekblue">
+                          {EXPERIENCE_SOURCE_LABELS[item.source as ExperienceSource] ?? item.source}
+                        </Tag>
+                        {item.round_type && <Tag>{item.round_type}</Tag>}
+                        {item.interview_date && <Tag>{item.interview_date}</Tag>}
                       </Space>
-                    )}
-                  </Space>
-                }
-              />
+                    }
+                    description={
+                      <Space orientation="vertical" size={2} style={{ width: "100%" }}>
+                        <Typography.Text type="secondary">
+                          {item.company}
+                          {item.position ? ` · ${item.position}` : ""}
+                          {item.difficulty ? ` · ${item.difficulty}` : ""}
+                        </Typography.Text>
+                        {item.questions.length > 0 && (
+                          <Typography.Text type="secondary">
+                            真实问题 {item.questions.length} 个：
+                            {item.questions.slice(0, 3).join("；")}
+                          </Typography.Text>
+                        )}
+                        {item.tags.length > 0 && (
+                          <Space size={4} wrap>
+                            {item.tags.map((tag) => (
+                              <Tag key={tag}>{tag}</Tag>
+                            ))}
+                          </Space>
+                        )}
+                      </Space>
+                    }
+                  />
+                </div>
+              </RowContextMenu>
             </ListyItem>
           )}
         />
       )}
 
-      <Modal
-        title={editing ? "编辑面经" : "新增面经"}
+      <InterviewExperienceFormModal
         open={modalOpen}
+        editing={editing}
+        form={form}
+        saving={saving}
+        jobSelect={jobSelect}
         onCancel={() => setModalOpen(false)}
         onOk={() => void save()}
-        confirmLoading={saving}
-        okText="保存"
-        cancelText="取消"
-      >
-        <Form form={form} layout="vertical" initialValues={{ source: "self" }}>
-          <Form.Item label="标题" name="title">
-            <Input maxLength={200} placeholder="例如：某司后端一面" />
-          </Form.Item>
-          <Space style={{ display: "flex" }} align="start">
-            <Form.Item label="公司" name="company" style={{ flex: 1 }}>
-              <Input maxLength={128} placeholder="公司名" />
-            </Form.Item>
-            <Form.Item label="岗位" name="position" style={{ flex: 1 }}>
-              <Input maxLength={128} placeholder="岗位名" />
-            </Form.Item>
-          </Space>
-          <Form.Item label="关联岗位（选填，删除岗位不影响面经）" name="job_id">
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              placeholder="绑定后自动回填公司/岗位快照"
-              options={jobOptions}
-            />
-          </Form.Item>
-          <Form.Item label="正文（面试过程、怎么答的）" name="content">
-            <Input.TextArea
-              autoSize={{ minRows: 3, maxRows: 8 }}
-              placeholder="记录面试流程与心得"
-            />
-          </Form.Item>
-          <Form.Item label="被问到的真实问题" name="questions" extra="逐条回车添加，会沉淀进知识库">
-            <Select mode="tags" placeholder="输入后回车" open={false} suffixIcon={null} />
-          </Form.Item>
-          <Form.Item label="标签" name="tags">
-            <Select
-              mode="tags"
-              placeholder="例如：客户沟通、数据透视表"
-              open={false}
-              suffixIcon={null}
-            />
-          </Form.Item>
-          <Space style={{ display: "flex" }} align="start">
-            <Form.Item label="来源" name="source" style={{ flex: 1 }}>
-              <Select
-                options={EXPERIENCE_SOURCES.map((value) => ({
-                  value,
-                  label: EXPERIENCE_SOURCE_LABELS[value],
-                }))}
-              />
-            </Form.Item>
-            <Form.Item label="难度" name="difficulty" style={{ flex: 1 }}>
-              <Input maxLength={16} placeholder="例如：中等" />
-            </Form.Item>
-          </Space>
-          <Space style={{ display: "flex" }} align="start">
-            <Form.Item label="轮次" name="round_type" style={{ flex: 1 }}>
-              <Select
-                allowClear
-                placeholder="选择常见轮次"
-                options={EXPERIENCE_ROUND_TYPES.map((value) => ({ value, label: value }))}
-              />
-            </Form.Item>
-            <Form.Item
-              label="面试日期"
-              name="interview_date"
-              style={{ flex: 1 }}
-              getValueProps={(value: string) => ({ value: value ? dayjs(value) : null })}
-              normalize={(value: Dayjs | null) => (value ? value.format("YYYY-MM-DD") : "")}
-            >
-              <DatePicker style={{ width: "100%" }} />
-            </Form.Item>
-          </Space>
-        </Form>
-      </Modal>
+      />
 
       <RecordDetailDrawer
         open={detail !== null}
@@ -371,7 +389,9 @@ export default function InterviewExperiencePanel({ jobOptions }: Props) {
             ? [
                 {
                   label: "关联岗位",
-                  value: jobOptions.find((option) => option.value === detail.job_id)?.label ?? "-",
+                  value:
+                    jobSelect.options.find((option) => option.value === detail.job_id)?.label ??
+                    "-",
                 },
                 { label: "创建时间", value: formatDateTime(detail.created_at) },
                 { label: "更新时间", value: formatDateTime(detail.updated_at) },

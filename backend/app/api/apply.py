@@ -3,6 +3,7 @@
 薄路由：只做校验、调 service、返回 schema；错误统一 ``HTTPException(status, detail=中文)``。
 执行采用**轮询模型**（前端按 1–2s 轮询任务详情），不用 SSE。
 """
+
 import json
 import logging
 
@@ -21,10 +22,6 @@ from ..models.job import Job
 from ..schemas.apply import (
     ApplyConfigIn,
     ApplyConfigOut,
-    ApplyQueueAddRequest,
-    ApplyQueueItemOut,
-    ApplyQueueItemUpdate,
-    ApplyQueueReorderRequest,
     ApplyRecordBatchOut,
     ApplyRecordOut,
     ApplyTaskCreate,
@@ -52,6 +49,8 @@ from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.settings_service import get_llm_config
 from ..services.site_health import site_health_overview
+from .apply_queue import router as apply_queue_router
+from .apply_record_items import router as apply_record_items_router
 from .apply_tasks_page import router as apply_tasks_page_router
 from .webform.records_page import router as webform_records_page_router
 
@@ -64,6 +63,10 @@ collect_router = APIRouter(prefix="/api/collect", tags=["collect"])
 # 且 apply.py 行数预算吃紧，所以独立成模块在这里挂载（详见各模块 docstring）。
 router.include_router(webform_records_page_router)
 router.include_router(apply_tasks_page_router)
+# 投递队列端点（P2-2 拆分）：GET /queue 有上限并带 total/truncated，语义见 apply_queue.py。
+router.include_router(apply_queue_router)
+# 批次明细分页（B4 按需加载）：grouped 轻量分页后，展开批次在这里拉明细。
+router.include_router(apply_record_items_router)
 
 
 def _raise(exc: apply_service.ApplyServiceError) -> None:
@@ -183,44 +186,6 @@ def browser_stop(db: Session = Depends(get_db)):
     """
     try:
         apply_service.stop_browser(db)
-    except apply_service.ApplyServiceError as exc:
-        _raise(exc)
-    return None
-
-
-# ===== 投递队列 =====
-
-
-@router.get("/queue", response_model=list[ApplyQueueItemOut])
-def get_queue(db: Session = Depends(get_db)):
-    return apply_service.list_queue(db)
-
-
-@router.post("/queue", response_model=list[ApplyQueueItemOut])
-def add_to_queue(payload: ApplyQueueAddRequest, db: Session = Depends(get_db)):
-    try:
-        return apply_service.add_to_queue(db, payload)
-    except apply_service.ApplyServiceError as exc:
-        _raise(exc)
-
-
-@router.patch("/queue/reorder", response_model=list[ApplyQueueItemOut])
-def reorder_queue(payload: ApplyQueueReorderRequest, db: Session = Depends(get_db)):
-    return apply_service.reorder_queue(db, payload.order)
-
-
-@router.patch("/queue/{item_id}", response_model=ApplyQueueItemOut)
-def update_queue_item(item_id: int, payload: ApplyQueueItemUpdate, db: Session = Depends(get_db)):
-    try:
-        return apply_service.update_queue_item(db, item_id, payload)
-    except apply_service.ApplyServiceError as exc:
-        _raise(exc)
-
-
-@router.delete("/queue/{item_id}", status_code=204)
-def delete_queue_item(item_id: int, db: Session = Depends(get_db)):
-    try:
-        apply_service.remove_queue_item(db, item_id)
     except apply_service.ApplyServiceError as exc:
         _raise(exc)
     return None
@@ -414,15 +379,26 @@ def list_record_batches(
     result: str = Query(default="", description="success / failed / skipped"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=5, ge=1, le=20, description="每页批次（组）数"),
+    include_items: bool = Query(
+        default=True, description="false 时不携带明细（items=[]），只返回 matched_count"
+    ),
     db: Session = Depends(get_db),
 ):
     """投递记录按批次分组：一页若干个批次，每个批次带自己的记录。
 
     分组键是批次（一次「开始投递」= 一个批次）：用户一次性投 N 个岗位时，这 N 条记录
     在界面上折叠成一组、点击展开看明细。筛选作用在记录上；分页按批次计。
+
+    ``include_items=false``（B4 按需加载）：批次只带命中数（``matched_count``），明细由
+    ``GET /records/batches/{task_id}/items`` 在展开时分页拉取——默认 true，旧行为不变。
     """
     batches, total = apply_service.list_record_batches(
-        db, keyword=keyword, result=result, page=page, page_size=page_size
+        db,
+        keyword=keyword,
+        result=result,
+        page=page,
+        page_size=page_size,
+        include_items=include_items,
     )
     return Page(items=batches, total=total)
 

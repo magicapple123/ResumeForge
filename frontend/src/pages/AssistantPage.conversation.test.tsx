@@ -38,6 +38,7 @@ const apiMocks = vi.hoisted(() => ({
   deleteAssistantMessage: vi.fn(),
   deleteAssistantMessages: vi.fn(),
   getAssistantConversation: vi.fn(),
+  getEarlierAssistantMessages: vi.fn(),
   listAssistantConversations: vi.fn(),
   renameAssistantConversation: vi.fn(),
   updateAssistantConversation: vi.fn(),
@@ -58,6 +59,7 @@ vi.mock("../api/assistant", async (importOriginal) => ({
   deleteAssistantMessage: apiMocks.deleteAssistantMessage,
   deleteAssistantMessages: apiMocks.deleteAssistantMessages,
   getAssistantConversation: apiMocks.getAssistantConversation,
+  getEarlierAssistantMessages: apiMocks.getEarlierAssistantMessages,
   listAssistantConversations: apiMocks.listAssistantConversations,
   renameAssistantConversation: apiMocks.renameAssistantConversation,
   updateAssistantConversation: apiMocks.updateAssistantConversation,
@@ -78,6 +80,9 @@ beforeEach(() => {
   apiMocks.getAssistantConversation
     .mockReset()
     .mockImplementation((id: number) => Promise.resolve(conversationDetail(id)));
+  apiMocks.getEarlierAssistantMessages
+    .mockReset()
+    .mockResolvedValue({ items: [], has_earlier: false });
   apiMocks.createAssistantConversation.mockReset().mockResolvedValue(CONVERSATIONS[0]);
   apiMocks.deleteAssistantConversation.mockReset().mockResolvedValue(undefined);
   apiMocks.renameAssistantConversation.mockReset();
@@ -229,13 +234,64 @@ describe("AssistantPage", () => {
     refreshedDetail.resolve(loadedDetail);
   });
 
+  it("loads earlier messages on demand and prepends them (B5)", async () => {
+    const message = (id: number, content: string) => ({
+      id,
+      conversation_id: 1,
+      role: id % 2 === 1 ? ("user" as const) : ("assistant" as const),
+      content,
+      quoted_message_id: null,
+      attachments: [],
+      context: {},
+      status: "complete" as const,
+      error: "",
+      model: "test-model",
+      created_at: CREATED_AT,
+    });
+    // 详情只带最新 1 条，还有更早的两条。
+    apiMocks.getAssistantConversation.mockResolvedValue({
+      ...conversationDetail(1),
+      messages: [message(3, "消息3")],
+      messages_total: 3,
+      has_earlier: true,
+    });
+    apiMocks.getEarlierAssistantMessages.mockResolvedValue({
+      items: [message(1, "消息1"), message(2, "消息2")],
+      has_earlier: false,
+    });
+
+    renderPage();
+    await openFirstConversation();
+    expect(await screen.findByText("消息3")).toBeInTheDocument();
+    // 总条数如实展示；「加载更早」按钮出现。
+    expect(screen.getByText("共 3 条消息")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /加载更早/ }));
+
+    // 取 detail 窗口最旧一条之前的消息（before_id=3），加载中不重复发请求。
+    await waitFor(() =>
+      expect(apiMocks.getEarlierAssistantMessages).toHaveBeenCalledWith(1, 3, 50, "page"),
+    );
+    expect(await screen.findByText("消息1")).toBeInTheDocument();
+    expect(screen.getByText("消息2")).toBeInTheDocument();
+    // has_earlier 变 false：按钮消失，总条数仍在。
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /加载更早/ })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("共 3 条消息")).toBeInTheDocument();
+  });
+
   it("positions a loaded conversation at the latest message without smooth scrolling", async () => {
     const delayedDetail = deferred<AssistantConversationDetail>();
     apiMocks.getAssistantConversation.mockImplementation(() => delayedDetail.promise);
 
     renderPage();
     await openFirstConversation();
-    await waitFor(() => expect(apiMocks.getAssistantConversation).toHaveBeenCalledWith(1));
+    // B5 按需加载：详情请求带 message_limit=50（与 harness 的钉子同一契约）。
+    await waitFor(() =>
+      expect(apiMocks.getAssistantConversation).toHaveBeenCalledWith(1, "page", {
+        message_limit: 50,
+      }),
+    );
     expect(scrollIntoViewMock).not.toHaveBeenCalled();
 
     delayedDetail.resolve({
