@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { markCandidateJobImported } from "../api/candidateJob";
 import { openWebFormUrl } from "../api/webform";
-import { addToQueue, QueueConflictError, startBackfill } from "../api/apply";
+import { startBackfill } from "../api/apply";
 import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, updateJob } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobAnalysisModal from "../components/JobAnalysisModal";
@@ -17,17 +17,19 @@ import ManualResumeModal from "../components/ManualResumeModal";
 import { candidateImportSource } from "../utils/jobSource";
 import CandidateJobsDrawer from "../components/jobs/CandidateJobsDrawer";
 import { candidateToJobPayload } from "../components/jobs/candidate/candidatePayload";
+import { JobImportModal } from "../components/jobs/JobImportModal";
 import JobTable from "../components/jobs/JobTable";
 import type { CandidateJobDetail, Job } from "../types";
 import { BatchToolbar } from "./jobs/BatchToolbar";
 import { JobFilterBar } from "./jobs/JobFilterBar";
 import type { BatchAction, MatchBatchRunMode } from "./jobs/jobFilterOptions";
+import { useJobQueue } from "./jobs/useJobQueue";
 import { useJobsPageState } from "./jobs/useJobsPageState";
 import { bulkEnqueueJobs, bulkEnqueueSummary } from "../components/apply/queue/bulkEnqueue";
 
 export default function JobsPage() {
   const navigate = useNavigate();
-  const { message, modal } = App.useApp();
+  const { message } = App.useApp();
 
   // 筛选 / 分页 / 详情 job_id 的 URL 状态化与由它驱动的列表查询都收在 hook 里：
   // 初值从 URL 读、改动写回，链接可分享、刷新后状态不丢。
@@ -65,7 +67,6 @@ export default function JobsPage() {
   const [matchBatchOpen, setMatchBatchOpen] = useState(false);
   const [matchBatchAutoRun, setMatchBatchAutoRun] = useState(false);
   const [matchBatchRunMode, setMatchBatchRunMode] = useState<MatchBatchRunMode>("immediate");
-  const [queueJobId, setQueueJobId] = useState<number | null>(null);
   const [webFormJobId, setWebFormJobId] = useState<number | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [batchStatus, setBatchStatus] = useState<string>();
@@ -75,6 +76,8 @@ export default function JobsPage() {
   const [backfilling, setBackfilling] = useState(false);
   // 备选岗位：抽屉里暂存未核对的招聘信息，导入时走正式岗位表单。
   const [candidatesOpen, setCandidatesOpen] = useState(false);
+  // CSV 导入弹窗。
+  const [importCsvOpen, setImportCsvOpen] = useState(false);
   // 导入用**详情**那一份：列表不带 JD，用它预填表单会得到一个没有职位描述的空表单。
   const [importCandidate, setImportCandidate] = useState<CandidateJobDetail | null>(null);
   const [importedCandidateId, setImportedCandidateId] = useState<number | null>(null);
@@ -129,60 +132,7 @@ export default function JobsPage() {
     [batchAction, favoriteJobId, message, reload, setDetailJob],
   );
 
-  // 确认弹窗的 onOk 会再次调用自身（带确认标记跳过弹窗）：用函数声明利用提升，
-  // 避免递归引用 useCallback 常量（Compiler 的 immutability 规则会报"先使用后声明"）。
-  async function addJobToQueue(
-    job: Job,
-    confirm: { unanalyzed?: boolean; realGap?: boolean } = {},
-  ) {
-    setQueueJobId(job.id);
-    try {
-      await addToQueue([
-        {
-          job_id: job.id,
-          confirm_unanalyzed: confirm.unanalyzed,
-          confirm_real_gap: confirm.realGap,
-        },
-      ]);
-      message.success("已加入投递台队列");
-    } catch (err) {
-      if (err instanceof QueueConflictError) {
-        const detail = err.detail;
-        if (detail.site_unsupported) {
-          // 这一类**没有"仍然加入"的选项**：确认也放行不了（投递时定位不到站点），
-          // 所以只给一个必须点掉的提示，而不是给个按钮让人以为可以强行通过。
-          modal.warning({
-            title: "这个岗位不能自动投递",
-            content: detail.message,
-            okText: "知道了",
-          });
-        } else if (detail.unanalyzed) {
-          modal.confirm({
-            title: "该岗位还没做过匹配分析",
-            content: "建议先做「匹配度分析」。也可以直接加入队列，投递前仍会再核对一次。",
-            okText: "仍然加入队列",
-            cancelText: "取消",
-            onOk: () => addJobToQueue(job, { unanalyzed: true }),
-          });
-        } else if (detail.gaps && detail.gaps.length > 0) {
-          modal.confirm({
-            title: "该岗位存在真实缺口，默认不投",
-            content: `匹配分析判定你确实不具备这些要求：${detail.gaps.join("、")}。确认仍要投递该岗位吗？`,
-            okText: "确认仍然投递",
-            okButtonProps: { danger: true },
-            cancelText: "取消",
-            onOk: () => addJobToQueue(job, { realGap: true }),
-          });
-        } else {
-          message.warning(detail.message);
-        }
-      } else {
-        message.error(err instanceof Error ? err.message : "加入投递台失败");
-      }
-    } finally {
-      setQueueJobId(null);
-    }
-  }
+  const { addJobToQueue, queueJobId } = useJobQueue();
 
   const openJobWebForm = useCallback(
     async (job: Job) => {
@@ -315,6 +265,8 @@ export default function JobsPage() {
     setBatchStatus(undefined);
   };
 
+  /** 勾选的岗位导出 CSV 由 BatchToolbar 就地处理（纯前端动作）。 */
+
   /** 右键菜单「批量选择」的动作：进入选择模式（批量操作进行中时不给进）。 */
   const enterSelectionMode = useCallback(() => {
     if (batchAction !== null) return;
@@ -377,6 +329,7 @@ export default function JobsPage() {
         backfillDetails={backfillDetails}
         setCandidatesOpen={setCandidatesOpen}
         setFormOpen={setFormOpen}
+        onImportCsv={() => setImportCsvOpen(true)}
       />
 
       <BatchToolbar
@@ -470,6 +423,11 @@ export default function JobsPage() {
           setFormOpen(true);
           setCandidatesOpen(false);
         }}
+      />
+      <JobImportModal
+        open={importCsvOpen}
+        onClose={() => setImportCsvOpen(false)}
+        onImported={() => void reload()}
       />
       <GenerateResumeModal
         job={generateJob}

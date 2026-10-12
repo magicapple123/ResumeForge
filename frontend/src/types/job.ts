@@ -202,6 +202,22 @@ export interface JobBatchDeleteResult {
   deleted: number;
 }
 
+/** CSV 导入：一行待导入数据（line 是预览时的文件真实行号，账目里原样带回）。 */
+export interface JobImportRow {
+  line: number;
+  data: Record<string, string>;
+}
+
+export interface JobImportPreview {
+  rows: JobImportRow[];
+  errors: { line: number; message: string }[];
+}
+
+export interface JobImportResult {
+  imported: number;
+  failed: { line: number; message: string }[];
+}
+
 export type JobAnalysisPriority = "high" | "medium" | "low";
 
 export interface JobRequirementAnalysis {

@@ -273,7 +273,20 @@ export default function DrillPage() {
         }
       >
         {batch.selecting && (
-          <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
+          <BatchActionBar
+            count={batch.selectedCount}
+            onExit={batch.exitSelecting}
+            pageSelectAll={{
+              allSelected:
+                pagedHistory.length > 0 && pagedHistory.every((item) => batch.isSelected(item.id)),
+              someSelected: pagedHistory.some((item) => batch.isSelected(item.id)),
+              onToggle: (checked) =>
+                batch.selectPage(
+                  pagedHistory.map((item) => item.id),
+                  checked,
+                ),
+            }}
+          >
             <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
               删除所选
             </Button>

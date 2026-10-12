@@ -206,6 +206,40 @@ class JobBatchDeleteResult(BaseModel):
     deleted: int
 
 
+class JobImportRow(BaseModel):
+    """一行待导入数据：``line`` 是预览时的文件真实行号，账目里原样带回。"""
+
+    line: int = Field(ge=1)
+    data: dict[str, str]
+
+
+class JobImportRequest(BaseModel):
+    """CSV 导入的提交步：行数据来自预览接口的解析结果（字段名见 job_csv.CSV_COLUMNS）。"""
+
+    rows: list[JobImportRow] = Field(max_length=500)
+
+    @field_validator("rows")
+    @classmethod
+    def rows_must_not_be_empty(cls, value: list[JobImportRow]) -> list[JobImportRow]:
+        if not value:
+            raise ValueError("没有可导入的岗位行")
+        return value
+
+
+class JobImportResult(BaseModel):
+    """CSV 导入的账目：成功多少、逐行失败原因（含重复跳过）。"""
+
+    imported: int = 0
+    failed: list[dict[str, object]] = Field(default_factory=list)
+
+
+class JobImportPreview(BaseModel):
+    """CSV 预览：可导入的行（带文件真实行号）+ 逐行错误。"""
+
+    rows: list[JobImportRow] = Field(default_factory=list)
+    errors: list[dict[str, object]] = Field(default_factory=list)
+
+
 class JobTextParseRequest(BaseModel):
     """粘贴的招聘文本、招聘信息截图或招聘文档（可同时给）。"""
 

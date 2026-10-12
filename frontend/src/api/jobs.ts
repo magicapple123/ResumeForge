@@ -15,8 +15,11 @@ import type {
   Page,
   JobMultiParseResult,
   ParsedJobDraft,
+  JobImportPreview,
+  JobImportResult,
+  JobImportRow,
 } from "../types";
-import { buildQuery, request } from "./client";
+import { buildQuery, request, requestRaw } from "./client";
 
 export interface JobListParams {
   keyword?: string;
@@ -80,6 +83,27 @@ export function batchUpdateJobStatus(payload: {
 
 export function batchDeleteJobs(payload: { job_ids: number[] }): Promise<JobBatchDeleteResult> {
   return request("/jobs/batch-delete", { method: "POST", body: JSON.stringify(payload) });
+}
+
+/** 把勾选的岗位导出成 CSV（返回原始 blob，调用方负责触发下载）。 */
+export async function exportJobsCsv(jobIds: number[]): Promise<Blob> {
+  const response = await requestRaw("/jobs/export", {
+    method: "POST",
+    body: JSON.stringify({ job_ids: jobIds }),
+  });
+  return response.blob();
+}
+
+/** CSV 导入第一步：上传文件解析预览（不落库）。 */
+export function previewJobImport(file: File): Promise<JobImportPreview> {
+  const form = new FormData();
+  form.append("file", file);
+  return request("/jobs/import/preview", { method: "POST", body: form });
+}
+
+/** CSV 导入第二步：确认提交，逐行建岗并返回账目。 */
+export function importJobs(rows: JobImportRow[]): Promise<JobImportResult> {
+  return request("/jobs/import", { method: "POST", body: JSON.stringify({ rows }) });
 }
 
 export function generateJobAnalysis(id: number): Promise<JobAnalysisResult> {

@@ -55,3 +55,17 @@ describe("useBatchSelection", () => {
     expect(result.current.isSelected(9)).toBe(true);
   });
 });
+
+describe("selectPage（全选/取消全选本页）", () => {
+  it("勾上当前页并保留其他页已选；取消只清当前页", () => {
+    const { result } = renderHook(() => useBatchSelection<number>());
+    act(() => {
+      result.current.toggle(1);
+      result.current.selectPage([2, 3, 4], true);
+    });
+    expect([...result.current.selectedIds].sort()).toEqual([1, 2, 3, 4]);
+
+    act(() => result.current.selectPage([2, 3, 4], false));
+    expect([...result.current.selectedIds]).toEqual([1]);
+  });
+});
