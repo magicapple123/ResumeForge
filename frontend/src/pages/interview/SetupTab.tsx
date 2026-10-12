@@ -4,7 +4,7 @@
  * 供题库「开始模拟面试」的 startFromBank 联动写回考察重点。）
  */
 import { PlayCircleOutlined } from "@ant-design/icons";
-import { Button, Card, Form, Input, InputNumber, Select, Space, Switch, Typography } from "antd";
+import { Button, Card, Form, Input, Select, Space, Typography } from "antd";
 import type { FormInstance } from "antd";
 import type { InterviewDifficulty, InterviewType, InterviewerStyle } from "../../types";
 import { JANE_FACE_SOURCES } from "./janeFaces";
@@ -19,14 +19,24 @@ import {
 const CONFIDENCE_TIP =
   "面试官会基于你的资料与岗位要求提问，回答越具体（做了什么、结果是什么）点评越有用。";
 
+/** 轮数选择框的「自动」档值：AI 按表现决定何时收尾（区间不向用户/模型展示）。 */
+export const AUTO_ROUNDS_OPTION = "auto";
+
+const ROUNDS_OPTIONS: { value: number | typeof AUTO_ROUNDS_OPTION; label: string }[] = [
+  { value: AUTO_ROUNDS_OPTION, label: "自动（AI 判断收尾）" },
+  ...Array.from({ length: MAX_INTERVIEW_ROUNDS - MIN_INTERVIEW_ROUNDS + 1 }, (_, index) => ({
+    value: MIN_INTERVIEW_ROUNDS + index,
+    label: `${MIN_INTERVIEW_ROUNDS + index} 轮`,
+  })),
+];
+
 export interface SetupForm {
   jobId?: number;
   interviewType: InterviewType;
   difficulty: InterviewDifficulty;
   interviewerStyle: InterviewerStyle;
-  /** 开启后 AI 按表现决定何时结束（区间保密，制造真实面试的未知感）。 */
-  autoRounds: boolean;
-  rounds: number;
+  /** 具体轮数，或 "auto" = 自动收尾（AI 按表现判断何时结束）。 */
+  rounds: number | typeof AUTO_ROUNDS_OPTION;
   focus: string;
   persona: string;
 }
@@ -46,8 +56,6 @@ export function SetupTab({
   starting: boolean;
   onStart: (values: SetupForm) => void;
 }) {
-  // 是否隐藏固定轮数输入（Form.useWatch 跟随开关实时变化）。
-  const autoRounds = Form.useWatch("autoRounds", form) ?? false;
   return (
     <Card size="small" className="settings-card">
       <div className="jane-intro">
@@ -72,7 +80,6 @@ export function SetupTab({
           interviewType: "综合面",
           difficulty: "中级",
           interviewerStyle: "严谨专业",
-          autoRounds: false,
           rounds: 6,
           focus: "",
           persona: "",
@@ -105,26 +112,12 @@ export function SetupTab({
             <Select options={INTERVIEWER_STYLES.map((value) => ({ value, label: value }))} />
           </Form.Item>
           <Form.Item
-            label="自动轮数"
-            name="autoRounds"
-            valuePropName="checked"
-            extra="开启后不再设定轮数，面试官按你的表现自主决定何时收尾（回答有料就深挖、回答空洞就收束），更接近真实面试的不可预期。"
+            label="轮数"
+            name="rounds"
+            extra="选「自动」时不设轮数：面试官按你的表现自主决定何时收尾，更接近真实面试。"
           >
-            <Switch />
+            <Select options={ROUNDS_OPTIONS} />
           </Form.Item>
-          {!autoRounds && (
-            <Form.Item
-              label="轮数"
-              name="rounds"
-              extra={`${MIN_INTERVIEW_ROUNDS}-${MAX_INTERVIEW_ROUNDS} 轮`}
-            >
-              <InputNumber
-                min={MIN_INTERVIEW_ROUNDS}
-                max={MAX_INTERVIEW_ROUNDS}
-                style={{ width: "100%" }}
-              />
-            </Form.Item>
-          )}
           <Form.Item
             label="考察重点（选填）"
             name="focus"

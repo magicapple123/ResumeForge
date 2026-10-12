@@ -137,16 +137,6 @@ export function deleteJobMatch(id: number): Promise<void> {
   return request(`/jobs/${id}/match-analysis`, { method: "DELETE" });
 }
 
-export function generateJobMatchBatch(payload: {
-  job_ids: number[];
-  force?: boolean;
-}): Promise<JobMatchBatchOut> {
-  return request("/jobs/match-batches", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
 export function listJobMatchBatches(limit = 30): Promise<JobMatchBatchSummary[]> {
   return request(`/jobs/match-batches?limit=${encodeURIComponent(limit)}`);
 }

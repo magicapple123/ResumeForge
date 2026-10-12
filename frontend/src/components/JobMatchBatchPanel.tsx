@@ -1,207 +1,85 @@
-/** 岗位广场批量适配度分析：运行、排序展示与历史回看。 */
+/** 岗位广场批量适配度分析：设置 → 进行中（后台任务进度）→ 结果，与历史回看。
+ *
+ * 分析**一律走后台任务**（`startJobMatchBatchTask`）：同步批量端点要等全部岗位
+ * 分析完才返回，多岗位必然撞前端请求超时预算（"请求超时，请重试"就是这么来的）。
+ * 走任务后，关掉面板/切到别的页面任务照跑（完成时全局通知），再次打开面板会
+ * 自动回到进行中视图——这就是"切页自动转后台"的机制。
+ */
 import { HistoryOutlined, ReloadOutlined, RobotOutlined } from "@ant-design/icons";
 import {
   Alert,
   App,
   Button,
-  Card,
-  Collapse,
+  Checkbox,
   Empty,
   Listy,
   Modal,
   Progress,
   Space,
   Tabs,
-  Tag,
   Typography,
 } from "antd";
 import PageSkeleton from "./common/PageSkeleton";
 import LoadingBlock from "./common/LoadingBlock";
 import { ListyItem, ListyMeta } from "./common/ListyItem";
-import { LISTY_ITEM_PADDING_SMALL } from "./common/listyPadding";
 import { useCallback, useEffect, useState } from "react";
+import { BatchResultView } from "./jobs/JobMatchBatchResult";
 import {
-  generateJobMatchBatch,
   getJobMatchBatch,
+  getJobMatchBatchTask,
   listJobMatchBatches,
   startJobMatchBatchTask,
 } from "../api/jobs";
+import type { JobMatchBatchOut, JobMatchBatchSummary } from "../types";
 import {
-  ADMISSION_META,
-  MATCH_STATUS_META,
-  type JobMatchBatchItem,
-  type JobMatchBatchOut,
-  type JobMatchBatchSummary,
-  type MatchCondition,
-} from "../types";
-import { watchJobMatchBatchTask } from "../utils/jobMatchBackgroundTasks";
+  cancelJobMatchBackgroundTask,
+  watchJobMatchBatchTask,
+} from "../utils/jobMatchBackgroundTasks";
+import { useJobMatchBackgroundTasks } from "../hooks/useJobMatchBackgroundTasks";
 
 interface JobMatchBatchPanelProps {
   open: boolean;
   jobIds: number[];
-  autoRun: boolean;
-  runMode?: "immediate" | "background";
+  /** 打开时先看哪个页签：筛选条「AI 分析适配度」进设置，「分析记录」进历史。 */
+  initialView?: "setup" | "history";
   onClose: () => void;
 }
-
-type BatchMatchResult = NonNullable<JobMatchBatchItem["result"]>;
-
-const GROUPS: Array<{
-  key: keyof Pick<BatchMatchResult, "hard_conditions" | "core_abilities" | "bonus_items">;
-  label: string;
-}> = [
-  { key: "hard_conditions", label: "硬性条件" },
-  { key: "core_abilities", label: "核心能力" },
-  { key: "bonus_items", label: "加分项" },
-];
 
 function formatTime(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-function sourceLabel(source: JobMatchBatchItem["analysis_source"]): string {
-  if (source === "existing") return "复用已有分析";
-  if (source === "local") return "本地降级";
-  return "本次新分析";
-}
-
-function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
-  if (conditions.length === 0) {
-    return <Typography.Text type="secondary">暂无条目</Typography.Text>;
-  }
-  return (
-    <Listy
-      items={conditions}
-      rowKey={(condition) => `${condition.label}|${condition.jd_quote}`}
-      styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
-      itemRender={(condition) => {
-        const meta = MATCH_STATUS_META[condition.status];
-        return (
-          <ListyItem>
-            <Space orientation="vertical" size={2} style={{ width: "100%" }}>
-              <Space size={6} wrap>
-                <Tag color={meta.color}>{meta.label}</Tag>
-                <Typography.Text strong>{condition.label}</Typography.Text>
-              </Space>
-              {condition.evidence ? (
-                <Typography.Text type="secondary">依据：{condition.evidence}</Typography.Text>
-              ) : null}
-            </Space>
-          </ListyItem>
-        );
-      }}
-    />
-  );
-}
-
-function MatchDetail({ item }: { item: JobMatchBatchItem }) {
-  const result = item.result;
-  if (!result) return null;
-  const admission = ADMISSION_META[result.admission];
-  return (
-    <Space orientation="vertical" size="small" style={{ width: "100%" }}>
-      <Space wrap>
-        <Tag color={admission.color}>准入：{admission.label}</Tag>
-        <Tag>
-          硬性门槛：
-          {result.hard_gate === "met" ? "满足" : result.hard_gate === "unmet" ? "未满足" : "待确认"}
-        </Tag>
-      </Space>
-      {GROUPS.map((group) => (
-        <section key={group.key}>
-          <Typography.Text strong>{group.label}</Typography.Text>
-          <ConditionList conditions={result[group.key] ?? []} />
-        </section>
-      ))}
-      {result.advice ? <Typography.Paragraph>{result.advice}</Typography.Paragraph> : null}
-      {result.notes.length > 0 ? (
-        <Typography.Text type="secondary">说明：{result.notes.join("；")}</Typography.Text>
-      ) : null}
-    </Space>
-  );
-}
-
-function BatchItemCard({ item }: { item: JobMatchBatchItem }) {
-  if (item.status === "failed") {
-    return (
-      <Card size="small" title={`${item.job_title}${item.company ? ` · ${item.company}` : ""}`}>
-        <Alert type="error" showIcon title={item.error || "本岗位分析失败"} />
-      </Card>
-    );
-  }
-
-  const score = item.reference_score?.score ?? 0;
-  // 参考分颜色分档：≥70 绿（把握较大）、40–69 主题蓝、<40 琥珀（偏弱）。**纯展示口径**——
-  // 参考分不参与准入，颜色只是帮视线定位高低，不构成第二套结论。
-  const scoreColor = score >= 70 ? "#3f9d63" : score >= 40 ? "#5b8ff9" : "#e6a23c";
-  return (
-    <Card
-      size="small"
-      title={
-        <Space size={6} wrap>
-          <Tag color="blue">第 {item.rank ?? "-"} 名</Tag>
-          <span>{item.job_title}</span>
-          {item.company ? (
-            <Typography.Text type="secondary">· {item.company}</Typography.Text>
-          ) : null}
-        </Space>
-      }
-      extra={<Tag>{sourceLabel(item.analysis_source)}</Tag>}
-    >
-      <div className="batch-score-row">
-        <Progress
-          type="circle"
-          percent={score}
-          size={72}
-          strokeColor={scoreColor}
-          format={(value) => (
-            <span className="batch-score-number">
-              {value}
-              <span className="batch-score-unit">分</span>
-            </span>
-          )}
-        />
-        <div className="batch-score-meta">
-          <Typography.Text strong>匹配度参考分</Typography.Text>
-          {item.result ? (
-            <Tag color={ADMISSION_META[item.result.admission].color}>
-              准入：{ADMISSION_META[item.result.admission].label}
-            </Tag>
-          ) : (
-            <Tag>暂无结论</Tag>
-          )}
-          {item.model ? (
-            <Typography.Text type="secondary" className="batch-score-model">
-              模型：{item.model}
-            </Typography.Text>
-          ) : null}
-        </div>
-      </div>
-      <Collapse
-        ghost
-        items={[{ key: "detail", label: "查看匹配详情", children: <MatchDetail item={item} /> }]}
-        style={{ marginTop: 8 }}
-      />
-    </Card>
-  );
-}
-
 export default function JobMatchBatchPanel({
   open,
   jobIds,
-  autoRun,
-  runMode = "immediate",
+  initialView = "setup",
   onClose,
 }: JobMatchBatchPanelProps) {
   const { message } = App.useApp();
-  const [activeTab, setActiveTab] = useState(autoRun ? "result" : "history");
+  // 后台任务注册表（useSyncExternalStore）：面板开着时实时跟随进度；关掉面板
+  // 任务照跑，完成时全局通知——"切页自动转后台"靠的就是任务在服务端、不在组件里。
+  const backgroundTasks = useJobMatchBackgroundTasks();
+  const activeTask =
+    backgroundTasks.find((task) => task.status === "pending" || task.status === "running") ?? null;
+
+  const [phase, setPhase] = useState<"setup" | "running" | "result" | "history">(
+    initialView === "history" ? "history" : "setup",
+  );
+  /** 面板自己跟踪的后台任务 id：完成/取消的判定靠它轮询任务端点，不依赖注册表
+   *  （注册表在任务进入终态的瞬间就会把它移除，靠订阅会错过"完成"这一刻）。 */
+  const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
+  const [force, setForce] = useState(false);
   const [batch, setBatch] = useState<JobMatchBatchOut | null>(null);
   const [history, setHistory] = useState<JobMatchBatchSummary[]>([]);
-  const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState("");
-  // 派生值：本批岗位 id 签名（渲染期计算，替代旧的可变状态）。
+  /** 历史「查看结果」的独立弹卡：不再把整个面板切到"本次结果"页签。 */
+  const [historyBatch, setHistoryBatch] = useState<JobMatchBatchOut | null>(null);
+  const [historyBatchLoading, setHistoryBatchLoading] = useState(false);
+
   const jobIdsKey = jobIds.join(",");
 
   const loadHistory = useCallback(async () => {
@@ -215,113 +93,188 @@ export default function JobMatchBatchPanel({
     }
   }, [message]);
 
-  const runBatch = useCallback(
-    async (force: boolean) => {
+  // 打开面板：重置到目标页签 + 拉历史；有进行中的后台任务则回到进度视图
+  // （跨页回来的"自动接上"），并把任务 id 交给面板自己的轮询。
+  const [prevOpenKey, setPrevOpenKey] = useState<string | null>(null);
+  if (prevOpenKey !== `${open}-${initialView}-${jobIdsKey}`) {
+    setPrevOpenKey(`${open}-${initialView}-${jobIdsKey}`);
+    if (open) {
+      if (activeTask) {
+        setRunningTaskId(activeTask.id);
+        setPhase("running");
+      } else {
+        setRunningTaskId(null);
+        setPhase(initialView === "history" ? "history" : "setup");
+      }
+      setBatch(null);
+      setError("");
+      setForce(false);
+    }
+  }
+
+  // 打开面板就拉一次历史（历史页签与「转入后台」后回看都靠它）。loadHistory 内部的
+  // setState 都是异步完成回调，规则的调用图追踪仍会标记——按"派生事件"书面理由豁免。
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!open) return;
+    void loadHistory();
+  }, [loadHistory, open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // 面板自轮询任务状态（注册表只负责进度展示，完成判定在这里——它在任务进入
+  // 终态时就把任务移除了，靠它会在"完成的一瞬间"丢失事件）。
+  useEffect(() => {
+    if (!open || phase !== "running" || !runningTaskId) return;
+    let cancelled = false;
+    const check = async () => {
+      let latest;
+      try {
+        latest = await getJobMatchBatchTask(runningTaskId);
+      } catch {
+        return; // 后端短暂不可用：下一轮继续，进度展示由注册表兜底。
+      }
+      if (cancelled) return;
+      if (latest.status === "completed" && latest.batch_id) {
+        try {
+          const result = await getJobMatchBatch(latest.batch_id);
+          if (!cancelled) {
+            setBatch(result);
+            setPhase("result");
+            setRunningTaskId(null);
+            void loadHistory();
+          }
+        } catch (requestError) {
+          if (!cancelled) {
+            message.error(
+              requestError instanceof Error ? requestError.message : "读取分析结果失败",
+            );
+            setPhase("setup");
+            setRunningTaskId(null);
+          }
+        }
+      } else if (latest.status === "cancelled" || latest.status === "failed") {
+        setPhase("setup");
+        setRunningTaskId(null);
+      }
+    };
+    const timer = window.setInterval(() => void check(), 1500);
+    void check();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loadHistory, message, open, phase, runningTaskId]);
+
+  const startAnalysis = useCallback(
+    async (overrideForce: boolean) => {
       if (jobIds.length === 0) {
         message.warning("请先选择岗位");
         return;
       }
-      setLoading(true);
+      setStarting(true);
       setError("");
       try {
-        const result = await generateJobMatchBatch({ job_ids: jobIds, force });
-        setBatch(result);
-        setActiveTab("result");
+        const task = await startJobMatchBatchTask({ job_ids: jobIds, force: overrideForce });
+        watchJobMatchBatchTask(task, "岗位适配度分析（" + jobIds.length + " 个岗位）");
+        setRunningTaskId(task.task_id);
+        setPhase("running");
         void loadHistory();
       } catch (requestError) {
-        const detail = requestError instanceof Error ? requestError.message : "批量分析失败";
-        setError(detail);
+        setError(requestError instanceof Error ? requestError.message : "创建分析任务失败");
       } finally {
-        setLoading(false);
+        setStarting(false);
       }
     },
     [jobIds, loadHistory, message],
   );
 
-  const runInBackground = useCallback(async () => {
-    if (jobIds.length === 0) {
-      message.warning("请先选择岗位");
-      return;
-    }
-    setLoading(true);
-    setError("");
+  const cancelRunning = async () => {
+    if (!activeTask || cancelling) return;
+    setCancelling(true);
     try {
-      const task = await startJobMatchBatchTask({ job_ids: jobIds, force: false });
-      watchJobMatchBatchTask(task, "岗位适配度分析（" + jobIds.length + " 个岗位）");
-      message.success("已转入后台分析，完成后会通知你");
-      onClose();
+      await cancelJobMatchBackgroundTask(activeTask.id);
+      setRunningTaskId(null);
+      setPhase("setup");
+      message.success("已取消本次分析；取消前完成的结果仍已保存");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "创建后台分析任务失败");
+      message.error(requestError instanceof Error ? requestError.message : "取消失败");
     } finally {
-      setLoading(false);
-    }
-  }, [jobIds, message, onClose]);
-
-  // Compiler 规范：随 open/jobIds 变化的重置用渲染期守卫式调整；副作用留在 effect。
-  const [prevResetKey, setPrevResetKey] = useState<string | null>(null);
-  if (prevResetKey !== jobIdsKey) {
-    setPrevResetKey(jobIdsKey);
-    setBatch(null);
-    setError("");
-    setActiveTab(autoRun ? "result" : "history");
-  }
-
-  // 打开即触发的历史拉取与自动运行：runBatch/runInBackground 内部的 setState 是
-  // 异步完成回调，但规则的调用图追踪仍会标记——按"派生事件"书面理由豁免。
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (!open) return;
-    void loadHistory();
-    if (autoRun) {
-      if (runMode === "background") void runInBackground();
-      else void runBatch(false);
-    }
-  }, [autoRun, jobIds, loadHistory, open, runBatch, runInBackground, runMode]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  const openHistory = async (id: number) => {
-    setLoading(true);
-    setError("");
-    try {
-      setBatch(await getJobMatchBatch(id));
-      setActiveTab("result");
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "读取匹配记录失败");
-    } finally {
-      setLoading(false);
+      setCancelling(false);
     }
   };
 
-  const resultContent =
-    loading && !batch ? (
-      <PageSkeleton rows={8} />
-    ) : batch ? (
-      <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-        <Alert
-          type={batch.failed_count > 0 ? "warning" : "success"}
-          showIcon
-          title={`已完成 ${batch.completed_count} 个岗位，${batch.failed_count} 个岗位失败`}
-          description={`结果已保存，可在「历史记录」中回看；已按匹配度参考分从高到低排列。${batch.model ? `本批使用模型：${batch.model}` : "本批未配置模型，使用本地降级结果。"}`}
+  const openHistoryBatch = async (id: number) => {
+    setHistoryBatchLoading(true);
+    try {
+      setHistoryBatch(await getJobMatchBatch(id));
+    } catch (requestError) {
+      message.error(requestError instanceof Error ? requestError.message : "读取匹配记录失败");
+    } finally {
+      setHistoryBatchLoading(false);
+    }
+  };
+
+  const runningContent = activeTask ? (
+    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
+      <Alert
+        type="info"
+        showIcon
+        title="正在后台分析，关闭这个窗口也不会中断"
+        description="分析在服务端逐个岗位进行；切到其他页面任务会继续，完成时会弹出通知。"
+      />
+      <div style={{ textAlign: "center" }}>
+        <Progress
+          type="circle"
+          percent={
+            activeTask.requestedCount > 0
+              ? Math.round(
+                  ((activeTask.completedCount + activeTask.failedCount) /
+                    activeTask.requestedCount) *
+                    100,
+                )
+              : 0
+          }
+          size={96}
         />
-        {batch.items.length === 0 ? (
-          <Typography.Text type="secondary">没有可展示的分析结果</Typography.Text>
+        <div style={{ marginTop: 8 }}>
+          <Typography.Text strong>
+            已完成 {activeTask.completedCount + activeTask.failedCount} /{" "}
+            {activeTask.requestedCount} 个岗位
+          </Typography.Text>
+          {activeTask.failedCount > 0 ? (
+            <Typography.Text type="secondary">（失败 {activeTask.failedCount}）</Typography.Text>
+          ) : null}
+        </div>
+        {activeTask.currentJobTitle ? (
+          <Typography.Text type="secondary">正在分析：{activeTask.currentJobTitle}</Typography.Text>
         ) : (
-          <Listy
-            items={batch.items}
-            rowKey={(item) => `${batch.id}-${item.job_id}`}
-            itemRender={(item) => (
-              <ListyItem>
-                <div style={{ width: "100%" }}>
-                  <BatchItemCard item={item} />
-                </div>
-              </ListyItem>
-            )}
-          />
+          <Typography.Text type="secondary">等待后台任务启动…</Typography.Text>
         )}
+      </div>
+      <Space wrap style={{ justifyContent: "center", width: "100%" }}>
+        <Button danger loading={cancelling} onClick={() => void cancelRunning()}>
+          取消本次分析
+        </Button>
+        <Button onClick={onClose}>转入后台，先去忙别的</Button>
       </Space>
-    ) : (
-      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择岗位后开始批量分析" />
-    );
+    </Space>
+  ) : (
+    <LoadingBlock />
+  );
+
+  const setupContent = (
+    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
+      <Alert
+        type="info"
+        showIcon
+        title={`将为 ${jobIds.length} 个勾选的岗位逐一分析适配度`}
+        description="分析在后台逐个岗位进行：可以随时取消，也可以关掉窗口先去忙别的，完成时会弹出通知；结论不带百分比，参考分仅作展示排序用。"
+      />
+      <Checkbox checked={force} onChange={(event) => setForce(event.target.checked)}>
+        重新分析已有结论的岗位（默认跳过已有适配度结论的岗位）
+      </Checkbox>
+    </Space>
+  );
 
   const historyContent = historyLoading ? (
     <LoadingBlock />
@@ -334,7 +287,7 @@ export default function JobMatchBatchPanel({
       itemRender={(item) => (
         <ListyItem
           actions={[
-            <Button key="view" type="link" onClick={() => void openHistory(item.id)}>
+            <Button key="view" type="link" onClick={() => void openHistoryBatch(item.id)}>
               查看结果
             </Button>,
           ]}
@@ -348,54 +301,125 @@ export default function JobMatchBatchPanel({
     />
   );
 
+  const resultContent = !batch ? (
+    <PageSkeleton rows={8} />
+  ) : batch ? (
+    <BatchResultView batch={batch} />
+  ) : (
+    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有可展示的结果" />
+  );
+
+  const phaseContent =
+    phase === "running"
+      ? runningContent
+      : phase === "result"
+        ? resultContent
+        : phase === "history"
+          ? historyContent
+          : setupContent;
+
   return (
-    <Modal
-      open={open}
-      title={
-        <Space>
-          <RobotOutlined />
-          岗位批量适配度分析
-        </Space>
-      }
-      width={900}
-      // 批量结果逐岗位输出：限高让超长内容只滚弹窗内部；全局 flex+margin:auto
-      // 让弹窗垂直居中，底部「关闭」不再抵住视口下缘。
-      styles={{
-        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
-      }}
-      onCancel={onClose}
-      footer={
-        <Space>
-          <Button onClick={onClose}>关闭</Button>
-          {activeTab === "result" && batch && autoRun && jobIds.length > 0 ? (
-            <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void runBatch(true)}>
-              重新分析
-            </Button>
-          ) : null}
-        </Space>
-      }
-    >
-      {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        items={[
-          { key: "result", label: "本次结果", children: resultContent },
-          {
-            key: "history",
-            label: (
-              <Space size={4}>
-                <HistoryOutlined />
-                历史记录
-              </Space>
-            ),
-            children: historyContent,
+    <>
+      <Modal
+        open={open}
+        title={
+          <Space>
+            <RobotOutlined />
+            岗位批量适配度分析
+          </Space>
+        }
+        width={900}
+        // 批量结果逐岗位输出：限高让超长内容只滚弹窗内部；全局 flex+margin:auto
+        // 让弹窗垂直居中，底部「关闭」不再抵住视口下缘。
+        styles={{
+          body: {
+            maxHeight: "var(--rf-modal-body-max-h)",
+            overflowY: "auto",
+            overflowX: "hidden",
           },
-        ]}
-      />
-      {jobIdsKey && autoRun ? (
-        <Typography.Text type="secondary">本次选择：{jobIds.length} 个岗位</Typography.Text>
-      ) : null}
-    </Modal>
+        }}
+        onCancel={onClose}
+        footer={
+          <Space>
+            <Button onClick={onClose}>关闭</Button>
+            {phase === "result" && batch && jobIds.length > 0 ? (
+              <Button
+                icon={<ReloadOutlined />}
+                loading={starting}
+                onClick={() => void startAnalysis(true)}
+              >
+                重新分析这批
+              </Button>
+            ) : null}
+            {phase === "setup" ? (
+              <Button
+                type="primary"
+                icon={<RobotOutlined />}
+                loading={starting}
+                onClick={() => void startAnalysis(force)}
+              >
+                开始分析
+              </Button>
+            ) : null}
+          </Space>
+        }
+      >
+        {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
+        <Tabs
+          activeKey={phase === "history" ? "history" : "analysis"}
+          onChange={(key) => {
+            if (activeTask && key === "history") {
+              // 进行中允许看历史，但回到分析页签要回到进度视图而不是 setup。
+              setPhase("history");
+              return;
+            }
+            setPhase(key === "history" ? "history" : activeTask ? "running" : "setup");
+          }}
+          items={[
+            {
+              key: "analysis",
+              label: (
+                <Space size={4}>
+                  <RobotOutlined />
+                  {phase === "running" ? "进行中" : phase === "result" ? "本次结果" : "分析设置"}
+                </Space>
+              ),
+              children: phaseContent,
+            },
+            {
+              key: "history",
+              label: (
+                <Space size={4}>
+                  <HistoryOutlined />
+                  历史记录
+                </Space>
+              ),
+              children: historyContent,
+            },
+          ]}
+        />
+        {phase === "setup" && jobIdsKey ? (
+          <Typography.Text type="secondary">本次选择：{jobIds.length} 个岗位</Typography.Text>
+        ) : null}
+      </Modal>
+      {/* 历史结果弹卡：查看某一批的完整结果，不占用面板本身的"本次结果"页签。 */}
+      <Modal
+        open={historyBatch !== null || historyBatchLoading}
+        title={historyBatch ? `第 ${historyBatch.id} 批分析结果` : "读取分析结果…"}
+        width={900}
+        confirmLoading={historyBatchLoading}
+        onCancel={() => setHistoryBatch(null)}
+        footer={<Button onClick={() => setHistoryBatch(null)}>关闭</Button>}
+        styles={{
+          body: {
+            maxHeight: "var(--rf-modal-body-max-h)",
+            overflowY: "auto",
+            overflowX: "hidden",
+          },
+        }}
+      >
+        {historyBatch ? <BatchResultView batch={historyBatch} /> : <PageSkeleton rows={6} />}
+      </Modal>
+    </>
   );
 }

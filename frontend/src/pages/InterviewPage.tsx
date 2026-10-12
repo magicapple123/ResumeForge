@@ -35,6 +35,7 @@ import type {
   QuestionBankRecord,
 } from "../types";
 import { AUTO_FINISH_MAX_ROUNDS, AUTO_ROUNDS_FLAG } from "../types";
+import { AUTO_ROUNDS_OPTION } from "../pages/interview/SetupTab";
 import { formatDateTime } from "../utils/format";
 
 /** 每页条数之类没有；这里是深链 ?job_id= 的解析：正整数才认，其余按"没带参"处理。 */
@@ -135,9 +136,10 @@ export default function InterviewPage() {
         interview_type: values.interviewType,
         difficulty: values.difficulty,
         interviewer_style: values.interviewerStyle,
-        // 自动收尾：何时结束完全交给 AI；rounds 只是服务端的硬性保险，界面与提示词都不展示。
-        rounds: values.autoRounds ? AUTO_FINISH_MAX_ROUNDS : values.rounds,
-        rounds_min: values.autoRounds ? AUTO_ROUNDS_FLAG : null,
+        // 「自动」档：何时结束完全交给 AI；rounds 只是服务端的硬性保险，界面与提示词都不展示。
+        rounds:
+          values.rounds === AUTO_ROUNDS_OPTION ? AUTO_FINISH_MAX_ROUNDS : (values.rounds as number),
+        rounds_min: values.rounds === AUTO_ROUNDS_OPTION ? AUTO_ROUNDS_FLAG : null,
         focus: values.focus ?? "",
         persona: values.persona ?? "",
       });

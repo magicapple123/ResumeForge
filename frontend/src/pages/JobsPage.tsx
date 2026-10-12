@@ -28,7 +28,7 @@ import JobTable from "../components/jobs/JobTable";
 import type { CandidateJobDetail, Job } from "../types";
 import { BatchToolbar } from "./jobs/BatchToolbar";
 import { JobFilterBar } from "./jobs/JobFilterBar";
-import type { BatchAction, MatchBatchRunMode } from "./jobs/jobFilterOptions";
+import type { BatchAction } from "./jobs/jobFilterOptions";
 import { useJobQueue } from "./jobs/useJobQueue";
 import { useJobsPageState } from "./jobs/useJobsPageState";
 import { bulkEnqueueJobs, bulkEnqueueSummary } from "../components/apply/queue/bulkEnqueue";
@@ -71,8 +71,7 @@ export default function JobsPage() {
   const [analysisJob, setAnalysisJob] = useState<Job | null>(null);
   const [matchJob, setMatchJob] = useState<Job | null>(null);
   const [matchBatchOpen, setMatchBatchOpen] = useState(false);
-  const [matchBatchAutoRun, setMatchBatchAutoRun] = useState(false);
-  const [matchBatchRunMode, setMatchBatchRunMode] = useState<MatchBatchRunMode>("immediate");
+  const [matchBatchView, setMatchBatchView] = useState<"setup" | "history">("setup");
   const [webFormJobId, setWebFormJobId] = useState<number | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [batchStatus, setBatchStatus] = useState<string>();
@@ -313,24 +312,25 @@ export default function JobsPage() {
     setSelectionMode(true);
   }, [batchAction]);
 
-  const openMatchBatch = (autoRun: boolean, runMode: MatchBatchRunMode = "immediate") => {
-    if (autoRun && !selectionMode) {
-      // 「AI 分析适配度」分析的是勾选的岗位：没进选择模式说明用户还没机会勾选——
-      // 直接带他进选择模式，而不是丢一句「请先选择岗位」的死路提示。
-      setSelectionMode(true);
-      message.info("已进入选择模式，勾选岗位后点分析");
-      return;
+  const openMatchBatch = (view: "setup" | "history" = "setup") => {
+    if (view === "setup") {
+      if (!selectionMode) {
+        // 「AI 分析适配度」分析的是勾选的岗位：没进选择模式说明用户还没机会勾选——
+        // 直接带他进选择模式，而不是丢一句「请先选择岗位」的死路提示。
+        setSelectionMode(true);
+        message.info("已进入选择模式，勾选岗位后点分析");
+        return;
+      }
+      if (selectedJobIds.length === 0) {
+        message.warning("请先选择岗位");
+        return;
+      }
+      if (selectedJobIds.length > 50) {
+        message.warning("一次最多分析 50 个岗位");
+        return;
+      }
     }
-    if (autoRun && selectedJobIds.length === 0) {
-      message.warning("请先选择岗位");
-      return;
-    }
-    if (autoRun && selectedJobIds.length > 50) {
-      message.warning("一次最多分析 50 个岗位");
-      return;
-    }
-    setMatchBatchAutoRun(autoRun);
-    setMatchBatchRunMode(runMode);
+    setMatchBatchView(view);
     setMatchBatchOpen(true);
   };
 
@@ -486,9 +486,8 @@ export default function JobsPage() {
       <JobMatchModal job={matchJob} onClose={() => setMatchJob(null)} />
       <JobMatchBatchPanel
         open={matchBatchOpen}
-        jobIds={matchBatchAutoRun ? selectedJobIds : []}
-        autoRun={matchBatchAutoRun}
-        runMode={matchBatchRunMode}
+        jobIds={selectedJobIds}
+        initialView={matchBatchView}
         onClose={() => setMatchBatchOpen(false)}
       />
     </div>

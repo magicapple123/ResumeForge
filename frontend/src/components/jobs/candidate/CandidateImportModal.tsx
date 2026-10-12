@@ -4,11 +4,12 @@
  * 与岗位广场的 JobImportModal 同一套两步流，但字段集更小（候选没有 JD 结构与
  * 收藏），预览里直接展示每行的岗位名 + 公司，方便用户核对再入库。
  */
-import { InboxOutlined } from "@ant-design/icons";
-import { Alert, List, Modal, Space, Typography, Upload } from "antd";
+import { DownloadOutlined, InboxOutlined } from "@ant-design/icons";
+import { Alert, Button, List, Modal, Space, Typography, Upload } from "antd";
 import { useState } from "react";
 import { importCandidatesCsv, previewCandidateImport } from "../../../api/candidateJob";
 import type { CandidateCsvPreview } from "../../../types";
+import { downloadCsvTemplate } from "../../../utils/download";
 
 interface Props {
   open: boolean;
@@ -95,8 +96,8 @@ export function CandidateImportModal({ open, onClose, onImported }: Props) {
     >
       <Space orientation="vertical" size={12} style={{ width: "100%" }}>
         <Typography.Text type="secondary">
-          第一行是表头（岗位名称 / 公司名称 / 工作地点 / 薪资范围 / 岗位链接 / 招聘原文 /
-          备注），也可以先用工具条里的「导出 CSV」拿一份现成模板
+          这里导入的是<strong>备选岗位</strong>（先暂存在这个抽屉里，之后点卡片上的「导入到岗位」
+          才会进入岗位广场）——与岗位广场的 CSV 导入是两条独立通道，别混用两份文件。
         </Typography.Text>
         <Upload.Dragger
           accept=".csv,text/csv"
@@ -109,7 +110,28 @@ export function CandidateImportModal({ open, onClose, onImported }: Props) {
             <InboxOutlined />
           </p>
           <p className="ant-upload-text">点击或拖拽 CSV 文件到这里</p>
+          <p className="ant-upload-hint">
+            第一行是表头（岗位名称 / 公司名称 / 工作地点 / 薪资范围 / 岗位链接 / 招聘原文 /
+            备注），也可以先下载空模板照着填
+          </p>
         </Upload.Dragger>
+        <Button
+          size="small"
+          icon={<DownloadOutlined />}
+          onClick={() =>
+            downloadCsvTemplate("备选岗位导入模板.csv", [
+              "岗位名称",
+              "公司名称",
+              "工作地点",
+              "薪资范围",
+              "岗位链接",
+              "招聘原文",
+              "备注",
+            ])
+          }
+        >
+          下载空模板
+        </Button>
 
         {parsing && <Typography.Text type="secondary">正在解析…</Typography.Text>}
 

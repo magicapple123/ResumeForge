@@ -70,27 +70,27 @@ describe("SetupTab 关联岗位预填（RF-11）", () => {
   });
 });
 
-describe("SetupTab 自动轮数", () => {
-  it("默认关闭：固定轮数输入可见，提交带 autoRounds=false", async () => {
+describe("SetupTab 轮数选择", () => {
+  it("默认固定轮数：提交带具体轮数值", async () => {
     const onStart = vi.fn();
     renderSetup({ onStart });
 
     expect(screen.getByLabelText("轮数")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /开始面试/ }));
     await waitFor(() => expect(onStart).toHaveBeenCalled());
-    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ autoRounds: false }));
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ rounds: 6 }));
   });
 
-  it("打开开关：固定轮数输入隐藏，提交带 autoRounds=true", async () => {
+  it("轮数下拉选「自动」：提交带 auto（页面据此改走后台任务的自动收尾模式）", async () => {
     const onStart = vi.fn();
     renderSetup({ onStart });
 
-    fireEvent.click(screen.getByRole("switch", { name: /自动轮数/ }));
-    // Form.useWatch 触发重渲需要一个微任务周期。
-    await waitFor(() => expect(screen.queryByLabelText("轮数")).toBeNull());
+    // antd Select 的下拉选项挂在 body portal 上：先点开选择框再点选项。
+    fireEvent.mouseDown(screen.getByLabelText("轮数"));
+    fireEvent.click(await screen.findByText("自动（AI 判断收尾）"));
 
     fireEvent.click(screen.getByRole("button", { name: /开始面试/ }));
     await waitFor(() => expect(onStart).toHaveBeenCalled());
-    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ autoRounds: true }));
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ rounds: "auto" }));
   });
 });
