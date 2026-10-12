@@ -3,12 +3,19 @@
 检索口径集中在 ``list_knowledge``：标题/正文按关键词命中（``q``）、分类精确筛选
 （``category``）、只取未删除的行（``live_only``）、按 ``updated_at`` 倒序。删除一律走
 ``trash.soft_delete`` 进回收站（``knowledge_entry`` 已在 ``TRASH_SPECS`` 注册）。
+
+关键词检索有两路（2026-10-12 万级数据优化）：迁移 ``0044_search_fts5`` 建过
+``knowledge_fts``（FTS5 trigram 外部内容表）时走 ``MATCH``，否则回退原 LIKE。
+trigram 下 ``MATCH '"关键词"'`` 与 ``LIKE '%关键词%'`` 对 ≥3 字符的子串语义一致
+（ASCII 大小写折叠也相同）；短于 3 字符 trigram 无法表达，回退 LIKE。
 """
+
 from __future__ import annotations
 
 import logging
+from weakref import WeakKeyDictionary
 
-from sqlalchemy import func, literal, or_, select
+from sqlalchemy import bindparam, func, literal, literal_column, or_, select, text
 from sqlalchemy.orm import Query, Session
 
 from ..models.knowledge_entry import KnowledgeEntry
@@ -16,6 +23,61 @@ from ..schemas.knowledge import KnowledgeCreate, KnowledgeUpdate
 from . import trash
 
 logger = logging.getLogger(__name__)
+
+# trigram 滑窗需要至少 3 个字符才能表达一个子串查询。
+_TRIGRAM_MIN_CHARS = 3
+
+# 探测结果按 Engine 进程内缓存：表存在与否在库生命周期内不变，同一 engine 的
+# 反复查询不必每次都打 sqlite_master。测试库各有独立 engine，互不串缓存。
+_FTS_CACHE: WeakKeyDictionary = WeakKeyDictionary()
+
+FTS_TABLE = "knowledge_fts"
+
+
+def _fts_available(db: Session) -> bool:
+    """``knowledge_fts`` 是否可用（迁移 0044 建过且当前 SQLite 支持 trigram）。
+
+    迁移只在 FTS5 trigram 可用的 SQLite 上建表，所以"表存在"即"可用"；表不存在时
+    的一切失败（历史库没跑过新迁移、SQLite 太旧）都归为不可用，走 LIKE 回退。
+    """
+    engine = db.get_bind()
+    cached = _FTS_CACHE.get(engine)
+    if cached is not None:
+        return cached
+    try:
+        db.execute(text(f"SELECT rowid FROM {FTS_TABLE} LIMIT 1")).all()
+        available = True
+    except Exception:  # noqa: BLE001 - 探测失败一律视为不可用
+        available = False
+    _FTS_CACHE[engine] = available
+    return available
+
+
+def _match_expression(raw: str) -> str | None:
+    """把用户输入转成安全的 FTS5 MATCH 表达式；不适配时返回 ``None``（回退 LIKE）。
+
+    整个词项用双引号包成 FTS5 字符串常量，内部的 ``"`` 翻倍转义——这样用户输入里
+    的 AND/OR/NOT/NEAR、括号、通配符全部按字面量参与匹配，既没有语法错误也没有
+    注入面（表达式作为参数绑定，且语义上等价于对原词做子串查找）。空格也是
+    trigram 的一部分，``"a b"`` 与 ``LIKE '%a b%'`` 一样要求精确含空格。
+
+    返回 ``None`` 的情形：strip 后为空（本来就不该加过滤）或长度不足
+    ``_TRIGRAM_MIN_CHARS``（trigram 表达不了短查询，继续走 LIKE 保语义）。
+    """
+    term = raw.strip()
+    if len(term) < _TRIGRAM_MIN_CHARS:
+        return None
+    escaped = term.replace('"', '""')
+    return f'"{escaped}"'
+
+
+def _fts_id_filter(expression: str):
+    """``MATCH`` 命中的 ``knowledge_entry.id`` 子查询（与主查询按 id 关联）。"""
+    return (
+        select(literal_column("rowid"))
+        .select_from(text(FTS_TABLE))
+        .where(text(f"{FTS_TABLE} MATCH :fts_match").bindparams(bindparam("fts_match", expression)))
+    )
 
 
 def _tag_expression(tag: str):
@@ -34,26 +96,37 @@ def _filtered_query(db: Session, *, q: str = "", category: str = "") -> Query[Kn
 
     检索口径集中在这一处：标题/正文按关键词命中（``q``）、分类精确筛选（``category``）、
     只取未删除的行。两处各写一遍迟早会改漏一边。
+
+    关键词命中：``knowledge_fts`` 可用时走 FTS5 ``MATCH``（trigram 子串语义，
+    软删除行靠 ``live_only`` 排除——索引里仍会保留已软删的行，因为软删是 UPDATE，
+    见 ``_fts_available`` 的模块注释）；不可用或查询过短（< 3 字符）时回退 LIKE。
     """
     query = db.query(KnowledgeEntry).filter(trash.live_only(KnowledgeEntry))
     if category.strip():
         query = query.filter(KnowledgeEntry.category == category.strip())
-    if q.strip():
-        like = f"%{q.strip()}%"
-        query = query.filter(
-            or_(
-                KnowledgeEntry.title.like(like),
-                KnowledgeEntry.content.like(like),
+    term = q.strip()
+    if term:
+        expression = _match_expression(term) if _fts_available(db) else None
+        if expression is not None:
+            query = query.filter(KnowledgeEntry.id.in_(_fts_id_filter(expression)))
+        else:
+            like = f"%{term}%"
+            query = query.filter(
+                or_(
+                    KnowledgeEntry.title.like(like),
+                    KnowledgeEntry.content.like(like),
+                )
             )
-        )
     return query
 
 
 def list_knowledge(db: Session, *, q: str = "", category: str = "") -> list[KnowledgeEntry]:
     """列表：按分类/关键词筛选，只看未删除条目，按更新时间倒序。"""
-    return _filtered_query(db, q=q, category=category).order_by(
-        KnowledgeEntry.updated_at.desc(), KnowledgeEntry.id.desc()
-    ).all()
+    return (
+        _filtered_query(db, q=q, category=category)
+        .order_by(KnowledgeEntry.updated_at.desc(), KnowledgeEntry.id.desc())
+        .all()
+    )
 
 
 def list_knowledge_page(
@@ -160,4 +233,3 @@ __all__ = [
     "list_knowledge_tags",
     "update_knowledge",
 ]
-

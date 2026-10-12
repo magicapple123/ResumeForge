@@ -290,10 +290,13 @@ def _database_info(database: Path, bind: Engine) -> dict[str, Any]:
         # 不是业务表，更不是"更新版本的新表"：按 ``sqlite_`` 前缀整体放行。逐个枚举
         # 会漏——optimize/ANALYZE 这类引擎行为随时可能在库里落下新的统计表，把一份
         # 完全合法的备份误判成"来自更新版本"。
+        # ``knowledge_fts*`` 是迁移 0044 建的 FTS5 派生索引（含 _data/_idx/_docsize/
+        # _config 四张影子表）：内容完全由 knowledge_entry + 触发器推导，删除后
+        # rebuild 即可重建，不算"更新版本的新表"。
         unexpected = sorted(
             name
             for name in tables - set(_APPLICATION_TABLES) - {"alembic_version"}
-            if not name.startswith("sqlite_")
+            if not name.startswith("sqlite_") and not name.startswith("knowledge_fts")
         )
         if unexpected:
             raise BackupError(

@@ -7,6 +7,7 @@
 
 因此这里除了常规的幂等与降级，还要专门验一件事：**从"跑过旧版 0025"的库升级也能补齐**。
 """
+
 from alembic import command
 from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect
@@ -123,7 +124,13 @@ def test_head_table_set_matches_the_models(tmp_path):
     try:
         command.upgrade(build_alembic_config(engine), "head")
         expected = set(Base.metadata.tables)
-        actual = _tables(engine) - {"alembic_version"}
+        # knowledge_fts* 是 0044 的 FTS5 派生索引（虚拟表+影子表，可由 rebuild 重建），
+        # 不在 Base.metadata 里，也不算业务表。
+        actual = {
+            name
+            for name in _tables(engine)
+            if name != "alembic_version" and not name.startswith("knowledge_fts")
+        }
         assert actual == expected, (
             f"仅库里有 {sorted(actual - expected)}，仅模型里有 {sorted(expected - actual)}"
         )

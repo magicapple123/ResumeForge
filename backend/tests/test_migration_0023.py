@@ -4,6 +4,7 @@
 **"旧备份仍可导入"的前提没有被破坏**——无论备份来自这张表存在之前还是之后，
 迁到 head 之后表集合都必须与当前代码一致。
 """
+
 from alembic import command
 from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect
@@ -66,7 +67,10 @@ def test_downgrade_brings_the_table_back(tmp_path):
         columns = {item["name"] for item in inspector.get_columns(TABLE)}
         assert columns == {"id", "site_id", "run_id", "job_count", "recorded_at"}
         indexes = {item["name"] for item in inspector.get_indexes(TABLE)}
-        assert {"ix_official_source_trend_site_id", "ix_official_source_trend_recorded_at"} <= indexes
+        assert {
+            "ix_official_source_trend_site_id",
+            "ix_official_source_trend_recorded_at",
+        } <= indexes
         # 外键的删除语义也要回来：源删掉时计数跟着走。
         assert any(
             item["referred_table"] == "official_site"
@@ -91,7 +95,13 @@ def test_head_table_set_matches_the_models(tmp_path):
         # 0024 之后不能再停在本迁移自己的 revision，否则新表会被误报成模型孤儿。
         command.upgrade(build_alembic_config(engine), "head")
         expected = set(Base.metadata.tables)
-        actual = _tables(engine) - {"alembic_version"}
+        # knowledge_fts* 是 0044 的 FTS5 派生索引（虚拟表+影子表，可由 rebuild 重建），
+        # 不在 Base.metadata 里，也不算业务表。
+        actual = {
+            name
+            for name in _tables(engine)
+            if name != "alembic_version" and not name.startswith("knowledge_fts")
+        }
         assert actual == expected, (
             f"仅库里有 {sorted(actual - expected)}，仅模型里有 {sorted(expected - actual)}"
         )

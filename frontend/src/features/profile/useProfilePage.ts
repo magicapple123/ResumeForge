@@ -74,6 +74,9 @@ export function useProfilePage() {
   const [profileText, setProfileText] = useState("");
   const [profileTextWarnings, setProfileTextWarnings] = useState<string[]>([]);
   const [profileTextParsing, setProfileTextParsing] = useState(false);
+  // 上传进度（0-100；null 表示不在上传中）：附件 base64 进 JSON 体，大文件上传
+  // 可达数秒以上，弹窗里画出进度条比一个转圈按钮更让人安心。
+  const [profileTextUploadPercent, setProfileTextUploadPercent] = useState<number | null>(null);
   const [profileTextRecognized, setProfileTextRecognized] = useState("");
   const [profileTextSource, setProfileTextSource] = useState<RecognitionSource | null>(null);
   const {
@@ -133,6 +136,7 @@ export function useProfilePage() {
   const closeProfileTextModal = () => {
     profileTextRequestId.current += 1;
     setProfileTextParsing(false);
+    setProfileTextUploadPercent(null);
     clearFiles();
     setProfileTextOpen(false);
   };
@@ -214,12 +218,18 @@ export function useProfilePage() {
     }
     setProfileTextParsing(true);
     const requestId = ++profileTextRequestId.current;
+    setProfileTextUploadPercent(0);
     try {
-      const parsed = await parseProfileText({
-        text,
-        images: attachmentInputs(files, "image"),
-        documents: attachmentInputs(files, "document"),
-      });
+      const parsed = await parseProfileText(
+        {
+          text,
+          images: attachmentInputs(files, "image"),
+          documents: attachmentInputs(files, "document"),
+        },
+        (percent) => {
+          if (requestId === profileTextRequestId.current) setProfileTextUploadPercent(percent);
+        },
+      );
       if (requestId !== profileTextRequestId.current) return;
       const { warnings, parse_engine: recognitionSource } = parsed;
       const currentValues = form.getFieldsValue(true) as Partial<ProfileFormValues>;
@@ -239,7 +249,10 @@ export function useProfilePage() {
       setProfileTextSource(null);
       message.error(err instanceof Error ? err.message : "识别个人资料失败");
     } finally {
-      if (requestId === profileTextRequestId.current) setProfileTextParsing(false);
+      if (requestId === profileTextRequestId.current) {
+        setProfileTextParsing(false);
+        setProfileTextUploadPercent(null);
+      }
     }
   };
 
@@ -274,6 +287,7 @@ export function useProfilePage() {
     profileText,
     profileTextWarnings,
     profileTextParsing,
+    profileTextUploadPercent,
     profileTextRecognized,
     profileTextSource,
     files,

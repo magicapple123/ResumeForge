@@ -318,3 +318,58 @@ def test_export_follows_the_current_filter(client):
     body = json.loads(response.text)
     assert body["总数"] == 1
     assert body["记录"][0]["岗位"] == "算法实习生"
+
+
+# ===== 导出流式化（批次 C4）=====
+
+
+def test_csv_export_streaming_matches_to_csv_byte_for_byte(client, db_session):
+    """流式端点的产物必须与一次性 ``to_csv`` 字节级一致（语义与产物兼容优先）。"""
+    from app.services.tracker import list_tracks, to_csv
+
+    client.post("/api/tracker", json=VALID)
+    client.post(
+        "/api/tracker", json={**VALID, "company": "备注\r\n含换行", "note": "第一行\n第二行"}
+    )
+
+    response = client.get("/api/tracker/export", params={"format": "csv"})
+    expected = to_csv(list_tracks(db_session, limit=None))
+    assert response.text == expected
+
+
+def test_csv_export_streams_a_large_list(client, db_session):
+    """600 条（超过列表 500 兜底）导出：文件名计数、行数与内容完整。"""
+    from app.models.tracker import ApplicationTrack
+
+    rows = [
+        ApplicationTrack(
+            company=f"公司{i:03d}",
+            company_key=f"公司{i:03d}",
+            title="批量岗",
+            title_key="批量岗",
+            status="applied",
+            applied_at="2026-09-18",
+            stage_note="",
+            next_action="",
+            next_action_date=None,
+            note=f"备注 {i}",
+        )
+        for i in range(600)
+    ]
+    db_session.add_all(rows)
+    db_session.commit()
+
+    response = client.get("/api/tracker/export", params={"format": "csv"})
+    assert response.status_code == 200
+    assert "attachment" in response.headers["Content-Disposition"]
+    assert (
+        "%E6%B1%82%E8%81%8C%E8%BF%9B%E5%BA%A6-600%E6%9D%A1"
+        in response.headers["Content-Disposition"]
+    )
+    # BOM + 表头 + 600 条数据行；TestClient 会把流式 body 聚齐。
+    lines = response.text.lstrip("﻿").splitlines()
+    assert len(lines) == 601
+    assert lines[0].startswith("公司,岗位,状态")
+    # 排序与列表一致（阶段序 → updated_at/id 倒序）：最后写入的（公司599）在最前。
+    assert lines[-1] == "公司000,批量岗,已投递,,2026-09-18,,,,备注 0"
+    assert lines[1] == "公司599,批量岗,已投递,,2026-09-18,,,,备注 599"

@@ -10,6 +10,7 @@
   因此它也**不登记** ``trash.TRASH_SPECS``——与 ``test_trash.py`` 的一一对应守卫不冲突；
 - 幂等、可降级，并能跑在"表已存在但版本号还停在上一版"的历史库上。
 """
+
 from alembic import command
 from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect, text
@@ -162,5 +163,11 @@ def test_head_table_set_matches_the_models(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'head.db'}")
     command.upgrade(build_alembic_config(engine), "head")
 
-    tables = set(inspect(engine).get_table_names()) - {"alembic_version"}
+    # knowledge_fts* 是 0044 的 FTS5 派生索引（虚拟表+影子表，可由 rebuild 重建），
+    # 不在 Base.metadata 里，也不算业务表。
+    tables = {
+        name
+        for name in inspect(engine).get_table_names()
+        if name != "alembic_version" and not name.startswith("knowledge_fts")
+    }
     assert tables == set(Base.metadata.tables)

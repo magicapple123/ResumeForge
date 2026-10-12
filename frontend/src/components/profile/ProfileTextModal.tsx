@@ -1,7 +1,7 @@
 /** 粘贴整段个人资料（或资料截图、简历文档）并结构化识别的弹窗。 */
 
 import { FileSearchOutlined } from "@ant-design/icons";
-import { Alert, Button, Input, Modal, Typography } from "antd";
+import { Alert, Button, Input, Modal, Progress, Typography } from "antd";
 import type { StagedFile } from "../../hooks/useRecognitionFiles";
 import { MaxLengthHint } from "../common/MaxLengthHint";
 import RecognitionFileField from "../RecognitionFileField";
@@ -13,6 +13,8 @@ interface Props {
   text: string;
   warnings: string[];
   parsing: boolean;
+  /** 附件上传进度（0-100）；null 表示不在上传中。100 后剩余的是服务端识别时间（按钮仍 loading）。 */
+  uploadPercent: number | null;
   recognizedText: string;
   /** 这次识别是 AI 还是本地规则；还没识别过时为 null。 */
   recognitionSource: RecognitionSource | null;
@@ -31,6 +33,7 @@ export default function ProfileTextModal({
   text,
   warnings,
   parsing,
+  uploadPercent,
   recognizedText,
   recognitionSource,
   files,
@@ -92,6 +95,15 @@ export default function ProfileTextModal({
         onRemove={onRemoveFile}
       />
       <RecognitionOutcome source={recognitionSource} text={recognizedText} />
+      {uploadPercent !== null && (
+        <Progress
+          aria-label="附件上传进度"
+          percent={uploadPercent}
+          size="small"
+          status={uploadPercent >= 100 ? "success" : "active"}
+          style={{ marginTop: 12 }}
+        />
+      )}
       {warnings.length > 0 && (
         <Alert type="warning" showIcon style={{ marginTop: 12 }} title={warnings.join("；")} />
       )}
