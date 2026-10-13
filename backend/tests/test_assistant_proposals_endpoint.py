@@ -151,8 +151,11 @@ def test_stale_proposal_after_a_b_a_switch_is_rejected(client):
     assert _activate(client, other).status_code == 200
     proposal_on_b = _proposal()
     # A → B → A（主数据）→ B：dataset_id 回到 B，代次已前进了两步。
-    assert _activate(client, "main").status_code == 200
-    assert _activate(client, other).status_code == 200
+    activate_main = _activate(client, "main")
+    assert activate_main.status_code == 200, activate_main.text
+    activate_back = _activate(client, other)
+    # 失败时带响应体：detail 里点名残留的租约 owner，便于定位排空窗的阻塞者。
+    assert activate_back.status_code == 200, activate_back.text
 
     response = client.post(_APPROVE.format(proposal_on_b.proposal_id))
     assert response.status_code == 409, response.text
