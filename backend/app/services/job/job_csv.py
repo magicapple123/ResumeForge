@@ -4,8 +4,10 @@
   列集与导入共用同一份 ``CSV_COLUMNS``——导出什么就能原样导回，来回不丢字段。
   表头用**手动添加岗位表单的字段名**；字段内换行折叠成空格（Excel 里引用字段内的
   换行会把一行撑成好几行、整个表格看起来"散架"，折叠后每条岗位恰好一行）。
-- **导入**：宽容解析（UTF-8/GBK、表头别名、空行跳过）、逐行报错（行号 + 原因），
-  解析与入库分成两步（先预览确认、再提交），用户不会"选完文件就静默进了几百条"。
+- **导入**：宽容解析（UTF-8/GBK、表头别名、空行跳过）、逐行报错（**物理行号** +
+  原因），解析与入库分成两步（先预览确认、再提交），用户不会"选完文件就静默进了几百条"。
+  解析骨架（行号口径、行级隔离、重复表头检测）与备选岗位 CSV 共用
+  :func:`csv_io.parse_csv_table`——规则只写一份。
 
 注意：``recognition_source``（录入方式）不参与 CSV——那是系统内部的溯源字段，
 CSV 导入的录入方式就是"CSV 导入"这一行为本身，无需用户填写。
@@ -13,14 +15,12 @@ CSV 导入的录入方式就是"CSV 导入"这一行为本身，无需用户填�
 
 from __future__ import annotations
 
-import csv
-import io
-
 from ...models.job import JOB_STATUSES, Job
 from ..csv_io import (
     MAX_IMPORT_FILE_CHARS,
     MAX_IMPORT_ROWS,
     decode_csv_bytes,
+    parse_csv_table,
     records_to_csv_text,
 )
 
@@ -134,49 +134,18 @@ def row_to_payload(row: dict[str, str]) -> dict[str, object]:
 def parse_job_csv(text: str) -> tuple[list[tuple[int, dict[str, str]]], list[dict[str, object]]]:
     """解析 CSV 文本，返回 ``(可导入的 (行号, 字段字典) 列表, 错误行)``。
 
-    行号是文件里的真实行号（含表头算 1），用户能直接在 Excel 里定位到那一行。
+    行号是文件里的**物理起始行号**（含表头算 1，带引号内换行的记录按起始行报），
+    用户能直接在 Excel 里定位到那一行。解析骨架与备选岗位 CSV 共用
+    :func:`csv_io.parse_csv_table`。
     """
-    reader = csv.reader(io.StringIO(text))
-    rows: list[dict[str, str]] = []
-    errors: list[dict[str, object]] = []
-
-    try:
-        header_row = next(reader)
-    except StopIteration:
-        return [], [{"line": 1, "message": "文件是空的"}]
-
-    fields: list[str | None] = []
-    seen_fields: set[str] = set()
-    for _index, cell in enumerate(header_row):
-        name = cell.strip().lstrip("\ufeff")
-        field = HEADER_TO_FIELD.get(name) or HEADER_ALIASES.get(name)
-        if field and field not in seen_fields:
-            seen_fields.add(field)
-        fields.append(field)
-    if "title" not in seen_fields:
-        return [], [{"line": 1, "message": "缺少「标题」列，无法识别哪一列是岗位名"}]
-
-    for offset, raw_row in enumerate(reader):
-        line = offset + 2  # 表头是第 1 行
-        if not any((cell or "").strip() for cell in raw_row):
-            continue  # 空行不算数据，也不报错
-        if len(rows) >= MAX_IMPORT_ROWS:
-            errors.append(
-                {"line": line, "message": f"一次最多导入 {MAX_IMPORT_ROWS} 行，后面的行已忽略"}
-            )
-            break
-        row: dict[str, str] = {}
-        for index, field in enumerate(fields):
-            if field is None or index >= len(raw_row):
-                continue
-            row[field] = raw_row[index]
-        try:
-            row_to_payload(row)
-        except ValueError as exc:
-            errors.append({"line": line, "message": str(exc)})
-            continue
-        rows.append((line, row))
-    return rows, errors
+    return parse_csv_table(
+        text,
+        header_to_field=HEADER_TO_FIELD,
+        header_aliases=HEADER_ALIASES,
+        validate_row=row_to_payload,
+        title_field="title",
+        title_missing_message="缺少「标题」列，无法识别哪一列是岗位名",
+    )
 
 
 __all__ = [

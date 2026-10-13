@@ -11,6 +11,7 @@
 监控点：``content`` 快照含照片 base64，单条体积大。当前是本地单用户 SQLite，
 量级可控、接受；将来数据量上来后再考虑照片置空降级，不在本批做。
 """
+
 from datetime import datetime
 from typing import Any
 
@@ -65,6 +66,27 @@ class ResumeDeliveryRecord(Base):
     pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 生成该简历的模型（从 resume_record.model 冗余），便于回答"当时用什么生成的"。
     model: Mapped[str] = mapped_column(String(64), default="")
+
+    # ===== 可信交付账本（0045，全部可空：旧行/旧备份 NULL = 不可还原，不编造）=====
+
+    # 导出前源内容的 sha256（脱敏导出 = 脱敏后内容的规范化哈希；apply/track 路径 =
+    # 冻结内容本身的规范化哈希，与 content_sha256 同值）。与 artifact_sha256 分开，
+    # 回答"存档里是哪份内容"，而不是把它和"产出的文件是哪份"混为一谈。
+    source_content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 导出产物字节的 sha256：仅 export 路径有值（apply/track 没有产物）；与
+    # export 响应头 X-Content-Sha256 同源。
+    artifact_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 实际生效的导出请求参数（page_limit/watermark/redact/redact_options/margin_mm/
+    # font_scale/include_photo，覆盖值已按生效规则折算）：凭它 + render_context 可
+    # 重放导出。仅 export 路径有值；NULL = 无导出请求（apply/track）或旧快照不可还原。
+    request_params: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # 幂等键：代表"哪一次真实投递动作"。apply 路径用天然动作 ID
+    # （apply_task_item:{id}——同一条目重放不重复记账），export 路径用
+    # export:{resume_id}:{artifact_sha256}（同一份产物只留一份存档）。NULL =
+    # 无天然动作 ID 的旧路径。普通索引、服务层按键去重：约束化会让历史脏数据
+    # 直接炸迁移，也不挡并发竞态（见 ADR-0002）。
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 

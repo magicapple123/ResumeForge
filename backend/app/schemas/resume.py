@@ -229,6 +229,32 @@ class DeliverySummary(BaseModel):
     rendered_config_sha256: str = ""
 
 
+class DeliveryDetail(DeliverySummary):
+    """一条交付记录的**详情**（PR-09 可信交付账本）：独立访问入口的响应体。
+
+    与摘要的分工：列表只回答"有这份证据、指纹是多少"；详情面向"原简历已删后
+    仍要能回答这份证据是什么、能不能重放"的独立入口
+    （``GET /api/resumes/deliveries/{id}``），因此带上渲染上下文与实际生效的
+    请求参数。旧快照缺这些列时为 ``None``/空——前端据此标注「不可还原」，
+    不编造数据。
+    """
+
+    # 实际生效的渲染上下文（模板/样式/版式）；旧快照为空 dict。
+    render_context: dict = Field(default_factory=dict)
+    # 实际生效的导出请求参数；None = 无导出请求（apply/track）或旧快照（不可还原）。
+    request_params: dict | None = None
+    # 双指纹拆分（PR-09）：导出前源内容哈希 / 导出产物字节哈希。旧行为 NULL。
+    source_content_sha256: str | None = None
+    artifact_sha256: str | None = None
+    # 幂等键：代表哪一次真实投递动作；旧记录为 None（如实显示"未记录"）。
+    idempotency_key: str | None = None
+    # 该快照是否可从存档重放导出（有导出格式 + 有实际请求参数）。
+    replayable: bool = False
+    # 目的地快照是否完整：旧版本快照没有目的地字段（company/job_title 全空）时
+    # 为 False——前端显示"目的地未记录"，不猜。
+    destination_recorded: bool = True
+
+
 class GenerateTaskOut(BaseModel):
     """简历生成后台任务的对外状态（前端按 1.5s 轮询）。
 

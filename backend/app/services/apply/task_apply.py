@@ -1,4 +1,5 @@
 """投递批次执行：逐条投递、失败隔离、熔断与成功回写。"""
+
 from __future__ import annotations
 
 import logging
@@ -314,6 +315,10 @@ def run_apply(
                     job_id=item.job_id,
                     resume_id=item.resume_id,
                     resume_title=item.resume_title,
+                    # 幂等键（PR-09）：条目 ID 就是这次真实投递动作的天然 ID——
+                    # 同一条目重放不重复记账；不同条目对同一家公司的第二次投递
+                    # 是不同的动作，快照不会被合并吞掉。
+                    attempt_key=f"apply_task_item:{item.id}",
                 )
                 session.commit()
 
@@ -433,4 +438,3 @@ __all__ = [
     "record_step",
     "run_apply",
 ]
-
