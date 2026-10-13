@@ -90,6 +90,22 @@ class EndlessProvider(BaseLLMProvider):
             await asyncio.sleep(0.001)
 
 
+class HangingProvider(BaseLLMProvider):
+    """在"对端不发数据"的挂死上卡住的 Provider：不产出事件、也不响应 cancel_event。
+
+    区别于 EndlessProvider 的 1ms 轮询（chunk 间隙的检查点能轮询到停止信号）：
+    这里的 ``await asyncio.sleep(60)`` 模拟模型流挂在 socket read 上——检查点
+    根本轮询不到，只有从外部取消 asyncio task 才能亚秒级跳出。
+    """
+
+    async def chat(self, _messages, *, thinking: bool = True):
+        raise AssertionError("不应触发一次性对话")
+
+    async def stream_chat(self, _messages):
+        await asyncio.sleep(60)  # 挂死点：cancel_event 检查点轮询不到它
+        yield '{"unreachable": true}'  # pragma: no cover - 取消后永远走不到
+
+
 # ===== RF-02：完整生命周期（孤儿恢复 / 收拢 / 总预算 / 字符计数 / 仲裁守卫）=====
 
 
@@ -210,6 +226,93 @@ def test_cancel_returns_after_lease_released(client, monkeypatch):
 
     owners = dataset_scope.lease_owners()
     assert "resume-generate" not in owners, f"lease still held after cancel: {owners}"
+
+
+def test_cancel_aborts_hung_model_call_and_releases_lease_promptly(client, monkeypatch):
+    """取消时主动中止挂在 socket read 上的模型调用：亚秒退出、租约即时归还。
+
+    修复前：cancel_event 的检查点只在 chunk 间隙轮询，Provider 挂死在 await 上时
+    线程要等 read timeout 才退出——join(2) 超时，租约到线程退出才归还，此窗口内
+    数据集切换会撞 409（实机验证报告"实机发现"第 1 条）。修复后：cancel 经
+    ``call_soon_threadsafe`` 直接取消主 task，线程亚秒级退出。
+    """
+    _seed_profile(client)
+    _configure(client)
+    job = _job(client)
+    monkeypatch.setattr(
+        "app.services.resume.resume_generate_runner.create_provider",
+        lambda resolved: HangingProvider(resolved),
+    )
+
+    task = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]}).json()
+    _wait_status(client, task["id"], "running")
+
+    begin = time.monotonic()
+    cancelled = client.post(f"/api/resumes/generate/tasks/{task['id']}/cancel")
+    elapsed = time.monotonic() - begin
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    # join(2.0) 只留作兜底：主动中止生效时线程亚秒退出，cancel 不应等满 2s 超时。
+    assert elapsed < 2.0, f"cancel 耗时 {elapsed:.2f}s，主 task 未被主动中止"
+
+    # 租约在 cancel 返回后 1s 内归还（修复前此刻仍被挂死线程持有，需等 read timeout）。
+    from app.runtime import dataset_scope
+
+    deadline = time.monotonic() + 1.0
+    while "resume-generate" in dataset_scope.lease_owners():
+        if time.monotonic() >= deadline:
+            owners = dataset_scope.lease_owners()
+            raise AssertionError(f"租约在 cancel 后 1s 仍未归还：{owners}")
+        time.sleep(0.02)
+
+    final = _wait_terminal(client, task["id"])
+    assert final["status"] == "cancelled"
+    assert final["resume_id"] is None
+
+
+def test_cancel_main_task_aborts_hung_loop_sub_second():
+    """机制单测：_cancel_main_task 跨线程取消事件循环上挂起的主 task。
+
+    用真实 event loop + 挂起协程（短 sleep 预算，不注入时钟）：挂 30s 的协程在
+    cancel 后必须亚秒级被取消并传播 CancelledError，句柄登记随之清空。
+    """
+    from app.services.resume.resume_generate_runner import ResumeGenerateRunner
+
+    runner = ResumeGenerateRunner()
+    entered = threading.Event()
+    finished = threading.Event()
+    outcome: list[str] = []
+
+    async def hang() -> None:
+        entered.set()
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            outcome.append("cancelled")
+            raise
+
+    def worker() -> None:
+        try:
+            runner._drive_event_loop(hang())
+        except asyncio.CancelledError:
+            outcome.append("propagated")
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    # entered 在协程体内置位，而协程只有被 run_until_complete 调度后才运行——
+    # 此时 loop/task 已登记完毕，无需再轮询句柄。
+    assert entered.wait(timeout=2.0), "worker 未在 2s 内进入挂起协程"
+
+    begin = time.monotonic()
+    runner._stop.set()
+    runner._cancel_main_task()
+    assert finished.wait(timeout=2.0), "挂起的事件循环未在 2s 内退出"
+    assert time.monotonic() - begin < 1.0, "跨线程取消未亚秒级生效"
+    assert outcome == ["cancelled", "propagated"]
+    with runner._lock:
+        assert runner._loop is None and runner._main_task is None
 
 
 def test_cancel_after_done_before_completed_writes_no_resume(client, monkeypatch):
