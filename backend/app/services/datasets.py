@@ -80,7 +80,12 @@ __all__ = [
 ]
 
 # 切换前最多等这么久，等正在进行的请求把手里的连接还回池子。
-_DRAIN_TIMEOUT_SECONDS = 3.0
+# 排空预算：等待租约清零与连接归还。10s 而非更短的 3s——激活会唤醒备份调度
+# （trigger_check），新数据集的首份自动备份在调度线程持租约期间创建，CI/慢磁盘
+# 上实测可超过 3s：A→B→A 连续切换的用例在 3s 窗下偶发 409（2026-10-13 CI run6
+# Windows 后端作业）。等待有界（10s）好过立即 409 让用户重试；真正卡死的租约
+# 超时后仍按原语义拒绝并点名 owner。
+_DRAIN_TIMEOUT_SECONDS = 10.0
 
 
 def _entry_dataset_stem(entry: dict[str, Any]) -> str:
