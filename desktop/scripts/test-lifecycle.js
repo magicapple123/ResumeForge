@@ -117,8 +117,9 @@ function loadMain() {
   const ipcMainStub = { handle() {} };
 
   const backendInstances = [];
-  // The tests set `stopBackend` to control the stop() promise.
-  const state = { stopBackend: () => Promise.resolve() };
+  // The tests set `stopBackend` to control the stop() promise; it resolves to
+  // the stop outcome ({ ok, reason }) that RR-02 introduced.
+  const state = { stopBackend: () => Promise.resolve({ ok: true, reason: "" }) };
   class BackendManagerStub {
     constructor() {
       backendInstances.push(this);
@@ -130,8 +131,9 @@ function loadMain() {
     stop() {
       events.stopCalls.push("stop");
       events.order.push("stop-start");
-      return state.stopBackend().then(() => {
+      return state.stopBackend().then((outcome) => {
         events.order.push("stop-complete");
+        return outcome === undefined ? { ok: true, reason: "" } : outcome;
       });
     }
   }
@@ -340,6 +342,61 @@ test("update install: installer spawns only AFTER backend.stop() completes", asy
     const spawnIndex = loaded.events.order.indexOf("installer-spawn");
     assert.ok(spawnIndex > stopCompleteIndex,
       `installer spawn must happen after stop-complete (order: ${loaded.events.order.join(" -> ")})`);
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("update install is BLOCKED when the backend stop is not confirmed (RR-02)", async () => {
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    const requestInstallAndQuit = loaded.exports.requestInstallAndQuit;
+    // The backend could not be proven dead (recycled pid / unreadable identity):
+    // installing on top of a live backend is exactly what must not happen.
+    loaded.state.stopBackend = () =>
+      Promise.resolve({ ok: false, reason: "没有停止后端：命令行与后端不符", verified: false });
+
+    requestInstallAndQuit("C:/temp/ResumeForge-Setup-0.19.0.exe");
+    const handler = loaded.events.beforeQuitHandler;
+    handler({ preventDefault: () => {} });
+    await flush();
+    await flush();
+
+    assert.strictEqual(loaded.events.spawnCalls.length, 0,
+      "the installer must NOT be spawned while the backend is unconfirmed");
+    assert.ok(loaded.events.errorBoxes.length >= 1,
+      "the user must see why the update did not install");
+    assert.match(loaded.events.errorBoxes.join(" "), /更新未安装|未被确认停止/);
+    assert.ok(loaded.events.quitCalls.length >= 2, "quit itself still completes");
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("a stop that never resolves cannot leak into an install (timeout path)", async () => {
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    const requestInstallAndQuit = loaded.exports.requestInstallAndQuit;
+    // A stop() that hangs: the fake timer table lets us fire the 10s cap.
+    loaded.state.stopBackend = () => new Promise(() => {});
+
+    requestInstallAndQuit("C:/temp/ResumeForge-Setup-0.19.0.exe");
+    const handler = loaded.events.beforeQuitHandler;
+    handler({ preventDefault: () => {} });
+    await flush();
+    assert.strictEqual(loaded.events.spawnCalls.length, 0, "no install while stopping");
+
+    const timeoutTimer = loaded.events.timers.find((t) => t._ms === 10_000);
+    assert.ok(timeoutTimer, "before-quit must arm the stop timeout");
+    timeoutTimer._fn();
+    await flush();
+    await flush();
+
+    assert.strictEqual(loaded.events.spawnCalls.length, 0,
+      "a timed-out stop must not be followed by an install");
+    assert.ok(loaded.events.errorBoxes.length >= 1, "the timeout must be visible to the user");
   } finally {
     loaded.cleanup();
   }

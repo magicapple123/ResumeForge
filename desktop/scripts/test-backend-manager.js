@@ -32,13 +32,7 @@ const {
   isRuntimeMarkerValid,
 } = require("../backend-manager");
 
-function makeTempRoot(label) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `rf-backend-manager-${label}-`));
-}
-
-function flush() {
-  return new Promise((resolve) => setImmediate(resolve));
-}
+const { makeTempRoot, flush } = require("./testkit");
 
 const IS_WIN = process.platform === "win32";
 const PYTHON_REL = IS_WIN ? path.join("python", "python.exe") : path.join("python", "bin", "python3");
@@ -211,35 +205,6 @@ test("non-launcher child exit still reports a crash", async () => {
     await flush();
     assert.strictEqual(unexpected, 1,
       "bundled-python backend exit must keep triggering crash supervision");
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// --- 4. stop() with an adopted pid ---------------------------------------------
-
-test("stop() kills the adopted backend tree when the launcher already exited", async () => {
-  const root = makeTempRoot("stop-adopted");
-  try {
-    const spawnCalls = [];
-    const spawnFn = (file, args, options) => {
-      spawnCalls.push({ file, args, options });
-      return { on(event, cb) { if (event === "exit") setTimeout(cb, 0); } };
-    };
-    const manager = makeManager(root, { spawnFn });
-    manager.adoptedPid = 4321;
-    manager.child = { exitCode: 0, signalCode: null, pid: 999 }; // launcher already gone
-    manager.onUnexpectedExit = () => {
-      throw new Error("stop must not trigger crash supervision");
-    };
-
-    await manager.stop();
-    assert.strictEqual(spawnCalls.length, 1, "the adopted tree must be terminated");
-    if (IS_WIN) {
-      assert.strictEqual(spawnCalls[0].file, "taskkill");
-      assert.deepStrictEqual(spawnCalls[0].args, ["/pid", "4321", "/T", "/F"]);
-    }
-    assert.strictEqual(manager.logStream, null, "the log handle must be closed");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

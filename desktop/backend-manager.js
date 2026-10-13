@@ -18,28 +18,33 @@ const net = require("net");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const processIdentity = require("./lib/process-identity");
+const { BACKEND_COMMAND_PATTERNS: BACKEND_COMMAND_PATTERNS_FOR_RECORDS, stopBackend } = require("./lib/backend-stop");
+const {
+  RUNTIME_ZIP_NAME,
+  extractZip,
+  isRuntimeMarkerValid,
+  resolvePython,
+  resolveRuntimePython,
+  rotateLogFile,
+  runtimeMarkerDigest,
+  runtimeMarkerPath,
+} = require("./lib/backend-runtime");
 
 const HEALTH_TIMEOUT_MS = 90_000;
 const HEALTH_POLL_INTERVAL_MS = 300;
 const PORT_SCAN_START = 8010;
 const PORT_SCAN_END = 8099;
-// Release archives may carry a zipped Python runtime (phase 3 packaging).
-// When present it is unpacked once into the shared data dir and preferred
-// over the dev-tree venv; dev trees simply keep using the venv.
-const RUNTIME_ZIP_NAME = "python-runtime.zip";
-// The backend log is appended on every launch and every restart; without a
-// cap a long-lived install accumulates gigabytes. One previous generation is
-// kept for post-mortems.
-const LOG_MAX_BYTES = 5 * 1024 * 1024;
 // The fallback launcher (Start-ResumeForge.ps1 / start.sh) records the real
-// backend process here before it exits.
+// backend process here before it exits. Windows writes JSON (backend.json),
+// macOS a flat key=value file (backend.macos.pid) -- same information, two
+// shapes (scripts/macos/lib/common.sh), so both are read (RR-02).
 const ADOPTED_PID_RELATIVE_PATH = path.join("runtime", "backend.json");
+const ADOPTED_PID_MACOS_RELATIVE_PATH = path.join("runtime", "backend.macos.pid");
 
-function resolveRuntimePython(runtimeDir) {
-  return process.platform === "win32"
-    ? path.join(runtimeDir, "python", "python.exe")
-    : path.join(runtimeDir, "python", "bin", "python3");
-}
+// How long to wait for a process we asked to stop to actually disappear before
+// reporting the stop as unconfirmed.
+const EXIT_CONFIRM_TIMEOUT_MS = 5000;
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -50,33 +55,6 @@ function findFreePort() {
       const { port } = server.address();
       server.close(() => resolve(port));
     });
-  });
-}
-
-function resolvePython(projectRoot) {
-  const candidates =
-    process.platform === "win32"
-      ? [path.join(projectRoot, "backend", ".venv", "Scripts", "python.exe")]
-      : [path.join(projectRoot, "backend", ".venv", "bin", "python")];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  throw new Error(`Python interpreter not found: ${candidates[0]}`);
-}
-
-function extractZip(zipPath, targetDir) {
-  // bsdtar ships with Windows 10+ and macOS and reads zip archives fine;
-  // using it avoids shipping an unzip dependency in the shell.
-  return new Promise((resolve, reject) => {
-    const child = spawn("tar", ["-xf", zipPath, "-C", targetDir], {
-      windowsHide: true,
-    });
-    child.on("error", reject);
-    child.on("exit", (code) =>
-      code === 0
-        ? resolve()
-        : reject(new Error(`tar exited with ${code} while unpacking runtime`)),
-    );
   });
 }
 
@@ -92,65 +70,35 @@ function buildBackendEnv(userDataDir) {
 
 // --- runtime marker versioning (audit PR-05) -----------------------------------
 
-function runtimeMarkerPath(runtimeDir) {
-  return path.join(runtimeDir, ".runtime-complete");
-}
-
-// The marker records the sha256 of the zip it was installed from. A marker
-// whose digest no longer matches the shipped zip means the packaged runtime
-// changed (dependency upgrade, interpreter bump) and the previously unpacked
-// tree must NOT be silently reused.
-function runtimeMarkerDigest(zipPath) {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash("sha256");
-    const stream = fs.createReadStream(zipPath);
-    stream.on("data", (chunk) => hash.update(chunk));
-    stream.on("error", reject);
-    stream.on("end", () => resolve(hash.digest("hex")));
-  });
-}
-
-async function isRuntimeMarkerValid(runtimeDir, zipPath) {
-  const markerPath = runtimeMarkerPath(runtimeDir);
-  if (!fs.existsSync(markerPath)) return false;
-  let expected;
-  try {
-    expected = await runtimeMarkerDigest(zipPath);
-  } catch {
-    return false;
-  }
-  let recorded = "";
-  try {
-    recorded = String(JSON.parse(fs.readFileSync(markerPath, "utf-8")).sha256 || "");
-  } catch {
-    // Legacy plain-text markers (pre-versioning) fail the parse and are
-    // treated as stale.
-    return false;
-  }
-  return recorded === expected;
-}
-
-// --- log rotation (audit PR-05) -------------------------------------------------
-
-function rotateLogFile(logPath, maxBytes = LOG_MAX_BYTES) {
-  try {
-    if (fs.existsSync(logPath) && fs.statSync(logPath).size > maxBytes) {
-      fs.rmSync(`${logPath}.old`, { force: true });
-      fs.renameSync(logPath, `${logPath}.old`);
-    }
-  } catch {
-    // Rotation is best effort; never block the launch on it.
-  }
-}
-
 class BackendManager {
-  constructor(projectRoot, runtimeDir, { packaged = false, userDataDir = null, extractFn = extractZip, spawnFn = spawn } = {}) {
+  constructor(projectRoot, runtimeDir, {
+    packaged = false,
+    userDataDir = null,
+    extractFn = extractZip,
+    spawnFn = spawn,
+    execFileFn,
+    verifyProcessFn = processIdentity.verifyProcessRecord,
+    exitConfirmTimeoutMs = EXIT_CONFIRM_TIMEOUT_MS,
+    processExistsFn = processIdentity.processExists,
+    killFn = null,
+  } = {}) {
     this.projectRoot = projectRoot;
     this.runtimeDir = runtimeDir;
     this.packaged = packaged;
     this.userDataDir = userDataDir;
     this.extractFn = extractFn;
     this.spawnFn = spawnFn;
+    // Identity probes (RR-02) are injectable so the offline tests can drive a
+    // fake process table instead of the real one; the confirmation budget is
+    // injectable so a "surviving process" probe does not have to wait it out.
+    this.execFileFn = execFileFn;
+    this.verifyProcessFn = verifyProcessFn;
+    this.exitConfirmTimeoutMs = exitConfirmTimeoutMs;
+    // Existence probe for "did it actually exit": injectable so tests can
+    // script a surviving process without touching the real process table.
+    this.processExistsFn = processExistsFn;
+    // POSIX kill injectable for the same reason (null = real process.kill).
+    this.killFn = killFn;
     this.child = null;
     this.logStream = null;
     this.stopped = false;
@@ -158,10 +106,15 @@ class BackendManager {
     // after starting the real backend (handoff), not a crash.
     this.usingLauncher = false;
     // Set once the real backend process is identified after a launcher
-    // handoff, so stop() can terminate the actual tree.
+    // handoff, so stop() can terminate the actual tree. The record carries the
+    // identity evidence; the bare pid is kept for logs/tests.
     this.adoptedPid = null;
+    this.adoptedRecord = null;
     this.url = null;
     this.earlyExit = null;
+    // Outcome of the last stop(): { ok, reason, verified }. The shell reads it
+    // before letting an update installer overwrite this installation.
+    this.lastStop = null;
     // Set by the shell: called when the backend dies while we did not ask
     // it to (crash supervision hook).
     this.onUnexpectedExit = null;
@@ -175,15 +128,65 @@ class BackendManager {
     return path.join(this.projectRoot, ADOPTED_PID_RELATIVE_PATH);
   }
 
+  adoptedPidMacosFile() {
+    return path.join(this.projectRoot, ADOPTED_PID_MACOS_RELATIVE_PATH);
+  }
+
   // The console launchers record the real backend process as
-  // {process_id, started_at_unix, started_at} (scripts/ResumeForge.Common.ps1).
+  // {process_id, started_at_unix, started_at} (scripts/ResumeForge.Common.ps1);
+  // macOS writes the same fields flat plus start_signature
+  // (scripts/macos/lib/common.sh). Both shapes resolve to one record.
+  readAdoptedRecord() {
+    const candidates =
+      process.platform === "darwin"
+        ? [this.adoptedPidMacosFile(), this.adoptedPidFile()]
+        : [this.adoptedPidFile(), this.adoptedPidMacosFile()];
+    for (const candidate of candidates) {
+      try {
+        const record = processIdentity.parseProcessRecord(fs.readFileSync(candidate, "utf-8"));
+        if (record) return record;
+      } catch {
+        // Missing/unreadable record: try the next shape.
+      }
+    }
+    return null;
+  }
+
   readAdoptedPid() {
+    const record = this.readAdoptedRecord();
+    return record ? record.pid : null;
+  }
+
+  // Snapshot the identity of the backend this shell spawned itself and record
+  // it in the same format the console launcher uses (RR-02: identity is
+  // recorded on both legs of the handoff). Best effort: a record we cannot
+  // fill with a read start time is worse than no record, so it is skipped.
+  async recordSpawnedChild(pid) {
+    const info = await processIdentity.readProcessInfo(pid, { execFileFn: this.execFileFn });
+    if (!info || typeof info !== "object") return;
+    // The snapshot is ours regardless of what the shared record file says: it
+    // is what stop() re-checks before killing this child.
+    this.childIdentity = info;
+    // The record file is shared with the console launcher (start.cmd): if it
+    // currently describes a DIFFERENT live backend, leave it alone -- the
+    // desktop shell must not shadow a running console session's record, or
+    // stop.cmd would later find a dead pid and report "not running".
+    if (await this.recordHoldsForeignLiveBackend(pid)) return;
+    if (!Number.isInteger(info.startedAtUnix) || info.startedAtUnix <= 0) return;
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.adoptedPidFile(), "utf-8"));
-      const pid = Number(parsed.process_id);
-      return Number.isInteger(pid) && pid > 0 ? pid : null;
+      const recordPath = this.adoptedPidFile();
+      fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+      fs.writeFileSync(
+        recordPath,
+        JSON.stringify({
+          process_id: pid,
+          started_at_unix: info.startedAtUnix,
+          started_at: new Date(info.startedAtUnix * 1000).toISOString(),
+          recorded_by: "desktop-shell",
+        }),
+      );
     } catch {
-      return null;
+      // Recording is diagnostic; never block a launch on it.
     }
   }
 
@@ -255,6 +258,9 @@ class BackendManager {
   }
 
   async start(onStage) {
+    // A fresh launch supersedes an earlier stop (crash-restart path).
+    this.stopped = false;
+    this.lastStop = null;
     await this.prepareRuntime(onStage);
     const port = await findFreePort();
     const logPath = this.logFile();
@@ -334,6 +340,15 @@ class BackendManager {
     this.earlyExit = null;
     this.child.on("exit", (code, signal) => this.onChildExit(code, signal));
 
+    // Directly spawned backends get their own identity snapshot AND process
+    // record (RR-02): the snapshot is re-checked before this pid is ever
+    // killed, the record lets the console flow / a later launch see which
+    // process is the backend. The write races the (much slower) uvicorn boot;
+    // failures never block start.
+    if (!this.usingLauncher && typeof this.child.pid === "number") {
+      this.recordSpawnedChild(this.child.pid).catch(() => {});
+    }
+
     const url = `http://127.0.0.1:${port}`;
     this.url = url;
     const deadline = Date.now() + HEALTH_TIMEOUT_MS;
@@ -347,15 +362,56 @@ class BackendManager {
       if (this.stopped) throw new Error("Backend startup aborted");
       if (await this.isHealthy(url)) {
         if (this.usingLauncher) {
-          // The launcher may already have handed off; adopt the real pid.
-          this.adoptedPid = this.adoptedPid || this.readAdoptedPid();
+          // The launcher may already have handed off; adopt (or refresh) the
+          // record it wrote for the real backend process.
+          this.adoptRecordedBackend();
         }
         if (onStage) onStage("ready");
         return url;
       }
       await new Promise((resolve) => setTimeout(resolve, HEALTH_POLL_INTERVAL_MS));
     }
+    // Health deadline blown: never leave a half-started tree behind. Try to
+    // stop whatever we spawned (the caller's stop() would otherwise miss a
+    // child that never reported healthy), then report the failure.
+    try {
+      await this.stop();
+    } catch {
+      // Stopping is best effort on the failure path; the timeout below is the
+      // error the user sees.
+    }
     throw new Error(`Backend health check timed out. See ${logPath}`);
+  }
+
+  // Health probe: /api/health must answer 200 within 2s. Kept on the class
+  // (the offline suites override it); the split that moved the stop logic out
+  // must never take this with it -- start() and onChildExit() both rely on it.
+  async isHealthy(url) {
+    try {
+      const response = await fetch(`${url}/api/health`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  // Stop the backend and report whether it is really gone. The decision logic
+  // (identity re-verification, tree kill, exit confirmation) lives in
+  // lib/backend-stop.js; this only owns the manager's own state and log handle.
+  // Resolves to { ok, reason, verified }: the shell must not treat "we asked it
+  // to die" as "it is dead" (RR-02).
+  async stop() {
+    this.stopped = true;
+    let outcome;
+    try {
+      outcome = await stopBackend(this);
+    } finally {
+      this.closeLog();
+    }
+    this.lastStop = outcome;
+    return outcome;
   }
 
   // Supervision decision for a child exit. In launcher mode the child is a
@@ -379,7 +435,7 @@ class BackendManager {
         .then((healthy) => {
           if (this.stopped) return;
           if (healthy) {
-            this.adoptedPid = this.readAdoptedPid();
+            this.adoptRecordedBackend();
             // Handoff complete: the real backend keeps running; no crash.
             return;
           }
@@ -390,62 +446,26 @@ class BackendManager {
     });
   }
 
-  async isHealthy(url) {
-    try {
-      const response = await fetch(`${url}/api/health`, {
-        signal: AbortSignal.timeout(2000),
-      });
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }
-
-  async stop() {
-    this.stopped = true;
-    const child = this.child;
-    this.child = null;
-    try {
-      if (child && child.exitCode === null && child.signalCode === null) {
-        await this.killTree(child.pid, child);
-      } else if (this.adoptedPid) {
-        // The launcher already exited; the real backend runs on its own pid.
-        await this.killTree(this.adoptedPid, null);
-      }
-    } finally {
-      this.closeLog();
-    }
-  }
-
-  killTree(pid, child) {
-    return new Promise((resolve) => {
-      const onDone = () => resolve();
-      if (process.platform === "win32") {
-        // uvicorn may hold child handles; kill the whole tree.
-        this.spawnFn("taskkill", ["/pid", String(pid), "/T", "/F"], {
-          windowsHide: true,
-        }).on("exit", onDone);
-        setTimeout(onDone, 8000).unref();
-        return;
-      }
-      if (child) {
-        child.on("exit", onDone);
-        child.kill("SIGTERM");
-        setTimeout(() => {
-          if (child.exitCode === null && child.signalCode === null) {
-            child.kill("SIGKILL");
-          }
-        }, 5000).unref();
-      } else {
-        try {
-          process.kill(pid, "SIGTERM");
-        } catch {
-          // Already gone.
-        }
-        setTimeout(onDone, 1000).unref();
-      }
-      setTimeout(onDone, 8000).unref();
+  // Does the shared record already describe a live backend that is not ours?
+  async recordHoldsForeignLiveBackend(pid) {
+    const existing = this.readAdoptedRecord();
+    if (!existing || existing.pid === pid) return false;
+    const verdict = await this.verifyProcessFn(existing, {
+      commandPatterns: BACKEND_COMMAND_PATTERNS_FOR_RECORDS,
+      execFileFn: this.execFileFn,
     });
+    return verdict.status === processIdentity.STATUS_VERIFIED;
+  }
+
+  // Adopt the backend that a launcher handed off (or that we spawned): the pid
+  // AND the evidence needed to re-verify it before any kill. Re-read on every
+  // health success so a crash-restart replaces the stale record instead of
+  // carrying the previous pid forward (RR-02).
+  adoptRecordedBackend() {
+    const record = this.readAdoptedRecord();
+    if (!record) return;
+    this.adoptedRecord = record;
+    this.adoptedPid = record.pid;
   }
 
   closeLog() {
@@ -470,6 +490,8 @@ class BackendManager {
 module.exports = {
   BackendManager,
   buildBackendEnv,
+  // Runtime helpers live in lib/backend-runtime.js; re-exported here so the
+  // existing callers/tests keep their import path.
   rotateLogFile,
   runtimeMarkerPath,
   runtimeMarkerDigest,
