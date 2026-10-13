@@ -134,11 +134,11 @@ def test_head_table_set_matches_the_models(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'head.db'}")
     command.upgrade(build_alembic_config(engine), "head")
 
-    # knowledge_fts* 是 0044 的 FTS5 派生索引（虚拟表+影子表，可由 rebuild 重建），
-    # 不在 Base.metadata 里，也不算业务表。
+    # knowledge_fts*（0044）与 search_fts_*（0046）是 FTS5 派生索引（虚拟表+影子表，
+    # 可由 rebuild 重建），不在 Base.metadata 里，也不算业务表。
     tables = {
         name
         for name in inspect(engine).get_table_names()
-        if name != "alembic_version" and not name.startswith("knowledge_fts")
+        if name != "alembic_version" and not name.startswith(("knowledge_fts", "search_fts"))
     }
     assert tables == set(Base.metadata.tables)
