@@ -8,11 +8,16 @@
   // job_parser/interview/assistant 均 0 错、apply 8、browser 17、api/ 65。选
   // data_backup（备份/恢复是关键路径，PR-15 刚触及资产清单与命名空间）纳入；
   // 其余 0 错子包待后续批次逐个纳入。
+  // 第二批扩面（2026-10-13）：apply（8 错：str→Literal 状态收窄、job_id None 守卫、
+  // CdpClient 基类补 navigate/set_file_input）与 browser（17 错：WindowAwareMixin
+  // 宿主契约 Protocol 化、可选成员 None 收窄）修完后纳入，两目录均 0 错。
   "include": [
     "app/models",
     "app/schemas",
     "app/runtime",
-    "app/services/data_backup"
+    "app/services/data_backup",
+    "app/services/apply",
+    "app/services/browser"
   ],
   "typeCheckingMode": "basic",
   "pythonVersion": "3.11",

@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from typing import get_args
+
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Query, Session
 
@@ -19,8 +21,29 @@ from ...models.apply import (
 )
 from ...models.job import JOB_STATUS_APPLIED, JOB_STATUS_OPEN, Job
 from ...models.profile import utcnow
-from ...schemas.apply import ApplyRecordBatchOut, ApplyRecordOut
+from ...schemas.apply import ApplyRecordBatchOut, ApplyRecordOut, TaskItemStatus, TaskStatus
 from .. import trash
+
+_TASK_ITEM_STATUS_VALUES: tuple[TaskItemStatus, ...] = get_args(TaskItemStatus)
+_TASK_STATUS_VALUES: tuple[TaskStatus, ...] = get_args(TaskStatus)
+
+
+def _as_task_item_status(value: str) -> TaskItemStatus:
+    """模型层记录状态是 ``str``，出口处收窄为 schema 的 ``Literal``。
+
+    取值由任务执行链路用常量写入，正常不会走到兜底；库里出现未知值时大声失败
+    （与 pydantic Literal 字段的校验语义一致），不悄悄把非法状态发给前端。
+    """
+    if value not in _TASK_ITEM_STATUS_VALUES:
+        raise ValueError(f"未知的投递记录状态：{value!r}")
+    return value
+
+
+def _as_task_status(value: str) -> TaskStatus:
+    """批次状态同 :func:`_as_task_item_status` 的收窄口径。"""
+    if value not in _TASK_STATUS_VALUES:
+        raise ValueError(f"未知的投递批次状态：{value!r}")
+    return value
 
 
 def write_back_job_status(db: Session, job_id: int | None) -> None:
@@ -72,7 +95,7 @@ def _record_out(item: ApplyTaskItem) -> ApplyRecordOut:
         company=item.company,
         resume_title=item.resume_title,
         greeting=item.greeting,
-        status=item.status,
+        status=_as_task_item_status(item.status),
         failure_category=item.failure_category,
         failure_label=FAILURE_CATEGORY_LABELS.get(item.failure_category, ""),
         failure_detail=item.failure_detail,
@@ -187,7 +210,7 @@ def list_record_batches(
     batches = [
         ApplyRecordBatchOut(
             id=task.id,
-            status=task.status,
+            status=_as_task_status(task.status),
             total=task.total,
             processed=task.processed,
             succeeded=task.succeeded,

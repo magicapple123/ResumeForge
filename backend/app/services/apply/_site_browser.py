@@ -1,15 +1,17 @@
 """当前站点与投递专用浏览器（进程内单例），以及站点筛选栏可选项。"""
+
 from __future__ import annotations
 
 import logging
 import threading
-from typing import Any
+from typing import Any, get_args
 
 from sqlalchemy.orm import Session
 
 from ...config import DEFAULT_BROWSER_PORT
 from ...schemas.apply import (
     ApplyConfigIn,
+    BrowserState,
     BrowserStatusOut,
     CollectFilterGroupOut,
     CollectFilterOptionOut,
@@ -32,6 +34,21 @@ from ._base import ApplyConflict
 from ._config import get_apply_config
 
 logger = logging.getLogger(__name__)
+
+_BROWSER_STATE_VALUES: tuple[BrowserState, ...] = get_args(BrowserState)
+
+
+def _as_browser_state(value: str) -> BrowserState:
+    """管理器快照里的 ``state`` 是 ``str``，出口处收窄为 schema 的 ``Literal``。
+
+    取值由 BrowserManager 用常量写入（stopped / starting / running / unknown），正常不会
+    走到兜底；出现未知值时大声失败，不悄悄把非法状态发给前端。
+    """
+    if value not in _BROWSER_STATE_VALUES:
+        raise ValueError(f"未知的浏览器状态：{value!r}")
+    return value
+
+
 def collect_filter_options(db: Session) -> CollectFilterOptionsOut:
     """当前站点筛选栏的可选项（界面据此渲染下拉框）。
 
@@ -85,6 +102,7 @@ def _filter_group_out(group: Any) -> CollectFilterGroupOut:
         source=group.source,
         note=group.note,
     )
+
 
 def current_site(db: Session) -> SiteAdapter | None:
     """当前选中的站点适配器。
@@ -184,7 +202,7 @@ def default_entry_url(db: Session) -> str:
 def _browser_status_out(status: BrowserStatus, db: Session) -> BrowserStatusOut:
     """把浏览器状态快照转成对外 schema。字段只在这一处列，避免多个出口漏字段。"""
     return BrowserStatusOut(
-        state=status.state,
+        state=_as_browser_state(status.state),
         port=status.port,
         profile_dir=status.profile_dir,
         browser_path=status.browser_path,
@@ -333,7 +351,9 @@ def test_collect_filters(db: Session, selected: dict[str, str]) -> CollectFilter
                 item.detail = resolution.applied[0]
                 applied.append(item)
             elif resolution.unapplied:
-                item.detail = "这个选项不在站点当前提供的清单里（站点可能改版，或它只对部分账号可见）"
+                item.detail = (
+                    "这个选项不在站点当前提供的清单里（站点可能改版，或它只对部分账号可见）"
+                )
                 unapplied.append(item)
             else:
                 item.detail = "选择的是「不限」或未选择，不会向站点发送这个筛选参数"
