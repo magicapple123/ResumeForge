@@ -1,6 +1,6 @@
 /** 投递记录（按批次分组）：组头统计、展开看明细、详情 Drawer 完整失败信息（含 URL）。 */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyRecord, ApplyRecordBatch, Page } from "../../types";
@@ -180,7 +180,7 @@ describe("ApplyRecordsPanel (grouped by batch)", () => {
     await renderPanel();
 
     fireEvent.click(batchHead(7));
-    expect(await screen.findByText("全栈工程师")).toBeInTheDocument();
+    expect((await screen.findAllByText("全栈工程师")).length).toBeGreaterThan(0);
     // total=22 > 20：批内分页器出现，翻到第 2 页携带 page=2。
     fireEvent.click(await screen.findByTitle("2"));
     await waitFor(() => {
@@ -403,5 +403,44 @@ describe("投递记录搜索框（受控化）", () => {
     });
     // 受控镜像从 keyword 同步回来，输入框不会被antd内部状态带跑。
     expect(input.value).toBe("前端");
+  });
+});
+
+describe("明细请求竞态守卫（PR-14）", () => {
+  /** Input.Search 里的文本输入框（本 describe 自用，避免跨 describe 复用内部函数）。 */
+  function searchInput(): HTMLInputElement {
+    return screen.getByPlaceholderText("搜索岗位 / 公司").closest("input") as HTMLInputElement;
+  }
+
+  it("慢的旧明细响应晚返回，不把旧筛选的数据写回新视图", async () => {
+    let resolveOld: (value: Page<ApplyRecord>) => void = () => {};
+    const oldResponse = new Promise<Page<ApplyRecord>>((resolve) => {
+      resolveOld = resolve;
+    });
+    // 第一次明细请求（旧筛选）挂起不返回；新筛选的补拉请求立即返回新数据。
+    apiMocks.listRecordBatchItems
+      .mockImplementationOnce(() => oldResponse)
+      .mockResolvedValue({ items: [RECORD_SUCCESS], total: 1 });
+    // 每次返回新对象引用（与真实响应一致）：组件按 data 引用变化清明细缓存。
+    apiMocks.listRecordBatches.mockImplementation(async () => ({ ...BATCHES }));
+
+    await renderPanel();
+    fireEvent.click(batchHead(7)); // 发起旧筛选下的明细请求（一直挂起）
+
+    // 换筛选：列表重拉 → 缓存清空 → 展开中的批次按新筛选补拉（立即返回）。
+    const input = searchInput();
+    fireEvent.change(input, { target: { value: "全栈" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect((await screen.findAllByText("全栈工程师")).length).toBeGreaterThan(0);
+
+    // 旧响应此刻才姗姗来迟，带着旧筛选（无关键词）的数据。
+    await act(async () => {
+      resolveOld({ items: [RECORD], total: 2 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // 若没有代次守卫，旧数据会在此刻覆盖新视图：旧岗位必须不出现。
+    expect(screen.queryByText("高级后端工程师（高并发方向）")).not.toBeInTheDocument();
+    expect(screen.getAllByText("全栈工程师").length).toBeGreaterThan(0);
   });
 });

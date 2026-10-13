@@ -168,7 +168,8 @@ describe("ResumeDetailModal 版本信息位（RF-17）", () => {
     renderModal(8);
 
     await waitFor(() =>
-      expect(screen.getByText(/已投递给 示例科技 · 后端开发实习生 · 投递台/)).toBeInTheDocument(),
+      // PR-09 文案契约：apply 是唯一显示「已投递给」的来源（三态语义区分）。
+      expect(screen.getByText(/已投递给\s*示例科技 · 后端开发实习生 · 投递台/)).toBeInTheDocument(),
     );
     expect(screen.getByText(/abcdef12/)).toBeInTheDocument();
     expect(listResumeDeliveriesCalledWith(8)).toBe(true);

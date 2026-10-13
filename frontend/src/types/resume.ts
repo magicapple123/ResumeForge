@@ -217,6 +217,27 @@ export interface DeliverySummary {
   rendered_config_sha256: string;
 }
 
+/**
+ * 一条交付记录的详情（PR-09 可信交付账本）：独立访问入口
+ * `GET /resumes/deliveries/{id}` 的响应体。旧快照缺新列时字段为
+ * null/false——UI 据此标注「不可还原」，不编造数据。
+ */
+export interface DeliveryDetail extends DeliverySummary {
+  /** 实际生效的渲染上下文；旧快照为空对象。 */
+  render_context: Record<string, unknown>;
+  /** 实际生效的导出请求参数；null = 无导出请求（apply/track）或旧快照（不可还原）。 */
+  request_params: Record<string, unknown> | null;
+  /** 导出前源内容哈希 / 导出产物字节哈希；旧行为 null。 */
+  source_content_sha256: string | null;
+  artifact_sha256: string | null;
+  /** 幂等键（代表哪一次真实投递动作）；旧记录为 null。 */
+  idempotency_key: string | null;
+  /** 是否可从存档重放导出。 */
+  replayable: boolean;
+  /** 目的地快照是否完整；false = 旧版本快照没有目的地字段。 */
+  destination_recorded: boolean;
+}
+
 /** 版式覆盖：键取自 `ResumeFormatField.key`，值都是数值（颜色也是十六进制字符串）。
  *  例外是 `section_order`：它是一串分区键，不是 CSS 数值（见 resumeSectionOrder.ts）。 */
 import type { ResumeFormatConfig } from "./resumeFormat";

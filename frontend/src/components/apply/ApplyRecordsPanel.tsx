@@ -29,7 +29,7 @@ import {
 } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import type { ColumnsType } from "antd/es/table";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import BatchGroup, { BATCH_ITEM_PAGE_SIZE, type BatchItemsState } from "./ApplyRecordsBatchGroup";
 import {
@@ -107,9 +107,19 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     if (error) message.error(error);
   }, [error, message]);
 
+  // 明细请求的代次守卫（PR-14）：数据集（列表 data）或筛选（keyword/result）一旦
+  // 变化就整体作废进行中的明细请求——迟到的旧响应不再把旧筛选/旧页的数据写回
+  // batchItems，用户看到的明细永远属于当前列表状态。每次发起请求取一个代次号，
+  // 响应回来时只落"仍然是最新代次"的结果，不匹配的直接丢弃。
+  const fetchGenerationRef = useRef(0);
+  useEffect(() => {
+    fetchGenerationRef.current += 1;
+  }, [keyword, result, data]);
+
   /** 拉取某个批次的某页明细（带与列表一致的 keyword/result，与 matched_count 对得上）。 */
   const fetchBatchItems = useCallback(
     async (batchId: number, itemPage: number) => {
+      const generation = ++fetchGenerationRef.current;
       setBatchItems((prev) => ({
         ...prev,
         [batchId]: {
@@ -126,11 +136,14 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
           page: itemPage,
           page_size: BATCH_ITEM_PAGE_SIZE,
         });
+        // 代次不匹配 = 期间换过筛选或列表已重置：这份响应属于旧世界，丢弃。
+        if (generation !== fetchGenerationRef.current) return;
         setBatchItems((prev) => ({
           ...prev,
           [batchId]: { items: resp.items, total: resp.total, page: itemPage, loading: false },
         }));
       } catch (err) {
+        if (generation !== fetchGenerationRef.current) return;
         message.error(err instanceof Error ? err.message : "加载批次明细失败");
         setBatchItems((prev) => ({
           ...prev,
@@ -216,17 +229,19 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     });
   };
 
-  /** 批量删除勾选的明细（软删）。reload 后明细缓存作废、展开中的批次自动重拉。 */
+  /** 批量删除勾选的明细（软删）。失败时保留选择可直接重试（对齐知识库页，PR-14）；
+   *  成功后 reload，明细缓存作废、展开中的批次自动重拉。 */
   const removeBatchSelected = async (batch: ApplyRecordBatch) => {
     const ids = selectedByBatch[batch.id] ?? [];
     if (ids.length === 0) return;
     try {
       const { deleted } = await batchDeleteRecords(ids);
       message.success(`已删除 ${deleted} 条投递记录，可在「回收站」里恢复`);
+      exitBatchSelect(batch.id);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "批量删除失败，请重试");
+      return;
     }
-    exitBatchSelect(batch.id);
     await reload();
   };
 

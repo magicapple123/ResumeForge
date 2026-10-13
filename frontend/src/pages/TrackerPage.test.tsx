@@ -225,6 +225,60 @@ describe("TrackerPage", () => {
     await waitFor(() => expect(apiMocks.deleteTrack).toHaveBeenCalledWith(1));
   });
 
+  it("删除后列表与统计一起刷新，漏斗数字不滞留旧值（PR-13）", async () => {
+    apiMocks.listTracksPage.mockResolvedValue(makePage([makeTrack()]));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats([makeTrack()]));
+    apiMocks.deleteTrack.mockResolvedValue(undefined);
+    renderPage();
+    await screen.findByText("示例科技");
+    const listCallsBefore = apiMocks.listTracksPage.mock.calls.length;
+    const statsCallsBefore = apiMocks.listTrackStats.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "更多操作 示例科技" }));
+    fireEvent.click(await screen.findByText("删除"));
+    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
+
+    await waitFor(() => {
+      // 一次 mutation 之后两边都要失效重拉：只刷列表的话漏斗停在删除前的数字。
+      expect(apiMocks.listTracksPage.mock.calls.length).toBeGreaterThan(listCallsBefore);
+      expect(apiMocks.listTrackStats.mock.calls.length).toBeGreaterThan(statsCallsBefore);
+    });
+  });
+
+  it("深链 job_id：统计与导出与列表同口径（PR-13）", async () => {
+    jobApiMocks.getJob.mockResolvedValue({ id: 7, title: "市场运营专员", company: "示例科技" });
+    apiMocks.exportTracks.mockResolvedValue({ blob: new Blob(["x"]), filename: "a.csv" });
+    // 有记录导出菜单才可用（totalCount > 0）。
+    apiMocks.listTracksPage.mockResolvedValue(makePage([makeTrack({ job_id: 7 })]));
+    renderPage(["/tracker?job_id=7"]);
+    await screen.findByText(/只看该岗位的投递/);
+
+    // 统计带 job_id：漏斗不再是"全部岗位"。
+    await waitFor(() => {
+      expect(apiMocks.listTrackStats).toHaveBeenCalledWith({
+        status: "",
+        keyword: "",
+        jobId: 7,
+      });
+    });
+
+    // 「导出」按钮带图标（可访问名可能含图标标注）；Dropdown 默认 hover 触发。
+    const exportButton = screen.getByRole("button", { name: /导出/ });
+    fireEvent.mouseEnter(exportButton);
+    await waitFor(() => {
+      expect(document.querySelector(".ant-dropdown:not(.ant-dropdown-hidden)")).not.toBeNull();
+    });
+    fireEvent.click(await screen.findByText("导出 CSV（可直接用 Excel 打开）"));
+    await waitFor(() => {
+      // 导出同样只带该岗位的进度。
+      expect(apiMocks.exportTracks).toHaveBeenCalledWith("csv", {
+        status: "",
+        keyword: "",
+        jobId: 7,
+      });
+    });
+  });
+
   it("从 URL 恢复状态筛选与关键词", async () => {
     apiMocks.listTracksPage.mockResolvedValue(makePage([]));
     apiMocks.listTrackStats.mockResolvedValue(makeStats([]));

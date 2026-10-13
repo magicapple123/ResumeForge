@@ -51,6 +51,12 @@ export function FirstDeliveryPanel({ stages }: { stages: ActivationStage[] }) {
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   {stage.description}
                 </Typography.Text>
+                {/* 真实进度（如"已核实 2/5 条主张"）：完成与未完成都展示，进度不说谎。 */}
+                {stage.progress && (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {stage.progress}
+                  </Typography.Text>
+                )}
                 {isCurrent && stage.cta && (
                   <span className="first-delivery-cta-row">
                     <Link to={stage.cta.path} className="first-delivery-cta">

@@ -1,6 +1,7 @@
 /** 简历相关接口：生成（SSE）、历史、渲染预览、导出下载。 */
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 import type {
+  DeliveryDetail,
   DeliverySummary,
   ExportFormat,
   ExportRequest,
@@ -271,7 +272,8 @@ export async function exportResume(
   format: ExportFormat,
   /** 为真时跳过"正文还有未完成标记"的拦截，导出一份草稿自查。 */
   allowIncomplete = false,
-  /** 为真时让后端把这次导出冻结成一份投递快照（RF-17 正式投递存档）；默认不落。 */
+  /** 【deprecated，ADR-0002】仅为兼容保留；「导出并记录交付」请走
+   *  exportResumeWithOptions（POST），把 record_delivery 放进请求体。 */
   recordDelivery = false,
 ): Promise<{
   blob: Blob;
@@ -359,4 +361,37 @@ export async function fetchResumeHtml(id: number, allowIncomplete = false): Prom
  */
 export function listResumeDeliveries(id: number): Promise<DeliverySummary[]> {
   return request(`/resumes/${id}/deliveries`);
+}
+
+/**
+ * 一条进度记录的交付快照（PR-09）：从岗位/进度进入对应 delivery 的入口。
+ * 原简历被删后这里的摘要仍然可读（快照外键 SET NULL、冗余目的地列自持）。
+ */
+export function listTrackDeliveries(trackId: number): Promise<DeliverySummary[]> {
+  return request(`/tracker/${trackId}/deliveries`);
+}
+
+/**
+ * 一条交付记录的详情（PR-09）：不依赖原简历存活的独立访问入口。
+ * 旧快照缺新列时 request_params 为 null、replayable/destination_recorded 为
+ * false——UI 据此标注「不可还原」，不编造数据。
+ */
+export function getDeliveryDetail(deliveryId: number): Promise<DeliveryDetail> {
+  return request(`/resumes/deliveries/${deliveryId}`);
+}
+
+/**
+ * 从交付快照下载（PR-09）：export 快照重放导出产物；apply/track 快照下载冻结的
+ * 内容 JSON。旧 export 快照缺参数时后端 409「不可还原」。
+ */
+export async function downloadDelivery(
+  deliveryId: number,
+): Promise<{ blob: Blob; filename: string }> {
+  const resp = await requestRaw(`/resumes/deliveries/${deliveryId}/download`, {
+    budget: "export",
+  });
+  return {
+    blob: await resp.blob(),
+    filename: getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? "delivery",
+  };
 }
