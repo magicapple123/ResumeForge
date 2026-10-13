@@ -150,11 +150,13 @@ _EXEMPTIONS: dict[str, Exemption] = {
         "过线 11 行，协议编排热点 + patch 落点密集", _STRUCTURED_BACKSTOP
     ),
     # ---- 2026-10-13 生产审计会话：多 PR 叠加增长的声明式豁免（到期 2026-11-15）----
-    # 以下四文件在本审计会话被 PR-02/03/07/08/09/10/11/13 多批同时改大
+    # 以下三文件在本审计会话被 PR-02/03/07/08/09/10/11/13 多批同时改大
     # （datasets：数据集身份贯穿；resume_generator：硬 deadline/用量汇总；
-    #   resume_risk：隐私最小化与降级契约；tracker：原子事务/快照/深链统计）。
+    #   resume_risk：隐私最小化与降级契约）。
     # 行为已被各自批次的新增测试钉住；立即拆分会把「拆分」与「本会话行为修改」
     # 混在同一批，风险高。拆分留待专门批次（逐文件独立方案），到期不续期即红。
+    # （tracker.py 与 ApplyRecordsPanel.tsx 两条豁免已于专门拆分批执行并删除：
+    #   tracker 拆出 tracker_query/tracker_csv，ApplyRecordsPanel 拆出展示子组件。）
     "backend/app/services/datasets.py": Exemption(
         "PR-02/03 数据集身份贯穿 +549 行；行为已钉，拆分留待专门批次",
         _PR18_MULTI_PR_GROWTH,
@@ -165,15 +167,6 @@ _EXEMPTIONS: dict[str, Exemption] = {
     ),
     "backend/app/services/resume/resume_risk.py": Exemption(
         "PR-11 隐私最小化/降级契约/查重预算后 665 行；同上，专门批次拆分",
-        _PR18_MULTI_PR_GROWTH,
-    ),
-    "backend/app/services/tracker.py": Exemption(
-        "PR-09/10/13 原子事务/交付快照/深链统计后 557 行；同上，专门批次拆分",
-        _PR18_MULTI_PR_GROWTH,
-    ),
-    "frontend/src/components/apply/ApplyRecordsPanel.tsx": Exemption(
-        "PR-14 批次明细代次守卫后 511 行（超 11 行）；组件拆分机械但为 11 行制造"
-        "props 钻孔不值得，随 apply 域下批重构一并拆",
         _PR18_MULTI_PR_GROWTH,
     ),
 }
