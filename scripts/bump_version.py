@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -35,10 +36,16 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(errors="replace")
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+# 测试自检（desktop/scripts/test-bump-version.js）通过该环境变量把脚本指到一个
+# 最小化的临时仓库；生产运行永远不设置它。
+REPO_ROOT = Path(os.environ.get("RF_BUMP_REPO_ROOT") or Path(__file__).resolve().parents[1])
 CONFIG_PY = REPO_ROOT / "backend" / "app" / "config.py"
 PACKAGE_JSON = REPO_ROOT / "frontend" / "package.json"
 PACKAGE_LOCK = REPO_ROOT / "frontend" / "package-lock.json"
+# 桌面壳的版本（desktop/package.json）就是打包后 app.getVersion() 的来源，也是
+# 更新器比较版本号的基准——发版时必须与前端同步前进（audit PR-05）。
+DESKTOP_PACKAGE_JSON = REPO_ROOT / "desktop" / "package.json"
+DESKTOP_PACKAGE_LOCK = REPO_ROOT / "desktop" / "package-lock.json"
 README = REPO_ROOT / "README.md"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 MIGRATIONS_DIR = REPO_ROOT / "backend" / "migrations" / "versions"
@@ -112,8 +119,7 @@ def decide_bump(commits: list[tuple[str, str]]) -> tuple[str, list[str]]:
 def has_entries(body: str) -> bool:
     """Unreleased 段落里是否有真正的记录（而不是只剩上次发版留下的空小节标题）。"""
     return any(
-        line.strip() and line.strip().lower() not in SECTION_HEADINGS
-        for line in body.splitlines()
+        line.strip() and line.strip().lower() not in SECTION_HEADINGS for line in body.splitlines()
     )
 
 
@@ -177,14 +183,15 @@ def commits_since(tag: str | None) -> list[tuple[str, str]]:
     return commits
 
 
-def read_versions() -> tuple[str, str, str]:
-    """返回 (config.py 里的版本, package.json 里的版本, README 里声明的版本)。"""
+def read_versions() -> tuple[str, str, str, str]:
+    """返回 (config.py 版本, frontend package.json 版本, desktop package.json 版本, README 版本)。"""
     config_match = re.search(r'app_version:\s*str\s*=\s*"([^"]+)"', CONFIG_PY.read_text("utf-8"))
     package_version = json.loads(PACKAGE_JSON.read_text("utf-8"))["version"]
+    desktop_version = json.loads(DESKTOP_PACKAGE_JSON.read_text("utf-8"))["version"]
     readme_match = re.search(r"当前版本：`([^`]+)`", README.read_text("utf-8"))
     if config_match is None or readme_match is None:
         raise BumpError("找不到 config.py 或 README 里的版本号")
-    return config_match.group(1), package_version, readme_match.group(1)
+    return config_match.group(1), package_version, desktop_version, readme_match.group(1)
 
 
 def new_migration_files(tag: str | None) -> list[str]:
@@ -221,16 +228,27 @@ def apply_version(new_version: str, released_on: str) -> list[str]:
     touched.append(str(PACKAGE_JSON.relative_to(REPO_ROOT)))
 
     # lockfile 里还有大量依赖自身的 "version" 字段，所以按结构改而不是按行改：
-    # 只动根包与 packages[""] 两处。
-    lock = json.loads(PACKAGE_LOCK.read_text("utf-8"))
-    lock["version"] = new_version
-    lock["packages"][""]["version"] = new_version
-    PACKAGE_LOCK.write_text(
-        json.dumps(lock, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-        newline="\n",
+    # 只动根包与 packages[""] 两处。frontend 与 desktop 两个 lock 同一策略。
+    for lock_path in (PACKAGE_LOCK, DESKTOP_PACKAGE_LOCK):
+        lock = json.loads(lock_path.read_text("utf-8"))
+        lock["version"] = new_version
+        lock["packages"][""]["version"] = new_version
+        lock_path.write_text(
+            json.dumps(lock, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        touched.append(str(lock_path.relative_to(REPO_ROOT)))
+
+    desktop_package_text = DESKTOP_PACKAGE_JSON.read_text("utf-8")
+    updated = replace_exact(
+        desktop_package_text,
+        r'^(\s*"version":\s*)"[^"]+"',
+        f'\\1"{new_version}"',
+        "desktop/package.json",
     )
-    touched.append(str(PACKAGE_LOCK.relative_to(REPO_ROOT)))
+    DESKTOP_PACKAGE_JSON.write_text(updated, encoding="utf-8", newline="\n")
+    touched.append(str(DESKTOP_PACKAGE_JSON.relative_to(REPO_ROOT)))
 
     readme_text = README.read_text("utf-8")
     updated = replace_exact(
@@ -266,11 +284,14 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         tag = latest_tag()
-        current, package_version, readme_version = read_versions()
+        current, package_version, desktop_version, readme_version = read_versions()
         print(f"最后一个发布标签：{tag or '（无）'}")
-        print(f"当前版本：config.py={current} package.json={package_version} README={readme_version}")
-        if len({current, package_version, readme_version}) != 1:
-            print("⚠ 三处版本号已经不一致，请先人工核对再继续。", file=sys.stderr)
+        print(
+            f"当前版本：config.py={current} package.json={package_version} "
+            f"desktop/package.json={desktop_version} README={readme_version}"
+        )
+        if len({current, package_version, desktop_version, readme_version}) != 1:
+            print("⚠ 各处版本号已经不一致，请先人工核对再继续。", file=sys.stderr)
             return 1
 
         commits = commits_since(tag)
@@ -303,6 +324,8 @@ def main(argv: list[str] | None = None) -> int:
                 CONFIG_PY,
                 PACKAGE_JSON,
                 PACKAGE_LOCK,
+                DESKTOP_PACKAGE_JSON,
+                DESKTOP_PACKAGE_LOCK,
                 README,
                 CHANGELOG,
             ):
