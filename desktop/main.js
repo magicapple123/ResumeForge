@@ -104,6 +104,42 @@ function logLine(message) {
   }
 }
 
+// ADR-0004 legacy-data migration: asks the user before moving the payload-era
+// data into the user data dir. The module is required lazily (inside the
+// packaged-only path) so the dev-tree lifecycle probes, which load this file
+// in a VM with app.isPackaged = false, never resolve it.
+function confirmDataMigration(details) {
+  return dialog
+    .showMessageBox({
+      type: "question",
+      title: "简历通",
+      message: "检测到旧版本数据",
+      detail:
+        "检测到旧版本的数据仍保存在安装目录内。是否迁移到新的用户数据目录？" +
+        "旧数据将保留备份，迁移失败时旧数据也原样保留。\n\n" +
+        `旧位置：${details.from}\n新位置：${details.to}`,
+      buttons: ["迁移", "暂不迁移"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    })
+    .then(({ response }) => response === 0);
+}
+
+// Returns the data dir the backend should run against, or null to keep the
+// legacy (payload) location for this launch (declined / failed migration).
+async function resolveUserDataDir() {
+  const { maybeMigrateUserData } = require("./lib/data-migration");
+  const result = await maybeMigrateUserData({
+    oldDataDir: path.join(projectRoot(), "backend", "data"),
+    newDataDir: userDataDir(),
+    showConfirm: confirmDataMigration,
+    showError: (title, message) => dialog.showErrorBox(title, message),
+    log: logLine,
+  });
+  return result.userDataDir;
+}
+
 function sendStage(stage, detail) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("splash:stage", { stage, detail });
@@ -225,11 +261,14 @@ async function startBackend() {
 }
 
 async function startBackendAndSwap() {
+  // ADR-0004: packaged installs keep user data under the profile; dev runs
+  // keep the repo-local backend/data behavior unchanged. The migration runs
+  // BEFORE the backend spawns (a declined or failed migration yields null ->
+  // the backend falls back to the legacy location, everything as before).
+  const effectiveUserDataDir = app.isPackaged ? await resolveUserDataDir() : null;
   backend = new BackendManager(projectRoot(), runtimeDir(), {
     packaged: app.isPackaged,
-    // ADR-0004: packaged installs keep user data under the profile; dev runs
-    // keep the repo-local backend/data behavior unchanged.
-    userDataDir: app.isPackaged ? userDataDir() : null,
+    userDataDir: effectiveUserDataDir,
   });
   backend.onUnexpectedExit = handleUnexpectedExit;
   try {
