@@ -4,10 +4,15 @@
   // RF-21 评估（2026-10-11）：app/runtime 试跑 0 错误，直接纳入；services/llm
   // 3 错、services/assistant_tools 32 错（集中在 reportArgumentType 的 None 收窄），
   // 扩面需先修存量，见 deliverables 的 RF-21 交付报告。
+  // PR-18 扩面（2026-10-13）：逐一探测 services/ 各子包——data_backup/drill/
+  // job_parser/interview/assistant 均 0 错、apply 8、browser 17、api/ 65。选
+  // data_backup（备份/恢复是关键路径，PR-15 刚触及资产清单与命名空间）纳入；
+  // 其余 0 错子包待后续批次逐个纳入。
   "include": [
     "app/models",
     "app/schemas",
-    "app/runtime"
+    "app/runtime",
+    "app/services/data_backup"
   ],
   "typeCheckingMode": "basic",
   "pythonVersion": "3.11",
