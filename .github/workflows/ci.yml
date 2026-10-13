@@ -522,6 +522,36 @@ jobs:
         working-directory: desktop
         run: npm ci --registry=https://registry.npmjs.org
 
+      - name: Run desktop shell unit tests (node:test, audit PR-05/06)
+        working-directory: desktop
+        # VM-based lifecycle probes (tray exit / update install / crash
+        # budget), updater hardening probes (abort signal, bounded download,
+        # checksum gate), BackendManager pure helpers (runtime marker,
+        # RF_DATA_DIR env, launcher handoff, log rotation), bump_version
+        # desktop-sync self-check and the npm-audit gate fixtures. No GUI,
+        # no network, no real processes.
+        # Glob form (not a bare directory): on Windows a directory argument
+        # is treated as a module and fails to load.
+        run: node --test "scripts/test-*.js"
+
+      - name: Desktop supply-chain audit gate (audit PR-06)
+        working-directory: desktop
+        # Read-only `npm audit --json` + baseline comparison: fails on any
+        # critical/high finding that is not registered (with an unexpired
+        # waiver) in desktop/scripts/audit-baseline.json. Unlike the
+        # frontend job there is no --omit=dev here: electron is the desktop
+        # runtime kernel even though it lives in devDependencies.
+        run: node scripts/check-npm-audit.js --baseline scripts/audit-baseline.json
+
+      - name: Check require graph against builder manifest (source, audit PR-04)
+        working-directory: desktop
+        # Static gate: every local module in main.js's recursive require
+        # graph must be covered by electron-builder.yml `files:`. This fails
+        # before packaging when an entry-time require (e.g. ./updater) would
+        # be missing from app.asar -- a failure mode that crashes the
+        # packaged shell before any of its own error handling runs.
+        run: node scripts/check-asar-deps.js --source .
+
       - name: Package desktop app (dir + NSIS)
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
@@ -547,6 +577,23 @@ jobs:
           "$sha  $($setup.Name)" | Set-Content "$($setup.FullName).sha256" -Encoding ascii
           Write-Host "installer sha256: $sha"
 
+      - name: Check packaged app.asar require completeness (audit PR-04)
+        working-directory: desktop
+        # Same gate against the real artifact: walk main.js's require graph
+        # inside out/win-unpacked/resources/app.asar and verify every local
+        # module shipped. Catches manifest drift the source gate cannot see
+        # (electron-builder filtering, buildResources clashes).
+        run: node scripts/check-asar-deps.js --asar out/win-unpacked/resources/app.asar
+
+      - name: Upload unpacked build for smoke job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-windows-unpacked
+          path: desktop/out/win-unpacked/
+          # Only consumed by desktop-shell-smoke right after this job.
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -556,3 +603,90 @@ jobs:
             desktop/out/ResumeForge-Setup-*.exe.sha256
           retention-days: 14
           if-no-files-found: error
+
+  desktop-shell-smoke:
+    # Real-launch smoke test for the packaged desktop shell. This job MUST
+    # run in CI: it actually starts win-unpacked\ResumeForge.exe, fetches the
+    # served page entry over the local backend port, quits the shell and
+    # asserts the backend process is gone. The maintainer's machine has no
+    # GUI-verification setup for the packaged shell, so this job is the only
+    # place the "packaged build really starts" property is exercised (the
+    # 2026-10-13 audit found a build that could not start at all).
+    name: Desktop shell smoke (real launch, CI-only)
+    needs: desktop-shell
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download unpacked desktop build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-windows-unpacked
+          path: desktop/out/win-unpacked
+
+      - name: Launch shell and wait for backend port
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Start-Process -FilePath "desktop\out\win-unpacked\ResumeForge.exe"
+          # BackendManager writes the pinned loopback port into
+          # resources\payload\runtime\logs\desktop-backend.log
+          # ("==== desktop launch ... port=NNNN ===="). First run unpacks the
+          # python runtime and installs requirements, hence the 10 min budget.
+          $log = "desktop\out\win-unpacked\resources\payload\runtime\logs\desktop-backend.log"
+          $deadline = (Get-Date).AddMinutes(10)
+          $port = $null
+          while ((Get-Date) -lt $deadline) {
+            if (Test-Path $log) {
+              $m = Select-String -Path $log -Pattern "port=(\d+)" | Select-Object -Last 1
+              if ($m) { $port = $m.Matches[0].Groups[1].Value; break }
+            }
+            if (-not (Get-Process -Name ResumeForge -ErrorAction SilentlyContinue)) {
+              throw "ResumeForge.exe exited before the backend reported a port (see logs step)"
+            }
+            Start-Sleep -Seconds 5
+          }
+          if (-not $port) { throw "backend port not found in $log within 10 minutes" }
+          $port | Set-Content desktop\out\smoke-port.txt
+          Write-Host "backend port: $port"
+
+      - name: Fetch served page entry (port alive is not enough)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $port = Get-Content desktop\out\smoke-port.txt
+          $base = "http://127.0.0.1:$port"
+          $index = Invoke-WebRequest -UseBasicParsing -Uri "$base/" -TimeoutSec 30
+          if ($index.StatusCode -ne 200) { throw "index returned $($index.StatusCode)" }
+          # Vite serves the app through an entry module; a blank page happens
+          # exactly when this module 404s while / returns 200. Fetch it.
+          if ($index.Content -notmatch 'src="(/assets/[^"]+\.js)"') {
+            throw "no entry module reference found in index.html"
+          }
+          $entryPath = $Matches[1]
+          $entry = Invoke-WebRequest -UseBasicParsing -Uri "$base$entryPath" -TimeoutSec 30
+          if ($entry.StatusCode -ne 200) { throw "entry module $entryPath returned $($entry.StatusCode)" }
+          Write-Host "entry module OK: $entryPath ($($entry.RawContentLength) bytes)"
+
+      - name: Quit shell and assert backend is gone
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $port = [int](Get-Content desktop\out\smoke-port.txt)
+          taskkill /IM ResumeForge.exe /T /F | Out-Null
+          Start-Sleep -Seconds 5
+          $client = New-Object Net.Sockets.TcpClient
+          $alive = $false
+          try { $alive = $client.ConnectAsync("127.0.0.1", $port).Wait(3000) } catch { $alive = $false }
+          if ($alive) { throw "backend still listening on port $port after the shell was killed" }
+          Write-Host "backend no longer listening on port $port after shell exit"
+
+      - name: Upload smoke logs on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-smoke-logs
+          path: |
+            desktop/out/win-unpacked/resources/payload/runtime/logs/
+            desktop/out/smoke-port.txt
+          retention-days: 7
+          if-no-files-found: ignore

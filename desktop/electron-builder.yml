@@ -18,6 +18,11 @@ files:
   - preload.js
   - splash.html
   - backend-manager.js
+  # main.js has a top-level require("./updater"); omitting it here shipped an
+  # app.asar whose entry crashed before any error handling (2026-10-13 audit
+  # PR-04). scripts/check-asar-deps.js now gates the require graph against
+  # this manifest in CI.
+  - updater.js
   - package.json
 
 extraResources:

@@ -3,6 +3,8 @@
 注意：这里只放服务端自身的配置；大模型 API 等用户运行时配置
 在「设置」页中填写，保存在本地数据库，二者互不混淆。
 """
+
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -12,7 +14,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 # 数据目录：数据库、备份、导出、样例等本地产物都落在它下面。其它模块一律从这里推导子目录，
 # 不各自去拼相对路径（拼错一处就会写到仓库里、被误提交）。
-DATA_DIR = BACKEND_DIR / "data"
+#
+# RF_DATA_DIR（ADR-0004）：桌面打包形态下 backend 目录位于安装目录内的 resources/payload，
+# 安装目录可能只读、更新时会被替换——桌面壳启动后端时把 RF_DATA_DIR 指到用户数据目录
+# （%APPDATA%/ResumeForge/data），数据库/附件/导出/备份因此全部落用户目录。未设置该变量时
+# 保持原默认（backend/data），控制台流程与开发流程不受影响。
+DATA_DIR = (
+    Path(os.environ["RF_DATA_DIR"]) if os.environ.get("RF_DATA_DIR") else BACKEND_DIR / "data"
+)
 DEFAULT_DATABASE_URL = f"sqlite:///{(DATA_DIR / 'resume_forge.db').as_posix()}"
 
 
@@ -25,6 +34,7 @@ def captures_dir() -> Path:
     登录态（``backend/data/browser-profile/``）混在一起。
     """
     return DATA_DIR / "captures"
+
 
 # 投递专用浏览器的 CDP 调试端口默认值。这是**唯一**的常量来源：
 # schemas 的配置出厂默认与 browser_manager 的兜底默认都从这里取，避免两处各写一个 9333
@@ -123,7 +133,9 @@ class Settings(BaseSettings):
 
     @property
     def update_allowed_host_list(self) -> list[str]:
-        return [host.strip().casefold() for host in self.update_allowed_hosts.split(",") if host.strip()]
+        return [
+            host.strip().casefold() for host in self.update_allowed_hosts.split(",") if host.strip()
+        ]
 
 
 @lru_cache
