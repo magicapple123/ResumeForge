@@ -17,7 +17,7 @@ FTS 表不存在（历史库/旧 SQLite）或关键词不足 3 字符时回退�
 """
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import String, cast, or_
+from sqlalchemy import String, cast, or_, true
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -29,10 +29,11 @@ from ..models.profile import Skill
 from ..models.referral import Referral
 from ..models.reminder import Reminder
 from ..models.resume import ResumeRecord
-from ..schemas.job import JobOut
+from ..schemas.job import JobListOut
 from ..schemas.resume import ResumeBrief
 from ..schemas.search import SearchHit, SearchResult
 from ..services import search_fts, trash
+from ..services.search_matching import LIKE_ESCAPE, like_pattern, normalized_term
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
@@ -54,19 +55,24 @@ _RESUMES_COLUMNS = (
 )
 
 
-def _keyword_filter(db: Session, model: type, base_table: str, like: str, term: str, columns):
+def _keyword_filter(db: Session, model: type, base_table: str, term: str, columns):
     """关键词过滤：FTS 可用走 ``MATCH``（按 id 关联），否则回退多列 ``LIKE``。
 
-    两路语义一致（子串匹配 + ASCII 大小写折叠），软删除过滤不在这里——它由调用方的
-    ``trash.live_only`` 承担（FTS 索引里保留软删行，靠查询侧排除，见 search_fts 注释）。
+    两路语义由 ``services/search_matching`` 统一（RR-07）：用户输入一律当**字面子串**，
+    ``%``/``_`` 在 LIKE 侧显式转义、在 FTS 侧本来就是字面量；前后空白不丢。软删除过滤
+    不在这里——它由调用方的 ``trash.live_only`` 承担（FTS 索引里保留软删行，靠查询侧
+    排除，见 search_fts 注释）。纯空白关键词不加过滤（与知识库检索同一口径）。
     """
+    if not normalized_term(term):
+        return true()
     fts_filter = search_fts.id_match_filter(db, model, base_table, term)
     if fts_filter is not None:
         return fts_filter
-    return or_(*(column.like(like) for column in columns))
+    like = like_pattern(term)
+    return or_(*(column.like(like, escape=LIKE_ESCAPE) for column in columns))
 
 
-def _search_more(db: Session, like: str, term: str, limit: int) -> list[SearchHit]:
+def _search_more(db: Session, term: str, limit: int) -> list[SearchHit]:
     """检索六个扩展数据域，返回按域分组的 ``SearchHit`` 列表。
 
     每域只取 ``limit`` 条、按创建时间倒序；技能表没有 ``deleted_at``（它是个人资料里的
@@ -82,7 +88,6 @@ def _search_more(db: Session, like: str, term: str, limit: int) -> list[SearchHi
                 db,
                 Referral,
                 "referral",
-                like,
                 term,
                 (
                     Referral.job_title,
@@ -111,9 +116,7 @@ def _search_more(db: Session, like: str, term: str, limit: int) -> list[SearchHi
     reminder_rows = (
         db.query(Reminder)
         .filter(trash.live_only(Reminder))
-        .filter(
-            _keyword_filter(db, Reminder, "reminder", like, term, (Reminder.title, Reminder.note))
-        )
+        .filter(_keyword_filter(db, Reminder, "reminder", term, (Reminder.title, Reminder.note)))
         .order_by(Reminder.created_at.desc(), Reminder.id.desc())
         .limit(limit)
         .all()
@@ -137,7 +140,6 @@ def _search_more(db: Session, like: str, term: str, limit: int) -> list[SearchHi
                 db,
                 InterviewExperience,
                 "interview_experience",
-                like,
                 term,
                 (
                     InterviewExperience.title,
@@ -170,7 +172,6 @@ def _search_more(db: Session, like: str, term: str, limit: int) -> list[SearchHi
                 db,
                 ClaimRecord,
                 "claim_record",
-                like,
                 term,
                 (
                     ClaimRecord.title,
@@ -204,7 +205,6 @@ def _search_more(db: Session, like: str, term: str, limit: int) -> list[SearchHi
                 db,
                 Material,
                 "material",
-                like,
                 term,
                 (
                     Material.title,
@@ -233,7 +233,12 @@ def _search_more(db: Session, like: str, term: str, limit: int) -> list[SearchHi
     # 技能域刻意保留 LIKE：个人资料硬删子表，至多几十行（见 search_fts 模块注释）。
     skill_rows = (
         db.query(Skill)
-        .filter(or_(Skill.name.like(like), Skill.level.like(like)))
+        .filter(
+            or_(
+                Skill.name.like(like_pattern(term), escape=LIKE_ESCAPE),
+                Skill.level.like(like_pattern(term), escape=LIKE_ESCAPE),
+            )
+        )
         .order_by(Skill.id.desc())
         .limit(limit)
         .all()
@@ -259,28 +264,28 @@ def search(
     limit: int = Query(default=20, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
-    like = f"%{q}%"
     jobs, resumes, more = [], [], []
     if scope in ("all", "jobs"):
         rows = (
             db.query(Job)
             .filter(trash.live_only(Job))
-            .filter(_keyword_filter(db, Job, "job", like, q, _JOBS_COLUMNS))
+            .filter(_keyword_filter(db, Job, "job", q, _JOBS_COLUMNS))
             .order_by(Job.created_at.desc(), Job.id.desc())
             .limit(limit)
             .all()
         )
-        jobs = [JobOut.model_validate(row) for row in rows]
+        # 瘦身模型：搜索结果卡片不读 JD 全文（RR-08），要全文按 id 单取。
+        jobs = [JobListOut.model_validate(row) for row in rows]
     if scope in ("all", "resumes"):
         rows = (
             db.query(ResumeRecord)
             .filter(trash.live_only(ResumeRecord))
-            .filter(_keyword_filter(db, ResumeRecord, "resume_record", like, q, _RESUMES_COLUMNS))
+            .filter(_keyword_filter(db, ResumeRecord, "resume_record", q, _RESUMES_COLUMNS))
             .order_by(ResumeRecord.created_at.desc(), ResumeRecord.id.desc())
             .limit(limit)
             .all()
         )
         resumes = [ResumeBrief.model_validate(row) for row in rows]
     if scope in ("all", "more"):
-        more = _search_more(db, like, q, limit)
+        more = _search_more(db, q, limit)
     return SearchResult(jobs=jobs, resumes=resumes, more=more)

@@ -21,6 +21,7 @@ from sqlalchemy.orm import Query, Session
 from ..models.knowledge_entry import KnowledgeEntry
 from ..schemas.knowledge import KnowledgeCreate, KnowledgeUpdate
 from . import trash
+from .search_matching import LIKE_ESCAPE, like_pattern, match_expression, normalized_term
 
 logger = logging.getLogger(__name__)
 
@@ -56,19 +57,10 @@ def _fts_available(db: Session) -> bool:
 def _match_expression(raw: str) -> str | None:
     """把用户输入转成安全的 FTS5 MATCH 表达式；不适配时返回 ``None``（回退 LIKE）。
 
-    整个词项用双引号包成 FTS5 字符串常量，内部的 ``"`` 翻倍转义——这样用户输入里
-    的 AND/OR/NOT/NEAR、括号、通配符全部按字面量参与匹配，既没有语法错误也没有
-    注入面（表达式作为参数绑定，且语义上等价于对原词做子串查找）。空格也是
-    trigram 的一部分，``"a b"`` 与 ``LIKE '%a b%'`` 一样要求精确含空格。
-
-    返回 ``None`` 的情形：strip 后为空（本来就不该加过滤）或长度不足
-    ``_TRIGRAM_MIN_CHARS``（trigram 表达不了短查询，继续走 LIKE 保语义）。
+    实现见 ``services/search_matching``（关键词语义的唯一实现处，RR-07）：本函数
+    保留旧名字，是因为测试与 ``services/search_fts`` 都从这里取它。
     """
-    term = raw.strip()
-    if len(term) < _TRIGRAM_MIN_CHARS:
-        return None
-    escaped = term.replace('"', '""')
-    return f'"{escaped}"'
+    return match_expression(raw)
 
 
 def _fts_id_filter(expression: str):
@@ -104,17 +96,20 @@ def _filtered_query(db: Session, *, q: str = "", category: str = "") -> Query[Kn
     query = db.query(KnowledgeEntry).filter(trash.live_only(KnowledgeEntry))
     if category.strip():
         query = query.filter(KnowledgeEntry.category == category.strip())
-    term = q.strip()
+    term = normalized_term(q)
     if term:
-        expression = _match_expression(term) if _fts_available(db) else None
+        # 传原文而不是 term：前后空白是子串的一部分，FTS 侧也必须按原样匹配，
+        # 否则 "  foo  " 在有索引的库上命中 foo... 、在回退 LIKE 的库上不命中（RR-07）。
+        expression = _match_expression(q) if _fts_available(db) else None
         if expression is not None:
             query = query.filter(KnowledgeEntry.id.in_(_fts_id_filter(expression)))
         else:
-            like = f"%{term}%"
+            # 字面子串：``%``/``_`` 显式转义（RR-07），与 FTS 路径以及全局搜索同语义。
+            like = like_pattern(q)
             query = query.filter(
                 or_(
-                    KnowledgeEntry.title.like(like),
-                    KnowledgeEntry.content.like(like),
+                    KnowledgeEntry.title.like(like, escape=LIKE_ESCAPE),
+                    KnowledgeEntry.content.like(like, escape=LIKE_ESCAPE),
                 )
             )
     return query

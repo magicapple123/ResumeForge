@@ -217,7 +217,8 @@ def test_fts_falls_back_to_like_when_unavailable(tmp_path, monkeypatch):
 def test_match_expression_quotes_and_escapes():
     assert ks._match_expression("面试技巧") == '"面试技巧"'
     assert ks._match_expression('hooks 要"点') == '"hooks 要""点"'
-    assert ks._match_expression("  前后空格  ") == '"前后空格"'
+    # RR-07：前后空白是子串的一部分，表达式不再 strip（旧行为会命中 foo...）。
+    assert ks._match_expression("  前后空格  ") == '"  前后空格  "'
 
 
 def test_match_expression_rejects_short_or_blank():

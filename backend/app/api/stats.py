@@ -32,7 +32,7 @@ from ..models.job import JOB_STATUS_OPEN, Job
 from ..models.profile import utcnow
 from ..models.resume import ResumeRecord
 from ..models.tracker import ACTIVE_STATUSES, STALLED_DAYS, ApplicationTrack
-from ..schemas.job import JobOut
+from ..schemas.job import JobListOut
 from ..schemas.resume import ResumeBrief
 from ..schemas.search import PendingClaimBrief, Stats
 from ..services import trash
@@ -191,7 +191,8 @@ def get_stats(db: Session = Depends(get_db)):
         claim_count=claim_count,
         resume_with_job_count=resume_with_job_count,
         week_resume_count=week_resume_count,
-        latest_jobs=[JobOut.model_validate(row) for row in latest_jobs],
+        # 首页卡片同样只读摘要（RR-08）；JD 全文按 id 单取。
+        latest_jobs=[JobListOut.model_validate(row) for row in latest_jobs],
         latest_resumes=[ResumeBrief.model_validate(row) for row in latest_resumes],
         favorite_job_count=favorite_job_count,
         pending_claim_count=pending_claim_count,

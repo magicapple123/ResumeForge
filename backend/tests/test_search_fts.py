@@ -33,7 +33,9 @@ PREVIOUS_REVISION = "0045_delivery_ledger"
 HEAD_REVISION = "0046_search_fts"
 
 # 对照关键词：中文 ≥3 字（trigram 主场）、ASCII 大小写折叠、2 字（回退 LIKE）、
-# FTS5 操作符（AND/OR/NOT/引号——作为字面量匹配才与 LIKE 等价）、无命中。
+# FTS5 操作符（AND/OR/NOT/引号——作为字面量匹配才与 LIKE 等价）、无命中，
+# 以及 RR-07 钉住的特殊字符：``%`` / ``_``（LIKE 通配符 vs FTS 字面量）、
+# 前后空白、带变音符号（trigram 会折叠，必须回退 LIKE）。
 QUERIES = (
     "字节跳动",
     "算法",
@@ -48,6 +50,17 @@ QUERIES = (
     "AND",
     '或"算法"',
     "完全不存在的关键词",
+    "foo%bar",
+    "fooblahbar",
+    "100%",
+    "snake_case",
+    "snake",
+    " leading-space",
+    "leading-space ",
+    '引号"岗位"',
+    "café",
+    "cafe",
+    "CAFÉ",
 )
 
 
@@ -102,6 +115,14 @@ def _seed(db_session) -> None:
                 candidate_wording="主导服务端开发",
             ),
             Material(title="获奖证书", category="证书", content="算法竞赛一等奖"),
+            # RR-07 特殊字符对照样本：% 与 _ 的字面量、前后空白、变音符号。
+            Job(title="foo%bar 岗位", company="字面量公司"),
+            Job(title="fooblahbar 岗位", company="通配符公司"),
+            Job(title="命中率 100% 的岗位", company="百分比公司"),
+            Job(title="snake_case 命名岗位", company="下划线公司"),
+            Job(title=" leading-space 岗位", company="空白公司"),
+            Job(title='引号"岗位"的一条', company="引号公司"),
+            Job(title="café 咖啡师岗位", company="变音符号公司"),
         ]
     )
     db_session.add(
@@ -140,6 +161,38 @@ def test_fts_results_are_identical_to_like_results(client, db_session):
     assert like_results["算法工程师"]["jobs"], "基线岗位命中不应为空"
     assert like_results["证书"]["more"], "基线资料命中不应为空"
     assert like_results["python"]["resumes"], "基线简历命中不应为空"
+    # RR-07：特殊字符在两路下同语义，且基线本身非空（对照不是两个空集的等号）。
+    assert like_results["foo%bar"]["jobs"], "字面量 % 必须命中含 % 的岗位"
+    assert like_results["snake_case"]["jobs"], "字面量 _ 必须命中含 _ 的岗位"
+    assert like_results[" leading-space"]["jobs"], "前导空白是子串的一部分"
+    assert like_results["café"]["jobs"], "带变音符号的查询仍要命中"
+
+
+def test_wildcards_are_literal_not_sql_wildcards(client, db_session):
+    """``%``/``_`` 是用户输入的字面量：升级前 LIKE 把 ``foo%bar`` 当通配符，
+    ``fooblahbar`` 也会被命中——迁移前后（走不走 FTS）给出不同结果。"""
+    _seed(db_session)
+
+    def _titles(query: str) -> list[str]:
+        body = client.get("/api/search", params={"q": query, "scope": "jobs"}).json()
+        return sorted(job["title"] for job in body["jobs"])
+
+    assert _titles("foo%bar") == ["foo%bar 岗位"]
+    assert _titles("snake_case") == ["snake_case 命名岗位"]
+    # 通配符解释下这里会命中两条（foo%bar 与 fooblahbar），现在只命中字面那一份。
+    assert _titles("fooblahbar") == ["fooblahbar 岗位"]
+
+
+def test_leading_space_query_is_not_stripped(client, db_session):
+    """前后空白是子串的一部分：多一个空格就是另一个关键词，不该被 strip 掉。"""
+    _seed(db_session)
+
+    spaced = client.get("/api/search", params={"q": " 岗位", "scope": "jobs"}).json()["jobs"]
+    assert spaced, "「空格 + 岗位」应当命中标题里带这个片段的岗位"
+    assert all(" 岗位" in job["title"] for job in spaced)
+
+    two_spaces = client.get("/api/search", params={"q": "  岗位", "scope": "jobs"}).json()["jobs"]
+    assert two_spaces == [], "双空格被 strip 掉就会退化成「岗位」查询，命中一大片"
 
 
 def test_fts_results_identical_under_limit_pagination(client, db_session):
@@ -192,3 +245,30 @@ def test_fts_scope_semantics_unchanged(client, db_session):
         fts_scoped = client.get("/api/search", params={"q": "字节跳动", "scope": "jobs"}).json()
     assert fts_scoped == like_scoped
     assert fts_scoped["more"] == []
+
+
+# ===== RR-08：首页与搜索的岗位只返回摘要，不携带 JD 全文 =====
+
+
+def test_search_and_stats_jobs_are_slim_but_detail_keeps_full_text(client, db_session):
+    """首页/搜索两次高频请求不再携带 JD 全文；要全文按 id 单取（详情仍是完整模型）。"""
+    long_jd = "岗位描述正文。" * 2000  # ~14KB，足以让"带了全文"一眼可见
+    db_session.add(Job(title="摘要瘦身岗", company="示例公司", description=long_jd))
+    db_session.commit()
+
+    search_body = client.get("/api/search", params={"q": "摘要瘦身岗"}).json()
+    assert search_body["jobs"], "基线命中不应为空"
+    job = search_body["jobs"][0]
+    assert "description" not in job, "搜索结果不许再带 JD 全文"
+    assert job["has_description"] is True, "摘要里要给出「有没有 JD」的判据"
+    assert {"id", "title", "company", "location", "salary"} <= set(job)
+
+    stats_body = client.get("/api/stats").json()
+    latest = [item for item in stats_body["latest_jobs"] if item["title"] == "摘要瘦身岗"]
+    assert latest, "最近岗位里应当有这条"
+    assert "description" not in latest[0]
+    assert latest[0]["has_description"] is True
+
+    # 详情链路保持完整：按 id 单取仍然给全文。
+    detail = client.get(f"/api/jobs/{job['id']}").json()
+    assert detail["description"] == long_jd
