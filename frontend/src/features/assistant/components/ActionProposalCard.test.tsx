@@ -109,3 +109,24 @@ describe("ActionProposalCard", () => {
     expect(getWriteProposal).not.toHaveBeenCalled();
   });
 });
+
+describe("写入提案的终态渲染（RR-05）", () => {
+  it("后端返回 unknown（提交后失败）时不白屏，而是如实说结果未知", async () => {
+    // 批准接口 409 + 随后的状态读取回来是 unknown：这是"数据可能已经落库"的终态，
+    // 以前 STATUS_META 里没有这个键 → meta.color 抛错 → 整页被错误边界接管。
+    approveWriteProposal.mockRejectedValue(new Error("写入结果未知（执行过程中数据已经提交）"));
+    getWriteProposal.mockResolvedValue({ proposal: proposal({ status: "unknown" }) });
+    renderCard(proposal());
+
+    fireEvent.click(await screen.findByRole("button", { name: /确认执行/ }));
+
+    expect(await screen.findByText("结果未知")).toBeInTheDocument();
+    // 终态封死重放：不再给出执行入口。
+    await waitFor(() => expect(screen.queryByRole("button", { name: /确认执行/ })).toBeNull());
+  });
+
+  it("未知状态值也能渲染（后端加终态时前端不该整页崩）", async () => {
+    renderCard(proposal({ status: "brand_new_state" as AssistantWriteProposal["status"] }));
+    expect(await screen.findByText("状态未知")).toBeInTheDocument();
+  });
+});
