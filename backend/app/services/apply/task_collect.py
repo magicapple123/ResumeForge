@@ -78,18 +78,23 @@ def run_collect(
         )
         return
 
-    wrapped = wrap_client(client)
-    recorder: SampleRecordingCdpClient | None = None
-    markers = tuple(getattr(adapter, "sample_markers", ()) or ())
-    if save_site_samples and markers:
-        captures_root = captures_root_factory()
-        target_dir = captures_root / (adapter.key or "unknown")
-        if is_within(target_dir, captures_root):
-            recorder = SampleRecordingCdpClient(wrapped, markers=markers, directory=target_dir)
-            wrapped = recorder
-        else:
-            log.warning("站点样例目录不在 captures 之内，已跳过保存：%s", target_dir)
+    # client 拿到之后的全部装配（wrap、样例录制器目录创建）都必须在 try/finally
+    # 之内：录制装配走文件系统、可能抛 OSError，任务由 ``_run`` 兜底置 failed，
+    # 但 ``finally: client.close()`` 是这条路径上唯一关掉 CDP 连接的地方。
     try:
+        # recorder 先绑定再做事：下方 except 分支会引用它，装配段任何一步
+        # 抛异常都不能让它处于未绑定状态。
+        recorder: SampleRecordingCdpClient | None = None
+        wrapped = wrap_client(client)
+        markers = tuple(getattr(adapter, "sample_markers", ()) or ())
+        if save_site_samples and markers:
+            captures_root = captures_root_factory()
+            target_dir = captures_root / (adapter.key or "unknown")
+            if is_within(target_dir, captures_root):
+                recorder = SampleRecordingCdpClient(wrapped, markers=markers, directory=target_dir)
+                wrapped = recorder
+            else:
+                log.warning("站点样例目录不在 captures 之内，已跳过保存：%s", target_dir)
         Collector().run(
             session=session,
             task=task,

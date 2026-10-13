@@ -4,6 +4,7 @@
 fakes 与 helpers（``FakeAdapter``/``_setup_task``/``_runner``/``_wait``/``_wait_db``/
 ``_task_status``/``_item_statuses``/``_poll``/``_config``）留在主文件。
 """
+
 import threading
 import time
 
@@ -65,11 +66,47 @@ def test_runner_stop_marks_remaining_items_skipped(db_session):
 
     db_session.expire_all()
     stored = db_session.get(ApplyTask, task.id)
-    items = db_session.query(ApplyTaskItem).filter_by(task_id=task.id).order_by(ApplyTaskItem.sort_order).all()
+    items = (
+        db_session.query(ApplyTaskItem)
+        .filter_by(task_id=task.id)
+        .order_by(ApplyTaskItem.sort_order)
+        .all()
+    )
     assert stored.status == "stopped"
     assert stored.stop_reason == "user"
     assert items[0].status == "skipped"
     assert items[1].status == "skipped"
+
+
+def test_stop_returns_after_lease_released(db_session):
+    """stop 返回时，runner 线程必须已归还 apply-task 租约（resume 运行器同款修复）。
+
+    终态先于租约释放可见的话：stop 后立刻发起的数据集切换会在 _wait_for_idle
+    排空窗内等待/409（datasets.py），stop 后立刻 start 下一批也会撞"已有任务正在
+    进行中"。复现钉法：工作线程被 adapter 的 gate 卡住（gate 不响应 _stop），
+    放行点由后台线程延迟 0.3s 控制——修复前 stop() 不 join、立即返回，此刻线程
+    必然还活着且持有租约（确定性红）；修复后 stop 先 join（≤2s），放行后的线程
+    在 join 窗口内退出并归还租约（确定性绿）。
+    """
+    gate = threading.Event()
+    task = _setup_task(db_session, 1)
+    runner = _runner(FakeAdapter(gate=gate))
+
+    runner.start(task.id)
+    _poll(db_session, lambda: db_session.get(ApplyTask, task.id).current_step == STEP_FILLING)
+
+    def _release_later():
+        time.sleep(0.3)
+        gate.set()
+
+    threading.Thread(target=_release_later, daemon=True).start()
+    runner.stop(task.id)
+
+    assert not runner.is_running(), "stop 返回时工作线程仍在运行"
+    from app.runtime import dataset_scope
+
+    owners = dataset_scope.lease_owners()
+    assert "apply-task" not in owners, f"lease still held after stop: {owners}"
 
 
 def test_runner_breaker_pauses_after_consecutive_failures(db_session):
