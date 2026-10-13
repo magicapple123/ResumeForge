@@ -133,6 +133,15 @@ class ResumeGenerateRunner:
         # 把 completed/failed 改回 cancelled（照抄 apply 运行器的"终态只读"纪律）。
         self._require_current(task_id)
         self._stop.set()
+        # 终态必须在线程归还租约**之后**才对观察者可见：否则"已取消"先出现在任务查询
+        # 里，而租约要等线程退出（_run_releasing_lease 的 finally）才归还，紧随其后的
+        # 数据集切换会在 _wait_for_idle 的排空窗内撞上 409（e2e 恢复用例的真实翻车
+        # 路径：取消→teardown 激活主库→409）。join 2s 与取消可见收尾的预算一致；
+        # 线程卡死（如模型连接不响应）时超时后照常写终态，此刻切换的排空等待会如实
+        # 409，用户稍候重试即可，租约最终仍由线程退出归还。
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=2.0)
         self._set_cancelled(task_id)
 
     def shutdown(self) -> None:

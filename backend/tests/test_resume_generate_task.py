@@ -185,6 +185,33 @@ def test_cancel_marks_cancelled_and_writes_no_half_resume(client, monkeypatch):
     assert client.get("/api/resumes").json()["total"] == 0
 
 
+def test_cancel_returns_after_lease_released(client, monkeypatch):
+    """取消返回 200 时，runner 线程必须已归还 resume-generate 租约。
+
+    终态先于租约释放可见的话，紧随取消的数据集切换会在 _wait_for_idle 排空窗内
+    撞上 409（e2e recovery 用例的真实翻车路径：取消 → teardown 激活主库 → 409）。
+    cancel 现在先 join 工作线程（≤2s）再写终态，因此断言是确定性的。"""
+    _seed_profile(client)
+    _configure(client)
+    job = _job(client)
+    monkeypatch.setattr(
+        "app.services.resume.resume_generate_runner.create_provider",
+        lambda resolved: EndlessProvider(resolved),
+    )
+
+    task = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]}).json()
+    _wait_status(client, task["id"], "running")
+
+    cancelled = client.post(f"/api/resumes/generate/tasks/{task['id']}/cancel")
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+
+    from app.runtime import dataset_scope
+
+    owners = dataset_scope.lease_owners()
+    assert "resume-generate" not in owners, f"lease still held after cancel: {owners}"
+
+
 def test_cancel_after_done_before_completed_writes_no_resume(client, monkeypatch):
     """竞态：cancel 在 done 之后、completed 认领之前到达 → 取消胜出、不落库。
 
