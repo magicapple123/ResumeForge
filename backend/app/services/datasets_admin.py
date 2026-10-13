@@ -1,10 +1,14 @@
-"""数据集的查看与管理操作：列表、重命名、删除与导出。
+"""数据集的查看与管理操作：列表、重命名、删除、导出，以及**数据集文件的落盘/回收**。
 
-从 :mod:`app.services.datasets` 纯搬迁拆出（PR-18 行数预算，2026-11-15 到期豁免的
-专门拆分批）：这里的函数只读注册表/元信息或做文件级管理动作，不触碰切换
-（prepare/commit/compensate）与导入链路——那两段留在 ``datasets.py``，测试在其
-模块命名空间上 monkeypatch（``_DRAIN_TIMEOUT_SECONDS``/``extract_database``/
-``restore_assets_from_manifest`` 等），落点不能动。
+从 :mod:`app.services.datasets` 纯搬迁拆出（PR-18 行数预算）：这里的函数只读
+注册表/元信息或做文件级管理动作，不触碰切换（prepare/commit/compensate）与
+导入校验链路——那两段留在 ``datasets.py``，测试在其模块命名空间上 monkeypatch
+（``_DRAIN_TIMEOUT_SECONDS``/``extract_database`` 等），落点不能动。
+
+RR-03 又把两个文件级动作挪进来（同样只为回到行数预算，行为不变）：
+``place_packaged_datasets``（把随包数据集原子落盘）与 ``discard_created_datasets``
+（失败时收回本次新建的数据集文件）。它们在 ``datasets.py`` 里仍然以同名 re-export
+出现，调用方与 monkeypatch 落点不变。
 """
 
 from __future__ import annotations
@@ -26,12 +30,18 @@ from ..dataset_registry import (
     dataset_metadata_file,
     datasets_directory,
     is_valid_dataset_id,
+    new_dataset_id,
     read_active_dataset_id,
     read_metadata,
     trash_directory,
     write_metadata,
 )
 from .data_backup import ExtraDatabase, create_backup_archive
+from .data_backup.import_archive import (
+    _best_effort_checkpoint,
+    _remove_candidate_files,
+    _remove_sqlite_sidecars,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -149,3 +159,59 @@ def export_dataset(
         return create_backup_archive(temporary, staging_dir, include_api_keys=include_api_keys)
     finally:
         temporary.dispose()
+
+
+def discard_created_datasets(dataset_ids: list[str]) -> None:
+    """回滚本次导入新建的数据集：删主文件 + 边车 + 元信息，**只删自己刚创建的**。"""
+    for dataset_id in dataset_ids:
+        try:
+            _remove_candidate_files(dataset_database_file(dataset_id))
+            dataset_metadata_file(dataset_id).unlink(missing_ok=True)
+        except OSError:
+            logger.warning("导入回滚时未能清理数据集文件 id=%s", dataset_id, exc_info=True)
+
+
+def place_packaged_datasets(
+    staged: list[tuple[dict[str, Any], Path]],
+    created_ids: list[str],
+) -> list[dict[str, Any]]:
+    """把已经校验过的其余数据集逐个落盘（校验在 ``import_dataset`` 里已经做完了）。
+
+    ``created_ids`` 是调用方的**回收清单**：每生成一个新 id 就立刻登记进去，这样
+    即使本函数在中途某个条目上失败（磁盘故障、第二个库写不进去），调用方的回滚
+    也收得回**已经落盘的**那几份——否则列表里会留下半截数据集。
+    """
+    restored: list[dict[str, Any]] = []
+    for entry, candidate in staged:
+        dataset_id = new_dataset_id()
+        # 先登记再落盘：任何中途失败都要能被回滚收回。
+        created_ids.append(dataset_id)
+        target = dataset_database_file(dataset_id)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        partial = target.with_suffix(".partial")
+        try:
+            # rename 之前先把 -wal 里的已提交帧 checkpoint 回主文件：SQLite 只在
+            # 「最后一个连接干净关闭」时才自动 checkpoint，校验链路存在未干净关闭的
+            # 异常路径（边车残留即证据），此时直接删边车会静默丢数据。失败只告警
+            # 不阻断——垃圾残留好过恢复流程整个失败。随后清掉边车：replace 只搬
+            # 主文件，边车会变成 staging 里的孤儿垃圾。
+            _best_effort_checkpoint(candidate)
+            _remove_sqlite_sidecars(candidate)
+            # 同盘内改名是原子的：中途失败不会在列表里留下半截的数据集。
+            candidate.replace(partial)
+            partial.replace(target)
+        except OSError as exc:
+            partial.unlink(missing_ok=True)
+            raise DatasetError(f"写入数据集失败：{exc}", status_code=500) from exc
+        write_metadata(
+            dataset_id,
+            {
+                # 名字沿用包里的：用户就是靠它在列表里认出这是哪一份。
+                "name": str(entry.get("name") or "导入的数据集"),
+                "source": "随备份包导入",
+                "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            },
+        )
+        restored.append(_describe(dataset_id, target))
+        logger.info("随包恢复了数据集 id=%s name=%s", dataset_id, entry.get("name"))
+    return restored

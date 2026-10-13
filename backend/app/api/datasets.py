@@ -8,8 +8,11 @@
 ``Content-Type: application/zip``——它不在 CORS 简单请求允许的类型里，跨站页面必须
 先发预检，而预检只放行本机前端。
 """
+
+import json
 import logging
 import re
+import zipfile
 from pathlib import Path
 from urllib.parse import quote
 from uuid import uuid4
@@ -22,8 +25,10 @@ from starlette.concurrency import run_in_threadpool
 
 from .. import database
 from ..services.data_backup import (
+    MANIFEST_MEMBER,
     BackupError,
     export_directory,
+    manifest_asset_warnings,
     purge_stale_restores,
     restore_directory,
 )
@@ -140,12 +145,21 @@ async def import_archive(request: Request) -> dict:
                 target.write(chunk)
         # zip 校验、逐成员解压、sqlite 快照复制与候选库迁移都是同步重活，
         # 下沉线程池避免导入期间整个后端无响应。
+        # 附件校验默认 fail-closed：包里的附件缺失/被改过、或与本机同名文件冲突时
+        # 整个导入拒绝（没有写入任何数据）。用户显式勾选"跳过有问题的附件"才走
+        # allow_partial_assets 的 DB-only 路径，且问题仍会在 asset_issues 里如实返回。
+        allow_partial = request.query_params.get("allow_partial_assets", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
         created = await run_in_threadpool(
             import_dataset,
             staging,
             request.query_params.get("name", ""),
             database.engine,
             directory,
+            allow_partial_assets=allow_partial,
         )
     except HTTPException:
         staging.unlink(missing_ok=True)
@@ -223,9 +237,7 @@ def export_all(request: Request, include_api_keys: bool = False) -> FileResponse
     except Exception as exc:
         raise _translate(exc) from exc
 
-    logger.info(
-        "已导出全部数据集 file=%s api_key_included=%s", archive_path.name, include_api_keys
-    )
+    logger.info("已导出全部数据集 file=%s api_key_included=%s", archive_path.name, include_api_keys)
     return _archive_response(archive_path)
 
 
@@ -236,7 +248,9 @@ def export(request: Request, dataset_id: str, include_api_keys: bool = False) ->
     staging = export_directory(database.engine)
     try:
         archive_path = export_dataset(
-            _require_valid_id(dataset_id), database.engine, staging,
+            _require_valid_id(dataset_id),
+            database.engine,
+            staging,
             include_api_keys=include_api_keys,
         )
     except Exception as exc:
@@ -252,15 +266,34 @@ def export(request: Request, dataset_id: str, include_api_keys: bool = False) ->
 
 
 def _archive_response(archive_path: Path) -> FileResponse:
+    headers = {
+        "Content-Disposition": (
+            f"attachment; filename*=UTF-8''{quote(sanitize_filename(archive_path.name), safe='')}"
+        ),
+        # 备份包含全部个人数据，禁止浏览器与中间层缓存。
+        "Cache-Control": "no-store",
+    }
+    headers.update(_incomplete_backup_headers(archive_path))
     return FileResponse(
         archive_path,
         media_type="application/zip",
-        headers={
-            "Content-Disposition": (
-                f"attachment; filename*=UTF-8''{quote(sanitize_filename(archive_path.name), safe='')}"
-            ),
-            # 备份包含全部个人数据，禁止浏览器与中间层缓存。
-            "Cache-Control": "no-store",
-        },
+        headers=headers,
         background=BackgroundTask(archive_path.unlink, missing_ok=True),
     )
+
+
+def _incomplete_backup_headers(archive_path: Path) -> dict[str, str]:
+    """包内已经存在"附件缺失/内容与登记哈希不符"时，在响应头里如实标出（RR-03）。
+
+    导出响应体是二进制压缩包，没有 JSON 通道；界面若只说"已导出"就等于把一份不完整的
+    备份说成完整备份。这里只放**计数**（响应头是 ASCII），细节留在包内清单里。
+    """
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            manifest = json.loads(archive.read(MANIFEST_MEMBER))
+    except (OSError, KeyError, ValueError, zipfile.BadZipFile):
+        return {}
+    warnings = manifest_asset_warnings(manifest)
+    if not warnings:
+        return {}
+    return {"X-Backup-Incomplete": "1", "X-Backup-Asset-Warnings": str(len(warnings))}

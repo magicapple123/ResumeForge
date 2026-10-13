@@ -1,8 +1,11 @@
 """用户数据备份：导出为可迁移的压缩包，以及从压缩包恢复。
 
-ResumeForge 的用户数据都在 SQLite 文件里——照片、经历参考文件和助手图片附件都以
-base64 存在数据库列中，磁盘上没有其它用户文件。所以一次备份就是「一份一致性快照 +
-一份元信息」，用标准库 zipfile 即可，不需要搬运目录。
+ResumeForge 的用户数据**主要**在 SQLite 文件里——照片、经历参考文件和助手图片附件
+以 base64 存在数据库列中。**但磁盘上确实还有一类用户文件**：按内容寻址落盘的
+``user_files/`` 副本（"我的文件"）与内推备注图 ``referral_images/``，数据库里只登记
+引用（``user_file.disk_name`` / ``referral.note_images``），原件不进库。所以备份包 =
+一致性快照 + 元信息 + **按引用收集的附件**（``asset_manifest`` 逐文件记 size/SHA-256，
+见 ``asset_manifest.py``）。导入侧先验后发布、绝不覆盖本机同名附件。
 
 **但"一份数据"未必只有一个文件**：应用支持多份数据集，每份各占一个数据库文件，而
 一次导出默认只带走**当前活动**的那一份。所以导出分两档：只导活动数据集（格式 1，
@@ -46,12 +49,18 @@ from .asset_manifest import (
     file_digest as file_digest,
 )
 from .asset_manifest import (
-    restore_assets_from_manifest as restore_assets_from_manifest,
+    manifest_asset_warnings as manifest_asset_warnings,
 )
 from .asset_manifest import (
     verify_database_rows as verify_database_rows,
 )
-from .asset_manifest import (
+from .asset_restore import (
+    AssetRestorePlan as AssetRestorePlan,
+)
+from .asset_restore import (
+    restore_assets_from_manifest as restore_assets_from_manifest,
+)
+from .asset_restore import (
     verify_restored_assets as verify_restored_assets,
 )
 from .export import (

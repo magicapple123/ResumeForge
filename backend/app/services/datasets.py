@@ -6,17 +6,20 @@
 指针与目录始终相对 **DATABASE_URL 所在的目录**（见 :mod:`app.dataset_registry`），
 所以切换只影响"连哪个文件"，不会让数据集列表本身跟着漂移。
 
-模块分工（PR-18 豁免拆分批，纯搬迁无行为变化）：导入链路（``import_dataset``）与
+模块分工（PR-18 拆分批，纯搬迁无行为变化）：导入链路（``import_dataset``）与
 切换链路（prepare/commit/compensate、``recover_startup_pointer``）留在本文件——测试
 在 ``datasets`` 模块命名空间上 monkeypatch（``_DRAIN_TIMEOUT_SECONDS``/``extract_database``
-/``restore_assets_from_manifest``/``run_database_migrations`` 等），落点不能动；
-列表/重命名/删除/导出在 ``datasets_admin.py``。本文件同时是对外门面：下面的
-re-export 保证既有消费方（``api/datasets.py`` 等）与测试的 import 路径不变。
+/``run_database_migrations`` 等），落点不能动；列表/重命名/删除/导出，以及数据集
+文件的落盘（``place_packaged_datasets``）与失败回收（``discard_created_datasets``）
+在 ``datasets_admin.py``；附件的先验后发布在
+``data_backup/asset_restore.py``（RR-03，见 ADR-0005）。本文件同时是对外门面：
+下面的 re-export 保证既有消费方（``api/datasets.py`` 等）与测试的 import 路径不变。
 """
 
 from __future__ import annotations
 
 import logging
+import secrets
 import time
 import zipfile
 from datetime import datetime
@@ -33,6 +36,7 @@ from ..dataset_registry import (
     MAIN_DATASET_ID,
     DatasetError,
     dataset_database_file,
+    datasets_directory,
     is_valid_dataset_id,
     new_dataset_id,
     read_active_dataset_id,
@@ -49,22 +53,23 @@ from .data_backup import (
     inspect_extra_dataset,
 )
 from .data_backup.asset_manifest import (
-    restore_assets_from_manifest,
+    manifest_asset_warnings,
     verify_database_rows,
 )
+from .data_backup.asset_restore import AssetRestorePlan, verify_restored_assets
 from .data_backup.import_archive import (
-    _best_effort_checkpoint,
     _remove_candidate_files,
-    _remove_sqlite_sidecars,
     restore_referral_images,
     restore_user_files,
 )
 from .datasets_admin import (
     _describe,
     delete_dataset,
+    discard_created_datasets,
     export_all_datasets,
     export_dataset,
     list_datasets,
+    place_packaged_datasets,
     rename_dataset,
 )
 
@@ -99,50 +104,91 @@ def _entry_dataset_stem(entry: dict[str, Any]) -> str:
     return member[len(prefix) : -len(".db")]
 
 
-def _restore_asset_section(
-    archive_path: Path,
-    asset_manifest: dict[str, Any],
-    dataset_id_in_archive: str | None,
-    assets_parent: Path,
-) -> tuple[dict[str, int], list[str]]:
-    """按一份资产清单把附件恢复到 ``assets_parent`` 下的类别目录（PR-15）。
-
-    ``dataset_id_in_archive`` 为 None 表示清单属于"活动数据集"段：成员在包根的扁平
-    前缀（老位置）；随包数据集的成员在 ``datasets/<id>/`` 之下，各自隔离。
-    """
-    prefixes = {
-        "user_files": dataset_asset_prefix(dataset_id_in_archive, "user_files"),
-        "referral_images": dataset_asset_prefix(dataset_id_in_archive, "referral_images"),
-    }
-    destinations = {
-        "user_files": assets_parent / "user_files",
-        "referral_images": assets_parent / "referral_images",
-    }
-    return restore_assets_from_manifest(
-        archive_path, asset_manifest, prefixes=prefixes, destinations=destinations
-    )
-
-
 def import_dataset(
-    archive_path: Path, name: str, bind: Engine, staging_dir: Path
+    archive_path: Path,
+    name: str,
+    bind: Engine,
+    staging_dir: Path,
+    *,
+    allow_partial_assets: bool = False,
 ) -> dict[str, Any]:
     """把上传的备份包校验后落成一份**新数据集**，不触碰当前正在使用的数据。
 
     **先把整包里所有东西都验完，再开始写盘。** 一份包可能带好几份数据集，若边写边验，
     后面某份不合法时前面几份已经落盘了——用户看到的是一次失败，列表里却多出几份半截的
     数据集，还得自己分辨哪几份能用。校验全部前置之后，这条路径才是"要么全成、要么不动"。
+
+    RR-03 把**附件**也拉进了这条"先验后写"的链路：以前附件是"直接写进共享目录、写完
+    再复核"，包里的字节先落到本机同名文件上，复核失败时原件已经被覆写；而且主库与随包
+    数据集在附件校验之前就已发布。现在：
+
+    1. 阶段一先做库与附件的**全部只读预检**（附件写进私有暂存并逐个核对 sha256、
+       与磁盘现状做冲突检测），任何完整性问题或冲突都在**一个字节都没写**时终止
+       （除非用户显式选择 ``allow_partial_assets`` 跳过有问题的附件）；
+    2. 阶段二才发布库；发布后任何失败都会**收回本次新建的数据集文件**——只删自己
+       刚创建的东西，用户既有文件一律不动；
+    3. 阶段三原子发布附件（``os.replace``），任何情况下都不覆盖本机同名文件；
+    4. 最后按清单独立复核磁盘现状（``verify_restored_assets``），问题如实进
+       ``asset_issues``——"恢复完成"与"恢复干净"是两件事。
     """
     preview = inspect_archive(archive_path, bind, staging_dir)
     manifest = preview.get("manifest", {})
 
     staged: list[tuple[dict[str, Any], Path]] = []
+    created_dataset_ids: list[str] = []
+    assets_parent = datasets_directory()
+    plan = AssetRestorePlan(assets_parent / f".rf-restore-{secrets.token_hex(8)}")
     try:
-        # 阶段一：只校验，不落盘。
+        # 阶段一：只校验，不落盘（库）。
         for entry in declared_datasets(manifest):
             staged.append((entry, inspect_extra_dataset(archive_path, entry, bind, staging_dir)))
 
+        # 阶段一（续）：只校验，不落盘（附件）。每个段一份前缀/目的地口径：活动数据集
+        # 用包根扁平前缀，随包数据集用 ``datasets/<id>/``，但**目的地是同一个共享目录**
+        # ——正因如此，跨段的物理同名冲突也要在这里被拦住（以前是"后写的赢"）。
+        asset_destinations = {
+            "user_files": assets_parent / "user_files",
+            "referral_images": assets_parent / "referral_images",
+        }
+        main_assets = manifest.get("asset_manifest")
+        if isinstance(main_assets, dict):
+            plan.add_section(
+                archive_path,
+                main_assets,
+                prefixes={
+                    "user_files": dataset_asset_prefix(None, "user_files"),
+                    "referral_images": dataset_asset_prefix(None, "referral_images"),
+                },
+                destinations=asset_destinations,
+                label="活动数据集",
+            )
+        for entry, _candidate in staged:
+            entry_assets = entry.get("asset_manifest") if isinstance(entry, dict) else None
+            if not isinstance(entry_assets, dict):
+                continue
+            stem = _entry_dataset_stem(entry)
+            plan.add_section(
+                archive_path,
+                entry_assets,
+                prefixes={
+                    category: dataset_asset_prefix(stem, category)
+                    for category in ("user_files", "referral_images")
+                },
+                destinations=asset_destinations,
+                label=f"随包数据集「{entry.get('name')}」",
+            )
+        blocking = plan.blocking_issues()
+        if blocking and not allow_partial_assets:
+            raise DatasetError(
+                "备份包的附件未通过校验，已停止导入（没有写入任何数据）："
+                + blocking[0]
+                + (f"（共 {len(blocking)} 条问题）" if len(blocking) > 1 else ""),
+                status_code=400,
+            )
+
         # 阶段二：全部通过之后才开始写。
         dataset_id = new_dataset_id()
+        created_dataset_ids.append(dataset_id)
         target = dataset_database_file(dataset_id)
         target.parent.mkdir(parents=True, exist_ok=True)
 
@@ -167,109 +213,78 @@ def import_dataset(
         logger.info("已导入新数据集 id=%s name=%s", dataset_id, name)
 
         result = _describe(dataset_id, target)
-        restored = _place_packaged_datasets(staged)
+        restored = place_packaged_datasets(staged, created_dataset_ids)
         if restored:
             # 随包带走的其余数据集各落成一份新数据集。**用新 id**：包里的 id 在本机可能早就
             # 存在（那是另一份数据），沿用会覆盖它——而覆盖用户的另一份数据集是不可逆的。
             result["restored_datasets"] = restored
 
-        # 附件恢复（PR-15）：有资产清单就按清单恢复并逐文件复核；没有（旧格式包）回退到
-        # 旧的"遍历扁平成员"路径。所有问题都收进 asset_issues 显式上报，绝不静默成功。
+        # 阶段三：发布附件（原子改名；同名冲突保留本机文件），随后按清单独立复核。
         asset_issues: list[str] = []
-        asset_manifest = manifest.get("asset_manifest")
-        if isinstance(asset_manifest, dict):
-            try:
-                restored_assets, issues = _restore_asset_section(
-                    archive_path, asset_manifest, None, target.parent
-                )
-                if any(restored_assets.values()):
-                    result["restored_assets"] = restored_assets
-                asset_issues.extend(issues)
-            except (OSError, zipfile.BadZipFile) as exc:
-                asset_issues.append(f"附件恢复失败：{exc}")
-                logger.warning("备份包的附件恢复失败（不影响数据集本身）", exc_info=True)
+        if isinstance(main_assets, dict) or any(
+            isinstance(entry.get("asset_manifest"), dict) for entry, _ in staged
+        ):
+            published, publish_issues = plan.publish()
+            counts = plan.merged_counts(published)
+            result["restored_assets"] = counts
+            asset_issues.extend(publish_issues)
+            # 用户在"允许跳过有问题的附件"下导入时，预检阶段记下的问题同样要如实上报。
+            if allow_partial_assets:
+                asset_issues.extend(blocking)
+            asset_issues.extend(
+                verify_restored_assets(main_assets, asset_destinations)
+                if isinstance(main_assets, dict)
+                else []
+            )
+            for entry, _candidate in staged:
+                entry_assets = entry.get("asset_manifest") if isinstance(entry, dict) else None
+                if isinstance(entry_assets, dict):
+                    asset_issues.extend(verify_restored_assets(entry_assets, asset_destinations))
         else:
-            # 包里附带的内推图片恢复到该库同目录；失败只告警，不影响数据集本身。
+            # 旧格式包（没有资产清单）回退到"遍历扁平成员、跳过同名"的老路径：附件恢复
+            # 失败只告警，不影响数据集本身。这条路从不覆盖本机文件，保护性与新版一致。
             try:
                 restored_images = restore_referral_images(
-                    archive_path, target.parent / "referral_images"
+                    archive_path, assets_parent / "referral_images"
                 )
                 if restored_images:
                     result["restored_referral_images"] = restored_images
             except (OSError, zipfile.BadZipFile):
                 logger.warning("备份包的内推图片恢复失败（不影响数据集本身）", exc_info=True)
-            # 用户上传文件的落盘副本（"我的文件"）同模式恢复；失败只告警。
             try:
-                restored_files = restore_user_files(archive_path, target.parent / "user_files")
+                restored_files = restore_user_files(archive_path, assets_parent / "user_files")
                 if restored_files:
                     result["restored_user_files"] = restored_files
             except (OSError, zipfile.BadZipFile):
                 logger.warning("备份包的用户文件恢复失败（不影响数据集本身）", exc_info=True)
 
-        # 随包数据集各有自己的资产清单段：按各自的前缀恢复（命名空间隔离）。
-        for entry, _candidate in staged:
-            entry_assets = entry.get("asset_manifest") if isinstance(entry, dict) else None
-            if not isinstance(entry_assets, dict):
-                continue
-            try:
-                _, issues = _restore_asset_section(
-                    archive_path, entry_assets, _entry_dataset_stem(entry), target.parent
-                )
-                asset_issues.extend(issues)
-            except (OSError, zipfile.BadZipFile) as exc:
-                asset_issues.append(f"随包数据集「{entry.get('name')}」的附件恢复失败：{exc}")
-                logger.warning("随包数据集的附件恢复失败", exc_info=True)
+        # 导出侧已经知道的"这份备份不完整"（附件缺失/内容与登记哈希不符）：导入时
+        # 如实转述，别让用户以为恢复出了完整的一套附件。
+        declared_warnings = manifest_asset_warnings(manifest)
+        if declared_warnings:
+            result["backup_asset_warnings"] = declared_warnings
 
         # 恢复后按清单复核 DB 关键行数（表缺失/行数不符都显式上报）。
         asset_issues.extend(verify_database_rows(target, manifest.get("tables") or {}))
         if asset_issues:
             result["asset_issues"] = asset_issues
+            result["assets_incomplete"] = True
             logger.warning("备份包恢复完成但存在 %s 条资产/行数问题", len(asset_issues))
 
         # 回给前端做提示用：勾选过"包含 API Key"的包恢复成功后，界面要如实告诉用户
         # 密钥也跟着回来了（解不开时应用按未配置处理，仍需重填）。
         result["api_key_included"] = manifest.get("api_key_included") is True
         return result
+    except BaseException:
+        # 阶段二/三中途失败：收回本次新建的数据集文件（只删自己刚创建的那几份，
+        # 用户既有文件一个都不动），让"失败"真的等于"什么都没发生"。
+        discard_created_datasets(created_dataset_ids)
+        raise
     finally:
+        plan.discard()
         for _, candidate in staged:
             # 候选库在 staging 校验（迁移）时会产生 WAL 边车，主文件与边车一起清。
             _remove_candidate_files(candidate)
-
-
-def _place_packaged_datasets(staged: list[tuple[dict[str, Any], Path]]) -> list[dict[str, Any]]:
-    """把已经校验过的其余数据集逐个落盘（校验在 ``import_dataset`` 里已经做完了）。"""
-    restored: list[dict[str, Any]] = []
-    for entry, candidate in staged:
-        dataset_id = new_dataset_id()
-        target = dataset_database_file(dataset_id)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        partial = target.with_suffix(".partial")
-        try:
-            # rename 之前先把 -wal 里的已提交帧 checkpoint 回主文件：SQLite 只在
-            # 「最后一个连接干净关闭」时才自动 checkpoint，校验链路存在未干净关闭的
-            # 异常路径（边车残留即证据），此时直接删边车会静默丢数据。失败只告警
-            # 不阻断——垃圾残留好过恢复流程整个失败。随后清掉边车：replace 只搬
-            # 主文件，边车会变成 staging 里的孤儿垃圾。
-            _best_effort_checkpoint(candidate)
-            _remove_sqlite_sidecars(candidate)
-            # 同盘内改名是原子的：中途失败不会在列表里留下半截的数据集。
-            candidate.replace(partial)
-            partial.replace(target)
-        except OSError as exc:
-            partial.unlink(missing_ok=True)
-            raise DatasetError(f"写入数据集失败：{exc}", status_code=500) from exc
-        write_metadata(
-            dataset_id,
-            {
-                # 名字沿用包里的：用户就是靠它在列表里认出这是哪一份。
-                "name": str(entry.get("name") or "导入的数据集"),
-                "source": "随备份包导入",
-                "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-            },
-        )
-        restored.append(_describe(dataset_id, target))
-        logger.info("随包恢复了数据集 id=%s name=%s", dataset_id, entry.get("name"))
-    return restored
 
 
 def create_dataset(name: str, bind: Engine) -> dict[str, Any]:
@@ -453,3 +468,10 @@ def activate_dataset(dataset_id: str, bind: Engine) -> dict[str, Any]:
     auto_backup_scheduler.trigger_check()
     logger.info("已切换到数据集 id=%s path=%s", dataset_id, target.name)
     return _describe(dataset_id, target)
+
+
+# 这两个动作的实现搬到了 ``datasets_admin.py``（行数预算），这里保留旧名别名：
+# 既有调用方与测试都在 ``datasets`` 命名空间上引用它们。注意
+# ``place_packaged_datasets`` 的第二个参数是**调用方的回收清单**（见其 docstring）。
+_place_packaged_datasets = place_packaged_datasets
+_discard_created_datasets = discard_created_datasets

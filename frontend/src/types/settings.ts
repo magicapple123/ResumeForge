@@ -135,6 +135,16 @@ export interface DatasetImportResult extends DatasetInfo {
   restored_datasets?: DatasetInfo[];
   /** 导出方勾选过「包含 API Key」时为 true：密钥已随包恢复（解不开时仍需重填）。 */
   api_key_included?: boolean;
+  /**
+   * 恢复过程中确实出现过的问题（附件缺失/内容与清单不符/行数对不上）。RR-03 起：
+   * 附件完整性问题默认让整次导入**在写盘前**失败；只有用户显式选择"跳过有问题的
+   * 附件"时才会带着这些问题继续，那时这里的每一条都要展示给用户。
+   */
+  asset_issues?: string[];
+  /** 导出时就已知的"这份备份不完整"（附件缺失或与登记哈希不符）。 */
+  backup_asset_warnings?: string[];
+  /** 上面两类问题任一非空时为 true：界面不得把它呈现成"完整恢复"。 */
+  assets_incomplete?: boolean;
 }
 
 /** 应用打开时是否弹出近期提醒（默认开）。 */

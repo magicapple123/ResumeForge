@@ -247,8 +247,14 @@ export function loadSampleDataset(): Promise<DatasetInfo> {
 }
 
 /** 把备份包导入为一份**新数据集**；不触碰当前正在使用的数据。 */
-export async function importDataset(file: File, name: string): Promise<DatasetImportResult> {
-  return request(`/settings/datasets/import?name=${encodeURIComponent(name)}`, {
+export async function importDataset(
+  file: File,
+  name: string,
+  /** 显式选择"跳过有问题的附件继续导入"（默认 false：附件有问题时整次导入被拒绝）。 */
+  allowPartialAssets = false,
+): Promise<DatasetImportResult> {
+  const partial = allowPartialAssets ? "&allow_partial_assets=true" : "";
+  return request(`/settings/datasets/import?name=${encodeURIComponent(name)}${partial}`, {
     method: "POST",
     // 必须写死 application/zip：浏览器按系统映射给出的 File.type 不可靠，而这个
     // 类型不在 CORS 简单请求允许的范围内，跨站页面无法直接触发导入流程。
@@ -275,7 +281,7 @@ export function deleteDataset(id: string): Promise<void> {
 export async function exportDataset(
   id: string,
   includeApiKeys = false,
-): Promise<{ blob: Blob; filename: string }> {
+): Promise<{ blob: Blob; filename: string; incompleteBackup: boolean }> {
   return downloadArchive(exportUrl(`/settings/datasets/${id}/export`, includeApiKeys));
 }
 
@@ -287,7 +293,7 @@ export async function exportDataset(
  */
 export async function exportAllDatasets(
   includeApiKeys = false,
-): Promise<{ blob: Blob; filename: string }> {
+): Promise<{ blob: Blob; filename: string; incompleteBackup: boolean }> {
   return downloadArchive(exportUrl("/settings/datasets/export-all", includeApiKeys));
 }
 
@@ -296,7 +302,9 @@ function exportUrl(base: string, includeApiKeys: boolean): string {
   return includeApiKeys ? `${base}?include_api_keys=true` : base;
 }
 
-async function downloadArchive(url: string): Promise<{ blob: Blob; filename: string }> {
+async function downloadArchive(
+  url: string,
+): Promise<{ blob: Blob; filename: string; incompleteBackup: boolean }> {
   // 响应是二进制压缩包，不是 JSON：走 requestRaw（错误分类/诊断与 request() 一致），
   // 导出大包走 export 预算（10 分钟），不吃 15s 的默认超时。
   const resp = await requestRaw(url, { budget: "export" });
@@ -305,6 +313,9 @@ async function downloadArchive(url: string): Promise<{ blob: Blob; filename: str
     filename:
       getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ??
       "resumeforge-backup.zip",
+    // RR-03：包里有附件缺失/与登记哈希不符时后端会在响应头标出来——不读它就会把
+    // 一份不完整的备份播报成"完整备份成功"。
+    incompleteBackup: resp.headers.get("X-Backup-Incomplete") === "1",
   };
 }
 

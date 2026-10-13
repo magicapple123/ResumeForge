@@ -15,6 +15,7 @@ import tempfile
 import time
 import warnings
 from pathlib import Path
+from types import SimpleNamespace
 
 _TEST_DIR = Path(tempfile.gettempdir()) / f"resume_forge_test_{os.getpid()}"
 _TEST_DIR.mkdir(parents=True, exist_ok=True)
@@ -310,3 +311,49 @@ def pytest_unconfigure(config):  # noqa: ARG001 - pytest 钩子签名固定
     重复调用是安全的：目录已经不在就直接返回。
     """
     _remove_test_dir()
+
+
+# ---------------------------------------------------------------------------
+# 备份/资产用例的三份数据集夹具（``test_backup_asset_manifest.py`` 与
+# ``test_backup_asset_restore.py`` 共用）。
+#
+# 放在 conftest 而不是某个测试文件里：pytest 只从测试模块与 conftest 收集夹具，
+# 从别的模块 import 夹具会让 ruff 把每个用例的同名参数判成 F811（要么关规则、
+# 要么到处 noqa）。夹具本身只为回到单文件行数预算而搬家，行为不变。
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def three_datasets(db_session):
+    """主库 + 数据集 A、B：每个库都有自己独特的附件，且 A 另有一张内推备注图。"""
+    # 辅助函数在 fixture 内部 import：conftest 顶部必须先设好测试环境变量
+    # （DATABASE_URL 等）再 import app 模块，模块级 import 会抢在它前面。
+    from app import database as _database
+    from app.dataset_registry import dataset_database_file as _dataset_database_file
+    from app.services.data_backup import database_path as _database_path
+    from app.services.datasets import create_dataset as _create_dataset
+    from tests.backup_asset_fixtures import (
+        _add_main_user_file as _backup_add_main_user_file,
+    )
+    from tests.backup_asset_fixtures import (
+        _add_referral_image as _backup_add_referral_image,
+    )
+    from tests.backup_asset_fixtures import (
+        _add_user_file as _backup_add_user_file,
+    )
+
+    dataset_a = _create_dataset("数据集A", _database.engine)
+    dataset_b = _create_dataset("数据集B", _database.engine)
+    path_a = _dataset_database_file(dataset_a["id"])
+    path_b = _dataset_database_file(dataset_b["id"])
+
+    main_file = _database_path(_database.engine).parent / "user_files" / "main-only-attachment.bin"
+    _backup_add_main_user_file(db_session, "main-only-attachment.bin", b"MAIN-CONTENT" * 10)
+    _backup_add_user_file(path_a, "aaa-dataset-a-file.bin", b"A" * 128)
+    _backup_add_user_file(path_b, "bbb-dataset-b-file.bin", b"B" * 128)
+    _backup_add_referral_image(path_a, "aaa-referral-note.png", b"REF-A-IMAGE" * 8)
+    try:
+        yield SimpleNamespace(
+            id_a=dataset_a["id"], id_b=dataset_b["id"], path_a=path_a, path_b=path_b
+        )
+    finally:
+        # 主库父目录（进程级测试根）不在 conftest 的数据集清理范围内，自己收尾。
+        main_file.unlink(missing_ok=True)
