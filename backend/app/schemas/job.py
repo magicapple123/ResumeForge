@@ -357,3 +357,28 @@ class JobOut(JobCreate):
         from ..services.sites.registry import get_registry
 
         return get_registry().resolve_for_job(self) is not None
+
+
+class JobListOut(JobOut):
+    """岗位列表的读取模型：与 `JobOut` 字段一致，但**不带 JD 全文**。
+
+    列表页从不需要整份岗位描述（20 行 × 平均 10KB 就是 ~430KB 的响应体），
+    需要 JD 的场景（详情抽屉、编辑表单、生成简历）都走 `GET /jobs/{id}` 单取。
+    所以这里把 `description` 排除出序列化（读取时仍校验、内存里仍有值），
+    并下发 `has_description`——「补齐详情」按钮据此判断哪些岗位缺 JD，
+    不用前端对着缺失字段猜。
+
+    继承 `JobOut` 是刻意的：读取侧的"校验直通 + from_attributes + apply_supported"
+    判据只有一处，列表与详情必须同源，否则又会出现"一条坏数据在列表能读、详情 500"
+    的分叉。
+    """
+
+    # exclude=True：字段参与校验与内存表示，但不进响应 JSON——这是"瘦身后仍能
+    # model_validate(ORM 行)"的最小改动，比复制一份字段清单好维护。
+    description: str = Field(default="", max_length=MAX_JOB_TEXT_CHARS, exclude=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_description(self) -> bool:
+        """岗位有没有可用的岗位描述（口径：description 非空白）。"""
+        return bool(self.description.strip())

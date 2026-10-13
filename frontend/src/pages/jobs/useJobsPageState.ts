@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getJob, listJobs } from "../../api/jobs";
 import { useApi } from "../../hooks/useApi";
-import type { Job } from "../../types";
+import type { Job, JobList } from "../../types";
 
 export function useJobsPageState() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -23,7 +23,8 @@ export function useJobsPageState() {
   const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
 
   // 详情抽屉的岗位本体与 ?job_id= 的写入/移除绑在同一处；页面里其它逻辑（收藏、批量
-  // 操作）通过返回的 setDetailJob 更新它。
+  // 操作）通过返回的 setDetailJob 更新它。详情必须是 getJob 的**全量**那份——列表项
+  // 已不带 JD 全文（JobList），直接复用会让抽屉空着一份岗位描述。
   const [detailJob, setDetailJob] = useState<Job | null>(null);
   const [openedLinkedJobId, setOpenedLinkedJobId] = useState<number | null>(null);
 
@@ -84,10 +85,11 @@ export function useJobsPageState() {
     );
   }, [keyword, jobType, status, sourceKind, page, pageSize, setSearchParams]);
 
-  // 详情与 ?job_id= 同步：打开详情写进 URL（可分享/刷新后恢复），关闭就移除。
+  // 详情与 ?job_id= 同步：打开详情只写 URL（可分享/刷新后恢复），岗位本体由下面的
+  // effect 统一经 getJob 拉全量——列表项已瘦身（JobList），这里不再直接复用。
   const openDetail = useCallback(
-    (job: Job) => {
-      setDetailJob(job);
+    (job: Pick<JobList, "id">) => {
+      setDetailJob(null);
       setSearchParams(
         (previous) => {
           const next = new URLSearchParams(previous);
@@ -112,18 +114,11 @@ export function useJobsPageState() {
     );
   }, [setSearchParams]);
 
-  // 从 ?job_id= 恢复详情：岗位在当前页就直接用，不在就单独拉一次。
-  // 深链岗位锁存器：列表命中直接用，未命中再单取。openedLinkedJobId 标记防止
-  // 重复拉取——锁存与条件拉取耦合，按书面理由豁免 Compiler 规则。
+  // 从 ?job_id= 恢复详情：统一走 getJob 单取全量（列表项已瘦身，不带 JD 全文）。
+  // openedLinkedJobId 标记防止重复拉取——锁存与条件拉取耦合，按书面理由豁免 Compiler 规则。
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!linkedJobId || openedLinkedJobId === linkedJobId || loading) return;
-    const listedJob = jobs?.items.find((item) => item.id === linkedJobId);
-    if (listedJob) {
-      setDetailJob(listedJob);
-      setOpenedLinkedJobId(linkedJobId);
-      return;
-    }
     setOpenedLinkedJobId(linkedJobId);
     void getJob(linkedJobId)
       .then(setDetailJob)

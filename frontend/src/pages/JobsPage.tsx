@@ -6,7 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { markCandidateJobImported } from "../api/candidateJob";
 import { openWebFormUrl } from "../api/webform";
 import { startBackfill } from "../api/apply";
-import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, updateJob } from "../api/jobs";
+import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, getJob, updateJob } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobAnalysisModal from "../components/JobAnalysisModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
@@ -19,7 +19,7 @@ import CandidateJobsDrawer from "../components/jobs/CandidateJobsDrawer";
 import { candidateToJobPayload } from "../components/jobs/candidate/candidatePayload";
 import { JobImportModal } from "../components/jobs/JobImportModal";
 import JobTable from "../components/jobs/JobTable";
-import type { CandidateJobDetail, Job } from "../types";
+import type { CandidateJobDetail, Job, JobList } from "../types";
 import { BatchToolbar } from "./jobs/BatchToolbar";
 import { JobFilterBar } from "./jobs/JobFilterBar";
 import type { BatchAction } from "./jobs/jobFilterOptions";
@@ -118,7 +118,7 @@ export default function JobsPage() {
   // 只有"岗位描述为空"的岗位才值得补详情（补详情要逐个打开页面，很慢），按钮据此出现/消失，
   // 而不是常驻一个点了没反应的按钮。当前只统计这一页已加载的岗位：补的就这一页里空的那些。
   const emptyDescriptionJobIds = (jobs?.items ?? [])
-    .filter((job) => !job.description.trim())
+    .filter((job) => !job.has_description)
     .map((job) => job.id);
 
   const removeJob = useCallback(
@@ -136,7 +136,7 @@ export default function JobsPage() {
   );
 
   const toggleFavorite = useCallback(
-    async (job: Job) => {
+    async (job: { id: number; favorite: boolean }) => {
       if (batchAction !== null || favoriteJobId !== null) return;
       setFavoriteJobId(job.id);
       try {
@@ -323,7 +323,7 @@ export default function JobsPage() {
     setMatchBatchOpen(true);
   };
 
-  const rowSelection: TableRowSelection<Job> = {
+  const rowSelection: TableRowSelection<JobList> = {
     selectedRowKeys: selectedJobIds,
     preserveSelectedRowKeys: true,
     onChange: (keys) => {
@@ -387,12 +387,15 @@ export default function JobsPage() {
         pageSize={pageSize}
         onToggleFavorite={(job) => void toggleFavorite(job)}
         onOpenDetail={openDetail}
-        onGenerate={setGenerateJob}
-        onWrite={setManualResumeJob}
+        onGenerate={(job) => void getJob(job.id).then(setGenerateJob)}
+        onWrite={(job) => void getJob(job.id).then(setManualResumeJob)}
         onViewResumes={(job) => navigate("/resumes?job_id=" + job.id)}
         onEdit={(job) => {
-          setEditingJob(job);
-          setFormOpen(true);
+          // 列表项已瘦身（无 JD 全文），编辑前先取全量。
+          void getJob(job.id).then((full) => {
+            setEditingJob(full);
+            setFormOpen(true);
+          });
         }}
         onDelete={(job) => void removeJob(job.id)}
         onEnterSelecting={enterSelectionMode}

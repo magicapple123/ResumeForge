@@ -3,7 +3,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Job, Page } from "../../types";
+import type { Job, JobList, Page } from "../../types";
 import JobTable from "./JobTable";
 
 const BASE_JOB: Job = {
@@ -30,14 +30,16 @@ const BASE_JOB: Job = {
   updated_at: "2026-08-21T09:30:00",
 };
 
-function makeJob(overrides: Partial<Job> = {}): Job {
-  return { ...BASE_JOB, ...overrides };
+function makeJob(overrides: Partial<Job> = {}): JobList {
+  const merged = { ...BASE_JOB, ...overrides };
+  const { description, ...rest } = merged;
+  return { ...rest, has_description: description.trim().length > 0 };
 }
 
 const noop = () => undefined;
 
-function renderTable(jobs: Job[]) {
-  const page: Page<Job> = { items: jobs, total: jobs.length };
+function renderTable(jobs: JobList[]) {
+  const page: Page<JobList> = { items: jobs, total: jobs.length };
   return render(
     <AntdApp>
       <JobTable

@@ -5,7 +5,7 @@ import { Button, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
 import type { HTMLAttributes } from "react";
-import type { Job, Page } from "../../types";
+import type { JobList, Page } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
 import SkillTags from "../SkillTags";
@@ -17,21 +17,21 @@ import { jobSourceKind } from "../../utils/jobSource";
 type BatchAction = "status" | "delete" | "enqueue" | null;
 
 interface Props {
-  jobs: Page<Job> | undefined;
+  jobs: Page<JobList> | undefined;
   loading: boolean;
   selectionMode: boolean;
-  rowSelection: TableRowSelection<Job>;
+  rowSelection: TableRowSelection<JobList>;
   batchAction: BatchAction;
   favoriteJobId: number | null;
   page: number;
   pageSize: number;
-  onToggleFavorite: (job: Job) => void;
-  onOpenDetail: (job: Job) => void;
-  onGenerate: (job: Job) => void;
-  onWrite: (job: Job) => void;
-  onViewResumes: (job: Job) => void;
-  onEdit: (job: Job) => void;
-  onDelete: (job: Job) => void;
+  onToggleFavorite: (job: JobList) => void;
+  onOpenDetail: (job: JobList) => void;
+  onGenerate: (job: JobList) => void;
+  onWrite: (job: JobList) => void;
+  onViewResumes: (job: JobList) => void;
+  onEdit: (job: JobList) => void;
+  onDelete: (job: JobList) => void;
   /** 右键菜单「批量选择」的动作：进入选择模式（工具栏按钮已收进这里，R8）。 */
   onEnterSelecting: () => void;
   onPageChange: (page: number, pageSize: number) => void;
@@ -69,7 +69,7 @@ export default function JobTable({
   onEnterSelecting,
   onPageChange,
 }: Props) {
-  const columns: ColumnsType<Job> = [
+  const columns: ColumnsType<JobList> = [
     {
       title: "收藏",
       key: "favorite",
@@ -188,12 +188,12 @@ export default function JobTable({
    * 行操作分两层，两层**不重叠**：主操作是行上的蓝色链接，「更多」里只放其余操作。
    * 菜单里再出现一遍「详情」会让人以为那是另一个入口（也白白多一次点击）。
    */
-  const primaryActions = (job: Job): RowActionItem[] => [
+  const primaryActions = (job: JobList): RowActionItem[] => [
     { key: "detail", label: "详情", onClick: () => onOpenDetail(job) },
     { key: "generate", label: "生成简历", onClick: () => onGenerate(job) },
   ];
 
-  const secondaryActions = (job: Job): RowActionItem[] => [
+  const secondaryActions = (job: JobList): RowActionItem[] => [
     { key: "write", label: "自行编写", onClick: () => onWrite(job) },
     { key: "resumes", label: "相关简历", onClick: () => onViewResumes(job) },
     { key: "edit", label: "编辑", onClick: () => onEdit(job) },
@@ -208,7 +208,7 @@ export default function JobTable({
 
   /** 整行右键：鼠标不在行内链接上，给完整清单更方便。
    * 非选择模式时顶部带「批量选择」（工具栏按钮已收进这里，R8）；选择模式下不重复给。 */
-  const contextActions = (job: Job): RowActionItem[] => [
+  const contextActions = (job: JobList): RowActionItem[] => [
     ...(selectionMode
       ? []
       : [
