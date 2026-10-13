@@ -9,8 +9,10 @@
 已知的项目名与公司名在总结 / 描述文本里遮罩，避免产品名从正文漏出。更细的产品名词表
 留到 R-17 完整实现时再扩展。
 """
+
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from ..schemas.resume import ResumeContent
@@ -50,7 +52,9 @@ def redact(resume_content: ResumeContent, options: RedactionOptions | None = Non
     # 先收集正文级"产品名" token：mask_company / mask_project 会把字段改成占位符，
     # 若在遮罩之后才收集，就只剩 "***"，正文里的原始公司 / 项目名会漏网。
     product_tokens = {project.name for project in resume_content.projects if project.name}
-    product_tokens |= {experience.company for experience in resume_content.experience if experience.company}
+    product_tokens |= {
+        experience.company for experience in resume_content.experience if experience.company
+    }
     resume = resume_content.model_copy(deep=True)
 
     if opts.mask_name:
@@ -71,9 +75,13 @@ def redact(resume_content: ResumeContent, options: RedactionOptions | None = Non
     if opts.mask_product:
         resume.summary = _mask_tokens(resume.summary, product_tokens)
         for experience in resume.experience:
-            experience.description = [_mask_tokens(line, product_tokens) for line in experience.description]
+            experience.description = [
+                _mask_tokens(line, product_tokens) for line in experience.description
+            ]
         for project in resume.projects:
-            project.description = [_mask_tokens(line, product_tokens) for line in project.description]
+            project.description = [
+                _mask_tokens(line, product_tokens) for line in project.description
+            ]
             project.highlights = [_mask_tokens(line, product_tokens) for line in project.highlights]
 
     return resume
@@ -112,6 +120,36 @@ SENSITIVE_KEYWORDS: tuple[tuple[str, str], ...] = (
     ("年薪", "年薪"),
 )
 
+# 出站自由文本的兜底遮罩模式（**只用于出站**，见 ``mask_outbound_text``）。
+# 与上面的 ``SENSITIVE_PATTERNS`` 分开放：那一份是「识别」模式（本地风险扫描拿它
+# 给用户提示"你这儿有个身份证号"），出站遮罩则要连联系方式、链接与内嵌图片一起
+# 抹掉——两者的用途相反，共用一份名单会让本地提示莫名多出"邮箱"这类条目。
+OUTBOUND_FREETEXT_PATTERNS: tuple[tuple[str, str], ...] = (
+    # 邮箱：结构化字段由 ``redact`` 负责，这里是正文里写死的联系方式兜底。
+    ("邮箱", r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+"),
+    # 链接与内嵌资源：``data:`` URI 里是 base64 的照片/附件（体积大且是个人资料），
+    # http(s) 链接可能是内部系统地址；远端风险复核不需要它们。
+    ("链接", r"(?:https?|ftp)://[^\s\"'<>()\[\]]+"),
+    ("内嵌数据", r"data:[^\s\"'<>()\[\]]+"),
+)
+
+
+def mask_outbound_text(text: str) -> str:
+    """出站自由文本的统一兜底遮罩（全仓库唯一实现）。
+
+    依次抹掉：邮箱、链接/内嵌 data URI、``SENSITIVE_PATTERNS``（身份证号/银行卡号/
+    精确出生日期）与 7 位以上长数字串（手机号/证件号/编号）。**只用于将要离开本机
+    的文本**：本地扫描必须保留原文才能发现敏感项，所以在源头不能遮。
+
+    遮罩不等于可证明的匿名化——任意自由文本里仍可能出现没被模式覆盖的第三方信息，
+    所以调用方必须先做**结构最小化**（不发原文），这里只是最后一道兜底。
+    """
+    masked = text
+    for _label, pattern in (*OUTBOUND_FREETEXT_PATTERNS, *SENSITIVE_PATTERNS):
+        masked = re.sub(pattern, MASK, masked)
+    return re.sub(r"\d{7,}", MASK, masked)
+
+
 # 合规/保密风险词（R-09 与 R-17 共用）：命中提示可能涉及未公开 / 保密信息。
 COMPLIANCE_KEYWORDS: tuple[str, ...] = (
     "保密协议",
@@ -134,8 +172,10 @@ COMPLIANCE_KEYWORDS: tuple[str, ...] = (
 __all__ = [
     "COMPLIANCE_KEYWORDS",
     "MASK",
+    "OUTBOUND_FREETEXT_PATTERNS",
     "RedactionOptions",
     "SENSITIVE_KEYWORDS",
     "SENSITIVE_PATTERNS",
+    "mask_outbound_text",
     "redact",
 ]

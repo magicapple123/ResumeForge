@@ -12,7 +12,7 @@ from app.models.claim import (
     ClaimRecord,
 )
 from app.models.resume import ResumeRecord
-from app.schemas.resume import ResumeContent, ResumeExperience, ResumeProject
+from app.schemas.resume import ResumeContent, ResumeProject
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider, LLMError
 from app.services.resume.resume_risk import MAX_DUPLICATE_RISKS, scan_local, scan_resume_risks
@@ -225,29 +225,6 @@ def test_risk_prompt_registered_in_preflight():
     assert "app/prompts/resume_risk.md" in covered
 
 
-# ===== PR-11：出站隐私边界（远端增强 prompt 不得携带身份字段） =====
-
-
-async def test_outbound_messages_do_not_contain_identity_fields():
-    resume = ResumeContent(
-        name="张三",
-        phone="13800138000",
-        email="zhangsan@example.com",
-        summary="负责后端服务开发，联系我请拨打 13800138000",
-        experience=[
-            ResumeExperience(company="示例公司", description=["在示例公司负责撮合引擎开发"])
-        ],
-    )
-    provider = CapturingProvider({"points": []})
-    await scan_resume_risks(resume, [], provider=provider, resume_id=1)
-    assert provider.captured_messages is not None
-    outbound = json.dumps(provider.captured_messages, ensure_ascii=False)
-    assert "张三" not in outbound
-    assert "13800138000" not in outbound
-    assert "zhangsan@example.com" not in outbound
-    assert "示例公司" not in outbound
-
-
 # ===== PR-11：畸形模型返回的降级矩阵（一律本地结果 + 降级原因，不 500） =====
 
 
@@ -367,7 +344,12 @@ async def test_llm_prompt_only_includes_resume_linked_claims():
     await scan_resume_risks(resume, [linked, generic], provider=provider, resume_id=1)
     assert provider.captured_messages is not None
     outbound = json.dumps(provider.captured_messages, ensure_ascii=False)
-    assert "撮合延迟数据需现场核对" in outbound  # 关联条目的台账内容进入 prompt
+    # RR-01：台账条目**原文一律不出站**，只发结构信息（类别/承担程度/计数）。
+    assert "撮合延迟数据需现场核对" not in outbound
+    assert "个人边界" in outbound  # 结构字段名还在（作为"填没填"的提示）
+    # 关联关系仍然可辨：只有 1 条进入 prompt（两条都发就会出现"条目 2"）。
+    assert "条目 1" in outbound
+    assert "条目 2" not in outbound
     assert "外卖" not in outbound  # 未关联条目不外发
 
 

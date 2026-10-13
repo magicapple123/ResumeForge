@@ -1,10 +1,15 @@
 """风险扫描的出站最小化与远端响应规范化（从 :mod:`app.services.resume.resume_risk` 纯搬迁拆出）。
 
-这是 PR-11 的**隐私关键路径**：进入远端增强的一切输入都必须经
-:func:`_build_enhancement_messages`（唯一出口）走最小化脱敏——复用
+这是 PR-11 / RR-01 的**隐私关键路径**：进入远端增强的一切输入都必须经
+:func:`_build_enhancement_messages`（唯一出口）走最小化——复用
 ``services/privacy.py`` 的 ``redact`` 遮罩姓名/电话/邮箱/公司、排除照片，正文里的
-身份 token 与长数字串再兜底遮罩；台账只带与当前简历关联的强责任条目。测试断言
-出站消息不含身份字段（``test_resume_risk.py``），拆分后契约不变。
+身份 token、联系方式、链接/内嵌 data URI 与长数字串再兜底遮罩。
+
+**台账条目只发结构信息，原文一律不出站**（RR-01）：台账的自由文本可以写进客户名、
+对接人姓名、内部项目编号，这些既不在简历结构字段里也不在 ``redact`` 的 token 表里，
+正则无法证明已匿名化——所以远端只拿到"有几条、什么类别、承担到什么程度、边界/备注/
+面试细节填没填"这类枚举与计数。条目的真实内容只留在本地规则（``resume_risk_rules``）
+里生成追问点，用户看到的仍是完整信息。
 
 模型返回经 :func:`_normalize_enhancement_points` 受限规范化，畸形结构抛
 :class:`LLMError` 降级而不是让整个扫描失败。
@@ -13,7 +18,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 from ...models.claim import (
@@ -24,7 +28,7 @@ from ...models.claim import (
 from ...schemas.resume import ResumeContent
 from ...schemas.resume_risk import RiskPoint
 from ...services.llm.base import LLMError
-from ..privacy import MASK, SENSITIVE_PATTERNS, redact
+from ..privacy import MASK, mask_outbound_text, redact
 from .resume_risk_rules import _resume_full_text
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
@@ -44,6 +48,8 @@ MAX_ENHANCEMENT_TEXT_CHARS = 2_000
 MAX_FOLLOW_UP_ITEMS = 20
 # 进入远端 prompt 的关联台账条目上限。
 MAX_LINKED_CLAIMS = 20
+# 台账结构信息段的字节上限（条目数已有上限，这里再兜一层总预算）。
+MAX_LINKED_CLAIMS_CHARS = 4_000
 
 
 def _load_prompt(name: str) -> str:
@@ -51,14 +57,11 @@ def _load_prompt(name: str) -> str:
 
 
 def _mask_sensitive_text(text: str) -> str:
-    """文本级兜底遮罩：复用共享敏感模式名单 + 长数字串（手机号/证件号/银行卡号）。
+    """文本级兜底遮罩：转发到 ``services/privacy.mask_outbound_text``（唯一实现）。
 
     只用于**出站**文本：本地扫描必须保留原文才能发现敏感项，所以不能在源头遮罩。
     """
-    masked = text
-    for _label, pattern in SENSITIVE_PATTERNS:
-        masked = re.sub(pattern, MASK, masked)
-    return re.sub(r"\d{7,}", MASK, masked)
+    return mask_outbound_text(text)
 
 
 def _outbound_resume_text(resume: ResumeContent) -> str:
@@ -106,35 +109,52 @@ def _split_linked_claims(resume: ResumeContent, claims: list[ClaimRecord]) -> li
 
 
 def _format_linked_claims(claims: list[ClaimRecord]) -> str:
-    """把关联台账条目渲染成 prompt 段落；条目文本同样走敏感数字兜底遮罩。"""
+    """把关联台账条目渲染成**只含结构信息**的 prompt 段落：条目原文一律不出站。
+
+    RR-01：此前这里把 title / subject / 候选表述 / 个人边界 / 风险备注 / 面试细节
+    的原文（只做数字兜底）直接发给远端，实证泄漏了台账里的合作方名称、对接人姓名
+    与内部编号——它们既不在简历结构字段里，也不在 ``redact`` 的 token 表里。
+
+    现在只输出**枚举、布尔与计数**：类别 / 承担程度 / 核实状态来自受控词表，边界与
+    备注只报"填没填、几条"。远端因此仍然能判断"这条主张需要准备哪些追问方向"，
+    而条目的真实内容只留在本地规则（``resume_risk_rules``）里。整段还有字节上限，
+    条目数上限见 :data:`MAX_LINKED_CLAIMS`。
+    """
     if not claims:
         return (
             "（无与当前简历关联的台账条目。若给出建议，只能以「全库通用准备建议」类别"
             "给出通用面试准备建议，不得当作当前简历存在的问题。）"
         )
-    lines: list[str] = []
-    for claim in claims:
-        lines.append(
-            f"- 条目「{claim.title or claim.subject or '未命名'}」"
-            f"主体「{claim.subject or '未填写'}」表述："
-            f"{_mask_sensitive_text(claim.candidate_wording or claim.source_fact or '')}"
-        )
-        if claim.boundary:
-            lines.append(f"  个人边界：{_mask_sensitive_text(claim.boundary)}")
-        for note in claim.risk_notes or []:
-            lines.append(f"  风险备注：{_mask_sensitive_text(str(note))}")
+    lines: list[str] = [
+        "（下列条目只有结构信息，没有原文；不要臆测条目内容，也不要凭此复述具体事实。）"
+    ]
+    for index, claim in enumerate(claims, start=1):
         details = claim.interview_details or {}
-        for key, label in (
-            ("decisions", "关键决策"),
-            ("difficulties", "难点"),
-            ("verification", "如何验证"),
-        ):
-            for entry in details.get(key) or []:
-                lines.append(f"  {label}：{_mask_sensitive_text(str(entry))}")
-        result = details.get("result")
-        if result:
-            lines.append(f"  结果：{_mask_sensitive_text(str(result))}")
-    return "\n".join(lines)
+        detail_counts = "、".join(
+            f"{label} {_entry_count(details.get(key))} 条"
+            for key, label in (
+                ("decisions", "关键决策"),
+                ("difficulties", "难点"),
+                ("verification", "如何验证"),
+            )
+        )
+        lines.append(
+            f"- 条目 {index}：类别={claim.category or '未分类'}；"
+            f"承担程度={claim.responsibility_level or '未填写'}；"
+            f"核实状态={claim.verification_status or '未填写'}；"
+            f"个人边界={'已填写' if (claim.boundary or '').strip() else '未填写'}；"
+            f"风险备注 {_entry_count(claim.risk_notes)} 条；"
+            f"面试细节：{detail_counts}、结果"
+            f"{'已填写' if details.get('result') else '未填写'}"
+        )
+    return "\n".join(lines)[:MAX_LINKED_CLAIMS_CHARS]
+
+
+def _entry_count(value: object) -> int:
+    """条目计数：只认列表/元组（台账里几个细节字段是 JSON 数组），其它一律算 0。"""
+    if isinstance(value, (list, tuple)):
+        return len(value)
+    return 0
 
 
 def _build_enhancement_messages(

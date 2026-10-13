@@ -1,5 +1,5 @@
 /** 简历风险扫描面板：风险点渲染、台账联动、错误透出。 */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ResumeRiskPanel from "./ResumeRiskPanel";
 
@@ -30,12 +30,14 @@ const RESULT = {
     },
   ],
   summary: { deep_dive: 1, compliance: 1 },
+  remote_enhancement_available: false,
   llm_used: false,
   notes: [],
 };
 
 beforeEach(() => {
   apiMocks.scanResumeRisks.mockReset();
+  window.localStorage.clear();
 });
 
 afterEach(() => {
@@ -54,7 +56,41 @@ describe("ResumeRiskPanel", () => {
     expect(screen.getByText("主导交易系统从0到1建设")).toBeInTheDocument();
     expect(screen.getByText("事实台账 #42")).toBeInTheDocument();
     expect(screen.getByText(/这条强主张会被追问/)).toBeInTheDocument();
-    expect(apiMocks.scanResumeRisks).toHaveBeenCalledWith(7);
+    // 默认开启 AI 增强（与历史行为一致）：请求显式带上 enhance=true。
+    expect(apiMocks.scanResumeRisks).toHaveBeenCalledWith(7, true);
+    // 没配置模型时不显示开关（显示一个按不动的开关只会让人困惑）。
+    expect(screen.queryByRole("switch", { name: "AI 增强" })).toBeNull();
+  });
+
+  // ===== RR-01：远端增强由用户显式控制 =====
+
+  it("配置了模型时给出「AI 增强」开关，关掉后只跑本地规则", async () => {
+    apiMocks.scanResumeRisks.mockResolvedValue({
+      ...RESULT,
+      remote_enhancement_available: true,
+      llm_used: true,
+    });
+    render(<ResumeRiskPanel resumeId={7} />);
+
+    expect(await screen.findByText("含模型增强")).toBeInTheDocument();
+    const toggle = screen.getByRole("switch", { name: "AI 增强" });
+    expect(toggle).toBeInTheDocument();
+    expect(apiMocks.scanResumeRisks).toHaveBeenLastCalledWith(7, true);
+
+    // 关掉：立刻按"只跑本地规则"重扫，并把偏好记下来（下次打开还关着）。
+    apiMocks.scanResumeRisks.mockResolvedValue({ ...RESULT, remote_enhancement_available: true });
+    fireEvent.click(toggle);
+    await waitFor(() => expect(apiMocks.scanResumeRisks).toHaveBeenLastCalledWith(7, false));
+    expect(window.localStorage.getItem("resumeRisk.remoteEnhancement")).toBe("off");
+  });
+
+  it("关掉偏好会跨会话保留（localStorage）", async () => {
+    window.localStorage.setItem("resumeRisk.remoteEnhancement", "off");
+    apiMocks.scanResumeRisks.mockResolvedValue({ ...RESULT, remote_enhancement_available: true });
+    render(<ResumeRiskPanel resumeId={7} />);
+
+    expect(await screen.findByText("共 2 条风险点")).toBeInTheDocument();
+    expect(apiMocks.scanResumeRisks).toHaveBeenLastCalledWith(7, false);
   });
 
   it("接口报错时透出中文错误", async () => {

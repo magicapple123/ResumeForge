@@ -26,6 +26,9 @@ export interface ResumeRiskScan {
   resume_id: number;
   points: RiskPoint[];
   summary: Record<string, number>;
+  /** 这台机器上是否配置了模型（决定「AI 增强」开关有没有意义）。 */
+  remote_enhancement_available: boolean;
+  /** 本次是否真的用了模型增强（没配置 / 你关掉了 / 调用失败降级 都为 false）。 */
   llm_used: boolean;
   notes: string[];
 }
