@@ -4,6 +4,7 @@
 ``points`` 是扁平列表，前端按 ``category`` 分组展示；``summary`` 是各类命中数，``llm_used``
 标记是否启用了可选模型增强（未配置时本地规则照常生效）。
 """
+
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -38,7 +39,7 @@ class RiskScanOut(BaseModel):
     summary: dict[str, int] = Field(default_factory=dict)
     # 是否使用了可选模型增强；未配置时为 False，本地规则结果仍完整可用。
     llm_used: bool = False
-    # 降级 / 提示信息，例如「模型增强未生效，已使用本地规则」。
+    # 降级 / 提示信息，例如「AI 增强未完成，已使用本地规则结果」。
     notes: list[str] = Field(default_factory=list)
 
 

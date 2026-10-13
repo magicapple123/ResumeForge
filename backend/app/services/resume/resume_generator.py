@@ -19,6 +19,7 @@ from ...schemas.profile import ProfileOut
 from ...schemas.resume import GenerateOptions, ResumeContent
 from ..llm.base import BaseLLMProvider, LLMError
 from ..llm.token_estimate import estimate_tokens
+from ..llm.usage import LLMUsage
 from ..profile.profile_relevance import (
     build_general_profile_context,
     build_job_prompt_text,
@@ -133,6 +134,23 @@ class ResumeGenerator:
             undefined=StrictUndefined,
             autoescape=False,
         )
+        # 多段用量汇总（审计 PR-07-6）：主生成 / 格式修复 / 质量重试各段结束后各补
+        # 一次 provider.last_usage（失败与取消轮次同样收集，能拿到多少算多少）。
+        self.usage_records: list[LLMUsage] = []
+        # 整链总预算（generate 时按值记录）：段结束后恢复注入，主生成流的硬墙钟
+        # 在余下的调用里继续生效。
+        self._total_budget: OperationBudget | None = None
+
+    def _record_call_usage(self) -> None:
+        """把 provider 刚结束的这一次调用用量补进本链汇总（PR-07-6）。
+
+        provider 只保留 ``last_usage``（跨轮累计是调用方责任）；在每段的
+        finally 里调用——失败与取消轮次同样能拿到多少算多少。测试假 Provider
+        可能不写甚至没有该属性，用 getattr 容忍缺失。
+        """
+        usage = getattr(self.provider, "last_usage", None)
+        if usage is not None:
+            self.usage_records.append(usage)
 
     async def generate(
         self,
@@ -249,6 +267,11 @@ class ResumeGenerator:
         if budget is not None:
             # 流开始前的预算检查（§2.1.a-2）：防御"上一段耗尽后才进流"。
             budget.raise_if_stopped()
+            # 整链硬墙钟接线（审计 PR-07-3）：主生成流没有 child，但 provider 的每次
+            # 传输尝试都以总预算剩余做 asyncio.timeout 上限——首字前静默、只发心跳
+            # 的流同样会被硬切（此前只有 runner 的逐事件检查，事件之间是盲区）。
+            self._total_budget = budget
+            self.provider.request_budget = budget
         # token 估算遥测（RF-14 §2.5）：默认关。开启时把估算写进 done 事件
         # （estimated_* 命名），由 runner 并进用量结构化日志——它不改请求体，
         # 也不作为截断依据（按 token 截断属 RF-13/RF-17 的产品决策，本批明确不做）。
@@ -263,9 +286,17 @@ class ResumeGenerator:
             "message": f"正在调用模型 {self.provider.config.model} 生成简历…",
         }
         parts: list[str] = []
-        async for delta in self.provider.stream_chat(messages):
-            parts.append(delta)
-            yield {"type": "delta", "text": delta}
+        stream = self.provider.stream_chat(messages)
+        try:
+            async for delta in stream:
+                parts.append(delta)
+                yield {"type": "delta", "text": delta}
+        finally:
+            # 取消/超时/异常路径也显式关闭 provider 流（aclosing 纪律，PR-07-4）：
+            # GeneratorExit 逐层展开，provider 的 finally 才能写 last_usage、
+            # response 才能及时关闭；随后补记本段用量（失败轮次也收集）。
+            await stream.aclose()
+            self._record_call_usage()
 
         raw = "".join(parts)
         resume = self._parse(raw)
@@ -294,6 +325,8 @@ class ResumeGenerator:
                 return
             finally:
                 self._end_segment()
+                # 修复段的用量（含失败轮次）也进汇总（PR-07-6）。
+                self._record_call_usage()
             resume = self._parse(fixed)
 
         if resume is None:
@@ -351,6 +384,8 @@ class ResumeGenerator:
                 logger.warning("简历质量重试失败，将沿用首轮结果：%s", exc)
             finally:
                 self._end_segment()
+                # 重试段的用量（含失败轮次）也进汇总（PR-07-6）。
+                self._record_call_usage()
 
             retry_content_shortfalls = (
                 _quality_shortfalls(retry_resume, selection.data, job)
@@ -441,17 +476,23 @@ class ResumeGenerator:
     # ===== 预算分段（RF-14 §2.1.c）=====
 
     def _begin_segment(self, segment: OperationBudget | None) -> None:
-        """把 child 段剩余注入 provider 的请求级 read deadline。
+        """把 child 段的剩余注入 provider 的请求级 deadline。
 
-        deadline 只能收紧（provider 的 ``_timeout`` 取 ``min(配置值, 本值)`` 并夹正），
-        不能放宽配置值。provider 实例不复用，这里设置后由调用方在 ``finally`` 里
-        ``_end_segment`` 复位——复位是防御性纪律，不是正确性依赖。
+        静态 ``request_deadline_seconds`` 压缩该段 read timeout（deadline 只能收紧，
+        provider 的 ``_timeout`` 取 ``min(配置值, 本值)`` 并夹正）；活预算
+        ``request_budget`` 注入 child 段本身——provider 的每次传输尝试/重试决策用
+        ``remaining()`` 重算剩余，退避与硬墙钟都随时间递减（PR-07-1/2）。provider
+        实例不复用，这里设置后由调用方在 ``finally`` 里 ``_end_segment`` 复位——
+        复位是防御性纪律，不是正确性依赖。
         """
         if segment is not None:
             self.provider.request_deadline_seconds = segment.remaining()
+            self.provider.request_budget = segment
 
     def _end_segment(self) -> None:
         self.provider.request_deadline_seconds = None
+        # 恢复整链总预算（主生成流的硬墙钟继续生效）；budget=None 的旧路径保持 None。
+        self.provider.request_budget = self._total_budget
 
     def _parse(self, raw: str) -> ResumeContent | None:
         data = extract_json(raw)

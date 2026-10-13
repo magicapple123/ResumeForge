@@ -13,6 +13,7 @@
 - **完成才落库**：取消/失败不写 ``resume_record``，只更新任务本身——因此中断不产生
   半成品，但结果整体丢失（与 SSE 时代的旧行为一致，进程重启丢进行中任务也接受）。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -43,7 +44,8 @@ from ...services import trash
 from ...services.claims import build_baseline
 from ...services.llm import create_provider
 from ...services.llm.base import LLMError
-from ...services.llm.usage import usage_log_line
+from ...services.llm.client_pool import aclose_clients_for_current_loop
+from ...services.llm.usage import summarize_usages
 from ...services.profile.profile_service import get_profile_detail, to_profile_out
 from ...services.resume.resume_generator import ResumeGenerator
 from ...services.resume.resume_task_state import (
@@ -197,41 +199,52 @@ class ResumeGenerateRunner:
             estimated_prompt_tokens: int | None = None
 
             try:
+
                 async def consume() -> None:
                     nonlocal resume, warnings, coverage_notes, rationale, fact_annotations
                     nonlocal last_char_commit, received_chars_total
                     nonlocal estimated_prompt_tokens
-                    async for event in generator.generate(
+                    # aclosing 纪律（审计 PR-07-4）：取消/超时/异常路径也显式关闭生成
+                    # 器——GeneratorExit 逐层展开，generator/provider 各层的 finally
+                    # （段复位、usage 补记、response 关闭）才真正执行。
+                    stream = generator.generate(
                         profile_out, job_out, options, baseline=baseline, budget=budget
-                    ):
-                        # 每一块事件之后检查停止信号、总预算与数据集归属：取消/超时/
-                        # 切换都在下一次模型输出前生效（raise_if_stopped 合并了 _stop
-                        # 检查与预算检查；lease.check 是显式的写入前归属校验）。
-                        budget.raise_if_stopped()
-                        if self._lease is not None:
-                            self._lease.check()
-                        if event["type"] == "progress":
-                            task.message = event["message"]
-                            session.commit()
-                        elif event["type"] == "delta":
-                            raw_parts.append(event["text"])
-                            # 累计计数代替 len("".join(...))：每 chunk 全量拼接是 O(n²)。
-                            received_chars_total += len(event["text"])
-                            task.received_chars = received_chars_total
-                            # 按字符粒度节流写库：全量进度不需要每块都落一次。
-                            if received_chars_total - last_char_commit >= _CHAR_COMMIT_STEP:
-                                last_char_commit = received_chars_total
+                    )
+                    try:
+                        async for event in stream:
+                            # 每一块事件之后检查停止信号、总预算与数据集归属：取消/超时/
+                            # 切换都在下一次模型输出前生效（raise_if_stopped 合并了 _stop
+                            # 检查与预算检查；lease.check 是显式的写入前归属校验）。
+                            budget.raise_if_stopped()
+                            if self._lease is not None:
+                                self._lease.check()
+                            if event["type"] == "progress":
+                                task.message = event["message"]
                                 session.commit()
-                        elif event["type"] == "done":
-                            resume = event["resume"]
-                            warnings = event["warnings"]
-                            coverage_notes = event.get("coverage_notes") or []
-                            rationale = event.get("rationale") or ""
-                            # 事实来源标注（RF-13）：锚定的副产品，随记录一起落库。
-                            fact_annotations = event.get("fact_annotations") or []
-                            # token 估算遥测（RF-14 §2.5）：估算开启时由 generator 放进
-                            # done 事件，与真实 tokens 一起进同一条用量日志。
-                            estimated_prompt_tokens = event.get("estimated_prompt_tokens")
+                            elif event["type"] == "delta":
+                                raw_parts.append(event["text"])
+                                # 累计计数代替 len("".join(...))：每 chunk 全量拼接是 O(n²)。
+                                received_chars_total += len(event["text"])
+                                task.received_chars = received_chars_total
+                                # 按字符粒度节流写库：全量进度不需要每块都落一次。
+                                if received_chars_total - last_char_commit >= _CHAR_COMMIT_STEP:
+                                    last_char_commit = received_chars_total
+                                    session.commit()
+                            elif event["type"] == "done":
+                                resume = event["resume"]
+                                warnings = event["warnings"]
+                                coverage_notes = event.get("coverage_notes") or []
+                                rationale = event.get("rationale") or ""
+                                # 事实来源标注（RF-13）：锚定的副产品，随记录一起落库。
+                                fact_annotations = event.get("fact_annotations") or []
+                                # token 估算遥测（RF-14 §2.5）：估算开启时由 generator 放进
+                                # done 事件，与真实 tokens 一起进同一条用量日志。
+                                estimated_prompt_tokens = event.get("estimated_prompt_tokens")
+                    finally:
+                        await stream.aclose()
+                        # asyncio.run 的循环即将关闭：先把共享池里属于本循环的客户端
+                        # 关掉（审计 PR-08——生成 runner 每任务新建事件循环）。
+                        await aclose_clients_for_current_loop()
 
                 asyncio.run(consume())
             except OperationCancelled as exc:
@@ -266,6 +279,14 @@ class ResumeGenerateRunner:
                     error="生成过程中发生内部错误，请查看后端日志",
                 )
                 return
+            finally:
+                # 用量汇总日志（审计 PR-07-6，RF-14 §2.2-5）：主生成+修复+重试+失败
+                # 轮次合并为一条总口径；缺值保留 None（不伪造 0）。成功、取消、超时、
+                # 失败各路径都经过这里，恰好记一次。prompt/response 内容与密钥绝不
+                # 入日志（隐私边界）。
+                self._log_generation_usage(
+                    task_id, generator, estimated_prompt_tokens=estimated_prompt_tokens
+                )
 
             # consume() 正常返回（已拿到 done + 解析出简历）后、写库之前**必须**再复查一次
             # 停止信号与预算：用户可能在 "done 已收到、completed 尚未提交" 这一窗口点取消，
@@ -285,16 +306,6 @@ class ResumeGenerateRunner:
                 logger.warning("简历生成任务因数据集切换中止 task_id=%s：%s", task_id, exc)
                 self._finalize(session, task, GENERATE_STATUS_FAILED, error=str(exc))
                 return
-
-            # 用量进结构化日志（RF-14 §2.2-5）：字段拼装在 usage.usage_log_line（与
-            # 未来消费方共用）。prompt/response 内容与密钥绝不入日志（隐私边界）。
-            usage = getattr(provider, "last_usage", None)
-            if usage is not None:
-                logger.info(
-                    "简历生成任务模型用量 task_id=%s %s",
-                    task_id,
-                    usage_log_line(usage, estimated_prompt_tokens=estimated_prompt_tokens),
-                )
 
             if resume is None:
                 self._finalize(
@@ -394,6 +405,37 @@ class ResumeGenerateRunner:
     # 终态仲裁三件套的实现拆在 resume_task_state.py（RF-02 纪律：条件 UPDATE +
     # 先到者赢）；这里保留薄方法委托，调用点与测试锚点（``runner._finalize`` 直接
     # 调用、``ResumeGenerateRunner._claim_completed`` monkeypatch）保持不变。
+
+    def _log_generation_usage(
+        self,
+        task_id: int,
+        generator: Any,
+        *,
+        estimated_prompt_tokens: int | None,
+    ) -> None:
+        """多段用量汇总日志（审计 PR-07-6，RF-14 §2.2-5）。
+
+        主生成 / 格式修复 / 质量重试 / 失败与取消轮次的用量在
+        ``generator.usage_records`` 里逐段收集（假 Provider 缺该属性时容忍），
+        这里合并为一条总口径。token 缺失保留 None（「未知」，不伪造 0）；
+        estimated_* 遥测只在估算开启时存在。
+        """
+        records = list(getattr(generator, "usage_records", None) or [])
+        summary = summarize_usages(records)
+        if summary is None:
+            return
+        fields = [
+            f"model={summary['model']}",
+            f"prompt_tokens={summary['prompt_tokens']}",
+            f"completion_tokens={summary['completion_tokens']}",
+            f"total_tokens={summary['total_tokens']}",
+            f"elapsed_ms={summary['elapsed_ms']}",
+            f"finish_reason={summary['finish_reason']}",
+            f"retries={summary['retries']}",
+        ]
+        if estimated_prompt_tokens is not None:
+            fields.append(f"estimated_prompt_tokens={estimated_prompt_tokens}")
+        logger.info("简历生成任务模型用量 task_id=%s %s", task_id, " ".join(fields))
 
     def _finalize(
         self, session: Any, task: ResumeGenerateTask, status: str, error: str = ""

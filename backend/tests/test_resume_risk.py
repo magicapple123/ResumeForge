@@ -12,10 +12,10 @@ from app.models.claim import (
     ClaimRecord,
 )
 from app.models.resume import ResumeRecord
-from app.schemas.resume import ResumeContent, ResumeProject
+from app.schemas.resume import ResumeContent, ResumeExperience, ResumeProject
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider, LLMError
-from app.services.resume.resume_risk import scan_local, scan_resume_risks
+from app.services.resume.resume_risk import MAX_DUPLICATE_RISKS, scan_local, scan_resume_risks
 
 
 class RiskProvider(BaseLLMProvider):
@@ -35,6 +35,18 @@ class RiskProvider(BaseLLMProvider):
 class BrokenProvider(RiskProvider):
     async def chat(self, messages, *, thinking: bool = True):
         raise LLMError("模型调用失败")
+
+
+class CapturingProvider(RiskProvider):
+    """记录出站 messages 的假模型，用于断言隐私边界。"""
+
+    def __init__(self, payload):
+        super().__init__(payload)
+        self.captured_messages: list | None = None
+
+    async def chat(self, messages, *, thinking: bool = True):
+        self.captured_messages = messages
+        return json.dumps(self.payload, ensure_ascii=False)
 
 
 def _resume_record(db_session, **kwargs):
@@ -211,3 +223,159 @@ def test_risk_scan_endpoint_404s_for_missing_resume(client):
 def test_risk_prompt_registered_in_preflight():
     covered = {relative for relative, _ in preflight._REQUIRED_FILES}
     assert "app/prompts/resume_risk.md" in covered
+
+
+# ===== PR-11：出站隐私边界（远端增强 prompt 不得携带身份字段） =====
+
+
+async def test_outbound_messages_do_not_contain_identity_fields():
+    resume = ResumeContent(
+        name="张三",
+        phone="13800138000",
+        email="zhangsan@example.com",
+        summary="负责后端服务开发，联系我请拨打 13800138000",
+        experience=[
+            ResumeExperience(company="示例公司", description=["在示例公司负责撮合引擎开发"])
+        ],
+    )
+    provider = CapturingProvider({"points": []})
+    await scan_resume_risks(resume, [], provider=provider, resume_id=1)
+    assert provider.captured_messages is not None
+    outbound = json.dumps(provider.captured_messages, ensure_ascii=False)
+    assert "张三" not in outbound
+    assert "13800138000" not in outbound
+    assert "zhangsan@example.com" not in outbound
+    assert "示例公司" not in outbound
+
+
+# ===== PR-11：畸形模型返回的降级矩阵（一律本地结果 + 降级原因，不 500） =====
+
+
+async def _scan_with(provider) -> object:
+    return await scan_resume_risks(
+        ResumeContent(summary="精通后端开发，性能提升 300%"), [], provider=provider, resume_id=1
+    )
+
+
+def _assert_degraded_to_local(result) -> None:
+    assert result.llm_used is False
+    assert any("本地规则" in note for note in result.notes)
+    assert any(p.category == "exaggeration" for p in result.points)
+
+
+async def test_malformed_follow_up_degrades_to_local():
+    # follow_up 期望字符串数组，模型却给了 int：修复前这里 TypeError → 整个扫描 500。
+    result = await _scan_with(RiskProvider({"points": [{"text": "test", "follow_up": 42}]}))
+    _assert_degraded_to_local(result)
+
+
+async def test_follow_up_nested_entries_are_dropped_not_fatal():
+    payload = {"points": [{"text": "有效深挖点", "follow_up": ["怎么验证", {"嵌套": "对象"}, 7]}]}
+    result = await _scan_with(RiskProvider(payload))
+    assert result.llm_used is True
+    point = next(p for p in result.points if p.text == "有效深挖点")
+    assert point.follow_up == ["怎么验证", "7"]
+
+
+async def test_points_as_object_is_wrapped_into_array():
+    result = await _scan_with(
+        RiskProvider({"points": {"text": "对象形式的深挖点", "severity": "high"}})
+    )
+    assert result.llm_used is True
+    assert any(p.text == "对象形式的深挖点" for p in result.points)
+
+
+async def test_points_as_string_degrades_to_local():
+    result = await _scan_with(RiskProvider({"points": "不是数组"}))
+    _assert_degraded_to_local(result)
+
+
+async def test_overlong_points_are_truncated_with_note():
+    payload = {"points": [{"text": f"深挖点{index}", "severity": "low"} for index in range(30)]}
+    result = await _scan_with(RiskProvider(payload))
+    assert result.llm_used is True
+    enhanced = [p for p in result.points if p.text.startswith("深挖点")]
+    assert len(enhanced) == 20
+    assert any("上限" in note for note in result.notes)
+
+
+async def test_oversized_text_fields_are_truncated():
+    payload = {"points": [{"text": "长" * 5000, "suggestion": "建" * 5000}]}
+    result = await _scan_with(RiskProvider(payload))
+    assert result.llm_used is True
+    point = next(p for p in result.points if p.text.startswith("长"))
+    assert len(point.text) <= 2000
+    assert len(point.suggestion) <= 2000
+
+
+async def test_bad_json_degrades_to_local():
+    result = await _scan_with(RiskProvider("这不是 JSON"))
+    _assert_degraded_to_local(result)
+
+
+async def test_unexpected_internal_error_degrades_to_local():
+    class ExplodingProvider(RiskProvider):
+        async def chat(self, messages, *, thinking: bool = True):
+            raise RuntimeError("意外内部错误")
+
+    result = await _scan_with(ExplodingProvider({}))
+    _assert_degraded_to_local(result)
+
+
+# ===== PR-11：查重去重边界与预算 =====
+
+
+def test_exact_duplicate_reported_once_and_not_repeated_in_similarity():
+    resume = ResumeContent(
+        projects=[
+            ResumeProject(name="项目A", description=["负责后端服务开发与数据库设计"]),
+            ResumeProject(name="项目B", description=["负责后端服务开发与数据库设计"]),
+        ]
+    )
+    points = scan_local(resume, [])
+    duplicates = [p for p in points if p.category == "duplicate"]
+    # 修复前：精确重复 1 条 + 相似重复 1 条（同一对要点报两次）= 2 条。
+    assert len(duplicates) == 1
+    assert "项目A" in duplicates[0].location and "项目B" in duplicates[0].location
+
+
+async def test_long_input_similarity_scan_is_bounded():
+    lines = [f"负责第{index:03d}号模块的开发工作并完成性能优化与稳定性保障" for index in range(200)]
+    resume = ResumeContent(projects=[ResumeProject(name="项目A", description=lines)])
+    result = await scan_resume_risks(resume, [], provider=None, resume_id=1)
+    duplicates = [p for p in result.points if p.category == "duplicate"]
+    assert 0 < len(duplicates) <= MAX_DUPLICATE_RISKS
+    assert any("查重" in note for note in result.notes)
+
+
+# ===== PR-11：台账条目收敛（远端增强只带与当前简历关联的条目） =====
+
+
+async def test_llm_prompt_only_includes_resume_linked_claims():
+    linked = _strong_claim(id=1, subject="交易系统", title="主导交易系统")
+    generic = _strong_claim(
+        id=2,
+        subject="外卖调度平台",
+        title="无关主张",
+        candidate_wording="主导外卖调度平台建设",
+        boundary="无关边界",
+    )
+    resume = ResumeContent(
+        projects=[ResumeProject(name="交易系统", description=["负责撮合引擎开发"])]
+    )
+    provider = CapturingProvider({"points": []})
+    await scan_resume_risks(resume, [linked, generic], provider=provider, resume_id=1)
+    assert provider.captured_messages is not None
+    outbound = json.dumps(provider.captured_messages, ensure_ascii=False)
+    assert "撮合延迟数据需现场核对" in outbound  # 关联条目的台账内容进入 prompt
+    assert "外卖" not in outbound  # 未关联条目不外发
+
+
+async def test_llm_prompt_labels_generic_suggestions_when_no_linked_claims():
+    provider = CapturingProvider({"points": []})
+    await scan_resume_risks(
+        ResumeContent(summary="负责后端服务开发"), [], provider=provider, resume_id=1
+    )
+    assert provider.captured_messages is not None
+    outbound = json.dumps(provider.captured_messages, ensure_ascii=False)
+    assert "全库通用准备建议" in outbound

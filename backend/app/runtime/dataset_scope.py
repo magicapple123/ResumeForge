@@ -185,15 +185,19 @@ def acquire_lease(owner: str) -> DatasetLease:
         return lease
 
 
-def frozen_session_factory() -> sessionmaker:
-    """捕获 current_identity().engine，返回绑定它的 sessionmaker（按值捕获 engine）。
+def frozen_session_factory(identity: DatasetIdentity | None = None) -> sessionmaker:
+    """捕获数据集身份的 engine，返回绑定它的 sessionmaker（按值捕获 engine）。
+
+    ``identity`` 缺省时捕获当前身份；显式传入**租约身份**时（PR-03：批准执行、
+    SSE 保存段），工厂绑定租约发布时刻的引擎——consume 之后到 commit 之间即使
+    有切换请求排队，写入仍落在批准/快照时刻的那份数据集上，不重读"当前库"。
 
     语义：rebind 用 ``SessionLocal.configure`` 原地改绑，"按值捕获 SessionLocal"
     冻不住旧库；必须按值捕获 engine。流式保存段等"切换窗口内已开始的写入"一律
     用它取代裸 ``SessionLocal()``。
     """
-    identity = current_identity()
-    return sessionmaker(bind=identity.engine, autoflush=False, expire_on_commit=False)
+    captured = identity if identity is not None else current_identity()
+    return sessionmaker(bind=captured.engine, autoflush=False, expire_on_commit=False)
 
 
 __all__ = [

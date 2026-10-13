@@ -4,15 +4,21 @@
 业务代码（简历生成等）只依赖本抽象，不感知具体协议。
 """
 
+import asyncio
+import logging
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 import httpx
 
+from ...runtime.operation_budget import OperationBudget, OperationCancelled
 from ...schemas.setting import LLMConfig
-from .usage import LLMUsage, build_usage
+from .usage import FINISH_BUDGET_EXHAUSTED, FINISH_CANCELLED, LLMUsage, build_usage
+
+logger = logging.getLogger(__name__)
 
 
 def build_request_timeout(
@@ -32,6 +38,16 @@ def build_request_timeout(
 
 class LLMError(Exception):
     """对外暴露的模型调用错误，message 为可直接展示给用户的中文提示。"""
+
+
+def log_llm_failure(category: str, detail: str) -> None:
+    """传输层失败的结构化分类日志（审计 PR-07-7）。
+
+    category 取值：timeout | disconnect | protocol | cancelled。只记类别与简述，
+    绝不记录 prompt/response 内容与密钥（隐私边界）；任务维度的 request_id /
+    task_id / dataset_id 上下文由 runtime.log_context 的绑定日志自动附带。
+    """
+    logger.warning("LLM 传输失败类别=%s：%s", category, detail)
 
 
 @dataclass
@@ -70,10 +86,72 @@ class BaseLLMProvider(ABC):
         # min(配置值, 本值)——deadline 只能收紧、不能放宽配置值。None 表示未接预算。
         # 调用方负责在 finally 中复位为 None（provider 实例不复用，复位是防御性纪律）。
         self.request_deadline_seconds: float | None = None
+        # 请求级**活预算**（审计 PR-07）：调用方注入 :class:`OperationBudget`（整链
+        # 总预算或 child 段），每次传输尝试/重试决策前用 ``remaining()`` 重算剩余——
+        # 与上面静态秒数不同，它会随时间递减。``remaining <= 0`` 时不发起新请求；
+        # 每次尝试用 ``asyncio.timeout(剩余)`` 包出整请求硬墙钟（read timeout 只是
+        # 段间上限，切不断首字前静默/只发心跳的流）。None 表示未接预算。
+        self.request_budget: OperationBudget | None = None
 
     def _deadline_remaining(self) -> float | None:
-        """本次请求的剩余预算秒数；未接预算时为 None（重试治理用它做"剩余不足不重试"）。"""
+        """本次决策的剩余预算秒数（PR-07-1：活预算每次重算）；未接预算时为 None。
+
+        重试治理（``StatusRetryGate``）与整请求硬墙钟都用它；接了活预算时返回
+        ``budget.remaining()``，否则退回静态 ``request_deadline_seconds``。
+        """
+        if self.request_budget is not None:
+            return self.request_budget.remaining()
         return self.request_deadline_seconds
+
+    def _raise_if_budget_exhausted(self) -> None:
+        """发起一次传输尝试前的硬检查：``remaining <= 0`` 绝不发起新请求（PR-07-1）。"""
+        remaining = self._deadline_remaining()
+        if remaining is None or remaining > 0:
+            return
+        budget = self.request_budget
+        if budget is not None:
+            raise OperationCancelled(budget.expiry_reason())
+        raise LLMError("请求预算已耗尽，不再发起新的模型请求")
+
+    @asynccontextmanager
+    async def _attempt_deadline(self):
+        """整次传输尝试的硬墙钟上限（审计 PR-07-3）。
+
+        httpx 分项 read timeout 只是"两段数据之间的等待上限"：首字前静默、只发
+        心跳帧的流不会被它切断。这里把本次尝试包进 ``asyncio.timeout(剩余预算)``，
+        到期即取消本次 await——response 由调用方的 ``async with client.stream``
+        在异常展开时关闭，外层异步迭代器由调用方按 aclosing 纪律显式 aclose。
+
+        **这不是重放机制**：超时/取消后请求结果未知，按仓库现有约束（协作式同步
+        写操作、结果未知的传输不自动重放）只做错误分类上报，重发是调用方的显式
+        决策（重试治理只覆盖"响应未开始"的状态码阶段）。
+        """
+        remaining = self._deadline_remaining()
+        if remaining is None:
+            yield  # 未接预算：行为与引入硬墙钟之前逐字节一致
+            return
+        self._raise_if_budget_exhausted()
+        async with asyncio.timeout(remaining):
+            yield
+
+    def _translate_deadline_expiry(self, exc: BaseException) -> Exception:
+        """``asyncio.timeout`` 到期（TimeoutError）的统一转换（PR-07-3）。
+
+        预算已耗尽 → 按预算语义上报（:class:`OperationCancelled`，message 区分
+        取消/超时）；否则按既有超时文案转 :class:`LLMError`（read timeout 的
+        语义不变，这里只兜"硬 deadline 先于 read timeout 生效"的窗口）。
+        """
+        budget = self.request_budget
+        if budget is not None and budget.is_expired():
+            return OperationCancelled(budget.expiry_reason())
+        return LLMError("模型响应超时，请稍后重试或调大超时时间")
+
+    def _cancelled_finish_reason(self) -> str:
+        """取消类结束原因：用户取消 → cancelled；预算到期 → budget_exhausted。"""
+        budget = self.request_budget
+        if budget is not None and budget.is_cancelled():
+            return FINISH_CANCELLED
+        return FINISH_BUDGET_EXHAUSTED
 
     def _record_usage(
         self,

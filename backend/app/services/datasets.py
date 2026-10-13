@@ -39,13 +39,19 @@ from ..dataset_registry import (
     write_metadata,
 )
 from .data_backup import (
+    ARCHIVE_DATASETS_DIRNAME,
     ExtraDatabase,
     cleanup_temp_directories,
     create_backup_archive,
+    dataset_asset_prefix,
     declared_datasets,
     extract_database,
     inspect_archive,
     inspect_extra_dataset,
+)
+from .data_backup.asset_manifest import (
+    restore_assets_from_manifest,
+    verify_database_rows,
 )
 from .data_backup.import_archive import (
     _best_effort_checkpoint,
@@ -59,6 +65,41 @@ logger = logging.getLogger(__name__)
 
 # 切换前最多等这么久，等正在进行的请求把手里的连接还回池子。
 _DRAIN_TIMEOUT_SECONDS = 3.0
+
+
+def _entry_dataset_stem(entry: dict[str, Any]) -> str:
+    """取随包数据集条目在包内的 id（``datasets/<stem>.db`` 的 stem）。
+
+    形状合法性已由 ``_assert_member_is_a_dataset`` 在校验阶段把关；这里再取一次
+    只是为了给资产成员前缀用，不做二次裁决。
+    """
+    member = str(entry.get("file") or "")
+    prefix = f"{ARCHIVE_DATASETS_DIRNAME}/"
+    return member[len(prefix) : -len(".db")]
+
+
+def _restore_asset_section(
+    archive_path: Path,
+    asset_manifest: dict[str, Any],
+    dataset_id_in_archive: str | None,
+    assets_parent: Path,
+) -> tuple[dict[str, int], list[str]]:
+    """按一份资产清单把附件恢复到 ``assets_parent`` 下的类别目录（PR-15）。
+
+    ``dataset_id_in_archive`` 为 None 表示清单属于"活动数据集"段：成员在包根的扁平
+    前缀（老位置）；随包数据集的成员在 ``datasets/<id>/`` 之下，各自隔离。
+    """
+    prefixes = {
+        "user_files": dataset_asset_prefix(dataset_id_in_archive, "user_files"),
+        "referral_images": dataset_asset_prefix(dataset_id_in_archive, "referral_images"),
+    }
+    destinations = {
+        "user_files": assets_parent / "user_files",
+        "referral_images": assets_parent / "referral_images",
+    }
+    return restore_assets_from_manifest(
+        archive_path, asset_manifest, prefixes=prefixes, destinations=destinations
+    )
 
 
 def _describe(dataset_id: str, path: Path) -> dict[str, Any]:
@@ -140,22 +181,60 @@ def import_dataset(
             # 随包带走的其余数据集各落成一份新数据集。**用新 id**：包里的 id 在本机可能早就
             # 存在（那是另一份数据），沿用会覆盖它——而覆盖用户的另一份数据集是不可逆的。
             result["restored_datasets"] = restored
-        # 包里附带的内推图片恢复到该库同目录；失败只告警，不影响数据集本身。
-        try:
-            restored_images = restore_referral_images(
-                archive_path, target.parent / "referral_images"
-            )
-            if restored_images:
-                result["restored_referral_images"] = restored_images
-        except (OSError, zipfile.BadZipFile):
-            logger.warning("备份包的内推图片恢复失败（不影响数据集本身）", exc_info=True)
-        # 用户上传文件的落盘副本（"我的文件"）同模式恢复；失败只告警。
-        try:
-            restored_files = restore_user_files(archive_path, target.parent / "user_files")
-            if restored_files:
-                result["restored_user_files"] = restored_files
-        except (OSError, zipfile.BadZipFile):
-            logger.warning("备份包的用户文件恢复失败（不影响数据集本身）", exc_info=True)
+
+        # 附件恢复（PR-15）：有资产清单就按清单恢复并逐文件复核；没有（旧格式包）回退到
+        # 旧的"遍历扁平成员"路径。所有问题都收进 asset_issues 显式上报，绝不静默成功。
+        asset_issues: list[str] = []
+        asset_manifest = manifest.get("asset_manifest")
+        if isinstance(asset_manifest, dict):
+            try:
+                restored_assets, issues = _restore_asset_section(
+                    archive_path, asset_manifest, None, target.parent
+                )
+                if any(restored_assets.values()):
+                    result["restored_assets"] = restored_assets
+                asset_issues.extend(issues)
+            except (OSError, zipfile.BadZipFile) as exc:
+                asset_issues.append(f"附件恢复失败：{exc}")
+                logger.warning("备份包的附件恢复失败（不影响数据集本身）", exc_info=True)
+        else:
+            # 包里附带的内推图片恢复到该库同目录；失败只告警，不影响数据集本身。
+            try:
+                restored_images = restore_referral_images(
+                    archive_path, target.parent / "referral_images"
+                )
+                if restored_images:
+                    result["restored_referral_images"] = restored_images
+            except (OSError, zipfile.BadZipFile):
+                logger.warning("备份包的内推图片恢复失败（不影响数据集本身）", exc_info=True)
+            # 用户上传文件的落盘副本（"我的文件"）同模式恢复；失败只告警。
+            try:
+                restored_files = restore_user_files(archive_path, target.parent / "user_files")
+                if restored_files:
+                    result["restored_user_files"] = restored_files
+            except (OSError, zipfile.BadZipFile):
+                logger.warning("备份包的用户文件恢复失败（不影响数据集本身）", exc_info=True)
+
+        # 随包数据集各有自己的资产清单段：按各自的前缀恢复（命名空间隔离）。
+        for entry, _candidate in staged:
+            entry_assets = entry.get("asset_manifest") if isinstance(entry, dict) else None
+            if not isinstance(entry_assets, dict):
+                continue
+            try:
+                _, issues = _restore_asset_section(
+                    archive_path, entry_assets, _entry_dataset_stem(entry), target.parent
+                )
+                asset_issues.extend(issues)
+            except (OSError, zipfile.BadZipFile) as exc:
+                asset_issues.append(f"随包数据集「{entry.get('name')}」的附件恢复失败：{exc}")
+                logger.warning("随包数据集的附件恢复失败", exc_info=True)
+
+        # 恢复后按清单复核 DB 关键行数（表缺失/行数不符都显式上报）。
+        asset_issues.extend(verify_database_rows(target, manifest.get("tables") or {}))
+        if asset_issues:
+            result["asset_issues"] = asset_issues
+            logger.warning("备份包恢复完成但存在 %s 条资产/行数问题", len(asset_issues))
+
         # 回给前端做提示用：勾选过"包含 API Key"的包恢复成功后，界面要如实告诉用户
         # 密钥也跟着回来了（解不开时应用按未配置处理，仍需重填）。
         result["api_key_included"] = manifest.get("api_key_included") is True
@@ -261,8 +340,8 @@ def _wait_for_idle(bind: Engine) -> None:
 def _preview_target(target: Path) -> None:
     """目标库预检：用**临时引擎**确认它能打开并完成迁移；失败抛 409，原库不受影响。
 
-    预检引擎用完立即 dispose（Windows 文件句柄），随后 rebind 才能独占目标文件。
-    预检把迁移也跑完一遍：真正的 rebind 之后再跑是幂等的（alembic 已在 head）。
+    预检引擎用完立即 dispose（Windows 文件句柄），随后提交段才能独占目标文件。
+    预检把迁移也跑完一遍：提交段里再跑是幂等的（alembic 已在 head）。
     """
     preview = database.build_engine(database.database_url_for(target))
     try:
@@ -276,12 +355,93 @@ def _preview_target(target: Path) -> None:
         preview.dispose()
 
 
-def activate_dataset(dataset_id: str, bind: Engine) -> dict[str, Any]:
-    """把应用切换到指定数据集（RF-03：互斥 → 排空 → 预检 → 指针 → rebind → 发布）。
+def _commit_switch(dataset_id: str, target: Path) -> None:
+    """预检通过后的提交段（PR-03：prepare / commit / compensate）。
 
-    顺序是刻意的：**预检通过才写指针**——预检失败时指针与引擎都保持原值，原库
-    毫发无损；rebind 成功后才发布新身份，"检查空闲"与"换绑"之间放进新任务的
-    TOCTOU 由 switch_lock + 租约封死（切换持锁期间 ``acquire_lease`` 直接失败）。
+    prepare（调用方 ``_preview_target``）→ 本函数：
+    建**目标引擎**并迁移/清理（此段失败只 dispose 新引擎，指针、旧引擎、内存
+    身份原封不动）→ 写指针 → ``adopt_engine`` 接管 → 释放旧引擎 → 发布身份。
+
+    与旧实现的关键差别：
+    - 旧引擎**不过早销毁**：旧 ``rebind`` 先 dispose 再建新引擎，建失败时旧
+      引擎已被拆掉；这里新引擎确认可用之后才释放旧引擎。
+    - 指针写入失败时新引擎还没接管，失败保持原状态；指针写入成功后的
+      ``adopt/publish`` 是纯内存操作不再失败。若进程恰在"指针已写、引擎未换"
+      的崩溃窗口退出，重启由 :func:`recover_startup_pointer` 做确定性恢复。
+    """
+    from ..runtime import dataset_scope
+
+    previous_engine = database.engine
+    try:
+        new_engine = database.build_engine(database.database_url_for(target))
+    except Exception as exc:
+        logger.warning("切换到数据集 %s 失败，已保持原数据集不变：%s", dataset_id, exc)
+        raise DatasetError(f"目标数据集无法使用（切换失败）：{exc}", status_code=409) from exc
+    try:
+        # 数据集可能来自更早的版本：建表/补列/迁移要在这里补跑，否则旧表缺列会直接 500。
+        if is_unversioned_legacy_database(new_engine):
+            Base.metadata.create_all(bind=new_engine)
+            ensure_sqlite_columns(new_engine, SQLITE_REQUIRED_COLUMNS)
+        run_database_migrations(new_engine)
+        cleanup_temp_directories(new_engine)
+    except Exception as exc:
+        new_engine.dispose()
+        logger.warning("切换到数据集 %s 失败，已保持原数据集不变：%s", dataset_id, exc)
+        raise DatasetError(f"目标数据集无法使用（切换失败）：{exc}", status_code=409) from exc
+    try:
+        write_active_dataset_id(dataset_id)
+    except OSError as exc:
+        new_engine.dispose()
+        logger.warning("切换到数据集 %s 时写指针失败，已保持原数据集不变：%s", dataset_id, exc)
+        raise DatasetError(f"写入数据集指针失败：{exc}", status_code=500) from exc
+    # 提交点：指针已落盘。先接管新引擎，再释放旧引擎，最后发布新身份——
+    # 三步都是内存操作，不引入新的失败模式。
+    database.adopt_engine(new_engine)
+    previous_engine.dispose()
+    dataset_scope.publish_switch(dataset_id, new_engine)
+
+
+def recover_startup_pointer() -> None:
+    """启动时校验数据集指针与可用库的一致性（PR-03 崩溃窗口的确定性恢复）。
+
+    极端崩溃窗口：指针已写成目标库、进程在引擎接管完成前退出。重启后若指针
+    指向的库已不可用（文件丢失/损坏到打不开），记录并回退主数据；可用则保持
+    用户的选择——切换意图在预检通过之后才落盘，保持它是安全的。
+    """
+    dataset_id = read_active_dataset_id()
+    if dataset_id == MAIN_DATASET_ID:
+        return
+    try:
+        target = dataset_database_file(dataset_id)
+        if not target.exists():
+            raise DatasetError(f"数据集文件已不存在：{target.name}")
+        # 只用探针连接验证"这个文件真的打得开"：SQLite 惰性建连，坏文件要到
+        # 第一条 PRAGMA 才暴露，这里主动触发一次。
+        probe = database.build_engine(database.database_url_for(target))
+        try:
+            with probe.connect() as connection:
+                connection.exec_driver_sql("SELECT 1")
+        finally:
+            probe.dispose()
+    except Exception as exc:  # noqa: BLE001 - 指针不可用就要恢复，不能让启动失败
+        logger.warning("启动恢复：指针指向的数据集 %s 不可用（%s），已回退主数据", dataset_id, exc)
+        write_active_dataset_id(MAIN_DATASET_ID)
+        main_file = dataset_database_file(MAIN_DATASET_ID)
+        current = database.engine.url.database
+        if current is None or Path(str(current)).resolve() != main_file.resolve():
+            database.rebind(main_file)
+        return
+    logger.info("启动恢复：数据集指针一致性校验通过 id=%s", dataset_id)
+
+
+def activate_dataset(dataset_id: str, bind: Engine) -> dict[str, Any]:
+    """把应用切换到指定数据集（RF-03：互斥 → 排空 → 预检 → 提交段 → 发布）。
+
+    顺序是刻意的（PR-03 prepare/commit/compensate）：**预检通过才进入提交段**
+    ——预检失败时指针与引擎都保持原值；提交段内先建好并迁移目标引擎，任一步
+    失败都恢复/保持一致状态（见 :func:`_commit_switch`）；"检查空闲"与"换绑"
+    之间放进新任务的 TOCTOU 由 switch_lock + 租约封死（切换持锁期间
+    ``acquire_lease`` 直接失败）。
     """
     if dataset_id != MAIN_DATASET_ID and not is_valid_dataset_id(dataset_id):
         raise DatasetError("数据集标识无效")
@@ -294,15 +454,7 @@ def activate_dataset(dataset_id: str, bind: Engine) -> dict[str, Any]:
     with dataset_scope.switch_lock():
         _wait_for_idle(bind)
         _preview_target(target)
-        write_active_dataset_id(dataset_id)
-        new_engine = database.rebind(target)
-        # 数据集可能来自更早的版本：建表/补列/迁移要在这里补跑，否则旧表缺列会直接 500。
-        if is_unversioned_legacy_database(new_engine):
-            Base.metadata.create_all(bind=new_engine)
-            ensure_sqlite_columns(new_engine, SQLITE_REQUIRED_COLUMNS)
-        run_database_migrations(new_engine)
-        cleanup_temp_directories(new_engine)
-        dataset_scope.publish_switch(dataset_id, new_engine)
+        _commit_switch(dataset_id, target)
 
     # 新数据集的备份节奏独立计算：切换后立即唤醒备份调度做一次到期检查（RF-05）。
     from .data_backup import scheduler as auto_backup_scheduler

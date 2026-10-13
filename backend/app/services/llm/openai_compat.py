@@ -12,10 +12,17 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from ...runtime.operation_budget import OperationCancelled
 from ...schemas.setting import LLMConfig
 from . import payload as payload_rules
 from . import retry
-from .base import BaseLLMProvider, LLMDelta, LLMError, build_request_timeout
+from .base import (
+    BaseLLMProvider,
+    LLMDelta,
+    LLMError,
+    build_request_timeout,
+    log_llm_failure,
+)
 from .client_pool import get_shared_client
 
 # 与"获取可用模型"接口（model_catalog）与 SearXNG 校验共用的请求侧规则：实现已
@@ -142,56 +149,70 @@ class OpenAICompatProvider(BaseLLMProvider):
         """
         payload = self._build_payload(messages, stream=False, thinking=thinking)
         started = time.monotonic()
-        gate = retry.StatusRetryGate(deadline_remaining=self._deadline_remaining())
+        # 活预算（PR-07-2）：门在每次决策时经 _deadline_remaining() 重算剩余。
+        gate = retry.StatusRetryGate(deadline_remaining_fn=self._deadline_remaining)
         prompt_tokens: int | None = None
         completion_tokens: int | None = None
         finish_reason = FINISH_ERROR
         try:
             while True:
                 try:
-                    client = self._client()
-                    async with client.stream(
-                        "POST",
-                        self._endpoint(),
-                        json=payload,
-                        headers=self._headers(),
-                        # 超时不烘进共享客户端，按请求传入（read 预算按调用收紧的语义不变）。
-                        timeout=self._timeout(),
-                    ) as response:
-                        if response.status_code != 200:
-                            # 429/5xx 只发生在 body 之前（安全点规则：首个 delta 之前）。
-                            # 重试编排（计数/退避/终态文案）在 retry.StatusRetryGate。
-                            delay = gate.next_delay(
-                                response.status_code, response.headers.get("retry-after")
-                            )
-                            if delay is not None:
-                                logger.warning(
-                                    "LLM 调用遇到 HTTP %s，%.1fs 后自动重试（第 %s 次）",
-                                    response.status_code,
-                                    delay,
-                                    gate.retries,
+                    async with self._attempt_deadline():
+                        client = self._client()
+                        async with client.stream(
+                            "POST",
+                            self._endpoint(),
+                            json=payload,
+                            headers=self._headers(),
+                            # 超时不烘进共享客户端，按请求传入（read 预算按调用收紧的语义不变）。
+                            timeout=self._timeout(),
+                        ) as response:
+                            if response.status_code != 200:
+                                # 429/5xx 只发生在 body 之前（安全点规则：首个 delta 之前）。
+                                # 重试编排（计数/退避/终态文案）在 retry.StatusRetryGate。
+                                delay = gate.next_delay(
+                                    response.status_code, response.headers.get("retry-after")
                                 )
-                                await retry.retry_sleep(delay)
-                                continue
-                            raise gate.final_error(response.status_code, self._http_error(response))
-                        body = bytearray()
-                        async for chunk in response.aiter_bytes():
-                            if len(body) + len(chunk) > _MAX_CHAT_RESPONSE_BYTES:
-                                raise LLMError("模型返回内容过大，请调低最大输出长度")
-                            body.extend(chunk)
+                                if delay is not None:
+                                    logger.warning(
+                                        "LLM 调用遇到 HTTP %s，%.1fs 后自动重试（第 %s 次）",
+                                        response.status_code,
+                                        delay,
+                                        gate.retries,
+                                    )
+                                    await retry.retry_sleep(delay)
+                                    continue
+                                raise gate.final_error(
+                                    response.status_code, self._http_error(response)
+                                )
+                            body = bytearray()
+                            async for chunk in response.aiter_bytes():
+                                if len(body) + len(chunk) > _MAX_CHAT_RESPONSE_BYTES:
+                                    raise LLMError("模型返回内容过大，请调低最大输出长度")
+                                body.extend(chunk)
+                except TimeoutError as exc:
+                    # 整请求硬 deadline（asyncio.timeout）到期：结果未知，不自动重放。
+                    log_llm_failure("timeout", "整请求预算到期（硬 deadline）")
+                    raise self._translate_deadline_expiry(exc) from exc
                 except httpx.TimeoutException as exc:
+                    log_llm_failure("timeout", type(exc).__name__)
                     raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
                 except httpx.RequestError as exc:
+                    log_llm_failure("disconnect", type(exc).__name__)
                     raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
                 try:
                     data = json.loads(body)
                 except (ValueError, UnicodeError) as exc:
+                    log_llm_failure("protocol", "非流式响应 JSON 解析失败")
                     raise LLMError("模型返回了无法解析的响应格式") from exc
                 # data 可能不是 dict（非法响应形态）：usage/finish_reason 的提取要容忍，
                 # 真正的形态校验交给 _extract_content 抛 LLMError。
                 prompt_tokens, completion_tokens, protocol_reason = openai_chat_outcome(data)
                 finish_reason = protocol_reason or FINISH_STOP
                 return self._extract_content(data)
+        except OperationCancelled:
+            finish_reason = self._cancelled_finish_reason()
+            raise
         except asyncio.CancelledError:
             finish_reason = FINISH_CANCELLED
             raise
@@ -231,7 +252,8 @@ class OpenAICompatProvider(BaseLLMProvider):
         drop_tools = False
         drop_thinking = False
         started = time.monotonic()
-        gate = retry.StatusRetryGate(deadline_remaining=self._deadline_remaining())
+        # 活预算（PR-07-2）：门在每次重试决策时经 _deadline_remaining() 重算剩余。
+        gate = retry.StatusRetryGate(deadline_remaining_fn=self._deadline_remaining)
         finish_reason = FINISH_ERROR
         try:
             while True:
@@ -281,6 +303,9 @@ class OpenAICompatProvider(BaseLLMProvider):
                         exc, tools, drop_tools=drop_tools, drop_thinking=drop_thinking
                     )
                     continue
+        except OperationCancelled:
+            finish_reason = self._cancelled_finish_reason()
+            raise
         except (asyncio.CancelledError, GeneratorExit):
             finish_reason = FINISH_CANCELLED
             raise
@@ -337,98 +362,109 @@ class OpenAICompatProvider(BaseLLMProvider):
     ) -> AsyncIterator[LLMDelta]:
         payload = self._build_payload(messages, stream=True, tools=tools, thinking=thinking)
         try:
-            client = self._client()
-            async with client.stream(
-                "POST",
-                self._endpoint(),
-                json=payload,
-                headers=self._headers(),
-                timeout=self._timeout(),
-            ) as response:
-                if response.status_code != 200:
-                    # 状态码阶段（尚未产出任何 delta）：交给 stream_chat_events 的重试
-                    # 循环决定退避重试或按既有语义转成 LLMError（含 400 降级）。
-                    raise StatusRetrySignal(
-                        response.status_code, response.headers.get("retry-after")
-                    )
-                total_chars = 0
-                pending: dict[int, dict] = {}
-                finish_reason: str | None = None
-                emitted = False
-                async for line in response.aiter_lines():
-                    # SSE 格式：每行 "data: {json}"，流结束标志 "data: [DONE]"
-                    if not line.startswith("data:"):
-                        continue
-                    chunk = line[5:].strip()
-                    if not chunk:
-                        continue
-                    if chunk == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(chunk)
-                    except json.JSONDecodeError as exc:
-                        raise LLMError("模型返回了无法解析的流式响应") from exc
-                    if not isinstance(data, dict):
-                        raise LLMError("模型返回了无法解析的流式响应")
-                    # 服务商自带的 usage 帧（stream_options.include_usage 开启时或部分
-                    # 端点最终 chunk 自带）：只读取、缺失不臆造（RF-14 §2.2-2）。
-                    if "usage" in data:
-                        (
-                            self._stream_prompt_tokens,
-                            self._stream_completion_tokens,
-                        ) = merge_openai_stream_usage(
-                            self._stream_prompt_tokens,
-                            self._stream_completion_tokens,
-                            data,
+            # 整次传输尝试包进硬墙钟（PR-07-3）：首字前静默、只发心跳的流也会被
+            # asyncio.timeout 硬切；到期时 async with 退出即关闭 response。
+            async with self._attempt_deadline():
+                client = self._client()
+                async with client.stream(
+                    "POST",
+                    self._endpoint(),
+                    json=payload,
+                    headers=self._headers(),
+                    timeout=self._timeout(),
+                ) as response:
+                    if response.status_code != 200:
+                        # 状态码阶段（尚未产出任何 delta）：交给 stream_chat_events 的重试
+                        # 循环决定退避重试或按既有语义转成 LLMError（含 400 降级）。
+                        raise StatusRetrySignal(
+                            response.status_code, response.headers.get("retry-after")
                         )
-                    choices = data.get("choices") or []
-                    if not isinstance(choices, list):
-                        raise LLMError("模型返回了无法解析的流式响应")
-                    if not choices:
-                        continue
-                    choice = choices[0]
-                    if not isinstance(choice, dict):
-                        raise LLMError("模型返回了无法解析的流式响应")
-                    if choice.get("finish_reason"):
-                        finish_reason = choice["finish_reason"]
-                        # 帧级捕获：收尾帧可能不产出 delta（无正文、无工具调用），
-                        # stream_chat_events 据此归一 finish_reason。
-                        self._stream_stop_reason = str(finish_reason)
-                    delta = choice.get("delta") or {}
-                    if not isinstance(delta, dict):
-                        raise LLMError("模型返回了无法解析的流式响应")
-                    text = delta.get("content")
-                    if text is not None and not isinstance(text, str):
-                        raise LLMError("模型返回了无法解析的流式响应")
-                    if text:
-                        total_chars += len(text)
-                        if total_chars > self._stream_char_limit():
-                            raise LLMError("模型流式输出过大，请调低最大输出长度")
-                        yield LLMDelta(text=text)
-                    # 思考内容与正文分开产出：它不是要展示给用户的回答，而是"模型
-                    # 在想什么"。同样计入 total_chars——它是真实消耗的输出，且不受
-                    # 限的话一条只会思考的流会无界增长。
-                    reasoning = _extract_reasoning(delta)
-                    if reasoning:
-                        total_chars += len(reasoning)
-                        if total_chars > self._stream_char_limit():
-                            raise LLMError("模型流式输出过大，请调低最大输出长度")
-                        yield LLMDelta(reasoning=reasoning)
-                    _accumulate_tool_calls(pending, delta.get("tool_calls"))
-                    # 有的端点不发 finish_reason 就结束，所以下面还要兜一次。
-                    if finish_reason and pending and not emitted:
-                        emitted = True
-                        yield LLMDelta(
-                            tool_calls=_finalize_tool_calls(pending),
-                            finish_reason=finish_reason,
-                        )
-                if pending and not emitted:
-                    yield LLMDelta(tool_calls=_finalize_tool_calls(pending))
+                    total_chars = 0
+                    pending: dict[int, dict] = {}
+                    finish_reason: str | None = None
+                    emitted = False
+                    async for line in response.aiter_lines():
+                        # SSE 格式：每行 "data: {json}"，流结束标志 "data: [DONE]"
+                        if not line.startswith("data:"):
+                            continue
+                        chunk = line[5:].strip()
+                        if not chunk:
+                            continue
+                        if chunk == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(chunk)
+                        except json.JSONDecodeError as exc:
+                            log_llm_failure("protocol", "流式帧 JSON 解析失败")
+                            raise LLMError("模型返回了无法解析的流式响应") from exc
+                        if not isinstance(data, dict):
+                            log_llm_failure("protocol", "流式帧不是 JSON 对象")
+                            raise LLMError("模型返回了无法解析的流式响应")
+                        # 服务商自带的 usage 帧（stream_options.include_usage 开启时或部分
+                        # 端点最终 chunk 自带）：只读取、缺失不臆造（RF-14 §2.2-2）。
+                        if "usage" in data:
+                            (
+                                self._stream_prompt_tokens,
+                                self._stream_completion_tokens,
+                            ) = merge_openai_stream_usage(
+                                self._stream_prompt_tokens,
+                                self._stream_completion_tokens,
+                                data,
+                            )
+                        choices = data.get("choices") or []
+                        if not isinstance(choices, list):
+                            raise LLMError("模型返回了无法解析的流式响应")
+                        if not choices:
+                            continue
+                        choice = choices[0]
+                        if not isinstance(choice, dict):
+                            raise LLMError("模型返回了无法解析的流式响应")
+                        if choice.get("finish_reason"):
+                            finish_reason = choice["finish_reason"]
+                            # 帧级捕获：收尾帧可能不产出 delta（无正文、无工具调用），
+                            # stream_chat_events 据此归一 finish_reason。
+                            self._stream_stop_reason = str(finish_reason)
+                        delta = choice.get("delta") or {}
+                        if not isinstance(delta, dict):
+                            raise LLMError("模型返回了无法解析的流式响应")
+                        text = delta.get("content")
+                        if text is not None and not isinstance(text, str):
+                            raise LLMError("模型返回了无法解析的流式响应")
+                        if text:
+                            total_chars += len(text)
+                            if total_chars > self._stream_char_limit():
+                                raise LLMError("模型流式输出过大，请调低最大输出长度")
+                            yield LLMDelta(text=text)
+                        # 思考内容与正文分开产出：它不是要展示给用户的回答，而是"模型
+                        # 在想什么"。同样计入 total_chars——它是真实消耗的输出，且不受
+                        # 限的话一条只会思考的流会无界增长。
+                        reasoning = _extract_reasoning(delta)
+                        if reasoning:
+                            total_chars += len(reasoning)
+                            if total_chars > self._stream_char_limit():
+                                raise LLMError("模型流式输出过大，请调低最大输出长度")
+                            yield LLMDelta(reasoning=reasoning)
+                        _accumulate_tool_calls(pending, delta.get("tool_calls"))
+                        # 有的端点不发 finish_reason 就结束，所以下面还要兜一次。
+                        if finish_reason and pending and not emitted:
+                            emitted = True
+                            yield LLMDelta(
+                                tool_calls=_finalize_tool_calls(pending),
+                                finish_reason=finish_reason,
+                            )
+                    if pending and not emitted:
+                        yield LLMDelta(tool_calls=_finalize_tool_calls(pending))
+        except TimeoutError as exc:
+            # 整请求硬 deadline（asyncio.timeout）到期：结果未知，不自动重放（安全点规则）。
+            log_llm_failure("timeout", "整请求预算到期（硬 deadline）")
+            raise self._translate_deadline_expiry(exc) from exc
         except httpx.TimeoutException as exc:
             # 流中途（已可能产出 delta）不重试：安全点规则（§2.4-2），只做文案转换。
+            log_llm_failure("timeout", type(exc).__name__)
             raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
         except httpx.RequestError as exc:
             # 流中途（已可能产出 delta）不重试：安全点规则（§2.4-2），只做文案转换。
+            log_llm_failure("disconnect", type(exc).__name__)
             raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
 
     # ===== 内部工具 =====
@@ -465,8 +501,9 @@ class OpenAICompatProvider(BaseLLMProvider):
         )
 
     def _timeout(self) -> httpx.Timeout:
-        # 分项 read 的"下限保护 + 预算上限压缩"两家同构，实现下沉到 base.build_request_timeout。
-        return build_request_timeout(self.config, self.request_deadline_seconds)
+        # 分项 read 的"下限保护 + 预算上限压缩"两家同构，实现下沉到 base.build_request_timeout；
+        # 剩余按活预算重算（PR-07-1）：接了 OperationBudget 时 read 随时间递减。
+        return build_request_timeout(self.config, self._deadline_remaining())
 
     def _build_payload(
         self,

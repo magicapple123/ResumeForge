@@ -10,12 +10,18 @@
 - 提案只存进程内存（单用户本地应用），重启即失效，不落库——重启后前端对
   pending 提案查询得到 404，按"提案已失效"展示。
 
-与架构契约的两处已记录偏差：
+与架构契约的三处已记录偏差：
 - 状态机增加 ``"failed"``：批准后的执行尝试失败时如实标记（契约的 Literal
   只有 executed/rejected，无法表达"确认过但没写成"）；
 - token 不回传前端：批准端点在同一请求内完成"批准→核销→执行"，token 只在
-  服务端内存流转，比"回传一次"更收敛。
-"""
+  服务端内存流转，比"回传一次"更收敛；
+- 状态机增加 ``"unknown"``（PR-03）：提交阶段失败时执行结果无法断言，置为
+  unknown 并阻断一切再执行——比"failed（未写入）"更诚实，也绝不自动二次写入。
+
+作用域绑定（PR-03）：提案创建时绑定 ``dataset_id + dataset_generation``。
+只比 dataset_id 挡不住 A→B→A：切走再切回来，id 相同但代次已前进，旧提案的
+写入意图未必还有效（用户草稿可能已改），照样拒绝。"""
+
 from __future__ import annotations
 
 import hashlib
@@ -34,7 +40,9 @@ from .policy import ToolExecutionContext
 # 提案有效期（秒）：足够用户读完差异卡片，又不会让"半小时前的弹窗"还能写库。
 PROPOSAL_TTL_SECONDS = 300
 
-ProposalStatus = Literal["pending", "approved", "executed", "expired", "rejected", "failed"]
+ProposalStatus = Literal[
+    "pending", "approved", "executed", "expired", "rejected", "failed", "unknown"
+]
 
 
 class FieldChange(BaseModel):
@@ -80,13 +88,16 @@ def arguments_digest(arguments: dict) -> str:
 class _ProposalRecord:
     """进程内提案记录（含不对外暴露的 token 与核销标记）。"""
 
-    def __init__(self, ctx: ToolExecutionContext, tool_name: str, arguments: dict, preview: WritePreview) -> None:
+    def __init__(
+        self, ctx: ToolExecutionContext, tool_name: str, arguments: dict, preview: WritePreview
+    ) -> None:
         created = utcnow()
         self.proposal_id = secrets.token_hex(8)
         self.tool_name = tool_name
         self.arguments = dict(arguments)
         self.arguments_digest = arguments_digest(arguments)
         self.dataset_id = ctx.dataset_id
+        self.dataset_generation = ctx.dataset_generation
         self.preview = preview
         self.created_at = created
         self.expires_at = created + timedelta(seconds=PROPOSAL_TTL_SECONDS)
@@ -121,14 +132,29 @@ def _get_locked(proposal_id: str) -> _ProposalRecord:
     return record
 
 
+def _scope_mismatch_error_locked(record: _ProposalRecord) -> WriteProposalError | None:
+    """提案作用域与当前数据集身份不一致时返回错误（调用方必须已持有 _LOCK）。
+
+    同时比较 dataset_id 与 dataset_generation（PR-03）：A→B→A 之后 id 相同但
+    代次已前进，旧提案照样失效——"同 ID 不同库"绝不能串写。
+    """
+    if (
+        record.dataset_id != dataset_scope.current_dataset_id()
+        or record.dataset_generation != dataset_scope.current_generation()
+    ):
+        return WriteProposalError("数据集已切换，本提案失效", status_code=409)
+    return None
+
+
 def _ensure_usable_locked(record: _ProposalRecord) -> None:
     """惰性过期 + 数据集归属校验（调用方必须已持有 _LOCK）。"""
     if record.status == "pending" and record.expired():
         record.status = "expired"
     if record.status in {"expired"} or (record.status != "pending" and record.expired()):
         raise WriteProposalError("提案已过期，请让助手重新发起", status_code=409)
-    if record.dataset_id != dataset_scope.current_dataset_id():
-        raise WriteProposalError("数据集已切换，本提案失效", status_code=409)
+    mismatch = _scope_mismatch_error_locked(record)
+    if mismatch is not None:
+        raise mismatch
 
 
 def create_proposal(
@@ -142,11 +168,18 @@ def create_proposal(
 
 
 def get_proposal(proposal_id: str) -> WriteProposalOut:
-    """读取提案当前状态（前端卡片刷新用；不存在按 404 处理）。"""
+    """读取提案当前状态（前端卡片刷新用；不存在按 404 处理）。
+
+    提案作用域与当前数据集身份不一致时抛 409：状态读取不暴露其他作用域的
+    提案详情（PR-03）。
+    """
     with _LOCK:
         record = _get_locked(proposal_id)
         if record.status == "pending" and record.expired():
             record.status = "expired"
+        mismatch = _scope_mismatch_error_locked(record)
+        if mismatch is not None:
+            raise mismatch
         return record.out()
 
 
@@ -163,7 +196,11 @@ def approve_proposal(proposal_id: str) -> dict[str, Any]:
             raise WriteProposalError(f"提案当前状态为 {record.status}，不能批准", status_code=409)
         record.status = "approved"
         record.token = secrets.token_hex(16)
-        return {"token": record.token, "tool_name": record.tool_name, "arguments": dict(record.arguments)}
+        return {
+            "token": record.token,
+            "tool_name": record.tool_name,
+            "arguments": dict(record.arguments),
+        }
 
 
 def reject_proposal(proposal_id: str) -> WriteProposalOut:
@@ -194,8 +231,9 @@ def consume(proposal_id: str, token: str) -> tuple[str, dict]:
         if record.expired():
             record.status = "expired"
             raise WriteProposalError("提案已过期，请让助手重新发起", status_code=409)
-        if record.dataset_id != dataset_scope.current_dataset_id():
-            raise WriteProposalError("数据集已切换，本提案失效", status_code=409)
+        mismatch = _scope_mismatch_error_locked(record)
+        if mismatch is not None:
+            raise mismatch
         record.token_consumed = True
         return record.tool_name, dict(record.arguments)
 
@@ -221,6 +259,19 @@ def mark_failed(proposal_id: str, error: str = "") -> WriteProposalOut:
         record = _get_locked(proposal_id)
         record.status = "failed"
         record.result_summary = error
+        return record.out()
+
+
+def mark_unknown(proposal_id: str, summary: str = "") -> WriteProposalOut:
+    """标记"执行结果未知"（提交阶段失败，PR-03）。
+
+    终态：approve 只认 pending、consume 只认 approved，unknown 天然阻断一切
+    再次执行——"结果未知"绝不自动二次写入。
+    """
+    with _LOCK:
+        record = _get_locked(proposal_id)
+        record.status = "unknown"
+        record.result_summary = summary
         return record.out()
 
 

@@ -203,3 +203,75 @@ def test_sse_generate_reports_switch_in_progress(client, monkeypatch):
     assert '"error"' in response.text
     assert "切换" in response.text
     assert dataset_scope.leases_pending() == 0
+
+
+def test_sse_generate_acquires_the_lease_before_reading_snapshots(client, monkeypatch):
+    """PR-03：租约获取先于任何业务快照读取——快照与保存段同属一个数据集身份。
+
+    注入探针记录调用顺序：acquire_lease 必须发生在资料/基线快照之前；流结束后
+    租约如约释放。保存段工厂从租约身份派生（注入切换不串写由租约封死）。
+    """
+    _seed_generation_prerequisites(client)
+    job = _job(client)
+
+    order: list[str] = []
+    real_acquire = dataset_scope.acquire_lease
+
+    def spy_acquire(owner):
+        order.append("lease")
+        return real_acquire(owner)
+
+    real_profile = __import__(
+        "app.api.resumes.generate_routes", fromlist=["get_profile_detail"]
+    ).get_profile_detail
+
+    def spy_profile(db):
+        order.append("profile-snapshot")
+        return real_profile(db)
+
+    real_baseline = __import__(
+        "app.api.resumes.generate_routes", fromlist=["build_baseline"]
+    ).build_baseline
+
+    def spy_baseline(db):
+        order.append("baseline-snapshot")
+        return real_baseline(db)
+
+    monkeypatch.setattr(dataset_scope, "acquire_lease", spy_acquire)
+    monkeypatch.setattr("app.api.resumes.generate_routes.get_profile_detail", spy_profile)
+    monkeypatch.setattr("app.api.resumes.generate_routes.build_baseline", spy_baseline)
+
+    class SuccessfulProvider(BaseLLMProvider):
+        async def chat(self, _messages, *, thinking: bool = True):  # pragma: no cover
+            raise AssertionError("合法流式 JSON 不应触发修复调用")
+
+        async def stream_chat(self, _messages):
+            yield json.dumps(
+                {
+                    "summary": "具备 Python 后端开发经验。",
+                    "projects": [{"name": "简历通", "role": "核心开发"}],
+                },
+                ensure_ascii=False,
+            )
+
+    monkeypatch.setattr(
+        "app.api.resumes.create_provider", lambda resolved: SuccessfulProvider(resolved)
+    )
+
+    response = client.post("/api/resumes/generate", json={"job_id": job["id"]})
+    assert response.status_code == 200
+    assert '"saved"' in response.text  # 生成结果成功落库
+
+    # 租约在最前：先于资料快照，也先于事实基线快照。
+    assert order.index("lease") < order.index("profile-snapshot")
+    assert order.index("lease") < order.index("baseline-snapshot")
+    assert dataset_scope.leases_pending() == 0
+
+
+def test_sse_generate_snapshot_failure_releases_the_lease(client, monkeypatch):
+    """快照阶段失败（如岗位不存在）：404 之前先把租约还回去，不挡后续切换。"""
+    _seed_generation_prerequisites(client)
+
+    response = client.post("/api/resumes/generate", json={"job_id": 999999})
+    assert response.status_code == 404
+    assert dataset_scope.leases_pending() == 0
