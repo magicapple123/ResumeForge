@@ -16,7 +16,7 @@ const path = require("path");
 const { test } = require("node:test");
 const { makeTempRoot } = require("./testkit");
 
-const { RUNTIME_ZIP_NAME, extractZip, rotateLogFile } = require("../lib/backend-runtime");
+const { RUNTIME_ZIP_NAME, extractZip, rotateLogFile, tarExecutable } = require("../lib/backend-runtime");
 
 test("extractZip is callable with spawn in scope (module-split regression)", async () => {
   const root = makeTempRoot("runtime-zip-missing");
@@ -50,7 +50,11 @@ test("extractZip spawns tar with the zip and the target directory", async () => 
   try {
     await extractZip(path.join(root, "r.zip"), path.join(root, "out"), fakeSpawn);
     assert.strictEqual(calls.length, 1);
-    assert.strictEqual(calls[0].file, "tar");
+    // Same resolver production uses: on Windows that is the system bsdtar by
+    // absolute path (PATH may lead with Git's GNU tar, which cannot read zip),
+    // elsewhere the PATH `tar`.
+    assert.strictEqual(calls[0].file, tarExecutable());
+    assert.ok(/^tar(\.exe)?$/.test(path.basename(calls[0].file)), "must be a tar executable");
     assert.deepStrictEqual(calls[0].args.slice(0, 1), ["-xf"]);
     assert.ok(calls[0].args[1].endsWith("r.zip"), "the zip path must be passed through");
     assert.ok(calls[0].args.includes("-C"), "extraction must be rooted at the target dir");
@@ -66,17 +70,24 @@ test("extractZip unpacks a real archive when the platform tar can read zip", asy
     fs.writeFileSync(source, "runtime payload");
     const zipPath = path.join(root, RUNTIME_ZIP_NAME);
     try {
-      // bsdtar (Windows 10+/macOS) writes zip archives from the -a suffix;
-      // GNU tar cannot, so the case skips where it is unsupported.
-      execFileSync("tar", ["-a", "-c", "-f", zipPath, path.basename(source)], {
+      // Build the archive with the *same* tar production extracts with:
+      // bsdtar writes zip from the -a suffix, GNU tar cannot. Using one
+      // resolver for both halves means the case runs exactly where the
+      // packaged shell can unpack -- previously it took PATH's tar to create
+      // and fell back to skipping on a Git-for-Windows PATH.
+      execFileSync(tarExecutable(), ["-a", "-c", "-f", zipPath, path.basename(source)], {
         cwd: root,
         stdio: "ignore",
       });
     } catch {
-      t.skip("tar cannot create zip archives on this platform");
+      t.skip("the platform tar cannot create zip archives");
       return;
     }
+    // Production creates the runtime dir before extracting
+    // (backend-manager prepareRuntime); mirror that here instead of leaving
+    // `tar -C` to fail on a missing directory.
     const target = path.join(root, "out");
+    fs.mkdirSync(target, { recursive: true });
     await extractZip(zipPath, target);
     assert.strictEqual(
       fs.readFileSync(path.join(target, "payload.txt"), "utf-8"),
