@@ -23,6 +23,7 @@ from ..schemas.job import (
     JobImportPreview,
     JobImportRequest,
     JobImportResult,
+    JobImportRow,
     JobListOut,
     JobMultiTextParseResult,
     JobOut,
@@ -402,7 +403,7 @@ async def preview_job_import(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     rows, errors = parse_job_csv(text)
     return JobImportPreview(
-        rows=[{"line": line, "data": data} for line, data in rows],
+        rows=[JobImportRow(line=line, data=data) for line, data in rows],
         errors=errors,
     )
 

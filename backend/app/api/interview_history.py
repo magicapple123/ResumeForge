@@ -7,6 +7,7 @@
 ``interview.router``（含 ``/{session_id}`` 这种参数段）之前，否则会被 ``session_id`` 抢走。
 ``application.py`` 里已按此顺序装配。
 """
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -68,9 +69,7 @@ def update_question_bank_entry(
 
 
 @router.get("/reviews", response_model=list[InterviewReviewRecordOut])
-def read_reviews(
-    limit: int = Query(default=100, ge=1, le=200), db: Session = Depends(get_db)
-):
+def read_reviews(limit: int = Query(default=100, ge=1, le=200), db: Session = Depends(get_db)):
     """复盘历史列表（只含未删除的，最近更新的在前）。"""
     return interview_history.list_reviews(db, limit=limit)
 

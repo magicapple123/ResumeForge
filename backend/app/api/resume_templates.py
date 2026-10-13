@@ -1,4 +1,5 @@
 """简历模板工作台接口：自制模板的增删改查与预览渲染。"""
+
 import logging
 import re
 
@@ -145,9 +146,7 @@ def read_template(template_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{template_id}", response_model=ResumeTemplateDetail)
-def update_template(
-    template_id: int, payload: ResumeTemplateUpdate, db: Session = Depends(get_db)
-):
+def update_template(template_id: int, payload: ResumeTemplateUpdate, db: Session = Depends(get_db)):
     template = _template_or_404(db, template_id)
     try:
         template = update_user_template(
@@ -169,14 +168,12 @@ def remove_template(template_id: int, db: Session = Depends(get_db)):
     delete_user_template(db, _template_or_404(db, template_id))
 
 
-def _preview_content(payload: TemplatePreviewRequest, db: Session) -> "object":
+def _preview_content(payload: TemplatePreviewRequest, db: Session) -> ResumeContent:
     if payload.content is not None:
         return payload.content
     if payload.resume_id is not None:
         record = db.get(ResumeRecord, payload.resume_id)
         if record is not None:
-            from ..schemas.resume import ResumeContent
-
             return ResumeContent.model_validate(record.content)
     return sample_resume_content()
 

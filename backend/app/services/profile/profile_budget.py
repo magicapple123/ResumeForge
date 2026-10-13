@@ -6,6 +6,7 @@ import json
 from copy import deepcopy
 from typing import Any
 
+from ...models.job import Job
 from ...schemas.job import JobOut
 from .profile_relevance_constants import (
     _LIST_DETAIL_FIELDS,
@@ -41,8 +42,13 @@ def _trim_middle(value: str, max_chars: int) -> str:
     return f"{value[:head_size].rstrip()}…{value[-tail_size:].lstrip()}"
 
 
-def build_job_prompt_text(job: JobOut, max_chars: int) -> str:
-    """在固定预算中优先保留任职要求，再补充职位描述。"""
+def build_job_prompt_text(job: JobOut | Job, max_chars: int) -> str:
+    """在固定预算中优先保留任职要求，再补充职位描述。
+
+    两种入参都收：schema 层（``JobOut``，助手工具链路）与模型层（``Job``，面试 /
+    简历生成链路直接拿 ORM 记录调用）——函数只读 ``requirements`` / ``description``
+    / ``additional_info`` 三个 str 字段，两边都有且语义一致。
+    """
     requirements = job.requirements.strip()
     description = job.description.strip()
     additional_info = job.additional_info.strip()

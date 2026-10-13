@@ -6,6 +6,7 @@
 
 路由顺序：固定路径（``/claims``）要排在 ``/{session_id}`` 之前。
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,6 +35,7 @@ from ..schemas.drill import (
     DrillRehearseRequest,
     DrillSessionBrief,
     DrillSessionOut,
+    DrillTurnOut,
 )
 from ..services.drill import (
     apply_verdict,
@@ -80,15 +82,15 @@ def _session_out(record: DrillSession) -> DrillSessionOut:
         created_at=record.created_at,
         contracts=[DrillContractOut.model_validate(item) for item in record.contracts],
         turns=[
-            {
-                "id": turn.id,
-                "contract_id": turn.contract_id,
-                "question": turn.question,
-                "answer": turn.answer,
-                "status": turn.status,
-                "feedback": turn.feedback,
-                "created_at": turn.created_at,
-            }
+            DrillTurnOut(
+                id=turn.id,
+                contract_id=turn.contract_id,
+                question=turn.question,
+                answer=turn.answer,
+                status=turn.status,
+                feedback=turn.feedback,
+                created_at=turn.created_at,
+            )
             for turn in record.turns
         ],
         review=record.review or {},
@@ -193,6 +195,8 @@ async def create_session(payload: DrillCreate, db: Session = Depends(get_db)):
         if stored is None:  # pragma: no cover - 只在并发删除时发生
             raise HTTPException(status_code=404, detail="这场深挖记录已不存在")
         claim = write_db.get(type(claims[0]), claims[0].id)
+        if claim is None:  # pragma: no cover - 与上面的 stored 同一并发删除窗口
+            raise HTTPException(status_code=404, detail="这道题的事实台账已不存在")
         open_contract(stored, claim, plan)
         # 立刻 flush：契约的 id 要给后续轮次做外键，None 会让"这轮属于哪道题"对不上。
         write_db.flush()
@@ -271,7 +275,9 @@ async def answer(session_id: int, payload: DrillAnswerRequest, db: Session = Dep
                 finished = True
             else:
                 claims = select_claims(write_db, stored.claim_ids, stored.max_questions)
-                nxt = next((c for c in claims if c.id not in {k.claim_id for k in stored.contracts}), None)
+                nxt = next(
+                    (c for c in claims if c.id not in {k.claim_id for k in stored.contracts}), None
+                )
                 if nxt is None:
                     finished = True
                 else:
@@ -396,9 +402,7 @@ async def finish(session_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{session_id}/rehearse", response_model=DrillRehearseOut)
-async def rehearse(
-    session_id: int, payload: DrillRehearseRequest, db: Session = Depends(get_db)
-):
+async def rehearse(session_id: int, payload: DrillRehearseRequest, db: Session = Depends(get_db)):
     """把复练队列里的一条变成一个**可回答的新问题**（不落库）。
 
     复练的关键是"不原题重复"：同一条主张换一个角度再问一次，才检验得出他是不是真的

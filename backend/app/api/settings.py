@@ -7,7 +7,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..database import get_db, session_engine
 from ..models.setting import LLMConfigRecord
 from ..schemas.setting import (
     AssistantOrbSetting,
@@ -352,4 +352,4 @@ def read_backup_status(db: Session = Depends(get_db)) -> dict:
     """当前数据集的自动备份保护摘要（RF-05）：是否被保护、最近成功、快照清单。"""
     from ..services.data_backup.status import backup_status
 
-    return backup_status(db.get_bind())
+    return backup_status(session_engine(db))

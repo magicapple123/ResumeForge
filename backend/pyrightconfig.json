@@ -11,13 +11,20 @@
   // 第二批扩面（2026-10-13）：apply（8 错：str→Literal 状态收窄、job_id None 守卫、
   // CdpClient 基类补 navigate/set_file_input）与 browser（17 错：WindowAwareMixin
   // 宿主契约 Protocol 化、可选成员 None 收窄）修完后纳入，两目录均 0 错。
+  // 第三批扩面（2026-10-13）：api 65 错清零后纳入——str→Literal 出口收窄
+  // （surface/status/source/enhancement_level/font_scale）、stream_chat_events 契约
+  // 改声明 AsyncGenerator（助手流要 aclose 内层）、Session.get_bind() 出口经
+  // database.session_engine 收窄为 Engine、webform 包属性显式 re-export、
+  // JobImportRow/CandidateCsvRow/DrillTurnOut 显式构造、_page_after_fill 参数
+  // 改声明 set[int]。其中 stats.py 1 错由并行实例处理（复用 session_engine 即清）。
   "include": [
     "app/models",
     "app/schemas",
     "app/runtime",
     "app/services/data_backup",
     "app/services/apply",
-    "app/services/browser"
+    "app/services/browser",
+    "app/api"
   ],
   "typeCheckingMode": "basic",
   "pythonVersion": "3.11",

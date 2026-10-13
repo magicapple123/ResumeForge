@@ -87,6 +87,11 @@ async def import_template_from_file(
             image_data_urls=[f"data:{image_mime};base64,{base64.b64encode(data).decode('ascii')}"],
         )
     else:
+        if document_mime is None:  # pragma: no cover - 上面的 422 已挡住"两类都识别不出"
+            raise HTTPException(
+                status_code=422,
+                detail="无法识别这个文件的类型。请上传简历的图片（PNG / JPG / WEBP）或文档（PDF / DOCX）。",
+            )
         data_url = f"data:{document_mime};base64,{base64.b64encode(data).decode('ascii')}"
         extractor = _legacy_dependency("extract_document_text", extract_document_text)
         try:
@@ -131,8 +136,9 @@ async def import_template_from_file(
     return ResumeTemplateDetail.model_validate(template)
 
 
-
-async def _read_sources(files: list[UploadFile]) -> tuple[TemplateImportSource, list[str], list[str]]:
+async def _read_sources(
+    files: list[UploadFile],
+) -> tuple[TemplateImportSource, list[str], list[str]]:
     if not files:
         raise HTTPException(status_code=422, detail="至少上传一份参考模板")
     if len(files) > 8:

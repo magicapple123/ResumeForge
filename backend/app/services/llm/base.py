@@ -8,7 +8,7 @@ import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
@@ -188,12 +188,14 @@ class BaseLLMProvider(ABC):
 
     async def stream_chat_events(
         self, messages: list[dict], tools: list[dict] | None = None
-    ) -> AsyncIterator[LLMDelta]:
+    ) -> AsyncGenerator[LLMDelta, None]:
         """带工具调用的流式对话。
 
         默认实现忽略 tools、退化成纯文本流：不支持工具调用的服务商与测试里的假
         Provider 都能继续工作，代价是不会产出 tool_calls。真正支持的 provider
-        覆盖本方法。
+        覆盖本方法。返回类型是异步生成器：助手流式链路要在浏览器断开时显式
+        ``aclose()`` 内层流（AsyncIterator 声明没有这个方法），让生成器 finally
+        里的清理逻辑（cancel_pending_assistant_message 等）有机会执行。
         """
         async for chunk in self.stream_chat(messages):
             yield LLMDelta(text=chunk)

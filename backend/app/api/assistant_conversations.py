@@ -3,6 +3,7 @@
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import get_args
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_
@@ -26,6 +27,20 @@ logger = logging.getLogger(__name__)
 DEFAULT_TITLE = "新对话"
 WELCOME_TITLE = "开始使用求职助手"
 _WELCOME_PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "assistant_welcome.md"
+
+_SURFACE_VALUES: tuple[ConversationSurface, ...] = get_args(ConversationSurface)
+
+
+def _as_surface(value: str) -> ConversationSurface:
+    """模型层 ``surface`` 是 ``str``，出口处收窄为 schema 的 ``Literal``。
+
+    取值由会话创建 / 复制链路用 schema 校验过的值写入，正常不会走到兜底；万一库里
+    出现未知值，在这里大声失败（与 pydantic Literal 字段的校验语义一致），不悄悄把
+    非法值发给前端。
+    """
+    if value not in _SURFACE_VALUES:
+        raise ValueError(f"未知的会话界面：{value!r}")
+    return value
 
 
 def welcome_message() -> str:
@@ -76,7 +91,7 @@ def _to_brief(conversation: ChatConversation, message_count: int = 0) -> ChatCon
     return ChatConversationBrief(
         id=conversation.id,
         title=conversation.title,
-        surface=conversation.surface,
+        surface=_as_surface(conversation.surface),
         pinned=conversation.pinned,
         favorite=conversation.favorite,
         archived=conversation.archived,
@@ -297,7 +312,7 @@ def fork_conversation(
         )
     db.commit()
     db.refresh(conversation)
-    return read_conversation(conversation.id, db, source.surface)
+    return read_conversation(conversation.id, db, _as_surface(source.surface))
 
 
 def delete_conversation(

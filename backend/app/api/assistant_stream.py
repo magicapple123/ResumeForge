@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from ..runtime import dataset_scope
@@ -74,7 +74,7 @@ async def _stream_message_events(
     system_prompt: str,
     search_web_fn: Callable[[str], Awaitable[list[dict[str, str]]]],
     quoted: dict[str, Any] | None = None,
-) -> AsyncIterator[str]:
+) -> AsyncGenerator[str, None]:
     parts: list[str] = []
     metadata = dict(context_metadata)
     model_context = list(context_blocks)
