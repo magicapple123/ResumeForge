@@ -3,6 +3,7 @@
 选用 SQLite：单用户本地应用，零部署成本；后续需要多用户时
 换 PostgreSQL 只需改 DATABASE_URL 并替换 JSON 列写法。
 """
+
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -105,6 +106,20 @@ def rebind(database_path: Path) -> Engine:
     engine = build_engine(database_url_for(database_path))
     SessionLocal.configure(bind=engine)
     return engine
+
+
+def adopt_engine(new_engine: Engine) -> Engine:
+    """把一个**已构建好**的引擎接管为全局引擎（不构建、不销毁任何引擎）。
+
+    与 :func:`rebind` 的分工：rebind 是"给我一个文件，换绑过去"（自建引擎并
+    先销毁旧的）；adopt 是"引擎已就绪，接管它"。数据集切换（PR-03 的
+    prepare/commit/compensate）用它把预检/迁移完的新引擎接进来，旧引擎由
+    调用方在新引擎确认可用**之后**再释放——旧引擎绝不过早销毁。
+    """
+    global engine
+    engine = new_engine
+    SessionLocal.configure(bind=new_engine)
+    return new_engine
 
 
 class Base(DeclarativeBase):

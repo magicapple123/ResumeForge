@@ -190,6 +190,16 @@ async def lifespan(_app: FastAPI):
     # 每一步都留一行日志。启动阶段是最容易"静默卡住"的地方：进程活着、端口没人监听、
     # 日志停在上一行——没有分段日志就只能靠猜（CI 的 macOS 作业上真发生过）。
     startup_logger = logging.getLogger(__name__)
+    # PR-03：先校验数据集指针与可用库一致（切换崩溃窗口的确定性恢复），再谈迁移
+    # ——指针指向的库打不开时回退主数据，避免应用起在一份坏库上到处 500。
+    startup_logger.info("启动自检：校验数据集指针")
+    try:
+        # 函数级导入：services.datasets 依赖链重，且 lifespan 调用时机在装配完成后。
+        from .services.datasets import recover_startup_pointer
+
+        recover_startup_pointer()
+    except Exception:  # noqa: BLE001 - 指针校验失败不阻断启动（database.py 已有回落）
+        startup_logger.warning("数据集指针校验失败（不阻断启动）", exc_info=True)
     bind = database.engine
     startup_logger.info("启动自检：检查数据库版本")
     if is_unversioned_legacy_database(bind):

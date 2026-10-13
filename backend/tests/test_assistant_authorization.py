@@ -1,6 +1,7 @@
 """RF-01 写入提案授权测试：一次性核销、参数绑定、数据集绑定、token 不进模型消息。"""
 
 import pytest
+from app.runtime import dataset_scope
 from app.services.assistant_tools import _TOOLS, execute_tool
 from app.services.assistant_tools import authorization as auth
 from app.services.assistant_tools.authorization import (
@@ -18,9 +19,11 @@ _TARGET_TOOL = "create_reminder"
 
 
 def _ctx(dataset_id: str = "main") -> ToolExecutionContext:
+    # generation 取当前真实值（PR-03 起提案作用域同时绑定 id+generation，
+    # 硬编码 1 会在同进程先前用例推进 generation 后失配）。
     return ToolExecutionContext(
         dataset_id=dataset_id,
-        dataset_generation=1,
+        dataset_generation=dataset_scope.current_generation(),
         web_search=False,
         fetch_pages=0,
         relaxed=False,
@@ -40,7 +43,12 @@ def _clean_store():
 
 
 def _proposal(arguments: dict | None = None):
-    return create_proposal(_ctx(), _TARGET_TOOL, arguments or {"title": "复盘", "remind_at": "2026-10-12T10:00:00"}, _preview())
+    return create_proposal(
+        _ctx(),
+        _TARGET_TOOL,
+        arguments or {"title": "复盘", "remind_at": "2026-10-12T10:00:00"},
+        _preview(),
+    )
 
 
 def test_approve_then_consume_returns_the_stored_arguments():
@@ -137,9 +145,7 @@ def test_stream_write_without_consent_becomes_a_proposal_not_an_execution(db_ses
     def _boom(db, arguments):  # pragma: no cover - 被调用即失败
         raise AssertionError("未确认的写入不应该执行 handler")
 
-    monkeypatch.setattr(
-        "app.services.assistant_tools.report_tools.create_reminder_record", _boom
-    )
+    monkeypatch.setattr("app.services.assistant_tools.report_tools.create_reminder_record", _boom)
     import asyncio
 
     from app.api.assistant_tool_exec import run_tool_call
@@ -178,7 +184,7 @@ def test_stream_write_with_consent_executes_directly(db_session):
     }
     ctx = ToolExecutionContext(
         dataset_id=_ctx().dataset_id,
-        dataset_generation=1,
+        dataset_generation=dataset_scope.current_generation(),
         web_search=False,
         fetch_pages=0,
         relaxed=False,

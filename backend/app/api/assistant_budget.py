@@ -4,6 +4,7 @@
 遥测与用量总口径的组装。``assistant_stream`` 只保留编排逻辑；这些"记录与判定"
 集中在这里，便于单独测试（毫秒级预算注入 monkeypatch 本模块的 ``get_settings``）。
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -34,6 +35,15 @@ class AssistantStreamBudget:
         self.usage_records: list[LLMUsage] = []
         # token 估算遥测（§2.5）：默认关，只在估算开启时才有值。
         self.estimated_prompt_tokens: int | None = None
+
+    @property
+    def operation_budget(self) -> OperationBudget:
+        """底层 :class:`OperationBudget`：供 provider 的活预算硬墙钟接线（审计 PR-07）。
+
+        助手流此前只在检查点协作检查；把整链预算注入 provider 后，每次传输尝试
+        以剩余预算做 asyncio.timeout 上限——首字前静默、只发心跳的流同样被硬切。
+        """
+        return self._budget
 
     def check(self) -> None:
         """预算检查点：到期抛 ``OperationCancelled``。"""

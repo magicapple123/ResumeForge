@@ -6,6 +6,7 @@
 访问（``from app.api import resumes as _api``），**禁止** from-import 具名绑定——绑定会把
 patch 静默断开（部分用例靠真实配置兜底仍会绿，是最危险的假绿形态）。
 """
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,6 +20,7 @@ from ...models.job import Job
 from ...models.resume import GENERATE_ACTIVE_STATUSES, ResumeGenerateTask
 from ...runtime import dataset_scope
 from ...runtime.dataset_scope import DatasetScopeError
+from ...runtime.log_redact import log_exception_redacted
 from ...schemas.job import JobOut
 from ...schemas.resume import GenerateRequest, GenerateTaskOut
 from ...services import trash
@@ -45,50 +47,70 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
     ``job_id`` 为空表示生成**通用简历**（不针对任何岗位）。事件类型见
     services/resume/resume_generator.py 文档；生成结果成功落库后，依次发送携带记录 id 的
     saved 事件和最终 done 事件。
+
+    租约时序（PR-03）：**先取租约，再做任何业务快照读取**——资料/岗位/事实基线
+    与保存段因此同属一个数据集身份；此前"快照在先、建流才取租约"留有一个入口
+    窗口（两次时刻之间切换数据集，快照与保存会分属两库）。切换持锁期间租约取
+    不到，仍以 SSE error 事件报错（与既有行为一致，不抛 500）。
     """
-    job = db.get(Job, payload.job_id) if payload.job_id is not None else None
-    if payload.job_id is not None and (job is None or trash.is_deleted(job)):
-        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
+    try:
+        lease = dataset_scope.acquire_lease("resume-generate-sse")
+    except DatasetScopeError as exc:
 
-    profile = get_profile_detail(db)
-    if (
-        not profile.name
-        and not profile.projects
-        and not profile.experiences
-        and not profile.campus_experiences
-    ):
-        raise HTTPException(status_code=400, detail="请先在「我的资料」页完善个人信息")
+        async def lease_error_stream(message: str):
+            yield _format_sse({"type": "error", "message": message})
 
-    # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
-    # app.api.resumes.get_llm_config 的 patch 契约。
-    config = _api.get_llm_config(db)
-    if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+        return StreamingResponse(
+            lease_error_stream(str(exc)),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
-    # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
-    # app.api.resumes.create_provider 的 patch 契约。
-    generator = ResumeGenerator(_api.create_provider(config))
-    job_out = JobOut.model_validate(job) if job is not None else None
-    profile_out = to_profile_out(profile)
-    # 事实台账里已确认的条目作为事实基线交给模型；台账为空时它就是空基线，
-    # 生成行为与没有这个功能时完全一致。
-    baseline = build_baseline(db)
-    # 流式模型调用可能持续数分钟；快照完成后立即释放请求 Session，避免占满连接池。
-    db.close()
+    try:
+        job = db.get(Job, payload.job_id) if payload.job_id is not None else None
+        if payload.job_id is not None and (job is None or trash.is_deleted(job)):
+            raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
+
+        profile = get_profile_detail(db)
+        if (
+            not profile.name
+            and not profile.projects
+            and not profile.experiences
+            and not profile.campus_experiences
+        ):
+            raise HTTPException(status_code=400, detail="请先在「我的资料」页完善个人信息")
+
+        # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
+        # app.api.resumes.get_llm_config 的 patch 契约。
+        config = _api.get_llm_config(db)
+        if not config.base_url or not config.model:
+            raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+
+        # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
+        # app.api.resumes.create_provider 的 patch 契约。
+        generator = ResumeGenerator(_api.create_provider(config))
+        job_out = JobOut.model_validate(job) if job is not None else None
+        profile_out = to_profile_out(profile)
+        # 事实台账里已确认的条目作为事实基线交给模型；台账为空时它就是空基线，
+        # 生成行为与没有这个功能时完全一致。
+        baseline = build_baseline(db)
+        # 流式模型调用可能持续数分钟；快照完成后立即释放请求 Session，避免占满连接池。
+        db.close()
+    except Exception:
+        # 快照阶段失败（404/400/内部错误）：先还租约再抛，否则切换会一直被这份
+        # 泄漏的租约挡到超时。
+        lease.release()
+        raise
+
+    # 冻结工厂从**租约身份**派生（PR-03）：不重读当前库，保存段绝不漂到
+    # 切换后的新库——即便租约释放与保存之间有并发切换也不串写。
+    factory = dataset_scope.frozen_session_factory(lease.identity)
 
     async def event_stream():
         raw_parts: list[str] = []
         parsed: dict | None = None
         warnings: list[str] = []
         done_event: dict | None = None
-        try:
-            # 流级租约（RF-03）：建流先取租约，切换持锁期间给出可读 error 事件；
-            # 拿到租约后按值冻结 engine，保存段写库绝不漂到切换后的新库。
-            lease = dataset_scope.acquire_lease("resume-generate-sse")
-        except DatasetScopeError as exc:
-            yield _format_sse({"type": "error", "message": str(exc)})
-            return
-        factory = dataset_scope.frozen_session_factory()
         try:
             async for event in generator.generate(
                 profile_out, job_out, payload.options, baseline=baseline
@@ -129,8 +151,10 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
             logger.warning("简历生成失败（模型错误）：%s", exc)
             yield _format_sse({"type": "error", "message": str(exc)})
         except Exception:  # noqa: BLE001 - 流式接口必须兜底，异常转为事件而非中断连接
-            logger.exception("简历生成发生内部错误")
-            yield _format_sse({"type": "error", "message": "生成过程中发生内部错误，请查看后端日志"})
+            log_exception_redacted(logger, "简历生成发生内部错误")
+            yield _format_sse(
+                {"type": "error", "message": "生成过程中发生内部错误，请查看后端日志"}
+            )
         finally:
             lease.release()
 

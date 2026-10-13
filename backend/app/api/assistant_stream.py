@@ -89,6 +89,9 @@ async def _stream_message_events(
     numberer = SourceNumberer()
     # RF-14 §2.1.b/§2.2/§2.5：整链预算与用量遥测的协调器（assistant_budget）。
     budget = AssistantStreamBudget()
+    # 活预算硬墙钟接线（审计 PR-07-3）：provider 的每次传输尝试以整链剩余预算做
+    # asyncio.timeout 上限——首字前静默、只发心跳帧的流也会被硬切；finally 复位。
+    provider.request_budget = budget.operation_budget
     try:
         yield format_sse(
             {
@@ -170,22 +173,28 @@ async def _stream_message_events(
             )
             calls: list[dict[str, Any]] = []
             round_reasoning: list[str] = []
-            async for delta in provider.stream_chat_events(messages, tools):
-                # RF-14 §2.1.b 检查点 3：每个 delta 之后——到期就在下一边界收尾。
-                budget.check()
-                if delta.text:
-                    parts.append(delta.text)
-                    yield format_sse({"type": "delta", "text": delta.text})
-                if delta.reasoning:
-                    # 思考内容单独成一个事件下发前端；它**只用于展示**，绝不塞回
-                    # `messages`——把它当正文回灌给模型会让它把自己的草稿当成事实，
-                    # 并且（对 Anthropic）会触发"必须原样回传 thinking 块"的协议要求，
-                    # 那是另一套改动（见 `anthropic._convert_messages` 的说明）。
-                    reasoning_parts.append(delta.reasoning)
-                    round_reasoning.append(delta.reasoning)
-                    yield format_sse({"type": "reasoning", "text": delta.reasoning})
-                if delta.tool_calls:
-                    calls.extend(delta.tool_calls)
+            # aclosing 纪律（审计 PR-07-4）：取消/超时/异常路径也显式关闭 provider 流
+            # ——provider 的 finally 才能写 last_usage、response 才能及时关闭。
+            model_stream = provider.stream_chat_events(messages, tools)
+            try:
+                async for delta in model_stream:
+                    # RF-14 §2.1.b 检查点 3：每个 delta 之后——到期就在下一边界收尾。
+                    budget.check()
+                    if delta.text:
+                        parts.append(delta.text)
+                        yield format_sse({"type": "delta", "text": delta.text})
+                    if delta.reasoning:
+                        # 思考内容单独成一个事件下发前端；它**只用于展示**，绝不塞回
+                        # `messages`——把它当正文回灌给模型会让它把自己的草稿当成事实，
+                        # 并且（对 Anthropic）会触发"必须原样回传 thinking 块"的协议要求，
+                        # 那是另一套改动（见 `anthropic._convert_messages` 的说明）。
+                        reasoning_parts.append(delta.reasoning)
+                        round_reasoning.append(delta.reasoning)
+                        yield format_sse({"type": "reasoning", "text": delta.reasoning})
+                    if delta.tool_calls:
+                        calls.extend(delta.tool_calls)
+            finally:
+                await model_stream.aclose()
             # §2.2：各轮用量——provider 只保留最后一次调用，跨轮累计在 budget 里做。
             budget.record_round(provider)
             if round_reasoning:
@@ -314,6 +323,9 @@ async def _stream_message_events(
         # 不冒充网络错误，也不归入用户取消分支（cancelled）。
         logger.warning("AI 助手回复超出时间预算，已中止：%s", exc)
         message = "回复超出时间预算，已中止"
+        # 失败路径也收集最后一轮 usage（PR-07-6）：轮循环的 record_round 因异常
+        # 被跳过，provider 的 last_usage 在上面的 aclose finally 里已写好。
+        budget.record_round(provider)
         usage_payload = budget.usage_summary(
             provider=provider, finish_reason=FINISH_BUDGET_EXHAUSTED
         )
@@ -327,36 +339,46 @@ async def _stream_message_events(
         )
         yield format_sse({"type": "error", "message": message})
     except asyncio.CancelledError:
+        # 用户断开（浏览器取消）路径同样收集最后一轮 usage：能拿到多少算多少。
+        budget.record_round(provider)
         finish_assistant_message(
             assistant_message_id,
             content="".join(parts),
             status="cancelled",
             error="回复已中断",
             factory=factory,
+            usage=budget.usage_summary(),
         )
         raise
     except LLMError as exc:
         logger.warning("AI 助手模型调用失败：%s", exc)
+        budget.record_round(provider)
         finish_assistant_message(
             assistant_message_id,
             content="".join(parts),
             status="error",
             error=str(exc),
             factory=factory,
+            usage=budget.usage_summary(),
         )
         yield format_sse({"type": "error", "message": str(exc)})
     except Exception:  # noqa: BLE001 - 流式响应必须转换内部异常
         logger.exception("AI 助手流式回复发生内部错误")
         message = "回复过程中发生内部错误，请查看后端日志"
+        budget.record_round(provider)
         finish_assistant_message(
             assistant_message_id,
             content="".join(parts),
             status="error",
             error=message,
             factory=factory,
+            usage=budget.usage_summary(),
         )
         yield format_sse({"type": "error", "message": message})
     finally:
+        # 活预算接线复位（防御性纪律，provider 实例不复用）；GeneratorExit（浏览器
+        # 断开）也可能走这里，cancel_pending 在任何路径上都要把 pending 消息收尾。
+        provider.request_budget = None
         # Closing an async generator can bypass CancelledError when the browser断开。
         cancel_pending_assistant_message(assistant_message_id, "".join(parts), factory=factory)
 

@@ -10,10 +10,18 @@ provider 层再重试等于烧双倍 token 制造第二套重试语义；**400**
 安全点规则（钉成测试的硬性不变式，§2.4-2）：重试只允许发生在**本次调用首个 delta
 产出之前**。429/5xx 表现为响应状态码，天然在 body 之前，安全；流中途的传输错误
 **不重试**（此时可能已有 delta 发给调用方，重试会造成文本重复）。
+
+总预算硬 deadline（审计 PR-07-2/5）：``deadline_remaining`` 在**每次重试决策时**重算
+（``StatusRetryGate`` 接受活预算函数，不再用构造时的旧值快照）；退避 sleep 被压进
+``min(退避值, 剩余 - ε)``，剩余不足（<1s）则直接放弃重试。另一条沿用仓库现有约束的
+硬规则：**超时/取消/结果未知的请求绝不自动重放**——协作式同步写操作（工具执行）与
+"响应是否已送达未知"的传输尝试都只做错误分类上报，重放是调用方的显式决策。
 """
+
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 
 from .base import LLMError
 
@@ -29,6 +37,8 @@ _BACKOFF_5XX = 1.0
 _RETRY_AFTER_CAP_SECONDS = 8.0
 # 所在请求的剩余预算不足 1s 时不再重试——预算耗尽优先于重试（§2.4-4）。
 _MIN_DEADLINE_REMAINING = 1.0
+# 退避压缩时给重试请求本身留出的余量：sleep 不得吃掉全部剩余预算。
+_BACKOFF_EPSILON_SECONDS = 0.1
 
 
 class StatusRetrySignal(Exception):
@@ -74,7 +84,9 @@ def retry_backoff_seconds(
     """计算本次应退避的秒数；返回 ``None`` 表示不重试。
 
     ``attempt`` 是**已完成**的重试次数（从 0 起算）。``deadline_remaining`` 是所在
-    请求的剩余预算秒数（``None`` = 未接预算，见 ``BaseLLMProvider.request_deadline_seconds``）。
+    请求的**当前**剩余预算秒数（``None`` = 未接预算）——调用方必须在每次决策时
+    重新计算传入，不能用请求开始时的快照（PR-07-2）。剩余不足 1s 不重试；否则
+    退避被压进 ``min(退避值, 剩余 - ε)``，保证 sleep 结束后预算还没烧干。
     """
     if status not in RETRYABLE_STATUSES:
         return None
@@ -85,9 +97,15 @@ def retry_backoff_seconds(
     if status == 429:
         parsed = parse_retry_after(retry_after)
         if parsed is not None:
-            return parsed
-        return _BASE_BACKOFF_429[min(attempt, len(_BASE_BACKOFF_429) - 1)]
-    return _BACKOFF_5XX
+            delay = parsed
+        else:
+            delay = _BASE_BACKOFF_429[min(attempt, len(_BASE_BACKOFF_429) - 1)]
+    else:
+        delay = _BACKOFF_5XX
+    if deadline_remaining is not None:
+        # 退避不得越过剩余预算：压到 remaining - ε，重试请求本身还要留一点时间。
+        delay = min(delay, deadline_remaining - _BACKOFF_EPSILON_SECONDS)
+    return delay
 
 
 async def retry_sleep(seconds: float) -> None:
@@ -105,15 +123,29 @@ class StatusRetryGate:
     能被执行两次（§2.4-5）。
     """
 
-    def __init__(self, *, deadline_remaining: float | None = None):
+    def __init__(
+        self,
+        *,
+        deadline_remaining: float | None = None,
+        deadline_remaining_fn: Callable[[], float | None] | None = None,
+    ):
+        """``deadline_remaining`` 是静态快照（兼容既有调用）；``deadline_remaining_fn``
+        是活预算函数（每次 ``next_delay`` 重算，PR-07-2），两者同时给出时活函数优先。
+        """
         self.retries = 0
         self._attempt = 0
         self._deadline_remaining = deadline_remaining
+        self._deadline_remaining_fn = deadline_remaining_fn
+
+    def _remaining(self) -> float | None:
+        if self._deadline_remaining_fn is not None:
+            return self._deadline_remaining_fn()
+        return self._deadline_remaining
 
     def next_delay(self, status: int, retry_after: str | None = None) -> float | None:
         """返回本次应退避的秒数（内部完成计数）；None 表示不重试。"""
         delay = retry_backoff_seconds(
-            status, self._attempt, retry_after, deadline_remaining=self._deadline_remaining
+            status, self._attempt, retry_after, deadline_remaining=self._remaining()
         )
         if delay is None:
             return None

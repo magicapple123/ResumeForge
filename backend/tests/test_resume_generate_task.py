@@ -321,3 +321,35 @@ def test_completed_status_and_resume_id_commit_atomically(client, monkeypatch):
     assert final["resume_id"] is not None
     assert observations, "运行器会话未观察到任何 completed 提交，spy 未生效"
     assert all(observations), f"观察到 completed 但 resume_id 为空的中间态：{observations}"
+
+
+# ===== 审计 PR-08：asyncio.run 的每任务新循环关闭前，池内该循环客户端必须被清理 =====
+
+
+def test_runner_cleans_pool_clients_of_its_event_loop(client, monkeypatch):
+    """runner 每任务新建事件循环（asyncio.run）：循环关闭前必须调用池的 per-loop 清理。
+
+    修复前 runner 只调用 asyncio.run，池里以"该循环"为键的客户端随循环一起死亡
+    却从未被 aclose。这里钉住接线本身：清理协程在 consume 的 finally 中被 await。
+    """
+    _seed_profile(client)
+    _configure(client)
+    job = _job(client)
+    monkeypatch.setattr(
+        "app.services.resume.resume_generate_runner.create_provider",
+        lambda resolved: SuccessfulProvider(resolved),
+    )
+    calls: list[bool] = []
+
+    async def _record_cleanup():
+        calls.append(True)
+
+    monkeypatch.setattr(
+        "app.services.resume.resume_generate_runner.aclose_clients_for_current_loop",
+        _record_cleanup,
+    )
+
+    task = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]}).json()
+    final = _wait_terminal(client, task["id"])
+    assert final["status"] == "completed"
+    assert calls == [True]
