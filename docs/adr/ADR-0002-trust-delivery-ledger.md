@@ -67,7 +67,7 @@
 ### 4. 双指纹与同源存档
 
 - `content_sha256`（旧列，语义不变）：apply/track = 内容规范化哈希；export =
-  **产物字节**哈希，与 `X-Content-Sha256` 响应头逐字一致（既有测试钉住）；
+  **产物字节**哈希；
 - `source_content_sha256`（新）：导出前（脱敏后）源内容的规范化哈希——"存档里是
   哪份内容"；
 - `artifact_sha256`（新）：产物字节哈希（export 路径与 `content_sha256` 同值，
@@ -77,7 +77,27 @@
   参数（覆盖值按 `build_export` 的生效规则折算），凭二者可重放导出
   （`replay_delivery_export`）。
 
+### 4.1 响应头口径（2026-10-14 RR-04 修订）
+
+**三种哈希不可混用**：源内容哈希（`source_content_sha256`）、历史原始产物哈希
+（`artifact_sha256`）、本次重放字节哈希，是三个不同的问题："存档里是哪份内容" /
+"当初下载的文件是哪一份" / "你现在拿到的这些字节是什么"。
+
+- `X-Content-Sha256` = **本次响应真实字节**的 sha256（此前放的是存档里的旧哈希：
+  HTML 每次渲染换 CSP nonce，用户永远核对不上；apply/track 返回的是带说明的 JSON
+  封装，头却按 `content` 字段算）。下载后自己算一遍必然一致；
+- `X-Artifact-Sha256` = 当初导出时产物的 sha256（`artifact_sha256` 列，缺则省略）；
+- `X-Source-Content-Sha256` = apply/track 冻结**内容**的规范化 sha256；
+- `X-Delivery-Replay: true` = 这份字节是按存档**重新生成**的，不保证与当初的源文件
+  逐字节相同（HTML nonce、PDF 时间戳）。要判断是否与原件一致，比对
+  `X-Content-Sha256` 与 `X-Artifact-Sha256` 即可。
+
+"归档原件字节"这条更强的承诺**没有**做：它要求把每次导出的产物字节也存一份
+（体积与保留策略另立），当前产品口径是"用存档内容 + 实际参数重新生成，并如实
+标注重放"。ADR 原文中"逐字一致（既有测试钉住）"的表述按此修订。
+
 ### 5. 独立访问：证据不依赖原简历存活
+
 
 - `GET /api/resumes/deliveries/{id}`：详情（含 render_context/request_params/
   双指纹/`replayable`/`destination_recorded`）；
