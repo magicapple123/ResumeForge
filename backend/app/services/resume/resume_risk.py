@@ -66,8 +66,14 @@ async def scan_resume_risks(
     provider: BaseLLMProvider | None = None,
     *,
     resume_id: int = 0,
+    remote_available: bool = False,
 ) -> RiskScanOut:
-    """风险扫描入口：本地规则始终运行，配置了模型时追加可选增强（失败自动降级）。"""
+    """风险扫描入口：本地规则始终运行，配置了模型时追加可选增强（失败自动降级）。
+
+    ``remote_available`` 只用于**如实回答**"这台机器上有没有配置模型"（前端据此决定
+    AI 增强开关是否有意义）——用户关掉增强时 provider 就是 None，两者必须分开报，
+    否则界面会把"你关掉了"显示成"你没配置模型"（RR-01）。
+    """
     notes: list[str] = []
     points = scan_local(resume, claims, notes=notes)
     llm_used = False
@@ -96,6 +102,7 @@ async def scan_resume_risks(
         points=points,
         summary=summary,
         llm_used=llm_used,
+        remote_enhancement_available=remote_available,
         notes=notes,
     )
 

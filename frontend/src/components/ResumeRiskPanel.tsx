@@ -4,8 +4,20 @@
  * 深挖风险点若联动到事实台账，会展示「台账 #{claim_id}」标记。
  */
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Collapse, Empty, Space, Spin, Tag, Typography } from "antd";
-import { useMemo } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  Collapse,
+  Empty,
+  Space,
+  Spin,
+  Switch,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
+import { useMemo, useState } from "react";
 import { scanResumeRisks } from "../api/resumeRisk";
 import { useApi } from "../hooks/useApi";
 import type { RiskCategory, RiskPoint, RiskSeverity } from "../types/resumeRisk";
@@ -28,8 +40,24 @@ interface Props {
   resumeId: number;
 }
 
+/** 「AI 增强」偏好的本地存储键：本机单用户工具，不引入服务端设置项。 */
+const ENHANCE_STORAGE_KEY = "resumeRisk.remoteEnhancement";
+
+function initialEnhancePreference(): boolean {
+  try {
+    return window.localStorage.getItem(ENHANCE_STORAGE_KEY) !== "off";
+  } catch {
+    // 隐私模式等读不到 storage：默认开，与历史行为一致。
+    return true;
+  }
+}
+
 export default function ResumeRiskPanel({ resumeId }: Props) {
-  const { data, loading, error, reload } = useApi(() => scanResumeRisks(resumeId), [resumeId]);
+  const [enhance, setEnhance] = useState(initialEnhancePreference);
+  const { data, loading, error, reload } = useApi(
+    () => scanResumeRisks(resumeId, enhance),
+    [resumeId, enhance],
+  );
 
   const grouped = useMemo(() => {
     const map = new Map<RiskCategory, RiskPoint[]>();
@@ -63,6 +91,32 @@ export default function ResumeRiskPanel({ resumeId }: Props) {
         <Button size="small" icon={<ReloadOutlined />} onClick={() => void reload()}>
           重新扫描
         </Button>
+        {data?.remote_enhancement_available && (
+          <Tooltip
+            title={
+              enhance
+                ? "开启时会把你已配置的模型拿来复核简历——只发送遮罩后的正文（姓名/电话/邮箱/公司等已遮蔽），台账只发条数与承担程度这类结构信息，不发送条目原文。关掉后只用本地规则，完全不联网。"
+                : "已关闭：只用本地规则，不会向模型发送任何内容。"
+            }
+          >
+            <Space size={4}>
+              <Switch
+                size="small"
+                checked={enhance}
+                onChange={(next) => {
+                  setEnhance(next);
+                  try {
+                    window.localStorage.setItem(ENHANCE_STORAGE_KEY, next ? "on" : "off");
+                  } catch {
+                    // 存不下就只在本次会话生效。
+                  }
+                }}
+                aria-label="AI 增强"
+              />
+              <Typography.Text type="secondary">AI 增强</Typography.Text>
+            </Space>
+          </Tooltip>
+        )}
       </Space>
 
       {data?.notes?.map((note) => (
