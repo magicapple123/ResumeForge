@@ -12,25 +12,13 @@
  * 记录只保存展示快照（岗位、公司、简历名、招呼语），不含完整个人资料——失败条目带上
  * 后端给的中文分类说明与可操作诊断，用户可以直接把这条信息回传给我们定位站点改版。
  */
-import { RedoOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Descriptions,
-  Drawer,
-  Empty,
-  Input,
-  Pagination,
-  Select,
-  Space,
-  Tag,
-  Tooltip,
-  Typography,
-} from "antd";
+import { RedoOutlined } from "@ant-design/icons";
+import { App, Button, Empty, Pagination, Space, Tag, Tooltip, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import ApplyRecordDetailDrawer from "./ApplyRecordDetailDrawer";
+import ApplyRecordsToolbar from "./ApplyRecordsToolbar";
 import BatchGroup, { BATCH_ITEM_PAGE_SIZE, type BatchItemsState } from "./ApplyRecordsBatchGroup";
 import {
   batchDeleteRecords,
@@ -58,12 +46,6 @@ interface Props {
   disabled: boolean;
   onRetried: (task: ApplyTask) => void;
 }
-
-const RESULT_OPTIONS = [
-  { value: "success", label: "成功" },
-  { value: "failed", label: "失败" },
-  { value: "skipped", label: "已跳过" },
-];
 
 const BATCH_PAGE_SIZE = 5;
 
@@ -379,51 +361,27 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
 
   return (
     <div className="apply-records-panel">
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Input.Search
-          placeholder="搜索岗位 / 公司"
-          allowClear
-          enterButton={<SearchOutlined />}
-          style={{ width: 260 }}
-          value={searchText}
-          onChange={(event) => {
-            const value = event.target.value;
-            setSearchText(value);
-            if (value === "" && keyword !== "") {
-              setKeyword("");
-              setPage(1);
-            }
-          }}
-          onSearch={(value) => {
-            setSearchText(value);
-            setKeyword(value);
+      <ApplyRecordsToolbar
+        searchText={searchText}
+        result={result}
+        onSearchTextChange={(value) => {
+          setSearchText(value);
+          if (value === "" && keyword !== "") {
+            setKeyword("");
             setPage(1);
-          }}
-        />
-        <Select
-          placeholder="结果"
-          allowClear
-          style={{ width: 130 }}
-          options={RESULT_OPTIONS}
-          value={result || undefined}
-          onChange={(value) => {
-            setResult(value ?? "");
-            setPage(1);
-          }}
-        />
-        <Button icon={<ReloadOutlined />} onClick={() => void reload()}>
-          刷新
-        </Button>
-        {/* 投递记录的"下一步"在求职进度：补一个小入口，不用用户自己找。 */}
-        <Link to="/tracker">
-          <Button type="link" size="small" style={{ padding: 0 }}>
-            去求职进度跟进
-          </Button>
-        </Link>
-        <Typography.Text type="secondary">
-          按投递批次分组：一次投出的多个岗位归在一组，点击展开看明细
-        </Typography.Text>
-      </Space>
+          }
+        }}
+        onSearch={(value) => {
+          setSearchText(value);
+          setKeyword(value);
+          setPage(1);
+        }}
+        onResultChange={(value) => {
+          setResult(value ?? "");
+          setPage(1);
+        }}
+        onReload={() => void reload()}
+      />
 
       {loading && batches.length === 0 && (
         <div style={{ textAlign: "center", padding: 24 }}>
@@ -468,44 +426,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
         />
       </div>
 
-      <Drawer
-        title="投递记录详情"
-        placement="right"
-        size={480}
-        open={detail !== null}
-        onClose={() => setDetail(null)}
-        destroyOnHidden
-      >
-        {detail && (
-          <Descriptions column={1} bordered size="small" colon>
-            <Descriptions.Item label="岗位">
-              {detail.job_title || "（岗位已删除）"}
-              {detail.company ? ` · ${detail.company}` : ""}
-            </Descriptions.Item>
-            <Descriptions.Item label="简历">{detail.resume_title || "-"}</Descriptions.Item>
-            <Descriptions.Item label="招呼语">
-              {detail.greeting || "（默认招呼语）"}
-            </Descriptions.Item>
-            <Descriptions.Item label="结果">
-              {TASK_ITEM_STATUS_META[detail.status].label}
-            </Descriptions.Item>
-            <Descriptions.Item label="失败分类">
-              {detail.failure_category
-                ? failureLabel(detail.failure_category, detail.failure_label)
-                : "-"}
-            </Descriptions.Item>
-            <Descriptions.Item label="失败信息（含页面 URL / 标题）">
-              {detail.failure_detail || "-"}
-            </Descriptions.Item>
-            <Descriptions.Item label="时间">
-              {formatDateTime(detail.finished_at || detail.created_at)}
-            </Descriptions.Item>
-            <Descriptions.Item label="任务 / 批次">
-              {`批次 #${detail.task_id} · 第 ${detail.attempt} 次尝试`}
-            </Descriptions.Item>
-          </Descriptions>
-        )}
-      </Drawer>
+      <ApplyRecordDetailDrawer record={detail} onClose={() => setDetail(null)} />
     </div>
   );
 }
