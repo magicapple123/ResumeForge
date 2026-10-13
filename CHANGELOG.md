@@ -10,6 +10,9 @@
 
 ### Changed
 
+- **`/api/stats` 查询合并：14 条 SQL → 4 条（万级最慢端点治理）。** 10 个计数合并为一条聚合语句（每个子查询自带完整 WHERE 口径），待确认台账与最近投递结果合并为一条 UNION ALL（Python 侧按 kind 拆分、显式重排序等价于原 SQL ORDER），最近岗位/简历各一条；响应 JSON 形状逐字节不变（14 键集合+顺序+类型钉住）。软删除过滤逐条核对保留（唯一例外 ApplyQueueItem 无 deleted_at，与合并前一致，专项测试钉住）。新增 SQL 条数预算测试（≤4 条断言，含空库/有数据两形态；启动自检回填后台线程会干扰计数，fixture 已掐掉）。
+
+- **全局搜索接入 FTS5（trigram），迁移 0046（万级最后两个线性增长点之一）。** job/resume_record/referral/reminder/interview_experience/claim_record/material 七域建 external content 虚拟表 + 三触发器（增/改/删同步）+ 收尾 rebuild（复用 0044 全套模式：逐表跳过、trigram 不可用整体跳过、完整 downgrade，迁移内联 spec 与 services/search_fts.SEARCH_FTS_SPECS 钉住相等）；skill（至多几十行的硬删子表）保留 LIKE（虚拟表维护成本是负优化）。检索侧 `app/services/search_fts.py`：可用性按 (Engine,表) 缓存、<3 字符回退 LIKE、引号转义防注入；`/api/search` 各域 FTS 可用走 MATCH（参数绑定）否则原 LIKE，字段清单与 FTS 列一一对应。**搜索排序统一加 id 决胜（created_at DESC, id DESC）**：批量导入行常共享同一秒 created_at，平局顺序此前依赖查询计划（未定义行为），现在任何计划下确定。两遍法对照测试：无索引库 LIKE 基准 vs 0046 后逐关键词响应 JSON 完全相等（13 关键词含中文/大小写/2 字回退/FTS5 操作符注入/无命中）+ 分页/软删除/scope 逐条一致。
 - **`/api/jobs` 列表响应瘦身（2026-10-13 审计观察项）。** 列表与 `/page` 分页改用 `JobListOut`：不再逐行携带完整 JD 全文（此前 page_size=20 时响应约 430KB），新增 `has_description` 布尔字段（由 description 非空白派生）；**详情端点（getJob）契约不变**，JD 全文仍从详情获取。前端岗位列表的"补齐详情"过滤改用 `has_description`（语义与原 `!description.trim()` 逐字等价）；从列表打开"生成/编辑/手写"前先经 getJob 取全量；收藏页（FavoritesPage）同步切换 JobList。配套：前端类型/mock（含 measure_frontend_perf 的 fail-closed mock 契约）同步、JobsPage/JobTable/FavoritesPage 测试更新（JobsPage 18 例全绿）、后端 test_api_jobs 契约改钉。
 
 - **desktop 依赖升级：electron ^33.0.0 → ^44.7.0、electron-builder ^25.1.8 → ^26.17.0（PR-06 豁免清偿）。** 仅变更 package.json 与锁文件，由 CI desktop-shell 打包门禁 + desktop-shell-smoke 真启动作业全链路验证。`npm audit` 从 19 条（4 moderate / 14 high / 1 critical）降到 8 条（全 moderate）：全部 critical/high（含 critical 的 tar）随升级清零；剩余 8 条全部源自 sprintf-js 根公告 GHSA-hp3w-g68c-fv3c（上游未发布修复），按 moderate 登记豁免至 2027-01-31（audit-baseline.json 已重建，供应链文档补升级记录）。audit-gate 测试同步：基线规模断言由硬编码 19 改为结构性校验（条目完整+到期字段），避免后续合法清偿再炸测试。
