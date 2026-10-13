@@ -10,10 +10,11 @@
  * 不编造。请求失败显示**错误态**（可重试）而不是「暂无投递记录」——加载不出来
  * 不等于没有记录。数据在弹窗打开时按需拉取；「独立版本/血缘」的判断不依赖它。
  */
-import { Button, Space, Tag, Typography } from "antd";
+import { App, Button, Space, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
-import { listResumeDeliveries } from "../../api/resumes";
+import { downloadDelivery, listResumeDeliveries } from "../../api/resumes";
 import type { DeliverySummary } from "../../types";
+import { downloadBlob } from "../../utils/download";
 
 const DELIVERY_SOURCE_LABELS: Record<string, string> = {
   apply: "投递台",
@@ -54,7 +55,9 @@ interface Props {
 }
 
 export default function ResumeDeliveryInfo({ recordId, parentRevisionId }: Props) {
+  const { message } = App.useApp();
   const [deliveries, setDeliveries] = useState<DeliverySummary[] | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
   // 请求失败是**错误态**而不是空态（PR-09）：失败静默降级成「暂无投递记录」
   // 会让用户误以为没投过。显示可重试的错误说明。
   const [loadFailed, setLoadFailed] = useState(false);
@@ -88,6 +91,30 @@ export default function ResumeDeliveryInfo({ recordId, parentRevisionId }: Props
       cancelled = true;
     };
   }, [recordId, reloadToken]);
+
+  // 下载交付存档：export 快照重放导出、apply/track 返回冻结内容 JSON。重放字节是按
+  // 存档重新生成的（HTML 每次换 CSP nonce），与当初下载的那份可能不同——这一点如实
+  // 说出来，并提供可核对的两个哈希，而不是含糊地叫「原件」。
+  const handleDownload = async (item: DeliverySummary) => {
+    if (downloadingId !== null) return;
+    setDownloadingId(item.id);
+    try {
+      const file = await downloadDelivery(item.id);
+      downloadBlob(file.blob, file.filename);
+      if (file.replayed && file.artifactSha256 && file.artifactSha256 !== file.contentSha256) {
+        message.info(
+          `已下载按存档重新生成的版本（原始产物指纹 ${file.artifactSha256.slice(0, 8)}…）；` +
+            "重新生成每次可能略有差异（例如页面随机数），内容与投递当时一致。",
+        );
+      } else {
+        message.success("已下载交付存档");
+      }
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "下载交付存档失败");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   if (deliveries === null) return null;
 
@@ -126,6 +153,16 @@ export default function ResumeDeliveryInfo({ recordId, parentRevisionId }: Props
               · {DELIVERY_SOURCE_LABELS[item.source] ?? item.source} ·{" "}
               {new Date(item.created_at).toLocaleDateString()} · {item.content_sha256.slice(0, 8)}
               {deliverySuffix(item.source)}
+              <Button
+                type="link"
+                size="small"
+                style={{ paddingInline: 4 }}
+                loading={downloadingId === item.id}
+                onClick={() => void handleDownload(item)}
+                data-testid={`delivery-download-${item.id}`}
+              >
+                下载存档
+              </Button>
             </Tag>
           );
         })}

@@ -356,6 +356,15 @@ def create_app() -> FastAPI:
             "Content-Disposition",
             "X-Content-Sha256",
             "X-Render-Config-Sha256",
+            # 备份导出：包里已经有"附件缺失/与登记哈希不符"时在响应头如实标出
+            # （RR-03），界面要能读到才知道不该说"完整备份成功"。
+            "X-Backup-Incomplete",
+            "X-Backup-Asset-Warnings",
+            # 交付下载（RR-04）：本次字节的哈希（X-Content-Sha256，见上）、
+            # 历史产物/源内容指纹，以及"这份字节是重放生成的"标记。
+            "X-Artifact-Sha256",
+            "X-Delivery-Replay",
+            "X-Source-Content-Sha256",
         ],
     )
     # add_middleware 后添加的在更外层先执行：跨站防线放在最外层，跨站发来的简单写

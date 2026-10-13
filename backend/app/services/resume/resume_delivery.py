@@ -20,8 +20,10 @@
 
 - ``source_content_sha256``：导出前（脱敏后）源内容的规范化哈希——存档里是哪份内容；
 - ``artifact_sha256``：导出产物字节的 sha256——产出的文件是哪份。
-  旧列 ``content_sha256`` 语义不变（apply/track = 内容哈希；export = 产物哈希），
-  与响应头 ``X-Content-Sha256`` 逐字一致的契约由既有测试钉住。
+  旧列 ``content_sha256`` 语义不变（apply/track = 内容哈希；export = 产物哈希）。
+  响应头口径见 ADR-0002 §4.1（2026-10-14 RR-04 修订）：``X-Content-Sha256`` 是
+  **本次响应真实字节**的哈希，历史指纹走 ``X-Artifact-Sha256``——重放字节（HTML
+  每次换 CSP nonce）与当初下载的源文件不保证逐字节相同。
 
 幂等（PR-09）：``idempotency_key`` 代表"哪一次真实投递动作"——apply 用任务条目 ID，
 export 用产物哈希。同键重放**不重复记账**：:func:`freeze_delivery` 查到已有行时
@@ -115,8 +117,9 @@ def freeze_delivery(
     - 配置指纹用 :func:`render_config_fingerprint` 按"默认导出请求 + 解析出的
       渲染上下文"计算——与 ``ExportDelivery`` 同一个函数，同口径可比对。
 
-    export 路径请把 ``build_export_delivery`` 产出的哈希原样传入，让
-    ``X-Content-Sha256`` / ``X-Render-Config-Sha256`` 响应头与库里的证据逐字一致。
+    export 路径请把 ``build_export_delivery`` 产出的哈希原样传入：库里的
+    ``artifact_sha256`` 就是"当初那次导出产物"的指纹，下载时以
+    ``X-Artifact-Sha256`` 报出，供用户与本次重放字节（``X-Content-Sha256``）比对。
     """
     if idempotency_key is not None:
         existing = (

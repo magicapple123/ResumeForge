@@ -1,11 +1,19 @@
 /** PR-09：ResumeDeliveryInfo 的三态语义区分与错误态（失败 ≠ 暂无投递记录）。 */
+import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DeliverySummary } from "../../types";
 
 const listResumeDeliveries = vi.fn();
+const downloadDelivery = vi.fn();
 vi.mock("../../api/resumes", () => ({
   listResumeDeliveries: (...args: unknown[]) => listResumeDeliveries(...args),
+  downloadDelivery: (...args: unknown[]) => downloadDelivery(...args),
+}));
+
+const downloadBlob = vi.fn();
+vi.mock("../../utils/download", () => ({
+  downloadBlob: (...args: unknown[]) => downloadBlob(...args),
 }));
 
 import ResumeDeliveryInfo from "./ResumeDeliveryInfo";
@@ -13,7 +21,18 @@ import ResumeDeliveryInfo from "./ResumeDeliveryInfo";
 afterEach(() => {
   cleanup();
   listResumeDeliveries.mockReset();
+  downloadDelivery.mockReset();
+  downloadBlob.mockReset();
 });
+
+// antd 的 message/modal 需要 <App> 提供 context（组件用 App.useApp() 取它们）。
+function renderInfo(recordId = 1, parentRevisionId: number | null = null) {
+  return render(
+    <AntdApp>
+      <ResumeDeliveryInfo recordId={recordId} parentRevisionId={parentRevisionId} />
+    </AntdApp>,
+  );
+}
 
 function delivery(overrides: Partial<DeliverySummary>): DeliverySummary {
   return {
@@ -35,13 +54,13 @@ function delivery(overrides: Partial<DeliverySummary>): DeliverySummary {
 describe("ResumeDeliveryInfo", () => {
   it("apply 来源显示「已投递给」（唯一代表真实投递）", async () => {
     listResumeDeliveries.mockResolvedValue([delivery({})]);
-    render(<ResumeDeliveryInfo recordId={1} parentRevisionId={null} />);
+    renderInfo();
     await waitFor(() => expect(screen.getByText(/已投递给\s*示例科技/)).toBeTruthy());
   });
 
   it("track 来源显示「进度关联」，并明确不是投递台发送", async () => {
     listResumeDeliveries.mockResolvedValue([delivery({ source: "track" })]);
-    render(<ResumeDeliveryInfo recordId={1} parentRevisionId={null} />);
+    renderInfo();
     await waitFor(() => expect(screen.getByText(/进度关联：\s*示例科技/)).toBeTruthy());
     expect(screen.getByText(/手工关联，非投递台发送/)).toBeTruthy();
   });
@@ -50,20 +69,20 @@ describe("ResumeDeliveryInfo", () => {
     listResumeDeliveries.mockResolvedValue([
       delivery({ source: "export", export_format: "pdf", filename: "简历.pdf" }),
     ]);
-    render(<ResumeDeliveryInfo recordId={1} parentRevisionId={null} />);
+    renderInfo();
     await waitFor(() => expect(screen.getByText(/导出存档：\s*示例科技/)).toBeTruthy());
     expect(screen.getByText(/不代表已实际发送/)).toBeTruthy();
   });
 
   it("旧快照目的地为空时显示「目的地未记录」，不编造", async () => {
     listResumeDeliveries.mockResolvedValue([delivery({ company: "", job_title: "" })]);
-    render(<ResumeDeliveryInfo recordId={1} parentRevisionId={null} />);
+    renderInfo();
     await waitFor(() => expect(screen.getByText(/目的地未记录/)).toBeTruthy());
   });
 
   it("请求失败显示错误态 + 重试，而不是「暂无投递记录」", async () => {
     listResumeDeliveries.mockRejectedValue(new Error("network down"));
-    render(<ResumeDeliveryInfo recordId={1} parentRevisionId={null} />);
+    renderInfo();
     await waitFor(() => expect(screen.getByText(/投递记录加载失败/)).toBeTruthy());
     expect(screen.queryByText(/独立版本，暂无投递记录/)).toBeNull();
 
@@ -76,7 +95,48 @@ describe("ResumeDeliveryInfo", () => {
 
   it("确实没有记录时才显示「独立版本，暂无投递记录」", async () => {
     listResumeDeliveries.mockResolvedValue([]);
-    render(<ResumeDeliveryInfo recordId={1} parentRevisionId={null} />);
+    renderInfo();
     await waitFor(() => expect(screen.getByText(/独立版本，暂无投递记录/)).toBeTruthy());
+  });
+
+  // ===== RR-04：存档下载可触达，且重放语义如实说明 =====
+
+  it("每条交付记录都能下载存档（原简历删掉后也拿得到证据）", async () => {
+    listResumeDeliveries.mockResolvedValue([delivery({ id: 7, export_format: "md" })]);
+    downloadDelivery.mockResolvedValue({
+      blob: new Blob(["md"]),
+      filename: "resume.md",
+      contentSha256: "a".repeat(64),
+      artifactSha256: "a".repeat(64),
+      replayed: true,
+    });
+    renderInfo();
+
+    await waitFor(() => expect(screen.getByTestId("delivery-download-7")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("delivery-download-7"));
+
+    await waitFor(() => expect(downloadDelivery).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalledTimes(1));
+    expect(downloadBlob.mock.calls[0][1] as string).toBe("resume.md");
+    // 重放字节与历史指纹一致时不额外打扰用户。
+    expect(screen.queryByText(/重新生成/)).toBeNull();
+  });
+
+  it("重放字节与历史指纹不一致时如实说明是重新生成的版本", async () => {
+    listResumeDeliveries.mockResolvedValue([delivery({ id: 9, export_format: "html" })]);
+    downloadDelivery.mockResolvedValue({
+      blob: new Blob(["<html>"]),
+      filename: "resume.html",
+      contentSha256: "b".repeat(64),
+      artifactSha256: "c".repeat(64),
+      replayed: true,
+    });
+    renderInfo();
+
+    await waitFor(() => expect(screen.getByTestId("delivery-download-9")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("delivery-download-9"));
+
+    expect(await screen.findByText(/重新生成/)).toBeTruthy();
+    expect(screen.getByText(/cccccccc/)).toBeTruthy();
   });
 });
