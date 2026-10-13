@@ -53,15 +53,17 @@ describe("FirstDeliveryPanel", () => {
     expect(cta).toHaveAttribute("href", "/profile");
   });
 
-  it("有岗位但无关联动作：当前步 CTA 指向简历中心", () => {
-    renderPanel(statsWith({ claim_count: 1, job_count: 3 }));
-    expect(screen.getByRole("link", { name: /为岗位生成或关联简历/ })).toHaveAttribute(
-      "href",
-      "/resumes",
+  it("空台账：核实阶段显示真实进度『台账为空』而不是已完成", () => {
+    // 前两步完成、有简历但台账为空：阶段 3 是当前步，必须显示"台账为空"而非完成态。
+    renderPanel(
+      statsWith({ resume_count: 1, job_count: 3, resume_with_job_count: 1, claim_count: 0 }),
     );
+    expect(screen.getByText(/台账为空/)).toBeInTheDocument();
+    const cta = screen.getByRole("link", { name: /去事实台账录入主张/ });
+    expect(cta).toHaveAttribute("href", "/claims");
   });
 
-  it("有待核实事实：当前步 CTA 带数量并指向事实台账", () => {
+  it("部分核实：进度以『已核实 N/M 条主张』呈现", () => {
     renderPanel(
       statsWith({
         claim_count: 5,
@@ -71,8 +73,17 @@ describe("FirstDeliveryPanel", () => {
         pending_claim_count: 2,
       }),
     );
+    expect(screen.getByText("已核实 3/5 条主张")).toBeInTheDocument();
     const cta = screen.getByRole("link", { name: /核实 2 条待确认事实/ });
     expect(cta).toHaveAttribute("href", "/claims");
+  });
+
+  it("有岗位但无关联动作：当前步 CTA 指向简历中心", () => {
+    renderPanel(statsWith({ claim_count: 1, job_count: 3 }));
+    expect(screen.getByRole("link", { name: /为岗位生成或关联简历/ })).toHaveAttribute(
+      "href",
+      "/resumes",
+    );
   });
 
   it("全完成（示例数据口径）：没有 CTA，已完成标记出现", () => {

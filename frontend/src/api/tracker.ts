@@ -18,11 +18,14 @@ export function listTracks(params: { status?: string; keyword?: string } = {}): 
 /**
  * 漏斗/统计摘要（P1-2）：只取统计字段，不整表拉回。
  * 与 `listTracks` 的筛选语义一致（status/keyword）。
+ * `jobId`（PR-13）：岗位深链时统计与列表同口径，不再出现"列表是一家公司、
+ * 漏斗是全部岗位"的分裂。
  */
 export function listTrackStats(
-  params: { status?: string; keyword?: string } = {},
+  params: { status?: string; keyword?: string; jobId?: number } = {},
 ): Promise<TrackStats> {
-  return request(`/tracker/stats${buildQuery(params)}`);
+  const { jobId, ...rest } = params;
+  return request(`/tracker/stats${buildQuery({ ...rest, job_id: jobId })}`);
 }
 
 /**
@@ -87,15 +90,20 @@ export function applyTracks(
   });
 }
 
-/** 导出当前筛选条件下的记录；返回 Blob 与文件名交给下载工具。 */
+/** 导出当前筛选条件下的记录；返回 Blob 与文件名交给下载工具。
+ *  `jobId`（PR-13）：岗位深链时只导出该岗位的进度，与列表/统计同口径。 */
 export async function exportTracks(
   format: "csv" | "json",
-  params: { status?: string; keyword?: string } = {},
+  params: { status?: string; keyword?: string; jobId?: number } = {},
 ): Promise<{ blob: Blob; filename: string }> {
-  const resp = await requestRaw(`/tracker/export${buildQuery({ ...params, format })}`, {
-    // 导出响应是文件流；导出走 export 预算（10 分钟），不吃 15s 的默认超时。
-    budget: "export",
-  });
+  const { jobId, ...rest } = params;
+  const resp = await requestRaw(
+    `/tracker/export${buildQuery({ ...rest, job_id: jobId, format })}`,
+    {
+      // 导出响应是文件流；导出走 export 预算（10 分钟），不吃 15s 的默认超时。
+      budget: "export",
+    },
+  );
   const filename =
     getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? `求职进度.${format}`;
   return { blob: await resp.blob(), filename };

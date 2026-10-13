@@ -27,6 +27,9 @@ export interface ExportRequest {
   page_limit?: number | null;
   include_photo?: boolean;
   allow_incomplete?: boolean;
+  /** 正式投递存档：为真时后端把这次导出冻结成一份投递快照；默认不落库。
+   *  「导出并记录交付」一律走 POST（本类型），GET 的同名参数已 deprecated（ADR-0002）。 */
+  record_delivery?: boolean;
 }
 
 /** 导出结果（对应一个 blob + 服务端建议文件名 + 页数元数据）。 */

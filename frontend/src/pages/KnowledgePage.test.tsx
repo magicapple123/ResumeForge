@@ -325,4 +325,73 @@ describe("KnowledgePage", () => {
     expect(await screen.findByText(/已删除 2 条知识/)).toBeInTheDocument();
     expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
   });
+
+  it("批量删除失败：保留选择不退出多选，可直接重试（PR-14）", async () => {
+    // 失败时悄悄清空选择 + 重拉，会让用户以为删成功了——失败必须原样保留现场。
+    apiMocks.listKnowledgePage.mockResolvedValue(
+      makePage([
+        makeKnowledge({ id: 1, title: "条目一" }),
+        makeKnowledge({ id: 2, title: "条目二" }),
+      ]),
+    );
+    apiMocks.batchDeleteKnowledge.mockRejectedValue(new Error("网络错误"));
+    renderPage();
+
+    await screen.findByText("条目一");
+    fireEvent.contextMenu(screen.getByText("条目一"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择知识条目 条目一" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择知识条目 条目二" }));
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    const popover = await waitFor(() => {
+      const root = document.querySelector(".ant-popover");
+      expect(root).not.toBeNull();
+      return root as HTMLElement;
+    });
+    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+
+    // 删除请求确实发出去了（确认按钮已生效）。
+    await waitFor(() => expect(apiMocks.batchDeleteKnowledge).toHaveBeenCalledTimes(1));
+    // 提示文案是接口给的原因（error.message），不是笼统的批量删除失败。
+    expect(await screen.findByText(/网络错误/)).toBeInTheDocument();
+    // 选择还在：操作条仍显示已选 2 项，且没有触发重拉。
+    expect(screen.getByText("已选 2 项")).toBeInTheDocument();
+    expect(apiMocks.listKnowledgePage).toHaveBeenCalledTimes(1);
+  });
+
+  it("删除最后一页最后一条后自动回上一页，分页控件不消失（PR-14）", async () => {
+    const pageOne = Array.from({ length: 12 }, (_, index) =>
+      makeKnowledge({ id: index + 1, title: `条目-${index + 1}` }),
+    );
+    // 按调用次序演进：初始第 1 页（total 13）→ 翻到第 2 页（孤条）→ 删除后按旧页码
+    // 重拉返回空（total 12，第 2 页已不存在）→ 页码校正回第 1 页重拉。
+    apiMocks.listKnowledgePage
+      .mockResolvedValueOnce(makePage(pageOne, 13))
+      .mockResolvedValueOnce(makePage([makeKnowledge({ id: 13, title: "末页孤条" })], 13))
+      .mockResolvedValueOnce({ items: [], total: 12 })
+      .mockResolvedValue(makePage(pageOne, 12));
+    renderPage();
+
+    expect(await screen.findByText("条目-1")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByTitle("2")[0]);
+    expect(await screen.findByText("末页孤条")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("删除"));
+    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
+
+    // 回到第 1 页并按正确页码重拉；条目与分页控件都在。
+    await waitFor(() => {
+      expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
+        { q: "", category: "", tag: "" },
+        1,
+        12,
+      );
+    });
+    expect(await screen.findByText("条目-1")).toBeInTheDocument();
+    // 回到的是有数据的页：空态不出现（hideOnSinglePage 下单页时翻页条本就隐藏，
+    // 关键是用户不再被困在删空的页码上）。
+    expect(screen.queryByText(/知识库还是空的/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/没有符合筛选条件的条目/)).not.toBeInTheDocument();
+  });
 });

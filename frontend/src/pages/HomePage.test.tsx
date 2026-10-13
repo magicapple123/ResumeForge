@@ -8,6 +8,10 @@ const apiMocks = vi.hoisted(() => ({ getStats: vi.fn(), searchAll: vi.fn() }));
 
 vi.mock("../api/search", () => apiMocks);
 
+const profileApiMocks = vi.hoisted(() => ({ getProfile: vi.fn() }));
+
+vi.mock("../api/profile", () => profileApiMocks);
+
 const reminderApiMocks = vi.hoisted(() => ({
   listUpcomingReminders: vi.fn(),
   // 近期提醒卡内嵌了紧凑月历（E11），它会自拉 listReminders。
@@ -48,6 +52,44 @@ const EMPTY_STATS: typeof STATS = {
   resume_with_job_count: 0,
 };
 
+// 「第一份交付」用的资料基线：关键字段全空（接口返回的真实形态是空串 + 空数组）。
+const EMPTY_PROFILE = {
+  id: 1,
+  photo: "",
+  name: "",
+  gender: "",
+  birth_year: "",
+  phone: "",
+  email: "",
+  city: "",
+  target_city: "",
+  job_intent: "",
+  personal_website: "",
+  github: "",
+  summary: "",
+  wechat: "",
+  birth_date: "",
+  id_type: "",
+  id_number: "",
+  country_region: "",
+  native_place: "",
+  political_status: "",
+  phone_country_code: "+86",
+  family_info: "",
+  expected_salary: "",
+  qq: "",
+  advisor: "",
+  research_direction: "",
+  preferred_industry: "",
+  section_order: [],
+  educations: [],
+  experiences: [],
+  campus_experiences: [],
+  projects: [],
+  skills: [],
+  awards: [],
+};
+
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -59,6 +101,7 @@ function renderPage() {
 beforeEach(() => {
   apiMocks.getStats.mockReset().mockResolvedValue(STATS);
   apiMocks.searchAll.mockReset().mockResolvedValue({ jobs: [], resumes: [], more: [] });
+  profileApiMocks.getProfile.mockReset().mockResolvedValue(EMPTY_PROFILE);
   reminderApiMocks.listUpcomingReminders.mockReset().mockResolvedValue([]);
   reminderApiMocks.listReminders.mockReset().mockResolvedValue([]);
   settingsApiMocks.getReminderPopupSetting.mockReset().mockResolvedValue({ enabled: false });
@@ -104,6 +147,33 @@ describe("HomePage", () => {
     renderPage();
     await screen.findByText("岗位广场");
     expect(screen.queryByText("从零到第一份可交付简历")).toBeNull();
+  });
+
+  it("关键字段补全后资料步骤显示已完成（基于 /api/profile 真实字段，非接口外数据）", async () => {
+    apiMocks.getStats.mockResolvedValue(EMPTY_STATS);
+    profileApiMocks.getProfile.mockResolvedValue({
+      ...EMPTY_PROFILE,
+      name: "张三",
+      phone: "13800000000",
+    });
+    renderPage();
+
+    expect(await screen.findByText("从零到第一份可交付简历")).toBeInTheDocument();
+    const factsTitle = screen.getByText("准备事实");
+    expect(factsTitle.parentElement?.textContent).toContain("已完成");
+  });
+
+  it("加载失败与空数据可区分：失败态有横幅与重试入口，重试会重新拉取", async () => {
+    apiMocks.getStats.mockRejectedValue(new Error("后端没起来"));
+    renderPage();
+
+    expect(await screen.findByText(/首页数据加载失败：后端没起来/)).toBeInTheDocument();
+    expect(screen.queryByText("从零到第一份可交付简历")).toBeNull();
+    expect(apiMocks.getStats).toHaveBeenCalledTimes(1);
+
+    // antd 按钮对两字标签会插入空格（"重 试"），匹配时容忍空白。
+    fireEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
+    await waitFor(() => expect(apiMocks.getStats).toHaveBeenCalledTimes(2));
   });
 
   it("renders grouped more-results that navigate by hit path", async () => {

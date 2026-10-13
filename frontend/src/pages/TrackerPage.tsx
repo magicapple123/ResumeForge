@@ -84,7 +84,23 @@ export default function TrackerPage() {
   );
   // 漏斗与统计字段走专用统计端点（P1-2）：不再为拉统计整表取回，
   // 记录数上万后页面开销从"全量 items"降到"几十个数字"。
-  const { data: stats } = useApi(() => listTrackStats({ status, keyword }), [status, keyword]);
+  // jobId（PR-13）：与列表同一份筛选——岗位深链时漏斗/导出不再"看得到的全是别的岗位"。
+  // reload 一并暴露：新增/导入/删除之后列表与统计要一起失效刷新，否则卡片变了
+  // 漏斗数字还停在旧值，直到下次筛选变化才追上。
+  const {
+    data: stats,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+  } = useApi(
+    () => listTrackStats({ status, keyword, jobId: jobId ?? undefined }),
+    [status, keyword, jobId],
+  );
+  // 一次 mutation 后两边一起刷新；Promise.all 让两个请求并发跑。
+  const reloadAll = useCallback(
+    () => Promise.all([reload(), reloadStats()]),
+    [reload, reloadStats],
+  );
 
   // 筛选条件变化时回第 1 页（渲染期守卫式调整，Compiler 规范）；深链 job_id 也算筛选。
   const filterKey = `${status}|${keyword}|${jobId ?? ""}`;
@@ -158,7 +174,7 @@ export default function TrackerPage() {
     try {
       await deleteTrack(track.id);
       message.success("已移入回收站，可在「回收站」里恢复");
-      await reload();
+      await reloadAll();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "删除失败");
     }
@@ -166,7 +182,12 @@ export default function TrackerPage() {
 
   const doExport = async (format: "csv" | "json") => {
     try {
-      const { blob, filename } = await exportTracks(format, { status, keyword });
+      // 深链岗位时导出同一份口径（PR-13）：只导出该岗位的进度。
+      const { blob, filename } = await exportTracks(format, {
+        status,
+        keyword,
+        jobId: jobId ?? undefined,
+      });
       downloadBlob(blob, filename);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "导出失败");
@@ -220,6 +241,9 @@ export default function TrackerPage() {
       </div>
 
       <div className="tracker-summary">
+        {/* 统计是独立请求（P1-2）：加载/失败要有自己的状态，不能默默拿 0 冒充真值。 */}
+        {statsLoading && <Typography.Text type="secondary">统计加载中…</Typography.Text>}
+        {statsError && <Typography.Text type="danger">统计加载失败：{statsError}</Typography.Text>}
         <Statistic title="总数" value={totalCount} />
         <Statistic
           title="进行中"
@@ -358,12 +382,12 @@ export default function TrackerPage() {
           setFormOpen(false);
           setEditing(null);
         }}
-        onSaved={() => void reload()}
+        onSaved={() => void reloadAll()}
       />
       <TrackImportModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
-        onImported={() => void reload()}
+        onImported={() => void reloadAll()}
       />
 
       <Modal

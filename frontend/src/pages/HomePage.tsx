@@ -5,10 +5,11 @@ import {
   SendOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Alert, Card, Space, Typography } from "antd";
+import { Alert, Button, Card, Space, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listUpcomingReminders } from "../api/reminders";
+import { getProfile } from "../api/profile";
 import { getStats } from "../api/search";
 import { getReminderPopupSetting } from "../api/settings";
 import { useApi } from "../hooks/useApi";
@@ -30,9 +31,15 @@ import { StatsCards } from "./home/StatsCards";
 let reminderPopupShownThisSession = false;
 
 export default function HomePage() {
-  const { data: stats, loading, error: statsError } = useApi(getStats);
-  // 「第一份交付」进度：复用上面已取的 stats，不新增请求。全部完成后面板消失。
-  const { stages: activationStages, allDone: activationAllDone } = useActivationProgress(stats);
+  const { data: stats, loading, error: statsError, reload: reloadStats } = useApi(getStats);
+  // 「第一份交付」进度需要资料关键字段（姓名/联系方式）这个事实：复用 getProfile，
+  // 不新增接口。profile 加载失败不阻断面板——阶段判定退回台账/简历计数。
+  const { data: profile, error: profileError, reload: reloadProfile } = useApi(getProfile);
+  // 全部完成后面板消失。
+  const { stages: activationStages, allDone: activationAllDone } = useActivationProgress(
+    stats,
+    profile,
+  );
   const { data: upcomingReminders, loading: remindersLoading } = useApi(
     () => listUpcomingReminders(8),
     [],
@@ -84,10 +91,27 @@ export default function HomePage() {
       : null,
   ].filter((item) => item !== null);
 
+  // 加载失败 ≠ 真的为空：失败要有横幅 + 重试入口，而不是让面板沉默地消失。
+  const homeLoadError = statsError || profileError;
+  const retryHomeData = () => {
+    if (statsError) void reloadStats();
+    if (profileError) void reloadProfile();
+  };
+
   return (
     <div>
-      {statsError && (
-        <Alert type="error" showIcon title={statsError} style={{ marginBottom: 16 }} />
+      {homeLoadError && (
+        <Alert
+          type="error"
+          showIcon
+          title={`首页数据加载失败：${homeLoadError}`}
+          action={
+            <Button size="small" onClick={retryHomeData}>
+              重试
+            </Button>
+          }
+          style={{ marginBottom: 16 }}
+        />
       )}
 
       {stats && !activationAllDone && <FirstDeliveryPanel stages={activationStages} />}

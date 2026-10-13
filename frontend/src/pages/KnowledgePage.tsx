@@ -112,13 +112,21 @@ export default function KnowledgePage() {
     setLoading(true);
     const result = await fetchEntries();
     if (result) {
+      // 末页删光校正（PR-14）：当前页已经没有任何条目、但库里还有数据，说明
+      // 停在了一个已不存在的页码上——回退到最后一个有数据的页（setPage 会触发
+      // fetchEntries 重建 → 按正确页码自动重拉），分页控件不消失、用户不被困住。
+      const maxPage = Math.max(1, Math.ceil(result.total / KNOWLEDGE_PAGE_SIZE));
+      if (result.items.length === 0 && result.total > 0 && page > maxPage) {
+        setPage(maxPage);
+        return;
+      }
       setEntries(result.items);
       setTotal(result.total);
       setCategories(result.categories);
       setTags(result.tags);
     }
     setLoading(false);
-  }, [fetchEntries]);
+  }, [fetchEntries, page]);
 
   // 筛选条件变化时回第 1 页（渲染期守卫式调整，Compiler 规范）。
   const filterKey = `${keyword}|${category}|${tag}`;
@@ -173,17 +181,19 @@ export default function KnowledgePage() {
     }
   };
 
-  /** 批量删除：一次请求删完（软删），成功后清空选择并重拉当前页。 */
+  /** 批量删除：一次请求删完（软删）。**失败时保留选择**——悄悄清掉选中会让用户
+   *  以为删成功了，留着选择可以直接重试（PR-14）。 */
   const removeSelected = async () => {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     try {
       const { deleted } = await batchDeleteKnowledge(ids);
       message.success(`已删除 ${deleted} 条知识，可在「回收站」里恢复`);
+      batch.exitSelecting();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "批量删除失败，请重试");
+      return;
     }
-    batch.exitSelecting();
     await load();
   };
 
