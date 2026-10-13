@@ -156,19 +156,11 @@ _EXEMPTIONS: dict[str, Exemption] = {
     # 行为已被各自批次的新增测试钉住；立即拆分会把「拆分」与「本会话行为修改」
     # 混在同一批，风险高。拆分留待专门批次（逐文件独立方案），到期不续期即红。
     # （tracker.py 与 ApplyRecordsPanel.tsx 两条豁免已于专门拆分批执行并删除：
-    #   tracker 拆出 tracker_query/tracker_csv，ApplyRecordsPanel 拆出展示子组件。）
-    "backend/app/services/datasets.py": Exemption(
-        "PR-02/03 数据集身份贯穿 +549 行；行为已钉，拆分留待专门批次",
-        _PR18_MULTI_PR_GROWTH,
-    ),
-    "backend/app/services/resume/resume_generator.py": Exemption(
-        "PR-07/08 硬 deadline/取消/用量汇总后 538 行；同上，专门批次拆分",
-        _PR18_MULTI_PR_GROWTH,
-    ),
-    "backend/app/services/resume/resume_risk.py": Exemption(
-        "PR-11 隐私最小化/降级契约/查重预算后 665 行；同上，专门批次拆分",
-        _PR18_MULTI_PR_GROWTH,
-    ),
+    #   tracker 拆出 tracker_query/tracker_csv，ApplyRecordsPanel 拆出展示子组件。
+    #   datasets.py / resume_generator.py / resume_risk.py 三条豁免也已于专门
+    #   拆分批执行并删除：datasets 拆出 datasets_admin，resume_generator 拆出
+    #   resume_generator_prompts，resume_risk 拆出 resume_risk_rules 与
+    #   resume_risk_outbound——均为纯搬迁，monkeypatch 落点留在原模块。）
 }
 
 # scripts/（*.py，预算 800）的豁免清单：CLI/工具脚本的结构性长度。
