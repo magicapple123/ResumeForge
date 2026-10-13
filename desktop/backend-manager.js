@@ -455,7 +455,14 @@ class BackendManager {
       // Log IO must never take the shell down (same discipline as the shell's
       // own logLine): a failed flush on a removed/locked file is swallowed.
       stream.on("error", () => {});
-      stream.end();
+      if (stream.pending) {
+        // Still opening: destroy cancels the open. end() would wait for the
+        // pending open and race a temp-dir cleanup (post-test ENOENT under
+        // node --test).
+        stream.destroy();
+      } else {
+        stream.end();
+      }
     }
   }
 }
