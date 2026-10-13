@@ -403,32 +403,50 @@ def _rebuild_archive(archive: Path, destination: Path, replacements: dict[str, b
 
 
 def test_export_carries_user_files_and_restores_them(db_session, tmp_path):
-    """备份包要带上"我的文件"（user_files/），恢复时原样落回目标库同目录——
-    这些文件是用户主动上传的内容，此前不在包里，换机器后就全丢了。"""
+    """备份包带上"我的文件"（user_files/），恢复时原样落回目标库同目录——
+    这些文件是用户主动上传的内容，此前不在包里，换机器后就全丢了。
+
+    PR-15 起装包**按库内容收集引用**：走真实的 ``save_from_bytes`` 造出
+    "DB 行 + 磁盘副本"，包里只有被引用的文件；没被任何库引用的文件不进包
+    （那是跨数据集隐私边界，由 test_backup_asset_manifest.py 单独钉住）。"""
     import shutil
 
+    from app.services import user_files as user_files_service
     from app.services.data_backup.import_archive import restore_user_files
 
     user_dir = database_path(engine).parent / "user_files"
     # 同 worker 的前序用例可能留下别的文件：先清空再种 canary，计数断言才稳定。
     shutil.rmtree(user_dir, ignore_errors=True)
-    user_dir.mkdir(parents=True, exist_ok=True)
+    contents = {b"%PDF-1.4 canary", b"\x89PNG canary"}
     try:
-        (user_dir / "resume-attachment.pdf").write_bytes(b"%PDF-1.4 canary")
-        (user_dir / "photo.png").write_bytes(b"\x89PNG canary")
+        user_files_service.save_from_bytes(
+            db_session,
+            b"%PDF-1.4 canary",
+            original_name="resume-attachment.pdf",
+            mime="application/pdf",
+            source_type="material",
+            source_ref="material:1",
+        )
+        user_files_service.save_from_bytes(
+            db_session,
+            b"\x89PNG canary",
+            original_name="photo.png",
+            mime="image/png",
+            source_type="photo",
+            source_ref="profile:1",
+        )
 
         archive_path = create_backup_archive(engine, tmp_path)
         with zipfile.ZipFile(archive_path) as archive:
             names = archive.namelist()
-        assert "user_files/resume-attachment.pdf" in names
-        assert "user_files/photo.png" in names
+        packed = [name for name in names if name.startswith("user_files/")]
+        assert len(packed) == 2
 
-        # 恢复到"另一台机器"的目标目录：逐个落回、字节数一致。
+        # 恢复到"另一台机器"的目标目录：逐个落回、字节内容一致（落盘名带指纹前缀）。
         target = tmp_path / "restored" / "user_files"
         restored = restore_user_files(archive_path, target)
         assert restored == 2
-        assert (target / "resume-attachment.pdf").read_bytes() == b"%PDF-1.4 canary"
-        assert (target / "photo.png").read_bytes() == b"\x89PNG canary"
+        assert {path.read_bytes() for path in target.iterdir() if path.is_file()} == contents
 
         # 再恢复一次：同名不覆盖（内容指纹命名，同名即同内容）。
         assert restore_user_files(archive_path, target) == 0

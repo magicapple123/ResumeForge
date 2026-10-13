@@ -13,6 +13,8 @@
 - **标记与轮转按数据集隔离**：快照与标记放在 ``auto-backups/<库文件名>/`` 子目录，
   同目录的 A/B 两个数据集各保各的份数、各算各的节奏；历史版本留在旧布局
   （``auto-backups/`` 根）里的快照**只读不删**——迁移期不清空用户既有备份；
+- **轮转走可恢复途径**（PR-15 统一口径）：被淘汰的好快照移入 ``.trash``（只留最近
+  几份），不直接 unlink；**校验失败的候选**是例外——它从未有效，直接删除并记录；
 - 与手动导出互不影响：不进 ``exports/`` 与 ``restore/``，启动清理不会碰它。
 """
 
@@ -29,7 +31,7 @@ from sqlalchemy import Engine
 
 from ...config import Settings, get_settings
 from ...database_migrations import backup_sqlite_database
-from .paths import database_path
+from .paths import BACKUP_TRASH_DIRNAME, database_path
 
 logger = logging.getLogger(__name__)
 
@@ -136,9 +138,12 @@ def snapshot_is_valid(path: Path, source: Engine) -> bool:
 
 
 def _rotate(directory: Path, keep: int) -> None:
-    """按修改时间只保留最新 ``keep`` 份快照；失败不抛（下轮还会再轮转）。
+    """按修改时间只保留最新 ``keep`` 份快照；被淘汰的移入 ``.trash``（可恢复）。
 
-    只清理**本数据集子目录**：旧布局（根目录）里的历史快照只读不删。
+    只清理**本数据集子目录**：旧布局（根目录）里的历史快照只读不删。被淘汰的
+    快照是**曾经验证过的有效备份**，直接 unlink 与手动备份的"删除 = 移入
+    ``.trash``"语义不一致（PR-15 审计项）——统一改为可恢复途径；``.trash`` 只保留
+    最近 :data:`_TRASH_KEEP` 份，防止"可恢复"变成无限膨胀。
     """
     try:
         snapshots = sorted(
@@ -149,12 +154,53 @@ def _rotate(directory: Path, keep: int) -> None:
     except OSError:
         logger.warning("自动备份轮转失败：目录不可读 dir=%s", directory, exc_info=True)
         return
-    for stale in snapshots[max(0, keep):]:
+    for stale in snapshots[max(0, keep) :]:
+        _trash_snapshot(directory, stale)
+
+
+# ``.trash`` 里最多保留的快照份数：轮转本身按 keep 兜底，trash 只是"后悔药"，
+# 留最近几份足够覆盖"刚删完就后悔"的窗口。
+_TRASH_KEEP = 5
+
+
+def _trash_snapshot(directory: Path, stale: Path) -> None:
+    """把一份被轮转的快照移入 ``.trash``；移不动就**留着原地**，绝不就地删除。"""
+    trash_dir = directory / BACKUP_TRASH_DIRNAME
+    try:
+        trash_dir.mkdir(parents=True, exist_ok=True)
+        destination = trash_dir / stale.name
+        if destination.exists():
+            destination = trash_dir / f"{stale.stem}-{time.strftime('%Y%m%d-%H%M%S')}{stale.suffix}"
+        stale.replace(destination)
+        logger.info("自动备份轮转：快照移入可恢复 trash path=%s -> %s", stale, destination)
+        _prune_trash(trash_dir)
+    except OSError:
+        # 同目录内的移动几乎不会失败；真失败时保留原文件（多占点磁盘好过丢备份），
+        # 下一轮轮转会再试。
+        logger.warning(
+            "自动备份轮转：快照移入 trash 失败，已保留原文件 path=%s", stale, exc_info=True
+        )
+
+
+def _prune_trash(trash_dir: Path) -> None:
+    """``.trash`` 只留最近 ``_TRASH_KEEP`` 份：更早的清除，避免 trash 无限膨胀。
+
+    这里是唯一允许对"曾经有效"的快照做永久删除的地方——它们已经先经过"移入
+    trash"这一步，且数量上限是明确的、写进文档的保留策略。
+    """
+    try:
+        trashed = sorted(
+            (item for item in trash_dir.glob("*.db") if item.is_file()),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return
+    for ancient in trashed[max(0, _TRASH_KEEP) :]:
         try:
-            stale.unlink()
-            logger.info("自动备份轮转删除最旧快照 path=%s", stale)
+            ancient.unlink(missing_ok=True)
         except OSError:
-            logger.warning("自动备份轮转删除失败 path=%s", stale, exc_info=True)
+            logger.warning("自动备份 trash 清理失败 path=%s", ancient, exc_info=True)
 
 
 def run_auto_backup_if_due(
@@ -193,6 +239,9 @@ def run_auto_backup_if_due(
             snapshot = candidate
         elif candidate is not None:
             error_text = "快照校验未通过"
+            # 无效候选**直接删除**是刻意的：它刚生成、从未有效，里面没有任何用户此前的
+            # 状态可恢复；把它放进"可恢复 trash"只会让人误以为那是一份能用的备份。
+            # 与轮转不同——被轮转淘汰的是**曾经验证过**的好快照，那才走 ``.trash``。
             try:
                 candidate.unlink()
             except OSError:

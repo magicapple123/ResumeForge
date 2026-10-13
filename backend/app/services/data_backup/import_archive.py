@@ -18,6 +18,7 @@ from typing import Any
 from sqlalchemy import Engine
 
 from ...database_migrations import _APPLICATION_TABLES, run_database_migrations
+from .asset_manifest import ASSET_MANIFEST_VERSION
 from .manifest import _revision_chain, _table_counts
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME,
@@ -215,6 +216,17 @@ def _read_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
     # 应用按未配置处理，由用户重填；不认识这个选项的老版本会在上面的格式校验处拒收。
     if manifest.get("api_key_included") not in (True, False):
         raise BackupError("备份包的元信息未声明密钥状态，为安全起见已拒绝恢复")
+    # 资产清单（PR-15）fail-closed：段存在就必须是当前代码认识的版本。没有这一段的
+    # 旧包走"遍历扁平成员"的老路径照常导入；版本号对不上（来自更新/更老版本）时
+    # 明确拒收，不给"按自己读不懂的形状安静误读附件"留门。
+    asset_section = manifest.get("asset_manifest")
+    if asset_section is not None and (
+        not isinstance(asset_section, dict)
+        or asset_section.get("manifest_version") != ASSET_MANIFEST_VERSION
+    ):
+        raise BackupError(
+            "备份包的资产清单版本不受支持，可能来自其它版本的 ResumeForge；请先升级应用再导入"
+        )
     return manifest
 
 

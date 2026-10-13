@@ -47,19 +47,36 @@ def test_scheduler_wakes_periodically(monkeypatch):
 
 
 def test_scheduler_check_binds_the_current_dataset_identity(monkeypatch):
-    """每轮检查取的是"当前"身份的引擎，不是启动时的旧引用。"""
+    """每轮检查取的是"当前"身份的引擎，不是启动时的旧引用；租约是真正的逻辑租约。"""
+    from types import SimpleNamespace as NS
+
     seen: list[object] = []
     engine = object()
-    identity = SimpleNamespace(engine=engine)
+    identity = SimpleNamespace(dataset_id="main", engine=engine)
+    released: list[bool] = []
+    lease = NS(identity=identity, release=lambda: released.append(True))
 
-    monkeypatch.setattr(
-        "app.runtime.dataset_scope.current_identity", lambda: identity
-    )
-    monkeypatch.setattr(
-        scheduler_module, "run_auto_backup_if_due", lambda bind: seen.append(bind)
-    )
+    monkeypatch.setattr("app.runtime.dataset_scope.current_identity", lambda: identity)
+    monkeypatch.setattr("app.runtime.dataset_scope.acquire_lease", lambda owner: lease)
+    monkeypatch.setattr(scheduler_module, "run_auto_backup_if_due", lambda bind: seen.append(bind))
     scheduler_module.run_for_current_dataset()
     assert seen == [engine]
+    assert released == [True], "检查结束后必须归还租约"
+
+
+def test_scheduler_skips_the_round_when_a_switch_is_in_progress(monkeypatch):
+    """切换进行中（acquire_lease 失败）：本轮备份跳过，绝不在换库窗口里拍快照。"""
+    from app.runtime.dataset_scope import DatasetScopeError
+
+    seen: list[object] = []
+
+    def _raise(owner):
+        raise DatasetScopeError("数据集正在切换中，请稍后再启动该任务")
+
+    monkeypatch.setattr("app.runtime.dataset_scope.acquire_lease", _raise)
+    monkeypatch.setattr(scheduler_module, "run_auto_backup_if_due", lambda bind: seen.append(bind))
+    scheduler_module.run_for_current_dataset()
+    assert seen == []
 
 
 def test_scheduler_stop_is_idempotent(monkeypatch):

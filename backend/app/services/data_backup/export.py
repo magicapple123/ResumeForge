@@ -1,4 +1,10 @@
-"""备份导出：生成压缩包（职责④）。"""
+"""备份导出：生成压缩包（职责④）。
+
+附件（``user_files``/``referral_images``）**按数据库内容收集引用后装包**（PR-15）：
+不再整目录拷贝——多份导入数据集共用同一个磁盘目录，整目录装包会把别的数据集的
+文件一起带走（跨数据集隐私泄漏）。每份库的引用清单与逐文件 SHA-256 记在包内
+``asset_manifest`` 段（见 ``asset_manifest.py``），恢复后逐文件复核。
+"""
 
 from __future__ import annotations
 
@@ -7,6 +13,7 @@ import secrets
 import sqlite3
 import zipfile
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -14,6 +21,7 @@ from sqlalchemy import Engine
 
 from ...database_migrations import backup_sqlite_database, snapshot_sqlite_file
 from .api_keys import _assert_no_plaintext_key, _plaintext_api_keys_in, _strip_api_keys
+from .asset_manifest import ASSET_CATEGORIES, build_asset_manifest
 from .manifest import build_manifest
 from .paths import (
     ARCHIVE_REFERRAL_IMAGES_PREFIX,
@@ -23,6 +31,7 @@ from .paths import (
     BackupError,
     ExtraDatabase,
     database_path,
+    dataset_asset_prefix,
 )
 
 
@@ -43,7 +52,7 @@ def create_backup_archive(
     **格式号是要紧的**（见 ``build_manifest``）：含密钥标 3、带其余数据集标 2，都是让
     老版本遇到读不懂的包时明确拒收（"请先升级应用再导入"），而不是安静地误读。
     """
-    database_path(bind)  # 内存库等无文件情况在此给出明确错误
+    active_parent = database_path(bind).parent  # 内存库等无文件情况在此给出明确错误
     staging_dir.mkdir(parents=True, exist_ok=True)
 
     snapshot = backup_sqlite_database(bind, output_dir=staging_dir)
@@ -72,26 +81,47 @@ def create_backup_archive(
             if not include_api_keys:
                 secrets_to_find.extend(_plaintext_api_keys_in(copy))
                 _strip_api_keys(copy)
+            # 资产清单**按这份库自己的内容**收集，引用根是源库所在目录（不是快照副本
+            # 的位置）：多份数据集共享同一磁盘目录时，只有被这份库登记过的文件才进包。
+            item = replace(item, asset_manifest=build_asset_manifest(copy, item.source.parent))
             extras.append((item, copy))
         if not include_api_keys:
             _assert_no_plaintext_key(snapshot, secrets_to_find)
             for _, copy in extras:
                 _assert_no_plaintext_key(copy, secrets_to_find)
 
+        active_asset_manifest = build_asset_manifest(snapshot, active_parent)
         manifest = build_manifest(
             bind,
             datasets=[item.manifest_entry(copy.stat().st_size) for item, copy in extras],
             api_key_included=include_api_keys,
+            asset_manifest=active_asset_manifest,
         )
         with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.write(snapshot, DATABASE_MEMBER)
-            _write_referral_images(archive, database_path(bind).parent)
-            _write_user_files(archive, database_path(bind).parent)
+            _write_assets(
+                archive,
+                active_parent,
+                active_asset_manifest,
+                {
+                    "user_files": ARCHIVE_USER_FILES_PREFIX,
+                    "referral_images": ARCHIVE_REFERRAL_IMAGES_PREFIX,
+                },
+            )
             for item, copy in extras:
                 archive.write(copy, item.member)
                 archive.writestr(
                     item.metadata_member,
                     json.dumps({"name": item.name, **item.metadata}, ensure_ascii=False, indent=2),
+                )
+                _write_assets(
+                    archive,
+                    item.source.parent,
+                    item.asset_manifest,
+                    {
+                        category: dataset_asset_prefix(item.dataset_id, category)
+                        for category in ASSET_CATEGORIES
+                    },
                 )
             archive.writestr(MANIFEST_MEMBER, json.dumps(manifest, ensure_ascii=False, indent=2))
     except (OSError, sqlite3.Error) as exc:
@@ -104,37 +134,23 @@ def create_backup_archive(
     return archive_path
 
 
-def _write_referral_images(archive: zipfile.ZipFile, database_parent: Path) -> int:
-    """把库同目录的内推备注图片装进备份包，返回装包的文件数。
+def _write_assets(
+    archive: zipfile.ZipFile,
+    assets_root: Path,
+    asset_manifest: dict | None,
+    prefixes: dict[str, str],
+) -> int:
+    """把清单声明且磁盘上确实存在的附件装进包里，返回装包的文件数。
 
-    这些图片是主库级磁盘资产（路径存在 referral 表里，内容此前不进包）——换机器
-    恢复后会整体丢失。目录不存在（从没传过内推图）就什么都不装；成员名统一为
-    ``referral_images/<文件名>``，manifest 格式不动，老版本读到多余成员会忽略，
-    而它们的清单校验只看主库成员与 manifest，不受影响。
+    只装清单里的文件：清单是按库内容收集的引用集合，因此目录里没被引用的文件
+    （包括**其他数据集**落在同一目录里的文件）天然不会进包。清单里声明了但磁盘
+    上已不存在的文件记在 ``<category>_missing`` 段随包走，恢复侧能如实告知用户。
     """
-    directory = database_parent / ARCHIVE_REFERRAL_IMAGES_PREFIX.rstrip("/")
-    if not directory.is_dir():
-        return 0
     written = 0
-    for image in sorted(directory.iterdir()):
-        if image.is_file():
-            archive.write(image, f"{ARCHIVE_REFERRAL_IMAGES_PREFIX}{image.name}")
-            written += 1
-    return written
-
-
-def _write_user_files(archive: zipfile.ZipFile, database_parent: Path) -> int:
-    """把库同目录的"我的文件"（用户上传内容的落盘副本）装进备份包，返回装包的文件数。
-
-    与内推图片同一模式：目录不存在（这个数据集从没存过用户文件）就什么都不装；
-    成员名统一 ``user_files/<文件名>``，manifest 格式不动，老版本读到多余成员会忽略。
-    """
-    directory = database_parent / ARCHIVE_USER_FILES_PREFIX.rstrip("/")
-    if not directory.is_dir():
-        return 0
-    written = 0
-    for item in sorted(directory.iterdir()):
-        if item.is_file():
-            archive.write(item, f"{ARCHIVE_USER_FILES_PREFIX}{item.name}")
-            written += 1
+    for category, prefix in prefixes.items():
+        for entry in (asset_manifest or {}).get(category) or []:
+            source = assets_root / category / entry["name"]
+            if source.is_file():
+                archive.write(source, f"{prefix}{entry['name']}")
+                written += 1
     return written

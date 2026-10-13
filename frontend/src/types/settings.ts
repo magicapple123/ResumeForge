@@ -241,7 +241,10 @@ export interface BackupStatusSnapshot {
 
 export interface BackupStatus {
   dataset_id: string;
-  /** 上次成功备份存在且当前没有连续失败——"受保护"的唯一定义。 */
+  /**
+   * 上次成功备份存在且当前没有连续失败——"受保护"的唯一定义。
+   * 范围仅指**数据库快照**（不含附件文件，也不含异地灾备），UI 文案需注明。
+   */
   protected: boolean;
   last_success: number | null;
   last_attempt: number | null;

@@ -5,9 +5,12 @@
 对**当前**数据集做一次到期检查；数据集切换后由 ``datasets.activate_dataset``
 调 ``trigger_check`` 立即唤醒一次（新数据集的备份节奏独立计算）。
 
-线程不绑定启动时的引擎——每轮通过 ``dataset_scope.current_identity()`` 取当前
-身份，切换数据集后自动跟着新库走；切换窗口内由 dataset_scope 的租约/互斥兜底。
+线程不绑定启动时的引擎——每轮通过 ``dataset_scope.acquire_lease("auto-backup")``
+取**真正的逻辑租约**再按租约身份跑（PR-15 审计项：此前只抓 identity、没取租约，
+切换/删除/恢复的并发全靠巧合）。切换持锁期间 ``acquire_lease`` 直接失败，本轮
+备份跳过；备份进行中持租约，切换的排空阶段会等到它归还——两个方向都互斥。
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,17 +22,28 @@ logger = logging.getLogger(__name__)
 
 
 def run_for_current_dataset() -> None:
-    """对当前活动数据集做一次到期检查（异常只记日志）。"""
+    """对当前活动数据集做一次到期检查（异常只记日志）。
+
+    先取租约再干活：取不到（数据集正在切换/恢复）就整轮跳过；取到了就用**租约
+    发布时刻**的引擎快照，配合 ``bound_context`` 让这轮日志带上 dataset_id。
+    """
     from ...runtime import dataset_scope  # 函数级导入避免模块加载期依赖 runtime 初始化
     from ...runtime.log_context import bound_context
 
     try:
-        identity = dataset_scope.current_identity()
-        # RF-20：调度线程常驻、不绑死单个数据集，每轮按当前身份绑定日志关联值，
-        # 让这一轮备份的日志行带上 dataset_id（task_id 对备份无意义，保持 "-"）。
-        # getattr 兜底：日志绑定是辅助，身份对象缺字段时也不能影响备份本身。
-        with bound_context(dataset_id=getattr(identity, "dataset_id", "-")):
-            run_auto_backup_if_due(identity.engine)
+        try:
+            lease = dataset_scope.acquire_lease("auto-backup")
+        except dataset_scope.DatasetScopeError:
+            logger.info("数据集正在切换中，本轮自动备份跳过")
+            return
+        try:
+            identity = lease.identity
+            # RF-20：调度线程常驻、不绑死单个数据集，每轮按租约身份绑定日志关联值
+            # （task_id 对备份无意义，保持 "-"）。
+            with bound_context(dataset_id=getattr(identity, "dataset_id", "-")):
+                run_auto_backup_if_due(identity.engine)
+        finally:
+            lease.release()
     except Exception:  # noqa: BLE001 - 调度线程绝不能把服务拖垮
         logger.warning("自动备份调度检查失败", exc_info=True)
 

@@ -56,6 +56,8 @@ describe("BackupStatusCard", () => {
     });
     expect(screen.getByText(/resume_forge-20261010-a\.db/)).toBeTruthy();
     expect(screen.getByText(/每 7 天自动快照一次/)).toBeTruthy();
+    // 「受保护」必须注明范围：仅数据库快照，不含附件（PR-15 审计项）。
+    expect(screen.getByText(/仅数据库快照，不含附件文件/)).toBeTruthy();
   });
 
   it("连续失败：显示保护中断与失败原因，不伪装成已保护", async () => {
