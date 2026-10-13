@@ -37,7 +37,8 @@ from ..schemas.tracker import (
     TrackUpdate,
 )
 from . import trash
-from .resume.resume_delivery import freeze_delivery
+from .csv_io import safe_csv_cell
+from .resume.resume_delivery import freeze_delivery, list_track_deliveries
 from .track_events import record_status_change, write_source
 from .tracker_merge import (
     _apply_payload,
@@ -63,14 +64,20 @@ def track_or_none(db: Session, track_id: int) -> ApplicationTrack | None:
     return record
 
 
-def _filtered_query(db: Session, *, status: str = "", keyword: str = "") -> Query[ApplicationTrack]:
-    """list_tracks 与 summarize **共用的过滤口径**：软删过滤 + 状态 + 关键词。
+def _filtered_query(
+    db: Session, *, status: str = "", keyword: str = "", job_id: int | None = None
+) -> Query[ApplicationTrack]:
+    """list / summarize / iter_tracks **共用的过滤口径**：软删过滤 + 状态 + 关键词 + 岗位。
 
     抽出来是为了让统计永远跟列表同一口径——两处各写一遍过滤条件，迟早会改漏一边。
+    ``job_id``（PR-13）：岗位深链时列表、统计与导出三处都按它过滤，否则会出现
+    "列表是一家公司的岗位，漏斗和下载却是全部岗位"的口径分裂。None 表示不过滤。
     """
     query = db.query(ApplicationTrack).filter(trash.live_only(ApplicationTrack))
     if status:
         query = query.filter(ApplicationTrack.status == status)
+    if job_id is not None:
+        query = query.filter(ApplicationTrack.job_id == job_id)
     target = (keyword or "").strip()
     if target:
         like = f"%{target}%"
@@ -103,9 +110,14 @@ def _stage_ordered(query: Query[ApplicationTrack]) -> Query[ApplicationTrack]:
 
 
 def list_tracks(
-    db: Session, *, status: str = "", keyword: str = "", limit: int | None = MAX_LIST_LIMIT
+    db: Session,
+    *,
+    status: str = "",
+    keyword: str = "",
+    job_id: int | None = None,
+    limit: int | None = MAX_LIST_LIMIT,
 ) -> list[ApplicationTrack]:
-    """按状态 / 关键词检索。
+    """按状态 / 关键词 / 岗位检索。
 
     默认排序刻意是"进行中的排在前面、越靠后的阶段越靠前"：用户打开这一页最想先看到的是
     还在推进的那几家，而不是三个月前就结束了的。排序已**下推 SQL**（2026-10-05 性能审查：
@@ -115,7 +127,7 @@ def list_tracks(
     不限量——**导出与助手工具必须传 None**：导出截断等于丢用户数据，助手工具自己
     有一层 limit 语义（见 tracker_tools），两层各管各的。
     """
-    query = _stage_ordered(_filtered_query(db, status=status, keyword=keyword))
+    query = _stage_ordered(_filtered_query(db, status=status, keyword=keyword, job_id=job_id))
     if limit is not None:
         query = query.limit(limit)
     return query.all()
@@ -137,11 +149,10 @@ def list_tracks_page(
     仍由旧端点随列表下发，本函数只负责行。
 
     ``job_id``（RF-11）：岗位详情深链过来的「该岗位的投递进度」过滤；None 表示
-    不过滤（不传该参数的行为与从前完全一致）。
+    不过滤（不传该参数的行为与从前完全一致）。过滤下推 ``_filtered_query``（PR-13），
+    与统计/导出共用同一份口径。
     """
-    base = _filtered_query(db, status=status, keyword=keyword)
-    if job_id is not None:
-        base = base.filter(ApplicationTrack.job_id == job_id)
+    base = _filtered_query(db, status=status, keyword=keyword, job_id=job_id)
     total = base.count()
     rows = _stage_ordered(base).offset((page - 1) * page_size).limit(page_size).all()
     return rows, total
@@ -159,14 +170,18 @@ _STATUS_ORDER = {
 }
 
 
-def summarize(db: Session, *, status: str = "", keyword: str = "") -> dict[str, Any]:
+def summarize(
+    db: Session, *, status: str = "", keyword: str = "", job_id: int | None = None
+) -> dict[str, Any]:
     """列表接口的统计部分：漏斗各阶段计数 + 几个一眼要看到的数字。
 
     从 **SQL 聚合**取数，过滤口径与列表共用（``_filtered_query``）：列表行数被
     :data:`MAX_LIST_LIMIT` 截断后，统计仍要反映筛选条件下的**全部**记录，而不是
     只数返回的那一页。状态计数沿用旧行为：目录之外的状态也会出现在 ``status_counts``。
+    ``job_id``（PR-13）：岗位深链时统计与列表同口径，不再出现"列表是一家公司、
+    漏斗是全部岗位"的分裂。
     """
-    base = _filtered_query(db, status=status, keyword=keyword)
+    base = _filtered_query(db, status=status, keyword=keyword, job_id=job_id)
     rows = (
         base.with_entities(ApplicationTrack.status, func.count(ApplicationTrack.id))
         .group_by(ApplicationTrack.status)
@@ -200,6 +215,9 @@ def _freeze_linked_resume(db: Session, record: ApplicationTrack, *, source: str)
     只在"这份快照还不存在"的意义上不做去重：表单每次把 ``resume_id`` **从无到有**地
     关联上来才算一次投递血缘，同一份记录反复保存（改备注、推进状态）不产生新快照。
     简历已删除/不存在时静默跳过——进度记录本身照常保存。
+
+    目的地快照（PR-09）：公司/岗位取**进度记录本身**（用户填写的实际投递目标），
+    不从原简历反推——通用简历（无公司）投给 A 公司时，快照目的地就是 A 公司。
     """
     if record.resume_id is None:
         return
@@ -208,34 +226,50 @@ def _freeze_linked_resume(db: Session, record: ApplicationTrack, *, source: str)
         return
     # 标题快照与外键一起落：简历被删后仍能回答"当时投的是哪一版"。
     record.resume_title = resume.title or ""
-    freeze_delivery(db, record=resume, track_id=record.id, source=source)
+    freeze_delivery(
+        db,
+        record=resume,
+        track_id=record.id,
+        source=source,
+        company=record.company or "",
+        job_title=record.title or "",
+    )
 
 
 def create_track(
     db: Session, payload: TrackCreate, *, source: str = SOURCE_MANUAL
 ) -> ApplicationTrack:
-    """新增一条求职进度记录。"""
+    """新增一条求职进度记录（PR-10 原子事务）。
+
+    record + 首个状态事件 + 投递快照在**同一个事务**里：先 flush 拿到 ``record.id``
+    （事件与快照的外键都要用它），最后一个 commit 一次性发布。任一步失败整体
+    rollback——数据库里不会留下"有记录没事件"或"有记录没快照"的半成品，用户重试
+    也不会撞唯一约束。
+    """
     record = ApplicationTrack(source=source)
     _apply_payload(record, payload)
     db.add(record)
-    db.commit()
-    db.refresh(record)
-    # 首个状态事件（RF-18）：新建本身就是一次状态变化（"" → 初始状态）。
-    # 手动添加由用户亲手写入（confirmed），其他来源（助手等）走系统口径。
-    record_status_change(
-        db,
-        record,
-        from_status="",
-        to_status=payload.status,
-        status_date=payload.status_date,
-        source=write_source(manual=source == SOURCE_MANUAL),
-        user_confirmed=True,
-    )
-    db.commit()
-    if payload.resume_id is not None:
-        _freeze_linked_resume(db, record, source="track")
+    try:
+        # flush 只写事务缓冲、不提交：record.id 就绪，后面任何一步炸了都能整体回滚。
+        db.flush()
+        # 首个状态事件（RF-18）：新建本身就是一次状态变化（"" → 初始状态）。
+        # 手动添加由用户亲手写入（confirmed），其他来源（助手等）走系统口径。
+        record_status_change(
+            db,
+            record,
+            from_status="",
+            to_status=payload.status,
+            status_date=payload.status_date,
+            source=write_source(manual=source == SOURCE_MANUAL),
+            user_confirmed=True,
+        )
+        if payload.resume_id is not None:
+            _freeze_linked_resume(db, record, source="track")
         db.commit()
-        db.refresh(record)
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(record)
     return record
 
 
@@ -291,6 +325,7 @@ def record_applied(
     job_id: int | None = None,
     resume_id: int | None = None,
     resume_title: str = "",
+    attempt_key: str | None = None,
 ) -> None:
     """投递成功后落一条「已投递」。
 
@@ -300,7 +335,14 @@ def record_applied(
     ``resume_id`` / ``resume_title``（RF-17）：投递条目上记录了这次用的是哪份简历
     （``ApplyTaskItem.resume_id``）。新建进度记录时落关联与标题快照，并冻结一份
     ``source="apply"`` 的投递快照；已有记录仅在缺关联时补上（与 ``job_id`` 同一
-    口径），不重复冻结。
+    口径），**补上也冻结一份快照**（PR-09：补投同样是真实发生的投递动作，
+    不能因为记录先存在就丢证据）。
+
+    ``attempt_key``（PR-09 幂等键）：这次投递动作的天然 ID（如
+    ``apply_task_item:{id}``）。同键重放不重复冻结快照；不同条目对同一家公司的
+    真实第二次投递拿到不同的键——**不会被 company+title 合并吞掉**。
+
+    目的地快照（PR-09）：公司/岗位取实参（实际投递目标），不从原简历反推。
     """
     if not company.strip() or not title.strip():
         # 快照字段为空时无从合并，宁可不记也不要造一条"(空) · (空)"。
@@ -334,16 +376,42 @@ def record_applied(
         if resume_id is not None:
             resume = db.get(ResumeRecord, resume_id)
             if resume is not None:
-                freeze_delivery(db, record=resume, track_id=record.id, source="apply")
+                freeze_delivery(
+                    db,
+                    record=resume,
+                    track_id=record.id,
+                    source="apply",
+                    company=company,
+                    job_title=title,
+                    idempotency_key=attempt_key,
+                )
         return
     if not existing.applied_at:
         existing.applied_at = payload.applied_at
     if existing.job_id is None and job_id is not None:
         existing.job_id = job_id
+    linked_now = False
     if existing.resume_id is None and resume_id is not None:
         existing.resume_id = resume_id
         existing.resume_title = resume_title or existing.resume_title
+        linked_now = True
     # 状态交给 resolve_status：已经在面试的不会被这一次投递拉回「已投递」。
+    # 快照条件（PR-09）：补投（关联从无到有）是真实动作；带了 attempt_key 的调用
+    # （投递台条目）每条都是一次真实投递——同一键重放由 freeze_delivery 去重，
+    # 不同键的真实第二次投递不被 company+title 合并吞掉。都没带（旧的重复通知
+    # 路径）保持旧行为：不重复冻结。
+    if resume_id is not None and (linked_now or attempt_key is not None):
+        resume = db.get(ResumeRecord, resume_id)
+        if resume is not None:
+            freeze_delivery(
+                db,
+                record=resume,
+                track_id=existing.id,
+                source="apply",
+                company=company,
+                job_title=title,
+                idempotency_key=attempt_key,
+            )
 
 
 # ===== 导出 =====
@@ -388,6 +456,10 @@ def iter_csv_chunks(records) -> Iterator[str]:
     导出走 ``StreamingResponse``（2026-10-12 万级数据优化）：不再 fetchall 全量行
     拼一个几十 MB 的字符串，而是每写一行就 yield 一段。``records`` 是任意可迭代
     （通常是 :func:`iter_tracks` 的惰性行迭代器），BOM 与表头先行，行序即记录序。
+
+    单元格编码与 ``records_to_csv_text`` **同源**（PR-12）：都经过
+    :func:`csv_io.safe_csv_cell`——公式前缀（``=``/``+``/``-``/``@``/制表符等）
+    的 Excel 注入防护只实现一份，改一处两处生效。
     """
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -397,23 +469,27 @@ def iter_csv_chunks(records) -> Iterator[str]:
     for item in records:
         buffer.seek(0)
         buffer.truncate()
-        writer.writerow(export_row(item))
+        writer.writerow([safe_csv_cell(value) for value in export_row(item)])
         yield buffer.getvalue()
 
 
-def iter_tracks(db: Session, *, status: str = "", keyword: str = "") -> Iterator[ApplicationTrack]:
-    """按状态 / 关键词检索的**惰性**版本：排序与 :func:`list_tracks` 完全一致。
+def iter_tracks(
+    db: Session, *, status: str = "", keyword: str = "", job_id: int | None = None
+) -> Iterator[ApplicationTrack]:
+    """按状态 / 关键词 / 岗位检索的**惰性**版本：排序与 :func:`list_tracks` 完全一致。
 
     导出（``limit=None`` 全量）专用：``yield_per`` 让 DBAPI 按批取行，端点不再
     fetchall 把万级记录一次性拖进内存。非导出路径（列表、统计）不经过这里。
     """
-    query = _stage_ordered(_filtered_query(db, status=status, keyword=keyword))
+    query = _stage_ordered(_filtered_query(db, status=status, keyword=keyword, job_id=job_id))
     return iter(query.yield_per(200))
 
 
-def count_tracks(db: Session, *, status: str = "", keyword: str = "") -> int:
+def count_tracks(
+    db: Session, *, status: str = "", keyword: str = "", job_id: int | None = None
+) -> int:
     """当前筛选下的记录总数（排序无关）：导出文件名与流式读取各查一次，口径一致。"""
-    return int(_filtered_query(db, status=status, keyword=keyword).count())
+    return int(_filtered_query(db, status=status, keyword=keyword, job_id=job_id).count())
 
 
 def to_csv(records: list[ApplicationTrack]) -> str:
@@ -462,6 +538,7 @@ __all__ = [
     "export_rows",
     "iter_csv_chunks",
     "iter_tracks",
+    "list_track_deliveries",
     "list_tracks",
     "list_tracks_page",
     "plan_merges",

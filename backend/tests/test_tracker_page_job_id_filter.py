@@ -97,3 +97,39 @@ def test_tracks_page_without_job_id_unchanged_and_legacy_endpoint_untouched(clie
     # 旧列表端点零改动：不认识也不需要认识 job_id，仍返回全量。
     legacy = client.get("/api/tracker", params={"job_id": a_id}).json()
     assert legacy["total"] == 5
+
+
+# ===== PR-13：stats 与导出的 job_id 贯穿（口径与列表一致） =====
+
+
+def test_stats_endpoint_filters_by_job_id(client):
+    """岗位深链时漏斗统计必须与列表同口径：不再出现"列表是一家公司、漏斗是全部"。"""
+    a_id, _ = _make_tracks_for_jobs()
+
+    by_job = client.get("/api/tracker/stats", params={"job_id": a_id}).json()
+    assert by_job["total"] == 3
+    assert by_job["status_counts"]["interview"] == 1
+
+    # 不传 job_id：全量 5 条，行为与从前一致。
+    assert client.get("/api/tracker/stats").json()["total"] == 5
+    # 不存在的岗位：0，而不是混入全量。
+    assert client.get("/api/tracker/stats", params={"job_id": 999999}).json()["total"] == 0
+
+
+def test_export_endpoint_filters_by_job_id(client):
+    a_id, b_id = _make_tracks_for_jobs()
+
+    by_job = client.get("/api/tracker/export", params={"format": "json", "job_id": a_id})
+    payload = by_job.json()
+    assert payload["总数"] == 3
+    assert all(row["公司"].startswith("甲-") for row in payload["记录"])
+    assert not any(row["公司"].startswith("丙-") for row in payload["记录"])
+
+    # CSV 同口径：BOM + 表头 + 3 行数据。
+    csv_resp = client.get("/api/tracker/export", params={"format": "csv", "job_id": b_id})
+    body = csv_resp.content.decode("utf-8-sig")
+    data_lines = [line for line in body.splitlines() if line and not line.startswith("公司,")]
+    assert len(data_lines) == 1
+
+    # 不传 job_id：5 条全量，行为与从前一致。
+    assert client.get("/api/tracker/export", params={"format": "json"}).json()["总数"] == 5

@@ -4,9 +4,12 @@
 ``_shared`` 导入。
 """
 
+import json
 import logging
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session
 
@@ -15,6 +18,7 @@ from ...models.job import Job
 from ...models.resume import ResumeRecord
 from ...schemas.common import Page
 from ...schemas.resume import (
+    DeliveryDetail,
     DeliverySummary,
     ManualResumeRequest,
     ResumeBatchDeleteResult,
@@ -27,7 +31,11 @@ from ...schemas.resume import (
     ResumeTitleUpdate,
 )
 from ...services import trash
-from ...services.resume.resume_delivery import list_deliveries
+from ...services.resume.resume_delivery import (
+    get_delivery,
+    list_deliveries,
+    replay_delivery_export,
+)
 from ...services.resume.resume_record import build_manual_title
 from ._shared import _to_resume_out
 
@@ -253,6 +261,81 @@ def list_resume_deliveries(resume_id: int, db: Session = Depends(get_db)):
     if record is None or trash.is_deleted(record):
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
     return [DeliverySummary.model_validate(item) for item in list_deliveries(db, resume_id)]
+
+
+def _delivery_detail(item) -> DeliveryDetail:
+    """ORM 快照 → 详情响应：replayable 与 destination_recorded 是派生结论，不落库。"""
+    detail = DeliveryDetail.model_validate(item)
+    detail.replayable = bool(item.export_format) and bool(item.request_params)
+    detail.destination_recorded = bool(item.company) or bool(item.job_title)
+    return detail
+
+
+@router.get("/deliveries/{delivery_id}", response_model=DeliveryDetail)
+def get_delivery_detail(delivery_id: int, db: Session = Depends(get_db)):
+    """一条交付记录的详情（PR-09）：**不依赖原简历存活**的独立访问入口。
+
+    旧入口 ``/resumes/{id}/deliveries`` 要求原简历记录存活；而快照外键 SET NULL 后
+    数据库证据还在——删了简历却查不到证据是业务上的不可达。本端点按快照 id 直接
+    取，原简历/岗位/进度是否被删都不影响读取。旧快照缺新列时如实返回
+    ``request_params=None`` / ``destination_recorded=False``，前端标注「不可还原」。
+    """
+    item = get_delivery(db, delivery_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="交付记录不存在")
+    return _delivery_detail(item)
+
+
+@router.get("/deliveries/{delivery_id}/download")
+def download_delivery(delivery_id: int, db: Session = Depends(get_db)):
+    """从交付快照下载（PR-09）：原简历删除后产物仍可取，证据可达才有意义。
+
+    - ``export`` 快照：凭存档内容 + render_context + 实际生效的请求参数**重放导出**
+      （同内容同参数的确定性渲染；脱敏存档不再二次脱敏）。旧快照没有请求参数时
+      409「不可还原」——不假装能重放出同一份文件。
+    - ``apply``/``track`` 快照：没有导出产物，返回冻结的内容 JSON（当时那份简历正文）。
+    """
+    item = get_delivery(db, delivery_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="交付记录不存在")
+    if item.export_format:
+        try:
+            artifact = replay_delivery_export(item)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - 重放失败要给可解释的响应而不是 500 堆栈
+            raise HTTPException(status_code=409, detail=f"从存档重放导出失败：{exc}") from exc
+        return Response(
+            artifact.content,
+            media_type=artifact.media_type,
+            headers={
+                "Content-Disposition": (
+                    f"attachment; filename*=UTF-8''{quote(artifact.filename, safe='')}"
+                ),
+                "X-Content-Sha256": item.artifact_sha256 or item.content_sha256,
+                "X-Delivery-Replay": "true",
+            },
+        )
+    content = json.dumps(
+        {
+            "说明": "投递快照的内容存档（apply/track 路径没有导出产物，这是冻结的简历正文）",
+            "resume_title": item.resume_title,
+            "company": item.company,
+            "job_title": item.job_title,
+            "content": item.content,
+        },
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
+    filename = f"{item.resume_title or 'delivery'}-{item.id}.json"
+    return Response(
+        content,
+        media_type="application/json; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+            "X-Content-Sha256": item.source_content_sha256 or item.content_sha256,
+        },
+    )
 
 
 @router.delete("/{resume_id}", status_code=204)

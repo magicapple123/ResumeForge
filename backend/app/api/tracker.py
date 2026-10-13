@@ -21,6 +21,7 @@ from starlette.concurrency import run_in_threadpool
 from ..database import SessionLocal, get_db
 from ..models.tracker import STATUSES, ApplicationTrack
 from ..schemas.common import Page
+from ..schemas.resume import DeliverySummary
 from ..schemas.tracker import (
     TRACK_EVIDENCE_PREVIEW_CHARS,
     TRACK_NOTE_PREVIEW_CHARS,
@@ -60,6 +61,9 @@ from ..services.tracker import (
     track_or_none,
     track_out,
     update_track,
+)
+from ..services.tracker import (
+    list_track_deliveries as list_track_delivery_records,
 )
 from ..services.tracker_extract import extract_tracker_records, local_tracker_records
 
@@ -130,15 +134,18 @@ def read_tracks_page(
 def read_track_stats(
     status: str = Query(default=""),
     keyword: str = Query(default=""),
+    job_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """只取漏斗统计（P1-2）：``summarize`` 本就是 SQL 聚合，独立成端点后画漏斗
     不必再拖 500 行列表大响应。过滤口径与列表共用；状态取值校验同列表。
+    ``job_id``（PR-13）：岗位深链时统计与列表同口径，不再出现"列表是一家公司、
+    漏斗是全部岗位"的分裂。
     **声明在 ``/{track_id}`` 之前**（同 ``/export`` 的理由）。
     """
     if status and status not in STATUSES:
         raise HTTPException(status_code=422, detail="未知的进度状态")
-    return TrackStatsOut(**summarize(db, status=status, keyword=keyword))
+    return TrackStatsOut(**summarize(db, status=status, keyword=keyword, job_id=job_id))
 
 
 @router.post("", response_model=TrackOut, status_code=201)
@@ -151,6 +158,7 @@ def export_tracks(
     format: str = Query(default="csv", pattern="^(csv|json)$"),
     status: str = Query(default=""),
     keyword: str = Query(default=""),
+    job_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """导出当前筛选条件下的进度记录。
@@ -162,6 +170,9 @@ def export_tracks(
     ``总数`` 字段需要全量计数、indent=2 的嵌套结构逐条重排缩进容易出字节差，
     流式化收益低风险高，如实不切。
 
+    ``job_id``（PR-13）：岗位深链时导出与列表/统计同口径——只导出该岗位的
+    进度记录，不再把全部岗位混进同一个文件。
+
     FastAPI ≥ 0.106 保证 generator 依赖（``get_db``）在响应发送完成后才清理，
     流式 generator 消费期间请求 session 仍然可用。
     """
@@ -169,16 +180,16 @@ def export_tracks(
         raise HTTPException(status_code=422, detail="未知的进度状态")
     # 文件名里的条数需要先知道总数：count 与流式读是两次查询，但排序/过滤口径
     # 完全一致（同一份 _filtered_query + _stage_ordered），语义不会漂移。
-    total = count_tracks(db, status=status, keyword=keyword)
+    total = count_tracks(db, status=status, keyword=keyword, job_id=job_id)
     if format == "json":
-        records = list_tracks(db, status=status, keyword=keyword, limit=None)
+        records = list_tracks(db, status=status, keyword=keyword, job_id=job_id, limit=None)
         assert len(records) == total  # 同口径两次查询必须一致；漂移即 bug
         content, media_type, suffix = to_json(records), "application/json; charset=utf-8", "json"
     else:
         # text/csv 不带 charset 时 Excel 会按本地编码猜，中文列名直接变乱码；
         # 内容里的 BOM 再兜一层（见 services/tracker.iter_csv_chunks）。
         media_type, suffix = "text/csv; charset=utf-8", "csv"
-        content = iter_csv_chunks(iter_tracks(db, status=status, keyword=keyword))
+        content = iter_csv_chunks(iter_tracks(db, status=status, keyword=keyword, job_id=job_id))
     stamp = str(total)
     filename = f"求职进度-{stamp}条.{suffix}"
     headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
@@ -259,6 +270,21 @@ def read_track(track_id: int, db: Session = Depends(get_db)):
     if record is None:
         raise HTTPException(status_code=404, detail="进度记录不存在或已被删除")
     return track_out(record)
+
+
+@router.get("/{track_id}/deliveries", response_model=list[DeliverySummary])
+def list_track_deliveries(track_id: int, db: Session = Depends(get_db)):
+    """一条进度记录的交付快照（PR-09）：从岗位/进度进入对应 delivery 的入口。
+
+    快照的外键 SET NULL、冗余目的地列自持：原简历被删后这里的摘要仍然可读
+    （摘要不含正文，正文走 ``/api/resumes/deliveries/{id}`` 详情/下载）。
+    进度不存在/已删 → 404，与详情接口同一口径。
+    """
+    if track_or_none(db, track_id) is None:
+        raise HTTPException(status_code=404, detail="进度记录不存在或已被删除")
+    return [
+        DeliverySummary.model_validate(item) for item in list_track_delivery_records(db, track_id)
+    ]
 
 
 @router.put("/{track_id}", response_model=TrackOut)

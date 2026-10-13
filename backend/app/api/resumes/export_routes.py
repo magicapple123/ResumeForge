@@ -3,7 +3,9 @@
 从原 ``api/resumes.py`` 原样搬运（纯切片，无 patch 读取点）；`_get_live_resume` 与两个
 PDF 响应头常量改从 ``_shared`` 导入。
 """
+
 import logging
+from dataclasses import asdict
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,7 +31,10 @@ from ...services.pdf_exporter import ResumePDFError
 from ...services.privacy import RedactionOptions as PrivacyRedactionOptions
 from ...services.privacy import redact
 from ...services.resume.resume_completeness import find_incomplete, incomplete_detail
-from ...services.resume.resume_delivery import freeze_delivery
+from ...services.resume.resume_delivery import (
+    canonical_content_sha256,
+    freeze_delivery,
+)
 from ...services.resume.resume_record import record_format_config
 from ...services.resume.resume_template_store import (
     resolve_style_config,
@@ -55,7 +60,13 @@ def _export_record(
     """导出闸门 + 管线委托 + 响应头，是 GET / POST 两条导出路径的共用出口。
 
     ``record_delivery``（RF-17）：为真时把这次导出冻结成一份 ``source="export"``
-    的投递快照（「正式投递存档」语义）。**默认不落**——预览导出零膨胀。
+    的投递快照（「正式投递存档」语义）。**默认不落**——预览导出零膨胀。新调用方
+    请走 ``POST /export``（GET 上的该参数仅为兼容保留，见 ADR-0002）。
+
+    存档口径（PR-09 可信交付账本）：存档 content 与下载产物**同源**（脱敏导出存
+    脱敏后内容）；``render_context`` / ``request_params`` 记录**实际生效**的请求
+    参数（覆盖值按生效规则折算，不是记录默认值）；``source_content_sha256`` 与
+    ``artifact_sha256`` 分开回答"存的是哪份内容"与"产出的文件是哪份"。
     """
     resume = ResumeContent.model_validate(record.content)
     # 导出闸门：正文里还留着【待补】之类的标记时拦下来。带占位符的简历投出去，
@@ -108,7 +119,39 @@ def _export_record(
             # 头的值做 URL 编码（路径里可能有中文/反斜杠等非 latin-1 字符），前端解码还原。
             headers["X-Saved-To"] = quote(final_path, safe="")
     if record_delivery:
+        # 实际导出的那份内容（PR-09）：脱敏导出存脱敏内容，保证存档与下载产物同源——
+        # 与管线内部 ``build_export`` 的脱敏前置是同一条规则、同一份实现（privacy.redact）。
+        effective_resume = redact(resume, request.redact_options) if request.redact else resume
+        effective_content = effective_resume.model_dump()
+        # 实际生效的渲染上下文（PR-09）：请求覆盖值按 build_export 的生效规则折算——
+        # 修复"请求 page_limit=2、存档里却是记录默认 1"的错位。
+        effective_render_context = {
+            "template": context.template,
+            "template_html": context.template_html,
+            "style_config": context.style_config or {},
+            "format_config": context.format_config or {},
+            "page_limit": request.page_limit
+            if request.page_limit is not None
+            else (record.page_limit or 1),
+            "font_scale": request.font_scale or context.font_scale or "standard",
+            "margin_mm": request.margin_mm,
+            "include_photo": request.include_photo,
+        }
+        # 实际生效的请求参数（PR-09）：从实际执行的导出调用取，不是默认值拼凑；
+        # 凭它 + render_context 可以重放导出（见 resume_delivery.replay_delivery_export）。
+        effective_request_params = {
+            "format": request.format,
+            "watermark": request.watermark,
+            "redact": request.redact,
+            "redact_options": (asdict(request.redact_options) if request.redact_options else None),
+            "margin_mm": request.margin_mm,
+            "font_scale": effective_render_context["font_scale"],
+            "page_limit": effective_render_context["page_limit"],
+            "include_photo": request.include_photo,
+        }
         # 显式存档：哈希原样沿用 ExportDelivery 的产出，库里证据与响应头逐字一致。
+        # 幂等键（PR-09）：同一份产物（同简历 + 同字节）只留一份存档——重复点击/
+        # 重试不会刷出一堆一模一样的证据；改过内容后重导出的字节不同，是新的存档。
         freeze_delivery(
             db,
             record=record,
@@ -118,6 +161,12 @@ def _export_record(
             pages=artifact.pages,
             content_sha256=delivery.content_sha256,
             rendered_config_sha256=delivery.rendered_config_sha256,
+            content=effective_content,
+            render_context=effective_render_context,
+            request_params=effective_request_params,
+            source_content_sha256=canonical_content_sha256(effective_content),
+            artifact_sha256=delivery.content_sha256,
+            idempotency_key=f"export:{record.id}:{delivery.content_sha256}",
         )
         db.commit()
     return Response(artifact.content, media_type=artifact.media_type, headers=headers)
@@ -133,11 +182,17 @@ def export_resume(
     ),
     record_delivery: bool = Query(
         default=False,
-        description="为真时把这次导出冻结成一份投递快照（正式投递存档）；默认不落库",
+        description="【deprecated】仅为兼容保留：为真时把这次导出冻结成投递快照。"
+        "新调用方请改用 POST /export（body 里 record_delivery=true），语义不变",
     ),
     db: Session = Depends(get_db),
 ):
-    """兼容旧的 GET 导出：仍限四种格式，内部委托管线。全参数导出走 ``POST``。"""
+    """兼容旧的 GET 导出：仍限四种格式，内部委托管线。全参数导出走 ``POST``。
+
+    ``record_delivery=true`` 的旧行为原样保留（最小破坏兼容，见 ADR-0002）：
+    它仍会落存档，但**推荐所有新调用方走 POST 端点**承担"导出并记录交付"，
+    GET 保持纯下载语义。
+    """
     record = _get_live_resume(db, resume_id)
     return _export_record(
         db,
@@ -171,8 +226,13 @@ def export_resume_with_options(
         page_limit=payload.page_limit,
         include_photo=payload.include_photo,
     )
-    return _export_record(db, record, request, allow_incomplete=payload.allow_incomplete,
-                          record_delivery=payload.record_delivery)
+    return _export_record(
+        db,
+        record,
+        request,
+        allow_incomplete=payload.allow_incomplete,
+        record_delivery=payload.record_delivery,
+    )
 
 
 @router.post("/{resume_id}/redact", response_model=ResumeContent)

@@ -25,7 +25,7 @@ from app.services.data_backup import (
 
 # 投递功能出现之前的那一版 revision，用来伪造一份"旧版本导出的备份"。
 PREVIOUS_REVISION = "0009_templates_and_interview"
-HEAD_REVISION = "0044_search_fts5"
+HEAD_REVISION = "0045_delivery_ledger"
 APPLY_TABLES = ("job_match_analysis", "apply_queue_item", "apply_task", "apply_task_item")
 
 

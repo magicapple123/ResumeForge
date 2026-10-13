@@ -23,7 +23,7 @@ _FTS_DERIVED_TABLES = {
     "knowledge_fts_config",
 }
 # 当前迁移 head；每次新增 revision 时同步这里。
-_HEAD_REVISION = "0044_search_fts5"
+_HEAD_REVISION = "0045_delivery_ledger"
 
 
 def _assert_head_schema(bind) -> None:
