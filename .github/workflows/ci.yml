@@ -672,7 +672,11 @@ jobs:
           $ErrorActionPreference = "Stop"
           $port = Get-Content desktop\out\smoke-port.txt
           $base = "http://127.0.0.1:$port"
-          $index = Invoke-WebRequest -UseBasicParsing -Uri "$base/" -TimeoutSec 30
+          # The SPA fallback (static_spa._should_spa_fallback) only serves
+          # index.html for 404s that carry browser-navigation Accept semantics;
+          # programmatic requests get the FastAPI 404 JSON by design.
+          $browserHeaders = @{ Accept = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8" }
+          $index = Invoke-WebRequest -UseBasicParsing -Uri "$base/" -TimeoutSec 30 -Headers $browserHeaders
           if ($index.StatusCode -ne 200) { throw "index returned $($index.StatusCode)" }
           # Vite serves the app through an entry module; a blank page happens
           # exactly when this module 404s while / returns 200. Fetch it.
