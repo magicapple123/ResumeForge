@@ -17,10 +17,9 @@
 
 const assert = require("assert");
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
-const crypto = require("crypto");
 const { test } = require("node:test");
+const { makeTempRoot, sha256, writeRel, relInventory, hashAll } = require("./testkit");
 
 const {
   DATABASE_FILENAME,
@@ -29,40 +28,6 @@ const {
   performMigration,
   maybeMigrateUserData,
 } = require("../lib/data-migration");
-
-function makeTempRoot(label) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `rf-data-migration-${label}-`));
-}
-
-function sha256(filePath) {
-  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
-}
-
-function writeRel(rootDir, rel, content) {
-  const full = path.join(rootDir, rel);
-  fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, content);
-  return full;
-}
-
-function relInventory(rootDir) {
-  const files = [];
-  const walk = (dir) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.isFile()) files.push(path.relative(rootDir, full));
-    }
-  };
-  if (fs.existsSync(rootDir)) walk(rootDir);
-  return files.sort();
-}
-
-function hashAll(rootDir) {
-  const map = {};
-  for (const rel of relInventory(rootDir)) map[rel] = sha256(path.join(rootDir, rel));
-  return map;
-}
 
 // A realistic legacy payload-era data dir: database + WAL/SHM sidecars,
 // user_files (nested), datasets (with .trash), plus misc dirs from config.py.
@@ -124,12 +89,28 @@ test("detect: no legacy data / new db exists / marker present -> skip", () => {
       reason: "new-data-exists",
     });
 
-    // Migrated marker wins even over both databases being present.
+    // Migrated marker + database in place -> done, never re-prompt.
     fs.rmSync(newDataDir, { recursive: true, force: true });
     writeRel(newDataDir, MARKER_FILENAME, "{}");
+    writeRel(newDataDir, DATABASE_FILENAME, "already-there");
     assert.deepStrictEqual(detectMigrationState(oldDataDir, newDataDir), {
       status: "skip",
       reason: "already-migrated",
+    });
+
+    // RR-06: a marker whose database is GONE is not "already migrated". With
+    // the legacy copy still around the migration is offered again (nothing was
+    // lost); with nothing anywhere it fails closed instead of letting the app
+    // create an empty database where real data used to live.
+    fs.rmSync(path.join(newDataDir, DATABASE_FILENAME));
+    assert.deepStrictEqual(detectMigrationState(oldDataDir, newDataDir), {
+      status: "needs-migration",
+      reason: "marker-without-database",
+    });
+    fs.rmSync(oldDataDir, { recursive: true, force: true });
+    assert.deepStrictEqual(detectMigrationState(oldDataDir, newDataDir), {
+      status: "inconsistent",
+      reason: "marker-without-database",
     });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -159,7 +140,9 @@ test("migration success: full copy verified, marker written, legacy copy untouch
 
     assert.strictEqual(result.outcome, "migrated");
     assert.strictEqual(result.userDataDir, newDataDir);
-    assert.deepStrictEqual(confirmCalls, [{ from: oldDataDir, to: newDataDir }]);
+    assert.deepStrictEqual(confirmCalls, [
+      { from: oldDataDir, to: newDataDir, reason: null },
+    ]);
 
     // The new location holds exactly the legacy file set, byte-identical
     // (plus the marker, which is not part of the migrated content).
@@ -181,9 +164,19 @@ test("migration success: full copy verified, marker written, legacy copy untouch
     assert.strictEqual(marker.from, oldDataDir);
     assert.strictEqual(marker.to, newDataDir);
 
-    // Backup sibling exists with the same content; temp dir is gone.
-    const backupDir = `${oldDataDir}.pre-migration-2026-10-13T08-30-00-000Z`;
-    assert.ok(fs.existsSync(backupDir), "backup sibling must exist");
+    // Backup sits under the user-writable tree (sibling of the data dir), NOT
+    // inside the install payload where a read-only install would fail (RR-06).
+    const backupDir = path.join(
+      path.dirname(newDataDir),
+      "backups",
+      "pre-migration-2026-10-13T08-30-00-000Z",
+    );
+    assert.ok(fs.existsSync(backupDir), "backup must exist under the user data tree");
+    assert.strictEqual(
+      fs.existsSync(`${oldDataDir}.pre-migration-2026-10-13T08-30-00-000Z`),
+      false,
+      "the backup must not land next to the (possibly read-only) legacy dir",
+    );
     assert.deepStrictEqual(relInventory(backupDir).sort(), relInventory(oldDataDir).sort());
     assert.strictEqual(
       fs.readdirSync(path.dirname(newDataDir)).filter((n) => n.includes(".migrating-")).length,
@@ -267,8 +260,12 @@ test("verification failure: temp cleaned, no marker, legacy data intact, error s
     assert.deepStrictEqual(hashAll(oldDataDir), legacyBefore, "legacy data must be untouched");
     assert.strictEqual(errorMessages.length, 1, "the user must see the failure");
     assert.match(errorMessages[0].message, /重试/, "the message must offer a retry");
-    // The backup stays as a safety artifact.
-    assert.ok(fs.existsSync(`${oldDataDir}.pre-migration-2026-10-13T08-30-00-000Z`));
+    // The backup stays as a safety artifact (user-writable location).
+    assert.ok(
+      fs.existsSync(
+        path.join(path.dirname(newDataDir), "backups", "pre-migration-2026-10-13T08-30-00-000Z"),
+      ),
+    );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

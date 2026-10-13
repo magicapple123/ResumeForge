@@ -109,6 +109,11 @@ function logLine(message) {
 // packaged-only path) so the dev-tree lifecycle probes, which load this file
 // in a VM with app.isPackaged = false, never resolve it.
 function confirmDataMigration(details) {
+  const incomplete =
+    details.reason === "marker-without-database"
+      ? "\n\n注意：上一次迁移的标记还在，但新位置已经找不到数据库文件" +
+        "（可能被移动、删除或同步工具移走）。现在重新迁移会从旧位置再复制一份。"
+      : "";
   return dialog
     .showMessageBox({
       type: "question",
@@ -116,8 +121,9 @@ function confirmDataMigration(details) {
       message: "检测到旧版本数据",
       detail:
         "检测到旧版本的数据仍保存在安装目录内。是否迁移到新的用户数据目录？" +
-        "旧数据将保留备份，迁移失败时旧数据也原样保留。\n\n" +
-        `旧位置：${details.from}\n新位置：${details.to}`,
+        "旧数据将保留备份，迁移失败时旧数据也原样保留。" +
+        incomplete +
+        `\n\n旧位置：${details.from}\n新位置：${details.to}`,
       buttons: ["迁移", "暂不迁移"],
       defaultId: 0,
       cancelId: 1,
@@ -126,10 +132,27 @@ function confirmDataMigration(details) {
     .then(({ response }) => response === 0);
 }
 
-// Returns the data dir the backend should run against, or null to keep the
-// legacy (payload) location for this launch (declined / failed migration).
+// Marker present but no database anywhere: fail closed and let the user pick
+// between restoring a backup (quit) and explicitly starting from scratch.
+async function recoverMissingData(message) {
+  const { response } = await dialog.showMessageBox({
+    type: "error",
+    title: "简历通",
+    message: "数据目录需要确认",
+    detail: `${message}\n\n「创建全新数据库」会删除上一次迁移的标记并在新位置新建一份空数据库。`,
+    buttons: ["退出（先去恢复备份）", "创建全新数据库"],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  return response === 1;
+}
+
+// Resolves to { userDataDir, aborted }: null userDataDir keeps the legacy
+// (payload) location for this launch (declined / failed migration); aborted
+// means the shell must quit instead of starting the backend (RR-06).
 async function resolveUserDataDir() {
-  const { maybeMigrateUserData } = require("./lib/data-migration");
+  const { maybeMigrateUserData, clearMarker } = require("./lib/data-migration");
   const result = await maybeMigrateUserData({
     oldDataDir: path.join(projectRoot(), "backend", "data"),
     newDataDir: userDataDir(),
@@ -137,7 +160,15 @@ async function resolveUserDataDir() {
     showError: (title, message) => dialog.showErrorBox(title, message),
     log: logLine,
   });
-  return result.userDataDir;
+  if (result.outcome === "inconsistent") {
+    logLine("data dir inconsistent: marker without database; asking the user");
+    const startFresh = await recoverMissingData(result.message);
+    if (!startFresh) return { userDataDir: null, aborted: true };
+    clearMarker(userDataDir());
+    logLine("data dir inconsistent: user chose to start with a fresh database");
+    return { userDataDir: userDataDir(), aborted: false };
+  }
+  return { userDataDir: result.userDataDir, aborted: false };
 }
 
 function sendStage(stage, detail) {
@@ -265,7 +296,15 @@ async function startBackendAndSwap() {
   // keep the repo-local backend/data behavior unchanged. The migration runs
   // BEFORE the backend spawns (a declined or failed migration yields null ->
   // the backend falls back to the legacy location, everything as before).
-  const effectiveUserDataDir = app.isPackaged ? await resolveUserDataDir() : null;
+  const resolved = app.isPackaged ? await resolveUserDataDir() : { userDataDir: null };
+  if (resolved.aborted) {
+    // The user chose to fix the data directory first: never start a backend
+    // that would create an empty database next to missing data (RR-06).
+    logLine("startup aborted: data directory needs recovery");
+    app.quit();
+    return;
+  }
+  const effectiveUserDataDir = resolved.userDataDir;
   backend = new BackendManager(projectRoot(), runtimeDir(), {
     packaged: app.isPackaged,
     userDataDir: effectiveUserDataDir,
@@ -285,6 +324,23 @@ async function startBackendAndSwap() {
 function requestInstallAndQuit(installerPath) {
   pendingInstallerPath = installerPath;
   app.quit();
+}
+
+// Stop the backend and normalise the outcome to { ok, reason }. The call
+// itself stays synchronous (the quit path must ask immediately); only the
+// result is awaited. A manager that reports nothing is treated as "completed"
+// (the pre-RR-02 contract) -- only an explicit ok:false blocks the install.
+function stopBackendSafely() {
+  if (!backend) return Promise.resolve({ ok: true, reason: "", verified: true });
+  let started;
+  try {
+    started = backend.stop();
+  } catch (err) {
+    return Promise.resolve({ ok: false, reason: String(err), verified: false });
+  }
+  return Promise.resolve(started)
+    .then((result) => (result && typeof result === "object" ? result : { ok: true, reason: "" }))
+    .catch((err) => ({ ok: false, reason: String(err), verified: false }));
 }
 
 function spawnPendingInstaller() {
@@ -360,15 +416,45 @@ if (!app.requestSingleInstanceLock()) {
     // Hold quit until the backend tree is down; a dangling uvicorn would
     // keep file handles and break the next launch/update. The cap bounds
     // the wait even if the backend's own stop logic hangs.
-    const stopPromise = backend ? backend.stop() : Promise.resolve();
+    //
+    // RR-02: "we asked it to stop" is not "it stopped". The stop outcome is
+    // checked before the update installer is allowed to overwrite this
+    // installation: an unverified stop (recycled pid, unreadable identity,
+    // timeout) must never be papered over by an install.
+    const stopPromise = stopBackendSafely();
     const stopCapped = Promise.race([
-      stopPromise.catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, STOP_TIMEOUT_MS).unref()),
+      stopPromise,
+      new Promise((resolve) => {
+        setTimeout(
+          () => resolve({ ok: false, reason: "停止后端超时", verified: false, timedOut: true }),
+          STOP_TIMEOUT_MS,
+        ).unref();
+      }),
     ]);
-    stopCapped.then(() => {
+    stopCapped.then((outcome) => {
       stopInFlight = false;
       shutdownComplete = true;
-      spawnPendingInstaller();
+      if (outcome && outcome.ok) {
+        spawnPendingInstaller();
+      } else {
+        const reason = (outcome && outcome.reason) || "未知原因";
+        const hadPendingInstaller = Boolean(pendingInstallerPath);
+        pendingInstallerPath = null;
+        logLine(`backend stop not verified (${reason}); update install blocked`);
+        try {
+          dialog.showErrorBox(
+            "简历通",
+            hadPendingInstaller
+              ? `更新未安装：后端服务未被确认停止（${reason}）。\n` +
+                  "为避免覆盖仍在使用数据文件的后端进程，安装已取消。" +
+                  "请手动结束残留的后端进程后重试更新。"
+              : `退出时未能确认后端服务已停止（${reason}）。\n` +
+                  "如果稍后发现端口被占用，请在任务管理器里结束残留的 python 进程。",
+          );
+        } catch {
+          // A failing dialog must not block the quit itself.
+        }
+      }
       app.quit();
     });
   });
