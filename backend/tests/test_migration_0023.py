@@ -95,12 +95,12 @@ def test_head_table_set_matches_the_models(tmp_path):
         # 0024 之后不能再停在本迁移自己的 revision，否则新表会被误报成模型孤儿。
         command.upgrade(build_alembic_config(engine), "head")
         expected = set(Base.metadata.tables)
-        # knowledge_fts* 是 0044 的 FTS5 派生索引（虚拟表+影子表，可由 rebuild 重建），
-        # 不在 Base.metadata 里，也不算业务表。
+        # knowledge_fts*（0044）与 search_fts_*（0046）是 FTS5 派生索引（虚拟表+影子表，
+        # 可由 rebuild 重建），不在 Base.metadata 里，也不算业务表。
         actual = {
             name
             for name in _tables(engine)
-            if name != "alembic_version" and not name.startswith("knowledge_fts")
+            if name != "alembic_version" and not name.startswith(("knowledge_fts", "search_fts"))
         }
         assert actual == expected, (
             f"仅库里有 {sorted(actual - expected)}，仅模型里有 {sorted(expected - actual)}"
