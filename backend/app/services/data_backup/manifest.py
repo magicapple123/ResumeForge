@@ -41,6 +41,7 @@ def build_manifest(
     *,
     datasets: Sequence[dict[str, Any]] = (),
     api_key_included: bool = False,
+    asset_manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """生成包内清单。
 
@@ -49,6 +50,10 @@ def build_manifest(
     这一段，放行会让用户以为"恢复成功"而实际只恢复了一份）；用户勾选"包含 API Key"
     时标 3——这个选项老版本完全没有对应逻辑，必须让它们拿到"请先升级"的明确信号，
     所以它的优先级最高。
+
+    ``asset_manifest`` 是活动数据集的资产清单（PR-15）：段内自带 ``manifest_version``。
+    老版本读到这个**额外的段**会忽略——DB 照常恢复，只是不带附件（与老版本本来的
+    行为一致，不会更差）；当前版本的导入侧按段内版本号 fail-closed 处理。
     """
     settings = get_settings()
     extras = list(datasets)
@@ -69,6 +74,8 @@ def build_manifest(
         # 用户的显式勾选。导入侧 fail-closed：这个字段缺失或乱值都拒收。
         "api_key_included": bool(api_key_included),
     }
+    if asset_manifest is not None:
+        manifest["asset_manifest"] = asset_manifest
     if api_key_included:
         # RF-24：随包密钥的风险要在包里自带说明——恢复时用户可能早已忘了勾过这个框。
         # Windows 的 DPAPI 密文绑定原用户与原机器，跨机不可解（应用按"未配置"处理）；
@@ -81,4 +88,3 @@ def build_manifest(
     if extras:
         manifest["datasets"] = extras
     return manifest
-

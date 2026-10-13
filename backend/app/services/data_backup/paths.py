@@ -46,6 +46,25 @@ ARCHIVE_REFERRAL_IMAGES_PREFIX = "referral_images/"
 # manifest 格式不动（缺这些条目的旧包照常导入），导入侧只遍历实际存在的成员。
 ARCHIVE_USER_FILES_PREFIX = "user_files/"
 
+# 可恢复删除的统一目录名（手动备份 ``backups/.trash``、自动备份 ``auto-backups/
+# <scope>/.trash`` 同名）：与业务数据回收站同一个"先可恢复，再谈永久"的取舍。
+BACKUP_TRASH_DIRNAME = ".trash"
+
+
+def dataset_asset_prefix(dataset_id: str | None, category: str) -> str:
+    """备份包里某数据集某类资产的成员名前缀。
+
+    - 活动数据集（``dataset_id is None``）用包根的扁平前缀（``user_files/``、
+      ``referral_images/``）——老版本照常可读；
+    - 随包数据集用 ``datasets/<id>/<category>/`` 前缀：多份数据集共用同一个
+      磁盘目录时，整目录装包会把**别的数据集**的文件带进来，按各自前缀隔离
+      才能保证"谁的数据跟谁走"。
+    """
+    if dataset_id is None:
+        return f"{category}/"
+    return f"{ARCHIVE_DATASETS_DIRNAME}/{dataset_id}/{category}/"
+
+
 # 临时文件放在数据库同级目录：Windows 上跨盘 os.replace 失败，而恢复正是要做
 # 一次原子替换。上传的待恢复包与导出产物分开放，避免启动清理时误删用户刚上传、
 # 还没确认的包。
@@ -67,6 +86,9 @@ class ExtraDatabase:
     name: str
     source: Path
     metadata: dict[str, Any] = field(default_factory=dict)
+    # 该数据集自己的资产清单（导出时由 create_backup_archive 按库内容收集后填入）；
+    # None 表示没有（清单条目里就不出现这一段）。
+    asset_manifest: dict[str, Any] | None = None
 
     @property
     def member(self) -> str:
@@ -78,13 +100,16 @@ class ExtraDatabase:
 
     def manifest_entry(self, size_bytes: int) -> dict[str, Any]:
         """备份清单里的一条数据集条目。"""
-        return {
+        entry: dict[str, Any] = {
             "id": self.dataset_id,
             "name": self.name,
             "file": self.member,
             "metadata_file": self.metadata_member,
             "size_bytes": size_bytes,
         }
+        if self.asset_manifest is not None:
+            entry["asset_manifest"] = self.asset_manifest
+        return entry
 
 
 class BackupError(Exception):

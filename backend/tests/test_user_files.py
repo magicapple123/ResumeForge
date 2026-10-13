@@ -1,4 +1,5 @@
 """用户文件副本库（R6）：去重、data URL 兼容、端点、回填、迁移与备份往返。"""
+
 import base64
 import json
 import os
@@ -290,9 +291,7 @@ def test_lookup_finds_by_source_and_later_sources(client, db_session):
         "/api/user-files/lookup",
         params={"source_type": "job_note", "source_ref": "job:3"},
     )
-    assert {item["id"] for item in again.json()["items"]} == {
-        item["id"] for item in items
-    }
+    assert {item["id"] for item in again.json()["items"]} == {item["id"] for item in items}
 
 
 # ---------- 回填 ----------
@@ -359,7 +358,11 @@ def test_migration_creates_user_file_table(tmp_path):
 
 
 def test_backup_roundtrip_restores_referral_images(db_session, tmp_path):
+    """内推备注图随备份包往返：导出按**库引用**收集（DB 里有 referral.note_images
+    指向它），导入按清单恢复并落回数据集同目录。PR-15 起没被任何库引用的
+    散文件不进包（跨数据集隐私边界，见 test_backup_asset_manifest.py）。"""
     from app.dataset_registry import dataset_database_file
+    from app.models.referral import Referral
     from app.services.datasets import import_dataset
     from app.services.referral_service import REFERRAL_IMAGES_DIRNAME, referral_images_dir
 
@@ -367,6 +370,8 @@ def test_backup_roundtrip_restores_referral_images(db_session, tmp_path):
     directory.mkdir(parents=True, exist_ok=True)
     image = directory / "refimg.png"
     image.write_bytes(PNG_BYTES)
+    db_session.add(Referral(note_images=[f"{REFERRAL_IMAGES_DIRNAME}/refimg.png"]))
+    db_session.commit()
 
     staging = tmp_path / "staging"
     archive_path = create_backup_archive(db_session.get_bind(), staging)
@@ -376,6 +381,7 @@ def test_backup_roundtrip_restores_referral_images(db_session, tmp_path):
     restored = dataset_file.parent / REFERRAL_IMAGES_DIRNAME / "refimg.png"
     assert restored.is_file()
     assert restored.read_bytes() == PNG_BYTES
+    assert created.get("asset_issues") is None
 
     # 这张图片落在测试库同目录：不清掉会污染后续用例的导出断言
     # （test_api_datasets 的成员集合会多出一个 referral_images/refimg.png）。

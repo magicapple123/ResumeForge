@@ -15,6 +15,7 @@ base64 存在数据库列中，磁盘上没有其它用户文件。所以一次�
 （格式 3）：密钥按本机存储形态随包走（Windows 上是 DPAPI 密文），导入侧要求清单
 显式声明密钥状态，老版本则会在格式校验处明确拒收。
 """
+
 import logging
 
 from .api_keys import (
@@ -28,6 +29,30 @@ from .api_keys import (
 )
 from .api_keys import (
     _strip_api_keys as _strip_api_keys,
+)
+from .asset_manifest import (
+    ASSET_CATEGORIES as ASSET_CATEGORIES,
+)
+from .asset_manifest import (
+    ASSET_MANIFEST_VERSION as ASSET_MANIFEST_VERSION,
+)
+from .asset_manifest import (
+    build_asset_manifest as build_asset_manifest,
+)
+from .asset_manifest import (
+    collect_referenced_names as collect_referenced_names,
+)
+from .asset_manifest import (
+    file_digest as file_digest,
+)
+from .asset_manifest import (
+    restore_assets_from_manifest as restore_assets_from_manifest,
+)
+from .asset_manifest import (
+    verify_database_rows as verify_database_rows,
+)
+from .asset_manifest import (
+    verify_restored_assets as verify_restored_assets,
 )
 from .export import (
     create_backup_archive as create_backup_archive,
@@ -102,6 +127,9 @@ from .paths import (
     BACKUP_FORMAT_WITH_KEYS as BACKUP_FORMAT_WITH_KEYS,
 )
 from .paths import (
+    BACKUP_TRASH_DIRNAME as BACKUP_TRASH_DIRNAME,
+)
+from .paths import (
     DATABASE_MEMBER as DATABASE_MEMBER,
 )
 from .paths import (
@@ -127,6 +155,9 @@ from .paths import (
 )
 from .paths import (
     database_path as database_path,
+)
+from .paths import (
+    dataset_asset_prefix as dataset_asset_prefix,
 )
 from .paths import (
     export_directory as export_directory,

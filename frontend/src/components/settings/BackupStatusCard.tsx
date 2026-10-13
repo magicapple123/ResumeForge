@@ -5,6 +5,10 @@
  * 与超过间隔未成功（overdue）都明确标出，不把"尝试过"包装成"已保护"。数据自取
  * （挂载时拉一次 /api/settings/backup-status），不向父级传回调，方便插在
  * 设置页"数据"页签的任意位置。
+ *
+ * 「受保护」的口径是**仅数据库快照**（PR-15 审计项）：自动备份不含附件文件，
+ * 也不等价于整机灾备——界面上必须把这个范围说清楚，不能让用户误以为"受保护"
+ * 等于"所有数据都不会丢"。
  */
 
 import { ReloadOutlined } from "@ant-design/icons";
@@ -69,7 +73,8 @@ export default function BackupStatusCard() {
           <Space wrap>
             <Tag color={meta.color}>{meta.label}</Tag>
             <Typography.Text type="secondary">
-              每 {status.interval_days} 天自动快照一次，只保留最近几份；手动导出的备份包不受影响。
+              每 {status.interval_days} 天自动快照一次（仅数据库快照，不含附件文件）；
+              手动导出的备份包才包含附件。只保留最近几份，手动备份不受影响。
             </Typography.Text>
           </Space>
           {status.last_success ? (

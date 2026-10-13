@@ -23,6 +23,11 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"  # noqa: E402
 # 文件日志只在生产装配时挂：测试进程并发写同一份滚动文件会在 Windows 上触发
 # 轮转竞争（改名时另一进程还握着句柄）。需要验证日志本身的用例自己临时打开。
 os.environ["LOG_FILE_ENABLED"] = "false"  # noqa: E402
+# 自动备份调度不进测试：lifespan 启动的后台线程会在每个 client 用例的启动时
+# 醒来对测试库拍真实快照（纯浪费 IO），而且 PR-15 起它持真正的数据集租约——
+# 那份瞬态租约会让任何断言"租约已清零"的用例（test_dataset_scope_stream 等）
+# 变成看运气的竞态。需要验证备份行为的用例都自己注入 settings 或直接调用函数。
+os.environ["AUTO_BACKUP_ENABLED"] = "false"  # noqa: E402
 
 import pytest  # noqa: E402
 from app import database  # noqa: E402
@@ -155,6 +160,11 @@ def clean_db():
     """每个用例前重建表结构，保证用例之间完全隔离。"""
     _reset_to_test_database()
     _clear_datasets()
+    # 存储统计有 60 秒短缓存（按统计根+库文件为键，跨用例是同一把钥匙）：
+    # 不在每个用例前失效，上一个用例扫到的旧数字会串进下一个用例的断言。
+    from app.services import storage_stats as _storage_stats
+
+    _storage_stats.reset_storage_cache()
     Base.metadata.drop_all(bind=database.engine)
     Base.metadata.create_all(bind=database.engine)
     _drop_fts_derived_tables()
