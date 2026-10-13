@@ -5,6 +5,7 @@
 浏览器还活着（标签页没了）时不误判；单轮失败（页面跳转）绝不触发；自动结束之后再
 手动 stop 幂等。FakeLiveClient 留在 test_webform_live.py。
 """
+
 import time
 
 import pytest
@@ -32,8 +33,12 @@ def test_browser_closed_after_consecutive_failures_auto_stops(monkeypatch):
     session = LiveSession(client, {"name": "张三"})
     session.start()
     try:
+        # 等"running 状态翻转"而不是只等线程退出：stop() 先置 _thread=None
+        # （is_running 立即变 False），最后才写 state["running"]=False；只等
+        # 前者会在两步之间读到中间态——CI（run7）偶发的 assert True is False
+        # 正是撞进这个窗口。state 翻转是 stop() 的最后一步，等到它即全部落定。
         deadline = time.monotonic() + 10.0
-        while session.is_running and time.monotonic() < deadline:
+        while (session.is_running or session.state["running"]) and time.monotonic() < deadline:
             time.sleep(0.02)
         assert session.is_running is False
         assert session.state["running"] is False
@@ -109,8 +114,10 @@ def test_multi_session_auto_stops_when_the_browser_sync_fails(monkeypatch):
     )
     session.start()
     try:
+        # 与单标签用例同一窗口：MultiLiveSession.stop() 也是先置 _thread=None、
+        # 最后才写 state["running"]=False，只等 is_running 会读到中间态。
         deadline = time.monotonic() + 10.0
-        while session.is_running and time.monotonic() < deadline:
+        while (session.is_running or session.state["running"]) and time.monotonic() < deadline:
             time.sleep(0.02)
         assert session.is_running is False
         assert session.state["running"] is False
