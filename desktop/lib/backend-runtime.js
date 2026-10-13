@@ -42,13 +42,33 @@ function resolvePython(projectRoot) {
   throw new Error(`Python interpreter not found: ${candidates[0]}`);
 }
 
+// Which tar reads zip archives.
+//
+// bsdtar (Windows 10+, macOS) reads them; GNU tar -- which is what a PATH that
+// leads with Git for Windows (C:\Program Files\Git\usr\bin) resolves to --
+// does not, and fails with a bare "tar exited with 1". A packaged app is
+// normally started from Explorer (System32 first in PATH), but nothing
+// guarantees that: double-clicking the exe from a Git shell, or a launcher
+// that inherited that PATH, would hand the unpack a GNU tar and the shell
+// would never come up. So on Windows the system bsdtar is named explicitly
+// (it ships with the OS since 10 1803) and PATH is only the fallback.
+function tarExecutable(platform = process.platform, env = process.env) {
+  if (platform === "win32") {
+    const systemRoot = env.SystemRoot || env.SYSTEMROOT || env.windir;
+    if (systemRoot) {
+      const systemTar = path.join(systemRoot, "System32", "tar.exe");
+      if (fs.existsSync(systemTar)) return systemTar;
+    }
+  }
+  return "tar";
+}
+
 function extractZip(zipPath, targetDir, spawnFn = spawn) {
-  // bsdtar ships with Windows 10+ and macOS and reads zip archives fine;
-  // using it avoids shipping an unzip dependency in the shell. spawnFn is
-  // injectable so tests can pin the call without depending on the platform tar
-  // (and so a missing `spawn` import fails loudly at the default parameter).
+  // spawnFn is injectable so tests can pin the call without depending on the
+  // platform tar (and so a missing `spawn` import fails loudly at the default
+  // parameter).
   return new Promise((resolve, reject) => {
-    const child = spawnFn("tar", ["-xf", zipPath, "-C", targetDir], {
+    const child = spawnFn(tarExecutable(), ["-xf", zipPath, "-C", targetDir], {
       windowsHide: true,
     });
     child.on("error", reject);
@@ -123,4 +143,5 @@ module.exports = {
   rotateLogFile,
   runtimeMarkerDigest,
   runtimeMarkerPath,
+  tarExecutable,
 };
