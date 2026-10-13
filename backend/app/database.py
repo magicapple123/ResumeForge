@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from .config import get_settings
@@ -162,3 +162,17 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def session_engine(db: Session) -> Engine:
+    """返回请求会话绑定的 ``Engine``。
+
+    ``Session.get_bind()`` 的返回类型是 ``Engine | Connection``，但本应用的会话都由
+    ``SessionLocal(bind=engine)`` 创建，绑定的只会是 ``Engine``；万一拿到
+    ``Connection``（只在把会话绑到具体事务连接时才可能发生），在这里大声失败，
+    不把连接对象当引擎传进备份 / 恢复等按引擎定位数据库文件的全局操作。
+    """
+    bind = db.get_bind()
+    if isinstance(bind, Engine):
+        return bind
+    raise RuntimeError("当前会话未绑定到 Engine，无法定位数据库文件")
