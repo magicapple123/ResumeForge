@@ -147,8 +147,9 @@ def test_stale_proposal_after_a_b_a_switch_is_rejected(client):
     other = _create_dataset(client, "目标库 B")
     # 在 A（主数据）上创建提案。
     proposal_on_a = _proposal()
-    # 切到 B 再创建一条针对 B 的提案。
-    assert _activate(client, other).status_code == 200
+    # 切到 B 再创建一条针对 B 的提案。（失败带响应体：detail 点名残留租约 owner）
+    activate_b_first = _activate(client, other)
+    assert activate_b_first.status_code == 200, activate_b_first.text
     proposal_on_b = _proposal()
     # A → B → A（主数据）→ B：dataset_id 回到 B，代次已前进了两步。
     activate_main = _activate(client, "main")
