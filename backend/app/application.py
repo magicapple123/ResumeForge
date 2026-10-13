@@ -71,6 +71,7 @@ from .middleware import (
     get_request_id,
 )
 from .runtime.log_context import LogContextFilter
+from .runtime.log_redact import RedactExceptionFilter
 from .services.apply import apply_service
 from .services.apply.task_runner import get_task_runner
 from .services.data_backup import cleanup_temp_directories
@@ -95,8 +96,9 @@ class JsonLogFormatter(logging.Formatter):
     """可选的 JSON 行日志格式（RF-20）：每行一个对象，便于机器采集与检索。
 
     固定键：time/level/logger/message/task_id/dataset_id/request_id；异常走
-    exc 字段。脱敏不在这里做——业务日志本身不记密钥（AGENTS 约束），诊断导出
-    另有一道兜底清洗，格式化器只负责结构化。
+    exc 字段。脱敏不在这里做——异常文本由 ``RedactExceptionFilter``（handler
+    级兜底）在格式化之前清洗进 ``record.exc_text``；本 formatter 优先使用
+    ``exc_text``，仅在没有 filter 兜底时才自行 ``formatException``。
     """
 
     def format(self, record: logging.LogRecord) -> str:
@@ -111,8 +113,11 @@ class JsonLogFormatter(logging.Formatter):
             "dataset_id": getattr(record, "dataset_id", "-"),
             "request_id": getattr(record, "request_id", "-"),
         }
-        if record.exc_info:
-            payload["exc"] = self.formatException(record.exc_info)
+        if record.exc_info and not record.exc_text:
+            # 没有脱敏 filter 兜底时自行渲染（有 filter 时 exc_text 已清洗就位）。
+            record.exc_text = self.formatException(record.exc_info)
+        if record.exc_text:
+            payload["exc"] = record.exc_text
         return json.dumps(payload, ensure_ascii=False)
 
 
@@ -161,6 +166,7 @@ def attach_file_log_handler(log_dir: Path) -> logging.Handler | None:
     handler.setFormatter(_build_formatter())
     handler.addFilter(RequestIdFilter())
     handler.addFilter(LogContextFilter())
+    handler.addFilter(RedactExceptionFilter())
     logging.getLogger().addHandler(handler)
     _file_log_handler = handler
     return handler
@@ -176,6 +182,10 @@ for handler in logging.getLogger().handlers:
     # RF-20：所有 handler 都注入后台线程的 task_id/dataset_id 关联字段
     # （LogContextFilter 与 RequestIdFilter 同一模式，缺省 "-"）。
     handler.addFilter(LogContextFilter())
+    # PR-20 对称项：handler 级异常文本脱敏兜底——全仓 logger.exception 的
+    # traceback 在格式化前统一清洗，未逐点接入 log_exception_redacted 的
+    # 调用点（drill/resume_writing/apply task_runner 等）由此覆盖。
+    handler.addFilter(RedactExceptionFilter())
     if settings.log_json_format:
         handler.setFormatter(JsonLogFormatter())
 if settings.log_file_enabled:

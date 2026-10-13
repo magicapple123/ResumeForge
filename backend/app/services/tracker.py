@@ -274,28 +274,38 @@ def create_track(
 
 
 def update_track(db: Session, record: ApplicationTrack, payload: TrackUpdate) -> ApplicationTrack:
+    """更新一条求职进度记录（PR-10 对称项：单事务）。
+
+    字段保存 + 状态事件 + 投递快照在**同一个事务**里发布：旧实现三段各自
+    commit，中途失败会留下"已更新字段但缺事件/快照"的半成品。现在先 flush
+    把字段改动压进事务缓冲，事件与快照任一步失败整体 rollback；最后一个
+    commit 一次性发布。对外 API 与返回值契约不变。
+    """
     previous_resume_id = record.resume_id
     previous_status = record.status
     _apply_payload(record, payload)
-    db.commit()
+    try:
+        # flush 只写事务缓冲、不提交（与 create_track 同一模式）。
+        db.flush()
+        if previous_status != record.status:
+            # 状态被用户亲手改了（含改成拒信）：追加一条事件。事件不参与合并取舍，
+            # 所以拒信也会留痕——之前的阶段不会因为终态被抹掉。
+            record_status_change(
+                db,
+                record,
+                from_status=previous_status,
+                to_status=record.status,
+                status_date=payload.status_date,
+                source=write_source(manual=True),
+                user_confirmed=True,
+            )
+        if payload.resume_id is not None and payload.resume_id != previous_resume_id:
+            _freeze_linked_resume(db, record, source="track")
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(record)
-    if previous_status != record.status:
-        # 状态被用户亲手改了（含改成拒信）：追加一条事件。事件不参与合并取舍，
-        # 所以拒信也会留痕——之前的阶段不会因为终态被抹掉。
-        record_status_change(
-            db,
-            record,
-            from_status=previous_status,
-            to_status=record.status,
-            status_date=payload.status_date,
-            source=write_source(manual=True),
-            user_confirmed=True,
-        )
-        db.commit()
-    if payload.resume_id is not None and payload.resume_id != previous_resume_id:
-        _freeze_linked_resume(db, record, source="track")
-        db.commit()
-        db.refresh(record)
     return record
 
 
