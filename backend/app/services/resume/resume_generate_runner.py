@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import threading
 from collections.abc import Callable
@@ -55,6 +54,7 @@ from ...services.resume.resume_task_state import (
     set_cancelled,
 )
 from ...services.settings_service import get_llm_config
+from .resume_runner_loop import RunnerEventLoopHandle
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +80,10 @@ class ResumeGenerateRunner:
         self._current_task_id: int | None = None
         self._lease: DatasetLease | None = None
         self._frozen_factory: Callable[[], Any] | None = None
-        # 工作线程的事件循环与主 task 句柄（_drive_event_loop 登记）：cancel()/shutdown()
-        # 借它们跨线程中止挂起的模型调用，见 _cancel_main_task。
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._main_task: asyncio.Task | None = None
+        # 工作线程事件循环与主 task 句柄的管理委托给句柄对象（机制说明见
+        # resume_runner_loop 模块 docstring）：cancel()/shutdown() 借它跨线程
+        # 中止挂起的模型调用。
+        self._loop_handle = RunnerEventLoopHandle(self._stop)
 
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -134,20 +134,16 @@ class ResumeGenerateRunner:
             lease.release()
 
     def cancel(self, task_id: int) -> None:
-        # 先落"取消"信号，再与工作线程竞争：若工作线程已跑完并提交终态，终态守卫会拒绝
-        # 把 completed/failed 改回 cancelled（照抄 apply 运行器的"终态只读"纪律）。
+        # 先落"取消"信号：若线程已跑完并提交终态，终态守卫会拒绝改写（apply 同款纪律）。
         self._require_current(task_id)
         self._stop.set()
-        # 主动中止挂起的模型调用：_stop 只在 chunk 间隙的检查点生效，模型流挂在
-        # socket read 上时检查点轮询不到，线程要等 read timeout（~5s）才退出——
-        # join 必超时，租约迟迟不归还，此窗口内数据集切换会撞 409。跨线程取消
-        # 主 task 让线程亚秒级退出；join 保留作兜底（线程卡死在不可中断的 C 扩展
-        # 里时仍超时写终态）。
-        self._cancel_main_task()
-        # 终态必须在线程归还租约**之后**才对观察者可见：否则"已取消"先出现在任务查询
-        # 里，而租约要等线程退出（_run_releasing_lease 的 finally）才归还，紧随其后的
-        # 数据集切换会在 _wait_for_idle 的排空窗内撞上 409（e2e 恢复用例的真实翻车
-        # 路径：取消→teardown 激活主库→409）。join 2s 与取消可见收尾的预算一致；
+        # 主动中止挂起的模型调用：_stop 的检查点轮询不到挂在 socket read 上的流，
+        # 线程要等 read timeout（~5s）才退出、租约迟迟不归还，此窗口内切换数据集
+        # 会撞 409。跨线程取消主 task 让线程亚秒级退出；join 保留作兜底。
+        self._loop_handle.cancel_main_task()
+        # 终态必须在线程归还租约**之后**才可见：否则"已取消"先出现在任务查询里，
+        # 而租约要等线程退出才归还，紧随其后的切换在排空窗内撞 409（e2e 恢复用例
+        # 的真实翻车路径）。join 2s 与取消可见收尾的预算一致；
         # 线程卡死（如模型连接不响应）时超时后照常写终态，此刻切换的排空等待会如实
         # 409，用户稍候重试即可，租约最终仍由线程退出归还。
         thread = self._thread
@@ -159,7 +155,7 @@ class ResumeGenerateRunner:
         self._stop.set()
         # 与 cancel 同一机制：进程收拢时也主动中止挂起的模型调用，别让 join(5)
         # 白等一个 read timeout。
-        self._cancel_main_task()
+        self._loop_handle.cancel_main_task()
         thread = self._thread
         if thread is not None:
             thread.join(timeout=5)
@@ -174,53 +170,6 @@ class ResumeGenerateRunner:
         """开一个任务会话：优先用启动时冻结的工厂（RF-03），退回测试注入，再退回全局。"""
         factory = self._frozen_factory or self._session_factory or SessionLocal
         return factory()
-
-    def _drive_event_loop(self, coro: Any) -> None:
-        """在工作线程里显式驱动事件循环跑完 ``coro``（替代 ``asyncio.run``）。
-
-        与 asyncio.run 的差别只有一个、但很关键：主 task 的句柄登记在 ``self`` 上，
-        cancel()/shutdown() 才能跨线程中止它——asyncio.run 把循环和 task 藏在内部，
-        外部唯一能做的就是等 ``_stop`` 的检查点轮询到，而挂在 socket read 上的流
-        永远轮询不到（见 _cancel_main_task）。异常原样向上抛，由 ``_run`` 的既有
-        异常分类收尾（CancelledError → cancelled，其余照旧）。
-        """
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            main_task = loop.create_task(coro)
-            with self._lock:
-                self._loop = loop
-                self._main_task = main_task
-            # 竞态兜底：cancel() 可能在登记完成之前已经置位 _stop（此刻它拿不到
-            # task 句柄，_cancel_main_task 是空操作）；登记后复查一次，保证"已请求
-            # 取消"一定转化为 task 取消。
-            if self._stop.is_set():
-                main_task.cancel()
-            loop.run_until_complete(main_task)
-        finally:
-            with self._lock:
-                self._loop = None
-                self._main_task = None
-            asyncio.set_event_loop(None)
-            loop.close()
-
-    def _cancel_main_task(self) -> None:
-        """跨线程中止挂起的模型调用：向工作线程的事件循环投递主 task 取消。
-
-        ``_stop`` 的检查点只在 chunk / 事件间隙轮询；模型流挂在 socket read 上
-        （对端不发数据）时检查点永远轮询不到，只能靠 ``call_soon_threadsafe``
-        把取消直接打进事件循环。取消引发的 CancelledError 由 ``_run`` 的既有
-        分类映射为"用户取消"，不会误报成内部错误；"结果未知不自动重放"的纪律
-        不变。循环已关闭（线程刚好退出）时投递会抛 RuntimeError——线程退出即
-        租约归还，无需再取消，吞掉即可。
-        """
-        with self._lock:
-            loop = self._loop
-            task = self._main_task
-        if loop is None or task is None or task.done():
-            return
-        with contextlib.suppress(RuntimeError):
-            loop.call_soon_threadsafe(task.cancel)
 
     def _run(self, task_id: int) -> None:
         session = self._open_session()
@@ -316,7 +265,7 @@ class ResumeGenerateRunner:
                         # （审计 PR-08——生成 runner 每任务新建事件循环）。
                         await aclose_clients_for_current_loop()
 
-                self._drive_event_loop(consume())
+                self._loop_handle.drive(consume())
             except OperationCancelled as exc:
                 # 用户取消（cancel_event 即 _stop）→ cancelled；预算到期 → failed。
                 # 两者共用一条信号线，用 OperationCancelled 的 message 区分原因。
