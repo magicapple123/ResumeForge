@@ -17,7 +17,7 @@ import { reloadPage } from "../../utils/navigation";
 
 /** 设置页「数据」页里数据集的加载、导出、导入、切换、重命名、删除与新建。 */
 export function useSettingsDatasets() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
   const [datasetsLoading, setDatasetsLoading] = useState(true);
   const [datasetExporting, setDatasetExporting] = useState(false);
@@ -68,9 +68,17 @@ export function useSettingsDatasets() {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename } = await exportDataset(dataset.id, includeApiKeys);
+      const { blob, filename, incompleteBackup } = await exportDataset(dataset.id, includeApiKeys);
       downloadBlob(blob, filename);
-      message.success(`已导出「${dataset.name}」到浏览器的下载目录`);
+      if (incompleteBackup) {
+        // RR-03：包里有附件缺失或与登记哈希不符时不能说成"完整备份成功"。
+        message.warning(
+          `已导出「${dataset.name}」，但这份备份「不完整」：包内有附件缺失或内容与数据库登记的哈希不符，` +
+            "明细见包内 manifest.json 的 asset_manifest 段",
+        );
+      } else {
+        message.success(`已导出「${dataset.name}」到浏览器的下载目录`);
+      }
     } catch (err) {
       message.error(err instanceof Error ? err.message : "导出数据集失败");
     } finally {
@@ -82,9 +90,16 @@ export function useSettingsDatasets() {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename } = await exportAllDatasets(includeApiKeys);
+      const { blob, filename, incompleteBackup } = await exportAllDatasets(includeApiKeys);
       downloadBlob(blob, filename);
-      message.success(`已把全部 ${datasets.length} 份数据集导出到浏览器的下载目录`);
+      if (incompleteBackup) {
+        message.warning(
+          `已把全部 ${datasets.length} 份数据集导出到浏览器的下载目录，但这份备份「不完整」：` +
+            "包内有附件缺失或内容与数据库登记的哈希不符，明细见包内 manifest.json 的 asset_manifest 段",
+        );
+      } else {
+        message.success(`已把全部 ${datasets.length} 份数据集导出到浏览器的下载目录`);
+      }
     } catch (err) {
       message.error(err instanceof Error ? err.message : "导出全部数据集失败");
     } finally {
@@ -92,11 +107,11 @@ export function useSettingsDatasets() {
     }
   };
 
-  const importDatasetFile = async (file: File, name: string) => {
+  const importDatasetFile = async (file: File, name: string, allowPartialAssets = false) => {
     if (datasetImporting) return;
     setDatasetImporting(true);
     try {
-      const created = await importDataset(file, name);
+      const created = await importDataset(file, name, allowPartialAssets);
       await loadDatasetList();
       // "导出全部数据集"产生的包里会随行带上其余几份，导入时它们也各成一份新数据集。
       // 只报主数据集的名字会让用户以为另外几份没被恢复。
@@ -105,9 +120,33 @@ export function useSettingsDatasets() {
       const parts = [`已导入数据集「${created.name}」`];
       if (extras > 0) parts.push(`并随包恢复了另外 ${extras} 份数据集`);
       if (created.api_key_included) parts.push("备份中的大模型 API Key 已一并恢复");
-      message.success(`${parts.join("，")}；当前数据未受影响`);
+      // RR-03：带着附件问题导入时不得呈现成"完整恢复"——问题逐条（最多 3 条）摆出来。
+      const problems = [...(created.backup_asset_warnings ?? []), ...(created.asset_issues ?? [])];
+      if (created.assets_incomplete || problems.length > 0) {
+        const shown = problems.slice(0, 3).join("；");
+        message.warning(
+          `${parts.join("，")}；当前数据未受影响，但这份备份「不完整」：` +
+            (shown || "附件存在缺失或校验不一致") +
+            (problems.length > 3 ? `（共 ${problems.length} 条）` : ""),
+        );
+      } else {
+        message.success(`${parts.join("，")}；当前数据未受影响`);
+      }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导入备份失败");
+      const text = err instanceof Error ? err.message : "导入备份失败";
+      // 附件完整性问题默认让整次导入失败（写盘前就拒绝）。这里给用户一条显式出路：
+      // 明确告知代价后，才带着"跳过有问题的附件"重试。
+      if (text.includes("附件未通过校验")) {
+        modal.confirm({
+          title: "备份包的附件有问题",
+          content: `${text}\n\n可以选择跳过有问题的附件，只导入数据库内容（这些附件在你本机的原文件不会被改动）。`,
+          okText: "跳过附件继续导入",
+          cancelText: "取消",
+          onOk: () => importDatasetFile(file, name, true),
+        });
+      } else {
+        message.error(text);
+      }
     } finally {
       setDatasetImporting(false);
     }

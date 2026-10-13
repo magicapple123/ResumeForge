@@ -311,4 +311,61 @@ describe("SettingsPage datasets", () => {
     const deleteItem = await screen.findByRole("menuitem", { name: "删除" });
     expect(deleteItem).toHaveAttribute("aria-disabled", "true");
   });
+
+  // ===== RR-03：附件不完整时不得播报成"完整恢复/完整备份" =====
+
+  it("does not report a partial import as a clean success", async () => {
+    apiMocks.importDataset.mockResolvedValue({
+      ...imported,
+      assets_incomplete: true,
+      asset_issues: [
+        "活动数据集 user_files/x.bin：本机已有同名但内容不同的附件，已保留本机文件（绝不覆盖）",
+      ],
+    });
+    const { container } = await renderPage();
+
+    chooseBackupFile(container);
+
+    // 导入确实完成了，但界面必须说明这份备份不完整、问题在哪。
+    expect(await screen.findByText(/不完整/)).toBeInTheDocument();
+    expect(screen.getByText(/绝不覆盖/)).toBeInTheDocument();
+  });
+
+  it("offers an explicit opt-in before importing a package with broken assets", async () => {
+    apiMocks.importDataset.mockRejectedValueOnce(
+      new Error(
+        "备份包的附件未通过校验，已停止导入（没有写入任何数据）：活动数据集 user_files/x.bin：备份包中缺少该附件",
+      ),
+    );
+    const { container } = await renderPage();
+
+    chooseBackupFile(container);
+
+    // 默认拒绝：不重试、不静默降级，先让用户看到问题。
+    expect(await screen.findByText(/附件未通过校验/)).toBeInTheDocument();
+    expect(apiMocks.importDataset).toHaveBeenCalledTimes(1);
+
+    // 用户显式点「跳过附件继续导入」后才带着 allow_partial_assets 重试。
+    apiMocks.importDataset.mockResolvedValueOnce(imported);
+    fireEvent.click(await screen.findByRole("button", { name: "跳过附件继续导入" }));
+
+    await waitFor(() => expect(apiMocks.importDataset).toHaveBeenCalledTimes(2));
+    expect(apiMocks.importDataset.mock.calls[1][1]).toBe("backup");
+    expect(apiMocks.importDataset.mock.calls[1][2]).toBe(true);
+  });
+
+  it("warns that an exported archive with missing attachments is incomplete", async () => {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    apiMocks.exportDataset.mockResolvedValue({
+      blob: new Blob(["zip-bytes"], { type: "application/zip" }),
+      filename: "resumeforge-backup-20260915.zip",
+      incompleteBackup: true,
+    });
+    await renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /导出当前数据集/ }));
+
+    expect(await screen.findByText(/不完整/)).toBeInTheDocument();
+    click.mockRestore();
+  });
 });

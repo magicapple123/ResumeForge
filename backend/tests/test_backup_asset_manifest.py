@@ -16,123 +16,33 @@
 import hashlib
 import json
 import zipfile
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-from app import database
-from app.database import build_engine, database_url_for
-from app.dataset_registry import dataset_database_file
-from app.models.referral import Referral
-from app.models.user_file import UserFile
+from app.dataset_registry import DatasetError
 from app.services.data_backup import (
     MANIFEST_MEMBER,
     BackupError,
     create_backup_archive,
-    database_path,
 )
 from app.services.data_backup import asset_manifest as asset_manifest_module
 from app.services.datasets import (
-    create_dataset,
     export_all_datasets,
     export_dataset,
     import_dataset,
 )
-from sqlalchemy.orm import Session
 
-# ---------------------------------------------------------------------------
-# 夹具：临时根下主库 + 两个导入库（A、B），各带内容可区分的合成附件。
-# ---------------------------------------------------------------------------
-
-
-def _add_user_file(dataset_db: Path, disk_name: str, content: bytes) -> None:
-    """往一份数据集库里登记一条 user_file 行，并把内容写到该库同目录 user_files/。"""
-    engine = build_engine(database_url_for(dataset_db))
-    try:
-        with Session(engine) as session:
-            session.add(
-                UserFile(
-                    sha256=hashlib.sha256(content).hexdigest(),
-                    disk_name=disk_name,
-                    original_name=disk_name,
-                    mime="application/octet-stream",
-                    size=len(content),
-                    source_type="test",
-                    source_ref="test:asset-manifest",
-                )
-            )
-            session.commit()
-    finally:
-        engine.dispose()
-    directory = dataset_db.parent / "user_files"
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / disk_name).write_bytes(content)
-
-
-def _add_referral_image(dataset_db: Path, image_name: str, content: bytes) -> None:
-    """往一份数据集库里登记一条 referral.note_images 引用，并落盘对应图片。"""
-    engine = build_engine(database_url_for(dataset_db))
-    try:
-        with Session(engine) as session:
-            session.add(Referral(note_images=[f"referral_images/{image_name}"]))
-            session.commit()
-    finally:
-        engine.dispose()
-    directory = dataset_db.parent / "referral_images"
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / image_name).write_bytes(content)
-
-
-def _add_main_user_file(db_session, disk_name: str, content: bytes) -> None:
-    """主库（当前活动测试库）的 user_file 行 + 磁盘副本。"""
-    db_session.add(
-        UserFile(
-            sha256=hashlib.sha256(content).hexdigest(),
-            disk_name=disk_name,
-            original_name=disk_name,
-            mime="application/octet-stream",
-            size=len(content),
-            source_type="test",
-            source_ref="test:asset-manifest",
-        )
-    )
-    db_session.commit()
-    directory = database_path(database.engine).parent / "user_files"
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / disk_name).write_bytes(content)
-
-
-@pytest.fixture()
-def three_datasets(db_session):
-    """主库 + 数据集 A、B：每个库都有自己独特的附件，且 A 另有一张内推备注图。"""
-    dataset_a = create_dataset("数据集A", database.engine)
-    dataset_b = create_dataset("数据集B", database.engine)
-    path_a = dataset_database_file(dataset_a["id"])
-    path_b = dataset_database_file(dataset_b["id"])
-
-    main_file = database_path(database.engine).parent / "user_files" / "main-only-attachment.bin"
-    _add_main_user_file(db_session, "main-only-attachment.bin", b"MAIN-CONTENT" * 10)
-    _add_user_file(path_a, "aaa-dataset-a-file.bin", b"A" * 128)
-    _add_user_file(path_b, "bbb-dataset-b-file.bin", b"B" * 128)
-    _add_referral_image(path_a, "aaa-referral-note.png", b"REF-A-IMAGE" * 8)
-    try:
-        yield SimpleNamespace(
-            id_a=dataset_a["id"], id_b=dataset_b["id"], path_a=path_a, path_b=path_b
-        )
-    finally:
-        # 主库父目录（进程级测试根）不在 conftest 的数据集清理范围内，自己收尾。
-        main_file.unlink(missing_ok=True)
-
-
-def _member_names(archive_path: Path) -> set[str]:
-    with zipfile.ZipFile(archive_path) as archive:
-        return set(archive.namelist())
-
-
-def _read_manifest(archive_path: Path) -> dict:
-    with zipfile.ZipFile(archive_path) as archive:
-        return json.loads(archive.read(MANIFEST_MEMBER))
-
+# 夹具与共享辅助搬进了 ``backup_asset_fixtures``（行数预算）；这里的 import 既取回
+# 辅助函数，也把 ``three_datasets`` 夹具注入本模块命名空间。
+from tests.backup_asset_fixtures import (  # noqa: F401
+    _add_main_user_file,
+    _dataset_names,
+    _fingerprints,
+    _import_all,
+    _member_names,
+    _read_manifest,
+    database,
+    dataset_database_file,
+)
 
 # ---------------------------------------------------------------------------
 # 导出侧
@@ -199,12 +109,6 @@ def test_all_datasets_export_manifest_lists_assets_with_checksums(three_datasets
 # ---------------------------------------------------------------------------
 
 
-def _import_all(three_datasets, tmp_path):
-    archive = export_all_datasets(database.engine, tmp_path / "staging-export")
-    result = import_dataset(archive, "整包恢复", database.engine, tmp_path / "staging-import")
-    return archive, result
-
-
 def test_restore_to_empty_directory_roundtrip(three_datasets, tmp_path):
     """整包恢复：附件齐、内容逐字节一致、DB 行数复核无问题、结果不带 asset_issues。"""
     _, result = _import_all(three_datasets, tmp_path)
@@ -217,8 +121,12 @@ def test_restore_to_empty_directory_roundtrip(three_datasets, tmp_path):
     assert (image_dir / "aaa-referral-note.png").read_bytes() == b"REF-A-IMAGE" * 8
 
 
-def test_restore_reports_a_corrupted_asset_explicitly(three_datasets, tmp_path):
-    """包里附件被篡改：恢复仍完成，但结果必须显式列出问题，不许静默成功。"""
+def test_corrupted_asset_refuses_the_whole_import_before_writing(three_datasets, tmp_path):
+    """包里附件被篡改（与清单 hash 不符）：导入**整体拒绝**，一个字节都不写。
+
+    RR-03 之前这里断言的是"恢复仍完成、问题列在 asset_issues 里"——那是把损坏的
+    附件写进共享目录之后才发现的。现在的契约是：完整性问题的判定发生在写盘之前。
+    """
     archive, _ = _import_all(three_datasets, tmp_path)
     names = _member_names(archive)
     target_member = f"datasets/{three_datasets.id_b}/user_files/bbb-dataset-b-file.bin"
@@ -230,16 +138,36 @@ def test_restore_reports_a_corrupted_asset_explicitly(three_datasets, tmp_path):
             payload = b"CORRUPTED" * 20 if name == target_member else source.read(name)
             target.writestr(name, payload)
 
-    result = import_dataset(tampered, "被篡改的包", database.engine, tmp_path / "staging-tampered")
+    datasets_dir = three_datasets.path_a.parent
+    before = _fingerprints(datasets_dir)
+    names_before = _dataset_names()
 
-    issues = "\n".join(result.get("asset_issues") or [])
+    with pytest.raises(DatasetError, match="附件未通过校验"):
+        import_dataset(tampered, "被篡改的包", database.engine, tmp_path / "staging-tampered")
+
+    # 一个字节都没动：既有库、既有附件、列表都不变。
+    assert _fingerprints(datasets_dir) == before
+    assert _dataset_names() == names_before
+
+    # 用户显式选择"跳过有问题的附件"时，导入继续，但问题必须逐条可见。
+    partial = import_dataset(
+        tampered,
+        "被篡改的包-部分",
+        database.engine,
+        tmp_path / "staging-tampered-partial",
+        allow_partial_assets=True,
+    )
+    issues = "\n".join(partial.get("asset_issues") or [])
     assert "bbb-dataset-b-file.bin" in issues
-    # 大小不符 / hash 不符 / 缺失，三种显式报告形态都算数——关键是"不许静默"。
-    assert "不符" in issues or "校验" in issues or "缺少" in issues
+    assert "不符" in issues or "校验" in issues
+    # 损坏的字节没有被写进共享目录：B 的附件在磁盘上保持原样（A 的原件）。
+    assert (
+        datasets_dir / "user_files" / "bbb-dataset-b-file.bin"
+    ).read_bytes() != b"CORRUPTED" * 20
 
 
-def test_restore_reports_a_missing_asset_explicitly(three_datasets, tmp_path):
-    """包里缺了清单声明的一份附件：导入结果必须显式点名，不静默。"""
+def test_missing_asset_refuses_the_whole_import_before_writing(three_datasets, tmp_path):
+    """包里缺了清单声明的一份附件：导入整体拒绝，既有数据一字未变。"""
     archive, _ = _import_all(three_datasets, tmp_path)
     target_member = f"datasets/{three_datasets.id_a}/referral_images/aaa-referral-note.png"
 
@@ -249,9 +177,25 @@ def test_restore_reports_a_missing_asset_explicitly(three_datasets, tmp_path):
             if name != target_member:
                 target.writestr(name, source.read(name))
 
-    result = import_dataset(stripped, "缺附件的包", database.engine, tmp_path / "staging-missing")
+    datasets_dir = three_datasets.path_a.parent
+    before = _fingerprints(datasets_dir)
+    image = datasets_dir / "referral_images" / "aaa-referral-note.png"
+    image_before = image.read_bytes()
 
-    issues = "\n".join(result.get("asset_issues") or [])
+    with pytest.raises(DatasetError, match="附件未通过校验"):
+        import_dataset(stripped, "缺附件的包", database.engine, tmp_path / "staging-missing")
+
+    assert _fingerprints(datasets_dir) == before
+    assert image.read_bytes() == image_before
+
+    partial = import_dataset(
+        stripped,
+        "缺附件的包-部分",
+        database.engine,
+        tmp_path / "staging-missing-partial",
+        allow_partial_assets=True,
+    )
+    issues = "\n".join(partial.get("asset_issues") or [])
     assert "aaa-referral-note.png" in issues
 
 
@@ -358,35 +302,31 @@ def test_partial_file_is_cleaned_up_when_database_write_fails(
     assert after - before == set(), f"失败导入不应在 datasets 目录留下任何新文件：{after - before}"
 
 
-def test_asset_restore_hard_failure_does_not_sink_the_import(three_datasets, tmp_path, monkeypatch):
-    """附件恢复的硬故障（OSError）：数据集本身照常导入，问题显式进 asset_issues。
+def test_asset_publish_failure_rolls_the_new_datasets_back(three_datasets, tmp_path, monkeypatch):
+    """附件发布阶段硬故障（磁盘满/权限）：库与附件都不留下——失败就等于什么都没发生。
 
-    ``restore_assets_from_manifest`` 复制中途的 OSError（磁盘满/权限）由
-    ``import_dataset`` 兜住转成 ``asset_issues``（"附件恢复失败：…"）——这条
-    except 分支此前没有测试。契约：附件故障**不拖垮**数据集导入，但必须可见。
+    RR-03 之前这里断言的是"数据集照常导入、问题进 asset_issues"：包里的附件写不进去
+    也照样发布库，用户看到一次失败却在列表里多出几份半截数据集。现在发布顺序是
+    "附件先验→库→附件发布"，发布阶段的失败会把本次新建的数据集文件收回去（只删
+    自己刚建的那几份）。
     """
-    from app.services import datasets as datasets_service
+    from app.services.data_backup.asset_restore import AssetRestorePlan
 
     archive = export_all_datasets(database.engine, tmp_path / "staging-export")
-    real_restore = datasets_service.restore_assets_from_manifest
 
-    def _restore_then_fail(archive_path, asset_manifest, *, prefixes, destinations):
-        # 只让「活动数据集」段（扁平前缀）失败：随包数据集段照常走真实现。
-        if prefixes["user_files"].endswith("user_files/") and "/" not in prefixes[
-            "user_files"
-        ].rstrip("/"):
-            raise OSError("模拟附件恢复中途磁盘故障")
-        return real_restore(
-            archive_path, asset_manifest, prefixes=prefixes, destinations=destinations
-        )
+    def _explode(self):
+        raise OSError("模拟附件发布中途磁盘故障")
 
-    monkeypatch.setattr(datasets_service, "restore_assets_from_manifest", _restore_then_fail)
+    monkeypatch.setattr(AssetRestorePlan, "publish", _explode)
 
-    result = import_dataset(archive, "附件故障包", database.engine, tmp_path / "staging-asset-fail")
+    datasets_dir = three_datasets.path_a.parent
+    before = _fingerprints(datasets_dir)
+    names_before = _dataset_names()
 
-    issues = "\n".join(result.get("asset_issues") or [])
-    assert "附件恢复失败" in issues, issues
-    assert "模拟附件恢复中途磁盘故障" in issues, issues
-    # 数据集本身照常可用：导入结果在列表里可见。
-    names = {item["name"] for item in datasets_service.list_datasets()}
-    assert "附件故障包" in names
+    with pytest.raises(OSError, match="模拟附件发布中途磁盘故障"):
+        import_dataset(archive, "附件故障包", database.engine, tmp_path / "staging-asset-fail")
+
+    # 回滚到导入前：没有半截数据集、没有新增附件、没有暂存残留。
+    assert _fingerprints(datasets_dir) == before
+    assert _dataset_names() == names_before
+    assert not [path for path in datasets_dir.iterdir() if path.name.startswith(".rf-restore-")]

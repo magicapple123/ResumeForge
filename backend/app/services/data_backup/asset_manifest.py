@@ -29,9 +29,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import shutil
 import sqlite3
-import zipfile
 from collections.abc import Mapping
 from contextlib import closing
 from pathlib import Path
@@ -117,18 +115,47 @@ def collect_referenced_names(database: Path) -> dict[str, set[str]]:
     return referenced
 
 
+def _recorded_user_file_digests(database: Path) -> dict[str, str]:
+    """读回 ``user_file`` 登记的 ``disk_name -> sha256``（RR-03）。
+
+    清单里已经记了"导出时磁盘上的字节哈希"；把数据库登记的哈希也读出来，就能区分
+    "文件不见了"（missing）与"文件还在但内容已经不是它登记的那一份"（mismatched）——
+    后者意味着磁盘被外力改过，导出的备份不该被当成完整备份。
+    """
+    digests: dict[str, str] = {}
+    try:
+        connection = sqlite3.connect(f"{database.as_uri()}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return digests
+    with closing(connection):
+        try:
+            rows = connection.execute("SELECT disk_name, sha256 FROM user_file").fetchall()
+        except sqlite3.Error:
+            return digests
+        for row in rows:
+            name, digest = row if row else (None, None)
+            if isinstance(name, str) and name and isinstance(digest, str) and digest:
+                digests[name] = digest
+    return digests
+
+
 def build_asset_manifest(database: Path, assets_root: Path) -> dict[str, Any]:
     """为一份数据库生成资产清单：只收该库引用到的文件，逐文件记 size + sha256。
 
     ``assets_root`` 是磁盘资产的根（该数据库所在目录；类别目录在其下）。库引用了
     但磁盘上已不存在的文件记入 ``<category>_missing``——导出时如实记录，恢复时
     用户能看到"这份备份本来就不完整"，而不是以为附件都齐了。
+
+    ``user_file`` 登记过哈希的资产再比一次实际字节：对不上进 ``<category>_mismatched``
+    （RR-03：导出侧的"完整备份"标签要以此为准，不能只报"没缺文件"）。
     """
     referenced = collect_referenced_names(database)
+    recorded = _recorded_user_file_digests(database)
     manifest: dict[str, Any] = {"manifest_version": ASSET_MANIFEST_VERSION}
     for category in ASSET_CATEGORIES:
         entries: list[dict[str, Any]] = []
         missing: list[str] = []
+        mismatched: list[str] = []
         directory = assets_root / category
         for name in sorted(referenced[category]):
             file_path = directory / name
@@ -138,9 +165,14 @@ def build_asset_manifest(database: Path, assets_root: Path) -> dict[str, Any]:
                 missing.append(name)
                 continue
             entries.append({"name": name, "size_bytes": size, "sha256": digest})
+            expected = recorded.get(name)
+            if expected and expected != digest:
+                mismatched.append(name)
         manifest[category] = entries
         if missing:
             manifest[f"{category}_missing"] = missing
+        if mismatched:
+            manifest[f"{category}_mismatched"] = mismatched
     return manifest
 
 
@@ -151,83 +183,56 @@ def _assert_safe_asset_name(name: Any, category: str) -> str:
     return name
 
 
-def restore_assets_from_manifest(
-    archive_path: Path,
-    asset_manifest: Mapping[str, Any],
-    *,
-    prefixes: Mapping[str, str],
-    destinations: Mapping[str, Path],
-) -> tuple[dict[str, int], list[str]]:
-    """按清单把附件恢复到目标目录，逐文件复核 sha256，返回（恢复数, 问题清单）。
+def manifest_asset_warnings(manifest: Mapping[str, Any] | None) -> list[str]:
+    """汇总一份备份清单里的附件告警（主段 + 每个随包数据集段）。
 
-    ``prefixes``/``destinations`` 按 ``ASSET_CATEGORIES`` 里的类别给出口径：前缀是
-    包内成员前缀（活动数据集 ``user_files/``，随包数据集 ``datasets/<id>/user_files/``），
-    目标是磁盘目录。目标已存在的同名文件**会被包内内容覆盖**——落盘名按内容指纹生成，
-    同名即同内容，覆盖是安全的；万一不同（被篡改的包），覆盖恰好是恢复动作，且 hash
-    复核会把原状态记录进问题清单。
+    两种告警都属于"这份备份不完整"，导出方与导入方都要如实说出口：
+
+    - ``<category>_missing``：导出时这个被引用的附件在磁盘上已经找不到了；
+    - ``<category>_mismatched``：文件还在，但内容与数据库登记的 SHA-256 不符
+      （磁盘被外力改过），装进包的其实是"当前磁盘上的那一份"。
+
+    导出侧用它在响应头里标出"这份包不完整"，导入侧用它提示用户别把它当成完整备份。
     """
-    restored: dict[str, int] = {category: 0 for category in ASSET_CATEGORIES}
-    issues: list[str] = []
-    with zipfile.ZipFile(archive_path) as archive:
-        members = set(archive.namelist())
+    warnings: list[str] = []
+    if not isinstance(manifest, Mapping):
+        return warnings
+    sections: list[tuple[str, Any]] = [("", manifest.get("asset_manifest"))]
+    datasets = manifest.get("datasets")
+    if isinstance(datasets, list):
+        for entry in datasets:
+            if isinstance(entry, dict):
+                sections.append(
+                    (str(entry.get("name") or "随包数据集"), entry.get("asset_manifest"))
+                )
+    for label, section in sections:
+        if not isinstance(section, Mapping):
+            continue
+        prefix = f"{label}：" if label else ""
         for category in ASSET_CATEGORIES:
-            prefix = prefixes[category]
-            destination = destinations[category]
-            for entry in asset_manifest.get(category) or []:
-                if not isinstance(entry, dict):
-                    issues.append(f"{category}：资产清单里有一条无法识别的条目")
-                    continue
-                name = _assert_safe_asset_name(entry.get("name"), category)
-                member = f"{prefix}{name}"
-                if member not in members:
-                    issues.append(f"{category}/{name}：备份包中缺少该附件")
-                    continue
-                destination.mkdir(parents=True, exist_ok=True)
-                target = destination / name
-                with archive.open(member) as source, target.open("wb") as target_file:
-                    shutil.copyfileobj(source, target_file)
-                restored[category] += 1
-                # 写完**实际读回来**复核：恢复成功必须以磁盘上的字节为准，不凭"写没报错"。
-                issues.extend(_verify_one(target, category, name, entry))
-    return restored, issues
-
-
-def _verify_one(path: Path, category: str, name: str, entry: Mapping[str, Any]) -> list[str]:
-    """复核一份恢复出来的文件：大小与 sha256 与清单一致；不一致显式报问题。"""
-    try:
-        size, digest = file_digest(path)
-    except OSError as exc:
-        return [f"{category}/{name}：恢复后无法读取（{exc}）"]
-    expected_size = entry.get("size_bytes")
-    if isinstance(expected_size, int) and size != expected_size:
-        return [f"{category}/{name}：恢复后大小不符（期望 {expected_size}，实际 {size}）"]
-    expected_digest = entry.get("sha256")
-    if isinstance(expected_digest, str) and digest != expected_digest:
-        return [f"{category}/{name}：内容校验不一致（SHA-256 与清单不符）"]
-    return []
-
-
-def verify_restored_assets(
-    asset_manifest: Mapping[str, Any], destinations: Mapping[str, Path]
-) -> list[str]:
-    """对**已恢复**的资产目录整体复核一遍清单：文件在、大小对、hash 对。
-
-    这是"恢复到新目录后实际读取验证"的独立入口：不依赖恢复过程的内存状态，
-    直接以磁盘现状对照清单，供导入流程在收尾时调用。
-    """
-    issues: list[str] = []
-    for category in ASSET_CATEGORIES:
-        destination = destinations[category]
-        for entry in asset_manifest.get(category) or []:
-            if not isinstance(entry, dict):
-                continue
-            try:
-                name = _assert_safe_asset_name(entry.get("name"), category)
-            except BackupError:
-                issues.append(f"{category}：资产清单里有一条不合法的文件名")
-                continue
-            issues.extend(_verify_one(destination / name, category, name, entry))
-    return issues
+            missing = [
+                name for name in section.get(f"{category}_missing") or [] if isinstance(name, str)
+            ]
+            mismatched = [
+                name
+                for name in section.get(f"{category}_mismatched") or []
+                if isinstance(name, str)
+            ]
+            if missing:
+                warnings.append(
+                    f"{prefix}备份导出时就缺少 {len(missing)} 个被引用的附件（"
+                    + "、".join(missing[:3])
+                    + ("…" if len(missing) > 3 else "")
+                    + "），这份备份不完整"
+                )
+            if mismatched:
+                warnings.append(
+                    f"{prefix}{len(mismatched)} 个附件的内容与数据库登记的哈希不符（"
+                    + "、".join(mismatched[:3])
+                    + ("…" if len(mismatched) > 3 else "")
+                    + "），备份里装的是当前磁盘上的字节"
+                )
+    return warnings
 
 
 def verify_database_rows(database: Path, expected_counts: Mapping[str, Any]) -> list[str]:
@@ -266,13 +271,17 @@ def verify_database_rows(database: Path, expected_counts: Mapping[str, Any]) -> 
     return issues
 
 
+# 恢复侧（先验后发布、冲突检测）在 ``asset_restore.py``：它 import 本模块的
+# ``ASSET_CATEGORIES`` / ``file_digest`` / ``_assert_safe_asset_name``，所以**这里
+# 不能反向 re-export**（会形成循环导入）。调用方直接 ``from .asset_restore import ...``。
+
+
 __all__ = [
     "ASSET_CATEGORIES",
     "ASSET_MANIFEST_VERSION",
     "build_asset_manifest",
     "collect_referenced_names",
     "file_digest",
-    "restore_assets_from_manifest",
+    "manifest_asset_warnings",
     "verify_database_rows",
-    "verify_restored_assets",
 ]
