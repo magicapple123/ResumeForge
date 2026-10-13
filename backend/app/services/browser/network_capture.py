@@ -10,6 +10,7 @@
 
 这里只做**纯解析**：吃 CDP 事件、吐结构化数据，不碰浏览器、不发请求，所以能离线测。
 """
+
 from __future__ import annotations
 
 import base64
@@ -107,7 +108,9 @@ def collect_bodies(
         if event.get("method") != "Network.responseReceived":
             continue
         params = event.get("params")
-        response = params.get("response") if isinstance(params, dict) else None
+        if not isinstance(params, dict):
+            continue
+        response = params.get("response")
         if not isinstance(response, dict):
             continue
         request_id = str(params.get("requestId") or "")
@@ -132,9 +135,7 @@ def collect_bodies(
     return captured
 
 
-def first_json_with(
-    captured: list[CapturedResponse], predicate
-) -> Any | None:
+def first_json_with(captured: list[CapturedResponse], predicate) -> Any | None:
     """按顺序找第一个满足 ``predicate`` 的响应体。
 
     顺序有意义：一类接口在页面上会被调用多次（滚动加载、切换筛选），而我们要的通常是

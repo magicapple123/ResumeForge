@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, get_args
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -17,7 +17,7 @@ from ...models.apply import (
 from ...models.job import Job
 from ...models.profile import utcnow
 from ...models.resume import ResumeRecord
-from ...schemas.apply import ApplyConfigIn, ApplyQueueItemOut
+from ...schemas.apply import ApplyConfigIn, ApplyQueueItemOut, QueueStatus
 from .. import trash
 from ..profile.profile_service import get_profile_detail
 from ..sites.base import SiteAdapter
@@ -28,6 +28,19 @@ from ._match import _admission_of_match, _blocking_gaps, _match_requires_confirm
 
 # 队列列表的兜底上限（P2-2）：超过后前端按 total/truncated 如实提示。
 MAX_QUEUE_LIST = 500
+
+_QUEUE_STATUS_VALUES: tuple[QueueStatus, ...] = get_args(QueueStatus)
+
+
+def _as_queue_status(value: str) -> QueueStatus:
+    """模型层 ``status`` 是 ``str``，出口处收窄为 schema 的 ``Literal``。
+
+    取值由入队 / 回写链路用常量写入，正常不会走到兜底；万一库里出现未知值，在这里
+    大声失败（与 pydantic Literal 字段的校验语义一致），不悄悄把非法状态发给前端。
+    """
+    if value not in _QUEUE_STATUS_VALUES:
+        raise ValueError(f"未知的队列状态：{value!r}")
+    return value
 
 
 def _resume_title(db: Session, resume_id: int | None) -> str:
@@ -72,7 +85,7 @@ def _queue_out(db: Session, item: ApplyQueueItem, job: Job | None) -> ApplyQueue
         resume_title=_resume_title(db, item.resume_id),
         greeting=item.greeting,
         sort_order=item.sort_order,
-        status=item.status,
+        status=_as_queue_status(item.status),
         admission=admission,
         hard_gate=hard_gate,
         requires_confirm=_match_requires_confirm(match) if match is not None else False,
@@ -100,7 +113,11 @@ def list_queue(db: Session, limit: int = MAX_QUEUE_LIST) -> list[ApplyQueueItemO
     )
     # 岗位一次性取回，避免每行一次查询（队列条数不多，但这属于该顺手做对的事）。
     jobs = _jobs_by_id(db, [item.job_id for item in items])
-    return [_queue_out(db, item, jobs.get(item.job_id)) for item in items]
+    # job_id 在模型层可空（岗位删除后置空）；_jobs_by_id 只收非空 id，这里对 None 直接给 None。
+    return [
+        _queue_out(db, item, jobs.get(item.job_id) if item.job_id is not None else None)
+        for item in items
+    ]
 
 
 def count_queue(db: Session) -> int:

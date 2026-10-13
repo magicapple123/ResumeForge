@@ -1,4 +1,5 @@
 """CDP 客户端公共基座：常量、``CdpError`` 与 ``CdpClient`` 抽象基类。"""
+
 from __future__ import annotations
 
 import logging
@@ -60,6 +61,19 @@ class CdpClient(ABC):
     def drain_events(self) -> list[dict[str, Any]]:
         return []
 
+    # 导航与文件上传与事件订阅一样走"基类给默认实现"的可选能力形态：真实客户端
+    # （WebsocketCdpClient）都提供，包装层（StopAware / SampleRecording）都显式转发，
+    # 离线假客户端只实现自己被调用到的方法即可。但这两个被调用时**没有兜底路径**
+    # （安静返回会让调用方误以为导航/上传成功了），所以默认实现大声失败而不是返回空值。
+    def navigate(self, url: str, *, timeout: float | None = None) -> dict[str, Any]:
+        """导航当前标签页到 ``url``；不支持导航的实现大声失败。"""
+        raise CdpError("当前 CDP 客户端不支持页面导航")
+
+    def set_file_input(
+        self, selector: str, files: list[str], *, timeout: float | None = None
+    ) -> None:
+        """把本地文件塞进 ``<input type="file">``；不支持上传的实现大声失败。"""
+        raise CdpError("当前 CDP 客户端不支持文件上传")
+
     def close(self) -> None:  # noqa: B027 - 可选钩子：子类按需覆写资源释放，基类故意留空
         """关闭底层连接（不关闭浏览器进程）。"""
-

@@ -4,15 +4,45 @@
 ``self._target_id`` / ``self._reset_connection`` / ``self._connection_handle``
 读写宿主 ``WebsocketCdpClient``（websocket_client.py）——整类搬运、成员名不得改动。
 """
+
 from __future__ import annotations
 
 import contextlib
 import logging
 import time
+from typing import Any, Protocol
 
 from .base import CdpError
 
 logger = logging.getLogger(__name__)
+
+# 页面可见性探测表达式：mixin 的类属性常量改成模块级，因为它属于 mixin 自身
+# 而不是宿主（_WindowHost 协议描述的是宿主契约，不该混入 mixin 自己的成员）。
+_VISIBILITY_PROBE = 'document.visibilityState || "unknown"'
+
+
+class _WindowHost(Protocol):
+    """``WindowAwareMixin`` 对宿主 ``WebsocketCdpClient`` 的最小类型契约。
+
+    上面模块说明里那份"私有属性契约"的类型化表达：mixin 方法把 ``self`` 注解为
+    本协议，pyright 据此校验属性与方法的存在性；宿主按结构满足协议，运行期零开销。
+    """
+
+    _target: dict[str, Any] | None
+    _target_id: str | None
+    _connection: Any | None
+
+    def send(
+        self, method: str, params: dict[str, Any] | None = None, *, timeout: float | None = None
+    ) -> dict[str, Any]: ...
+
+    def evaluate(self, expression: str, *, timeout: float | None = None) -> Any: ...
+
+    def list_targets(self) -> list[dict[str, Any]]: ...
+
+    def _reset_connection(self, *, clear_target: bool = False) -> None: ...
+
+    def _connection_handle(self) -> Any: ...
 
 
 class WindowAwareMixin:
@@ -29,9 +59,7 @@ class WindowAwareMixin:
     激活窗口（对被完全遮挡、位于其他虚拟桌面的窗口同样有效）。
     """
 
-    _VISIBILITY_PROBE = 'document.visibilityState || "unknown"'
-
-    def ensure_page_visible(self, *, timeout_seconds: float = 8.0) -> bool:
+    def ensure_page_visible(self: _WindowHost, *, timeout_seconds: float = 8.0) -> bool:
         """确保当前标签页所在窗口可见，返回最终是否 ``visible``。
 
         失败**不抛异常**、只返回 False：个别环境（无头、远程会话）确实无法还原窗口，
@@ -60,11 +88,11 @@ class WindowAwareMixin:
 
         while True:
             try:
-                last_state = str(self.evaluate(self._VISIBILITY_PROBE) or "")
+                last_state = str(self.evaluate(_VISIBILITY_PROBE) or "")
                 if last_state == "visible":
                     return True
                 _activate()
-                if str(self.evaluate(self._VISIBILITY_PROBE) or "") == "visible":
+                if str(self.evaluate(_VISIBILITY_PROBE) or "") == "visible":
                     return True
                 window = self.send("Browser.getWindowForTarget")
                 window_id = window.get("windowId")
@@ -99,7 +127,7 @@ class WindowAwareMixin:
                 return last_state == "visible"
             time.sleep(0.5)
 
-    def switch_to_target(self, target_id: str) -> bool:
+    def switch_to_target(self: _WindowHost, target_id: str) -> bool:
         """把后续命令切换到另一个标签页；切换失败返回 False（调用方自行决定回退）。
 
         用途：点击岗位页的「立即沟通」后，聊天页**可能开在新标签页**而不是整页跳转。
@@ -135,4 +163,3 @@ class WindowAwareMixin:
         except CdpError:
             return False
         return True
-

@@ -1,4 +1,5 @@
 """匹配结论的读取、准入判断与持久化。"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -14,7 +15,7 @@ from ...models.apply import (
 )
 from ...models.job import Job
 from ...models.profile import utcnow
-from ...schemas.job_match import JobMatchResult
+from ...schemas.job_match import AdmissionResult, JobMatchResult
 from ..job.job_match import match_requires_confirmation
 
 
@@ -22,16 +23,14 @@ def latest_match(db: Session, job_id: int | None) -> JobMatchAnalysis | None:
     """取某岗位最近一次匹配结论。"""
     if job_id is None:
         return None
-    return (
-        db.query(JobMatchAnalysis)
-        .filter(JobMatchAnalysis.job_id == job_id)
-        .one_or_none()
-    )
+    return db.query(JobMatchAnalysis).filter(JobMatchAnalysis.job_id == job_id).one_or_none()
 
 
-def _admission_of_match(match: JobMatchAnalysis) -> str | None:
+def _admission_of_match(match: JobMatchAnalysis) -> AdmissionResult | None:
     result = match.result if isinstance(match.result, dict) else {}
     admission = result.get("admission")
+    # ADMISSIONS 与 schemas.job_match.AdmissionResult 的三个字面量逐字一致（models/apply
+    # 是唯一出处），成员判断本身就是运行期收窄，通过后即是合法的 AdmissionResult。
     if admission in ADMISSIONS:
         return admission
     # 结果里没有可用 admission 时，退回按硬门槛/需确认字段推断（保守）。
@@ -54,11 +53,7 @@ def _match_requires_confirm(match: JobMatchAnalysis) -> bool:
     任何一次回归或历史脏数据出现空结论时都不应被当成 ALLOWED 放行自动投递。
     """
     admission = _admission_of_match(match)
-    return (
-        admission is None
-        or admission == ADMISSION_NEEDS_CONFIRM
-        or bool(match.requires_confirm)
-    )
+    return admission is None or admission == ADMISSION_NEEDS_CONFIRM or bool(match.requires_confirm)
 
 
 def _blocking_gaps(result: dict[str, Any]) -> list[str]:
@@ -75,16 +70,13 @@ def _blocking_gaps(result: dict[str, Any]) -> list[str]:
                     gaps.append(label)
     return gaps
 
+
 def persist_match(
     db: Session, job: Job, result: JobMatchResult, *, model: str = ""
 ) -> JobMatchAnalysis:
     """写入/覆盖某岗位最近一次匹配结论（job_id 唯一）。"""
     requires_confirm = match_requires_confirmation(result)
-    row = (
-        db.query(JobMatchAnalysis)
-        .filter(JobMatchAnalysis.job_id == job.id)
-        .one_or_none()
-    )
+    row = db.query(JobMatchAnalysis).filter(JobMatchAnalysis.job_id == job.id).one_or_none()
     payload = result.model_dump()
     if row is None:
         row = JobMatchAnalysis(
@@ -115,4 +107,3 @@ def delete_match(db: Session, job_id: int) -> None:
     if row is not None:
         db.delete(row)
         db.commit()
-

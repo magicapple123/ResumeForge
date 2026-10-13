@@ -17,6 +17,7 @@
 本模块**不含任何站点专属常量**：要保存哪些接口由调用方（任务运行器）从站点适配器的
 ``sample_markers`` 取出来传进来——站点知识只属于适配器层，这是本项目的分层纪律。
 """
+
 from __future__ import annotations
 
 import base64
@@ -140,7 +141,9 @@ class SampleRecordingCdpClient(CdpClient):
             if not isinstance(event, dict) or event.get("method") != "Network.responseReceived":
                 continue
             params = event.get("params")
-            response = params.get("response") if isinstance(params, dict) else None
+            if not isinstance(params, dict):
+                continue
+            response = params.get("response")
             if not isinstance(response, dict):
                 continue
             request_id = str(params.get("requestId") or "")
@@ -203,7 +206,9 @@ class SampleRecordingCdpClient(CdpClient):
             path = self._directory / self._file_name(label)
             path.write_bytes(encoded)
         except OSError:
-            logger.warning("写入站点样例失败，已跳过（不影响采集）：%s", _url_path(url), exc_info=True)
+            logger.warning(
+                "写入站点样例失败，已跳过（不影响采集）：%s", _url_path(url), exc_info=True
+            )
             return
         self._saved += 1
 
