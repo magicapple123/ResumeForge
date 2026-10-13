@@ -6,7 +6,7 @@ import pytest
 from app.models.resume import ResumeRecord
 from app.models.resume_delivery import ResumeDeliveryRecord
 from app.models.tracker import ApplicationTrack, ApplicationTrackEvent
-from app.schemas.tracker import TrackCreate
+from app.schemas.tracker import TrackCreate, TrackUpdate
 from app.services import tracker as tracker_service
 from sqlalchemy import select
 
@@ -124,3 +124,94 @@ def test_api_create_track_failure_leaves_no_residue_and_retry_succeeds(
     ok = client.post("/api/tracker", json={"company": "示例科技", "title": "后端开发"})
     assert ok.status_code == 201
     assert client.get("/api/tracker").json()["total"] == 1
+
+
+# ===== update_track 单事务（PR-10 对称项）=====
+
+
+def _update_payload(**overrides) -> TrackUpdate:
+    values = {"company": "示例科技", "title": "后端开发", "status": "interview", **overrides}
+    return TrackUpdate(**values)
+
+
+def test_update_track_success_writes_event_and_snapshot_in_one_transaction(db_session):
+    """基线：状态推进 + 新关联简历的投递快照在**同一个事务**里落库。"""
+    resume = _make_resume(db_session)
+    track = tracker_service.create_track(db_session, _payload())
+    updated = tracker_service.update_track(db_session, track, _update_payload(resume_id=resume.id))
+    assert updated.status == "interview"
+    events = db_session.scalars(select(ApplicationTrackEvent)).all()
+    assert [(event.from_status, event.to_status) for event in events] == [
+        ("", "applied"),
+        ("applied", "interview"),
+    ]
+    delivery = db_session.scalars(select(ResumeDeliveryRecord)).one()
+    assert delivery.track_id == track.id
+
+
+def test_update_event_failure_rolls_back_field_changes(db_session):
+    """事件插入失败：字段改动不得残留（旧行为是"字段已提交但缺事件"的半成品）。"""
+    track = tracker_service.create_track(db_session, _payload())
+
+    def exploding_event(*args, **kwargs):
+        raise RuntimeError("record_status_change 注入失败")
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(tracker_service, "record_status_change", exploding_event)
+    try:
+        with pytest.raises(RuntimeError):
+            tracker_service.update_track(db_session, track, _update_payload())
+    finally:
+        monkey.undo()
+    db_session.rollback()
+    db_session.expire_all()
+    stored = db_session.get(ApplicationTrack, track.id)
+    assert stored.status == "applied"  # 字段改动整体回滚
+    assert _counts(db_session) == (1, 1, 0)
+
+
+def test_update_freeze_failure_rolls_back_status_and_event(db_session):
+    """快照冻结失败：状态改动与新事件都不得残留，简历本体不受影响。"""
+    resume = _make_resume(db_session)
+    track = tracker_service.create_track(db_session, _payload())
+
+    def exploding_freeze(*args, **kwargs):
+        raise RuntimeError("freeze_delivery 注入失败")
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(tracker_service, "freeze_delivery", exploding_freeze)
+    try:
+        with pytest.raises(RuntimeError):
+            tracker_service.update_track(db_session, track, _update_payload(resume_id=resume.id))
+    finally:
+        monkey.undo()
+    db_session.rollback()
+    db_session.expire_all()
+    stored = db_session.get(ApplicationTrack, track.id)
+    assert stored.status == "applied"
+    assert stored.resume_id is None
+    assert _counts(db_session) == (1, 1, 0)
+    assert db_session.get(ResumeRecord, resume.id) is not None
+
+
+def test_update_final_commit_failure_rolls_back_everything(db_session):
+    """最终 commit 失败：字段 / 事件 / 快照整体回滚，无业务半成品。"""
+    resume = _make_resume(db_session)
+    track = tracker_service.create_track(db_session, _payload())
+
+    def failing_commit():
+        raise RuntimeError("commit 注入失败")
+
+    original_commit = db_session.commit
+    db_session.commit = failing_commit
+    try:
+        with pytest.raises(RuntimeError):
+            tracker_service.update_track(db_session, track, _update_payload(resume_id=resume.id))
+    finally:
+        db_session.commit = original_commit
+    db_session.rollback()
+    db_session.expire_all()
+    stored = db_session.get(ApplicationTrack, track.id)
+    assert stored.status == "applied"
+    assert stored.resume_id is None
+    assert _counts(db_session) == (1, 1, 0)
