@@ -1,5 +1,12 @@
 # 桌面依赖供应链审计与豁免基线（2026-10-13，生产审计 PR-06）
 
+
+## 2026-10-13 升级记录（PR-06 豁免清偿）
+
+2026-10-13 执行 `electron ^33.0.0 → ^44.7.0` 与 `electron-builder ^25.1.8 → ^26.17.0` 升级（仅锁文件变更，由 CI desktop-shell 打包门禁 + desktop-shell-smoke 真启动作业全链路验证）。升级后 `npm audit` 从 **19 条（4 moderate / 14 high / 1 critical）降到 8 条（全 moderate）**：全部 critical/high（含 critical 的 tar、electron 自身的 38 条 GHSA）随升级清零。剩余 8 条全部源自单一根公告 **GHSA-hp3w-g68c-fv3c**（sprintf-js 无界精度说明符 DoS）——sprintf-js 1.1.3 是 npm 最新版且上游未发布修复版本，roarr → global-agent → @electron/get 链（electron 与 app-builder-lib 传递引入）在上游发布修复前无法消除，按 moderate 登记豁免至 2027-01-31。
+
+> 下表保留升级前的逐条审计记录供追溯；**升级后的权威豁免清单以  为准**（已重建为上述 8 条）。electron-builder 26 的配置 schema/产物布局变化由 CI 打包校验与 asar require 门禁兜底。
+
 ## 范围与结论
 
 对 `desktop/` 运行 `npm audit`（registry.npmjs.org，2026-10-13）：**19 个受影响包条目**
