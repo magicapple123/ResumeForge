@@ -3,7 +3,19 @@
 旧的 ``jobs`` / ``resumes`` 字段保持不变；六个新数据域统一放进 ``more``（``SearchHit``），
 旧调用方完全无感。扩展域只在 ``scope in ("all", "more")`` 时查询，``scope="jobs"`` 或
 ``"resumes"`` 时仍只查单一域，语义不变。
+
+检索路径（2026-10 万级数据优化批）：各域优先走迁移 ``0046_search_fts`` 建的
+FTS5 trigram 全文索引（见 ``services/search_fts``），子串语义与原 LIKE 一致；
+FTS 表不存在（历史库/旧 SQLite）或关键词不足 3 字符时回退原 ``LIKE '%kw%'``。
+两路结果一致由 ``tests/test_search_fts.py`` 的对照测试钉住。技能域保留 LIKE
+（个人资料硬删子表，至多几十行，FTS 化是负优化——理由见 search_fts 模块注释）。
+
+排序：全部按 ``created_at DESC, id DESC``。``id`` 决胜是 FTS 化批引入的——
+批量导入的行常常共享同一秒的 ``created_at``，平局时 SQLite 的返回顺序取决于
+查询计划（LIKE 扫描与 FTS ``id IN (MATCH)`` 的计划不同），不加决胜两路就会
+在平局上给出不同顺序；决胜后任何计划下顺序都确定。
 """
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session
@@ -20,12 +32,41 @@ from ..models.resume import ResumeRecord
 from ..schemas.job import JobOut
 from ..schemas.resume import ResumeBrief
 from ..schemas.search import SearchHit, SearchResult
-from ..services import trash
+from ..services import search_fts, trash
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
+# 关键词的 LIKE 形态与各域被检索的字段。字段清单必须与
+# ``search_fts.SEARCH_FTS_SPECS`` 里同一张表的 FTS 列一一对应。
+_JOBS_COLUMNS = (
+    Job.title,
+    Job.company,
+    Job.location,
+    Job.description,
+    Job.additional_info,
+    Job.note,
+)
+_RESUMES_COLUMNS = (
+    ResumeRecord.title,
+    ResumeRecord.job_title,
+    ResumeRecord.company,
+    cast(ResumeRecord.content, String),
+)
 
-def _search_more(db: Session, like: str, limit: int) -> list[SearchHit]:
+
+def _keyword_filter(db: Session, model: type, base_table: str, like: str, term: str, columns):
+    """关键词过滤：FTS 可用走 ``MATCH``（按 id 关联），否则回退多列 ``LIKE``。
+
+    两路语义一致（子串匹配 + ASCII 大小写折叠），软删除过滤不在这里——它由调用方的
+    ``trash.live_only`` 承担（FTS 索引里保留软删行，靠查询侧排除，见 search_fts 注释）。
+    """
+    fts_filter = search_fts.id_match_filter(db, model, base_table, term)
+    if fts_filter is not None:
+        return fts_filter
+    return or_(*(column.like(like) for column in columns))
+
+
+def _search_more(db: Session, like: str, term: str, limit: int) -> list[SearchHit]:
     """检索六个扩展数据域，返回按域分组的 ``SearchHit`` 列表。
 
     每域只取 ``limit`` 条、按创建时间倒序；技能表没有 ``deleted_at``（它是个人资料里的
@@ -37,15 +78,22 @@ def _search_more(db: Session, like: str, limit: int) -> list[SearchHit]:
         db.query(Referral)
         .filter(trash.live_only(Referral))
         .filter(
-            or_(
-                Referral.job_title.like(like),
-                Referral.company.like(like),
-                Referral.referrer_name.like(like),
-                Referral.position.like(like),
-                Referral.note.like(like),
+            _keyword_filter(
+                db,
+                Referral,
+                "referral",
+                like,
+                term,
+                (
+                    Referral.job_title,
+                    Referral.company,
+                    Referral.referrer_name,
+                    Referral.position,
+                    Referral.note,
+                ),
             )
         )
-        .order_by(Referral.created_at.desc())
+        .order_by(Referral.created_at.desc(), Referral.id.desc())
         .limit(limit)
         .all()
     )
@@ -63,8 +111,10 @@ def _search_more(db: Session, like: str, limit: int) -> list[SearchHit]:
     reminder_rows = (
         db.query(Reminder)
         .filter(trash.live_only(Reminder))
-        .filter(or_(Reminder.title.like(like), Reminder.note.like(like)))
-        .order_by(Reminder.created_at.desc())
+        .filter(
+            _keyword_filter(db, Reminder, "reminder", like, term, (Reminder.title, Reminder.note))
+        )
+        .order_by(Reminder.created_at.desc(), Reminder.id.desc())
         .limit(limit)
         .all()
     )
@@ -83,14 +133,21 @@ def _search_more(db: Session, like: str, limit: int) -> list[SearchHit]:
         db.query(InterviewExperience)
         .filter(trash.live_only(InterviewExperience))
         .filter(
-            or_(
-                InterviewExperience.title.like(like),
-                InterviewExperience.company.like(like),
-                InterviewExperience.position.like(like),
-                InterviewExperience.content.like(like),
+            _keyword_filter(
+                db,
+                InterviewExperience,
+                "interview_experience",
+                like,
+                term,
+                (
+                    InterviewExperience.title,
+                    InterviewExperience.company,
+                    InterviewExperience.position,
+                    InterviewExperience.content,
+                ),
             )
         )
-        .order_by(InterviewExperience.created_at.desc())
+        .order_by(InterviewExperience.created_at.desc(), InterviewExperience.id.desc())
         .limit(limit)
         .all()
     )
@@ -109,15 +166,22 @@ def _search_more(db: Session, like: str, limit: int) -> list[SearchHit]:
         db.query(ClaimRecord)
         .filter(trash.live_only(ClaimRecord))
         .filter(
-            or_(
-                ClaimRecord.title.like(like),
-                ClaimRecord.category.like(like),
-                ClaimRecord.subject.like(like),
-                ClaimRecord.source_fact.like(like),
-                ClaimRecord.candidate_wording.like(like),
+            _keyword_filter(
+                db,
+                ClaimRecord,
+                "claim_record",
+                like,
+                term,
+                (
+                    ClaimRecord.title,
+                    ClaimRecord.category,
+                    ClaimRecord.subject,
+                    ClaimRecord.source_fact,
+                    ClaimRecord.candidate_wording,
+                ),
             )
         )
-        .order_by(ClaimRecord.created_at.desc())
+        .order_by(ClaimRecord.created_at.desc(), ClaimRecord.id.desc())
         .limit(limit)
         .all()
     )
@@ -136,15 +200,22 @@ def _search_more(db: Session, like: str, limit: int) -> list[SearchHit]:
         db.query(Material)
         .filter(trash.live_only(Material))
         .filter(
-            or_(
-                Material.title.like(like),
-                Material.category.like(like),
-                Material.content.like(like),
-                Material.note.like(like),
-                Material.url.like(like),
+            _keyword_filter(
+                db,
+                Material,
+                "material",
+                like,
+                term,
+                (
+                    Material.title,
+                    Material.category,
+                    Material.content,
+                    Material.note,
+                    Material.url,
+                ),
             )
         )
-        .order_by(Material.created_at.desc())
+        .order_by(Material.created_at.desc(), Material.id.desc())
         .limit(limit)
         .all()
     )
@@ -159,6 +230,7 @@ def _search_more(db: Session, like: str, limit: int) -> list[SearchHit]:
         for row in material_rows
     )
 
+    # 技能域刻意保留 LIKE：个人资料硬删子表，至多几十行（见 search_fts 模块注释）。
     skill_rows = (
         db.query(Skill)
         .filter(or_(Skill.name.like(like), Skill.level.like(like)))
@@ -193,17 +265,8 @@ def search(
         rows = (
             db.query(Job)
             .filter(trash.live_only(Job))
-            .filter(
-                or_(
-                    Job.title.like(like),
-                    Job.company.like(like),
-                    Job.location.like(like),
-                    Job.description.like(like),
-                    Job.additional_info.like(like),
-                    Job.note.like(like),
-                )
-            )
-            .order_by(Job.created_at.desc())
+            .filter(_keyword_filter(db, Job, "job", like, q, _JOBS_COLUMNS))
+            .order_by(Job.created_at.desc(), Job.id.desc())
             .limit(limit)
             .all()
         )
@@ -212,19 +275,12 @@ def search(
         rows = (
             db.query(ResumeRecord)
             .filter(trash.live_only(ResumeRecord))
-            .filter(
-                or_(
-                    ResumeRecord.title.like(like),
-                    ResumeRecord.job_title.like(like),
-                    ResumeRecord.company.like(like),
-                    cast(ResumeRecord.content, String).like(like),
-                )
-            )
-            .order_by(ResumeRecord.created_at.desc())
+            .filter(_keyword_filter(db, ResumeRecord, "resume_record", like, q, _RESUMES_COLUMNS))
+            .order_by(ResumeRecord.created_at.desc(), ResumeRecord.id.desc())
             .limit(limit)
             .all()
         )
         resumes = [ResumeBrief.model_validate(row) for row in rows]
     if scope in ("all", "more"):
-        more = _search_more(db, like, limit)
+        more = _search_more(db, like, q, limit)
     return SearchResult(jobs=jobs, resumes=resumes, more=more)

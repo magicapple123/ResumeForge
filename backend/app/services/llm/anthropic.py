@@ -21,7 +21,7 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any
 
 import httpx
@@ -204,7 +204,7 @@ class AnthropicProvider(BaseLLMProvider):
 
     async def stream_chat_events(
         self, messages: list[dict], tools: list[dict] | None = None
-    ) -> AsyncIterator[LLMDelta]:
+    ) -> AsyncGenerator[LLMDelta, None]:
         """流式发消息请求，逐块产出 LLMDelta（支持工具调用）。
 
         重试治理（RF-14 §2.4）：429/5xx 只在**状态码阶段**（任何 delta 产出之前）按

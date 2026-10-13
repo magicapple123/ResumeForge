@@ -7,6 +7,7 @@
 工作台的手工创建/编辑走普通 JSON：结构化的提示词与知识文件用 JSON 表达更自然，
 也不必再绕一层文件上传。
 """
+
 import logging
 from urllib.parse import unquote
 from uuid import uuid4
@@ -15,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from ..database import get_db
+from ..database import get_db, session_engine
 from ..models.assistant import AssistantSkill
 from ..schemas.skill import (
     MAX_SKILL_DETAIL_FILE_CHARS,
@@ -92,9 +93,7 @@ def _to_detail(skill: AssistantSkill) -> AssistantSkillDetail:
             content = content[: max(budget, 0)]
             truncated = True
         budget -= len(content)
-        file_details.append(
-            {"path": item.path, "size_bytes": item.size_bytes, "content": content}
-        )
+        file_details.append({"path": item.path, "size_bytes": item.size_bytes, "content": content})
     return AssistantSkillDetail(
         **_to_out(skill).model_dump(),
         prompt=skill.prompt,
@@ -124,12 +123,10 @@ async def import_skill(request: Request, db: Session = Depends(get_db)):
     elif content_type in _MARKDOWN_CONTENT_TYPES:
         suffix = ".md"
     else:
-        raise HTTPException(
-            status_code=415, detail="请导入 .md 提示词文件或 .zip 技能包"
-        )
+        raise HTTPException(status_code=415, detail="请导入 .md 提示词文件或 .zip 技能包")
 
     source_name = _source_name(request)
-    staging = restore_directory(db.get_bind())
+    staging = restore_directory(session_engine(db))
     staging.mkdir(parents=True, exist_ok=True)
     # 临时文件仍然用随机名，避免并发导入同名文件互相截断；真实文件名走 source_name。
     candidate = staging / f"{uuid4().hex}{suffix}"
@@ -179,7 +176,13 @@ def update_skill(skill_id: int, payload: AssistantSkillUpdate, db: Session = Dep
     """更新技能（只提交要改的字段）；``files`` 提交时整体替换知识文件。"""
     if all(
         value is None
-        for value in (payload.name, payload.description, payload.prompt, payload.enabled, payload.files)
+        for value in (
+            payload.name,
+            payload.description,
+            payload.prompt,
+            payload.enabled,
+            payload.files,
+        )
     ):
         raise HTTPException(status_code=422, detail="至少提供一个要修改的技能字段")
     try:

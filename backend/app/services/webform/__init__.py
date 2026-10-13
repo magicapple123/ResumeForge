@@ -4,6 +4,24 @@
 详见 ``engine.py`` 的模块说明，守卫见 ``tests/test_webform_no_submit.py``。
 """
 
+# 把这些子模块挂成包属性（``webform.browser`` 等）：api 层路由经 ``webform_service.*``
+# 属性访问它们以保证 patch 契约（``app.api.webform.webform_service.*``）继续生效，
+# 这里显式 re-export 让类型检查器认识这批属性（运行时它们本就随导入被挂上）。
+from . import (
+    ai as ai,
+)
+from . import (
+    browser as browser,
+)
+from . import (
+    live_targets as live_targets,
+)
+from . import (
+    repeated_profile as repeated_profile,
+)
+from . import (
+    url_history as url_history,
+)
 from ._base import WebFormBadRequest, WebFormConflict, WebFormError, WebFormNotFound
 from .data import (
     build_catalog,

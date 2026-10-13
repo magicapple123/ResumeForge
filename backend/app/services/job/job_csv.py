@@ -15,6 +15,8 @@ CSV 导入的录入方式就是"CSV 导入"这一行为本身，无需用户填�
 
 from __future__ import annotations
 
+from typing import Any
+
 from ...models.job import JOB_STATUSES, Job
 from ..csv_io import (
     MAX_IMPORT_FILE_CHARS,
@@ -112,9 +114,13 @@ def _parse_favorite(value: str) -> bool:
     return (value or "").strip().lower() in _TRUE_TOKENS
 
 
-def row_to_payload(row: dict[str, str]) -> dict[str, object]:
-    """把一行解析结果清洗成可直接建 ``JobCreate`` 的字段字典。"""
-    payload: dict[str, object] = {}
+def row_to_payload(row: dict[str, str]) -> dict[str, Any]:
+    """把一行解析结果清洗成可直接建 ``JobCreate`` 的字段字典。
+
+    值域是 ``str``（文本字段）与 ``bool``（favorite），但调用方以 ``**`` 解包进
+    ``JobCreate``，键集合随行内容变化——声明 ``Any`` 让解包交给 pydantic 校验。
+    """
+    payload: dict[str, Any] = {}
     for field, value in row.items():
         text = (value or "").strip()
         if field == "favorite":

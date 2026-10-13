@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 
 import httpx
 
@@ -235,7 +235,7 @@ class OpenAICompatProvider(BaseLLMProvider):
 
     async def stream_chat_events(
         self, messages: list[dict], tools: list[dict] | None = None
-    ) -> AsyncIterator[LLMDelta]:
+    ) -> AsyncGenerator[LLMDelta, None]:
         """带工具调用的流式对话。
 
         工具调用的参数在协议里是**碎片化**到达的（实测一个短 JSON 会用二十多帧、

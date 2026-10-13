@@ -44,7 +44,9 @@ def take_snapshot(db: Session = Depends(get_db)):
         snapshot, page = webform_service.read_snapshot(manager.client())
     except webform_service.WebFormError as exc:
         _raise(exc)
-    diagnostics.record_event("webform.snapshot", control_count=len(snapshot.controls), title=page.get("title", ""))
+    diagnostics.record_event(
+        "webform.snapshot", control_count=len(snapshot.controls), title=page.get("title", "")
+    )
     return {
         "snapshot_id": snapshot.id,
         "page": page,
@@ -106,7 +108,11 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
     )
     return {
         "snapshot_id": snapshot.id,
-        "page": {"url": snapshot.url, "title": snapshot.title, "control_count": len(snapshot.controls)},
+        "page": {
+            "url": snapshot.url,
+            "title": snapshot.title,
+            "control_count": len(snapshot.controls),
+        },
         **report.as_dict(),
         "default_indexes": [item.index for item in webform_service.default_selections(report)],
         "learning": {"candidates": learning},
@@ -129,9 +135,7 @@ def fill(payload: WebFormFillIn, db: Session = Depends(get_db)):
             manager.client(),
             snapshot,
             [
-                webform_service.FillSelection(
-                    index=item.index, field=item.field, value=item.value
-                )
+                webform_service.FillSelection(index=item.index, field=item.field, value=item.value)
                 for item in payload.items
             ],
             # 整页填充收尾复读一次：组件事后还原的"伪已填"要如实降级（见 apply_fill）。
@@ -165,7 +169,7 @@ def fill(payload: WebFormFillIn, db: Session = Depends(get_db)):
     }
 
 
-def _page_after_fill(client: Any, applied: dict[int, str]) -> list[dict[str, Any]]:
+def _page_after_fill(client: Any, applied: set[int]) -> list[dict[str, Any]]:
     """填完后重读页面，做一份可读快照：[{index, label, value, filled}]。
 
     **这是"我当时到底填了什么"的唯一可靠来源**：``outcomes`` 只说了成功与否，而回读校验
@@ -242,7 +246,11 @@ def _record_fill(
 
 @router.get("/records", response_model=list[WebFormFillRecordOut])
 def list_records(
-    limit: int = Query(default=webform_service.history.DEFAULT_LIST_LIMIT, ge=1, le=webform_service.history.MAX_LIST_LIMIT),
+    limit: int = Query(
+        default=webform_service.history.DEFAULT_LIST_LIMIT,
+        ge=1,
+        le=webform_service.history.MAX_LIST_LIMIT,
+    ),
     db: Session = Depends(get_db),
 ):
     """填充记录列表（只含未删除的，最近的在最前）。"""

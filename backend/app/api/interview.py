@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from collections.abc import AsyncIterator
+from typing import get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -35,6 +36,7 @@ from ..schemas.interview import (
     InterviewQuestionAnswerOut,
     InterviewQuestionAnswerRequest,
     InterviewQuestionGenerateRequest,
+    InterviewStatus,
     QuestionBankOut,
 )
 from ..schemas.material import MaterialCreate, MaterialOut
@@ -104,6 +106,21 @@ def _job_text(db: Session, job_id: int | None) -> str:
     return build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW)
 
 
+_INTERVIEW_STATUS_VALUES: tuple[InterviewStatus, ...] = get_args(InterviewStatus)
+
+
+def _as_interview_status(value: str) -> InterviewStatus:
+    """模型层 ``status`` 是 ``str``，出口处收窄为 schema 的 ``Literal``。
+
+    取值由开场 / 结束链路用常量写入，正常不会走到兜底；万一库里出现未知值，在这里
+    大声失败（与 pydantic Literal 字段的校验语义一致——以前响应模型校验也会在同一
+    位置拦下它），不悄悄把非法状态发给前端。
+    """
+    if value not in _INTERVIEW_STATUS_VALUES:
+        raise ValueError(f"未知的面试状态：{value!r}")
+    return value
+
+
 def _to_out(session: InterviewSession) -> InterviewBrief:
     return InterviewBrief(
         id=session.id,
@@ -116,7 +133,7 @@ def _to_out(session: InterviewSession) -> InterviewBrief:
         interviewer_style=session.interviewer_style,
         rounds=session.rounds,
         rounds_min=session.rounds_min,
-        status=session.status,
+        status=_as_interview_status(session.status),
         created_at=session.created_at,
         updated_at=session.updated_at,
         answered_rounds=answered_rounds(session),

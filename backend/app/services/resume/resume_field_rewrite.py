@@ -23,6 +23,7 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from ...schemas.resume import ResumeContent
 from ...services.llm.base import BaseLLMProvider
@@ -122,7 +123,9 @@ class FieldTarget:
     label: str
     text: str
     context: str
-    kind: str = "text"
+    # 取值只有构造路径写下的 "text"（默认）与 "lines" 两种——api 层按它决定
+    # 改写结果回填成单段还是逐条列表（RewriteFieldOut.kind 也是这个 Literal）。
+    kind: Literal["text", "lines"] = "text"
 
 
 def _item_identity(item: object, section: str) -> str:

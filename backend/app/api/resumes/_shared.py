@@ -3,15 +3,51 @@
 从原 ``api/resumes.py`` 原样搬运（Wave5 拆分）：常量与 helper 的实现逻辑零改动，
 仅随文件移动改变导入路径。
 """
+
 import json
+from typing import Literal, get_args
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ...models.resume import ResumeRecord
-from ...schemas.resume import ResumeContent, ResumeOut
+from ...schemas.resume import (
+    FactAnnotation,
+    ResumeContent,
+    ResumeFontScale,
+    ResumeOut,
+)
 from ...services import trash
 from ...services.resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_TEMPLATE
+
+# 与 ResumeBrief 对应字段上的 Literal 保持一致（schema 里未起别名，这里就近镜像）。
+ResumeSource = Literal["ai", "manual"]
+ResumeEnhancementLevel = Literal["light", "balanced", "strong"]
+
+# 模型层三列都是 ``str``，出口处收窄为 schema 的 ``Literal``（未知值大声失败，
+# 与 pydantic Literal 字段的校验语义一致——以前响应模型校验也会在同一位置拦下）。
+_SOURCE_VALUES: tuple[ResumeSource, ...] = get_args(ResumeSource)
+_ENHANCEMENT_LEVEL_VALUES: tuple[ResumeEnhancementLevel, ...] = get_args(ResumeEnhancementLevel)
+_FONT_SCALE_VALUES: tuple[ResumeFontScale, ...] = get_args(ResumeFontScale)
+
+
+def _as_resume_source(value: str) -> ResumeSource:
+    if value not in _SOURCE_VALUES:
+        raise ValueError(f"未知的简历来源：{value!r}")
+    return value
+
+
+def _as_enhancement_level(value: str) -> ResumeEnhancementLevel:
+    if value not in _ENHANCEMENT_LEVEL_VALUES:
+        raise ValueError(f"未知的美化档位：{value!r}")
+    return value
+
+
+def _as_font_scale(value: str) -> ResumeFontScale:
+    if value not in _FONT_SCALE_VALUES:
+        raise ValueError(f"未知的字号系数：{value!r}")
+    return value
+
 
 # 服务端 PDF 的实际页数与用户选定的上限。前端靠它们提示"下载下来的页数和你选的不一样"，
 # 因此这两个响应头必须出现在 CORS 的 expose_headers 里（见 application.py）。
@@ -31,18 +67,18 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         job_id=record.job_id,
         job_title=record.job_title,
         company=record.company,
-        source=record.source or "ai",
+        source=_as_resume_source(record.source or "ai"),
         favorite=record.favorite,
         model=record.model,
         enhancement_enabled=record.enhancement_enabled,
-        enhancement_level=record.enhancement_level,
+        enhancement_level=_as_enhancement_level(record.enhancement_level),
         note=record.note or "",
         template=record.template or DEFAULT_TEMPLATE,
         format_name=record.format_name or "",
         # 这个字段漏了不会报错，只会让保存成功却读不回来——界面上表现为"按了没反应"。
         format_config=record.format_config or {},
         page_limit=record.page_limit or 1,
-        font_scale=record.font_scale or DEFAULT_FONT_SCALE,
+        font_scale=_as_font_scale(record.font_scale or DEFAULT_FONT_SCALE),
         created_at=record.created_at,
         parent_revision_id=record.parent_revision_id,
         content=ResumeContent.model_validate(record.content),
@@ -50,7 +86,11 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         parse_error=record.parse_error,
         rationale=record.rationale or "",
         coverage_notes=record.coverage_notes or [],
-        fact_annotations=record.fact_annotations or [],
+        # JSON 列里存的是 dict，逐条显式校验成 FactAnnotation（与 pydantic 构造时的
+        # 隐式校验同语义，这里写明让类型检查器也看得到）。
+        fact_annotations=[
+            FactAnnotation.model_validate(item) for item in (record.fact_annotations or [])
+        ],
     )
 
 

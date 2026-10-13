@@ -14,6 +14,7 @@ from ..schemas.material import (
     CandidateCsvImportRequest,
     CandidateCsvImportResult,
     CandidateCsvPreview,
+    CandidateCsvRow,
     CandidateJobBulkImportOut,
     CandidateJobBulkImportRequest,
     CandidateJobCreate,
@@ -48,8 +49,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/candidate-jobs", tags=["candidate-jobs"])
 
 
-def _save_image_copies(db: Session, candidate_id: int, images: list[str]) -> None:
-    """best-effort：把备选岗位截图 data URL 落一份磁盘副本（失败只记日志）。"""
+def _save_image_copies(db: Session, candidate_id: int, images: list[str] | None) -> None:
+    """best-effort：把备选岗位截图 data URL 落一份磁盘副本（失败只记日志）。
+
+    ``CandidateJobUpdate.images`` 允许显式传 ``null``（区分"没提这个字段"与"清空"），
+    本函数对 ``None`` 与空列表同样按"没有图"处理。
+    """
     for index, data_url in enumerate(images or []):
         if not data_url:
             continue
@@ -206,7 +211,7 @@ async def preview_candidate_csv_import(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     rows, errors = parse_candidate_csv(text)
     return CandidateCsvPreview(
-        rows=[{"line": line, "data": data} for line, data in rows],
+        rows=[CandidateCsvRow(line=line, data=data) for line, data in rows],
         errors=errors,
     )
 
