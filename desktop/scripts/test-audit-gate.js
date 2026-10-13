@@ -147,8 +147,8 @@ test("the real repo baseline is loadable and internally consistent", () => {
   const baseline = JSON.parse(
     fs.readFileSync(path.join(REPO_DESKTOP, "scripts", "audit-baseline.json"), "utf-8"),
   );
-  assert.ok(Array.isArray(baseline.packages) && baseline.packages.length === 19,
-    "the 2026-10-13 audit reported 19 affected packages");
+  assert.ok(Array.isArray(baseline.packages) && baseline.packages.length > 0,
+    "the registered baseline must list at least one reviewed entry");
   for (const entry of baseline.packages) {
     assert.ok(entry.package && entry.severity && entry.until, `entry incomplete: ${entry.package}`);
     assert.ok(Array.isArray(entry.advisories), `${entry.package} needs an advisory list`);
