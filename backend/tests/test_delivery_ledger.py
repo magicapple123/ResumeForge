@@ -247,6 +247,14 @@ def test_delivery_detail_and_download_survive_resume_deletion(db_session, client
     assert download.status_code == 200
     payload = json.loads(download.content)
     assert payload["content"]["name"] == "林致远"
+    # RR-04：哈希按**响应字节**算（返回的是带说明的 JSON 封装，不是 content 字段本身）；
+    # 存档里那份内容的规范化哈希另用 X-Source-Content-Sha256 报出来。
+    assert download.headers["X-Content-Sha256"] == hashlib.sha256(download.content).hexdigest()
+    stored = _deliveries(db_session)[0]
+    assert download.headers["X-Source-Content-Sha256"] == (
+        stored.source_content_sha256 or stored.content_sha256
+    )
+    assert download.headers["X-Content-Sha256"] != download.headers["X-Source-Content-Sha256"]
 
     # 从进度进入对应 delivery。
     track_deliveries = client.get(f"/api/tracker/{track_id}/deliveries")
@@ -272,6 +280,34 @@ def test_export_snapshot_download_replays_from_archive(db_session, client):
     assert replay.headers["X-Delivery-Replay"] == "true"
     # 同内容 + 同参数的确定性渲染：重放产物与当时的下载逐字节一致。
     assert replay.content == original.content
+    # RR-04：下载头必须指向**本次实际返回的字节**；历史指纹另用 X-Artifact-Sha256。
+    assert replay.headers["X-Content-Sha256"] == hashlib.sha256(replay.content).hexdigest()
+    stored = _deliveries(db_session)[0]
+    assert replay.headers["X-Artifact-Sha256"] == stored.artifact_sha256
+    # md 是确定性渲染：重放字节与存档指纹本就应当相等。
+    assert replay.headers["X-Content-Sha256"] == replay.headers["X-Artifact-Sha256"]
+
+
+def test_html_replay_header_tracks_actual_bytes_not_the_stored_hash(db_session, client):
+    """HTML 每次渲染换 CSP nonce：重放字节与历史指纹不同，头必须按实际字节算。"""
+    resume = _make_resume(db_session)
+    original = client.get(f"/api/resumes/{resume.id}/export?format=html&record_delivery=true")
+    assert original.status_code == 200
+    delivery = _deliveries(db_session)[0]
+    stored_hash = delivery.artifact_sha256
+    assert stored_hash == hashlib.sha256(original.content).hexdigest()
+
+    first = client.get(f"/api/resumes/deliveries/{delivery.id}/download")
+    second = client.get(f"/api/resumes/deliveries/{delivery.id}/download")
+    assert first.status_code == second.status_code == 200
+    for response in (first, second):
+        # 修复前这里等于 stored_hash，而返回的字节每次都不同 —— 用户永远核对不上。
+        assert response.headers["X-Content-Sha256"] == hashlib.sha256(response.content).hexdigest()
+        assert response.headers["X-Artifact-Sha256"] == stored_hash
+        # CSP nonce 每次渲染都换：重放字节与"当初下载的那份"并不相同，
+        # 响应头如实反映这件事（X-Arifact-Sha256 留着历史指纹供比对）。
+        assert response.headers["X-Content-Sha256"] != stored_hash
+    assert first.content != second.content
 
 
 def test_legacy_snapshot_without_params_reports_not_replayable(db_session, client):

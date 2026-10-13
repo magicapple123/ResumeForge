@@ -380,18 +380,31 @@ export function getDeliveryDetail(deliveryId: number): Promise<DeliveryDetail> {
   return request(`/resumes/deliveries/${deliveryId}`);
 }
 
+export interface DeliveryDownload {
+  blob: Blob;
+  filename: string;
+  /** 本次返回字节的 sha256（RR-04：头永远指向真实字节，可与下载后的文件核对）。 */
+  contentSha256: string | null;
+  /** 历史指纹：export 快照 = 当初产物的 sha256；apply/track = 冻结内容的规范化 sha256。 */
+  artifactSha256: string | null;
+  /** true 表示这份字节是按存档**重新生成**的，不保证与当初下载的文件逐字节相同。 */
+  replayed: boolean;
+}
+
 /**
  * 从交付快照下载（PR-09）：export 快照重放导出产物；apply/track 快照下载冻结的
  * 内容 JSON。旧 export 快照缺参数时后端 409「不可还原」。
  */
-export async function downloadDelivery(
-  deliveryId: number,
-): Promise<{ blob: Blob; filename: string }> {
+export async function downloadDelivery(deliveryId: number): Promise<DeliveryDownload> {
   const resp = await requestRaw(`/resumes/deliveries/${deliveryId}/download`, {
     budget: "export",
   });
   return {
     blob: await resp.blob(),
     filename: getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? "delivery",
+    contentSha256: resp.headers.get("X-Content-Sha256"),
+    artifactSha256:
+      resp.headers.get("X-Artifact-Sha256") ?? resp.headers.get("X-Source-Content-Sha256"),
+    replayed: resp.headers.get("X-Delivery-Replay") === "true",
   };
 }

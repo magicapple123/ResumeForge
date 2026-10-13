@@ -4,6 +4,7 @@
 ``_shared`` 导入。
 """
 
+import hashlib
 import json
 import logging
 from urllib.parse import quote
@@ -294,6 +295,15 @@ def download_delivery(delivery_id: int, db: Session = Depends(get_db)):
       （同内容同参数的确定性渲染；脱敏存档不再二次脱敏）。旧快照没有请求参数时
       409「不可还原」——不假装能重放出同一份文件。
     - ``apply``/``track`` 快照：没有导出产物，返回冻结的内容 JSON（当时那份简历正文）。
+
+    **哈希口径（RR-04）**：``X-Content-Sha256`` 永远是**本次响应真实字节**的 sha256
+    （用户拿到文件后自己算一遍就能对上）。历史指纹另开响应头：
+
+    - ``X-Artifact-Sha256``：当初导出时产物的 sha256（``artifact_sha256`` 列）；
+    - ``X-Source-Content-Sha256``：apply/track 存档里冻结**内容**的规范化 sha256；
+    - ``X-Delivery-Replay: true``：这份字节是**重新生成**的，不保证与当初下载的
+      源文件逐字节相同——HTML 每次渲染都换 CSP nonce，PDF 还可能带时间戳。要判断
+      "是否与原件一致"，把 ``X-Content-Sha256`` 与 ``X-Artifact-Sha256`` 比一下即可。
     """
     item = get_delivery(db, delivery_id)
     if item is None:
@@ -305,17 +315,19 @@ def download_delivery(delivery_id: int, db: Session = Depends(get_db)):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except Exception as exc:  # noqa: BLE001 - 重放失败要给可解释的响应而不是 500 堆栈
             raise HTTPException(status_code=409, detail=f"从存档重放导出失败：{exc}") from exc
-        return Response(
-            artifact.content,
-            media_type=artifact.media_type,
-            headers={
-                "Content-Disposition": (
-                    f"attachment; filename*=UTF-8''{quote(artifact.filename, safe='')}"
-                ),
-                "X-Content-Sha256": item.artifact_sha256 or item.content_sha256,
-                "X-Delivery-Replay": "true",
-            },
-        )
+        headers = {
+            "Content-Disposition": (
+                f"attachment; filename*=UTF-8''{quote(artifact.filename, safe='')}"
+            ),
+            # 实际本次字节的哈希：以前这里放的是**存档里**的旧产物哈希，HTML 重放
+            # 每次 nonce 不同，用户永远核对不上。
+            "X-Content-Sha256": hashlib.sha256(artifact.content).hexdigest(),
+            "X-Delivery-Replay": "true",
+        }
+        original = item.artifact_sha256 or item.content_sha256
+        if original:
+            headers["X-Artifact-Sha256"] = original
+        return Response(artifact.content, media_type=artifact.media_type, headers=headers)
     content = json.dumps(
         {
             "说明": "投递快照的内容存档（apply/track 路径没有导出产物，这是冻结的简历正文）",
@@ -328,14 +340,15 @@ def download_delivery(delivery_id: int, db: Session = Depends(get_db)):
         indent=2,
     ).encode("utf-8")
     filename = f"{item.resume_title or 'delivery'}-{item.id}.json"
-    return Response(
-        content,
-        media_type="application/json; charset=utf-8",
-        headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
-            "X-Content-Sha256": item.source_content_sha256 or item.content_sha256,
-        },
-    )
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+        # 返回的是**封装后的 JSON 字节**，哈希就按这些字节算。
+        "X-Content-Sha256": hashlib.sha256(content).hexdigest(),
+    }
+    source_hash = item.source_content_sha256 or item.content_sha256
+    if source_hash:
+        headers["X-Source-Content-Sha256"] = source_hash
+    return Response(content, media_type="application/json; charset=utf-8", headers=headers)
 
 
 @router.delete("/{resume_id}", status_code=204)

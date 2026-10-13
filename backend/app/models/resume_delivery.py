@@ -73,8 +73,10 @@ class ResumeDeliveryRecord(Base):
     # 冻结内容本身的规范化哈希，与 content_sha256 同值）。与 artifact_sha256 分开，
     # 回答"存档里是哪份内容"，而不是把它和"产出的文件是哪份"混为一谈。
     source_content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # 导出产物字节的 sha256：仅 export 路径有值（apply/track 没有产物）；与
-    # export 响应头 X-Content-Sha256 同源。
+    # 导出产物字节的 sha256：仅 export 路径有值（apply/track 没有产物）。
+    # 注意：它是**当初那次导出**的指纹，重放不一定逐字节复现（HTML 的 CSP nonce
+    # 每次不同），所以下载响应头用 X-Artifact-Sha256 报它，X-Content-Sha256 报
+    # 本次真实字节（ADR-0002 §4.1，RR-04）。
     artifact_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 实际生效的导出请求参数（page_limit/watermark/redact/redact_options/margin_mm/
     # font_scale/include_photo，覆盖值已按生效规则折算）：凭它 + render_context 可
