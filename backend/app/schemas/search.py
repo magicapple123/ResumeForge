@@ -1,15 +1,14 @@
 """搜索与统计 Schema。"""
+
 from typing import Literal
 
 from pydantic import BaseModel
 
-from .job import JobOut
+from .job import JobListOut
 from .resume import ResumeBrief
 
 # 全局搜索"更多结果"覆盖的数据域：每一类对应一个真实前端路由（见 api/search.py）。
-SearchHitType = Literal[
-    "referral", "reminder", "experience", "claim", "material", "skill"
-]
+SearchHitType = Literal["referral", "reminder", "experience", "claim", "material", "skill"]
 
 
 class SearchHit(BaseModel):
@@ -29,7 +28,15 @@ class SearchHit(BaseModel):
 
 
 class SearchResult(BaseModel):
-    jobs: list[JobOut] = []
+    """全局搜索的响应体。
+
+    ``jobs`` 用**列表瘦身模型**（RR-08）：搜索结果卡片只需要 id/标题/公司/地点/薪资，
+    而 JD 全文动辄 20KB 一条、``limit`` 上限 50——带上全文时这个端点最坏情况接近 1MB，
+    首页与搜索这两个最高频入口白白拖慢（实测 500 岗位合成库上 106KB→瘦身后几 KB）。
+    要全文走 ``GET /api/jobs/{id}``（详情抽屉、编辑、生成简历都是那么做的）。
+    """
+
+    jobs: list[JobListOut] = []
     resumes: list[ResumeBrief] = []
     # 扩展数据域的命中结果，默认空列表保证向后兼容。
     more: list[SearchHit] = []
@@ -47,7 +54,8 @@ class Stats(BaseModel):
     open_job_count: int
     resume_count: int
     week_resume_count: int
-    latest_jobs: list[JobOut] = []
+    # 首页卡片同样只读摘要（RR-08）；JD 全文按 id 单取。
+    latest_jobs: list[JobListOut] = []
     latest_resumes: list[ResumeBrief] = []
     # 首页"接下来做什么"需要的几个数。全部只报**待办**，不报"你做了多少"——
     # 概览页上真正能推动用户的只有"还有什么没做完"。

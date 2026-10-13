@@ -3,9 +3,10 @@
 2026-10 万级数据优化批：全局搜索此前对 8 张表做 ``LIKE '%kw%'`` 线性扫描
 （perf-evidence 实测 p95 23.3ms 且随数据量线性增长）。本模块把**能 FTS 化的
 数据域**迁到迁移 ``0046_search_fts`` 建的 FTS5 trigram 虚拟表上，语义与 LIKE
-完全一致（子串匹配、ASCII 大小写折叠相同，见 :func:`match_expression`），
+完全一致——这条一致性由 ``services/search_matching`` 统一保证（RR-07：LIKE 侧
+显式 ESCAPE、前后空白不丢、带变音符号的查询直接回退 LIKE，见 :func:`match_expression`），
 表不存在（历史库没跑过新迁移、SQLite 太旧）或关键词过短（< 3 字符）时回退
-原 LIKE 路径，行为与迁移前一致。
+原 LIKE 路径，两路结果的等价性由 ``tests/test_search_fts.py`` 逐关键词对照钉住。
 
 设计沿用迁移 0044（知识库 ``knowledge_fts``）的先例：
 
@@ -28,7 +29,7 @@ from weakref import WeakKeyDictionary
 from sqlalchemy import bindparam, literal_column, select, text
 from sqlalchemy.orm import Session
 
-from .knowledge_service import _match_expression
+from .search_matching import match_expression
 
 # 各数据域的 FTS 表名前缀与被索引列——列清单与 ``app/api/search.py`` 里各域的
 # LIKE 字段**一一对应**，改任何一侧都要同步另一侧（test_search_fts.py 的对照
@@ -93,7 +94,7 @@ def id_match_filter(db: Session, model: type, base_table: str, term: str):
     不足 3 字符（trigram 表达不了短查询）。否则返回 ``id IN (MATCH 子查询)``：
     MATCH 命中任一被索引列即算命中，与各域 ``or_(多列 LIKE)`` 语义一致。
     """
-    expression = _match_expression(term)
+    expression = match_expression(term)
     if expression is None or not fts_available(db, base_table):
         return None
     fts_table = fts_table_name(base_table)

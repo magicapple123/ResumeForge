@@ -1,6 +1,6 @@
 /** 搜索与首页统计类型。 */
 
-import type { Job } from "./job";
+import type { JobList } from "./job";
 import type { ResumeBrief } from "./resume";
 
 /** 全局搜索"更多结果"覆盖的数据域。 */
@@ -17,7 +17,12 @@ export interface SearchHit {
 }
 
 export interface SearchResult {
-  jobs: Job[];
+  /**
+   * 搜索命中的岗位是**摘要**（RR-08）：这两个高频入口不再回传 JD 全文
+   * （单条可达 20KB，`limit` 上限 50 时最坏接近 1MB）。要看全文走
+   * `GET /api/jobs/{id}`——搜索结果点击后的 `/jobs?job_id=` 深链就是这么做的。
+   */
+  jobs: JobList[];
   resumes: ResumeBrief[];
   /** 内推 / 提醒 / 面经 / 台账 / 资料 / 技能 的命中结果。 */
   more: SearchHit[];
@@ -43,7 +48,8 @@ export interface Stats {
   open_job_count: number;
   resume_count: number;
   week_resume_count: number;
-  latest_jobs: Job[];
+  /** 首页「最近岗位」卡片同样只读摘要（RR-08）；全文按 id 单取。 */
+  latest_jobs: JobList[];
   latest_resumes: ResumeBrief[];
   // 首页"接下来做什么"的几个数，都只报**待办**。
   favorite_job_count: number;

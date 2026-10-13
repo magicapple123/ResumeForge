@@ -7,8 +7,8 @@
 - 短词（< 3 字符）回退 LIKE；
 - 中文子串（≥ 3 字符）MATCH 与 LIKE 同语义；
 - ASCII 大小写折叠一致；
-- 含 ``%`` / ``_`` 的查询**明确存在差异**（FTS 按字面量、LIKE 按通配符），
-  差异被断言并呈现，而不是含糊宣称"完全一致"；
+- 含 ``%`` / ``_`` 的查询**两路同语义**（RR-07：LIKE 侧显式 ESCAPE，字面子串），
+  以前"FTS 按字面量、LIKE 按通配符"的差异被钉在这里，现在改钉"两路一致"；
 - FTS 索引在插入后立即可搜到（触发器同步，无需 rebuild）；
 - 搜索计划真的走 ``knowledge_fts``（EXPLAIN QUERY PLAN）。
 """
@@ -130,39 +130,73 @@ def test_ascii_case_folding_matches_like(fts_db):
     assert "Python 后端开发" in titles
 
 
-def test_percent_query_divergence_is_explicit(fts_db, like_db):
-    """审计 C-4 的核心差异：``q=%py`` 在两路检索下行为不同，且必须可解释。
+def test_percent_query_is_literal_in_both_paths(fts_db, like_db):
+    """RR-07：``q=%py`` 两路都按**字面子串**——LIKE 侧显式转义后不再命中 python。
 
-    - FTS（迁移 0044 库）：``%py`` ≥ 3 字符 → ``MATCH '"%py"'`` 按字面量匹配
-      ``%py`` 子串 → ``python`` 不含 ``%`` → 不命中；
-    - LIKE（模拟 0044 之前）：``LIKE '%%py%'`` 里用户输入的 ``%`` 与通配符合并
-      → 实际检索 ``py`` → 命中 ``python``。
-
-    差异被钉在这里：维护者改检索实现时必须显式面对这条边界，而不是默认
-    "语义完全一致"。
+    修复前：FTS 按字面量不命中，LIKE 把用户输入的 ``%`` 当通配符 → 命中 python，
+    同一次搜索在升级前后（迁移跑没跑）给出不同结果。
     """
-    fts_engine, fts_session = fts_db
-    like_engine, like_session = like_db
+    _fts_engine, fts_session = fts_db
+    _like_engine, like_session = like_db
 
     fts_hits = ks.list_knowledge(fts_session, q="%py")
     like_hits = ks.list_knowledge(like_session, q="%py")
 
-    assert fts_hits == [], "FTS 路径对 '%py' 应按字面量匹配（无 % 字符的文本不命中）"
-    assert any(entry.title == "Python 后端开发" for entry in like_hits), (
-        "LIKE 回退路径 '%%py%' 应命中 python（通配符合并语义）"
-    )
+    assert fts_hits == [], "文本里没有 % 字符就不该命中"
+    assert like_hits == [], "LIKE 回退路径同样按字面量（% 不是通配符）"
 
 
-def test_underscore_query_divergence_is_explicit(fts_db, like_db):
-    """``q=py_``：FTS 按字面量 ``py_`` 不命中；LIKE ``%py_%`` 中 ``_`` 是单字通配符。"""
+def test_underscore_query_is_literal_in_both_paths(fts_db, like_db):
+    """``q=py_``：``_`` 是字面量（旧 LIKE 把它当单字通配符，会命中 python）。"""
     _fts_engine, fts_session = fts_db
     _like_engine, like_session = like_db
 
-    fts_hits = ks.list_knowledge(fts_session, q="py_")
-    like_hits = ks.list_knowledge(like_session, q="py_")
+    assert ks.list_knowledge(fts_session, q="py_") == []
+    assert ks.list_knowledge(like_session, q="py_") == []
 
-    assert fts_hits == []
-    assert any(entry.title == "Python 后端开发" for entry in like_hits)
+
+def test_literal_special_characters_match_when_text_contains_them(fts_db, like_db):
+    """文本里真的含 ``%`` / ``_`` 时，两路都能按字面命中（转义不能把功能转没）。"""
+    _fts_engine, fts_session = fts_db
+    _like_engine, like_session = like_db
+    for session in (fts_session, like_session):
+        session.add(
+            KnowledgeEntry(
+                title="覆盖率笔记",
+                content="压测达到 100% 覆盖，命名用 snake_case 风格。",
+                category="技术笔记",
+            )
+        )
+        session.commit()
+
+    for session in (fts_session, like_session):
+        # 逐条断言（不用 or 兜底）：`%` 是字面量，两种查询都应命中这条、且只命中这条。
+        assert [entry.title for entry in ks.list_knowledge(session, q="100%")] == ["覆盖率笔记"]
+        assert [entry.title for entry in ks.list_knowledge(session, q="100% 覆盖")] == [
+            "覆盖率笔记"
+        ]
+        assert [entry.title for entry in ks.list_knowledge(session, q="snake_case")] == [
+            "覆盖率笔记"
+        ]
+        # 没有 % 字符的文本不该被通配符解释命中。
+        assert ks.list_knowledge(session, q="100 覆盖") == []
+
+
+def test_diacritic_query_falls_back_to_like(fts_db, like_db):
+    """带变音符号的查询不走 FTS：trigram 默认折叠变音符号，会与 LIKE 不一致。"""
+    _fts_engine, fts_session = fts_db
+    _like_engine, like_session = like_db
+    for session in (fts_session, like_session):
+        session.add(
+            KnowledgeEntry(title="语言笔记", content="拿铁 café 的检索笔记。", category="技术笔记")
+        )
+        session.commit()
+
+    assert ks._match_expression("café") is None, "带变音符号的查询必须回退 LIKE"
+    for session in (fts_session, like_session):
+        assert [entry.title for entry in ks.list_knowledge(session, q="café")] == ["语言笔记"]
+        # 不带变音符号的写法不命中带变音符号的文本（两路口径一致）。
+        assert ks.list_knowledge(session, q="cafe") == []
 
 
 def test_fts_index_synced_after_insert(fts_db):
@@ -225,3 +259,29 @@ def test_match_expression_guard_rails():
     assert ks._match_expression("面试") is None
     assert ks._match_expression("面试技巧") == '"面试技巧"'
     assert ks._match_expression('a"b') == '"a""b"'
+    # 前后空白是子串的一部分：不再 strip（" foo " 与 LIKE '% foo %' 同语义）。
+    assert ks._match_expression("  foo  ") == '"  foo  "'
+    # 带变音符号一律回退 LIKE（trigram 会折叠变音符号，与 LIKE 不一致）。
+    assert ks._match_expression("café") is None
+
+
+def test_non_ascii_case_folding_falls_back_to_like(fts_db, like_db):
+    """非 ASCII 大小写折叠：trigram 会折叠西里尔/希腊/拉丁扩展，LIKE 只折 ASCII。
+
+    靠"两路结果必须逐条相等"的承诺兜底：这类查询直接回退 LIKE（慢但不撒谎）。
+    """
+    _fts_engine, fts_session = fts_db
+    _like_engine, like_session = like_db
+    for session in (fts_session, like_session):
+        session.add(
+            KnowledgeEntry(title="俄语笔记", content="Привет Технологии 记录", category="技术笔记")
+        )
+        session.commit()
+
+    assert ks._match_expression("привет") is None, "非 ASCII 大小写字母必须回退 LIKE"
+    for session in (fts_session, like_session):
+        # 两路一致：小写查询不命中大写写法（LIKE 的 ASCII-only 折叠口径）。
+        assert ks.list_knowledge(session, q="привет") == []
+        assert [entry.title for entry in ks.list_knowledge(session, q="Привет")] == ["俄语笔记"]
+    # 中文不受影响：仍然走 FTS 快路径。
+    assert ks._match_expression("俄语笔记") is not None
