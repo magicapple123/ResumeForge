@@ -120,7 +120,11 @@ export interface AssistantWriteProposal {
   preview: AssistantWritePreview;
   created_at: string;
   expires_at: string;
-  status: "pending" | "approved" | "executed" | "expired" | "rejected" | "failed";
+  /**
+   * 提案终态。``unknown`` = 后端在执行**中途失败但已经提交过**（RR-05）：数据可能
+   * 已经落库，所以文案是"结果未知、先在数据里核对"，而不是"执行失败"。
+   */
+  status: "pending" | "approved" | "executed" | "expired" | "rejected" | "failed" | "unknown";
 }
 
 /** 助手调用过一次工具的记录；写在助手消息的 context 里，供历史回看。 */

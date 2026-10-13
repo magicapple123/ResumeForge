@@ -26,6 +26,7 @@ import logging
 from contextlib import suppress
 
 from fastapi import APIRouter, HTTPException
+from sqlalchemy import event
 
 from ..runtime import dataset_scope
 from ..runtime.dataset_scope import DatasetScopeError
@@ -48,6 +49,31 @@ router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
 def _error(exc: WriteProposalError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=str(exc))
+
+
+class _CommitWatcher:
+    """记录这条会话是否**已经真的提交过**（RR-05）。
+
+    写工具的服务层仍各自 ``db.commit()``（历史实现，短期不收敛为单一 Unit of Work）。
+    于是"handler 抛异常"有两种截然不同的后果：提交前抛 = 什么都没发生（可以说"执行
+    失败"），提交后抛（典型是 commit 之后的 ``db.refresh`` / 结果构造） = 数据已经
+    落库，再说"执行失败"就是**误报**——用户会重发一次，从而二次写入。
+
+    这里挂一个会话级 ``after_commit`` 监听器（只影响这一条会话，不动全局
+    ``Session`` 类），异常路径据此把终态从 failed 改成 unknown。
+    """
+
+    def __init__(self, session) -> None:
+        self.happened = False
+        self._session = session
+        event.listen(session, "after_commit", self._on_commit)
+
+    def _on_commit(self, _session) -> None:  # noqa: ANN001 - SQLAlchemy 事件签名
+        self.happened = True
+
+    def detach(self) -> None:
+        with suppress(Exception):
+            event.remove(self._session, "after_commit", self._on_commit)
 
 
 @router.post("/write-proposals/{proposal_id}/approve")
@@ -89,12 +115,27 @@ async def approve_write_proposal(proposal_id: str) -> dict:
                 status_code=503,
                 detail=f"写入暂不可用（数据库会话打开失败），提案已置为失败，请稍后重试：{exc}",
             ) from exc
+        watcher = _CommitWatcher(db)
         try:
             try:
                 result = tool.handler(db, arguments)
             except Exception as exc:  # noqa: BLE001 - 执行失败如实回给前端
                 with suppress(Exception):
                     db.rollback()
+                # RR-05：handler 已经在内部提交过就不能说"执行失败"——数据已经落库，
+                # 说失败会让用户重发，从而二次写入。这种情况只报"结果未知"并封死重放。
+                if watcher.happened:
+                    mark_unknown(proposal_id, f"执行中断但写入可能已提交：{exc}")
+                    logger.warning(
+                        "提案 %s 执行中断但已提交过（%s）：%s", proposal_id, tool_name, exc
+                    )
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "写入结果未知（执行过程中数据已经提交，随后步骤失败）："
+                            f"请先在数据里核对该动作是否生效，本提案不会再次执行。原因：{exc}"
+                        ),
+                    ) from exc
                 mark_failed(proposal_id, str(exc))
                 logger.warning("提案 %s 执行失败（%s）：%s", proposal_id, tool_name, exc)
                 raise HTTPException(status_code=422, detail=f"写入执行失败：{exc}") from exc
@@ -112,6 +153,7 @@ async def approve_write_proposal(proposal_id: str) -> dict:
                     detail="写入结果未知（提交阶段失败），请核对数据后重新发起；本提案不会再次执行",
                 ) from exc
         finally:
+            watcher.detach()
             db.close()
     finally:
         lease.release()

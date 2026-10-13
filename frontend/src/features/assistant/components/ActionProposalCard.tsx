@@ -25,7 +25,13 @@ const STATUS_META: Record<AssistantWriteProposal["status"], { label: string; col
   expired: { label: "已失效", color: "default" },
   rejected: { label: "已拒绝", color: "default" },
   failed: { label: "执行失败", color: "error" },
+  // RR-05：执行中途失败但**已经提交过**——数据可能已落库，所以不能说"失败"，
+  // 也不能提供任何重试入口（提案终态已经封死）。
+  unknown: { label: "结果未知", color: "warning" },
 };
+
+/** 兜底元数据：后端新增终态而前端还没跟上时也要能渲染，而不是整页白屏。 */
+const FALLBACK_STATUS_META = { label: "状态未知", color: "default" } as const;
 
 interface Props {
   proposal: AssistantWriteProposal;
@@ -80,7 +86,7 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
     }
   };
 
-  const meta = STATUS_META[proposal.status];
+  const meta = STATUS_META[proposal.status] ?? FALLBACK_STATUS_META;
   const pending = proposal.status === "pending";
   const { preview } = proposal;
 

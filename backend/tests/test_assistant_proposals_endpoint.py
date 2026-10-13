@@ -11,6 +11,8 @@
 - 冻结工厂从租约身份派生：切换尝试期间写入仍落原库。
 """
 
+from datetime import datetime
+
 from app import database
 from app.models.reminder import Reminder
 from app.runtime import dataset_scope
@@ -237,3 +239,138 @@ def test_approve_while_switch_lock_held_returns_409_and_keeps_proposal_pending(c
     retry = client.post(_APPROVE.format(proposal.proposal_id))
     assert retry.status_code == 200, retry.text
     assert _reminder_count() == 1
+
+
+# ===== RR-05：提交后失败必须是"结果未知"，不能报成"执行失败" =====
+
+
+def test_handler_failure_after_internal_commit_is_unknown_not_failed(client, monkeypatch):
+    """handler 内部已提交、随后步骤（如 refresh/构造返回值）失败。
+
+    修复前这里返回 422「写入执行失败」并 mark_failed——而数据其实已经落库，用户照着
+    提示重发就会二次写入。现在如实报"结果未知"（409）并封死这条提案。
+    """
+    from app.api import assistant_proposals as endpoint
+
+    class _CommittingTool:
+        name = _TARGET_TOOL
+
+        def handler(self, db, arguments):
+            # 真实写工具就是这么写的：服务层自己 commit，之后才构造返回值。
+            db.add(
+                Reminder(
+                    title=str(arguments.get("title") or "复盘"),
+                    remind_at=datetime(2026, 10, 12, 10, 0, 0),
+                )
+            )
+            db.commit()
+            raise RuntimeError("模拟：提交之后构造返回值时失败")
+
+    monkeypatch.setattr(endpoint, "get_tool", lambda _name: _CommittingTool())
+
+    proposal = _proposal()
+    response = client.post(_APPROVE.format(proposal.proposal_id))
+
+    assert response.status_code == 409, response.text
+    assert "结果未知" in response.json()["detail"]
+    # 数据确实写进去了：这才是"不能说执行失败"的理由。
+    assert _reminder_count() == 1
+    final = client.get(_GET.format(proposal.proposal_id))
+    assert final.status_code == 200
+    assert final.json()["proposal"]["status"] == "unknown"
+    # 终态封死重放：再点批准也不会有第二次写入。
+    assert client.post(_APPROVE.format(proposal.proposal_id)).status_code == 409
+    assert _reminder_count() == 1
+
+
+def test_handler_failure_before_any_commit_is_still_reported_as_failed(client, monkeypatch):
+    """对照组：提交之前就抛，数据没有任何变化——这时"执行失败"才是真话。"""
+    from app.api import assistant_proposals as endpoint
+
+    class _FailingTool:
+        name = _TARGET_TOOL
+
+        def handler(self, db, arguments):
+            raise RuntimeError("模拟：校验阶段失败")
+
+    monkeypatch.setattr(endpoint, "get_tool", lambda _name: _FailingTool())
+
+    proposal = _proposal()
+    response = client.post(_APPROVE.format(proposal.proposal_id))
+
+    assert response.status_code == 422, response.text
+    assert "写入执行失败" in response.json()["detail"]
+    assert _reminder_count() == 0
+    final = client.get(_GET.format(proposal.proposal_id))
+    assert final.json()["proposal"]["status"] == "failed"
+    assert client.post(_APPROVE.format(proposal.proposal_id)).status_code == 409
+    assert _reminder_count() == 0
+
+
+def test_concurrent_approvals_write_at_most_once(client):
+    """两个批准请求并发：只有一个能核销成功，写入恰好发生一次。"""
+    import threading
+
+    proposal = _proposal()
+    results: list[int] = []
+    barrier = threading.Barrier(2)
+
+    def _approve() -> None:
+        barrier.wait()
+        # 每个线程各自一个 TestClient，避免共享连接状态。
+        from app.main import app as fastapi_app
+        from fastapi.testclient import TestClient
+
+        with TestClient(fastapi_app) as thread_client:
+            results.append(thread_client.post(_APPROVE.format(proposal.proposal_id)).status_code)
+
+    threads = [threading.Thread(target=_approve) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(results) == [200, 409], results
+    assert _reminder_count() == 1
+
+
+def test_real_tool_failure_after_its_own_commit_is_reported_as_unknown(client, monkeypatch):
+    """真实写工具（create_candidate_job）在 commit 之后的 refresh 上失败。
+
+    这条用例不注入假 handler：直接让 SQLAlchemy 的 ``Session.refresh`` 在该工具的
+    提交之后抛一次错，复现"数据已落库、但 handler 抛异常"的真实形态。
+    """
+    from app.models.material import CandidateJob
+    from app.services.assistant_tools.authorization import WritePreview, create_proposal
+    from sqlalchemy.orm import Session as OrmSession
+
+    real_refresh = OrmSession.refresh
+
+    def exploding_refresh(self, instance, *args, **kwargs):
+        if isinstance(instance, CandidateJob):
+            raise RuntimeError("模拟：提交之后 refresh 失败")
+        return real_refresh(self, instance, *args, **kwargs)
+
+    monkeypatch.setattr(OrmSession, "refresh", exploding_refresh)
+
+    ctx = tool_policy.build_context(writable=True)
+    proposal = create_proposal(
+        ctx,
+        "create_candidate_job",
+        {"title": "后端开发（虚构）", "company": "示例科技"},
+        WritePreview(target="备选岗位新条目", scope="新增 1 条", changes=[]),
+    )
+
+    response = client.post(_APPROVE.format(proposal.proposal_id))
+    assert response.status_code == 409, response.text
+    assert "结果未知" in response.json()["detail"]
+    final = client.get(_GET.format(proposal.proposal_id))
+    assert final.json()["proposal"]["status"] == "unknown"
+
+    with database.SessionLocal() as session:
+        stored = session.query(CandidateJob).all()
+    assert [row.title for row in stored] == ["后端开发（虚构）"], "提交确实生效了"
+    # 再次批准不会二次写入。
+    assert client.post(_APPROVE.format(proposal.proposal_id)).status_code == 409
+    with database.SessionLocal() as session:
+        assert session.query(CandidateJob).count() == 1
