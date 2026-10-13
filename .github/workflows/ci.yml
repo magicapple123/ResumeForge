@@ -646,8 +646,25 @@ jobs:
             Start-Sleep -Seconds 5
           }
           if (-not $port) { throw "backend port not found in $log within 10 minutes" }
+          # The "port=" line is written by BackendManager BEFORE uvicorn spawns;
+          # on a cold runner interpreter unpack + FastAPI import take a while,
+          # so poll the health endpoint until the backend actually serves.
+          $base = "http://127.0.0.1:$port"
+          $healthy = $false
+          while ((Get-Date) -lt $deadline) {
+            try {
+              $health = Invoke-WebRequest -UseBasicParsing -Uri "$base/api/health" -TimeoutSec 5
+              if ($health.StatusCode -eq 200) { $healthy = $true; break }
+            } catch {
+              if (-not (Get-Process -Name ResumeForge -ErrorAction SilentlyContinue)) {
+                throw "ResumeForge.exe exited while waiting for backend health (see logs step)"
+              }
+            }
+            Start-Sleep -Seconds 5
+          }
+          if (-not $healthy) { throw "backend at $base never became healthy within 10 minutes" }
           $port | Set-Content desktop\out\smoke-port.txt
-          Write-Host "backend port: $port"
+          Write-Host "backend port: $port (health OK)"
 
       - name: Fetch served page entry (port alive is not enough)
         shell: pwsh
