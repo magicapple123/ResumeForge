@@ -281,7 +281,11 @@ test("start() spawns the backend with RF_DATA_DIR pointing at the user data dir"
       path.join(root, "userdata"),
       "the backend env must point RF_DATA_DIR at the user data directory",
     );
-    assert.ok(spawnCalls[0].options.env.PATH, "the parent env must be inherited");
+    const childEnvKeys = Object.keys(spawnCalls[0].options.env);
+    assert.ok(
+      childEnvKeys.some((key) => key.toUpperCase() === "PATH"),
+      "the parent env must be inherited (any case variant)",
+    );
     // Close the log handle BEFORE the temp root is deleted, otherwise the
     // stream's async close fires after cleanup (fails under node --test).
     manager.closeLog();

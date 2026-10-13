@@ -198,6 +198,9 @@ def test_permission_error_becomes_a_warning_instead_of_a_crash(tmp_path, monkeyp
         real_scandir = os.scandir
 
         def _deny(name):
+            if not isinstance(name, (str, os.PathLike)):
+                # shutil.rmtree 在 POSIX 上用目录 fd（int）调 scandir，透传给真实现。
+                return real_scandir(name)
             if Path(name).name == "captures":
                 raise PermissionError(13, "权限不足", str(name))
             return real_scandir(name)
