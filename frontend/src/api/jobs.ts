@@ -6,6 +6,7 @@ import type {
   JobBatchDeleteResult,
   JobBatchStatusResult,
   JobAnalysisResult,
+  JobList,
   JobMatchOut,
   JobMatchResult,
   JobMatchBatchOut,
@@ -32,7 +33,8 @@ export interface JobListParams {
   page_size?: number;
 }
 
-export function listJobs(params: JobListParams = {}): Promise<Page<Job>> {
+/** 列表响应是瘦身版 JobListOut（无 JD 全文，带 has_description）；要 JD 用 getJob。 */
+export function listJobs(params: JobListParams = {}): Promise<Page<JobList>> {
   return request(`/jobs${buildQuery(params)}`);
 }
 

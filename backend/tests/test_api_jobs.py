@@ -225,6 +225,25 @@ def test_job_list_search_and_pagination(client):
     assert response.json()["total"] == 2 and len(response.json()["items"]) == 1
 
 
+def test_job_list_omits_description_but_reports_has_description(client):
+    """列表响应瘦身（PR-17）：不带 JD 全文，只带 has_description 两态；详情仍含全文。
+
+    列表页对 JD 的唯一消费是"缺岗位描述"过滤（补齐详情按钮），后端算好下发；
+    详情抽屉 / 编辑表单 / 生成简历需要 JD 时走 `GET /jobs/{id}` 单取。
+    """
+    with_jd = client.post("/api/jobs", json={"title": "有JD", "description": "Python 后端"}).json()
+    without_jd = client.post("/api/jobs", json={"title": "无JD", "description": "   "}).json()
+
+    items = {item["id"]: item for item in client.get("/api/jobs").json()["items"]}
+    assert "description" not in items[with_jd["id"]]
+    assert items[with_jd["id"]]["has_description"] is True
+    assert "description" not in items[without_jd["id"]]
+    assert items[without_jd["id"]]["has_description"] is False
+
+    detail = client.get(f"/api/jobs/{with_jd['id']}").json()
+    assert detail["description"] == "Python 后端"
+
+
 def test_job_ids_matches_list_filter_across_pages(client):
     """``/jobs/ids`` 与 ``/jobs`` 是同一份筛选器：不分页返回全部匹配 id，跨页全选用。
 

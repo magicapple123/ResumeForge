@@ -60,6 +60,20 @@ export interface Job {
   updated_at: string;
 }
 
+/**
+ * 岗位列表项（`GET /jobs` 与收藏夹的列表响应）。
+ *
+ * 与 `Job`（详情 `GET /jobs/{id}`）的字段一致，但**不带 JD 全文**——列表页从不消费
+ * 整份岗位描述，带着它会让响应随 JD 长度线性膨胀（PR-17 瘦身）。需要 JD 的场景
+ * （详情抽屉 / 编辑表单 / 生成简历 / 自行编写）用 `getJob(id)` 单取详情那份。
+ *
+ * `has_description` 由后端算好下发：列表页「补齐详情」按钮据此判断哪些岗位缺 JD，
+ * 不再对（已不存在的）description 做 trim。
+ */
+export type JobList = Omit<Job, "description"> & {
+  has_description: boolean;
+};
+
 /** 一次粘贴里含多份招聘信息时的解析结果；只有一个元素表示没识别出多份。 */
 export interface JobMultiParseResult {
   items: ParsedJobDraft[];

@@ -2,14 +2,21 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CandidateJobDetail, Job } from "../types";
+import type { CandidateJobDetail, Job, JobList } from "../types";
 import JobsPage from "./JobsPage";
 
 const mocks = vi.hoisted(() => ({
   reload: vi.fn(),
   startBackfill: vi.fn(),
-  jobs: [] as Job[],
+  getJob: vi.fn(),
+  jobs: [] as JobList[],
 }));
+
+// 详情统一经 getJob 拉全量（列表项已瘦身），点击行会触发；不 mock 会在 jsdom 里真发请求。
+vi.mock("../api/jobs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/jobs")>();
+  return { ...actual, getJob: mocks.getJob };
+});
 
 vi.mock("../hooks/useApi", () => ({
   useApi: () => ({
@@ -51,8 +58,10 @@ const BASE_JOB: Job = {
   updated_at: "2026-08-21T09:30:00",
 };
 
-function makeJob(overrides: Partial<Job> = {}): Job {
-  return { ...BASE_JOB, ...overrides };
+function makeJob(overrides: Partial<Job> = {}): JobList {
+  const merged = { ...BASE_JOB, ...overrides };
+  const { description, ...rest } = merged;
+  return { ...rest, has_description: description.trim().length > 0 };
 }
 
 function renderPage(initialEntries: string[] = ["/jobs"]) {
@@ -130,6 +139,8 @@ describe("JobsPage", () => {
 
   beforeEach(() => {
     mocks.jobs = [makeJob()];
+    mocks.getJob.mockReset();
+    mocks.getJob.mockResolvedValue({ ...BASE_JOB });
     mocks.startBackfill.mockReset();
     mocks.startBackfill.mockResolvedValue({} as never);
     for (const mock of Object.values(candidateMocks)) mock.mockReset();
@@ -290,6 +301,8 @@ describe("JobsPage URL 状态化", () => {
 
   beforeEach(() => {
     mocks.jobs = [makeJob()];
+    mocks.getJob.mockReset();
+    mocks.getJob.mockResolvedValue({ ...BASE_JOB });
     mocks.startBackfill.mockReset();
     mocks.startBackfill.mockResolvedValue({} as never);
     for (const mock of Object.values(candidateMocks)) mock.mockReset();

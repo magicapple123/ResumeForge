@@ -11,12 +11,12 @@ import { RowActions, RowContextMenu, type RowActionItem } from "../components/co
 import EmptyState from "../components/common/EmptyState";
 import ResumeDetailModal from "../components/ResumeDetailModal";
 import { useApi } from "../hooks/useApi";
-import type { Job, Page, ResumeBrief } from "../types";
+import type { JobList, Page, ResumeBrief } from "../types";
 import { formatDateTime } from "../utils/format";
 
 type FavoriteKind = "jobs" | "resumes";
 type FavoritePage =
-  { kind: "jobs"; page: Page<Job> } | { kind: "resumes"; page: Page<ResumeBrief> };
+  { kind: "jobs"; page: Page<JobList> } | { kind: "resumes"; page: Page<ResumeBrief> };
 
 export default function FavoritesPage() {
   const navigate = useNavigate();
@@ -61,7 +61,7 @@ export default function FavoritesPage() {
   }, [kind, page, pageSize, setSearchParams]);
 
   const removeJobFavorite = useCallback(
-    async (job: Job) => {
+    async (job: JobList) => {
       const key = `job-${job.id}`;
       if (updatingKeyRef.current) return;
       updatingKeyRef.current = key;
@@ -115,7 +115,7 @@ export default function FavoritesPage() {
    * 「更多」菜单里**不放**「取消收藏」：行上那颗金色星标就是它，菜单里再来一项
    * 只会让人怀疑两者是不是不同的操作。
    */
-  const secondaryActions = (item: Job | ResumeBrief): RowActionItem[] =>
+  const secondaryActions = (item: JobList | ResumeBrief): RowActionItem[] =>
     kind === "jobs"
       ? [
           {
@@ -127,19 +127,19 @@ export default function FavoritesPage() {
       : [{ key: "preview", label: "预览 / 导出", onClick: () => setPreviewId(item.id) }];
 
   /** 整行右键：鼠标不在星标上，补上取消收藏，一次右键就能做完。 */
-  const contextActions = (item: Job | ResumeBrief): RowActionItem[] => [
+  const contextActions = (item: JobList | ResumeBrief): RowActionItem[] => [
     ...secondaryActions(item),
     {
       key: "unfavorite",
       label: "取消收藏",
       onClick: () =>
         kind === "jobs"
-          ? void removeJobFavorite(item as Job)
+          ? void removeJobFavorite(item as JobList)
           : void removeResumeFavorite(item as ResumeBrief),
     },
   ];
 
-  const jobColumns: ColumnsType<Job> = [
+  const jobColumns: ColumnsType<JobList> = [
     {
       title: "岗位",
       dataIndex: "title",
@@ -254,9 +254,11 @@ export default function FavoritesPage() {
           },
         ]}
       />
-      <Table<Job | ResumeBrief>
+      <Table<JobList | ResumeBrief>
         rowKey="id"
-        columns={(kind === "jobs" ? jobColumns : resumeColumns) as ColumnsType<Job | ResumeBrief>}
+        columns={
+          (kind === "jobs" ? jobColumns : resumeColumns) as ColumnsType<JobList | ResumeBrief>
+        }
         dataSource={items}
         loading={loading}
         locale={{

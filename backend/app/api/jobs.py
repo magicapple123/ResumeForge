@@ -23,6 +23,7 @@ from ..schemas.job import (
     JobImportPreview,
     JobImportRequest,
     JobImportResult,
+    JobListOut,
     JobMultiTextParseResult,
     JobOut,
     JobTextParseRequest,
@@ -85,6 +86,11 @@ def _save_note_image_copies(db: Session, job_id: int, note_images: list[str]) ->
 
 def _to_out(job: Job) -> JobOut:
     return JobOut.model_validate(job)
+
+
+def _to_list_out(job: Job) -> JobListOut:
+    # 列表响应不带 JD 全文（体积审计 PR-17）；详情仍走 _to_out，JD 全文可达。
+    return JobListOut.model_validate(job)
 
 
 def _get_jobs_or_404(db: Session, job_ids: list[int]) -> list[Job]:
@@ -151,7 +157,7 @@ def _filtered_query(
     return query
 
 
-@router.get("", response_model=Page[JobOut])
+@router.get("", response_model=Page[JobListOut])
 def list_jobs(
     db: Session = Depends(get_db),
     keyword: str = Query(default="", description="按标题/公司/城市/描述/其他信息/备注模糊匹配"),
@@ -170,7 +176,7 @@ def list_jobs(
     jobs = (
         query.order_by(Job.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     )
-    return Page(items=[_to_out(job) for job in jobs], total=total)
+    return Page(items=[_to_list_out(job) for job in jobs], total=total)
 
 
 @router.get("/ids", response_model=list[int])
