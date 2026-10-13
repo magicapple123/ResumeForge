@@ -6,6 +6,7 @@
 - 熔断的连续失败计数在**成功一次后必须归零**（这是常见 bug，专门钉死）；
 - 每日上限**只计成功投递**，失败 / 重试不占额度。
 """
+
 from __future__ import annotations
 
 import logging
@@ -41,6 +42,9 @@ class _FastClock:
 
 
 class FakeCdp(CdpClient):
+    def __init__(self) -> None:
+        self.closed = False
+
     def list_targets(self):
         return []
 
@@ -60,6 +64,7 @@ class FakeCdp(CdpClient):
         return {}
 
     def close(self):
+        self.closed = True
         return None
 
 
@@ -91,7 +96,9 @@ class ScriptedAdapter(SiteAdapter):
         self.calls += 1
         if self._raise_on is not None and self.calls == self._raise_on:
             raise RuntimeError("模拟单岗位内部异常")
-        category = self._script[min(self.calls - 1, len(self._script) - 1)] if self._script else None
+        category = (
+            self._script[min(self.calls - 1, len(self._script) - 1)] if self._script else None
+        )
         if category:
             raise SiteFailure(category, f"模拟失败：{category}")
         return ApplyOutcome(success=True, greeting_sent=greeting)
@@ -141,9 +148,7 @@ def _setup_task(db_session, count: int, **config_overrides) -> ApplyTask:
 
 
 def _make_apply_task(db_session, count: int, config: ApplyConfigIn) -> ApplyTask:
-    task = ApplyTask(
-        kind="apply", status="pending", total=count, config=config.model_dump()
-    )
+    task = ApplyTask(kind="apply", status="pending", total=count, config=config.model_dump())
     db_session.add(task)
     db_session.flush()
     for index in range(count):
@@ -155,9 +160,7 @@ def _make_apply_task(db_session, count: int, config: ApplyConfigIn) -> ApplyTask
         )
         db_session.add(job)
         db_session.flush()
-        resume = ResumeRecord(
-            title=f"简历{index}", job_id=job.id, job_title=job.title, content={}
-        )
+        resume = ResumeRecord(title=f"简历{index}", job_id=job.id, job_title=job.title, content={})
         db_session.add(resume)
         db_session.flush()
         db_session.add(
@@ -424,3 +427,86 @@ def test_top_level_worker_error_marks_task_failed_with_readable_message(db_sessi
     assert runner.is_running() is False
     assert runner.current_task_id() is None
     assert _wait_no_leftover(), f"残留线程：{_leftover_threads()}"
+
+
+# ===== client 的 finally 全覆盖 =====
+#
+# ``run_apply`` / ``run_collect`` 在 ``_make_client`` 成功之后、原 try/finally 之前
+# 还有一段装配代码（适配器快照、样例录制器）；这段代码抛异常时任务会被 ``_run``
+# 兜底置 failed，但 client 不能因此漏关（CDP 连接泄漏到浏览器）。
+
+
+class _ExplodingRegistry(SiteRegistry):
+    """``resolve_for_job`` 直接抛异常：逼出 run_apply 装配段（适配器快照）的失败。"""
+
+    def resolve_for_job(self, job):  # noqa: D401 - 测试替身
+        raise RuntimeError("模拟注册表异常")
+
+
+def _counting_client_factory(created: list):
+    def factory(_config):
+        client = FakeCdp()
+        created.append(client)
+        return client
+
+    return factory
+
+
+def test_apply_client_is_closed_when_setup_after_make_client_fails(db_session):
+    """run_apply 拿到 client 后、进入 try 前的装配段抛异常，client 也必须被关闭。"""
+    created: list[FakeCdp] = []
+    task = _setup_task(db_session, 1)
+    runner = TaskRunner(
+        registry=_ExplodingRegistry(),
+        client_factory=_counting_client_factory(created),
+        sleeper=lambda _seconds: None,
+        clock=_FastClock(),
+        poll_interval=0.01,
+    )
+
+    runner.start(task.id)
+    _wait(runner)
+
+    db_session.expire_all()
+    assert db_session.get(ApplyTask, task.id).status == "failed"
+    assert _wait_no_leftover(), f"残留线程：{_leftover_threads()}"
+    assert created, "client 工厂未被调用（用例自检）"
+    assert created[0].closed, "client 未被关闭（CDP 连接泄漏）"
+
+
+def test_collect_client_is_closed_when_recorder_setup_fails(db_session, monkeypatch):
+    """run_collect 的样例录制装配（走文件系统）抛异常，client 也必须被关闭。"""
+    created: list[FakeCdp] = []
+
+    class _MarkedAdapter(ScriptedAdapter):
+        sample_markers = (("search", ("api", "search")),)
+
+    task = ApplyTask(
+        kind="collect",
+        status="pending",
+        total=0,
+        config={"keywords": ["后端"], "save_site_samples": True},
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    def _boom():
+        raise OSError("模拟 captures 目录创建失败")
+
+    monkeypatch.setattr("app.services.apply.task_runner.captures_dir", _boom)
+    runner = TaskRunner(
+        registry=_registry(_MarkedAdapter([])),
+        client_factory=_counting_client_factory(created),
+        sleeper=lambda _seconds: None,
+        clock=_FastClock(),
+        poll_interval=0.01,
+    )
+
+    runner.start(task.id)
+    _wait(runner)
+
+    db_session.expire_all()
+    assert db_session.get(ApplyTask, task.id).status == "failed"
+    assert _wait_no_leftover(), f"残留线程：{_leftover_threads()}"
+    assert created, "client 工厂未被调用（用例自检）"
+    assert created[0].closed, "client 未被关闭（CDP 连接泄漏）"

@@ -212,18 +212,22 @@ def run_apply(
         )
         return
 
-    wrapped = wrap_client(client)
-    registry = runner._registry or get_registry()
-    # 主站点适配器快照写进 task.config：诊断事件、界面与事后排查都能对上"这批用的是
-    # 哪个适配器的哪个版本"（采集链路写 site_key 是同一套做法）。
-    adapter_meta = adapter_snapshot(session, items, registry)
-    if adapter_meta:
-        task.config = {**(task.config or {}), "adapter": adapter_meta}
-        session.commit()
-    consecutive = 0
-    # 「同公司只投一个岗位」的作用域是**本批次**：这次投过的公司，后面同公司的岗位直接跳过。
-    attempted_companies: set[str] = set()
+    # client 拿到之后的全部装配（wrap、适配器快照、config 提交）都必须在
+    # try/finally 之内：装配段抛异常时任务由 ``_run`` 兜底置 failed，但
+    # ``finally: client.close()`` 是这条路径上唯一关掉 CDP 连接的地方，
+    # 漏进 try 外面就是一次连接泄漏。
     try:
+        wrapped = wrap_client(client)
+        registry = runner._registry or get_registry()
+        # 主站点适配器快照写进 task.config：诊断事件、界面与事后排查都能对上"这批用的是
+        # 哪个适配器的哪个版本"（采集链路写 site_key 是同一套做法）。
+        adapter_meta = adapter_snapshot(session, items, registry)
+        if adapter_meta:
+            task.config = {**(task.config or {}), "adapter": adapter_meta}
+            session.commit()
+        consecutive = 0
+        # 「同公司只投一个岗位」的作用域是**本批次**：这次投过的公司，后面同公司的岗位直接跳过。
+        attempted_companies: set[str] = set()
         for index, item in enumerate(items):
             try:
                 runner._checkpoint()

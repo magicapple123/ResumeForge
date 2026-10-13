@@ -9,6 +9,7 @@
 - 工作线程的异常**不许被吞**：兜底把任务置失败并写中文 ``message``；
 - 连续失败达阈值**熔断**并醒目提示；每日上限**只计成功投递**。
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,9 +51,7 @@ logger = logging.getLogger(__name__)
 # 都不许再把它改回活动态。用途见 ``TaskRunner._set_status``——它正是 pause/resume 竞态的
 # 收敛点：工作线程抢先提交 ``completed`` 后，``resume()`` 的 ``_set_status(RUNNING)`` 必须
 # 让位，否则终态会被盖回 ``running`` 且再无人修正，任务永久卡住。
-_TERMINAL_STATUSES = frozenset(
-    {TASK_STATUS_COMPLETED, TASK_STATUS_STOPPED, TASK_STATUS_FAILED}
-)
+_TERMINAL_STATUSES = frozenset({TASK_STATUS_COMPLETED, TASK_STATUS_STOPPED, TASK_STATUS_FAILED})
 
 
 _is_within = task_collect.is_within
@@ -101,7 +100,9 @@ class StopAwareCdpClient(CdpClient):
         self._guard()
         return self._inner.evaluate(expression, timeout=timeout)
 
-    def set_file_input(self, selector: str, files: list[str], *, timeout: float | None = None) -> None:
+    def set_file_input(
+        self, selector: str, files: list[str], *, timeout: float | None = None
+    ) -> None:
         self._guard()
         return self._inner.set_file_input(selector, files, timeout=timeout)
 
@@ -237,6 +238,16 @@ class TaskRunner:
         self._require_current(task_id)
         self._stop.set()
         self._resume.set()  # 释放可能正卡在暂停等待里的工作线程
+        # 终态必须在线程归还租约**之后**才对观察者可见（照抄 resume 运行器的同款修复）：
+        # 否则"已停止"先出现在任务查询里，而 apply-task 租约要等线程退出
+        # （_run_releasing_lease 的 finally）才归还——窗口内的数据集切换会在
+        # _wait_for_idle 排空窗撞 409，stop 后立刻 start 下一批也会撞
+        # "已有任务正在进行中"。join 2s 与 resume 的取消预算一致；线程卡死
+        # （如单次 CDP 调用长时间不返回）时超时后照常写终态，此刻的排空等待
+        # 会如实 409（可重试），租约最终仍由线程退出归还。
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=2.0)
         self._set_status(task_id, TASK_STATUS_STOPPED, STOP_REASON_USER)
 
     def shutdown(self) -> None:
@@ -277,7 +288,11 @@ class TaskRunner:
         except Exception:  # noqa: BLE001 - 工作线程异常必须兜底，绝不能静默丢失
             logger.exception("投递/采集任务执行发生内部错误 task_id=%s", task_id)
             self._finalize(
-                session, task, TASK_STATUS_FAILED, STOP_REASON_ERROR, message="任务执行发生内部错误，请查看后端日志"
+                session,
+                task,
+                TASK_STATUS_FAILED,
+                STOP_REASON_ERROR,
+                message="任务执行发生内部错误，请查看后端日志",
             )
         finally:
             session.close()  # 工作线程自关会话
