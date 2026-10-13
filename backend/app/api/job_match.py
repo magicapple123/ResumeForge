@@ -5,6 +5,7 @@
 
 未配置大模型时走**本地降级**并给出中文警告（不阻断流程）；资料为空时应先补资料再分析。
 """
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,6 +15,7 @@ from ..database import SessionLocal, get_db
 from ..models.job import Job
 from ..models.job_match_batch import JobMatchBatch
 from ..models.profile import utcnow
+from ..runtime.log_redact import log_exception_redacted
 from ..schemas.job_match import JobMatchOut, JobMatchResult
 from ..schemas.job_match_background import JobMatchBackgroundTask
 from ..schemas.job_match_batch import (
@@ -63,7 +65,9 @@ async def create_match_batch(
     found = {job.id: job for job in jobs}
     missing = [job_id for job_id in job_ids if job_id not in found]
     if missing:
-        raise HTTPException(status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}")
+        raise HTTPException(
+            status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}"
+        )
     ordered_jobs = [found[job_id] for job_id in job_ids]
     try:
         inputs = build_batch_inputs(db, ordered_jobs, force=payload.force)
@@ -96,7 +100,9 @@ def create_match_batch_task(
     found = {job.id: job for job in jobs}
     missing = [job_id for job_id in job_ids if job_id not in found]
     if missing:
-        raise HTTPException(status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}")
+        raise HTTPException(
+            status_code=404, detail=f"以下岗位不存在或已被删除：{'、'.join(map(str, missing))}"
+        )
     try:
         # 在创建任务前先做资料准入校验，避免用户关闭弹窗后才发现资料为空。
         build_batch_inputs(db, [found[job_id] for job_id in job_ids], force=payload.force)
@@ -194,7 +200,7 @@ async def create_match_analysis(
             logger.warning("岗位匹配分析失败：%s", exc)
             raise HTTPException(status_code=502, detail=f"生成匹配分析失败：{exc}") from exc
         except Exception as exc:  # noqa: BLE001 - 外部模型异常统一转为可理解的错误
-            logger.exception("岗位匹配分析发生内部错误")
+            log_exception_redacted(logger, "岗位匹配分析发生内部错误")
             raise HTTPException(status_code=502, detail="生成匹配分析失败，请稍后重试") from exc
         model_name = config.model
 

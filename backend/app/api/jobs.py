@@ -10,6 +10,7 @@ from starlette.responses import Response
 
 from ..database import get_db
 from ..models.job import JOB_STATUSES, Job
+from ..runtime.log_redact import log_exception_redacted
 from ..schemas.common import Page
 from ..schemas.job import (
     RECOGNITION_SOURCE_AUTO,
@@ -364,7 +365,7 @@ async def analyze_job(job_id: int, db: Session = Depends(get_db)):
         logger.warning("岗位需求解读失败：%s", exc)
         raise HTTPException(status_code=502, detail=f"生成岗位解读失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 外部模型异常统一转为用户可理解的错误
-        logger.exception("岗位需求解读发生内部错误")
+        log_exception_redacted(logger, "岗位需求解读发生内部错误")
         raise HTTPException(status_code=502, detail="生成岗位解读失败，请稍后重试") from exc
 
 
