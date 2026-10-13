@@ -5,14 +5,14 @@
 
 2026-10-13 执行 `electron ^33.0.0 → ^44.7.0` 与 `electron-builder ^25.1.8 → ^26.17.0` 升级（仅锁文件变更，由 CI desktop-shell 打包门禁 + desktop-shell-smoke 真启动作业全链路验证）。升级后 `npm audit` 从 **19 条（4 moderate / 14 high / 1 critical）降到 8 条（全 moderate）**：全部 critical/high（含 critical 的 tar、electron 自身的 38 条 GHSA）随升级清零。剩余 8 条全部源自单一根公告 **GHSA-hp3w-g68c-fv3c**（sprintf-js 无界精度说明符 DoS）——sprintf-js 1.1.3 是 npm 最新版且上游未发布修复版本，roarr → global-agent → @electron/get 链（electron 与 app-builder-lib 传递引入）在上游发布修复前无法消除，按 moderate 登记豁免至 2027-01-31。
 
-> 下表保留升级前的逐条审计记录供追溯；**升级后的权威豁免清单以  为准**（已重建为上述 8 条）。electron-builder 26 的配置 schema/产物布局变化由 CI 打包校验与 asar require 门禁兜底。
+> 下表保留升级前的逐条审计记录供追溯，**它描述的是升级前状态，不是当前口径**；**当前权威豁免清单是 `desktop/scripts/audit-baseline.json`**（已按升级后重建为 8 条 moderate，CI 门禁 `desktop/scripts/check-npm-audit.js` 消费它）。electron-builder 26 的配置 schema/产物布局变化由 CI 打包校验与 asar require 门禁兜底。
 
-## 范围与结论
+## 范围与结论（**历史快照：升级前**，2026-10-13 上午）
 
 对 `desktop/` 运行 `npm audit`（registry.npmjs.org，2026-10-13）：**19 个受影响包条目**
 （4 moderate / 14 high / 1 critical，critical 为 `tar`）。
 
-**结论：本轮不升级任何依赖版本，全部 19 条登记为带到期日的豁免（waiver）。** 依据：
+**当时的结论：本轮不升级任何依赖版本，全部 19 条登记为带到期日的豁免（waiver）。**（同日下午已按上面「2026-10-13 升级记录」执行了 Electron 44 / electron-builder 26 升级，19 条降为 8 条 moderate；本节以下内容仅作历史对照。）依据：
 
 - 每一条的 `fixAvailable` 都是 **semver-major** 升级（`electron ^33.0.0 → 44.7.0`、
   `electron-builder ^25.1.8 → 26.15.3`）或依赖这两个升级间接达成——不存在"范围内安全升级"。

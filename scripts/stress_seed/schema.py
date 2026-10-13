@@ -4,7 +4,7 @@ Everything here imports the application lazily and only inside functions,
 so importing this module never builds an engine or touches the filesystem.
 
 Schema policy: the database is initialized with a real ``alembic upgrade
-head`` (currently ``0044_search_fts5``), exactly like production -- never
+head`` (currently ``0046_search_fts``), exactly like production -- never
 with ``Base.metadata.create_all``. The Alembic head revision is returned so
 the manifest can pin the schema version the dataset was built against.
 """
