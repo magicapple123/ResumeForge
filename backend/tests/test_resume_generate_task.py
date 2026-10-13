@@ -271,14 +271,15 @@ def test_cancel_aborts_hung_model_call_and_releases_lease_promptly(client, monke
 
 
 def test_cancel_main_task_aborts_hung_loop_sub_second():
-    """机制单测：_cancel_main_task 跨线程取消事件循环上挂起的主 task。
+    """机制单测：RunnerEventLoopHandle 跨线程取消事件循环上挂起的主 task。
 
     用真实 event loop + 挂起协程（短 sleep 预算，不注入时钟）：挂 30s 的协程在
     cancel 后必须亚秒级被取消并传播 CancelledError，句柄登记随之清空。
     """
-    from app.services.resume.resume_generate_runner import ResumeGenerateRunner
+    from app.services.resume.resume_runner_loop import RunnerEventLoopHandle
 
-    runner = ResumeGenerateRunner()
+    stop = threading.Event()
+    handle = RunnerEventLoopHandle(stop)
     entered = threading.Event()
     finished = threading.Event()
     outcome: list[str] = []
@@ -293,7 +294,7 @@ def test_cancel_main_task_aborts_hung_loop_sub_second():
 
     def worker() -> None:
         try:
-            runner._drive_event_loop(hang())
+            handle.drive(hang())
         except asyncio.CancelledError:
             outcome.append("propagated")
         finally:
@@ -306,13 +307,13 @@ def test_cancel_main_task_aborts_hung_loop_sub_second():
     assert entered.wait(timeout=2.0), "worker 未在 2s 内进入挂起协程"
 
     begin = time.monotonic()
-    runner._stop.set()
-    runner._cancel_main_task()
+    stop.set()
+    handle.cancel_main_task()
     assert finished.wait(timeout=2.0), "挂起的事件循环未在 2s 内退出"
     assert time.monotonic() - begin < 1.0, "跨线程取消未亚秒级生效"
     assert outcome == ["cancelled", "propagated"]
-    with runner._lock:
-        assert runner._loop is None and runner._main_task is None
+    with handle._lock:
+        assert handle._loop is None and handle._main_task is None
 
 
 def test_cancel_after_done_before_completed_writes_no_resume(client, monkeypatch):
