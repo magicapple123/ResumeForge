@@ -35,7 +35,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from .paths import BackupError
+from .asset_safety import safe_asset_name, safe_asset_path
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +101,8 @@ def collect_referenced_names(database: Path) -> dict[str, set[str]]:
             rows = []
         for row in rows:
             name = row[0] if row else None
-            if isinstance(name, str) and name and "/" not in name and "\\" not in name:
-                referenced["user_files"].add(name)
+            if isinstance(name, str) and name:
+                referenced["user_files"].add(safe_asset_name(name, "user_files"))
         try:
             rows = connection.execute("SELECT note_images FROM referral").fetchall()
         except sqlite3.Error:
@@ -158,7 +158,7 @@ def build_asset_manifest(database: Path, assets_root: Path) -> dict[str, Any]:
         mismatched: list[str] = []
         directory = assets_root / category
         for name in sorted(referenced[category]):
-            file_path = directory / name
+            file_path = safe_asset_path(directory, name)
             try:
                 size, digest = file_digest(file_path)
             except OSError:
@@ -178,9 +178,7 @@ def build_asset_manifest(database: Path, assets_root: Path) -> dict[str, Any]:
 
 def _assert_safe_asset_name(name: Any, category: str) -> str:
     """清单条目里的文件名只认单段安全名字：挡住构造出来的路径穿越。"""
-    if not isinstance(name, str) or not name or "/" in name or "\\" in name or name.startswith("."):
-        raise BackupError(f"备份包的资产清单里 {category} 有一个不合法的文件名，已停止恢复")
-    return name
+    return safe_asset_name(name, category)
 
 
 def manifest_asset_warnings(manifest: Mapping[str, Any] | None) -> list[str]:
@@ -262,7 +260,8 @@ def verify_database_rows(database: Path, expected_counts: Mapping[str, Any]) -> 
                 issues.append(f"表 {table} 在恢复后的数据库中不存在")
                 continue
             try:
-                actual = connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+                quoted_table = str(table).replace('"', '""')
+                actual = connection.execute(f'SELECT COUNT(*) FROM "{quoted_table}"').fetchone()[0]
             except sqlite3.DatabaseError as exc:
                 issues.append(f"表 {table} 无法统计行数（{exc}）")
                 continue

@@ -1,7 +1,7 @@
 /** 软件更新卡片：检查、下载进度与后台下载选项。 */
 
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import UpdateCard from "./UpdateCard";
 
@@ -76,6 +76,34 @@ afterEach(() => {
 });
 
 describe("UpdateCard", () => {
+  it("a delayed initial status cannot replace a newer completed download", async () => {
+    let resolveInitial!: (status: { state: string }) => void;
+    apiMocks.getUpdateDownloadStatus.mockReturnValueOnce(
+      new Promise<{ state: string }>((resolve) => {
+        resolveInitial = resolve;
+      }),
+    );
+    renderCard();
+    await waitFor(() => expect(apiMocks.getUpdateDownloadStatus).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+    fireEvent.click(await screen.findByRole("button", { name: "下载更新" }));
+    expect(await screen.findByText("更新包已下载完成")).toBeInTheDocument();
+    await act(async () => resolveInitial({ state: "idle" }));
+    expect(screen.getByText("更新包已下载完成")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重启并安装" })).toBeInTheDocument();
+  });
+
+  it("a status-read error exposes retry and blocks unconfirmed update actions", async () => {
+    apiMocks.getUpdateDownloadStatus.mockRejectedValueOnce(new Error("SYNTHETIC_PRIVATE_ERROR"));
+    renderCard();
+    const retry = await screen.findByRole("button", { name: "重试读取状态" });
+    expect(screen.queryByText("SYNTHETIC_PRIVATE_ERROR")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+    expect(await screen.findByRole("button", { name: "下载更新" })).toBeDisabled();
+    fireEvent.click(retry);
+    await waitFor(() => expect(screen.getByRole("button", { name: "下载更新" })).toBeEnabled());
+  });
+
   it("checks for updates, offers background download, and shows the ready state", async () => {
     renderCard();
     await waitFor(() => expect(apiMocks.getUpdateDownloadStatus).toHaveBeenCalledOnce());

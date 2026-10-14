@@ -3,15 +3,15 @@
 // Desktop supply-chain audit gate (audit PR-06, 2026-10-13).
 //
 // Runs `npm audit --json` (read-only; the lockfile is never touched) and fails
-// when the report contains a critical/high entry that is NOT covered by the
+// when the report contains any severity entry that is NOT covered by the
 // registered waiver baseline (desktop/scripts/audit-baseline.json):
 //   - an affected package missing from the baseline,
 //   - a new advisory id on a registered package,
 //   - a severity escalation beyond the registered one,
 //   - a waiver whose `until` date has passed (forces scheduled re-review).
 //
-// Moderate-only findings never fail the gate by themselves; a moderate that
-// escalates to high does.
+// The known moderate dependency chain has been removed. A new low/moderate
+// finding now requires the same explicit review as a high/critical finding.
 //
 // Usage:
 //   node scripts/check-npm-audit.js --baseline scripts/audit-baseline.json
@@ -22,7 +22,7 @@ const fs = require("fs");
 const path = require("path");
 
 const SEVERITY_RANK = { low: 1, moderate: 2, high: 3, critical: 4 };
-const GATE_SEVERITIES = new Set(["high", "critical"]);
+const GATE_SEVERITIES = new Set(["low", "moderate", "high", "critical"]);
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -84,14 +84,27 @@ function collectFailures(report, baseline, today) {
 }
 
 function runNpmAudit(registry) {
-  // Windows needs shell:true for .cmd shims (Node >= 18.20 refuses .cmd via
-  // spawnSync without it -- EINVAL); args are fixed literals, no quoting risk.
-  // The registry is pinned because local npm configs may point at mirrors
-  // that do not implement the audit endpoint (e.g. npmmirror 404s on it).
-  const useShell = process.platform === "win32";
-  const result = spawnSync("npm", ["audit", "--json", `--registry=${registry}`], {
+  const args = ["audit", "--json", `--registry=${registry}`];
+  let command = "npm";
+  if (process.platform === "win32") {
+    // Never invoke the .cmd shim with shell:true: --registry is a CLI input,
+    // and Node joins shell arguments without making metacharacters safe.
+    // Run npm's JavaScript entry through the known Node executable instead.
+    const nodeDirectory = path.dirname(process.execPath);
+    const candidates = [
+      process.env.npm_execpath,
+      path.join(nodeDirectory, "node_modules", "npm", "bin", "npm-cli.js"),
+      path.join(nodeDirectory, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+    ];
+    const cli = candidates.find((candidate) =>
+      candidate && path.basename(candidate) === "npm-cli.js" && fs.existsSync(candidate));
+    if (!cli) throw new Error("Cannot locate npm-cli.js; install Node with npm (no shell fallback)");
+    command = process.execPath;
+    args.unshift(cli);
+  }
+  const result = spawnSync(command, args, {
     encoding: "utf-8",
-    shell: useShell,
+    shell: false,
     maxBuffer: 64 * 1024 * 1024,
   });
   if (result.error) {
@@ -162,7 +175,7 @@ function main(argv) {
   }
 
   console.log(
-    `desktop npm audit gate: OK (${checked} critical/high finding(s) checked, ` +
+    `desktop npm audit gate: OK (${checked} vulnerability finding(s) checked, ` +
       `${registered} registered waiver(s), baseline reviewed ${baseline.reviewedAt || "unknown"})`,
   );
   return 0;

@@ -70,6 +70,7 @@ from .middleware import (
     RequestIdFilter,
     get_request_id,
 )
+from .middleware.dataset_request import DatasetRequestMiddleware
 from .runtime.log_context import LogContextFilter
 from .runtime.log_redact import RedactExceptionFilter
 from .services.apply import apply_service
@@ -334,6 +335,7 @@ def _frontend_dist_dir() -> Path:
 def create_app() -> FastAPI:
     """创建并装配应用；保留工厂便于离线测试和未来多实例部署。"""
     app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+    app.add_middleware(DatasetRequestMiddleware)
     app.add_middleware(
         RequestContextMiddleware,
         max_body_bytes=settings.max_request_body_mb * 1024 * 1024,
@@ -365,6 +367,7 @@ def create_app() -> FastAPI:
             "X-Artifact-Sha256",
             "X-Delivery-Replay",
             "X-Source-Content-Sha256",
+            "X-Dataset-Scope",
         ],
     )
     # add_middleware 后添加的在更外层先执行：跨站防线放在最外层，跨站发来的简单写

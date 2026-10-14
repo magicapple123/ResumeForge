@@ -26,6 +26,7 @@
 删除某条内容时**不连带删除它的关联对象**（岗位删除 → 投递记录保留快照字段并按既有约定
 ``SET NULL``），这条行为回收站前后完全一致——回收站只改变"这条还在不在列表里"。
 """
+
 from __future__ import annotations
 
 import logging
@@ -52,6 +53,7 @@ from ..models.resume import ResumeRecord
 from ..models.share_package import SharePackage
 from ..models.tracker import ApplicationTrack
 from ..models.web_form_record import WebFormFillRecord
+from ..runtime.log_fields import safe_log_text
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +199,9 @@ def counts(db: Session) -> dict[str, int]:
     }
 
 
-def list_trashed(db: Session, *, key: str = "", limit: int = MAX_TRASH_ITEMS) -> list[dict[str, Any]]:
+def list_trashed(
+    db: Session, *, key: str = "", limit: int = MAX_TRASH_ITEMS
+) -> list[dict[str, Any]]:
     """列出回收站内容，**按删除时间倒序**（最近的先看到）。
 
     ``key`` 留空表示不限类型——界面用一张表混排所有类型，带类型标签与筛选，
@@ -229,7 +233,7 @@ def restore(db: Session, key: str, item_id: int) -> bool:
         return False
     item.deleted_at = None
     db.commit()
-    logger.info("已从回收站恢复 type=%s id=%s", key, item_id)
+    logger.info("已从回收站恢复 type=%s id=%s", safe_log_text(key), int(item_id))
     return True
 
 
@@ -272,7 +276,7 @@ def purge(db: Session, key: str, item_id: int) -> bool:
         return False
     db.delete(item)
     db.commit()
-    logger.info("已彻底删除 type=%s id=%s", key, item_id)
+    logger.info("已彻底删除 type=%s id=%s", safe_log_text(key), int(item_id))
     return True
 
 
@@ -308,7 +312,7 @@ def empty(db: Session, *, key: str = "") -> int:
             db.delete(row)
             removed += 1
     db.commit()
-    logger.info("已清空回收站 type=%s，彻底删除 %s 条", key or "全部", removed)
+    logger.info("已清空回收站 type=%s，彻底删除 %s 条", safe_log_text(key or "全部"), int(removed))
     return removed
 
 

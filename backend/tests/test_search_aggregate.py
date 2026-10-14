@@ -4,6 +4,9 @@
 容易写错又难发现的部分：合并顺序、去重、单来源失败降级、正文只抓前 N 条、
 以及「不允许抓内网地址」这条安全边界。
 """
+
+from urllib.parse import urlsplit
+
 import app.services.assistant.assistant_web_search as web_search_module
 import pytest
 from app.schemas.setting import SearchConfig
@@ -22,7 +25,9 @@ def test_unwrap_redirect_decodes_duckduckgo_links():
     wrapped = "//duckduckgo.com/l/?uddg=https%3A%2F%2Fcareers.example.com%2Fjobs&rut=abc"
     assert _unwrap_redirect(wrapped) == "https://careers.example.com/jobs"
     # 普通外链原样返回，DuckDuckGo 自家页面被丢掉（那是广告与设置页）。
-    assert _unwrap_redirect("https://careers.example.com/jobs") == "https://careers.example.com/jobs"
+    assert (
+        _unwrap_redirect("https://careers.example.com/jobs") == "https://careers.example.com/jobs"
+    )
     assert _unwrap_redirect("https://duckduckgo.com/y.js?ad=1") == ""
 
 
@@ -78,9 +83,9 @@ async def test_aggregate_interleaves_deduplicates_and_ranks_official_first(monke
     urls = [item["url"] for item in results]
     # 重复（含 / 与不带 / 的同一路径）只留一条。
     assert len(urls) == len(set(urls))
-    assert sum(1 for url in urls if url.startswith("https://careers.example.com")) == 2
+    assert sum(1 for url in urls if urlsplit(url).hostname == "careers.example.com") == 2
     # 用人单位官网排在第三方平台之前。
-    assert urls[0].startswith("https://careers.example.com")
+    assert urlsplit(urls[0]).hostname == "careers.example.com"
 
 
 @pytest.mark.asyncio
@@ -130,9 +135,7 @@ async def test_aggregate_fetches_page_text_only_for_the_first_n(monkeypatch):
     monkeypatch.setattr(aggregate_module, "bing_search", fake_bing)
     monkeypatch.setattr(aggregate_module, "fetch_page_text", fake_fetch)
 
-    results = await aggregate_search(
-        "后端 招聘", SearchConfig(sources=["bing"], fetch_pages=2)
-    )
+    results = await aggregate_search("后端 招聘", SearchConfig(sources=["bing"], fetch_pages=2))
 
     assert len(fetched) == 2
     assert results[0]["text"] == "这是抓回来的正文节选。"
@@ -189,7 +192,7 @@ async def test_aggregate_sends_the_rewritten_query_to_every_source(monkeypatch):
     async def fake_fetch_bing(query: str):
         captured["bing"] = query
         return (
-            '<rss><channel><item><title>外卖平台项目</title>'
+            "<rss><channel><item><title>外卖平台项目</title>"
             "<link>https://example.com/a</link>"
             "<description>项目管理说明</description></item></channel></rss>"
         ).encode()

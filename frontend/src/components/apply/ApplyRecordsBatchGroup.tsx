@@ -13,17 +13,7 @@ import { RowActions } from "../common/RowActions";
 import { isFromInnerControl } from "../common/recordDetailCore";
 import { formatDateTime } from "../../utils/format";
 import { TASK_STATUS_META, type ApplyRecord, type ApplyRecordBatch } from "../../types";
-
-/** 批次明细的服务端分页大小（B4 按需加载：展开时才拉明细，不整批搬运）。 */
-export const BATCH_ITEM_PAGE_SIZE = 20;
-
-/** 一个已展开批次的明细状态（服务端分页：items 是当前页，total 供分页器用）。 */
-export interface BatchItemsState {
-  items: ApplyRecord[];
-  total: number;
-  page: number;
-  loading: boolean;
-}
+import { BATCH_ITEM_PAGE_SIZE, type BatchItemsState } from "../../types/applyBatchItems";
 
 interface BatchGroupProps {
   batch: ApplyRecordBatch;

@@ -113,7 +113,7 @@ def _export_record(
     if saved_location and validate_directory(saved_location) is None:
         try:
             final_path = save_artifact(artifact.content, saved_location, artifact.filename)
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             logger.warning("导出产物落盘到「%s」失败：%s", saved_location, exc)
         else:
             # 头的值做 URL 编码（路径里可能有中文/反斜杠等非 latin-1 字符），前端解码还原。

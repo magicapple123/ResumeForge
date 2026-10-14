@@ -64,8 +64,8 @@ export function checkForUpdate(refresh = false): Promise<UpdateCheckResult> {
   return request(`/update/check${refresh ? "?refresh=true" : ""}`);
 }
 
-export function getUpdateDownloadStatus(): Promise<UpdateStatus> {
-  return request("/update/download-status");
+export function getUpdateDownloadStatus(signal?: AbortSignal): Promise<UpdateStatus> {
+  return request("/update/download-status", { signal });
 }
 
 export function startUpdateDownload(background = false): Promise<UpdateStatus> {
@@ -320,6 +320,6 @@ async function downloadArchive(
 }
 
 /** 当前数据集的自动备份保护摘要（RF-05）。 */
-export function getBackupStatus(): Promise<BackupStatus> {
-  return request<BackupStatus>("/settings/backup-status");
+export function getBackupStatus(signal?: AbortSignal): Promise<BackupStatus> {
+  return request<BackupStatus>("/settings/backup-status", { signal });
 }

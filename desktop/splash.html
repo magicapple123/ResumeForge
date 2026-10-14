@@ -92,8 +92,14 @@
     <script>
       (function () {
         var logo = document.getElementById("logo");
-        var icon = new URLSearchParams(location.search).get("icon");
-        if (icon) logo.src = icon; // absolute path works for file:// pages
+        // Build resources may be excluded from app.asar even when listed in
+        // files. Packaged shells carry a controlled extraResources copy beside
+        // app.asar; source trees use the local copy. Never read a URL from query.
+        logo.addEventListener("error", function extraResourcesIcon() {
+          logo.removeEventListener("error", extraResourcesIcon);
+          logo.src = "../icon.png";
+        });
+        logo.src = "icon.png";
         var bar = document.getElementById("bar");
         var stage = document.getElementById("stage");
         var errorBox = document.getElementById("error");

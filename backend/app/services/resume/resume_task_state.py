@@ -7,6 +7,7 @@
 下只会有一个写入者生效（先到者赢），绝不覆盖已写入的终态；调用方自此不再通过
 ORM 改 status，避免把原子守卫绕过去。
 """
+
 from __future__ import annotations
 
 import logging
@@ -26,9 +27,7 @@ from ...models.resume import (
 logger = logging.getLogger(__name__)
 
 
-def finalize_task(
-    session: Any, task: ResumeGenerateTask, status: str, error: str = ""
-) -> None:
+def finalize_task(session: Any, task: ResumeGenerateTask, status: str, error: str = "") -> None:
     """写入任务终态；**终态守卫**：只允许从 pending/running 转入，绝不覆盖已有终态。
 
     取消与异常收尾可能并发（cancel 已把任务写成 cancelled，worker 又因模型错误
@@ -95,19 +94,15 @@ def set_cancelled(task_id: int, *, open_session: Callable[[], Any]) -> None:
             update(ResumeGenerateTask)
             .where(ResumeGenerateTask.id == task_id)
             .where(
-                ResumeGenerateTask.status.in_(
-                    (GENERATE_STATUS_RUNNING, GENERATE_STATUS_PENDING)
-                )
+                ResumeGenerateTask.status.in_((GENERATE_STATUS_RUNNING, GENERATE_STATUS_PENDING))
             )
-            .values(
-                status=GENERATE_STATUS_CANCELLED, error="已取消", finished_at=utcnow()
-            )
+            .values(status=GENERATE_STATUS_CANCELLED, error="已取消", finished_at=utcnow())
             .execution_options(synchronize_session=False)
         )
         session.execute(statement)
         session.commit()
     except Exception:  # noqa: BLE001 - 与工作线程并发写时可能短暂锁库，忽略即可
-        logger.warning("更新生成任务取消状态失败 task_id=%s", task_id)
+        logger.warning("更新生成任务取消状态失败 task_id=%s", int(task_id))
     finally:
         session.close()
 

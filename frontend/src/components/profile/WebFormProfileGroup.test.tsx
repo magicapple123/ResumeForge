@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { WebFormField } from "../../types";
-import { areGroupPropsEqual, type WebFormProfileGroupProps } from "./WebFormProfileGroup";
+import { areGroupPropsEqual, type WebFormProfileGroupProps } from "./webFormProfileGroupMemo";
 
 const FIELDS: WebFormField[] = [
   { key: "cet6_score", label: "英语六级分数", group: "语言与证书", kind: "text", sensitive: false },

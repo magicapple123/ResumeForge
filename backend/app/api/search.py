@@ -17,7 +17,7 @@ FTS 表不存在（历史库/旧 SQLite）或关键词不足 3 字符时回退�
 """
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import String, cast, or_, true
+from sqlalchemy import String, and_, cast, or_, true
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -66,10 +66,10 @@ def _keyword_filter(db: Session, model: type, base_table: str, term: str, column
     if not normalized_term(term):
         return true()
     fts_filter = search_fts.id_match_filter(db, model, base_table, term)
-    if fts_filter is not None:
-        return fts_filter
     like = like_pattern(term)
-    return or_(*(column.like(like, escape=LIKE_ESCAPE) for column in columns))
+    exact = or_(*(column.like(like, escape=LIKE_ESCAPE) for column in columns))
+    # Trigram Unicode folding can differ even for ASCII queries. FTS only supplies candidates.
+    return and_(fts_filter, exact) if fts_filter is not None else exact
 
 
 def _search_more(db: Session, term: str, limit: int) -> list[SearchHit]:

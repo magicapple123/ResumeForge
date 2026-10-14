@@ -215,12 +215,18 @@ def test_restore_verifies_database_row_counts(three_datasets, tmp_path):
             else:
                 target.writestr(name, source.read(name))
 
-    lying_result = import_dataset(
-        lying, "行数不符的包", database.engine, tmp_path / "staging-lying"
-    )
+    from app.dataset_registry import DatasetError
 
-    issues = "\n".join(lying_result.get("asset_issues") or [])
-    assert "user_file" in issues
+    with pytest.raises(DatasetError, match="数据库行数"):
+        import_dataset(lying, "行数不符的包", database.engine, tmp_path / "staging-lying")
+    with pytest.raises(DatasetError, match="数据库行数"):
+        import_dataset(
+            lying,
+            "跳过附件也不能跳过数据库校验",
+            database.engine,
+            tmp_path / "staging-lying-partial",
+            allow_partial_assets=True,
+        )
 
 
 def test_legacy_package_without_asset_manifest_still_imports(three_datasets, tmp_path):

@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     # 备份上传单独放宽：恢复用的压缩包体积随用户数据增长，而请求体是流式落盘的，
     # 内存占用与包大小无关。其余接口仍受 max_request_body_mb 约束。
     max_backup_upload_mb: int = Field(default=512, ge=1, le=4096)
+    max_backup_uncompressed_mb: int = Field(default=4096, ge=1, le=65536)
 
     # 文件日志：在数据目录 logs/ 下追加一份 5MB×5 的滚动日志，防止长期挂机时
     # 启动器重定向的 stdout/stderr（runtime/*.log）无限膨胀。不想落盘的场景

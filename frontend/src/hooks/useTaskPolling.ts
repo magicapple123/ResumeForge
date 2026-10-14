@@ -10,6 +10,7 @@ import { DependencyList, useCallback, useEffect, useRef, useState } from "react"
 import { ApiError, isCancellation } from "../api/client";
 import type { ApplyTaskDetail, TaskStatus } from "../types";
 import { isDocumentHidden, onVisibilityChange } from "../utils/visibility";
+import { useDependencyVersion } from "./useDependencyVersion";
 
 /** 仍在推进的状态：只有这些状态下才需要继续轮询。 */
 export const ACTIVE_TASK_STATUSES: readonly TaskStatus[] = [
@@ -46,26 +47,36 @@ export function useTaskPolling(
   taskId: number | null,
   deps: DependencyList = [],
 ): TaskPollingState {
+  const dependencyVersion = useDependencyVersion(deps);
+  const activeDependencyVersion = useRef(dependencyVersion);
+  const activeTaskId = useRef(taskId);
   const [detail, setDetail] = useState<ApplyTaskDetail | null>(null);
   const [error, setError] = useState("");
   const [notFound, setNotFound] = useState(false);
   const version = useRef(0);
   // single-flight 标记与连续失败计数：轮询循环据此跳过叠加请求并做失败退避。
-  const inFlight = useRef(false);
+  const inFlight = useRef<number | null>(null);
   const failures = useRef(0);
 
   const fetcherRef = useRef(fetcher);
   // ref 写入放 effect（Compiler 禁止渲染期写 ref）：声明在重置/重载 effect 之前。
   useEffect(() => {
     fetcherRef.current = fetcher;
+    activeDependencyVersion.current = dependencyVersion;
+    activeTaskId.current = taskId;
   });
 
   const refresh = useCallback(async (): Promise<boolean> => {
-    if (taskId == null) return false;
+    if (
+      taskId == null ||
+      activeTaskId.current !== taskId ||
+      activeDependencyVersion.current !== dependencyVersion
+    )
+      return false;
     const current = ++version.current;
     // 重试时先把 404 态撤掉再拉一次；后端仍返回 404 会重新置真。
     setNotFound(false);
-    inFlight.current = true;
+    inFlight.current = current;
     try {
       const result = await fetcherRef.current(taskId);
       if (current === version.current) {
@@ -87,10 +98,9 @@ export function useTaskPolling(
       }
       return false;
     } finally {
-      inFlight.current = false;
+      if (inFlight.current === current) inFlight.current = null;
     }
-    // eslint-disable-next-line react-hooks/use-memo -- 依赖列表同样是调用方传参，无法写成字面量
-  }, [taskId, ...deps]);
+  }, [taskId, dependencyVersion]);
 
   // 切换任务时清空旧详情，避免把上一个任务的状态显示成新任务的。
   // Compiler 规范：随 prop 变化的重置改到渲染期「调整状态」模式（守卫式 setState）。
@@ -107,6 +117,9 @@ export function useTaskPolling(
     version.current += 1;
     failures.current = 0;
     if (taskId != null) void refresh();
+    return () => {
+      version.current += 1;
+    };
   }, [taskId, refresh]);
 
   // 仅在任务仍处于推进状态时轮询；进入终态后自动停止，避免空转。
@@ -128,7 +141,7 @@ export function useTaskPolling(
     const tick = async () => {
       if (disposed) return;
       // 后台跳过本轮（秒级轮询在后台纯属浪费）；single-flight：上一轮还没回来就不叠加。
-      if (isDocumentHidden() || inFlight.current) {
+      if (isDocumentHidden() || inFlight.current !== null) {
         schedule(POLL_INTERVAL_MS);
         return;
       }
@@ -146,7 +159,7 @@ export function useTaskPolling(
     const unsubscribeVisibility = onVisibilityChange(() => {
       if (disposed || isDocumentHidden()) return;
       // 前台补拉也别和进行中的请求叠加：in-flight 时它完成后自会排下一轮。
-      if (inFlight.current) return;
+      if (inFlight.current !== null) return;
       if (timer !== undefined) window.clearTimeout(timer);
       void tick();
     });

@@ -21,6 +21,7 @@ import type {
   SiteList,
 } from "../types";
 import { ApiError, buildQuery, extractError, request } from "./client";
+import { datasetScopeHeaders } from "./datasetScope";
 
 // ===== 配置 =====
 
@@ -133,7 +134,7 @@ export class QueueConflictError extends Error {
 export async function addToQueue(items: ApplyQueueAddItem[]): Promise<ApplyQueueItem[]> {
   const resp = await fetch("/api/apply/queue", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: datasetScopeHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ items }),
   });
   if (resp.status === 409) {

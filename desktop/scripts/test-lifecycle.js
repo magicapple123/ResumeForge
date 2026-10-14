@@ -15,6 +15,7 @@ const os = require("os");
 const path = require("path");
 const vm = require("vm");
 const { test } = require("node:test");
+const { EventEmitter } = require("node:events");
 
 const REPO_DESKTOP = path.join(__dirname, "..");
 
@@ -41,6 +42,7 @@ function loadMain() {
     preventCalls: [],
     errorBoxes: [],
     spawnCalls: [],
+    installerChildren: [],
     timers: [],
   };
 
@@ -144,7 +146,10 @@ function loadMain() {
     spawn(file, args, options) {
       events.spawnCalls.push({ file, args, options });
       events.order.push("installer-spawn");
-      return { unref() {} };
+      const child = new EventEmitter();
+      child.unref = () => {};
+      events.installerChildren.push(child);
+      return child;
     },
   };
 
@@ -342,6 +347,22 @@ test("update install: installer spawns only AFTER backend.stop() completes", asy
     const spawnIndex = loaded.events.order.indexOf("installer-spawn");
     assert.ok(spawnIndex > stopCompleteIndex,
       `installer spawn must happen after stop-complete (order: ${loaded.events.order.join(" -> ")})`);
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("installer asynchronous spawn failure is handled and shown to the user", async () => {
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    loaded.exports.requestInstallAndQuit("C:/temp/ResumeForge-Setup-0.19.0.exe");
+    loaded.events.beforeQuitHandler({ preventDefault() {} });
+    await flush();
+    const child = loaded.events.installerChildren[0];
+    assert.ok(child, "the verified installer path should have been passed to spawn");
+    assert.doesNotThrow(() => child.emit("error", new Error("synthetic ENOENT")));
+    assert.match(loaded.events.errorBoxes.join(" "), /安装程序未能启动/);
   } finally {
     loaded.cleanup();
   }

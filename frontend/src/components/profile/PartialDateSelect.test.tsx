@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import PartialDateSelect, { normalizePartialDate } from "./PartialDateSelect";
+import PartialDateSelect from "./PartialDateSelect";
+import { normalizePartialDate } from "./partialDate";
 
 afterEach(() => {
   cleanup();

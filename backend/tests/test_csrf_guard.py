@@ -5,6 +5,7 @@
 端点根本不执行，同时把 ``_stop_process`` 替换成记录用的空函数兜底，就算防线回归
 失效也不会真的把测试进程关掉。
 """
+
 from app.api import system as system_api
 from app.database import SessionLocal, get_db
 from app.main import app
@@ -110,6 +111,24 @@ def test_malformed_or_null_origin_is_rejected(client):
         assert response.status_code == 403, origin
 
 
+def test_save_folder_rejects_non_loopback_clients_before_filesystem_probe(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.api.settings.validate_directory", lambda path: calls.append(path))
+    previous = app.dependency_overrides.copy()
+    app.dependency_overrides[get_db] = _override_get_db
+    try:
+        with TestClient(app, client=("192.0.2.1", 50001)) as remote:
+            response = remote.put(
+                "/api/settings/export-save-location", json={"path": str(tmp_path)}
+            )
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous)
+    assert response.status_code == 403
+    assert "本机" in response.json()["detail"]
+    assert calls == []
+
+
 def test_pick_folder_rejects_non_loopback_clients():
     """pick 端点会弹原生模态对话框：非回环直连（含跨站借道浏览器）一律 403。"""
 
@@ -133,9 +152,7 @@ def test_pick_folder_rejects_non_loopback_clients():
 
 def test_pick_folder_allows_loopback_clients(client, monkeypatch):
     """回环直连时 pick 端点照常工作（monkeypatch 掉真弹窗，只验校验放行）。"""
-    monkeypatch.setattr(
-        "app.api.settings.pick_directory", lambda: "C:/picked/folder"
-    )
+    monkeypatch.setattr("app.api.settings.pick_directory", lambda: "C:/picked/folder")
 
     response = client.post("/api/settings/export-save-location/pick")
 

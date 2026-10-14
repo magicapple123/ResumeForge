@@ -9,7 +9,7 @@ import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
 from ...config import get_settings
 from ...runtime.operation_budget import OperationBudget
@@ -82,7 +82,7 @@ class ResumeGenerator:
         self._env = Environment(
             loader=FileSystemLoader(PROMPTS_DIR),
             undefined=StrictUndefined,
-            autoescape=False,
+            autoescape=select_autoescape(default=False, default_for_string=False),
         )
         # 多段用量汇总（审计 PR-07-6）：主生成 / 格式修复 / 质量重试各段结束后各补
         # 一次 provider.last_usage（失败与取消轮次同样收集，能拿到多少算多少）。
@@ -266,12 +266,15 @@ class ResumeGenerator:
                 fixed = await self.provider.chat(
                     [{"role": "user", "content": fix_prompt}], thinking=False
                 )
-            except LLMError as exc:
+            except LLMError:
                 if budget is not None and budget.is_expired():
                     # 预算耗尽不得伪装成网络超时（§2.1.a-3）：与 runner 的预算语义一致。
                     yield {"type": "error", "message": "生成超出时间预算，已终止"}
                     return
-                yield {"type": "error", "message": f"自动修复调用失败：{exc}"}
+                yield {
+                    "type": "error",
+                    "message": "自动修复调用失败：模型服务暂时不可用，请稍后重试",
+                }
                 return
             finally:
                 self._end_segment()
@@ -331,7 +334,7 @@ class ResumeGenerator:
                 retry_raw = await self.provider.chat(retry_messages)
                 retry_resume = self._parse(retry_raw)
             except Exception as exc:  # noqa: BLE001 - 质量重试失败应保留首轮结果
-                logger.warning("简历质量重试失败，将沿用首轮结果：%s", exc)
+                logger.warning("简历质量重试失败，将沿用首轮结果，异常类型=%s", type(exc).__name__)
             finally:
                 self._end_segment()
                 # 重试段的用量（含失败轮次）也进汇总（PR-07-6）。

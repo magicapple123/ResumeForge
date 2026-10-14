@@ -18,17 +18,16 @@ import {
   Switch,
   Typography,
 } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   acknowledgeUpdateInstallResult,
   checkForUpdate,
-  getUpdateDownloadStatus,
   getUpdateInstallResult,
   installDownloadedUpdate,
   startUpdateDownload,
 } from "../../api/settings";
-import type { UpdateCheckResult, UpdateStatus } from "../../types";
-import { isDocumentHidden, onVisibilityChange } from "../../utils/visibility";
+import type { UpdateCheckResult } from "../../types";
+import { useUpdateDownloadStatus } from "../../hooks/useUpdateDownloadStatus";
 
 const UPDATE_COMPLETED_KEY = "resumeforge.update.completed";
 
@@ -43,60 +42,12 @@ function formatBytes(value: number | null): string {
 export default function UpdateCard() {
   const { modal } = App.useApp();
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
-  const [status, setStatus] = useState<UpdateStatus | null>(null);
+  const { status, statusError, setStatus, refreshStatus } = useUpdateDownloadStatus();
   const [checking, setChecking] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [background, setBackground] = useState(false);
   const [error, setError] = useState("");
-
-  /**
-   * 拉取后端真实的下载/安装状态。
-   *
-   * 抽成助手是为了让「安装/下载失败后纠偏」与挂载时的初始拉取走同一条路径：
-   * 失败后不刷新状态的话，陈旧的 ready 会让绿色「已下载完成」与刚弹出的红色错误
-   * 同屏并存——正是用户截图里的现场。
-   */
-  const refreshStatus = useCallback(async (isCancelled?: () => boolean) => {
-    try {
-      const current = await getUpdateDownloadStatus();
-      if (!isCancelled?.()) setStatus(current);
-    } catch {
-      // 状态接口失败不应让整个设置页报错；用户仍可手动检查更新。
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void refreshStatus(() => cancelled);
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshStatus]);
-
-  const statusState = status?.state;
-
-  useEffect(() => {
-    if (!statusState || !["downloading", "installing"].includes(statusState)) return;
-    // 页面在后台时跳过本轮 tick；回到前台由 visibilitychange 立即补一次。
-    const poll = () => {
-      void getUpdateDownloadStatus()
-        .then((current) => setStatus(current))
-        .catch(() => undefined);
-    };
-    const timer = window.setInterval(() => {
-      if (isDocumentHidden()) return;
-      poll();
-    }, 800);
-    const unsubscribeVisibility = onVisibilityChange(() => {
-      if (isDocumentHidden()) return;
-      poll();
-    });
-    return () => {
-      window.clearInterval(timer);
-      unsubscribeVisibility();
-    };
-  }, [statusState]);
 
   useEffect(() => {
     // 旧版本会在**点击安装时**先写一个"已完成"的标记，于是安装崩了下次打开照样显示
@@ -235,7 +186,7 @@ export default function UpdateCard() {
             icon={<DownloadOutlined />}
             aria-label="下载更新"
             loading={downloading}
-            disabled={activeStatus || installing}
+            disabled={activeStatus || installing || Boolean(statusError)}
             onClick={() => void download()}
           >
             下载更新
@@ -251,7 +202,7 @@ export default function UpdateCard() {
             重新检查
           </Button>
         )}
-        {status?.state === "ready" && (
+        {status?.state === "ready" && !statusError && (
           <Button
             type="primary"
             danger
@@ -270,7 +221,7 @@ export default function UpdateCard() {
           <Switch
             size="small"
             checked={background}
-            disabled={activeStatus || installing}
+            disabled={activeStatus || installing || Boolean(statusError)}
             onChange={setBackground}
           />
           <span>后台下载（下载完成后提醒我安装）</span>
@@ -279,7 +230,16 @@ export default function UpdateCard() {
 
       {checking && !result && <Spin style={{ marginTop: 16 }} />}
       {error && <Alert style={{ marginTop: 16 }} type="error" showIcon title={error} />}
-      {status?.state === "downloading" && (
+      {statusError && (
+        <Alert
+          style={{ marginTop: 16 }}
+          type="warning"
+          showIcon
+          title={statusError}
+          action={<Button onClick={() => void refreshStatus()}>重试读取状态</Button>}
+        />
+      )}
+      {status?.state === "downloading" && !statusError && (
         <div style={{ marginTop: 16 }}>
           <Typography.Text>
             正在下载更新包：{formatBytes(status.downloaded_bytes)} /{" "}
@@ -288,7 +248,7 @@ export default function UpdateCard() {
           <Progress percent={Math.round(status.progress)} status="active" />
         </div>
       )}
-      {status?.state === "installing" && (
+      {status?.state === "installing" && !statusError && (
         <Alert
           style={{ marginTop: 16 }}
           type="info"
@@ -296,10 +256,10 @@ export default function UpdateCard() {
           title="更新器已启动，应用即将退出并自动重启。"
         />
       )}
-      {status?.state === "failed" && status.message && (
+      {status?.state === "failed" && status.message && !statusError && (
         <Alert style={{ marginTop: 16 }} type="error" showIcon title={status.message} />
       )}
-      {status?.state === "ready" && (
+      {status?.state === "ready" && !statusError && (
         <Alert
           style={{ marginTop: 16 }}
           type="success"

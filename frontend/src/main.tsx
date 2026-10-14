@@ -5,6 +5,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
+import DatasetScopeBoundary from "./components/DatasetScopeBoundary";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import { layer, palette } from "./theme/tokens";
 import "./index.css";
@@ -68,7 +69,13 @@ async function start() {
           <NotifyHostBridge />
           <AppErrorBoundary>
             <BrowserRouter>
-              <App />
+              {import.meta.env.VITE_DEMO_MODE === "1" ? (
+                <App />
+              ) : (
+                <DatasetScopeBoundary>
+                  <App />
+                </DatasetScopeBoundary>
+              )}
             </BrowserRouter>
           </AppErrorBoundary>
         </AntdApp>

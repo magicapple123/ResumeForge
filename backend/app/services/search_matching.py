@@ -13,12 +13,12 @@
   （``foo%bar`` 能匹配 ``fooblahbar``，而 MATCH 不能）；
 - **前后空白**：FTS 侧先 ``strip()`` 再匹配，``" foo "`` 会命中 ``foo...``；LIKE 侧
   按原样要求两侧空格；
-- **变音符号**：trigram 默认 ``remove_diacritics=1``，``café`` 会连 ``cafe`` 一起命中，
-  而 LIKE 不会。
+- **Unicode 折叠**：trigram 的 Unicode 大小写折叠比 SQLite LIKE 的 ASCII 折叠更宽；
+  ``kubernetes`` 可能从候选索引命中 ``Kubernetes``，LIKE 则不会。
 
 本模块把"用户输入 = **字面子串**"这一约定写成一份实现：LIKE 侧显式 ``ESCAPE``，
-FTS 侧保留原文（只判空时 strip），带变音符号的查询直接不走 FTS（见
-:func:`fts_safe`）。改这里的任何一条都要同步改另一条，两个路径的对照测试
+FTS 侧保留原文（只判空时 strip），并且候选集合始终再用同源 LIKE 核验；查询側保守
+回退见 :func:`fts_safe`。改这里的任何一条都要同步改另一条，两个路径的对照测试
 （``tests/test_search_fts.py``）按"同一端点两遍的 JSON 完全相等"钉住这个不变量。
 """
 
@@ -54,13 +54,12 @@ def like_pattern(raw: str) -> str:
 
 
 def fts_safe(raw: str) -> bool:
-    """这个关键词能否安全地交给 FTS trigram（即与 LIKE 结果必然一致）。
+    """这个关键词能否交给 FTS trigram 候选索引；最终结果仍须 LIKE 精确核验。
 
     两处已知的折叠差异，命中任意一条就回退 LIKE（慢一点，但对得上）：
 
-    1. **变音符号**：trigram 默认 ``remove_diacritics=1``，``héllo`` 会命中 ``hello``，
-       LIKE 不会。UTF-8 分解后与原字符不同即说明带变音符号（重音拉丁/希腊/西里尔、
-       谚文音节等）。
+    1. **组合字符**：对分解后不同的字符保守回退，避免索引配置和规范化差异。
+       默认 trigram 的 remove_diacritics 是 0；不能把 unicode61 的默认规则套用在它上面。
     2. **非 ASCII 大小写折叠**：trigram 的小写折叠覆盖西里尔/希腊/拉丁扩展，
        而 SQLite 的 LIKE 只折 ASCII——``ПРИВЕТ`` 与 ``привет`` 在 FTS 下相等、
        在 LIKE 下不等。凡是"有大小写概念的非 ASCII 字符"（``lower() != upper()``）

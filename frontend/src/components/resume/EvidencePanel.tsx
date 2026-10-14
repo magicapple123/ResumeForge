@@ -13,7 +13,7 @@
  */
 import { Space, Tag, Typography } from "antd";
 import { useMemo } from "react";
-import { RESPONSIBILITY_COLORS, STATUS_COLORS } from "../claims/ClaimCard";
+import { claimResponsibilityColor, claimStatusColor } from "../claims/claimPresentation";
 import { describeResumeFieldPath } from "../../utils/resumeFieldPath";
 import type { FactAnnotation, ResumeContent } from "../../types";
 import { ORIGIN_COLORS, ORIGIN_LABELS, canShowVerified } from "./factAnnotationMeta";
@@ -107,15 +107,9 @@ export default function EvidencePanel({ annotations, content }: Props) {
                       >
                         {ORIGIN_LABELS[annotation.origin] ?? annotation.origin}
                       </Tag>
-                      {verified && (
-                        <Tag
-                          color={(STATUS_COLORS as Record<string, string>)[verified] ?? "default"}
-                        >
-                          {verified}
-                        </Tag>
-                      )}
+                      {verified && <Tag color={claimStatusColor(verified)}>{verified}</Tag>}
                       {annotation.responsibility && (
-                        <Tag color={RESPONSIBILITY_COLORS[annotation.responsibility] ?? "default"}>
+                        <Tag color={claimResponsibilityColor(annotation.responsibility)}>
                           {annotation.responsibility}
                         </Tag>
                       )}

@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment
+from jinja2 import Environment, select_autoescape
 
 from ...models.interview import (
     INTERVIEW_STATUS_FINISHED,
@@ -31,7 +31,10 @@ logger = logging.getLogger(__name__)
 PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
 
 # 面试提示词是我们自己仓库里的文件（不是用户输入），不需要沙箱环境。
-_PROMPT_ENV = Environment(autoescape=False, keep_trailing_newline=True)
+_PROMPT_ENV = Environment(
+    autoescape=select_autoescape(default=False, default_for_string=False),
+    keep_trailing_newline=True,
+)
 MAX_INTERVIEW_RESPONSE_CHARS = 40_000
 # 送给模型的上下文预算：个人资料与 JD 各留一份，超出就截断。
 MAX_PROFILE_CONTEXT_CHARS = 6_000

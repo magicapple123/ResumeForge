@@ -25,19 +25,38 @@ from .section_constants import (
 )
 
 
+def _split_leading_location(value: str) -> tuple[str, str] | None:
+    """Parse the first explicit separator without overlapping whitespace quantifiers."""
+    positions = (value.find(separator) for separator in "|丨｜-—–")
+    position = min((index for index in positions if index >= 0), default=-1)
+    if position < 1:
+        return None
+    if value[position] == "-" and value[position + 1 : position + 2].isdecimal():
+        return None
+    prefix = value[:position].rstrip()
+    if len(prefix) > 64 or not _looks_like_location(prefix.strip()):
+        return None
+    tail = value[position + 1 :]
+    if not tail:
+        return None
+    # Preserve the old line regex's single optional final LF and whitespace-only
+    # suffix behavior; interior LF after the non-whitespace remainder is invalid.
+    body = tail[:-1] if tail.endswith("\n") else tail
+    if not body:
+        return None
+    remainder = body.lstrip()
+    if "\n" in remainder or (not remainder and body.endswith("\n")):
+        return None
+    return prefix.strip(), remainder.strip()
+
+
 def _prepare_title_candidate(value: str) -> tuple[str, str]:
     """清理标题行附带的 URL，并拆出明确分隔的地点前缀。"""
     candidate = _strip_inline_salary(_URL_RE.sub("", value)).strip()
     leading_location = ""
-    prefix_match = re.match(
-        r"^(?P<prefix>[^|丨｜\-—–]{1,64})\s*(?:[|丨｜—–]|-(?!\d))\s*(?P<remainder>.+)$",
-        candidate,
-    )
-    if prefix_match:
-        prefix = prefix_match.group("prefix").strip()
-        if _looks_like_location(prefix):
-            leading_location = prefix
-            candidate = prefix_match.group("remainder").strip()
+    prefix_parts = _split_leading_location(candidate)
+    if prefix_parts:
+        leading_location, candidate = prefix_parts
     return candidate, leading_location
 
 
@@ -127,9 +146,7 @@ def _looks_like_internship_marker(value: str) -> bool:
 def _split_title_company(value: str) -> tuple[str, str]:
     # 部分官网把“岗位名(职位编号)公司品牌”无分隔地拼接。含数字的括号编号
     # 是可靠边界；尾部仍需通过公司候选校验，避免拆坏普通括号说明。
-    for code_match in re.finditer(
-        r"[（(](?=[^（）()\s]{1,32}[)）])[^（）()\s]*\d[^（）()\s]*[)）]", value
-    ):
+    for code_match in re.finditer(r"[（(](?=[^（）()\s]{0,31}\d)[^（）()\s]{1,32}[)）]", value):
         compact_title = value[: code_match.end()].strip()
         compact_company = value[code_match.end() :].strip(" \t|｜·,，;；/\\")
         if (
@@ -143,7 +160,7 @@ def _split_title_company(value: str) -> tuple[str, str]:
     # 定位真正的岗位片段，避免把后续元信息一起写入 title。
     pipe_parts = [
         part.strip(" \t|｜·,，;；/\\")
-        for part in re.split(r"\s*[|丨｜]\s*", value.strip())
+        for part in re.split(r"[|丨｜]", value.strip())
         if part.strip(" \t|｜·,，;；/\\")
     ]
     if len(pipe_parts) >= 3:
@@ -170,12 +187,12 @@ def _split_title_company(value: str) -> tuple[str, str]:
             return title, ""
 
     parts = re.split(
-        r"\s+(?:[-—–|｜@])\s+|\s*[|丨｜]\s*",
+        r"(?<!\s)\s++[-—–|｜@]\s++|[|丨｜]",
         value.strip(),
         maxsplit=1,
     )
-    if len(parts) != 2 and re.search(r"\s+[/／]\s+", value):
-        slash_parts = re.split(r"\s+[/／]\s+", value.strip(), maxsplit=1)
+    if len(parts) != 2 and re.search(r"(?<!\s)\s++[/／]\s++", value):
+        slash_parts = re.split(r"(?<!\s)\s++[/／]\s++", value.strip(), maxsplit=1)
         # Slash is common inside role names (``AI / ML``); only treat it as
         # a company separator when the left side has a company signal.
         if len(slash_parts) == 2 and _looks_like_company(slash_parts[0]):
@@ -240,14 +257,9 @@ def _extract_location_from_metadata(value: str) -> str:
 
     # ``北京-岗位名`` 的连字符既不是薪资区间，也不是地点内容；只在
     # 连字符左侧本身可独立识别为地点时使用该边界。
-    prefix_match = re.match(
-        r"^(?P<prefix>[^|丨｜\-—–]{1,64})\s*(?:[|丨｜—–]|-(?!\d))\s*(?P<remainder>.+)$",
-        without_salary,
-    )
-    if prefix_match:
-        prefix = prefix_match.group("prefix").strip()
-        if _looks_like_location(prefix):
-            return prefix
+    prefix_parts = _split_leading_location(without_salary)
+    if prefix_parts:
+        return prefix_parts[0]
 
     without_salary = re.sub(
         r"(?:正式|正式员工|全职|兼职|长期|实习|校招|社招|intern(?:ship)?|full[- ]?time|"
@@ -268,4 +280,3 @@ def _extract_location_from_metadata(value: str) -> str:
     if _looks_like_location(without_salary):
         return without_salary
     return ""
-

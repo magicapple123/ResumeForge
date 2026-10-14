@@ -9,28 +9,28 @@ _MONTH_NAME = (
 )
 _DATE_TOKEN = rf"(?:\d{{4}}(?:[./年-]\d{{1,2}})?(?:[./月-]\d{{1,2}})?|{_MONTH_NAME}\s+\d{{4}})"
 _DATE_RANGE_RE = re.compile(
-    rf"(?P<start>{_DATE_TOKEN})\s*"
-    rf"(?:至|到|[-—–－~～]|\bto\b)\s*"
+    rf"(?P<start>{_DATE_TOKEN})\s*+"
+    rf"(?:至|到|[-—–－~～]|\bto\b)\s*+"
     rf"(?P<end>{_DATE_TOKEN}|至今|现在|present|current|now)",
     re.IGNORECASE,
 )
 _DATE_RE = re.compile(_DATE_TOKEN, re.IGNORECASE)
 _PHONE_RE = re.compile(r"(?<!\d)(?:\+?86[\s-]?)?1[3-9](?:[\s-]?\d){9}(?!\d)")
-_EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}")
+_EMAIL_RE = re.compile(r"(?<![\w.+-])[\w.+-]{1,64}@[\w.-]{1,253}\.[A-Za-z]{2,63}(?![\w.-])")
 _URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 # 限制数字序号长度，避免把 ``2025.06-至今`` 的年份误当作列表编号剥掉。
 _BULLET_RE = re.compile(r"^\s*(?:[-*•·]|\d{1,3}[、.)）.]|[一二三四五六七八九十]+[、.)）.])\s*")
-_ENTRY_SEPARATOR_RE = re.compile(r"\s*(?:\||｜|丨|·|•|—|–|－|/|／|~|～|\s+-\s+)\s*")
+_ENTRY_SEPARATOR_RE = re.compile(r"[|｜丨·•—–－/／~～]|(?<!\s)\s++-\s++")
 # 普通英文名称中可能含有连字符；仅把带空格的横线，或中文字段之间的
 # 无空格横线当作条目分隔符。日期范围已在调用方先移除。
 _HEADER_SEPARATOR_RE = re.compile(
-    r"\s*(?:\||｜|丨|·|•|—|–|－|/|／|~|～|\s+-\s+|(?<=[\u4e00-\u9fff])-(?=[\u4e00-\u9fffA-Za-z]))\s*"
+    r"[|｜丨·•—–－/／~～]|(?<!\s)\s++-\s++|(?<=[\u4e00-\u9fff])-(?=[\u4e00-\u9fffA-Za-z])"
 )
 
 _NUMBERED_HEADING_RE = re.compile(
     r"^(?:第\s*)?(?:\d+|[一二三四五六七八九十百]+)\s*(?:[、.)）.]|、)\s*"
 )
-_INLINE_LABEL_SEPARATOR_RE = re.compile(r"\s*(?:\||｜|丨|;|；|,|，)\s*")
+_INLINE_LABEL_SEPARATOR_RE = re.compile(r"[|｜丨;；,，]")
 _BASIC_UNLABELED_CITY_RE = re.compile(
     r"(?:北京|上海|天津|重庆|深圳|广州|杭州|成都|武汉|西安|南京|苏州|长沙|厦门|合肥|郑州|青岛|济南|大连|宁波|东莞|佛山|珠海|无锡|福州|昆明|南昌|沈阳|石家庄|哈尔滨|香港|澳门|台北|兰州|太原|南宁|海口|贵阳|乌鲁木齐|呼和浩特|温州|常州|嘉兴|绍兴|扬州|Beijing|Shanghai|Tianjin|Chongqing|Shenzhen|Guangzhou|Hangzhou|Chengdu|Wuhan|Xi'an|Nanjing|Suzhou|Remote|Hybrid)",
     re.IGNORECASE,

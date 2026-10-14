@@ -113,6 +113,32 @@ test("migration snapshots SQLite databases consistently (WAL frames included)", 
   }
 });
 
+test("migration refuses a real SQLite source when consistent snapshot support is unavailable", async () => {
+  const root = makeTempRoot("migrate-no-sqlite-runtime");
+  let handle;
+  try {
+    const { DatabaseSync } = require("node:sqlite");
+    const oldDataDir = path.join(root, "payload", "backend", "data");
+    const newDataDir = path.join(root, "userdata", "new", "data");
+    fs.mkdirSync(oldDataDir, { recursive: true });
+    handle = new DatabaseSync(path.join(oldDataDir, DATABASE_FILENAME));
+    handle.exec("CREATE TABLE note (body TEXT)");
+    handle.close();
+    handle = null;
+
+    await assert.rejects(
+      () => performMigration({ oldDataDir, newDataDir, nowIso: FIXED_NOW, sqlite: null }),
+      /consistent snapshot support is unavailable/,
+    );
+    assert.strictEqual(fs.existsSync(path.join(newDataDir, DATABASE_FILENAME)), false);
+  } finally {
+    try {
+      handle?.close();
+    } catch {}
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("migration refuses to delete a same-named temp dir it did not create", async () => {
   const root = makeTempRoot("migrate-temp-provenance");
   try {

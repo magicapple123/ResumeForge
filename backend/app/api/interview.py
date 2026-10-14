@@ -259,11 +259,13 @@ async def create_session(payload: InterviewCreate, db: Session = Depends(get_db)
 
     try:
         question, _feedback, _done = await _ask_next_question(db, session, provider)
-    except LLMError as exc:
+    except LLMError:
         # 开场失败就删掉这条空会话：留一条没有任何内容的面试只会让列表变乱。
         db.delete(session)
         db.commit()
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502, detail="面试助手暂时无法开始本轮，请稍后重试"
+        ) from None
     add_message(
         session,
         role="interviewer",
@@ -308,9 +310,11 @@ async def submit_answer(
 
     try:
         question, feedback, done = await _ask_next_question(db, session, provider)
-    except LLMError as exc:
+    except LLMError:
         # 回答已经存下来了，用户不会白写；只是这一轮的追问失败。
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502, detail="面试助手暂时无法完成本轮，请稍后重试"
+        ) from None
 
     add_message(
         session,
@@ -663,9 +667,10 @@ async def _answer_stream_events(
                 if piece:
                     yield _sse({"type": "question_delta", "text": piece})
         question, feedback, done = parse_turn("".join(parts))
-    except LLMError as exc:
-        # 回答已存档（后端先存后问），失败时提示"重试"而不是"重写"。
-        yield _sse({"type": "error", "detail": str(exc)})
+    except LLMError:
+        # Provider errors are deliberately reduced to a fixed public message;
+        # model responses and validation details can contain private resume data.
+        yield _sse({"type": "error", "detail": "面试助手暂时无法完成本轮，请稍后重试"})
         return
 
     add_message(

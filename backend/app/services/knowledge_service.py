@@ -103,15 +103,14 @@ def _filtered_query(db: Session, *, q: str = "", category: str = "") -> Query[Kn
         expression = _match_expression(q) if _fts_available(db) else None
         if expression is not None:
             query = query.filter(KnowledgeEntry.id.in_(_fts_id_filter(expression)))
-        else:
-            # 字面子串：``%``/``_`` 显式转义（RR-07），与 FTS 路径以及全局搜索同语义。
-            like = like_pattern(q)
-            query = query.filter(
-                or_(
-                    KnowledgeEntry.title.like(like, escape=LIKE_ESCAPE),
-                    KnowledgeEntry.content.like(like, escape=LIKE_ESCAPE),
-                )
+        # Always verify candidates literally; content may contain Unicode casefold aliases.
+        like = like_pattern(q)
+        query = query.filter(
+            or_(
+                KnowledgeEntry.title.like(like, escape=LIKE_ESCAPE),
+                KnowledgeEntry.content.like(like, escape=LIKE_ESCAPE),
             )
+        )
     return query
 
 

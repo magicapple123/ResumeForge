@@ -15,6 +15,7 @@ Wave5 拆分后的**聚合门面**：六个路由域各自住在子模块里，�
 templates → generate → crud → ai_edits → layout_render → export 即原文件端点顺序，
 满足不变量，不要重排。
 """
+
 from fastapi import APIRouter
 
 from ...services.llm import create_provider as create_provider
@@ -22,6 +23,7 @@ from ...services.settings_service import get_llm_config as get_llm_config
 from . import (
     ai_edits_routes,
     crud_routes,
+    delivery_archive_routes,
     export_routes,
     generate_routes,
     layout_render_routes,
@@ -45,6 +47,7 @@ router = APIRouter(tags=["resumes"])
 # 最终路径拼接公式为 父链 prefix + route.path，两种写法产出的 URL 与 OpenAPI 路径逐字符一致。
 router.include_router(templates_routes.router, prefix="/api/resumes")
 router.include_router(generate_routes.router, prefix="/api/resumes")
+router.include_router(delivery_archive_routes.router, prefix="/api/resumes")
 router.include_router(crud_routes.router, prefix="/api/resumes")
 router.include_router(ai_edits_routes.router, prefix="/api/resumes")
 router.include_router(review_routes.router, prefix="/api/resumes")

@@ -288,12 +288,12 @@ def test_missing_selected_context_returns_404(client, request_body, message):
     assert message in response.json()["detail"]
 
 
-def test_model_failure_emits_error_and_persists_failed_message(client, monkeypatch):
+def test_model_failure_emits_error_and_persists_failed_message(client, monkeypatch, caplog):
     _configure_llm(client)
 
     class FailingProvider(_FakeProvider):
         async def stream_chat(self, _messages):
-            raise LLMError("模型服务暂时不可用")
+            raise LLMError("SYNTHETIC_PRIVATE_ERROR sk-synthetic_private_secret C:/private.db")
             yield ""  # pragma: no cover
 
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: FailingProvider())
@@ -303,12 +303,14 @@ def test_model_failure_emits_error_and_persists_failed_message(client, monkeypat
         json={"content": "帮我分析"},
     )
     events = _events(response)
-    assert events[-1] == {"type": "error", "message": "模型服务暂时不可用"}
+    assert events[-1] == {"type": "error", "message": "模型服务暂时无法处理本次请求，请稍后重试"}
+    assert "SYNTHETIC_PRIVATE_ERROR" not in response.text
+    assert "SYNTHETIC_PRIVATE_ERROR" not in caplog.text
     assistant = client.get(f"/api/assistant/conversations/{conversation['id']}").json()["messages"][
         1
     ]
     assert assistant["status"] == "error"
-    assert assistant["error"] == "模型服务暂时不可用"
+    assert assistant["error"] == "模型服务暂时无法处理本次请求，请稍后重试"
 
 
 @pytest.mark.asyncio

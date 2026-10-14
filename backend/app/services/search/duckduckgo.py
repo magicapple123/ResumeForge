@@ -7,11 +7,12 @@
 注意：它是公开的 HTML 接口，可能限流或调整结构。解析失败一律当作"这个来源没结果"，
 由聚合层决定是否降级，绝不让整次搜索失败。
 """
+
 from __future__ import annotations
 
 import logging
 from html.parser import HTMLParser
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
@@ -69,16 +70,23 @@ def _unwrap_redirect(href: str) -> str:
     """DuckDuckGo 的链接常是 ``//duckduckgo.com/l/?uddg=<编码后的真实地址>``。"""
     if not href:
         return ""
-    candidate = href if href.startswith(("http://", "https://")) else f"https:{href}"
+    candidate = f"https:{href}" if href.startswith("//") else href
     try:
         parsed = urlsplit(candidate)
     except ValueError:
         return ""
     host = (parsed.hostname or "").casefold()
-    if "duckduckgo.com" in host and parsed.path.startswith("/l/"):
+    if parsed.scheme not in {"http", "https"} or not host:
+        return ""
+    provider_host = host == "duckduckgo.com" or host.endswith(".duckduckgo.com")
+    if provider_host and parsed.path.startswith("/l/"):
         target = parse_qs(parsed.query).get("uddg", [""])[0]
-        return unquote(target) if target else ""
-    if host and "duckduckgo.com" not in host:
+        try:
+            resolved = urlsplit(target)
+            return target if resolved.scheme in {"http", "https"} and resolved.hostname else ""
+        except ValueError:
+            return ""
+    if not provider_host:
         return candidate
     return ""
 

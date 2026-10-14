@@ -4,10 +4,10 @@
 本地目录；列表 / 详情 / 评论读取 / 评论导入 / 文件下载都走这里。权限只做标记，
 不做在线鉴权（离线包本来就是发出去给别人看的）。
 """
+
 import logging
 import os
 import subprocess
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -23,6 +23,8 @@ from ..schemas.share_package import (
     ShareRevealOut,
 )
 from ..services import trash
+from ..services.data_backup.asset_safety import safe_asset_path
+from ..services.data_backup.paths import BackupError
 from ..services.privacy import RedactionOptions as PrivacyRedactionOptions
 from ..services.share_package import (
     SharePackageError,
@@ -86,7 +88,9 @@ def read_share_packages(
     limit: int = Query(default=200, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
-    return [share_package_brief(item) for item in list_share_packages(db, keyword=keyword, limit=limit)]
+    return [
+        share_package_brief(item) for item in list_share_packages(db, keyword=keyword, limit=limit)
+    ]
 
 
 @router.get("/{share_id}", response_model=SharePackageOut)
@@ -161,12 +165,11 @@ def download_share_package_file(share_id: int, filename: str, db: Session = Depe
     "列表和详情都正常、偏偏下载 404"这种看起来像坏了的状况。
     """
     package = _package_or_404(db, share_id)
-    directory = package_directory(db.get_bind(), package.id).resolve()
-    # 只取 basename，并拒绝任何仍逃逸到目录外的路径。
-    safe_name = Path(filename).name
-    path = (directory / safe_name).resolve()
-    if path.parent != directory:
-        raise HTTPException(status_code=404, detail="文件不存在")
+    directory = package_directory(db.get_bind(), package.id)
+    try:
+        path = safe_asset_path(directory, filename)
+    except BackupError as exc:
+        raise HTTPException(status_code=404, detail="文件不存在") from exc
     if not path.is_file():
         try:
             ensure_package_files(db, package)
@@ -174,5 +177,9 @@ def download_share_package_file(share_id: int, filename: str, db: Session = Depe
             logger.warning("重新生成分享包文件失败 id=%s：%s", package.id, exc)
         if not path.is_file():
             raise HTTPException(status_code=404, detail="文件不存在")
+        try:
+            path = safe_asset_path(directory, filename)
+        except BackupError as exc:
+            raise HTTPException(status_code=404, detail="文件不存在") from exc
     media_type = _MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
-    return FileResponse(path, media_type=media_type, filename=safe_name)
+    return FileResponse(path, media_type=media_type, filename=path.name)

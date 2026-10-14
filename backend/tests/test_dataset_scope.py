@@ -353,8 +353,9 @@ def test_starting_a_generation_while_switch_is_in_progress_returns_409_without_o
     from app import database
     from app.models.resume import ResumeGenerateTask
 
+    job_id = _job(client)["id"]
     with switch_lock():
-        response = client.post("/api/resumes/generate/tasks", json={"job_id": _job(client)["id"]})
+        response = client.post("/api/resumes/generate/tasks", json={"job_id": job_id})
         assert response.status_code == 409
         assert "切换" in response.json()["detail"]
 

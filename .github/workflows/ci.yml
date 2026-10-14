@@ -537,7 +537,7 @@ jobs:
       - name: Desktop supply-chain audit gate (audit PR-06)
         working-directory: desktop
         # Read-only `npm audit --json` + baseline comparison: fails on any
-        # critical/high finding that is not registered (with an unexpired
+        # severity finding that is not registered (with an unexpired
         # waiver) in desktop/scripts/audit-baseline.json. Unlike the
         # frontend job there is no --omit=dev here: electron is the desktop
         # runtime kernel even though it lives in devDependencies.

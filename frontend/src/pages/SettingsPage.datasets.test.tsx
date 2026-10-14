@@ -13,6 +13,7 @@ const apiMocks = vi.hoisted(() => ({
   deleteLLMConfigRecord: vi.fn(),
   exportAllDatasets: vi.fn(),
   exportDataset: vi.fn(),
+  getBackupStatus: vi.fn(),
   getLLMConfig: vi.fn(),
   getNavigationVisibility: vi.fn(),
   getReminderPopupSetting: vi.fn(),
@@ -78,6 +79,18 @@ const searchConfig = {
 };
 
 beforeEach(() => {
+  apiMocks.getBackupStatus.mockResolvedValue({
+    dataset_id: "main",
+    protected: false,
+    last_success: null,
+    last_attempt: null,
+    consecutive_failures: 0,
+    last_error: "",
+    interval_days: 7,
+    overdue: false,
+    snapshot_count: 0,
+    snapshots: [],
+  });
   apiMocks.getLLMConfig.mockResolvedValue(llmConfig);
   apiMocks.getNavigationVisibility.mockResolvedValue({ hidden: [] });
   apiMocks.getAssistantOrbSetting.mockResolvedValue({ enabled: true, tips_enabled: true });

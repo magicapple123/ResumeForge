@@ -17,6 +17,7 @@ files:
   - main.js
   - preload.js
   - splash.html
+  - icon.png
   - backend-manager.js
   - lib/data-migration.js
   # Identity checks for adopted PIDs (RR-02): backend-manager.js requires it,
@@ -28,6 +29,7 @@ files:
   - lib/backend-runtime.js
   # Stop/kill decisions (identity re-verification) used by backend-manager.js.
   - lib/backend-stop.js
+  - lib/backend-startup.js
   # main.js has a top-level require("./updater"); omitting it here shipped an
   # app.asar whose entry crashed before any error handling (2026-10-13 audit
   # PR-04). scripts/check-asar-deps.js now gates the require graph against

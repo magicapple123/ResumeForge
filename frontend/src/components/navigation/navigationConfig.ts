@@ -17,7 +17,7 @@ import {
   StarOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
-import type { ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
 
 export type NavigationGroup = "primary" | "space";
 
@@ -30,53 +30,119 @@ export interface NavigationItem {
 }
 
 export const NAVIGATION_ITEMS: NavigationItem[] = [
-  { key: "/", icon: <HomeOutlined />, label: "首页", group: "primary", required: true },
-  { key: "/jobs", icon: <SearchOutlined />, label: "岗位广场", group: "primary", required: true },
+  { key: "/", icon: createElement(HomeOutlined), label: "首页", group: "primary", required: true },
+  {
+    key: "/jobs",
+    icon: createElement(SearchOutlined),
+    label: "岗位广场",
+    group: "primary",
+    required: true,
+  },
   {
     key: "/resumes",
-    icon: <FileTextOutlined />,
+    icon: createElement(FileTextOutlined),
     label: "简历中心",
     group: "primary",
     required: true,
   },
-  { key: "/apply", icon: <SendOutlined />, label: "投递台", group: "primary", required: true },
-  { key: "/webform", icon: <FormOutlined />, label: "网申填表", group: "primary", required: false },
+  {
+    key: "/apply",
+    icon: createElement(SendOutlined),
+    label: "投递台",
+    group: "primary",
+    required: true,
+  },
+  {
+    key: "/webform",
+    icon: createElement(FormOutlined),
+    label: "网申填表",
+    group: "primary",
+    required: false,
+  },
   {
     key: "/tracker",
-    icon: <FunnelPlotOutlined />,
+    icon: createElement(FunnelPlotOutlined),
     label: "求职进度",
     group: "primary",
     required: false,
   },
   {
     key: "/interview",
-    icon: <SolutionOutlined />,
+    icon: createElement(SolutionOutlined),
     label: "模拟面试",
     group: "primary",
     required: false,
   },
   {
     key: "/assistant",
-    icon: <MessageOutlined />,
+    icon: createElement(MessageOutlined),
     label: "求职助手",
     group: "primary",
     required: false,
   },
-  { key: "/settings", icon: <SettingOutlined />, label: "设置", group: "primary", required: true },
-  { key: "/profile", icon: <ProfileOutlined />, label: "我的资料", group: "space", required: true },
-  { key: "/favorites", icon: <StarOutlined />, label: "收藏夹", group: "space", required: false },
-  { key: "/materials", icon: <InboxOutlined />, label: "资料箱", group: "space", required: false },
-  { key: "/knowledge", icon: <BookOutlined />, label: "知识库", group: "space", required: false },
-  { key: "/skills", icon: <ToolOutlined />, label: "工作台", group: "space", required: false },
+  {
+    key: "/settings",
+    icon: createElement(SettingOutlined),
+    label: "设置",
+    group: "primary",
+    required: true,
+  },
+  {
+    key: "/profile",
+    icon: createElement(ProfileOutlined),
+    label: "我的资料",
+    group: "space",
+    required: true,
+  },
+  {
+    key: "/favorites",
+    icon: createElement(StarOutlined),
+    label: "收藏夹",
+    group: "space",
+    required: false,
+  },
+  {
+    key: "/materials",
+    icon: createElement(InboxOutlined),
+    label: "资料箱",
+    group: "space",
+    required: false,
+  },
+  {
+    key: "/knowledge",
+    icon: createElement(BookOutlined),
+    label: "知识库",
+    group: "space",
+    required: false,
+  },
+  {
+    key: "/skills",
+    icon: createElement(ToolOutlined),
+    label: "工作台",
+    group: "space",
+    required: false,
+  },
   {
     key: "/analytics",
-    icon: <BarChartOutlined />,
+    icon: createElement(BarChartOutlined),
     label: "求职统计",
     group: "space",
     required: false,
   },
-  { key: "/claims", icon: <AuditOutlined />, label: "事实台账", group: "space", required: false },
-  { key: "/trash", icon: <DeleteOutlined />, label: "回收站", group: "space", required: false },
+  {
+    key: "/claims",
+    icon: createElement(AuditOutlined),
+    label: "事实台账",
+    group: "space",
+    required: false,
+  },
+  {
+    key: "/trash",
+    icon: createElement(DeleteOutlined),
+    label: "回收站",
+    group: "space",
+    required: false,
+  },
 ];
 
 export const MENU_ITEMS = NAVIGATION_ITEMS;

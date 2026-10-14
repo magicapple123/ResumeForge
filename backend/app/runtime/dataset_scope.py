@@ -9,8 +9,8 @@
 加载顺序耦合。
 
 语义要点：
-- **短 HTTP 请求不取租约**；租约只给长生命周期任务（生成 runner、投递 runner、
-  匹配任务、助手流）。切换排空 = 先等逻辑租约清零，再对连接池做短兜底轮询。
+- **API HTTP 请求也持租约到响应/流结束**；后台 runner 另取长任务租约。激活请求
+  自身与纯内存提案读取例外；切换排空 = 租约清零，再对连接池做短兜底轮询。
 - **切换持锁期间 ``acquire_lease`` 直接失败**：不存在"排空完成与换绑之间放进新
   任务"的 TOCTOU 窗口——租约的检查与登记都在状态锁内完成，而切换线程先于排空
   拿到切换锁，因此任何登记成功的租约都会被排空等到。
@@ -26,10 +26,14 @@ import logging
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from sqlalchemy.orm import sessionmaker
+
+from .dataset_errors import DatasetScopeError
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -46,19 +50,24 @@ class DatasetIdentity:
     engine: Engine  # 发布时刻的引擎实例（供 frozen_session_factory 捕获）
 
 
-class DatasetScopeError(Exception):
-    """数据集作用域错误。message 为可直接展示的中文；status_code 用于 API 映射。"""
-
-    def __init__(self, message: str, status_code: int = 409) -> None:
-        super().__init__(message)
-        self.status_code = status_code
-
-
 _state_lock = threading.Lock()
 _switch_mutex = threading.Lock()
 _identity: DatasetIdentity | None = None
 _generation = 0
 _leases: list[DatasetLease] = []
+_INSTANCE_ID = uuid4().hex
+expected_request_scope: ContextVar[str | None] = ContextVar("expected_dataset_scope", default=None)
+
+
+def request_scope_token(identity: DatasetIdentity | None = None) -> str:
+    value = identity or current_identity()
+    return f"{_INSTANCE_ID}:{value.dataset_id}:{value.generation}"
+
+
+def validate_request_scope(identity: DatasetIdentity | None = None) -> None:
+    expected = expected_request_scope.get()
+    if expected is not None and expected != request_scope_token(identity):
+        raise DatasetScopeError("数据集已切换，请保留草稿并刷新页面后重新打开；本次操作未执行")
 
 
 def _ensure_identity_locked() -> DatasetIdentity:

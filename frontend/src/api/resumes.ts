@@ -363,6 +363,12 @@ export function listResumeDeliveries(id: number): Promise<DeliverySummary[]> {
   return request(`/resumes/${id}/deliveries`);
 }
 
+export function listDeliveryArchive(
+  params: { page?: number; page_size?: number; keyword?: string; source?: string } = {},
+): Promise<{ items: DeliverySummary[]; total: number }> {
+  return request(`/resumes/deliveries${buildQuery(params)}`);
+}
+
 /**
  * 一条进度记录的交付快照（PR-09）：从岗位/进度进入对应 delivery 的入口。
  * 原简历被删后这里的摘要仍然可读（快照外键 SET NULL、冗余目的地列自持）。

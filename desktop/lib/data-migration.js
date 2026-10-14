@@ -137,8 +137,8 @@ function copyTree(srcDir, destDir, copyFileFn, { skip = null, base = "" } = {}) 
 
 // --- SQLite snapshot (RR-06) -----------------------------------------------------
 
-// node:sqlite ships with modern Node/Electron; when it is missing (older
-// runtime, stripped build) the migration falls back to byte copies.
+// Real SQLite sources require node:sqlite snapshots; missing support stops
+// migration. Byte copying is used only for non-database regular files.
 function sha256File(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash("sha256");
@@ -262,12 +262,19 @@ async function performMigration({
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 
+  const databaseFiles = findDatabaseFiles(oldDataDir);
+  if (!sqlite && databaseFiles.some((relative) => looksLikeSqlite(path.join(oldDataDir, relative)))) {
+    throw new Error(
+      "SQLite consistent snapshot support is unavailable; migration stopped without copying user data",
+    );
+  }
+
   // 1. Backup first -- kept even when later steps fail (a safety artifact, never
   //    cleaned here). Databases go through the same consistent snapshot as the
   //    migration itself: this backup is the only rollback artifact outside the
   //    install payload, so a torn main+wal pair while another instance writes
   //    would hand the user a corrupt restore point.
-  const backupSnapshots = sqlite ? findDatabaseFiles(oldDataDir) : [];
+  const backupSnapshots = sqlite ? databaseFiles : [];
   const backupSnapshotSet = new Set();
   for (const relative of backupSnapshots) {
     const source = path.join(oldDataDir, relative);
@@ -297,7 +304,7 @@ async function performMigration({
     );
 
     const snapshots = new Set();
-    const databases = sqlite ? findDatabaseFiles(oldDataDir) : [];
+    const databases = sqlite ? databaseFiles : [];
     for (const relative of databases) {
       const source = path.join(oldDataDir, relative);
       if (!looksLikeSqlite(source)) continue;

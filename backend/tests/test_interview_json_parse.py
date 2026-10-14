@@ -124,7 +124,8 @@ async def test_generate_question_answer_bad_text_raises_with_snippet():
             provider, question="讲讲项目难点", job_payload="", resume_text=""
         )
     assert provider.calls == 2
-    assert bad in str(exc.value)
+    assert "模型未返回有效的参考答案 JSON" in str(exc.value)
+    assert bad not in str(exc.value)
 
 
 async def test_generate_question_bank_accepts_fenced_json():

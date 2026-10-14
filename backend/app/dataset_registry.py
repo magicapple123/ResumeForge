@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import stat
 from pathlib import Path
 
 from .config import get_settings
@@ -57,6 +58,15 @@ def is_valid_dataset_id(dataset_id: str) -> bool:
     )
 
 
+def canonical_dataset_id(dataset_id: str, *, allow_main: bool = True) -> str:
+    """Rebuild an accepted identifier from its numeric value, never from path text."""
+    if allow_main and dataset_id == MAIN_DATASET_ID:
+        return MAIN_DATASET_ID
+    if not is_valid_dataset_id(dataset_id):
+        raise DatasetError("数据集标识无效")
+    return f"{int(dataset_id, 16):0{_ID_LENGTH}x}"
+
+
 def configured_database_file() -> Path:
     """DATABASE_URL 指向的 SQLite 文件；内存库等情况抛 DatasetError。"""
     database_url = get_settings().database_url
@@ -77,6 +87,23 @@ def datasets_directory() -> Path:
     return data_directory() / DATASETS_DIRNAME
 
 
+def _dataset_child_file(dataset_id: str, suffix: str) -> Path:
+    """Return a generated dataset path only when it remains under the dataset root."""
+    dataset_id = canonical_dataset_id(dataset_id, allow_main=False)
+    root = datasets_directory()
+    if root.exists() and (
+        root.is_symlink()
+        or getattr(root.lstat(), "st_file_attributes", 0)
+        & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 1024)
+    ):
+        raise DatasetError("数据集目录不能是符号链接或目录联接，请先检查数据目录", status_code=409)
+    canonical_root = root.resolve(strict=False)
+    candidate = (canonical_root / f"{dataset_id}{suffix}").resolve(strict=False)
+    if candidate.parent != canonical_root:
+        raise DatasetError("数据集路径超出受控目录", status_code=409)
+    return candidate
+
+
 def trash_directory() -> Path:
     return datasets_directory() / TRASH_DIRNAME
 
@@ -88,15 +115,11 @@ def pointer_path() -> Path:
 def dataset_database_file(dataset_id: str) -> Path:
     if dataset_id == MAIN_DATASET_ID:
         return configured_database_file()
-    if not is_valid_dataset_id(dataset_id):
-        raise DatasetError("数据集标识无效")
-    return datasets_directory() / f"{dataset_id}.db"
+    return _dataset_child_file(dataset_id, ".db")
 
 
 def dataset_metadata_file(dataset_id: str) -> Path:
-    if not is_valid_dataset_id(dataset_id):
-        raise DatasetError("数据集标识无效")
-    return datasets_directory() / f"{dataset_id}{METADATA_SUFFIX}"
+    return _dataset_child_file(dataset_id, METADATA_SUFFIX)
 
 
 def read_active_dataset_id() -> str:
@@ -147,6 +170,10 @@ def active_database_file() -> Path:
 
 
 def read_metadata(dataset_id: str) -> dict:
+    # The primary DB has a fixed name/source and no datasets/<id>.json sidecar.
+    # It can still be an extra dataset in an export while another one is active.
+    if dataset_id == MAIN_DATASET_ID:
+        return {}
     path = dataset_metadata_file(dataset_id)
     if not path.exists():
         return {}

@@ -8,8 +8,8 @@
 test_webform_live_ai.py；「记住这条」在 test_webform_live_remember.py；「问投投」在
 test_webform_live_assistant_ask.py。FakeLiveClient/raw_control 留在本文件供各主题文件复用。）
 """
+
 import json
-import re
 
 import pytest
 from app.services.browser.cdp_client import CdpClient
@@ -72,7 +72,7 @@ class FakeLiveClient(CdpClient):
             )
         if "rf:live-panel" in expression:
             start = expression.index("window.__rfShowPanel(") + len("window.__rfShowPanel(")
-            end = expression.index(");", start)          # 面板载荷到此为止
+            end = expression.index(");", start)  # 面板载荷到此为止
             self.panels.append(json.loads(expression[start:end]))
             return "1"
         # 这一条**必须排在 `rf:live-hide` 前面**：`"rf:live-hide" in "rf:live-hide-remember"`
@@ -85,8 +85,12 @@ class FakeLiveClient(CdpClient):
             return "1"
         if "rf:set-value" in expression:
             # 如实记住写进去的值——回读时要原样吐回来，否则会被（正确地）判成"未确认"。
-            match = re.search(r"setter\.call\(el, (\".*?\")\);", expression)
-            self.written = json.loads(match.group(1)) if match else ""
+            prefix = "setter.call(el, "
+            if prefix in expression:
+                encoded = expression.partition(prefix)[2].lstrip()
+                self.written = json.JSONDecoder().raw_decode(encoded)[0]
+            else:
+                self.written = ""
             return f'{{"ok": true, "value": {json.dumps(self.written, ensure_ascii=False)}}}'
         if "rf:read-back" in expression:
             return f'{{"ok": true, "value": {json.dumps(self.written, ensure_ascii=False)}}}'
@@ -435,7 +439,9 @@ def test_disabled_live_session_does_not_show_focus_panel():
         session._tick()
 
         assert session.state["enabled"] is False
-        assert not [expression for expression in client.expressions if "rf:live-panel" in expression]
+        assert not [
+            expression for expression in client.expressions if "rf:live-panel" in expression
+        ]
     finally:
         session.stop()
 
@@ -482,7 +488,9 @@ def test_custom_field_suggestion_hits_when_the_control_has_a_name_attribute():
     曾经把 label/placeholder/aria_label/name 拼成一串再归一——name 一非空，
     拼接结果就永远不等于自定义标签的归一结果，同名建议全部失效。
     """
-    catalog = [{"group": "自定义", "label": "导师姓名", "value": "王教授", "key": "CUSTOM_导师姓名"}]
+    catalog = [
+        {"group": "自定义", "label": "导师姓名", "value": "王教授", "key": "CUSTOM_导师姓名"}
+    ]
     session = _custom_field_session({"CUSTOM_导师姓名": "王教授"}, catalog)
     control = LiveSession._build_control(raw_control(label="导师姓名", name="entry.123456"))
 
@@ -496,7 +504,9 @@ def test_custom_field_suggestion_hits_when_the_control_has_a_name_attribute():
 
 def test_custom_field_suggestion_hits_when_the_name_is_the_label_itself():
     """name 本身等于标签也要命中（还是同一个字段，不是第二个信号源）。"""
-    catalog = [{"group": "自定义", "label": "导师姓名", "value": "王教授", "key": "CUSTOM_导师姓名"}]
+    catalog = [
+        {"group": "自定义", "label": "导师姓名", "value": "王教授", "key": "CUSTOM_导师姓名"}
+    ]
     session = _custom_field_session({"CUSTOM_导师姓名": "王教授"}, catalog)
     control = LiveSession._build_control(raw_control(label="导师姓名", name="导师姓名"))
 

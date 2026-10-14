@@ -13,7 +13,7 @@ def _split_tokens(value: str) -> list[str]:
     return [
         token.strip().replace("CI_CD", "CI/CD").replace("ci_cd", "CI/CD")
         for token in re.split(
-            r"[,，、/|｜;；&\n]+|\s+(?:and|以及|及)\s+",
+            r"[,，、/|｜;；&\n]+|(?<!\s)\s++(?:and|以及|及)\s++",
             protected,
             flags=re.IGNORECASE,
         )
@@ -141,21 +141,24 @@ def _normalize_skill_name(value: str) -> str:
 def _skill_name_and_level(token: str, inherited_level: str = "") -> tuple[str, str]:
     """支持括号、前后缀和破折号等技能等级表述。"""
     clean = token.strip().strip("-—–－:：")
-    clean = re.sub(r"\s*等(?:编程语言|开发语言|技术|工具|框架)?$", "", clean).strip()
+    for suffix in ("等编程语言", "等开发语言", "等技术", "等工具", "等框架", "等"):
+        if clean.endswith(suffix):
+            clean = clean[: -len(suffix)].rstrip()
+            break
     if not clean:
         return "", ""
 
-    bracketed = re.match(r"^(?P<name>.+?)[（(]\s*(?P<level>[^()（）]+?)\s*[）)]$", clean)
-    if bracketed and _SKILL_LEVEL_RE.fullmatch(bracketed.group("level").strip()):
-        return _normalize_skill_name(bracketed.group("name")), bracketed.group("level").strip()
-
-    trailing = re.match(
-        r"^(?P<name>.+?)\s*(?:[-—–－:：]|\s+)\s*(?P<level>熟练掌握|熟练使用|熟练|精通|掌握|熟悉|了解|入门|精通使用|proficient|advanced|intermediate|beginner|basic)$",
-        clean,
-        re.IGNORECASE,
-    )
-    if trailing:
-        return _normalize_skill_name(trailing.group("name")), trailing.group("level")
+    if clean.endswith((")", "）")):
+        opening = max(clean.rfind("("), clean.rfind("（"))
+        if opening > 0:
+            level = clean[opening + 1 : -1].strip()
+            if _SKILL_LEVEL_RE.fullmatch(level):
+                return _normalize_skill_name(clean[:opening]), level
+    trailing = re.search(_SKILL_LEVEL_RE.pattern.removeprefix("^"), clean, re.IGNORECASE)
+    if trailing and trailing.start() > 0:
+        prefix = clean[: trailing.start()]
+        if prefix[-1].isspace() or prefix[-1] in "-—–－:：":
+            return _normalize_skill_name(prefix.rstrip(" \t-—–－:：")), trailing.group(1)
 
     leading = _SKILL_LEADING_LEVEL_RE.match(clean)
     if leading:
@@ -170,7 +173,7 @@ def _parse_skills(lines: list[str]) -> list[dict[str, str]]:
         clean = _clean_line(line)
         if not clean:
             continue
-        label_match = re.match(r"^([^：:]{1,32})\s*[:：]\s*(.+)$", clean)
+        label_match = re.match(r"^([^：:]{1,32}?)\s*+[:：]\s*+(.+)$", clean)
         label_key = label_match.group(1).casefold() if label_match else ""
         if label_match and any(
             term.casefold() in label_key

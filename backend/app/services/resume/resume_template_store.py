@@ -8,6 +8,7 @@
 
 模板名与内置模板共用一个命名空间：重名时拒绝保存，否则"选择模板"会指向不确定的一版。
 """
+
 from __future__ import annotations
 
 import json
@@ -29,6 +30,7 @@ from .resume_templates import (
     RESUME_TEMPLATES,
     validated_format_config,
 )
+from .template_html_sanitizer import filter_template_html
 
 logger = logging.getLogger(__name__)
 
@@ -38,21 +40,6 @@ MAX_TEMPLATE_NAME_CHARS = 40
 
 # 模板名：中文、字母、数字、连字符与下划线，不能以符号开头。
 _NAME_RE = re.compile(r"^[\w\u4e00-\u9fff][\w\u4e00-\u9fff\- ]*$")
-# 需要剥离的标签：脚本与任何会发起网络请求的元素。
-_STRIP_TAG_RE = re.compile(
-    r"<\s*(script|iframe|object|embed|base|link)\b[^>]*>.*?<\s*/\s*\1\s*>",
-    re.IGNORECASE | re.DOTALL,
-)
-_STRIP_SELF_CLOSING_RE = re.compile(
-    r"<\s*(iframe|object|embed|base|link)\b[^>]*/?>",
-    re.IGNORECASE,
-)
-# 带 http-equiv 的 meta 单独剥：它是**空元素**，永远没有闭合标签，放进上面那条
-# 成对匹配的正则里等于永远不生效。它能做两件坏事：refresh 自动跳转到外部地址，
-# 以及自带一条 CSP 把应用补的那条顶掉。
-_STRIP_META_EQUIV_RE = re.compile(r"<\s*meta\b[^>]*http-equiv\s*=[^>]*>", re.IGNORECASE)
-# 单独收尾的 <script src="..."></script> 之类（上面那条要求成对出现，这里兜底）。
-_ORPHAN_SCRIPT_RE = re.compile(r"<\s*/?\s*script\b[^>]*>", re.IGNORECASE)
 _CSP_META = (
     '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
     "img-src data: blob:; style-src 'unsafe-inline'; script-src 'nonce-{{ csp_nonce }}'; "
@@ -66,29 +53,17 @@ class TemplateError(ValueError):
 
 def _validated_style_config(raw: dict | None) -> dict:
     normalized = validated_style_config(raw)
-    if len(json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))) > MAX_STYLE_CONFIG_CHARS:
+    if (
+        len(json.dumps(normalized, ensure_ascii=False, separators=(",", ":")))
+        > MAX_STYLE_CONFIG_CHARS
+    ):
         raise TemplateError("模板视觉配置过大，请减少自定义图片或装饰后再保存")
     return normalized
 
 
 def sanitize_template_html(html: str) -> str:
     """去掉会执行代码或发起网络请求的内容，并补齐 CSP 与字符集声明。"""
-    cleaned = _STRIP_TAG_RE.sub("", html or "")
-    cleaned = _STRIP_SELF_CLOSING_RE.sub("", cleaned)
-    cleaned = _ORPHAN_SCRIPT_RE.sub("", cleaned)
-    cleaned = _STRIP_META_EQUIV_RE.sub("", cleaned)
-    if "<meta" not in cleaned.lower() or "charset" not in cleaned.lower():
-        cleaned = cleaned.replace(
-            "<head>", '<head>\n<meta charset="utf-8" />', 1
-        ) if "<head>" in cleaned else cleaned
-    # 无条件补上应用的 CSP。此前是"文档里已经出现 Content-Security-Policy 字样就跳过"，
-    # 于是模板只要在注释或属性里带上这个词（或自带一条宽松的 CSP meta），就能让应用这条
-    # 完全不注入——没有 CSP 之后，事件属性里的脚本会照常执行。
-    if "</head>" in cleaned:
-        cleaned = cleaned.replace("</head>", f"{_CSP_META}\n</head>", 1)
-    else:
-        cleaned = f"{_CSP_META}\n{cleaned}"
-    return cleaned
+    return filter_template_html(html, _CSP_META)
 
 
 def validate_template_name(name: str) -> str:
@@ -208,7 +183,7 @@ def update_user_template(
         template.enabled = enabled
     db.commit()
     db.refresh(template)
-    logger.info("已更新简历模板 id=%s name=%s", template.id, template.name)
+    logger.info("已更新简历模板 id=%s", int(template.id))
     return template
 
 
@@ -307,5 +282,3 @@ __all__ = [
     "validate_template_html",
     "validate_template_name",
 ]
-
-

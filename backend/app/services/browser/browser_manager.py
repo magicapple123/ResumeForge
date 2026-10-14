@@ -16,6 +16,7 @@ Chrome 自 136 起**禁止在默认用户数据目录上开启远程调试**，`
 - **"在不在跑"看调试端口，不看进程句柄**（见 :meth:`BrowserManager.is_running`）；"是不是本
   进程拉起的"是另一个独立事实（``BrowserStatus.owned``），只用来决定"关闭浏览器"能不能按。
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,6 +31,7 @@ from typing import Any
 import httpx
 
 from ...config import BACKEND_DIR, DEFAULT_BROWSER_PORT
+from .browser_inputs import BrowserError, validated_browser_url
 from .cdp_client import DEFAULT_HOST, WebsocketCdpClient
 
 logger = logging.getLogger(__name__)
@@ -84,10 +86,6 @@ def browser_display_name(path: str | Path | None) -> str:
     return _CUSTOM_NAME
 
 
-class BrowserError(Exception):
-    """对外暴露的浏览器错误，message 为可直接展示给用户的中文提示。"""
-
-
 # ``BrowserStatus.state`` 的取值之一：调试端口在答，采集/投递都能用。
 # 定义成常量是因为调用方要拿它做判断（例如"浏览器在跑才去读登录态清单"），
 # 而字符串字面量散在各处时，改一处就会漏一处。
@@ -136,7 +134,9 @@ class BrowserManager:
         self._profile_dir = Path(profile_dir) if profile_dir else default_profile_dir()
         self._port = port
         self._browser_path = Path(browser_path) if browser_path else None
-        self._browser_choice = browser_choice if browser_choice in BROWSER_CHOICES else BROWSER_CHOICE_AUTO
+        self._browser_choice = (
+            browser_choice if browser_choice in BROWSER_CHOICES else BROWSER_CHOICE_AUTO
+        )
         self._host = host
         self._http_transport = http_transport
         self._popen = popen or subprocess.Popen
@@ -321,6 +321,7 @@ class BrowserManager:
         自己开的标签页，不该被重新启动的调用动到——所以「换个入口再启一次」不会生效，
         要导航请用 ``open_url``。
         """
+        target_url = validated_browser_url(url)
         # 已经是"有浏览器"（端口在答，或本进程刚拉起还在启动）就不再拉第二个。
         if self.is_active():
             return self.status()
@@ -330,18 +331,19 @@ class BrowserManager:
         args = [
             str(browser),
             f"--remote-debugging-port={self._port}",
+            "--remote-debugging-address=127.0.0.1",
             f"--user-data-dir={self._profile_dir}",
-            "--remote-allow-origins=*",
             "--no-first-run",
             "--no-default-browser-check",
             "--new-window",
-            url or "about:blank",
+            "about:blank",
         ]
         try:
             self._process = self._popen(args, shell=False)
         except OSError as exc:
             self._reset_process()
-            raise BrowserError(f"启动浏览器失败：{exc}") from exc
+            logger.warning("浏览器进程启动失败 error_type=%s", type(exc).__name__)
+            raise BrowserError("启动浏览器失败，请检查浏览器路径或系统权限") from exc
         self._pid = getattr(self._process, "pid", None)
         self._started_at = time.time()
         self._browser_path = browser
@@ -349,9 +351,17 @@ class BrowserManager:
 
         if not self._wait_until_ready():
             self.stop()
-            raise BrowserError(
-                "浏览器已启动但调试端口未就绪，请确认没有被安全软件拦截后重试"
-            )
+            raise BrowserError("浏览器已启动但调试端口未就绪，请确认没有被安全软件拦截后重试")
+        if target_url != "about:blank":
+            try:
+                # A URL is CDP data, never a browser executable/option argument.
+                # Reuse the initial tab so the user still lands on the intended page.
+                self.open_url(target_url)
+            except Exception as exc:  # noqa: BLE001 - keep an already-started browser usable
+                logger.warning("浏览器入口导航失败 error_type=%s", type(exc).__name__)
+                raise BrowserError(
+                    "浏览器已启动，但入口网页暂时无法打开；请检查网络后重试打开网页"
+                ) from exc
         return self.status()
 
     def _wait_until_ready(self) -> bool:
@@ -412,8 +422,19 @@ class BrowserManager:
         复用当前标签页（``Page.navigate``）而不是新开一个：用户反复点"打开招聘网站"
         时不该越堆越多标签页，启动时开的那个页就是落脚点。
         """
+        target_url = validated_browser_url(url)
         self._require_running()
-        self.client().navigate(url)
+        client = self.client()
+        try:
+            result = client.navigate(target_url)
+            if (
+                isinstance(result, dict)
+                and result.get("errorText")
+                and not result.get("isDownload")
+            ):
+                raise BrowserError("无法打开网页，请检查地址或网络后重试")
+        finally:
+            client.close()
 
     def client(self, *, target_id: str | None = None) -> WebsocketCdpClient:
         """取当前 CDP 客户端，可选地绑定到指定标签页。"""

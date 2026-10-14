@@ -190,11 +190,8 @@ def place_packaged_datasets(
         target.parent.mkdir(parents=True, exist_ok=True)
         partial = target.with_suffix(".partial")
         try:
-            # rename 之前先把 -wal 里的已提交帧 checkpoint 回主文件：SQLite 只在
-            # 「最后一个连接干净关闭」时才自动 checkpoint，校验链路存在未干净关闭的
-            # 异常路径（边车残留即证据），此时直接删边车会静默丢数据。失败只告警
-            # 不阻断——垃圾残留好过恢复流程整个失败。随后清掉边车：replace 只搬
-            # 主文件，边车会变成 staging 里的孤儿垃圾。
+            # Require a complete WAL checkpoint. A busy/failed checkpoint must not publish
+            # the main file without its committed pages; the caller rolls back this import.
             _best_effort_checkpoint(candidate)
             _remove_sqlite_sidecars(candidate)
             # 同盘内改名是原子的：中途失败不会在列表里留下半截的数据集。

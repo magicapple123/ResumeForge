@@ -156,7 +156,7 @@ def mark_candidate_imported(db: Session, candidate: CandidateJob, job_id: int) -
     candidate.imported_job_id = job_id
     db.commit()
     db.refresh(candidate)
-    logger.info("备选岗位已导入 id=%s job_id=%s", candidate.id, job_id)
+    logger.info("备选岗位已导入 id=%s job_id=%s", int(candidate.id), int(job_id))
     return candidate
 
 
