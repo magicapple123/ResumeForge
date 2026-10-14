@@ -227,8 +227,12 @@ def read_export_save_location(db: Session = Depends(get_db)):
 
 
 @router.put("/export-save-location", response_model=ExportSaveLocationOut)
-def write_export_save_location(payload: ExportSaveLocationIn, db: Session = Depends(get_db)):
+def write_export_save_location(
+    payload: ExportSaveLocationIn, request: Request, db: Session = Depends(get_db)
+):
     """保存导出落盘目录。空串恢复默认；目录不合法时 400 并说明原因。"""
+    if not _is_loopback_request(request):
+        raise HTTPException(status_code=403, detail="保存位置只能在运行后端的本机设置")
     path = payload.path.strip()
     if path:
         reason = validate_directory(path)

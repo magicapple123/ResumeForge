@@ -21,7 +21,6 @@ from __future__ import annotations
 import logging
 import secrets
 import time
-import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -43,6 +42,7 @@ from ..dataset_registry import (
     write_active_dataset_id,
     write_metadata,
 )
+from ..runtime.log_fields import safe_log_text
 from .data_backup import (
     ARCHIVE_DATASETS_DIRNAME,
     cleanup_temp_directories,
@@ -59,8 +59,6 @@ from .data_backup.asset_manifest import (
 from .data_backup.asset_restore import AssetRestorePlan, verify_restored_assets
 from .data_backup.import_archive import (
     _remove_candidate_files,
-    restore_referral_images,
-    restore_user_files,
 )
 from .datasets_admin import (
     _describe,
@@ -101,7 +99,10 @@ def _entry_dataset_stem(entry: dict[str, Any]) -> str:
     """
     member = str(entry.get("file") or "")
     prefix = f"{ARCHIVE_DATASETS_DIRNAME}/"
-    return member[len(prefix) : -len(".db")]
+    stem = member[len(prefix) : -len(".db")]
+    if (stem != MAIN_DATASET_ID and not is_valid_dataset_id(stem)) or entry.get("id") != stem:
+        raise DatasetError("备份包的数据集标识无效，已停止导入", status_code=400)
+    return stem
 
 
 def import_dataset(
@@ -122,17 +123,23 @@ def import_dataset(
     再复核"，包里的字节先落到本机同名文件上，复核失败时原件已经被覆写；而且主库与随包
     数据集在附件校验之前就已发布。现在：
 
-    1. 阶段一先做库与附件的**全部只读预检**（附件写进私有暂存并逐个核对 sha256、
-       与磁盘现状做冲突检测），任何完整性问题或冲突都在**一个字节都没写**时终止
+    1. 阶段一先做库与附件的**全部预检**（附件写进私有暂存并逐个核对 sha256、
+       与磁盘现状做冲突检测），任何完整性问题或冲突都在**业务目录发布前**终止
        （除非用户显式选择 ``allow_partial_assets`` 跳过有问题的附件）；
     2. 阶段二才发布库；发布后任何失败都会**收回本次新建的数据集文件**——只删自己
        刚创建的东西，用户既有文件一律不动；
-    3. 阶段三原子发布附件（``os.replace``），任何情况下都不覆盖本机同名文件；
-    4. 最后按清单独立复核磁盘现状（``verify_restored_assets``），问题如实进
-       ``asset_issues``——"恢复完成"与"恢复干净"是两件事。
+    3. 阶段三原子、不覆盖地发布附件；失败回收本次新建的文件；
+    4. 最后按清单独立复核磁盘现状，严格模式失败回滚；仅显式允许部分附件恢复时
+       返回 ``asset_issues`` 与不完整标志。旧包走同一发布链，但没有原始 SHA-256。
     """
     preview = inspect_archive(archive_path, bind, staging_dir)
     manifest = preview.get("manifest", {})
+    actual_counts = preview.get("database", {}).get("tables", {})
+    for table, expected in (manifest.get("tables") or {}).items():
+        if type(expected) is not int or expected < 0 or actual_counts.get(table, 0) != expected:
+            raise DatasetError(
+                "备份包的数据库行数与清单不符，已停止导入：" + str(table), status_code=400
+            )
 
     staged: list[tuple[dict[str, Any], Path]] = []
     created_dataset_ids: list[str] = []
@@ -162,25 +169,42 @@ def import_dataset(
                 destinations=asset_destinations,
                 label="活动数据集",
             )
+        else:
+            plan.add_legacy_section(
+                archive_path,
+                prefixes={
+                    category: dataset_asset_prefix(None, category)
+                    for category in asset_destinations
+                },
+                destinations=asset_destinations,
+                label="旧格式活动数据集",
+            )
         for entry, _candidate in staged:
             entry_assets = entry.get("asset_manifest") if isinstance(entry, dict) else None
-            if not isinstance(entry_assets, dict):
-                continue
             stem = _entry_dataset_stem(entry)
+            prefixes = {
+                category: dataset_asset_prefix(stem, category) for category in asset_destinations
+            }
+            if not isinstance(entry_assets, dict):
+                plan.add_legacy_section(
+                    archive_path,
+                    prefixes=prefixes,
+                    destinations=asset_destinations,
+                    label="旧格式随包数据集",
+                )
+                continue
             plan.add_section(
                 archive_path,
                 entry_assets,
-                prefixes={
-                    category: dataset_asset_prefix(stem, category)
-                    for category in ("user_files", "referral_images")
-                },
+                prefixes=prefixes,
                 destinations=asset_destinations,
                 label=f"随包数据集「{entry.get('name')}」",
             )
-        blocking = plan.blocking_issues()
+        declared_warnings = manifest_asset_warnings(manifest)
+        blocking = [*plan.blocking_issues(), *declared_warnings]
         if blocking and not allow_partial_assets:
             raise DatasetError(
-                "备份包的附件未通过校验，已停止导入（没有写入任何数据）："
+                "备份包的附件未通过校验，已停止导入（没有发布业务数据）："
                 + blocking[0]
                 + (f"（共 {len(blocking)} 条问题）" if len(blocking) > 1 else ""),
                 status_code=400,
@@ -221,51 +245,38 @@ def import_dataset(
 
         # 阶段三：发布附件（原子改名；同名冲突保留本机文件），随后按清单独立复核。
         asset_issues: list[str] = []
-        if isinstance(main_assets, dict) or any(
-            isinstance(entry.get("asset_manifest"), dict) for entry, _ in staged
-        ):
-            published, publish_issues = plan.publish()
-            counts = plan.merged_counts(published)
-            result["restored_assets"] = counts
-            asset_issues.extend(publish_issues)
-            # 用户在"允许跳过有问题的附件"下导入时，预检阶段记下的问题同样要如实上报。
-            if allow_partial_assets:
-                asset_issues.extend(blocking)
-            asset_issues.extend(
-                verify_restored_assets(main_assets, asset_destinations)
-                if isinstance(main_assets, dict)
-                else []
+        published, publish_issues = plan.publish()
+        counts = plan.merged_counts(published)
+        result["restored_assets"] = counts
+        asset_issues.extend(publish_issues)
+        if publish_issues and not allow_partial_assets:
+            raise DatasetError(
+                "备份包的附件发布失败，已回滚本次导入：" + publish_issues[0], status_code=500
             )
-            for entry, _candidate in staged:
-                entry_assets = entry.get("asset_manifest") if isinstance(entry, dict) else None
-                if isinstance(entry_assets, dict):
-                    asset_issues.extend(verify_restored_assets(entry_assets, asset_destinations))
-        else:
-            # 旧格式包（没有资产清单）回退到"遍历扁平成员、跳过同名"的老路径：附件恢复
-            # 失败只告警，不影响数据集本身。这条路从不覆盖本机文件，保护性与新版一致。
-            try:
-                restored_images = restore_referral_images(
-                    archive_path, assets_parent / "referral_images"
-                )
-                if restored_images:
-                    result["restored_referral_images"] = restored_images
-            except (OSError, zipfile.BadZipFile):
-                logger.warning("备份包的内推图片恢复失败（不影响数据集本身）", exc_info=True)
-            try:
-                restored_files = restore_user_files(archive_path, assets_parent / "user_files")
-                if restored_files:
-                    result["restored_user_files"] = restored_files
-            except (OSError, zipfile.BadZipFile):
-                logger.warning("备份包的用户文件恢复失败（不影响数据集本身）", exc_info=True)
-
+        if not isinstance(main_assets, dict):
+            result["restored_user_files"] = counts["user_files"]
+            result["restored_referral_images"] = counts["referral_images"]
+            result["legacy_asset_verification"] = "zip_crc_and_size"
+        # 用户在允许部分附件恢复下导入时，预检问题同样如实上报。
+        if allow_partial_assets:
+            asset_issues.extend(blocking)
+        if isinstance(main_assets, dict):
+            asset_issues.extend(verify_restored_assets(main_assets, asset_destinations))
+        for entry, _candidate in staged:
+            entry_assets = entry.get("asset_manifest")
+            if isinstance(entry_assets, dict):
+                asset_issues.extend(verify_restored_assets(entry_assets, asset_destinations))
         # 导出侧已经知道的"这份备份不完整"（附件缺失/内容与登记哈希不符）：导入时
         # 如实转述，别让用户以为恢复出了完整的一套附件。
-        declared_warnings = manifest_asset_warnings(manifest)
         if declared_warnings:
             result["backup_asset_warnings"] = declared_warnings
 
         # 恢复后按清单复核 DB 关键行数（表缺失/行数不符都显式上报）。
         asset_issues.extend(verify_database_rows(target, manifest.get("tables") or {}))
+        if asset_issues and not allow_partial_assets:
+            raise DatasetError(
+                "备份恢复后的完整性校验失败，已回滚本次导入：" + asset_issues[0], status_code=400
+            )
         if asset_issues:
             result["asset_issues"] = asset_issues
             result["assets_incomplete"] = True
@@ -278,6 +289,7 @@ def import_dataset(
     except BaseException:
         # 阶段二/三中途失败：收回本次新建的数据集文件（只删自己刚创建的那几份，
         # 用户既有文件一个都不动），让"失败"真的等于"什么都没发生"。
+        plan.rollback()
         discard_created_datasets(created_dataset_ids)
         raise
     finally:
@@ -317,7 +329,7 @@ def create_dataset(name: str, bind: Engine) -> dict[str, Any]:
             "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         },
     )
-    logger.info("已新建空数据集 id=%s name=%s", dataset_id, cleaned)
+    logger.info("已新建空数据集 id=%s", safe_log_text(dataset_id))
     return _describe(dataset_id, target)
 
 
@@ -458,6 +470,7 @@ def activate_dataset(dataset_id: str, bind: Engine) -> dict[str, Any]:
     from ..runtime import dataset_scope
 
     with dataset_scope.switch_lock():
+        dataset_scope.validate_request_scope()
         _wait_for_idle(bind)
         _preview_target(target)
         _commit_switch(dataset_id, target)

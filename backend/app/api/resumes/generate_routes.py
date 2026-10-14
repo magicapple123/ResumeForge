@@ -61,7 +61,7 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
             yield _format_sse({"type": "error", "message": message})
 
         return StreamingResponse(
-            lease_error_stream(str(exc)),
+            lease_error_stream(exc.public_message),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
@@ -147,9 +147,9 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                 # 只有持久化成功后才宣布完成；断流不会留下“成功但无历史记录”的状态。
                 yield _format_sse({"type": "saved", "record_id": record.id})
                 yield _format_sse(done_event)
-        except LLMError as exc:
-            logger.warning("简历生成失败（模型错误）：%s", exc)
-            yield _format_sse({"type": "error", "message": str(exc)})
+        except LLMError:
+            logger.warning("简历生成失败（模型错误，用户可见错误已固定脱敏）")
+            yield _format_sse({"type": "error", "message": "模型服务暂时无法完成生成，请稍后重试"})
         except Exception:  # noqa: BLE001 - 流式接口必须兜底，异常转为事件而非中断连接
             log_exception_redacted(logger, "简历生成发生内部错误")
             yield _format_sse(

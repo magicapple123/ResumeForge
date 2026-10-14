@@ -11,7 +11,6 @@
 
 import json
 import logging
-import re
 import zipfile
 from pathlib import Path
 from urllib.parse import quote
@@ -24,6 +23,8 @@ from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
 from .. import database
+from ..dataset_registry import DatasetError, canonical_dataset_id
+from ..runtime.log_fields import safe_log_text
 from ..services.data_backup import (
     MANIFEST_MEMBER,
     BackupError,
@@ -54,7 +55,6 @@ router = APIRouter(prefix="/api/settings/datasets", tags=["settings"])
 IMPORT_PATH = f"{router.prefix}/import"
 
 # 数据集 id 由后端生成，拼进路径前严格校验，避免路径穿越。
-_ID_PATTERN = re.compile(r"\A(?:main|[0-9a-f]{16})\Z")
 # Windows 把 .zip 映射成 application/x-zip-compressed，两种都接受。
 _ZIP_CONTENT_TYPES = frozenset({"application/zip", "application/x-zip-compressed"})
 
@@ -66,9 +66,10 @@ def _require_loopback(request: Request) -> None:
 
 
 def _require_valid_id(dataset_id: str) -> str:
-    if not _ID_PATTERN.match(dataset_id):
-        raise HTTPException(status_code=400, detail="数据集标识无效")
-    return dataset_id
+    try:
+        return canonical_dataset_id(dataset_id)
+    except DatasetError as exc:
+        raise HTTPException(status_code=400, detail="数据集标识无效") from exc
 
 
 def _translate(exc: Exception) -> HTTPException:
@@ -237,7 +238,11 @@ def export_all(request: Request, include_api_keys: bool = False) -> FileResponse
     except Exception as exc:
         raise _translate(exc) from exc
 
-    logger.info("已导出全部数据集 file=%s api_key_included=%s", archive_path.name, include_api_keys)
+    logger.info(
+        "已导出全部数据集 file=%s key_policy=%s",
+        archive_path.name,
+        "included" if include_api_keys else "excluded",
+    )
     return _archive_response(archive_path)
 
 
@@ -257,10 +262,10 @@ def export(request: Request, dataset_id: str, include_api_keys: bool = False) ->
         raise _translate(exc) from exc
 
     logger.info(
-        "已导出数据集 id=%s file=%s api_key_included=%s",
-        dataset_id,
-        archive_path.name,
-        include_api_keys,
+        "已导出数据集 id=%s file=%s key_policy=%s",
+        safe_log_text(dataset_id),
+        safe_log_text(archive_path.name),
+        "included" if include_api_keys else "excluded",
     )
     return _archive_response(archive_path)
 

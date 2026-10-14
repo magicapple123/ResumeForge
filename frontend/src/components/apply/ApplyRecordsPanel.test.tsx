@@ -125,6 +125,28 @@ function batchHead(batchId: number): HTMLElement {
 }
 
 describe("ApplyRecordsPanel (grouped by batch)", () => {
+  it("loads concurrently expanded batches without invalidating another batch", async () => {
+    let resolveFirst!: (value: Page<ApplyRecord>) => void;
+    const firstResponse = new Promise<Page<ApplyRecord>>((resolve) => {
+      resolveFirst = resolve;
+    });
+    apiMocks.listRecordBatchItems.mockImplementation((id: number) =>
+      id === 7
+        ? firstResponse
+        : Promise.resolve({
+            items: [{ ...RECORD_SUCCESS, id: 3, task_id: 6, job_title: "并行批次的岗位" }],
+            total: 1,
+          }),
+    );
+    await renderPanel();
+    fireEvent.click(batchHead(7));
+    fireEvent.click(batchHead(6));
+    expect(await screen.findByText("并行批次的岗位")).toBeInTheDocument();
+    await act(async () => resolveFirst(BATCH_ITEMS));
+    expect(await screen.findByText(RECORD.job_title)).toBeInTheDocument();
+    expect(apiMocks.listRecordBatchItems).toHaveBeenCalledTimes(2);
+  });
+
   it("初次分组请求走轻量分页（include_items=false），组头展示命中数", async () => {
     await renderPanel();
 

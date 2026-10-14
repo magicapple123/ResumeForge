@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import secrets
-import shutil
 import sqlite3
 import zipfile
 from contextlib import closing
@@ -18,6 +18,7 @@ from typing import Any
 from sqlalchemy import Engine
 
 from ...database_migrations import _APPLICATION_TABLES, run_database_migrations
+from .archive_guard import copy_archive_member, validate_archive, validate_manifest_assets
 from .asset_manifest import ASSET_MANIFEST_VERSION
 from .manifest import _revision_chain, _table_counts
 from .paths import (
@@ -49,19 +50,17 @@ def _remove_sqlite_sidecars(path: Path) -> None:
 
 
 def _best_effort_checkpoint(path: Path) -> None:
-    """对候选库做一次尽力而为的 WAL checkpoint，把 -wal 里的已提交帧写回主文件。
+    """Require a complete candidate WAL checkpoint before publishing its main file.
 
-    SQLite 只在「最后一个连接干净关闭」时才自动 checkpoint；校验链路上若存在
-    未经干净关闭的连接（inspect 用例暴露的边车残留正说明这类路径存在），``-wal``
-    里可能有尚未落回主文件的数据。**保留候选库**之前必须先补一次 checkpoint，
-    否则随后删边车就是静默丢数据。失败（文件损坏、被锁等）一律吞掉：这只影响
-    垃圾文件残留，不该阻断用户的恢复流程。
+    Keep the historical import name for callers; a busy/failed checkpoint now fails closed.
     """
     try:
-        with closing(sqlite3.connect(path)) as connection:
-            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    except sqlite3.Error:
-        logger.warning("候选库 %s 的 WAL checkpoint 未完成，按原样保留", path.name)
+        with closing(sqlite3.connect(path, timeout=5.0)) as connection:
+            result = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            if result is None or result[0] != 0 or result[1] != result[2]:
+                raise BackupError("候选库的 WAL 尚未完整写回，已停止发布，请稍后重试")
+    except sqlite3.Error as exc:
+        raise BackupError("候选库的 WAL 检查失败，已停止发布，请稍后重试") from exc
 
 
 def _remove_candidate_files(path: Path) -> None:
@@ -76,12 +75,10 @@ def extract_member(archive_path: Path, member: str, destination: Path) -> Path:
     用 ``ZipFile.open`` 逐块写出，不经过 ``extractall``，从结构上排除了 zip-slip；
     调用方仍需自行校验 ``member`` 是不是自己期望的那一个。
     """
-    with (
-        zipfile.ZipFile(archive_path) as archive,
-        archive.open(member) as source,
-        destination.open("wb") as target,
-    ):
-        shutil.copyfileobj(source, target)
+    with zipfile.ZipFile(archive_path) as archive:
+        validate_archive(archive)
+        with destination.open("xb") as target:
+            copy_archive_member(archive, member, target)
     return destination
 
 
@@ -92,26 +89,9 @@ def restore_referral_images(archive_path: Path, destination_dir: Path) -> int:
     照常成功。成员名只认 ``referral_images/<单段文件名>`` 一种形状（杜绝 zip-slip）；
     目标已存在的同名文件不覆盖（多份数据集共用一个文件系统命名空间，先到先得）。
     """
-    restored = 0
-    with zipfile.ZipFile(archive_path) as archive:
-        members = [
-            name for name in archive.namelist() if name.startswith(ARCHIVE_REFERRAL_IMAGES_PREFIX)
-        ]
-        if not members:
-            return 0
-        destination_dir.mkdir(parents=True, exist_ok=True)
-        for member in members:
-            name = member[len(ARCHIVE_REFERRAL_IMAGES_PREFIX) :]
-            if not name or "/" in name or "\\" in name or name.startswith("."):
-                logger.warning("备份包里的内推图片路径不合法，已跳过：%s", member)
-                continue
-            target = destination_dir / name
-            if target.exists():
-                continue
-            with archive.open(member) as source, target.open("wb") as target_file:
-                shutil.copyfileobj(source, target_file)
-            restored += 1
-    return restored
+    return _restore_legacy_assets(
+        archive_path, destination_dir, "referral_images", ARCHIVE_REFERRAL_IMAGES_PREFIX
+    )
 
 
 def restore_user_files(archive_path: Path, destination_dir: Path) -> int:
@@ -121,26 +101,33 @@ def restore_user_files(archive_path: Path, destination_dir: Path) -> int:
     成员名只认 ``user_files/<单段文件名>``（杜绝 zip-slip）；目标已存在的同名文件
     不覆盖——user_files 按内容指纹命名，同名即同内容，先到先得。
     """
-    restored = 0
-    with zipfile.ZipFile(archive_path) as archive:
-        members = [
-            name for name in archive.namelist() if name.startswith(ARCHIVE_USER_FILES_PREFIX)
-        ]
-        if not members:
-            return 0
-        destination_dir.mkdir(parents=True, exist_ok=True)
-        for member in members:
-            name = member[len(ARCHIVE_USER_FILES_PREFIX) :]
-            if not name or "/" in name or "\\" in name or name.startswith("."):
-                logger.warning("备份包里的用户文件路径不合法，已跳过：%s", member)
-                continue
-            target = destination_dir / name
-            if target.exists():
-                continue
-            with archive.open(member) as source, target.open("wb") as target_file:
-                shutil.copyfileobj(source, target_file)
-            restored += 1
-    return restored
+    return _restore_legacy_assets(
+        archive_path, destination_dir, "user_files", ARCHIVE_USER_FILES_PREFIX
+    )
+
+
+def _restore_legacy_assets(archive_path: Path, directory: Path, category: str, prefix: str) -> int:
+    from .asset_restore import AssetRestorePlan
+
+    plan = AssetRestorePlan(directory.parent / f".rf-legacy-{secrets.token_hex(8)}")
+    try:
+        plan.add_legacy_section(
+            archive_path,
+            prefixes={category: prefix},
+            destinations={category: directory},
+            label="旧格式附件",
+        )
+        if plan.blocking_issues():
+            raise BackupError("旧格式备份附件未通过校验：" + plan.blocking_issues()[0])
+        counts, issues = plan.publish()
+        if issues:
+            raise BackupError("旧格式备份附件发布失败：" + issues[0])
+        return counts[category]
+    except BaseException:
+        plan.rollback()
+        raise
+    finally:
+        plan.discard()
 
 
 def declared_datasets(manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -163,7 +150,7 @@ def _assert_member_is_a_dataset(entry: dict[str, Any]) -> str:
     if not member.startswith(prefix) or not member.endswith(".db"):
         raise BackupError(f"备份包里有一份数据集的路径不合法（{member or '空'}），已停止导入")
     stem = member[len(prefix) : -len(".db")]
-    if not stem or "/" in stem or "\\" in stem or stem.startswith("."):
+    if not re.fullmatch(r"(?:main|[0-9a-f]{16})", stem) or entry.get("id") != stem:
         raise BackupError(f"备份包里有一份数据集的路径不合法（{member}），已停止导入")
     return member
 
@@ -193,6 +180,7 @@ def inspect_extra_dataset(
 
 
 def _read_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
+    validate_archive(archive)
     try:
         manifest = json.loads(archive.read(MANIFEST_MEMBER))
     except (KeyError, json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -214,7 +202,7 @@ def _read_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
     # 再变更时，不会静默放行一个自己读不懂的声明。true 表示用户导出时勾选了"包含
     # API Key"（格式 3）：密钥按本机存储形态随包走，恢复后解不开（换机器/换用户）时
     # 应用按未配置处理，由用户重填；不认识这个选项的老版本会在上面的格式校验处拒收。
-    if manifest.get("api_key_included") not in (True, False):
+    if type(manifest.get("api_key_included")) is not bool:
         raise BackupError("备份包的元信息未声明密钥状态，为安全起见已拒绝恢复")
     # 资产清单（PR-15）fail-closed：段存在就必须是当前代码认识的版本。没有这一段的
     # 旧包走"遍历扁平成员"的老路径照常导入；版本号对不上（来自更新/更老版本）时
@@ -227,6 +215,7 @@ def _read_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
         raise BackupError(
             "备份包的资产清单版本不受支持，可能来自其它版本的 ResumeForge；请先升级应用再导入"
         )
+    validate_manifest_assets(manifest)
     return manifest
 
 

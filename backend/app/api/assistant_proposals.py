@@ -30,6 +30,7 @@ from sqlalchemy import event
 
 from ..runtime import dataset_scope
 from ..runtime.dataset_scope import DatasetScopeError
+from ..runtime.log_fields import safe_log_text
 from ..services.assistant_tools import get_tool
 from ..services.assistant_tools import policy as tool_policy
 from ..services.assistant_tools.authorization import (
@@ -109,11 +110,16 @@ async def approve_write_proposal(proposal_id: str) -> dict:
         try:
             db = factory()
         except Exception as exc:  # noqa: BLE001 - 会话打不开是明确"未执行"
-            mark_failed(proposal_id, f"会话打开失败：{exc}")
-            logger.warning("提案 %s 会话打开失败（%s）：%s", proposal_id, tool_name, exc)
+            mark_failed(proposal_id, "会话打开失败，未执行写入，请稍后重试")
+            logger.warning(
+                "提案 %s 会话打开失败（%s）error_type=%s",
+                safe_log_text(proposal_id),
+                safe_log_text(tool_name),
+                type(exc).__name__,
+            )
             raise HTTPException(
                 status_code=503,
-                detail=f"写入暂不可用（数据库会话打开失败），提案已置为失败，请稍后重试：{exc}",
+                detail="写入暂不可用（数据库会话打开失败），提案已置为失败，请稍后重试",
             ) from exc
         watcher = _CommitWatcher(db)
         try:
@@ -125,20 +131,30 @@ async def approve_write_proposal(proposal_id: str) -> dict:
                 # RR-05：handler 已经在内部提交过就不能说"执行失败"——数据已经落库，
                 # 说失败会让用户重发，从而二次写入。这种情况只报"结果未知"并封死重放。
                 if watcher.happened:
-                    mark_unknown(proposal_id, f"执行中断但写入可能已提交：{exc}")
+                    mark_unknown(proposal_id, "执行中断但写入可能已提交，请先核对数据")
                     logger.warning(
-                        "提案 %s 执行中断但已提交过（%s）：%s", proposal_id, tool_name, exc
+                        "提案 %s 执行中断但已提交过（%s）error_type=%s",
+                        safe_log_text(proposal_id),
+                        safe_log_text(tool_name),
+                        type(exc).__name__,
                     )
                     raise HTTPException(
                         status_code=409,
                         detail=(
                             "写入结果未知（执行过程中数据已经提交，随后步骤失败）："
-                            f"请先在数据里核对该动作是否生效，本提案不会再次执行。原因：{exc}"
+                            "请先在数据里核对该动作是否生效，本提案不会再次执行。"
                         ),
                     ) from exc
-                mark_failed(proposal_id, str(exc))
-                logger.warning("提案 %s 执行失败（%s）：%s", proposal_id, tool_name, exc)
-                raise HTTPException(status_code=422, detail=f"写入执行失败：{exc}") from exc
+                mark_failed(proposal_id, "写入执行失败，本次未提交，请核对输入后重试")
+                logger.warning(
+                    "提案 %s 执行失败（%s）error_type=%s",
+                    safe_log_text(proposal_id),
+                    safe_log_text(tool_name),
+                    type(exc).__name__,
+                )
+                raise HTTPException(
+                    status_code=422, detail="写入执行失败，本次未提交，请核对输入后重试"
+                ) from exc
             try:
                 # 收尾提交（写服务的 handler 一般已自行提交；此处幂等且把
                 # "提交失败"与"handler 失败"分开：前者结果未知，后者未执行）。
@@ -146,8 +162,13 @@ async def approve_write_proposal(proposal_id: str) -> dict:
             except Exception as exc:  # noqa: BLE001 - 提交结果无法断言
                 with suppress(Exception):
                     db.rollback()
-                mark_unknown(proposal_id, f"写入结果未知：{exc}")
-                logger.warning("提案 %s 提交结果未知（%s）：%s", proposal_id, tool_name, exc)
+                mark_unknown(proposal_id, "写入结果未知，请核对数据，本提案不会再次执行")
+                logger.warning(
+                    "提案 %s 提交结果未知（%s）error_type=%s",
+                    safe_log_text(proposal_id),
+                    safe_log_text(tool_name),
+                    type(exc).__name__,
+                )
                 raise HTTPException(
                     status_code=409,
                     detail="写入结果未知（提交阶段失败），请核对数据后重新发起；本提案不会再次执行",
@@ -161,10 +182,10 @@ async def approve_write_proposal(proposal_id: str) -> dict:
     final = mark_executed(proposal_id, summary)
     logger.info(
         "提案 %s 已执行（%s）request_id=%s dataset=%s",
-        proposal_id,
-        tool_name,
-        ctx.request_id,
-        lease.identity.dataset_id,
+        safe_log_text(proposal_id),
+        safe_log_text(tool_name),
+        safe_log_text(ctx.request_id),
+        safe_log_text(lease.identity.dataset_id),
     )
     return {
         "proposal": final.model_dump(mode="json"),

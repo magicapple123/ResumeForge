@@ -1,6 +1,7 @@
 /** 统一请求封装：JSON 解析、错误信息提取、请求预算（超时）、取消与友好报错。 */
 
 import { recordClientDiagnostic } from "../utils/clientDiagnostics";
+import { datasetScopeHeaders } from "./datasetScope";
 
 /** 错误类别：http=后端有响应但非 2xx；network=fetch 失败；timeout=预算到期；cancelled=调用方中止。 */
 export type ApiErrorCode = "http" | "network" | "timeout" | "cancelled";
@@ -167,7 +168,11 @@ export async function requestRaw(path: string, options: RequestOptions = {}): Pr
   }
 
   try {
-    const resp = await fetch(`/api${path}`, { ...rest, signal: controller.signal });
+    const resp = await fetch(`/api${path}`, {
+      ...rest,
+      headers: datasetScopeHeaders(rest.headers),
+      signal: controller.signal,
+    });
     if (!resp.ok) {
       const requestId = resp.headers.get("x-request-id") ?? undefined;
       recordClientDiagnostic("api.error", {
@@ -259,7 +264,7 @@ export function uploadWithProgress<T>(
     // 与调用方取消天然区分开，语义与 fetch 版的预算一致。
     if (limit > 0) xhr.timeout = limit;
 
-    const headersLike = new Headers(headers);
+    const headersLike = datasetScopeHeaders(headers);
     // 与 request() 同一条规则：FormData 不预设 Content-Type（boundary 由浏览器生成）；
     // JSON 字符串体自动补 application/json；裸 Blob 补 octet-stream，自带类型的
     // Blob（File）沿用自身 type，调用方传 headers 时以 headers 为准。

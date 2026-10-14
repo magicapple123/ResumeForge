@@ -14,7 +14,7 @@ from app.services.resume.resume_generator import (
     split_commas,
     split_lines,
 )
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 from pydantic import ValidationError
 from tests.test_resume_generator import (
     GOOD_RESUME,
@@ -41,7 +41,9 @@ async def test_generate_injects_profile_photo_without_sending_it_to_llm():
     prompt_data = build_profile_prompt_data(profile)
     provider = FakeProvider(stream_text=json.dumps(GOOD_RESUME, ensure_ascii=False))
 
-    events = await collect_events(ResumeGenerator(provider).generate(profile, make_job(), GenerateOptions()))
+    events = await collect_events(
+        ResumeGenerator(provider).generate(profile, make_job(), GenerateOptions())
+    )
     done = next(event for event in events if event["type"] == "done")
 
     assert "photo" not in prompt_data
@@ -70,14 +72,18 @@ async def test_generate_repairs_broken_json_once():
         stream_text="抱歉，我无法生成：xxx",
         chat_replies=[json.dumps(GOOD_RESUME, ensure_ascii=False)],
     )
-    events = await collect_events(ResumeGenerator(provider).generate(make_profile(), make_job(), GenerateOptions()))
+    events = await collect_events(
+        ResumeGenerator(provider).generate(make_profile(), make_job(), GenerateOptions())
+    )
     done = next(event for event in events if event["type"] == "done")
     assert done["resume"]["name"] == "张三"
 
 
 async def test_generate_fails_gracefully():
     provider = FakeProvider(stream_text="彻底乱码", chat_replies=["仍然乱码"])
-    events = await collect_events(ResumeGenerator(provider).generate(make_profile(), make_job(), GenerateOptions()))
+    events = await collect_events(
+        ResumeGenerator(provider).generate(make_profile(), make_job(), GenerateOptions())
+    )
     assert events[-1]["type"] == "error"
     assert "JSON" in events[-1]["message"]
 
@@ -121,15 +127,17 @@ def test_generate_options_rejects_removed_tone_option():
 
 
 def test_extract_json_tolerates_wrappers():
-    assert extract_json("```json\n{\"a\": 1}\n```") == {"a": 1}
-    assert extract_json("前置说明 {\"a\": 1} 后置说明") == {"a": 1}
-    assert extract_json("{\"resume\": {\"a\": 1}}") == {"a": 1}
+    assert extract_json('```json\n{"a": 1}\n```') == {"a": 1}
+    assert extract_json('前置说明 {"a": 1} 后置说明') == {"a": 1}
+    assert extract_json('{"resume": {"a": 1}}') == {"a": 1}
     assert extract_json("") is None
     assert extract_json("没有任何花括号") is None
 
 
 def test_coerce_resume_fills_defaults():
-    resume = coerce_resume({"name": "李四", "education": [{"school": "某大学", "courses": "数学\n英语"}]})
+    resume = coerce_resume(
+        {"name": "李四", "education": [{"school": "某大学", "courses": "数学\n英语"}]}
+    )
     assert resume.name == "李四"
     assert resume.summary == ""
     assert resume.education[0].courses == ["数学", "英语"]
@@ -212,7 +220,9 @@ def test_split_helpers():
 def _render_system_prompt(job: bool) -> str:
     """直接渲染系统提示模板：这两种口径都只存在于文本里，没有别的抓手。"""
     env = Environment(
-        loader=FileSystemLoader(PROMPTS_DIR), undefined=StrictUndefined, autoescape=False
+        loader=FileSystemLoader(PROMPTS_DIR),
+        undefined=StrictUndefined,
+        autoescape=select_autoescape(default=False, default_for_string=False),
     )
     return env.get_template("resume_generate_system.md").render(job=job)
 

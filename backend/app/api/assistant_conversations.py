@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..models.assistant import ChatConversation, ChatMessage
 from ..models.profile import utcnow
+from ..runtime.log_fields import safe_log_text
 from ..schemas.assistant import (
     ChatConversationBrief,
     ChatConversationCreate,
@@ -365,7 +366,7 @@ def delete_messages(
         db.delete(row)
     conversation.updated_at = utcnow()
     db.commit()
-    logger.info("已删除消息 conversation_id=%s count=%s", conversation_id, len(rows))
+    logger.info("已删除消息 conversation_id=%s count=%s", safe_log_text(conversation_id), len(rows))
     return len(rows)
 
 

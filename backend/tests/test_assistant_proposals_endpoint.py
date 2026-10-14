@@ -80,7 +80,7 @@ def test_session_open_failure_returns_structured_error_and_marks_failed(client, 
 
     def broken_factory(_identity=None):
         def _open():
-            raise OSError("模拟：数据库文件无法打开")
+            raise OSError("SYNTHETIC_PRIVATE_DATABASE_PATH token=synthetic-secret")
 
         return _open
 
@@ -89,9 +89,12 @@ def test_session_open_failure_returns_structured_error_and_marks_failed(client, 
     response = client.post(_APPROVE.format(proposal.proposal_id))
     assert response.status_code == 503, response.text
     assert "写入" in response.json()["detail"]
+    assert "SYNTHETIC_PRIVATE" not in response.text
+    assert "synthetic-secret" not in response.text
     final = client.get(_GET.format(proposal.proposal_id))
     assert final.status_code == 200
     assert final.json()["proposal"]["status"] == "failed"
+    assert "SYNTHETIC_PRIVATE" not in final.text
     assert _reminder_count() == 0
     # 终态不可重放：再点批准仍是 409，不会出现第二次写入尝试。
     assert client.post(_APPROVE.format(proposal.proposal_id)).status_code == 409

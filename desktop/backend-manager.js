@@ -19,6 +19,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const processIdentity = require("./lib/process-identity");
+const { attachBackendChild } = require("./lib/backend-startup");
 const { BACKEND_COMMAND_PATTERNS: BACKEND_COMMAND_PATTERNS_FOR_RECORDS, stopBackend } = require("./lib/backend-stop");
 const {
   RUNTIME_ZIP_NAME,
@@ -334,26 +335,17 @@ class BackendManager {
         },
       );
     }
-    this.child.stdout.on("data", (chunk) => this.logStream.write(chunk));
-    this.child.stderr.on("data", (chunk) => this.logStream.write(chunk));
-
-    this.earlyExit = null;
-    this.child.on("exit", (code, signal) => this.onChildExit(code, signal));
-
-    // Directly spawned backends get their own identity snapshot AND process
-    // record (RR-02): the snapshot is re-checked before this pid is ever
-    // killed, the record lets the console flow / a later launch see which
-    // process is the backend. The write races the (much slower) uvicorn boot;
-    // failures never block start.
-    if (!this.usingLauncher && typeof this.child.pid === "number") {
-      this.recordSpawnedChild(this.child.pid).catch(() => {});
-    }
+    attachBackendChild(this);
 
     const url = `http://127.0.0.1:${port}`;
     this.url = url;
     const deadline = Date.now() + HEALTH_TIMEOUT_MS;
     if (onStage) onStage("health-check");
     while (Date.now() < deadline) {
+      if (this.startupError) {
+        this.closeLog();
+        throw new Error(`Backend spawn failed: ${this.startupError.message}. See ${logPath}`);
+      }
       if (this.earlyExit && !this.usingLauncher) {
         throw new Error(
           `Backend exited early (code=${this.earlyExit.code}). See ${logPath}`,

@@ -66,7 +66,7 @@ _RETRY_CONSTRAINT = (
 async def _chat_json(provider: BaseLLMProvider, prompt: str, label: str) -> dict[str, Any]:
     """调用模型并解析 JSON；解析失败时**自动重试一次**（追加更严格的约束）。
 
-    两次都失败才抛出 ``LLMError``，错误信息附带原始返回的前 200 字符便于排查。
+    两次都失败才抛出 ``LLMError``；原始模型返回不进入用户可见错误。
     """
     raw = await provider.chat(
         [
@@ -92,8 +92,12 @@ async def _chat_json(provider: BaseLLMProvider, prompt: str, label: str) -> dict
     try:
         return parse_json_object(raw_retry, label=label)
     except LLMError as exc:
-        snippet = raw_retry[:200]
-        raise LLMError(f"{exc}（原始返回前 200 字符：{snippet}）") from exc
+        # The model response can contain the user's resume, job description, or a
+        # provider diagnostic. Never put that payload into an HTTP error message.
+        # Keep only the parse category for the caller; the exception chain remains
+        # available to the redacted application logger when this is handled there.
+        logger.warning("面试 JSON 解析重试仍失败 label=%s response_chars=%s", label, len(raw_retry))
+        raise LLMError(f"模型未返回有效的{label} JSON，请重试") from exc
 
 
 def _parse_item(value: Any) -> InterviewQuestionItem | None:
@@ -210,7 +214,7 @@ async def generate_question_answer(
     )
     data = await _chat_json(provider, prompt, "参考答案")
     result = parse_question_answer(data, question)
-    logger.info("参考答案生成完成 question=%s…", question[:20])
+    logger.info("参考答案生成完成 question_chars=%s", len(question))
     return result
 
 
@@ -228,7 +232,7 @@ async def analyze_question(
     )
     data = await _chat_json(provider, prompt, "答题思路")
     result = parse_analysis(data, question)
-    logger.info("答题思路分析完成 question=%s…", question[:20])
+    logger.info("答题思路分析完成 question_chars=%s", len(question))
     return result
 
 

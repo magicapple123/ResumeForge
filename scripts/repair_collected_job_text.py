@@ -17,6 +17,7 @@
     backend/.venv/Scripts/python.exe scripts/repair_collected_job_text.py
     backend/.venv/Scripts/python.exe scripts/repair_collected_job_text.py --apply
 """
+
 from __future__ import annotations
 
 import argparse
@@ -92,9 +93,11 @@ def main() -> int:
             plans.append((row["id"], repaired, touched))
 
     print(f"采集来源的岗位共 {len(rows)} 条，需要修复 {len(plans)} 条。")
-    for job_id, repaired, touched in plans:
-        print(f"  id={job_id} 将更新：{'、'.join(touched)}")
-        print(f"    标题 -> {repaired['title']!r}   薪资 -> {repaired['salary']!r}")
+    for job_id, _repaired, touched in plans:
+        # Preview output can be redirected or attached to a support ticket. Do not
+        # echo titles, companies, salary, or JD text; field names/counts are enough
+        # to review the repair scope before the explicit --apply action.
+        print(f"  id={job_id} 将更新字段：{'、'.join(touched)}（共 {len(touched)} 项）")
 
     if not plans:
         connection.close()

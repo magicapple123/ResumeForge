@@ -230,9 +230,7 @@ async function verifyProcessRecord(record, { commandPatterns, execFileFn, platfo
       return { status: STATUS_MISMATCH, info, reason: "启动时刻签名与记录不符（PID 已被复用）" };
     }
   } else {
-    // No recorded start time at all (pre-timestamp record): the command line
-    // matched, which is the same fallback the launchers use -- but say so.
-    return { status: STATUS_VERIFIED, info, reason: "记录没有启动时刻，仅按命令行核对" };
+    return { status: STATUS_UNVERIFIABLE, info, reason: "缺少可核对的启动时刻，不能仅凭命令行停止进程" };
   }
   return { status: STATUS_VERIFIED, info, reason: "" };
 }

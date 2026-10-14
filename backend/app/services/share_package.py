@@ -11,6 +11,7 @@
 "是否附带评论回传文件"。源简历 / 岗位删除后 ``SET NULL``，快照与文件清单独立成包，
 不连坐。脱敏唯一复用 ``privacy.redact``，导出唯一复用 ``export_pipeline.build_export``。
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -32,6 +33,7 @@ from ..models.share_package import (
     SHARE_PERMISSIONS,
     SharePackage,
 )
+from ..runtime.log_fields import safe_log_text
 from ..schemas.resume import ResumeContent
 from ..schemas.share_package import (
     ShareCommentsOut,
@@ -325,13 +327,16 @@ def create_share_package(
     package.files = files
     db.commit()
     db.refresh(package)
-    logger.info("已生成分享包 id=%s resume_id=%s permission=%s", package.id, resume_id, permission)
+    logger.info(
+        "已生成分享包 id=%s resume_id=%s permission=%s",
+        int(package.id),
+        int(resume_id),
+        safe_log_text(permission),
+    )
     return package
 
 
-def list_share_packages(
-    db: Session, *, keyword: str = "", limit: int = 200
-) -> list[SharePackage]:
+def list_share_packages(db: Session, *, keyword: str = "", limit: int = 200) -> list[SharePackage]:
     """列出未软删除的分享包，最近的在前。"""
     query = db.query(SharePackage).filter(trash.live_only(SharePackage))
     if keyword.strip():
@@ -423,13 +428,19 @@ def import_comments(
     directory = package_directory(db.get_bind(), package.id)
     directory.mkdir(parents=True, exist_ok=True)
 
-    files = [item for item in (package.files or []) if not str(item.get("name", "")).startswith("comments.")]
-    files.append(_text_file_entry(directory, filename, content, "json" if format == "json" else "markdown"))
+    files = [
+        item
+        for item in (package.files or [])
+        if not str(item.get("name", "")).startswith("comments.")
+    ]
+    files.append(
+        _text_file_entry(directory, filename, content, "json" if format == "json" else "markdown")
+    )
     package.files = files
     package.comments_file = str(directory / filename)
     db.commit()
     db.refresh(package)
-    logger.info("已导入评论分享包 id=%s format=%s", package.id, format)
+    logger.info("已导入评论分享包 id=%s format=%s", int(package.id), safe_log_text(format))
     return read_comments(package)
 
 

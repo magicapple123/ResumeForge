@@ -19,19 +19,7 @@ const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { scheduleUpdateCheck } = require("./updater");
 
-// Startup probe: persists which bootstrap step the shell reached. Remove in
-// phase 5 once the packaged pipeline is proven end to end.
-try {
-  const probeDir = path.join(
-    process.env.LOCALAPPDATA || app.getPath("userData"),
-    "ResumeForge",
-  );
-  fs.mkdirSync(probeDir, { recursive: true });
-  fs.appendFileSync(
-    path.join(probeDir, "startup-probe.log"),
-    `${new Date().toISOString()} module-loaded packaged=${app.isPackaged}\n`,
-  );
-} catch {}
+// Lifecycle diagnostics use the controlled runtime log; module imports must not write user profiles.
 
 let mainWindow = null;
 let backend = null;
@@ -232,9 +220,7 @@ function createWindow() {
     },
   });
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadFile(path.join(__dirname, "splash.html"), {
-    query: { icon: shellIcon() },
-  });
+  mainWindow.loadFile(path.join(__dirname, "splash.html"));
   mainWindow.once("ready-to-show", () => mainWindow.show());
 
   // Closing the window minimizes to tray; real quits run through before-quit,
@@ -354,6 +340,10 @@ function spawnPendingInstaller() {
       windowsHide: true,
     });
     child.unref();
+    child.on("error", (err) => {
+      logLine(`update installer spawn failed: ${err}`);
+      try { dialog.showErrorBox("简历通", "更新安装程序未能启动，请保留下载文件后手动重试。"); } catch {}
+    });
     logLine(`update installer spawned: ${installerPath}`);
   } catch (err) {
     logLine(`update installer spawn failed: ${err}`);

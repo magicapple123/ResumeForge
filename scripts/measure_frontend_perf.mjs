@@ -204,6 +204,7 @@ export const UNMATCHED_DETAIL = "unmatched by perf mock (fail-closed)";
  */
 export function classifyMockRequest(url) {
   const p = new URL(url, "http://mock.local").pathname;
+  if (p === "/api/dataset-scope") return "dataset_scope";
   if (p === "/api/stats") return "stats";
   if (p === "/api/tracker/stats") return "tracker_stats";
   if (p.startsWith("/api/tracker/page")) return "tracker_page";
@@ -228,6 +229,8 @@ export function classifyMockRequest(url) {
 /** mock 响应体（已按名称对齐真实 DTO）。未匹配返回 undefined。 */
 export function mockBodyFor(name) {
   switch (name) {
+    case "dataset_scope":
+      return { scope: "perf-fixture:main:1", dataset_id: "main", generation: 1 };
     case "stats":
       return STATS;
     case "tracker_stats":

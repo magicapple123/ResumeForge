@@ -31,6 +31,7 @@
 
 from __future__ import annotations
 
+import errno
 import logging
 import os
 import time
@@ -168,6 +169,15 @@ def _classify(rel_parts: tuple[str, ...], datasets_dirname: str) -> str:
     return "uncategorized"
 
 
+def _read_error_reason(error: OSError) -> str:
+    """Publish a stable IO category, not OS exception text or filesystem details."""
+    if isinstance(error, PermissionError) or error.errno in {errno.EACCES, errno.EPERM}:
+        return "权限不足"
+    if isinstance(error, FileNotFoundError) or error.errno == errno.ENOENT:
+        return "文件已变化或不存在"
+    return "读取失败，请稍后重试"
+
+
 def _scan_tree(
     root: Path,
     datasets_dirname: str,
@@ -194,7 +204,7 @@ def _scan_tree(
             entries = list(os.scandir(directory))
         except OSError as exc:
             if len(warnings) < _MAX_WARNINGS:
-                warnings.append(f"无法读取目录 {directory.name}：{exc.strerror or exc}")
+                warnings.append(f"无法读取目录 {directory.name}：{_read_error_reason(exc)}")
             continue
         for entry in entries:
             try:
@@ -202,7 +212,7 @@ def _scan_tree(
                 is_link = entry.is_symlink()
             except OSError as exc:
                 if len(warnings) < _MAX_WARNINGS:
-                    warnings.append(f"无法读取 {entry.name}：{exc.strerror or exc}")
+                    warnings.append(f"无法读取 {entry.name}：{_read_error_reason(exc)}")
                 continue
             rel_parts = rel + (entry.name,)
             if is_dir:
@@ -228,7 +238,7 @@ def _scan_tree(
                 size = entry.stat(follow_symlinks=False).st_size
             except OSError as exc:
                 if len(warnings) < _MAX_WARNINGS:
-                    warnings.append(f"无法读取 {entry.name}：{exc.strerror or exc}")
+                    warnings.append(f"无法读取 {entry.name}：{_read_error_reason(exc)}")
                 continue
             _add(_classify(rel_parts, datasets_dirname), size)
     return {key: (size, count) for key, (size, count) in counts.items()}

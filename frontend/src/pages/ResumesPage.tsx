@@ -20,6 +20,7 @@ import type { DiffViewData } from "../types/resumeFieldDiff";
 import { useApi } from "../hooks/useApi";
 import type { ResumeBrief } from "../types";
 import ResumeTable from "./resumes/ResumeTable";
+import DeliveryArchiveModal from "../components/resume/DeliveryArchiveModal";
 import ResumeRenameModal from "./resumes/ResumeRenameModal";
 import ResumeNoteModal from "./resumes/ResumeNoteModal";
 import ResumeDiffModal from "./resumes/ResumeDiffModal";
@@ -27,6 +28,7 @@ import { useSelectAllResumes } from "./resumes/useSelectAllResumes";
 
 export default function ResumesPage() {
   const navigate = useNavigate();
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const { message, modal } = App.useApp();
   // 批量选择：勾选若干份简历后一次删除（全部进回收站，可恢复）。
@@ -233,6 +235,10 @@ export default function ResumesPage() {
 
   return (
     <div>
+      <Button onClick={() => setArchiveOpen(true)} style={{ marginBottom: 12 }}>
+        交付存档
+      </Button>
+      {archiveOpen && <DeliveryArchiveModal onClose={() => setArchiveOpen(false)} />}
       {jobId && (
         <Space style={{ marginBottom: 12 }}>
           <Tag color="blue">按岗位筛选：#{jobId}</Tag>

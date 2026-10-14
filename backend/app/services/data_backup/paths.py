@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,6 +46,8 @@ ARCHIVE_REFERRAL_IMAGES_PREFIX = "referral_images/"
 # 与数据库同目录存放——此前备份包不带它们，换机器/导出再导入后用户文件全丢。
 # manifest 格式不动（缺这些条目的旧包照常导入），导入侧只遍历实际存在的成员。
 ARCHIVE_USER_FILES_PREFIX = "user_files/"
+_DATASET_ID_RE = re.compile(r"(?:main|[0-9a-f]{16})\Z")
+_ASSET_CATEGORIES = frozenset({"user_files", "referral_images"})
 
 # 可恢复删除的统一目录名（手动备份 ``backups/.trash``、自动备份 ``auto-backups/
 # <scope>/.trash`` 同名）：与业务数据回收站同一个"先可恢复，再谈永久"的取舍。
@@ -60,8 +63,12 @@ def dataset_asset_prefix(dataset_id: str | None, category: str) -> str:
       磁盘目录时，整目录装包会把**别的数据集**的文件带进来，按各自前缀隔离
       才能保证"谁的数据跟谁走"。
     """
+    if category not in _ASSET_CATEGORIES:
+        raise BackupError(f"备份包附件类别无效：{category}")
     if dataset_id is None:
         return f"{category}/"
+    if not isinstance(dataset_id, str) or not _DATASET_ID_RE.fullmatch(dataset_id):
+        raise BackupError("备份包数据集标识无效")
     return f"{ARCHIVE_DATASETS_DIRNAME}/{dataset_id}/{category}/"
 
 

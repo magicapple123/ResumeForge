@@ -4,6 +4,7 @@
 fakes 与 _transport/_manager/_orphan_browser 留在主文件；
 _env_with 只被本文件的 choice 组使用，随组迁入。
 """
+
 from pathlib import Path
 
 import pytest
@@ -66,18 +67,23 @@ def test_client_uses_the_configured_factory(tmp_path):
 
 # ===== 启动时就打开站点入口 =====
 # 只拉一个 about:blank 的空白窗口是没有用的：用户面对白页既不知道去哪，
-# 也没有可以扫码登录的页面。所以拉起时必须带上目标地址。
+# 也没有可以扫码登录的页面。进程以固定空白页启动后，必须通过 CDP 打开目标地址。
 
 
 def test_start_opens_the_given_url_instead_of_a_blank_page(tmp_path):
-    manager, popen = _manager(tmp_path)
+    from tests.test_browser_start_argument_boundary import NavigationClient
+
+    client = NavigationClient()
+    manager, popen = _manager(tmp_path, client_factory=lambda *args, **kwargs: client)
     entry = "https://www.zhipin.com/"
 
     manager.start(url=entry)
 
     args, _kwargs = popen.calls[0]
-    assert args[-1] == entry
-    assert "about:blank" not in args
+    assert args[-1] == "about:blank"
+    assert entry not in args
+    assert client.urls == [entry]
+    assert client.closed == 1
 
 
 def test_start_falls_back_to_a_blank_page_when_no_url_is_known(tmp_path):
@@ -101,12 +107,15 @@ def test_open_url_navigates_the_existing_tab_instead_of_opening_a_new_one(tmp_pa
         def new_tab(self, url="about:blank"):  # pragma: no cover - 不该被调用
             raise AssertionError("open_url 不应该新开标签页")
 
+        def close(self):
+            calls.append(("close", {}))
+
     manager, _popen = _manager(tmp_path, client_factory=lambda *a, **k: FakeClient())
-    manager.start(url="https://www.zhipin.com/")
+    manager.start()
 
     manager.open_url("https://www.zhipin.com/")
 
-    assert calls == [("navigate", {"url": "https://www.zhipin.com/"})]
+    assert calls == [("navigate", {"url": "https://www.zhipin.com/"}), ("close", {})]
 
 
 def test_open_url_requires_a_running_browser(tmp_path):

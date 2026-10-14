@@ -216,12 +216,14 @@ def test_open_in_system_failure_returns_400(client, db_session, monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
 
     def _boom(_path):
-        raise OSError("no association")
+        raise OSError("SYNTHETIC_PRIVATE_SYSTEM_PATH token=synthetic-secret")
 
     monkeypatch.setattr(os, "startfile", _boom, raising=False)
     response = client.post(f"/api/user-files/{row.id}/open-in-system")
     assert response.status_code == 400
     assert "打开失败" in response.json()["detail"]
+    assert "SYNTHETIC_PRIVATE" not in response.text
+    assert "synthetic-secret" not in response.text
 
 
 def test_reveal_opens_the_folder_and_selects_the_file(client, db_session, monkeypatch):

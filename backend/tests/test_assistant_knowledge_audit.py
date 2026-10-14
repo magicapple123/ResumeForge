@@ -15,6 +15,7 @@
 
 再加上几个新工具的冒烟测试，确认读工具 live_only、写工具真的落库。
 """
+
 from __future__ import annotations
 
 import json
@@ -31,9 +32,7 @@ from app.services.feature_catalog import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = REPO_ROOT / "frontend"
-NAVIGATION_CONFIG_TSX = (
-    FRONTEND_DIR / "src" / "components" / "navigation" / "navigationConfig.tsx"
-)
+NAVIGATION_CONFIG_TSX = FRONTEND_DIR / "src" / "components" / "navigation" / "navigationConfig.ts"
 GUIDE_STEPS_TS = FRONTEND_DIR / "src" / "components" / "userGuideSteps.ts"
 README_MD = REPO_ROOT / "README.md"
 
@@ -126,6 +125,7 @@ def _readme_feature_names() -> set[str]:
             names.add(cleaned)
     return names
 
+
 # 数据域 → 至少要有一个对应的只读工具（与能力地图无关，但同样不能静默退化）。
 DOMAIN_READ_TOOLS = {
     "岗位/收藏": ["list_jobs", "get_job"],
@@ -199,9 +199,7 @@ def test_catalog_covers_every_readme_feature():
     """
     keys = {feature.key for feature in FEATURES}
     missing = sorted(
-        name
-        for name, mapped in README_FEATURE_KEYS.items()
-        if not (set(mapped) & keys)
+        name for name, mapped in README_FEATURE_KEYS.items() if not (set(mapped) & keys)
     )
     assert not missing, f"README 里有、目录里没有对应功能：{missing}"
 
@@ -276,7 +274,7 @@ def test_write_tools_are_bidirectionally_consistent_with_catalog():
 def test_catalog_domains_match_menu_labels_bidirectionally():
     """目录 domain 与前端导航 label 双向相等：任一方向多/少一项都会变红。"""
     menu_labels = _menu_labels()
-    assert menu_labels, "未能从 navigationConfig.tsx 提取到导航 label"
+    assert menu_labels, "未能从 navigationConfig.ts 提取到导航 label"
     domains = set(FUNCTIONAL_DOMAINS)
     assert domains == menu_labels, (
         f"目录功能域与菜单不一致：\n"

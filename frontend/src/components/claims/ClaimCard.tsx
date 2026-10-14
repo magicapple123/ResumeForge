@@ -8,25 +8,10 @@
 import { DeleteOutlined, EditOutlined, MoreOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Dropdown, Space, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
-import type { Claim, ClaimSummary, VerificationStatus } from "../../types";
+import type { Claim, ClaimSummary } from "../../types";
 import { SOURCE_TYPE_LABELS, hasPlaceholder } from "../../types";
 import { useRowActionMenu } from "../common/rowActionMenu";
-
-// 色板同时供 EvidencePanel（RF-13 证据展示）复用：同一状态/承担程度必须同色，
-// 否则"台账里绿的、预览里黄的"会让人怀疑两处说的是不是同一条。
-export const STATUS_COLORS: Record<VerificationStatus, string> = {
-  已确认: "green",
-  待确认: "gold",
-  已过期: "volcano",
-  不采用: "default",
-};
-
-export const RESPONSIBILITY_COLORS: Record<string, string> = {
-  参与: "default",
-  负责模块: "blue",
-  主导方案或交付: "purple",
-  项目负责人: "magenta",
-};
+import { claimResponsibilityColor, claimStatusColor } from "./claimPresentation";
 
 interface Props {
   /** 全量条目（详情/旧列表）或分页摘要行（GET /api/claims/page，只有 ≤200 字摘要）。 */
@@ -95,12 +80,10 @@ export default function ClaimCard({
             {claim.title || claim.subject || `条目 ${claim.id}`}
           </Typography.Text>
           <Tag>{claim.category}</Tag>
-          <Tag color={RESPONSIBILITY_COLORS[claim.responsibility_level] ?? "default"}>
+          <Tag color={claimResponsibilityColor(claim.responsibility_level)}>
             {claim.responsibility_level}
           </Tag>
-          <Tag color={STATUS_COLORS[claim.verification_status] ?? "default"}>
-            {claim.verification_status}
-          </Tag>
+          <Tag color={claimStatusColor(claim.verification_status)}>{claim.verification_status}</Tag>
           {claim.last_verified && (
             <Typography.Text type="secondary" className="claim-card-verified">
               最近核实 {claim.last_verified}

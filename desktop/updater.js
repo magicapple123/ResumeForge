@@ -21,7 +21,8 @@ const { app, dialog } = require("electron");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { Readable } = require("stream");
+const { Readable, Transform } = require("stream");
+const { pipeline } = require("stream/promises");
 
 const RELEASES_API = "https://api.github.com/repos/magicapple123/ResumeForge/releases/latest";
 // Every host we are willing to touch, including redirect hops.
@@ -37,6 +38,7 @@ const DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
 // misrouted or hostile response, not an update.
 const MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024;
 const CHECK_DELAY_MS = 30_000;
+const RELEASE_VERSION_RE = /^v?(\d+)\.(\d+)\.(\d+)$/;
 
 // Electron 33 embeds Node 20, where AbortSignal.timeout exists (the backend
 // health probe already relies on it). The manual controller is a fallback for
@@ -60,13 +62,43 @@ function versionCompare(a, b) {
   return 0;
 }
 
+function normalizedReleaseVersion(value) {
+  if (typeof value !== "string") return null;
+  const match = RELEASE_VERSION_RE.exec(value.trim());
+  return match ? `${match[1]}.${match[2]}.${match[3]}` : null;
+}
+
+function isReleaseAssetUrl(value, expectedName, tag) {
+  if (typeof value !== "string") return false;
+  try {
+    const parsed = new URL(value);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.hostname !== "github.com" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.port ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return false;
+    }
+    // Metadata comes from our releases API; its original asset URLs must still
+    // belong to this repository and this release. Redirects are checked separately.
+    return decodeURIComponent(parsed.pathname) ===
+      `/magicapple123/ResumeForge/releases/download/${tag}/${expectedName}`;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchAllowed(url, init) {
   // Manual redirect following: every hop's host must be allowlisted.
   let current = url;
   for (let hop = 0; hop < 10; hop += 1) {
     const parsed = new URL(current);
-    if (!ALLOWED_HOSTS.has(parsed.host)) {
-      throw new Error(`update host not allowed: ${parsed.host}`);
+    if (parsed.protocol !== "https:" || !ALLOWED_HOSTS.has(parsed.hostname) || parsed.username || parsed.password || parsed.port) {
+      throw new Error(`update host not allowed: ${parsed.hostname}`);
     }
     const response = await fetch(current, {
       ...init,
@@ -132,36 +164,28 @@ async function downloadToFile(url, destPath, { maxBytes = MAX_DOWNLOAD_BYTES } =
       ? Readable.fromWeb(response.body)
       : response.body;
 
-  const out = fs.createWriteStream(partPath);
-  // Stream errors are absorbed: the sha256 verification of the staged file is
-  // the final authority on whether a download is usable, so a late IO error
-  // (e.g. on an aborted staging file) must never surface as an unhandled
-  // event -- it just makes the checksum fail.
-  out.on("error", () => {});
   let total = 0;
-  try {
-    for await (const chunk of bodyStream) {
+  const limiter = new Transform({
+    transform(chunk, _encoding, callback) {
       total += chunk.length;
       if (total > maxBytes) {
-        throw new Error(
-          `download exceeded size limit: ${total} bytes streamed, cap is ${maxBytes}`,
-        );
+        callback(new Error(`download exceeded size limit: ${total} bytes streamed, cap is ${maxBytes}`));
+      } else {
+        callback(null, chunk);
       }
-      if (!out.write(chunk)) {
-        await new Promise((resolve) => out.once("drain", resolve));
-      }
-    }
-    await new Promise((resolve) => out.end(resolve));
+    },
+  });
+  let created = false;
+  const out = fs.createWriteStream(partPath, { flags: "wx" });
+  out.once("open", () => { created = true; });
+  try {
+    // pipeline propagates ENOSPC/permission/open errors and aborts all streams;
+    // waiting only for "drain" would hang forever after a filesystem error.
+    await pipeline(bodyStream, limiter, out);
   } catch (err) {
-    // Remove the staging file and drop the stream. Fire-and-forget destroy:
-    // a stream destroyed before its async open completed never fires the
-    // destroy callback (and emits a late error), so we must not await it --
-    // the no-op error listener above absorbs the late event and the sha256
-    // check guarantees nothing partial is ever published.
-    try {
-      fs.rmSync(partPath, { force: true });
-    } catch {}
-    out.destroy();
+    if (created) {
+      try { fs.rmSync(partPath, { force: true }); } catch {}
+    }
     throw err;
   }
   return { partPath, size: total };
@@ -173,13 +197,24 @@ function findAsset(release, predicate) {
 
 async function checkAndOfferUpdate(parentWindow, deps = {}) {
   if (!app.isPackaged) return;
+  // This installer protocol is NSIS/Windows only. Other platforms retain their supported manual update path.
+  if (process.platform !== "win32") return;
   const release = await fetchLatestRelease();
-  const latest = release.tag_name || "";
-  if (versionCompare(latest, app.getVersion()) <= 0) return;
+  const latest = normalizedReleaseVersion(release.tag_name);
+  const current = normalizedReleaseVersion(app.getVersion());
+  if (!latest || !current) throw new Error("release version is not an exact stable semver");
+  if (versionCompare(latest, current) <= 0) return;
 
-  const assetName = `ResumeForge-Setup-${latest.replace(/^v/, "")}.exe`;
-  const installer = findAsset(release, (a) => a.name === assetName);
-  const checksum = findAsset(release, (a) => a.name === `${assetName}.sha256`);
+  const assetName = `ResumeForge-Setup-${latest}.exe`;
+  const checksumName = `${assetName}.sha256`;
+  const installer = findAsset(
+    release,
+    (a) => a.name === assetName && isReleaseAssetUrl(a.browser_download_url, assetName, release.tag_name),
+  );
+  const checksum = findAsset(
+    release,
+    (a) => a.name === checksumName && isReleaseAssetUrl(a.browser_download_url, checksumName, release.tag_name),
+  );
   if (!installer || !checksum) {
     // Release exists but assets incomplete: skip rather than half-update.
     return;
@@ -187,7 +222,7 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
 
   const choice = await dialog.showMessageBox(parentWindow, {
     type: "info",
-    message: `发现新版本 ${latest.replace(/^v/, "")}`,
+    message: `发现新版本 ${latest}`,
     detail: "将下载并安装更新，期间应用会自动重启。",
     buttons: ["立即更新", "暂不"],
     defaultId: 0,
@@ -195,15 +230,14 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
   });
   if (choice.response !== 0) return;
 
-  const tempDir = path.join(app.getPath("temp"), "resumeforge-update");
-  fs.mkdirSync(tempDir, { recursive: true });
+  const tempDir = fs.mkdtempSync(path.join(app.getPath("temp"), "resumeforge-update-"));
   const installerPath = path.join(tempDir, assetName);
   const checksumPath = path.join(tempDir, `${assetName}.sha256`);
 
   const { partPath } = await downloadToFile(installer.browser_download_url, installerPath);
   let checksumPartPath;
   try {
-    checksumPartPath = (await downloadToFile(checksum.browser_download_url, checksumPath)).partPath;
+    checksumPartPath = (await downloadToFile(checksum.browser_download_url, checksumPath, { maxBytes: 4096 })).partPath;
     fs.renameSync(checksumPartPath, checksumPath);
   } catch (err) {
     try {
@@ -213,11 +247,16 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
   }
 
   // Checksum sidecar format: "<hex>  <filename>" (sha256sum style).
-  const expected = fs
-    .readFileSync(checksumPath, "utf-8")
-    .trim()
-    .split(/\s+/)[0]
-    .toLowerCase();
+  const checksumText = fs.readFileSync(checksumPath, "utf-8").trim();
+  const checksumMatch = /^(?<hash>[0-9a-f]{64})(?:\s+(?<name>\S+))?$/i.exec(checksumText);
+  if (!checksumMatch || (checksumMatch.groups.name && checksumMatch.groups.name !== assetName)) {
+    try {
+      fs.rmSync(partPath, { force: true });
+      fs.rmSync(checksumPath, { force: true });
+    } catch {}
+    throw new Error("checksum mismatch or invalid sidecar format");
+  }
+  const expected = checksumMatch.groups.hash.toLowerCase();
   const actual = await sha256File(partPath);
   if (actual !== expected) {
     try {
@@ -254,6 +293,7 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
 
 function scheduleUpdateCheck(parentWindow, logLine, deps = {}) {
   if (!app.isPackaged) return;
+  if (process.platform !== "win32") return;
   setTimeout(() => {
     checkAndOfferUpdate(parentWindow, deps)
       .catch((err) => {
@@ -269,4 +309,6 @@ module.exports = {
   timeoutSignal,
   downloadToFile,
   MAX_DOWNLOAD_BYTES,
+  isReleaseAssetUrl,
+  normalizedReleaseVersion,
 };

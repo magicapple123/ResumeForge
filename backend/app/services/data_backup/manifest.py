@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Sequence
+from contextlib import closing
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from alembic.script import ScriptDirectory
@@ -42,6 +45,7 @@ def build_manifest(
     datasets: Sequence[dict[str, Any]] = (),
     api_key_included: bool = False,
     asset_manifest: dict[str, Any] | None = None,
+    snapshot: Path | None = None,
 ) -> dict[str, Any]:
     """生成包内清单。
 
@@ -69,7 +73,7 @@ def build_manifest(
         "app_version": settings.app_version,
         "alembic_revision": current_head_revision(bind),
         "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "tables": _table_counts(bind),
+        "tables": _snapshot_table_counts(snapshot) if snapshot is not None else _table_counts(bind),
         # 与 export 侧的剥离/保留逻辑对应：False 是默认（密钥已清空），True 只能来自
         # 用户的显式勾选。导入侧 fail-closed：这个字段缺失或乱值都拒收。
         "api_key_included": bool(api_key_included),
@@ -88,3 +92,11 @@ def build_manifest(
     if extras:
         manifest["datasets"] = extras
     return manifest
+
+
+def _snapshot_table_counts(snapshot: Path) -> dict[str, int]:
+    with closing(sqlite3.connect(snapshot.as_uri() + "?mode=ro", uri=True)) as connection:
+        return {
+            name: connection.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
+            for name in _APPLICATION_TABLES
+        }

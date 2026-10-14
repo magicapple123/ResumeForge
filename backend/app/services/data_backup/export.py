@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import secrets
 import sqlite3
@@ -22,6 +23,7 @@ from sqlalchemy import Engine
 from ...database_migrations import backup_sqlite_database, snapshot_sqlite_file
 from .api_keys import _assert_no_plaintext_key, _plaintext_api_keys_in, _strip_api_keys
 from .asset_manifest import ASSET_CATEGORIES, build_asset_manifest
+from .asset_safety import safe_asset_path
 from .manifest import build_manifest
 from .paths import (
     ARCHIVE_REFERRAL_IMAGES_PREFIX,
@@ -59,7 +61,10 @@ def create_backup_archive(
     if snapshot is None:
         raise BackupError("无法创建数据库快照，请确认数据目录可写", status_code=500)
 
-    archive_path = staging_dir / f"resumeforge-backup-{datetime.now():%Y%m%d-%H%M%S}.zip"
+    archive_path = (
+        staging_dir
+        / f"resumeforge-backup-{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(8)}.zip"
+    )
     extras: list[tuple[ExtraDatabase, Path]] = []
     try:
         # **每一份数据库各剥离一次密钥**：把不同数据集的明文 Key 收集到一起再统一校验，
@@ -96,8 +101,9 @@ def create_backup_archive(
             datasets=[item.manifest_entry(copy.stat().st_size) for item, copy in extras],
             api_key_included=include_api_keys,
             asset_manifest=active_asset_manifest,
+            snapshot=snapshot,
         )
-        with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        with zipfile.ZipFile(archive_path, "x", zipfile.ZIP_DEFLATED) as archive:
             archive.write(snapshot, DATABASE_MEMBER)
             _write_assets(
                 archive,
@@ -124,6 +130,9 @@ def create_backup_archive(
                     },
                 )
             archive.writestr(MANIFEST_MEMBER, json.dumps(manifest, ensure_ascii=False, indent=2))
+    except BackupError:
+        archive_path.unlink(missing_ok=True)
+        raise
     except (OSError, sqlite3.Error) as exc:
         archive_path.unlink(missing_ok=True)
         raise BackupError(f"生成备份文件失败：{exc}", status_code=500) from exc
@@ -149,8 +158,22 @@ def _write_assets(
     written = 0
     for category, prefix in prefixes.items():
         for entry in (asset_manifest or {}).get(category) or []:
-            source = assets_root / category / entry["name"]
-            if source.is_file():
-                archive.write(source, f"{prefix}{entry['name']}")
-                written += 1
+            source = safe_asset_path(assets_root / category, entry["name"])
+            digest, size = hashlib.sha256(), 0
+            try:
+                with (
+                    source.open("rb") as handle,
+                    archive.open(f"{prefix}{entry['name']}", "w") as out,
+                ):
+                    for chunk in iter(lambda: handle.read(1 << 20), b""):
+                        size += len(chunk)
+                        if size > entry["size_bytes"]:
+                            raise BackupError("备份导出期间附件发生变化，已停止导出，请重试")
+                        digest.update(chunk)
+                        out.write(chunk)
+            except OSError as exc:
+                raise BackupError("备份导出期间附件不可读取，已停止导出，请重试") from exc
+            if size != entry["size_bytes"] or digest.hexdigest() != entry["sha256"]:
+                raise BackupError("备份导出期间附件发生变化，已停止导出，请重试")
+            written += 1
     return written

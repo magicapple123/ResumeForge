@@ -455,7 +455,7 @@ def test_export_carries_user_files_and_restores_them(db_session, tmp_path):
 
 
 def test_restore_user_files_skips_unsafe_and_missing_members(tmp_path):
-    """zip-slip 成员与目录条目一律跳过；没有 user_files 成员的旧包恢复为零。"""
+    """Reject a legacy zip-slip package before publication; missing assets remain compatible."""
     import zipfile as zf
 
     from app.services.data_backup.import_archive import restore_user_files
@@ -467,7 +467,8 @@ def test_restore_user_files_skips_unsafe_and_missing_members(tmp_path):
         archive.writestr("referral_images/other.png", "not-mine")
 
     target = tmp_path / "restored" / "user_files"
-    assert restore_user_files(archive_path, target) == 0
+    with pytest.raises(BackupError):
+        restore_user_files(archive_path, target)
     assert not (tmp_path / "escape.txt").exists()
     assert not (target / "dir.txt").exists()
 

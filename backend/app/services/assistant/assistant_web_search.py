@@ -9,6 +9,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from .search_errors import AssistantSearchError as AssistantSearchError
+
 logger = logging.getLogger(__name__)
 
 BING_SEARCH_URL = "https://cn.bing.com/search"
@@ -118,10 +120,6 @@ _LOCAL_APP_ACTION_MARKERS = (
 )
 
 
-class AssistantSearchError(Exception):
-    """可安全展示给用户的联网搜索错误。"""
-
-
 class _HTMLTextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -190,9 +188,9 @@ def _matched_career_terms(value: str) -> list[str]:
 
 def _is_recruitment_discovery_question(value: str) -> bool:
     normalized = value.casefold()
-    return any(marker.casefold() in normalized for marker in _RECRUITMENT_DISCOVERY_MARKERS) and any(
-        marker.casefold() in normalized for marker in _INTERNET_EMPLOYER_MARKERS
-    )
+    return any(
+        marker.casefold() in normalized for marker in _RECRUITMENT_DISCOVERY_MARKERS
+    ) and any(marker.casefold() in normalized for marker in _INTERNET_EMPLOYER_MARKERS)
 
 
 def _build_recruitment_discovery_query(value: str) -> str:
@@ -241,7 +239,7 @@ def _strip_conversational_filler(text: str) -> str:
         filler = next((item for item in leading if stripped.startswith(item)), "")
         if not filler:
             break
-        stripped = stripped[len(filler):].strip()
+        stripped = stripped[len(filler) :].strip()
     # 反复剥句尾：'... 一下 吧'。
     trailing = sorted(_QUERY_TRAILING_FILLERS, key=len, reverse=True)
     while stripped:
@@ -298,9 +296,7 @@ def _is_obviously_unrelated_result(result: dict[str, str]) -> bool:
     return any(marker.casefold() in haystack for marker in _OBVIOUSLY_UNRELATED_MARKERS)
 
 
-def _is_relevant_career_result(
-    result: dict[str, str], terms: list[str], question: str
-) -> bool:
+def _is_relevant_career_result(result: dict[str, str], terms: list[str], question: str) -> bool:
     haystack = f"{result['title']} {result['snippet']} {result['url']}".casefold()
     matched = [term for term in terms if term.casefold() in haystack]
     has_recruitment_url_marker = _has_recruitment_url_marker(result["url"])
@@ -318,9 +314,7 @@ def _is_relevant_career_result(
     return bool(matched and has_career_marker)
 
 
-def filter_relevant_results(
-    results: list[dict[str, str]], question: str
-) -> list[dict[str, str]]:
+def filter_relevant_results(results: list[dict[str, str]], question: str) -> list[dict[str, str]]:
     """Keep only sources that visibly relate to an identifiable career question."""
     terms = _matched_career_terms(question)
     if not terms:
@@ -468,12 +462,10 @@ async def search_web(query: str) -> list[dict[str, str]]:
     if not normalized:
         raise AssistantSearchError("请先输入要搜索的内容")
     search_query = build_search_query(normalized)
-    candidates = parse_bing_rss(
-        await fetch_bing_rss(search_query), limit=_MAX_CANDIDATE_RESULTS
-    )
-    results = rank_results(
-        _deduplicate(filter_relevant_results(candidates, normalized))
-    )[:_MAX_RESULTS]
+    candidates = parse_bing_rss(await fetch_bing_rss(search_query), limit=_MAX_CANDIDATE_RESULTS)
+    results = rank_results(_deduplicate(filter_relevant_results(candidates, normalized)))[
+        :_MAX_RESULTS
+    ]
     if not results:
         # 零结果就如实报错，**不再**以"问题含已知求职词"为前提：那样非求职类问题即使被
         # 过滤得一条不剩也会静默返回空，模型可能据此瞎编。报错会让调用方明确"没拿到资料"。

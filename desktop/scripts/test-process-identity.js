@@ -191,13 +191,13 @@ test("macOS start signatures keep the launcher's exact spacing", async () => {
   assert.strictEqual(collapsed.status, STATUS_MISMATCH, "签名不一致就该拒绝，不猜");
 });
 
-test("verifyProcessRecord accepts a pre-timestamp record only via the command line", async () => {
+test("verifyProcessRecord refuses a pre-timestamp record even when the command line matches", async () => {
   const table = { 4321: { startedAtUnix: null, commandLine: BACKEND_COMMAND } };
   const verdict = await verifyProcessRecord(
     { pid: 4321, startedAtUnix: null, startSignature: null },
     { commandPatterns: BACKEND_PATTERNS, execFileFn: fakeExecFor(table) },
   );
-  assert.strictEqual(verdict.status, STATUS_VERIFIED);
+  assert.strictEqual(verdict.status, STATUS_UNVERIFIABLE);
   assert.match(verdict.reason, /启动时刻/);
 });
 

@@ -16,19 +16,19 @@ import { RedoOutlined } from "@ant-design/icons";
 import { App, Button, Empty, Pagination, Space, Tag, Tooltip, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import type { ColumnsType } from "antd/es/table";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ApplyRecordDetailDrawer from "./ApplyRecordDetailDrawer";
 import ApplyRecordsToolbar from "./ApplyRecordsToolbar";
-import BatchGroup, { BATCH_ITEM_PAGE_SIZE, type BatchItemsState } from "./ApplyRecordsBatchGroup";
+import BatchGroup from "./ApplyRecordsBatchGroup";
 import {
   batchDeleteRecords,
   deleteRecord,
   deleteRecordBatch,
-  listRecordBatchItems,
   listRecordBatches,
   retryRecord,
 } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
+import { useApplyBatchItems } from "../../hooks/useApplyBatchItems";
 import { RowActions } from "../common/RowActions";
 import BatchActionBar from "../common/BatchActionBar";
 import BatchDeleteButton from "../common/BatchDeleteButton";
@@ -67,8 +67,6 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
   const [detail, setDetail] = useState<ApplyRecord | null>(null);
   // 当前展开的批次 id 集合（分组展示：点击组头展开/收起）。
   const [expanded, setExpanded] = useState<number[]>([]);
-  // B4 按需加载：明细在批次首次展开时才拉取，折叠不丢（缓存到 batchItems）。
-  const [batchItems, setBatchItems] = useState<Record<number, BatchItemsState>>({});
   // 批内明细的多选：多选范围＝展开批次的明细表，按批次各存一份选区。
   const [selectingBatches, setSelectingBatches] = useState<number[]>([]);
   const [selectedByBatch, setSelectedByBatch] = useState<Record<number, number[]>>({});
@@ -89,68 +87,14 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     if (error) message.error(error);
   }, [error, message]);
 
-  // 明细请求的代次守卫（PR-14）：数据集（列表 data）或筛选（keyword/result）一旦
-  // 变化就整体作废进行中的明细请求——迟到的旧响应不再把旧筛选/旧页的数据写回
-  // batchItems，用户看到的明细永远属于当前列表状态。每次发起请求取一个代次号，
-  // 响应回来时只落"仍然是最新代次"的结果，不匹配的直接丢弃。
-  const fetchGenerationRef = useRef(0);
-  useEffect(() => {
-    fetchGenerationRef.current += 1;
-  }, [keyword, result, data]);
-
-  /** 拉取某个批次的某页明细（带与列表一致的 keyword/result，与 matched_count 对得上）。 */
-  const fetchBatchItems = useCallback(
-    async (batchId: number, itemPage: number) => {
-      const generation = ++fetchGenerationRef.current;
-      setBatchItems((prev) => ({
-        ...prev,
-        [batchId]: {
-          items: prev[batchId]?.items ?? [],
-          total: prev[batchId]?.total ?? 0,
-          page: itemPage,
-          loading: true,
-        },
-      }));
-      try {
-        const resp = await listRecordBatchItems(batchId, {
-          keyword,
-          result,
-          page: itemPage,
-          page_size: BATCH_ITEM_PAGE_SIZE,
-        });
-        // 代次不匹配 = 期间换过筛选或列表已重置：这份响应属于旧世界，丢弃。
-        if (generation !== fetchGenerationRef.current) return;
-        setBatchItems((prev) => ({
-          ...prev,
-          [batchId]: { items: resp.items, total: resp.total, page: itemPage, loading: false },
-        }));
-      } catch (err) {
-        if (generation !== fetchGenerationRef.current) return;
-        message.error(err instanceof Error ? err.message : "加载批次明细失败");
-        setBatchItems((prev) => ({
-          ...prev,
-          [batchId]: { ...(prev[batchId] as BatchItemsState), loading: false },
-        }));
-      }
-    },
-    [keyword, message, result],
+  const onBatchError = useCallback((error: string) => void message.error(error), [message]);
+  const { batchItems, fetchBatchItems } = useApplyBatchItems(
+    data,
+    keyword,
+    result,
+    expanded,
+    onBatchError,
   );
-
-  // 列表数据一变（翻页/筛选/删除后 reload），旧明细就过期：清空缓存，
-  // 已展开的批次由下面的补拉 effect 重新拉第一页。
-  // Compiler 规范：随 data 变化的重置用渲染期守卫式调整，不用 effect。
-  const [prevData, setPrevData] = useState(data);
-  if (prevData !== data) {
-    setPrevData(data);
-    setBatchItems({});
-  }
-
-  // 每个展开中的批次都必须有一份明细（首次展开 / 缓存被清后补拉）。
-  useEffect(() => {
-    for (const batchId of expanded) {
-      if (!batchItems[batchId]) void fetchBatchItems(batchId, 1);
-    }
-  }, [expanded, batchItems, fetchBatchItems]);
 
   const retry = async (record: ApplyRecord) => {
     setRetrying(record.id);

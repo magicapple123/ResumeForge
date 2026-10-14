@@ -18,7 +18,7 @@ def _detail_groups(lines: list[str]) -> tuple[list[str], list[str], list[str], s
         line = _clean_line(raw_line)
         if not line:
             continue
-        match = re.match(r"^([^：:]{1,32})\s*[:：]\s*(.+)$", line)
+        match = re.match(r"^([^：:]{1,32}?)\s*+[:：]\s*+(.+)$", line)
         if match:
             label = match.group(1).strip().lower()
             value = match.group(2).strip()

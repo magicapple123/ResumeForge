@@ -196,7 +196,16 @@ def test_export_flags_missing_and_mismatched_assets(db_session, tmp_path):
         assert edited_name in section.get("user_files_mismatched", [])
 
         # 导入这份"本来就不完整"的备份：如实提示，而不是当成一次完整恢复。
-        result = import_dataset(archive, "不完整备份", database.engine, tmp_path / "staging-import")
+        with pytest.raises(DatasetError, match="附件未通过校验"):
+            import_dataset(archive, "不完整备份", database.engine, tmp_path / "staging-strict")
+        result = import_dataset(
+            archive,
+            "不完整备份",
+            database.engine,
+            tmp_path / "staging-import",
+            allow_partial_assets=True,
+        )
+        assert result["assets_incomplete"] is True
         warnings = "\n".join(result.get("backup_asset_warnings") or [])
         assert gone_name in warnings
         assert "不完整" in warnings

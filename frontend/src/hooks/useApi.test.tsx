@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import { useApi } from "./useApi";
 
@@ -12,6 +12,24 @@ function deferred<T>() {
 }
 
 describe("useApi", () => {
+  it("keeps equivalent dependencies stable and reloads with the newest fetcher", async () => {
+    const fetcher = vi.fn(async () => "first");
+    const nextFetcher = vi.fn(async () => "second");
+    const { result, rerender } = renderHook(({ fn, key }) => useApi(fn, [key]), {
+      initialProps: { fn: fetcher, key: 1 },
+    });
+    await waitFor(() => expect(result.current.data).toBe("first"));
+    const oldReload = result.current.reload;
+    rerender({ fn: nextFetcher, key: 1 });
+    expect(nextFetcher).not.toHaveBeenCalled();
+    await act(async () => result.current.reload());
+    expect(result.current.data).toBe("second");
+    rerender({ fn: nextFetcher, key: 2 });
+    await waitFor(() => expect(nextFetcher).toHaveBeenCalledTimes(2));
+    await act(async () => oldReload());
+    expect(nextFetcher).toHaveBeenCalledTimes(2);
+  });
+
   it("does not let an older response overwrite the latest request", async () => {
     const first = deferred<string>();
     const second = deferred<string>();

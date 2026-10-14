@@ -32,6 +32,7 @@ import {
 
 test("覆盖补齐：新端点与应用壳端点都有点名", () => {
   const required = [
+    "http://x/api/dataset-scope",
     "http://x/api/tracker/stats",
     "http://x/api/tracker/page?page=1&page_size=20",
     "http://x/api/tracker",

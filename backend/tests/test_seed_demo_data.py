@@ -10,6 +10,7 @@
 
 脚本在导入时就会写库（它是一次性工具，不是库），所以这里**用子进程调用**，绝不 import。
 """
+
 from __future__ import annotations
 
 import json
@@ -19,6 +20,7 @@ import sqlite3
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -133,14 +135,12 @@ def test_every_person_and_organisation_is_marked_fictional(demo_db: Path):
 
 def test_contacts_are_obviously_placeholders(demo_db: Path):
     """联系方式必须一眼就是假的：手机号固定 0000，邮箱走 example.com 保留域。"""
-    profile = _rows(
-        demo_db, "select name, phone, email, personal_website from user_profile"
-    )[0]
+    profile = _rows(demo_db, "select name, phone, email, personal_website from user_profile")[0]
     _, phone, email, website = profile
 
     assert re.fullmatch(r"1\d{2}-0000-0000", phone), phone
     assert email.endswith("@example.com"), email
-    assert "example.com" in website, website
+    assert urlsplit(website).hostname == "example.com", website
 
 
 def test_job_links_point_at_placeholder_paths(demo_db: Path):

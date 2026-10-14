@@ -18,6 +18,21 @@
 // manager keeps owning the lifecycle while this module owns the decisions.
 
 const processIdentity = require("./process-identity");
+const net = require("net");
+
+async function backendPortOpen(manager) {
+  if (!manager.url) return false;
+  if (manager.portOpenFn) return manager.portOpenFn(manager.url);
+  const url = new URL(manager.url);
+  if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || !url.port) return true;
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: url.hostname.replace(/^\[|\]$/g, ""), port: Number(url.port) });
+    const finish = (open) => { socket.destroy(); resolve(open); };
+    socket.once("connect", () => finish(true));
+    socket.once("error", (error) => finish(error.code !== "ECONNREFUSED"));
+    socket.setTimeout(1000, () => finish(true)); // unreadable/time-out counts as unconfirmed
+  });
+}
 
 // What the backend's own command line looks like, mirrored from the launchers
 // (Get-ResumeForgeProcessPattern in scripts/ResumeForge.Common.ps1 and
@@ -29,8 +44,7 @@ const BACKEND_COMMAND_PATTERNS = ["uvicorn\\s+app\\.main:app"];
 // is still re-checked against the identity snapshot taken at spawn before the
 // tree is killed -- a pid recycled in the window between "the child died" and
 // "we noticed" must not be killed. Returns null when the snapshot is missing
-// or unreadable, in which case the handle is the only evidence we have and the
-// caller proceeds on that.
+// or unreadable. A numeric PID without identity evidence must never be killed.
 async function verifySpawnedChild(manager) {
   if (!manager.childIdentity || !Number.isInteger(manager.childIdentity.pid)) return null;
   return manager.verifyProcessFn(
@@ -47,7 +61,6 @@ async function verifySpawnedChild(manager) {
 // Resolves to { ok, reason, verified }.
 async function stopBackend(manager) {
   const child = manager.child;
-  manager.child = null;
   // Launcher mode without a record is the one case where "no handle" does not
   // mean "no backend": the bootstrap script exits after handoff, so the real
   // uvicorn can be alive with nothing left to point at it. Report it as
@@ -69,10 +82,10 @@ async function stopBackend(manager) {
       // gets the last word -- a pid recycled into someone else's process must
       // never be killed, handle or not.
       const verdict = await verifySpawnedChild(manager);
-      if (verdict && verdict.status === processIdentity.STATUS_MISMATCH) {
+      if (!verdict || verdict.status === processIdentity.STATUS_MISMATCH || verdict.status === processIdentity.STATUS_UNVERIFIABLE) {
         outcome = {
           ok: false,
-          reason: `没有停止后端：${verdict.reason}（自建子进程 pid=${child.pid}）`,
+          reason: `没有停止后端：${verdict ? verdict.reason : "缺少进程身份快照"}（自建子进程 pid=${child.pid}）`,
           verified: false,
         };
       } else if (verdict && verdict.status === processIdentity.STATUS_GONE) {
@@ -86,6 +99,10 @@ async function stopBackend(manager) {
   } catch (err) {
     outcome = { ok: false, reason: `停止后端时出错：${err}`, verified: false };
   }
+  if (outcome.ok && await backendPortOpen(manager)) {
+    outcome = { ok: false, reason: "根进程已退出，但后端端口仍可连接，无法确认后代进程已停止", verified: false };
+  }
+  if (outcome.ok) manager.child = null;
   return outcome;
 }
 

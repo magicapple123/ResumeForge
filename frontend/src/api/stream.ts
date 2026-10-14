@@ -1,6 +1,7 @@
 /** SSE 流式响应读取：用于简历生成等长任务，逐事件回调。 */
 
 import { ApiError, extractError } from "./client";
+import { datasetScopeHeaders } from "./datasetScope";
 
 export interface SSEParserState {
   buffer: string;
@@ -97,7 +98,7 @@ export async function consumeSSE<T>(
 ): Promise<void> {
   const resp = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: datasetScopeHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
     signal,
   });

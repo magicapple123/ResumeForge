@@ -4,11 +4,15 @@
 逐字节一致。用户显式指定了一个文件夹后，导出端点在返回下载响应的同时把同一份产物
 再写一份到那里——写失败只记日志，**绝不阻断导出**（best-effort）。
 """
+
 import logging
 import os
+import secrets
 import subprocess
 import sys
-import time
+
+from .data_backup.asset_safety import safe_asset_name
+from .data_backup.paths import BackupError
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +53,7 @@ def validate_directory(path: str) -> str | None:
         return "目录不存在"
     if not os.path.isdir(directory):
         return "不是目录"
-    probe_path = os.path.join(directory, _PROBE_FILENAME)
+    probe_path = os.path.join(directory, f"{_PROBE_FILENAME}-{secrets.token_hex(8)}")
     try:
         with open(probe_path, "x", encoding="utf-8"):
             pass
@@ -59,7 +63,7 @@ def validate_directory(path: str) -> str | None:
         os.remove(probe_path)
     except OSError:
         # 能创建就说明可写；删不掉只留一个探针小文件，不该因此判成不可写。
-        logger.warning("导出目录写探针文件删除失败：%s", probe_path)
+        logger.warning("导出目录写探针文件清理失败，已保留空探针；导出目录可写")
     return None
 
 
@@ -70,20 +74,23 @@ def save_artifact(content: bytes, directory: str, base_name: str) -> str:
     上抛，由调用方做 best-effort 处理（记日志、不阻断导出）。
     """
     directory = directory.strip()
-    base_name = os.path.basename(base_name)  # 文件名来自服务端，仍防御一次路径拼接
-    target = os.path.join(directory, base_name)
-    if os.path.exists(target):
-        stem, ext = os.path.splitext(base_name)
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        candidate = f"{stem}_{timestamp}{ext}"
-        counter = 1
-        while os.path.exists(os.path.join(directory, candidate)):
-            candidate = f"{stem}_{timestamp}_{counter}{ext}"
-            counter += 1
+    try:
+        base_name = safe_asset_name(base_name)
+    except BackupError as exc:
+        raise ValueError("导出文件名不安全，未写入保存目录") from exc
+    stem, ext = os.path.splitext(base_name)
+    for attempt in range(100):
+        candidate = base_name if attempt == 0 else f"{stem}_{secrets.token_hex(8)}{ext}"
         target = os.path.join(directory, candidate)
-    with open(target, "wb") as handle:
-        handle.write(content)
-    return target
+        try:
+            # The user explicitly selected this directory. Only a safe basename is appended;
+            # exclusive creation keeps even a last-moment arrival byte-for-byte unchanged.
+            with open(target, "xb") as handle:
+                handle.write(content)
+            return target
+        except FileExistsError:
+            continue
+    raise OSError("保存目录文件名冲突过多，请稍后重试")
 
 
 class FolderPickerUnavailable(RuntimeError):
@@ -112,7 +119,9 @@ def pick_directory() -> str | None:
         raise FolderPickerUnavailable("无法打开文件夹选择器，请重试") from exc
     if proc.returncode != 0:
         # 最常见原因：便携运行时未带 tkinter（ModuleNotFoundError）。
-        logger.warning("文件夹选择器退出码 %s：%s", proc.returncode, (proc.stderr or "").strip()[:200])
+        logger.warning(
+            "文件夹选择器退出码 %s：%s", proc.returncode, (proc.stderr or "").strip()[:200]
+        )
         raise FolderPickerUnavailable("无法打开文件夹选择器，请重试")
     selected = (proc.stdout or "").strip()
     return selected or None

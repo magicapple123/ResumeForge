@@ -46,7 +46,6 @@ REDACT_FAILURE_PLACEHOLDER = "[日志脱敏失败，异常文本已丢弃]"
 
 # Pydantic v2 的错误消息形态：``input_value=<repr>, input_type=<type>``。
 # repr 不会跨行（字符串里的换行会被转义成 \n），单行非贪婪到 ", input_type=" 即可。
-_INPUT_VALUE_RE = re.compile(r"input_value=(?P<value>.*?), input_type=")
 
 # base64 图片/照片 data URL：长 base64 载荷整段遮掉。
 _DATA_URL_RE = re.compile(r"data:(?:image|application)/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]{24,}")
@@ -70,16 +69,34 @@ def redact_sensitive_text(text: str) -> str:
     返回与输入等价的文本（不无损、不重排）。
     """
 
-    def _mask_input_value(match: re.Match[str]) -> str:
-        return f"input_value='{REDACTED_PLACEHOLDER}', input_type="
-
-    cleaned = _INPUT_VALUE_RE.sub(_mask_input_value, text)
+    cleaned = _redact_input_values(text)
     cleaned = _DATA_URL_RE.sub(f"data:image/*;base64,{MASK}", cleaned)
     cleaned = _API_KEY_RE.sub("sk-" + MASK, cleaned)
     cleaned = _BEARER_RE.sub("Bearer " + MASK, cleaned)
     # 赋值形态只遮值、保留键名与分隔符（排障时仍知道是哪个字段敏感）。
     cleaned = _SECRET_ASSIGN_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{MASK}", cleaned)
     return cleaned
+
+
+def _redact_input_values(text: str) -> str:
+    """Consume each line once; repeated unmatched markers cannot trigger regex rescans."""
+    output: list[str] = []
+    for line in text.splitlines(keepends=True):
+        offset = 0
+        while True:
+            start = line.find("input_value=", offset)
+            if start < 0:
+                output.append(line[offset:])
+                break
+            end = line.find(", input_type=", start + len("input_value="))
+            if end < 0:
+                output.append(line[offset:])
+                break
+            output.append(line[offset:start])
+            output.append(f"input_value='{REDACTED_PLACEHOLDER}'")
+            output.append(", input_type=")
+            offset = end + len(", input_type=")
+    return "".join(output)
 
 
 def log_exception_redacted(logger: logging.Logger, msg: str, *args: object) -> None:

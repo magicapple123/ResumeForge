@@ -13,8 +13,8 @@
 
 import { ReloadOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, List, Space, Tag, Typography } from "antd";
-import { useCallback, useEffect, useState } from "react";
 import { getBackupStatus } from "../../api/settings";
+import { useApi } from "../../hooks/useApi";
 import type { BackupStatus } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import LoadingBlock from "../common/LoadingBlock";
@@ -28,25 +28,7 @@ function statusMeta(status: BackupStatus): { label: string; color: string } {
 }
 
 export default function BackupStatusCard() {
-  const [status, setStatus] = useState<BackupStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setStatus(await getBackupStatus());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "读取备份状态失败");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { data: status, loading, error, reload } = useApi(getBackupStatus);
 
   const meta = status ? statusMeta(status) : null;
 
@@ -59,7 +41,7 @@ export default function BackupStatusCard() {
           size="small"
           type="text"
           icon={<ReloadOutlined />}
-          onClick={() => void load()}
+          onClick={() => void reload()}
           aria-label="刷新备份状态"
         />
       }

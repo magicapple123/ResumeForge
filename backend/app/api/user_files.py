@@ -4,6 +4,7 @@
 ``disk_name``，拼上副本目录后在返回/打开前做 resolve 校验——最终路径必须仍落在
 副本目录内，否则按 404 处理（防穿越守卫，对被篡改的行也成立）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -56,12 +57,7 @@ def list_user_files(
     if keyword.strip():
         query = query.filter(UserFile.original_name.like(f"%{keyword.strip()}%"))
     total = query.count()
-    rows = (
-        query.order_by(UserFile.id.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    rows = query.order_by(UserFile.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
     return {"items": [_file_out(row) for row in rows], "total": total}
 
 
@@ -129,8 +125,12 @@ def open_in_system(file_id: int, db: Session = Depends(get_db)) -> dict:
         else:
             subprocess.run(["xdg-open", str(path)], check=True, timeout=15)
     except Exception as exc:  # noqa: BLE001 - 对外只给一句中文原因
-        logger.warning("用系统程序打开副本失败 id=%s: %s", file_id, exc)
-        raise HTTPException(status_code=400, detail=f"调用系统程序打开失败：{exc}") from exc
+        logger.warning(
+            "用系统程序打开副本失败 id=%s error_type=%s", int(file_id), type(exc).__name__
+        )
+        raise HTTPException(
+            status_code=400, detail="调用系统程序打开失败，请检查文件关联或系统权限"
+        ) from exc
     return {"ok": True}
 
 
@@ -156,6 +156,10 @@ def reveal_in_folder(file_id: int, db: Session = Depends(get_db)) -> dict:
         else:
             subprocess.Popen(["xdg-open", str(path.parent)])  # noqa: S606
     except Exception as exc:  # noqa: BLE001 - 对外只给一句中文原因
-        logger.warning("打开副本所在文件夹失败 id=%s: %s", file_id, exc)
-        raise HTTPException(status_code=400, detail=f"打开所在文件夹失败：{exc}") from exc
+        logger.warning(
+            "打开副本所在文件夹失败 id=%s error_type=%s", int(file_id), type(exc).__name__
+        )
+        raise HTTPException(
+            status_code=400, detail="打开所在文件夹失败，请检查文件是否存在及系统权限"
+        ) from exc
     return {"ok": True}

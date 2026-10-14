@@ -35,7 +35,7 @@ function sha256Hex(content) {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
-function loadUpdater({ fetchImpl, appOverrides = {}, dialogResponses = [0, 0] } = {}) {
+function loadUpdater({ fetchImpl, appOverrides = {}, dialogResponses = [0, 0], platform = "win32" } = {}) {
   const events = { dialogCalls: [], quitCalls: [], fetchInits: [] };
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "rf-updater-vm-"));
 
@@ -58,7 +58,7 @@ function loadUpdater({ fetchImpl, appOverrides = {}, dialogResponses = [0, 0] } 
 
   const sandbox = {
     console,
-    process,
+    process: { ...process, platform },
     Buffer,
     Promise,
     Date,
@@ -97,8 +97,8 @@ function releasePayload(tag) {
   return {
     tag_name: tag,
     assets: [
-      { name: assetName, browser_download_url: `https://github.com/x/${assetName}` },
-      { name: `${assetName}.sha256`, browser_download_url: `https://github.com/x/${assetName}.sha256` },
+      { name: assetName, browser_download_url: `https://github.com/magicapple123/ResumeForge/releases/download/${tag}/${assetName}` },
+      { name: `${assetName}.sha256`, browser_download_url: `https://github.com/magicapple123/ResumeForge/releases/download/${tag}/${assetName}.sha256` },
     ],
   };
 }
@@ -139,6 +139,63 @@ test("fetch init carries an AbortSignal and timeoutSignal() aborts for real", as
     await new Promise((resolve) => setTimeout(resolve, 150));
     assert.strictEqual(signal.aborted, true, "timeoutSignal must abort after its timeout");
   } finally {
+    fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("update metadata requires an exact stable tag and release-asset source", async () => {
+  const invalidCases = [
+    {
+      release: { tag_name: "v0.19.0-beta.1", assets: [] },
+      error: /exact stable semver/i,
+    },
+  ];
+  for (const item of invalidCases) {
+    const loaded = loadUpdater({
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => item.release,
+        body: null,
+      }),
+    });
+    try {
+      if (item.error) {
+        await assert.rejects(() => loaded.exports.checkAndOfferUpdate(null), item.error);
+      } else {
+        await loaded.exports.checkAndOfferUpdate(null);
+        assert.strictEqual(loaded.events.dialogCalls.length, 0, "incomplete release must be skipped");
+      }
+    } finally {
+      fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
+    }
+  }
+});
+
+test("unsupported desktop platforms never fetch or execute the Windows installer", async () => {
+  for (const platform of ["darwin", "linux"]) {
+    const loaded = loadUpdater({ platform, fetchImpl: async () => assert.fail("no NSIS network on this platform") });
+    try {
+      await loaded.exports.checkAndOfferUpdate(null, { installAndQuit: () => assert.fail("no NSIS install") });
+      assert.strictEqual(loaded.events.dialogCalls.length, 0);
+    } finally {
+      fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
+    }
+  }
+});
+
+test("download rejects an actual output IO error without waiting forever for drain", async () => {
+  const loaded = loadUpdater({ fetchImpl: async () => installerResponse("synthetic installer".repeat(5000)) });
+  let watchdog;
+  try {
+    const download = loaded.exports.downloadToFile("https://github.com/x/fake.exe", path.join(loaded.tmpRoot, "missing", "fake.exe"));
+    await assert.rejects(
+      Promise.race([download, new Promise((_, reject) => { watchdog = setTimeout(() => reject(new Error("IO watchdog exceeded")), 2000); })]),
+      /ENOENT/,
+    );
+  } finally {
+    clearTimeout(watchdog);
     fs.rmSync(loaded.tmpRoot, { recursive: true, force: true });
   }
 });
@@ -235,7 +292,8 @@ test("checksum mismatch: no replacement, no install step", async () => {
       () => loaded.exports.checkAndOfferUpdate(null, { installAndQuit: () => {} }),
       /checksum mismatch/i,
     );
-    const installerPath = path.join(loaded.tmpRoot, "resumeforge-update", "ResumeForge-Setup-0.19.0.exe");
+    const updateDir = fs.readdirSync(loaded.tmpRoot).find((name) => name.startsWith("resumeforge-update-"));
+    const installerPath = path.join(loaded.tmpRoot, updateDir, "ResumeForge-Setup-0.19.0.exe");
     assert.strictEqual(fs.existsSync(installerPath), false,
       "a failed checksum must never replace/publish the installer");
     assert.strictEqual(fs.existsSync(`${installerPath}.part`), false,
@@ -271,9 +329,10 @@ test("checksum match: verified payload is published and installAndQuit gets its 
     await loaded.exports.checkAndOfferUpdate(null, {
       installAndQuit: (installerPath) => installed.push(installerPath),
     });
-    const installerPath = path.join(loaded.tmpRoot, "resumeforge-update", "ResumeForge-Setup-0.19.0.exe");
+    const installerPath = installed[0];
     assert.strictEqual(installed.length, 1, "installAndQuit must be called exactly once");
-    assert.strictEqual(installed[0], installerPath);
+    assert.strictEqual(path.basename(installerPath), "ResumeForge-Setup-0.19.0.exe");
+    assert.strictEqual(path.dirname(path.dirname(installerPath)), loaded.tmpRoot);
     assert.strictEqual(fs.readFileSync(installerPath, "utf-8"), content,
       "the published installer must contain exactly the verified payload");
     assert.strictEqual(fs.existsSync(`${installerPath}.part`), false,

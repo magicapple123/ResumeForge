@@ -118,8 +118,10 @@ async def _stream_message_events(
                     metadata["sources"] = sources
                     model_context.append(web_context(sources, numberer))
                 except AssistantSearchError as exc:
-                    metadata["search_error"] = str(exc)
-                    model_context.append(f"[联网搜索状态]\n{exc}，请勿声称已获得联网资料。")
+                    metadata["search_error"] = exc.public_message
+                    model_context.append(
+                        f"[联网搜索状态]\n{exc.public_message}，请勿声称已获得联网资料。"
+                    )
             update_message_context(user_message_id, metadata, factory=factory)
             yield format_sse(
                 {
@@ -350,18 +352,18 @@ async def _stream_message_events(
             usage=budget.usage_summary(),
         )
         raise
-    except LLMError as exc:
-        logger.warning("AI 助手模型调用失败：%s", exc)
+    except LLMError:
+        logger.warning("AI 助手模型调用失败（用户可见错误已固定脱敏）")
         budget.record_round(provider)
         finish_assistant_message(
             assistant_message_id,
             content="".join(parts),
             status="error",
-            error=str(exc),
+            error="模型服务暂时无法处理本次请求，请稍后重试",
             factory=factory,
             usage=budget.usage_summary(),
         )
-        yield format_sse({"type": "error", "message": str(exc)})
+        yield format_sse({"type": "error", "message": "模型服务暂时无法处理本次请求，请稍后重试"})
     except Exception:  # noqa: BLE001 - 流式响应必须转换内部异常
         logger.exception("AI 助手流式回复发生内部错误")
         message = "回复过程中发生内部错误，请查看后端日志"
@@ -409,7 +411,7 @@ async def stream_message_events(
     try:
         lease = dataset_scope.acquire_lease("assistant-stream")
     except DatasetScopeError as exc:
-        yield format_sse({"type": "error", "message": str(exc)})
+        yield format_sse({"type": "error", "message": exc.public_message})
         return
     # 租约在手：身份不会再变（切换会被排空挡住），此刻冻结的就是流全程的库。
     factory = dataset_scope.frozen_session_factory()

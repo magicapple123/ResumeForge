@@ -1,6 +1,7 @@
 /** 通用数据加载 Hook：管理 loading / error / data 三态。 */
 import { DependencyList, useCallback, useEffect, useRef, useState } from "react";
 import { isCancellation } from "../api/client";
+import { useDependencyVersion } from "./useDependencyVersion";
 
 /**
  * fetcher 可选地接收一个 AbortSignal：被新请求替换或组件卸载时会被中止，让底层
@@ -18,6 +19,8 @@ interface ApiState<T> {
 }
 
 export function useApi<T>(fetcher: ApiFetcher<T>, deps: DependencyList = []): ApiState<T> {
+  const dependencyVersion = useDependencyVersion(deps);
+  const activeDependencyVersion = useRef(dependencyVersion);
   const [data, setDataState] = useState<T>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,9 +34,11 @@ export function useApi<T>(fetcher: ApiFetcher<T>, deps: DependencyList = []): Ap
   const fetcherRef = useRef(fetcher);
   useEffect(() => {
     fetcherRef.current = fetcher;
+    activeDependencyVersion.current = dependencyVersion;
   });
 
   const reload = useCallback(async () => {
+    if (dependencyVersion !== activeDependencyVersion.current) return;
     const currentRequest = ++requestVersion.current;
     // 版本守卫基础上对被替换的旧请求 abort()：慢请求不再占用连接、也不会迟到覆盖。
     abortRef.current?.abort();
@@ -52,8 +57,7 @@ export function useApi<T>(fetcher: ApiFetcher<T>, deps: DependencyList = []): Ap
     } finally {
       if (currentRequest === requestVersion.current) setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/use-memo -- 依赖列表同样是调用方传参，无法写成字面量
-  }, deps);
+  }, [dependencyVersion]);
 
   useEffect(() => {
     void reload();

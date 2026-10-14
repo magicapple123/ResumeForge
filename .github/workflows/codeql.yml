@@ -1,9 +1,11 @@
 name: CodeQL
 
-# 静态安全扫描（SAST）。PR 级扫描交给 ruff/eslint/tsc，这份 weekly 扫描专捕
-# 安全语义类问题（注入、路径穿越、不安全的反序列化等），不必挂在每次 PR 上拖速度。
+# 静态安全扫描（SAST）：每个候选提交/PR 都分析，定时扫描用于新增规则的复核。
 # 结果出现在仓库的 Security → Code scanning 里，按 GitHub 默认策略告警。
 on:
+  push:
+    branches: [main]
+  pull_request:
   schedule:
     # 每周一 03:20 UTC（北京 11:20）：避开整点 runner 高峰。
     - cron: "20 3 * * 1"
@@ -11,6 +13,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:

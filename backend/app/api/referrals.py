@@ -5,7 +5,6 @@
 """
 
 import logging
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -23,6 +22,8 @@ from ..schemas.referral import (
     ReferralUpdate,
 )
 from ..services import trash
+from ..services.data_backup.asset_safety import safe_asset_path
+from ..services.data_backup.paths import BackupError
 from ..services.referral_service import (
     create_referral,
     delete_referral,
@@ -86,12 +87,11 @@ async def upload_referral_image(file: UploadFile = File(...), db: Session = Depe
 @router.get("/images/{filename}")
 def read_referral_image(filename: str, db: Session = Depends(get_db)):
     """读取内推备注图片（只允许目录内的文件，防路径穿越）。"""
-    safe_name = Path(filename).name
-    if safe_name in {"", ".", ".."}:
-        raise HTTPException(status_code=404, detail="图片不存在")
-    directory = referral_images_dir(db.get_bind()).resolve()
-    path = (directory / safe_name).resolve()
-    if path.parent != directory or not path.is_file():
+    try:
+        path = safe_asset_path(referral_images_dir(db.get_bind()), filename)
+    except BackupError as exc:
+        raise HTTPException(status_code=404, detail="图片不存在") from exc
+    if not path.is_file():
         raise HTTPException(status_code=404, detail="图片不存在")
     media_type = _IMAGE_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
     return FileResponse(path, media_type=media_type)

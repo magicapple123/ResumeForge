@@ -11,5 +11,10 @@
   "devDependencies": {
     "electron": "^44.7.0",
     "electron-builder": "^26.17.0"
+  },
+  "overrides": {
+    "@electron/get@3.1.0": {
+      "global-agent": "4.1.3"
+    }
   }
 }

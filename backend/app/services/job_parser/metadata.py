@@ -18,6 +18,12 @@ from .section_constants import (
     _UPDATED_DATE_RE,
 )
 
+_ORG_DIRECTION_RE = re.compile(
+    r"(?:客户端|服务端|研发|生产|制造|销售|市场|运营|门店|科室|"
+    r"client|server|engineering|production|sales|marketing|operations)",
+    re.IGNORECASE,
+)
+
 
 def _looks_like_compact_recruitment_metadata(value: str) -> bool:
     """判断是否为官网压缩在一行的地点、类型、类别、人数和日期元数据。"""
@@ -186,14 +192,14 @@ def _is_additional_preamble_line(line: str) -> bool:
         re.IGNORECASE,
     ):
         return True
-    return bool(
-        re.fullmatch(
-            r"[^。！？!?]{1,32}\s*[-—–/]\s*"
-            r"(?:客户端|服务端|研发|生产|制造|销售|市场|运营|门店|科室|"
-            r"client|server|engineering|production|sales|marketing|operations)",
-            candidate,
-            re.IGNORECASE,
-        )
+    separator = max(candidate.rfind(character) for character in "-—–/")
+    if separator < 1:
+        return False
+    prefix = candidate[:separator].rstrip()
+    return (
+        1 <= len(prefix) <= 32
+        and not any(character in "。！？!?" for character in prefix)
+        and bool(_ORG_DIRECTION_RE.fullmatch(candidate[separator + 1 :].strip()))
     )
 
 

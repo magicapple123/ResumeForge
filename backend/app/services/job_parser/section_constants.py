@@ -6,7 +6,7 @@ _SECTION_NUMBER_PREFIX = r"(?:(?:第\s*)?(?:\d{1,3}|[一二三四五六七八九
 # 招聘官网常把章节名渲染为 Markdown 标题或视觉标签。将这些展示包装从
 # 实际章节名中剥离，既能覆盖复制文本，又不会放宽普通岗位标题的识别条件。
 _SECTION_HEADING_PREFIX = r"(?:#{1,6}\s*)?(?:[【［\[]\s*)?"
-_SECTION_HEADING_SUFFIX = r"\s*(?:[】］\]])?"
+_SECTION_HEADING_SUFFIX = r"(?:\s*+[】］\]])?"
 # 中文的"职责类 / 要求类"章节名是个**开放集合**：只靠枚举复合词永远会漏，而漏掉一个词的
 # 表现不是"少识别一节标题"，是**那一整节正文被丢掉**——正文是技能标签、匹配分析、简历定制、
 # 面试准备的共同输入，丢了它这条链路全部空转。
@@ -47,7 +47,7 @@ _REQUIREMENTS_HEADINGS = (
     r"preferred\s+qualifications|must\s+have|"
     rf"who\s+you\s+are|preferred\s+skills|qualifications\s*(?:&|and)\s+skills|{_REQUIREMENTS_MORPHS})"
 )
-_SECTION_SEPARATOR = r"(?:\s*[:：]\s*|\s+|$)"
+_SECTION_SEPARATOR = r"(?:\s*+[:：]\s*+|\s++|$)"
 
 _DESCRIPTION_HEADING_RE = re.compile(
     rf"^{_SECTION_HEADING_PREFIX}{_SECTION_NUMBER_PREFIX}{_DESCRIPTION_HEADINGS}"
@@ -73,7 +73,7 @@ _ADDITIONAL_HEADING_RE = re.compile(
     re.IGNORECASE,
 )
 _INLINE_SECTION_RE = re.compile(
-    rf"(?:^|(?<=[。；，,;！？!?.\s]))\s*{_SECTION_HEADING_PREFIX}{_SECTION_NUMBER_PREFIX}"
+    rf"(?:^|(?<=[。；，,;！？!?.])|(?<=\s)(?=\S))\s*+{_SECTION_HEADING_PREFIX}{_SECTION_NUMBER_PREFIX}"
     rf"(?P<heading>{_DESCRIPTION_HEADINGS}|{_REQUIREMENTS_HEADINGS}|{_ADDITIONAL_HEADINGS})"
     rf"{_SECTION_HEADING_SUFFIX}{_SECTION_SEPARATOR}",
     re.IGNORECASE,
@@ -81,22 +81,25 @@ _INLINE_SECTION_RE = re.compile(
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 _JOB_ID_RE = re.compile(
-    r"^(?:(?:职位|岗位|Job|Position)\s*(?:ID|编号|编码)|Req(?:uisition)?\s*ID)\s*[:：#]?\s*\S+",
+    r"^(?:(?:职位|岗位|Job|Position)\s*+(?:ID|编号|编码)|Req(?:uisition)?\s*+ID)\s*+[:：#]?\s*+\S+",
     re.IGNORECASE,
 )
 _SALARY_RE = re.compile(
-    r"(?:薪资|薪酬|工资|月薪|年薪)?\s*(?:面议|可面议|待定|保密)|"
-    r"(?:[$€£￥¥]\s*)?\d+(?:\.\d+)?\s*(?:[kKwW万千元])?\s*"
-    r"(?:-|~|～|—|–|至)\s*(?:[$€£￥¥]\s*)?\d+(?:\.\d+)?\s*(?:[kKwW万千元])"
-    r"(?:\s*/\s*(?:月|年|天|日|小时))?(?:\s*[·xX*]\s*\d{1,2}\s*薪)?|"
-    r"(?:薪资|薪酬|工资|月薪|年薪)?\s*(?:[$€£￥¥]\s*)?\d+(?:\.\d+)?\s*(?:[kKwW万千元])\s*"
-    r"(?:起|以上|/\s*(?:月|年|天|日|小时)|(?:\s*[·xX*]\s*\d{1,2}\s*薪)?(?=\s*(?:$|[|｜·,，;；/\\])))|"
+    # Bound numeric tokens and only start at a whitespace-run boundary. This prevents
+    # retrying a failed number/whitespace scan at every character of an untrusted line.
+    r"(?<![\d\s])\s*+(?:"
+    r"(?:薪资|薪酬|工资|月薪|年薪)?\s*+(?:面议|可面议|待定|保密)|"
+    r"(?:[$€£￥¥]\s*+)?\d{1,12}(?:\.\d{1,4})?\s*+(?:[kKwW万千元])?\s*+"
+    r"(?:-|~|～|—|–|至)\s*+(?:[$€£￥¥]\s*+)?\d{1,12}(?:\.\d{1,4})?\s*+(?:[kKwW万千元])"
+    r"(?:\s*+/\s*+(?:月|年|天|日|小时))?(?:\s*+[·xX*]\s*+\d{1,2}\s*+薪)?|"
+    r"(?:薪资|薪酬|工资|月薪|年薪)?\s*+(?:[$€£￥¥]\s*+)?\d{1,12}(?:\.\d{1,4})?\s*+(?:[kKwW万千元])\s*+"
+    r"(?:起|以上|/\s*+(?:月|年|天|日|小时)|(?:\s*+[·xX*]\s*+\d{1,2}\s*+薪)?(?=\s*+(?:$|[|｜·,，;；/\\])))|"
     # 卡片常只显示单个数字（如 ``30K`` 或 ``$120K``），此分支要求有
     # 明确的金额单位，避免把普通年份/编号误当薪资。
-    r"(?:[$€£￥¥]\s*)?\d+(?:\.\d+)?\s*[kKwW万千元](?:\s*[·xX*]\s*\d{1,2}\s*薪)?"
+    r"(?:[$€£￥¥]\s*+)?\d{1,12}(?:\.\d{1,4})?\s*+[kKwW万千元](?:\s*+[·xX*]\s*+\d{1,2}\s*+薪)?)"
 )
 _PUBLISHED_DATE_RE = re.compile(
-    r"(?:发布于|发布日期?|发布时间|posted\s+date|date\s+posted|published)\s*[:：]?\s*"
+    r"(?:发布于|发布日期?|发布时间|posted\s++date|date\s++posted|published)\s*+[:：]?\s*+"
     r"(?P<date>\d{4}(?:[./年-]\d{1,2})?(?:[./月-]\d{1,2}日?)?|"
     r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
     r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|"
@@ -104,7 +107,7 @@ _PUBLISHED_DATE_RE = re.compile(
     re.IGNORECASE,
 )
 _UPDATED_DATE_RE = re.compile(
-    r"^(?:更新于|更新日期|更新时间|updated|last\s+updated)\s*[:：]?\s*\S+",
+    r"^(?:更新于|更新日期|更新时间|updated|last\s++updated)\s*+[:：]?\s*+\S+",
     re.IGNORECASE,
 )
 _BARE_DATE_RE = re.compile(r"(?<!\d)(?P<date>20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})(?!\d)")
