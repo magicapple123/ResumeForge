@@ -9,10 +9,12 @@
 test_apply_browser_manager_client.py。fakes 与 ``_transport``/``_manager``/
 ``_orphan_browser`` 留在本文件。）
 """
+
 from pathlib import Path
 
 import httpx
 import pytest
+from app.config import DATA_DIR
 from app.services.browser.browser_manager import (
     BrowserError,
     BrowserManager,
@@ -111,10 +113,15 @@ def _manager(tmp_path: Path, **overrides) -> tuple[BrowserManager, FakePopen]:
     return BrowserManager(**kwargs), popen
 
 
-def test_default_profile_dir_lives_under_backend_data():
+def test_default_profile_dir_follows_the_configured_data_dir():
+    """登录态必须落在 config.DATA_DIR 下（打包形态跟随 RF_DATA_DIR 到用户目录）。
+
+    硬编码 ``BACKEND_DIR/"data"`` 会把登录态写进安装目录，升级安装时被整体删除
+    （ADR-0004 的核心不变量）。DATA_DIR 与 RF_DATA_DIR 的联动见 test_data_dir_env.py。
+    """
     path = default_profile_dir()
 
-    assert path.name == "browser-profile"
+    assert path == DATA_DIR / "browser-profile"
     assert path.parent.name == "data"
 
 

@@ -24,6 +24,7 @@ const { makeTempRoot, sha256, writeRel, relInventory, hashAll } = require("./tes
 const {
   DATABASE_FILENAME,
   MARKER_FILENAME,
+  MIGRATED_AWAY_FILENAME,
   detectMigrationState,
   performMigration,
   maybeMigrateUserData,
@@ -145,12 +146,16 @@ test("migration success: full copy verified, marker written, legacy copy untouch
     ]);
 
     // The new location holds exactly the legacy file set, byte-identical
-    // (plus the marker, which is not part of the migrated content).
+    // (plus the marker, which is not part of the migrated content; the legacy
+    // dir in turn gains the archival marker, which is not user content).
+    const legacyInventory = relInventory(oldDataDir).filter(
+      (rel) => rel !== MIGRATED_AWAY_FILENAME,
+    );
     assert.deepStrictEqual(
       relInventory(newDataDir).filter((rel) => rel !== MARKER_FILENAME),
-      relInventory(oldDataDir),
+      legacyInventory,
     );
-    for (const rel of relInventory(oldDataDir)) {
+    for (const rel of legacyInventory) {
       assert.strictEqual(
         sha256(path.join(newDataDir, rel)),
         sha256(path.join(oldDataDir, rel)),
@@ -163,6 +168,15 @@ test("migration success: full copy verified, marker written, legacy copy untouch
     assert.strictEqual(marker.migratedAt, FIXED_NOW);
     assert.strictEqual(marker.from, oldDataDir);
     assert.strictEqual(marker.to, newDataDir);
+
+    // Archival marker inside the LEGACY dir: the NSIS rescue hook reads it on the
+    // next upgrade to tell "already migrated" from "still the live data".
+    const away = JSON.parse(
+      fs.readFileSync(path.join(oldDataDir, MIGRATED_AWAY_FILENAME), "utf-8"),
+    );
+    assert.strictEqual(away.migratedAt, FIXED_NOW);
+    assert.strictEqual(away.to, newDataDir);
+    assert.match(away.backup, /pre-migration/, "the marker must point at the backup");
 
     // Backup sits under the user-writable tree (sibling of the data dir), NOT
     // inside the install payload where a read-only install would fail (RR-06).
@@ -177,15 +191,25 @@ test("migration success: full copy verified, marker written, legacy copy untouch
       false,
       "the backup must not land next to the (possibly read-only) legacy dir",
     );
-    assert.deepStrictEqual(relInventory(backupDir).sort(), relInventory(oldDataDir).sort());
+    // Backup == the legacy tree as it was BEFORE the migration: it must not carry
+    // the archival marker (written only after a successful migration).
+    assert.deepStrictEqual(
+      relInventory(backupDir).sort(),
+      relInventory(oldDataDir)
+        .filter((rel) => rel !== MIGRATED_AWAY_FILENAME)
+        .sort(),
+    );
     assert.strictEqual(
       fs.readdirSync(path.dirname(newDataDir)).filter((n) => n.includes(".migrating-")).length,
       0,
       "no temp dir may survive a successful migration",
     );
 
-    // The legacy copy is untouched (ADR: never cleaned by the migration).
-    assert.deepStrictEqual(hashAll(oldDataDir), legacyBefore);
+    // The legacy copy is untouched apart from the archival marker the migration is
+    // required to leave behind (ADR: nothing is ever cleaned up here).
+    const legacyAfter = hashAll(oldDataDir);
+    const { [MIGRATED_AWAY_FILENAME]: _awayMarker, ...legacyContent } = legacyAfter;
+    assert.deepStrictEqual(legacyContent, legacyBefore);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

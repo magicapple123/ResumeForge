@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### Added
+
+### Fixed
+
+### Changed
+
+## 1.0.0 - 2026-10-14
+
 ### Security & Reliability
 
 - 简历导出 GET/POST 在读取私人简历和执行保存目录探针前校验回环直连与跨站来源；非回环、非回环 Origin 或 `Sec-Fetch-Site: cross-site` 请求现在返回 403。保存位置只能由后端本机原生文件夹选择器设置、校验与持久化；HTTP 设置接口拒绝客户端提交的任意路径并只接受恢复默认操作。演示接口自检使用明确的本机测试客户端，并新增路径输入拒绝、选择器校验/持久化、导出来源与兼容性回归测试。
@@ -22,6 +30,9 @@
 - 桌面更新器校验稳定版本、平台和发布资产来源；桌面迁移在缺少 SQLite 一致快照能力时 fail-closed。
 - 新增交付存档独立分页检索和下载入口，原简历删除后仍可查找；页头数据集切换后旧表单保留草稿并拒绝串写。恢复解压预算可用 `MAX_BACKUP_UNCOMPRESSED_MB` 调整（默认 4096 MB）。
 - 桌面下载 IO 错误不再挂起，子进程异步启动失败有明确终态；根进程退出但端口仍存活时阻止更新安装。启动页仅使用受控本地图标，并兼容 asar 排除构建资源时的 extraResources 路径。
+- **升级安装不再丢旧版用户数据（1.0.0 发布前阻断项）。** 最早发布的 Windows 安装版（ResumeForge-Setup-0.18.0.exe）把数据库、附件与备份写在安装目录的 `resources/payload/backend/data` 里；NSIS 原地升级会先执行旧版卸载器（`/S /KEEP_APP_DATA --updated`），而它把整个安装目录搬进临时目录再删除——用户数据在"新壳的 ADR-0004 迁移流程还没机会运行"之前就已消失，首启只会在用户目录静默新建一份空库。现在安装器在触碰旧版本之前先把这份数据复制到自己的临时目录并**逐文件校验字节数**（应用仍在运行、或复制校验失败，都会中止安装并保证旧数据原样保留、给出可见说明），安装完成后再放回**新** payload 的同名位置，交给既有迁移流程弹窗确认、先备份再搬进 `%APPDATA%\ResumeForge\data`。目标位置已有数据库时绝不覆盖；旧位置带应用写入的「已迁移走」标记（`migrated-away.json`，迁移成功后由 `desktop/lib/data-migration.js` 写入旧数据目录）时整体空转。判据只用安装目录内的文件——安装器不去猜应用的 userData 路径（`%APPDATA%` 下的库可能属于同机另一套安装，桌面壳也支持 `--user-data-dir`）。实现为 `desktop/nsis/legacy-data-rescue.nsh`（整文件以 `!ifndef BUILD_UNINSTALLER` 包住、UTF-8 BOM），守卫测试 `desktop/scripts/test-nsis-rescue.js`；真实「0.18.0 安装版 → 1.0.0」升级演练为零失败。
+- **投递浏览器与网申浏览器的登录态目录改为跟随数据目录（`RF_DATA_DIR`）。** 此前两处硬编码 `BACKEND_DIR/"data"`：打包形态下等于安装目录内的 payload 路径，升级安装会把浏览器登录态一并清掉；现在与数据库、附件一致地落在数据目录下（控制台/开发形态没有 `RF_DATA_DIR`，行为与从前逐字节一致），旧位置里的登录态由上面的抢救链一并带回。测试见 `backend/tests/test_data_dir_env.py` 与 `test_apply_browser_manager.py`。
+- 本地构建的 Windows 安装包开始生成校验和 sidecar：`scripts/Build-Desktop.ps1 -Target win` 按 CI 与桌面更新器接受的格式（`<hex>`＋两个空格＋文件名，ASCII、无 coreutils 的 `*` 前缀）写 `ResumeForge-Setup-<版本>.exe.sha256`；0.18.0 发布包里 sidecar 的 `*` 格式会被 1.0.0 的更新器判为非法格式而拒绝更新。同一脚本装配 payload 的解包步骤固定用系统 bsdtar、不再信任 PATH 里的 `tar`（Git for Windows / MSYS 的 GNU tar 会把 `D:\...` 当成远端主机名直接失败），与运行时解包同一口径。
 
 ### Added
 

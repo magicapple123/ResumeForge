@@ -274,6 +274,28 @@ README 是这个仓库的门面，也是对用户可见功能的**权威清单**
 - **`uninstall.cmd` / `scripts/Uninstall-ResumeForge.ps1` 是唯一会主动删东西的入口**，改它必须跑 `scripts/tests/Test-Uninstall-ResumeForge.ps1`。三条不能退让的性质：默认只删启动器生成的东西（`backend\data` 与 `backend\.env` 要留着，`-Purge` 才删）、**永远不删源码**、只在真正的 checkout 里运行。测试全部在临时目录里复制一份脚本来跑，不会碰当前仓库。
 - **往 `backend/app/preflight.py` 的 `_REQUIRED_FILES` 加资源时，必须同步加到 `scripts/Build-Release.ps1` 的 `$RequiredFiles`。** 这是单方向守卫：`scripts/tests/Test-Build-Release.ps1` 会断言"preflight 要的每一样，打包清单都要点名"，漏一项就会让 Windows 的「启动器 + 打包」测试抛 `Build-Release.ps1 does not require 'backend/app/data/xxx'` 而变红——2026-09-21 就是因为它落后 22 项（`ats_keywords.json`、`feature_catalog.py` 与 20 个提示词）让 Windows job 连续多轮失败。注意这份清单是**发布前自检网，不是打包过滤**：`git archive` 本来就会带上全部受追踪文件，漏登记只红测试、不丢文件。
 
+## 桌面安装包（`desktop/` 与 `scripts/Build-Desktop.ps1`）
+
+- **不变量（ADR-0004）：用户数据永远不落 `resources/payload`。** 打包形态下数据目录是
+  `%APPDATA%\ResumeForge\data`（壳注入 `RF_DATA_DIR`）；任何"按 `BACKEND_DIR/"data"` 拼路径"
+  的新代码都会把它写进安装目录，而 NSIS 升级会先执行旧卸载器、把安装目录整体删除。
+  2026-10-14 已因此修掉两处（投递/网申浏览器登录态目录）——加数据目录相关路径时先问
+  "升级安装会不会把这里删掉"。
+- **旧数据抢救钩子不能删**：`desktop/nsis/legacy-data-rescue.nsh`（经 electron-builder.yml
+  `nsis.include` 接入）在 `customInit`（**早于**对旧卸载器的调用）把安装目录里的
+  `backend\data` 复制到 `$PLUGINSDIR` 并逐文件校验，`customInstall` 再交回新 payload，
+  由应用的迁移流程完成搬家。跳过判据是**旧目录里的** `resume_forge.db` 与
+  `migrated-away.json`（后者由 `lib/data-migration.js` 在迁移成功后写入）——不要让安装器
+  去读 `%APPDATA%` 猜 userData 路径。改动它（或换 NSIS 配置）必须跑
+  `desktop/scripts/test-nsis-rescue.js`；`.nsh` 里**有中文就必须 UTF-8 BOM**——Unicode NSIS
+  对无 BOM 的文件按系统码页解码，弹窗文案会变乱码。
+- **安装包 sidecar 必须是两空格格式**（`<hex>`＋两个空格＋文件名，ASCII、无 `*` 前缀）：
+  桌面更新器把 sidecar 里的文件名与发布资产名逐字比较，coreutils 的 `hash *file` 形式会被
+  判为非法格式而拒绝更新。`scripts/Build-Desktop.ps1 -Target win` 现在会自动写出与 CI 同格式的
+  sidecar；手工发版时两个文件一起挂。
+- 桌面离线门禁在 `desktop/` 下跑：`node --test "scripts/test-*.js"`（CI 的 desktop-shell 作业
+  紧接着真的打一次 NSIS 包，语法错误会在那里暴露）。
+
 ## 版本与发布
 
 - **不要手工逐个文件改版本号。** 在仓库根目录执行 `python scripts/bump_version.py`：它按自上一个 `v*` 标签以来的提交类型判定幅度，并同步全部位置。加 `--dry-run` 只预览不改文件；自动判定不满意时用 `--bump major|minor|patch` 覆盖。
