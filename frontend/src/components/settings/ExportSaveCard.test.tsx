@@ -5,7 +5,7 @@ import ExportSaveCard from "./ExportSaveCard";
 
 const apiMocks = vi.hoisted(() => ({
   getExportSaveLocation: vi.fn(),
-  putExportSaveLocation: vi.fn(),
+  clearExportSaveLocation: vi.fn(),
   pickExportSaveFolder: vi.fn(),
 }));
 
@@ -15,7 +15,7 @@ afterEach(() => cleanup());
 
 beforeEach(() => {
   apiMocks.getExportSaveLocation.mockResolvedValue({ path: "" });
-  apiMocks.putExportSaveLocation.mockImplementation(async (path: string) => ({ path }));
+  apiMocks.clearExportSaveLocation.mockResolvedValue({ path: "" });
   apiMocks.pickExportSaveFolder.mockResolvedValue({ path: null });
 });
 
@@ -50,8 +50,10 @@ describe("ExportSaveCard", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /选择文件夹/ }));
 
-    await waitFor(() => expect(apiMocks.putExportSaveLocation).toHaveBeenCalledWith("D:\\Picked"));
-    expect(await screen.findByText("已保存：导出内容将同时存到 D:\\Picked")).toBeInTheDocument();
+    await waitFor(() => expect(apiMocks.pickExportSaveFolder).toHaveBeenCalled());
+    expect(
+      await screen.findByText("已保存：从本机前端导出时会同时存到 D:\\Picked"),
+    ).toBeInTheDocument();
     expect(await screen.findByText(/当前：D:\\Picked/)).toBeInTheDocument();
   });
 
@@ -62,12 +64,11 @@ describe("ExportSaveCard", () => {
     fireEvent.click(await screen.findByRole("button", { name: /选择文件夹/ }));
 
     await waitFor(() => expect(apiMocks.pickExportSaveFolder).toHaveBeenCalled());
-    expect(apiMocks.putExportSaveLocation).not.toHaveBeenCalled();
+    expect(apiMocks.clearExportSaveLocation).not.toHaveBeenCalled();
   });
 
   it("shows the backend reason when saving the picked folder fails", async () => {
-    apiMocks.pickExportSaveFolder.mockResolvedValue({ path: "E:\\readonly" });
-    apiMocks.putExportSaveLocation.mockRejectedValue(new Error("目录不可写"));
+    apiMocks.pickExportSaveFolder.mockRejectedValue(new Error("目录不可写"));
     renderCard();
 
     fireEvent.click(await screen.findByRole("button", { name: /选择文件夹/ }));
@@ -82,7 +83,7 @@ describe("ExportSaveCard", () => {
     fireEvent.click(await screen.findByRole("button", { name: /选择文件夹/ }));
 
     expect(await screen.findByText("无法打开文件夹选择器，请重试")).toBeInTheDocument();
-    expect(apiMocks.putExportSaveLocation).not.toHaveBeenCalled();
+    expect(apiMocks.clearExportSaveLocation).not.toHaveBeenCalled();
   });
 
   it("restores the default after a folder was configured", async () => {
@@ -91,6 +92,6 @@ describe("ExportSaveCard", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /恢复默认/ }));
 
-    await waitFor(() => expect(apiMocks.putExportSaveLocation).toHaveBeenCalledWith(""));
+    await waitFor(() => expect(apiMocks.clearExportSaveLocation).toHaveBeenCalled());
   });
 });
