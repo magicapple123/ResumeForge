@@ -17,6 +17,7 @@
 
 ``--check`` 需要 ``fastapi.testclient``（dev 依赖里已有）。不带它时只写数据、不起应用。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -141,7 +142,7 @@ ins(
             achievements="连续两年获得校级奖学金",
             reference_file_name="",
             reference_content="",
-        )
+        ),
     ],
 )
 
@@ -221,7 +222,7 @@ ins(
             ),
             reference_file_name="",
             reference_content="",
-        )
+        ),
     ],
 )
 
@@ -1596,7 +1597,7 @@ def run_checks() -> int:
     from app.main import app  # noqa: PLC0415
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, client=("127.0.0.1", 50000), raise_server_exceptions=False)
     failures: list[str] = []
     for path in CHECKS:
         response = client.get(path)

@@ -150,11 +150,23 @@ def test_pick_folder_rejects_non_loopback_clients():
     assert "本机" in response.json()["detail"]
 
 
-def test_pick_folder_allows_loopback_clients(client, monkeypatch):
+def test_pick_folder_allows_loopback_clients(client, monkeypatch, tmp_path):
     """回环直连时 pick 端点照常工作（monkeypatch 掉真弹窗，只验校验放行）。"""
-    monkeypatch.setattr("app.api.settings.pick_directory", lambda: "C:/picked/folder")
+    monkeypatch.setattr("app.api.settings.pick_directory", lambda: str(tmp_path))
 
     response = client.post("/api/settings/export-save-location/pick")
 
     assert response.status_code == 200
-    assert response.json() == {"path": "C:/picked/folder"}
+    assert response.json() == {"path": str(tmp_path)}
+
+
+def test_cross_origin_folder_picker_is_rejected_before_opening_dialog(monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.api.settings.pick_directory", lambda: calls.append("opened"))
+    with TestClient(app, client=("127.0.0.1", 50000)) as local_browser:
+        response = local_browser.post(
+            "/api/settings/export-save-location/pick",
+            headers={"Origin": "https://evil.example"},
+        )
+    assert response.status_code == 403
+    assert calls == []

@@ -221,8 +221,10 @@ def write_assistant_relaxed_mode(
 
 
 @router.get("/export-save-location", response_model=ExportSaveLocationOut)
-def read_export_save_location(db: Session = Depends(get_db)):
+def read_export_save_location(request: Request, db: Session = Depends(get_db)):
     """生成内容保存位置：空串 = 仅浏览器下载（默认行为）。"""
+    if not _is_loopback_request(request):
+        raise HTTPException(status_code=403, detail="保存位置只能在运行后端的本机查看")
     return ExportSaveLocationOut(path=get_export_save_location(db))
 
 
@@ -230,23 +232,21 @@ def read_export_save_location(db: Session = Depends(get_db)):
 def write_export_save_location(
     payload: ExportSaveLocationIn, request: Request, db: Session = Depends(get_db)
 ):
-    """保存导出落盘目录。空串恢复默认；目录不合法时 400 并说明原因。"""
+    """仅允许清除保存位置；设置目录必须走后端本机原生选择器。"""
     if not _is_loopback_request(request):
         raise HTTPException(status_code=403, detail="保存位置只能在运行后端的本机设置")
-    path = payload.path.strip()
-    if path:
-        reason = validate_directory(path)
-        if reason is not None:
-            raise HTTPException(status_code=400, detail=reason)
-    return ExportSaveLocationOut(path=save_export_save_location(db, path))
+    if not payload.clear:
+        raise HTTPException(status_code=400, detail="请使用「选择文件夹」设置保存位置")
+    return ExportSaveLocationOut(path=save_export_save_location(db, ""))
 
 
 @router.post("/export-save-location/pick")
-def pick_export_save_folder(request: Request) -> dict:
+def pick_export_save_folder(request: Request, db: Session = Depends(get_db)) -> dict:
     """弹出本机原生「选择文件夹」对话框，返回所选绝对路径（取消返回 null）。
 
     后端就跑在用户本机，原生对话框是唯一能拿到**真实绝对路径**的方式（浏览器的
-    File System Access API 拿不到完整路径）。环境不支持时 503，前端回退为手动输入。
+    File System Access API 拿不到完整路径）。环境不支持时返回 503，前端提示重试；不接受
+    通过 HTTP 手工提交目录路径。
 
     与上方密钥查看同一套回环校验：接口会弹出原生系统对话框，若放任任意来源调用，
     恶意网页可以反复骚扰用户（对话框是模态的，还会挡住别的窗口），所以只允许
@@ -258,6 +258,11 @@ def pick_export_save_folder(request: Request) -> dict:
         picked = pick_directory()
     except FolderPickerUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if picked:
+        reason = validate_directory(picked)
+        if reason is not None:
+            raise HTTPException(status_code=400, detail=reason)
+        picked = save_export_save_location(db, picked)
     return {"path": picked}
 
 

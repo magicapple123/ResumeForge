@@ -1,10 +1,12 @@
 """浏览器跨站防线：状态变更请求只接受回环来源。"""
+
 from __future__ import annotations
 
 import json
 import logging
 from urllib.parse import urlparse
 
+from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,27 @@ _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # Origin 是 `http://127.0.0.1:8005`。两者 host 都落在这三个回环名字上，天然放行；
 # 恶意网页发来的 `Origin: https://evil.example` host 非回环，被拒。
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _origin_is_loopback(origin: str) -> bool:
+    """Return whether an HTTP Origin names one of the exact loopback hosts."""
+    try:
+        hostname = urlparse(origin).hostname
+    except ValueError:
+        return False
+    return bool(hostname) and hostname.lower() in _LOOPBACK_HOSTS
+
+
+def is_non_cross_site_request(request: Request) -> bool:
+    """Check browser provenance; callers separately enforce the peer address boundary.
+
+    Origin and Fetch Metadata are independent checks. Headerless local CLI clients
+    remain usable; a loopback Origin must not override an explicit cross-site signal.
+    """
+    if request.headers.get("sec-fetch-site", "").strip().lower() == "cross-site":
+        return False
+    origin = request.headers.get("origin", "").strip()
+    return not origin or _origin_is_loopback(origin)
 
 
 class LoopbackOriginGuardMiddleware:
@@ -48,17 +71,9 @@ class LoopbackOriginGuardMiddleware:
             await self.app(scope, receive, send)
             return
 
-        headers = {
-            name.decode("latin-1").lower(): value.decode("latin-1")
-            for name, value in scope.get("headers", [])
-        }
-        origin = headers.get("origin", "").strip()
-        if origin:
-            if not self._origin_is_loopback(origin):
-                await self._reject(scope, send, origin)
-                return
-        elif headers.get("sec-fetch-site", "").strip().lower() == "cross-site":
-            await self._reject(scope, send, origin)
+        request = Request(scope)
+        if not is_non_cross_site_request(request):
+            await self._reject(scope, send, request.headers.get("origin", "").strip())
             return
 
         await self.app(scope, receive, send)
@@ -70,20 +85,12 @@ class LoopbackOriginGuardMiddleware:
         ``urlparse(...).hostname`` 已做小写化、去端口、去 IPv6 括号；解析抛
         ``ValueError`` 或拿不到 hostname 时一律按**非回环**处理（见类 docstring）。
         """
-        try:
-            hostname = urlparse(origin).hostname
-        except ValueError:
-            return False
-        if not hostname:
-            return False
-        return hostname.lower() in _LOOPBACK_HOSTS
+        return _origin_is_loopback(origin)
 
     async def _reject(self, scope: Scope, send: Send, origin: str) -> None:
         """短路请求：返回 403 并留下含来源的诊断日志。"""
         path = scope.get("path", "")
-        logger.warning(
-            "已拒绝跨站状态变更请求：path=%s origin=%r", path, origin
-        )
+        logger.warning("已拒绝跨站状态变更请求：path=%s origin=%r", path, origin)
         body = json.dumps(
             {"detail": "拒绝跨站请求：本机后端只接受来自本机前端的状态变更操作"},
             ensure_ascii=False,

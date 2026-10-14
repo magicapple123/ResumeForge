@@ -3,7 +3,7 @@
  *
  * **只支持点选**：后端在用户本机弹原生「选择文件夹」对话框拿真实绝对路径——
  * 浏览器拿不到完整路径，手动输入路径容易写错盘符/拼写，所以这版刻意不提供
- * 手动输入。默认留空 = 仅浏览器下载（与历史版本零差异）；选定后导出简历时
+ * 手动输入。默认留空 = 仅浏览器下载（与历史版本零差异）；选定后从本机前端导出简历时
  * 后端会在返回下载的同时把同一份产物落盘一份到那里。打印路径不受影响。
  *
  * 卡片自带取数与保存（与 ReminderPopupCard / WebFormRelaxedModeCard 一致），不走
@@ -14,9 +14,9 @@ import { FolderOpenOutlined } from "@ant-design/icons";
 import { App, Button, Card, Space, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";
 import {
+  clearExportSaveLocation,
   getExportSaveLocation,
   pickExportSaveFolder,
-  putExportSaveLocation,
 } from "../../api/settings";
 
 export default function ExportSaveCard() {
@@ -46,17 +46,15 @@ export default function ExportSaveCard() {
     };
   }, [message]);
 
-  const save = async (next: string) => {
+  const clear = async () => {
     if (saving) return;
     setSaving(true);
     try {
-      const saved = await putExportSaveLocation(next.trim());
+      const saved = await clearExportSaveLocation();
       setPath(saved.path);
-      message.success(
-        saved.path ? `已保存：导出内容将同时存到 ${saved.path}` : "已恢复默认：仅浏览器下载",
-      );
+      message.success("已恢复默认：仅浏览器下载");
     } catch (err) {
-      // 后端校验失败（目录不存在 / 不是目录 / 不可写）时 detail 可直接展示。
+      // 清除失败时保留后端给出的可读原因。
       message.error(err instanceof Error ? err.message : "保存导出保存位置失败");
     } finally {
       setSaving(false);
@@ -64,7 +62,7 @@ export default function ExportSaveCard() {
   };
 
   // 点选文件夹：后端在用户本机弹原生对话框拿真实绝对路径，选完自动保存
-  // （保存时后端会做目录校验，非法目录的错误原因直接展示）。
+  // 并由后端校验、持久化；客户端不提交文件系统路径。
   const browse = async () => {
     if (picking) return;
     setPicking(true);
@@ -75,7 +73,7 @@ export default function ExportSaveCard() {
         return;
       }
       setPath(picked.path);
-      await save(picked.path);
+      message.success(`已保存：从本机前端导出时会同时存到 ${picked.path}`);
     } catch (err) {
       // 503：本机环境弹不出原生对话框（如运行时缺 tkinter），提示重试。
       message.warning(err instanceof Error ? err.message : "无法打开文件夹选择器，请重试");
@@ -87,23 +85,23 @@ export default function ExportSaveCard() {
   return (
     <Card title="生成内容保存位置" className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        默认保存到浏览器默认下载目录；选择文件夹后将同时保存一份到那里。
+        默认保存到浏览器默认下载目录；从本机前端选择文件夹后，导出会同时保存一份到那里。
       </Typography.Paragraph>
       <Spin spinning={loading}>
         <Space wrap>
           <Button
             type="primary"
             icon={<FolderOpenOutlined />}
+            disabled={loading || saving}
             loading={picking}
             onClick={() => void browse()}
           >
             选择文件夹
           </Button>
           <Button
-            disabled={saving || !path}
+            disabled={loading || saving || picking || !path}
             onClick={() => {
-              setPath("");
-              void save("");
+              void clear();
             }}
           >
             恢复默认

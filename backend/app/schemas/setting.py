@@ -1,4 +1,5 @@
 """设置 Schema：当前大模型配置、配置记录与联网搜索设置。"""
+
 from datetime import datetime
 from typing import Any, Literal
 
@@ -92,6 +93,7 @@ class LLMConfig(BaseModel):
         if style not in THINKING_STYLES:
             raise ValueError(f"思考参数形态只能是：{'、'.join(THINKING_STYLES)}")
         return style
+
     # 额外的请求体字段：长尾参数的出口（各家自创参数太多，逐个加字段不现实）。
     extra_body: dict[str, Any] = Field(default_factory=dict)
 
@@ -316,9 +318,9 @@ class AssistantOrbSetting(BaseModel):
 
 
 class ExportSaveLocationIn(BaseModel):
-    """导出产物的额外落盘位置。空串 = 恢复默认（仅浏览器下载）。"""
+    """导出产物保存位置的控制请求；目录只能由本机原生选择器提供。"""
 
-    path: str = Field(default="", max_length=1024)
+    clear: bool = False
 
 
 class ExportSaveLocationOut(BaseModel):

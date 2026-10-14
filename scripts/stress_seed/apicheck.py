@@ -68,7 +68,7 @@ def run_api_checks() -> int:
     from app.main import app  # noqa: PLC0415
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, client=("127.0.0.1", 50000), raise_server_exceptions=False)
     failures: list[str] = []
     for path in CHECKS:
         response = client.get(path)

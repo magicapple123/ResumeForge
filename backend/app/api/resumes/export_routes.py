@@ -9,10 +9,12 @@ from dataclasses import asdict
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Request as HTTPRequest
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from ...database import get_db
+from ...middleware.loopback_origin import is_non_cross_site_request
 from ...models.resume import ResumeRecord
 from ...schemas.export import (
     ExportRequest as ExportRequestSchema,
@@ -42,11 +44,18 @@ from ...services.resume.resume_template_store import (
 )
 from ...services.settings_service import get_export_save_location
 from ...services.watermark import WatermarkError
+from .. import settings as settings_api
 from ._shared import PDF_PAGE_LIMIT_HEADER, PDF_PAGES_HEADER, _get_live_resume
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _require_local_export_request(request: HTTPRequest) -> None:
+    """Resume exports expose private profile data and are a loopback-only capability."""
+    if not settings_api._is_loopback_request(request) or not is_non_cross_site_request(request):
+        raise HTTPException(status_code=403, detail="简历导出仅允许从本机前端访问")
 
 
 def _export_record(
@@ -174,6 +183,7 @@ def _export_record(
 
 @router.get("/{resume_id}/export")
 def export_resume(
+    request: HTTPRequest,
     resume_id: int,
     format: str = Query(..., pattern="^(json|md|html|pdf)$"),
     allow_incomplete: bool = Query(
@@ -193,6 +203,7 @@ def export_resume(
     它仍会落存档，但**推荐所有新调用方走 POST 端点**承担"导出并记录交付"，
     GET 保持纯下载语义。
     """
+    _require_local_export_request(request)
     record = _get_live_resume(db, resume_id)
     return _export_record(
         db,
@@ -205,6 +216,7 @@ def export_resume(
 
 @router.post("/{resume_id}/export")
 def export_resume_with_options(
+    request: HTTPRequest,
     resume_id: int,
     payload: ExportRequestSchema,
     db: Session = Depends(get_db),
@@ -214,9 +226,10 @@ def export_resume_with_options(
     脱敏作为管线前置步骤（``redact`` 是唯一实现），脱敏版是**独立导出文件**，不回写、
     不落库副本。响应头保留 ``X-Resume-Pages`` / ``X-Resume-Page-Limit``。
     """
+    _require_local_export_request(request)
     record = _get_live_resume(db, resume_id)
     privacy_options = PrivacyRedactionOptions(**payload.redact_options.model_dump())
-    request = ExportRequest(
+    export_options = ExportRequest(
         format=payload.format,
         watermark=payload.watermark,
         redact=payload.redact,
@@ -229,7 +242,7 @@ def export_resume_with_options(
     return _export_record(
         db,
         record,
-        request,
+        export_options,
         allow_incomplete=payload.allow_incomplete,
         record_delivery=payload.record_delivery,
     )
