@@ -48,6 +48,10 @@ const DATABASE_FILENAME = "resume_forge.db";
 // replacement on update (a marker in the payload would be wiped by the next
 // installer run, re-prompting already-migrated users).
 const MARKER_FILENAME = "migrated.json";
+// Marker written into the LEGACY data dir after a successful migration: the
+// installer's rescue hook treats its presence as "this payload copy is
+// archival, nothing to rescue" (see desktop/nsis/legacy-data-rescue.nsh).
+const MIGRATED_AWAY_FILENAME = "migrated-away.json";
 // Provenance marker written INSIDE a temp copy dir. A leftover
 // <newDataDir>.migrating-<ts> may only be removed when it carries this file:
 // the name alone is not proof that the directory is ours (RR-06).
@@ -290,6 +294,9 @@ async function performMigration({
       }
     }
   }
+  // A previous migration's "this copy is archival" marker describes the legacy dir
+  // itself, not user data: never carry it into the backup or the migrated tree.
+  backupDropped.add(MIGRATED_AWAY_FILENAME);
   copyTree(oldDataDir, backupDir, copyFileFn, {
     skip: (relative) => backupDropped.has(relative) || backupSnapshotSet.has(relative),
   });
@@ -325,6 +332,7 @@ async function performMigration({
         }
       }
     }
+    dropped.add(MIGRATED_AWAY_FILENAME); // archival marker: see the backup note above
     // The copy must skip both the snapshotted databases (already written, and
     // deliberately not byte-identical) and their sidecars.
     const skipped = (relative) => dropped.has(relative) || snapshots.has(relative);
@@ -364,6 +372,23 @@ async function performMigration({
       2,
     )}\n`,
   );
+
+  // 6. Marker inside the LEGACY dir: it tells the next NSIS upgrade's rescue hook
+  //    (desktop/nsis/legacy-data-rescue.nsh) that this copy is archival -- the live
+  //    data now lives under the profile. The installer must decide from files inside
+  //    the install directory alone: the app's user data path is not something the
+  //    installer can safely guess (%APPDATA% may hold another install's data, and
+  //    the shell supports --user-data-dir).
+  //    Best-effort: a read-only install directory must not fail a migration that
+  //    already succeeded. A missing marker only costs an extra rescue-and-restore
+  //    round on the next upgrade, which the shell then skips (marker + database in
+  //    the profile), so the failure direction is safe.
+  try {
+    fs.writeFileSync(
+      path.join(oldDataDir, MIGRATED_AWAY_FILENAME),
+      `${JSON.stringify({ migratedAt: nowIso, to: newDataDir, backup: backupDir }, null, 2)}\n`,
+    );
+  } catch {}
   return { backupDir };
 }
 
@@ -462,6 +487,7 @@ function clearMarker(dataDir) {
 module.exports = {
   DATABASE_FILENAME,
   MARKER_FILENAME,
+  MIGRATED_AWAY_FILENAME,
   TEMP_MARKER_FILENAME,
   clearMarker,
   detectMigrationState,

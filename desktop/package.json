@@ -1,7 +1,7 @@
 {
   "name": "resumeforge-desktop",
   "productName": "ResumeForge",
-  "version": "0.18.0",
+  "version": "1.0.0",
   "description": "ResumeForge desktop shell",
   "main": "main.js",
   "private": true,

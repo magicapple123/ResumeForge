@@ -30,7 +30,7 @@ from typing import Any
 
 import httpx
 
-from ...config import BACKEND_DIR, DEFAULT_BROWSER_PORT
+from ...config import DATA_DIR, DEFAULT_BROWSER_PORT
 from .browser_inputs import BrowserError, validated_browser_url
 from .cdp_client import DEFAULT_HOST, WebsocketCdpClient
 
@@ -109,8 +109,14 @@ class BrowserStatus:
 
 
 def default_profile_dir() -> Path:
-    """投递专用浏览器的 ``user-data-dir``（与数据库同级的数据目录下）。"""
-    return BACKEND_DIR / "data" / PROFILE_DIR_NAME
+    """投递专用浏览器的 ``user-data-dir``（落在数据目录下）。
+
+    必须用 ``config.DATA_DIR``（跟随 ``RF_DATA_DIR``），不能用 ``BACKEND_DIR/"data"``：
+    打包形态下 BACKEND_DIR 在安装目录（``resources/payload/backend``）内，登录态会被
+    下一次 NSIS 升级连同安装目录一起删掉（ADR-0004 的核心不变量：用户数据不落 payload）。
+    控制台/开发形态没有 RF_DATA_DIR，DATA_DIR 仍是 ``backend/data``，行为不变。
+    """
+    return DATA_DIR / PROFILE_DIR_NAME
 
 
 class BrowserManager:

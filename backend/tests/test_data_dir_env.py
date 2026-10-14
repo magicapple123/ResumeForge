@@ -16,7 +16,12 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
-_PROBE = "import app.config as c; print(c.DATA_DIR); print(c.DEFAULT_DATABASE_URL)"
+_PROBE = (
+    "import app.config as c; print(c.DATA_DIR); print(c.DEFAULT_DATABASE_URL); "
+    "from app.services.browser.browser_manager import default_profile_dir as browser_dir; "
+    "from app.services.webform.browser import default_profile_dir as webform_dir; "
+    "print(browser_dir()); print(webform_dir())"
+)
 
 
 def _import_config(extra_env: dict[str, str]) -> list[str]:
@@ -39,6 +44,9 @@ def test_default_data_dir_is_backend_data_when_env_absent() -> None:
     lines = _import_config({})
     assert lines[0] == str(BACKEND_DIR / "data")
     assert lines[1] == f"sqlite:///{(BACKEND_DIR / 'data' / 'resume_forge.db').as_posix()}"
+    # 浏览器登录态必须跟数据目录走，不能硬编码在安装目录里（升级会被删，ADR-0004）。
+    assert lines[2] == str(BACKEND_DIR / "data" / "browser-profile")
+    assert lines[3] == str(BACKEND_DIR / "data" / "webform-browser-profile")
 
 
 def test_rf_data_dir_redirects_data_dir_and_database_url() -> None:
@@ -46,3 +54,5 @@ def test_rf_data_dir_redirects_data_dir_and_database_url() -> None:
         lines = _import_config({"RF_DATA_DIR": tmp})
     assert lines[0] == str(Path(tmp))
     assert lines[1] == f"sqlite:///{Path(tmp).as_posix()}/resume_forge.db"
+    assert lines[2] == str(Path(tmp) / "browser-profile")
+    assert lines[3] == str(Path(tmp) / "webform-browser-profile")

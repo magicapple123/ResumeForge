@@ -8,6 +8,7 @@
 
 本模块只负责网申浏览器管理，不参与表单识别与填写。
 """
+
 from __future__ import annotations
 
 import threading
@@ -15,7 +16,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ...config import BACKEND_DIR, DEFAULT_WEBFORM_BROWSER_PORT
+from ...config import DATA_DIR, DEFAULT_WEBFORM_BROWSER_PORT
 from ...schemas.apply import BrowserStatusOut
 from ..apply._config import get_apply_config
 from ..browser.browser_manager import BrowserError, BrowserManager, BrowserStatus
@@ -29,8 +30,11 @@ _manager_key: tuple[Any, ...] | None = None
 
 
 def default_profile_dir():
-    """网申浏览器独立的登录态与窗口配置目录。"""
-    return BACKEND_DIR / "data" / WEBFORM_PROFILE_DIR_NAME
+    """网申浏览器独立的登录态与窗口配置目录（落在数据目录下，随 RF_DATA_DIR 走）。
+
+    与投递浏览器同理：不能写进安装目录，否则升级安装会清掉登录态（ADR-0004）。
+    """
+    return DATA_DIR / WEBFORM_PROFILE_DIR_NAME
 
 
 def _cache_key(config: Any) -> tuple[str, str]:
@@ -119,17 +123,11 @@ def open_url(db: Session, url: str) -> dict[str, Any]:
 
         # 已经有一个空白页时优先复用它，避免用户每点一次就多一个标签页。
         blank = next(
-            (
-                item
-                for item in targets
-                if str(item.get("url", "")).strip() in {"", "about:blank"}
-            ),
+            (item for item in targets if str(item.get("url", "")).strip() in {"", "about:blank"}),
             None,
         )
         client = (
-            manager.client_for_target(str(blank["id"]))
-            if blank is not None
-            else manager.client()
+            manager.client_for_target(str(blank["id"])) if blank is not None else manager.client()
         )
         try:
             if blank is not None:

@@ -95,6 +95,7 @@ macOS/Linux 将后端 Python 路径替换为 `.venv/bin/python`；前端命令�
 ## 数据迁移与回滚
 
 - 后端启动时会自动执行 `backend/migrations/` 中尚未应用的 Alembic migration。
+- **Windows 安装版（NSIS）升级不丢用户数据。** 最早发布的安装版把数据写在安装目录的 `resources/payload/backend/data` 里，而 NSIS 原地升级会先执行旧版卸载器、把安装目录整体删除——1.0.0 的安装器因此会在触碰旧版本之前先把这份数据复制并逐文件校验（应用还在运行、或复制校验失败会中止安装并保留旧数据原样），装完再交回应用，由首次启动的迁移弹窗确认后搬进 `%APPDATA%\ResumeForge\data`（迁移前自动备份在 `%APPDATA%\ResumeForge\backups\pre-migration-<时间戳>\`）。浏览器登录态目录同样随数据目录走，不再落在安装目录里。
 - 检测到已有数据且存在待迁移版本时，程序会先在 `backend/data/backups/` 创建一致性 SQLite 备份。
 - 从 `v0.18.0`（迁移 head `0038`）升级到当前候选代码共有 **8 个新迁移（`0039`～`0046`）**：新增表、列或派生索引，并包含明确的数据规范化。`0042` 会把岗位备注中的来源行搬到 `origin_source` 列，再从备注移除该行；这是保留信息的迁移，不能描述为“既有内容字节不变”。FTS 派生索引按业务表重建。回滚应使用升级前完整备份和匹配的旧版本代码。
 - 页面启动时会确认当前数据集身份；切换数据集或重启后端后，旧标签页的写入会收到 409。先保留草稿，再刷新并重新打开记录，不要反复提交旧表单。使用脚本时可以先读 `GET /api/dataset-scope`，再用 `X-Dataset-Scope` 绑定读写；应用浏览器客户端强制采用此保护。
@@ -170,7 +171,7 @@ macOS 桌面目标（dmg）仍未接线——electron-builder 的 mac 包需要�
 - **同一个包也要能在 Mac 上开箱即用**，所以自检里还有三条针对 macOS 的断言：`start.command` / `stop.command` / `update.command` 与 `scripts/macos/**` 必须**存在**、里面的行尾必须是 **LF**（CRLF 会让内核把解释器读成 `/bin/bash^M`，macOS 以 `bad interpreter` 启动失败，而这在 Windows 上完全看不出来）、三个 `*.command` 必须在压缩包条目里带**可执行位**（Finder 双击靠它，而 Mac 用户手上只有这个 zip）。
 - 工作区有未提交改动时会给出警告：压缩包内容是该 ref 的提交状态，不包含未提交的改动。**这条对新增文件的改动尤其要紧**——新增的必需文件在提交之前不可能出现在 `HEAD` 的压缩包里，所以加完文件要先提交再出包。
 
-出包后请把 zip 挂到 GitHub Releases（仓库目前只有 tag，没有 Release 附件），而不要用聊天工具零散发文件，否则用户拿到的版本无从核对。CI 在 Windows 上运行 `scripts/tests/Test-Build-Release.ps1`：它会真的打一次包，并断言压缩包包含的文件与 `git ls-tree -r HEAD` 完全一致、必需文件齐备、禁止路径没有泄漏、`.cmd` 保持 CRLF、macOS 入口脚本存在且是 LF 与可执行、以及出包清单与后端 `app/preflight.py` 的运行时清单一致。macOS 侧另有一组 CI 作业（`macos-launcher-guards` / `macos-runtimes` / `macos-end-to-end`）在真 Mac 上跑启动链的守卫测试、真下载一遍便携版运行时校验摘要、以及从干净检出走一次完整启动——维护者手上没有 Mac，那是唯一能自动验证 macOS 链路的地方。Windows 侧对应的是 `windows-end-to-end`：从干净检出走完整启动链，并在浏览器那一步之前真的取一次前端入口模块（"端口活着但页面一片空白"只有它捕得到）。
+出包后请把 zip 与校验和挂到 GitHub Releases（每个发布都必须带附件：应用内更新按发布资产找包与 `.sha256`，缺任一个都会静默不提示更新），而不要用聊天工具零散发文件，否则用户拿到的版本无从核对。Windows 安装包（`ResumeForge-Setup-<版本>.exe`＋sidecar）由 `scripts/Build-Desktop.ps1 -Target win` 产出并自动写出同格式的校验和，两个文件一起挂。CI 在 Windows 上运行 `scripts/tests/Test-Build-Release.ps1`：它会真的打一次包，并断言压缩包包含的文件与 `git ls-tree -r HEAD` 完全一致、必需文件齐备、禁止路径没有泄漏、`.cmd` 保持 CRLF、macOS 入口脚本存在且是 LF 与可执行、以及出包清单与后端 `app/preflight.py` 的运行时清单一致。macOS 侧另有一组 CI 作业（`macos-launcher-guards` / `macos-runtimes` / `macos-end-to-end`）在真 Mac 上跑启动链的守卫测试、真下载一遍便携版运行时校验摘要、以及从干净检出走一次完整启动——维护者手上没有 Mac，那是唯一能自动验证 macOS 链路的地方。Windows 侧对应的是 `windows-end-to-end`：从干净检出走完整启动链，并在浏览器那一步之前真的取一次前端入口模块（"端口活着但页面一片空白"只有它捕得到）。
 
 ## 保留哪些文件
 

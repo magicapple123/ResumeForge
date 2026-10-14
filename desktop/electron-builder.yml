@@ -60,6 +60,9 @@ nsis:
   # DeepSeek-style guard: refuse to install while a copy is still running.
   shortcutName: 简历通
   artifactName: ResumeForge-Setup-${version}.${ext}
+  # 旧版（payload-era）数据抢救：在调用旧卸载器之前把安装目录里的用户数据复制出来，
+  # 装完再交回应用的 ADR-0004 迁移流程。守卫测试见 scripts/test-nsis-rescue.js。
+  include: nsis/legacy-data-rescue.nsh
 
 mac:
   icon: icon.png

@@ -42,10 +42,16 @@ New-Item -ItemType Directory -Force $payloadDir | Out-Null
 # under runtime/ (gitignored) instead of %TEMP%.
 $archiveTar = Join-Path $projectRoot "runtime\tmp-desktop-payload.tar"
 New-Item -ItemType Directory -Force (Split-Path $archiveTar) | Out-Null
+# 解包固定用系统 bsdtar（%SystemRoot%\System32\tar.exe），不信任 PATH：Git for
+# Windows / MSYS 的 GNU tar 会把 "D:\..." 当成远端主机名（Cannot connect to D:
+# resolve failed）直接失败，而这类 PATH 在开发机上很常见。与 6993ef2 对运行时
+# 解包的处置同一口径（那边由 desktop/lib/backend-runtime.js 固定系统 tar）。
+$systemTar = Join-Path $env:SystemRoot "System32\tar.exe"
+$tarExe = if (Test-Path $systemTar) { $systemTar } else { "tar" }
 foreach ($spec in @("backend", "scripts", "start.cmd", "start.command", "stop.cmd", "stop.command", "branding")) {
     git -C $projectRoot archive -o $archiveTar HEAD -- $spec
     if ($LASTEXITCODE -ne 0) { throw "git archive $spec failed with $LASTEXITCODE" }
-    tar -xf $archiveTar -C $payloadDir
+    & $tarExe -xf $archiveTar -C $payloadDir
     if ($LASTEXITCODE -ne 0) { throw "tar extract $spec failed with $LASTEXITCODE" }
 }
 Remove-Item -Force $archiveTar -ErrorAction SilentlyContinue
@@ -90,3 +96,24 @@ try {
 }
 
 Write-Host "Desktop packaging done -> $(Join-Path $desktopDir 'out')"
+
+# Checksum sidecar for the installer, in the exact format CI's "Verify packaging
+# outputs" step writes and the desktop updater accepts: "<hex>  <name>", two
+# spaces, ASCII, no `*` prefix (the updater compares the sidecar's file name to
+# the release asset name character for character, so the coreutils `hash *file`
+# form is rejected as malformed). Local builds previously left a stale sidecar
+# next to a rebuilt exe; writing it here keeps the pair consistent.
+if ($Target -eq "win") {
+    # Match the artifact this build just produced (the version in desktop/package.json),
+    # not "the first ResumeForge-Setup-*.exe" -- desktop/out can still hold installers
+    # from earlier versions, and a stale pick would checksum the wrong file.
+    $version = (Get-Content (Join-Path $desktopDir "package.json") -Raw | ConvertFrom-Json).version
+    $setupPath = Join-Path $desktopDir "out\ResumeForge-Setup-$version.exe"
+    if (Test-Path $setupPath) {
+        $sha = (Get-FileHash $setupPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        "$sha  $(Split-Path -Leaf $setupPath)" | Set-Content "$setupPath.sha256" -Encoding ascii
+        Write-Host "installer sha256 ($(Split-Path -Leaf $setupPath)): $sha"
+    } else {
+        Write-Warning "installer artifact not found for checksum sidecar: $setupPath"
+    }
+}
