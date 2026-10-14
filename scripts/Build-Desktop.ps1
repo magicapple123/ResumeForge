@@ -42,10 +42,11 @@ New-Item -ItemType Directory -Force $payloadDir | Out-Null
 # under runtime/ (gitignored) instead of %TEMP%.
 $archiveTar = Join-Path $projectRoot "runtime\tmp-desktop-payload.tar"
 New-Item -ItemType Directory -Force (Split-Path $archiveTar) | Out-Null
-# 解包固定用系统 bsdtar（%SystemRoot%\System32\tar.exe），不信任 PATH：Git for
-# Windows / MSYS 的 GNU tar 会把 "D:\..." 当成远端主机名（Cannot connect to D:
-# resolve failed）直接失败，而这类 PATH 在开发机上很常见。与 6993ef2 对运行时
-# 解包的处置同一口径（那边由 desktop/lib/backend-runtime.js 固定系统 tar）。
+# Extract with the system bsdtar (%SystemRoot%\System32\tar.exe), never trust
+# PATH: Git for Windows / MSYS ship a GNU tar that reads "D:\..." as a remote
+# host name ("Cannot connect to D: resolve failed") and fails outright -- a
+# PATH shape that is common on dev machines. Same policy the runtime unpacking
+# got in 6993ef2 (desktop/lib/backend-runtime.js pins the system tar there).
 $systemTar = Join-Path $env:SystemRoot "System32\tar.exe"
 $tarExe = if (Test-Path $systemTar) { $systemTar } else { "tar" }
 foreach ($spec in @("backend", "scripts", "start.cmd", "start.command", "stop.cmd", "stop.command", "branding")) {
@@ -99,8 +100,8 @@ Write-Host "Desktop packaging done -> $(Join-Path $desktopDir 'out')"
 
 # Checksum sidecar for the installer, in the exact format CI's "Verify packaging
 # outputs" step writes and the desktop updater accepts: "<hex>  <name>", two
-# spaces, ASCII, no `*` prefix (the updater compares the sidecar's file name to
-# the release asset name character for character, so the coreutils `hash *file`
+# spaces, ASCII, no "*" prefix (the updater compares the sidecar's file name to
+# the release asset name character for character, so the coreutils "hash *file"
 # form is rejected as malformed). Local builds previously left a stale sidecar
 # next to a rebuilt exe; writing it here keeps the pair consistent.
 if ($Target -eq "win") {
