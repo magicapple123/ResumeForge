@@ -78,30 +78,30 @@
 
 ## 界面速览
 
-截图全部来自**真实运行**的应用，数据是内置的**虚构示例**（「张示例 / 示例科技有限公司 / example.com」），不含任何真实用户资料。
+截图全部来自**真实运行的桌面版**应用，数据是内置的**纯虚构演示数据**（求职者「林晚晴」与一批虚构公司，邮箱统一 `example.com`），不含任何真实用户资料。
 
-**侧栏保留高频主流程九个入口**，其余八个（我的资料、收藏夹、资料箱、知识库、工作台、求职统计、事实台账、回收站）收进页头「我的空间」下拉——两级导航跟着真实使用顺序走：
+**两级导航跟着真实使用顺序走**——侧栏保留高频主流程七个入口，其余八个（我的资料、收藏夹、资料箱、知识库、工作台、求职统计、事实台账、回收站）收进页头「我的空间」下拉：
 
 <p align="center">
   <img src="docs/images/anim-nav.webp" alt="依次切换侧栏主入口（岗位广场、简历中心、投递台、网申填表、求职进度、模拟面试、求职助手）与页头「我的空间」下拉里的求职统计、事实台账、知识库与工作台" width="820">
 </p>
 
-**首页**：快捷入口按「找岗位 / 做简历 / 投递跟进 / 面试准备 / 我的数据 / 系统」组织，近期提醒卡片按紧急度分色：
+**首页**：从零到交付的进度清单、岗位/简历统计、按紧急度分色的近期提醒，一屏知道自己该干什么：
 
 <p align="center">
-  <img src="docs/images/home.png" alt="简历通首页：快捷入口、近期提醒与待办" width="900">
+  <img src="docs/images/home.png" alt="简历通首页：从零到一份可交付简历的进度清单、岗位与简历统计、按紧急度分色的近期提醒列表" width="900">
 </p>
 
-**AI 是按岗位生成的，不是套模板**：挑一个岗位，定档位、篇幅与模板。生成时会从你的资料与经历总结里按 JD 筛选排序，**原始资料不会被修改**：
+**AI 是按岗位生成的，不是套模板**。挑一个岗位，定美化档位、篇幅与模板；生成时会从你的资料与经历总结里按 JD 筛选排序，**原始资料不会被修改**：
 
 <p align="center">
-  <img src="docs/images/crop-ai-resume-options.png" alt="为「市场运营专员」生成简历的弹窗：当前模型、岗位适配与内容美化档位（轻度 / 均衡 / 深度）、篇幅与版式、字号与补充要求" width="900">
+  <img src="docs/images/crop-ai-resume-options.png" alt="为「用户增长运营」生成简历的弹窗：当前模型 deepseek-flash、岗位适配与内容美化档位（轻度 / 均衡 / 深度）、篇幅与版式、字号与补充要求" width="900">
 </p>
 
-生成完它会自动做两件事。一是**版式诊断**：下面这张图里正文占了 105%、超出所选页数，它直接给出收紧顺序与一键「自动一页」。二是**防虚构校验**：把结果与你的资料库逐条比对，「400 人、7.2%、6.1%、1.1 个」这些资料里没有的量化结果被**点名要求人工核对**——模型编出来的东西不会悄悄留在简历里：
+生成完它会自动做两件事。一是**版面诊断**：下面这张图里内容超出所选页数（占用 154%），它直接给出按优先级排好的收紧顺序与一键「自动一页」。二是**来源与核对**：每个区块标注「回填原文 / 资料原文」，生成结果可以逐段溯源到你的资料库——模型编出来的东西不会悄悄留在简历里：
 
 <p align="center">
-  <img src="docs/images/crop-ai-resume-result.png" alt="AI 生成结果弹窗：版式诊断提示占用 105% 并给出「自动一页」，防虚构校验指出实习/工作经历出现资料未提供的量化结果「400 人、7.2%、6.1%、1.1 个」，下方为 A4 预览与导出入口" width="900">
+  <img src="docs/images/crop-ai-resume-result.png" alt="AI 生成简历的预览弹窗：版面诊断提示内容超出所选页数（占用 154%）并给出五步收紧顺序与「自动一页」；内容来源说明逐区块标注回填原文与资料原文；底部提供 AI 修改、质量检测、导出选项、一键脱敏等操作" width="900">
 </p>
 
 **AI 定制简历的 A4 成品**（服务端用系统中文字体渲染，PDF 可直接下载，也可以走浏览器打印）：
@@ -113,34 +113,34 @@
 **一个框搜遍全站**：岗位、简历、内推、提醒、面经、事实台账、资料箱与助手技能一起搜，不用先想「这东西在哪个模块」：
 
 <p align="center">
-  <img src="docs/images/anim-search.webp" alt="在首页全局搜索框输入「市场运营」，同时列出匹配的岗位、简历、内推、提醒、面经、资料箱与助手技能" width="880">
+  <img src="docs/images/anim-search.webp" alt="在首页全局搜索框输入「用户增长」，同时列出匹配的岗位、简历、内推、提醒、面经、资料箱与助手技能" width="880">
 </p>
 
 **岗位广场**：手动录入、粘贴原文、贴截图、传 pdf/docx 都能识别成可编辑草稿；技能标签保存时自动提取：
 
 <p align="center">
-  <img src="docs/images/jobs.png" alt="岗位广场：技能标签、来源标注、收藏与筛选" width="900">
+  <img src="docs/images/jobs.png" alt="岗位广场：16 个在招岗位的列表，收藏星标、技能标签、来源角标、状态与备注，顶部提供搜索、筛选与批量工具" width="900">
 </p>
 
 **岗位详情的匹配度分析**：逐条对照 JD 给出五类结论，每条都附 JD 原文与你自己的证据；找不到依据时如实写「资料中未提供」。五类结论本身不带百分比；结论区之后另有 0–100 的「匹配度参考分」（本地规则估算、带免责、不参与投递准入）：
 
 <p align="center">
-  <img src="docs/images/job-detail.png" alt="岗位详情抽屉：职位描述、任职要求、技能标签，与底部动作条「岗位需求解读 / 匹配度分析 / 加入投递台」" width="900">
+  <img src="docs/images/job-detail.png" alt="岗位详情抽屉：职位描述、任职要求、技能标签，与底部动作条「用 AI 生成简历 / 自行编写简历 / 岗位需求解读 / 匹配度分析 / 投递进度」" width="900">
 </p>
 
 <p align="center">
-  <img src="docs/images/crop-job-match.png" alt="岗位匹配度分析结果：准入结论「需确认」、硬性门槛「硬性条件待确认」，以及逐条的「已匹配 / 证据不足」结论、招聘原文与依据" width="900">
+  <img src="docs/images/crop-job-match.png" alt="岗位匹配度分析结果：逐条给出已匹配 / 表达缺口 / 证据不足等结论、招聘原文与依据，底部为投递建议" width="900">
 </p>
 
-**助手会先查你的库再回答**——台账里的主张、面经、面试深挖记录都查得到，而且**未经你同意不改任何数据**（下面这轮回答里它明确说「你说一声我再动，未经你同意我不改简历」）：
+**助手会先查你的库再回答**——台账里的主张、面经、面试深挖记录都查得到，而且**未经你同意不改任何数据**：
 
 <p align="center">
-  <img src="docs/images/anim-assistant.webp" alt="在求职助手里问「我这份简历里，哪条说法最容易被面试官追问？」，助手逐字回答并引用事实台账、面经与面试深挖记录" width="880">
+  <img src="docs/images/anim-assistant.webp" alt="在求职助手里问「我这份简历里，哪条说法最容易被面试官追问？」，助手逐字流式回答并引用事实台账、面经与面试深挖记录" width="880">
 </p>
 
 <table>
 <tr>
-<td width="50%"><img src="docs/images/resumes.png" alt="简历中心"><br><sub><b>简历中心</b>：多份简历、来源区分、收藏、备注、版式与篇幅控制</sub></td>
+<td width="50%"><img src="docs/images/resumes.png" alt="简历中心"><br><sub><b>简历中心</b>：多份简历、来源区分（AI 生成 / 用户编写）、收藏、备注、版式与篇幅控制</sub></td>
 <td width="50%"><img src="docs/images/apply.png" alt="自动投递台"><br><sub><b>自动投递台</b>：采集 → 匹配 → 显式确认 → 自动投递，四步流程写在页面顶部</sub></td>
 </tr>
 <tr>
@@ -148,7 +148,7 @@
 <td width="50%"><img src="docs/images/analytics.png" alt="求职统计"><br><sub><b>求职统计</b>：转化与卡点、时间与节奏、渠道与去向、简历与健康度</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/images/claims.png" alt="事实台账"><br><sub><b>事实台账</b>：事实、表述、承担程度与个人边界分开管</sub></td>
+<td width="50%"><img src="docs/images/claims.png" alt="事实台账"><br><sub><b>事实台账</b>：18 条主张的核实状态、承担程度与最近核实日期一屏总览</sub></td>
 <td width="50%"><img src="docs/images/interview.png" alt="模拟面试"><br><sub><b>模拟面试</b>：逐轮追问，结束后给维度评分与改进建议</sub></td>
 </tr>
 <tr>
@@ -160,11 +160,7 @@
 **导出与脱敏**：PDF / Word / Markdown / 纯文本 / JSON / HTML 任选，可加水印；一键脱敏遮住姓名、电话、邮箱、公司与学校后再导出：
 
 <p align="center">
-  <img src="docs/images/crop-resume-export.png" alt="简历预览页脚：质量检测、导出选项、一键脱敏、离线分享、下载 PDF、更多格式" width="900">
-</p>
-
-<p align="center">
-  <img src="docs/images/anim-export.webp" alt="打开简历预览，依次点开更多格式、一键脱敏与离线分享" width="880">
+  <img src="docs/images/crop-resume-export.png" alt="简历预览的导出选项面板：六种格式多选、自定义水印、一键隐私脱敏" width="900">
 </p>
 
 **投递台操作动图**——勾选岗位 → 点「开始投递」→ 确认本批次范围。**在你点下去之前，它不会打开任何招聘网站**：
@@ -180,7 +176,7 @@
 </p>
 
 <details>
-<summary><b>更多界面</b>（点击展开：简历预览、资料箱、知识库、工作台、回收站）</summary>
+<summary><b>更多界面</b>（点击展开：简历预览、资料箱、知识库、工作台、回收站、内置指南）</summary>
 
 <br>
 
@@ -207,7 +203,7 @@
 <td width="50%"><img src="docs/images/crop-home-search.png" alt="全局搜索结果"><br><sub>搜索一次命中八个模块</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/images/crop-claims-row.png" alt="事实台账一行"><br><sub>台账一条：原始事实、简历表述、承担程度与个人边界</sub></td>
+<td width="50%"><img src="docs/images/crop-claims-row.png" alt="事实台账一条"><br><sub>台账一条：原始事实、简历表述、承担程度与个人边界</sub></td>
 <td width="50%"><img src="docs/images/crop-tracker-parse.png" alt="从通知导入进展"><br><sub>粘邮件 / 截图识别进展，先预览「会发生什么」再确认写入</sub></td>
 </tr>
 </table>
@@ -504,6 +500,25 @@ npm run smoke                                   # 开发形态
 
 - **Bug 与需求**：用 [Issue 模板](.github/ISSUE_TEMPLATE) 提交，附上版本号、系统与复现步骤。
 - **安全问题**：请走私密渠道（见 [SECURITY.md](SECURITY.md)），不要在公开 Issue 里披露可利用细节。
+
+## ☕ 赞赏支持
+
+简历通**永久免费开源**，不打赏也完全不影响任何功能。如果它帮你拿到了面试或 offer，想请作者喝杯咖啡的话，点下面展开即可：
+
+<details>
+<summary><b>👉 请作者喝杯咖啡（微信 / 支付宝）</b></summary>
+
+<br>
+
+<p align="center">
+  <img src="docs/images/appreciate-card.png" alt="赞赏码：微信支付与支付宝，金额随意；不打赏也完全不影响使用，点个 Star 同样是对作者的支持" width="640">
+</p>
+
+<p align="center">
+  <sub>金额随意，一杯奶茶也感激不尽。没空的话，去上面给个 <b>Star</b> 一样开心 ⭐</sub>
+</p>
+
+</details>
 
 ## 📖 文档
 
