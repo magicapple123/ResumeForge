@@ -93,6 +93,7 @@ jobs:
           .\scripts\tests\Test-Start-ResumeForge.ps1
           .\scripts\tests\Test-Update-ResumeForge.ps1
           .\scripts\tests\Test-Build-Release.ps1
+          .\scripts\tests\Test-PythonRuntimeGuard.ps1
 
       - name: Run tests with coverage
         env:

@@ -72,5 +72,15 @@ if (Test-Path $sevenZip) {
 }
 Remove-Item -Recurse -Force $staging
 
+# 7. Stamp the dependency manifest INTO the zip. Build-Desktop.ps1 reads this
+# entry to decide whether a cached zip may be reused: a runtime that predates a
+# backend\requirements.txt change must not be handed to the packager (the 1.0.1
+# incident shipped exactly that and the app crashed on 'import pypdfium2').
+# Embedding it in the archive keeps the marker self-contained -- the zip carries
+# its own fingerprint through copies and re-distribution.
+. (Join-Path $PSScriptRoot "PythonRuntimeManifest.ps1")
+$manifest = Add-PythonRuntimeManifest -ZipPath $zipPath -PythonVersion $PythonVersion -RequirementsPath (Join-Path $projectRoot "backend\requirements.txt")
+Write-Host "Stamped runtime manifest: python $($manifest.pythonVersion), requirements $($manifest.requirementsSha256.Substring(0, 12))..."
+
 $size = "{0:N1} MB" -f ((Get-Item $zipPath).Length / 1MB)
 Write-Host "Done: $zipPath ($size)"

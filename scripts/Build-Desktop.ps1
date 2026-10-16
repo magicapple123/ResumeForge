@@ -15,7 +15,12 @@
 
 param(
     [ValidateSet("win", "mac", "dir")]
-    [string]$Target = "win"
+    [string]$Target = "win",
+    # Bundled interpreter version. Must stay equal to Build-PythonRuntime.ps1's
+    # default (Test-PythonRuntimeGuard.ps1 pins the two together): the reuse guard
+    # compares the version stamped into python-runtime.zip against this value, so
+    # a bump here without the other would make every cached zip look stale.
+    [string]$PythonVersion = "3.12.10"
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,12 +69,28 @@ New-Item -ItemType Directory -Force (Join-Path $payloadDir "runtime\logs") | Out
 # a copy so first user launch unpacks instead of provisioning. Windows-only:
 # the zip holds the amd64 embeddable interpreter, so mac builds skip it (the
 # mac shell falls back to the shipped launcher, which provisions on demand).
+#
+# Reuse is guarded by a manifest embedded in the zip (see
+# PythonRuntimeManifest.ps1). It records the SHA-256 of backend\requirements.txt
+# and the bundled Python version at build time; here we compare both against the
+# current checkout and rebuild on any mismatch -- including a zip that carries no
+# manifest, i.e. a cache from before this guard existed. The 1.0.1 incident was
+# precisely a cache that predated a requirements change, so a bare existence
+# check (the old behaviour) is exactly the trap this closes.
+. (Join-Path $PSScriptRoot "PythonRuntimeManifest.ps1")
 $runtimeZip = Join-Path $desktopDir "python-runtime.zip"
 if ($Target -ne "mac") {
-    if (-not (Test-Path $runtimeZip)) {
-        Write-Host "python-runtime.zip missing - building it (one-time, downloads + pip install)..."
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "Build-PythonRuntime.ps1")
+    $requirementsPath = Join-Path $projectRoot "backend\requirements.txt"
+    # Bind the rebuild inputs to locals before the scriptblock so it does not
+    # depend on scope resolution while the helper invokes it.
+    $buildRuntimeScript = Join-Path $PSScriptRoot "Build-PythonRuntime.ps1"
+    $bundledPythonVersion = $PythonVersion
+    $runtimeDecision = Invoke-PythonRuntimeEnsure -ZipPath $runtimeZip -PythonVersion $PythonVersion -RequirementsPath $requirementsPath -Rebuild {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $buildRuntimeScript -PythonVersion $bundledPythonVersion
         if ($LASTEXITCODE -ne 0) { throw "Build-PythonRuntime failed with $LASTEXITCODE" }
+    }
+    if ($runtimeDecision.Rebuilt) {
+        Write-Host "python-runtime.zip rebuilt from the current requirements."
     }
     Copy-Item -Force $runtimeZip (Join-Path $payloadDir "python-runtime.zip")
 }
