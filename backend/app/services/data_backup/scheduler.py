@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import threading
 
+from ...config import get_settings
 from .auto_backup import run_auto_backup_if_due
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,10 @@ def run_for_current_dataset() -> None:
     from ...runtime.log_context import bound_context
 
     try:
+        # Disabled scheduling must not briefly hold a dataset lease: even a no-op
+        # snapshot check can race with a caller that is switching datasets.
+        if not get_settings().auto_backup_enabled:
+            return
         try:
             lease = dataset_scope.acquire_lease("auto-backup")
         except dataset_scope.DatasetScopeError:

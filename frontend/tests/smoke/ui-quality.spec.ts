@@ -48,6 +48,10 @@ test("mobile navigation works by keyboard and returns focus on Escape", async ({
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/jobs");
   const skip = page.getByRole("link", { name: "跳到主要内容" });
+  // goto's load event can precede the dataset bootstrap / React mount.
+  // Wait for the actual keyboard target without moving focus to it.
+  await expect(skip).toBeAttached();
+  await page.bringToFront();
   await page.keyboard.press("Tab");
   await expect(skip).toBeFocused();
   await page.keyboard.press("Enter");
