@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import AppHeaderContext from "./AppHeaderContext";
+import baseStyles from "../styles/base.css?inline";
 
 const listDatasets = vi.fn();
 const activateDataset = vi.fn();
@@ -44,6 +45,42 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("AppHeaderContext", () => {
+  it("示例徽标在页头和下拉菜单中都满足小字 4.5:1 的对比度", async () => {
+    listDatasets.mockResolvedValue([
+      { id: "demo", name: "体验示例", source: "sample", is_active: true },
+    ]);
+    getProfile.mockResolvedValue({ name: "张示例", photo: "" });
+    const { container } = renderHeader();
+    const stylesheet = document.createElement("style");
+    stylesheet.textContent = baseStyles;
+    container.appendChild(stylesheet);
+
+    fireEvent.click(await screen.findByRole("button", { name: "当前数据集：体验示例" }));
+    const badges = await screen.findAllByText("示例");
+    expect(badges).toHaveLength(2);
+
+    function luminance(color: string) {
+      const channels = color
+        .match(/[\d.]+/g)!
+        .slice(0, 3)
+        .map((value) => {
+          const channel = Number(value) / 255;
+          return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+        });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    }
+
+    for (const badge of badges) {
+      const style = getComputedStyle(badge);
+      const foreground = luminance(style.color);
+      const background = luminance(style.backgroundColor);
+      expect(
+        (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05),
+        `${style.color} on ${style.backgroundColor}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("显示当前数据集的名字，而不是列表里的第一个", async () => {
     listDatasets.mockResolvedValue([
       { id: "a", name: "工作数据", is_active: false },

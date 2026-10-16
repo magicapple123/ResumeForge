@@ -41,6 +41,7 @@ from ..services.export_save_location import (
 )
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
+from ..services.llm.connection_probe import connection_probe_config
 from ..services.llm.model_catalog import list_available_models
 from ..services.llm.thinking import probe_thinking, thinking_support
 from ..services.settings_service import (
@@ -340,18 +341,22 @@ async def test_llm(payload: LLMTestRequest, db: Session = Depends(get_db)):
         resolved_payload = resolve_llm_config_api_key(db, payload)
     except ValueError as exc:
         return LLMTestResult(ok=False, message=str(exc))
-    # 只测连通性：连思考参数一起测的话，"参数写错"会表现成"连不上"，用户会去查网络。
-    # 探针同时把 max_tokens 压到 64：连通性只在乎"模型回话了没有"，不需要长输出——
-    # 用户反馈过"快模型测连接也要等很久"，长 max_tokens 会让探针陪跑完整的生成长度。
-    probe_config = resolved_payload.without_thinking().model_copy(update={"max_tokens": 64})
-    provider = create_provider(probe_config)
+    # 不继承用户的思考参数；默认思考的已知模型由能力表显式关闭，未知服务商不加参数。
+    probe_config = connection_probe_config(resolved_payload)
     started = time.perf_counter()
     try:
+        provider = create_provider(probe_config)
         reply = await provider.chat([{"role": "user", "content": "请只回复两个字：正常"}])
     except LLMError as exc:
         logger.warning("LLM 连接测试失败：%s", exc)
         return LLMTestResult(ok=False, message=str(exc))
     latency_ms = int((time.perf_counter() - started) * 1000)
+    if not reply.strip():
+        return LLMTestResult(
+            ok=False,
+            latency_ms=latency_ms,
+            message="模型没有返回正文，当前配置暂不可用；请检查模型名称或思考设置后重试",
+        )
     return LLMTestResult(
         ok=True,
         latency_ms=latency_ms,

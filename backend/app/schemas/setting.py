@@ -29,7 +29,7 @@ THINKING_STYLES = (
 )
 
 # **不参与思考配置**的标记：`without_thinking()` 把它写进 `thinking_style`，表示"这次调用
-# 完全不由设置页的思考设置管"（求职助手、测试连接用它）。它**不在 THINKING_STYLES 里**，
+# 完全不由设置页的思考设置管"（求职助手用它）。它**不在 THINKING_STYLES 里**，
 # 用户存不进来；有它才能让"默认就思考的模型要显式关掉"那条规则不误伤助手。
 THINKING_STYLE_UNMANAGED = "unmanaged"
 
@@ -138,11 +138,11 @@ class LLMConfig(BaseModel):
     def without_thinking(self) -> "LLMConfig":
         """剥掉全部思考设置（开关、档位、老字段预算），并标记为**不参与思考配置**。
 
-        给"不该受「思考模式」影响"的两处调用用：
+        给"不该受设置页「思考模式」影响"的调用用：
         - **求职助手**：它有自己的单次请求级「思考强度」，两者必须分开——否则用户在
           设置页开一次开关，会连助手的对话一起改掉（连老字段预算一起剥，助手才是
           完全由自己的选择决定）；
-        - **测试连接**：只测连通性，不该因为思考参数写错而"连不上"。
+        测试连接另外通过 connection_probe_config 按能力表关闭默认思考。
 
         `thinking_style` 置成 `THINKING_STYLE_UNMANAGED` 而不是默认的 auto：有些模型
         **不指定就思考**（DeepSeek V4、通义 Qwen3.5+），那种模型要靠显式发关闭参数才能

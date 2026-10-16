@@ -5,11 +5,12 @@
  * 清理入口（手动备份）在旁边的「手动备份」卡里，逐份确认。
  */
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, List, Progress, Space, Typography } from "antd";
+import { Alert, Button, Card, Listy, Progress, Space, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { getStorageStats } from "../../api/storage";
 import type { StorageStats } from "../../api/storage";
 import LoadingBlock from "../common/LoadingBlock";
+import { ListyItem } from "../common/ListyItem";
 
 function formatSize(bytes: number): string {
   if (bytes <= 0) return "0 B";
@@ -82,35 +83,38 @@ export default function StorageStatsCard() {
       ) : error ? (
         <Alert type="error" showIcon title={error} />
       ) : stats ? (
-        <Space direction="vertical" style={{ width: "100%" }} size={8}>
+        <Space orientation="vertical" style={{ width: "100%" }} size={8}>
           <Typography.Text type="secondary">
             数据目录共占用 {formatSize(stats.total_bytes)}（{stats.total_file_count} 个文件）。
             这里只显示体积，不会读取或改动任何文件内容；占用大的目录（如投递浏览器的用户目录）
             属于正常现象。
           </Typography.Text>
-          <List
-            size="small"
-            dataSource={top.filter((item) => item.size_bytes > 0)}
-            locale={{ emptyText: "还没有产生本地文件" }}
-            renderItem={(item) => (
-              <List.Item>
-                <div style={{ width: "100%" }}>
-                  <Space style={{ width: "100%", justifyContent: "space-between" }}>
-                    <Typography.Text>{item.label}</Typography.Text>
-                    <Typography.Text type="secondary">
-                      {formatSize(item.size_bytes)}
-                    </Typography.Text>
-                  </Space>
-                  <Progress
-                    percent={Math.max(1, Math.round((item.size_bytes / maxSize) * 100))}
-                    showInfo={false}
-                    strokeColor={percentColor((item.size_bytes / maxSize) * 100)}
-                    size="small"
-                  />
-                </div>
-              </List.Item>
-            )}
-          />
+          {top.some((item) => item.size_bytes > 0) ? (
+            <Listy
+              items={top.filter((item) => item.size_bytes > 0)}
+              rowKey={(item) => item.key}
+              itemRender={(item) => (
+                <ListyItem>
+                  <div style={{ width: "100%" }}>
+                    <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                      <Typography.Text>{item.label}</Typography.Text>
+                      <Typography.Text type="secondary">
+                        {formatSize(item.size_bytes)}
+                      </Typography.Text>
+                    </Space>
+                    <Progress
+                      percent={Math.max(1, Math.round((item.size_bytes / maxSize) * 100))}
+                      showInfo={false}
+                      strokeColor={percentColor((item.size_bytes / maxSize) * 100)}
+                      size="small"
+                    />
+                  </div>
+                </ListyItem>
+              )}
+            />
+          ) : (
+            <Typography.Text type="secondary">还没有产生本地文件</Typography.Text>
+          )}
         </Space>
       ) : null}
     </Card>

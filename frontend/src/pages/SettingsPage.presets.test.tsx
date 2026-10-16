@@ -176,6 +176,10 @@ afterEach(() => {
 });
 
 describe("SettingsPage model presets", () => {
+  it("uses the current DeepSeek model ID while keeping the legacy alias recognizable", () => {
+    expect(deepseekPreset.model).toBe("deepseek-flash");
+  });
+
   it("recognizes a legacy custom record that uses the official DeepSeek endpoint", async () => {
     apiMocks.listLLMConfigRecords.mockResolvedValue([
       makeRecord({

@@ -18,6 +18,7 @@
   那正是 :func:`probe_thinking` 的职责：它区分**真的生效**（响应里有思考内容）、
   **接受了但没效果**、**上游明确拒绝**三种情况。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -61,8 +62,7 @@ _EFFORTS_BY_STYLE: dict[str, tuple[str, ...]] = {
 }
 
 _UNLISTED_NOTE = (
-    "内置表没有收录这个服务商，下面是按通用写法给的选项；"
-    "点「检测思考支持」确认它是否真的生效。"
+    "内置表没有收录这个服务商，下面是按通用写法给的选项；点「检测思考支持」确认它是否真的生效。"
 )
 
 # 探测用的提示词：只要一个字，把花费压到最低。
@@ -142,8 +142,8 @@ _TABLE: tuple[_VendorRule, ...] = (
         STYLE_THINKING_OBJECT,
         (),
         True,
-        "DeepSeek V4（deepseek-v4-flash / -pro）用 thinking 开关控制思考，且**默认开着**；"
-        "旧的 deepseek-chat / deepseek-reasoner 已于 2026-07-24 停用。",
+        "DeepSeek（deepseek-flash / deepseek-v4-pro）用 thinking 开关控制思考，且**默认开着**；"
+        "deepseek-v4-flash 是 deepseek-flash 的兼容别名，新配置建议用模型列表里的名称。",
         default_on=True,
     ),
     _VendorRule(
@@ -228,7 +228,7 @@ def _explicit_style(config: LLMConfig) -> str:
 def resolve_style(config: LLMConfig) -> str:
     """决定这次请求用哪种形态。
 
-    优先级：**不参与思考配置**（助手/测试连接）> **用户显式指定** > 能力表按服务商/模型
+    优先级：**不参与思考配置**（助手）> **用户显式指定** > 能力表按服务商/模型
     给出的判断 > 按协议兜底（OpenAI 兼容 → ``reasoning_effort``，原生 Messages → 预算）。
 
     表参与请求构造是有意的：不然"开关一开就生效"对智谱、通义这类只有自己写法的服务商
@@ -253,7 +253,13 @@ def _match_rule(config: LLMConfig) -> _VendorRule | None:
     host = host_of(config.base_url)
     model = str(config.model or "").strip().casefold()
     for rule in _TABLE:
-        if rule.host and rule.host not in host:
+        # 完整域名按边界匹配，避免把 api.deepseek.com.example.org 当作官方服务。
+        # MiniMax / Moonshot 的规则刻意不带顶级域名，仍兼容其多个官方域名。
+        if rule.host and not (
+            host == rule.host
+            or host.endswith("." + rule.host)
+            or (rule.host in {"api.minimax", "api.moonshot"} and host.startswith(rule.host + "."))
+        ):
             continue
         if rule.model_pattern is not None and not rule.model_pattern.search(model):
             continue
@@ -270,8 +276,9 @@ def thinking_support(config: LLMConfig) -> ThinkingSupport:
     style = resolve_style(config)
     rule = _match_rule(config)
     if _explicit_style(config):
-        return ThinkingSupport(style, _EFFORTS_BY_STYLE.get(style, ()), True,
-                               rule.note if rule else _UNLISTED_NOTE)
+        return ThinkingSupport(
+            style, _EFFORTS_BY_STYLE.get(style, ()), True, rule.note if rule else _UNLISTED_NOTE
+        )
     if rule is not None:
         return ThinkingSupport(rule.style, rule.efforts, rule.supported, rule.note)
     return ThinkingSupport(style, _EFFORTS_BY_STYLE.get(style, ()), True, _UNLISTED_NOTE)
@@ -325,7 +332,7 @@ def thinking_payload(config: LLMConfig) -> dict:
     """
     style = resolve_style(config)
     if style == THINKING_STYLE_UNMANAGED:
-        # 助手/测试连接：这次调用不参与思考配置，一个字都不发。
+        # 助手：这次调用不参与设置页的思考配置，一个字都不发。
         return {}
     if not getattr(config, "thinking_enabled", False):
         rule = _match_rule(config)
@@ -394,9 +401,7 @@ async def probe_thinking(config: LLMConfig, *, seconds: float = _PROBE_SECONDS) 
             except StopAsyncIteration:
                 break
             if delta.reasoning:
-                return ThinkingProbe(
-                    True, True, "已确认生效：这次调用真的产出了思考内容。"
-                )
+                return ThinkingProbe(True, True, "已确认生效：这次调用真的产出了思考内容。")
             if delta.text:
                 saw_text = True
     except LLMError as exc:

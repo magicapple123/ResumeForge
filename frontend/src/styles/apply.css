@@ -36,15 +36,6 @@
   margin-bottom: 8px;
 }
 
-/*
- * 手动备份卡（ManualBackupsCard）：批量选择时勾选框挂在 List.Item.Meta 的头像槽，
- * antd 默认顶部对齐——相对"标题+说明"两行文字会偏上（用户截图反馈），改垂直居中。
- * 只作用于该卡，不影响其他 List 头像的使用。
- */
-.manual-backups-card .ant-list-item-meta-avatar {
-  align-self: center;
-}
-
 .apply-progress-panel {
   padding: 12px 16px;
   background: var(--rf-surface, #fff);

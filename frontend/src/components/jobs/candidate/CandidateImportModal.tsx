@@ -5,7 +5,8 @@
  * 收藏），预览里直接展示每行的岗位名 + 公司，方便用户核对再入库。
  */
 import { DownloadOutlined, InboxOutlined } from "@ant-design/icons";
-import { Alert, Button, Flex, List, Modal, Space, Typography, Upload } from "antd";
+import { Alert, Button, Flex, Listy, Modal, Space, Typography, Upload } from "antd";
+import { ListyItem } from "../../common/ListyItem";
 import { useState } from "react";
 import { importCandidatesCsv, previewCandidateImport } from "../../../api/candidateJob";
 import type { CandidateCsvPreview } from "../../../types";
@@ -170,33 +171,34 @@ export function CandidateImportModal({ open, onClose, onImported }: Props) {
                 type="warning"
                 showIcon
                 style={{ marginTop: 8 }}
-                message="以下行不会导入（改好 CSV 后可以重新选择文件）"
+                title="以下行不会导入（改好 CSV 后可以重新选择文件）"
                 description={
-                  <List
-                    size="small"
-                    dataSource={preview.errors.slice(0, 10)}
-                    renderItem={(item) => (
-                      <List.Item>
+                  <Listy
+                    items={preview.errors.slice(0, 10)}
+                    rowKey={(item) => item.line}
+                    itemRender={(item) => (
+                      <ListyItem>
                         第 {item.line} 行：{item.message}
-                      </List.Item>
+                      </ListyItem>
                     )}
                   />
                 }
               />
             )}
             {preview.rows.length > 0 && (
-              <List
-                size="small"
-                style={{ marginTop: 8 }}
-                header={<Typography.Text type="secondary">前几条预览</Typography.Text>}
-                dataSource={preview.rows.slice(0, 5)}
-                renderItem={(row) => (
-                  <List.Item>
-                    第 {row.line} 行：{row.data.title || "（无岗位名）"}
-                    {row.data.company ? ` · ${row.data.company}` : ""}
-                  </List.Item>
-                )}
-              />
+              <div style={{ marginTop: 8 }}>
+                <Typography.Text type="secondary">前几条预览</Typography.Text>
+                <Listy
+                  items={preview.rows.slice(0, 5)}
+                  rowKey={(row) => row.line}
+                  itemRender={(row) => (
+                    <ListyItem>
+                      第 {row.line} 行：{row.data.title || "（无岗位名）"}
+                      {row.data.company ? ` · ${row.data.company}` : ""}
+                    </ListyItem>
+                  )}
+                />
+              </div>
             )}
           </div>
         )}

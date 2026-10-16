@@ -12,13 +12,14 @@
  */
 
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Card, List, Select, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Card, Listy, Select, Space, Tag, Typography } from "antd";
 import { useState } from "react";
 import { getBackupStatus, saveAutoBackupInterval } from "../../api/settings";
 import { useApi } from "../../hooks/useApi";
 import type { BackupStatus } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import LoadingBlock from "../common/LoadingBlock";
+import { ListyItem } from "../common/ListyItem";
 
 /** 状态 → 展示标签（保护缺口优先如实暴露）。 */
 function statusMeta(status: BackupStatus): { label: string; color: string } {
@@ -79,7 +80,7 @@ export default function BackupStatusCard() {
       ) : error ? (
         <Alert type="error" showIcon title={error} />
       ) : status && meta ? (
-        <Space direction="vertical" style={{ width: "100%" }} size={8}>
+        <Space orientation="vertical" style={{ width: "100%" }} size={8}>
           <Space wrap>
             <Tag color={meta.color}>{meta.label}</Tag>
             <Typography.Text type="secondary">
@@ -114,18 +115,20 @@ export default function BackupStatusCard() {
             />
           )}
           {status.snapshot_count > 0 ? (
-            <List
-              size="small"
-              dataSource={status.snapshots}
-              renderItem={(item) => (
-                <List.Item>
-                  <Typography.Text ellipsis style={{ maxWidth: "70%" }}>
-                    {item.name}
-                  </Typography.Text>
-                  <Typography.Text type="secondary">
-                    {formatDateTime(new Date(item.modified_at * 1000).toISOString())}
-                  </Typography.Text>
-                </List.Item>
+            <Listy
+              items={status.snapshots}
+              rowKey={(item) => item.name}
+              itemRender={(item) => (
+                <ListyItem>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                    <Typography.Text ellipsis style={{ maxWidth: "70%" }}>
+                      {item.name}
+                    </Typography.Text>
+                    <Typography.Text type="secondary">
+                      {formatDateTime(new Date(item.modified_at * 1000).toISOString())}
+                    </Typography.Text>
+                  </div>
+                </ListyItem>
               )}
             />
           ) : (
