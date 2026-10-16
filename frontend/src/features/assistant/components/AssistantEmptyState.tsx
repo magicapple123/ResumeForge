@@ -36,7 +36,11 @@ export default function AssistantEmptyState({
           <div className="assistant-empty-state-copy">
             <Typography.Text strong>{greeting.headline}</Typography.Text>
             {greeting.care ? (
-              <Typography.Text type="warning">{greeting.care}</Typography.Text>
+              // 关怀语用站内 warning 文字 token（accessibility.css 里着色），而不是 antd 的
+              // type="warning"——后者的 #faad14 在白/浅底上只有 ~1.9:1，过不了 axe 的 AA。
+              <Typography.Text className="assistant-empty-state-care">
+                {greeting.care}
+              </Typography.Text>
             ) : null}
             <Typography.Text type="secondary">
               {floating

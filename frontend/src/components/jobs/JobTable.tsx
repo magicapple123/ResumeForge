@@ -227,7 +227,10 @@ export default function JobTable({
       columns={columns}
       dataSource={jobs?.items ?? []}
       loading={loading}
-      scroll={{ x: 1330 }}
+      // 空表（无当前页行）时不启用横向滚动：否则 `.ant-table-content` 会变成
+      // "可横滚、区域内却没有任何可聚焦元素"的容器，命中 axe 的
+      // `scrollable-region-focusable`（serious）。有数据时照旧按列宽固定横滚。
+      scroll={jobs?.items?.length ? { x: 1330 } : undefined}
       components={{
         body: {
           // 整行右键即可编辑/删除；批量模式下不拦截右键，避免和选择操作打架。

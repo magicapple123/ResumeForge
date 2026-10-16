@@ -124,3 +124,24 @@ describe("JobTable 悬停导入时间", () => {
     expect(tooltip).toHaveTextContent(/导入于 \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
   });
 });
+
+describe("JobTable 空表可访问性", () => {
+  it("空数据时不产生无目标的横向滚动区域（axe scrollable-region-focusable）", () => {
+    const { container } = renderTable([]);
+
+    const content = container.querySelector<HTMLElement>(".ant-table-content");
+    expect(content).not.toBeNull();
+    // 没有 overflow-x，容器就不是"可滚动区域"——空表不该出现一个没有任何可聚焦元素的滚动区。
+    expect(content?.style.overflowX).toBe("");
+    // 表格也不再被钉成固定 1330px 宽；auto 布局会把列宽压回容器宽度，不会反向造成页面级横向溢出。
+    expect(container.querySelector<HTMLElement>("table")?.style.width).toBe("");
+  });
+
+  it("有数据时保持原行为：列宽固定 1330px + 横向滚动", () => {
+    const { container } = renderTable([makeJob()]);
+
+    const content = container.querySelector<HTMLElement>(".ant-table-content");
+    expect(content?.style.overflowX).toBe("auto");
+    expect(container.querySelector<HTMLElement>("table")?.style.width).toBe("1330px");
+  });
+});

@@ -349,9 +349,14 @@ def batch_update_job_status(payload: JobBatchStatusRequest, db: Session = Depend
 
 @router.post("/batch-delete", response_model=JobBatchDeleteResult)
 def batch_delete_jobs(payload: JobBatchRequest, db: Session = Depends(get_db)):
+    """批量移入回收站（软删除），与单条删除及其余各域的批量删除同一口径。
+
+    岗位是采集/粘贴攒起来的，一次误点不该让它彻底消失；软删除后可在「回收站」恢复，
+    彻底删除在「回收站」里单独提供（不可恢复，需二次确认）。
+    """
     jobs = _get_jobs_or_404(db, payload.job_ids)
     for job in jobs:
-        db.delete(job)
+        trash.soft_delete(db, "job", job)
     _commit_batch(db)
     return JobBatchDeleteResult(deleted=len(jobs))
 

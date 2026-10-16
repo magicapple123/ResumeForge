@@ -1,4 +1,5 @@
 """岗位备注与批量操作测试。"""
+
 import pytest
 
 
@@ -158,6 +159,59 @@ def test_batch_delete_deduplicates_ids(client):
     assert client.get(f"/api/jobs/{first['id']}").status_code == 404
     assert client.get(f"/api/jobs/{second['id']}").status_code == 404
     assert client.get(f"/api/jobs/{untouched['id']}").status_code == 200
+
+
+def test_batch_delete_soft_deletes_into_trash_and_can_be_restored(client):
+    """批量删除是软删除（进回收站、可恢复），不是物理删除。
+
+    回归：``POST /api/jobs/batch-delete`` 此前直接 ``db.delete`` 物理删行，是唯一绕过
+    回收站的删除入口——界面批量删岗位即不可恢复的数据丢失。现与单条删除同一软删语义。
+    """
+    first = _create_job(client, "算法工程师", "内推人：张三")
+    second = _create_job(client, "后端工程师", "已过简历初筛")
+    untouched = _create_job(client, "前端工程师")
+
+    response = client.post("/api/jobs/batch-delete", json={"job_ids": [first["id"], second["id"]]})
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 2}
+
+    # ① 回收站外看不到（列表与单条读取都按既有约定 404）。
+    assert client.get(f"/api/jobs/{first['id']}").status_code == 404
+    assert client.get(f"/api/jobs/{second['id']}").status_code == 404
+
+    # ② 但在回收站里能看到（type=job），证明是软删除而非物理删除。
+    trashed = client.get("/api/trash", params={"type": "job"}).json()["items"]
+    trashed_ids = {item["id"] for item in trashed}
+    assert {first["id"], second["id"]} <= trashed_ids
+    # 未被选中的岗位不受影响，也不在回收站里。
+    assert client.get(f"/api/jobs/{untouched['id']}").status_code == 200
+    assert untouched["id"] not in trashed_ids
+
+    # ③ 恢复后原样回来，数据完整（标题与备注都在）。
+    assert client.post(f"/api/trash/job/{first['id']}/restore").status_code == 204
+    restored = client.get(f"/api/jobs/{first['id']}")
+    assert restored.status_code == 200
+    assert restored.json()["title"] == "算法工程师"
+    assert restored.json()["note"] == "内推人：张三"
+
+
+def test_batch_delete_matches_single_delete_trash_semantics(client):
+    """批量删除与单条删除在回收站口径上完全一致：同一路径的两种入口，结果必须一样。"""
+    via_batch = _create_job(client, "批量删岗位")
+    via_single = _create_job(client, "单条删岗位")
+
+    assert client.post("/api/jobs/batch-delete", json={"job_ids": [via_batch["id"]]}).json() == {
+        "deleted": 1
+    }
+    assert client.delete(f"/api/jobs/{via_single['id']}").status_code == 204
+
+    # 两个入口删掉的岗位，在回收站里以同一形式出现。
+    trashed = client.get("/api/trash", params={"type": "job"}).json()["items"]
+    assert {item["id"] for item in trashed} == {via_batch["id"], via_single["id"]}
+    # 也都可恢复。
+    for job_id in (via_batch["id"], via_single["id"]):
+        assert client.post(f"/api/trash/job/{job_id}/restore").status_code == 204
+        assert client.get(f"/api/jobs/{job_id}").status_code == 200
 
 
 @pytest.mark.parametrize("path", ["batch-status", "batch-delete"])
