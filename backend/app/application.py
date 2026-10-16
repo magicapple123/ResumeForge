@@ -248,9 +248,12 @@ async def lifespan(_app: FastAPI):
     # check_seconds 周期再查；快照可能几百 MB，不能让它卡住"开始接收请求"这一行。
     from .services.data_backup import scheduler as auto_backup_scheduler
 
-    auto_backup_scheduler.start_scheduler(get_settings().auto_backup_check_seconds)
-    # 唤醒一次：启动时立即做首轮到期检查（与旧行为一致），之后按周期调度。
-    auto_backup_scheduler.trigger_check()
+    runtime_settings = get_settings()
+    if runtime_settings.auto_backup_enabled:
+        auto_backup_scheduler.start_scheduler(runtime_settings.auto_backup_check_seconds)
+        # 唤醒一次：启动时立即做首轮到期检查（与旧行为一致），之后按周期调度。
+        auto_backup_scheduler.trigger_check()
+    # 关闭时不创建空线程：它没有备份工作，却会在请求/数据集切换时短暂争抢租约。
     # 用户文件副本的启动回填同样放后台：扫描的是 base64 大字段，但 best-effort、
     # 幂等，失败只记日志，绝不阻断启动或请求。
     from .services.user_files import schedule_backfill

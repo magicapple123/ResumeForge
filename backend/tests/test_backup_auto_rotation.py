@@ -90,6 +90,7 @@ def test_backup_scheduling_is_excluded_during_dataset_switch(monkeypatch):
     from app.services.data_backup import scheduler as scheduler_module
 
     calls: list = []
+    monkeypatch.setattr(scheduler_module, "get_settings", _auto_settings)
     monkeypatch.setattr(scheduler_module, "run_auto_backup_if_due", lambda bind: calls.append(bind))
 
     def _raise(owner):
@@ -109,6 +110,7 @@ def test_backup_run_holds_and_releases_the_lease(monkeypatch):
         identity=SimpleNamespace(dataset_id="main", engine=object()),
         release=lambda: released.append(True),
     )
+    monkeypatch.setattr(scheduler_module, "get_settings", _auto_settings)
     monkeypatch.setattr("app.runtime.dataset_scope.acquire_lease", lambda owner: lease)
     monkeypatch.setattr(scheduler_module, "run_auto_backup_if_due", lambda bind: None)
 

@@ -1,5 +1,6 @@
 """自动备份调度线程（RF-05）：启动即查、周期唤醒、切换唤醒、干净退出。"""
 
+import asyncio
 import threading
 from types import SimpleNamespace
 
@@ -56,6 +57,9 @@ def test_scheduler_check_binds_the_current_dataset_identity(monkeypatch):
     released: list[bool] = []
     lease = NS(identity=identity, release=lambda: released.append(True))
 
+    monkeypatch.setattr(
+        scheduler_module, "get_settings", lambda: SimpleNamespace(auto_backup_enabled=True)
+    )
     monkeypatch.setattr("app.runtime.dataset_scope.current_identity", lambda: identity)
     monkeypatch.setattr("app.runtime.dataset_scope.acquire_lease", lambda owner: lease)
     monkeypatch.setattr(scheduler_module, "run_auto_backup_if_due", lambda bind: seen.append(bind))
@@ -73,10 +77,44 @@ def test_scheduler_skips_the_round_when_a_switch_is_in_progress(monkeypatch):
     def _raise(owner):
         raise DatasetScopeError("数据集正在切换中，请稍后再启动该任务")
 
+    monkeypatch.setattr(
+        scheduler_module, "get_settings", lambda: SimpleNamespace(auto_backup_enabled=True)
+    )
     monkeypatch.setattr("app.runtime.dataset_scope.acquire_lease", _raise)
     monkeypatch.setattr(scheduler_module, "run_auto_backup_if_due", lambda bind: seen.append(bind))
     scheduler_module.run_for_current_dataset()
     assert seen == []
+
+
+def test_scheduler_does_not_take_a_dataset_lease_when_disabled(monkeypatch):
+    """A disabled no-op must not race with a dataset switch by holding a lease."""
+    monkeypatch.setattr(
+        scheduler_module, "get_settings", lambda: SimpleNamespace(auto_backup_enabled=False)
+    )
+
+    attempts: list[str] = []
+
+    def unexpected_lease(owner):
+        attempts.append(owner)
+        raise AssertionError("disabled backup scheduling must not acquire a dataset lease")
+
+    monkeypatch.setattr("app.runtime.dataset_scope.acquire_lease", unexpected_lease)
+    scheduler_module.run_for_current_dataset()
+    assert attempts == []
+
+
+def test_lifespan_skips_backup_scheduler_when_disabled(monkeypatch):
+    from app import application
+
+    settings = application.get_settings().model_copy(update={"auto_backup_enabled": False})
+    monkeypatch.setattr(application, "get_settings", lambda: settings)
+
+    async def run_lifespan():
+        async with application.lifespan(application.app):
+            assert scheduler_module.get_scheduler() is None
+
+    asyncio.run(run_lifespan())
+    assert scheduler_module.get_scheduler() is None
 
 
 def test_scheduler_stop_is_idempotent(monkeypatch):
