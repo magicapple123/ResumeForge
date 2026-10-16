@@ -183,8 +183,8 @@ describe("ApplyRecordsPanel (grouped by batch)", () => {
       page_size: 20,
     });
     expect(screen.getByText("全栈工程师")).toBeInTheDocument();
-    // 每条记录都有自己的 详情 / 重投 按钮。
-    expect(screen.getAllByRole("button", { name: /详\s*情/ }).length).toBeGreaterThanOrEqual(2);
+    // 「详 情」独立按钮已并入「···」菜单（重投仍是行内按钮）。
+    expect(screen.queryByRole("button", { name: /详\s*情/ })).toBeNull();
     expect(screen.getAllByRole("button", { name: /重投/ }).length).toBeGreaterThanOrEqual(2);
 
     // 折叠不丢：收起再展开不再重复调明细端点。
@@ -211,11 +211,14 @@ describe("ApplyRecordsPanel (grouped by batch)", () => {
     });
   });
 
-  it("opens the detail Drawer from an expanded row with full failure info including the URL", async () => {
+  it("opens the detail Drawer from the row's ··· menu with full failure info including the URL", async () => {
     await renderPanel();
     fireEvent.click(batchHead(7));
-    const detailButtons = await screen.findAllByRole("button", { name: /详\s*情/ });
-    fireEvent.click(detailButtons[0]);
+    await screen.findByText("高级后端工程师（高并发方向）");
+    // 「查看详情」收在行内「···」菜单里（独立「详 情」按钮已合并）。
+    const row = screen.getByText("高级后端工程师（高并发方向）").closest("tr") as HTMLElement;
+    fireEvent.click(within(row).getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("查看详情"));
 
     const drawer = await screen.findByRole("dialog");
     expect(
@@ -257,7 +260,7 @@ describe("ApplyRecordsPanel (grouped by batch)", () => {
 
 describe("投递记录分页器", () => {
   it("多页时渲染分页器，翻页携带 page 重新加载；单页时不出现", async () => {
-    // 12 个批次、每页 5 个 → 两页，分页器应出现。
+    // 12 个批次、每页 10 个 → 两页，分页器应出现。
     apiMocks.listRecordBatches.mockResolvedValue({ items: BATCHES.items, total: 12 });
     await renderPanel();
     expect(await screen.findByTitle("2")).toBeInTheDocument();

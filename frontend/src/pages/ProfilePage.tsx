@@ -1,6 +1,7 @@
 /** 我的资料：基础信息 + 各分区动态列表，整体保存。 */
 import { App, ConfigProvider, Form, Input } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
+import ErrorState from "../components/common/ErrorState";
 import {
   useCallback,
   useEffect,
@@ -72,13 +73,14 @@ export default function ProfilePage() {
   const {
     form,
     loading,
+    loadError,
+    retryProfileLoad,
     saving,
     editing,
     setEditing,
     photoReading,
-    sectionOrder,
+    sectionOrderStore,
     sectionReorderMode,
-    dragOverSection,
     profileTextOpen,
     profileText,
     profileTextWarnings,
@@ -170,7 +172,9 @@ export default function ProfilePage() {
     setWriteOpen(true);
   }, []);
 
-  const handleStartEditing = useCallback(() => setEditing(true), [setEditing]);
+  const handleStartEditing = useCallback(() => {
+    if (!loading && !loadError) setEditing(true);
+  }, [loading, loadError, setEditing]);
 
   /**
    * 「保存全部资料」= 资料表单 + 网申资料，**两次都成功才算成功**。
@@ -180,6 +184,7 @@ export default function ProfilePage() {
    * 存上了，而实际上丢的是他刚补的那一屏。
    */
   const submitAll = async () => {
+    if (loading || loadError) return;
     const profileSaved = await submit();
     const draft = workspaceRef.current?.getDraft() ?? null;
     if (!extraProfile || !draft) {
@@ -278,7 +283,7 @@ export default function ProfilePage() {
   // 本次进入也没关掉它时，就在球旁挂上「去编辑」入口。依赖里只有真会变的几个条件，
   // 打字与击键都不会把它重算。
   useEffect(() => {
-    if (loading || editing || promptDismissed) {
+    if (loading || loadError || editing || promptDismissed) {
       setProfileEditControl(null);
       return undefined;
     }
@@ -292,11 +297,16 @@ export default function ProfilePage() {
       onDismiss: () => setPromptDismissed(true),
     });
     return () => setProfileEditControl(null);
-  }, [editing, handleStartEditing, loading, promptDismissed]);
+  }, [editing, handleStartEditing, loading, loadError, promptDismissed]);
 
   // 简历资料子树与网申资料的输入无关：用 useMemo 钉住元素引用（依赖里没有任何草稿状态），
   // 网申资料打字时 React 直接跳过这棵最重的子树。注意 ProfileWorkspaceTabs 两 tab 常驻挂载
   // （destroyOnHidden=false），这里的引用稳定化正是消除「另一 tab 无辜重渲」的那一环。
+  //
+  // 分区顺序（sectionOrder）与排序模式**刻意不在依赖里**：它们由分区栈经
+  // sectionOrderStore 自行订阅（useSyncExternalStore）。拖拽实时重排的每次 splice
+  // 若走到这里，antd Form 会换 context、67 个 Form.Item 全量重渲（实测单次 170ms）——
+  // 这正是用户实测拖拽卡顿的根因，顺序的渲染消费必须止步于分区栈内部。
   const resumeContent = useMemo(
     () => (
       <>
@@ -304,12 +314,10 @@ export default function ProfilePage() {
           <GeneralResumeSection onGenerate={openGenerateModal} onWrite={openWriteModal} />
         </ConfigProvider>
         <ProfileSectionStack
-          sectionOrder={sectionOrder}
-          sectionReorderMode={sectionReorderMode}
+          reorderStore={sectionOrderStore}
           editing={editing}
           saving={saving}
           photo={photo}
-          dragOverSection={dragOverSection}
           collapsedSections={collapsedSections}
           onToggleCollapsed={toggleSection}
           onPhotoSelect={handlePhotoSelect}
@@ -320,7 +328,6 @@ export default function ProfilePage() {
     ),
     [
       collapsedSections,
-      dragOverSection,
       editing,
       handlePhotoSelect,
       handleSectionPointerDownStable,
@@ -329,8 +336,7 @@ export default function ProfilePage() {
       openWriteModal,
       photo,
       saving,
-      sectionOrder,
-      sectionReorderMode,
+      sectionOrderStore,
       toggleSection,
     ],
   );
@@ -391,6 +397,8 @@ export default function ProfilePage() {
   );
 
   if (loading) return <PageSkeleton rows={10} />;
+  if (loadError)
+    return <ErrorState description={`我的资料加载失败：${loadError}`} onRetry={retryProfileLoad} />;
 
   return (
     <div className={`profile-page${editing ? " is-editing" : ""}`}>

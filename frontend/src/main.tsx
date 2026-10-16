@@ -7,7 +7,8 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import DatasetScopeBoundary from "./components/DatasetScopeBoundary";
 import AppErrorBoundary from "./components/AppErrorBoundary";
-import { layer, palette } from "./theme/tokens";
+import { appTheme } from "./theme/appTheme";
+import { layer } from "./theme/tokens";
 import "./index.css";
 
 /**
@@ -36,24 +37,8 @@ async function start() {
       <ConfigProvider
         locale={zhCN}
         theme={{
-          token: {
-            colorPrimary: palette.brand,
-            borderRadius: 6,
-            // RF-12 a11y：antd 默认的次级文字（rgba 黑 45% ≈ #8c8c8c）与链接蓝
-            // （#1677ff）对白底不足 4.5:1，收进 token 并加深到达标值（axe 扫描钉着）。
-            colorTextDescription: palette.textSecondary,
-            colorTextSecondary: palette.textSecondary,
-            colorTextTertiary: palette.textTertiary,
-            // 占位符默认 #bfbfbf 只有 1.83:1（axe 扫描钉着）；提到三级文字色。
-            colorTextPlaceholder: palette.textTertiary,
-            colorLink: palette.link,
-            // 弹层基准 z 提到 3100：投投浮窗里的右键菜单、下拉、confirm、message 若低于
-            // 自家卡片会被整个盖住（看起来就是"点了没反应"）。投投整族（球 3400 /
-            // 助手卡 3300 / 剪贴板卡 3200 / 资料保存卡 3250，地标见 features/tou-tou
-            // 各 css）整体高于本基准——有 Modal 弹出时悬浮球与卡片仍可用，不必逐处
-            // overlayStyle（球身 Tooltip 的 3450 例外，需显式抬层）。
-            zIndexPopupBase: layer.popupBase,
-          },
+          ...appTheme,
+          token: { ...appTheme.token, zIndexPopupBase: layer.popupBase },
         }}
         // 弹窗内容在**卡片自己身上**滚动，而不是让整页滚动。
         // antd 默认把 Modal 当作文档流里的普通元素（它只是 position: fixed 的遮罩），

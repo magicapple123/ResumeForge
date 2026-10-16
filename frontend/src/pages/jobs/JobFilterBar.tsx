@@ -4,7 +4,6 @@
  * openMatchBatch/backfillDetails 等经 prop 直通页面 handler，零 api 导入。）
  */
 import {
-  CloseCircleOutlined,
   HistoryOutlined,
   InboxOutlined,
   PlusOutlined,
@@ -27,8 +26,6 @@ export function JobFilterBar({
   sourceKind,
   setSourceKind,
   batchAction,
-  selectionMode,
-  exitSelectionMode,
   openMatchBatch,
   emptyDescriptionJobIds,
   backfilling,
@@ -47,8 +44,6 @@ export function JobFilterBar({
   sourceKind: "" | "collected" | "manual";
   setSourceKind: (value: "" | "collected" | "manual") => void;
   batchAction: BatchAction;
-  selectionMode: boolean;
-  exitSelectionMode: () => void;
   openMatchBatch: (view?: "setup" | "history") => void;
   emptyDescriptionJobIds: number[];
   backfilling: boolean;
@@ -91,6 +86,7 @@ export function JobFilterBar({
           }}
         />
         <Select
+          aria-label="岗位类型筛选"
           placeholder="类型"
           allowClear
           disabled={batchAction !== null}
@@ -103,6 +99,7 @@ export function JobFilterBar({
           options={JOB_TYPE_OPTIONS}
         />
         <Select
+          aria-label="岗位状态筛选"
           placeholder="状态"
           allowClear
           disabled={batchAction !== null}
@@ -127,16 +124,8 @@ export function JobFilterBar({
           }}
           options={SOURCE_KIND_OPTIONS}
         />
-        {/* 进入选择模式的入口在行右键菜单的「批量选择」（R8）；这里只保留退出。 */}
-        {selectionMode && (
-          <Button
-            icon={<CloseCircleOutlined />}
-            disabled={batchAction !== null}
-            onClick={exitSelectionMode}
-          >
-            退出选择
-          </Button>
-        )}
+        {/* 进入选择模式的入口在行右键菜单的「批量选择」（R8）；退出选择已挪到
+            BatchToolbar 的「全选全部岗位」右侧（用户要求，两行各归其位）。 */}
         {/* 开始分析在面板里确认（设置视图有「开始分析」按钮）；分析一律走后台任务，
             关掉面板/切页都不会中断，无需单独的"后台运行"入口。 */}
         <Button

@@ -19,6 +19,7 @@ import CandidateJobsDrawer from "../components/jobs/CandidateJobsDrawer";
 import { candidateToJobPayload } from "../components/jobs/candidate/candidatePayload";
 import { JobImportModal } from "../components/jobs/JobImportModal";
 import JobTable from "../components/jobs/JobTable";
+import ErrorState from "../components/common/ErrorState";
 import type { CandidateJobDetail, Job, JobList } from "../types";
 import { BatchToolbar } from "./jobs/BatchToolbar";
 import { JobFilterBar } from "./jobs/JobFilterBar";
@@ -326,14 +327,8 @@ export default function JobsPage() {
   const rowSelection: TableRowSelection<JobList> = {
     selectedRowKeys: selectedJobIds,
     preserveSelectedRowKeys: true,
-    onChange: (keys) => {
-      const jobIds = keys.map(Number);
-      if (jobIds.length > 500) {
-        message.warning("一次最多选择 500 个岗位");
-        return;
-      }
-      setSelectedJobIds(jobIds);
-    },
+    // 选择不设条数上限：批量端点已放宽到 5000，勾选时不再拦（超出由动作时报错兜底）。
+    onChange: (keys) => setSelectedJobIds(keys.map(Number)),
     getCheckboxProps: () => ({ disabled: batchAction !== null }),
   };
 
@@ -350,8 +345,6 @@ export default function JobsPage() {
         sourceKind={sourceKind}
         setSourceKind={setSourceKind}
         batchAction={batchAction}
-        selectionMode={selectionMode}
-        exitSelectionMode={exitSelectionMode}
         openMatchBatch={openMatchBatch}
         emptyDescriptionJobIds={emptyDescriptionJobIds}
         backfilling={backfilling}
@@ -371,39 +364,44 @@ export default function JobsPage() {
         applyBatchStatus={applyBatchStatus}
         enqueueSelectedJobs={enqueueSelectedJobs}
         removeSelectedJobs={removeSelectedJobs}
+        exitSelectionMode={exitSelectionMode}
         totalCount={jobs?.total ?? 0}
         selectAllPagesLoading={selectAllPagesLoading}
         onSelectAllPages={() => void selectAllPages()}
       />
 
-      <JobTable
-        jobs={jobs}
-        loading={loading}
-        selectionMode={selectionMode}
-        rowSelection={rowSelection}
-        batchAction={batchAction}
-        favoriteJobId={favoriteJobId}
-        page={page}
-        pageSize={pageSize}
-        onToggleFavorite={(job) => void toggleFavorite(job)}
-        onOpenDetail={openDetail}
-        onGenerate={(job) => void getJob(job.id).then(setGenerateJob)}
-        onWrite={(job) => void getJob(job.id).then(setManualResumeJob)}
-        onViewResumes={(job) => navigate("/resumes?job_id=" + job.id)}
-        onEdit={(job) => {
-          // 列表项已瘦身（无 JD 全文），编辑前先取全量。
-          void getJob(job.id).then((full) => {
-            setEditingJob(full);
-            setFormOpen(true);
-          });
-        }}
-        onDelete={(job) => void removeJob(job.id)}
-        onEnterSelecting={enterSelectionMode}
-        onPageChange={(nextPage, nextPageSize) => {
-          setPage(nextPage);
-          setPageSize(nextPageSize);
-        }}
-      />
+      {error ? (
+        <ErrorState description={error} onRetry={() => void reload()} />
+      ) : (
+        <JobTable
+          jobs={jobs}
+          loading={loading}
+          selectionMode={selectionMode}
+          rowSelection={rowSelection}
+          batchAction={batchAction}
+          favoriteJobId={favoriteJobId}
+          page={page}
+          pageSize={pageSize}
+          onToggleFavorite={(job) => void toggleFavorite(job)}
+          onOpenDetail={openDetail}
+          onGenerate={(job) => void getJob(job.id).then(setGenerateJob)}
+          onWrite={(job) => void getJob(job.id).then(setManualResumeJob)}
+          onViewResumes={(job) => navigate("/resumes?job_id=" + job.id)}
+          onEdit={(job) => {
+            // 列表项已瘦身（无 JD 全文），编辑前先取全量。
+            void getJob(job.id).then((full) => {
+              setEditingJob(full);
+              setFormOpen(true);
+            });
+          }}
+          onDelete={(job) => void removeJob(job.id)}
+          onEnterSelecting={enterSelectionMode}
+          onPageChange={(nextPage, nextPageSize) => {
+            setPage(nextPage);
+            setPageSize(nextPageSize);
+          }}
+        />
+      )}
 
       <JobDetailDrawer
         job={detailJob}

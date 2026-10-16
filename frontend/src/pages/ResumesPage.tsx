@@ -13,6 +13,7 @@ import {
 } from "../api/resumes";
 import { diffResume } from "../api/resumeWriting";
 import BatchActionBar from "../components/common/BatchActionBar";
+import ErrorState from "../components/common/ErrorState";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import ResumeDetailModal from "../components/ResumeDetailModal";
 import { computeFieldDiff } from "../utils/resumeFieldDiff";
@@ -51,9 +52,6 @@ export default function ResumesPage() {
   }
   const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
   const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
-  const [favoriteFilter, setFavoriteFilter] = useState<boolean | undefined>(() =>
-    boolParam("favorite"),
-  );
   const [hasJobFilter, setHasJobFilter] = useState<boolean | undefined>(() => boolParam("has_job"));
   // 深链 ?resume_id=（RF-11 搜索直开）：挂载时读一次，数字有效才打开详情；
   // 关闭详情时把参数从 URL 移除（replace，不打历史）。镜像 JobsPage 的 job_id 模式。
@@ -83,21 +81,19 @@ export default function ResumesPage() {
         page,
         page_size: pageSize,
         job_id: jobId,
-        favorite: favoriteFilter,
         has_job: hasJobFilter,
       }),
-    [keyword, page, pageSize, jobId, favoriteFilter, hasJobFilter],
+    [keyword, page, pageSize, jobId, hasJobFilter],
   );
 
   useEffect(() => {
     if (error) message.error(error);
   }, [error, message]);
 
-  // 跨页全选（对齐岗位广场）：按当前筛选拉全部 id，批量删除仍走 500 上限裁决。
+  // 跨页全选（对齐岗位广场）：按当前筛选拉全部 id，批量删除仍受后端 5000 上限裁决。
   const { selectAllPages, selectAllPagesLoading } = useSelectAllResumes({
     keyword,
     jobId,
-    favoriteFilter,
     hasJobFilter,
     setSelectedIds: batch.setSelected,
   });
@@ -110,7 +106,6 @@ export default function ResumesPage() {
         const next = new URLSearchParams(previous);
         const values: [string, string][] = [
           ["keyword", keyword],
-          ["favorite", favoriteFilter === undefined ? "" : favoriteFilter ? "1" : "0"],
           ["has_job", hasJobFilter === undefined ? "" : hasJobFilter ? "1" : "0"],
           ["page", page > 1 ? String(page) : ""],
           ["page_size", pageSize !== 10 ? String(pageSize) : ""],
@@ -123,7 +118,7 @@ export default function ResumesPage() {
       },
       { replace: true },
     );
-  }, [keyword, favoriteFilter, hasJobFilter, page, pageSize, setSearchParams]);
+  }, [keyword, hasJobFilter, page, pageSize, setSearchParams]);
 
   const remove = useCallback(
     async (id: number) => {
@@ -235,53 +230,39 @@ export default function ResumesPage() {
 
   return (
     <div>
-      <Button onClick={() => setArchiveOpen(true)} style={{ marginBottom: 12 }}>
-        交付存档
-      </Button>
       {archiveOpen && <DeliveryArchiveModal onClose={() => setArchiveOpen(false)} />}
-      {jobId && (
-        <Space style={{ marginBottom: 12 }}>
-          <Tag color="blue">按岗位筛选：#{jobId}</Tag>
-          <Button type="link" size="small" onClick={() => navigate("/resumes")}>
-            清除筛选
-          </Button>
-        </Space>
-      )}
-      <Input.Search
-        placeholder="搜索简历记录"
-        allowClear
-        style={{ width: 300, marginBottom: 16 }}
-        // 受控镜像：URL 恢复的关键词能回填输入框；点 × 清空时立即把筛选也清掉。
-        value={searchText}
-        onChange={(event) => {
-          const value = event.target.value;
-          setSearchText(value);
-          if (value === "" && keyword !== "") {
-            setKeyword("");
-            setPage(1);
-          }
-        }}
-        onSearch={(value) => {
-          setSearchText(value);
-          setKeyword(value);
-          setPage(1);
-        }}
-      />
-      <Space wrap style={{ marginBottom: 16 }}>
-        <Select
+      {/* 筛选栏整体收进一个 Space（gap 12px，wrap 换行时同样吃 gap）：
+          之前「交付存档」按钮、搜索框、两个筛选 Select 各写各的 marginBottom，
+          行内元素水平方向零间距——按钮和搜索框几乎贴死，视觉节奏也不一致。 */}
+      <Space wrap size={16} align="center" className="rf-filter-bar">
+        <Button onClick={() => setArchiveOpen(true)}>交付存档</Button>
+        {jobId && (
+          <Space size={4} align="center">
+            <Tag color="blue">按岗位筛选：#{jobId}</Tag>
+            <Button type="link" size="small" onClick={() => navigate("/resumes")}>
+              清除筛选
+            </Button>
+          </Space>
+        )}
+        <Input.Search
+          placeholder="搜索简历记录"
           allowClear
-          placeholder="收藏状态"
-          aria-label="按收藏状态筛选"
-          style={{ width: 130 }}
-          value={favoriteFilter}
-          onChange={(value) => {
-            setFavoriteFilter(value);
+          style={{ width: 300 }}
+          // 受控镜像：URL 恢复的关键词能回填输入框；点 × 清空时立即把筛选也清掉。
+          value={searchText}
+          onChange={(event) => {
+            const value = event.target.value;
+            setSearchText(value);
+            if (value === "" && keyword !== "") {
+              setKeyword("");
+              setPage(1);
+            }
+          }}
+          onSearch={(value) => {
+            setSearchText(value);
+            setKeyword(value);
             setPage(1);
           }}
-          options={[
-            { value: true, label: "已收藏" },
-            { value: false, label: "未收藏" },
-          ]}
         />
         <Select
           allowClear
@@ -300,21 +281,7 @@ export default function ResumesPage() {
         />
       </Space>
       {batch.selecting && (
-        <BatchActionBar
-          count={batch.selectedCount}
-          onExit={batch.exitSelecting}
-          pageSelectAll={{
-            allSelected:
-              (data?.items ?? []).length > 0 &&
-              (data?.items ?? []).every((item) => batch.isSelected(item.id)),
-            someSelected: (data?.items ?? []).some((item) => batch.isSelected(item.id)),
-            onToggle: (checked) =>
-              batch.selectPage(
-                (data?.items ?? []).map((item) => item.id),
-                checked,
-              ),
-          }}
-        >
+        <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
           {(data?.total ?? 0) > 0 && (
             <Tooltip title={`按当前筛选，一键选中全部 ${data?.total} 份简历（跨页，不止当前页）`}>
               <Button loading={selectAllPagesLoading} onClick={() => void selectAllPages()}>
@@ -323,31 +290,35 @@ export default function ResumesPage() {
             </Tooltip>
           )}
           <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
-            删除所选
+            批量删除
           </Button>
         </BatchActionBar>
       )}
-      <ResumeTable
-        data={data}
-        loading={loading}
-        batch={batch}
-        favoriteResumeId={favoriteResumeId}
-        page={page}
-        setPage={setPage}
-        pageSize={pageSize}
-        setPageSize={setPageSize}
-        toggleFavorite={toggleFavorite}
-        remove={remove}
-        setPreviewId={setPreviewId}
-        setRenameTarget={setRenameTarget}
-        setRenameValue={setRenameValue}
-        setNoteTarget={setNoteTarget}
-        setNoteValue={setNoteValue}
-        setDiffBase={setDiffBase}
-        setDiffAgainstId={setDiffAgainstId}
-        setDiffResult={setDiffResult}
-        navigate={navigate}
-      />
+      {error ? (
+        <ErrorState description={error} onRetry={() => void reload()} />
+      ) : (
+        <ResumeTable
+          data={data}
+          loading={loading}
+          batch={batch}
+          favoriteResumeId={favoriteResumeId}
+          page={page}
+          setPage={setPage}
+          pageSize={pageSize}
+          setPageSize={setPageSize}
+          toggleFavorite={toggleFavorite}
+          remove={remove}
+          setPreviewId={setPreviewId}
+          setRenameTarget={setRenameTarget}
+          setRenameValue={setRenameValue}
+          setNoteTarget={setNoteTarget}
+          setNoteValue={setNoteValue}
+          setDiffBase={setDiffBase}
+          setDiffAgainstId={setDiffAgainstId}
+          setDiffResult={setDiffResult}
+          navigate={navigate}
+        />
+      )}
       <ResumeDetailModal
         recordId={previewId}
         onClose={() => {

@@ -1,0 +1,171 @@
+/* Cross-page interaction rules; feature-specific layouts remain in their modules. */
+.rf-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-skip-link {
+  position: fixed;
+  z-index: 3500;
+  top: 8px;
+  left: 16px;
+  padding: 12px 24px;
+  border: 2px solid var(--rf-focus-visible);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+  color: var(--rf-brand);
+  font-weight: 600;
+  transform: translateY(-160%);
+}
+
+.app-skip-link:focus {
+  transform: translateY(0);
+}
+
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 3px;
+}
+
+.app-content:focus {
+  outline: none;
+}
+
+.app-content {
+  scroll-margin-top: calc(var(--rf-header-height) + 16px);
+}
+
+.app-mobile-menu-button {
+  display: none;
+}
+
+.app-header-page-label {
+  display: none;
+}
+
+.app-mobile-navigation .ant-menu {
+  border-inline-end: 0;
+}
+
+.app-mobile-navigation .ant-menu-item {
+  height: 48px;
+  line-height: 48px;
+  margin-block: 8px;
+  border-radius: var(--rf-radius-control);
+}
+
+.app-mobile-navigation .ant-drawer-close {
+  min-width: 48px;
+  min-height: 48px;
+}
+
+.app-header-title {
+  line-height: 1.5;
+}
+
+.app-nav-menu .ant-menu-item {
+  transition:
+    background-color var(--rf-motion-duration) ease-in-out,
+    color var(--rf-motion-duration) ease-in-out;
+}
+
+.app-header-context-error {
+  color: var(--rf-error-text);
+}
+
+.rf-state {
+  display: flex;
+  min-height: 192px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  border-radius: var(--rf-radius-panel);
+  background: var(--rf-surface);
+}
+
+.rf-state .ant-empty {
+  max-width: 480px;
+  margin: 0;
+}
+
+.rf-state .ant-empty-description {
+  color: var(--rf-text-secondary);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.rf-state--error {
+  border: 1px solid #f4ccc7;
+  background: #fffbfa;
+}
+
+.rf-state--error .ant-empty-description,
+.rf-state-error-icon {
+  color: var(--rf-error-text);
+}
+
+.rf-state-error-icon {
+  font-size: 40px;
+}
+
+.rf-state-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* Wide tables scroll inside their own container, leaving page actions reachable. */
+.app-content .ant-table-wrapper {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-content .ant-table-content {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.trash-type-filters {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  padding-bottom: 4px;
+  overscroll-behavior-x: contain;
+}
+
+.trash-type-filters .ant-segmented {
+  display: inline-flex;
+}
+
+.rf-filter-bar {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.rf-filter-bar > .ant-space-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

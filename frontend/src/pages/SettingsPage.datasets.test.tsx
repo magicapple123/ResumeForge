@@ -174,6 +174,13 @@ describe("SettingsPage datasets", () => {
     expect(screen.getByText("当前")).toBeInTheDocument();
   });
 
+  /** 「导出」收进了下拉菜单：先点开菜单，再点对应菜单项。 */
+  async function openExportMenu(itemName: string | RegExp) {
+    // antd 按钮的 accessible name 含图标名（"download导出"），按结尾匹配。
+    fireEvent.click(screen.getByRole("button", { name: /导\s*出$/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: itemName }));
+  }
+
   it("downloads the active dataset", async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     apiMocks.exportDataset.mockResolvedValue({
@@ -182,7 +189,7 @@ describe("SettingsPage datasets", () => {
     });
     await renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /导出当前数据集/ }));
+    await openExportMenu(/导出当前数据集/);
 
     // 默认不包含 API Key：密钥不出包是既有承诺，勾选项只在用户显式勾选时生效。
     await waitFor(() => expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", false));
@@ -200,12 +207,12 @@ describe("SettingsPage datasets", () => {
 
     const checkbox = screen.getByRole("checkbox", { name: /备份中包含大模型 API Key/ });
     fireEvent.click(checkbox);
-    fireEvent.click(screen.getByRole("button", { name: /导出当前数据集/ }));
+    await openExportMenu(/导出当前数据集/);
     await waitFor(() => expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", true));
 
     // 取消勾选后恢复默认：选择权始终跟着勾选状态走，而不是一次勾选永久生效。
     fireEvent.click(checkbox);
-    fireEvent.click(screen.getByRole("button", { name: /导出当前数据集/ }));
+    await openExportMenu(/导出当前数据集/);
     await waitFor(() => expect(apiMocks.exportDataset).toHaveBeenLastCalledWith("main", false));
     click.mockRestore();
   });
@@ -219,20 +226,38 @@ describe("SettingsPage datasets", () => {
     apiMocks.listDatasets.mockResolvedValue([mainDataset, imported]);
     await renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /导出全部数据集/ }));
+    await openExportMenu(/导出全部数据集/);
 
     await waitFor(() => expect(apiMocks.exportAllDatasets).toHaveBeenCalledOnce());
     expect(click).toHaveBeenCalledOnce();
     click.mockRestore();
   });
 
-  it("hides the export-all button when there is only one dataset", async () => {
-    // 只有一份时两个按钮做的事一模一样，多一个选择只是噪声；它出现本身才是信号。
+  it("hides the export-all entry when there is only one dataset", async () => {
+    // 只有一份时两个入口做的事一模一样，多一个选择只是噪声；它出现本身才是信号。
     apiMocks.listDatasets.mockResolvedValue([mainDataset]);
     await renderPage();
 
     expect(await screen.findByText("主数据")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /导出全部数据集/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /导\s*出$/ }));
+    expect(await screen.findByRole("menuitem", { name: /导出当前数据集/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /导出全部数据集/ })).not.toBeInTheDocument();
+  });
+
+  it("shows only the first 5 datasets until 展开其余 is requested", async () => {
+    const extras = Array.from({ length: 6 }, (_, index) => ({
+      ...imported,
+      id: `extra-${index}`,
+      name: `备份 ${index + 2}`,
+    }));
+    apiMocks.listDatasets.mockResolvedValue([mainDataset, imported, ...extras]);
+    await renderPage();
+
+    expect(await screen.findByText("主数据")).toBeInTheDocument();
+    // 列表默认只渲染前 5 份，其余收进「显示全部」（展示层折叠，不裁剪接口数据）。
+    expect(screen.queryByText("备份 6")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "显示全部 8 条" }));
+    expect(await screen.findByText("备份 6")).toBeInTheDocument();
   });
 
   it("imports a chosen archive as a new dataset without switching to it", async () => {
@@ -376,7 +401,7 @@ describe("SettingsPage datasets", () => {
     });
     await renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /导出当前数据集/ }));
+    await openExportMenu(/导出当前数据集/);
 
     expect(await screen.findByText(/不完整/)).toBeInTheDocument();
     click.mockRestore();

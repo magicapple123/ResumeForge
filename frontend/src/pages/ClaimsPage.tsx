@@ -14,6 +14,7 @@ import {
 } from "@ant-design/icons";
 import { App, Button, Empty, Input, Pagination, Select, Space, Statistic, Typography } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
+import ErrorState from "../components/common/ErrorState";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -200,14 +201,16 @@ export default function ClaimsPage() {
         )}
       </div>
 
-      <Space size={12} wrap className="claims-filters">
+      <Space size={16} wrap className="claims-filters rf-filter-bar">
         <Select
+          aria-label="事实分类筛选"
           value={category}
           onChange={setCategory}
           style={{ width: 180 }}
           options={[{ value: "", label: "全部分类" }, ...categoryOptions]}
         />
         <Select
+          aria-label="事实核实状态筛选"
           value={status}
           onChange={setStatus}
           style={{ width: 160 }}
@@ -243,7 +246,7 @@ export default function ClaimsPage() {
       )}
 
       {loading && <PageSkeleton rows={6} />}
-      {error && <Typography.Text type="danger">{error}</Typography.Text>}
+      {error && <ErrorState description={error} onRetry={() => void reload()} />}
       {!loading && !error && items.length === 0 && (
         <Empty
           description={

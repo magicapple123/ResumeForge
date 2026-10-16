@@ -7,8 +7,9 @@
  * 和一条同步链路。换浏览器/清缓存会丢，界面文案里如实说明。
  */
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Empty, Input, List, Typography } from "antd";
+import { App, Button, ConfigProvider, Empty, Input, List, Typography } from "antd";
 import { useEffect, useState } from "react";
+import { layer } from "../../theme/tokens";
 import { RowActions } from "../../components/common/RowActions";
 import { copyText } from "../../utils/clipboard";
 import { useTouTouCardDrag } from "./useTouTouCardDrag";
@@ -163,138 +164,146 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
 
   return (
     <section className={classes} style={cardStyle} role="dialog" aria-label="投投剪贴板">
-      <div
-        ref={gripRef}
-        className="tt-clipboard-card-grip"
-        role="button"
-        tabIndex={0}
-        aria-label="拖动投投剪贴板"
-        onPointerDown={handlePointerDown}
-        onKeyDown={handleKeyDown}
-      >
-        <span className="tt-clipboard-card-title">投投剪贴板</span>
-      </div>
-      <button
-        type="button"
-        className="tt-clipboard-card-close"
-        aria-label="关闭投投剪贴板"
-        onClick={onClose}
-      >
-        ×
-      </button>
-      <div className="tt-clipboard-card-body">
-        <Typography.Paragraph type="secondary" className="tt-clipboard-card-hint">
-          把要反复粘贴的资料存成片段，点一下就复制。片段只保存在本机浏览器里，不会上传。
-        </Typography.Paragraph>
-        {editingId === null ? (
-          <>
-            <Button
-              type="primary"
-              ghost
-              block
-              icon={<PlusOutlined />}
-              onClick={startCreate}
-              disabled={items.length >= MAX_ITEMS}
-            >
-              {items.length >= MAX_ITEMS ? `片段已达上限（${MAX_ITEMS} 条）` : "新增片段"}
-            </Button>
-            <div className="tt-clipboard-card-list">
-              {items.length === 0 ? (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="还没有片段：把常贴的内容存进来，随时一键复制。"
-                />
-              ) : (
-                <List
-                  dataSource={items}
-                  renderItem={(item) => (
-                    <List.Item
-                      actions={[
-                        <Button
-                          key="copy"
-                          size="small"
-                          type="primary"
-                          ghost
-                          loading={copyingId === item.id}
-                          onClick={() => void copyItem(item)}
-                        >
-                          复制
-                        </Button>,
-                        // 编辑/删除收进「···」菜单：删除不再以红图标裸露在行内
-                        // （全局约定：除回收站外，删除一律走菜单 + 二次确认）。
-                        <RowActions
-                          key="more"
-                          more={[
-                            {
-                              key: "edit",
-                              label: "编辑",
-                              icon: <EditOutlined />,
-                              onClick: () => startEdit(item),
-                            },
-                            {
-                              key: "delete",
-                              label: "删除",
-                              icon: <DeleteOutlined />,
-                              danger: true,
-                              confirm: "删除这条片段？",
-                              onClick: () => removeItem(item.id),
-                            },
-                          ]}
-                        />,
-                      ]}
-                    >
-                      <List.Item.Meta
-                        title={item.title}
-                        description={
-                          <Typography.Paragraph
-                            type="secondary"
-                            ellipsis={{ rows: 2 }}
-                            className="tt-clipboard-card-item-content"
+      {/*
+        卡片内弹层基准抬层：全局 zIndexPopupBase（3100）配 antd 的组件偏移
+        （+50~+80）到不了本卡（3500）之上，「···」下拉从这里挂到 body 后被卡片
+        盖住（用户看是"删除项被裁掉"）。局部把基准提到 layer.cardPopup（3550），
+        下拉落在 3600——卡片之上、悬浮球（3650）之下。其余 token 继承全局主题。
+      */}
+      <ConfigProvider theme={{ token: { zIndexPopupBase: layer.cardPopup } }}>
+        <div
+          ref={gripRef}
+          className="tt-clipboard-card-grip"
+          role="button"
+          tabIndex={0}
+          aria-label="拖动投投剪贴板"
+          onPointerDown={handlePointerDown}
+          onKeyDown={handleKeyDown}
+        >
+          <span className="tt-clipboard-card-title">投投剪贴板</span>
+        </div>
+        <button
+          type="button"
+          className="tt-clipboard-card-close"
+          aria-label="关闭投投剪贴板"
+          onClick={onClose}
+        >
+          ×
+        </button>
+        <div className="tt-clipboard-card-body">
+          <Typography.Paragraph type="secondary" className="tt-clipboard-card-hint">
+            把要反复粘贴的资料存成片段，点一下就复制。
+          </Typography.Paragraph>
+          {editingId === null ? (
+            <>
+              <Button
+                type="primary"
+                ghost
+                block
+                icon={<PlusOutlined />}
+                onClick={startCreate}
+                disabled={items.length >= MAX_ITEMS}
+              >
+                {items.length >= MAX_ITEMS ? `片段已达上限（${MAX_ITEMS} 条）` : "新增片段"}
+              </Button>
+              <div className="tt-clipboard-card-list">
+                {items.length === 0 ? (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="还没有片段：把常贴的内容存进来，随时一键复制。"
+                  />
+                ) : (
+                  <List
+                    dataSource={items}
+                    renderItem={(item) => (
+                      <List.Item
+                        actions={[
+                          <Button
+                            key="copy"
+                            size="small"
+                            type="primary"
+                            ghost
+                            loading={copyingId === item.id}
+                            onClick={() => void copyItem(item)}
                           >
-                            {item.content}
-                          </Typography.Paragraph>
-                        }
-                      />
-                    </List.Item>
-                  )}
-                />
-              )}
-            </div>
-          </>
-        ) : (
-          <div>
-            <Input
-              value={title}
-              maxLength={MAX_TITLE_CHARS}
-              placeholder={`片段名称（留空则取内容前 20 字，最多 ${MAX_TITLE_CHARS} 字）`}
-              onChange={(event) => setTitle(event.target.value)}
-              style={{ marginBottom: 8 }}
-            />
-            <Input.TextArea
-              value={content}
-              onChange={(event) => setContent(event.target.value.slice(0, MAX_CONTENT_CHARS))}
-              placeholder="片段内容（复制时按这里保存的原文粘贴）"
-              autoSize={{ minRows: 6, maxRows: 12 }}
-              // 不用 antd showCount（"0/4000" 常驻计数打扰且会与按钮行叠字）：
-              // maxLength 作硬上限，达到上限才出现一行红色小字提示。
-              maxLength={MAX_CONTENT_CHARS}
-            />
-            {content.length >= MAX_CONTENT_CHARS ? (
-              <div className="tt-clipboard-card-limit-hint" role="note">
-                已达 {MAX_CONTENT_CHARS} 字上限
+                            复制
+                          </Button>,
+                          // 编辑/删除收进「···」菜单：删除不再以红图标裸露在行内
+                          // （全局约定：除回收站外，删除一律走菜单 + 二次确认）。
+                          <RowActions
+                            key="more"
+                            more={[
+                              {
+                                key: "edit",
+                                label: "编辑",
+                                icon: <EditOutlined />,
+                                onClick: () => startEdit(item),
+                              },
+                              {
+                                key: "delete",
+                                label: "删除",
+                                icon: <DeleteOutlined />,
+                                danger: true,
+                                confirm: "删除这条片段？",
+                                onClick: () => removeItem(item.id),
+                              },
+                            ]}
+                          />,
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={item.title}
+                          description={
+                            <Typography.Paragraph
+                              type="secondary"
+                              ellipsis={{ rows: 2 }}
+                              className="tt-clipboard-card-item-content"
+                            >
+                              {item.content}
+                            </Typography.Paragraph>
+                          }
+                        />
+                      </List.Item>
+                    )}
+                  />
+                )}
               </div>
-            ) : null}
-            <div style={{ marginTop: 12, textAlign: "right" }}>
-              <Button onClick={closeEditor} style={{ marginRight: 8 }}>
-                取消
-              </Button>
-              <Button type="primary" onClick={saveEditing}>
-                保存
-              </Button>
+            </>
+          ) : (
+            <div>
+              <Input
+                value={title}
+                maxLength={MAX_TITLE_CHARS}
+                placeholder={`片段名称（留空则取内容前 20 字，最多 ${MAX_TITLE_CHARS} 字）`}
+                onChange={(event) => setTitle(event.target.value)}
+                style={{ marginBottom: 8 }}
+              />
+              <Input.TextArea
+                value={content}
+                onChange={(event) => setContent(event.target.value.slice(0, MAX_CONTENT_CHARS))}
+                placeholder="片段内容（复制时按这里保存的原文粘贴）"
+                autoSize={{ minRows: 6, maxRows: 12 }}
+                // 不用 antd showCount（"0/4000" 常驻计数打扰且会与按钮行叠字）：
+                // maxLength 作硬上限，达到上限才出现一行红色小字提示。
+                maxLength={MAX_CONTENT_CHARS}
+              />
+              {content.length >= MAX_CONTENT_CHARS ? (
+                <div className="tt-clipboard-card-limit-hint" role="note">
+                  已达 {MAX_CONTENT_CHARS} 字上限
+                </div>
+              ) : null}
+              <div style={{ marginTop: 12, textAlign: "right" }}>
+                <Button onClick={closeEditor} style={{ marginRight: 8 }}>
+                  取消
+                </Button>
+                <Button type="primary" onClick={saveEditing}>
+                  保存
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </ConfigProvider>
     </section>
   );
 }

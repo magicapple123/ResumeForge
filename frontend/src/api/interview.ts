@@ -59,8 +59,10 @@ export async function submitInterviewAnswerStream(
   onQuestionDelta: (text: string) => void,
 ): Promise<InterviewAnswerResult> {
   let result: InterviewAnswerResult | null = null;
+  // 注意必须带 `/api` 前缀：consumeSSE 拿到什么就 fetch 什么（不像 request() 会自动
+  // 补前缀），漏了就会打到前端自身源上 → 404「请求失败（HTTP 404）」。
   await consumeSSE<InterviewAnswerStreamEvent>(
-    `/interview/${id}/answers/stream`,
+    `/api/interview/${id}/answers/stream`,
     { content },
     (event) => {
       if (event.type === "question_delta" && event.text) onQuestionDelta(event.text);

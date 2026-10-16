@@ -212,7 +212,8 @@ async def parse_tracks(payload: TrackParseRequest, db: Session = Depends(get_db)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    urls = image_data_urls(images)
+    # PDF 扫描页渲染出的图片并进同一图片通路：与用户截图一样走视觉识别。
+    urls = image_data_urls(images) + list(documents.images)
     source_text = "\n\n".join(part for part in (payload.text, documents.text) if part.strip())
     if not source_text.strip() and not urls:
         raise HTTPException(status_code=422, detail="请先粘贴通知内容或上传截图、文档")

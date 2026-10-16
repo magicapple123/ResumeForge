@@ -458,8 +458,8 @@ export default function TouTouOrb({
         title="单击：打开求职助手；双击：打开投递剪贴板"
         placement="top"
         /*
-         * 球（.tt-shell）已提到 3400，antd Tooltip 默认的 1070 会被盖住；
-         * 抬到与 .tt-tip 同一地标 3450（见 tou-tou.css）。默认的 hover 事件
+         * 球（.tt-shell）已提到 3650，antd Tooltip 默认的 1070 会被盖住；
+         * 抬到与 .tt-tip 同一地标 3700（见 tou-tou.css）。默认的 hover 事件
          * 不影响 280ms 的单击/双击判定。
          */
         overlayStyle={{ zIndex: layer.orbTooltip }}

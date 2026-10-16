@@ -22,6 +22,7 @@ import {
   Modal,
   Pagination,
   Select,
+  Skeleton,
   Space,
   Statistic,
   Tag,
@@ -29,6 +30,7 @@ import {
   Typography,
 } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
+import ErrorState from "../components/common/ErrorState";
 import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -240,23 +242,38 @@ export default function TrackerPage() {
         </Space>
       </div>
 
-      <div className="tracker-summary">
-        {/* 统计是独立请求（P1-2）：加载/失败要有自己的状态，不能默默拿 0 冒充真值。 */}
-        {statsLoading && <Typography.Text type="secondary">统计加载中…</Typography.Text>}
-        {statsError && <Typography.Text type="danger">统计加载失败：{statsError}</Typography.Text>}
-        <Statistic title="总数" value={totalCount} />
-        <Statistic
-          title="进行中"
-          value={stats?.active_count ?? 0}
-          prefix={<FunnelPlotOutlined />}
-        />
-        <Statistic title="本月投递" value={stats?.month_count ?? 0} />
-        <Statistic
-          title="Offer"
-          value={stats?.offer_count ?? 0}
-          styles={{ content: { color: "#389e0d" } }}
-        />
-        <Statistic title="已结束" value={stats?.rejected_count ?? 0} />
+      <div className="tracker-summary" aria-busy={statsLoading || undefined}>
+        {/* 统计是独立请求（P1-2）：加载中渲染骨架占位而不是数值卡片——数据没到就画卡
+            会拿 0 冒充真值、加载完成后整排跳变（加载态与卡片同时出现的布局错乱）。
+            区分「加载中」与「空数据」：加载完成（哪怕全为 0）才渲染统计网格。 */}
+        {statsLoading ? (
+          <>
+            {[0, 1, 2, 3, 4].map((index) => (
+              <div key={index} className="tracker-summary-skeleton">
+                <Skeleton active title={false} paragraph={{ rows: 2 }} />
+              </div>
+            ))}
+          </>
+        ) : (
+          <>
+            {statsError && (
+              <Typography.Text type="danger">统计加载失败：{statsError}</Typography.Text>
+            )}
+            <Statistic title="总数" value={totalCount} />
+            <Statistic
+              title="进行中"
+              value={stats?.active_count ?? 0}
+              prefix={<FunnelPlotOutlined />}
+            />
+            <Statistic title="本月投递" value={stats?.month_count ?? 0} />
+            <Statistic
+              title="Offer"
+              value={stats?.offer_count ?? 0}
+              styles={{ content: { color: "#389e0d" } }}
+            />
+            <Statistic title="已结束" value={stats?.rejected_count ?? 0} />
+          </>
+        )}
       </div>
 
       {totalCount > 0 && (
@@ -289,8 +306,9 @@ export default function TrackerPage() {
         </div>
       )}
 
-      <Space size={12} wrap className="tracker-filters">
+      <Space size={16} wrap className="tracker-filters rf-filter-bar">
         <Select
+          aria-label="求职进度状态筛选"
           value={status}
           onChange={setStatus}
           style={{ width: 160 }}
@@ -337,7 +355,7 @@ export default function TrackerPage() {
       </Space>
 
       {loading && <PageSkeleton rows={6} />}
-      {error && <Typography.Text type="danger">{error}</Typography.Text>}
+      {error && <ErrorState description={error} onRetry={() => void reload()} />}
       {!loading && !error && items.length === 0 && (
         <Empty
           description={

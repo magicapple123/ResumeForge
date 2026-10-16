@@ -16,7 +16,7 @@ import {
   Typography,
 } from "antd";
 import LoadingBlock from "../components/common/LoadingBlock";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   batchDeleteKnowledge,
@@ -32,25 +32,22 @@ import { RowActions, RowContextMenu } from "../components/common/RowActions";
 import BatchActionBar from "../components/common/BatchActionBar";
 import BatchDeleteButton from "../components/common/BatchDeleteButton";
 import { useBatchSelection } from "../hooks/useBatchSelection";
+import { useApi } from "../hooks/useApi";
+import ErrorState from "../components/common/ErrorState";
 import { DetailTrigger } from "../components/common/RecordDetail";
 import KnowledgeFormModal from "../components/knowledge/KnowledgeFormModal";
 import { AssistantMessageContent } from "../features/assistant/components/AssistantMessageContent";
 import type { Knowledge, KnowledgePayload, KnowledgeSummary } from "../types";
 import { formatDateTime } from "../utils/format";
 
-/** 卡片网格 12 个一页（3 列 × 4 行），与迁移前的页内分页口径一致。 */
-const KNOWLEDGE_PAGE_SIZE = 12;
+/** 卡片网格 15 个一页（3 列 × 5 行），与后端 /knowledge/page 端点默认值一致。 */
+const KNOWLEDGE_PAGE_SIZE = 15;
 
 export default function KnowledgePage() {
   const { message } = App.useApp();
   // 批量选择：勾选若干条后一次删除（软删，全部进回收站）。
   const batch = useBatchSelection<number>();
-  const [entries, setEntries] = useState<KnowledgeSummary[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [tags, setTags] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState<string>("");
   const [tag, setTag] = useState<string>("");
@@ -62,71 +59,29 @@ export default function KnowledgePage() {
   const [viewing, setViewing] = useState<Knowledge | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
-  const fetchEntries = useCallback(async (): Promise<{
-    items: KnowledgeSummary[];
-    total: number;
-    categories: string[];
-    tags: string[];
-  } | null> => {
-    try {
-      // 标签筛选在服务端做（分页前过滤，/knowledge/page 的 tag 参数），标签下拉的
-      // 选项来自全库标签端点 /knowledge/tags——不再受当前页内容限制。
-      const [pageData, categoryList, tagList] = await Promise.all([
-        listKnowledgePage({ q: keyword, category, tag }, page, KNOWLEDGE_PAGE_SIZE),
-        listKnowledgeCategories(),
-        listKnowledgeTags(),
-      ]);
-      return {
-        items: pageData.items,
-        total: pageData.total,
-        categories: categoryList,
-        tags: tagList.tags,
-      };
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : "加载知识库失败");
-      return null;
-    }
-  }, [category, keyword, page, tag, message]);
-
-  // Compiler 规范：初始加载的 setState 放 .then 回调（外部数据到达时应用）。
-  useEffect(() => {
-    let cancelled = false;
-    void fetchEntries().then((result) => {
-      if (cancelled) return;
-      if (result) {
-        setEntries(result.items);
-        setTotal(result.total);
-        setCategories(result.categories);
-        setTags(result.tags);
-      }
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchEntries]);
-
-  // 事件路径（提交/删除后的整表重拉，含 loading 翻动）。
-  const load = useCallback(async () => {
-    setLoading(true);
-    const result = await fetchEntries();
-    if (result) {
-      // 末页删光校正（PR-14）：当前页已经没有任何条目、但库里还有数据，说明
-      // 停在了一个已不存在的页码上——回退到最后一个有数据的页（setPage 会触发
-      // fetchEntries 重建 → 按正确页码自动重拉），分页控件不消失、用户不被困住。
-      const maxPage = Math.max(1, Math.ceil(result.total / KNOWLEDGE_PAGE_SIZE));
-      if (result.items.length === 0 && result.total > 0 && page > maxPage) {
-        setPage(maxPage);
-        return;
-      }
-      setEntries(result.items);
-      setTotal(result.total);
-      setCategories(result.categories);
-      setTags(result.tags);
-    }
-    setLoading(false);
-  }, [fetchEntries, page]);
+  const requestKey = JSON.stringify([keyword, category, tag, page]);
+  const {
+    data,
+    loading,
+    error,
+    reload: load,
+  } = useApi(async () => {
+    const [pageData, categoryList, tagList] = await Promise.all([
+      listKnowledgePage({ q: keyword, category, tag }, page, KNOWLEDGE_PAGE_SIZE),
+      listKnowledgeCategories(),
+      listKnowledgeTags(),
+    ]);
+    return { ...pageData, categories: categoryList, tags: tagList.tags, requestKey };
+  }, [requestKey]);
+  const entries = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const categories = useMemo(() => data?.categories ?? [], [data]);
+  const tags = useMemo(() => data?.tags ?? [], [data]);
+  // Only a response for this filter/page can correct a deleted last page.
+  const lastPage = Math.max(1, Math.ceil(total / KNOWLEDGE_PAGE_SIZE));
+  if (data?.requestKey === requestKey && entries.length === 0 && total > 0 && page > lastPage) {
+    setPage(lastPage);
+  }
 
   // 筛选条件变化时回第 1 页（渲染期守卫式调整，Compiler 规范）。
   const filterKey = `${keyword}|${category}|${tag}`;
@@ -274,7 +229,7 @@ export default function KnowledgePage() {
         </Button>
       </div>
 
-      <Space wrap style={{ marginBottom: 16 }}>
+      <Space wrap className="rf-filter-bar">
         <Input.Search
           allowClear
           placeholder="搜索标题或正文"
@@ -317,6 +272,8 @@ export default function KnowledgePage() {
 
       {loading ? (
         <LoadingBlock />
+      ) : error ? (
+        <ErrorState description={`知识库加载失败：${error}`} onRetry={() => void load()} />
       ) : entries.length === 0 ? (
         <Empty
           // total=0 时区分「库里真没东西」和「筛选后没结果」：库空才引导去新增，

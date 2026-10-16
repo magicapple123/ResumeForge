@@ -5,7 +5,7 @@
  * 收藏），预览里直接展示每行的岗位名 + 公司，方便用户核对再入库。
  */
 import { DownloadOutlined, InboxOutlined } from "@ant-design/icons";
-import { Alert, Button, List, Modal, Space, Typography, Upload } from "antd";
+import { Alert, Button, Flex, List, Modal, Space, Typography, Upload } from "antd";
 import { useState } from "react";
 import { importCandidatesCsv, previewCandidateImport } from "../../../api/candidateJob";
 import type { CandidateCsvPreview } from "../../../types";
@@ -93,6 +93,48 @@ export function CandidateImportModal({ open, onClose, onImported }: Props) {
       okText="确认导入"
       okButtonProps={{ disabled: !preview || preview.rows.length === 0, loading: committing }}
       width={640}
+      /* 「下载空模板」放进 footer 左侧（用户反馈：与取消/确认分处两行、基线不齐）——
+         自定义 footer 左右两组按钮天然同一行。 */
+      footer={
+        <Flex justify="space-between" align="center">
+          <Button
+            size="small"
+            icon={<DownloadOutlined />}
+            onClick={() =>
+              downloadCsvTemplate("备选岗位导入模板.csv", [
+                "岗位名称",
+                "公司名称",
+                "岗位链接",
+                "招聘原文",
+                "备注",
+              ])
+            }
+          >
+            下载空模板
+          </Button>
+          <Space>
+            <Button
+              disabled={committing}
+              onClick={() => {
+                if (!committing) {
+                  reset();
+                  onClose();
+                }
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              type="primary"
+              disabled={!preview || preview.rows.length === 0}
+              loading={committing}
+              onClick={() => void confirmImport()}
+            >
+              确认导入
+            </Button>
+          </Space>
+        </Flex>
+      }
     >
       <Space orientation="vertical" size={12} style={{ width: "100%" }}>
         <Typography.Text type="secondary">
@@ -115,22 +157,6 @@ export function CandidateImportModal({ open, onClose, onImported }: Props) {
             也可以先下载空模板照着填
           </p>
         </Upload.Dragger>
-        <Button
-          size="small"
-          icon={<DownloadOutlined />}
-          onClick={() =>
-            downloadCsvTemplate("备选岗位导入模板.csv", [
-              "岗位名称",
-              "公司名称",
-              "岗位链接",
-              "招聘原文",
-              "备注",
-            ])
-          }
-        >
-          下载空模板
-        </Button>
-
         {parsing && <Typography.Text type="secondary">正在解析…</Typography.Text>}
 
         {preview && (

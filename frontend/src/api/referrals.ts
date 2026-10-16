@@ -1,11 +1,20 @@
 /** 内推管理接口。 */
-import type { Referral, ReferralImageUpload, ReferralPayload, ReferralStats } from "../types";
+import type { Page, Referral, ReferralImageUpload, ReferralPayload, ReferralStats } from "../types";
 import { buildQuery, request, uploadWithProgress } from "./client";
 
 export function listReferrals(
   params: { status?: string; keyword?: string; limit?: number } = {},
 ): Promise<Referral[]> {
   return request(`/referrals${buildQuery(params)}`);
+}
+
+/** 分页列出内推（每页默认 10 条），与旧全量端点同源过滤口径。 */
+export function listReferralsPage(
+  params: { status?: string; keyword?: string } = {},
+  page = 1,
+  pageSize = 10,
+): Promise<Page<Referral>> {
+  return request(`/referrals/page${buildQuery({ ...params, page, page_size: pageSize })}`);
 }
 
 export function getReferralStats(): Promise<ReferralStats> {

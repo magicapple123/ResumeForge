@@ -378,7 +378,7 @@ def list_record_batches(
     keyword: str = Query(default=""),
     result: str = Query(default="", description="success / failed / skipped"),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=5, ge=1, le=20, description="每页批次（组）数"),
+    page_size: int = Query(default=10, ge=1, le=20, description="每页批次（组）数"),
     include_items: bool = Query(
         default=True, description="false 时不携带明细（items=[]），只返回 matched_count"
     ),

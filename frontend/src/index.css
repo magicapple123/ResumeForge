@@ -14,3 +14,6 @@
 @import "./styles/trash.css";
 @import "./styles/modules.css";
 @import "./styles/responsive.css";
+@import "./styles/foundation.css";
+@import "./styles/accessibility.css";
+@import "./styles/mobile.css";

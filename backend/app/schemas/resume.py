@@ -458,9 +458,9 @@ class ReviewPrepareOut(BaseModel):
 
 
 class ResumeBatchRequest(BaseModel):
-    """批量操作请求：与 ``schemas.job.JobBatchRequest`` 同款口径（去重 + 上限 500）。"""
+    """批量操作请求：与 ``schemas.job.JobBatchRequest`` 同款口径（去重 + 上限 5000）。"""
 
-    resume_ids: list[int] = Field(max_length=500)
+    resume_ids: list[int] = Field(max_length=5000)
 
     @field_validator("resume_ids")
     @classmethod

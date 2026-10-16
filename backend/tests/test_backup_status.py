@@ -47,7 +47,15 @@ def test_protected_after_success_and_overdue_after_interval(tmp_path, monkeypatc
     )
     engine = _engine(tmp_path)
     try:
-        _write_marker(engine, {"last_attempt": 1_000, "last_success": 1_000, "consecutive_failures": 0, "last_error": ""})
+        _write_marker(
+            engine,
+            {
+                "last_attempt": 1_000,
+                "last_success": 1_000,
+                "consecutive_failures": 0,
+                "last_error": "",
+            },
+        )
         status = backup_status(engine, now=1_000 + 3600)
         assert status["protected"] is True
         assert status["overdue"] is False
@@ -100,11 +108,36 @@ def test_snapshot_listing_is_recency_ordered_and_capped(tmp_path, monkeypatch):
             item = directory / f"resume_forge-{index:02d}.db"
             item.write_bytes(b"x")
             os.utime(item, (1_000 + index, 1_000 + index))
-        _write_marker(engine, {"last_attempt": 1_012, "last_success": 1_012, "consecutive_failures": 0, "last_error": ""})
+        _write_marker(
+            engine,
+            {
+                "last_attempt": 1_012,
+                "last_success": 1_012,
+                "consecutive_failures": 0,
+                "last_error": "",
+            },
+        )
         status = backup_status(engine, now=2_000)
         assert status["snapshot_count"] == 13
         assert len(status["snapshots"]) == 10
         assert status["snapshots"][0]["name"] == "resume_forge-12.db"
         assert status["snapshots"][-1]["name"] == "resume_forge-03.db"
+    finally:
+        engine.dispose()
+
+
+def test_interval_days_reads_the_runtime_setting(tmp_path):
+    """状态卡的间隔展示与调度判定同一来源：KV 运行时值优先于环境配置。"""
+    engine = _engine(tmp_path)
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "CREATE TABLE app_setting (key VARCHAR(64) PRIMARY KEY, value TEXT)"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO app_setting (key, value) VALUES ('auto_backup_interval_days', '30')"
+            )
+        status = backup_status(engine, now=1_000_000)
+        assert status["interval_days"] == 30
     finally:
         engine.dispose()

@@ -12,6 +12,7 @@ from ..models.setting import LLMConfigRecord
 from ..schemas.setting import (
     AssistantOrbSetting,
     AssistantRelaxedModeSetting,
+    AutoBackupIntervalSetting,
     ExportSaveLocationIn,
     ExportSaveLocationOut,
     LLMApiKeyRevealResult,
@@ -46,6 +47,7 @@ from ..services.settings_service import (
     delete_llm_config_record,
     get_assistant_orb_setting,
     get_assistant_relaxed_mode,
+    get_auto_backup_interval_days,
     get_export_save_location,
     get_llm_config,
     get_navigation_visibility,
@@ -57,6 +59,7 @@ from ..services.settings_service import (
     resolve_llm_config_api_key,
     save_assistant_orb_setting,
     save_assistant_relaxed_mode,
+    save_auto_backup_interval_days,
     save_export_save_location,
     save_llm_config,
     save_llm_config_record,
@@ -362,3 +365,17 @@ def read_backup_status(db: Session = Depends(get_db)) -> dict:
     from ..services.data_backup.status import backup_status
 
     return backup_status(session_engine(db))
+
+
+@router.get("/auto-backup-interval", response_model=AutoBackupIntervalSetting)
+def read_auto_backup_interval(db: Session = Depends(get_db)):
+    """自动备份间隔（天）：用户保存的运行时值，缺失时回退环境配置默认。"""
+    return AutoBackupIntervalSetting(interval_days=get_auto_backup_interval_days(db))
+
+
+@router.put("/auto-backup-interval", response_model=AutoBackupIntervalSetting)
+def write_auto_backup_interval(payload: AutoBackupIntervalSetting, db: Session = Depends(get_db)):
+    """保存自动备份间隔（1..365 天）。调度线程下次到期检查时读取，无需重启。"""
+    return AutoBackupIntervalSetting(
+        interval_days=save_auto_backup_interval_days(db, payload.interval_days)
+    )

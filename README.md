@@ -538,6 +538,7 @@ npm run smoke                                   # 开发形态
 | [项目导航图](docs/PROJECT_MAP.md) | 从功能倒查代码位置的地图，想改某功能先看这份 |
 | [面试讲解指南](docs/INTERVIEW_GUIDE.md) | 怎么把项目讲清楚、讲出深度（亮点与高频追问） |
 | [架构设计](docs/architecture.md) | 分层、数据模型、决策记录、扩展点 |
+| [界面质量规范](docs/ui-quality.md) | 设计令牌、窄屏交互、键盘与可访问性验收标准 |
 | [升级与回滚](docs/upgrading.md) | 版本升级、压缩包更新、数据备份与回滚 |
 | [AI 故障排查](docs/ai-troubleshooting.md) | 模型连接、超时、输出异常与常见报错 |
 | [提示词调优](docs/prompt-tuning.md) | 各生成链路用的提示词与调整方法 |

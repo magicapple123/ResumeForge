@@ -1,17 +1,16 @@
-/** 设置页：大模型配置（含预设与连通测试）。 */
-import { CloseOutlined, EditOutlined, SaveOutlined } from "@ant-design/icons";
-import { App, Button, Tabs, Typography } from "antd";
+/** 设置页：大模型配置（单区块：记录卡列表 + 新增/编辑共用弹窗）。 */
+import { Tabs, Typography } from "antd";
 import { useState } from "react";
 import { useSettingsDatasets } from "../features/settings/useSettingsDatasets";
 import { useSettingsSkills } from "../features/settings/useSettingsSkills";
 import { useLLMSettings } from "../features/settings/useLLMSettings";
+import { useLLMRecordTools } from "../features/settings/useLLMRecordTools";
 import DatasetsCard from "../components/settings/DatasetsCard";
 import BackupStatusCard from "../components/settings/BackupStatusCard";
 import ManualBackupsCard from "../components/settings/ManualBackupsCard";
 import StorageStatsCard from "../components/settings/StorageStatsCard";
 import AssistantOrbCard from "../components/settings/AssistantOrbCard";
 import LLMConfigCard from "../components/settings/LLMConfigCard";
-import LLMConfigRecordsCard from "../components/settings/LLMConfigRecordsCard";
 import ReminderPopupCard from "../components/settings/ReminderPopupCard";
 import WebFormRelaxedModeCard from "../components/settings/WebFormRelaxedModeCard";
 import ExportSaveCard from "../components/settings/ExportSaveCard";
@@ -38,42 +37,56 @@ function SettingsGroupTitle({ text, hint }: { text: string; hint?: string }) {
 }
 
 export default function SettingsPage() {
-  const { message } = App.useApp();
   const [activeTab, setActiveTab] = useState<SettingsTabKey>("model");
 
   const {
-    form,
-    saving,
-    testing,
-    editing,
-    setEditing,
-    testResult,
-    apiKeyResetToken,
     records,
+    setRecords,
     recordsLoading,
     activeRecordId,
-    recordModalOpen,
-    setRecordModalOpen,
-    recordName,
-    setRecordName,
-    recordSaving,
+    configSummary,
     recordApplyingId,
     recordDeletingId,
-    applyPreset,
-    revealSavedApiKey,
-    save,
-    fetchModels,
-    checkThinking,
-    test,
-    openRecordModal,
-    saveRecord,
     applyRecord,
     removeRecord,
-    cancelEditing,
-    resetRevealedApiKey,
-    clearSessionKey,
-    clearingSessionKey,
   } = useLLMSettings();
+
+  // 记录卡动作（卡上测试连接 / 新增与编辑共用弹窗）拆在独立 hook：保持 useLLMSettings 精简。
+  const {
+    recordTestingId,
+    recordTestResults,
+    testRecord,
+    recordForm,
+    modalOpen: recordModalOpen,
+    editingRecord,
+    recordSaving: recordEditSaving,
+    draftTesting,
+    draftTestResult,
+    openCreate,
+    openRecordEdit,
+    closeRecordModal,
+    applyRecordPreset,
+    testDraft,
+    submitRecord,
+    fetchDraftModels,
+    checkingThinking,
+    thinkingResult,
+    effortOptions,
+    showingCustomEffort,
+    clearThinkingResult,
+    handleEffortCustom,
+    backToEffortPresets,
+    probeThinking,
+    checkThinking,
+  } = useLLMRecordTools(setRecords);
+
+  /** 编辑的是当前生效的那条记录时，保存后同步为当前配置，保持「使用中」匹配。 */
+  const handleSaveRecord = async () => {
+    const updated = await submitRecord();
+    if (updated && activeRecordId !== null && updated.id === activeRecordId) {
+      await applyRecord(updated);
+    }
+  };
 
   const {
     skills,
@@ -118,7 +131,7 @@ export default function SettingsPage() {
   } = useSettingsDatasets();
 
   return (
-    <div className={`settings-page${editing ? " is-editing" : ""}`}>
+    <div className="settings-page">
       <div className="settings-page-header">
         <div>
           <Typography.Title level={3} style={{ margin: 0 }}>
@@ -147,79 +160,47 @@ export default function SettingsPage() {
                 <div className="settings-section-head">
                   <div className="settings-section-titles">
                     <Typography.Text type="secondary">
-                      简历生成、岗位解读与求职助手用的是同一套模型配置；改之前需要先点「编辑设置」。
+                      简历生成、岗位解读与求职助手用的是同一套模型配置；已保存的配置以记录卡片展示，
+                      点「新增配置」或记录卡上的「编辑」在弹窗中填写。
                     </Typography.Text>
-                  </div>
-                  <div className="settings-section-actions">
-                    {editing ? (
-                      <>
-                        <Button
-                          icon={<CloseOutlined />}
-                          disabled={saving || testing}
-                          onClick={cancelEditing}
-                        >
-                          取消
-                        </Button>
-                        <Button
-                          type="primary"
-                          icon={<SaveOutlined />}
-                          loading={saving}
-                          disabled={testing}
-                          onClick={() => void save()}
-                        >
-                          保存配置
-                        </Button>
-                      </>
-                    ) : (
-                      <Button icon={<EditOutlined />} onClick={() => setEditing(true)}>
-                        编辑设置
-                      </Button>
-                    )}
                   </div>
                 </div>
 
-                <SettingsGroupTitle
-                  text="模型服务"
-                  hint="模型配置与历史配置档案；改之前先点右上角「编辑设置」"
-                />
+                <SettingsGroupTitle text="模型服务" hint="当前使用的配置与已保存的配置记录" />
                 <LLMConfigCard
-                  form={form}
-                  editing={editing}
-                  saving={saving}
-                  testing={testing}
-                  testResult={testResult}
-                  apiKeyResetToken={apiKeyResetToken}
-                  onPresetChange={applyPreset}
-                  onResetApiKey={resetRevealedApiKey}
-                  onRevealApiKey={revealSavedApiKey}
-                  onRevealError={(error) => message.error(error)}
-                  onTest={() => void test()}
-                  onFetchModels={fetchModels}
-                  onCheckThinking={checkThinking}
-                  onClearSessionKey={clearSessionKey}
-                  clearingSessionKey={clearingSessionKey}
-                />
-
-                <LLMConfigRecordsCard
                   records={records}
                   recordsLoading={recordsLoading}
                   activeRecordId={activeRecordId}
-                  editing={editing}
-                  saving={saving}
-                  testing={testing}
-                  recordSaving={recordSaving}
+                  configSummary={configSummary}
                   recordApplyingId={recordApplyingId}
                   recordDeletingId={recordDeletingId}
+                  recordTestingId={recordTestingId}
+                  recordTestResults={recordTestResults}
+                  recordForm={recordForm}
                   recordModalOpen={recordModalOpen}
-                  recordName={recordName}
-                  onOpenRecordModal={openRecordModal}
+                  editingRecord={editingRecord}
+                  recordSaving={recordEditSaving}
+                  draftTesting={draftTesting}
+                  draftTestResult={draftTestResult}
+                  checkingThinking={checkingThinking}
+                  thinkingResult={thinkingResult}
+                  showingCustomEffort={showingCustomEffort}
+                  effortOptions={effortOptions}
+                  onProbeThinking={() => probeThinking()}
+                  onLoadThinkingOptions={() => checkThinking(false)}
+                  onBackToEffortPresets={backToEffortPresets}
+                  onEffortCustom={handleEffortCustom}
+                  onClearThinkingResult={clearThinkingResult}
+                  onOpenCreate={openCreate}
+                  onOpenRecordEdit={openRecordEdit}
+                  onSaveRecord={() => void handleSaveRecord()}
+                  onCloseRecordModal={closeRecordModal}
                   onApplyRecord={(record) => void applyRecord(record)}
                   onRemoveRecord={(record) => void removeRecord(record)}
-                  onRecordNameChange={setRecordName}
-                  onSaveRecord={() => void saveRecord()}
-                  onCloseRecordModal={() => {
-                    if (!recordSaving) setRecordModalOpen(false);
-                  }}
+                  onTestRecord={(record) => void testRecord(record)}
+                  onTestDraft={() => void testDraft()}
+                  onPresetChange={applyRecordPreset}
+                  onFetchDraftModels={fetchDraftModels}
                 />
 
                 {/* 联网搜索与模型配置同页：两者一起决定助手"能查什么、查得多细"。 */}

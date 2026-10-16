@@ -36,7 +36,6 @@ export const PRESET_OPTIONS = [
 ];
 
 /** session_only 是前端专用开关（密钥走会话通道、不落库），不属于 LLMConfig。 */
-export type SettingsFormValues = LLMConfig & { preset: string; session_only?: boolean };
 
 export function normalizePresetBaseUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, "");
@@ -66,66 +65,6 @@ export function matchingPreset(config: Pick<LLMConfig, "provider" | "base_url">)
   return LLM_PRESETS.find((preset) => normalizePresetBaseUrl(preset.base_url) === normalizedUrl);
 }
 
-export function isMaskedApiKey(value: string): boolean {
-  return value === API_KEY_MASK || value.startsWith(`${API_KEY_MASK}:record:`);
-}
-
-export function formValuesFromConfig(config: LLMConfig): SettingsFormValues {
-  const matched = matchingPreset(config);
-  return {
-    provider: config.provider,
-    base_url: config.base_url,
-    api_key: config.api_key,
-    model: config.model,
-    temperature: config.temperature,
-    timeout_seconds: config.timeout_seconds,
-    max_tokens: config.max_tokens,
-    api_style: config.api_style ?? "openai",
-    // 高级参数缺省是 null（= 不发送，沿用服务商默认），表单里也照此显示。
-    top_p: config.top_p ?? null,
-    frequency_penalty: config.frequency_penalty ?? null,
-    presence_penalty: config.presence_penalty ?? null,
-    seed: config.seed ?? null,
-    top_k: config.top_k ?? null,
-    repetition_penalty: config.repetition_penalty ?? null,
-    stop: config.stop ?? [],
-    thinking_budget: config.thinking_budget ?? null,
-    thinking_enabled: config.thinking_enabled ?? false,
-    thinking_effort: config.thinking_effort ?? "",
-    thinking_style: config.thinking_style ?? "auto",
-    extra_body: config.extra_body ?? {},
-    // 纯手动配置保存后再打开时，下拉要停在它自己那一项上，而不是跳回"自定义模型"。
-    preset:
-      matched?.provider ?? (config.provider === MANUAL_PRESET ? MANUAL_PRESET : CUSTOM_PRESET),
-  };
-}
-
-export function configFromFormValues(values: SettingsFormValues): LLMConfig {
-  return {
-    provider: values.provider,
-    base_url: values.base_url,
-    api_key: values.api_key,
-    model: values.model,
-    temperature: values.temperature,
-    timeout_seconds: values.timeout_seconds,
-    max_tokens: values.max_tokens,
-    api_style: values.api_style ?? "openai",
-    top_p: values.top_p ?? null,
-    frequency_penalty: values.frequency_penalty ?? null,
-    presence_penalty: values.presence_penalty ?? null,
-    seed: values.seed ?? null,
-    top_k: values.top_k ?? null,
-    repetition_penalty: values.repetition_penalty ?? null,
-    stop: values.stop ?? [],
-    thinking_budget: values.thinking_budget ?? null,
-    thinking_enabled: values.thinking_enabled ?? false,
-    thinking_effort: values.thinking_effort ?? "",
-    thinking_style: values.thinking_style || "auto",
-    // 表单里没有这个字段（长尾参数出口），从原值带过来，别在保存时清掉。
-    extra_body: values.extra_body ?? {},
-  };
-}
-
 export function configFromRecord(record: LLMConfigRecord): LLMConfig {
   return {
     provider: record.provider,
@@ -148,6 +87,23 @@ export function configFromRecord(record: LLMConfigRecord): LLMConfig {
     thinking_effort: record.thinking_effort ?? "",
     thinking_style: record.thinking_style ?? "auto",
     extra_body: record.extra_body ?? {},
+  };
+}
+
+/** 当前配置卡片折叠态的摘要（脱敏：只带"是否配置了密钥"，不带密钥本体）。 */
+export interface LLMConfigSummary {
+  presetLabel: string;
+  baseUrl: string;
+  model: string;
+  hasKey: boolean;
+}
+
+export function summaryFromConfig(config: LLMConfig): LLMConfigSummary {
+  return {
+    presetLabel: matchingPreset(config)?.label ?? CUSTOM_PRESET_LABEL,
+    baseUrl: config.base_url,
+    model: config.model,
+    hasKey: config.api_key.trim() !== "",
   };
 }
 

@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { useEffect } from "react";
+import { ConfigProvider } from "antd";
+import { layer } from "../../theme/tokens";
 import { useTouTou } from "./touTouContext";
 import { useTouTouCardDrag } from "./useTouTouCardDrag";
 import "./tou-tou-assistant.css";
@@ -56,7 +58,16 @@ export default function TouTouAssistantCard({ children, onClose, open }: Props) 
       >
         ×
       </button>
-      {children}
+      {/*
+        卡片内弹层基准抬层：全局 zIndexPopupBase（3100）配 antd 的组件偏移
+        （+50~+80）到不了卡片（3400）之上，Select 下拉 / Tooltip / 图片预览从
+        这里挂到 body 后会被卡片盖住（用户看是"下拉被裁掉"）。局部把基准提到
+        layer.cardPopup（3550），弹层落在 3600~3630——卡片之上、悬浮球（3650）
+        之下，球随时可以点。其余 token 全部继承全局主题。
+      */}
+      <ConfigProvider theme={{ token: { zIndexPopupBase: layer.cardPopup } }}>
+        {children}
+      </ConfigProvider>
     </section>
   );
 }

@@ -67,6 +67,8 @@ export function useProfilePage() {
   const [form] = Form.useForm<ProfileFormValues>();
   const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [photoReading, setPhotoReading] = useState(false);
@@ -93,11 +95,11 @@ export function useProfilePage() {
   const photo = Form.useWatch("photo", form) ?? "";
   const sectionReorder = useProfileSectionReorder({ editing, saving, photoReading });
   const {
-    sectionOrder,
+    sectionOrderStore,
+    getSectionOrder,
     setSectionOrder,
     sectionReorderMode,
     setSectionReorderMode,
-    dragOverSection,
     resetSectionReorder,
     handleSectionPointerDown,
     toggleSectionReorderMode,
@@ -109,6 +111,7 @@ export function useProfilePage() {
     void getProfile()
       .then((profile) => {
         if (!active) return;
+        setLoadError("");
         const values = toFormValues(profile);
         form.setFieldsValue(values);
         setSectionOrder(normalizeSectionOrder(values.section_order));
@@ -116,7 +119,11 @@ export function useProfilePage() {
         setSectionReorderMode(false);
       })
       .catch((err) => {
-        if (active) message.error(err instanceof Error ? err.message : "加载资料失败");
+        if (active) {
+          const failure = err instanceof Error ? err.message : "加载资料失败";
+          setLoadError(failure);
+          message.error(failure);
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -124,7 +131,13 @@ export function useProfilePage() {
     return () => {
       active = false;
     };
-  }, [form, message, setSectionOrder, setSectionReorderMode]);
+  }, [form, message, setSectionOrder, setSectionReorderMode, loadAttempt]);
+
+  const retryProfileLoad = () => {
+    setLoading(true);
+    setLoadError("");
+    setLoadAttempt((attempt) => attempt + 1);
+  };
 
   useEffect(
     () => () => {
@@ -144,11 +157,11 @@ export function useProfilePage() {
   /** 提交资料表单；返回是否真的保存成功（校验不过 / 请求失败都算没存上），
    * 供调用方决定"未保存更改"警示是否可以解除。 */
   const submit = async (): Promise<boolean> => {
-    if (!editing || saving || photoReading) return false;
+    if (!editing || loading || loadError || saving || photoReading) return false;
     let values: ProfileFormValues;
     try {
       const formValues = await form.validateFields();
-      values = { ...formValues, section_order: sectionOrder } as ProfileFormValues;
+      values = { ...formValues, section_order: getSectionOrder() } as ProfileFormValues;
     } catch {
       return false;
     }
@@ -234,7 +247,7 @@ export function useProfilePage() {
       const { warnings, parse_engine: recognitionSource } = parsed;
       const currentValues = form.getFieldsValue(true) as Partial<ProfileFormValues>;
       const merged = mergeParsedProfileValues(currentValues as ProfileFormValues, parsed);
-      form.setFieldsValue({ ...merged, section_order: sectionOrder });
+      form.setFieldsValue({ ...merged, section_order: getSectionOrder() });
       setProfileTextWarnings(warnings);
       setProfileTextRecognized(parsed.recognized_text ?? "");
       // 提示条会消失，但"是 AI 还是本地规则"要一直留在弹窗里。
@@ -276,13 +289,14 @@ export function useProfilePage() {
   return {
     form,
     loading,
+    loadError,
+    retryProfileLoad,
     saving,
     editing,
     setEditing,
     photoReading,
-    sectionOrder,
+    sectionOrderStore,
     sectionReorderMode,
-    dragOverSection,
     profileTextOpen,
     profileText,
     profileTextWarnings,
@@ -302,6 +316,7 @@ export function useProfilePage() {
     handleSectionPointerDown,
     toggleSectionReorderMode,
     moveSectionByOffset,
+    getSectionOrder,
     openProfileTextModal,
     handleProfileTextChange,
     closeProfileTextModal,

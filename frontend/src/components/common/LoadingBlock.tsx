@@ -39,7 +39,11 @@ export default function LoadingBlock({ size = "default", tip, minHeight, childre
     minHeight: minHeight ?? "var(--rf-loading-min-h)",
   };
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", ...style }}>
+    <div
+      role="status"
+      aria-label={tip || "正在加载内容"}
+      style={{ display: "flex", alignItems: "center", justifyContent: "center", ...style }}
+    >
       <Spin size={spinSize} description={tip} />
     </div>
   );

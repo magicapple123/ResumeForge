@@ -12,8 +12,9 @@
  */
 
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, List, Space, Tag, Typography } from "antd";
-import { getBackupStatus } from "../../api/settings";
+import { Alert, App, Button, Card, List, Select, Space, Tag, Typography } from "antd";
+import { useState } from "react";
+import { getBackupStatus, saveAutoBackupInterval } from "../../api/settings";
 import { useApi } from "../../hooks/useApi";
 import type { BackupStatus } from "../../types";
 import { formatDateTime } from "../../utils/format";
@@ -27,10 +28,37 @@ function statusMeta(status: BackupStatus): { label: string; color: string } {
   return { label: "受保护", color: "success" };
 }
 
+/** 常用间隔档位（天）；用户自定义过的值不在档位里时由调用方动态补进选项。 */
+const INTERVAL_PRESET_DAYS = [1, 3, 7, 14, 30, 90, 365];
+
 export default function BackupStatusCard() {
+  const { message } = App.useApp();
   const { data: status, loading, error, reload } = useApi(getBackupStatus);
+  const [savingInterval, setSavingInterval] = useState(false);
 
   const meta = status ? statusMeta(status) : null;
+
+  const changeInterval = async (days: number) => {
+    if (!status || days === status.interval_days || savingInterval) return;
+    setSavingInterval(true);
+    try {
+      await saveAutoBackupInterval(days);
+      message.success(`自动备份间隔已改为每 ${days} 天，下次调度检查时生效`);
+      await reload();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "保存自动备份间隔失败");
+    } finally {
+      setSavingInterval(false);
+    }
+  };
+
+  const intervalOptions =
+    status && !INTERVAL_PRESET_DAYS.includes(status.interval_days)
+      ? [
+          { value: status.interval_days, label: `${status.interval_days} 天` },
+          ...INTERVAL_PRESET_DAYS.map((days) => ({ value: days, label: `${days} 天` })),
+        ]
+      : INTERVAL_PRESET_DAYS.map((days) => ({ value: days, label: `${days} 天` }));
 
   return (
     <Card
@@ -55,8 +83,19 @@ export default function BackupStatusCard() {
           <Space wrap>
             <Tag color={meta.color}>{meta.label}</Tag>
             <Typography.Text type="secondary">
-              每 {status.interval_days} 天自动快照一次（仅数据库快照，不含附件文件）；
-              手动导出的备份包才包含附件。只保留最近几份，手动备份不受影响。
+              每
+              <Select
+                size="small"
+                aria-label="自动备份间隔（天）"
+                style={{ width: 88, margin: "0 4px" }}
+                value={status.interval_days}
+                options={intervalOptions}
+                loading={savingInterval}
+                disabled={savingInterval}
+                onChange={(days) => void changeInterval(days)}
+              />
+              天自动快照一次（仅数据库快照，不含附件文件）；手动导出的备份包才包含附件。
+              只保留最近几份，手动备份不受影响。
             </Typography.Text>
           </Space>
           {status.last_success ? (

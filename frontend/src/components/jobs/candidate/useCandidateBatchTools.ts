@@ -2,6 +2,7 @@
  * 备选岗位抽屉的批量动作（跨页全选 / 导出 CSV / 批量删除）：
  * 从 CandidateJobsDrawer 拆出（文件行数预算）——动作本身只依赖选择集与刷新回调，
  * 状态所有权仍留在抽屉，这里只收"发出请求 + 给结果提示"这段流程。
+ * （批量导入入口已按产品决策移除；后端端点保留，采集结果面板仍在用。）
  */
 import { App, Modal } from "antd";
 import dayjs from "dayjs";
@@ -51,9 +52,11 @@ export function useCandidateBatchTools({
         message.warning("当前筛选下没有备选岗位");
         return;
       }
-      if (ids.length > 500) {
+      // 上限与后端批量端点（5000）对齐：全选全部（含 CSV 导出）一次过；
+      // 超出时给出明确提示，而不是让请求撞 422。
+      if (ids.length > 5000) {
         message.warning(
-          `当前筛选下共 ${ids.length} 条备选岗位，批量操作一次最多 500 条；请先用搜索缩小范围`,
+          `当前筛选下共 ${ids.length} 条备选岗位，超出单次批量上限 5000 条；请先用搜索缩小范围`,
         );
         return;
       }

@@ -87,13 +87,16 @@ export default function ProfileTextModal({
         autoSize={{ minRows: 14, maxRows: 24 }}
       />
       <MaxLengthHint value={text} maxLength={100_000} />
-      <RecognitionFileField
-        files={files}
-        reading={filesReading}
-        disabled={parsing}
-        onAddFiles={onAddFiles}
-        onRemove={onRemoveFile}
-      />
+      {/* 文件暂存区紧跟输入框下缘，补 12px 呼吸空隙，避免「添加截图或文档」按钮贴住边框。 */}
+      <div style={{ marginTop: 12 }}>
+        <RecognitionFileField
+          files={files}
+          reading={filesReading}
+          disabled={parsing}
+          onAddFiles={onAddFiles}
+          onRemove={onRemoveFile}
+        />
+      </div>
       <RecognitionOutcome source={recognitionSource} text={recognizedText} />
       {uploadPercent !== null && (
         <Progress

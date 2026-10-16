@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { App as AntdApp } from "antd";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TouTouClipboardCard from "./TouTouClipboardCard";
+import { layer } from "../../theme/tokens";
 import { copyText } from "../../utils/clipboard";
 
 vi.mock("../../utils/clipboard", () => ({
@@ -104,6 +105,28 @@ describe("TouTouClipboardCard", () => {
     await waitFor(() => {
       expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]")).toHaveLength(0);
     });
+  });
+
+  it("「···」下拉的层级高于卡片本体，展开后菜单不被卡片盖住", async () => {
+    seedStorage([{ id: 1, title: "联系方式", content: "13800000000" }]);
+    renderCard(<TouTouClipboardCard open onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    // 卡内局部 ConfigProvider 把 zIndexPopupBase 抬到 cardPopup（3550），Dropdown
+    // 自带 +50 偏移。antd 6 以 CSS 变量落地 z-index：读 --ant-dropdown-z-index-popup
+    // 的声明值，必须高于剪贴板卡（3300）——否则「删除」项会被卡片盖掉。
+    const declared = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules ?? []))
+      .map(
+        (rule) =>
+          (rule as CSSStyleRule).style?.getPropertyValue("--ant-dropdown-z-index-popup") ?? "",
+      )
+      .find((value) => value.trim() !== "");
+    expect(declared).toBeDefined();
+    const z = Number(declared!.trim());
+    expect(z).toBeGreaterThan(layer.clipboardCard);
+    expect(z).toBeLessThan(layer.orb);
   });
 
   it("re-positions next to the orb on every open instead of restoring the last drag", () => {

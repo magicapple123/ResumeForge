@@ -12,7 +12,7 @@
  * 记录只保存展示快照（岗位、公司、简历名、招呼语），不含完整个人资料——失败条目带上
  * 后端给的中文分类说明与可操作诊断，用户可以直接把这条信息回传给我们定位站点改版。
  */
-import { RedoOutlined } from "@ant-design/icons";
+import { EyeOutlined, RedoOutlined } from "@ant-design/icons";
 import { App, Button, Empty, Pagination, Space, Tag, Tooltip, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import type { ColumnsType } from "antd/es/table";
@@ -47,7 +47,7 @@ interface Props {
   onRetried: (task: ApplyTask) => void;
 }
 
-const BATCH_PAGE_SIZE = 5;
+const BATCH_PAGE_SIZE = 10;
 
 export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
   const { message } = App.useApp();
@@ -243,8 +243,16 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
               重投
             </Button>
           </Tooltip>
+          {/* 「查看详情」与「删除」都收进「···」菜单：整行点击本来就能看详情，
+              独立的「详 情」按钮与「···」并排是重复入口（用户反馈）。 */}
           <RowActions
             more={[
+              {
+                key: "detail",
+                label: "查看详情",
+                icon: <EyeOutlined />,
+                onClick: () => setDetail(record),
+              },
               {
                 key: "delete",
                 label: "删除",
@@ -255,16 +263,6 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
             ]}
           />
         </Space>
-      ),
-    },
-    {
-      title: "详情",
-      key: "detail",
-      width: 80,
-      render: (_, record) => (
-        <Button size="small" onClick={() => setDetail(record)}>
-          详情
-        </Button>
       ),
     },
   ];

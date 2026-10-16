@@ -1,6 +1,7 @@
 /** 设置相关接口。 */
 import type {
   BackupStatus,
+  AutoBackupIntervalSetting,
   DatasetImportResult,
   DatasetInfo,
   AssistantOrbSetting,
@@ -319,4 +320,17 @@ async function downloadArchive(
 /** 当前数据集的自动备份保护摘要（RF-05）。 */
 export function getBackupStatus(signal?: AbortSignal): Promise<BackupStatus> {
   return request<BackupStatus>("/settings/backup-status", { signal });
+}
+
+/** 自动备份间隔（天）：用户保存的运行时值，缺失时后端回退环境配置默认。 */
+export function getAutoBackupInterval(): Promise<AutoBackupIntervalSetting> {
+  return request("/settings/auto-backup-interval");
+}
+
+/** 保存自动备份间隔（1..365 天）；调度线程下次到期检查时读取，无需重启。 */
+export function saveAutoBackupInterval(intervalDays: number): Promise<AutoBackupIntervalSetting> {
+  return request("/settings/auto-backup-interval", {
+    method: "PUT",
+    body: JSON.stringify({ interval_days: intervalDays }),
+  });
 }

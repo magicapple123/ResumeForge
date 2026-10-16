@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.referral import REFERRAL_STATUSES, Referral
+from ..schemas.common import Page
 from ..schemas.referral import (
     ReferralBatchDeleteResult,
     ReferralBatchRequest,
@@ -28,6 +29,7 @@ from ..services.referral_service import (
     create_referral,
     delete_referral,
     list_referrals,
+    list_referrals_page,
     referral_images_dir,
     referral_or_none,
     referral_out,
@@ -71,6 +73,28 @@ def read_referrals(
 def read_referral_stats(db: Session = Depends(get_db)):
     """内推转化率：converted（由关联漏斗后置位派生）/ 有效内推总数。"""
     return referral_stats(db)
+
+
+@router.get("/page", response_model=Page[ReferralOut])
+def read_referrals_page(
+    status: str = Query(default=""),
+    keyword: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """分页列出内推：过滤与排序与旧端点同源，每页默认 10 条。
+
+    内推此前是无上限全量下发（``limit`` 默认 200、封顶 500）；前端改为按页渲染后
+    走本端点。``converted`` 派生口径不变（批量预取 track）。**声明在
+    ``/{referral_id}`` 之前**（字面量段排在参数段前面，同 ``/stats``）。
+    """
+    if status and status not in REFERRAL_STATUSES:
+        raise HTTPException(status_code=422, detail="未知的内推状态")
+    rows, total = list_referrals_page(
+        db, status=status, keyword=keyword, page=page, page_size=page_size
+    )
+    return Page(items=referrals_out(db, rows), total=total)
 
 
 @router.post("/upload-image", response_model=ReferralImageUploadOut)

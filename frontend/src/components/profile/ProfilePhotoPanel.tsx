@@ -139,8 +139,12 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
     }
   };
 
+  /** 「使用中」的唯一口径：先按字节匹配表单当前照片，同 bytes 多条时以主照片记录为准，
+   *  再退到第一条匹配——没有匹配就谁都不亮（表单可能是还没入库的新照片）。 */
+  const matched = photos.filter((photo) => photo.image === activePhoto);
+  const activeId = matched.find((photo) => photo.is_primary)?.id ?? matched[0]?.id;
   /** 除当前照片外还有几张备选——决定「照片库」按钮上要不要带数字。 */
-  const alternateCount = photos.filter((photo) => photo.image !== activePhoto).length;
+  const alternateCount = photos.filter((photo) => photo.id !== activeId).length;
 
   return (
     <FileDropZone
@@ -207,7 +211,7 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
           </Typography.Paragraph>
           <div className="profile-photo-library">
             {photos.map((photo) => {
-              const isActive = photo.image === activePhoto || photo.is_primary;
+              const isActive = photo.id === activeId;
               return (
                 <div
                   key={photo.id}

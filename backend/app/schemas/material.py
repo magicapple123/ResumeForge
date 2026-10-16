@@ -24,9 +24,10 @@ MAX_MATERIAL_TITLE_CHARS = 256
 MAX_MATERIAL_CONTENT_CHARS = 100_000
 MAX_MATERIAL_NOTE_CHARS = 4000
 MAX_CANDIDATE_JOB_TEXT_CHARS = 50_000
-# 一次批量导入最多处理多少条候选。超过这个数说明用户是"全选"而不是"挑选"，
-# 而挑选正是这个功能的用意；也顺带给单次请求一个明确的规模上限。
-MAX_CANDIDATE_IMPORT_BATCH = 200
+# 一次批量请求（批量导入 / CSV 导出勾选集）最多处理多少条候选。
+# 上限跟随岗位/简历批量端点的 5000 口径：全选全部（含 CSV 导出 420 条报错那类场景）
+# 都要能一次过；仍保留一个规模上限给单次请求兜底。
+MAX_CANDIDATE_IMPORT_BATCH = 5000
 
 
 class MaterialFileInput(BaseModel):

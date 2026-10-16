@@ -76,13 +76,13 @@ def read_materials_page(
     keyword: str = Query(default=""),
     category: str = Query(default=""),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=12, ge=1, le=100),
+    page_size: int = Query(default=18, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     """分页列出资料（RF-08 续）：过滤与排序与旧端点同源。
 
     资料箱此前是无上限的全量下发（数百条时每行还带附件元信息数组），前端全量
-    渲染卡片网格。本端点按页取（网格一页 12 张），`MaterialSummary` 仍不带
+    渲染卡片网格。本端点按页取（网格一页 18 张），`MaterialSummary` 仍不带
     data_url 与附件文字（RF-25 口径不变），详情走 ``/{id}``。**声明在
     ``/{material_id}`` 之前**（字面量段排在参数段前面，同 ``/categories``）。
     """

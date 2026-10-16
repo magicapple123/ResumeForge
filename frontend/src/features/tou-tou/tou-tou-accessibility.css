@@ -21,7 +21,9 @@
   .tt.is-petted .tt-turn,
   .tt-save-card-dot,
   .tt-card,
-  .tt-card.is-leaving {
+  .tt-card.is-leaving,
+  .tt-tip,
+  .tt-assistant-card {
     animation: none;
   }
 

@@ -20,13 +20,15 @@ const BROWSER_CHOICE_OPTIONS = (Object.keys(BROWSER_CHOICE_META) as BrowserChoic
 interface Props {
   /** 文案可按场景微调（投递台 / 网申填表），默认写两处都成立的说法。 */
   label?: string;
+  /** 紧凑档（网申填表弹窗用）：字段换行排列时行距 16→8，弹窗内不显松散。 */
+  compact?: boolean;
 }
 
-export default function BrowserChoiceFields({ label = "受控浏览器" }: Props) {
+export default function BrowserChoiceFields({ label = "受控浏览器", compact = false }: Props) {
   // 只有选了「自定义路径」才需要填路径。
   const browserChoice = Form.useWatch("browser_choice") as BrowserChoice | undefined;
   return (
-    <Space size={16} wrap>
+    <Space size={compact ? 8 : 16} wrap>
       <Form.Item
         name="browser_choice"
         label={label}

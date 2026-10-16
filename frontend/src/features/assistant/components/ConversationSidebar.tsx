@@ -24,7 +24,6 @@ import {
   Empty,
   Input,
   Listy,
-  Pagination,
   Spin,
   Popconfirm,
   Popover,
@@ -42,8 +41,8 @@ import { conversationToMaterial, exportConversation } from "../../../api/assista
 import { copyText } from "../../../utils/clipboard";
 import { downloadBlob } from "../../../utils/download";
 import { formatDateTime } from "../../../utils/format";
-import { useClientPagination } from "../../../hooks/useClientPagination";
 import BatchActionBar from "../../../components/common/BatchActionBar";
+import LoadingBlock from "../../../components/common/LoadingBlock";
 import { RowContextMenu, type RowActionItem } from "../../../components/common/RowActions";
 import { useBatchSelection } from "../../../hooks/useBatchSelection";
 import { ListyItem } from "../../../components/common/ListyItem";
@@ -103,13 +102,7 @@ function ConversationSidebar({
     return !conversation.archived;
   });
 
-  // 会话持续累积，侧边栏一页 10 条；切换归档/收藏视图时回第 1 页。
-  const {
-    page,
-    setPage,
-    paged: pagedConversations,
-    total: conversationTotal,
-  } = useClientPagination(visibleConversations, 10, filter);
+  // 列表全量渲染（滚动由样式接管）：会话再多也是一屏内滚动，不再分页。
 
   const startRename = (conversation: AssistantConversationBrief) => {
     setActionMenuId(null);
@@ -291,12 +284,12 @@ function ConversationSidebar({
             onExit={batch.exitSelecting}
             pageSelectAll={{
               allSelected:
-                pagedConversations.length > 0 &&
-                pagedConversations.every((item) => batch.isSelected(item.id)),
-              someSelected: pagedConversations.some((item) => batch.isSelected(item.id)),
+                visibleConversations.length > 0 &&
+                visibleConversations.every((item) => batch.isSelected(item.id)),
+              someSelected: visibleConversations.some((item) => batch.isSelected(item.id)),
               onToggle: (checked) =>
                 batch.selectPage(
-                  pagedConversations.map((item) => item.id),
+                  visibleConversations.map((item) => item.id),
                   checked,
                 ),
             }}
@@ -328,157 +321,146 @@ function ConversationSidebar({
         ]}
         onChange={(value) => setFilter(value as ConversationFilter)}
       />
-      {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
-      <Spin spinning={loading}>
-        {visibleConversations.length === 0 ? (
-          <div className="assistant-conversation-list">
+      {/* 首次加载不显示「暂无对话」（那是空态）：用 LoadingBlock 体系给加载提示；
+          刷新已有列表仍用 Spin 遮罩，避免刷新时整列闪没。 */}
+      {visibleConversations.length === 0 ? (
+        <div className="assistant-conversation-list">
+          {loading ? (
+            <LoadingBlock tip="正在加载对话…" />
+          ) : (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无对话" />
-          </div>
-        ) : (
-          <>
-            <Listy
-              className="assistant-conversation-list"
-              items={pagedConversations}
-              rowKey={(conversation) => conversation.id}
-              itemRender={(conversation) => (
-                <RowContextMenu
-                  items={
+          )}
+        </div>
+      ) : (
+        <Spin spinning={loading}>
+          <Listy
+            className="assistant-conversation-list"
+            items={visibleConversations}
+            rowKey={(conversation) => conversation.id}
+            itemRender={(conversation) => (
+              <RowContextMenu
+                items={
+                  batch.selecting
+                    ? []
+                    : onBatchDelete
+                      ? [batchSelectAction(), ...actionsFor(conversation)]
+                      : actionsFor(conversation)
+                }
+              >
+                <ListyItem
+                  className={conversation.id === activeId ? "is-active" : ""}
+                  actions={
                     batch.selecting
-                      ? []
-                      : onBatchDelete
-                        ? [batchSelectAction(), ...actionsFor(conversation)]
-                        : actionsFor(conversation)
-                  }
-                >
-                  <ListyItem
-                    className={conversation.id === activeId ? "is-active" : ""}
-                    actions={
-                      batch.selecting
-                        ? [
-                            // 多选模式：行动作区换成勾选框，点行（标题）也切换勾选。
-                            <Checkbox
-                              key="pick"
-                              aria-label={`选择对话 ${conversation.title}`}
-                              checked={batch.isSelected(conversation.id)}
-                              onChange={() => batch.toggle(conversation.id)}
-                            />,
-                          ]
-                        : [
-                            <Popover
-                              key="more"
-                              trigger="click"
-                              placement="bottomRight"
-                              open={actionMenuId === conversation.id}
-                              onOpenChange={(open) =>
-                                setActionMenuId(open ? conversation.id : null)
-                              }
-                              content={
-                                <div className="assistant-conversation-actions-menu">
-                                  {actionsFor(conversation).map((item) =>
-                                    item.confirm ? (
-                                      <Popconfirm
-                                        key={item.key}
-                                        title={item.confirm}
-                                        onConfirm={() => {
-                                          setActionMenuId(null);
-                                          item.onClick?.();
-                                        }}
-                                      >
-                                        <Button
-                                          type="text"
-                                          size="small"
-                                          danger={item.danger}
-                                          icon={item.icon}
-                                        >
-                                          {item.label}
-                                        </Button>
-                                      </Popconfirm>
-                                    ) : (
+                      ? [
+                          // 多选模式：行动作区换成勾选框，点行（标题）也切换勾选。
+                          <Checkbox
+                            key="pick"
+                            aria-label={`选择对话 ${conversation.title}`}
+                            checked={batch.isSelected(conversation.id)}
+                            onChange={() => batch.toggle(conversation.id)}
+                          />,
+                        ]
+                      : [
+                          <Popover
+                            key="more"
+                            trigger="click"
+                            placement="bottomRight"
+                            open={actionMenuId === conversation.id}
+                            onOpenChange={(open) => setActionMenuId(open ? conversation.id : null)}
+                            content={
+                              <div className="assistant-conversation-actions-menu">
+                                {actionsFor(conversation).map((item) =>
+                                  item.confirm ? (
+                                    <Popconfirm
+                                      key={item.key}
+                                      title={item.confirm}
+                                      onConfirm={() => {
+                                        setActionMenuId(null);
+                                        item.onClick?.();
+                                      }}
+                                    >
                                       <Button
-                                        key={item.key}
                                         type="text"
                                         size="small"
                                         danger={item.danger}
                                         icon={item.icon}
-                                        onClick={item.onClick}
                                       >
                                         {item.label}
                                       </Button>
-                                    ),
-                                  )}
-                                </div>
-                              }
-                            >
-                              <Tooltip title="更多操作（也可以直接右键这条对话）">
-                                <Button
-                                  type="text"
-                                  size="small"
-                                  aria-label="更多对话操作"
-                                  className="assistant-conversation-more-button"
-                                  icon={<MoreOutlined />}
-                                />
-                              </Tooltip>
-                            </Popover>,
-                          ]
-                    }
-                  >
-                    {editingId === conversation.id ? (
-                      <Input
-                        size="small"
-                        value={editingTitle}
-                        autoFocus
-                        maxLength={128}
-                        suffix={
-                          <Tooltip title="保存标题（回车也可以）">
-                            <Button
-                              type="text"
-                              size="small"
-                              aria-label="保存对话标题"
-                              icon={<SaveOutlined />}
-                              onClick={() => saveTitle(conversation.id)}
-                            />
-                          </Tooltip>
+                                    </Popconfirm>
+                                  ) : (
+                                    <Button
+                                      key={item.key}
+                                      type="text"
+                                      size="small"
+                                      danger={item.danger}
+                                      icon={item.icon}
+                                      onClick={item.onClick}
+                                    >
+                                      {item.label}
+                                    </Button>
+                                  ),
+                                )}
+                              </div>
+                            }
+                          >
+                            <Tooltip title="更多操作（也可以直接右键这条对话）">
+                              <Button
+                                type="text"
+                                size="small"
+                                aria-label="更多对话操作"
+                                className="assistant-conversation-more-button"
+                                icon={<MoreOutlined />}
+                              />
+                            </Tooltip>
+                          </Popover>,
+                        ]
+                  }
+                >
+                  {editingId === conversation.id ? (
+                    <Input
+                      size="small"
+                      value={editingTitle}
+                      autoFocus
+                      maxLength={128}
+                      suffix={
+                        <Tooltip title="保存标题（回车也可以）">
+                          <Button
+                            type="text"
+                            size="small"
+                            aria-label="保存对话标题"
+                            icon={<SaveOutlined />}
+                            onClick={() => saveTitle(conversation.id)}
+                          />
+                        </Tooltip>
+                      }
+                      onChange={(event) => setEditingTitle(event.target.value)}
+                      onPressEnter={() => saveTitle(conversation.id)}
+                    />
+                  ) : (
+                    <div className="assistant-conversation-item">
+                      <ConversationTitle
+                        title={conversation.title}
+                        pinned={conversation.pinned}
+                        favorite={conversation.favorite}
+                        onSelect={() =>
+                          batch.selecting
+                            ? batch.toggle(conversation.id)
+                            : onSelect(conversation.id)
                         }
-                        onChange={(event) => setEditingTitle(event.target.value)}
-                        onPressEnter={() => saveTitle(conversation.id)}
                       />
-                    ) : (
-                      <div className="assistant-conversation-item">
-                        <ConversationTitle
-                          title={conversation.title}
-                          pinned={conversation.pinned}
-                          favorite={conversation.favorite}
-                          onSelect={() =>
-                            batch.selecting
-                              ? batch.toggle(conversation.id)
-                              : onSelect(conversation.id)
-                          }
-                        />
-                        <Typography.Text type="secondary" className="assistant-conversation-meta">
-                          {conversation.group_name ? `${conversation.group_name} · ` : ""}
-                          {conversation.message_count} 条 ·{" "}
-                          {formatDateTime(conversation.updated_at)}
-                        </Typography.Text>
-                      </div>
-                    )}
-                  </ListyItem>
-                </RowContextMenu>
-              )}
-            />
-            <Pagination
-              current={page}
-              pageSize={10}
-              total={conversationTotal}
-              onChange={setPage}
-              hideOnSinglePage
-              showSizeChanger={false}
-              showTotal={(count) => `共 ${count} 场对话`}
-              size="small"
-              style={{ marginTop: 8 }}
-            />
-          </>
-        )}
-      </Spin>
+                      <Typography.Text type="secondary" className="assistant-conversation-meta">
+                        {conversation.group_name ? `${conversation.group_name} · ` : ""}
+                        {conversation.message_count} 条 · {formatDateTime(conversation.updated_at)}
+                      </Typography.Text>
+                    </div>
+                  )}
+                </ListyItem>
+              </RowContextMenu>
+            )}
+          />
+        </Spin>
+      )}
     </aside>
   );
 }

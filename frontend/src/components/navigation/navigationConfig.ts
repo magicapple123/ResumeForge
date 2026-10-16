@@ -158,6 +158,13 @@ export function pathMatchesNavigationItem(pathname: string, item: NavigationItem
     : pathname === item.key || pathname.startsWith(item.key + "/");
 }
 
+export function navigationPageLabel(pathname: string): string {
+  if (pathname === "/claims/drill") return "事实核对";
+  return (
+    NAVIGATION_ITEMS.find((item) => pathMatchesNavigationItem(pathname, item))?.label ?? "首页"
+  );
+}
+
 export function filterNavigationItems(
   items: NavigationItem[],
   hiddenKeys: readonly string[],

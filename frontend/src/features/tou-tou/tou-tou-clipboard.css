@@ -7,9 +7,11 @@
   right: 24px;
   bottom: 120px;
   /*
-   * 3200：高于 antd 弹层基准 zIndexPopupBase（3100，main.tsx）——Modal 弹出时
-   * 剪贴板仍可用；低于助手卡（3300）与悬浮球（3400），保持 球 > 助手卡 > 剪贴板
-   * 的相对次序。
+   * 3500：高于 antd 6 容器链——zIndexPopupBase（3100）+ useZIndex 容器偏移
+   * +100/层（单层 Modal/Drawer 实际 3200、Drawer 内嵌 Modal 3300），弹窗无论
+   * 常规单层还是 Drawer 内嵌都盖不住本卡；也高于助手卡（3400）——两卡同时
+   * 弹出时剪贴板压在助手卡上面，而两者都低于悬浮球（3650），保持
+   * 球 > 剪贴板 > 助手卡 的相对次序。
    */
   z-index: var(--rf-layer-clipboard-card);
   display: flex;

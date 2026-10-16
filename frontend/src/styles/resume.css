@@ -59,6 +59,17 @@
 /* 页与页之间的“裁切间隙”：把连续纸面在分页处切开，观感等同两张并排的独立 A4 纸。
    间隙里露出预览视口的底色（#f5f7fa），两侧的柔和阴影扮演每张纸的纸边。
    宽度由组件按 PAGE_GAP_PX × scale 内联给出；压住的是简历自身的页边距区域，不遮正文。 */
+/* 预览工具栏（抓手/编辑/缩放/刷新）与下方警告条、画布之间的呼吸间距：
+   之前工具栏没有下缘间距，与黄色警告条、画布三层全部贴死（用户截图反馈）。 */
+.resume-preview-toolbar {
+  margin-bottom: 12px;
+}
+
+/* 溢出警告条与画布之间同样留一档；首条警告已有内联 marginBottom: 12。 */
+.resume-preview-overflow {
+  margin-bottom: 12px;
+}
+
 .resume-preview-page-separator {
   position: absolute;
   top: 0;
@@ -80,7 +91,7 @@
 .resume-preview-page-separator-label {
   position: absolute;
   left: 50%;
-  top: 8px;
+  top: 12px;
   transform: translateX(-50%);
   padding: 2px 8px;
   background: #fff7e6;

@@ -74,7 +74,7 @@ export function deleteResume(id: number): Promise<void> {
 
 /**
  * 批量软删除简历（P2-4）：一次请求删完（全部进回收站），不再前端逐条 N 连发。
- * 任一 id 不存在或已删除时整批失败（404），不会出现"删了一半"的状态；一次最多 500 份。
+ * 任一 id 不存在或已删除时整批失败（404），不会出现"删了一半"的状态；一次最多 5000 份。
  */
 export function batchDeleteResumes(resumeIds: number[]): Promise<{ deleted: number }> {
   return request("/resumes/batch-delete", {

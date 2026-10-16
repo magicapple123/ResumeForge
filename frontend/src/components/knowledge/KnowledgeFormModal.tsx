@@ -1,7 +1,9 @@
 /** 知识库条目编辑：标题、分类、标签、来源与 Markdown 正文。 */
 
-import { App, Button, Form, Input, Modal, Select, Space, Typography } from "antd";
-import { useState } from "react";
+import { Button, Form, Input, Modal, Select, Space, Typography } from "antd";
+import type { InputRef } from "antd";
+import { useId, useRef, useState } from "react";
+import { handleEditorSaveKey } from "../../utils/formKeyboard";
 import type { Knowledge, KnowledgePayload } from "../../types";
 import { KNOWLEDGE_CATEGORIES } from "../../types";
 
@@ -23,7 +25,9 @@ export default function KnowledgeFormModal({
   onCancel,
   onSubmit,
 }: Props) {
-  const { message } = App.useApp();
+  const fieldId = useId();
+  const titleInput = useRef<InputRef>(null);
+  const [titleTouched, setTitleTouched] = useState(false);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<string>("其他");
   const [tags, setTags] = useState<string[]>([]);
@@ -36,6 +40,7 @@ export default function KnowledgeFormModal({
   if (prevSync === null || prevSync.open !== open || prevSync.entry !== entry) {
     setPrevSync({ open, entry });
     if (open) {
+      setTitleTouched(false);
       setTitle(entry?.title ?? "");
       setCategory(entry?.category || "其他");
       setTags(entry?.tags ?? []);
@@ -47,9 +52,11 @@ export default function KnowledgeFormModal({
   const options = Array.from(new Set([...categories, ...KNOWLEDGE_CATEGORIES]));
 
   const submit = () => {
+    if (submitting) return;
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
-      message.warning("请填写标题");
+      setTitleTouched(true);
+      titleInput.current?.focus();
       return;
     }
     onSubmit({
@@ -87,17 +94,41 @@ export default function KnowledgeFormModal({
         知识库用来沉淀愿意反复查阅的成文内容：面经总结、简历技巧、求职策略、行业笔记等。 正文支持
         Markdown，保存后会按标题、列表、表格等结构渲染。
       </Typography.Paragraph>
-      <Form layout="vertical">
-        <Form.Item label="标题" required>
+      <Typography.Paragraph type="secondary">
+        Ctrl / ⌘ + Enter 或 S 保存，Esc 取消
+      </Typography.Paragraph>
+      <Form
+        layout="vertical"
+        disabled={submitting}
+        onKeyDown={(event) => handleEditorSaveKey(event, submit)}
+      >
+        <Form.Item
+          label="标题"
+          htmlFor={`${fieldId}-title`}
+          required
+          validateStatus={titleTouched && !title.trim() ? "error" : undefined}
+          help={
+            titleTouched && !title.trim() ? (
+              <span id={`${fieldId}-title-error`}>请填写标题</span>
+            ) : undefined
+          }
+        >
           <Input
+            ref={titleInput}
+            id={`${fieldId}-title`}
+            aria-invalid={titleTouched && !title.trim()}
+            aria-describedby={titleTouched && !title.trim() ? `${fieldId}-title-error` : undefined}
+            onBlur={() => setTitleTouched(true)}
+            showCount
             value={title}
             maxLength={200}
             placeholder="如：STAR 法则 / 自我介绍模板"
             onChange={(event) => setTitle(event.target.value)}
           />
         </Form.Item>
-        <Form.Item label="分类">
+        <Form.Item label="分类" htmlFor={`${fieldId}-category`}>
           <Select
+            id={`${fieldId}-category`}
             // tags 模式的取值是数组，这里始终只放一项，对外仍当单个字符串用。
             value={category ? [category] : []}
             showSearch
@@ -111,8 +142,9 @@ export default function KnowledgeFormModal({
             placeholder="选择或输入一个新分类"
           />
         </Form.Item>
-        <Form.Item label="标签">
+        <Form.Item label="标签" htmlFor={`${fieldId}-tags`}>
           <Select
+            id={`${fieldId}-tags`}
             mode="tags"
             value={tags}
             maxCount={20}
@@ -121,16 +153,18 @@ export default function KnowledgeFormModal({
             tokenSeparators={[",", "，"]}
           />
         </Form.Item>
-        <Form.Item label="来源">
+        <Form.Item label="来源" htmlFor={`${fieldId}-source`}>
           <Input
+            id={`${fieldId}-source`}
             value={source}
             maxLength={64}
             placeholder="如：手动录入 / 面经导入"
             onChange={(event) => setSource(event.target.value)}
           />
         </Form.Item>
-        <Form.Item label="正文内容" style={{ marginBottom: 0 }}>
+        <Form.Item label="正文内容" htmlFor={`${fieldId}-content`} style={{ marginBottom: 0 }}>
           <Input.TextArea
+            id={`${fieldId}-content`}
             value={content}
             autoSize={{ minRows: 8, maxRows: 20 }}
             placeholder={"支持 Markdown：\n# 标题\n- 列表项\n**加粗**、`代码`、表格等"}

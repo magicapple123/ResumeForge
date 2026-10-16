@@ -6,7 +6,7 @@ import ReferralPanel from "./ReferralPanel";
 import { REFERRAL_STATUS_COLORS } from "../types";
 
 const apiMocks = vi.hoisted(() => ({
-  listReferrals: vi.fn(),
+  listReferralsPage: vi.fn(),
   getReferralStats: vi.fn(),
   createReferral: vi.fn(),
   updateReferral: vi.fn(),
@@ -50,7 +50,7 @@ function renderPanel() {
 }
 
 beforeEach(() => {
-  apiMocks.listReferrals.mockReset().mockResolvedValue(ITEMS);
+  apiMocks.listReferralsPage.mockReset().mockResolvedValue({ items: ITEMS, total: ITEMS.length });
   apiMocks.getReferralStats.mockReset().mockResolvedValue(STATS);
   apiMocks.deleteReferral.mockReset().mockResolvedValue(undefined);
 });
@@ -167,9 +167,10 @@ describe("ReferralPanel", () => {
   });
 
   it("点卡片打开详情，看得到联系方式与内推码", async () => {
-    apiMocks.listReferrals.mockResolvedValue([
-      { ...ITEMS[0], referral_code: "REF-888", note_images: [] },
-    ]);
+    apiMocks.listReferralsPage.mockResolvedValue({
+      items: [{ ...ITEMS[0], referral_code: "REF-888", note_images: [] }],
+      total: 1,
+    });
     renderPanel();
     await screen.findByText(/张三 · 后端开发/);
 
@@ -182,10 +183,10 @@ describe("ReferralPanel", () => {
   });
 
   it("批量选择：右键进多选 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除请求带全部 id 并刷新", async () => {
-    apiMocks.listReferrals.mockResolvedValue([
-      ITEMS[0],
-      { ...ITEMS[0], id: 2, referrer_name: "李四", converted: false },
-    ]);
+    apiMocks.listReferralsPage.mockResolvedValue({
+      items: [ITEMS[0], { ...ITEMS[0], id: 2, referrer_name: "李四", converted: false }],
+      total: 2,
+    });
     apiMocks.batchDeleteReferrals.mockResolvedValue({ deleted: 2 });
     renderPanel();
     await screen.findByText(/张三 · 后端开发/);
@@ -216,8 +217,28 @@ describe("ReferralPanel", () => {
     expect(await screen.findByText(/已删除 2 条内推/)).toBeInTheDocument();
     expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(apiMocks.listReferrals.mock.calls.length).toBeGreaterThan(1);
+      expect(apiMocks.listReferralsPage.mock.calls.length).toBeGreaterThan(1);
       expect(apiMocks.getReferralStats.mock.calls.length).toBeGreaterThan(1);
+    });
+  });
+
+  it("服务端分页：默认每页 10 条，翻页携带 page 重新请求", async () => {
+    apiMocks.listReferralsPage.mockResolvedValue({ items: ITEMS, total: 25 });
+    renderPanel();
+    expect(await screen.findByText(/张三 · 后端开发/)).toBeInTheDocument();
+    expect(apiMocks.listReferralsPage).toHaveBeenLastCalledWith(
+      { status: undefined, keyword: "" },
+      1,
+      10,
+    );
+
+    fireEvent.click(screen.getByTitle("2"));
+    await waitFor(() => {
+      expect(apiMocks.listReferralsPage).toHaveBeenLastCalledWith(
+        { status: undefined, keyword: "" },
+        2,
+        10,
+      );
     });
   });
 });

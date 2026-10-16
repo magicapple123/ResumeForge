@@ -169,8 +169,8 @@ export default function ResumeTable({
   navigate,
 }: Props) {
   /**
-   * 行操作分两层，两层**不重叠**：主操作是行上的蓝色链接，「更多」里只放其余操作。
-   * 菜单里再出现一遍「预览 / 导出」会让人以为那是另一个入口。
+   * 主操作平铺在行上；其余操作（重命名/备注/对比/收藏/删除）只走整行右键菜单
+   * （三点「更多」下拉已移除），菜单里不重复「预览 / 导出」。
    * 动作定义在模块级 builder 里（ContextMenuRow 复用同一份），这里只做绑定。
    */
   const actionDeps = useMemo<RowActionDeps>(
@@ -202,9 +202,6 @@ export default function ResumeTable({
 
   const primaryActions = (record: ResumeBrief): RowActionItem[] =>
     primaryActionsFor(record, actionDeps);
-
-  const secondaryActions = (record: ResumeBrief): RowActionItem[] =>
-    secondaryActionsFor(record, actionDeps);
 
   /** rowKey → record：行渲染 O(1) 取值，替代对 items 的逐条 find（O(n²)）。 */
   const itemsByRowKey = useMemo(() => {
@@ -328,9 +325,10 @@ export default function ResumeTable({
       key: "actions",
       width: 150,
       render: (_, record) => (
+        // 三点「更多」下拉已移除：重命名/备注/对比/收藏/删除统一走整行右键菜单，
+        // 键盘用户可用 ContextMenu 键 / Shift+F10 打开（见 RowContextMenu）。
         <RowActions
           primary={primaryActions(record)}
-          more={secondaryActions(record)}
           // 多选模式下收起行内操作，避免勾选与单行操作互相干扰。
           disabled={batch.selecting}
         />

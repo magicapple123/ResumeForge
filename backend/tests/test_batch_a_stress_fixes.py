@@ -173,7 +173,7 @@ def test_resume_batch_delete_rejects_unknown_id_without_partial_delete(client, d
 
 def test_resume_batch_delete_rejects_empty_ids(client):
     assert client.post("/api/resumes/batch-delete", json={"resume_ids": []}).status_code == 422
-    too_many = client.post("/api/resumes/batch-delete", json={"resume_ids": list(range(1, 502))})
+    too_many = client.post("/api/resumes/batch-delete", json={"resume_ids": list(range(1, 5002))})
     assert too_many.status_code == 422
 
 

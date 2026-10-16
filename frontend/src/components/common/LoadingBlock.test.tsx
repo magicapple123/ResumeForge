@@ -13,6 +13,7 @@ describe("LoadingBlock", () => {
 
     const holder = container.firstElementChild as HTMLElement;
     expect(holder).not.toBeNull();
+    expect(screen.getByRole("status", { name: "正在加载内容" })).toBeInTheDocument();
     expect(holder.style.display).toBe("flex");
     expect(holder.style.minHeight).toBe("var(--rf-loading-min-h)");
     expect(holder.querySelector(".ant-spin")).not.toBeNull();

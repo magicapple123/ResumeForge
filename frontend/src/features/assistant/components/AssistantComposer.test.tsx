@@ -205,10 +205,11 @@ describe("AssistantComposer 附件 Tooltip", () => {
     fireEvent.mouseEnter(screen.getByRole("button", { name: "添加附件" }));
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent("添加图片或文档附件");
-    // 卡片提到 3300 后，antd Tooltip 默认 1070 会被盖住；maxWidth 保证换行不水平溢出。
+    // 卡片（3400）高于 antd Tooltip 默认 1070 会被盖住，显式抬到卡片内弹层基准
+    // 3550 才稳在卡片之上；maxWidth 保证换行不水平溢出。
     // overlayStyle 落在 .ant-tooltip 根节点上（role=tooltip 的是内层内容节点）。
     const overlay = tooltip.closest(".ant-tooltip") as HTMLElement;
-    expect(overlay.style.zIndex).toBe("3100");
+    expect(overlay.style.zIndex).toBe("3550");
     expect(overlay.style.maxWidth).toBe("240px");
   });
 
@@ -222,6 +223,16 @@ describe("AssistantComposer 附件 Tooltip", () => {
 });
 
 describe("AssistantComposer 思考强度", () => {
+  it("说明挂在文字旁的问号图标上，悬停「思考强度」文字本身不再弹 tooltip", async () => {
+    renderComposer();
+
+    fireEvent.mouseEnter(screen.getByText("思考强度"));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    fireEvent.mouseEnter(screen.getByLabelText("思考强度说明"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("推理强度");
+  });
+
   /** 打开下拉并选中某一项（antd 的下拉是虚拟列表，用键盘回车选更稳）。 */
   function chooseEffort(label: string) {
     const combobox = screen.getByRole("combobox", { name: "思考强度" });

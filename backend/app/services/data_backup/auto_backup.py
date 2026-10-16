@@ -79,6 +79,28 @@ def failure_backoff_seconds(consecutive_failures: int) -> int:
     return FAILURE_BACKOFF_STEPS[index]
 
 
+def runtime_interval_days(bind: Engine, config: Settings | None = None) -> int:
+    """自动备份间隔（天）：用户在设置页保存的运行时值优先，读不到回退环境配置。
+
+    每次到期检查现读现用（调度线程默认 6h 醒一次），所以用户改完频率**无需重启**，
+    下次检查即按新间隔判定。引擎上可能连 ``app_setting`` 表都没有（测试/极老库），
+    任何读取失败都回退环境配置——备份判定不能因为一个设置读不到而中断。
+    """
+    if config is None:
+        config = get_settings()
+    fallback = max(1, config.auto_backup_interval_days)
+    try:
+        from sqlalchemy.orm import Session
+
+        from ...services.settings_service import get_auto_backup_interval_days
+
+        with Session(bind) as session:
+            return get_auto_backup_interval_days(session)
+    except Exception:  # noqa: BLE001 - 表缺失/脏库都只是"用默认值"，不是故障
+        logger.warning("读取自动备份间隔设置失败，回退环境配置", exc_info=True)
+        return fallback
+
+
 def _is_due(marker: dict[str, Any], now: float, interval_seconds: int) -> bool:
     """到期判定：成功节奏与失败退避分开算（RF-05 核心语义）。"""
     last_attempt = float(marker.get("last_attempt", 0) or 0)
@@ -226,7 +248,7 @@ def run_auto_backup_if_due(
         return None
 
     marker = _read_marker(_marker_path(bind))
-    interval_seconds = max(1, config.auto_backup_interval_days) * 86400
+    interval_seconds = runtime_interval_days(bind, config) * 86400
     if not _is_due(marker, current, interval_seconds):
         return None
 

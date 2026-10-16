@@ -69,4 +69,30 @@ describe("SkillsCard", () => {
 
     expect(props.onImport).not.toHaveBeenCalled();
   });
+
+  it("技能超过 5 项：默认只展示 5 项，点「显示全部」展开其余", () => {
+    const skills = Array.from({ length: 7 }, (_, index) => ({
+      id: index + 1,
+      name: `技能${index + 1}`,
+      description: "",
+      files: [],
+      prompt_chars: 10,
+      enabled: true,
+      updated_at: "2026-10-01T00:00:00Z",
+      source_name: `技能${index + 1}.md`,
+    }));
+    renderCard({ skills });
+
+    expect(screen.getByText("技能1")).toBeTruthy();
+    // 第 6、7 项默认折叠；展开后可见。
+    expect(screen.queryByText("技能6")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "显示全部 7 条" }));
+    expect(screen.getByText("技能6")).toBeTruthy();
+    expect(screen.getByText("技能7")).toBeTruthy();
+  });
+
+  it("技能不超过 5 项：不出现折叠按钮", () => {
+    renderCard();
+    expect(screen.queryByText(/显示全部/)).toBeNull();
+  });
 });

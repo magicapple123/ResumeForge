@@ -362,6 +362,8 @@ def test_prompt_conditionals_are_actually_rendered():
 
 
 def test_auto_rounds_validation():
+    from app.schemas.interview import MAX_INTERVIEW_ROUNDS, MIN_INTERVIEW_ROUNDS
+
     assert InterviewCreate().rounds_min is None
     # 下限必须小于上限，否则区间退化成一个数，"未知感"无从谈起。
     with pytest.raises(Exception):
@@ -369,6 +371,9 @@ def test_auto_rounds_validation():
     with pytest.raises(Exception):
         InterviewCreate(rounds=3, rounds_min=5)
     assert InterviewCreate(rounds=9, rounds_min=3).rounds_min == 3
+    # 前端「自动」档的实际提交对：rounds=硬性保险上限、rounds_min=产品允许的最小轮数
+    # （曾经提交过模式开关值 1，被这里的 ge=MIN_INTERVIEW_ROUNDS 拦成 422）。
+    assert InterviewCreate(rounds=MAX_INTERVIEW_ROUNDS, rounds_min=MIN_INTERVIEW_ROUNDS)
 
 
 def test_prompt_auto_rounds_branch_hides_exact_total():

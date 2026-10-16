@@ -2,8 +2,8 @@
  * 语义 token 的 CSS 侧出口（RF-12）。
  *
  * 与 `src/theme/tokens.ts` 一一对应——TS 侧供组件/主题引用，这里供全局 CSS 引用。
- * **只收编既有值**：每个变量都等于替换前的字面量，收编不改变任何渲染结果。
- * 存量样式按「色值完全相同才替换」的原则逐步迁移，未迁移的字面量仍是合法现状。
+ * 保留品牌与弹层契约；文字与状态颜色在白底、浅色背景上验证对比度。
+ * 新界面优先使用语义变量，存量视觉域按任务逐步迁移。
  */
 :root {
   /* 品牌与中性色（与 tokens.ts palette 对应） */
@@ -12,23 +12,55 @@
   --rf-brand-wash: #f7faff;
   --rf-surface-alt: #f6f8fb;
   --rf-text-secondary: #5f6b7a;
-  /* RF-12 a11y：#8a94a3 对白底只有 3.06:1，加深到 4.63:1（与 tokens.ts 同步）。 */
-  --rf-text-tertiary: #6b7683;
+  /* 三级文字同时适用于白底和应用浅底，与 tokens.ts 同步。 */
+  --rf-text-tertiary: #626f7f;
   /* antd 次级说明文字的达标替代（原硬编码 #8c8c8c 只有 3.36:1）。 */
   --rf-text-description: #5f6b7a;
   --rf-border: #e7ebf0;
   --rf-border-subtle: #e5e7eb;
   --rf-danger: #ff4d4f;
   --rf-focus-ring: #91caff;
+  --rf-surface: #ffffff;
+  --rf-text-body: #223047;
+  --rf-success-text: #176b41;
+  --rf-warning-text: #875300;
+  --rf-error-text: #b42318;
+  --rf-focus-visible: #0958d9;
+  --rf-space-1: 4px;
+  --rf-space-2: 8px;
+  --rf-space-3: 16px;
+  --rf-space-4: 24px;
+  --rf-radius-control: 8px;
+  --rf-radius-panel: 16px;
+  --rf-motion-duration: 180ms;
+  --rf-header-height: 64px;
 
-  /* 弹层层级（与 tokens.ts layer 对应；3100 基准 + 投投整族） */
+  /*
+   * 弹层层级（与 tokens.ts layer 一一对应）。谁盖谁（自下而上）：
+   *   3100 popup-base    antd zIndexPopupBase。注意 antd 6 useZIndex 给
+   *                      Modal/Drawer 自动 +100 容器偏移：单层 Modal/Drawer 实际
+   *                      3200，Drawer 内嵌 Modal 3300，再嵌 +100/层。
+   *   3110 editor-modal  简历编辑器 Modal（打开时无并存容器）。
+   *   3400 assistant-card 投投助手卡：高于容器链两层（3200/3300）。
+   *   3450 save-card     投投资料保存卡——是 .tt-shell（isolation: isolate）的
+   *                      壳内地标，不参与全局排序，只需壳内 tip > save。
+   *   3500 clipboard-card 投投剪贴板卡：高于三层容器链；两卡同开时压住助手卡。
+   *   3550 card-popup    投投卡内弹层基准（局部 ConfigProvider 注入
+   *                      zIndexPopupBase）：+50~+80 组件偏移落在 3600~3630，
+   *                      卡之上、球之下。
+   *   3650 orb           悬浮球：压住三卡，随时可点。
+   *   3700 orb-tooltip   球身 Tooltip：投投族最高层。
+   *   antd message(+1010=4110)/notification(+1050=4150) 在投投族之上——
+   *   toast 不被卡片遮挡。
+   */
   --rf-layer-popup-base: 3100;
   --rf-layer-editor-modal: 3110;
-  --rf-layer-clipboard-card: 3200;
-  --rf-layer-save-card: 3250;
-  --rf-layer-assistant-card: 3300;
-  --rf-layer-orb: 3400;
-  --rf-layer-orb-tooltip: 3450;
+  --rf-layer-assistant-card: 3400;
+  --rf-layer-save-card: 3450;
+  --rf-layer-clipboard-card: 3500;
+  --rf-layer-card-popup: 3550;
+  --rf-layer-orb: 3650;
+  --rf-layer-orb-tooltip: 3700;
 }
 
 /*

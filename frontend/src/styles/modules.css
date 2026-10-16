@@ -150,6 +150,14 @@
   justify-content: flex-end;
 }
 
+/* 「历史网址」下拉：popupRender 自定义限高容器（滚动只在这一层）。
+   内层菜单必须保持 overflow visible / max-height none——菜单自身再限高会出现
+   双滚动条（外层容器一条 + 菜单列表一条），这是 2026 用户实测踩到的形态。 */
+.webform-history-popup .ant-dropdown-menu {
+  max-height: none;
+  overflow: visible;
+}
+
 .webform-browser-status-row {
   display: flex;
   align-items: flex-start;
@@ -423,6 +431,14 @@
   height: 100%;
 }
 
+/* 等高链路：grid 的 stretch 只拉到无类名包装 div；中间的 .detail-trigger 是普通
+   block（高度=内容），不补 height:100% 的话 Card 的 100% 相对它就断了——
+   这正是知识库卡片高度不齐的根因。 */
+.knowledge-grid > div,
+.knowledge-grid .detail-trigger {
+  height: 100%;
+}
+
 .knowledge-card-head {
   display: flex;
   align-items: center;
@@ -505,6 +521,13 @@
   font-size: 12px;
   color: rgba(0, 0, 0, 0.65);
   white-space: nowrap;
+}
+
+/* 说明问号：灰色小号、随文字标签垂直居中（父级 flex 已对齐），悬停它才显示思考强度说明。 */
+.assistant-reasoning-help {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  cursor: help;
 }
 
 .assistant-reasoning-select {
@@ -840,6 +863,16 @@
 /* 包住"导入 HTML"按钮的 label：让点击落到里面的按钮上。 */
 .template-upload-button {
   display: inline-flex;
+}
+
+/*
+ * 模板区卡片头部：「样式模板」卡的按钮组较宽（复制改一份 / 导入 HTML / 导入参考模板），
+ * 与标题挤在同一行时会贴死（用户截图反馈）。加最小间距并允许换行：
+ * 宽屏仍是"标题左、按钮组右"的默认节奏，窄一档时按钮组整体换到标题下方（右对齐）。
+ */
+.template-workbench .ant-card-head-wrapper {
+  flex-wrap: wrap;
+  gap: 4px 12px;
 }
 
 .style-template-editor {
@@ -1281,9 +1314,12 @@
   height: auto;
 }
 
-.llm-advanced-toggle {
-  padding-inline: 0;
-}
+/* .llm-advanced-toggle（LLMRecordModal 的「高级调整」折叠头）的间距/去 padding 规则
+   不能写在这里：antd 6 Button 的 cssinjs 样式运行时注入 <head>、排在静态样式表之后，
+   同特异性下这里写的 padding-inline / margin-block 会被 antd 的 padding 压掉
+   （2026 返工实测无效的根因）。规则已移到组件内联 style（LLMRecordModal.tsx），
+   由 LLMRecordModal.test.tsx 钉住。同理注意 .llm-fetch-models-button 的 padding-inline
+   在 cssinjs 面前同样不可靠，后续如需真生效也应改内联。 */
 
 /* ===== 首页 =====
 

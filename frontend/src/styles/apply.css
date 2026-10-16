@@ -27,6 +27,24 @@
   font-size: 12px;
 }
 
+/*
+ * 浏览器设置弹窗（BrowserSettingsModal）：两枚浏览器字段换行显示时，
+ * Form.Item 默认 marginBottom 24 与 Space 行距 16 会叠出 40px 的大空行
+ * （用户截图反馈），统一收紧到 8。只作用于该弹窗，不影响投递台同字段组件。
+ */
+.browser-settings-form .ant-form-item {
+  margin-bottom: 8px;
+}
+
+/*
+ * 手动备份卡（ManualBackupsCard）：批量选择时勾选框挂在 List.Item.Meta 的头像槽，
+ * antd 默认顶部对齐——相对"标题+说明"两行文字会偏上（用户截图反馈），改垂直居中。
+ * 只作用于该卡，不影响其他 List 头像的使用。
+ */
+.manual-backups-card .ant-list-item-meta-avatar {
+  align-self: center;
+}
+
 .apply-progress-panel {
   padding: 12px 16px;
   background: var(--rf-surface, #fff);
@@ -274,6 +292,29 @@
 
 .apply-records-batch-stats {
   margin-left: auto;
+}
+
+/* 批次展开/收起的高度过渡：grid 0fr→1fr 插值（内容条件渲染，收起后不留 DOM）。
+   仅动 grid-template-rows，不碰 transform/opacity，动画中间态不影响行为断言。 */
+.apply-records-batch-body-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms ease;
+}
+
+.apply-records-batch-body-wrap.is-expanded {
+  grid-template-rows: 1fr;
+}
+
+.apply-records-batch-body-wrap > .apply-records-batch-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apply-records-batch-body-wrap {
+    transition: none;
+  }
 }
 
 .apply-records-batch-body {

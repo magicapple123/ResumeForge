@@ -1,7 +1,6 @@
 /**
  * 思考模式区：开关行 + 思考强度（下拉/自定义两态）+ 检测按钮 + 检测结果 Alert。
- * （自 LLMConfigCard 拆出：:356-434 整块逐字随迁；两分支各自挂 name 的结构逐字保留；
- * Form.Item 经 context 注册到卡片持有的同一 form 实例。）
+ * （两分支各自挂 name 的结构逐字保留；Form.Item 经 context 注册到调用方持有的同一 form。）
  */
 import { ExperimentOutlined } from "@ant-design/icons";
 import { Alert, Button, Col, Form, Input, Row, Select, Switch, Typography } from "antd";

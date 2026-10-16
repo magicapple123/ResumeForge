@@ -1,7 +1,6 @@
 /**
  * 高级调整折叠块的内部内容：Top P / Top K、惩罚项、随机种子、停止词、思考参数形态。
- * （自 LLMConfigCard 拆出：:436-589 折叠块内部逐字随迁；**零 props**——纯 Form.Item name
- * 注册在卡片持有的父 Form 上；advancedOpen 条件渲染留在卡片。）
+ * （**零 props**——纯 Form.Item name 注册在调用方持有的父 Form 上，弹窗/页面表单通用。）
  */
 import { Alert, Col, Form, InputNumber, Row, Select } from "antd";
 import { THINKING_STYLE_OPTIONS } from "./thinkingMeta";

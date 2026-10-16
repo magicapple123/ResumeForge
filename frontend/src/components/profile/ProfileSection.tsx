@@ -140,7 +140,7 @@ function ProfileListBody({
               className={`profile-list-item${dragOverItemKey === field.key ? " is-drag-over" : ""}`}
             >
               {editable && (
-                <Tooltip title={`拖动或使用上下方向键调整${label}顺序`}>
+                <Tooltip title={`拖动调整${label}顺序`}>
                   <button
                     type="button"
                     className="profile-list-item-drag-handle"

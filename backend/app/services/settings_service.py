@@ -3,6 +3,7 @@
 安全说明：API Key 在 Windows 上用系统 DPAPI 加密后落库（见 api_key_crypto），
 其他平台保持明文。本项目定位为单用户本地部署的工具，不做多用户暴露；如需对外部署请自行加锁。
 """
+
 import json
 import logging
 from urllib.parse import urlsplit, urlunsplit
@@ -33,6 +34,8 @@ _ASSISTANT_ORB_KEY = "assistant_orb_enabled"
 _NAVIGATION_VISIBILITY_KEY = "navigation_visibility"
 _WEBFORM_RELAXED_MODE_KEY = "webform_relaxed_mode"
 _EXPORT_SAVE_LOCATION_KEY = "export_save_location"
+# 自动备份间隔（天）的运行时设置：调度线程每次到期检查时读取，保存后下次检查生效。
+_AUTO_BACKUP_INTERVAL_KEY = "auto_backup_interval_days"
 # 求职助手放宽模式：开启后助手可读取完整资料（含姓名、电话等敏感字段）与
 # 网申填写记录、历史对话。默认必须**关**——它扩大的是发往模型的个人信息面。
 _ASSISTANT_RELAXED_MODE_KEY = "assistant_relaxed_mode"
@@ -402,6 +405,43 @@ def save_export_save_location(db: Session, path: str) -> str:
         db.add(AppSetting(key=_EXPORT_SAVE_LOCATION_KEY, value=cleaned))
     else:
         row.value = cleaned
+    db.commit()
+    return cleaned
+
+
+# ===== 自动备份间隔 =====
+
+
+def get_auto_backup_interval_days(db: Session) -> int:
+    """读取自动备份间隔（天）；缺失或脏数据回退环境配置的默认值。
+
+    与环境级 ``Settings.auto_backup_interval_days`` 的关系：后者是进程启动时的
+    出厂默认（.env），这里存的是用户在设置页改过的运行时值。KV 里只存一个整数
+    （``json.dumps(days)``），读取时按 1..365 夹紧，避免越界值拖垮调度判定。
+    """
+    from ..config import get_settings
+
+    fallback = max(1, get_settings().auto_backup_interval_days)
+    row = db.get(AppSetting, _AUTO_BACKUP_INTERVAL_KEY)
+    if row is None:
+        return fallback
+    try:
+        value = int(json.loads(row.value))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        logger.warning("自动备份间隔设置数据损坏，已回退环境配置默认值")
+        return fallback
+    return max(1, min(365, value))
+
+
+def save_auto_backup_interval_days(db: Session, days: int) -> int:
+    """持久化自动备份间隔（天）。上限校验交给 Pydantic schema（1..365）。"""
+    cleaned = max(1, min(365, int(days)))
+    row = db.get(AppSetting, _AUTO_BACKUP_INTERVAL_KEY)
+    serialized = json.dumps(cleaned)
+    if row is None:
+        db.add(AppSetting(key=_AUTO_BACKUP_INTERVAL_KEY, value=serialized))
+    else:
+        row.value = serialized
     db.commit()
     return cleaned
 

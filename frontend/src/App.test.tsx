@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
@@ -58,6 +58,40 @@ describe("first-visit guide", () => {
 });
 
 describe("application navigation", () => {
+  it("lets keyboard users skip navigation and focus the current page", async () => {
+    window.localStorage.setItem("resumeforge.user-guide.seen", "1");
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    await screen.findByText("首页内容");
+
+    const skip = screen.getByRole("link", { name: "跳到主要内容" });
+    fireEvent.click(skip);
+    expect(screen.getByRole("main")).toHaveFocus();
+    expect(skip).toHaveAttribute("href", `#${screen.getByRole("main").id}`);
+  });
+
+  it("opens mobile navigation, follows a destination and closes the drawer", async () => {
+    window.localStorage.setItem("resumeforge.user-guide.seen", "1");
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    const toggle = await screen.findByRole("button", { name: "打开导航" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    const drawer = await screen.findByRole("dialog", { name: "功能导航" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(within(drawer).getByRole("menuitem", { name: "岗位广场" }));
+    expect(await screen.findByText("岗位广场内容")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "功能导航" })).toBeNull());
+    expect(screen.getByRole("main")).toHaveFocus();
+    expect(document.title).toBe(`岗位广场 · ${APP_NAME}`);
+  });
+
   it("shows the app version next to the brand name, matching package.json", async () => {
     window.localStorage.setItem("resumeforge.user-guide.seen", "1");
     const { container } = render(

@@ -20,6 +20,8 @@ from pypdf import PdfWriter
 
 PDF_MIME = "application/pdf"
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+# 多文档通路把单页 < 30 字符的页判为扫描页（T03），这里的文字页样张要超过阈值。
+LONG_PDF_TEXT = "Company: Example Inc is hiring a backend engineer in Tianjin"
 
 
 def data_url(raw: bytes, mime: str) -> str:
@@ -94,8 +96,8 @@ def build_pdf(text: str = "", *, blank: bool = False) -> bytes:
     output += f"xref\n0 {size}\n".encode("ascii") + b"0000000000 65535 f \n"
     for number in range(1, size):
         output += f"{offsets[number]:010d} 00000 n \n".encode("ascii")
-    output += (
-        f"trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("ascii")
+    output += f"trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode(
+        "ascii"
     )
     return bytes(output)
 
@@ -183,13 +185,15 @@ def test_documents_share_one_text_budget_and_are_all_validated():
 
 def test_documents_are_joined_without_source_markers():
     """标记行会被本地规则当成正文（岗位描述里会多出一行文件名），所以不插标记。"""
+    # 文字页用超过 30 字符的真实长度文本：多文档通路的单页 < 30 字符判为扫描页（T03）。
     first = DocumentStub("jd.docx", build_docx("职位名称：后端开发工程师"), DOCX_MIME)
-    second = DocumentStub("jd.pdf", build_pdf("Company: Example Inc"), PDF_MIME)
+    second = DocumentStub("jd.pdf", build_pdf(LONG_PDF_TEXT), PDF_MIME)
 
     combined = extract_documents_text([first, second])
 
-    assert combined.text == "职位名称：后端开发工程师\n\nCompany: Example Inc"
+    assert combined.text == f"职位名称：后端开发工程师\n\n{LONG_PDF_TEXT}"
     assert combined.warnings == []
+    assert combined.images == ()
 
 
 def test_attachment_budget_covers_count_and_total_bytes():
@@ -198,7 +202,5 @@ def test_attachment_budget_covers_count_and_total_bytes():
     with pytest.raises(ValueError, match="一次最多上传 4 个附件"):
         assert_attachment_budget(count=5, total_bytes=1024)
     with pytest.raises(ValueError, match="附件总大小不能超过 5 MB"):
-        assert_attachment_budget(
-            count=3, total_bytes=total_attachment_bytes(two_mb * 3)
-        )
+        assert_attachment_budget(count=3, total_bytes=total_attachment_bytes(two_mb * 3))
     assert_attachment_budget(count=4, total_bytes=total_attachment_bytes(two_mb))

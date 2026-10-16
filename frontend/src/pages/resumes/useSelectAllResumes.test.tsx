@@ -15,7 +15,6 @@ function Harness({ keyword, jobId }: { keyword: string; jobId?: number }) {
   const { selectAllPages, selectAllPagesLoading } = useSelectAllResumes({
     keyword,
     jobId,
-    favoriteFilter: undefined,
     hasJobFilter: undefined,
     setSelectedIds: setSelected,
   });
