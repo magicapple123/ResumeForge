@@ -16,7 +16,7 @@ export default function DatasetScopeBoundary({ children }: { children: ReactNode
       });
     return () => controller.abort();
   }, []);
-  if (state === "loading") return <Spin fullscreen tip="正在连接本地工作台" />;
+  if (state === "loading") return <Spin fullscreen description="正在连接本地工作台" />;
   if (state === "error")
     return (
       <Alert

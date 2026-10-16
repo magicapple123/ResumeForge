@@ -58,7 +58,10 @@ export const GUIDE_STEPS: GuideStep[] = [
         lead: "要不要配",
         text: "手动管理岗位、资料和自行编写简历**不需要**模型；AI 生成、岗位需求解读、优化建议、截图识别和求职助手需要一个。",
       },
-      { lead: "快速预设", text: "覆盖常见服务商，选中即填好地址与模型名。" },
+      {
+        lead: "快速预设",
+        text: "覆盖常见服务商，选中即填好地址与模型名；DeepSeek 预设使用账号模型列表中的 `deepseek-flash`。",
+      },
       {
         lead: "直连官方",
         text: "选「Claude（Anthropic 原生协议）」这个预设，会把地址、模型名和接口协议一次填好。",

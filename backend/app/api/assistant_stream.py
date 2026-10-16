@@ -21,6 +21,7 @@ from ..services.assistant.assistant_web_search import (
 from ..services.assistant_tools import policy as tool_policy
 from ..services.assistant_tools import tool_definitions
 from ..services.llm.base import BaseLLMProvider, LLMError
+from ..services.llm.tool_messages import assistant_tool_call_message
 from ..services.llm.usage import FINISH_BUDGET_EXHAUSTED
 from ..services.settings_service import get_assistant_relaxed_mode, get_search_config
 from .assistant_budget import AssistantStreamBudget
@@ -46,8 +47,7 @@ MAX_WEB_SEARCHES = 3
 # 思考内容写进助手消息 `context` 的上限（字符数）。**为什么必须限长**：
 #   1) 思考内容常常比正文长一个量级（高强度思考尤甚），而 context 是随每条历史消息
 #      一起被批量加载的 JSON；不设限会让单条消息无限膨胀，历史列表的内存与带宽都会失控。
-#   2) 它**不参与后续对话**（见下面流循环里的说明），所以保存得完整与否不影响回答质量，
-#      它是"给用户回看的解释"，按上限截断即可。
+#   2) 该上限只作用于历史展示；DeepSeek 当次工具续轮的协议字段保留完整原文。
 # 超限时**如实截断并打标记**（context 里 `reasoning_truncated=True`），不静默丢弃。
 MAX_REASONING_CONTEXT_CHARS = 20_000
 
@@ -186,10 +186,7 @@ async def _stream_message_events(
                         parts.append(delta.text)
                         yield format_sse({"type": "delta", "text": delta.text})
                     if delta.reasoning:
-                        # 思考内容单独成一个事件下发前端；它**只用于展示**，绝不塞回
-                        # `messages`——把它当正文回灌给模型会让它把自己的草稿当成事实，
-                        # 并且（对 Anthropic）会触发"必须原样回传 thinking 块"的协议要求，
-                        # 那是另一套改动（见 `anthropic._convert_messages` 的说明）。
+                        # 思考单独下发、存档，不混入正文；工具续轮是否回传由协议适配决定。
                         reasoning_parts.append(delta.reasoning)
                         round_reasoning.append(delta.reasoning)
                         yield format_sse({"type": "reasoning", "text": delta.reasoning})
@@ -213,7 +210,11 @@ async def _stream_message_events(
                 break
 
             # 把助手的这次调用原样回填进消息，模型才能把结果对上号。
-            messages.append({"role": "assistant", "content": None, "tool_calls": calls})
+            messages.append(
+                assistant_tool_call_message(
+                    getattr(provider, "config", None), calls, "".join(round_reasoning)
+                )
+            )
             for call in calls:
                 if is_web_search(call) and web_searches_used >= MAX_WEB_SEARCHES:
                     # 超预算时**明确告诉模型**次数用完了，而不是静默丢掉这次调用：

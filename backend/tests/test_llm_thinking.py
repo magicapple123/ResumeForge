@@ -8,6 +8,7 @@
 2. **默认路径一个字都不加**——关着的时候请求体要与加这个功能之前完全一致，
    否则升级会把所有用户一起推到 400 上。
 """
+
 import json
 
 import httpx
@@ -80,6 +81,7 @@ def test_an_unknown_style_is_rejected_at_the_schema():
         ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen3-max", "enable_thinking", True),
         # 预设里用的就是这个别名：钉版本号的正则会让它掉进"未收录"，而它的思考默认是开的。
         ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", "enable_thinking", True),
+        ("https://api.deepseek.com", "deepseek-flash", "thinking_object", True),
         ("https://api.deepseek.com", "deepseek-v4-flash", "thinking_object", True),
         ("https://api.deepseek.com", "deepseek-v4-pro", "thinking_object", True),
         ("https://api.minimax.chat/v1", "MiniMax-M3", "thinking_object", True),
@@ -118,7 +120,9 @@ def test_kimi_k3_says_thinking_cannot_be_turned_off():
     ("base_url", "model", "expected"),
     [
         # 不指定就思考的模型：省略等于开着，所以"关闭"必须显式发出去。
+        ("https://api.deepseek.com", "deepseek-flash", {"thinking": {"type": "disabled"}}),
         ("https://api.deepseek.com", "deepseek-v4-flash", {"thinking": {"type": "disabled"}}),
+        ("https://api.deepseek.com", "deepseek-v4-pro", {"thinking": {"type": "disabled"}}),
         (
             "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "qwen3-max",
@@ -204,7 +208,10 @@ def test_a_custom_effort_is_kept_and_only_normalized():
     assert normalize_effort(_config(thinking_effort="Minimal")) == "minimal"
     assert normalize_effort(_config(thinking_effort="")) == ""
     # 候选表里没有、服务商也未必认识的值照样保留——它可能就是用户端点支持的那个词。
-    assert normalize_effort(_config(base_url="https://api.moonshot.cn/v1", thinking_effort="high")) == "high"
+    assert (
+        normalize_effort(_config(base_url="https://api.moonshot.cn/v1", thinking_effort="high"))
+        == "high"
+    )
 
 
 def test_a_numeric_custom_effort_becomes_the_budget():
@@ -212,9 +219,9 @@ def test_a_numeric_custom_effort_becomes_the_budget():
     config = _config(api_style="anthropic", thinking_enabled=True, thinking_effort="4096")
 
     assert thinking_budget(config) == 4096
-    assert thinking_payload(
-        config.model_copy(update={"thinking_style": "budget"})
-    ) == {"thinking": {"type": "enabled", "budget_tokens": 4096}}
+    assert thinking_payload(config.model_copy(update={"thinking_style": "budget"})) == {
+        "thinking": {"type": "enabled", "budget_tokens": 4096}
+    }
 
 
 def test_an_unknown_word_falls_back_to_the_default_depth():
@@ -248,10 +255,8 @@ def test_reasoning_effort_style_sends_the_effort():
 
 
 def test_reasoning_effort_style_without_an_effort_uses_the_default():
-    """"开启了但没选档位"在 effort 形态下只能靠发一个档位表达。"""
-    config = _config(
-        base_url="https://api.openai.com/v1", model="gpt-5.1", thinking_enabled=True
-    )
+    """ "开启了但没选档位"在 effort 形态下只能靠发一个档位表达。"""
+    config = _config(base_url="https://api.openai.com/v1", model="gpt-5.1", thinking_enabled=True)
 
     assert thinking_payload(config) == {"reasoning_effort": DEFAULT_EFFORT}
 
@@ -283,9 +288,10 @@ def test_the_native_protocol_maps_the_effort_to_a_budget():
     config = _config(api_style="anthropic", thinking_enabled=True, thinking_effort="low")
 
     assert thinking_budget(config) == EFFORT_BUDGETS["low"]
-    assert thinking_budget(config.model_copy(update={"thinking_effort": ""})) == EFFORT_BUDGETS[
-        DEFAULT_EFFORT
-    ]
+    assert (
+        thinking_budget(config.model_copy(update={"thinking_effort": ""}))
+        == EFFORT_BUDGETS[DEFAULT_EFFORT]
+    )
 
 
 # ===== 实测探测 =====

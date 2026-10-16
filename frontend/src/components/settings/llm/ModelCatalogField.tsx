@@ -129,7 +129,7 @@ export default function ModelCatalogField({
             <Input
               id="llm-record-model"
               aria-label="模型名称"
-              placeholder="deepseek-v4-flash"
+              placeholder="deepseek-flash"
               style={{ minWidth: 0, flex: 1 }}
             />
           </Form.Item>

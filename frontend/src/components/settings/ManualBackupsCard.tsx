@@ -9,13 +9,14 @@
  * 可进入批量选择模式（勾选多份 → 移除所选），与备选岗位的批量模式同一套交互。
  */
 import { DeleteOutlined, MoreOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Card, Checkbox, Dropdown, Flex, List, Space, Typography } from "antd";
+import { Alert, App, Button, Card, Checkbox, Dropdown, Flex, Listy, Space, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { listManualBackups, trashManualBackup } from "../../api/storage";
 import type { ManualBackupItem } from "../../api/storage";
 import { formatDateTime } from "../../utils/format";
 import LoadingBlock from "../common/LoadingBlock";
 import { useCollapsedList } from "../common/useCollapsedList";
+import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { RowContextMenu, type RowMenuItem } from "../common/RowActions";
 
 function formatSize(bytes: number): string {
@@ -201,13 +202,13 @@ export default function ManualBackupsCard() {
             </Typography.Text>
           ) : (
             <RowContextMenu items={contextItems}>
-              <List
-                size="small"
-                dataSource={visibleItems}
-                renderItem={(item) => {
+              <Listy
+                items={visibleItems}
+                rowKey={(item) => item.name}
+                itemRender={(item) => {
                   const selected = selectedNames.includes(item.name);
                   return (
-                    <List.Item
+                    <ListyItem
                       actions={
                         selecting
                           ? []
@@ -237,10 +238,8 @@ export default function ManualBackupsCard() {
                             ]
                       }
                     >
-                      {/* 勾选框只放 Meta 的 avatar 槽（行首一处）：此前在 actions 与
-                          内容区各放一个导致一选项两框；用原生槽位也不会破坏 List 的
-                          flex 布局（此前内容区包 Flex 曾把标题/说明压成竖排）。 */}
-                      <List.Item.Meta
+                      {/* 勾选框只放行首一处，ListyItem 保持主内容与操作区横向排列。 */}
+                      <ListyMeta
                         avatar={
                           selecting ? (
                             <Checkbox
@@ -260,7 +259,7 @@ export default function ManualBackupsCard() {
                           new Date(item.modified_at * 1000).toISOString(),
                         )}`}
                       />
-                    </List.Item>
+                    </ListyItem>
                   );
                 }}
               />

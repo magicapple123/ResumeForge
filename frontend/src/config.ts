@@ -48,12 +48,11 @@ export interface LLMPreset {
  * 绝大多数条目是**提供 OpenAI 兼容接口**的服务商；Claude 另有一条走 Messages 原生协议
  * （扩展思考、独立 system 字段），所以预设里带了 `api_style`。
  *
- * 模型名只作为起点：各家迭代很快，**旧模型名会直接 404**（DeepSeek 的 `deepseek-chat`、
- * 月之暗面的 `kimi-k2-0711-preview`、Google 的 `gemini-2.5-flash` 都已按各自公告下线）。
+ * 模型名只作为起点：各家迭代很快，旧名称可能下线，也可能作为兼容别名继续映射。
  * 界面上因此提供了「获取可用模型」按钮，按当前账号实际可用的模型覆盖这里的预填值。
  *
  * **最后一次核对：2026-10-01**（依据各家官方文档/下线公告）。下一次核对时重点看：
- * `deepseek-v4-flash`、`kimi-k3`、`doubao-seed-2.1-pro`、`glm-5.3`、`MiniMax-M3`、
+ * `deepseek-flash`、`kimi-k3`、`doubao-seed-2.1-pro`、`glm-5.3`、`MiniMax-M3`、
  * `gemini-3.6-flash`、`grok-4.3`、`gpt-5.1` 是否还在售。
  *
  * **改这里的模型名时，记得同步后端 `services/llm/thinking.py` 的能力表**：那张表按
@@ -62,13 +61,12 @@ export interface LLMPreset {
  */
 export const LLM_PRESETS: LLMPreset[] = [
   {
-    // `deepseek-chat` / `deepseek-reasoner` 已于 2026-07-24 停用（调用返回 404），
-    // V4 起把"选模型"和"是否思考"拆开了：模型是 deepseek-v4-flash / -pro，
-    // 思考由 thinking 参数控制（且默认开着）。
+    // 2026-10-16 核对：模型列表使用 deepseek-flash / deepseek-v4-pro。
+    // deepseek-v4-flash 仍是兼容别名；思考由 thinking 参数控制，默认开启。
     label: "DeepSeek（深度求索）",
     provider: "deepseek",
     base_url: "https://api.deepseek.com",
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
   },
   {
     // 地址必须带 /v1：provider 拼的是 `{base_url}/messages`，少了这一段会打到

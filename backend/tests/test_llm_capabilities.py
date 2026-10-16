@@ -6,6 +6,7 @@
 - **默认配置下 _build_payload 的输出与改动前逐字节一致**（stream_options /
   response_format 等新字段一律由默认关闭的配置守门）。
 """
+
 import json
 
 import pytest
@@ -26,7 +27,7 @@ def _config(base_url: str, model: str) -> LLMConfig:
 @pytest.mark.parametrize(
     ("base_url", "model"),
     [
-        ("https://api.deepseek.com/v1", "deepseek-v4-flash"),
+        ("https://api.deepseek.com/v1", "deepseek-flash"),
         ("https://api.moonshot.cn/v1", "kimi-k3"),
         ("https://open.bigmodel.cn/api/paas/v4", "glm-5"),
         ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
@@ -52,7 +53,7 @@ def test_resolve_is_pure_declaration_and_matches_thinking_authority(base_url, mo
 
 
 def test_resolve_deepseek_reasoning_matches_authority():
-    config = _config("https://api.deepseek.com/v1", "deepseek-v4-flash")
+    config = _config("https://api.deepseek.com/v1", "deepseek-flash")
     assert resolve_capabilities(config).reasoning is True
     assert thinking_support(config).supported is True
 

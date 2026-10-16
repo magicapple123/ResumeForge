@@ -357,13 +357,8 @@ def _import_skill(client, name: str, prompt: str, files: dict[str, str] | None =
     return response.json()
 
 
-def test_reasoning_streams_persists_and_is_never_fed_back_to_the_model(client, monkeypatch):
-    """思考内容要经 SSE 下发、落进助手消息 context，且**绝不回灌给模型**。
-
-    三层一次钉住：事件协议（前端靠它流式展示）、持久化（历史回看靠它）、以及"不回灌"
-    （把模型自己的草稿当正文再喂回去，会让它把草稿当成事实，也会撞上 Anthropic
-    "必须原样回传 thinking 块"的协议要求）。
-    """
+def test_reasoning_streams_persists_without_relay_for_other_providers(client, monkeypatch):
+    """普通服务商保持 SSE 与历史展示；思考不混入正文，也不附加专有协议字段。"""
     _configure_llm(client)
     provider = _ScriptedProvider(
         [
@@ -395,9 +390,42 @@ def test_reasoning_streams_persists_and_is_never_fed_back_to_the_model(client, m
     # 两次发给模型的请求里都不能出现这些思考文本——它们只是给用户看的。
     for request in provider.requests:
         for message in request["messages"]:
+            assert "reasoning_content" not in message
             content = str(message.get("content") or "")
             assert "我先查一下岗位。" not in content
             assert "想清楚了。" not in content
+
+
+def test_deepseek_tool_continuations_relay_each_round_reasoning(client, monkeypatch):
+    _configure_llm(client)
+    provider = _ScriptedProvider(
+        [
+            [
+                LLMDelta(reasoning="第一段"),
+                LLMDelta(reasoning="完整思考"),
+                _tool_call("list_jobs", {}),
+            ],
+            [LLMDelta(reasoning="第二轮思考"), _tool_call("list_jobs", {}, "call_2")],
+            [LLMDelta(text="共有 0 个岗位。")],
+        ]
+    )
+    provider.config = LLMConfig(base_url="https://api.deepseek.com/v1", model="deepseek-flash")
+    monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
+    conversation = _create_conversation(client)
+    response = client.post(
+        f"/api/assistant/conversations/{conversation['id']}/messages",
+        json={"content": "查一下岗位"},
+    )
+
+    assert _events(response)[-1]["type"] == "done"
+    assert len(provider.requests) == 3
+    continuations = [m for m in provider.requests[2]["messages"] if m.get("tool_calls")]
+    assert [m["reasoning_content"] for m in continuations] == ["第一段完整思考", "第二轮思考"]
+    assert all(m["content"] is None for m in continuations)
+    assistant = client.get(f"/api/assistant/conversations/{conversation['id']}").json()["messages"][
+        1
+    ]
+    assert assistant["context"]["reasoning"] == "第一段完整思考第二轮思考"
 
 
 def test_reasoning_is_truncated_and_marked_before_storing(client, monkeypatch):

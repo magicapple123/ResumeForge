@@ -285,7 +285,7 @@ export default function AssistantComposer({
                   compact ? "添加图片或文档附件" : "添加文本、图片或文档附件（也可以直接粘贴截图）"
                 }
                 placement="top"
-                overlayStyle={compact ? { maxWidth: 240, zIndex: layer.cardPopup } : undefined}
+                styles={compact ? { root: { maxWidth: 240, zIndex: layer.cardPopup } } : undefined}
               >
                 <Button
                   aria-label="添加附件"

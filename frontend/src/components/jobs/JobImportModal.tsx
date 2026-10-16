@@ -4,7 +4,8 @@
  * 用户在确认前就知道哪些行能进、哪些行会被跳过、为什么。
  */
 import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Flex, List, Modal, Space, Tag, Typography, Upload } from "antd";
+import { Alert, App, Button, Flex, Listy, Modal, Space, Tag, Typography, Upload } from "antd";
+import { ListyItem } from "../common/ListyItem";
 import { useState } from "react";
 import { importJobs, previewJobImport } from "../../api/jobs";
 import type { JobImportPreview } from "../../types";
@@ -165,41 +166,40 @@ export function JobImportModal({
               type="warning"
               showIcon
               style={{ marginTop: 8 }}
-              message="以下行不会导入（改好 CSV 后可以重新选择文件）"
+              title="以下行不会导入（改好 CSV 后可以重新选择文件）"
               description={
-                <List
-                  size="small"
-                  dataSource={errors}
-                  renderItem={(item) => (
-                    <List.Item>
+                <Listy
+                  items={errors}
+                  rowKey={(item) => item.line}
+                  itemRender={(item) => (
+                    <ListyItem>
                       <Tag>第 {item.line} 行</Tag>
                       {item.message}
-                    </List.Item>
+                    </ListyItem>
                   )}
                 />
               }
             />
           )}
           {rows.length > 0 && (
-            <List
-              size="small"
-              style={{ marginTop: 8 }}
-              header={
-                <Typography.Text type="secondary">
-                  将导入以下岗位（最多显示前 10 条）
-                </Typography.Text>
-              }
-              dataSource={rows.slice(0, 10)}
-              renderItem={(item) => (
-                <List.Item>
-                  <Typography.Text strong>{item.data.title || "（无标题）"}</Typography.Text>
-                  <Typography.Text type="secondary">
-                    {item.data.company || "—"}
-                    {item.data.origin_source ? ` · 来源：${item.data.origin_source}` : ""}
-                  </Typography.Text>
-                </List.Item>
-              )}
-            />
+            <div style={{ marginTop: 8 }}>
+              <Typography.Text type="secondary">将导入以下岗位（最多显示前 10 条）</Typography.Text>
+              <Listy
+                items={rows.slice(0, 10)}
+                rowKey={(item) => item.line}
+                itemRender={(item) => (
+                  <ListyItem>
+                    <Flex justify="space-between" gap={12}>
+                      <Typography.Text strong>{item.data.title || "（无标题）"}</Typography.Text>
+                      <Typography.Text type="secondary">
+                        {item.data.company || "—"}
+                        {item.data.origin_source ? ` · 来源：${item.data.origin_source}` : ""}
+                      </Typography.Text>
+                    </Flex>
+                  </ListyItem>
+                )}
+              />
+            </div>
           )}
         </div>
       )}

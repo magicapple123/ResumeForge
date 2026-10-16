@@ -7,7 +7,8 @@
  * 和一条同步链路。换浏览器/清缓存会丢，界面文案里如实说明。
  */
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, ConfigProvider, Empty, Input, List, Typography } from "antd";
+import { App, Button, ConfigProvider, Empty, Input, Listy, Typography } from "antd";
+import { ListyItem, ListyMeta } from "../../components/common/ListyItem";
 import { useEffect, useState } from "react";
 import { layer } from "../../theme/tokens";
 import { RowActions } from "../../components/common/RowActions";
@@ -213,10 +214,11 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
                     description="还没有片段：把常贴的内容存进来，随时一键复制。"
                   />
                 ) : (
-                  <List
-                    dataSource={items}
-                    renderItem={(item) => (
-                      <List.Item
+                  <Listy
+                    items={items}
+                    rowKey={(item) => item.id}
+                    itemRender={(item) => (
+                      <ListyItem
                         actions={[
                           <Button
                             key="copy"
@@ -251,7 +253,7 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
                           />,
                         ]}
                       >
-                        <List.Item.Meta
+                        <ListyMeta
                           title={item.title}
                           description={
                             <Typography.Paragraph
@@ -263,7 +265,7 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
                             </Typography.Paragraph>
                           }
                         />
-                      </List.Item>
+                      </ListyItem>
                     )}
                   />
                 )}

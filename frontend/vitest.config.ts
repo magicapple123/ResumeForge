@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
+    // Process the shared badge stylesheet for its contrast regression test.
+    css: { include: [/base\.css(?:\?.*)?$/] },
     setupFiles: ["./src/test/setup.ts"],
     // 显式限定 src/：默认 include（**/*.spec.ts）会把 tests/smoke 的 Playwright
     // 用例也当成 vitest 用例收进来。
