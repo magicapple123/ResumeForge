@@ -99,11 +99,14 @@ export default function BrowserSettingsModal({ open, onClose, onSaved }: Props) 
         <PageSkeleton rows={3} card={false} />
       ) : (
         <>
-          <p>
+          {/* 说明段落与表单、表单与底部链接之间的间距统一收紧（用户反馈行距偏松）。 */}
+          <p style={{ marginBottom: 12 }}>
             投递台和网申填表会分别打开独立浏览器窗口与登录态；这里选择的浏览器类型对两边都生效。
           </p>
-          <Form form={form} layout="vertical">
-            <BrowserChoiceFields />
+          {/* mb-tight：Form.Item 默认 marginBottom 24 与 Space 行距叠加，两枚字段换行
+              后中间会空出一大段，这里收紧到 8；compact 让字段换行行距 16→8。 */}
+          <Form form={form} layout="vertical" className="browser-settings-form">
+            <BrowserChoiceFields compact />
           </Form>
           <Button type="link" style={{ paddingLeft: 0 }} onClick={onClose}>
             换过浏览器后，回页面点「关闭浏览器」再点「启动浏览器」才会生效

@@ -11,17 +11,18 @@
 import { MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Space } from "antd";
 import type { ReactNode } from "react";
-import { useRowActionMenu, type RowActionItem } from "./rowActionMenu";
+import { cloneElement, isValidElement, useState } from "react";
+import { useRowActionMenu, type RowActionItem, type RowMenuItem } from "./rowActionMenu";
 
 // 类型从工具模块转发出去：调用方只认 `RowActions` 这一个入口，不必知道菜单项
 // 与 hook 被拆到了另一个文件。
-export type { RowActionItem } from "./rowActionMenu";
+export type { RowActionItem, RowMenuItem } from "./rowActionMenu";
 
 interface RowActionsProps {
   /** 直接显示的主操作（建议不超过 2 个）。 */
   primary?: RowActionItem[];
-  /** 收进「更多」下拉的操作，含删除等危险项。 */
-  more?: RowActionItem[];
+  /** 收进「更多」下拉的操作，含删除等危险项；可用 divider 分组。 */
+  more?: RowMenuItem[];
   disabled?: boolean;
 }
 
@@ -60,18 +61,44 @@ export function RowActions({ primary = [], more = [], disabled = false }: RowAct
 }
 
 interface RowContextMenuProps {
-  items: RowActionItem[];
+  items: RowMenuItem[];
   children: ReactNode;
   disabled?: boolean;
 }
 
-/** 整行的右键菜单：与「更多」下拉共用同一份菜单项。 */
+/** 整行的右键菜单：与「更多」下拉共用同一份菜单项。
+ * 键盘可达性：右键没有键盘等价物，聚焦行内任意元素时按 ContextMenu 键或
+ * Shift+F10（Windows 标准的"键盘右键"）可以打开同一份菜单——三点按钮被移除后
+ * 这条是键盘用户触达删除/编辑等次级操作的唯一入口。 */
 export function RowContextMenu({ items, children, disabled = false }: RowContextMenuProps) {
   const buildMenu = useRowActionMenu();
+  const [open, setOpen] = useState(false);
   if (disabled || items.length === 0) return <>{children}</>;
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+      event.preventDefault();
+      setOpen(true);
+    }
+  };
+  const wrapped = isValidElement(children)
+    ? cloneElement(children as React.ReactElement<{ onKeyDown?: unknown }>, {
+        onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
+          // 不覆盖宿主（如 antd 行）自带的 onKeyDown，只做追加。
+          const original = (children as React.ReactElement<{ onKeyDown?: unknown }>).props
+            .onKeyDown as ((e: React.KeyboardEvent<HTMLElement>) => void) | undefined;
+          original?.(event);
+          handleKeyDown(event);
+        },
+      })
+    : children;
   return (
-    <Dropdown menu={{ items: buildMenu(items) }} trigger={["contextMenu"]}>
-      {children}
+    <Dropdown
+      menu={{ items: buildMenu(items) }}
+      trigger={["contextMenu"]}
+      open={open}
+      onOpenChange={setOpen}
+    >
+      {wrapped}
     </Dropdown>
   );
 }

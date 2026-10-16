@@ -175,24 +175,20 @@ export default function JobTable({
       key: "actions",
       width: 170,
       render: (_, job) => (
-        <RowActions
-          disabled={batchAction !== null}
-          primary={primaryActions(job)}
-          more={secondaryActions(job)}
-        />
+        // 三点「更多」下拉已移除：右键菜单（含同一份次级操作）是唯一入口，
+        // 键盘用户可用 ContextMenu 键 / Shift+F10 打开（见 RowContextMenu）。
+        <RowActions disabled={batchAction !== null} primary={primaryActions(job)} />
       ),
     },
   ];
 
-  /**
-   * 行操作分两层，两层**不重叠**：主操作是行上的蓝色链接，「更多」里只放其余操作。
-   * 菜单里再出现一遍「详情」会让人以为那是另一个入口（也白白多一次点击）。
-   */
+  /** 主操作直接平铺在行上；其余操作（含删除）统一收进整行右键菜单。 */
   const primaryActions = (job: JobList): RowActionItem[] => [
     { key: "detail", label: "详情", onClick: () => onOpenDetail(job) },
     { key: "generate", label: "生成简历", onClick: () => onGenerate(job) },
   ];
 
+  /** 次级操作：只出现在整行右键菜单（行内不再有三点下拉）。 */
   const secondaryActions = (job: JobList): RowActionItem[] => [
     { key: "write", label: "自行编写", onClick: () => onWrite(job) },
     { key: "resumes", label: "相关简历", onClick: () => onViewResumes(job) },

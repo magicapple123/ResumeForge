@@ -224,7 +224,8 @@ async def parse_job_text_draft(payload: JobTextParseRequest, db: Session = Depen
     except ValueError as exc:
         # 在路由层抛：只有 HTTPException 的 detail 会被前端原样展示。
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    image_urls = image_data_urls(images)
+    # PDF 扫描页渲染出的图片并进同一图片通路：与用户截图一样走视觉识别。
+    image_urls = image_data_urls(images) + list(documents.images)
     has_images = bool(image_urls)
     has_documents = bool(payload.documents)
 
@@ -279,7 +280,8 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    image_urls = image_data_urls(images)
+    # PDF 扫描页渲染出的图片并进同一图片通路：与用户截图一样走视觉识别。
+    image_urls = image_data_urls(images) + list(documents.images)
     has_images = bool(image_urls)
     has_documents = bool(payload.documents)
     source_text = "\n\n".join(part for part in (payload.text, documents.text) if part.strip())

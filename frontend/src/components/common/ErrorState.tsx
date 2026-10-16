@@ -6,6 +6,7 @@
  * 让错误出现时即被播报，不依赖用户恰好看着这一块。
  */
 import { Button, Empty } from "antd";
+import { ExclamationCircleOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
 
 export default function ErrorState({
@@ -23,8 +24,11 @@ export default function ErrorState({
   retryLabel?: string;
 }) {
   return (
-    <div role="alert">
-      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={description}>
+    <div role="alert" className="rf-state rf-state--error">
+      <Empty
+        image={<ExclamationCircleOutlined className="rf-state-error-icon" />}
+        description={description}
+      >
         {onRetry ? (
           <Button onClick={onRetry} loading={retrying}>
             {retryLabel}

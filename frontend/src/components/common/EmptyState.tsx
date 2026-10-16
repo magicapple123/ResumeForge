@@ -23,13 +23,17 @@ export default function EmptyState({
   children?: ReactNode;
 }) {
   return (
-    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={description}>
-      {children ??
-        (actionLabel && onAction ? (
-          <Button type="primary" onClick={onAction}>
-            {actionLabel}
-          </Button>
-        ) : null)}
-    </Empty>
+    <div className="rf-state">
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={description}>
+        <div className="rf-state-actions">
+          {children ??
+            (actionLabel && onAction ? (
+              <Button type="primary" onClick={onAction}>
+                {actionLabel}
+              </Button>
+            ) : null)}
+        </div>
+      </Empty>
+    </div>
   );
 }

@@ -1,18 +1,25 @@
-/** 求职助手流式发送、停止、乐观消息和刷新收尾。 */
+/**
+ * 求职助手流式发送 hook：薄封装，状态本体在 assistantStreamStore（跨路由存活）。
+ *
+ * 问题 B 修复：原来这里的 10 余个 useState 都在组件实例上，切页卸载即丢失，
+ * 且卸载 effect 会 abort 掉请求。现在 hook 只做三件事：
+ * 1. 用 useSyncExternalStore 订阅全局 store（page/floating 共享同一份状态）；
+ * 2. 把当前挂载实例的刷新回调注册给 store，供流结束收尾使用（卸载时注销）；
+ * 3. 暴露 send/stop 两个动作（stop 只来自用户手动停止，卸载不再触发）。
+ */
 
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type { RefObject } from "react";
-import { useCallback, useRef, useState } from "react";
-import { sendAssistantMessage } from "../../../api/assistant";
-import type {
-  AssistantSource,
-  AssistantSourceNumber,
-  AssistantStreamEvent,
-  AssistantToolCall,
-  AssistantSurface,
-  ReasoningEffort,
-} from "../../../types";
+import type { AssistantSurface, ReasoningEffort } from "../../../types";
 import type { PendingAttachment } from "../assistantUtils";
 import { useTouTou } from "../../tou-tou/touTouContext";
+import {
+  abortAssistantStream,
+  getAssistantStreamState,
+  registerAssistantStreamInstance,
+  sendAssistantStreamMessage,
+  subscribeAssistantStream,
+} from "./assistantStreamStore";
 
 interface Options {
   activeIdRef: RefObject<number | null>;
@@ -22,7 +29,6 @@ interface Options {
   clearAttachments: () => void;
   attachmentReadsRef: RefObject<number>;
   attachmentsRef: RefObject<PendingAttachment[]>;
-  mountedRef: RefObject<boolean>;
   jobId: number | undefined;
   resumeId: number | undefined;
   webSearch: boolean;
@@ -33,195 +39,50 @@ interface Options {
   clearQuote: () => void;
 }
 
-export function useAssistantStream({
-  activeIdRef,
-  reloadConversations,
-  loadDetail,
-  createConversation,
-  clearAttachments,
-  attachmentReadsRef,
-  attachmentsRef,
-  mountedRef,
-  jobId,
-  resumeId,
-  webSearch,
-  reasoningEffort,
-  surface = "page",
-  quotedMessageId,
-  clearQuote,
-}: Options) {
+export function useAssistantStream(options: Options) {
   const { setStatus: setTouTouStatus } = useTouTou();
-  const [sending, setSending] = useState(false);
-  const [sendingConversationId, setSendingConversationId] = useState<number | null>(null);
-  const [pendingUserText, setPendingUserText] = useState("");
-  // 正在发送的这条消息还没有服务端时间戳，用它被发出的时刻顶上。
-  const [pendingSentAt, setPendingSentAt] = useState("");
-  const [pendingUserAttachments, setPendingUserAttachments] = useState<PendingAttachment[]>([]);
-  const [streamingText, setStreamingText] = useState("");
-  const [streamingReasoning, setStreamingReasoning] = useState("");
-  const [streamingSources, setStreamingSources] = useState<AssistantSource[]>([]);
-  const [streamingSourceMap, setStreamingSourceMap] = useState<AssistantSourceNumber[]>([]);
-  const [streamingTools, setStreamingTools] = useState<AssistantToolCall[]>([]);
-  const [progressText, setProgressText] = useState("");
-  const [streamError, setStreamError] = useState("");
-  const abortRef = useRef<AbortController | null>(null);
-  const sendingRef = useRef(false);
-  const requestErrorRef = useRef(false);
-
-  const stop = useCallback(() => abortRef.current?.abort(), []);
-
+  const {
+    activeIdRef,
+    reloadConversations,
+    loadDetail,
+    createConversation,
+    clearAttachments,
+    attachmentReadsRef,
+    attachmentsRef,
+    jobId,
+    resumeId,
+    webSearch,
+    reasoningEffort,
+    surface = "page",
+    quotedMessageId,
+    clearQuote,
+  } = options;
+  const state = useSyncExternalStore(subscribeAssistantStream, getAssistantStreamState);
+  // 流结束收尾（含离场期间结束的场景）需要刷新数据：把当前实例的回调注册给
+  // store。这些回调都是稳定引用，注册只发生一次；卸载时注销。
+  useEffect(
+    () => registerAssistantStreamInstance({ activeIdRef, reloadConversations, loadDetail }),
+    [activeIdRef, loadDetail, reloadConversations],
+  );
   const send = useCallback(
-    async (text: string, clearContent: () => void) => {
-      const trimmedText = text.trim();
-      if (
-        (!trimmedText && attachmentsRef.current.length === 0) ||
-        sendingRef.current ||
-        attachmentReadsRef.current > 0
-      ) {
-        return;
-      }
-      sendingRef.current = true;
-      requestErrorRef.current = false;
-      setSending(true);
-      setTouTouStatus("thinking");
-      let conversationId: number | null;
-      try {
-        conversationId = activeIdRef.current ?? (await createConversation());
-      } catch (error) {
-        sendingRef.current = false;
-        setSending(false);
-        setStreamError(error instanceof Error ? error.message : "创建会话失败");
-        setTouTouStatus("error");
-        return;
-      }
-      if (!conversationId) {
-        sendingRef.current = false;
-        setSending(false);
-        setStreamError("创建会话失败");
-        setTouTouStatus("error");
-        return;
-      }
-      const attachmentPayload = attachmentsRef.current.map(({ name, mime_type, data }) => ({
-        name,
-        mime_type,
-        data,
-      }));
-      const optimisticAttachments = [...attachmentsRef.current];
-      clearContent();
-      // 引用只对这一次提问有效：发出去就清掉，避免用户以为下一条也带着引用。
-      clearQuote();
-      setPendingUserText(trimmedText || "[附件]");
-      setPendingSentAt(new Date().toISOString());
-      setPendingUserAttachments(optimisticAttachments);
-      setStreamingText("");
-      setStreamingReasoning("");
-      setStreamingSources([]);
-      setStreamingSourceMap([]);
-      setStreamingTools([]);
-      setProgressText("");
-      setStreamError("");
-      setSendingConversationId(conversationId);
-      clearAttachments();
-      const controller = new AbortController();
-      abortRef.current = controller;
-      try {
-        const requestPayload = {
-          content: trimmedText,
-          job_id: jobId,
-          resume_id: resumeId,
-          // 后端保留这个字段只是兼容旧客户端；助手现在始终读取本地个人资料。
-          include_profile: true,
-          web_search: webSearch,
-          reasoning_effort: reasoningEffort,
-          quoted_message_id: quotedMessageId,
-          attachments: attachmentPayload,
-        };
-        const handleEvent = (event: AssistantStreamEvent) => {
-          if (abortRef.current !== controller) return;
-          if (event.type === "delta") setStreamingText((current) => current + event.text);
-          if (event.type === "reasoning") setStreamingReasoning((current) => current + event.text);
-          if (event.type === "progress") setProgressText(event.message);
-          if (event.type === "sources") {
-            setStreamingSources(event.sources);
-            setStreamingSourceMap(event.source_map ?? []);
-            if (event.error) setProgressText(event.error);
-          }
-          if (event.type === "tool") {
-            // 显式挑字段，而不是解构剔除 type：仓库的 lint 不允许未使用的变量。
-            setStreamingTools((current) => [
-              ...current,
-              {
-                name: event.name,
-                arguments: event.arguments,
-                summary: event.summary,
-                link: event.link,
-                ok: event.ok,
-                error: event.error,
-                changed: event.changed,
-              },
-            ]);
-          }
-          if (event.type === "write_proposal") {
-            // 写入提案（RF-01）跟在对应 tool 事件之后到达：挂回最近一条工具记录，
-            // 由 MessageToolCalls 渲染确认卡（待确认的写入在折叠面板外一眼可见）。
-            setStreamingTools((current) => {
-              if (current.length === 0) return current;
-              const next = [...current];
-              next[next.length - 1] = { ...next[next.length - 1], proposal: event.proposal };
-              return next;
-            });
-          }
-          if (event.type === "error") {
-            requestErrorRef.current = true;
-            setStreamError(event.message);
-            setTouTouStatus("error");
-          }
-          if (event.type === "done") setTouTouStatus("done");
-          if (event.type === "start") void reloadConversations();
-        };
-        if (surface === "page") {
-          await sendAssistantMessage(
-            conversationId,
-            requestPayload,
-            handleEvent,
-            controller.signal,
-          );
-        } else {
-          await sendAssistantMessage(
-            conversationId,
-            requestPayload,
-            handleEvent,
-            controller.signal,
-            surface,
-          );
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          requestErrorRef.current = true;
-          setStreamError(error instanceof Error ? error.message : "发送消息失败");
-          setTouTouStatus("error");
-        }
-      } finally {
-        if (abortRef.current === controller) abortRef.current = null;
-        sendingRef.current = false;
-        if (mountedRef.current) {
-          setSending(false);
-          setPendingUserText("");
-          setPendingUserAttachments([]);
-          setStreamingText("");
-          setStreamingReasoning("");
-          setStreamingTools([]);
-          const refreshes: Promise<unknown>[] = [reloadConversations()];
-          if (activeIdRef.current === conversationId) refreshes.push(loadDetail(conversationId));
-          await Promise.all(refreshes);
-          if (mountedRef.current) {
-            setTouTouStatus(
-              controller.signal.aborted ? "idle" : requestErrorRef.current ? "error" : "done",
-            );
-          }
-        }
-      }
-    },
+    (text: string, clearContent: () => void) =>
+      sendAssistantStreamMessage(text, clearContent, {
+        activeIdRef,
+        reloadConversations,
+        loadDetail,
+        createConversation,
+        clearAttachments,
+        attachmentReadsRef,
+        attachmentsRef,
+        setTouTouStatus,
+        jobId,
+        resumeId,
+        webSearch,
+        reasoningEffort,
+        surface,
+        quotedMessageId,
+        clearQuote,
+      }),
     [
       activeIdRef,
       attachmentReadsRef,
@@ -231,7 +92,6 @@ export function useAssistantStream({
       createConversation,
       jobId,
       loadDetail,
-      mountedRef,
       quotedMessageId,
       reasoningEffort,
       reloadConversations,
@@ -241,22 +101,6 @@ export function useAssistantStream({
       webSearch,
     ],
   );
-
-  return {
-    sending,
-    sendingConversationId,
-    pendingUserText,
-    pendingSentAt,
-    pendingUserAttachments,
-    streamingText,
-    streamingReasoning,
-    streamingSources,
-    streamingSourceMap,
-    streamingTools,
-    progressText,
-    streamError,
-    abortRef,
-    send,
-    stop,
-  };
+  const stop = useCallback(() => abortAssistantStream(), []);
+  return { ...state, send, stop };
 }

@@ -70,9 +70,7 @@ def test_second_run_within_interval_is_skipped(tmp_path: Path):
         directory = dataset_scope_directory(engine)
         before = sorted(p.name for p in directory.glob("*.db"))
         # 间隔（7 天）内再跑：不再产出快照。
-        assert (
-            run_auto_backup_if_due(engine, now=1_000_000 + 3600, settings=_settings()) is None
-        )
+        assert run_auto_backup_if_due(engine, now=1_000_000 + 3600, settings=_settings()) is None
         assert sorted(p.name for p in directory.glob("*.db")) == before
     finally:
         engine.dispose()
@@ -134,7 +132,9 @@ def test_disabled_setting_returns_none(tmp_path: Path):
     engine = _engine_with_data(tmp_path)
     try:
         assert (
-            run_auto_backup_if_due(engine, now=1_000_000, settings=_settings(auto_backup_enabled=False))
+            run_auto_backup_if_due(
+                engine, now=1_000_000, settings=_settings(auto_backup_enabled=False)
+            )
             is None
         )
         assert not auto_backup_directory(engine).exists()
@@ -202,8 +202,7 @@ def test_corrupt_snapshot_is_not_counted_and_keeps_old_snapshots(
         monkeypatch.setattr(auto_backup_module, "backup_sqlite_database", _garbage)
         # 推到成功间隔之后，这次运行才会真的走到备份与校验。
         assert (
-            run_auto_backup_if_due(engine, now=1_000_000 + 86400 * 7, settings=_settings())
-            is None
+            run_auto_backup_if_due(engine, now=1_000_000 + 86400 * 7, settings=_settings()) is None
         )
         marker = _marker(engine)
         assert marker["consecutive_failures"] == 1
@@ -242,5 +241,30 @@ def test_snapshot_content_is_queryable_after_rotation(tmp_path: Path):
             assert check.execute("SELECT MAX(id) FROM probe").fetchone()[0] == 1
         finally:
             check.close()
+    finally:
+        engine.dispose()
+
+
+def test_runtime_interval_setting_overrides_env_default(tmp_path: Path):
+    """设置页保存的间隔优先于环境配置：改成 1 天后第 2 天就应再次备份。
+
+    读取失败（表缺失等）回退注入的 settings 默认——其余用例的引擎没有
+    app_setting 表，本身就隐式钉住了这条回退路径。
+    """
+    engine = _engine_with_data(tmp_path)
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "CREATE TABLE app_setting (key VARCHAR(64) PRIMARY KEY, value TEXT)"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO app_setting (key, value) VALUES ('auto_backup_interval_days', '1')"
+            )
+        assert run_auto_backup_if_due(engine, now=1_000_000, settings=_settings()) is not None
+        # 2 天 < 环境默认 7 天：按旧语义这里会跳过；动态值 1 天 → 到期再备份。
+        assert (
+            run_auto_backup_if_due(engine, now=1_000_000 + 2 * 86400, settings=_settings())
+            is not None
+        )
     finally:
         engine.dispose()

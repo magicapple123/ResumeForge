@@ -7,13 +7,14 @@ const apiMocks = vi.hoisted(() => ({
   acknowledgeUpdateInstallResult: vi.fn(),
   getAssistantOrbSetting: vi.fn(),
   checkForUpdate: vi.fn(),
-  checkLLMThinking: vi.fn(),
   activateDataset: vi.fn(),
+  clearLLMSessionKey: vi.fn(),
   deleteDataset: vi.fn(),
   deleteLLMConfigRecord: vi.fn(),
   exportAllDatasets: vi.fn(),
   exportDataset: vi.fn(),
   getLLMConfig: vi.fn(),
+  getLLMSessionKeyStatus: vi.fn(),
   getNavigationVisibility: vi.fn(),
   getReminderPopupSetting: vi.fn(),
   getSearchConfig: vi.fn(),
@@ -23,13 +24,14 @@ const apiMocks = vi.hoisted(() => ({
   importDataset: vi.fn(),
   listDatasets: vi.fn(),
   listLLMConfigRecords: vi.fn(),
+  listLLMModels: vi.fn(),
   renameDataset: vi.fn(),
-  revealLLMApiKey: vi.fn(),
   saveLLMConfig: vi.fn(),
   saveLLMConfigRecord: vi.fn(),
   saveAssistantOrbSetting: vi.fn(),
   saveReminderPopupSetting: vi.fn(),
   saveSearchConfig: vi.fn(),
+  setLLMSessionKey: vi.fn(),
   startUpdateDownload: vi.fn(),
   testLLM: vi.fn(),
 }));
@@ -49,6 +51,13 @@ const navigationMocks = vi.hoisted(() => ({ reloadPage: vi.fn() }));
 
 // 整页重载在 jsdom 里不可用，换成可断言的替身。
 vi.mock("../utils/navigation", () => navigationMocks);
+
+// 打开记录编辑弹窗（编辑/删除收进「···」菜单，菜单项 accessible name 带图标名前缀）。
+async function openRecordEditByName(name: string) {
+  fireEvent.click(screen.getByRole("button", { name: `更多操作（${name}）` }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: /编\s*辑$/ }));
+  await screen.findByText(new RegExp(`编辑配置记录「${name}」`));
+}
 
 const mainDataset = {
   id: "main",
@@ -77,6 +86,23 @@ const searchConfig = {
   max_results: 8,
 };
 
+function makeRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 7,
+    name: "测试记录",
+    provider: "openai",
+    base_url: llmConfig.base_url,
+    api_key: "********:record:7",
+    model: llmConfig.model,
+    temperature: 0.1,
+    timeout_seconds: 120,
+    max_tokens: 4096,
+    created_at: "2026-08-20T10:00:00",
+    updated_at: "2026-08-20T10:00:00",
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   apiMocks.getLLMConfig.mockResolvedValue(llmConfig);
   apiMocks.getNavigationVisibility.mockResolvedValue({ hidden: [] });
@@ -97,20 +123,10 @@ beforeEach(() => {
   // 没有待汇报的更新结果——有的话 UpdateCard 会弹一个确认框，把设置页的用例搅乱。
   apiMocks.getUpdateInstallResult.mockResolvedValue(null);
   apiMocks.acknowledgeUpdateInstallResult.mockResolvedValue(undefined);
-  apiMocks.checkLLMThinking.mockResolvedValue({
-    style: "reasoning_effort",
-    efforts: ["minimal", "low", "medium", "high"],
-    supported: true,
-    note: "内置表给的说明",
-    probed: false,
-    accepted: null,
-    reasoning_seen: false,
-    message: "",
-  });
   apiMocks.listLLMConfigRecords.mockResolvedValue([]);
+  apiMocks.getLLMSessionKeyStatus.mockResolvedValue({ configured: false });
   apiMocks.saveAssistantOrbSetting.mockImplementation(async (setting) => setting);
   apiMocks.listDatasets.mockResolvedValue([mainDataset]);
-  apiMocks.revealLLMApiKey.mockResolvedValue({ api_key: "sk-revealed" });
   skillMocks.listSkills.mockResolvedValue([]);
 });
 
@@ -118,36 +134,89 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
-describe("SettingsPage 高级参数往返", () => {
-  /** 后端 LLMConfig 的字段前端必须全部声明：接口是整份替换语义，缺一个就会在保存时被清掉。 */
-  const configured = {
-    ...llmConfig,
-    api_style: "anthropic" as const,
+
+describe("SettingsPage 记录编辑参数往返", () => {
+  it("fetches models with this record's saved key reference when the key field is blank", async () => {
+    const record = makeRecord({ base_url: "https://models.example.com/v1" });
+    apiMocks.listLLMConfigRecords.mockResolvedValue([record]);
+    apiMocks.listLLMModels.mockResolvedValue({
+      models: ["example-model"],
+      message: "找到 1 个模型",
+    });
+    render(
+      <AntdApp>
+        <SettingsPage />
+      </AntdApp>,
+    );
+    await screen.findByText("测试记录");
+    await openRecordEditByName("测试记录");
+    fireEvent.click(screen.getByRole("button", { name: /获取可用模型/ }));
+    await waitFor(() =>
+      expect(apiMocks.listLLMModels).toHaveBeenCalledWith({
+        base_url: record.base_url,
+        api_key: record.api_key,
+      }),
+    );
+    expect(await screen.findByText("example-model")).toBeInTheDocument();
+  });
+
+  it("uses the newly typed key and endpoint without requiring a model or a saved record", async () => {
+    apiMocks.listLLMModels.mockResolvedValue({ models: [], message: "暂无模型" });
+    render(
+      <AntdApp>
+        <SettingsPage />
+      </AntdApp>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /新增配置/ }));
+    fireEvent.change(screen.getByLabelText("Base URL"), {
+      target: { value: " https://models.example.com/v1 " },
+    });
+    fireEvent.change(screen.getByPlaceholderText("sk-…"), { target: { value: " fake-new-key " } });
+    fireEvent.click(screen.getByRole("button", { name: /获取可用模型/ }));
+    await waitFor(() =>
+      expect(apiMocks.listLLMModels).toHaveBeenCalledWith({
+        base_url: "https://models.example.com/v1",
+        api_key: "fake-new-key",
+      }),
+    );
+    const emptyModelsMessage = await screen.findByText("暂无模型");
+    expect(emptyModelsMessage.closest('[role="alert"]')).toBeInTheDocument();
+    expect(apiMocks.saveLLMConfigRecord).not.toHaveBeenCalled();
+  });
+
+  /** 后端 LLMConfig 的字段前端必须在编辑弹窗里全部声明：记录接口同样是整份替换语义，
+   * 弹窗里没有的字段要靠「从原记录展开」兜住，缺一个就会在保存时被清掉。 */
+  const configured = makeRecord({
+    api_style: "anthropic",
     top_k: 40,
     repetition_penalty: 1.05,
     stop: ["###"],
     thinking_budget: 4096,
     extra_body: { chat_template_kwargs: { thinking: true } },
-  };
+  });
 
-  it("keeps the protocol and advanced parameters when saving", async () => {
-    apiMocks.getLLMConfig.mockResolvedValue(configured);
-    apiMocks.saveLLMConfig.mockImplementation(async (config) => config);
+  it("keeps the protocol and advanced parameters when saving a record", async () => {
+    apiMocks.listLLMConfigRecords.mockResolvedValue([configured]);
+    apiMocks.saveLLMConfigRecord.mockImplementation(async (payload) => ({
+      ...configured,
+      ...(payload as object),
+    }));
 
     render(
       <AntdApp>
         <SettingsPage />
       </AntdApp>,
     );
-    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
+    await screen.findByText("测试记录");
 
-    fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
-    fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
-
+    await openRecordEditByName("测试记录");
     // 此前这几个字段没进前端类型，保存时被 Pydantic 默认值填回：api_style 变回 openai，
-    // 配好的原生 Claude 被静默打回兼容模式，其余几个参数被清空。
+    // 配好的原生 Claude 被静默打回兼容模式，其余几个参数被清空。弹窗表单只覆盖常用
+    // 字段，其余全靠从原记录展开——这条守住的就是“弹窗里没有的字段原样保留”。
+    fireEvent.click(screen.getByRole("button", { name: /^保\s*存$/ }));
+
     await waitFor(() =>
-      expect(apiMocks.saveLLMConfig).toHaveBeenCalledWith(
+      expect(apiMocks.saveLLMConfigRecord).toHaveBeenCalledWith(
         expect.objectContaining({
           api_style: "anthropic",
           top_k: 40,
@@ -158,111 +227,6 @@ describe("SettingsPage 高级参数往返", () => {
         }),
       ),
     );
-  });
-});
-
-describe("SettingsPage 思考模式", () => {
-  const thinkingConfig = {
-    ...llmConfig,
-    thinking_enabled: true,
-    thinking_effort: "low",
-    thinking_style: "auto",
-  };
-
-  async function renderEditing(config: unknown = llmConfig) {
-    apiMocks.getLLMConfig.mockResolvedValue(config);
-    render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
-    );
-    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
-    fireEvent.click(screen.getByRole("button", { name: /编辑设置/ }));
-  }
-
-  it("saves the switch, the effort and the style along with the rest", async () => {
-    apiMocks.saveLLMConfig.mockImplementation(async (config) => config);
-    await renderEditing(thinkingConfig);
-
-    fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
-
-    // 与 api_style 同一类坑：整份替换语义下，前端没声明的字段会被默认值填回去——
-    // 那意味着用户开好的思考模式在下次保存时被静默关掉。
-    await waitFor(() =>
-      expect(apiMocks.saveLLMConfig).toHaveBeenCalledWith(
-        expect.objectContaining({
-          thinking_enabled: true,
-          thinking_effort: "low",
-          thinking_style: "auto",
-        }),
-      ),
-    );
-  });
-
-  it("takes the effort options from the backend when the switch is turned on", async () => {
-    await renderEditing();
-
-    fireEvent.click(screen.getByRole("switch", { name: /思考模式/ }));
-
-    // 只读能力表那一次（probe=false）：**不发上游请求**，所以打开开关不花钱。
-    await waitFor(() =>
-      expect(apiMocks.checkLLMThinking).toHaveBeenCalledWith(
-        expect.objectContaining({ base_url: "https://api.openai.com/v1" }),
-        false,
-      ),
-    );
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: /思考强度/ }));
-    // 各家档位不同，所以选项必须来自接口而不是写死在前端。
-    expect(await screen.findByText("最低（minimal）")).toBeTruthy();
-  });
-
-  it("lets the user type a custom effort and saves it with the rest", async () => {
-    apiMocks.saveLLMConfig.mockImplementation(async (config) => config);
-    await renderEditing();
-
-    fireEvent.click(screen.getByRole("switch", { name: /思考模式/ }));
-    await waitFor(() => expect(apiMocks.checkLLMThinking).toHaveBeenCalled());
-
-    // 各家档位词汇不同（xhigh / max / adaptive…），选「自定义…」自己填。
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: /思考强度/ }));
-    fireEvent.click(await screen.findByText("自定义…"));
-
-    const input = screen.getByPlaceholderText("如 xhigh / max / 4096");
-    fireEvent.change(input, { target: { value: "xhigh" } });
-
-    fireEvent.click(screen.getByRole("button", { name: /保存配置/ }));
-
-    await waitFor(() =>
-      expect(apiMocks.saveLLMConfig).toHaveBeenCalledWith(
-        expect.objectContaining({ thinking_enabled: true, thinking_effort: "xhigh" }),
-      ),
-    );
-  });
-
-  it("shows a stored custom effort in the input instead of an unknown select value", async () => {
-    await renderEditing({ ...thinkingConfig, thinking_effort: "xhigh" });
-
-    expect(await screen.findByPlaceholderText("如 xhigh / max / 4096")).toHaveValue("xhigh");
-  });
-
-  it("shows the probe verdict and tells the user it costs a request", async () => {
-    apiMocks.checkLLMThinking.mockResolvedValue({
-      style: "reasoning_effort",
-      efforts: ["minimal", "low", "medium", "high"],
-      supported: true,
-      note: "内置表给的说明",
-      probed: true,
-      accepted: true,
-      reasoning_seen: true,
-      message: "已确认生效：这次调用真的产出了思考内容。",
-    });
-    await renderEditing();
-
-    expect(screen.getByText(/会发一次最小请求/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /检测思考支持/ }));
-
-    expect(await screen.findByText(/已确认生效/)).toBeTruthy();
-    expect(apiMocks.checkLLMThinking).toHaveBeenCalledWith(expect.anything(), true);
   });
 });
 

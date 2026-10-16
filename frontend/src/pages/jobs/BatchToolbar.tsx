@@ -6,6 +6,7 @@
 import {
   CheckOutlined,
   ClearOutlined,
+  CloseCircleOutlined,
   DeleteOutlined,
   DownloadOutlined,
   SendOutlined,
@@ -28,6 +29,7 @@ export function BatchToolbar({
   applyBatchStatus,
   enqueueSelectedJobs,
   removeSelectedJobs,
+  exitSelectionMode,
   totalCount = 0,
   selectAllPagesLoading = false,
   onSelectAllPages,
@@ -41,6 +43,8 @@ export function BatchToolbar({
   applyBatchStatus: () => Promise<void>;
   enqueueSelectedJobs: () => Promise<void>;
   removeSelectedJobs: () => Promise<void>;
+  /** 退出选择模式（从筛选行挪到这里，用户要求）。 */
+  exitSelectionMode: () => void;
   /** 当前筛选下全部岗位数：>0 时显示「全选全部岗位」按钮。 */
   totalCount?: number;
   selectAllPagesLoading?: boolean;
@@ -82,6 +86,15 @@ export function BatchToolbar({
           </Button>
         </Tooltip>
       )}
+      {/* 退出选择挪到「全选全部岗位」右侧（用户要求）：与选择操作同处一行，
+          不再挤在筛选行的末尾。 */}
+      <Button
+        icon={<CloseCircleOutlined />}
+        disabled={batchAction !== null}
+        onClick={exitSelectionMode}
+      >
+        退出选择
+      </Button>
       <Button
         icon={<ClearOutlined />}
         disabled={selectedJobIds.length === 0 || batchAction !== null}

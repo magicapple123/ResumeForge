@@ -74,6 +74,17 @@ afterEach(() => {
 });
 
 describe("MaterialsPage", () => {
+  it("keeps a failed load distinct from empty data and recovers on retry", async () => {
+    apiMocks.listMaterialsPage.mockRejectedValueOnce(new Error("服务暂不可用"));
+    renderPage();
+    expect(await screen.findByRole("alert")).toHaveTextContent("服务暂不可用");
+    expect(screen.queryByText(/资料箱还是空的/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
+    expect(await screen.findByText("护士执业资格证")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(apiMocks.listMaterialsPage).toHaveBeenCalledTimes(2);
+  });
+
   it("渲染资料卡片", async () => {
     renderPage();
 
@@ -134,9 +145,9 @@ describe("MaterialsPage", () => {
     expect(await screen.findByText("护士执业资格证")).toBeInTheDocument();
   });
 
-  it("翻到第 2 页按 page=2 重新请求服务端，取到旧全量之外的第 13 条", async () => {
-    // 服务端分页（RF-08 续）：一页 12 张，翻页时把页码下发 /materials/page。
-    const pageOne: Material[] = Array.from({ length: 12 }, (_, index) => ({
+  it("翻到第 2 页按 page=2 重新请求服务端，取到旧全量之外的第 19 条", async () => {
+    // 服务端分页（RF-08 续）：一页 18 张，翻页时把页码下发 /materials/page。
+    const pageOne: Material[] = Array.from({ length: 18 }, (_, index) => ({
       id: index + 1,
       title: `资料-${index + 1}`,
       category: "证书",
@@ -148,8 +159,8 @@ describe("MaterialsPage", () => {
       updated_at: "2026-09-10T09:30:00",
     }));
     apiMocks.listMaterialsPage
-      .mockResolvedValueOnce(makePage(pageOne, 13))
-      .mockResolvedValueOnce(makePage([ITEMS[0]], 13));
+      .mockResolvedValueOnce(makePage(pageOne, 19))
+      .mockResolvedValueOnce(makePage([ITEMS[0]], 19));
     renderPage();
 
     expect(await screen.findByText("资料-1")).toBeInTheDocument();
@@ -161,7 +172,7 @@ describe("MaterialsPage", () => {
       expect(apiMocks.listMaterialsPage).toHaveBeenLastCalledWith(
         { keyword: "", category: "" },
         2,
-        12,
+        18,
       );
     });
     expect(await screen.findByText("护士执业资格证")).toBeInTheDocument();
@@ -169,7 +180,7 @@ describe("MaterialsPage", () => {
 
   it("搜索关键词后回第 1 页并把 keyword 下发服务端", async () => {
     // 筛选变化必须重置页码：停在第 2 页时搜索，若仍请求 page=2 会漏掉第 1 页的命中。
-    const pageOne: Material[] = Array.from({ length: 12 }, (_, index) => ({
+    const pageOne: Material[] = Array.from({ length: 18 }, (_, index) => ({
       id: index + 1,
       title: `资料-${index + 1}`,
       category: "证书",
@@ -181,8 +192,8 @@ describe("MaterialsPage", () => {
       updated_at: "2026-09-10T09:30:00",
     }));
     apiMocks.listMaterialsPage
-      .mockResolvedValueOnce(makePage(pageOne, 13))
-      .mockResolvedValueOnce(makePage([ITEMS[0]], 13))
+      .mockResolvedValueOnce(makePage(pageOne, 19))
+      .mockResolvedValueOnce(makePage([ITEMS[0]], 19))
       .mockResolvedValueOnce(makePage(ITEMS, 1));
     renderPage();
 
@@ -198,7 +209,7 @@ describe("MaterialsPage", () => {
       expect(apiMocks.listMaterialsPage).toHaveBeenLastCalledWith(
         { keyword: "证书", category: "" },
         1,
-        12,
+        18,
       );
     });
   });

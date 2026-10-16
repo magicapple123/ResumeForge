@@ -3,10 +3,11 @@
  * （自 CandidateJobsDrawer 拆出，closest() 冒泡守卫逐字随迁，行为等价。）
  * R8：批量选择入口收进卡片右键菜单（批量选择 + 编辑 + 单条删除）；多选模式下右键菜单收起。
  * 卡片上不再放「···」菜单（用户反馈三个点太吵）：编辑/删除走右键，详情走点卡片。
+ * 右键菜单按「查看/编辑」与「批量/删除」分两组（divider 隔开），危险项 danger 标红。
  */
-import { CheckSquareOutlined, DeleteOutlined, EditOutlined } from "@ant-design/icons";
+import { CheckSquareOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import { Card, Checkbox, Space, Tag, Typography } from "antd";
-import { RowActions, RowContextMenu, type RowActionItem } from "../../common/RowActions";
+import { RowActions, RowContextMenu, type RowMenuItem } from "../../common/RowActions";
 import type { CandidateJob } from "../../../types";
 import { formatDateTime } from "../../../utils/format";
 
@@ -25,7 +26,7 @@ export function CandidateCardGrid({
   items: CandidateJob[];
   selectedIds: number[];
   batchAction: "import" | "delete" | null;
-  /** 多选模式：勾选框本来就常驻，这里只控制右键菜单收起；批量按钮由父级控制显隐。 */
+  /** 多选模式：勾选框只在多选模式渲染（用户反馈：平时不要勾选框）；右键菜单收起。 */
   selecting: boolean;
   /** 右键菜单「批量选择」的动作：进入多选模式（工具栏按钮已收进这里，R8）。 */
   onEnterSelecting: () => void;
@@ -39,21 +40,30 @@ export function CandidateCardGrid({
     <div className="candidate-job-card-grid">
       {items.map((candidate) => {
         const selected = selectedIds.includes(candidate.id);
-        /** 右键菜单：批量选择 + 编辑 + 单条删除（与原「···」菜单同一份确认）；多选时收起。 */
-        const contextItems: RowActionItem[] = selecting
+        /** 右键菜单：查看/编辑组 + 分隔线 + 批量/删除组（与原「···」菜单同一份确认）；
+            多选时收起。功能与工具栏口径一致——「批量选择」进多选模式后，批量导入/
+            批量删除/清空/退出都在工具栏上。 */
+        const contextItems: RowMenuItem[] = selecting
           ? []
           : [
               {
-                key: "batch_select",
-                label: "批量选择",
-                icon: <CheckSquareOutlined />,
-                onClick: onEnterSelecting,
+                key: "detail",
+                label: "查看详情",
+                icon: <EyeOutlined />,
+                onClick: () => void onOpenDetails(candidate),
               },
               {
                 key: "edit",
                 label: "编辑",
                 icon: <EditOutlined />,
                 onClick: () => onOpenEdit(candidate),
+              },
+              { key: "divider-batch", type: "divider" },
+              {
+                key: "batch_select",
+                label: "批量选择",
+                icon: <CheckSquareOutlined />,
+                onClick: onEnterSelecting,
               },
               {
                 key: "delete",
@@ -76,12 +86,14 @@ export function CandidateCardGrid({
               }}
               title={
                 <Space>
-                  <Checkbox
-                    checked={selected}
-                    disabled={batchAction !== null}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => onToggleSelected(candidate.id, event.target.checked)}
-                  />
+                  {selecting && (
+                    <Checkbox
+                      checked={selected}
+                      disabled={batchAction !== null}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) => onToggleSelected(candidate.id, event.target.checked)}
+                    />
+                  )}
                   <Typography.Text strong>{candidate.title || "（未识别岗位名）"}</Typography.Text>
                 </Space>
               }

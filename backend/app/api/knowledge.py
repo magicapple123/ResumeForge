@@ -76,7 +76,7 @@ def read_knowledge_page(
     category: str = Query(default=""),
     tag: str = Query(default="", description="按标签筛选：精确匹配 tags 中的成员"),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=15, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     """分页列出知识库条目（RF-08）：过滤与排序与旧列表端点完全一致。

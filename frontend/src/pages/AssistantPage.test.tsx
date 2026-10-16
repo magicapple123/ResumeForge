@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantMessage } from "../types";
 import AssistantPage from "./AssistantPage";
+import { resetAssistantStreamForTests } from "../features/assistant/hooks/assistantStreamStore";
 import {
   CONVERSATIONS,
   CREATED_AT,
@@ -57,6 +58,9 @@ vi.mock("../api/resumes", () => ({ listResumes: apiMocks.listResumes }));
 vi.mock("../api/skill", () => ({ listSkills: skillApiMocks.listSkills }));
 
 beforeEach(() => {
+  // 流式会话状态是模块级全局 store（问题 B）：用例之间必须重置回空闲，
+  // 否则前一个用例挂起的流会把"发送中"状态漏进后面的用例。
+  resetAssistantStreamForTests();
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
     configurable: true,
     value: scrollIntoViewMock,

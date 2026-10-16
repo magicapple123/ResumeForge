@@ -5,17 +5,19 @@
  * 只有接口没有入口，于是「抓取正文的条数」永远是默认的 0，助手拿到的永远只有摘要。
  * 助手页那个开关是"这次要不要联网"，这里配的是"联网时怎么搜"，两者互不替代。
  *
- * 卡片自带取数与保存（与 `UpdateCard` 一致）：它和上面的模型配置是两套独立设置，
- * 复用「编辑设置」那个全局编辑态只会让用户分不清"我改的这一项保存了没有"。
+ * 卡片自带取数与保存（与 `UpdateCard` 一致）：它和上面的模型配置是两套独立设置。
+ * 交互是「查看态 → 编辑态」（用户要求）：字段默认灰色只读，点「编辑搜索设置」解锁，
+ * 编辑时按钮换成「保存搜索设置 + 取消」；卡片右上角常驻「编辑搜索设置」入口。
  */
 
-import { ReloadOutlined, SaveOutlined } from "@ant-design/icons";
+import { SaveOutlined } from "@ant-design/icons";
 import {
   App,
   Alert,
   Button,
   Card,
   Checkbox,
+  Flex,
   Input,
   InputNumber,
   Space,
@@ -65,6 +67,9 @@ export default function SearchCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
+  // 查看态 → 编辑态（用户要求的交互）：字段默认灰色只读，点「编辑搜索设置」解锁；
+  // 编辑时按钮换成「保存搜索设置 + 取消」，保存成功或取消都回到查看态。
+  const [editing, setEditing] = useState(false);
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
   // 判别式结果保留原始错误消息（测试钉住它必须原样展示）。
@@ -98,22 +103,14 @@ export default function SearchCard() {
     };
   }, [fetchConfig]);
 
-  // 事件路径（手动重试按钮，含 loading/loadError 翻动）。
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    const result = await fetchConfig();
-    if ("config" in result) {
-      setConfig(result.config);
-      setSaved(result.config);
-    } else {
-      setLoadError(result.error);
-    }
-    setLoading(false);
-  }, [fetchConfig]);
-
   const patch = (changes: Partial<SearchConfig>) =>
     setConfig((current) => ({ ...current, ...changes }));
+
+  // 取消编辑：丢弃未保存改动，回到查看态（不重新发请求）。
+  const cancelEdit = () => {
+    setConfig(saved);
+    setEditing(false);
+  };
 
   const save = async () => {
     if (saving) return;
@@ -133,6 +130,8 @@ export default function SearchCard() {
       setConfig(result);
       setSaved(result);
       message.success("已保存联网搜索设置");
+      // 保存完成即编辑结束：回查看态（字段重新变灰）。
+      setEditing(false);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "保存联网搜索设置失败");
     } finally {
@@ -142,9 +141,17 @@ export default function SearchCard() {
 
   const usesSearxng = config.sources.includes("searxng");
   const dirty = !sameConfig(config, saved);
+  // 查看态字段整体只读；SearXNG 输入框叠加原条件（未选该来源时也禁用）。
+  const fieldsDisabled = !editing;
+  // 卡片右上角：查看态是「编辑搜索设置」入口（编辑态换回保存/取消，在右下角）。
+  const editEntry = (
+    <Button type="primary" onClick={() => setEditing(true)}>
+      编辑搜索设置
+    </Button>
+  );
 
   return (
-    <Card title="联网搜索" className="settings-card">
+    <Card title="联网搜索" className="settings-card" extra={editEntry}>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         这里配的是助手「联网搜索」开关打开时**怎么搜**；助手页那个开关决定这一次要不要联网。
         抓取正文能拿到比摘要更完整的页面内容，但每次搜索会慢一些，也可能被站点拒绝。
@@ -170,6 +177,7 @@ export default function SearchCard() {
             <Checkbox.Group
               options={SOURCE_OPTIONS}
               value={config.sources}
+              disabled={fieldsDisabled}
               onChange={(values) => patch({ sources: values as SearchSource[] })}
             />
           </div>
@@ -184,7 +192,7 @@ export default function SearchCard() {
               value={config.searxng_url}
               onChange={(event) => patch({ searxng_url: event.target.value })}
               placeholder="http://localhost:8080"
-              disabled={!usesSearxng}
+              disabled={fieldsDisabled || !usesSearxng}
               allowClear
             />
           </div>
@@ -199,6 +207,7 @@ export default function SearchCard() {
                 <Checkbox
                   key={option.value}
                   checked={config.fetch_pages === option.value}
+                  disabled={fieldsDisabled}
                   onChange={() => patch({ fetch_pages: option.value })}
                 >
                   {option.label}
@@ -215,34 +224,37 @@ export default function SearchCard() {
             {/* addonAfter 已废弃（v6）：按官方指引以 Space.Compact + Space.Addon 重组。 */}
             <Space.Compact>
               <InputNumber
+                aria-label="搜索结果数量"
                 min={1}
                 max={15}
                 value={config.max_results}
+                disabled={fieldsDisabled}
                 onChange={(value) => patch({ max_results: value ?? DEFAULT_CONFIG.max_results })}
               />
               <Space.Addon>条</Space.Addon>
             </Space.Compact>
           </div>
 
-          <Space wrap>
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              loading={saving}
-              disabled={!dirty}
-              onClick={() => void save()}
-            >
-              保存搜索设置
-            </Button>
-            <Button
-              icon={<ReloadOutlined />}
-              disabled={loading || saving}
-              onClick={() => void load()}
-            >
-              重新读取
-            </Button>
-            {dirty && <Typography.Text type="warning">有未保存的改动</Typography.Text>}
-          </Space>
+          {/* 编辑态的操作区在右下角；查看态入口在卡片右上角（extra）。 */}
+          <Flex justify="flex-end" wrap gap={8}>
+            {editing && (
+              <>
+                <Button
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  loading={saving}
+                  disabled={!dirty}
+                  onClick={() => void save()}
+                >
+                  保存搜索设置
+                </Button>
+                <Button disabled={saving} onClick={cancelEdit}>
+                  取消
+                </Button>
+                {dirty && <Typography.Text type="warning">有未保存的改动</Typography.Text>}
+              </>
+            )}
+          </Flex>
         </Space>
       </Spin>
     </Card>

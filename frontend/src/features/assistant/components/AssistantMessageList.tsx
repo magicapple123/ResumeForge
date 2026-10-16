@@ -73,6 +73,10 @@ interface Props {
   selecting: boolean;
   selectedIds: ReadonlySet<number>;
   onToggleSelected: (message: AssistantMessage) => void;
+  /** 滚动容器（.assistant-messages）ref：页面侧实现 stick-to-bottom（问题 A）用。 */
+  messagesScrollRef?: RefObject<HTMLDivElement | null>;
+  /** 用户滚动容器时回调：页面侧据此判断是否吸底。 */
+  onMessagesScroll?: () => void;
 }
 
 interface BubbleProps {
@@ -208,11 +212,18 @@ export default function AssistantMessageList({
   selecting,
   selectedIds,
   onToggleSelected,
+  messagesScrollRef,
+  onMessagesScroll,
 }: Props) {
   const historyMessages = detail?.messages ?? [];
 
   return (
-    <div className="assistant-messages" aria-live="polite">
+    <div
+      className="assistant-messages"
+      aria-live="polite"
+      ref={messagesScrollRef}
+      onScroll={onMessagesScroll}
+    >
       {showLoading ? (
         <PageSkeleton rows={6} card={false} />
       ) : historyMessages.length === 0 && !(sending && activeStream) ? (

@@ -78,6 +78,17 @@ afterEach(() => {
 });
 
 describe("KnowledgePage", () => {
+  it("keeps a failed load distinct from empty data and recovers on retry", async () => {
+    apiMocks.listKnowledgePage.mockRejectedValueOnce(new Error("服务暂不可用"));
+    renderPage();
+    expect(await screen.findByRole("alert")).toHaveTextContent("服务暂不可用");
+    expect(screen.queryByText(/知识库还是空的/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
+    expect(await screen.findByText("STAR 法则")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(apiMocks.listKnowledgePage).toHaveBeenCalledTimes(2);
+  });
+
   it("renders entries with title, category and tags", async () => {
     renderPage();
 
@@ -88,7 +99,7 @@ describe("KnowledgePage", () => {
     expect(apiMocks.listKnowledgePage).toHaveBeenCalledWith(
       { q: "", category: "", tag: "" },
       1,
-      12,
+      15,
     );
   });
 
@@ -104,7 +115,7 @@ describe("KnowledgePage", () => {
       expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
         { q: "量化", category: "", tag: "" },
         1,
-        12,
+        15,
       );
     });
   });
@@ -112,18 +123,18 @@ describe("KnowledgePage", () => {
   it("标签筛选走服务端：选择标签后带 tag 参数重新请求并回到第 1 页", async () => {
     // 收口轮：标签从「当前页内再筛选」改为服务端筛选（分页前过滤）。
     // 先翻到第 2 页，再选标签——应回第 1 页并以 tag 重新拉取。
-    const pageOne = Array.from({ length: 12 }, (_, index) =>
+    const pageOne = Array.from({ length: 15 }, (_, index) =>
       makeKnowledge({ id: index + 1, title: `条目-${index + 1}` }),
     );
     apiMocks.listKnowledgePage
-      .mockResolvedValueOnce(makePage(pageOne, 13))
-      .mockResolvedValueOnce(makePage([makeKnowledge({ id: 13, title: "第 13 条" })], 13))
+      .mockResolvedValueOnce(makePage(pageOne, 16))
+      .mockResolvedValueOnce(makePage([makeKnowledge({ id: 16, title: "第 16 条" })], 16))
       .mockResolvedValueOnce(makePage([makeKnowledge({ title: "标签命中" })], 1));
     renderPage();
 
     expect(await screen.findByText("条目-1")).toBeInTheDocument();
     fireEvent.click(screen.getAllByTitle("2")[0]);
-    expect(await screen.findByText("第 13 条")).toBeInTheDocument();
+    expect(await screen.findByText("第 16 条")).toBeInTheDocument();
 
     const combobox = screen.getByRole("combobox", { name: "标签筛选" });
     fireEvent.mouseDown(combobox);
@@ -136,7 +147,7 @@ describe("KnowledgePage", () => {
       expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
         { q: "", category: "", tag: "简历" },
         1,
-        12,
+        15,
       );
     });
     expect(await screen.findByText("标签命中")).toBeInTheDocument();
@@ -265,16 +276,16 @@ describe("KnowledgePage", () => {
   });
 
   it("翻到第 2 页取到旧全量之外的新页记录", async () => {
-    const pageOne = Array.from({ length: 12 }, (_, index) =>
+    const pageOne = Array.from({ length: 15 }, (_, index) =>
       makeKnowledge({ id: index + 1, title: `条目-${index + 1}` }),
     );
     apiMocks.listKnowledgePage
-      .mockResolvedValueOnce(makePage(pageOne, 13))
-      .mockResolvedValueOnce(makePage([makeKnowledge({ id: 13, title: "第 13 条" })], 13));
+      .mockResolvedValueOnce(makePage(pageOne, 16))
+      .mockResolvedValueOnce(makePage([makeKnowledge({ id: 16, title: "第 16 条" })], 16));
     renderPage();
 
     expect(await screen.findByText("条目-1")).toBeInTheDocument();
-    expect(screen.queryByText("第 13 条")).not.toBeInTheDocument();
+    expect(screen.queryByText("第 16 条")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByTitle("2")[0]);
 
@@ -282,10 +293,10 @@ describe("KnowledgePage", () => {
       expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
         { q: "", category: "", tag: "" },
         2,
-        12,
+        15,
       );
     });
-    expect(await screen.findByText("第 13 条")).toBeInTheDocument();
+    expect(await screen.findByText("第 16 条")).toBeInTheDocument();
   });
 
   it("批量选择：右键进多选 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除请求带全部 id 并重拉", async () => {
@@ -360,16 +371,16 @@ describe("KnowledgePage", () => {
   });
 
   it("删除最后一页最后一条后自动回上一页，分页控件不消失（PR-14）", async () => {
-    const pageOne = Array.from({ length: 12 }, (_, index) =>
+    const pageOne = Array.from({ length: 15 }, (_, index) =>
       makeKnowledge({ id: index + 1, title: `条目-${index + 1}` }),
     );
-    // 按调用次序演进：初始第 1 页（total 13）→ 翻到第 2 页（孤条）→ 删除后按旧页码
-    // 重拉返回空（total 12，第 2 页已不存在）→ 页码校正回第 1 页重拉。
+    // 按调用次序演进：初始第 1 页（total 16）→ 翻到第 2 页（孤条）→ 删除后按旧页码
+    // 重拉返回空（total 15，第 2 页已不存在）→ 页码校正回第 1 页重拉。
     apiMocks.listKnowledgePage
-      .mockResolvedValueOnce(makePage(pageOne, 13))
-      .mockResolvedValueOnce(makePage([makeKnowledge({ id: 13, title: "末页孤条" })], 13))
-      .mockResolvedValueOnce({ items: [], total: 12 })
-      .mockResolvedValue(makePage(pageOne, 12));
+      .mockResolvedValueOnce(makePage(pageOne, 16))
+      .mockResolvedValueOnce(makePage([makeKnowledge({ id: 16, title: "末页孤条" })], 16))
+      .mockResolvedValueOnce({ items: [], total: 15 })
+      .mockResolvedValue(makePage(pageOne, 15));
     renderPage();
 
     expect(await screen.findByText("条目-1")).toBeInTheDocument();
@@ -385,7 +396,7 @@ describe("KnowledgePage", () => {
       expect(apiMocks.listKnowledgePage).toHaveBeenLastCalledWith(
         { q: "", category: "", tag: "" },
         1,
-        12,
+        15,
       );
     });
     expect(await screen.findByText("条目-1")).toBeInTheDocument();

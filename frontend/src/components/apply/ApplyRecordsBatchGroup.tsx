@@ -107,48 +107,54 @@ export default function BatchGroup({
           }
         />
       </div>
-      {expanded && (
+      {/* 外层 wrap 是 grid（0fr→1fr）过渡容器：展开/收起时高度平滑变化；
+          内容仍按 expanded 条件渲染，收起后不留 DOM（行为与断言不受影响）。 */}
+      <div className={`apply-records-batch-body-wrap${expanded ? " is-expanded" : ""}`}>
         <div className="apply-records-batch-body">
-          {selecting && batchToolbar}
-          <Table<ApplyRecord>
-            rowKey="id"
-            size="small"
-            columns={recordColumns}
-            dataSource={itemsState?.items ?? []}
-            loading={itemsState?.loading}
-            rowSelection={
-              selecting
-                ? {
-                    selectedRowKeys: selectedRecordIds,
-                    onChange: (keys) => onSelectionChange(keys as number[]),
-                  }
-                : undefined
-            }
-            // 明细走服务端分页（B4）：一批可能几百条，展开时只拉当前页。
-            // 表内没有"上移/下移"类依赖 render 序号的操作（只有重投/详情/删除，都按 record 定位）。
-            pagination={{
-              current: itemsState?.page ?? 1,
-              pageSize: BATCH_ITEM_PAGE_SIZE,
-              total: itemsState?.total ?? 0,
-              onChange: onItemsPageChange,
-              showSizeChanger: false,
-              hideOnSinglePage: (itemsState?.total ?? 0) <= BATCH_ITEM_PAGE_SIZE,
-            }}
-            scroll={{ y: 320 }}
-            // 整行点击也能看详情；行内的「重投」按钮不会被这一层抢走。
-            onRow={(record) => ({
-              onClick: (event) => {
-                if (isFromInnerControl(event)) return;
-                onOpenDetail(record);
-              },
-              style: { cursor: "pointer" },
-            })}
-            locale={{
-              emptyText: itemsState?.loading ? "正在加载明细…" : "该批次没有命中的记录",
-            }}
-          />
+          {expanded && (
+            <>
+              {selecting && batchToolbar}
+              <Table<ApplyRecord>
+                rowKey="id"
+                size="small"
+                columns={recordColumns}
+                dataSource={itemsState?.items ?? []}
+                loading={itemsState?.loading}
+                rowSelection={
+                  selecting
+                    ? {
+                        selectedRowKeys: selectedRecordIds,
+                        onChange: (keys) => onSelectionChange(keys as number[]),
+                      }
+                    : undefined
+                }
+                // 明细走服务端分页（B4）：一批可能几百条，展开时只拉当前页。
+                // 表内没有"上移/下移"类依赖 render 序号的操作（只有重投/详情/删除，都按 record 定位）。
+                pagination={{
+                  current: itemsState?.page ?? 1,
+                  pageSize: BATCH_ITEM_PAGE_SIZE,
+                  total: itemsState?.total ?? 0,
+                  onChange: onItemsPageChange,
+                  showSizeChanger: false,
+                  hideOnSinglePage: (itemsState?.total ?? 0) <= BATCH_ITEM_PAGE_SIZE,
+                }}
+                scroll={{ y: 320 }}
+                // 整行点击也能看详情；行内的「重投」按钮不会被这一层抢走。
+                onRow={(record) => ({
+                  onClick: (event) => {
+                    if (isFromInnerControl(event)) return;
+                    onOpenDetail(record);
+                  },
+                  style: { cursor: "pointer" },
+                })}
+                locale={{
+                  emptyText: itemsState?.loading ? "正在加载明细…" : "该批次没有命中的记录",
+                }}
+              />
+            </>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

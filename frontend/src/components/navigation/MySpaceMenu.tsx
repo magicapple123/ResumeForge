@@ -1,4 +1,4 @@
-import { DownOutlined } from "@ant-design/icons";
+import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import { Button, Dropdown } from "antd";
 import type { MenuProps } from "antd";
 import { useMemo } from "react";
@@ -18,6 +18,7 @@ export default function MySpaceMenu({ hiddenKeys }: Props) {
       key: item.key,
       icon: item.icon,
       label: item.label,
+      "aria-label": item.label,
     }));
   }, [hiddenKeys, location.pathname]);
   const selectedKey = SPACE_NAVIGATION_ITEMS.find((item) =>
@@ -36,7 +37,13 @@ export default function MySpaceMenu({ hiddenKeys }: Props) {
         onClick: ({ key }) => navigate(String(key)),
       }}
     >
-      <Button className="app-space-menu-button" type="text" aria-haspopup="menu">
+      <Button
+        className="app-space-menu-button"
+        type="text"
+        aria-label="我的空间"
+        aria-haspopup="menu"
+        icon={<AppstoreOutlined />}
+      >
         我的空间 <DownOutlined />
       </Button>
     </Dropdown>

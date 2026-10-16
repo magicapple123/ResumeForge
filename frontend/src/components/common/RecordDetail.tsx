@@ -6,8 +6,8 @@
  * 表 + 正文区」，调用方只负责给字段。
  *
  * 卡片整块可点，但**不能**做成 `<button>`：卡片里有「编辑 / 删除」这类按钮，按钮套按钮
- * 是无效 HTML。所以用 `role="button"` + `tabIndex`，并在点击时跳过内层可交互元素，
- * 否则点「删除」会顺带把详情打开了。判定与类型在 `recordDetailCore.ts`。
+ * 是无效 HTML。外层用 group，单独的原生按钮承接键盘操作，内层动作与它互为兄弟。
+ * 鼠标点卡片正文时仍可打开详情，点击内部按钮则跳过。判定在 `recordDetailCore.ts`。
  */
 import { Divider, Drawer, Empty, Space, Typography } from "antd";
 import type { ReactNode } from "react";
@@ -39,7 +39,7 @@ export function DetailTrigger({ onOpen, label, className, children }: DetailTrig
   );
 
   const stableKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
+    (event: KeyboardEvent<HTMLButtonElement>) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       // 焦点在内层按钮上时，回车/空格归按钮。
       if (isFromInnerControl(event)) return;
@@ -51,13 +51,18 @@ export function DetailTrigger({ onOpen, label, className, children }: DetailTrig
 
   return (
     <div
-      role="button"
-      tabIndex={0}
+      role="group"
       aria-label={label}
       className={`detail-trigger${className ? ` ${className}` : ""}`}
       onClick={stableClick}
-      onKeyDown={stableKeyDown}
     >
+      <button
+        type="button"
+        className="detail-trigger-open"
+        aria-label={label}
+        onClick={onOpen}
+        onKeyDown={stableKeyDown}
+      />
       {children}
     </div>
   );

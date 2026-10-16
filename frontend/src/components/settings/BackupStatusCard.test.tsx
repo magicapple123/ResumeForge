@@ -1,13 +1,15 @@
 /** BackupStatusCard（RF-05）：保护状态、失败缺口与快照清单的展示。 */
 import { App as AntdApp } from "antd";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BackupStatus } from "../../types";
 
 const getBackupStatus = vi.fn();
+const saveAutoBackupInterval = vi.fn();
 
 vi.mock("../../api/settings", () => ({
   getBackupStatus: (...args: unknown[]) => getBackupStatus(...args),
+  saveAutoBackupInterval: (...args: unknown[]) => saveAutoBackupInterval(...args),
 }));
 
 import BackupStatusCard from "./BackupStatusCard";
@@ -41,6 +43,7 @@ function renderCard() {
 
 beforeEach(() => {
   getBackupStatus.mockReset();
+  saveAutoBackupInterval.mockReset();
 });
 
 afterEach(() => {
@@ -55,9 +58,29 @@ describe("BackupStatusCard", () => {
       expect(screen.getByText("受保护")).toBeTruthy();
     });
     expect(screen.getByText(/resume_forge-20261010-a\.db/)).toBeTruthy();
-    expect(screen.getByText(/每 7 天自动快照一次/)).toBeTruthy();
+    expect(screen.getByText(/每/)).toBeTruthy();
+    expect(screen.getByLabelText("自动备份间隔（天）")).toBeTruthy();
     // 「受保护」必须注明范围：仅数据库快照，不含附件（PR-15 审计项）。
     expect(screen.getByText(/仅数据库快照，不含附件文件/)).toBeTruthy();
+  });
+
+  it("修改间隔：调用保存接口并刷新状态", async () => {
+    getBackupStatus.mockResolvedValue(status({}));
+    saveAutoBackupInterval.mockResolvedValue({ interval_days: 30 });
+    renderCard();
+    const select = await screen.findByLabelText("自动备份间隔（天）");
+    fireEvent.mouseDown(select);
+    fireEvent.click(await screen.findByTitle("30 天"));
+    await waitFor(() => {
+      expect(saveAutoBackupInterval).toHaveBeenCalledWith(30);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/下次调度检查时生效/)).toBeTruthy();
+    });
+    // 保存后刷新保护状态（间隔变了，overdue 口径也变了）。
+    await waitFor(() => {
+      expect(getBackupStatus.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
   });
 
   it("连续失败：显示保护中断与失败原因，不伪装成已保护", async () => {

@@ -14,6 +14,7 @@
  */
 import { Col, Empty, Row, Segmented, Tag, Typography } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
+import ErrorState from "../components/common/ErrorState";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { getAnalyticsDashboard } from "../api/analytics";
@@ -171,7 +172,10 @@ function CohortBlock({ cohort }: { cohort: TrackCohort }) {
 
 export default function AnalyticsPage() {
   const [trendMonths, setTrendMonths] = useState(6);
-  const { data, loading, error } = useApi(() => getAnalyticsDashboard(trendMonths), [trendMonths]);
+  const { data, loading, error, reload } = useApi(
+    () => getAnalyticsDashboard(trendMonths),
+    [trendMonths],
+  );
 
   // 漏斗主线：只画推进主线（已投递→筛选中→测评/笔试→面试→Offer），
   // 「已结束」「待确认」属于分支，不在主线漏斗里，但后端仍会下发其计数。
@@ -195,7 +199,7 @@ export default function AnalyticsPage() {
       {loading ? (
         <PageSkeleton rows={8} />
       ) : error ? (
-        <Typography.Text type="danger">{error}</Typography.Text>
+        <ErrorState description={`求职统计加载失败：${error}`} onRetry={() => void reload()} />
       ) : !data ? (
         <Empty description="暂无看板数据" />
       ) : (

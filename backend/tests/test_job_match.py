@@ -1,6 +1,7 @@
 """匹配分析离线测试：五类状态、证据锚定、禁分数、硬门槛、准入映射、本地降级、招呼语。"""
 
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -15,6 +16,7 @@ from app.services.job.job_match import (
     local_match_result,
     parse_greeting,
     parse_match_result,
+    strip_data_urls,
     validate_evidence,
 )
 from app.services.llm.base import BaseLLMProvider, LLMError
@@ -283,3 +285,109 @@ def test_validate_evidence_handles_evidence_with_no_substantial_clauses():
     )
     with pytest.raises(LLMError, match="无法在资料或简历中核对"):
         validate_evidence(fabricated, jd_source="", personal_source="最高学历：本科")
+
+
+# ===== 问题 C：带照片简历剥离 base64 data URL =====
+
+
+def test_strip_data_urls_removes_base64_and_keeps_text():
+    """合法 data URL 被剥成占位文本，真实文本与 JSON 结构保持完好。"""
+    text = json.dumps(
+        {
+            "content": {
+                "skills": "Python 后端",
+                "photo": "data:image/png;base64," + "QUJD" * 100,
+            }
+        },
+        ensure_ascii=False,
+    )
+
+    stripped = strip_data_urls(text)
+
+    assert "QUJD" not in stripped
+    assert "base64" not in stripped
+    assert "[图片数据已省略]" in stripped
+    assert "Python 后端" in stripped
+    # 占位符落在字符串值内部：剥离后的文本仍是合法 JSON。
+    assert json.loads(stripped)["content"]["skills"] == "Python 后端"
+
+
+def test_strip_data_urls_returns_text_without_data_urls_unchanged():
+    """没有 data URL 时原样返回；任意 mime 前缀都剥离；非 base64 的 data: 不误伤。"""
+    untouched = json.dumps({"skills": "Python"}, ensure_ascii=False)
+    assert strip_data_urls(untouched) == untouched
+    assert strip_data_urls("") == ""
+
+    # 不只 image/*：任意 data:...;base64, 前缀都剥离。
+    mixed = "前缀 data:application/pdf;base64,QUJD 后缀"
+    assert strip_data_urls(mixed) == "前缀 [图片数据已省略] 后缀"
+
+    # 非 base64 形态的 "data:" 引用不受影响。
+    plain = "参考 data: 文档说明"
+    assert strip_data_urls(plain) == plain
+
+
+def test_strip_data_urls_handles_large_base64_quickly():
+    """超大 base64（约 640KB）剥离耗时可接受（单次线性扫描，阈值 1s）。"""
+    huge = "data:image/jpeg;base64," + "QUJD" * 160_000
+    text = json.dumps({"content": {"photo": huge, "skills": "Python"}}, ensure_ascii=False)
+
+    start = time.perf_counter()
+    stripped = strip_data_urls(text)
+    elapsed = time.perf_counter() - start
+
+    assert "QUJD" not in stripped
+    assert "Python" in stripped
+    assert elapsed < 1.0
+
+
+def test_build_match_messages_strips_photo_and_keeps_real_text():
+    """带照片简历：构造出的 messages 不含 base64 片段、真实简历文本留在预算内。"""
+    real = "主导过高并发网关项目，精通 Python 与 Django。" * 200  # ~6000 字符，预算内
+    resume_text = json.dumps(
+        {
+            "content": {
+                "skills": "Python 后端",
+                # ~480KB 的照片 base64：修复前会把真实文本完全挤出预算。
+                "photo": "data:image/png;base64," + "QUJD" * 120_000,
+                "detail": real,
+            }
+        },
+        ensure_ascii=False,
+    )
+
+    messages = build_match_messages(_payload(), _PROFILE_TEXT, resume_text)
+    user_message = messages[1]["content"]
+
+    assert "QUJD" not in user_message
+    assert "base64" not in user_message
+    # 真实简历文本（含收尾片段）不再被 base64 挤出预算。
+    assert real[-40:] in user_message
+    assert len(user_message) <= 20_000
+
+    # 剥离后的消息体仍是合法 JSON，resume 值里的占位符可解析。
+    between = user_message.split("<MATCH_DATA>\n", 1)[1].rsplit("\n</MATCH_DATA>", 1)[0]
+    data = json.loads(between)
+    assert "[图片数据已省略]" in data["resume"]
+
+
+@pytest.mark.asyncio
+async def test_analyze_match_with_photo_resume_strips_base64_from_prompt_and_evidence():
+    """analyze_match 全链路：提示词不含 base64，证据核对仍能对到真实简历文本。"""
+    resume_text = json.dumps(
+        {
+            "content": {
+                "skills": "Python 后端",
+                "photo": "data:image/png;base64," + "QUJD" * 100,
+            }
+        },
+        ensure_ascii=False,
+    )
+    provider = ScriptedProvider(json.dumps(_valid_result(), ensure_ascii=False))
+
+    result = await analyze_match(provider, _payload(), _PROFILE_TEXT, resume_text)
+
+    assert provider.messages is not None
+    assert "QUJD" not in provider.messages[1]["content"]
+    # 证据核对（validate_evidence）拿到的是剥离后的来源，"Python" 可核对到。
+    assert result.core_abilities[0].evidence == "Python"

@@ -53,6 +53,29 @@ describe("ManualBackupsCard", () => {
     expect(screen.getByText(/\.trash\/ 里还有 2 份/)).toBeTruthy();
   });
 
+  it("快照超过 5 份：默认只展示 5 份，点「显示全部」展开其余", async () => {
+    const items = Array.from({ length: 7 }, (_, index) => ({
+      name: `resume_forge-2026100${index}-000000.db`,
+      size_bytes: 1024,
+      modified_at: 1_760_000_000 + index,
+    }));
+    apiMocks.listManualBackups.mockResolvedValue({ ...LISTED, items, trashed_count: 0 });
+    renderCard();
+    expect(await screen.findByText("resume_forge-20261000-000000.db")).toBeTruthy();
+    // 第 6、7 份默认折叠；「显示全部」点击后可见，并可收起。
+    expect(screen.queryByText("resume_forge-20261005-000000.db")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "显示全部 7 条" }));
+    expect(await screen.findByText("resume_forge-20261005-000000.db")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "收起列表" }));
+    expect(screen.queryByText("resume_forge-20261005-000000.db")).toBeNull();
+  });
+
+  it("快照不超过 5 份：不出现折叠按钮", async () => {
+    renderCard();
+    expect(await screen.findByText("resume_forge-20261001-000000.db")).toBeTruthy();
+    expect(screen.queryByText(/显示全部/)).toBeNull();
+  });
+
   it("空列表：说明没有自动清理，不提供批量删除", async () => {
     apiMocks.listManualBackups.mockResolvedValue({ ...LISTED, items: [], trashed_count: 0 });
     renderCard();
@@ -62,9 +85,13 @@ describe("ManualBackupsCard", () => {
 
   it("移除走确认弹窗，确认后调用可恢复删除并刷新列表", async () => {
     renderCard();
+    // 「移除」已收进每行「···」菜单（用户反馈不裸露）：先开菜单再点「移除」。
     fireEvent.click(
-      await screen.findByRole("button", { name: "移除备份 resume_forge-20261001-000000.db" }),
+      await screen.findByRole("button", {
+        name: "备份 resume_forge-20261001-000000.db 的更多操作",
+      }),
     );
+    fireEvent.click(await screen.findByRole("menuitem", { name: /移除/ }));
 
     // 确认弹窗展示影响：体积、快照时间与去向（标题在 dialog 结构里会出现多处）。
     expect(

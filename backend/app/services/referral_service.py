@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 
 from ..config import DATA_DIR
 from ..models.job import Job
@@ -163,10 +163,10 @@ def referral_out(db: Session, referral: Referral) -> ReferralOut:
     return out
 
 
-def list_referrals(
-    db: Session, *, status: str = "", keyword: str = "", limit: int = 200
-) -> list[Referral]:
-    """按状态/关键词过滤；只取未软删除的行，最近更新的在前。"""
+def _filtered_referrals_query(
+    db: Session, *, status: str = "", keyword: str = ""
+) -> Query[Referral]:
+    """内推列表的过滤口径唯一实现：软删过滤 + 状态/关键词筛选（分页端点复用）。"""
     query = db.query(Referral).filter(trash.live_only(Referral))
     if status.strip():
         query = query.filter(Referral.status == status.strip())
@@ -180,11 +180,34 @@ def list_referrals(
                 Referral.referrer_name.like(like),
             )
         )
+    return query
+
+
+def list_referrals(
+    db: Session, *, status: str = "", keyword: str = "", limit: int = 200
+) -> list[Referral]:
+    """按状态/关键词过滤；只取未软删除的行，最近更新的在前。"""
     return (
-        query.order_by(Referral.updated_at.desc(), Referral.id.desc())
+        _filtered_referrals_query(db, status=status, keyword=keyword)
+        .order_by(Referral.updated_at.desc(), Referral.id.desc())
         .limit(max(1, min(limit, MAX_REFERRAL_LIST)))
         .all()
     )
+
+
+def list_referrals_page(
+    db: Session, *, status: str = "", keyword: str = "", page: int = 1, page_size: int = 10
+) -> tuple[list[Referral], int]:
+    """分页列出内推：过滤与排序与 :func:`list_referrals` 同源，返回 (行, 筛选后总数)。"""
+    query = _filtered_referrals_query(db, status=status, keyword=keyword)
+    total = query.count()
+    rows = (
+        query.order_by(Referral.updated_at.desc(), Referral.id.desc())
+        .offset((max(1, page) - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return rows, total
 
 
 def referral_or_none(db: Session, referral_id: int) -> Referral | None:
@@ -285,6 +308,7 @@ __all__ = [
     "create_referral",
     "delete_referral",
     "list_referrals",
+    "list_referrals_page",
     "referral_images_dir",
     "referral_or_none",
     "referral_out",

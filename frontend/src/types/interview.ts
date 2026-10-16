@@ -27,8 +27,10 @@ export const MAX_INTERVIEW_ROUNDS = 12;
 /** 自动收尾模式：何时结束完全由 AI 判断，界面与提示词都不给出轮数范围；
  *  AUTO_FINISH_MAX_ROUNDS 只是服务端的硬性保险（防对话失控），不向用户/模型展示。 */
 export const AUTO_FINISH_MAX_ROUNDS = 12;
-/** 自动收尾的模式开关值（随表单发给后端；仅用于区分模式，不表达"最早轮数"）。 */
-export const AUTO_ROUNDS_FLAG = 1;
+/** 自动收尾模式随表单提交的 rounds_min：语义是「自动收尾的最早轮数下限」，
+ *  取产品允许的最小轮数（后端校验 rounds_min ≥ MIN_INTERVIEW_ROUNDS 且 < rounds；
+ *  取 MIN 时 AI 从第 3 轮起即可按表现收尾，适配大多数真实面试的节奏）。 */
+export const AUTO_ROUNDS_FLAG = MIN_INTERVIEW_ROUNDS;
 
 export interface InterviewMessage {
   id: number;

@@ -24,6 +24,7 @@ import {
   Typography,
 } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
+import ErrorState from "../components/common/ErrorState";
 import type { ColumnsType } from "antd/es/table";
 import type { TableRowSelection } from "antd/es/table/interface";
 import type { HTMLAttributes } from "react";
@@ -325,18 +326,19 @@ export default function TrashPage() {
         description="岗位、简历、投递记录、事实台账条目、资料箱材料与助手会话——删除后它们立刻从各自的列表、首页统计和搜索里消失，只在这里可见。"
       />
 
-      {error && <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} />}
-
       {data && data.total > 0 && (
-        <Segmented
-          style={{ marginBottom: 12 }}
-          value={type}
-          onChange={(value) => setType(value as string)}
-          options={options}
-        />
+        <div className="trash-type-filters" role="region" aria-label="回收站分类">
+          <Segmented
+            value={type}
+            onChange={(value) => setType(value as string)}
+            options={options}
+          />
+        </div>
       )}
 
-      {loading && !data ? (
+      {error ? (
+        <ErrorState description={error} onRetry={() => void reload()} />
+      ) : loading && !data ? (
         <PageSkeleton rows={5} />
       ) : items.length === 0 ? (
         <Empty

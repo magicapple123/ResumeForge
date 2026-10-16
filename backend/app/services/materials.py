@@ -52,7 +52,7 @@ def list_materials_page(
     keyword: str = "",
     category: str = "",
     page: int = 1,
-    page_size: int = 12,
+    page_size: int = 18,
 ) -> tuple[list[Material], int]:
     """分页取资料：过滤与排序与 :func:`list_materials` 完全一致，total 反映筛选后集合。"""
     base = _materials_query(db, keyword=keyword, category=category)

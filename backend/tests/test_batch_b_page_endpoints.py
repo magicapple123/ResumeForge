@@ -103,16 +103,16 @@ def _make_claims(count=25):
 
 
 def test_materials_page_basic_and_ordering(client):
-    _make_materials(13)
+    _make_materials(19)
     resp = client.get("/api/materials/page")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["total"] == 13
-    assert len(body["items"]) == 12  # 默认一页 12 张
+    assert body["total"] == 19
+    assert len(body["items"]) == 18  # 默认一页 18 张（桌面 4 列网格，末行可留空）
     second = client.get("/api/materials/page", params={"page": 2}).json()
     assert len(second["items"]) == 1
     # 排序：updated_at desc → 最后插入的排最前
-    assert body["items"][0]["title"] == "资料-0012"
+    assert body["items"][0]["title"] == "资料-0018"
     assert second["items"][0]["title"] == "资料-0000"
 
 

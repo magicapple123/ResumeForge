@@ -21,6 +21,7 @@ import {
   Input,
   Listy,
   Modal,
+  Pagination,
   Select,
   Space,
   Tag,
@@ -34,7 +35,7 @@ import {
   createReferral,
   deleteReferral,
   getReferralStats,
-  listReferrals,
+  listReferralsPage,
   updateReferral,
   uploadReferralImage,
 } from "../api/referrals";
@@ -54,12 +55,17 @@ import BatchDeleteButton from "./common/BatchDeleteButton";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { RowContextMenu } from "./common/RowActions";
 
+/** 每页条数：与后端 /referrals/page 端点默认值一致。 */
+const REFERRAL_PAGE_SIZE = 10;
+
 export default function ReferralPanel() {
   const { message } = App.useApp();
-  // 批量选择：勾选若干条后一次删除（软删，全部进回收站）；列表是全量下发，
-  // 选区即当前已加载的全部条目。
+  // 批量选择：勾选若干条后一次删除（软删，全部进回收站）；列表是服务端分页，
+  // 选区即当前页已加载的条目（pageSelectAll 只作用于当前页）。
   const batch = useBatchSelection<number>();
   const [items, setItems] = useState<Referral[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | undefined>();
@@ -82,12 +88,16 @@ export default function ReferralPanel() {
   // 返回 null 表示失败（错误提示在这里统一给出）。
   const fetchList = useCallback(async () => {
     try {
-      return await listReferrals({ status: status || undefined, keyword: keyword.trim() });
+      return await listReferralsPage(
+        { status: status || undefined, keyword: keyword.trim() },
+        page,
+        REFERRAL_PAGE_SIZE,
+      );
     } catch (error) {
       message.error(error instanceof Error ? error.message : "读取内推失败");
       return null;
     }
-  }, [status, keyword, message]);
+  }, [status, keyword, page, message]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -100,17 +110,28 @@ export default function ReferralPanel() {
 
   // Compiler 规范：deps 变化的 loading 置位用渲染期守卫；应用状态放在 .then 回调。
   const [prevListKey, setPrevListKey] = useState<string | null>(null);
-  const listKey = `${status}:${keyword}`;
+  const listKey = `${status}:${keyword}:${page}`;
   if (prevListKey !== listKey) {
     setPrevListKey(listKey);
     setLoading(true);
   }
 
+  // 筛选条件变化时回第 1 页（渲染期守卫式调整，Compiler 规范）；翻页不改筛选键。
+  const filterKey = `${status}:${keyword}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
+    setPage(1);
+  }
+
   useEffect(() => {
     let cancelled = false;
-    void fetchList().then((items) => {
+    void fetchList().then((pageData) => {
       if (cancelled) return;
-      if (items !== null) setItems(items);
+      if (pageData !== null) {
+        setItems(pageData.items);
+        setTotal(pageData.total);
+      }
       setLoading(false);
     });
     void fetchStats().then((stats) => {
@@ -125,8 +146,11 @@ export default function ReferralPanel() {
   // 事件路径（保存/删除后的整表重拉，含 loading 翻动）。
   const loadList = useCallback(async () => {
     setLoading(true);
-    const items = await fetchList();
-    if (items !== null) setItems(items);
+    const pageData = await fetchList();
+    if (pageData !== null) {
+      setItems(pageData.items);
+      setTotal(pageData.total);
+    }
     setLoading(false);
   }, [fetchList]);
 
@@ -300,136 +324,152 @@ export default function ReferralPanel() {
       ) : items.length === 0 ? (
         <Empty description="还没有内推记录，把找人内推的机会记下来吧" />
       ) : (
-        <Listy
-          items={items}
-          rowKey={(item) => item.id}
-          itemRender={(item) => (
-            <ListyItem
-              className="detail-trigger"
-              // 整条可点开详情；内层的「详情 / 更多」按钮不会被这一层抢走。
-              onClick={(event) => {
-                if (isFromInnerControl(event)) return;
-                setDetail(item);
-              }}
-              actions={[
-                batch.selecting ? (
-                  <Checkbox
-                    key="select"
-                    aria-label={`选择内推 ${item.referrer_name || item.position}`}
-                    checked={batch.isSelected(item.id)}
-                    onChange={() => batch.toggle(item.id)}
-                  />
-                ) : (
-                  <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
-                    详情
-                  </Button>
-                ),
-                ...(batch.selecting
-                  ? []
-                  : [
-                      <Dropdown
-                        key="more"
-                        trigger={["click"]}
-                        menu={{
-                          items: buildMenu([
-                            {
-                              key: "edit",
-                              label: "编辑",
-                              icon: <EditOutlined />,
-                              onClick: () => openEdit(item),
-                            },
-                            {
-                              key: "delete",
-                              label: "删除",
-                              danger: true,
-                              icon: <DeleteOutlined />,
-                              confirm: "删除这条内推？删除后可在回收站里找回。",
-                              onClick: () => void remove(item),
-                            },
-                          ]),
-                        }}
-                      >
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={<MoreOutlined />}
-                          aria-label={`更多操作 ${item.referrer_name || item.position}`}
-                        />
-                      </Dropdown>,
-                    ]),
-              ]}
-            >
-              {/* 右键菜单挂在条目主体上：多选模式收起（入口只在正常模式的菜单里）。 */}
-              <RowContextMenu
-                items={
-                  batch.selecting
+        <>
+          <Listy
+            items={items}
+            rowKey={(item) => item.id}
+            itemRender={(item) => (
+              <ListyItem
+                className="detail-trigger"
+                // 整条可点开详情；内层的「详情 / 更多」按钮不会被这一层抢走。
+                onClick={(event) => {
+                  if (isFromInnerControl(event)) return;
+                  setDetail(item);
+                }}
+                actions={[
+                  batch.selecting ? (
+                    <Checkbox
+                      key="select"
+                      aria-label={`选择内推 ${item.referrer_name || item.position}`}
+                      checked={batch.isSelected(item.id)}
+                      onChange={() => batch.toggle(item.id)}
+                    />
+                  ) : (
+                    <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
+                      详情
+                    </Button>
+                  ),
+                  ...(batch.selecting
                     ? []
                     : [
-                        {
-                          key: "batch_select",
-                          label: "批量选择",
-                          icon: <CheckSquareOutlined />,
-                          onClick: batch.enterSelecting,
-                        },
-                      ]
-                }
-              >
-                <div>
-                  <ListyMeta
-                    title={
-                      <Space size={6} wrap>
-                        <span>
-                          {item.referrer_name || "未记内推人"}
-                          {item.position ? ` · ${item.position}` : ""}
-                        </span>
-                        <Tag
-                          color={REFERRAL_STATUS_COLORS[item.status as ReferralStatus] ?? "default"}
+                        <Dropdown
+                          key="more"
+                          trigger={["click"]}
+                          menu={{
+                            items: buildMenu([
+                              {
+                                key: "edit",
+                                label: "编辑",
+                                icon: <EditOutlined />,
+                                onClick: () => openEdit(item),
+                              },
+                              {
+                                key: "delete",
+                                label: "删除",
+                                danger: true,
+                                icon: <DeleteOutlined />,
+                                confirm: "删除这条内推？删除后可在回收站里找回。",
+                                onClick: () => void remove(item),
+                              },
+                            ]),
+                          }}
                         >
-                          {REFERRAL_STATUS_LABELS[item.status as ReferralStatus] ?? item.status}
-                        </Tag>
-                        {item.converted && <Tag color="green">已转化</Tag>}
-                      </Space>
-                    }
-                    description={
-                      <Space orientation="vertical" size={2} style={{ width: "100%" }}>
-                        <Typography.Text type="secondary">
-                          {item.company}
-                          {item.relation ? ` · ${item.relation}` : ""}
-                          {item.channel ? ` · ${item.channel}` : ""}
-                        </Typography.Text>
-                        {item.referral_code && (
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<MoreOutlined />}
+                            aria-label={`更多操作 ${item.referrer_name || item.position}`}
+                          />
+                        </Dropdown>,
+                      ]),
+                ]}
+              >
+                {/* 右键菜单挂在条目主体上：多选模式收起（入口只在正常模式的菜单里）。 */}
+                <RowContextMenu
+                  items={
+                    batch.selecting
+                      ? []
+                      : [
+                          {
+                            key: "batch_select",
+                            label: "批量选择",
+                            icon: <CheckSquareOutlined />,
+                            onClick: batch.enterSelecting,
+                          },
+                        ]
+                  }
+                >
+                  <div>
+                    <ListyMeta
+                      title={
+                        <Space size={6} wrap>
+                          <span>
+                            {item.referrer_name || "未记内推人"}
+                            {item.position ? ` · ${item.position}` : ""}
+                          </span>
+                          <Tag
+                            color={
+                              REFERRAL_STATUS_COLORS[item.status as ReferralStatus] ?? "default"
+                            }
+                          >
+                            {REFERRAL_STATUS_LABELS[item.status as ReferralStatus] ?? item.status}
+                          </Tag>
+                          {item.converted && <Tag color="green">已转化</Tag>}
+                        </Space>
+                      }
+                      description={
+                        <Space orientation="vertical" size={2} style={{ width: "100%" }}>
                           <Typography.Text type="secondary">
-                            内推码：{item.referral_code}
+                            {item.company}
+                            {item.relation ? ` · ${item.relation}` : ""}
+                            {item.channel ? ` · ${item.channel}` : ""}
                           </Typography.Text>
-                        )}
-                        {item.note && (
-                          <Typography.Text type="secondary">{item.note}</Typography.Text>
-                        )}
-                        {(item.note_images ?? []).length > 0 && (
-                          <Space size={4} wrap>
-                            {(item.note_images ?? []).map((path) => (
-                              <img
-                                key={path}
-                                src={referralImageUrl(path)}
-                                alt="备注图"
-                                style={{
-                                  width: 32,
-                                  height: 32,
-                                  objectFit: "cover",
-                                  borderRadius: 3,
-                                }}
-                              />
-                            ))}
-                          </Space>
-                        )}
-                      </Space>
-                    }
-                  />
-                </div>
-              </RowContextMenu>
-            </ListyItem>
-          )}
-        />
+                          {item.referral_code && (
+                            <Typography.Text type="secondary">
+                              内推码：{item.referral_code}
+                            </Typography.Text>
+                          )}
+                          {item.note && (
+                            <Typography.Text type="secondary">{item.note}</Typography.Text>
+                          )}
+                          {(item.note_images ?? []).length > 0 && (
+                            <Space size={4} wrap>
+                              {(item.note_images ?? []).map((path) => (
+                                <img
+                                  key={path}
+                                  src={referralImageUrl(path)}
+                                  alt="备注图"
+                                  style={{
+                                    width: 32,
+                                    height: 32,
+                                    objectFit: "cover",
+                                    borderRadius: 3,
+                                  }}
+                                />
+                              ))}
+                            </Space>
+                          )}
+                        </Space>
+                      }
+                    />
+                  </div>
+                </RowContextMenu>
+              </ListyItem>
+            )}
+          />
+
+          <div style={{ textAlign: "right", marginTop: 12 }}>
+            <Pagination
+              current={page}
+              pageSize={REFERRAL_PAGE_SIZE}
+              total={total}
+              onChange={setPage}
+              hideOnSinglePage
+              showSizeChanger={false}
+              showTotal={(count) => `共 ${count} 条`}
+            />
+          </div>
+        </>
       )}
 
       <Modal

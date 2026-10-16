@@ -452,3 +452,25 @@ def test_create_provider_forwards_request_overrides():
     payload: dict = {}
     ignored._apply_request_overrides(payload)
     assert "messages" not in payload
+
+
+def test_auto_backup_interval_defaults_and_roundtrips(client):
+    """自动备份间隔：默认回退环境配置；保存后可读回（运行时值）。"""
+    from app.config import get_settings
+
+    expected_default = get_settings().auto_backup_interval_days
+    response = client.get("/api/settings/auto-backup-interval")
+    assert response.status_code == 200
+    assert response.json() == {"interval_days": expected_default}
+
+    response = client.put("/api/settings/auto-backup-interval", json={"interval_days": 3})
+    assert response.status_code == 200
+    assert response.json() == {"interval_days": 3}
+    assert client.get("/api/settings/auto-backup-interval").json() == {"interval_days": 3}
+
+
+def test_auto_backup_interval_rejects_out_of_range(client):
+    """1..365 的边界由 schema 校验挡下，越界值不该落库。"""
+    for value in (0, 366):
+        response = client.put("/api/settings/auto-backup-interval", json={"interval_days": value})
+        assert response.status_code == 422

@@ -7,13 +7,12 @@
 import { ImportOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
 import { App, Button, Drawer, Empty, Input, Pagination, Space, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import CandidateBatchToolbar from "./CandidateBatchToolbar";
 import {
   createCandidateJob,
   deleteCandidateJob,
   getCandidateJob,
-  importCandidateJobs,
   listCandidateJobsPage,
   updateCandidateJob,
 } from "../../api/candidateJob";
@@ -74,19 +73,13 @@ export default function CandidateJobsDrawer({
   const [committedKeyword, setCommittedKeyword] = useState("");
 
   // 备选岗位走服务端分页（RF-08）：页码/总数来自分页端点，历史候选超过旧端点 300 条
-  // 兜底后仍然全部可达。items 就是当前页；选择集只作用于当前页——「全选」是全选本页
-  // （范围写进文案），翻页/换筛选都会清空选择，不存在跨页多选。
+  // 兜底后仍然全部可达。items 就是当前页；「全选本页」只勾本页，而「全选全部」是
+  // 跨页选中当前筛选下的全部候选——**翻页保留跨页选择**（产品决策，工具条计数跨页
+  // 保留）；换搜索/筛选（可见集合本身变了）与退出多选仍清空。
   const [page, setPage] = useState(1);
   const [serverTotal, setServerTotal] = useState(0);
 
   const taskFilterKey = collectTaskIds.join(",");
-  const selectedPendingIds = useMemo(
-    () =>
-      items
-        .filter((item) => selectedIds.includes(item.id) && item.status === "pending")
-        .map((item) => item.id),
-    [items, selectedIds],
-  );
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
   // 返回 null 表示失败（错误提示在这里统一给出）。
@@ -311,32 +304,11 @@ export default function CandidateJobsDrawer({
     );
   };
 
-  const importSelected = async () => {
-    if (selectedPendingIds.length === 0) {
-      message.warning("请先选择待处理的备选岗位");
-      return;
-    }
-    setBatchAction("import");
-    try {
-      const result = await importCandidateJobs(selectedPendingIds);
-      setSelectedIds([]);
-      await load();
-      const details = [
-        result.imported > 0 ? `新建 ${result.imported} 个` : "",
-        result.duplicate > 0 ? `重复 ${result.duplicate} 个` : "",
-        result.trashed > 0 ? `回收站已有 ${result.trashed} 个` : "",
-        result.invalid > 0 ? `无效 ${result.invalid} 个` : "",
-        result.missing > 0 ? `已不存在 ${result.missing} 个` : "",
-      ].filter(Boolean);
-      message.success(`批量导入完成：${details.join("，") || "没有可导入的岗位"}`);
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : "批量导入失败");
-    } finally {
-      setBatchAction(null);
-    }
-  };
-
-  const allSelected = items.length > 0 && selectedIds.length === items.length;
+  const allSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
+  // 勾选框三态的口径是「本页」：checked=本页全选中、indeterminate=本页部分选中、
+  // 再点一次=清空本页选择。「全选全部」跨页选中后本页自然全选中（checked 亮起），
+  // 不会出现"本页已全选却仍显示半选"的错位。
+  const someSelected = items.some((item) => selectedIds.includes(item.id));
 
   // 批量动作（跨页全选 / 导出 CSV / 批量删除）收在 hook 里（文件行数预算）：
   // 状态所有权仍在抽屉，hook 只收"发请求 + 给提示"这段流程。
@@ -350,9 +322,11 @@ export default function CandidateJobsDrawer({
       onBatchActionChange: setBatchAction,
     });
 
-  // 翻页即清空选择集：选择只作用于当前页，翻页后上一页的勾选不再可见也不该生效。
+  // 翻页只换页码，不动选择集：「全选全部」跨页选中 N 条后翻页，已选计数必须保留，
+  // 本页勾选框三态按「本页」口径自然收敛（见上方 allSelected/someSelected 的注释）。
+  // 幽灵选中由删除路径兜底：单删就地剔除 id（remove），批删/批量导入后整体清空
+  // （useCandidateBatchTools），被删条目不会留在 selectedIds 里。
   const changePage = (next: number) => {
-    setSelectedIds([]);
     setPage(next);
   };
 
@@ -377,7 +351,7 @@ export default function CandidateJobsDrawer({
         {collectTaskIds.length > 0
           ? `这里只显示选中采集记录的岗位（${collectTaskIds.length} 条记录）。`
           : "这里放还没核对的招聘信息（粘贴的文本或截图）。"}
-        点卡片查看详情；选中后可以批量导入或删除。
+        点卡片查看详情；选中后可以批量删除或导出。
       </Typography.Paragraph>
       <Space wrap style={{ marginBottom: 12 }}>
         <Input.Search
@@ -394,13 +368,14 @@ export default function CandidateJobsDrawer({
           </Typography.Text>
         ) : null}
       </Space>
-      {items.length > 0 && (
+      {/* 批量工具栏只在多选模式出现（用户反馈：右键「批量选择」后才显示整套选择/操作，
+          平时界面就是普通浏览）；卡片勾选框同样只在多选模式渲染（CandidateCardGrid）。 */}
+      {selecting && items.length > 0 && (
         <CandidateBatchToolbar
           selectedCount={selectedIds.length}
           pageCount={items.length}
           allSelected={allSelected}
-          someSelected={selectedIds.length > 0}
-          pendingSelectedCount={selectedPendingIds.length}
+          someSelected={someSelected}
           selecting={selecting}
           batchAction={batchAction}
           totalCount={serverTotal}
@@ -408,8 +383,15 @@ export default function CandidateJobsDrawer({
           onSelectAllPages={() => void selectAllPages()}
           exporting={exporting}
           onExportCsv={() => void exportSelected()}
-          onToggleAll={(checked) => setSelectedIds(checked ? items.map((item) => item.id) : [])}
-          onImport={() => void importSelected()}
+          // 勾选框只动「本页」的条目：勾上=并入本页 id（不破坏跨页选中），取消=只
+          // 移除本页 id。直接整体置成 items.map 会把「全选全部」的跨页选择静默删掉。
+          onToggleAll={(checked) =>
+            setSelectedIds((current) =>
+              checked
+                ? [...new Set([...current, ...items.map((item) => item.id)])]
+                : current.filter((id) => !items.some((item) => item.id === id)),
+            )
+          }
           onDelete={deleteSelected}
           onClear={() => setSelectedIds([])}
           onExit={() => {

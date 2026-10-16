@@ -22,7 +22,7 @@ import {
   Typography,
 } from "antd";
 import LoadingBlock from "../components/common/LoadingBlock";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   batchDeleteMaterials,
   createMaterial,
@@ -39,24 +39,22 @@ import { RowActions, RowContextMenu } from "../components/common/RowActions";
 import BatchActionBar from "../components/common/BatchActionBar";
 import BatchDeleteButton from "../components/common/BatchDeleteButton";
 import { useBatchSelection } from "../hooks/useBatchSelection";
+import { useApi } from "../hooks/useApi";
+import ErrorState from "../components/common/ErrorState";
 import type { Material, MaterialPayload, MaterialSummary } from "../types";
 import { canPreviewImage } from "../utils/attachments";
 import { formatDateTime } from "../utils/format";
 
-/** 卡片网格 12 个一页（3 列 × 4 行），与后端 /materials/page 的默认口径一致。 */
-const MATERIALS_PAGE_SIZE = 12;
+/** 卡片网格 18 个一页（桌面主断点下 4 列网格，末行可留空），与后端 /materials/page 的默认口径一致。 */
+const MATERIALS_PAGE_SIZE = 18;
 
 export default function MaterialsPage() {
   const { message } = App.useApp();
   // 批量选择：勾选若干份后一次删除（软删，全部进回收站）。
   const batch = useBatchSelection<number>();
   // 列表是摘要（无 data_url / 附件文字）；详情与编辑时再按需取全量。
-  // 分页在服务端做（RF-08 续）：只保存当前页 12 张，keyword/category 下发服务端。
-  const [materials, setMaterials] = useState<MaterialSummary[]>([]);
-  const [total, setTotal] = useState(0);
+  // 分页在服务端做（RF-08 续）：只保存当前页 18 张，keyword/category 下发服务端。
   const [page, setPage] = useState(1);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState<string>("");
   const [formOpen, setFormOpen] = useState(false);
@@ -66,52 +64,21 @@ export default function MaterialsPage() {
   // 页面顶部视图切换：资料卡片 / 我的文件清单（入口刻意挂在这里，不加新菜单）。
   const [view, setView] = useState<string>("materials");
 
-  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
-  const fetchMaterials = useCallback(async (): Promise<{
-    items: MaterialSummary[];
-    total: number;
-    categories: string[];
-  } | null> => {
-    try {
-      const [pageData, categoryList] = await Promise.all([
-        listMaterialsPage({ keyword, category }, page, MATERIALS_PAGE_SIZE),
-        listMaterialCategories(),
-      ]);
-      return { items: pageData.items, total: pageData.total, categories: categoryList };
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : "加载资料失败");
-      return null;
-    }
-  }, [category, keyword, page, message]);
-
-  // Compiler 规范：初始加载的 setState 放 .then 回调（外部数据到达时应用）。
-  useEffect(() => {
-    let cancelled = false;
-    void fetchMaterials().then((result) => {
-      if (cancelled) return;
-      if (result) {
-        setMaterials(result.items);
-        setTotal(result.total);
-        setCategories(result.categories);
-      }
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchMaterials]);
-
-  // 事件路径（提交/删除后的整表重拉，含 loading 翻动）。
-  const load = useCallback(async () => {
-    setLoading(true);
-    const result = await fetchMaterials();
-    if (result) {
-      setMaterials(result.items);
-      setTotal(result.total);
-      setCategories(result.categories);
-    }
-    setLoading(false);
-  }, [fetchMaterials]);
+  const {
+    data,
+    loading,
+    error,
+    reload: load,
+  } = useApi(async () => {
+    const [pageData, categoryList] = await Promise.all([
+      listMaterialsPage({ keyword, category }, page, MATERIALS_PAGE_SIZE),
+      listMaterialCategories(),
+    ]);
+    return { ...pageData, categories: categoryList };
+  }, [category, keyword, page]);
+  const materials = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const categories = useMemo(() => data?.categories ?? [], [data]);
 
   // 筛选条件变化时回第 1 页（渲染期守卫式调整，Compiler 规范）。
   const filterKey = `${keyword}|${category}`;
@@ -253,7 +220,7 @@ export default function MaterialsPage() {
         <UserFilesPanel />
       ) : (
         <>
-          <Space wrap style={{ marginBottom: 16 }}>
+          <Space wrap className="rf-filter-bar">
             <Input.Search
               allowClear
               placeholder="搜索标题、正文或备注"
@@ -261,6 +228,7 @@ export default function MaterialsPage() {
               onSearch={setKeyword}
             />
             <Select
+              aria-label="资料分类筛选"
               value={category}
               options={categoryOptions}
               style={{ width: 160 }}
@@ -293,6 +261,8 @@ export default function MaterialsPage() {
 
           {loading ? (
             <LoadingBlock />
+          ) : error ? (
+            <ErrorState description={`资料箱加载失败：${error}`} onRetry={() => void load()} />
           ) : materials.length === 0 ? (
             <Empty
               // total=0 时区分「库里真没东西」和「筛选后没结果」：库空才引导去新增，

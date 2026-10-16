@@ -17,6 +17,7 @@ import {
 } from "antd";
 import type { AssistantSkill } from "../../types";
 import FileDropZone from "../common/FileDropZone";
+import { useCollapsedList } from "../common/useCollapsedList";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
 import { RowActions } from "../common/RowActions";
@@ -59,6 +60,8 @@ export default function SkillsCard({
   const { message } = App.useApp();
   // 同一时刻只允许一个改动在进行，避免连点产生互相覆盖的请求。
   const busy = importing || deletingId !== null;
+  // 技能多了会淹没页面：默认只展示前 5 项，其余收进「显示全部」（展示层折叠）。
+  const { visibleItems: visibleSkills, toggleNode: skillsToggleNode } = useCollapsedList(skills);
 
   return (
     <Card title="助手技能" className="settings-card">
@@ -105,7 +108,7 @@ export default function SkillsCard({
         ) : (
           <Listy
             style={{ marginTop: 16 }}
-            items={skills}
+            items={visibleSkills}
             rowKey={(skill) => skill.id}
             styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
             itemRender={(skill) => (
@@ -161,6 +164,7 @@ export default function SkillsCard({
             )}
           />
         )}
+        {skillsToggleNode}
       </Spin>
     </Card>
   );

@@ -121,6 +121,20 @@
   background: #fff;
 }
 
+/*
+ * 拖动中的分区（类由 useProfileSectionReorder 在激活时挂、松手时摘）：
+ * - z-index 抬到所有兄弟之上：分区栈改用 CSS order 做视觉重排后，DOM 顺序不再
+ *   随拖动变化，向下拖时后绘制的兄弟（不透明白底）会盖住被拖卡，必须置顶。
+ * - will-change: transform 把被拖卡提升为合成层：跟手视觉是每帧直改
+ *   transform（ref 直写、不走 React），有独立合成层后不再整块重绘。
+ * 只在拖动期间挂载，松手即摘，不常驻占显存。
+ */
+.profile-section-sortable.is-dragging {
+  z-index: 10;
+  will-change: transform;
+  box-shadow: 0 16px 32px rgb(31 55 88 / 16%);
+}
+
 .profile-section-compact-label {
   display: flex;
   align-items: center;

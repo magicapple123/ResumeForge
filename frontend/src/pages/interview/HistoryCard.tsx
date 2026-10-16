@@ -50,7 +50,7 @@ export function HistoryCard({
       label: "删除这场面试",
       danger: true,
       icon: <DeleteOutlined />,
-      confirm: "删除这场面试？删除后可在回收站找回。",
+      confirm: "删除这场面试？删除后无法恢复。",
       onClick: () => void onRemove(item),
     },
   ];
@@ -116,7 +116,7 @@ export function HistoryCard({
                                 label: "删除这场面试",
                                 danger: true,
                                 icon: <DeleteOutlined />,
-                                confirm: "删除这场面试？删除后可在回收站找回。",
+                                confirm: "删除这场面试？删除后无法恢复。",
                                 onClick: () => void onRemove(item),
                               },
                             ]}

@@ -27,9 +27,12 @@ export const ReadSnapshotCard = memo(function ReadSnapshotCard({
 }) {
   return (
     <>
+      {/* 本组件在父级 Space 里只占一个 item（memo 包着的 fragment 不会被拍平），
+          Steps 与下方 Card 之间没有现成的间距可蹭——补 12px，避免步骤行贴住卡片边框。 */}
       <Steps
         size="small"
         current={step}
+        style={{ marginBottom: 12 }}
         items={[
           { title: "启动浏览器" },
           { title: "打开网申页" },

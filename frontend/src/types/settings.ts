@@ -249,6 +249,11 @@ export interface BackupStatusSnapshot {
   modified_at: number;
 }
 
+/** 自动备份间隔（天）：设置页可调的运行时值，保存后下次调度检查生效。 */
+export interface AutoBackupIntervalSetting {
+  interval_days: number;
+}
+
 export interface BackupStatus {
   dataset_id: string;
   /**

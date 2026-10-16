@@ -6,6 +6,7 @@
    写入侧不接受该字段；
 3. ``/stats`` 只统计有效内推（非 closed/invalid），转化率 = converted / 有效内推总数。
 """
+
 from pathlib import Path
 
 from app.models.job import Job
@@ -23,7 +24,9 @@ def _job(db_session, title="后端开发工程师", company="示例公司") -> J
     return job
 
 
-def _track(db_session, status="applied", company="示例公司", title="后端开发工程师") -> ApplicationTrack:
+def _track(
+    db_session, status="applied", company="示例公司", title="后端开发工程师"
+) -> ApplicationTrack:
     track = ApplicationTrack(
         company=company,
         title=title,
@@ -84,33 +87,61 @@ def test_binding_job_backfills_snapshots(client, db_session):
 
 def test_converted_is_derived_from_associated_track(client, db_session):
     # 进入面试的漏斗 → converted=True。
-    interview_track = _track(db_session, status="interview", company="示例公司", title="后端开发工程师")
+    interview_track = _track(
+        db_session, status="interview", company="示例公司", title="后端开发工程师"
+    )
     converted = client.post(
         "/api/referrals",
-        json={"company": "示例公司", "position": "后端", "referrer_name": "张三", "track_id": interview_track.id},
+        json={
+            "company": "示例公司",
+            "position": "后端",
+            "referrer_name": "张三",
+            "track_id": interview_track.id,
+        },
     ).json()
     assert converted["converted"] is True
 
     # 仍停留在「已投递」的漏斗 → converted=False。
-    applied_track = _track(db_session, status="applied", company="另一家公司", title="前端开发工程师")
+    applied_track = _track(
+        db_session, status="applied", company="另一家公司", title="前端开发工程师"
+    )
     not_converted = client.post(
         "/api/referrals",
-        json={"company": "另一家公司", "position": "前端", "referrer_name": "王五", "track_id": applied_track.id},
+        json={
+            "company": "另一家公司",
+            "position": "前端",
+            "referrer_name": "王五",
+            "track_id": applied_track.id,
+        },
     ).json()
     assert not_converted["converted"] is False
 
 
 def test_stats_only_counts_valid_referrals_and_derived_conversion(client, db_session):
-    interview_track = _track(db_session, status="interview", company="示例公司", title="后端开发工程师")
-    applied_track = _track(db_session, status="applied", company="另一家公司", title="前端开发工程师")
+    interview_track = _track(
+        db_session, status="interview", company="示例公司", title="后端开发工程师"
+    )
+    applied_track = _track(
+        db_session, status="applied", company="另一家公司", title="前端开发工程师"
+    )
 
     client.post(
         "/api/referrals",
-        json={"company": "示例公司", "position": "后端", "referrer_name": "张三", "track_id": interview_track.id},
+        json={
+            "company": "示例公司",
+            "position": "后端",
+            "referrer_name": "张三",
+            "track_id": interview_track.id,
+        },
     )
     client.post(
         "/api/referrals",
-        json={"company": "另一家公司", "position": "前端", "referrer_name": "王五", "track_id": applied_track.id},
+        json={
+            "company": "另一家公司",
+            "position": "前端",
+            "referrer_name": "王五",
+            "track_id": applied_track.id,
+        },
     )
     client.post(
         "/api/referrals",
@@ -124,11 +155,40 @@ def test_stats_only_counts_valid_referrals_and_derived_conversion(client, db_ses
     assert stats["rate"] == 0.5
 
 
+def test_list_page_returns_paged_items_and_total(client):
+    """分页端点：默认每页 10 条，返回筛选后总数；软删行不出现。"""
+    for index in range(12):
+        resp = client.post(
+            "/api/referrals",
+            json={"company": f"公司{index}", "position": "后端", "referrer_name": f"张{index}"},
+        )
+        assert resp.status_code == 201, resp.text
+
+    first = client.get("/api/referrals/page").json()
+    assert first["total"] == 12
+    assert len(first["items"]) == 10
+
+    second = client.get("/api/referrals/page", params={"page": 2, "page_size": 10}).json()
+    assert second["total"] == 12
+    assert len(second["items"]) == 2
+
+    # 关键词过滤口径与全量端点同源：total 是筛选后的总数。
+    filtered = client.get("/api/referrals/page", params={"keyword": "公司1"}).json()
+    assert filtered["total"] == 3  # 公司1、公司10、公司11（共 12 家：公司0-公司11）
+    # 状态不合法时 422，与旧端点一致。
+    assert client.get("/api/referrals/page", params={"status": "nope"}).status_code == 422
+
+
 def test_create_rejects_converted_field(client):
     # converted 是派生字段，写入侧不接受，防止在表里手算第二份口径。
     resp = client.post(
         "/api/referrals",
-        json={"company": "示例公司", "position": "后端", "referrer_name": "张三", "converted": True},
+        json={
+            "company": "示例公司",
+            "position": "后端",
+            "referrer_name": "张三",
+            "converted": True,
+        },
     )
     assert resp.status_code == 422
 

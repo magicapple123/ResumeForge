@@ -26,23 +26,35 @@ const CONVERSATIONS = [
   conversation({ id: 2, title: "面试复盘" }),
 ];
 
-function renderSidebar(onBatchDelete: (ids: number[]) => void) {
+function sidebarProps(
+  onBatchDelete: (ids: number[]) => void,
+  conversations: AssistantConversationBrief[] = CONVERSATIONS,
+  loading = false,
+) {
+  return {
+    conversations,
+    loading,
+    activeId: null,
+    onCreate: vi.fn(),
+    onSelect: vi.fn(),
+    onDelete: vi.fn(),
+    onRename: vi.fn(),
+    onToggleFlag: vi.fn(),
+    onArchive: vi.fn(),
+    onFork: vi.fn(),
+    onMoveToGroup: vi.fn(),
+    onBatchDelete,
+  };
+}
+
+function renderSidebar(
+  onBatchDelete: (ids: number[]) => void,
+  conversations: AssistantConversationBrief[] = CONVERSATIONS,
+  loading = false,
+) {
   return render(
     <AntdApp>
-      <ConversationSidebar
-        conversations={CONVERSATIONS}
-        loading={false}
-        activeId={null}
-        onCreate={vi.fn()}
-        onSelect={vi.fn()}
-        onDelete={vi.fn()}
-        onRename={vi.fn()}
-        onToggleFlag={vi.fn()}
-        onArchive={vi.fn()}
-        onFork={vi.fn()}
-        onMoveToGroup={vi.fn()}
-        onBatchDelete={onBatchDelete}
-      />
+      <ConversationSidebar {...sidebarProps(onBatchDelete, conversations, loading)} />
     </AntdApp>,
   );
 }
@@ -57,6 +69,24 @@ afterEach(() => {
 });
 
 describe("ConversationSidebar 批量选择", () => {
+  /** 加载态不是空态：加载中不出现「暂无对话」（用户截图里空态文案 + 转圈图标同屏）；
+      加载完成且确实没有会话时才显示空态。 */
+  it("加载中显示加载提示，加载完成且无会话才显示「暂无对话」", () => {
+    const onBatchDelete = vi.fn();
+    const view = renderSidebar(onBatchDelete, [], true);
+
+    expect(screen.queryByText("暂无对话")).not.toBeInTheDocument();
+    expect(screen.getByText("正在加载对话…")).toBeInTheDocument();
+
+    view.rerender(
+      <AntdApp>
+        <ConversationSidebar {...sidebarProps(onBatchDelete, [], false)} />
+      </AntdApp>,
+    );
+    expect(screen.getByText("暂无对话")).toBeInTheDocument();
+    expect(screen.queryByText("正在加载对话…")).not.toBeInTheDocument();
+  });
+
   /** 右键会话条目，从菜单点「批量选择」（入口已从侧栏按钮收进右键菜单，R8）。 */
   async function enterSelectingViaContextMenu(title: string) {
     fireEvent.contextMenu(screen.getByText(title));
@@ -100,5 +130,32 @@ describe("ConversationSidebar 批量选择", () => {
     expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "删除所选" })).not.toBeInTheDocument();
     expect(onBatchDelete).not.toHaveBeenCalled();
+  });
+
+  it("全选覆盖全部可见会话（去分页后 12 条也不只选本页 10 条）", async () => {
+    const onBatchDelete = vi.fn();
+    const many = Array.from({ length: 12 }, (_, index) =>
+      conversation({ id: index + 1, title: `对话 ${index + 1}` }),
+    );
+    renderSidebar(onBatchDelete, many);
+
+    await screen.findByText("对话 1");
+    fireEvent.contextMenu(screen.getByText("对话 1"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: /全选本页/ }));
+    expect(screen.getByText("已选 12 项")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    const confirmRoot = await waitFor(() => {
+      const root = document.querySelector(".ant-modal-confirm");
+      expect(root).not.toBeNull();
+      return root as HTMLElement;
+    });
+    expect(confirmRoot.textContent).toContain("删除选中的 12 段对话");
+    fireEvent.click(within(confirmRoot).getByRole("button", { name: /删\s*除/ }));
+
+    await waitFor(() => expect(onBatchDelete).toHaveBeenCalledTimes(1));
+    expect(onBatchDelete.mock.calls[0][0]).toHaveLength(12);
   });
 });

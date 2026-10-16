@@ -95,6 +95,8 @@ function renderPageWithProbe(initialEntries: string[] = ["/jobs"]) {
 const candidateMocks = vi.hoisted(() => ({
   listCandidateJobs: vi.fn(),
   listCandidateJobsPage: vi.fn(),
+  listCandidateJobIds: vi.fn(),
+  exportCandidatesCsv: vi.fn(),
   getCandidateJob: vi.fn(),
   createCandidateJob: vi.fn(),
   updateCandidateJob: vi.fn(),
@@ -422,7 +424,7 @@ describe("从备选岗位导入", () => {
     expect(screen.getByText("熟悉 SQL。")).toBeInTheDocument();
   });
 
-  it("可以批量导入选中的备选岗位", async () => {
+  it("备选岗位批量导入入口已移除（产品决策）；卡片勾选框只在多选模式出现", async () => {
     candidateMocks.listCandidateJobsPage.mockResolvedValue({
       items: [
         makeCandidate({ id: 31, title: "岗位一" }),
@@ -430,25 +432,60 @@ describe("从备选岗位导入", () => {
       ],
       total: 2,
     });
-    candidateMocks.importCandidateJobs.mockResolvedValue({
-      imported: 2,
-      duplicate: 0,
-      trashed: 0,
-      invalid: 0,
-      missing: 0,
-      results: [],
-    });
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /备选岗位/ }));
-    // R8：批量导入按钮只在多选模式渲染——先在卡片上右键进入多选。
-    fireEvent.contextMenu(await screen.findByText("岗位一"));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
-    const checkboxes = await screen.findAllByRole("checkbox");
-    fireEvent.click(checkboxes[1]);
-    fireEvent.click(checkboxes[2]);
-    fireEvent.click(screen.getByRole("button", { name: "批量导入" }));
+    // 普通模式：卡片上没有勾选框、也没有批量工具栏（含批量导入/批量删除）。
+    expect(await screen.findByText("岗位一")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "全选本页" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "批量导入" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "批量删除" })).toBeNull();
 
-    await waitFor(() => expect(candidateMocks.importCandidateJobs).toHaveBeenCalledWith([31, 32]));
+    // 右键进入多选模式后：勾选框与批量操作区一起出现（仍无批量导入）。
+    fireEvent.contextMenu(screen.getByText("岗位一"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+    expect(await screen.findByRole("checkbox", { name: "全选本页" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "批量删除" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "批量导入" })).toBeNull();
+  });
+
+  it("「全选全部」后翻页保留跨页选择：计数不丢、本页勾选框亮起", async () => {
+    // 守的是 2026 的产品决策：跨页「全选全部」（选中 N 条）后翻页，不再清空 selectedIds
+    // ——清空与「全选全部」的语义相悖。翻页后：工具条计数跨页保留（CandidateBatchToolbar
+    // 的「已选 X / 总数」），「全选本页」勾选框按本页口径自然收敛为 checked 亮起。
+    const pageOne = Array.from({ length: 12 }, (_, index) =>
+      makeCandidate({ id: index + 1, title: `候选-${index + 1}` }),
+    );
+    const pageTwo = Array.from({ length: 3 }, (_, index) =>
+      makeCandidate({ id: 13 + index, title: `候选-${13 + index}` }),
+    );
+    candidateMocks.listCandidateJobsPage.mockImplementation((_filters: unknown, page: number) =>
+      Promise.resolve(page === 1 ? { items: pageOne, total: 15 } : { items: pageTwo, total: 15 }),
+    );
+    candidateMocks.listCandidateJobIds.mockResolvedValue(
+      Array.from({ length: 15 }, (_, index) => index + 1),
+    );
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /备选岗位/ }));
+    expect(await screen.findByText("候选-1")).toBeInTheDocument();
+    // 「全选全部」只在多选模式出现——先右键进入批量选择。
+    fireEvent.contextMenu(screen.getByText("候选-1"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "全选全部" }));
+    expect(await screen.findByText("已选 15 / 15 条")).toBeInTheDocument();
+
+    // 翻页：中途不点任何条目的勾选框，选择集应当原样保留。
+    const pageTwoButton = document.querySelector(".ant-pagination-item-2");
+    expect(pageTwoButton).not.toBeNull();
+    fireEvent.click(pageTwoButton as HTMLElement);
+    expect(await screen.findByText("候选-13")).toBeInTheDocument();
+    expect(candidateMocks.listCandidateJobsPage).toHaveBeenLastCalledWith({}, 2, 12);
+
+    // 计数跨页保留；本页 3 条全在选中集里 → 勾选框 checked 亮起而非半选/未选。
+    expect(screen.getByText("已选 15 / 15 条")).toBeInTheDocument();
+    const checkbox = screen.getByRole("checkbox", { name: "全选本页" }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    expect(checkbox.indeterminate).toBe(false);
   });
 });

@@ -26,12 +26,20 @@ vi.mock("../../utils/attachments", async (importOriginal) => ({
   readAsDataUrl: vi.fn().mockResolvedValue("data:image/png;base64,AA=="),
 }));
 
-function renderPanel() {
+function renderPanel(activePhoto = "") {
   return render(
     <AntdApp>
-      <ProfilePhotoPanel activePhoto="" onSelect={vi.fn()} />
+      <ProfilePhotoPanel activePhoto={activePhoto} onSelect={vi.fn()} />
     </AntdApp>,
   );
+}
+
+/** 打开照片库弹窗，返回当前带「使用中」标记的数量。 */
+async function openLibraryAndCountActive() {
+  fireEvent.click(await screen.findByRole("button", { name: /照片库/ }));
+  const modal = await screen.findByRole("dialog");
+  await waitFor(() => expect(modal.querySelector(".profile-photo-library")).not.toBeNull());
+  return modal.querySelectorAll(".profile-photo-thumb.is-active").length;
 }
 
 beforeEach(() => {
@@ -96,5 +104,48 @@ describe("ProfilePhotoPanel 上传进度（C2）", () => {
 
     expect(await screen.findByText("照片已保存，可在下方切换使用哪一张")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull());
+  });
+});
+
+describe("ProfilePhotoPanel 使用中标记（单一口径 + id 消歧）", () => {
+  it("表单照片=A、库主照片=B 时只有 A 亮「使用中」", async () => {
+    apiMocks.listProfilePhotos.mockResolvedValue([
+      { id: 1, name: "A", image: "data:image/png;base64,AA==", is_primary: false },
+      { id: 2, name: "B", image: "data:image/png;base64,BB==", is_primary: true },
+    ]);
+    renderPanel("data:image/png;base64,AA==");
+
+    expect(await openLibraryAndCountActive()).toBe(1);
+    const modal = screen.getByRole("dialog");
+    const activeThumb = modal.querySelector(".profile-photo-thumb.is-active");
+    expect(activeThumb).not.toBeNull();
+    expect(activeThumb?.querySelector("img")).toHaveAttribute("src", "data:image/png;base64,AA==");
+  });
+
+  it("同 bytes 双记录只亮一条（is_primary 优先）", async () => {
+    const sameImage = "data:image/png;base64,AA==";
+    apiMocks.listProfilePhotos.mockResolvedValue([
+      { id: 1, name: "旧记录", image: sameImage, is_primary: false },
+      { id: 2, name: "主记录", image: sameImage, is_primary: true },
+      { id: 3, name: "其他", image: "data:image/png;base64,CC==", is_primary: false },
+    ]);
+    renderPanel(sameImage);
+
+    expect(await openLibraryAndCountActive()).toBe(1);
+    const modal = screen.getByRole("dialog");
+    const activeThumb = modal.querySelector(".profile-photo-thumb.is-active");
+    const activeLabel = activeThumb
+      ?.querySelector("button.profile-photo-thumb-button")
+      ?.getAttribute("aria-label");
+    expect(activeLabel).toContain("主记录");
+  });
+
+  it("表单值为库外照片时全部不亮（is_primary 不能自亮）", async () => {
+    apiMocks.listProfilePhotos.mockResolvedValue([
+      { id: 1, name: "B", image: "data:image/png;base64,BB==", is_primary: true },
+    ]);
+    renderPanel("data:image/png;base64,XX==");
+
+    expect(await openLibraryAndCountActive()).toBe(0);
   });
 });

@@ -23,7 +23,9 @@ import {
 import LoadingBlock from "../components/common/LoadingBlock";
 import type { ColumnsType } from "antd/es/table";
 import type { HTMLAttributes } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useApi } from "../hooks/useApi";
+import ErrorState from "../components/common/ErrorState";
 import { deleteSkill, importSkill, listSkills, setSkillEnabled } from "../api/skill";
 import { RowActions, RowContextMenu } from "../components/common/RowActions";
 import SkillEditorModal, { type SkillDraft } from "../components/skills/SkillEditorModal";
@@ -86,51 +88,22 @@ const ACCEPT = ".md,.zip";
 export default function SkillsPage() {
   const { message } = App.useApp();
   const [tab, setTab] = useState<"skills" | "templates">("skills");
-  const [skills, setSkills] = useState<AssistantSkill[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, loading, error, reload: load, setData: setSkills } = useApi(listSkills);
+  const skills = data ?? [];
   const [importing, setImporting] = useState(false);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorSkillId, setEditorSkillId] = useState<number | null>(null);
   const [editorDraft, setEditorDraft] = useState<SkillDraft | null>(null);
 
-  // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
-  const fetchSkills = useCallback(async (): Promise<AssistantSkill[] | null> => {
-    try {
-      return await listSkills();
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : "加载技能失败");
-      return null;
-    }
-  }, [message]);
-
-  // Compiler 规范：初始加载的 setState 放 .then 回调（外部数据到达时应用）。
-  useEffect(() => {
-    let cancelled = false;
-    void fetchSkills().then((items) => {
-      if (cancelled) return;
-      if (items !== null) setSkills(items);
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchSkills]);
-
-  // 事件路径（开关/导入后的整表重拉，含 loading 翻动）。
-  const load = useCallback(async () => {
-    setLoading(true);
-    const items = await fetchSkills();
-    if (items !== null) setSkills(items);
-    setLoading(false);
-  }, [fetchSkills]);
-
   const toggle = async (skill: AssistantSkill, enabled: boolean) => {
     if (togglingId !== null) return;
     setTogglingId(skill.id);
     try {
       const updated = await setSkillEnabled(skill.id, enabled);
-      setSkills((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setSkills((current) =>
+        (current ?? []).map((item) => (item.id === updated.id ? updated : item)),
+      );
     } catch (error) {
       message.error(error instanceof Error ? error.message : "切换技能状态失败");
     } finally {
@@ -209,6 +182,7 @@ export default function SkillsPage() {
       width: 90,
       render: (_, skill) => (
         <Switch
+          aria-label={`${skill.enabled ? "停用" : "启用"}技能「${skill.name}」`}
           size="small"
           checked={skill.enabled}
           loading={togglingId === skill.id}
@@ -338,6 +312,8 @@ export default function SkillsPage() {
 
           {loading ? (
             <LoadingBlock />
+          ) : error ? (
+            <ErrorState description={`技能加载失败：${error}`} onRetry={() => void load()} />
           ) : skills.length === 0 ? (
             <Empty description="还没有技能，先用模板建一个试试" />
           ) : (

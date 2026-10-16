@@ -113,7 +113,8 @@ export default function InterviewPage() {
         interview_type: values.interviewType,
         difficulty: values.difficulty,
         interviewer_style: values.interviewerStyle,
-        // 「自动」档：何时结束完全交给 AI；rounds 只是服务端的硬性保险，界面与提示词都不展示。
+        // 「自动」档：何时结束交给 AI（最早第 AUTO_ROUNDS_FLAG 轮起可收尾）；rounds 只是
+        // 服务端的硬性保险，界面与提示词都不展示。
         rounds:
           values.rounds === AUTO_ROUNDS_OPTION ? AUTO_FINISH_MAX_ROUNDS : (values.rounds as number),
         rounds_min: values.rounds === AUTO_ROUNDS_OPTION ? AUTO_ROUNDS_FLAG : null,

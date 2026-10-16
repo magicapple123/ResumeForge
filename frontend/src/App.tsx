@@ -1,4 +1,4 @@
-import { GithubOutlined, QuestionCircleOutlined } from "@ant-design/icons";
+import { GithubOutlined, MenuOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import { Button, Layout, Menu, Modal, Tooltip, Typography } from "antd";
 import PageSkeleton from "./components/common/PageSkeleton";
 import {
@@ -17,15 +17,17 @@ import AppHeaderContext from "./components/AppHeaderContext";
 import BackgroundTasksIndicator from "./components/BackgroundTasksIndicator";
 import ExitAppButton from "./components/common/ExitAppButton";
 import MySpaceMenu from "./components/navigation/MySpaceMenu";
+import MobileNavigation from "./components/navigation/MobileNavigation";
+import RouteAccessibility from "./components/navigation/RouteAccessibility";
 import {
   MENU_ITEMS,
   NAVIGATION_ITEMS,
   PRIMARY_NAVIGATION_ITEMS,
   filterNavigationItems,
+  navigationPageLabel,
   pathMatchesNavigationItem,
 } from "./components/navigation/navigationConfig";
 import TaskCompletionNotifier from "./components/TaskCompletionNotifier";
-import UpdateCheckButton from "./components/UpdateCheckButton";
 import { APP_NAME, APP_VERSION, GITHUB_REPO } from "./config";
 import TouTouAssistantCard from "./features/tou-tou/TouTouAssistantCard";
 import TouTouClipboardCard from "./features/tou-tou/TouTouClipboardCard";
@@ -111,6 +113,8 @@ function MainLayout() {
   const [starModalOpen, setStarModalOpen] = useState(false);
   const [floatingAssistantOpen, setFloatingAssistantOpen] = useState(false);
   const [clipboardOpen, setClipboardOpen] = useState(false);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const closeMobileNavigation = useCallback(() => setMobileNavigationOpen(false), []);
   const { hiddenKeys } = useNavigationVisibility();
   const visiblePrimaryItems = useMemo(
     () => filterNavigationItems(PRIMARY_NAVIGATION_ITEMS, hiddenKeys, location.pathname),
@@ -143,7 +147,9 @@ function MainLayout() {
   const menuItems = useMemo(
     () =>
       visiblePrimaryItems.map((item) => ({
-        ...item,
+        key: item.key,
+        icon: item.icon,
+        "aria-label": item.label,
         label: (
           <span
             onMouseEnter={() => void preloadPage(item.key)}
@@ -237,6 +243,7 @@ function MainLayout() {
   return (
     <TouTouProvider>
       <>
+        <RouteAccessibility />
         {/* 批次完成全局通知：挂在布局层，投递/采集跑完时无论用户在哪个页面都能收到。 */}
         <TaskCompletionNotifier />
         <TouTouOrb
@@ -319,16 +326,28 @@ function MainLayout() {
                 >
                   <span className="app-guide-label">使用指南</span>
                 </Button>
-                {/* 开源仓库入口在页头右上角（见下面的 Header）。页脚这一行是
-                  「使用指南 + 检查更新」：都是"偶尔想确认一下"的低频动作，凑在左下角。 */}
-                <UpdateCheckButton />
+                {/* 开源仓库入口在页头右上角（见下面的 Header）。检查更新入口已按用户
+                  要求从左下角移除：统一走「设置」页的更新卡片。 */}
               </div>
             </div>
           </Sider>
           <Layout className="app-main">
             <Header className="app-header">
+              <Button
+                type="text"
+                className="app-mobile-menu-button"
+                id="mobile-navigation-trigger"
+                icon={<MenuOutlined />}
+                aria-label="打开导航"
+                aria-expanded={mobileNavigationOpen}
+                aria-controls={mobileNavigationOpen ? "mobile-navigation" : undefined}
+                onClick={() => setMobileNavigationOpen(true)}
+              />
               <Typography.Text strong className="app-header-title">
                 AI 定制化简历生成平台
+                <span className="app-header-page-label">
+                  {navigationPageLabel(location.pathname)}
+                </span>
               </Typography.Text>
               <div className="app-header-actions">
                 {/* 左侧是"我当前在哪个数据集、用的哪张照片"，右侧是全局动作（源码 / 退出）。
@@ -358,13 +377,24 @@ function MainLayout() {
                 <ExitAppButton />
               </div>
             </Header>
-            <Content className="app-content">
+            <Content className="app-content" id="main-content" role="main" tabIndex={-1}>
               <Suspense fallback={<PageSkeleton rows={8} />}>
                 <Outlet />
               </Suspense>
             </Content>
           </Layout>
         </Layout>
+        <MobileNavigation
+          open={mobileNavigationOpen}
+          items={menuItems}
+          selectedKey={selectedKey}
+          onClose={closeMobileNavigation}
+          onOpenGuide={() => setGuideOpen(true)}
+          onNavigate={(path) => {
+            void preloadPage(path);
+            navigate(path);
+          }}
+        />
         {guideOpen && (
           <Suspense fallback={null}>
             <UserGuideModal

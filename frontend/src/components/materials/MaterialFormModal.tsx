@@ -14,7 +14,8 @@ import {
   Typography,
   Upload,
 } from "antd";
-import { useState } from "react";
+import { useId, useState } from "react";
+import { handleEditorSaveKey } from "../../utils/formKeyboard";
 import type { Material, MaterialFile, MaterialPayload } from "../../types";
 import { MATERIAL_CATEGORIES } from "../../types";
 import FileDropZone from "../common/FileDropZone";
@@ -60,6 +61,7 @@ export default function MaterialFormModal({
   onSubmit,
 }: Props) {
   const { message } = App.useApp();
+  const fieldId = useId();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<string>("其他");
   const [content, setContent] = useState("");
@@ -143,6 +145,7 @@ export default function MaterialFormModal({
   };
 
   const submit = () => {
+    if (submitting) return;
     const trimmedTitle = title.trim();
     if (!trimmedTitle && !content.trim() && !url.trim() && files.length === 0) {
       message.warning("请至少填写标题、内容、链接或添加附件");
@@ -186,17 +189,27 @@ export default function MaterialFormModal({
         style={{ marginBottom: 16 }}
         title="资料箱用来放还没整理进简历的零散材料：证书、作品说明、链接、笔记等。求职助手可以读取这里的内容并按需引用。"
       />
-      <Form layout="vertical">
-        <Form.Item label="标题">
+      <Typography.Paragraph type="secondary">
+        Ctrl / ⌘ + Enter 或 S 保存，Esc 取消
+      </Typography.Paragraph>
+      <Form
+        layout="vertical"
+        disabled={submitting}
+        onKeyDown={(event) => handleEditorSaveKey(event, submit)}
+      >
+        <Form.Item label="标题" htmlFor={`${fieldId}-title`}>
           <Input
+            id={`${fieldId}-title`}
+            showCount
             value={title}
             maxLength={256}
             placeholder="如：CET-6 成绩单 / 个人作品集链接"
             onChange={(event) => setTitle(event.target.value)}
           />
         </Form.Item>
-        <Form.Item label="分类">
+        <Form.Item label="分类" htmlFor={`${fieldId}-category`}>
           <Select
+            id={`${fieldId}-category`}
             // tags 模式的取值是数组，这里始终只放一项，对外仍当单个字符串用。
             value={category ? [category] : []}
             showSearch
@@ -210,16 +223,18 @@ export default function MaterialFormModal({
             placeholder="选择或输入一个新分类"
           />
         </Form.Item>
-        <Form.Item label="正文内容">
+        <Form.Item label="正文内容" htmlFor={`${fieldId}-content`}>
           <Input.TextArea
+            id={`${fieldId}-content`}
             value={content}
             autoSize={{ minRows: 4, maxRows: 12 }}
             placeholder="粘贴资料原文，或写下要点说明"
             onChange={(event) => setContent(event.target.value)}
           />
         </Form.Item>
-        <Form.Item label="相关链接">
+        <Form.Item label="相关链接" htmlFor={`${fieldId}-url`}>
           <Input
+            id={`${fieldId}-url`}
             value={url}
             placeholder="https://…（选填）"
             onChange={(event) => setUrl(event.target.value)}
@@ -298,8 +313,9 @@ export default function MaterialFormModal({
             </div>
           )}
         </Form.Item>
-        <Form.Item label="备注" style={{ marginBottom: 0 }}>
+        <Form.Item label="备注" htmlFor={`${fieldId}-note`} style={{ marginBottom: 0 }}>
           <Input.TextArea
+            id={`${fieldId}-note`}
             value={note}
             autoSize={{ minRows: 2, maxRows: 5 }}
             placeholder="为什么留下它、还缺什么（选填）"

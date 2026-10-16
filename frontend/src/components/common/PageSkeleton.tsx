@@ -17,8 +17,22 @@ interface Props {
 
 export default function PageSkeleton({ rows = 6, avatar = false, card = true }: Props) {
   const skeleton = <Skeleton active avatar={avatar} paragraph={{ rows }} />;
-  if (!card) {
-    return skeleton;
-  }
-  return <div style={{ padding: 16 }}>{skeleton}</div>;
+  const status = (
+    <span className="rf-sr-only" role="status">
+      正在加载内容
+    </span>
+  );
+  if (!card)
+    return (
+      <>
+        {skeleton}
+        {status}
+      </>
+    );
+  return (
+    <div style={{ padding: 16 }} aria-busy="true">
+      {skeleton}
+      {status}
+    </div>
+  );
 }

@@ -10,7 +10,7 @@ export function listMaterials(
   return request(`/materials${buildQuery(params)}`);
 }
 
-/** 分页列出资料（RF-08 续）：行结构与旧列表一致，一页默认 12 张（网格口径）。 */
+/** 分页列出资料（RF-08 续）：行结构与旧列表一致，一页默认 16 张（网格口径）。 */
 export function listMaterialsPage(
   params: { keyword?: string; category?: string } = {},
   page: number,

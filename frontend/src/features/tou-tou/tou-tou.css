@@ -14,10 +14,11 @@
   right: var(--tt-edge);
   bottom: var(--tt-edge);
   /*
-   * 3400：投投整族的顶层地标。高于 antd 弹层基准 zIndexPopupBase（3100，main.tsx）——
-   * Modal/Drawer 弹出时球仍可点；同族梯度：剪贴板卡 3200 < 助手卡 3300 < 球 3400
-   * < 小贴士/Tooltip 3450（资料保存卡 3250）。浏览器按命中测试派发点击，遮罩不会
-   * 吞掉球的点击。
+   * 3650：投投整族的顶层地标。高于 antd 6 容器链——zIndexPopupBase（3100，
+   * main.tsx）+ useZIndex 容器偏移 +100/层（单层 Modal/Drawer 实际 3200、
+   * Drawer 内嵌 Modal 3300）——Modal/Drawer 弹出时球仍可点；同族梯度：助手卡
+   * 3400 < 保存卡 3450（壳内）< 剪贴板卡 3500 < 球 3650 < 小贴士/Tooltip 3700。
+   * 浏览器按命中测试派发点击，遮罩不会吞掉球的点击。
    */
   z-index: var(--rf-layer-orb);
   width: var(--tt-size);
@@ -330,9 +331,9 @@
   position: absolute;
   bottom: 6px;
   /*
-   * 3450：投投族最高层地标。本壳（.tt-shell）是 isolation: isolate 的层叠上下文，
-   * 该值只在壳内生效——用意是压住资料保存卡（.tt-save-card 的 3250），并作为
-   * 「小贴士永远在球族最上面」的文档性地标（悬浮球 Tooltip 的 overlayStyle 同取 3450）。
+   * 3700：投投族最高层地标。本壳（.tt-shell）是 isolation: isolate 的层叠上下文，
+   * 该值只在壳内生效——用意是压住资料保存卡（.tt-save-card 的 3450），并作为
+   * 「小贴士永远在球族最上面」的文档性地标（悬浮球 Tooltip 的 overlayStyle 同取 3700）。
    */
   z-index: var(--rf-layer-orb-tooltip);
   display: flex;
@@ -349,6 +350,18 @@
   font-size: 12px;
   line-height: 1.55;
   pointer-events: auto;
+  /* 入场淡入 140ms：只动 opacity。各贴边形态（.tt-shell.is-edge-* .tt-tip）用
+     transform 做居中定位，keyframe 里再写 transform 会把定位覆盖掉。 */
+  animation: tt-tip-in 140ms ease-out;
+}
+
+@keyframes tt-tip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .tt-tip-close {
@@ -380,9 +393,10 @@
   right: 0;
   bottom: calc(100% + 12px);
   /*
-   * 3250：介于剪贴板卡（3200）与助手卡（3300）之间的层级地标。本卡是
-   * .tt-shell（3400，isolation: isolate）的子元素，实际排序只发生在壳内——
-   * 壳整体高于 antd 弹层基准 3100，所以有 Modal 弹出时卡片也照常可点。
+   * 3450：介于助手卡（3400）与剪贴板卡（3500）之间的层级地标。本卡是
+   * .tt-shell（3650，isolation: isolate）的子元素，实际排序只发生在壳内——
+   * 壳整体高于 antd 6 容器链（单层 Modal/Drawer 实际 3200、Drawer 内嵌 3300），
+   * 所以有 Modal 弹出时卡片也照常可点。
    */
   z-index: var(--rf-layer-save-card);
   display: flex;

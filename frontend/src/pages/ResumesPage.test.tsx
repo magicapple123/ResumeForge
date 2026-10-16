@@ -198,17 +198,42 @@ describe("ResumesPage 备注列", () => {
   });
 });
 
+describe("ResumesPage 行操作（三点菜单已移除）", () => {
+  it("行内不再有三点「更多操作」按钮；右键菜单仍含全部次级操作", async () => {
+    renderPage();
+    const title = await screen.findByText(RESUME.title);
+
+    expect(screen.queryByRole("button", { name: "更多操作" })).not.toBeInTheDocument();
+    fireEvent.contextMenu(title.closest("tr") as HTMLElement);
+    expect(await screen.findByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "编辑备注" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "版本对比" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "收藏" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
+  });
+
+  it("键盘可达：聚焦行内元素时按 ContextMenu 键打开同一份右键菜单", async () => {
+    renderPage();
+    const title = await screen.findByText(RESUME.title);
+
+    fireEvent.keyDown(title.closest("tr") as HTMLElement, { key: "ContextMenu", bubbles: true });
+    expect(await screen.findByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+  });
+});
+
 describe("ResumesPage URL 状态化", () => {
-  it("从 URL 恢复关键词与收藏筛选", async () => {
-    renderPage(["/resumes?keyword=%E5%88%B6%E9%80%A0&favorite=0"]);
+  it("从 URL 恢复关键词筛选（收藏状态筛选已移除，走收藏夹）", async () => {
+    renderPage(["/resumes?keyword=%E5%88%B6%E9%80%A0"]);
 
     await waitFor(() => {
       expect(apiMocks.listResumes).toHaveBeenLastCalledWith(
-        expect.objectContaining({ keyword: "制造", favorite: false }),
+        expect.objectContaining({ keyword: "制造" }),
       );
     });
     const searchInput = screen.getByPlaceholderText("搜索简历记录") as HTMLInputElement;
     expect(searchInput.value).toBe("制造");
+    // 收藏状态筛选入口已下线：页面上不再有它的 Select。
+    expect(screen.queryByText("收藏状态")).not.toBeInTheDocument();
   });
 });
 
@@ -269,7 +294,7 @@ describe("ResumesPage 批量选择", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
   }
 
-  it("行右键菜单进入多选 → 勾 2 项 → 删除所选 → 确认 → 一次批量删除请求带全部 id（P2-2）", async () => {
+  it("行右键菜单进入多选 → 勾 2 项 → 批量删除 → 确认 → 一次批量删除请求带全部 id（P2-2）", async () => {
     apiMocks.listResumes.mockResolvedValue({
       items: [RESUME, { ...RESUME, id: 9, title: "另一份简历" }],
       total: 2,
@@ -278,18 +303,15 @@ describe("ResumesPage 批量选择", () => {
 
     // CI 慢机上数据晚于表格就绪——先等第一条数据渲染出来再右键进入多选（5s 安全网）。
     await enterSelectingViaContextMenu();
-    // rowSelection 勾选框：BatchActionBar 的「全选本页」在最前（index 0），
-    // 然后是表头全选与数据行。每次点击都会触发重渲染，必须现查现点。
-    const pageSelectAll = screen
-      .getAllByRole("checkbox")
-      .find((box) => (box.closest("label")?.textContent ?? "").includes("全选本页"));
-    // 每次点击都触发重渲（checkbox DOM 可能重建），必须现查现点（旧节点引用会失效）。
-    const rowBoxes = () => screen.getAllByRole("checkbox").filter((box) => box !== pageSelectAll);
+    // 勾选走 rowSelection 自带的表头/行勾选框（2026-10-16 起 BatchActionBar 的重复
+    // 「全选本页」已按用户要求移除，表格表头那个是唯一入口）。rowSelection 的表头
+    // 全选框与数据行勾选框都叫「全选本页」/ 行标题，全部现查现点（重渲会重建 DOM）。
+    const rowBoxes = () => screen.getAllByRole("checkbox");
     fireEvent.click(rowBoxes()[1]!);
     fireEvent.click(rowBoxes()[2]!);
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
     expect(
       (await screen.findAllByText(/删除选中的 2 份简历/, {}, { timeout: 5000 })).length,
     ).toBeGreaterThan(0);
@@ -298,7 +320,7 @@ describe("ResumesPage 批量选择", () => {
     expect(apiMocks.batchDeleteResumes).not.toHaveBeenCalled();
     // 确认弹窗里 antd 会把标题渲染两份（.ant-modal-title 与 .ant-modal-confirm-title），
     // 用文本查询会撞"Found multiple"——直接等容器出现，再在容器内点确认键
-    // （okText「删除」被 antd 插空格成「删 除」；容器限定避免与操作条「删除所选」撞名）。
+    // （okText「删除」被 antd 插空格成「删 除」；容器限定避免与操作条「批量删除」撞名）。
     const confirmRoot = await waitFor(
       () => {
         const root = document.querySelector(".ant-modal-confirm");
@@ -320,7 +342,7 @@ describe("ResumesPage 批量选择", () => {
     expect(await screen.findByText(/已删除 2 份简历/, {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
-  it("空选时「删除所选」不可用；退出多选清空选区", async () => {
+  it("空选时「批量删除」不可用；退出多选清空选区", async () => {
     apiMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 1 });
     renderPage();
 
@@ -328,7 +350,7 @@ describe("ResumesPage 批量选择", () => {
     // 顺带钉住 R8 口径：工具栏不再有直接的「批量选择」按钮。
     expect(screen.queryByRole("button", { name: /批量选择/ })).not.toBeInTheDocument();
     await enterSelectingViaContextMenu();
-    const deleteBtn = await screen.findByRole("button", { name: "删除所选" }, { timeout: 5000 });
+    const deleteBtn = await screen.findByRole("button", { name: "批量删除" }, { timeout: 5000 });
     expect(deleteBtn).toBeDisabled();
 
     const rowCheckbox = screen.getAllByRole("checkbox")[1]!;
@@ -362,10 +384,10 @@ describe("ResumesPage 跨页全选（C3）", () => {
     expect(await screen.findByText(/已选中当前筛选下的全部 3 份简历/)).toBeInTheDocument();
     expect(screen.getByText("已选 3 项")).toBeInTheDocument();
     expect(apiMocks.listResumeIds).toHaveBeenCalledWith(
-      expect.objectContaining({ keyword: "", favorite: undefined, has_job: undefined }),
+      expect.objectContaining({ keyword: "", has_job: undefined }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
     const confirmRoot = await waitFor(() => {
       const root = document.querySelector(".ant-modal-confirm");
       expect(root).not.toBeNull();
@@ -381,17 +403,17 @@ describe("ResumesPage 跨页全选（C3）", () => {
     expect(apiMocks.batchDeleteResumes).toHaveBeenCalledWith([RESUME.id, 9, 77]);
   });
 
-  it("筛选下超过 500 份时如实拒绝并提示缩小范围，不进入选区", async () => {
+  it("筛选下超过 5000 份时如实拒绝并提示缩小范围，不进入选区", async () => {
     apiMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 1 });
-    apiMocks.listResumeIds.mockResolvedValue(Array.from({ length: 501 }, (_, i) => i + 1));
+    apiMocks.listResumeIds.mockResolvedValue(Array.from({ length: 5001 }, (_, i) => i + 1));
     renderPage();
 
     await enterSelectingViaContextMenu();
     fireEvent.click(screen.getByRole("button", { name: "全选全部简历（共 1 个）" }));
 
-    // 文案对齐岗位广场：说明总数、上限与出路（先筛选缩小范围）。
+    // 文案对齐岗位广场：说明总数、上限（与后端批量端点一致的 5000）与出路（先筛选缩小范围）。
     expect(
-      await screen.findByText(/共 501 份简历，批量操作一次最多 500 个；请先用筛选或搜索缩小范围/),
+      await screen.findByText(/共 5001 份简历，超出单次批量上限 5000 份；请先用筛选或搜索缩小范围/),
     ).toBeInTheDocument();
     expect(screen.getByText("已选 0 项")).toBeInTheDocument();
     expect(apiMocks.batchDeleteResumes).not.toHaveBeenCalled();

@@ -1,383 +1,330 @@
-/** 大模型配置表单：预设、连接测试、获取可用模型、思考模式与高级调整。 */
-
-import { ApiOutlined, CloudDownloadOutlined } from "@ant-design/icons";
+/** 大模型 API 配置：单区块。已保存记录以卡片呈现，新增与编辑共用同一弹窗。
+ *
+ * 信息架构（用户要求的交互重构）：
+ * - 「使用」= 把该记录应用到当前生效配置；「测试连接」留在卡上；
+ * - 「编辑」「删除」收进卡上的「···」下拉（弹层全局挂 body，不会被卡片裁剪）；
+ * - 点卡片本体查看只读详情（密钥脱敏）；
+ * - 带「使用中」标记的是当前生效的那条；编辑它并保存后，调用方会把改动同步到
+ *   当前生效配置（见 SettingsPage 的 handleSaveRecord），避免生效内容与记录脱节。
+ */
+import {
+  ApiOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  MoreOutlined,
+  PlusOutlined,
+  SwapOutlined,
+} from "@ant-design/icons";
 import {
   Alert,
+  App,
   Button,
   Card,
-  Checkbox,
-  Col,
-  Form,
-  Input,
-  InputNumber,
-  Popconfirm,
-  Row,
-  Select,
-  Slider,
-  Space,
+  Dropdown,
+  Empty,
+  Flex,
+  Spin,
+  Tag,
   Tooltip,
+  Typography,
 } from "antd";
 import type { FormInstance } from "antd/es/form";
-import { useState } from "react";
-import type { LLMModelsResult, LLMTestResult, LLMThinkingResult } from "../../types";
-import { CUSTOM_EFFORT_OPTION } from "../../types/assistant";
-import ApiKeyInput from "./ApiKeyInput";
-import { AdvancedParamsSection } from "./llm/AdvancedParamsSection";
-import { ModelPickerModal } from "./llm/ModelPickerModal";
-import { EFFORT_LABELS, FALLBACK_EFFORTS } from "./llm/thinkingMeta";
-import { ThinkingSection } from "./llm/ThinkingSection";
-import { useUnlimitedTokens } from "./llm/useUnlimitedTokens";
-import {
-  MAX_MAX_TOKENS,
-  MIN_MAX_TOKENS,
-  PRESET_OPTIONS,
-  type SettingsFormValues,
-} from "./SettingsConfig";
+import { useMemo, useState } from "react";
+import type {
+  LLMConfigRecord,
+  LLMModelsResult,
+  LLMTestResult,
+  LLMThinkingResult,
+} from "../../types";
+import { formatDateTime } from "../../utils/format";
+import type { LLMConfigSummary } from "./SettingsConfig";
+import { CUSTOM_PRESET_LABEL, matchingPreset } from "./SettingsConfig";
+import type { RecordFormValues } from "../../features/settings/useLLMRecordTools";
+import { useCollapsedList } from "../common/useCollapsedList";
+import LLMRecordModal from "./LLMRecordModal";
+import LLMRecordViewModal from "./LLMRecordViewModal";
 
 interface Props {
-  form: FormInstance<SettingsFormValues>;
-  editing: boolean;
-  saving: boolean;
-  testing: boolean;
-  testResult: LLMTestResult | null;
-  apiKeyResetToken: number;
+  records: LLMConfigRecord[];
+  recordsLoading: boolean;
+  activeRecordId: number | null;
+  /** 当前生效配置的摘要（脱敏）：未来自任何记录时用于引导文案。 */
+  configSummary: LLMConfigSummary | null;
+  recordApplyingId: number | null;
+  recordDeletingId: number | null;
+  /** 卡上「测试连接」：逐卡触发、结果逐卡显示。 */
+  recordTestingId: number | null;
+  recordTestResults: Record<number, LLMTestResult>;
+  /** 新增/编辑共用弹窗的表单与状态。 */
+  recordForm: FormInstance<RecordFormValues>;
+  recordModalOpen: boolean;
+  /** null = 新增态；非 null = 正在编辑该记录。 */
+  editingRecord: LLMConfigRecord | null;
+  recordSaving: boolean;
+  draftTesting: boolean;
+  draftTestResult: LLMTestResult | null;
+  /** 思考模式检测（弹窗内）：状态归 useLLMRecordTools，这里只透传。 */
+  checkingThinking: boolean;
+  thinkingResult: LLMThinkingResult | null;
+  showingCustomEffort: boolean;
+  effortOptions: { value: string; label: string }[];
+  onProbeThinking: () => Promise<void>;
+  onLoadThinkingOptions: () => Promise<LLMThinkingResult>;
+  onBackToEffortPresets: () => void;
+  onEffortCustom: (effort: string) => boolean;
+  onClearThinkingResult: () => void;
+  onOpenCreate: () => void;
+  onOpenRecordEdit: (record: LLMConfigRecord) => void;
+  onSaveRecord: () => void;
+  onCloseRecordModal: () => void;
+  onApplyRecord: (record: LLMConfigRecord) => void;
+  onRemoveRecord: (record: LLMConfigRecord) => void;
+  onTestRecord: (record: LLMConfigRecord) => void;
+  onTestDraft: () => void;
   onPresetChange: (provider: string) => void;
-  onResetApiKey: () => void;
-  onRevealApiKey: () => Promise<string>;
-  onRevealError: (message: string) => void;
-  onTest: () => void;
-  /** 拉取服务商当前可用的模型列表（失败时由 result.message 说明原因）。 */
-  onFetchModels: () => Promise<LLMModelsResult>;
-  /** 查思考支持：probe=true 会真的发一次最小请求，用来分辨"生效/被忽略/被拒绝"。 */
-  onCheckThinking: (probe: boolean) => Promise<LLMThinkingResult>;
-  /** 清除后端内存中的临时会话密钥（RF-24 收尾）；不动落库密钥。 */
-  onClearSessionKey: () => Promise<void>;
-  clearingSessionKey: boolean;
+  onFetchDraftModels: () => Promise<LLMModelsResult>;
 }
 
 export default function LLMConfigCard({
-  form,
-  editing,
-  saving,
-  testing,
-  testResult,
-  apiKeyResetToken,
+  records,
+  recordsLoading,
+  activeRecordId,
+  configSummary,
+  recordApplyingId,
+  recordDeletingId,
+  recordTestingId,
+  recordTestResults,
+  recordForm,
+  recordModalOpen,
+  editingRecord,
+  recordSaving,
+  draftTesting,
+  draftTestResult,
+  checkingThinking,
+  thinkingResult,
+  showingCustomEffort,
+  effortOptions,
+  onProbeThinking,
+  onLoadThinkingOptions,
+  onBackToEffortPresets,
+  onEffortCustom,
+  onClearThinkingResult,
+  onOpenCreate,
+  onOpenRecordEdit,
+  onSaveRecord,
+  onCloseRecordModal,
+  onApplyRecord,
+  onRemoveRecord,
+  onTestRecord,
+  onTestDraft,
   onPresetChange,
-  onResetApiKey,
-  onRevealApiKey,
-  onRevealError,
-  onTest,
-  onFetchModels,
-  onCheckThinking,
-  onClearSessionKey,
-  clearingSessionKey,
+  onFetchDraftModels,
 }: Props) {
-  const thinkingEnabled = Form.useWatch("thinking_enabled", form);
-  const thinkingEffort: string = Form.useWatch("thinking_effort", form) ?? "";
-  const sessionOnly = Form.useWatch("session_only", form) === true;
-  const { unlimitedTokens, setUnlimitedTokens } = useUnlimitedTokens(form);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [fetchingModels, setFetchingModels] = useState(false);
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
-  const [modelOptions, setModelOptions] = useState<string[]>([]);
-  const [modelsMessage, setModelsMessage] = useState("");
-  const [thinkingResult, setThinkingResult] = useState<LLMThinkingResult | null>(null);
-  const [checkingThinking, setCheckingThinking] = useState(false);
-  const [customEffort, setCustomEffort] = useState(false);
+  const { modal } = App.useApp();
+  const [viewingRecord, setViewingRecord] = useState<LLMConfigRecord | null>(null);
+  // 「使用中」的记录永远排最顶部（用户要求）：当前生效的那张是最高频查看对象。
+  // 稳定排序——其余记录保持原有顺序，不因切换使用而打乱；生效配置未来自任何记录
+  // （activeRecordId 为 null）时不排序。
+  const sortedRecords = useMemo(() => {
+    if (activeRecordId === null) return records;
+    const active = records.filter((record) => record.id === activeRecordId);
+    return active.length > 0
+      ? [...active, ...records.filter((record) => record.id !== activeRecordId)]
+      : records;
+  }, [records, activeRecordId]);
+  // 记录多了也会刷屏：与数据集/技能一致，默认只展示前 5 张卡。
+  const { visibleItems: visibleRecords, toggleNode: recordsToggleNode } =
+    useCollapsedList(sortedRecords);
+  const cardBusy =
+    recordApplyingId !== null || recordDeletingId !== null || recordTestingId !== null;
 
-  const thinkingEfforts = thinkingResult?.efforts?.length
-    ? thinkingResult.efforts
-    : FALLBACK_EFFORTS;
-  const effortOptions = [
-    { value: "", label: "默认档位（不指定）" },
-    ...thinkingEfforts.map((effort) => ({
-      value: effort,
-      label: EFFORT_LABELS[effort] ? `${EFFORT_LABELS[effort]}（${effort}）` : effort,
-    })),
-  ];
-
-  /**
-   * 是否显示"自定义输入框"。
-   *
-   * **派生**而不是用 state 同步：载入的配置里若是一个不在选项里的档位（自定义值，或换过
-   * 模型后留下的词），它就该直接落在输入框里——用 effect 去追这个状态会在异步载入时
-   * 慢一拍，用户先看到的是一个显示不出来的未知值。
-   */
-  const showingCustomEffort =
-    customEffort ||
-    (thinkingEffort.trim() !== "" &&
-      thinkingEffort.trim() !== CUSTOM_EFFORT_OPTION &&
-      !effortOptions.some((option) => option.value === thinkingEffort.trim()));
-
-  /** 只读后端能力表拿档位选项——**零上游调用**，所以打开开关时就顺手取一次。 */
-  const loadThinkingOptions = async () => {
-    const result = await onCheckThinking(false);
-    setThinkingResult(result);
-  };
-
-  /** 实测：会真的发一次最小请求，按钮旁边写明了这一点。 */
-  const probeThinking = async () => {
-    if (checkingThinking) return;
-    setCheckingThinking(true);
-    try {
-      setThinkingResult(await onCheckThinking(true));
-    } finally {
-      setCheckingThinking(false);
-    }
-  };
-
-  const fetchModels = async () => {
-    if (fetchingModels) return;
-    setFetchingModels(true);
-    try {
-      const result = await onFetchModels();
-      setModelsMessage(result.message);
-      if (result.models.length > 0) {
-        setModelOptions(result.models);
-        setModelPickerOpen(true);
-      }
-    } finally {
-      setFetchingModels(false);
-    }
+  /** 删除走 confirm 二次确认（维持原 Popconfirm 的文案语义）。 */
+  const confirmRemove = (record: LLMConfigRecord) => {
+    modal.confirm({
+      title: `删除记录“${record.name}”？`,
+      content: "删除记录不会影响当前正在使用的配置",
+      okText: "删除",
+      cancelText: "取消",
+      okButtonProps: { danger: true },
+      onOk: () => onRemoveRecord(record),
+    });
   };
 
   return (
-    <Card title="大模型 API 配置" className="settings-card">
-      <Alert
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-        title="默认支持所有兼容 OpenAI Chat Completions 协议的模型服务：DeepSeek、豆包（火山方舟）、Kimi、通义千问、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Ollama 等；把「接口协议」切到 Anthropic 原生后也可以直连 Claude。API Key 保存在本地数据库中，仅本机可访问。"
-      />
-      <Form
-        form={form}
-        layout="vertical"
-        disabled={!editing || saving || testing}
-        onValuesChange={(changedValues) => {
-          if ("base_url" in changedValues) onResetApiKey();
-          // 换了端点/模型/协议，上一次的检测结论就不再适用——清掉比留着误导好。
-          if (
-            "base_url" in changedValues ||
-            "model" in changedValues ||
-            "api_style" in changedValues
-          ) {
-            setThinkingResult(null);
-          }
-          // 打开开关时顺手取一次档位（只读后端能力表，零上游调用）。
-          if ("thinking_enabled" in changedValues && changedValues.thinking_enabled) {
-            void loadThinkingOptions();
-          }
-          // 下拉里选了「自定义…」：把哨兵值从字段里清掉，换成输入框。
-          if (changedValues.thinking_effort === CUSTOM_EFFORT_OPTION) {
-            setCustomEffort(true);
-            form.setFieldValue("thinking_effort", "");
-          }
-        }}
+    <>
+      <Card
+        title="大模型 API 配置"
+        className="settings-card"
+        extra={
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            disabled={cardBusy || recordsLoading}
+            onClick={onOpenCreate}
+          >
+            新增配置
+          </Button>
+        }
       >
-        <Form.Item name="provider" hidden>
-          <Input />
-        </Form.Item>
-        <Form.Item name="preset" label="快速预设（选择后自动填充 Base URL 与模型名）">
-          <Select
-            options={PRESET_OPTIONS}
-            onChange={onPresetChange}
-            showSearch
-            optionFilterProp="label"
-          />
-        </Form.Item>
-        <Form.Item
-          name="api_style"
-          label="接口协议"
-          tooltip="多数服务商（含 Claude 的 OpenAI 兼容层）走 Chat Completions，选「OpenAI 兼容」。只有要用 Claude 原生 Messages 协议（支持扩展思考、独立 system 字段）时才选 Anthropic 原生——此时 Base URL 填 https://api.anthropic.com/v1（本应用会在后面接 /messages）。"
-        >
-          <Select
-            options={[
-              { value: "openai", label: "OpenAI 兼容（Chat Completions）" },
-              { value: "anthropic", label: "Anthropic 原生（Messages）" },
-            ]}
-          />
-        </Form.Item>
-        <Row gutter={[16, 0]}>
-          <Col xs={24} lg={16}>
-            <Form.Item
-              name="base_url"
-              label="Base URL"
-              rules={[{ required: true, message: "必填" }]}
-              tooltip="服务地址，通常形如 https://api.xxx.com 或 https://api.xxx.com/v1"
-            >
-              <Input placeholder="https://api.deepseek.com" />
-            </Form.Item>
-          </Col>
-          <Col xs={24} lg={8}>
-            {/* addonAfter 已废弃（v6）：按官方指引改为 Space.Compact。拆成外层无 name 的
-                Form.Item（只管 label/tooltip）+ 内层 noStyle Form.Item（把 value 与 id="model"
-                注回输入框），并用 htmlFor 把 label 重新指回输入框——否则 id 会落在
-                Space.Compact 的 div 上，getByLabelText("模型名称") 就找不到输入框了。 */}
-            <Form.Item
-              label="模型名称"
-              htmlFor="model"
-              tooltip="各厂商模型名不同：可以点输入框右侧的「获取可用模型」按当前账号拉取，也可以照官方文档手填"
-            >
-              <Space.Compact block>
-                <Form.Item name="model" noStyle>
-                  <Input placeholder="deepseek-v4-flash" />
-                </Form.Item>
-                <Button
-                  type="text"
-                  size="small"
-                  className="llm-fetch-models-button"
-                  icon={<CloudDownloadOutlined />}
-                  loading={fetchingModels}
-                  onClick={() => void fetchModels()}
-                >
-                  获取可用模型
-                </Button>
-              </Space.Compact>
-            </Form.Item>
-          </Col>
-        </Row>
-        <Form.Item
-          name="api_key"
-          label="API Key（选填）"
-          tooltip="多数云模型服务需要填写；Ollama 等无需鉴权的本地兼容服务可留空。点击眼睛时才会从本机后端临时读取已保存密钥，隐藏后立即清除显示值。"
-        >
-          <ApiKeyInput
-            editing={editing}
-            disabled={saving || testing}
-            resetToken={apiKeyResetToken}
-            onReveal={onRevealApiKey}
-            onRevealError={onRevealError}
-          />
-        </Form.Item>
-        <Form.Item style={{ marginTop: -12 }} name="session_only" valuePropName="checked">
-          {/* RF-24：不想让密钥以任何形态落盘的用户可以勾选——保存时密钥只进后端
-              进程内存（会话通道），数据库里不写、日志与备份也不会包含它，进程
-              重启即失效，需要重新填写。 */}
-          <Checkbox className="session-only-api-key-toggle">
-            仅本会话使用（不保存密钥，重启后需重新填写）
-          </Checkbox>
-        </Form.Item>
-        {sessionOnly && (
-          <Form.Item style={{ marginTop: -16 }}>
-            <Popconfirm
-              title="清除临时密钥？"
-              description="后端内存里的临时密钥会立即删除；落库的配置不受影响。"
-              okText="清除"
-              cancelText="取消"
-              onConfirm={() => void onClearSessionKey()}
-            >
-              <Button
-                size="small"
-                className="clear-session-key-button"
-                disabled={clearingSessionKey}
-                loading={clearingSessionKey}
-              >
-                清除临时密钥
-              </Button>
-            </Popconfirm>
-          </Form.Item>
-        )}
-        <Row gutter={[16, 0]}>
-          <Col xs={24} md={8}>
-            <Form.Item
-              name="temperature"
-              label="创意度 temperature"
-              tooltip="控制输出的随机性。值越低越稳定，适合事实型简历；值越高表达更发散，也会增加内容不一致或虚构风险。"
-            >
-              <Slider min={0} max={2} step={0.1} marks={{ 0: "严谨", 1: "均衡", 2: "发散" }} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={8}>
-            <Form.Item
-              name="timeout_seconds"
-              label="超时时间（秒）"
-              tooltip="等待模型返回响应数据的最长时间；超过后请求会终止。网络较慢或生成内容较长时可适当调大，但调大不会让模型生成得更快。"
-            >
-              <InputNumber min={10} max={600} style={{ width: "100%" }} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={8}>
-            <Form.Item
-              name="max_tokens"
-              label="最大输出 Token"
-              tooltip="限制模型单次回复的最大输出 Token 数。值越大可能增加费用；过小可能导致内容被截断。它不是模型的上下文长度上限。勾选「不限制」后不再发送该参数，改由服务商决定上限，但并非真的无限——部分服务商的默认值可能比手动设置的值更小。"
-            >
-              <InputNumber
-                min={MIN_MAX_TOKENS}
-                max={MAX_MAX_TOKENS}
-                step={512}
-                // 要传 undefined 而不是 false：antd 只在 prop 为 null/undefined 时
-                // 才回退到 Form 的 disabled 上下文，传 false 会让非编辑态也能改。
-                disabled={unlimitedTokens ? true : undefined}
-                style={{ width: "100%" }}
-              />
-            </Form.Item>
-            <Form.Item style={{ marginBottom: 0 }}>
-              {/* 这一条的行为与直觉相反（"不限制"其实取决于服务商默认值，可能比手填的还小），
-                  而那段解释原本只挂在上面那个数字输入框的 tooltip 里，勾选框自己不说。 */}
-              <Tooltip title="勾选后不再发送 max_tokens，由服务商决定上限。可缓解推理模型把思考过程算进输出预算、正文被挤空的问题；但它不是真的无限——部分服务商的默认值可能比手动设置的值更小。">
-                <Checkbox
-                  checked={unlimitedTokens}
-                  onChange={(event) => setUnlimitedTokens(event.target.checked)}
-                >
-                  不限制（由服务商决定上限）
-                </Checkbox>
-              </Tooltip>
-            </Form.Item>
-          </Col>
-        </Row>
-
-        <ThinkingSection
-          thinkingEnabled={thinkingEnabled}
-          thinkingEffort={thinkingEffort}
-          showingCustomEffort={showingCustomEffort}
-          effortOptions={effortOptions}
-          checkingThinking={checkingThinking}
-          thinkingResult={thinkingResult}
-          saving={saving}
-          testing={testing}
-          onProbe={probeThinking}
-          onBackToPresets={() => {
-            setCustomEffort(false);
-            form.setFieldValue("thinking_effort", "");
-          }}
-        />
-
-        <Button
-          type="link"
-          className="llm-advanced-toggle"
-          onClick={() => setAdvancedOpen((current) => !current)}
-        >
-          {advancedOpen
-            ? "收起高级调整"
-            : "高级调整（Top P / Top K、惩罚项、随机种子、停止词、思考参数形态）"}
-        </Button>
-        {advancedOpen && <AdvancedParamsSection />}
-      </Form>
-      <Button icon={<ApiOutlined />} loading={testing} disabled={saving} onClick={onTest}>
-        测试连接
-      </Button>
-      {testResult && (
         <Alert
-          style={{ marginTop: 16 }}
-          type={testResult.ok ? "success" : "error"}
+          type="info"
           showIcon
-          title={
-            testResult.ok
-              ? `${testResult.message}（耗时 ${testResult.latency_ms}ms）`
-              : `连接失败：${testResult.message}`
-          }
+          style={{ marginBottom: 16 }}
+          title="支持所有兼容 OpenAI Chat Completions 协议的模型服务（DeepSeek、豆包、Kimi、通义千问、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Ollama 等），也可切换到 Anthropic 原生协议直连 Claude。每张卡片是一份已保存的配置：点卡片本体查看详情，可直接测试连接、切换使用；删除记录不会影响当前正在使用的配置。API Key 保存在本地数据库中，仅本机可访问。"
         />
-      )}
-      <ModelPickerModal
-        open={modelPickerOpen}
-        modelsMessage={modelsMessage}
-        modelOptions={modelOptions}
-        onPick={(model) => {
-          form.setFieldValue("model", model);
-        }}
-        onClose={() => setModelPickerOpen(false)}
+        <Spin spinning={recordsLoading}>
+          {records.length === 0 ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="暂无配置记录，点右上「新增配置」创建第一份；当前生效的配置会继续正常使用"
+            />
+          ) : (
+            <Flex vertical gap={12}>
+              {activeRecordId === null && configSummary && (
+                <Alert
+                  type="info"
+                  showIcon
+                  title={`当前生效的配置（${configSummary.model || "未填写模型"} · ${configSummary.baseUrl || "未填写地址"}）未来自任何记录，点记录卡上的「使用」可切换`}
+                />
+              )}
+              {visibleRecords.map((record) => {
+                const isActive = activeRecordId === record.id;
+                const testResult = recordTestResults[record.id];
+                return (
+                  <Card
+                    key={record.id}
+                    size="small"
+                    className="llm-record-card"
+                    style={{ cursor: "pointer" }}
+                    // 点卡片本体查看配置详情；按钮区与结果提示上会阻断冒泡。
+                    onClick={() => setViewingRecord(record)}
+                    title={
+                      <Flex gap={8} wrap align="center">
+                        {/* 「更新于 …」改为悬停显示，不再常驻占排版宽度。 */}
+                        <Tooltip title={`更新于 ${formatDateTime(record.updated_at)}`}>
+                          <Typography.Text strong>{record.name}</Typography.Text>
+                        </Tooltip>
+                        {isActive && (
+                          <Tooltip title="当前生效的配置：简历生成与求职助手正在用它">
+                            <Tag color="blue">使用中</Tag>
+                          </Tooltip>
+                        )}
+                      </Flex>
+                    }
+                  >
+                    <Flex gap={8} wrap style={{ marginBottom: 12 }}>
+                      <Tag>{matchingPreset(record)?.label ?? CUSTOM_PRESET_LABEL}</Tag>
+                      <Typography.Text type="secondary">
+                        {record.model || "未填写模型"}
+                      </Typography.Text>
+                      <Typography.Text type="secondary">
+                        {record.base_url || "未填写地址"}
+                      </Typography.Text>
+                      {record.api_key && (
+                        // 脱敏承诺：卡片只说明"配置了密钥"，密钥本体与占位符都不渲染。
+                        <Tag color="green">密钥已配置</Tag>
+                      )}
+                    </Flex>
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <Flex gap={8} wrap>
+                        {/* 已是当前生效配置时「使用」无事可做：禁用置灰，避免
+                            「能点但点了没效果」的怪观感（点卡片本体看详情不受影响）。 */}
+                        <Button
+                          size="small"
+                          type={isActive ? "default" : "primary"}
+                          icon={<SwapOutlined />}
+                          disabled={cardBusy || isActive}
+                          loading={recordApplyingId === record.id}
+                          onClick={() => onApplyRecord(record)}
+                        >
+                          使用
+                        </Button>
+                        <Button
+                          size="small"
+                          icon={<ApiOutlined />}
+                          disabled={cardBusy}
+                          loading={recordTestingId === record.id}
+                          onClick={() => onTestRecord(record)}
+                        >
+                          测试连接
+                        </Button>
+                        <Dropdown
+                          menu={{
+                            items: [
+                              { key: "edit", icon: <EditOutlined />, label: "编辑" },
+                              {
+                                key: "delete",
+                                icon: <DeleteOutlined />,
+                                label: "删除",
+                                danger: true,
+                              },
+                            ],
+                            onClick: ({ key }) => {
+                              if (key === "edit") onOpenRecordEdit(record);
+                              else confirmRemove(record);
+                            },
+                          }}
+                          trigger={["click"]}
+                        >
+                          <Button
+                            size="small"
+                            icon={<MoreOutlined />}
+                            aria-label={`更多操作（${record.name}）`}
+                            disabled={cardBusy}
+                          />
+                        </Dropdown>
+                      </Flex>
+                      {testResult && (
+                        <Alert
+                          style={{ marginTop: 12 }}
+                          type={testResult.ok ? "success" : "error"}
+                          showIcon
+                          title={
+                            testResult.ok
+                              ? `${testResult.message}（耗时 ${testResult.latency_ms}ms）`
+                              : `连接失败：${testResult.message}`
+                          }
+                        />
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
+              {recordsToggleNode}
+            </Flex>
+          )}
+        </Spin>
+      </Card>
+
+      <LLMRecordModal
+        open={recordModalOpen}
+        mode={editingRecord ? "edit" : "create"}
+        recordName={editingRecord?.name ?? ""}
+        form={recordForm}
+        saving={recordSaving}
+        testing={draftTesting}
+        testResult={draftTestResult}
+        onSave={onSaveRecord}
+        onClose={onCloseRecordModal}
+        onTest={onTestDraft}
+        onPresetChange={onPresetChange}
+        onFetchModels={onFetchDraftModels}
+        checkingThinking={checkingThinking}
+        thinkingResult={thinkingResult}
+        showingCustomEffort={showingCustomEffort}
+        effortOptions={effortOptions}
+        onProbe={onProbeThinking}
+        onLoadThinkingOptions={onLoadThinkingOptions}
+        onBackToEffortPresets={onBackToEffortPresets}
+        onEffortCustom={onEffortCustom}
+        onClearThinkingResult={onClearThinkingResult}
       />
-    </Card>
+
+      <LLMRecordViewModal
+        open={viewingRecord !== null}
+        record={viewingRecord}
+        onClose={() => setViewingRecord(null)}
+      />
+    </>
   );
 }

@@ -183,7 +183,8 @@ class JobUpdate(BaseModel):
 
 
 class JobBatchRequest(BaseModel):
-    job_ids: list[JobId] = Field(max_length=500)
+    # 上限对齐全选全部的真实规模（历史库可到数千条），5000 足够容纳全量又兜底单次请求规模。
+    job_ids: list[JobId] = Field(max_length=5000)
 
     @field_validator("job_ids")
     @classmethod

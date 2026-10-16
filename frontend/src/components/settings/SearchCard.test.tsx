@@ -33,6 +33,12 @@ function renderCard() {
   );
 }
 
+/** 进入编辑态（2026-10-16 起字段默认只读：查看态 → 点「编辑搜索设置」解锁）。 */
+async function enterEditing() {
+  await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
+  fireEvent.click(await screen.findByRole("button", { name: /编辑搜索设置/ }));
+}
+
 beforeEach(() => {
   apiMocks.getSearchConfig.mockResolvedValue(stored);
   apiMocks.saveSearchConfig.mockImplementation(async (config) => config);
@@ -66,7 +72,7 @@ describe("SearchCard", () => {
 
   it("saves the page-fetch count the user picked", async () => {
     renderCard();
-    await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
+    await enterEditing();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "抓前 2 条正文" }));
     fireEvent.click(screen.getByRole("button", { name: /保存搜索设置/ }));
@@ -77,11 +83,13 @@ describe("SearchCard", () => {
         expect.objectContaining({ fetch_pages: 2 }),
       ),
     );
+    // 保存成功即编辑结束：回到查看态（编辑按钮回来、字段重新只读）。
+    expect(await screen.findByRole("button", { name: /编辑搜索设置/ })).toBeInTheDocument();
   });
 
   it("keeps the source list the user checked", async () => {
     renderCard();
-    await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
+    await enterEditing();
 
     // 取消 DuckDuckGo，只留 Bing。
     fireEvent.click(screen.getByRole("checkbox", { name: "DuckDuckGo" }));
@@ -96,7 +104,7 @@ describe("SearchCard", () => {
 
   it("refuses to save an empty source list", async () => {
     renderCard();
-    await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
+    await enterEditing();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Bing" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "DuckDuckGo" }));
@@ -109,7 +117,7 @@ describe("SearchCard", () => {
 
   it("refuses a SearXNG address without a scheme", async () => {
     renderCard();
-    await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
+    await enterEditing();
 
     fireEvent.click(screen.getByRole("checkbox", { name: /SearXNG/ }));
     fireEvent.change(screen.getByPlaceholderText("http://localhost:8080"), {
@@ -125,7 +133,7 @@ describe("SearchCard", () => {
 
   it("trims the SearXNG address before saving", async () => {
     renderCard();
-    await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
+    await enterEditing();
 
     fireEvent.click(screen.getByRole("checkbox", { name: /SearXNG/ }));
     fireEvent.change(screen.getByPlaceholderText("http://localhost:8080"), {
@@ -142,7 +150,7 @@ describe("SearchCard", () => {
 
   it("keeps the save button disabled until something changes", async () => {
     renderCard();
-    await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
+    await enterEditing();
 
     const saveButton = screen.getByRole("button", { name: /保存搜索设置/ });
     expect(saveButton).toBeDisabled();
@@ -150,6 +158,27 @@ describe("SearchCard", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "抓前 1 条正文" }));
     expect(saveButton).toBeEnabled();
     expect(screen.getByText("有未保存的改动")).toBeInTheDocument();
+  });
+
+  it("view mode keeps fields disabled; cancel discards edits and returns to view mode", async () => {
+    renderCard();
+    await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
+
+    // 查看态：字段整体只读，只有「编辑搜索设置」入口。
+    expect(screen.getByRole("button", { name: /编辑搜索设置/ })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: "DuckDuckGo" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /保存搜索设置/ })).toBeNull();
+    // 「重新读取」已移除（用户要求）：编辑入口在卡片右上角（extra），无独立刷新按钮。
+    expect(screen.queryByRole("button", { name: "重新读取" })).toBeNull();
+
+    // 编辑 → 改动 → 取消：改动丢弃、回查看态。
+    fireEvent.click(screen.getByRole("button", { name: /编辑搜索设置/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "抓前 1 条正文" }));
+    fireEvent.click(screen.getByRole("button", { name: /^取\s*消$/ }));
+    expect(await screen.findByRole("button", { name: /编辑搜索设置/ })).toBeInTheDocument();
+    expect(screen.queryByText("有未保存的改动")).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "抓前 1 条正文" })).not.toBeChecked();
+    expect(apiMocks.saveSearchConfig).not.toHaveBeenCalled();
   });
 
   it("tells the user when the saved setting could not be read", async () => {

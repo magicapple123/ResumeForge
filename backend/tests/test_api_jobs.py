@@ -192,7 +192,7 @@ def test_representative_request_size_limits(client):
     assert client.post("/api/jobs", json={"title": "岗" * 129}).status_code == 422
     assert client.post("/api/jobs/parse-text", json={"text": "A" * 50_001}).status_code == 422
     assert (
-        client.post("/api/jobs/batch-delete", json={"job_ids": list(range(1, 502))}).status_code
+        client.post("/api/jobs/batch-delete", json={"job_ids": list(range(1, 5002))}).status_code
         == 422
     )
     assert (

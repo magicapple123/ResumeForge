@@ -1,4 +1,5 @@
 """个人资料接口：读取、整体更新与文本识别草稿。"""
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -130,7 +131,8 @@ async def parse_profile_text_draft(payload: ProfileTextParseRequest, db: Session
     except ValueError as exc:
         # 在路由层抛：只有 HTTPException 的 detail 会被前端原样展示。
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    image_urls = image_data_urls(images)
+    # PDF 扫描页渲染出的图片并进同一图片通路：与用户截图一样走视觉识别。
+    image_urls = image_data_urls(images) + list(documents.images)
     has_images = bool(image_urls)
     has_documents = bool(payload.documents)
 
@@ -156,7 +158,9 @@ async def parse_profile_text_draft(payload: ProfileTextParseRequest, db: Session
         )
     except Exception:  # noqa: BLE001 - 外部模型异常不能阻断草稿解析
         logger.exception("个人资料 AI 识别发生内部错误，已回退本地解析")
-        result = mark_local_fallback(local_draft, ai_failed_warning(has_images, has_documents=has_documents))
+        result = mark_local_fallback(
+            local_draft, ai_failed_warning(has_images, has_documents=has_documents)
+        )
     return finalize_recognition_result(
         result, has_images=has_images, document_warnings=documents.warnings
     )

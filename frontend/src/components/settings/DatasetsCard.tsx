@@ -1,11 +1,18 @@
 /** 数据集管理：导入多份备份、在它们之间切换，以及导出/重命名/删除。 */
 
-import { DownloadOutlined, PlusOutlined, SwapOutlined, UploadOutlined } from "@ant-design/icons";
+import {
+  CloudDownloadOutlined,
+  DownloadOutlined,
+  PlusOutlined,
+  SwapOutlined,
+  UploadOutlined,
+} from "@ant-design/icons";
 import {
   Alert,
   Button,
   Card,
   Checkbox,
+  Dropdown,
   Empty,
   Input,
   Listy,
@@ -18,6 +25,7 @@ import {
   Upload,
 } from "antd";
 import { RowActions } from "../common/RowActions";
+import { useCollapsedList } from "../common/useCollapsedList";
 import type { DatasetInfo } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import FileDropZone from "../common/FileDropZone";
@@ -103,6 +111,9 @@ export default function DatasetsCard({
 }: Props) {
   const busy = exporting || importing || switchingId !== null || deletingId !== null || creating;
   const active = datasets.find((item) => item.is_active);
+  // 列表长了会淹没操作区：默认只展示前 5 份，其余收进「显示全部」（展示层折叠）。
+  const { visibleItems: visibleDatasets, toggleNode: datasetsToggleNode } =
+    useCollapsedList(datasets);
 
   return (
     <>
@@ -111,34 +122,43 @@ export default function DatasetsCard({
         className="settings-card"
         extra={
           <Space wrap>
-            <Button icon={<PlusOutlined />} disabled={busy} onClick={onOpenCreate}>
+            {/* 主操作：新建是用户在这里最常做的事，用 primary 从一排同色按钮里立起来。 */}
+            <Button type="primary" icon={<PlusOutlined />} disabled={busy} onClick={onOpenCreate}>
               新建空数据集
             </Button>
-            <Tooltip title="只导出当前这一份数据集；列表里其余几份不会进包">
-              <Button
-                icon={<DownloadOutlined />}
-                loading={exporting}
-                disabled={busy || !active}
-                onClick={() => active && onExport(active)}
-              >
-                导出当前数据集
+            {/* 「导出当前」与「导出全部」原来是一对长得一样的描边按钮，容易按错；
+                合并成一个「导出」下拉后入口唯一，两项各带说明，不会再误触。 */}
+            <Dropdown
+              trigger={["click"]}
+              disabled={busy}
+              menu={{
+                items: [
+                  {
+                    key: "current",
+                    icon: <DownloadOutlined />,
+                    label: "导出当前数据集",
+                    disabled: !active,
+                  },
+                  ...(datasets.length > 1
+                    ? [
+                        {
+                          key: "all",
+                          icon: <CloudDownloadOutlined />,
+                          label: "导出全部数据集",
+                        },
+                      ]
+                    : []),
+                ],
+                onClick: ({ key }) => {
+                  if (key === "current" && active) onExport(active);
+                  if (key === "all") onExportAll();
+                },
+              }}
+            >
+              <Button icon={<DownloadOutlined />} loading={exporting} disabled={busy || !active}>
+                导出
               </Button>
-            </Tooltip>
-            {/* 只在**确实有别的数据集**时出现：只有一份时两个按钮做的事一模一样，多一个
-                选择只是噪声。它出现本身也是一个提示——"你还有别的数据集，默认那个按钮
-                不会把它们装进去"。 */}
-            {datasets.length > 1 && (
-              <Tooltip title="当前这份 + 列表里其余每一份都装进同一个备份包">
-                <Button
-                  icon={<DownloadOutlined />}
-                  loading={exporting}
-                  disabled={busy}
-                  onClick={onExportAll}
-                >
-                  导出全部数据集
-                </Button>
-              </Tooltip>
-            )}
+            </Dropdown>
           </Space>
         }
       >
@@ -189,9 +209,13 @@ export default function DatasetsCard({
               return Upload.LIST_IGNORE;
             }}
           >
-            <Button icon={<UploadOutlined />} loading={importing} disabled={busy}>
-              导入备份为新数据集
-            </Button>
+            {/* 导入是"新增一份数据集"的特殊操作（不覆盖现有数据），保持 default 样式
+                并用上传图标与导出区分；附件有问题时另有二次确认（见 useSettingsDatasets）。 */}
+            <Tooltip title="导入会新增一份数据集，不会改动当前正在使用的数据">
+              <Button icon={<UploadOutlined />} loading={importing} disabled={busy}>
+                导入备份为新数据集
+              </Button>
+            </Tooltip>
           </Upload>
         </FileDropZone>
 
@@ -204,7 +228,7 @@ export default function DatasetsCard({
           ) : (
             <Listy
               style={{ marginTop: 16 }}
-              items={datasets}
+              items={visibleDatasets}
               rowKey={(dataset) => dataset.id}
               itemRender={(dataset) => (
                 <ListyItem
@@ -271,6 +295,7 @@ export default function DatasetsCard({
               )}
             />
           )}
+          {datasetsToggleNode}
         </Spin>
       </Card>
 

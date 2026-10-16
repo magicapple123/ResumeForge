@@ -295,3 +295,12 @@ def test_import_endpoint_rejects_an_empty_selection(client):
     response = client.post("/api/candidate-jobs/import", json={"candidate_ids": []})
 
     assert response.status_code == 422
+
+
+def test_import_endpoint_rejects_selection_over_batch_limit(client):
+    """与其他批量端点同一上限（5000）：超过就 422，而不是硬着头皮去建一万条岗位。"""
+    response = client.post(
+        "/api/candidate-jobs/import", json={"candidate_ids": list(range(1, 5002))}
+    )
+
+    assert response.status_code == 422

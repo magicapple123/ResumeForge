@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantConversationDetail, AssistantStreamEvent } from "../types";
 import { MessageToolCalls } from "../features/assistant/components/AssistantMessageContent";
 import {
+  getAssistantStreamState,
+  resetAssistantStreamForTests,
+  subscribeAssistantStream,
+} from "../features/assistant/hooks/assistantStreamStore";
+import {
   CONVERSATIONS,
   conversationDetail,
   deferred,
@@ -55,6 +60,9 @@ vi.mock("../api/resumes", () => ({ listResumes: apiMocks.listResumes }));
 vi.mock("../api/skill", () => ({ listSkills: skillApiMocks.listSkills }));
 
 beforeEach(() => {
+  // 流式会话状态是模块级全局 store（问题 B）：部分用例会把流挂起不结束，
+  // 用例之间必须重置回空闲，否则"发送中"状态会漏进下一个用例。
+  resetAssistantStreamForTests();
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
     configurable: true,
     value: scrollIntoViewMock,
@@ -203,8 +211,9 @@ describe("AssistantPage", () => {
     expect(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题")).toBeEnabled();
   });
 
-  it("aborts an active stream when the page unmounts", async () => {
+  it("leaves the stream running when the page unmounts (问题 B 全局化)", async () => {
     let signal: AbortSignal | undefined;
+    let finish: () => void = () => undefined;
     apiMocks.sendAssistantMessage.mockImplementation(
       (
         _id: number,
@@ -213,10 +222,8 @@ describe("AssistantPage", () => {
         nextSignal: AbortSignal,
       ) => {
         signal = nextSignal;
-        return new Promise<void>((_resolve, reject) => {
-          nextSignal.addEventListener("abort", () =>
-            reject(new DOMException("aborted", "AbortError")),
-          );
+        return new Promise<void>((resolve) => {
+          finish = resolve;
         });
       },
     );
@@ -236,7 +243,10 @@ describe("AssistantPage", () => {
 
     view.unmount();
 
-    expect(signal?.aborted).toBe(true);
+    // 卸载**不再**中止回答（问题 B）：流式会话在全局 store 中跨路由存活，
+    // 离场期间回复继续、结束后由 store 完成数据刷新。手动停止仍走停止按钮。
+    expect(signal?.aborted).toBe(false);
+    finish();
   });
 
   it("reserves attachment slots while files are still being read", async () => {
@@ -382,4 +392,62 @@ describe("AssistantPage", () => {
     expect(screen.queryByText(/改动了/)).not.toBeInTheDocument();
     expect(screen.queryByText(/项失败/)).not.toBeInTheDocument();
   });
+
+  it("50 个 delta 只触发有限次订阅者通知（T02 缓冲 + rAF/setTimeout 合并 flush）", async () => {
+    let emit: ((event: AssistantStreamEvent) => void) | undefined;
+    let finish: () => void = () => undefined;
+    apiMocks.sendAssistantMessage.mockImplementation(
+      async (_id: number, _payload: unknown, onEvent: (event: AssistantStreamEvent) => void) => {
+        emit = onEvent;
+        return new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      },
+    );
+
+    // 先用真实计时器把页面与流挂起就绪（waitFor 依赖真实 interval，不能在 fake 下用）。
+    renderPage();
+    await openFirstConversation();
+    fireEvent.change(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题"), {
+      target: { value: "连续输出测试" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+    await waitFor(() => expect(emit).toBeDefined());
+
+    vi.useFakeTimers();
+    try {
+      let notifications = 0;
+      const unsubscribe = subscribeAssistantStream(() => {
+        notifications += 1;
+      });
+
+      for (let index = 0; index < 50; index += 1) {
+        emit?.({ type: "delta", text: `词${index} ` });
+      }
+
+      // delta 不再逐个 patch+emit：同步发完后缓冲尚未 flush，订阅者一次都没被通知。
+      expect(notifications).toBe(0);
+      expect(getAssistantStreamState().streamingText).toBe("");
+
+      // 推进 fake 时间触发 setTimeout 兜底 flush（rAF 若先到也一样只合并一次）。
+      vi.advanceTimersByTime(60);
+      expect(notifications).toBeLessThanOrEqual(3);
+      expect(notifications).toBeGreaterThanOrEqual(1);
+      // 文本不丢不重：50 个 delta 全量并入最终状态。
+      expect(getAssistantStreamState().streamingText).toBe(
+        Array.from({ length: 50 }, (_, index) => `词${index} `).join(""),
+      );
+
+      unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // 流正常收口：视图复位、输入恢复（streamLifecycle 语义不回归）。
+    finish();
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "停止生成" })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题")).toBeEnabled();
+  }, 20_000);
 });

@@ -317,6 +317,12 @@ class AssistantOrbSetting(BaseModel):
     tips_enabled: bool = True
 
 
+class AutoBackupIntervalSetting(BaseModel):
+    """自动备份间隔（天）。用户可在设置页调整，保存进 KV 后下次调度检查即生效。"""
+
+    interval_days: int = Field(default=7, ge=1, le=365)
+
+
 class ExportSaveLocationIn(BaseModel):
     """导出产物保存位置的控制请求；目录只能由本机原生选择器提供。"""
 

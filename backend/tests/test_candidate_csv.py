@@ -58,6 +58,22 @@ def test_export_flattens_newlines(client, db_session):
     assert "职责一 职责二 职责三" in text.splitlines()[1]
 
 
+def test_export_accepts_full_selection_over_old_200_limit(client):
+    """全选全部导出不再被旧的 200 条上限拦下（用户 420 条导出报 422 的回归钉）。
+
+    420 个不存在的 id 应通过 schema 校验、走到"id 不存在"的 404；超过 5000 的新上限
+    仍然拒绝。
+    """
+    over_old = client.post(
+        "/api/candidate-jobs/csv/export", json={"candidate_ids": list(range(1, 421))}
+    )
+    assert over_old.status_code == 404, over_old.text
+    over_new = client.post(
+        "/api/candidate-jobs/csv/export", json={"candidate_ids": list(range(1, 5002))}
+    )
+    assert over_new.status_code == 422
+
+
 def test_import_preview_reports_line_numbers(client):
     body = _csv(
         "后端开发,示例科技,https://example.com/9,职责：开发,内部推荐",

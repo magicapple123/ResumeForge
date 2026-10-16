@@ -46,4 +46,21 @@ describe("全选本页（pageSelectAll）", () => {
     render(<BatchActionBar count={0} onExit={() => {}} />);
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
+
+  it("pageSelectAllLabelHidden 时勾选框不带文字、仍可通过 aria-label 命中并回传勾选（简历中心）", () => {
+    const onToggle = vi.fn();
+    render(
+      <BatchActionBar
+        count={1}
+        pageSelectAll={{ allSelected: false, someSelected: true, onToggle }}
+        pageSelectAllLabelHidden
+        onExit={() => {}}
+      />,
+    );
+    const checkbox = screen.getByRole("checkbox", { name: /全选本页/ });
+    // 文字入口已移除：勾选框的可见文本为空，含义由 hover title 提示。
+    expect(checkbox.closest("label")).toHaveTextContent("");
+    fireEvent.click(checkbox);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
 });

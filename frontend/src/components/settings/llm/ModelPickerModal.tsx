@@ -20,7 +20,14 @@ export function ModelPickerModal({
   onClose: () => void;
 }) {
   return (
-    <Modal title="选择模型" open={open} footer={null} onCancel={onClose}>
+    <Modal
+      title="选择模型"
+      aria-label="选择模型"
+      open={open}
+      destroyOnHidden
+      footer={null}
+      onCancel={onClose}
+    >
       <Typography.Paragraph type="secondary">{modelsMessage}</Typography.Paragraph>
       <Listy
         height={360}

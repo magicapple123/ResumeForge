@@ -6,13 +6,11 @@ import { listResumeIds } from "../../api/resumes";
 export function useSelectAllResumes({
   keyword,
   jobId,
-  favoriteFilter,
   hasJobFilter,
   setSelectedIds,
 }: {
   keyword: string;
   jobId: number | undefined;
-  favoriteFilter: boolean | undefined;
   hasJobFilter: boolean | undefined;
   /** 用一份完整 id 列表替换当前已选（BatchSelection.setSelected）。 */
   setSelectedIds: (ids: number[]) => void;
@@ -27,12 +25,12 @@ export function useSelectAllResumes({
   useEffect(() => {
     generationRef.current += 1;
     setSelectAllPagesLoading(false);
-  }, [keyword, jobId, favoriteFilter, hasJobFilter]);
+  }, [keyword, jobId, hasJobFilter]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // 跨页全选：按**当前筛选**向后端要全部 id（与列表同一份筛选器），拿到后整体勾选。
-  // 批量删除卡 500 上限，超出就如实拒绝并指路缩小范围——悄悄只选前 500 会让
-  // "全选了"和"实际选了"对不上，比报错更害人（口径对齐岗位广场）。
+  // 上限与后端批量端点（5000）对齐：超出就如实拒绝并指路缩小范围——悄悄只选一部分
+  // 会让"全选了"和"实际选了"对不上，比报错更害人（口径对齐岗位广场）。
   const selectAllPages = async () => {
     if (selectAllPagesLoading) return;
     const generation = ++generationRef.current;
@@ -41,7 +39,6 @@ export function useSelectAllResumes({
       const ids = await listResumeIds({
         keyword,
         job_id: jobId,
-        favorite: favoriteFilter,
         has_job: hasJobFilter,
       });
       if (generation !== generationRef.current) return; // 期间筛选已变：旧结果丢弃
@@ -49,9 +46,9 @@ export function useSelectAllResumes({
         message.warning("当前筛选下没有简历");
         return;
       }
-      if (ids.length > 500) {
+      if (ids.length > 5000) {
         message.warning(
-          `当前筛选下共 ${ids.length} 份简历，批量操作一次最多 500 个；请先用筛选或搜索缩小范围`,
+          `当前筛选下共 ${ids.length} 份简历，超出单次批量上限 5000 份；请先用筛选或搜索缩小范围`,
         );
         return;
       }

@@ -9,6 +9,7 @@ import { listJobs, updateJob } from "../api/jobs";
 import { listResumes, updateResumeFavorite } from "../api/resumes";
 import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
 import EmptyState from "../components/common/EmptyState";
+import ErrorState from "../components/common/ErrorState";
 import ResumeDetailModal from "../components/ResumeDetailModal";
 import { useApi } from "../hooks/useApi";
 import type { JobList, Page, ResumeBrief } from "../types";
@@ -254,45 +255,51 @@ export default function FavoritesPage() {
           },
         ]}
       />
-      <Table<JobList | ResumeBrief>
-        rowKey="id"
-        columns={
-          (kind === "jobs" ? jobColumns : resumeColumns) as ColumnsType<JobList | ResumeBrief>
-        }
-        dataSource={items}
-        loading={loading}
-        locale={{
-          emptyText: <EmptyState description={kind === "jobs" ? "暂无收藏岗位" : "暂无收藏简历"} />,
-        }}
-        // 简历列的固定宽度加起来约 620px，比岗位列更窄，在普通窗口里根本不会横向溢出；
-        // 硬套 `x: 760` 会在「简历」页签下画出一条用不上的横向滚动条。岗位列更宽，仍保留兜底。
-        scroll={kind === "jobs" ? { x: 760 } : undefined}
-        components={{
-          body: {
-            row: (props: HTMLAttributes<HTMLTableRowElement>) => {
-              const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
-              const item = items.find((entry) => String(entry.id) === rowKey);
-              if (!item) return <tr {...props} />;
-              return (
-                <RowContextMenu items={contextActions(item)}>
-                  <tr {...props} />
-                </RowContextMenu>
-              );
+      {error ? (
+        <ErrorState description={error} onRetry={() => void reload()} />
+      ) : (
+        <Table<JobList | ResumeBrief>
+          rowKey="id"
+          columns={
+            (kind === "jobs" ? jobColumns : resumeColumns) as ColumnsType<JobList | ResumeBrief>
+          }
+          dataSource={items}
+          loading={loading}
+          locale={{
+            emptyText: (
+              <EmptyState description={kind === "jobs" ? "暂无收藏岗位" : "暂无收藏简历"} />
+            ),
+          }}
+          // 简历列的固定宽度加起来约 620px，比岗位列更窄，在普通窗口里根本不会横向溢出；
+          // 硬套 `x: 760` 会在「简历」页签下画出一条用不上的横向滚动条。岗位列更宽，仍保留兜底。
+          scroll={kind === "jobs" ? { x: 760 } : undefined}
+          components={{
+            body: {
+              row: (props: HTMLAttributes<HTMLTableRowElement>) => {
+                const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
+                const item = items.find((entry) => String(entry.id) === rowKey);
+                if (!item) return <tr {...props} />;
+                return (
+                  <RowContextMenu items={contextActions(item)}>
+                    <tr {...props} />
+                  </RowContextMenu>
+                );
+              },
             },
-          },
-        }}
-        pagination={{
-          current: page,
-          pageSize,
-          total: currentPage?.total ?? 0,
-          showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 项收藏`,
-          onChange: (nextPage, nextPageSize) => {
-            setPage(nextPage);
-            setPageSize(nextPageSize);
-          },
-        }}
-      />
+          }}
+          pagination={{
+            current: page,
+            pageSize,
+            total: currentPage?.total ?? 0,
+            showSizeChanger: true,
+            showTotal: (total) => `共 ${total} 项收藏`,
+            onChange: (nextPage, nextPageSize) => {
+              setPage(nextPage);
+              setPageSize(nextPageSize);
+            },
+          }}
+        />
+      )}
       <ResumeDetailModal recordId={previewId} onClose={() => setPreviewId(null)} />
     </div>
   );

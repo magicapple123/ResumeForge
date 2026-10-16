@@ -49,6 +49,12 @@ _MARKDOWN_JSON_RE = re.compile(r"\A```(?:json)?\s*(.*?)\s*```\Z", re.IGNORECASE 
 _NO_EVIDENCE_HINTS = ("未提供", "无相关", "资料中未", "简历中未")
 _MAX_LOCAL_CONDITIONS = 20
 
+# base64 data URL（简历照片等）：`data:<mime>;base64,<payload>`。base64 字符集
+# （A-Za-z0-9+/=）不含引号，payload 在 JSON 字符串值里是连续的，可安全匹配；
+# mime 前缀不设限（不只 image/*），避免非常规类型漏网。
+_DATA_URL_RE = re.compile(r"data:[^;,\s]*;base64,[A-Za-z0-9+/=]+")
+_DATA_URL_PLACEHOLDER = "[图片数据已省略]"
+
 # 证据核对的子句级容错参数：实质子句的字符 3-gram 包含率需不低于该阈值。
 _CLAUSE_SPLIT_RE = re.compile(r"[。；;！!？?，,、]")
 _MIN_CLAUSE_CHARS = 6
@@ -115,6 +121,21 @@ def _personal_source(profile_text: str, resume_text: str) -> str:
     )
 
 
+def strip_data_urls(text: str) -> str:
+    """剥离文本里的 base64 data URL，替换为简短占位文本。
+
+    ``api/job_match.py`` 构造的 ``profile_text``/``resume_text`` 是 ``json.dumps``
+    产物，简历照片以数百 KB 的 base64 data URL 藏在 ``content.photo`` 之类的字段里：
+    在 20k 字符预算的收缩迭代中它会挤掉几乎全部真实简历文本，让带照片简历的匹配
+    分析必然失败。这里在**字符串层**直接替换占位文本，而不是走 JSON 解析层——
+    占位符落在字符串值内部，JSON 结构天然不被破坏；同时兼容文本并非合法 JSON 的
+    调用方（无需解析即可剥离，解析失败时的行为差异少一个分支）。
+    """
+    if not text or "data:" not in text:
+        return text
+    return _DATA_URL_RE.sub(_DATA_URL_PLACEHOLDER, text)
+
+
 def _fit_payload(payload: dict[str, Any], prefix: str, suffix: str, max_chars: int) -> str:
     """把不可信数据装进消息，并在超预算时按最长的文本字段逐步收缩。"""
 
@@ -149,8 +170,10 @@ def build_match_messages(
     suffix = "\n</MATCH_DATA>"
     payload = {
         "job": job_payload_data,
-        "profile": profile_text[:_MAX_PERSONAL_CHARS],
-        "resume": resume_text[:_MAX_PERSONAL_CHARS],
+        # 先剥离 base64 数据再进预算收缩（问题 C）：照片 data URL 占据绝对长度，
+        # 不剥离的话收缩后模型看到的几乎全是 base64 片段。
+        "profile": strip_data_urls(profile_text)[:_MAX_PERSONAL_CHARS],
+        "resume": strip_data_urls(resume_text)[:_MAX_PERSONAL_CHARS],
     }
     user_message = _fit_payload(payload, prefix, suffix, max_chars)
     return [
@@ -299,6 +322,10 @@ async def analyze_match(
     resume_text: str,
 ) -> JobMatchResult:
     """调用一次模型完成匹配分析；不修改任何岗位/资料/简历数据。"""
+    # 剥离照片等 base64 数据（问题 C）：既避免预算被挤爆，也让证据核对
+    # （_personal_source / _plain_source）不受 base64 片段干扰。
+    profile_text = strip_data_urls(profile_text)
+    resume_text = strip_data_urls(resume_text)
     messages = build_match_messages(job_payload_data, profile_text, resume_text)
     raw = await provider.chat(messages, thinking=False)
     result = parse_match_result(raw)
@@ -410,5 +437,6 @@ __all__ = [
     "match_requires_confirmation",
     "parse_greeting",
     "parse_match_result",
+    "strip_data_urls",
     "validate_evidence",
 ]

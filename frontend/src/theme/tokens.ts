@@ -1,13 +1,14 @@
 /**
  * 语义设计 token（RF-12：克制的设计体系）。
  *
- * 这里**只收编既有值，不发明新值**：每个常量都来自 main.tsx 的主题、全局 CSS 或
- * 投投/编辑器弹层现用的数字。新增 UI 优先引用这里的 token；存量样式只在色值完全
- * 相同的前提下做机械替换，保证 diff 可审。
+ * 颜色、间距与层级的共享出口。主题在 appTheme.ts 组装，CSS 变量在
+ * design-tokens.css 同步维护；文字色需要同时检查白底和应用浅底的对比度。
  *
- * 弹层层级（`layer`）以 `zIndexPopupBase: 3100` 为基准，整族高于基准——有 Modal
- * 弹出时悬浮球与投投卡片仍可用。**不得改变任何实际渲染值**：ResumeDetailPreview、
- * AssistantComposer、TouTouOrb 的测试分别钉着 3100/3110/3450。
+ * 弹层层级（`layer`）以 `zIndexPopupBase: 3100` 为基准。注意 antd 6 的 useZIndex
+ * 会给 Modal/Drawer 再加 +100 容器偏移（Drawer 内的 Modal 经 ZIndexContext 继承后
+ * 再 +100，即实际 3200/3300），投投整族因此整体压在容器链之上——有 Modal
+ * 弹出时悬浮球与投投卡片仍可用。ResumeDetailPreview、TouTouOrb 的测试钉着
+ * 3100/3700。
  */
 
 /** 品牌与中性色（来源：main.tsx colorPrimary 与 styles/base.css 现值）。 */
@@ -27,7 +28,7 @@ export const palette = {
   /** 二级文字（菜单、正文辅助）。 */
   textSecondary: "#5f6b7a",
   /** 三级文字（caption、版本号）。RF-12 由 #8a94a3 加深到 4.5:1 对比度达标值。 */
-  textTertiary: "#6b7683",
+  textTertiary: "#626f7f",
   /** 常规边框。 */
   border: "#e7ebf0",
   /** 更浅的边框/分隔线。 */
@@ -38,6 +39,11 @@ export const palette = {
   focusRing: "#91caff",
   /** 链接色：antd 默认 #1677ff 只有 4.1:1，加深到 blue-7 达标。 */
   link: "#0958d9",
+  /** Text-bearing semantic states, including light alert backgrounds. */
+  success: "#176b41",
+  warning: "#875300",
+  error: "#b42318",
+  textBody: "#223047",
 } as const;
 
 /** 间距刻度：只允许 4/8 体系（antd 默认 spacing 单位即 8/4）。 */
@@ -59,22 +65,42 @@ export const fontSize = {
 } as const;
 
 /**
- * 弹层层级：3100 基准 + 投投整族。悬浮球 tip3450＞球3400＞助手3300＞
- * 保存卡3250＞剪贴板3200；ResumeEditorModal 3110 盖在宿主 Modal（3100）之上。
+ * 弹层层级：3100 基准 + 投投整族。
+ *
+ * antd 6 容器链的实际高度（useZIndex）：单层 Modal/Drawer = popupBase+100 = 3200，
+ * Drawer 内嵌 Modal = popupBase+200 = 3300，再嵌一层 +100。这正是 2026-10 用户
+ * 截图「岗位广场详情弹窗盖住剪贴板卡」的根因——旧值 clipboardCard=3300 与
+ * Drawer 内 Modal 同层，门户后 DOM 顺序靠后的 Modal 胜出。投投三卡因此全部
+ * 抬到容器链之上：助手卡 3400 > 三层容器链（3400 为病态上限，仅两层内的
+ * 嵌套被保证）。message（+1010=4110）/notification（+1050=4150）仍高于整个
+ * 投投族——toast 不被卡片遮挡，几何上也互不重叠（toast 顶部、卡片底部）。
+ *
+ * 梯度：悬浮球 tip3700＞球3650＞卡内弹层3550＞剪贴板3500＞保存卡3450（壳内
+ * 地标，不参与全局排序）＞助手3400；ResumeEditorModal 3110 盖在旧语义的宿主
+ * 弹窗之上（其打开场景无并存容器，见 ResumeEditorModal.tsx 注释）。
+ * 剪贴板卡刻意压在助手卡之上：两卡同时弹出时剪贴板不能被大尺寸的助手卡盖住。
  */
 export const layer = {
   /** antd ConfigProvider zIndexPopupBase：confirm/message/dropdown/Modal 的基准。 */
   popupBase: 3100,
-  /** 简历编辑器 Modal：盖在打开它的宿主弹窗（3100）之上。 */
+  /** 简历编辑器 Modal：盖在打开它的宿主弹窗之上（打开时无并存容器）。 */
   editorModal: 3110,
-  /** 投投剪贴板卡片。 */
-  clipboardCard: 3200,
-  /** 投投资料保存卡。 */
-  saveCard: 3250,
-  /** 投投助手卡片。 */
-  assistantCard: 3300,
+  /** 投投助手卡片。高于 antd 6 容器链两层（3200/3300）。 */
+  assistantCard: 3400,
+  /** 投投资料保存卡（.tt-shell 壳内地标，不参与全局排序）。 */
+  saveCard: 3450,
+  /** 投投剪贴板卡片（两卡同开时压在助手卡之上；高于三层容器链）。 */
+  clipboardCard: 3500,
+  /**
+   * 投投卡片内弹出层（下拉 / Select / Tooltip / 图片预览 / 二次确认）的基准。
+   * antd 各弹层组件在 zIndexPopupBase 之上还有 +50~+80 的自身偏移，全局基准
+   * （3100）抬不满卡片的高度——弹层从卡片里挂到 body 后会被卡片盖住，看起来
+   * 就是"菜单被裁掉"。这里把卡片内弹层的基准抬到剪贴板卡（3500）之上、
+   * 悬浮球（3650）之下：由投投两张卡各自的局部 ConfigProvider 注入。
+   */
+  cardPopup: 3550,
   /** 投投悬浮球。 */
-  orb: 3400,
+  orb: 3650,
   /** 悬浮球身 Tooltip 的例外抬层（高于球身）。 */
-  orbTooltip: 3450,
+  orbTooltip: 3700,
 } as const;

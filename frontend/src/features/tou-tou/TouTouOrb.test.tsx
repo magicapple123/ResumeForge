@@ -29,9 +29,9 @@ describe("TouTouOrb", () => {
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip).toHaveTextContent("单击：打开求职助手；双击：打开投递剪贴板");
     // overlayStyle 落在 .ant-tooltip 根节点上（role=tooltip 的是内层内容节点）；
-    // 3450 高于球的 3400——球被压住的 antd 默认 Tooltip（1070）等于没有。
+    // 3700 高于球的 3650——球被压住的 antd 默认 Tooltip（1070）等于没有。
     const overlay = tooltip.closest(".ant-tooltip") as HTMLElement;
-    expect(overlay.style.zIndex).toBe("3450");
+    expect(overlay.style.zIndex).toBe("3700");
   });
 
   it("still opens the assistant while the tooltip is armed (hover does not eat clicks)", () => {

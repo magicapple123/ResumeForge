@@ -20,7 +20,9 @@
   gap: 12px;
 }
 
-.tracker-summary > .ant-statistic {
+/* 统计卡片与加载骨架共用同一套卡片外观：骨架占位与真实卡片同形，加载完成后不跳动。 */
+.tracker-summary > .ant-statistic,
+.tracker-summary > .tracker-summary-skeleton {
   min-height: 82px;
   padding: 14px 16px;
   background: var(--rf-surface, #fff);
@@ -30,19 +32,23 @@
   box-shadow: 0 8px 22px rgba(31, 56, 85, 0.06);
 }
 
-.tracker-summary > .ant-statistic:nth-child(2) {
+.tracker-summary > .ant-statistic:nth-child(2),
+.tracker-summary > .tracker-summary-skeleton:nth-child(2) {
   border-top-color: #61ddaa;
 }
 
-.tracker-summary > .ant-statistic:nth-child(3) {
+.tracker-summary > .ant-statistic:nth-child(3),
+.tracker-summary > .tracker-summary-skeleton:nth-child(3) {
   border-top-color: #f6bd16;
 }
 
-.tracker-summary > .ant-statistic:nth-child(4) {
+.tracker-summary > .ant-statistic:nth-child(4),
+.tracker-summary > .tracker-summary-skeleton:nth-child(4) {
   border-top-color: #7262fd;
 }
 
-.tracker-summary > .ant-statistic:nth-child(5) {
+.tracker-summary > .ant-statistic:nth-child(5),
+.tracker-summary > .tracker-summary-skeleton:nth-child(5) {
   border-top-color: #f08bb4;
 }
 

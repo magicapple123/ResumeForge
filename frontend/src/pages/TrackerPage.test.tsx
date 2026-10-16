@@ -104,6 +104,22 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("TrackerPage", () => {
+  it("统计加载中渲染骨架占位、不渲染 0 值卡片；完成后骨架消失（空数据才显示 0 值卡）", async () => {
+    // 用未 resolve 的 Promise 托住统计请求：加载中不应出现「总数」等 0 值卡片，
+    // 也不应出现旧的「统计加载中…」文字（用户截图里布局错乱的来源）。
+    apiMocks.listTrackStats.mockReturnValueOnce(new Promise(() => {}));
+    const { unmount } = renderPage();
+    expect(screen.queryByText("统计加载中…")).not.toBeInTheDocument();
+    expect(screen.queryByText("总数")).not.toBeInTheDocument();
+    expect(document.querySelector(".tracker-summary-skeleton")).not.toBeNull();
+    expect(document.querySelector(".tracker-summary")).toHaveAttribute("aria-busy", "true");
+    unmount();
+    renderPage();
+    expect(await screen.findByText("总数")).toBeInTheDocument();
+    expect(document.querySelector(".tracker-summary-skeleton")).toBeNull();
+    expect(document.querySelector(".tracker-summary")).not.toHaveAttribute("aria-busy");
+  });
+
   it("renders a record with its stage and source", async () => {
     apiMocks.listTracksPage.mockResolvedValue(
       makePage([makeTrack({ status: "interview", stage_note: "二面" })]),

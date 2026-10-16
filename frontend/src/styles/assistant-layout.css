@@ -16,6 +16,25 @@
   margin-top: 12px;
 }
 
+/*
+ * 去分页后列表全量渲染：页面形态让列表自身滚动（新对话/搜索/筛选留在视口内），
+ * 不把整页撑长；浮窗抽屉（.assistant-sidebar--floating）整体 overflow 滚动，
+ * 再嵌一层内滚会出现双滚动条，故排除。
+ */
+.assistant-sidebar:not(.assistant-sidebar--floating) .assistant-conversation-list {
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+}
+
+/*
+ * 「新对话」按钮（及其下的批量操作条）与搜索输入框之间的呼吸间距。
+ * 两者原本零间距贴死（用户截图反馈）；10px 落在 8-12px 的建议带内，
+ * 与下方 Segmented 的 margin-top: 12px 同一节奏。整页与浮窗窄板共用。
+ */
+.assistant-conversation-search {
+  margin-top: 10px;
+}
+
 .assistant-conversation-filter {
   margin-top: 12px;
 }
@@ -105,6 +124,8 @@
   grid-template-rows: auto minmax(320px, 1fr) auto;
   min-width: 0;
   max-height: calc(100vh - 116px);
+  /* 「回到底部」悬浮按钮（问题 A）以工作区为定位基准。 */
+  position: relative;
 }
 
 /*
@@ -154,6 +175,31 @@
   min-height: 320px;
   padding: 18px 4px;
   overflow-y: auto;
+}
+
+/* 「回到底部」（问题 A）：流式期间用户上翻退出吸底后的悬浮按钮。
+   z-index 阶梯约定：页面内局部浮层用个位数，远低于悬浮球/浮窗那一档（1000+）。 */
+.assistant-scroll-bottom {
+  position: absolute;
+  right: 24px;
+  bottom: 150px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  color: #595959;
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+
+.assistant-scroll-bottom:hover {
+  color: #1677ff;
+  border-color: #1677ff;
 }
 
 .assistant-empty-state {

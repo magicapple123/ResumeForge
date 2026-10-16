@@ -1,5 +1,5 @@
 /** PageSkeleton：rows / avatar / card 三个变体的渲染结果。 */
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import PageSkeleton from "./PageSkeleton";
 
@@ -13,6 +13,7 @@ describe("PageSkeleton", () => {
 
     const holder = container.firstElementChild as HTMLElement;
     expect(holder.style.padding).toBe("16px");
+    expect(screen.getByRole("status")).toHaveTextContent("正在加载内容");
     expect(container.querySelector(".ant-skeleton")).not.toBeNull();
     expect(container.querySelector(".ant-skeleton-with-avatar")).toBeNull();
     expect(container.querySelectorAll(".ant-skeleton-paragraph > li").length).toBe(6);
@@ -29,5 +30,6 @@ describe("PageSkeleton", () => {
     const { container } = render(<PageSkeleton card={false} />);
 
     expect(container.firstElementChild?.classList.contains("ant-skeleton")).toBe(true);
+    expect(screen.getByRole("status")).toHaveTextContent("正在加载内容");
   });
 });

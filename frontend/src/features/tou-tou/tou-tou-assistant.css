@@ -5,9 +5,11 @@
   right: 24px;
   bottom: 96px;
   /*
-   * 3300：略低于悬浮球（.tt-shell 的 3400），保证球压在卡片之上、随时可以再点球收起；
-   * 高于 antd 弹层基准 zIndexPopupBase（3100，main.tsx）——Modal/Drawer 弹出时
-   * 卡片仍可用。同族梯度：剪贴板卡 3200 < 助手卡 3300 < 球 3400 < 小贴士/Tooltip 3450。
+   * 3400：略低于悬浮球（.tt-shell 的 3650），保证球压在卡片之上、随时可以再点球收起；
+   * 高于 antd 6 容器链——zIndexPopupBase（3100）+ useZIndex 容器偏移 +100/层
+   * （单层 Modal/Drawer 实际 3200、Drawer 内嵌 Modal 3300），Modal/Drawer 弹出时
+   * 卡片仍可用。同族梯度：助手卡 3400 < 资料保存卡 3450（壳内地标）< 剪贴板卡
+   * 3500 < 球 3650 < 小贴士/Tooltip 3700（剪贴板与助手卡同开时剪贴板在上）。
    */
   z-index: var(--rf-layer-assistant-card);
   width: min(760px, calc(100vw - 24px));
@@ -17,6 +19,26 @@
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 20px 55px rgb(25 61 99 / 24%);
+  /*
+   * 入场 160ms：从贴球的一侧（右下）轻轻上浮淡入，替代原来的瞬间弹出
+   * （用户反馈「点击之后……显得顺滑一点」）。刻意只动 opacity + translateY、
+   * 不做 scale：卡片打开的第一帧 useTouTouCardDrag 会用 getBoundingClientRect
+   * 量卡片尺寸来算「摆在球旁边」的位置，scale 会把量出来的宽高缩小 ~4%、
+   * 造成系统性偏移；translateY 不改变盒子的宽高，量测不受影响。
+   * reduced-motion 下由 tou-tou-accessibility.css 直接关掉。
+   */
+  animation: tt-assistant-card-in 160ms ease-out;
+}
+
+@keyframes tt-assistant-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .tt-assistant-card.is-dragging {

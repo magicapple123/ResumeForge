@@ -1,7 +1,7 @@
 /** AI 求职助手：流式对话、历史记录、技能开关、附件与项目上下文联动。 */
-import { HistoryOutlined } from "@ant-design/icons";
+import { ArrowDownOutlined, HistoryOutlined } from "@ant-design/icons";
 import { App, Button, Space, Typography } from "antd";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { deleteAssistantMessage } from "../api/assistant";
 import AssistantComposer from "../features/assistant/components/AssistantComposer";
@@ -13,11 +13,14 @@ import { readStoredReasoningEffort } from "../features/assistant/readStoredReaso
 import type { StarterPrompt } from "../features/assistant/assistantTypes";
 import { positiveId } from "../features/assistant/assistantUtils";
 import { useAssistantAttachments } from "../features/assistant/hooks/useAssistantAttachments";
+import { useAssistantAutoScroll } from "../features/assistant/hooks/useAssistantAutoScroll";
 import { useAssistantConversations } from "../features/assistant/hooks/useAssistantConversations";
 import { useAssistantMessageSelection } from "../features/assistant/hooks/useAssistantMessageSelection";
 import { useAssistantSkills } from "../features/assistant/hooks/useAssistantSkills";
 import { useAssistantStream } from "../features/assistant/hooks/useAssistantStream";
 import { useAssistantUrlBootstrap } from "../features/assistant/hooks/useAssistantUrlBootstrap";
+import { useRestoreStreamingConversation } from "../features/assistant/hooks/useRestoreStreamingConversation";
+import { useAssistantDisplayStream } from "../features/assistant/hooks/useThrottledStreamingText";
 import type { AssistantPageProps } from "./assistantPageTypes";
 import type {
   AssistantConversationBrief,
@@ -146,7 +149,6 @@ export default function AssistantPage({
     clearAttachments,
     attachmentReadsRef,
     attachmentsRef,
-    mountedRef,
     quotedMessageId: quoted?.id ?? null,
     clearQuote,
     jobId,
@@ -172,6 +174,8 @@ export default function AssistantPage({
     stop,
   } = stream;
 
+  const { displayText, displayReasoning } = useAssistantDisplayStream(stream);
+
   /** 消息右键菜单「批量选择」的动作（页头按钮已收进这里，R8）。
    *  多选只在有历史消息时才有意义；流式回复期间也不给进——那两条临时气泡还不在
    *  数据库里，勾不上。 */
@@ -183,9 +187,22 @@ export default function AssistantPage({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      stop();
+      // 问题 B：卸载**不再**中止流式回答。流式会话状态在全局 store
+      // （assistantStreamStore）中跨路由存活，离场期间回复继续、结束后由 store
+      // 完成数据刷新；abort 只来自用户手动停止（输入框的停止按钮）。
     };
-  }, [stop]);
+  }, []);
+
+  // 流式会话全局化（问题 B）：回到 /assistant 时恢复"发送中"的完整视图，
+  // 整域下沉到 useRestoreStreamingConversation（挂载时一次性尝试，深链/?new=1 优先）。
+  useRestoreStreamingConversation({
+    sending,
+    sendingConversationId,
+    activeId,
+    requestedConversationId,
+    startNew,
+    selectConversation,
+  });
 
   // 思考强度：切一次记一次，下次打开助手页沿用上次的选择。
   useEffect(() => {
@@ -296,37 +313,31 @@ export default function AssistantPage({
     }
   };
 
-  // 在浏览器绘制前定位到末尾，避免详情刷新时先闪现旧的顶部位置。
-  // 「加载更早」（B5）是往顶部 prepend：这一次变化不该把视口拽到底部，跳过一次滚动，
-  // 让浏览器停在用户当前查看的位置附近。
-  const skipNextScrollRef = useRef(false);
-  const handleLoadEarlier = useCallback(async () => {
-    skipNextScrollRef.current = true;
-    await loadEarlier();
-  }, [loadEarlier]);
-  useLayoutEffect(() => {
-    if (awaitingConversation || (!historyMessages.length && !isActiveStream)) return;
-    if (skipNextScrollRef.current) {
-      skipNextScrollRef.current = false;
-      return;
-    }
-    messageEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-  }, [awaitingConversation, detail?.id, detail?.messages, historyMessages.length, isActiveStream]);
-
-  useEffect(() => {
-    if (!sending || !isActiveStream) return;
-    messageEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-  }, [
+  // ===== 滚动域（问题 A）：吸底跟随、定位到底部与「加载更早」跳过 =====
+  // 整域下沉到 useAssistantAutoScroll；页面只消费回调与「回到底部」显隐。
+  const {
+    handleLoadEarlier,
+    handleMessagesScroll,
+    messagesScrollRef,
+    scrollToBottom,
+    showScrollBottom,
+  } = useAssistantAutoScroll({
+    messageEndRef,
+    awaitingConversation,
+    detailId: detail?.id,
+    detailMessages: detail?.messages,
+    historyCount: historyMessages.length,
     isActiveStream,
+    sending,
     pendingUserText,
     progressText,
-    sending,
     streamError,
     streamingSources,
     streamingReasoning,
     streamingTools,
     streamingText,
-  ]);
+    loadEarlier,
+  });
 
   // 浮窗的历史抽屉是盖在内容上的：除了点背板，键盘用户还需要一条直接退出的路。
   useEffect(() => {
@@ -407,8 +418,8 @@ export default function AssistantPage({
           pendingUserText={pendingUserText}
           pendingSentAt={pendingSentAt}
           pendingUserAttachments={pendingUserAttachments}
-          streamingText={streamingText}
-          streamingReasoning={streamingReasoning}
+          streamingText={displayText}
+          streamingReasoning={displayReasoning}
           streamingSources={streamingSources}
           streamingSourceMap={streamingSourceMap}
           streamingTools={streamingTools}
@@ -431,7 +442,23 @@ export default function AssistantPage({
           selecting={selecting}
           selectedIds={selectedIds}
           onToggleSelected={toggleSelected}
+          messagesScrollRef={messagesScrollRef}
+          onMessagesScroll={handleMessagesScroll}
         />
+        {/* 问题 A：流式期间用户上翻退出吸底后出现的「回到底部」悬浮按钮。
+            点击滚到底并恢复吸底跟随。z-index 用页面内局部浮层的个位数一档，
+            不与悬浮球/浮窗（1000+）冲突。 */}
+        {showScrollBottom && (
+          <button
+            type="button"
+            className="assistant-scroll-bottom"
+            aria-label="回到底部"
+            title="回到底部"
+            onClick={scrollToBottom}
+          >
+            <ArrowDownOutlined aria-hidden="true" />
+          </button>
+        )}
         <AssistantComposer
           compact={compact}
           content={content}
