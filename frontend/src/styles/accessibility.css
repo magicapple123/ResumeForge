@@ -31,6 +31,16 @@
   color: var(--rf-warning-text);
 }
 
+/*
+ * 助手空态「深夜关怀语」：此前用 antd Typography 的 type="warning"，取 colorWarning
+ * #faad14，在白/浅底上对比度仅 ~1.9:1，过不了 axe color-contrast 的 AA（4.5:1）。
+ * 改用站内 warning 文字 token（#875300，theme/tokens.ts palette.warning，深浅底均 ≥6:1），
+ * 语义仍是「关怀/提醒」，只是深到可读。
+ */
+.assistant-empty-state-care.ant-typography {
+  color: var(--rf-warning-text);
+}
+
 .tt-profile-prompt-card-title {
   color: var(--rf-text-secondary);
 }
