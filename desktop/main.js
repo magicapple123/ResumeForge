@@ -17,7 +17,7 @@ const { app, BrowserWindow, Tray, Menu, dialog, ipcMain } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
-const { scheduleUpdateCheck } = require("./updater");
+const { installerWaitCommand, scheduleUpdateCheck } = require("./updater");
 
 // Lifecycle diagnostics use the controlled runtime log; module imports must not write user profiles.
 
@@ -334,7 +334,12 @@ function spawnPendingInstaller() {
   const installerPath = pendingInstallerPath;
   pendingInstallerPath = null;
   try {
-    const child = require("child_process").spawn(installerPath, ["/S"], {
+    // NSIS 静默安装会覆盖 shell 的程序文件；在 Electron 还没退出、exe 句柄未
+    // 释放时直接 spawn 会撞锁静默失败。改为派生一个**脱离的等待进程**：先等
+    // 本主进程退出，再启动安装器（命令构造在 updater.installerWaitCommand，
+    // 可离线单测）。后台停机已经在本函数被调用之前完成，顺序不变。
+    const { file, args } = installerWaitCommand(installerPath, process.pid);
+    const child = require("child_process").spawn(file, args, {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
@@ -344,7 +349,7 @@ function spawnPendingInstaller() {
       logLine(`update installer spawn failed: ${err}`);
       try { dialog.showErrorBox("简历通", "更新安装程序未能启动，请保留下载文件后手动重试。"); } catch {}
     });
-    logLine(`update installer spawned: ${installerPath}`);
+    logLine(`update installer wait-and-install scheduled: ${installerPath} (pid ${process.pid})`);
   } catch (err) {
     logLine(`update installer spawn failed: ${err}`);
   }
@@ -457,6 +462,11 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 ipcMain.handle("splash:get-version", () => app.getVersion());
+
+// 桌面前端的「退出」按钮（preload 暴露的 window.splash.quitApp()）：只发
+// app.quit()，让 before-quit 这个唯一停止点完成"停后端 → 必要时 spawn 安装器"
+// 的既有顺序——绝不从这里另开退出路径。
+ipcMain.on("app:quit-request", () => app.quit());
 
 // Test hooks for the VM-based lifecycle probes
 // (desktop/scripts/test-lifecycle.js). The packaged app runs main.js as its

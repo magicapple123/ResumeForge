@@ -28,6 +28,7 @@ import {
 } from "../../api/settings";
 import type { UpdateCheckResult } from "../../types";
 import { useUpdateDownloadStatus } from "../../hooks/useUpdateDownloadStatus";
+import { renderReleaseNotes } from "./updateNotesRenderer";
 
 const UPDATE_COMPLETED_KEY = "resumeforge.update.completed";
 
@@ -279,17 +280,18 @@ export default function UpdateCard() {
               {result.latest_version && <span>最新版本：{result.latest_version}</span>}
               {result.published_at && <span>发布时间：{result.published_at.slice(0, 10)}</span>}
               {result.notes && (
-                <Typography.Paragraph
+                /* 版本说明是 markdown（## 标题 / - 列表 / **粗体**），不能当纯文本直出；
+                   容器保留滚动（说明长时不把弹窗撑爆）。 */
+                <div
                   style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
                     maxHeight: 200,
                     overflowY: "auto",
                     overflowX: "hidden",
+                    width: "100%",
                   }}
                 >
-                  {result.notes}
-                </Typography.Paragraph>
+                  {renderReleaseNotes(result.notes)}
+                </div>
               )}
               {result.release_url && (
                 <Typography.Link

@@ -39,6 +39,16 @@ export default function ProfilePage() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [writeOpen, setWriteOpen] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState<ProfileWorkspaceKey>("resume");
+  // 未保存防护：这一页是整页表单、只有「保存全部资料」一个提交口，中途刷新/关闭
+  // 浏览器会**静默丢掉**全部未保存编辑。dirty 时挂 beforeunload，触发浏览器原生的
+  // "未保存的更改将丢失"确认；SPA 内的路由跳转不拦（超出本次范围）。
+  const [dirty, setDirty] = useState(false);
+  // markDirty 必须在 useProfilePage 之前声明：识别成功回填要经它置脏（稳定引用，
+  // 不会打穿两棵 tab 子树的 memo）。
+  const markDirty = useCallback(() => setDirty(true), []);
+  // 「粘贴文本识别」成功后要切回「简历资料」分页；activeKey 由这里下发给
+  // ProfileWorkspaceTabs（受控）。useCallback 稳定引用，useProfilePage 经 ref 持有。
+  const activateResumeWorkspace = useCallback(() => setActiveWorkspace("resume"), []);
   // 「网申资料」：**草稿**由 `WebFormProfileWorkspace` 自己持有（击键只重渲那一棵子树），
   // 本页只留**目录**——提交时按它收窄字段，不把界面上的临时键发出去。
   //
@@ -80,7 +90,6 @@ export default function ProfilePage() {
     setEditing,
     photoReading,
     sectionOrderStore,
-    sectionReorderMode,
     profileTextOpen,
     profileText,
     profileTextWarnings,
@@ -97,22 +106,19 @@ export default function ProfilePage() {
     submit,
     cancelEditing,
     handleSectionPointerDown,
-    toggleSectionReorderMode,
     moveSectionByOffset,
     openProfileTextModal,
     handleProfileTextChange,
     closeProfileTextModal,
     parseProfile,
-  } = useProfilePage();
+  } = useProfilePage({
+    activateResumeWorkspace,
+    onProfileParsed: markDirty,
+  });
 
-  // 未保存防护：这一页是整页表单、只有「保存全部资料」一个提交口，中途刷新/关闭
-  // 浏览器会**静默丢掉**全部未保存编辑。dirty 时挂 beforeunload，触发浏览器原生的
-  // "未保存的更改将丢失"确认；SPA 内的路由跳转不拦（超出本次范围）。
-  const [dirty, setDirty] = useState(false);
   // 悬浮球那张「去改资料」提示卡本次进入是否已被关掉。放在页面 state（而不是球、也不写本地存储）：
   // 它的生命周期就是"这一次待在这一页"，离开页面即随组件一起消失，回来自然重新提醒。
   const [promptDismissed, setPromptDismissed] = useState(false);
-  const markDirty = useCallback(() => setDirty(true), []);
   useEffect(() => {
     if (!dirty) return;
     const handler = (event: BeforeUnloadEvent) => {
@@ -181,15 +187,28 @@ export default function ProfilePage() {
    *
    * 网申资料走自己的接口（它存在独立的表里，见 `WebFormProfileSection` 的说明），
    * 所以这里必然是两个请求。不允许的形态是"第二次失败却提示成功"——那会让用户以为
-   * 存上了，而实际上丢的是他刚补的那一屏。
+   * 存上了，而实际上丢的是他刚补的那一屏。同理，资料表单校验不过/保存失败时也
+   * **不**提交网申资料：那样用户会看到"保存成功"、页面却停在编辑态，而简历资料的
+   * 改动其实没存上（两次都成功才解除未保存警示并退出编辑）。
    */
   const submitAll = async () => {
     if (loading || loadError) return;
-    const profileSaved = await submit();
+    const outcome = await submit();
+    if (outcome === "invalid") {
+      // 必填项没补全（antd 已把错误标在字段上并滚动到第一个错误）——提示用户先补全，
+      // 网申资料这次不提交，避免"存一半"被当成全部保存。
+      message.warning("请先补全简历资料里的必填项，再保存全部资料");
+      return;
+    }
+    if (outcome !== "saved") {
+      // failed（保存请求失败，错误已提示）或 skipped（当前不可提交）：什么都不做，
+      // 保持编辑态与未保存警示，等用户处理后再保存。
+      return;
+    }
     const draft = workspaceRef.current?.getDraft() ?? null;
     if (!extraProfile || !draft) {
-      // 网申资料还没加载（用户没打开过那个分页）：只有资料表单要存，存上了才解除未保存警示。
-      if (profileSaved) setDirty(false);
+      // 网申资料还没加载（用户没打开过那个分页）：资料表单已存上，解除未保存警示。
+      setDirty(false);
       return;
     }
     setExtraSaving(true);
@@ -209,9 +228,8 @@ export default function ProfilePage() {
       const saved = await updateWebFormExtraProfile(payload, draft.details, repeated);
       setExtraProfile(saved);
       workspaceRef.current?.adoptSaved(saved);
-      // **两次提交都成功**才算干净：资料表单没存上（profileSaved 为 false）或网申资料
-      // 失败（走下面的 catch）都保持 dirty——"存了一半"时未保存更改仍在。
-      if (profileSaved) setDirty(false);
+      // **两次提交都成功**才算干净；网申资料失败走下面的 catch，dirty 保持不变。
+      setDirty(false);
     } catch (err) {
       // 资料表单已经存进去了，所以要如实说明"存了一半"，而不是笼统说保存失败。
       message.error(
@@ -389,11 +407,21 @@ export default function ProfilePage() {
         <ProfileWorkspaceTabs
           resumeContent={resumeContent}
           webFormContent={webFormContent}
+          activeKey={activeWorkspace}
           onActiveKeyChange={setActiveWorkspace}
         />
       </Form>
     ),
-    [editing, form, markDirty, photoReading, resumeContent, saving, webFormContent],
+    [
+      activeWorkspace,
+      editing,
+      form,
+      markDirty,
+      photoReading,
+      resumeContent,
+      saving,
+      webFormContent,
+    ],
   );
 
   if (loading) return <PageSkeleton rows={10} />;
@@ -409,9 +437,7 @@ export default function ProfilePage() {
         extraSaving={extraSaving}
         photoReading={photoReading}
         profileTextParsing={profileTextParsing}
-        sectionReorderMode={sectionReorderMode}
         allExpanded={allExpanded}
-        onToggleSectionReorderMode={toggleSectionReorderMode}
         onOpenProfileTextModal={openProfileTextModal}
         // 取消编辑即放弃未保存更改（表单回滚到已存值），警示随之解除。
         onCancelEditing={handleCancelEditing}

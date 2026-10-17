@@ -21,7 +21,7 @@ function PartialDateSelectImpl({
   id,
   value = "",
   onChange,
-  disabled = false,
+  disabled,
   label,
   allowOngoing = false,
   yearOnly = false,
@@ -57,6 +57,13 @@ function PartialDateSelectImpl({
   };
   const unsupported = value.trim() && !parts;
 
+  // 禁用语义：只有存在**明确禁用原因**（调用方传了 disabled、或"至今"锁年月、
+  // 年/月尚未选锁下级）时才传 true；否则传 undefined——antd Select 的合并规则是
+  // `mergedDisabled = customDisabled ?? contextDisabled`，显式传 false 会覆盖
+  // Form/ConfigProvider 层的禁用上下文（「我的资料」非编辑态日期仍可改的根因）。
+  const yearDisabled = disabled || selected.ongoing || undefined;
+  const monthDayDisabled = disabled || selected.ongoing || !selected.year || undefined;
+
   return (
     <div className="profile-partial-date-select">
       <Space.Compact block className="profile-partial-date-select__controls">
@@ -64,7 +71,7 @@ function PartialDateSelectImpl({
           id={id}
           aria-label={yearOnly ? label : `${label}年份`}
           value={selected.year || undefined}
-          disabled={disabled || selected.ongoing}
+          disabled={yearDisabled}
           allowClear
           placeholder="年"
           options={years}
@@ -82,7 +89,7 @@ function PartialDateSelectImpl({
             <Select
               aria-label={`${label}月份`}
               value={selected.month || undefined}
-              disabled={disabled || selected.ongoing || !selected.year}
+              disabled={monthDayDisabled}
               allowClear
               placeholder="月"
               options={MONTH_OPTIONS}
@@ -98,7 +105,7 @@ function PartialDateSelectImpl({
             <Select
               aria-label={`${label}日期`}
               value={selected.day || undefined}
-              disabled={disabled || selected.ongoing || !selected.year || !selected.month}
+              disabled={monthDayDisabled || !selected.month || undefined}
               allowClear
               placeholder="日"
               options={dayOptions}
@@ -110,7 +117,7 @@ function PartialDateSelectImpl({
       {allowOngoing ? (
         <Checkbox
           checked={selected.ongoing}
-          disabled={disabled}
+          disabled={disabled || undefined}
           style={{ marginTop: 6 }}
           onChange={(event) => onChange?.(event.target.checked ? "至今" : "")}
         >

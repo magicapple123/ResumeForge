@@ -239,8 +239,12 @@ export function createDataset(name: string): Promise<DatasetInfo> {
 /**
  * 一键载入体验示例：新建「体验示例」数据集、写入纯虚构数据并切换过去。
  * 主数据不受影响；写完由调用方刷新页面让全部视图落到新数据集上。
+ *
+ * 后端在已存在「体验示例」数据集时会**复用**而不是再建一份，并返回
+ * `reused: true`（旧后端没有这个字段，可选以容忍）——调用方据此把提示
+ * 从"已创建/已就绪"改成分流的措辞，避免重复点击时谎报又建了一份。
  */
-export function loadSampleDataset(): Promise<DatasetInfo> {
+export function loadSampleDataset(): Promise<DatasetInfo & { reused?: boolean }> {
   return request("/settings/datasets/sample/load", { method: "POST" });
 }
 

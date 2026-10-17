@@ -269,4 +269,26 @@ describe("UpdateCard", () => {
     expect((await screen.findAllByText(/上次更新没有完成/)).length).toBeGreaterThan(0);
     await waitFor(() => expect(apiMocks.acknowledgeUpdateInstallResult).toHaveBeenCalledOnce());
   });
+
+  it("版本说明按 markdown 渲染：## 变标题、- 变列表、**变粗体**，不再直出原始符号", async () => {
+    // 回归（用户实测）：版本说明是 GitHub Release 的 markdown 原文，此前纯文本直出，
+    // 用户看到一行行 `## 新增`、`- **xxx**`。这里断言三种语法都被渲染掉。
+    apiMocks.checkForUpdate.mockResolvedValue({
+      ...latest,
+      notes: "## 新增\n- **深挖** 模式支持从台账直出报告\n\n修复问题",
+    });
+    renderCard();
+
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    // `## 新增` → 标题；`- **深挖** …` → 列表项（内含 strong）。
+    expect(await screen.findByRole("heading", { name: "新增" })).toBeInTheDocument();
+    expect(screen.getByRole("listitem")).toBeInTheDocument();
+    expect(screen.getByText("深挖").closest("strong")).not.toBeNull();
+    expect(screen.getByText("修复问题")).toBeInTheDocument();
+    // 原始 markdown 符号不再出现在界面上。
+    const card = document.querySelector(".settings-card") as HTMLElement;
+    expect(card.textContent ?? "").not.toContain("##");
+    expect(card.textContent ?? "").not.toContain("**");
+  });
 });

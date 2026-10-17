@@ -2,7 +2,10 @@
 
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getProfileEditControl } from "../features/tou-tou/profileSaveBridge";
+import {
+  getProfileEditControl,
+  getProfileSaveControl,
+} from "../features/tou-tou/profileSaveBridge";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import {
   cleanupProfilePage,
@@ -15,6 +18,7 @@ import {
 const apiMocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
   saveProfile: vi.fn(),
+  parseProfileText: vi.fn(),
   listResumes: vi.fn(),
   getWebFormExtraProfile: vi.fn(),
   updateWebFormExtraProfile: vi.fn(),
@@ -25,6 +29,7 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("../api/profile", () => ({
   getProfile: apiMocks.getProfile,
   saveProfile: apiMocks.saveProfile,
+  parseProfileText: apiMocks.parseProfileText,
 }));
 // 「网申资料」走自己的接口（独立的表），这里一并假掉——不假的话这一页会去真发请求。
 vi.mock("../api/webform", async (importOriginal) => ({
@@ -243,7 +248,101 @@ describe("ProfilePage 未保存防护", () => {
   });
 });
 
+describe("ProfilePage 粘贴文本识别", () => {
+  it("识别成功 → 弹窗关闭、进入编辑态（页头出现取消/保存全部资料）、表单已回填", async () => {
+    apiMocks.parseProfileText.mockResolvedValue({
+      name: "李四",
+      warnings: [],
+      parse_engine: "local",
+      recognized_text: "姓名：李四",
+    });
+    renderProfilePage();
+    await screen.findByText("还没有通用简历");
+
+    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /粘贴文本识别/ }));
+    fireEvent.change(await screen.findByLabelText("个人资料文本"), {
+      target: { value: "姓名：李四" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /识别并填入/ }));
+
+    // 弹窗自动关闭（旧实现识别成功后仍停在弹窗里，用户要自己再点一次关闭）。
+    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("李四"));
+    // 弹窗自动关闭（旧实现识别成功后仍停在弹窗里，用户要自己再点一次关闭）。
+    // jsdom 没有 CSS 过渡事件，antd 的退出动画会停在 zoom-leave；补一次
+    // transitionEnd 让 rc-motion 走完收尾，再断言标题离开文档。
+    await waitFor(() => {
+      const modal = document.querySelector(".ant-modal");
+      if (modal?.classList.contains("ant-zoom-leave")) fireEvent.transitionEnd(modal);
+      expect(screen.queryByText("粘贴个人资料并识别")).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /保存全部资料/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /取消/ })).toBeInTheDocument();
+  });
+
+  it("识别填入后置脏：悬浮球保存桥挂上（未保存警示要生效）", async () => {
+    apiMocks.parseProfileText.mockResolvedValue({
+      name: "李四",
+      warnings: [],
+      parse_engine: "local",
+      recognized_text: "姓名：李四",
+    });
+    renderProfilePage();
+    await screen.findByText("还没有通用简历");
+    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /粘贴文本识别/ }));
+    fireEvent.change(await screen.findByLabelText("个人资料文本"), {
+      target: { value: "姓名：李四" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /识别并填入/ }));
+
+    // setFieldsValue 不触发 onValuesChange；置脏由识别成功显式通知。
+    await waitFor(() => expect(getProfileSaveControl()).not.toBeNull());
+  });
+
+  it("识别成功后把工作区切回「简历资料」分页（activateResumeWorkspace 接线）", async () => {
+    // 「粘贴文本识别」入口目前只在简历资料 tab 渲染；切回是防御性接线（识别回填的是
+    // 简历资料表单，工作区若停在网申分页用户会以为没反应）。弹窗打开期间把工作区切走
+    // （antd 遮罩不挡 jsdom 的程序化点击），钉住"识别成功 → activeWorkspace 回 resume"。
+    apiMocks.parseProfileText.mockResolvedValue({
+      name: "李四",
+      warnings: [],
+      parse_engine: "local",
+      recognized_text: "姓名：李四",
+    });
+    renderProfilePage();
+    await screen.findByText("还没有通用简历");
+    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /粘贴文本识别/ }));
+    // 弹窗开着时把工作区切到网申资料，再完成识别。
+    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
+    fireEvent.change(await screen.findByLabelText("个人资料文本"), {
+      target: { value: "姓名：李四" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /识别并填入/ }));
+
+    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("李四"));
+    // 工作区自动切回「简历资料」分页（受控 activeKey 的可见结果）。
+    expect(screen.getByRole("tab", { name: "简历资料" })).toHaveAttribute("aria-selected", "true");
+  });
+});
+
 describe("ProfilePage 分区折叠", () => {
+  it("非编辑态下条目的日期选择框跟随表单禁用", async () => {
+    // 回归（用户实测）：PartialDateSelect 此前恒传 disabled=false，antd Select 的
+    // 合并规则（customDisabled ?? contextDisabled）让显式 false 覆盖 Form 级禁用，
+    // 查看态的出生/经历日期仍可修改。这里钉住"查看态确实禁用"这条端到端行为。
+    apiMocks.getProfile.mockResolvedValue({
+      ...DEFAULT_PROFILE,
+      educations: [{ school: "示例大学", start_date: "2022-09", end_date: "2026-06" }],
+    });
+    renderProfilePage();
+    await screen.findByText("还没有通用简历");
+
+    const yearCombobox = await screen.findByRole("combobox", { name: "教育经历1开始时间年份" });
+    expect(yearCombobox.closest(".ant-select")).toHaveClass("ant-select-disabled");
+  });
+
   it("默认展开每个分区，点标题可收起", async () => {
     renderProfilePage();
     await screen.findByLabelText("通用简历名称");
