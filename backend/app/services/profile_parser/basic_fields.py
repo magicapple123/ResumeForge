@@ -19,6 +19,11 @@ from .identity_constants import (
 )
 from .normalization import _COMPACT_RESET_ALIASES, _clean_line, _compact_heading, _heading_key
 
+# 常见于「姓名：张三␣␣␣␣年龄：21」这类列排布、但**不进资料页**的字段标签。
+# 只作为同一行的列边界（终止上一个字段的值），不产生字段——年龄换算出生年份
+# 不可靠，识别器刻意忽略（截图抄录里最常见的就是它把姓名吞成半行）。
+_IGNORED_INLINE_LABELS = ("年龄", "age")
+
 
 @lru_cache(maxsize=64)
 def _label_value_pattern(labels: tuple[str, ...]) -> re.Pattern[str]:
@@ -49,7 +54,11 @@ def _label_matches(line: str, labels: tuple[str, ...]) -> list[tuple[int, int, s
 def _extract_inline_labeled_values(line: str) -> dict[str, str]:
     """解析同一行的多个基本字段，不把后续标签吞进当前字段值。"""
     matches: list[tuple[int, int, str, str]] = []
-    for field, labels in _BASIC_LABELS.items():
+    labeled: dict[str, tuple[str, ...]] = {**_BASIC_LABELS}
+    # 被忽略的标签（年龄等）以 None 字段参与同一场定位：它们终止前面的值，
+    # 但自己不产出字段。
+    labeled[""] = _IGNORED_INLINE_LABELS
+    for field, labels in labeled.items():
         for start, end, label in _label_matches(line, labels):
             # ``Project Name:``/``Company Name:`` 中的裸 ``Name`` 不是候选人
             # 姓名字段；完整的 ``project name``/``candidate name`` 别名会在
@@ -69,6 +78,8 @@ def _extract_inline_labeled_values(line: str) -> dict[str, str]:
 
     values: dict[str, str] = {}
     for index, (_start, end, field, _label) in enumerate(selected):
+        if not field:
+            continue
         value_start = end
         while value_start < len(line) and line[value_start] in " \t:：":
             value_start += 1

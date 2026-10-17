@@ -4,6 +4,7 @@ import re
 
 from .entry_constants import (
     _DATE_RANGE_RE,
+    _DATE_RE,
     _ENTRY_HEADER_PATTERNS,
     _ENTRY_SEPARATOR_RE,
     _HEADER_BOUNDARY_LABELS,
@@ -11,6 +12,19 @@ from .entry_constants import (
     _HEADER_SEPARATOR_RE,
 )
 from .normalization import _clean_line
+
+# 教育条目内部的细节字段行（GPA/主修课程/荣誉奖项…）。它们是**同一条教育经历**
+# 的附加字段，绝不能被当作新条目的头部切开——否则 GPA 行会被拆成
+# school="GPA：3.53" / major="4" 这样的坏条目，GPA 与奖项也随之丢失。
+_DETAIL_LABEL_RE = re.compile(
+    r"^(?:主修课程|核心课程|课程|GPA|绩点|排名|成绩|荣誉奖项|获奖情况|获奖经历|奖项|荣誉)"
+    r"\s*[:：]",
+    re.IGNORECASE,
+)
+
+# 宽空白/制表符是截图抄录里最常用的列分隔符（「2025.3—至今␣␣␣␣校外兼职␣␣␣␣前端」），
+# 与竖线/斜杠一样是条目头部的结构信号。
+_WIDE_SPACE_RE = re.compile(r"\s{2,}|\t")
 
 
 def _split_entry_blocks(lines: list[str], kind: str = "") -> list[list[str]]:
@@ -31,9 +45,33 @@ def _split_entry_blocks(lines: list[str], kind: str = "") -> list[list[str]]:
     return blocks
 
 
+def _entry_header_date(clean: str) -> re.Match[str] | None:
+    """条目头部的日期：优先日期范围，其次行首的单个日期。
+
+    「2025.6        第16届…大赛        前端」这类**单个日期开头**的行没有范围
+    分隔符，但只要有结构信号（宽空白/列分隔符）就应视作条目头部；而正文行
+    （「2024 年度总结…」）没有结构信号，不会误切。
+    """
+    range_match = _DATE_RANGE_RE.search(clean)
+    if range_match is not None:
+        return range_match
+    bare_match = _DATE_RE.match(clean)
+    if bare_match is None:
+        return None
+    raw_suffix = clean[bare_match.end() :]
+    structural = bool(
+        _WIDE_SPACE_RE.search(raw_suffix) or re.search(r"[|｜丨·•/／~～—–－-]", raw_suffix)
+    )
+    if not structural and raw_suffix.strip():
+        return None
+    return bare_match
+
+
 def _looks_like_entry_header(line: str, kind: str = "") -> bool:
     clean = _clean_line(line)
     if not clean or len(clean) > 180:
+        return False
+    if _DETAIL_LABEL_RE.match(clean):
         return False
     # 新条目的第一行应与解析阶段认可的字段别名保持一致。这里不能只列
     # 几个中文写法，否则连续粘贴的 ``Company:`` / ``就职公司：`` 会被
@@ -43,22 +81,25 @@ def _looks_like_entry_header(line: str, kind: str = "") -> bool:
     # 必须先排除，避免被后面的通用日期/学历启发式误切成新记录。
     if _is_header_metadata_line(clean):
         return bool(primary_label.match(clean))
-    date_match = _DATE_RANGE_RE.search(clean)
+    date_match = _entry_header_date(clean)
     if date_match:
         # 只把带有结构分隔符、日期位于行首/行尾的短行当作经历头部。
-        # 正文中的“2024-2025 完成迁移”也含日期，但不应因此切断当前条目。
-        prefix = clean[: date_match.start()].strip(" \t|｜丨·•—–－/~～")
-        suffix = clean[date_match.end() :].strip(" \t|｜丨·•—–－/~～")
+        # 正文中的“2024-2025 完成迁移”也含日期，但不应因此切断当前条目；
+        # **整行只有一个日期**也不是新条目——它是“组织/角色 + 日期”连续
+        # 无标题结构的一部分（见 ``_infer_unlabeled_header``）。
+        raw_prefix = clean[: date_match.start()]
+        raw_suffix = clean[date_match.end() :]
+        prefix = raw_prefix.strip(" \t|｜丨·•—–－/~～")
+        suffix = raw_suffix.strip(" \t|｜丨·•—–－/~～")
         if not prefix and not suffix:
             return False
         if len(clean) > 160 or re.search(r"[。！？!?]", clean):
             return False
-        return bool(
-            prefix
-            and (re.search(r"[|｜丨·•/／~～—–－-]", prefix + suffix) or not suffix)
-            or suffix
-            and (re.search(r"[|｜丨·•/／~～—–－-]", prefix + suffix) or not prefix)
+        structural = bool(
+            re.search(r"[|｜丨·•/／~～—–－-]", prefix + suffix)
+            or _WIDE_SPACE_RE.search(raw_prefix + raw_suffix)
         )
+        return bool(prefix and (structural or not suffix) or suffix and (structural or not prefix))
     if primary_label.match(clean):
         return True
     has_unspaced_hyphen = bool(re.search(r"(?<!\d)-(?!\d)", clean))
@@ -133,9 +174,26 @@ def _parse_header(line: str) -> tuple[list[str], str, str]:
         clean = (clean[: date_match.start()] + clean[date_match.end() :]).strip(
             " -—–－~～|｜丨·/／"
         )
+    else:
+        # 没有日期范围时接受行首的单个日期（只记 start，end 留空），如
+        # 「2025.6        第16届…大赛        前端」。
+        bare_match = _DATE_RE.match(clean)
+        if bare_match is not None:
+            start_date = bare_match.group(0)
+            clean = clean[bare_match.end() :].strip(" -—–－~～|｜丨·/／")
+    # 「2024—2025学年」「2024-2025年度」里，学年/年度是日期范围的量词而不是
+    # 条目的第一列，摘掉日期后要一并去掉，否则组织名会变成“学年”。
+    # 只摘**独立成词**的学年/年度（后面跟空白或行尾），避免误伤以这两个字
+    # 开头的组织名。
+    clean = re.sub(r"^(?:学年|年度)(?=\s|$)\s*+", "", clean)
+    clean = re.sub(r"\s+(?:学年|年度)$", "", clean)
     # 日期已先移除，因此此处可以兼容未加空格的 ``公司-岗位-时间`` 格式，
-    # 又不会把年月中的连字符切开。
-    parts = [part.strip() for part in _HEADER_SEPARATOR_RE.split(clean) if part.strip()]
-    if len(parts) == 1:
-        parts = [part.strip() for part in re.split(r"\s{2,}|\t+", clean) if part.strip()]
+    # 又不会把年月中的连字符切开。宽空白/制表符也是列分隔符（截图抄录的
+    # 对齐排版），每个部件再按宽空白拆开。
+    parts = [
+        sub.strip()
+        for part in _HEADER_SEPARATOR_RE.split(clean)
+        for sub in re.split(r"\s{2,}|\t+", part)
+        if sub.strip()
+    ]
     return parts, start_date, end_date

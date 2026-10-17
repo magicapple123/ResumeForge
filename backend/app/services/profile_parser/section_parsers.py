@@ -1,5 +1,7 @@
 """教育、工作、校园、项目和奖项条目的解析。"""
 
+import re
+
 from .entry_blocks import (
     _block_labeled_value,
     _is_header_metadata_line,
@@ -10,6 +12,17 @@ from .entry_constants import _DATE_RE, _DEGREE_TERMS
 from .entry_details import _detail_groups
 from .entry_inference import _compact_header_fields, _find_date_range, _infer_unlabeled_header
 from .normalization import _clean_line
+
+# 校园经历的条目头常常是**单列**的「组织 + 职务」连写（如
+# 「软件学院向阳工作室总负责人」「2301班团支书」）：从尾部职责词处拆开，
+# 组织与角色才各自落位。只在校园分区的单列头部启用——多列头部本来就
+# 有明确的角色列，不动。
+_CAMPUS_ROLE_SUFFIX_RE = re.compile(
+    r"^(?P<organization>.{2,60}?)"
+    r"(?P<role>总负责人|负责人|团长|副团长|团支书|书记|部长|副部长|部员|"
+    r"主席|副主席|会长|副会长|理事长|班长|副班长|委员|干事|队长|副队长|"
+    r"组长|副组长|社长|副社长|成员|志愿者)$"
+)
 
 
 def _parse_education(lines: list[str]) -> list[dict[str, str]]:
@@ -30,6 +43,10 @@ def _parse_education(lines: list[str]) -> list[dict[str, str]]:
             or compact.get("major", "")
             or (parts[1] if len(parts) > 1 else "")
         )
+        # 「软件工程专业/本科」这类写法会把量词带进专业名：去掉尾部"专业"，
+        # 表单里直接可得"软件工程"。
+        if major.endswith("专业") and len(major) > len("专业"):
+            major = major[: -len("专业")]
         degree = (
             _block_labeled_value(block, "degree")
             or compact.get("degree", "")
@@ -77,6 +94,7 @@ def _parse_experience(lines: list[str], campus: bool = False) -> list[dict[str, 
         inferred_details: list[str] | None = None
         if (
             len(parts) <= 1
+            and len(block) > 1
             and not labeled_first
             and not compact.get("first")
             and not labeled_role
@@ -104,6 +122,11 @@ def _parse_experience(lines: list[str], campus: bool = False) -> list[dict[str, 
         first = first or (parts[0] if parts else "")
         role = labeled_role or compact.get("role", "") or inferred_role
         role = role or (parts[1] if len(parts) > 1 else "")
+        if campus and not role and first and len(parts) <= 1:
+            match = _CAMPUS_ROLE_SUFFIX_RE.match(first)
+            if match:
+                first = match.group("organization")
+                role = match.group("role")
         if inferred_start and not start:
             start = inferred_start
         if inferred_end and not end:
@@ -134,6 +157,7 @@ def _parse_projects(lines: list[str]) -> list[dict[str, str]]:
         inferred_details: list[str] | None = None
         if (
             len(parts) <= 1
+            and len(block) > 1
             and not labeled_name
             and not compact.get("first")
             and not labeled_role

@@ -200,7 +200,9 @@ def _entry_values(section: str, value: Any, state: dict[str, bool]) -> list[dict
         if len(value) > 200:
             state["truncated"] = True
     elif section == "skills" and isinstance(value, str):
-        raw_items = [{"name": token.strip()} for token in _TOKEN_SPLIT_RE.split(value) if token.strip()]
+        raw_items = [
+            {"name": token.strip()} for token in _TOKEN_SPLIT_RE.split(value) if token.strip()
+        ]
     else:
         raw_items = []
 
@@ -276,12 +278,49 @@ def _merge_entries(
     return merged[:200]
 
 
+# 模型偶尔无视提示词里的规范分区键，用同义别名输出（practice / campus /
+# work_experience…）。这里宽容映射回规范键，映射不了的原样保留——锚定校验
+# 与合并逻辑对无法归类的键本来就不会采信。
+_SECTION_KEY_ALIASES = {
+    "practice": "projects",
+    "practices": "projects",
+    "project": "projects",
+    "project_experience": "projects",
+    "projects_experience": "projects",
+    "experience": "experiences",
+    "experiences_and_practice": "experiences",
+    "work": "experiences",
+    "work_experience": "experiences",
+    "internship": "experiences",
+    "internships": "experiences",
+    "employment": "experiences",
+    "campus": "campus_experiences",
+    "campus_experience": "campus_experiences",
+    "student_experience": "campus_experiences",
+    "education": "educations",
+    "award": "awards",
+    "awards_and_honors": "awards",
+    "honors": "awards",
+    "skill": "skills",
+}
+
+
+def _canonical_section_keys(data: dict[str, Any]) -> dict[str, Any]:
+    """把模型输出的分区别名键映射回规范键；规范键已有值时不动。"""
+    canonical = dict(data)
+    for alias, section in _SECTION_KEY_ALIASES.items():
+        if alias in data and not data.get(section):
+            canonical[section] = data[alias]
+    return canonical
+
+
 def normalize_profile_result(
     data: dict[str, Any], local: ProfileTextParseResult, source_text: str
 ) -> ProfileTextParseResult:
     """把模型抽取的资料 JSON 规范化成可落库结果：字段截断、来源锚定、与本地结果合并。"""
     if isinstance(data.get("profile"), dict):
         data = data["profile"]
+    data = _canonical_section_keys(data)
     state = {"truncated": False}
     local_data = local.model_dump()
     values = {

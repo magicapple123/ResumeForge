@@ -145,6 +145,34 @@ async def test_extract_profile_text_keeps_local_entries_and_ignores_unanchored_m
 
 
 @pytest.mark.asyncio
+async def test_extract_profile_text_accepts_alias_section_keys():
+    """模型不按规范分区键输出（practice/campus 等）时宽容映射回规范键。"""
+    text = """姓名：李四
+项目/实践经历
+简历通｜核心开发
+校园经历
+学生会｜部长
+技能：Python"""
+    local = parse_profile_text(text)
+    response = json.dumps(
+        {
+            "name": "李四",
+            "practice": [{"name": "简历通", "role": "核心开发"}],
+            "campus": [{"organization": "学生会", "role": "部长"}],
+            "skill": [{"name": "Python", "level": ""}],
+        },
+        ensure_ascii=False,
+    )
+
+    result = await extract_profile_text(FakeProvider(response), text, local)
+
+    data = result.model_dump()
+    assert [item["name"] for item in data["projects"]] == ["简历通"]
+    assert [item["organization"] for item in data["campus_experiences"]] == ["学生会"]
+    assert [item["name"] for item in data["skills"]] == ["Python"]
+
+
+@pytest.mark.asyncio
 async def test_extract_profile_text_rejects_invalid_model_json():
     local = parse_profile_text("姓名：李四\n技能：Python")
 
