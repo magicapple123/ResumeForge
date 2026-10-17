@@ -38,7 +38,7 @@
 
 </div>
 
-> 在线体验是一个**只读演示版**：界面是真的、数据是虚构的、AI 输出是预录回放。想真的生成、真的导出、真的投递，按下面的[快速开始](#-快速开始)在本机跑起来——Windows 第一次双击 `start.cmd`、macOS 第一次双击 `start.command`，都会自动装好环境；也可以到[官网](https://magicapple123.github.io/ResumeForge-official/)直接下载对应平台的压缩包，不用经过 GitHub。
+> 在线体验是一个**只读演示版**：界面是真的、数据是虚构的、AI 输出是预录回放。想真的生成、真的导出、真的投递，按下面的[快速开始](#-快速开始)在本机跑起来——Windows 第一次双击 `start.cmd`、macOS 第一次双击 `start.command`，都会自动装好环境；也可以到[官网](https://magicapple123.github.io/ResumeForge-official/)直接下载对应平台的安装包或压缩包（Windows 安装版 / macOS dmg 安装版 / 双平台便携包），不用经过 GitHub。
 
 ---
 
@@ -294,7 +294,7 @@
 
 - 下载来源都是官方地址（python.org / nodejs.org），走 HTTPS，并且**校验官方提供的 SHA256 摘要**后才解压使用。整个过程在终端里可见，不做隐藏执行。
 - 已经装好 Python 与 Node 的话，启动器会直接用现成的，不会重复下载。
-- **想核对文件是否被动过**：每次发布都随包提供一个 `.sha256` 校验文件（与压缩包同名，例如 `ResumeForge-0.12.0-windows.zip.sha256`）。Windows 上 `Get-FileHash .\ResumeForge-0.12.0-windows.zip -Algorithm SHA256`，macOS / Linux 上 `shasum -a 256 ResumeForge-0.12.0-windows.zip`，与文件里的值对一下即可。
+- **想核对文件是否被动过**：每次发布都随包提供一个 `.sha256` 校验文件（与压缩包同名，例如 `ResumeForge-1.0.1-windows.zip.sha256`）。Windows 上 `Get-FileHash .\ResumeForge-1.0.1-windows.zip -Algorithm SHA256`，macOS / Linux 上 `shasum -a 256 ResumeForge-1.0.1-windows.zip`，与文件里的值对一下即可。
 - **不建议**为了装它而关闭杀毒软件或加白名单。先核对上面的摘要；若校验一致却仍被拦截，把拦截的具体文件名与日志发到 [Issues](https://github.com/magicapple123/ResumeForge/issues) 或群里，那是需要修的问题，不是让你去关防护的理由。
 
 ## 🚀 快速开始
@@ -324,7 +324,20 @@ http://127.0.0.1:8005
 之后每次双击开始/停止即可，不需要分别启动前后端；也可以点页头**右上角**的**退出**，把前后端进程一起停掉。
 
 <details>
-<summary><b>macOS 用户看这里：第一次打开需要多一步</b></summary>
+<summary><b>macOS 安装版（.dmg，v1.0.1 起提供）</b></summary>
+
+<br>
+
+不想用源码包？macOS 现在也有与 Windows 安装版同形态的桌面安装包：到 [Release 页面](https://github.com/magicapple123/ResumeForge/releases) 下载 `ResumeForge-<版本>-x64.dmg`（Apple Silicon 机型经 Rosetta 2 运行），双击安装后从「应用程序」打开「简历通」。
+
+- **安装包未签名/未公证**：首次打开若提示「无法验证开发者」，右键 →「打开」即可；或在终端执行一次 `xattr -dr com.apple.quarantine /Applications/ResumeForge.app`。
+- **首次启动需要联网**：应用会在首次启动时在线装配 Python 运行时（下载依赖，数分钟），之后启动即快。
+- **数据位置**：用户数据放在 `~/Library/Application Support/ResumeForge/`，覆盖安装新版本不会丢数据。
+
+</details>
+
+<details>
+<summary><b>macOS 用源码包看这里：第一次打开需要多一步</b></summary>
 
 <br>
 
@@ -430,7 +443,7 @@ $env:SMOKE_FRONTEND_URL = "http://127.0.0.1:5173"; $env:SMOKE_BACKEND_URL = "htt
 npm run smoke                                   # 开发形态
 ```
 
-当前规模：后端与前端合计 **4,000+ 个测试用例**（后端覆盖率门槛 80%），确切数字以每次 CI 的汇总行为准。GitHub Actions 在 Linux、Windows 与 macOS 上重复执行关键检查——macOS 那几个作业是刻意加的，因为维护者手上没有 Mac，那是唯一能真正跑一遍 macOS 启动链的地方。
+当前规模：后端与前端合计 **5,000+ 个测试用例**（后端覆盖率门槛 80%，后端单次全量约 4,200 个用例；确切数字以每次 CI 的汇总行为准）。GitHub Actions 在 Linux、Windows 与 macOS 上重复执行关键检查——macOS 那几个作业是刻意加的：它们会真下载便携运行时、从干净检出走完整启动链，并做浏览器冒烟，是 macOS 链路的持续把关；macOS 桌面安装包（dmg）自 v1.0.1 起同样由 CI 构建产出。
 
 </details>
 
@@ -473,7 +486,7 @@ npm run smoke                                   # 开发形态
 - **最省事的备份**：**设置 → 数据集 → 导出当前数据集**。导出会带上该数据集引用到的附件，并在包内记录行数、大小和 SHA-256；如果源库已经缺附件或磁盘字节与登记哈希不一致，界面会明确标为“不完整”。换电脑时在新装的应用里「导入备份为新数据集」还原即可（备份默认不含 API Key，可在导出前勾选包含；Windows 上密文绑定本机，换机恢复可能仍需重填）。
 - **交付存档**：简历中心的「交付存档」可以在原简历删除后按标题、公司、岗位和来源查找历史交付。下载的是按快照重放的文件或冻结内容 JSON，不能承诺与原始下载文件字节一致；源记录 purge 不会自动清掉快照、附件和备份副本。
 - **一键更新**：Windows 双击 `update.cmd`，macOS 双击 `update.command`（或 `bash scripts/macos/update.sh`）。两者都只替换程序文件，`data/`、`.env`、`runtime/` 一律不动；Windows 侧还有 `-DryRun` 只预览、`-SkipDependencies` 只拉代码不装依赖。
-- **更新不会动数据库**：Alembic 迁移在下次启动时自动执行，迁移前会在 `backend/data/backups/` 写一份备份。应用内**设置 → 应用 → 软件更新**可直接检查、下载并显示进度；Windows 下载完成后可确认重启安装，程序会原地覆盖并自动重启，`data/`、`.env` 与 `runtime/` 不动。macOS 目前走上面的 `update.command`（同样是"下载新包 → 只覆盖程序文件"）。更新包按当前平台挑选并核对发布方给的 `.sha256`；**成没成以"现在跑的是哪个版本"为准**——没起来会说出失败原因与日志位置（`runtime/update.log`），不会一律弹"已更新"。
+- **更新不会动数据库**：Alembic 迁移在下次启动时自动执行，迁移前会在 `backend/data/backups/` 写一份备份。应用内**设置 → 应用 → 软件更新**可直接检查、下载并显示进度；Windows 下载完成后可确认重启安装，程序会原地覆盖并自动重启，`data/`、`.env` 与 `runtime/` 不动。macOS 源码包走上面的 `update.command`（同样是"下载新包 → 只覆盖程序文件"）；用 `.dmg` 安装版的用户下载新 dmg 覆盖安装即可（数据在 `~/Library/Application Support/ResumeForge/`，不随安装目录覆盖）。更新包按当前平台挑选并核对发布方给的 `.sha256`；**成没成以"现在跑的是哪个版本"为准**——没起来会说出失败原因与日志位置（`runtime/update.log`），不会一律弹"已更新"。
 
 不要使用 `git clean -fdx`，也不要删除整个项目目录后直接覆盖。完整的升级、压缩包更新与回滚步骤见 [docs/upgrading.md](docs/upgrading.md)。
 

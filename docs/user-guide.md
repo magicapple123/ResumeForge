@@ -19,14 +19,19 @@ ResumeForge 的推荐流程是：维护完整个人资料 → 录入目标岗位
     「无法打开，因为 Apple 无法检查它是否包含恶意软件」。这不是代码问题。任选一种处置，**只需一次**：
     在 Finder 里**右键点 `start.command` → 打开**再点一次「打开」；或在「终端」里进入项目目录执行
     `xattr -dr com.apple.quarantine .`。
+  - **也可以装桌面安装包（.dmg，v1.0.1 起提供）**：到 Release 页面下载对应架构的 dmg（目前为 x64；Apple Silicon
+    机型经 Rosetta 2 运行），双击安装后从「应用程序」打开。安装包未签名，首次打开需右键 →「打开」，或在终端执行
+    `xattr -dr com.apple.quarantine /Applications/ResumeForge.app`；用户数据在 `~/Library/Application Support/ResumeForge/`，
+    覆盖安装不会丢。首次启动会在线装配 Python 运行时（需联网，数分钟）。
   - 双击**没反应**时（某些解压工具会丢掉可执行位），在「终端」里进入项目目录执行 `bash start.command`，
     效果与双击一致。想换端口或不开浏览器：`bash scripts/macos/start.sh --backend-port 8010 --frontend-port 5180 --no-browser`。
 - **Linux**：目前没有一键启动器，按 [升级与数据安全](upgrading.md) 分别启动后端与前端：后端使用
   `.venv/bin/python -m uvicorn app.main:app --port 8000`，前端在 `frontend` 目录运行 `npm run dev`，然后打开
   `http://localhost:5173`。
 - **应用内更新**：设置里的「软件更新」可以检查、下载并显示进度；Windows 下载完成后可确认「重启并安装」，应用会在原路径
-  覆盖程序文件并自动重启。`data/`、`.env`、`runtime/` 和数据库备份不会被更新包覆盖。macOS 用 `update.command`
-  做同样的事（只替换程序文件，数据一样不动），**不要把 Windows 的自动覆盖安装承诺给 macOS / Linux**。
+  覆盖程序文件并自动重启。`data/`、`.env`、`runtime/` 和数据库备份不会被更新包覆盖。macOS 源码包用 `update.command`
+  做同样的事（只替换程序文件，数据一样不动）；macOS 安装版（dmg）用户下载新 dmg 覆盖安装即可（数据在用户目录，不随之覆盖）。
+  **不要把 Windows 的自动覆盖安装承诺给 macOS / Linux**。
   若卡片提示状态读取失败，先点 **重试读取状态**；状态尚不能确认时，下载安装按钮会暂时停用，避免沿用过期的“已下载”状态。
 
 ## 界面导览
