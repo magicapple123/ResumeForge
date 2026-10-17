@@ -9,8 +9,10 @@
 #   2. let electron-builder produce the .dmg (and the unpacked .app directory).
 #
 # Usage (from anywhere):
-#   bash scripts/build-desktop-mac.sh            # dmg + dir (default)
-#   bash scripts/build-desktop-mac.sh --dir      # dir only (fast smoke build)
+#   bash scripts/build-desktop-mac.sh                  # dmg + dir (host arch)
+#   bash scripts/build-desktop-mac.sh --dir            # dir only (fast smoke build)
+#   bash scripts/build-desktop-mac.sh --arch both      # x64 + arm64 dmgs
+#   bash scripts/build-desktop-mac.sh --arch universal # one dmg, both arches
 #   bash scripts/build-desktop-mac.sh --help
 #
 # Prerequisites:
@@ -40,9 +42,18 @@ fail() {
 }
 
 TARGET="dmg"
+ARCH=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) TARGET="dir" ;;
+    --arch)
+      [ $# -ge 2 ] || {
+        echo "--arch needs a value: x64 | arm64 | universal | both" >&2
+        exit 2
+      }
+      ARCH="$2"
+      shift
+      ;;
     -h | --help)
       sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -113,20 +124,40 @@ echo "Payload assembled: $PAYLOAD_FILES files"
 BUILDER="$DESKTOP_DIR/node_modules/.bin/electron-builder"
 [ -x "$BUILDER" ] || fail "electron-builder not found at $BUILDER - run npm install in desktop/ first."
 
-echo "=== electron-builder --mac (target=$TARGET) ==="
+# Architecture selection. Default (empty) keeps electron-builder's host-arch
+# behaviour; CI uses "both" so one run ships native dmgs for Intel and Apple
+# Silicon alike. bash 3.2 (macOS /bin/bash) is the compatibility floor, so the
+# empty-array expansion below must stay behind the "+" guard under set -u.
+ARCH_ARGS=()
+ARCH_SPLIT="$(echo "$ARCH" | tr ',' ' ')"
+case "$ARCH_SPLIT" in
+  "") ;;
+  x64) ARCH_ARGS=(--x64) ;;
+  arm64) ARCH_ARGS=(--arm64) ;;
+  universal) ARCH_ARGS=(--universal) ;;
+  "x64 arm64" | "arm64 x64" | both) ARCH_ARGS=(--x64 --arm64) ;;
+  *)
+    fail "Unknown --arch value '$ARCH' (expected x64 | arm64 | universal | both)"
+    ;;
+esac
+
+echo "=== electron-builder --mac (target=$TARGET${ARCH:+, arch=$ARCH}) ==="
 pushd "$DESKTOP_DIR" >/dev/null
 if [ "$TARGET" = "dir" ]; then
-  "$BUILDER" --mac --dir --config electron-builder.yml
+  "$BUILDER" --mac --dir ${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"} --config electron-builder.yml
 else
-  "$BUILDER" --mac --config electron-builder.yml
+  "$BUILDER" --mac ${ARCH_ARGS[@]+"${ARCH_ARGS[@]}"} --config electron-builder.yml
 fi
 popd >/dev/null
 
 echo "=== Build output ==="
 ls -lh "$DESKTOP_DIR/out" 2>/dev/null || true
 
-DMG="$(ls "$DESKTOP_DIR/out"/ResumeForge-"$VERSION"-*.dmg 2>/dev/null | head -1 || true)"
-if [ -n "$DMG" ] && [ -f "$DMG" ]; then
+# One sidecar per dmg: --arch both can produce more than one artifact per run.
+DMG_COUNT=0
+for DMG in "$DESKTOP_DIR/out"/ResumeForge-"$VERSION"-*.dmg; do
+  [ -f "$DMG" ] || continue
+  DMG_COUNT=$((DMG_COUNT + 1))
   # sha256 sidecar in the same "<hex>  <name>" format the Windows installer
   # sidecar uses (ASCII, two spaces, no "*" prefix).
   (
@@ -135,9 +166,11 @@ if [ -n "$DMG" ] && [ -f "$DMG" ]; then
   )
   echo "dmg: $DMG"
   echo "sha256: $(cat "$DMG.sha256")"
-  echo ""
-  echo "Next: hdiutil attach \"$DMG\" to inspect, then launch ResumeForge.app."
-  echo "The build is unsigned - first launch needs right-click > Open (Gatekeeper)."
-else
+done
+if [ "$DMG_COUNT" -eq 0 ]; then
   echo "WARNING: no .dmg artifact found under $DESKTOP_DIR/out" >&2
+else
+  echo ""
+  echo "Next: hdiutil attach \"<dmg>\" to inspect, then launch ResumeForge.app."
+  echo "The build is unsigned - first launch needs right-click > Open (Gatekeeper)."
 fi

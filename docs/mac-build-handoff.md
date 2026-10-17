@@ -3,6 +3,31 @@
 > 目标读者：在 macOS（含虚拟机）上执行本任务的 AI agent 或维护者。
 > 背景：本仓库的 Windows 桌面安装包（NSIS Setup.exe）已发布；**macOS 桌面壳（.dmg）从未构建过**，本任务完成它的首次构建与验证。
 
+## 〇、日常发版请优先用 CI（无需虚拟机）
+
+发布资产已可由 GitHub Actions 构建（公开仓库的 macOS runner 免费），**日常发版不再需要进入虚拟机**：
+
+1. 按常规流程 bump 版本、push、打 tag、创建 Release（`gh release create <tag> --notes-file ...`）；
+2. 在 GitHub Actions 页面手动运行 **`Release assets (desktop installers)`**：
+   - `tag`：目标版本（如 `v1.0.2`，**Release 必须已存在**）；
+   - `source_ref`：留空（构建源=该 tag，保证产物与发行严格对应）；
+   - `dry_run`：初次可保持 `true` 演练（只产出 workflow artifact，不碰 Release）；
+3. 成功后 Release 自动获得：
+   - `ResumeForge-Setup-<ver>.exe` + `.sha256`（Windows）
+   - `ResumeForge-<ver>-x64.dmg` / `ResumeForge-<ver>-arm64.dmg` + `.sha256`（mac 双架构，Intel 与 Apple Silicon 原生各一份）
+
+命令行等价操作：
+
+```bash
+gh workflow run release-assets.yml -f tag=v1.0.2 -f dry_run=true   # 演练
+gh workflow run release-assets.yml -f tag=v1.0.2 -f dry_run=false  # 正式挂资产
+gh run watch
+```
+
+**虚拟机仍然有用的两个场景**：① 真机启动验收（本文第四节）；② 补建早于 mac 构建脚本的历史版本（≤ v1.0.1 的 tag）。新版本优先走 CI。
+
+---
+
 ## 一、目标
 
 在 macOS 上从源码构建出：
