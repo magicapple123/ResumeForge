@@ -1,0 +1,221 @@
+# Release assets: build the desktop installers in CI and attach them to a
+# GitHub Release. This is the replacement for hand-packaging on the
+# maintainer's machine (and the macOS VM): the macOS dmg needs a real macOS
+# environment (hdiutil), which GitHub provides on the free macos runners of
+# public repositories.
+#
+# Flow after a release is created (see docs/mac-build-handoff.md):
+#   1. bump versions / push / tag / `gh release create <tag>` with notes
+#   2. run this workflow with `tag=<tag>` and `dry_run=false`
+#   3. the run attaches ResumeForge-Setup-<ver>.exe (+.sha256) and
+#      ResumeForge-<ver>-{x64,arm64}.dmg (+.sha256) to the release
+#
+# The build source defaults to the tag itself, so the artifacts correspond
+# exactly to what was released. `source_ref` exists for rehearsal runs
+# (e.g. tag=v1.0.1 predates scripts/build-desktop-mac.sh; build from main
+# with dry_run=true to exercise the pipeline without touching the release).
+name: Release assets (desktop installers)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag the assets belong to (e.g. v1.0.2). Required even for dry runs."
+        required: true
+      source_ref:
+        description: "Optional: build from this ref instead of the tag (rehearsal only)."
+        required: false
+        default: ""
+      dry_run:
+        description: "Build and keep artifacts as workflow artifacts; do not touch the release."
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-assets-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  target:
+    name: Resolve build ref and verify release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      ref: ${{ steps.resolve.outputs.ref }}
+    steps:
+      - name: Resolve ref / verify release exists
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -n "$SOURCE_REF" ]; then
+            REF="$SOURCE_REF"
+            echo "Rehearsal build from '$REF' (release target remains '$TAG')."
+          else
+            REF="$TAG"
+          fi
+          if [ "$DRY_RUN" != "true" ]; then
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null ||
+              { echo "::error::Release '$TAG' does not exist; create it first."; exit 1; }
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+  windows-installer:
+    name: Windows installer (Setup.exe)
+    needs: target
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.target.outputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Build frontend production assets
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+          npm run build
+
+      - name: Install desktop shell dependencies
+        working-directory: desktop
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        run: npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+
+      - name: Package desktop app (dir + NSIS)
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        # Build-Desktop rebuilds desktop/python-runtime.zip automatically when
+        # the cached zip is missing or stale (requirements fingerprint guard,
+        # scripts/PythonRuntimeManifest.ps1) -- exactly the CI case here.
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\Build-Desktop.ps1 -Target win
+
+      - name: Verify packaging outputs and write checksum sidecar
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($f in @("desktop\out\win-unpacked\ResumeForge.exe",
+                           "desktop\out\win-unpacked\resources\payload\backend\app\main.py",
+                           "desktop\out\win-unpacked\resources\payload\frontend\dist\index.html",
+                           "desktop\out\win-unpacked\resources\payload\python-runtime.zip")) {
+            if (-not (Test-Path $f)) { throw "packaging output missing: $f" }
+          }
+          $setup = Get-ChildItem "desktop\out\ResumeForge-Setup-*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "installer artifact not found in desktop/out" }
+          $sha = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  $($setup.Name)" | Set-Content "$($setup.FullName).sha256" -Encoding ascii
+          Write-Host "installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB, 1)) MB)"
+          Write-Host "sha256: $sha"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-installer
+          path: |
+            desktop/out/ResumeForge-Setup-*.exe
+            desktop/out/ResumeForge-Setup-*.exe.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attach installer to the release
+        if: ${{ !inputs.dry_run }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" \
+            desktop/out/ResumeForge-Setup-*.exe \
+            desktop/out/ResumeForge-Setup-*.exe.sha256 \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+  macos-installer:
+    name: macOS installer (dmg, x64 + arm64)
+    needs: target
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.target.outputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Check the mac build script exists at this ref
+        # Tags older than the script (v1.0.1 and earlier) cannot build dmgs
+        # from here; fail with an actionable message instead of a bare 127.
+        run: |
+          set -euo pipefail
+          if [ ! -f scripts/build-desktop-mac.sh ]; then
+            echo "::error::scripts/build-desktop-mac.sh missing at ref '${{ needs.target.outputs.ref }}'. Build older tags from a mac manually (docs/mac-build-handoff.md) or pass source_ref for a rehearsal."
+            exit 1
+          fi
+
+      - name: Build frontend production assets
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Install desktop shell dependencies
+        working-directory: desktop
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        run: npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+
+      - name: Build dmgs (x64 + arm64)
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        # The macOS runner is Apple Silicon; --arch both cross-builds the Intel
+        # dmg too so one run serves every Mac. Unsigned by design (no Apple
+        # Developer certificate) -- Gatekeeper guidance lives in the release
+        # notes and docs/mac-build-handoff.md.
+        run: bash scripts/build-desktop-mac.sh --arch both
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-installers
+          path: |
+            desktop/out/ResumeForge-*.dmg
+            desktop/out/ResumeForge-*.dmg.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attach dmgs to the release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" \
+            desktop/out/ResumeForge-*.dmg \
+            desktop/out/ResumeForge-*.dmg.sha256 \
+            --repo "$GITHUB_REPOSITORY" --clobber
