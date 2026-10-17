@@ -187,6 +187,12 @@ bash -n start.command scripts/macos/start.sh       # 只做语法检查，几毫
 
 Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链路，并真的取一次前端入口模块）。它和 macOS 那个作业一样，捕的是"新下载的包在这台机器上起不来"——**端口活着不等于页面能用**：Vite 的入口模块取不到时浏览器就是一片空白（2026-09-29 用户在虚拟机上遇到的正是这个形态）。改了启动链、发布包或前端入口要跑它。
 
+### macOS 桌面安装包与发布资产（v1.0.1 起）
+
+- **mac 安装包（dmg）**：在 macOS 上构建 `bash scripts/build-desktop-mac.sh --arch both`（或 `--arch x64|arm64|universal`），产物为 `desktop/out/ResumeForge-<ver>-{x64,arm64}.dmg` + 同名 `.sha256`。**未签名**（无 Apple 开发者证书），发布说明里必须写清右键→打开 / `xattr -dr com.apple.quarantine` 的打开方式。
+- **日常发版优先走 CI**：`gh workflow run release-assets.yml -f tag=<tag> -f dry_run=true|false`——Windows `Setup.exe` 与 mac 双架构 dmg 一并构建并挂到对应 Release（`dry_run=false` 才上传）。构建源默认=该 tag（产物与发行严格对应）；流程与已知坑见 `docs/mac-build-handoff.md`。
+- **桌面运行时缓存**：`desktop/python-runtime.zip` 由依赖清单守卫自动管理——requirements 指纹或 Python 版本不匹配时 `Build-Desktop.ps1` 会自动重建（`scripts/PythonRuntimeManifest.ps1`，测试 `scripts/tests/Test-PythonRuntimeGuard.ps1` 随 CI 运行）。不要手工复用陈旧 zip。
+
 ### 本地运行
 
 - 后端默认仅监听本机地址；开发启动方式以 README 和当前配置为准。

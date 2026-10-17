@@ -615,11 +615,14 @@ $sizeInMegabytes = [math]::Round((Get-Item -LiteralPath $archivePath).Length / 1
 #      scripts and docs), so the checksum is the concrete thing a cautious user can
 #      actually check. With -IncludeDesktop exactly one exe is added, under
 #      desktop/, and the same hash covers it.
-# Written in the conventional "<hash>  <filename>" format so `sha256sum -c` works.
+# Written in the conventional "<hash>  <filename>" format with an LF line ending
+# so `sha256sum -c` works on macOS/Linux too. Set-Content appends CRLF on
+# Windows, which makes shasum treat the trailing "\r" as part of the file name
+# and fail every cross-platform check.
 $hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
 $checksumPath = "$archivePath.sha256"
 $checksumLine = "$hash  $([System.IO.Path]::GetFileName($archivePath))"
-Set-Content -LiteralPath $checksumPath -Value $checksumLine -Encoding ASCII
+[System.IO.File]::WriteAllText($checksumPath, "$checksumLine`n", [System.Text.Encoding]::ASCII)
 
 Write-Host ""
 Write-Host "Archive  : $archivePath"

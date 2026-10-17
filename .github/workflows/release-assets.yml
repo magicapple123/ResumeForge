@@ -120,7 +120,9 @@ jobs:
           $setup = Get-ChildItem "desktop\out\ResumeForge-Setup-*.exe" | Select-Object -First 1
           if (-not $setup) { throw "installer artifact not found in desktop/out" }
           $sha = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$sha  $($setup.Name)" | Set-Content "$($setup.FullName).sha256" -Encoding ascii
+          # LF line ending so `sha256sum -c` works on macOS/Linux (Set-Content
+          # would append CRLF and break the cross-platform check).
+          [System.IO.File]::WriteAllText("$($setup.FullName).sha256", "$sha  $($setup.Name)`n", [System.Text.Encoding]::ASCII)
           Write-Host "installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB, 1)) MB)"
           Write-Host "sha256: $sha"
 

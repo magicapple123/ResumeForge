@@ -133,7 +133,10 @@ if ($Target -eq "win") {
     $setupPath = Join-Path $desktopDir "out\ResumeForge-Setup-$version.exe"
     if (Test-Path $setupPath) {
         $sha = (Get-FileHash $setupPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        "$sha  $(Split-Path -Leaf $setupPath)" | Set-Content "$setupPath.sha256" -Encoding ascii
+        # LF (not Set-Content's CRLF): the sidecar must stay `sha256sum -c`
+        # friendly on macOS/Linux, where the trailing "\r" would break the
+        # file name match.
+        [System.IO.File]::WriteAllText("$setupPath.sha256", "$sha  $(Split-Path -Leaf $setupPath)`n", [System.Text.Encoding]::ASCII)
         Write-Host "installer sha256 ($(Split-Path -Leaf $setupPath)): $sha"
     } else {
         Write-Warning "installer artifact not found for checksum sidecar: $setupPath"
