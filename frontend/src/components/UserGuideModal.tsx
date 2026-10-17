@@ -7,7 +7,7 @@ import {
   RightOutlined,
 } from "@ant-design/icons";
 import { App as AntdApp, Button, Divider, Modal, Space, Steps, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 // 走 import 让 Vite 按 `base` 重写前缀，别写死 "/resumeforge-icon.png"
 // （在线体验产物部署在 Pages 子路径下，绝对路径会 404）。理由同 App.tsx 侧栏图标。
@@ -50,6 +50,10 @@ export default function UserGuideModal({
 }: UserGuideModalProps) {
   const { message } = AntdApp.useApp();
   const [current, setCurrent] = useState(0);
+  // 弹窗内容容器：打开时把初始焦点收进来（而非 antd 默认放进右上角关闭按钮），
+  // 否则弹窗一出现关闭按钮就顶着全局 :focus-visible 的焦点环，看着像误触。
+  // tabIndex=-1 让它可编程聚焦但不进 Tab 序；键盘 Tab 的焦点环不受影响。
+  const contentRef = useRef<HTMLDivElement | null>(null);
   // 「快速开始」→ 完整 8 步：用户手动切走后就留在步骤视图，本次打开不再弹回。
   const [view, setView] = useState<"quick-start" | "steps">(
     initialQuickStart ? "quick-start" : "steps",
@@ -69,6 +73,31 @@ export default function UserGuideModal({
       setView(initialQuickStart ? "quick-start" : "steps");
     }
   }
+
+  // 打开时把焦点落到内容容器上。autoFocus 只在挂载时生效（antd Modal 关闭后 DOM
+  // 保留、重开不重挂），所以用 effect 覆盖「每次打开」；Modal 内容随 motion 在
+  // 首个 commit 之后才挂上（此刻 ref 还是空），用 rAF 重试几次直到可聚焦。用户若
+  // 已把焦点移进弹窗（例如 Tab 进了按钮）则不抢。
+  useEffect(() => {
+    if (!open) return undefined;
+    let raf = 0;
+    let attempts = 0;
+    const tryFocus = () => {
+      const container = contentRef.current;
+      if (container) {
+        if (!container.contains(document.activeElement)) {
+          container.focus({ preventScroll: true });
+        }
+        return;
+      }
+      if (attempts < 10) {
+        attempts += 1;
+        raf = requestAnimationFrame(tryFocus);
+      }
+    };
+    tryFocus();
+    return () => cancelAnimationFrame(raf);
+  }, [open]);
 
   const goToStepPage = () => {
     onClose();
@@ -93,8 +122,10 @@ export default function UserGuideModal({
     if (loadingSample) return;
     setLoadingSample(true);
     try {
-      await loadSampleDataset();
-      message.success("示例数据已就绪，正在进入首页");
+      const result = await loadSampleDataset();
+      // 后端在已有「体验示例」数据集时会复用而不是再建一份（reused=true）——
+      // 这时说"已创建/已就绪"是在撒谎，用户会以为又多了一份数据。
+      message.success(result.reused ? "已回到体验示例数据" : "示例数据已就绪，正在进入首页");
       onClose();
       onSampleLoaded();
     } catch (err) {
@@ -173,74 +204,77 @@ export default function UserGuideModal({
         )
       }
     >
-      {showQuickStart ? (
-        /* 首启动首屏：三条都通向"第一份可交付简历"，选一条顺的走；
+      {/* 内容容器接收初始焦点（见 contentRef 说明），两种视图都包在同一容器里。 */}
+      <div ref={contentRef} className="user-guide-modal-content" tabIndex={-1}>
+        {showQuickStart ? (
+          /* 首启动首屏：三条都通向"第一份可交付简历"，选一条顺的走；
            完整 8 步保留在「查看完整指南」后面，一步不少。 */
-        <section className="user-guide-quickstart" aria-live="polite">
-          <Typography.Title level={4}>从这里开始</Typography.Title>
-          <Typography.Paragraph className="user-guide-description">
-            三条路都通向你的第一份可交付简历，选一条顺的走。
-          </Typography.Paragraph>
-          <div className="user-guide-quickstart-paths">
-            {QUICK_START_PATHS.map((item) => {
-              const PathIcon = item.icon;
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  className="user-guide-quickstart-path"
-                  disabled={item.key === "sample" && loadingSample}
-                  onClick={() => goToQuickStartPath(item)}
-                >
-                  <span className="user-guide-quickstart-icon" aria-hidden="true">
-                    <PathIcon />
-                  </span>
-                  <span className="user-guide-quickstart-copy">
-                    <span className="user-guide-quickstart-lead">{item.lead}</span>
-                    <span className="user-guide-quickstart-text">{item.text}</span>
-                  </span>
-                  <RightOutlined className="user-guide-quickstart-arrow" aria-hidden="true" />
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      ) : (
-        /* 步骤竖排在左侧当导航，内容在右侧。
+          <section className="user-guide-quickstart" aria-live="polite">
+            <Typography.Title level={4}>从这里开始</Typography.Title>
+            <Typography.Paragraph className="user-guide-description">
+              三条路都通向你的第一份可交付简历，选一条顺的走。
+            </Typography.Paragraph>
+            <div className="user-guide-quickstart-paths">
+              {QUICK_START_PATHS.map((item) => {
+                const PathIcon = item.icon;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className="user-guide-quickstart-path"
+                    disabled={item.key === "sample" && loadingSample}
+                    onClick={() => goToQuickStartPath(item)}
+                  >
+                    <span className="user-guide-quickstart-icon" aria-hidden="true">
+                      <PathIcon />
+                    </span>
+                    <span className="user-guide-quickstart-copy">
+                      <span className="user-guide-quickstart-lead">{item.lead}</span>
+                      <span className="user-guide-quickstart-text">{item.text}</span>
+                    </span>
+                    <RightOutlined className="user-guide-quickstart-arrow" aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ) : (
+          /* 步骤竖排在左侧当导航，内容在右侧。
           横排一行的做法在模块变多之后标题会互相挤压（截图反馈"小标题有点拥挤"）：
           9 个步骤平分 720px，每个标题只剩 70 多像素，中文标题被迫折成两三行。
           竖排后每个标题独占一行，再加模块也不用重新排版。 */
-        <div className="user-guide-body">
-          <Steps
-            className="user-guide-steps"
-            orientation="vertical"
-            size="small"
-            current={current}
-            items={GUIDE_STEPS.map(({ title }) => ({ title }))}
-            onChange={setCurrent}
-          />
-          <Divider orientation="vertical" className="user-guide-divider" />
-          <section className="user-guide-step-content" aria-live="polite">
-            <div className="user-guide-step-icon" aria-hidden="true">
-              <StepIcon />
-            </div>
-            <div className="user-guide-step-copy">
-              <Typography.Title level={4}>{step.heading}</Typography.Title>
-              <Typography.Paragraph className="user-guide-description">
-                {renderEmphasis(step.description)}
-              </Typography.Paragraph>
-              <ul className="user-guide-points">
-                {step.points.map((point) => (
-                  <li key={point.lead}>
-                    <span className="user-guide-point-lead">{point.lead}</span>
-                    <span className="user-guide-point-text">{renderEmphasis(point.text)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
-        </div>
-      )}
+          <div className="user-guide-body">
+            <Steps
+              className="user-guide-steps"
+              orientation="vertical"
+              size="small"
+              current={current}
+              items={GUIDE_STEPS.map(({ title }) => ({ title }))}
+              onChange={setCurrent}
+            />
+            <Divider orientation="vertical" className="user-guide-divider" />
+            <section className="user-guide-step-content" aria-live="polite">
+              <div className="user-guide-step-icon" aria-hidden="true">
+                <StepIcon />
+              </div>
+              <div className="user-guide-step-copy">
+                <Typography.Title level={4}>{step.heading}</Typography.Title>
+                <Typography.Paragraph className="user-guide-description">
+                  {renderEmphasis(step.description)}
+                </Typography.Paragraph>
+                <ul className="user-guide-points">
+                  {step.points.map((point) => (
+                    <li key={point.lead}>
+                      <span className="user-guide-point-lead">{point.lead}</span>
+                      <span className="user-guide-point-text">{renderEmphasis(point.text)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          </div>
+        )}
+      </div>
     </Modal>
   );
 }

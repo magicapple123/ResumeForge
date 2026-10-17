@@ -160,6 +160,18 @@ describe("UserGuideModal", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("打开时初始焦点不落在右上角关闭按钮上", async () => {
+    renderGuide();
+
+    const closeButton = document.querySelector<HTMLElement>(".ant-modal-close");
+    expect(closeButton).toBeInTheDocument();
+    // antd 默认把初始焦点交给第一个可聚焦元素（关闭按钮），命中全局 :focus-visible
+    // 规则后弹窗一出现关闭按钮就顶着焦点环——初始焦点必须收进弹窗内容容器。
+    // 内容随 motion 挂载（rAF 重试聚焦），用 waitFor 等它落位。
+    await waitFor(() => expect(document.activeElement).toHaveClass("user-guide-modal-content"));
+    expect(document.activeElement).not.toBe(closeButton);
+  });
+
   it("loads the sample dataset and hands over to the reload hook", async () => {
     const onClose = vi.fn();
     const onSampleLoaded = vi.fn();
@@ -171,6 +183,26 @@ describe("UserGuideModal", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     // 收尾交给注入的钩子（生产环境是整页刷新，让全部视图落到示例数据集上）。
     expect(onSampleLoaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("新建示例数据集时提示「已就绪」，复用已有数据集时提示「已回到」", async () => {
+    // 默认 mock：不带 reused（旧后端/首次创建）→ 维持原有文案。
+    const first = renderGuide({ onClose: vi.fn(), onSampleLoaded: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: /载入示例数据体验/ }));
+    expect(await screen.findByText("示例数据已就绪，正在进入首页")).toBeInTheDocument();
+    first.unmount();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // reused=true：后端复用了已存在的「体验示例」数据集，不能再说"已创建/已就绪"。
+    apiMocks.loadSampleDataset.mockResolvedValue({
+      id: "0123456789abcdef",
+      name: "体验示例",
+      sample: true,
+      reused: true,
+    });
+    renderGuide({ onClose: vi.fn(), onSampleLoaded: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: /载入示例数据体验/ }));
+    expect(await screen.findByText("已回到体验示例数据")).toBeInTheDocument();
   });
 
   it("stays open with an error message when loading the sample fails", async () => {

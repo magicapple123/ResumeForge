@@ -3,7 +3,6 @@ import {
   DownOutlined,
   EditOutlined,
   FileSearchOutlined,
-  HolderOutlined,
   SaveOutlined,
   UpOutlined,
 } from "@ant-design/icons";
@@ -17,9 +16,7 @@ interface Props {
   extraSaving: boolean;
   photoReading: boolean;
   profileTextParsing: boolean;
-  sectionReorderMode: boolean;
   allExpanded: boolean;
-  onToggleSectionReorderMode: () => void;
   onOpenProfileTextModal: () => void;
   onCancelEditing: () => void;
   onSubmitAll: () => Promise<void>;
@@ -34,9 +31,7 @@ export default function ProfilePageHeader({
   extraSaving,
   photoReading,
   profileTextParsing,
-  sectionReorderMode,
   allExpanded,
-  onToggleSectionReorderMode,
   onOpenProfileTextModal,
   onCancelEditing,
   onSubmitAll,
@@ -57,22 +52,13 @@ export default function ProfilePageHeader({
         {editing ? (
           <>
             {activeWorkspace === "resume" ? (
-              <>
-                <Button
-                  icon={<HolderOutlined />}
-                  disabled={saving || photoReading || profileTextParsing}
-                  onClick={onToggleSectionReorderMode}
-                >
-                  {sectionReorderMode ? "完成模块排序" : "调整模块顺序"}
-                </Button>
-                <Button
-                  icon={<FileSearchOutlined />}
-                  disabled={saving || photoReading || profileTextParsing}
-                  onClick={onOpenProfileTextModal}
-                >
-                  粘贴文本识别
-                </Button>
-              </>
+              <Button
+                icon={<FileSearchOutlined />}
+                disabled={saving || photoReading || profileTextParsing}
+                onClick={onOpenProfileTextModal}
+              >
+                粘贴文本识别
+              </Button>
             ) : null}
             <Button
               icon={<CloseOutlined />}

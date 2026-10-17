@@ -61,8 +61,8 @@ test.describe.serial("核心链路（第 2 条载入示例，第 3 条依赖它�
 
   test("示例简历可以真实导出为 PDF", async ({ page }) => {
     // 自带准备：顺序执行时示例已由上一条载入；单独跑本条（-g / 重试）时补载。
-    // 每次载入都会新建一份「体验示例」并切换过去（旧的不删，示例数据会累积，
-    // 这是既有行为，数据集清理由用户在设置页完成）。
+    // 重复载入是幂等的：后端会复用已有的「体验示例」数据集并切换过去
+    // （sample/load 返回 reused=true），不会累积多份示例。
     const api = await playwrightRequest.newContext();
     const datasets = (await (await api.get(`${BACKEND_URL}/api/settings/datasets`)).json()) as {
       name: string;

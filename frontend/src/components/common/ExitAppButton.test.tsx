@@ -46,6 +46,33 @@ describe("ExitAppButton", () => {
     expect(screen.getByText(/关闭这个标签页/)).toBeInTheDocument();
   });
 
+  it("桌面壳（window.splash.isDesktop）走桌面文案并在退出后调用 quitApp", async () => {
+    const quitApp = vi.fn();
+    // 桌面壳注入的桥由 desktop/ 批次实现；这里 stub 出同一个形状。
+    (window as unknown as { splash: unknown }).splash = { isDesktop: true, quitApp };
+
+    renderButton();
+
+    fireEvent.click(screen.getByRole("button", { name: "退出应用" }));
+    const dialog = await screen.findByRole("dialog");
+    // 桌面文案面向桌面快捷方式，不再出现浏览器措辞（start.cmd / 标签页）。
+    expect(dialog.textContent).toContain("应用会完全退出");
+    expect(dialog.textContent).toContain("桌面快捷方式");
+    expect(dialog.textContent).not.toContain("start.cmd");
+
+    fireEvent.click(screen.getByRole("button", { name: "退 出" }));
+
+    await waitFor(() => expect(systemMocks.shutdownApp).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("简历通已退出")).toBeInTheDocument();
+    // shutdownApp 成功后追加退出壳进程。
+    await waitFor(() => expect(quitApp).toHaveBeenCalledTimes(1));
+    // 遮罩文案也面向桌面（没有"浏览器不允许/标签页"措辞）。
+    expect(screen.getByText(/桌面壳进程都已停止/)).toBeInTheDocument();
+    expect(screen.queryByText(/关闭这个标签页/)).not.toBeInTheDocument();
+
+    delete (window as unknown as { splash?: unknown }).splash;
+  });
+
   // 失败路径（接口报错、确认框保持打开）没有用例：组件**故意**把错误再抛出去让 antd
   // 别关确认框，而 vitest 会把这条未处理的 Promise 拒绝记成整个运行的错误。那条逻辑
   // 本轮没有改动，就不为它引入噪声了。

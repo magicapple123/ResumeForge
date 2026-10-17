@@ -5,224 +5,15 @@
 // main.js is loaded inside a Node VM with stubbed electron / BackendManager /
 // updater modules -- no real process, window, tray or network is involved.
 // The stubs capture calls so the tests can assert the *ordering* between
-// backend.stop(), app.quit() and the update-installer spawn.
+// backend.stop(), app.quit() and the update-installer spawn. The shared VM
+// harness lives in lifecycle-harness.js; the preload quitApp bridge probes
+// live in test-quit-bridge.js.
 //
 // Run with: node scripts/test-lifecycle.js   (or: node --test scripts/)
 
 const assert = require("assert");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const vm = require("vm");
 const { test } = require("node:test");
-const { EventEmitter } = require("node:events");
-
-const REPO_DESKTOP = path.join(__dirname, "..");
-
-// A deferred promise the tests resolve manually to control when "the backend
-// finished stopping" happens.
-function makeDeferred() {
-  let resolve;
-  const promise = new Promise((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
-
-function flush() {
-  // Let the VM's async whenReady handler and promise chains settle.
-  return new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
-}
-
-function loadMain() {
-  const events = {
-    quitCalls: [],
-    stopCalls: [],
-    order: [],
-    preventCalls: [],
-    errorBoxes: [],
-    spawnCalls: [],
-    installerChildren: [],
-    timers: [],
-  };
-
-  const mainTmp = fs.mkdtempSync(path.join(os.tmpdir(), "rf-main-vm-"));
-
-  const appStub = {
-    isPackaged: false,
-    quit() {
-      events.quitCalls.push("quit");
-      events.order.push("quit");
-    },
-    requestSingleInstanceLock() {
-      return true;
-    },
-    whenReady() {
-      return Promise.resolve();
-    },
-    on(name, handler) {
-      if (name === "before-quit") events.beforeQuitHandler = handler;
-    },
-    getPath(name) {
-      return mainTmp;
-    },
-    getVersion() {
-      return "0.18.0";
-    },
-  };
-
-  const browserWindowInstances = [];
-  class BrowserWindowStub {
-    constructor() {
-      this.webContents = { send() {} };
-      browserWindowInstances.push(this);
-    }
-    setMenuBarVisibility() {}
-    loadFile() {
-      return Promise.resolve();
-    }
-    loadURL() {
-      return Promise.resolve();
-    }
-    once() {}
-    on() {}
-    show() {}
-    hide() {}
-    focus() {}
-    isDestroyed() {
-      return false;
-    }
-    isMinimized() {
-      return false;
-    }
-    restore() {}
-  }
-
-  const menuHolder = {};
-  class TrayStub {
-    setToolTip() {}
-    setContextMenu(menu) {
-      menuHolder.menu = menu;
-    }
-    on() {}
-  }
-  const MenuStub = {
-    buildFromTemplate: (template) => ({ template }),
-  };
-
-  const dialogStub = {
-    showErrorBox: (title, message) => {
-      events.errorBoxes.push(message);
-    },
-  };
-
-  const ipcMainStub = { handle() {} };
-
-  const backendInstances = [];
-  // The tests set `stopBackend` to control the stop() promise; it resolves to
-  // the stop outcome ({ ok, reason }) that RR-02 introduced.
-  const state = { stopBackend: () => Promise.resolve({ ok: true, reason: "" }) };
-  class BackendManagerStub {
-    constructor() {
-      backendInstances.push(this);
-      this.onUnexpectedExit = null;
-    }
-    async start() {
-      return "http://127.0.0.1:8010";
-    }
-    stop() {
-      events.stopCalls.push("stop");
-      events.order.push("stop-start");
-      return state.stopBackend().then((outcome) => {
-        events.order.push("stop-complete");
-        return outcome === undefined ? { ok: true, reason: "" } : outcome;
-      });
-    }
-  }
-
-  const updaterStub = { scheduleUpdateCheck() {} };
-
-  const childProcessStub = {
-    spawn(file, args, options) {
-      events.spawnCalls.push({ file, args, options });
-      events.order.push("installer-spawn");
-      const child = new EventEmitter();
-      child.unref = () => {};
-      events.installerChildren.push(child);
-      return child;
-    },
-  };
-
-  const sandbox = {
-    console,
-    process,
-    Buffer,
-    Promise,
-    Date,
-    JSON,
-    Object,
-    Array,
-    String,
-    Number,
-    Error,
-    Math,
-    setTimeout(fn, ms) {
-      // Captured fake timer: crash-restart backoffs must never actually fire
-      // during the test; tests may invoke the recorded callback manually.
-      const handle = { _fn: fn, _ms: ms, unref() {} };
-      events.timers.push(handle);
-      return handle;
-    },
-    clearTimeout() {},
-    setImmediate,
-    require(spec) {
-      if (spec === "electron") {
-        return {
-          app: appStub,
-          BrowserWindow: BrowserWindowStub,
-          Tray: TrayStub,
-          Menu: MenuStub,
-          dialog: dialogStub,
-          ipcMain: ipcMainStub,
-        };
-      }
-      if (spec === "./backend-manager") {
-        return { BackendManager: BackendManagerStub };
-      }
-      if (spec === "./updater") {
-        return updaterStub;
-      }
-      if (spec === "child_process") {
-        return childProcessStub;
-      }
-      return require(spec);
-    },
-    module: { exports: {} },
-    __filename: path.join(REPO_DESKTOP, "main.js"),
-    __dirname: REPO_DESKTOP,
-  };
-
-  const source = fs.readFileSync(path.join(REPO_DESKTOP, "main.js"), "utf-8");
-  vm.runInNewContext(source, sandbox, { filename: "desktop/main.js" });
-
-  return {
-    events,
-    appStub,
-    menuHolder,
-    backendInstances,
-    exports: sandbox.module.exports,
-    state,
-    cleanup: () => fs.rmSync(mainTmp, { recursive: true, force: true }),
-  };
-}
-
-async function waitForShellReady(loaded) {
-  // The whenReady handler is async: window + tray + backend start.
-  await flush();
-  await flush();
-  assert.ok(loaded.menuHolder.menu, "tray menu should have been created");
-  assert.ok(loaded.backendInstances.length >= 1, "backend should have been created");
-}
+const { flush, loadMain, makeDeferred, waitForShellReady } = require("./lifecycle-harness");
 
 test("tray exit does NOT stop the backend (audit R: stop call count is 0)", async () => {
   const loaded = loadMain();
@@ -337,11 +128,15 @@ test("update install: installer spawns only AFTER backend.stop() completes", asy
 
     assert.strictEqual(loaded.events.spawnCalls.length, 1, "installer should have spawned");
     const spawn = loaded.events.spawnCalls[0];
-    assert.strictEqual(spawn.file, "C:/temp/ResumeForge-Setup-0.19.0.exe");
-    // spawn.args comes from the VM realm; compare element-wise.
-    assert.strictEqual(spawn.args.length, 1);
-    assert.strictEqual(spawn.args[0], "/S");
-    assert.ok(spawn.options.detached, "installer must survive our exit");
+    // 2026-10 实测缺陷③：NSIS /S 安装若在 Electron 退出前启动，会撞上未释放的
+    // exe 句柄而静默失败。现在派生的是"等待主进程退出再安装"的脱离等待进程。
+    assert.strictEqual(spawn.file, "powershell");
+    assert.ok(spawn.options.detached, "the wait-and-install helper must survive our exit");
+    const script = spawn.args[spawn.args.length - 1];
+    assert.match(script, /Wait-Process -Id \d+/, "the helper must wait for the shell's pid");
+    assert.match(script, /Start-Process -FilePath 'C:\/temp\/ResumeForge-Setup-0\.19\.0\.exe'/,
+      "the verified installer path must be handed to Start-Process verbatim");
+    assert.match(script, /-ArgumentList '\/S'/, "the NSIS install must stay silent");
 
     const stopCompleteIndex = loaded.events.order.indexOf("stop-complete");
     const spawnIndex = loaded.events.order.indexOf("installer-spawn");

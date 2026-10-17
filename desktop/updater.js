@@ -14,8 +14,14 @@
 //     append to a .part staging file, hard size cap, and the payload only
 //     replaces the candidate installer after the sha256 sidecar verifies.
 //   - install = hand the verified installer to main.js's installAndQuit(),
-//     which quits the app; main's before-quit stops the backend and spawns
-//     the installer only after the stop completes (no file handles held).
+//     which quits the app; main's before-quit stops the backend and schedules
+//     the installer only after the stop completes. The installer itself runs
+//     from a detached wait-for-pid PowerShell helper (installerWaitCommand)
+//     so the NSIS /S run never races the live shell's file handles.
+//   - One confirmation up front ("将下载并安装更新，期间应用会自动重启") authorizes
+//     the whole download->verify->install->restart flow; a second blocking
+//     dialog after the checksum used to strand the install when the user was
+//     away or the window sat in the tray.
 
 const { app, dialog } = require("electron");
 const crypto = require("crypto");
@@ -38,6 +44,9 @@ const DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
 // misrouted or hostile response, not an update.
 const MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024;
 const CHECK_DELAY_MS = 30_000;
+// 启动后的一次检查可能赶上机器离线（Wi-Fi 未连、VPN 未拨）：之后每 6 小时补查
+// 一次，失败静默记日志。unref 保证定时器不会阻止应用退出。
+const RECHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const RELEASE_VERSION_RE = /^v?(\d+)\.(\d+)\.(\d+)$/;
 
 // Electron 33 embeds Node 20, where AbortSignal.timeout exists (the backend
@@ -195,6 +204,51 @@ function findAsset(release, predicate) {
   return (release.assets || []).find(predicate);
 }
 
+// 窗口可能正藏在托盘里：所有更新对话框弹出前先把窗口带回来并抢焦点，
+// 否则对话框跟着一个看不见的窗口，用户"永远看不到更新提示"（实测缺陷②）。
+// 窗口为 null / 已销毁时返回 null，调用方退化为无 parent 的弹窗——对话框
+// 仍然会显示。
+function revealWindow(parentWindow) {
+  if (!parentWindow || typeof parentWindow.isDestroyed !== "function") return null;
+  try {
+    if (parentWindow.isDestroyed()) return null;
+    if (typeof parentWindow.isMinimized === "function" && parentWindow.isMinimized()) {
+      parentWindow.restore();
+    }
+    parentWindow.show();
+    parentWindow.focus();
+    return parentWindow;
+  } catch {
+    // 任何窗口操作失败都不该拦住对话框本身。
+    return null;
+  }
+}
+
+async function showUpdateDialog(parentWindow, options) {
+  const target = revealWindow(parentWindow);
+  return target ? dialog.showMessageBox(target, options) : dialog.showMessageBox(options);
+}
+
+/**
+ * 「等待主进程退出，再静默运行安装器」的命令构造（纯函数，便于离线单测）。
+ *
+ * NSIS 静默安装（`/S`）会覆盖 shell 的程序文件——如果它在 Electron 进程还活着、
+ * exe 句柄未释放时启动，安装会撞锁静默失败（实测缺陷③）。所以安装器不再由
+ * main.js 在退出前直接 spawn，而是交给一个脱离的 PowerShell 等待进程：
+ * 先等主进程 pid 退出，再启动安装器。`-ErrorAction SilentlyContinue` 兜住
+ * "进程恰好已经退出"的竞态（Wait-Process 找不到 pid 不算错误）。
+ */
+function installerWaitCommand(installerPath, mainPid) {
+  const escaped = String(installerPath).replace(/'/g, "''");
+  const script =
+    `Wait-Process -Id ${Number(mainPid)} -ErrorAction SilentlyContinue; ` +
+    `Start-Process -FilePath '${escaped}' -ArgumentList '/S'`;
+  return {
+    file: "powershell",
+    args: ["-NoProfile", "-WindowStyle", "Hidden", "-Command", script],
+  };
+}
+
 async function checkAndOfferUpdate(parentWindow, deps = {}) {
   if (!app.isPackaged) return;
   // This installer protocol is NSIS/Windows only. Other platforms retain their supported manual update path.
@@ -220,7 +274,7 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
     return;
   }
 
-  const choice = await dialog.showMessageBox(parentWindow, {
+  const choice = await showUpdateDialog(parentWindow, {
     type: "info",
     message: `发现新版本 ${latest}`,
     detail: "将下载并安装更新，期间应用会自动重启。",
@@ -269,16 +323,13 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
   // candidate installer.
   fs.renameSync(partPath, installerPath);
 
-  const install = await dialog.showMessageBox(parentWindow, {
-    type: "info",
-    message: "更新包校验通过",
-    detail: "应用将退出并自动运行安装程序。",
-    buttons: ["立即安装", "取消"],
-    defaultId: 0,
-    cancelId: 1,
-  });
-  if (install.response !== 0) return;
-
+  // 用户在第一次确认（"将下载并安装更新，期间应用会自动重启"）时已经授权了
+  // 整个"下载 → 校验 → 安装 → 重启"流程；校验通过后**直接安装**，不再弹第二个
+  // 阻塞确认——用户离开电脑或窗口在托盘里看不见时，那个确认框会让安装永远
+  // 不发生（实测缺陷①）。这里只留一条日志记录自动安装的决定。
+  if (typeof deps.onAutoInstall === "function") {
+    deps.onAutoInstall(installerPath);
+  }
   if (typeof deps.installAndQuit === "function") {
     // main.js owns the install sequencing: quit -> before-quit stops the
     // backend -> installer spawns after the stop completes.
@@ -294,12 +345,27 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
 function scheduleUpdateCheck(parentWindow, logLine, deps = {}) {
   if (!app.isPackaged) return;
   if (process.platform !== "win32") return;
-  setTimeout(() => {
-    checkAndOfferUpdate(parentWindow, deps)
-      .catch((err) => {
-        if (logLine) logLine(`update check failed: ${err}`);
-      });
-  }, CHECK_DELAY_MS);
+  // 校验通过即自动安装是这次的新行为：记一条日志，方便从 desktop-main.log
+  // 回答"到底有没有尝试安装"。
+  const wiredDeps = {
+    ...deps,
+    onAutoInstall:
+      deps.onAutoInstall ||
+      ((installerPath) => {
+        if (logLine) logLine(`update verified, installing automatically: ${installerPath}`);
+      }),
+  };
+  const runCheck = () => {
+    checkAndOfferUpdate(parentWindow, wiredDeps).catch((err) => {
+      if (logLine) logLine(`update check failed: ${err}`);
+    });
+  };
+  setTimeout(runCheck, CHECK_DELAY_MS).unref();
+  // 启动 30s 那一次如果机器离线就永远错过了；之后每 6 小时补查一次。
+  // 若新版本已可用而用户此前点过「暂不」，补查会再次弹出确认——这是有意的
+  // 取舍：本特性的目标就是"下载完成后安装真的发生"。unref 保证定时器不阻止退出。
+  const interval = setInterval(runCheck, RECHECK_INTERVAL_MS);
+  interval.unref();
 }
 
 module.exports = {
@@ -308,6 +374,7 @@ module.exports = {
   versionCompare,
   timeoutSignal,
   downloadToFile,
+  installerWaitCommand,
   MAX_DOWNLOAD_BYTES,
   isReleaseAssetUrl,
   normalizedReleaseVersion,
