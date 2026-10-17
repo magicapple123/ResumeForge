@@ -192,6 +192,10 @@ def _parse_skills(lines: list[str]) -> list[dict[str, str]]:
                 "机器学习",
                 "自然语言",
                 "计算机视觉",
+                "计算机",
+                "摄影",
+                "设计",
+                "办公",
                 "大模型",
                 "certification",
                 "certifications",
@@ -217,7 +221,19 @@ def _parse_skills(lines: list[str]) -> list[dict[str, str]]:
         if leading_level:
             inherited_level = leading_level.group("level")
             clean = leading_level.group("skills")
-        for token in _split_tokens(clean):
+        # 分类行里偶尔出现整句技能描述（如
+        # 「摄影：熟练掌握相机的使用，能独自完成视频拍摄与剪辑工作」）——
+        # 逗号只是句子停顿而不是技能列表分隔符，句子太长且没有顿号/斜杠这类
+        # 列表分隔符时整条保留，拆开会产生「相机的使用」这类无意义碎片。
+        long_sentence = (
+            label_match is not None
+            and len(clean) > 16
+            and "、" not in clean
+            and "/" not in clean
+            and "|" not in clean
+        )
+        tokens = [clean] if long_sentence else _split_tokens(clean)
+        for token in tokens:
             name, level = _skill_name_and_level(token, inherited_level)
             key = name.casefold()
             if not name or len(name) > 64:

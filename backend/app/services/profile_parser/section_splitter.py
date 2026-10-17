@@ -38,6 +38,13 @@ def _split_sections(lines: list[str]) -> dict[str, list[str]]:
             continue
         key, inline_content = _heading_parts(line)
         if key is not None:
+            # 「荣誉奖项：第16届…」这类**带内容的奖项行**出现在教育分区内时，
+            # 它是教育条目的附加字段（落到 achievements），不是新分区——被当成
+            # 分区标题会把后续所有内容都拖进奖项分区。独立的「荣誉奖项」标题行
+            # （无内联内容）仍然正常开启分区。
+            if current == "educations" and current_explicit and key == "awards" and inline_content:
+                sections["educations"].append(line)
+                continue
             current = key
             current_explicit = True
             if inline_content:

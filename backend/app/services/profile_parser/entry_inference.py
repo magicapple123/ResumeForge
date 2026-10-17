@@ -23,6 +23,9 @@ def _compact_header_fields(line: str, kind: str) -> dict[str, str]:
     if date_match is None:
         return {}
     body = (clean[: date_match.start()] + clean[date_match.end() :]).strip(" -—–－~～|｜丨·•/／")
+    # 「2024—2025学年 天津工业大学 软件工程 本科」：学年/年度是日期量词，
+    # 摘掉日期后要一并去掉，不能混进学校/专业 token。
+    body = re.sub(r"^(?:学年|年度)(?=\s|$)\s*+", "", body)
     if not body or re.search(r"[|｜丨/／·•—–－~～-]", body) or re.search(r"[:：]", body):
         return {}
     tokens = body.split()

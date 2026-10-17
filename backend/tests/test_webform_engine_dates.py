@@ -4,6 +4,7 @@
 DOM 顺序裁决。主文件与共享替身见 ``test_webform_engine.py``；基础映射见
 ``test_webform_engine_match.py``，证据消歧见 ``test_webform_engine_ambiguity.py``。
 """
+
 from app.services.webform.engine import FormEngine
 from app.services.webform.service.fill import _rebuild_mapping
 
@@ -45,7 +46,8 @@ def test_tencent_style_referral_education_dates_and_supplement_are_mapped():
     )
 
     mappings = {
-        mapping.field: mapping for mapping in engine.match_fields(
+        mapping.field: mapping
+        for mapping in engine.match_fields(
             controls,
             {
                 "referral_code": "345354543",
@@ -195,12 +197,12 @@ def test_polluted_year_month_text_components_split_one_profile_date():
     by_field: dict[str, list[str]] = {}
     for mapping in engine.match_fields(
         controls,
-        {"education_end": "2023-06", "phone": "13551567974"},
+        {"education_end": "2023-06", "phone": "13800001234"},
     ).mappings:
         by_field.setdefault(mapping.field, []).append(mapping.write_value())
 
     assert by_field["education_end"] == ["2023", "06"]
-    assert by_field["phone"] == ["13551567974"]
+    assert by_field["phone"] == ["13800001234"]
 
 
 def _paired_date_controls(gap: bool = False):
@@ -209,7 +211,9 @@ def _paired_date_controls(gap: bool = False):
     ``gap=True`` 时在两组之间插一个"请输入就读学校"（模拟可重复区块的第二条教育经历：
     它的日期组前面隔着别的控件），编号照真实页面连续。
     """
-    block = "就读时间-学校名称专业名称学历删除本条 教育背景添加就读时间-学校名称专业名称学历删除本条"
+    block = (
+        "就读时间-学校名称专业名称学历删除本条 教育背景添加就读时间-学校名称专业名称学历删除本条"
+    )
     entries = [("年", block), ("月", block), ("年", block), ("月", block)]
     if gap:
         entries.insert(2, ("请输入就读学校", "学校名称*"))
@@ -243,7 +247,9 @@ def test_adjacent_date_group_pair_completes_the_end_field():
         _paired_date_controls(), {"education_start": "2019-09", "education_end": "2023-06"}
     )
 
-    assert {(mapping.field, mapping.control.index): mapping.write_value() for mapping in result.mappings} == {
+    assert {
+        (mapping.field, mapping.control.index): mapping.write_value() for mapping in result.mappings
+    } == {
         ("education_start", 14): "2019",
         ("education_start", 15): "09",
         ("education_end", 16): "2023",

@@ -8,9 +8,19 @@ _MONTH_NAME = (
     r"Nov(?:ember)?|Dec(?:ember)?)"
 )
 _DATE_TOKEN = rf"(?:\d{{4}}(?:[./年-]\d{{1,2}})?(?:[./月-]\d{{1,2}})?|{_MONTH_NAME}\s+\d{{4}})"
+# 分隔符兼容「— – - ~ 至 到」与直接空格接「至今/现在」（``2025.3 至今`` 这种截图
+# 抄录常见的写法：日期与「至今」之间只有空格，没有连字符）。前三个分支自带
+# ``\s*+``，最后一个分支用「空白 + 前瞻」消费空格——不能依赖分支外的共享 ``\s*+``，
+# 它是占有量词，回溯不会把空格让给后面的分支。
+_DATE_RANGE_SEPARATOR = (
+    r"(?:\s*+[至到]\s*+[-—–－~～]?\s*+"
+    r"|\s*+[-—–－~～]\s*+"
+    r"|\s*+\bto\b\s*+"
+    r"|\s++(?=至今|现在|present|current|now))"
+)
 _DATE_RANGE_RE = re.compile(
-    rf"(?P<start>{_DATE_TOKEN})\s*+"
-    rf"(?:至|到|[-—–－~～]|\bto\b)\s*+"
+    rf"(?P<start>{_DATE_TOKEN})"
+    rf"{_DATE_RANGE_SEPARATOR}"
     rf"(?P<end>{_DATE_TOKEN}|至今|现在|present|current|now)",
     re.IGNORECASE,
 )
