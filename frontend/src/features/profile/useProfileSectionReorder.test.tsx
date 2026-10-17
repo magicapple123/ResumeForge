@@ -1,14 +1,26 @@
-/** 资料分区拖拽重排（order 外部 store 化后）：高度前缀和、实时重排、零 elementFromPoint、
- *  order 变化的布局位移补偿（被拖卡片视觉连续跟手）。 */
+/** 资料分区拖拽重排：按下不塌缩、实时重排、前缘插入判定、直接算目标位置的跟手视觉。
+ *
+ * 第二轮修复后的行为契约（jsdom 只能验证算术与事件流，真机行为由
+ * `.workbuddy/tmp/drag-repro/verify.cjs` 在真实 Chromium 里验收）：
+ * 1. 拖拽期**不改变布局**（塌缩与跟手在几何上不兼容，见 hook 注释）；
+ * 2. 插入判定用被拖项**前缘**，clamp 上限处一定能到达末位（旧实现的死锁回归）；
+ * 3. `transform = 视觉目标位置 − 当前顺序下的布局位置`，不做累加补偿。
+ */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useSyncExternalStore } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SECTION_ORDER } from "../../components/profile/ProfileSectionConfig";
 import type { ProfileSectionKey } from "../../components/profile/ProfileSectionConfig";
-import { draggedLayoutShift, useProfileSectionReorder } from "./useProfileSectionReorder";
+import { resetScrollAnchoringStateForTests } from "../../components/profile/dragAutoScroll";
+import { useProfileSectionReorder } from "./useProfileSectionReorder";
 
-/** 每个分区的高度（jsdom 无布局，测试里用 getBoundingClientRect 桩出栈式布局）。 */
+/** 每个分区的高度（jsdom 无布局，测试里用 getBoundingClientRect 桩出栈式布局）。
+ *
+ * summary 刻意给 140px：行程制下「一次激活内拖到 clamp 上限」的可用行程 =
+ * stackBottom − 被拖项高 − 其静止槽位。projects（index 2）到末位需要 5 步 =
+ * 5×48 = 240px 行程，stub 栈在 projects 之下必须留足这个余量——真实分区都在几百
+ * 像素以上，该前提天然成立。 */
 const HEIGHTS: Record<ProfileSectionKey, number> = {
   basic_info: 100,
   experiences: 80,
@@ -17,11 +29,13 @@ const HEIGHTS: Record<ProfileSectionKey, number> = {
   educations: 30,
   awards: 20,
   campus_experiences: 20,
-  summary: 20,
+  summary: 140,
 };
 const STACK_TOP = 200;
 
-/** 当前顺序直接从 DOM 的 data-order 属性读回，测试里不持有模块级可变状态。 */
+/** 默认顺序下的分区栈几何（gap=0）：
+ * basic 200-300、exp 300-380、projects 380-440、skills 440-480、edu 480-510、
+ * awards 510-530、campus 530-550、summary 550-690。 */
 function currentOrder(): ProfileSectionKey[] {
   const raw = screen.getByTestId("section-stack").getAttribute("data-order") ?? "";
   return raw.split(",").filter(Boolean) as ProfileSectionKey[];
@@ -30,19 +44,27 @@ function currentOrder(): ProfileSectionKey[] {
 function Harness({ editing = true }: { editing?: boolean }) {
   const reorder = useProfileSectionReorder({ editing, saving: false, photoReading: false });
   // 与 ProfileSectionStack 相同的消费方式：顺序经外部 store 订阅。
-  const { sectionOrder } = useSyncExternalStore(
+  const { sectionOrder, reordering, draggingKey } = useSyncExternalStore(
     reorder.sectionOrderStore.subscribe,
     reorder.sectionOrderStore.getSnapshot,
   );
   return (
     <div
-      className="profile-section-stack"
+      className={`profile-section-stack${reordering ? " is-section-reordering" : ""}`}
       data-order={sectionOrder.join(",")}
       data-testid="section-stack"
     >
-      {/* 与生产实现一致：DOM 顺序固定为默认序，视觉顺序交给 CSS order。 */}
+      {/* 与生产实现一致：DOM 顺序固定为默认序，视觉顺序交给 CSS order；
+          分区壳按 reordering 挂 is-section-reordering（强制真实布局）。 */}
       {DEFAULT_SECTION_ORDER.map((key) => (
-        <div key={key} data-profile-section-key={key} style={{ order: sectionOrder.indexOf(key) }}>
+        <div
+          key={key}
+          data-profile-section-key={key}
+          className={`profile-section-sortable${reordering ? " is-section-reordering" : ""}${
+            draggingKey === key ? " is-dragging" : ""
+          }`}
+          style={{ order: sectionOrder.indexOf(key) }}
+        >
           <button
             type="button"
             aria-label={`拖动调整${key}顺序`}
@@ -102,6 +124,7 @@ function stubSectionRects() {
   });
 }
 
+/** pointerdown → 一步越过阈值（激活 + 重排 + 写 transform 全在同一个事件里同步完成）。 */
 function dragTo(key: ProfileSectionKey, fromY: number, toY: number) {
   fireEvent.pointerDown(screen.getByLabelText(`拖动调整${key}顺序`), {
     clientX: 10,
@@ -111,13 +134,23 @@ function dragTo(key: ProfileSectionKey, fromY: number, toY: number) {
   fireEvent.pointerMove(document, { clientX: 10, clientY: toY, pointerId: 1 });
 }
 
+function draggedTransform(key: ProfileSectionKey): string {
+  return (
+    document.querySelector<HTMLElement>(`[data-profile-section-key="${key}"]`)?.style.transform ??
+    ""
+  );
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  // jsdom 里补偿帧不一定被排空，锚定引用计数会跨用例残留，这里清干净。
+  resetScrollAnchoringStateForTests();
+  document.documentElement.style.removeProperty("overflow-anchor");
 });
 
 describe("useProfileSectionReorder（order 外部 store 化）", () => {
-  it("拖动中即时重排：目标 index 变化即生效，不等 pointerup；松手保留", () => {
+  it("按下不塌缩：未过阈值不动布局；拖动中即时重排，松手保留", () => {
     stubSectionRects();
     // jsdom 没有实现 document.elementFromPoint：先补一个可观测的桩，
     // 全流程断言它从未被调用（T05 核心约束：零 DOM 命中测试）。
@@ -128,13 +161,19 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     const elementFromPoint = document.elementFromPoint as unknown as ReturnType<typeof vi.fn>;
     render(<Harness />);
 
-    // projects 卡片在默认布局的 380-440；手柄按下约在其内部 y=410。
-    dragTo("projects", 410, 412);
+    // projects 卡片在默认布局的 380-440；手柄按在 410（距卡片上缘 30）。
+    fireEvent.pointerDown(screen.getByLabelText("拖动调整projects顺序"), {
+      clientX: 10,
+      clientY: 410,
+      pointerId: 1,
+    });
     // 未过阈值（6px）：不激活、不重排。
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 412, pointerId: 1 });
     expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
 
-    // 拖到 y=430：越过 skills 中心（移除被拖项后的布局中为 400）→ 实时重排。
-    fireEvent.pointerMove(document, { clientX: 10, clientY: 430, pointerId: 1 });
+    // 拖到 460：越过阈值激活（激活时不改布局），行程 = 430−380 = 50 ≥ 步长 48
+    // → 推进一格，目标位 3，实时重排。
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 460, pointerId: 1 });
     expect(currentOrder()).toEqual([
       "basic_info",
       "experiences",
@@ -145,17 +184,16 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
       "campus_experiences",
       "summary",
     ]);
-    // 跟手视觉：被拖分区 transform 直改。指针位移 430-410=+20，但 splice 把
-    // projects 从第 3 位挪到第 4 位，盒子布局位置下移 40px（skills 高度），
-    // transform 补偿布局位移：20-40=-20。视觉位置 = 新布局 420 + (-20) = 400，
-    // 与重排前一致（380+20）——卡片始终钉在鼠标上。
-    const dragged = document.querySelector<HTMLElement>('[data-profile-section-key="projects"]');
-    expect(dragged?.style.transform).toBe("translateY(-20px)");
+    // 跟手：desiredTop = 460-30 = 430；重排后 projects 在第 3 位，
+    // 布局上缘 = 200+100+80+40 = 420 → transform = 430-420 = +10。
+    // 视觉位置 = 420+10 = 430 = 指针 460 - grabOffset 30，卡片钉在鼠标下。
+    expect(draggedTransform("projects")).toBe("translateY(10px)");
     // 拖动中挂 is-dragging（置顶 + 合成层提示，见 profile.css）；顺序虽变，DOM 节点不换。
+    const dragged = document.querySelector<HTMLElement>('[data-profile-section-key="projects"]');
     expect(dragged?.classList.contains("is-dragging")).toBe(true);
 
-    // 松手保留：顺序就是拖动中的最终态。
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 430, pointerId: 1 });
+    // 松手保留：顺序就是拖动中的最终态；同时退出拖拽态（content-visibility 复位）。
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 440, pointerId: 1 });
     expect(currentOrder()).toEqual([
       "basic_info",
       "experiences",
@@ -166,11 +204,54 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
       "campus_experiences",
       "summary",
     ]);
-    // 松手后清理抬起态。
     expect(dragged?.classList.contains("is-dragging")).toBe(false);
     expect(dragged?.style.transform).toBe("");
+    expect(document.querySelector(".profile-section-stack")?.className).toBe(
+      "profile-section-stack",
+    );
     // 全程零 elementFromPoint（T05 核心约束）。
     expect(elementFromPoint).not.toHaveBeenCalled();
+  });
+
+  it("激活瞬间不跳位：越过阈值那一步的顺序与位置都由指针决定", () => {
+    stubSectionRects();
+    render(<Harness />);
+
+    // 按下 experiences（290-370，按在 330），只移动 8px（刚过 6px 阈值）。
+    fireEvent.pointerDown(screen.getByLabelText("拖动调整experiences顺序"), {
+      clientX: 10,
+      clientY: 330,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 338, pointerId: 1 });
+    // 顺序不变（旧实现塌缩后这里会凭空上移两位）。
+    expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
+    // 跟手：grabOffset = 330-300 = 30，desiredTop = 338-30 = 308，
+    // 布局上缘 300 → transform = +8px，与指针位移完全一致（没有跳变、没有被甩出去）。
+    expect(draggedTransform("experiences")).toBe("translateY(8px)");
+    // 卡片没有被甩出栈顶，也没有脱离指针。
+    expect(308).toBeGreaterThanOrEqual(STACK_TOP);
+  });
+
+  it("末位可达：拖到 clamp 上限一定换到最后一格并错开", () => {
+    stubSectionRects();
+    render(<Harness />);
+
+    // 指针拖到很远（10000）：desiredTop 被钳到 stackBottom-60 = 630，
+    // 行程 = 630−380 = 250 = 5 步 → 2+5 钳到 7（末位）。
+    dragTo("projects", 410, 10_000);
+    expect(currentOrder()).toEqual([
+      "basic_info",
+      "experiences",
+      "skills",
+      "educations",
+      "awards",
+      "campus_experiences",
+      "summary",
+      "projects",
+    ]);
+    // 末位布局上缘 630，视觉位置 = 630 + 0。行程制下钳位保证大行程必然到达末位。
+    expect(draggedTransform("projects")).toBe("translateY(0px)");
   });
 
   it("basic_info 固定首位：向上拖不可越过，transform 钳在栈范围内", () => {
@@ -178,7 +259,7 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     render(<Harness />);
 
     dragTo("projects", 410, 210);
-    // 指针已到栈顶以上：插入位钳为 1，basic_info 仍在首位。
+    // 指针已到栈顶以上：desiredTop 钳为 200，插入位钳为 1，basic_info 仍在首位。
     expect(currentOrder()[0]).toBe("basic_info");
     expect(currentOrder()).toEqual([
       "basic_info",
@@ -190,11 +271,37 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
       "campus_experiences",
       "summary",
     ]);
-    // 指针位移 -200 被钳到 minTranslate = 200-380 = -180；splice 把 projects 挪到
-    // 第 2 位（布局位置上移 80px → 位移补偿 -80）：transform = -180-(-80) = -100。
-    // 视觉位置 = 新布局 300 + (-100) = 200 = 栈顶，卡片贴住上边界不越界。
-    const dragged = document.querySelector<HTMLElement>('[data-profile-section-key="projects"]');
-    expect(dragged?.style.transform).toBe("translateY(-100px)");
+    // 视觉目标位置 200；重排后 projects 在第 1 位，布局上缘 300 → transform = -100。
+    expect(draggedTransform("projects")).toBe("translateY(-100px)");
+  });
+
+  it("交换帧一致：store 提交后分区 order 与被拖分区 transform 同步落定（flushSync 契约）", () => {
+    stubSectionRects();
+    render(<Harness />);
+
+    fireEvent.pointerDown(screen.getByLabelText("拖动调整projects顺序"), {
+      clientX: 10,
+      clientY: 410,
+      pointerId: 1,
+    });
+
+    // 用原生 dispatchEvent 而不是 fireEvent：fireEvent 结束时会兜底 flush React
+    // 更新，错帧窗口就被掩盖了。这里在「分派同步返回后、React 兜底提交之前」的
+    // 窗口内断言——修复前 CSS order 还是旧值（2）而 transform 已按新布局写入，
+    // 本用例必挂；修复后（flushSync 包住 commitOrder）顺序提交与 transform 同帧生效。
+    act(() => {
+      document.dispatchEvent(
+        new MouseEvent("pointermove", { bubbles: true, clientX: 10, clientY: 460 }),
+      );
+
+      const dragged = document.querySelector<HTMLElement>('[data-profile-section-key="projects"]');
+      // 顺序已提交：projects 的 CSS order 内联样式是 3（新序）。
+      expect(dragged?.style.order).toBe("3");
+      // 跟手 transform 与新布局一致：desiredTop = 430，新布局上缘 420 → +10。
+      expect(dragged?.style.transform).toBe("translateY(10px)");
+    });
+
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 460, pointerId: 1 });
   });
 
   it("上移/下移按钮（键盘可访问性）语义不变，basic_info 不可被顶替", () => {
@@ -223,11 +330,132 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     expect(currentOrder()[0]).toBe("basic_info");
   });
 
+  it("外部滚动只平移几何、不动闩锁锚点：不换位且仍跟手", () => {
+    stubSectionRects();
+    // 模拟滚动容器（jsdom 无布局 → resolveScrollParent 兜底到 document.documentElement）
+    let scrollTopValue = 0;
+    Object.defineProperty(document.documentElement, "scrollTop", {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        scrollTopValue = value;
+      },
+    });
+    render(<Harness />);
+
+    // experiences（300-370）按在 330，移动 8px 激活：desiredTop = 308，闩锁锚点 = 300。
+    dragTo("experiences", 330, 338);
+    expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
+    expect(draggedTransform("experiences")).toBe("translateY(8px)");
+
+    // 外部滚动 60px（浏览器 scroll anchoring / 用户滚轮）：只平移几何，**不动锚点**。
+    // 若锚点也跟着平移 60（上一版），距离 60 ≥ latch 12 就会立刻换位 → 与 anchoring
+    // 形成正反馈（QA 实测 10/10 翻转、邻卡 890px 弹跳）。
+    act(() => {
+      scrollTopValue = 60;
+      document.documentElement.dispatchEvent(new Event("scroll"));
+    });
+    expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
+    // 几何平移后第 2 位布局上缘 = 140+100 = 240 → transform = 308-240 = 68（跟手不漂移）。
+    expect(draggedTransform("experiences")).toBe("translateY(68px)");
+
+    // 之后再微抖 ±2px：锚点没被推开，仍然不换位。
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 340, pointerId: 1 });
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 336, pointerId: 1 });
+    expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
+
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 336, pointerId: 1 });
+    Reflect.deleteProperty(document.documentElement, "scrollTop");
+  });
+
+  it("拖拽期关闭 overflow-anchor，松手后在补偿帧里恢复", () => {
+    stubSectionRects();
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {
+      frames.length = 0;
+    });
+    // 原本有内联值：应恢复成原值而不是清空。
+    document.documentElement.style.setProperty("overflow-anchor", "auto");
+    render(<Harness />);
+
+    dragTo("projects", 410, 418);
+    // 激活即关锚定（换位造成的布局变动不会再被 anchoring 反向补偿）。
+    expect(document.documentElement.style.getPropertyValue("overflow-anchor")).toBe("none");
+
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 418, pointerId: 1 });
+    // 补偿 rAF 执行之前不能恢复，否则 anchoring 会和补偿双重补偿。
+    expect(document.documentElement.style.getPropertyValue("overflow-anchor")).toBe("none");
+
+    // 收敛阶段：只写 scrollTop，不恢复锚定。
+    act(() => {
+      frames.shift()?.(0);
+    });
+    expect(document.documentElement.style.getPropertyValue("overflow-anchor")).toBe("none");
+    // 排空后续收敛帧后，才在最后一帧恢复（避免 anchoring 与补偿叠加）。
+    act(() => {
+      let guard = 0;
+      while (frames.length > 0 && guard < 30) {
+        frames.shift()?.(0);
+        guard += 1;
+      }
+    });
+    expect(document.documentElement.style.getPropertyValue("overflow-anchor")).toBe("auto");
+    document.documentElement.style.removeProperty("overflow-anchor");
+  });
+
+  it("上一次补偿收敛期间开始新拖拽：锚定全程保持 none，结束后才清空", () => {
+    stubSectionRects();
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {
+      frames.length = 0;
+    });
+    render(<Harness />);
+    const anchorAttr = () => document.documentElement.style.getPropertyValue("overflow-anchor");
+
+    // 拖拽 A：激活 → 关闭锚定；松手 → 补偿开始按帧收敛（帧还没跑）
+    dragTo("projects", 410, 418);
+    expect(anchorAttr()).toBe("none");
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 418, pointerId: 1 });
+
+    // A 还在收敛窗口里，立刻开始拖拽 B
+    dragTo("skills", 690, 698);
+    expect(anchorAttr()).toBe("none");
+
+    // 排空 A 的收敛帧（含 A 的恢复回调）：B 仍持有一份，锚定必须还是 none
+    act(() => {
+      let guard = 0;
+      while (frames.length > 0 && guard < 30) {
+        frames.shift()?.(0);
+        guard += 1;
+      }
+    });
+    expect(anchorAttr()).toBe("none");
+
+    // B 松手并排空：两次都释放后才真正清空
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 698, pointerId: 1 });
+    act(() => {
+      let guard = 0;
+      while (frames.length > 0 && guard < 30) {
+        frames.shift()?.(0);
+        guard += 1;
+      }
+    });
+    expect(anchorAttr()).toBe("");
+  });
+
   it("pointercancel 清理：transform 复位，后续移动不再改顺序", () => {
     stubSectionRects();
     render(<Harness />);
 
-    dragTo("projects", 410, 430);
+    dragTo("projects", 410, 460);
     expect(currentOrder()[3]).toBe("projects");
     const orderAtDrag = [...currentOrder()];
 
@@ -244,8 +472,8 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     stubSectionRects();
     render(<Harness />);
 
-    dragTo("projects", 410, 430);
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 430, pointerId: 1 });
+    dragTo("projects", 410, 460);
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 460, pointerId: 1 });
     expect(currentOrder()[2]).toBe("skills");
 
     fireEvent.click(screen.getByLabelText("重置projects"));
@@ -256,48 +484,9 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     stubSectionRects();
     render(<Harness editing={false} />);
 
-    dragTo("projects", 410, 430);
+    dragTo("projects", 410, 440);
     expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
     const dragged = document.querySelector<HTMLElement>('[data-profile-section-key="projects"]');
     expect(dragged?.style.transform).toBe("");
-  });
-});
-
-describe("draggedLayoutShift（实时重排的布局位移补偿，纯计算）", () => {
-  // heights=[100, 80, 60, 40]、gap=10 时各位置的盒子 top：
-  // 0→0、1→110、2→200、3→270（前 index 个「高度+gap」之和）。
-  const heights = [100, 80, 60, 40];
-  const gap = 10;
-
-  it("向下移动：盒子布局位置下移，位移为正（transform 需减去它）", () => {
-    // 从第 3 位（top 200）挪到第 4 位：新前缀不含被拖项自身（60+10），
-    // top = (100+10)+(80+10)+(40+10) = 250。
-    expect(draggedLayoutShift(heights, gap, 2, 3)).toBe(50);
-  });
-
-  it("向上移动：盒子布局位置上移，位移为负", () => {
-    // 从第 4 位（top 270）挪到第 2 位（top 110）。
-    expect(draggedLayoutShift(heights, gap, 3, 1)).toBe(-160);
-  });
-
-  it("跨多位移动：位移是新旧两个前缀和之差，与路径无关", () => {
-    // 从第 1 位（top 0）挪到第 4 位：新前缀不含自身（100+10），
-    // top = (80+10)+(60+10)+(40+10) = 210。
-    expect(draggedLayoutShift(heights, gap, 0, 3)).toBe(210);
-  });
-
-  it("目标与来源相同：位移为 0（不产生补偿）", () => {
-    expect(draggedLayoutShift(heights, gap, 1, 1)).toBe(0);
-  });
-
-  it("gap=0：位移退化为纯高度前缀和之差", () => {
-    // top: 0→0、2→180；2→1 即 100-180=-80。
-    expect(draggedLayoutShift([100, 80, 60], 0, 2, 1)).toBe(-80);
-  });
-
-  it("索引越界：返回 0（防御性，不产生错误补偿）", () => {
-    expect(draggedLayoutShift(heights, gap, -1, 2)).toBe(0);
-    expect(draggedLayoutShift(heights, gap, 2, 4)).toBe(0);
-    expect(draggedLayoutShift([], gap, 0, 0)).toBe(0);
   });
 });

@@ -14,7 +14,7 @@ import type { ProfileSectionKey } from "./ProfileSectionConfig";
 import ProfileBasicSection from "./ProfileBasicSection";
 import { ProjectSection } from "./ProjectSection";
 import { SkillSection } from "./SkillSection";
-import type { ProfileSectionOrderStore } from "../../features/profile/useProfileSectionReorder";
+import type { ProfileSectionOrderStore } from "../../features/profile/sectionOrderStore";
 
 interface Props {
   /**
@@ -47,7 +47,7 @@ export default function ProfileSectionStack({
   onHandlePointerDown,
   onMoveByOffset,
 }: Props) {
-  const { sectionOrder, reordering } = useSyncExternalStore(
+  const { sectionOrder, reordering, draggingKey } = useSyncExternalStore(
     reorderStore.subscribe,
     reorderStore.getSnapshot,
   );
@@ -84,21 +84,29 @@ export default function ProfileSectionStack({
     [editing, onPhotoSelect, photo, saving],
   );
 
-  const section = (sectionKey: ProfileSectionKey, children: ReactNode) => (
-    <SortableProfileSection
-      key={sectionKey}
-      sectionKey={sectionKey}
-      order={sectionOrder.indexOf(sectionKey)}
-      editable={editing}
-      compact={reordering}
-      collapsed={!editing && collapsedSections.has(sectionKey)}
-      onToggleCollapsed={onToggleCollapsed}
-      onHandlePointerDown={onHandlePointerDown}
-      onMoveByOffset={onMoveByOffset}
-    >
-      {children}
-    </SortableProfileSection>
-  );
+  const section = (sectionKey: ProfileSectionKey, children: ReactNode) => {
+    const order = sectionOrder.indexOf(sectionKey);
+    return (
+      <SortableProfileSection
+        key={sectionKey}
+        sectionKey={sectionKey}
+        order={order}
+        editable={editing}
+        reordering={reordering}
+        dragging={draggingKey === sectionKey}
+        collapsed={!editing && collapsedSections.has(sectionKey)}
+        // 微调按钮边界：`basic_info` 固定首位（order 0），第 1 个可拖分区（order 1）
+        // 的上移禁用；末位（order = 总数 − 1）的下移禁用。与键盘排序的钳制一致。
+        canMoveUp={order > 1}
+        canMoveDown={order >= 0 && order < sectionOrder.length - 1}
+        onToggleCollapsed={onToggleCollapsed}
+        onHandlePointerDown={onHandlePointerDown}
+        onMoveByOffset={onMoveByOffset}
+      >
+        {children}
+      </SortableProfileSection>
+    );
+  };
 
   return (
     <div className={`profile-section-stack${reordering ? " is-section-reordering" : ""}`}>

@@ -64,10 +64,6 @@
   flex-direction: column;
 }
 
-.profile-section-stack.is-section-reordering {
-  gap: 8px;
-}
-
 /* 分区标题栏：卡片本体不再自带标题，标题由这里统一给，查看态点标题即可展开/收起。 */
 .profile-section-collapse-toggle,
 .profile-section-titlebar {
@@ -107,18 +103,32 @@
 .profile-section-sortable {
   position: relative;
   min-width: 0;
-  /* 长资料页只绘制当前视口附近的分区，避免滚动时反复绘制整棵表单树。 */
+  /* 长资料页只绘制当前视口附近的分区，避免滚动时反复绘制整棵表单树。
+     编辑态下该优化被 is-section-reordering 覆盖（见下），查看态保持 auto。 */
   content-visibility: auto;
   contain-intrinsic-size: 0 420px;
+  /* 阴影/描边只在拖拽抬起时出现，150ms 过渡只作用于 box-shadow；
+     transform 严禁加过渡（跟手视觉逐帧直写，过渡会拖尾）。 */
+  transition: box-shadow 150ms ease;
 }
 
+/*
+ * 强制**真实布局**（content-visibility: visible）。类在**进入编辑态时**就挂在每个
+ * 分区上（ProfileSectionShell：`reordering || editable`），而不是等拖拽激活——
+ * 激活瞬间同时发生「全部分区 auto → visible」与「被拖壳 will-change 提升合成层 +
+ * transform 逐帧变化」，Chrome 对刚切出 content-visibility 的内容会出现栅格失效，
+ * 卡片自己的白色背景整帧画不出来（真机连拍实测标题栏与第一个条目之间露出整段
+ * 页面背景，看起来像"游离在卡片外的重复拖动标志"）。提前挂类后拖拽全程不再发生
+ * CV 切换。离屏分区默认 `content-visibility: auto` 时 rect 也会退化成
+ * `contain-intrinsic-size` 的 420px 假高度，拖拽几何（前缀和、clamp 上限）同样全错。
+ *
+ * 刻意不再做「拖拽期塌缩成 50px 标签条」：全部塌缩会让文档变矮、滚动容器
+ * scrollTop 被浏览器夹小，塌缩后的 rect 反而比塌缩前更低，补偿值符号/量级全错，
+ * 卡片直接脱离鼠标；同时插入判定会拿紧凑栈坐标去比展开态的指针位置，激活瞬间就
+ * 算出错误的插入位。分区内容、高度、gap 在拖拽期一律保持原样。
+ */
 .profile-section-sortable.is-section-reordering {
-  /* 拖动时必须让所有标题条参与布局，不能被屏幕外延迟绘制隐藏。 */
   content-visibility: visible;
-  min-height: 50px;
-  border: 1px solid #d9e5f5;
-  border-radius: 8px;
-  background: #fff;
 }
 
 /*
@@ -127,40 +137,18 @@
  *   随拖动变化，向下拖时后绘制的兄弟（不透明白底）会盖住被拖卡，必须置顶。
  * - will-change: transform 把被拖卡提升为合成层：跟手视觉是每帧直改
  *   transform（ref 直写、不走 React），有独立合成层后不再整块重绘。
+ * - "抬起"语言与条目统一：1px 浅蓝描边用 box-shadow 环实现（零布局位移），
+ *   圆角与卡片一致，阴影多层柔和（近处贴地影 + 远处弥散影）。
  * 只在拖动期间挂载，松手即摘，不常驻占显存。
  */
 .profile-section-sortable.is-dragging {
   z-index: 10;
   will-change: transform;
-  box-shadow: 0 16px 32px rgb(31 55 88 / 16%);
-}
-
-.profile-section-compact-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 50px;
-  gap: 12px;
-  padding: 0 76px 0 16px;
-}
-
-.profile-section-compact-label .ant-typography:first-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profile-section-sortable.is-section-reordering .profile-section-content.is-collapsed {
-  display: none;
-}
-
-.profile-section-sortable.is-drag-over > .ant-card,
-.profile-section-sortable.is-drag-over > .profile-top-card,
-.profile-section-sortable.is-drag-over > .ant-row,
-.profile-section-sortable.is-drag-over {
-  outline: 2px dashed #1677ff;
-  outline-offset: 3px;
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 1px #91caff,
+    0 1px 2px rgb(31 55 88 / 6%),
+    0 12px 28px rgb(31 55 88 / 14%);
 }
 
 .profile-section-drag-handle {
@@ -196,6 +184,65 @@
   cursor: grabbing;
 }
 
+/*
+ * 分区把手上移/下移微调按钮（点击移动一位，复用键盘排序路径）：
+ * - 默认完全透明且不响应指针，悬停分区 / 焦点进入分区时才浮现（减少编辑态噪音）；
+ *   opacity/pointer-events 组合保持按钮始终可被键盘聚焦——聚焦本身会触发
+ *   .profile-section-sortable:focus-within 让它现形（visibility:hidden 会把按钮
+ *   踢出 Tab 序，键盘用户就永远找不到它了）。
+ * - 位置在拖拽把手（right 38px、宽 28px）左侧一列：↑ 66px、↓ 94px。
+ */
+.profile-section-nudge {
+  position: absolute;
+  z-index: 3;
+  top: 9px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  color: var(--rf-text-description);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  user-select: none;
+}
+
+.profile-section-nudge-up {
+  right: 66px;
+}
+
+.profile-section-nudge-down {
+  right: 94px;
+}
+
+.profile-page.is-editing .profile-section-nudge {
+  display: inline-flex;
+}
+
+.profile-section-sortable:hover .profile-section-nudge,
+.profile-section-sortable:focus-within .profile-section-nudge {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.profile-section-nudge:hover {
+  background: #eef5ff;
+  color: #1677ff;
+}
+
+.profile-section-nudge:disabled {
+  color: #bfbfbf;
+  cursor: not-allowed;
+  background: transparent;
+}
+
 .profile-list-items {
   display: flex;
   flex-direction: column;
@@ -209,12 +256,51 @@
   border: 1px solid #f0f0f0;
   border-radius: 8px;
   background: #fafafa;
+  /* 只过渡 box-shadow（抬起/落下的阴影有 150ms 缓冲）；transform 严禁加过渡。 */
+  transition: box-shadow 150ms ease;
 }
 
-.profile-list-item.is-drag-over {
-  border-color: #1677ff;
-  outline: 2px dashed #1677ff;
-  outline-offset: 2px;
+/*
+ * 拖动中的条目（类由 useProfileItemListDrag 在激活时挂、松手时摘）：
+ * 条目全程保持展开、没有塌缩，这里只给"被拖条目"一个抬起视觉——
+ * z-index 置顶（向下拖时后绘制的兄弟会盖住被拖项）+ 合成层提示（每帧直改
+ * transform）+ 柔和多层阴影 + 浅蓝描边（不再是生硬的 1px 纯蓝）。只在拖动期间
+ * 挂载，松手即摘。
+ */
+.profile-list-item.is-dragging {
+  z-index: 10;
+  will-change: transform;
+  border-color: #91caff;
+  box-shadow:
+    0 1px 2px rgb(31 55 88 / 6%),
+    0 12px 28px rgb(31 55 88 / 14%);
+  background: #fff;
+}
+
+/*
+ * 交叉隐藏（只在拖拽进行中生效，松手即恢复；非拖拽态不受影响，键盘可达性不变）：
+ * - 分区拖拽中隐藏条目级把手/删除簇：被拖分区上的「⠿ 🗑」悬在卡片视觉之外，
+ *   用户会把它们看成"重复的拖动标志/错位"。
+ * - 条目拖拽中隐藏分区把手：同理，拖条目时不该看到分区级的把手。
+ */
+.profile-section-sortable.is-dragging .profile-list-item-drag-handle,
+.profile-section-sortable.is-dragging .profile-list-item-delete,
+.profile-section-sortable.is-dragging .profile-section-nudge {
+  visibility: hidden;
+}
+
+/* :has 从被拖条目反向命中分区壳（Chromium 105+ 支持；不支持的引擎下只是少这层
+   视觉精修，不影响功能）。 */
+.profile-section-stack:has(.profile-list-item.is-dragging) .profile-section-drag-handle,
+.profile-section-stack:has(.profile-list-item.is-dragging) .profile-section-nudge {
+  visibility: hidden;
+}
+
+/* 分区拖拽进行中（栈级 is-section-reordering 只在拖拽期存在）隐藏全部分区微调按钮，
+   避免拖动时其它分区的 ↑/↓ 悬在卡片外被误认成拖动标志。 */
+.profile-section-stack.is-section-reordering .profile-section-nudge {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .profile-list-item-drag-handle,
@@ -252,21 +338,6 @@
 
 .profile-list-item-delete {
   right: 8px;
-}
-
-.profile-list-item-summary {
-  display: flex;
-  align-items: center;
-  min-height: 38px;
-  padding-right: 4px;
-}
-
-.profile-list-item-summary .ant-typography {
-  min-width: 0;
-}
-
-.profile-list-item-content.is-collapsed {
-  display: none;
 }
 
 .profile-reference-preview {

@@ -1,12 +1,20 @@
 /** 资料分区排序状态与指针拖拽行为（T05 重写；order 外部 store 化）。
  *
- * 与旧实现的三点差别：
- * 1. **零 `elementFromPoint`**：拖动激活时一次性缓存各分区高度（与当前顺序对齐），
- *    pointermove 里用「指针 y + 高度前缀和」直接算插入位，不碰 DOM 命中测试。
- * 2. **拖动中实时重排**：目标 index 变化就立即 splice 进顺序（含高度数组同步），
- *    不等 pointerup；松手只做清理，顺序已经是最终态。
- * 3. **跟手视觉走 ref**：被拖分区用 `style.transform = translateY(...)` 直改，
- *    不经 setState——指针移动本身不再引发任何 React 渲染。
+ * ## 零 `elementFromPoint`
+ *
+ * 拖动激活时一次性缓存各分区高度（与当前顺序对齐），pointermove 里用「指针行程制」
+ * （`resolveTargetIndex`，自行程锚点每 TRAVEL_STEP_PX 推进一格）直接算插入位，
+ * 不碰 DOM 命中测试；几何只负责 clamp 与布局前缀和。
+ *
+ * ## 拖动中实时重排
+ *
+ * 目标 index 变化就立即 splice 进顺序（高度数组同步），不等 pointerup；松手只做
+ * 清理，顺序已经是最终态。
+ *
+ * ## 跟手视觉走 ref
+ *
+ * 被拖分区用 `style.transform = translateY(...)` 直改，不经 setState——指针移动
+ * 本身不再引发任何 React 渲染。
  *
  * ## 为什么顺序不走页面级 React state（用户实测拖拽仍卡顿的根因）
  *
@@ -21,15 +29,54 @@
  * React Compiler 禁止渲染期读 ref）：拖拽中的每次 splice 只重渲订阅它的
  * `ProfileSectionStack`（分区壳 memo 化，只有 order 变化的壳重渲），Form 子树整块跳过。
  * 页面级消费者（提交时读顺序）经 `getSectionOrder()` 在事件时刻取最新值，不经渲染。
+ *
+ * ## 为什么拖拽期不再塌缩分区（第二轮修复的核心）
+ *
+ * 上一版在越过阈值时把全部分区塌缩成 50px 标签条，试图让「排序模式」更紧凑。真机上
+ * 这条路根本走不通，两个独立原因：
+ *
+ * 1. **跟手不可兼容**：全部塌缩让文档整体变矮，滚动容器 `scrollTop` 被浏览器夹小，
+ *    塌缩后的 rect 反而比塌缩前**低**了约 185px（真机实测），按 `pre−post` 算出的
+ *    补偿符号/量级全错，卡片被推离鼠标（用户截图里「浮在顶上、超出可移动范围」）。
+ * 2. **插入判定不可兼容**：插入判定拿塌缩后的 50px 栈坐标去比「指针」的绝对 y，而
+ *    指针还停在展开时的位置（远在紧凑栈之外），激活瞬间就算出错误的插入位——顺序
+ *    在手指刚动 7px 时就凭空上移两位。
+ *
+ * 结论：塌缩与「跟手」在几何上不共戴天。现在拖拽期保持**真实布局**（分区内容不折叠、
+ * 不换高度、不动 gap），只把离屏分区的 `content-visibility` 强制成 `visible`，
+ * 保证几何真实且稳定。
  */
 
+import { flushSync } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 import {
-  DEFAULT_SECTION_ORDER,
   SECTION_DRAG_THRESHOLD_PX,
   type ProfileSectionKey,
 } from "../../components/profile/ProfileSectionConfig";
+import {
+  applyScrollShift,
+  canScrollTowards,
+  clampDesiredTop,
+  dragTranslate,
+  layoutTop,
+  moveWithin,
+  resolveTargetIndex,
+  stackBottomOf,
+  swapLatchOpen,
+  TRAVEL_STEP_PX,
+  type DragStackGeometry,
+} from "../../components/profile/dragReorder";
+import {
+  compensateReleaseShift,
+  createEdgeAutoScroller,
+  disableScrollAnchoring,
+  layoutTopWithoutTransform,
+  resolveScrollParent,
+  type EdgeAutoScroller,
+} from "../../components/profile/dragAutoScroll";
+import { captureFlipTops, playSwapFlip } from "../../components/profile/swapFlip";
+import { createSectionOrderStore } from "./sectionOrderStore";
 
 interface Options {
   editing: boolean;
@@ -37,117 +84,14 @@ interface Options {
   photoReading: boolean;
 }
 
-/** 拖动激活时一次性缓存的几何信息（视口坐标）。 */
-interface DragGeometry {
-  /** 分区栈顶部（首个分区上缘）。 */
-  stackTop: number;
-  /** 分区栈底部（最后一个分区下缘）。 */
-  stackBottom: number;
-  /** 相邻分区间距（CSS gap），jsdom/无布局时自然为 0。 */
-  gap: number;
-  /** 被拖分区平移的上下限（相对其初始位置）。 */
-  minTranslate: number;
-  maxTranslate: number;
-}
+/** 拖拽期挂在每个分区上的类（强制真实布局，见文件头说明）。 */
+const SECTION_REORDERING_CLASS = "is-section-reordering";
 
-/** store 快照：顺序 + 是否处于排序模式（排序模式也要绕开 Form 链，理由同上）。 */
-export interface ProfileSectionOrderSnapshot {
-  sectionOrder: ProfileSectionKey[];
-  reordering: boolean;
-}
-
-/** `useSyncExternalStore` 协议：快照引用只在 commit 时更换，两次 commit 间恒定。 */
-export interface ProfileSectionOrderStore {
-  subscribe: (listener: () => void) => () => void;
-  getSnapshot: () => ProfileSectionOrderSnapshot;
-  /** 事件时刻读最新顺序（提交/解析等不经渲染的消费口）。 */
-  getOrder: () => ProfileSectionKey[];
-  isReordering: () => boolean;
-  /** 整体换序（拖拽实时 splice 与加载资料写入共用此出口）。 */
-  commitOrder: (next: ProfileSectionKey[]) => void;
-  setReordering: (value: boolean) => void;
-}
-
-/**
- * 顺序 store 的模块级工厂：普通闭包变量 + 监听器集合，不走 React ref/state。
- * `getSnapshot` 返回缓存快照（只在 commit 时换新对象），满足 useSyncExternalStore
- * 的引用稳定性要求；编译器视角这是纯外部可变量，正是该协议的标准形态。
- */
-function createSectionOrderStore(): ProfileSectionOrderStore {
-  let order: ProfileSectionKey[] = DEFAULT_SECTION_ORDER;
-  let reordering = false;
-  let snapshot: ProfileSectionOrderSnapshot = { sectionOrder: order, reordering };
-  const listeners = new Set<() => void>();
-  const notify = () => {
-    snapshot = { sectionOrder: order, reordering };
-    listeners.forEach((listener) => listener());
-  };
-  return {
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    getSnapshot: () => snapshot,
-    getOrder: () => order,
-    isReordering: () => reordering,
-    /** 顺序写入的唯一出口：先同步换变量（事件回调立刻可读），再广播订阅者。 */
-    commitOrder(next) {
-      if (next === order) return;
-      order = next;
-      notify();
-    },
-    setReordering(value) {
-      if (value === reordering) return;
-      reordering = value;
-      notify();
-    },
-  };
-}
-
-/**
- * 实时重排（splice）后被拖项布局位置的位移：新布局 top − 旧布局 top（栈顶相对坐标）。
- *
- * CSS `order` 变化的瞬间，flex 会把被拖项的盒子**重新摆位**——它从第 3 位换到第 5 位，
- * 盒子位置瞬间下移若干像素；而 `translateY` 是相对自身盒子的偏移，不补偿这个跳变的
- * 话，视觉位置 = 新布局位置 + 旧偏移 ≠ 鼠标位置，卡片会「甩出」鼠标。
- *
- * 布局 top 的算法与渲染一致：flex column 里第 index 个盒子前有 index 个
- * 「高度 + gap」的前缀。``heights``/``gap`` 必须与 splice **前**的顺序对齐（被拖项
- * 自身高度不变，其余项相对位置也不变，所以前缀和用旧序即可算出新旧两个位置）。
- * 返回值应累加进拖拽中的 transform 补偿：`translateY = 指针位移 − 累计布局位移`。
- *
- * 抽成纯函数是为了可单测——jsdom 验证不了视觉连续性，但这段几何是纯算术。
- */
-export function draggedLayoutShift(
-  heights: number[],
-  gap: number,
-  sourceIndex: number,
-  targetIndex: number,
-): number {
-  const lastIndex = heights.length - 1;
-  if (sourceIndex < 0 || sourceIndex > lastIndex || targetIndex < 0 || targetIndex > lastIndex) {
-    return 0;
-  }
-  const topAt = (index: number): number => {
-    let top = 0;
-    for (let i = 0; i < index; i += 1) top += heights[i] + gap;
-    return top;
-  };
-  const topBefore = topAt(sourceIndex);
-  // splice 后的前缀要按新数组算：向下移动时，新位置前缀不再包含被拖项自身
-  // （它已从 source 抽走），等价于 T(target+1) −（自身高度 + gap）；向上移动时
-  // 新位置前缀全部来自被拖项之前的项，旧序前缀即新序前缀。
-  const topAfter =
-    targetIndex > sourceIndex
-      ? topAt(targetIndex + 1) - (heights[sourceIndex] + gap)
-      : topAt(targetIndex);
-  return topAfter - topBefore;
-}
+/** `basic_info` 固定首位：分区目标插入位的下限。 */
+const SECTION_MIN_INDEX = 1;
 
 export function useProfileSectionReorder({ editing, saving, photoReading }: Options) {
-  // 排序模式仍保留一份 state：页头的「调整顺序」按钮要跟着高亮（页面级消费者）。
+  // 排序模式仍保留一份 state：页头按钮（全部展开/收起）与 CSS 类要看它。
   // 它只在拖拽激活/退出时翻转一次，不会进入 pointermove 高频路径。
   const [sectionReorderMode, setSectionReorderModeState] = useState(false);
   /** 正在拖动的分区；null 表示无拖动。仅作为 document 监听的挂载开关使用。 */
@@ -156,32 +100,69 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
   const [store] = useState(createSectionOrderStore);
 
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  /** 最近一次指针 y（自动滚动回调里要按它重算得跟手位置）。 */
+  const lastPointerYRef = useRef(0);
   const dragActivatedRef = useRef(false);
-  /** 与当前顺序逐位对齐的分区高度缓存（拖动激活时采集）。 */
-  const heightsRef = useRef<number[]>([]);
-  const geometryRef = useRef<DragGeometry | null>(null);
+  /** 激活时缓存的栈几何（heights 与当前顺序逐位对齐，重排时同步 splice）。 */
+  const geometryRef = useRef<DragStackGeometry | null>(null);
+  /** 指针按下点在被拖分区内的纵向偏移（0~h），跟手位置 = 指针 y − 它。 */
+  const grabOffsetRef = useRef(0);
+  const draggedHeightRef = useRef(0);
+  /** 上一次算出的视觉目标位置：相邻两次的差决定拖动方向（静止/被 clamp 时沿用）。 */
+  const lastDesiredTopRef = useRef(0);
+  /** 指针最近一次的移动方向：1=向下，-1=向上。静止时沿用（保留既有语义）。 */
+  const directionRef = useRef<1 | -1>(1);
   /**
-   * 拖拽开始以来累计的布局位移（order 变化把被拖项盒子挪动了多少像素）。
-   * transform 必须减掉它才能保持视觉连续，见 `draggedLayoutShift` 的说明。
+   * 行程锚点（内容坐标）：激活时 = 激活位置，每次真正换位后 = 当时 desiredTop。
+   * 插入位 = 当前位 + |desiredTop − 锚点| / TRAVEL_STEP_PX 步；自动滚动时随内容
+   * 平移（applyScrollShift，source==="auto"），外部滚动不平移（防 anchoring 环路）。
+   * 它同时是换位闩锁的锚点（swapLatchOpen 用同一个值）。
    */
-  const layoutShiftRef = useRef(0);
+  const travelAnchorRef = useRef(0);
   const draggedElRef = useRef<HTMLElement | null>(null);
+  /** 本次拖拽的滚动容器（内层 `.app-content`），自动滚动与外部滚动补偿共用。 */
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  /** 上一次已知的 scrollTop：外部/浏览器发起的滚动用它算增量。 */
+  const lastScrollTopRef = useRef(0);
+  const autoScrollerRef = useRef<EdgeAutoScroller | null>(null);
+  /** 拖拽期关闭 `overflow-anchor` 的恢复函数（松手补偿写入后再调用）。 */
+  const restoreScrollAnchorRef = useRef<(() => void) | null>(null);
 
   /** 排序模式写入的唯一出口：store 给分区栈，state 给页头按钮。 */
   const applyReorderMode = useCallback(
     (value: boolean) => {
-      store.setReordering(value);
+      if (value) store.setReordering(true);
+      else store.endDrag();
       setSectionReorderModeState(value);
+    },
+    [store],
+  );
+
+  /**
+   * 拖拽激活：一次 notify 同时打开 reordering 与被拖分区标记。
+   *
+   * 抬起视觉（`is-dragging`）必须走**声明式**类：激活时 React 会因为 reordering
+   * 翻转而重写分区壳的 className，命令式 `classList.add('is-dragging')` 会被整串
+   * 覆盖掉（真机上表现为卡片没有抬起、z-index 没置顶，被后面的兄弟卡盖住）。
+   */
+  const beginSectionDrag = useCallback(
+    (sectionKey: ProfileSectionKey) => {
+      store.beginDrag(sectionKey);
+      setSectionReorderModeState(true);
     },
     [store],
   );
 
   const clearDragState = useCallback(() => {
     pointerStartRef.current = null;
+    lastPointerYRef.current = 0;
     dragActivatedRef.current = false;
-    heightsRef.current = [];
     geometryRef.current = null;
-    layoutShiftRef.current = 0;
+    grabOffsetRef.current = 0;
+    draggedHeightRef.current = 0;
+    lastDesiredTopRef.current = 0;
+    directionRef.current = 1;
+    travelAnchorRef.current = 0;
     const element = draggedElRef.current;
     if (element) {
       element.style.transform = "";
@@ -207,41 +188,41 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
     (event: ReactPointerEvent<HTMLButtonElement>, sectionKey: ProfileSectionKey) => {
       if (!editing || saving || photoReading || sectionKey === "basic_info") return;
       event.preventDefault();
+      // 只记录起点并标记被拖分区，**不**改布局：越过阈值才激活。
       pointerStartRef.current = { x: event.clientX, y: event.clientY };
+      lastPointerYRef.current = event.clientY;
       dragActivatedRef.current = false;
-      applyReorderMode(true);
       setDraggingSection(sectionKey);
     },
-    [applyReorderMode, editing, saving, photoReading],
+    [editing, saving, photoReading],
   );
 
   /**
    * 把拖动项从 sourceIndex 实时挪到 targetIndex；顺序与高度数组同步 splice。
-   * splice 前先算被拖项的布局位移并累进补偿（heights 还是旧序，正是纯函数需要的输入）。
+   * 每次都按新顺序重算 transform（不累加位移），所以重排与跟手在同一个几何模型里。
+   *
+   * **flushSync 是交换帧对齐的关键**：store 提交（`commitOrder` → notify → 订阅者
+   * 重渲）默认在下一帧才把新的 CSS `order` 内联样式写进 DOM，而 syncDrag 随后同步
+   * 写入的 transform 是按**新布局**算的——不先提交就有一帧「旧 order + 新 transform」，
+   * 被拖分区在交换成功瞬间向上（或向下）跳一个槽位（与条目路径同款错帧，真机逐帧
+   * 实测一个槽位高度）。flushSync 让顺序提交同步完成后再写 transform，同帧生效。
+   * 调用点都在原生事件 / scroll / rAF 回调里，不在渲染期，flushSync 是安全的；
+   * 换位受闩锁门控（≥12px），频率很低，同步渲染不构成性能问题。
    */
   const applyLiveReorder = (sourceIndex: number, targetIndex: number) => {
-    const next = [...store.getOrder()];
-    const nextHeights = [...heightsRef.current];
-    if (
-      sourceIndex < 0 ||
-      sourceIndex >= next.length ||
-      targetIndex < 0 ||
-      targetIndex >= next.length
-    ) {
-      return;
-    }
-    layoutShiftRef.current += draggedLayoutShift(
-      nextHeights,
-      geometryRef.current?.gap ?? 0,
-      sourceIndex,
-      targetIndex,
-    );
-    const moved = next.splice(sourceIndex, 1)[0];
-    next.splice(targetIndex, 0, moved);
-    const movedHeight = nextHeights.splice(sourceIndex, 1)[0];
-    nextHeights.splice(targetIndex, 0, movedHeight);
-    heightsRef.current = nextHeights;
-    store.commitOrder(next);
+    const geometry = geometryRef.current;
+    if (!geometry) return;
+    const current = store.getOrder();
+    const next = moveWithin(current, sourceIndex, targetIndex);
+    if (next === current) return;
+    // FLIP First：提交前量一次各分区的视觉位置（换位只挪动两槽之间的邻卡）。
+    const prevTops = captureFlipTops(document.body, "[data-profile-section-key]");
+    geometry.heights = moveWithin(geometry.heights, sourceIndex, targetIndex);
+    flushSync(() => {
+      store.commitOrder(next);
+    });
+    // FLIP Last-Invert-Play：邻卡从旧位置 150ms 滑到新位置；被拖卡保持 1:1 跟手。
+    playSwapFlip(prevTops, draggedElRef.current);
   };
 
   /** 拖动激活时采集各分区高度（读一次 DOM，此后移动全程零 DOM 查询）。 */
@@ -250,93 +231,205 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
       document.querySelectorAll<HTMLElement>("[data-profile-section-key]"),
     );
     if (elements.length === 0) return false;
+    const draggedElement = elements.find(
+      (element) => element.dataset.profileSectionKey === sectionKey,
+    );
+    if (!draggedElement) return false;
+    // 拖拽期强制真实布局：离屏分区默认 `content-visibility: auto`，rect 高度会退化成
+    // `contain-intrinsic-size` 的 420px 假高度（真机实测：屏幕外分区全部 h=420，
+    // 实际 1280/880/688…）。不先把类补上就量，向下拖到视口外时几何整段错位。
+    // 这里同步补类（React 侧随后由 `reordering` prop 保持同一个类），再读 rect。
+    elements.forEach((element) => element.classList.add(SECTION_REORDERING_CLASS));
     const rects = elements.map((element) => element.getBoundingClientRect());
     const heightByKey = new Map<string, number>();
     elements.forEach((element, index) => {
       heightByKey.set(element.dataset.profileSectionKey ?? "", rects[index].height);
     });
-    // 高度数组与当前顺序逐位对齐（高度按 key 取，与 DOM 遍历顺序无关）。
-    heightsRef.current = store.getOrder().map((key) => heightByKey.get(key) ?? 0);
+    const order = store.getOrder();
+    const heights = order.map((key) => heightByKey.get(key) ?? 0);
 
-    // 分区栈按 CSS `order` 摆放后，DOM 顺序不再等于视觉顺序：栈几何必须按
-    // 屏幕位置算——先把矩形排成视觉序，再取相邻间隔做 gap。
+    // 分区栈按 CSS `order` 摆放后，DOM 顺序不再等于视觉顺序：栈几何按屏幕位置算。
     const visualRects = [...rects].sort((a, b) => a.top - b.top || a.left - b.left);
     const gap =
       visualRects.length >= 2
         ? Math.max(0, visualRects[1].top - (visualRects[0].top + visualRects[0].height))
         : 0;
     const stackTop = visualRects[0].top;
-    const stackBottom = Math.max(...rects.map((rect) => rect.top + rect.height));
-    const draggedElement = document.querySelector<HTMLElement>(
-      `[data-profile-section-key="${sectionKey}"]`,
-    );
-    if (!draggedElement) return false;
-    // 抬起视觉：置顶 + 合成层提示（拖拽期间每帧直改 transform，见 profile.css）。
-    draggedElement.classList.add("is-dragging");
-    layoutShiftRef.current = 0;
+    // 栈底由前缀和推导（不用末项 bottom）：保证 clamp 上限与插入判定的前缀和自洽。
+    const stackBottom = stackBottomOf(stackTop, gap, heights);
+
     const draggedRect = draggedElement.getBoundingClientRect();
-    geometryRef.current = {
-      stackTop,
-      stackBottom,
-      gap,
-      minTranslate: stackTop - draggedRect.top,
-      maxTranslate: stackBottom - draggedRect.height - draggedRect.top,
-    };
+    const start = pointerStartRef.current;
+    const rawOffset = start ? start.y - draggedRect.top : draggedRect.height / 2;
+    geometryRef.current = { stackTop, stackBottom, gap, heights };
+    grabOffsetRef.current = Math.min(Math.max(rawOffset, 0), draggedRect.height);
+    draggedHeightRef.current = draggedRect.height;
+    // 方向跟踪的起点 = 激活时的布局位置：第一次移动就能判对方向。
+    lastDesiredTopRef.current = draggedRect.top;
+    directionRef.current = 1;
+    // 行程锚点 = 激活时的视觉目标位置（= 被拖卡布局上缘）。
+    travelAnchorRef.current = draggedRect.top;
     draggedElRef.current = draggedElement;
     return true;
   };
 
   useEffect(() => {
     if (!draggingSection) return;
+    const draggedKey = draggingSection;
+
+    /**
+     * 按指针 y 同步「插入位 + transform」：自动滚动、外部滚动、pointermove 三处共用。
+     *
+     * 顺序很重要：先按当前几何算目标插入位 → 需要就实时重排（顺序与 heights 同步）
+     * → 再用**新顺序**算布局位置与 transform。全部在前缀和模型里完成，不读 DOM。
+     */
+    function syncDrag(pointerY: number) {
+      const geometry = geometryRef.current;
+      const element = draggedElRef.current;
+      if (!geometry || !element) return;
+      const order = store.getOrder();
+      const sourceIndex = order.indexOf(draggedKey);
+      if (sourceIndex < 0) return;
+      const height = draggedHeightRef.current;
+      const desiredTop = clampDesiredTop(geometry, height, pointerY - grabOffsetRef.current);
+      // 方向跟踪：只有明显位移（>0.5px）才改方向（保留既有语义；行程制下插入位
+      // 的符号由 travel 自带，方向仅作为指针移动趋势的记录）。
+      const delta = desiredTop - lastDesiredTopRef.current;
+      if (delta > 0.5) directionRef.current = 1;
+      else if (delta < -0.5) directionRef.current = -1;
+      lastDesiredTopRef.current = desiredTop;
+      // 目标插入位（行程制）：自行程锚点以来每 TRAVEL_STEP_PX 推进一格
+      // （见 resolveTargetIndex 说明）；几何只负责 clamp 与 basic_info 下限。
+      const targetIndex = resolveTargetIndex(
+        geometry.heights.length - 1,
+        sourceIndex,
+        desiredTop,
+        travelAnchorRef.current,
+        SECTION_MIN_INDEX,
+      );
+      // 换位闩锁：距上一次真正换位不足 SWAP_LATCH_PX 时先不换，避免卡片在临界点
+      // ±2px 抖动时来回换位（gap=0 的大分区在旧实现里完全没有滞回）。
+      if (targetIndex !== sourceIndex && swapLatchOpen(travelAnchorRef.current, desiredTop)) {
+        travelAnchorRef.current = desiredTop;
+        applyLiveReorder(sourceIndex, targetIndex);
+      } else if (
+        targetIndex === sourceIndex &&
+        Math.abs(desiredTop - travelAnchorRef.current) >= TRAVEL_STEP_PX
+      ) {
+        // 钳制 pinned（目标位被 minIndex/lastIndex 挡住，步数 ≥1 却换不动）：锚点跟到
+        // 当前位置，防止贴边滚动期间锚点单边漂移积累「行程债」——否则反向拖动时要先
+        // 还清漂移量才能再次换位（真机 B6 回拖失效的根因）。
+        travelAnchorRef.current = desiredTop;
+      }
+      const current = geometryRef.current;
+      if (!current) return;
+      const currentIndex = store.getOrder().indexOf(draggedKey);
+      if (currentIndex < 0) return;
+      // 跟手：视觉目标位置 − 当前顺序下的布局位置。重排后同一帧内重算，无漂移。
+      element.style.transform = `translateY(${dragTranslate(
+        desiredTop,
+        layoutTop(current, currentIndex),
+      )}px)`;
+    }
+
+    /**
+     * 结算一次滚动：几何总是平移；行程锚点**只在自动滚动器自发的 tick 里**平移。
+     *
+     * 滚动让内容整体上移 `delta`，项高与间距不变，所以只需平移 stackTop/stackBottom
+     * ——**不重新量 DOM**。外部滚动（用户滚轮、浏览器夹 scrollTop、scroll anchoring）
+     * 只平移几何、**不动锚点**：锚点是「内容坐标」，被外部滚动挪走的内容已不在指针下，
+     * 再平移锚点等于"指针没动却离上次换位更远了"，会捅开闩锁再换位，而换位又触发
+     * anchoring → 正反馈环路（QA 实测分区 10/10 翻转、邻卡跨 890px 弹跳）。
+     */
+    function applyScrollDelta(delta: number, source: "auto" | "external") {
+      if (delta === 0) return;
+      const geometry = geometryRef.current;
+      if (!geometry) return;
+      const shifted = applyScrollShift(geometry, travelAnchorRef.current, delta, source);
+      geometryRef.current = shifted.geometry;
+      travelAnchorRef.current = shifted.lastSwapTop;
+      lastScrollTopRef.current += delta;
+      syncDrag(lastPointerYRef.current);
+    }
+
+    function handleContainerScroll() {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      applyScrollDelta(container.scrollTop - lastScrollTopRef.current, "external");
+    }
+
+    function startAutoScroll() {
+      const container = resolveScrollParent(draggedElRef.current);
+      if (!container) return;
+      scrollContainerRef.current = container;
+      lastScrollTopRef.current = container.scrollTop;
+      // 拖拽期关掉浏览器滚动锚定（换位→anchoring→再换位的正反馈源头）。
+      restoreScrollAnchorRef.current = disableScrollAnchoring(container);
+      container.addEventListener("scroll", handleContainerScroll, { passive: true });
+      autoScrollerRef.current = createEdgeAutoScroller({
+        container,
+        onTick: (delta) => applyScrollDelta(delta, "auto"),
+        // 已被 clamp 在栈底/栈顶时指针继续贴边不滚（否则页面空转、卡片钉住不动）。
+        canScroll: (delta) => {
+          const geometry = geometryRef.current;
+          if (!geometry) return false;
+          return canScrollTowards(
+            geometry,
+            draggedHeightRef.current,
+            lastPointerYRef.current - grabOffsetRef.current,
+            delta,
+          );
+        },
+      });
+    }
+
     const handlePointerMove = (event: globalThis.PointerEvent) => {
       event.preventDefault();
       const start = pointerStartRef.current;
       if (!start) return;
-      const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
-      if (!dragActivatedRef.current && distance < SECTION_DRAG_THRESHOLD_PX) return;
-
+      lastPointerYRef.current = event.clientY;
       if (!dragActivatedRef.current) {
-        // 首次越过阈值：激活拖拽，采集几何信息。
+        const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+        if (distance < SECTION_DRAG_THRESHOLD_PX) return;
+        // 顺序不能反：先按**未改动**的布局量几何（含强制 content-visibility），
+        // 再进入排序模式并起自动滚动。
+        if (!captureGeometry(draggedKey)) return;
         dragActivatedRef.current = true;
-        captureGeometry(draggingSection);
+        beginSectionDrag(draggedKey);
+        startAutoScroll();
       }
-
-      // 目标插入位：高度前缀和遍历「其余分区」的中心线，指针越过一个中心记一位。
-      // 实时重排（若发生）会同步累加布局位移补偿，transform 必须在其**之后**计算，
-      // 同一帧里「新布局位置 + 新 transform」一起绘制，视觉才不跳。
-      const geometry = geometryRef.current;
-      if (!geometry) return;
-      const order = store.getOrder();
-      const sourceIndex = order.indexOf(draggingSection);
-      if (sourceIndex < 0) return;
-      const otherHeights = heightsRef.current.filter((_, index) => index !== sourceIndex);
-      let insertion = 0;
-      let cursor = geometry.stackTop;
-      for (let index = 0; index < otherHeights.length; index += 1) {
-        const center = cursor + otherHeights[index] / 2;
-        if (event.clientY > center) insertion = index + 1;
-        cursor += otherHeights[index] + geometry.gap;
-      }
-      // basic_info 固定首位：插入位钳在 [1, n-1]，不可越过也不可顶替它。
-      const targetIndex = Math.max(1, Math.min(insertion, order.length - 1));
-      if (targetIndex !== sourceIndex) applyLiveReorder(sourceIndex, targetIndex);
-
-      // 跟手视觉：ref 直改 transform（clamp 在分区栈范围内），不走 setState。
-      // 偏移相对 pointerdown 的起始指针位置，与激活时机无关；再减去 order 变化把
-      // 盒子挪动的累计位移，被拖卡片才始终钉在鼠标上（见 draggedLayoutShift 说明）。
-      const element = draggedElRef.current;
-      if (!element) return;
-      const translateY = Math.min(
-        geometry.maxTranslate,
-        Math.max(geometry.minTranslate, event.clientY - start.y),
-      );
-      element.style.transform = `translateY(${translateY - layoutShiftRef.current}px)`;
+      syncDrag(event.clientY);
+      autoScrollerRef.current?.update(event.clientY);
     };
+
     const finishSectionDrag = (event: globalThis.PointerEvent) => {
       event.preventDefault();
-      // 拖动中的实时重排已把顺序写进 store；松手/取消只做清理（transform 复位等）。
+      autoScrollerRef.current?.stop();
+      autoScrollerRef.current = null;
+      // 松手/取消即退出排序模式：分区壳摘掉 is-dragging（置顶/合成层提示），顺序
+      // 保留拖动中的最终态，没有"确认"步骤。
+      //
+      // `is-section-reordering`（强制真实布局）自进入编辑态起就挂在每个分区上
+      // （见 ProfileSectionShell），拖拽全程不发生 content-visibility 切换——这正是
+      // 拖拽激活瞬间卡片背景整段不绘制的伪影根因（Chrome 对「刚切出
+      // content-visibility 的内容 + 新提升的合成层」会出现栅格失效）。因此编辑态下
+      // 松手不再有 CV 回落位移；compensateReleaseShift 在没有位移时是零补偿 no-op，
+      // 保留调用是为了兜底查看态/未来布局变化（松手那帧的跳变防御不能拆）。
+      const element = draggedElRef.current;
+      const container = scrollContainerRef.current;
+      const beforeLayoutTop = element ? layoutTopWithoutTransform(element) : null;
+      const restoreAnchor = restoreScrollAnchorRef.current;
+      restoreScrollAnchorRef.current = null;
+      applyReorderMode(false);
       clearDragState();
+      if (element && container && beforeLayoutTop !== null) {
+        // overflow-anchor 在补偿写完之后再恢复（否则 anchoring 与补偿会双重补偿）。
+        compensateReleaseShift(element, container, beforeLayoutTop, restoreAnchor ?? undefined);
+      } else {
+        restoreAnchor?.();
+      }
     };
+
     document.addEventListener("pointermove", handlePointerMove, { passive: false });
     document.addEventListener("pointerup", finishSectionDrag);
     document.addEventListener("pointercancel", finishSectionDrag);
@@ -344,15 +437,19 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
       document.removeEventListener("pointermove", handlePointerMove);
       document.removeEventListener("pointerup", finishSectionDrag);
       document.removeEventListener("pointercancel", finishSectionDrag);
+      // rAF 不能泄漏：卸载 / 拖拽结束都必须停掉自动滚动。
+      autoScrollerRef.current?.stop();
+      autoScrollerRef.current = null;
+      const container = scrollContainerRef.current;
+      if (container) container.removeEventListener("scroll", handleContainerScroll);
+      scrollContainerRef.current = null;
+      // 兜底恢复滚动锚定（组件卸载 / 拖拽被中断）。
+      restoreScrollAnchorRef.current?.();
+      restoreScrollAnchorRef.current = null;
     };
     // applyLiveReorder / captureGeometry 只经 ref 与稳定 store 起作用，不进依赖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draggingSection, clearDragState, store]);
-
-  const toggleSectionReorderMode = useCallback(() => {
-    if (store.isReordering()) clearDragState();
-    applyReorderMode(!store.isReordering());
-  }, [applyReorderMode, clearDragState, store]);
+  }, [draggingSection, beginSectionDrag, applyReorderMode, clearDragState, store]);
 
   const moveSectionByOffset = useCallback(
     (sectionKey: ProfileSectionKey, offset: -1 | 1) => {
@@ -368,10 +465,7 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
       ) {
         return;
       }
-      const next = [...current];
-      next.splice(sourceIndex, 1);
-      next.splice(targetIndex, 0, sectionKey);
-      store.commitOrder(next);
+      store.commitOrder(moveWithin(current, sourceIndex, targetIndex));
     },
     [store],
   );
@@ -387,7 +481,6 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
     setSectionReorderMode: applyReorderMode,
     resetSectionReorder,
     handleSectionPointerDown,
-    toggleSectionReorderMode,
     moveSectionByOffset,
   };
 }
