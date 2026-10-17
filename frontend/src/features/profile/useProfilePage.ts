@@ -63,9 +63,30 @@ function toFormValues(profile: Profile): ProfileFormValues {
   };
 }
 
-export function useProfilePage() {
+/** 提交资料表单的结构化结果：调用方（保存全部资料）按它分流。 */
+export type ProfileSubmitOutcome = "saved" | "invalid" | "failed" | "skipped";
+
+interface UseProfilePageOptions {
+  /**
+   * 「粘贴文本识别」成功后把工作区切回「简历资料」分页。必须传**稳定引用**：
+   * ProfilePage 用 useMemo 钉住两棵 tab 子树，回调换新会把 memo 打穿。
+   */
+  activateResumeWorkspace?: () => void;
+  /**
+   * 识别填入完成后通知页面置脏（未保存警示/悬浮球保存条都挂在 dirty 上）。
+   * `form.setFieldsValue` 不触发 onValuesChange，页面侧感知不到这次改动。
+   */
+  onProfileParsed?: () => void;
+}
+
+export function useProfilePage(options: UseProfilePageOptions = {}) {
   const [form] = Form.useForm<ProfileFormValues>();
   const { message } = App.useApp();
+  // 回调经 ref 持有：调用时刻读最新实现，hook 内部不依赖引用稳定性。
+  const optionsRef = useRef(options);
+  useEffect(() => {
+    optionsRef.current = options;
+  });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -98,11 +119,9 @@ export function useProfilePage() {
     sectionOrderStore,
     getSectionOrder,
     setSectionOrder,
-    sectionReorderMode,
     setSectionReorderMode,
     resetSectionReorder,
     handleSectionPointerDown,
-    toggleSectionReorderMode,
     moveSectionByOffset,
   } = sectionReorder;
 
@@ -154,16 +173,21 @@ export function useProfilePage() {
     setProfileTextOpen(false);
   };
 
-  /** 提交资料表单；返回是否真的保存成功（校验不过 / 请求失败都算没存上），
-   * 供调用方决定"未保存更改"警示是否可以解除。 */
-  const submit = async (): Promise<boolean> => {
-    if (!editing || loading || loadError || saving || photoReading) return false;
+  /**
+   * 提交资料表单，返回结构化结果供调用方分流：
+   * - `saved`：校验通过且已存进后端（内部已退出编辑态并提示成功）；
+   * - `invalid`：必填/格式校验不过（错误已就地标红，antd 会滚到第一个错误字段）；
+   * - `failed`：校验通过但保存请求失败（已提示错误，仍在编辑态）；
+   * - `skipped`：当前根本不可提交（非编辑态/加载中/保存中等），什么都没发生。
+   */
+  const submit = async (): Promise<ProfileSubmitOutcome> => {
+    if (!editing || loading || loadError || saving || photoReading) return "skipped";
     let values: ProfileFormValues;
     try {
       const formValues = await form.validateFields();
       values = { ...formValues, section_order: getSectionOrder() } as ProfileFormValues;
     } catch {
-      return false;
+      return "invalid";
     }
     setSaving(true);
     try {
@@ -174,10 +198,10 @@ export function useProfilePage() {
       resetSectionReorder(normalizeSectionOrder(nextValues.section_order));
       setEditing(false);
       message.success("资料已保存，现在可以去岗位广场生成简历了");
-      return true;
+      return "saved";
     } catch (err) {
       message.error(err instanceof Error ? err.message : "保存失败");
-      return false;
+      return "failed";
     } finally {
       setSaving(false);
     }
@@ -255,6 +279,16 @@ export function useProfilePage() {
       message.success(
         `${recognitionSource === "ai" ? "已使用 AI" : "已使用本地规则"}识别并填入资料，请核对后保存`,
       );
+      // 识别成功就该收尾了：识别结果已回填表单，弹窗没有继续停留的价值——用户要
+      // 做的是回到资料页核对并保存，而不是盯着弹窗里那份原始抄录。
+      closeProfileTextModal();
+      // 识别入口在编辑态页头上，正常情况下已在编辑；防御兜底：不在编辑态就把编辑
+      // 打开，否则回填的值会锁在一屏禁用的输入框里。
+      if (!editing) setEditing(true);
+      // setFieldsValue 不触发 onValuesChange，页面侧的未保存警示感知不到这次回填；
+      // 显式通知置脏，"识别填入后未保存"的保护才不落空。
+      optionsRef.current.onProfileParsed?.();
+      optionsRef.current.activateResumeWorkspace?.();
     } catch (err) {
       if (requestId !== profileTextRequestId.current) return;
       setProfileTextWarnings([]);
@@ -296,7 +330,6 @@ export function useProfilePage() {
     setEditing,
     photoReading,
     sectionOrderStore,
-    sectionReorderMode,
     profileTextOpen,
     profileText,
     profileTextWarnings,
@@ -314,7 +347,6 @@ export function useProfilePage() {
     cancelEditing,
     beforePhotoUpload,
     handleSectionPointerDown,
-    toggleSectionReorderMode,
     moveSectionByOffset,
     getSectionOrder,
     openProfileTextModal,
