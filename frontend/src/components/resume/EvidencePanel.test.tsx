@@ -1,8 +1,8 @@
 /**
  * 事实来源展示（RF-13）：四类 origin 的渲染、无标注不渲染、
- * AI 改写永不显示为"已确认"。
+ * AI 改写永不显示为"已确认"，以及默认折叠（R8）。
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FactAnnotation, ResumeContent } from "../../types";
 import EvidencePanel from "./EvidencePanel";
@@ -39,6 +39,11 @@ function annotation(overrides: Partial<FactAnnotation>): FactAnnotation {
   return { path: "summary", origin: "grounded", ...overrides };
 }
 
+/** 展开折叠面板：默认折叠，条目要点开标题才渲染出来（R8）。 */
+function expandPanel() {
+  fireEvent.click(screen.getByRole("button", { name: /内容来源说明/ }));
+}
+
 afterEach(cleanup);
 
 describe("EvidencePanel", () => {
@@ -51,7 +56,26 @@ describe("EvidencePanel", () => {
     expect(legacy).toBeEmptyDOMElement();
   });
 
-  it("按分区渲染标注：栏目人话 + 来源 Tag + 依据", () => {
+  it("默认折叠：只显示标题与条数，条目和说明文字都还看不到", () => {
+    render(
+      <EvidencePanel
+        content={CONTENT}
+        annotations={[
+          annotation({ path: "summary", origin: "grounded" }),
+          annotation({ path: "experience.0", origin: "restored" }),
+        ]}
+      />,
+    );
+
+    // 条数徽标：标题即"这个面板里有多少条标注"。
+    expect(screen.getByText("内容来源说明 · 2 条")).toBeInTheDocument();
+    // 折叠状态下 children 不渲染——分区标题、Tag 与说明文字都不在文档里。
+    expect(screen.queryByText("资料原文")).not.toBeInTheDocument();
+    expect(screen.queryByText("回填原文")).not.toBeInTheDocument();
+    expect(screen.queryByText(/建议导出前过目/)).not.toBeInTheDocument();
+  });
+
+  it("按分区渲染标注：栏目人话 + 来源 Tag + 依据（展开后）", () => {
     render(
       <EvidencePanel
         content={CONTENT}
@@ -71,7 +95,9 @@ describe("EvidencePanel", () => {
       />,
     );
 
-    expect(screen.getByText("内容来源说明")).toBeInTheDocument();
+    expect(screen.getByText("内容来源说明 · 2 条")).toBeInTheDocument();
+    expandPanel();
+
     // path 翻译成人话（个人总结 / 实习/工作经历「某科技公司」）；分区标题与
     // summary 标注的栏目标签同名，所以用 getAllByText 断言两处都在。
     expect(screen.getAllByText("个人总结").length).toBeGreaterThanOrEqual(1);
@@ -94,6 +120,7 @@ describe("EvidencePanel", () => {
       />,
     );
 
+    expandPanel();
     expect(screen.getByText("AI 改写保留")).toBeInTheDocument();
     expect(screen.queryByText("已确认")).not.toBeInTheDocument();
   });
@@ -113,6 +140,7 @@ describe("EvidencePanel", () => {
       />,
     );
 
+    expandPanel();
     expect(screen.getByText("已确认")).toBeInTheDocument();
     expect(screen.getByText("主导方案或交付")).toBeInTheDocument();
     expect(screen.getByText(/个人边界：团队负责容器化/)).toBeInTheDocument();

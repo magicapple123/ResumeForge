@@ -28,6 +28,7 @@ import { useJobQueue } from "./jobs/useJobQueue";
 import { useJobsPageState } from "./jobs/useJobsPageState";
 import { useSelectAllJobs } from "./jobs/useSelectAllJobs";
 import { bulkEnqueueJobs, bulkEnqueueSummary } from "../components/apply/queue/bulkEnqueue";
+import { registerJobCreateHandler } from "../features/shortcuts/runtimeTargets";
 
 export default function JobsPage() {
   const navigate = useNavigate();
@@ -83,6 +84,17 @@ export default function JobsPage() {
   const [importCandidate, setImportCandidate] = useState<CandidateJobDetail | null>(null);
   const [importedCandidateId, setImportedCandidateId] = useState<number | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
+
+  // R5 快捷键「新建岗位」：App 侧只在 /jobs 派发，这里把它接到既有的新建弹窗上
+  // （与点「手动添加」同一条路径：清掉编辑态与导入预填，再打开表单）。
+  useEffect(() => {
+    registerJobCreateHandler(() => {
+      setEditingJob(null);
+      setImportCandidate(null);
+      setFormOpen(true);
+    });
+    return () => registerJobCreateHandler(null);
+  }, []);
 
   // 完成通知的「查看结果」深链（/jobs?match_batch=history）：打开分析记录后清掉参数，
   // 让刷新/返回不会再弹。useJobsPageState 管它自己的筛选参数，这里只动 match_batch。

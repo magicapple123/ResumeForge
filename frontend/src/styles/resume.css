@@ -63,6 +63,8 @@
    之前工具栏没有下缘间距，与黄色警告条、画布三层全部贴死（用户截图反馈）。 */
 .resume-preview-toolbar {
   margin-bottom: 12px;
+  /* 「让 AI 改这一栏」的 chip 绝对定位到右侧（R14），这里是它的定位上下文。 */
+  position: relative;
 }
 
 /* 溢出警告条与画布之间同样留一档；首条警告已有内联 marginBottom: 12。 */
@@ -143,18 +145,39 @@
   pointer-events: auto;
 }
 
-/* 手写简历在桌面端并排显示岗位参考；参考栏跟随弹窗内部滚动保持可见。 */
+/* 手写简历在桌面端并排显示岗位参考；**左右两栏各自独立滚动**。
+ *
+ * 为什么不是"整块 body 一起滚"：编辑一栏可以长到几十屏，岗位要求却只有一屏。整块滚时
+ * 用户一改到下面的条目就再也看不到参考内容——而那正是他需要对照的东西（"这条要求我
+ * 有没有写到"）。所以桌面端让 body 不滚，两栏各滚各的。
+ *
+ * `height: 100%` 依赖 Modal body 有确定高度：`ResumeEditorModal` 在宽屏时把 body 设成
+ * `display:flex; flex-direction:column` + `max-height`，grid 作为 flex item 拿到
+ * 剩余高度（`min-height: 0` 才允许它缩到内容以下），子栏的 `overflow-y: auto` 才真的
+ * 出现滚动条，而不是把内容撑出弹窗被裁掉。
+ */
 .resume-editor-layout--with-reference {
   display: grid;
   grid-template-areas: "editor reference";
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-  align-items: start;
+  align-items: stretch;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   gap: 20px;
 }
 
 .resume-editor-main {
   grid-area: editor;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  /* `overflow-y: auto` 会把 `overflow-x` 的可见值抬成 auto（CSS 规范：两个轴不能一个
+     visible 一个非 visible），于是长内容会在这个栏里多出一条横向滚动条。这里显式裁掉。 */
+  overflow-x: hidden;
+  /* 右侧留一点空隙，避免滚动条贴住参考栏的分隔线。 */
+  padding-right: 8px;
 }
 
 .resume-editor-description {
@@ -164,10 +187,32 @@
 
 .resume-editor-reference {
   grid-area: reference;
-  position: sticky;
-  top: 0;
-  max-height: calc(100vh - 210px);
+  /* 曾经是 sticky：那时整块 body 一起滚，参考栏靠 sticky 跟手。现在两栏各自滚动，
+     sticky 既没有意义也会把参考栏顶出可视区，所以回到普通流式定位。 */
+  position: static;
+  max-height: none;
+  min-height: 0;
   overflow-y: auto;
+}
+
+/* 窄屏（单列）：回到"整块一起滚"，参考内容收进「查看岗位要求」折叠面板里。 */
+@media (max-width: 992px) {
+  .resume-editor-layout--with-reference {
+    display: block;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .resume-editor-main {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .resume-editor-reference {
+    overflow: visible;
+    max-height: none;
+  }
 }
 
 .job-reference-panel {
@@ -465,12 +510,24 @@
   margin-top: 12px;
 }
 
-/* 预览工具栏里的「当前指向」提示：鼠标划过纸面字段时出现，说明现在指向哪一栏。 */
+/* 预览工具栏里的「当前指向」提示：鼠标划过纸面字段时出现，说明现在指向哪一栏。
+ *
+ * R14：它是工具栏里唯一"长度不可控"的东西——路径文案可以是「实习/工作经历 · 第 2 条 ·
+ * 工作内容 · 第 3 条」，而旁边还有「让 AI 改这一栏」按钮。原先它作为 Space 的普通子项
+ * 参与 flex 排版，`max-width: 46%` 一到就把按钮挤到下一行（视觉上像是按钮"掉出去了"）。
+ * 现在它脱离文档流、钉在工具栏右侧：宽度不再影响按钮组的换行判定，label 自己收缩省略，
+ * 按钮永远完整可见。 */
 .resume-preview-hover-chip {
-  display: inline-flex;
-  max-width: 46%;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  /* 内联 style 由 ResumePreview 直接切换 none/flex（显隐逻辑不变）。 */
+  display: flex;
+  max-width: min(520px, 60vw);
   align-items: center;
   gap: 8px;
+  z-index: 2;
   padding: 2px 6px 2px 10px;
   border: 1px solid #b9d2f2;
   border-radius: 999px;
@@ -480,7 +537,28 @@
 }
 
 .resume-preview-hover-label {
+  /* 唯一的可收缩项：长文案只会被省略，不会把按钮顶走。 */
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 按钮与来源角标一律不收缩、不换行——它们是这个 chip 存在的理由。 */
+.resume-preview-hover-chip > .ant-btn,
+.resume-preview-hover-badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 窄屏：绝对定位会和上方缩放控件叠在一起，改为独占一行（仍固定在工具栏下方）。 */
+@media (max-width: 900px) {
+  .resume-preview-hover-chip {
+    position: static;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    margin-top: 8px;
+  }
 }

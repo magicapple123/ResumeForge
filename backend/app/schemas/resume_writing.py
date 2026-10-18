@@ -4,6 +4,7 @@
 一段文本出」，结果直接回填到简历对应字段、零适配。版本对比则是两份简历的三态差异
 （added / removed / unchanged），唯一实现见 ``services/resume/resume_diff.py``。
 """
+
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
@@ -74,6 +75,37 @@ class PolishRequest(BaseModel):
 
 
 class PolishOut(BaseModel):
+    result: str = ""
+
+
+MAX_SELECTION_TEXT_CHARS = 4000
+MAX_SELECTION_INSTRUCTION_CHARS = 500
+
+
+# 选区润色的正文上限。4000 是「一段经历 / 一段总结」的现实上界，也远小于整份简历：
+# 全局润色只发用户选中的这一段文字，不把整份简历送出去（隐私边界，见 AGENTS.md）。
+SelectionText = Annotated[
+    str,
+    Field(min_length=1, max_length=MAX_SELECTION_TEXT_CHARS),
+    AfterValidator(_strip_writing_text),
+]
+
+
+class PolishSelectionRequest(BaseModel):
+    """全局选区润色请求：任意输入框里被选中的那一段文字 + 用户自己的要求。
+
+    ``instruction`` 可空（用户只想要"顺手润色一下"），长度与
+    ``services/resume/resume_field_rewrite.py`` 的 ``instruction`` 保持同一上限。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    text: SelectionText
+    instruction: str = Field(default="", max_length=MAX_SELECTION_INSTRUCTION_CHARS)
+
+
+class PolishSelectionOut(BaseModel):
+    """润色结果。**不回写**任何字段——是否替换由用户在前端点「替换选中」决定。"""
+
     result: str = ""
 
 

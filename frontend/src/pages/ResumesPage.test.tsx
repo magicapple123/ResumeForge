@@ -1,3 +1,9 @@
+/**
+ * 简历页：列提示、收藏、通用简历、备注列、行操作、URL 状态化、深链、批量选择与跨页全选。
+ *
+ * 「按岗位筛选」（R15）的用例已拆到 `ResumesPage.jobFilter.test.tsx`（行数预算）。
+ */
+
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
@@ -37,6 +43,16 @@ vi.mock("../api/resumes", async (importOriginal) => ({
 // 由它自己的测试负责，这里桩掉。
 vi.mock("../components/resume/ResumeDetailPreview", () => ({
   default: () => <div data-testid="resume-preview-stub" />,
+}));
+
+// 岗位筛选下拉（R15）会远程搜岗位，并按 id 回查已选岗位：两个端点都要桩掉，
+// 否则用例会去敲真实后端。
+const jobMocks = vi.hoisted(() => ({ listJobs: vi.fn(), getJob: vi.fn() }));
+
+vi.mock("../api/jobs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/jobs")>()),
+  listJobs: jobMocks.listJobs,
+  getJob: jobMocks.getJob,
 }));
 
 const RESUME: ResumeBrief = {
@@ -85,6 +101,15 @@ beforeEach(() => {
   });
   apiMocks.fetchResumeHtml.mockReset().mockResolvedValue("<p>预览</p>");
   apiMocks.renderResume.mockReset().mockResolvedValue("<p>预览</p>");
+  jobMocks.listJobs.mockReset().mockResolvedValue({
+    items: [{ id: 3, title: "制造工程师", company: "示例制造企业" }],
+    total: 1,
+  });
+  jobMocks.getJob.mockReset().mockResolvedValue({
+    id: 3,
+    title: "制造工程师",
+    company: "示例制造企业",
+  });
 });
 
 afterEach(() => {

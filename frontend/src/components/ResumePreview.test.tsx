@@ -104,9 +104,53 @@ describe("ResumePreview", () => {
     const chip = document.querySelector(".resume-preview-hover-chip") as HTMLElement | null;
     expect(chip).not.toBeNull();
     expect(chip?.textContent).toContain("summary");
-    expect(chip?.style.display).toBe("inline-flex");
+    // R14：chip 是 flex（不是 inline-flex）容器，内部按「label 收缩 + 按钮不换行」排版。
+    expect(chip?.style.display).toBe("flex");
     fireEvent.mouseOut(target, { relatedTarget: iframe.contentDocument.body });
     expect(chip?.style.display).toBe("none");
+  });
+
+  it("chip 用 flex 排版：长 label 只压缩文字，动作按钮仍在 DOM 且可点击（R14）", () => {
+    const onEditTarget = vi.fn();
+    const longPath = "experience.0.description.0";
+    render(
+      <ResumePreview
+        html="<!doctype html><html><body></body></html>"
+        warnings={[]}
+        onEditTarget={onEditTarget}
+        // 真实文案比这还长（「实习/工作经历 · 第 1 条 · 工作内容 · 第 1 条」）；
+        // 这里要的是"长度不可控"，所以给它一段明显超宽的文字。
+        describePath={() =>
+          "实习/工作经历 · 第 1 条 · 工作内容 · 第 1 条（负责服务端接口设计与实现，覆盖订单、支付与对账链路）"
+        }
+      />,
+    );
+
+    const iframe = getPreviewFrame();
+    if (!iframe.contentDocument) throw new Error("测试环境未创建 iframe document");
+    iframe.contentDocument.body.innerHTML = `<span data-resume-path="${longPath}">项目要点</span>`;
+    fireEvent.click(screen.getByText("编辑"));
+    fireEvent.load(iframe);
+    const target = iframe.contentDocument.querySelector("[data-resume-path]");
+    if (!target) throw new Error("可编辑字段未渲染");
+
+    fireEvent.mouseMove(target);
+
+    const chip = document.querySelector<HTMLElement>(".resume-preview-hover-chip");
+    expect(chip).not.toBeNull();
+    expect(chip?.style.display).toBe("flex");
+    // 结构契约：label 与按钮是 chip 内的同级 flex 子项（CSS 靠这两级分别做收缩/不收缩）。
+    const label = chip?.querySelector(".resume-preview-hover-label");
+    expect(label).not.toBeNull();
+    expect(label?.textContent).toContain("工作内容");
+    const action = chip?.querySelector("button");
+    expect(action).not.toBeNull();
+    expect(action).toHaveTextContent("让 AI 改这一栏");
+
+    // 长 label 不影响按钮可用：点它仍然精确回传刚才指向的字段。
+    fireEvent.click(action as HTMLElement);
+    expect(onEditTarget).toHaveBeenCalledWith(longPath);
+    expect(chip?.style.display).toBe("flex");
   });
 
   it("exposes editable fields as keyboard controls", () => {

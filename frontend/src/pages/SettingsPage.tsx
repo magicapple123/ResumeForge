@@ -21,6 +21,7 @@ import UpdateCard from "../components/settings/UpdateCard";
 import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
 import PrivacyCard from "../components/settings/PrivacyCard";
 import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
+import ShortcutSettingsCard from "../components/settings/ShortcutSettingsCard";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
 
 /** 设置分页。三页各自装同一类东西：改模型配置不用先翻过整套数据备份。 */
@@ -302,8 +303,12 @@ export default function SettingsPage() {
                     </Typography.Text>
                   </div>
                 </div>
-                <SettingsGroupTitle text="界面与提醒" hint="导航入口、悬浮球与近期提醒的行为" />
+                <SettingsGroupTitle
+                  text="界面与提醒"
+                  hint="导航入口、快捷键、悬浮球与近期提醒的行为"
+                />
                 <NavigationSettingsCard />
+                <ShortcutSettingsCard />
                 <AssistantOrbCard />
                 <ReminderPopupCard />
 

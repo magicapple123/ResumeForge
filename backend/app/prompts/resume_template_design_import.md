@@ -18,7 +18,7 @@
 - photo_shape：square / rounded / circle
 - photo_size：4 ~ 10（相对基准字号的系数）
 - skill_style：pill / outline / plain
-- font_scale_adjust：0.88 ~ 1.16
+- font_scale_adjust：0.35 ~ 1.16（可接受范围已放宽；AI 生成仍建议 0.88 及以上，见判断规则 6）
 - line_height：1.2 ~ 2.2
 - page_padding：8 ~ 26（mm）
 - section_gap：0.6 ~ 2.2
@@ -30,6 +30,9 @@
 3. 不确定的字段省略，不要猜。至少识别出一项合法配置，否则返回空 config。
 4. confidence 的键只能是本次返回的 config 键，值为 0 到 1 的小数。
 5. evidence 是简短的版式依据，不包含用户身份信息；warnings 是给用户看的限制说明。
+6. font_scale_adjust 的字段范围已放宽到 0.35（界面上有无级字号滑块，用户自己能拖到很小），
+   但**你给的建议值仍应 >= 0.88**：参考简历显得"字小"多半是页边距小、行高紧，优先动
+   line_height / page_padding / section_gap 去还原；只有确实量到正文明显更小时才低于 0.88。
 
 严格只输出以下 JSON 形状，不要 Markdown：
 {

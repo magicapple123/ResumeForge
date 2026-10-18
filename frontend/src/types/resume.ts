@@ -140,7 +140,15 @@ export interface ResumeTemplateCatalog {
   format_presets: ResumeFormatPreset[];
   /** 正文分区清单（「调整板块顺序」用）。键名、标签与默认顺序都由后端下发。 */
   section_options: { key: string; label: string }[];
+  /** 内置默认顺序：已保存简历没有自己的 `section_order` 时读它（老简历外观不追溯改变）。 */
   default_section_order: string[];
+  /**
+   * 「我的资料」里排好的顺序，已翻译成正文分区键（后端可能不给，旧目录没有这一项）。
+   *
+   * 只用于**生成**新简历时的默认值；预览 / 编辑已保存简历时不读它——否则在资料页
+   * 拖一下顺序，所有老简历的外观都会跟着变。
+   */
+  profile_section_order?: string[];
   /** 三个版式参数的默认值由后端下发，前端不写死——改默认值只改一处。 */
   defaults: {
     template: string;
@@ -389,6 +397,13 @@ export interface GenerateOptions {
   font_scale: ResumeFontScale;
   template: string;
   format_name: string;
+  /**
+   * 生成时就生效的版式覆盖（板块顺序、字号系数等）。
+   *
+   * 不传也行（后端默认 `{}`）：有了它，用户在配置页调的顺序与字号才会跟着简历落库，
+   * 关掉弹窗再从简历中心重开仍然是他调过的那一版。
+   */
+  format_config?: ResumeFormatConfig;
   /** 用户自己补充的生成要求（≤2000 字），作为附加上下文交给模型。 */
   custom_instruction: string;
 }

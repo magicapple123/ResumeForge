@@ -6,10 +6,20 @@ import ResumeRiskPanel from "./ResumeRiskPanel";
 interface Props {
   open: boolean;
   resumeId: number | null;
+  /** 简历内容的签名：风险扫描完成后用它判断"内容是不是改过了"。 */
+  contentSignature?: string;
+  /** 关联岗位 id：ATS 面板据此提供「从关联岗位载入 JD」。 */
+  jobId?: number;
   onClose: () => void;
 }
 
-export default function ResumeQualityModal({ open, resumeId, onClose }: Props) {
+export default function ResumeQualityModal({
+  open,
+  resumeId,
+  contentSignature,
+  jobId,
+  onClose,
+}: Props) {
   return (
     <Modal
       title="质量检测"
@@ -26,12 +36,12 @@ export default function ResumeQualityModal({ open, resumeId, onClose }: Props) {
             {
               key: "risk",
               label: "风险扫描",
-              children: <ResumeRiskPanel resumeId={resumeId} />,
+              children: <ResumeRiskPanel resumeId={resumeId} contentSignature={contentSignature} />,
             },
             {
               key: "ats",
               label: "ATS 检测",
-              children: <AtsCheckPanel resumeId={resumeId} />,
+              children: <AtsCheckPanel resumeId={resumeId} jobId={jobId} />,
             },
           ]}
         />

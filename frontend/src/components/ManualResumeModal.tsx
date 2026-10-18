@@ -6,6 +6,7 @@ import { createManualResume } from "../api/resumes";
 import { getProfile } from "../api/profile";
 import type { Job, Profile, ResumeContent } from "../types";
 import { profileToResumeContent } from "../utils/profileToResume";
+import { buildProfileFillSources } from "../features/profile/profileFillOptions";
 import JobRequirementPanel from "./JobRequirementPanel";
 import ResumeEditorModal from "./ResumeEditorModal";
 
@@ -67,6 +68,9 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
     () => (profile ? profileToResumeContent(profile, job) : null),
     [job, profile],
   );
+  // 「从我的资料填入」的候选：预填之后用户又在资料里补了实习/项目时，不必复制粘贴。
+  // 只在有资料时构造；`ResumeDetailPreview` 的编辑入口不传（那里改的是已保存简历）。
+  const fillSources = useMemo(() => (profile ? buildProfileFillSources(profile) : null), [profile]);
 
   const save = async (nextContent: ResumeContent) => {
     await createManualResume({
@@ -98,6 +102,7 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
         }
         saveLabel="保存手写简历"
         referencePanel={job ? <JobRequirementPanel job={job} /> : undefined}
+        fillSources={fillSources}
         onClose={onClose}
         onSave={save}
       />

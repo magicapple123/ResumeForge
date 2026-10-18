@@ -1,4 +1,8 @@
-/** 生成弹窗在「没有岗位」（通用简历）时的行为，以及后台生成任务的前端交互。 */
+/** 生成弹窗在「没有岗位」（通用简历）时的行为，以及后台生成任务的前端交互。
+ *
+ * R6「生成时定下的版式覆盖要跟着请求走」的用例已拆到
+ * `GenerateResumeModal.layout.test.tsx`（行数预算）。
+ */
 
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

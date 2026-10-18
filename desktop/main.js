@@ -44,8 +44,13 @@ const RESTART_BACKOFF_MS = 1500;
 // Crash budget (audit PR-05): more than MAX_RESTART_ATTEMPTS unexpected
 // exits inside this window give up on restarting and surface the error.
 const RESTART_WINDOW_MS = 5 * 60_000;
-// Hard cap on how long before-quit waits for the backend to stop.
-const STOP_TIMEOUT_MS = 10_000;
+// Hard cap on how long before-quit waits for the backend to stop. A normal
+// quit is a user waiting in front of the tray menu, so the cap is short: a
+// backend that is still there after 6s is reported in the log, not in a modal
+// dialog (R3). The install path keeps the old, generous budget -- overwriting
+// a live installation is the one case worth waiting (and failing) for.
+const STOP_TIMEOUT_MS = 6_000;
+const INSTALL_STOP_TIMEOUT_MS = 15_000;
 
 const restartTimestamps = [];
 
@@ -416,38 +421,55 @@ if (!app.requestSingleInstanceLock()) {
     // checked before the update installer is allowed to overwrite this
     // installation: an unverified stop (recycled pid, unreadable identity,
     // timeout) must never be papered over by an install.
+    //
+    // R3: a plain quit (tray exit, window close) must never block on a modal
+    // dialog. Only a pending installer turns an unverified stop into an error
+    // box -- that is the one path where continuing would corrupt an install.
+    const installPending = Boolean(pendingInstallerPath);
+    const stopTimeoutMs = installPending ? INSTALL_STOP_TIMEOUT_MS : STOP_TIMEOUT_MS;
     const stopPromise = stopBackendSafely();
     const stopCapped = Promise.race([
       stopPromise,
       new Promise((resolve) => {
         setTimeout(
           () => resolve({ ok: false, reason: "停止后端超时", verified: false, timedOut: true }),
-          STOP_TIMEOUT_MS,
+          stopTimeoutMs,
         ).unref();
       }),
     ]);
     stopCapped.then((outcome) => {
       stopInFlight = false;
       shutdownComplete = true;
-      if (outcome && outcome.ok) {
+      const stopOk = Boolean(outcome && outcome.ok);
+      const stopVerified = !outcome || outcome.verified !== false;
+      const reason = (outcome && outcome.reason) || "未知原因";
+      const backendUrl = (backend && backend.url) || "（未知）";
+      const probeDetail = (outcome && outcome.detail) || "（无）";
+      if (stopOk && (!installPending || stopVerified)) {
         spawnPendingInstaller();
-      } else {
-        const reason = (outcome && outcome.reason) || "未知原因";
-        const hadPendingInstaller = Boolean(pendingInstallerPath);
+      } else if (installPending) {
+        // The installer would overwrite files a live backend may still hold.
         pendingInstallerPath = null;
-        logLine(`backend stop not verified (${reason}); update install blocked`);
+        logLine(
+          `backend stop not verified (${reason}); update install blocked; url=${backendUrl}; detail=${probeDetail}`,
+        );
         try {
           dialog.showErrorBox(
             "简历通",
-            hadPendingInstaller
-              ? `更新未安装：后端服务未被确认停止（${reason}）。\n` +
-                  "为避免覆盖仍在使用数据文件的后端进程，安装已取消。" +
-                  "请手动结束残留的后端进程后重试更新。"
-              : `退出时未能确认后端服务已停止（${reason}）。\n` +
-                  "如果稍后发现端口被占用，请在任务管理器里结束残留的 python 进程。",
+            `更新未安装：后端服务未被确认停止（${reason}）。\n` +
+              "为避免覆盖仍在使用数据文件的后端进程，安装已取消。" +
+              "请手动结束残留的后端进程后重试更新。",
           );
         } catch {
           // A failing dialog must not block the quit itself.
+        }
+      } else {
+        // Ordinary quit: the user asked to leave, so leave. The evidence goes
+        // to desktop-main.log for the next time someone asks "why is port 8010
+        // still taken?" -- not into a dialog they cannot act on (R3).
+        logLine(`backend stop not verified (${reason}); url=${backendUrl}; detail=${probeDetail}`);
+        if (outcome && outcome.warning) {
+          logLine(`backend stop warning: ${outcome.warning} (url=${backendUrl}; detail=${probeDetail})`);
         }
       }
       app.quit();

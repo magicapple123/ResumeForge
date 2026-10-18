@@ -10,21 +10,32 @@
  * 1. 数据集在这里可以直接切换，但切换成功后会整页重载，保证岗位、资料和缓存都来自新数据集。
  * 2. **头像不出本机**。照片存在本地数据库里，这里只是把它显示出来，不发给任何模型。
  */
-import { DatabaseOutlined, DownOutlined, HomeOutlined, UserOutlined } from "@ant-design/icons";
-import { Avatar, Dropdown, Skeleton, Tooltip } from "antd";
+import {
+  DatabaseOutlined,
+  DownOutlined,
+  HomeOutlined,
+  PlusOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
+import { App, Avatar, Dropdown, Skeleton, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProfile } from "../api/profile";
-import { activateDataset, listDatasets } from "../api/settings";
+import { activateDataset, createDataset, listDatasets } from "../api/settings";
 import type { Profile } from "../types";
 import type { DatasetInfo } from "../types/settings";
 import { reloadPage } from "../utils/navigation";
 import { saveActiveDatasetId } from "../utils/datasetScope";
+import DatasetCreateModal from "./DatasetCreateModal";
+
+/** 下拉菜单里「新建数据集…」的 key：与数据集 id 不可能冲突。 */
+const CREATE_DATASET_KEY = "create-dataset";
 
 export default function AppHeaderContext() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { message, modal } = App.useApp();
   const [dataset, setDataset] = useState<DatasetInfo | null>(null);
   const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
   const [, setDatasetCount] = useState(0); // 计数原先只用于悬停提示，提示移除后仅保留写入
@@ -32,6 +43,9 @@ export default function AppHeaderContext() {
   const [ready, setReady] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [creating, setCreating] = useState(false);
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
   // 返回 null 表示失败（页头是全局装饰：读不到就少显示一块，绝不报错或白屏）。
@@ -95,6 +109,55 @@ export default function AppHeaderContext() {
   // 资料相互独立，界面上必须随时说清"现在看的是示例"，并给出回主数据的醒目出路。
   const isSampleActive = dataset?.source === "sample";
 
+  /**
+   * 新建数据集：成功后问一句"要不要马上切过去"。
+   *
+   * 不自动切换是刻意的——用户可能只是想先把一份新数据集准备好（例如面试练习），
+   * 立刻切走会让人误以为刚才的数据丢了。切换仍复用 activateDataset + 整页重载。
+   */
+  const handleCreateDataset = useCallback(async () => {
+    if (creating) return;
+    const name = createName.trim();
+    if (!name) {
+      message.warning("请填写数据集名称");
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await createDataset(name);
+      setCreateOpen(false);
+      setCreateName("");
+      // 列表单独刷新：这一步失败不影响"已经建好"这个事实，下次进页面还会再拉一次。
+      try {
+        setDatasets(await listDatasets());
+      } catch {
+        /* 忽略：下拉条目下一次挂载时会自然补齐 */
+      }
+      modal.confirm({
+        title: `已新建「${created.name || name}」`,
+        content: "是否立即切换到这个数据集？",
+        okText: "立即切换",
+        cancelText: "稍后",
+        onOk: async () => {
+          try {
+            await activateDataset(created.id);
+            // active id 必须在 reload 前落盘（与下拉切换同一套收尾）：重载后的首帧
+            // 只有 localStorage 可读。
+            saveActiveDatasetId(created.id);
+            window.setTimeout(reloadPage, 250);
+          } catch (error) {
+            message.error(error instanceof Error ? error.message : "切换数据集失败");
+          }
+        },
+      });
+    } catch (error) {
+      // 后端的 detail 原文（例如「数据集名称已存在」）比通用文案有用得多。
+      message.error(error instanceof Error ? error.message : "新建数据集失败");
+    } finally {
+      setCreating(false);
+    }
+  }, [createName, creating, message, modal]);
+
   const datasetMenuItems = useMemo<MenuProps["items"]>(() => {
     const items: MenuProps["items"] = datasets.map((item) => ({
       key: item.id,
@@ -120,6 +183,14 @@ export default function AppHeaderContext() {
         label: <span className="app-dataset-return">回到我的数据</span>,
       });
     }
+    // 末尾固定留一个「新建数据集…」：用户想到"再开一份数据"的时刻正是在这个下拉里，
+    // 让他先跳去设置页再回来是最容易放弃的路径。
+    items.push({ type: "divider" });
+    items.push({
+      key: CREATE_DATASET_KEY,
+      icon: <PlusOutlined />,
+      label: "新建数据集…",
+    });
     return items;
   }, [datasets, switchingId, isSampleActive]);
 
@@ -139,6 +210,12 @@ export default function AppHeaderContext() {
               menu={{
                 items: datasetMenuItems,
                 onClick: ({ key }) => {
+                  // 「新建数据集…」是动作入口，不是数据集 id：只开弹窗，不触发切换。
+                  if (key === CREATE_DATASET_KEY) {
+                    setCreateName("");
+                    setCreateOpen(true);
+                    return;
+                  }
                   // 「回到我的数据」是动作入口：解析出目标数据集 id，仍走切换流程。
                   const targetId = key.startsWith("return-main:")
                     ? key.slice("return-main:".length)
@@ -185,6 +262,18 @@ export default function AppHeaderContext() {
           {switchError ? <span className="app-header-context-error">{switchError}</span> : null}
         </>
       )}
+      <DatasetCreateModal
+        open={createOpen}
+        value={createName}
+        confirmLoading={creating}
+        onChange={setCreateName}
+        onOk={() => void handleCreateDataset()}
+        onCancel={() => {
+          if (creating) return;
+          setCreateOpen(false);
+          setCreateName("");
+        }}
+      />
     </div>
   );
 }

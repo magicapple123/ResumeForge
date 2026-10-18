@@ -195,7 +195,8 @@ test("a stop that never resolves cannot leak into an install (timeout path)", as
   try {
     await waitForShellReady(loaded);
     const requestInstallAndQuit = loaded.exports.requestInstallAndQuit;
-    // A stop() that hangs: the fake timer table lets us fire the 10s cap.
+    // A stop() that hangs: the fake timer table lets us fire the install-path
+    // cap. R3 split the budget: the install path keeps the long one.
     loaded.state.stopBackend = () => new Promise(() => {});
 
     requestInstallAndQuit("C:/temp/ResumeForge-Setup-0.19.0.exe");
@@ -204,8 +205,8 @@ test("a stop that never resolves cannot leak into an install (timeout path)", as
     await flush();
     assert.strictEqual(loaded.events.spawnCalls.length, 0, "no install while stopping");
 
-    const timeoutTimer = loaded.events.timers.find((t) => t._ms === 10_000);
-    assert.ok(timeoutTimer, "before-quit must arm the stop timeout");
+    const timeoutTimer = loaded.events.timers.find((t) => t._ms === 15_000);
+    assert.ok(timeoutTimer, "before-quit must arm the install-path stop timeout");
     timeoutTimer._fn();
     await flush();
     await flush();
@@ -213,6 +214,102 @@ test("a stop that never resolves cannot leak into an install (timeout path)", as
     assert.strictEqual(loaded.events.spawnCalls.length, 0,
       "a timed-out stop must not be followed by an install");
     assert.ok(loaded.events.errorBoxes.length >= 1, "the timeout must be visible to the user");
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+// --- R3: an ordinary quit never blocks on a modal dialog ----------------------
+
+test("plain quit: an unverified stop is logged, NOT shown as an error box (R3)", async () => {
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    loaded.state.stopBackend = () =>
+      Promise.resolve({ ok: false, reason: "x", verified: false });
+
+    const exitItem = loaded.menuHolder.menu.template.find((i) => i.label === "退出");
+    exitItem.click();
+    const quitsBeforeStop = loaded.events.quitCalls.length;
+    loaded.events.beforeQuitHandler({ preventDefault() {} });
+    await flush();
+    await flush();
+
+    assert.strictEqual(loaded.events.errorBoxes.length, 0,
+      "an ordinary quit must not pop a blocking dialog");
+    assert.ok(loaded.events.quitCalls.length > quitsBeforeStop,
+      "quit must still complete");
+    assert.strictEqual(loaded.events.spawnCalls.length, 0, "and no installer was pending");
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("plain quit: an unverified stop does not arm the install-path timeout (R3)", async () => {
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    loaded.state.stopBackend = () => new Promise(() => {});
+
+    const exitItem = loaded.menuHolder.menu.template.find((i) => i.label === "退出");
+    exitItem.click();
+    loaded.events.beforeQuitHandler({ preventDefault() {} });
+    await flush();
+
+    assert.strictEqual(
+      loaded.events.timers.some((t) => t._ms === 15_000),
+      false,
+      "with no pending installer the long install budget must not be used",
+    );
+    const timeoutTimer = loaded.events.timers.find((t) => t._ms === 6_000);
+    assert.ok(timeoutTimer, "an ordinary quit uses the short cap");
+    timeoutTimer._fn();
+    await flush();
+    await flush();
+
+    assert.strictEqual(loaded.events.errorBoxes.length, 0,
+      "even a hung stop must not pop a dialog on a plain quit");
+    assert.ok(loaded.events.quitCalls.length >= 1, "quit still completes");
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("plain quit: an unknown port probe (ok + warning) is a normal exit (R3)", async () => {
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    loaded.state.stopBackend = () =>
+      Promise.resolve({ ok: true, reason: "", verified: false, warning: "端口探测未能确认后端已停止" });
+
+    const exitItem = loaded.menuHolder.menu.template.find((i) => i.label === "退出");
+    exitItem.click();
+    loaded.events.beforeQuitHandler({ preventDefault() {} });
+    await flush();
+    await flush();
+
+    assert.strictEqual(loaded.events.errorBoxes.length, 0, "warning is a log line, not a dialog");
+  } finally {
+    loaded.cleanup();
+  }
+});
+
+test("install path: an unknown port probe (ok but unverified) still blocks the install (R3)", async () => {
+  const loaded = loadMain();
+  try {
+    await waitForShellReady(loaded);
+    loaded.state.stopBackend = () =>
+      Promise.resolve({ ok: true, reason: "", verified: false, warning: "端口探测未能确认后端已停止" });
+
+    loaded.exports.requestInstallAndQuit("C:/temp/ResumeForge-Setup-0.19.0.exe");
+    loaded.events.beforeQuitHandler({ preventDefault() {} });
+    await flush();
+    await flush();
+
+    assert.strictEqual(loaded.events.spawnCalls.length, 0,
+      "an unverified stop must never be papered over by an install");
+    assert.ok(loaded.events.errorBoxes.length >= 1, "the blocked install must be explained");
+    assert.match(loaded.events.errorBoxes.join(" "), /更新未安装/);
   } finally {
     loaded.cleanup();
   }

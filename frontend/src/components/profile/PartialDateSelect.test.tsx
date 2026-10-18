@@ -1,9 +1,9 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Form } from "antd";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import PartialDateSelect from "./PartialDateSelect";
-import { normalizePartialDate } from "./partialDate";
+import { buildYearGroups, normalizePartialDate } from "./partialDate";
 
 afterEach(() => {
   cleanup();
@@ -84,5 +84,63 @@ describe("PartialDateSelect", () => {
     }
     // 「至今」勾选框自身不受 selected.ongoing 影响（disabled 只由显式 prop 决定）。
     expect(screen.getByRole("checkbox", { name: "至今" })).toBeEnabled();
+  });
+});
+
+describe("PartialDateSelect 年份分组（R9）", () => {
+  afterEach(() => {
+    cleanup();
+    document.body.innerHTML = "";
+  });
+
+  it("两组：第一组第一项是当前年，未来年份退到第二组", () => {
+    // 回归：原来下拉是从「当前年+15」开始降序的，选出生年份要先滚过十几个未来年份。
+    const currentYear = new Date().getFullYear();
+    const groups = buildYearGroups(currentYear, 0);
+
+    expect(groups.map((group) => group.label)).toEqual(["今年及以前", "未来年份"]);
+    expect(groups[0].options[0].value).toBe(String(currentYear));
+    expect(groups[0].options.map((option) => option.value)).toContain("1900");
+    expect(groups[0].options.map((option) => option.value)).not.toContain(String(currentYear + 1));
+    expect(groups[1].options[0].value).toBe(String(currentYear + 1));
+    expect(groups[1].options.map((option) => option.value)).toContain(String(currentYear + 15));
+  });
+
+  it("已选年份落在范围外时仍并入对应组，不会变成选不中的值", () => {
+    const currentYear = new Date().getFullYear();
+    const oldGroups = buildYearGroups(currentYear, 1850);
+    expect(oldGroups[0].options.map((option) => option.value)).toContain("1850");
+    expect(oldGroups[0].options[oldGroups[0].options.length - 1].value).toBe("1850");
+
+    const futureGroups = buildYearGroups(currentYear, currentYear + 30);
+    expect(futureGroups[1].options[futureGroups[1].options.length - 1].value).toBe(
+      String(currentYear + 30),
+    );
+  });
+
+  it("有值时挂载不触发 onChange，已选年份仍然显示", () => {
+    const onChange = vi.fn();
+    render(<PartialDateSelect label="教育日期" value="2024-06" onChange={onChange} />);
+
+    // 空值/已有值都不得"自动写当前日期"——只有用户真的选了才回调。
+    expect(onChange).not.toHaveBeenCalled();
+    const shown = document.querySelectorAll<HTMLElement>(
+      ".profile-partial-date-select .ant-select-content",
+    );
+    expect(shown[0]).toHaveTextContent("2024");
+    expect(shown[1]).toHaveTextContent("06");
+  });
+
+  it("打开年份下拉时第一项就是本年，未来年份排在后面的分组里", () => {
+    render(<PartialDateSelect label="工作日期" />);
+    const currentYear = new Date().getFullYear();
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "工作日期年份" }));
+
+    // 分组标题在 DOM 里（未来年份那一组在虚拟列表窗口之外，由上面的纯函数用例守）。
+    expect(document.querySelector(".ant-select-item-group")).toHaveTextContent("今年及以前");
+    const options = document.querySelectorAll(".ant-select-dropdown .ant-select-item-option");
+    expect(options.length).toBeGreaterThan(0);
+    expect(options[0]).toHaveAttribute("title", String(currentYear));
   });
 });

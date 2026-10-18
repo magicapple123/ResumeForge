@@ -6,6 +6,8 @@
  * 两侧各有测试钉住「默认顺序一致」「归一化结果完整」，这是防止漂移的方式。
  */
 
+import type { ResumeFormatConfig } from "../types/resumeFormat";
+
 /** 分区键 → 界面文案。与后端 SECTION_LABELS 保持逐字一致。 */
 export const RESUME_SECTION_LABELS: Record<string, string> = {
   summary: "个人总结",
@@ -62,5 +64,28 @@ export function moveSection(order: string[], index: number, direction: -1 | 1): 
   }
   const next = [...order];
   [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
+/**
+ * 生成时的版式覆盖里该不该写 `section_order`，写成什么。
+ *
+ * 规则只有一条：**与内置默认相同就不写**。理由与"字号系数恰好为 1 时不写"完全一样——
+ * "没调过"和"调成和默认一样"在存储里应当是同一种形态，否则每份简历都会多出一条
+ * 无意义的覆盖，而"恢复默认"与"从没动过"会留下不同的存储形态。
+ *
+ * 保留 `base` 里的其它键（强调色、字号系数……）：这里只负责这一个键，不做整体替换。
+ */
+export function buildSectionOrderConfig(
+  profileOrder: string[],
+  builtInDefaultOrder: string[],
+  base: ResumeFormatConfig = {},
+): ResumeFormatConfig {
+  const next: ResumeFormatConfig = { ...base };
+  if (profileOrder.join(",") === builtInDefaultOrder.join(",")) {
+    delete next.section_order;
+  } else {
+    next.section_order = [...profileOrder];
+  }
   return next;
 }

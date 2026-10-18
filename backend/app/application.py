@@ -385,6 +385,8 @@ def create_app() -> FastAPI:
         jobs.router,
         resumes.router,
         resume_writing.router,
+        # 全局 AI 润色：前缀是 /api/writing，与上面那条 /api/resumes 不冲突。
+        resume_writing.selection_router,
         resume_risk.router,
         ats.router,
         resume_templates_api.router,

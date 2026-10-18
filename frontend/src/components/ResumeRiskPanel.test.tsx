@@ -1,6 +1,8 @@
-/** 简历风险扫描面板：风险点渲染、台账联动、错误透出。 */
+/** 简历风险扫描面板：挂载不请求、点开始才扫、取消、关闭再开保留结果、签名变化提示。 */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../api/client";
+import { resetRiskScanStore } from "../features/resume/riskScanStore";
 import ResumeRiskPanel from "./ResumeRiskPanel";
 
 const apiMocks = vi.hoisted(() => ({ scanResumeRisks: vi.fn() }));
@@ -30,73 +32,122 @@ const RESULT = {
     },
   ],
   summary: { deep_dive: 1, compliance: 1 },
-  remote_enhancement_available: false,
+  remote_enhancement_available: true,
   llm_used: false,
   notes: [],
 };
 
 beforeEach(() => {
+  resetRiskScanStore();
   apiMocks.scanResumeRisks.mockReset();
   window.localStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
+  resetRiskScanStore();
   document.body.innerHTML = "";
 });
 
 describe("ResumeRiskPanel", () => {
-  it("渲染风险点、五类分组与台账联动", async () => {
+  it("挂载时不发请求，只显示说明卡", () => {
+    render(<ResumeRiskPanel resumeId={7} contentSignature="sig-1" />);
+
+    expect(apiMocks.scanResumeRisks).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "开始扫描" })).toBeInTheDocument();
+    // 五类检查都写在说明卡里（用户点之前就该知道要查什么）。
+    expect(screen.getByText("查重")).toBeInTheDocument();
+    expect(screen.getByText("敏感词")).toBeInTheDocument();
+    expect(screen.getByText("夸大")).toBeInTheDocument();
+    expect(screen.getByText("深挖风险点")).toBeInTheDocument();
+    expect(screen.getByText("合规校验")).toBeInTheDocument();
+    // AI 增强开关在卡上，默认沿用本机偏好（此处为空 → 开）。
+    expect(screen.getByRole("switch", { name: "AI 增强" })).toBeInTheDocument();
+  });
+
+  it("点「开始扫描」才发请求，完成后显示结果与扫描元信息", async () => {
+    apiMocks.scanResumeRisks.mockResolvedValue(RESULT);
+    render(<ResumeRiskPanel resumeId={7} contentSignature="sig-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "开始扫描" }));
+
+    expect(await screen.findByText("共 2 条风险点")).toBeInTheDocument();
+    expect(apiMocks.scanResumeRisks).toHaveBeenCalledTimes(1);
+    expect(apiMocks.scanResumeRisks.mock.calls[0][0]).toBe(7);
+    expect(apiMocks.scanResumeRisks.mock.calls[0][1]).toBe(true);
+    // 结果与台账联动仍然照旧。
+    expect(screen.getByText("主导交易系统从0到1建设")).toBeInTheDocument();
+    expect(screen.getByText("事实台账 #42")).toBeInTheDocument();
+    // 顶部一行「扫描于 HH:mm · 用时 Xs · 不含模型增强」。
+    expect(screen.getByText(/扫描于 \d{2}:\d{2}/)).toBeInTheDocument();
+    expect(screen.getByText(/用时 \d+\.\d+s/)).toBeInTheDocument();
+    expect(screen.getByText(/不含模型增强/)).toBeInTheDocument();
+  });
+
+  it("扫描中可以取消，取消后回到说明卡且不显示错误", async () => {
+    apiMocks.scanResumeRisks.mockImplementation(
+      (_id: number, _enhance: boolean, signal?: AbortSignal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new ApiError("已取消", undefined, { code: "cancelled" })),
+          );
+        }),
+    );
+    render(<ResumeRiskPanel resumeId={7} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "开始扫描" }));
+    expect(await screen.findByText(/正在扫描/)).toBeInTheDocument();
+    expect(screen.getByText("可以关闭此窗口，扫描会继续")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /取\s*消/ }));
+
+    expect(await screen.findByRole("button", { name: "开始扫描" })).toBeInTheDocument();
+    expect(screen.queryByText("风险扫描失败")).toBeNull();
+  });
+
+  it("关闭面板再打开时直接显示上次结果（不重新请求）", async () => {
+    apiMocks.scanResumeRisks.mockResolvedValue(RESULT);
+    const first = render(<ResumeRiskPanel resumeId={7} contentSignature="sig-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "开始扫描" }));
+    expect(await screen.findByText("共 2 条风险点")).toBeInTheDocument();
+    first.unmount();
+
+    render(<ResumeRiskPanel resumeId={7} contentSignature="sig-1" />);
+    expect(await screen.findByText("共 2 条风险点")).toBeInTheDocument();
+    // 结果来自 store：全程只请求过一次。
+    expect(apiMocks.scanResumeRisks).toHaveBeenCalledTimes(1);
+  });
+
+  it("签名变化时提示「简历内容已修改，建议重新扫描」", async () => {
+    apiMocks.scanResumeRisks.mockResolvedValue(RESULT);
+    const view = render(<ResumeRiskPanel resumeId={7} contentSignature="sig-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "开始扫描" }));
+    expect(await screen.findByText("共 2 条风险点")).toBeInTheDocument();
+    expect(screen.queryByText("简历内容已修改，建议重新扫描")).toBeNull();
+
+    view.rerender(<ResumeRiskPanel resumeId={7} contentSignature="sig-2" />);
+    expect(await screen.findByText("简历内容已修改，建议重新扫描")).toBeInTheDocument();
+  });
+
+  it("接口报错时在说明卡上显示错误并可重试", async () => {
+    apiMocks.scanResumeRisks.mockRejectedValueOnce(new ApiError("模型服务不可用", 500));
+    render(<ResumeRiskPanel resumeId={7} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "开始扫描" }));
+
+    expect(await screen.findByText("模型服务不可用")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /重\s*试/ })).toBeInTheDocument();
+  });
+
+  it("关掉 AI 增强后按 enhance=false 扫描，并记住偏好", async () => {
     apiMocks.scanResumeRisks.mockResolvedValue(RESULT);
     render(<ResumeRiskPanel resumeId={7} />);
 
-    expect(await screen.findByText("共 2 条风险点")).toBeInTheDocument();
-    expect(screen.getByText("深挖风险点")).toBeInTheDocument();
-    expect(screen.getByText("合规校验")).toBeInTheDocument();
-    expect(screen.getByText("主导交易系统从0到1建设")).toBeInTheDocument();
-    expect(screen.getByText("事实台账 #42")).toBeInTheDocument();
-    expect(screen.getByText(/这条强主张会被追问/)).toBeInTheDocument();
-    // 默认开启 AI 增强（与历史行为一致）：请求显式带上 enhance=true。
-    expect(apiMocks.scanResumeRisks).toHaveBeenCalledWith(7, true);
-    // 没配置模型时不显示开关（显示一个按不动的开关只会让人困惑）。
-    expect(screen.queryByRole("switch", { name: "AI 增强" })).toBeNull();
-  });
-
-  // ===== RR-01：远端增强由用户显式控制 =====
-
-  it("配置了模型时给出「AI 增强」开关，关掉后只跑本地规则", async () => {
-    apiMocks.scanResumeRisks.mockResolvedValue({
-      ...RESULT,
-      remote_enhancement_available: true,
-      llm_used: true,
-    });
-    render(<ResumeRiskPanel resumeId={7} />);
-
-    expect(await screen.findByText("含模型增强")).toBeInTheDocument();
-    const toggle = screen.getByRole("switch", { name: "AI 增强" });
-    expect(toggle).toBeInTheDocument();
-    expect(apiMocks.scanResumeRisks).toHaveBeenLastCalledWith(7, true);
-
-    // 关掉：立刻按"只跑本地规则"重扫，并把偏好记下来（下次打开还关着）。
-    apiMocks.scanResumeRisks.mockResolvedValue({ ...RESULT, remote_enhancement_available: true });
-    fireEvent.click(toggle);
-    await waitFor(() => expect(apiMocks.scanResumeRisks).toHaveBeenLastCalledWith(7, false));
+    fireEvent.click(screen.getByRole("switch", { name: "AI 增强" }));
     expect(window.localStorage.getItem("resumeRisk.remoteEnhancement")).toBe("off");
-  });
 
-  it("关掉偏好会跨会话保留（localStorage）", async () => {
-    window.localStorage.setItem("resumeRisk.remoteEnhancement", "off");
-    apiMocks.scanResumeRisks.mockResolvedValue({ ...RESULT, remote_enhancement_available: true });
-    render(<ResumeRiskPanel resumeId={7} />);
-
-    expect(await screen.findByText("共 2 条风险点")).toBeInTheDocument();
-    expect(apiMocks.scanResumeRisks).toHaveBeenLastCalledWith(7, false);
-  });
-
-  it("接口报错时透出中文错误", async () => {
-    apiMocks.scanResumeRisks.mockRejectedValue(new Error("风险扫描失败"));
-    render(<ResumeRiskPanel resumeId={7} />);
-
-    expect(await screen.findByText("风险扫描失败")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "开始扫描" }));
+    await waitFor(() => expect(apiMocks.scanResumeRisks).toHaveBeenCalled());
+    expect(apiMocks.scanResumeRisks.mock.calls[0][1]).toBe(false);
   });
 });

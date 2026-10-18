@@ -14,6 +14,7 @@ import { RESUME_PAGE_LIMITS, type ResumeLayout } from "../types";
 import type { ResumePreviewHandle } from "./ResumePreview";
 import TemplateGalleryModal from "./resume/TemplateGalleryModal";
 import {
+  buildSectionOrderConfig,
   DEFAULT_RESUME_SECTION_ORDER,
   moveSection,
   normalizeSectionOrder,
@@ -25,6 +26,7 @@ import {
   fontTiers,
   layoutForFontPx,
   layoutToFontPx,
+  SMALL_FONT_WARNING_PX,
   tierByName,
   withFontAdjust,
 } from "../utils/resumeFontScale";
@@ -52,6 +54,15 @@ interface Props {
    * 没有预览时（生成前的配置阶段）可省略——滑块仍可用，只是没有即时反馈。
    */
   previewRef?: React.RefObject<ResumePreviewHandle | null>;
+  /**
+   * 默认板块顺序是否跟随「我的资料」。
+   *
+   * 只在**生成**场景为 true：新简历的默认顺序应当等于用户在资料页排好的顺序。
+   * 已保存简历（预览 / 编辑）与生成后的预览阶段都不传——它们读的是这份简历自己的
+   * `section_order`，没有则用内置默认。否则用户在资料页拖一下，所有老简历的外观都会
+   * 跟着变，而"老简历不追溯改变"是这条功能的前提。
+   */
+  preferProfileOrder?: boolean;
 }
 
 export default function ResumeLayoutControls({
@@ -61,6 +72,7 @@ export default function ResumeLayoutControls({
   compact = false,
   resumeId,
   previewRef,
+  preferProfileOrder = false,
 }: Props) {
   const { data: catalog } = useApi(fetchResumeTemplates, []);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -109,9 +121,18 @@ export default function ResumeLayoutControls({
 
   // 正文分区顺序：键与标签由后端下发（改默认值只改一处），归一化在前端做同样的事，
   // 因为控件展示的是"完整排列"，而存储里可能只有用户动过的那几项。
-  const defaultSectionOrder = useMemo(
+  const builtInSectionOrder = useMemo(
     () => catalog?.default_section_order ?? DEFAULT_RESUME_SECTION_ORDER,
     [catalog?.default_section_order],
+  );
+  // 生效的默认顺序：生成场景跟随资料页，其余场景用内置默认。两个字段刻意分开下发
+  // （`profile_section_order` / `default_section_order`），这里按场景选一个。
+  const defaultSectionOrder = useMemo(
+    () =>
+      preferProfileOrder
+        ? (catalog?.profile_section_order ?? builtInSectionOrder)
+        : builtInSectionOrder,
+    [preferProfileOrder, catalog?.profile_section_order, builtInSectionOrder],
   );
   const sectionOptions = useMemo(() => catalog?.section_options ?? [], [catalog?.section_options]);
   const sectionOrder = useMemo(
@@ -131,9 +152,17 @@ export default function ResumeLayoutControls({
 
   const handleSectionOrderReset = () => {
     if (!isCustomOrder) return;
-    const nextFormatConfig = { ...layout.format_config };
-    delete nextFormatConfig.section_order;
-    onChange({ ...layout, format_config: nextFormatConfig });
+    // 「默认」在生成场景下就是资料顺序：写回它，用户才真的回到他看到的那一版；
+    // 与内置默认相同时 helper 会把这个键删掉——"没调过"与"调成和默认一样"在存储里
+    // 应当是同一种形态。非生成场景传内置默认，因此等于删除这个键（保持原行为）。
+    onChange({
+      ...layout,
+      format_config: buildSectionOrderConfig(
+        preferProfileOrder ? defaultSectionOrder : builtInSectionOrder,
+        builtInSectionOrder,
+        layout.format_config ?? {},
+      ),
+    });
   };
 
   const handleFontChange = (px: number) => {
@@ -314,7 +343,7 @@ export default function ResumeLayoutControls({
           className="resume-font-slider"
           min={pxBounds.min}
           max={pxBounds.max}
-          step={0.1}
+          step={0.5}
           value={shownPx}
           disabled={disabled}
           aria-label="字号（拖动调整，方向键微调）"
@@ -326,6 +355,13 @@ export default function ResumeLayoutControls({
         <Typography.Text type="secondary" style={{ minWidth: 44, display: "inline-block" }}>
           {shownPxText}
         </Typography.Text>
+        {/* 提示而不是禁用：字号偏小是用户自己的判断题（偶尔确实要压进一页），
+            我们的责任是把"打印出来可能看不清"这件事说在动手之前。 */}
+        {shownPx < SMALL_FONT_WARNING_PX && (
+          <Typography.Text type="warning" className="resume-font-warning">
+            小于 {SMALL_FONT_WARNING_PX}px 打印可能看不清
+          </Typography.Text>
+        )}
         <Tooltip title={`恢复默认字号（${defaultTierLabel}）`}>
           <Button
             size="small"

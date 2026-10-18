@@ -3,6 +3,7 @@
 三类结论：格式风险（format）/ 关键词覆盖（keyword）/ 信息位置（position）。结果里
 强制携带 ``disclaimer``（本地规则估计，不代表真实 ATS 解析结果），前端必须展示。
 """
+
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,6 +31,8 @@ class AtsIssue(BaseModel):
     detail: str = ""
     # 涉及的关键词 / 命中的符号，便于前端定位。
     evidence: list[str] = Field(default_factory=list, max_length=20)
+    # 面向用户的改进建议（R13）。默认空串保持向后兼容：旧客户端拿不到也不会崩。
+    suggestion: str = ""
 
 
 class AtsCheckOut(BaseModel):
@@ -43,6 +46,13 @@ class AtsCheckOut(BaseModel):
     score: int = Field(default=0, ge=0, le=100)
     disclaimer: str = ATS_DISCLAIMER
     summary: dict[str, int] = Field(default_factory=dict)
+    # 三个分项的分数（键与 issue 类别一致：format / keyword / position），
+    # 加起来不等于总分——总分是 0.4/0.4/0.2 加权后的结果。
+    subscores: dict[str, int] = Field(default_factory=dict)
+    # 关键词覆盖率（0~1）：目标词里有多少出现在简历中。
+    coverage_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    # 每个目标词的命中情况：[{keyword, matched, count, sections}]。默认空列表向后兼容。
+    keyword_hits: list[dict] = Field(default_factory=list)
 
 
 __all__ = [

@@ -16,7 +16,9 @@ from app.services.docx_exporter import build_resume_docx
 from app.services.exporter import export_markdown, render_html
 from app.services.resume.resume_sections import (
     DEFAULT_SECTION_ORDER,
+    PROFILE_SECTION_TO_RESUME,
     normalized_section_order,
+    profile_to_resume_order,
     resolved_section_order,
 )
 from app.services.txt_exporter import export_txt
@@ -62,9 +64,7 @@ def _assert_follows_order(texts: dict[str, str]) -> None:
         positions = [(title, text.find(title)) for title, _ in _title_positions(text)]
         missing = [title for title, position in positions if position < 0]
         assert not missing, f"{name} 缺少分区标题：{missing}"
-        order_in_output = [
-            title for title, _ in sorted(positions, key=lambda item: item[1])
-        ]
+        order_in_output = [title for title, _ in sorted(positions, key=lambda item: item[1])]
         assert order_in_output == [
             "项目经历",
             "实习/工作经历",
@@ -128,6 +128,62 @@ def test_resolved_order_reads_format_config_and_falls_back():
     assert resolved_section_order(CUSTOM_CONFIG) == CUSTOM_ORDER
     # 键缺失（而不是设成默认值）要能区分开：没有就是没有。
     assert "section_order" not in {}
+
+
+# ===== 「我的资料」顺序 -> 简历正文顺序 =====
+# 生成界面的默认顺序取这一份映射：用户在资料页把项目拖到最前面，生成出来的简历也该是
+# 项目在前。两边的键名本来不同（资料页是复数子表名，正文是单数分区键），所以映射必须是
+# 显式的——用"去掉 s"之类的字符串魔法会在 `summary` 上直接翻车。
+
+
+def test_profile_keys_map_onto_every_resume_section():
+    """映射必须覆盖全部七个正文分区，且每个值都是合法的分区键。"""
+    assert set(PROFILE_SECTION_TO_RESUME.values()) == set(DEFAULT_SECTION_ORDER)
+    for profile_key, resume_key in PROFILE_SECTION_TO_RESUME.items():
+        assert isinstance(profile_key, str) and profile_key, "资料侧的键不能为空"
+        assert resume_key in DEFAULT_SECTION_ORDER, resume_key
+    # `basic_info` 刻意不在映射里：它是页眉，不参与正文排序。
+    assert "basic_info" not in PROFILE_SECTION_TO_RESUME
+
+
+def test_profile_order_is_translated_kept_and_completed():
+    """按资料里的顺序翻译成正文键；缺的键由默认顺序补齐成完整排列。"""
+    assert profile_to_resume_order(["basic_info", "projects", "experiences", "summary"]) == [
+        "projects",
+        "experience",
+        "summary",
+        "education",
+        "campus_experience",
+        "skills",
+        "awards",
+    ]
+    # 已经排好的资料顺序原样保留。
+    assert profile_to_resume_order(
+        [
+            "summary",
+            "educations",
+            "experiences",
+            "campus_experiences",
+            "projects",
+            "skills",
+            "awards",
+        ]
+    ) == list(DEFAULT_SECTION_ORDER)
+
+
+def test_profile_order_drops_basic_info_and_duplicates():
+    """`basic_info` 是页眉（姓名/联系方式/照片），不参与正文分区排序。"""
+    order = profile_to_resume_order(["basic_info", "awards", "basic_info", "awards", "skills"])
+    assert "basic_info" not in order
+    assert order[:2] == ["awards", "skills"]
+    assert len(order) == len(DEFAULT_SECTION_ORDER)
+    assert sorted(order) == sorted(DEFAULT_SECTION_ORDER)
+
+
+def test_profile_order_falls_back_on_dirty_input():
+    """脏输入一律回落到内置默认顺序，而不是抛异常：它是可随手改的 JSON 字段。"""
+    for dirty in (None, "projects", 42, {"projects": 1}, ["unknown_key"], []):
+        assert profile_to_resume_order(dirty) == list(DEFAULT_SECTION_ORDER), dirty
 
 
 def test_html_preview_follows_the_custom_order():

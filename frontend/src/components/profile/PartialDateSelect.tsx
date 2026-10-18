@@ -2,6 +2,7 @@ import { Checkbox, Select, Space, Typography } from "antd";
 import { memo, useMemo } from "react";
 import {
   arePartialDatePropsEqual,
+  buildYearGroups,
   parsePartialDate,
   type PartialDateSelectProps as Props,
 } from "./partialDate";
@@ -28,18 +29,13 @@ function PartialDateSelectImpl({
 }: Props) {
   const parts = parsePartialDate(value);
   const selected = parts ?? { year: "", month: "", day: "", ongoing: false };
-  // 年份范围几乎恒定（1900 → 当前年+15，已选年份更大时才外扩）。这个组件在「我的资料」
-  // 里同时存在十几个、每次渲染重建 ~142 项 options 是编辑态卡顿的放大器之一（见
-  // deliverables/profile-input-perf-audit-2026-10-09.md），useMemo 掉。
-  const years = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    const minYear = Math.min(1900, Number(selected.year) || 1900);
-    const maxYear = Math.max(currentYear + 15, Number(selected.year) || 0);
-    return Array.from({ length: maxYear - minYear + 1 }, (_, index) => {
-      const year = String(maxYear - index);
-      return { value: year, label: year };
-    });
-  }, [selected.year]);
+  // 年份范围几乎恒定（1900 → 当前年+15，已选年份更大时才外扩），分两组渲染。这个组件在
+  // 「我的资料」里同时存在十几个、每次渲染重建 ~142 项 options 是编辑态卡顿的放大器之一
+  // （见 deliverables/profile-input-perf-audit-2026-10-09.md），useMemo 掉。
+  const years = useMemo(
+    () => buildYearGroups(new Date().getFullYear(), Number(selected.year) || 0),
+    [selected.year],
+  );
   const dayOptions = useMemo(
     () =>
       Array.from({ length: daysInMonth(selected.year, selected.month) }, (_, index) => {

@@ -80,28 +80,34 @@ export function useRemoteSearchSelect({ fetchOptions, fetchById, debounceMs = 30
   /** 重新拉当前关键词的选项（打开弹窗/面板时调用一次做初始加载）。 */
   const reload = useCallback(() => runSearch(""), [runSearch]);
 
-  /** 已选值保显示：按 id 回查并并入选项头部（有缓存；不覆盖现有项）。 */
+  /**
+   * 已选值保显示：按 id 回查并并入选项头部（有缓存；不覆盖现有项）。
+   *
+   * 返回回查结果：需要"查不到就降级显示别的东西"的调用方（如简历中心的岗位筛选
+   * 下拉把失效岗位显示成 `#id`）必须知道结局，否则只能猜。
+   */
   const ensure = useCallback(
-    (id: number | null | undefined) => {
-      if (id == null) return;
+    async (id: number | null | undefined): Promise<RemoteSelectOption | null> => {
+      if (id == null) return null;
       const cached = ensureCacheRef.current.get(id);
       if (cached) {
         setOptions((previous) =>
           previous.some((option) => option.value === id) ? previous : [cached, ...previous],
         );
-        return;
+        return cached;
       }
-      void fetchById(id)
-        .then((option) => {
-          if (!option) return;
-          ensureCacheRef.current.set(id, option);
-          setOptions((previous) =>
-            previous.some((existing) => existing.value === id) ? previous : [option, ...previous],
-          );
-        })
-        .catch(() => {
-          /* 回查失败静默：选不中就显示原值，与旧行为一致 */
-        });
+      try {
+        const option = await fetchById(id);
+        if (!option) return null;
+        ensureCacheRef.current.set(id, option);
+        setOptions((previous) =>
+          previous.some((existing) => existing.value === id) ? previous : [option, ...previous],
+        );
+        return option;
+      } catch {
+        /* 回查失败静默：调用方自己决定降级显示，这里不抛错 */
+        return null;
+      }
     },
     [fetchById],
   );

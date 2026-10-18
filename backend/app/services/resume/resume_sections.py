@@ -38,6 +38,24 @@ SECTION_LABELS: dict[str, str] = {
     "awards": "荣誉奖项",
 }
 
+# 「我的资料」那边的分区名 -> 简历正文的分区名。
+#
+# 两边的键名本来就不一样（资料页是复数形式的子表名，正文是单数形式的分区键），
+# 而生成界面的"默认顺序"应当等于用户在资料页排好的顺序——所以在两者之间必须有一份
+# 显式的映射，不能靠"去掉 s"之类的字符串魔法（`summary` 就没有复数形式）。
+#
+# `basic_info` 刻意**不在**映射里：姓名、联系方式、照片是页眉，不参与正文分区排序
+# （见上面的说明），资料页把它排在哪一位都不该影响简历。
+PROFILE_SECTION_TO_RESUME: dict[str, str] = {
+    "educations": "education",
+    "experiences": "experience",
+    "campus_experiences": "campus_experience",
+    "projects": "projects",
+    "skills": "skills",
+    "awards": "awards",
+    "summary": "summary",
+}
+
 # 页眉（姓名 / 求职意向 / 联系方式 / 照片）不在可排序的七个分区里，它永远在最前面。
 # 这里显式写下来，是为了让"为什么列表里没有它"这个问题有一个能搜到的答案。
 
@@ -79,10 +97,34 @@ def resolved_section_order(format_config: dict | None) -> list[str]:
     return normalized_section_order(format_config.get("section_order"))
 
 
+def profile_to_resume_order(raw: object) -> list[str]:
+    """把「我的资料」存的分区顺序翻译成简历正文的分区顺序。
+
+    生成界面的默认板块顺序取这里的结果：用户在资料页把「项目经历」拖到最前面，
+    生成出来的简历就应当也是项目在前——但**只作为默认值**，不影响已保存简历的外观
+    （老简历读的是自己 `format_config.section_order`，没有则仍是内置默认顺序）。
+
+    非列表 / 未知键 / 重复键都不报错：`format_config` 与资料页的 `section_order` 都是
+    用户可以随手改的 JSON，抛异常会让整份配置失效。垃圾输入一律回落到内置默认顺序，
+    而"少写了几项"由 ``normalized_section_order`` 补齐成完整排列。
+    """
+    if not isinstance(raw, (list, tuple)):
+        return list(DEFAULT_SECTION_ORDER)
+
+    ordered: list[str] = []
+    for item in raw:
+        key = PROFILE_SECTION_TO_RESUME.get(str(item).strip())
+        if key is not None and key not in ordered:
+            ordered.append(key)
+    return normalized_section_order(ordered)
+
+
 __all__ = [
     "DEFAULT_SECTION_ORDER",
+    "PROFILE_SECTION_TO_RESUME",
     "SECTION_LABELS",
     "normalized_section_order",
+    "profile_to_resume_order",
     "resolved_section_order",
     "section_label",
 ]

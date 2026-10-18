@@ -8,17 +8,37 @@
  * 直出 PDF 天然走同一条乘数路径——"同一口径"这正是我们反复修过的那类 bug 的防线。
  * 自动一页也已经在用这个字段生成候选阶梯，所以滑块与它共用同一份语义。
  *
- * **映射语义**：滑块给的是**绝对字号**（覆盖所有档位基准像素的跨度）；提交时落到
- * **最近的档位**，再用系数补齐与档位基准之间的差。于是后端与数据库完全不用动——
- * 仍然是"枚举档位 + 一个系数"。相邻档位之间的间距由系数吸收，最大值只到约 ×1.083
- * （小档 12→13）、最小值约 ×0.929（标准档 14→13），都落在既有 `font_scale_adjust`
- * 的 [0.88, 1.16] 之内，因此无需放宽后端字段范围。
+ * **映射语义**：滑块给的是**绝对字号**（5px ~ 最大档位基准像素）；提交时落到**最近的
+ * 档位**，再用系数补齐与档位基准之间的差。于是后端与数据库仍然只是"枚举档位 + 一个系数"，
+ * 不需要新增列或枚举值。相邻档位之间的间距由系数吸收：往上最大约 ×1.083（标准档
+ * 14→15.5），往下**可以一直到 5/11 ≈ 0.455**（最小档基准 11px 时拖到 5px）——
+ * 因此后端 `font_scale_adjust` 的字段下限已经从 0.88 放宽到 0.35，与 `ADJUST_MIN` 对齐。
  */
 import type { ResumeFontScale, ResumeFontScaleOption, ResumeLayout } from "../types";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 
 /** `format_config` 里字号系数的键，与后端 `FORMAT_FIELDS` 一致。 */
 export const FONT_SCALE_ADJUST_KEY = "font_scale_adjust";
+
+/**
+ * 滑块能拖到的最小绝对字号（px）。
+ *
+ * 5px 是"再小就没有打印意义"的界线，而不是"刚好还行"：A4 打印下 5px 约等于 3.75pt。
+ * 之所以敢放到这么小，是因为下半段有**显式提示**（< 8px 时读数旁出现警告），
+ * 而不是靠滑块拦着——用户偶尔确实需要把某一版压进一页，但必须知道代价。
+ *
+ * 由此推出的系数下限是 5/11 ≈ 0.455（最小档基准 11px），后端 `font_scale_adjust`
+ * 的字段 min 已同步放宽到 0.35，所以拖到底也不会被 `validated_format_config` 丢掉。
+ */
+export const MIN_FONT_PX = 5;
+
+/**
+ * 低于这个字号就在读数旁提示"打印可能看不清"。
+ *
+ * 8px ≈ 6pt：这是屏幕上"还看得清"与"打印出来会糊"之间比较公认的分界。提示而不禁用，
+ * 理由同上——这是用户自己的判断题，我们的责任是把代价说清楚。
+ */
+export const SMALL_FONT_WARNING_PX = 8;
 
 /**
  * 后端下发的档位缺 `base_px`（旧目录 / 契约漂移）时的兜底，与后端 `FONT_SCALES` 对齐。
@@ -37,11 +57,12 @@ const DEFAULT_TIER: ResumeFontScale = "standard";
 /**
  * 系数安全区间，镜像后端 `FORMAT_FIELDS` 的 `font_scale_adjust` min/max。
  *
- * 仅仅是"越界就别发出去"的兜底：最近档位映射算出来的系数不会超出 [0.929, 1.083]，
- * 但万一后端字段范围或档位被别人改动，这里也要保证**不发出后端会静默丢弃的值**——
- * `validated_format_config` 对越界数值是直接跳过（等于悄悄丢掉用户的设置）。
+ * `ADJUST_MIN` 已从 0.88 放宽到 0.35：滑块最左端是 5px，最小档基准 11px 时系数是
+ * 5/11 ≈ 0.455；留 0.35 的余量是为了"档位表被别人改小"时仍不越界。取整后的系数只要
+ * 落在后端范围内就不会被 `validated_format_config` **静默丢弃**——那个函数对越界数值
+ * 是直接跳过（等于悄悄丢掉用户的设置），所以这边必须先夹住。
  */
-const ADJUST_MIN = 0.88;
+const ADJUST_MIN = 0.35;
 const ADJUST_MAX = 1.16;
 
 export interface FontTier {
@@ -68,10 +89,10 @@ export function fontTiers(options: ResumeFontScaleOption[] = []): FontTier[] {
   return FALLBACK_TIERS;
 }
 
-/** 滑块的可选范围：所有档位基准像素的最小 / 最大值。 */
+/** 滑块的可选范围：**最小 5px**（可打印性下限），最大取所有档位基准像素的最大值。 */
 export function fontPxBounds(tiers: FontTier[]): { min: number; max: number } {
   const list = tiers.length > 0 ? tiers : FALLBACK_TIERS;
-  return { min: list[0].basePx, max: list[list.length - 1].basePx };
+  return { min: MIN_FONT_PX, max: list[list.length - 1].basePx };
 }
 
 function round(value: number, digits: number): number {

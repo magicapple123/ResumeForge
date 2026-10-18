@@ -8,6 +8,7 @@ export function EducationEditor() {
     <ResumeListSection
       title="教育经历"
       name="education"
+      fillSection="education"
       emptyValue={{
         school: "",
         major: "",
@@ -76,6 +77,7 @@ export function ExperienceEditor() {
     <ResumeListSection
       title="实习/工作经历"
       name="experience"
+      fillSection="experience"
       emptyValue={{ company: "", role: "", start_date: "", end_date: "", description: [] }}
     >
       {(field) => (
@@ -120,6 +122,7 @@ export function CampusEditor() {
     <ResumeListSection
       title="校园经历"
       name="campus_experience"
+      fillSection="campusExperience"
       emptyValue={{ organization: "", role: "", start_date: "", end_date: "", description: [] }}
     >
       {(field) => (
@@ -164,6 +167,7 @@ export function ProjectEditor() {
     <ResumeListSection
       title="项目经历"
       name="projects"
+      fillSection="projects"
       emptyValue={{
         name: "",
         role: "",
@@ -223,7 +227,12 @@ export function ProjectEditor() {
 
 export function SkillEditor() {
   return (
-    <ResumeListSection title="专业技能" name="skills" emptyValue={{ name: "", level: "" }}>
+    <ResumeListSection
+      title="专业技能"
+      name="skills"
+      fillSection="skills"
+      emptyValue={{ name: "", level: "" }}
+    >
       {(field) => (
         <Row gutter={12}>
           <Col xs={24} md={12}>
@@ -251,6 +260,7 @@ export function AwardEditor() {
     <ResumeListSection
       title="荣誉奖项"
       name="awards"
+      fillSection="awards"
       emptyValue={{ name: "", date: "", description: "" }}
     >
       {(field) => (

@@ -51,6 +51,17 @@ export const TEMPLATE_CATALOG: ResumeTemplateCatalog = {
     "skills",
     "awards",
   ],
+  // 默认夹具里资料顺序与内置默认一致："没调过资料顺序"的用户看到的就是这一份。
+  // 需要验证"跟随资料页"的用例自己覆盖这个字段。
+  profile_section_order: [
+    "summary",
+    "education",
+    "experience",
+    "campus_experience",
+    "projects",
+    "skills",
+    "awards",
+  ],
   format_fields: [
     { key: "accent", label: "强调色", type: "color" },
     { key: "line_height", label: "行高", type: "number", min: 1.2, max: 2.2, step: 0.05 },
