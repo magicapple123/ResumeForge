@@ -441,18 +441,23 @@ if ((Test-Path -LiteralPath $distIndexFile -PathType Leaf) -and ($distVersion -e
     Write-Host "frontend\dist already matches version $version; reusing it (delete frontend\dist to force a rebuild)."
 }
 else {
+    # Windows 提供 npm.cmd；Linux/macOS（CI 的 source-zips 作业在 pwsh 下跑）
+    # 只有 npm。取第一个能找到的，后续统一经命令对象调用。
     $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
     if ($null -eq $npmCommand) {
-        throw "npm.cmd was not found on PATH. Building frontend\dist needs Node.js 20.19+; install it (or delete frontend\dist if a stale build is blocking the version check)."
+        $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+    }
+    if ($null -eq $npmCommand) {
+        throw "npm was not found on PATH. Building frontend\dist needs Node.js 20.19+; install it (or delete frontend\dist if a stale build is blocking the version check)."
     }
     Write-Host "Building the frontend (npm ci, then npm run build)..."
     Push-Location -LiteralPath $frontendDirectory
     try {
-        & npm.cmd ci --no-audit --no-fund --fetch-timeout=1800000 --fetch-retries=5
+        & $npmCommand.Source ci --no-audit --no-fund --fetch-timeout=1800000 --fetch-retries=5
         if ($LASTEXITCODE -ne 0) {
             throw "npm ci failed (exit $LASTEXITCODE). Release aborted: the archive must carry a working frontend\dist."
         }
-        & npm.cmd run build
+        & $npmCommand.Source run build
         if ($LASTEXITCODE -ne 0) {
             throw "npm run build failed (exit $LASTEXITCODE). Release aborted: shipping without frontend\dist would hand out a launcher that cannot show a page."
         }
