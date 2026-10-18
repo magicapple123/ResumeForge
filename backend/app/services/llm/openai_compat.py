@@ -106,6 +106,17 @@ def _extract_reasoning(delta: dict) -> str:
     return ""
 
 
+class _TransportDisconnected(LLMError):
+    """非流式传输层断连的内部标记：LLMError 的子类，对外语义完全不变。
+
+    chat() 捕获它并降级到 SSE 流式重试；若降级路径也失败、或有调用方绕过 chat()
+    直接触达，它仍是一条正常的「无法连接模型服务」LLMError。
+    """
+
+    def __init__(self, error: LLMError):
+        super().__init__(str(error))
+
+
 def _status_error(status: int) -> LLMError:
     """状态码 → LLMError。实现下沉到 payload.status_error，保留为调用点。"""
     return payload_rules.status_error(status)
@@ -146,7 +157,61 @@ class OpenAICompatProvider(BaseLLMProvider):
         429/5xx 在状态码阶段按 §2.4 重试（429 最多 2 次、5xx 最多 1 次，退避见
         ``retry.retry_backoff_seconds``）；非法输出/400/其余 4xx 不重试。用量经
         ``last_usage`` 暴露：返回前写入，异常路径也要有记录（finish_reason=error）。
+
+        传输层断连降级（2026-10-18，本机网关实测）：长输出请求在**非流式**模式下会被
+        一些网关/中转站在生成长响应期间掐断连接（httpx ReadError，连接全程无字节流动；
+        同一提示词流式 SSE 100% 成功、非流式约三成断）。chat 没有向调用方产出过任何
+        字节，因此重发安全：断连时以同参数走一次 SSE 流、聚合全文返回。
         """
+        try:
+            return await self._chat_nonstream(messages, thinking=thinking)
+        except _TransportDisconnected as exc:
+            logger.warning("非流式调用被网关掐断，降级为 SSE 流式重试：%s", exc)
+        return await self._chat_via_stream(messages, thinking=thinking)
+
+    async def _chat_via_stream(self, messages: list[dict], *, thinking: bool) -> str:
+        """同参数走一次 SSE 流并把正文聚合为完整文本（chat 的传输断连降级路径）。
+
+        只消费正文 delta；不传工具、也不走 stream_chat_events 的 400 参数降级——
+        这条路径的契约就是「把刚才没拿到的回答原样拿回来」，语义与 chat 保持一致。
+        流中途失败（已产出部分正文）不二次重发，错误原样交给调用方。
+        """
+        started = time.monotonic()
+        parts: list[str] = []
+        # 与 stream_chat_events 同样的捕获位重置（本路径不经它，得自己来）。
+        self._stream_prompt_tokens = None
+        self._stream_completion_tokens = None
+        self._stream_stop_reason = None
+        try:
+            async for delta in self._stream_deltas(messages, None, thinking=thinking):
+                if delta.text:
+                    parts.append(delta.text)
+            finish_reason = self._stream_stop_reason or FINISH_STOP
+            return "".join(parts)
+        except StatusRetrySignal as signal:
+            # 降级路径没有外层重试循环：状态码直接按既有文案表转 LLMError（429/5xx
+            # 的重试职责已在非流式一侧的 gate 里用尽，这里不再二次排队）。
+            finish_reason = FINISH_ERROR
+            raise payload_rules.status_error(signal.status) from signal
+        except OperationCancelled:
+            finish_reason = self._cancelled_finish_reason()
+            raise
+        except asyncio.CancelledError:
+            finish_reason = FINISH_CANCELLED
+            raise
+        except Exception:
+            finish_reason = FINISH_ERROR
+            raise
+        finally:
+            self._record_usage(
+                started=started,
+                finish_reason=finish_reason,
+                prompt_tokens=self._stream_prompt_tokens,
+                completion_tokens=self._stream_completion_tokens,
+                retries=0,
+            )
+
+    async def _chat_nonstream(self, messages: list[dict], *, thinking: bool = True) -> str:
         payload = self._build_payload(messages, stream=False, thinking=thinking)
         started = time.monotonic()
         # 活预算（PR-07-2）：门在每次决策时经 _deadline_remaining() 重算剩余。
@@ -199,7 +264,11 @@ class OpenAICompatProvider(BaseLLMProvider):
                     raise LLMError("模型响应超时，请稍后重试或调大超时时间") from exc
                 except httpx.RequestError as exc:
                     log_llm_failure("disconnect", type(exc).__name__)
-                    raise LLMError("无法连接模型服务，请检查 Base URL 与网络状态") from exc
+                    # 交给 chat() 的流式降级路径：非流式没有向调用方产出过任何字节，
+                    # 重发安全；超时与取消走上面的分支，不在这条降级范围内。
+                    raise _TransportDisconnected(
+                        LLMError("无法连接模型服务，请检查 Base URL 与网络状态")
+                    ) from exc
                 try:
                     data = json.loads(body)
                 except (ValueError, UnicodeError) as exc:
