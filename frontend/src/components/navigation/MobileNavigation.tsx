@@ -12,6 +12,12 @@ interface Props {
   onOpenGuide: () => void;
 }
 
+/** 关闭后把焦点送回抽屉的触发按钮，或送回页面主内容（选了一个目的地）。 */
+function focusAfterCloseTarget(kind: "trigger" | "content") {
+  const target = kind === "content" ? "main-content" : "mobile-navigation-trigger";
+  document.getElementById(target)?.focus({ preventScroll: true });
+}
+
 /** The desktop menu and this drawer share the same visible destinations. */
 export default function MobileNavigation({
   open,
@@ -28,9 +34,7 @@ export default function MobileNavigation({
     const closing = previouslyOpen.current && !open;
     previouslyOpen.current = open;
     if (!closing || focusAfterClose.current === null) return;
-    const target =
-      focusAfterClose.current === "content" ? "main-content" : "mobile-navigation-trigger";
-    document.getElementById(target)?.focus({ preventScroll: true });
+    focusAfterCloseTarget(focusAfterClose.current);
   }, [open]);
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
@@ -53,6 +57,12 @@ export default function MobileNavigation({
       onClose={() => {
         focusAfterClose.current = "trigger";
         onClose();
+      }}
+      afterOpenChange={(visible) => {
+        // 退场动画结束、抽屉真正卸载后再补一次。rc-drawer 的焦点清理可能晚于
+        // 上面的 layout effect，把焦点送回 body（慢速 runner 上偶发）。
+        if (visible || focusAfterClose.current === null) return;
+        focusAfterCloseTarget(focusAfterClose.current);
       }}
       destroyOnHidden
       focusable={{ focusTriggerAfterClose: false }}
