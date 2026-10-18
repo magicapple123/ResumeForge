@@ -441,8 +441,9 @@ if ((Test-Path -LiteralPath $distIndexFile -PathType Leaf) -and ($distVersion -e
     Write-Host "frontend\dist already matches version $version; reusing it (delete frontend\dist to force a rebuild)."
 }
 else {
-    # Windows 提供 npm.cmd；Linux/macOS（CI 的 source-zips 作业在 pwsh 下跑）
-    # 只有 npm。取第一个能找到的，后续统一经命令对象调用。
+    # Windows ships npm.cmd; Linux/macOS (the CI source-zips job runs this
+    # script under pwsh) only have npm. Prefer the first one found and invoke
+    # it through the resolved command object afterwards.
     $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
     if ($null -eq $npmCommand) {
         $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
