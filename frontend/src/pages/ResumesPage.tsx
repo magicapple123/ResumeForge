@@ -25,6 +25,7 @@ import DeliveryArchiveModal from "../components/resume/DeliveryArchiveModal";
 import ResumeRenameModal from "./resumes/ResumeRenameModal";
 import ResumeNoteModal from "./resumes/ResumeNoteModal";
 import ResumeDiffModal from "./resumes/ResumeDiffModal";
+import JobFilterSelect from "./resumes/JobFilterSelect";
 import { useSelectAllResumes } from "./resumes/useSelectAllResumes";
 
 export default function ResumesPage() {
@@ -73,6 +74,37 @@ export default function ResumesPage() {
   const [diffLoading, setDiffLoading] = useState(false);
   const jobIdParam = searchParams.get("job_id");
   const jobId = jobIdParam && /^\d+$/.test(jobIdParam) ? Number(jobIdParam) : undefined;
+  // 岗位名由 JobFilterSelect 回传（它负责远程搜索与深链回查），Tag 与下拉共用同一份名称，
+  // 避免两处各自解析出现"标签是 #3、下拉是岗位名"。
+  const [jobLabel, setJobLabel] = useState("");
+
+  /**
+   * 岗位筛选只改 `job_id`（选择时顺带回到第 1 页）。
+   *
+   * 刻意不用 `navigate("/resumes")`：那会把 keyword、has_job、page_size 一起清掉，
+   * 而"按岗位筛选"与"有/无目标岗位""关键词"是互相独立的三维条件。清空同理，只删 job_id。
+   *
+   * `page` 由下面那个统一写回器维护（只在 page > 1 时保留参数），所以"回到第 1 页"
+   * 表现为 URL 里没有 page、请求里的 page 是 1，与本页既有约定一致。
+   */
+  const applyJobFilter = useCallback(
+    (nextJobId: number | undefined) => {
+      setPage(1);
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          if (nextJobId === undefined) {
+            next.delete("job_id");
+          } else {
+            next.set("job_id", String(nextJobId));
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const { data, loading, reload, error } = useApi(
     () =>
@@ -238,12 +270,13 @@ export default function ResumesPage() {
         <Button onClick={() => setArchiveOpen(true)}>交付存档</Button>
         {jobId && (
           <Space size={4} align="center">
-            <Tag color="blue">按岗位筛选：#{jobId}</Tag>
-            <Button type="link" size="small" onClick={() => navigate("/resumes")}>
+            <Tag color="blue">按岗位筛选：{jobLabel || `#${jobId}`}</Tag>
+            <Button type="link" size="small" onClick={() => applyJobFilter(undefined)}>
               清除筛选
             </Button>
           </Space>
         )}
+        <JobFilterSelect value={jobId} onChange={applyJobFilter} onLabelChange={setJobLabel} />
         <Input.Search
           placeholder="搜索简历记录"
           allowClear

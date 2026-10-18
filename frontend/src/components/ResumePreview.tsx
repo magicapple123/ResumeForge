@@ -143,7 +143,9 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
           badge.style.display = "none";
         }
       }
-      chip.style.display = "inline-flex";
+      // R14：chip 是 flex 容器（不是 inline-flex）——它内部要「label 可收缩、按钮不换行」，
+      // inline-flex 的固有宽度会让长 label 把按钮挤出可视区。显隐判定本身不变。
+      chip.style.display = "flex";
     },
     [describePath, describeAnnotation],
   );

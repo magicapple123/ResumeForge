@@ -3,6 +3,7 @@
 薄路由：只做校验、调 service、返回 schema。写作/润色/翻译依赖模型，未配置时返回清晰
 中文错误（不做本地降级、不伪造结果）；版本对比是纯本地 difflib，不依赖模型。
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,6 +20,8 @@ from ..schemas.resume_writing import (
     PhrasesRequest,
     PolishOut,
     PolishRequest,
+    PolishSelectionOut,
+    PolishSelectionRequest,
     ResumeDiffOut,
     ResumeDiffRequest,
     RewriteFieldOut,
@@ -37,10 +40,21 @@ from ..services.resume.resume_field_rewrite import (
     resolve_field_target,
     rewrite_field,
 )
-from ..services.resume.resume_writing import generate_phrases, polish, rewrite_star, translate
+from ..services.resume.resume_writing import (
+    generate_phrases,
+    polish,
+    polish_selection,
+    rewrite_star,
+    translate,
+)
 from ..services.settings_service import get_llm_config
 
 router = APIRouter(prefix="/api/resumes", tags=["resume-writing"])
+
+# 全局 AI 润色（R17）与简历无关：用户在任意输入框里选中一段文字就能用，请求体里
+# 也没有简历 id。因此单独一条前缀 `/api/writing`，不塞进 `/api/resumes/{id}/...`。
+selection_router = APIRouter(prefix="/api/writing", tags=["resume-writing"])
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,9 +73,7 @@ def _require_provider(db: Session):
 
 
 @router.post("/{resume_id}/writing/star", response_model=StarRewriteOut)
-async def star_rewrite(
-    resume_id: int, payload: StarRewriteRequest, db: Session = Depends(get_db)
-):
+async def star_rewrite(resume_id: int, payload: StarRewriteRequest, db: Session = Depends(get_db)):
     _load_record(db, resume_id)
     claim = None
     if payload.claim_id is not None:
@@ -96,9 +108,7 @@ async def phrases(resume_id: int, payload: PhrasesRequest, db: Session = Depends
 
 
 @router.post("/{resume_id}/writing/polish", response_model=PolishOut)
-async def polish_resume(
-    resume_id: int, payload: PolishRequest, db: Session = Depends(get_db)
-):
+async def polish_resume(resume_id: int, payload: PolishRequest, db: Session = Depends(get_db)):
     _load_record(db, resume_id)
     provider = _require_provider(db)
     db.close()
@@ -171,6 +181,25 @@ async def translate_resume(
     return TranslateOut(result=result)
 
 
+@selection_router.post("/polish-selection", response_model=PolishSelectionOut)
+async def polish_selection_endpoint(payload: PolishSelectionRequest, db: Session = Depends(get_db)):
+    """润色用户选中的那一段文字（全局 AI 润色）。
+
+    **只处理请求体里的 ``text``**：这里既不读简历、也不知道这段文字属于哪一栏，
+    所以不可能把整份简历送出去。结果只返回给前端，是否替换由用户点「替换选中」决定。
+    """
+    provider = _require_provider(db)
+    db.close()
+    try:
+        result = await polish_selection(provider, payload.text, payload.instruction)
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=f"润色失败：{exc}") from exc
+    except Exception as exc:  # noqa: BLE001 - 为用户提供可理解的失败提示
+        logger.exception("选区润色发生内部错误")
+        raise HTTPException(status_code=502, detail="润色失败，请稍后重试") from exc
+    return PolishSelectionOut(result=result)
+
+
 @router.post("/{resume_id}/diff", response_model=ResumeDiffOut)
 def diff_resume(resume_id: int, payload: ResumeDiffRequest, db: Session = Depends(get_db)):
     """两份简历的三态差异；纯本地计算，不调用模型。"""
@@ -190,4 +219,4 @@ def diff_resume(resume_id: int, payload: ResumeDiffRequest, db: Session = Depend
     )
 
 
-__all__ = ["router"]
+__all__ = ["router", "selection_router"]

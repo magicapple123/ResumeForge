@@ -50,6 +50,9 @@
    *                      卡之上、球之下。
    *   3650 orb           悬浮球：压住三卡，随时可点。
    *   3700 orb-tooltip   球身 Tooltip：投投族最高层。
+   *   3710 ai-polish     全局 AI 润色的按钮与卡片：要盖住承载输入框的那一层
+   *                      （编辑器 3110、单层 Modal/Drawer 3200、嵌套 3300），
+   *                      所以排在投投族之上。
    *   antd message(+1010=4110)/notification(+1050=4150) 在投投族之上——
    *   toast 不被卡片遮挡。
    */
@@ -61,6 +64,7 @@
   --rf-layer-card-popup: 3550;
   --rf-layer-orb: 3650;
   --rf-layer-orb-tooltip: 3700;
+  --rf-layer-ai-polish: 3710;
 }
 
 /*

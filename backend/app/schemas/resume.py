@@ -7,43 +7,28 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .profile import validate_photo_data_url
 
+# 生成参数（版式常量 + ``GenerateOptions``/``GenerateRequest``）已迁至
+# ``schemas/resume_generation.py`` 以满足单文件 500 行预算；这里 re-export，
+# 保持 ``from app.schemas.resume import GenerateOptions`` 等既有导入路径不变。
+from .resume_generation import (  # noqa: F401  (re-export：保持既有导入路径)
+    MAX_CUSTOM_INSTRUCTION_CHARS,
+    MAX_FORMAT_CONFIG_KEYS,
+    MAX_RESUME_PAGES,
+    MIN_CUSTOM_INSTRUCTION_CHARS,
+    GenerateOptions,
+    GenerateRequest,
+    ResumeFontScale,
+    _validate_format_config_shape,
+)
+
 MAX_RESUME_SECTION_ITEMS = 200
 MAX_RESUME_LIST_ITEMS = 500
 MAX_RESUME_TEXT_CHARS = 50_000
 ResumeLine = Annotated[str, Field(max_length=20_000)]
 
 
-# 版式参数：最大篇幅（A4 页数）、字号档位、模板。默认 1 页 + 标准字号。
-MAX_RESUME_PAGES = 3
-ResumeFontScale = Literal["small", "standard", "large"]
-MIN_CUSTOM_INSTRUCTION_CHARS = 0
-MAX_CUSTOM_INSTRUCTION_CHARS = 2000
 # 简历备注的上限：列表默认可见（ellipsis + tooltip）、详情可编辑。
 MAX_RESUME_NOTE_CHARS = 2000
-
-
-class GenerateOptions(BaseModel):
-    """控制是否允许模型基于已有事实做岗位导向的改写和拓展，以及输出篇幅。"""
-
-    model_config = ConfigDict(extra="forbid")
-    enhance: bool = False
-    enhancement_level: Literal["light", "balanced", "strong"] = "balanced"
-    # 目标篇幅：默认 1 页 A4。塞不下时用户可在预览页加大页数或缩小字号后重新渲染。
-    page_limit: int = Field(default=1, ge=1, le=MAX_RESUME_PAGES)
-    font_scale: ResumeFontScale = "standard"
-    template: str = Field(default="classic", max_length=64)
-    # 格式模板（版式覆盖）的名字：内置预设或用户自制格式模板；空串表示用样式模板自带的版式。
-    format_name: str = Field(default="", max_length=64)
-    # 用户自己补充的生成要求；只作为附加上下文，不会覆盖系统提示里的防虚构规则。
-    custom_instruction: str = Field(default="", max_length=MAX_CUSTOM_INSTRUCTION_CHARS)
-
-
-class GenerateRequest(BaseModel):
-    """生成请求。``job_id`` 为空表示生成**通用简历**（不针对任何岗位）。"""
-
-    job_id: int | None = Field(default=None, ge=1)
-    title: str = Field(default="", max_length=256)
-    options: GenerateOptions = GenerateOptions()
 
 
 # ===== 简历内容结构（LLM 输出的 JSON 必须符合此结构） =====

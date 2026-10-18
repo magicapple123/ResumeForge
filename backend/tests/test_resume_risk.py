@@ -1,5 +1,6 @@
 """简历风险扫描：五类风险、只提示不改写、强主张台账联动、LLM 降级与提示词登记。"""
 
+import asyncio
 import json
 
 from app import preflight
@@ -15,6 +16,7 @@ from app.models.resume import ResumeRecord
 from app.schemas.resume import ResumeContent, ResumeProject
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider, LLMError
+from app.services.resume import resume_risk as risk_module
 from app.services.resume.resume_risk import MAX_DUPLICATE_RISKS, scan_local, scan_resume_risks
 
 
@@ -361,3 +363,59 @@ async def test_llm_prompt_labels_generic_suggestions_when_no_linked_claims():
     assert provider.captured_messages is not None
     outbound = json.dumps(provider.captured_messages, ensure_ascii=False)
     assert "全库通用准备建议" in outbound
+
+
+# ===== R12：AI 增强硬上限（超时降级，不等真实 45s） =====
+
+
+class SlowProvider(RiskProvider):
+    """永远不返回的假模型：用来触发 ``asyncio.wait_for`` 的超时分支。"""
+
+    def __init__(self, delay_s: float = 1.0):
+        super().__init__({})
+        self.delay_s = delay_s
+        self.closed = False
+
+    async def chat(self, messages, *, thinking: bool = True):
+        await asyncio.sleep(self.delay_s)
+        return json.dumps(self.payload, ensure_ascii=False)
+
+    async def aclose(self):
+        self.closed = True
+
+
+async def test_llm_enhancement_times_out_and_degrades(monkeypatch):
+    """超时必须**排在自己的异常分支**里降级，而不是当成"模型返回内容异常"。
+
+    预算被 monkeypatch 成 50ms：真实 45s 会让这条用例变成整轮回归里最慢的一条。
+    """
+    monkeypatch.setattr(risk_module, "LLM_ENHANCE_TIMEOUT_S", 0.05)
+    provider = SlowProvider()
+    result = await scan_resume_risks(
+        ResumeContent(summary="精通后端开发"), [], provider=provider, resume_id=1
+    )
+    assert result.llm_used is False
+    assert any("超时" in note for note in result.notes)
+    # 超时后仍返回本地规则结果（不是空结果，也不是 500）。
+    assert any(p.category == "exaggeration" for p in result.points)
+    # provider 声明了 aclose()：超时路径必须把连接收掉，否则重扫会一直占着它。
+    assert provider.closed is True
+
+
+async def test_llm_error_still_degrades_after_timeout_branch_added(monkeypatch):
+    """加了超时分支后，LLMError 的降级语义不变（回归守卫）。"""
+    monkeypatch.setattr(risk_module, "LLM_ENHANCE_TIMEOUT_S", 5.0)
+    result = await scan_resume_risks(
+        ResumeContent(summary="精通后端开发"), [], provider=BrokenProvider({}), resume_id=1
+    )
+    assert result.llm_used is False
+    assert any("本地规则" in note for note in result.notes)
+    assert not any("超时" in note for note in result.notes)
+
+
+async def test_no_provider_stays_local_without_enhancement_notes():
+    """``enhance=false`` 路径不建 provider，也就不该有任何超时/降级提示。"""
+    result = await scan_resume_risks(ResumeContent(summary="精通后端开发"), [], provider=None)
+    assert result.llm_used is False
+    assert not any("超时" in note for note in result.notes)
+    assert not any("AI 增强" in note for note in result.notes)

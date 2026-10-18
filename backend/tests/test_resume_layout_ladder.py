@@ -3,6 +3,7 @@
 拆分自 test_resume_layout.py——先动间距还是先动字号、每档只紧不松、用户手调过的值
 不许反弹、字号探针只出现在字号档——这些阶梯规则单独成文件。
 """
+
 from app.services.resume.resume_layout import (
     MIN_FONT_PX,
     build_fit_ladder,
@@ -19,7 +20,9 @@ def test_font_floor_is_governed_by_absolute_pixels_not_ratio():
         assert size * floor >= MIN_FONT_PX - 1e-9, name
     # 小字号档本身就等于下限，系数只能是 1——不允许再缩。
     assert font_adjust_floor("small") == 1.0
-    # 其余档位受格式字段自身的 0.88 下限约束（比像素下限更严）。
+    # 其余档位受**自动一页自己的** 0.88 下限约束（比像素下限更严）。
+    # 注意这是 `AUTO_FIT_MIN_ADJUST`，不是格式字段的 min——字段 min 已为无级字号滑块
+    # 放宽到 0.35，自动一页仍不许把字缩到那种程度。
     assert font_adjust_floor("standard") == 0.88
     assert font_adjust_floor("large") == 0.88
 
@@ -123,6 +126,8 @@ def test_room_report_explains_the_font_floor():
     assert room["font_floor_px"] == MIN_FONT_PX
     assert "9pt" in room["font_floor_note"] or "12px" in room["font_floor_note"]
 
-    tight = fit_room_report("compact", "small", {"page_padding": 12, "section_gap": 0.8, "line_height": 1.4})
+    tight = fit_room_report(
+        "compact", "small", {"page_padding": 12, "section_gap": 0.8, "line_height": 1.4}
+    )
     assert tight["has_room"] is False
     assert "不会再缩小字号" in tight["font_floor_note"]

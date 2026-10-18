@@ -9,6 +9,7 @@
 - ``resolved_format_name`` / ``resolved_style_name``：模板名按"能不能解析"归一，
   自制模板按**用户起的名字**存，不能拿 ``template_spec`` 偷偷换成内置模板。
 """
+
 from __future__ import annotations
 
 import logging
@@ -93,6 +94,7 @@ def save_record(
     coverage_notes: list[dict] | None = None,
     rationale: str = "",
     fact_annotations: list[dict] | None = None,
+    format_config: dict | None = None,
     commit: bool = True,
 ) -> ResumeRecord:
     """生成结果落库（在流结束后的同一请求内调用）。
@@ -102,6 +104,11 @@ def save_record(
     ``coverage_notes`` / ``rationale`` 是生成时的筛选说明与生成说明（可为空：手写
     简历、旧测试调用方都没有它们）；``fact_annotations`` 是事实来源标注（RF-13，
     可为空：手写/旧调用方）。
+
+    ``format_config`` 是生成时就定下来的版式覆盖（板块顺序、字号系数等）。必须在这里
+    过一遍 ``validated_format_config``：请求体里的这个字段只做了形状校验（见
+    ``schemas/resume.py``），未知键与越界数值都要在落库前丢掉——否则一份"存了却渲染
+    时不生效"的配置会让用户以为自己的调整丢了。
     """
     name = str(content.get("name") or "简历").strip()[:48]
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
@@ -129,6 +136,7 @@ def save_record(
         format_name=resolved_format_name(db, format_name),
         page_limit=normalize_page_limit(page_limit),
         font_scale=font_scale_spec(font_scale)["name"],
+        format_config=validated_format_config(format_config),
         custom_instruction=custom_instruction.strip()[:2000],
         coverage_notes=coverage_notes or [],
         rationale=rationale or "",

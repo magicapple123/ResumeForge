@@ -4,6 +4,7 @@
 字号档位、分区清单、模板市场与 PDF 直出可用性。真正的模板 CRUD 在 ``api/resume_templates.py``，
 不并入本域。
 """
+
 import logging
 
 from fastapi import APIRouter, Depends
@@ -11,7 +12,12 @@ from sqlalchemy.orm import Session
 
 from ...database import get_db
 from ...services.pdf_exporter import font_available
-from ...services.resume.resume_sections import DEFAULT_SECTION_ORDER, section_label
+from ...services.profile.profile_service import get_or_create_profile
+from ...services.resume.resume_sections import (
+    DEFAULT_SECTION_ORDER,
+    profile_to_resume_order,
+    section_label,
+)
 from ...services.resume.resume_template_store import (
     custom_format_options,
     custom_template_options,
@@ -51,6 +57,11 @@ def read_resume_templates(db: Session = Depends(get_db)):
             {"key": key, "label": section_label(key)} for key in DEFAULT_SECTION_ORDER
         ],
         "default_section_order": list(DEFAULT_SECTION_ORDER),
+        # 生成界面用的默认顺序：跟随用户在「我的资料」里排好的顺序。
+        # **不改**上面的 ``default_section_order``——它是"内置默认"，已保存简历在没有
+        # 自己的 ``section_order`` 时读的是它；把两者混成一个字段，等于让资料页的一次
+        # 拖动把用户已经导出过的简历悄悄换一个样子。
+        "profile_section_order": profile_to_resume_order(get_or_create_profile(db).section_order),
         "format_presets": [
             {
                 "name": item["name"],

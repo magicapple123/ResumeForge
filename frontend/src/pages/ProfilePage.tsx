@@ -30,6 +30,7 @@ import {
   setProfileSaveControl,
 } from "../features/tou-tou/profileSaveBridge";
 import { useProfilePage } from "../features/profile/useProfilePage";
+import { useFormShortcutHistory } from "../features/shortcuts/useFormShortcutHistory";
 import type { WebFormExtraProfile } from "../types";
 
 export default function ProfilePage() {
@@ -209,6 +210,8 @@ export default function ProfilePage() {
     if (!extraProfile || !draft) {
       // 网申资料还没加载（用户没打开过那个分页）：资料表单已存上，解除未保存警示。
       setDirty(false);
+      // 已落库的值成为新基线：再按撤回不该把用户带回"保存前"。
+      formHistory.reset();
       return;
     }
     setExtraSaving(true);
@@ -230,6 +233,7 @@ export default function ProfilePage() {
       workspaceRef.current?.adoptSaved(saved);
       // **两次提交都成功**才算干净；网申资料失败走下面的 catch，dirty 保持不变。
       setDirty(false);
+      formHistory.reset();
     } catch (err) {
       // 资料表单已经存进去了，所以要如实说明"存了一半"，而不是笼统说保存失败。
       message.error(
@@ -241,6 +245,16 @@ export default function ProfilePage() {
       setExtraSaving(false);
     }
   };
+
+  // R5 快捷键：撤回/恢复作用于整页表单（跨字段），保存复用上面这条唯一保存入口
+  // （含网申资料的第二次提交）。resetKey 用 loading：加载完成即"换了记录"，历史清空，
+  // 否则第一次撤回会把整页拉回加载前的空表单。
+  const formHistory = useFormShortcutHistory(form, {
+    onSave: () => void submitAll(),
+    onChange: markDirty,
+    historyEnabled: editing,
+    resetKey: loading,
+  });
 
   // useProfilePage / useProfileSectionReorder 返回的处理函数每次渲染都是新引用；
   // 简历资料子树要靠「元素引用不变」跳过与网申资料击键无关的重渲（见 resumeContent
@@ -399,7 +413,7 @@ export default function ProfilePage() {
         form={form}
         layout="vertical"
         disabled={!editing || saving || photoReading}
-        onValuesChange={markDirty}
+        onValuesChange={formHistory.handleValuesChange}
       >
         <Form.Item name="photo" hidden>
           <Input />
@@ -416,7 +430,7 @@ export default function ProfilePage() {
       activeWorkspace,
       editing,
       form,
-      markDirty,
+      formHistory.handleValuesChange,
       photoReading,
       resumeContent,
       saving,

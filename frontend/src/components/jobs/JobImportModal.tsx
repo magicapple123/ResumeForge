@@ -1,15 +1,34 @@
 /**
- * 岗位 CSV 导入弹窗：选文件 → 预览确认（逐行错误与重复检查）→ 提交导入。
+ * 岗位 CSV 导入弹窗：选文件（可多选/拖拽/粘贴）→ 预览确认（逐行错误与重复检查）→ 提交导入。
  * 解析在后端做（UTF-8/GBK、表头别名、逐行报错），前端只负责把预览结果讲清楚：
  * 用户在确认前就知道哪些行能进、哪些行会被跳过、为什么。
+ *
+ * 多文件的账目（串行解析、坏文件隔离、去重、上限、按 500 行分块提交）在
+ * `features/import/useCsvFileBatch` 里，与备选岗位导入共用同一套口径。
  */
 import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Flex, Listy, Modal, Space, Tag, Typography, Upload } from "antd";
 import { ListyItem } from "../common/ListyItem";
 import { useState } from "react";
+import type { ClipboardEvent } from "react";
 import { importJobs, previewJobImport } from "../../api/jobs";
-import type { JobImportPreview } from "../../types";
+import type { JobImportRow } from "../../types";
 import { downloadCsvTemplate } from "../../utils/download";
+import { commitRowsInChunks, useCsvFileBatch } from "../../features/import/useCsvFileBatch";
+
+interface CsvRowError {
+  line: number;
+  message: string;
+}
+
+/** 岗位的判重身份：公司 + 岗位名 + 投递链接（归一化后逐字比较）。 */
+function jobRowKey(row: JobImportRow): string {
+  const data = row.data ?? {};
+  const url = data.source_url ?? data.url ?? data.link ?? "";
+  return [data.company, data.title, url]
+    .map((value) => (value ?? "").trim().toLowerCase())
+    .join("|");
+}
 
 export function JobImportModal({
   open,
@@ -22,60 +41,71 @@ export function JobImportModal({
   onImported: () => void;
 }) {
   const { message } = App.useApp();
-  const [preview, setPreview] = useState<JobImportPreview | null>(null);
-  const [fileName, setFileName] = useState("");
-  const [parsing, setParsing] = useState(false);
   const [committing, setCommitting] = useState(false);
-
-  const reset = () => {
-    setPreview(null);
-    setFileName("");
-    setParsing(false);
-    setCommitting(false);
-  };
+  const batch = useCsvFileBatch<JobImportRow, CsvRowError>({
+    parseFile: async (file) => {
+      const result = await previewJobImport(file);
+      return { rows: result.rows, errors: result.errors };
+    },
+    dedupeKey: jobRowKey,
+  });
 
   const close = () => {
-    if (parsing || committing) return;
-    reset();
+    if (committing) return;
+    batch.reset();
     onClose();
   };
 
-  const handleFile = async (file: File) => {
-    setParsing(true);
-    setFileName(file.name);
-    try {
-      const result = await previewJobImport(file);
-      setPreview(result);
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : "解析 CSV 失败");
-    } finally {
-      setParsing(false);
+  const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    if (committing || batch.parsing) return;
+    const files = Array.from(event.clipboardData?.files ?? []);
+    if (files.length > 0) {
+      event.preventDefault();
+      void batch.addFiles(files);
+      return;
     }
-    // 返回 false 阻止 antd Upload 自动上传：文件内容已经交给预览流程了。
-    return false;
+    // 从 Excel / 表格里复制出来的是纯文本：当作一个 CSV 文件交给后端解析，
+    // 列顺序与模板一致即可（首行表头照常参与别名匹配）。
+    const text = event.clipboardData?.getData("text/plain") ?? "";
+    if (!text.trim()) return;
+    event.preventDefault();
+    void batch.addFiles([new File([text], "粘贴内容.csv", { type: "text/csv" })]);
   };
 
   const commit = async () => {
-    if (!preview || preview.rows.length === 0) return;
+    if (!batch.canCommit || committing) return;
     setCommitting(true);
     try {
-      const result = await importJobs(preview.rows);
+      const outcome = await commitRowsInChunks<JobImportRow, CsvRowError>({
+        // 提交时剥掉前端附加的 sourceFile：后端只认 {line, data}。
+        rows: batch.rows.map((row) => ({ line: row.line, data: row.data })),
+        commitRows: (chunk) => importJobs(chunk),
+      });
       onImported();
-      const skipped = result.failed.filter((item) => item.message.includes("已跳过")).length;
-      const failed = result.failed.length - skipped;
-      if (result.imported > 0) {
-        message.success(`已导入 ${result.imported} 个岗位`);
+      if (outcome.imported > 0) {
+        message.success(`已导入 ${outcome.imported} 个岗位`);
       }
+      if (outcome.failedChunk !== undefined) {
+        // 停在失败块：后续块没提交，账目只说已成功的那部分。
+        message.error(
+          `第 ${outcome.failedChunk} 批导入失败（已导入 ${outcome.imported} 个岗位）：${
+            outcome.failedMessage ?? "请检查网络后重试"
+          }`,
+        );
+        return;
+      }
+      const skipped = outcome.failed.filter((item) => item.message.includes("已跳过")).length;
+      const failed = outcome.failed.length - skipped;
       if (skipped > 0) {
         message.info(`${skipped} 行与已有岗位重复，已跳过`);
       }
       if (failed > 0) {
         message.warning(`${failed} 行导入失败，详见弹窗中的错误列表`);
         // 失败行保留在预览里，用户改完 CSV 可以只重导这些行。
-        setPreview({ ...preview, rows: [] });
         return;
       }
-      reset();
+      // 全成功（没有任何失败行）才关闭：有失败就留着预览，方便用户只重导那些行。
+      batch.reset();
       onClose();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "导入失败");
@@ -84,8 +114,8 @@ export function JobImportModal({
     }
   };
 
-  const rows = preview?.rows ?? [];
-  const errors = preview?.errors ?? [];
+  const rows = batch.rows;
+  const errors = batch.errors;
 
   return (
     <Modal
@@ -121,12 +151,12 @@ export function JobImportModal({
             下载空模板
           </Button>
           <Space>
-            <Button disabled={parsing || committing} onClick={close}>
+            <Button disabled={batch.parsing || committing} onClick={close}>
               取消
             </Button>
             <Button
               type="primary"
-              disabled={rows.length === 0}
+              disabled={!batch.canCommit}
               loading={committing}
               onClick={() => void commit()}
             >
@@ -136,71 +166,125 @@ export function JobImportModal({
         </Flex>
       }
     >
-      <Upload.Dragger
-        accept=".csv,text/csv"
-        maxCount={1}
-        showUploadList={false}
-        disabled={parsing || committing}
-        beforeUpload={(file) => void handleFile(file)}
+      {/* 整块导入区都可粘贴：拖拽进文件、或者从表格复制一片内容按 Ctrl+V。 */}
+      <div
+        role="group"
+        aria-label="CSV 导入区"
+        tabIndex={0}
+        onPaste={handlePaste}
+        style={{ outline: "none" }}
       >
-        <p className="ant-upload-drag-icon">
-          <UploadOutlined />
-        </p>
-        <p className="ant-upload-text">点击或拖拽 CSV 文件到这里</p>
-        <p className="ant-upload-hint">
-          第一行是表头（岗位名称 / 公司名称 / 工作地点 / 薪资范围 / 岗位类型 / 状态 / 投递链接 /
-          发布时间…），也可以先用「导出 CSV」拿一份现成模板
-        </p>
-      </Upload.Dragger>
+        <Upload.Dragger
+          accept=".csv,text/csv"
+          multiple
+          showUploadList={false}
+          disabled={batch.parsing || committing}
+          // 返回 false 阻止 antd 自动上传：文件只交给本地批量状态机。
+          beforeUpload={(file) => {
+            void batch.addFiles([file]);
+            return false;
+          }}
+        >
+          <p className="ant-upload-drag-icon">
+            <UploadOutlined />
+          </p>
+          <p className="ant-upload-text">点击或拖拽 CSV 文件到这里（可多选）</p>
+          <p className="ant-upload-hint">
+            第一行是表头（岗位名称 / 公司名称 / 工作地点 / 薪资范围 / 岗位类型 / 状态 / 投递链接 /
+            发布时间…），也可以先用「导出 CSV」拿一份现成模板；一次最多 10 个文件、合计 2000 行
+          </p>
+        </Upload.Dragger>
+        <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
+          也可以直接在这块区域按 Ctrl+V 粘贴从表格复制的 CSV 内容
+        </Typography.Text>
+      </div>
 
-      {parsing && <Typography.Text type="secondary">正在解析…</Typography.Text>}
+      {batch.parsing && <Typography.Text type="secondary">正在解析…</Typography.Text>}
 
-      {preview && (
+      {batch.notice && (
+        <Alert type="warning" showIcon style={{ marginTop: 8 }} title={batch.notice} />
+      )}
+
+      {batch.files.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <Typography.Text strong>
-            {fileName}：可导入 {rows.length} 条
+            已选 {batch.files.length} 个文件：合计可导入 {rows.length} 条
             {errors.length > 0 ? `，${errors.length} 行有问题` : ""}
+            {batch.duplicates > 0 ? `，已去除重复 ${batch.duplicates} 行` : ""}
           </Typography.Text>
-          {errors.length > 0 && (
-            <Alert
-              type="warning"
-              showIcon
-              style={{ marginTop: 8 }}
-              title="以下行不会导入（改好 CSV 后可以重新选择文件）"
-              description={
-                <Listy
-                  items={errors}
-                  rowKey={(item) => item.line}
-                  itemRender={(item) => (
-                    <ListyItem>
-                      <Tag>第 {item.line} 行</Tag>
-                      {item.message}
-                    </ListyItem>
-                  )}
-                />
-              }
+          <Listy
+            items={batch.files}
+            rowKey={(item) => item.id}
+            itemRender={(item) => (
+              <ListyItem>
+                <Flex justify="space-between" gap={12} wrap>
+                  <Typography.Text>{item.file}</Typography.Text>
+                  <Space size={8} wrap>
+                    {item.status === "parsing" && <Tag color="processing">解析中…</Tag>}
+                    {item.status === "ok" && <Tag color="success">可导入 {item.importable} 条</Tag>}
+                    {item.status === "error" && <Tag color="error">解析失败</Tag>}
+                    {item.errorCount > 0 && <Tag color="warning">{item.errorCount} 行有问题</Tag>}
+                    {item.duplicates > 0 && <Tag>重复 {item.duplicates} 行</Tag>}
+                    <Button
+                      type="link"
+                      size="small"
+                      disabled={batch.parsing || committing}
+                      onClick={() => batch.removeFile(item.id)}
+                    >
+                      移除
+                    </Button>
+                  </Space>
+                </Flex>
+                {item.message ? (
+                  <Typography.Text type="danger">{item.message}</Typography.Text>
+                ) : null}
+              </ListyItem>
+            )}
+          />
+        </div>
+      )}
+
+      {errors.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginTop: 8 }}
+          title="以下行不会导入（改好 CSV 后可以重新选择文件）"
+          description={
+            <Listy
+              items={errors.slice(0, 10)}
+              rowKey={(item) => `${item.sourceFile}#${item.line}`}
+              itemRender={(item) => (
+                <ListyItem>
+                  <Tag>{item.sourceFile}</Tag>
+                  <Tag>第 {item.line} 行</Tag>
+                  {item.message}
+                </ListyItem>
+              )}
             />
-          )}
-          {rows.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <Typography.Text type="secondary">将导入以下岗位（最多显示前 10 条）</Typography.Text>
-              <Listy
-                items={rows.slice(0, 10)}
-                rowKey={(item) => item.line}
-                itemRender={(item) => (
-                  <ListyItem>
-                    <Flex justify="space-between" gap={12}>
-                      <Typography.Text strong>{item.data.title || "（无标题）"}</Typography.Text>
-                      <Typography.Text type="secondary">
-                        {item.data.company || "—"}
-                        {item.data.origin_source ? ` · 来源：${item.data.origin_source}` : ""}
-                      </Typography.Text>
-                    </Flex>
-                  </ListyItem>
-                )}
-              />
-            </div>
-          )}
+          }
+        />
+      )}
+
+      {rows.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <Typography.Text type="secondary">将导入以下岗位（最多显示前 10 条）</Typography.Text>
+          <Listy
+            items={rows.slice(0, 10)}
+            rowKey={(item) => `${item.sourceFile}#${item.line}`}
+            itemRender={(item) => (
+              <ListyItem>
+                <Flex justify="space-between" gap={12}>
+                  <Typography.Text strong>{item.data.title || "（无标题）"}</Typography.Text>
+                  <Typography.Text type="secondary">
+                    {item.data.company || "—"}
+                    {item.data.origin_source ? ` · 来源：${item.data.origin_source}` : ""}
+                    {` · ${item.sourceFile}`}
+                  </Typography.Text>
+                </Flex>
+              </ListyItem>
+            )}
+          />
         </div>
       )}
     </Modal>

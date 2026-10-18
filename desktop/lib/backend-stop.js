@@ -10,8 +10,10 @@
 //   * a pid we spawned ourselves is re-checked against the identity snapshot
 //     taken at spawn, so a recycled pid is never killed;
 //   * "taskkill exited 0" is not proof -- the process table decides;
-//   * the result is { ok, reason, verified }: the shell refuses to install an
-//     update when ok is false.
+//   * the result is { ok, reason, verified } (+ optional `warning`/`detail`
+//     from the three-state port probe, R3): the shell refuses to install an
+//     update when ok is false, and refuses to install when `verified` is false
+//     even though ok is true (an unreadable probe must not pass for "gone").
 //
 // Everything it needs from the manager (spawnFn / execFileFn / verifyProcessFn /
 // exitConfirmTimeoutMs / the adopted record) is read off `manager`, so the
@@ -20,18 +22,118 @@
 const processIdentity = require("./process-identity");
 const net = require("net");
 
-async function backendPortOpen(manager) {
-  if (!manager.url) return false;
-  if (manager.portOpenFn) return manager.portOpenFn(manager.url);
-  const url = new URL(manager.url);
-  if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || !url.port) return true;
+// Three-state port probe (R3). A single `connect` attempt used to answer a
+// boolean question, and both "timed out" and "connection reset" were read as
+// "still open". That is why a perfectly ordinary quit could end in
+// "退出时未能确认后端服务已停止": the socket was still in TIME_WAIT-a-like
+// state, the probe could not handshake, and the shell treated "cannot tell"
+// as "definitely alive". The states are now explicit, so the caller can pick
+// the right reaction: open -> fail closed, unknown -> pass with a warning.
+const PORT_STATE_OPEN = "open";
+const PORT_STATE_CLOSED = "closed";
+const PORT_STATE_UNKNOWN = "unknown";
+
+// ~0/250/750ms: a backend that is really gone refuses the very first connect;
+// the retries exist for a socket that is still unwinding after the kill.
+const PORT_PROBE_DELAYS_MS = [0, 250, 750];
+const PORT_PROBE_TIMEOUT_MS = 1000;
+
+// errno values that mean "nothing is listening (any more)" rather than
+// "we cannot tell". Kept as a Set so probePortOnce stays a pure lookup.
+const PORT_CLOSED_ERROR_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EPIPE",
+  "ETIMEDOUT",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EADDRNOTAVAIL",
+]);
+
+function sleep(ms) {
   return new Promise((resolve) => {
-    const socket = net.createConnection({ host: url.hostname.replace(/^\[|\]$/g, ""), port: Number(url.port) });
-    const finish = (open) => { socket.destroy(); resolve(open); };
-    socket.once("connect", () => finish(true));
-    socket.once("error", (error) => finish(error.code !== "ECONNREFUSED"));
-    socket.setTimeout(1000, () => finish(true)); // unreadable/time-out counts as unconfirmed
+    setTimeout(resolve, ms);
   });
+}
+
+// One probe attempt. Resolves to { state, detail } -- never rejects.
+function probePortOnce(rawUrl) {
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return Promise.resolve({ state: PORT_STATE_UNKNOWN, detail: "后端地址无法解析" });
+  }
+  if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || !url.port) {
+    // Non-loopback or portless URL: the shell cannot probe it at all, so keep
+    // the historical fail-closed reading ("still reachable") instead of
+    // silently declaring the backend gone.
+    return Promise.resolve({ state: PORT_STATE_OPEN, detail: "非本机地址，按仍可连接处理" });
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const socket = net.createConnection({
+      host: url.hostname.replace(/^\[|\]$/g, ""),
+      port: Number(url.port),
+    });
+    const finish = (state, detail) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve({ state, detail });
+    };
+    socket.once("connect", () => finish(PORT_STATE_OPEN, "connect 成功"));
+    socket.once("error", (error) => {
+      const code = error && error.code;
+      finish(
+        PORT_CLOSED_ERROR_CODES.has(code) ? PORT_STATE_CLOSED : PORT_STATE_UNKNOWN,
+        `error ${code || (error && error.message) || "unknown"}`,
+      );
+    });
+    socket.setTimeout(PORT_PROBE_TIMEOUT_MS, () => finish(PORT_STATE_UNKNOWN, "探测超时"));
+  });
+}
+
+function normalizeProbeResult(result) {
+  if (typeof result === "string") return { state: result, detail: "" };
+  if (result && typeof result.state === "string") {
+    return { state: result.state, detail: String(result.detail || "") };
+  }
+  return { state: PORT_STATE_UNKNOWN, detail: "探测结果无法识别" };
+}
+
+// Is the backend port still answering? Returns { state, detail } where state is
+// "open" | "closed" | "unknown".
+//
+// `attemptFn` is the injection point for tests (it receives the manager and the
+// 0-based attempt index; it may answer with a state string or { state, detail }).
+// `manager.portOpenFn` keeps its original boolean contract and is deliberately
+// NOT retried: existing tests assert one probe per stop.
+async function probeBackendPort(manager, attemptFn) {
+  if (!manager.url) return { state: PORT_STATE_CLOSED, detail: "后端地址未知（尚未启动）" };
+  if (!attemptFn && manager.portOpenFn) {
+    const open = await manager.portOpenFn(manager.url);
+    return { state: open ? PORT_STATE_OPEN : PORT_STATE_CLOSED, detail: "测试注入 portOpenFn" };
+  }
+  let sawUnknown = false;
+  let lastDetail = "";
+  for (let attempt = 0; attempt < PORT_PROBE_DELAYS_MS.length; attempt += 1) {
+    const delay = PORT_PROBE_DELAYS_MS[attempt];
+    if (delay > 0) await sleep(delay);
+    const attemptResult = attemptFn
+      ? normalizeProbeResult(await attemptFn(manager, attempt))
+      : await probePortOnce(manager.url);
+    lastDetail = `第 ${attempt + 1} 次探测 "${attemptResult.state}"${
+      attemptResult.detail ? `（${attemptResult.detail}）` : ""
+    }`;
+    if (attemptResult.state === PORT_STATE_OPEN) {
+      return { state: PORT_STATE_OPEN, detail: lastDetail };
+    }
+    if (attemptResult.state !== PORT_STATE_CLOSED) sawUnknown = true;
+  }
+  // Every attempt refused the connection -> closed. Any attempt we could not
+  // judge -> unknown (the caller warns instead of failing the quit).
+  return { state: sawUnknown ? PORT_STATE_UNKNOWN : PORT_STATE_CLOSED, detail: lastDetail };
 }
 
 // What the backend's own command line looks like, mirrored from the launchers
@@ -99,8 +201,31 @@ async function stopBackend(manager) {
   } catch (err) {
     outcome = { ok: false, reason: `停止后端时出错：${err}`, verified: false };
   }
-  if (outcome.ok && await backendPortOpen(manager)) {
-    outcome = { ok: false, reason: "根进程已退出，但后端端口仍可连接，无法确认后代进程已停止", verified: false };
+  if (outcome.ok) {
+    // `manager.portProbeFn` mirrors the other injection seams on the manager
+    // (spawnFn / killFn / processExistsFn / portOpenFn) so the three states can
+    // be exercised without a real socket.
+    const probe = await probeBackendPort(manager, manager.portProbeFn);
+    if (probe.state === PORT_STATE_OPEN) {
+      // Still reachable: fail closed, exactly as before (an update must not be
+      // installed over a backend that is demonstrably alive).
+      outcome = {
+        ok: false,
+        reason: "根进程已退出，但后端端口仍可连接，无法确认后代进程已停止",
+        verified: false,
+        detail: probe.detail,
+      };
+    } else if (probe.state === PORT_STATE_UNKNOWN) {
+      // Cannot tell (timeout / unexpected errno). A quit must not be held
+      // hostage by an unreadable socket, but the stop is NOT verified -- the
+      // shell refuses to install an update on that.
+      outcome = {
+        ...outcome,
+        verified: false,
+        warning: "端口探测未能确认后端已停止",
+        detail: probe.detail,
+      };
+    }
   }
   if (outcome.ok) manager.child = null;
   return outcome;
@@ -232,6 +357,7 @@ async function confirmTermination(manager, pid, child) {
 module.exports = {
   BACKEND_COMMAND_PATTERNS,
   confirmTermination,
+  probeBackendPort,
   stopAdoptedBackend,
   stopBackend,
   verifySpawnedChild,

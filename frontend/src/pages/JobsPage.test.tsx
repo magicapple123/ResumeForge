@@ -1,8 +1,15 @@
+/**
+ * 岗位页：列表展示、批量补齐详情与选择模式、URL 状态化、详情抽屉的重复打开与竞态。
+ *
+ * 「备选岗位」侧（导入/采集跳转/卡片详情/批量选择）的用例已拆到
+ * `JobsPage.candidateImport.test.tsx`（行数预算）。
+ */
+
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CandidateJobDetail, Job, JobList } from "../types";
+import type { Job, JobList } from "../types";
 import JobsPage from "./JobsPage";
 
 const mocks = vi.hoisted(() => ({
@@ -106,33 +113,6 @@ const candidateMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../api/candidateJob", () => candidateMocks);
-
-function makeCandidate(overrides: Partial<CandidateJobDetail> = {}): CandidateJobDetail {
-  return {
-    id: 1,
-    title: "后端开发工程师",
-    company: "示例公司",
-    location: "",
-    salary: "",
-    raw_text: "",
-    images: [],
-    note: "",
-    source: "官网采集",
-    source_url: "",
-    collect_task_id: null,
-    status: "pending",
-    imported_job_id: null,
-    created_at: "2026-09-23T10:00:00",
-    updated_at: "2026-09-23T10:00:00",
-    description: "",
-    requirements: "",
-    job_type: "",
-    additional_info: "",
-    ...overrides,
-  };
-}
-
-const makeCandidateDetail = makeCandidate;
 
 describe("JobsPage", () => {
   // 本仓库没有全局 auto-cleanup（见 ApplyPage.test.tsx），必须显式清理，
@@ -351,141 +331,88 @@ describe("JobsPage URL 状态化", () => {
   });
 });
 
-describe("从备选岗位导入", () => {
+describe("岗位详情重复打开（R2：双击、重开与竞态）", () => {
   afterEach(cleanup);
 
-  it("用详情那份预填表单，而不是列表那一行", async () => {
-    // **这条守的是一个已经发生过的缺陷**：候选有两条来路，字段分布正好相反——手工粘贴的只有
-    // raw_text，而采集来的内容全在 description/requirements 里、raw_text 是空的。
-    // 而「导入到岗位」原先只预填 raw_text，于是采集来的候选打开的是一个**全空的表单**，
-    // 用户看到的就是"导入进来什么都没有"——数据其实一直都在。
-    //
-    // 列表接口也刻意不带 JD（最多 300 条 × 单条上限几万字符），所以要取详情那一条。
-    candidateMocks.listCandidateJobsPage.mockResolvedValue({
-      items: [makeCandidate({ id: 9, title: "后端开发工程师", raw_text: "" })],
-      total: 1,
+  beforeEach(() => {
+    // 两行：一为"护士"(id=1)，一为"后端开发"(id=2)，竞态用例需要两个岗位。
+    mocks.jobs = [makeJob({ id: 1, title: "护士" }), makeJob({ id: 2, title: "后端开发" })];
+    mocks.getJob.mockReset();
+    mocks.getJob.mockResolvedValue({ ...BASE_JOB });
+    mocks.startBackfill.mockReset();
+    mocks.startBackfill.mockResolvedValue({} as never);
+    for (const mock of Object.values(candidateMocks)) mock.mockReset();
+  });
+
+  /** 抽屉是否处于展开态：antd 在打开的抽屉根节点上挂 `-open` 类。 */
+  function drawerOpened(): boolean {
+    return document.querySelector(".ant-drawer-open") !== null;
+  }
+
+  it("连续两次点击同一岗位标题，抽屉仍然显示详情，且不重复请求", async () => {
+    // **这条守的是一个真实缺陷**：openDetail 原先无条件 setDetailJob(null)，而
+    // openedLinkedJobId 锁存着同一个 id，effect 因此不再拉取 —— 双击同一行之后抽屉
+    // 就是一片空白，用户看到的是"点了没反应"。
+    renderPageWithProbe();
+    fireEvent.click(screen.getByRole("button", { name: "护士" }));
+
+    await waitFor(() => expect(drawerOpened()).toBe(true));
+    await waitFor(() => expect(screen.getByText("负责病区护理工作。")).toBeInTheDocument());
+    expect(mocks.getJob).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "护士" }));
+
+    await waitFor(() => expect(drawerOpened()).toBe(true));
+    expect(screen.getByText("负责病区护理工作。")).toBeInTheDocument();
+    expect(mocks.getJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("关闭抽屉后再点同一岗位，会重新拉取详情并重新打开", async () => {
+    renderPageWithProbe();
+    fireEvent.click(screen.getByRole("button", { name: "护士" }));
+    await waitFor(() => expect(screen.getByText("负责病区护理工作。")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(drawerOpened()).toBe(false));
+
+    fireEvent.click(screen.getByRole("button", { name: "护士" }));
+
+    await waitFor(() => expect(mocks.getJob).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(drawerOpened()).toBe(true));
+    expect(screen.getByText("负责病区护理工作。")).toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent("job_id=1");
+  });
+
+  it("快速 A→B：晚到的 A 响应不会覆盖 B", async () => {
+    let resolveFirst: ((job: Job) => void) | undefined;
+    mocks.getJob.mockImplementation((id: number) => {
+      if (id === 1) {
+        // A 故意挂住：等 B 先回来之后再放行，模拟慢响应。
+        return new Promise<Job>((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      return Promise.resolve({
+        ...BASE_JOB,
+        id: 2,
+        title: "后端开发",
+        description: "负责服务端开发。",
+      });
     });
-    candidateMocks.getCandidateJob.mockResolvedValue(
-      makeCandidateDetail({
-        id: 9,
-        title: "后端开发工程师",
-        description: "负责服务端开发与维护，参与架构演进。",
-        requirements: "三年以上后端经验。",
-      }),
-    );
-    renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /备选岗位/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "导入到岗位" }));
+    renderPageWithProbe();
+    fireEvent.click(screen.getByRole("button", { name: "护士" }));
+    await waitFor(() => expect(resolveFirst).toBeTypeOf("function"));
 
-    await waitFor(() => expect(candidateMocks.getCandidateJob).toHaveBeenCalledWith(9));
-    // 表单里岗位描述那一栏要有内容——这才叫"导入进来了"。
-    const description = await screen.findByLabelText("岗位描述（JD）");
-    await waitFor(() => expect(description).toHaveValue("负责服务端开发与维护，参与架构演进。"));
-    expect(screen.getByLabelText("岗位名称")).toHaveValue("后端开发工程师");
-  });
+    fireEvent.click(screen.getByRole("button", { name: "后端开发" }));
+    await waitFor(() => expect(screen.getByText("负责服务端开发。")).toBeInTheDocument());
+    expect(screen.getByTestId("location")).toHaveTextContent("job_id=2");
 
-  it("从采集记录跳转时只加载对应批次，并自动打开备选岗位", async () => {
-    candidateMocks.listCandidateJobsPage.mockResolvedValue({
-      items: [makeCandidate({ id: 12, title: "官网后端工程师", collect_task_id: 8 })],
-      total: 1,
-    });
-    renderPage(["/jobs?collect_task_ids=8,9"]);
+    resolveFirst?.({ ...BASE_JOB, description: "负责病区护理工作。" });
 
-    await waitFor(() =>
-      expect(candidateMocks.listCandidateJobsPage).toHaveBeenCalledWith(
-        { collectTaskIds: [8, 9] },
-        1,
-        12,
-      ),
-    );
-    expect(await screen.findByText(/这里只显示选中采集记录的岗位/)).toBeInTheDocument();
-    expect(screen.getByText("官网后端工程师")).toBeInTheDocument();
-  });
-
-  it("点击备选岗位卡片会读取并展示完整详情", async () => {
-    const candidate = makeCandidate({ id: 21, title: "数据分析师" });
-    candidateMocks.listCandidateJobsPage.mockResolvedValue({ items: [candidate], total: 1 });
-    candidateMocks.getCandidateJob.mockResolvedValue(
-      makeCandidateDetail({
-        id: 21,
-        title: "数据分析师",
-        description: "负责业务数据分析。",
-        requirements: "熟悉 SQL。",
-      }),
-    );
-    renderPage();
-
-    fireEvent.click(screen.getByRole("button", { name: /备选岗位/ }));
-    fireEvent.click(await screen.findByText("数据分析师"));
-
-    await waitFor(() => expect(candidateMocks.getCandidateJob).toHaveBeenCalledWith(21));
-    expect(await screen.findByText("负责业务数据分析。")).toBeInTheDocument();
-    expect(screen.getByText("熟悉 SQL。")).toBeInTheDocument();
-  });
-
-  it("备选岗位批量导入入口已移除（产品决策）；卡片勾选框只在多选模式出现", async () => {
-    candidateMocks.listCandidateJobsPage.mockResolvedValue({
-      items: [
-        makeCandidate({ id: 31, title: "岗位一" }),
-        makeCandidate({ id: 32, title: "岗位二" }),
-      ],
-      total: 2,
-    });
-    renderPage();
-
-    fireEvent.click(screen.getByRole("button", { name: /备选岗位/ }));
-    // 普通模式：卡片上没有勾选框、也没有批量工具栏（含批量导入/批量删除）。
-    expect(await screen.findByText("岗位一")).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "全选本页" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "批量导入" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "批量删除" })).toBeNull();
-
-    // 右键进入多选模式后：勾选框与批量操作区一起出现（仍无批量导入）。
-    fireEvent.contextMenu(screen.getByText("岗位一"));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
-    expect(await screen.findByRole("checkbox", { name: "全选本页" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "批量删除" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "批量导入" })).toBeNull();
-  });
-
-  it("「全选全部」后翻页保留跨页选择：计数不丢、本页勾选框亮起", async () => {
-    // 守的是 2026 的产品决策：跨页「全选全部」（选中 N 条）后翻页，不再清空 selectedIds
-    // ——清空与「全选全部」的语义相悖。翻页后：工具条计数跨页保留（CandidateBatchToolbar
-    // 的「已选 X / 总数」），「全选本页」勾选框按本页口径自然收敛为 checked 亮起。
-    const pageOne = Array.from({ length: 12 }, (_, index) =>
-      makeCandidate({ id: index + 1, title: `候选-${index + 1}` }),
-    );
-    const pageTwo = Array.from({ length: 3 }, (_, index) =>
-      makeCandidate({ id: 13 + index, title: `候选-${13 + index}` }),
-    );
-    candidateMocks.listCandidateJobsPage.mockImplementation((_filters: unknown, page: number) =>
-      Promise.resolve(page === 1 ? { items: pageOne, total: 15 } : { items: pageTwo, total: 15 }),
-    );
-    candidateMocks.listCandidateJobIds.mockResolvedValue(
-      Array.from({ length: 15 }, (_, index) => index + 1),
-    );
-    renderPage();
-
-    fireEvent.click(screen.getByRole("button", { name: /备选岗位/ }));
-    expect(await screen.findByText("候选-1")).toBeInTheDocument();
-    // 「全选全部」只在多选模式出现——先右键进入批量选择。
-    fireEvent.contextMenu(screen.getByText("候选-1"));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "全选全部" }));
-    expect(await screen.findByText("已选 15 / 15 条")).toBeInTheDocument();
-
-    // 翻页：中途不点任何条目的勾选框，选择集应当原样保留。
-    const pageTwoButton = document.querySelector(".ant-pagination-item-2");
-    expect(pageTwoButton).not.toBeNull();
-    fireEvent.click(pageTwoButton as HTMLElement);
-    expect(await screen.findByText("候选-13")).toBeInTheDocument();
-    expect(candidateMocks.listCandidateJobsPage).toHaveBeenLastCalledWith({}, 2, 12);
-
-    // 计数跨页保留；本页 3 条全在选中集里 → 勾选框 checked 亮起而非半选/未选。
-    expect(screen.getByText("已选 15 / 15 条")).toBeInTheDocument();
-    const checkbox = screen.getByRole("checkbox", { name: "全选本页" }) as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
-    expect(checkbox.indeterminate).toBe(false);
+    // 晚到的 A 已经被序号守卫作废：内容仍然是 B 的。
+    await waitFor(() => expect(screen.queryByText("负责病区护理工作。")).not.toBeInTheDocument());
+    expect(screen.getByText("负责服务端开发。")).toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent("job_id=2");
   });
 });

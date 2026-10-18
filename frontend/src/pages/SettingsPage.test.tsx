@@ -321,3 +321,17 @@ describe("SettingsPage 编辑使用中的记录", () => {
     await screen.findAllByText("配置记录「DeepSeek 校招」已保存");
   });
 });
+
+describe("SettingsPage 快捷键设置", () => {
+  it("在「应用」页签挂载快捷键设置卡", async () => {
+    renderSettingsPage();
+    await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole("tab", { name: "应用" }));
+
+    // 卡片标题 + 动作表第一行（撤回）都在，说明整张卡真的挂上了。
+    expect(await screen.findByText("快捷键")).toBeInTheDocument();
+    expect(screen.getByText("撤回")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /全部恢复默认/ })).toBeInTheDocument();
+  });
+});

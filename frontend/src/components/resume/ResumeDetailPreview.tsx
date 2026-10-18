@@ -31,6 +31,7 @@ import { useNavigate } from "react-router-dom";
 import { RESUME_ENHANCEMENT_LEVELS } from "../../config";
 import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
+import { contentSignature } from "../../utils/contentSignature";
 import ExportButtons from "../ExportButtons";
 import ExportOptionsModal from "../ExportOptionsModal";
 import { describeResumeFieldPath } from "../../utils/resumeFieldPath";
@@ -146,6 +147,9 @@ export default function ResumeDetailPreview({
   const enhancementLabel = RESUME_ENHANCEMENT_LEVELS.find(
     (item) => item.value === detail.enhancement_level,
   )?.label;
+
+  // 风险扫描的"内容签名"：只随 content 变化重算，用来判断"扫描之后正文是不是改过了"。
+  const riskContentSignature = useMemo(() => contentSignature(detail.content), [detail.content]);
 
   /**
    * 警告分级（#3）：「疑似虚构」与「岗位筛选没选上」性质完全不同，不该共用一面
@@ -430,6 +434,8 @@ export default function ResumeDetailPreview({
       <ResumeQualityModal
         open={qualityOpen}
         resumeId={detail.id}
+        contentSignature={riskContentSignature}
+        jobId={detail.job_id ?? undefined}
         onClose={() => setQualityOpen(false)}
       />
       <ExportOptionsModal

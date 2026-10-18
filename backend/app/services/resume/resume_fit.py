@@ -2,6 +2,7 @@
 
 从 ``resume_layout.py`` 拆出：与诊断段仅通过常量与 ``_round`` 耦合。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,6 +22,14 @@ from .resume_layout import (
 from .resume_templates import font_scale_spec, format_css, template_layout_defaults
 
 # ===== 自动一页 =====
+
+# 「自动一页」的收紧下限，**与格式字段自身的下限是两件事**。
+#
+# 字段下限（``FORMAT_FIELDS["font_scale_adjust"]["min"]``）放宽到 0.35 是为了让无级
+# 字号滑块能拖到 5px；但自动一页是**程序替用户做决定**，它不该把字号缩到那种程度——
+# 那等于不打招呼地把简历变成看不清的样子。所以这里单独钉一个 0.88（标准档 ≈12.3px），
+# 与放宽之前的行为逐字一致：standard / large 仍收到 0.88，small 仍停在 1.0。
+AUTO_FIT_MIN_ADJUST = 0.88
 
 
 def _effective_layout(template: str, format_config: dict | None) -> dict[str, float]:
@@ -44,17 +53,21 @@ def _effective_layout(template: str, format_config: dict | None) -> dict[str, fl
 
 
 def font_adjust_floor(font_scale: str) -> float:
-    """字号系数能小到多少：不低于 ``MIN_FONT_PX``，且不越过格式字段自身的下限。
+    """字号系数能小到多少：不低于 ``MIN_FONT_PX``，且不越过自动一页自己的下限。
 
-    两种下限取更严的那个——档位大时是"12px"这条在管，档位小时是格式字段的 0.88 在管
-    （小字号档 12px 已经等于下限，此时系数只能是 1）。
+    两种下限取更严的那个——档位大时是"11px"这条在管，档位小时是
+    ``AUTO_FIT_MIN_ADJUST``（0.88）在管（小字号档 11px 已经等于下限，此时系数只能是 1）。
+
+    注意这里取的是 ``max(AUTO_FIT_MIN_ADJUST, 字段下限)`` 而不是直接用字段下限：
+    字段下限为了无级滑块已经放宽到 0.35，直接拿来用会让自动一页把字缩到 5px 以下。
+    两者取更严的那个，既尊重"有人把字段下限调得更严"，也不会因为放宽而变松。
     """
     from .resume_templates import _format_field
 
     spec = font_scale_spec(font_scale)
     base_px = float(spec["base_px"])
     field = _format_field("font_scale_adjust") or {}
-    field_min = float(field.get("min", 0.88))
+    field_min = max(AUTO_FIT_MIN_ADJUST, float(field.get("min", AUTO_FIT_MIN_ADJUST)))
     by_pixels = MIN_FONT_PX / base_px if base_px > 0 else 1.0
     return _round(max(field_min, min(1.0, by_pixels)), 3)
 
@@ -180,4 +193,3 @@ def fit_room_report(template: str, font_scale: str, format_config: dict | None) 
             else "当前字号档位已经接近可读下限，自动一页不会再缩小字号。"
         ),
     }
-

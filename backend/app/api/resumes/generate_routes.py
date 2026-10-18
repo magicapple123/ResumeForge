@@ -139,6 +139,7 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                         format_name=payload.options.format_name,
                         page_limit=payload.options.page_limit,
                         font_scale=payload.options.font_scale,
+                        format_config=payload.options.format_config,
                         custom_instruction=payload.options.custom_instruction,
                         coverage_notes=done_event.get("coverage_notes") or [],
                         rationale=done_event.get("rationale") or "",

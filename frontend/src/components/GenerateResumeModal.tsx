@@ -26,6 +26,7 @@ import type {
 } from "../types";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
+import { buildSectionOrderConfig, DEFAULT_RESUME_SECTION_ORDER } from "../utils/resumeSectionOrder";
 import type { ResumePreviewHandle } from "./ResumePreview";
 import GenerationConfigStage from "./generate-resume/GenerationConfigStage";
 import GenerationProgressStage from "./generate-resume/GenerationProgressStage";
@@ -138,6 +139,11 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     void fetchResumeTemplates()
       .then((catalog) => {
         setPdfDirectAvailable(catalog.pdf_direct_available);
+        // 默认板块顺序跟随「我的资料」：用户在资料页把项目拖到最前，生成出来的简历也
+        // 该是项目在前。与内置默认相同时不写 `section_order`（"没调过"与"调成和默认
+        // 一样"应当是同一种存储形态）；其它 format_config 键（夹带进来的字号系数等）保留。
+        const builtInOrder = catalog.default_section_order ?? DEFAULT_RESUME_SECTION_ORDER;
+        const profileOrder = catalog.profile_section_order ?? builtInOrder;
         // 三个参数都要重置。此前漏了 page_limit（只覆盖 template / font_scale），
         // 于是上一次选过 3 页的话，下次打开默认就是 3 页，与"默认一页 A4"相矛盾。
         setLayout((current) => ({
@@ -146,6 +152,11 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           format_name: catalog.defaults.format_name ?? "",
           font_scale: catalog.defaults.font_scale,
           page_limit: catalog.defaults.page_limit,
+          format_config: buildSectionOrderConfig(
+            profileOrder,
+            builtInOrder,
+            current.format_config ?? {},
+          ),
         }));
       })
       .catch(() => {
@@ -202,6 +213,9 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           font_scale: layout.font_scale,
           template: layout.template,
           format_name: layout.format_name,
+          // 生成时定下的版式覆盖必须跟着请求走：不然用户在配置页调的顺序 / 字号
+          // 只影响"这次预览"，关掉弹窗再从简历中心打开就变回去了。
+          format_config: layout.format_config ?? {},
           custom_instruction: customInstruction.trim(),
         },
       });

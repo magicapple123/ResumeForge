@@ -3,6 +3,41 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResumeContent } from "../types";
 import ResumeEditorModal from "./ResumeEditorModal";
+import ShortcutProvider from "../features/shortcuts/ShortcutProvider";
+import { EDITOR_FIELD_SCROLL_OPTIONS } from "./resume-editor/editorFieldScroll";
+
+/**
+ * 把测试视口切成"宽屏"：`src/test/setup.ts` 的 matchMedia 一律返回 false，所以默认
+ * 视口等价于窄屏。antd 的 `Grid.useBreakpoint` 在每次订阅时重新读 matchMedia，
+ * 因此在 render 之前替换、之后还原即可（不需要动那个全局默认值）。
+ */
+function mockWideViewport(minWidthPx = 992): () => void {
+  const original = window.matchMedia;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: (query: string) => {
+      const minWidth = /min-width:\s*(\d+)px/.exec(query);
+      return {
+        matches: minWidth ? Number(minWidth[1]) <= minWidthPx : false,
+        media: query,
+        onchange: null,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent: () => false,
+      };
+    },
+  });
+  return () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: original,
+    });
+  };
+}
 
 const CONTENT: ResumeContent = {
   photo: "",
@@ -184,5 +219,221 @@ describe("ResumeEditorModal 未保存守卫", () => {
     );
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * R11：桌面端左右两栏各自独立滚动。
+ *
+ * 整块 body 一起滚时，编辑栏可以长到几十屏，用户一改到下面的条目就再也看不到岗位要求
+ * ——而那正是他需要对照的东西。所以宽屏下 body 不滚（`overflow: hidden`），
+ * `.resume-editor-main` 与 `.resume-editor-reference` 各自滚动；窄屏回到单列整块滚。
+ */
+describe("ResumeEditorModal 双栏独立滚动（R11）", () => {
+  function bodyStyle(): CSSStyleDeclaration {
+    const body = document.querySelector<HTMLElement>(".ant-modal-body");
+    if (!body) throw new Error("弹窗 body 未渲染");
+    return body.style;
+  }
+
+  it("宽屏 + 有参考栏时 body 不滚，左右两栏的容器都在", async () => {
+    const restore = mockWideViewport();
+    try {
+      render(
+        <AntdApp>
+          <ResumeEditorModal
+            open
+            content={CONTENT}
+            referencePanel={<div>岗位参考内容</div>}
+            onClose={vi.fn()}
+            onSave={vi.fn()}
+          />
+        </AntdApp>,
+      );
+
+      // 两栏布局下 body 自己不滚（否则整块滚，参考栏一秒就滚出可视区）。
+      await waitFor(() => expect(bodyStyle().overflow).toBe("hidden"));
+      expect(document.querySelector(".resume-editor-main")).not.toBeNull();
+      expect(document.querySelector(".resume-editor-reference")).not.toBeNull();
+      // 宽屏直接展示参考内容，不走折叠面板。
+      expect(screen.getByText("岗位参考内容")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /查看岗位要求/ })).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it("没有参考栏时仍是单列，body 照旧可滚", async () => {
+    render(
+      <AntdApp>
+        <ResumeEditorModal open content={CONTENT} onClose={vi.fn()} onSave={vi.fn()} />
+      </AntdApp>,
+    );
+
+    expect(bodyStyle().overflowY).toBe("auto");
+    expect(bodyStyle().overflow).not.toBe("hidden");
+    // 单列时不渲染参考栏容器（不是渲染了但隐藏）。
+    expect(document.querySelector(".resume-editor-reference")).toBeNull();
+  });
+
+  it("窄屏有参考栏时仍是单列可滚 + 折叠面板", async () => {
+    render(
+      <AntdApp>
+        <ResumeEditorModal
+          open
+          content={CONTENT}
+          referencePanel={<div>岗位参考内容</div>}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      </AntdApp>,
+    );
+
+    // 默认测试视口（matchMedia 一律 false）就是窄屏：body 可滚、参考内容进折叠面板。
+    expect(bodyStyle().overflowY).toBe("auto");
+    expect(screen.getByRole("button", { name: /查看岗位要求/ })).toBeInTheDocument();
+  });
+
+  it("跳转字段时用「滚到中间、已可见就不滚」的选项，并把焦点交给那一栏", async () => {
+    // jsdom 没有布局，滚动本身观察不到（`scroll-into-view-if-needed` 在里面是空转），
+    // 所以这里钉两件能钉的事：选项值本身，以及"跳转真的跑到了目标字段"（焦点）。
+    expect(EDITOR_FIELD_SCROLL_OPTIONS).toMatchObject({
+      behavior: "smooth",
+      block: "center",
+      // `if-needed`：已经在可视区就别再滚，免得把用户正在看的上下文顶走。
+      scrollMode: "if-needed",
+    });
+
+    const content: ResumeContent = {
+      ...CONTENT,
+      projects: [
+        {
+          name: "预测性维护平台",
+          role: "负责人",
+          start_date: "2026.01",
+          end_date: "2026.06",
+          tech_stack: ["Python"],
+          description: ["采集设备数据"],
+          highlights: [],
+        },
+      ],
+    };
+    render(
+      <AntdApp>
+        <ResumeEditorModal
+          open
+          content={content}
+          initialTarget="projects.0.name"
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      </AntdApp>,
+    );
+
+    const field = await screen.findByLabelText("项目名称");
+    await waitFor(() => expect(field).toHaveFocus());
+    // 目标字段在编辑栏里：两栏布局下这一栏自己滚，参考栏不该跟着动。
+    expect(field.closest(".resume-editor-main")).not.toBeNull();
+  });
+});
+
+/**
+ * R16：`fillSources` 不传时这条入口**完全不渲染**。
+ *
+ * 编辑已保存简历时用户要的是改这一份，不是从资料里再抓一条进来；把入口留在那里只会让
+ * 他以为"填进来会替换"，而实际是追加一条重复项。
+ */
+describe("ResumeEditorModal 从我的资料填入（R16）", () => {
+  const FILL_SOURCES = {
+    education: [
+      {
+        key: "示例大学|软件工程|2023.09|2027.06",
+        label: "示例大学",
+        hint: "软件工程",
+        value: { school: "示例大学", major: "软件工程" },
+      },
+    ],
+    experience: [],
+    campusExperience: [],
+    projects: [],
+    skills: [],
+    awards: [],
+    summary: "资料里的个人总结",
+  };
+
+  async function openEducationTab() {
+    fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
+    // 「添加教育经历」始终存在，用它确认这一页真的挂上了（内容为空时没有字段可等）。
+    // 用正则：按钮里带图标，无障碍名会混进图标的 aria-label。
+    return screen.findByRole("button", { name: /添加教育经历/ });
+  }
+
+  it("不传 fillSources 时教育页没有任何填入入口", async () => {
+    render(
+      <AntdApp>
+        <ResumeEditorModal open content={CONTENT} onClose={vi.fn()} onSave={vi.fn()} />
+      </AntdApp>,
+    );
+
+    await openEducationTab();
+    expect(screen.queryByText("从我的资料填入")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "从我的资料选择教育经历" }),
+    ).not.toBeInTheDocument();
+    // 基本信息页的「填入个人总结」同样不该出现。
+    expect(
+      screen.queryByRole("button", { name: /从我的资料填入个人总结/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("传了 fillSources 时教育页出现候选下拉", async () => {
+    render(
+      <AntdApp>
+        <ResumeEditorModal
+          open
+          content={CONTENT}
+          fillSources={FILL_SOURCES}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      </AntdApp>,
+    );
+
+    await openEducationTab();
+    expect(
+      await screen.findByRole("combobox", { name: "从我的资料选择教育经历" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("ResumeEditorModal 快捷键（R5）", () => {
+  it("Ctrl+Z 撤回、Ctrl+Shift+Z 恢复，Ctrl+S 走同一处 form.submit()", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AntdApp>
+        <ShortcutProvider>
+          <ResumeEditorModal open content={CONTENT} onClose={vi.fn()} onSave={onSave} />
+        </ShortcutProvider>
+      </AntdApp>,
+    );
+
+    const nameInput = screen.getByLabelText("姓名");
+    fireEvent.change(nameInput, { target: { value: "李四" } });
+    expect(nameInput).toHaveValue("李四");
+
+    // 输入框里是浏览器原生的逐字撤销，页面级历史不动。
+    fireEvent.keyDown(nameInput, { key: "z", ctrlKey: true });
+    expect(nameInput).toHaveValue("李四");
+
+    // 输入框外：表单级撤回 / 恢复。
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("张三"));
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("李四"));
+
+    // 保存：与页脚「保存并更新预览」同一个 form.submit() 入口。
+    fireEvent.keyDown(window, { key: "s", ctrlKey: true });
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0][0]).toMatchObject({ name: "李四" });
   });
 });

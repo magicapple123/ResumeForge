@@ -119,7 +119,14 @@ export default function GenerationConfigStage({
       <Typography.Title level={5} style={{ marginTop: 20 }}>
         篇幅与版式
       </Typography.Title>
-      <ResumeLayoutControls layout={layout} disabled={!llmReady} onChange={setLayout} />
+      <ResumeLayoutControls
+        layout={layout}
+        disabled={!llmReady}
+        onChange={setLayout}
+        // 生成场景：默认板块顺序跟随「我的资料」里排好的顺序。预览 / 编辑已保存简历
+        // 时不传（它们读这份简历自己的 section_order，老简历外观因此不被追溯改变）。
+        preferProfileOrder
+      />
       <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
         默认 1 页 A4 +
         标准字号。生成后如果内容塞不下，可以在预览里一键增加页数或缩小字号，不必重新生成。

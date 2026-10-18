@@ -11,7 +11,7 @@
  * - AI 改写（enhanced_kept / ai_rewrite）**永不显示为已确认**——即使标注里带了
  *   verification_status="已确认"（防御性：正常链路不会带），渲染层也要压掉。
  */
-import { Space, Tag, Typography } from "antd";
+import { Collapse, Space, Tag, Typography } from "antd";
 import { useMemo } from "react";
 import { claimResponsibilityColor, claimStatusColor } from "../claims/claimPresentation";
 import { describeResumeFieldPath } from "../../utils/resumeFieldPath";
@@ -73,70 +73,89 @@ export default function EvidencePanel({ annotations, content }: Props) {
 
   if (!annotations?.length) return null;
 
+  // 默认折叠（R8）：这份说明是"想核对时再看"的辅助信息，但一段简历动辄十几条标注，
+  // 平铺展开会把预览正文挤到屏幕外。折叠成一行标题 + 条数徽标，需要时一点即开。
   return (
     <div className="resume-evidence-panel" data-testid="evidence-panel">
-      <Typography.Text strong style={{ fontSize: 13 }}>
-        内容来源说明
-      </Typography.Text>
-      <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
-        这些内容来自你的个人资料；AI 改写过的部分永远不显示为"已确认"，建议导出前过目。
-      </Typography.Paragraph>
-      <div style={{ display: "grid", gap: 8 }}>
-        {grouped.map((group) => (
-          <div key={group.section}>
-            <Typography.Text strong style={{ fontSize: 13 }}>
-              {group.title}
-            </Typography.Text>
-            <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
-              {group.items.map((annotation) => {
-                const verified = canShowVerified(annotation)
-                  ? annotation.verification_status
-                  : null;
-                return (
-                  <div
-                    key={`${annotation.path}:${annotation.origin}`}
-                    style={{ fontSize: 13, lineHeight: 1.7 }}
-                  >
-                    <Space size={6} wrap>
-                      <Typography.Text style={{ fontSize: 13 }}>
-                        {describeResumeFieldPath(annotation.path, content)}
+      <Collapse
+        size="small"
+        defaultActiveKey={[]}
+        items={[
+          {
+            key: "evidence",
+            label: (
+              <Typography.Text strong style={{ fontSize: 13 }}>
+                内容来源说明 · {annotations.length} 条
+              </Typography.Text>
+            ),
+            children: (
+              <>
+                <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+                  这些内容来自你的个人资料；AI 改写过的部分永远不显示为"已确认"，建议导出前过目。
+                </Typography.Paragraph>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {grouped.map((group) => (
+                    <div key={group.section}>
+                      <Typography.Text strong style={{ fontSize: 13 }}>
+                        {group.title}
                       </Typography.Text>
-                      <Tag
-                        color={ORIGIN_COLORS[annotation.origin] ?? "default"}
-                        style={{ marginInlineEnd: 0 }}
-                      >
-                        {ORIGIN_LABELS[annotation.origin] ?? annotation.origin}
-                      </Tag>
-                      {verified && <Tag color={claimStatusColor(verified)}>{verified}</Tag>}
-                      {annotation.responsibility && (
-                        <Tag color={claimResponsibilityColor(annotation.responsibility)}>
-                          {annotation.responsibility}
-                        </Tag>
-                      )}
-                    </Space>
-                    {annotation.source_fact && (
-                      <Typography.Paragraph
-                        type="secondary"
-                        style={{ fontSize: 12, margin: "2px 0 0" }}
-                      >
-                        依据：{annotation.source_fact}
-                      </Typography.Paragraph>
-                    )}
-                    {annotation.boundary && (
-                      <Typography.Paragraph
-                        type="secondary"
-                        style={{ fontSize: 12, margin: "2px 0 0" }}
-                      >
-                        个人边界：{annotation.boundary}
-                      </Typography.Paragraph>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
+                      <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
+                        {group.items.map((annotation) => {
+                          const verified = canShowVerified(annotation)
+                            ? annotation.verification_status
+                            : null;
+                          return (
+                            <div
+                              key={`${annotation.path}:${annotation.origin}`}
+                              style={{ fontSize: 13, lineHeight: 1.7 }}
+                            >
+                              <Space size={6} wrap>
+                                <Typography.Text style={{ fontSize: 13 }}>
+                                  {describeResumeFieldPath(annotation.path, content)}
+                                </Typography.Text>
+                                <Tag
+                                  color={ORIGIN_COLORS[annotation.origin] ?? "default"}
+                                  style={{ marginInlineEnd: 0 }}
+                                >
+                                  {ORIGIN_LABELS[annotation.origin] ?? annotation.origin}
+                                </Tag>
+                                {verified && (
+                                  <Tag color={claimStatusColor(verified)}>{verified}</Tag>
+                                )}
+                                {annotation.responsibility && (
+                                  <Tag color={claimResponsibilityColor(annotation.responsibility)}>
+                                    {annotation.responsibility}
+                                  </Tag>
+                                )}
+                              </Space>
+                              {annotation.source_fact && (
+                                <Typography.Paragraph
+                                  type="secondary"
+                                  style={{ fontSize: 12, margin: "2px 0 0" }}
+                                >
+                                  依据：{annotation.source_fact}
+                                </Typography.Paragraph>
+                              )}
+                              {annotation.boundary && (
+                                <Typography.Paragraph
+                                  type="secondary"
+                                  style={{ fontSize: 12, margin: "2px 0 0" }}
+                                >
+                                  个人边界：{annotation.boundary}
+                                </Typography.Paragraph>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

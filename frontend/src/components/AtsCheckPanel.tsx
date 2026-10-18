@@ -2,22 +2,29 @@
  *
  * 提供可选的 JD 文本输入，按 JD 抽出的关键词检查覆盖；不填 JD 时做通用关键词覆盖。
  * 结果带免责声明（本地规则估计，不代表真实 ATS 解析结果），必须展示给用户。
+ *
+ * R13 起结果不再只有一个笼统的总分：三个分项（格式/关键词/位置）+ 关键词覆盖率一起展示，
+ * 每条问题都带「建议」，并可一键复制成改进清单——用户要的是"下一步改什么"，
+ * 而不是"你得了 62 分"。
  */
-import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Empty, Input, Progress, Space, Tag, Typography } from "antd";
+import { CopyOutlined, DownloadOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Card, Empty, Input, Progress, Space, Tag, Typography } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
 import { useMemo, useRef, useState } from "react";
 import { runAtsCheck } from "../api/ats";
+import { getJob } from "../api/jobs";
 import { MAX_JOB_TEXT_CHARS } from "../config";
 import { useApi } from "../hooks/useApi";
-import type { AtsIssue, AtsIssueCategory, AtsSeverity } from "../types/ats";
+import type { AtsIssue, AtsIssueCategory, AtsKeywordHit, AtsSeverity } from "../types/ats";
+import { copyText } from "../utils/clipboard";
 import { MaxLengthHint } from "./common/MaxLengthHint";
 
-const CATEGORY_ORDER: { key: AtsIssueCategory; label: string; color: string }[] = [
-  { key: "format", label: "格式风险", color: "orange" },
-  { key: "keyword", label: "关键词覆盖", color: "blue" },
-  { key: "position", label: "信息位置", color: "purple" },
-];
+const CATEGORY_ORDER: { key: AtsIssueCategory; label: string; cardLabel: string; color: string }[] =
+  [
+    { key: "format", label: "格式", cardLabel: "格式风险", color: "orange" },
+    { key: "keyword", label: "关键词", cardLabel: "关键词覆盖", color: "blue" },
+    { key: "position", label: "位置", cardLabel: "信息位置", color: "purple" },
+  ];
 
 const SEVERITY: Record<AtsSeverity, { label: string; color: string }> = {
   high: { label: "高", color: "red" },
@@ -27,10 +34,50 @@ const SEVERITY: Record<AtsSeverity, { label: string; color: string }> = {
 
 interface Props {
   resumeId: number;
+  /**
+   * 关联岗位 id（由父组件传入）。为 undefined 时不显示「从关联岗位载入 JD」——
+   * 面板自己再去请求一次简历只为拿 id 不划算，拿不到还会多一次失败态。
+   */
+  jobId?: number;
 }
 
-export default function AtsCheckPanel({ resumeId }: Props) {
+/** 把 issues 拼成可粘贴的改进清单（标题 + 建议，按严重程度保序）。 */
+function buildImprovementList(issues: AtsIssue[]): string {
+  return issues
+    .map((issue, index) => {
+      const severity = SEVERITY[issue.severity]?.label ?? "中";
+      const head = `${index + 1}. 【${severity}】${issue.title}`;
+      const suggestion = issue.suggestion?.trim();
+      return suggestion ? `${head}\n   建议：${suggestion}` : head;
+    })
+    .join("\n");
+}
+
+/** 关键词命中：有 hits 时按出现次数降序；没有时退回旧的 matched/missing 两个数组。 */
+function keywordTags(result: {
+  keyword_hits?: AtsKeywordHit[];
+  matched_keywords: string[];
+  missing_keywords: string[];
+}): { matched: { word: string; count: number }[]; missing: string[] } {
+  const hits = result.keyword_hits ?? [];
+  if (hits.length > 0) {
+    const matched = hits
+      .filter((hit) => hit.matched)
+      .map((hit) => ({ word: hit.keyword, count: hit.count }))
+      .sort((left, right) => right.count - left.count);
+    const missing = hits.filter((hit) => !hit.matched).map((hit) => hit.keyword);
+    return { matched, missing };
+  }
+  return {
+    matched: result.matched_keywords.map((word) => ({ word, count: 0 })),
+    missing: result.missing_keywords,
+  };
+}
+
+export default function AtsCheckPanel({ resumeId, jobId }: Props) {
+  const { message } = App.useApp();
   const [jdText, setJdText] = useState("");
+  const [loadingJd, setLoadingJd] = useState(false);
   const jdTextRef = useRef("");
   const { data, loading, error, reload } = useApi(
     () => runAtsCheck(resumeId, jdTextRef.current),
@@ -40,6 +87,32 @@ export default function AtsCheckPanel({ resumeId }: Props) {
   const run = () => {
     jdTextRef.current = jdText;
     void reload();
+  };
+
+  /** 从关联岗位把 JD 拉进输入框：只填不跑，用户可以先看一眼再决定检测。 */
+  const loadJdFromJob = async () => {
+    if (!jobId) return;
+    setLoadingJd(true);
+    try {
+      const job = await getJob(jobId);
+      const combined = [job.description, job.requirements]
+        .map((part) => (part ?? "").trim())
+        .filter(Boolean)
+        .join("\n");
+      // 硬上限与后端 AtsCheckRequest.jd_text 一致，超了就是 422，这里先裁掉。
+      setJdText(combined.slice(0, MAX_JOB_TEXT_CHARS));
+    } catch {
+      message.error("岗位信息读取失败，可以手动粘贴 JD");
+    } finally {
+      setLoadingJd(false);
+    }
+  };
+
+  const copyImprovements = async () => {
+    if (!data || data.issues.length === 0) return;
+    const ok = await copyText(buildImprovementList(data.issues));
+    if (ok) message.success("改进清单已复制");
+    else message.error("复制失败，请手动选择文本");
   };
 
   const grouped = useMemo(() => {
@@ -52,21 +125,35 @@ export default function AtsCheckPanel({ resumeId }: Props) {
     return CATEGORY_ORDER.map((item) => ({ ...item, issues: map.get(item.key) ?? [] }));
   }, [data]);
 
+  const keywords = useMemo(() => (data ? keywordTags(data) : { matched: [], missing: [] }), [data]);
+
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
-      <Space.Compact style={{ width: "100%" }}>
-        <Input.TextArea
-          rows={2}
-          maxLength={MAX_JOB_TEXT_CHARS}
-          value={jdText}
-          placeholder="可选：粘贴岗位 JD 文本，按 JD 关键词检查覆盖（留空则做通用覆盖）"
-          aria-label="JD 文本"
-          onChange={(event) => setJdText(event.target.value)}
-        />
-        <Button type="primary" loading={loading} onClick={run}>
-          开始检测
-        </Button>
-      </Space.Compact>
+      <Space orientation="vertical" style={{ width: "100%" }} size="small">
+        <Space.Compact style={{ width: "100%" }}>
+          <Input.TextArea
+            rows={2}
+            maxLength={MAX_JOB_TEXT_CHARS}
+            value={jdText}
+            placeholder="可选：粘贴岗位 JD 文本，按 JD 关键词检查覆盖（留空则做通用覆盖）"
+            aria-label="JD 文本"
+            onChange={(event) => setJdText(event.target.value)}
+          />
+          <Button type="primary" loading={loading} onClick={run}>
+            开始检测
+          </Button>
+        </Space.Compact>
+        {jobId != null && (
+          <Button
+            size="small"
+            icon={<DownloadOutlined />}
+            loading={loadingJd}
+            onClick={() => void loadJdFromJob()}
+          >
+            从关联岗位载入 JD
+          </Button>
+        )}
+      </Space>
       {/* 硬上限交给 maxLength；提示统一走 MaxLengthHint（全仓禁用 antd showCount）。 */}
       <MaxLengthHint value={jdText} maxLength={MAX_JOB_TEXT_CHARS} />
 
@@ -75,14 +162,31 @@ export default function AtsCheckPanel({ resumeId }: Props) {
       {data && !loading && (
         <>
           <Alert type="info" showIcon title={data.disclaimer} />
-          <Space wrap align="center">
-            <Typography.Text strong>ATS 参考分</Typography.Text>
-            <Progress
-              type="circle"
-              size={64}
-              percent={data.score}
-              format={(value) => `${value ?? 0}`}
-            />
+          <Space wrap align="center" size="large">
+            <Space orientation="vertical" size={0} align="center">
+              <Typography.Text strong>ATS 参考分</Typography.Text>
+              <Progress
+                type="circle"
+                size={64}
+                percent={data.score}
+                format={(value) => `${value ?? 0}`}
+              />
+            </Space>
+            <Space orientation="vertical" size={4} style={{ minWidth: 180 }}>
+              {CATEGORY_ORDER.map((item) => (
+                <div key={item.key}>
+                  <Typography.Text type="secondary">{item.label}</Typography.Text>
+                  <Progress
+                    percent={data.subscores?.[item.key] ?? 0}
+                    size="small"
+                    format={(value) => `${value ?? 0}`}
+                  />
+                </div>
+              ))}
+            </Space>
+            {data.coverage_ratio != null && (
+              <Tag color="geekblue">关键词覆盖率 {Math.round(data.coverage_ratio * 100)}%</Tag>
+            )}
             {CATEGORY_ORDER.map((item) => {
               const count = data.summary?.[item.key] ?? 0;
               if (!count) return null;
@@ -92,28 +196,39 @@ export default function AtsCheckPanel({ resumeId }: Props) {
                 </Tag>
               );
             })}
+          </Space>
+
+          <Space wrap>
             <Button size="small" icon={<ReloadOutlined />} onClick={() => void reload()}>
               重新检测
             </Button>
+            <Button
+              size="small"
+              icon={<CopyOutlined />}
+              disabled={data.issues.length === 0}
+              onClick={() => void copyImprovements()}
+            >
+              复制改进清单
+            </Button>
           </Space>
 
-          {data.matched_keywords.length > 0 && (
+          {keywords.matched.length > 0 && (
             <div>
               <Typography.Text type="secondary">已命中关键词：</Typography.Text>
               <Space wrap>
-                {data.matched_keywords.map((word) => (
-                  <Tag key={word} color="green">
-                    {word}
+                {keywords.matched.map((hit) => (
+                  <Tag key={hit.word} color="green">
+                    {hit.count > 0 ? `${hit.word} ×${hit.count}` : hit.word}
                   </Tag>
                 ))}
               </Space>
             </div>
           )}
-          {data.missing_keywords.length > 0 && (
+          {keywords.missing.length > 0 && (
             <div>
               <Typography.Text type="secondary">未命中关键词：</Typography.Text>
               <Space wrap>
-                {data.missing_keywords.map((word) => (
+                {keywords.missing.map((word) => (
                   <Tag key={word}>{word}</Tag>
                 ))}
               </Space>
@@ -130,7 +245,7 @@ export default function AtsCheckPanel({ resumeId }: Props) {
                   size="small"
                   title={
                     <Space>
-                      <Typography.Text strong>{group.label}</Typography.Text>
+                      <Typography.Text strong>{group.cardLabel}</Typography.Text>
                       <Tag color={group.color}>{group.issues.length}</Tag>
                     </Space>
                   }
@@ -159,6 +274,12 @@ export default function AtsCheckPanel({ resumeId }: Props) {
                               </Tag>
                             ))}
                           </Space>
+                        )}
+                        {issue.suggestion && (
+                          <Typography.Paragraph style={{ margin: "4px 0 0" }}>
+                            <Typography.Text type="success">建议：</Typography.Text>
+                            {issue.suggestion}
+                          </Typography.Paragraph>
                         )}
                       </div>
                     ))}

@@ -62,7 +62,6 @@ import {
   layoutTop,
   moveWithin,
   resolveTargetIndex,
-  stackBottomOf,
   swapLatchOpen,
   TRAVEL_STEP_PX,
   type DragStackGeometry,
@@ -77,15 +76,14 @@ import {
 } from "../../components/profile/dragAutoScroll";
 import { captureFlipTops, playSwapFlip } from "../../components/profile/swapFlip";
 import { createSectionOrderStore } from "./sectionOrderStore";
+import { focusReorderedSection } from "./profileSectionFocus";
+import { captureSectionGeometry } from "./profileSectionGeometry";
 
 interface Options {
   editing: boolean;
   saving: boolean;
   photoReading: boolean;
 }
-
-/** 拖拽期挂在每个分区上的类（强制真实布局，见文件头说明）。 */
-const SECTION_REORDERING_CLASS = "is-section-reordering";
 
 /** `basic_info` 固定首位：分区目标插入位的下限。 */
 const SECTION_MIN_INDEX = 1;
@@ -225,51 +223,28 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
     playSwapFlip(prevTops, draggedElRef.current);
   };
 
-  /** 拖动激活时采集各分区高度（读一次 DOM，此后移动全程零 DOM 查询）。 */
+  /**
+   * 拖动激活时采集各分区高度（读一次 DOM，此后移动全程零 DOM 查询）。
+   *
+   * 实现见 `profileSectionGeometry.captureSectionGeometry`（几何模型与
+   * `content-visibility` 的处理写在那边）；这里只负责把结果灌进各 ref。
+   */
   const captureGeometry = (sectionKey: ProfileSectionKey): boolean => {
-    const elements = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-profile-section-key]"),
-    );
-    if (elements.length === 0) return false;
-    const draggedElement = elements.find(
-      (element) => element.dataset.profileSectionKey === sectionKey,
-    );
-    if (!draggedElement) return false;
-    // 拖拽期强制真实布局：离屏分区默认 `content-visibility: auto`，rect 高度会退化成
-    // `contain-intrinsic-size` 的 420px 假高度（真机实测：屏幕外分区全部 h=420，
-    // 实际 1280/880/688…）。不先把类补上就量，向下拖到视口外时几何整段错位。
-    // 这里同步补类（React 侧随后由 `reordering` prop 保持同一个类），再读 rect。
-    elements.forEach((element) => element.classList.add(SECTION_REORDERING_CLASS));
-    const rects = elements.map((element) => element.getBoundingClientRect());
-    const heightByKey = new Map<string, number>();
-    elements.forEach((element, index) => {
-      heightByKey.set(element.dataset.profileSectionKey ?? "", rects[index].height);
+    const captured = captureSectionGeometry({
+      sectionKey,
+      order: store.getOrder(),
+      pointerStartY: pointerStartRef.current?.y ?? null,
     });
-    const order = store.getOrder();
-    const heights = order.map((key) => heightByKey.get(key) ?? 0);
-
-    // 分区栈按 CSS `order` 摆放后，DOM 顺序不再等于视觉顺序：栈几何按屏幕位置算。
-    const visualRects = [...rects].sort((a, b) => a.top - b.top || a.left - b.left);
-    const gap =
-      visualRects.length >= 2
-        ? Math.max(0, visualRects[1].top - (visualRects[0].top + visualRects[0].height))
-        : 0;
-    const stackTop = visualRects[0].top;
-    // 栈底由前缀和推导（不用末项 bottom）：保证 clamp 上限与插入判定的前缀和自洽。
-    const stackBottom = stackBottomOf(stackTop, gap, heights);
-
-    const draggedRect = draggedElement.getBoundingClientRect();
-    const start = pointerStartRef.current;
-    const rawOffset = start ? start.y - draggedRect.top : draggedRect.height / 2;
-    geometryRef.current = { stackTop, stackBottom, gap, heights };
-    grabOffsetRef.current = Math.min(Math.max(rawOffset, 0), draggedRect.height);
-    draggedHeightRef.current = draggedRect.height;
+    if (captured === null) return false;
+    geometryRef.current = captured.geometry;
+    grabOffsetRef.current = captured.grabOffset;
+    draggedHeightRef.current = captured.draggedHeight;
     // 方向跟踪的起点 = 激活时的布局位置：第一次移动就能判对方向。
-    lastDesiredTopRef.current = draggedRect.top;
+    lastDesiredTopRef.current = captured.draggedTop;
     directionRef.current = 1;
     // 行程锚点 = 激活时的视觉目标位置（= 被拖卡布局上缘）。
-    travelAnchorRef.current = draggedRect.top;
-    draggedElRef.current = draggedElement;
+    travelAnchorRef.current = captured.draggedTop;
+    draggedElRef.current = captured.element;
     return true;
   };
 
@@ -466,6 +441,9 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
         return;
       }
       store.commitOrder(moveWithin(current, sourceIndex, targetIndex));
+      // 移动后把焦点送回**被移动的那个分区**（R10）：焦点收尾的完整理由与实现见
+      // `profileSectionFocus.focusReorderedSection`（下一帧执行，此时新 order 已落 DOM）。
+      focusReorderedSection(sectionKey);
     },
     [store],
   );

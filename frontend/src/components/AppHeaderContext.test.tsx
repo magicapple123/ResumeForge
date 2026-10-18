@@ -1,24 +1,32 @@
-/** 页头上下文：当前数据集名 + 头像（取自「我的资料」当前启用的照片）。 */
+/** 页头上下文：当前数据集名 + 头像（取自「我的资料」当前启用的照片）+ 新建数据集入口。 */
 
+import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import AppHeaderContext from "./AppHeaderContext";
+import { reloadPage } from "../utils/navigation";
 import baseStyles from "../styles/base.css?inline";
 
 const listDatasets = vi.fn();
 const activateDataset = vi.fn();
+const createDataset = vi.fn();
 const getProfile = vi.fn();
+const saveActiveDatasetId = vi.fn();
 
 vi.mock("../api/settings", () => ({
   listDatasets: () => listDatasets(),
   activateDataset: (id: string) => activateDataset(id),
+  createDataset: (name: string) => createDataset(name),
 }));
 vi.mock("../api/profile", () => ({
   getProfile: () => getProfile(),
 }));
 vi.mock("../utils/navigation", () => ({
   reloadPage: vi.fn(),
+}));
+vi.mock("../utils/datasetScope", () => ({
+  saveActiveDatasetId: (id: string | null | undefined) => saveActiveDatasetId(id),
 }));
 
 function LocationProbe() {
@@ -29,17 +37,30 @@ function LocationProbe() {
 function renderHeader() {
   return render(
     <MemoryRouter>
-      <AppHeaderContext />
-      <LocationProbe />
+      <AntdApp>
+        <AppHeaderContext />
+        <LocationProbe />
+      </AntdApp>
     </MemoryRouter>,
   );
+}
+
+/** 打开数据集下拉并点「新建数据集…」，返回名称输入框。 */
+async function openCreateModal() {
+  fireEvent.click(await screen.findByRole("button", { name: "当前数据集：工作数据" }));
+  fireEvent.click(await screen.findByText("新建数据集…"));
+  return screen.findByLabelText("数据集名称");
 }
 
 beforeEach(() => {
   listDatasets.mockReset();
   activateDataset.mockReset();
+  createDataset.mockReset();
   getProfile.mockReset();
+  saveActiveDatasetId.mockReset();
+  vi.mocked(reloadPage).mockReset();
   activateDataset.mockResolvedValue(undefined);
+  window.localStorage.clear();
 });
 
 afterEach(cleanup);
@@ -189,5 +210,91 @@ describe("AppHeaderContext", () => {
     fireEvent.click(screen.getByRole("button", { name: "当前数据集：我的数据" }));
     await waitFor(() => expect(screen.getByText("我的数据（当前）")).toBeInTheDocument());
     expect(screen.queryByText("回到我的数据")).toBeNull();
+  });
+});
+
+describe("AppHeaderContext 新建数据集（R4）", () => {
+  const CURRENT = { id: "a", name: "工作数据", is_active: true };
+  const CREATED = { id: "b", name: "面试练习", source: "本机", is_active: false };
+
+  beforeEach(() => {
+    listDatasets.mockResolvedValue([CURRENT]);
+    getProfile.mockResolvedValue({ name: "张示例", photo: "" });
+  });
+
+  it("下拉菜单末尾有「新建数据集…」，点击只开弹窗，不切换数据集", async () => {
+    renderHeader();
+
+    const nameInput = await openCreateModal();
+
+    expect(nameInput).toBeInTheDocument();
+    expect(activateDataset).not.toHaveBeenCalled();
+  });
+
+  it("创建成功后刷新列表，确认「立即切换」会 activate + 落盘 active id 并重载", async () => {
+    listDatasets.mockResolvedValueOnce([CURRENT]).mockResolvedValue([CURRENT, CREATED]);
+    createDataset.mockResolvedValue(CREATED);
+    renderHeader();
+
+    const nameInput = await openCreateModal();
+    fireEvent.change(nameInput, { target: { value: " 面试练习 " } });
+    fireEvent.click(screen.getByRole("button", { name: /新\s*建/ }));
+
+    // 名称 trim 后再提交。
+    await waitFor(() => expect(createDataset).toHaveBeenCalledWith("面试练习"));
+    // antd 会把确认框标题渲染两份（.ant-modal-title 与 .ant-modal-confirm-title）。
+    expect((await screen.findAllByText(/已新建「面试练习」/)).length).toBeGreaterThan(0);
+
+    fireEvent.click(await screen.findByRole("button", { name: /立即切换/ }));
+
+    await waitFor(() => expect(activateDataset).toHaveBeenCalledWith("b"));
+    expect(saveActiveDatasetId).toHaveBeenCalledWith("b");
+    await waitFor(() => expect(reloadPage).toHaveBeenCalled());
+
+    // 列表刷新后新数据集出现在下拉里。
+    fireEvent.click(screen.getByRole("button", { name: "当前数据集：工作数据" }));
+    expect(await screen.findByText("面试练习")).toBeInTheDocument();
+  });
+
+  it("取消「稍后」只关闭询问，不切换数据集", async () => {
+    listDatasets.mockResolvedValueOnce([CURRENT]).mockResolvedValue([CURRENT, CREATED]);
+    createDataset.mockResolvedValue(CREATED);
+    renderHeader();
+
+    const nameInput = await openCreateModal();
+    fireEvent.change(nameInput, { target: { value: "面试练习" } });
+    fireEvent.click(screen.getByRole("button", { name: /新\s*建/ }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /稍\s*后/ }));
+
+    // 不打断言弹窗"消失"（jsdom 等不到 antd 的离场动画），只断行为：什么都没发生。
+    await waitFor(() => expect(createDataset).toHaveBeenCalledWith("面试练习"));
+    expect(activateDataset).not.toHaveBeenCalled();
+    expect(saveActiveDatasetId).not.toHaveBeenCalledWith("b");
+    expect(reloadPage).not.toHaveBeenCalled();
+  });
+
+  it("名称为空时提示且不发请求", async () => {
+    renderHeader();
+
+    const nameInput = await openCreateModal();
+    fireEvent.change(nameInput, { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: /新\s*建/ }));
+
+    expect(await screen.findByText("请填写数据集名称")).toBeInTheDocument();
+    expect(createDataset).not.toHaveBeenCalled();
+  });
+
+  it("重名时展示后端返回的原文", async () => {
+    createDataset.mockRejectedValue(new Error("数据集名称已存在"));
+    renderHeader();
+
+    const nameInput = await openCreateModal();
+    fireEvent.change(nameInput, { target: { value: "面试练习" } });
+    fireEvent.click(screen.getByRole("button", { name: /新\s*建/ }));
+
+    expect(await screen.findByText("数据集名称已存在")).toBeInTheDocument();
+    // 失败后弹窗仍开着，用户可以改名重试。
+    expect(screen.getByLabelText("数据集名称")).toBeInTheDocument();
   });
 });

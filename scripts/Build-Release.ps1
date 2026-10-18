@@ -124,6 +124,7 @@ $RequiredFiles = @(
     "backend/app/prompts/resume_star.md",
     "backend/app/prompts/resume_suggestions.md",
     "backend/app/prompts/resume_translate.md",
+    "backend/app/prompts/selection_polish.md",
     "backend/app/prompts/web_form_match.md",
     "backend/app/services/feature_catalog.py",
     "backend/app/templates/resume.html.j2",

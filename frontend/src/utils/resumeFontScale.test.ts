@@ -13,6 +13,7 @@ import {
   fontTiers,
   layoutForFontPx,
   layoutToFontPx,
+  MIN_FONT_PX,
   tierByName,
   withFontAdjust,
 } from "./resumeFontScale";
@@ -70,8 +71,14 @@ describe("fontTiers", () => {
 });
 
 describe("fontPxBounds", () => {
-  it("范围取所有档位基准像素的最小 / 最大", () => {
-    expect(fontPxBounds(TIERS)).toEqual({ min: 11, max: 18 });
+  it("下限是可打印下限 5px，上限取最大档位基准像素", () => {
+    // 下限不再是"最小档基准"：滑块要能拖到 5px，低于这个数就没有打印意义了。
+    expect(MIN_FONT_PX).toBe(5);
+    expect(fontPxBounds(TIERS)).toEqual({ min: 5, max: 18 });
+  });
+
+  it("档位表为空时同样从 5px 起", () => {
+    expect(fontPxBounds([])).toEqual({ min: 5, max: 18 });
   });
 });
 
@@ -137,14 +144,23 @@ describe("layoutForFontPx", () => {
     });
   });
 
-  it("整段范围内的系数都落在后端 [0.88, 1.16] 内（越界会被后端静默丢弃）", () => {
-    for (let px = 11; px <= 18 + 1e-9; px = Math.round((px + 0.1) * 10) / 10) {
+  it("整段范围内的系数都落在后端 [0.35, 1.16] 内（越界会被后端静默丢弃）", () => {
+    for (let px = 5; px <= 18 + 1e-9; px = Math.round((px + 0.1) * 10) / 10) {
       const next = layoutForFontPx(layout(), px, TIERS);
       const adjust = next.format_config?.[FONT_SCALE_ADJUST_KEY];
       if (adjust === undefined) continue;
-      expect(Number(adjust)).toBeGreaterThanOrEqual(0.88);
+      expect(Number(adjust)).toBeGreaterThanOrEqual(0.35);
       expect(Number(adjust)).toBeLessThanOrEqual(1.16);
     }
+  });
+
+  it("拖到 5px：落到最小档 + 系数 5/11≈0.455（后端字段下限已放宽到 0.35）", () => {
+    const next = layoutForFontPx(layout(), 5, TIERS);
+    expect(next.font_scale).toBe("small");
+    expect(next.format_config?.[FONT_SCALE_ADJUST_KEY]).toBe(0.455);
+    // 0.35 本身必须写得出去：字段下限与滑块下限只差一点点余量，一旦不同步，
+    // 拖到底的系数就会被后端静默丢掉。
+    expect(layoutForFontPx(layout(), 4, TIERS).font_scale).toBe("small");
   });
 
   it("超出范围的值被夹到边界，不会发出后端会丢弃的系数", () => {
@@ -152,7 +168,11 @@ describe("layoutForFontPx", () => {
       font_scale: "large",
       format_config: {},
     });
-    expect(layoutForFontPx(layout(), 1, TIERS)).toMatchObject({ font_scale: "small" });
+    // 4.9px 夹到 5px：最近档仍是最小档，系数是 5/11 而不是 4.9/11。
+    expect(layoutForFontPx(layout(), 4.9, TIERS)).toMatchObject({
+      font_scale: "small",
+      format_config: { [FONT_SCALE_ADJUST_KEY]: 0.455 },
+    });
   });
 });
 

@@ -15,7 +15,12 @@ FORMAT_FIELDS: tuple[dict, ...] = (
         "key": "font_scale_adjust",
         "label": "字号系数",
         "type": "number",
-        "min": 0.88,
+        # 下限 0.35：无级字号滑块允许小到 5px（最小档 11px 时系数 5/11≈0.455），
+        # 所以字段范围必须能装下它，否则用户拖到 5px 会被 `validated_format_config`
+        # 静默丢弃——存下来却不是他调的那个字号，是最难被发现的一类失败。
+        # **自动一页仍然只到 0.88**（见 `resume_fit.AUTO_FIT_MIN_ADJUST`），
+        # 放宽字段范围不等于让自动一页把字缩到看不清。
+        "min": 0.35,
         "max": 1.16,
         "step": 0.02,
         "description": "在所选字号档位上再乘一个系数",

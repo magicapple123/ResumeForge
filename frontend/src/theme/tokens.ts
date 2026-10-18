@@ -103,4 +103,11 @@ export const layer = {
   orb: 3650,
   /** 悬浮球身 Tooltip 的例外抬层（高于球身）。 */
   orbTooltip: 3700,
+  /**
+   * 全局 AI 润色的按钮与卡片。必须盖住**承载输入框的那一层**：简历编辑器 3110、
+   * 单层 Modal/Drawer 3200、Drawer 内嵌 Modal 3300——否则按钮会被它正要服务的那张
+   * 弹窗盖住。取投投族最高层（orbTooltip 3700）+10；仍低于 antd message（4110）
+   * 与 notification（4150），toast 照常压在上面。
+   */
+  aiPolish: 3710,
 } as const;

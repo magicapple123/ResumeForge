@@ -137,8 +137,8 @@ describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
       font_scale: "standard",
       format_config: { font_scale_adjust: expect.any(Number) },
     });
-    // 14px 上调 3 格 → 14.3px，系数 14.3 / 14 ≈ 1.021。
-    expect(Number(onChange.mock.calls[0][0].format_config.font_scale_adjust)).toBeCloseTo(1.021, 2);
+    // 14px 上调 3 格（每格 0.5px）→ 15.5px，最近档仍是标准档，系数 15.5 / 14 ≈ 1.107。
+    expect(Number(onChange.mock.calls[0][0].format_config.font_scale_adjust)).toBeCloseTo(1.107, 2);
   });
 
   it("从大字号往下拖会就近落到标准档并带小于 1 的系数", async () => {
@@ -147,8 +147,8 @@ describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
     });
     const slider = await screen.findByRole("slider");
 
-    // 18px 往下 43 格 → 13.7px，最近档是标准档（14），系数 13.7 / 14 ≈ 0.979（< 1）。
-    for (let i = 0; i < 43; i += 1) pressArrow(slider, "ArrowLeft");
+    // 18px 往下 9 格（每格 0.5px）→ 13.5px，最近档是标准档（14），系数 13.5 / 14 ≈ 0.964。
+    for (let i = 0; i < 9; i += 1) pressArrow(slider, "ArrowLeft");
 
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
     expect(onChange.mock.calls[0][0]).toMatchObject({ font_scale: "standard" });
@@ -196,6 +196,147 @@ describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
     });
     expect(onChange.mock.calls[0][0].format_config).not.toHaveProperty("font_scale_adjust");
     expect(setLiveProbe).toHaveBeenCalledWith("");
+  });
+});
+
+describe("ResumeLayoutControls · 字号下限 5px（R7）", () => {
+  it("滑块的范围是 5 ~ 最大档位基准像素，步长 0.5", async () => {
+    renderControls();
+    const slider = await screen.findByRole("slider");
+    const tiers = TEMPLATE_CATALOG.font_scales;
+    const maxBasePx = Math.max(...tiers.map((tier) => tier.base_px));
+    expect(slider).toHaveAttribute("aria-valuemin", "5");
+    expect(slider).toHaveAttribute("aria-valuemax", String(maxBasePx));
+  });
+
+  it("字号低于 8px 时在读数旁提示打印可能看不清", async () => {
+    // 11px × 0.5 = 5.5px：直接构造一个"已经很小"的版式，不必靠按 13 次方向键。
+    renderControls({
+      layout: {
+        ...DEFAULT_LAYOUT,
+        font_scale: "small",
+        format_config: { font_scale_adjust: 0.5 },
+      },
+    });
+
+    expect(await screen.findByText(/小于 8px 打印可能看不清/)).toBeInTheDocument();
+  });
+
+  it("正常字号不显示这条警告（提示只在真的偏小时出现）", async () => {
+    renderControls();
+    await screen.findByRole("slider");
+    expect(screen.queryByText(/小于 8px 打印可能看不清/)).not.toBeInTheDocument();
+  });
+});
+
+describe("ResumeLayoutControls · 生成时默认顺序跟随「我的资料」（R6）", () => {
+  /** 资料页把「项目经历」拖到最前的那种顺序（与内置默认不同）。 */
+  const PROFILE_ORDER = [
+    "projects",
+    "education",
+    "summary",
+    "experience",
+    "campus_experience",
+    "skills",
+    "awards",
+  ];
+
+  function mockCatalog(profileOrder: string[]) {
+    apiMocks.fetchResumeTemplates.mockResolvedValue({
+      ...TEMPLATE_CATALOG,
+      profile_section_order: profileOrder,
+    });
+  }
+
+  async function openOrderPanel() {
+    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
+    return screen.findByRole("list", { name: "简历板块顺序" });
+  }
+
+  it("preferProfileOrder 时默认顺序取资料顺序", async () => {
+    mockCatalog(PROFILE_ORDER);
+    renderControls({ preferProfileOrder: true });
+
+    const list = await openOrderPanel();
+    const labels = Array.from(list.querySelectorAll(".resume-section-order-label")).map(
+      (node) => node.textContent,
+    );
+    expect(labels[0]).toBe("项目经历");
+    // 跟随资料顺序时，没调过就不该标成"已调整"。
+    expect(screen.getByRole("button", { name: "调整简历板块顺序" })).not.toHaveTextContent(
+      "顺序·已调整",
+    );
+  });
+
+  it("不传 preferProfileOrder 时仍用内置默认（老简历外观不追溯改变）", async () => {
+    mockCatalog(PROFILE_ORDER);
+    renderControls();
+
+    const list = await openOrderPanel();
+    const labels = Array.from(list.querySelectorAll(".resume-section-order-label")).map(
+      (node) => node.textContent,
+    );
+    expect(labels[0]).toBe("个人总结");
+  });
+
+  it("生成场景的「恢复默认」写回资料顺序", async () => {
+    mockCatalog(PROFILE_ORDER);
+    const onChange = renderControls({
+      preferProfileOrder: true,
+      layout: {
+        ...DEFAULT_LAYOUT,
+        format_config: {
+          accent: "#123456",
+          section_order: [
+            "skills",
+            "awards",
+            "summary",
+            "education",
+            "experience",
+            "campus_experience",
+            "projects",
+          ],
+        },
+      },
+    });
+
+    await openOrderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const nextLayout = onChange.mock.calls[0][0] as ResumeLayout;
+    // 资料顺序与内置默认不同 → 显式写进 format_config，用户才真的回到他看到的那一版。
+    expect(nextLayout.format_config?.section_order).toEqual(PROFILE_ORDER);
+    // 其它覆盖不被这次操作清掉。
+    expect(nextLayout.format_config).toMatchObject({ accent: "#123456" });
+  });
+
+  it("资料顺序等于内置默认时「恢复默认」不写 section_order", async () => {
+    mockCatalog(TEMPLATE_CATALOG.default_section_order);
+    const onChange = renderControls({
+      preferProfileOrder: true,
+      layout: {
+        ...DEFAULT_LAYOUT,
+        format_config: {
+          section_order: [
+            "projects",
+            "summary",
+            "education",
+            "experience",
+            "campus_experience",
+            "skills",
+            "awards",
+          ],
+        },
+      },
+    });
+
+    await openOrderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
+
+    const nextLayout = onChange.mock.calls[0][0] as ResumeLayout;
+    // "没调过"与"调成和默认一样"在存储里应当是同一种形态。
+    expect(nextLayout.format_config).not.toHaveProperty("section_order");
   });
 });
 

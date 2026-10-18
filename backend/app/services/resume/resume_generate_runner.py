@@ -45,7 +45,6 @@ from ...services.claims import build_baseline
 from ...services.llm import create_provider
 from ...services.llm.base import LLMError
 from ...services.llm.client_pool import aclose_clients_for_current_loop
-from ...services.llm.usage import summarize_usages
 from ...services.profile.profile_service import get_profile_detail, to_profile_out
 from ...services.resume.resume_generator import ResumeGenerator
 from ...services.resume.resume_task_state import (
@@ -54,6 +53,7 @@ from ...services.resume.resume_task_state import (
     set_cancelled,
 )
 from ...services.settings_service import get_llm_config
+from .resume_generate_support import log_generation_usage
 from .resume_runner_loop import RunnerEventLoopHandle
 
 logger = logging.getLogger(__name__)
@@ -365,6 +365,7 @@ class ResumeGenerateRunner:
                     format_name=options.format_name,
                     page_limit=options.page_limit,
                     font_scale=options.font_scale,
+                    format_config=options.format_config,
                     custom_instruction=options.custom_instruction,
                     coverage_notes=coverage_notes,
                     rationale=rationale,
@@ -432,29 +433,8 @@ class ResumeGenerateRunner:
         *,
         estimated_prompt_tokens: int | None,
     ) -> None:
-        """多段用量汇总日志（审计 PR-07-6，RF-14 §2.2-5）。
-
-        主生成 / 格式修复 / 质量重试 / 失败与取消轮次的用量在
-        ``generator.usage_records`` 里逐段收集（假 Provider 缺该属性时容忍），
-        这里合并为一条总口径。token 缺失保留 None（「未知」，不伪造 0）；
-        estimated_* 遥测只在估算开启时存在。
-        """
-        records = list(getattr(generator, "usage_records", None) or [])
-        summary = summarize_usages(records)
-        if summary is None:
-            return
-        fields = [
-            f"model={summary['model']}",
-            f"prompt_tokens={summary['prompt_tokens']}",
-            f"completion_tokens={summary['completion_tokens']}",
-            f"total_tokens={summary['total_tokens']}",
-            f"elapsed_ms={summary['elapsed_ms']}",
-            f"finish_reason={summary['finish_reason']}",
-            f"retries={summary['retries']}",
-        ]
-        if estimated_prompt_tokens is not None:
-            fields.append(f"estimated_prompt_tokens={estimated_prompt_tokens}")
-        logger.info("简历生成任务模型用量 task_id=%s %s", task_id, " ".join(fields))
+        """多段用量汇总日志；实现搬在 ``resume_generate_support.py``（薄委托保留锚点）。"""
+        log_generation_usage(task_id, generator, estimated_prompt_tokens=estimated_prompt_tokens)
 
     def _finalize(
         self, session: Any, task: ResumeGenerateTask, status: str, error: str = ""

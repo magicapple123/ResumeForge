@@ -9,11 +9,27 @@ import {
 } from "@ant-design/icons";
 import { Tooltip, Typography } from "antd";
 import { memo } from "react";
-import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { SECTION_LABELS } from "./ProfileSectionConfig";
 import type { ProfileSectionKey } from "./ProfileSectionConfig";
 
 export type { ProfileSectionKey } from "./ProfileSectionConfig";
+
+/**
+ * 视觉隐藏但读屏可读（sr-only 的内联等价物）：只给 aria-live 播报用的文本，
+ * 不新增全局样式文件（R10）。
+ */
+const VISUALLY_HIDDEN_STYLE: CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
 
 export type ProfileSectionPointerDownHandler = (
   event: ReactPointerEvent<HTMLButtonElement>,
@@ -151,9 +167,26 @@ export const SortableProfileSection = memo(function SortableProfileSection({
       }${collapsed ? " is-collapsed" : ""}${dragging ? " is-dragging" : ""}`}
       style={{ order }}
       data-profile-section-key={sectionKey}
+      // 可编程聚焦的落点（R10）：移动后焦点优先给拖动把手，没有把手的分区（basic_info）
+      // 落到这里。-1 表示不进入 tab 序，只接受脚本 focus()。
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        // 只处理**根节点自身**上的方向键：分区内容里文本框的 ArrowUp/Down 必须保持
+        // 原有语义（移动光标），把手也已有同名处理，事件冒泡上来不能二次触发换位。
+        if (event.target !== event.currentTarget) return;
+        if (sectionKey === "basic_info") return;
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+        event.preventDefault();
+        onMoveByOffset(sectionKey, event.key === "ArrowUp" ? -1 : 1);
+      }}
     >
       {editable && sectionKey !== "basic_info" && (
         <>
+          {/* 键盘换位没有视觉反馈的替代品：读屏用户需要被告知"现在排第几"。
+              内容随 order 变化而变化，aria-live 才会播报（挂载时的初始内容不播报）。 */}
+          <span role="status" aria-live="polite" style={VISUALLY_HIDDEN_STYLE}>
+            {`${SECTION_LABELS[sectionKey]} 已移到第 ${order + 1} 位`}
+          </span>
           <SectionNudgeButtons
             sectionKey={sectionKey}
             canMoveUp={canMoveUp}

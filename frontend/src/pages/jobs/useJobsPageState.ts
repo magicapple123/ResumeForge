@@ -1,6 +1,6 @@
 /** JobsPage 的状态层：筛选/分页/详情 job_id 的 URL 状态化，以及由它驱动的列表查询。 */
 import { App } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getJob, listJobs } from "../../api/jobs";
 import { useApi } from "../../hooks/useApi";
@@ -26,7 +26,14 @@ export function useJobsPageState() {
   // 操作）通过返回的 setDetailJob 更新它。详情必须是 getJob 的**全量**那份——列表项
   // 已不带 JD 全文（JobList），直接复用会让抽屉空着一份岗位描述。
   const [detailJob, setDetailJob] = useState<Job | null>(null);
-  const [openedLinkedJobId, setOpenedLinkedJobId] = useState<number | null>(null);
+  // 已发起过详情请求的 job_id：防止 jobs 重载时重复拉取。用 ref 而不是 state，是因为
+  // 它只在 effect 内部被读写，变成 state 会让"清空锁存允许重试"和 effect 依赖互相触发。
+  const openedLinkedJobId = useRef<number | null>(null);
+  // 详情请求序号：只接受**最后一次**请求的结果。快速 A→B 时，A 的慢响应不能覆盖 B。
+  const detailRequestSeq = useRef(0);
+  // 显式重试信号：只有用户动作（打开详情）会递增它，effect 因此永远不会自我重触发。
+  // 失败时锁存已被清空，这一次递增就是"再试一次"的唯一入口（R2）。
+  const [detailRequestTick, setDetailRequestTick] = useState(0);
 
   const linkedJobId = Number(searchParams.get("job_id")) || null;
   const collectTaskIdsKey = searchParams.get("collect_task_ids") ?? "";
@@ -87,9 +94,14 @@ export function useJobsPageState() {
 
   // 详情与 ?job_id= 同步：打开详情只写 URL（可分享/刷新后恢复），岗位本体由下面的
   // effect 统一经 getJob 拉全量——列表项已瘦身（JobList），这里不再直接复用。
+  //
+  // R2：**不能无条件清空 detailJob**。双击同一行（或重新点开刚看过的岗位）时，清空会
+  // 让抽屉空着，而 effect 又因为 job_id 没变、锁存仍是该 id 而不重新拉取——于是详情永远
+  // 不出现。只有换成**另一个**岗位时才清空（避免把上一个岗位的内容当成新的显示）。
   const openDetail = useCallback(
     (job: Pick<JobList, "id">) => {
-      setDetailJob(null);
+      if (detailJob?.id !== job.id) setDetailJob(null);
+      setDetailRequestTick((tick) => tick + 1);
       setSearchParams(
         (previous) => {
           const next = new URLSearchParams(previous);
@@ -99,10 +111,14 @@ export function useJobsPageState() {
         { replace: true },
       );
     },
-    [setSearchParams],
+    [detailJob?.id, setSearchParams],
   );
 
   const closeDetail = useCallback(() => {
+    // 作废所有在途请求：关闭之后它们的结果不该再写回抽屉。
+    detailRequestSeq.current += 1;
+    // 清空锁存，否则再次打开同一个岗位时 effect 会因为 id 相同而跳过拉取。
+    openedLinkedJobId.current = null;
     setDetailJob(null);
     setSearchParams(
       (previous) => {
@@ -115,16 +131,24 @@ export function useJobsPageState() {
   }, [setSearchParams]);
 
   // 从 ?job_id= 恢复详情：统一走 getJob 单取全量（列表项已瘦身，不带 JD 全文）。
-  // openedLinkedJobId 标记防止重复拉取——锁存与条件拉取耦合，按书面理由豁免 Compiler 规则。
-  /* eslint-disable react-hooks/set-state-in-effect */
+  // openedLinkedJobId 标记防止重复拉取（jobs 每次重载都是新对象，没有这个锁存就会重复请求）。
   useEffect(() => {
-    if (!linkedJobId || openedLinkedJobId === linkedJobId || loading) return;
-    setOpenedLinkedJobId(linkedJobId);
+    if (!linkedJobId || loading) return;
+    if (openedLinkedJobId.current === linkedJobId) return;
+    openedLinkedJobId.current = linkedJobId;
+    const seq = (detailRequestSeq.current += 1);
     void getJob(linkedJobId)
-      .then(setDetailJob)
-      .catch((err) => message.error(err instanceof Error ? err.message : "岗位不存在或已被删除"));
-  }, [jobs, linkedJobId, loading, message, openedLinkedJobId]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+      .then((job) => {
+        if (seq !== detailRequestSeq.current) return;
+        setDetailJob(job);
+      })
+      .catch((err) => {
+        if (seq !== detailRequestSeq.current) return;
+        // 失败不锁死：清空锁存，用户再点一次这一行（或重新点开）就会重新拉取。
+        openedLinkedJobId.current = null;
+        message.error(err instanceof Error ? err.message : "岗位不存在或已被删除");
+      });
+  }, [detailRequestTick, jobs, linkedJobId, loading, message]);
 
   return {
     keyword,

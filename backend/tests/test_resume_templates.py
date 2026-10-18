@@ -1,4 +1,5 @@
 """简历模板体系：内置样式、格式模板校验、用户自制模板的清洗与渲染。"""
+
 import pytest
 from app.database import SessionLocal
 from app.services.exporter import render_html
@@ -212,7 +213,8 @@ def test_user_style_template_crud_and_render(client, db_session):
 
     # 重名拒绝：名称是选择模板时的唯一标识。
     duplicate = client.post(
-        "/api/resume-templates", json={"name": "我的深色模板", "kind": "style", "html": CUSTOM_STYLE}
+        "/api/resume-templates",
+        json={"name": "我的深色模板", "kind": "style", "html": CUSTOM_STYLE},
     )
     assert duplicate.status_code == 400
 
@@ -285,7 +287,12 @@ def test_layout_update_stores_custom_name_and_ignores_unknown(client):
 
     patched = client.patch(
         f"/api/resumes/{record_id}/layout",
-        json={"template": "我的深色模板", "format_name": "不存在", "page_limit": 2, "font_scale": "small"},
+        json={
+            "template": "我的深色模板",
+            "format_name": "不存在",
+            "page_limit": 2,
+            "font_scale": "small",
+        },
     )
     assert patched.status_code == 200
     assert patched.json()["template"] == "我的深色模板"
@@ -353,3 +360,71 @@ def test_generating_with_a_custom_style_keeps_its_name(client, monkeypatch):
         # 内置模板名仍然规范化，未知名字才退回默认内置模板。
         assert resolved_style_name(db, "modern") == "modern"
         assert resolved_style_name(db, "不存在的模板") == "classic"
+
+
+# ===== R6/R7：生成界面的默认顺序跟随「我的资料」，字号下限放宽到 5px =====
+
+
+def test_font_scale_adjust_lower_bound_matches_the_five_pixel_slider():
+    """字段下限 0.35 必须能装下"最小档 11px 拖到 5px"（5/11≈0.455）。
+
+    下限留在 0.88 时，用户把滑块拖到 5px 会被 ``validated_format_config`` **静默丢弃**：
+    存下来的是他没调过的字号，而界面上滑块停在 5px——最典型的一类"看不见的错"。
+    """
+    from app.services.resume.resume_template_format import format_field_options
+    from app.services.resume.resume_templates import FORMAT_FIELD_KEYS, _format_field
+
+    field = _format_field("font_scale_adjust")
+    assert field is not None
+    assert field["min"] == 0.35
+    # 上限与步长不动：滑块只放宽了"更小"这一个方向。
+    assert field["max"] == 1.16
+    assert field["step"] == 0.02
+
+    # 5px / 最小档 11px ≈ 0.455 必须能落库，且渲染时真的参与计算。
+    assert validated_format_config({"font_scale_adjust": 0.455}) == {"font_scale_adjust": 0.455}
+    assert validated_format_config({"font_scale_adjust": 0.35}) == {"font_scale_adjust": 0.35}
+    # 再小就越界：字段范围不是"无下限"。
+    assert validated_format_config({"font_scale_adjust": 0.34}) == {}
+
+    # 目录下发的选项也要是同一个数：前端读的是这一份。
+    option = next(item for item in format_field_options() if item["key"] == "font_scale_adjust")
+    assert option["min"] == 0.35
+    assert "font_scale_adjust" in FORMAT_FIELD_KEYS
+
+    # 不只是"能存"：这个系数真的参与渲染。最小档 11px × 0.455 = 5.005px ≈ 滑块最左端，
+    # 这正是"拖到 5px"在纸面上兑现的地方。
+    html = render_html(
+        sample_resume_content(), font_scale="small", format_config={"font_scale_adjust": 0.455}
+    )
+    assert "--fs: calc(5.0px * var(--fit-scale, 1));" in html
+
+
+def test_templates_catalog_exposes_profile_section_order(client):
+    """`GET /templates` 额外下发 `profile_section_order`，而 `default_section_order` 不变。
+
+    两者刻意分开：`default_section_order` 是"内置默认"，已保存简历在没有自己的
+    `section_order` 时读的是它；跟着资料页一起变，等于让一次拖动悄悄改掉用户已经导出过的
+    简历。所以这里既断言新字段跟着资料走，也断言老字段**逐字不变**。
+    """
+    from app.services.resume.resume_sections import DEFAULT_SECTION_ORDER
+
+    # 把「项目经历」拖到教育前面：资料页的顺序就是生成界面的默认顺序。
+    updated = client.put(
+        "/api/profile",
+        json={"section_order": ["basic_info", "projects", "educations", "summary"]},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["section_order"][:3] == ["basic_info", "projects", "educations"]
+
+    catalog = client.get("/api/resumes/templates")
+    assert catalog.status_code == 200
+    body = catalog.json()
+    # 用户动过的那几项按资料顺序排在最前，其余由归一化补在后面（完整排列）。
+    assert body["profile_section_order"][:3] == ["projects", "education", "summary"]
+    assert sorted(body["profile_section_order"]) == sorted(DEFAULT_SECTION_ORDER)
+    assert len(body["profile_section_order"]) == len(DEFAULT_SECTION_ORDER)
+    # 页眉（basic_info）不参与正文排序。
+    assert "basic_info" not in body["profile_section_order"]
+    # 老字段逐字不变——它是"老简历外观不追溯改变"的那条承诺。
+    assert body["default_section_order"] == list(DEFAULT_SECTION_ORDER)
