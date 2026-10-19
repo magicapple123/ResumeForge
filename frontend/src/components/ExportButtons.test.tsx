@@ -1,19 +1,20 @@
 /**
- * 导出按钮组：重点是"正文还有未完成标记"（409）那条分支。
+ * 导出入口：全页面只有一个「导出」按钮，点击打开统一面板。
  *
- * 这条分支有两件事必须同时成立：拦下时要**说清原因并给出去路**，用户点了"我去改简历"
- * 之后**不能再偷偷导出**。两头都错得很隐蔽——前者变成导出失败的死路，后者变成
- * 用户以为没导出、其实草稿已经下载了。
+ * 这里只钉"入口形态"与"参数同源"两件事：以前是「下载 PDF」+「更多格式」两个入口、
+ * 预览页另有「导出选项」「一键脱敏」，四条路径各自拼参数；漏一条就会出现"预览里调过的
+ * 字号没进导出"。面板内部的行为（格式多选、脱敏、409 草稿闸门）在
+ * `ExportOptionsModal.test.tsx` 里。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../api/client";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ResumeLayout } from "../types";
 import ExportButtons from "./ExportButtons";
 
 const apiMocks = vi.hoisted(() => ({
-  exportResume: vi.fn(),
-  fetchResumeHtml: vi.fn(),
+  exportResumeWithOptions: vi.fn(),
+  redactResume: vi.fn(),
 }));
 
 const downloadMocks = vi.hoisted(() => ({
@@ -24,111 +25,54 @@ const downloadMocks = vi.hoisted(() => ({
 vi.mock("../api/resumes", () => apiMocks);
 vi.mock("../utils/download", () => downloadMocks);
 
-const BLOCKED = new ApiError(
-  "这份简历里还有 1 处未完成标记：个人总结 里还有「【待补」。确实只想导出一份草稿自查时，可以选择「导出草稿」。",
-  409,
-);
-
-const RESULT = {
-  blob: new Blob(["pdf"]),
-  filename: "简历.pdf",
-  pages: 1,
-  pageLimit: 1,
+const LAYOUT: ResumeLayout = {
+  template: "classic",
+  format_name: "",
+  page_limit: 2,
+  font_scale: "small",
+  format_config: { font_scale_adjust: 0.636 },
 };
 
-function renderButtons() {
+function renderButtons(props: Partial<React.ComponentProps<typeof ExportButtons>> = {}) {
   return render(
     <AntdApp>
-      <ExportButtons recordId={7} />
+      <ExportButtons recordId={7} layout={LAYOUT} {...props} />
     </AntdApp>,
   );
 }
 
-beforeEach(() => {
-  for (const mock of [...Object.values(apiMocks), ...Object.values(downloadMocks)]) {
-    mock.mockReset();
-  }
+afterEach(() => {
+  cleanup();
+  document.body.innerHTML = "";
 });
 
-afterEach(cleanup);
-
 describe("ExportButtons", () => {
-  it("downloads straight away when nothing is blocked", async () => {
-    apiMocks.exportResume.mockResolvedValue(RESULT);
+  it("只有一个「导出」入口，旧的「下载 PDF / 更多格式」不再出现", () => {
     renderButtons();
 
-    fireEvent.click(screen.getByRole("button", { name: /下载 PDF/ }));
-
-    await waitFor(() => expect(downloadMocks.downloadBlob).toHaveBeenCalledTimes(1));
-    // 没有拦下时不该问任何问题。
-    expect(screen.queryByText(/未完成标记/)).not.toBeInTheDocument();
-    expect(apiMocks.exportResume).toHaveBeenCalledWith(7, "pdf", false);
+    expect(screen.getByRole("button", { name: /导\s*出/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /下载 PDF/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /更多格式/ })).not.toBeInTheDocument();
   });
 
-  it("explains why the export was blocked and offers a way out", async () => {
-    apiMocks.exportResume.mockRejectedValueOnce(BLOCKED).mockResolvedValue(RESULT);
-    renderButtons();
-
-    fireEvent.click(screen.getByRole("button", { name: /下载 PDF/ }));
-
-    // 原因要原样透出（后端已经写清是哪一节），并且给出"仍要导出草稿"这条路。
-    expect(await screen.findByText(/个人总结 里还有/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "仍要导出草稿" }));
-
-    await waitFor(() => expect(downloadMocks.downloadBlob).toHaveBeenCalledTimes(1));
-    // 第二次必须显式带上"允许未完成"，而不是把同一个请求重发一遍。
-    expect(apiMocks.exportResume).toHaveBeenNthCalledWith(2, 7, "pdf", true);
-  });
-
-  it("does not download anything when the user chooses to fix the resume first", async () => {
-    apiMocks.exportResume.mockRejectedValue(BLOCKED);
-    renderButtons();
-
-    fireEvent.click(screen.getByRole("button", { name: /下载 PDF/ }));
-    // 用正文里独有的那句匹配：标题和正文都含「未完成标记」，只按这个找会命中两个元素。
-    expect(await screen.findByText(/个人总结 里还有/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "我去改简历" }));
-
-    // 不断言"弹窗消失了"——那取决于 antd 的退场动画，不是这条测试要证明的事。
-    await waitFor(() => expect(apiMocks.exportResume).toHaveBeenCalledTimes(1));
-    expect(downloadMocks.downloadBlob).not.toHaveBeenCalled();
-  });
-
-  it("reports other errors without asking about placeholders", async () => {
-    apiMocks.exportResume.mockRejectedValue(new ApiError("生成 PDF 失败", 500));
-    renderButtons();
-
-    fireEvent.click(screen.getByRole("button", { name: /下载 PDF/ }));
-
-    expect(await screen.findByText(/生成 PDF 失败/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "仍要导出草稿" })).not.toBeInTheDocument();
-    expect(downloadMocks.downloadBlob).not.toHaveBeenCalled();
-  });
-
-  it("applies the same gate to the other formats", async () => {
-    apiMocks.exportResume.mockRejectedValueOnce(BLOCKED).mockResolvedValue({
-      ...RESULT,
-      filename: "简历.md",
+  it("点击后打开面板，并显示预览当前的行距/字号系数", async () => {
+    renderButtons({
+      layout: { ...LAYOUT, format_config: { font_scale_adjust: 0.636, line_height: 1.55 } },
     });
-    renderButtons();
 
-    // antd 的 Dropdown 默认 hover 触发，jsdom 里 click 打不开它。
-    fireEvent.mouseEnter(screen.getByRole("button", { name: /更多格式/ }));
-    fireEvent.click(await screen.findByText("导出 Markdown"));
+    fireEvent.click(screen.getByRole("button", { name: /导\s*出/ }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "仍要导出草稿" }));
-    await waitFor(() => expect(downloadMocks.downloadBlob).toHaveBeenCalledTimes(1));
-    expect(apiMocks.exportResume).toHaveBeenNthCalledWith(2, 7, "md", true);
+    expect(await screen.findByText(/跟随预览：行距 1\.55/)).toBeInTheDocument();
+    expect(screen.getByText(/字号系数 0\.64/)).toBeInTheDocument();
   });
 
-  it("提示浏览器打印的分页可能与屏幕近似分页略有不同", async () => {
-    renderButtons();
+  it("父组件接管面板时只画按钮，不挂第二份弹窗（两份表单会互相覆盖）", () => {
+    const onOpen = vi.fn();
+    renderButtons({ onOpen });
 
-    fireEvent.mouseEnter(screen.getByRole("button", { name: /更多格式/ }));
-    const printItem = await screen.findByText("浏览器打印 / 另存为 PDF");
+    fireEvent.click(screen.getByRole("button", { name: /导\s*出/ }));
 
-    // 只补一句、就地提示，不夸大也不长篇。
-    expect(printItem).toHaveAttribute("title", expect.stringContaining("分页以浏览器为准"));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/跟随预览/)).not.toBeInTheDocument();
   });
 });

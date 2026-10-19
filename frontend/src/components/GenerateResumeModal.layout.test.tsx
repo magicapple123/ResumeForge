@@ -220,11 +220,11 @@ describe("GenerateResumeModal 回填只重算板块顺序（R6）", () => {
       await Promise.resolve();
     });
 
-    // 在配置阶段把字号往上调一格：14 → 14.5px，落库形态是「档位 + 系数」。
-    const slider = await screen.findByRole("slider");
+    // 在配置阶段把字号往上调一格：14 → 14.1px（步长 0.1px），落库形态是「档位 + 系数」。
+    const slider = await screen.findByRole("slider", { name: /字号/ });
     pressArrowRight(slider);
-    // 断言滑块本身的值（读数与 tooltip 里也会出现 "14.5px"，按文本查会撞车）。
-    await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "14.5"));
+    // 断言滑块本身的值（读数与 tooltip 里也会出现 "14.1px"，按文本查会撞车）。
+    await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "14.1"));
     // 等防抖（180ms）把这次拖动提交成一次 setLayout。
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -250,7 +250,8 @@ describe("GenerateResumeModal 回填只重算板块顺序（R6）", () => {
 
     const formatConfig = apiMocks.startResumeGeneration.mock.calls[0][0].options.format_config;
     // 字号是用户的调整，不该被目录回填抹掉（那会让"关掉再打开字号变回去"）。
-    expect(formatConfig.font_scale_adjust).toBeCloseTo(1.036, 2);
+    // 14.1 / 14 ≈ 1.0071 → 系数量化到 3 位小数 1.007。
+    expect(formatConfig.font_scale_adjust).toBeCloseTo(1.007, 2);
     // 板块顺序则按资料顺序重算；资料顺序等于内置默认时不写这个键。
     expect(formatConfig).not.toHaveProperty("section_order");
   });

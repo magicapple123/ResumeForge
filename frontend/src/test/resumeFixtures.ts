@@ -100,6 +100,12 @@ export const TEMPLATE_CATALOG: ResumeTemplateCatalog = {
     },
   ],
   defaults: { template: "classic", font_scale: "standard", page_limit: 1, format_name: "" },
+  // 版式默认值：行距控件在"没设过覆盖"时显示这里的值（后端由 TEMPLATE_LAYOUT_DEFAULTS 下发）。
+  template_layouts: {
+    classic: { line_height: 1.7, padding_mm: 14, section_gap: 1.3 },
+    modern: { line_height: 1.72, padding_mm: 14, section_gap: 1.25 },
+    compact: { line_height: 1.55, padding_mm: 12, section_gap: 0.9 },
+  },
   pdf_direct_available: true,
   market: [],
 };

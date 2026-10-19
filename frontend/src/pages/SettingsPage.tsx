@@ -21,6 +21,9 @@ import UpdateCard from "../components/settings/UpdateCard";
 import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
 import PrivacyCard from "../components/settings/PrivacyCard";
 import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
+import AppearanceCard from "../components/settings/AppearanceCard";
+import GlobalLLMCard from "../components/settings/GlobalLLMCard";
+import ResumeFontCard from "../components/settings/ResumeFontCard";
 import ShortcutSettingsCard from "../components/settings/ShortcutSettingsCard";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
 
@@ -167,7 +170,10 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <SettingsGroupTitle text="模型服务" hint="当前使用的配置与已保存的配置记录" />
+                {/* R21：跨数据集的模型配置——放在"当前数据集那一份"之前，先讲大局。 */}
+                <GlobalLLMCard />
+
+                <SettingsGroupTitle text="模型服务" hint="当前数据集的配置与已保存的配置记录" />
                 <LLMConfigCard
                   records={records}
                   recordsLoading={recordsLoading}
@@ -255,8 +261,8 @@ export default function SettingsPage() {
                   creating={datasetCreating}
                   createOpen={createDatasetOpen}
                   createName={createDatasetName}
-                  onExport={(dataset) => void runDatasetExport(dataset)}
-                  onExportAll={() => void runExportAllDatasets()}
+                  onExport={(dataset, filename) => void runDatasetExport(dataset, filename)}
+                  onExportAll={(filename) => void runExportAllDatasets(filename)}
                   onImport={(file, name) => void importDatasetFile(file, name)}
                   onActivate={(dataset) => void switchDataset(dataset)}
                   onOpenRename={(dataset) => {
@@ -307,6 +313,8 @@ export default function SettingsPage() {
                   text="界面与提醒"
                   hint="导航入口、快捷键、悬浮球与近期提醒的行为"
                 />
+                <AppearanceCard />
+                <ResumeFontCard />
                 <NavigationSettingsCard />
                 <ShortcutSettingsCard />
                 <AssistantOrbCard />

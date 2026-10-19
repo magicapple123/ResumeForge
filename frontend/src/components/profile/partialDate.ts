@@ -37,15 +37,17 @@ function yearRange(from: number, to: number, step: 1 | -1): YearOption[] {
  * 年份选项按"当前年"分成两组（R9）。
  *
  * 原来是一个从 `当前年+15` 降序到 1900 的扁平列表，于是选出生年份的人第一眼看到的是
- * 2038、2037……要滚十几项才见到今年。分组后第一组第一项就是今年，未来年份退到第二组。
+ * 2038、2037……要滚十几项才见到今年。分组后第一组第一项就是今年，未来年份退到第二组
+ * （+1 ~ +5：教育经历/工作经历的"预计毕业""合同到期"最多也就往后几年，留 15 年会让
+ * 未来组塞满几乎用不到的空档）。
  * 已选年份仍按原来的外扩逻辑并进对应组：早于 1900 的放进"今年及以前"末尾，晚于
- * `当前年+15` 的放进"未来年份"末尾，历史脏数据不会变成"选不中的值"。
+ * `当前年+5` 的放进"未来年份"末尾，历史脏数据不会变成"选不中的值"。
  *
  * 这里是纯函数（不读 `Date`），当前年由调用方传入，测试因此不依赖运行日期。
  */
 export function buildYearGroups(currentYear: number, selectedYear: number): YearOptionGroup[] {
   const pastMinYear = Math.min(1900, selectedYear || 1900);
-  const futureMaxYear = Math.max(currentYear + 15, selectedYear);
+  const futureMaxYear = Math.max(currentYear + 5, selectedYear);
   return [
     { label: "今年及以前", options: yearRange(currentYear, pastMinYear, -1) },
     { label: "未来年份", options: yearRange(currentYear + 1, futureMaxYear, 1) },

@@ -43,7 +43,7 @@ export default function QuestionGroupCards({
                   <div
                     key={key}
                     style={{
-                      borderTop: index ? "1px solid #f0f0f0" : "none",
+                      borderTop: index ? "1px solid var(--rf-border)" : "none",
                       paddingTop: index ? 8 : 0,
                     }}
                   >

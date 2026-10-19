@@ -3,6 +3,7 @@ import { CheckCircleFilled, DownOutlined, PlusOutlined, SearchOutlined } from "@
 import { App, Button, Card, Empty, Input, Modal, Radio, Space, Tag, Typography } from "antd";
 import { useMemo, useState } from "react";
 import type { WebFormMemoryTarget, WebFormRememberPending } from "../../types";
+import { useGroupTone } from "./webFormGroupTones";
 
 export interface WebFormMemorySelection {
   target_id: string;
@@ -19,21 +20,6 @@ interface Props {
   saving: boolean;
   onCancel: () => void;
   onSubmit: (selection: WebFormMemorySelection) => void;
-}
-
-const GROUP_TONES = [
-  { color: "#2e6da4", border: "#b8d4f2", background: "#f2f7ff" },
-  { color: "#247a65", border: "#a9d9cb", background: "#effaf6" },
-  { color: "#6344a2", border: "#c8b9ed", background: "#f7f3ff" },
-  { color: "#a76720", border: "#f1c58e", background: "#fff8ed" },
-  { color: "#a34d5c", border: "#e9b3bd", background: "#fff3f5" },
-  { color: "#26728a", border: "#a9d3de", background: "#effaff" },
-];
-
-function groupTone(group: string) {
-  let hash = 0;
-  for (const char of group) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
-  return GROUP_TONES[Math.abs(hash) % GROUP_TONES.length];
 }
 
 function fuzzyIncludes(text: string, keyword: string): boolean {
@@ -70,6 +56,8 @@ export default function WebFormMemoryDialog({
   onSubmit,
 }: Props) {
   const { message } = App.useApp();
+  // 分组色调跟随主题（R18）：深色下浅底 chip 会变成一块白砖。
+  const groupTone = useGroupTone();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState("custom");
   const [customLabel, setCustomLabel] = useState("");
@@ -177,7 +165,7 @@ export default function WebFormMemoryDialog({
     >
       {pending ? (
         <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-          <Card size="small" style={{ background: "#f5f8ff" }}>
+          <Card size="small" style={{ background: "var(--rf-brand-wash)" }}>
             <Space orientation="vertical" size={4}>
               <Typography.Text type="secondary">当前浏览器字段</Typography.Text>
               <Typography.Text strong>
@@ -204,14 +192,14 @@ export default function WebFormMemoryDialog({
               hoverable
               style={{
                 marginBottom: 12,
-                borderColor: selectedId === "custom" ? "#1677ff" : undefined,
-                background: selectedId === "custom" ? "#f5f8ff" : undefined,
+                borderColor: selectedId === "custom" ? "var(--rf-info)" : undefined,
+                background: selectedId === "custom" ? "var(--rf-brand-wash)" : undefined,
               }}
               onClick={() => setSelectedId("custom")}
             >
               <Space align="start">
                 <Radio checked={selectedId === "custom"} />
-                <PlusOutlined style={{ color: "#1677ff", marginTop: 4 }} />
+                <PlusOutlined style={{ color: "var(--rf-info)", marginTop: 4 }} />
                 <Space orientation="vertical" size={2}>
                   <Space wrap size={6}>
                     <Typography.Text strong>新增一条网申自定义字段</Typography.Text>
@@ -249,7 +237,7 @@ export default function WebFormMemoryDialog({
                         border: `1px solid ${tone.border}`,
                         borderRadius: 8,
                         color: tone.color,
-                        background: expanded ? tone.background : "#fff",
+                        background: expanded ? tone.background : "var(--rf-surface)",
                         fontWeight: 700,
                       }}
                     >
@@ -271,7 +259,7 @@ export default function WebFormMemoryDialog({
                           marginInlineEnd: 0,
                           color: tone.color,
                           borderColor: tone.border,
-                          background: "#fff",
+                          background: "var(--rf-surface)",
                         }}
                       >
                         {items.length} 条
@@ -292,8 +280,8 @@ export default function WebFormMemoryDialog({
                               size="small"
                               hoverable
                               style={{
-                                borderColor: selected ? "#1677ff" : undefined,
-                                background: selected ? "#f5f8ff" : undefined,
+                                borderColor: selected ? "var(--rf-info)" : undefined,
+                                background: selected ? "var(--rf-brand-wash)" : undefined,
                               }}
                               onClick={() => selectTarget(target)}
                             >
@@ -308,7 +296,7 @@ export default function WebFormMemoryDialog({
                                     <Typography.Text strong>{target.label}</Typography.Text>
                                     <Tag color="orange">{SOURCE_LABEL}</Tag>
                                     {selected ? (
-                                      <CheckCircleFilled style={{ color: "#1677ff" }} />
+                                      <CheckCircleFilled style={{ color: "var(--rf-info)" }} />
                                     ) : null}
                                   </Space>
                                   <Typography.Text type="secondary" ellipsis>

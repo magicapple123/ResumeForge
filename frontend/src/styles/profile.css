@@ -39,9 +39,9 @@
   width: 132px;
   height: 176px;
   overflow: hidden;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 6px;
-  background: #f5f5f5;
+  background: var(--rf-surface-alt);
 }
 
 .profile-photo-frame .ant-image,
@@ -84,7 +84,7 @@
 }
 
 .profile-section-collapse-toggle:hover {
-  background: #f3f6fa;
+  background: var(--rf-surface-alt);
 }
 
 .profile-section-collapse-icon {
@@ -92,7 +92,7 @@
   align-items: center;
   justify-content: center;
   width: 16px;
-  color: #1677ff;
+  color: var(--rf-info);
   font-size: 12px;
 }
 
@@ -122,13 +122,63 @@
  * CV 切换。离屏分区默认 `content-visibility: auto` 时 rect 也会退化成
  * `contain-intrinsic-size` 的 420px 假高度，拖拽几何（前缀和、clamp 上限）同样全错。
  *
- * 刻意不再做「拖拽期塌缩成 50px 标签条」：全部塌缩会让文档变矮、滚动容器
- * scrollTop 被浏览器夹小，塌缩后的 rect 反而比塌缩前更低，补偿值符号/量级全错，
- * 卡片直接脱离鼠标；同时插入判定会拿紧凑栈坐标去比展开态的指针位置，激活瞬间就
- * 算出错误的插入位。分区内容、高度、gap 在拖拽期一律保持原样。
+ * 这条规则只管 content-visibility，不负责折叠：拖拽期的折叠是**另一件事**，由下面的
+ * `.is-compact` 显式开关（激活那一刻「量 → 折叠 → 补偿 scrollTop」三步走，见
+ * features/profile/profileCompactDrag.ts）。两件事必须分开：塌缩若顺手做在这里，
+ * 补偿值就没有「塌缩前」的参照，符号/量级全错，卡片会直接脱手。
  */
 .profile-section-sortable.is-section-reordering {
   content-visibility: visible;
+}
+
+/*
+ * 拖动激活期「全部大卡片折叠成紧凑条」（P3）。
+ *
+ * 开关只有一个：store 的 `compact`（由 useProfileSectionReorder 在拖动激活那一帧
+ * 同步挂上、松手立刻摘掉），**所有**分区一起折，不分被拖/未拖——用户要的就是
+ * 「一开始拖就全收起来，再在紧凑布局里换位」。
+ *
+ * 折叠是真实的高度变化，所以激活顺序必须是「量 beforeTop → 折叠 → 补偿 scrollTop →
+ * 按紧凑高度采集几何」（见 features/profile/profileCompactDrag.ts）。拖动中的跟手
+ * 视觉就是紧凑条**自己**：`transform` 直写（见 useProfileSectionReorder.syncDrag）
+ * 配上 `.is-dragging` 的置顶/合成层，不再另起浮条——用户要的是"卡片本身跟手"。
+ *
+ * 放在 `.is-dragging` 之前：那条规则要给被拖卡换抬起阴影，同特异度下后写的赢。
+ */
+.profile-section-sortable.is-compact {
+  box-sizing: border-box;
+  height: 52px;
+  min-height: 52px;
+  /* 紧凑条之间留 8px：否则 8 条只剩 1px 描边相隔，看起来像一整块表格。
+     间距是均匀的，几何采集算出的 gap 就是 8，前缀和模型照常成立。 */
+  margin: 0 0 8px;
+  overflow: hidden;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+}
+
+.profile-section-sortable.is-compact .profile-section-content {
+  display: none;
+}
+
+/*
+ * 标题栏占满整条：52px 减上下各 1px 边框 = 50px，标题栏本身就是 flex，垂直居中由它
+ * 负责。右侧留出 76px 给拖动把手（right 38px、宽 28px）与微调按钮，标题不钻到控件下面。
+ */
+.profile-section-sortable.is-compact .profile-section-titlebar {
+  box-sizing: border-box;
+  height: 50px;
+  margin: 0;
+  padding: 0 76px 0 16px;
+  overflow: hidden;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+/* 微调按钮默认浮在卡片顶部（top 9px + 28px），紧凑条里会和把手挤在一起，直接收起。 */
+.profile-section-sortable.is-compact .profile-section-nudge {
+  display: none;
 }
 
 /*
@@ -140,11 +190,15 @@
  * - "抬起"语言与条目统一：1px 浅蓝描边用 box-shadow 环实现（零布局位移），
  *   圆角与卡片一致，阴影多层柔和（近处贴地影 + 远处弥散影）。
  * 只在拖动期间挂载，松手即摘，不常驻占显存。
+ *
+ * 注意：被拖卡在拖动激活期同时带 `.is-compact`（52px），所以"跟手的那条"就是卡片
+ * 本身——不再有独立浮条，这里必须保证它在紧凑尺寸下也有完整的白色底与抬起阴影。
  */
 .profile-section-sortable.is-dragging {
   z-index: 10;
   will-change: transform;
   border-radius: 8px;
+  background: var(--rf-surface);
   box-shadow:
     0 0 0 1px #91caff,
     0 1px 2px rgb(31 55 88 / 6%),
@@ -176,8 +230,8 @@
 }
 
 .profile-section-drag-handle:hover {
-  background: #eef5ff;
-  color: #1677ff;
+  background: var(--rf-brand-wash);
+  color: var(--rf-info);
 }
 
 .profile-section-drag-handle:active {
@@ -233,12 +287,12 @@
 }
 
 .profile-section-nudge:hover {
-  background: #eef5ff;
-  color: #1677ff;
+  background: var(--rf-brand-wash);
+  color: var(--rf-info);
 }
 
 .profile-section-nudge:disabled {
-  color: #bfbfbf;
+  color: var(--rf-text-tertiary);
   cursor: not-allowed;
   background: transparent;
 }
@@ -253,10 +307,11 @@
   position: relative;
   min-width: 0;
   padding: 16px 76px 4px 16px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--rf-border);
   border-radius: 8px;
-  background: #fafafa;
-  /* 只过渡 box-shadow（抬起/落下的阴影有 150ms 缓冲）；transform 严禁加过渡。 */
+  background: var(
+    --rf-surface-alt
+  ); /* 只过渡 box-shadow（抬起/落下的阴影有 150ms 缓冲）；transform 严禁加过渡。 */
   transition: box-shadow 150ms ease;
 }
 
@@ -270,11 +325,11 @@
 .profile-list-item.is-dragging {
   z-index: 10;
   will-change: transform;
-  border-color: #91caff;
+  border-color: var(--rf-focus-ring);
   box-shadow:
     0 1px 2px rgb(31 55 88 / 6%),
     0 12px 28px rgb(31 55 88 / 14%);
-  background: #fff;
+  background: var(--rf-surface);
 }
 
 /*
@@ -328,8 +383,8 @@
 }
 
 .profile-list-item-drag-handle:hover {
-  background: #eef5ff;
-  color: #1677ff;
+  background: var(--rf-brand-wash);
+  color: var(--rf-info);
 }
 
 .profile-list-item-drag-handle:active {
@@ -345,9 +400,9 @@
   margin: 12px 0 0;
   padding: 14px;
   overflow: auto;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
-  background: #fafafa;
+  background: var(--rf-surface-alt);
   white-space: pre-wrap;
   word-break: break-word;
   font-family: inherit;

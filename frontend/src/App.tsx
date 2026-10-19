@@ -1,5 +1,7 @@
-import { GithubOutlined, MenuOutlined, QuestionCircleOutlined } from "@ant-design/icons";
-import { Button, Layout, Menu, Modal, Tooltip, Typography } from "antd";
+import { MenuOutlined, QuestionCircleOutlined } from "@ant-design/icons";
+import { Button, Layout, Menu, Typography } from "antd";
+import AppHeaderActions from "./components/AppHeaderActions";
+import StarPromptModal from "./components/StarPromptModal";
 import PageSkeleton from "./components/common/PageSkeleton";
 import {
   lazy,
@@ -13,11 +15,8 @@ import {
 } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { registerTaskNavigate } from "./utils/taskNotify";
-import AppHeaderContext from "./components/AppHeaderContext";
-import BackgroundTasksIndicator from "./components/BackgroundTasksIndicator";
-import ExitAppButton from "./components/common/ExitAppButton";
 import RiskScanWatcher from "./components/RiskScanWatcher";
-import MySpaceMenu from "./components/navigation/MySpaceMenu";
+import SuggestionScanWatcher from "./components/SuggestionScanWatcher";
 import MobileNavigation from "./components/navigation/MobileNavigation";
 import RouteAccessibility from "./components/navigation/RouteAccessibility";
 import {
@@ -29,11 +28,13 @@ import {
   pathMatchesNavigationItem,
 } from "./components/navigation/navigationConfig";
 import TaskCompletionNotifier from "./components/TaskCompletionNotifier";
-import { APP_NAME, APP_VERSION, GITHUB_REPO } from "./config";
+import { APP_NAME, APP_VERSION } from "./config";
+import GlobalOverlays from "./components/GlobalOverlays";
 import AiPolishLayer from "./features/ai-polish/AiPolishLayer";
 import ShortcutProvider from "./features/shortcuts/ShortcutProvider";
 import { useShortcut } from "./features/shortcuts/useShortcutKeymap";
-import { focusHomeSearch, triggerJobCreate } from "./features/shortcuts/runtimeTargets";
+import { triggerJobCreate } from "./features/shortcuts/runtimeTargets";
+import { useAppShortcuts } from "./features/shortcuts/useAppShortcuts";
 import TouTouAssistantCard from "./features/tou-tou/TouTouAssistantCard";
 import TouTouClipboardCard from "./features/tou-tou/TouTouClipboardCard";
 import TouTouOrb from "./features/tou-tou/TouTouOrb";
@@ -46,7 +47,6 @@ import { consumeFirstVisitGuide, setUserGuideVisible } from "./utils/userGuide";
 // 经过 Vite 的 base 重写，等于没修。
 import brandIcon from "./assets/resumeforge-icon.png";
 // 投投宣传图（透明底抠图）：GitHub Star 提示弹窗用。
-import promoPlane from "./assets/toutou/promo-plane.png";
 
 type LazyPage<Props = Record<string, never>> = LazyExoticComponent<ComponentType<Props>> & {
   preload: () => Promise<{ default: ComponentType<Props> }>;
@@ -123,14 +123,9 @@ function MainLayout() {
   // R5 快捷键的三个全局落点，全部接在既有实现上（不新造入口）：
   // 搜索 = 跳首页 + 聚焦首页那个全站搜索框；助手 = 复用悬浮助手卡的开关；
   // 新建岗位 = 岗位页自己登记的"打开新建弹窗"（不在岗位页就什么都不做）。
-  useShortcut("search", () => {
-    navigate("/");
-    focusHomeSearch();
-  });
   useShortcut("assistant", () => setFloatingAssistantOpen((open) => !open));
-  useShortcut("newJob", () => {
-    if (location.pathname === "/jobs") triggerJobCreate();
-  });
+  useShortcut("newJob", () => location.pathname === "/jobs" && triggerJobCreate());
+  useAppShortcuts(() => setFloatingAssistantOpen(true));
   const { hiddenKeys } = useNavigationVisibility();
   const visiblePrimaryItems = useMemo(
     () => filterNavigationItems(PRIMARY_NAVIGATION_ITEMS, hiddenKeys, location.pathname),
@@ -264,10 +259,14 @@ function MainLayout() {
         <TaskCompletionNotifier />
         {/* 风险扫描的后台提醒：用户关掉「质量检测」弹窗后，进度与结果由它接住。 */}
         <RiskScanWatcher />
+        {/* 岗位优化建议的后台提醒：关掉建议弹窗后，生成进度与结果由它接住。 */}
+        <SuggestionScanWatcher />
         {/* 全局 AI 润色：文档级监听，任何输入框里选中一段文字都能就地改写。 */}
         <AiPolishLayer />
+
         {/* 快捷键：唯一的 keydown 监听挂载点；动作由各页面用 useShortcut 自己认领。 */}
         <ShortcutProvider />
+        <GlobalOverlays />
         <TouTouOrb
           isWebform={location.pathname === "/webform"}
           onOpen={() => {
@@ -371,33 +370,10 @@ function MainLayout() {
                   {navigationPageLabel(location.pathname)}
                 </span>
               </Typography.Text>
-              <div className="app-header-actions">
-                {/* 左侧是"我当前在哪个数据集、用的哪张照片"，右侧是全局动作（源码 / 退出）。
-                  两者之间用一根细分隔线隔开，避免四个元素挤成一条。 */}
-                <MySpaceMenu hiddenKeys={hiddenKeys} />
-                <AppHeaderContext />
-                {/* 有任务在跑时才出现：平时页头不该多一个空按钮。 */}
-                <BackgroundTasksIndicator />
-                <span className="app-header-divider" aria-hidden="true" />
-                {/* GitHub 入口在页头右上角：与「退出」并排。
-                  它是"关于本项目"这类低频、跨页面的入口，放右上角既符合习惯，
-                  也不必让用户先找到侧栏底部。 */}
-                {GITHUB_REPO && (
-                  <Tooltip title="在 GitHub 上查看源码 / 反馈问题">
-                    <Button
-                      className="app-repo-button"
-                      type="text"
-                      icon={<GithubOutlined />}
-                      href={GITHUB_REPO}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`在 GitHub 上查看 ${APP_NAME} 源码`}
-                      onClick={() => setStarModalOpen(true)}
-                    />
-                  </Tooltip>
-                )}
-                <ExitAppButton />
-              </div>
+              <AppHeaderActions
+                hiddenKeys={hiddenKeys}
+                onStarClick={() => setStarModalOpen(true)}
+              />
             </Header>
             <Content className="app-content" id="main-content" role="main" tabIndex={-1}>
               <Suspense fallback={<PageSkeleton rows={8} />}>
@@ -432,34 +408,7 @@ function MainLayout() {
             />
           </Suspense>
         )}
-        {starModalOpen && (
-          <Modal open onCancel={() => setStarModalOpen(false)} footer={null} width={380}>
-            <div style={{ textAlign: "center", paddingBlock: 8 }}>
-              <img
-                src={promoPlane}
-                alt=""
-                style={{ height: 72, width: "auto", objectFit: "contain" }}
-              />
-              <Typography.Title level={5} style={{ marginTop: 12, marginBottom: 4 }}>
-                如果 {APP_NAME} 对你有帮助
-              </Typography.Title>
-              <Typography.Text type="secondary">
-                欢迎去 GitHub 给项目点一个 Star ⭐——这是对独立开发最实在的支持。
-              </Typography.Text>
-              <div style={{ marginTop: 16 }}>
-                <Button
-                  type="primary"
-                  href={GITHUB_REPO}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setStarModalOpen(false)}
-                >
-                  去点 Star
-                </Button>
-              </div>
-            </div>
-          </Modal>
-        )}
+        <StarPromptModal open={starModalOpen} onClose={() => setStarModalOpen(false)} />
       </>
     </TouTouProvider>
   );

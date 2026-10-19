@@ -15,11 +15,13 @@ import { diffResume } from "../api/resumeWriting";
 import BatchActionBar from "../components/common/BatchActionBar";
 import ErrorState from "../components/common/ErrorState";
 import { useBatchSelection } from "../hooks/useBatchSelection";
+import ManualResumeModal from "../components/ManualResumeModal";
 import ResumeDetailModal from "../components/ResumeDetailModal";
+import { registerNewResumeHandler } from "../features/shortcuts/runtimeTargets";
 import { computeFieldDiff } from "../utils/resumeFieldDiff";
 import type { DiffViewData } from "../types/resumeFieldDiff";
 import { useApi } from "../hooks/useApi";
-import type { ResumeBrief } from "../types";
+import type { ResumeBrief, ResumeSort } from "../types";
 import ResumeTable from "./resumes/ResumeTable";
 import DeliveryArchiveModal from "../components/resume/DeliveryArchiveModal";
 import ResumeRenameModal from "./resumes/ResumeRenameModal";
@@ -54,6 +56,12 @@ export default function ResumesPage() {
   const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
   const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
   const [hasJobFilter, setHasJobFilter] = useState<boolean | undefined>(() => boolParam("has_job"));
+  // 新建手写简历（R8）：以前只能从岗位页或「我的资料」进，简历中心自己没有入口。
+  const [manualOpen, setManualOpen] = useState(false);
+  /** 排序（R14）：默认「最近修改」，与后端默认值一致；写回 URL 以便刷新/分享保持。 */
+  const [sort, setSort] = useState<ResumeSort>(
+    () => (searchParams.get("sort") as ResumeSort | null) ?? "updated_desc",
+  );
   // 深链 ?resume_id=（RF-11 搜索直开）：挂载时读一次，数字有效才打开详情；
   // 关闭详情时把参数从 URL 移除（replace，不打历史）。镜像 JobsPage 的 job_id 模式。
   const [previewId, setPreviewId] = useState<number | null>(() => {
@@ -114,8 +122,9 @@ export default function ResumesPage() {
         page_size: pageSize,
         job_id: jobId,
         has_job: hasJobFilter,
+        sort,
       }),
-    [keyword, page, pageSize, jobId, hasJobFilter],
+    [keyword, page, pageSize, jobId, hasJobFilter, sort],
   );
 
   useEffect(() => {
@@ -123,6 +132,12 @@ export default function ResumesPage() {
   }, [error, message]);
 
   // 跨页全选（对齐岗位广场）：按当前筛选拉全部 id，批量删除仍受后端 5000 上限裁决。
+  // R8：把「新建简历」与「翻页」登记给快捷键系统（离开页面即注销）。
+  useEffect(() => {
+    registerNewResumeHandler(() => setManualOpen(true));
+    return () => registerNewResumeHandler(null);
+  }, []);
+
   const { selectAllPages, selectAllPagesLoading } = useSelectAllResumes({
     keyword,
     jobId,
@@ -141,6 +156,8 @@ export default function ResumesPage() {
           ["has_job", hasJobFilter === undefined ? "" : hasJobFilter ? "1" : "0"],
           ["page", page > 1 ? String(page) : ""],
           ["page_size", pageSize !== 10 ? String(pageSize) : ""],
+          // 默认值不写回 URL：干净的链接比"默认值也显式写出来"更好读。
+          ["sort", sort === "updated_desc" ? "" : sort],
         ];
         for (const [key, value] of values) {
           if (value) next.set(key, value);
@@ -150,7 +167,7 @@ export default function ResumesPage() {
       },
       { replace: true },
     );
-  }, [keyword, hasJobFilter, page, pageSize, setSearchParams]);
+  }, [keyword, hasJobFilter, page, pageSize, sort, setSearchParams]);
 
   const remove = useCallback(
     async (id: number) => {
@@ -263,10 +280,22 @@ export default function ResumesPage() {
   return (
     <div>
       {archiveOpen && <DeliveryArchiveModal onClose={() => setArchiveOpen(false)} />}
+      <ManualResumeModal
+        job={null}
+        open={manualOpen}
+        onClose={() => {
+          setManualOpen(false);
+          // 新建后列表要能看到它：关弹窗就重拉一次（与其它入口同一处理）。
+          void reload();
+        }}
+      />
       {/* 筛选栏整体收进一个 Space（gap 12px，wrap 换行时同样吃 gap）：
           之前「交付存档」按钮、搜索框、两个筛选 Select 各写各的 marginBottom，
           行内元素水平方向零间距——按钮和搜索框几乎贴死，视觉节奏也不一致。 */}
       <Space wrap size={16} align="center" className="rf-filter-bar">
+        <Button type="primary" onClick={() => setManualOpen(true)}>
+          新建简历
+        </Button>
         <Button onClick={() => setArchiveOpen(true)}>交付存档</Button>
         {jobId && (
           <Space size={4} align="center">
@@ -310,6 +339,22 @@ export default function ResumesPage() {
           options={[
             { value: true, label: "有目标岗位" },
             { value: false, label: "通用简历" },
+          ]}
+        />
+        <Select
+          aria-label="排序方式"
+          style={{ width: 132 }}
+          value={sort}
+          onChange={(value) => {
+            setSort(value);
+            setPage(1);
+          }}
+          options={[
+            { value: "updated_desc", label: "最近修改" },
+            { value: "created_desc", label: "最近生成" },
+            { value: "title_asc", label: "标题 A→Z" },
+            { value: "company_asc", label: "按公司" },
+            { value: "job_title_asc", label: "按岗位" },
           ]}
         />
       </Space>

@@ -1,0 +1,160 @@
+/*
+ * 深色主题（R18）：只覆盖**应用外壳**，简历预览 iframe 永远是白纸。
+ *
+ * 两条线各管一半：
+ *   1. antd 组件由 `ThemeProvider` 的 `darkAlgorithm` 重算 token，不在这里逐个覆盖；
+ *   2. 自定义 CSS 走语义变量。凡是已经用 `var(--rf-*)` 的地方，改这里的变量就够了；
+ *      剩下少量硬编码的白底/深字（外壳、弹窗标题、数据集 chip）单独列在下面。
+ *
+ * **不追求 100% 覆盖**：这版的目标是"深色下不刺眼、字读得清、没有白块"，而不是把
+ * 392 处硬编码色值逐条改成 token。新增界面请优先用 `var(--rf-*)`，否则深色下会漏。
+ */
+[data-theme="dark"] {
+  /* 品牌色与面板 */
+  --rf-brand: #9dc3ef;
+  --rf-brand-tint: #1f2a3a;
+  --rf-brand-wash: #1a2230;
+  --rf-surface: #1b1f27;
+  --rf-surface-alt: #15181e;
+
+  /* 文字：正文必须明显亮于背景，次级/三级文字仍保持可读（对比度 ≥ 4.5:1） */
+  --rf-text-body: #e6eaf2;
+  --rf-text-secondary: #b3bdcc;
+  --rf-text-tertiary: #a3aebf;
+  --rf-text-description: #b3bdcc;
+
+  /* 边框与状态色 */
+  --rf-border: #2c333f;
+  --rf-border-subtle: #262c36;
+  --rf-border-strong: #3a4450;
+
+  /* 信息色在深底上要提亮，否则 #1677ff 与背景的对比度不足。 */
+  --rf-info: #6aa9ff;
+  --rf-info-strong: #9dc3ef;
+  /* 信息浅底改为"深蓝灰"，否则整块浅蓝在深色页面里就是一块亮砖。 */
+  --rf-info-bg: #1c2a3d;
+
+  /* 品牌实底保持深色（承载白字）；提醒底改为深琥珀，避免整块亮黄。 */
+  --rf-brand-fill: #24406b;
+  --rf-warning-bg: #33280f;
+  --rf-warning-border: #6b5220;
+
+  /* 深色下遮罩要更重一点，否则弹层背后的内容仍显得"浮在上面"。 */
+  --rf-scrim: rgb(0 0 0 / 45%);
+  --rf-scrim-strong: rgb(0 0 0 / 62%);
+  /* 分类色在深底上略提亮，保持同等可辨识度。 */
+  --rf-accent-red: #ff9b98;
+  --rf-accent-violet: #a99bff;
+  --rf-accent-green: #6fd94a;
+  --rf-accent-amber: #f4c65a;
+  --rf-accent-blue: #9dc0e0;
+  --rf-accent-pink: #ffb3cf;
+  --rf-surface-glass: rgb(27 31 39 / 92%);
+  --rf-surface-glass-border: rgb(255 255 255 / 10%);
+  /* 这两个在深色下也要显式给出：danger 提亮一点，白字保持白字。 */
+  --rf-danger: #ff7875;
+  --rf-on-brand: rgb(255 255 255 / 92%);
+  --rf-success-text: #74d7a4;
+  --rf-warning-text: #f2c66d;
+  --rf-error-text: #ff9a91;
+  --rf-focus-ring: #3b5b86;
+  --rf-focus-visible: #9dc3ef;
+  /* 收藏星标在深底上要提亮：#d89614 与 #1b1f27 的对比只有 3.0 左右，星标会糊成一片。 */
+  --rf-favorite: #f0c04a;
+  /* A4 纸面在深色下**保持纯白**：这是"屏幕上那张纸"，不是外壳的一部分。
+     显式重复一遍而不是继承浅色值，是为了让"深色下纸也是白的"在这里有据可查。 */
+  --rf-paper: #ffffff;
+}
+
+[data-theme="dark"] body {
+  background: #12151a;
+  color: var(--rf-text-body);
+}
+
+/* ===== 外壳：页头 / 侧栏 / 内容区 ===== */
+[data-theme="dark"] .app-shell {
+  background: var(--rf-surface-alt);
+}
+
+[data-theme="dark"] .app-sider {
+  background: #1b1f27 !important;
+  border-right-color: var(--rf-border-subtle);
+  box-shadow: 2px 0 12px rgb(0 0 0 / 35%);
+}
+
+[data-theme="dark"] .app-header {
+  background: #1b1f27;
+  border-bottom-color: var(--rf-border);
+  box-shadow: 0 1px 8px rgb(0 0 0 / 30%);
+}
+
+/* ===== 弹窗：标题条是硬编码的浅色渐变，必须单独压掉 ===== */
+[data-theme="dark"] .ant-modal-content {
+  border-color: var(--rf-border);
+  background: #1b1f27;
+  box-shadow:
+    0 24px 70px rgb(0 0 0 / 45%),
+    0 8px 24px rgb(0 0 0 / 30%);
+}
+
+[data-theme="dark"] .ant-modal-header {
+  background: #1b1f27;
+  border-bottom-color: #2c333f;
+}
+
+[data-theme="dark"] .ant-modal-title {
+  color: #e6eaf2;
+}
+
+/* ===== 页头控件：chip 与数据集下拉是硬编码浅底 ===== */
+[data-theme="dark"] .app-dataset-chip {
+  border-color: #333b48;
+  background: #212733;
+  color: #c6d1e0;
+}
+
+[data-theme="dark"] .app-dataset-chip:hover {
+  border-color: #3f4b5c;
+  background: #26303d;
+  color: #cfe0f7;
+}
+
+[data-theme="dark"] .app-dataset-sample-tag {
+  border-color: #6b5220;
+  background: #33280f;
+  color: #f2c66d;
+}
+
+/* ===== 卡片与分区标题（部分页面用了硬编码白底） ===== */
+[data-theme="dark"] .ant-card {
+  background: #1b1f27;
+  border-color: var(--rf-border);
+}
+
+[data-theme="dark"] .ant-card-head {
+  border-bottom-color: var(--rf-border);
+}
+
+/* ===== 表格与空态 ===== */
+[data-theme="dark"] .ant-table {
+  background: transparent;
+}
+
+[data-theme="dark"] .ant-table-thead > tr > th {
+  background: #232833 !important;
+  color: #dbe4f0 !important;
+  border-bottom-color: var(--rf-border) !important;
+}
+
+[data-theme="dark"] .ant-table-tbody > tr > td {
+  border-bottom-color: #262c36;
+}
+
+/* ===== 滚动条：深色页面上出现一条白色滚动条最扎眼 ===== */
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #39424f;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #4a5666;
+}

@@ -4,19 +4,27 @@ import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
+import { DEFAULT_JOB_SORT_STATE, type JobSortState } from "../../utils/jobSort";
 import { useSelectAllJobs } from "./useSelectAllJobs";
 
 const apiMocks = vi.hoisted(() => ({ listJobIds: vi.fn() }));
 
 vi.mock("../../api/jobs", () => apiMocks);
 
-function Harness({ keyword }: { keyword: string }) {
+function Harness({
+  keyword,
+  sortState = DEFAULT_JOB_SORT_STATE,
+}: {
+  keyword: string;
+  sortState?: JobSortState;
+}) {
   const [selected, setSelected] = useState<number[]>([]);
   const { selectAllPages, selectAllPagesLoading } = useSelectAllJobs({
     keyword,
     jobType: "",
     status: "",
     sourceKind: "",
+    sortState,
     setSelectedJobIds: (updater) => setSelected((prev) => updater(prev)),
   });
   return (
@@ -35,6 +43,28 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("useSelectAllJobs 代次守卫", () => {
+  it("全选带上当前排序，保证 id 顺序与列表一致（R14）", async () => {
+    apiMocks.listJobIds.mockResolvedValue([7]);
+    render(
+      <AntdApp>
+        <Harness keyword="k" sortState={{ sort: "title_asc", order: "desc" }} />
+      </AntdApp>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "全选全部" }));
+
+    await waitFor(() =>
+      expect(apiMocks.listJobIds).toHaveBeenCalledWith({
+        keyword: "k",
+        job_type: "",
+        status: "",
+        source_kind: undefined,
+        sort: "title_asc",
+        order: "desc",
+      }),
+    );
+  });
+
   it("筛选未变时正常全选：ids 整体写入选择", async () => {
     apiMocks.listJobIds.mockResolvedValue([4, 5]);
     render(

@@ -19,6 +19,35 @@
   --rf-border: #e7ebf0;
   --rf-border-subtle: #e5e7eb;
   --rf-danger: #ff4d4f;
+  /* 信息色（链接、可点提示、信息条）：与品牌深蓝区分开，避免"什么都像主按钮"。 */
+  --rf-info: #1677ff;
+  --rf-info-strong: #1554ad;
+  /* 信息浅底：差异块、被选中的自定义项、提示条的内层底色。
+     与 --rf-brand-tint 分开——那是"品牌色淡底"，这里是"信息蓝淡底"。 */
+  --rf-info-bg: #e6f4ff;
+  /* 比 --rf-border 更明显的分隔线：表格头、分区边、强调边框。 */
+  --rf-border-strong: #d9d9d9;
+  /* 品牌实底（按钮、页头徽标）：深色主题下也要保持深底，才能承载白字。
+     与 --rf-brand 分开——后者是"品牌色文字"，深色下需要提亮。 */
+  --rf-brand-fill: #16365c;
+  /* 提醒类浅底与描边：目前只用于"过期/待确认"条。 */
+  --rf-warning-bg: #fff7e6;
+  --rf-warning-border: #ffd591;
+  /* 遮罩/滚动条轨道用的半透明黑：它在两种主题下都是"压暗"，不随主题翻转。 */
+  --rf-scrim: rgb(15 23 42 / 18%);
+  --rf-scrim-strong: rgb(15 23 42 / 32%);
+  /* 品牌实底上的前景色（白字/白描边）：深色主题下实底仍是深色，所以它始终是浅色。 */
+  --rf-on-brand: rgb(255 255 255 / 92%);
+  /* 分类强调色（状态条、阶段标记）：需要彼此可区分，深浅主题共用同一组。 */
+  --rf-accent-red: #ff7875;
+  --rf-accent-violet: #8b7cf6;
+  --rf-accent-green: #52c41a;
+  --rf-accent-amber: #f0b429;
+  --rf-accent-blue: #7ba7d0;
+  --rf-accent-pink: #f08bb4;
+  /* 半透明面板（悬浮卡、吸顶条）：背景会透出一点，必须随主题翻转。 */
+  --rf-surface-glass: rgb(255 255 255 / 92%);
+  --rf-surface-glass-border: rgb(31 56 85 / 8%);
   --rf-focus-ring: #91caff;
   --rf-surface: #ffffff;
   --rf-text-body: #223047;
@@ -26,6 +55,11 @@
   --rf-warning-text: #875300;
   --rf-error-text: #b42318;
   --rf-focus-visible: #0958d9;
+  /* 收藏星标：只用在图标上（不上文字），深色下需要提亮才看得见。 */
+  --rf-favorite: #d89614;
+  /* A4 纸面：**两种主题下都是白纸**。导出与打印看到的就是屏幕上这张纸，
+     纸不跟着外壳变暗——所以它只能是常量，不是 --rf-surface。 */
+  --rf-paper: #ffffff;
   --rf-space-1: 4px;
   --rf-space-2: 8px;
   --rf-space-3: 16px;

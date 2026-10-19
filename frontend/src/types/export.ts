@@ -1,5 +1,6 @@
 /** 多格式导出与脱敏的类型（R-16 / R-17）。枚举字符串与后端逐字一致。 */
 import type { ResumeFontScale } from "./resume";
+import type { ResumeFormatConfig } from "./resumeFormat";
 
 /** 导出格式（与后端 ``ExportFormat`` 逐字一致）。 */
 export type ExportFormat = "json" | "md" | "html" | "pdf" | "docx" | "txt";
@@ -21,10 +22,23 @@ export interface ExportRequest {
   watermark?: string;
   redact?: boolean;
   redact_options?: RedactionOptions;
-  /** 页边距（mm）；null 表示沿用记录里存的值。 */
+  /**
+   * 页边距（mm）；null 表示沿用记录里存的值。
+   *
+   * **后端仍接受这个字段**（PDF/Word 读它），但导出面板自 R1 起**不再发送**：页边距
+   * 只有 `format_config.page_padding` 一个落点，预览与导出读同一个键。两套参数并存
+   * 正是"改面板值预览不变、PDF 变"的来源。新调用方请用 `format_config.page_padding`。
+   */
   margin_mm?: number | null;
   font_scale?: ResumeFontScale | null;
   page_limit?: number | null;
+  /**
+   * 本次导出的版式草稿（字号系数 / 行距 / 页边距 / 区块间距…）。
+   *
+   * 与预览 `POST /resumes/render` 用的是同一个对象：用户在预览里把字号拖到 7px 但没点
+   * 「保存版式」时，导出也必须按 7px 排——否则就会出现"预览一页、导出两页"。
+   */
+  format_config?: ResumeFormatConfig;
   include_photo?: boolean;
   allow_incomplete?: boolean;
   /** 正式投递存档：为真时后端把这次导出冻结成一份投递快照；默认不落库。

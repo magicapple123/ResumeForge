@@ -1,8 +1,12 @@
 /**
- * 快捷键设置的持久化与订阅（R5）。
+ * 快捷键设置的持久化与订阅（R5 / R7）。
  *
- * 存在 localStorage 的 `rf.shortcuts.v1` 里，形状是
- * `{ version: 1, bindings: Record<动作id, 组合键[]> }`。
+ * 存在 localStorage 的 `rf.shortcuts.v1` 里（键名沿用不动，避免升级即丢设置），形状是
+ * `{ version: 2, bindings: Record<动作id, 组合键[] | null> }`。
+ *
+ * **`null` 表示用户显式解绑**——这与"没配过、用默认值"是两件事：默认值是一份会随
+ * 版本变化的清单，把它当成"空即默认"会让用户永远关不掉一条快捷键。v1 的数据读取时
+ * 自动升级（版本号改 2，数组原样保留）。
  *
  * 读取一律走 `getShortcutSettings()`：它按"原始字符串是否变化"缓存解析结果，
  * 所以既能给 `useSyncExternalStore` 提供引用稳定的快照，又能在测试或另一个标签页
@@ -15,9 +19,10 @@ import { SHORTCUT_ACTIONS, defaultShortcutBindings, type ShortcutActionId } from
 import { normalizeBinding, validateShortcut } from "./matchShortcut";
 
 export const SHORTCUT_STORAGE_KEY = "rf.shortcuts.v1";
-export const SHORTCUT_STORAGE_VERSION = 1;
+export const SHORTCUT_STORAGE_VERSION = 2;
 
-export type ShortcutBindings = Record<ShortcutActionId, string[]>;
+/** `null` = 显式解绑；数组 = 生效的组合（空数组在清洗时按"没配过"回落默认）。 */
+export type ShortcutBindings = Record<ShortcutActionId, string[] | null>;
 
 export interface ShortcutSettings {
   version: number;
@@ -71,6 +76,11 @@ export function sanitizeShortcutBindings(input: unknown): ShortcutBindings {
   const result = {} as ShortcutBindings;
   for (const action of SHORTCUT_ACTIONS) {
     const raw = source[action.id];
+    if (raw === null) {
+      // 显式解绑：不回落到默认值，否则用户永远关不掉这一条。
+      result[action.id] = null;
+      continue;
+    }
     const candidates = Array.isArray(raw) ? raw : [];
     const accepted: string[] = [];
     for (const candidate of candidates) {
@@ -95,7 +105,11 @@ export function sanitizeShortcutBindings(input: unknown): ShortcutBindings {
 
 export function sanitizeShortcutSettings(input: unknown): ShortcutSettings {
   if (!isPlainObject(input)) return defaultShortcutSettings();
-  if (input.version !== SHORTCUT_STORAGE_VERSION) return defaultShortcutSettings();
+  // v1 → v2：结构兼容（只是多了 null 的语义），旧设置原样保留；不认识的新版本仍退回默认，
+  // 避免把未来版本的字段当成当前版本的语义解释。
+  if (input.version !== 1 && input.version !== SHORTCUT_STORAGE_VERSION) {
+    return defaultShortcutSettings();
+  }
   return {
     version: SHORTCUT_STORAGE_VERSION,
     bindings: sanitizeShortcutBindings(input.bindings),
@@ -153,7 +167,8 @@ export function saveShortcutSettings(input: unknown): ShortcutSettings {
 export function updateShortcutBinding(
   settings: ShortcutSettings,
   id: ShortcutActionId,
-  keys: string[],
+  /** 传 `null` 表示解绑（该动作不再响应任何组合）。 */
+  keys: string[] | null,
 ): ShortcutSettings {
   return saveShortcutSettings({
     version: SHORTCUT_STORAGE_VERSION,
@@ -175,9 +190,15 @@ export function resetShortcutSettings(): ShortcutSettings {
   return saveShortcutSettings(defaultShortcutSettings());
 }
 
-/** 某个动作当前的组合键（未经清洗，仅用于展示兜底）。 */
+/**
+ * 某个动作当前的组合键（仅用于展示）。
+ *
+ * `null`（显式解绑）返回空数组——调用方据此显示「未绑定」；**不能**回落到默认值，
+ * 否则界面上会说"绑着 Ctrl+K"，而按下去什么都不会发生。
+ */
 export function shortcutKeysOf(settings: ShortcutSettings, id: ShortcutActionId): string[] {
   const list = settings.bindings[id];
+  if (list === null) return [];
   if (!Array.isArray(list) || list.length === 0) return defaultShortcutBindings()[id];
   return list.map((binding) => normalizeBinding(binding)).filter((binding) => binding.length > 0);
 }

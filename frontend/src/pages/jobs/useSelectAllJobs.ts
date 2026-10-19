@@ -3,18 +3,22 @@
 import { App } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { listJobIds } from "../../api/jobs";
+import type { JobSortState } from "../../utils/jobSort";
 
 export function useSelectAllJobs({
   keyword,
   jobType,
   status,
   sourceKind,
+  sortState,
   setSelectedJobIds,
 }: {
   keyword: string;
   jobType: string;
   status: string;
   sourceKind: "" | "collected" | "manual";
+  /** 排序必须与列表同源：全选拿到的 id 顺序要和用户看到的顺序一致（R14）。 */
+  sortState: JobSortState;
   setSelectedJobIds: (updater: (current: number[]) => number[]) => void;
 }) {
   const { message } = App.useApp();
@@ -28,7 +32,7 @@ export function useSelectAllJobs({
   useEffect(() => {
     generationRef.current += 1;
     setSelectAllPagesLoading(false);
-  }, [keyword, jobType, status, sourceKind]);
+  }, [keyword, jobType, status, sourceKind, sortState]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // 跨页全选：按**当前筛选**向后端要全部 id（与列表同一份筛选器），拿到后整体勾选。
@@ -44,6 +48,8 @@ export function useSelectAllJobs({
         job_type: jobType,
         status,
         source_kind: sourceKind || undefined,
+        sort: sortState.sort,
+        order: sortState.order ?? undefined,
       });
       if (generation !== generationRef.current) return; // 期间筛选已变：旧结果丢弃
       if (ids.length === 0) {

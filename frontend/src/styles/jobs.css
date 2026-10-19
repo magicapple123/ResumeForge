@@ -32,7 +32,7 @@
 }
 
 .job-favorite-button.is-favorite {
-  color: #f5a623;
+  color: var(--rf-warning-text);
 }
 
 .job-detail-text-sections {
@@ -44,28 +44,28 @@
 
 .job-detail-text-section {
   padding: 14px 16px 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 8px;
 }
 
 .job-detail-text-section--description {
-  border-color: #bfdbfe;
-  background: #f8fbff;
+  border-color: var(--rf-border-strong);
+  background: var(--rf-surface-alt);
 }
 
 .job-detail-text-section--requirements {
-  border-color: #c7d2fe;
-  background: #fafaff;
+  border-color: var(--rf-border-strong);
+  background: var(--rf-surface-alt);
 }
 
 .job-detail-text-section--additional {
-  border-color: #bbf7d0;
-  background: #f7fef9;
+  border-color: var(--rf-border-strong);
+  background: var(--rf-surface-alt);
 }
 
 .job-detail-text-section--note {
-  border-color: #fde68a;
-  background: #fffdf2;
+  border-color: var(--rf-border-strong);
+  background: var(--rf-surface-alt);
 }
 
 .job-detail-section-heading {
@@ -77,19 +77,19 @@
 
 .job-detail-section-icon {
   display: inline-flex;
-  color: #1677ff;
+  color: var(--rf-info);
 }
 
 .job-detail-text-section--requirements .job-detail-section-icon {
-  color: #4f46e5;
+  color: var(--rf-text-body);
 }
 
 .job-detail-text-section--additional .job-detail-section-icon {
-  color: #15803d;
+  color: var(--rf-text-body);
 }
 
 .job-detail-text-section--note .job-detail-section-icon {
-  color: #d48806;
+  color: var(--rf-warning-text);
 }
 
 .job-detail-text {

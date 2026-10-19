@@ -106,7 +106,7 @@ export default function FavoritesPage() {
         aria-label="取消收藏"
         loading={updatingKey === key}
         disabled={Boolean(updatingKey)}
-        icon={<StarFilled style={{ color: "#d89614" }} />}
+        icon={<StarFilled style={{ color: "var(--rf-favorite)" }} />}
         onClick={onClick}
       />
     </Tooltip>

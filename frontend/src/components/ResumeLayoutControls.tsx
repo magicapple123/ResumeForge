@@ -1,9 +1,11 @@
-/** 简历版式控制：样式模板 / 格式模板 / 最大篇幅（页数）/ 字号，生成与预览弹窗共用。 */
+/** 简历版式控制：样式模板 / 格式模板 / 最大篇幅（页数）/ 字号 / 行距，生成与预览弹窗共用。 */
 
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
+  MinusOutlined,
   PictureOutlined,
+  PlusOutlined,
   UndoOutlined,
 } from "@ant-design/icons";
 import { Button, Popover, Segmented, Select, Slider, Space, Tooltip, Typography } from "antd";
@@ -13,6 +15,7 @@ import { fetchResumeTemplates } from "../api/resumes";
 import { RESUME_PAGE_LIMITS, type ResumeLayout } from "../types";
 import type { ResumePreviewHandle } from "./ResumePreview";
 import TemplateGalleryModal from "./resume/TemplateGalleryModal";
+import LineHeightControl from "./resume/LineHeightControl";
 import {
   buildSectionOrderConfig,
   DEFAULT_RESUME_SECTION_ORDER,
@@ -40,6 +43,9 @@ import {
  * 因为这里用户的手指刚离开、对延迟更敏感）。
  */
 const FONT_COMMIT_DEBOUNCE_MS = 180;
+
+/** 模板目录里拿不到默认行距时的兜底（经典模板的默认值，也是历史默认）。 */
+const FALLBACK_LINE_HEIGHT = 1.7;
 
 interface Props {
   layout: ResumeLayout;
@@ -114,7 +120,11 @@ export default function ResumeLayoutControls({
     [],
   );
 
-  const shownPx = draggingPx ?? committedPx;
+  // 滑块的可用界面是 0.1px 网格，所以权威值在这里也先落到同一网格上：后端可能存着
+  // 17.98 这种两位小数的系数（映射函数保留 2 位），若原样喂给控件，就会出现"读数写 18px、
+  // 但「放大」按钮还亮着"这种自相矛盾的状态。规整到 0.1 后，读数、滑块与两端按钮的
+  // 可用性说的是同一件事；真正落库时仍由 layoutForFontPx 做 2 位精度换算，不丢精度。
+  const shownPx = Math.round((draggingPx ?? committedPx) * 10) / 10;
   const shownPxText = `${Number(shownPx.toFixed(1))}px`;
   const currentTemplate = templates.find((item) => item.name === layout.template);
   const defaultTierLabel = tierByName(tiers, catalog?.defaults.font_scale ?? "standard").label;
@@ -166,15 +176,32 @@ export default function ResumeLayoutControls({
   };
 
   const handleFontChange = (px: number) => {
-    setDraggingPx(px);
+    // 0.1px 步长下浮点尾巴会直接漏到读数与落库值里（14.100000000000001），所以入口
+    // 先统一规整到一位小数：`setDraggingPx`、探针 CSS 与提交用的必须是**同一个**值，
+    // 否则"看到的"和"存下的"会差那么一点点，回填时读数还会跳一下。
+    const nextPx = Math.round(px * 10) / 10;
+    setDraggingPx(nextPx);
     // 即时反馈：直接改预览里的 `--fs`，不外发请求。探针保持到下一次重渲染（iframe 重新
     // 加载时自然销毁），所以从"拖动中的字号"到"最终渲染的字号"之间不会出现跳回旧值的闪动。
-    previewRef?.current?.setLiveProbe(fontProbeCss(px));
+    previewRef?.current?.setLiveProbe(fontProbeCss(nextPx));
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       debounceRef.current = null;
-      onChange(layoutForFontPx(layoutRef.current, px, tiers));
+      onChange(layoutForFontPx(layoutRef.current, nextPx, tiers));
     }, FONT_COMMIT_DEBOUNCE_MS);
+  };
+
+  /** 夹进滑块范围：两端步进按钮与滑块必须共用同一套边界，否则会点出越界值。 */
+  const clampToBounds = (px: number): number => Math.min(pxBounds.max, Math.max(pxBounds.min, px));
+  /**
+   * 两端加减按钮各走 0.1px。
+   *
+   * 滑块的 0.1px 步长在触屏/触控板上很难精确命中一格（手指一动就是两三格），
+   * 按钮给的是"确定地只挪一格"的入口；推进量先按一位小数取整再夹边界，
+   * 所以连点也不会累积出 18.000000000000004 这种值。
+   */
+  const stepFontPx = (delta: number) => {
+    handleFontChange(clampToBounds(Math.round((shownPx + delta) * 10) / 10));
   };
 
   const resetFont = () => {
@@ -189,6 +216,36 @@ export default function ResumeLayoutControls({
       ...layout,
       font_scale: catalog?.defaults.font_scale ?? "standard",
       format_config: withFontAdjust(layout.format_config, 1),
+    });
+  };
+
+  // ===== 行距（R20）=====
+  // 默认值必须取**当前模板**的真实行距：模板之间 1.55~1.8 不等，写死一个数字会让滑块
+  // 停在与渲染不同的位置，用户一拖就跳。拖动/防抖/复位那套状态在 LineHeightControl 里。
+  const templateLineHeight =
+    catalog?.template_layouts?.[layout.template]?.line_height ?? FALLBACK_LINE_HEIGHT;
+  const configuredLineHeight =
+    typeof layout.format_config?.line_height === "number" ? layout.format_config.line_height : null;
+
+  /**
+   * 写行距：数值 = 写入覆盖；null = 删掉覆盖（回到随模板）。
+   *
+   * 用 `layoutRef.current` 而不是闭包里的 `layout`：防抖回调在松手 120ms 后才跑，
+   * 这期间父组件可能已经改了页数或字号，用旧快照会把那些改动覆盖回去。
+   */
+  const applyLineHeight = (next: number | null) => {
+    const current = layoutRef.current;
+    if (next === null) {
+      // 删键而不是写回模板默认值：存储里"没调过"与"调成和默认一样"应当是同一形态，
+      // 否则以后模板更新默认行距时，这些简历不会跟着变。
+      const rest = { ...(current.format_config ?? {}) };
+      delete rest["line_height"];
+      onChange({ ...current, format_config: rest });
+      return;
+    }
+    onChange({
+      ...current,
+      format_config: { ...current.format_config, line_height: next },
     });
   };
 
@@ -338,20 +395,46 @@ export default function ResumeLayoutControls({
       <Space size={6}>
         {!compact && <Typography.Text type="secondary">字号</Typography.Text>}
         {/* 无级滑块：拖动时本地即时缩放预览，静置 180ms 后才提交一次。落库仍是
-            "档位 + 系数"，所以老简历读到的默认值（系数缺省 1.0）完全不受影响。 */}
-        <Slider
-          className="resume-font-slider"
-          min={pxBounds.min}
-          max={pxBounds.max}
-          step={0.5}
-          value={shownPx}
-          disabled={disabled}
-          aria-label="字号（拖动调整，方向键微调）"
-          ariaLabelForHandle="字号"
-          tooltip={{ formatter: (value) => (value == null ? "" : `${Number(value.toFixed(1))}px`) }}
-          style={{ width: 150, margin: "0 4px" }}
-          onChange={handleFontChange}
-        />
+            "档位 + 系数"，所以老简历读到的默认值（系数缺省 1.0）完全不受影响。
+            步长 0.1px 是为了让"8px 还是 7.9px 能压进一页"这种判断题有足够的颗粒度；
+            两端各配一个 ±0.1px 的按钮，因为滑块在触屏上很难精确落到某一格。 */}
+        <Space size={2} align="center">
+          <Tooltip title="缩小字号（-0.1px）">
+            <Button
+              size="small"
+              type="text"
+              icon={<MinusOutlined />}
+              aria-label="缩小字号"
+              disabled={disabled || shownPx <= pxBounds.min}
+              onClick={() => stepFontPx(-0.1)}
+            />
+          </Tooltip>
+          <Slider
+            className="resume-font-slider"
+            min={pxBounds.min}
+            max={pxBounds.max}
+            step={0.1}
+            value={shownPx}
+            disabled={disabled}
+            aria-label="字号（拖动调整，方向键微调）"
+            ariaLabelForHandle="字号"
+            tooltip={{
+              formatter: (value) => (value == null ? "" : `${Number(value.toFixed(1))}px`),
+            }}
+            style={{ width: 150, margin: "0 2px" }}
+            onChange={handleFontChange}
+          />
+          <Tooltip title="放大字号（+0.1px）">
+            <Button
+              size="small"
+              type="text"
+              icon={<PlusOutlined />}
+              aria-label="放大字号"
+              disabled={disabled || shownPx >= pxBounds.max}
+              onClick={() => stepFontPx(0.1)}
+            />
+          </Tooltip>
+        </Space>
         <Typography.Text type="secondary" style={{ minWidth: 44, display: "inline-block" }}>
           {shownPxText}
         </Typography.Text>
@@ -373,6 +456,13 @@ export default function ResumeLayoutControls({
           />
         </Tooltip>
       </Space>
+      <LineHeightControl
+        value={configuredLineHeight ?? templateLineHeight}
+        customized={configuredLineHeight !== null}
+        disabled={disabled}
+        compact={compact}
+        onChange={applyLineHeight}
+      />
     </Space>
   );
 }

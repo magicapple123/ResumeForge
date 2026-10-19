@@ -19,6 +19,16 @@ const apiMocks = vi.hoisted(() => ({
   exportAllDatasets: vi.fn(),
   exportDataset: vi.fn(),
   getLLMConfig: vi.fn(),
+  // R21：全局模型卡挂载时会读一次；没配过就返回空状态。
+  getGlobalLLM: vi.fn().mockResolvedValue({
+    enabled: false,
+    configured: false,
+    provider: "",
+    model: "",
+    base_url: "",
+  }),
+  saveGlobalLLM: vi.fn(),
+  clearGlobalLLM: vi.fn(),
   getLLMSessionKeyStatus: vi.fn(),
   getNavigationVisibility: vi.fn(),
   getReminderPopupSetting: vi.fn(),

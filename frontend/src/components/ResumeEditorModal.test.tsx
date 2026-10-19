@@ -1,63 +1,19 @@
+/**
+ * 简历微调弹窗：参考栏、未保存守卫、双栏独立滚动、从我的资料填入、快捷键。
+ *
+ * 2026-10-19：条目级填入开关（`entryFill`）那一组按内聚边界拆到
+ * `ResumeEditorModal.entryFill.test.tsx`（行数预算 500）。内容夹具与视口 mock 抽到
+ * `ResumeEditorModal.testkit.tsx` 供两个文件共用；本文件自身不注册 `vi.mock`
+ * （这一批用例断言的都是渲染行为，不打 api）。
+ */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResumeContent } from "../types";
+import { CONTENT, makeResumeContent, mockWideViewport } from "./ResumeEditorModal.testkit";
 import ResumeEditorModal from "./ResumeEditorModal";
 import ShortcutProvider from "../features/shortcuts/ShortcutProvider";
 import { EDITOR_FIELD_SCROLL_OPTIONS } from "./resume-editor/editorFieldScroll";
-
-/**
- * 把测试视口切成"宽屏"：`src/test/setup.ts` 的 matchMedia 一律返回 false，所以默认
- * 视口等价于窄屏。antd 的 `Grid.useBreakpoint` 在每次订阅时重新读 matchMedia，
- * 因此在 render 之前替换、之后还原即可（不需要动那个全局默认值）。
- */
-function mockWideViewport(minWidthPx = 992): () => void {
-  const original = window.matchMedia;
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    writable: true,
-    value: (query: string) => {
-      const minWidth = /min-width:\s*(\d+)px/.exec(query);
-      return {
-        matches: minWidth ? Number(minWidth[1]) <= minWidthPx : false,
-        media: query,
-        onchange: null,
-        addListener: () => undefined,
-        removeListener: () => undefined,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-        dispatchEvent: () => false,
-      };
-    },
-  });
-  return () => {
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      writable: true,
-      value: original,
-    });
-  };
-}
-
-const CONTENT: ResumeContent = {
-  photo: "",
-  name: "张三",
-  gender: "",
-  birth_year: "",
-  phone: "",
-  email: "",
-  city: "",
-  personal_website: "",
-  github: "",
-  job_intent: "产品运营专员",
-  summary: "",
-  education: [],
-  experience: [],
-  campus_experience: [],
-  projects: [],
-  skills: [],
-  awards: [],
-};
 
 afterEach(() => {
   cleanup();
@@ -103,8 +59,7 @@ describe("ResumeEditorModal reference panel", () => {
   });
 
   it("opens the matching tab and focuses a multiline field selected from the preview", async () => {
-    const content: ResumeContent = {
-      ...CONTENT,
+    const content: ResumeContent = makeResumeContent({
       projects: [
         {
           name: "预测性维护平台",
@@ -116,7 +71,7 @@ describe("ResumeEditorModal reference panel", () => {
           highlights: ["降低停机时间"],
         },
       ],
-    };
+    });
 
     render(
       <AntdApp>
@@ -304,8 +259,7 @@ describe("ResumeEditorModal 双栏独立滚动（R11）", () => {
       scrollMode: "if-needed",
     });
 
-    const content: ResumeContent = {
-      ...CONTENT,
+    const content: ResumeContent = makeResumeContent({
       projects: [
         {
           name: "预测性维护平台",
@@ -317,7 +271,7 @@ describe("ResumeEditorModal 双栏独立滚动（R11）", () => {
           highlights: [],
         },
       ],
-    };
+    });
     render(
       <AntdApp>
         <ResumeEditorModal

@@ -69,16 +69,16 @@ afterEach(() => {
 });
 
 describe("App 快捷键", () => {
-  it("mod+k 跳到首页并把焦点放到搜索框", async () => {
+  it("mod+k 在任意页面唤起全站搜索（R6），不再跳回首页", async () => {
     renderApp("/jobs");
     expect(await screen.findByText("岗位广场内容")).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
 
-    expect(await screen.findByText("首页内容")).toBeInTheDocument();
-    const input = screen.getByLabelText("全站搜索");
-    // 首页是懒加载路由：聚焦带重试，不能只断言"这一次就已经聚焦"。
+    // 弹层直接出现在当前页面；输入框自动聚焦，用户可以直接打字。
+    const input = await screen.findByLabelText("搜索关键词");
     await waitFor(() => expect(input).toHaveFocus());
+    expect(screen.queryByText("首页内容")).toBeNull();
   });
 
   it("输入框里的 mod+z 交给原生撤销，不拦截也不触发页面撤回", async () => {
@@ -138,11 +138,11 @@ describe("App 快捷键", () => {
     renderApp("/jobs");
     await screen.findByText("岗位广场内容");
 
-    // 旧组合已失效。
+    // 旧组合已失效：按 mod+k 打不开搜索弹层。
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-    expect(screen.queryByText("首页内容")).toBeNull();
+    expect(screen.queryByLabelText("搜索关键词")).toBeNull();
 
     fireEvent.keyDown(window, { key: "p", ctrlKey: true });
-    expect(await screen.findByText("首页内容")).toBeInTheDocument();
+    expect(await screen.findByLabelText("搜索关键词")).toBeInTheDocument();
   });
 });

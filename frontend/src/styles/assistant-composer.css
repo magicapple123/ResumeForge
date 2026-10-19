@@ -49,9 +49,9 @@
   display: grid;
   gap: 12px;
   padding: 12px;
-  border-top: 1px solid #e5e7eb;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  border-top: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 20px;
 }
 
@@ -74,14 +74,14 @@
   align-items: center;
   gap: 8px 16px;
   padding-left: 14px;
-  border-left: 1px solid #e5e7eb;
+  border-left: 1px solid var(--rf-border-subtle);
 }
 
 .assistant-context-toggle {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: #344054;
+  color: var(--rf-text-secondary);
   font-size: 14px;
   white-space: nowrap;
   cursor: pointer;

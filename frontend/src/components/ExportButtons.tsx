@@ -1,183 +1,56 @@
-/** 导出按钮组：直接下载 PDF（服务端生成）/ 浏览器打印 / HTML / Markdown / JSON。 */
-import { DownloadOutlined, PrinterOutlined } from "@ant-design/icons";
-import { App, Button, Dropdown, Space, Tooltip } from "antd";
-import type { MenuProps } from "antd";
-import { useState } from "react";
-import { ApiError } from "../api/client";
-import { formatErrorGuidance } from "../api/errorGuidance";
-import { exportResume, fetchResumeHtml } from "../api/resumes";
-import { downloadBlob, printHtml } from "../utils/download";
-
-/**
- * 浏览器打印路径的诚实提示。
+/** 导出入口：全页面唯一的「导出」按钮，点击打开统一的导出面板。
  *
- * **为什么只能给提示、不能在应用内消除差异**：屏幕上的近似分页是预览用 CSS `columns`
- * 排出来的估算；而「浏览器打印 / 另存为 PDF」走的是 `@media print` 的 `break-inside: avoid`，
- * 页断点可能与屏幕不同（预览说一页、打印可能两页）。浏览器不向 JS 暴露打印页数，所以应用
- * 无法在内部算出真实打印页数，只能就地说明"打印是权威、屏幕是近似"。
+ * 历史上这里有「下载 PDF」+「更多格式」两个入口，预览页另有一套「导出选项」、再加一个
+ * 「一键脱敏」。三套入口各自拼参数，于是"预览里调过的字号/行距没进导出"这类问题只出现
+ * 在其中一条路径上。现在收成一个入口 + 一份请求体（见 ExportOptionsModal）。
  */
-export const PRINT_PAGINATION_NOTE =
-  "打印 / 另存为 PDF 的分页以浏览器为准，可能与屏幕近似分页略有不同。";
+import { ExportOutlined } from "@ant-design/icons";
+import { Button } from "antd";
+import { useState } from "react";
+import type { ResumeLayout } from "../types";
+import ExportOptionsModal from "./ExportOptionsModal";
 
 interface Props {
   recordId: number;
-  /** 服务端是否找到中文字体；为 false 时主按钮退回浏览器打印。 */
+  /** 预览当前的版式草稿：导出必须与眼前所见同参数。 */
+  layout?: ResumeLayout;
+  /** 服务端是否找到中文字体；为 false 时面板里只给浏览器打印。 */
   pdfDirectAvailable?: boolean;
+  /**
+   * 由父组件接管弹窗（父组件还需要从「查看大图」等地方打开同一个面板时用）。
+   * 提供时本组件只画按钮，不再自己挂一份弹窗——两份实例会各自持有一份表单状态。
+   */
+  onOpen?: () => void;
 }
 
-export default function ExportButtons({ recordId, pdfDirectAvailable = true }: Props) {
-  const { message, modal } = App.useApp();
-  const [downloading, setDownloading] = useState(false);
-  // 主按钮的提示是说明文字，不是操作引导：点击后开始导出，提示就该收掉，
-  // 而不是等鼠标移开才消失。受控开关在点击时统一关闭。
-  const [pdfTipOpen, setPdfTipOpen] = useState(false);
-
-  /**
-   * 导出被"正文还有未完成标记"拦下时（409），问一次是否仍要导草稿。
-   *
-   * 拦下不等于堵死：用户确实只想导一份草稿自查时得有出路。写成通用包装是因为
-   * 四种格式和打印都会撞到这条闸门，各写一遍迟早漏掉一个。
-   */
-  const runExport = async <T,>(
-    run: (allowIncomplete: boolean) => Promise<T>,
-  ): Promise<T | null> => {
-    try {
-      return await run(false);
-    } catch (err) {
-      if (!(err instanceof ApiError) || err.status !== 409) throw err;
-      const proceed = await new Promise<boolean>((resolve) => {
-        modal.confirm({
-          title: "简历里还有未完成标记",
-          content: err.message,
-          okText: "仍要导出草稿",
-          cancelText: "我去改简历",
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
-      });
-      if (!proceed) return null;
-      return await run(true);
-    }
-  };
-
-  /** 直接下载 PDF：服务端用 fpdf2 + 系统中文字体排版，不需要打开打印窗口。 */
-  const downloadPdf = async () => {
-    if (downloading) return;
-    setDownloading(true);
-    try {
-      const result = await runExport((allowIncomplete) =>
-        exportResume(recordId, "pdf", allowIncomplete),
-      );
-      if (result === null) return; // 用户选择先去改简历
-      const { blob, filename, pages, pageLimit, savedTo } = result;
-      downloadBlob(blob, filename);
-      if (pages && pageLimit && pages > pageLimit) {
-        // 内容放不下时服务端宁可多出一页也不裁字，所以页数可能多于用户选的上限。
-        // 之前这种情况只在服务端日志里，用户下载完才发现版式跟预览不一样。
-        message.warning(
-          `PDF 共 ${pages} 页，超过你选择的 ${pageLimit} 页上限：服务端排版不裁内容，` +
-            "放不下就顺延。想要和预览完全一致的版式，请用「浏览器打印 / 另存为 PDF」。",
-        );
-      } else if (savedTo) {
-        // 设置了「生成内容保存位置」：后端已经把同一份产物落盘了一份。
-        message.success(`已同时保存到 ${savedTo}`);
-      } else {
-        message.success("PDF 已开始下载");
-      }
-    } catch (err) {
-      message.error(
-        err instanceof Error
-          ? `${err.message}（可以改用「浏览器打印 / 另存为 PDF」）`
-          : "下载 PDF 失败，请改用浏览器打印",
-      );
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  /** 浏览器打印：版式与预览同源（同一模板 + 同一 --fit-scale），但分页受 @media print 的
-   *  break-inside: avoid 影响，可能与屏幕近似分页略有不同——浏览器不向 JS 暴露打印页数，
-   *  应用内无法消除这个差异，只能在下拉项上提示一句（见 PRINT_PAGINATION_NOTE）。 */
-  const printPdf = async () => {
-    try {
-      const html = await runExport((allowIncomplete) => fetchResumeHtml(recordId, allowIncomplete));
-      if (html === null) return;
-      printHtml(html);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "打开打印窗口失败");
-    }
-  };
-
-  /** 下载文件（HTML / Markdown / JSON） */
-  const exportFile = async (format: "html" | "md" | "json") => {
-    try {
-      const result = await runExport((allowIncomplete) =>
-        exportResume(recordId, format, allowIncomplete),
-      );
-      if (result === null) return;
-      downloadBlob(result.blob, result.filename);
-      if (result.savedTo) {
-        message.success(`已同时保存到 ${result.savedTo}`);
-      }
-    } catch (err) {
-      // RF-20：失败不只显示原始异常——给「原因 + 建议 + 编号」指引。
-      message.error(formatErrorGuidance(err, "导出失败"));
-    }
-  };
-
-  const menuItems: MenuProps["items"] = [
-    {
-      key: "pdf-print",
-      label: <span title={PRINT_PAGINATION_NOTE}>浏览器打印 / 另存为 PDF</span>,
-      icon: <PrinterOutlined />,
-    },
-    ...(pdfDirectAvailable ? [{ key: "pdf-download", label: "直接下载 PDF" }] : []),
-    { key: "html", label: "导出 HTML" },
-    { key: "md", label: "导出 Markdown" },
-    { key: "json", label: "导出 JSON" },
-  ];
-
-  const onMenuClick: MenuProps["onClick"] = ({ key }) => {
-    if (key === "pdf-download") void downloadPdf();
-    if (key === "pdf-print") void printPdf();
-    if (key === "html" || key === "md" || key === "json") void exportFile(key);
-  };
+export default function ExportButtons({
+  recordId,
+  layout,
+  pdfDirectAvailable = true,
+  onOpen,
+}: Props) {
+  const [open, setOpen] = useState(false);
 
   return (
-    <Space>
-      {pdfDirectAvailable ? (
-        <Tooltip
-          open={pdfTipOpen}
-          onOpenChange={setPdfTipOpen}
-          title="服务端直接生成，不用打开打印窗口。它用自己的一套排版（强调色跟随所选模板），版式与预览不逐像素一致；想要和预览完全一样，请用「浏览器打印 / 另存为 PDF」"
-        >
-          <span onClick={() => setPdfTipOpen(false)}>
-            <Button
-              type="primary"
-              icon={<DownloadOutlined />}
-              loading={downloading}
-              onClick={() => void downloadPdf()}
-            >
-              下载 PDF
-            </Button>
-          </span>
-        </Tooltip>
-      ) : (
-        <Tooltip
-          open={pdfTipOpen}
-          onOpenChange={setPdfTipOpen}
-          title="系统里没有找到中文字体，PDF 由浏览器打印生成"
-        >
-          <span onClick={() => setPdfTipOpen(false)}>
-            <Button type="primary" icon={<PrinterOutlined />} onClick={() => void printPdf()}>
-              打印 / 另存为 PDF
-            </Button>
-          </span>
-        </Tooltip>
+    <>
+      <Button
+        type="primary"
+        icon={<ExportOutlined />}
+        onClick={() => (onOpen ? onOpen() : setOpen(true))}
+      >
+        导出
+      </Button>
+      {onOpen ? null : (
+        <ExportOptionsModal
+          recordId={recordId}
+          open={open}
+          initialPageLimit={layout?.page_limit}
+          initialFontScale={layout?.font_scale}
+          initialFormatConfig={layout?.format_config}
+          pdfDirectAvailable={pdfDirectAvailable}
+          onClose={() => setOpen(false)}
+        />
       )}
-      <Dropdown menu={{ items: menuItems, onClick: onMenuClick }}>
-        <Button>更多格式</Button>
-      </Dropdown>
-    </Space>
+    </>
   );
 }

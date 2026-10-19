@@ -11,7 +11,8 @@
  * Ctrl/⌘/Alt；浏览器保留组合拒绝；与其它动作冲突拒绝。被拒绝时红字提示且**不落库**，
  * 用户不会在"以为改好了"之后发现按了没反应。
  */
-import { App, Button, Card, Popconfirm, Space, Table, Tag, Typography } from "antd";
+import { QuestionCircleOutlined } from "@ant-design/icons";
+import { App, Button, Card, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -47,6 +48,24 @@ const REJECTION_TEXT: Record<ShortcutRejectionReason, string> = {
   modifierOnly: "还需要一个非修饰键（例如 Z、K）",
   reserved: "这是浏览器或窗口的保留组合，换一个",
   noModifier: "组合键必须带 Ctrl / ⌘ 或 Alt",
+};
+
+/**
+ * R8：为什么这些动作不用"更顺手"的键。
+ *
+ * 计划表里的第一版有两类是浏览器/系统先接走的（Ctrl+E 聚焦地址栏搜索、Ctrl+, 打开
+ * 浏览器/系统设置），还有一类会和常用扩展撞车——绑上去要么到不了页面，要么把用户
+ * 正在用的浏览器功能抢走。默认值因此统一加一级修饰键或换主键；用户仍可在本卡改键。
+ * 另外两个翻页动作只作用于**列表分页**，不是简历预览翻页，必须写清楚。
+ */
+const ACTION_HINTS: Partial<Record<ShortcutActionId, string>> = {
+  toggleTheme: "避开 Ctrl+Shift+L（部分浏览器/扩展占用），改用 Ctrl/⌘+Alt+D。",
+  openSettings: "Ctrl/⌘+, 是浏览器与系统的设置键，到不了页面，改用 Ctrl/⌘+Alt+S。",
+  openSkills: "避开 Ctrl+Shift+K（浏览器开发者工具/搜索冲突），改用 Ctrl/⌘+Alt+K。",
+  exportPdf: "Ctrl/⌘+E 是浏览器地址栏搜索的保留键，改用 Ctrl/⌘+Shift+E。",
+  newResume: "避开 Ctrl/⌘+Alt+R（与输入法/扩展冲突），改用 Ctrl/⌘+Shift+N。",
+  prevPage: "作用于当前列表分页，不是简历预览翻页；落到分页控件上，不在预览里翻页。",
+  nextPage: "作用于当前列表分页，不是简历预览翻页；落到分页控件上，不在预览里翻页。",
 };
 
 function actionLabel(id: ShortcutActionId): string {
@@ -108,6 +127,14 @@ export default function ShortcutSettingsCard() {
 
   const dataSource = useMemo(() => [...SHORTCUT_ACTIONS], []);
 
+  /** 解绑：写入 null（不是空数组），否则下次读取会被当成"没配过"回落默认。 */
+  const handleClear = (action: ShortcutAction) => {
+    updateShortcutBinding(settings, action.id, null);
+    setRecordingId(null);
+    setError("");
+    message.success(`「${action.label}」已解绑，这个组合键不再触发任何动作`);
+  };
+
   const handleRestore = (action: ShortcutAction) => {
     restoreShortcutBinding(settings, action.id);
     setRecordingId(null);
@@ -126,7 +153,19 @@ export default function ShortcutSettingsCard() {
     {
       title: "动作",
       key: "label",
-      render: (_, action) => <Typography.Text>{action.label}</Typography.Text>,
+      render: (_, action) => {
+        const hint = ACTION_HINTS[action.id];
+        return (
+          <Space size={4}>
+            <Typography.Text>{action.label}</Typography.Text>
+            {hint ? (
+              <Tooltip title={hint}>
+                <QuestionCircleOutlined aria-label={`${action.label} 说明`} />
+              </Tooltip>
+            ) : null}
+          </Space>
+        );
+      },
     },
     {
       title: "作用域",
@@ -153,9 +192,14 @@ export default function ShortcutSettingsCard() {
             </Space>
           );
         }
+        const keys = shortcutKeysOf(settings, action.id);
+        if (keys.length === 0) {
+          // 「未绑定」必须显式显示：留空会让用户以为设置丢了。
+          return <Tag className="shortcut-settings-key">未绑定</Tag>;
+        }
         return (
           <Space size={4} wrap>
-            {shortcutKeysOf(settings, action.id).map((binding) => (
+            {keys.map((binding) => (
               <Tag key={binding} className="shortcut-settings-key">
                 {formatShortcut(binding, { mac })}
               </Tag>
@@ -167,10 +211,12 @@ export default function ShortcutSettingsCard() {
     {
       title: "操作",
       key: "actions",
-      width: 168,
+      width: 240,
       render: (_, action) => {
+        const keys = shortcutKeysOf(settings, action.id);
+        const isUnbound = keys.length === 0;
         const isDefault = sameKeys(
-          shortcutKeysOf(settings, action.id),
+          keys,
           defaultShortcutBindings()[action.id].map((binding) => normalizeBinding(binding)),
         );
         return (
@@ -185,6 +231,17 @@ export default function ShortcutSettingsCard() {
             >
               {recordingId === action.id ? "取消" : "修改"}
             </Button>
+            <Popconfirm
+              title={`解绑「${action.label}」？`}
+              description="解绑后这个组合键不再触发任何动作，可随时「恢复默认」。"
+              okText="解绑"
+              cancelText="取消"
+              onConfirm={() => handleClear(action)}
+            >
+              <Button size="small" disabled={isUnbound}>
+                清除
+              </Button>
+            </Popconfirm>
             <Button size="small" disabled={isDefault} onClick={() => handleRestore(action)}>
               恢复默认
             </Button>

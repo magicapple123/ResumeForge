@@ -262,3 +262,80 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
     await waitFor(() => expect(screen.getByLabelText("个人总结")).toHaveValue("资料里的个人总结"));
   });
 });
+
+/**
+ * 条目级填入（「从资料填入本条」）在真实弹窗里的样子。
+ *
+ * `ResumeListSection.fillEntry.test.tsx` 已经把语义铺开了；这里只钉一条整链路——资料读进
+ * 候选、候选进到每个条目头部的下拉、点下去只改那一条。真实场景：预填之后用户在资料里
+ * 又补了一段教育经历，想把它塞进**已经存在**的某一条（而不是再追加一条重复的）。
+ */
+describe("ManualResumeModal 从资料填入本条（条目级）", () => {
+  const EDUCATION_A = {
+    school: "示例大学",
+    department: "",
+    major: "软件工程",
+    degree: "本科",
+    study_mode: "",
+    degree_type: "",
+    start_date: "2023.09",
+    end_date: "2027.06",
+    gpa: "3.8",
+    cet4_score: "",
+    cet6_score: "",
+    courses: "数据结构",
+    achievements: "",
+  };
+
+  const EDUCATION_B = {
+    ...EDUCATION_A,
+    school: "第二大学",
+    major: "机械设计",
+    degree: "硕士",
+    start_date: "2021.09",
+    end_date: "2023.06",
+    gpa: "3.5",
+    courses: "",
+  };
+
+  it("删掉预填的一条再加一条空的，可以从它的下拉把资料里那条填回来", async () => {
+    apiMocks.getProfile.mockResolvedValue({
+      ...PROFILE,
+      educations: [EDUCATION_A, EDUCATION_B],
+    });
+
+    render(
+      <AntdApp>
+        <ManualResumeModal job={null} open onClose={vi.fn()} />
+      </AntdApp>,
+    );
+
+    await screen.findByText(/自行编写|从头编写/);
+    fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
+    await waitFor(() => expect(screen.getAllByLabelText("学校")).toHaveLength(2));
+
+    // 删掉第 2 条（「第二大学」），再加一条空条目：此时候选里 B 又变成"没人用过"。
+    fireEvent.click(screen.getAllByRole("button", { name: "删除教育经历" })[1]);
+    await waitFor(() => expect(screen.getAllByLabelText("学校")).toHaveLength(1));
+    fireEvent.click(await screen.findByRole("button", { name: /添加教育经历/ }));
+    await waitFor(() => expect(screen.getAllByLabelText("学校")).toHaveLength(2));
+
+    // 第 2 条头部的下拉：选中资料里的 B，再点「填入本条的…」。
+    const entrySelect = screen.getAllByRole("combobox", { name: "从我的资料选择填入本条" })[1];
+    fireEvent.mouseDown(entrySelect);
+    fireEvent.click(entrySelect);
+    const option = await screen.findByText(/第二大学（机械设计 · 硕士 · 2021.09 ~ 2023.06）/);
+    fireEvent.click(option);
+    fireEvent.click(screen.getAllByRole("button", { name: "填入本条的教育经历" })[1]);
+
+    await waitFor(() => expect(screen.getAllByLabelText("学校")[1]).toHaveValue("第二大学"));
+    // 填的是"这一条"：条目数不变，第 1 条（资料里的 A）逐字不动。
+    expect(screen.getAllByLabelText("学校")).toHaveLength(2);
+    expect(screen.getAllByLabelText("学校")[0]).toHaveValue("示例大学");
+    expect(screen.getAllByLabelText("专业")[1]).toHaveValue("机械设计");
+    expect(screen.getAllByLabelText("学历")[1]).toHaveValue("硕士");
+    expect(screen.getAllByLabelText("开始时间")[1]).toHaveValue("2021.09");
+    // 顶部「追加一条」入口还在，两者并存。
+    expect(screen.getByText("从我的资料追加一条")).toBeInTheDocument();
+  });
+});

@@ -246,7 +246,7 @@ export function matches(
  * 会把自己判成冲突。
  */
 export function findConflict(
-  bindings: Record<string, string[]>,
+  bindings: Record<string, string[] | null>,
   next: string,
   exceptId?: string,
 ): ShortcutActionId | null {
@@ -264,7 +264,7 @@ export function findConflict(
 /** 事件命中的动作 id（没有命中返回 null）。动作顺序即注册表顺序。 */
 export function findBindingActionId(
   event: KeyboardEvent,
-  bindings: Record<string, string[]>,
+  bindings: Record<string, string[] | null>,
   options: ShortcutOptions = {},
 ): ShortcutActionId | null {
   const normalized = normalizeEvent(event, options);

@@ -23,6 +23,19 @@
  *
  * 防抖仍由换位闩锁（`swapLatchOpen`，12px）兜亚步长抖动，与 gap 完全解耦。
  *
+ * ## 为什么「小条目」不用行程制，而用**邻卡边缘**判定
+ *
+ * 分区卡片又高又少（890px/块），按行程推进才能跨得动；条目（教育/经历/项目）却
+ * 又多又矮（60~380px/条），48px/槽在条目列表里意味着「拖到邻卡中间就换位」——用户
+ * 实测的原话是「太敏感、总在我没想换的地方翻」。条目的心理模型是**卡片**：手指要
+ * 真的把卡拖到「下一张卡的下缘」或「上一张卡的上缘」，才算压过去一张。
+ *
+ * 于是条目拖拽单独走 `resolveItemEdgeTargetIndex`：判定只看**指针 y 与邻卡边缘**的
+ * 相对位置，既不看邻卡中线（更敏感），也不看指针行程（与卡片高度无关，矮卡上极敏感）。
+ * 触发点比边缘提前 `ITEM_EDGE_TRIGGER_PX`：用户不必把指针精确压到像素级边缘，只要
+ * 「快要到」就换，松手前能看到下一格已经让开。天然滞回 = 一整张卡片的高/矮，指针停在
+ * 邻卡中间随便晃都不会换位。
+ *
  * ## 为什么 transform 直接算「目标位置 − 布局位置」
  *
  * 旧实现把每次实时重排造成的布局位移累加进一个 `layoutShift` 再补偿。累加式补偿
@@ -169,6 +182,91 @@ export function resolveTargetIndex(
   if (steps === 0) return dragIndex;
   const insertion = dragIndex + (travel > 0 ? steps : -steps);
   return Math.max(minIndex, Math.min(insertion, lastIndex));
+}
+
+/**
+ * 条目拖拽的边缘换位闩锁（px）：距上一次真正换位至少移动这么远才允许再换一次。
+ *
+ * 边缘判定本身已经有一整张卡片高度的天然滞回（换位后要换回来得走到另一侧的边缘），
+ * 这条闩锁只兜「指针恰好压在边缘线上」的亚像素抖动与自动滚动的逐帧重复判定：指针
+ * 停在 `nextBottom` 上不动时，±1~2px 的手抖不该让同一处反复换位。
+ *
+ * 取 6 的原因：小于拖拽激活阈值（同为 6px）则会与激活抖动同量级、兜不住；大于 6 会让
+ * 「到边后想立刻再换一位」的手感变钝（用户已经拖过一整张卡，不该再等）。
+ */
+export const ITEM_SWAP_LATCH_PX = 6;
+
+/**
+ * 条目拖拽的「快要到边缘」预判距离（px）。
+ *
+ * 用户的原话是「拖到**快要到**下一张小卡片底部或者上一张小卡片顶部时就更换位置」：
+ * 精确压到边缘线才换，指针得走完整张卡，手感偏迟；提前 24px（约一行正文的高度）
+ * 换位，视觉上卡片刚接近邻卡边缘就让开，松手前能确认落点。
+ *
+ * 不按卡片高度做百分比：矮卡（60px）的 24px 已经接近半张，高卡（380px）的 24px
+ * 又太贴边；固定 24px 更接近「接近边缘」的直觉，也让边缘闩锁（6px）始终小于预判带。
+ */
+export const ITEM_EDGE_TRIGGER_PX = 24;
+
+/**
+ * 条目拖拽的「边缘换位」：指针**接近**下一张卡片的底边、或上一张卡片的顶边
+ * （提前 `ITEM_EDGE_TRIGGER_PX`）就换位。返回目标下标（可能跨多格）或原位。
+ *
+ * 跨多格是刻意的：拖到父卡片底部时指针已经越过后面所有条目的边缘，若一次只推进
+ * 一位，会停在中间而不是末位（用户实测「拖到它所在的大卡片底部时无法正常换位」）。
+ * 指针只越过一张卡时仍然只换一位，所以「不敏感」的手感不变。
+ *
+ * ## 为什么是「边缘」而不是「邻卡中线」或「48px 行程」
+ *
+ * 1. **中线（前缘越过邻中心）**：换位阈值落在邻卡内部，被拖卡只要盖住邻卡一半就翻。
+ *    条目卡矮（60px）时阈值只有 30px，比鼠标手抖的幅度大不了多少——用户抱怨的
+ *    「拖到相邻卡片中间就换位，太敏感」正是这条。
+ * 2. **行程制（`resolveTargetIndex`，48px/槽）**：与邻卡几何完全解耦，但正因如此，
+ *    在矮条目上 48px 只等于「半个邻卡」，仍然是「盖住就翻」；而且它和指针在卡片里的
+ *    位置无关，用户无法建立「拖过一张卡才换」的空间直觉。
+ * 3. **接近边缘（本函数）**：阈值锚在**邻卡的真实下缘/上缘**上，并提前 24px——
+ *    下移要 `pointerY >= layoutTop(next) + height(next) - 24`，
+ *    上移要 `pointerY <= layoutTop(prev) + 24`。用户不必精确压到像素级边缘，
+ *    「快要到」就换；换位量仍接近一整张卡，且自带滞回：换位后想换回来，指针得走到
+ *    **另一侧**的边缘去（隔着一整张卡），±2px 抖动不可能触发。
+ *
+ * 判定只用**指针 y**，不用 `desiredTop`（被拖卡的视觉上缘）：`desiredTop` 已经被
+ * `clampDesiredTop` 钳在栈内、又带着抓取偏移，拿它跟边缘比会把「手指位置」和「卡片
+ * 位置」混在一起——贴边钳住时 `desiredTop` 不再跟手，边缘判定就会永久失效或永久触发。
+ *
+ * @param geometry 激活时缓存的栈几何（`heights` 与当前顺序逐位对齐）。
+ * @param sourceIndex 被拖条目**当前**下标。
+ * @param pointerY 指针的视口 y（不是卡片位置，也不是内容坐标）。
+ * @returns 目标下标（下移/上移可跨多格）或原位 `sourceIndex`。
+ */
+export function resolveItemEdgeTargetIndex(
+  geometry: DragStackGeometry,
+  sourceIndex: number,
+  pointerY: number,
+): number {
+  const count = geometry.heights.length;
+  // 越界下标（空栈 / 几何尚未采集完成）原样返回：没有任何邻卡可判，不推进。
+  if (sourceIndex < 0 || sourceIndex >= count) return sourceIndex;
+
+  // 下移：从当前位开始逐张检查「接近下一张底边」；指针越过的最后一张就是目标。
+  // 必须**循环**而不是只比较下一张：用户把条目拖到父卡片底部时，指针已经越过
+  // 后面所有条目的边缘，只推进一位会停在中间（用户实测「拖到底部无法正常换位」）。
+  let target = sourceIndex;
+  while (target + 1 < count) {
+    const nextBottom = layoutTop(geometry, target + 1) + geometry.heights[target + 1];
+    if (pointerY >= nextBottom - ITEM_EDGE_TRIGGER_PX) target += 1;
+    else break;
+  }
+  if (target !== sourceIndex) return target;
+
+  // 上移：与下移对称，从当前位逐张往上检查「接近上一张顶边」。
+  while (target - 1 >= 0) {
+    const prevTop = layoutTop(geometry, target - 1);
+    if (pointerY <= prevTop + ITEM_EDGE_TRIGGER_PX) target -= 1;
+    else break;
+  }
+
+  return target;
 }
 
 /**

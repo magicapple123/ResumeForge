@@ -1,0 +1,13 @@
+/*
+ * 日期选择器的弹出层宽度（PartialDateSelect）。
+ *
+ * 三个 Select 都设了 `popupMatchSelectWidth={false}`：弹出层按选项内容自适应，而不是
+ * 跟随控件宽度——「年 / 月 / 日」并排放在 Space.Compact 里，控件被等分成很窄的一条，
+ * 弹出层跟着变窄就会把「2024」截成「20」。
+ *
+ * 这里只给年份补一个最小宽度兜底（年份是四位数字，比月/日的两位更宽）。不需要颜色，
+ * 所以没有 --rf-* token 可引用。
+ */
+.profile-year-select-popup {
+  min-width: 96px;
+}

@@ -19,6 +19,7 @@ import type {
   ResumePendingChange,
   ResumeReviewResult,
   ResumeSuggestions,
+  ResumeSort,
   ResumeTemplateCatalog,
   StreamEvent,
 } from "../types";
@@ -34,6 +35,8 @@ export function listResumes(
     favorite?: boolean;
     /** false 只取通用简历（未关联任何岗位） */
     has_job?: boolean;
+    /** 列表排序（R14）；省略时后端用「最近修改」。 */
+    sort?: ResumeSort;
   } = {},
 ): Promise<Page<ResumeBrief>> {
   return request(`/resumes${buildQuery(params)}`);
@@ -108,8 +111,22 @@ export function createManualResume(payload: {
   });
 }
 
-export function generateResumeSuggestions(id: number): Promise<ResumeSuggestions> {
-  return request(`/resumes/${id}/suggestions`, { method: "POST" });
+/**
+ * 生成岗位化修改建议（调用一次大模型，10–60 秒）。
+ *
+ * 预算是借用的 ``recognition``（90s）：这条接口**非流式、要等完整 JSON**，``default``
+ * 的 15s 在长简历 + 慢模型时不够用。``signal`` 由模块级 store 传入，用户点「取消生成」
+ * 时 abort（弹窗关闭**不** abort——那是"后台继续"语义）。
+ */
+export function generateResumeSuggestions(
+  id: number,
+  signal?: AbortSignal,
+): Promise<ResumeSuggestions> {
+  return request(`/resumes/${id}/suggestions`, {
+    method: "POST",
+    budget: "recognition",
+    signal,
+  });
 }
 
 /**
@@ -332,6 +349,23 @@ export async function exportResumeWithOptions(
     pages: readCountHeader(resp.headers.get("X-Resume-Pages")),
     pageLimit: readCountHeader(resp.headers.get("X-Resume-Page-Limit")),
     savedTo: readSavedToHeader(resp.headers.get("X-Saved-To")),
+  };
+}
+
+/**
+ * 离线分享包（R3）：一个 zip，内含单文件 HTML + PDF + 说明。
+ *
+ * 与「生成分享包」不同：那个是给**装了这个应用**的人看的（带分享码与评论回传）；
+ * 这个 zip 给的是招聘方或朋友——双击 HTML 就能看，PDF 直接转发。
+ */
+export async function downloadResumeShareZip(
+  id: number,
+): Promise<{ blob: Blob; filename: string }> {
+  const resp = await requestRaw(`/resumes/${id}/share-zip`, { budget: "export" });
+  return {
+    blob: await resp.blob(),
+    filename:
+      getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? "简历-离线包.zip",
   };
 }
 

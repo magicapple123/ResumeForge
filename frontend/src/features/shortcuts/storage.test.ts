@@ -30,7 +30,7 @@ afterEach(() => {
 describe("默认值与坏数据", () => {
   it("存储为空时给出默认组合", () => {
     const settings = getShortcutSettings();
-    expect(settings.version).toBe(1);
+    expect(settings.version).toBe(2);
     expect(settings.bindings).toEqual(defaultShortcutSettings().bindings);
     expect(settings.bindings.redo).toEqual(["mod+shift+z", "mod+y"]);
   });
@@ -39,6 +39,20 @@ describe("默认值与坏数据", () => {
     window.localStorage.setItem(SHORTCUT_STORAGE_KEY, "{不是 JSON");
     expect(getShortcutSettings().bindings).toEqual(defaultShortcutSettings().bindings);
     expect(parseShortcutSettings("{")).toEqual(defaultShortcutSettings());
+  });
+
+  it("v1 的设置读取时升级到 v2，组合原样保留（升级不丢用户改过的键）", () => {
+    window.localStorage.setItem(
+      SHORTCUT_STORAGE_KEY,
+      JSON.stringify({ version: 1, bindings: { search: ["mod+p"], undo: ["mod+z"] } }),
+    );
+
+    const settings = getShortcutSettings();
+
+    expect(settings.version).toBe(2);
+    expect(settings.bindings.search).toEqual(["mod+p"]);
+    // 没出现在 v1 数据里的动作仍拿默认值。
+    expect(settings.bindings.newJob).toEqual(["mod+alt+n"]);
   });
 
   it("版本不认识时整份回落默认", () => {
@@ -60,7 +74,23 @@ describe("默认值与坏数据", () => {
       },
     });
     expect(Object.keys(settings.bindings).sort()).toEqual(
-      ["assistant", "newJob", "redo", "save", "search", "undo"].sort(),
+      [
+        "assistant",
+        "exportPdf",
+        "focusAssistant",
+        "newJob",
+        "newResume",
+        "nextPage",
+        "openSettings",
+        "openSkills",
+        "prevPage",
+        "redo",
+        "save",
+        "search",
+        "switchDataset",
+        "toggleTheme",
+        "undo",
+      ].sort(),
     );
     expect(settings.bindings.undo).toEqual(["mod+p"]);
     // 全被过滤光的动作回落到默认。
@@ -99,7 +129,7 @@ describe("落库与广播", () => {
     const next = updateShortcutBinding(defaultShortcutSettings(), "search", ["mod+p"]);
 
     expect(next.bindings.search).toEqual(["mod+p"]);
-    expect(readStored()).toEqual({ version: 1, bindings: next.bindings });
+    expect(readStored()).toEqual({ version: 2, bindings: next.bindings });
     expect(listener).toHaveBeenCalledTimes(1);
     // 快照跟着变：keymap 立刻用新组合。
     expect(getShortcutSettings().bindings.search).toEqual(["mod+p"]);
@@ -107,6 +137,17 @@ describe("落库与广播", () => {
     unsubscribe();
     saveShortcutSettings(defaultShortcutSettings());
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("解绑写入 null：刷新后仍是解绑，展示为空、按键不再命中（R7）", () => {
+    const unbound = updateShortcutBinding(defaultShortcutSettings(), "search", null);
+
+    expect(unbound.bindings.search).toBeNull();
+    // 落库形态是 null，不是空数组——空数组会被当成"没配过"回落默认。
+    expect(readStored().bindings.search).toBeNull();
+    expect(shortcutKeysOf(getShortcutSettings(), "search")).toEqual([]);
+    // 重新读一遍仍是解绑（不依赖内存里的那一份）。
+    expect(getShortcutSettings().bindings.search).toBeNull();
   });
 
   it("单条恢复默认只改那一个动作", () => {
@@ -120,7 +161,7 @@ describe("落库与广播", () => {
     updateShortcutBinding(defaultShortcutSettings(), "assistant", ["mod+p"]);
     const reset = resetShortcutSettings();
     expect(reset.bindings).toEqual(defaultShortcutSettings().bindings);
-    expect(readStored()).toEqual({ version: 1, bindings: defaultShortcutSettings().bindings });
+    expect(readStored()).toEqual({ version: 2, bindings: defaultShortcutSettings().bindings });
   });
 
   it("localStorage 不可写时仍然在内存里生效", () => {

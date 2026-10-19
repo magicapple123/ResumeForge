@@ -256,12 +256,15 @@ describe("HomePage", () => {
     expect(screen.getByText("催 HR 回复")).toBeInTheDocument();
     expect(screen.queryByText(/\d{4} 年 \d+ 月/)).toBeNull();
 
-    // 紧急度着色点：soon / overdue 对应不同背景色。
+    // 紧急度着色点：soon / overdue 用**不同 token**（R18：色值不再写死在内联样式里，
+    // 深色主题下由 dark-tokens.css 统一换一套）。这里断言"两者不同且都走语义 token"，
+    // 而不是钉死某个 rgb——钉死 rgb 等于把浅色配色重新写回测试。
     const dots = document.querySelectorAll(".reminder-urgency-dot");
     expect(dots.length).toBe(2);
     const colors = Array.from(dots).map((dot) => (dot as HTMLElement).style.background);
-    expect(colors).toContain("rgb(250, 140, 22)"); // soon
-    expect(colors).toContain("rgb(255, 77, 79)"); // overdue
+    expect(colors).toContain("var(--rf-accent-amber)"); // soon
+    expect(colors).toContain("var(--rf-danger)"); // overdue
+    expect(new Set(colors).size).toBe(2);
 
     // 点击提醒条目打开既有的提醒弹窗（只有弹窗才有「知道了」按钮）。
     fireEvent.click(screen.getByLabelText("查看提醒：参加某司二面"));

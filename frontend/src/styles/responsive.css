@@ -20,7 +20,7 @@
     width: 100%;
     padding-top: 8px;
     padding-left: 0;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--rf-border-subtle);
     border-left: 0;
   }
 
@@ -83,7 +83,7 @@
     padding-bottom: 12px;
     overflow-y: auto;
     border-right: 0;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--rf-border-subtle);
   }
 
   .assistant-workspace {
@@ -108,7 +108,7 @@
   }
 
   .resume-editor-reference .ant-collapse {
-    background: #f8fafc;
+    background: var(--rf-surface-alt);
   }
 
   .job-reference-panel {

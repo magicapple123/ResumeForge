@@ -47,7 +47,7 @@ export default function ProfileSectionStack({
   onHandlePointerDown,
   onMoveByOffset,
 }: Props) {
-  const { sectionOrder, reordering, draggingKey } = useSyncExternalStore(
+  const { sectionOrder, reordering, draggingKey, compact } = useSyncExternalStore(
     reorderStore.subscribe,
     reorderStore.getSnapshot,
   );
@@ -94,6 +94,9 @@ export default function ProfileSectionStack({
         editable={editing}
         reordering={reordering}
         dragging={draggingKey === sectionKey}
+        // 拖动激活期全部折叠成紧凑条：一个开关驱动所有分区（含未被拖的），这正是
+        // 「一开始拖就全部收起来」的实现点（见 profileCompactDrag.ts）。
+        compact={compact}
         collapsed={!editing && collapsedSections.has(sectionKey)}
         // 微调按钮边界：`basic_info` 固定首位（order 0），第 1 个可拖分区（order 1）
         // 的上移禁用；末位（order = 总数 − 1）的下移禁用。与键盘排序的钳制一致。

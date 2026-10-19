@@ -75,7 +75,7 @@
 }
 
 .tt:focus-visible {
-  outline: 2px solid #91caff;
+  outline: 2px solid var(--rf-focus-ring);
   outline-offset: 4px;
 }
 
@@ -291,7 +291,7 @@
   top: calc(var(--tt-size) * -0.12);
   left: calc(var(--tt-size) * -0.12);
   z-index: 1;
-  color: #6b8cb5;
+  color: var(--rf-text-secondary);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1px;
@@ -342,10 +342,10 @@
   width: max-content;
   max-width: min(280px, calc(100vw - 32px));
   padding: 10px 12px;
-  border: 1px solid #d7e7f7;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 12px;
-  color: #244364;
-  background: rgb(255 255 255 / 96%);
+  color: var(--rf-brand);
+  background: var(--rf-surface-glass);
   box-shadow: 0 12px 30px rgb(42 83 125 / 16%);
   font-size: 12px;
   line-height: 1.55;
@@ -371,14 +371,14 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  color: #66809b;
-  background: #eef6fd;
+  color: var(--rf-text-secondary);
+  background: var(--rf-brand-wash);
   cursor: pointer;
   line-height: 20px;
 }
 
 .tt-tip-close:focus-visible {
-  outline: 2px solid #91caff;
+  outline: 2px solid var(--rf-focus-ring);
   outline-offset: 2px;
 }
 
@@ -405,9 +405,9 @@
   width: max-content;
   max-width: min(240px, calc(100vw - 32px));
   padding: 10px 12px 12px;
-  border: 1px solid #d7e7f7;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 12px;
-  background: #fff;
+  background: var(--rf-surface);
   box-shadow: 0 12px 30px rgb(42 83 125 / 16%);
   /* 壳本身 pointer-events: none（拖拽命中只留给球），卡片要自己接住点击。 */
   pointer-events: auto;
@@ -417,7 +417,7 @@
 }
 
 .tt-card:focus-within {
-  outline: 2px solid #91caff;
+  outline: 2px solid var(--rf-focus-ring);
   outline-offset: 2px;
 }
 
@@ -430,7 +430,7 @@
   align-items: center;
   gap: 7px;
   margin: 0;
-  color: #6b86a3;
+  color: var(--rf-text-secondary);
   font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
@@ -454,8 +454,7 @@
   height: 0;
   border-right: 7px solid transparent;
   border-left: 7px solid transparent;
-  border-top: 7px solid #fff;
-  /* 尾巴压在卡片下边框上，白色填充盖住接缝处的描边。 */
+  border-top: 7px solid var(--rf-border-subtle); /* 尾巴压在卡片下边框上，白色填充盖住接缝处的描边。 */
   filter: drop-shadow(0 2px 1px rgb(42 83 125 / 8%));
 }
 
@@ -496,7 +495,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #1677ff;
+  background: var(--rf-info);
   box-shadow: 0 2px 6px rgb(22 119 255 / 35%);
   animation: tt-save-card-dot-in 200ms var(--tt-ease-pop);
 }
@@ -522,7 +521,7 @@
   justify-content: space-between;
   gap: 8px;
   margin: 0;
-  color: #6b86a3;
+  color: var(--rf-text-secondary);
   font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
@@ -536,15 +535,15 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  color: #66809b;
-  background: #eef6fd;
+  color: var(--rf-text-secondary);
+  background: var(--rf-brand-wash);
   cursor: pointer;
   font-size: 13px;
   line-height: 18px;
 }
 
 .tt-profile-prompt-card-close:focus-visible {
-  outline: 2px solid #91caff;
+  outline: 2px solid var(--rf-focus-ring);
   outline-offset: 2px;
 }
 
