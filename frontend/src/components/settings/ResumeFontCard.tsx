@@ -3,7 +3,8 @@
  *
  * 边界要说清楚：这里**只影响 PDF 导出**。界面字体跟系统走，网页预览用的是模板
  * 自带的字体栈——把"上传了字体但界面没变"说成 bug 是最容易发生的误会，所以卡片上
- * 直接写明。内置字体需要随包分发字体文件（约 13MB），当前版本只支持自定义上传。
+ * 直接写明。字体不随应用分发：一款中文字体动辄十几 MB，体积与授权都该由用户自己决定，
+ * 所以这里只做"上传 → 选用"这一条路。
  */
 import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
 import { App, Button, Card, Empty, Listy, Space, Tag, Typography, Upload } from "antd";
@@ -32,7 +33,7 @@ export default function ResumeFontCard() {
       setData(await listResumeFonts());
     } catch {
       // 读不到（老后端）就当作没有自定义字体，不影响其它设置。
-      setData({ items: [], builtin: [], active: null, max_bytes: 20 * 1024 * 1024 });
+      setData({ items: [], active: null, max_bytes: 20 * 1024 * 1024 });
     }
   }, []);
 
@@ -53,9 +54,9 @@ export default function ResumeFontCard() {
     }
   };
 
-  const activate = async (name: string | null, builtin = false) => {
+  const activate = async (name: string | null) => {
     try {
-      await activateResumeFont(name, builtin);
+      await activateResumeFont(name);
       message.success(name ? `已切换到「${name}」` : "已回到系统字体");
       await load();
     } catch (err) {
@@ -78,9 +79,7 @@ export default function ResumeFontCard() {
   };
 
   const items = data?.items ?? [];
-  const builtin = data?.builtin ?? [];
-  const activeName = data?.active?.name ?? null;
-  const activeBuiltin = Boolean(data?.active?.builtin);
+  const activeName = data?.active ?? null;
 
   return (
     <Card className="settings-card" title="简历字体">
@@ -105,38 +104,6 @@ export default function ResumeFontCard() {
           回到系统字体
         </Button>
       </Space>
-      {builtin.length > 0 ? (
-        <div style={{ marginBottom: 12 }}>
-          <Typography.Text strong>内置字体</Typography.Text>
-          <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-            随应用分发，开箱可用
-          </Typography.Text>
-          <Listy
-            items={builtin}
-            rowKey={(item) => item.name}
-            itemRender={(item) => {
-              const isActive = activeBuiltin && item.name === activeName;
-              return (
-                <ListyItem>
-                  <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
-                    <Space>
-                      <Typography.Text>{item.label || item.name}</Typography.Text>
-                      {isActive ? <Tag color="blue">当前使用</Tag> : null}
-                    </Space>
-                    <Button
-                      size="small"
-                      disabled={isActive}
-                      onClick={() => void activate(item.name, true)}
-                    >
-                      设为当前
-                    </Button>
-                  </Space>
-                </ListyItem>
-              );
-            }}
-          />
-        </div>
-      ) : null}
       {items.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -152,9 +119,7 @@ export default function ResumeFontCard() {
                 <Space>
                   <Typography.Text>{item.name}</Typography.Text>
                   <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
-                  {!activeBuiltin && item.name === activeName ? (
-                    <Tag color="blue">当前使用</Tag>
-                  ) : null}
+                  {item.name === activeName ? <Tag color="blue">当前使用</Tag> : null}
                 </Space>
                 <Space size={4}>
                   <Button

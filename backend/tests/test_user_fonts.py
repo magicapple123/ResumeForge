@@ -77,7 +77,7 @@ def test_api_roundtrip(client):
 
     active = client.put("/api/settings/fonts/active", json={"name": "测试字体.ttf"})
     assert active.status_code == 200
-    assert active.json()["active"] == {"name": "测试字体.ttf", "builtin": False}
+    assert active.json()["active"] == "测试字体.ttf"
 
     assert client.delete("/api/settings/fonts/测试字体.ttf").status_code == 204
     assert client.get("/api/settings/fonts").json()["active"] is None
@@ -89,39 +89,3 @@ def test_api_rejects_bad_extension(client):
         files={"file": ("payload.exe", b"MZ", "application/octet-stream")},
     )
     assert response.status_code == 400
-
-
-# ===== 内置字体（随包分发的 OFL 字体）=====
-
-
-def test_builtin_fonts_are_listed_and_resolvable(font_dir):
-    builtin = user_fonts.list_builtin_fonts()
-    assert len(builtin) == len(user_fonts.BUILTIN_FONTS)
-    assert all(item["builtin"] and item["size"] > 0 for item in builtin)
-
-    name = builtin[0]["name"]
-    user_fonts.set_active(name, builtin=True)
-
-    info = user_fonts.active_font_info()
-    assert info == {"name": name, "builtin": True}
-    path = user_fonts.active_font_path()
-    assert path is not None and path.parent == user_fonts.ASSETS_DIR
-
-
-def test_builtin_font_must_exist(font_dir):
-    with pytest.raises(user_fonts.FontError):
-        user_fonts.set_active("不存在.ttf", builtin=True)
-
-
-def test_custom_and_builtin_switch_cleanly(font_dir):
-    user_fonts.save_font("custom.ttf", b"x" * 32)
-    user_fonts.set_active("custom.ttf")
-    assert user_fonts.active_font_info()["builtin"] is False
-
-    builtin = user_fonts.list_builtin_fonts()[0]["name"]
-    user_fonts.set_active(builtin, builtin=True)
-    assert user_fonts.active_font_path().parent == user_fonts.ASSETS_DIR
-
-    # 删自定义字体不该动到内置字体的选择。
-    user_fonts.delete_font("custom.ttf")
-    assert user_fonts.active_font_info() == {"name": builtin, "builtin": True}

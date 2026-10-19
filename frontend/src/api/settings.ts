@@ -379,20 +379,14 @@ export function clearGlobalLLM(): Promise<void> {
 /** 自定义简历字体（R10）：只影响 PDF 导出用的字体。 */
 export interface ResumeFont {
   name: string;
-  /** 内置字体的中文名（自定义字体没有）。 */
-  label?: string;
   size: number;
-  uploaded_at?: string;
+  uploaded_at: string;
   active: boolean;
-  builtin?: boolean;
 }
 
 export interface ResumeFonts {
-  /** 用户自己上传的字体。 */
   items: ResumeFont[];
-  /** 随包分发的内置字体（OFL）。 */
-  builtin: ResumeFont[];
-  active: { name: string; builtin: boolean } | null;
+  active: string | null;
   max_bytes: number;
 }
 
@@ -408,13 +402,10 @@ export function uploadResumeFont(file: File): Promise<ResumeFont> {
 }
 
 /** 设为当前字体；`null` = 回到系统字体。 */
-export function activateResumeFont(
-  name: string | null,
-  builtin = false,
-): Promise<{ active: { name: string; builtin: boolean } | null }> {
+export function activateResumeFont(name: string | null): Promise<{ active: string | null }> {
   return request("/settings/fonts/active", {
     method: "PUT",
-    body: JSON.stringify({ name, builtin }),
+    body: JSON.stringify({ name }),
   });
 }
 
