@@ -31,8 +31,7 @@ import {
 } from "./components/navigation/navigationConfig";
 import TaskCompletionNotifier from "./components/TaskCompletionNotifier";
 import { APP_NAME, APP_VERSION, GITHUB_REPO } from "./config";
-import GlobalFileDrop from "./components/GlobalFileDrop";
-import GlobalShortcuts from "./components/GlobalShortcuts";
+import GlobalOverlays from "./components/GlobalOverlays";
 import AiPolishLayer from "./features/ai-polish/AiPolishLayer";
 import ShortcutProvider from "./features/shortcuts/ShortcutProvider";
 import { useShortcut } from "./features/shortcuts/useShortcutKeymap";
@@ -271,12 +270,10 @@ function MainLayout() {
         <SuggestionScanWatcher />
         {/* 全局 AI 润色：文档级监听，任何输入框里选中一段文字都能就地改写。 */}
         <AiPolishLayer />
-        {/* 全局拖入导入（R17）：把文件扔进窗口任意位置即可，按扩展名分发。 */}
-        <GlobalFileDrop />
+
         {/* 快捷键：唯一的 keydown 监听挂载点；动作由各页面用 useShortcut 自己认领。 */}
         <ShortcutProvider />
-        {/* 全局快捷键的落点（R8）：主题 / 设置 / 技能。 */}
-        <GlobalShortcuts />
+        <GlobalOverlays />
         <TouTouOrb
           isWebform={location.pathname === "/webform"}
           onOpen={() => {
