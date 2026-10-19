@@ -4,16 +4,16 @@
   max-width: min(88%, 820px);
   margin-bottom: 16px;
   padding: 12px 14px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 8px;
-  background: #fff;
+  background: var(--rf-surface);
 }
 
 .assistant-message--user {
   min-width: 0;
   margin-left: auto;
-  background: #f3f7ff;
-  border-color: #d6e4ff;
+  background: var(--rf-surface-alt);
+  border-color: var(--rf-border-strong);
 }
 
 /*
@@ -41,7 +41,7 @@
 }
 
 .assistant-message--selected {
-  border-color: #1677ff;
+  border-color: var(--rf-info);
   box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.12);
 }
 
@@ -56,7 +56,7 @@
   gap: 8px 12px;
   padding: 6px 2px;
   margin-bottom: 4px;
-  border-bottom: 1px solid #eef1f5;
+  border-bottom: 1px solid var(--rf-border-subtle);
   background: none;
 }
 
@@ -81,30 +81,30 @@
 
 .assistant-message-content--rich h4 {
   margin: 14px 0 7px;
-  color: #172033;
+  color: var(--rf-text-body);
   font-size: 15px;
   line-height: 1.5;
 }
 
 .assistant-message-content--rich code {
   padding: 1px 5px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 4px;
-  color: #9f1239;
-  background: #fff1f2;
+  color: var(--rf-text-body);
+  background: var(--rf-surface-alt);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 0.9em;
 }
 
 .assistant-message-content--rich a {
-  color: #096dd9;
+  color: var(--rf-info);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 
 .assistant-message-content--rich a:hover {
-  color: #0050b3;
+  color: var(--rf-text-body);
 }
 
 .assistant-markdown-list-item {
@@ -115,7 +115,7 @@
 }
 
 .assistant-markdown-list-item > span {
-  color: #1677ff;
+  color: var(--rf-info);
   font-weight: 600;
   text-align: center;
 }
@@ -128,13 +128,13 @@
   max-width: 100%;
   margin: 10px 0;
   overflow-x: auto;
-  border: 1px solid #dfe5ef;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 6px;
-  background: #fff;
+  background: var(--rf-surface);
 }
 
 .assistant-markdown-table-wrap:focus-visible {
-  outline: 2px solid #1677ff;
+  outline: 2px solid var(--rf-focus-visible);
   outline-offset: 2px;
 }
 
@@ -152,8 +152,8 @@
   padding: 8px 10px;
   text-align: left;
   vertical-align: top;
-  border-right: 1px solid #e7ebf1;
-  border-bottom: 1px solid #e7ebf1;
+  border-right: 1px solid var(--rf-border-strong);
+  border-bottom: 1px solid var(--rf-border-strong);
 }
 
 .assistant-markdown-table-wrap th:last-child,
@@ -166,9 +166,9 @@
 }
 
 .assistant-markdown-table-wrap th {
-  color: #1f2937;
+  color: var(--rf-text-body);
   font-weight: 600;
-  background: #f4f7fb;
+  background: var(--rf-surface-alt);
 }
 
 .assistant-message-attachments,
@@ -193,27 +193,27 @@
 .assistant-attachment-notes {
   flex: 1 1 100%;
   font-size: 12px;
-  color: #d48806;
+  color: var(--rf-warning-text);
 }
 
 .assistant-sources.ant-collapse {
   display: block;
   margin-top: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
-  background: #f8fafc;
+  background: var(--rf-surface-alt);
 }
 
 .assistant-sources .ant-collapse-header {
   align-items: center !important;
   padding: 8px 10px !important;
-  color: #52606f !important;
+  color: var(--rf-text-secondary) !important;
   font-size: 13px;
 }
 
 .assistant-sources .ant-collapse-content {
-  border-top: 1px solid #e2e8f0 !important;
-  background: #fff;
+  border-top: 1px solid var(--rf-border-subtle) !important;
+  background: var(--rf-surface);
 }
 
 .assistant-sources .ant-collapse-content-box {
@@ -232,7 +232,7 @@
    两部分，其实它们是不同来源。分隔线 + 上下留白让"一条到这儿就完了"变得显然。 */
 .assistant-sources li {
   padding: 8px 2px;
-  border-top: 1px solid #eef2f7;
+  border-top: 1px solid var(--rf-border-subtle);
 }
 
 .assistant-sources li:first-child {
@@ -276,21 +276,21 @@
    的意图——标题里直接写「改动了 N 项」「N 项失败」。标题永远显示，所以不展开也看得见。 */
 .assistant-tool-calls.ant-collapse {
   margin-top: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
-  background: #f8fafc;
+  background: var(--rf-surface-alt);
 }
 
 .assistant-tool-calls .ant-collapse-header {
   align-items: center !important;
   padding: 8px 10px !important;
-  color: #52606f !important;
+  color: var(--rf-text-secondary) !important;
   font-size: 13px;
 }
 
 .assistant-tool-calls .ant-collapse-content {
-  border-top: 1px solid #e2e8f0 !important;
-  background: #fff;
+  border-top: 1px solid var(--rf-border-subtle) !important;
+  background: var(--rf-surface);
 }
 
 .assistant-tool-calls .ant-collapse-content-box {
@@ -315,7 +315,7 @@
   align-items: center;
   gap: 7px;
   margin-top: 10px;
-  color: #667085;
+  color: var(--rf-text-secondary);
   font-size: 12px;
 }
 
@@ -323,7 +323,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #1677ff;
+  background: var(--rf-info);
   animation: assistant-pulse 1.2s ease-in-out infinite;
 }
 
@@ -366,7 +366,7 @@
 /* 思考过程置顶 + 动效（A2）：思考中标题亮蓝并带脉冲点，思考结束后停（复用 streaming 的
    同一套脉冲节奏，视觉上"正在想"与"正在答"是一致的手感）。 */
 .assistant-reasoning--active .assistant-reasoning-label {
-  color: #1677ff;
+  color: var(--rf-info);
 }
 
 .assistant-reasoning-dot {
@@ -375,7 +375,7 @@
   height: 7px;
   margin-left: 6px;
   border-radius: 50%;
-  background: #1677ff;
+  background: var(--rf-info);
   animation: assistant-pulse 1.2s ease-in-out infinite;
 }
 
@@ -384,8 +384,8 @@
   width: 120px;
   height: 90px;
   object-fit: contain;
-  background: #f8fafc;
-  border: 1px solid #d9dee7;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border-strong);
   border-radius: 6px;
   cursor: zoom-in;
 }
@@ -400,9 +400,9 @@
 
 .assistant-write-proposal {
   padding: 10px 12px;
-  border: 1px solid #f0d596;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 8px;
-  background: #fffbe9;
+  background: var(--rf-surface-alt);
   display: flex;
   flex-direction: column;
   gap: 6px;

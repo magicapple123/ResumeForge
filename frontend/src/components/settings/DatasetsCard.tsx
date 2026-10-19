@@ -24,6 +24,8 @@ import {
   Typography,
   Upload,
 } from "antd";
+import { useState } from "react";
+import { defaultExportName } from "../../utils/exportNaming";
 import { RowActions } from "../common/RowActions";
 import { useCollapsedList } from "../common/useCollapsedList";
 import type { DatasetInfo } from "../../types";
@@ -53,9 +55,10 @@ interface Props {
   creating: boolean;
   createOpen: boolean;
   createName: string;
-  onExport: (dataset: DatasetInfo) => void;
+  /** `filename` 是用户填的下载名；不传则由后端用默认名。 */
+  onExport: (dataset: DatasetInfo, filename?: string) => void;
   /** 导出全部数据集（活动的那份 + 列表里其余每一份）。 */
-  onExportAll: () => void;
+  onExportAll: (filename?: string) => void;
   onImport: (file: File, name: string) => void;
   onActivate: (dataset: DatasetInfo) => void;
   onOpenRename: (dataset: DatasetInfo) => void;
@@ -109,6 +112,23 @@ export default function DatasetsCard({
   onConfirmCreate,
   onCancelCreate,
 }: Props) {
+  // 导出前先问下载名：`"all"` 表示"全部数据集"，null 表示弹窗关着。
+  const [exportTarget, setExportTarget] = useState<DatasetInfo | "all" | null>(null);
+  const [exportName, setExportName] = useState("");
+
+  const openExport = (target: DatasetInfo | "all") => {
+    setExportTarget(target);
+    setExportName(defaultExportName(target === "all" ? "全部数据集" : target.name));
+  };
+
+  const confirmExport = () => {
+    const target = exportTarget;
+    const name = exportName.trim();
+    setExportTarget(null);
+    if (target === "all") onExportAll(name);
+    else if (target) onExport(target, name);
+  };
+
   const busy = exporting || importing || switchingId !== null || deletingId !== null || creating;
   const active = datasets.find((item) => item.is_active);
   // 列表长了会淹没操作区：默认只展示前 5 份，其余收进「显示全部」（展示层折叠）。
@@ -150,8 +170,8 @@ export default function DatasetsCard({
                     : []),
                 ],
                 onClick: ({ key }) => {
-                  if (key === "current" && active) onExport(active);
-                  if (key === "all") onExportAll();
+                  if (key === "current" && active) openExport(active);
+                  if (key === "all") openExport("all");
                 },
               }}
             >
@@ -165,10 +185,10 @@ export default function DatasetsCard({
         <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
           每份数据集就是一个完整的简历通数据库（岗位、个人资料、简历、收藏、助手会话和全部附件），
           可以随时切换，互不影响。导入备份包只会<strong>新增</strong>一份数据集，当前正在使用的
-          数据不会被动到；导出的备份默认不包含大模型 API Key，需要时可在下方勾选。
+          数据不会被动到；导出的备份<strong>默认包含</strong>大模型 API Key，不需要时可取消勾选。
         </Typography.Paragraph>
 
-        {/* 是否把大模型 API Key 一并带走：默认关，选择权交给用户。
+        {/* 是否把大模型 API Key 一并带走：默认勾选（D-A），选择权仍交给用户。
             密钥按本机存储形态写入（Windows 上是系统加密形态、绑定当前用户与这台电脑），
             不解密成明文——备份包是用户可能长期保存或转发的东西。 */}
         <div style={{ marginBottom: 16 }}>
@@ -183,9 +203,9 @@ export default function DatasetsCard({
             type="secondary"
             style={{ marginBottom: 0, marginTop: 4, fontSize: 12 }}
           >
-            按本机存储的形态写入（Windows 上为系统加密、绑定当前用户与这台电脑，换电脑恢复后
-            可能需要重新填写；macOS/Linux 上密钥以明文随包）。勾选后的备份包更敏感，
-            请妥善保管，不要发给不信任的人。
+            默认勾选。密钥按本机存储的形态写入（Windows 上为系统加密、绑定当前用户与这台电脑，
+            换电脑恢复后可能需要重新填写；macOS/Linux 上密钥以明文随包）。勾选后的备份包
+            更敏感，请妥善保管，不要发给不信任的人。
           </Typography.Paragraph>
         </div>
 
@@ -343,6 +363,40 @@ export default function DatasetsCard({
           maxLength={64}
           placeholder="数据集名称（例如：秋招专用）"
           onChange={(event) => onCreateNameChange(event.target.value)}
+        />
+      </Modal>
+
+      <Modal
+        title={exportTarget === "all" ? "导出全部数据集" : "导出数据集"}
+        open={exportTarget !== null}
+        okText="导出"
+        cancelText="取消"
+        confirmLoading={exporting}
+        destroyOnHidden
+        onOk={confirmExport}
+        onCancel={() => setExportTarget(null)}
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title="这个名字会作为下载文件名，可含中文；扩展名会自动补 .zip。"
+        />
+        {/* 导出当下再确认一次：与卡片上的开关是同一份状态（默认包含，D-A）。 */}
+        <Checkbox
+          checked={includeApiKeys}
+          disabled={busy}
+          style={{ marginBottom: 16 }}
+          onChange={(event) => onIncludeApiKeysChange(event.target.checked)}
+        >
+          导出包中包含大模型 API Key
+        </Checkbox>
+        <Input
+          value={exportName}
+          maxLength={80}
+          placeholder="例如：校招线-20261019-101500"
+          aria-label="导出文件名"
+          onChange={(event) => setExportName(event.target.value)}
         />
       </Modal>
     </>

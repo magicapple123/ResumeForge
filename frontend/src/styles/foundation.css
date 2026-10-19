@@ -102,8 +102,8 @@
 }
 
 .rf-state--error {
-  border: 1px solid #f4ccc7;
-  background: #fffbfa;
+  border: 1px solid var(--rf-border-strong);
+  background: var(--rf-surface-alt);
 }
 
 .rf-state--error .ant-empty-description,

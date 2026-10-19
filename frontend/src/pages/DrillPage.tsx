@@ -220,20 +220,20 @@ export default function DrillPage() {
           <Statistic
             title="讲得清"
             value={stats.verified_count}
-            styles={{ content: { color: "#389e0d" } }}
+            styles={{ content: { color: "var(--rf-success-text)" } }}
             prefix={<CheckCircleOutlined />}
           />
           <Statistic
             title="部分验证"
             value={stats.partial_count}
-            styles={{ content: { color: "#d48806" } }}
+            styles={{ content: { color: "var(--rf-warning-text)" } }}
           />
           <Statistic title="未验证" value={stats.unverified_count} />
           {stats.contradictory_count > 0 && (
             <Statistic
               title="存在矛盾"
               value={stats.contradictory_count}
-              styles={{ content: { color: "#cf1322" } }}
+              styles={{ content: { color: "var(--rf-error-text)" } }}
               prefix={<ExclamationCircleOutlined />}
             />
           )}

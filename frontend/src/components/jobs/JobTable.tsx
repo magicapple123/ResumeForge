@@ -3,13 +3,14 @@
 import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
 import { Button, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import type { TableRowSelection } from "antd/es/table/interface";
+import type { SortOrder, TableRowSelection } from "antd/es/table/interface";
 import type { HTMLAttributes } from "react";
 import type { JobList, Page } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
 import SkillTags from "../SkillTags";
 import { jobSourceKind } from "../../utils/jobSource";
+import { nextSortState, sortOrderFor, type JobSortState } from "../../utils/jobSort";
 
 // 值域与 pages/jobs/jobFilterOptions.ts 的 BatchAction 保持一致（新增动作两处同步改）；
 // 此处只判「有无批量操作进行中」，不区分具体动作。类型本地持有是因为 components
@@ -35,6 +36,9 @@ interface Props {
   /** 右键菜单「批量选择」的动作：进入选择模式（工具栏按钮已收进这里，R8）。 */
   onEnterSelecting: () => void;
   onPageChange: (page: number, pageSize: number) => void;
+  /** 当前排序（受控）：列头箭头由它决定，点击列头经 onSortChange 回到 URL 状态里。 */
+  sortState: JobSortState;
+  onSortChange: (state: JobSortState) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -68,6 +72,8 @@ export default function JobTable({
   onDelete,
   onEnterSelecting,
   onPageChange,
+  sortState,
+  onSortChange,
 }: Props) {
   const columns: ColumnsType<JobList> = [
     {
@@ -93,7 +99,12 @@ export default function JobTable({
     {
       title: "岗位",
       dataIndex: "title",
+      key: "title",
       width: 260,
+      // 排序走服务端（R14）：本页数据本地排序在分页下必错。
+      sorter: true,
+      sortOrder: sortOrderFor("title", sortState),
+      showSorterTooltip: { title: "按岗位名称排序" },
       // 悬停整格都能看到导入时间：之前 Tooltip 只挂在岗位名那颗链接上，
       // 鼠标停在关键字标签或旁边空白处就没有提示，等于只有一半时候管用。
       render: (_, job) => (
@@ -123,7 +134,16 @@ export default function JobTable({
         </Tooltip>
       ),
     },
-    { title: "公司", dataIndex: "company", width: 130, render: (value) => value || "-" },
+    {
+      title: "公司",
+      dataIndex: "company",
+      key: "company",
+      width: 130,
+      sorter: true,
+      sortOrder: sortOrderFor("company", sortState),
+      showSorterTooltip: { title: "按公司名称排序" },
+      render: (value) => value || "-",
+    },
     { title: "城市", dataIndex: "location", width: 90, render: (value) => value || "-" },
     { title: "薪资", dataIndex: "salary", width: 130, render: (value) => value || "-" },
     { title: "类型", dataIndex: "job_type", width: 80 },
@@ -167,7 +187,17 @@ export default function JobTable({
     {
       title: "发布时间",
       dataIndex: "posted_at",
+      // 列里展示的是招聘信息自己写的 posted_at（自由文本，后端没有可排的列）；
+      // 这一列排的是**导入时间** created_at，tooltip 里说明，免得"点了排序像没变"。
+      key: "created_at",
       width: 150,
+      sorter: true,
+      sortOrder: sortOrderFor("created_at", sortState),
+      // 默认就是倒序：把方向序列反过来，第一下点击才会真的变成升序。
+      // 用默认的 ["ascend","descend"] 时，第一次点击是"取消排序"，而取消后又回到默认
+      // 倒序——用户看到的是"点了没反应"。
+      sortDirections: ["descend", "ascend"],
+      showSorterTooltip: { title: "按导入时间排序" },
       render: (value: string) => value || "-",
     },
     {
@@ -254,6 +284,13 @@ export default function JobTable({
         showSizeChanger: true,
         showTotal: (total) => `共 ${total} 个岗位`,
         onChange: onPageChange,
+      }}
+      // 排序交给服务端：只把"排序动作"翻译成 API 参数，分页/筛选的动作各走各的。
+      onChange={(_pagination, _filters, sorter, extra) => {
+        if (extra.action !== "sort") return;
+        const active = Array.isArray(sorter) ? sorter[0] : sorter;
+        const columnKey = String(active?.columnKey ?? active?.field ?? "");
+        onSortChange(nextSortState(columnKey, active?.order as SortOrder | null | undefined));
       }}
     />
   );

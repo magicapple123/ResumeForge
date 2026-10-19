@@ -1,5 +1,5 @@
-/** ATS 本地检测面板：免责声明、三类结论、JD 关键词覆盖、分项分数、建议与载入 JD。 */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+/** ATS 本地检测面板：免责声明、三类结论、JD 关键词覆盖、分项分数、建议与关联岗位 JD 自动载入。 */
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntdApp } from "antd";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AtsCheckPanel from "./AtsCheckPanel";
@@ -49,6 +49,16 @@ const RESULT = {
     { keyword: "Python", matched: false, count: 0, sections: [] },
   ],
 };
+
+/** getJob 的返回：面板只用 description + requirements 拼 JD 文本。 */
+function jobPayload(
+  description = "负责后端服务开发与性能优化",
+  requirements = "熟悉 Python 与 MySQL",
+) {
+  return { id: 5, title: "后端开发工程师", description, requirements };
+}
+
+const JOB_JD = "负责后端服务开发与性能优化\n熟悉 Python 与 MySQL";
 
 function renderPanel(props: { resumeId: number; jobId?: number }) {
   return render(
@@ -134,32 +144,90 @@ describe("AtsCheckPanel", () => {
     expect(screen.queryByText(/\d+\s*\/\s*50000/)).not.toBeInTheDocument();
   });
 
-  it("没有关联岗位时不显示「从关联岗位载入 JD」", async () => {
+  it("没有关联岗位时不读取岗位、也不显示载入按钮与提示", async () => {
     apiMocks.runAtsCheck.mockResolvedValue(RESULT);
     renderPanel({ resumeId: 7 });
 
     await screen.findByText("本地规则估计，不代表真实 ATS 解析结果");
-    expect(screen.queryByRole("button", { name: /从关联岗位载入 JD/ })).toBeNull();
+    expect(apiMocks.getJob).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /重新载入关联岗位 JD/ })).toBeNull();
+    expect(screen.queryByText(/已自动载入关联岗位 JD/)).toBeNull();
+    expect(screen.queryByText(/未能自动读取关联岗位/)).toBeNull();
   });
 
-  it("从关联岗位载入 JD：填入输入框但不自动检测", async () => {
+  it("有 jobId 时挂载即自动填入 JD，但只填不检测", async () => {
     apiMocks.runAtsCheck.mockResolvedValue(RESULT);
-    apiMocks.getJob.mockResolvedValue({
-      id: 5,
-      title: "后端开发工程师",
-      description: "负责后端服务开发与性能优化",
-      requirements: "熟悉 Python 与 MySQL",
-    });
+    apiMocks.getJob.mockResolvedValue(jobPayload());
     renderPanel({ resumeId: 7, jobId: 5 });
 
-    await screen.findByText("本地规则估计，不代表真实 ATS 解析结果");
-    fireEvent.click(screen.getByRole("button", { name: /从关联岗位载入 JD/ }));
-
-    await waitFor(() => expect(apiMocks.getJob).toHaveBeenCalledWith(5));
     const jd = screen.getByLabelText("JD 文本") as HTMLTextAreaElement;
-    await waitFor(() => expect(jd.value).toBe("负责后端服务开发与性能优化\n熟悉 Python 与 MySQL"));
-    // 「载入」只填不跑：整个过程仍然只有挂载时那一次检测。
+    await waitFor(() => expect(jd.value).toBe(JOB_JD));
+    expect(apiMocks.getJob).toHaveBeenCalledWith(5);
+    expect(await screen.findByText("已自动载入关联岗位 JD，可直接开始检测")).toBeInTheDocument();
+
+    // 「自动载入」只填不跑：整个挂载过程仍然只有挂载时那一次检测，且检测用的是空 JD。
     expect(apiMocks.runAtsCheck).toHaveBeenCalledTimes(1);
+    expect(apiMocks.runAtsCheck).toHaveBeenCalledWith(7, "");
+  });
+
+  it("「重新载入关联岗位 JD」会再次读取岗位并刷新输入框", async () => {
+    apiMocks.runAtsCheck.mockResolvedValue(RESULT);
+    apiMocks.getJob.mockResolvedValue(jobPayload());
+    renderPanel({ resumeId: 7, jobId: 5 });
+
+    const jd = screen.getByLabelText("JD 文本") as HTMLTextAreaElement;
+    await waitFor(() => expect(jd.value).toBe(JOB_JD));
+
+    apiMocks.getJob.mockResolvedValue(jobPayload("后端服务开发", "熟悉 Go 与 PostgreSQL"));
+    fireEvent.click(screen.getByRole("button", { name: /重新载入关联岗位 JD/ }));
+
+    await waitFor(() => expect(jd.value).toBe("后端服务开发\n熟悉 Go 与 PostgreSQL"));
+    expect(apiMocks.getJob).toHaveBeenCalledTimes(2);
+    // 手动刷新后不再挂「已自动载入」那句提示：JD 现在是用户主动要的。
+    expect(screen.queryByText("已自动载入关联岗位 JD，可直接开始检测")).toBeNull();
+    // 载入/刷新同样不触发检测。
+    expect(apiMocks.runAtsCheck).toHaveBeenCalledTimes(1);
+  });
+
+  it("自动载入失败只提示一行次要文案，不弹阻塞错误，手动按钮仍可用", async () => {
+    apiMocks.runAtsCheck.mockResolvedValue(RESULT);
+    apiMocks.getJob.mockRejectedValueOnce(new Error("岗位不存在"));
+    renderPanel({ resumeId: 7, jobId: 5 });
+
+    expect(await screen.findByText("未能自动读取关联岗位，可稍后手动载入")).toBeInTheDocument();
+    // 自动路径是静默失败：不出现手动载入那套「岗位信息读取失败」错误。
+    expect(screen.queryByText(/岗位信息读取失败/)).toBeNull();
+    expect(screen.getByLabelText("JD 文本")).toHaveValue("");
+
+    apiMocks.getJob.mockResolvedValue(jobPayload());
+    fireEvent.click(screen.getByRole("button", { name: /重新载入关联岗位 JD/ }));
+
+    await waitFor(() => expect(screen.getByLabelText("JD 文本")).toHaveValue(JOB_JD));
+    expect(screen.queryByText("未能自动读取关联岗位，可稍后手动载入")).toBeNull();
+  });
+
+  it("用户手动清空 JD 后不会被自动填回，自动载入提示也随之消失", async () => {
+    apiMocks.runAtsCheck.mockResolvedValue(RESULT);
+    apiMocks.getJob.mockResolvedValue(jobPayload());
+    renderPanel({ resumeId: 7, jobId: 5 });
+
+    const jd = screen.getByLabelText("JD 文本") as HTMLTextAreaElement;
+    await waitFor(() => expect(jd.value).toBe(JOB_JD));
+    expect(screen.getByText("已自动载入关联岗位 JD，可直接开始检测")).toBeInTheDocument();
+
+    fireEvent.change(jd, { target: { value: "" } });
+    // 等一轮宏任务：若实现会「补填」，它就在这一轮里发生。
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(jd).toHaveValue("");
+    // 输入框都空了，还挂着「可直接开始检测」就是自相矛盾的提示。
+    expect(screen.queryByText("已自动载入关联岗位 JD，可直接开始检测")).toBeNull();
+    // 同一个岗位只自动载入一次，清空不会触发第二次读取。
+    expect(apiMocks.getJob).toHaveBeenCalledTimes(1);
+    // 也不会退化成「自动读取失败」那一行。
+    expect(screen.queryByText(/未能自动读取关联岗位/)).toBeNull();
   });
 
   it("复制改进清单：把标题与建议拼成文本写进剪贴板", async () => {

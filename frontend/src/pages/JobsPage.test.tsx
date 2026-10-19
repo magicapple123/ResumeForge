@@ -304,6 +304,16 @@ describe("JobsPage URL 状态化", () => {
     );
   });
 
+  it("点列头排序后把 sort 写进 URL（刷新/分享后保留）", async () => {
+    renderPageWithProbe();
+
+    // 表头标题在 antd 6 里会渲染多份（测量/克隆节点），统一点 `<th>` 本体。
+    const header = screen.getAllByText("岗位")[0]!;
+    fireEvent.click(header.closest("th") as HTMLElement);
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("sort=title_asc"));
+  });
+
   it("进页面时从 URL 恢复筛选与页码", () => {
     mocks.jobs = Array.from({ length: 12 }, (_, index) =>
       makeJob({ id: index + 1, title: `示例岗位${index + 1}` }),

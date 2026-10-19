@@ -12,8 +12,23 @@
 /** 动作的作用域：只用于设置页展示与代码阅读，拦截判断由"有没有注册 handler"决定。 */
 export type ShortcutScope = "form" | "page" | "global" | "jobs";
 
-/** 六个动作的 id（也是 localStorage 里的键）。 */
-export type ShortcutActionId = "undo" | "redo" | "save" | "search" | "assistant" | "newJob";
+/** 动作 id（也是 localStorage 里的键）。新增动作必须同时有真实落点（见文件头）。 */
+export type ShortcutActionId =
+  | "undo"
+  | "redo"
+  | "save"
+  | "search"
+  | "assistant"
+  | "newJob"
+  | "toggleTheme"
+  | "openSettings"
+  | "openSkills"
+  | "exportPdf"
+  | "newResume"
+  | "switchDataset"
+  | "prevPage"
+  | "nextPage"
+  | "focusAssistant";
 
 export interface ShortcutAction {
   id: ShortcutActionId;
@@ -38,6 +53,18 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   { id: "search", label: "搜索", defaultKeys: ["mod+k"], scope: "global" },
   { id: "assistant", label: "打开/关闭求职助手", defaultKeys: ["mod+j"], scope: "global" },
   { id: "newJob", label: "新建岗位", defaultKeys: ["mod+alt+n"], scope: "jobs" },
+  // 下面四个是 R8 新增的"全局动作"：都在 `GlobalShortcuts` / 预览组件里有真实落点，
+  // 不是只占一行表（按了没反应的快捷键比没有更糟）。
+  { id: "toggleTheme", label: "切换深色/浅色", defaultKeys: ["mod+alt+d"], scope: "global" },
+  { id: "openSettings", label: "打开设置", defaultKeys: ["mod+alt+s"], scope: "global" },
+  { id: "openSkills", label: "打开助手技能", defaultKeys: ["mod+alt+k"], scope: "global" },
+  { id: "exportPdf", label: "打开导出（简历预览中）", defaultKeys: ["mod+shift+e"], scope: "page" },
+  // R8 第二批：落点分别是简历中心、页头数据集菜单、当前列表分页、求职助手。
+  { id: "newResume", label: "新建简历", defaultKeys: ["mod+shift+n"], scope: "page" },
+  { id: "switchDataset", label: "切换数据集", defaultKeys: ["mod+shift+d"], scope: "global" },
+  { id: "prevPage", label: "上一页（列表）", defaultKeys: ["mod+["], scope: "page" },
+  { id: "nextPage", label: "下一页（列表）", defaultKeys: ["mod+]"], scope: "page" },
+  { id: "focusAssistant", label: "打开助手并聚焦输入", defaultKeys: ["mod+/"], scope: "global" },
 ];
 
 export const SHORTCUT_ACTION_IDS: readonly ShortcutActionId[] = SHORTCUT_ACTIONS.map(

@@ -26,7 +26,9 @@ export default function ReferralStatsCard({ stats }: Props) {
             title="转化率"
             value={convertedRate}
             suffix="%"
-            styles={{ content: { color: convertedRate >= 50 ? "#389e0d" : undefined } }}
+            styles={{
+              content: { color: convertedRate >= 50 ? "var(--rf-success-text)" : undefined },
+            }}
           />
         </Col>
       </Row>

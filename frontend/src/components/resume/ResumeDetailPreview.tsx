@@ -4,8 +4,9 @@
  * 此前同一套预览有两份实现（`ResumeDetailModal` 的完整预览、`GenerateResumeModal` 的
  * preview 阶段各写一遍），按钮、诊断卡与导出项都各自维护，改一处漏一处。现在把它们
  * 收进这一个组件：头部元信息 Tags + 版式控件（compact）+ 版面诊断卡 + 简历预览 + 底部
- * 完整操作（手动调整 / 岗位建议 / 查看岗位 / 咨询助手 / 质量检测 / 导出选项 / 一键脱敏 /
- * 离线分享）+ 导出按钮，以及这些操作各自挂载的子弹窗。
+ * 完整操作（手动调整 / 岗位建议 / 查看岗位 / 咨询助手 / 质量检测 / 离线分享）+ 导出按钮，
+ * 以及这些操作各自挂载的子弹窗。导出只有一个入口（`ExportButtons` → 统一导出面板）：
+ * 脱敏、水印、页数、字号、行距都在面板里，不再各占一个按钮。
  *
  * 只依赖子组件与 `api/resumes`，**不** import `ResumeDetailModal` / `GenerateResumeModal`，
  * 避免循环依赖（设计 §9 ⑨）。
@@ -14,9 +15,7 @@ import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import {
   BulbOutlined,
   EditOutlined,
-  ExportOutlined,
   ZoomInOutlined,
-  EyeInvisibleOutlined,
   FolderOpenOutlined,
   MessageOutlined,
   SafetyCertificateOutlined,
@@ -37,9 +36,9 @@ import ExportOptionsModal from "../ExportOptionsModal";
 import { describeResumeFieldPath } from "../../utils/resumeFieldPath";
 import ResumeFieldQuickEditModal from "./ResumeFieldQuickEditModal";
 import ResumeZoomModal from "./ResumeZoomModal";
-import RedactionModal from "../RedactionModal";
 import ResumeEditorModal from "../ResumeEditorModal";
 import ResumeLayoutControls from "../ResumeLayoutControls";
+import { useShortcut } from "../../features/shortcuts/useShortcutKeymap";
 import ResumeQualityModal from "../ResumeQualityModal";
 import ResumeSuggestionsModal from "../ResumeSuggestionsModal";
 import ResumeReviseModal from "./ResumeReviseModal";
@@ -133,10 +132,14 @@ export default function ResumeDetailPreview({
   const [reviseInstructions, setReviseInstructions] = useState("");
   const [qualityOpen, setQualityOpen] = useState(false);
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
+  // R8：预览打开时按 Ctrl/⌘+Shift+E 直接拉起导出面板——导出是这一步最常做的事。
+  useShortcut("exportPdf", (event) => {
+    event.preventDefault();
+    setExportOptionsOpen(true);
+  });
   const [zoomOpen, setZoomOpen] = useState(false);
   // 「只编辑选中的这一部分」：预览里点中哪一栏就只改哪一栏（与「手动调整」分开）。
   const [quickEditPath, setQuickEditPath] = useState<string | null>(null);
-  const [redactionOpen, setRedactionOpen] = useState(false);
   const [sharePackageOpen, setSharePackageOpen] = useState(false);
   // 内部再包一层引用：父组件可能传 null（尚未量到），子组件需要一份稳定的 ref 传入 ResumePreview。
   const fallbackRef = useRef<ResumePreviewHandle>(null);
@@ -382,17 +385,16 @@ export default function ResumeDetailPreview({
         <Button block icon={<SafetyCertificateOutlined />} onClick={() => setQualityOpen(true)}>
           质量检测
         </Button>
-        <Button block icon={<ExportOutlined />} onClick={() => setExportOptionsOpen(true)}>
-          导出选项
-        </Button>
-        <Button block icon={<EyeInvisibleOutlined />} onClick={() => setRedactionOpen(true)}>
-          一键脱敏
-        </Button>
         <Button block icon={<ShareAltOutlined />} onClick={() => setSharePackageOpen(true)}>
           离线分享
         </Button>
         <div className="resume-detail-footer-export">
-          <ExportButtons recordId={detail.id} pdfDirectAvailable={pdfDirectAvailable} />
+          <ExportButtons
+            recordId={detail.id}
+            layout={layout}
+            pdfDirectAvailable={pdfDirectAvailable}
+            onOpen={() => setExportOptionsOpen(true)}
+          />
           {extraActions ? <span className="resume-detail-footer-extra">{extraActions}</span> : null}
         </div>
       </div>
@@ -441,9 +443,12 @@ export default function ResumeDetailPreview({
       <ExportOptionsModal
         recordId={detail.id}
         open={exportOptionsOpen}
-        // 把预览用的页数传进去：否则导出弹窗发的是"不指定"，由后端取记录里存的旧值——
-        // 用户在预览里把页数改成 2、还没保存就导出，就会得到"预览 2 页、导出 1 页"。
+        // 页数/字号/版式草稿全部带上：否则导出弹窗发的是"不指定"，由后端取记录里存的旧值——
+        // 用户在预览里把字号拖到 7px、页数改成 2、还没保存就导出，就会得到与眼前不同的文件。
         initialPageLimit={layout.page_limit}
+        initialFontScale={layout.font_scale}
+        initialFormatConfig={layout.format_config}
+        pdfDirectAvailable={pdfDirectAvailable}
         onClose={() => setExportOptionsOpen(false)}
       />
       <ResumeFieldQuickEditModal
@@ -469,11 +474,6 @@ export default function ResumeDetailPreview({
           setZoomOpen(false);
           setExportOptionsOpen(true);
         }}
-      />
-      <RedactionModal
-        recordId={detail.id}
-        open={redactionOpen}
-        onClose={() => setRedactionOpen(false)}
       />
       <SharePackageModal
         recordId={detail.id}

@@ -7,7 +7,7 @@
      220px ≈ header + footer + 视口安全边距的总和。 */
   --rf-modal-body-max-h: calc(100vh - 220px);
   /* 「我的空间」下拉菜单选中项的浅色底（替代 colorPrimary 派生的深藏青实底）。 */
-  --rf-nav-selected-bg: #eef2f7;
+  --rf-nav-selected-bg: var(--rf-brand-tint);
   /* 加载占位块的最小高度：居中的 Spin 不会把区域塌成一条线。 */
   --rf-loading-min-h: 160px;
 }
@@ -49,12 +49,12 @@
    用同一套表面、标题和操作区建立层级，再通过语义 class 给危险/辅助/编辑类弹窗加
    顶部色带。这样不同模块不会各自长出一套互不相容的卡片外观。 */
 .ant-modal-root .ant-modal-mask {
-  background: rgb(15 23 42 / 38%);
+  background: var(--rf-scrim-strong);
 }
 
 .ant-modal-content {
   overflow: hidden;
-  border: 1px solid #e4eaf2;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 16px;
   box-shadow:
     0 24px 70px rgb(15 23 42 / 18%),
@@ -64,14 +64,35 @@
 .ant-modal-header {
   margin-bottom: 0;
   padding: 18px 22px 14px;
-  border-bottom: 1px solid #edf1f6;
-  background: linear-gradient(135deg, #fbfdff 0%, #f4f8fc 100%);
+  border-bottom: 1px solid var(--rf-border-subtle);
+  background: linear-gradient(135deg, var(--rf-surface-alt) 0%, var(--rf-surface-alt) 100%);
 }
 
 .ant-modal-title {
-  color: #16365c;
+  color: var(--rf-brand);
   font-size: 16px;
   font-weight: 700;
+}
+
+/*
+ * 欢迎卡片（8 步引导）是"封面"而不是表单弹窗：标题下的分割线与渐变底会把品牌图标和
+ * 标题切成两截。只覆盖这一个弹窗（.user-guide-modal），其余 Modal 的标题保持原样——
+ * 动全局 .ant-modal-header 会让所有弹窗一起变。
+ */
+.user-guide-modal .ant-modal-header {
+  border-bottom: none;
+  background: transparent;
+}
+
+/*
+ * 技能详情弹窗：内容有 3 屏时，首行 Alert 与最后一个「添加知识文件」按钮会分别贴住
+ * 标题和页脚。body 多留一点下边距、footer 加一条分隔线，视觉上不再"顶格"。
+ * 用 styles.body 传内边距（组件里），这里只补 footer 的边界。
+ */
+.skill-editor-modal .ant-modal-footer {
+  margin-top: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
 }
 
 .ant-modal-close {
@@ -81,7 +102,7 @@
 }
 
 .ant-modal-close:hover {
-  background: #eaf1f8;
+  background: var(--rf-brand-tint);
 }
 
 .ant-modal-body {
@@ -91,40 +112,40 @@
 .ant-modal-footer {
   margin-top: 0;
   padding: 14px 22px 18px;
-  border-top: 1px solid #edf1f6;
-  background: #fbfcfe;
+  border-top: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface-alt);
 }
 
 .ant-modal-confirm .ant-modal-content {
-  border-top: 3px solid #91caff;
+  border-top: 3px solid var(--rf-focus-ring);
 }
 
 .ant-modal-confirm .ant-modal-confirm-title {
-  color: #16365c;
+  color: var(--rf-brand);
   font-weight: 700;
 }
 
 .ant-modal-confirm .ant-modal-confirm-content {
-  color: #526173;
+  color: var(--rf-text-body);
   line-height: 1.7;
 }
 
 .rf-modal-danger .ant-modal-content {
-  border-top: 3px solid #ff7875;
+  border-top: 3px solid var(--rf-accent-red);
 }
 
 .rf-modal-assist .ant-modal-content {
-  border-top: 3px solid #8b7cf6;
+  border-top: 3px solid var(--rf-accent-violet);
 }
 
 .rf-modal-editor .ant-modal-content {
-  border-top: 3px solid #52c41a;
+  border-top: 3px solid var(--rf-accent-green);
 }
 
 /* 所有可勾选表格统一使用品牌浅蓝，覆盖 antd 默认的深灰选中背景。 */
 .ant-table-tbody > tr.ant-table-row-selected > td,
 .ant-table-tbody > tr.ant-table-row-selected:hover > td {
-  background: #eaf1f8 !important;
+  background: var(--rf-brand-tint) !important;
 }
 
 /* ===== 网申浏览器工具区 =====
@@ -165,7 +186,7 @@
   gap: 14px 20px;
   margin-top: 14px;
   padding-top: 14px;
-  border-top: 1px solid #f0f2f5;
+  border-top: 1px solid var(--rf-border-subtle);
 }
 
 .webform-browser-status {
@@ -217,16 +238,16 @@
 }
 
 .row-actions-more {
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--rf-text-secondary);
 }
 
 .row-actions-more:hover {
-  color: #16365c !important;
+  color: var(--rf-brand) !important;
 }
 
 /* 表格行右键：给一点悬停反馈，让用户知道整行都可以右键。 */
 .ant-table-tbody > tr.ant-table-row:hover > td {
-  background: #fafcff;
+  background: var(--rf-surface-alt);
 }
 
 /* ===== 岗位备注图片 ===== */
@@ -261,10 +282,10 @@
   gap: 5px;
   width: 58px;
   height: 38px;
-  border: 1px solid #b8d4f5;
+  border: 1px solid var(--rf-focus-ring);
   border-radius: 999px;
-  color: #155eef;
-  background: #edf5ff;
+  color: var(--rf-text-body);
+  background: var(--rf-brand-wash);
   box-shadow: 0 8px 22px rgb(31 55 88 / 12%);
   cursor: pointer;
 }
@@ -281,9 +302,9 @@
   width: 230px;
   min-height: 48px;
   padding: 5px;
-  border: 1px solid #d9e2f0;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 999px;
-  background: #f5f8fc;
+  background: var(--rf-surface-alt);
   box-shadow: 0 8px 22px rgb(31 55 88 / 12%);
   transition:
     transform 160ms ease,
@@ -295,7 +316,7 @@
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  color: #344054;
+  color: var(--rf-text-secondary);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -304,7 +325,7 @@
 .webform-target-floating-more {
   align-self: flex-end;
   padding: 2px 9px;
-  color: #667085;
+  color: var(--rf-text-secondary);
   font-size: 11px;
 }
 
@@ -314,13 +335,13 @@
 }
 
 .webform-target-floating-ball.is-on {
-  border-color: #b8d4f5;
-  background: #edf5ff;
+  border-color: var(--rf-focus-ring);
+  background: var(--rf-brand-wash);
 }
 
 .webform-target-floating-ball.is-off {
-  border-color: #d9dde5;
-  background: #f5f6f8;
+  border-color: var(--rf-border-strong);
+  background: var(--rf-surface-alt);
 }
 
 .webform-target-floating-ball .ant-switch {
@@ -394,13 +415,13 @@
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border: 1px solid #eef1f5;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
-  background: #fafbfc;
+  background: var(--rf-surface-alt);
 }
 
 .material-file-icon {
-  color: #8c9bab;
+  color: var(--rf-text-tertiary);
 }
 
 .material-file-meta {
@@ -472,7 +493,7 @@
 .skills-intro-steps {
   margin: 0 0 12px;
   padding-left: 20px;
-  color: #4b5563;
+  color: var(--rf-text-secondary);
   line-height: 1.9;
 }
 
@@ -481,9 +502,9 @@
   flex-direction: column;
   gap: 6px;
   padding: 10px;
-  border: 1px solid #eef1f5;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
-  background: #fafbfc;
+  background: var(--rf-surface-alt);
 }
 
 /* ===== 助手补充信息 ===== */
@@ -519,14 +540,14 @@
 
 .assistant-reasoning-label {
   font-size: 12px;
-  color: rgba(0, 0, 0, 0.65);
+  color: var(--rf-text-body);
   white-space: nowrap;
 }
 
 /* 说明问号：灰色小号、随文字标签垂直居中（父级 flex 已对齐），悬停它才显示思考强度说明。 */
 .assistant-reasoning-help {
   font-size: 12px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--rf-text-secondary);
   cursor: help;
 }
 
@@ -553,7 +574,7 @@
 /* 技能下拉：用真实勾选框表达"已启用"（菜单自带高亮在浅色主题下几乎看不出来）。 */
 .assistant-skill-menu-hint {
   font-size: 12px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--rf-text-secondary);
 }
 
 .assistant-skill-option {
@@ -575,7 +596,7 @@
 
 .assistant-skill-option-desc {
   font-size: 12px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--rf-text-secondary);
   white-space: normal;
 }
 
@@ -599,9 +620,9 @@
   gap: 12px;
   flex-wrap: wrap;
   padding: 10px 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--rf-surface);
 }
 
 .interview-messages {
@@ -611,17 +632,17 @@
   max-height: 52vh;
   overflow-y: auto;
   padding: 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 8px;
-  background: #fafbfc;
+  background: var(--rf-surface-alt);
 }
 
 .interview-message {
   max-width: 88%;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border-subtle);
 }
 
 /* 面试官在左、候选人在右：一眼看出谁在说话。 */
@@ -631,8 +652,8 @@
 
 .interview-message--me {
   align-self: flex-end;
-  background: #eef4fb;
-  border-color: #d6e4f2;
+  background: var(--rf-brand-wash);
+  border-color: var(--rf-border-strong);
 }
 
 .interview-message-head {
@@ -650,11 +671,11 @@
 .interview-feedback {
   margin-top: 8px;
   padding: 8px 10px;
-  border-left: 3px solid #f0b429;
-  background: #fffaeb;
+  border-left: 3px solid var(--rf-accent-amber);
+  background: var(--rf-surface-alt);
   border-radius: 0 6px 6px 0;
   font-size: 13px;
-  color: #5c4406;
+  color: var(--rf-text-body);
   white-space: pre-wrap;
 }
 
@@ -687,8 +708,8 @@
   align-self: center;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
   font-size: 12px;
 }
 
@@ -729,7 +750,7 @@
 .interview-report-lists ul {
   margin: 0;
   padding-left: 20px;
-  color: #4b5563;
+  color: var(--rf-text-secondary);
   line-height: 1.8;
 }
 
@@ -740,16 +761,16 @@
   gap: 2px;
   margin: 6px 0 8px;
   padding: 6px 10px;
-  border-left: 3px solid #cbd5e1;
-  background: #f8fafc;
+  border-left: 3px solid var(--rf-border-strong);
+  background: var(--rf-surface-alt);
   border-radius: 0 6px 6px 0;
   font-size: 12px;
-  color: #475569;
+  color: var(--rf-text-secondary);
 }
 
 .assistant-quoted-label {
   font-weight: 600;
-  color: #64748b;
+  color: var(--rf-text-secondary);
 }
 
 .assistant-quoted-text {
@@ -767,8 +788,8 @@
   gap: 8px;
   margin-bottom: 8px;
   padding: 6px 6px 6px 10px;
-  border-left: 3px solid #16365c;
-  background: #f1f5f9;
+  border-left: 3px solid var(--rf-brand);
+  background: var(--rf-surface-alt);
   border-radius: 0 6px 6px 0;
   /* 作为 composer 栅格子项，默认 min-width:auto 会让超长引用把整块撑出可视区；
      这里允许收缩，配合文字容器截断，取消按钮始终留在右侧。 */
@@ -778,7 +799,7 @@
 .assistant-quote-chip-label {
   font-size: 12px;
   font-weight: 600;
-  color: #16365c;
+  color: var(--rf-brand);
   white-space: nowrap;
 }
 
@@ -786,7 +807,7 @@
   flex: 1;
   min-width: 0;
   font-size: 12px;
-  color: #475569;
+  color: var(--rf-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -821,8 +842,8 @@
   align-items: center;
   gap: 6px;
   padding: 6px;
-  background: var(--rf-surface, #fff);
-  border: 1px solid var(--rf-border, #f0f0f0);
+  background: var(--rf-surface, var(--rf-surface));
+  border: 1px solid var(--rf-border, var(--rf-border));
   border-radius: 8px;
   cursor: pointer;
   transition:
@@ -833,7 +854,7 @@
 
 .builtin-style-card:hover,
 .builtin-style-card:focus-visible {
-  border-color: #91caff;
+  border-color: var(--rf-focus-ring);
   box-shadow: 0 2px 8px rgba(22, 119, 255, 0.12);
   transform: translateY(-1px);
   outline: none;
@@ -843,8 +864,8 @@
   position: relative;
   display: block;
   overflow: hidden;
-  background: #fff;
-  border: 1px solid #eef0f3;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 4px;
 }
 
@@ -857,7 +878,7 @@
 
 .builtin-style-name {
   font-size: 13px;
-  color: #262626;
+  color: var(--rf-text-body);
 }
 
 /* 包住"导入 HTML"按钮的 label：让点击落到里面的按钮上。 */
@@ -899,9 +920,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 8px;
-  background: #f5f6f8;
+  background: var(--rf-surface-alt);
   overflow: hidden;
 }
 
@@ -922,14 +943,16 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: #f0f2f5;
-  border: 1px solid #e5e7eb;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 8px;
 }
 
 .a4-preview-paper {
   overflow: hidden;
-  background: #ffffff;
+  /* 纸面恒白（R18）：--rf-surface 在深色下会变暗，纸不能跟着变——导出/打印
+     看到的就是这张纸。深色主题下由 --rf-paper 显式保持 #ffffff。 */
+  background: var(--rf-paper);
   box-shadow: 0 2px 12px rgb(15 23 42 / 12%);
 }
 
@@ -943,17 +966,17 @@
   width: 48px;
   height: 28px;
   padding: 0;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 4px;
-  background: #ffffff;
+  background: var(--rf-surface);
   cursor: pointer;
 }
 
 .template-style-controls {
   padding: 10px 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 8px;
-  background: #fafbfc;
+  background: var(--rf-surface-alt);
 }
 
 .template-style-control-grid {
@@ -972,7 +995,7 @@
 .template-badge-editor {
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--rf-border-subtle);
 }
 
 .template-badge-editor-row {
@@ -987,9 +1010,9 @@
   width: 72px;
   height: 32px;
   object-fit: contain;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 4px;
-  background: #fff;
+  background: var(--rf-surface);
 }
 
 .template-recognition-editor {
@@ -1031,14 +1054,14 @@
 .template-gallery-card {
   display: flex;
   flex-direction: column;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 10px;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--rf-surface);
 }
 
 .template-gallery-card.is-active {
-  border-color: #16365c;
+  border-color: var(--rf-brand);
   box-shadow: 0 0 0 2px rgba(22, 54, 92, 0.12);
 }
 
@@ -1049,7 +1072,7 @@
 .template-gallery-preview {
   position: relative;
   height: 405px; /* 1123 × 0.36 ≈ 404.3，取整避免露出一条底边 */
-  background: #f5f6f8;
+  background: var(--rf-surface-alt);
   overflow: hidden;
 }
 
@@ -1075,7 +1098,7 @@
 }
 
 .template-gallery-preview:focus-visible {
-  outline: 2px solid #2f7be5;
+  outline: 2px solid var(--rf-focus-visible);
   outline-offset: 2px;
 }
 
@@ -1086,7 +1109,7 @@
   height: 1123px;
   margin: 0 auto;
   border: 0;
-  background: #fff;
+  background: var(--rf-surface);
   box-shadow: 0 6px 24px rgb(15 23 42 / 12%);
 }
 
@@ -1106,7 +1129,7 @@
   padding: 12px;
   text-align: center;
   font-size: 12px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--rf-text-secondary);
 }
 
 .template-gallery-meta {
@@ -1187,16 +1210,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px dashed #7ba7d0;
+  border: 2px dashed var(--rf-accent-blue);
   border-radius: 8px;
-  background: rgba(234, 242, 250, 0.92);
+  background: var(--rf-brand-wash);
   pointer-events: none;
 }
 
 .file-drop-overlay-text {
   font-size: 13px;
   font-weight: 600;
-  color: #16365c;
+  color: var(--rf-brand);
 }
 
 /* 简历预览页脚：按钮多时换行，而不是把最后一个按钮挤出弹窗。 */
@@ -1221,7 +1244,7 @@
 }
 
 .app-exit-button:hover {
-  color: #b42318 !important;
+  color: var(--rf-text-body) !important;
 }
 
 /* 窄屏放不下"退出"两个字时只留图标，避免顶栏被挤到换行。 */
@@ -1239,7 +1262,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
+  background: var(--rf-surface);
 }
 
 /* ===== 简历版式控件 ===== */
@@ -1294,7 +1317,7 @@
 }
 
 .profile-photo-thumb.is-active .profile-photo-thumb-button {
-  border-color: #16365c;
+  border-color: var(--rf-brand);
 }
 
 .profile-photo-thumb .ant-tag {
@@ -1341,7 +1364,7 @@
 }
 
 .home-todo-item + .home-todo-item {
-  border-top: 1px solid var(--rf-border, #f0f0f0);
+  border-top: 1px solid var(--rf-border, var(--rf-border));
 }
 
 .home-todo-icon {
@@ -1352,8 +1375,8 @@
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  background: #eaf1f8;
-  color: #16365c;
+  background: var(--rf-brand-tint);
+  color: var(--rf-brand);
   font-size: 16px;
 }
 
@@ -1380,19 +1403,19 @@
   flex-direction: column;
   gap: 2px;
   padding: 12px 14px;
-  border: 1px solid var(--rf-border, #e7ebf0);
+  border: 1px solid var(--rf-border, var(--rf-border-subtle));
   border-radius: 8px;
-  background: #fff;
+  background: var(--rf-surface);
   color: inherit;
 }
 
 .home-shortcut:hover {
-  border-color: #16365c;
-  background: #f8fbfe;
+  border-color: var(--rf-brand);
+  background: var(--rf-surface-alt);
 }
 
 .home-shortcut-icon {
-  color: #16365c;
+  color: var(--rf-brand);
   font-size: 18px;
 }
 
@@ -1422,7 +1445,7 @@
 }
 
 .first-delivery-stage + .first-delivery-stage {
-  border-top: 1px solid var(--rf-border, #f0f0f0);
+  border-top: 1px solid var(--rf-border, var(--rf-border));
 }
 
 /* 未来态弱化：用显式灰而非 opacity——半透明黑在白底上的等效对比度只有 ~3.5:1，
@@ -1430,7 +1453,7 @@
    灰（#5f6b7a，RF-12 对比度修正后的 token）≈5.4:1，AA 通过，弱化层级感仍在。 */
 .first-delivery-stage.is-upcoming .first-delivery-stage-title,
 .first-delivery-stage.is-upcoming .ant-typography {
-  color: var(--rf-text-description, #5f6b7a);
+  color: var(--rf-text-description, var(--rf-text-secondary));
 }
 
 .first-delivery-stage-icon {
@@ -1441,22 +1464,22 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 1px solid var(--rf-border, #d9d9d9);
+  border: 1px solid var(--rf-border, var(--rf-border-strong));
   color: var(--rf-text-description);
   font-size: 14px;
 }
 
 .first-delivery-stage.is-current .first-delivery-stage-icon {
-  border-color: #16365c;
-  background: #eaf1f8;
-  color: #16365c;
+  border-color: var(--rf-brand);
+  background: var(--rf-brand-tint);
+  color: var(--rf-brand);
   font-weight: 600;
 }
 
 .first-delivery-stage.is-done .first-delivery-stage-icon {
   border: none;
   background: transparent;
-  color: #52c41a;
+  color: var(--rf-accent-green);
   font-size: 18px;
 }
 
@@ -1480,7 +1503,7 @@
 }
 
 .first-delivery-stage.is-current .first-delivery-stage-title {
-  color: #16365c;
+  color: var(--rf-brand);
 }
 
 .first-delivery-cta-row {
@@ -1496,9 +1519,9 @@
   align-items: center;
   gap: 4px;
   padding: 2px 12px;
-  border: 1px solid #16365c;
+  border: 1px solid var(--rf-brand);
   border-radius: 6px;
-  background: #16365c;
+  background: var(--rf-brand-fill);
   color: #fff;
   font-size: 13px;
   font-weight: 500;
@@ -1507,7 +1530,7 @@
 
 .first-delivery-cta:hover {
   color: #fff;
-  background: #24507f;
+  background: var(--rf-brand-fill);
 }
 
 /* 全局搜索扩域后，结果区与"更多结果"分组要收紧，避免首页搜索区越拉越长。 */
@@ -1532,7 +1555,7 @@
 .analytics-page .analytics-metric-row .ant-card {
   height: 100%;
   overflow: hidden;
-  border: 1px solid #e8edf3;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 14px;
   box-shadow: 0 10px 26px rgba(31, 56, 85, 0.07);
 }
@@ -1542,24 +1565,24 @@
   height: 4px;
   margin: -24px -24px 18px;
   content: "";
-  background: #5b8ff9;
+  background: var(--rf-info);
 }
 
 .analytics-page .analytics-metric-row .ant-col:nth-child(2) .ant-card::before {
-  background: #61ddaa;
+  background: var(--rf-accent-green);
 }
 
 .analytics-page .analytics-metric-row .ant-col:nth-child(3) .ant-card::before {
-  background: #f6bd16;
+  background: var(--rf-accent-amber);
 }
 
 .analytics-page .analytics-metric-row .ant-col:nth-child(4) .ant-card::before {
-  background: #7262fd;
+  background: var(--rf-accent-violet);
 }
 
 .analytics-page .analytics-section {
   overflow: hidden;
-  border: 1px solid #e3e9f1;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 16px;
   box-shadow: 0 10px 28px rgba(31, 56, 85, 0.06);
 }
@@ -1571,8 +1594,8 @@
 }
 
 .analytics-page .analytics-section .ant-card-head {
-  background: linear-gradient(90deg, #fbfdff, #fff);
-  border-bottom: 1px solid #edf1f6;
+  background: linear-gradient(90deg, var(--rf-surface-alt), var(--rf-surface));
+  border-bottom: 1px solid var(--rf-border-subtle);
 }
 
 /* 区块里的一张图 = 一个浅色面板 + 一行小标题。
@@ -1580,8 +1603,8 @@
 .analytics-page .analytics-chart-block {
   height: 100%;
   padding: 12px 14px 10px;
-  background: #fbfcfe;
-  border: 1px solid #edf1f6;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 10px;
 }
 
@@ -1595,7 +1618,7 @@
 
 .analytics-page .analytics-chart-block-title {
   font-size: 13px;
-  color: #33414f;
+  color: var(--rf-text-body);
 }
 
 .analytics-page .analytics-chart-block-hint {
@@ -1640,8 +1663,8 @@
   justify-content: center;
   gap: 4px;
   padding: 12px 16px;
-  background: #fafafa;
-  border: 1px solid #f0f0f0;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border);
   border-radius: 8px;
   line-height: 1.5;
 }
@@ -1650,15 +1673,15 @@
 .analytics-page .analytics-source-tile {
   height: 100%;
   padding: 8px 12px;
-  background: #fafafa;
-  border: 1px solid #f0f0f0;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border);
   border-radius: 8px;
 }
 
 /* 网申预览表「需你确认」行（同意/声明类勾选，放宽模式）：淡警示底色，
    与事实类行区分——勾上它等于代你做出表态，视觉上不能和普通值混在一起。 */
 .webform-row-needs-confirm > td {
-  background: #fffbe6;
+  background: var(--rf-surface-alt);
 }
 
 /* 「我的空间」下拉菜单：选中项用浅底深字，替代 colorPrimary 派生的深藏青实底。
@@ -1669,23 +1692,23 @@
   .ant-dropdown-menu
   li.ant-dropdown-menu-item.ant-dropdown-menu-item-selected {
   background: var(--rf-nav-selected-bg);
-  color: #16365c;
+  color: var(--rf-brand);
 }
 
 .ant-dropdown.rf-nav-dropdown
   .ant-dropdown-menu
   li.ant-dropdown-menu-item.ant-dropdown-menu-item-selected
   .ant-dropdown-menu-title-content {
-  color: #16365c;
+  color: var(--rf-brand);
 }
 
 /* 面经等"卡片化列表"（Listy + className="rf-card-list"）：antd 6 的 Listy 默认
    是纯分隔线的扁列表，多条记录挤在一起分不出边界；这里把每条升级成独立卡片
    （描边+圆角+浅 hover 阴影），列表整体更像一叠卡片而不是一页流水。 */
 .rf-card-list .ant-listy-item {
-  border: 1px solid #e4eaf2;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 10px;
-  background: #fff;
+  background: var(--rf-surface);
   padding: 12px 16px;
   margin-bottom: 10px;
   transition:
@@ -1694,7 +1717,7 @@
 }
 
 .rf-card-list .ant-listy-item:hover {
-  border-color: #c7d7e8;
+  border-color: var(--rf-border-strong);
   box-shadow: 0 2px 12px rgba(22, 54, 92, 0.07);
 }
 
@@ -1712,14 +1735,14 @@
 }
 
 .batch-score-number {
-  color: #16365c;
+  color: var(--rf-brand);
   font-size: 20px;
   font-weight: 600;
 }
 
 .batch-score-unit {
   margin-left: 2px;
-  color: #64748b;
+  color: var(--rf-text-secondary);
   font-size: 12px;
   font-weight: 400;
 }

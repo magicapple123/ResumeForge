@@ -132,6 +132,78 @@ function toSelectionRect(rect: DOMRect): SelectionRect {
   };
 }
 
+/** 一段「光标位置」：粘贴时用它决定插到哪儿，不含文本。 */
+export interface CaretInsertion {
+  kind: SelectionKind;
+  element: EditableElement;
+  start: number;
+  end: number;
+}
+
+/**
+ * 元素的矩形（按视口坐标）。
+ *
+ * 给「只有光标、没有选区」的场景兜一个定位值：`SelectionTarget.rect` 必填，而光标
+ * 本身量不出矩形——退回元素矩形即可，那个矩形只用于浮层定位。
+ */
+export function elementRect(element: HTMLElement): SelectionRect {
+  return toSelectionRect(element.getBoundingClientRect());
+}
+
+/**
+ * 读出当前光标（或选区）在可编辑区里的字符偏移；不在可编辑区里时返回 `null`。
+ *
+ * 与 `getSelectionTarget` 的差别只在「允许折叠」：润色必须有选中的文字，而粘贴
+ * 只要有落点。`email` 这类不暴露 `selectionStart` 的类型返回 `null`，由调用方
+ * 退回「替换整个已选中的那段」。
+ *
+ * `preferred` 用来指定「先看这个元素」：右键菜单拿到焦点之后 `document.activeElement`
+ * 已经是菜单本身了，但用户真正想粘贴的仍是原来那个输入框——它的 `selectionStart/End`
+ * 在失焦后依然有效。
+ */
+export function getCaretInsertion(preferred?: EditableElement | null): CaretInsertion | null {
+  const isField = (
+    node: Element | null | undefined,
+  ): node is HTMLInputElement | HTMLTextAreaElement =>
+    node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement;
+
+  const field = isField(preferred) && isEditableElement(preferred) ? preferred : null;
+  if (field) {
+    const start = field.selectionStart;
+    const end = field.selectionEnd;
+    if (start !== null && end !== null) {
+      return { kind: kindOf(field), element: field, start, end };
+    }
+  }
+
+  const active = document.activeElement;
+  if (isField(active)) {
+    if (!isEditableElement(active)) return null;
+    const start = active.selectionStart;
+    const end = active.selectionEnd;
+    if (start === null || end === null) return null;
+    return { kind: kindOf(active), element: active, start, end };
+  }
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const anchorHost = contentEditableHost(selection.anchorNode);
+  const host =
+    preferred instanceof HTMLElement && isEditableElement(preferred)
+      ? (contentEditableHost(selection.anchorNode) ?? preferred)
+      : anchorHost;
+  if (!host || !isEditableElement(host)) return null;
+  const range = selection.getRangeAt(0);
+  if (!host.contains(range.startContainer)) return null;
+  const start = textOffset(host, range.startContainer, range.startOffset);
+  return {
+    kind: "contenteditable",
+    element: host,
+    start,
+    end: start + range.toString().length,
+  };
+}
+
 /**
  * 读出当前选区；不可润色时返回 `null`。
  *

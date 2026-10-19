@@ -5,13 +5,14 @@
  * **必须只有一处实现**：上次"图表随窗口放大"的修复就是靠这个封顶，散成两份的话下次
  * 只会修到一半。
  *
- * 视觉约定（本轮统一）：每行一条**全宽浅色轨道**（#f0f2f5）垫底，彩色条只表示占比；
- * 计数为 0 的阶段显示"空轨道 + 0 标签"，不再画出难看的彩色细条；条高统一 22px、圆角
- * 统一；计数标签落在轨道右侧，漏斗模式还可选显示"相对第一阶段的百分比"小字。
+ * 视觉约定（本轮统一）：每行一条**全宽轨道**垫底（颜色随主题，见 chartPalette），彩色条
+ * 只表示占比；计数为 0 的阶段显示"空轨道 + 0 标签"，不再画出难看的彩色细条；条高统一
+ * 22px、圆角统一；计数标签落在轨道右侧，漏斗模式还可选显示"相对第一阶段的百分比"小字。
  *
  * 只负责画。阶段顺序与计数口径由后端 ``/api/analytics/dashboard`` 下发。
  */
 
+import { useChartPalette } from "../../theme/chartPalette";
 import { BAR_LABEL_FONT_SIZE, BAR_LABEL_GAP, fitLabel, labelLayoutFor } from "./barLabelLayout";
 
 export interface HorizontalBarItem {
@@ -26,7 +27,7 @@ interface Props {
   ariaLabel: string;
   /** `center` = 居中（漏斗）；`start` = 左对齐共享基线（排行）。默认居中。 */
   align?: "center" | "start";
-  /** 每条的配色；缺省统一用强调蓝。 */
+  /** 每条的配色；缺省用当前主题的系列色。 */
   colorFor?: (key: string) => string;
   /** 是否显示"相对第一阶段的百分比"小字（漏斗默认开，排行不需要）。 */
   showPercent?: boolean;
@@ -35,9 +36,7 @@ interface Props {
 export const HORIZONTAL_BAR_WIDTH = 620;
 export const HORIZONTAL_BAR_HEIGHT = 22;
 export const HORIZONTAL_BAR_GAP = 12;
-export const TRACK_COLOR = "#f0f2f5";
 const COUNT_WIDTH = 56;
-const DEFAULT_COLORS = ["#5b8ff9", "#61ddaa", "#65789b", "#f6bd16", "#7262fd", "#78d3f8"];
 
 export default function HorizontalBarChart({
   items,
@@ -46,6 +45,8 @@ export default function HorizontalBarChart({
   colorFor,
   showPercent = false,
 }: Props) {
+  // 轨道与文字色跟随主题（R18）：写死 #f0f2f5 的轨道在深色下是一整块白板。
+  const palette = useChartPalette();
   const max = Math.max(1, ...items.map((item) => item.count));
   const firstCount = items[0]?.count ?? 0;
   const width = HORIZONTAL_BAR_WIDTH;
@@ -77,7 +78,7 @@ export default function HorizontalBarChart({
         const ratio = item.count / max;
         const barWidth = Math.round(ratio * chartWidth);
         const x = align === "start" ? labelWidth : labelWidth + (chartWidth - barWidth) / 2;
-        const fill = colorFor?.(item.key) ?? DEFAULT_COLORS[index % DEFAULT_COLORS.length];
+        const fill = colorFor?.(item.key) ?? palette.series[index % palette.series.length];
         const pct =
           showPercent && firstCount > 0 ? Math.round((item.count / firstCount) * 100) : null;
         const shownLabel = fitLabel(item.label, labelTextWidth);
@@ -88,7 +89,7 @@ export default function HorizontalBarChart({
               y={y + barHeight / 2 + 4}
               textAnchor="end"
               fontSize={BAR_LABEL_FONT_SIZE}
-              fill="#555"
+              fill={palette.labelText}
             >
               {/* 只有真被截断的标签才挂 title：完整显示的行再给一个同文提示是噪音，
                   而且会让"这一个标签叫什么"在无障碍树上出现两次。 */}
@@ -103,7 +104,7 @@ export default function HorizontalBarChart({
               width={chartWidth}
               height={barHeight}
               rx={6}
-              fill={TRACK_COLOR}
+              fill={palette.track}
               data-track="true"
             />
             {/* 彩色条只在计数大于 0 时画；0 阶段保留空轨道 + 右侧「0」标签。 */}
@@ -119,10 +120,16 @@ export default function HorizontalBarChart({
                 data-bar-index={index}
               />
             )}
-            <text x={countX} y={y + barHeight / 2 + 4} fontSize={13} fill="#333" fontWeight={600}>
+            <text
+              x={countX}
+              y={y + barHeight / 2 + 4}
+              fontSize={13}
+              fill={palette.valueText}
+              fontWeight={600}
+            >
               {item.count}
               {pct !== null && (
-                <tspan fontSize={10} fill="#999" dx={4}>
+                <tspan fontSize={10} fill={palette.mutedText} dx={4}>
                   {pct}%
                 </tspan>
               )}

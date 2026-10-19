@@ -283,7 +283,8 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
           body: {
             maxHeight: "var(--rf-modal-body-max-h)",
             overflow: "auto",
-            background: "#f0f2f5",
+            // 模板预览底色：深色主题下必须暗下去，否则 iframe 周围是一圈白边。
+            background: "var(--rf-surface-alt)",
           },
         }}
         destroyOnHidden

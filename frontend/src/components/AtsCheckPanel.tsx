@@ -10,7 +10,7 @@
 import { CopyOutlined, DownloadOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Card, Empty, Input, Progress, Space, Tag, Typography } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { runAtsCheck } from "../api/ats";
 import { getJob } from "../api/jobs";
 import { MAX_JOB_TEXT_CHARS } from "../config";
@@ -35,7 +35,7 @@ const SEVERITY: Record<AtsSeverity, { label: string; color: string }> = {
 interface Props {
   resumeId: number;
   /**
-   * 关联岗位 id（由父组件传入）。为 undefined 时不显示「从关联岗位载入 JD」——
+   * 关联岗位 id（由父组件传入）。为 undefined 时既没有自动载入、也没有「载入 JD」按钮——
    * 面板自己再去请求一次简历只为拿 id 不划算，拿不到还会多一次失败态。
    */
   jobId?: number;
@@ -78,6 +78,10 @@ export default function AtsCheckPanel({ resumeId, jobId }: Props) {
   const { message } = App.useApp();
   const [jdText, setJdText] = useState("");
   const [loadingJd, setLoadingJd] = useState(false);
+  /** 自动载入的提示行：带上 jobId，换岗位后旧提示自然不再显示。 */
+  const [jdNotice, setJdNotice] = useState<{ jobId: number; kind: "auto" | "failed" } | null>(null);
+  /** 自动载入过的岗位 id：同一个岗位只自动填一次（用户手动清空后不再填回）。 */
+  const autoLoadedJobId = useRef<number | null>(null);
   const jdTextRef = useRef("");
   const { data, loading, error, reload } = useApi(
     () => runAtsCheck(resumeId, jdTextRef.current),
@@ -89,24 +93,83 @@ export default function AtsCheckPanel({ resumeId, jobId }: Props) {
     void reload();
   };
 
-  /** 从关联岗位把 JD 拉进输入框：只填不跑，用户可以先看一眼再决定检测。 */
-  const loadJdFromJob = async () => {
-    if (!jobId) return;
-    setLoadingJd(true);
+  /** 读取关联岗位并拼成 JD 文本（只取文本、不碰界面状态）；失败返回 null。 */
+  const fetchJobJd = useCallback(async (targetJobId: number): Promise<string | null> => {
     try {
-      const job = await getJob(jobId);
+      const job = await getJob(targetJobId);
       const combined = [job.description, job.requirements]
         .map((part) => (part ?? "").trim())
         .filter(Boolean)
         .join("\n");
       // 硬上限与后端 AtsCheckRequest.jd_text 一致，超了就是 422，这里先裁掉。
-      setJdText(combined.slice(0, MAX_JOB_TEXT_CHARS));
+      return combined.slice(0, MAX_JOB_TEXT_CHARS);
     } catch {
-      message.error("岗位信息读取失败，可以手动粘贴 JD");
-    } finally {
-      setLoadingJd(false);
+      return null;
     }
+  }, []);
+
+  /**
+   * 自动填入关联岗位 JD：**只填不跑检测**。
+   *
+   * 三个前置条件缺一不可——有 jobId、输入框还是空的、这个岗位没自动载入过。第三条是
+   * "用户手动清空后不要再填回来"的实现：用 ref 记 jobId，不需要额外 state 触发重跑。
+   */
+  useEffect(() => {
+    if (jobId == null) return;
+    if (autoLoadedJobId.current === jobId) return;
+    if (jdText.trim() !== "") return;
+    autoLoadedJobId.current = jobId;
+    let cancelled = false;
+    void fetchJobJd(jobId).then((text) => {
+      if (cancelled) return;
+      if (!text) {
+        // 自动路径不弹阻塞错误：保留手动按钮，留一行次要提示就够了。
+        setJdNotice({ jobId, kind: "failed" });
+        return;
+      }
+      // 用户在请求期间开始打字时不能覆盖他：空串才写。
+      setJdText((current) => (current.trim() === "" ? text : current));
+      setJdNotice({ jobId, kind: "auto" });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchJobJd, jdText, jobId]);
+
+  /**
+   * 用户改写 JD 时同步收掉「已自动载入…」提示：输入框已经被清空（或换成了自己粘贴的内容），
+   * 再说"可直接开始检测"就与界面不一致了。
+   *
+   * 只清 `auto` 这一类：自动载入**失败**时输入框本来就是空的，那行提示必须留着告诉用户
+   * 为什么框里没东西，所以失败态（`failed`）原样保留。
+   *
+   * 写在 onChange 里而不是 effect 里：这是"用户操作引起的状态变化"，用 effect 同步
+   * setState 会触发级联渲染（`react-hooks/set-state-in-effect`），事件回调是 React 推荐写法。
+   */
+  const handleJdInput = (next: string) => {
+    setJdText(next);
+    if (next.trim() !== "") return;
+    setJdNotice((current) => (current?.kind === "auto" ? null : current));
   };
+
+  /** 手动载入/刷新：失败照旧弹出可操作的中文错误（自动路径才静默）。 */
+  const handleLoadJd = async () => {
+    if (jobId == null) return;
+    setLoadingJd(true);
+    const text = await fetchJobJd(jobId);
+    setLoadingJd(false);
+    if (text === null) {
+      setJdNotice(null);
+      message.error("岗位信息读取失败，可以手动粘贴 JD");
+      return;
+    }
+    autoLoadedJobId.current = jobId;
+    setJdText(text);
+    setJdNotice(null);
+  };
+
+  /** 只显示当前 jobId 的提示：换岗位/换简历后旧提示不该继续挂着。 */
+  const notice = jdNotice && jdNotice.jobId === jobId ? jdNotice.kind : null;
 
   const copyImprovements = async () => {
     if (!data || data.issues.length === 0) return;
@@ -137,21 +200,33 @@ export default function AtsCheckPanel({ resumeId, jobId }: Props) {
             value={jdText}
             placeholder="可选：粘贴岗位 JD 文本，按 JD 关键词检查覆盖（留空则做通用覆盖）"
             aria-label="JD 文本"
-            onChange={(event) => setJdText(event.target.value)}
+            onChange={(event) => handleJdInput(event.target.value)}
           />
           <Button type="primary" loading={loading} onClick={run}>
             开始检测
           </Button>
         </Space.Compact>
         {jobId != null && (
-          <Button
-            size="small"
-            icon={<DownloadOutlined />}
-            loading={loadingJd}
-            onClick={() => void loadJdFromJob()}
-          >
-            从关联岗位载入 JD
-          </Button>
+          <Space wrap size="small">
+            <Button
+              size="small"
+              icon={<DownloadOutlined />}
+              loading={loadingJd}
+              onClick={() => void handleLoadJd()}
+            >
+              重新载入关联岗位 JD
+            </Button>
+            {notice === "auto" && (
+              <Typography.Text type="secondary">
+                已自动载入关联岗位 JD，可直接开始检测
+              </Typography.Text>
+            )}
+            {notice === "failed" && (
+              <Typography.Text type="secondary">
+                未能自动读取关联岗位，可稍后手动载入
+              </Typography.Text>
+            )}
+          </Space>
         )}
       </Space>
       {/* 硬上限交给 maxLength；提示统一走 MaxLengthHint（全仓禁用 antd showCount）。 */}
@@ -254,7 +329,7 @@ export default function AtsCheckPanel({ resumeId, jobId }: Props) {
                     {group.issues.map((issue, index) => (
                       <div
                         key={index}
-                        style={{ borderTop: "1px solid #f0f0f0", paddingTop: 8 }}
+                        style={{ borderTop: "1px solid var(--rf-border)", paddingTop: 8 }}
                         data-ats-category={issue.category}
                       >
                         <Space size="small" wrap>

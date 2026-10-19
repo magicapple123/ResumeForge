@@ -14,6 +14,7 @@ import type { DatasetInfo } from "../../types";
 import { formatErrorGuidance } from "../../api/errorGuidance";
 import { downloadBlob } from "../../utils/download";
 import { reloadPage } from "../../utils/navigation";
+import { describeImportIssues } from "./datasetImportFeedback";
 
 /** 设置页「数据」页里数据集的加载、导出、导入、切换、重命名、删除与新建。 */
 export function useSettingsDatasets() {
@@ -22,8 +23,9 @@ export function useSettingsDatasets() {
   const [datasetsLoading, setDatasetsLoading] = useState(true);
   const [datasetExporting, setDatasetExporting] = useState(false);
   const [datasetImporting, setDatasetImporting] = useState(false);
-  // 导出是否随包带走大模型 API Key。默认关（密钥不出包），由用户在导出前显式勾选。
-  const [includeApiKeys, setIncludeApiKeys] = useState(false);
+  // 导出是否随包带走大模型 API Key。默认勾选（D-A）：迁移整包时省去重填密钥；
+  // 用户可以取消勾选把密钥剥离。
+  const [includeApiKeys, setIncludeApiKeys] = useState(true);
   const [switchingDatasetId, setSwitchingDatasetId] = useState<string | null>(null);
   const [renamingDatasetId, setRenamingDatasetId] = useState<string | null>(null);
   const [deletingDatasetId, setDeletingDatasetId] = useState<string | null>(null);
@@ -64,11 +66,15 @@ export function useSettingsDatasets() {
     setDatasetsLoading(false);
   }, [fetchDatasetList]);
 
-  const runDatasetExport = async (dataset: DatasetInfo) => {
+  const runDatasetExport = async (dataset: DatasetInfo, downloadName?: string) => {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename, incompleteBackup } = await exportDataset(dataset.id, includeApiKeys);
+      const { blob, filename, incompleteBackup } = await exportDataset(
+        dataset.id,
+        includeApiKeys,
+        downloadName,
+      );
       downloadBlob(blob, filename);
       if (incompleteBackup) {
         // RR-03：包里有附件缺失或与登记哈希不符时不能说成"完整备份成功"。
@@ -86,11 +92,14 @@ export function useSettingsDatasets() {
     }
   };
 
-  const runExportAllDatasets = async () => {
+  const runExportAllDatasets = async (downloadName?: string) => {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename, incompleteBackup } = await exportAllDatasets(includeApiKeys);
+      const { blob, filename, incompleteBackup } = await exportAllDatasets(
+        includeApiKeys,
+        downloadName,
+      );
       downloadBlob(blob, filename);
       if (incompleteBackup) {
         message.warning(
@@ -118,7 +127,17 @@ export function useSettingsDatasets() {
       const extras = created.restored_datasets?.length ?? 0;
       // 勾选过"包含 API Key"的包要如实告诉用户密钥也回来了（换机器解不开时仍需重填）。
       const parts = [`已导入数据集「${created.name}」`];
-      if (extras > 0) parts.push(`并随包恢复了另外 ${extras} 份数据集`);
+      if (extras > 0) {
+        // 逐份点名（最多 3 个）：只说"另外 N 份"，用户还是不知道恢复了哪几份。
+        const names = (created.restored_datasets ?? [])
+          .map((dataset) => dataset.name)
+          .filter(Boolean);
+        const shownNames = names.slice(0, 3).join("、");
+        parts.push(
+          `并随包恢复了另外 ${extras} 份数据集` +
+            (shownNames ? `（${shownNames}${names.length > 3 ? " 等" : ""}）` : ""),
+        );
+      }
       if (created.api_key_included) parts.push("备份中的大模型 API Key 已一并恢复");
       // RR-03：带着附件问题导入时不得呈现成"完整恢复"——问题逐条（最多 3 条）摆出来。
       const problems = [...(created.backup_asset_warnings ?? []), ...(created.asset_issues ?? [])];
@@ -132,6 +151,10 @@ export function useSettingsDatasets() {
       } else {
         message.success(`${parts.join("，")}；当前数据未受影响`);
       }
+      // R16：整包逐份恢复，坏一份不影响其它份。成功提示之后必须点名没恢复的那几份，
+      // 否则用户会把"恢复了一部分"当成"整包都回来了"。
+      const trouble = describeImportIssues(created.failed, created.skipped);
+      if (trouble) message.warning(trouble);
     } catch (err) {
       const text = err instanceof Error ? err.message : "导入备份失败";
       // 附件完整性问题默认让整次导入失败（写盘前就拒绝）。这里给用户一条显式出路：

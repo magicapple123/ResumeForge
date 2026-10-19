@@ -184,7 +184,7 @@ export default memo(function WebFormProfileField({
                 display: "block",
                 whiteSpace: "pre-wrap",
                 overflowWrap: "anywhere",
-                color: value.trim() ? undefined : "#b8c2cc",
+                color: value.trim() ? undefined : "var(--rf-text-tertiary)",
               }}
             >
               {value || "未填写"}

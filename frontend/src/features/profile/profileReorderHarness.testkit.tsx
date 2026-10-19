@@ -14,10 +14,14 @@
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { useSyncExternalStore } from "react";
 import { vi } from "vitest";
-import { DEFAULT_SECTION_ORDER } from "../../components/profile/ProfileSectionConfig";
+import {
+  DEFAULT_SECTION_ORDER,
+  SECTION_LABELS,
+} from "../../components/profile/ProfileSectionConfig";
 import type { ProfileSectionKey } from "../../components/profile/ProfileSectionConfig";
 import { resetScrollAnchoringStateForTests } from "../../components/profile/dragAutoScroll";
 import { useProfileSectionReorder } from "./useProfileSectionReorder";
+import { COMPACT_SECTION_HEIGHT_PX } from "./profileCompactDrag";
 
 /** 每个分区的高度（jsdom 无布局，测试里用 getBoundingClientRect 桩出栈式布局）。
  *
@@ -36,6 +40,10 @@ const HEIGHTS: Record<ProfileSectionKey, number> = {
   summary: 140,
 };
 export const STACK_TOP = 200;
+/** 拖动激活期紧凑条的高度（与 profile.css 的 `.is-compact` 一致，取自生产常量）。 */
+export const COMPACT_HEIGHT_PX = COMPACT_SECTION_HEIGHT_PX;
+/** 紧凑态的类名（生产实现由 ProfileSectionShell 挂，见 profile.css）。 */
+export const COMPACT_CLASS = "is-compact";
 
 /** 默认顺序下的分区栈几何（gap=0）：
  * basic 200-300、exp 300-380、projects 380-440、skills 440-480、edu 480-510、
@@ -47,8 +55,8 @@ export function currentOrder(): ProfileSectionKey[] {
 
 export function Harness({ editing = true }: { editing?: boolean }) {
   const reorder = useProfileSectionReorder({ editing, saving: false, photoReading: false });
-  // 与 ProfileSectionStack 相同的消费方式：顺序经外部 store 订阅。
-  const { sectionOrder, reordering, draggingKey } = useSyncExternalStore(
+  // 与 ProfileSectionStack 相同的消费方式：顺序 + 拖拽态经外部 store 订阅。
+  const { sectionOrder, reordering, draggingKey, compact } = useSyncExternalStore(
     reorder.sectionOrderStore.subscribe,
     reorder.sectionOrderStore.getSnapshot,
   );
@@ -59,14 +67,15 @@ export function Harness({ editing = true }: { editing?: boolean }) {
       data-testid="section-stack"
     >
       {/* 与生产实现一致：DOM 顺序固定为默认序，视觉顺序交给 CSS order；
-          分区壳按 reordering 挂 is-section-reordering（强制真实布局）。 */}
+          分区壳按 reordering 挂 is-section-reordering（强制真实布局）、
+          按 compact 挂 is-compact（拖动激活期全部折叠成 52px 紧凑条）。 */}
       {DEFAULT_SECTION_ORDER.map((key) => (
         <div
           key={key}
           data-profile-section-key={key}
           className={`profile-section-sortable${reordering ? " is-section-reordering" : ""}${
             draggingKey === key ? " is-dragging" : ""
-          }`}
+          }${compact ? ` ${COMPACT_CLASS}` : ""}`}
           style={{ order: sectionOrder.indexOf(key) }}
           // 与生产实现（ProfileSectionShell）一致：根节点是可编程聚焦的落点。
           tabIndex={-1}
@@ -92,6 +101,8 @@ export function Harness({ editing = true }: { editing?: boolean }) {
             aria-label={`重置${key}`}
             onClick={() => reorder.resetSectionReorder(DEFAULT_SECTION_ORDER)}
           />
+          {/* 与生产实现一致：分区壳里有标题栏（紧凑条的可见内容就是它）。 */}
+          <div className="profile-section-titlebar">{SECTION_LABELS[key]}</div>
         </div>
       ))}
     </div>
@@ -100,12 +111,24 @@ export function Harness({ editing = true }: { editing?: boolean }) {
 
 /** 把分区高度桩成按 **视觉序（CSS order）** 从 STACK_TOP 起的垂直栈（gap=0）。
  * 真实浏览器里 flex 容器按 order 摆放分区；jsdom 没有布局，这里按各分区当前的
- * order 内联样式排序模拟——每次 rect 查询都现算，splice 更新 order 后立刻反映。 */
-export function stubSectionRects() {
+ * order 内联样式排序模拟——每次 rect 查询都现算，splice 更新 order 后立刻反映。
+ *
+ * `options.compactHeight`：模拟「拖动激活期全部分区折叠成紧凑条」的真实布局——
+ * 带 `is-compact` 类（生产实现由 ProfileSectionShell 挂）的分区一律报这个高度。
+ * 不传时保持展开高度表（既有用例的几何前提一字不改）。 */
+export function stubSectionRects(options: { compactHeight?: number } = {}) {
+  const { compactHeight } = options;
+  /** 某个分区当前应报的高度：折叠态走固定高度，展开态走高度表。 */
+  const heightOf = (node: Element): number => {
+    const element = node as HTMLElement;
+    if (compactHeight !== undefined && element.classList?.contains(COMPACT_CLASS)) {
+      return compactHeight;
+    }
+    return HEIGHTS[(element.dataset?.profileSectionKey ?? "") as ProfileSectionKey] ?? 0;
+  };
   return vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
     this: Element,
   ) {
-    const key = (this as HTMLElement).dataset?.profileSectionKey ?? "";
     const siblings = this.parentElement ? Array.from(this.parentElement.children) : [];
     const visualOrder = (sibling: Element) =>
       Number((sibling as HTMLElement).style?.order ?? "0") || 0;
@@ -113,10 +136,9 @@ export function stubSectionRects() {
     let top = STACK_TOP;
     for (const sibling of visualSiblings) {
       if (sibling === this) break;
-      const siblingKey = (sibling as HTMLElement).dataset?.profileSectionKey ?? "";
-      top += HEIGHTS[siblingKey as ProfileSectionKey] ?? 0;
+      top += heightOf(sibling);
     }
-    const height = HEIGHTS[key as ProfileSectionKey] ?? 0;
+    const height = heightOf(this);
     return {
       top,
       bottom: top + height,

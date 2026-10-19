@@ -73,6 +73,7 @@ const RESUME: ResumeBrief = {
   page_limit: 1,
   font_scale: "standard",
   created_at: "2026-08-20T10:00:00",
+  updated_at: "2026-08-21T09:30:00",
 };
 
 function renderPage(initialEntries: string[] = ["/resumes"]) {
@@ -115,6 +116,26 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+});
+
+describe("ResumesPage 排序（R14）", () => {
+  it("默认按最近修改拉取，切换后带上新的 sort 参数", async () => {
+    renderPage();
+    await screen.findByText(RESUME.title);
+
+    expect(apiMocks.listResumes).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: "updated_desc" }),
+    );
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "排序方式" }));
+    fireEvent.click(await screen.findByTitle("最近生成"));
+
+    await waitFor(() =>
+      expect(apiMocks.listResumes).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: "created_desc" }),
+      ),
+    );
+  });
 });
 
 describe("ResumesPage column hints", () => {

@@ -1,18 +1,20 @@
 /**
- * 版式控件：模板"选中即见预览"与无级字号滑块。
+ * 版式控件：模板"选中即见预览"与板块顺序。
  *
  * 两块都是**看不见的错最容易溜过去**的地方：模板入口合并后如果只是换了个名字、
- * 预览没真的渲染出来，用户还是盲选；滑块如果每拖一下都发请求，界面会卡、后端会被刷。
- * 所以这里把"能看到预览""拖动不发请求、防抖后只发一次""恢复默认"都钉住。
+ * 预览没真的渲染出来，用户还是盲选；板块顺序如果只改内存不落库，用户下次打开
+ * 又会回到默认。所以这里把"能看到预览""顺序写进完整排列""恢复默认"都钉住。
+ *
+ * 2026-10-19：字号域（0.1px 精度 / 加减按钮 / 滑块步长与下限 / 拖动防抖）按内聚
+ * 边界拆到 `ResumeLayoutControls.font.test.tsx`（行数预算 500）。渲染外壳与假预览
+ * 句柄抽到 `ResumeLayoutControls.testkit.tsx` 共用；本文件的 api mock 与
+ * `beforeEach` 保持自持（vitest 的 mock 注册不跨文件 hoist）。
  */
-import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createRef } from "react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import type { ResumeLayout } from "../types";
-import type { ResumePreviewHandle } from "./ResumePreview";
-import ResumeLayoutControls from "./ResumeLayoutControls";
+import { DEFAULT_LAYOUT, renderControls } from "./ResumeLayoutControls.testkit";
 
 const apiMocks = vi.hoisted(() => ({
   fetchResumeTemplates: vi.fn(),
@@ -26,34 +28,6 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   previewResumeTemplate: apiMocks.previewResumeTemplate,
 }));
 
-const DEFAULT_LAYOUT: ResumeLayout = {
-  template: "classic",
-  format_name: "",
-  page_limit: 1,
-  font_scale: "standard",
-};
-
-/** 假的预览句柄：只记录 setLiveProbe 被调过什么，不涉及真实 iframe。 */
-function makePreviewRef() {
-  const setLiveProbe = vi.fn();
-  const measureWithProbe = vi.fn(() => null);
-  const ref = createRef<ResumePreviewHandle>();
-  (ref as { current: ResumePreviewHandle | null }).current = { setLiveProbe, measureWithProbe };
-  return { ref, setLiveProbe, measureWithProbe };
-}
-
-function renderControls(
-  props: Partial<React.ComponentProps<typeof ResumeLayoutControls>> = {},
-  onChange = vi.fn(),
-) {
-  render(
-    <AntdApp>
-      <ResumeLayoutControls layout={DEFAULT_LAYOUT} onChange={onChange} {...props} />
-    </AntdApp>,
-  );
-  return onChange;
-}
-
 beforeEach(() => {
   apiMocks.fetchResumeTemplates.mockReset();
   apiMocks.previewResumeTemplate.mockReset();
@@ -66,12 +40,6 @@ afterEach(() => {
   document.body.innerHTML = "";
   vi.restoreAllMocks();
 });
-
-/** 键盘可访问：方向键微调字号。rc-slider 读的是 `keyCode`/`which`，不是 `key`。 */
-function pressArrow(target: Element, direction: "ArrowLeft" | "ArrowRight") {
-  const keyCode = direction === "ArrowRight" ? 39 : 37;
-  fireEvent.keyDown(target, { key: direction, keyCode, which: keyCode });
-}
 
 describe("ResumeLayoutControls · 选模板即见预览（C2）", () => {
   it("模板入口合并成一个按钮，不再有单独的「看效果」", async () => {
@@ -111,121 +79,6 @@ describe("ResumeLayoutControls · 选模板即见预览（C2）", () => {
     fireEvent.click(useButtons[0]);
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0]).toMatchObject({ template: "modern" });
-  });
-});
-
-describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
-  it("拖动时即时反馈、不发请求；静置后只提交一次", async () => {
-    const { ref, setLiveProbe } = makePreviewRef();
-    const onChange = renderControls({ previewRef: ref });
-
-    const slider = await screen.findByRole("slider");
-    // 键盘可访问：方向键微调字号（这也是唯一的"拖动"入口，测试直接用它）。
-    pressArrow(slider, "ArrowRight");
-    pressArrow(slider, "ArrowRight");
-    pressArrow(slider, "ArrowRight");
-
-    // 中间态：预览被本地探针缩放了，但没有外发任何版式请求。
-    expect(setLiveProbe).toHaveBeenCalled();
-    const probeCalls = setLiveProbe.mock.calls;
-    expect(probeCalls[probeCalls.length - 1][0]).toContain("--fs: calc(");
-    expect(onChange).not.toHaveBeenCalled();
-
-    // 防抖结束后恰好提交一次 —— 不是每拖一格一次。
-    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
-    expect(onChange.mock.calls[0][0]).toMatchObject({
-      font_scale: "standard",
-      format_config: { font_scale_adjust: expect.any(Number) },
-    });
-    // 14px 上调 3 格（每格 0.5px）→ 15.5px，最近档仍是标准档，系数 15.5 / 14 ≈ 1.107。
-    expect(Number(onChange.mock.calls[0][0].format_config.font_scale_adjust)).toBeCloseTo(1.107, 2);
-  });
-
-  it("从大字号往下拖会就近落到标准档并带小于 1 的系数", async () => {
-    const onChange = renderControls({
-      layout: { ...DEFAULT_LAYOUT, font_scale: "large" },
-    });
-    const slider = await screen.findByRole("slider");
-
-    // 18px 往下 9 格（每格 0.5px）→ 13.5px，最近档是标准档（14），系数 13.5 / 14 ≈ 0.964。
-    for (let i = 0; i < 9; i += 1) pressArrow(slider, "ArrowLeft");
-
-    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
-    expect(onChange.mock.calls[0][0]).toMatchObject({ font_scale: "standard" });
-    expect(Number(onChange.mock.calls[0][0].format_config.font_scale_adjust)).toBeLessThan(1);
-  });
-
-  it("拖动全程零网络：fetch 与 previewResumeTemplate 一次都没被调用", async () => {
-    // 直接盯住网络入口本身，而不是"某个回调没被调"：将来若有人在拖动处理里塞一句
-    // 裸 fetch / 预览请求，这条断言会立刻红——这是"零网络"最靠得住的说法。
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const { ref } = makePreviewRef();
-    const onChange = renderControls({ previewRef: ref });
-
-    const slider = await screen.findByRole("slider");
-    for (let i = 0; i < 6; i += 1) pressArrow(slider, "ArrowRight");
-
-    // 拖动中：任何网络入口都没被碰过，也没有提交。
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(apiMocks.previewResumeTemplate).not.toHaveBeenCalled();
-    expect(onChange).not.toHaveBeenCalled();
-
-    // 松手防抖后：恰好一次提交，且这次提交本身也不走 fetch（由父组件统一落库）。
-    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(apiMocks.previewResumeTemplate).not.toHaveBeenCalled();
-  });
-
-  it("「恢复默认」回到默认档位并清掉字号系数，其它覆盖保留", async () => {
-    const { ref, setLiveProbe } = makePreviewRef();
-    const onChange = renderControls({
-      layout: {
-        ...DEFAULT_LAYOUT,
-        font_scale: "large",
-        format_config: { font_scale_adjust: 0.95, accent: "#123456" },
-      },
-      previewRef: ref,
-    });
-
-    fireEvent.click(await screen.findByRole("button", { name: "恢复默认字号" }));
-
-    expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange.mock.calls[0][0]).toMatchObject({
-      font_scale: TEMPLATE_CATALOG.defaults.font_scale,
-      format_config: { accent: "#123456" },
-    });
-    expect(onChange.mock.calls[0][0].format_config).not.toHaveProperty("font_scale_adjust");
-    expect(setLiveProbe).toHaveBeenCalledWith("");
-  });
-});
-
-describe("ResumeLayoutControls · 字号下限 5px（R7）", () => {
-  it("滑块的范围是 5 ~ 最大档位基准像素，步长 0.5", async () => {
-    renderControls();
-    const slider = await screen.findByRole("slider");
-    const tiers = TEMPLATE_CATALOG.font_scales;
-    const maxBasePx = Math.max(...tiers.map((tier) => tier.base_px));
-    expect(slider).toHaveAttribute("aria-valuemin", "5");
-    expect(slider).toHaveAttribute("aria-valuemax", String(maxBasePx));
-  });
-
-  it("字号低于 8px 时在读数旁提示打印可能看不清", async () => {
-    // 11px × 0.5 = 5.5px：直接构造一个"已经很小"的版式，不必靠按 13 次方向键。
-    renderControls({
-      layout: {
-        ...DEFAULT_LAYOUT,
-        font_scale: "small",
-        format_config: { font_scale_adjust: 0.5 },
-      },
-    });
-
-    expect(await screen.findByText(/小于 8px 打印可能看不清/)).toBeInTheDocument();
-  });
-
-  it("正常字号不显示这条警告（提示只在真的偏小时出现）", async () => {
-    renderControls();
-    await screen.findByRole("slider");
-    expect(screen.queryByText(/小于 8px 打印可能看不清/)).not.toBeInTheDocument();
   });
 });
 

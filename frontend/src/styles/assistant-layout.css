@@ -9,7 +9,7 @@
 .assistant-sidebar {
   min-width: 0;
   padding-right: 12px;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid var(--rf-border-subtle);
 }
 
 .assistant-conversation-list {
@@ -47,7 +47,7 @@
 }
 
 .assistant-conversation-list .ant-listy-item:has(.is-active) {
-  background: #eef4ff;
+  background: var(--rf-surface-alt);
 }
 
 .assistant-conversation-list .listy-item-actions {
@@ -55,19 +55,19 @@
 }
 
 .assistant-conversation-more-button {
-  color: #98a2b3;
+  color: var(--rf-text-tertiary);
 }
 
 .assistant-conversation-more-button:hover,
 .assistant-conversation-list .ant-listy-item:has(.is-active) .assistant-conversation-more-button {
-  color: #1677ff;
+  color: var(--rf-info);
 }
 
 .assistant-conversation-button {
   width: 100%;
   min-width: 0;
   overflow: hidden;
-  color: #262626;
+  color: var(--rf-text-body);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -87,13 +87,13 @@
   align-items: center;
   gap: 4px;
   margin-right: 6px;
-  color: #d89614;
+  color: var(--rf-warning-text);
   font-size: 12px;
   vertical-align: 1px;
 }
 
 .assistant-conversation-flags .anticon-pushpin {
-  color: #1677ff;
+  color: var(--rf-info);
 }
 
 .assistant-conversation-title.is-overflowing {
@@ -145,7 +145,7 @@
   justify-content: space-between;
   gap: 8px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--rf-border-subtle);
 }
 
 .assistant-header .ant-typography {
@@ -161,14 +161,14 @@
   flex: none;
   max-width: 100%;
   overflow: hidden;
-  color: #1554ad;
+  color: var(--rf-info-strong);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .assistant-skills-hint.ant-btn:hover {
-  color: #003eb3;
-  background: #edf5ff;
+  color: var(--rf-info-strong);
+  background: var(--rf-brand-wash);
 }
 
 .assistant-messages {
@@ -189,17 +189,17 @@
   justify-content: center;
   width: 34px;
   height: 34px;
-  color: #595959;
-  background: #fff;
-  border: 1px solid #d9d9d9;
+  color: var(--rf-text-secondary);
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border-strong);
   border-radius: 50%;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   cursor: pointer;
 }
 
 .assistant-scroll-bottom:hover {
-  color: #1677ff;
-  border-color: #1677ff;
+  color: var(--rf-info);
+  border-color: var(--rf-info);
 }
 
 .assistant-empty-state {
@@ -240,15 +240,15 @@
 .assistant-starter-prompt.ant-btn {
   height: auto;
   padding: 5px 10px;
-  color: #1554ad;
-  border-color: #cfe0fa;
-  background: #f7faff;
+  color: var(--rf-info-strong);
+  border-color: var(--rf-border-strong);
+  background: var(--rf-surface-alt);
 }
 
 .assistant-starter-prompt.ant-btn:hover {
-  color: #003eb3;
-  border-color: #91caff;
-  background: #edf5ff;
+  color: var(--rf-info-strong);
+  border-color: var(--rf-focus-ring);
+  background: var(--rf-brand-wash);
 }
 
 /* 空态里的技能引导：只在没启用任何技能时出现，负责让人知道有这个功能。 */

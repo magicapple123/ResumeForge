@@ -29,14 +29,14 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: rgb(15 23 42 / 18%);
+  background-color: var(--rf-scrim);
   background-clip: content-box;
   border: 2px solid transparent;
   border-radius: 8px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(15 23 42 / 32%);
+  background-color: var(--rf-scrim-strong);
 }
 
 #root {
@@ -56,7 +56,7 @@ body {
   inset: 0 auto 0 0;
   height: 100vh !important;
   overflow: hidden;
-  background: #fff !important;
+  background: var(--rf-surface) !important;
   border-right: 1px solid var(--rf-border-subtle);
   box-shadow: 2px 0 12px rgb(15 23 42 / 4%);
 }
@@ -186,7 +186,7 @@ body {
 }
 
 .app-nav-menu .ant-menu-item .anticon {
-  color: #8b96a5;
+  color: var(--rf-text-tertiary);
   font-size: 17px;
 }
 
@@ -206,7 +206,7 @@ body {
 
 .app-sider-footer {
   padding: 10px 10px 16px;
-  border-top: 1px solid #eef0f3;
+  border-top: 1px solid var(--rf-border-subtle);
 }
 
 /* 「使用指南」占满页脚宽度。留成行容器是为了折叠态（64px 宽）能整行居中。 */
@@ -227,7 +227,7 @@ body {
 
 .app-guide-button:hover {
   color: var(--rf-brand) !important;
-  background: #f3f7fb !important;
+  background: var(--rf-surface-alt) !important;
 }
 
 /* 开源仓库入口：页头右上角、退出按钮左边的**纯图标**按钮。
@@ -249,7 +249,7 @@ body {
 
 .app-repo-button:hover {
   color: var(--rf-brand) !important;
-  background: #f3f7fb !important;
+  background: var(--rf-surface-alt) !important;
 }
 
 /* 「检查更新」：页脚最右侧的纯图标按钮，与「使用指南」同一行。
@@ -269,7 +269,7 @@ body {
 
 .app-update-button:hover {
   color: var(--rf-brand) !important;
-  background: #f3f7fb !important;
+  background: var(--rf-surface-alt) !important;
 }
 
 .user-guide-brand-image {
@@ -363,7 +363,7 @@ body {
    并留出更多下边距，避免和要点粘在一起。 */
 .user-guide-description {
   margin: 0 0 18px;
-  color: #55606e;
+  color: var(--rf-text-body);
   font-size: 14px;
   line-height: 1.9;
 }
@@ -374,8 +374,9 @@ body {
      空隙，长条目视觉上连成"一整段"。这里显式取消默认圆点、改用统一的小圆点标记，
      让每一条都一眼可辨，又不抢正文的注意力。 */
   padding-left: 0;
-  color: #4b5563;
-  /* 行高从 2 收到 1.75：每条要点现在都由粗体短标签领起，靠**标签**断句就够，
+  color: var(
+    --rf-text-secondary
+  ); /* 行高从 2 收到 1.75：每条要点现在都由粗体短标签领起，靠**标签**断句就够，
      不必再靠超宽行距硬撑，收紧后一屏能看到更多条。 */
   line-height: 1.75;
   list-style: none;
@@ -412,7 +413,7 @@ body {
 }
 
 .user-guide-point-text {
-  color: #4b5563;
+  color: var(--rf-text-secondary);
 }
 
 .user-guide-footer {
@@ -439,14 +440,14 @@ body {
   padding: 14px 16px;
   border: 1px solid var(--rf-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--rf-surface);
   text-align: left;
   cursor: pointer;
 }
 
 .user-guide-quickstart-path:hover:not(:disabled) {
   border-color: var(--rf-brand);
-  background: #f8fbfe;
+  background: var(--rf-surface-alt);
 }
 
 .user-guide-quickstart-path:disabled {
@@ -481,7 +482,7 @@ body {
 }
 
 .user-guide-quickstart-text {
-  color: #4b5563;
+  color: var(--rf-text-secondary);
   font-size: 13px;
 }
 
@@ -502,7 +503,7 @@ body {
   top: 0;
   height: 64px;
   padding: 0 24px;
-  background: #fff;
+  background: var(--rf-surface);
   border-bottom: 1px solid var(--rf-border);
   box-shadow: 0 1px 8px rgb(15 23 42 / 3%);
 }
@@ -530,16 +531,23 @@ body {
   gap: 5px;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid #e3e9f1;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 999px;
-  color: #4a5768;
+  color: var(--rf-text-secondary);
   font-size: 12px;
 }
 
 .app-space-menu-button:hover {
   color: var(--rf-brand) !important;
-  background: #eef4fb !important;
-  border-color: #c9d8ea !important;
+  background: var(--rf-brand-wash) !important;
+  border-color: var(--rf-border-strong) !important;
+}
+
+/* 页头全局模型选择器（R21）：只在配了 profile 时渲染。 */
+.app-model-profile-select {
+  flex: 0 0 auto;
+  min-width: 150px;
+  max-width: 240px;
 }
 
 /* 页头右侧的「当前数据集 + 头像」：只读展示，尺寸与页头 64px 高对齐。 */
@@ -556,18 +564,18 @@ body {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border: 1px solid #e3e9f1;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 999px;
-  background: #f7f9fc;
-  color: #4a5768;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
   font-size: 12px;
   line-height: 1.6;
   cursor: pointer;
 }
 
 .app-dataset-chip:hover {
-  border-color: #c9d8ea;
-  background: #eef4fb;
+  border-color: var(--rf-border-strong);
+  background: var(--rf-brand-wash);
   color: var(--rf-brand);
 }
 
@@ -577,14 +585,35 @@ body {
   white-space: nowrap;
 }
 
+/*
+ * 数据集下拉：条目宽度设上限，超长名字省略而不是把弹层撑到半屏。
+ * chip 自己已经限到 220px，弹层此前没有任何约束——名字一长，菜单比页面还宽。
+ */
+.app-dataset-dropdown {
+  max-width: 360px;
+}
+
+.app-dataset-dropdown .ant-dropdown-menu-item {
+  max-width: 340px;
+}
+
+.app-dataset-dropdown .app-dataset-menu-label {
+  display: inline-block;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
 /* 「示例」小徽标：chip 旁与下拉条目共用，提示当前是体验数据、与真实资料独立。 */
 .app-dataset-sample-tag {
   flex: 0 0 auto;
   padding: 0 6px;
-  border: 1px solid #ffd591;
+  border: 1px solid var(--rf-warning-border);
   border-radius: 4px;
-  background: #fff7e6;
-  color: #874d00;
+  background: var(--rf-warning-bg);
+  color: var(--rf-text-body);
   font-size: 11px;
   line-height: 18px;
 }
@@ -603,9 +632,9 @@ body {
 
 .app-user-avatar {
   flex: 0 0 auto;
-  border: 1px solid #e3e9f1;
-  background: #eef2f7;
-  color: #7b8798;
+  border: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-tertiary);
 }
 
 .app-user-avatar-button {
@@ -627,7 +656,7 @@ body {
 }
 
 .app-dataset-arrow {
-  color: #9aa7b8;
+  color: var(--rf-text-tertiary);
   font-size: 9px;
 }
 
@@ -682,7 +711,7 @@ body {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 0;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--rf-border-subtle);
 }
 
 .background-task-row:last-of-type {
@@ -691,7 +720,7 @@ body {
 
 .background-task-spin {
   margin-top: 3px;
-  color: #2f7be5;
+  color: var(--rf-info);
 }
 
 .background-task-label,
@@ -735,7 +764,7 @@ body {
 }
 
 .detail-trigger:focus-visible {
-  outline: 2px solid #1677ff;
+  outline: 2px solid var(--rf-focus-visible);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -760,7 +789,7 @@ body {
 
 .record-detail-label {
   flex: 0 0 96px;
-  color: rgb(0 0 0 / 45%);
+  color: var(--rf-text-secondary);
   font-size: 13px;
 }
 
@@ -783,5 +812,65 @@ body {
   justify-content: flex-end;
   margin-top: 24px;
   padding-top: 12px;
-  border-top: 1px solid #eef0f3;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+/*
+ * 全局拖入导入（R17）：拖文件进窗口时的遮罩。
+ * pointer-events: none 是必须的——遮罩出现后如果接住指针，dragleave/drop 会打到遮罩上，
+ * 用户松手时反而收不到 drop。
+ */
+.global-file-drop {
+  position: fixed;
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inset: 0;
+  background: color-mix(in srgb, var(--rf-brand-fill) 28%, transparent);
+  pointer-events: none;
+}
+
+.global-file-drop-inner {
+  padding: 28px 44px;
+  border: 2px dashed var(--rf-on-brand);
+  border-radius: 16px;
+  background: var(--rf-brand, var(--rf-brand-fill));
+  box-shadow: 0 18px 48px rgb(15 23 42 / 28%);
+  color: #fff;
+  text-align: center;
+}
+
+.global-file-drop-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.global-file-drop-hint {
+  margin-top: 6px;
+  color: var(--rf-on-brand);
+  font-size: 12px;
+}
+
+/* 全站搜索（R6）：结果行整行可点，左右两端信息对齐。 */
+.global-search-hit {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.global-search-hit:hover,
+.global-search-hit:focus-visible,
+.global-search-hit[aria-selected="true"] {
+  background: var(--rf-brand-tint);
 }

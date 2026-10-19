@@ -273,7 +273,7 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     const footer = document.querySelector(".resume-detail-footer");
     expect(footer).not.toBeNull();
     expect(footer!.className).toContain("resume-detail-footer");
-    // 八项动作按钮都在（ExportButtons 在测试里被替成 null，不影响这一层）。
+    // 动作按钮都在（ExportButtons 在测试里被替成 null，不影响这一层）。
     for (const name of [
       "手动调整",
       "查看大图",
@@ -281,11 +281,13 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
       "查看对应岗位",
       "咨询求职助手",
       "质量检测",
-      "导出选项",
-      "一键脱敏",
       "离线分享",
     ]) {
       expect(screen.getByText(name)).toBeInTheDocument();
     }
+    // 导出只有一个入口（ExportButtons）：旧的「导出选项」「一键脱敏」两个按钮已并入面板，
+    // 留在页面上就是"两条路径各自拼参数"的老问题。
+    expect(screen.queryByText("导出选项")).not.toBeInTheDocument();
+    expect(screen.queryByText("一键脱敏")).not.toBeInTheDocument();
   });
 });

@@ -13,6 +13,7 @@ export default defineConfig({
         /base\.css(?:\?.*)?$/,
         /accessibility\.css(?:\?.*)?$/,
         /design-tokens\.css(?:\?.*)?$/,
+        /dark-tokens\.css(?:\?.*)?$/,
       ],
     },
     setupFiles: ["./src/test/setup.ts"],

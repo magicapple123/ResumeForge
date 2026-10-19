@@ -40,6 +40,14 @@ interface Props {
    * ——那时用户要的是改这一份，不是从资料里再抓一条进来。
    */
   fillSources?: ProfileFillSources | null;
+  /**
+   * 是否渲染**条目级**的「从资料填入本条」，默认 `true`。
+   *
+   * 关掉它（`false`）时，模块顶部的「从我的资料追加一条」照旧可用，只是每个条目头部
+   * 不再出现下拉。岗位详情里的「自行编写简历」用它：那份表单的经历/项目是空的，
+   * 用户要照着岗位从头写，条目级填入没有可对应的东西。
+   */
+  entryFill?: boolean;
 }
 
 import {
@@ -71,6 +79,7 @@ export default function ResumeEditorModal({
   initialTarget,
   resumeId,
   fillSources,
+  entryFill = true,
 }: Props) {
   const { message, modal } = App.useApp();
   const [form] = Form.useForm<ResumeContent>();
@@ -113,8 +122,9 @@ export default function ResumeEditorModal({
   const summarySource = fillSources?.summary?.trim() ?? "";
   // 上下文的值必须稳定：每次渲染新建一个对象会让所有消费它的分区重渲染（表单很大）。
   const fillContextValue = useMemo(
-    () => (fillSources ? { sources: fillSources, onFilled: () => setDirty(true) } : null),
-    [fillSources],
+    () =>
+      fillSources ? { sources: fillSources, onFilled: () => setDirty(true), entryFill } : null,
+    [fillSources, entryFill],
   );
 
   // Compiler 规范：随 open/content/initialTarget 变化的回填用渲染期守卫式调整；

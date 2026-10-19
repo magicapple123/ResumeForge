@@ -24,6 +24,43 @@ vi.mock("./pages/InterviewPage", () => ({ default: () => <div>模拟面试内容
 vi.mock("./pages/AnalyticsPage", () => ({ default: () => <div>求职统计内容</div> }));
 vi.mock("./pages/TrashPage", () => ({ default: () => <div>回收站内容</div> }));
 
+// 页头全局模型选择器（R21）挂载时会读一次；只替换这一个接口，其余设置接口保持真实。
+vi.mock("./api/settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./api/settings")>();
+  return {
+    ...actual,
+    getGlobalLLM: vi.fn().mockResolvedValue({
+      enabled: true,
+      configured: true,
+      provider: "custom",
+      model: "deepseek-chat",
+      base_url: "https://api.deepseek.com/v1",
+      active_profile_id: "p_1",
+      active_name: "DeepSeek 日常",
+      profiles: [
+        {
+          id: "p_1",
+          name: "DeepSeek 日常",
+          provider: "custom",
+          model: "deepseek-chat",
+          base_url: "https://api.deepseek.com/v1",
+          configured: true,
+          is_default: true,
+        },
+        {
+          id: "p_2",
+          name: "备用",
+          provider: "custom",
+          model: "deepseek-lite",
+          base_url: "https://b.example/v1",
+          configured: true,
+          is_default: false,
+        },
+      ],
+    }),
+  };
+});
+
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
@@ -152,6 +189,21 @@ describe("application navigation", () => {
     expect(await screen.findByText(/点一个 Star/)).toBeInTheDocument();
     // 带 href 的 antd Button 渲染成 <a>，角色是 link。
     expect(screen.getByRole("link", { name: "去点 Star" })).toHaveAttribute("href", GITHUB_REPO);
+  });
+
+  it("shows the active global model profile in the header actions", async () => {
+    window.localStorage.setItem("resumeforge.user-guide.seen", "1");
+    const { container } = render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    // R21：配了 profile 后，页头（搜索之后）出现选择器，显示"名称 · 模型"。
+    const select = await screen.findByRole("combobox", { name: "当前全局模型" });
+    expect(screen.getByText("DeepSeek 日常 · deepseek-chat")).toBeInTheDocument();
+    const headerActions = container.querySelector(".app-header-actions");
+    expect(headerActions?.contains(select)).toBe(true);
   });
 
   it("clicking the ResumeForge icon scrolls the current page to the top", async () => {

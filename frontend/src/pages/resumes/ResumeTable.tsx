@@ -223,7 +223,13 @@ export default function ResumeTable({
             aria-label={record.favorite ? "取消收藏简历" : "收藏简历"}
             loading={favoriteResumeId === record.id}
             disabled={favoriteResumeId !== null}
-            icon={record.favorite ? <StarFilled style={{ color: "#d89614" }} /> : <StarOutlined />}
+            icon={
+              record.favorite ? (
+                <StarFilled style={{ color: "var(--rf-favorite)" }} />
+              ) : (
+                <StarOutlined />
+              )
+            }
             onClick={() => void toggleFavorite(record)}
           />
         </Tooltip>
@@ -232,10 +238,22 @@ export default function ResumeTable({
     {
       title: "简历标题",
       dataIndex: "title",
+      // 1080px 宽下无宽度的标题列会被压到约一个字宽：给一个下限再让它在窄屏内省略。
+      width: 220,
+      // 自定义 render 返回的是按钮，列级 ellipsis 截不到按钮里的文字（按钮自带样式），
+      // 所以省略号由按钮自己带（见下）；这里关掉 antd 的原生 title，避免和 Tooltip 弹两次。
+      ellipsis: { showTitle: false },
       render: (_, record) => (
-        <Button type="link" className="table-text-link" onClick={() => setPreviewId(record.id)}>
-          {record.title}
-        </Button>
+        <Tooltip title={record.title} placement="topLeft">
+          <Button
+            type="link"
+            className="table-text-link"
+            style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}
+            onClick={() => setPreviewId(record.id)}
+          >
+            {record.title}
+          </Button>
+        </Tooltip>
       ),
     },
     {
@@ -319,6 +337,14 @@ export default function ResumeTable({
       dataIndex: "created_at",
       width: 160,
       render: (value) => formatDateTime(value),
+    },
+    {
+      // 默认排序就是「最近修改」，这一列让排序结果可解释：改完备注/版式后时间会往前走。
+      title: "最近修改",
+      dataIndex: "updated_at",
+      width: 160,
+      render: (value: string | null | undefined) =>
+        value ? formatDateTime(value) : <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
       title: "操作",
