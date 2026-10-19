@@ -3,9 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job, JobAnalysisResult } from "../types";
 import JobAnalysisModal from "./JobAnalysisModal";
 
-const apiMocks = vi.hoisted(() => ({ generateJobAnalysis: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({ generateJobAnalysis: vi.fn(), getJobAnalysis: vi.fn() }));
 
-vi.mock("../api/jobs", () => ({ generateJobAnalysis: apiMocks.generateJobAnalysis }));
+vi.mock("../api/jobs", () => ({
+  generateJobAnalysis: apiMocks.generateJobAnalysis,
+  getJobAnalysis: apiMocks.getJobAnalysis,
+}));
 
 const JOB: Job = {
   id: 12,
@@ -52,6 +55,12 @@ const ANALYSIS: JobAnalysisResult = {
 
 beforeEach(() => {
   apiMocks.generateJobAnalysis.mockReset().mockResolvedValue(ANALYSIS);
+  apiMocks.getJobAnalysis.mockReset().mockResolvedValue({
+    cached: false,
+    stale: false,
+    generated_at: null,
+    result: null,
+  });
 });
 
 afterEach(() => {
@@ -113,6 +122,34 @@ describe("JobAnalysisModal", () => {
     // 回到「可以重新开始」的状态：说明卡又出现了，也没有错误框。
     await waitFor(() => expect(screen.getByText(/会把岗位描述交给模型/)).toBeInTheDocument());
     expect(screen.queryByText(/生成失败/)).not.toBeInTheDocument();
+  });
+
+  it("有缓存时直接显示，不再调用模型（R2）", async () => {
+    apiMocks.getJobAnalysis.mockResolvedValue({
+      cached: true,
+      stale: false,
+      generated_at: "2026-10-19T10:00:00+08:00",
+      result: ANALYSIS,
+    });
+
+    render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
+
+    expect(await screen.findByText(ANALYSIS.summary)).toBeInTheDocument();
+    expect(apiMocks.generateJobAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("岗位内容改过时显示「可能过期」，但旧结果仍然可读（R2）", async () => {
+    apiMocks.getJobAnalysis.mockResolvedValue({
+      cached: true,
+      stale: true,
+      generated_at: "2026-10-19T10:00:00+08:00",
+      result: ANALYSIS,
+    });
+
+    render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
+
+    expect(await screen.findByText("岗位内容改过，这份解读可能已过期")).toBeInTheDocument();
+    expect(screen.getByText(ANALYSIS.summary)).toBeInTheDocument();
   });
 
   it("重新生成需要二次确认（会覆盖当前结果）", async () => {

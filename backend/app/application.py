@@ -30,6 +30,7 @@ from .api import (
     interview_history,
     job_match,
     jobs,
+    jobs_analysis,
     knowledge,
     manual_backups,
     materials,
@@ -383,6 +384,7 @@ def create_app() -> FastAPI:
         # 的 `/{job_id}` 参数路径注册，否则 FastAPI 会把它尝试解析成整数并返回 422。
         job_match.router,
         jobs.router,
+        jobs_analysis.router,
         resumes.router,
         resume_writing.router,
         # 全局 AI 润色：前缀是 /api/writing，与上面那条 /api/resumes 不冲突。

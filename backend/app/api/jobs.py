@@ -10,7 +10,6 @@ from starlette.responses import Response
 
 from ..database import get_db
 from ..models.job import JOB_STATUSES, Job
-from ..runtime.log_redact import log_exception_redacted
 from ..schemas.common import Page
 from ..schemas.job import (
     RECOGNITION_SOURCE_AUTO,
@@ -31,7 +30,6 @@ from ..schemas.job import (
     JobTextParseResult,
     JobUpdate,
 )
-from ..schemas.job_analysis import JobAnalysisResult
 from ..services import trash
 from ..services.attachments import (
     assert_attachment_budget,
@@ -40,7 +38,6 @@ from ..services.attachments import (
     total_attachment_bytes,
 )
 from ..services.document_text import extract_documents_text
-from ..services.job.job_analysis import generate_job_analysis
 from ..services.job.job_csv import (
     MAX_IMPORT_FILE_CHARS,
     decode_csv_bytes,
@@ -359,28 +356,6 @@ def batch_delete_jobs(payload: JobBatchRequest, db: Session = Depends(get_db)):
         trash.soft_delete(db, "job", job)
     _commit_batch(db)
     return JobBatchDeleteResult(deleted=len(jobs))
-
-
-@router.post("/{job_id}/analysis", response_model=JobAnalysisResult)
-async def analyze_job(job_id: int, db: Session = Depends(get_db)):
-    """按需生成岗位需求总结和通用求职建议，不修改岗位或个人资料。"""
-    job = db.get(Job, job_id)
-    if job is None or trash.is_deleted(job):
-        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
-    config = get_llm_config(db)
-    if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
-    provider = create_provider(config)
-    job_out = JobOut.model_validate(job)
-    db.close()
-    try:
-        return await generate_job_analysis(provider, job_out)
-    except LLMError as exc:
-        logger.warning("岗位需求解读失败：%s", exc)
-        raise HTTPException(status_code=502, detail=f"生成岗位解读失败：{exc}") from exc
-    except Exception as exc:  # noqa: BLE001 - 外部模型异常统一转为用户可理解的错误
-        log_exception_redacted(logger, "岗位需求解读发生内部错误")
-        raise HTTPException(status_code=502, detail="生成岗位解读失败，请稍后重试") from exc
 
 
 @router.post("/export")

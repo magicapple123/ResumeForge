@@ -5,7 +5,7 @@ import PageSkeleton from "./common/PageSkeleton";
 import { ListyItem } from "./common/ListyItem";
 import { announceBackgroundFailure, announceBackgroundResult } from "../utils/backgroundTask";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { generateJobAnalysis } from "../api/jobs";
+import { generateJobAnalysis, getJobAnalysis } from "../api/jobs";
 import type { Job, JobAnalysisPriority, JobAnalysisResult } from "../types";
 
 interface Props {
@@ -24,6 +24,9 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [hasAttempted, setHasAttempted] = useState(false);
+  // R2：缓存信息——生成时间与「内容改过」标记。旧结果照常展示，只是提醒可能过期。
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const requestVersion = useRef(0);
   const lastJobId = useRef<number | null>(null);
 
@@ -35,6 +38,28 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
     setError("");
     setLoading(false);
     setHasAttempted(false);
+    setStale(false);
+    setGeneratedAt(null);
+  }, [job]);
+
+  // 打开时先读缓存：有就直接显示（不调模型），没有才让用户点「开始生成」。
+  useEffect(() => {
+    if (!job) return undefined;
+    let cancelled = false;
+    getJobAnalysis(job.id)
+      .then((cache) => {
+        if (cancelled || !cache.cached || !cache.result) return;
+        setData(cache.result);
+        setGeneratedAt(cache.generated_at);
+        setStale(cache.stale);
+        setHasAttempted(true);
+      })
+      .catch(() => {
+        // 读缓存失败不打扰用户：当作没有缓存，仍可点「开始生成」。
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [job]);
 
   // 用户在生成过程中关掉了弹窗：请求继续跑，但结果用统一通知告诉他（见 utils/backgroundTask）。
@@ -68,7 +93,11 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
         announceBackgroundResult("岗位解读", "回到岗位详情再点「岗位需求解读」即可看到。");
         return;
       }
-      if (currentRequest === requestVersion.current) setData(result);
+      if (currentRequest === requestVersion.current) {
+        setData(result);
+        setStale(false);
+        setGeneratedAt(new Date().toISOString());
+      }
     } catch (loadError) {
       // 用户主动取消：不是失败，也不该弹「生成失败」。
       if (controller.signal.aborted) {
@@ -143,6 +172,19 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
         </div>
       ) : data ? (
         <div className="job-analysis-content">
+          {stale ? (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 12 }}
+              title="岗位内容改过，这份解读可能已过期"
+              description={
+                generatedAt
+                  ? `生成于 ${new Date(generatedAt).toLocaleString()}；重写岗位描述后建议重新生成。`
+                  : "重写岗位描述后建议重新生成。"
+              }
+            />
+          ) : null}
           <div className="job-analysis-summary">
             <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
               <Typography.Text strong>

@@ -126,6 +126,18 @@ export function importJobs(rows: JobImportRow[]): Promise<JobImportResult> {
   return request("/jobs/import", { method: "POST", body: JSON.stringify({ rows }) });
 }
 
+/** 已缓存的解读（R2）：不调用模型，秒回；`stale` 表示岗位内容改过。 */
+export interface JobAnalysisCache {
+  cached: boolean;
+  stale: boolean;
+  generated_at: string | null;
+  result: JobAnalysisResult | null;
+}
+
+export function getJobAnalysis(id: number): Promise<JobAnalysisCache> {
+  return request(`/jobs/${id}/analysis`);
+}
+
 export function generateJobAnalysis(id: number, signal?: AbortSignal): Promise<JobAnalysisResult> {
   // signal 供「取消生成」用：后端调用无法真中断，但界面可以立刻停止等待，
   // 不让用户对着一个已经放弃的转圈继续等。
