@@ -23,6 +23,7 @@ import PrivacyCard from "../components/settings/PrivacyCard";
 import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
 import AppearanceCard from "../components/settings/AppearanceCard";
 import GlobalLLMCard from "../components/settings/GlobalLLMCard";
+import ResumeFontCard from "../components/settings/ResumeFontCard";
 import ShortcutSettingsCard from "../components/settings/ShortcutSettingsCard";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
 
@@ -313,6 +314,7 @@ export default function SettingsPage() {
                   hint="导航入口、快捷键、悬浮球与近期提醒的行为"
                 />
                 <AppearanceCard />
+                <ResumeFontCard />
                 <NavigationSettingsCard />
                 <ShortcutSettingsCard />
                 <AssistantOrbCard />

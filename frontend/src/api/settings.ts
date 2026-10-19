@@ -375,3 +375,40 @@ export function saveGlobalLLM(payload: {
 export function clearGlobalLLM(): Promise<void> {
   return request("/settings/global-llm", { method: "DELETE" });
 }
+
+/** 自定义简历字体（R10）：只影响 PDF 导出用的字体。 */
+export interface ResumeFont {
+  name: string;
+  size: number;
+  uploaded_at: string;
+  active: boolean;
+}
+
+export interface ResumeFonts {
+  items: ResumeFont[];
+  active: string | null;
+  max_bytes: number;
+}
+
+export function listResumeFonts(): Promise<ResumeFonts> {
+  return request("/settings/fonts");
+}
+
+export function uploadResumeFont(file: File): Promise<ResumeFont> {
+  const form = new FormData();
+  form.append("file", file);
+  // 字体最大 20MB：走上传预算，不吃 15s 的默认超时。
+  return request("/settings/fonts", { method: "POST", body: form, budget: "upload" });
+}
+
+/** 设为当前字体；`null` = 回到系统字体。 */
+export function activateResumeFont(name: string | null): Promise<{ active: string | null }> {
+  return request("/settings/fonts/active", {
+    method: "PUT",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteResumeFont(name: string): Promise<void> {
+  return request(`/settings/fonts/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
