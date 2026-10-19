@@ -158,6 +158,16 @@ export interface ResumeTemplateCatalog {
   };
   /** 系统里是否找到中文字体：决定「直接下载 PDF」是否可用。 */
   pdf_direct_available: boolean;
+  /**
+   * 每个内置模板的版式默认值（只含用户可调的三项：行距 / 页边距 / 区块间距）。
+   *
+   * 行距控件在"用户没设过覆盖"时要显示模板的真实默认值，否则滑块会停在一个与实际
+   * 渲染不同的数字上。旧后端不下发这一项时前端回退到 `DEFAULT_LINE_HEIGHT`。
+   */
+  template_layouts?: Record<
+    string,
+    { line_height: number; padding_mm: number; section_gap: number }
+  >;
   /** 模板市场预设（R-19）：映射既有样式模板 + 格式预设 + 建议字号。 */
   market: TemplateMarketPreset[];
 }

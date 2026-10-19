@@ -1,4 +1,5 @@
 """Word（.docx）导出：字节可读、版式复用 ResumeLayout、分页与 PDF ±1。"""
+
 from io import BytesIO
 
 import pytest
@@ -54,6 +55,19 @@ def test_docx_uses_template_default_margin_when_not_overridden():
     document = Document(BytesIO(result.content))
     section = document.sections[0]
     assert round(section.top_margin.mm, 2) == pytest.approx(expected, abs=0.01)
+
+
+def test_docx_page_is_a4_not_the_python_docx_default_letter():
+    """纸张必须是 A4（210×297mm），与预览和 PDF 同一张纸。
+
+    python-docx 默认是 Letter（215.9×279.4mm）：不显式设置时，同一段文字在 Word 里
+    行宽与页高都不同，"Word 页数 ≈ PDF 页数"这个承诺从纸型上就不成立。
+    """
+    result = build_resume_docx(_resume(), template="classic", page_limit=1)
+
+    section = Document(BytesIO(result.content)).sections[0]
+    assert round(section.page_width.mm, 2) == pytest.approx(210.0, abs=0.05)
+    assert round(section.page_height.mm, 2) == pytest.approx(297.0, abs=0.05)
 
 
 def test_docx_excludes_photo_when_include_photo_is_false():

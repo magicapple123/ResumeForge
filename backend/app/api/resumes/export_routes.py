@@ -27,6 +27,7 @@ from ...services.export_pipeline import (
     ExportRequest,
     RenderContext,
     build_export_delivery,
+    effective_format_config,
 )
 from ...services.export_save_location import save_artifact, validate_directory
 from ...services.pdf_exporter import ResumePDFError
@@ -138,7 +139,8 @@ def _export_record(
             "template": context.template,
             "template_html": context.template_html,
             "style_config": context.style_config or {},
-            "format_config": context.format_config or {},
+            # 生效后的版式：记录值 + 本次请求的草稿覆盖，与 build_export 渲染用的是同一份。
+            "format_config": effective_format_config(request, context),
             "page_limit": request.page_limit
             if request.page_limit is not None
             else (record.page_limit or 1),
@@ -156,6 +158,7 @@ def _export_record(
             "margin_mm": request.margin_mm,
             "font_scale": effective_render_context["font_scale"],
             "page_limit": effective_render_context["page_limit"],
+            "format_config": effective_render_context["format_config"],
             "include_photo": request.include_photo,
         }
         # 显式存档：哈希原样沿用 ExportDelivery 的产出，库里证据与响应头逐字一致。
@@ -237,6 +240,7 @@ def export_resume_with_options(
         margin_mm=payload.margin_mm,
         font_scale=payload.font_scale,
         page_limit=payload.page_limit,
+        format_config=payload.format_config,
         include_photo=payload.include_photo,
     )
     return _export_record(

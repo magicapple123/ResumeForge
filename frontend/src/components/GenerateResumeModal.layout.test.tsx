@@ -221,7 +221,7 @@ describe("GenerateResumeModal 回填只重算板块顺序（R6）", () => {
     });
 
     // 在配置阶段把字号往上调一格：14 → 14.1px（步长 0.1px），落库形态是「档位 + 系数」。
-    const slider = await screen.findByRole("slider");
+    const slider = await screen.findByRole("slider", { name: /字号/ });
     pressArrowRight(slider);
     // 断言滑块本身的值（读数与 tooltip 里也会出现 "14.1px"，按文本查会撞车）。
     await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "14.1"));

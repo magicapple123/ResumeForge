@@ -48,7 +48,7 @@ describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
     const { ref, setLiveProbe } = makePreviewRef();
     const onChange = renderControls({ previewRef: ref });
 
-    const slider = await screen.findByRole("slider");
+    const slider = await screen.findByRole("slider", { name: /字号/ });
     // 键盘可访问：方向键微调字号（这也是唯一的"拖动"入口，测试直接用它）。
     pressArrow(slider, "ArrowRight");
     pressArrow(slider, "ArrowRight");
@@ -74,7 +74,7 @@ describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
     const onChange = renderControls({
       layout: { ...DEFAULT_LAYOUT, font_scale: "large" },
     });
-    const slider = await screen.findByRole("slider");
+    const slider = await screen.findByRole("slider", { name: /字号/ });
 
     // 18px 往下 41 格（每格 0.1px）→ 13.9px：越过 16px 的中点后最近档变成标准档（14），
     // 系数 13.9 / 14 ≈ 0.993。
@@ -92,7 +92,7 @@ describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
     const { ref } = makePreviewRef();
     const onChange = renderControls({ previewRef: ref });
 
-    const slider = await screen.findByRole("slider");
+    const slider = await screen.findByRole("slider", { name: /字号/ });
     for (let i = 0; i < 6; i += 1) pressArrow(slider, "ArrowRight");
 
     // 拖动中：任何网络入口都没被碰过，也没有提交。
@@ -132,7 +132,7 @@ describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
 describe("ResumeLayoutControls · 字号下限 5px（R7）", () => {
   it("滑块的范围是 5 ~ 最大档位基准像素，步长 0.1px", async () => {
     renderControls();
-    const slider = await screen.findByRole("slider");
+    const slider = await screen.findByRole("slider", { name: /字号/ });
     const tiers = TEMPLATE_CATALOG.font_scales;
     const maxBasePx = Math.max(...tiers.map((tier) => tier.base_px));
     expect(slider).toHaveAttribute("aria-valuemin", "5");
@@ -159,7 +159,7 @@ describe("ResumeLayoutControls · 字号下限 5px（R7）", () => {
 
   it("正常字号不显示这条警告（提示只在真的偏小时出现）", async () => {
     renderControls();
-    await screen.findByRole("slider");
+    await screen.findByRole("slider", { name: /字号/ });
     expect(screen.queryByText(/小于 8px 打印可能看不清/)).not.toBeInTheDocument();
   });
 });
@@ -167,7 +167,7 @@ describe("ResumeLayoutControls · 字号下限 5px（R7）", () => {
 describe("ResumeLayoutControls · 两端 ±0.1px 按钮", () => {
   it("「放大字号」一次 +0.1px，读数与滑块说同一件事", async () => {
     renderControls();
-    const slider = await screen.findByRole("slider");
+    const slider = await screen.findByRole("slider", { name: /字号/ });
     expect(slider).toHaveAttribute("aria-valuenow", "14");
     expect(screen.getByText("14px")).toBeInTheDocument();
 
@@ -180,7 +180,7 @@ describe("ResumeLayoutControls · 两端 ±0.1px 按钮", () => {
 
   it("「缩小字号」一次 -0.1px；连点三次读数仍是干净的 13.7（没有浮点尾巴）", async () => {
     renderControls();
-    const slider = await screen.findByRole("slider");
+    const slider = await screen.findByRole("slider", { name: /字号/ });
     const minus = screen.getByRole("button", { name: "缩小字号" });
 
     fireEvent.click(minus);
@@ -228,7 +228,7 @@ describe("ResumeLayoutControls · 两端 ±0.1px 按钮", () => {
         format_config: { font_scale_adjust: 0.9944 },
       },
     });
-    const slider = await screen.findByRole("slider");
+    const slider = await screen.findByRole("slider", { name: /字号/ });
     const plus = screen.getByRole("button", { name: "放大字号" });
     expect(slider).toHaveAttribute("aria-valuenow", "17.9");
 

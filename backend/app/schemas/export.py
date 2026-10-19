@@ -6,6 +6,7 @@
 Pydantic 镜像，作为脱敏预览接口的请求体；脱敏规则本身仍只有 ``privacy.redact`` 一份
 实现，这里只负责把 HTTP 请求的字段白名单化（``extra="forbid"`` 防注入多余参数）。
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -45,6 +46,12 @@ class ExportRequest(BaseModel):
     # 字号 / 页数覆盖：None 表示沿用记录里存的值。
     font_scale: ResumeFontScale | None = None
     page_limit: int | None = Field(default=None, ge=1, le=MAX_RESUME_PAGES)
+    # 这次导出用的版式覆盖（字号系数 / 行距 / 页边距 / 区块间距 / 强调色等）。
+    # **缺省 = 沿用记录里存的版式**（旧前端兼容）；给值时按
+    # ``validated_format_config`` 白名单化后**叠加**在记录值之上。这是"预览里把字号拖到
+    # 7px、却没点保存就导出，PDF 仍按旧字号排出两页"的直接原因——预览走 /render 已经带上
+    # 了草稿版式，导出却只读记录值。
+    format_config: dict | None = None
     include_photo: bool = True
     allow_incomplete: bool = False
     # 正式投递存档（RF-17）：为真时这次导出冻结一份投递快照；默认不落库（预览零膨胀）。
