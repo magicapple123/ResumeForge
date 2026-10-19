@@ -53,8 +53,8 @@ def test_job_analysis_uses_saved_job_without_profile(monkeypatch, client):
         },
     ).json()
     provider = JobAnalysisProvider()
-    monkeypatch.setattr("app.api.jobs.get_llm_config", lambda _db: provider.config)
-    monkeypatch.setattr("app.api.jobs.create_provider", lambda _config: provider)
+    monkeypatch.setattr("app.api.jobs_analysis.get_llm_config", lambda _db: provider.config)
+    monkeypatch.setattr("app.api.jobs_analysis.create_provider", lambda _config: provider)
 
     response = client.post(f"/api/jobs/{job['id']}/analysis")
 
