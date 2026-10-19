@@ -13,18 +13,26 @@ import time
 from pathlib import Path
 
 import pytest
+from app.services import cleanup
 from app.services.cleanup import TRASH_DIRNAME, plan_cleanup, run_cleanup
 
 
 @pytest.fixture(autouse=True)
 def data_dir(tmp_path, monkeypatch):
-    """每个用例一个干净的数据目录：清理是按目录扫描的，用例之间不能互相看见文件。"""
-    monkeypatch.setattr("app.services.cleanup.DATA_DIR", str(tmp_path))
+    """每个用例一个干净的数据目录：清理是按目录扫描的，用例之间不能互相看见文件。
+
+    **这个 fixture 是必须的，不是清洁癖**：2026-10-19 这组用例最初直接以
+    ``app.config.DATA_DIR`` 为根，跑一次测试就把开发机的 ``backend/data`` 当成沙箱——
+    主库被写成 2 字节、真实备份被移进 ``.cleanup-trash``。现在固定指向 ``tmp_path``，
+    并断言补丁真的生效（写在错误根上的清理测试，比没有测试更危险）。
+    """
+    monkeypatch.setattr(cleanup, "DATA_DIR", str(tmp_path))
+    assert cleanup._data_root() == tmp_path
     return tmp_path
 
 
 def _write(relative: str, size: int, *, age_days: float) -> Path:
-    path = Path(__import__("app.services.cleanup", fromlist=["DATA_DIR"]).DATA_DIR) / relative
+    path = cleanup._data_root() / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"x" * size)
     stamp = time.time() - age_days * 86400
