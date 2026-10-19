@@ -36,12 +36,8 @@ import GlobalSearch from "./components/GlobalSearch";
 import AiPolishLayer from "./features/ai-polish/AiPolishLayer";
 import ShortcutProvider from "./features/shortcuts/ShortcutProvider";
 import { useShortcut } from "./features/shortcuts/useShortcutKeymap";
-import {
-  clickPaginationStep,
-  triggerDatasetMenu,
-  triggerJobCreate,
-  triggerNewResume,
-} from "./features/shortcuts/runtimeTargets";
+import { triggerJobCreate } from "./features/shortcuts/runtimeTargets";
+import { useAppShortcuts } from "./features/shortcuts/useAppShortcuts";
 import TouTouAssistantCard from "./features/tou-tou/TouTouAssistantCard";
 import TouTouClipboardCard from "./features/tou-tou/TouTouClipboardCard";
 import TouTouOrb from "./features/tou-tou/TouTouOrb";
@@ -132,49 +128,8 @@ function MainLayout() {
   // 搜索 = 跳首页 + 聚焦首页那个全站搜索框；助手 = 复用悬浮助手卡的开关；
   // 新建岗位 = 岗位页自己登记的"打开新建弹窗"（不在岗位页就什么都不做）。
   useShortcut("assistant", () => setFloatingAssistantOpen((open) => !open));
-  useShortcut("newJob", () => {
-    if (location.pathname === "/jobs") triggerJobCreate();
-  });
-  // R8 第二批：四个动作都走"页面登记、App 转发"的同一套落点（见 runtimeTargets）。
-  // 落点不存在时**不拦截按键**——宁可让浏览器拿走，也不要吞掉一个什么都没发生的按键。
-  useShortcut("newResume", (event) => {
-    if (location.pathname === "/resumes") {
-      if (triggerNewResume()) event.preventDefault();
-      return;
-    }
-    // 不在简历页：先跳过去，等页面登记完落点再触发（最多重试 6 帧）。
-    void navigate("/resumes");
-    let attempts = 6;
-    const tryOpen = () => {
-      if (triggerNewResume()) return;
-      attempts -= 1;
-      if (attempts > 0) window.requestAnimationFrame(tryOpen);
-    };
-    window.requestAnimationFrame(tryOpen);
-    event.preventDefault();
-  });
-  useShortcut("switchDataset", (event) => {
-    if (triggerDatasetMenu()) event.preventDefault();
-  });
-  // 翻页不逐页登记：直接点当前页面上的 antd 分页按钮。这样岗位广场、简历中心、
-  // 收藏夹等所有列表页都能用；按钮不存在或已禁用时不拦截（交给浏览器）。
-  useShortcut("prevPage", (event) => {
-    if (clickPaginationStep("prev")) event.preventDefault();
-  });
-  useShortcut("nextPage", (event) => {
-    if (clickPaginationStep("next")) event.preventDefault();
-  });
-  useShortcut("focusAssistant", (event) => {
-    event.preventDefault();
-    setFloatingAssistantOpen(true);
-    // 卡片是异步挂载的：等它出现再聚焦输入框，否则 focus 打在还没渲染的元素上。
-    window.setTimeout(() => {
-      const field = document.querySelector<HTMLElement>(
-        ".tt-shell textarea, .tt-shell input, .tt-shell [contenteditable='true']",
-      );
-      field?.focus();
-    }, 80);
-  });
+  useShortcut("newJob", () => location.pathname === "/jobs" && triggerJobCreate());
+  useAppShortcuts(() => setFloatingAssistantOpen(true));
   const { hiddenKeys } = useNavigationVisibility();
   const visiblePrimaryItems = useMemo(
     () => filterNavigationItems(PRIMARY_NAVIGATION_ITEMS, hiddenKeys, location.pathname),
