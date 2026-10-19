@@ -1,19 +1,27 @@
 /** 粘贴整段个人资料（或资料截图、简历文档）并结构化识别的弹窗。 */
 
 import { FileSearchOutlined } from "@ant-design/icons";
-import { Alert, Button, Input, Modal, Progress, Typography } from "antd";
+import { Alert, Button, Input, Modal, Progress, Space, Spin, Typography } from "antd";
 import type { StagedFile } from "../../hooks/useRecognitionFiles";
 import { MaxLengthHint } from "../common/MaxLengthHint";
 import RecognitionFileField from "../RecognitionFileField";
 import RecognitionOutcome from "../RecognitionOutcome";
 import type { RecognitionSource } from "../../types";
 
+/** 上传阶段在整条进度里占的比例：0-15%，剩下的时间都在解析。 */
+const UPLOAD_SHARE_PERCENT = 15;
+
 interface Props {
   open: boolean;
   text: string;
   warnings: string[];
   parsing: boolean;
-  /** 附件上传进度（0-100）；null 表示不在上传中。100 后剩余的是服务端识别时间（按钮仍 loading）。 */
+  /**
+   * 附件上传进度（0-100）；null 表示不在上传中。
+   *
+   * **100 表示字节已经发完**，服务端此时才开始解析、调模型——那一段耗时不可预估，
+   * 所以到 100 就切成不确定态（转圈），不再显示百分比。
+   */
   uploadPercent: number | null;
   recognizedText: string;
   /** 这次识别是 AI 还是本地规则；还没识别过时为 null。 */
@@ -98,14 +106,24 @@ export default function ProfileTextModal({
         />
       </div>
       <RecognitionOutcome source={recognitionSource} text={recognizedText} />
-      {uploadPercent !== null && (
+      {uploadPercent !== null && uploadPercent < 100 && (
+        // 上传阶段只占整个等待的一小段：真实字节映射到 0-15%，避免大文件一上传完
+        // 进度条就画满、而用户还要再等十几秒解析。
         <Progress
           aria-label="附件上传进度"
-          percent={uploadPercent}
+          percent={Math.round((uploadPercent / 100) * UPLOAD_SHARE_PERCENT)}
           size="small"
-          status={uploadPercent >= 100 ? "success" : "active"}
+          status="active"
           style={{ marginTop: 12 }}
         />
+      )}
+      {uploadPercent !== null && uploadPercent >= 100 && parsing && (
+        // 解析阶段不显示百分比：服务端要抽文本、可能还要调模型，耗时不可预估。
+        // 用不确定态 + 一句说明，比一个停在 15% 的假进度条诚实。
+        <Space size={8} style={{ marginTop: 12 }}>
+          <Spin size="small" />
+          <Typography.Text type="secondary">正在解析资料…</Typography.Text>
+        </Space>
       )}
       {warnings.length > 0 && (
         <Alert type="warning" showIcon style={{ marginTop: 12 }} title={warnings.join("；")} />

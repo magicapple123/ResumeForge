@@ -112,16 +112,25 @@ describe("ProfileTextModal", () => {
     expect(screen.queryByText("本地规则")).not.toBeInTheDocument();
   });
 
-  it("上传中显示附件进度条并推进到当前百分比（C2）", () => {
+  it("上传中显示附件进度条：真实字节只映射到 0-15%，不会一上传完就画满（R5）", () => {
     renderModal({ parsing: true, uploadPercent: 40 });
 
-    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "40");
+    // 40% 的上传字节 = 整条等待的 6%——剩下 85% 的时间都在解析。
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "6");
   });
 
-  it("上传结束（uploadPercent 回到 null）后进度条消失", () => {
+  it("字节发完（100）后切成不确定态：转圈 + 「正在解析资料…」，不再显示百分比（R5）", () => {
+    renderModal({ parsing: true, uploadPercent: 100 });
+
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.getByText("正在解析资料…")).toBeInTheDocument();
+  });
+
+  it("解析结束（uploadPercent 回到 null）后进度条与解析提示都消失", () => {
     renderModal({ parsing: false, uploadPercent: null });
 
     expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.queryByText("正在解析资料…")).toBeNull();
   });
 
   it("keeps saying whether AI or local rules produced the fields", async () => {
