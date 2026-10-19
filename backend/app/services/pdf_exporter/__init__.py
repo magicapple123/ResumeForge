@@ -30,6 +30,7 @@
 组成，此 ``__init__`` 作为原 ``pdf_exporter`` 模块路径的兼容门面：``__all__`` 与私有
 符号再导出保持原命名空间全集，外部导入路径零改动。
 """
+
 from __future__ import annotations
 
 from .canvas import _ResumePDF as _ResumePDF
@@ -46,6 +47,7 @@ from .fonts import (
 from .fonts import (
     ResumePDFError,
     font_available,
+    reset_font_cache,
 )
 from .fonts import (
     _resolve_font_paths as _resolve_font_paths,
@@ -108,6 +110,7 @@ __all__ = [
     "decide_fit_scale",
     "draw_name_gender",
     "font_available",
+    "reset_font_cache",
     "measure_content_height",
     "plan_name_gender",
     "rendered_page_count",

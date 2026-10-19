@@ -24,6 +24,7 @@ from ..schemas.setting import (
 )
 from .api_key_crypto import decrypt_key, encrypt_key
 from .api_key_session import get_session_key, session_key_configured
+from .global_settings import read_global_llm
 
 logger = logging.getLogger(__name__)
 
@@ -146,12 +147,11 @@ def _mask_llm_config_record(record: LLMConfigRecord) -> LLMConfigRecordOut:
     return output.model_copy(update={"api_key": _masked_api_key(record.api_key, record.id)})
 
 
-def get_llm_config(db: Session) -> LLMConfig:
-    """读取 LLM 配置（解密 API Key）；缺失或脏数据退回默认。
+def get_dataset_llm_config(db: Session) -> LLMConfig:
+    """读取**本数据集**的 LLM 配置（解密 API Key）；缺失或脏数据退回默认。
 
-    若用户设置了「仅本会话使用」的临时密钥（api_key_session），它**优先**于库里的
-    密钥：临时密钥的存在本身就是"这会儿想用不落盘的密钥"的意思。占位符还原与
-    保存链路因此也自然解析到临时密钥——落库前由 `_strip_session_key` 兜底拦下。
+    设置页编辑的就是这一份：全局配置是另一份（`data/global_settings.json`），
+    两者不能混——否则"在 A 数据集里改配置"会悄悄改掉所有数据集。
     """
     row = db.get(AppSetting, _LLM_CONFIG_KEY)
     if row is None:
@@ -168,6 +168,23 @@ def get_llm_config(db: Session) -> LLMConfig:
     if session_key:
         config = config.model_copy(update={"api_key": session_key})
     return config
+
+
+def get_llm_config(db: Session) -> LLMConfig:
+    """**实际生效**的 LLM 配置（R21）：全局优先，否则用本数据集那一份。
+
+    全局配置显式开启且填了 base_url + model 时接管所有调用；否则行为与升级前完全
+    一致。这一层只做"选哪一份"，不改变各调用点——27 处调用点因此无需逐个修改，
+    也不会出现"某条链路忘了支持全局配置"。
+    """
+    global_llm = read_global_llm()
+    if global_llm is not None and global_llm.config.base_url and global_llm.config.model:
+        config = global_llm.config
+        session_key = get_session_key()
+        if session_key:
+            config = config.model_copy(update={"api_key": session_key})
+        return config
+    return get_dataset_llm_config(db)
 
 
 def _strip_session_key(config: LLMConfig) -> LLMConfig:

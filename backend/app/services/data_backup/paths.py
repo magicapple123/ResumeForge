@@ -20,14 +20,18 @@ from sqlalchemy import Engine
 #   2 = 多数据集（读不懂 ``datasets/`` 段的老版本必须拒收）；
 #   3 = 含 API Key——用户显式勾选后，密钥按**本机存储形态**随包走（Windows 上是
 #       DPAPI 密文，绑定当前用户与机器）。不认识这个选项的老版本必须拒收。
+#   4 = 嵌套整包（R16）：外层 zip 只装 ``datasets/<id>.zip``（每份都是完整的单数据集
+#       包）+ 清单 + README，不再有包根的事务库。老版本读不懂这个结构，必须拒收。
 # 当前代码能读/写的**最高**格式，导入侧用它拒绝"来自更新版本"的包。写包时的 format
 # 由 ``build_manifest`` 按内容显式计算，**不能**直接套这个常量——否则"导出全部数据集
 # （不含密钥）"会被错误标成 3，老版本会拒收一份本可以安全读的包。
-BACKUP_FORMAT_VERSION = 3
+BACKUP_FORMAT_VERSION = 4
 BACKUP_FORMAT_MULTI_DATASET = 2
 BACKUP_FORMAT_WITH_KEYS = 3
+BACKUP_FORMAT_NESTED_COLLECTION = 4
 DATABASE_MEMBER = "resume_forge.db"
 MANIFEST_MEMBER = "manifest.json"
+README_MEMBER = "README.txt"
 # 归档里"其余数据集"的存放前缀。
 #
 # 当前活动的那份**仍然叫 ``resume_forge.db``**（格式 1 的位置不变），其余数据集按

@@ -30,6 +30,7 @@ from .api import (
     interview_history,
     job_match,
     jobs,
+    jobs_analysis,
     knowledge,
     manual_backups,
     materials,
@@ -40,6 +41,7 @@ from .api import (
     resume_writing,
     resumes,
     search,
+    settings_llm_profiles,
     share_packages,
     skills,
     stats,
@@ -47,6 +49,9 @@ from .api import (
     trash,
     user_files,
     webform,
+)
+from .api import (
+    fonts as fonts_api,
 )
 from .api import (
     resume_templates as resume_templates_api,
@@ -358,6 +363,10 @@ def create_app() -> FastAPI:
         expose_headers=[
             resumes.PDF_PAGES_HEADER,
             resumes.PDF_PAGE_LIMIT_HEADER,
+            # R1：这次 PDF 是哪个引擎排的、以及"缩到下限仍装不下"的如实标记。
+            # 不放行的话，跨源部署下前端读到的是 null，等于没设。
+            resumes.PDF_ENGINE_HEADER,
+            resumes.RESUME_OVERFLOW_HEADER,
             "Content-Disposition",
             "X-Content-Sha256",
             "X-Render-Config-Sha256",
@@ -383,6 +392,7 @@ def create_app() -> FastAPI:
         # 的 `/{job_id}` 参数路径注册，否则 FastAPI 会把它尝试解析成整数并返回 422。
         job_match.router,
         jobs.router,
+        jobs_analysis.router,
         resumes.router,
         resume_writing.router,
         # 全局 AI 润色：前缀是 /api/writing，与上面那条 /api/resumes 不冲突。
@@ -409,6 +419,8 @@ def create_app() -> FastAPI:
         webform.router,
         tracker.router,
         settings_api.router,
+        settings_llm_profiles.router,
+        fonts_api.router,
         datasets.router,
         skills.router,
         search.router,

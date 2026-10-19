@@ -1,4 +1,5 @@
 """字体解析（系统中文字体查找 + 环境变量兜底）。"""
+
 from __future__ import annotations
 
 import logging
@@ -18,7 +19,10 @@ _FONT_CANDIDATES: tuple[tuple[str, str], ...] = (
     ("C:/Windows/Fonts/simsun.ttc", "C:/Windows/Fonts/simsun.ttc"),
     ("C:/Windows/Fonts/Deng.ttf", "C:/Windows/Fonts/Dengb.ttf"),
     ("/System/Library/Fonts/PingFang.ttc", "/System/Library/Fonts/PingFang.ttc"),
-    ("/System/Library/Fonts/Supplemental/Songti.ttc", "/System/Library/Fonts/Supplemental/Songti.ttc"),
+    (
+        "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "/System/Library/Fonts/Supplemental/Songti.ttc",
+    ),
     ("/Library/Fonts/Arial Unicode.ttf", "/Library/Fonts/Arial Unicode.ttf"),
     (
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
@@ -28,7 +32,10 @@ _FONT_CANDIDATES: tuple[tuple[str, str], ...] = (
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
     ),
-    ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
+    (
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    ),
     ("/usr/share/fonts/truetype/arphic/uming.ttc", "/usr/share/fonts/truetype/arphic/uming.ttc"),
 )
 
@@ -60,6 +67,16 @@ def _probe_font_paths() -> tuple[str, str] | None:
         if path.is_file():
             return str(path), str(path)
         logger.warning("环境变量 %s 指向的字体不存在：%s", FONT_ENV_VAR, override)
+    # 用户在设置页上传并选中的字体（R10）优先于系统字体：他明确选了一个，
+    # 就该按那个导出；文件被删/移动时自然回落到系统字体，不报错。
+    try:
+        from ..user_fonts import active_font_path
+
+        user_font = active_font_path()
+    except Exception:  # noqa: BLE001 - 字体探测失败不该让导出整条链路崩掉
+        user_font = None
+    if user_font is not None:
+        return str(user_font), str(user_font)
     for regular, bold in _FONT_CANDIDATES:
         if Path(regular).is_file():
             return regular, bold if Path(bold).is_file() else regular
@@ -69,3 +86,10 @@ def _probe_font_paths() -> tuple[str, str] | None:
 def font_available() -> bool:
     """前端据此决定是否展示「下载 PDF」主按钮。"""
     return _resolve_font_paths() is not None
+
+
+def reset_font_cache() -> None:
+    """字体设置变更后调用：下一次探测重新走一遍候选（含用户字体）。"""
+    global _font_paths_cache, _font_resolved
+    _font_paths_cache = None
+    _font_resolved = False

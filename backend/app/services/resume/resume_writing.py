@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from ...models.claim import ClaimRecord
@@ -32,6 +33,26 @@ _UNTRUSTED_SYSTEM = (
 # 用户没写要求时的占位：提示词里 {{ instruction }} 为空会让模型以为漏了参数。
 _NO_INSTRUCTION = "（用户没有额外要求，按简历规范做通用润色：通顺、专业、不夸大）"
 
+# 模型有时不"改写"，而是礼貌地回一句拒绝（服务商的内容策略、区域限制，或把选中的
+# 文字当成了一次提问）。这句话会被当成 ``result`` 原样回填进用户的输入框——在界面上
+# 看就是"润色成功了，但结果是一句道歉"。以下模式是识别它的最后一道关。
+_REFUSAL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"区域.{0,6}(不可用|不支持|暂不支持)"),
+    re.compile(r"(不可用|不支持).{0,6}区域"),
+    re.compile(r"not available in your (region|country)", re.IGNORECASE),
+    re.compile(r"^(很)?抱歉[，,！!\s]*(我)?(无法|不能|不可以)(为你|帮你)?(改写|润色)"),
+    re.compile(
+        r"^(I'?m sorry|sorry)[,，]?\s*(but\s+)?(I\s+)?(can'?t|cannot|am unable)", re.IGNORECASE
+    ),
+)
+
+_REFUSAL_MAX_CHARS = 120
+
+_UNUSABLE_RESULT_MESSAGE = (
+    "模型没有返回可用的改写结果（可能触发了服务商的内容策略）。"
+    "请换一段文字，或在「设置」里换一个模型重试。"
+)
+
 
 def _load_prompt(name: str) -> str:
     return (PROMPTS_DIR / name).read_text(encoding="utf-8")
@@ -49,6 +70,32 @@ async def _chat_json(provider: BaseLLMProvider, prompt: str, label: str) -> dict
         ]
     )
     return parse_json_object(raw, label=label)
+
+
+def _looks_like_refusal(result: str) -> bool:
+    """这段"改写结果"是不是一句拒绝？"""
+    for pattern in _REFUSAL_PATTERNS:
+        if pattern.search(result):
+            return True
+    # 兜底：短句里同时有「抱歉 + 改写/润色 + 不可用/无法/不能」——措辞千变万化，
+    # 只靠固定短语会漏，而这三个要素同时出现基本不可能是润色后的简历文字。
+    if len(result) <= _REFUSAL_MAX_CHARS:
+        has_apology = "抱歉" in result
+        has_task = "改写" in result or "润色" in result
+        has_block = "不可用" in result or "无法" in result or "不能" in result
+        if has_apology and has_task and has_block:
+            return True
+    return False
+
+
+def _reject_unusable_polish_result(result: str) -> None:
+    """把"看似成功、其实是一句拒绝"的结果判为失败。
+
+    宁可让用户看到一句明确的中文错误（换一段文字 / 换个模型），也不要把道歉信
+    填进他的简历输入框——那样用户会以为是自己写错了，或者干脆就点「替换选中」。
+    """
+    if _looks_like_refusal(result):
+        raise LLMError(_UNUSABLE_RESULT_MESSAGE)
 
 
 async def rewrite_star(
@@ -125,10 +172,18 @@ async def polish_selection(provider: BaseLLMProvider, text: str, instruction: st
         .replace("{{ instruction }}", (instruction or "").strip() or _NO_INSTRUCTION)
     )
     data = await _chat_json(provider, prompt, "润色")
+    # 模型明确说出"改不了"时，把原因原样带出来：用户看到的才是"为什么"，而不是
+    # 一句笼统的失败。这个字段是提示词约定的，出现即表示没有可用结果。
+    error = data.get("error")
+    if isinstance(error, str) and error.strip():
+        raise LLMError(f"模型未能改写：{error.strip()[:120]}")
     result = data.get("result")
     if not isinstance(result, str) or not result.strip():
         raise LLMError("模型未返回有效的润色结果，请重试")
-    return result.strip()
+    polished = result.strip()
+    # 有些服务商不给 error 字段，而是把"抱歉，此地不可用"当成正常结果返回。
+    _reject_unusable_polish_result(polished)
+    return polished
 
 
 async def translate(provider: BaseLLMProvider, text: str, direction: str) -> str:

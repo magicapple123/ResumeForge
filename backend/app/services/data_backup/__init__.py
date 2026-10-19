@@ -63,6 +63,9 @@ from .asset_restore import (
 from .asset_restore import (
     verify_restored_assets as verify_restored_assets,
 )
+from .collection_export import (
+    create_collection_archive as create_collection_archive,
+)
 from .export import (
     create_backup_archive as create_backup_archive,
 )
@@ -130,6 +133,9 @@ from .paths import (
     BACKUP_FORMAT_MULTI_DATASET as BACKUP_FORMAT_MULTI_DATASET,
 )
 from .paths import (
+    BACKUP_FORMAT_NESTED_COLLECTION as BACKUP_FORMAT_NESTED_COLLECTION,
+)
+from .paths import (
     BACKUP_FORMAT_VERSION as BACKUP_FORMAT_VERSION,
 )
 from .paths import (
@@ -146,6 +152,9 @@ from .paths import (
 )
 from .paths import (
     MANIFEST_MEMBER as MANIFEST_MEMBER,
+)
+from .paths import (
+    README_MEMBER as README_MEMBER,
 )
 from .paths import (
     RESTORE_DIRNAME as RESTORE_DIRNAME,

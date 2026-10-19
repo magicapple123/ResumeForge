@@ -1,4 +1,5 @@
 """一页适配与入口（测量 / 真实页数 / 决策 / ``build_resume_pdf``）。"""
+
 from __future__ import annotations
 
 import logging
@@ -110,7 +111,11 @@ def decide_fit_scale(
             return scale, False
         height = measure_height(scale)
         # 连续高明显超出 → 按比例一次跳够；连续高已达标（比例档失效）→ 用离散下限兜底。
-        ratio = usable_height / height * _FIT_RATIO_MARGIN if height > usable_height + _FIT_TOLERANCE_MM else 1.0
+        ratio = (
+            usable_height / height * _FIT_RATIO_MARGIN
+            if height > usable_height + _FIT_TOLERANCE_MM
+            else 1.0
+        )
         next_scale = max(MIN_FIT_SCALE, scale * min(ratio, 1 - _FIT_PAGE_STEP))
         if next_scale >= scale - _FIT_MIN_STEP:
             break
@@ -133,9 +138,10 @@ def build_resume_pdf(
 
     版式（行距/页边距/区块间距**与各层级字号比例**）与预览对齐：默认取所选**样式模板**的
     版式值，用户在「格式模板」里设过的 `line_height` / `page_padding` / `section_gap` 会
-    覆盖它们；``margin_mm`` 是导出时的页边距直接覆盖；内容超过所选页数时按与预览同口径缩
-    **字号派生尺寸**来装下，是否"装得下"以**真实渲染的页数**为准（见 `decide_fit_scale`），
-    实在装不下就如实标记 ``overflow``。
+    覆盖它们；``margin_mm`` 是页边距的**兼容回落值**（只在 ``format_config`` 没给
+    ``page_padding`` 时生效，见 ``layout._resolve_margin_mm``）；内容超过所选页数时按与
+    预览同口径缩**字号派生尺寸**来装下，是否"装得下"以**真实渲染的页数**为准（见
+    `decide_fit_scale`），实在装不下就如实标记 ``overflow``。
     """
     from ..resume.resume_templates import FONT_SCALES, template_spec
 

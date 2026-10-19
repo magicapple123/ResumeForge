@@ -10,7 +10,6 @@ from starlette.responses import Response
 
 from ..database import get_db
 from ..models.job import JOB_STATUSES, Job
-from ..runtime.log_redact import log_exception_redacted
 from ..schemas.common import Page
 from ..schemas.job import (
     RECOGNITION_SOURCE_AUTO,
@@ -31,7 +30,6 @@ from ..schemas.job import (
     JobTextParseResult,
     JobUpdate,
 )
-from ..schemas.job_analysis import JobAnalysisResult
 from ..services import trash
 from ..services.attachments import (
     assert_attachment_budget,
@@ -40,7 +38,6 @@ from ..services.attachments import (
     total_attachment_bytes,
 )
 from ..services.document_text import extract_documents_text
-from ..services.job.job_analysis import generate_job_analysis
 from ..services.job.job_csv import (
     MAX_IMPORT_FILE_CHARS,
     decode_csv_bytes,
@@ -50,6 +47,7 @@ from ..services.job.job_csv import (
 )
 from ..services.job.job_multi_parser import extract_multiple_jobs, local_multi_drafts
 from ..services.job.job_service import create_job_record, find_job_by_identity, update_job_record
+from ..services.job.job_sorting import JobSort, JobSortOrder, job_order_by
 from ..services.job_text_parser import parse_job_text
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
@@ -169,13 +167,24 @@ def list_jobs(
     # 兼容历史库里的两种来源值，也兼容旧官网导入把 `官网采集` 写进 source、但没有写入
     # recognition_source 的记录。
     source_kind: str = Query(default=""),
+    # 排序（R14）：键自带方向（created_desc / title_asc…），``order`` 只用于覆盖方向。
+    # 非法值由 Literal 拦成 422（不静默回落默认值——"改了参数却毫无变化"更难排查）。
+    sort: JobSort = Query(
+        default="created_desc", description="排序键：最近导入/最近修改/标题/公司"
+    ),
+    order: JobSortOrder | None = Query(
+        default=None, description="方向覆盖：asc / desc；不传则用 sort 自带方向"
+    ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ):
     query = _filtered_query(db, keyword, job_type, status, favorite, source_kind)
     total = query.count()
     jobs = (
-        query.order_by(Job.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+        query.order_by(*job_order_by(sort, order))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
     )
     return Page(items=[_to_list_out(job) for job in jobs], total=total)
 
@@ -188,16 +197,21 @@ def list_job_ids(
     status: str = Query(default=""),
     favorite: bool | None = Query(default=None),
     source_kind: str = Query(default=""),
+    sort: JobSort = Query(default="created_desc"),
+    order: JobSortOrder | None = Query(default=None),
 ):
     """当前筛选下**全部**岗位的 id（不分页）：批量选择「全选全部岗位」用。
 
     id 列表本身很轻（几千条也只是几 KB），把筛选逻辑交给前端分页拉取反而要多轮请求；
     批量操作 500 的上限由前端在拿到列表后裁决——这里如实返回全量。
+
+    排序参数与 ``/jobs`` 完全同源（同一份 ``job_order_by``）：跨页全选拿到的 id 顺序
+    必须与用户看到的列表一致，否则"全选后批量导出/改状态"的处理顺序会莫名其妙。
     """
     return [
         job_id
         for (job_id,) in _filtered_query(db, keyword, job_type, status, favorite, source_kind)
-        .order_by(Job.created_at.desc())
+        .order_by(*job_order_by(sort, order))
         .with_entities(Job.id)
         .all()
     ]
@@ -359,28 +373,6 @@ def batch_delete_jobs(payload: JobBatchRequest, db: Session = Depends(get_db)):
         trash.soft_delete(db, "job", job)
     _commit_batch(db)
     return JobBatchDeleteResult(deleted=len(jobs))
-
-
-@router.post("/{job_id}/analysis", response_model=JobAnalysisResult)
-async def analyze_job(job_id: int, db: Session = Depends(get_db)):
-    """按需生成岗位需求总结和通用求职建议，不修改岗位或个人资料。"""
-    job = db.get(Job, job_id)
-    if job is None or trash.is_deleted(job):
-        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
-    config = get_llm_config(db)
-    if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
-    provider = create_provider(config)
-    job_out = JobOut.model_validate(job)
-    db.close()
-    try:
-        return await generate_job_analysis(provider, job_out)
-    except LLMError as exc:
-        logger.warning("岗位需求解读失败：%s", exc)
-        raise HTTPException(status_code=502, detail=f"生成岗位解读失败：{exc}") from exc
-    except Exception as exc:  # noqa: BLE001 - 外部模型异常统一转为用户可理解的错误
-        log_exception_redacted(logger, "岗位需求解读发生内部错误")
-        raise HTTPException(status_code=502, detail="生成岗位解读失败，请稍后重试") from exc
 
 
 @router.post("/export")

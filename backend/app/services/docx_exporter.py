@@ -12,6 +12,7 @@ Word 的自动分页一致，因此与 PDF 的真实页数差在 ±1 内（容�
 没有可用的中文字体时**仍能生成**（python-docx 只写字体名，渲染由 Word 完成），但无法做
 页数估算，此时 ``pages=None``。
 """
+
 from __future__ import annotations
 
 import math
@@ -27,6 +28,8 @@ from ..schemas.resume import MAX_RESUME_PAGES, ResumeContent
 from .pdf_exporter import (
     _PX_TO_MM,
     _PX_TO_PT,
+    PAGE_HEIGHT_MM,
+    PAGE_WIDTH_MM,
     _photo_bytes,
     _resolve_font_paths,
     crop_image_to_cover,
@@ -59,7 +62,9 @@ def _join(values: list[str], separator: str = " · ") -> str:
     return separator.join(str(item).strip() for item in values if str(item).strip())
 
 
-def _set_run_font(run, *, size_pt: float, bold: bool = False, color: tuple[int, int, int] | None = None) -> None:
+def _set_run_font(
+    run, *, size_pt: float, bold: bool = False, color: tuple[int, int, int] | None = None
+) -> None:
     """统一设置 run 的字体 / 字号 / 颜色，并补上 east-asian 字体（否则中文会回退默认字体）。"""
     run.font.name = DOCX_FONT
     run.font.size = Pt(size_pt)
@@ -69,7 +74,9 @@ def _set_run_font(run, *, size_pt: float, bold: bool = False, color: tuple[int, 
         run.font.color.rgb = RGBColor(color[0], color[1], color[2])
 
 
-def _paragraph(doc, *, indent_mm: float = 0.0, space_after_mm: float = 0.0, space_before_mm: float = 0.0):
+def _paragraph(
+    doc, *, indent_mm: float = 0.0, space_after_mm: float = 0.0, space_before_mm: float = 0.0
+):
     paragraph = doc.add_paragraph()
     paragraph.paragraph_format.left_indent = Mm(indent_mm)
     paragraph.paragraph_format.space_after = Mm(space_after_mm)
@@ -119,7 +126,9 @@ def _entry_head(doc, left: str, right: str, *, base: float, layout) -> None:
         )
 
 
-def _header(doc, resume: ResumeContent, *, accent: tuple[int, int, int], layout, include_photo: bool) -> None:
+def _header(
+    doc, resume: ResumeContent, *, accent: tuple[int, int, int], layout, include_photo: bool
+) -> None:
     base = layout.scaled_base_px
     photo = _photo_bytes(resume.photo) if (resume.photo and include_photo) else None
     if photo:
@@ -132,9 +141,7 @@ def _header(doc, resume: ResumeContent, *, accent: tuple[int, int, int], layout,
             # 自身宽高比走——裁过之后它恰好就是模板的 `photo_height_ratio`。
             picture_paragraph.add_run().add_picture(
                 BytesIO(
-                    crop_image_to_cover(
-                        photo, layout.photo_width_ratio / layout.photo_height_ratio
-                    )
+                    crop_image_to_cover(photo, layout.photo_width_ratio / layout.photo_height_ratio)
                 ),
                 width=Mm(layout.gap_mm(layout.photo_width_ratio)),
             )
@@ -157,13 +164,17 @@ def _header(doc, resume: ResumeContent, *, accent: tuple[int, int, int], layout,
     if resume.job_intent:
         intent_paragraph = _paragraph(doc)
         intent_run = intent_paragraph.add_run(f"求职意向：{resume.job_intent}")
-        _set_run_font(intent_run, size_pt=base * layout.intent_ratio * _PX_TO_PT, color=_MUTED_COLOR)
+        _set_run_font(
+            intent_run, size_pt=base * layout.intent_ratio * _PX_TO_PT, color=_MUTED_COLOR
+        )
 
     contact = _join([resume.phone, resume.email, resume.city, resume.birth_year], "　　")
     if contact:
         contact_paragraph = _paragraph(doc)
         contact_run = contact_paragraph.add_run(contact)
-        _set_run_font(contact_run, size_pt=base * layout.contact_ratio * _PX_TO_PT, color=_MUTED_COLOR)
+        _set_run_font(
+            contact_run, size_pt=base * layout.contact_ratio * _PX_TO_PT, color=_MUTED_COLOR
+        )
 
 
 def _section_summary(doc, resume: ResumeContent, *, base: float, layout, accent) -> None:
@@ -236,7 +247,9 @@ def _section_projects(doc, resume: ResumeContent, *, base: float, layout, accent
             layout=layout,
         )
         if project.tech_stack:
-            _meta_line(doc, f"技术栈/工具：{'、'.join(project.tech_stack)}", base=base, layout=layout)
+            _meta_line(
+                doc, f"技术栈/工具：{'、'.join(project.tech_stack)}", base=base, layout=layout
+            )
         _bullets(doc, project.description, base=base)
         _bullets(doc, project.highlights, base=base)
 
@@ -295,8 +308,15 @@ def _build_document(
     base = layout.scaled_base_px
     doc = Document()
 
-    # 页边距：与 PDF 同一份 layout.margin_mm（模板默认或 format_config.page_padding / margin_mm）。
+    # 页边距：与 PDF 同一份 layout.margin_mm——由 `pdf_exporter.layout._resolve_margin_mm`
+    # 解析（format_config.page_padding 权威，margin_mm 只是它的兼容回落值）。Word 与 PDF
+    # 不各自算一遍，否则同一次导出会给出两种边距。
     section = doc.sections[0]
+    # 纸张尺寸：python-docx 默认是 Letter（215.9×279.4mm），而预览与 PDF 都是 A4
+    # （210×297mm）。不显式设置的话，同一段文字在 Word 里行宽与页高都不同，"页数与
+    # PDF 一致"就无从谈起——这是导出侧最容易被忽略的一处口径分叉。
+    section.page_width = Mm(PAGE_WIDTH_MM)
+    section.page_height = Mm(PAGE_HEIGHT_MM)
     section.top_margin = Mm(layout.margin_mm)
     section.bottom_margin = Mm(layout.margin_mm)
     section.left_margin = Mm(layout.margin_mm)
@@ -326,6 +346,9 @@ def build_resume_docx(
 
     版式全部来自 ``ResumeLayout``（复用 PDF 的同一来源），页数用连续流模型估算，与
     PDF 的真实页数差在 ±1 内。没有中文字体时仍能生成文档，只是 ``pages=None``。
+
+    ``margin_mm`` 与 PDF 同一条规则：页边距权威是 ``format_config.page_padding``，
+    ``margin_mm`` 只在没给 ``page_padding`` 时作回落值（见 ``layout._resolve_margin_mm``）。
     """
     from .resume.resume_templates import FONT_SCALES, template_spec, validated_format_config
 

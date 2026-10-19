@@ -6,6 +6,7 @@
 Pydantic 镜像，作为脱敏预览接口的请求体；脱敏规则本身仍只有 ``privacy.redact`` 一份
 实现，这里只负责把 HTTP 请求的字段白名单化（``extra="forbid"`` 防注入多余参数）。
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -40,11 +41,20 @@ class ExportRequest(BaseModel):
     watermark: str = Field(default="", max_length=200)
     redact: bool = False
     redact_options: RedactionOptions = Field(default_factory=RedactionOptions)
-    # 页边距直接覆盖（mm）：None 表示用记录里的版式（模板默认或 format_config.page_padding）。
+    # 页边距**兼容字段**（R1）：只在请求未提供 ``format_config.page_padding`` 时作为它的
+    # 回落值（收进 8–26mm 后生效），**不再单独覆盖**任何东西。页边距的唯一权威是
+    # ``format_config.page_padding``——预览、HTML、PDF、Word 都读它；两套并存就会出现
+    # "预览 8mm、PDF 30mm"。新调用方请只发 ``page_padding``。
     margin_mm: float | None = Field(default=None, ge=4, le=40)
     # 字号 / 页数覆盖：None 表示沿用记录里存的值。
     font_scale: ResumeFontScale | None = None
     page_limit: int | None = Field(default=None, ge=1, le=MAX_RESUME_PAGES)
+    # 这次导出用的版式覆盖（字号系数 / 行距 / 页边距 / 区块间距 / 强调色等）。
+    # **缺省 = 沿用记录里存的版式**（旧前端兼容）；给值时按
+    # ``validated_format_config`` 白名单化后**叠加**在记录值之上。这是"预览里把字号拖到
+    # 7px、却没点保存就导出，PDF 仍按旧字号排出两页"的直接原因——预览走 /render 已经带上
+    # 了草稿版式，导出却只读记录值。
+    format_config: dict | None = None
     include_photo: bool = True
     allow_incomplete: bool = False
     # 正式投递存档（RF-17）：为真时这次导出冻结一份投递快照；默认不落库（预览零膨胀）。

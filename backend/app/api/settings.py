@@ -49,8 +49,8 @@ from ..services.settings_service import (
     get_assistant_orb_setting,
     get_assistant_relaxed_mode,
     get_auto_backup_interval_days,
+    get_dataset_llm_config,
     get_export_save_location,
-    get_llm_config,
     get_navigation_visibility,
     get_reminder_popup_on_start,
     get_search_config,
@@ -116,7 +116,8 @@ def remove_llm_config_record(record_id: int, db: Session = Depends(get_db)):
 
 @router.get("/llm", response_model=LLMConfig)
 def read_llm_config(db: Session = Depends(get_db)):
-    return mask_llm_config(db, get_llm_config(db))
+    """设置页表单读的是**本数据集**的配置；全局配置见 `/settings/global-llm`。"""
+    return mask_llm_config(db, get_dataset_llm_config(db))
 
 
 @router.post("/llm/api-key/reveal", response_model=LLMApiKeyRevealResult)
@@ -130,7 +131,7 @@ def reveal_llm_api_key(
         raise HTTPException(status_code=403, detail="API Key 只能在运行后端的本机查看")
     response.headers["Cache-Control"] = "no-store, private"
     response.headers["Pragma"] = "no-cache"
-    return LLMApiKeyRevealResult(api_key=get_llm_config(db).api_key)
+    return LLMApiKeyRevealResult(api_key=get_dataset_llm_config(db).api_key)
 
 
 @router.put("/llm", response_model=LLMConfig)

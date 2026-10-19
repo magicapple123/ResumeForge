@@ -31,10 +31,16 @@ from . import (
     templates_routes,
 )
 from ._shared import (
+    PDF_ENGINE_HEADER as PDF_ENGINE_HEADER,
+)
+from ._shared import (
     PDF_PAGE_LIMIT_HEADER as PDF_PAGE_LIMIT_HEADER,
 )
 from ._shared import (
     PDF_PAGES_HEADER as PDF_PAGES_HEADER,
+)
+from ._shared import (
+    RESUME_OVERFLOW_HEADER as RESUME_OVERFLOW_HEADER,
 )
 
 router = APIRouter(tags=["resumes"])

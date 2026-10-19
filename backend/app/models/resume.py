@@ -1,4 +1,5 @@
 """简历生成记录模型：每次生成都落库，支持历史查看与导出。"""
+
 from datetime import datetime
 from typing import Any
 
@@ -41,9 +42,7 @@ class ResumeRecord(Base):
     # 存在的理由：`format_name` 指向的是**具名**格式模板，改了它所有引用它的简历一起变。
     # 而「自动一页」试出来的方案只对当前这份内容成立（换一份内容就不一样了），不该
     # 反过来去污染用户的模板清单，所以按简历单独存一份。
-    format_config: Mapped[dict[str, Any]] = mapped_column(
-        JSON, default=dict, server_default="{}"
-    )
+    format_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
     page_limit: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     font_scale: Mapped[str] = mapped_column(
         String(16), default="standard", server_default="standard"
@@ -71,6 +70,12 @@ class ResumeRecord(Base):
     # 在预览里折叠展示，回答"为什么是这样一份简历"。
     rationale: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    # 最后修改时间（0047）：列表「最近修改」排序用。`onupdate` 在 ORM 更新这一行时
+    # 自动刷新——改内容、调版式、改备注都算"动过它"，这正是用户想找的那一份。
+    # 旧行升级时用 created_at 回填（见迁移 0047），所以排序不会因为升级而突变。
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=True, index=True
+    )
     # 软删除时间戳：NULL 表示「没删」。列表查询一律加 `deleted_at IS NULL`，
     # 回收站里则只看非 NULL 的行（见 ``services/trash.py``）。
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
