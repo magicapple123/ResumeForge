@@ -1,4 +1,5 @@
-/** 拖拽几何内核的纯计算测试：槽位/前缀和、clamp、行程制换位（48px/槽）、两端可达、不漂移。 */
+/** 拖拽几何内核的纯计算测试：槽位/前缀和、clamp、行程制换位（48px/槽）、边缘换位、
+ * 两端可达、不漂移。 */
 
 import { describe, expect, it } from "vitest";
 import {
@@ -6,8 +7,11 @@ import {
   canScrollTowards,
   clampDesiredTop,
   dragTranslate,
+  ITEM_EDGE_TRIGGER_PX,
+  ITEM_SWAP_LATCH_PX,
   layoutTop,
   moveWithin,
+  resolveItemEdgeTargetIndex,
   resolveTargetIndex,
   shiftSwapAnchor,
   stackBottomOf,
@@ -142,6 +146,107 @@ describe("resolveTargetIndex（行程制：每 TRAVEL_STEP_PX 推进一格）", 
 
   it("TRAVEL_STEP_PX = 48（每槽行程常量契约）", () => {
     expect(TRAVEL_STEP_PX).toBe(48);
+  });
+});
+
+describe("resolveItemEdgeTargetIndex（条目拖拽：接近邻卡边缘就换位）", () => {
+  /** 三条 100 高的等高条目：上缘 0/100/200，下缘 100/200/300。 */
+  const flat = (): DragStackGeometry => ({
+    stackTop: 0,
+    stackBottom: 300,
+    gap: 0,
+    heights: [100, 100, 100],
+  });
+
+  it("下移：指针接近**下一张卡片的底边**（提前 24px）就换一位（中间绝不换）", () => {
+    const geometry = flat();
+    // 下一张（index 1）的下缘 = layoutTop(1) + 100 = 200；预判带 24px → 176。
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 175)).toBe(0);
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 176)).toBe(1);
+    // 到边上仍然换（预判是提前，不是替代）。
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 200)).toBe(1);
+    // 关键回归：指针停在下一张卡片**中间**（旧行程制 48px 早就翻了一位）→ 不换。
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 150)).toBe(0);
+    // 自己的下缘（100）也不算：压过自己的边界不代表接近邻卡边缘。
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 100)).toBe(0);
+  });
+
+  it("上移：指针接近**上一张卡片的顶边**（提前 24px）就换一位（与下移对称）", () => {
+    // 顶边随 stackTop 平移：stackTop=100 时上一张的顶边正好落在 100，预判带 100..124。
+    const offset: DragStackGeometry = {
+      stackTop: 100,
+      stackBottom: 400,
+      gap: 0,
+      heights: [100, 100, 100],
+    };
+    expect(resolveItemEdgeTargetIndex(offset, 1, 125)).toBe(1);
+    expect(resolveItemEdgeTargetIndex(offset, 1, 124)).toBe(0);
+    // stackTop=0 时上一张的顶边是 0，预判带 0..24：指针 25 还没进入，24 才换。
+    expect(resolveItemEdgeTargetIndex(flat(), 1, 25)).toBe(1);
+    expect(resolveItemEdgeTargetIndex(flat(), 1, 24)).toBe(0);
+    expect(resolveItemEdgeTargetIndex(flat(), 1, 100)).toBe(1);
+    // 顶边之上（负坐标）继续成立。
+    expect(resolveItemEdgeTargetIndex(flat(), 1, -50)).toBe(0);
+  });
+
+  it("两端边界：首位不能再上移、末位不能再下移；越界下标原样返回", () => {
+    const geometry = flat();
+    expect(resolveItemEdgeTargetIndex(geometry, 0, -1000)).toBe(0);
+    expect(resolveItemEdgeTargetIndex(geometry, 2, 1000)).toBe(2);
+    // 空栈 / 越界下标：没有任何邻卡可判，原值返回（不抛异常、不推进）。
+    expect(resolveItemEdgeTargetIndex(geometry, -1, 500)).toBe(-1);
+    expect(resolveItemEdgeTargetIndex(geometry, 7, 500)).toBe(7);
+    const empty: DragStackGeometry = { stackTop: 0, stackBottom: 0, gap: 0, heights: [] };
+    expect(resolveItemEdgeTargetIndex(empty, 0, 0)).toBe(0);
+  });
+
+  it("gap 计入边缘：按 layoutTop 前缀和算，且不在邻卡内部提前触发", () => {
+    const geometry: DragStackGeometry = {
+      stackTop: 0,
+      stackBottom: 324,
+      gap: 8,
+      heights: [100, 100, 100],
+    };
+    // layoutTop(1) = 100+8 = 108 → 下一张下缘 = 208；预判带 184。
+    expect(layoutTop(geometry, 1)).toBe(108);
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 183)).toBe(0);
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 184)).toBe(1);
+    // 上移侧的顶边不含 gap 前缀（上一张上缘 = 0）；108 不是边缘，也不在预判带内。
+    expect(resolveItemEdgeTargetIndex(geometry, 1, 108)).toBe(1);
+    expect(resolveItemEdgeTargetIndex(geometry, 1, 24)).toBe(0);
+  });
+
+  it("拖到父卡片底部：一次越过多个边缘时直接推进到末位（不会停在中间）", () => {
+    // 四条 100 高的条目：0-100 / 100-200 / 200-300 / 300-400。
+    const geometry: DragStackGeometry = {
+      stackTop: 0,
+      stackBottom: 400,
+      gap: 0,
+      heights: [100, 100, 100, 100],
+    };
+    // 只越过第一张的预判带 → 只换一位。
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 200)).toBe(1);
+    // 越过第二张的预判带（300-24=276）→ 目标第 3 位；拖到父卡片底部 → 末位。
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 300)).toBe(2);
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 1000)).toBe(3);
+    // 反向：从末位拖到父卡片顶部，同样一次回到首位。
+    expect(resolveItemEdgeTargetIndex(geometry, 3, -1000)).toBe(0);
+    // 指针在 100（第 2 张上缘）只回到第 2 位；到 24（首张顶边的预判带）才回首位。
+    expect(resolveItemEdgeTargetIndex(geometry, 3, 100)).toBe(1);
+    expect(resolveItemEdgeTargetIndex(geometry, 3, 24)).toBe(0);
+  });
+
+  it("与行程制对照：矮条目上 48px 行程早已翻位，边缘判定纹丝不动（用户抱怨的那一版）", () => {
+    const geometry = flat();
+    // 行程制：指针自锚点 0 走 48px → 步数 1 → 换到 index 1。
+    expect(resolveTargetIndex(2, 0, 48, 0)).toBe(1);
+    // 边缘判定：同样的 48px 只到下一张卡片的中段，不换。
+    expect(resolveItemEdgeTargetIndex(geometry, 0, 48)).toBe(0);
+    // 自然滞回 = 一整张卡片高度；预判带 24px 小于卡片高度，闩锁 6px 小于预判带。
+    expect(ITEM_EDGE_TRIGGER_PX).toBe(24);
+    expect(ITEM_SWAP_LATCH_PX).toBe(6);
+    expect(ITEM_SWAP_LATCH_PX).toBeLessThan(ITEM_EDGE_TRIGGER_PX);
+    expect(ITEM_EDGE_TRIGGER_PX).toBeLessThan(geometry.heights[0]);
   });
 });
 

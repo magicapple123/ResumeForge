@@ -88,34 +88,43 @@ describe("PartialDateSelect", () => {
 });
 
 describe("PartialDateSelect 年份分组（R9）", () => {
+  /**
+   * 分组是纯函数（当前年由调用方传入），所以这一组用例固定一个年份，
+   * 不跟着运行机器的真实日期漂：跨年那天跑 CI 不会红。
+   */
+  const FIXED_YEAR = 2026;
+
   afterEach(() => {
     cleanup();
     document.body.innerHTML = "";
   });
 
-  it("两组：第一组第一项是当前年，未来年份退到第二组", () => {
+  it("两组：第一组第一项是当前年，未来年份退到第二组，最多到 +5", () => {
     // 回归：原来下拉是从「当前年+15」开始降序的，选出生年份要先滚过十几个未来年份。
-    const currentYear = new Date().getFullYear();
-    const groups = buildYearGroups(currentYear, 0);
+    const groups = buildYearGroups(FIXED_YEAR, 0);
 
     expect(groups.map((group) => group.label)).toEqual(["今年及以前", "未来年份"]);
-    expect(groups[0].options[0].value).toBe(String(currentYear));
+    expect(groups[0].options[0].value).toBe(String(FIXED_YEAR));
     expect(groups[0].options.map((option) => option.value)).toContain("1900");
-    expect(groups[0].options.map((option) => option.value)).not.toContain(String(currentYear + 1));
-    expect(groups[1].options[0].value).toBe(String(currentYear + 1));
-    expect(groups[1].options.map((option) => option.value)).toContain(String(currentYear + 15));
+    expect(groups[0].options.map((option) => option.value)).not.toContain(String(FIXED_YEAR + 1));
+    expect(groups[1].options[0].value).toBe(String(FIXED_YEAR + 1));
+    // 未来只留 5 年：+5 在，+6 不在（原来放到 +15，未来组一半是永远用不到的空档）。
+    expect(groups[1].options.map((option) => option.value)).toContain(String(FIXED_YEAR + 5));
+    expect(groups[1].options.map((option) => option.value)).not.toContain(String(FIXED_YEAR + 6));
+    expect(groups[1].options[groups[1].options.length - 1].value).toBe(String(FIXED_YEAR + 5));
   });
 
   it("已选年份落在范围外时仍并入对应组，不会变成选不中的值", () => {
-    const currentYear = new Date().getFullYear();
-    const oldGroups = buildYearGroups(currentYear, 1850);
+    const oldGroups = buildYearGroups(FIXED_YEAR, 1850);
     expect(oldGroups[0].options.map((option) => option.value)).toContain("1850");
     expect(oldGroups[0].options[oldGroups[0].options.length - 1].value).toBe("1850");
 
-    const futureGroups = buildYearGroups(currentYear, currentYear + 30);
+    // 脏数据（未来 30 年）把未来组外扩到它，且排在组末尾。
+    const futureGroups = buildYearGroups(FIXED_YEAR, FIXED_YEAR + 30);
     expect(futureGroups[1].options[futureGroups[1].options.length - 1].value).toBe(
-      String(currentYear + 30),
+      String(FIXED_YEAR + 30),
     );
+    expect(futureGroups[1].options.map((option) => option.value)).toContain(String(FIXED_YEAR + 5));
   });
 
   it("有值时挂载不触发 onChange，已选年份仍然显示", () => {
@@ -137,10 +146,69 @@ describe("PartialDateSelect 年份分组（R9）", () => {
 
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "工作日期年份" }));
 
-    // 分组标题在 DOM 里（未来年份那一组在虚拟列表窗口之外，由上面的纯函数用例守）。
+    // 第一组的第一项必须是今年：否则选出生年份要先滚过一屏未来年份。
     expect(document.querySelector(".ant-select-item-group")).toHaveTextContent("今年及以前");
     const options = document.querySelectorAll(".ant-select-dropdown .ant-select-item-option");
     expect(options.length).toBeGreaterThan(0);
     expect(options[0]).toHaveAttribute("title", String(currentYear));
+  });
+
+  it("已选的远期年份仍显示得出来（外扩保证它不是「选不中的值」）", () => {
+    // 未来组只到 +5，但存储里已有的 +30 不能被悄悄抹掉：外扩逻辑把它并进组里。
+    const currentYear = new Date().getFullYear();
+    render(<PartialDateSelect label="毕业日期" value={String(currentYear + 30)} />);
+
+    const shown = document.querySelector<HTMLElement>(
+      ".profile-partial-date-select .ant-select-content",
+    );
+    expect(shown).toHaveTextContent(String(currentYear + 30));
+  });
+
+  it("年份弹层的可视高度放宽到 320px，且未来组到 +5 为止", () => {
+    render(<PartialDateSelect label="毕业日期" />);
+    const currentYear = new Date().getFullYear();
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "毕业日期年份" }));
+
+    const holder = document.querySelector<HTMLElement>(
+      ".ant-select-dropdown .ant-select-dropdown-list-holder",
+    );
+    expect(holder).not.toBeNull();
+    expect(holder!.style.maxHeight).toBe("320px");
+
+    // 下拉里确实只有 +1 ~ +5：读的是真实渲染出来的选项，不只是纯函数的返回值。
+    const years = Array.from(
+      document.querySelectorAll<HTMLElement>(".ant-select-dropdown .ant-select-item-option"),
+    )
+      .map((node) => Number(node.getAttribute("title")))
+      .filter((year) => Number.isFinite(year));
+    expect(Math.max(...years)).toBe(currentYear + 5);
+    expect(years).not.toContain(currentYear + 6);
+    expect(
+      Array.from(document.querySelectorAll(".ant-select-item-group")).map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["今年及以前", "未来年份"]);
+  });
+});
+
+describe("PartialDateSelect 年份宽度（P1）", () => {
+  it("年份控件保留最小宽度，弹出层带独立类名（宽度不跟随控件）", () => {
+    // 回归：年/月/日挤在 Space.Compact 里等分，控件只有几十像素宽，弹层若跟随控件
+    // 宽度就会把「2024」截成「20」。`popupMatchSelectWidth={false}` 让弹层按内容自适应，
+    // 但它的效果只能在有真实布局的浏览器里量（jsdom 里所有尺寸都是 0），所以这里断言
+    // 两处**可观测**的替代信号：控件自己的 minWidth，以及弹层的类名（由新增的
+    // styles/partialDate.css 提供 min-width 兜底）。
+    render(<PartialDateSelect label="教育日期" />);
+
+    const yearSelect = document.querySelector<HTMLElement>(
+      ".profile-partial-date-select .ant-select",
+    );
+    expect(yearSelect).not.toBeNull();
+    expect(yearSelect!.style.minWidth).toBe("80px");
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "教育日期年份" }));
+    const dropdown = document.querySelector(".ant-select-dropdown");
+    expect(dropdown).not.toBeNull();
+    expect(dropdown).toHaveClass("profile-year-select-popup");
   });
 });

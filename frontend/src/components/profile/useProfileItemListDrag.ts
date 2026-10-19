@@ -6,8 +6,11 @@
  *    条目或空白，松手时 move 用错索引甚至不触发——这正是用户实测"小条目拖不动"
  *    的根因。
  * 2. **越过阈值才激活，几何用缓存的前缀和**：激活时一次性采集本列表容器的条目
- *    几何（与当前顺序对齐），拖动中用共享的「指针行程制」插入判定算目标位
- *    （`resolveTargetIndex`，与分区拖拽同源），不碰 DOM 命中测试。
+ *    几何（与当前顺序对齐），拖动中用**邻卡边缘判定**算目标位
+ *    （`resolveItemEdgeTargetIndex`：指针接近下一张卡的下缘 / 上一张卡的上缘就换位，
+ *    拖到父卡片底部时会一次推进到末位），不碰 DOM 命中测试。**刻意不用分区拖拽的
+ *    48px 行程制**：条目卡矮（60~380px），48px/槽等于「拖到邻卡中间就换位」，用户
+ *    实测「太敏感、总在没想换的地方翻」。
  * 3. **位置直接算，不累加位移**：`transform = 视觉目标位置 − 当前顺序下的布局位置`，
  *    实时重排（Form.List move）后同一帧内重算，无累计漂移。
  * 4. **拖拽期自动滚动**：指针贴近滚动容器（内层 `.app-content`）上下边缘时连续滚动，
@@ -24,12 +27,11 @@ import {
   canScrollTowards,
   clampDesiredTop,
   dragTranslate,
+  ITEM_SWAP_LATCH_PX,
   layoutTop,
   moveWithin,
-  resolveTargetIndex,
+  resolveItemEdgeTargetIndex,
   stackBottomOf,
-  swapLatchOpen,
-  TRAVEL_STEP_PX,
   type DragStackGeometry,
 } from "./dragReorder";
 import {
@@ -92,18 +94,19 @@ export function useProfileItemListDrag({ enabled, itemCount, onMove }: Options) 
   const geometryRef = useRef<DragStackGeometry | null>(null);
   const grabOffsetRef = useRef(0);
   const draggedHeightRef = useRef(0);
-  /** 上一次算出的视觉目标位置：相邻两次的差决定拖动方向（静止/被 clamp 时沿用）。 */
-  const lastDesiredTopRef = useRef(0);
-  /** 指针最近一次的移动方向：1=向下，-1=向上。决定取上缘还是下缘做插入判定。 */
-  /** 指针最近一次的移动方向：1=向下，-1=向上。静止时沿用（保留既有语义）。 */
-  const directionRef = useRef<1 | -1>(1);
   /**
-   * 行程锚点（内容坐标）：激活时 = 激活位置，每次真正换位后 = 当时 desiredTop。
-   * 插入位 = 当前位 + |desiredTop − 锚点| / TRAVEL_STEP_PX 步；自动滚动时随内容
-   * 平移（applyScrollShift，source==="auto"），外部滚动不平移（防 anchoring 环路）。
-   * 它同时是换位闩锁的锚点（swapLatchOpen 用同一个值）。
+   * 上次换位时的**指针 y**（激活时 = 按下的位置）。
+   *
+   * 两个用途：
+   * 1. 换位闩锁——距上次换位不足 `ITEM_SWAP_LATCH_PX` 时不再换位，兜住「指针压在
+   *    邻卡边缘线上」的亚像素抖动与自动滚动的逐帧重复判定；
+   * 2. 自动滚动的锚点平移（`applyScrollShift` 的 `lastSwapTop` 参数）——贴边滚动时
+   *    内容整体上移，边缘坐标随之平移，指针没动也应当允许继续推进，因此自发滚动
+   *    会把本值按滚动量反向平移（外部滚动不平移，防 anchoring 正反馈）。
+   *
+   * **插入判定不读它**：条目换位只看指针与邻卡边缘（`resolveItemEdgeTargetIndex`）。
    */
-  const travelAnchorRef = useRef(0);
+  const lastSwapYRef = useRef(0);
   const draggedElRef = useRef<HTMLElement | null>(null);
   const sectionElRef = useRef<HTMLElement | null>(null);
   const scrollContainerRef = useRef<HTMLElement | null>(null);
@@ -133,9 +136,7 @@ export function useProfileItemListDrag({ enabled, itemCount, onMove }: Options) 
     geometryRef.current = null;
     grabOffsetRef.current = 0;
     draggedHeightRef.current = 0;
-    lastDesiredTopRef.current = 0;
-    directionRef.current = 1;
-    travelAnchorRef.current = 0;
+    lastSwapYRef.current = 0;
     lastPointerYRef.current = 0;
     listRef.current = null;
     const element = draggedElRef.current;
@@ -227,12 +228,9 @@ export function useProfileItemListDrag({ enabled, itemCount, onMove }: Options) 
       grabOffsetRef.current = Math.min(Math.max(rawOffset, 0), draggedRect.height);
       draggedHeightRef.current = draggedRect.height;
       dragIndexRef.current = draggedPosition;
-      // 方向跟踪的起点 = 激活时的布局位置：第一次移动就能判对方向（否则快速向上
-      // 起手会被当成向下，先算出一个偏下的插入位）。
-      lastDesiredTopRef.current = draggedRect.top;
-      directionRef.current = 1;
-      // 行程锚点 = 激活时的视觉目标位置（= 被拖卡布局上缘）。
-      travelAnchorRef.current = draggedRect.top;
+      // 换位闩锁锚点 = 按下时的指针 y（不是卡片上缘）：闩锁量的是**指针位移**，
+      // 与抓取偏移、卡片高度都无关。
+      lastSwapYRef.current = start ? start.y : draggedRect.top;
       // 抬起视觉（`is-dragging`）由渲染层按拖拽 key 声明式挂类（pointerdown 时已挂），
       // 这里不再命令式补类，避免两处来源互相覆盖。
       draggedElRef.current = draggedElement;
@@ -247,24 +245,18 @@ export function useProfileItemListDrag({ enabled, itemCount, onMove }: Options) 
       if (index < 0 || index >= geometry.heights.length) return;
       const height = draggedHeightRef.current;
       const desiredTop = clampDesiredTop(geometry, height, pointerY - grabOffsetRef.current);
-      // 方向跟踪：只有明显位移（>0.5px）才改方向（保留既有语义；行程制下插入位
-      // 的符号由 travel 自带，方向仅作为指针移动趋势的记录）。
-      const delta = desiredTop - lastDesiredTopRef.current;
-      if (delta > 0.5) directionRef.current = 1;
-      else if (delta < -0.5) directionRef.current = -1;
-      lastDesiredTopRef.current = desiredTop;
-      // 目标插入位（行程制）：自行程锚点以来每 TRAVEL_STEP_PX 推进一格
-      // （见 resolveTargetIndex 说明）；几何只负责 clamp，不再参与插入判定。
-      const targetIndex = resolveTargetIndex(
-        geometry.heights.length - 1,
-        index,
-        desiredTop,
-        travelAnchorRef.current,
-      );
-      // 换位闩锁：距上一次真正换位不足 SWAP_LATCH_PX 时先不换（把当前目标位视为未达成），
-      // 避免指针在临界点 ±2px 抖动导致邻项来回弹跳。
-      if (targetIndex !== index && swapLatchOpen(travelAnchorRef.current, desiredTop)) {
-        travelAnchorRef.current = desiredTop;
+      // 目标插入位（**边缘判定**）：指针接近下一张卡片的底边 → 下移；接近上一张
+      // 卡片的顶边 → 上移；指针在邻卡中间随便晃都不换位。拖到父卡片底部时指针
+      // 越过后面所有边缘，会一次推进到末位（见 resolveItemEdgeTargetIndex）。
+      const targetIndex = resolveItemEdgeTargetIndex(geometry, index, pointerY);
+      // 换位闩锁：距上一次真正换位（或激活）不足 ITEM_SWAP_LATCH_PX 时先不换。
+      // 边缘判定本身有一整张卡片高度的滞回，这条只兜「指针恰好压在边缘线上」的
+      // 亚像素抖动与自动滚动的逐帧重判。
+      if (
+        targetIndex !== index &&
+        Math.abs(pointerY - lastSwapYRef.current) >= ITEM_SWAP_LATCH_PX
+      ) {
+        lastSwapYRef.current = pointerY;
         // FLIP First：提交前量一次本列表内各行的视觉位置。
         const prevTops = captureFlipTops(listRef.current, "[data-profile-list-item-index]");
         // 实时重排：几何数组与 Form.List 的值同时更新（同步 splice 保持逐位对齐）。
@@ -276,20 +268,12 @@ export function useProfileItemListDrag({ enabled, itemCount, onMove }: Options) 
         // 槽位（真机逐帧实测 -315.7px / +318.7px 两帧抖动）。flushSync 让 move 的
         // DOM 提交同步完成，随后写入的 transform 与布局同帧生效（单次绘制，无错帧）。
         // 调用点都在原生事件 / rAF 回调里，不在渲染期，flushSync 是安全的；
-        // 换位受闩锁（≥12px）门控，频率很低，同步渲染不构成性能问题。
+        // 换位受边缘判定 + 闩锁（≥6px）门控，频率很低，同步渲染不构成性能问题。
         flushSync(() => {
           onMoveRef.current(index, targetIndex);
         });
         // FLIP Last-Invert-Play：邻行从旧位置 150ms 滑到新位置；被拖条目保持 1:1 跟手。
         playSwapFlip(prevTops, element);
-      } else if (
-        targetIndex === index &&
-        Math.abs(desiredTop - travelAnchorRef.current) >= TRAVEL_STEP_PX
-      ) {
-        // 钳制 pinned（目标位被栈边界挡住，步数 ≥1 却换不动）：锚点跟到当前位置，
-        // 防止贴边滚动期间锚点单边漂移积累「行程债」——否则反向拖动时要先还清漂移量
-        // 才能再次换位（真机 B6 回拖失效的根因）。
-        travelAnchorRef.current = desiredTop;
       }
       const current = geometryRef.current;
       if (!current) return;
@@ -300,24 +284,21 @@ export function useProfileItemListDrag({ enabled, itemCount, onMove }: Options) 
     }
 
     /**
-     * 平移缓存的栈几何并重算跟手位置：滚动让内容整体上移 `delta`，项高与间距不变，
-     * 因此只平移 stackTop/stackBottom，**不重新量 DOM**。
-     */
-    /**
-     * 结算一次滚动：几何总是平移；行程锚点**只在自动滚动器自发的 tick 里**平移。
+     * 结算一次滚动：几何总是平移；闩锁锚点（上次换位的指针 y）**只在自动滚动器自发的
+     * tick 里**平移。
      *
-     * 外部滚动（浏览器 scroll anchoring / 用户滚轮）只更新几何：锚点是「内容坐标」，
-     * 被外部滚动挪走的内容已经不在指针下，此时再平移锚点等于"指针没动却离上次换位
-     * 更远了"，会直接捅开闩锁再换位，而换位又触发 anchoring → 正反馈环路
-     * （QA 实测分区 10/10 翻转、邻卡 −594↔−1484 弹跳 890px）。
+     * 外部滚动（浏览器 scroll anchoring / 用户滚轮）只更新几何：边缘坐标被外部滚动挪
+     * 走之后，指针下面的东西已经换了，此时再平移锚点等于"指针没动却离上次换位更远了"，
+     * 会直接捅开闩锁再换位，而换位又触发 anchoring → 正反馈环路（QA 实测分区 10/10
+     * 翻转、邻卡 −594↔−1484 弹跳 890px）。
      */
     function applyScrollDelta(delta: number, source: "auto" | "external") {
       if (delta === 0) return;
       const geometry = geometryRef.current;
       if (!geometry) return;
-      const shifted = applyScrollShift(geometry, travelAnchorRef.current, delta, source);
+      const shifted = applyScrollShift(geometry, lastSwapYRef.current, delta, source);
       geometryRef.current = shifted.geometry;
-      travelAnchorRef.current = shifted.lastSwapTop;
+      lastSwapYRef.current = shifted.lastSwapTop;
       lastScrollTopRef.current += delta;
       syncDrag(lastPointerYRef.current);
     }

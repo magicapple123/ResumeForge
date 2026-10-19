@@ -108,8 +108,22 @@ export function createManualResume(payload: {
   });
 }
 
-export function generateResumeSuggestions(id: number): Promise<ResumeSuggestions> {
-  return request(`/resumes/${id}/suggestions`, { method: "POST" });
+/**
+ * 生成岗位化修改建议（调用一次大模型，10–60 秒）。
+ *
+ * 预算是借用的 ``recognition``（90s）：这条接口**非流式、要等完整 JSON**，``default``
+ * 的 15s 在长简历 + 慢模型时不够用。``signal`` 由模块级 store 传入，用户点「取消生成」
+ * 时 abort（弹窗关闭**不** abort——那是"后台继续"语义）。
+ */
+export function generateResumeSuggestions(
+  id: number,
+  signal?: AbortSignal,
+): Promise<ResumeSuggestions> {
+  return request(`/resumes/${id}/suggestions`, {
+    method: "POST",
+    budget: "recognition",
+    signal,
+  });
 }
 
 /**

@@ -174,6 +174,29 @@ describe("layoutForFontPx", () => {
       format_config: { [FONT_SCALE_ADJUST_KEY]: 0.455 },
     });
   });
+
+  it("0.1px 颗粒度可往返：12.3 / 5.1 / 17.9 存下去再读回来都对得上", () => {
+    // 滑块步长收紧到 0.1px 之后，"存了 12.3、下次打开变成 12.28"就是肉眼可见的跳动。
+    // 系数量化到 3 位小数，最大误差 0.0005 × 18 ≈ 0.009px，仍在 0.01px 以内。
+    const roundTrip = (px: number) => layoutToFontPx(layoutForFontPx(layout(), px, TIERS), TIERS);
+
+    expect(roundTrip(12.3)).toBeCloseTo(12.3, 2);
+    // 两端：既要不失真，也不能被夹到范围外。
+    expect(roundTrip(5.1)).toBeCloseTo(5.1, 1);
+    expect(roundTrip(17.9)).toBeCloseTo(17.9, 1);
+    expect(roundTrip(5.1)).toBeGreaterThanOrEqual(MIN_FONT_PX);
+    expect(roundTrip(17.9)).toBeLessThanOrEqual(18);
+  });
+
+  it("整段 0.1px 网格都能往返（误差 ≤ 0.01px），两端不越界", () => {
+    for (let px = 5; px <= 18 + 1e-9; px = Math.round((px + 0.1) * 10) / 10) {
+      const back = layoutToFontPx(layoutForFontPx(layout(), px, TIERS), TIERS);
+      const error = Math.round(Math.abs(back - px) * 1000) / 1000;
+      expect(error).toBeLessThanOrEqual(0.01);
+      expect(back).toBeGreaterThanOrEqual(MIN_FONT_PX);
+      expect(back).toBeLessThanOrEqual(18);
+    }
+  });
 });
 
 describe("withFontAdjust", () => {

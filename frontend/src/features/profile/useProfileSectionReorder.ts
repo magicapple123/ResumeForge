@@ -30,21 +30,23 @@
  * `ProfileSectionStack`（分区壳 memo 化，只有 order 变化的壳重渲），Form 子树整块跳过。
  * 页面级消费者（提交时读顺序）经 `getSectionOrder()` 在事件时刻取最新值，不经渲染。
  *
- * ## 为什么拖拽期不再塌缩分区（第二轮修复的核心）
+ * ## 拖动期折叠全部分区（第三轮：用户明确要求）
  *
- * 上一版在越过阈值时把全部分区塌缩成 50px 标签条，试图让「排序模式」更紧凑。真机上
- * 这条路根本走不通，两个独立原因：
+ * 上一版刻意保持真实布局（不塌缩），理由记在 `profileCompactDrag.ts` 头注释：塌缩会
+ * 改文档高度，滚动被夹 + 插入判定错位曾让卡片直接脱手。用户随后明确要求「一开始拖
+ * 就把所有大卡片收起来，再在紧凑布局里换位」，于是这两条坑改成在激活那一刻显式处理：
  *
- * 1. **跟手不可兼容**：全部塌缩让文档整体变矮，滚动容器 `scrollTop` 被浏览器夹小，
- *    塌缩后的 rect 反而比塌缩前**低**了约 185px（真机实测），按 `pre−post` 算出的
- *    补偿符号/量级全错，卡片被推离鼠标（用户截图里「浮在顶上、超出可移动范围」）。
- * 2. **插入判定不可兼容**：插入判定拿塌缩后的 50px 栈坐标去比「指针」的绝对 y，而
- *    指针还停在展开时的位置（远在紧凑栈之外），激活瞬间就算出错误的插入位——顺序
- *    在手指刚动 7px 时就凭空上移两位。
+ * 1. 先记被拖卡的视口上缘 → `flushSync` 折叠全部卡片 → 把位移写进 `scrollTop`
+ *    （`switchToCompactLayout`）；
+ * 2. 折叠把卡片挪出指针时重设抓取偏移，让激活这一刻 `transform` 恒为 0
+ *    （`resolveCompactGrabOffset`）；
+ * 3. 几何在折叠**之后**采集，此后前缀和 / clamp / 换位 / 行程仍是同一套模型；
+ * 4. 跟手就是**紧凑条自己**：`transform` 直写 + `is-dragging` 置顶（不再有独立浮条）。
  *
- * 结论：塌缩与「跟手」在几何上不共戴天。现在拖拽期保持**真实布局**（分区内容不折叠、
- * 不换高度、不动 gap），只把离屏分区的 `content-visibility` 强制成 `visible`，
- * 保证几何真实且稳定。
+ * 松手在同一个 `flushSync` 里复位紧凑态（立刻恢复展开），恢复造成的整页位移由
+ * `compensateReleaseShift` 逐帧补偿；位移收敛后把视角滚回**被拖卡片居中**
+ * （`centerElementInContainer`）——折叠期 `scrollTop` 会被浏览器夹小，不主动滚回来
+ * 就会停在页顶。
  */
 
 import { flushSync } from "react-dom";
@@ -60,7 +62,6 @@ import {
   clampDesiredTop,
   dragTranslate,
   layoutTop,
-  moveWithin,
   resolveTargetIndex,
   swapLatchOpen,
   TRAVEL_STEP_PX,
@@ -74,10 +75,15 @@ import {
   resolveScrollParent,
   type EdgeAutoScroller,
 } from "../../components/profile/dragAutoScroll";
-import { captureFlipTops, playSwapFlip } from "../../components/profile/swapFlip";
 import { createSectionOrderStore } from "./sectionOrderStore";
-import { focusReorderedSection } from "./profileSectionFocus";
+import { stepSectionOrder } from "./profileSectionMove";
 import { captureSectionGeometry } from "./profileSectionGeometry";
+import {
+  centerElementInContainer,
+  resolveCompactGrabOffset,
+  switchToCompactLayout,
+} from "./profileCompactDrag";
+import { commitLiveSwap } from "./profileSwapCommit";
 
 interface Options {
   editing: boolean;
@@ -137,7 +143,8 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
   );
 
   /**
-   * 拖拽激活：一次 notify 同时打开 reordering 与被拖分区标记。
+   * 拖拽激活：一次 notify 同时打开 reordering、被拖分区标记与「全部折叠」紧凑态
+   * （三者同一次提交，折叠才不会比抬起视觉晚一帧）。
    *
    * 抬起视觉（`is-dragging`）必须走**声明式**类：激活时 React 会因为 reordering
    * 翻转而重写分区壳的 className，命令式 `classList.add('is-dragging')` 会被整串
@@ -186,10 +193,12 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
     (event: ReactPointerEvent<HTMLButtonElement>, sectionKey: ProfileSectionKey) => {
       if (!editing || saving || photoReading || sectionKey === "basic_info") return;
       event.preventDefault();
-      // 只记录起点并标记被拖分区，**不**改布局：越过阈值才激活。
+      // 只记录起点、被拖壳与分区标记，**不**改布局：越过阈值才激活。
+      // 被拖壳必须在这里就拿到：折叠切换要在几何采集**之前**量它的 rect。
       pointerStartRef.current = { x: event.clientX, y: event.clientY };
       lastPointerYRef.current = event.clientY;
       dragActivatedRef.current = false;
+      draggedElRef.current = event.currentTarget.closest<HTMLElement>("[data-profile-section-key]");
       setDraggingSection(sectionKey);
     },
     [editing, saving, photoReading],
@@ -198,29 +207,18 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
   /**
    * 把拖动项从 sourceIndex 实时挪到 targetIndex；顺序与高度数组同步 splice。
    * 每次都按新顺序重算 transform（不累加位移），所以重排与跟手在同一个几何模型里。
-   *
-   * **flushSync 是交换帧对齐的关键**：store 提交（`commitOrder` → notify → 订阅者
-   * 重渲）默认在下一帧才把新的 CSS `order` 内联样式写进 DOM，而 syncDrag 随后同步
-   * 写入的 transform 是按**新布局**算的——不先提交就有一帧「旧 order + 新 transform」，
-   * 被拖分区在交换成功瞬间向上（或向下）跳一个槽位（与条目路径同款错帧，真机逐帧
-   * 实测一个槽位高度）。flushSync 让顺序提交同步完成后再写 transform，同帧生效。
-   * 调用点都在原生事件 / scroll / rAF 回调里，不在渲染期，flushSync 是安全的；
-   * 换位受闩锁门控（≥12px），频率很低，同步渲染不构成性能问题。
+   * 提交细节（flushSync 帧对齐 + FLIP）见 `profileSwapCommit.ts`。
    */
   const applyLiveReorder = (sourceIndex: number, targetIndex: number) => {
     const geometry = geometryRef.current;
     if (!geometry) return;
-    const current = store.getOrder();
-    const next = moveWithin(current, sourceIndex, targetIndex);
-    if (next === current) return;
-    // FLIP First：提交前量一次各分区的视觉位置（换位只挪动两槽之间的邻卡）。
-    const prevTops = captureFlipTops(document.body, "[data-profile-section-key]");
-    geometry.heights = moveWithin(geometry.heights, sourceIndex, targetIndex);
-    flushSync(() => {
-      store.commitOrder(next);
+    commitLiveSwap({
+      store,
+      geometry,
+      draggedElement: draggedElRef.current,
+      sourceIndex,
+      targetIndex,
     });
-    // FLIP Last-Invert-Play：邻卡从旧位置 150ms 滑到新位置；被拖卡保持 1:1 跟手。
-    playSwapFlip(prevTops, draggedElRef.current);
   };
 
   /**
@@ -301,6 +299,7 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
       const currentIndex = store.getOrder().indexOf(draggedKey);
       if (currentIndex < 0) return;
       // 跟手：视觉目标位置 − 当前顺序下的布局位置。重排后同一帧内重算，无漂移。
+      // 被拖的就是卡片本身（紧凑条），`is-dragging` 由 React 声明式挂载负责置顶与合成层。
       element.style.transform = `translateY(${dragTranslate(
         desiredTop,
         layoutTop(current, currentIndex),
@@ -366,11 +365,27 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
       if (!dragActivatedRef.current) {
         const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
         if (distance < SECTION_DRAG_THRESHOLD_PX) return;
-        // 顺序不能反：先按**未改动**的布局量几何（含强制 content-visibility），
-        // 再进入排序模式并起自动滚动。
-        if (!captureGeometry(draggedKey)) return;
+        // 顺序不能反：先把**全部**大卡片折成紧凑条并补偿位移，再按紧凑高度量几何
+        // （折叠 → 补偿 → 采集，理由见 profileCompactDrag.ts）。
+        switchToCompactLayout({
+          element: draggedElRef.current,
+          enterCompactLayout: () => flushSync(() => beginSectionDrag(draggedKey)),
+          resolveContainer: resolveScrollParent,
+        });
+        if (!captureGeometry(draggedKey)) {
+          // 采不到几何（分区已不在 DOM）：把折叠退回去，否则整页永久停在紧凑条。
+          flushSync(() => applyReorderMode(false));
+          return;
+        }
+        // 折叠把卡片挪出了指针（补偿被滚动边界夹掉）时以紧凑条当前上缘重设抓取偏移，
+        // 否则 desiredTop 会离原位好几槽，激活瞬间就连跳多位。
+        const regrabbed = resolveCompactGrabOffset(
+          start.y,
+          lastDesiredTopRef.current,
+          draggedHeightRef.current,
+        );
+        if (regrabbed !== null) grabOffsetRef.current = regrabbed;
         dragActivatedRef.current = true;
-        beginSectionDrag(draggedKey);
         startAutoScroll();
       }
       syncDrag(event.clientY);
@@ -387,21 +402,39 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
       // `is-section-reordering`（强制真实布局）自进入编辑态起就挂在每个分区上
       // （见 ProfileSectionShell），拖拽全程不发生 content-visibility 切换——这正是
       // 拖拽激活瞬间卡片背景整段不绘制的伪影根因（Chrome 对「刚切出
-      // content-visibility 的内容 + 新提升的合成层」会出现栅格失效）。因此编辑态下
-      // 松手不再有 CV 回落位移；compensateReleaseShift 在没有位移时是零补偿 no-op，
-      // 保留调用是为了兜底查看态/未来布局变化（松手那帧的跳变防御不能拆）。
+      // content-visibility 的内容 + 新提升的合成层」会出现栅格失效）。
+      //
+      // 但紧凑折叠是一次**真实的高度变化**：松手必须立刻恢复展开，并让
+      // `compensateReleaseShift` 逐帧补偿恢复造成的整页位移（所以 beforeLayoutTop
+      // 必须取恢复**之前**的紧凑位置，恢复本身走 flushSync 同步落地）。
       const element = draggedElRef.current;
       const container = scrollContainerRef.current;
+      // 未激活（按下即松手）时不做任何滚动：`scrollContainerRef` 此时为空，
+      // 若无条件调 `centerElementInContainer` 会把「点一下拖动把手」变成一次滚动。
+      const activated = dragActivatedRef.current;
       const beforeLayoutTop = element ? layoutTopWithoutTransform(element) : null;
       const restoreAnchor = restoreScrollAnchorRef.current;
       restoreScrollAnchorRef.current = null;
-      applyReorderMode(false);
-      clearDragState();
-      if (element && container && beforeLayoutTop !== null) {
-        // overflow-anchor 在补偿写完之后再恢复（否则 anchoring 与补偿会双重补偿）。
-        compensateReleaseShift(element, container, beforeLayoutTop, restoreAnchor ?? undefined);
-      } else {
+      flushSync(() => {
+        applyReorderMode(false);
+        clearDragState();
+      });
+      /**
+       * 补偿帧收敛后的收尾：先恢复 overflow-anchor（先恢复再滚，否则这次滚动会被
+       * 浏览器锚定重新计算一遍），再把视角落回被拖卡片居中（用户松手后要看到
+       * 自己刚拖的那张卡，而不是被夹到 0 的页顶）。
+       *
+       * `isConnected` 兜底：收敛期最长 10 帧，窗口里组件可能已卸载（切路由）。脱离
+       * 文档的元素 rect 全是 0，照算会把共享的 `.app-content` 推到错误位置。
+       */
+      const afterRestore = () => {
         restoreAnchor?.();
+        if (activated && element?.isConnected) centerElementInContainer(element, container);
+      };
+      if (element && container && beforeLayoutTop !== null) {
+        compensateReleaseShift(element, container, beforeLayoutTop, afterRestore);
+      } else {
+        afterRestore();
       }
     };
 
@@ -421,30 +454,17 @@ export function useProfileSectionReorder({ editing, saving, photoReading }: Opti
       // 兜底恢复滚动锚定（组件卸载 / 拖拽被中断）。
       restoreScrollAnchorRef.current?.();
       restoreScrollAnchorRef.current = null;
+      // 紧凑折叠同理：拖拽被打断时没有 pointerup 收尾，不主动复位就会让整页永远
+      // 停在 52px 的标签条上（effect 的清理发生在提交之后，setState 是安全的）。
+      store.setCompact(false);
     };
     // applyLiveReorder / captureGeometry 只经 ref 与稳定 store 起作用，不进依赖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draggingSection, beginSectionDrag, applyReorderMode, clearDragState, store]);
 
+  // 上移/下移一位：实现与焦点收尾见 `profileSectionMove.ts`（键盘与微调按钮同一条路径）。
   const moveSectionByOffset = useCallback(
-    (sectionKey: ProfileSectionKey, offset: -1 | 1) => {
-      if (sectionKey === "basic_info") return;
-      const current = store.getOrder();
-      const sourceIndex = current.indexOf(sectionKey);
-      const targetIndex = sourceIndex + offset;
-      if (
-        sourceIndex < 0 ||
-        targetIndex <= 0 ||
-        targetIndex >= current.length ||
-        current[targetIndex] === "basic_info"
-      ) {
-        return;
-      }
-      store.commitOrder(moveWithin(current, sourceIndex, targetIndex));
-      // 移动后把焦点送回**被移动的那个分区**（R10）：焦点收尾的完整理由与实现见
-      // `profileSectionFocus.focusReorderedSection`（下一帧执行，此时新 order 已落 DOM）。
-      focusReorderedSection(sectionKey);
-    },
+    (sectionKey: ProfileSectionKey, offset: -1 | 1) => stepSectionOrder(store, sectionKey, offset),
     [store],
   );
 

@@ -55,6 +55,12 @@ interface SortableProfileSectionProps {
   reordering: boolean;
   /** 是否正在被拖：挂 `is-dragging`（置顶 + 合成层提示，见 profile.css）。 */
   dragging: boolean;
+  /**
+   * 拖动激活期：**全部**分区折叠成 52px 紧凑条（`is-compact`，见 profile.css 与
+   * `features/profile/profileCompactDrag.ts`）。默认 false——查看态的折叠走
+   * `collapsed`，与这个「拖拽期紧凑布局」是两件不同的事，互不影响。
+   */
+  compact?: boolean;
   /** 查看态是否折叠：编辑态永远展开，所以这里只在 `editable=false` 时被调用方置真。 */
   collapsed: boolean;
   /** 上移微调是否可用（`basic_info` 固定首位 → 第 1 个可拖分区的上移禁用）。 */
@@ -131,6 +137,7 @@ export const SortableProfileSection = memo(function SortableProfileSection({
   editable,
   reordering,
   dragging,
+  compact = false,
   collapsed,
   canMoveUp,
   canMoveDown,
@@ -164,7 +171,9 @@ export const SortableProfileSection = memo(function SortableProfileSection({
     <div
       className={`profile-section-sortable${
         reordering || editable ? " is-section-reordering" : ""
-      }${collapsed ? " is-collapsed" : ""}${dragging ? " is-dragging" : ""}`}
+      }${collapsed ? " is-collapsed" : ""}${dragging ? " is-dragging" : ""}${
+        compact ? " is-compact" : ""
+      }`}
       style={{ order }}
       data-profile-section-key={sectionKey}
       // 可编程聚焦的落点（R10）：移动后焦点优先给拖动把手，没有把手的分区（basic_info）

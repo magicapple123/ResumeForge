@@ -64,10 +64,31 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
     }
   }
 
-  const content = useMemo(
-    () => (profile ? profileToResumeContent(profile, job) : null),
-    [job, profile],
-  );
+  /**
+   * 初始内容。
+   *
+   * - **岗位详情里的「自行编写」**（`job != null`）：只预填**基本信息**。经历/项目/技能这些
+   *   是"这个岗位要什么"，只能由用户照着岗位要求亲手写；把资料里所有经历一股脑倒进来，
+   *   用户得先删掉一大半，而且很容易留下与岗位无关的段落。留空 + 每个模块顶部的
+   *   「从我的资料追加一条」= 需要哪条就加哪条。
+   * - **通用手写简历**（`job == null`）：全量预填。它不针对任何岗位，资料里的经历本来就
+   *   都是候选。
+   */
+  const content = useMemo(() => {
+    if (!profile) return null;
+    const base = profileToResumeContent(profile, job);
+    if (!job) return base;
+    return {
+      ...base,
+      summary: "",
+      education: [],
+      experience: [],
+      campus_experience: [],
+      projects: [],
+      skills: [],
+      awards: [],
+    };
+  }, [job, profile]);
   // 「从我的资料填入」的候选：预填之后用户又在资料里补了实习/项目时，不必复制粘贴。
   // 只在有资料时构造；`ResumeDetailPreview` 的编辑入口不传（那里改的是已保存简历）。
   const fillSources = useMemo(() => (profile ? buildProfileFillSources(profile) : null), [profile]);
@@ -97,12 +118,15 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
         title={job ? `自行编写「${job.title}」简历` : "从头编写通用简历"}
         description={
           job
-            ? "已从我的资料预填基本信息和经历，你可以直接修改、删减或补充后保存。"
+            ? "已预填基本信息；其他模块留空，可用每个模块顶部的「从我的资料追加一条」按需添加。"
             : "已从我的资料预填基本信息和经历。通用简历不针对任何岗位，建议保留各方向的经历与技能，修改后保存。"
         }
         saveLabel="保存手写简历"
         referencePanel={job ? <JobRequirementPanel job={job} /> : undefined}
         fillSources={fillSources}
+        // 岗位模式只留模块顶部的「追加一条」：条目是用户照岗位亲手加出来的，
+        // 头部再摆"填入本条"既没有对应目标，也和顶部入口抢同一件事。
+        entryFill={!job}
         onClose={onClose}
         onSave={save}
       />

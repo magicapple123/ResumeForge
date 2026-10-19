@@ -17,6 +17,7 @@ import AppHeaderContext from "./components/AppHeaderContext";
 import BackgroundTasksIndicator from "./components/BackgroundTasksIndicator";
 import ExitAppButton from "./components/common/ExitAppButton";
 import RiskScanWatcher from "./components/RiskScanWatcher";
+import SuggestionScanWatcher from "./components/SuggestionScanWatcher";
 import MySpaceMenu from "./components/navigation/MySpaceMenu";
 import MobileNavigation from "./components/navigation/MobileNavigation";
 import RouteAccessibility from "./components/navigation/RouteAccessibility";
@@ -264,6 +265,8 @@ function MainLayout() {
         <TaskCompletionNotifier />
         {/* 风险扫描的后台提醒：用户关掉「质量检测」弹窗后，进度与结果由它接住。 */}
         <RiskScanWatcher />
+        {/* 岗位优化建议的后台提醒：关掉建议弹窗后，生成进度与结果由它接住。 */}
+        <SuggestionScanWatcher />
         {/* 全局 AI 润色：文档级监听，任何输入框里选中一段文字都能就地改写。 */}
         <AiPolishLayer />
         {/* 快捷键：唯一的 keydown 监听挂载点；动作由各页面用 useShortcut 自己认领。 */}

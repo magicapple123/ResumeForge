@@ -6,6 +6,7 @@ import {
   parsePartialDate,
   type PartialDateSelectProps as Props,
 } from "./partialDate";
+import "../../styles/partialDate.css";
 
 function daysInMonth(year: string, month: string): number {
   if (!year || !month) return 31;
@@ -29,8 +30,8 @@ function PartialDateSelectImpl({
 }: Props) {
   const parts = parsePartialDate(value);
   const selected = parts ?? { year: "", month: "", day: "", ongoing: false };
-  // 年份范围几乎恒定（1900 → 当前年+15，已选年份更大时才外扩），分两组渲染。这个组件在
-  // 「我的资料」里同时存在十几个、每次渲染重建 ~142 项 options 是编辑态卡顿的放大器之一
+  // 年份范围几乎恒定（1900 → 当前年+5，已选年份更大时才外扩），分两组渲染。这个组件在
+  // 「我的资料」里同时存在十几个、每次渲染重建 ~130 项 options 是编辑态卡顿的放大器之一
   // （见 deliverables/profile-input-perf-audit-2026-10-09.md），useMemo 掉。
   const years = useMemo(
     () => buildYearGroups(new Date().getFullYear(), Number(selected.year) || 0),
@@ -71,6 +72,17 @@ function PartialDateSelectImpl({
           allowClear
           placeholder="年"
           options={years}
+          // 弹层高度给足：过去一组（今年 → 1900）很长，"未来年份"在它后面。320px 大致能
+          // 一屏看到当前年附近十几项，滚一下就能摸到未来 5 年，不必盲滚。
+          listHeight={320}
+          // 弹出层按选项内容自适应，不跟随被压窄的控件：否则「2024」会被控件宽度
+          // 截成「20」，用户看不出自己选的是哪一年。
+          popupMatchSelectWidth={false}
+          // antd 6 起 popupClassName 已废弃，改走 classNames.popup.root
+          // （样式在 styles/partialDate.css，给年份弹层一个最小宽度兜底）。
+          classNames={{ popup: { root: "profile-year-select-popup" } }}
+          // 控件本身也要留住最小宽度（Space.Compact 等分时会把它压到几十像素）。
+          style={{ minWidth: 80 }}
           onChange={(year?: string) => {
             const nextMonth = year && selected.month ? selected.month : "";
             const nextDay =
@@ -89,6 +101,7 @@ function PartialDateSelectImpl({
               allowClear
               placeholder="月"
               options={MONTH_OPTIONS}
+              popupMatchSelectWidth={false}
               onChange={(month?: string) => {
                 const nextMonth = month ?? "";
                 const nextDay =
@@ -105,6 +118,7 @@ function PartialDateSelectImpl({
               allowClear
               placeholder="日"
               options={dayOptions}
+              popupMatchSelectWidth={false}
               onChange={(day?: string) => commit(selected.year, selected.month, day ?? "")}
             />
           </>

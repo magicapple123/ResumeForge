@@ -3,7 +3,8 @@
  *
  * 旧实现在 pointerdown 时立即把全部条目折叠成摘要条，布局塌缩后 elementFromPoint
  * 命中错误条目或空白，松手时 Form.List move 用错索引甚至不触发。新实现按下不改
- * 布局、越过阈值用缓存的条目中线算目标位、零 elementFromPoint；这里全部用 jsdom
+ * 布局、越过阈值后用缓存的邻卡边缘（下一张的底边 / 上一张的顶边）算目标位、
+ * 零 elementFromPoint；这里全部用 jsdom
  * 桩出条目几何后做真实的指针事件序列，断言 Form.List 的值顺序。
  *
  * 「多列表共存」一组单独守着另一个真实缺陷：资料页同时挂载 6 个分区列表，而每行的
@@ -18,7 +19,6 @@ import type { FormListFieldData, FormListOperation } from "antd/es/form/FormList
 import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ProfileSection from "./ProfileSection";
-import { resolveTargetIndex } from "./dragReorder";
 
 const ITEM_HEIGHT = 60;
 const ITEM_GAP = 10;
@@ -132,9 +132,9 @@ describe("ProfileSection 小条目拖拽排序", () => {
     stubItemRects(3);
     render(<Harness />);
 
-    // 第 2 条（B，170-230 中心 y=200）拖到 y=275：下缘 = 目标位置 240 + 60 = 300，
-    // 探进 A（top+24=124）与 C（top+24=264）之下 → 目标位 2，B 挪到最后。
-    dragHandle("B 公司", 200, 275);
+    // 第 2 条（B，170-230）拖到 y=300 —— 边缘判定要**下一张卡片（C，240-300）的底边**：
+    // 指针停在 C 的中间（270）不换，压到 C 的下缘（300）才换到第 3 位。
+    dragHandle("B 公司", 200, 300);
 
     expect(currentCompanies()).toEqual(["A 公司", "C 公司", "B 公司"]);
     // 被拖条目保持完整展开（内容不塌缩），并有抬起视觉。
@@ -143,15 +143,14 @@ describe("ProfileSection 小条目拖拽排序", () => {
     );
     expect(dragged).not.toBeNull();
     expect(dragged).toHaveValue("B 公司");
-    // 跟手：grabOffset = 200-170 = 30 → desiredTop = 275-30 = 245，被钳到栈底允许的
+    // 跟手：grabOffset = 200-170 = 30 → desiredTop = 300-30 = 270，被钳到栈底允许的
     // 240（3×60 + 2×10 = 200 的栈高）；重排后 B 在第 3 位，布局上缘 240 →
-    // transform = 240-240 = 0。视觉位置 240+0 = 指针 275-30-5（钳住的 5px）——已到
-    // 栈底，钳住不再跟。
+    // transform = 240-240 = 0（视觉位置已贴栈底，钳住不再跟手）。
     const draggedItem = dragged?.closest<HTMLElement>(".profile-list-item");
     expect(draggedItem?.style.transform).toBe("translateY(0px)");
 
     // 松手：顺序保留，抬起态清理干净。
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 275, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 300, pointerId: 1 });
     expect(currentCompanies()).toEqual(["A 公司", "C 公司", "B 公司"]);
     expect(document.querySelector(".profile-list-item.is-dragging")).toBeNull();
     expect(draggedItem?.style.transform).toBe("");
@@ -181,7 +180,7 @@ describe("ProfileSection 小条目拖拽排序", () => {
     // 修复后（flushSync 包住 onMove）DOM 提交与 transform 同帧生效。
     act(() => {
       document.dispatchEvent(
-        new MouseEvent("pointermove", { bubbles: true, clientX: 10, clientY: 275 }),
+        new MouseEvent("pointermove", { bubbles: true, clientX: 10, clientY: 300 }),
       );
 
       // 按值识别条目（值稳定；aria-label 里的下标会随 move 变化）。
@@ -191,7 +190,8 @@ describe("ProfileSection 小条目拖拽排序", () => {
       expect(values).toEqual(["A 公司", "C 公司", "B 公司"]);
 
       // 被拖条目挂着抬起类、在 DOM 末位，transform 是新布局下的跟手值：
-      // desiredTop 钳到 240，B 在第 3 位布局上缘 240 → translateY(0px)。
+      // 指针 300 恰好压在「下一张卡片的底边」→ 换到末位；desiredTop 钳到 240，
+      // B 在第 3 位布局上缘 240 → translateY(0px)。
       const dragged = document.querySelector<HTMLElement>(".profile-list-item.is-dragging");
       expect(dragged).not.toBeNull();
       expect(dragged?.querySelector<HTMLInputElement>("input")?.value).toBe("B 公司");
@@ -199,7 +199,7 @@ describe("ProfileSection 小条目拖拽排序", () => {
       expect(items.indexOf(dragged as HTMLElement)).toBe(2);
     });
 
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 275, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 300, pointerId: 1 });
     expect(currentCompanies()).toEqual(["A 公司", "C 公司", "B 公司"]);
   });
 
@@ -207,10 +207,10 @@ describe("ProfileSection 小条目拖拽排序", () => {
     stubItemRects(3);
     render(<Harness />);
 
-    dragHandle("B 公司", 200, 275);
+    dragHandle("B 公司", 200, 300);
     expect(currentCompanies()).toEqual(["A 公司", "C 公司", "B 公司"]);
 
-    fireEvent.pointerCancel(document, { clientX: 10, clientY: 275, pointerId: 1 });
+    fireEvent.pointerCancel(document, { clientX: 10, clientY: 300, pointerId: 1 });
     expect(document.querySelector(".profile-list-item.is-dragging")).toBeNull();
     // 取消后指针再动：没有激活的拖拽，顺序冻结。
     fireEvent.pointerMove(document, { clientX: 10, clientY: 130, pointerId: 1 });
@@ -357,14 +357,14 @@ describe("多列表共存（资料页同时挂载 6 个分区列表）", () => {
     expect(lists).toHaveLength(2);
 
     // 第二个列表条目 top = 520/630/740/850/960/1070（高 90、gap 20）；
-    // 项目B 在 630-720，按在中心 675，拖到 760：行程 = 715−630 = 85 ≥ 一步 48
-    // → 挪到第 3 位（行程 125 会跨两步，这里刻意用 85 只跨一槽）。
+    // 项目B 在 630-720，按在中心 675；下一张（项目C，740-830）的底边 = 830，
+    // 指针拖到 830 才换到第 3 位（停在 C 的中间 785 不换）。
     fireEvent.pointerDown(screen.getByLabelText("拖动调整项目B顺序"), {
       clientX: 10,
       clientY: 675,
       pointerId: 1,
     });
-    fireEvent.pointerMove(document, { clientX: 10, clientY: 760, pointerId: 1 });
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 830, pointerId: 1 });
 
     expect(fieldValues("projects")).toEqual(["项目A", "项目C", "项目B", "项目D", "项目E", "项目F"]);
     // 第一个列表必须完全不受影响（全局查询下这里会被同号下标带乱）。
@@ -376,8 +376,8 @@ describe("多列表共存（资料页同时挂载 6 个分区列表）", () => {
     expect(
       draggingItems[0]?.querySelector<HTMLInputElement>('[aria-label^="projects-"]')?.value,
     ).toBe("项目B");
-    // 跟手 transform：desiredTop = 760-45 = 715，第 3 位布局上缘 740 → 715-740 = -25。
-    expect(draggingItems[0]?.style.transform).toBe("translateY(-25px)");
+    // 跟手 transform：desiredTop = 830-45 = 785，第 3 位布局上缘 740 → 785-740 = 45。
+    expect(draggingItems[0]?.style.transform).toBe("translateY(45px)");
 
     // 第一个列表的条目一根手指都没碰过。
     lists[0]?.querySelectorAll<HTMLElement>(".profile-list-item").forEach((item) => {
@@ -392,16 +392,16 @@ describe("多列表共存（资料页同时挂载 6 个分区列表）", () => {
     const lists = container.querySelectorAll(".profile-list-items");
     expect(lists).toHaveLength(2);
 
-    // 第一个列表条目 top = 100/170/240/310（高 60、gap 10，下缘阈值 top+24）；
-    // 实习B 拖到 280：下缘 310 探进实习C（top+24=264）之下但未到实习D（334）→ 第 3 位。
-    // （第二个列表高 90、gap 20：几何查询一旦跨列表，heights 全是 90、插入位会被
-    //   算成"不动"，本条立刻失败——这是对"改回全局查询"的变异守卫。）
+    // 第一个列表条目 top = 100/170/240/310（高 60、gap 10）；实习B 在 170-230，
+    // 下一张（实习C，240-300）的底边 = 300，指针拖到 300 才换到第 3 位（中间 270 不换）。
+    // （第二个列表高 90、gap 20：几何查询一旦跨列表，heights 全是 90、边缘会被算到
+    //   别的坐标上，本条立刻失败——这是对"改回全局查询"的变异守卫。）
     fireEvent.pointerDown(screen.getByLabelText("拖动调整实习B顺序"), {
       clientX: 10,
       clientY: 200,
       pointerId: 1,
     });
-    fireEvent.pointerMove(document, { clientX: 10, clientY: 280, pointerId: 1 });
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 300, pointerId: 1 });
 
     expect(fieldValues("experiences")).toEqual(["实习A", "实习C", "实习B", "实习D"]);
     expect(fieldValues("projects")).toEqual(PROJECTS);
@@ -412,48 +412,50 @@ describe("多列表共存（资料页同时挂载 6 个分区列表）", () => {
     expect(
       draggingItems[0]?.querySelector<HTMLInputElement>('[aria-label^="experiences-"]')?.value,
     ).toBe("实习B");
-    expect(draggingItems[0]?.style.transform).toBe("translateY(10px)");
+    // 跟手 transform：desiredTop = 300-30 = 270，第 3 位布局上缘 240 → 270-240 = 30。
+    expect(draggingItems[0]?.style.transform).toBe("translateY(30px)");
 
     lists[1]?.querySelectorAll<HTMLElement>(".profile-list-item").forEach((item) => {
       expect(item.style.transform).toBe("");
       expect(item.classList.contains("is-dragging")).toBe(false);
     });
 
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 280, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 300, pointerId: 1 });
     expect(document.querySelector(".profile-list-item.is-dragging")).toBeNull();
     expect(fieldValues("experiences")).toEqual(["实习A", "实习C", "实习B", "实习D"]);
   });
 });
 
-describe("条目插入判定与末位可达（真实数据回归）", () => {
+describe("条目边缘换位（真实数据回归：拖过一整张卡才换）", () => {
   // 真机实测的 projects 几何：3 条 379 高、gap 12、栈顶 68，栈底 = 68+3×379+2×12 = 1229。
   const TALL = { top: 68, height: 379, gap: 12 };
 
-  it("末位可达：行程足够大一定换到最后一格（行程制，钳位保证）", () => {
-    // 槽位 68/459/850。拖第 2 条：锚点 = 其布局上缘 459。
-    // 位移 205（desiredTop 664）→ 行程 205 = 4 步 → 1+4 钳到末位 2。
-    expect(resolveTargetIndex(2, 1, 664, 459)).toBe(2);
-    // 位移 390（desiredTop 849）→ 仍是末位，且不越界。
-    expect(resolveTargetIndex(2, 1, 849, 459)).toBe(2);
-    // 拖到 clamp 上限 850（下缘 = 栈底 1229）→ 末位。
-    const clampMax = TALL.top + 3 * TALL.height + 2 * TALL.gap - TALL.height;
-    expect(clampMax).toBe(850);
-    expect(resolveTargetIndex(2, 1, clampMax, 459)).toBe(2);
+  it("指针在下一张卡片中间不换位，压到下一张的底边才换一位", () => {
+    stubItemRects(3, TALL);
+    render(<Harness />);
 
-    // 反向对称：从末位（锚点 850）向上回拖 205 → 645，行程 −205 = 4 步 → 2−4 钳到 0。
-    expect(resolveTargetIndex(2, 2, 645, 850)).toBe(0);
-    // 只回拖 48px（恰好一步）→ 第 1 位（index 1）。
-    expect(resolveTargetIndex(2, 2, 802, 850)).toBe(1);
-    // 停在原槽 → 不动。
-    expect(resolveTargetIndex(2, 2, 850, 850)).toBe(2);
-  });
-
-  it("交换发生在指针行程跨过 48px 步长时（行程制，防抖靠闩锁 + 步数归零）", () => {
-    // 锚点 170（第 2 条布局上缘）。向下 47px 不换、48px 恰好换到末位；向上对称。
-    expect(resolveTargetIndex(2, 1, 217, 170)).toBe(1);
-    expect(resolveTargetIndex(2, 1, 218, 170)).toBe(2);
-    expect(resolveTargetIndex(2, 1, 123, 170)).toBe(1);
-    expect(resolveTargetIndex(2, 1, 122, 170)).toBe(0);
+    // 条目上缘 68/459/850、下缘 447/838/1229。拖第 2 条（B，459-838），按在中心 649
+    //（grabOffset = 190）。
+    fireEvent.pointerDown(screen.getByLabelText("拖动调整B 公司顺序"), {
+      clientX: 10,
+      clientY: 649,
+      pointerId: 1,
+    });
+    // 指针 838 还压在 B 自己的下缘上（下一张 C 的上缘 850 之下）→ 不换；旧行程制
+    // （48px/槽）在这里早就翻了一位——这正是用户抱怨的「太敏感」。
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 838, pointerId: 1 });
+    expect(currentCompanies()).toEqual(["A 公司", "B 公司", "C 公司"]);
+    // 指针进到 C 的中间（1040）也不换：判定只看边缘，不看指针在邻卡里走了多远。
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 1040, pointerId: 1 });
+    expect(currentCompanies()).toEqual(["A 公司", "B 公司", "C 公司"]);
+    // 还差 1px 才进入「接近 C 底边」的 24px 预判带（1229-24=1205）→ 仍不换。
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 1204, pointerId: 1 });
+    expect(currentCompanies()).toEqual(["A 公司", "B 公司", "C 公司"]);
+    // 进入预判带（1205）→ 换到末位，不必精确压到 1229。
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 1205, pointerId: 1 });
+    expect(currentCompanies()).toEqual(["A 公司", "C 公司", "B 公司"]);
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 1205, pointerId: 1 });
+    expect(document.querySelector(".profile-list-item.is-dragging")).toBeNull();
   });
 
   it("条目末位可达（真机行为）：拖到 clamp 上限即换到最后一位", () => {
@@ -467,7 +469,7 @@ describe("条目插入判定与末位可达（真实数据回归）", () => {
       pointerId: 1,
     });
     fireEvent.pointerMove(document, { clientX: 10, clientY: 656, pointerId: 1 });
-    // 激活瞬间顺序不变（行程 7px < 步长 48）。
+    // 激活瞬间顺序不变（656 仍在下一张卡片 850-1229 的上方，边缘未到）。
     expect(currentCompanies()).toEqual(["A 公司", "B 公司", "C 公司"]);
     fireEvent.pointerMove(document, { clientX: 10, clientY: 3000, pointerId: 1 });
     expect(currentCompanies()).toEqual(["A 公司", "C 公司", "B 公司"]);
