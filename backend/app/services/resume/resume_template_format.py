@@ -127,11 +127,25 @@ def format_field_options() -> list[dict]:
     ]
 
 
+def page_padding_bounds() -> tuple[float, float]:
+    """``page_padding`` 字段的 ``(min, max)``，单位 mm。
+
+    给"兼容字段"做回落时的 clamp 用：``ExportRequest.margin_mm`` 已经不再是独立旋钮，
+    但旧客户端仍可能给出 4mm / 40mm（它自己那份历史范围）。收进这里的区间，而不是让
+    一个越界值把正文排出页面。**范围只在本模块定义一次**，别处不要再抄一份 8 和 26。
+    """
+    field = _format_field("page_padding")
+    if field is None:  # pragma: no cover - FORMAT_FIELDS 里必然有 page_padding
+        raise RuntimeError("格式字段表缺少 page_padding，页边距范围无从取值")
+    return float(field["min"]), float(field["max"])
+
+
 __all__ = [
     "FORMAT_FIELDS",
     "FORMAT_FIELD_KEYS",
     "_format_field",
     "format_css",
     "format_field_options",
+    "page_padding_bounds",
     "validated_format_config",
 ]

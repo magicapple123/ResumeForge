@@ -8,6 +8,7 @@
 docx/txt 是 R-16 新增的两个渲染器（Word 复用 ``ResumeLayout``，纯文本复用 Markdown 正文
 结构去标记）。管线不新增任何缩放 / 版式逻辑——fit-scale 两套口径维持现状，由既有测试钉住。
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -21,6 +22,7 @@ from .exporter import build_filename, export_json, export_markdown, render_html
 from .pdf_exporter import build_resume_pdf
 from .privacy import RedactionOptions, redact
 from .resume.resume_sections import resolved_section_order
+from .resume.resume_template_format import validated_format_config
 from .txt_exporter import export_txt
 from .watermark import apply_watermark
 
@@ -30,7 +32,9 @@ class ExportRequest:
     """一次导出请求。字段与 ``schemas/export.ExportRequest`` 一一对应，由 API 层转换。
 
     ``font_scale`` / ``page_limit`` 为 ``None`` 时表示沿用记录里存的值；``margin_mm``
-    为 ``None`` 时沿用记录里的页边距（模板默认或 format_config.page_padding）。
+    是**兼容字段**（R1）——只在 ``format_config`` 没给 ``page_padding`` 时作为它的回落值，
+    不再单独覆盖页边距。``format_config`` 是本次导出的版式草稿覆盖（可为 None）：给值时
+    叠加在记录值之上，让"预览里调过、还没保存"的字号/行距也能进入导出。
     """
 
     format: str = "pdf"
@@ -40,6 +44,7 @@ class ExportRequest:
     margin_mm: float | None = None
     font_scale: str | None = None
     page_limit: int | None = None
+    format_config: dict | None = None
     include_photo: bool = True
 
 
@@ -48,8 +53,9 @@ class RenderContext:
     """渲染器所需、由调用方解析好的版式上下文。
 
     ``template`` / ``template_html`` 由 ``resume_template_store.resolve_style_template``
-    解析一次后传入，避免每个渲染器各解析一次。``margin_mm`` 是导出时的页边距直接覆盖，
-    ``include_photo`` 决定照片是否进入渲染（txt/md/json 本来就不含照片）。
+    解析一次后传入，避免每个渲染器各解析一次。``margin_mm`` 是页边距的**兼容回落值**
+    （见 ``pdf_exporter.layout._resolve_margin_mm``）：``format_config.page_padding``
+    在时它一律不生效。``include_photo`` 决定照片是否进入渲染（txt/md/json 本来就不含照片）。
     """
 
     template: str = "classic"
@@ -174,6 +180,18 @@ FORMAT_RENDERERS: dict[str, Callable[[ResumeContent, RenderContext], RenderedArt
 }
 
 
+def effective_format_config(request: ExportRequest, context: RenderContext) -> dict:
+    """本次导出**实际生效**的版式配置：记录值 + 请求里的草稿覆盖。
+
+    请求值过一遍 ``validated_format_config``（未知键丢弃、越界回退）——它来自 HTTP
+    请求体，不能因为调用方多塞一个键就影响渲染。**合并方向是"请求覆盖记录"**：预览里
+    拖出来的字号系数、行距正是靠这一条进入导出的。
+    """
+    merged = dict(context.format_config or {})
+    merged.update(validated_format_config(request.format_config))
+    return merged
+
+
 def build_export(
     request: ExportRequest,
     resume: ResumeContent,
@@ -194,7 +212,7 @@ def build_export(
         style_config=context.style_config,
         page_limit=request.page_limit if request.page_limit is not None else context.page_limit,
         font_scale=request.font_scale or context.font_scale,
-        format_config=context.format_config,
+        format_config=effective_format_config(request, context),
         margin_mm=request.margin_mm,
         include_photo=request.include_photo,
     )
@@ -231,8 +249,10 @@ def render_config_fingerprint(request: ExportRequest, context: RenderContext) ->
     """把「影响渲染结果」的全部输入序列化成稳定 sha256，用于交付血缘比对。
 
     覆盖格式、水印、脱敏选项与**生效后**的版式参数（``build_export`` 的覆盖规则：
-    请求显式给出的 ``page_limit`` / ``font_scale`` / ``margin_mm`` 优先于记录值），
-    以及解析后的模板上下文。序列化用排序键的紧凑 JSON，保证同一配置稳定出同一指纹。
+    请求显式给出的 ``page_limit`` / ``font_scale`` / ``format_config`` 优先于记录值；
+    ``margin_mm`` 只在 ``format_config`` 没给 ``page_padding`` 时才有意义，但它照样进
+    指纹——同一份请求换了它，「生效后的页边距」也可能跟着换），以及解析后的模板上下文。
+    序列化用排序键的紧凑 JSON，保证同一配置稳定出同一指纹。
     """
     payload = {
         "format": request.format,
@@ -246,7 +266,7 @@ def render_config_fingerprint(request: ExportRequest, context: RenderContext) ->
         "template": context.template,
         "template_html": context.template_html,
         "style_config": context.style_config or {},
-        "format_config": context.format_config or {},
+        "format_config": effective_format_config(request, context),
     }
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -278,5 +298,6 @@ __all__ = [
     "RenderedArtifact",
     "build_export",
     "build_export_delivery",
+    "effective_format_config",
     "render_config_fingerprint",
 ]

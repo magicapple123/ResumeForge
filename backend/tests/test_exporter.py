@@ -1,7 +1,10 @@
 """导出服务测试。"""
+
+import base64
 import json
 import re
 
+import pytest
 from app.schemas.resume import (
     ResumeAward,
     ResumeCampusExperience,
@@ -11,6 +14,7 @@ from app.schemas.resume import (
     ResumeProject,
     ResumeSkill,
 )
+from app.services import user_fonts
 from app.services.exporter import (
     build_filename,
     export_json,
@@ -19,6 +23,8 @@ from app.services.exporter import (
     sanitize_filename,
 )
 from app.services.resume.resume_sample import sample_resume_content
+from app.services.resume.resume_template_catalog import RESUME_TEMPLATES
+from tests.font_fixtures import build_test_font
 
 RESUME = ResumeContent(
     name="张三",
@@ -28,9 +34,17 @@ RESUME = ResumeContent(
     job_intent="后端开发工程师",
     summary="一句话总结。",
     education=[
-        ResumeEducation(school="天津工业大学", major="软件工程", degree="本科", gpa="3.8/4.0", courses=["数据结构"])
+        ResumeEducation(
+            school="天津工业大学",
+            major="软件工程",
+            degree="本科",
+            gpa="3.8/4.0",
+            courses=["数据结构"],
+        )
     ],
-    experience=[ResumeExperience(company="某科技公司", role="后端实习生", description=["负责服务开发"])],
+    experience=[
+        ResumeExperience(company="某科技公司", role="后端实习生", description=["负责服务开发"])
+    ],
     campus_experience=[
         ResumeCampusExperience(
             organization="学生会",
@@ -40,7 +54,9 @@ RESUME = ResumeContent(
             description=["策划校园活动"],
         )
     ],
-    projects=[ResumeProject(name="简历通", tech_stack=["Python", "FastAPI"], highlights=["已开源"])],
+    projects=[
+        ResumeProject(name="简历通", tech_stack=["Python", "FastAPI"], highlights=["已开源"])
+    ],
     skills=[ResumeSkill(name="Python", level="熟练")],
     awards=[ResumeAward(name="奖学金", date="2024.10")],
 )
@@ -49,6 +65,18 @@ PHOTO_DATA_URL = (
     "data:image/png;base64,"
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl2kAAAAASUVORK5CYII="
 )
+
+
+@pytest.fixture(autouse=True)
+def font_dir(tmp_path, monkeypatch):
+    """所有渲染用例都在空字体目录里跑：不去读开发机上真实选中的字体。"""
+    monkeypatch.setattr(user_fonts, "DATA_DIR", str(tmp_path))
+    return tmp_path
+
+
+def _activate_test_font() -> None:
+    user_fonts.save_font("测试字体.ttf", build_test_font())
+    user_fonts.set_active("测试字体.ttf")
 
 
 def test_export_json_roundtrip():
@@ -171,3 +199,58 @@ def test_json_export_keeps_every_field_except_the_photo():
     data = json.loads(export_json(resume))
 
     assert set(data) == set(resume.model_dump().keys()) - {"photo"}
+
+
+# ===== R10：预览 / 导出 HTML 与 PDF 同字体（内嵌子集化 @font-face）=====
+
+
+def test_render_html_without_custom_font_embeds_nothing():
+    """没选字体时不插 style，也不出现 @font-face——否则等于凭空多下载一份字体。"""
+    html = render_html(RESUME)
+
+    assert "@font-face" not in html
+    assert 'id="rf-font"' not in html
+
+
+def test_render_html_embeds_active_font_before_head_close():
+    _activate_test_font()
+
+    html = render_html(RESUME)
+
+    assert '<style id="rf-font">' in html
+    assert "@font-face" in html
+    assert "data:font/ttf;base64," in html
+    # CSP 之外的兜底：字体块必须在 </head> 之前，否则浏览器可能整块忽略。
+    assert html.index('<style id="rf-font">') < html.index("</head>")
+    encoded = html.split("data:font/ttf;base64,", 1)[1].split(")", 1)[0]
+    assert len(base64.b64decode(encoded)) < 1_500_000
+
+
+def test_render_html_inlines_font_for_custom_templates_too():
+    """自制模板走沙箱分支，也必须带上同一个字体（两处共用一份注入逻辑）。"""
+    _activate_test_font()
+
+    html = render_html(
+        RESUME,
+        template_html="<html><head><title>t</title></head><body>{{ resume.name }}</body></html>",
+    )
+
+    assert '<style id="rf-font">' in html
+    assert html.index('<style id="rf-font">') < html.index("</head>")
+
+
+def test_render_html_survives_a_broken_font_file():
+    user_fonts.save_font("broken.ttf", b"not a font at all")
+    user_fonts.set_active("broken.ttf")
+
+    html = render_html(RESUME)
+
+    assert "张三" in html
+    assert "@font-face" not in html
+
+
+def test_every_builtin_template_allows_data_fonts():
+    """8 个内置模板的 CSP 都必须放行 data: 字体，否则预览里字体被静默拦掉。"""
+    for name in RESUME_TEMPLATES:
+        html = render_html(RESUME, template=name)
+        assert "font-src data:;" in html, name

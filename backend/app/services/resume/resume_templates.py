@@ -15,6 +15,7 @@ from .resume_template_format import (
     _format_field,
     format_css,
     format_field_options,
+    page_padding_bounds,
     validated_format_config,
 )
 from .resume_template_layout import TEMPLATE_LAYOUT_DEFAULTS, template_layout_defaults
@@ -46,6 +47,7 @@ __all__ = [
     "font_scale_spec",
     "format_css",
     "format_field_options",
+    "page_padding_bounds",
     "template_options",
     "template_options_with_custom",
     "template_spec",

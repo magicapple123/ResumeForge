@@ -51,3 +51,8 @@ class Job(Base):
     # 软删除时间戳：NULL 表示「没删」。列表查询一律加 `deleted_at IS NULL`，
     # 回收站里则只看非 NULL 的行（见 ``services/trash.py``）。
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # AI 解读缓存（R2）：{"fingerprint","generated_at","result"}。放在岗位上而不是
+    # 单独的日志表——解读针对的是"这条岗位的这段描述"，岗位删了它就没有意义。
+    # 指纹在每次读取时与当前内容比对，不一致即标记"可能过期"，但**不自动作废**：
+    # 用户可能只是补了个标签，旧解读仍值得看。
+    analysis_cache: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")

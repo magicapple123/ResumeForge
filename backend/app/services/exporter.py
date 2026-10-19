@@ -4,6 +4,7 @@ PDF 有两条路：浏览器打印（前端打开导出 HTML 后调用 print，�
 完全一致），以及服务端直接生成（``pdf_exporter``，可以直接下载，但需要系统中文字体）。
 HTML 渲染在这里，同时负责把模板、页数与字号档位写进版式。
 """
+
 import json
 import re
 import secrets
@@ -24,6 +25,7 @@ from .resume.resume_templates import (
     template_spec,
     validated_format_config,
 )
+from .resume_font_embed import embed_css as embed_font_css
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
@@ -85,9 +87,7 @@ def export_markdown(
         header += f" · {resume.job_intent}"
     lines.append(f"# {header}")
     contacts = " | ".join(
-        item
-        for item in [resume.phone, resume.email, resume.city, resume.birth_year]
-        if item
+        item for item in [resume.phone, resume.email, resume.city, resume.birth_year] if item
     )
     if contacts:
         lines.append(f"{contacts}\n")
@@ -115,7 +115,9 @@ def export_markdown(
         if resume.experience:
             lines.append("## 实习/工作经历\n")
             for exp in resume.experience:
-                lines.append(f"### {exp.company} · {exp.role}（{exp.start_date} - {exp.end_date}）\n")
+                lines.append(
+                    f"### {exp.company} · {exp.role}（{exp.start_date} - {exp.end_date}）\n"
+                )
                 lines.append(_join_bullets(exp.description))
                 lines.append("")
 
@@ -145,7 +147,12 @@ def export_markdown(
     def write_skills() -> None:
         if resume.skills:
             lines.append("## 专业技能\n")
-            lines.append(_join_bullets(f"{skill.name}（{skill.level}）" if skill.level else skill.name for skill in resume.skills))
+            lines.append(
+                _join_bullets(
+                    f"{skill.name}（{skill.level}）" if skill.level else skill.name
+                    for skill in resume.skills
+                )
+            )
             lines.append("")
 
     def write_awards() -> None:
@@ -153,7 +160,8 @@ def export_markdown(
             lines.append("## 荣誉奖项\n")
             lines.append(
                 _join_bullets(
-                    f"{award.name} · {award.date}" + (f" · {award.description}" if award.description else "")
+                    f"{award.name} · {award.date}"
+                    + (f" · {award.description}" if award.description else "")
                     for award in resume.awards
                 )
             )
@@ -186,6 +194,19 @@ def _inject_before(html: str, block: str, marker: str) -> str:
     if marker in html:
         return html.replace(marker, f"{block}\n{marker}", 1)
     return f"{html}\n{block}"
+
+
+def _active_font_style(resume: ResumeContent) -> str:
+    """当前自定义字体的内嵌样式（R10）；没有可用字体时返回空串。
+
+    字符集取简历全部可见文本（照片的 data URL 排除在外：几千个 base64 字符没有意义）。
+    没有字体时**不输出任何标签**——HTML 里不该出现孤零零的 ``@font-face``。
+    """
+    text = json.dumps(resume.model_dump(exclude={"photo"}), ensure_ascii=False)
+    css = embed_font_css(text)
+    if not css:
+        return ""
+    return f'<style id="rf-font">\n{css}\n</style>'
 
 
 def render_html(
@@ -247,4 +268,9 @@ def render_html(
     css = "\n".join(block for block in css_blocks if block)
     if css:
         html = _inject_before(html, f"<style>\n{css}\n</style>", "</head>")
+    # 字体样式必须**最后**插：风格配置里的 body font-family 也带 !important，
+    # 同优先级下后出现的声明生效，否则用户选的字体族会盖掉自定义字体。
+    font_style = _active_font_style(resume)
+    if font_style:
+        html = _inject_before(html, font_style, "</head>")
     return html

@@ -38,8 +38,10 @@ from tests.backup_asset_fixtures import (  # noqa: F401
     _dataset_names,
     _fingerprints,
     _import_all,
+    _legacy_all_archive,
     _member_names,
     _read_manifest,
+    _sub_members,
     database,
     dataset_database_file,
 )
@@ -72,24 +74,26 @@ def test_single_dataset_export_does_not_leak_unreferenced_files(three_datasets, 
 
 
 def test_all_datasets_export_covers_assets_of_every_dataset(three_datasets, tmp_path):
-    """导出全部数据集：主库 + A + B 的附件都要在包里（各自隔离命名空间）。"""
+    """导出全部数据集：每份**子包**里只装它自己引用的附件（各自隔离命名空间）。"""
     archive = export_all_datasets(database.engine, tmp_path / "staging")
 
-    names = _member_names(archive)
-    # 主库附件仍在老位置（老版本可读）。
-    assert "user_files/main-only-attachment.bin" in names
-    # A、B 的附件在各自 datasets/<id>/ 前缀下，互不混装。
-    assert f"datasets/{three_datasets.id_a}/user_files/aaa-dataset-a-file.bin" in names
-    assert f"datasets/{three_datasets.id_a}/referral_images/aaa-referral-note.png" in names
-    assert f"datasets/{three_datasets.id_b}/user_files/bbb-dataset-b-file.bin" in names
+    # 格式 4：附件跟着各自的子包走，子包内部仍是单数据集包的扁平前缀。
+    main_names = _sub_members(archive, "main")
+    assert "user_files/main-only-attachment.bin" in main_names
+    names_a = _sub_members(archive, three_datasets.id_a)
+    assert "user_files/aaa-dataset-a-file.bin" in names_a
+    assert "referral_images/aaa-referral-note.png" in names_a
+    assert not any("bbb-dataset-b-file" in name for name in names_a)
+    assert "user_files/bbb-dataset-b-file.bin" in _sub_members(archive, three_datasets.id_b)
 
 
 def test_all_datasets_export_manifest_lists_assets_with_checksums(three_datasets, tmp_path):
-    """清单里逐文件带 size 与 sha256，且显式标 manifest_version。"""
+    """外层清单逐份带 sha256；每份的附件清单带 size 与 sha256。"""
     archive = export_all_datasets(database.engine, tmp_path / "staging")
     manifest = _read_manifest(archive)
 
-    asset_manifest = manifest["asset_manifest"]
+    main_entry = next(item for item in manifest["datasets"] if item["id"] == "main")
+    asset_manifest = main_entry["asset_manifest"]
     assert asset_manifest["manifest_version"] == asset_manifest_module.ASSET_MANIFEST_VERSION
     user_entries = {entry["name"]: entry for entry in asset_manifest["user_files"]}
     assert user_entries["main-only-attachment.bin"]["size_bytes"] == len(b"MAIN-CONTENT" * 10)
@@ -97,6 +101,7 @@ def test_all_datasets_export_manifest_lists_assets_with_checksums(three_datasets
         user_entries["main-only-attachment.bin"]["sha256"]
         == hashlib.sha256(b"MAIN-CONTENT" * 10).hexdigest()
     )
+    assert all(len(item["sha256"]) == 64 for item in manifest["datasets"])
 
     entry_a = next(item for item in manifest["datasets"] if item["id"] == three_datasets.id_a)
     entry_assets = entry_a["asset_manifest"]
@@ -289,7 +294,9 @@ def test_partial_file_is_cleaned_up_when_database_write_fails(
 
     datasets_dir = three_datasets.path_a.parent
     before = {path.name for path in datasets_dir.iterdir()}
-    archive = export_all_datasets(database.engine, tmp_path / "staging-export")
+    # 格式 2 的整包（活动库 + 两份随包数据集）走"先验后写"的单次落盘链路；
+    # 格式 4 的嵌套包改成逐份导入，这条原子性用例由格式 2 守着。
+    archive = _legacy_all_archive(three_datasets, tmp_path / "staging-export")
 
     def _explode(_archive_path, _partial):
         raise OSError("模拟磁盘写入失败")
@@ -318,7 +325,7 @@ def test_asset_publish_failure_rolls_the_new_datasets_back(three_datasets, tmp_p
     """
     from app.services.data_backup.asset_restore import AssetRestorePlan
 
-    archive = export_all_datasets(database.engine, tmp_path / "staging-export")
+    archive = _legacy_all_archive(three_datasets, tmp_path / "staging-export")
 
     def _explode(self):
         raise OSError("模拟附件发布中途磁盘故障")

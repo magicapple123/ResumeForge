@@ -18,6 +18,7 @@ from ...services.resume.resume_sections import (
     profile_to_resume_order,
     section_label,
 )
+from ...services.resume.resume_template_layout import TEMPLATE_LAYOUT_DEFAULTS
 from ...services.resume.resume_template_store import (
     custom_format_options,
     custom_template_options,
@@ -48,6 +49,17 @@ def read_resume_templates(db: Session = Depends(get_db)):
     """
     return {
         "templates": template_options_with_custom(custom_template_options(db)),
+        # 每个内置模板的版式默认值（只放用户可调的三项）。行距/页边距控件在"用户没设过
+        # 覆盖"时必须显示模板的真实默认值——否则滑块停在一个与实际渲染不同的数字上，
+        # 用户一拖就会跳一下，且说不清自己改的是哪一个值。
+        "template_layouts": {
+            name: {
+                "line_height": defaults["line_height"],
+                "padding_mm": defaults["padding_mm"],
+                "section_gap": defaults["section_gap"],
+            }
+            for name, defaults in TEMPLATE_LAYOUT_DEFAULTS.items()
+        },
         "font_scales": font_scale_options(),
         "format_fields": format_field_options(),
         "style_fields": format_field_options() + style_field_options(),

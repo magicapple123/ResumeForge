@@ -20,6 +20,7 @@ ORB_TSX = FRONTEND_SRC / "features" / "tou-tou" / "TouTouOrb.tsx"
 ORB_CSS = FRONTEND_SRC / "features" / "tou-tou" / "tou-tou.css"
 CARD_CSS = FRONTEND_SRC / "features" / "tou-tou" / "tou-tou-assistant.css"
 COMPOSER_CSS = FRONTEND_SRC / "styles" / "assistant-composer.css"
+THEME_PROVIDER_TSX = FRONTEND_SRC / "components" / "ThemeProvider.tsx"
 MAIN_TSX = FRONTEND_SRC / "main.tsx"
 TOKENS_TS = FRONTEND_SRC / "theme" / "tokens.ts"
 
@@ -35,7 +36,9 @@ def test_popup_zindex_base_stays_above_the_floating_cards():
     RF-12 之后基准经语义 token 引用（``layer.popupBase``），所以钉整条链：
     main.tsx 必须引用 token，tokens.ts 必须把值钉在 3100。
     """
-    text = MAIN_TSX.read_text(encoding="utf-8")
+    # 2026-10-19：主题装配搬进 ThemeProvider（切主题要重渲染），这条链也跟着搬；
+    # 两处任一引用都算数，但**必须**引用语义 token，不能写死数字。
+    text = MAIN_TSX.read_text(encoding="utf-8") + THEME_PROVIDER_TSX.read_text(encoding="utf-8")
     assert "zIndexPopupBase: layer.popupBase" in text
     tokens = TOKENS_TS.read_text(encoding="utf-8")
     assert "popupBase: 3100" in tokens
@@ -57,7 +60,7 @@ def test_orb_position_supports_all_four_edges():
     )
     for edge in ("left", "right", "top", "bottom"):
         assert f'"{edge}"' in hook
-        assert 'is-edge-${position.side}' in component
+        assert "is-edge-${position.side}" in component
 
 
 def test_floating_panel_layout_prerequisites_stay_in_place():

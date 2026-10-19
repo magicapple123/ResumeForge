@@ -5,6 +5,7 @@
 """
 
 import hashlib
+import io
 import json
 import zipfile
 from pathlib import Path
@@ -14,7 +15,12 @@ from app.database import build_engine, database_url_for
 from app.dataset_registry import dataset_database_file
 from app.models.referral import Referral
 from app.models.user_file import UserFile
-from app.services.data_backup import MANIFEST_MEMBER, database_path
+from app.services.data_backup import (
+    MANIFEST_MEMBER,
+    ExtraDatabase,
+    create_backup_archive,
+    database_path,
+)
 from app.services.datasets import (
     export_all_datasets,
     import_dataset,
@@ -30,8 +36,10 @@ __all__ = [
     "_dataset_names",
     "_fingerprints",
     "_import_all",
+    "_legacy_all_archive",
     "_member_names",
     "_read_manifest",
+    "_sub_members",
     "database",
     "database_path",
     "dataset_database_file",
@@ -102,6 +110,14 @@ def _member_names(archive_path: Path) -> set[str]:
         return set(archive.namelist())
 
 
+def _sub_members(archive_path: Path, dataset_id: str) -> set[str]:
+    """读格式 4 嵌套整包里某一份子包的成员名（子包本身是一份单数据集包）。"""
+    with zipfile.ZipFile(archive_path) as outer:
+        payload = outer.read(f"datasets/{dataset_id}.zip")
+    with zipfile.ZipFile(io.BytesIO(payload)) as sub:
+        return set(sub.namelist())
+
+
 def _fingerprints(root: Path) -> dict[str, str]:
     """目录树的字节指纹：相对路径 -> sha256（含库、边车、附件、元信息）。
 
@@ -124,7 +140,30 @@ def _dataset_names() -> set[str]:
     return {item["name"] for item in list_datasets()}
 
 
+def _legacy_all_archive(three_datasets, staging_dir: Path) -> Path:
+    """造一份**格式 2** 的整包（活动库 + datasets/<id>.db + 逐份附件清单）。
+
+    R16 起 ``export_all_datasets`` 产的是格式 4 嵌套包。本模块的用例验的是附件清单与
+    "先验后发布/失败回滚"语义，而格式 2 仍是被支持的导入输入；用它可以直接篡改包内
+    成员构造坏包，不必先改子包再重算外层 sha256（那会把用例重点挪到分发逻辑上）。
+    格式 4 的分发与隔离由 ``test_collection_archive.py`` 覆盖。
+    """
+    names = {item["id"]: item["name"] for item in list_datasets()}
+    extras = [
+        ExtraDatabase(
+            dataset_id=dataset_id,
+            name=names.get(dataset_id, dataset_id),
+            source=path,
+        )
+        for dataset_id, path in (
+            (three_datasets.id_a, three_datasets.path_a),
+            (three_datasets.id_b, three_datasets.path_b),
+        )
+    ]
+    return create_backup_archive(database.engine, staging_dir, extra_databases=extras)
+
+
 def _import_all(three_datasets, tmp_path):
-    archive = export_all_datasets(database.engine, tmp_path / "staging-export")
+    archive = _legacy_all_archive(three_datasets, tmp_path / "staging-export")
     result = import_dataset(archive, "整包恢复", database.engine, tmp_path / "staging-import")
     return archive, result

@@ -246,6 +246,7 @@ def create_share_package(
     resume_id: int,
     permission: str,
     redact_options: RedactionOptions | None = None,
+    include_photo: bool = True,
 ) -> SharePackage:
     """生成一份分享包：脱敏 → 渲染 HTML/PDF → 写目录 → 记录文件清单与 token。"""
     record = trash.get_live(db, ResumeRecord, resume_id)
@@ -272,9 +273,19 @@ def create_share_package(
     )
 
     # 导出唯一复用 export_pipeline：HTML 与 PDF 都从这里出，不另写渲染逻辑。
-    html_artifact = build_export(ExportRequest(format="html"), redacted_resume, context)
+    # ``include_photo`` 与导出接口同口径地透传（默认 True）。注意 HTML 渲染本身还不消费
+    # 这个开关（只有 PDF/DOCX 消费），所以关掉照片时单独把 HTML 那份内容里的照片清空，
+    # 保证「HTML 与 PDF 都不含照片」和界面上那句话一致。
+    html_resume = (
+        redacted_resume if include_photo else redacted_resume.model_copy(update={"photo": ""})
+    )
+    html_artifact = build_export(
+        ExportRequest(format="html", include_photo=include_photo), html_resume, context
+    )
     try:
-        pdf_artifact = build_export(ExportRequest(format="pdf"), redacted_resume, context)
+        pdf_artifact = build_export(
+            ExportRequest(format="pdf", include_photo=include_photo), redacted_resume, context
+        )
     except ResumePDFError as exc:
         # 没有中文字体时无法直出 PDF，与导出接口给出一致的可读提示。
         raise SharePackageError(str(exc), 409) from exc

@@ -16,7 +16,7 @@ Python 侧按 kind 拆开、按各自口径排序）。
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, literal, select
 from sqlalchemy.orm import Session
 
@@ -120,6 +120,67 @@ def get_storage_stats(db: Session = Depends(get_db)) -> dict:
     from ..services.storage_stats import storage_overview
 
     return storage_overview(session_engine(db))
+
+
+def _cleanup_categories(raw: Any) -> set[str] | None:
+    """把请求里的清理类别归一成集合。
+
+    ``None``（没传该字段）= 全部类别；**空集合** = 用户取消全选，什么都不清。
+    两种情形必须区分：把"空"当成"全部"会让取消勾选变成"更彻底地清"。
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple, set)):
+        raise ValueError("categories 必须是字符串数组")
+    values: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            raise ValueError("categories 必须是字符串数组")
+        values.extend(part.strip() for part in item.split(",") if part.strip())
+    return set(values)
+
+
+@router.get("/storage/cleanup-preview")
+def cleanup_preview(
+    older_than_days: int = Query(default=30, ge=1, le=3650),
+    categories: list[str] | None = Query(
+        default=None,
+        description="要扫描的类别（可重复传，也可逗号分隔）：backups / backup-trash / "
+        "auto-backups / logs / old-logs。不传=全部；传空=什么都不清。",
+    ),
+) -> dict:
+    """清理预览（R19）：列出超过保留期的备份与日志，只 stat 不读内容、不做任何删除。
+
+    预览与执行吃**同一份** ``categories`` 语义与同一份 ``plan_cleanup``，所以"预览看到
+    的就是执行会移走的"。未知类别返回 400 并列出合法值，而不是静默当成"全部"。
+    """
+    from ..services.cleanup import plan_cleanup
+
+    try:
+        selected = _cleanup_categories(categories)
+        return plan_cleanup(older_than_days=older_than_days, categories=selected)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/storage/cleanup")
+def cleanup_now(body: dict | None = None) -> dict:
+    """执行清理（R19）：候选文件移入 ``.cleanup-trash/<时间戳>/``，永不硬删。"""
+    from ..services.cleanup import DEFAULT_RETENTION_DAYS, run_cleanup
+
+    payload = body if isinstance(body, dict) else {}
+    raw = payload.get("older_than_days", DEFAULT_RETENTION_DAYS)
+    try:
+        days = max(1, min(3650, int(raw)))
+    except (TypeError, ValueError):
+        days = DEFAULT_RETENTION_DAYS
+    try:
+        selected = _cleanup_categories(payload.get("categories"))
+        return run_cleanup(older_than_days=days, categories=selected)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("", response_model=Stats)

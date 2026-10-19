@@ -97,6 +97,9 @@ def test_selection_polish_prompt_carries_the_no_new_facts_constraint(client, mon
     # 反例守卫：提示词里不许出现"编造""可以补充未提供的信息"这类放水措辞。
     assert "编造" not in prompt
     assert "可以补充" not in prompt
+    # 无法改写时的约定出口：只许给 {"error": ...}，不许输出道歉或解释。
+    assert '"error"' in prompt
+    assert "无法改写" in prompt
 
 
 async def test_selection_polish_injects_a_placeholder_for_a_blank_instruction():
@@ -124,3 +127,36 @@ def test_selection_polish_empty_result_is_a_502(client, monkeypatch):
 
     assert response.status_code == 502
     assert "润色失败" in response.json()["detail"]
+
+
+def test_selection_polish_refusal_result_is_not_returned_as_success(client, monkeypatch):
+    """模型把"此地不可用"当成正常结果返回时，必须报错——绝不能把它回填进输入框。"""
+    provider = SelectionProvider({"result": "很抱歉！改写当前对你的区域不可用。"})
+    _use_provider(monkeypatch, provider)
+
+    response = client.post(POLISH_PATH, json={"text": SELECTED_TEXT})
+
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert "没有返回可用的改写结果" in detail
+    # 原句不能出现在响应体里，否则前端仍可能把它显示成"结果"。
+    assert "区域不可用" not in detail
+
+
+def test_selection_polish_error_field_is_surfaced(client, monkeypatch):
+    """提示词约定无法改写时给 ``{"error": ...}``：把原因如实带给用户，不吞掉。"""
+    provider = SelectionProvider({"error": "内容涉及敏感信息"})
+    _use_provider(monkeypatch, provider)
+
+    response = client.post(POLISH_PATH, json={"text": SELECTED_TEXT})
+
+    assert response.status_code == 502
+    assert "内容涉及敏感信息" in response.json()["detail"]
+
+
+async def test_selection_polish_keeps_ordinary_text_that_merely_sounds_negative():
+    """守卫的反例：正文里出现"无法"不是拒答，不能被这道闸门误伤。"""
+    provider = SelectionProvider({"result": "负责排查无法复现的线上问题，改用自动化脚本定位根因"})
+    polished = await polish_selection(provider, "排查无法复现的线上问题", "")
+
+    assert polished == "负责排查无法复现的线上问题，改用自动化脚本定位根因"

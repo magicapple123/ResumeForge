@@ -36,7 +36,7 @@ from ..dataset_registry import (
     trash_directory,
     write_metadata,
 )
-from .data_backup import ExtraDatabase, create_backup_archive
+from .data_backup import ExtraDatabase, create_backup_archive, create_collection_archive
 from .data_backup.import_archive import (
     _best_effort_checkpoint,
     _remove_candidate_files,
@@ -125,6 +125,10 @@ def export_all_datasets(bind: Engine, staging_dir: Path, *, include_api_keys: bo
     为什么需要它：默认的导出只带**当前活动**的那一份，其余数据集（用户可能有好几份，
     例如给不同求职方向各开一套）不会进包。一个用户"备份了"却丢了几份数据集，通常要到
     很久以后翻旧记录时才发现，那时原始文件可能早就不在了。
+
+    从 R16 起产物是**格式 4 的嵌套整包**：外层 zip 里每份数据集都是一个完整的单数据集
+    包（``datasets/main.zip`` / ``datasets/<id>.zip``），逐份带 sha256，坏一份不影响
+    其余份的恢复（见 ``data_backup.collection_export``）。
     """
     active = read_active_dataset_id()
     extras: list[ExtraDatabase] = []
@@ -139,8 +143,8 @@ def export_all_datasets(bind: Engine, staging_dir: Path, *, include_api_keys: bo
                 metadata=dict(read_metadata(item["id"]) or {}),
             )
         )
-    return create_backup_archive(
-        bind, staging_dir, extra_databases=extras, include_api_keys=include_api_keys
+    return create_collection_archive(
+        bind, staging_dir, extras=extras, include_api_keys=include_api_keys
     )
 
 

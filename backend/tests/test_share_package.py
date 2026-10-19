@@ -3,6 +3,7 @@
 分享包是生成那一刻的只读快照：文件落本地目录（测试库 → 临时目录）、token 可校验、
 评论只在 ``comment`` 权限下附带并可导入回传。
 """
+
 import json
 from pathlib import Path
 
@@ -38,7 +39,9 @@ def test_create_share_package_redacts_snapshot_and_writes_files(client):
             "phone": "13800000000",
             "email": "a@example.com",
             "summary": "负责后端服务。",
-            "experience": [{"company": "字节跳动", "role": "工程师", "description": ["实现检索接口"]}],
+            "experience": [
+                {"company": "字节跳动", "role": "工程师", "description": ["实现检索接口"]}
+            ],
         },
     )
 
@@ -78,7 +81,9 @@ def test_share_package_list_and_detail_with_download_urls(client):
     share_id = listing.json()[0]["id"]
     detail = client.get(f"/api/share-packages/{share_id}")
     assert detail.status_code == 200
-    assert detail.json()["files"][0]["download_url"].startswith(f"/api/share-packages/{share_id}/files/")
+    assert detail.json()["files"][0]["download_url"].startswith(
+        f"/api/share-packages/{share_id}/files/"
+    )
 
 
 def test_read_only_has_no_comments_file(client):
@@ -153,6 +158,59 @@ def test_share_package_file_download_and_path_traversal_guard(client):
 def test_create_share_package_unknown_resume_is_404(client):
     response = client.post("/api/share-packages", json={"resume_id": 999999})
     assert response.status_code == 404
+
+
+def test_include_photo_is_forwarded_to_the_exporter(client, monkeypatch):
+    """「包含照片」必须真的落到导出请求上，而不是只改了一个请求体字段。
+
+    分享包本身不判断照片，它只把参数透传给 ``export_pipeline``（与导出接口同一实现）；
+    这里卡住 HTML/PDF 两次导出收到的 ``include_photo``。
+    """
+    from app.services import share_package as share_package_service
+
+    resume_id = _manual_resume(client, {"name": "张三", "summary": "关注后端。"})
+    seen: list[tuple[str, bool]] = []
+
+    class _Artifact:
+        content = b"<html>stub</html>"
+
+    def fake_build_export(request, _resume, _context):
+        seen.append((request.format, request.include_photo))
+        return _Artifact()
+
+    monkeypatch.setattr(share_package_service, "build_export", fake_build_export)
+
+    # 默认（不传）保持旧行为：照片随包走。
+    _create_package(client, resume_id)
+    assert seen == [("html", True), ("pdf", True)]
+
+    seen.clear()
+    _create_package(client, resume_id, include_photo=False)
+    assert seen == [("html", False), ("pdf", False)]
+
+
+# 1×1 的纯色 PNG：只为验证照片有没有进产物，不关心像素内容。
+_PHOTO = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+def test_include_photo_false_keeps_the_photo_out_of_the_html(client):
+    """关掉照片后 HTML 里不能再出现照片 data URL（否则勾选是假的）。"""
+    resume_id = _manual_resume(client, {"name": "张三", "photo": _PHOTO})
+
+    with_photo = _create_package(client, resume_id)
+    directory = Path(with_photo["files"][0]["path"]).parent
+    assert "data:image" in (directory / "resume.html").read_text(encoding="utf-8")
+
+    without = _create_package(client, resume_id, include_photo=False)
+    directory = Path(without["files"][0]["path"]).parent
+    html = (directory / "resume.html").read_text(encoding="utf-8")
+    assert "data:image" not in html
+    # 照片之外的正文照常渲染，不是把整份内容丢掉了。
+    assert "张三" not in html  # 已脱敏
+    assert "summary" in html or "<body" in html
 
 
 def test_share_package_full_trash_cycle(client):
