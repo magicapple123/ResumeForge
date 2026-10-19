@@ -15,6 +15,7 @@ import { fetchResumeTemplates } from "../api/resumes";
 import { RESUME_PAGE_LIMITS, type ResumeLayout } from "../types";
 import type { ResumePreviewHandle } from "./ResumePreview";
 import TemplateGalleryModal from "./resume/TemplateGalleryModal";
+import LineHeightControl from "./resume/LineHeightControl";
 import {
   buildSectionOrderConfig,
   DEFAULT_RESUME_SECTION_ORDER,
@@ -42,19 +43,6 @@ import {
  * 因为这里用户的手指刚离开、对延迟更敏感）。
  */
 const FONT_COMMIT_DEBOUNCE_MS = 180;
-
-/**
- * 行距滑块的提交防抖（毫秒）。
- *
- * 行距没有本地探针（不像字号能直接改 `--fs`），每次提交都要向后端重渲染一次，所以
- * 比字号更保守：120ms 足以把一次拖动折叠成一次请求，又短到松手后几乎立刻看到结果。
- */
-const LINE_HEIGHT_COMMIT_DEBOUNCE_MS = 120;
-
-/** 行距的可用区间与步长。与后端 `FORMAT_FIELDS` 的 line_height 完全一致。 */
-const LINE_HEIGHT_MIN = 1.2;
-const LINE_HEIGHT_MAX = 2.2;
-const LINE_HEIGHT_STEP = 0.05;
 
 /** 模板目录里拿不到默认行距时的兜底（经典模板的默认值，也是历史默认）。 */
 const FALLBACK_LINE_HEIGHT = 1.7;
@@ -233,60 +221,32 @@ export default function ResumeLayoutControls({
 
   // ===== 行距（R20）=====
   // 默认值必须取**当前模板**的真实行距：模板之间 1.55~1.8 不等，写死一个数字会让滑块
-  // 停在与渲染不同的位置，用户一拖就跳。
+  // 停在与渲染不同的位置，用户一拖就跳。拖动/防抖/复位那套状态在 LineHeightControl 里。
   const templateLineHeight =
     catalog?.template_layouts?.[layout.template]?.line_height ?? FALLBACK_LINE_HEIGHT;
   const configuredLineHeight =
     typeof layout.format_config?.line_height === "number" ? layout.format_config.line_height : null;
-  const lineHeight = configuredLineHeight ?? templateLineHeight;
-  const [draggingLineHeight, setDraggingLineHeight] = useState<number | null>(null);
-  const lineDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const shownLineHeight = Math.round((draggingLineHeight ?? lineHeight) * 100) / 100;
-  const isCustomLineHeight = configuredLineHeight !== null;
 
-  useEffect(
-    () => () => {
-      if (lineDebounceRef.current) clearTimeout(lineDebounceRef.current);
-    },
-    [],
-  );
-
-  // 父组件确认了新的行距（保存成功或外部改动）后交回权威值，避免滑块停在中间态。
-  const lineSignature = `${layout.template}:${configuredLineHeight ?? ""}`;
-  const [prevLineSignature, setPrevLineSignature] = useState(lineSignature);
-  if (prevLineSignature !== lineSignature) {
-    setPrevLineSignature(lineSignature);
-    setDraggingLineHeight(null);
-  }
-
-  const commitLineHeight = (next: number) => {
-    // 0.05 步长下的浮点尾巴（1.7000000000000002）会直接落到落库值与读数里，先规整。
-    const value =
-      Math.round(Math.min(LINE_HEIGHT_MAX, Math.max(LINE_HEIGHT_MIN, next)) * 100) / 100;
-    setDraggingLineHeight(value);
-    if (lineDebounceRef.current) clearTimeout(lineDebounceRef.current);
-    lineDebounceRef.current = setTimeout(() => {
-      lineDebounceRef.current = null;
-      const current = layoutRef.current;
-      onChange({
-        ...current,
-        format_config: { ...current.format_config, line_height: value },
-      });
-    }, LINE_HEIGHT_COMMIT_DEBOUNCE_MS);
-  };
-
-  const resetLineHeight = () => {
-    if (!isCustomLineHeight) return;
-    if (lineDebounceRef.current) {
-      clearTimeout(lineDebounceRef.current);
-      lineDebounceRef.current = null;
+  /**
+   * 写行距：数值 = 写入覆盖；null = 删掉覆盖（回到随模板）。
+   *
+   * 用 `layoutRef.current` 而不是闭包里的 `layout`：防抖回调在松手 120ms 后才跑，
+   * 这期间父组件可能已经改了页数或字号，用旧快照会把那些改动覆盖回去。
+   */
+  const applyLineHeight = (next: number | null) => {
+    const current = layoutRef.current;
+    if (next === null) {
+      // 删键而不是写回模板默认值：存储里"没调过"与"调成和默认一样"应当是同一形态，
+      // 否则以后模板更新默认行距时，这些简历不会跟着变。
+      const rest = { ...(current.format_config ?? {}) };
+      delete rest["line_height"];
+      onChange({ ...current, format_config: rest });
+      return;
     }
-    setDraggingLineHeight(null);
-    // 删掉这个键而不是写回模板默认值：存储里"没调过"与"调成和默认一样"应当是同一形态，
-    // 否则以后模板更新默认行距时，这些简历不会跟着变。
-    const rest = { ...(layout.format_config ?? {}) };
-    delete rest["line_height"];
-    onChange({ ...layout, format_config: rest });
+    onChange({
+      ...current,
+      format_config: { ...current.format_config, line_height: next },
+    });
   };
 
   return (
@@ -496,64 +456,13 @@ export default function ResumeLayoutControls({
           />
         </Tooltip>
       </Space>
-      <Space size={6}>
-        {!compact && <Typography.Text type="secondary">行距</Typography.Text>}
-        {/* 行距是"内容差一行就多一页"时最有效的一档，此前只存在于模板工作台，主预览里
-            没有入口。这里与字号同一套交互：滑块 + 两端 0.05 步进 + 读数 + 恢复默认。 */}
-        <Space size={2} align="center">
-          <Tooltip title="收紧行距（-0.05）">
-            <Button
-              size="small"
-              type="text"
-              icon={<MinusOutlined />}
-              aria-label="减小行距"
-              disabled={disabled || shownLineHeight <= LINE_HEIGHT_MIN}
-              onClick={() => commitLineHeight(shownLineHeight - LINE_HEIGHT_STEP)}
-            />
-          </Tooltip>
-          <Slider
-            className="resume-line-height-slider"
-            min={LINE_HEIGHT_MIN}
-            max={LINE_HEIGHT_MAX}
-            step={LINE_HEIGHT_STEP}
-            value={shownLineHeight}
-            disabled={disabled}
-            aria-label="行距（拖动调整）"
-            ariaLabelForHandle="行距"
-            tooltip={{ formatter: (value) => (value == null ? "" : Number(value).toFixed(2)) }}
-            style={{ width: 120, margin: "0 2px" }}
-            onChange={commitLineHeight}
-          />
-          <Tooltip title="放宽行距（+0.05）">
-            <Button
-              size="small"
-              type="text"
-              icon={<PlusOutlined />}
-              aria-label="增大行距"
-              disabled={disabled || shownLineHeight >= LINE_HEIGHT_MAX}
-              onClick={() => commitLineHeight(shownLineHeight + LINE_HEIGHT_STEP)}
-            />
-          </Tooltip>
-        </Space>
-        <Typography.Text type="secondary" style={{ minWidth: 34, display: "inline-block" }}>
-          {shownLineHeight.toFixed(2)}
-        </Typography.Text>
-        {!isCustomLineHeight && (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            随模板
-          </Typography.Text>
-        )}
-        <Tooltip title="恢复模板默认行距">
-          <Button
-            size="small"
-            type="text"
-            icon={<UndoOutlined />}
-            disabled={disabled || !isCustomLineHeight}
-            aria-label="恢复默认行距"
-            onClick={resetLineHeight}
-          />
-        </Tooltip>
-      </Space>
+      <LineHeightControl
+        value={configuredLineHeight ?? templateLineHeight}
+        customized={configuredLineHeight !== null}
+        disabled={disabled}
+        compact={compact}
+        onChange={applyLineHeight}
+      />
     </Space>
   );
 }
