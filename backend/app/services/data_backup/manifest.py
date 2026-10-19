@@ -77,6 +77,11 @@ def build_manifest(
         # 与 export 侧的剥离/保留逻辑对应：False 是默认（密钥已清空），True 只能来自
         # 用户的显式勾选。导入侧 fail-closed：这个字段缺失或乱值都拒收。
         "api_key_included": bool(api_key_included),
+        # 包的类型（R16）：``collection`` 表示"这是一份包含多份数据集的整包"。
+        # 它与 format 号是两件事——format 决定老版本能不能读（2/3 都要拒收），
+        # type 决定**界面**怎么介绍它（"内含 3 份数据集"而不是"一份备份"）。
+        # 导入逻辑不依赖这个字段：包里有 ``datasets/`` 就逐份恢复，缺失/乱值只影响文案。
+        "type": "collection" if extras else "dataset",
     }
     if asset_manifest is not None:
         manifest["asset_manifest"] = asset_manifest

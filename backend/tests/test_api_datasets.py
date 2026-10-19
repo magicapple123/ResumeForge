@@ -1,4 +1,5 @@
 """数据集接口测试：本机限制、类型校验、导入/切换/重命名/删除与导出。"""
+
 import io
 import json
 import sqlite3
@@ -19,7 +20,9 @@ def _archive_bytes(tmp_path: Path) -> bytes:
     return create_backup_archive(database.engine, tmp_path / "staging").read_bytes()
 
 
-def _import(client, payload: bytes, name: str = "导入的数据集", content_type: str = "application/zip"):
+def _import(
+    client, payload: bytes, name: str = "导入的数据集", content_type: str = "application/zip"
+):
     return client.post(
         f"/api/settings/datasets/import?name={name}",
         content=payload,
@@ -349,20 +352,18 @@ def test_a_round_trip_preserves_every_kind_of_content_including_the_trash(
 
     assert "哨兵资料" in {item["title"] for item in client.get("/api/materials").json()}
     assert "哨兵投递" in {item["title"] for item in client.get("/api/tracker").json()["items"]}
-    assert "哨兵会话" in {item["title"] for item in client.get("/api/assistant/conversations").json()}
-    assert "哨兵候选岗位" in {
-        item["title"] for item in client.get("/api/candidate-jobs").json()
+    assert "哨兵会话" in {
+        item["title"] for item in client.get("/api/assistant/conversations").json()
     }
-    claim_titles = {
-        item["title"] for item in client.get("/api/claims").json().get("items", [])
-    }
+    assert "哨兵候选岗位" in {item["title"] for item in client.get("/api/candidate-jobs").json()}
+    claim_titles = {item["title"] for item in client.get("/api/claims").json().get("items", [])}
     assert "哨兵台账" in claim_titles
 
     # ⑤ **回收站状态一起被带走**：删掉的那条不该复活，且仍列在回收站里。
     trashed_now = client.get("/api/trash").json()
-    assert [
-        item["title"] for item in trashed_now["items"] if item["type"] == "job"
-    ] == ["要删掉的岗位"]
+    assert [item["title"] for item in trashed_now["items"] if item["type"] == "job"] == [
+        "要删掉的岗位"
+    ]
 
     # ⑥ 备份里不含明文 API Key（导入的那份同样是"导出产物"，这条顺带再确认一次）。
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
@@ -409,8 +410,22 @@ def test_export_all_carries_the_other_datasets(client, tmp_path):
     # 格式号必须升到 2：老版本读不懂 datasets/ 这一段，得让它**明确拒收**而不是安静地
     # 只恢复活动数据集。
     assert manifest["format"] == 2
+    # R16：整包的"类型"与"格式号"分开——前者给界面介绍用，后者决定老版本能不能读。
+    assert manifest["type"] == "collection"
     assert [item["id"] for item in manifest["datasets"]] == [other_id]
     assert manifest["datasets"][0]["name"] == "校招线"
+
+
+def test_single_dataset_export_is_typed_as_dataset(client, tmp_path):
+    """单份包的 type 是 dataset：界面据此说"一份备份"，不会被当成整包。"""
+    _add_job(client, "主数据里的岗位")
+
+    response = client.get(f"/api/settings/datasets/{MAIN}/export")
+
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+    assert manifest["type"] == "dataset"
+    assert manifest["format"] == 1
 
 
 def test_exporting_one_dataset_stays_format_1(client, tmp_path):

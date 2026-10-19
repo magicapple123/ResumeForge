@@ -125,7 +125,17 @@ export function useSettingsDatasets() {
       const extras = created.restored_datasets?.length ?? 0;
       // 勾选过"包含 API Key"的包要如实告诉用户密钥也回来了（换机器解不开时仍需重填）。
       const parts = [`已导入数据集「${created.name}」`];
-      if (extras > 0) parts.push(`并随包恢复了另外 ${extras} 份数据集`);
+      if (extras > 0) {
+        // 逐份点名（最多 3 个）：只说"另外 N 份"，用户还是不知道恢复了哪几份。
+        const names = (created.restored_datasets ?? [])
+          .map((dataset) => dataset.name)
+          .filter(Boolean);
+        const shownNames = names.slice(0, 3).join("、");
+        parts.push(
+          `并随包恢复了另外 ${extras} 份数据集` +
+            (shownNames ? `（${shownNames}${names.length > 3 ? " 等" : ""}）` : ""),
+        );
+      }
       if (created.api_key_included) parts.push("备份中的大模型 API Key 已一并恢复");
       // RR-03：带着附件问题导入时不得呈现成"完整恢复"——问题逐条（最多 3 条）摆出来。
       const problems = [...(created.backup_asset_warnings ?? []), ...(created.asset_issues ?? [])];

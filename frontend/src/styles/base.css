@@ -806,3 +806,40 @@ body {
   padding-top: 12px;
   border-top: 1px solid #eef0f3;
 }
+
+/*
+ * 全局拖入导入（R17）：拖文件进窗口时的遮罩。
+ * pointer-events: none 是必须的——遮罩出现后如果接住指针，dragleave/drop 会打到遮罩上，
+ * 用户松手时反而收不到 drop。
+ */
+.global-file-drop {
+  position: fixed;
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inset: 0;
+  background: rgb(22 54 92 / 28%);
+  pointer-events: none;
+}
+
+.global-file-drop-inner {
+  padding: 28px 44px;
+  border: 2px dashed rgb(255 255 255 / 85%);
+  border-radius: 16px;
+  background: var(--rf-brand, #16365c);
+  box-shadow: 0 18px 48px rgb(15 23 42 / 28%);
+  color: #fff;
+  text-align: center;
+}
+
+.global-file-drop-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.global-file-drop-hint {
+  margin-top: 6px;
+  color: rgb(255 255 255 / 85%);
+  font-size: 12px;
+}
