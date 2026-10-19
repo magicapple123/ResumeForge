@@ -108,6 +108,14 @@ export default function ShortcutSettingsCard() {
 
   const dataSource = useMemo(() => [...SHORTCUT_ACTIONS], []);
 
+  /** 解绑：写入 null（不是空数组），否则下次读取会被当成"没配过"回落默认。 */
+  const handleClear = (action: ShortcutAction) => {
+    updateShortcutBinding(settings, action.id, null);
+    setRecordingId(null);
+    setError("");
+    message.success(`「${action.label}」已解绑，这个组合键不再触发任何动作`);
+  };
+
   const handleRestore = (action: ShortcutAction) => {
     restoreShortcutBinding(settings, action.id);
     setRecordingId(null);
@@ -153,9 +161,14 @@ export default function ShortcutSettingsCard() {
             </Space>
           );
         }
+        const keys = shortcutKeysOf(settings, action.id);
+        if (keys.length === 0) {
+          // 「未绑定」必须显式显示：留空会让用户以为设置丢了。
+          return <Tag className="shortcut-settings-key">未绑定</Tag>;
+        }
         return (
           <Space size={4} wrap>
-            {shortcutKeysOf(settings, action.id).map((binding) => (
+            {keys.map((binding) => (
               <Tag key={binding} className="shortcut-settings-key">
                 {formatShortcut(binding, { mac })}
               </Tag>
@@ -167,10 +180,12 @@ export default function ShortcutSettingsCard() {
     {
       title: "操作",
       key: "actions",
-      width: 168,
+      width: 240,
       render: (_, action) => {
+        const keys = shortcutKeysOf(settings, action.id);
+        const isUnbound = keys.length === 0;
         const isDefault = sameKeys(
-          shortcutKeysOf(settings, action.id),
+          keys,
           defaultShortcutBindings()[action.id].map((binding) => normalizeBinding(binding)),
         );
         return (
@@ -185,6 +200,17 @@ export default function ShortcutSettingsCard() {
             >
               {recordingId === action.id ? "取消" : "修改"}
             </Button>
+            <Popconfirm
+              title={`解绑「${action.label}」？`}
+              description="解绑后这个组合键不再触发任何动作，可随时「恢复默认」。"
+              okText="解绑"
+              cancelText="取消"
+              onConfirm={() => handleClear(action)}
+            >
+              <Button size="small" disabled={isUnbound}>
+                清除
+              </Button>
+            </Popconfirm>
             <Button size="small" disabled={isDefault} onClick={() => handleRestore(action)}>
               恢复默认
             </Button>

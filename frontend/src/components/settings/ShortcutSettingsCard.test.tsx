@@ -13,10 +13,10 @@ function renderCard() {
   );
 }
 
-function storedBindings(): Record<string, string[]> | null {
+function storedBindings(): Record<string, string[] | null> | null {
   const raw = window.localStorage.getItem(SHORTCUT_STORAGE_KEY);
   if (raw === null) return null;
-  return (JSON.parse(raw) as { bindings: Record<string, string[]> }).bindings;
+  return (JSON.parse(raw) as { bindings: Record<string, string[] | null> }).bindings;
 }
 
 /** 某个动作所在的那一行（antd 的 Table 另有测量行，按文字定位最稳）。 */
@@ -114,6 +114,33 @@ describe("ShortcutSettingsCard", () => {
 
     fireEvent.click(within(rowOf("搜索")).getByRole("button", { name: /恢\s*复\s*默\s*认/ }));
 
+    await waitFor(() => expect(storedBindings()?.search).toEqual(["mod+k"]));
+    expect(within(rowOf("搜索")).getByText("Ctrl+K")).toBeInTheDocument();
+  });
+
+  it("「清除」解绑：写入 null、显示「未绑定」，并且可以恢复默认（R7）", async () => {
+    renderCard();
+    expect(within(rowOf("搜索")).getByText("Ctrl+K")).toBeInTheDocument();
+
+    fireEvent.click(within(rowOf("搜索")).getByRole("button", { name: /清\s*除/ }));
+    const confirm = await waitFor(() => {
+      const button = document.querySelector<HTMLButtonElement>(".ant-popconfirm .ant-btn-primary");
+      if (!button) throw new Error("未找到确认按钮");
+      return button;
+    });
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(storedBindings()?.search).toBeNull());
+    // 未绑定要显式显示：留空会让用户以为设置丢了。
+    expect(within(rowOf("搜索")).getByText("未绑定")).toBeInTheDocument();
+    // 已解绑时「清除」不可再点，「恢复默认」可用。
+    expect(within(rowOf("搜索")).getByRole("button", { name: /清\s*除/ })).toBeDisabled();
+    expect(
+      within(rowOf("搜索")).getByRole("button", { name: /恢\s*复\s*默\s*认/ }),
+    ).not.toBeDisabled();
+
+    // 恢复默认能把它救回来。
+    fireEvent.click(within(rowOf("搜索")).getByRole("button", { name: /恢\s*复\s*默\s*认/ }));
     await waitFor(() => expect(storedBindings()?.search).toEqual(["mod+k"]));
     expect(within(rowOf("搜索")).getByText("Ctrl+K")).toBeInTheDocument();
   });
