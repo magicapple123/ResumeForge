@@ -16,7 +16,7 @@ Python 侧按 kind 拆开、按各自口径排序）。
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, literal, select
 from sqlalchemy.orm import Session
 
@@ -120,6 +120,27 @@ def get_storage_stats(db: Session = Depends(get_db)) -> dict:
     from ..services.storage_stats import storage_overview
 
     return storage_overview(session_engine(db))
+
+
+@router.get("/storage/cleanup-preview")
+def cleanup_preview(older_than_days: int = Query(default=30, ge=1, le=3650)) -> dict:
+    """清理预览（R19）：列出超过保留期的备份与日志，只 stat 不读内容、不做任何删除。"""
+    from ..services.cleanup import plan_cleanup
+
+    return plan_cleanup(older_than_days=older_than_days)
+
+
+@router.post("/storage/cleanup")
+def cleanup_now(body: dict | None = None) -> dict:
+    """执行清理（R19）：候选文件移入 ``.cleanup-trash/<时间戳>/``，永不硬删。"""
+    from ..services.cleanup import DEFAULT_RETENTION_DAYS, run_cleanup
+
+    raw = (body or {}).get("older_than_days", DEFAULT_RETENTION_DAYS)
+    try:
+        days = max(1, min(3650, int(raw)))
+    except (TypeError, ValueError):
+        days = DEFAULT_RETENTION_DAYS
+    return run_cleanup(older_than_days=days)
 
 
 @router.get("", response_model=Stats)

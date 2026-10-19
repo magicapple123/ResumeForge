@@ -4,11 +4,16 @@
  * 数字来自 GET /api/stats/storage，后端只 stat 不读内容；这里不做任何清理动作，
  * 清理入口（手动备份）在旁边的「手动备份」卡里，逐份确认。
  */
-import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Listy, Progress, Space, Typography } from "antd";
+import { DeleteOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Card, Listy, Modal, Progress, Space, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
-import { getStorageStats } from "../../api/storage";
-import type { StorageStats } from "../../api/storage";
+import {
+  getStorageStats,
+  previewCleanup,
+  runCleanup,
+  type CleanupPlan,
+  type StorageStats,
+} from "../../api/storage";
 import LoadingBlock from "../common/LoadingBlock";
 import { ListyItem } from "../common/ListyItem";
 
@@ -26,9 +31,14 @@ function percentColor(percent: number): string {
 }
 
 export default function StorageStatsCard() {
+  const { message } = App.useApp();
   const [stats, setStats] = useState<StorageStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // 清理（R19）：先看清单再动手，且只移到回收目录——这里不做任何"永久删除"。
+  const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [cleanupPlan, setCleanupPlan] = useState<CleanupPlan | null>(null);
+  const [cleanupRunning, setCleanupRunning] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +71,41 @@ export default function StorageStatsCard() {
     };
   }, []);
 
+  /** 打开清理预览：没有候选时说一句就收工，不弹一个空清单。 */
+  const openCleanup = async () => {
+    try {
+      const plan = await previewCleanup();
+      if (plan.totals.files === 0) {
+        message.success("没有超过 30 天的旧备份或日志，暂时不用清理");
+        return;
+      }
+      setCleanupPlan(plan);
+      setCleanupOpen(true);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "读取清理清单失败");
+    }
+  };
+
+  const confirmCleanup = async () => {
+    if (cleanupRunning) return;
+    setCleanupRunning(true);
+    try {
+      const result = await runCleanup();
+      setCleanupOpen(false);
+      const failed = result.failed.length;
+      message.success(
+        `已把 ${result.moved} 个文件移到「${result.trash_dir || ".cleanup-trash"}」，` +
+          `释放 ${formatSize(result.freed_bytes)}` +
+          (failed > 0 ? `；另有 ${failed} 个文件被占用未能移动` : ""),
+      );
+      void load();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "清理失败");
+    } finally {
+      setCleanupRunning(false);
+    }
+  };
+
   const top = stats ? [...stats.items].sort((a, b) => b.size_bytes - a.size_bytes).slice(0, 6) : [];
   const maxSize = top.length > 0 ? Math.max(...top.map((item) => item.size_bytes), 1) : 1;
 
@@ -69,13 +114,19 @@ export default function StorageStatsCard() {
       title="存储占用"
       className="settings-card"
       extra={
-        <Button
-          size="small"
-          type="text"
-          icon={<ReloadOutlined />}
-          onClick={() => void load()}
-          aria-label="刷新存储占用"
-        />
+        <Space size={4}>
+          {/* 清理旧文件（R19）：移到 .cleanup-trash，不永久删除；清单先给用户看。 */}
+          <Button size="small" icon={<DeleteOutlined />} onClick={() => void openCleanup()}>
+            清理旧文件
+          </Button>
+          <Button
+            size="small"
+            type="text"
+            icon={<ReloadOutlined />}
+            onClick={() => void load()}
+            aria-label="刷新存储占用"
+          />
+        </Space>
       }
     >
       {loading ? (
@@ -117,6 +168,49 @@ export default function StorageStatsCard() {
           )}
         </Space>
       ) : null}
+
+      <Modal
+        title="清理旧文件"
+        open={cleanupOpen}
+        okText={cleanupPlan ? `移走 ${cleanupPlan.totals.files} 个文件` : "移走"}
+        cancelText="取消"
+        confirmLoading={cleanupRunning}
+        onOk={() => void confirmCleanup()}
+        onCancel={() => setCleanupOpen(false)}
+        width="min(560px, 92vw)"
+      >
+        {cleanupPlan ? (
+          <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+            <Alert
+              type="info"
+              showIcon
+              title={`以下文件超过 ${cleanupPlan.older_than_days} 天没有变动，共 ${formatSize(
+                cleanupPlan.totals.bytes,
+              )}`}
+              description="清理会把它们移到数据目录下的 .cleanup-trash/（按时间分文件夹），不会永久删除；确认无误后可自行在文件管理器里删除那个目录。"
+            />
+            <Listy
+              items={cleanupPlan.candidates.slice(0, 20)}
+              rowKey={(item) => item.path}
+              itemRender={(item) => (
+                <ListyItem>
+                  <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                    <Typography.Text ellipsis title={item.path} style={{ maxWidth: 380 }}>
+                      {item.path}
+                    </Typography.Text>
+                    <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
+                  </Space>
+                </ListyItem>
+              )}
+            />
+            {cleanupPlan.candidates.length > 20 ? (
+              <Typography.Text type="secondary">
+                还有 {cleanupPlan.candidates.length - 20} 个文件未列出，确认后一并移走。
+              </Typography.Text>
+            ) : null}
+          </Space>
+        ) : null}
+      </Modal>
     </Card>
   );
 }

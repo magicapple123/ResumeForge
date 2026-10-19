@@ -59,23 +59,34 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** R2：打开弹窗不再自动调模型，必须先点「开始生成」。 */
+function start() {
+  fireEvent.click(screen.getByRole("button", { name: /开始生成/ }));
+}
+
 describe("JobAnalysisModal", () => {
-  it("generates and renders the selected job analysis when opened", async () => {
+  it("先说明再生成：打开时一次请求都不发，点「开始生成」才调用模型", async () => {
     render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
 
-    expect(apiMocks.generateJobAnalysis).toHaveBeenCalledWith(JOB.id);
+    expect(screen.getByText(/会把岗位描述交给模型/)).toBeInTheDocument();
+    expect(apiMocks.generateJobAnalysis).not.toHaveBeenCalled();
+
+    start();
+
+    expect(apiMocks.generateJobAnalysis).toHaveBeenCalledWith(JOB.id, expect.anything());
     expect(await screen.findByText(ANALYSIS.summary)).toBeInTheDocument();
     expect(screen.getByText("核心要求")).toBeInTheDocument();
     expect(screen.getByText("持有护士执业资格证")).toBeInTheDocument();
     expect(screen.getByText("突出临床能力")).toBeInTheDocument();
   });
 
-  it("shows a friendly error and lets the user retry", async () => {
+  it("失败时给出原因，并可以重新生成", async () => {
     apiMocks.generateJobAnalysis
       .mockRejectedValueOnce(new Error("模型暂时不可用"))
       .mockResolvedValueOnce(ANALYSIS);
 
     render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
+    start();
 
     expect(await screen.findByText("模型暂时不可用")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重新生成解读" }));
@@ -84,18 +95,48 @@ describe("JobAnalysisModal", () => {
     expect(apiMocks.generateJobAnalysis).toHaveBeenCalledTimes(2);
   });
 
-  it("regenerates an existing analysis only after the user asks", async () => {
+  it("生成中可以取消：回到初始状态，不显示「生成失败」", async () => {
+    // 永不 resolve 的请求：模拟还在等模型。
+    apiMocks.generateJobAnalysis.mockImplementation(
+      (_id: number, signal?: AbortSignal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        }),
+    );
+
+    render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
+    start();
+    fireEvent.click(await screen.findByRole("button", { name: "取消生成" }));
+
+    // 回到「可以重新开始」的状态：说明卡又出现了，也没有错误框。
+    await waitFor(() => expect(screen.getByText(/会把岗位描述交给模型/)).toBeInTheDocument());
+    expect(screen.queryByText(/生成失败/)).not.toBeInTheDocument();
+  });
+
+  it("重新生成需要二次确认（会覆盖当前结果）", async () => {
     const updated = { ...ANALYSIS, summary: "第二次生成的岗位总结。" };
     apiMocks.generateJobAnalysis.mockResolvedValueOnce(ANALYSIS).mockResolvedValueOnce(updated);
 
     render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
+    start();
 
     expect(await screen.findByText(ANALYSIS.summary)).toBeInTheDocument();
     expect(apiMocks.generateJobAnalysis).toHaveBeenCalledTimes(1);
+
     fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+    // 确认前不发请求。
+    expect(apiMocks.generateJobAnalysis).toHaveBeenCalledTimes(1);
+
+    const confirm = await waitFor(() => {
+      const button = document.querySelector<HTMLButtonElement>(".ant-popconfirm .ant-btn-primary");
+      if (!button) throw new Error("未找到确认按钮");
+      return button;
+    });
+    fireEvent.click(confirm);
 
     expect(await screen.findByText(updated.summary)).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText(ANALYSIS.summary)).not.toBeInTheDocument());
     expect(apiMocks.generateJobAnalysis).toHaveBeenCalledTimes(2);
   });
 });
