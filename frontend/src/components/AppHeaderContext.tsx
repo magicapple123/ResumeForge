@@ -162,7 +162,7 @@ export default function AppHeaderContext() {
     const items: MenuProps["items"] = datasets.map((item) => ({
       key: item.id,
       label: (
-        <span className="app-dataset-menu-label">
+        <span className="app-dataset-menu-label" title={item.name}>
           {item.is_active ? `${item.name}（当前）` : item.name}
           {item.source === "sample" && (
             <Tooltip title="体验数据，与你的真实资料相互独立">
@@ -207,6 +207,10 @@ export default function AppHeaderContext() {
           {dataset ? (
             <Dropdown
               trigger={["click"]}
+              // 数据集名可以很长（导入的名称不受限），弹层不设上限时会被一个名字撑到
+              // 半屏宽。宽度约束与省略号都放在 CSS 里（.app-dataset-dropdown），
+              // 完整名字通过条目的 title 属性悬停可见。
+              classNames={{ root: "app-dataset-dropdown" }}
               menu={{
                 items: datasetMenuItems,
                 onClick: ({ key }) => {

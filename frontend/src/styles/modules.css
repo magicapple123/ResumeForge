@@ -74,6 +74,27 @@
   font-weight: 700;
 }
 
+/*
+ * 欢迎卡片（8 步引导）是"封面"而不是表单弹窗：标题下的分割线与渐变底会把品牌图标和
+ * 标题切成两截。只覆盖这一个弹窗（.user-guide-modal），其余 Modal 的标题保持原样——
+ * 动全局 .ant-modal-header 会让所有弹窗一起变。
+ */
+.user-guide-modal .ant-modal-header {
+  border-bottom: none;
+  background: transparent;
+}
+
+/*
+ * 技能详情弹窗：内容有 3 屏时，首行 Alert 与最后一个「添加知识文件」按钮会分别贴住
+ * 标题和页脚。body 多留一点下边距、footer 加一条分隔线，视觉上不再"顶格"。
+ * 用 styles.body 传内边距（组件里），这里只补 footer 的边界。
+ */
+.skill-editor-modal .ant-modal-footer {
+  margin-top: 0;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f6;
+}
+
 .ant-modal-close {
   top: 14px;
   inset-inline-end: 14px;

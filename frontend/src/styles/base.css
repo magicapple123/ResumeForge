@@ -577,6 +577,27 @@ body {
   white-space: nowrap;
 }
 
+/*
+ * 数据集下拉：条目宽度设上限，超长名字省略而不是把弹层撑到半屏。
+ * chip 自己已经限到 220px，弹层此前没有任何约束——名字一长，菜单比页面还宽。
+ */
+.app-dataset-dropdown {
+  max-width: 360px;
+}
+
+.app-dataset-dropdown .ant-dropdown-menu-item {
+  max-width: 340px;
+}
+
+.app-dataset-dropdown .app-dataset-menu-label {
+  display: inline-block;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
 /* 「示例」小徽标：chip 旁与下拉条目共用，提示当前是体验数据、与真实资料独立。 */
 .app-dataset-sample-tag {
   flex: 0 0 auto;

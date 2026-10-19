@@ -64,11 +64,15 @@ export function useSettingsDatasets() {
     setDatasetsLoading(false);
   }, [fetchDatasetList]);
 
-  const runDatasetExport = async (dataset: DatasetInfo) => {
+  const runDatasetExport = async (dataset: DatasetInfo, downloadName?: string) => {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename, incompleteBackup } = await exportDataset(dataset.id, includeApiKeys);
+      const { blob, filename, incompleteBackup } = await exportDataset(
+        dataset.id,
+        includeApiKeys,
+        downloadName,
+      );
       downloadBlob(blob, filename);
       if (incompleteBackup) {
         // RR-03：包里有附件缺失或与登记哈希不符时不能说成"完整备份成功"。
@@ -86,11 +90,14 @@ export function useSettingsDatasets() {
     }
   };
 
-  const runExportAllDatasets = async () => {
+  const runExportAllDatasets = async (downloadName?: string) => {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename, incompleteBackup } = await exportAllDatasets(includeApiKeys);
+      const { blob, filename, incompleteBackup } = await exportAllDatasets(
+        includeApiKeys,
+        downloadName,
+      );
       downloadBlob(blob, filename);
       if (incompleteBackup) {
         message.warning(

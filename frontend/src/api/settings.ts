@@ -283,8 +283,10 @@ export function deleteDataset(id: string): Promise<void> {
 export async function exportDataset(
   id: string,
   includeApiKeys = false,
+  /** 下载名（可含中文）；省略时后端用「<数据集名>-<时间戳>.zip」。 */
+  filename?: string,
 ): Promise<{ blob: Blob; filename: string; incompleteBackup: boolean }> {
-  return downloadArchive(exportUrl(`/settings/datasets/${id}/export`, includeApiKeys));
+  return downloadArchive(exportUrl(`/settings/datasets/${id}/export`, includeApiKeys, filename));
 }
 
 /**
@@ -295,13 +297,21 @@ export async function exportDataset(
  */
 export async function exportAllDatasets(
   includeApiKeys = false,
+  filename?: string,
 ): Promise<{ blob: Blob; filename: string; incompleteBackup: boolean }> {
-  return downloadArchive(exportUrl("/settings/datasets/export-all", includeApiKeys));
+  return downloadArchive(exportUrl("/settings/datasets/export-all", includeApiKeys, filename));
 }
 
-/** 不勾选时保持 URL 干净，与旧行为一致；勾选才带上布尔查询参数。 */
-function exportUrl(base: string, includeApiKeys: boolean): string {
-  return includeApiKeys ? `${base}?include_api_keys=true` : base;
+/**
+ * 拼导出 URL：只带**有值**的查询参数，不留 `?` 尾巴（旧行为与旧测试都依赖"没勾选时
+ * URL 干净"）。
+ */
+function exportUrl(base: string, includeApiKeys: boolean, filename?: string): string {
+  const params: string[] = [];
+  if (includeApiKeys) params.push("include_api_keys=true");
+  const name = (filename || "").trim();
+  if (name) params.push(`filename=${encodeURIComponent(name)}`);
+  return params.length ? `${base}?${params.join("&")}` : base;
 }
 
 async function downloadArchive(

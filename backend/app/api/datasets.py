@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
@@ -33,6 +33,7 @@ from ..services.data_backup import (
     purge_stale_restores,
     restore_directory,
 )
+from ..services.data_backup.naming import default_backup_stem, safe_backup_filename
 from ..services.datasets import (
     activate_dataset,
     create_dataset,
@@ -219,7 +220,15 @@ def remove(request: Request, dataset_id: str) -> None:
 
 
 @router.get("/export-all")
-def export_all(request: Request, include_api_keys: bool = False) -> FileResponse:
+def export_all(
+    request: Request,
+    include_api_keys: bool = False,
+    filename: str | None = Query(
+        default=None,
+        max_length=128,
+        description="下载名（可含中文）；省略时为「全部数据集-<时间戳>.zip」",
+    ),
+) -> FileResponse:
     """把**全部数据集**导出为一个备份包（活动的那份 + 其余每一份）。
 
     与 ``/{dataset_id}/export`` 的区别是"包里有没有其余数据集"。两个都给，是因为它们
@@ -243,11 +252,22 @@ def export_all(request: Request, include_api_keys: bool = False) -> FileResponse
         archive_path.name,
         "included" if include_api_keys else "excluded",
     )
-    return _archive_response(archive_path)
+    return _archive_response(
+        archive_path, filename=filename, default_stem=default_backup_stem("全部数据集")
+    )
 
 
 @router.get("/{dataset_id}/export")
-def export(request: Request, dataset_id: str, include_api_keys: bool = False) -> FileResponse:
+def export(
+    request: Request,
+    dataset_id: str,
+    include_api_keys: bool = False,
+    filename: str | None = Query(
+        default=None,
+        max_length=128,
+        description="下载名（可含中文）；省略时为「<数据集名>-<时间戳>.zip」",
+    ),
+) -> FileResponse:
     """把指定数据集导出为备份包（``include_api_keys`` 语义同 ``export_all``）。"""
     _require_loopback(request)
     staging = export_directory(database.engine)
@@ -267,13 +287,32 @@ def export(request: Request, dataset_id: str, include_api_keys: bool = False) ->
         safe_log_text(archive_path.name),
         "included" if include_api_keys else "excluded",
     )
-    return _archive_response(archive_path)
+    return _archive_response(
+        archive_path,
+        filename=filename,
+        default_stem=default_backup_stem(_dataset_label(dataset_id)),
+    )
 
 
-def _archive_response(archive_path: Path) -> FileResponse:
+def _dataset_label(dataset_id: str) -> str:
+    """数据集在下载名里的默认称呼；查不到时用 id（导出本身仍然继续）。"""
+    for item in list_datasets():
+        if item["id"] == dataset_id:
+            return str(item.get("name") or dataset_id)
+    return dataset_id
+
+
+def _archive_response(
+    archive_path: Path,
+    *,
+    filename: str | None = None,
+    default_stem: str | None = None,
+) -> FileResponse:
+    # 下载名与临时文件名解耦：临时文件是由后端生成的安全名字，用户看到的是他填的那个。
+    download_name = safe_backup_filename(filename, default_stem=default_stem or archive_path.stem)
     headers = {
         "Content-Disposition": (
-            f"attachment; filename*=UTF-8''{quote(sanitize_filename(archive_path.name), safe='')}"
+            f"attachment; filename*=UTF-8''{quote(sanitize_filename(download_name), safe='')}"
         ),
         # 备份包含全部个人数据，禁止浏览器与中间层缓存。
         "Cache-Control": "no-store",

@@ -98,10 +98,14 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
 
   return (
     <Modal
+      className="skill-editor-modal"
       title={skillId === null ? "新建助手技能" : "技能详情与编辑"}
       open={open}
       width={760}
       mask={{ closable: !saving }}
+      // 内容长时 body 自己滚动；下边距比左右多留一点，最后一个「添加知识文件」按钮
+      // 才不会贴着页脚（此前首尾都显得"顶格"）。
+      styles={{ body: { padding: "20px 24px 28px", scrollPaddingTop: 12 } }}
       onCancel={onClose}
       footer={
         <Space>

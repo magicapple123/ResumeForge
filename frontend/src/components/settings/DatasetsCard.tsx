@@ -24,6 +24,8 @@ import {
   Typography,
   Upload,
 } from "antd";
+import { useState } from "react";
+import { defaultExportName } from "../../utils/exportNaming";
 import { RowActions } from "../common/RowActions";
 import { useCollapsedList } from "../common/useCollapsedList";
 import type { DatasetInfo } from "../../types";
@@ -53,9 +55,10 @@ interface Props {
   creating: boolean;
   createOpen: boolean;
   createName: string;
-  onExport: (dataset: DatasetInfo) => void;
+  /** `filename` 是用户填的下载名；不传则由后端用默认名。 */
+  onExport: (dataset: DatasetInfo, filename?: string) => void;
   /** 导出全部数据集（活动的那份 + 列表里其余每一份）。 */
-  onExportAll: () => void;
+  onExportAll: (filename?: string) => void;
   onImport: (file: File, name: string) => void;
   onActivate: (dataset: DatasetInfo) => void;
   onOpenRename: (dataset: DatasetInfo) => void;
@@ -109,6 +112,23 @@ export default function DatasetsCard({
   onConfirmCreate,
   onCancelCreate,
 }: Props) {
+  // 导出前先问下载名：`"all"` 表示"全部数据集"，null 表示弹窗关着。
+  const [exportTarget, setExportTarget] = useState<DatasetInfo | "all" | null>(null);
+  const [exportName, setExportName] = useState("");
+
+  const openExport = (target: DatasetInfo | "all") => {
+    setExportTarget(target);
+    setExportName(defaultExportName(target === "all" ? "全部数据集" : target.name));
+  };
+
+  const confirmExport = () => {
+    const target = exportTarget;
+    const name = exportName.trim();
+    setExportTarget(null);
+    if (target === "all") onExportAll(name);
+    else if (target) onExport(target, name);
+  };
+
   const busy = exporting || importing || switchingId !== null || deletingId !== null || creating;
   const active = datasets.find((item) => item.is_active);
   // 列表长了会淹没操作区：默认只展示前 5 份，其余收进「显示全部」（展示层折叠）。
@@ -150,8 +170,8 @@ export default function DatasetsCard({
                     : []),
                 ],
                 onClick: ({ key }) => {
-                  if (key === "current" && active) onExport(active);
-                  if (key === "all") onExportAll();
+                  if (key === "current" && active) openExport(active);
+                  if (key === "all") openExport("all");
                 },
               }}
             >
@@ -343,6 +363,31 @@ export default function DatasetsCard({
           maxLength={64}
           placeholder="数据集名称（例如：秋招专用）"
           onChange={(event) => onCreateNameChange(event.target.value)}
+        />
+      </Modal>
+
+      <Modal
+        title={exportTarget === "all" ? "导出全部数据集" : "导出数据集"}
+        open={exportTarget !== null}
+        okText="导出"
+        cancelText="取消"
+        confirmLoading={exporting}
+        destroyOnHidden
+        onOk={confirmExport}
+        onCancel={() => setExportTarget(null)}
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title="这个名字会作为下载文件名，可含中文；扩展名会自动补 .zip。"
+        />
+        <Input
+          value={exportName}
+          maxLength={80}
+          placeholder="例如：校招线-20261019-101500"
+          aria-label="导出文件名"
+          onChange={(event) => setExportName(event.target.value)}
         />
       </Modal>
     </>

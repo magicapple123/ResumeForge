@@ -64,6 +64,24 @@ Remove-Item -Force $archiveTar -ErrorAction SilentlyContinue
 
 Copy-Item -Recurse -Force (Join-Path $projectRoot "frontend\dist") (Join-Path $payloadDir "frontend\dist")
 New-Item -ItemType Directory -Force (Join-Path $payloadDir "runtime\logs") | Out-Null
+# R11: the double-click update entry that ships next to the installed exe.
+# Generated here instead of copied from the repo root: the repo-root update.cmd
+# updates a source checkout via git, while an installed app must go through the
+# Electron updater (--check-update). Pure ASCII + CRLF so cmd.exe never sees a
+# BOM; the file name stays ASCII to avoid NSIS code-page issues on Chinese paths.
+$updateCmdLines = @(
+    '@echo off',
+    'rem ResumeForge updater: check GitHub Releases, download, verify, install.',
+    'rem Double-click this file. It starts the app with --check-update; when the app',
+    'rem is already running, the running instance receives the same request.',
+    'start "" "%~dp0ResumeForge.exe" --check-update'
+)
+[System.IO.File]::WriteAllText(
+    (Join-Path $payloadDir "update.cmd"),
+    (($updateCmdLines -join "`r`n") + "`r`n"),
+    [System.Text.Encoding]::ASCII
+)
+
 
 # Bundled runtime: build once, reuse across packaging runs. The payload gets
 # a copy so first user launch unpacks instead of provisioning. Windows-only:

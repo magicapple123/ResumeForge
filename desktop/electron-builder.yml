@@ -37,6 +37,17 @@ files:
   - updater.js
   - package.json
 
+extraFiles:
+  # R11: the double-click update entry lives next to the executable (install root),
+  # not inside resources/payload. Both files are generated into payload/ by
+  # scripts/Build-Desktop.ps1 and scripts/build-desktop-mac.sh; the filter makes
+  # the Windows build tolerate the absence of update.command and vice versa.
+  - from: payload
+    to: .
+    filter:
+      - update.cmd
+      - update.command
+
 extraResources:
   # Assembled by scripts/Build-Desktop.ps1 before electron-builder runs.
   - from: payload
