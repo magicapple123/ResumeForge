@@ -80,7 +80,21 @@ test.describe.serial("核心链路（第 2 条载入示例，第 3 条依赖它�
     // 打开示例简历的预览详情。
     await page.getByText("示例简历 · 市场运营").first().click();
     const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("button", { name: /下载 PDF/ }).click();
+    // 导出入口已经收敛成预览里唯一的「导出」按钮 + 统一面板（默认就勾着 PDF），
+    // 旧用例找的「下载 PDF」已被移除。两个坑：
+    //   1) 带图标的 antd 按钮，可访问名是「export 导出」（图标自带 aria-label），
+    //      所以只能按正则匹配，`exact: "导出"` 永远等不到；
+    //   2) 列表行里还有「预览 / 导出」按钮，必须先用预览 dialog 的标题把范围收窄。
+    const detailDialog = page.getByRole("dialog", { name: "示例简历 · 市场运营" });
+    await expect(detailDialog).toBeVisible();
+    await detailDialog.getByRole("button", { name: /导出/ }).click();
+
+    // 统一面板自己就是一个名为「导出」的 dialog，直接按名字取最稳（不必靠文本过滤，
+    // 那会连外层预览一起命中）。
+    const optionsDialog = page.getByRole("dialog", { name: "导出" });
+    await expect(optionsDialog).toBeVisible();
+    // 底部确认按钮的可访问名是「导 出」——antd 会给两字中文按钮插一个空格。
+    await optionsDialog.getByRole("button", { name: /^导\s*出$/ }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
 
