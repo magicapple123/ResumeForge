@@ -214,3 +214,50 @@ def test_post_export_rejects_non_object_format_config(client):
         json={"format": "html", "format_config": "line-height: 1.2"},
     )
     assert response.status_code == 422
+
+
+# ===== R3：离线分享包 =====
+
+
+def test_share_zip_contains_html_pdf_and_readme(client):
+    """一个 zip 里三样东西：可直接看的 HTML、可直接转发的 PDF、怎么用的说明。"""
+    import io
+    import zipfile
+
+    resume_id = _manual_resume(client, {"name": "张三", "summary": "关注后端。"})
+
+    response = client.get(f"/api/resumes/{resume_id}/share-zip")
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        names = set(archive.namelist())
+    assert {"简历.html", "说明.txt"} <= names
+    # PDF 是否在包里取决于本机字体；在就从字节头确认它是真 PDF。
+    if "简历.pdf" in names:
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            assert archive.read("简历.pdf").startswith(b"%PDF")
+
+
+def test_share_zip_falls_back_to_html_without_pdf(client, monkeypatch):
+    """本机没有中文字体时，分享包仍要能生成（HTML + 说明里写清原因）。"""
+    import io
+    import zipfile
+
+    from app.services.pdf_exporter import ResumePDFError
+
+    def _boom(*args, **kwargs):
+        raise ResumePDFError("未找到可用的中文字体")
+
+    monkeypatch.setattr("app.services.export_pipeline.build_resume_pdf", _boom)
+    resume_id = _manual_resume(client, {"name": "张三", "summary": "关注后端。"})
+
+    response = client.get(f"/api/resumes/{resume_id}/share-zip")
+
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        names = set(archive.namelist())
+        readme = archive.read("说明.txt").decode("utf-8")
+    assert "简历.pdf" not in names
+    assert "简历.html" in names
+    assert "未能生成 PDF" in readme

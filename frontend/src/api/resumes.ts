@@ -352,6 +352,23 @@ export async function exportResumeWithOptions(
   };
 }
 
+/**
+ * 离线分享包（R3）：一个 zip，内含单文件 HTML + PDF + 说明。
+ *
+ * 与「生成分享包」不同：那个是给**装了这个应用**的人看的（带分享码与评论回传）；
+ * 这个 zip 给的是招聘方或朋友——双击 HTML 就能看，PDF 直接转发。
+ */
+export async function downloadResumeShareZip(
+  id: number,
+): Promise<{ blob: Blob; filename: string }> {
+  const resp = await requestRaw(`/resumes/${id}/share-zip`, { budget: "export" });
+  return {
+    blob: await resp.blob(),
+    filename:
+      getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? "简历-离线包.zip",
+  };
+}
+
 /** 脱敏预览：返回脱敏后的简历内容，不落库、不改动原记录。 */
 export function redactResume(id: number, options: RedactionOptions): Promise<ResumeContent> {
   return request(`/resumes/${id}/redact`, {

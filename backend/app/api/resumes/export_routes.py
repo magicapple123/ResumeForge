@@ -5,7 +5,9 @@ PDF 响应头常量改从 ``_shared`` 导入。
 """
 
 import logging
+import zipfile
 from dataclasses import asdict
+from io import BytesIO
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,6 +28,7 @@ from ...schemas.resume import ResumeContent
 from ...services.export_pipeline import (
     ExportRequest,
     RenderContext,
+    build_export,
     build_export_delivery,
     effective_format_config,
 )
@@ -250,6 +253,65 @@ def export_resume_with_options(
         allow_incomplete=payload.allow_incomplete,
         record_delivery=payload.record_delivery,
     )
+
+
+@router.get("/{resume_id}/share-zip")
+def share_resume_zip(request: HTTPRequest, resume_id: int, db: Session = Depends(get_db)):
+    """离线分享包（R3）：一个 zip，内含单文件 HTML + PDF + 打开说明。
+
+    为什么是 zip 而不是链接：接收方可能是招聘方或朋友，没有这个应用、也不该被要求
+    装一个。HTML 双击就能看（样式与照片全内嵌），PDF 直接转发；说明里写清怎么打开、
+    怎么打印成 A4。**PDF 生成失败不影响整包**（例如本机没有中文字体）：这时只带 HTML
+    并在说明里写明原因——比"打包失败"更有用。
+    """
+    _require_local_export_request(request)
+    record = _get_live_resume(db, resume_id)
+    resume = ResumeContent.model_validate(record.content)
+    export_template, export_html = resolve_style_template(db, record.template)
+    context = RenderContext(
+        template=export_template,
+        template_html=export_html,
+        style_config=resolve_style_config(db, record.template),
+        page_limit=record.page_limit,
+        font_scale=record.font_scale,
+        format_config=record_format_config(db, record),
+    )
+    html = build_export(ExportRequest(format="html"), resume, context)
+    pdf_bytes: bytes | None = None
+    pdf_note = ""
+    try:
+        pdf_bytes = build_export(ExportRequest(format="pdf"), resume, context).content
+    except (ResumePDFError, ValueError) as exc:
+        logger.warning("分享包未能生成 PDF（用 HTML 兜底）：%s", exc)
+        pdf_note = f"（本机未能生成 PDF：{exc}）"
+
+    stem = (resume.name or "简历").strip()[:48] or "简历"
+    readme = "\n".join(
+        [
+            f"{stem} · 简历离线包",
+            "",
+            "1. 双击「简历.html」用浏览器打开即可查看（样式与照片都在这一个文件里）。",
+            "2. 「简历.pdf」可以直接转发或打印；如需 A4 打印，选择「实际大小 / 100%」。",
+            "3. 版面以 PDF 为准；HTML 用于在任意设备上快速查看。",
+            "",
+            "这份包只包含这份简历本身，不含账号、其他数据或个人资料库。",
+            pdf_note,
+        ]
+    ).strip()
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("简历.html", html.content)
+        if pdf_bytes is not None:
+            archive.writestr("简历.pdf", pdf_bytes)
+        archive.writestr("说明.txt", readme.encode("utf-8"))
+
+    filename = f"{stem}-离线包.zip"
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+        "Cache-Control": "no-store",
+    }
+    return Response(buffer.getvalue(), media_type="application/zip", headers=headers)
 
 
 @router.post("/{resume_id}/redact", response_model=ResumeContent)

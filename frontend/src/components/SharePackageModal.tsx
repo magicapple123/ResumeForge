@@ -1,5 +1,5 @@
 /** 离线分享包：选择分享版本 + 权限 + 脱敏范围 → 生成 → 展示本地路径 / 文件清单 / 评论导入。 */
-import { CopyOutlined, FolderOpenOutlined } from "@ant-design/icons";
+import { CopyOutlined, DownloadOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
@@ -22,6 +22,7 @@ import {
   importSharePackageComments,
   revealSharePackage,
 } from "../api/sharePackages";
+import { downloadResumeShareZip } from "../api/resumes";
 import type { SharePackageDetail } from "../types";
 import {
   DEFAULT_REDACTION_OPTIONS,
@@ -58,6 +59,22 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [revealing, setRevealing] = useState(false);
+
+  const [zipLoading, setZipLoading] = useState(false);
+
+  const downloadZip = async () => {
+    if (zipLoading) return;
+    setZipLoading(true);
+    try {
+      const { blob, filename } = await downloadResumeShareZip(recordId);
+      downloadBlob(blob, filename);
+      message.success("离线包已开始下载");
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "生成离线包失败");
+    } finally {
+      setZipLoading(false);
+    }
+  };
 
   const generate = async () => {
     if (generating) return;
@@ -203,9 +220,19 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
           </Typography.Text>
         </div>
 
-        <Button type="primary" loading={generating} onClick={() => void generate()}>
-          生成分享包
-        </Button>
+        <Space wrap>
+          <Button type="primary" loading={generating} onClick={() => void generate()}>
+            生成分享包
+          </Button>
+          {/* R3：给"没有这个应用的人"的一份 zip（HTML + PDF + 说明）。 */}
+          <Button
+            icon={<DownloadOutlined />}
+            loading={zipLoading}
+            onClick={() => void downloadZip()}
+          >
+            下载离线包（zip）
+          </Button>
+        </Space>
 
         {result && (
           <>
