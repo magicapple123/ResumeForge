@@ -22,6 +22,15 @@ from typing import Any
 from ..config import DATA_DIR
 
 DIR_NAME = "fonts"
+# 随包分发的内置字体（OFL）：放在 backend/assets/fonts，git archive 会带进安装包。
+# 只写"文件名 → 中文名"的对照，字体本身与许可证都在同一个目录里。
+ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "fonts"
+BUILTIN_FONTS: tuple[tuple[str, str], ...] = (
+    ("NotoSansSC-Regular.ttf", "思源黑体"),
+    ("NotoSerifSC-Regular.ttf", "思源宋体"),
+    ("LXGWWenKai-Regular.ttf", "霞鹜文楷"),
+    ("ZCOOLXiaoWei-Regular.ttf", "站酷小薇"),
+)
 ACTIVE_FILENAME = "active.json"
 MAX_BYTES = 20 * 1024 * 1024
 ALLOWED_SUFFIXES = {".ttf", ".otf", ".ttc"}
@@ -82,21 +91,54 @@ def list_fonts() -> list[dict[str, Any]]:
     return items
 
 
-def active_font_name() -> str | None:
+def builtin_font_path(name: str) -> Path | None:
+    path = ASSETS_DIR / name
+    return path if path.is_file() else None
+
+
+def list_builtin_fonts() -> list[dict[str, Any]]:
+    """随包分发的内置字体。缺失的（精简安装）直接不列出，而不是给一个点不动的选项。"""
+    items: list[dict[str, Any]] = []
+    for filename, label in BUILTIN_FONTS:
+        path = builtin_font_path(filename)
+        if path is None:
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        items.append({"name": filename, "label": label, "size": size, "builtin": True})
+    return items
+
+
+def active_font_info() -> dict[str, Any] | None:
+    """当前选中的字体：``{"name","builtin"}``；没有选就是 None。"""
     try:
         data = json.loads(_active_file().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    name = data.get("name") if isinstance(data, dict) else None
-    return name if isinstance(name, str) and name else None
+    if not isinstance(data, dict):
+        return None
+    name = data.get("name")
+    if not isinstance(name, str) or not name:
+        return None
+    # 旧文件只有 name（那时的选择必然是自定义字体），builtin 默认 False。
+    return {"name": name, "builtin": bool(data.get("builtin"))}
+
+
+def active_font_name() -> str | None:
+    info = active_font_info()
+    return info["name"] if info else None
 
 
 def active_font_path() -> Path | None:
     """当前字体文件的真实路径；文件不存在时返回 None（不要回落到一个坏路径）。"""
-    name = active_font_name()
-    if not name:
+    info = active_font_info()
+    if info is None:
         return None
-    path = fonts_dir() / name
+    if info["builtin"]:
+        return builtin_font_path(info["name"])
+    path = fonts_dir() / info["name"]
     return path if path.is_file() else None
 
 
@@ -115,17 +157,25 @@ def save_font(filename: str, data: bytes) -> dict[str, Any]:
     return {"name": name, "size": len(data), "active": name == active_font_name()}
 
 
-def set_active(name: str | None) -> None:
-    """设置当前字体；`None` 表示回到系统字体。"""
-    directory = fonts_dir()
+def set_active(name: str | None, *, builtin: bool = False) -> None:
+    """设置当前字体；`None` 表示回到系统字体。
+
+    ``builtin=True`` 时 ``name`` 是随包分发的文件名，否则是用户自己上传的。
+    """
     if name is None:
         _active_file().unlink(missing_ok=True)
         return
-    path = directory / name
-    if not path.is_file():
-        raise FontError("字体文件不存在，请重新上传")
-    directory.mkdir(parents=True, exist_ok=True)
-    _active_file().write_text(json.dumps({"name": name}, ensure_ascii=False), encoding="utf-8")
+    if builtin:
+        if builtin_font_path(name) is None:
+            raise FontError("内置字体不存在，可能安装包被精简过")
+    else:
+        path = fonts_dir() / name
+        if not path.is_file():
+            raise FontError("字体文件不存在，请重新上传")
+    _active_file().parent.mkdir(parents=True, exist_ok=True)
+    _active_file().write_text(
+        json.dumps({"name": name, "builtin": builtin}, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 def delete_font(name: str) -> None:
@@ -133,16 +183,22 @@ def delete_font(name: str) -> None:
     if not path.is_file():
         raise FontError("字体文件不存在")
     path.unlink()
-    if active_font_name() == name:
+    info = active_font_info()
+    if info is not None and not info["builtin"] and info["name"] == name:
         _active_file().unlink(missing_ok=True)
 
 
 __all__ = [
+    "ASSETS_DIR",
+    "BUILTIN_FONTS",
     "DIR_NAME",
     "MAX_BYTES",
     "FontError",
+    "active_font_info",
     "active_font_name",
     "active_font_path",
+    "builtin_font_path",
+    "list_builtin_fonts",
     "delete_font",
     "list_fonts",
     "save_font",

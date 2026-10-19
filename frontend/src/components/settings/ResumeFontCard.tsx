@@ -32,7 +32,7 @@ export default function ResumeFontCard() {
       setData(await listResumeFonts());
     } catch {
       // 读不到（老后端）就当作没有自定义字体，不影响其它设置。
-      setData({ items: [], active: null, max_bytes: 20 * 1024 * 1024 });
+      setData({ items: [], builtin: [], active: null, max_bytes: 20 * 1024 * 1024 });
     }
   }, []);
 
@@ -53,9 +53,9 @@ export default function ResumeFontCard() {
     }
   };
 
-  const activate = async (name: string | null) => {
+  const activate = async (name: string | null, builtin = false) => {
     try {
-      await activateResumeFont(name);
+      await activateResumeFont(name, builtin);
       message.success(name ? `已切换到「${name}」` : "已回到系统字体");
       await load();
     } catch (err) {
@@ -78,6 +78,9 @@ export default function ResumeFontCard() {
   };
 
   const items = data?.items ?? [];
+  const builtin = data?.builtin ?? [];
+  const activeName = data?.active?.name ?? null;
+  const activeBuiltin = Boolean(data?.active?.builtin);
 
   return (
     <Card className="settings-card" title="简历字体">
@@ -98,10 +101,42 @@ export default function ResumeFontCard() {
             上传字体（ttf / otf / ttc，≤20MB）
           </Button>
         </Upload>
-        <Button disabled={!data?.active} onClick={() => void activate(null)}>
+        <Button disabled={!activeName} onClick={() => void activate(null)}>
           回到系统字体
         </Button>
       </Space>
+      {builtin.length > 0 ? (
+        <div style={{ marginBottom: 12 }}>
+          <Typography.Text strong>内置字体</Typography.Text>
+          <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+            随应用分发，开箱可用
+          </Typography.Text>
+          <Listy
+            items={builtin}
+            rowKey={(item) => item.name}
+            itemRender={(item) => {
+              const isActive = activeBuiltin && item.name === activeName;
+              return (
+                <ListyItem>
+                  <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
+                    <Space>
+                      <Typography.Text>{item.label || item.name}</Typography.Text>
+                      {isActive ? <Tag color="blue">当前使用</Tag> : null}
+                    </Space>
+                    <Button
+                      size="small"
+                      disabled={isActive}
+                      onClick={() => void activate(item.name, true)}
+                    >
+                      设为当前
+                    </Button>
+                  </Space>
+                </ListyItem>
+              );
+            }}
+          />
+        </div>
+      ) : null}
       {items.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -117,7 +152,9 @@ export default function ResumeFontCard() {
                 <Space>
                   <Typography.Text>{item.name}</Typography.Text>
                   <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
-                  {item.active ? <Tag color="blue">当前使用</Tag> : null}
+                  {!activeBuiltin && item.name === activeName ? (
+                    <Tag color="blue">当前使用</Tag>
+                  ) : null}
                 </Space>
                 <Space size={4}>
                   <Button

@@ -64,3 +64,50 @@ export function triggerJobCreate(): boolean {
   jobCreateHandler();
   return true;
 }
+
+// ===== R8：其余四个"页面自己认领"的落点 =====
+// 与新建岗位同一模式：页面挂载时登记、卸载时注销；App 只负责转发按键。
+
+/** 页头的数据集下拉：由 AppHeaderContext 登记（它才是下拉的拥有者）。 */
+let datasetMenuHandler: (() => void) | null = null;
+
+export function registerDatasetMenuHandler(handler: (() => void) | null): void {
+  datasetMenuHandler = handler;
+}
+
+export function triggerDatasetMenu(): boolean {
+  if (!datasetMenuHandler) return false;
+  datasetMenuHandler();
+  return true;
+}
+
+/**
+ * 翻页（R8）：直接点当前页面上 antd 分页的上一页/下一页按钮。
+ *
+ * 为什么不逐页登记：岗位广场、简历中心、收藏夹都各自管着页码，让每个页面都注册一遍
+ * 既啰嗦又容易漏；而它们用的都是同一套 antd 分页 DOM。按钮不存在或已禁用时返回
+ * false，调用方据此**不拦截**按键——按了没反应总比吞掉一个什么都没发生的按键好。
+ */
+export function clickPaginationStep(direction: "prev" | "next"): boolean {
+  if (typeof document === "undefined") return false;
+  const item = document.querySelector<HTMLElement>(
+    `.ant-pagination-${direction}:not(.ant-pagination-disabled)`,
+  );
+  const button = item?.querySelector<HTMLButtonElement>("button");
+  if (!button) return false;
+  button.click();
+  return true;
+}
+
+/** 新建手写简历：简历中心登记（列表页自己知道怎么刷新）。 */
+let newResumeHandler: (() => void) | null = null;
+
+export function registerNewResumeHandler(handler: (() => void) | null): void {
+  newResumeHandler = handler;
+}
+
+export function triggerNewResume(): boolean {
+  if (!newResumeHandler) return false;
+  newResumeHandler();
+  return true;
+}

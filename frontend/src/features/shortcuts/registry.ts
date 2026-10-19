@@ -23,7 +23,12 @@ export type ShortcutActionId =
   | "toggleTheme"
   | "openSettings"
   | "openSkills"
-  | "exportPdf";
+  | "exportPdf"
+  | "newResume"
+  | "switchDataset"
+  | "prevPage"
+  | "nextPage"
+  | "focusAssistant";
 
 export interface ShortcutAction {
   id: ShortcutActionId;
@@ -54,6 +59,12 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   { id: "openSettings", label: "打开设置", defaultKeys: ["mod+alt+s"], scope: "global" },
   { id: "openSkills", label: "打开助手技能", defaultKeys: ["mod+alt+k"], scope: "global" },
   { id: "exportPdf", label: "打开导出（简历预览中）", defaultKeys: ["mod+shift+e"], scope: "page" },
+  // R8 第二批：落点分别是简历中心、页头数据集菜单、当前列表分页、求职助手。
+  { id: "newResume", label: "新建简历", defaultKeys: ["mod+shift+n"], scope: "page" },
+  { id: "switchDataset", label: "切换数据集", defaultKeys: ["mod+shift+d"], scope: "global" },
+  { id: "prevPage", label: "上一页", defaultKeys: ["mod+["], scope: "page" },
+  { id: "nextPage", label: "下一页", defaultKeys: ["mod+]"], scope: "page" },
+  { id: "focusAssistant", label: "打开助手并聚焦输入", defaultKeys: ["mod+/"], scope: "global" },
 ];
 
 export const SHORTCUT_ACTION_IDS: readonly ShortcutActionId[] = SHORTCUT_ACTIONS.map(

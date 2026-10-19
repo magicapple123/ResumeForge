@@ -12,8 +12,9 @@ from ..services.pdf_exporter import reset_font_cache
 from ..services.user_fonts import (
     MAX_BYTES,
     FontError,
-    active_font_name,
+    active_font_info,
     delete_font,
+    list_builtin_fonts,
     list_fonts,
     save_font,
     set_active,
@@ -36,7 +37,9 @@ def read_resume_fonts() -> dict:
 
     return {
         "items": list_fonts(),
-        "active": active_font_name(),
+        # 随包分发的内置字体（OFL）：界面上与自定义字体分成两组。
+        "builtin": list_builtin_fonts(),
+        "active": active_font_info(),
         "max_bytes": MAX_BYTES,
     }
 
@@ -59,16 +62,16 @@ async def upload_resume_font(request: Request, file: UploadFile = File(...)) -> 
 @router.put("/fonts/active")
 def activate_resume_font(payload: dict, request: Request) -> dict:
     """设为当前字体；`name: null` 表示回到系统字体。"""
-    from ..services.user_fonts import active_font_name
 
     _require_loopback(request)
     name = payload.get("name")
+    builtin = bool(payload.get("builtin"))
     try:
-        set_active(str(name) if name else None)
+        set_active(str(name) if name else None, builtin=builtin)
     except FontError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     reset_font_cache()
-    return {"active": active_font_name()}
+    return {"active": active_font_info()}
 
 
 @router.delete("/fonts/{name}", status_code=204)

@@ -22,6 +22,7 @@ import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProfile } from "../api/profile";
+import { registerDatasetMenuHandler } from "../features/shortcuts/runtimeTargets";
 import { activateDataset, createDataset, listDatasets } from "../api/settings";
 import type { Profile } from "../types";
 import type { DatasetInfo } from "../types/settings";
@@ -44,8 +45,17 @@ export default function AppHeaderContext() {
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  // 数据集下拉的受控开关：快捷键要能把它打开（见 R8 的 switchDataset）。
+  const [datasetMenuOpen, setDatasetMenuOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // R8：把「打开数据集下拉」登记给快捷键系统。下拉的开关只有本组件知道，
+  // 让 App 直接 import 这里的状态会把页头变成一个全局单例，登记-注销更干净。
+  useEffect(() => {
+    registerDatasetMenuHandler(() => setDatasetMenuOpen(true));
+    return () => registerDatasetMenuHandler(null);
+  }, []);
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
   // 返回 null 表示失败（页头是全局装饰：读不到就少显示一块，绝不报错或白屏）。
@@ -207,6 +217,9 @@ export default function AppHeaderContext() {
           {dataset ? (
             <Dropdown
               trigger={["click"]}
+              // R8：受控开关，供「切换数据集」快捷键打开（Ctrl/⌘+Shift+D）。
+              open={datasetMenuOpen}
+              onOpenChange={setDatasetMenuOpen}
               // 数据集名可以很长（导入的名称不受限），弹层不设上限时会被一个名字撑到
               // 半屏宽。宽度约束与省略号都放在 CSS 里（.app-dataset-dropdown），
               // 完整名字通过条目的 title 属性悬停可见。

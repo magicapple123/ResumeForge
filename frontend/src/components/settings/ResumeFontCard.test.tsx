@@ -63,13 +63,16 @@ describe("ResumeFontCard", () => {
     expect(await screen.findByText("思源黑体.ttf")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /设为当前/ }));
 
-    await waitFor(() => expect(apiMocks.activateResumeFont).toHaveBeenCalledWith("思源黑体.ttf"));
+    await waitFor(() =>
+      expect(apiMocks.activateResumeFont).toHaveBeenCalledWith("思源黑体.ttf", false),
+    );
   });
 
   it("当前字体所在行的「设为当前」不可点，且可以从系统字体切回", async () => {
     apiMocks.listResumeFonts.mockResolvedValue({
       items: [{ ...FONT, active: true }],
-      active: FONT.name,
+      builtin: [],
+      active: { name: FONT.name, builtin: false },
       max_bytes: 20971520,
     });
     renderCard();
@@ -78,6 +81,33 @@ describe("ResumeFontCard", () => {
     expect(screen.getByRole("button", { name: /设为当前/ })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: /回到系统字体/ }));
-    await waitFor(() => expect(apiMocks.activateResumeFont).toHaveBeenCalledWith(null));
+    await waitFor(() => expect(apiMocks.activateResumeFont).toHaveBeenCalledWith(null, false));
+  });
+});
+
+describe("内置字体", () => {
+  it("内置字体单独成组，点「设为当前」会带上 builtin 标记", async () => {
+    apiMocks.listResumeFonts.mockResolvedValue({
+      items: [],
+      builtin: [
+        {
+          name: "NotoSansSC-Regular.ttf",
+          label: "思源黑体",
+          size: 1024,
+          active: false,
+          builtin: true,
+        },
+      ],
+      active: null,
+      max_bytes: 20971520,
+    });
+    renderCard();
+
+    expect(await screen.findByText("内置字体")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /设为当前/ }));
+
+    await waitFor(() =>
+      expect(apiMocks.activateResumeFont).toHaveBeenCalledWith("NotoSansSC-Regular.ttf", true),
+    );
   });
 });
