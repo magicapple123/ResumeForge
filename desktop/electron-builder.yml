@@ -35,7 +35,21 @@ files:
   # PR-04). scripts/check-asar-deps.js now gates the require graph against
   # this manifest in CI.
   - updater.js
+  # R1：main.js 顶层 require("./print")——用 Chromium 打简历 PDF，漏打包会让
+  # "打印 / 另存 PDF"在安装版里直接抛 MODULE_NOT_FOUND。
+  - print.js
   - package.json
+
+extraFiles:
+  # R11: the double-click update entry lives next to the executable (install root),
+  # not inside resources/payload. Both files are generated into payload/ by
+  # scripts/Build-Desktop.ps1 and scripts/build-desktop-mac.sh; the filter makes
+  # the Windows build tolerate the absence of update.command and vice versa.
+  - from: payload
+    to: .
+    filter:
+      - update.cmd
+      - update.command
 
 extraResources:
   # Assembled by scripts/Build-Desktop.ps1 before electron-builder runs.

@@ -117,6 +117,29 @@ mkdir -p "$PAYLOAD_DIR/frontend"
 cp -R "$FRONTEND_DIR/dist" "$PAYLOAD_DIR/frontend/dist"
 mkdir -p "$PAYLOAD_DIR/runtime/logs"
 
+# R11: double-click update entry at the install root (next to ResumeForge.app).
+# macOS has no NSIS installer protocol, so this never pretends to auto-update:
+# when the app is not running it starts it with --check-update (the app shows
+# either "up to date" or the release page); when it is already running the
+# release page opens directly, because `open -a` does not forward --args to a
+# running instance.
+cat > "$PAYLOAD_DIR/update.command" <<'UPDATE_EOF'
+#!/bin/bash
+# ResumeForge updater. Double-click this file in Finder.
+#
+# macOS 版没有 NSIS 安装器，更新是「下载新的 .dmg 覆盖安装」。这个入口只负责把
+# 你带到正确的地方，不会静默改动应用文件。
+RELEASES_PAGE="https://github.com/magicapple123/ResumeForge/releases/latest"
+
+if pgrep -x "ResumeForge" >/dev/null 2>&1; then
+    open "$RELEASES_PAGE"
+else
+    open -a "ResumeForge" --args --check-update
+fi
+UPDATE_EOF
+chmod +x "$PAYLOAD_DIR/update.command"
+
+
 PAYLOAD_FILES="$(find "$PAYLOAD_DIR" -type f | wc -l | tr -d ' ')"
 echo "Payload assembled: $PAYLOAD_FILES files"
 
