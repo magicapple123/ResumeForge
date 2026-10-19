@@ -50,6 +50,9 @@ from .api import (
     webform,
 )
 from .api import (
+    fonts as fonts_api,
+)
+from .api import (
     resume_templates as resume_templates_api,
 )
 from .api import (
@@ -411,6 +414,7 @@ def create_app() -> FastAPI:
         webform.router,
         tracker.router,
         settings_api.router,
+        fonts_api.router,
         datasets.router,
         skills.router,
         search.router,

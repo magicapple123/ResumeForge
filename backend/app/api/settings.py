@@ -4,7 +4,7 @@ import ipaddress
 import logging
 import time
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -133,67 +133,6 @@ def reveal_llm_api_key(
     response.headers["Cache-Control"] = "no-store, private"
     response.headers["Pragma"] = "no-cache"
     return LLMApiKeyRevealResult(api_key=get_dataset_llm_config(db).api_key)
-
-
-@router.get("/fonts")
-def read_resume_fonts() -> dict:
-    """自定义简历字体列表（R10）：只回文件名/体积/是否在用，不回文件内容。"""
-    from ..services.user_fonts import MAX_BYTES, active_font_name, list_fonts
-
-    return {
-        "items": list_fonts(),
-        "active": active_font_name(),
-        "max_bytes": MAX_BYTES,
-    }
-
-
-@router.post("/fonts")
-async def upload_resume_font(request: Request, file: UploadFile = File(...)) -> dict:
-    """上传一个字体文件（ttf/otf/ttc，≤20MB）。不会自动设为当前字体。"""
-    from ..services.pdf_exporter import reset_font_cache
-    from ..services.user_fonts import FontError, save_font
-
-    if not _is_loopback_request(request):
-        raise HTTPException(status_code=403, detail="字体只能在运行后端的本机上传")
-    data = await file.read(20 * 1024 * 1024 + 1)
-    try:
-        item = save_font(file.filename or "font.ttf", data)
-    except FontError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    # 字体文件变了，PDF 导出的探测缓存必须失效，否则新字体会"上传成功但不生效"。
-    reset_font_cache()
-    return item
-
-
-@router.put("/fonts/active")
-def activate_resume_font(payload: dict, request: Request) -> dict:
-    """设为当前字体；`name: null` 表示回到系统字体。"""
-    from ..services.pdf_exporter import reset_font_cache
-    from ..services.user_fonts import FontError, active_font_name, set_active
-
-    if not _is_loopback_request(request):
-        raise HTTPException(status_code=403, detail="字体只能在运行后端的本机切换")
-    name = payload.get("name")
-    try:
-        set_active(str(name) if name else None)
-    except FontError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    reset_font_cache()
-    return {"active": active_font_name()}
-
-
-@router.delete("/fonts/{name}", status_code=204)
-def remove_resume_font(name: str, request: Request) -> None:
-    from ..services.pdf_exporter import reset_font_cache
-    from ..services.user_fonts import FontError, delete_font
-
-    if not _is_loopback_request(request):
-        raise HTTPException(status_code=403, detail="字体只能在运行后端的本机删除")
-    try:
-        delete_font(name)
-    except FontError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    reset_font_cache()
 
 
 @router.get("/global-llm")
