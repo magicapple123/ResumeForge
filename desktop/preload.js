@@ -14,3 +14,13 @@ contextBridge.exposeInMainWorld("splash", {
   isDesktop: true,
   quitApp: () => ipcRenderer.send("app:quit-request"),
 });
+
+/**
+ * 简历打印桥（R1）：把**预览用的 HTML** 交给主进程用 Chromium 打成 PDF。
+ *
+ * 只暴露一个固定通道，不接收任意通道名——contextIsolation 下暴露面越小越好。
+ * 浏览器里 window.resumeForge 不存在，前端据此回落到后端 PDF 引擎。
+ */
+contextBridge.exposeInMainWorld("resumeForge", {
+  printPdf: (payload) => ipcRenderer.invoke("resume:print-pdf", payload),
+});

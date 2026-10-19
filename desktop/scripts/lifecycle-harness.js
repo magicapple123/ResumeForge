@@ -220,6 +220,10 @@ function loadMain() {
       if (spec === "./backend-manager") {
         return { BackendManager: BackendManagerStub };
       }
+      if (spec === "./print") {
+        // R1：打印通道与生命周期无关，只保证主进程能加载。
+        return { registerPrintHandler() {} };
+      }
       if (spec === "./updater") {
         return updaterStub;
       }

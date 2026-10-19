@@ -486,8 +486,8 @@ if (!app.requestSingleInstanceLock()) {
     app.quit();
   });
 }
-
 ipcMain.handle("splash:get-version", () => app.getVersion());
+require("./print").registerPrintHandler(); // R1：Chromium 打印
 
 // 桌面前端的「退出」按钮（preload 暴露的 window.splash.quitApp()）：只发
 // app.quit()，让 before-quit 这个唯一停止点完成"停后端 → 必要时 spawn 安装器"

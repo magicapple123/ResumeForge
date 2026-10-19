@@ -35,6 +35,9 @@ files:
   # PR-04). scripts/check-asar-deps.js now gates the require graph against
   # this manifest in CI.
   - updater.js
+  # R1：main.js 顶层 require("./print")——用 Chromium 打简历 PDF，漏打包会让
+  # "打印 / 另存 PDF"在安装版里直接抛 MODULE_NOT_FOUND。
+  - print.js
   - package.json
 
 extraFiles:

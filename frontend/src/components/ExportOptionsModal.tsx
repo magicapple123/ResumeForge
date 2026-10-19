@@ -180,7 +180,19 @@ export default function ExportOptionsModal({
         }),
       );
       if (result === null) return;
-      printHtml(await result.blob.text());
+      const html = await result.blob.text();
+      // R1：桌面版直接把这份 HTML 交给 Chromium 打印——和预览同一个引擎，
+      // 分页与行距才对得上；浏览器里没有这个桥，继续走 window.print。
+      const desktopPrint = window.resumeForge?.printPdf;
+      if (desktopPrint) {
+        const outcome = await desktopPrint({
+          html,
+          suggestedName: `${recordId}-简历.pdf`,
+        });
+        if (outcome?.saved) message.success(`已保存到 ${outcome.path}`);
+        return;
+      }
+      printHtml(html);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "打开打印窗口失败");
     }
