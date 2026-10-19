@@ -348,3 +348,30 @@ export function saveAutoBackupInterval(intervalDays: number): Promise<AutoBackup
     body: JSON.stringify({ interval_days: intervalDays }),
   });
 }
+
+/** 全局模型配置摘要（R21）：一份配置对所有数据集生效。 */
+export interface GlobalLLMSummary {
+  enabled: boolean;
+  /** 地址与模型都填了才为 true；只有 true 时才会接管实际调用。 */
+  configured: boolean;
+  provider: string;
+  model: string;
+  base_url: string;
+}
+
+export function getGlobalLLM(): Promise<GlobalLLMSummary> {
+  return request("/settings/global-llm");
+}
+
+/** 保存全局配置；`api_key` 为空表示保留原密钥。 */
+export function saveGlobalLLM(payload: {
+  enabled: boolean;
+  api_key?: string;
+  config: { provider?: string; base_url: string; model: string; api_style?: string };
+}): Promise<GlobalLLMSummary> {
+  return request("/settings/global-llm", { method: "PUT", body: JSON.stringify(payload) });
+}
+
+export function clearGlobalLLM(): Promise<void> {
+  return request("/settings/global-llm", { method: "DELETE" });
+}

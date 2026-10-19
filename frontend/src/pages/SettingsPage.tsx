@@ -22,6 +22,7 @@ import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
 import PrivacyCard from "../components/settings/PrivacyCard";
 import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
 import AppearanceCard from "../components/settings/AppearanceCard";
+import GlobalLLMCard from "../components/settings/GlobalLLMCard";
 import ShortcutSettingsCard from "../components/settings/ShortcutSettingsCard";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
 
@@ -168,7 +169,10 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <SettingsGroupTitle text="模型服务" hint="当前使用的配置与已保存的配置记录" />
+                {/* R21：跨数据集的模型配置——放在"当前数据集那一份"之前，先讲大局。 */}
+                <GlobalLLMCard />
+
+                <SettingsGroupTitle text="模型服务" hint="当前数据集的配置与已保存的配置记录" />
                 <LLMConfigCard
                   records={records}
                   recordsLoading={recordsLoading}
