@@ -175,10 +175,29 @@ describe("SettingsPage datasets", () => {
   });
 
   /** 「导出」收进了下拉菜单：先点开菜单，再点对应菜单项。 */
-  async function openExportMenu(itemName: string | RegExp) {
+  /**
+   * 打开导出菜单并确认命名弹窗（R15：导出前先问下载名）。
+   *
+   * 返回用户在弹窗里看到并确认的文件名——断言里用它核对"名字真的传出去了"。
+   */
+  /** 导出下拉的触发按钮：命名弹窗里也有「导出」，只按名字找会命中两个。 */
+  function exportTrigger(): HTMLElement {
+    const candidates = screen
+      .getAllByRole("button", { name: /导\s*出$/ })
+      .filter((element) => element.classList.contains("ant-dropdown-trigger"));
+    if (candidates.length !== 1) throw new Error("没找到唯一的导出下拉按钮");
+    return candidates[0];
+  }
+
+  async function openExportMenu(itemName: string | RegExp): Promise<string> {
     // antd 按钮的 accessible name 含图标名（"download导出"），按结尾匹配。
-    fireEvent.click(screen.getByRole("button", { name: /导\s*出$/ }));
+    fireEvent.click(exportTrigger());
     fireEvent.click(await screen.findByRole("menuitem", { name: itemName }));
+    const dialog = await screen.findByRole("dialog");
+    const input = within(dialog).getByLabelText("导出文件名") as HTMLInputElement;
+    const name = input.value;
+    fireEvent.click(within(dialog).getByRole("button", { name: /导\s*出/ }));
+    return name;
   }
 
   it("downloads the active dataset", async () => {
@@ -189,10 +208,14 @@ describe("SettingsPage datasets", () => {
     });
     await renderPage();
 
-    await openExportMenu(/导出当前数据集/);
+    const filename = await openExportMenu(/导出当前数据集/);
 
     // 默认不包含 API Key：密钥不出包是既有承诺，勾选项只在用户显式勾选时生效。
-    await waitFor(() => expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", false));
+    // 第三个参数是 R15 的下载名（默认 `<数据集名>-<时间戳>`）。
+    await waitFor(() =>
+      expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", false, filename),
+    );
+    expect(filename).toMatch(/^主数据-\d{8}-\d{6}$/);
     expect(click).toHaveBeenCalledOnce();
     click.mockRestore();
   });
@@ -207,13 +230,17 @@ describe("SettingsPage datasets", () => {
 
     const checkbox = screen.getByRole("checkbox", { name: /备份中包含大模型 API Key/ });
     fireEvent.click(checkbox);
-    await openExportMenu(/导出当前数据集/);
-    await waitFor(() => expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", true));
+    const filename = await openExportMenu(/导出当前数据集/);
+    await waitFor(() =>
+      expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", true, filename),
+    );
 
     // 取消勾选后恢复默认：选择权始终跟着勾选状态走，而不是一次勾选永久生效。
     fireEvent.click(checkbox);
     await openExportMenu(/导出当前数据集/);
-    await waitFor(() => expect(apiMocks.exportDataset).toHaveBeenLastCalledWith("main", false));
+    await waitFor(() =>
+      expect(apiMocks.exportDataset).toHaveBeenLastCalledWith("main", false, expect.any(String)),
+    );
     click.mockRestore();
   });
 
@@ -239,7 +266,7 @@ describe("SettingsPage datasets", () => {
     await renderPage();
 
     expect(await screen.findByText("主数据")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /导\s*出$/ }));
+    fireEvent.click(exportTrigger());
     expect(await screen.findByRole("menuitem", { name: /导出当前数据集/ })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /导出全部数据集/ })).not.toBeInTheDocument();
   });

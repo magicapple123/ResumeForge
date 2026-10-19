@@ -255,8 +255,8 @@ export default function SettingsPage() {
                   creating={datasetCreating}
                   createOpen={createDatasetOpen}
                   createName={createDatasetName}
-                  onExport={(dataset) => void runDatasetExport(dataset)}
-                  onExportAll={() => void runExportAllDatasets()}
+                  onExport={(dataset, filename) => void runDatasetExport(dataset, filename)}
+                  onExportAll={(filename) => void runExportAllDatasets(filename)}
                   onImport={(file, name) => void importDatasetFile(file, name)}
                   onActivate={(dataset) => void switchDataset(dataset)}
                   onOpenRename={(dataset) => {
