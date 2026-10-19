@@ -148,6 +148,12 @@ function loadMain() {
 
   const updaterStub = {
     scheduleUpdateCheck() {},
+    // R11: the install-root --check-update entry. The harness only needs the
+    // surface main.js calls; the real behaviour lives in test-manual-update-entry.js.
+    wantsManualUpdateCheck() {
+      return false;
+    },
+    runManualUpdateCheck() {},
     // Deterministic stand-in for the real installerWaitCommand(): the pure
     // function itself is unit-tested against the real module in
     // test-updater.js; here we only need main.js's spawn wiring to be
@@ -213,6 +219,10 @@ function loadMain() {
       }
       if (spec === "./backend-manager") {
         return { BackendManager: BackendManagerStub };
+      }
+      if (spec === "./print") {
+        // R1：打印通道与生命周期无关，只保证主进程能加载。
+        return { registerPrintHandler() {} };
       }
       if (spec === "./updater") {
         return updaterStub;

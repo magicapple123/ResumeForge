@@ -23,7 +23,7 @@
 //     dialog after the checksum used to strand the install when the user was
 //     away or the window sat in the tray.
 
-const { app, dialog } = require("electron");
+const { app, dialog, shell } = require("electron");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
@@ -257,7 +257,12 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
   const latest = normalizedReleaseVersion(release.tag_name);
   const current = normalizedReleaseVersion(app.getVersion());
   if (!latest || !current) throw new Error("release version is not an exact stable semver");
-  if (versionCompare(latest, current) <= 0) return;
+  if (versionCompare(latest, current) <= 0) {
+    // 手动检查（安装目录里的双击更新入口）需要一句"已是最新"；后台定时检查则保持安静，
+    // 否则每 6 小时都会弹一次"没有新版本"。
+    if (deps.onUpToDate) await deps.onUpToDate(current, latest);
+    return;
+  }
 
   const assetName = `ResumeForge-Setup-${latest}.exe`;
   const checksumName = `${assetName}.sha256`;
@@ -342,6 +347,64 @@ async function checkAndOfferUpdate(parentWindow, deps = {}) {
   }
 }
 
+const RELEASES_PAGE = "https://github.com/magicapple123/ResumeForge/releases/latest";
+
+// 安装目录里的双击更新入口（Windows update.cmd / macOS update.command）带这个参数启动。
+const CHECK_UPDATE_FLAG = "--check-update";
+
+/** 这次启动（或第二个实例的 argv）是不是"双击更新入口"发起的。 */
+function wantsManualUpdateCheck(argv = process.argv) {
+  return Array.isArray(argv) && argv.includes(CHECK_UPDATE_FLAG);
+}
+
+/**
+ * 手动检查更新（安装目录里的双击入口带 --check-update 启动时调用）。
+ *
+ * 与后台定时检查的区别只有两点：立刻查、以及**必须给一个可见的结果**。双击之后什么都
+ * 不发生，用户无法区分"没有新版本"和"坏了"。
+ *
+ * macOS 没有 NSIS 安装器协议（自动安装链路是 Windows 专用），这里如实引导到发布页，
+ * 不假装能静默升级。
+ */
+function runManualUpdateCheck(parentWindow, logLine, deps = {}) {
+  if (process.platform !== "win32") {
+    dialog
+      .showMessageBox({
+        type: "info",
+        message: "当前平台的更新需要手动下载",
+        detail: "macOS 版请在发布页下载最新的 .dmg 安装包；打开后把应用拖进「应用程序」即可。",
+        buttons: ["打开发布页", "关闭"],
+        defaultId: 0,
+        cancelId: 1,
+      })
+      .then((result) => {
+        if (result.response === 0) shell.openExternal(RELEASES_PAGE);
+      })
+      .catch(() => {});
+    return;
+  }
+  checkAndOfferUpdate(parentWindow, {
+    ...deps,
+    onUpToDate: () =>
+      dialog.showMessageBox(parentWindow, {
+        type: "info",
+        message: "已是最新版本",
+        detail: `当前版本 ${app.getVersion()}，没有可用的更新。`,
+        buttons: ["好"],
+      }),
+  }).catch((err) => {
+    if (logLine) logLine(`manual update check failed: ${err}`);
+    try {
+      dialog.showErrorBox(
+        "检查更新失败",
+        `请检查网络后重试。
+
+${err && err.message ? err.message : err}`,
+      );
+    } catch {}
+  });
+}
+
 function scheduleUpdateCheck(parentWindow, logLine, deps = {}) {
   if (!app.isPackaged) return;
   if (process.platform !== "win32") return;
@@ -369,6 +432,9 @@ function scheduleUpdateCheck(parentWindow, logLine, deps = {}) {
 }
 
 module.exports = {
+  CHECK_UPDATE_FLAG,
+  wantsManualUpdateCheck,
+  runManualUpdateCheck,
   scheduleUpdateCheck,
   checkAndOfferUpdate,
   versionCompare,

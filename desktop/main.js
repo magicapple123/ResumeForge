@@ -17,7 +17,7 @@ const { app, BrowserWindow, Tray, Menu, dialog, ipcMain } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
-const { installerWaitCommand, scheduleUpdateCheck } = require("./updater");
+const { installerWaitCommand, runManualUpdateCheck, scheduleUpdateCheck, wantsManualUpdateCheck } = require("./updater");
 
 // Lifecycle diagnostics use the controlled runtime log; module imports must not write user profiles.
 
@@ -38,6 +38,7 @@ let restartAttempts = 0;
 let restartTimer = null;
 
 const MAX_RESTART_ATTEMPTS = 3;
+
 // 1.5s, 4.5s, 13.5s -- enough to survive a transient port/file hiccup without
 // hammering a genuinely broken backend.
 const RESTART_BACKOFF_MS = 1500;
@@ -375,12 +376,14 @@ if (!app.requestSingleInstanceLock()) {
   } catch {}
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_event, argv) => {
     if (mainWindow) {
       mainWindow.show();
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
+    // 应用已经在运行时双击更新入口：不启动第二个实例，直接走一次手动检查。
+    if (wantsManualUpdateCheck(argv)) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: requestInstallAndQuit });
   });
 
   app.whenReady().then(async () => {
@@ -390,6 +393,7 @@ if (!app.requestSingleInstanceLock()) {
       createTray();
       await startBackendAndSwap();
       scheduleUpdateCheck(mainWindow, logLine, { installAndQuit: requestInstallAndQuit });
+      if (wantsManualUpdateCheck()) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: requestInstallAndQuit });
     } catch (err) {
       logLine(`startup failed: ${err}`);
       dialog.showErrorBox(
@@ -482,8 +486,8 @@ if (!app.requestSingleInstanceLock()) {
     app.quit();
   });
 }
-
 ipcMain.handle("splash:get-version", () => app.getVersion());
+require("./print").registerPrintHandler(); // R1：Chromium 打印
 
 // 桌面前端的「退出」按钮（preload 暴露的 window.splash.quitApp()）：只发
 // app.quit()，让 before-quit 这个唯一停止点完成"停后端 → 必要时 spawn 安装器"
