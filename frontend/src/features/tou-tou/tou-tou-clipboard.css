@@ -19,9 +19,9 @@
   width: min(360px, calc(100vw - 24px));
   max-height: min(600px, calc(100vh - 140px));
   overflow: hidden;
-  border: 1px solid #cfe0f3;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 14px;
-  background: #fff;
+  background: var(--rf-surface);
   box-shadow: 0 20px 55px rgb(25 61 99 / 24%);
 }
 
@@ -35,7 +35,7 @@
   flex: 0 0 auto;
   align-items: center;
   padding: 12px 44px 10px 14px;
-  border-bottom: 1px solid #e5eef8;
+  border-bottom: 1px solid var(--rf-border-subtle);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -47,12 +47,12 @@
 }
 
 .tt-clipboard-card-grip:focus-visible {
-  outline: 2px solid #91caff;
+  outline: 2px solid var(--rf-focus-ring);
   outline-offset: 2px;
 }
 
 .tt-clipboard-card-title {
-  color: #244364;
+  color: var(--rf-brand);
   font-size: 14px;
   font-weight: 600;
 }
@@ -67,20 +67,20 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  color: #5b7187;
-  background: #eef5fb;
+  color: var(--rf-text-secondary);
+  background: var(--rf-brand-wash);
   cursor: pointer;
   font-size: 18px;
   line-height: 26px;
 }
 
 .tt-clipboard-card-close:hover {
-  color: #16365c;
-  background: #dcecfb;
+  color: var(--rf-brand);
+  background: var(--rf-brand-tint);
 }
 
 .tt-clipboard-card-close:focus-visible {
-  outline: 2px solid #91caff;
+  outline: 2px solid var(--rf-focus-ring);
   outline-offset: 2px;
 }
 
@@ -116,7 +116,7 @@
    （showCount 计数已移除，见 TouTouClipboardCard）。 */
 .tt-clipboard-card-limit-hint {
   margin-top: 4px;
-  color: #ff4d4f;
+  color: var(--rf-danger);
   font-size: 12px;
   line-height: 1.5;
   text-align: right;

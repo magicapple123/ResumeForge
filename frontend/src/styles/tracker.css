@@ -25,31 +25,31 @@
 .tracker-summary > .tracker-summary-skeleton {
   min-height: 82px;
   padding: 14px 16px;
-  background: var(--rf-surface, #fff);
-  border: 1px solid var(--rf-border, #f0f0f0);
-  border-top: 3px solid #5b8ff9;
+  background: var(--rf-surface, var(--rf-surface));
+  border: 1px solid var(--rf-border, var(--rf-border));
+  border-top: 3px solid var(--rf-focus-ring);
   border-radius: 12px;
   box-shadow: 0 8px 22px rgba(31, 56, 85, 0.06);
 }
 
 .tracker-summary > .ant-statistic:nth-child(2),
 .tracker-summary > .tracker-summary-skeleton:nth-child(2) {
-  border-top-color: #61ddaa;
+  border-top-color: var(--rf-accent-green);
 }
 
 .tracker-summary > .ant-statistic:nth-child(3),
 .tracker-summary > .tracker-summary-skeleton:nth-child(3) {
-  border-top-color: #f6bd16;
+  border-top-color: var(--rf-accent-amber);
 }
 
 .tracker-summary > .ant-statistic:nth-child(4),
 .tracker-summary > .tracker-summary-skeleton:nth-child(4) {
-  border-top-color: #7262fd;
+  border-top-color: var(--rf-accent-violet);
 }
 
 .tracker-summary > .ant-statistic:nth-child(5),
 .tracker-summary > .tracker-summary-skeleton:nth-child(5) {
-  border-top-color: #f08bb4;
+  border-top-color: var(--rf-accent-pink);
 }
 
 /* 漏斗：每级一条，宽度按"占最大一级的比例"。用按钮而不是 div，
@@ -59,8 +59,13 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
   padding: 16px;
-  background: linear-gradient(135deg, #f8fbff 0%, #fff 52%, #fbf8ff 100%);
-  border: 1px solid var(--rf-border, #e8edf3);
+  background: linear-gradient(
+    135deg,
+    var(--rf-surface-alt) 0%,
+    var(--rf-surface-alt) 52%,
+    #fbf8ff 100%
+  );
+  border: 1px solid var(--rf-border, var(--rf-border-strong));
   border-radius: 16px;
   box-shadow: 0 10px 28px rgba(31, 56, 85, 0.06);
 }
@@ -75,8 +80,8 @@
   align-items: center;
   width: 100%;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(31, 56, 85, 0.08);
+  background: var(--rf-surface-glass);
+  border: 1px solid var(--rf-surface-glass-border);
   border-radius: 12px;
   cursor: pointer;
   text-align: left;
@@ -92,7 +97,7 @@
 }
 
 .tracker-funnel-step.is-selected {
-  border-color: var(--rf-stage-color, #5b8ff9);
+  border-color: var(--rf-stage-color, var(--rf-focus-ring));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--rf-stage-color, #5b8ff9) 18%, transparent);
 }
 
@@ -105,19 +110,19 @@
 }
 
 .tracker-funnel-step[data-stage-index="2"] {
-  --rf-stage-color: #61ddaa;
+  --rf-stage-color: var(--rf-accent-green);
 }
 
 .tracker-funnel-step[data-stage-index="3"] {
-  --rf-stage-color: #f6bd16;
+  --rf-stage-color: var(--rf-accent-amber);
 }
 
 .tracker-funnel-step[data-stage-index="4"] {
-  --rf-stage-color: #7262fd;
+  --rf-stage-color: var(--rf-accent-violet);
 }
 
 .tracker-funnel-step[data-stage-index="5"] {
-  --rf-stage-color: #f08bb4;
+  --rf-stage-color: var(--rf-accent-pink);
 }
 
 .tracker-funnel-index {
@@ -130,13 +135,13 @@
   color: #fff;
   font-size: 11px;
   font-weight: 700;
-  background: var(--rf-stage-color, #5b8ff9);
+  background: var(--rf-stage-color, var(--rf-info));
   border-radius: 50%;
 }
 
 .tracker-funnel-label {
   grid-area: label;
-  color: rgba(0, 0, 0, 0.65);
+  color: var(--rf-text-body);
   font-size: 13px;
   font-weight: 600;
 }
@@ -144,7 +149,7 @@
 .tracker-funnel-count {
   grid-area: count;
   font-variant-numeric: tabular-nums;
-  color: #1f3855;
+  color: var(--rf-text-body);
   font-size: 20px;
   font-weight: 600;
   text-align: right;
@@ -154,7 +159,7 @@
   grid-area: meter;
   height: 8px;
   overflow: hidden;
-  background: #edf1f5;
+  background: var(--rf-surface-alt);
   border-radius: 999px;
 }
 
@@ -193,8 +198,8 @@
   /* padding-left 比 16px 大 4px：给贴左缘的阶段竖条让出宽度后，
      条与文字之间仍保持 16px 间距（此前竖条悬在 8px 处，右缘距文字只有 4px）。 */
   padding: 14px 16px 14px 20px;
-  background: var(--rf-surface, #fff);
-  border: 1px solid var(--rf-border, #f0f0f0);
+  background: var(--rf-surface, var(--rf-surface));
+  border: 1px solid var(--rf-border, var(--rf-border));
   border-radius: 8px;
 }
 
@@ -209,19 +214,19 @@
 }
 
 .track-card[data-stage-index="2"] {
-  --rf-stage-color: #61ddaa;
+  --rf-stage-color: var(--rf-accent-green);
 }
 
 .track-card[data-stage-index="3"] {
-  --rf-stage-color: #f6bd16;
+  --rf-stage-color: var(--rf-accent-amber);
 }
 
 .track-card[data-stage-index="4"] {
-  --rf-stage-color: #7262fd;
+  --rf-stage-color: var(--rf-accent-violet);
 }
 
 .track-card[data-stage-index="5"] {
-  --rf-stage-color: #f08bb4;
+  --rf-stage-color: var(--rf-accent-pink);
 }
 
 /* 进行中的记录左侧加一条贴左缘满高的阶段色竖条：一屏十几条时，
@@ -235,16 +240,19 @@
   bottom: 0;
   width: 4px;
   border-radius: 0 4px 4px 0;
-  background: var(--rf-stage-color, #1677ff);
+  background: var(--rf-stage-color, var(--rf-info));
 }
 
 /* 激活卡整体加一层阶段色调：浅底 + 边框向阶段色靠拢，
    让"还在进行中的"比单靠一条竖条更早被视觉捕捉到。 */
 .track-card.is-active {
-  background: color-mix(in srgb, var(--rf-stage-color, #5b8ff9) 6%, transparent);
-  border-color: color-mix(in srgb, var(--rf-stage-color, #5b8ff9) 30%, var(--rf-border, #f0f0f0));
+  background: color-mix(in srgb, var(--rf-stage-color, var(--rf-info)) 6%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--rf-stage-color, var(--rf-focus-ring)) 30%,
+    var(--rf-border, var(--rf-border))
+  );
 }
-
 .track-card-head {
   display: flex;
   flex-wrap: wrap;
@@ -260,12 +268,12 @@
   flex-wrap: wrap;
   gap: 4px 14px;
   margin-top: 6px;
-  color: #64748b;
+  color: var(--rf-text-secondary);
   font-size: 12px;
 }
 
 .track-card-meta .ant-typography {
-  color: #64748b;
+  color: var(--rf-text-secondary);
   font-size: 12px;
 }
 
@@ -274,19 +282,19 @@
   display: flex;
   gap: 10px;
   margin-top: 10px;
-  color: rgba(0, 0, 0, 0.75);
+  color: var(--rf-text-body);
   font-size: 13px;
 }
 
 .track-card-next.is-overdue {
-  color: #cf1322;
+  color: var(--rf-text-body);
   font-weight: 600;
 }
 
 .track-card-next-label {
   flex: 0 0 auto;
   min-width: 40px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--rf-text-secondary);
   font-size: 12px;
   line-height: 21px;
 }
@@ -294,7 +302,7 @@
 /* 补充信息（心得/依据）：最轻一层——次级色 + 小字号，不与上面三层抢注意力。 */
 .track-card-note {
   margin: 10px 0 0;
-  color: rgba(0, 0, 0, 0.55);
+  color: var(--rf-text-secondary);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -303,7 +311,7 @@
 .track-card-evidence {
   display: block;
   margin-top: 6px;
-  color: #64748b;
+  color: var(--rf-text-secondary);
   font-size: 12px;
 }
 
@@ -327,7 +335,7 @@
   gap: 10px;
   align-items: flex-start;
   padding: 10px;
-  border: 1px solid var(--rf-border, #f0f0f0);
+  border: 1px solid var(--rf-border, var(--rf-border));
   border-radius: 8px;
 }
 
@@ -374,15 +382,15 @@
 
 /* 月份标题加重：它是这一行的"锚点"，翻月时视线先落在它上面。 */
 .calendar-view-head .ant-typography {
-  color: #16365c;
+  color: var(--rf-brand);
   font-size: 14px;
   font-weight: 700;
 }
 
 .calendar-view-head .ant-btn:not(:disabled):hover {
-  color: #16365c;
-  border-color: #b8d4f5;
-  background: #eaf1f8;
+  color: var(--rf-brand);
+  border-color: var(--rf-focus-ring);
+  background: var(--rf-brand-tint);
 }
 
 .calendar-view-grid {
@@ -410,9 +418,9 @@
   overflow: hidden;
   min-height: 64px;
   padding: 4px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--rf-border);
   border-radius: 6px;
-  background: #fff;
+  background: var(--rf-surface);
   cursor: pointer;
   text-align: left;
   transition:
@@ -422,13 +430,13 @@
 }
 
 .calendar-view-cell:hover {
-  border-color: #b8d4f5;
-  background: #f8fbff;
+  border-color: var(--rf-focus-ring);
+  background: var(--rf-surface-alt);
 }
 
 .calendar-view-cell.is-today {
-  border-color: #5b8ff9;
-  background: #f0f7ff;
+  border-color: var(--rf-focus-ring);
+  background: var(--rf-brand-wash);
   box-shadow: 0 1px 4px rgba(91, 143, 249, 0.18);
 }
 
@@ -447,13 +455,13 @@
   margin-bottom: 2px;
   color: #fff;
   font-weight: 700;
-  background: #5b8ff9;
+  background: var(--rf-info);
   border-radius: 50%;
 }
 
 .calendar-view-day {
   font-size: 12px;
-  color: #595959;
+  color: var(--rf-text-secondary);
   margin-bottom: 2px;
 }
 
@@ -466,7 +474,7 @@
 
 .calendar-view-item {
   padding-left: 4px;
-  border-left: 3px solid #1677ff;
+  border-left: 3px solid var(--rf-info);
   font-size: 11px;
   line-height: 1.3;
   white-space: nowrap;

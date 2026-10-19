@@ -26,6 +26,32 @@
   /* 边框与状态色 */
   --rf-border: #2c333f;
   --rf-border-subtle: #262c36;
+  --rf-border-strong: #3a4450;
+
+  /* 信息色在深底上要提亮，否则 #1677ff 与背景的对比度不足。 */
+  --rf-info: #6aa9ff;
+  --rf-info-strong: #9dc3ef;
+
+  /* 品牌实底保持深色（承载白字）；提醒底改为深琥珀，避免整块亮黄。 */
+  --rf-brand-fill: #24406b;
+  --rf-warning-bg: #33280f;
+  --rf-warning-border: #6b5220;
+
+  /* 深色下遮罩要更重一点，否则弹层背后的内容仍显得"浮在上面"。 */
+  --rf-scrim: rgb(0 0 0 / 45%);
+  --rf-scrim-strong: rgb(0 0 0 / 62%);
+  /* 分类色在深底上略提亮，保持同等可辨识度。 */
+  --rf-accent-red: #ff9b98;
+  --rf-accent-violet: #a99bff;
+  --rf-accent-green: #6fd94a;
+  --rf-accent-amber: #f4c65a;
+  --rf-accent-blue: #9dc0e0;
+  --rf-accent-pink: #ffb3cf;
+  --rf-surface-glass: rgb(27 31 39 / 92%);
+  --rf-surface-glass-border: rgb(255 255 255 / 10%);
+  /* 这两个在深色下也要显式给出：danger 提亮一点，白字保持白字。 */
+  --rf-danger: #ff7875;
+  --rf-on-brand: rgb(255 255 255 / 92%);
   --rf-success-text: #74d7a4;
   --rf-warning-text: #f2c66d;
   --rf-error-text: #ff9a91;

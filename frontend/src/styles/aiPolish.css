@@ -32,7 +32,7 @@
 }
 
 .rf-ai-polish-menu-item:hover:enabled {
-  background: #f5f5f5;
+  background: var(--rf-surface-alt);
 }
 
 .rf-ai-polish-menu-item:disabled {

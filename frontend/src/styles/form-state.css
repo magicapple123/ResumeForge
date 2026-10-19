@@ -19,8 +19,8 @@
 .profile-page:not(.is-editing) .ant-input-disabled,
 .settings-page:not(.is-editing) .ant-input-disabled,
 .settings-page:not(.is-editing) .ant-input-number-disabled .ant-input-number-input {
-  color: #262626 !important;
-  -webkit-text-fill-color: #262626;
+  color: var(--rf-text-body) !important;
+  -webkit-text-fill-color: var(--rf-text-body);
   opacity: 1;
 }
 
@@ -34,5 +34,5 @@
 /* antd 6 起选中值不再渲染 .ant-select-selection-item，值文本落在
    .ant-select-content 内（jsdom 实测），选择器同步更新。 */
 .settings-page:not(.is-editing) .ant-select-disabled .ant-select-content {
-  color: #262626 !important;
+  color: var(--rf-text-body) !important;
 }

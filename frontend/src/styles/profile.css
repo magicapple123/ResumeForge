@@ -39,9 +39,9 @@
   width: 132px;
   height: 176px;
   overflow: hidden;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 6px;
-  background: #f5f5f5;
+  background: var(--rf-surface-alt);
 }
 
 .profile-photo-frame .ant-image,
@@ -84,7 +84,7 @@
 }
 
 .profile-section-collapse-toggle:hover {
-  background: #f3f6fa;
+  background: var(--rf-surface-alt);
 }
 
 .profile-section-collapse-icon {
@@ -92,7 +92,7 @@
   align-items: center;
   justify-content: center;
   width: 16px;
-  color: #1677ff;
+  color: var(--rf-info);
   font-size: 12px;
 }
 
@@ -153,8 +153,8 @@
      间距是均匀的，几何采集算出的 gap 就是 8，前缀和模型照常成立。 */
   margin: 0 0 8px;
   overflow: hidden;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 8px;
 }
 
@@ -198,7 +198,7 @@
   z-index: 10;
   will-change: transform;
   border-radius: 8px;
-  background: #fff;
+  background: var(--rf-surface);
   box-shadow:
     0 0 0 1px #91caff,
     0 1px 2px rgb(31 55 88 / 6%),
@@ -230,8 +230,8 @@
 }
 
 .profile-section-drag-handle:hover {
-  background: #eef5ff;
-  color: #1677ff;
+  background: var(--rf-brand-wash);
+  color: var(--rf-info);
 }
 
 .profile-section-drag-handle:active {
@@ -287,12 +287,12 @@
 }
 
 .profile-section-nudge:hover {
-  background: #eef5ff;
-  color: #1677ff;
+  background: var(--rf-brand-wash);
+  color: var(--rf-info);
 }
 
 .profile-section-nudge:disabled {
-  color: #bfbfbf;
+  color: var(--rf-text-tertiary);
   cursor: not-allowed;
   background: transparent;
 }
@@ -307,10 +307,11 @@
   position: relative;
   min-width: 0;
   padding: 16px 76px 4px 16px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--rf-border);
   border-radius: 8px;
-  background: #fafafa;
-  /* 只过渡 box-shadow（抬起/落下的阴影有 150ms 缓冲）；transform 严禁加过渡。 */
+  background: var(
+    --rf-surface-alt
+  ); /* 只过渡 box-shadow（抬起/落下的阴影有 150ms 缓冲）；transform 严禁加过渡。 */
   transition: box-shadow 150ms ease;
 }
 
@@ -324,11 +325,11 @@
 .profile-list-item.is-dragging {
   z-index: 10;
   will-change: transform;
-  border-color: #91caff;
+  border-color: var(--rf-focus-ring);
   box-shadow:
     0 1px 2px rgb(31 55 88 / 6%),
     0 12px 28px rgb(31 55 88 / 14%);
-  background: #fff;
+  background: var(--rf-surface);
 }
 
 /*
@@ -382,8 +383,8 @@
 }
 
 .profile-list-item-drag-handle:hover {
-  background: #eef5ff;
-  color: #1677ff;
+  background: var(--rf-brand-wash);
+  color: var(--rf-info);
 }
 
 .profile-list-item-drag-handle:active {
@@ -399,9 +400,9 @@
   margin: 12px 0 0;
   padding: 14px;
   overflow: auto;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
-  background: #fafafa;
+  background: var(--rf-surface-alt);
   white-space: pre-wrap;
   word-break: break-word;
   font-family: inherit;

@@ -3,9 +3,9 @@
 .resume-field-rewrite {
   margin-bottom: 16px;
   padding: 12px 14px;
-  border-left: 3px solid #2f7be5;
+  border-left: 3px solid var(--rf-info);
   border-radius: 0 10px 10px 0;
-  background: #f6f9fe;
+  background: var(--rf-surface-alt);
 }
 
 /* 「当前内容」预览。
@@ -52,9 +52,9 @@
 
 .resume-field-rewrite-result {
   padding: 10px 12px;
-  border: 1px dashed #b9d2f2;
+  border: 1px dashed var(--rf-focus-ring);
   border-radius: 8px;
-  background: #fff;
+  background: var(--rf-surface);
 }
 /* 页与页之间的“裁切间隙”：把连续纸面在分页处切开，观感等同两张并排的独立 A4 纸。
    间隙里露出预览视口的底色（#f5f7fa），两侧的柔和阴影扮演每张纸的纸边。
@@ -84,7 +84,7 @@
 .resume-preview-page-separator-line {
   display: block;
   height: 100%;
-  background: #f5f7fa;
+  background: var(--rf-surface-alt);
   box-shadow:
     -5px 0 9px -3px rgb(15 40 80 / 0.16),
     5px 0 9px -3px rgb(15 40 80 / 0.16);
@@ -96,9 +96,9 @@
   top: 12px;
   transform: translateX(-50%);
   padding: 2px 8px;
-  background: #fff7e6;
-  color: #ad6800;
-  border: 1px solid #ffd591;
+  background: var(--rf-warning-bg);
+  color: var(--rf-warning-text);
+  border: 1px solid var(--rf-warning-border);
   border-radius: 4px;
   font-size: 12px;
   line-height: 18px;
@@ -111,9 +111,9 @@
   /* 横向放大只在预览内滚动；纵向空间由外层弹窗/页面承接，避免双滚动条。 */
   overflow-x: auto;
   overflow-y: hidden;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
-  background: #f5f7fa;
+  background: var(--rf-surface-alt);
   cursor: grab;
   touch-action: none;
   overscroll-behavior: contain;
@@ -217,17 +217,17 @@
 
 .job-reference-panel {
   padding-left: 18px;
-  border-left: 1px solid #e5e7eb;
+  border-left: 1px solid var(--rf-border-subtle);
 }
 
 .job-reference-header {
   padding-bottom: 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--rf-border-subtle);
 }
 
 .job-reference-eyebrow {
   display: block;
-  color: #1677ff;
+  color: var(--rf-info);
   font-size: 12px;
   font-weight: 600;
 }
@@ -248,12 +248,12 @@
 
 .job-reference-meta .ant-descriptions-item-label {
   width: 44px;
-  color: #6b7280;
+  color: var(--rf-text-secondary);
 }
 
 .job-reference-section {
   padding: 14px 0;
-  border-bottom: 1px solid #eef0f3;
+  border-bottom: 1px solid var(--rf-border-subtle);
 }
 
 .job-reference-section:last-child {
@@ -268,7 +268,7 @@
 }
 
 .job-reference-section-icon {
-  color: #1677ff;
+  color: var(--rf-info);
   line-height: 1;
 }
 
@@ -363,8 +363,8 @@
   width: 100%;
   margin-top: 16px;
   padding: 12px 0 4px;
-  background: var(--rf-surface, #fff);
-  border-top: 1px solid var(--rf-border, #f0f0f0);
+  background: var(--rf-surface, var(--rf-surface));
+  border-top: 1px solid var(--rf-border, var(--rf-border));
 }
 
 /* 「下载 PDF」主按钮组：独占整行、保持醒目，不再和上方按钮挤在同一排抢宽度。 */
@@ -393,8 +393,8 @@
 .resume-diagnosis {
   padding: 10px 12px;
   margin-bottom: 12px;
-  background: var(--rf-surface, #fff);
-  border: 1px solid var(--rf-border, #f0f0f0);
+  background: var(--rf-surface, var(--rf-surface));
+  border: 1px solid var(--rf-border, var(--rf-border));
   border-radius: 8px;
 }
 
@@ -463,14 +463,14 @@
 }
 
 .resume-section-order-row:hover {
-  background: #f4f7fb;
+  background: var(--rf-surface-alt);
 }
 
 .resume-section-order-index {
   flex: 0 0 18px;
   text-align: center;
   font-size: 12px;
-  color: #8a94a3;
+  color: var(--rf-text-tertiary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -529,10 +529,10 @@
   gap: 8px;
   z-index: 2;
   padding: 2px 6px 2px 10px;
-  border: 1px solid #b9d2f2;
+  border: 1px solid var(--rf-focus-ring);
   border-radius: 999px;
-  background: #f6f9fe;
-  color: #33414f;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-body);
   font-size: 12px;
 }
 

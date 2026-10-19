@@ -15,9 +15,9 @@
   width: min(760px, calc(100vw - 24px));
   height: min(680px, calc(100vh - 132px));
   overflow: hidden;
-  border: 1px solid #cfe0f3;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 14px;
-  background: #fff;
+  background: var(--rf-surface);
   box-shadow: 0 20px 55px rgb(25 61 99 / 24%);
   /*
    * 入场 160ms：从贴球的一侧（右下）轻轻上浮淡入，替代原来的瞬间弹出
@@ -69,7 +69,7 @@
 }
 
 .tt-assistant-card-grip:focus-visible {
-  outline: 2px solid #91caff;
+  outline: 2px solid var(--rf-focus-ring);
   outline-offset: -2px;
 }
 
@@ -237,9 +237,9 @@
   z-index: 3;
   width: 250px;
   overflow-y: auto;
-  border: 1px solid #d8e5f2;
+  border: 1px solid var(--rf-border-strong);
   border-radius: 12px;
-  background: #fff;
+  background: var(--rf-surface);
   box-shadow: 0 16px 36px rgb(31 65 100 / 22%);
 }
 
@@ -268,7 +268,7 @@
   z-index: 2;
   padding: 0;
   border: 0;
-  background: rgb(15 35 60 / 16%);
+  background: var(--rf-scrim);
   backdrop-filter: blur(1.5px);
   cursor: default;
 }
@@ -283,20 +283,20 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  color: #5b7187;
-  background: #eef5fb;
+  color: var(--rf-text-secondary);
+  background: var(--rf-brand-wash);
   cursor: pointer;
   font-size: 20px;
   line-height: 28px;
 }
 
 .tt-assistant-card-close:hover {
-  color: #16365c;
-  background: #dcecfb;
+  color: var(--rf-brand);
+  background: var(--rf-brand-tint);
 }
 
 .tt-assistant-card-close:focus-visible {
-  outline: 2px solid #91caff;
+  outline: 2px solid var(--rf-focus-ring);
   outline-offset: 2px;
 }
 
