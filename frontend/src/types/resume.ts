@@ -192,6 +192,10 @@ export interface ResumeLayout {
   format_config?: ResumeFormatConfig;
 }
 
+/** 简历列表排序（R14）：与后端 `RESUME_SORT_ORDERS` 的键逐字一致。 */
+export type ResumeSort =
+  "updated_desc" | "created_desc" | "title_asc" | "company_asc" | "job_title_asc";
+
 export interface ResumeBrief {
   id: number;
   title: string;

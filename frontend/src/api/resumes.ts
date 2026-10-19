@@ -19,6 +19,7 @@ import type {
   ResumePendingChange,
   ResumeReviewResult,
   ResumeSuggestions,
+  ResumeSort,
   ResumeTemplateCatalog,
   StreamEvent,
 } from "../types";
@@ -34,6 +35,8 @@ export function listResumes(
     favorite?: boolean;
     /** false 只取通用简历（未关联任何岗位） */
     has_job?: boolean;
+    /** 列表排序（R14）；省略时后端用「最近修改」。 */
+    sort?: ResumeSort;
   } = {},
 ): Promise<Page<ResumeBrief>> {
   return request(`/resumes${buildQuery(params)}`);

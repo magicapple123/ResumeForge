@@ -7,11 +7,12 @@
 import hashlib
 import json
 import logging
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from sqlalchemy import String, cast, or_
+from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Session
 
 from ...database import get_db
@@ -133,6 +134,23 @@ def _filtered_query(
     return query
 
 
+# 列表排序的取值 → ORDER BY。默认「最近修改」：用户更常找"我刚改过的那份"，
+# 而不是"最久以前生成的那份"。``coalesce`` 兜住 0047 之前的旧行（updated_at 为空时
+# 用创建时间），迁移失败或历史库残留也不会把它们排到最后。
+RESUME_SORT_ORDERS = {
+    "updated_desc": (
+        func.coalesce(ResumeRecord.updated_at, ResumeRecord.created_at).desc(),
+        ResumeRecord.id.desc(),
+    ),
+    "created_desc": (ResumeRecord.created_at.desc(), ResumeRecord.id.desc()),
+    # 按标题排序时先按公司/岗位归类更有意义，这里保持纯字典序，中文按 SQLite 的
+    # UTF-8 码点排（与"最近使用"无关，只是另一种浏览方式）。
+    "title_asc": (ResumeRecord.title.asc(), ResumeRecord.id.asc()),
+    "company_asc": (ResumeRecord.company.asc(), ResumeRecord.title.asc()),
+    "job_title_asc": (ResumeRecord.job_title.asc(), ResumeRecord.title.asc()),
+}
+
+
 @router.get("", response_model=Page[ResumeBrief])
 def list_resumes(
     db: Session = Depends(get_db),
@@ -142,12 +160,15 @@ def list_resumes(
     job_id: int | None = Query(default=None, ge=1),
     favorite: bool | None = Query(default=None),
     has_job: bool | None = Query(default=None),
+    sort: Literal[
+        "updated_desc", "created_desc", "title_asc", "company_asc", "job_title_asc"
+    ] = Query(default="updated_desc", description="排序：最近修改 / 最近生成 / 标题 / 公司 / 岗位"),
 ):
     """列出简历。``has_job=false`` 只返回通用简历（未关联任何岗位）。"""
     query = _filtered_query(db, keyword=keyword, job_id=job_id, favorite=favorite, has_job=has_job)
     total = query.count()
     records = (
-        query.order_by(ResumeRecord.created_at.desc())
+        query.order_by(*RESUME_SORT_ORDERS[sort])
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
