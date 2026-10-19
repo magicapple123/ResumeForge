@@ -21,6 +21,7 @@ import UpdateCard from "../components/settings/UpdateCard";
 import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
 import PrivacyCard from "../components/settings/PrivacyCard";
 import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
+import AppearanceCard from "../components/settings/AppearanceCard";
 import ShortcutSettingsCard from "../components/settings/ShortcutSettingsCard";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
 
@@ -307,6 +308,7 @@ export default function SettingsPage() {
                   text="界面与提醒"
                   hint="导航入口、快捷键、悬浮球与近期提醒的行为"
                 />
+                <AppearanceCard />
                 <NavigationSettingsCard />
                 <ShortcutSettingsCard />
                 <AssistantOrbCard />

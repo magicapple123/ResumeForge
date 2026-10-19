@@ -38,6 +38,7 @@ import ResumeFieldQuickEditModal from "./ResumeFieldQuickEditModal";
 import ResumeZoomModal from "./ResumeZoomModal";
 import ResumeEditorModal from "../ResumeEditorModal";
 import ResumeLayoutControls from "../ResumeLayoutControls";
+import { useShortcut } from "../../features/shortcuts/useShortcutKeymap";
 import ResumeQualityModal from "../ResumeQualityModal";
 import ResumeSuggestionsModal from "../ResumeSuggestionsModal";
 import ResumeReviseModal from "./ResumeReviseModal";
@@ -131,6 +132,11 @@ export default function ResumeDetailPreview({
   const [reviseInstructions, setReviseInstructions] = useState("");
   const [qualityOpen, setQualityOpen] = useState(false);
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
+  // R8：预览打开时按 Ctrl/⌘+Shift+E 直接拉起导出面板——导出是这一步最常做的事。
+  useShortcut("exportPdf", (event) => {
+    event.preventDefault();
+    setExportOptionsOpen(true);
+  });
   const [zoomOpen, setZoomOpen] = useState(false);
   // 「只编辑选中的这一部分」：预览里点中哪一栏就只改哪一栏（与「手动调整」分开）。
   const [quickEditPath, setQuickEditPath] = useState<string | null>(null);

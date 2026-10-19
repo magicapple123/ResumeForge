@@ -74,7 +74,18 @@ describe("默认值与坏数据", () => {
       },
     });
     expect(Object.keys(settings.bindings).sort()).toEqual(
-      ["assistant", "newJob", "redo", "save", "search", "undo"].sort(),
+      [
+        "assistant",
+        "exportPdf",
+        "newJob",
+        "openSettings",
+        "openSkills",
+        "redo",
+        "save",
+        "search",
+        "toggleTheme",
+        "undo",
+      ].sort(),
     );
     expect(settings.bindings.undo).toEqual(["mod+p"]);
     // 全被过滤光的动作回落到默认。

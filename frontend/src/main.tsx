@@ -1,14 +1,11 @@
-import { App as AntdApp, ConfigProvider } from "antd";
 import NotifyHostBridge from "./components/NotifyHostBridge";
-import zhCN from "antd/locale/zh_CN";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import DatasetScopeBoundary from "./components/DatasetScopeBoundary";
 import AppErrorBoundary from "./components/AppErrorBoundary";
-import { appTheme } from "./theme/appTheme";
-import { layer } from "./theme/tokens";
+import ThemeProvider from "./components/ThemeProvider";
 import "./index.css";
 
 /**
@@ -34,37 +31,22 @@ async function start() {
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <ConfigProvider
-        locale={zhCN}
-        theme={{
-          ...appTheme,
-          token: { ...appTheme.token, zIndexPopupBase: layer.popupBase },
-        }}
-        // 弹窗内容在**卡片自己身上**滚动，而不是让整页滚动。
-        // antd 默认把 Modal 当作文档流里的普通元素（它只是 position: fixed 的遮罩），
-        // 卡片一高，撑大的就是 <body>——于是滚动条跑到整个窗口的右边，用户得先滑页面
-        // 才能看到卡片下半部分，卡片自己的右上角也没有滚动条。挂到 body 上之后，
-        // 卡片脱离文档流，页面高度不受影响，滚动条落在卡片右侧。
-        getPopupContainer={() => document.body}
-      >
-        {/* AntdApp 提供上下文版 message/modal，兼容主题 */}
-        <AntdApp>
-          {/* 把 AntD 的通知/弹窗实例交给 utils/taskNotify：生成完成后"弹窗 + 提示声"这件事
-              需要一个能在任何模块里调用的出口，而 useApp() 只能在组件里用。 */}
-          <NotifyHostBridge />
-          <AppErrorBoundary>
-            <BrowserRouter>
-              {import.meta.env.VITE_DEMO_MODE === "1" ? (
+      <ThemeProvider>
+        {/* 把 AntD 的通知/弹窗实例交给 utils/taskNotify：生成完成后"弹窗 + 提示声"这件事
+            需要一个能在任何模块里调用的出口，而 useApp() 只能在组件里用。 */}
+        <NotifyHostBridge />
+        <AppErrorBoundary>
+          <BrowserRouter>
+            {import.meta.env.VITE_DEMO_MODE === "1" ? (
+              <App />
+            ) : (
+              <DatasetScopeBoundary>
                 <App />
-              ) : (
-                <DatasetScopeBoundary>
-                  <App />
-                </DatasetScopeBoundary>
-              )}
-            </BrowserRouter>
-          </AppErrorBoundary>
-        </AntdApp>
-      </ConfigProvider>
+              </DatasetScopeBoundary>
+            )}
+          </BrowserRouter>
+        </AppErrorBoundary>
+      </ThemeProvider>
     </React.StrictMode>,
   );
 }

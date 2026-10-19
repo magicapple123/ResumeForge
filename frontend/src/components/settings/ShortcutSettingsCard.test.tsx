@@ -42,9 +42,20 @@ afterEach(() => {
 });
 
 describe("ShortcutSettingsCard", () => {
-  it("列出六个动作、作用域与默认组合", () => {
+  it("列出全部动作、作用域与默认组合", () => {
     renderCard();
-    for (const label of ["撤回", "恢复", "保存当前编辑", "搜索", "打开/关闭求职助手", "新建岗位"]) {
+    for (const label of [
+      "撤回",
+      "恢复",
+      "保存当前编辑",
+      "搜索",
+      "打开/关闭求职助手",
+      "新建岗位",
+      "切换深色/浅色",
+      "打开设置",
+      "打开助手技能",
+      "打开导出（简历预览中）",
+    ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(screen.getAllByText("Ctrl+Z").length).toBeGreaterThan(0);

@@ -32,6 +32,7 @@ import {
 import TaskCompletionNotifier from "./components/TaskCompletionNotifier";
 import { APP_NAME, APP_VERSION, GITHUB_REPO } from "./config";
 import GlobalFileDrop from "./components/GlobalFileDrop";
+import GlobalShortcuts from "./components/GlobalShortcuts";
 import AiPolishLayer from "./features/ai-polish/AiPolishLayer";
 import ShortcutProvider from "./features/shortcuts/ShortcutProvider";
 import { useShortcut } from "./features/shortcuts/useShortcutKeymap";
@@ -274,6 +275,8 @@ function MainLayout() {
         <GlobalFileDrop />
         {/* 快捷键：唯一的 keydown 监听挂载点；动作由各页面用 useShortcut 自己认领。 */}
         <ShortcutProvider />
+        {/* 全局快捷键的落点（R8）：主题 / 设置 / 技能。 */}
+        <GlobalShortcuts />
         <TouTouOrb
           isWebform={location.pathname === "/webform"}
           onOpen={() => {
