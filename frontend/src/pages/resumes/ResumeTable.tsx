@@ -6,7 +6,7 @@
 import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
 import { Button, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import type { HTMLAttributes } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
@@ -168,6 +168,21 @@ export default function ResumeTable({
   setDiffResult,
   navigate,
 }: Props) {
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+
+  // 列宽加起来会超过容器（标题固定 220 + 最近修改列），antd 因此把表格放进一个
+  // 横向滚动的 `.ant-table-content` 里——但它不给这个容器 tabindex。于是键盘用户
+  // 既滚不到被裁掉的列，也拿不到焦点（WCAG 2.1.1，axe 的 scrollable-region-focusable）。
+  // 这里不去改 antd 内部结构，只把那个已经存在的滚动容器补成可聚焦区域；
+  // 不传依赖数组是有意的：翻页/换数据都会重建节点，每次渲染后确认一次即可。
+  useEffect(() => {
+    const node = tableWrapRef.current?.querySelector<HTMLElement>(".ant-table-content");
+    if (!node || node.hasAttribute("tabindex")) return;
+    node.tabIndex = 0;
+    node.setAttribute("role", "region");
+    node.setAttribute("aria-label", "简历列表（可横向滚动）");
+  });
+
   /**
    * 主操作平铺在行上；其余操作（重命名/备注/对比/收藏/删除）只走整行右键菜单
    * （三点「更多」下拉已移除），菜单里不重复「预览 / 导出」。
@@ -363,48 +378,50 @@ export default function ResumeTable({
   ];
 
   return (
-    <Table
-      rowKey="id"
-      columns={columns}
-      dataSource={data?.items ?? []}
-      loading={loading}
-      rowSelection={
-        batch.selecting
-          ? {
-              selectedRowKeys: [...batch.selectedIds],
-              onChange: (keys) => batch.setSelected(keys as number[]),
-            }
-          : undefined
-      }
-      components={{
-        body: {
-          // 整行右键即可重命名、收藏或删除，不必先找到右侧的按钮。
-          // record 用 Map 以 rowKey 查找（列表里逐条 find 是 O(n²)），行组件 memo 化。
-          row: (props: HTMLAttributes<HTMLTableRowElement>) => {
-            const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
-            return (
-              <ContextMenuRow
-                {...props}
-                record={itemsByRowKey.get(rowKey)}
-                selecting={batch.selecting}
-                enterSelecting={batch.enterSelecting}
-                deps={actionDeps}
-              />
-            );
+    <div ref={tableWrapRef}>
+      <Table
+        rowKey="id"
+        columns={columns}
+        dataSource={data?.items ?? []}
+        loading={loading}
+        rowSelection={
+          batch.selecting
+            ? {
+                selectedRowKeys: [...batch.selectedIds],
+                onChange: (keys) => batch.setSelected(keys as number[]),
+              }
+            : undefined
+        }
+        components={{
+          body: {
+            // 整行右键即可重命名、收藏或删除，不必先找到右侧的按钮。
+            // record 用 Map 以 rowKey 查找（列表里逐条 find 是 O(n²)），行组件 memo 化。
+            row: (props: HTMLAttributes<HTMLTableRowElement>) => {
+              const rowKey = String((props as { "data-row-key"?: string })["data-row-key"] ?? "");
+              return (
+                <ContextMenuRow
+                  {...props}
+                  record={itemsByRowKey.get(rowKey)}
+                  selecting={batch.selecting}
+                  enterSelecting={batch.enterSelecting}
+                  deps={actionDeps}
+                />
+              );
+            },
           },
-        },
-      }}
-      pagination={{
-        current: page,
-        pageSize,
-        total: data?.total ?? 0,
-        showSizeChanger: true,
-        showTotal: (total) => `共 ${total} 条记录`,
-        onChange: (nextPage, nextPageSize) => {
-          setPage(nextPage);
-          setPageSize(nextPageSize);
-        },
-      }}
-    />
+        }}
+        pagination={{
+          current: page,
+          pageSize,
+          total: data?.total ?? 0,
+          showSizeChanger: true,
+          showTotal: (total) => `共 ${total} 条记录`,
+          onChange: (nextPage, nextPageSize) => {
+            setPage(nextPage);
+            setPageSize(nextPageSize);
+          },
+        }}
+      />
+    </div>
   );
 }

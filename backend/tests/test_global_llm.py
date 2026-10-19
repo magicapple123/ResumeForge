@@ -6,11 +6,14 @@ B 数据集里悄悄用上 A 数据集的模型/额度——最难发现的一�
 四条性质：
 1. 显式开启 + base_url/model 齐全 → 全局接管；
 2. 没开、只填一半、文件坏 → 一律回落到本数据集配置（升级后行为不变）；
-3. API Key 落盘是密文，接口只回"配置过没有"，不清空时保留原密钥；
+3. API Key 落盘：Windows 是 DPAPI 密文，其它平台按设计保持明文（见 api_key_crypto）；
+   接口只回"配置过没有"，不清空时保留原密钥；
 4. 文件在数据目录根上，与数据集无关（换数据集仍读得到）。
 """
 
 from __future__ import annotations
+
+import sys
 
 import pytest
 from app.schemas.setting import LLMConfig
@@ -92,9 +95,14 @@ def test_api_roundtrip_masks_key_and_keeps_it_when_blank(client):
     assert summary["configured"] is True
     assert "api_key" not in summary, "摘要接口绝不能回传密钥"
 
-    # 文件里是密文：明文密钥不出现在磁盘上。
+    # 落盘形态随平台：Windows 只有 DPAPI 密文，其它平台（无 DPAPI）按设计就是明文。
+    # 这条断言原本写死"文件里搜不到明文"，于是只在本机（Windows）绿、Ubuntu 上红——
+    # 加密是 **Windows 的** 能力，不是跨平台承诺，别把它当成产品的安全边界来测。
     raw = global_settings._path().read_text(encoding="utf-8")
-    assert "sk-global" not in raw
+    if sys.platform == "win32":
+        assert "sk-global" not in raw
+    else:
+        assert "sk-global" in raw, "非 Windows 平台按设计保持明文，改了就同步 CHANGELOG"
 
     # 不传 api_key 时保留原密钥；显式 __clear__ 才清空。
     client.put(

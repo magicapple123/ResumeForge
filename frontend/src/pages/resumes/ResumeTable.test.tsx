@@ -101,3 +101,21 @@ describe("ResumeTable 最近修改列（R14-b）", () => {
     expect(within(row as HTMLElement).getByText("—")).toBeInTheDocument();
   });
 });
+
+describe("ResumeTable 横向滚动区（a11y）", () => {
+  /** 标题列固定 220px + 最近修改列会让表格宽于容器，antd 用 `.ant-table-content`
+   *  承载横向滚动——但它自己不加 tabindex。键盘用户因此滚不到被裁掉的列，
+   *  axe 的 `scrollable-region-focusable`（WCAG 2.1.1）会判 serious。
+   *  这条只在真实浏览器的冒烟里会红（jsdom 不算布局），所以在这里把"补 tabindex
+   *  和 role/aria-label"这件事钉住，避免以后有人把那个 effect 当成多余代码删掉。 */
+  it("把 antd 的滚动容器补成可聚焦区域", async () => {
+    render(<Harness item={RESUME} />);
+    await screen.findByRole("button", { name: RESUME.title });
+
+    const scroller = document.querySelector(".ant-table-content");
+    expect(scroller).not.toBeNull();
+    expect(scroller).toHaveAttribute("tabindex", "0");
+    expect(scroller).toHaveAttribute("role", "region");
+    expect(scroller).toHaveAttribute("aria-label", "简历列表（可横向滚动）");
+  });
+});
