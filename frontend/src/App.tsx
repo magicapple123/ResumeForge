@@ -32,10 +32,11 @@ import {
 import TaskCompletionNotifier from "./components/TaskCompletionNotifier";
 import { APP_NAME, APP_VERSION, GITHUB_REPO } from "./config";
 import GlobalOverlays from "./components/GlobalOverlays";
+import GlobalSearch from "./components/GlobalSearch";
 import AiPolishLayer from "./features/ai-polish/AiPolishLayer";
 import ShortcutProvider from "./features/shortcuts/ShortcutProvider";
 import { useShortcut } from "./features/shortcuts/useShortcutKeymap";
-import { focusHomeSearch, triggerJobCreate } from "./features/shortcuts/runtimeTargets";
+import { triggerJobCreate } from "./features/shortcuts/runtimeTargets";
 import TouTouAssistantCard from "./features/tou-tou/TouTouAssistantCard";
 import TouTouClipboardCard from "./features/tou-tou/TouTouClipboardCard";
 import TouTouOrb from "./features/tou-tou/TouTouOrb";
@@ -125,10 +126,6 @@ function MainLayout() {
   // R5 快捷键的三个全局落点，全部接在既有实现上（不新造入口）：
   // 搜索 = 跳首页 + 聚焦首页那个全站搜索框；助手 = 复用悬浮助手卡的开关；
   // 新建岗位 = 岗位页自己登记的"打开新建弹窗"（不在岗位页就什么都不做）。
-  useShortcut("search", () => {
-    navigate("/");
-    focusHomeSearch();
-  });
   useShortcut("assistant", () => setFloatingAssistantOpen((open) => !open));
   useShortcut("newJob", () => {
     if (location.pathname === "/jobs") triggerJobCreate();
@@ -378,6 +375,8 @@ function MainLayout() {
                 </span>
               </Typography.Text>
               <div className="app-header-actions">
+                {/* 全站搜索（R6）：任何页面都能用 ⌘/Ctrl+K 唤起。 */}
+                <GlobalSearch />
                 {/* 左侧是"我当前在哪个数据集、用的哪张照片"，右侧是全局动作（源码 / 退出）。
                   两者之间用一根细分隔线隔开，避免四个元素挤成一条。 */}
                 <MySpaceMenu hiddenKeys={hiddenKeys} />

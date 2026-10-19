@@ -843,3 +843,25 @@ body {
   color: rgb(255 255 255 / 85%);
   font-size: 12px;
 }
+
+/* 全站搜索（R6）：结果行整行可点，左右两端信息对齐。 */
+.global-search-hit {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.global-search-hit:hover,
+.global-search-hit:focus-visible {
+  background: var(--rf-brand-tint);
+}
