@@ -14,6 +14,7 @@ import type { DatasetInfo } from "../../types";
 import { formatErrorGuidance } from "../../api/errorGuidance";
 import { downloadBlob } from "../../utils/download";
 import { reloadPage } from "../../utils/navigation";
+import { describeImportIssues } from "./datasetImportFeedback";
 
 /** 设置页「数据」页里数据集的加载、导出、导入、切换、重命名、删除与新建。 */
 export function useSettingsDatasets() {
@@ -22,8 +23,9 @@ export function useSettingsDatasets() {
   const [datasetsLoading, setDatasetsLoading] = useState(true);
   const [datasetExporting, setDatasetExporting] = useState(false);
   const [datasetImporting, setDatasetImporting] = useState(false);
-  // 导出是否随包带走大模型 API Key。默认关（密钥不出包），由用户在导出前显式勾选。
-  const [includeApiKeys, setIncludeApiKeys] = useState(false);
+  // 导出是否随包带走大模型 API Key。默认勾选（D-A）：迁移整包时省去重填密钥；
+  // 用户可以取消勾选把密钥剥离。
+  const [includeApiKeys, setIncludeApiKeys] = useState(true);
   const [switchingDatasetId, setSwitchingDatasetId] = useState<string | null>(null);
   const [renamingDatasetId, setRenamingDatasetId] = useState<string | null>(null);
   const [deletingDatasetId, setDeletingDatasetId] = useState<string | null>(null);
@@ -149,6 +151,10 @@ export function useSettingsDatasets() {
       } else {
         message.success(`${parts.join("，")}；当前数据未受影响`);
       }
+      // R16：整包逐份恢复，坏一份不影响其它份。成功提示之后必须点名没恢复的那几份，
+      // 否则用户会把"恢复了一部分"当成"整包都回来了"。
+      const trouble = describeImportIssues(created.failed, created.skipped);
+      if (trouble) message.warning(trouble);
     } catch (err) {
       const text = err instanceof Error ? err.message : "导入备份失败";
       // 附件完整性问题默认让整次导入失败（写盘前就拒绝）。这里给用户一条显式出路：

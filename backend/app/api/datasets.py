@@ -172,7 +172,8 @@ async def import_archive(request: Request) -> dict:
     finally:
         staging.unlink(missing_ok=True)
 
-    logger.info("已导入数据集 id=%s size=%s", created["id"], received)
+    # 格式 4 的嵌套整包返回的是 {restored, failed, summary}，没有单一 id。
+    logger.info("已导入数据集 id=%s size=%s", created.get("id", ""), received)
     # 注意：**导入路径刻意不立刻回填副本**。回填要对新数据集文件开第二个引擎，
     # Windows 上会让紧接着的删除/移动失败；而且导入本身不切换激活库——用户真正
     # 开始用这份数据必然先经过「切换」，切换路径上的回填（见 activate）已经覆盖
@@ -222,7 +223,7 @@ def remove(request: Request, dataset_id: str) -> None:
 @router.get("/export-all")
 def export_all(
     request: Request,
-    include_api_keys: bool = False,
+    include_api_keys: bool = True,
     filename: str | None = Query(
         default=None,
         max_length=128,
@@ -234,9 +235,10 @@ def export_all(
     与 ``/{dataset_id}/export`` 的区别是"包里有没有其余数据集"。两个都给，是因为它们
     对应两种真实意图：**迁移走**（要全部）与**单独拷一份出去**（只要那一份）。
 
-    ``include_api_keys`` 是用户显式勾选的选项（默认关）：勾选后密钥按本机存储形态随包走，
-    格式号升到 3，老版本会明确拒收。路由声明在 ``/{dataset_id}/export`` 之前只是习惯；
-    两者段数不同（``/export-all`` 是一段、``/{id}/export`` 是两段），本来就不会互相截胡。
+    ``include_api_keys`` 默认**包含**密钥（决策 D-A / D5）：迁移整包时最省事，用户可在
+    导出前取消勾选（显式传 ``false``）把密钥剥离。带上密钥时格式号升到 3，老版本会明确拒收。
+    路由声明在 ``/{dataset_id}/export`` 之前只是习惯；两者段数不同（``/export-all`` 是一段、
+    ``/{id}/export`` 是两段），本来就不会互相截胡。
     """
     _require_loopback(request)
     staging = export_directory(database.engine)
@@ -261,7 +263,7 @@ def export_all(
 def export(
     request: Request,
     dataset_id: str,
-    include_api_keys: bool = False,
+    include_api_keys: bool = True,
     filename: str | None = Query(
         default=None,
         max_length=128,

@@ -180,12 +180,12 @@ export default function ClaimsPage() {
         <Statistic
           title="已确认（可进正式简历）"
           value={data?.confirmed_count ?? 0}
-          styles={{ content: { color: "#389e0d" } }}
+          styles={{ content: { color: "var(--rf-success-text)" } }}
         />
         <Statistic
           title="待确认"
           value={data?.pending_count ?? 0}
-          styles={{ content: { color: "#d48806" } }}
+          styles={{ content: { color: "var(--rf-warning-text)" } }}
         />
         <Statistic
           title="生成时可用的事实"
@@ -196,7 +196,7 @@ export default function ClaimsPage() {
           <Statistic
             title="会被避开的未确认说法"
             value={baseline.data?.blocked_wording.length ?? 0}
-            styles={{ content: { color: "#d4380d" } }}
+            styles={{ content: { color: "var(--rf-error-text)" } }}
           />
         )}
       </div>

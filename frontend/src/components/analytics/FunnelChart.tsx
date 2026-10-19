@@ -10,15 +10,15 @@
  * services/analytics.py）。
  */
 import type { FunnelStage } from "../../types";
+import { useChartPalette } from "../../theme/chartPalette";
 import HorizontalBarChart from "./HorizontalBarChart";
-
-const STAGE_COLORS = ["#8c8c8c", "#5b8ff9", "#61ddaa", "#f6bd16", "#7262fd", "#f08bb4"];
 
 interface Props {
   stages: FunnelStage[];
 }
 
 export default function FunnelChart({ stages }: Props) {
+  const palette = useChartPalette();
   const firstKey = stages[0]?.status;
   return (
     <HorizontalBarChart
@@ -32,9 +32,10 @@ export default function FunnelChart({ stages }: Props) {
       showPercent
       colorFor={(key) => {
         const index = stages.findIndex((stage) => stage.status === key);
+        // 第一阶段是"全部岗位"，用中性灰而不是彩色：它不是一个需要被辨认的阶段。
         return key === firstKey
-          ? STAGE_COLORS[0]
-          : STAGE_COLORS[Math.max(1, index) % STAGE_COLORS.length];
+          ? palette.neutral
+          : palette.series[Math.max(1, index) % palette.series.length];
       }}
     />
   );

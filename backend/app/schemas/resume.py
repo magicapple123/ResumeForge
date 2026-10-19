@@ -176,6 +176,10 @@ class ResumeBrief(BaseModel):
     page_limit: int = 1
     font_scale: ResumeFontScale = "standard"
     created_at: datetime
+    # 最近修改时间（R14-b）：列表新增「最近修改」列，与默认排序 ``updated_desc`` 同源。
+    # 由 ``ResumeRecord.updated_at``（ORM ``onupdate``）经 ``from_attributes`` 直接读取；
+    # 迁移 0047 已用 ``created_at`` 回填旧行，这里给默认值只是兼容只读投影缺该属性的场景。
+    updated_at: datetime | None = None
 
 
 class ResumeOut(ResumeBrief):

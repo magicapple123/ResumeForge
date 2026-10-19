@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createManualResume } from "../api/resumes";
 import { importDataset } from "../api/settings";
+import { describeImportIssues } from "../features/settings/datasetImportFeedback";
 
 const ACCEPTED = [".zip", ".csv", ".json"] as const;
 
@@ -50,6 +51,9 @@ export default function GlobalFileDrop() {
         onOk: async () => {
           const created = await importDataset(file, stemOf(file.name), false);
           message.success(`已导入数据集「${created.name}」`);
+          // 整包可能只恢复了一部分：没进来的那几份要点名，不能只报成功。
+          const trouble = describeImportIssues(created.failed, created.skipped);
+          if (trouble) message.warning(trouble);
           // 数据集列表在页头菜单里是挂载时取的：换一份数据集必须重载才能看到。
           window.setTimeout(() => window.location.reload(), 600);
         },

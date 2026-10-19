@@ -41,6 +41,7 @@ from .api import (
     resume_writing,
     resumes,
     search,
+    settings_llm_profiles,
     share_packages,
     skills,
     stats,
@@ -362,6 +363,10 @@ def create_app() -> FastAPI:
         expose_headers=[
             resumes.PDF_PAGES_HEADER,
             resumes.PDF_PAGE_LIMIT_HEADER,
+            # R1：这次 PDF 是哪个引擎排的、以及"缩到下限仍装不下"的如实标记。
+            # 不放行的话，跨源部署下前端读到的是 null，等于没设。
+            resumes.PDF_ENGINE_HEADER,
+            resumes.RESUME_OVERFLOW_HEADER,
             "Content-Disposition",
             "X-Content-Sha256",
             "X-Render-Config-Sha256",
@@ -414,6 +419,7 @@ def create_app() -> FastAPI:
         webform.router,
         tracker.router,
         settings_api.router,
+        settings_llm_profiles.router,
         fonts_api.router,
         datasets.router,
         skills.router,

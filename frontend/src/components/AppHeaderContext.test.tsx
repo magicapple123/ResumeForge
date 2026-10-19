@@ -7,6 +7,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import AppHeaderContext from "./AppHeaderContext";
 import { reloadPage } from "../utils/navigation";
 import baseStyles from "../styles/base.css?inline";
+import designTokens from "../theme/design-tokens.css?raw";
 
 const listDatasets = vi.fn();
 const activateDataset = vi.fn();
@@ -80,26 +81,63 @@ describe("AppHeaderContext", () => {
     const badges = await screen.findAllByText("示例");
     expect(badges).toHaveLength(2);
 
+    /**
+     * 色值从 **CSS 文本**里取，而不是 `getComputedStyle`。
+     *
+     * 原因：注入的是 `base.css?inline` 的原文，jsdom 不求值 custom property——`color` 会
+     * 原样返回 `var(--rf-text-body)`，而 `background` 直接退化成 `rgba(0, 0, 0, 0)`
+     * （声明被判为无效值）。R18 把 534 处色值全量 token 化之后，这条断言就是这么失效的：
+     * 它开始测"透明底上的 var() 字符串"，对比度算出来是 NaN。
+     * 现在改成"解析 token → 算真实对比度"，比原来更贴近要守的东西（徽标可读）。
+     */
+    function resolveToken(raw: string): string {
+      const matched = /^var\((--rf-[a-z-]+)\)$/.exec(raw.trim());
+      if (!matched) return raw.trim();
+      const declared = new RegExp(`${matched[1]}\\s*:\\s*([^;]+);`).exec(designTokens);
+      return declared ? declared[1].trim() : raw.trim();
+    }
+
+    function declared(selector: string, property: string): string {
+      const rule = new RegExp(`${selector}\\s*\\{([^}]*)\\}`).exec(baseStyles);
+      const body = rule?.[1] ?? "";
+      const value = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+);`).exec(body);
+      return resolveToken(value?.[1] ?? "");
+    }
+
+    /** 支持 `#rgb` / `#rrggbb` / `rgb(...)`：token 解析出来是十六进制，按 rgb 的算法算会得到 NaN。 */
     function luminance(color: string) {
-      const channels = color
-        .match(/[\d.]+/g)!
-        .slice(0, 3)
-        .map((value) => {
-          const channel = Number(value) / 255;
-          return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-        });
+      const raw = color.trim();
+      const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(raw);
+      let values: number[];
+      if (hex) {
+        const pairs =
+          hex[1].length === 3
+            ? hex[1].split("").map((char) => char + char)
+            : (hex[1].match(/../g) ?? []);
+        values = pairs.map((pair) => Number.parseInt(pair, 16));
+      } else {
+        values = (raw.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+      }
+      const channels = values.slice(0, 3).map((value) => {
+        const channel = value / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
       return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
     }
 
-    for (const badge of badges) {
-      const style = getComputedStyle(badge);
-      const foreground = luminance(style.color);
-      const background = luminance(style.backgroundColor);
-      expect(
-        (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05),
-        `${style.color} on ${style.backgroundColor}`,
-      ).toBeGreaterThanOrEqual(4.5);
-    }
+    const foregroundColor = declared("\\.app-dataset-sample-tag", "color");
+    const backgroundColor = declared("\\.app-dataset-sample-tag", "background");
+    const foreground = luminance(foregroundColor);
+    const background = luminance(backgroundColor);
+
+    // 两个徽标都真的带着这条样式类（页头一个、下拉菜单一个）。
+    expect(
+      badges.filter((badge) => badge.classList.contains("app-dataset-sample-tag")),
+    ).toHaveLength(2);
+    expect(
+      (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05),
+      `${foregroundColor} on ${backgroundColor}`,
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   it("显示当前数据集的名字，而不是列表里的第一个", async () => {

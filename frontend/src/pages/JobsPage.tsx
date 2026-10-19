@@ -6,7 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { markCandidateJobImported } from "../api/candidateJob";
 import { openWebFormUrl } from "../api/webform";
 import { startBackfill } from "../api/apply";
-import { batchDeleteJobs, batchUpdateJobStatus, deleteJob, getJob, updateJob } from "../api/jobs";
+import { deleteJob, getJob, updateJob } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobAnalysisModal from "../components/JobAnalysisModal";
 import JobDetailDrawer from "../components/JobDetailDrawer";
@@ -27,7 +27,7 @@ import type { BatchAction } from "./jobs/jobFilterOptions";
 import { useJobQueue } from "./jobs/useJobQueue";
 import { useJobsPageState } from "./jobs/useJobsPageState";
 import { useSelectAllJobs } from "./jobs/useSelectAllJobs";
-import { bulkEnqueueJobs, bulkEnqueueSummary } from "../components/apply/queue/bulkEnqueue";
+import { useJobBatchActions } from "./jobs/useJobBatchActions";
 import { registerJobCreateHandler } from "../features/shortcuts/runtimeTargets";
 
 export default function JobsPage() {
@@ -45,6 +45,8 @@ export default function JobsPage() {
     setStatus,
     sourceKind,
     setSourceKind,
+    sortState,
+    applySort,
     page,
     setPage,
     pageSize,
@@ -203,93 +205,26 @@ export default function JobsPage() {
     }
   };
 
-  const applyBatchStatus = async () => {
-    if (selectedJobIds.length === 0) {
-      message.warning("请先选择岗位");
-      return;
-    }
-    if (!batchStatus) {
-      message.warning("请选择要设置的状态");
-      return;
-    }
+  // 批量动作（改状态 / 删除 / 加入投递队列）在独立 hook 里：页面组合层只负责接线，
+  // 勾选与忙态仍由本页持有（BatchToolbar 的按钮据此禁用）。
+  const batch = useJobBatchActions({
+    jobs,
+    page,
+    selectedJobIds,
+    batchStatus,
+    setPage,
+    setSelectedJobIds,
+    setBatchStatus,
+    setBatchAction,
+    setDetailJob,
+    reload,
+  });
 
-    const jobIds = [...selectedJobIds];
-    const nextStatus = batchStatus;
-    setBatchAction("status");
-    try {
-      const result = await batchUpdateJobStatus({ job_ids: jobIds, status: nextStatus });
-      setSelectedJobIds([]);
-      setBatchStatus(undefined);
-      setDetailJob((current) =>
-        current && jobIds.includes(current.id) ? { ...current, status: nextStatus } : current,
-      );
-      await reload();
-      message.success(`已更新 ${result.updated} 个岗位的状态`);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "批量更新状态失败");
-    } finally {
-      setBatchAction(null);
-    }
-  };
+  const applyBatchStatus = batch.applyBatchStatus;
 
-  const removeSelectedJobs = async () => {
-    if (selectedJobIds.length === 0) {
-      message.warning("请先选择岗位");
-      return;
-    }
+  const removeSelectedJobs = batch.removeSelectedJobs;
 
-    const jobIds = [...selectedJobIds];
-    setBatchAction("delete");
-    try {
-      const result = await batchDeleteJobs({ job_ids: jobIds });
-      setSelectedJobIds([]);
-      setBatchStatus(undefined);
-      setDetailJob((current) => (current && jobIds.includes(current.id) ? null : current));
-      // 当前页因此变空且还有上一页时回退一页，避免停在一页空白上；其余情况原地刷新，
-      // 不无脑跳回首页。
-      const listedJobs = jobs?.items ?? [];
-      if (listedJobs.length > 0 && listedJobs.every((job) => jobIds.includes(job.id)) && page > 1) {
-        setPage(page - 1);
-      }
-      await reload();
-      const failed = jobIds.length - result.deleted;
-      if (failed > 0) {
-        message.warning(`成功 ${result.deleted} 个，${failed} 个未能删除；已删除的可在回收站恢复`);
-      } else {
-        message.success(`已删除 ${result.deleted} 个岗位，可在回收站恢复`);
-      }
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "批量删除失败");
-    } finally {
-      setBatchAction(null);
-    }
-  };
-
-  const enqueueSelectedJobs = async () => {
-    if (selectedJobIds.length === 0) {
-      message.warning("请先选择岗位");
-      return;
-    }
-
-    // 与「导入并加入投递队列」同一条海投路径（bulkEnqueueJobs）：逐条入队、逐条容错，
-    // 双确认直接带上，最后给聚合账目——bulkEnqueueJobs 正常不会 throw，catch 只兜意外。
-    const jobIds = [...selectedJobIds];
-    setBatchAction("enqueue");
-    try {
-      const outcome = await bulkEnqueueJobs(jobIds);
-      setSelectedJobIds([]);
-      await reload();
-      if (outcome.enqueued > 0) {
-        message.success(bulkEnqueueSummary(outcome));
-      } else {
-        message.warning(bulkEnqueueSummary(outcome));
-      }
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "批量加入投递队列失败");
-    } finally {
-      setBatchAction(null);
-    }
-  };
+  const enqueueSelectedJobs = batch.enqueueSelectedJobs;
 
   const exitSelectionMode = () => {
     if (batchAction !== null) return;
@@ -305,6 +240,7 @@ export default function JobsPage() {
     jobType,
     status,
     sourceKind,
+    sortState,
     setSelectedJobIds,
   });
 
@@ -408,6 +344,8 @@ export default function JobsPage() {
           }}
           onDelete={(job) => void removeJob(job.id)}
           onEnterSelecting={enterSelectionMode}
+          sortState={sortState}
+          onSortChange={applySort}
           onPageChange={(nextPage, nextPageSize) => {
             setPage(nextPage);
             setPageSize(nextPageSize);

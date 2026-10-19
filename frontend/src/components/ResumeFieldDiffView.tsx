@@ -144,12 +144,12 @@ function SubFieldRow({ sub }: { sub: SubFieldDiff }) {
       <Typography.Text type="secondary">{sub.label}：</Typography.Text>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         {sub.removedLines.map((line, index) => (
-          <div key={`r-${index}`} style={{ color: "#a8071a" }}>
+          <div key={`r-${index}`} style={{ color: "var(--rf-error-text)" }}>
             − {line}
           </div>
         ))}
         {sub.addedLines.map((line, index) => (
-          <div key={`a-${index}`} style={{ color: "#135200" }}>
+          <div key={`a-${index}`} style={{ color: "var(--rf-success-text)" }}>
             + {line}
           </div>
         ))}
@@ -164,10 +164,10 @@ function ModifiedItemBlock({ item }: { item: ModifiedItemDiff }) {
     <div
       data-sign="modified"
       style={{
-        border: "1px solid #91caff",
+        border: "1px solid var(--rf-focus-ring)",
         borderRadius: 6,
         padding: "8px 12px",
-        background: "#e6f4ff",
+        background: "var(--rf-info-bg)",
       }}
     >
       <Tag color="blue">修改</Tag>

@@ -28,3 +28,14 @@ export function formatDateTime(iso: string | undefined): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+/** 字节数转可读体积（如 `512 B` / `480 KB` / `1.2 MB`）。
+ *
+ * 几个面板此前各写了一份同名局部函数，直接引用这里的那份，别再复制第五份。
+ */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}

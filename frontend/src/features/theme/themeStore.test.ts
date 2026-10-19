@@ -9,10 +9,18 @@ import {
   THEME_STORAGE_KEY,
   applyTheme,
   getThemeMode,
+  hydrateThemeFromServer,
   resolveTheme,
   setThemeMode,
   toggleTheme,
 } from "./themeStore";
+
+const apiMocks = vi.hoisted(() => ({
+  getGlobalTheme: vi.fn(),
+  saveGlobalTheme: vi.fn(),
+}));
+
+vi.mock("../../api/settings", () => apiMocks);
 
 function stubMatchMedia(prefersDark: boolean) {
   const listeners = new Set<() => void>();
@@ -43,6 +51,8 @@ beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.style.colorScheme = "";
   stubMatchMedia(false);
+  apiMocks.getGlobalTheme.mockReset().mockResolvedValue({ theme: null });
+  apiMocks.saveGlobalTheme.mockReset().mockResolvedValue({ theme: null });
 });
 
 afterEach(() => {
@@ -99,5 +109,58 @@ describe("themeStore", () => {
 
     expect(toggleTheme()).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+});
+
+describe("主题服务端持久化（R18）", () => {
+  it("服务端有值时以服务端为准（覆盖本地），并写回 localStorage", async () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, "light");
+    apiMocks.getGlobalTheme.mockResolvedValue({ theme: "dark" });
+
+    await hydrateThemeFromServer();
+
+    expect(getThemeMode()).toBe("dark");
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("服务端返回 null 时保留本地值，不拿默认浅色覆盖", async () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, "dark");
+    applyTheme();
+    apiMocks.getGlobalTheme.mockResolvedValue({ theme: null });
+
+    await hydrateThemeFromServer();
+
+    expect(getThemeMode()).toBe("dark");
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("请求失败时保留本地值且不抛错（离线兜底）", async () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, "dark");
+    applyTheme();
+    apiMocks.getGlobalTheme.mockRejectedValue(new Error("offline"));
+
+    await expect(hydrateThemeFromServer()).resolves.toBeUndefined();
+
+    expect(getThemeMode()).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("保存失败不影响本次切换，也不向调用方抛错", async () => {
+    apiMocks.saveGlobalTheme.mockRejectedValue(new Error("readonly"));
+
+    expect(() => setThemeMode("dark")).not.toThrow();
+    await Promise.resolve();
+
+    expect(getThemeMode()).toBe("dark");
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("切换时 best-effort 保存到服务端", () => {
+    setThemeMode("system");
+
+    expect(apiMocks.saveGlobalTheme).toHaveBeenCalledWith("system");
   });
 });

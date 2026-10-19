@@ -62,8 +62,8 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   // R8 第二批：落点分别是简历中心、页头数据集菜单、当前列表分页、求职助手。
   { id: "newResume", label: "新建简历", defaultKeys: ["mod+shift+n"], scope: "page" },
   { id: "switchDataset", label: "切换数据集", defaultKeys: ["mod+shift+d"], scope: "global" },
-  { id: "prevPage", label: "上一页", defaultKeys: ["mod+["], scope: "page" },
-  { id: "nextPage", label: "下一页", defaultKeys: ["mod+]"], scope: "page" },
+  { id: "prevPage", label: "上一页（列表）", defaultKeys: ["mod+["], scope: "page" },
+  { id: "nextPage", label: "下一页（列表）", defaultKeys: ["mod+]"], scope: "page" },
   { id: "focusAssistant", label: "打开助手并聚焦输入", defaultKeys: ["mod+/"], scope: "global" },
 ];
 

@@ -269,7 +269,7 @@ export default function TrackerPage() {
             <Statistic
               title="Offer"
               value={stats?.offer_count ?? 0}
-              styles={{ content: { color: "#389e0d" } }}
+              styles={{ content: { color: "var(--rf-success-text)" } }}
             />
             <Statistic title="已结束" value={stats?.rejected_count ?? 0} />
           </>

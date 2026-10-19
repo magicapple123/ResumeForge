@@ -950,7 +950,9 @@
 
 .a4-preview-paper {
   overflow: hidden;
-  background: var(--rf-surface);
+  /* 纸面恒白（R18）：--rf-surface 在深色下会变暗，纸不能跟着变——导出/打印
+     看到的就是这张纸。深色主题下由 --rf-paper 显式保持 #ffffff。 */
+  background: var(--rf-paper);
   box-shadow: 0 2px 12px rgb(15 23 42 / 12%);
 }
 

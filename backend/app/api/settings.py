@@ -5,7 +5,6 @@ import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..database import get_db, session_engine
@@ -133,61 +132,6 @@ def reveal_llm_api_key(
     response.headers["Cache-Control"] = "no-store, private"
     response.headers["Pragma"] = "no-cache"
     return LLMApiKeyRevealResult(api_key=get_dataset_llm_config(db).api_key)
-
-
-@router.get("/global-llm")
-def read_global_llm_settings() -> dict:
-    """全局模型配置摘要（R21）：不返回密钥，只说"有没有、开着没、哪个模型"。"""
-    from ..services.global_settings import global_llm_summary
-
-    return global_llm_summary()
-
-
-@router.put("/global-llm")
-def write_global_llm_settings(payload: dict, request: Request) -> dict:
-    """保存全局模型配置：写 `data/global_settings.json`，对所有数据集生效。
-
-    ``api_key`` 为空时**保留**原来的密钥（与"重新保存表单不要我重填密钥"一致）；
-    传 ``"__clear__"`` 才显式清空。
-    """
-    from ..services.global_settings import (
-        global_llm_summary,
-        read_global_llm,
-        write_global_llm,
-    )
-
-    if not _is_loopback_request(request):
-        raise HTTPException(status_code=403, detail="模型配置只能在运行后端的本机修改")
-    try:
-        config = LLMConfig.model_validate(payload.get("config") or {})
-    except ValidationError as exc:
-        raise HTTPException(status_code=400, detail="配置字段不合法") from exc
-
-    incoming_key = str(payload.get("api_key", "") or "")
-    if incoming_key == "__clear__":
-        config = config.model_copy(update={"api_key": ""})
-    elif not incoming_key:
-        existing = read_global_llm()
-        if existing is not None:
-            config = config.model_copy(update={"api_key": existing.config.api_key})
-    else:
-        config = config.model_copy(update={"api_key": incoming_key})
-
-    try:
-        write_global_llm(config, enabled=bool(payload.get("enabled", True)))
-    except ApiKeyEncryptionError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return global_llm_summary()
-
-
-@router.delete("/global-llm", status_code=204)
-def remove_global_llm_settings(request: Request) -> None:
-    """清除全局配置：各数据集回到自己那份。"""
-    from ..services.global_settings import clear_global_llm
-
-    if not _is_loopback_request(request):
-        raise HTTPException(status_code=403, detail="模型配置只能在运行后端的本机修改")
-    clear_global_llm()
 
 
 @router.put("/llm", response_model=LLMConfig)

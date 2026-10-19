@@ -1,4 +1,5 @@
 """版式常量与 ``ResumeLayout``（PDF 唯一的版式来源）。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -129,6 +130,33 @@ class ResumeLayout:
         return replace(self, fit_scale=scale)
 
 
+def _resolve_margin_mm(overrides: dict, defaults: dict, margin_mm: float | None) -> float:
+    """页边距的**唯一**解析口径：``page_padding`` 权威，``margin_mm`` 只是它的回落值。
+
+    优先级（R1，PDF / Word 共用这一份）：
+
+    1. ``format_config.page_padding``（预览、HTML、PDF、Word 读的都是它）；
+    2. 没有它时，``margin_mm`` 收进 ``page_padding`` 的合法区间后作为回落值——
+       旧客户端的"只给 margin_mm"行为保持不变；
+    3. 两者都没有，用模板自带的 ``padding_mm``。
+
+    为什么 ``margin_mm`` 不能覆盖 ``page_padding``：它是面板历史上的第二个旋钮，只有
+    PDF/Word 读，预览不读。两者并存时会出现"面板 30mm、预览 8mm"——同一个页边距有两个
+    数字，正是 R1 要消灭的分叉。
+    """
+    from ..resume.resume_templates import page_padding_bounds
+
+    page_padding = overrides.get("page_padding")
+    if page_padding is not None:
+        return float(page_padding)
+    if margin_mm is not None:
+        # 兼容值按 page_padding 的区间 clamp：旧请求可能带 4mm / 40mm（它自己那份历史
+        # 范围），越界不该让正文排出纸张，也不该为此回 4xx/5xx——静默收到合法区间即可。
+        low, high = page_padding_bounds()
+        return min(high, max(low, float(margin_mm)))
+    return float(defaults["padding_mm"])
+
+
 def resolve_layout(
     *,
     template: str,
@@ -144,10 +172,15 @@ def resolve_layout(
     PDF 自动跟上；抄一份到本模块，就是"今天对了、明天模板一改又漂移"——这正是"直出 PDF
     与预览不一致"这个 bug 的来源。
 
-    ``margin_mm`` 是导出时的**页边距直接覆盖**（R-16 全参数导出）：给定时优先于
-    ``format_config.page_padding`` 与模板默认值，让 PDF / Word 共用同一边距口径。
+    ``margin_mm`` 是**兼容字段**，不是第二个旋钮（R1）：页边距的唯一权威是
+    ``format_config.page_padding``（预览、HTML、PDF、Word 都读它）。只有请求**没有**给出
+    ``page_padding`` 时，``margin_mm`` 才作为它的回落值；两者同时出现时以
+    ``page_padding`` 为准——否则旧客户端/手工请求能重新制造"预览 8mm、PDF 30mm"。
     """
-    from ..resume.resume_templates import template_layout_defaults, validated_format_config
+    from ..resume.resume_templates import (
+        template_layout_defaults,
+        validated_format_config,
+    )
 
     defaults = template_layout_defaults(template)
     overrides = validated_format_config(format_config)
@@ -158,7 +191,7 @@ def resolve_layout(
         # 否则存量简历的 PDF 会因为"凭空多了一个默认值"而无端跳变。
         return float(value) if value is not None else float(defaults[default_key])
 
-    resolved_margin = float(margin_mm) if margin_mm is not None else pick("page_padding", "padding_mm")
+    resolved_margin = _resolve_margin_mm(overrides, defaults, margin_mm)
 
     return ResumeLayout(
         base_px=base_px,

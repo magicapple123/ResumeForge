@@ -1,21 +1,44 @@
 /**
  * 存储占用卡（RF-25）：数据目录各分项的磁盘占用与文件数。
  *
- * 数字来自 GET /api/stats/storage，后端只 stat 不读内容；这里不做任何清理动作，
- * 清理入口（手动备份）在旁边的「手动备份」卡里，逐份确认。
+ * 数字来自 GET /api/stats/storage，后端只 stat 不读内容。
+ * 「清理旧文件」（R19）：清单先给用户看、按类别分组勾选（默认全选）、执行后只把文件
+ * 移到数据目录下的 .cleanup-trash/（按时间分文件夹），**永不硬删**。
+ *
+ * 一条固定事实写在弹窗里：最近 3 份备份不会出现在清单里——它们是"出事了能回滚"的那
+ * 几条，保留策略在后端（`services/cleanup.py:KEEP_RECENT_BACKUPS`），这里如实告知。
  */
 import { DeleteOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Card, Listy, Modal, Progress, Space, Typography } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Checkbox,
+  Listy,
+  Modal,
+  Progress,
+  Space,
+  Typography,
+} from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
   getStorageStats,
   previewCleanup,
   runCleanup,
+  type CleanupCategoryKey,
   type CleanupPlan,
   type StorageStats,
 } from "../../api/storage";
 import LoadingBlock from "../common/LoadingBlock";
 import { ListyItem } from "../common/ListyItem";
+
+/** 与后端默认保留期一致：界面上固定展示的就是这一档。 */
+const CLEANUP_DAYS = 30;
+/** 固定提示语：保留策略在后端，文案跟着它走（改了常量也要改这句）。 */
+const RECENT_BACKUPS_HINT = "最近 3 份备份不会出现在清单里";
+/** 清单里最多列多少个文件：更多时只说个数，确认后一并移走。 */
+const CANDIDATE_PREVIEW_LIMIT = 20;
 
 function formatSize(bytes: number): string {
   if (bytes <= 0) return "0 B";
@@ -31,13 +54,14 @@ function percentColor(percent: number): string {
 }
 
 export default function StorageStatsCard() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [stats, setStats] = useState<StorageStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   // 清理（R19）：先看清单再动手，且只移到回收目录——这里不做任何"永久删除"。
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [cleanupPlan, setCleanupPlan] = useState<CleanupPlan | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<CleanupCategoryKey[]>([]);
   const [cleanupRunning, setCleanupRunning] = useState(false);
 
   const load = useCallback(async () => {
@@ -74,13 +98,30 @@ export default function StorageStatsCard() {
   /** 打开清理预览：没有候选时说一句就收工，不弹一个空清单。 */
   const openCleanup = async () => {
     try {
-      const plan = await previewCleanup();
+      // 不传 categories = 全部类别：弹窗里再按类别勾选。
+      const plan = await previewCleanup(CLEANUP_DAYS);
       if (plan.totals.files === 0) {
-        message.success("没有超过 30 天的旧备份或日志，暂时不用清理");
+        message.success(`没有超过 ${CLEANUP_DAYS} 天的旧备份或日志，暂时不用清理`);
         return;
       }
+      setSelectedCategories(plan.categories.map((item) => item.key));
       setCleanupPlan(plan);
       setCleanupOpen(true);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "读取清理清单失败");
+    }
+  };
+
+  /**
+   * 勾选变化：立刻重新预览。
+   *
+   * 刻意不让前端自己算数量——"预览 = 执行"的保证在后端同一份 plan 上，前端重算一遍
+   * 就等于把这条保证降级成"两处代码碰巧算得一样"。
+   */
+  const applyCategories = async (next: CleanupCategoryKey[]) => {
+    setSelectedCategories(next);
+    try {
+      setCleanupPlan(await previewCleanup(CLEANUP_DAYS, next));
     } catch (err) {
       message.error(err instanceof Error ? err.message : "读取清理清单失败");
     }
@@ -90,14 +131,25 @@ export default function StorageStatsCard() {
     if (cleanupRunning) return;
     setCleanupRunning(true);
     try {
-      const result = await runCleanup();
+      const result = await runCleanup(CLEANUP_DAYS, selectedCategories);
       setCleanupOpen(false);
       const failed = result.failed.length;
-      message.success(
-        `已把 ${result.moved} 个文件移到「${result.trash_dir || ".cleanup-trash"}」，` +
-          `释放 ${formatSize(result.freed_bytes)}` +
-          (failed > 0 ? `；另有 ${failed} 个文件被占用未能移动` : ""),
-      );
+      modal.success({
+        title: `已移走 ${result.moved} 个文件`,
+        content: (
+          <Space orientation="vertical" size={4} style={{ width: "100%" }}>
+            <span>
+              释放 {formatSize(result.freed_bytes)}，已移到「
+              {result.trash_dir || ".cleanup-trash"}
+              」，不会永久删除。
+            </span>
+            <span>
+              {RECENT_BACKUPS_HINT}；本次保留 {result.skipped.length} 份。
+            </span>
+            {failed > 0 ? <span>另有 {failed} 个文件被占用，未能移动。</span> : null}
+          </Space>
+        ),
+      });
       void load();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "清理失败");
@@ -108,6 +160,7 @@ export default function StorageStatsCard() {
 
   const top = stats ? [...stats.items].sort((a, b) => b.size_bytes - a.size_bytes).slice(0, 6) : [];
   const maxSize = top.length > 0 ? Math.max(...top.map((item) => item.size_bytes), 1) : 1;
+  const listedCandidates = cleanupPlan?.candidates ?? [];
 
   return (
     <Card
@@ -175,6 +228,7 @@ export default function StorageStatsCard() {
         okText={cleanupPlan ? `移走 ${cleanupPlan.totals.files} 个文件` : "移走"}
         cancelText="取消"
         confirmLoading={cleanupRunning}
+        okButtonProps={{ disabled: (cleanupPlan?.totals.files ?? 0) === 0 }}
         onOk={() => void confirmCleanup()}
         onCancel={() => setCleanupOpen(false)}
         width="min(560px, 92vw)"
@@ -184,28 +238,54 @@ export default function StorageStatsCard() {
             <Alert
               type="info"
               showIcon
-              title={`以下文件超过 ${cleanupPlan.older_than_days} 天没有变动，共 ${formatSize(
+              title={`以下文件超过 ${cleanupPlan.older_than_days} 天没有变动，选中类别共 ${formatSize(
                 cleanupPlan.totals.bytes,
-              )}`}
+              )}（${cleanupPlan.totals.files} 个）`}
               description="清理会把它们移到数据目录下的 .cleanup-trash/（按时间分文件夹），不会永久删除；确认无误后可自行在文件管理器里删除那个目录。"
             />
+            <Typography.Text type="secondary">
+              {RECENT_BACKUPS_HINT}（本次已保留 {cleanupPlan.skipped.length} 份）。
+            </Typography.Text>
+            {/* 按类别分组勾选：名称 / 文件数 / 体积都在同一行，默认全选。 */}
+            <Checkbox.Group
+              value={selectedCategories}
+              onChange={(values) =>
+                void applyCategories(values.map(String) as CleanupCategoryKey[])
+              }
+              style={{ width: "100%" }}
+            >
+              <Space orientation="vertical" size={4} style={{ width: "100%" }}>
+                {cleanupPlan.categories.map((category) => {
+                  const stat = cleanupPlan.by_category[category.key];
+                  return (
+                    <Checkbox key={category.key} value={category.key}>
+                      <span>{category.label}</span>
+                      <Typography.Text type="secondary">
+                        {` ${stat?.files ?? 0} 个文件 · ${formatSize(stat?.bytes ?? 0)}`}
+                      </Typography.Text>
+                    </Checkbox>
+                  );
+                })}
+              </Space>
+            </Checkbox.Group>
             <Listy
-              items={cleanupPlan.candidates.slice(0, 20)}
+              items={listedCandidates.slice(0, CANDIDATE_PREVIEW_LIMIT)}
               rowKey={(item) => item.path}
               itemRender={(item) => (
                 <ListyItem>
                   <Space style={{ width: "100%", justifyContent: "space-between" }}>
-                    <Typography.Text ellipsis title={item.path} style={{ maxWidth: 380 }}>
-                      {item.path}
+                    <Typography.Text ellipsis title={item.path} style={{ maxWidth: 340 }}>
+                      {item.label}·{item.path}
                     </Typography.Text>
                     <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
                   </Space>
                 </ListyItem>
               )}
             />
-            {cleanupPlan.candidates.length > 20 ? (
+            {listedCandidates.length > CANDIDATE_PREVIEW_LIMIT ? (
               <Typography.Text type="secondary">
-                还有 {cleanupPlan.candidates.length - 20} 个文件未列出，确认后一并移走。
+                还有 {listedCandidates.length - CANDIDATE_PREVIEW_LIMIT}{" "}
+                个文件未列出，确认后一并移走。
               </Typography.Text>
             ) : null}
           </Space>

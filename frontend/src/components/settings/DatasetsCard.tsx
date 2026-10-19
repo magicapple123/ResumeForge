@@ -185,10 +185,10 @@ export default function DatasetsCard({
         <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
           每份数据集就是一个完整的简历通数据库（岗位、个人资料、简历、收藏、助手会话和全部附件），
           可以随时切换，互不影响。导入备份包只会<strong>新增</strong>一份数据集，当前正在使用的
-          数据不会被动到；导出的备份默认不包含大模型 API Key，需要时可在下方勾选。
+          数据不会被动到；导出的备份<strong>默认包含</strong>大模型 API Key，不需要时可取消勾选。
         </Typography.Paragraph>
 
-        {/* 是否把大模型 API Key 一并带走：默认关，选择权交给用户。
+        {/* 是否把大模型 API Key 一并带走：默认勾选（D-A），选择权仍交给用户。
             密钥按本机存储形态写入（Windows 上是系统加密形态、绑定当前用户与这台电脑），
             不解密成明文——备份包是用户可能长期保存或转发的东西。 */}
         <div style={{ marginBottom: 16 }}>
@@ -203,9 +203,9 @@ export default function DatasetsCard({
             type="secondary"
             style={{ marginBottom: 0, marginTop: 4, fontSize: 12 }}
           >
-            按本机存储的形态写入（Windows 上为系统加密、绑定当前用户与这台电脑，换电脑恢复后
-            可能需要重新填写；macOS/Linux 上密钥以明文随包）。勾选后的备份包更敏感，
-            请妥善保管，不要发给不信任的人。
+            默认勾选。密钥按本机存储的形态写入（Windows 上为系统加密、绑定当前用户与这台电脑，
+            换电脑恢复后可能需要重新填写；macOS/Linux 上密钥以明文随包）。勾选后的备份包
+            更敏感，请妥善保管，不要发给不信任的人。
           </Typography.Paragraph>
         </div>
 
@@ -382,6 +382,15 @@ export default function DatasetsCard({
           style={{ marginBottom: 16 }}
           title="这个名字会作为下载文件名，可含中文；扩展名会自动补 .zip。"
         />
+        {/* 导出当下再确认一次：与卡片上的开关是同一份状态（默认包含，D-A）。 */}
+        <Checkbox
+          checked={includeApiKeys}
+          disabled={busy}
+          style={{ marginBottom: 16 }}
+          onChange={(event) => onIncludeApiKeysChange(event.target.checked)}
+        >
+          导出包中包含大模型 API Key
+        </Checkbox>
         <Input
           value={exportName}
           maxLength={80}

@@ -308,7 +308,9 @@ def _build_document(
     base = layout.scaled_base_px
     doc = Document()
 
-    # 页边距：与 PDF 同一份 layout.margin_mm（模板默认或 format_config.page_padding / margin_mm）。
+    # 页边距：与 PDF 同一份 layout.margin_mm——由 `pdf_exporter.layout._resolve_margin_mm`
+    # 解析（format_config.page_padding 权威，margin_mm 只是它的兼容回落值）。Word 与 PDF
+    # 不各自算一遍，否则同一次导出会给出两种边距。
     section = doc.sections[0]
     # 纸张尺寸：python-docx 默认是 Letter（215.9×279.4mm），而预览与 PDF 都是 A4
     # （210×297mm）。不显式设置的话，同一段文字在 Word 里行宽与页高都不同，"页数与
@@ -344,6 +346,9 @@ def build_resume_docx(
 
     版式全部来自 ``ResumeLayout``（复用 PDF 的同一来源），页数用连续流模型估算，与
     PDF 的真实页数差在 ±1 内。没有中文字体时仍能生成文档，只是 ``pages=None``。
+
+    ``margin_mm`` 与 PDF 同一条规则：页边距权威是 ``format_config.page_padding``，
+    ``margin_mm`` 只在没给 ``page_padding`` 时作回落值（见 ``layout._resolve_margin_mm``）。
     """
     from .resume.resume_templates import FONT_SCALES, template_spec, validated_format_config
 

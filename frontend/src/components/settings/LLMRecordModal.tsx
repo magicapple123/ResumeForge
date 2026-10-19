@@ -272,7 +272,7 @@ export default function LLMRecordModal({
                   最大输出 Token
                   <Tooltip title="限制模型单次回复的最大输出 Token 数。值越大可能增加费用；过小可能导致内容被截断。它不是模型的上下文长度上限。">
                     <QuestionCircleOutlined
-                      style={{ color: "rgba(0,0,0,0.45)", fontSize: 12 }}
+                      style={{ color: "var(--rf-text-description)", fontSize: 12 }}
                       aria-label="最大输出 Token 说明"
                     />
                   </Tooltip>

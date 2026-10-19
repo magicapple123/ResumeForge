@@ -194,7 +194,7 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
         style={{
           marginTop: 12,
           paddingTop: 12,
-          borderTop: "1px solid #f0f2f5",
+          borderTop: "1px solid var(--rf-border-subtle)",
         }}
       >
         <Button onClick={onClose}>取消</Button>

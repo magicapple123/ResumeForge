@@ -49,7 +49,14 @@ from ...services.resume.resume_template_store import (
 from ...services.settings_service import get_export_save_location
 from ...services.watermark import WatermarkError
 from .. import settings as settings_api
-from ._shared import PDF_PAGE_LIMIT_HEADER, PDF_PAGES_HEADER, _get_live_resume
+from ._shared import (
+    PDF_ENGINE_HEADER,
+    PDF_ENGINE_NAME,
+    PDF_PAGE_LIMIT_HEADER,
+    PDF_PAGES_HEADER,
+    RESUME_OVERFLOW_HEADER,
+    _get_live_resume,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +125,13 @@ def _export_record(
     # 把实际页数带回去，让界面能提示，而不是让用户下载完才发现。
     if artifact.pages is not None:
         headers[PDF_PAGES_HEADER] = str(artifact.pages)
+        if request.format == "pdf":
+            # 只有真的由 PDF 引擎渲染时才声称引擎名：html/json/md/txt 根本没有 PDF 引擎，
+            # 给它们也回一个 "fpdf2" 是假话。
+            headers[PDF_ENGINE_HEADER] = PDF_ENGINE_NAME
+        # overflow 只在"有分页引擎"的格式（pdf/docx）里有意义，而 artifact.pages 非空
+        # 正是这一条件。标志不许说谎：它必须与上面两行的页数结论一致。
+        headers[RESUME_OVERFLOW_HEADER] = "true" if artifact.overflow else "false"
     if artifact.page_limit is not None:
         headers[PDF_PAGE_LIMIT_HEADER] = str(artifact.page_limit)
     # 「生成内容保存位置」：设置非空且目录合法时，把同一份产物再落盘一份。**best-effort**：
@@ -292,7 +306,7 @@ def share_resume_zip(request: HTTPRequest, resume_id: int, db: Session = Depends
             "",
             "1. 双击「简历.html」用浏览器打开即可查看（样式与照片都在这一个文件里）。",
             "2. 「简历.pdf」可以直接转发或打印；如需 A4 打印，选择「实际大小 / 100%」。",
-            "3. 版面以 PDF 为准；HTML 用于在任意设备上快速查看。",
+            "3. HTML 与 PDF 由同一份版式生成，排版一致。",
             "",
             "这份包只包含这份简历本身，不含账号、其他数据或个人资料库。",
             pdf_note,

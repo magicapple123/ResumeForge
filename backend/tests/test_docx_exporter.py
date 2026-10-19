@@ -39,11 +39,39 @@ def test_docx_reuses_layout_margins_and_respects_margin_override():
 
     document = Document(BytesIO(result.content))
     section = document.sections[0]
-    # 页边距直接覆盖 20mm，且四边一致（复用 ResumeLayout.margin_mm 的同一来源）。
+    # 旧的兼容输入（只给 margin_mm）仍按它排版，且四边一致
+    # （复用 ResumeLayout.margin_mm 的同一来源）。
     assert round(section.top_margin.mm, 2) == pytest.approx(20.0, abs=0.01)
     assert round(section.left_margin.mm, 2) == pytest.approx(20.0, abs=0.01)
     assert round(section.right_margin.mm, 2) == pytest.approx(20.0, abs=0.01)
     assert round(section.bottom_margin.mm, 2) == pytest.approx(20.0, abs=0.01)
+
+
+def test_docx_page_padding_beats_the_legacy_margin_mm():
+    """Word 与 PDF 同一条规则（R1）：``page_padding`` 权威，``margin_mm`` 不再覆盖。
+
+    修之前 ``margin_mm=30`` 会盖掉 ``page_padding=8``，于是同一份导出里 Word/PDF 是
+    30mm 而预览/HTML 是 8mm——"改面板值预览不变、导出变"的同一个根因。
+    """
+    result = build_resume_docx(
+        _resume(),
+        template="classic",
+        page_limit=1,
+        format_config={"page_padding": 8},
+        margin_mm=30,
+    )
+
+    section = Document(BytesIO(result.content)).sections[0]
+    assert round(section.left_margin.mm, 2) == pytest.approx(8.0, abs=0.01)
+    assert round(section.top_margin.mm, 2) == pytest.approx(8.0, abs=0.01)
+
+
+def test_docx_clamps_out_of_range_legacy_margin_mm():
+    """越界的兼容值收进 8–26（不 500、不把正文排出纸张）。"""
+    result = build_resume_docx(_resume(), template="classic", page_limit=1, margin_mm=40)
+
+    section = Document(BytesIO(result.content)).sections[0]
+    assert round(section.left_margin.mm, 2) == pytest.approx(26.0, abs=0.01)
 
 
 def test_docx_uses_template_default_margin_when_not_overridden():

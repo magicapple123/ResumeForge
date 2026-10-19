@@ -5,6 +5,8 @@
  * 和高度公式散成两份。只负责画，数据由后端 ``/api/analytics/dashboard`` 下发。
  */
 
+import { useChartPalette } from "../../theme/chartPalette";
+
 export interface BarPoint {
   /** 面向展示的短标签（如 "9月"、"周一"）。 */
   label: string;
@@ -19,9 +21,9 @@ interface Props {
   ariaLabel: string;
 }
 
-const BAR_COLORS = ["#5b8ff9", "#61ddaa", "#65789b", "#f6bd16", "#7262fd", "#78d3f8"];
-
 export default function BarChart({ points, ariaLabel }: Props) {
+  // 图表色跟随主题（R18）：深色下轨道与基线必须暗下去，否则整张图是一块白板。
+  const palette = useChartPalette();
   const max = Math.max(1, ...points.map((point) => point.count));
   const width = 620;
   // 紧凑：整体高度 170（原 240），上下内边距同步收窄，趋势图下方空白明显减少，
@@ -48,7 +50,7 @@ export default function BarChart({ points, ariaLabel }: Props) {
         x2={width - padding.right}
         y1={padding.top + chartHeight}
         y2={padding.top + chartHeight}
-        stroke="#d9e2ec"
+        stroke={palette.grid}
         strokeWidth="1"
       />
       {points.map((point, index) => {
@@ -63,12 +65,18 @@ export default function BarChart({ points, ariaLabel }: Props) {
               width={barWidth}
               height={barHeight}
               rx={index % 2 === 0 ? 8 : 3}
-              fill={BAR_COLORS[index % BAR_COLORS.length]}
+              fill={palette.series[index % palette.series.length]}
               data-bar-index={index}
             />
             {/* 计数为 0 时不画数字：留一个孤零零的「0」看着像渲染坏了。 */}
             {point.count > 0 && (
-              <text x={x + barWidth / 2} y={y - 6} textAnchor="middle" fontSize={12} fill="#333">
+              <text
+                x={x + barWidth / 2}
+                y={y - 6}
+                textAnchor="middle"
+                fontSize={12}
+                fill={palette.valueText}
+              >
                 {point.count}
               </text>
             )}
@@ -77,7 +85,7 @@ export default function BarChart({ points, ariaLabel }: Props) {
               y={height - 10}
               textAnchor="middle"
               fontSize={12}
-              fill="#555"
+              fill={palette.labelText}
             >
               {point.label}
             </text>

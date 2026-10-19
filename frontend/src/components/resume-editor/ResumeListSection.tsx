@@ -131,9 +131,9 @@ export default function ResumeListSection({
                   position: "relative",
                   marginBottom: 12,
                   padding: "16px 42px 4px 16px",
-                  border: "1px solid #e5e7eb",
+                  border: "1px solid var(--rf-border-subtle)",
                   borderRadius: 8,
-                  background: "#fafafa",
+                  background: "var(--rf-surface-alt)",
                 }}
               >
                 {/* 标题与条目级填入同一行：`minWidth: 0` + `marginRight: auto` 让长标题

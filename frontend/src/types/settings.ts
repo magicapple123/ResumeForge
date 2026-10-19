@@ -132,7 +132,8 @@ export interface DatasetInfo {
  * 带了几份数据集），或那份数据集的路径校验没通过（整包拒收，不会有这个字段）。
  */
 export interface DatasetImportResult extends DatasetInfo {
-  restored_datasets?: DatasetInfo[];
+  /** 除主数据集之外随包恢复的那几份（只需 id/name 供界面点名）。 */
+  restored_datasets?: Array<Pick<DatasetInfo, "id" | "name">>;
   /** 导出方勾选过「包含 API Key」时为 true：密钥已随包恢复（解不开时仍需重填）。 */
   api_key_included?: boolean;
   /**
@@ -145,6 +146,20 @@ export interface DatasetImportResult extends DatasetInfo {
   backup_asset_warnings?: string[];
   /** 上面两类问题任一非空时为 true：界面不得把它呈现成"完整恢复"。 */
   assets_incomplete?: boolean;
+  /**
+   * R16 嵌套整包：逐份的结果。整包不再"要么全成、要么不动"——一份子包坏了只跳过
+   * 那一份，所以失败/跳过的每一份都要能点名给用户看。
+   */
+  failed?: DatasetImportIssue[];
+  skipped?: DatasetImportIssue[];
+  summary?: { restored: number; skipped: number; failed: number };
+}
+
+/** 嵌套整包里单份数据集没恢复成功（或没被导入）的原因，直接展示给用户。 */
+export interface DatasetImportIssue {
+  id?: string;
+  name?: string;
+  error: string;
 }
 
 /** 应用打开时是否弹出近期提醒（默认开）。 */

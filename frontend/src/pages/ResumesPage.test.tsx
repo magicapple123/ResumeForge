@@ -73,6 +73,7 @@ const RESUME: ResumeBrief = {
   page_limit: 1,
   font_scale: "standard",
   created_at: "2026-08-20T10:00:00",
+  updated_at: "2026-08-21T09:30:00",
 };
 
 function renderPage(initialEntries: string[] = ["/resumes"]) {

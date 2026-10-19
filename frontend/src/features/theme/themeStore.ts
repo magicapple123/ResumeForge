@@ -9,6 +9,7 @@
  * `darkAlgorithm` 负责，两边合起来才没有"半明半暗"的接缝。
  */
 import { useSyncExternalStore } from "react";
+import { getGlobalTheme, saveGlobalTheme } from "../../api/settings";
 
 export type ThemeMode = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
@@ -76,7 +77,8 @@ export function applyTheme(mode: ThemeMode = getThemeMode()): void {
   document.documentElement.style.colorScheme = resolved;
 }
 
-export function setThemeMode(mode: ThemeMode): void {
+/** 只改本地状态（localStorage + data-theme + 通知订阅者），不写服务端。 */
+function applyLocalMode(mode: ThemeMode): void {
   const next = normalize(mode);
   try {
     storage()?.setItem(THEME_STORAGE_KEY, next);
@@ -87,6 +89,29 @@ export function setThemeMode(mode: ThemeMode): void {
   cachedMode = next;
   applyTheme(next);
   for (const listener of Array.from(listeners)) listener();
+}
+
+export function setThemeMode(mode: ThemeMode): void {
+  applyLocalMode(mode);
+  // 服务端持久化是 best-effort：失败不回滚本切换，也不弹错误（离线/老后端都能用）。
+  void saveGlobalTheme(normalize(mode)).catch(() => {});
+}
+
+/**
+ * 启动时从服务端取主题（跨数据集、换浏览器不丢）。
+ *
+ * 服务端有值就以它为准（写回 localStorage 并 apply）；返回 null 或请求失败时
+ * 保留 localStorage 现值——绝不能用默认浅色覆盖用户的本地选择。
+ */
+export async function hydrateThemeFromServer(): Promise<void> {
+  try {
+    const { theme } = await getGlobalTheme();
+    if (theme === "light" || theme === "dark" || theme === "system") {
+      applyLocalMode(theme);
+    }
+  } catch {
+    // 服务端暂时不可用：本地值就是最终值（离线兜底）。
+  }
 }
 
 /** 浅色 ⇄ 深色（跟随系统时按当前实际显示取反）。 */

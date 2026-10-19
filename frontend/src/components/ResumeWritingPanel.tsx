@@ -185,7 +185,7 @@ function ResultBlock({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 12 }}>
+    <div style={{ border: "1px solid var(--rf-border)", borderRadius: 8, padding: 12 }}>
       <Space style={{ width: "100%", justifyContent: "space-between" }}>
         <Typography.Text strong>{label}</Typography.Text>
         <Button size="small" type="link" onClick={onApply}>

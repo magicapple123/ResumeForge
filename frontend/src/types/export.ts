@@ -22,7 +22,13 @@ export interface ExportRequest {
   watermark?: string;
   redact?: boolean;
   redact_options?: RedactionOptions;
-  /** 页边距（mm）；null 表示沿用记录里存的值。 */
+  /**
+   * 页边距（mm）；null 表示沿用记录里存的值。
+   *
+   * **后端仍接受这个字段**（PDF/Word 读它），但导出面板自 R1 起**不再发送**：页边距
+   * 只有 `format_config.page_padding` 一个落点，预览与导出读同一个键。两套参数并存
+   * 正是"改面板值预览不变、PDF 变"的来源。新调用方请用 `format_config.page_padding`。
+   */
   margin_mm?: number | null;
   font_scale?: ResumeFontScale | null;
   page_limit?: number | null;

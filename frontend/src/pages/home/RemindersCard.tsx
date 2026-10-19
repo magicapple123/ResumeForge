@@ -15,11 +15,12 @@ import CalendarView from "../../components/tracker/CalendarView";
 const REMINDER_VIEW_KEY = "rf.home.reminderView";
 
 /** 紧急度着色点的实际色值（与 REMINDER_URGENCY_COLORS 的 antd 色名对应）。 */
+// 用 token 而不是色值（R18）：深色下 #1677ff 的蓝点与深底几乎同亮度，点会"消失"。
 const URGENCY_DOT_COLORS: Record<string, string> = {
-  overdue: "#ff4d4f",
-  soon: "#fa8c16",
-  upcoming: "#1677ff",
-  later: "#d9d9d9",
+  overdue: "var(--rf-danger)",
+  soon: "var(--rf-accent-amber)",
+  upcoming: "var(--rf-info)",
+  later: "var(--rf-border-strong)",
 };
 
 /** 紧急度的文字名（RF-12：颜色不能是唯一状态信号——点旁必须带可读的紧急度）。 */
@@ -106,7 +107,7 @@ export function RemindersCard({
                     width: 8,
                     height: 8,
                     borderRadius: "50%",
-                    background: URGENCY_DOT_COLORS[item.urgency] ?? "#d9d9d9",
+                    background: URGENCY_DOT_COLORS[item.urgency] ?? "var(--rf-border-strong)",
                     flex: "none",
                   }}
                 />

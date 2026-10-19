@@ -543,6 +543,13 @@ body {
   border-color: var(--rf-border-strong) !important;
 }
 
+/* 页头全局模型选择器（R21）：只在配了 profile 时渲染。 */
+.app-model-profile-select {
+  flex: 0 0 auto;
+  min-width: 150px;
+  max-width: 240px;
+}
+
 /* 页头右侧的「当前数据集 + 头像」：只读展示，尺寸与页头 64px 高对齐。 */
 .app-header-context {
   display: flex;
@@ -863,6 +870,7 @@ body {
 }
 
 .global-search-hit:hover,
-.global-search-hit:focus-visible {
+.global-search-hit:focus-visible,
+.global-search-hit[aria-selected="true"] {
   background: var(--rf-brand-tint);
 }

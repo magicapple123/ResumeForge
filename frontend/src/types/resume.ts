@@ -222,6 +222,8 @@ export interface ResumeBrief {
   page_limit: number;
   font_scale: ResumeFontScale;
   created_at: string;
+  /** 最近修改时间（R14-b）：列表「最近修改」列与默认排序 `updated_desc` 同源；旧数据可能缺失。 */
+  updated_at?: string | null;
 }
 
 /** 版本血缘（RF-17）：由哪份简历派生而来；null = 独立版本，不做推断。 */

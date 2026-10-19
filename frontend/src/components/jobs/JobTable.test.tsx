@@ -1,9 +1,10 @@
-/** 岗位表格：来源角标 + 悬停显示导入时间。 */
+/** 岗位表格：来源角标 + 悬停显示导入时间 + 列头排序（R14）。 */
 
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Job, JobList, Page } from "../../types";
+import { DEFAULT_JOB_SORT_STATE, type JobSortState } from "../../utils/jobSort";
 import JobTable from "./JobTable";
 
 const BASE_JOB: Job = {
@@ -38,7 +39,13 @@ function makeJob(overrides: Partial<Job> = {}): JobList {
 
 const noop = () => undefined;
 
-function renderTable(jobs: JobList[]) {
+function renderTable(
+  jobs: JobList[],
+  options: {
+    sortState?: JobSortState;
+    onSortChange?: (state: JobSortState) => void;
+  } = {},
+) {
   const page: Page<JobList> = { items: jobs, total: jobs.length };
   return render(
     <AntdApp>
@@ -60,6 +67,8 @@ function renderTable(jobs: JobList[]) {
         onDelete={noop}
         onEnterSelecting={noop}
         onPageChange={noop}
+        sortState={options.sortState ?? DEFAULT_JOB_SORT_STATE}
+        onSortChange={options.onSortChange ?? noop}
       />
     </AntdApp>,
   );
@@ -122,6 +131,53 @@ describe("JobTable 悬停导入时间", () => {
 
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent(/导入于 \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+  });
+});
+
+describe("JobTable 列头排序（R14）", () => {
+  /** 点某列列头。表头标题在 antd 6 里会出现多份（测量/克隆节点），统一点 `<th>` 本体。 */
+  function clickHeader(label: string) {
+    const title = screen.getAllByText(label)[0]!;
+    const th = title.closest("th");
+    expect(th).toBeTruthy();
+    fireEvent.click(th as HTMLElement);
+  }
+
+  it("点「岗位」列头把排序翻译成后端 sort=title_asc", () => {
+    const onSortChange = vi.fn();
+    renderTable([makeJob()], { onSortChange });
+
+    clickHeader("岗位");
+
+    expect(onSortChange).toHaveBeenCalledWith({ sort: "title_asc", order: null });
+  });
+
+  it("点「公司」列头把排序翻译成后端 sort=company_asc", () => {
+    const onSortChange = vi.fn();
+    renderTable([makeJob()], { onSortChange });
+
+    clickHeader("公司");
+
+    expect(onSortChange).toHaveBeenCalledWith({ sort: "company_asc", order: null });
+  });
+
+  it("「发布时间」列排的是导入时间：默认倒序，再点是升序（显式 order）", () => {
+    const onSortChange = vi.fn();
+    const { unmount } = renderTable([makeJob()], { onSortChange });
+
+    // 当前就是 created_desc（默认），这一列的箭头已经亮着；再点一次是反向（升序）。
+    clickHeader("发布时间");
+    expect(onSortChange).toHaveBeenCalledWith({ sort: "created_desc", order: "asc" });
+
+    unmount();
+    const second = vi.fn();
+    renderTable([makeJob()], {
+      sortState: { sort: "created_desc", order: "asc" },
+      onSortChange: second,
+    });
+    clickHeader("发布时间");
+    // 升序状态下再点 → antd 取消排序 → 回到默认（最近导入倒序）。
+    expect(second).toHaveBeenCalledWith({ sort: "created_desc", order: null });
   });
 });
 

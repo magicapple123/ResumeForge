@@ -32,6 +32,7 @@ import {
 import { SHARE_PERMISSIONS, type SharePermission } from "../types/sharePackage";
 import { copyText } from "../utils/clipboard";
 import { downloadBlob } from "../utils/download";
+import { formatBytes } from "../utils/format";
 
 interface Props {
   recordId: number;
@@ -50,6 +51,7 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
   const { message } = App.useApp();
   const [permission, setPermission] = useState<SharePermission>("read_only");
   const [redactOptions, setRedactOptions] = useState<RedactionOptions>(DEFAULT_REDACTION_OPTIONS);
+  const [includePhoto, setIncludePhoto] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<SharePackageDetail | null>(null);
   const [comments, setComments] = useState("");
@@ -61,6 +63,11 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
   const [revealing, setRevealing] = useState(false);
 
   const [zipLoading, setZipLoading] = useState(false);
+
+  // 体积只按后端文件清单里的实际 size 求和，不按内容去猜：生成前没有产物就明说
+  // 「生成后统计」，不给一个看起来很准、实际对不上的数字。
+  const fileCount = result?.files.length ?? 0;
+  const totalBytes = (result?.files ?? []).reduce((sum, file) => sum + file.size, 0);
 
   const downloadZip = async () => {
     if (zipLoading) return;
@@ -86,6 +93,7 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
         resume_id: recordId,
         permission,
         redact_options: redactOptions,
+        include_photo: includePhoto,
       });
       setResult(detail);
       if (detail.permission === "comment") {
@@ -220,6 +228,21 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
           </Typography.Text>
         </div>
 
+        <div>
+          <Typography.Text strong>照片</Typography.Text>
+          <div style={{ marginTop: 8 }}>
+            <Checkbox
+              checked={includePhoto}
+              onChange={(event) => setIncludePhoto(event.target.checked)}
+            >
+              包含照片
+            </Checkbox>
+          </div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            分享包固定包含 HTML 与 PDF；取消勾选后这两个文件都不再绘制照片。
+          </Typography.Text>
+        </div>
+
         <Space wrap>
           <Button type="primary" loading={generating} onClick={() => void generate()}>
             生成分享包
@@ -234,6 +257,12 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
           </Button>
         </Space>
 
+        {!result && (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            分享包含 HTML、PDF、脱敏快照与文件清单；生成后在这里显示实际体积。
+          </Typography.Text>
+        )}
+
         {result && (
           <>
             <Descriptions column={1} size="small" bordered>
@@ -245,12 +274,17 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
                   {result.permission === "comment" ? "可评论" : "只读"}
                 </Tag>
               </Descriptions.Item>
+              <Descriptions.Item label="预计体积">
+                {`约 ${formatBytes(totalBytes)}（${fileCount} 个文件）`}
+              </Descriptions.Item>
             </Descriptions>
 
             <div>
               <Typography.Text strong>使用说明</Typography.Text>
               <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", fontSize: 12 }}>
-                把整个文件夹发给对方，对方用浏览器打开 resume.html 即可查看。
+                {
+                  "把整个文件夹发给对方，对方用浏览器打开 resume.html 即可查看；HTML 与 PDF 由同一份版式生成。"
+                }
                 {result.permission === "comment"
                   ? " 如需评论，让对方填写 comments.md 后回传给你，你在下方「导入评论」导入。"
                   : ""}

@@ -26,6 +26,7 @@ import {
   type RedactionOptions,
 } from "../types/export";
 import { downloadBlob, printHtml } from "../utils/download";
+import { MAX_PAGE_PADDING, MIN_PAGE_PADDING, withPagePadding } from "../utils/pagePadding";
 
 interface Props {
   recordId: number;
@@ -74,7 +75,11 @@ export default function ExportOptionsModal({
   const [redact, setRedact] = useState(false);
   const [redactOptions, setRedactOptions] = useState<RedactionOptions>(DEFAULT_REDACTION_OPTIONS);
   const [redactedPreview, setRedactedPreview] = useState<ResumeContent | null>(null);
-  const [marginMm, setMarginMm] = useState<number | null>(null);
+  // 页边距初值取预览当前用的那一档（`format_config.page_padding`），面板与预览因此是
+  // 同一个数字，而不是"面板 14mm、预览 11mm"两套。
+  const [pagePadding, setPagePadding] = useState<number | null>(
+    typeof initialFormatConfig?.page_padding === "number" ? initialFormatConfig.page_padding : null,
+  );
   const [fontScale, setFontScale] = useState<ResumeFontScale | null>(initialFontScale ?? null);
   // 初值取"预览当前用的页数"，而不是 null（null 会被后端解释成"按记录里存的那份版式"）。
   // 用户在预览里改过页数、还没保存就导出时，null 会导出一份与眼前所见不同页数的文件——
@@ -94,17 +99,19 @@ export default function ExportOptionsModal({
   /**
    * 组装一次导出请求。所有字段共用同一份草稿版式——面板改的三项覆盖在它之上，
    * 面板没碰的（字号系数 / 行距 / 区块间距 / 强调色）原样透传给后端。
+   *
+   * **不再发 `margin_mm`**（R1）：页边距只有 `format_config.page_padding` 一个落点，
+   * 预览与导出读的是同一个键。两套参数并存的代价是"预览不变、导出变了"。
    */
   const buildRequest = (format: ExportFormat): ExportRequest => ({
     format,
     watermark: watermarkEnabled ? watermark : "",
     redact,
     redact_options: redact ? redactOptions : undefined,
-    margin_mm: marginMm,
     // 面板清空时回落到预览的档位：记录里的档位可能和眼前所见不是同一个。
     font_scale: fontScale ?? initialFontScale ?? null,
     page_limit: pageLimit,
-    format_config: initialFormatConfig,
+    format_config: withPagePadding(initialFormatConfig, pagePadding),
     include_photo: includePhoto,
   });
 
@@ -269,14 +276,15 @@ export default function ExportOptionsModal({
                 options={FONT_SCALE_OPTIONS}
                 onChange={(value) => setFontScale((value as ResumeFontScale | null) ?? null)}
               />
-              <span>页边距(mm)</span>
+              <span>页边距(mm，与预览一致)</span>
               <InputNumber
-                min={4}
-                max={40}
-                placeholder="默认"
+                min={MIN_PAGE_PADDING}
+                max={MAX_PAGE_PADDING}
+                step={1}
+                placeholder="跟预览"
                 style={{ width: 90 }}
-                value={marginMm}
-                onChange={(value) => setMarginMm(value)}
+                value={pagePadding}
+                onChange={(value) => setPagePadding(value)}
               />
             </Space>
           </div>

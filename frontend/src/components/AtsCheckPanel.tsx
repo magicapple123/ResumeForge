@@ -329,7 +329,7 @@ export default function AtsCheckPanel({ resumeId, jobId }: Props) {
                     {group.issues.map((issue, index) => (
                       <div
                         key={index}
-                        style={{ borderTop: "1px solid #f0f0f0", paddingTop: 8 }}
+                        style={{ borderTop: "1px solid var(--rf-border)", paddingTop: 8 }}
                         data-ats-category={issue.category}
                       >
                         <Space size="small" wrap>

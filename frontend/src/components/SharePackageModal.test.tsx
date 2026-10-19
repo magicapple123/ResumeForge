@@ -130,6 +130,37 @@ describe("SharePackageModal", () => {
     );
   });
 
+  it("默认勾选「包含照片」，请求体带 include_photo: true", async () => {
+    renderModal();
+
+    const photo = screen.getByRole("checkbox", { name: "包含照片" }) as HTMLInputElement;
+    expect(photo.checked).toBe(true);
+    // 格式开关本批不做：固定两份产物要写清楚，用户不会以为能只出 PDF。
+    expect(screen.getByText(/分享包固定包含 HTML 与 PDF/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "生成分享包" }));
+
+    await waitFor(() =>
+      expect(apiMocks.createSharePackage).toHaveBeenCalledWith(
+        expect.objectContaining({ include_photo: true }),
+      ),
+    );
+  });
+
+  it("取消勾选后请求体带 include_photo: false", async () => {
+    renderModal();
+    // 脱敏范围里也有勾选框，按名字精确取「包含照片」这一个。
+    fireEvent.click(screen.getByRole("checkbox", { name: "包含照片" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "生成分享包" }));
+
+    await waitFor(() =>
+      expect(apiMocks.createSharePackage).toHaveBeenCalledWith(
+        expect.objectContaining({ include_photo: false }),
+      ),
+    );
+  });
+
   it("下载文件走下载接口并触发浏览器下载", async () => {
     renderModal();
     fireEvent.click(screen.getByRole("button", { name: "生成分享包" }));
@@ -184,11 +215,30 @@ describe("SharePackageModal", () => {
 
     expect(screen.getByText(/把整个文件夹发给对方/)).toBeInTheDocument();
     expect(screen.getByText("使用说明")).toBeInTheDocument();
+    // R3：不再写「以 PDF 为准」这种过度保守的说法，也不写死「HTML 已内嵌字体」。
+    expect(screen.getByText(/HTML 与 PDF 由同一份版式生成/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /打开所在文件夹/ }));
     await waitFor(() => expect(apiMocks.revealSharePackage).toHaveBeenCalledWith(1));
 
     fireEvent.click(screen.getByRole("button", { name: /复制路径/ }));
     await waitFor(() => expect(clipboardMocks.copyText).toHaveBeenCalledWith("C:\\tmp\\share\\1"));
+  });
+
+  it("生成前不编造体积，只说明里面有什么", () => {
+    renderModal();
+
+    expect(screen.getByText(/生成后在这里显示实际体积/)).toBeInTheDocument();
+    expect(screen.queryByText("预计体积")).toBeNull();
+  });
+
+  it("生成后按后端文件清单的实际大小给出预计体积", async () => {
+    renderModal();
+    fireEvent.click(screen.getByRole("button", { name: "生成分享包" }));
+    await screen.findByText("token123");
+
+    expect(screen.getByText("预计体积")).toBeInTheDocument();
+    // 100 B + 200 B，条目数同样取自后端清单。
+    expect(screen.getByText("约 300 B（2 个文件）")).toBeInTheDocument();
   });
 });

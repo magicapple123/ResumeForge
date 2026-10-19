@@ -1,4 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { App as AntdApp } from "antd";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job, JobAnalysisResult } from "../types";
 import JobAnalysisModal from "./JobAnalysisModal";
@@ -73,16 +75,37 @@ function start() {
   fireEvent.click(screen.getByRole("button", { name: /开始生成/ }));
 }
 
+/** antd `App` 提供 message/notification 的上下文；组件里的「停止等待」提示依赖它。 */
+function renderModal(onClose: () => void = vi.fn()) {
+  return render(
+    <AntdApp>
+      <JobAnalysisModal job={JOB} onClose={onClose} />
+    </AntdApp>,
+  );
+}
+
+/** 真实父级的样子：`onClose` 把 job 置空 → Modal 的 open 变 false。 */
+function ClosableModal() {
+  const [job, setJob] = useState<Job | null>(JOB);
+  return (
+    <>
+      <span>{job ? "岗位解读打开中" : "岗位解读已关闭"}</span>
+      <JobAnalysisModal job={job} onClose={() => setJob(null)} />
+    </>
+  );
+}
+
 describe("JobAnalysisModal", () => {
   it("先说明再生成：打开时一次请求都不发，点「开始生成」才调用模型", async () => {
-    render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
+    renderModal();
 
     expect(screen.getByText(/会把岗位描述交给模型/)).toBeInTheDocument();
     expect(apiMocks.generateJobAnalysis).not.toHaveBeenCalled();
 
     start();
 
-    expect(apiMocks.generateJobAnalysis).toHaveBeenCalledWith(JOB.id, expect.anything());
+    // 首次生成**不带** force：后端已有缓存时会直接返回，不必再跑一次模型（R2-a）。
+    expect(apiMocks.generateJobAnalysis).toHaveBeenCalledWith(JOB.id, expect.anything(), false);
     expect(await screen.findByText(ANALYSIS.summary)).toBeInTheDocument();
     expect(screen.getByText("核心要求")).toBeInTheDocument();
     expect(screen.getByText("持有护士执业资格证")).toBeInTheDocument();
@@ -94,7 +117,7 @@ describe("JobAnalysisModal", () => {
       .mockRejectedValueOnce(new Error("模型暂时不可用"))
       .mockResolvedValueOnce(ANALYSIS);
 
-    render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
+    renderModal();
     start();
 
     expect(await screen.findByText("模型暂时不可用")).toBeInTheDocument();
@@ -104,23 +127,34 @@ describe("JobAnalysisModal", () => {
     expect(apiMocks.generateJobAnalysis).toHaveBeenCalledTimes(2);
   });
 
-  it("生成中可以取消：回到初始状态，不显示「生成失败」", async () => {
-    // 永不 resolve 的请求：模拟还在等模型。
-    apiMocks.generateJobAnalysis.mockImplementation(
-      (_id: number, signal?: AbortSignal) =>
-        new Promise((_resolve, reject) => {
-          signal?.addEventListener("abort", () =>
-            reject(new DOMException("aborted", "AbortError")),
-          );
-        }),
+  it("「停止等待」只停界面：不 abort 在途请求，关掉弹窗并提示后台会缓存（R2-b）", async () => {
+    let signalCaptured: AbortSignal | undefined;
+    // 永不 resolve 的请求：模拟还在等模型。拿到 signal 才能断言"没有被 abort"。
+    apiMocks.generateJobAnalysis.mockImplementation((_id: number, signal?: AbortSignal) => {
+      signalCaptured = signal;
+      return new Promise(() => undefined);
+    });
+
+    render(
+      <AntdApp>
+        <ClosableModal />
+      </AntdApp>,
     );
-
-    render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
     start();
-    fireEvent.click(await screen.findByRole("button", { name: "取消生成" }));
 
-    // 回到「可以重新开始」的状态：说明卡又出现了，也没有错误框。
-    await waitFor(() => expect(screen.getByText(/会把岗位描述交给模型/)).toBeInTheDocument());
+    fireEvent.click(await screen.findByRole("button", { name: "停止等待" }));
+
+    // 关键：连接没断——服务端才能跑完并写缓存，下次打开秒读。
+    expect(signalCaptured).toBeDefined();
+    expect(signalCaptured?.aborted).toBe(false);
+
+    // 提示出现，且说明是"后台仍会完成"而不是"已取消"。
+    expect(
+      await screen.findByText("已停止等待。后台仍会完成本次生成并缓存，下次打开可直接查看。"),
+    ).toBeInTheDocument();
+
+    // 弹窗真的关掉了（父级把 job 置空），不是只把加载动画藏起来。
+    expect(await screen.findByText("岗位解读已关闭")).toBeInTheDocument();
     expect(screen.queryByText(/生成失败/)).not.toBeInTheDocument();
   });
 
@@ -132,7 +166,7 @@ describe("JobAnalysisModal", () => {
       result: ANALYSIS,
     });
 
-    render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
+    renderModal();
 
     expect(await screen.findByText(ANALYSIS.summary)).toBeInTheDocument();
     expect(apiMocks.generateJobAnalysis).not.toHaveBeenCalled();
@@ -146,7 +180,7 @@ describe("JobAnalysisModal", () => {
       result: ANALYSIS,
     });
 
-    render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
+    renderModal();
 
     expect(await screen.findByText("岗位内容改过，这份解读可能已过期")).toBeInTheDocument();
     expect(screen.getByText(ANALYSIS.summary)).toBeInTheDocument();
@@ -156,7 +190,7 @@ describe("JobAnalysisModal", () => {
     const updated = { ...ANALYSIS, summary: "第二次生成的岗位总结。" };
     apiMocks.generateJobAnalysis.mockResolvedValueOnce(ANALYSIS).mockResolvedValueOnce(updated);
 
-    render(<JobAnalysisModal job={JOB} onClose={vi.fn()} />);
+    renderModal();
     start();
 
     expect(await screen.findByText(ANALYSIS.summary)).toBeInTheDocument();
@@ -175,5 +209,58 @@ describe("JobAnalysisModal", () => {
 
     expect(await screen.findByText(updated.summary)).toBeInTheDocument();
     expect(apiMocks.generateJobAnalysis).toHaveBeenCalledTimes(2);
+  });
+
+  it("「重新生成」带 force=true，普通生成不带（否则缓存永远用不上 / 永远不更新）", async () => {
+    const updated = { ...ANALYSIS, summary: "重新生成后的结论。" };
+    apiMocks.generateJobAnalysis.mockResolvedValueOnce(ANALYSIS).mockResolvedValueOnce(updated);
+
+    renderModal();
+    start();
+    expect(await screen.findByText(ANALYSIS.summary)).toBeInTheDocument();
+    // 第一次：普通生成，允许后端直接给缓存。
+    expect(apiMocks.generateJobAnalysis).toHaveBeenNthCalledWith(
+      1,
+      JOB.id,
+      expect.anything(),
+      false,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+    const confirm = await waitFor(() => {
+      const button = document.querySelector<HTMLButtonElement>(".ant-popconfirm .ant-btn-primary");
+      if (!button) throw new Error("未找到确认按钮");
+      return button;
+    });
+    fireEvent.click(confirm);
+
+    expect(await screen.findByText(updated.summary)).toBeInTheDocument();
+    // 第二次：用户明确要求覆盖当前结论，必须绕过缓存。
+    expect(apiMocks.generateJobAnalysis).toHaveBeenNthCalledWith(
+      2,
+      JOB.id,
+      expect.anything(),
+      true,
+    );
+  });
+
+  it("生成失败后重试不带 force：失败说明没有可用的缓存，没必要多烧一次", async () => {
+    apiMocks.generateJobAnalysis
+      .mockRejectedValueOnce(new Error("模型暂时不可用"))
+      .mockResolvedValueOnce(ANALYSIS);
+
+    renderModal();
+    start();
+    expect(await screen.findByText("模型暂时不可用")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "重新生成解读" }));
+
+    expect(await screen.findByText(ANALYSIS.summary)).toBeInTheDocument();
+    expect(apiMocks.generateJobAnalysis).toHaveBeenNthCalledWith(
+      2,
+      JOB.id,
+      expect.anything(),
+      false,
+    );
   });
 });

@@ -6,9 +6,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile
 
 from ..services.pdf_exporter import reset_font_cache
+from ..services.resume_font_embed import active_web_font
 from ..services.user_fonts import (
     MAX_BYTES,
     FontError,
@@ -39,6 +40,25 @@ def read_resume_fonts() -> dict:
         "active": active_font_name(),
         "max_bytes": MAX_BYTES,
     }
+
+
+@router.get("/fonts/active/file")
+def read_active_font_file() -> Response:
+    """当前字体的原始字节（给前端/调试兜底）。
+
+    正常预览不需要这个接口：``/render`` 返回的 HTML 里已经内嵌了子集化的 ``@font-face``。
+    这里回的是**整份**字体，所以强制 ``no-store``——字体文件说换就换，缓存住旧字节只会
+    让"我明明换了字体"变成玄学。
+    """
+
+    font = active_web_font()
+    if font is None:
+        raise HTTPException(status_code=404, detail="没有正在使用的自定义字体")
+    return Response(
+        content=font[1],
+        media_type="font/ttf",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.post("/fonts")

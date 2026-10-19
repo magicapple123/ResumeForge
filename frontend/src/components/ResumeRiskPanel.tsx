@@ -341,7 +341,7 @@ function RiskPointItem({ point }: { point: RiskPoint }) {
   const severity = SEVERITY[point.severity] ?? SEVERITY.medium;
   return (
     <div
-      style={{ borderTop: "1px solid #f0f0f0", paddingTop: 8 }}
+      style={{ borderTop: "1px solid var(--rf-border)", paddingTop: 8 }}
       data-risk-category={point.category}
     >
       <Space size="small" wrap>

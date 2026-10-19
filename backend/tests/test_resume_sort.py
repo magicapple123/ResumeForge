@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 
 def _manual(client, title: str) -> int:
     response = client.post(
@@ -62,3 +64,23 @@ def test_sort_does_not_change_the_total(client):
         response = client.get("/api/resumes", params={"sort": sort})
         assert response.status_code == 200
         assert response.json()["total"] == 2
+
+
+def test_list_items_include_updated_at(client):
+    """列表项要带 ``updated_at``（R14-b）：前端「最近修改」列直接用它。
+
+    排序用 ``updated_desc`` 却拿不到时间的话，用户只能看到顺序变了、说不出为什么；
+    改动之后时间必须真的往前走，否则这一列等于摆设。
+    """
+    resume_id = _manual(client, "带最近修改的简历")
+
+    item = client.get("/api/resumes").json()["items"][0]
+    assert item["updated_at"] is not None
+    created_at = datetime.fromisoformat(item["created_at"])
+    assert datetime.fromisoformat(item["updated_at"]) >= created_at
+
+    updated = client.put(f"/api/resumes/{resume_id}", json={"name": "张三", "summary": "改过。"})
+    assert updated.status_code == 200, updated.text
+
+    item = client.get("/api/resumes").json()["items"][0]
+    assert datetime.fromisoformat(item["updated_at"]) > created_at

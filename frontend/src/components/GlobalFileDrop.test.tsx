@@ -80,6 +80,26 @@ describe("GlobalFileDrop", () => {
     expect(allowPartial).toBe(false);
   });
 
+  it("拖入的整包只恢复了一部分时，点名没恢复成功的那几份", async () => {
+    // R16：一份子包坏了不影响其它份，所以"导入成功"之外必须说清哪几份没进来。
+    apiMocks.importDataset.mockResolvedValue({
+      id: "new",
+      name: "校招线",
+      restored_datasets: [{ id: "other", name: "社招线" }],
+      failed: [{ id: "aaa", name: "实习线", error: "子包已损坏，无法读取" }],
+      skipped: [],
+      summary: { restored: 2, skipped: 0, failed: 1 },
+    });
+    renderDrop();
+
+    dropFile("校招线.zip");
+    fireEvent.click(await screen.findByRole("button", { name: /导\s*入/ }));
+
+    expect(await screen.findByText(/1 份数据集失败/)).toBeInTheDocument();
+    expect(screen.getByText(/实习线：子包已损坏/)).toBeInTheDocument();
+    expect(screen.getByText(/已导入数据集「校招线」/)).toBeInTheDocument();
+  });
+
   it(".json 作为一份新简历导入，目录名去掉扩展名作标题", async () => {
     renderDrop();
 

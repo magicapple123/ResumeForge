@@ -279,10 +279,10 @@ export function deleteDataset(id: string): Promise<void> {
   return request(`/settings/datasets/${id}`, { method: "DELETE" });
 }
 
-/** 导出指定数据集（默认不含大模型 API Key；显式勾选后密钥按本机存储形态随包走）。 */
+/** 导出指定数据集（默认**包含**大模型 API Key；显式取消后剥离）。 */
 export async function exportDataset(
   id: string,
-  includeApiKeys = false,
+  includeApiKeys = true,
   /** 下载名（可含中文）；省略时后端用「<数据集名>-<时间戳>.zip」。 */
   filename?: string,
 ): Promise<{ blob: Blob; filename: string; incompleteBackup: boolean }> {
@@ -296,22 +296,21 @@ export async function exportDataset(
  * 数据集的用户如果按默认方式备份，其余几份不会进包，而这种事通常要到需要恢复时才发现。
  */
 export async function exportAllDatasets(
-  includeApiKeys = false,
+  includeApiKeys = true,
   filename?: string,
 ): Promise<{ blob: Blob; filename: string; incompleteBackup: boolean }> {
   return downloadArchive(exportUrl("/settings/datasets/export-all", includeApiKeys, filename));
 }
 
 /**
- * 拼导出 URL：只带**有值**的查询参数，不留 `?` 尾巴（旧行为与旧测试都依赖"没勾选时
- * URL 干净"）。
+ * 拼导出 URL：始终显式带 `include_api_keys`（后端默认 true），否则"取消勾选"会被
+ * 当成缺省值重新包含密钥。
  */
 function exportUrl(base: string, includeApiKeys: boolean, filename?: string): string {
-  const params: string[] = [];
-  if (includeApiKeys) params.push("include_api_keys=true");
+  const params = [`include_api_keys=${includeApiKeys ? "true" : "false"}`];
   const name = (filename || "").trim();
   if (name) params.push(`filename=${encodeURIComponent(name)}`);
-  return params.length ? `${base}?${params.join("&")}` : base;
+  return `${base}?${params.join("&")}`;
 }
 
 async function downloadArchive(
@@ -349,21 +348,44 @@ export function saveAutoBackupInterval(intervalDays: number): Promise<AutoBackup
   });
 }
 
-/** 全局模型配置摘要（R21）：一份配置对所有数据集生效。 */
+/** 全局模型配置摘要（R21）：profiles 列表 + 当前生效项，**不含密钥**。 */
+export interface GlobalLLMProfile {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  base_url: string;
+  /** 地址与模型都填了才为 true；只有当前 profile 的这一项为 true 时才会接管调用。 */
+  configured: boolean;
+  /** 默认 profile（第一个创建的；删除后自动顺延）。 */
+  is_default: boolean;
+}
+
 export interface GlobalLLMSummary {
   enabled: boolean;
-  /** 地址与模型都填了才为 true；只有 true 时才会接管实际调用。 */
+  /** 当前 profile 的地址与模型都填了才为 true。 */
   configured: boolean;
   provider: string;
   model: string;
   base_url: string;
+  active_profile_id: string;
+  active_name: string;
+  profiles: GlobalLLMProfile[];
+}
+
+export interface GlobalLLMProfileInput {
+  name: string;
+  config: { provider?: string; base_url: string; model: string; api_style?: string };
+  /** 空 = 保留原密钥（编辑时）；`"__clear__"` = 清空。 */
+  api_key?: string;
+  models?: string[];
 }
 
 export function getGlobalLLM(): Promise<GlobalLLMSummary> {
   return request("/settings/global-llm");
 }
 
-/** 保存全局配置；`api_key` 为空表示保留原密钥。 */
+/** 保存全局配置：更新**当前 active profile**；`api_key` 为空表示保留原密钥。 */
 export function saveGlobalLLM(payload: {
   enabled: boolean;
   api_key?: string;
@@ -372,8 +394,58 @@ export function saveGlobalLLM(payload: {
   return request("/settings/global-llm", { method: "PUT", body: JSON.stringify(payload) });
 }
 
+export function createGlobalLLMProfile(payload: GlobalLLMProfileInput): Promise<GlobalLLMSummary> {
+  return request("/settings/global-llm/profiles", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateGlobalLLMProfile(
+  id: string,
+  payload: Partial<GlobalLLMProfileInput>,
+): Promise<GlobalLLMSummary> {
+  return request(`/settings/global-llm/profiles/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteGlobalLLMProfile(id: string): Promise<GlobalLLMSummary> {
+  return request(`/settings/global-llm/profiles/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+/** 切换当前 profile（后端同时会把"对所有数据集生效"打开）。 */
+export function activateGlobalLLMProfile(id: string): Promise<GlobalLLMSummary> {
+  return request("/settings/global-llm/activate", {
+    method: "POST",
+    body: JSON.stringify({ id }),
+  });
+}
+
 export function clearGlobalLLM(): Promise<void> {
   return request("/settings/global-llm", { method: "DELETE" });
+}
+
+/** 跨数据集/浏览器的主题偏好（R18）：顶层 `theme`，与 llm 并列。 */
+export type GlobalThemeMode = "light" | "dark" | "system";
+
+export interface GlobalTheme {
+  /** null = 从未保存过（前端保留本地值）。 */
+  theme: GlobalThemeMode | null;
+}
+
+export function getGlobalTheme(): Promise<GlobalTheme> {
+  return request("/settings/global-theme");
+}
+
+export function saveGlobalTheme(mode: GlobalThemeMode): Promise<GlobalTheme> {
+  return request("/settings/global-theme", {
+    method: "PUT",
+    body: JSON.stringify({ theme: mode }),
+  });
 }
 
 /** 自定义简历字体（R10）：只影响 PDF 导出用的字体。 */

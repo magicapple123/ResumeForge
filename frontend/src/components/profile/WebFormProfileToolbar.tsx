@@ -29,9 +29,9 @@ export default function WebFormProfileToolbar({
         flexWrap: "wrap",
         marginBottom: 14,
         padding: "10px 12px",
-        border: "1px solid #e6edf5",
+        border: "1px solid var(--rf-border)",
         borderRadius: 10,
-        background: "#f8fbff",
+        background: "var(--rf-brand-wash)",
       }}
     >
       <Space size="small" wrap>

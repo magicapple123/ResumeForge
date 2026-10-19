@@ -246,11 +246,12 @@ def test_export_downloads_a_dataset_as_a_zip(client, tmp_path):
     assert response.content[:2] == b"PK"
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         manifest = json.loads(archive.read("manifest.json"))
-    assert manifest["api_key_included"] is False
+    # D-A：默认随包带上密钥（格式号 3），用户可显式取消。
+    assert manifest["api_key_included"] is True and manifest["format"] == 3
 
 
-def test_export_includes_api_keys_only_on_explicit_request(client, db_session):
-    """默认导出剥离密钥；显式传 ``include_api_keys=true`` 才随包走，导入要如实回报。"""
+def test_export_includes_api_keys_by_default_and_can_opt_out(client, db_session):
+    """默认随包带密钥（D-A）；显式 ``include_api_keys=false`` 才剥离，导入要如实回报。"""
     from app.schemas.setting import LLMConfig
     from app.services.settings_service import save_llm_config
 
@@ -265,23 +266,22 @@ def test_export_includes_api_keys_only_on_explicit_request(client, db_session):
     stored = _stored_llm_api_key()
     assert stored
 
-    # 默认（不带参数）：密钥不出包——既有承诺不变。
     default = client.get(f"/api/settings/datasets/{MAIN}/export")
     assert default.status_code == 200
     with zipfile.ZipFile(io.BytesIO(default.content)) as archive:
-        assert stored.encode() not in archive.read(DATABASE_MEMBER)
-
-    # 显式勾选：存储原值随包走，格式号升到 3（不认识该选项的老版本会明确拒收）。
-    response = client.get(f"/api/settings/datasets/{MAIN}/export?include_api_keys=true")
-    assert response.status_code == 200
-    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         assert stored.encode() in archive.read(DATABASE_MEMBER)
         manifest = json.loads(archive.read("manifest.json"))
-    assert manifest["api_key_included"] is True
-    assert manifest["format"] == 3
+    assert manifest["api_key_included"] is True and manifest["format"] == 3
 
-    # 导入这份包：接口要如实告诉前端"密钥已随包恢复"。
-    created = _import(client, response.content, name="带 Key 的备份").json()
+    # 显式取消勾选：密钥不出包。
+    response = client.get(f"/api/settings/datasets/{MAIN}/export?include_api_keys=false")
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert stored.encode() not in archive.read(DATABASE_MEMBER)
+        manifest = json.loads(archive.read("manifest.json"))
+    assert manifest["api_key_included"] is False
+
+    created = _import(client, default.content, name="带 Key 的备份").json()
     assert created["api_key_included"] is True
 
 
@@ -397,30 +397,34 @@ def test_export_all_carries_the_other_datasets(client, tmp_path):
     _add_job(client, "主数据里的岗位")
     other_id = _other_dataset_with_a_job(client, "校招线", "校招专有岗位")
 
-    response = client.get("/api/settings/datasets/export-all")
+    # 关掉"随包带密钥"（默认开，D-A）后，格式号仍是 4：R16 起整包是**嵌套结构**
+    # （每份数据集各是一个完整子包），≤3 的旧版本读不懂，必须明确拒收。
+    response = client.get("/api/settings/datasets/export-all?include_api_keys=false")
 
     assert response.status_code == 200
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         names = set(archive.namelist())
         manifest = json.loads(archive.read("manifest.json"))
-    # 活动数据集仍在老位置，其余数据集放在 datasets/ 下。
-    assert "resume_forge.db" in names
-    assert f"datasets/{other_id}.db" in names
-    assert f"datasets/{other_id}.json" in names
-    # 格式号必须升到 2：老版本读不懂 datasets/ 这一段，得让它**明确拒收**而不是安静地
-    # 只恢复活动数据集。
-    assert manifest["format"] == 2
+    # 外层只有清单、README 与逐份子包，不再有包根的事务库。
+    assert names == {
+        "manifest.json",
+        "README.txt",
+        "datasets/main.zip",
+        f"datasets/{other_id}.zip",
+    }
+    assert manifest["format"] == 4
     # R16：整包的"类型"与"格式号"分开——前者给界面介绍用，后者决定老版本能不能读。
     assert manifest["type"] == "collection"
-    assert [item["id"] for item in manifest["datasets"]] == [other_id]
-    assert manifest["datasets"][0]["name"] == "校招线"
+    assert [item["id"] for item in manifest["datasets"]] == [MAIN, other_id]
+    assert manifest["datasets"][1]["name"] == "校招线"
+    assert all(len(item["sha256"]) == 64 for item in manifest["datasets"])
 
 
 def test_single_dataset_export_is_typed_as_dataset(client, tmp_path):
     """单份包的 type 是 dataset：界面据此说"一份备份"，不会被当成整包。"""
     _add_job(client, "主数据里的岗位")
 
-    response = client.get(f"/api/settings/datasets/{MAIN}/export")
+    response = client.get(f"/api/settings/datasets/{MAIN}/export?include_api_keys=false")
 
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         manifest = json.loads(archive.read("manifest.json"))
@@ -429,10 +433,10 @@ def test_single_dataset_export_is_typed_as_dataset(client, tmp_path):
 
 
 def test_exporting_one_dataset_stays_format_1(client, tmp_path):
-    """只导一份时格式保持 1——老版本与旧备份的互操作不能因为这次改动受影响。"""
+    """关掉密钥随包时，只导一份的格式保持 1——老版本与旧备份的互操作不受影响。"""
     _other_dataset_with_a_job(client, "校招线", "校招专有岗位")
 
-    response = client.get(f"/api/settings/datasets/{MAIN}/export")
+    response = client.get(f"/api/settings/datasets/{MAIN}/export?include_api_keys=false")
 
     assert response.status_code == 200
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
@@ -444,7 +448,11 @@ def test_exporting_one_dataset_stays_format_1(client, tmp_path):
 
 
 def test_import_restores_the_packaged_datasets(client, tmp_path):
-    """导入一份"全部"包，包里的其余数据集要各落成一份新数据集，且内容是真的。"""
+    """导入一份"全部"包：包里的每一份（含活动那份）都各落成一份新数据集。
+
+    R16 起整包是嵌套结构，活动数据集也以子包形式随包走；导入侧对每份子包单独调用
+    同一套导入链路，返回 ``{restored, skipped, failed, summary}``。
+    """
     other_id = _other_dataset_with_a_job(client, "校招线", "校招专有岗位")
     payload = client.get("/api/settings/datasets/export-all").content
 
@@ -452,15 +460,19 @@ def test_import_restores_the_packaged_datasets(client, tmp_path):
 
     assert response.status_code == 200
     created = response.json()
-    restored = created.get("restored_datasets")
-    assert restored and len(restored) == 1
-    assert restored[0]["name"] == "校招线"  # 名字沿用包里的，用户靠它认人
+    assert created["summary"] == {"restored": 2, "skipped": 0, "failed": 0}
+    by_source = {item["source_id"]: item for item in created["restored"]}
+    assert set(by_source) == {MAIN, other_id}
+    assert by_source[other_id]["name"] == "校招线"  # 名字沿用包里的，用户靠它认人
     # **新 id**：沿用包里的 id 会覆盖本机已有的那份同名 id 的数据集（不可逆）。
-    assert restored[0]["id"] not in {MAIN, other_id}
-    assert {item["id"] for item in _list_datasets(client)} >= {restored[0]["id"], other_id}
+    assert by_source[other_id]["id"] not in {MAIN, other_id}
+    assert {item["id"] for item in _list_datasets(client)} >= {
+        by_source[other_id]["id"],
+        other_id,
+    }
 
     # 恢复出来的那份里确实有那个特征岗位。
-    client.post(f"/api/settings/datasets/{restored[0]['id']}/activate")
+    client.post(f"/api/settings/datasets/{by_source[other_id]['id']}/activate")
     assert _job_titles(client) == {"校招专有岗位"}
 
 

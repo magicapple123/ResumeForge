@@ -55,6 +55,8 @@ describe("ShortcutSettingsCard", () => {
       "打开设置",
       "打开助手技能",
       "打开导出（简历预览中）",
+      "上一页（列表）",
+      "下一页（列表）",
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
@@ -66,6 +68,14 @@ describe("ShortcutSettingsCard", () => {
         within(rowOf(label)).getByRole("button", { name: /恢\s*复\s*默\s*认/ }),
       ).toBeDisabled();
     }
+  });
+
+  it("规避浏览器保留键的动作带说明，翻页写明作用于列表（R8）", () => {
+    renderCard();
+    // 说明用「?」图标承载：既让用户知道为什么不是更顺手的 Ctrl+E / Ctrl+,，也不占列宽。
+    expect(screen.getByLabelText("打开设置 说明")).toBeInTheDocument();
+    expect(screen.getByLabelText("打开导出（简历预览中） 说明")).toBeInTheDocument();
+    expect(screen.getByLabelText("上一页（列表） 说明")).toBeInTheDocument();
   });
 
   it("录制新组合后写入 localStorage 并刷新显示", async () => {

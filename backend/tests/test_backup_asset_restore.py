@@ -9,11 +9,12 @@ import pytest
 from app.dataset_registry import DatasetError
 from app.models.user_file import UserFile
 from app.services.data_backup import create_backup_archive
-from app.services.datasets import export_all_datasets, import_dataset
+from app.services.datasets import import_dataset
 from tests.backup_asset_fixtures import (
     _dataset_names,
     _fingerprints,
     _import_all,
+    _legacy_all_archive,
     _read_manifest,
     database,
     database_path,
@@ -231,7 +232,9 @@ def test_second_packaged_dataset_failure_rolls_back_the_first(
     """
     from app.services import datasets_admin as datasets_admin_service
 
-    archive = export_all_datasets(database.engine, tmp_path / "staging-export")
+    # 多份数据集在**一份**包里按序落盘、失败整包回滚——这是格式 2 的语义；
+    # 格式 4（嵌套整包）改为逐份导入，一份失败不影响其它份。
+    archive = _legacy_all_archive(three_datasets, tmp_path / "staging-export")
     datasets_dir = three_datasets.path_a.parent
     before = _fingerprints(datasets_dir)
     names_before = _dataset_names()

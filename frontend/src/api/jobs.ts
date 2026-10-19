@@ -22,6 +22,13 @@ import type {
 } from "../types";
 import { buildQuery, request, requestRaw } from "./client";
 
+/**
+ * 岗位列表排序键（后端 Literal）：键自带方向，`order` 可覆盖它。
+ * 非法值后端直接 422——所以这里的联合类型就是权威取值。
+ */
+export type JobSort = "created_desc" | "updated_desc" | "title_asc" | "company_asc";
+export type JobSortOrder = "asc" | "desc";
+
 export interface JobListParams {
   keyword?: string;
   job_type?: string;
@@ -29,6 +36,10 @@ export interface JobListParams {
   favorite?: boolean;
   /** 按录入方式粗筛：`collected`=投递台自动采集，`manual`=其余（手动填写/粘贴/截图/文档等）。 */
   source_kind?: "collected" | "manual";
+  /** 排序键（R14）；不传 = 后端默认 `created_desc`。 */
+  sort?: JobSort;
+  /** 方向覆盖；不传则用 sort 自带方向。 */
+  order?: JobSortOrder;
   page?: number;
   page_size?: number;
 }
@@ -138,10 +149,16 @@ export function getJobAnalysis(id: number): Promise<JobAnalysisCache> {
   return request(`/jobs/${id}/analysis`);
 }
 
-export function generateJobAnalysis(id: number, signal?: AbortSignal): Promise<JobAnalysisResult> {
-  // signal 供「取消生成」用：后端调用无法真中断，但界面可以立刻停止等待，
-  // 不让用户对着一个已经放弃的转圈继续等。
-  return request(`/jobs/${id}/analysis`, { method: "POST", signal });
+export function generateJobAnalysis(
+  id: number,
+  signal?: AbortSignal,
+  force = false,
+): Promise<JobAnalysisResult> {
+  // signal 保留给"真正需要中断"的调用方；岗位解读弹窗走的是「停止等待」（R2-b）：
+  // 只关界面、不 abort，服务端连接仍在，生成结束后会写缓存，下次打开秒读。
+  // force（R2-a）：后端默认先读缓存、命中就直接返回；只有点「重新生成」才带它，
+  // 明确表示"这次愿意再付一次 token"。
+  return request(`/jobs/${id}/analysis${force ? "?force=true" : ""}`, { method: "POST", signal });
 }
 
 /**

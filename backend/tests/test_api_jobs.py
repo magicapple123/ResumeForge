@@ -1,5 +1,7 @@
 """岗位、搜索与统计 API 冒烟测试。"""
 
+from datetime import datetime
+
 import pytest
 from app.models.job import Job
 
@@ -415,3 +417,57 @@ def test_stats_reports_activation_totals(client, db_session):
     body = client.get("/api/stats").json()
     assert body["claim_count"] == 2
     assert body["resume_with_job_count"] == 1
+
+
+def _seed_sortable_jobs(db_session) -> None:
+    """三条时间线互不相同的岗位（R14 排序用）。
+
+    时间戳显式给：API 创建的岗位 ``created_at`` 精度只到秒，同一批会撞在一起，排不出
+    可断言的顺序。公司名用 ASCII 前缀，避免把断言绑在 SQLite 的中文码点序上。
+    """
+    rows = [
+        ("Beta", "C公司", datetime(2026, 1, 4, 9), datetime(2026, 3, 1, 9)),
+        ("Alpha", "A公司", datetime(2026, 1, 3, 9), datetime(2026, 3, 2, 9)),
+        ("Gamma", "B公司", datetime(2026, 1, 1, 9), datetime(2026, 3, 3, 9)),
+    ]
+    for title, company, created_at, updated_at in rows:
+        db_session.add(
+            Job(title=title, company=company, created_at=created_at, updated_at=updated_at)
+        )
+    db_session.commit()
+
+
+def test_job_list_sorts_by_the_four_keys_and_honours_order(client, db_session):
+    """岗位排序（R14）：4 个排序键各自生效，显式 order 覆盖 sort 自带方向。"""
+    _seed_sortable_jobs(db_session)
+
+    def titles(**params) -> list[str]:
+        return [item["title"] for item in client.get("/api/jobs", params=params).json()["items"]]
+
+    assert titles() == ["Beta", "Alpha", "Gamma"]  # 默认 created_desc（不传参数也不变）
+    assert titles(sort="created_desc") == ["Beta", "Alpha", "Gamma"]
+    assert titles(sort="updated_desc") == ["Gamma", "Alpha", "Beta"]
+    assert titles(sort="title_asc") == ["Alpha", "Beta", "Gamma"]
+    assert titles(sort="company_asc") == ["Alpha", "Gamma", "Beta"]
+    # 显式 order 覆盖 sort 自带方向（前端第二次点同一列列头时走这条）。
+    assert titles(sort="created_desc", order="asc") == ["Gamma", "Alpha", "Beta"]
+    assert titles(sort="title_asc", order="desc") == ["Gamma", "Beta", "Alpha"]
+    # 列表项带 updated_at：排序键之一要能被前端读回来核对。
+    assert "updated_at" in client.get("/api/jobs").json()["items"][0]
+
+
+def test_job_list_rejects_unknown_sort_values(client):
+    """非法排序值必须 4xx，而不是"200 且顺序不变"（后者会让人以为参数生效了）。"""
+    assert client.get("/api/jobs", params={"sort": "bogus"}).status_code == 422
+    params = {"sort": "title_asc", "order": "sideways"}
+    assert client.get("/api/jobs", params=params).status_code == 422
+    assert client.get("/api/jobs/ids", params={"sort": "bogus"}).status_code == 422
+
+
+def test_job_ids_follow_the_same_order_as_the_list(client, db_session):
+    """「全选全部」拿到的 id 顺序必须与列表一致，否则批量处理顺序会莫名其妙。"""
+    _seed_sortable_jobs(db_session)
+
+    for params in ({}, {"sort": "updated_desc"}, {"sort": "company_asc", "order": "desc"}):
+        listed = [item["id"] for item in client.get("/api/jobs", params=params).json()["items"]]
+        assert client.get("/api/jobs/ids", params=params).json() == listed, params

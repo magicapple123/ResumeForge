@@ -11,10 +11,20 @@ import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { appTheme } from "../theme/appTheme";
 import { layer } from "../theme/tokens";
-import { applyTheme, useResolvedTheme, useThemeMode } from "../features/theme/themeStore";
+import {
+  applyTheme,
+  hydrateThemeFromServer,
+  useResolvedTheme,
+  useThemeMode,
+} from "../features/theme/themeStore";
 
 export default function ThemeProvider({ children }: { children: ReactNode }) {
   const mode = useThemeMode();
+
+  useEffect(() => {
+    // 首屏先从服务端取一次（跨数据集/换浏览器）；服务端无值时保留本地选择。
+    void hydrateThemeFromServer();
+  }, []);
 
   useEffect(() => {
     // 首屏与每次切换都把 data-theme 落到 <html>：避免"主题存了深色、页面却是浅色"。

@@ -1,7 +1,8 @@
 /**
  * 简历字体卡（R10）：上传 → 设为当前 → 删除。
  *
- * 关键边界是"只影响 PDF 导出"，界面上必须写明；以及删除当前字体后要回到系统字体。
+ * 关键边界是"预览、HTML 与 PDF 同一款字"，界面上必须写明（旧文案说"只影响 PDF"，
+ * 会让用户以为预览没变是 bug）；以及删除当前字体后要回到系统字体。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -47,9 +48,10 @@ afterEach(() => {
 });
 
 describe("ResumeFontCard", () => {
-  it("写明只影响 PDF 导出，避免「界面没变」被当成 bug", async () => {
+  it("写明预览、HTML 与 PDF 用同一款字，避免「预览没变」被当成 bug", async () => {
     renderCard();
-    expect(await screen.findByText(/只影响 PDF 导出/)).toBeInTheDocument();
+    expect(await screen.findByText(/用于预览、HTML 与 PDF/)).toBeInTheDocument();
+    expect(screen.queryByText(/只影响 PDF 导出/)).not.toBeInTheDocument();
   });
 
   it("列表里显示当前使用，并可设为当前", async () => {

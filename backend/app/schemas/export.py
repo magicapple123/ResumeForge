@@ -41,7 +41,10 @@ class ExportRequest(BaseModel):
     watermark: str = Field(default="", max_length=200)
     redact: bool = False
     redact_options: RedactionOptions = Field(default_factory=RedactionOptions)
-    # 页边距直接覆盖（mm）：None 表示用记录里的版式（模板默认或 format_config.page_padding）。
+    # 页边距**兼容字段**（R1）：只在请求未提供 ``format_config.page_padding`` 时作为它的
+    # 回落值（收进 8–26mm 后生效），**不再单独覆盖**任何东西。页边距的唯一权威是
+    # ``format_config.page_padding``——预览、HTML、PDF、Word 都读它；两套并存就会出现
+    # "预览 8mm、PDF 30mm"。新调用方请只发 ``page_padding``。
     margin_mm: float | None = Field(default=None, ge=4, le=40)
     # 字号 / 页数覆盖：None 表示沿用记录里存的值。
     font_scale: ResumeFontScale | None = None

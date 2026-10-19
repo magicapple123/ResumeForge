@@ -24,6 +24,8 @@ node_modules/.tmp/
 # 构建产物本身可随时用 `npm run build` 重建，留着只会污染 `git status`。
 rf_build_*/
 frontend/rf_build_*/
+# 审计验收时的一次性构建输出（2026-10-19 快照），同样不该被提交。
+frontend/rf_audit_build/
 
 # ===== 环境与本地数据 =====
 .env

@@ -76,6 +76,7 @@ def create_share_package_entry(payload: SharePackageCreate, db: Session = Depend
             resume_id=payload.resume_id,
             permission=payload.permission,
             redact_options=options,
+            include_photo=payload.include_photo,
         )
     except SharePackageError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

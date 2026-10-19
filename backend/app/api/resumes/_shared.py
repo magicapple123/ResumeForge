@@ -54,6 +54,16 @@ def _as_font_scale(value: str) -> ResumeFontScale:
 PDF_PAGES_HEADER = "X-Resume-Pages"
 PDF_PAGE_LIMIT_HEADER = "X-Resume-Page-Limit"
 
+# 这份 PDF 由哪个引擎排版（当前唯一实现就是 fpdf2）。以前只能靠"样式像不像"猜，
+# 前端与排查脚本要判断"这份文件到底出自服务端引擎还是浏览器打印"就没有依据。
+PDF_ENGINE_HEADER = "X-Pdf-Engine"
+PDF_ENGINE_NAME = "fpdf2"
+
+# "缩到字号下限仍装不下所选页数"的如实标记（取 ``artifact.overflow``）。界面要能提示
+# 用户加页/删内容，靠的是响应头而不是日志——日志只有开发者看得到。**标志不许说谎**：
+# 它必须与 ``X-Resume-Pages`` / ``X-Resume-Page-Limit`` 的结论一致。
+RESUME_OVERFLOW_HEADER = "X-Resume-Overflow"
+
 
 def _format_sse(payload: dict) -> str:
     """把事件转成 SSE 数据帧。"""

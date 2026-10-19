@@ -1,9 +1,10 @@
 /**
- * 简历字体（R10）：上传字体文件，导出 PDF 时使用。
+ * 简历字体（R10）：上传字体文件，预览、导出 HTML 与导出 PDF 统一使用。
  *
- * 边界要说清楚：这里**只影响 PDF 导出**。界面字体跟系统走，网页预览用的是模板
- * 自带的字体栈——把"上传了字体但界面没变"说成 bug 是最容易发生的误会，所以卡片上
- * 直接写明。字体不随应用分发：一款中文字体动辄十几 MB，体积与授权都该由用户自己决定，
+ * 同源性要说清楚：选中的字体会被渲染层按用到的字形子集化，内嵌进预览 HTML，
+ * 导出的 HTML 里也带着同一份子集，PDF 直接读同一个字体文件。**界面本身**（设置页、
+ * 列表页）仍跟系统字体走——把"设置页没变"说成 bug 是最容易发生的误会。
+ * 字体不随应用分发：一款中文字体动辄十几 MB，体积与授权都该由用户自己决定，
  * 所以这里只做"上传 → 选用"这一条路。
  */
 import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
@@ -45,7 +46,7 @@ export default function ResumeFontCard() {
     setBusy(true);
     try {
       const item = await uploadResumeFont(file);
-      message.success(`已上传「${item.name}」，点「设为当前」后导出即生效`);
+      message.success(`已上传「${item.name}」，点「设为当前」后预览与导出即生效`);
       await load();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "上传字体失败");
@@ -67,7 +68,7 @@ export default function ResumeFontCard() {
   const remove = (name: string) => {
     modal.confirm({
       title: `删除字体「${name}」？`,
-      content: "删除后如果它正在使用，导出会回到系统字体。",
+      content: "删除后如果它正在使用，预览与导出会回到系统字体。",
       okText: "删除",
       cancelText: "取消",
       onOk: async () => {
@@ -84,7 +85,8 @@ export default function ResumeFontCard() {
   return (
     <Card className="settings-card" title="简历字体">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        导出 PDF 时使用的字体。**只影响 PDF 导出**：界面与网页预览仍用系统字体。
+        用于预览、HTML 与 PDF：选中的字体在预览里立刻生效，导出的 HTML / PDF 也是同一款字。
+        界面本身（设置页、列表页）仍使用系统字体。
         系统字体缺少你需要的字形（生僻字、繁体）时，上传一个字体文件即可。
       </Typography.Paragraph>
       <Space wrap style={{ marginBottom: 12 }}>
@@ -107,7 +109,7 @@ export default function ResumeFontCard() {
       {items.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="还没有上传字体，导出使用系统自带的中文字体"
+          description="还没有上传字体，预览与导出使用系统自带的中文字体"
         />
       ) : (
         <Listy

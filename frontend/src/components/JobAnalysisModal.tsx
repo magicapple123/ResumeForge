@@ -1,6 +1,6 @@
 /** 按需生成岗位需求总结和通用求职建议。 */
 import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, Listy, Modal, Popconfirm, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Empty, Listy, Modal, Popconfirm, Space, Tag, Typography } from "antd";
 import PageSkeleton from "./common/PageSkeleton";
 import { ListyItem } from "./common/ListyItem";
 import { announceBackgroundFailure, announceBackgroundResult } from "../utils/backgroundTask";
@@ -20,6 +20,7 @@ const PRIORITY_META: Record<JobAnalysisPriority, { label: string; color: string 
 };
 
 export default function JobAnalysisModal({ job, onClose }: Props) {
+  const { message } = App.useApp();
   const [data, setData] = useState<JobAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -65,56 +66,87 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
   // 用户在生成过程中关掉了弹窗：请求继续跑，但结果用统一通知告诉他（见 utils/backgroundTask）。
   const leftWhileLoading = useRef(false);
 
-  // 取消生成：只中止这一次等待，不动已经拿到的旧结果（用户可能就是不想覆盖它）。
+  // R2-b：请求一旦发出就**不主动 abort**。后端只有检测到客户端仍连接时才写缓存；
+  // abort 会让这次已经烧掉的 token 白费（下次打开又要重跑）。controller 仍保留，
+  // 只是当前没有任何地方调用 `abort()`。
   const abortRef = useRef<AbortController | null>(null);
 
-  const cancel = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
+  // 组件卸载（父级换页/整块销毁）后不再 setState；在途请求照常跑完并落缓存。
+  // 挂载时显式置回 true：StrictMode 会「挂载→清理→再挂载」，只在清理里置 false 会让
+  // 后续所有提示都被吞掉。
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  /**
+   * 「停止等待」（R2-b 诚实降级）：停止占用用户注意力，但**不断开连接**。
+   *
+   * 只做三件事：停掉加载动画并清掉错误、关闭弹窗、提示「后台会完成并缓存」。
+   * 不 abort 是刻意的——服务端连接不断，本次生成才会写进缓存，下次打开秒读。
+   */
+  const stopWaiting = () => {
+    // 让迟到的结果不再回填到已经关掉的弹窗；请求本身继续跑。
     requestVersion.current += 1;
-    setLoading(false);
-    setError("");
-    // 取消后回到「可以重新开始」的状态，而不是留一个空白或一个错误框。
-    setHasAttempted(false);
+    if (mounted.current) {
+      setLoading(false);
+      setError("");
+      setHasAttempted(false);
+    }
+    onClose();
+    message.info("已停止等待。后台仍会完成本次生成并缓存，下次打开可直接查看。", 6);
   };
 
-  const load = useCallback(async () => {
-    if (!job) return;
-    const currentRequest = ++requestVersion.current;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setHasAttempted(true);
-    setLoading(true);
-    setError("");
-    leftWhileLoading.current = false;
-    try {
-      const result = await generateJobAnalysis(job.id, controller.signal);
-      if (leftWhileLoading.current) {
-        announceBackgroundResult("岗位解读", "回到岗位详情再点「岗位需求解读」即可看到。");
-        return;
+  const load = useCallback(
+    async (force = false) => {
+      if (!job) return;
+      const currentRequest = ++requestVersion.current;
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setHasAttempted(true);
+      setLoading(true);
+      setError("");
+      leftWhileLoading.current = false;
+      try {
+        // R2-a：普通生成不带 force——后端已有缓存时直接返回，不必重跑模型再付一次钱。
+        const result = await generateJobAnalysis(job.id, controller.signal, force);
+        if (leftWhileLoading.current) {
+          announceBackgroundResult("岗位解读", "回到岗位详情再点「岗位需求解读」即可看到。");
+          return;
+        }
+        if (currentRequest === requestVersion.current) {
+          setData(result);
+          setStale(false);
+          setGeneratedAt(new Date().toISOString());
+        }
+      } catch (loadError) {
+        // 用户主动取消：不是失败，也不该弹「生成失败」。
+        if (controller.signal.aborted) {
+          if (currentRequest === requestVersion.current) setLoading(false);
+          return;
+        }
+        const detail =
+          loadError instanceof Error ? loadError.message : "生成岗位解读失败，请稍后重试";
+        if (leftWhileLoading.current) {
+          announceBackgroundFailure("岗位解读", detail);
+          return;
+        }
+        if (currentRequest === requestVersion.current) setError(detail);
+      } finally {
+        if (!leftWhileLoading.current && currentRequest === requestVersion.current)
+          setLoading(false);
       }
-      if (currentRequest === requestVersion.current) {
-        setData(result);
-        setStale(false);
-        setGeneratedAt(new Date().toISOString());
-      }
-    } catch (loadError) {
-      // 用户主动取消：不是失败，也不该弹「生成失败」。
-      if (controller.signal.aborted) {
-        if (currentRequest === requestVersion.current) setLoading(false);
-        return;
-      }
-      const detail =
-        loadError instanceof Error ? loadError.message : "生成岗位解读失败，请稍后重试";
-      if (leftWhileLoading.current) {
-        announceBackgroundFailure("岗位解读", detail);
-        return;
-      }
-      if (currentRequest === requestVersion.current) setError(detail);
-    } finally {
-      if (!leftWhileLoading.current && currentRequest === requestVersion.current) setLoading(false);
-    }
-  }, [job]);
+    },
+    [job],
+  );
+
+  /** 「重新生成」：唯一会带 `force=true` 的入口——用户明确要求覆盖当前结论。 */
+  const regenerate = useCallback(() => {
+    void load(true);
+  }, [load]);
 
   // R2：**不**在打开弹窗时自动调模型。先说明「要读什么、大概多久、能不能走开」，
   // 用户点「开始生成」才发请求——此前一打开就转圈，用户既不知道在等什么，也不好取消。
@@ -157,8 +189,8 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
           />
           <div style={{ marginTop: 12, textAlign: "right" }}>
             <Space>
-              {/* 取消只影响这一次等待：后端调用无法真中断，但界面不再占用你的注意力。 */}
-              <Button onClick={cancel}>取消生成</Button>
+              {/* R2-b：停止等待 ≠ 取消。连接不断，后台跑完会写缓存；下次打开直接读缓存。 */}
+              <Button onClick={stopWaiting}>停止等待</Button>
               <Button
                 onClick={() => {
                   leftWhileLoading.current = true;
@@ -197,7 +229,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
                 description="当前这份解读会被新结果替换。"
                 okText="重新生成"
                 cancelText="取消"
-                onConfirm={() => void load()}
+                onConfirm={regenerate}
               >
                 <Button type="link" size="small" aria-label="重新生成" icon={<ReloadOutlined />}>
                   重新生成

@@ -57,6 +57,7 @@ from .data_backup.asset_manifest import (
     verify_database_rows,
 )
 from .data_backup.asset_restore import AssetRestorePlan, verify_restored_assets
+from .data_backup.collection_import import import_collection, is_nested_collection
 from .data_backup.import_archive import (
     _remove_candidate_files,
 )
@@ -131,7 +132,13 @@ def import_dataset(
     3. 阶段三原子、不覆盖地发布附件；失败回收本次新建的文件；
     4. 最后按清单独立复核磁盘现状，严格模式失败回滚；仅显式允许部分附件恢复时
        返回 ``asset_issues`` 与不完整标志。旧包走同一发布链，但没有原始 SHA-256。
+
+    格式 4（嵌套整包，R16）分流给 ``collection_import``；格式 1/2/3 的旧路径不变。
     """
+    if is_nested_collection(archive_path):
+        return import_collection(
+            archive_path, name, bind, staging_dir, allow_partial_assets=allow_partial_assets
+        )
     preview = inspect_archive(archive_path, bind, staging_dir)
     manifest = preview.get("manifest", {})
     actual_counts = preview.get("database", {}).get("tables", {})

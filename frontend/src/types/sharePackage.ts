@@ -52,6 +52,8 @@ export interface SharePackageCreatePayload {
   resume_id: number;
   permission: SharePermission;
   redact_options?: RedactionOptions;
+  /** 是否把简历照片带进 HTML / PDF（默认 true）；快照 JSON 本来就不含照片。 */
+  include_photo?: boolean;
 }
 
 export interface ShareReveal {

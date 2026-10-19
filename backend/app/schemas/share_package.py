@@ -8,6 +8,7 @@
 ``redact_options`` 直接复用 ``schemas/export.RedactionOptions``：脱敏规则仍只有
 ``services/privacy.redact`` 一份实现，这里只是把 HTTP 请求的字段白名单化。
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -31,6 +32,9 @@ class SharePackageCreate(BaseModel):
     resume_id: int = Field(ge=1)
     permission: SharePermission = "read_only"
     redact_options: RedactionOptions = Field(default_factory=RedactionOptions)
+    # 照片默认随包走（与导出默认一致）：分享包里 HTML/PDF 用的是同一份版式与内容，
+    # 关掉只影响那两个产物，快照 JSON 本来就不含照片。
+    include_photo: bool = True
 
     @field_validator("permission")
     @classmethod
