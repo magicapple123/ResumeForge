@@ -7,6 +7,7 @@ cd "$ROOT" || exit 1
 
 # Collect staged files
 STAGED_P=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.py$' || true)
+STAGED_P_NEW=$(git diff --cached --name-only --diff-filter=A | grep '\.py$' || true)
 STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' || true)
 
 FAIL=0
@@ -18,8 +19,15 @@ if [ -n "$STAGED_P" ]; then
   if [ -z "$RUFF" ]; then RUFF=$(command -v ruff || true); fi
   if [ -n "$RUFF" ]; then
     echo "[pre-commit] ruff check..."
-    "$RUFF" check $STAGED_P || FAIL=1
-    "$RUFF" format --check $STAGED_P || FAIL=1
+    # 逐批传参：暂存文件多时（如批量加了文件头）一次性把路径铺进 argv 会撞
+    # Windows 的命令行长度上限，报 "Argument list too long" 而不是真的 lint 失败。
+    printf '%s\n' "$STAGED_P" | xargs -n 200 "$RUFF" check || FAIL=1
+    # 格式检查只覆盖本次新增的文件。仓库存量代码有数百个文件不符合
+    # `ruff format`（2026-10-20 实测 HEAD 就有 462 个），对「批量改已有文件」
+    # 一律要求格式化，会把无关的格式 churn 混进提交。新文件仍必须格式化。
+    if [ -n "$STAGED_P_NEW" ]; then
+      printf '%s\n' "$STAGED_P_NEW" | xargs -n 200 "$RUFF" format --check || FAIL=1
+    fi
   else
     echo "[pre-commit] WARNING: ruff not found, skipped"
   fi
@@ -32,7 +40,8 @@ for f in $STAGED_TS; do
 done
 if [ -n "$STAGED_TS_REL" ] && [ -d "frontend/node_modules" ]; then
   echo "[pre-commit] eslint on staged files..."
-  (cd frontend && ./node_modules/.bin/eslint $STAGED_TS_REL) || FAIL=1
+  # 同上，分批传参避免 argv 超长
+  printf '%s\n' $STAGED_TS_REL | (cd frontend && xargs -n 100 ./node_modules/.bin/eslint) || FAIL=1
 fi
 
 # 3) Backend structural guards (fast tests)
