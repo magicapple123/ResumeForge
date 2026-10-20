@@ -5,12 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { getJob, listJobs } from "../../api/jobs";
 import { useApi } from "../../hooks/useApi";
 import type { Job, JobList } from "../../types";
-import {
-  DEFAULT_JOB_SORT,
-  isJobSort,
-  isJobSortOrder,
-  type JobSortState,
-} from "../../utils/jobSort";
+import { DEFAULT_JOB_SORT_STATE, type JobSortState } from "../../utils/jobSort";
 
 export function useJobsPageState() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -27,16 +22,10 @@ export function useJobsPageState() {
   });
   const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
   const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
-  // 排序（R14）：初值从 URL 读（刷新/分享后箭头与顺序都能复原），非法值回落到默认。
+  // 排序（E）：**只存在组件状态里**，不进 URL。离开岗位广场（组件卸载）即恢复默认，
+  // 从简历中心回来不会停在上次的排序上；URL 里的 sort/order 也不再被读取。
   // 后端是分页排序的唯一权威——绝不能在前端对本页数据本地排序（分页会错）。
-  const [sortState, setSortState] = useState<JobSortState>(() => {
-    const rawSort = searchParams.get("sort");
-    const rawOrder = searchParams.get("order");
-    return {
-      sort: isJobSort(rawSort) ? rawSort : DEFAULT_JOB_SORT,
-      order: isJobSortOrder(rawOrder) ? rawOrder : null,
-    };
-  });
+  const [sortState, setSortState] = useState<JobSortState>(DEFAULT_JOB_SORT_STATE);
   /** 换排序一定回到第 1 页：停在第 3 页看"按标题排"的第一批没有意义。 */
   const applySort = useCallback((next: JobSortState) => {
     setSortState(next);
@@ -104,9 +93,9 @@ export function useJobsPageState() {
           ["source_kind", sourceKind],
           ["page", page > 1 ? String(page) : ""],
           ["page_size", pageSize !== 10 ? String(pageSize) : ""],
-          // 默认排序不写回 URL：干净的链接比"默认值也显式写出来"更好读（同简历页）。
-          ["sort", sortState.sort === DEFAULT_JOB_SORT ? "" : sortState.sort],
-          ["order", sortState.order ?? ""],
+          // 排序不进 URL（E）：显式删除，清掉旧链接里残留的 sort/order。
+          ["sort", ""],
+          ["order", ""],
         ];
         for (const [key, value] of values) {
           if (value) next.set(key, value);
@@ -116,7 +105,7 @@ export function useJobsPageState() {
       },
       { replace: true },
     );
-  }, [keyword, jobType, status, sourceKind, page, pageSize, sortState, setSearchParams]);
+  }, [keyword, jobType, status, sourceKind, page, pageSize, setSearchParams]);
 
   // 详情与 ?job_id= 同步：打开详情只写 URL（可分享/刷新后恢复），岗位本体由下面的
   // effect 统一经 getJob 拉全量——列表项已瘦身（JobList），这里不再直接复用。

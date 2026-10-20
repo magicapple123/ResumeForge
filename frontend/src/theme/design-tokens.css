@@ -45,18 +45,46 @@
   --rf-accent-amber: #f0b429;
   --rf-accent-blue: #7ba7d0;
   --rf-accent-pink: #f08bb4;
+  /* 求职进度的阶段色（T9）：**随主题变化**，所以只存在于 CSS——`tokens.ts` 不带它们。
+     深色对应值见 dark-tokens.css（同名同序）。这六档是"图形/色块"用色，
+     对比度门槛 3:1（不是正文的 4.5），实测值见 theme/contrast.test.ts。 */
+  --rf-stage-applied: #64748b;
+  --rf-stage-screening: #3b6ea5;
+  --rf-stage-assessment: #2f7d7d;
+  --rf-stage-interview: #6b5fa8;
+  --rf-stage-offer: #2f8f5b;
+  --rf-stage-rejected: #b04a4a;
   /* 半透明面板（悬浮卡、吸顶条）：背景会透出一点，必须随主题翻转。 */
   --rf-surface-glass: rgb(255 255 255 / 92%);
   --rf-surface-glass-border: rgb(31 56 85 / 8%);
   --rf-focus-ring: #91caff;
   --rf-surface: #ffffff;
+  /* 浮起面：下拉、Tooltip、Popover、页头上的 chip。浅色下与卡片同白——
+     层次靠阴影而不是亮度差，深色下才需要抬高亮度（见 dark-tokens.css）。 */
+  --rf-surface-elevated: #ffffff;
   --rf-text-body: #223047;
   --rf-success-text: #176b41;
   --rf-warning-text: #875300;
   --rf-error-text: #b42318;
   --rf-focus-visible: #0958d9;
-  /* 收藏星标：只用在图标上（不上文字），深色下需要提亮才看得见。 */
-  --rf-favorite: #d89614;
+  /* 收藏星标：只用在图标上（不上文字）。**亮琥珀**是它作为"可点击的收藏态"的语义，
+     不能被换成正文/警示文字色——`--rf-warning-text`（#875300）在浅色下是深棕，
+     星标会像一颗脏点（2026-10 回归）。深色下提亮到 #f0c04a。 */
+  --rf-favorite: #f5a623;
+  /* 大数字的强语义色（求职统计页的「Offer 数」「逾期提醒」）：这两处沿用
+     antd green-7 / red-7，与 --rf-success-text 不是同一个用途——后者是**正文级**
+     状态文字（更暗、对比度更高），这里是大字号指标，保留原来的鲜活度。 */
+  --rf-success-strong: #389e0d;
+  --rf-error-strong: #cf1322;
+  /* 版本对比（diff）三态：底色 / 描边（也是词级高亮的那一档填充）/ 文字。
+     浅色取 antd green-1/green-2/green-9 与 red-1/red-2/red-9 的现值，
+     深色另给一套（深底上浅色底块会变成"亮砖"）。 */
+  --rf-diff-added-bg: #f6ffed;
+  --rf-diff-added-border: #d9f7be;
+  --rf-diff-added-text: #135200;
+  --rf-diff-removed-bg: #fff1f0;
+  --rf-diff-removed-border: #ffccc7;
+  --rf-diff-removed-text: #a8071a;
   /* A4 纸面：**两种主题下都是白纸**。导出与打印看到的就是屏幕上这张纸，
      纸不跟着外壳变暗——所以它只能是常量，不是 --rf-surface。 */
   --rf-paper: #ffffff;
@@ -68,6 +96,11 @@
   --rf-radius-panel: 16px;
   --rf-motion-duration: 180ms;
   --rf-header-height: 64px;
+  /* 弹窗内容区统一高度上限：替代各弹窗散落的 170/180/200/220/230px 多档写法。
+     240px ≈ header + footer + 视口上下安全边距的总和（弹窗距视口上下各 ≥ 48px）。
+     移动端在 mobile.css 的媒体查询里另给一档（页头更高、边距更小）。
+     这是**长度** token：只有这一个源头，深色不重复声明（否则会盖掉移动端档位）。 */
+  --rf-modal-body-max-h: calc(100vh - 240px);
 
   /*
    * 弹层层级（与 tokens.ts layer 一一对应）。谁盖谁（自下而上）：
@@ -102,12 +135,26 @@
 }
 
 /*
+ * dvh 回退：移动端浏览器地址栏收起/展开时 `vh` 不是"真正的可见高度"，弹窗会被
+ * 地址栏压掉一截。自定义属性不能像普通声明那样"写两次取后一条"（浏览器不校验
+ * 它的单位），所以这里用 @supports 门控——不支持 dvh 的浏览器保留上面的 vh 值。
+ */
+@supports (height: 100dvh) {
+  :root {
+    --rf-modal-body-max-h: calc(100dvh - 240px);
+  }
+}
+
+/*
  * RF-12 a11y：antd 预设 Tag 的浅底配色（green/success）前景对浅底不足 4.5:1
  * （#389e0d/#52c41a on #f6ffed ≈ 2.2–3.4），统一加深前景到 green-7（5.3:1）。
  * 只改前景色，底色与语义不变——表格/折叠头里的状态标签仍带文字，颜色不是唯一信号。
+ *
+ * 作用域收窄到**仅浅色**：深色下 #237804 是深绿，压在深绿的 Tag 底上等于看不见。
+ * 深色的对应规则在 dark-tokens.css（改用 --rf-success-text）。
  */
-.ant-tag.ant-tag-green,
-.ant-tag.ant-tag-success {
+:root:not([data-theme="dark"]) .ant-tag.ant-tag-green,
+:root:not([data-theme="dark"]) .ant-tag.ant-tag-success {
   /* !important：antd 的 cssinjs 样式注入晚于本文件，同权重会被它覆盖。 */
   color: #237804 !important;
 }

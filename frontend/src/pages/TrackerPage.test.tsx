@@ -531,3 +531,44 @@ describe("TrackerPage ?job_id= 深链（RF-11）", () => {
     expect(screen.queryByText(/只看该岗位的投递/)).toBeNull();
   });
 });
+
+/**
+ * T9：统计卡的上色从 `:nth-child(2..5)` 换成**语义类名**。
+ *
+ * 位置选择器的故障很隐蔽：`statsError` 时网格里会多出一个错误文案节点，于是"总数"拿到
+ * 灰色之外的配色、五张卡的颜色整体前移一格——看起来只是"颜色好像不太对"，没人会觉得
+ * 那是 bug。类名与顺序解耦之后，加任何兄弟节点都不影响配色。
+ */
+describe("TrackerPage 统计卡配色（T9）", () => {
+  const STAT_KEYS = ["total", "active", "month", "offer", "closed"];
+
+  it("5 张统计卡各带自己的语义类名", async () => {
+    apiMocks.listTrackStats.mockResolvedValue(makeStats([makeTrack()]));
+    renderPage();
+    await screen.findByText("总数");
+
+    for (const key of STAT_KEYS) {
+      expect(
+        document.querySelector(`.tracker-summary > .tracker-stat--${key}`),
+        `缺少 .tracker-stat--${key}`,
+      ).not.toBeNull();
+    }
+  });
+
+  it("统计失败时：错误文案排在最前，5 张卡的类名一个不少（位置不再决定配色）", async () => {
+    apiMocks.listTrackStats.mockRejectedValue(new Error("统计接口挂了"));
+    renderPage();
+
+    const summary = await waitFor(() => {
+      const node = document.querySelector<HTMLElement>(".tracker-summary");
+      if (!node?.textContent?.includes("统计加载失败")) throw new Error("还没渲染错误态");
+      return node;
+    });
+
+    // 多出来的这个兄弟节点（错误文案）不该再"顶掉"任何一张卡的配色。
+    expect(summary.firstElementChild?.textContent).toContain("统计加载失败");
+    for (const key of STAT_KEYS) {
+      expect(summary.querySelector(`.tracker-stat--${key}`)).not.toBeNull();
+    }
+  });
+});

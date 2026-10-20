@@ -21,8 +21,6 @@ import UpdateCard from "../components/settings/UpdateCard";
 import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
 import PrivacyCard from "../components/settings/PrivacyCard";
 import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
-import AppearanceCard from "../components/settings/AppearanceCard";
-import GlobalLLMCard from "../components/settings/GlobalLLMCard";
 import ResumeFontCard from "../components/settings/ResumeFontCard";
 import ShortcutSettingsCard from "../components/settings/ShortcutSettingsCard";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
@@ -111,8 +109,8 @@ export default function SettingsPage() {
     datasetsLoading,
     datasetExporting,
     datasetImporting,
-    includeApiKeys,
-    setIncludeApiKeys,
+    includeGlobalLLM,
+    setIncludeGlobalLLM,
     switchingDatasetId,
     renamingDatasetId,
     deletingDatasetId,
@@ -164,16 +162,16 @@ export default function SettingsPage() {
                 <div className="settings-section-head">
                   <div className="settings-section-titles">
                     <Typography.Text type="secondary">
-                      简历生成、岗位解读与求职助手用的是同一套模型配置；已保存的配置以记录卡片展示，
-                      点「新增配置」或记录卡上的「编辑」在弹窗中填写。
+                      简历生成、岗位解读与求职助手用的是同一套模型配置，所有数据集共用；
+                      已保存的配置以记录卡片展示，点「新增配置」或记录卡上的「编辑」在弹窗中填写。
                     </Typography.Text>
                   </div>
                 </div>
 
-                {/* R21：跨数据集的模型配置——放在"当前数据集那一份"之前，先讲大局。 */}
-                <GlobalLLMCard />
-
-                <SettingsGroupTitle text="模型服务" hint="当前数据集的配置与已保存的配置记录" />
+                <SettingsGroupTitle
+                  text="大模型 API 配置（所有数据集共用）"
+                  hint="保存即对所有数据集生效；记录卡片可随时切换「使用中」"
+                />
                 <LLMConfigCard
                   records={records}
                   recordsLoading={recordsLoading}
@@ -251,8 +249,8 @@ export default function SettingsPage() {
                   loading={datasetsLoading}
                   exporting={datasetExporting}
                   importing={datasetImporting}
-                  includeApiKeys={includeApiKeys}
-                  onIncludeApiKeysChange={setIncludeApiKeys}
+                  includeGlobalLLM={includeGlobalLLM}
+                  onIncludeGlobalLLMChange={setIncludeGlobalLLM}
                   switchingId={switchingDatasetId}
                   renamingId={renamingDatasetId}
                   deletingId={deletingDatasetId}
@@ -313,7 +311,11 @@ export default function SettingsPage() {
                   text="界面与提醒"
                   hint="导航入口、快捷键、悬浮球与近期提醒的行为"
                 />
-                <AppearanceCard />
+                {/* 主题切换已上移到页头（A3）：设置页只留一句说明，避免两处控件各说一套。 */}
+                <Typography.Paragraph type="secondary" className="settings-theme-note">
+                  主题在页面右上角切换；深色只作用于应用界面，简历预览、导出 PDF 与打印结果
+                  仍是白纸。
+                </Typography.Paragraph>
                 <ResumeFontCard />
                 <NavigationSettingsCard />
                 <ShortcutSettingsCard />

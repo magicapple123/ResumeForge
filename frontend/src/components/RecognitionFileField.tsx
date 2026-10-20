@@ -1,15 +1,11 @@
-/** 识别前的文件暂存区：截图显示缩略图，文档显示文件名。 */
+/** 识别前的文件暂存区：图片显示缩略图（可点开预览），文档显示名称与体积。 */
 
-import {
-  DeleteOutlined,
-  FilePdfOutlined,
-  FileWordOutlined,
-  PictureOutlined,
-} from "@ant-design/icons";
-import { App, Button, Image, Tag, Tooltip, Typography, Upload } from "antd";
+import { DeleteOutlined, PictureOutlined } from "@ant-design/icons";
+import { App, Button, Image, Tooltip, Typography, Upload } from "antd";
 import type { StagedFile } from "../hooks/useRecognitionFiles";
-import { MAX_ATTACHMENT_COUNT, RECOGNITION_ACCEPT, canPreviewImage } from "../utils/attachments";
+import { MAX_ATTACHMENT_COUNT, RECOGNITION_ACCEPT } from "../utils/attachments";
 import FileDropZone from "./common/FileDropZone";
+import RecognitionFilePreview from "./RecognitionFilePreview";
 
 interface Props {
   files: StagedFile[];
@@ -17,10 +13,6 @@ interface Props {
   disabled?: boolean;
   onAddFiles: (files: File[]) => void;
   onRemove: (id: number) => void;
-}
-
-function documentIcon(name: string) {
-  return name.toLowerCase().endsWith(".pdf") ? <FilePdfOutlined /> : <FileWordOutlined />;
 }
 
 export default function RecognitionFileField({
@@ -70,34 +62,28 @@ export default function RecognitionFileField({
         </div>
 
         {files.length > 0 && (
-          <div className="recognition-files-list">
-            {files.map((file) => (
-              <div key={file.id} className="recognition-file-item">
-                {file.kind === "image" && canPreviewImage(file.mime_type) ? (
-                  <Image src={file.data} alt={file.name} className="recognition-image" />
-                ) : (
-                  // 浏览器渲染不了的图片（TIFF）和文档都用文件名标签，不做破图预览。
-                  <Tag
-                    className="recognition-file-tag"
-                    icon={file.kind === "image" ? <PictureOutlined /> : documentIcon(file.name)}
-                  >
-                    {file.name}
-                  </Tag>
-                )}
-                <Tooltip title={`移除 ${file.name}`}>
-                  <Button
-                    type="text"
-                    size="small"
-                    danger
-                    aria-label={`移除文件 ${file.name}`}
-                    icon={<DeleteOutlined />}
-                    disabled={busy}
-                    onClick={() => onRemove(file.id)}
-                  />
-                </Tooltip>
-              </div>
-            ))}
-          </div>
+          // 同一个 PreviewGroup 包住整个列表：同一次暂存的多张图点开后可以左右切换/缩放，
+          // 而不是各自弹一个只能看自己那一张的浮层。
+          <Image.PreviewGroup>
+            <div className="recognition-files-list">
+              {files.map((file) => (
+                <div key={file.id} className="recognition-file-item">
+                  <RecognitionFilePreview file={file} />
+                  <Tooltip title={`移除 ${file.name}`}>
+                    <Button
+                      type="text"
+                      size="small"
+                      danger
+                      aria-label={`移除文件 ${file.name}`}
+                      icon={<DeleteOutlined />}
+                      disabled={busy}
+                      onClick={() => onRemove(file.id)}
+                    />
+                  </Tooltip>
+                </div>
+              ))}
+            </div>
+          </Image.PreviewGroup>
         )}
       </div>
     </FileDropZone>

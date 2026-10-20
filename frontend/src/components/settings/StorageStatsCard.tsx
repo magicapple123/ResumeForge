@@ -231,6 +231,15 @@ export default function StorageStatsCard() {
         okButtonProps={{ disabled: (cleanupPlan?.totals.files ?? 0) === 0 }}
         onOk={() => void confirmCleanup()}
         onCancel={() => setCleanupOpen(false)}
+        // 清单可能有 30+ 个文件：body 用统一上限自己滚动（--rf-modal-body-max-h），
+        // 候选清单再在里面单独限高——这样头部说明与底部按钮都不随滚动跑掉。
+        // 只加高度与溢出，不改 body 的 padding（浅色视觉必须零变化）。
+        styles={{
+          body: {
+            maxHeight: "var(--rf-modal-body-max-h)",
+            overflowY: "auto",
+          },
+        }}
         width="min(560px, 92vw)"
       >
         {cleanupPlan ? (
@@ -268,26 +277,28 @@ export default function StorageStatsCard() {
                 })}
               </Space>
             </Checkbox.Group>
-            <Listy
-              items={listedCandidates.slice(0, CANDIDATE_PREVIEW_LIMIT)}
-              rowKey={(item) => item.path}
-              itemRender={(item) => (
-                <ListyItem>
-                  <Space style={{ width: "100%", justifyContent: "space-between" }}>
-                    <Typography.Text ellipsis title={item.path} style={{ maxWidth: 340 }}>
-                      {item.label}·{item.path}
-                    </Typography.Text>
-                    <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
-                  </Space>
-                </ListyItem>
-              )}
-            />
-            {listedCandidates.length > CANDIDATE_PREVIEW_LIMIT ? (
-              <Typography.Text type="secondary">
-                还有 {listedCandidates.length - CANDIDATE_PREVIEW_LIMIT}{" "}
-                个文件未列出，确认后一并移走。
-              </Typography.Text>
-            ) : null}
+            <div className="cleanup-candidate-list">
+              <Listy
+                items={listedCandidates.slice(0, CANDIDATE_PREVIEW_LIMIT)}
+                rowKey={(item) => item.path}
+                itemRender={(item) => (
+                  <ListyItem>
+                    <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                      <Typography.Text ellipsis title={item.path} style={{ maxWidth: 340 }}>
+                        {item.label}·{item.path}
+                      </Typography.Text>
+                      <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
+                    </Space>
+                  </ListyItem>
+                )}
+              />
+              {listedCandidates.length > CANDIDATE_PREVIEW_LIMIT ? (
+                <Typography.Text type="secondary">
+                  还有 {listedCandidates.length - CANDIDATE_PREVIEW_LIMIT}{" "}
+                  个文件未列出，确认后一并移走。
+                </Typography.Text>
+              ) : null}
+            </div>
           </Space>
         ) : null}
       </Modal>

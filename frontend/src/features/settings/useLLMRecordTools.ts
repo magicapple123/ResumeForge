@@ -162,8 +162,8 @@ function pickRegistered(values: RecordFormValues): Record<string, unknown> {
 
 export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigRecord[]>>) {
   const { message } = App.useApp();
-  const [recordTestingId, setRecordTestingId] = useState<number | null>(null);
-  const [recordTestResults, setRecordTestResults] = useState<Record<number, LLMTestResult>>({});
+  const [recordTestingId, setRecordTestingId] = useState<string | null>(null);
+  const [recordTestResults, setRecordTestResults] = useState<Record<string, LLMTestResult>>({});
   const [recordForm] = Form.useForm<RecordFormValues>();
   /** null = 弹窗关闭；非 null = 编辑该记录；配合 modalOpen 区分新增态。 */
   const [editingRecord, setEditingRecord] = useState<LLMConfigRecord | null>(null);
@@ -289,7 +289,7 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
     [recordTestingId],
   );
 
-  /** 打开新增弹窗：从与后端一致的默认值开始填；保存后不自动生效。 */
+  /** 打开新增弹窗：从与后端一致的默认值开始填；保存后不自动抢占「使用中」。 */
   const openCreate = useCallback(() => {
     recordForm.resetFields();
     recordForm.setFieldsValue(createDefaults());

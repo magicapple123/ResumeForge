@@ -22,6 +22,7 @@ import type {
   WebFormRelaxedModeSetting,
 } from "../types";
 import { getFilenameFromDisposition, request, requestRaw } from "./client";
+import type { RequestBudgetKind } from "./client";
 
 export function getLLMConfig(): Promise<LLMConfig> {
   return request("/settings/llm");
@@ -117,8 +118,17 @@ export function clearLLMSessionKey(): Promise<void> {
   return request("/settings/llm/session-key", { method: "DELETE" });
 }
 
-export function testLLM(config: LLMConfig): Promise<LLMTestResult> {
-  return request("/settings/llm/test", { method: "POST", body: JSON.stringify(config) });
+/**
+ * 测一次连接（T8）。
+ *
+ * 预算默认 `task`（30s）：真实模型的首字延迟经常超过 15s，用 default 会把它误判成"连不上"。
+ * 调用方（页头下拉双击）显式要求"只测连接、不切换"，所以这里只发一次探测请求。
+ */
+export function testLLM(
+  config: LLMConfig,
+  budget: RequestBudgetKind = "task",
+): Promise<LLMTestResult> {
+  return request("/settings/llm/test", { method: "POST", body: JSON.stringify(config), budget });
 }
 
 export function listLLMConfigRecords(): Promise<LLMConfigRecord[]> {
@@ -131,7 +141,7 @@ export function saveLLMConfigRecord(
   return request("/settings/llm/records", { method: "POST", body: JSON.stringify(record) });
 }
 
-export function deleteLLMConfigRecord(id: number): Promise<void> {
+export function deleteLLMConfigRecord(id: string): Promise<void> {
   return request(`/settings/llm/records/${id}`, { method: "DELETE" });
 }
 
@@ -268,7 +278,9 @@ export async function importDataset(
 }
 
 export function activateDataset(id: string): Promise<DatasetInfo> {
-  return request(`/settings/datasets/${id}/activate`, { method: "POST" });
+  // 切换要等后端排空（上限 10s）再跑两次元数据迁移：default 的 15s 会把"快成功"的
+  // 切换掐成客户端超时，而服务端此时已经切完了——下次写请求就拿着旧 token 吃 409。
+  return request(`/settings/datasets/${id}/activate`, { method: "POST", budget: "task" });
 }
 
 export function renameDataset(id: string, name: string): Promise<DatasetInfo> {
@@ -283,10 +295,13 @@ export function deleteDataset(id: string): Promise<void> {
 export async function exportDataset(
   id: string,
   includeApiKeys = true,
+  includeGlobalLLM = true,
   /** 下载名（可含中文）；省略时后端用「<数据集名>-<时间戳>.zip」。 */
   filename?: string,
-): Promise<{ blob: Blob; filename: string; incompleteBackup: boolean }> {
-  return downloadArchive(exportUrl(`/settings/datasets/${id}/export`, includeApiKeys, filename));
+): Promise<ArchiveDownload> {
+  return downloadArchive(
+    exportUrl(`/settings/datasets/${id}/export`, includeApiKeys, includeGlobalLLM, filename),
+  );
 }
 
 /**
@@ -297,36 +312,77 @@ export async function exportDataset(
  */
 export async function exportAllDatasets(
   includeApiKeys = true,
+  includeGlobalLLM = true,
   filename?: string,
-): Promise<{ blob: Blob; filename: string; incompleteBackup: boolean }> {
-  return downloadArchive(exportUrl("/settings/datasets/export-all", includeApiKeys, filename));
+): Promise<ArchiveDownload> {
+  return downloadArchive(
+    exportUrl("/settings/datasets/export-all", includeApiKeys, includeGlobalLLM, filename),
+  );
 }
 
 /**
- * 拼导出 URL：始终显式带 `include_api_keys`（后端默认 true），否则"取消勾选"会被
- * 当成缺省值重新包含密钥。
+ * 拼导出 URL：始终显式带两个开关（后端默认 true），否则"取消勾选"会被当成缺省值
+ * 重新包含。`include_global_llm` 控制整个 `global_llm.json` 段，不是只控密钥。
  */
-function exportUrl(base: string, includeApiKeys: boolean, filename?: string): string {
-  const params = [`include_api_keys=${includeApiKeys ? "true" : "false"}`];
+function exportUrl(
+  base: string,
+  includeApiKeys: boolean,
+  includeGlobalLLM: boolean,
+  filename?: string,
+): string {
+  const params = [
+    `include_api_keys=${includeApiKeys ? "true" : "false"}`,
+    `include_global_llm=${includeGlobalLLM ? "true" : "false"}`,
+  ];
   const name = (filename || "").trim();
   if (name) params.push(`filename=${encodeURIComponent(name)}`);
   return `${base}?${params.join("&")}`;
 }
 
-async function downloadArchive(
-  url: string,
-): Promise<{ blob: Blob; filename: string; incompleteBackup: boolean }> {
+/** 附件告警计数（H2）：三类分开报，界面按类型写文案。 */
+export interface BackupAssetIssues {
+  /** 这次导出时磁盘上找不到（新缺失）→ 包里不包含。 */
+  missing: number;
+  /** 文件在，但字节与数据库登记的 SHA-256 不符 → 包里是当前磁盘上的那一份。 */
+  mismatched: number;
+  /** 数据集导入时就已缺失 → 只做说明，不算"不完整"。 */
+  missingAtImport: number;
+  /** 仅新缺失或哈希不符时为 true（后端 X-Backup-Incomplete）。 */
+  incomplete: boolean;
+}
+
+export interface ArchiveDownload {
+  blob: Blob;
+  filename: string;
+  /** 兼容既有调用点：等价于 assetIssues.incomplete。 */
+  incompleteBackup: boolean;
+  assetIssues: BackupAssetIssues;
+}
+
+function headerCount(headers: Headers, name: string): number {
+  const raw = Number(headers.get(name) ?? "0");
+  return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : 0;
+}
+
+async function downloadArchive(url: string): Promise<ArchiveDownload> {
   // 响应是二进制压缩包，不是 JSON：走 requestRaw（错误分类/诊断与 request() 一致），
   // 导出大包走 export 预算（10 分钟），不吃 15s 的默认超时。
   const resp = await requestRaw(url, { budget: "export" });
+  // RR-03 / H2：包里有附件缺失/与登记哈希不符时后端会在响应头标出来——不读它就会把
+  // 一份不完整的备份播报成"完整备份成功"。三类计数分开读，文案才能说清是哪一种。
+  const assetIssues: BackupAssetIssues = {
+    missing: headerCount(resp.headers, "X-Backup-Asset-Missing"),
+    mismatched: headerCount(resp.headers, "X-Backup-Asset-Mismatched"),
+    missingAtImport: headerCount(resp.headers, "X-Backup-Asset-Missing-At-Import"),
+    incomplete: resp.headers.get("X-Backup-Incomplete") === "1",
+  };
   return {
     blob: await resp.blob(),
     filename:
       getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ??
       "resumeforge-backup.zip",
-    // RR-03：包里有附件缺失/与登记哈希不符时后端会在响应头标出来——不读它就会把
-    // 一份不完整的备份播报成"完整备份成功"。
-    incompleteBackup: resp.headers.get("X-Backup-Incomplete") === "1",
+    incompleteBackup: assetIssues.incomplete,
+    assetIssues,
   };
 }
 
@@ -348,85 +404,14 @@ export function saveAutoBackupInterval(intervalDays: number): Promise<AutoBackup
   });
 }
 
-/** 全局模型配置摘要（R21）：profiles 列表 + 当前生效项，**不含密钥**。 */
-export interface GlobalLLMProfile {
-  id: string;
-  name: string;
-  provider: string;
-  model: string;
-  base_url: string;
-  /** 地址与模型都填了才为 true；只有当前 profile 的这一项为 true 时才会接管调用。 */
-  configured: boolean;
-  /** 默认 profile（第一个创建的；删除后自动顺延）。 */
-  is_default: boolean;
-}
-
-export interface GlobalLLMSummary {
-  enabled: boolean;
-  /** 当前 profile 的地址与模型都填了才为 true。 */
-  configured: boolean;
-  provider: string;
-  model: string;
-  base_url: string;
-  active_profile_id: string;
-  active_name: string;
-  profiles: GlobalLLMProfile[];
-}
-
-export interface GlobalLLMProfileInput {
-  name: string;
-  config: { provider?: string; base_url: string; model: string; api_style?: string };
-  /** 空 = 保留原密钥（编辑时）；`"__clear__"` = 清空。 */
-  api_key?: string;
-  models?: string[];
-}
-
-export function getGlobalLLM(): Promise<GlobalLLMSummary> {
-  return request("/settings/global-llm");
-}
-
-/** 保存全局配置：更新**当前 active profile**；`api_key` 为空表示保留原密钥。 */
-export function saveGlobalLLM(payload: {
-  enabled: boolean;
-  api_key?: string;
-  config: { provider?: string; base_url: string; model: string; api_style?: string };
-}): Promise<GlobalLLMSummary> {
-  return request("/settings/global-llm", { method: "PUT", body: JSON.stringify(payload) });
-}
-
-export function createGlobalLLMProfile(payload: GlobalLLMProfileInput): Promise<GlobalLLMSummary> {
-  return request("/settings/global-llm/profiles", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function updateGlobalLLMProfile(
-  id: string,
-  payload: Partial<GlobalLLMProfileInput>,
-): Promise<GlobalLLMSummary> {
-  return request(`/settings/global-llm/profiles/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function deleteGlobalLLMProfile(id: string): Promise<GlobalLLMSummary> {
-  return request(`/settings/global-llm/profiles/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-}
-
-/** 切换当前 profile（后端同时会把"对所有数据集生效"打开）。 */
-export function activateGlobalLLMProfile(id: string): Promise<GlobalLLMSummary> {
-  return request("/settings/global-llm/activate", {
-    method: "POST",
-    body: JSON.stringify({ id }),
-  });
-}
-
-export function clearGlobalLLM(): Promise<void> {
-  return request("/settings/global-llm", { method: "DELETE" });
+/**
+ * 切换「使用中」的全局配置记录（C）。
+ *
+ * 排序语义：记录与生效配置是**同一份**，所以切换就是 activate，不再像旧版那样
+ * 把记录内容复制进当前配置（那样会产生"记录改了、生效的没改"的第二份真相）。
+ */
+export function activateLLMRecord(id: string): Promise<LLMConfigRecord> {
+  return request(`/settings/llm/records/${encodeURIComponent(id)}/activate`, { method: "POST" });
 }
 
 /** 跨数据集/浏览器的主题偏好（R18）：顶层 `theme`，与 llm 并列。 */
@@ -474,6 +459,11 @@ export function uploadResumeFont(file: File): Promise<ResumeFont> {
 }
 
 /** 设为当前字体；`null` = 回到系统字体。 */
+/** 任意已上传字体的原始文件 URL（设置页点击预览用；同源相对路径，开发态走 Vite 代理）。 */
+export function resumeFontPreviewUrl(name: string): string {
+  return `/api/settings/fonts/${encodeURIComponent(name)}/file`;
+}
+
 export function activateResumeFont(name: string | null): Promise<{ active: string | null }> {
   return request("/settings/fonts/active", {
     method: "PUT",

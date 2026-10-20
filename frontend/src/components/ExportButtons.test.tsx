@@ -55,15 +55,17 @@ describe("ExportButtons", () => {
     expect(screen.queryByRole("button", { name: /更多格式/ })).not.toBeInTheDocument();
   });
 
-  it("点击后打开面板，并显示预览当前的行距/字号系数", async () => {
+  it("点击后打开导出面板（版式与「跟随预览」文案已随 T5 移出面板）", async () => {
     renderButtons({
       layout: { ...LAYOUT, format_config: { font_scale_adjust: 0.636, line_height: 1.55 } },
     });
 
     fireEvent.click(screen.getByRole("button", { name: /导\s*出/ }));
 
-    expect(await screen.findByText(/跟随预览：行距 1\.55/)).toBeInTheDocument();
-    expect(screen.getByText(/字号系数 0\.64/)).toBeInTheDocument();
+    // 面板照旧打开（「格式」是它的第一块）。
+    expect(await screen.findByText("格式")).toBeInTheDocument();
+    // 只读的「跟随预览：行距 / 字号系数」随版式栏一起下线：版式现在只在预览的版式栏里改。
+    expect(screen.queryByText(/跟随预览/)).not.toBeInTheDocument();
   });
 
   it("父组件接管面板时只画按钮，不挂第二份弹窗（两份表单会互相覆盖）", () => {
@@ -73,6 +75,7 @@ describe("ExportButtons", () => {
     fireEvent.click(screen.getByRole("button", { name: /导\s*出/ }));
 
     expect(onOpen).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText(/跟随预览/)).not.toBeInTheDocument();
+    // 自己没有挂第二份面板（否则页面上会出现两个「格式」区块 / 两个「导出」按钮）。
+    expect(screen.queryByText("格式")).not.toBeInTheDocument();
   });
 });

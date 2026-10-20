@@ -228,6 +228,10 @@ describe("ManualResumeModal 岗位模式（自行编写简历）", () => {
     expect(screen.getByLabelText("求职意向")).toHaveValue(JOB.title);
     // 个人总结留空：这份简历是要照着岗位现写的。
     expect(screen.getByLabelText("个人总结")).toHaveValue("");
+
+    // T11：一键填入只给「通用手写简历」。岗位模式的经历是照岗位写的，
+    // 把资料全倒进去等于替用户做决定，所以这里连按钮都不出现。
+    expect(screen.queryByRole("button", { name: /填入我的资料全部数据/ })).not.toBeInTheDocument();
   });
 
   it("六个列表模块都没有预填条目，但每个模块顶部都有「从我的资料追加一条」", async () => {
@@ -300,8 +304,8 @@ describe("ManualResumeModal 岗位模式（自行编写简历）", () => {
   });
 });
 
-describe("ManualResumeModal 通用手写简历（job = null）保持全量预填与条目级下拉", () => {
-  it("经历/项目等全量预填，且每个条目旁仍有「从资料填入本条」", async () => {
+describe("ManualResumeModal 通用手写简历（job = null）：空白起步 + 一键填入 + 条目级下拉", () => {
+  it("默认空白；一键填入后每个条目旁仍有「从资料填入本条」", async () => {
     render(
       <AntdApp>
         <ManualResumeModal job={null} open onClose={vi.fn()} />
@@ -309,9 +313,13 @@ describe("ManualResumeModal 通用手写简历（job = null）保持全量预填
     );
 
     expect(await screen.findByText("从头编写通用简历")).toBeInTheDocument();
-    expect(screen.getByText(/已从我的资料预填基本信息和经历/)).toBeInTheDocument();
-    // 通用简历不针对岗位：个人总结照旧预填。
-    expect(screen.getByLabelText("个人总结")).toHaveValue("资料里的个人总结");
+    // T11：通用简历从空白开始，不再全量预填。
+    expect(screen.getByText(/从空白开始/)).toBeInTheDocument();
+    expect(screen.getByLabelText("个人总结")).toHaveValue("");
+
+    // 一键把资料带进来（这正是替掉"默认全量预填"的那条路）。
+    fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
+    await waitFor(() => expect(screen.getByLabelText("个人总结")).toHaveValue("资料里的个人总结"));
 
     // 教育：预填的一条在，条目级入口也在（P4 行为，不能因岗位模式被一起关掉）。
     fireEvent.click(await screen.findByRole("tab", { name: "教育" }));

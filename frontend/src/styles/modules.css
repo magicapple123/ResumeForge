@@ -3,9 +3,9 @@
 
 /* ===== 全局设计变量 ===== */
 :root {
-  /* 弹窗内容区统一高度上限：替代各弹窗散落的 170/180/200/220/230px 四档写法。
-     220px ≈ header + footer + 视口安全边距的总和。 */
-  --rf-modal-body-max-h: calc(100vh - 220px);
+  /* 弹窗内容区高度上限 `--rf-modal-body-max-h` 定义在 theme/design-tokens.css：
+     那是 token 的唯一出口，深浅两套主题都在那里声明同值。这里不再重复定义，
+     否则后加载的这条会静默盖掉它（此前就是如此）。 */
   /* 「我的空间」下拉菜单选中项的浅色底（替代 colorPrimary 派生的深藏青实底）。 */
   --rf-nav-selected-bg: var(--rf-brand-tint);
   /* 加载占位块的最小高度：居中的 Spin 不会把区域塌成一条线。 */
@@ -16,7 +16,12 @@
    内容高的弹窗（投递设置、生成简历…）在卡片内部滚动，而不是把整页撑高。
    两件事配合才成立：ConfigProvider 把弹窗挂到 body（见 main.tsx，卡片因此脱离文档流、
    不再撑大 <body>），这里再给卡片一个高度上限，超出部分由卡片自己的内容区滚动。
-   只给上限不给固定高度：内容少时卡片仍然按内容收缩，不会留一大片空白。 */
+   只给上限不给固定高度：内容少时卡片仍然按内容收缩，不会留一大片空白。
+
+   **antd 6.6.5 的容器类名是 `.ant-modal-container`**：@rc-component/dialog 的
+   DOM 已改为 `div.ant-modal > div.ant-modal-container > (close, header, body, footer)`，
+   旧版的 content 容器类名已被删除。此前这里 9 条规则全部写的是旧类名，于是
+   max-height / body 滚动 / 边框圆角阴影一条都没生效，长内容弹窗才会"上下顶格"。 */
 .ant-modal-wrap {
   display: flex;
 }
@@ -28,18 +33,24 @@
   margin: auto;
 }
 
-.ant-modal-content {
+.ant-modal-container {
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 120px);
+  /* 视口上下各留 48px：1280×720 下弹窗距上下沿 ≥ 40px（验收口径）。
+     先 vh 后 dvh：移动端地址栏收放时 vh 不是真实可见高度，不认 dvh 的浏览器
+     留在前一条上。 */
+  max-height: calc(100vh - 96px);
+  max-height: calc(100dvh - 96px);
+  overflow: hidden;
 }
 
-.ant-modal-content > .ant-modal-header,
-.ant-modal-content > .ant-modal-footer {
+.ant-modal-container > .ant-modal-header,
+.ant-modal-container > .ant-modal-footer {
   flex: 0 0 auto;
 }
 
-.ant-modal-content > .ant-modal-body {
+.ant-modal-container > .ant-modal-body {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -52,8 +63,8 @@
   background: var(--rf-scrim-strong);
 }
 
-.ant-modal-content {
-  overflow: hidden;
+.ant-modal-container {
+  /* 圆角 + overflow:hidden 让标题条的底色被裁在圆角里；边框与阴影给出"浮在页面之上"。 */
   border: 1px solid var(--rf-border-strong);
   border-radius: 16px;
   box-shadow:
@@ -116,7 +127,7 @@
   background: var(--rf-surface-alt);
 }
 
-.ant-modal-confirm .ant-modal-content {
+.ant-modal-confirm .ant-modal-container {
   border-top: 3px solid var(--rf-focus-ring);
 }
 
@@ -130,15 +141,15 @@
   line-height: 1.7;
 }
 
-.rf-modal-danger .ant-modal-content {
+.rf-modal-danger .ant-modal-container {
   border-top: 3px solid var(--rf-accent-red);
 }
 
-.rf-modal-assist .ant-modal-content {
+.rf-modal-assist .ant-modal-container {
   border-top: 3px solid var(--rf-accent-violet);
 }
 
-.rf-modal-editor .ant-modal-content {
+.rf-modal-editor .ant-modal-container {
   border-top: 3px solid var(--rf-accent-green);
 }
 
@@ -505,6 +516,29 @@
   border: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
   background: var(--rf-surface-alt);
+}
+
+/*
+ * 技能弹窗的内容容器（SkillEditorModal）：表单条目之间统一 16px 节奏。
+ * 弹窗 body 自己限高滚动（maxHeight 走 --rf-modal-body-max-h，写在组件的 inline
+ * style 里），这里只负责"内容多时首行与末行都不贴边"的内部间距——body 的 padding
+ * 20/24/28 加上这层 gap，最后一个「添加知识文件」按钮才不会压在页脚分隔线上。
+ */
+.skill-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/*
+ * 清理旧文件的候选清单（StorageStatsCard）：
+ * 类别勾选与说明留在弹窗上层不滚动，只有这份清单内部滚动——30 个文件时
+ * 头部 Alert 与底部「移走 N 个文件」都还在原位。
+ */
+.cleanup-candidate-list {
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 4px 2px;
 }
 
 /* ===== 助手补充信息 ===== */
@@ -1269,15 +1303,6 @@
 
 .resume-layout-controls {
   row-gap: 8px;
-}
-
-.generate-layout-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
 }
 
 /* ===== 个人照片面板 ===== */

@@ -6,14 +6,31 @@
  * 列表页）仍跟系统字体走——把"设置页没变"说成 bug 是最容易发生的误会。
  * 字体不随应用分发：一款中文字体动辄十几 MB，体积与授权都该由用户自己决定，
  * 所以这里只做"上传 → 选用"这一条路。
+ *
+ * 2026-10-20 两处交互调整：
+ * 1. 删除不再是一颗裸露的红色垃圾桶（列表里既抢眼又容易误点），收进「···」菜单；
+ * 2. 点字体名可以**先预览再决定**：弹窗里用该字体渲染一段示例，确认后再「设为当前」。
  */
-import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
-import { App, Button, Card, Empty, Listy, Space, Tag, Typography, Upload } from "antd";
+import { DeleteOutlined, EyeOutlined, MoreOutlined, UploadOutlined } from "@ant-design/icons";
+import {
+  App,
+  Button,
+  Card,
+  Dropdown,
+  Empty,
+  Listy,
+  Modal,
+  Space,
+  Tag,
+  Typography,
+  Upload,
+} from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
   activateResumeFont,
   deleteResumeFont,
   listResumeFonts,
+  resumeFontPreviewUrl,
   uploadResumeFont,
   type ResumeFonts,
 } from "../../api/settings";
@@ -28,6 +45,8 @@ export default function ResumeFontCard() {
   const { message, modal } = App.useApp();
   const [data, setData] = useState<ResumeFonts | null>(null);
   const [busy, setBusy] = useState(false);
+  /** 正在预览的字体文件名；null = 弹窗关闭。 */
+  const [previewName, setPreviewName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -59,6 +78,7 @@ export default function ResumeFontCard() {
     try {
       await activateResumeFont(name);
       message.success(name ? `已切换到「${name}」` : "已回到系统字体");
+      setPreviewName(null);
       await load();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "切换字体失败");
@@ -119,7 +139,14 @@ export default function ResumeFontCard() {
             <ListyItem>
               <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
                 <Space>
-                  <Typography.Text>{item.name}</Typography.Text>
+                  {/* 点名字直接预览：用户要在「设为当前」之前先确认字形，不该逼他先切换。 */}
+                  <Button
+                    type="link"
+                    className="table-text-link"
+                    onClick={() => setPreviewName(item.name)}
+                  >
+                    {item.name}
+                  </Button>
                   <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
                   {item.name === activeName ? <Tag color="blue">当前使用</Tag> : null}
                 </Space>
@@ -131,19 +158,88 @@ export default function ResumeFontCard() {
                   >
                     设为当前
                   </Button>
-                  <Button
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    aria-label={`删除字体 ${item.name}`}
-                    onClick={() => remove(item.name)}
-                  />
+                  {/* 删除收进「···」：原来是一颗裸露的红色垃圾桶，密集列表里既抢眼又容易误点。 */}
+                  <Dropdown
+                    trigger={["click"]}
+                    menu={{
+                      items: [
+                        { key: "preview", icon: <EyeOutlined />, label: "预览字体" },
+                        {
+                          key: "delete",
+                          icon: <DeleteOutlined />,
+                          label: "删除",
+                          danger: true,
+                        },
+                      ],
+                      onClick: ({ key }) => {
+                        if (key === "preview") setPreviewName(item.name);
+                        else remove(item.name);
+                      },
+                    }}
+                  >
+                    <Button
+                      size="small"
+                      icon={<MoreOutlined />}
+                      aria-label={`更多字体操作（${item.name}）`}
+                    />
+                  </Dropdown>
                 </Space>
               </Space>
             </ListyItem>
           )}
         />
       )}
+
+      <Modal
+        open={previewName !== null}
+        title={previewName ? `字体预览「${previewName}」` : "字体预览"}
+        onCancel={() => setPreviewName(null)}
+        destroyOnHidden
+        width={640}
+        footer={[
+          <Button key="close" onClick={() => setPreviewName(null)}>
+            关闭
+          </Button>,
+          <Button
+            key="use"
+            type="primary"
+            disabled={previewName === null || previewName === activeName}
+            onClick={() => previewName && void activate(previewName)}
+          >
+            {previewName === activeName ? "当前已在使用" : "设为当前"}
+          </Button>,
+        ]}
+      >
+        {previewName ? (
+          <>
+            {/* 字体文件同源提供，直接喂给 @font-face；不下载到内存再转 base64。 */}
+            <style>
+              {`@font-face{font-family:"rf-font-preview";src:url("${resumeFontPreviewUrl(
+                previewName,
+              )}");font-display:swap;}`}
+            </style>
+            <div
+              className="font-preview-sample"
+              style={{ fontFamily: '"rf-font-preview", "Microsoft YaHei", sans-serif' }}
+            >
+              <div className="font-preview-sample-title">张三 · 后端开发工程师</div>
+              <div className="font-preview-sample-meta">
+                2022.07 – 2024.09 ｜ 示例科技有限公司 ｜ 高级后端工程师
+              </div>
+              <p className="font-preview-sample-body">
+                负责核心交易链路的接口设计与性能优化，QPS 从 1,200 提升到 8,500； 主导 Python /
+                FastAPI 服务拆分，P99 延迟下降 42%。
+              </p>
+              <p className="font-preview-sample-body">
+                ABCDEFG abcdefg 0123456789 ！？、；：「」（）——·…
+              </p>
+            </div>
+            <Typography.Paragraph type="secondary" style={{ margin: "12px 0 0", fontSize: 12 }}>
+              预览只改变这段示例文字；点「设为当前」后，简历预览、导出 HTML 与 PDF 才会一起使用它。
+            </Typography.Paragraph>
+          </>
+        ) : null}
+      </Modal>
     </Card>
   );
 }

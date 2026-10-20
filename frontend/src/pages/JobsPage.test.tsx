@@ -16,13 +16,25 @@ const mocks = vi.hoisted(() => ({
   reload: vi.fn(),
   startBackfill: vi.fn(),
   getJob: vi.fn(),
+  getJobAnalysis: vi.fn(),
   jobs: [] as JobList[],
 }));
 
 // 详情统一经 getJob 拉全量（列表项已瘦身），点击行会触发；不 mock 会在 jsdom 里真发请求。
+// getJobAnalysis 同理：解读弹窗一打开就去读缓存，不挡掉也会真发 fetch。
 vi.mock("../api/jobs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/jobs")>();
-  return { ...actual, getJob: mocks.getJob };
+  return { ...actual, getJob: mocks.getJob, getJobAnalysis: mocks.getJobAnalysis };
+});
+
+// 解读弹窗打开就会读缓存：默认给"没有缓存"，需要的用例再用 mockResolvedValueOnce 覆盖。
+// 不 reset（各 describe 的 beforeEach 只管自己的 mock），否则会退回 undefined → 弹窗里
+// `.then` 拿到 undefined 直接抛。
+mocks.getJobAnalysis.mockResolvedValue({
+  cached: false,
+  stale: false,
+  generated_at: null,
+  result: null,
 });
 
 vi.mock("../hooks/useApi", () => ({
@@ -304,14 +316,41 @@ describe("JobsPage URL 状态化", () => {
     );
   });
 
-  it("点列头排序后把 sort 写进 URL（刷新/分享后保留）", async () => {
+  it("点列头排序不写进 URL（排序只是本次浏览的视角）", async () => {
     renderPageWithProbe();
 
     // 表头标题在 antd 6 里会渲染多份（测量/克隆节点），统一点 `<th>` 本体。
     const header = screen.getAllByText("岗位")[0]!;
     fireEvent.click(header.closest("th") as HTMLElement);
 
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("sort=title_asc"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "恢复默认排序" })).toBeEnabled());
+    expect(screen.getByTestId("location")).not.toHaveTextContent("sort=");
+    expect(screen.getByTestId("location")).not.toHaveTextContent("order=");
+  });
+
+  it("离开岗位广场再回来，排序恢复默认（按钮回到禁用）", async () => {
+    const first = renderPageWithProbe();
+    const header = screen.getAllByText("岗位")[0]!;
+    fireEvent.click(header.closest("th") as HTMLElement);
+    await waitFor(() => expect(screen.getByRole("button", { name: "恢复默认排序" })).toBeEnabled());
+    first.unmount();
+
+    renderPageWithProbe();
+    expect(await screen.findByRole("button", { name: "恢复默认排序" })).toBeDisabled();
+    expect(document.querySelector(".ant-table-column-sort")).toBeNull();
+  });
+
+  it("「恢复默认排序」点击后回到默认排序并清除列头箭头", async () => {
+    renderPageWithProbe();
+    const header = screen.getAllByText("公司")[0]!;
+    fireEvent.click(header.closest("th") as HTMLElement);
+
+    const reset = screen.getByRole("button", { name: "恢复默认排序" });
+    await waitFor(() => expect(reset).toBeEnabled());
+    fireEvent.click(reset);
+
+    await waitFor(() => expect(reset).toBeDisabled());
+    expect(document.querySelector(".ant-table-column-sort")).toBeNull();
   });
 
   it("进页面时从 URL 恢复筛选与页码", () => {
@@ -338,6 +377,21 @@ describe("JobsPage URL 状态化", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     await waitFor(() => expect(screen.getByTestId("location").textContent).not.toContain("job_id"));
+  });
+
+  it("?job_id=X&analysis=1 深链：详情就绪后自动打开岗位解读，并清掉 analysis 参数", async () => {
+    // 后台完成通知的「查看」就落在这个 URL 上：用户点一下应该直接看到解读弹窗，
+    // 而不是先看到抽屉、再自己找「岗位需求解读」。
+    renderPageWithProbe(["/jobs?job_id=1&analysis=1"]);
+
+    expect(await screen.findByText(/会把岗位描述交给模型/)).toBeInTheDocument();
+
+    // 参数清掉（replace）：刷新或返回都不会再弹一次。
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).not.toContain("analysis"),
+    );
+    // 详情本身仍然开着（深链不该把抽屉关掉）。
+    expect(screen.getByTestId("location")).toHaveTextContent("job_id=1");
   });
 });
 

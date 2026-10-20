@@ -9,20 +9,11 @@ const apiMocks = vi.hoisted(() => ({
   checkForUpdate: vi.fn(),
   activateDataset: vi.fn(),
   deleteDataset: vi.fn(),
+  activateLLMRecord: vi.fn(),
   deleteLLMConfigRecord: vi.fn(),
   exportAllDatasets: vi.fn(),
   exportDataset: vi.fn(),
   getLLMConfig: vi.fn(),
-  // R21：全局模型卡挂载时会读一次；没配过就返回空状态。
-  getGlobalLLM: vi.fn().mockResolvedValue({
-    enabled: false,
-    configured: false,
-    provider: "",
-    model: "",
-    base_url: "",
-  }),
-  saveGlobalLLM: vi.fn(),
-  clearGlobalLLM: vi.fn(),
   getNavigationVisibility: vi.fn(),
   getReminderPopupSetting: vi.fn(),
   getSearchConfig: vi.fn(),
@@ -88,15 +79,17 @@ const searchConfig = {
 
 function makeRecord(overrides: Record<string, unknown> = {}) {
   return {
-    id: 7,
+    id: "p_7",
     name: "DeepSeek 校招",
     provider: "deepseek",
     base_url: "https://api.deepseek.com",
-    api_key: "********:record:7",
+    api_key: "********:profile:p_7",
     model: "deepseek-chat",
     temperature: 0.1,
     timeout_seconds: 120,
     max_tokens: 4096,
+    models: ["deepseek-chat"],
+    is_active: false,
     created_at: "2026-08-20T10:00:00",
     updated_at: "2026-08-20T10:00:00",
     ...overrides,
@@ -166,13 +159,21 @@ describe("SettingsPage configuration record lifecycle", () => {
   it("refreshes the current config after deleting the active record", async () => {
     apiMocks.getLLMConfig
       // 第一次：当前配置与记录一致，该记录是“使用中”的那条。
-      .mockResolvedValueOnce({ ...llmConfig, ...makeRecord() })
+      .mockResolvedValueOnce({
+        ...llmConfig,
+        ...makeRecord(),
+        scope: "global",
+        record_id: "p_7",
+        record_name: "DeepSeek 校招",
+      })
       // 删除使用中的记录后重新拉取当前配置（刷新摘要，甩掉已删记录的密钥引用）。
       .mockResolvedValueOnce({
         ...llmConfig,
         provider: "deepseek",
         base_url: "https://api.deepseek.com",
         model: "deepseek-chat",
+        scope: "dataset",
+        record_id: null,
       });
     apiMocks.listLLMConfigRecords.mockResolvedValue([makeRecord()]);
     apiMocks.deleteLLMConfigRecord.mockResolvedValue(undefined);
@@ -197,22 +198,24 @@ describe("SettingsPage configuration record lifecycle", () => {
     });
     fireEvent.click(confirmDelete);
 
-    await waitFor(() => expect(apiMocks.deleteLLMConfigRecord).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(apiMocks.deleteLLMConfigRecord).toHaveBeenCalledWith("p_7"));
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledTimes(2), { timeout: 1000 });
     await screen.findByText(/暂无配置记录/);
     // 记录卡已移除（confirm 的标题不是纯文本匹配，不受其关闭动画影响）。
     expect(screen.queryByText("DeepSeek 校招")).not.toBeInTheDocument();
   });
 
-  it("shows the guidance banner when no record matches the current config", async () => {
+  it("shows the upgrade banner while the effective config still comes from the dataset", async () => {
     apiMocks.listLLMConfigRecords.mockResolvedValue([makeRecord()]);
-    // 当前配置（openai/gpt-4o-mini）与记录不一致：没有任何记录处于使用中。
+    // scope=dataset：还在用数据集里的旧配置（全局尚无生效记录）。
 
     renderSettingsPage();
 
     await screen.findByText("DeepSeek 校招");
     expect(screen.queryByText("使用中")).toBeNull();
-    expect(await screen.findByText(/未来自任何记录/)).toBeInTheDocument();
+    expect(
+      await screen.findByText("当前沿用本数据集旧配置，保存后将升级为全局配置"),
+    ).toBeInTheDocument();
   });
 });
 
@@ -274,7 +277,7 @@ describe("SettingsPage 查看配置详情", () => {
     expect(screen.getAllByText("https://api.deepseek.com").length).toBeGreaterThan(0);
     // 脱敏：详情里只说明“已配置”，密钥本体与 `********:record:N` 引用都不渲染。
     expect(screen.getByText("已配置（********）")).toBeInTheDocument();
-    expect(screen.queryByText("********:record:7")).toBeNull();
+    expect(screen.queryByText("********:profile:p_7")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "关 闭" }));
     await waitFor(() => expect(screen.queryByText(/配置详情「/)).toBeNull());
@@ -288,16 +291,18 @@ describe("SettingsPage 编辑使用中的记录", () => {
       ...llmConfig,
       provider: "deepseek",
       base_url: record.base_url,
-      api_key: "********:record:7",
+      api_key: "********:profile:p_7",
       model: "deepseek-chat",
+      scope: "global",
+      record_id: "p_7",
+      record_name: "DeepSeek 校招",
     });
     apiMocks.listLLMConfigRecords.mockResolvedValue([record]);
     apiMocks.saveLLMConfigRecord.mockImplementation(async (payload) => ({
       ...record,
       ...payload,
-      id: 7,
+      id: "p_7",
     }));
-    apiMocks.saveLLMConfig.mockImplementation(async (config) => config);
 
     renderSettingsPage();
     await screen.findByText("DeepSeek 校招");
@@ -316,18 +321,12 @@ describe("SettingsPage 编辑使用中的记录", () => {
         expect.objectContaining({
           name: "DeepSeek 校招",
           model: "deepseek-v4",
-          api_key: "********:record:7",
+          api_key: "********:profile:p_7",
         }),
       ),
     );
-    // 编辑的是使用中的记录：保存后改动同步进当前生效配置（整份 PUT）。
-    await waitFor(() =>
-      expect(apiMocks.saveLLMConfig).toHaveBeenCalledWith(
-        expect.objectContaining({ model: "deepseek-v4", api_key: "********:record:7" }),
-      ),
-    );
-    // 同步生效的直接证据：applyRecord 的成功提示（antd 6 的消息文本可能渲染两份，用 findAll）。
-    await screen.findAllByText("已切换到配置「DeepSeek 校招」");
+    // C 之后记录与生效配置是同一份：保存记录本身就是改"使用中"的那条，
+    // 不再需要额外 PUT /settings/llm 复制一份（旧行为会留下两份真相）。
     await screen.findAllByText("配置记录「DeepSeek 校招」已保存");
   });
 });

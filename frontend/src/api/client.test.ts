@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, BUDGETS_MS, buildQuery, isCancellation, request } from "./client";
+import { datasetScopeHeaders } from "./datasetScope";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
 
 afterEach(() => {
@@ -295,7 +296,109 @@ describe("BUDGETS_MS", () => {
       task: 30_000,
       // AI 识别：非流式等完整 JSON，大文本 15s 会误超时（AI 提速批次）。
       recognition: 90_000,
+      // 岗位解读（T1）：整段生成 10–60s，长 JD 更久，15s 必然误超时。
+      analysis: 180_000,
       stream: 0,
     });
+  });
+});
+
+describe("数据集身份响应头与业务码", () => {
+  it("采纳成功响应回写的 X-Dataset-Scope", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "X-Dataset-Scope": "instance:B:7" },
+        }),
+      ),
+    );
+
+    await request("/example");
+
+    expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("instance:B:7");
+  });
+
+  it("409 响应头同样被采纳，且 businessCode 取自响应体的 code", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            detail: "数据集已切换，请保留草稿并刷新页面后重新打开；本次操作未执行",
+            code: "dataset_scope_changed",
+          }),
+          {
+            status: 409,
+            headers: {
+              "Content-Type": "application/json",
+              "X-Dataset-Scope": "instance:B:8",
+            },
+          },
+        ),
+      ),
+    );
+
+    const err = await request("/example", { method: "POST" }).then(
+      () => {
+        throw new Error("should not resolve");
+      },
+      (e: ApiError) => e,
+    );
+
+    // businessCode 是新增的可选字段：既有 code 联合类型不动（http 仍是传输层分类）。
+    expect(err.code).toBe("http");
+    expect(err.status).toBe(409);
+    expect(err.businessCode).toBe("dataset_scope_changed");
+    // 失败响应里的身份也要采纳：否则重试还是拿着旧 token。
+    expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("instance:B:8");
+  });
+
+  it("响应体没有 code 时 businessCode 为 undefined（普通 409 不被误判成身份过期）", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "数据集正在切换中，请稍后再试" }), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const err = await request("/example", { method: "POST" }).then(
+      () => {
+        throw new Error("should not resolve");
+      },
+      (e: ApiError) => e,
+    );
+
+    expect(err.businessCode).toBeUndefined();
+  });
+
+  it("响应没带 X-Dataset-Scope 时不覆盖已知身份", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "X-Dataset-Scope": "instance:B:9" },
+        }),
+      ),
+    );
+    await request("/example");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    await request("/example");
+
+    expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("instance:B:9");
   });
 });

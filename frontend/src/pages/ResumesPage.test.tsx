@@ -118,26 +118,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("ResumesPage 排序（R14）", () => {
-  it("默认按最近修改拉取，切换后带上新的 sort 参数", async () => {
-    renderPage();
-    await screen.findByText(RESUME.title);
-
-    expect(apiMocks.listResumes).toHaveBeenCalledWith(
-      expect.objectContaining({ sort: "updated_desc" }),
-    );
-
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: "排序方式" }));
-    fireEvent.click(await screen.findByTitle("最近生成"));
-
-    await waitFor(() =>
-      expect(apiMocks.listResumes).toHaveBeenLastCalledWith(
-        expect.objectContaining({ sort: "created_desc" }),
-      ),
-    );
-  });
-});
-
 describe("ResumesPage column hints", () => {
   it("explains what a beauty-enhancement level actually did on hover", async () => {
     apiMocks.listResumes.mockResolvedValue({

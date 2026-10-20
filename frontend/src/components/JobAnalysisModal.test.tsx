@@ -1,8 +1,15 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+/**
+ * 岗位解读弹窗（T1 语义）：**取消 = 真 abort**，**后台继续 = detach 后继续跑**。
+ *
+ * 旧语义是「停止等待」（不断连接），那条断言已被 T1 明确替换：用户点「取消」时
+ * 请求必须真的中断，否则服务端还会把整段生成跑完、继续烧 token。
+ */
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntdApp } from "antd";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job, JobAnalysisResult } from "../types";
+import { resetJobAnalysisStoreForTests } from "../features/jobs/jobAnalysisStore";
 import JobAnalysisModal from "./JobAnalysisModal";
 
 const apiMocks = vi.hoisted(() => ({ generateJobAnalysis: vi.fn(), getJobAnalysis: vi.fn() }));
@@ -11,6 +18,14 @@ vi.mock("../api/jobs", () => ({
   generateJobAnalysis: apiMocks.generateJobAnalysis,
   getJobAnalysis: apiMocks.getJobAnalysis,
 }));
+
+const noticeMocks = vi.hoisted(() => ({
+  announceBackgroundResult: vi.fn(),
+  announceBackgroundFailure: vi.fn(),
+}));
+
+// 通知出口换成替身：这里只断言"用户走了才通知"，不测通知长什么样。
+vi.mock("../utils/backgroundTask", () => noticeMocks);
 
 const JOB: Job = {
   id: 12,
@@ -55,7 +70,24 @@ const ANALYSIS: JobAnalysisResult = {
   ],
 };
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
+  resetJobAnalysisStoreForTests();
   apiMocks.generateJobAnalysis.mockReset().mockResolvedValue(ANALYSIS);
   apiMocks.getJobAnalysis.mockReset().mockResolvedValue({
     cached: false,
@@ -63,11 +95,15 @@ beforeEach(() => {
     generated_at: null,
     result: null,
   });
+  noticeMocks.announceBackgroundResult.mockReset();
+  noticeMocks.announceBackgroundFailure.mockReset();
 });
 
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  resetJobAnalysisStoreForTests();
+  vi.useRealTimers();
 });
 
 /** R2：打开弹窗不再自动调模型，必须先点「开始生成」。 */
@@ -75,7 +111,7 @@ function start() {
   fireEvent.click(screen.getByRole("button", { name: /开始生成/ }));
 }
 
-/** antd `App` 提供 message/notification 的上下文；组件里的「停止等待」提示依赖它。 */
+/** antd `App` 提供 message/notification 的上下文；取消提示依赖它。 */
 function renderModal(onClose: () => void = vi.fn()) {
   return render(
     <AntdApp>
@@ -95,6 +131,14 @@ function ClosableModal() {
   );
 }
 
+function renderClosable() {
+  return render(
+    <AntdApp>
+      <ClosableModal />
+    </AntdApp>,
+  );
+}
+
 describe("JobAnalysisModal", () => {
   it("先说明再生成：打开时一次请求都不发，点「开始生成」才调用模型", async () => {
     renderModal();
@@ -107,7 +151,7 @@ describe("JobAnalysisModal", () => {
     // 首次生成**不带** force：后端已有缓存时会直接返回，不必再跑一次模型（R2-a）。
     expect(apiMocks.generateJobAnalysis).toHaveBeenCalledWith(JOB.id, expect.anything(), false);
     expect(await screen.findByText(ANALYSIS.summary)).toBeInTheDocument();
-    expect(screen.getByText("核心要求")).toBeInTheDocument();
+    expect(screen.getByText("核心需求")).toBeInTheDocument();
     expect(screen.getByText("持有护士执业资格证")).toBeInTheDocument();
     expect(screen.getByText("突出临床能力")).toBeInTheDocument();
   });
@@ -127,35 +171,83 @@ describe("JobAnalysisModal", () => {
     expect(apiMocks.generateJobAnalysis).toHaveBeenCalledTimes(2);
   });
 
-  it("「停止等待」只停界面：不 abort 在途请求，关掉弹窗并提示后台会缓存（R2-b）", async () => {
-    let signalCaptured: AbortSignal | undefined;
-    // 永不 resolve 的请求：模拟还在等模型。拿到 signal 才能断言"没有被 abort"。
-    apiMocks.generateJobAnalysis.mockImplementation((_id: number, signal?: AbortSignal) => {
-      signalCaptured = signal;
-      return new Promise(() => undefined);
+  it("「取消」真的中断请求：abort 置真、回到初始态、提示结果不保存", async () => {
+    const pending = deferred<JobAnalysisResult>();
+    let signal: AbortSignal | undefined;
+    apiMocks.generateJobAnalysis.mockImplementation((_id: number, nextSignal?: AbortSignal) => {
+      signal = nextSignal;
+      return pending.promise;
     });
 
-    render(
-      <AntdApp>
-        <ClosableModal />
-      </AntdApp>,
-    );
+    renderModal();
     start();
 
-    fireEvent.click(await screen.findByRole("button", { name: "停止等待" }));
+    fireEvent.click(await screen.findByRole("button", { name: "取消生成本次解读" }));
 
-    // 关键：连接没断——服务端才能跑完并写缓存，下次打开秒读。
-    expect(signalCaptured).toBeDefined();
-    expect(signalCaptured?.aborted).toBe(false);
-
-    // 提示出现，且说明是"后台仍会完成"而不是"已取消"。
-    expect(
-      await screen.findByText("已停止等待。后台仍会完成本次生成并缓存，下次打开可直接查看。"),
-    ).toBeInTheDocument();
-
-    // 弹窗真的关掉了（父级把 job 置空），不是只把加载动画藏起来。
-    expect(await screen.findByText("岗位解读已关闭")).toBeInTheDocument();
+    // 关键：连接真的断了（服务端据此取消生成），而不是只关掉加载动画。
+    expect(signal?.aborted).toBe(true);
+    expect(await screen.findByText("已取消，本次生成结果不会保存")).toBeInTheDocument();
+    // 回到初始态：还能再点「开始生成」，也没有残留的计时文案。
+    expect(screen.getByRole("button", { name: /开始生成/ })).toBeInTheDocument();
+    expect(screen.queryByText(/已生成 \d+ 秒/)).not.toBeInTheDocument();
     expect(screen.queryByText(/生成失败/)).not.toBeInTheDocument();
+  });
+
+  it("「后台继续」关闭弹窗但不断开连接，完成后弹通知而不是回填弹窗", async () => {
+    const pending = deferred<JobAnalysisResult>();
+    let signal: AbortSignal | undefined;
+    apiMocks.generateJobAnalysis.mockImplementation((_id: number, nextSignal?: AbortSignal) => {
+      signal = nextSignal;
+      return pending.promise;
+    });
+
+    renderClosable();
+    start();
+
+    fireEvent.click(await screen.findByRole("button", { name: "后台继续" }));
+
+    expect(signal?.aborted).toBe(false);
+    expect(await screen.findByText("岗位解读已关闭")).toBeInTheDocument();
+
+    act(() => {
+      pending.resolve(ANALYSIS);
+    });
+
+    // 结果不往已关闭的弹窗里回填，改走统一通知。
+    await waitFor(() => expect(noticeMocks.announceBackgroundResult).toHaveBeenCalledOnce());
+    expect(screen.queryByText(ANALYSIS.summary)).not.toBeInTheDocument();
+  });
+
+  it("生成中显示「已生成 N 秒」，让用户知道还要等", async () => {
+    vi.useFakeTimers();
+    const pending = deferred<JobAnalysisResult>();
+    apiMocks.generateJobAnalysis.mockReturnValue(pending.promise);
+
+    renderModal();
+    start();
+
+    expect(screen.getByText("已生成 0 秒")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(screen.getByText("已生成 3 秒")).toBeInTheDocument();
+  });
+
+  it("生成中的右上角关闭等价于「后台继续」：不 abort，任务留着跑", async () => {
+    const pending = deferred<JobAnalysisResult>();
+    let signal: AbortSignal | undefined;
+    apiMocks.generateJobAnalysis.mockImplementation((_id: number, nextSignal?: AbortSignal) => {
+      signal = nextSignal;
+      return pending.promise;
+    });
+
+    renderClosable();
+    start();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(await screen.findByText("岗位解读已关闭")).toBeInTheDocument();
+    expect(signal?.aborted).toBe(false);
   });
 
   it("有缓存时直接显示，不再调用模型（R2）", async () => {

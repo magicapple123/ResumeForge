@@ -14,6 +14,11 @@ import { useState } from "react";
 import { useBackgroundTasks } from "../hooks/useBackgroundTasks";
 import { useJobMatchBackgroundTasks } from "../hooks/useJobMatchBackgroundTasks";
 import {
+  cancelJobAnalysis,
+  useRunningJobAnalyses,
+  type JobAnalysisEntry,
+} from "../features/jobs/jobAnalysisStore";
+import {
   cancelBackgroundTask,
   dismissBackgroundTask,
   type BackgroundTask,
@@ -108,13 +113,44 @@ function JobMatchTaskRow({
   );
 }
 
+/** 岗位解读：状态在模块级 store 里（可真取消），这里只负责显示与取消入口。 */
+function JobAnalysisTaskRow({
+  entry,
+  onCancel,
+}: {
+  entry: JobAnalysisEntry;
+  onCancel: () => void;
+}) {
+  const label = ["岗位解读", entry.state.company, entry.state.title].filter(Boolean).join(" · ");
+  return (
+    <div className="background-task-row">
+      <Space size={8} align="start">
+        <LoadingOutlined className="background-task-spin" />
+        <div>
+          <Typography.Text strong className="background-task-label">
+            {label}
+          </Typography.Text>
+          <Typography.Text type="secondary" className="background-task-progress">
+            正在生成岗位解读…
+          </Typography.Text>
+        </div>
+      </Space>
+      <Button size="small" danger type="text" icon={<CloseCircleOutlined />} onClick={onCancel}>
+        取消
+      </Button>
+    </div>
+  );
+}
+
 export default function BackgroundTasksIndicator() {
   const { message } = App.useApp();
   const tasks = useBackgroundTasks();
   const matchTasks = useJobMatchBackgroundTasks();
+  // 第三源（T1）：岗位解读。此前它只活在弹窗里，关掉弹窗就彻底看不见了。
+  const analyses = useRunningJobAnalyses();
   const [cancelling, setCancelling] = useState<number | string | null>(null);
 
-  if (tasks.length === 0 && matchTasks.length === 0) return null;
+  if (tasks.length === 0 && matchTasks.length === 0 && analyses.length === 0) return null;
 
   const cancel = async (task: BackgroundTask) => {
     if (cancelling !== null) return;
@@ -159,6 +195,16 @@ export default function BackgroundTasksIndicator() {
       {matchTasks.map((task) => (
         <JobMatchTaskRow key={task.id} task={task} onCancel={() => void cancelMatchTask(task)} />
       ))}
+      {analyses.map((entry) => (
+        <JobAnalysisTaskRow
+          key={`analysis-${entry.jobId}`}
+          entry={entry}
+          onCancel={() => {
+            cancelJobAnalysis(entry.jobId);
+            message.info("已取消岗位解读");
+          }}
+        />
+      ))}
       <Typography.Text type="secondary" className="background-tasks-hint">
         关掉窗口也会继续跑，完成后会弹窗提醒并响一声。
       </Typography.Text>
@@ -167,9 +213,13 @@ export default function BackgroundTasksIndicator() {
 
   return (
     <Popover content={content} title="正在进行的任务" trigger="click" placement="bottomRight">
-      <Tooltip title={tasks.length + matchTasks.length + " 个任务正在进行"}>
+      <Tooltip title={tasks.length + matchTasks.length + analyses.length + " 个任务正在进行"}>
         <Button className="background-tasks-button" type="text" aria-label="查看后台任务">
-          <Badge count={tasks.length + matchTasks.length} size="small" offset={[2, -2]}>
+          <Badge
+            count={tasks.length + matchTasks.length + analyses.length}
+            size="small"
+            offset={[2, -2]}
+          >
             <LoadingOutlined /> 后台任务
           </Badge>
         </Button>

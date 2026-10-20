@@ -7,7 +7,8 @@
  * 助手时只能得到"暂不可达"。组件级测试抓不到这种断链，必须在**调用点**这一层钉住。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResumeDetail, ResumeLayout } from "../../types";
@@ -77,7 +78,7 @@ const LAYOUT: ResumeLayout = {
   format_config: {},
 };
 
-function renderPreview() {
+function renderPreview(extraActions?: ReactNode) {
   const previewRef = { current: null };
   return render(
     <MemoryRouter>
@@ -96,6 +97,7 @@ function renderPreview() {
           onApplyLayout={vi.fn()}
           onApplyFittedFormat={vi.fn()}
           onSaveEditedResume={vi.fn()}
+          extraActions={extraActions}
           suggestionsGenerated={false}
           suggestionsResetKey={0}
           onSuggestionsGenerated={vi.fn()}
@@ -289,5 +291,27 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     // 留在页面上就是"两条路径各自拼参数"的老问题。
     expect(screen.queryByText("导出选项")).not.toBeInTheDocument();
     expect(screen.queryByText("一键脱敏")).not.toBeInTheDocument();
+  });
+
+  it("导出落在「离线分享」之后的最后一格，额外操作单独占一行（T4）", () => {
+    renderPreview(<button type="button">保存修改</button>);
+
+    const footer = document.querySelector(".resume-detail-footer") as HTMLElement;
+    const children = [...footer.children];
+    const exportBox = footer.querySelector(".resume-detail-footer-export") as HTMLElement;
+    const extraRow = footer.querySelector(".resume-detail-footer-extra-row") as HTMLElement;
+    const shareButton = screen.getByText("离线分享").closest("button") as HTMLElement;
+
+    // 导出是 footer 的**最后一个**网格项：CSS 用 `-2 / -1` 让它落到「离线分享」那一行的
+    // 末格（整卡右下角），所以它必须排在所有按钮之后，否则会落到别的位置。
+    expect(children[children.length - 1]).toBe(exportBox);
+    // 额外操作在导出之前、且在「离线分享」之后，独占一行。
+    expect(children.indexOf(shareButton)).toBeLessThan(children.indexOf(extraRow));
+    expect(children.indexOf(extraRow)).toBeLessThan(children.indexOf(exportBox));
+    // 额外操作不再被塞进导出容器里（那会让它和导出按钮抢同一格）。
+    expect(exportBox.contains(extraRow)).toBe(false);
+    expect(within(extraRow).getByText("保存修改")).toBeInTheDocument();
+    // 全页只有一个导出容器（面板严格模式要求只有一个「导出」按钮）。
+    expect(footer.querySelectorAll(".resume-detail-footer-export")).toHaveLength(1);
   });
 });

@@ -104,7 +104,7 @@
 }
 
 .assistant-message-content--rich a:hover {
-  color: var(--rf-text-body);
+  color: var(--rf-info-strong);
 }
 
 .assistant-markdown-list-item {

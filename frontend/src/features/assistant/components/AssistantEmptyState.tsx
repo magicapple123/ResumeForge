@@ -1,7 +1,7 @@
 /** 新会话的引导提示和常用问题。 */
 
 import { Button, Empty, Typography } from "antd";
-import promoPlane from "../../../assets/toutou/promo-plane.png";
+import promoPlane from "../../../assets/toutou/promo-plane.webp";
 import { STARTER_PROMPTS, type StarterPrompt } from "../assistantTypes";
 import { greetingForHour } from "../greetingText";
 

@@ -1,6 +1,7 @@
 import { MenuOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import { Button, Layout, Menu, Typography } from "antd";
 import AppHeaderActions from "./components/AppHeaderActions";
+import BackgroundTaskBar from "./components/BackgroundTaskBar";
 import StarPromptModal from "./components/StarPromptModal";
 import PageSkeleton from "./components/common/PageSkeleton";
 import {
@@ -375,6 +376,8 @@ function MainLayout() {
                 onStarClick={() => setStarModalOpen(true)}
               />
             </Header>
+            {/* 常驻任务条：无任务时组件自身 return null，不占位。 */}
+            <BackgroundTaskBar />
             <Content className="app-content" id="main-content" role="main" tabIndex={-1}>
               <Suspense fallback={<PageSkeleton rows={8} />}>
                 <Outlet />

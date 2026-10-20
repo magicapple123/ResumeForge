@@ -6,11 +6,13 @@ import {
   ZoomOutOutlined,
 } from "@ant-design/icons";
 import { Button, Popover, Segmented, Space, Tooltip, Typography } from "antd";
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import { useState } from "react";
 import type { InteractionMode } from "./config";
 
 interface Props {
+  /** 版式控件等在工具栏里就地渲染（见 ResumePreview.toolbarExtra）。 */
+  extra?: ReactNode;
   canEdit: boolean;
   /**
    * 「正指向」提示的占位元素。
@@ -37,6 +39,7 @@ interface BadgeAnnotation {
 }
 
 export default function ResumePreviewToolbar({
+  extra,
   canEdit,
   hoverChipRef,
   onRewriteHoverTarget,
@@ -73,6 +76,7 @@ export default function ResumePreviewToolbar({
             ]}
           />
         )}
+        {extra}
         <Tooltip title="缩小预览">
           <Button
             type="text"

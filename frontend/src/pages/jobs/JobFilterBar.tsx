@@ -8,10 +8,13 @@ import {
   InboxOutlined,
   PlusOutlined,
   ReloadOutlined,
+  UndoOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
-import { Button, Input, Select, Space } from "antd";
+import { Button, Input, Select, Space, Tooltip } from "antd";
 import { useState } from "react";
+import type { JobSortState } from "../../utils/jobSort";
+import { DEFAULT_JOB_SORT_STATE, isDefaultJobSort } from "../../utils/jobSort";
 import type { BatchAction } from "./jobFilterOptions";
 import { JOB_TYPE_OPTIONS, SOURCE_KIND_OPTIONS, STATUS_OPTIONS } from "./jobFilterOptions";
 
@@ -33,6 +36,8 @@ export function JobFilterBar({
   setCandidatesOpen,
   setFormOpen,
   onImportCsv,
+  sortState,
+  applySort,
 }: {
   keyword: string;
   setKeyword: (value: string) => void;
@@ -51,6 +56,9 @@ export function JobFilterBar({
   setCandidatesOpen: (value: boolean) => void;
   setFormOpen: (value: boolean) => void;
   onImportCsv: () => void;
+  /** 当前排序（E）：只存在页面状态里，用于「恢复默认排序」的禁用态。 */
+  sortState: JobSortState;
+  applySort: (next: JobSortState) => void;
 }) {
   // 搜索框受控：本地镜像同步外部 keyword（URL 带参等外部变化能回填输入框），
   // 点 × 清空时立即把筛选也清掉——之前非受控时清空后列表仍按旧关键词过滤。
@@ -173,6 +181,24 @@ export function JobFilterBar({
         >
           手动添加
         </Button>
+        {/* 恢复默认排序（E）：排序一旦点上列头就没有"取消"的可视入口，这里给一个
+            明确的退路；点击同时回到第 1 页（停在第 3 页看默认排序的前几条没有意义）。 */}
+        <Tooltip
+          title={
+            isDefaultJobSort(sortState)
+              ? "当前已是默认排序：最近导入在前"
+              : "恢复默认排序：最近导入在前"
+          }
+        >
+          <Button
+            icon={<UndoOutlined />}
+            aria-label="恢复默认排序"
+            disabled={batchAction !== null || isDefaultJobSort(sortState)}
+            onClick={() => applySort(DEFAULT_JOB_SORT_STATE)}
+          >
+            恢复默认排序
+          </Button>
+        </Tooltip>
       </Space>
     </div>
   );

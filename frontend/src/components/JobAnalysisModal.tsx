@@ -1,11 +1,17 @@
-/** 按需生成岗位需求总结和通用求职建议。 */
+/** 按需生成岗位需求总结和通用求职建议（T1：可真取消 / 后台继续 / 订阅模块级状态）。 */
 import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Listy, Modal, Popconfirm, Space, Tag, Typography } from "antd";
 import PageSkeleton from "./common/PageSkeleton";
 import { ListyItem } from "./common/ListyItem";
-import { announceBackgroundFailure, announceBackgroundResult } from "../utils/backgroundTask";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { generateJobAnalysis, getJobAnalysis } from "../api/jobs";
+import { useEffect, useRef, useState } from "react";
+import { getJobAnalysis } from "../api/jobs";
+import {
+  attachJobAnalysis,
+  cancelJobAnalysis,
+  detachJobAnalysis,
+  startJobAnalysis,
+  useJobAnalysis,
+} from "../features/jobs/jobAnalysisStore";
 import type { Job, JobAnalysisPriority, JobAnalysisResult } from "../types";
 
 interface Props {
@@ -19,41 +25,61 @@ const PRIORITY_META: Record<JobAnalysisPriority, { label: string; color: string 
   low: { label: "加分项", color: "blue" },
 };
 
+/** 服务端缓存里读到的那一份（只作为"没有新结果时"的展示来源）。 */
+interface CachedAnalysis {
+  data: JobAnalysisResult;
+  generatedAt: string | null;
+  stale: boolean;
+}
+
+/**
+ * 「已生成 N 秒」：长任务最难熬的是不知道还要多久。每秒刷新一次，卸载即清定时器
+ * （不清的话弹窗关掉之后还会往已卸载的组件 setState）。
+ */
+function useElapsedSeconds(startedAt: number | undefined): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (startedAt === undefined) return undefined;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+  if (startedAt === undefined) return 0;
+  return Math.max(0, Math.floor((now - startedAt) / 1000));
+}
+
 export default function JobAnalysisModal({ job, onClose }: Props) {
   const { message } = App.useApp();
-  const [data, setData] = useState<JobAnalysisResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [hasAttempted, setHasAttempted] = useState(false);
-  // R2：缓存信息——生成时间与「内容改过」标记。旧结果照常展示，只是提醒可能过期。
-  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
-  const [stale, setStale] = useState(false);
-  const requestVersion = useRef(0);
+  const jobId = job?.id ?? null;
+  const state = useJobAnalysis(jobId);
+  // 打开时的服务端缓存：有就直接展示（不调模型），没有才让用户点「开始生成」。
+  const [cached, setCached] = useState<CachedAnalysis | null>(null);
   const lastJobId = useRef<number | null>(null);
 
+  // 换岗位：上一份缓存必须清掉，否则会把另一个岗位的结论当成这个岗位的显示出来。
   useEffect(() => {
     if (!job || lastJobId.current === job.id) return;
     lastJobId.current = job.id;
-    requestVersion.current += 1;
-    setData(null);
-    setError("");
-    setLoading(false);
-    setHasAttempted(false);
-    setStale(false);
-    setGeneratedAt(null);
+    setCached(null);
   }, [job]);
 
-  // 打开时先读缓存：有就直接显示（不调模型），没有才让用户点「开始生成」。
+  // 有人在看 → 完成时就地回填；离开（卸载 / 换岗位）→ detach，完成时改走统一通知。
+  useEffect(() => {
+    if (jobId === null) return undefined;
+    attachJobAnalysis(jobId);
+    return () => detachJobAnalysis(jobId);
+  }, [jobId]);
+
   useEffect(() => {
     if (!job) return undefined;
     let cancelled = false;
     getJobAnalysis(job.id)
       .then((cache) => {
         if (cancelled || !cache.cached || !cache.result) return;
-        setData(cache.result);
-        setGeneratedAt(cache.generated_at);
-        setStale(cache.stale);
-        setHasAttempted(true);
+        setCached({
+          data: cache.result,
+          generatedAt: cache.generated_at,
+          stale: cache.stale,
+        });
       })
       .catch(() => {
         // 读缓存失败不打扰用户：当作没有缓存，仍可点「开始生成」。
@@ -63,93 +89,43 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
     };
   }, [job]);
 
-  // 用户在生成过程中关掉了弹窗：请求继续跑，但结果用统一通知告诉他（见 utils/backgroundTask）。
-  const leftWhileLoading = useRef(false);
+  const running = state.status === "running";
+  // 新结果优先于缓存：用户刚生成完，看到的不该还是上次那份。
+  const data = state.status === "done" ? (state.result ?? null) : (cached?.data ?? null);
+  const stale = state.status === "done" ? Boolean(state.stale) : (cached?.stale ?? false);
+  const generatedAt =
+    state.status === "done" ? (state.generatedAt ?? null) : (cached?.generatedAt ?? null);
+  const error = state.status === "error" ? (state.error ?? "") : "";
+  const elapsedSeconds = useElapsedSeconds(running ? state.startedAt : undefined);
 
-  // R2-b：请求一旦发出就**不主动 abort**。后端只有检测到客户端仍连接时才写缓存；
-  // abort 会让这次已经烧掉的 token 白费（下次打开又要重跑）。controller 仍保留，
-  // 只是当前没有任何地方调用 `abort()`。
-  const abortRef = useRef<AbortController | null>(null);
-
-  // 组件卸载（父级换页/整块销毁）后不再 setState；在途请求照常跑完并落缓存。
-  // 挂载时显式置回 true：StrictMode 会「挂载→清理→再挂载」，只在清理里置 false 会让
-  // 后续所有提示都被吞掉。
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  /**
-   * 「停止等待」（R2-b 诚实降级）：停止占用用户注意力，但**不断开连接**。
-   *
-   * 只做三件事：停掉加载动画并清掉错误、关闭弹窗、提示「后台会完成并缓存」。
-   * 不 abort 是刻意的——服务端连接不断，本次生成才会写进缓存，下次打开秒读。
-   */
-  const stopWaiting = () => {
-    // 让迟到的结果不再回填到已经关掉的弹窗；请求本身继续跑。
-    requestVersion.current += 1;
-    if (mounted.current) {
-      setLoading(false);
-      setError("");
-      setHasAttempted(false);
-    }
-    onClose();
-    message.info("已停止等待。后台仍会完成本次生成并缓存，下次打开可直接查看。", 6);
+  const start = (force: boolean) => {
+    if (!job) return;
+    startJobAnalysis({
+      jobId: job.id,
+      title: job.title,
+      company: job.company,
+      force,
+    });
   };
 
-  const load = useCallback(
-    async (force = false) => {
-      if (!job) return;
-      const currentRequest = ++requestVersion.current;
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setHasAttempted(true);
-      setLoading(true);
-      setError("");
-      leftWhileLoading.current = false;
-      try {
-        // R2-a：普通生成不带 force——后端已有缓存时直接返回，不必重跑模型再付一次钱。
-        const result = await generateJobAnalysis(job.id, controller.signal, force);
-        if (leftWhileLoading.current) {
-          announceBackgroundResult("岗位解读", "回到岗位详情再点「岗位需求解读」即可看到。");
-          return;
-        }
-        if (currentRequest === requestVersion.current) {
-          setData(result);
-          setStale(false);
-          setGeneratedAt(new Date().toISOString());
-        }
-      } catch (loadError) {
-        // 用户主动取消：不是失败，也不该弹「生成失败」。
-        if (controller.signal.aborted) {
-          if (currentRequest === requestVersion.current) setLoading(false);
-          return;
-        }
-        const detail =
-          loadError instanceof Error ? loadError.message : "生成岗位解读失败，请稍后重试";
-        if (leftWhileLoading.current) {
-          announceBackgroundFailure("岗位解读", detail);
-          return;
-        }
-        if (currentRequest === requestVersion.current) setError(detail);
-      } finally {
-        if (!leftWhileLoading.current && currentRequest === requestVersion.current)
-          setLoading(false);
-      }
-    },
-    [job],
-  );
+  /** 取消 = 真的停掉本次生成，结果不保存（与「后台继续」是两条不同的路）。 */
+  const cancel = () => {
+    if (!job) return;
+    cancelJobAnalysis(job.id);
+    message.info("已取消，本次生成结果不会保存", 6);
+  };
 
-  /** 「重新生成」：唯一会带 `force=true` 的入口——用户明确要求覆盖当前结论。 */
-  const regenerate = useCallback(() => {
-    void load(true);
-  }, [load]);
+  /** 后台继续 = 关掉弹窗但不断开连接，完成后弹通知并响一声。 */
+  const continueInBackground = () => {
+    if (job) detachJobAnalysis(job.id);
+    onClose();
+  };
 
-  // R2：**不**在打开弹窗时自动调模型。先说明「要读什么、大概多久、能不能走开」，
-  // 用户点「开始生成」才发请求——此前一打开就转圈，用户既不知道在等什么，也不好取消。
+  // 右上角 X / Esc：生成期间等价于「后台继续」（别让误关把结果丢掉）。
+  const handleClose = () => {
+    if (job && running) detachJobAnalysis(job.id);
+    onClose();
+  };
 
   return (
     <Modal
@@ -160,7 +136,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
         </Space>
       }
       open={!!job}
-      onCancel={onClose}
+      onCancel={handleClose}
       footer={null}
       width={760}
       // 解读是 AI 长文：限高让超长内容只滚弹窗内部，卡片整体不出视口。
@@ -172,33 +148,29 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
       {error ? (
         <Space orientation="vertical" style={{ width: "100%" }}>
           <Alert type="error" showIcon title={error} />
-          <Button aria-label="重新生成解读" icon={<ReloadOutlined />} onClick={() => void load()}>
+          <Button aria-label="重新生成解读" icon={<ReloadOutlined />} onClick={() => start(false)}>
             重新生成解读
           </Button>
         </Space>
-      ) : loading ? (
+      ) : running ? (
         <div>
           <PageSkeleton rows={8} card={false} />
-          {/* 「后台继续」：请求不会因为关掉弹窗而中断，完成后会弹通知并响一声。
-              没有这个按钮时，用户只能干等——而他根本不知道能不能走开。 */}
+          <Typography.Paragraph type="secondary" className="job-analysis-elapsed">
+            已生成 {elapsedSeconds} 秒
+          </Typography.Paragraph>
+          {/* 两条出路说明白：取消 = 白跑一次（结果不保存）；后台继续 = 结果会留下。 */}
           <Alert
             type="info"
             showIcon
-            style={{ marginTop: 12 }}
             title="生成期间可以关掉这个弹窗去做别的，完成后会提醒你（弹窗 + 提示音）。"
+            description="点「取消」会中断本次生成，结果不会保存。"
           />
-          <div style={{ marginTop: 12, textAlign: "right" }}>
+          <div className="job-analysis-actions">
             <Space>
-              {/* R2-b：停止等待 ≠ 取消。连接不断，后台跑完会写缓存；下次打开直接读缓存。 */}
-              <Button onClick={stopWaiting}>停止等待</Button>
-              <Button
-                onClick={() => {
-                  leftWhileLoading.current = true;
-                  onClose();
-                }}
-              >
-                后台继续（关闭弹窗）
+              <Button aria-label="取消生成本次解读" onClick={cancel}>
+                取消
               </Button>
+              <Button onClick={continueInBackground}>后台继续</Button>
             </Space>
           </div>
         </div>
@@ -229,7 +201,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
                 description="当前这份解读会被新结果替换。"
                 okText="重新生成"
                 cancelText="取消"
-                onConfirm={regenerate}
+                onConfirm={() => start(true)}
               >
                 <Button type="link" size="small" aria-label="重新生成" icon={<ReloadOutlined />}>
                   重新生成
@@ -287,7 +259,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无补充建议" />
           )}
         </div>
-      ) : !hasAttempted ? (
+      ) : (
         // 首次打开：先讲清楚这一步在做什么，再让用户决定何时开始。
         <Space orientation="vertical" size={12} style={{ width: "100%" }}>
           <Alert
@@ -301,12 +273,12 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
             完成后会提醒你。
           </Typography.Paragraph>
           <div>
-            <Button type="primary" icon={<BulbOutlined />} onClick={() => void load()}>
+            <Button type="primary" icon={<BulbOutlined />} onClick={() => start(false)}>
               开始生成
             </Button>
           </div>
         </Space>
-      ) : null}
+      )}
     </Modal>
   );
 }

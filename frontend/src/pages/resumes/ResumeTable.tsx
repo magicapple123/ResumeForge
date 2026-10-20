@@ -6,6 +6,7 @@
 import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
 import { Button, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { SortOrder } from "antd/es/table/interface";
 import { memo, useEffect, useMemo, useRef } from "react";
 import type { HTMLAttributes } from "react";
 import type { Dispatch, SetStateAction } from "react";
@@ -16,6 +17,12 @@ import type { Page } from "../../types";
 import type { ResumeBrief } from "../../types";
 import type { DiffViewData } from "../../types/resumeFieldDiff";
 import { formatDateTime } from "../../utils/format";
+import {
+  nextSortState,
+  sortDirectionsFor,
+  sortOrderFor,
+  type ResumeSortState,
+} from "../../utils/resumeSort";
 
 /** 行操作动作的依赖集：全部是 setState 与 useCallback 回调，引用跨渲染稳定，
  * 行组件据此做 memo——页面其它 state 变化时已渲染的行不必重跑。 */
@@ -143,6 +150,10 @@ interface Props {
   setDiffBase: (target: ResumeBrief | null) => void;
   setDiffAgainstId: (id: number | null) => void;
   setDiffResult: (result: DiffViewData | null) => void;
+  /** 当前排序状态（列头箭头的唯一来源）。 */
+  sortState: ResumeSortState;
+  /** 列头三态排序的回调（页面负责 setPage(1) 与 URL 写回）。 */
+  onSortChange: (next: ResumeSortState) => void;
   /** 跳转岗位广场（保留在页面里的 useNavigate）。 */
   navigate: (path: string) => void;
 }
@@ -166,6 +177,8 @@ export default function ResumeTable({
   setDiffBase,
   setDiffAgainstId,
   setDiffResult,
+  sortState,
+  onSortChange,
   navigate,
 }: Props) {
   const tableWrapRef = useRef<HTMLDivElement>(null);
@@ -225,6 +238,12 @@ export default function ResumeTable({
     return map;
   }, [data]);
 
+  /**
+   * 列头排序（T2）：排序在服务端做（本地排序在分页下必错），这里只把"点了哪一列、
+   * 什么方向"翻译成页面状态。四列的键分别是 title / job(job_title) / created / updated。
+   */
+  const SORT_TOOLTIP = { title: "点击排序，再点反向，第三次取消" };
+
   const columns: ColumnsType<ResumeBrief> = [
     {
       title: "收藏",
@@ -255,6 +274,10 @@ export default function ResumeTable({
       dataIndex: "title",
       // 1080px 宽下无宽度的标题列会被压到约一个字宽：给一个下限再让它在窄屏内省略。
       width: 220,
+      sorter: true,
+      sortOrder: sortOrderFor("title", sortState),
+      sortDirections: sortDirectionsFor("title"),
+      showSorterTooltip: SORT_TOOLTIP,
       // 自定义 render 返回的是按钮，列级 ellipsis 截不到按钮里的文字（按钮自带样式），
       // 所以省略号由按钮自己带（见下）；这里关掉 antd 的原生 title，避免和 Tooltip 弹两次。
       ellipsis: { showTitle: false },
@@ -274,15 +297,25 @@ export default function ResumeTable({
     {
       title: "目标岗位",
       key: "job",
+      // T3：这一列原本没有宽度，长岗位名/公司名会把整表撑宽，其它列被挤成一字宽。
+      // 固定 200 + 列级 ellipsis（整表切 table-layout: fixed）+ 单元格内 Tag 自己省略。
+      width: 200,
+      sorter: true,
+      sortOrder: sortOrderFor("job", sortState),
+      sortDirections: sortDirectionsFor("job"),
+      showSorterTooltip: SORT_TOOLTIP,
+      ellipsis: { showTitle: false },
       render: (_, record) => (
-        <Space>
+        <Space wrap size={[4, 4]}>
           {record.job_id ? (
             <Button
               type="link"
               className="table-text-link"
               onClick={() => navigate(`/jobs?job_id=${record.job_id}`)}
             >
-              <Tag color="blue">{record.job_title || "-"}</Tag>
+              <Tag color="blue" className="resume-job-tag">
+                {record.job_title || "-"}
+              </Tag>
             </Button>
           ) : (
             // 无岗位记录的 job_title 存的是求职意向，不能当岗位名显示，
@@ -291,10 +324,12 @@ export default function ResumeTable({
               <Tooltip title="不关联岗位、可投递多个方向的简历">
                 <Tag color="purple">通用简历</Tag>
               </Tooltip>
-              {record.job_title && <Tag>求职意向：{record.job_title}</Tag>}
+              {record.job_title && (
+                <Tag className="resume-job-tag">求职意向：{record.job_title}</Tag>
+              )}
             </>
           )}
-          {record.company && <Tag>{record.company}</Tag>}
+          {record.company && <Tag className="resume-company-tag">{record.company}</Tag>}
         </Space>
       ),
     },
@@ -351,6 +386,10 @@ export default function ResumeTable({
       title: "创建时间",
       dataIndex: "created_at",
       width: 160,
+      sorter: true,
+      sortOrder: sortOrderFor("created_at", sortState),
+      sortDirections: sortDirectionsFor("created_at"),
+      showSorterTooltip: SORT_TOOLTIP,
       render: (value) => formatDateTime(value),
     },
     {
@@ -358,6 +397,10 @@ export default function ResumeTable({
       title: "最近修改",
       dataIndex: "updated_at",
       width: 160,
+      sorter: true,
+      sortOrder: sortOrderFor("updated_at", sortState),
+      sortDirections: sortDirectionsFor("updated_at"),
+      showSorterTooltip: SORT_TOOLTIP,
       render: (value: string | null | undefined) =>
         value ? formatDateTime(value) : <Typography.Text type="secondary">—</Typography.Text>,
     },
@@ -420,6 +463,13 @@ export default function ResumeTable({
             setPage(nextPage);
             setPageSize(nextPageSize);
           },
+        }}
+        // 排序交给服务端：只把"排序动作"翻译成页面状态，翻页/筛选各走各的。
+        onChange={(_pagination, _filters, sorter, extra) => {
+          if (extra.action !== "sort") return;
+          const active = Array.isArray(sorter) ? sorter[0] : sorter;
+          const columnKey = String(active?.columnKey ?? active?.field ?? "");
+          onSortChange(nextSortState(columnKey, active?.order as SortOrder | null | undefined));
         }}
       />
     </div>

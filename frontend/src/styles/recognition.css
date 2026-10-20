@@ -18,28 +18,38 @@
   margin-top: 12px;
 }
 
-/* 第一行固定成缩略图的高度：截图与文档混排时，删除按钮才会落在同一条线上。
-   只有标签的条目（文档、浏览器渲染不了的 TIFF）在这个高度里垂直居中。 */
+/* 第一行固定成缩略图的高度（T6 起 48px）：截图与文档混排时，删除按钮才会落在同一条线上。
+   文档类的条目在行内左对齐，多出来的宽度由文件名自己省略。 */
 .recognition-file-item {
   display: grid;
-  grid-template-rows: 72px auto;
+  grid-template-rows: 48px auto;
   justify-items: center;
   align-items: center;
   gap: 2px;
 }
 
 .recognition-file-item .recognition-image {
-  width: 96px;
-  height: 72px;
-  object-fit: contain;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
 }
 
-/* 文档的标签可能很长（文件名来自用户），截断后靠悬停查看全名。 */
-.recognition-file-tag {
-  max-width: 220px;
+/* 文档条目：图标 + 文件名 + 体积（+ PDF 的「预览」）。 */
+.recognition-file-summary {
+  max-width: 260px;
+}
+
+.recognition-file-name {
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.recognition-file-size {
+  flex: 0 0 auto;
+  font-size: 12px;
 }
 
 /* 识别来源标记与"识别到的原文"合为一块：来源要一直看得见，原文默认收起。 */

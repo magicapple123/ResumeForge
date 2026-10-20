@@ -6,15 +6,29 @@ import { Tag, Typography } from "antd";
 import type { CSSProperties } from "react";
 import type { DiffLine, DiffLineType, DiffToken, ResumeDiff } from "../types/resumeWriting";
 
+/**
+ * 三态配色全部走语义 token（`--rf-diff-*`）：浅色的取值与原来写死的
+ * `#f6ffed/#d9f7be/#fff1f0/#ffccc7/#135200/#a8071a` 逐项等值（视觉不变），
+ * 深色另给一套暗底亮字（见 `theme/dark-tokens.css`）。
+ */
 const LINE_STYLE: Record<DiffLineType, CSSProperties> = {
-  added: { background: "#f6ffed", color: "#135200" },
-  removed: { background: "#fff1f0", color: "#a8071a", textDecoration: "line-through" },
+  added: { background: "var(--rf-diff-added-bg)", color: "var(--rf-diff-added-text)" },
+  removed: {
+    background: "var(--rf-diff-removed-bg)",
+    color: "var(--rf-diff-removed-text)",
+    textDecoration: "line-through",
+  },
   unchanged: { background: "transparent" },
 };
 
+/** 词级高亮用 --rf-diff-*-border 那一档：它是同一色系里更实的一档填充。 */
 const TOKEN_STYLE: Record<DiffLineType, CSSProperties> = {
-  added: { background: "#d9f7be", color: "#135200" },
-  removed: { background: "#ffccc7", color: "#a8071a", textDecoration: "line-through" },
+  added: { background: "var(--rf-diff-added-border)", color: "var(--rf-diff-added-text)" },
+  removed: {
+    background: "var(--rf-diff-removed-border)",
+    color: "var(--rf-diff-removed-text)",
+    textDecoration: "line-through",
+  },
   unchanged: {},
 };
 

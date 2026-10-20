@@ -187,17 +187,17 @@ export default function JobTable({
     {
       title: "发布时间",
       dataIndex: "posted_at",
-      // 列里展示的是招聘信息自己写的 posted_at（自由文本，后端没有可排的列）；
-      // 这一列排的是**导入时间** created_at，tooltip 里说明，免得"点了排序像没变"。
-      key: "created_at",
+      // 列里展示招聘信息自己写的 posted_at；排序键 `posted_desc` 也按它排——
+      // 解析不出日期（空串 / "3 天前"）时后端回落到导入日期，不会把这类岗位甩到两端。
+      key: "posted_at",
       width: 150,
       sorter: true,
-      sortOrder: sortOrderFor("created_at", sortState),
+      sortOrder: sortOrderFor("posted_at", sortState),
       // 默认就是倒序：把方向序列反过来，第一下点击才会真的变成升序。
       // 用默认的 ["ascend","descend"] 时，第一次点击是"取消排序"，而取消后又回到默认
       // 倒序——用户看到的是"点了没反应"。
       sortDirections: ["descend", "ascend"],
-      showSorterTooltip: { title: "按导入时间排序" },
+      showSorterTooltip: { title: "按发布时间排序（没有发布时间的按导入时间）" },
       render: (value: string) => value || "-",
     },
     {

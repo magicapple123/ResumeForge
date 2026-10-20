@@ -8,9 +8,10 @@ export type { WebFormProfileGroupProps } from "./webFormProfileGroupMemo";
 const CONTAINER_STYLE: CSSProperties = {
   marginBottom: 14,
   padding: "12px 14px 14px",
-  border: "1px solid #e6edf5",
+  // 白底/浅边在深色下会变成"一块亮砖 + 一圈亮边"，改走语义 token。
+  border: "1px solid var(--rf-border)",
   borderRadius: 12,
-  background: "#fff",
+  background: "var(--rf-surface)",
   boxShadow: "0 2px 8px rgba(31, 56, 88, 0.04)",
 };
 

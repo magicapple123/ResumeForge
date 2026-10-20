@@ -193,8 +193,25 @@ export interface ResumeLayout {
 }
 
 /** 简历列表排序（R14）：与后端 `RESUME_SORT_ORDERS` 的键逐字一致。 */
+/**
+ * 简历列表排序键（与后端 `GET /api/resumes` 的 `sort` Literal **完全一致**）。
+ *
+ * T2 起每个字段都有升降两个方向：列头三态排序（升序 → 降序 → 取消）需要反向键，
+ * 后端没有 `order` 覆盖参数。
+ */
+export type ResumeSortOrder = "asc" | "desc";
+
 export type ResumeSort =
-  "updated_desc" | "created_desc" | "title_asc" | "company_asc" | "job_title_asc";
+  | "updated_desc"
+  | "updated_asc"
+  | "created_desc"
+  | "created_asc"
+  | "title_asc"
+  | "title_desc"
+  | "company_asc"
+  | "company_desc"
+  | "job_title_asc"
+  | "job_title_desc";
 
 export interface ResumeBrief {
   id: number;

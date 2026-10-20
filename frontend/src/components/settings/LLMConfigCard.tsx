@@ -47,14 +47,14 @@ import LLMRecordViewModal from "./LLMRecordViewModal";
 interface Props {
   records: LLMConfigRecord[];
   recordsLoading: boolean;
-  activeRecordId: number | null;
+  activeRecordId: string | null;
   /** 当前生效配置的摘要（脱敏）：未来自任何记录时用于引导文案。 */
   configSummary: LLMConfigSummary | null;
-  recordApplyingId: number | null;
-  recordDeletingId: number | null;
+  recordApplyingId: string | null;
+  recordDeletingId: string | null;
   /** 卡上「测试连接」：逐卡触发、结果逐卡显示。 */
-  recordTestingId: number | null;
-  recordTestResults: Record<number, LLMTestResult>;
+  recordTestingId: string | null;
+  recordTestResults: Record<string, LLMTestResult>;
   /** 新增/编辑共用弹窗的表单与状态。 */
   recordForm: FormInstance<RecordFormValues>;
   recordModalOpen: boolean;
@@ -170,15 +170,7 @@ export default function LLMConfigCard({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          title="支持所有兼容 OpenAI Chat Completions 协议的模型服务（DeepSeek、豆包、Kimi、通义千问、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Ollama 等），也可切换到 Anthropic 原生协议直连 Claude。每张卡片是一份已保存的配置：点卡片本体查看详情，可直接测试连接、切换使用；删除记录不会影响当前正在使用的配置。API Key 保存在本地数据库中，仅本机可访问。"
-        />
-        {/* R21：全局配置优先级更高，不写清楚会让用户以为"保存没生效"。 */}
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 16 }}
-          title="全局配置生效时，本卡保存的配置不生效"
-          description="上方「全局模型」开关打开且当前配置完整时，所有数据集都走全局那一套；本卡的记录只在全局关闭或未配置时生效。"
+          title="支持所有兼容 OpenAI Chat Completions 协议的模型服务（DeepSeek、豆包、Kimi、通义千问、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Ollama 等），也可切换到 Anthropic 原生协议直连 Claude。所有数据集共用这里的配置：每张卡片是一份已保存的记录，点卡片本体查看详情，可直接测试连接、切换「使用中」。API Key 加密保存在本地数据目录，不进入备份包。"
         />
         <Spin spinning={recordsLoading}>
           {records.length === 0 ? (
@@ -188,11 +180,12 @@ export default function LLMConfigCard({
             />
           ) : (
             <Flex vertical gap={12}>
-              {activeRecordId === null && configSummary && (
+              {activeRecordId === null && configSummary?.scope === "dataset" && (
                 <Alert
                   type="info"
                   showIcon
-                  title={`当前生效的配置（${configSummary.model || "未填写模型"} · ${configSummary.baseUrl || "未填写地址"}）未来自任何记录，点记录卡上的「使用」可切换`}
+                  title="当前沿用本数据集旧配置，保存后将升级为全局配置"
+                  description={`正在使用：${configSummary.model || "未填写模型"} · ${configSummary.baseUrl || "未填写地址"}。保存一次（或在下方新建记录后点「使用」）即改为所有数据集共用。`}
                 />
               )}
               {visibleRecords.map((record) => {

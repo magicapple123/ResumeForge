@@ -48,6 +48,14 @@ interface Props {
    * 用户要照着岗位从头写，条目级填入没有可对应的东西。
    */
   entryFill?: boolean;
+  /**
+   * 「填入我的资料全部数据」（T11）。
+   *
+   * 提供后头部多一个次按钮：把整份「我的资料」一次性带进表单。手写通用简历会传
+   * （它从空白开始，需要一条"要么自己写、要么全部带入"的捷径）；岗位模式与编辑已保存
+   * 简历都不传——前者会替用户做决定，后者要的是改这一份而不是换成资料里的内容。
+   */
+  fillAll?: () => ResumeContent;
 }
 
 import {
@@ -63,6 +71,7 @@ import { resolveEditorTarget } from "./resume-editor/ResumeEditorTarget";
 import { EDITOR_FIELD_SCROLL_OPTIONS } from "./resume-editor/editorFieldScroll";
 import { ProfileFillProvider } from "./resume-editor/profileFillContext";
 import { readResumeValueByPath } from "../utils/resumeFieldPath";
+import { hasAnyResumeContent } from "../utils/profileToResume";
 import type { ProfileFillSources } from "../features/profile/profileFillOptions";
 import { useFormShortcutHistory } from "../features/shortcuts/useFormShortcutHistory";
 import { layer } from "../theme/tokens";
@@ -80,6 +89,7 @@ export default function ResumeEditorModal({
   resumeId,
   fillSources,
   entryFill = true,
+  fillAll,
 }: Props) {
   const { message, modal } = App.useApp();
   const [form] = Form.useForm<ResumeContent>();
@@ -126,6 +136,32 @@ export default function ResumeEditorModal({
       fillSources ? { sources: fillSources, onFilled: () => setDirty(true), entryFill } : null,
     [fillSources, entryFill],
   );
+
+  /**
+   * 「填入我的资料全部数据」：整份表单被覆盖，所以先看有没有东西会被冲掉。
+   *
+   * `getFieldsValue(true)` 取**全部**已注册值而不是当前标签页的：antd 的 Tabs 惰性渲染，
+   * 只看当前页会把"教育里已经填好的两条"当成空，于是一声不响地覆盖掉用户的内容。
+   */
+  const fillAllFromProfile = () => {
+    if (!fillAll) return;
+    const apply = () => {
+      form.setFieldsValue(fillAll() as never);
+      setDirty(true);
+      formHistory.push();
+      message.success("已填入「我的资料」的内容");
+    };
+    if (!hasAnyResumeContent(form.getFieldsValue(true) as ResumeContent)) {
+      apply();
+      return;
+    }
+    modal.confirm({
+      title: "将用「我的资料」覆盖当前已填写的内容？",
+      okText: "覆盖填入",
+      cancelText: "取消",
+      onOk: apply,
+    });
+  };
 
   // Compiler 规范：随 open/content/initialTarget 变化的回填用渲染期守卫式调整；
   // 表单实例写入与滚动聚焦的定时器副作用留在 effect。
@@ -402,6 +438,18 @@ export default function ResumeEditorModal({
               <Typography.Text type="secondary" className="resume-editor-description">
                 {description}
               </Typography.Text>
+            )}
+            {fillAll && (
+              <div className="resume-editor-fill-all">
+                <Button
+                  size="small"
+                  icon={<ImportOutlined />}
+                  aria-label="填入我的资料全部数据"
+                  onClick={fillAllFromProfile}
+                >
+                  填入我的资料全部数据
+                </Button>
+              </div>
             )}
             <Form
               form={form}

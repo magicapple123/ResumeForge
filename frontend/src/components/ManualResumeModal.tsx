@@ -1,12 +1,13 @@
-/** 用户手写简历弹窗：用个人资料预填结构化表单，再保存为手写简历记录。 */
+/** 用户手写简历弹窗：岗位模式预填基本信息，通用模式从空白开始（可一键填入全部资料）。 */
 import { App, Modal } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createManualResume } from "../api/resumes";
 import { getProfile } from "../api/profile";
 import type { Job, Profile, ResumeContent } from "../types";
-import { profileToResumeContent } from "../utils/profileToResume";
+import { blankResumeContent, profileToResumeContent } from "../utils/profileToResume";
 import { buildProfileFillSources } from "../features/profile/profileFillOptions";
+import { bumpResumeList } from "../features/resume/resumeListEvents";
 import JobRequirementPanel from "./JobRequirementPanel";
 import ResumeEditorModal from "./ResumeEditorModal";
 
@@ -71,13 +72,14 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
    *   是"这个岗位要什么"，只能由用户照着岗位要求亲手写；把资料里所有经历一股脑倒进来，
    *   用户得先删掉一大半，而且很容易留下与岗位无关的段落。留空 + 每个模块顶部的
    *   「从我的资料追加一条」= 需要哪条就加哪条。
-   * - **通用手写简历**（`job == null`）：全量预填。它不针对任何岗位，资料里的经历本来就
-   *   都是候选。
+   * - **通用手写简历**（`job == null`）：**从空白开始**（T11）。以前是全量预填，但那份
+   *   简历不针对任何岗位，资料里所有经历都是候选，用户同样得先删一半才写得下去。
+   *   现在改成"空白起步 + 头部一键填入全部资料"：要么自己写这一份需要的，要么一次带入。
    */
   const content = useMemo(() => {
     if (!profile) return null;
     const base = profileToResumeContent(profile, job);
-    if (!job) return base;
+    if (!job) return blankResumeContent();
     return {
       ...base,
       summary: "",
@@ -99,6 +101,9 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
       title: job ? "" : initialTitle.trim(),
       content: nextContent,
     });
+    // T12：保存成功就广播。列表由订阅方各自重取——「我的资料」的通用简历区块、简历中心，
+    // 以及以后新增的入口，都不必再各自记着"保存完要 reload"。
+    bumpResumeList();
     message.success(
       job ? "手写简历已保存到简历中心" : "通用简历已保存，可在「我的资料」和简历中心查看",
     );
@@ -119,7 +124,7 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
         description={
           job
             ? "已预填基本信息；其他模块留空，可用每个模块顶部的「从我的资料追加一条」按需添加。"
-            : "已从我的资料预填基本信息和经历。通用简历不针对任何岗位，建议保留各方向的经历与技能，修改后保存。"
+            : "从空白开始；可点「填入我的资料全部数据」一次带入，也可以只写这一份需要的内容。"
         }
         saveLabel="保存手写简历"
         referencePanel={job ? <JobRequirementPanel job={job} /> : undefined}
@@ -127,6 +132,9 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
         // 岗位模式只留模块顶部的「追加一条」：条目是用户照岗位亲手加出来的，
         // 头部再摆"填入本条"既没有对应目标，也和顶部入口抢同一件事。
         entryFill={!job}
+        // T11：通用模式才给「填入我的资料全部数据」。岗位模式不传——那份表单的经历
+        // 是照岗位写的，一键把资料全倒进去等于替用户做决定。
+        fillAll={job || !profile ? undefined : () => profileToResumeContent(profile)}
         onClose={onClose}
         onSave={save}
       />

@@ -1,7 +1,7 @@
 /** 岗位广场：搜索筛选、手动添加、详情与生成简历入口。 */
 import { App } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { markCandidateJobImported } from "../api/candidateJob";
 import { openWebFormUrl } from "../api/webform";
@@ -116,6 +116,28 @@ export default function JobsPage() {
       { replace: true },
     );
   }, [searchParams, setSearchParams]);
+
+  // 完成通知的「查看」深链（/jobs?job_id=<id>&analysis=1）：等详情拉全之后自动打开解读弹窗，
+  // 再把参数清掉。boolean 锁存保证"清参数触发的这一轮"不会再把弹窗重开一次；参数彻底
+  // 消失后复位，这样从任务条再点一次「查看」（同一个岗位）仍然能打开。
+  const analysisLinkHandled = useRef(false);
+  useEffect(() => {
+    if (searchParams.get("analysis") !== "1") {
+      analysisLinkHandled.current = false;
+      return;
+    }
+    if (!detailJob || analysisLinkHandled.current) return;
+    analysisLinkHandled.current = true;
+    setAnalysisJob(detailJob);
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete("analysis");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, detailJob, setSearchParams]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
@@ -300,6 +322,8 @@ export default function JobsPage() {
         setCandidatesOpen={setCandidatesOpen}
         setFormOpen={setFormOpen}
         onImportCsv={() => setImportCsvOpen(true)}
+        sortState={sortState}
+        applySort={applySort}
       />
 
       <BatchToolbar

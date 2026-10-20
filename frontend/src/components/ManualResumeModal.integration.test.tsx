@@ -169,6 +169,14 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
     return select;
   }
 
+  /**
+   * T11：通用简历默认**空白**，"资料里有什么 → 表单里就有什么"这类语义现在由
+   * 「填入我的资料全部数据」触发，所以每个用例先点一下它。
+   */
+  async function fillAllFromProfile() {
+    fireEvent.click(await screen.findByRole("button", { name: /填入我的资料全部数据/ }));
+  }
+
   it("打开后教育页有候选，且已经在简历里的那条标成「已加入」", async () => {
     render(
       <AntdApp>
@@ -176,9 +184,10 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
       </AntdApp>,
     );
 
+    // 一键填入把资料里的教育经历带进来 → 同一条再出现在候选里就是「已加入」。
+    await fillAllFromProfile();
     await openEducationFill();
 
-    // 预填已经把资料里的教育经历带进来了，所以候选存在但不可选。
     const option = await screen.findByText(/示例大学.*已加入/);
     expect(option).toBeInTheDocument();
     expect(option.closest(".ant-select-item-option")).toHaveClass(
@@ -193,10 +202,14 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
       </AntdApp>,
     );
 
-    // 先删掉预填的那条，模拟"误删了想加回来"。
+    // 先一键填入，再删掉那条，模拟"误删了想加回来"。
+    await fillAllFromProfile();
     await screen.findByText(/自行编写|从头编写/);
     fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
-    fireEvent.click(await screen.findByRole("button", { name: "删除教育经历" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "删除教育经历" })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "删除教育经历" }));
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "删除教育经历" })).not.toBeInTheDocument(),
     );
@@ -227,10 +240,11 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
       </AntdApp>,
     );
 
+    // 先一键填入，再让用户改掉学校名（这条与资料里的不再是"同一条"）。
+    await fillAllFromProfile();
     await screen.findByText(/自行编写|从头编写/);
     fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
 
-    // 用户把学校名改掉了：这条与资料里的不再是"同一条"，候选因此重新可选。
     const schoolInput = await screen.findByLabelText("学校");
     fireEvent.change(schoolInput, { target: { value: "我自己改过的大学" } });
 
@@ -310,7 +324,9 @@ describe("ManualResumeModal 从资料填入本条（条目级）", () => {
       </AntdApp>,
     );
 
+    // T11：默认空白，先一键填入两条再开始"删掉一条再加一条空的"。
     await screen.findByText(/自行编写|从头编写/);
+    fireEvent.click(await screen.findByRole("button", { name: /填入我的资料全部数据/ }));
     fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
     await waitFor(() => expect(screen.getAllByLabelText("学校")).toHaveLength(2));
 

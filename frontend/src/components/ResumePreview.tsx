@@ -1,5 +1,6 @@
 /** 简历预览：负责装配版面、工具栏与 iframe 交互，不在入口文件里堆叠测量细节。 */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { measureResumeLayout, type LayoutMeasure } from "../utils/resumeLayoutMeasure";
 import { calculatePreviewGeometry } from "./resume-preview/geometry";
 import {
@@ -49,6 +50,13 @@ interface Props {
   onLayoutStatus?: (status: { pages: number; scale: number; overflow: boolean }) => void;
   /** 实测高度，交给版面诊断使用。 */
   onMeasure?: (measure: LayoutMeasure) => void;
+  /**
+   * 工具栏里的额外控件（简历版式：模板/字号/页数/行距）。
+   *
+   * 2026-10-20 从"画布上方单独一行"移进抓手那一行：用户要在同一行里边看边调，
+   * 两行控件把预览区又往下挤了一截。传入的是已构造好的节点，预览本身不关心内容。
+   */
+  toolbarExtra?: ReactNode;
 }
 
 const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePreview(
@@ -62,6 +70,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     describeAnnotation,
     onLayoutStatus,
     onMeasure,
+    toolbarExtra,
   },
   ref,
 ) {
@@ -261,6 +270,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   return (
     <div>
       <ResumePreviewToolbar
+        extra={toolbarExtra}
         canEdit={Boolean(onEditTarget)}
         interactionMode={interactionMode}
         hoverChipRef={hoverChipRef}

@@ -16,6 +16,8 @@ import { RESUME_PAGE_LIMITS, type ResumeLayout } from "../types";
 import type { ResumePreviewHandle } from "./ResumePreview";
 import TemplateGalleryModal from "./resume/TemplateGalleryModal";
 import LineHeightControl from "./resume/LineHeightControl";
+import PagePaddingControl from "./resume/PagePaddingControl";
+import { clampPagePadding } from "../utils/pagePadding";
 import {
   buildSectionOrderConfig,
   DEFAULT_RESUME_SECTION_ORDER,
@@ -249,6 +251,25 @@ export default function ResumeLayoutControls({
     });
   };
 
+  // ===== 页边距（T5）：从导出面板搬来，落点仍是 format_config.page_padding =====
+  const rawPagePadding = layout.format_config?.page_padding;
+  const configuredPagePadding = typeof rawPagePadding === "number" ? rawPagePadding : null;
+
+  const applyPagePadding = (next: number | null) => {
+    const current = layoutRef.current;
+    if (next === null) {
+      // 与行距同一语义：删键而不是写回模板默认值，模板更新时这些简历才跟着变。
+      const rest = { ...(current.format_config ?? {}) };
+      delete rest["page_padding"];
+      onChange({ ...current, format_config: rest });
+      return;
+    }
+    onChange({
+      ...current,
+      format_config: { ...current.format_config, page_padding: clampPagePadding(next) },
+    });
+  };
+
   return (
     <Space size={compact ? 8 : 16} wrap className="resume-layout-controls">
       <Space size={6}>
@@ -462,6 +483,12 @@ export default function ResumeLayoutControls({
         disabled={disabled}
         compact={compact}
         onChange={applyLineHeight}
+      />
+      <PagePaddingControl
+        value={configuredPagePadding}
+        disabled={disabled}
+        compact={compact}
+        onChange={applyPagePadding}
       />
     </Space>
   );

@@ -96,6 +96,8 @@ export interface LLMConfigSummary {
   baseUrl: string;
   model: string;
   hasKey: boolean;
+  /** 生效来源（C）：dataset = 还在用数据集旧配置，保存一次即升级为全局。 */
+  scope: "global" | "dataset";
 }
 
 export function summaryFromConfig(config: LLMConfig): LLMConfigSummary {
@@ -104,6 +106,7 @@ export function summaryFromConfig(config: LLMConfig): LLMConfigSummary {
     baseUrl: config.base_url,
     model: config.model,
     hasKey: config.api_key.trim() !== "",
+    scope: config.scope ?? "dataset",
   };
 }
 

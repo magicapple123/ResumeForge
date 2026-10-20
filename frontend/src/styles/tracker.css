@@ -27,29 +27,28 @@
   padding: 14px 16px;
   background: var(--rf-surface, var(--rf-surface));
   border: 1px solid var(--rf-border, var(--rf-border));
-  border-top: 3px solid var(--rf-focus-ring);
+  border-top: 2px solid var(--rf-border-strong);
   border-radius: 12px;
   box-shadow: 0 8px 22px rgba(31, 56, 85, 0.06);
 }
 
-.tracker-summary > .ant-statistic:nth-child(2),
-.tracker-summary > .tracker-summary-skeleton:nth-child(2) {
-  border-top-color: var(--rf-accent-green);
+/* 上色按**语义类名**而不是位置（T9）。此前用 `:nth-child(2..5)`：一旦网格里多出一个
+   兄弟节点（例如 `statsError` 时先渲染的那行错误文案），整排配色就整体串位——错误提示
+   会抢走"总数"的灰边，5 张卡的颜色全部前移一格。骨架占位则保持中性，不按位置变色。 */
+.tracker-summary > .tracker-stat--active {
+  border-top-color: var(--rf-stage-screening);
 }
 
-.tracker-summary > .ant-statistic:nth-child(3),
-.tracker-summary > .tracker-summary-skeleton:nth-child(3) {
-  border-top-color: var(--rf-accent-amber);
+.tracker-summary > .tracker-stat--month {
+  border-top-color: var(--rf-stage-interview);
 }
 
-.tracker-summary > .ant-statistic:nth-child(4),
-.tracker-summary > .tracker-summary-skeleton:nth-child(4) {
-  border-top-color: var(--rf-accent-violet);
+.tracker-summary > .tracker-stat--offer {
+  border-top-color: var(--rf-success-strong);
 }
 
-.tracker-summary > .ant-statistic:nth-child(5),
-.tracker-summary > .tracker-summary-skeleton:nth-child(5) {
-  border-top-color: var(--rf-accent-pink);
+.tracker-summary > .tracker-stat--closed {
+  border-top-color: var(--rf-stage-rejected);
 }
 
 /* 漏斗：每级一条，宽度按"占最大一级的比例"。用按钮而不是 div，
@@ -59,15 +58,12 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
   padding: 16px;
-  background: linear-gradient(
-    135deg,
-    var(--rf-surface-alt) 0%,
-    var(--rf-surface-alt) 52%,
-    #fbf8ff 100%
-  );
+  /* 平面而不是渐变：旧写法在末尾混了一块写死的浅紫，浅色下像褪色的紫晕，深色下更是
+     一块亮斑（2026-10-20 用户截图）。层级交给边框与卡片本身的明度。 */
+  background: var(--rf-surface);
   border: 1px solid var(--rf-border, var(--rf-border-strong));
   border-radius: 16px;
-  box-shadow: 0 10px 28px rgba(31, 56, 85, 0.06);
+  box-shadow: 0 10px 28px rgb(31 56 85 / 6%);
 }
 
 .tracker-funnel-step {
@@ -80,8 +76,10 @@
   align-items: center;
   width: 100%;
   padding: 12px;
-  background: var(--rf-surface-glass);
-  border: 1px solid var(--rf-surface-glass-border);
+  /* T9：漏斗容器是 `--rf-surface`，步骤卡必须比它"厚"一层（暗色下玻璃面几乎与容器
+     同色，只剩一根描边，看起来像一格格空白）。 */
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border-strong);
   border-radius: 12px;
   cursor: pointer;
   text-align: left;
@@ -93,36 +91,41 @@
 
 .tracker-funnel-step:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 18px rgba(31, 56, 85, 0.1);
+  box-shadow: 0 8px 18px rgb(15 23 42 / 10%);
 }
 
 .tracker-funnel-step.is-selected {
   border-color: var(--rf-stage-color, var(--rf-focus-ring));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rf-stage-color, #5b8ff9) 18%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--rf-stage-color, var(--rf-focus-ring)) 12%, transparent);
 }
 
-.tracker-funnel-step[data-stage-index="0"] {
-  --rf-stage-color: var(--rf-text-description);
+/* 阶段色（T9）：漏斗与卡片**共用一份**映射。以前两处各写一遍，同一个蓝色写死了两次，
+   改一处漏一处；index 5 更是死规则——`FUNNEL_STATUSES` 只有 5 项（applied → offer），
+   `rejected` 算出来是 -1，永远不会有 `data-stage-index="5"`。 */
+:is(.tracker-funnel-step, .track-card)[data-stage-index="0"] {
+  --rf-stage-color: var(--rf-stage-applied);
 }
 
-.tracker-funnel-step[data-stage-index="1"] {
-  --rf-stage-color: #5b8ff9;
+:is(.tracker-funnel-step, .track-card)[data-stage-index="1"] {
+  --rf-stage-color: var(--rf-stage-screening);
 }
 
-.tracker-funnel-step[data-stage-index="2"] {
-  --rf-stage-color: var(--rf-accent-green);
+:is(.tracker-funnel-step, .track-card)[data-stage-index="2"] {
+  --rf-stage-color: var(--rf-stage-assessment);
 }
 
-.tracker-funnel-step[data-stage-index="3"] {
-  --rf-stage-color: var(--rf-accent-amber);
+:is(.tracker-funnel-step, .track-card)[data-stage-index="3"] {
+  --rf-stage-color: var(--rf-stage-interview);
 }
 
-.tracker-funnel-step[data-stage-index="4"] {
-  --rf-stage-color: var(--rf-accent-violet);
+:is(.tracker-funnel-step, .track-card)[data-stage-index="4"] {
+  --rf-stage-color: var(--rf-stage-offer);
 }
 
-.tracker-funnel-step[data-stage-index="5"] {
-  --rf-stage-color: var(--rf-accent-pink);
+/* 已结束（rejected）不在漏斗里，但卡片要能表达：用一条独立的属性选择器接住 -1。 */
+.track-card[data-stage-index="-1"] {
+  --rf-stage-color: var(--rf-stage-rejected);
 }
 
 .tracker-funnel-index {
@@ -157,7 +160,7 @@
 
 .tracker-funnel-meter {
   grid-area: meter;
-  height: 8px;
+  height: 6px;
   overflow: hidden;
   background: var(--rf-surface-alt);
   border-radius: 999px;
@@ -167,12 +170,11 @@
   display: block;
   height: 100%;
   min-width: 0;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--rf-stage-color, #5b8ff9) 55%, #fff),
-    var(--rf-stage-color, #5b8ff9)
-  );
+  /* 实色 + 轻微透明：渐变在 100% 时是一条从灰白到彩色的宽带，像加载条；
+     实色更像"这一阶段占了多少"的数据条，深色下也不会发白。 */
+  background: var(--rf-stage-color, var(--rf-info));
   border-radius: inherit;
+  opacity: 1;
   transition: width 0.25s ease;
 }
 
@@ -203,32 +205,6 @@
   border-radius: 8px;
 }
 
-/* 阶段色与漏斗共用一套（见 .tracker-funnel-step 的定义），0-5 一一对应：
-   已投递 / 筛选中 / 测评·笔试 / 面试 / Offer / 第 6 阶段。 */
-.track-card[data-stage-index="0"] {
-  --rf-stage-color: var(--rf-text-description);
-}
-
-.track-card[data-stage-index="1"] {
-  --rf-stage-color: #5b8ff9;
-}
-
-.track-card[data-stage-index="2"] {
-  --rf-stage-color: var(--rf-accent-green);
-}
-
-.track-card[data-stage-index="3"] {
-  --rf-stage-color: var(--rf-accent-amber);
-}
-
-.track-card[data-stage-index="4"] {
-  --rf-stage-color: var(--rf-accent-violet);
-}
-
-.track-card[data-stage-index="5"] {
-  --rf-stage-color: var(--rf-accent-pink);
-}
-
 /* 进行中的记录左侧加一条贴左缘满高的阶段色竖条：一屏十几条时，
    扫一眼就知道哪些还要跟。贴缘后条不再挤占文字空间；右缘带圆角、
    左缘随卡片 8px 圆角内贴（radius 左侧为 0，避免露出卡片外）。 */
@@ -246,7 +222,9 @@
 /* 激活卡整体加一层阶段色调：浅底 + 边框向阶段色靠拢，
    让"还在进行中的"比单靠一条竖条更早被视觉捕捉到。 */
 .track-card.is-active {
-  background: color-mix(in srgb, var(--rf-stage-color, var(--rf-info)) 6%, transparent);
+  /* 与 `--rf-surface` 混，而不是与 transparent 混：透明底会把页面底色透上来，
+     浅色下是一层脏灰、深色下几乎看不见（T9）。 */
+  background: color-mix(in srgb, var(--rf-stage-color, var(--rf-info)) 6%, var(--rf-surface));
   border-color: color-mix(
     in srgb,
     var(--rf-stage-color, var(--rf-focus-ring)) 30%,
@@ -512,4 +490,12 @@
   .tracker-summary {
     grid-template-columns: repeat(2, minmax(130px, 1fr));
   }
+}
+
+/* ===== 深色主题（T9）=====
+   深色背景对低透明度的外发光几乎不敏感：浅色下 12% 的环已经看得见，深色下会糊掉。
+   这里只把这一条提到 16%，其余阶段色全部走 token（见 theme/dark-tokens.css）。 */
+[data-theme="dark"] .tracker-funnel-step.is-selected {
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--rf-stage-color, var(--rf-focus-ring)) 16%, transparent);
 }

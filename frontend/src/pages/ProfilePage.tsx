@@ -473,6 +473,8 @@ export default function ProfilePage() {
         job={null}
         open={writeOpen}
         initialTitle={generalTitle}
+        // T12：保存后由 `resumeListEvents` 广播刷新，入口不再各自 reload；
+        // 关闭（含取消）也不需要任何额外动作。
         onClose={() => setWriteOpen(false)}
       />
 

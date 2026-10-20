@@ -1,9 +1,13 @@
 import type { ThemeConfig } from "antd";
-import { palette } from "./tokens";
+import { layer, palette } from "./tokens";
 
 /** Shared by the production root and browser accessibility checks. */
 export const appTheme: ThemeConfig = {
   token: {
+    // 层级基准：投投族（3400+）靠它压住 antd 的 Modal/Drawer 容器链。
+    // 以前由 ThemeProvider 拼在 token 外面；深色改用独立 darkTheme 后，
+    // 两套主题各自持有同一个基准值，ThemeProvider 才能直接 `theme={...}`。
+    zIndexPopupBase: layer.popupBase,
     colorPrimary: palette.brand,
     colorText: palette.textBody,
     colorTextHeading: palette.brand,

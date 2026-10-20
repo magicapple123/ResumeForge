@@ -1,6 +1,6 @@
 /** GitHub Star 提示弹窗（从 App.tsx 抽出，守住单文件行数预算）。 */
 import { Button, Modal, Typography } from "antd";
-import promoPlane from "../assets/toutou/promo-plane.png";
+import promoPlane from "../assets/toutou/promo-plane.webp";
 import { APP_NAME, GITHUB_REPO } from "../config";
 
 interface Props {

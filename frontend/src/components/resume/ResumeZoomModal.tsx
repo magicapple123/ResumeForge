@@ -9,6 +9,9 @@
  */
 import { CloseOutlined, DownloadOutlined } from "@ant-design/icons";
 import { Button, Modal, Space, Typography } from "antd";
+import { useRef } from "react";
+import type { ResumeLayout } from "../../types";
+import ResumeLayoutControls from "../ResumeLayoutControls";
 import ResumePreview, { type ResumePreviewHandle } from "../ResumePreview";
 
 interface Props {
@@ -21,8 +24,13 @@ interface Props {
   onEditTarget: (path: string) => void;
   /** 把字段路径翻译成人话栏名，用于工具栏上的"正指向"提示。 */
   describePath?: (path: string) => string;
+  /** 版式控件（与主预览同一份状态）：在大图里也能边走边调。 */
+  layout?: ResumeLayout;
+  resumeId?: number;
+  relayouting?: boolean;
+  onApplyLayout?: (next: ResumeLayout) => void;
   onExport?: () => void;
-  previewRef?: React.Ref<ResumePreviewHandle>;
+  previewRef?: React.RefObject<ResumePreviewHandle | null>;
 }
 
 export default function ResumeZoomModal({
@@ -33,9 +41,28 @@ export default function ResumeZoomModal({
   onClose,
   onEditTarget,
   describePath,
+  layout,
+  resumeId,
+  relayouting = false,
+  onApplyLayout,
   onExport,
   previewRef,
 }: Props) {
+  // 大图有自己的预览实例：字号滑块要即时作用在**这一个** iframe 上，不能借用主预览的句柄。
+  // 调用方给了 ref 就用它（不再在 ref 回调里二次赋值——Compiler 禁止渲染后再改 ref）。
+  const fallbackPreviewRef = useRef<ResumePreviewHandle>(null);
+  const zoomPreviewRef = previewRef ?? fallbackPreviewRef;
+  const toolbarExtra =
+    layout && onApplyLayout ? (
+      <ResumeLayoutControls
+        compact
+        layout={layout}
+        resumeId={resumeId}
+        disabled={relayouting}
+        previewRef={zoomPreviewRef}
+        onChange={onApplyLayout}
+      />
+    ) : undefined;
   return (
     <Modal
       title="查看简历大图"
@@ -61,7 +88,8 @@ export default function ResumeZoomModal({
       </Typography.Paragraph>
       <div className="resume-zoom-body">
         <ResumePreview
-          ref={previewRef}
+          ref={zoomPreviewRef}
+          toolbarExtra={toolbarExtra}
           html={html}
           pages={pages}
           warnings={warnings}

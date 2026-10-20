@@ -26,7 +26,7 @@ import { buildQuery, request, requestRaw } from "./client";
  * 岗位列表排序键（后端 Literal）：键自带方向，`order` 可覆盖它。
  * 非法值后端直接 422——所以这里的联合类型就是权威取值。
  */
-export type JobSort = "created_desc" | "updated_desc" | "title_asc" | "company_asc";
+export type JobSort = "created_desc" | "updated_desc" | "title_asc" | "company_asc" | "posted_desc";
 export type JobSortOrder = "asc" | "desc";
 
 export interface JobListParams {
@@ -154,11 +154,16 @@ export function generateJobAnalysis(
   signal?: AbortSignal,
   force = false,
 ): Promise<JobAnalysisResult> {
-  // signal 保留给"真正需要中断"的调用方；岗位解读弹窗走的是「停止等待」（R2-b）：
-  // 只关界面、不 abort，服务端连接仍在，生成结束后会写缓存，下次打开秒读。
+  // signal 保留给"真正需要中断"的调用方（T1 起「取消」会真的 abort）。
   // force（R2-a）：后端默认先读缓存、命中就直接返回；只有点「重新生成」才带它，
   // 明确表示"这次愿意再付一次 token"。
-  return request(`/jobs/${id}/analysis${force ? "?force=true" : ""}`, { method: "POST", signal });
+  // 预算走 analysis（180s）：岗位解读要整段生成，default 的 15s 必然超时——超时那次
+  // 前端已经放弃，后端却还在烧 token，用户只看到「请求超时，请重试」。
+  return request(`/jobs/${id}/analysis${force ? "?force=true" : ""}`, {
+    method: "POST",
+    signal,
+    budget: "analysis",
+  });
 }
 
 /**

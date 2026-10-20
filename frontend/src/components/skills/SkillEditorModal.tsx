@@ -103,9 +103,18 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
       open={open}
       width={760}
       mask={{ closable: !saving }}
-      // 内容长时 body 自己滚动；下边距比左右多留一点，最后一个「添加知识文件」按钮
-      // 才不会贴着页脚（此前首尾都显得"顶格"）。
-      styles={{ body: { padding: "20px 24px 28px", scrollPaddingTop: 12 } }}
+      // 内容长时 body 自己滚动：`--rf-modal-body-max-h` 是弹窗内容区的统一上限
+      // （tokens 里定义，深浅主题同值）。只给 maxHeight 不给固定高度，内容少时弹窗
+      // 仍按内容收缩。下边距比左右多留一点，最后一个「添加知识文件」按钮才不会贴着
+      // 页脚（此前首尾都显得"顶格"）。
+      styles={{
+        body: {
+          padding: "20px 24px 28px",
+          scrollPaddingTop: 12,
+          maxHeight: "var(--rf-modal-body-max-h)",
+          overflowY: "auto",
+        },
+      }}
       onCancel={onClose}
       footer={
         <Space>
@@ -121,108 +130,110 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
       {loading ? (
         <Spin />
       ) : (
-        <Form layout="vertical">
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-            title="技能提示词会加进助手的系统提示，等于给它加一条长期要求；知识文件是助手按需查阅的参考资料。"
-          />
-          <Form.Item label="技能名称" required>
-            <Input
-              value={name}
-              maxLength={64}
-              placeholder="如：简历要点精炼"
-              onChange={(event) => setName(event.target.value)}
+        <div className="skill-editor-body">
+          <Form layout="vertical">
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              title="技能提示词会加进助手的系统提示，等于给它加一条长期要求；知识文件是助手按需查阅的参考资料。"
             />
-          </Form.Item>
-          <Form.Item label="适用场景（一句话说明什么时候用它）">
-            <Input
-              value={description}
-              maxLength={255}
-              placeholder="如：把经历描述压缩成 3 条以内的简历要点"
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </Form.Item>
-          <Form.Item label="启用">
-            <Switch checked={enabled} onChange={setEnabled} />
-          </Form.Item>
-          <Form.Item label="技能提示词" required>
-            <Input.TextArea
-              value={prompt}
-              autoSize={{ minRows: 8, maxRows: 20 }}
-              placeholder={
-                "用「你要…」「不要…」这类明确要求描述你希望助手怎么做。\n例如：改写简历要点时，每条不超过 35 字，必须包含动作动词与可核对的成果。"
-              }
-              onChange={(event) => setPrompt(event.target.value)}
-            />
-          </Form.Item>
-          <Form.Item
-            label={
-              <Space>
-                <span>知识文件</span>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  助手需要时才会读取（如常见面试题、公司清单）
-                </Typography.Text>
-              </Space>
-            }
-          >
-            {filesTruncated && (
-              <Alert
-                type="warning"
-                showIcon
-                style={{ marginBottom: 12 }}
-                title="这个技能的知识文件体积很大，本次没有加载全部内容；保存时不会改动知识文件（只更新提示词与开关）。"
+            <Form.Item label="技能名称" required>
+              <Input
+                value={name}
+                maxLength={64}
+                placeholder="如：简历要点精炼"
+                onChange={(event) => setName(event.target.value)}
               />
-            )}
-            <Space orientation="vertical" style={{ width: "100%" }}>
-              {files.map((file, index) => (
-                <div key={`${file.path}-${index}`} className="skill-file-editor">
-                  <Space style={{ width: "100%" }} align="start">
-                    <Input
-                      value={file.path}
-                      maxLength={255}
-                      placeholder="文件名，如 面试问题.md"
-                      style={{ width: 240 }}
+            </Form.Item>
+            <Form.Item label="适用场景（一句话说明什么时候用它）">
+              <Input
+                value={description}
+                maxLength={255}
+                placeholder="如：把经历描述压缩成 3 条以内的简历要点"
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </Form.Item>
+            <Form.Item label="启用">
+              <Switch checked={enabled} onChange={setEnabled} />
+            </Form.Item>
+            <Form.Item label="技能提示词" required>
+              <Input.TextArea
+                value={prompt}
+                autoSize={{ minRows: 8, maxRows: 20 }}
+                placeholder={
+                  "用「你要…」「不要…」这类明确要求描述你希望助手怎么做。\n例如：改写简历要点时，每条不超过 35 字，必须包含动作动词与可核对的成果。"
+                }
+                onChange={(event) => setPrompt(event.target.value)}
+              />
+            </Form.Item>
+            <Form.Item
+              label={
+                <Space>
+                  <span>知识文件</span>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    助手需要时才会读取（如常见面试题、公司清单）
+                  </Typography.Text>
+                </Space>
+              }
+            >
+              {filesTruncated && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  title="这个技能的知识文件体积很大，本次没有加载全部内容；保存时不会改动知识文件（只更新提示词与开关）。"
+                />
+              )}
+              <Space orientation="vertical" style={{ width: "100%" }}>
+                {files.map((file, index) => (
+                  <div key={`${file.path}-${index}`} className="skill-file-editor">
+                    <Space style={{ width: "100%" }} align="start">
+                      <Input
+                        value={file.path}
+                        maxLength={255}
+                        placeholder="文件名，如 面试问题.md"
+                        style={{ width: 240 }}
+                        onChange={(event) =>
+                          setFiles((current) =>
+                            current.map((item, i) =>
+                              i === index ? { ...item, path: event.target.value } : item,
+                            ),
+                          )
+                        }
+                      />
+                      <Button
+                        type="text"
+                        danger
+                        aria-label={`删除知识文件 ${file.path}`}
+                        icon={<DeleteOutlined />}
+                        onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}
+                      />
+                    </Space>
+                    <Input.TextArea
+                      value={file.content}
+                      autoSize={{ minRows: 3, maxRows: 10 }}
+                      placeholder="知识文件内容（纯文本或 Markdown）"
                       onChange={(event) =>
                         setFiles((current) =>
                           current.map((item, i) =>
-                            i === index ? { ...item, path: event.target.value } : item,
+                            i === index ? { ...item, content: event.target.value } : item,
                           ),
                         )
                       }
                     />
-                    <Button
-                      type="text"
-                      danger
-                      aria-label={`删除知识文件 ${file.path}`}
-                      icon={<DeleteOutlined />}
-                      onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}
-                    />
-                  </Space>
-                  <Input.TextArea
-                    value={file.content}
-                    autoSize={{ minRows: 3, maxRows: 10 }}
-                    placeholder="知识文件内容（纯文本或 Markdown）"
-                    onChange={(event) =>
-                      setFiles((current) =>
-                        current.map((item, i) =>
-                          i === index ? { ...item, content: event.target.value } : item,
-                        ),
-                      )
-                    }
-                  />
-                </div>
-              ))}
-              <Button
-                icon={<PlusOutlined />}
-                onClick={() => setFiles((current) => [...current, { path: "", content: "" }])}
-              >
-                添加知识文件
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
+                  </div>
+                ))}
+                <Button
+                  icon={<PlusOutlined />}
+                  onClick={() => setFiles((current) => [...current, { path: "", content: "" }])}
+                >
+                  添加知识文件
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        </div>
       )}
     </Modal>
   );

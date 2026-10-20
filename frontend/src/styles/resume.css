@@ -63,6 +63,8 @@
    之前工具栏没有下缘间距，与黄色警告条、画布三层全部贴死（用户截图反馈）。 */
 .resume-preview-toolbar {
   margin-bottom: 12px;
+  /* 版式控件（模板/板块/页数/字号/行距）现在与抓手/缩放同处一行；
+     工具栏自身换行时按块排列，不再单独占一整行。 */
   /* 「让 AI 改这一栏」的 chip 绝对定位到右侧（R14），这里是它的定位上下文。 */
   position: relative;
 }
@@ -299,6 +301,40 @@
   margin: 0 auto;
 }
 
+/* 字体预览（2026-10-20）：示例文字使用用户字体，容器仍是应用表面。 */
+.font-preview-sample {
+  padding: 18px 20px;
+  color: var(--rf-text-body);
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 12px;
+}
+
+.font-preview-sample-title {
+  margin-bottom: 4px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.font-preview-sample-meta {
+  margin-bottom: 12px;
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+}
+
+.font-preview-sample-body {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.font-preview-sample-body:last-child {
+  margin-bottom: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
 .settings-card {
   margin-bottom: 16px;
 }
@@ -368,24 +404,37 @@
 }
 
 /* 「下载 PDF」主按钮组：独占整行、保持醒目，不再和上方按钮挤在同一排抢宽度。 */
+/* T4：导出按钮落到「离线分享」所在行的**最后一格**（`auto-fill` 网格的 `-2 / -1`
+   就是这一行的末尾），也就是整张卡片的右下角——导出是这一步的终点动作，位置对了
+   才不必在整排按钮里找它。 */
 .resume-detail-footer-export {
-  grid-column: 1 / -1;
+  grid-column: -2 / -1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px 12px;
 }
 
-/* 生成弹窗里插入的额外操作（重新生成 / 去简历中心 / 完成）也独占整行。 */
-.resume-detail-footer-extra {
-  display: inline-flex;
-  align-items: center;
-  margin-left: auto;
+/* 额外操作（取消修改 / 保存修改、生成弹窗里的重新生成…）独占一整行，
+   靠右对齐紧跟按钮区：它们是"这一轮改动"的确认动作，不能挤进 150px 的格子。 */
+.resume-detail-footer-extra-row {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.resume-detail-footer-extra .ant-space {
+.resume-detail-footer-extra-row .ant-space {
   display: inline-flex;
+}
+
+/* 窄屏：`auto-fill` 会塌成一列，`-2 / -1` 会指向一个不存在的格子（-2 变为第 0 条
+   线之前的无效区间），导出因此可能挤在 150px 里或错位。这时明确退回整行。 */
+@media (max-width: 720px) {
+  .resume-detail-footer-export {
+    grid-column: 1 / -1;
+  }
 }
 
 /* ===== 版面诊断与「自动一页」 ===== */
@@ -561,4 +610,21 @@
     max-width: 100%;
     margin-top: 8px;
   }
+}
+
+/* 列表「目标岗位」列（T3）：列宽固定 200，长岗位名/公司名必须在 Tag 内省略，
+   否则整表被撑宽、其它列被挤成一字宽。column 级 ellipsis 负责切 table-layout: fixed，
+   这里负责让 Tag 自身收敛（antd Tag 默认 white-space: nowrap 但不限宽）。 */
+.resume-job-tag,
+.resume-company-tag {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* 「填入我的资料全部数据」（T11）：编辑器头部说明文字下方的一行次要操作。 */
+.resume-editor-fill-all {
+  margin-bottom: 12px;
 }

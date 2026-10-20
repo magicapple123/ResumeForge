@@ -544,6 +544,25 @@ body {
 }
 
 /* 页头全局模型选择器（R21）：只在配了 profile 时渲染。 */
+/* 模型下拉的每一行（T8）：双击 = 只测连接。测试中在行尾转圈，标签不换行。 */
+.model-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.model-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-option-testing {
+  flex: 0 0 auto;
+  color: var(--rf-brand);
+}
+
 .app-model-profile-select {
   flex: 0 0 auto;
   min-width: 150px;
@@ -740,6 +759,51 @@ body {
   font-size: 12px;
 }
 
+/* 页头下方的常驻任务条（T1）：无任务时组件不渲染，所以它出现即意味着"有活在跑"。 */
+.background-task-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface-alt);
+}
+
+.background-task-bar-title {
+  font-size: 12px;
+}
+
+.background-task-bar-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 2px 8px;
+}
+
+.background-task-bar-spin {
+  color: var(--rf-info);
+}
+
+.background-task-bar-label {
+  font-size: 12px;
+}
+
+.background-task-bar-meta {
+  font-size: 12px;
+}
+
+/* 岗位解读弹窗：计时文案与操作按钮（此前是内联 style，颜色/间距统一收到这里）。 */
+.job-analysis-elapsed {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.job-analysis-actions {
+  margin-top: 12px;
+  text-align: right;
+}
+
 /* 「上下文」与「全局动作」之间的一根细线：四个元素排一行时，靠它分组才不糊成一片。 */
 .app-header-divider {
   width: 1px;
@@ -853,6 +917,46 @@ body {
 }
 
 /* 全站搜索（R6）：结果行整行可点，左右两端信息对齐。 */
+/* 全站搜索浮层（T7）：右上角的**非模态**面板——没有遮罩、不锁滚动、不做焦点陷阱，
+   搜索是"顺手看一眼"，不该把整个页面按停。层级压过编辑器弹窗（3110）。 */
+.global-search-popover {
+  position: fixed;
+  top: 64px;
+  right: 24px;
+  z-index: 3120;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(520px, calc(100vw - 32px));
+  max-height: 70vh;
+  overflow: auto;
+  padding: 12px 14px 14px;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgb(15 23 42 / 28%);
+}
+
+.global-search-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 结果区自己滚：面板限高后，头部的标题与输入框不该跟着一起滚出去。 */
+.global-search-results {
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (max-width: 720px) {
+  .global-search-popover {
+    top: 56px;
+    right: 8px;
+    width: calc(100vw - 16px);
+  }
+}
+
 .global-search-hit {
   display: flex;
   width: 100%;

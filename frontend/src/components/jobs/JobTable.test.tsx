@@ -161,23 +161,27 @@ describe("JobTable 列头排序（R14）", () => {
     expect(onSortChange).toHaveBeenCalledWith({ sort: "company_asc", order: null });
   });
 
-  it("「发布时间」列排的是导入时间：默认倒序，再点是升序（显式 order）", () => {
+  it("「发布时间」列按 posted_at 排序：首次倒序，再点升序", () => {
     const onSortChange = vi.fn();
     const { unmount } = renderTable([makeJob()], { onSortChange });
 
-    // 当前就是 created_desc（默认），这一列的箭头已经亮着；再点一次是反向（升序）。
+    // 默认态没有任何列点亮：发布时间的第一次点击给出倒序（最近的在前）。
     clickHeader("发布时间");
-    expect(onSortChange).toHaveBeenCalledWith({ sort: "created_desc", order: "asc" });
+    expect(onSortChange).toHaveBeenCalledWith({ sort: "posted_desc", order: null });
 
     unmount();
     const second = vi.fn();
     renderTable([makeJob()], {
-      sortState: { sort: "created_desc", order: "asc" },
+      sortState: { sort: "posted_desc", order: null },
       onSortChange: second,
     });
     clickHeader("发布时间");
-    // 升序状态下再点 → antd 取消排序 → 回到默认（最近导入倒序）。
-    expect(second).toHaveBeenCalledWith({ sort: "created_desc", order: null });
+    expect(second).toHaveBeenCalledWith({ sort: "posted_desc", order: "asc" });
+  });
+
+  it("默认态没有任何列头带排序样式（ant-table-column-sort）", () => {
+    const { container } = renderTable([makeJob()]);
+    expect(container.querySelector(".ant-table-column-sort")).toBeNull();
   });
 });
 

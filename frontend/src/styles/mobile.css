@@ -81,6 +81,16 @@
     justify-content: center;
   }
 
+  /* 方形成 48×48 时必须同时把文字设为 0：原来只在 ≤700px 那档隐藏文字，
+     701–767px 之间文字仍以 12px 渲染，会顶出圆形边框（用户截图）。 */
+  .app-space-menu-button {
+    font-size: 0;
+  }
+
+  .app-space-menu-button .anticon {
+    font-size: 18px;
+  }
+
   .app-exit-label,
   .app-header-divider {
     display: none;
@@ -158,7 +168,10 @@
     max-width: calc(100vw - 16px);
   }
 
-  .ant-modal-content {
+  /* antd 6.6.5 的容器类名是 .ant-modal-container（旧 content 容器类名已删除）。
+     手机上几乎不留垂直边距：一屏本来就矮，弹窗要尽量把高度用满。 */
+  .ant-modal-container {
+    max-height: calc(100vh - 32px);
     max-height: calc(100dvh - 32px);
   }
 

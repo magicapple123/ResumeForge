@@ -1,10 +1,14 @@
-/** 通用简历区块：只查通用简历、重命名、删除与两个创建入口。 */
+/** 通用简历区块：只查通用简历、重命名、删除、两个创建入口与 T12 的刷新广播。 */
 
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
+import {
+  bumpResumeList,
+  resetResumeListEventsForTests,
+} from "../../features/resume/resumeListEvents";
 import GeneralResumeSection from "./GeneralResumeSection";
 
 const apiMocks = vi.hoisted(() => ({
@@ -59,11 +63,13 @@ beforeEach(() => {
   apiMocks.fetchResumeTemplates.mockReset();
   apiMocks.listResumes.mockResolvedValue({ items: [GENERAL], total: 1 });
   apiMocks.fetchResumeTemplates.mockResolvedValue(TEMPLATE_CATALOG);
+  resetResumeListEventsForTests();
 });
 
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  resetResumeListEventsForTests();
 });
 
 describe("GeneralResumeSection", () => {
@@ -79,6 +85,10 @@ describe("GeneralResumeSection", () => {
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText("通用简历")).toBeInTheDocument();
     expect(within(row as HTMLElement).getByText(/求职意向：后端开发/)).toBeInTheDocument();
+
+    // T12：挂载时一次 + 收到广播后一次。保存手写简历的一方不必知道有谁在看这个列表。
+    act(() => bumpResumeList());
+    await waitFor(() => expect(apiMocks.listResumes).toHaveBeenCalledTimes(2));
   });
 
   it("shows an empty state before anything is created", async () => {

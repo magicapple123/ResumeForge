@@ -7,7 +7,7 @@
  * 2. 拖动/步进按 0.05 提交，且提交的是"当前 layout + 新行距"，不覆盖同期改过的字号；
  * 3. 恢复默认是**删掉这个键**（回到随模板），不是写回一个和默认相等的值。
  */
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import { DEFAULT_LAYOUT, renderControls } from "./ResumeLayoutControls.testkit";
@@ -22,6 +22,23 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   fetchResumeTemplates: apiMocks.fetchResumeTemplates,
   previewResumeTemplate: apiMocks.previewResumeTemplate,
 }));
+
+/**
+ * 行距这一行（`LineHeightControl` 的外层容器）。
+ *
+ * 版式栏里现在有**两处**合法的「随模板」：行距一行、页边距一行（T5 把页边距从导出面板
+ * 搬进预览后各留了一个）。所以查这三个字必须限定作用域——全局 `getByText` 会多重命中，
+ * 那不是 UI 错了，是断言范围太宽。锚点取「恢复默认行距」按钮：这个可访问名只有行距这
+ * 一行有，再从它向上取到所在的版式行。
+ */
+function lineHeightRow(): HTMLElement {
+  const anchor = screen.getByRole("button", { name: "恢复默认行距" });
+  // 不用 `parentElement`：按钮禁用时 antd 的 Tooltip 会额外包一层 span，
+  // 取最近的版式行（`Space`）才稳定——与 `ProfilePage.webform.test.tsx` 同一写法。
+  const row = anchor.closest(".ant-space");
+  if (!row) throw new Error("找不到行距控件所在的版式行");
+  return row as HTMLElement;
+}
 
 beforeEach(() => {
   apiMocks.fetchResumeTemplates.mockReset();
@@ -42,7 +59,9 @@ describe("ResumeLayoutControls · 行距（R20）", () => {
 
     // classic 的默认行距是 1.70（后端 TEMPLATE_LAYOUT_DEFAULTS），不是写死的 1.7。
     expect(await screen.findByText("1.70")).toBeInTheDocument();
-    expect(screen.getByText("随模板")).toBeInTheDocument();
+    // 行距这一行标「随模板」；页边距那一行也有一个（合法 UI，共两处）。
+    expect(within(lineHeightRow()).getByText("随模板")).toBeInTheDocument();
+    expect(screen.getAllByText("随模板")).toHaveLength(2);
     // 没设过覆盖时"恢复默认"不可点——它已经是默认了。
     expect(screen.getByRole("button", { name: "恢复默认行距" })).toBeDisabled();
   });
@@ -71,7 +90,10 @@ describe("ResumeLayoutControls · 行距（R20）", () => {
     });
 
     expect(await screen.findByText("1.45")).toBeInTheDocument();
-    expect(screen.queryByText("随模板")).not.toBeInTheDocument();
+    // 行距有了覆盖值就不再标「随模板」——但只能在自己的行里断言：页边距那一行的
+    // 「随模板」仍然在，全局 `queryByText` 会把它算进来。
+    expect(within(lineHeightRow()).queryByText("随模板")).not.toBeInTheDocument();
+    expect(screen.getAllByText("随模板")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "恢复默认行距" }));
 

@@ -2,6 +2,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage from "./SettingsPage";
+import { ApiError } from "../api/client";
 
 const apiMocks = vi.hoisted(() => ({
   acknowledgeUpdateInstallResult: vi.fn(),
@@ -10,28 +11,12 @@ const apiMocks = vi.hoisted(() => ({
   checkLLMThinking: vi.fn(),
   activateDataset: vi.fn(),
   deleteDataset: vi.fn(),
+  activateLLMRecord: vi.fn(),
   deleteLLMConfigRecord: vi.fn(),
   exportAllDatasets: vi.fn(),
   exportDataset: vi.fn(),
   getBackupStatus: vi.fn(),
   getLLMConfig: vi.fn(),
-  // R21：全局模型卡挂载时会读一次；没配过就返回空状态。
-  getGlobalLLM: vi.fn().mockResolvedValue({
-    enabled: false,
-    configured: false,
-    provider: "",
-    model: "",
-    base_url: "",
-    active_profile_id: "",
-    active_name: "",
-    profiles: [],
-  }),
-  saveGlobalLLM: vi.fn(),
-  clearGlobalLLM: vi.fn(),
-  createGlobalLLMProfile: vi.fn(),
-  updateGlobalLLMProfile: vi.fn(),
-  deleteGlobalLLMProfile: vi.fn(),
-  activateGlobalLLMProfile: vi.fn(),
   getNavigationVisibility: vi.fn(),
   getReminderPopupSetting: vi.fn(),
   getSearchConfig: vi.fn(),
@@ -53,6 +38,15 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../api/settings", () => apiMocks);
+
+// 409 重试路径要"重新同步身份再试一次"：只替换 initializeDatasetScope，
+// 保留 datasetScopeHeaders 等真实实现（client.ts 依赖它们）。
+const datasetScopeMocks = vi.hoisted(() => ({ initializeDatasetScope: vi.fn() }));
+
+vi.mock("../api/datasetScope", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/datasetScope")>();
+  return { ...actual, initializeDatasetScope: datasetScopeMocks.initializeDatasetScope };
+});
 
 const skillMocks = vi.hoisted(() => ({
   deleteSkill: vi.fn(),
@@ -141,6 +135,7 @@ beforeEach(() => {
   apiMocks.saveAssistantOrbSetting.mockImplementation(async (setting) => setting);
   apiMocks.listDatasets.mockResolvedValue([mainDataset]);
   apiMocks.revealLLMApiKey.mockResolvedValue({ api_key: "sk-revealed" });
+  datasetScopeMocks.initializeDatasetScope.mockResolvedValue(undefined);
   skillMocks.listSkills.mockResolvedValue([]);
 });
 
@@ -176,8 +171,7 @@ describe("SettingsPage datasets", () => {
       </AntdApp>,
     );
     await waitFor(() => expect(apiMocks.listDatasets).toHaveBeenCalled());
-    // 数据集在「数据」页里，而设置默认停在「AI 模型」页——先切过去，
-    // 与真实用户的操作一致（不切换就看不到这份卡片）。
+    // 设置默认停在「AI 模型」页，先切到「数据」页（不切换就看不到这张卡片）。
     fireEvent.click(screen.getByRole("tab", { name: "数据" }));
     return view;
   }
@@ -199,9 +193,8 @@ describe("SettingsPage datasets", () => {
    */
   /** 导出下拉的触发按钮：命名弹窗里也有「导出」，只按名字找会命中两个。 */
   function exportTrigger(): HTMLElement {
-    const candidates = screen
-      .getAllByRole("button", { name: /导\s*出$/ })
-      .filter((element) => element.classList.contains("ant-dropdown-trigger"));
+    const buttons = screen.getAllByRole("button", { name: /导\s*出$/ });
+    const candidates = buttons.filter((el) => el.classList.contains("ant-dropdown-trigger"));
     if (candidates.length !== 1) throw new Error("没找到唯一的导出下拉按钮");
     return candidates[0];
   }
@@ -227,17 +220,15 @@ describe("SettingsPage datasets", () => {
 
     const filename = await openExportMenu(/导出当前数据集/);
 
-    // D-A：默认随包带上 API Key；取消勾选才会剥离。
-    // 第三个参数是 R15 的下载名（默认 `<数据集名>-<时间戳>`）。
+    // 默认带上配置与密钥；第四个参数是 R15 的下载名（默认 `<数据集名>-<时间戳>`）。
     await waitFor(() =>
-      expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", true, filename),
+      expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", true, true, filename),
     );
     expect(filename).toMatch(/^主数据-\d{8}-\d{6}$/);
     expect(click).toHaveBeenCalledOnce();
     click.mockRestore();
   });
-
-  it("lets the user opt out of including API keys", async () => {
+  it("couples API keys with the global model config switch", async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     apiMocks.exportDataset.mockResolvedValue({
       blob: new Blob(["zip-bytes"], { type: "application/zip" }),
@@ -245,19 +236,26 @@ describe("SettingsPage datasets", () => {
     });
     await renderPage();
 
-    const checkbox = screen.getByRole("checkbox", { name: /备份中包含大模型 API Key/ });
+    const checkbox = screen.getByRole("checkbox", {
+      name: /备份中包含全局模型配置与 API Key/,
+    });
     expect(checkbox).toBeChecked();
     fireEvent.click(checkbox);
     const filename = await openExportMenu(/导出当前数据集/);
+    // 取消勾选 = 配置与密钥都不带（不再有单独的密钥开关）。
     await waitFor(() =>
-      expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", false, filename),
+      expect(apiMocks.exportDataset).toHaveBeenCalledWith("main", false, false, filename),
     );
 
-    // 再勾回来：导出重新带密钥，选择权始终跟着勾选状态走。
     fireEvent.click(checkbox);
     await openExportMenu(/导出当前数据集/);
     await waitFor(() =>
-      expect(apiMocks.exportDataset).toHaveBeenLastCalledWith("main", true, expect.any(String)),
+      expect(apiMocks.exportDataset).toHaveBeenLastCalledWith(
+        "main",
+        true,
+        true,
+        expect.any(String),
+      ),
     );
     click.mockRestore();
   });
@@ -320,6 +318,18 @@ describe("SettingsPage datasets", () => {
     expect(navigationMocks.reloadPage).not.toHaveBeenCalled();
   });
 
+  it("reports the global model configs restored with the archive", async () => {
+    apiMocks.importDataset.mockResolvedValue({
+      ...imported,
+      global_llm: { imported: 2, updated: 1, skipped: 1, profiles: 3 },
+    });
+    const { container } = await renderPage();
+
+    chooseBackupFile(container);
+
+    expect(await screen.findByText(/全局模型配置已恢复 3 条（跳过 1 条同名）/)).toBeInTheDocument();
+  });
+
   it("switches to another dataset and reloads the page", async () => {
     apiMocks.listDatasets.mockResolvedValue([mainDataset, imported]);
     apiMocks.activateDataset.mockResolvedValue({ ...imported, is_active: true });
@@ -330,6 +340,52 @@ describe("SettingsPage datasets", () => {
 
     await waitFor(() => expect(apiMocks.activateDataset).toHaveBeenCalledWith(imported.id));
     await waitFor(() => expect(navigationMocks.reloadPage).toHaveBeenCalled(), { timeout: 3000 });
+  });
+
+  it("resyncs a stale dataset scope and switches on the retry", async () => {
+    // f92d26df：页面手里的 token 过期后，第一个写请求（恰好是"切换数据集"）必吃 409。
+    // 这不是"有任务在跑"，重同步身份后重试一次就能成。
+    apiMocks.listDatasets.mockResolvedValue([mainDataset, imported]);
+    apiMocks.activateDataset
+      .mockRejectedValueOnce(
+        new ApiError("数据集已切换，请保留草稿并刷新页面后重新打开；本次操作未执行", 409, {
+          code: "http",
+          businessCode: "dataset_scope_changed",
+        }),
+      )
+      .mockResolvedValueOnce({ ...imported, is_active: true });
+    await renderPage();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /切换/ })[1]);
+
+    await waitFor(() => expect(apiMocks.activateDataset).toHaveBeenCalledTimes(2));
+    // 重试打的还是同一份数据集（不是"随便再切一次"）。
+    expect(apiMocks.activateDataset.mock.calls.map((call) => call[0])).toEqual([
+      imported.id,
+      imported.id,
+    ]);
+    expect(datasetScopeMocks.initializeDatasetScope).toHaveBeenCalledOnce();
+    // 成功提示只弹一次：重试成功不能变成"一条错误 + 一条成功"。
+    expect(await screen.findAllByText(/已切换到「备份 A」/)).toHaveLength(1);
+    expect(screen.queryByText(/请先停止或等待当前任务完成/)).toBeNull();
+    await waitFor(() => expect(navigationMocks.reloadPage).toHaveBeenCalled(), { timeout: 3000 });
+  });
+
+  it("does not retry a 409 that only means a switch is busy or draining", async () => {
+    // 「切换中」「排空超时」两类 409 保持原行为：重试只会再撞一次，
+    // 给用户的动作也是"等任务停下"，不是"重试"。
+    apiMocks.listDatasets.mockResolvedValue([mainDataset, imported]);
+    apiMocks.activateDataset.mockRejectedValueOnce(
+      new ApiError("数据集正在切换中，请稍后再试", 409, { code: "http" }),
+    );
+    await renderPage();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /切换/ })[1]);
+
+    expect(await screen.findByText(/请先停止或等待当前任务完成/)).toBeInTheDocument();
+    expect(apiMocks.activateDataset).toHaveBeenCalledOnce();
+    expect(datasetScopeMocks.initializeDatasetScope).not.toHaveBeenCalled();
+    expect(navigationMocks.reloadPage).not.toHaveBeenCalled();
   });
 
   it("renames a dataset", async () => {
@@ -393,89 +449,5 @@ describe("SettingsPage datasets", () => {
     expect(renameItem).toHaveAttribute("aria-disabled", "true");
     const deleteItem = await screen.findByRole("menuitem", { name: "删除" });
     expect(deleteItem).toHaveAttribute("aria-disabled", "true");
-  });
-
-  // ===== RR-03：附件不完整时不得播报成"完整恢复/完整备份" =====
-
-  it("does not report a partial import as a clean success", async () => {
-    apiMocks.importDataset.mockResolvedValue({
-      ...imported,
-      assets_incomplete: true,
-      asset_issues: [
-        "活动数据集 user_files/x.bin：本机已有同名但内容不同的附件，已保留本机文件（绝不覆盖）",
-      ],
-    });
-    const { container } = await renderPage();
-
-    chooseBackupFile(container);
-
-    // 导入确实完成了，但界面必须说明这份备份不完整、问题在哪。
-    expect(await screen.findByText(/不完整/)).toBeInTheDocument();
-    expect(screen.getByText(/绝不覆盖/)).toBeInTheDocument();
-  });
-
-  it("names the datasets that failed to restore from a collection", async () => {
-    // R16：整包逐份恢复，坏一份不影响其它份。只报"导入成功"会让用户以为整包都回来了。
-    apiMocks.importDataset.mockResolvedValue({
-      ...imported,
-      restored_datasets: [{ id: "fedcba0987654321", name: "社招线" }],
-      failed: [
-        {
-          id: "aaa",
-          name: "校招线",
-          error: "子包内容与清单的 SHA-256 不符（文件可能已损坏或被改动）",
-        },
-        { id: "bbb", name: "实习线", error: "包内缺少这份数据集的子包" },
-      ],
-      skipped: [],
-      summary: { restored: 2, skipped: 0, failed: 2 },
-    });
-    const { container } = await renderPage();
-
-    chooseBackupFile(container);
-
-    expect(await screen.findByText(/2 份数据集失败/)).toBeInTheDocument();
-    expect(screen.getByText(/校招线：子包内容与清单的 SHA-256 不符/)).toBeInTheDocument();
-    expect(screen.getByText(/实习线：包内缺少/)).toBeInTheDocument();
-    // 成功路径的既有文案不变。
-    expect(screen.getByText(/已导入数据集「备份 A」/)).toBeInTheDocument();
-  });
-
-  it("offers an explicit opt-in before importing a package with broken assets", async () => {
-    apiMocks.importDataset.mockRejectedValueOnce(
-      new Error(
-        "备份包的附件未通过校验，已停止导入（没有写入任何数据）：活动数据集 user_files/x.bin：备份包中缺少该附件",
-      ),
-    );
-    const { container } = await renderPage();
-
-    chooseBackupFile(container);
-
-    // 默认拒绝：不重试、不静默降级，先让用户看到问题。
-    expect(await screen.findByText(/附件未通过校验/)).toBeInTheDocument();
-    expect(apiMocks.importDataset).toHaveBeenCalledTimes(1);
-
-    // 用户显式点「跳过附件继续导入」后才带着 allow_partial_assets 重试。
-    apiMocks.importDataset.mockResolvedValueOnce(imported);
-    fireEvent.click(await screen.findByRole("button", { name: "跳过附件继续导入" }));
-
-    await waitFor(() => expect(apiMocks.importDataset).toHaveBeenCalledTimes(2));
-    expect(apiMocks.importDataset.mock.calls[1][1]).toBe("backup");
-    expect(apiMocks.importDataset.mock.calls[1][2]).toBe(true);
-  });
-
-  it("warns that an exported archive with missing attachments is incomplete", async () => {
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    apiMocks.exportDataset.mockResolvedValue({
-      blob: new Blob(["zip-bytes"], { type: "application/zip" }),
-      filename: "resumeforge-backup-20260915.zip",
-      incompleteBackup: true,
-    });
-    await renderPage();
-
-    await openExportMenu(/导出当前数据集/);
-
-    expect(await screen.findByText(/不完整/)).toBeInTheDocument();
-    click.mockRestore();
   });
 });

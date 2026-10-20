@@ -1,32 +1,19 @@
 /**
- * 全站搜索（R6）：页头放大镜 + ⌘/Ctrl+K，任何页面都能用。
+ * 全站搜索（R6 / T7）：页头放大镜 + ⌘/Ctrl+K，任何页面都能用。
  *
- * 钉住三件容易坏的事：打开时**不发空查询**、输入有防抖（连打不连发）、点结果会跳转。
+ * 钉住容易坏的事：打开时**不发空查询**、输入有防抖（连打不连发）、点结果会跳转，
+ * 以及 T7 换容器之后的三条新语义——**非模态**（没有遮罩）、点面板外关闭、Esc 关闭。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import GlobalSearch from "./GlobalSearch";
+import ShortcutProvider from "../features/shortcuts/ShortcutProvider";
 
 const apiMocks = vi.hoisted(() => ({ searchAll: vi.fn() }));
 
 vi.mock("../api/search", () => apiMocks);
-
-/**
- * Modal 只做「开/关」的替身：jsdom 不会跑完 antd 的离场动画，真实弹窗关闭后内容
- * 仍留在 DOM 里，无法断言「Esc 关闭」。其它 antd 组件保持真实实现，交互不变。
- */
-vi.mock("antd", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("antd")>();
-  const { createElement } = await import("react");
-  return {
-    ...actual,
-    Modal: (props: { open?: boolean; title?: ReactNode; children?: ReactNode }) =>
-      props.open ? createElement("div", { role: "dialog" }, props.title, props.children) : null,
-  };
-});
 
 const RESULT = {
   jobs: [
@@ -163,12 +150,55 @@ describe("GlobalSearch", () => {
     expect(await screen.findByText("岗位页已打开")).toBeInTheDocument();
   });
 
-  it("Esc 关闭搜索弹层", async () => {
+  it("Esc 关闭浮层（焦点还在输入框里）", async () => {
     const input = await searchTwoHits();
     fireEvent.keyDown(input, { key: "Escape" });
 
-    // Modal 替身只在 open 为 true 时渲染内容，弹层关闭即整个消失。
+    // 浮层是条件渲染的 portal：关闭即整个从 DOM 消失（不依赖 antd 的离场动画）。
     await waitFor(() => expect(screen.queryByLabelText("搜索关键词")).not.toBeInTheDocument());
+  });
+
+  it("浮层是非模态的：有 role=search 面板，但没有遮罩层", async () => {
+    await searchTwoHits();
+
+    expect(screen.getByRole("search", { name: "全站搜索" })).toBeInTheDocument();
+    // 没有遮罩 = 不打停页面：用户仍能看见、仍能操作背后的内容。
+    expect(document.querySelector(".ant-modal-mask")).toBeNull();
+    expect(document.querySelector(".global-search-popover")).not.toBeNull();
+  });
+
+  it("打开即聚焦输入框（portal 里 autoFocus 不可靠，靠显式 focus）", async () => {
+    renderSearch();
+    fireEvent.click(screen.getByRole("button", { name: "全站搜索" }));
+
+    const input = screen.getByLabelText("搜索关键词");
+    await waitFor(() => expect(input).toHaveFocus());
+  });
+
+  it("点击面板之外关闭（没有遮罩兜底，得自己判位置）", async () => {
+    await searchTwoHits();
+
+    fireEvent.pointerDown(document.body);
+
+    await waitFor(() => expect(screen.queryByRole("search")).not.toBeInTheDocument());
+    // 关闭时清空这次搜索的痕迹：再打开是干净的初始态。
+    expect(apiMocks.searchAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("点击面板内部不会关闭", async () => {
+    await searchTwoHits();
+
+    fireEvent.pointerDown(screen.getByRole("search", { name: "全站搜索" }));
+
+    expect(screen.getByRole("search", { name: "全站搜索" })).toBeInTheDocument();
+  });
+
+  it("Esc 在文档层也生效（鼠标点过别处、焦点已不在输入框时）", async () => {
+    await searchTwoHits();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("search")).not.toBeInTheDocument());
   });
 
   it("没有结果时按方向键或回车不崩、不误跳转", async () => {
@@ -185,5 +215,22 @@ describe("GlobalSearch", () => {
 
     expect(screen.getByText("没有匹配的内容")).toBeInTheDocument();
     expect(screen.queryByText("岗位页已打开")).not.toBeInTheDocument();
+  });
+
+  it("showTrigger=false 时不渲染放大镜，但 Ctrl+K 仍能唤起弹层", async () => {
+    render(
+      <MemoryRouter initialEntries={["/settings"]}>
+        <AntdApp>
+          <ShortcutProvider />
+          <GlobalSearch showTrigger={false} />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("button", { name: "全站搜索" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+
+    expect(await screen.findByLabelText("搜索关键词")).toBeInTheDocument();
   });
 });

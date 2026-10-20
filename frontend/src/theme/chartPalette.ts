@@ -41,14 +41,16 @@ export const CHART_PALETTES: Record<ResolvedTheme, ChartPalette> = {
   },
   dark: {
     // 深底上把同一组色相提亮一档：保持"哪个阶段是哪个颜色"的语义不变，
-    // 同时让 #1b1f27 的背景上仍看得清边界。
+    // 同时让 #15181d 的背景上仍看得清边界。
     series: ["#7ea6ff", "#6fd9ab", "#8fa3bd", "#f6c85f", "#9a8cff", "#8fd8f8"],
     neutral: "#8d99a8",
-    track: "#232833",
-    grid: "#2c333f",
-    labelText: "#b3bdcc",
-    valueText: "#e6eaf2",
-    mutedText: "#a3aebf",
+    // track / grid 对齐深色表面阶梯（A2）：track 比卡片面 #1a1e24 亮一档，
+    // 才看得出"这是没填满的轨道"；grid 取边框色 #2a2f37，不发光。
+    track: "#242b35",
+    grid: "#2a2f37",
+    labelText: "#aab5c4",
+    valueText: "#e8ecf2",
+    mutedText: "#909bab",
   },
 };
 

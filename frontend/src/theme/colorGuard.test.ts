@@ -80,9 +80,10 @@ describe("颜色守卫", () => {
       (match: RegExpMatchArray) => match[1],
     );
 
-    // 与主题无关的 token（间距、圆角、动效时长、页头高度、层级）不要求有深色覆盖。
+    // 与主题无关的 token（间距、圆角、动效时长、页头高度、弹窗高度上限、层级）
+    // 不要求有深色覆盖：它们是**长度**不是颜色，深浅两套主题共用同一个值。
     const colorTokens = tokens.filter(
-      (token: string) => !/-space-|-radius-|-duration|-height|layer-/i.test(token),
+      (token: string) => !/-space-|-radius-|-duration|-height|-max-h|layer-/i.test(token),
     );
     const missing = colorTokens.filter((token: string) => !dark.includes(`${token}:`));
 

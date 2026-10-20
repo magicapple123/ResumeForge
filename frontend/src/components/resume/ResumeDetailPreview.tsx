@@ -213,17 +213,6 @@ export default function ResumeDetailPreview({
           创建于 {detail.created_at.replace("T", " ").slice(0, 16)}
         </Typography.Text>
       </Space>
-      <div className="generate-layout-bar">
-        <ResumeLayoutControls
-          compact
-          layout={layout}
-          resumeId={detail.id}
-          disabled={relayouting}
-          previewRef={resolvedPreviewRef}
-          onChange={(next) => onApplyLayout(next)}
-        />
-        {relayouting && <Typography.Text type="secondary">正在按新版式渲染…</Typography.Text>}
-      </div>
       {/* 生成说明（折叠）：回答"为什么是这样一份简历"。 */}
       {detail.rationale ? (
         <Collapse
@@ -323,6 +312,21 @@ export default function ResumeDetailPreview({
       )}
       <ResumePreview
         ref={resolvedPreviewRef}
+        toolbarExtra={
+          <>
+            <ResumeLayoutControls
+              compact
+              layout={layout}
+              resumeId={detail.id}
+              disabled={relayouting}
+              previewRef={resolvedPreviewRef}
+              onChange={(next) => onApplyLayout(next)}
+            />
+            {relayouting ? (
+              <Typography.Text type="secondary">正在按新版式渲染…</Typography.Text>
+            ) : null}
+          </>
+        }
         html={html}
         pages={layout.page_limit}
         warnings={fabricationWarnings}
@@ -388,6 +392,11 @@ export default function ResumeDetailPreview({
         <Button block icon={<ShareAltOutlined />} onClick={() => setSharePackageOpen(true)}>
           离线分享
         </Button>
+        {/* 额外操作（取消修改 / 保存修改）单独占一行：它们是"这一轮版式改动"的确认动作，
+            挤进 150px 的格子里会把两个按钮压成两行。 */}
+        {extraActions ? <div className="resume-detail-footer-extra-row">{extraActions}</div> : null}
+        {/* 导出放在最后：网格里 `-2 / -1` 让它落到「离线分享」所在行的最后一格，
+            也就是整张卡的右下角。 */}
         <div className="resume-detail-footer-export">
           <ExportButtons
             recordId={detail.id}
@@ -395,7 +404,6 @@ export default function ResumeDetailPreview({
             pdfDirectAvailable={pdfDirectAvailable}
             onOpen={() => setExportOptionsOpen(true)}
           />
-          {extraActions ? <span className="resume-detail-footer-extra">{extraActions}</span> : null}
         </div>
       </div>
 
@@ -464,6 +472,10 @@ export default function ResumeDetailPreview({
         html={html}
         warnings={detail.warnings}
         pages={layout.page_limit}
+        layout={layout}
+        resumeId={detail.id}
+        relayouting={relayouting}
+        onApplyLayout={onApplyLayout}
         describePath={(path) => describeResumeFieldPath(path, detail.content)}
         onClose={() => setZoomOpen(false)}
         onEditTarget={(path) => {

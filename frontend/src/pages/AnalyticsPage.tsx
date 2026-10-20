@@ -260,7 +260,7 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
             framed
             title="Offer 数"
             value={data.offer_count}
-            valueStyle={{ color: "#389e0d" }}
+            valueStyle={{ color: "var(--rf-success-strong)" }}
             hint={`Offer 率 ${formatRate(data.offer_rate)}`}
           />
         </Col>
@@ -367,7 +367,7 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
                 value={reminders[bucket.key]}
                 valueStyle={
                   bucket.key === "overdue" && reminders.overdue > 0
-                    ? { color: "#cf1322" }
+                    ? { color: "var(--rf-error-strong)" }
                     : undefined
                 }
               />

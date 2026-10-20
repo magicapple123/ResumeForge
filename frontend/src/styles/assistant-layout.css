@@ -87,7 +87,7 @@
   align-items: center;
   gap: 4px;
   margin-right: 6px;
-  color: var(--rf-warning-text);
+  color: var(--rf-favorite);
   font-size: 12px;
   vertical-align: 1px;
 }

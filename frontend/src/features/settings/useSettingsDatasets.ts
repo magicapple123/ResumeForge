@@ -10,8 +10,10 @@ import {
   listDatasets,
   renameDataset,
 } from "../../api/settings";
+import type { BackupAssetIssues } from "../../api/settings";
 import type { DatasetInfo } from "../../types";
-import { formatErrorGuidance } from "../../api/errorGuidance";
+import { formatErrorGuidance, isDatasetScopeExpired } from "../../api/errorGuidance";
+import { initializeDatasetScope } from "../../api/datasetScope";
 import { downloadBlob } from "../../utils/download";
 import { reloadPage } from "../../utils/navigation";
 import { describeImportIssues } from "./datasetImportFeedback";
@@ -23,9 +25,10 @@ export function useSettingsDatasets() {
   const [datasetsLoading, setDatasetsLoading] = useState(true);
   const [datasetExporting, setDatasetExporting] = useState(false);
   const [datasetImporting, setDatasetImporting] = useState(false);
-  // 导出是否随包带走大模型 API Key。默认勾选（D-A）：迁移整包时省去重填密钥；
-  // 用户可以取消勾选把密钥剥离。
-  const [includeApiKeys, setIncludeApiKeys] = useState(true);
+  // 全局模型配置（所有已保存记录）：默认随包导出（用户 2026-10-19 要求）。
+  // 2026-10-20 起不再单独提供「包含 API Key」开关：勾选这一项就一并带上密钥，
+  // 取消则两者都不带——用户不需要理解"配置段"和"密钥"是两份东西。
+  const [includeGlobalLLM, setIncludeGlobalLLM] = useState(true);
   const [switchingDatasetId, setSwitchingDatasetId] = useState<string | null>(null);
   const [renamingDatasetId, setRenamingDatasetId] = useState<string | null>(null);
   const [deletingDatasetId, setDeletingDatasetId] = useState<string | null>(null);
@@ -66,25 +69,44 @@ export function useSettingsDatasets() {
     setDatasetsLoading(false);
   }, [fetchDatasetList]);
 
+  /**
+   * 导出结果提示（H2）：把"新缺失 / 哈希不符 / 导入时就缺"分开说。
+   *
+   * 旧文案把三类合成一句"备份不完整"：用户看到 310 个自导入起就不存在的附件也在报警，
+   * 只能学会忽略这条警告。现在只有**这次导出真的丢了文件**才说"不完整"。
+   */
+  const reportBackupIssues = (successText: string, issues: BackupAssetIssues) => {
+    const parts: string[] = [];
+    if (issues.missing > 0) {
+      parts.push(`有 ${issues.missing} 个被引用的附件在磁盘上找不到，备份里不包含它们`);
+    }
+    if (issues.mismatched > 0) {
+      parts.push(`${issues.mismatched} 个附件内容与数据库登记不符，包里装的是当前磁盘上的字节`);
+    }
+    if (parts.length > 0) {
+      message.warning(`${successText}，但这份备份「不完整」：${parts.join("；")}`);
+      return;
+    }
+    message.success(successText);
+    if (issues.missingAtImport > 0) {
+      message.info(
+        `另有 ${issues.missingAtImport} 个附件在该数据集导入时就已缺失，已在包内清单注明`,
+      );
+    }
+  };
+
   const runDatasetExport = async (dataset: DatasetInfo, downloadName?: string) => {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename, incompleteBackup } = await exportDataset(
+      const { blob, filename, assetIssues } = await exportDataset(
         dataset.id,
-        includeApiKeys,
+        includeGlobalLLM,
+        includeGlobalLLM,
         downloadName,
       );
       downloadBlob(blob, filename);
-      if (incompleteBackup) {
-        // RR-03：包里有附件缺失或与登记哈希不符时不能说成"完整备份成功"。
-        message.warning(
-          `已导出「${dataset.name}」，但这份备份「不完整」：包内有附件缺失或内容与数据库登记的哈希不符，` +
-            "明细见包内 manifest.json 的 asset_manifest 段",
-        );
-      } else {
-        message.success(`已导出「${dataset.name}」到浏览器的下载目录`);
-      }
+      reportBackupIssues(`已导出「${dataset.name}」到浏览器的下载目录`, assetIssues);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "导出数据集失败");
     } finally {
@@ -96,19 +118,13 @@ export function useSettingsDatasets() {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename, incompleteBackup } = await exportAllDatasets(
-        includeApiKeys,
+      const { blob, filename, assetIssues } = await exportAllDatasets(
+        includeGlobalLLM,
+        includeGlobalLLM,
         downloadName,
       );
       downloadBlob(blob, filename);
-      if (incompleteBackup) {
-        message.warning(
-          `已把全部 ${datasets.length} 份数据集导出到浏览器的下载目录，但这份备份「不完整」：` +
-            "包内有附件缺失或内容与数据库登记的哈希不符，明细见包内 manifest.json 的 asset_manifest 段",
-        );
-      } else {
-        message.success(`已把全部 ${datasets.length} 份数据集导出到浏览器的下载目录`);
-      }
+      reportBackupIssues(`已把全部 ${datasets.length} 份数据集导出到浏览器的下载目录`, assetIssues);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "导出全部数据集失败");
     } finally {
@@ -139,9 +155,24 @@ export function useSettingsDatasets() {
         );
       }
       if (created.api_key_included) parts.push("备份中的大模型 API Key 已一并恢复");
+      // 全局模型配置是"数据集之外"的一段：恢复条数与跳过原因都要说清楚，
+      // 否则用户只看到数据集恢复，以为配置也回来了（或反之）。
+      const globalLlm = created.global_llm;
+      const globalFailed = Boolean(globalLlm?.error);
+      if (globalLlm?.error) {
+        parts.push(`全局模型配置未能导入（${globalLlm.error}）`);
+      } else if (globalLlm && (globalLlm.imported || globalLlm.updated)) {
+        const restored = (globalLlm.imported ?? 0) + (globalLlm.updated ?? 0);
+        parts.push(
+          `全局模型配置已恢复 ${restored} 条` +
+            (globalLlm.skipped ? `（跳过 ${globalLlm.skipped} 条同名）` : ""),
+        );
+      } else if (globalLlm?.skipped) {
+        parts.push(`全局模型配置 ${globalLlm.skipped} 条与本地同名，已保留本地版本`);
+      }
       // RR-03：带着附件问题导入时不得呈现成"完整恢复"——问题逐条（最多 3 条）摆出来。
       const problems = [...(created.backup_asset_warnings ?? []), ...(created.asset_issues ?? [])];
-      if (created.assets_incomplete || problems.length > 0) {
+      if (created.assets_incomplete || problems.length > 0 || globalFailed) {
         const shown = problems.slice(0, 3).join("；");
         message.warning(
           `${parts.join("，")}；当前数据未受影响，但这份备份「不完整」：` +
@@ -179,7 +210,15 @@ export function useSettingsDatasets() {
     if (switchingDatasetId !== null) return;
     setSwitchingDatasetId(dataset.id);
     try {
-      await activateDataset(dataset.id);
+      try {
+        await activateDataset(dataset.id);
+      } catch (err) {
+        // 只有「页面 token 过期」能自助修：重新同步身份后重试一次。
+        // 「数据集正在切换中」「排空超时」两类 409 保持原行为——重试只会再撞一次。
+        if (!isDatasetScopeExpired(err)) throw err;
+        await initializeDatasetScope();
+        await activateDataset(dataset.id);
+      }
       message.success(`已切换到「${dataset.name}」，正在重新加载页面`);
       // 整页重载：切换后所有本地状态都要按新数据集重建。失败时保留 loading 以便重试。
       window.setTimeout(reloadPage, 800);
@@ -245,8 +284,8 @@ export function useSettingsDatasets() {
     datasetsLoading,
     datasetExporting,
     datasetImporting,
-    includeApiKeys,
-    setIncludeApiKeys,
+    includeGlobalLLM,
+    setIncludeGlobalLLM,
     switchingDatasetId,
     renamingDatasetId,
     deletingDatasetId,

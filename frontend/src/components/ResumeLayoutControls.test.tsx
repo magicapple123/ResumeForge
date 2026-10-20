@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import type { ResumeLayout } from "../types";
 import { DEFAULT_LAYOUT, renderControls } from "./ResumeLayoutControls.testkit";
+import { clampPagePadding } from "../utils/pagePadding";
 
 const apiMocks = vi.hoisted(() => ({
   fetchResumeTemplates: vi.fn(),
@@ -271,5 +272,70 @@ describe("ResumeLayoutControls · 板块顺序", () => {
     expect(nextLayout.format_config).not.toHaveProperty("section_order");
     // accent 是用户自己的覆盖，不动它。
     expect(nextLayout.format_config).toMatchObject({ accent: "#123456" });
+  });
+});
+
+/**
+ * 页边距（T5）：从导出面板搬到版式栏后的写入/复位/边界。
+ *
+ * 落点必须是 `format_config.page_padding`——预览、保存、导出读的都是这一个键；
+ * 写别处就会出现"预览改了、导出没变"。
+ */
+describe("ResumeLayoutControls · 页边距（T5）", () => {
+  function lastLayout(onChange: ReturnType<typeof vi.fn>) {
+    // tsconfig 的 lib 没到 ES2022，不能用 `Array.prototype.at`。
+    const calls = onChange.mock.calls;
+    return calls[calls.length - 1]?.[0] as ResumeLayout;
+  }
+
+  it("输入数值写进 format_config.page_padding", async () => {
+    const onChange = renderControls();
+
+    const input = await screen.findByRole("spinbutton", { name: "页边距" });
+    fireEvent.change(input, { target: { value: "14" } });
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(lastLayout(onChange).format_config).toEqual({ page_padding: 14 });
+  });
+
+  it("没设过时不写字：输入框留空显示「随模板」，复位按钮禁用", async () => {
+    renderControls();
+
+    const input = await screen.findByRole("spinbutton", { name: "页边距" });
+    // 留空 + 占位文案：写一个"看起来已设置"的数字会让人以为它被写进了这份简历。
+    // （「随模板」这三个字行距控件也会渲染，所以按 placeholder 定位本控件。）
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("placeholder", "随模板");
+    expect(screen.getByRole("button", { name: "恢复默认页边距" })).toBeDisabled();
+  });
+
+  it("复位删键而不是写回模板默认值（模板更新时这些简历才跟着变）", async () => {
+    const onChange = renderControls({
+      layout: { ...DEFAULT_LAYOUT, format_config: { page_padding: 14, line_height: 1.6 } },
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "恢复默认页边距" }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const next = lastLayout(onChange);
+    expect(next.format_config).not.toHaveProperty("page_padding");
+    // 其它版式项原样保留（只删这一个键）。
+    expect(next.format_config).toEqual({ line_height: 1.6 });
+  });
+
+  it("边界：输入框声明 8–26，程序化赋值再被 clamp 收一道（不许把 40 发给后端）", async () => {
+    renderControls();
+    const input = await screen.findByRole("spinbutton", { name: "页边距" });
+
+    // 用户手动输入由 antd 的 min/max 挡住（越界时它只会修正显示，不触发 onChange）。
+    expect(input).toHaveAttribute("aria-valuemin", "8");
+    expect(input).toHaveAttribute("aria-valuemax", "26");
+
+    // 历史草稿 / 粘贴 / 程序化赋值绕过输入框时，靠唯一的实现收口：
+    // 后端白名单之外的值会被整条丢弃（"设了 30mm，导出还是默认"）。
+    expect(clampPagePadding(3)).toBe(8);
+    expect(clampPagePadding(40)).toBe(26);
+    expect(clampPagePadding(25.7)).toBe(26);
+    expect(clampPagePadding(Number.NaN)).toBe(8);
   });
 });

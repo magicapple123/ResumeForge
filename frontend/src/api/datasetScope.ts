@@ -1,6 +1,18 @@
 /** Per-document scope: do not silently adopt a different dataset into an existing editor. */
 let scopeToken: string | null = null;
 
+/**
+ * 采纳后端响应头里的 scope token。
+ *
+ * 后端每个响应都会回写 `X-Dataset-Scope`（含 409），而本模块此前只在启动时取一次——
+ * 后端重启（instance id 变）、另一标签页切过（generation 前进）、或上次切换"服务端成功
+ * 但页面没重载"之后，这个 token 就永久过期了，此后第一个写请求必吃 409。
+ * 只接受非空字符串：`null`（响应没带头）不能把已知身份清空。
+ */
+export function adoptDatasetScope(value: string | null): void {
+  if (typeof value === "string" && value !== "") scopeToken = value;
+}
+
 export function datasetScopeHeaders(input?: HeadersInit): Headers {
   const headers = new Headers(input);
   headers.set("X-ResumeForge-Client", "browser");

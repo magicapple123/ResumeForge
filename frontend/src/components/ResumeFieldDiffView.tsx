@@ -18,9 +18,17 @@ import type {
 } from "../types/resumeFieldDiff";
 import ResumeDiffView from "./ResumeDiffView";
 
+/**
+ * 三态配色与 `ResumeDiffView` 共用同一组 token（`--rf-diff-*`）：同一语义两套颜色
+ * 必然让人困惑。浅色取值与原写死的 #d9f7be/#ffccc7/#135200/#a8071a 等值。
+ */
 const TOKEN_STYLE: Record<string, CSSProperties> = {
-  added: { background: "#d9f7be", color: "#135200" },
-  removed: { background: "#ffccc7", color: "#a8071a", textDecoration: "line-through" },
+  added: { background: "var(--rf-diff-added-border)", color: "var(--rf-diff-added-text)" },
+  removed: {
+    background: "var(--rf-diff-removed-border)",
+    color: "var(--rf-diff-removed-text)",
+    textDecoration: "line-through",
+  },
   unchanged: {},
 };
 
@@ -95,8 +103,10 @@ function StringSectionCard({ section }: { section: StringSectionDiff }) {
 
 /** 新增/删除条目：红 − / 绿 + 边框块。 */
 function ItemBlock({ item, sign }: { item: ListItemView; sign: "added" | "removed" }) {
-  const color = sign === "added" ? "#52c41a" : "#ff4d4f";
-  const bg = sign === "added" ? "#f6ffed" : "#fff1f0";
+  // 语义 token：浅色下 --rf-accent-green=#52c41a、--rf-danger=#ff4d4f，与原写死值一致；
+  // 深色下两者都会提亮，边框与加号才不会糊在暗底上。
+  const color = sign === "added" ? "var(--rf-accent-green)" : "var(--rf-danger)";
+  const bg = sign === "added" ? "var(--rf-diff-added-bg)" : "var(--rf-diff-removed-bg)";
   return (
     <div
       data-sign={sign}

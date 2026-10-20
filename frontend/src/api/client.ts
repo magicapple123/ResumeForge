@@ -1,16 +1,17 @@
 /** 统一请求封装：JSON 解析、错误信息提取、请求预算（超时）、取消与友好报错。 */
 
 import { recordClientDiagnostic } from "../utils/clientDiagnostics";
-import { datasetScopeHeaders } from "./datasetScope";
+import { adoptDatasetScope, datasetScopeHeaders } from "./datasetScope";
 
 /** 错误类别：http=后端有响应但非 2xx；network=fetch 失败；timeout=预算到期；cancelled=调用方中止。 */
 export type ApiErrorCode = "http" | "network" | "timeout" | "cancelled";
 
 /**
  * 请求预算分类（毫秒）：文件上传/大文件导出给长预算，普通请求 15s，任务类 30s，
- * stream 不限时（SSE 流式路径不走 request()，此档供显式豁免的调用方使用）。
+ * AI 解读 180s，stream 不限时（SSE 流式路径不走 request()，此档供显式豁免的调用方使用）。
  */
-export type RequestBudgetKind = "default" | "upload" | "export" | "task" | "recognition" | "stream";
+export type RequestBudgetKind =
+  "default" | "upload" | "export" | "task" | "recognition" | "analysis" | "stream";
 
 export const BUDGETS_MS: Record<RequestBudgetKind, number> = {
   default: 15_000,
@@ -20,6 +21,8 @@ export const BUDGETS_MS: Record<RequestBudgetKind, number> = {
   // AI 识别（岗位/资料解析）：非流式等完整 JSON，大文本 30s 不够——90s 兜底，
   // 正常在几秒到十几秒返回，超时才报错（此前 default 15s 会让大文本直接超时）。
   recognition: 90_000,
+  // 岗位解读（T1）：整段生成 10–60s 是常态，长 JD 更久；15s 必然误超时。
+  analysis: 180_000,
   stream: 0, // 0 表示不限时
 };
 
@@ -28,6 +31,12 @@ export class ApiError extends Error {
   readonly code: ApiErrorCode;
   /** 从响应头 x-request-id 读取（后端 request_context 中间件在每个响应上回写）；网络失败时 undefined。 */
   readonly requestId?: string;
+  /**
+   * 后端在错误响应体里给的业务码（如 `dataset_scope_changed`）。与 `code`（传输层分类）
+   * 分开：`code` 是被广泛依赖的联合类型，加值会连锁影响所有 switch；调用方要区分
+   * "哪一种 409"只能靠这个字段。
+   */
+  readonly businessCode?: string;
   /** 仅 GET 且 5xx/timeout/network 时 true；写方法一律 false。是否重试由调用方决定，client 不内置自动重试。 */
   readonly retryable: boolean;
   readonly cause?: unknown;
@@ -38,6 +47,7 @@ export class ApiError extends Error {
     opts: {
       code?: ApiErrorCode;
       requestId?: string;
+      businessCode?: string;
       retryable?: boolean;
       cause?: unknown;
     } = {},
@@ -47,6 +57,7 @@ export class ApiError extends Error {
     this.status = status;
     this.code = opts.code ?? "http";
     this.requestId = opts.requestId;
+    this.businessCode = opts.businessCode;
     this.retryable = opts.retryable ?? false;
     if (opts.cause !== undefined) this.cause = opts.cause;
   }
@@ -67,26 +78,45 @@ export function buildQuery(params: object): string {
   return text ? `?${text}` : "";
 }
 
-/** 从响应体中提取错误信息（FastAPI 的 detail 可能是字符串或校验错误数组） */
-export async function extractError(resp: Response): Promise<string> {
+/** 非 2xx 响应体解析结果：用户可读文案 + 可选业务码。 */
+interface ErrorPayload {
+  message: string;
+  businessCode?: string;
+}
+
+/**
+ * 解析非 2xx 响应体（唯一实现）：`detail` 交给用户看，`code` 留给调用方做分支判断。
+ * 响应体不是 JSON / 形状不认识时退回「请求失败（HTTP xxx）」。
+ */
+async function readErrorPayload(resp: Response): Promise<ErrorPayload> {
   try {
     const data = await resp.json();
     const detail = data?.detail;
-    if (typeof detail === "string") return detail;
+    const businessCode = typeof data?.code === "string" ? data.code : undefined;
+    if (typeof detail === "string") return { message: detail, businessCode };
     if (Array.isArray(detail) && detail.length > 0) {
-      return detail.map((item) => item?.msg ?? String(item)).join("；");
+      return {
+        message: detail.map((item) => item?.msg ?? String(item)).join("；"),
+        businessCode,
+      };
     }
     // 结构化 detail：投递台的 409 就是这种形状（`{message, unanalyzed, gaps, site_unsupported…}`）。
     // 不取 message 的话，所有走 `request()` 的调用方只能看到「请求失败（HTTP 409）」——
     // 用户拿到的是一句没信息量的话，而真正的原因（例如"来源不支持自动投递，请先移出队列"）
     // 就躺在响应体里。
     if (detail && typeof detail === "object" && typeof detail.message === "string") {
-      return detail.message;
+      return { message: detail.message, businessCode };
     }
+    return { message: `请求失败（HTTP ${resp.status}）`, businessCode };
   } catch {
     // 响应体不是 JSON 时退回状态码提示
+    return { message: `请求失败（HTTP ${resp.status}）` };
   }
-  return `请求失败（HTTP ${resp.status}）`;
+}
+
+/** 从响应体中提取错误信息（FastAPI 的 detail 可能是字符串或校验错误数组） */
+export async function extractError(resp: Response): Promise<string> {
+  return (await readErrorPayload(resp)).message;
 }
 
 /** 从 Content-Disposition 里解析文件名，兼容 RFC 5987 的 filename* 形式 */
@@ -173,6 +203,9 @@ export async function requestRaw(path: string, options: RequestOptions = {}): Pr
       headers: datasetScopeHeaders(rest.headers),
       signal: controller.signal,
     });
+    // 所有响应（含 409）都带回后端当前的数据集身份：不采纳的话，页面会一直拿启动时的
+    // 旧 token 写库，后端重启/别的标签页切过之后就每次写都 409。
+    adoptDatasetScope(resp.headers.get("X-Dataset-Scope"));
     if (!resp.ok) {
       const requestId = resp.headers.get("x-request-id") ?? undefined;
       recordClientDiagnostic("api.error", {
@@ -181,9 +214,11 @@ export async function requestRaw(path: string, options: RequestOptions = {}): Pr
         method,
         request_id: requestId,
       });
-      throw new ApiError(await extractError(resp), resp.status, {
+      const payload = await readErrorPayload(resp);
+      throw new ApiError(payload.message, resp.status, {
         code: "http",
         requestId,
+        businessCode: payload.businessCode,
         retryable: retryable && resp.status >= 500,
       });
     }

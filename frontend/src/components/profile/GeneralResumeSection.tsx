@@ -13,6 +13,7 @@ import { deleteResume, listResumes, renameResume } from "../../api/resumes";
 import type { ResumeBrief } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import ResumeDetailModal from "../ResumeDetailModal";
+import { useResumeListVersion } from "../../features/resume/resumeListEvents";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 
 const PAGE_SIZE = 50;
@@ -49,7 +50,8 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
   };
 
   // Compiler 规范：挂载加载用内联 async IIFE（setState 在自身回调里应用）。
-  // 只在进入页面时加载一次；增删后由各操作自行刷新。
+  // 进入页面时加载一次；之后的增删改由 `resumeListEvents` 广播（见下），本区块不再
+  // 依赖"各操作记得回来 reload"。
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -67,6 +69,15 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在进入页面时加载一次
   }, []);
+
+  // T12：别处保存/删除手写简历后广播版本号，这里跟着重取。
+  // 版本为 0 表示"本次会话还没有过广播"——跳过，避免与上面那次挂载加载撞成双请求。
+  const resumeListVersion = useResumeListVersion();
+  useEffect(() => {
+    if (resumeListVersion === 0) return;
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load 每次渲染都是新函数，只跟版本走
+  }, [resumeListVersion]);
 
   const confirmRename = async (record: ResumeBrief) => {
     if (savingRename) return;

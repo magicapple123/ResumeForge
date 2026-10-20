@@ -52,11 +52,25 @@ export interface LLMConfig {
    * 赋给 `{}`，`unknown` 不满足，会让整个表单类型报错。
    */
   extra_body: Record<string, LLMExtraBodyValue>;
+  /**
+   * 生效来源（C）：`global` = 全局记录（所有数据集共用）；`dataset` = 还在用数据集
+   * 里的旧配置（升级后尚未迁移的回退态，保存一次即升级为 global）。
+   */
+  scope?: "global" | "dataset";
+  /** 生效记录 id（scope=global 时有值）；「使用中」据此高亮，不再逐字段比对。 */
+  record_id?: string | null;
+  /** 生效记录名称，用于卡片上的"使用中：xxx"。 */
+  record_name?: string;
 }
 
 export interface LLMConfigRecord extends LLMConfig {
-  id: number;
+  /** 全局记录 id（后端是 `p_` 前缀的字符串）。 */
+  id: string;
   name: string;
+  /** 该记录保存过的模型清单（供下拉选择）。 */
+  models: string[];
+  /** 是否为「使用中」的记录。 */
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -146,6 +160,19 @@ export interface DatasetImportResult extends DatasetInfo {
   backup_asset_warnings?: string[];
   /** 上面两类问题任一非空时为 true：界面不得把它呈现成"完整恢复"。 */
   assets_incomplete?: boolean;
+  /**
+   * 备份包里的全局模型配置合并结果（格式 5）。旧包没有这一段；`error` 表示配置段
+   * 损坏或合并失败——数据集本身已恢复，界面只提示配置没回来。
+   */
+  global_llm?: {
+    imported?: number;
+    updated?: number;
+    skipped?: number;
+    invalid?: number;
+    active?: boolean;
+    profiles?: number;
+    error?: string;
+  };
   /**
    * R16 嵌套整包：逐份的结果。整包不再"要么全成、要么不动"——一份子包坏了只跳过
    * 那一份，所以失败/跳过的每一份都要能点名给用户看。

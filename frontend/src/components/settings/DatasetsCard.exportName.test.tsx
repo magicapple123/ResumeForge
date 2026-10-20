@@ -30,8 +30,8 @@ function renderCard(overrides: Partial<React.ComponentProps<typeof DatasetsCard>
         loading={false}
         exporting={false}
         importing={false}
-        includeApiKeys={false}
-        onIncludeApiKeysChange={vi.fn()}
+        includeGlobalLLM
+        onIncludeGlobalLLMChange={vi.fn()}
         switchingId={null}
         renamingId={null}
         deletingId={null}
@@ -63,6 +63,20 @@ function renderCard(overrides: Partial<React.ComponentProps<typeof DatasetsCard>
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+});
+
+describe("DatasetsCard 导出选项", () => {
+  it("全局模型配置默认勾选，取消后回调 false", () => {
+    const onIncludeGlobalLLMChange = vi.fn();
+    renderCard({ onIncludeGlobalLLMChange });
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: /备份中包含全局模型配置/,
+    });
+    expect(checkbox).toBeChecked();
+    fireEvent.click(checkbox);
+    expect(onIncludeGlobalLLMChange).toHaveBeenCalledWith(false);
+  });
 });
 
 describe("DatasetsCard 导出命名（R15）", () => {

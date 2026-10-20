@@ -259,19 +259,38 @@ export default function TrackerPage() {
             {statsError && (
               <Typography.Text type="danger">统计加载失败：{statsError}</Typography.Text>
             )}
-            <Statistic title="总数" value={totalCount} />
+            {/* 上色靠**语义类名**（T9）：此前是 `:nth-child(2..5)`，网格里一旦多出
+                一个兄弟节点（statsError 的错误文案就是），整排配色会集体前移一格。 */}
             <Statistic
+              className="tracker-stat tracker-stat--total"
+              title="总数"
+              value={totalCount}
+            />
+            <Statistic
+              className="tracker-stat tracker-stat--active"
               title="进行中"
               value={stats?.active_count ?? 0}
               prefix={<FunnelPlotOutlined />}
             />
-            <Statistic title="本月投递" value={stats?.month_count ?? 0} />
             <Statistic
+              className="tracker-stat tracker-stat--month"
+              title="本月投递"
+              value={stats?.month_count ?? 0}
+            />
+            <Statistic
+              className="tracker-stat tracker-stat--offer"
               title="Offer"
               value={stats?.offer_count ?? 0}
-              styles={{ content: { color: "var(--rf-success-text)" } }}
+              // --rf-success-strong 是"求职统计页大数字"专用色：比 body 级的
+              // --rf-success-text 更亮，深色下也能在卡片面上立住。
+              styles={{ content: { color: "var(--rf-success-strong)" } }}
             />
-            <Statistic title="已结束" value={stats?.rejected_count ?? 0} />
+            <Statistic
+              className="tracker-stat tracker-stat--closed"
+              title="已结束"
+              value={stats?.rejected_count ?? 0}
+              styles={{ content: { color: "var(--rf-error-strong)" } }}
+            />
           </>
         )}
       </div>

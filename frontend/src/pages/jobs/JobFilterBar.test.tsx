@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { JobFilterBar } from "./JobFilterBar";
+import { DEFAULT_JOB_SORT_STATE } from "../../utils/jobSort";
 
 /** 与 JobsPage 相同的接线：keyword/setKeyword 是真实 React state。 */
 function StatefulHarness({ onKeywordChange }: { onKeywordChange?: (value: string) => void }) {
@@ -35,6 +36,8 @@ function StatefulHarness({ onKeywordChange }: { onKeywordChange?: (value: string
       setCandidatesOpen={vi.fn()}
       setFormOpen={vi.fn()}
       onImportCsv={vi.fn()}
+      sortState={DEFAULT_JOB_SORT_STATE}
+      applySort={vi.fn()}
     />
   );
 }
@@ -59,6 +62,8 @@ function ControlledHarness({ keyword }: { keyword: string }) {
       setCandidatesOpen={vi.fn()}
       setFormOpen={vi.fn()}
       onImportCsv={vi.fn()}
+      sortState={DEFAULT_JOB_SORT_STATE}
+      applySort={vi.fn()}
     />
   );
 }

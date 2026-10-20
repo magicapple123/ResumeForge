@@ -1,38 +1,43 @@
 /*
- * 深色主题（R18）：只覆盖**应用外壳**，简历预览 iframe 永远是白纸。
+ * 深色主题（A2 重做）：只覆盖**应用外壳**，简历预览 iframe 永远是白纸。
  *
  * 两条线各管一半：
- *   1. antd 组件由 `ThemeProvider` 的 `darkAlgorithm` 重算 token，不在这里逐个覆盖；
- *   2. 自定义 CSS 走语义变量。凡是已经用 `var(--rf-*)` 的地方，改这里的变量就够了；
- *      剩下少量硬编码的白底/深字（外壳、弹窗标题、数据集 chip）单独列在下面。
+ *   1. antd 组件由 `theme/darkTheme.ts`（独立的 ThemeConfig + darkAlgorithm）负责，
+ *      这里只补算法算不出的"外壳层次"与少量 antd 默认值不合适的规则；
+ *   2. 自定义 CSS 走语义变量。凡是已经用 `var(--rf-*)` 的地方，改这里的变量就够了。
  *
- * **不追求 100% 覆盖**：这版的目标是"深色下不刺眼、字读得清、没有白块"，而不是把
- * 392 处硬编码色值逐条改成 token。新增界面请优先用 `var(--rf-*)`，否则深色下会漏。
+ * 表面阶梯（与 `theme/darkTheme.ts` 的 `darkPalette` 同值，改色时两边一起改）：
+ *   页面底 #14171c < 次级面 #15181d < 外壳 #171a20 ≈ 卡片面 #1a1e24 < 浮起面 #22272f
+ * 旧版只有两档（#1b1f27 / #15181e），卡片、页头、侧栏几乎同色，"糊成一块"。
+ *
+ * **不追求 100% 覆盖**：新增界面请优先用 `var(--rf-*)`，否则深色下会漏。
  */
 [data-theme="dark"] {
   /* 品牌色与面板 */
   --rf-brand: #9dc3ef;
-  --rf-brand-tint: #1f2a3a;
-  --rf-brand-wash: #1a2230;
-  --rf-surface: #1b1f27;
-  --rf-surface-alt: #15181e;
+  --rf-brand-tint: #1e2836;
+  --rf-brand-wash: #1d232c;
+  --rf-surface: #1a1e24;
+  --rf-surface-alt: #15181d;
+  /* 浮起面：下拉、Tooltip、Popover、页头上的 chip。比卡片面亮一档，才浮得起来。 */
+  --rf-surface-elevated: #22272f;
 
   /* 文字：正文必须明显亮于背景，次级/三级文字仍保持可读（对比度 ≥ 4.5:1） */
-  --rf-text-body: #e6eaf2;
-  --rf-text-secondary: #b3bdcc;
-  --rf-text-tertiary: #a3aebf;
-  --rf-text-description: #b3bdcc;
+  --rf-text-body: #e8ecf2;
+  --rf-text-secondary: #aab5c4;
+  --rf-text-tertiary: #909bab;
+  --rf-text-description: #aab5c4;
 
   /* 边框与状态色 */
-  --rf-border: #2c333f;
-  --rf-border-subtle: #262c36;
-  --rf-border-strong: #3a4450;
+  --rf-border: #2a2f37;
+  --rf-border-subtle: #262b33;
+  --rf-border-strong: #3a414c;
 
   /* 信息色在深底上要提亮，否则 #1677ff 与背景的对比度不足。 */
   --rf-info: #6aa9ff;
   --rf-info-strong: #9dc3ef;
   /* 信息浅底改为"深蓝灰"，否则整块浅蓝在深色页面里就是一块亮砖。 */
-  --rf-info-bg: #1c2a3d;
+  --rf-info-bg: #1b2635;
 
   /* 品牌实底保持深色（承载白字）；提醒底改为深琥珀，避免整块亮黄。 */
   --rf-brand-fill: #24406b;
@@ -49,7 +54,15 @@
   --rf-accent-amber: #f4c65a;
   --rf-accent-blue: #9dc0e0;
   --rf-accent-pink: #ffb3cf;
-  --rf-surface-glass: rgb(27 31 39 / 92%);
+  /* 求职进度的阶段色（T9）：深色下降饱和、提亮，保证在 #1a1e24 / #15181d 上都够看。
+     与 design-tokens.css 同名同序（colorGuard 会检查深色覆盖了每个颜色 token）。 */
+  --rf-stage-applied: #94a3b8;
+  --rf-stage-screening: #7fa8cc;
+  --rf-stage-assessment: #6fb3b3;
+  --rf-stage-interview: #a79ad6;
+  --rf-stage-offer: #6cc79a;
+  --rf-stage-rejected: #d98a8a;
+  --rf-surface-glass: rgb(26 30 36 / 92%);
   --rf-surface-glass-border: rgb(255 255 255 / 10%);
   /* 这两个在深色下也要显式给出：danger 提亮一点，白字保持白字。 */
   --rf-danger: #ff7875;
@@ -59,80 +72,113 @@
   --rf-error-text: #ff9a91;
   --rf-focus-ring: #3b5b86;
   --rf-focus-visible: #9dc3ef;
-  /* 收藏星标在深底上要提亮：#d89614 与 #1b1f27 的对比只有 3.0 左右，星标会糊成一片。 */
+  /* 收藏星标在深底上要提亮：#d89614 与 #1a1e24 的对比只有 3.0 左右，星标会糊成一片。 */
   --rf-favorite: #f0c04a;
+  /* 大数字的强语义色：深底上要比正文级状态色更亮、更纯，才撑得住 20px 的字重。 */
+  --rf-success-strong: #73d13d;
+  --rf-error-strong: #ff7875;
+  /* 版本对比三态：底色压成"深色块"，描边与文字提亮——浅色那套底块在深色页面上
+     会变成一块亮砖，三态反而更难分辨。 */
+  --rf-diff-added-bg: #16281c;
+  --rf-diff-added-border: #235034;
+  --rf-diff-added-text: #8fe3a8;
+  --rf-diff-removed-bg: #2b1a1c;
+  --rf-diff-removed-border: #5c2a2e;
+  --rf-diff-removed-text: #ffb3ae;
+  /* 注意：`--rf-modal-body-max-h` 这类**长度** token 不在本文件重复声明。
+     本文件在 index.css 里最后加载，重复声明会盖掉 mobile.css 的移动端档位；
+     弹窗高度上限只有 theme/design-tokens.css 一个源头。 */
   /* A4 纸面在深色下**保持纯白**：这是"屏幕上那张纸"，不是外壳的一部分。
      显式重复一遍而不是继承浅色值，是为了让"深色下纸也是白的"在这里有据可查。 */
   --rf-paper: #ffffff;
 }
 
 [data-theme="dark"] body {
-  background: #12151a;
+  background: #14171c;
   color: var(--rf-text-body);
 }
 
-/* ===== 外壳：页头 / 侧栏 / 内容区 ===== */
+/* ===== 外壳：页头 / 侧栏 / 内容区 =====
+   页头与侧栏用比卡片面更深的 #171a20，边框 #262b33，阴影只留一条 1px 暗线——
+   深色下的"投影"看不出来，叠多了反而像一圈脏边。 */
 [data-theme="dark"] .app-shell {
   background: var(--rf-surface-alt);
 }
 
 [data-theme="dark"] .app-sider {
-  background: #1b1f27 !important;
+  background: #171a20 !important;
   border-right-color: var(--rf-border-subtle);
-  box-shadow: 2px 0 12px rgb(0 0 0 / 35%);
+  box-shadow: 0 1px 0 rgb(0 0 0 / 40%);
 }
 
 [data-theme="dark"] .app-header {
-  background: #1b1f27;
-  border-bottom-color: var(--rf-border);
-  box-shadow: 0 1px 8px rgb(0 0 0 / 30%);
+  background: #171a20;
+  border-bottom-color: var(--rf-border-subtle);
+  box-shadow: 0 1px 0 rgb(0 0 0 / 40%);
 }
 
-/* ===== 弹窗：标题条是硬编码的浅色渐变，必须单独压掉 ===== */
-[data-theme="dark"] .ant-modal-content {
+/* ===== 弹窗 =====
+   antd 6.6.5 的容器类名是 `.ant-modal-container`（旧 content 容器类名已删除），
+   这里是深色背景与阴影；`max-height`/body 滚动由 styles/modules.css 统一给。 */
+[data-theme="dark"] .ant-modal-container {
   border-color: var(--rf-border);
-  background: #1b1f27;
+  background: var(--rf-surface);
   box-shadow:
     0 24px 70px rgb(0 0 0 / 45%),
     0 8px 24px rgb(0 0 0 / 30%);
 }
 
+/* 标题/页脚与**容器同色**，只留一条细分隔线：用更暗的 surface-alt 会在深色下
+   变成两条明显的"黑条"（用户 2026-10-20 截图反馈），看起来像渲染残留。 */
 [data-theme="dark"] .ant-modal-header {
-  background: #1b1f27;
-  border-bottom-color: #2c333f;
+  background: var(--rf-surface);
+  border-bottom-color: var(--rf-border-subtle);
 }
 
 [data-theme="dark"] .ant-modal-title {
-  color: #e6eaf2;
+  color: var(--rf-brand);
 }
 
-/* ===== 页头控件：chip 与数据集下拉是硬编码浅底 ===== */
+[data-theme="dark"] .ant-modal-footer {
+  background: var(--rf-surface);
+  border-top-color: var(--rf-border-subtle);
+}
+
+/* 页头控件：chip 与数据集下拉是硬编码浅底 */
 [data-theme="dark"] .app-dataset-chip {
-  border-color: #333b48;
-  background: #212733;
-  color: #c6d1e0;
+  border-color: var(--rf-border);
+  background: var(--rf-surface-elevated);
+  color: var(--rf-text-body);
 }
 
 [data-theme="dark"] .app-dataset-chip:hover {
-  border-color: #3f4b5c;
-  background: #26303d;
-  color: #cfe0f7;
+  border-color: var(--rf-border-strong);
+  background: #262c35;
+  color: var(--rf-brand);
 }
 
 [data-theme="dark"] .app-dataset-sample-tag {
-  border-color: #6b5220;
-  background: #33280f;
-  color: #f2c66d;
+  border-color: var(--rf-warning-border);
+  background: var(--rf-warning-bg);
+  color: var(--rf-warning-text);
 }
 
 /* ===== 卡片与分区标题（部分页面用了硬编码白底） ===== */
 [data-theme="dark"] .ant-card {
-  background: #1b1f27;
+  background: var(--rf-surface);
   border-color: var(--rf-border);
 }
 
 [data-theme="dark"] .ant-card-head {
-  border-bottom-color: var(--rf-border);
+  border-bottom-color: var(--rf-border-subtle);
+}
+
+/* ===== 状态标签 =====
+   浅色那条 `.ant-tag-green` 深绿前景规则已被收窄到 `:root:not([data-theme="dark"])`，
+   深色这里换成提亮后的成功色，否则深绿字压在深绿底上等于看不见。 */
+[data-theme="dark"] .ant-tag.ant-tag-green,
+[data-theme="dark"] .ant-tag.ant-tag-success {
+  color: var(--rf-success-text) !important;
 }
 
 /* ===== 表格与空态 ===== */
@@ -141,13 +187,13 @@
 }
 
 [data-theme="dark"] .ant-table-thead > tr > th {
-  background: #232833 !important;
-  color: #dbe4f0 !important;
+  background: #20252c !important;
+  color: #cfd8e6 !important;
   border-bottom-color: var(--rf-border) !important;
 }
 
 [data-theme="dark"] .ant-table-tbody > tr > td {
-  border-bottom-color: #262c36;
+  border-bottom-color: var(--rf-border-subtle);
 }
 
 /* ===== 滚动条：深色页面上出现一条白色滚动条最扎眼 ===== */

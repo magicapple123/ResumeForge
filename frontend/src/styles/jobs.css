@@ -32,7 +32,7 @@
 }
 
 .job-favorite-button.is-favorite {
-  color: var(--rf-warning-text);
+  color: var(--rf-favorite);
 }
 
 .job-detail-text-sections {
@@ -81,15 +81,15 @@
 }
 
 .job-detail-text-section--requirements .job-detail-section-icon {
-  color: var(--rf-text-body);
+  color: var(--rf-accent-violet);
 }
 
 .job-detail-text-section--additional .job-detail-section-icon {
-  color: var(--rf-text-body);
+  color: var(--rf-accent-green);
 }
 
 .job-detail-text-section--note .job-detail-section-icon {
-  color: var(--rf-warning-text);
+  color: var(--rf-accent-amber);
 }
 
 .job-detail-text {

@@ -75,8 +75,10 @@ describe("App 快捷键", () => {
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
 
-    // 弹层直接出现在当前页面；输入框自动聚焦，用户可以直接打字。
-    const input = await screen.findByLabelText("搜索关键词");
+    // 浮层直接出现在当前页面（T7：`role="search"` 的非模态面板）；输入框自动聚焦，
+    // 用户可以直接打字。
+    expect(await screen.findByRole("search", { name: "全站搜索" })).toBeInTheDocument();
+    const input = screen.getByLabelText("搜索关键词");
     await waitFor(() => expect(input).toHaveFocus());
     expect(screen.queryByText("首页内容")).toBeNull();
   });

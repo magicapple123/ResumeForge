@@ -15,6 +15,17 @@ export interface ErrorGuidance {
   ref: string;
 }
 
+/** 数据集作用域过期（后端 code=dataset_scope_changed）。
+ *
+ * 这类 409 的成因不是「有任务在跑」，而是页面手里的 scope token 旧了：只有它能在
+ * 重新同步身份后自动重试一次，其余 409 必须保持原行为（提示用户先停下任务）。
+ */
+export function isDatasetScopeExpired(err: unknown): boolean {
+  return (
+    err instanceof ApiError && err.status === 409 && err.businessCode === "dataset_scope_changed"
+  );
+}
+
 /** 从 ApiError 提取映射表；非 ApiError（本地异常/未知）给通用指引。 */
 export function errorGuidance(err: unknown): ErrorGuidance {
   const ref = err instanceof ApiError && err.requestId ? err.requestId.slice(0, 8) : "-";
@@ -45,6 +56,15 @@ export function errorGuidance(err: unknown): ErrorGuidance {
   }
   const status = err.status ?? 0;
   if (status === 409) {
+    // 「页面与本地数据集的连接过期」不是冲突：调用方已经自动重同步并重试过一次，
+    // 还走到这里说明重试也失败了——让用户直接再点一次，而不是去停任务。
+    if (isDatasetScopeExpired(err)) {
+      return {
+        reason: "页面与本地数据集的连接已过期",
+        action: "已自动重新同步，请重试",
+        ref,
+      };
+    }
     return {
       reason: err.message || "存在进行中的任务或资源冲突",
       action: "请先停止或等待当前任务完成，再重试本操作",

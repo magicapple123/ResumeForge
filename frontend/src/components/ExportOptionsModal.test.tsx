@@ -1,15 +1,17 @@
-/** 统一导出面板：默认 PDF、版式草稿透传、水印/脱敏参数、未选格式拦截、409 草稿闸门。 */
+/**
+ * 统一导出面板（T5）：默认 PDF、**版式草稿原样透传**、水印/脱敏参数、未选格式拦截、409 草稿闸门。
+ *
+ * 版式（页数/字号/页边距）与脱敏预览已从面板移出：前者归预览的版式栏，后者走真实导出的
+ * `redact` 参数。面板因此只剩「导出什么」——格式 / 水印 / 脱敏范围 / 照片。
+ */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
-import { withPagePadding } from "../utils/pagePadding";
+import { clampPagePadding } from "../utils/pagePadding";
 import ExportOptionsModal from "./ExportOptionsModal";
 
-const apiMocks = vi.hoisted(() => ({
-  exportResumeWithOptions: vi.fn(),
-  redactResume: vi.fn(),
-}));
+const apiMocks = vi.hoisted(() => ({ exportResumeWithOptions: vi.fn() }));
 
 const downloadMocks = vi.hoisted(() => ({
   downloadBlob: vi.fn(),
@@ -39,7 +41,6 @@ function renderModal(props: RenderProps = {}) {
 
 beforeEach(() => {
   apiMocks.exportResumeWithOptions.mockReset().mockResolvedValue(RESULT);
-  apiMocks.redactResume.mockReset();
   downloadMocks.downloadBlob.mockReset();
   downloadMocks.printHtml.mockReset();
 });
@@ -69,55 +70,35 @@ describe("ExportOptionsModal", () => {
     });
   });
 
-  it("页边距只有一个落点：写进 format_config.page_padding，不再发 margin_mm（R1）", async () => {
-    renderModal({ initialFormatConfig: { line_height: 1.55 } });
+  it("面板里不再有「版式」栏与「预览脱敏效果」：版式归预览，脱敏预览已下线（T5）", () => {
+    renderModal({ initialFormatConfig: { line_height: 1.55, page_padding: 14 } });
 
-    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "20" } });
-    fireEvent.click(screen.getByRole("button", { name: /导\s*出/ }));
+    // 版式三项（页数/字号/页边距）连同标题一起消失：唯一入口是预览的版式栏。
+    expect(screen.queryByText("版式")).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+    expect(screen.queryByText("预览脱敏效果")).not.toBeInTheDocument();
 
-    await waitFor(() => expect(downloadMocks.downloadBlob).toHaveBeenCalledTimes(1));
-    const [, payload] = apiMocks.exportResumeWithOptions.mock.calls[0] as [
-      number,
-      Record<string, unknown>,
-    ];
-    // 预览的草稿版式原样保留，页边距覆盖在它之上。
-    expect(payload.format_config).toEqual({ line_height: 1.55, page_padding: 20 });
-    // 两套参数并存正是"预览不变、导出变了"的来源，所以 margin_mm 必须彻底消失。
-    expect(payload).not.toHaveProperty("margin_mm");
+    // 脱敏开关与勾选项仍在（真实导出走 POST /export 的 redact 参数）。
+    fireEvent.click(screen.getByRole("switch", { name: "开启脱敏" }));
+    expect(screen.getByRole("checkbox", { name: /姓名/ })).toBeInTheDocument();
   });
 
-  it("页边距越界值被 clamp 到 8–26（后端的白名单之外会被整条丢弃）", () => {
-    // 直接钉 helper：antd 的 InputNumber 已经把手动输入挡在 8–26 内，clamp 守的是
+  it("页边距越界值被 clamp 到 8–26（版式栏的输入框与后端白名单之间只有这一道）", () => {
+    // 直接钉 helper：`PagePaddingControl` 的 InputNumber 已经挡在 8–26 内，clamp 守的是
     // "历史草稿 / 粘贴 / 程序化赋值"这条来路，只有单测能覆盖到。
-    expect(withPagePadding(undefined, 5)).toEqual({ page_padding: 8 });
-    expect(withPagePadding(undefined, 7)).toEqual({ page_padding: 8 });
-    expect(withPagePadding(undefined, 40)).toEqual({ page_padding: 26 });
-    expect(withPagePadding(undefined, 25.7)).toEqual({ page_padding: 26 });
-    expect(withPagePadding(undefined, 14)).toEqual({ page_padding: 14 });
-    // 没动滑块就原样透传预览的草稿版式，不凭空造一个 page_padding。
-    expect(withPagePadding({ line_height: 1.55 }, null)).toEqual({ line_height: 1.55 });
-    expect(withPagePadding(undefined, null)).toBeUndefined();
+    expect(clampPagePadding(5)).toBe(8);
+    expect(clampPagePadding(7)).toBe(8);
+    expect(clampPagePadding(40)).toBe(26);
+    expect(clampPagePadding(25.7)).toBe(26);
+    expect(clampPagePadding(14)).toBe(14);
+    expect(clampPagePadding(Number.NaN)).toBe(8);
   });
 
-  it("页边距的输入范围与预览一致（8–26，不是旧的 4–40）", () => {
-    renderModal();
-
-    const input = screen.getByRole("spinbutton");
-    expect(input).toHaveAttribute("aria-valuemin", "8");
-    expect(input).toHaveAttribute("aria-valuemax", "26");
-  });
-
-  it("页边距初值取预览当前的值，面板与预览不是两套数字", () => {
-    renderModal({ initialFormatConfig: { page_padding: 14 } });
-
-    expect(screen.getByRole("spinbutton")).toHaveValue("14");
-  });
-
-  it("把预览的页数、字号与版式草稿一起带给后端（否则导出与预览不同版）", async () => {
+  it("页数 / 字号 / 版式草稿全部原样取自预览（面板不再覆盖任何一项，T5）", async () => {
     renderModal({
       initialPageLimit: 2,
       initialFontScale: "small",
-      initialFormatConfig: { font_scale_adjust: 0.636, line_height: 1.55 },
+      initialFormatConfig: { font_scale_adjust: 0.636, line_height: 1.55, page_padding: 14 },
     });
 
     fireEvent.click(screen.getByRole("button", { name: /导\s*出/ }));
@@ -129,7 +110,7 @@ describe("ExportOptionsModal", () => {
         format: "pdf",
         page_limit: 2,
         font_scale: "small",
-        format_config: { font_scale_adjust: 0.636, line_height: 1.55 },
+        format_config: { font_scale_adjust: 0.636, line_height: 1.55, page_padding: 14 },
       }),
     );
   });
@@ -210,6 +191,21 @@ describe("ExportOptionsModal", () => {
     expect(apiMocks.exportResumeWithOptions).toHaveBeenCalledWith(
       7,
       expect.objectContaining({ format: "html", format_config: { line_height: 1.55 } }),
+    );
+  });
+
+  it("「包含照片」开关仍写 include_photo（它只影响导出内容，不参与预览渲染）", async () => {
+    renderModal();
+
+    // 挪进「格式」区块并改名，语义不变。
+    expect(screen.queryByRole("switch", { name: "显示照片" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "包含照片" }));
+    fireEvent.click(screen.getByRole("button", { name: /导\s*出/ }));
+
+    await waitFor(() => expect(downloadMocks.downloadBlob).toHaveBeenCalledTimes(1));
+    expect(apiMocks.exportResumeWithOptions).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ include_photo: false }),
     );
   });
 

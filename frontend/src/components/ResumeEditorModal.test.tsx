@@ -391,3 +391,88 @@ describe("ResumeEditorModal 快捷键（R5）", () => {
     expect(onSave.mock.calls[0][0]).toMatchObject({ name: "李四" });
   });
 });
+
+/**
+ * T11：「填入我的资料全部数据」——通用手写简历从空白起步后的那条捷径。
+ *
+ * 两件事必须钉住：这个按钮只在传了 `fillAll` 时存在（岗位模式/编辑已保存简历不该有），
+ * 以及"覆盖已有内容"必须先问一句——它替换的是整份表单，不是补一段。
+ */
+describe("ResumeEditorModal 填入我的资料全部数据（T11）", () => {
+  const FILLED: ResumeContent = makeResumeContent({
+    name: "李四",
+    summary: "资料里的个人总结",
+    education: [
+      {
+        school: "示例大学",
+        major: "软件工程",
+        degree: "本科",
+        start_date: "2023.09",
+        end_date: "2027.06",
+        gpa: "3.8",
+        courses: ["数据结构"],
+        achievements: [],
+      } as ResumeContent["education"][number],
+    ],
+  });
+  const BLANK: ResumeContent = makeResumeContent({ name: "", job_intent: "", summary: "" });
+
+  function renderEditor(content: ResumeContent, fillAll?: () => ResumeContent) {
+    render(
+      <AntdApp>
+        <ResumeEditorModal
+          open
+          content={content}
+          fillAll={fillAll}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      </AntdApp>,
+    );
+  }
+
+  it("不传 fillAll 时没有这个入口（岗位模式 / 编辑已保存简历都不该出现）", () => {
+    renderEditor(CONTENT);
+
+    expect(screen.queryByRole("button", { name: /填入我的资料全部数据/ })).not.toBeInTheDocument();
+  });
+
+  it("表单为空时直接填入，不需要确认；填完算未保存（取消会先问）", () => {
+    renderEditor(BLANK, () => FILLED);
+
+    fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
+
+    expect(screen.getByLabelText("姓名")).toHaveValue("李四");
+    expect(screen.getByLabelText("个人总结")).toHaveValue("资料里的个人总结");
+
+    // 脏标记生效：这时点「取消」必须先弹未保存确认。
+    fireEvent.click(screen.getByRole("button", { name: /取\s*消/ }));
+    expect(document.querySelector(".ant-modal-confirm")?.textContent).toContain(
+      "未保存的修改将丢失",
+    );
+  });
+
+  it("已有内容时先确认：取消不动，确认后覆盖", async () => {
+    renderEditor(CONTENT, () => FILLED);
+
+    fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
+
+    await waitFor(() => expect(document.querySelector(".ant-modal-confirm")).not.toBeNull());
+    // 取消：原内容一个字符都不动。
+    const box = document.querySelector(".ant-modal-confirm") as HTMLElement;
+    fireEvent.click(box.querySelector(".ant-btn:not(.ant-btn-primary)") as HTMLElement);
+    expect(screen.getByLabelText("姓名")).toHaveValue("张三");
+
+    // 再来一次并确认覆盖。
+    fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
+    const confirm = await waitFor(() => {
+      const button = document.querySelector<HTMLButtonElement>(
+        ".ant-modal-confirm .ant-btn-primary",
+      );
+      if (!button) throw new Error("未找到确认按钮");
+      return button;
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("李四"));
+  });
+});
