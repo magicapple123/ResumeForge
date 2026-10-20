@@ -17,12 +17,12 @@ import {
   Empty,
   List,
   Space,
-  Spin,
   Switch,
   Tag,
   Tooltip,
   Typography,
 } from "antd";
+import LoadingBlock from "./common/LoadingBlock";
 import { useEffect, useMemo, useState } from "react";
 import {
   cancelRiskScan,
@@ -306,7 +306,7 @@ function ScanningCard({ startedAt, onCancel }: { startedAt?: number; onCancel: (
 
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle" align="center">
-      <Spin />
+      <LoadingBlock />
       <Typography.Text>正在扫描…已用时 {elapsed}s</Typography.Text>
       <Typography.Text type="secondary">可以关闭此窗口，扫描会继续</Typography.Text>
       <Button onClick={onCancel}>取消</Button>

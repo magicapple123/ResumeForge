@@ -29,13 +29,12 @@ vi.mock("../api/resumes", async (importOriginal) => ({
  *
  * 版式栏里现在有**两处**合法的「随模板」：行距一行、页边距一行（T5 把页边距从导出面板
  * 搬进预览后各留了一个）。所以查这三个字必须限定作用域——全局 `getByText` 会多重命中，
- * 那不是 UI 错了，是断言范围太宽。锚点取「恢复默认行距」按钮：这个可访问名只有行距这
- * 一行有，再从它向上取到所在的版式行。
+ * 那不是 UI 错了，是断言范围太宽。锚点取「行距」这个标题文字：只有行距这一行有，
+ * 再从它向上取到所在的版式行（恢复默认已改成双击标题，不再有独立的 ↺ 按钮）。
  */
 function lineHeightRow(): HTMLElement {
-  const anchor = screen.getByRole("button", { name: "恢复默认行距" });
-  // 不用 `parentElement`：按钮禁用时 antd 的 Tooltip 会额外包一层 span，
-  // 取最近的版式行（`Space`）才稳定——与 `ProfilePage.webform.test.tsx` 同一写法。
+  const anchor = screen.getByText("行距");
+  // 从标题向上取最近的版式行（`Space`）。
   const row = anchor.closest(".ant-space");
   if (!row) throw new Error("找不到行距控件所在的版式行");
   return row as HTMLElement;
@@ -56,22 +55,26 @@ afterEach(() => {
 
 describe("ResumeLayoutControls · 行距（R20）", () => {
   it("没设过覆盖时显示当前模板的默认行距，并标注「随模板」", async () => {
-    renderControls();
+    const onChange = renderControls();
 
     // classic 的默认行距是 1.70（后端 TEMPLATE_LAYOUT_DEFAULTS），不是写死的 1.7。
     expect(await screen.findByText("1.70")).toBeInTheDocument();
     // 行距这一行标「随模板」；页边距那一行也有一个（合法 UI，共两处）。
     expect(within(lineHeightRow()).getByText("随模板")).toBeInTheDocument();
     expect(screen.getAllByText("随模板")).toHaveLength(2);
-    // 没设过覆盖时"恢复默认"不可点——它已经是默认了。
-    expect(screen.getByRole("button", { name: "恢复默认行距" })).toBeDisabled();
+    // 恢复默认改成双击标题：独立的 ↺ 按钮已删除，已经是默认值时双击不提交。
+    expect(screen.queryByRole("button", { name: "恢复默认行距" })).toBeNull();
+    fireEvent.doubleClick(within(lineHeightRow()).getByText("行距"));
+    // 上面那句注释的断言在这里：没有覆盖值时 reset 直接返回，不触发 onChange。
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("加减按钮按 0.05 提交，并保留 layout 里的其它字段", async () => {
     const onChange = renderControls({
       layout: { ...DEFAULT_LAYOUT, page_limit: 2, format_name: "compact" },
     });
-    await screen.findByText("1.70");
+    // 版式是「紧凑」：滑杆从预设的 1.45 起算（不再是模板默认的 1.70）。
+    await within(lineHeightRow()).findByText("1.45");
 
     fireEvent.click(screen.getByRole("button", { name: "减小行距" }));
 
@@ -81,8 +84,18 @@ describe("ResumeLayoutControls · 行距（R20）", () => {
       format_name: "compact",
       page_limit: 2,
       font_scale: "standard",
-      format_config: { line_height: 1.65 },
+      format_config: { line_height: 1.4 },
     });
+  });
+
+  it("换版式后滑杆显示预设值，而不是模板默认", async () => {
+    renderControls({ layout: { ...DEFAULT_LAYOUT, format_name: "compact" } });
+
+    const row = lineHeightRow();
+    expect(await within(row).findByText("1.45")).toBeInTheDocument();
+    expect(within(row).queryByText("1.70")).not.toBeInTheDocument();
+    // 页边距同理：紧凑是 11mm，模板默认 14mm。
+    expect(await screen.findByText("11mm")).toBeInTheDocument();
   });
 
   it("已有覆盖时按覆盖值显示，并且可以一键回到随模板", async () => {
@@ -96,7 +109,7 @@ describe("ResumeLayoutControls · 行距（R20）", () => {
     expect(within(lineHeightRow()).queryByText("随模板")).not.toBeInTheDocument();
     expect(screen.getAllByText("随模板")).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "恢复默认行距" }));
+    fireEvent.doubleClick(within(lineHeightRow()).getByText("行距"));
 
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
     // 只删 line_height，其它覆盖（强调色）原样保留。
@@ -104,6 +117,35 @@ describe("ResumeLayoutControls · 行距（R20）", () => {
       ...DEFAULT_LAYOUT,
       format_config: { accent: "#112233" },
     });
+  });
+
+  it("键盘 Enter / 空格等价于双击恢复默认，其它键不触发（不吞滑块的键盘行为）", async () => {
+    const onChange = renderControls({
+      layout: { ...DEFAULT_LAYOUT, format_config: { line_height: 1.45, accent: "#112233" } },
+    });
+    await screen.findByText("1.45");
+
+    // 提示从原生 title 换成 Tooltip 之后，"这里可双击"必须也能被键盘触达：
+    // 标题是 role=button + tabIndex=0，Enter / 空格等价于双击。
+    const label = within(lineHeightRow()).getByRole("button", {
+      name: "行距（双击或按回车恢复默认）",
+    });
+    expect(label).toHaveAttribute("tabindex", "0");
+
+    // 非激活键必须放行：否则会把同排滑块的键盘操作一起吞掉。
+    fireEvent.keyDown(label, { key: "a" });
+    fireEvent.keyDown(label, { key: "ArrowUp" });
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(label, { key: "Enter" });
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    expect(onChange).toHaveBeenCalledWith({
+      ...DEFAULT_LAYOUT,
+      format_config: { accent: "#112233" },
+    });
+
+    fireEvent.keyDown(label, { key: " " });
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(2));
   });
 
   it("下限处不再继续减小", async () => {

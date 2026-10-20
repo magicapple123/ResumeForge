@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历预览：负责装配版面、工具栏与 iframe 交互，不在入口文件里堆叠测量细节。 */
+import { ReloadOutlined, ZoomInOutlined, ZoomOutOutlined } from "@ant-design/icons";
+import { Button, Tooltip, Typography } from "antd";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { measureResumeLayout, type LayoutMeasure } from "../utils/resumeLayoutMeasure";
@@ -10,6 +12,7 @@ import {
   LIVE_PROBE_STYLE_ID,
   MAX_ZOOM,
   MIN_PREVIEW_HEIGHT,
+  PAGE_GAP_PX,
   PREVIEW_BOTTOM_RESERVE,
   PREVIEW_HEIGHT_RATIO,
   PROBE_STYLE_ID,
@@ -52,12 +55,18 @@ interface Props {
   /** 实测高度，交给版面诊断使用。 */
   onMeasure?: (measure: LayoutMeasure) => void;
   /**
-   * 工具栏里的额外控件（简历版式：模板/字号/页数/行距）。
+   * 工具栏**第一行右侧**的控件：结构类版式（样式模板 / 版式模板 / 板块顺序 / 最大篇幅）。
    *
-   * 2026-10-20 从"画布上方单独一行"移进抓手那一行：用户要在同一行里边看边调，
-   * 两行控件把预览区又往下挤了一截。传入的是已构造好的节点，预览本身不关心内容。
+   * P2 起工具栏是两行、且由两个**具名插槽**分别喂数据（D4）：结构类与度量类性质不同，
+   * 同一行里会互相抢位置。传入的是已构造好的节点，预览本身不关心内容。
    */
-  toolbarExtra?: ReactNode;
+  templateControls?: ReactNode;
+  /**
+   * 工具栏**第二行左侧**的控件：度量类版式（字号 / 行距 / 页边距）。
+   *
+   * 缩放条不在工具栏里：它由预览自己渲染在纸面下方（缩放是"看"的动作，不是"改"的动作）。
+   */
+  measureControls?: ReactNode;
 }
 
 const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePreview(
@@ -71,7 +80,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     describeAnnotation,
     onLayoutStatus,
     onMeasure,
-    toolbarExtra,
+    templateControls,
+    measureControls,
   },
   ref,
 ) {
@@ -98,6 +108,9 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   const [measure, setMeasure] = useState<LayoutMeasure | null>(null);
   const [overflow, setOverflow] = useState(false);
   const [naturalWidth, setNaturalWidth] = useState(A4_WIDTH_PX);
+  // 页间隙（未缩放 px）＝ 左右页边距之和：页边距一变，两页之间的空白也跟着变，
+  // 所以它和列宽一样必须由实际渲染量出来（见 layoutFrame），不能写死 28mm。
+  const [pageGap, setPageGap] = useState(PAGE_GAP_PX);
 
   const updateAvailableSpace = useCallback(() => {
     const container = containerRef.current;
@@ -123,6 +136,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     }
     setOverflow(result.overflow);
     setNaturalWidth(result.naturalWidth);
+    setPageGap(result.pageGap);
     onLayoutStatus?.({ pages: pageCount, scale: result.scale, overflow: result.overflow });
   }, [onLayoutStatus, onMeasure, pageCount, paperHeight]);
 
@@ -258,6 +272,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     zoom,
     overflow,
     naturalWidth,
+    pageGap,
     measure,
   });
   // 纵向空间归外层弹窗/页面管理：放大后让外层变长，不再制造第二条内部纵向滚动条，
@@ -271,19 +286,18 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   return (
     <div>
       <ResumePreviewToolbar
-        extra={toolbarExtra}
+        templateControls={templateControls}
+        measureControls={measureControls}
         canEdit={Boolean(onEditTarget)}
         interactionMode={interactionMode}
         hoverChipRef={hoverChipRef}
         onRewriteHoverTarget={(path) => onEditTarget?.(path)}
-        scale={geometry.scale}
         onInteractionModeChange={setInteractionMode}
-        onAdjustZoom={adjustZoom}
-        onResetZoom={() => setZoom(1)}
       />
       <ResumePreviewCanvas
         warnings={warnings}
         overflow={overflow}
+        overflowClipped={geometry.overflowClipped}
         pagesNeeded={geometry.pagesNeeded}
         pageCount={pageCount}
         overflowAmountText={geometry.overflowAmountText}
@@ -297,11 +311,53 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         scale={geometry.scale}
         separatorCount={geometry.separatorCount}
         totalVisualPages={geometry.totalVisualPages}
+        pageGap={geometry.pageGap}
         html={html}
         containerRef={containerRef}
         iframeRef={iframeRef}
         onIframeLoad={handleFrameLoad}
       />
+      {/* 缩放条在**纸面下方**（P2b / D6）：缩放是"看"的动作，不是"改"的动作——
+          "看图 → 想放大 → 手就在图旁边"。它原先挤在工具栏里，把"改版式"的按钮
+          顶到同一行右侧去抢位置。缩放状态本身仍住在本组件（`zoom` / `adjustZoom` /
+          `setZoom`），Ctrl+滚轮与命令式句柄完全不受影响，这里只是换了渲染位置。 */}
+      <div className="resume-preview-zoom-row">
+        <Tooltip title="缩小预览">
+          <Button
+            type="text"
+            size="small"
+            aria-label="缩小预览"
+            icon={<ZoomOutOutlined />}
+            onClick={() => adjustZoom(-0.1)}
+          />
+        </Tooltip>
+        <Typography.Text type="secondary" className="resume-preview-zoom-label">
+          {Math.round(geometry.scale * 100)}%
+        </Typography.Text>
+        <Tooltip title="放大预览">
+          <Button
+            type="text"
+            size="small"
+            aria-label="放大预览"
+            icon={<ZoomInOutlined />}
+            onClick={() => adjustZoom(0.1)}
+          />
+        </Tooltip>
+        <Tooltip title="适应页面（重置缩放）">
+          <Button
+            type="text"
+            size="small"
+            aria-label="适应页面"
+            icon={<ReloadOutlined />}
+            onClick={() => setZoom(1)}
+          />
+        </Tooltip>
+        {/* 快捷键提示：Ctrl+滚轮缩放早已实现，但没有任何地方告诉用户——用户只能一个个
+            按钮试。常驻在缩放控件旁边而不是做成一次性引导，因为"想放大看一眼"随时会发生。 */}
+        <Typography.Text type="secondary" className="resume-preview-zoom-hint">
+          按住 Ctrl 滚滚轮可缩放
+        </Typography.Text>
+      </div>
     </div>
   );
 });

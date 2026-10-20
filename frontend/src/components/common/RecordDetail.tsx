@@ -10,7 +10,8 @@
  * 是无效 HTML。外层用 group，单独的原生按钮承接键盘操作，内层动作与它互为兄弟。
  * 鼠标点卡片正文时仍可打开详情，点击内部按钮则跳过。判定在 `recordDetailCore.ts`。
  */
-import { Divider, Drawer, Empty, Space, Typography } from "antd";
+import { Divider, Drawer, Space, Typography } from "antd";
+import EmptyState from "./EmptyState";
 import type { ReactNode } from "react";
 import { useCallback } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
@@ -117,7 +118,7 @@ export function RecordDetailDrawer({
       </Space>
 
       {isEmpty ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这条记录没有更多内容" />
+        <EmptyState inline description="这条记录没有更多内容" />
       ) : (
         <>
           {visibleFields.length > 0 && (

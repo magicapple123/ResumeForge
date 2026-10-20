@@ -235,6 +235,7 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
         <Col xs={24} sm={12} xl={6}>
           <StatCard
             framed
+            className="stat-card-applied"
             title="投递总量"
             value={data.total_applications}
             hint={`有效投递 ${data.valid_applications}`}
@@ -243,6 +244,7 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
         <Col xs={24} sm={12} xl={6}>
           <StatCard
             framed
+            className="stat-card-interview"
             title="面试率"
             value={formatRate(data.interview_rate)}
             hint={`面试 ${data.interview_count} / 有效投递 ${data.valid_applications}`}
@@ -251,6 +253,7 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
         <Col xs={24} sm={12} xl={6}>
           <StatCard
             framed
+            className="stat-card-assessment"
             title="笔试通过率"
             value={formatRate(data.assessment_pass_rate)}
             hint={`进面试 ${data.assessment_to_interview_count} / 测评笔试 ${data.assessment_count}`}
@@ -259,6 +262,7 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
         <Col xs={24} sm={12} xl={6}>
           <StatCard
             framed
+            className="stat-card-offer"
             title="Offer 数"
             value={data.offer_count}
             valueStyle={{ color: "var(--rf-success-strong)" }}

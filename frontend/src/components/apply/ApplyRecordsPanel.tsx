@@ -16,7 +16,7 @@
 import { EyeOutlined, RedoOutlined } from "@ant-design/icons";
 import { App, Button, Empty, Pagination, Space, Tag, Tooltip, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import ApplyRecordDetailDrawer from "./ApplyRecordDetailDrawer";
 import ApplyRecordsToolbar from "./ApplyRecordsToolbar";
@@ -172,7 +172,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     await reload();
   };
 
-  const recordColumns: ColumnsType<ApplyRecord> = [
+  const recordColumns: TableColumnsType<ApplyRecord> = [
     {
       title: "岗位",
       dataIndex: "job_title",

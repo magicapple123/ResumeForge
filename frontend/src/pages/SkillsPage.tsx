@@ -22,7 +22,7 @@ import {
   Upload,
 } from "antd";
 import LoadingBlock from "../components/common/LoadingBlock";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import type { HTMLAttributes } from "react";
 import { useState } from "react";
 import { useApi } from "../hooks/useApi";
@@ -160,7 +160,7 @@ export default function SkillsPage() {
     },
   ];
 
-  const columns: ColumnsType<AssistantSkill> = [
+  const columns: TableColumnsType<AssistantSkill> = [
     {
       title: "技能",
       dataIndex: "name",

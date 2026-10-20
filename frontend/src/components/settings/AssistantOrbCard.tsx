@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 设置页里的「投投」悬浮球卡片：入口开关与提示标语开关，即改即存。 */
 
-import { App, Card, Divider, Space, Spin, Switch, Typography } from "antd";
+import { App, Card, Divider, Space, Switch, Typography } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import { useCallback, useEffect, useState } from "react";
 import { getAssistantOrbSetting, saveAssistantOrbSetting } from "../../api/settings";
 import type { AssistantOrbSetting } from "../../types/settings";
@@ -73,7 +74,7 @@ export default function AssistantOrbCard() {
         在应用各页面保留一个轻量的求职助手入口。点击它可以直接进入助手，静置后会自动贴边收起，
         不会遮挡主要内容。
       </Typography.Paragraph>
-      <Spin spinning={loading}>
+      <LoadingBlock spinning={loading}>
         <Space orientation="vertical" size={4}>
           <Switch
             checked={setting.enabled}
@@ -107,7 +108,7 @@ export default function AssistantOrbCard() {
             关闭后悬浮球不再弹出提示语，也不会在「我的资料」页提示你去改资料，其余功能不受影响。
           </Typography.Text>
         </Space>
-      </Spin>
+      </LoadingBlock>
     </Card>
   );
 }

@@ -19,10 +19,10 @@ export default function BatchDeleteButton({ count, noun, disabled = false, onDel
       okText="删除"
       cancelText="取消"
       okButtonProps={{ danger: true }}
-      disabled={disabled || count === 0}
+      disabled={disabled || count === 0 || undefined}
       onConfirm={onDelete}
     >
-      <Button danger disabled={disabled || count === 0}>
+      <Button danger disabled={disabled || count === 0 || undefined}>
         删除所选
       </Button>
     </Popconfirm>

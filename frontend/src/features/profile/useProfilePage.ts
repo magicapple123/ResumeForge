@@ -4,11 +4,19 @@
 import { App, Form, Upload } from "antd";
 import type { UploadProps } from "antd";
 import { useEffect, useRef, useState } from "react";
+import type { ComponentProps } from "react";
 import { getProfile, parseProfileText, saveProfile } from "../../api/profile";
+import { isCancellation } from "../../api/client";
 import { normalizeSectionOrder } from "../../components/profile/ProfileSectionConfig";
+import type { RecognitionReviewRow } from "../../components/profile/RecognitionReviewList";
+import type ProfileTextModal from "../../components/profile/ProfileTextModal";
 import { attachmentInputs, useRecognitionFiles } from "../../hooks/useRecognitionFiles";
-import type { Profile, RecognitionSource } from "../../types";
-import { mergeParsedProfileValues } from "../../utils/profileText";
+import type { Profile, ProfileTextParseResult, RecognitionSource } from "../../types";
+import {
+  mergeParsedProfileValues,
+  profileToReviewRows,
+  reviewRowsToProfile,
+} from "../../utils/profileText";
 import { useProfileSectionReorder } from "./useProfileSectionReorder";
 
 export type ProfileFormValues = Omit<Profile, "id" | "updated_at">;
@@ -103,6 +111,13 @@ export function useProfilePage(options: UseProfilePageOptions = {}) {
   const [profileTextUploadPercent, setProfileTextUploadPercent] = useState<number | null>(null);
   const [profileTextRecognized, setProfileTextRecognized] = useState("");
   const [profileTextSource, setProfileTextSource] = useState<RecognitionSource | null>(null);
+  /**
+   * 校对清单（项 13）：非 null 即"识别完了，等用户核对"。
+   *
+   * 识别结果**先落在这里**而不是直接写表单——识别是猜、改资料是写。用户点「确认填入」才
+   * 走 `applyParsedProfile()`；点「取消」就整份丢掉，表单一个字都不动。
+   */
+  const [profileTextRows, setProfileTextRows] = useState<RecognitionReviewRow[] | null>(null);
   const {
     files,
     reading: filesReading,
@@ -113,6 +128,10 @@ export function useProfilePage(options: UseProfilePageOptions = {}) {
   } = useRecognitionFiles();
   const photoReadId = useRef(0);
   const profileTextRequestId = useRef(0);
+  /** 识别请求的中止器：「取消识别」要能真的把请求掐掉，而不是只改界面。 */
+  const profileTextAbortRef = useRef<AbortController | null>(null);
+  /** 最近一次识别结果：确认填入时要拿它当基线（区分"改过的"与"原样"）。 */
+  const parsedRef = useRef<ProfileTextParseResult | null>(null);
   const savedValues = useRef<ProfileFormValues | null>(null);
   const photo = Form.useWatch("photo", form) ?? "";
   const sectionReorder = useProfileSectionReorder({ editing, saving, photoReading });
@@ -168,8 +187,12 @@ export function useProfilePage(options: UseProfilePageOptions = {}) {
 
   const closeProfileTextModal = () => {
     profileTextRequestId.current += 1;
+    profileTextAbortRef.current?.abort();
+    profileTextAbortRef.current = null;
+    parsedRef.current = null;
     setProfileTextParsing(false);
     setProfileTextUploadPercent(null);
+    setProfileTextRows(null);
     clearFiles();
     setProfileTextOpen(false);
   };
@@ -248,12 +271,21 @@ export function useProfilePage(options: UseProfilePageOptions = {}) {
     return false;
   };
 
+  /** 「取消识别」：掐掉请求。界面复位由 `parseProfile` 的 finally 统一负责。 */
+  const cancelParse = () => {
+    profileTextAbortRef.current?.abort();
+    profileTextAbortRef.current = null;
+  };
+
   const parseProfile = async () => {
     const text = profileText.trim();
     if (!text && files.length === 0) {
       message.warning("请先粘贴个人资料，或添加截图、上传文档");
       return;
     }
+    // 每次识别一个独立的中止器：取消只影响这一次请求。
+    const controller = new AbortController();
+    profileTextAbortRef.current = controller;
     setProfileTextParsing(true);
     const requestId = ++profileTextRequestId.current;
     setProfileTextUploadPercent(0);
@@ -267,48 +299,90 @@ export function useProfilePage(options: UseProfilePageOptions = {}) {
         (percent) => {
           if (requestId === profileTextRequestId.current) setProfileTextUploadPercent(percent);
         },
+        controller.signal,
       );
       if (requestId !== profileTextRequestId.current) return;
       const { warnings, parse_engine: recognitionSource } = parsed;
-      const currentValues = form.getFieldsValue(true) as Partial<ProfileFormValues>;
-      const merged = mergeParsedProfileValues(currentValues as ProfileFormValues, parsed);
-      form.setFieldsValue({ ...merged, section_order: getSectionOrder() });
+      // 阶段二：识别结果**先落成清单**，等用户核对后再写表单（项 13 / D23）。
+      parsedRef.current = parsed;
       setProfileTextWarnings(warnings);
       setProfileTextRecognized(parsed.recognized_text ?? "");
       // 提示条会消失，但"是 AI 还是本地规则"要一直留在弹窗里。
       setProfileTextSource(recognitionSource);
-      message.success(
-        `${recognitionSource === "ai" ? "已使用 AI" : "已使用本地规则"}识别并填入资料，请核对后保存`,
-      );
-      // 识别成功就该收尾了：识别结果已回填表单，弹窗没有继续停留的价值——用户要
-      // 做的是回到资料页核对并保存，而不是盯着弹窗里那份原始抄录。
-      closeProfileTextModal();
-      // 识别入口在编辑态页头上，正常情况下已在编辑；防御兜底：不在编辑态就把编辑
-      // 打开，否则回填的值会锁在一屏禁用的输入框里。
-      if (!editing) setEditing(true);
-      // setFieldsValue 不触发 onValuesChange，页面侧的未保存警示感知不到这次回填；
-      // 显式通知置脏，"识别填入后未保存"的保护才不落空。
-      optionsRef.current.onProfileParsed?.();
-      optionsRef.current.activateResumeWorkspace?.();
+      setProfileTextRows(profileToReviewRows(parsed));
     } catch (err) {
       if (requestId !== profileTextRequestId.current) return;
-      setProfileTextWarnings([]);
-      setProfileTextRecognized("");
-      setProfileTextSource(null);
-      message.error(err instanceof Error ? err.message : "识别个人资料失败");
+      // 用户自己点了「取消识别」：静默回到输入态，不弹错误（这不是失败）。
+      if (!isCancellation(err)) {
+        setProfileTextWarnings([]);
+        setProfileTextRecognized("");
+        setProfileTextSource(null);
+        setProfileTextRows(null);
+        parsedRef.current = null;
+        message.error(err instanceof Error ? err.message : "识别个人资料失败");
+      }
     } finally {
       if (requestId === profileTextRequestId.current) {
         setProfileTextParsing(false);
         setProfileTextUploadPercent(null);
       }
+      if (profileTextAbortRef.current === controller) profileTextAbortRef.current = null;
     }
   };
 
+  /**
+   * 「确认填入」：把校对后的清单写进表单。
+   *
+   * `reviewRowsToProfile(rows, parsed)` 以识别结果为基线，只返回**用户改过**的值，
+   * 所以"原样没动"的字段一个都不会被这里覆盖；空字段仍由 `mergeParsedProfileValues`
+   * 挡住（它只覆盖非空值）。
+   */
+  const applyParsedProfile = () => {
+    const parsed = parsedRef.current;
+    const rows = profileTextRows;
+    if (!parsed || rows === null) return;
+    const edited = reviewRowsToProfile(rows, parsed);
+    const currentValues = form.getFieldsValue(true) as Partial<ProfileFormValues>;
+    const merged = mergeParsedProfileValues(
+      currentValues as ProfileFormValues,
+      {
+        ...parsed,
+        ...edited,
+      } as ProfileTextParseResult,
+    );
+    form.setFieldsValue({ ...merged, section_order: getSectionOrder() });
+    message.success(
+      `${parsed.parse_engine === "ai" ? "已使用 AI" : "已使用本地规则"}识别并填入资料，请核对后保存`,
+    );
+    // 识别入口在编辑态页头上，正常情况下已在编辑；防御兜底：不在编辑态就把编辑
+    // 打开，否则回填的值会锁在一屏禁用的输入框里。
+    if (!editing) setEditing(true);
+    // setFieldsValue 不触发 onValuesChange，页面侧的未保存警示感知不到这次回填；
+    // 显式通知置脏，"识别填入后未保存"的保护才不落空。
+    optionsRef.current.onProfileParsed?.();
+    optionsRef.current.activateResumeWorkspace?.();
+    closeProfileTextModal();
+  };
+
+  /**
+   * 「取消」：放弃这次识别结果。**表单一个字都不动**，弹窗关掉，下次从头开始。
+   */
+  const discardParsedProfile = () => {
+    parsedRef.current = null;
+    setProfileTextRows(null);
+    setProfileTextWarnings([]);
+    setProfileTextRecognized("");
+    setProfileTextSource(null);
+    closeProfileTextModal();
+  };
+
   const openProfileTextModal = () => {
+    parsedRef.current = null;
     setProfileText("");
     setProfileTextWarnings([]);
     setProfileTextRecognized("");
     setProfileTextSource(null);
+    setProfileTextRows(null);
     clearFiles();
     setProfileTextOpen(true);
   };
@@ -316,10 +390,42 @@ export function useProfilePage(options: UseProfilePageOptions = {}) {
   const handleProfileTextChange = (value: string) => {
     // 内容改了，上一次识别的来源与抄录都不再对应当前内容。
     setProfileText(value);
+    parsedRef.current = null;
+    setProfileTextRows(null);
     setProfileTextWarnings([]);
     setProfileTextRecognized("");
     setProfileTextSource(null);
   };
+
+  /**
+   * 粘贴识别弹窗的整套 props。
+   *
+   * 在这里拼装而不是让页面拼：这些值全部来自本 hook 的 state，页面再抄一遍只是
+   * 让"谁拥有这份状态"变模糊（而且复制粘贴的字段清单最容易漏一项）。
+   * `satisfies` 是刻意的——弹窗新增必填 prop 时这里会立刻编译失败。
+   */
+  const profileTextModal = {
+    open: profileTextOpen,
+    text: profileText,
+    warnings: profileTextWarnings,
+    parsing: profileTextParsing,
+    uploadPercent: profileTextUploadPercent,
+    recognizedText: profileTextRecognized,
+    recognitionSource: profileTextSource,
+    files,
+    filesReading,
+    rows: profileTextRows,
+    onRowsChange: setProfileTextRows,
+    onApply: applyParsedProfile,
+    onDiscard: discardParsedProfile,
+    onCancelParse: cancelParse,
+    onTextChange: handleProfileTextChange,
+    onAddFiles: (incoming: File[]) => void addFiles(incoming),
+    onRemoveFile: removeFile,
+    onPasteFiles,
+    onClose: closeProfileTextModal,
+    onParse: () => void parseProfile(),
+  } satisfies ComponentProps<typeof ProfileTextModal>;
 
   return {
     form,
@@ -338,6 +444,7 @@ export function useProfilePage(options: UseProfilePageOptions = {}) {
     profileTextUploadPercent,
     profileTextRecognized,
     profileTextSource,
+    profileTextRows,
     files,
     filesReading,
     addFiles,
@@ -354,5 +461,7 @@ export function useProfilePage(options: UseProfilePageOptions = {}) {
     handleProfileTextChange,
     closeProfileTextModal,
     parseProfile,
+    /** 页面只需把它整个透传给 `ProfilePageModals`，不再自己拼字段。 */
+    profileTextModal,
   };
 }

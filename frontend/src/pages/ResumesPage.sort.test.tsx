@@ -232,3 +232,26 @@ describe("ResumesPage 列头排序（T2）", () => {
     );
   });
 });
+
+describe("ResumesPage 列头提示（项 3）", () => {
+  /**
+   * 四列各有自己的提示，且只说"按什么排"：三态机制由表头箭头自解释，而"目标岗位 vs
+   * 简历标题"这种易混列必须由文案交代语义（D3）。
+   */
+  it("四列提示分别是「按某列排序」，不再有三态说明", async () => {
+    renderPage();
+    await screen.findByText(RESUME.title);
+
+    for (const label of ["简历标题", "目标岗位", "创建时间", "最近修改"]) {
+      // 提示挂在列标题节点上（antd 把 column.title 包进 Tooltip），hover 它才会出现。
+      const trigger = (header(label).querySelector(".ant-table-column-title") ??
+        header(label)) as HTMLElement;
+      fireEvent.mouseEnter(trigger);
+      expect(await screen.findByText(`按${label}排序`)).toBeInTheDocument();
+      fireEvent.mouseLeave(trigger);
+    }
+
+    // 老文案讲的是机制（"点击排序，再点反向，第三次取消"），已经删掉。
+    expect(screen.queryByText(/第三次取消/)).toBeNull();
+  });
+});

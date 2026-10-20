@@ -22,9 +22,9 @@ import {
   Input,
   InputNumber,
   Space,
-  Spin,
   Typography,
 } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import { useCallback, useEffect, useState } from "react";
 import { getSearchConfig, saveSearchConfig } from "../../api/settings";
 import type { SearchConfig, SearchSource } from "../../types";
@@ -168,7 +168,7 @@ export default function SearchCard() {
         />
       )}
 
-      <Spin spinning={loading}>
+      <LoadingBlock spinning={loading}>
         <Space orientation="vertical" size="large" style={{ width: "100%" }}>
           <div>
             <Typography.Text strong>搜索来源</Typography.Text>
@@ -257,7 +257,7 @@ export default function SearchCard() {
             )}
           </Flex>
         </Space>
-      </Spin>
+      </LoadingBlock>
     </Card>
   );
 }

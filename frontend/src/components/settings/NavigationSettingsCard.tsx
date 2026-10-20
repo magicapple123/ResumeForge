@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import { App, Button, Card, Spin, Switch, Tag, Typography } from "antd";
+import { App, Button, Card, Switch, Tag, Typography } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import { useMemo, useState } from "react";
 import { saveNavigationVisibility } from "../../api/settings";
 import { useNavigationVisibility } from "../../hooks/useNavigationVisibility";
@@ -92,7 +93,7 @@ export default function NavigationSettingsCard() {
         隐藏只会移除导航入口，不会删除数据，也不会禁止直接访问对应页面。首页、岗位广场、简历中心、我的资料、投递台和设置始终保留。
       </Typography.Paragraph>
       {/* 按 group 分「核心入口 / 我的空间」两块，组内两列网格（窄屏单列）的紧凑布局。 */}
-      <Spin spinning={loading}>
+      <LoadingBlock spinning={loading}>
         <div className="navigation-settings-groups">
           {GROUPS.map((group) => (
             <section key={group} className="navigation-settings-group">
@@ -114,7 +115,7 @@ export default function NavigationSettingsCard() {
             </section>
           ))}
         </div>
-      </Spin>
+      </LoadingBlock>
     </Card>
   );
 }

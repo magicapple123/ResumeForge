@@ -262,21 +262,20 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
         title={zoomTemplate ? `${zoomTemplate.label} · 完整预览` : "完整预览"}
         open={zoomTemplate !== null}
         onCancel={() => setZoomTemplate(null)}
+        // 只留主动作（用这个模板）。先前那颗「关闭」与右上角 × 重复，属于同一弹窗的
+        // 第二/第三个关闭入口；Esc 与点遮罩同样映射 onCancel。
         footer={
           zoomTemplate ? (
-            <Space>
-              <Button onClick={() => setZoomTemplate(null)}>关闭</Button>
-              <Button
-                type="primary"
-                disabled={zoomTemplate.name === selectedName}
-                onClick={() => {
-                  onSelect(zoomTemplate.name);
-                  setZoomTemplate(null);
-                }}
-              >
-                {zoomTemplate.name === selectedName ? "当前使用" : "用这个模板"}
-              </Button>
-            </Space>
+            <Button
+              type="primary"
+              disabled={zoomTemplate.name === selectedName}
+              onClick={() => {
+                onSelect(zoomTemplate.name);
+                setZoomTemplate(null);
+              }}
+            >
+              {zoomTemplate.name === selectedName ? "当前使用" : "用这个模板"}
+            </Button>
           ) : null
         }
         width="min(900px, 96vw)"

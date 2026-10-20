@@ -8,7 +8,7 @@
  * （记录弹窗的 RecordFormValues 与旧设置表单的 SettingsFormValues）都带它。
  */
 import { Form } from "antd";
-import type { FormInstance } from "antd/es/form";
+import type { FormInstance } from "antd";
 import { useRef } from "react";
 import { DEFAULT_MAX_TOKENS, MIN_MAX_TOKENS, UNLIMITED_MAX_TOKENS } from "../SettingsConfig";
 

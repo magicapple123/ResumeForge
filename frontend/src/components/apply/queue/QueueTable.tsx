@@ -8,7 +8,7 @@
 import { MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Menu, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useEffect, useRef, useState } from "react";
 import type { ApplyQueueItem } from "../../../types";
@@ -62,7 +62,7 @@ export function QueueTable({
    * 招呼语是用户可编辑的长文本，之前不设宽度时它会跟「准入 / 状态」抢空间——编辑过一条
    * 队列条目之后整张表就挤成一团。定宽 + 省略号让每列宽度只由表头决定，内容长短不再影响排版。
    */
-  const columns: ColumnsType<ApplyQueueItem> = [
+  const columns: TableColumnsType<ApplyQueueItem> = [
     {
       title: "岗位",
       dataIndex: "job_title",

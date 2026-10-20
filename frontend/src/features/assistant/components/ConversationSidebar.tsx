@@ -22,16 +22,15 @@ import {
   App,
   Button,
   Checkbox,
-  Empty,
   Input,
   Listy,
-  Spin,
   Popconfirm,
   Popover,
   Segmented,
   Tooltip,
   Typography,
 } from "antd";
+import EmptyState from "../../../components/common/EmptyState";
 import { memo, useState } from "react";
 import type {
   AssistantConversationBrief,
@@ -323,17 +322,17 @@ function ConversationSidebar({
         onChange={(value) => setFilter(value as ConversationFilter)}
       />
       {/* 首次加载不显示「暂无对话」（那是空态）：用 LoadingBlock 体系给加载提示；
-          刷新已有列表仍用 Spin 遮罩，避免刷新时整列闪没。 */}
+          刷新已有列表仍用 LoadingBlock 的遮罩模式（spinning），避免刷新时整列闪没。 */}
       {visibleConversations.length === 0 ? (
         <div className="assistant-conversation-list">
           {loading ? (
             <LoadingBlock tip="正在加载对话…" />
           ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无对话" />
+            <EmptyState inline description="暂无对话" />
           )}
         </div>
       ) : (
-        <Spin spinning={loading}>
+        <LoadingBlock spinning={loading}>
           <Listy
             className="assistant-conversation-list"
             items={visibleConversations}
@@ -460,7 +459,7 @@ function ConversationSidebar({
               </RowContextMenu>
             )}
           />
-        </Spin>
+        </LoadingBlock>
       )}
     </aside>
   );

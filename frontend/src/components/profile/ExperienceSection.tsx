@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 实习/工作经历分区。 */
 import { Col, Form, Input, Row } from "antd";
-import type { FormListFieldData } from "antd/es/form/FormList";
+import type { FormListFieldData } from "antd";
 import PartialDateSelect from "./PartialDateSelect";
 import ProfileSection from "./ProfileSection";
 

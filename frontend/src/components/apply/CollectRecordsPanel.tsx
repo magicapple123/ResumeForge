@@ -7,7 +7,8 @@
  * 结果如何（已暂存 / 重复 / 失败原因）。
  */
 import { HistoryOutlined } from "@ant-design/icons";
-import { Alert, Button, Collapse, Empty, Pagination, Space, Tag, Typography } from "antd";
+import { Alert, Button, Collapse, Pagination, Space, Tag, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { listApplyTasksPage } from "../../api/apply";
@@ -102,10 +103,7 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
 
   if (records.length === 0) {
     return (
-      <Empty
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="还没有采集记录。到「自动采集」页签设置条件并点「开始采集」，这里就会出现每一次的记录。"
-      />
+      <EmptyState description="还没有采集记录。到「自动采集」页签设置条件并点「开始采集」，这里就会出现每一次的记录。" />
     );
   }
 

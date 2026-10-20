@@ -14,7 +14,7 @@
  */
 import { QuestionCircleOutlined } from "@ant-design/icons";
 import { App, Button, Card, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import {
   SCOPE_LABELS,
@@ -150,7 +150,7 @@ export default function ShortcutSettingsCard() {
     message.success(`已恢复默认快捷键（共 ${Object.keys(next.bindings).length} 项）`);
   };
 
-  const columns: ColumnsType<ShortcutAction> = [
+  const columns: TableColumnsType<ShortcutAction> = [
     {
       title: "动作",
       key: "label",

@@ -6,7 +6,7 @@
  * 会明确显示"第 N/6 轮"，用户始终知道还剩几个问题；助手那边则是自由对话。
  */
 import { ArrowLeftOutlined, StopOutlined, ThunderboltOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Modal, Space, Tabs, Tag, Typography } from "antd";
+import { App, Button, Form, Input, Space, Tabs, Tag, Typography } from "antd";
 import LoadingBlock from "../components/common/LoadingBlock";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -44,7 +44,7 @@ function parseLinkedJobId(raw: string | null): number | undefined {
 }
 
 export default function InterviewPage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const navigate = useNavigate();
   // 岗位详情「模拟面试」深链带来的预填（RF-11）：进页面就把关联岗位选好。
   const [searchParams] = useSearchParams();
@@ -170,7 +170,7 @@ export default function InterviewPage() {
 
   const endEarly = () => {
     if (!active) return;
-    Modal.confirm({
+    modal.confirm({
       title: "结束这场面试？",
       content: "结束后会根据已有的问答生成评分报告，不能再补充回答。",
       okText: "结束并出报告",
@@ -205,7 +205,7 @@ export default function InterviewPage() {
   const removeSelected = () => {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
-    Modal.confirm({
+    modal.confirm({
       title: `删除选中的 ${ids.length} 场面试？`,
       content: "删除后可在回收站找回。",
       okText: "删除",

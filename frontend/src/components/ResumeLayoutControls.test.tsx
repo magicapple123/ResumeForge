@@ -11,7 +11,7 @@
  * 句柄抽到 `ResumeLayoutControls.testkit.tsx` 共用；本文件的 api mock 与
  * `beforeEach` 保持自持（vitest 的 mock 注册不跨文件 hoist）。
  */
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import type { ResumeLayout } from "../types";
@@ -277,37 +277,53 @@ describe("ResumeLayoutControls · 板块顺序", () => {
 });
 
 /**
- * 页边距（T5）：从导出面板搬到版式栏后的写入/复位/边界。
+ * 页边距（T5 → 项 4a 滑块化）：从导出面板搬到版式栏后的写入/复位/边界。
  *
  * 落点必须是 `format_config.page_padding`——预览、保存、导出读的都是这一个键；
  * 写别处就会出现"预览改了、导出没变"。
+ *
+ * 形态从 `InputNumber` 改成滑块（与行距同构）：`spinbutton` 那套查询已不存在，
+ * 这里改按 `slider` + 两端 ±1 按钮 + `${value}mm` 读数断言。
  */
-describe("ResumeLayoutControls · 页边距（T5）", () => {
+describe("ResumeLayoutControls · 页边距（T5 / 4a）", () => {
   function lastLayout(onChange: ReturnType<typeof vi.fn>) {
     // tsconfig 的 lib 没到 ES2022，不能用 `Array.prototype.at`。
     const calls = onChange.mock.calls;
     return calls[calls.length - 1]?.[0] as ResumeLayout;
   }
 
-  it("输入数值写进 format_config.page_padding", async () => {
-    const onChange = renderControls();
-
-    const input = await screen.findByRole("spinbutton", { name: "页边距" });
-    fireEvent.change(input, { target: { value: "14" } });
-
-    await waitFor(() => expect(onChange).toHaveBeenCalled());
-    expect(lastLayout(onChange).format_config).toEqual({ page_padding: 14 });
-  });
-
-  it("没设过时不写字：输入框留空显示「随模板」，复位按钮禁用", async () => {
+  it("滑块与 ±1 按钮都说同一件事：没设过时停在模板默认 14mm", async () => {
     renderControls();
 
-    const input = await screen.findByRole("spinbutton", { name: "页边距" });
-    // 留空 + 占位文案：写一个"看起来已设置"的数字会让人以为它被写进了这份简历。
-    // （「随模板」这三个字行距控件也会渲染，所以按 placeholder 定位本控件。）
-    expect(input).toHaveValue("");
-    expect(input).toHaveAttribute("placeholder", "随模板");
-    expect(screen.getByRole("button", { name: "恢复默认页边距" })).toBeDisabled();
+    const slider = await screen.findByRole("slider", { name: /页边距/ });
+    // classic 的模板默认页边距是 14mm（目录下发），不是写死的数字。
+    expect(slider).toHaveAttribute("aria-valuenow", "14");
+    expect(screen.getByText("14mm")).toBeInTheDocument();
+    // 两端按钮在默认位置都可用（8 < 14 < 26）。
+    expect(screen.getByRole("button", { name: "减小页边距" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "增大页边距" })).toBeEnabled();
+  });
+
+  it("「增大页边距」一次 +1mm，写进 format_config.page_padding", async () => {
+    const onChange = renderControls();
+
+    const plus = await screen.findByRole("button", { name: "增大页边距" });
+    fireEvent.click(plus);
+
+    // 读数先跟着走（本地值），提交在 120ms 防抖后。
+    expect(screen.getByText("15mm")).toBeInTheDocument();
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(lastLayout(onChange).format_config).toEqual({ page_padding: 15 });
+  });
+
+  it("没设过时标「随模板」，且没有独立的复位按钮", async () => {
+    renderControls();
+
+    // 恢复默认已改成"双击标题"，独立的 ↺ 按钮不再存在。
+    expect(screen.queryByRole("button", { name: "恢复默认页边距" })).toBeNull();
+    // 锚点取标题文字，再向上取整行：「随模板」行距那一行也有，全局查询会多重命中。
+    const row = screen.getByText("页边距").closest(".ant-space") as HTMLElement;
+    expect(within(row).getByText("随模板")).toBeInTheDocument();
   });
 
   it("复位删键而不是写回模板默认值（模板更新时这些简历才跟着变）", async () => {
@@ -315,7 +331,7 @@ describe("ResumeLayoutControls · 页边距（T5）", () => {
       layout: { ...DEFAULT_LAYOUT, format_config: { page_padding: 14, line_height: 1.6 } },
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "恢复默认页边距" }));
+    fireEvent.doubleClick(await screen.findByText("页边距"));
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const next = lastLayout(onChange);
@@ -324,15 +340,19 @@ describe("ResumeLayoutControls · 页边距（T5）", () => {
     expect(next.format_config).toEqual({ line_height: 1.6 });
   });
 
-  it("边界：输入框声明 8–26，程序化赋值再被 clamp 收一道（不许把 40 发给后端）", async () => {
-    renderControls();
-    const input = await screen.findByRole("spinbutton", { name: "页边距" });
+  it("边界：滑块声明 8–26，两端按钮到边界禁用，程序化赋值再被 clamp 收一道", async () => {
+    renderControls({ layout: { ...DEFAULT_LAYOUT, format_config: { page_padding: 8 } } });
+    const slider = await screen.findByRole("slider", { name: /页边距/ });
+    expect(slider).toHaveAttribute("aria-valuemin", "8");
+    expect(slider).toHaveAttribute("aria-valuemax", "26");
+    // 已在下限：只能往上。
+    expect(screen.getByRole("button", { name: "减小页边距" })).toBeDisabled();
+    cleanup();
 
-    // 用户手动输入由 antd 的 min/max 挡住（越界时它只会修正显示，不触发 onChange）。
-    expect(input).toHaveAttribute("aria-valuemin", "8");
-    expect(input).toHaveAttribute("aria-valuemax", "26");
+    renderControls({ layout: { ...DEFAULT_LAYOUT, format_config: { page_padding: 26 } } });
+    expect(await screen.findByRole("button", { name: "增大页边距" })).toBeDisabled();
 
-    // 历史草稿 / 粘贴 / 程序化赋值绕过输入框时，靠唯一的实现收口：
+    // 历史草稿 / 粘贴 / 程序化赋值绕过控件时，靠唯一的实现收口：
     // 后端白名单之外的值会被整条丢弃（"设了 30mm，导出还是默认"）。
     expect(clampPagePadding(3)).toBe(8);
     expect(clampPagePadding(40)).toBe(26);

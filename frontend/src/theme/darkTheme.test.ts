@@ -64,10 +64,17 @@ describe("darkTheme token", () => {
       headerColor: darkPalette.tableHeaderText,
       rowHoverBg: darkPalette.rowHoverBg,
       borderColor: darkPalette.border,
+      // 选中行在深色下必须是「比卡片面亮一档的蓝灰」，不能沿用浅色 brand-tint
+      // （那条 `!important` 在审计 §P1-3 被换成 token，这里钉住换完的结果）。
+      rowSelectedBg: darkPalette.selectedBg,
+      rowSelectedHoverBg: darkPalette.selectedBg,
     });
     expect(darkTheme.components?.Menu).toEqual({
       itemSelectedBg: darkPalette.selectedBg,
       itemSelectedColor: darkPalette.selectedText,
+      // 尺寸三项刻意不迁 token（会连带改掉下拉菜单/移动端抽屉的菜单项高度，
+      // 见 appTheme.ts 的 Menu 注释），所以这里只剩颜色与选中条。
+      activeBarBorderWidth: 0,
     });
     expect(darkTheme.components?.Select).toEqual({
       optionSelectedBg: darkPalette.selectedBg,
@@ -79,6 +86,28 @@ describe("darkTheme token", () => {
     expect(darkTheme.components?.Menu?.itemSelectedBg).not.toBe(
       appTheme.components?.Menu?.itemSelectedBg,
     );
+  });
+
+  it("弹窗 token 与 dark-tokens.css 同源：标题条/页脚用卡片面，不用次级面", () => {
+    // 深色下 surface-alt 会在标题/页脚处压出两条"黑条"（用户 2026-10-20 截图反馈，
+    // 见 dark-tokens.css 的注释）。token 若编码成 surfaceAlt，删掉 CSS 覆写就会复发。
+    expect(darkTheme.components?.Modal).toEqual({
+      headerBg: darkPalette.surface,
+      titleColor: darkPalette.brandText,
+      titleFontSize: 16,
+      contentBg: darkPalette.surface,
+      footerBg: darkPalette.surface,
+    });
+    expect(darkTheme.components?.Modal?.headerBg).not.toBe(darkPalette.surfaceAlt);
+  });
+
+  it("Menu 的选中条归零由 token 表达，尺寸仍留在 CSS（跨组件零影响）", () => {
+    // 为什么尺寸不迁：itemHeight/itemMarginBlock/itemBorderRadius 是组件级全局值，
+    // 会连带改掉下拉菜单（QueueTable）与移动端抽屉（MobileNavigation）的菜单项高度。
+    expect(darkTheme.components?.Menu?.activeBarBorderWidth).toBe(0);
+    expect(appTheme.components?.Menu?.activeBarBorderWidth).toBe(0);
+    expect(darkTheme.components?.Menu).not.toHaveProperty("itemHeight");
+    expect(appTheme.components?.Menu).not.toHaveProperty("itemHeight");
   });
 
   it("走 darkAlgorithm 而不是手写全套 token", () => {

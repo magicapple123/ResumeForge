@@ -16,7 +16,6 @@ import {
   Checkbox,
   Collapse,
   Descriptions,
-  Modal,
   Pagination,
   Space,
   Spin,
@@ -24,7 +23,7 @@ import {
   Tag,
   Typography,
 } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { CheckSquareOutlined } from "@ant-design/icons";
 import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
@@ -52,7 +51,7 @@ function shortTime(value: string): string {
   return (value || "").replace("T", " ").slice(0, 16);
 }
 
-const itemColumns: ColumnsType<WebFormRecordItem> = [
+const itemColumns: TableColumnsType<WebFormRecordItem> = [
   {
     title: "字段",
     key: "field",
@@ -86,7 +85,7 @@ interface Props {
 }
 
 export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   // 服务端分页（RF-08）：页码/总数来自分页端点；列表行是摘要（无填写值与页面快照），
   // 展开某条时再取详情（getWebFormRecord），不让真实填写值随列表整体下发。
   const [page, setPage] = useState(1);
@@ -153,7 +152,7 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
   const removeSelected = () => {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
-    Modal.confirm({
+    modal.confirm({
       title: `删除选中的 ${ids.length} 条填充记录？`,
       content: "会进回收站，之后可以恢复。",
       okText: "删除",

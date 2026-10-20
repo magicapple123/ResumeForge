@@ -9,6 +9,7 @@ import { App, Form } from "antd";
 import { useCallback, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { checkLLMThinking, saveLLMConfigRecord, testLLM, listLLMModels } from "../../api/settings";
+import { bumpLLMConfig } from "./llmConfigEvents";
 import { LLM_PRESETS } from "../../config";
 import type {
   LLMConfig,
@@ -396,6 +397,8 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
         ...mergedConfigFromForm(values, editingRecord),
       });
       setRecords((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      // 记录新增/改名后，页头下拉里的候选也要立刻变（否则要等下一次路由变化）。
+      bumpLLMConfig();
       setModalOpen(false);
       message.success(
         editingRecord

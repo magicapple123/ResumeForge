@@ -13,7 +13,8 @@ import {
   SaveOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Alert, App, Button, Card, Empty, Select, Space, Spin, Tag, Typography } from "antd";
+import { Alert, App, Button, Card, Empty, Select, Space, Tag, Typography } from "antd";
+import LoadingBlock from "./common/LoadingBlock";
 import { useEffect, useState } from "react";
 import {
   deleteQuestionBank,
@@ -340,7 +341,7 @@ export default function QuestionBankPanel({
       )}
 
       {loading ? (
-        <Spin />
+        <LoadingBlock />
       ) : error ? (
         <Alert type="error" showIcon title={error} />
       ) : !viewData ? (

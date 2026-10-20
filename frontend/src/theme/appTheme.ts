@@ -38,8 +38,38 @@ export const appTheme: ThemeConfig = {
       headerBg: palette.surfaceAlt,
       headerColor: palette.brand,
       rowHoverBg: palette.brandWash,
+      // 选中行底色：原先由 `styles/modules.css` 里一条 `!important` 硬压（审计 §P1-3），
+      // 现在改由组件 token 表达——深色那套才有自己的选中色，不再被浅色 tint 蒙住。
+      rowSelectedBg: palette.brandTint,
+      rowSelectedHoverBg: palette.brandTint,
     },
-    Menu: { itemSelectedBg: palette.brandTint, itemSelectedColor: palette.brand },
+    Menu: {
+      itemSelectedBg: palette.brandTint,
+      itemSelectedColor: palette.brand,
+      // 选中条由 antd 的 `::after` 画，原先用 `display: none` 抹掉；token 归零才是正确表达。
+      // 注意：`itemHeight` / `itemMarginBlock` / `itemBorderRadius` **故意不迁**——
+      // 它们是组件级全局 token，会连带改掉下拉菜单（`QueueTable`）与移动端抽屉
+      // （`MobileNavigation`）的菜单项高度（默认 `controlHeightLG` = 50 → 44）。
+      // 那两处不在本页的视觉验收范围内，所以尺寸仍留在 `styles/base.css` 的
+      // `.app-nav-menu .ant-menu-item`（只作用于侧栏）。
+      activeBarBorderWidth: 0,
+    },
+    /**
+     * 弹窗三段（标题条 / 内容 / 页脚）的表面色。
+     *
+     * 注意 antd 6.6.5 的 `Modal.ComponentToken` 只公开 6 个键（headerBg / titleLineHeight /
+     * titleFontSize / titleColor / contentBg / footerBg）——`headerPadding`、
+     * `headerBorderBottom`、`footerPadding`、`footerBorderTop`、`bodyPadding` 等只存在于
+     * `prepareComponentToken` 的**内部**返回类型里，写进 ThemeConfig 会直接 TS 报错。
+     * 所以内边距 / 分隔线仍留在 `styles/modules.css`（那里逐条标了 antd-override 理由）。
+     */
+    Modal: {
+      headerBg: palette.surfaceAlt,
+      titleColor: palette.brand,
+      titleFontSize: 16,
+      contentBg: palette.surface,
+      footerBg: palette.surfaceAlt,
+    },
     // Select 下拉"当前选中项"的底色：antd 默认取 controlItemBgActive（= colorPrimaryBg），
     // 而本主题品牌色 #16365c 过深过灰，antd 调色板对其算出的 colorPrimaryBg 是 #92989c
     // 中灰——下拉里的选中项就成了深灰底，与浅色表单反差刺眼（2026 用户截图反馈）。

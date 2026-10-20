@@ -16,20 +16,10 @@ import {
   PlusOutlined,
   SwapOutlined,
 } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Dropdown,
-  Empty,
-  Flex,
-  Spin,
-  Tag,
-  Tooltip,
-  Typography,
-} from "antd";
-import type { FormInstance } from "antd/es/form";
+import { Alert, App, Button, Card, Dropdown, Flex, Tag, Tooltip, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
+import LoadingBlock from "../common/LoadingBlock";
+import type { FormInstance } from "antd";
 import { useMemo, useState } from "react";
 import type {
   LLMConfigRecord,
@@ -173,10 +163,10 @@ export default function LLMConfigCard({
           style={{ marginBottom: 16 }}
           title="支持所有兼容 OpenAI Chat Completions 协议的模型服务（DeepSeek、豆包、Kimi、通义千问、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Ollama 等），也可切换到 Anthropic 原生协议直连 Claude。所有数据集共用这里的配置：每张卡片是一份已保存的记录，点卡片本体查看详情，可直接测试连接、切换「使用中」。API Key 加密保存在本地数据目录，不进入备份包。"
         />
-        <Spin spinning={recordsLoading}>
+        <LoadingBlock spinning={recordsLoading}>
           {records.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            <EmptyState
+              inline
               description="暂无配置记录，点右上「新增配置」创建第一份；当前生效的配置会继续正常使用"
             />
           ) : (
@@ -295,7 +285,7 @@ export default function LLMConfigCard({
               {recordsToggleNode}
             </Flex>
           )}
-        </Spin>
+        </LoadingBlock>
       </Card>
 
       <LLMRecordModal

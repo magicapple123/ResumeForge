@@ -12,7 +12,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
-import type { ResumeGenerateTask } from "../types";
+import type { ResumeDetail, ResumeGenerateTask } from "../types";
 import { resetBackgroundTasks } from "../utils/backgroundTasks";
 import { registerNotifyHost } from "../utils/taskNotify";
 import GenerateResumeModal from "./GenerateResumeModal";
@@ -64,7 +64,13 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   updateResumeLayout: apiMocks.updateResumeLayout,
   fetchResumeTemplates: apiMocks.fetchResumeTemplates,
 }));
-vi.mock("../api/settings", () => ({ getLLMConfig: apiMocks.getLLMConfig }));
+// 项 14 起版式栏里还有「简历字体」下拉，它会读已上传字体清单；这里给它一份空清单
+// （本文件只关心版式覆盖怎么落库，字体选择由 ResumeFontControl.test.tsx 单独守）。
+vi.mock("../api/settings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/settings")>()),
+  getLLMConfig: apiMocks.getLLMConfig,
+  listResumeFonts: vi.fn().mockResolvedValue({ items: [], active: null, max_bytes: 1 }),
+}));
 
 /** 一个正在运行的后台生成任务。用函数造值，让每个用例都能按需覆盖字段。 */
 function makeTask(overrides: Partial<ResumeGenerateTask> = {}): ResumeGenerateTask {
@@ -255,5 +261,124 @@ describe("GenerateResumeModal 回填只重算板块顺序（R6）", () => {
     expect(formatConfig.font_scale_adjust).toBeCloseTo(1.007, 2);
     // 板块顺序则按资料顺序重算；资料顺序等于内置默认时不写这个键。
     expect(formatConfig).not.toHaveProperty("section_order");
+  });
+});
+
+/**
+ * 预览期的版式重排（项 6 / D11 + C5）。
+ *
+ * 这一条专门守 C5 的第二种形态：原先 `applyLayout` 把 `setLayout(next)` 写在
+ * "没有 detail / 正在重排"的守卫**之前**，于是出现"滑块读数已经是新值、画面还是旧版式"
+ * ——比"整条丢弃"更隐蔽（保存后下次打开才看到跳变）。修法是把草稿推进统一挪到
+ * `onRendered`，所以这里的核心断言是：**渲染没成功之前，读数不许前进**。
+ */
+describe("GenerateResumeModal 预览期版式重排（P3）", () => {
+  const DETAIL: ResumeDetail = {
+    id: 7,
+    title: "生成出来的简历",
+    job_id: null,
+    job_title: "",
+    company: "",
+    source: "ai",
+    favorite: false,
+    note: "",
+    model: "demo-model",
+    enhancement_enabled: false,
+    enhancement_level: "balanced",
+    template: "classic",
+    format_name: "",
+    format_config: {},
+    page_limit: 1,
+    font_scale: "standard",
+    created_at: "2026-10-20T08:00:00",
+    content: {
+      photo: "",
+      name: "张三",
+      gender: "",
+      birth_year: "",
+      phone: "",
+      email: "",
+      city: "",
+      personal_website: "",
+      github: "",
+      job_intent: "",
+      summary: "",
+      education: [],
+      experience: [],
+      campus_experience: [],
+      projects: [],
+      skills: [],
+      awards: [],
+    },
+    warnings: [],
+    parse_error: "",
+    parent_revision_id: null,
+    rationale: "",
+    coverage_notes: [],
+  };
+
+  function deferred() {
+    let resolve!: (html: string) => void;
+    const promise = new Promise<string>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  }
+
+  /** 走完"生成 → 轮询到完成 → 进入预览阶段"这条真实链路。 */
+  async function openPreview() {
+    apiMocks.getResumeGenerateTask
+      .mockResolvedValueOnce(makeTask({ status: "running" }))
+      .mockResolvedValue(makeTask({ status: "completed", resume_id: 7 }));
+    apiMocks.getResume.mockResolvedValue(DETAIL);
+    apiMocks.renderResume.mockResolvedValue("<div>预览HTML</div>");
+    apiMocks.updateResumeLayout.mockResolvedValue({});
+
+    renderModal();
+    fireEvent.click(await screen.findByRole("button", { name: /开始生成/ }));
+    await waitFor(() => expect(apiMocks.getResume).toHaveBeenCalledWith(7));
+    // 版式控件出现即说明已经在预览阶段（配置阶段的页数选择器也是这三个，所以再用
+    // 「重新生成」按钮确认一次）。
+    await screen.findByRole("button", { name: /重新生成/ });
+  }
+
+  it("连续两次改版式只渲染 2 次，且读数在渲染成功前不前进", async () => {
+    await openPreview();
+
+    // 预览加载用掉的那一次渲染不算在内：从这里开始记账。
+    apiMocks.renderResume.mockReset();
+    const gate = deferred();
+    apiMocks.renderResume.mockReturnValueOnce(gate.promise).mockResolvedValue("<div>新版式</div>");
+
+    fireEvent.click(screen.getByText("2 页"));
+    fireEvent.click(screen.getByText("3 页"));
+
+    // 第一次还在飞：第二次只进"待渲染"，不重复发请求。
+    expect(apiMocks.renderResume).toHaveBeenCalledTimes(1);
+    // **C5 的核心**：读数没有前进，仍停在 1 页。旧实现在这里已经是 3 页了。
+    expect(screen.getByText("1 页").closest("label")).toHaveClass("ant-segmented-item-selected");
+    expect(screen.getByText("3 页").closest("label")).not.toHaveClass(
+      "ant-segmented-item-selected",
+    );
+    // 记录也还没写回（写回与"生效"必须是同一时刻）。
+    expect(apiMocks.updateResumeLayout).not.toHaveBeenCalled();
+
+    await act(async () => {
+      gate.resolve("<div>新版式</div>");
+      await gate.promise;
+    });
+
+    // 尾随合并：只补跑最后那一版（2 页从未渲染）。
+    await waitFor(() => expect(apiMocks.renderResume).toHaveBeenCalledTimes(2));
+    expect(apiMocks.renderResume.mock.calls[1][1]).toMatchObject({ page_limit: 3 });
+    await waitFor(() =>
+      expect(apiMocks.updateResumeLayout).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ page_limit: 3 }),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("3 页").closest("label")).toHaveClass("ant-segmented-item-selected"),
+    );
   });
 });

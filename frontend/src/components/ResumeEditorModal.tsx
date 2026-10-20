@@ -14,7 +14,6 @@ import {
   Space,
   Tabs,
   Tooltip,
-  Typography,
 } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -28,6 +27,8 @@ interface Props {
   onSave: (content: ResumeContent) => Promise<void>;
   title?: string;
   description?: string;
+  /** 渲染在说明行之上的额外内容（手写简历的「简历名称」输入，项 11）。 */
+  headerExtra?: ReactNode;
   saveLabel?: string;
   referencePanel?: ReactNode;
   /** 从预览点击进入时使用的结构化字段路径，如 projects.0.description.1。 */
@@ -67,6 +68,7 @@ import {
   SkillEditor,
   AwardEditor,
 } from "./resume-editor/ResumeSectionEditors";
+import EditorHeader from "./resume-editor/EditorHeader";
 import FieldRewritePanel from "./resume-editor/FieldRewritePanel";
 import { resolveEditorTarget } from "./resume-editor/ResumeEditorTarget";
 import { EDITOR_FIELD_SCROLL_OPTIONS } from "./resume-editor/editorFieldScroll";
@@ -84,6 +86,7 @@ export default function ResumeEditorModal({
   onSave,
   title = "手动调整简历内容",
   description,
+  headerExtra,
   saveLabel = "保存并更新预览",
   referencePanel,
   initialTarget,
@@ -435,23 +438,11 @@ export default function ResumeEditorModal({
             </div>
           )}
           <div className="resume-editor-main">
-            {description && (
-              <Typography.Text type="secondary" className="resume-editor-description">
-                {description}
-              </Typography.Text>
-            )}
-            {fillAll && (
-              <div className="resume-editor-fill-all">
-                <Button
-                  size="small"
-                  icon={<ImportOutlined />}
-                  aria-label="填入我的资料全部数据"
-                  onClick={fillAllFromProfile}
-                >
-                  填入我的资料全部数据
-                </Button>
-              </div>
-            )}
+            <EditorHeader
+              description={description}
+              onFillAll={fillAll ? fillAllFromProfile : undefined}
+              headerExtra={headerExtra}
+            />
             <Form
               form={form}
               layout="vertical"

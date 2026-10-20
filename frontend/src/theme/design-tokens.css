@@ -55,6 +55,16 @@
   --rf-stage-interview: #6b5fa8;
   --rf-stage-offer: #2f8f5b;
   --rf-stage-rejected: #b04a4a;
+  /* 「颜色条」专用（浅色=亮彩色，深色=上面的暗彩色）。
+     为什么不直接改 `--rf-stage-*`：那套还用在描边、徽标底色与文字上，
+     亮彩在浅底上做文字/细线达不到 3:1；条形是大色块且有数字在旁边，用亮色更有辨识度。
+     深色主题里这六个与 `--rf-stage-*` 同值（见 dark-tokens.css）。 */
+  --rf-stage-bar-applied: #6b7c93;
+  --rf-stage-bar-screening: #4f8ff7;
+  --rf-stage-bar-assessment: #2ec4b6;
+  --rf-stage-bar-interview: #7c6cf5;
+  --rf-stage-bar-offer: #3fbf7f;
+  --rf-stage-bar-rejected: #e05c5c;
   /* 半透明面板（悬浮卡、吸顶条）：背景会透出一点，必须随主题翻转。 */
   --rf-surface-glass: rgb(255 255 255 / 92%);
   --rf-surface-glass-border: rgb(31 56 85 / 8%);
@@ -154,6 +164,7 @@
  * 作用域收窄到**仅浅色**：深色下 #237804 是深绿，压在深绿的 Tag 底上等于看不见。
  * 深色的对应规则在 dark-tokens.css（改用 --rf-success-text）。
  */
+/* antd-override: 无障碍补偿 —— 浅色下把 tag 深绿前景压到达标对比度；深色另有提亮值 */
 :root:not([data-theme="dark"]) .ant-tag.ant-tag-green,
 :root:not([data-theme="dark"]) .ant-tag.ant-tag-success {
   /* !important：antd 的 cssinjs 样式注入晚于本文件，同权重会被它覆盖。 */

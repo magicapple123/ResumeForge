@@ -41,4 +41,15 @@ describe("LoadingBlock", () => {
     expect(document.querySelector(".ant-spin-container")).not.toBeNull();
     expect(screen.getByText("加载中")).toBeInTheDocument();
   });
+
+  it("spinning={false} 时不渲染遮罩（内容常驻、加载完就撤罩）", () => {
+    const { container } = render(
+      <LoadingBlock spinning={false}>
+        <div>表格内容</div>
+      </LoadingBlock>,
+    );
+
+    expect(screen.getByText("表格内容")).toBeInTheDocument();
+    expect(container.querySelector(".ant-spin-spinning")).toBeNull();
+  });
 });

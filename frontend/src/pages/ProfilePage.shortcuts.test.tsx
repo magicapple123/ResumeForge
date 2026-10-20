@@ -70,8 +70,7 @@ afterEach(() => {
 describe("ProfilePage 快捷键", () => {
   it("输入框外的 Ctrl+Z 撤回整页表单的改动，输入框内不劫持", async () => {
     renderWithShortcuts();
-    await screen.findByLabelText("通用简历名称");
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /编辑资料/ }));
 
     const nameInput = await screen.findByLabelText("姓名");
     await waitFor(() => expect(nameInput).toBeEnabled());
@@ -94,8 +93,7 @@ describe("ProfilePage 快捷键", () => {
 
   it("Ctrl+S 触发页面既有的保存入口", async () => {
     renderWithShortcuts();
-    await screen.findByLabelText("通用简历名称");
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /编辑资料/ }));
 
     const nameInput = await screen.findByLabelText("姓名");
     await waitFor(() => expect(nameInput).toBeEnabled());

@@ -6,6 +6,7 @@ import {
   Button,
   Checkbox,
   Descriptions,
+  Input,
   Modal,
   Radio,
   Space,
@@ -346,9 +347,8 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
                     {comments || "（还没有评论）"}
                   </Typography.Paragraph>
                   <Space.Compact style={{ width: "100%" }}>
-                    <textarea
+                    <Input.TextArea
                       aria-label="评论回传内容"
-                      className="ant-input"
                       rows={4}
                       value={commentText}
                       placeholder="粘贴收件人回传的评论内容"

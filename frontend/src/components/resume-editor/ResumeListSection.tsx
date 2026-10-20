@@ -3,7 +3,7 @@
 
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Form, Tooltip } from "antd";
-import type { FormListFieldData } from "antd/es/form/FormList";
+import type { FormListFieldData } from "antd";
 import { useRef } from "react";
 import type { ReactNode } from "react";
 import {

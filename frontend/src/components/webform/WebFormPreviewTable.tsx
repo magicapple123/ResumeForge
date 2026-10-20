@@ -17,7 +17,7 @@
  * 只剩真正被编辑的那一行重渲。
  */
 import { Checkbox, Input, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import { memo, useMemo } from "react";
 import type { WebFormItemStatus, WebFormPreviewItem } from "../../types";
 
@@ -176,7 +176,7 @@ function WebFormPreviewTableImpl({
 }: Props) {
   // 列定义里的 render 闭包引用了 selected/values/disabled 与回调，按真实依赖缓存；
   // render 里只把「本行解析后的原始值」交给 memo 子组件，因此未变行 props 恒等、可 bail。
-  const columns: ColumnsType<WebFormPreviewItem> = useMemo(
+  const columns: TableColumnsType<WebFormPreviewItem> = useMemo(
     () => [
       {
         title: "填入",

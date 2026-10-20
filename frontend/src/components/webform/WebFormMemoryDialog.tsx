@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 「记住这条」的资料目标选择器。 */
 import { CheckCircleFilled, DownOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
-import { App, Button, Card, Empty, Input, Modal, Radio, Space, Tag, Typography } from "antd";
+import { App, Button, Card, Input, Modal, Radio, Space, Tag, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
 import { useMemo, useState } from "react";
 import type { WebFormMemoryTarget, WebFormRememberPending } from "../../types";
 import { useGroupTone } from "./webFormGroupTones";
@@ -314,7 +315,7 @@ export default function WebFormMemoryDialog({
                 );
               })
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的已有资料" />
+              <EmptyState inline description="没有匹配的已有资料" />
             )}
           </div>
 

@@ -37,7 +37,7 @@ export function RowActions({ primary = [], more = [], disabled = false }: RowAct
           key={item.key}
           type="link"
           size="small"
-          disabled={disabled || item.disabled}
+          disabled={disabled || item.disabled || undefined}
           danger={item.danger}
           icon={item.icon}
           onClick={item.onClick}
@@ -52,7 +52,7 @@ export function RowActions({ primary = [], more = [], disabled = false }: RowAct
             size="small"
             className="row-actions-more"
             aria-label="更多操作"
-            disabled={disabled}
+            disabled={disabled || undefined}
             icon={<MoreOutlined />}
           />
         </Dropdown>

@@ -9,6 +9,7 @@ interface Props {
   showOnlyFilled: boolean;
   onSearchChange: (value: string) => void;
   onToggleShowOnlyFilled: () => void;
+  /** 打开「粘贴文本识别」（项 12）。只有编辑态渲染入口。 */
 }
 
 export default function WebFormProfileToolbar({
@@ -61,6 +62,8 @@ export default function WebFormProfileToolbar({
             {showOnlyFilled ? "显示全部字段" : "只看已填写"}
           </Button>
         ) : null}
+        {/* 「粘贴文本识别」已移到页头（与简历资料侧同一个位置，切换分页即换目标），
+            这里不再放第二个入口。 */}
       </Space>
     </div>
   );

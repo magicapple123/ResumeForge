@@ -25,7 +25,7 @@ import {
   Space,
   Tooltip,
 } from "antd";
-import type { FormInstance } from "antd/es/form";
+import type { FormInstance } from "antd";
 import { useState } from "react";
 import type { LLMModelsResult, LLMTestResult, LLMThinkingResult } from "../../types";
 import { MaxLengthHint } from "../common/MaxLengthHint";

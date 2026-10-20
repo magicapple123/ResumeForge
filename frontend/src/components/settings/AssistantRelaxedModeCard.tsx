@@ -7,7 +7,8 @@
  * 是这个功能成立的前提）：API 密钥等凭据任何模式都不发给模型，简历照片二进制不发送，
  * 也没有删除类工具。
  */
-import { App, Card, Space, Spin, Switch, Typography } from "antd";
+import { App, Card, Space, Switch, Typography } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import { useEffect, useState } from "react";
 import { getAssistantRelaxedMode, saveAssistantRelaxedMode } from "../../api/settings";
 
@@ -62,7 +63,7 @@ export default function AssistantRelaxedModeCard() {
         默认关闭：助手读到的是脱敏资料（不含姓名、电话等身份字段），也没有网申填写值与
         历史对话工具。
       </Typography.Paragraph>
-      <Spin spinning={loading}>
+      <LoadingBlock spinning={loading}>
         <Space orientation="vertical" size={4}>
           <Switch
             checked={enabled}
@@ -82,7 +83,7 @@ export default function AssistantRelaxedModeCard() {
             密钥等凭据与全局配置、简历照片的图片内容；助手也永远没有删除类工具。
           </Typography.Text>
         </Space>
-      </Spin>
+      </LoadingBlock>
     </Card>
   );
 }

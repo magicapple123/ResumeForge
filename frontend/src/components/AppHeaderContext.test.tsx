@@ -141,6 +141,29 @@ describe("AppHeaderContext", () => {
     ).toBeGreaterThanOrEqual(4.5);
   });
 
+  it("弹层宽度跟随触发框（与圆角框同宽）", async () => {
+    // jsdom 里 offsetWidth 恒为 0；这里给原型装一个可配置的 getter，模拟真实布局下量到的宽度。
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      value: 220,
+    });
+    listDatasets.mockResolvedValue([{ id: "a", name: "工作数据", is_active: true }]);
+    getProfile.mockResolvedValue({ name: "张示例", photo: "" });
+    try {
+      renderHeader();
+      fireEvent.click(await screen.findByRole("button", { name: "当前数据集：工作数据" }));
+      const dropdown = await waitFor(() => {
+        const node = document.querySelector<HTMLElement>(".app-dataset-dropdown");
+        expect(node).not.toBeNull();
+        return node!;
+      });
+      expect(dropdown.style.width).toBe("220px");
+      expect(dropdown.style.maxWidth).toBe("220px");
+    } finally {
+      delete (HTMLElement.prototype as { offsetWidth?: number }).offsetWidth;
+    }
+  });
+
   it("显示当前数据集的名字，而不是列表里的第一个", async () => {
     listDatasets.mockResolvedValue([
       { id: "a", name: "工作数据", is_active: false },
@@ -186,6 +209,27 @@ describe("AppHeaderContext", () => {
 
     await waitFor(() => expect(container.querySelector(".ant-skeleton")).toBeNull());
     expect(container.querySelector(".app-dataset-chip")).toBeNull();
+  });
+
+  it("beforeAvatar 插槽渲染在头像左侧（项 1：「我的空间」搬家靠它）", async () => {
+    listDatasets.mockResolvedValue([{ id: "a", name: "默认", is_active: true }]);
+    getProfile.mockResolvedValue({ name: "张示例", photo: "" });
+
+    const { container } = render(
+      <MemoryRouter>
+        <AntdApp>
+          <AppHeaderContext beforeAvatar={<span data-testid="avatar-slot">我的空间</span>} />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(container.querySelector(".app-user-avatar-button")).not.toBeNull());
+
+    // 紧邻：插槽就是头像的前一个兄弟节点——中间不再隔着别的容器（CSS `order` 跨容器排不了，
+    // 所以顺序只能靠 DOM，见组件文件头的说明）。
+    const slot = container.querySelector('[data-testid="avatar-slot"]');
+    expect(slot).not.toBeNull();
+    expect(container.querySelector(".app-user-avatar-button")!.previousElementSibling).toBe(slot);
   });
 
   it("点击头像直接进入我的资料", async () => {

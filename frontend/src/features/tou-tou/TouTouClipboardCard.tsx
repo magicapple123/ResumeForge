@@ -8,7 +8,8 @@
  * 和一条同步链路。换浏览器/清缓存会丢，界面文案里如实说明。
  */
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, ConfigProvider, Empty, Input, Listy, Typography } from "antd";
+import { App, Button, ConfigProvider, Input, Listy, Typography } from "antd";
+import EmptyState from "../../components/common/EmptyState";
 import { ListyItem, ListyMeta } from "../../components/common/ListyItem";
 import { useEffect, useState } from "react";
 import { layer } from "../../theme/tokens";
@@ -210,10 +211,7 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
               </Button>
               <div className="tt-clipboard-card-list">
                 {items.length === 0 ? (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description="还没有片段：把常贴的内容存进来，随时一键复制。"
-                  />
+                  <EmptyState inline description="还没有片段：把常贴的内容存进来，随时一键复制。" />
                 ) : (
                   <Listy
                     items={items}

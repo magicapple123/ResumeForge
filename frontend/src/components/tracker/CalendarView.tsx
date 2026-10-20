@@ -8,7 +8,8 @@
  * 组件默认自拉 ``listReminders``；传入 ``reminders`` 时用它覆盖（测试 / 父组件已取数时）。
  */
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
-import { Button, Empty, Listy, Modal, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Listy, Modal, Space, Tag, Tooltip, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
 import LoadingBlock from "../common/LoadingBlock";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
@@ -208,10 +209,7 @@ export default function CalendarView({
         </div>
       )}
       {!loading && items.length === 0 && (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="这个月还没有提醒，把面试、测评截止这些时点记下来吧"
-        />
+        <EmptyState inline description="这个月还没有提醒，把面试、测评截止这些时点记下来吧" />
       )}
 
       <Modal
@@ -231,7 +229,7 @@ export default function CalendarView({
         }}
       >
         {detailItems.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这一天没有安排" />
+          <EmptyState inline description="这一天没有安排" />
         ) : (
           <Listy
             items={detailItems}

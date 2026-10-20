@@ -3,7 +3,7 @@
 
 import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
 import { Button, Table, Tag, Tooltip, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import type { SortOrder, TableRowSelection } from "antd/es/table/interface";
 import type { HTMLAttributes } from "react";
 import type { JobList, Page } from "../../types";
@@ -76,7 +76,7 @@ export default function JobTable({
   sortState,
   onSortChange,
 }: Props) {
-  const columns: ColumnsType<JobList> = [
+  const columns: TableColumnsType<JobList> = [
     {
       title: "收藏",
       key: "favorite",

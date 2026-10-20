@@ -1,19 +1,36 @@
 // SPDX-License-Identifier: Apache-2.0
-import {
-  DragOutlined,
-  EditOutlined,
-  ReloadOutlined,
-  ZoomInOutlined,
-  ZoomOutOutlined,
-} from "@ant-design/icons";
-import { Button, Popover, Segmented, Space, Tooltip, Typography } from "antd";
+/**
+ * 预览工具栏（P2b 起是**两行**）。
+ *
+ * ```
+ * row1（primary）: [抓手|编辑] ................ [样式][版式][顺序][页数]
+ * row2（measure）: [字号][行距][页边距] ...... [正指向 chip]
+ * ```
+ *
+ * 为什么分两行（项 4 / D7 / D31）：
+ * - 结构类（样式/版式/顺序/页数）与度量类（字号/行距/页边距）是两组不同性质的动作，
+ *   挤在一行时"改版式"的四个按钮被挤到同一行右侧去抢位置；
+ * - 缩放条**不在工具栏里**了：缩放是"看"的动作，它被移到纸面下方（见 ResumePreview）。
+ *
+ * 「正指向」chip 从"绝对定位钉在工具栏右端"改成**第二行的普通 flex 项**（`margin-left:auto`）：
+ * 绝对定位在"右端是低价值提示文字"时无害，右端换成核心按钮后就会把按钮盖住。
+ * 改为参与布局后，它的宽度只会把左侧挤一点，结构上不可能与第一行的控件重叠。
+ *
+ * **chip 的内部 DOM 与显隐逻辑一字未改**：`ResumePreview.applyHoverChip` 仍然直接写它的
+ * `display` / `dataset.path` / label 文本与角标（原因见那里的注释：iframe 事件监听器 +
+ * 父组件重渲染会振荡），这里只换了它的父容器。
+ */
+import { DragOutlined, EditOutlined } from "@ant-design/icons";
+import { Button, Popover, Segmented, Tooltip, Typography } from "antd";
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import { useState } from "react";
 import type { InteractionMode } from "./config";
 
 interface Props {
-  /** 版式控件等在工具栏里就地渲染（见 ResumePreview.toolbarExtra）。 */
-  extra?: ReactNode;
+  /** 第一行右侧：结构类版式控件（样式模板 / 版式模板 / 板块顺序 / 最大篇幅）。 */
+  templateControls?: ReactNode;
+  /** 第二行左侧：度量类版式控件（字号 / 行距 / 页边距）。 */
+  measureControls?: ReactNode;
   canEdit: boolean;
   /**
    * 「正指向」提示的占位元素。
@@ -26,10 +43,7 @@ interface Props {
   hoverChipRef: RefObject<HTMLSpanElement | null>;
   onRewriteHoverTarget?: (path: string) => void;
   interactionMode: InteractionMode;
-  scale: number;
   onInteractionModeChange: Dispatch<SetStateAction<InteractionMode>>;
-  onAdjustZoom: (delta: number) => void;
-  onResetZoom: () => void;
 }
 
 /** 角标 hover 时弹出的标注详情（内容来自角标元素上的 data-*，由 ResumePreview 直写）。 */
@@ -40,15 +54,13 @@ interface BadgeAnnotation {
 }
 
 export default function ResumePreviewToolbar({
-  extra,
+  templateControls,
+  measureControls,
   canEdit,
   hoverChipRef,
   onRewriteHoverTarget,
   interactionMode,
-  scale,
   onInteractionModeChange,
-  onAdjustZoom,
-  onResetZoom,
 }: Props) {
   // 角标 Popover 的开关状态只由角标自己的 mouseenter/leave 驱动（React 合成事件
   // 随渲染正常重绑，没有 iframe 监听器那个振荡问题）；内容读 data-*，写入仍走
@@ -56,60 +68,33 @@ export default function ResumePreviewToolbar({
   const [annotation, setAnnotation] = useState<BadgeAnnotation | null>(null);
   return (
     <div className="resume-preview-toolbar">
-      <Space size={8} wrap>
-        {canEdit && (
-          <Segmented
-            size="small"
-            aria-label="简历预览交互模式"
-            value={interactionMode}
-            onChange={(value) => onInteractionModeChange(value as InteractionMode)}
-            options={[
-              {
-                value: "pan",
-                label: <Tooltip title="按住拖动浏览简历">抓手</Tooltip>,
-                icon: <DragOutlined />,
-              },
-              {
-                value: "edit",
-                label: <Tooltip title="点击简历中的字段直接修改">编辑</Tooltip>,
-                icon: <EditOutlined />,
-              },
-            ]}
-          />
-        )}
-        {extra}
-        <Tooltip title="缩小预览">
-          <Button
-            type="text"
-            size="small"
-            aria-label="缩小预览"
-            icon={<ZoomOutOutlined />}
-            onClick={() => onAdjustZoom(-0.1)}
-          />
-        </Tooltip>
-        <Typography.Text type="secondary" className="resume-preview-zoom-label">
-          {Math.round(scale * 100)}%
-        </Typography.Text>
-        <Tooltip title="放大预览">
-          <Button
-            type="text"
-            size="small"
-            aria-label="放大预览"
-            icon={<ZoomInOutlined />}
-            onClick={() => onAdjustZoom(0.1)}
-          />
-        </Tooltip>
-        <Tooltip title="适应页面（重置缩放）">
-          <Button
-            type="text"
-            size="small"
-            aria-label="适应页面"
-            icon={<ReloadOutlined />}
-            onClick={onResetZoom}
-          />
-        </Tooltip>
-        {/* 快捷键提示：Ctrl+滚轮缩放早已实现，但没有任何地方告诉用户——用户只能一个个
-            按钮试。常驻在缩放控件旁边而不是做成一次性引导，因为"想放大看一眼"随时会发生。 */}
+      <div className="resume-preview-toolbar-row resume-preview-toolbar-row-primary">
+        <div className="resume-preview-toolbar-cluster">
+          {canEdit && (
+            <Segmented
+              size="small"
+              aria-label="简历预览交互模式"
+              value={interactionMode}
+              onChange={(value) => onInteractionModeChange(value as InteractionMode)}
+              options={[
+                {
+                  value: "pan",
+                  label: <Tooltip title="按住拖动浏览简历">抓手</Tooltip>,
+                  icon: <DragOutlined />,
+                },
+                {
+                  value: "edit",
+                  label: <Tooltip title="点击简历中的字段直接修改">编辑</Tooltip>,
+                  icon: <EditOutlined />,
+                },
+              ]}
+            />
+          )}
+        </div>
+        <div className="resume-preview-toolbar-controls">{templateControls}</div>
+      </div>
+      <div className="resume-preview-toolbar-row resume-preview-toolbar-row-measure">
+        <div className="resume-preview-toolbar-cluster">{measureControls}</div>
         {/* 默认隐藏：iframe 的 mousemove 直接改它的文本与显隐（见 hoverChipRef 注释）。
             按钮点击时从 data-path 读"当前指向"，保证改的就是用户刚指的那一栏。 */}
         <span ref={hoverChipRef} className="resume-preview-hover-chip" style={{ display: "none" }}>
@@ -156,10 +141,7 @@ export default function ResumePreviewToolbar({
             让 AI 改这一栏
           </Button>
         </span>
-        <Typography.Text type="secondary" className="resume-preview-zoom-hint">
-          按住 Ctrl 滚滚轮可缩放
-        </Typography.Text>
-      </Space>
+      </div>
     </div>
   );
 }

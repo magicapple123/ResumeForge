@@ -321,3 +321,24 @@ export interface WebFormFillRecord {
  * 真实值，随列表下发既慢又没必要；回看单条时走既有详情端点 `getWebFormRecord(id)`。
  */
 export type WebFormRecordSummary = Omit<WebFormFillRecord, "items" | "page_snapshot">;
+
+/**
+ * 「网申资料」粘贴识别的结果（项 12 / D20 / D21 / D32）。
+ *
+ * `values` 只含**目录内**的键；`custom` 是目录外的待确认字段——它们必须由用户逐条勾选后才
+ * 会写进资料（识别可以猜，用户的资料不该被猜出来）。`custom[].key` 由后端生成
+ * （`CUSTOM_` 前缀 + 栏目名），前端**不重新生成**，只沿用。
+ */
+export interface WebFormExtraProfileParsedItem {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface WebFormExtraProfileParse {
+  values: Record<string, string>;
+  custom: WebFormExtraProfileParsedItem[];
+  warnings: string[];
+  parse_engine: "ai" | "local";
+  recognized_text: string;
+}

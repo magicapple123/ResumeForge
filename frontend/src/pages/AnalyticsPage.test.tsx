@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 求职数据看板：概览指标 + 四个主题区块 + 诚实空态。 */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+// @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
+import { readFileSync } from "node:fs";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AnalyticsPage from "./AnalyticsPage";
+
+// 与 `styles/color-regression.test.ts` 同一套写法：从磁盘读 CSS 原文，绕开 vitest 把
+// 未列入 `test.css.include` 的样式表替换成空模块这件事。
+declare const process: { cwd(): string };
 
 const apiMocks = vi.hoisted(() => ({ getAnalyticsDashboard: vi.fn() }));
 
@@ -183,6 +189,43 @@ describe("AnalyticsPage", () => {
     expect(screen.getByText("面试率")).toBeInTheDocument();
     expect(screen.getByText("笔试通过率")).toBeInTheDocument();
     expect(screen.getByText("Offer 数")).toBeInTheDocument();
+  });
+
+  it("四张概览卡带阶段语义类名，彩条按阶段 token 上色（项 8）", async () => {
+    const { container } = renderPage();
+    await screen.findByText("投递总量");
+
+    for (const stage of ["applied", "interview", "assessment", "offer"]) {
+      const card = container.querySelector(`.stat-card-${stage}`);
+      expect(card, `缺少 .stat-card-${stage}`).not.toBeNull();
+      // 彩条是 `::before` 画在**卡片根**上的：语义类名必须与 `.ant-card` 落在同一个
+      // 元素（CSS 用的是 `.ant-card.stat-card-*`），不同元素的话选择器静默命中不了。
+      expect(card!.classList.contains("ant-card")).toBe(true);
+    }
+
+    // C6：`color-regression.test.ts` 只读 4 个 CSS + tracker.css，不读 modules.css，
+    // 所以项 8 的守卫落在这里——直接读文件原文，断言"按阶段上色"而不是"按列序上色"。
+    const css = readFileSync([process.cwd(), "src", "styles", "modules.css"].join("/"), "utf8");
+    expect(css).toContain(
+      ".analytics-page .analytics-metric-row .ant-card.stat-card-interview::before",
+    );
+    expect(css).toContain(
+      ".analytics-page .analytics-metric-row .ant-card.stat-card-assessment::before",
+    );
+    expect(css).toContain(
+      ".analytics-page .analytics-metric-row .ant-card.stat-card-offer::before",
+    );
+    // 颜色条用 token：`--rf-stage-bar-*` 在浅色是亮彩、深色是暗彩（各自 tokens 文件一套），
+    // 不再借用 --rf-accent-*，也不直接吃 `--rf-stage-*`（那套要留给描边与徽标的对比度）。
+    for (const token of [
+      "--rf-stage-bar-interview",
+      "--rf-stage-bar-assessment",
+      "--rf-stage-bar-offer",
+    ]) {
+      expect(css).toContain(`var(${token}`);
+    }
+    // 按 `:nth-child` 上色的四条规则已删除：列顺序一变颜色就错位，且与阶段毫无对应。
+    expect(css).not.toContain(".analytics-metric-row .ant-col:nth-child");
   });
 
   it("渲染四个主题区块", async () => {

@@ -70,17 +70,20 @@ export default function RecognitionFileField({
               {files.map((file) => (
                 <div key={file.id} className="recognition-file-item">
                   <RecognitionFilePreview file={file} />
-                  <Tooltip title={`移除 ${file.name}`}>
-                    <Button
-                      type="text"
-                      size="small"
-                      danger
-                      aria-label={`移除文件 ${file.name}`}
-                      icon={<DeleteOutlined />}
-                      disabled={busy}
-                      onClick={() => onRemove(file.id)}
-                    />
-                  </Tooltip>
+                  {/* 动作区独立成块：D16 的整行布局靠它"绝不收缩"（体积/删除不会换行）。 */}
+                  <span className="recognition-file-actions">
+                    <Tooltip title={`移除 ${file.name}`}>
+                      <Button
+                        type="text"
+                        size="small"
+                        danger
+                        aria-label={`移除文件 ${file.name}`}
+                        icon={<DeleteOutlined />}
+                        disabled={busy}
+                        onClick={() => onRemove(file.id)}
+                      />
+                    </Tooltip>
+                  </span>
                 </div>
               ))}
             </div>

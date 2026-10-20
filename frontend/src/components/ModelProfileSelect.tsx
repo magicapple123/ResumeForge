@@ -16,8 +16,9 @@
  */
 import { LoadingOutlined } from "@ant-design/icons";
 import { App, Select } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { subscribeLLMConfig } from "../features/settings/llmConfigEvents";
 import { getLLMConfig, listLLMConfigRecords, activateLLMRecord, testLLM } from "../api/settings";
 import { configFromRecord } from "./settings/SettingsConfig";
 import type { LLMConfigRecord } from "../types";
@@ -44,7 +45,8 @@ export default function ModelProfileSelect() {
   /** 双击已经被识别过：紧随其后的那次 `onSelect` 不能再排一次切换。 */
   const suppressNextSelect = useRef(false);
 
-  useEffect(() => {
+  /** 取一次记录与生效项；返回取消函数（响应回来时组件可能已经不在）。 */
+  const loadRecords = useCallback(() => {
     // 取数放在 effect 内联：Compiler 要求"同步 setState"与取数分开，这里的状态
     // 更新全在 then 回调里；cancelled 防止快速切路由时旧响应覆盖新数据。
     let cancelled = false;
@@ -63,7 +65,13 @@ export default function ModelProfileSelect() {
     return () => {
       cancelled = true;
     };
-  }, [location.pathname]);
+  }, []);
+
+  useEffect(() => loadRecords(), [loadRecords, location.pathname]);
+
+  // 设置里保存/启用/删除配置后立刻重取（本轮新增）。在此之前只有路由变化会刷新，
+  // 于是"设置里换了模型、顶上还显示旧的"——页头与设置页是两棵互不相识的子树。
+  useEffect(() => subscribeLLMConfig(loadRecords), [loadRecords]);
 
   const clearPendingSwitch = () => {
     const pending = pendingSwitch.current;
@@ -145,7 +153,12 @@ export default function ModelProfileSelect() {
       value={activeId ?? undefined}
       placeholder="选择模型配置"
       loading={switching}
+      // 触发器固定 200px（见 base.css 的 .app-model-profile-select），弹层**不跟着它**
+      // 变窄：`false` 让弹层按内容自适应，再由下面的 maxWidth 收到 320px。
+      // 分工是"触发框只交代当前是谁，弹层要能扫视比较"（D2）。
       popupMatchSelectWidth={false}
+      // antd 6 的语义化样式入口：`popup.root` 即 `.ant-select-dropdown` 根节点。
+      styles={{ popup: { root: { maxWidth: 320 } } }}
       // 受控展开：单击选中后不能立刻收起，否则双击的第二下没地方落。
       open={open}
       onOpenChange={(next) => {
@@ -186,7 +199,15 @@ export default function ModelProfileSelect() {
               void testRecord(id);
             }}
           >
-            <span className="model-option-label">{option.label}</span>
+            {/* 省略号之外的兜底：`title` 让长记录名在 hover 时能看全（弹层上限 320px，
+                超出部分由 CSS 截断）。`label` 在 antd 的类型里是 ReactNode，只有字符串
+                才适合当原生 title，所以先判类型。 */}
+            <span
+              className="model-option-label"
+              title={typeof option.label === "string" ? option.label : undefined}
+            >
+              {option.label}
+            </span>
             {testingId === id && <LoadingOutlined className="model-option-testing" />}
           </div>
         );

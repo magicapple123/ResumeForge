@@ -79,6 +79,8 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
     return (
       <Space orientation="vertical" style={{ width: "100%" }}>
         <Typography.Text type="danger">{error}</Typography.Text>
+        {/* 保留：只在「读取失败且没有任何数据」时渲染，是失败态唯一的显式出口
+            （表单都没渲染出来，不能靠 × 之外的动作离开）。 */}
         <Button onClick={onClose}>关闭</Button>
       </Space>
     );
@@ -190,19 +192,14 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
         <Switch />
       </Form.Item>
 
-      {/* 底部操作区：与表单之间留出分隔线，滚到底也不和最后一个字段贴在一起。 */}
-      <Space
-        style={{
-          marginTop: 12,
-          paddingTop: 12,
-          borderTop: "1px solid var(--rf-border-subtle)",
-        }}
-      >
+      {/* 底部操作区：**吸附在可视区底部**（不再随内容滚走），靠右并排。
+          这个表单有七八个字段，用户改到中间想保存时不该先滚到底。 */}
+      <div className="apply-settings-actions">
         <Button onClick={onClose}>取消</Button>
         <Button type="primary" loading={saving} onClick={() => void submit()}>
           保存设置
         </Button>
-      </Space>
+      </div>
     </Form>
   );
 }

@@ -63,6 +63,13 @@
   --rf-stage-interview: #a79ad6;
   --rf-stage-offer: #6cc79a;
   --rf-stage-rejected: #d98a8a;
+  /* 深色：颜色条就用这套暗彩色（深底上亮色会发荧光，和截图里的观感不一致）。 */
+  --rf-stage-bar-applied: #94a3b8;
+  --rf-stage-bar-screening: #7fa8cc;
+  --rf-stage-bar-assessment: #6fb3b3;
+  --rf-stage-bar-interview: #a79ad6;
+  --rf-stage-bar-offer: #6cc79a;
+  --rf-stage-bar-rejected: #d98a8a;
   --rf-surface-glass: rgb(26 30 36 / 92%);
   --rf-surface-glass-border: rgb(255 255 255 / 10%);
   /* 这两个在深色下也要显式给出：danger 提亮一点，白字保持白字。 */

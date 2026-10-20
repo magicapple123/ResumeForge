@@ -84,9 +84,10 @@ describe("ExportOptionsModal", () => {
     expect(screen.getByRole("checkbox", { name: /姓名/ })).toBeInTheDocument();
   });
 
-  it("页边距越界值被 clamp 到 8–26（版式栏的输入框与后端白名单之间只有这一道）", () => {
-    // 直接钉 helper：`PagePaddingControl` 的 InputNumber 已经挡在 8–26 内，clamp 守的是
-    // "历史草稿 / 粘贴 / 程序化赋值"这条来路，只有单测能覆盖到。
+  it("页边距越界值被 clamp 到 8–26（版式栏的滑块与后端白名单之间只有这一道）", () => {
+    // 直接钉 helper：`PagePaddingControl` 的滑块已经挡在 8–26 内（项 4a 从 InputNumber
+    // 改成滑块，边界不变），clamp 守的是"历史草稿 / 粘贴 / 程序化赋值"这条来路，
+    // 只有单测能覆盖到。
     expect(clampPagePadding(5)).toBe(8);
     expect(clampPagePadding(7)).toBe(8);
     expect(clampPagePadding(40)).toBe(26);

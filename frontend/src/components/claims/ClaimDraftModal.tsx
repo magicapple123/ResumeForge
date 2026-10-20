@@ -5,7 +5,8 @@
  * 草稿一律带「待确认」状态入库，所以这里的核对环节不是走过场：用户至少要看一眼
  * 原始事实有没有被曲解。候选表述允许就地改，因为那是最常需要调整的一栏。
  */
-import { App, Button, Checkbox, Empty, Input, Modal, Select, Space, Typography } from "antd";
+import { App, Button, Checkbox, Input, Modal, Select, Space, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
 import { useState } from "react";
 import { createClaim, draftClaims } from "../../api/claims";
 import type { Claim, ClaimDraftPayload, ClaimPayload } from "../../types";
@@ -163,7 +164,7 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
         ))}
 
         {rows.length === 0 ? (
-          <Empty description="还没有草稿" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <EmptyState inline description="还没有草稿" />
         ) : (
           <div className="claim-draft-list">
             {rows.map((row) => (

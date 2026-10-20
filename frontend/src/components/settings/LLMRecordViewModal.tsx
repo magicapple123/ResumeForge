@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 配置记录的只读详情弹窗：点记录卡本体查看。密钥只显示脱敏占位，不回显本体。 */
-import { Descriptions, Modal, Button, Tag } from "antd";
+import { Descriptions, Modal, Tag } from "antd";
 import type { LLMConfigRecord } from "../../types";
 import { API_KEY_MASK, CUSTOM_PRESET_LABEL, matchingPreset } from "./SettingsConfig";
 
@@ -36,11 +36,9 @@ export default function LLMRecordViewModal({ open, record, onClose }: Props) {
       title={`配置详情「${record.name}」`}
       open={open}
       onCancel={onClose}
-      footer={
-        <Button type="primary" onClick={onClose}>
-          关闭
-        </Button>
-      }
+      // 只读详情没有第二个动作，底部栏那只「关闭」是右上角 × 的重复入口（Esc / 点遮罩
+      // 同样关闭），所以不渲染 footer。
+      footer={null}
       width={560}
     >
       <Descriptions bordered column={1} size="small">

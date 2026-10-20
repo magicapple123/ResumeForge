@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历预览弹窗的关联上下文行（RF-11）：有 job_id 给三段直达链接，通用简历没有。 */
 import { App as AntdApp } from "antd";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ResumeDetail } from "../types";
+import type { ResumeDetail, ResumeLayout } from "../types";
 import ResumeDetailModal from "./ResumeDetailModal";
 
 const apiMocks = vi.hoisted(() => ({
@@ -18,9 +18,26 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../api/resumes", () => apiMocks);
-// 预览主体是另一批测试的对象；这里只关心弹窗自己的上下文行，桩掉即可。
+// 预览主体是另一批测试的对象；这里只关心弹窗自己的上下文行与**版式重排**。
+// 桩里多给两个按钮：宿主层的"连续两次改版式"必须由本文件主动触发 `onApplyLayout`，
+// 否则只能靠真控件（那一层已有自己的测试）。`data-page-limit` 让"草稿有没有前进"可观察。
 vi.mock("./resume/ResumeDetailPreview", () => ({
-  default: () => <div data-testid="resume-preview-stub" />,
+  default: ({
+    layout,
+    onApplyLayout,
+  }: {
+    layout: ResumeLayout;
+    onApplyLayout: (next: ResumeLayout) => void;
+  }) => (
+    <div data-testid="resume-preview-stub" data-page-limit={layout.page_limit}>
+      <button type="button" onClick={() => onApplyLayout({ ...layout, page_limit: 2 })}>
+        改版式·2 页
+      </button>
+      <button type="button" onClick={() => onApplyLayout({ ...layout, page_limit: 3 })}>
+        改版式·3 页
+      </button>
+    </div>
+  ),
 }));
 
 function makeDetail(overrides: Partial<ResumeDetail>): ResumeDetail {
@@ -180,3 +197,66 @@ describe("ResumeDetailModal 版本信息位（RF-17）", () => {
 function listResumeDeliveriesCalledWith(id: number): boolean {
   return apiMocks.listResumeDeliveries.mock.calls.some((call) => call[0] === id);
 }
+
+/**
+ * 版式重排（项 6 / D11）：**尾随合并** + "草稿只在渲染成功后前进"。
+ *
+ * 这两条一起守住的是一类很难复现的体感问题：拖动时中间态不该逐个渲染（浪费且卡），
+ * 而读数也不该跑到画面前面去（用户会以为"改了没生效"）。
+ */
+describe("ResumeDetailModal 版式重排（P3）", () => {
+  function deferred() {
+    let resolve!: (html: string) => void;
+    const promise = new Promise<string>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  }
+
+  it("连续两次改版式：在飞时只渲染一次，渲染成功后草稿才是最后一次", async () => {
+    apiMocks.getResume.mockResolvedValue(makeDetail({}));
+    apiMocks.fetchResumeHtml.mockResolvedValue("<p>预览</p>");
+    const gate = deferred();
+    apiMocks.renderResume.mockReturnValueOnce(gate.promise).mockResolvedValue("<p>新版式</p>");
+
+    renderModal(8);
+    const stub = await screen.findByTestId("resume-preview-stub");
+    expect(stub).toHaveAttribute("data-page-limit", "1");
+
+    fireEvent.click(screen.getByRole("button", { name: "改版式·2 页" }));
+    fireEvent.click(screen.getByRole("button", { name: "改版式·3 页" }));
+
+    // 第一次还在飞：第二次只进"待渲染"，不重复发请求。
+    expect(apiMocks.renderResume).toHaveBeenCalledTimes(1);
+    // 草稿没有前进：读数仍是旧值（渲染中不谎报"已生效"）。
+    expect(screen.getByTestId("resume-preview-stub")).toHaveAttribute("data-page-limit", "1");
+
+    await act(async () => {
+      gate.resolve("<p>新版式</p>");
+      await gate.promise;
+    });
+
+    // 尾随合并：只补跑"最后那一版"，中间那一次（2 页）从未渲染。
+    await waitFor(() => expect(apiMocks.renderResume).toHaveBeenCalledTimes(2));
+    expect(apiMocks.renderResume.mock.calls[1][1]).toMatchObject({ page_limit: 3 });
+    await waitFor(() =>
+      expect(screen.getByTestId("resume-preview-stub")).toHaveAttribute("data-page-limit", "3"),
+    );
+  });
+
+  it("渲染失败：提示原因，不重试，草稿停在原处", async () => {
+    apiMocks.getResume.mockResolvedValue(makeDetail({}));
+    apiMocks.fetchResumeHtml.mockResolvedValue("<p>预览</p>");
+    apiMocks.renderResume.mockRejectedValueOnce(new Error("后端渲染失败"));
+
+    renderModal(8);
+    await screen.findByTestId("resume-preview-stub");
+
+    fireEvent.click(screen.getByRole("button", { name: "改版式·2 页" }));
+
+    expect(await screen.findByText("后端渲染失败")).toBeInTheDocument();
+    // 不自动重试（失败 → 重试 → 再失败会变死循环）。
+    await waitFor(() => expect(apiMocks.renderResume).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("resume-preview-stub")).toHaveAttribute("data-page-limit", "1");
+  });
+});

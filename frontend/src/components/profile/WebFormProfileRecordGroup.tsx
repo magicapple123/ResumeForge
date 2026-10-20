@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import { Button, Card, Col, Empty, Input, Row, Select, Space, Tag, Typography } from "antd";
+import { Button, Card, Col, Input, Row, Select, Space, Tag, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
 import { memo, useCallback, useEffect, useRef, type ComponentProps } from "react";
 import type { WebFormRepeatedGroup, WebFormRepeatedRecord } from "../../types";
 import PartialDateSelect from "./PartialDateSelect";
@@ -249,7 +250,7 @@ export default memo(function WebFormProfileRecordGroup({
         }
         style={{ marginBottom: 14 }}
       >
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`还没有${group.label}`} />
+        <EmptyState inline description={`还没有${group.label}`} />
       </Card>
     );
   }

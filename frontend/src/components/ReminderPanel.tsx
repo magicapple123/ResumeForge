@@ -54,7 +54,7 @@ interface ReminderForm {
 }
 
 export default function ReminderPanel() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   // 绑定目标下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const trackSelect = useTrackSearchSelect();
   const jobSelect = useJobSearchSelect();
@@ -196,7 +196,7 @@ export default function ReminderPanel() {
   const removeSelected = () => {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
-    Modal.confirm({
+    modal.confirm({
       title: `删除选中的 ${ids.length} 条提醒？`,
       content: "删除后可在回收站里找回。",
       okText: "删除",

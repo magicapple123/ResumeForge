@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 开场面板：选主张、定题数与反馈方式。 */
-import { Alert, App, Button, Empty, Modal, Select, Space, Typography } from "antd";
+import { Alert, App, Button, Modal, Select, Space, Typography } from "antd";
+import EmptyState from "../../components/common/EmptyState";
 import PageSkeleton from "../../components/common/PageSkeleton";
 import { ThunderboltOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
@@ -90,8 +91,8 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
             {claims.loading ? (
               <PageSkeleton rows={2} card={false} />
             ) : available.length === 0 ? (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              <EmptyState
+                inline
                 description="事实台账里还没有「已确认」的条目。先去「事实台账」确认几条。"
               />
             ) : (

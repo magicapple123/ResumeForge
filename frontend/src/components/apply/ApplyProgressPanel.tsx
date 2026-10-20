@@ -9,7 +9,7 @@
  */
 import { PauseOutlined, PlayCircleOutlined, StopOutlined } from "@ant-design/icons";
 import { Alert, Button, Descriptions, Space, Spin, Table, Tag, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -60,7 +60,7 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
     task.message ||
     (task.stop_reason ? (STOP_REASON_LABELS[task.stop_reason] ?? task.stop_reason) : "");
 
-  const columns: ColumnsType<ApplyTaskItem> = [
+  const columns: TableColumnsType<ApplyTaskItem> = [
     {
       title: "岗位",
       dataIndex: "job_title",

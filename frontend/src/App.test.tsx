@@ -102,12 +102,15 @@ describe("application navigation", () => {
     );
 
     // 版本号单源是根 package.json 的 version（CI 与后端 config.py 一起核对），
-    // 页头品牌区展示的必须是同一个值：以 v 开头、hover 有 title 说明。
+    // 页头品牌区展示的必须是同一个值：以 v 开头；说明由 Tooltip 承担（不再是原生
+    // title —— 原生 title 只对鼠标可见，功能提示必须让键盘/读屏也能拿到），
+    // 所以这里改成悬停后断言气泡文案，比原来检查 title 属性更贴近真实行为。
     const version = container.querySelector(".app-brand-version");
     expect(version).not.toBeNull();
     expect(version!.textContent).toMatch(/^v/);
     expect(version!.textContent).toBe(`v${pkg.version}`);
-    expect(version).toHaveAttribute("title", "当前版本");
+    fireEvent.mouseEnter(version!);
+    expect(await screen.findByText("当前版本")).toBeInTheDocument();
   });
 
   it("opens private pages from the top-level 我的空间 menu", async () => {
@@ -125,6 +128,27 @@ describe("application navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: /我的空间/ }));
     fireEvent.click(screen.getByText("求职助手"));
     expect(await screen.findByText("求职助手内容")).toBeInTheDocument();
+  });
+
+  it("「我的空间」在头像左侧：顺序是 [数据集][我的空间][头像]", async () => {
+    window.localStorage.setItem("resumeforge.user-guide.seen", "1");
+    const { container } = render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+    await screen.findByText("首页内容");
+
+    // 钉的是**关系**而不是"存在"：以前「我的空间」是 `.app-header-actions` 的直接子节点，
+    // 头像在它右边的另一个容器里。现在它走 `AppHeaderContext` 的 `beforeAvatar` 插槽，
+    // 必须与头像同容器、且在头像之前——否则"移到头像左侧"这件事就没做到。
+    const space = await screen.findByRole("button", { name: /我的空间/ });
+    const avatar = await screen.findByRole("button", { name: "进入我的资料" });
+    const context = container.querySelector(".app-header-context");
+    expect(context).not.toBeNull();
+    expect(context!.contains(space)).toBe(true);
+    expect(context!.contains(avatar)).toBe(true);
+    expect(space.compareDocumentPosition(avatar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("keeps the open-source link in the header actions, not in the sidebar footer", async () => {

@@ -5,7 +5,7 @@
  * 状态所有权仍留在抽屉，这里只收"发出请求 + 给结果提示"这段流程。
  * （批量导入入口已按产品决策移除；后端端点保留，采集结果面板仍在用。）
  */
-import { App, Modal } from "antd";
+import { App } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 import {
@@ -34,7 +34,7 @@ export function useCandidateBatchTools({
   /** 批量删除进行中由抽屉置位（工具条按钮据此 loading/禁用）。 */
   onBatchActionChange?: (action: "import" | "delete" | null) => void;
 }) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [selectAllPagesLoading, setSelectAllPagesLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -93,7 +93,7 @@ export function useCandidateBatchTools({
     }
     const ids = [...selectedIds];
     // 跨页多选/批量删除必须二次确认并写明实际条数与范围（§2.5 规则 4）。
-    Modal.confirm({
+    modal.confirm({
       title: `删除选中的 ${ids.length} 条备选岗位？`,
       content: "删除后进回收站，可恢复。",
       okText: "删除",

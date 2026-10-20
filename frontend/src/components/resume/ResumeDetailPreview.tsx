@@ -13,16 +13,6 @@
  * 避免循环依赖（设计 §9 ⑨）。
  */
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
-import {
-  BulbOutlined,
-  EditOutlined,
-  ZoomInOutlined,
-  FolderOpenOutlined,
-  MessageOutlined,
-  SafetyCertificateOutlined,
-  ShareAltOutlined,
-  ThunderboltOutlined,
-} from "@ant-design/icons";
 import { Button, Collapse, Space, Tag, Tooltip, Typography } from "antd";
 import { Alert } from "antd";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -32,13 +22,14 @@ import { RESUME_ENHANCEMENT_LEVELS } from "../../config";
 import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 import { contentSignature } from "../../utils/contentSignature";
-import ExportButtons from "../ExportButtons";
 import ExportOptionsModal from "../ExportOptionsModal";
 import { describeResumeFieldPath } from "../../utils/resumeFieldPath";
 import ResumeFieldQuickEditModal from "./ResumeFieldQuickEditModal";
 import ResumeZoomModal from "./ResumeZoomModal";
 import ResumeEditorModal from "../ResumeEditorModal";
-import ResumeLayoutControls from "../ResumeLayoutControls";
+import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
+import ResumeMeasureControls from "./ResumeMeasureControls";
+import ResumeTemplateControls from "./ResumeTemplateControls";
 import { useShortcut } from "../../features/shortcuts/useShortcutKeymap";
 import ResumeQualityModal from "../ResumeQualityModal";
 import ResumeSuggestionsModal from "../ResumeSuggestionsModal";
@@ -46,6 +37,7 @@ import ResumeReviseModal from "./ResumeReviseModal";
 import SharePackageModal from "../SharePackageModal";
 import ResumePreview, { type ResumePreviewHandle } from "../ResumePreview";
 import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
+import ResumeDetailFooter from "./ResumeDetailFooter";
 import EvidencePanel from "./EvidencePanel";
 import { ORIGIN_LABELS } from "./factAnnotationMeta";
 import type { FactAnnotation } from "../../types";
@@ -145,6 +137,8 @@ export default function ResumeDetailPreview({
   // 内部再包一层引用：父组件可能传 null（尚未量到），子组件需要一份稳定的 ref 传入 ResumePreview。
   const fallbackRef = useRef<ResumePreviewHandle>(null);
   const resolvedPreviewRef = previewRef ?? fallbackRef;
+  // 版式目录：**只取一次**，工具栏两行的两组控件共用（见 `useResumeTemplateCatalog`）。
+  const { catalog } = useResumeTemplateCatalog();
   // 缺省跟随 onResumeRevised：能刷新预览就有意义，不能刷新就不该摆出这个入口。
   const showRevise = showReviseAction ?? Boolean(onResumeRevised);
 
@@ -313,16 +307,31 @@ export default function ResumeDetailPreview({
       )}
       <ResumePreview
         ref={resolvedPreviewRef}
-        toolbarExtra={
+        // 两个具名插槽（P2 / D4）：结构类在工具栏第一行，度量类在第二行。
+        // 目录由本组件取**一次**（`useResumeTemplateCatalog`），两组共用——各取一次就是两个请求。
+        // 渲染中**不禁用**（D12）：禁用是"丢弃"的另一种写法（用户拖不动 → 以为坏了），
+        // 边距合并已经保证"最后一次一定生效"，禁用只会制造"卡"的体感。
+        templateControls={
+          // 与「岗位详情 → AI 生成」用**同一套**版式控件（非 compact）：两处的
+          // 分组标签、控件尺寸、两行两列的排布必须一致，否则同一件事在两条入口里
+          // 长得不一样（2026-10-20 用户反馈）。
+          <ResumeTemplateControls
+            layout={layout}
+            resumeId={detail.id}
+            catalog={catalog}
+            onChange={(next) => onApplyLayout(next)}
+          />
+        }
+        measureControls={
           <>
-            <ResumeLayoutControls
-              compact
+            <ResumeMeasureControls
               layout={layout}
-              resumeId={detail.id}
-              disabled={relayouting}
+              catalog={catalog}
               previewRef={resolvedPreviewRef}
               onChange={(next) => onApplyLayout(next)}
             />
+            {/* 「正在按新版式渲染…」留在度量这一行：它说明的是"你刚拖的那个值正在生效"，
+                回到第一行会与"改版式"的按钮混在一起。 */}
             {relayouting ? (
               <Typography.Text type="secondary">正在按新版式渲染…</Typography.Text>
             ) : null}
@@ -342,71 +351,31 @@ export default function ResumeDetailPreview({
         // 通读、跨栏改、写作增强都留给「手动调整」。
         onEditTarget={(path) => setQuickEditPath(path)}
       />
-      {/* 固定在弹窗底部：内容长（版面诊断 + 预览）时不必一路翻到最后才够得着这些按钮。
-          按钮区是 CSS Grid：每个按钮独占一格、block 拉满整格，自动铺满整行不留右侧空当；
-          「下载 PDF」主按钮独占底部一整行，保持醒目。 */}
-      <div className="resume-detail-footer">
-        <Button
-          block
-          icon={<EditOutlined />}
-          onClick={() => {
-            setEditorTarget(null);
-            setEditorOpen(true);
-          }}
-        >
-          手动调整
-        </Button>
-        <Button block icon={<ZoomInOutlined />} onClick={() => setZoomOpen(true)}>
-          查看大图
-        </Button>
-        {showRevise && (
-          <Button block icon={<ThunderboltOutlined />} onClick={() => setReviseOpen(true)}>
-            AI 修改 / 重新生成
-          </Button>
-        )}
-        <Button
-          block
-          icon={<BulbOutlined />}
-          disabled={!detail.job_id}
-          onClick={() => setSuggestionsOpen(true)}
-        >
-          {suggestionsGenerated ? "查看岗位优化建议" : "生成岗位优化建议"}
-        </Button>
-        <Button
-          block
-          icon={<FolderOpenOutlined />}
-          disabled={!detail.job_id}
-          onClick={() => detail.job_id && navigate(`/jobs?job_id=${detail.job_id}`)}
-        >
-          查看对应岗位
-        </Button>
-        <Button
-          block
-          icon={<MessageOutlined />}
-          onClick={() => navigate(`/assistant?resume_id=${detail.id}&new=1`)}
-        >
-          咨询求职助手
-        </Button>
-        <Button block icon={<SafetyCertificateOutlined />} onClick={() => setQualityOpen(true)}>
-          质量检测
-        </Button>
-        <Button block icon={<ShareAltOutlined />} onClick={() => setSharePackageOpen(true)}>
-          离线分享
-        </Button>
-        {/* 额外操作（取消修改 / 保存修改）单独占一行：它们是"这一轮版式改动"的确认动作，
-            挤进 150px 的格子里会把两个按钮压成两行。 */}
-        {extraActions ? <div className="resume-detail-footer-extra-row">{extraActions}</div> : null}
-        {/* 导出放在最后：网格里 `-2 / -1` 让它落到「离线分享」所在行的最后一格，
-            也就是整张卡的右下角。 */}
-        <div className="resume-detail-footer-export">
-          <ExportButtons
-            recordId={detail.id}
-            layout={layout}
-            pdfDirectAvailable={pdfDirectAvailable}
-            onOpen={() => setExportOptionsOpen(true)}
-          />
-        </div>
-      </div>
+      {/* 固定在弹窗底部：内容长（版面诊断 + 预览）时不必一路翻到最后才够得着这些按钮。 */}
+      <ResumeDetailFooter
+        resumeId={detail.id}
+        layout={layout}
+        pdfDirectAvailable={pdfDirectAvailable}
+        extraActions={extraActions}
+        showRevise={showRevise}
+        suggestionsGenerated={suggestionsGenerated}
+        jobId={detail.job_id ?? null}
+        onOpenEditor={() => {
+          setEditorTarget(null);
+          setEditorOpen(true);
+        }}
+        onOpenZoom={() => setZoomOpen(true)}
+        onOpenRevise={() => setReviseOpen(true)}
+        onOpenSuggestions={() => setSuggestionsOpen(true)}
+        // 没岗位时按钮本身已禁用；守卫留在跳转这一侧，避免将来有第二个入口时忘了判空。
+        onOpenJob={() => {
+          if (detail.job_id) navigate(`/jobs?job_id=${detail.job_id}`);
+        }}
+        onOpenAssistant={() => navigate(`/assistant?resume_id=${detail.id}&new=1`)}
+        onOpenQuality={() => setQualityOpen(true)}
+        onOpenSharePackage={() => setSharePackageOpen(true)}
+        onOpenExportOptions={() => setExportOptionsOpen(true)}
+      />
 
       <ResumeEditorModal
         open={editorOpen}

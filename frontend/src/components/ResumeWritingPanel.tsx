@@ -4,7 +4,8 @@
  * 自包含：一段文本进、一段文本出。结果既可复制，也可一键回填——由父组件决定
  * 「回填到哪个字段」，这里只负责把结果交回去。
  */
-import { App, Button, Checkbox, Input, Radio, Segmented, Space, Spin, Typography } from "antd";
+import { App, Button, Checkbox, Input, Radio, Segmented, Space, Typography } from "antd";
+import LoadingBlock from "./common/LoadingBlock";
 import { useMemo, useState } from "react";
 import {
   generatePhrases,
@@ -143,7 +144,7 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
         生成
       </Button>
 
-      {loading && <Spin />}
+      {loading && <LoadingBlock />}
 
       {!loading && singleResult && (
         <ResultBlock label="结果" onApply={() => apply(singleResult)}>

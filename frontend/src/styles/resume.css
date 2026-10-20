@@ -60,14 +60,67 @@
 /* 页与页之间的“裁切间隙”：把连续纸面在分页处切开，观感等同两张并排的独立 A4 纸。
    间隙里露出预览视口的底色（#f5f7fa），两侧的柔和阴影扮演每张纸的纸边。
    宽度由组件按 PAGE_GAP_PX × scale 内联给出；压住的是简历自身的页边距区域，不遮正文。 */
-/* 预览工具栏（抓手/编辑/缩放/刷新）与下方警告条、画布之间的呼吸间距：
+/* 预览工具栏（P2b 起是两行：上=结构类、下=度量类）与下方警告条、画布之间的呼吸间距：
    之前工具栏没有下缘间距，与黄色警告条、画布三层全部贴死（用户截图反馈）。 */
 .resume-preview-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 12px;
-  /* 版式控件（模板/板块/页数/字号/行距）现在与抓手/缩放同处一行；
-     工具栏自身换行时按块排列，不再单独占一整行。 */
-  /* 「让 AI 改这一栏」的 chip 绝对定位到右侧（R14），这里是它的定位上下文。 */
-  position: relative;
+}
+
+/* 每一行都是可换行的 flex：窄屏时行内的簇各自换行，而不是把整行挤成横向滚动。 */
+.resume-preview-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 第一行：左侧交互模式、右侧结构类控件（`margin-left:auto` 顶到最右）。 */
+.resume-preview-toolbar-row-primary {
+  justify-content: space-between;
+}
+
+.resume-preview-toolbar-cluster {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 度量那一行：cluster 是行的子项，不给 grow 就只占内容宽度（544px），
+   右边留一大块空白——与生成弹窗里铺满的两列不一致。 */
+.resume-preview-toolbar-row > .resume-preview-toolbar-cluster {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resume-preview-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* 版式下拉的触发框：宽度刚好框住 4 个中文字符。
+   4em = 4 × 14px 的汉字宽度，+36px 是左右内边距与右侧箭头占位；原来是 min-width:120，
+   框比文字宽出一大截，同一行的「样式 / 版式 / 顺序 / 篇幅」看起来疏密不匀。
+   预设名更长时（如「宽松（自制）」）触发框走省略号，展开后的列表按内容撑开
+   （`popupMatchSelectWidth={false}`），不会跟着被裁掉。 */
+.resume-format-select {
+  width: calc(4em + 36px);
+  min-width: calc(4em + 36px);
+}
+
+/* 缩放条：在纸面**下方**居中（P2b / D6）。缩放是"看"的动作，手应该落在图旁边。 */
+.resume-preview-zoom-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 /* 溢出警告条与画布之间同样留一档；首条警告已有内联 marginBottom: 12。 */
@@ -75,6 +128,9 @@
   margin-bottom: 12px;
 }
 
+/* 页与页之间的“裁切间隙”：把连续纸面在分页处切开，观感等同两张并排的独立 A4 纸。
+   间隙里露出预览视口的底色（#f5f7fa），两侧的柔和阴影扮演每张纸的纸边。
+   宽度由组件按 PAGE_GAP_PX × scale 内联给出；压住的是简历自身的页边距区域，不遮正文。 */
 .resume-preview-page-separator {
   position: absolute;
   top: 0;
@@ -84,13 +140,18 @@
   transform: translateX(-50%);
 }
 
+/* 盖住列间距，露出视口底色：观感是"两张并排的 A4 纸"而不是一张宽纸。
+   宽度=column-gap（28mm），两侧各加一道纸边阴影，边界才立得住。 */
 .resume-preview-page-separator-line {
   display: block;
   height: 100%;
   background: var(--rf-surface-alt);
+  /* 阴影留在页间隙内部；外投影会盖住紧贴纸边的日期、照片和正文末字。 */
   box-shadow:
-    -5px 0 9px -3px rgb(15 40 80 / 0.16),
-    5px 0 9px -3px rgb(15 40 80 / 0.16);
+    inset 7px 0 16px -6px rgb(15 40 80 / 0.28),
+    inset -7px 0 16px -6px rgb(15 40 80 / 0.28),
+    inset 1px 0 0 rgb(15 40 80 / 0.06),
+    inset -1px 0 0 rgb(15 40 80 / 0.06);
 }
 
 .resume-preview-page-separator-label {
@@ -183,9 +244,35 @@
   padding-right: 8px;
 }
 
+/* 说明文字与「填入我的资料全部数据」同一行（项 9）：说明占满剩余宽度，按钮贴最右。
+   原来两者是两段独立 DOM，各带 margin-bottom，等于白白多占一行高度。 */
 .resume-editor-description {
   display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resume-editor-hint-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   margin-bottom: 16px;
+}
+
+.resume-editor-hint-row > .resume-editor-description {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resume-editor-hint-row > .ant-btn {
+  flex: 0 0 auto;
+}
+
+/* 窄屏：说明通常要占两三行，按钮跟在后面挤在同一行会把它压成一条窄柱，所以允许换行。 */
+@media (max-width: 640px) {
+  .resume-editor-hint-row {
+    flex-wrap: wrap;
+  }
 }
 
 .resume-editor-reference {
@@ -417,24 +504,64 @@
   gap: 8px 12px;
 }
 
-/* 额外操作（取消修改 / 保存修改、生成弹窗里的重新生成…）独占一整行，
-   靠右对齐紧跟按钮区：它们是"这一轮改动"的确认动作，不能挤进 150px 的格子。 */
-.resume-detail-footer-extra-row {
+/* 最后一行：左侧三个次动作（咨询 / 质量 / 离线分享）与右侧的
+   「取消修改 / 保存修改 / 导出」**合并成同一行**（2026-10-20 用户要求）。
+   容器用 subgrid 复用页脚的列，左侧按钮因此仍与上面两排逐列对齐；
+   右侧动作只在第 4、5 列里靠右收尾，按内容宽度排（比整格窄）。 */
+.resume-detail-footer-tail {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+@supports (grid-template-columns: subgrid) {
+  .resume-detail-footer-tail {
+    display: grid;
+    grid-template-columns: subgrid;
+  }
+}
+
+.resume-detail-footer-tail > .resume-detail-footer-confirm-row,
+.resume-detail-footer-tail > .resume-detail-footer-export {
+  grid-column: 4 / 6;
+  justify-self: end;
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.resume-detail-footer-confirm-row > .resume-detail-footer-extra {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-.resume-detail-footer-extra-row .ant-space {
+.resume-detail-footer-confirm-row .ant-space {
   display: inline-flex;
 }
 
-/* 窄屏：`auto-fill` 会塌成一列，`-2 / -1` 会指向一个不存在的格子（-2 变为第 0 条
-   线之前的无效区间），导出因此可能挤在 150px 里或错位。这时明确退回整行。 */
+/* 右侧三个动作比左侧按钮小一档：这里只按内容宽度渲染，不再铺满整格。 */
+.resume-detail-footer-confirm-row .ant-btn,
+.resume-detail-footer-tail > .resume-detail-footer-export .ant-btn {
+  width: auto;
+}
+
+/* 窄屏：塌成一列，左侧三个在上、右侧动作在下并靠右。 */
 @media (max-width: 720px) {
-  .resume-detail-footer-export {
+  .resume-detail-footer-tail {
+    grid-template-columns: 1fr;
+  }
+
+  .resume-detail-footer-tail > .resume-detail-footer-confirm-row,
+  .resume-detail-footer-tail > .resume-detail-footer-export {
     grid-column: 1 / -1;
+    justify-self: stretch;
+    margin-left: 0;
   }
 }
 
@@ -549,35 +676,31 @@
   }
 }
 
-/* 「查看大图」弹窗：给预览一个尽量高的视口，页面才能以 1:1 显示。 */
+/* 「查看大图」弹窗：给预览一个尽量高的视口，页面才能以 1:1 显示。
+   操作区已交给 Modal 的 footer 插槽（对齐与内边距由 `theme.components.Modal` 给），
+   原来贴在正文末尾的 `.resume-zoom-footer` 已随之删除。 */
 .resume-zoom-body {
   min-height: 360px;
 }
 
-.resume-zoom-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
-
-/* 预览工具栏里的「当前指向」提示：鼠标划过纸面字段时出现，说明现在指向哪一栏。
+/* 预览工具栏第二行右侧的「当前指向」提示：鼠标划过纸面字段时出现，说明现在指向哪一栏。
  *
  * R14：它是工具栏里唯一"长度不可控"的东西——路径文案可以是「实习/工作经历 · 第 2 条 ·
  * 工作内容 · 第 3 条」，而旁边还有「让 AI 改这一栏」按钮。原先它作为 Space 的普通子项
  * 参与 flex 排版，`max-width: 46%` 一到就把按钮挤到下一行（视觉上像是按钮"掉出去了"）。
- * 现在它脱离文档流、钉在工具栏右侧：宽度不再影响按钮组的换行判定，label 自己收缩省略，
- * 按钮永远完整可见。 */
+ * 那之后它被改成绝对定位钉在工具栏右端。
+ *
+ * P2b / D7：右端换成了核心按钮（结构类控件），绝对定位会**正好盖住**它们，所以改回
+ * **参与布局**（`margin-left: auto`）——宽度只会把左侧挤一点，结构上不可能重叠。 */
 .resume-preview-hover-chip {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
   /* 内联 style 由 ResumePreview 直接切换 none/flex（显隐逻辑不变）。 */
   display: flex;
+  /* 只有剩余空间才占，长文案先压缩自己（label 内部再省略号）。 */
+  flex: 0 1 auto;
   max-width: min(520px, 60vw);
   align-items: center;
   gap: 8px;
-  z-index: 2;
+  margin-left: auto;
   padding: 2px 6px 2px 10px;
   border: 1px solid var(--rf-focus-ring);
   border-radius: 999px;
@@ -602,16 +725,8 @@
   white-space: nowrap;
 }
 
-/* 窄屏：绝对定位会和上方缩放控件叠在一起，改为独占一行（仍固定在工具栏下方）。 */
-@media (max-width: 900px) {
-  .resume-preview-hover-chip {
-    position: static;
-    transform: none;
-    width: 100%;
-    max-width: 100%;
-    margin-top: 8px;
-  }
-}
+/* 窄屏的那条覆盖规则（绝对定位 → 独占一行）随 P2b 一起删除：
+   chip 现在天然就在第二行的右端，父容器的 `flex-wrap` 负责换行，不需要额外断点。 */
 
 /* 列表「目标岗位」列（T3）：列宽固定 200，长岗位名/公司名必须在 Tag 内省略，
    否则整表被撑宽、其它列被挤成一字宽。column 级 ellipsis 负责切 table-layout: fixed，
@@ -625,7 +740,5 @@
   vertical-align: bottom;
 }
 
-/* 「填入我的资料全部数据」（T11）：编辑器头部说明文字下方的一行次要操作。 */
-.resume-editor-fill-all {
-  margin-bottom: 12px;
-}
+/* 「填入我的资料全部数据」的样式已随项 9 并进 `.resume-editor-hint-row`：
+   它不再是说明文字下方独立的一行，而是同一行里贴最右的按钮（见上方规则）。 */

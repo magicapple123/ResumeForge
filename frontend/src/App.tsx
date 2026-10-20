@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { MenuOutlined, QuestionCircleOutlined } from "@ant-design/icons";
-import { Button, Layout, Menu, Typography } from "antd";
+import { Button, Layout, Menu, Tooltip, Typography } from "antd";
 import AppHeaderActions from "./components/AppHeaderActions";
 import BackgroundTaskBar from "./components/BackgroundTaskBar";
 import StarPromptModal from "./components/StarPromptModal";
@@ -319,10 +319,12 @@ function MainLayout() {
                 <span className="app-brand-name">
                   {APP_NAME}
                   {/* 版本号低调跟在应用名旁：次要文字色 + 小字号，不抢视觉；
-                    hover 有 title 说明。值来自 package.json（版本单源）。 */}
-                  <span className="app-brand-version" title="当前版本">
-                    v{APP_VERSION}
-                  </span>
+                    说明走 Tooltip 而不是原生 title —— 后者只对鼠标可见，键盘用户与读屏
+                    都拿不到"这是什么"。Tooltip 不产生 DOM，`className` 仍留在 span 上，
+                    页头品牌区的布局不受影响。值来自 package.json（版本单源）。 */}
+                  <Tooltip title="当前版本">
+                    <span className="app-brand-version">v{APP_VERSION}</span>
+                  </Tooltip>
                 </span>
                 <span className="app-brand-caption">AI 简历工作台</span>
               </span>

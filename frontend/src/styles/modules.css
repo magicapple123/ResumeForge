@@ -23,10 +23,12 @@
    DOM 已改为 `div.ant-modal > div.ant-modal-container > (close, header, body, footer)`，
    旧版的 content 容器类名已被删除。此前这里 9 条规则全部写的是旧类名，于是
    max-height / body 滚动 / 边框圆角阴影一条都没生效，长内容弹窗才会"上下顶格"。 */
+/* antd-override: 布局无 token —— 弹窗容器需要 flex，margin:auto 才能垂直居中 */
 .ant-modal-wrap {
   display: flex;
 }
 
+/* antd-override: 布局无 token —— top:0 + margin:auto 让高弹窗从顶部整体滚动 */
 .ant-modal {
   /* flex + margin:auto 的标准解法：矮弹窗垂直居中；高弹窗不会被 flex 居中裁切，
      而是从视口顶部开始整体滚动（margin:auto 在溢出时退化为 0）。 */
@@ -34,6 +36,7 @@
   margin: auto;
 }
 
+/* antd-override: 布局无 token —— 弹窗高度上限与容器内的滚动前提（antd 无 max-height token） */
 .ant-modal-container {
   display: flex;
   flex-direction: column;
@@ -45,11 +48,13 @@
   overflow: hidden;
 }
 
+/* antd-override: 布局无 token —— 高度链要求 header/footer 不参与伸缩 */
 .ant-modal-container > .ant-modal-header,
 .ant-modal-container > .ant-modal-footer {
   flex: 0 0 auto;
 }
 
+/* antd-override: 布局无 token —— 内容区独立滚动（min-height:0 + overflow-y），antd 无对应 token */
 .ant-modal-container > .ant-modal-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -60,10 +65,12 @@
 /* ===== 弹窗统一视觉 =====
    用同一套表面、标题和操作区建立层级，再通过语义 class 给危险/辅助/编辑类弹窗加
    顶部色带。这样不同模块不会各自长出一套互不相容的卡片外观。 */
+/* antd-override: 私有形态 —— 遮罩浓度是产品口径（--rf-scrim-strong），无 token */
 .ant-modal-root .ant-modal-mask {
   background: var(--rf-scrim-strong);
 }
 
+/* antd-override: 私有形态 —— 容器圆角裁切与品牌阴影；Modal 没有 borderRadiusLG/boxShadow 这组 token */
 .ant-modal-container {
   /* 圆角 + overflow:hidden 让标题条的底色被裁在圆角里；边框与阴影给出"浮在页面之上"。 */
   border: 1px solid var(--rf-border-strong);
@@ -73,22 +80,23 @@
     0 8px 24px rgb(15 23 42 / 10%);
 }
 
+/* antd-override: 布局无 token —— headerPadding / headerBorderBottom / headerMarginBottom
+   只存在于 antd 的 prepareComponentToken 内部返回类型，未进入 Modal.ComponentToken */
 .ant-modal-header {
   margin-bottom: 0;
   padding: 18px 22px 14px;
   border-bottom: 1px solid var(--rf-border-subtle);
-  background: linear-gradient(135deg, var(--rf-surface-alt) 0%, var(--rf-surface-alt) 100%);
 }
 
+/* antd-override: 私有形态 —— 标题字重 700；titleFontSize/titleColor 已由 token 给，字重不在 token 面 */
 .ant-modal-title {
-  color: var(--rf-brand);
-  font-size: 16px;
   font-weight: 700;
 }
 
 /*
  * 欢迎卡片（8 步引导）是"封面"而不是表单弹窗：标题下的分割线与渐变底会把品牌图标和
- * 标题切成两截。只覆盖这一个弹窗（.user-guide-modal），其余 Modal 的标题保持原样——
+ * 标题切成两截。只覆盖这一个弹窗（.user-guide-modal），其余 Modal 的标题由
+ * `theme.components.Modal`（headerBg）+ 上面的 headerPadding 负责——
  * 动全局 .ant-modal-header 会让所有弹窗一起变。
  */
 .user-guide-modal .ant-modal-header {
@@ -107,36 +115,43 @@
   border-top: 1px solid var(--rf-border-subtle);
 }
 
+/* antd-override: 布局无 token —— 关闭按钮的贴角位置 */
 .ant-modal-close {
   top: 14px;
   inset-inline-end: 14px;
   border-radius: 8px;
 }
 
+/* antd-override: 私有形态 —— 关闭按钮 hover 底色用品牌 tint，无对应 token */
 .ant-modal-close:hover {
   background: var(--rf-brand-tint);
 }
 
 .ant-modal-body {
+  /* antd-override: 布局无 token —— bodyPadding 是单值 token，非对称内边距只能留 CSS */
   padding: 20px 22px 22px;
 }
 
+/* antd-override: 布局无 token —— footerPadding / footerBorderTop / footerMarginTop
+   同样只在 prepareComponentToken 内部返回类型里，未进入 Modal.ComponentToken */
 .ant-modal-footer {
   margin-top: 0;
   padding: 14px 22px 18px;
   border-top: 1px solid var(--rf-border-subtle);
-  background: var(--rf-surface-alt);
 }
 
+/* antd-override: 私有形态 —— 确认弹窗顶部的焦点色带（其余弹窗按语义换色） */
 .ant-modal-confirm .ant-modal-container {
   border-top: 3px solid var(--rf-focus-ring);
 }
 
+/* antd-override: 私有形态 —— 确认弹窗标题用品牌色 + 700，与普通弹窗区分 */
 .ant-modal-confirm .ant-modal-confirm-title {
   color: var(--rf-brand);
   font-weight: 700;
 }
 
+/* antd-override: 私有形态 —— 确认弹窗正文的行高与正文色（--rf-text-body） */
 .ant-modal-confirm .ant-modal-confirm-content {
   color: var(--rf-text-body);
   line-height: 1.7;
@@ -152,12 +167,6 @@
 
 .rf-modal-editor .ant-modal-container {
   border-top: 3px solid var(--rf-accent-green);
-}
-
-/* 所有可勾选表格统一使用品牌浅蓝，覆盖 antd 默认的深灰选中背景。 */
-.ant-table-tbody > tr.ant-table-row-selected > td,
-.ant-table-tbody > tr.ant-table-row-selected:hover > td {
-  background: var(--rf-brand-tint) !important;
 }
 
 /* ===== 网申浏览器工具区 =====
@@ -258,6 +267,7 @@
 }
 
 /* 表格行右键：给一点悬停反馈，让用户知道整行都可以右键。 */
+/* antd-override: 私有形态 —— 行右键的悬停反馈；antd 6 用 .ant-table-cell-row-hover 类，我们按行 hover */
 .ant-table-tbody > tr.ant-table-row:hover > td {
   background: var(--rf-surface-alt);
 }
@@ -1306,6 +1316,245 @@
   row-gap: 8px;
 }
 
+/* 生成配置阶段（就是这个壳）：结构行铺满整行，
+   「样式 / 版式 / 板块」靠左，「最大篇幅」靠右。
+   页数是这一行里"另起一类"的选择（排几页 A4），与前面三个"长什么样"的选项分开站；
+   预览工具栏用的是同一个组件，但不匹配下面这两条规则，形态不变。 */
+.resume-layout-controls > .ant-space-item:first-child {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.resume-layout-controls .resume-template-controls {
+  width: 100%;
+}
+
+/* 最大篇幅顶到最右（窄到换行时它自己占一行，仍然靠右）。 */
+.resume-layout-controls
+  .resume-template-controls
+  > .ant-space-item:has(> .resume-page-limit-group) {
+  margin-left: auto;
+}
+
+/* 度量控件（字号 / 行距 / 页边距 / 字体）：等宽四列铺满可用宽度。
+   之前是一串 inline 分组左对齐，宽弹窗里右侧空出半屏、控件全挤在左边；
+   现在每列 = 常驻小标签 + 控件，列宽自动均分，窄屏按 minmax 下限折行。 */
+/* antd 的 Space 会给每个子项包一层不可伸缩的 `.ant-space-item`：里面的度量栅格
+   就算写了 `width:100%`，也会按内容的收缩宽度算（这就是弹窗里四列挤成一团的另一半原因）。
+   让装栅格的那一项占满整行。 */
+.resume-layout-controls > .ant-space-item:has(.resume-measure-grid) {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.resume-measure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  align-items: center;
+  gap: 10px 20px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* 弹窗里一行只放一个控件：这一格最宽（标签 + 减/加 + 滑块 + 数值 + 警告 + 复位），
+   四列排会互相压穿（2026-10-20 用户截图：警告竖排、数值叠到"行距"上）。 */
+/* 方案 A（用户选定）：两行两列铺满整宽——第一行 行距 / 页边距，第二行 字号 / 字体。
+   顺序在 DOM 里就改了（不是 CSS order），键盘 Tab 顺序与视觉顺序一致。 */
+.resume-measure-grid.is-stacked {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 28px;
+}
+
+/* 弹窗窄下来时退回单列，否则两列的滑块会短到不好拖。 */
+/* 两列的断点从 720 提到 900（QA 实测），再提到 1000（读数改定宽列后）。
+   三条滑杆写死 200px、读数 56px、来源标签 52px 之后，一行的固定开销是
+   「标签 44 + 间距 6 + 控件 264 + 间距 6 + 读数 56 + 间距 6 + 来源 52 = 434px」；
+   两列需要弹窗内容宽 896px，而弹窗是 min(960px, 96vw) 再减左右 24px 内边距——
+   窗口要到 983px 才够，900~1000px 之间读数会被画到「+」和滑杆上。
+   所以窗口窄于 1000px 时直接退回单列，每格 800px 以上，读数与滑杆都放得下。 */
+@media (max-width: 1000px) {
+  .resume-measure-grid.is-stacked {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 预览工具栏才并排：列宽下限 300px，窗口变窄自动折行，不会挤成一团。 */
+.resume-measure-grid.is-compact {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 8px 16px;
+}
+
+.resume-measure-cell {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 滑块所在的那一格吃掉剩余宽度：固定 150px 在窄格里必然顶出去。
+   antd 的 Space 会把每个子项包一层 `.ant-space-item`，所以要让这一层可伸缩。 */
+.resume-measure-cell .ant-space {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resume-measure-cell .ant-space-item:has(.ant-slider) {
+  flex: 1 1 auto;
+  min-width: 48px;
+}
+
+.resume-measure-cell .ant-slider {
+  min-width: 0;
+}
+
+.resume-measure-label {
+  flex: 0 0 auto;
+  min-width: 34px;
+  /* 双击标题 = 恢复默认，所以标题不能被双击选中文字。 */
+  cursor: default;
+  user-select: none;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* 三条滑杆长度统一（2026-10-21 用户截图：字号约 260px、行距约 90px、页边距约 60px）。
+   原因是滑杆写的 `flex: 1 1 auto`——宽度取决于"这一格还剩多少"，于是三行读起来像三套
+   不同的控件。现在把三条滑杆写死同一宽度，读数与来源标签各占一列（`.resume-measure-value`
+   / `.resume-measure-source`）排在滑杆之后，三行因此形成两条竖线：滑杆一条、读数一条。
+   只作用于弹窗（`.is-stacked`）：工具栏（`.is-compact`）里每格宽度本来就不一样，
+   写死会顶穿自己的格子。 */
+/* 滑杆所在的那一格定宽 200px。**必须是直接子选择器**（`> .ant-slider`）：
+   行距/页边距外面还套着一层 `.ant-space-item`，它内部也有滑杆——用 `:has(.ant-slider)`
+   会把这层外壳一起钉成 200px，而它的内容其实是 264px（两个按钮 + 滑杆），
+   多出来的 64px 会溢到尾部下面，读数直接压在「+」上。 */
+.resume-measure-grid.is-stacked .ant-space-item:has(> .ant-slider) {
+  flex: 0 0 200px;
+  min-width: 200px;
+}
+
+.resume-measure-grid.is-stacked .ant-slider {
+  /* 滑块自带 2px 左右外边距。注意：这一格实际内容宽是 264px（两个 30px 图标按钮 + 200px 滑杆），
+     不是 200px——所以窗口太窄时必须靠断点退回单列，不能只指望"刚好放得下"。 */
+  width: 200px;
+}
+
+/* 字号那一格的 Space 是 `.resume-measure-cell` 的直接子项，基础规则让它
+   `flex: 1 1 auto` 吃掉剩余宽度（紧凑模式需要）。到了弹窗里它必须与另外两行的控件
+   同宽，否则尾部被挤到格子最右端，读数与上一行错开整整 61px（实测）。 */
+.resume-measure-grid.is-stacked .resume-measure-cell > .ant-space {
+  flex: 0 0 auto;
+}
+
+/* 尾部吃掉这一格剩下的宽度：内容**左对齐**（读数与滑杆之间的距离固定），
+   这样三行读数才会落在同一条竖线上——靠右收口时，缺失来源标签的那一行会整体右移。 */
+.resume-measure-grid.is-stacked .ant-space-item:has(> .resume-measure-tail) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 标签固定宽度：否则「行距」24px、「字号」34px、「页边距」36px 会把后面的
+   减号与滑杆整体推开，三行滑杆虽然等长却不在同一条竖线上（实测差 10px）。
+   `display:inline-block` 不能省：行距/页边距的标签在 antd 的 `.ant-space-item`
+   里是行内元素，行内元素上 `width` 不生效（实测仍是 24/36）。 */
+.resume-measure-grid.is-stacked .resume-measure-label {
+  display: inline-block;
+  flex: 0 0 44px;
+  width: 44px;
+  white-space: nowrap;
+}
+
+.resume-measure-tail {
+  display: flex;
+  align-items: center;
+  /* 左对齐（原先是 flex-end）：尾部宽度由这一格剩余空间决定，靠右收口时
+     「1.45 随版式」与没有标签的「13.2px」会各自贴到右边界，读数就错开了。 */
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 读数列：定宽 + 等宽数字。读数是"这一格当前的量"，三行读数的左边界必须对齐
+   （用户 2026-10-20 截图：1.45 在左、13.2px 在右）。56px 取 14px 字号下
+   「13.2px」这种最长读数的宽度，够放且不晃。 */
+.resume-measure-value {
+  flex: 0 0 56px;
+  width: 56px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 来源标签（随模板 / 随版式）做成小胶囊：一段裸露的文字紧挨着读数时，
+   会被读成"读数的后半句"，也分不清它是说明还是可点的操作。
+   没设过覆盖才显示内容；但**位置始终占着**（`.is-empty` 只留空位、不画胶囊）——
+   否则用户一拖滑杆标签消失，读数就向右跳一格，三行又对不齐了。
+   min-width 按 3 个 12px 汉字 + 左右内边距算，两种标签同宽。 */
+.resume-measure-source {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  /* 这一层没有 antd 的边框盒重置：不写 border-box 时 padding 与边框会加在
+     min-width 之外（实测 50px 被撑到 64px），读数与标签一起把整行顶宽 4px。 */
+  box-sizing: border-box;
+  min-width: 52px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 999px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.resume-measure-source.is-empty {
+  border-color: transparent;
+  background: none;
+}
+
+/* 字体下拉与上一行的页边距滑杆**同宽同起点**（用户 2026-10-20 指定）。
+   滑杆左侧的开销是「减号按钮 30 + 间距 2 + 滑杆自身左右外边距 2」＝ 34px
+   （小号图标按钮宽 = controlHeightSM = controlHeight 40 × 0.75 = 30），
+   而下拉左侧只有 44px 标签 + 6px 间距；补 34px 才落在同一条竖线上，
+   宽度取滑杆的 200px，右边界因此也对齐。 */
+.resume-measure-grid.is-stacked .resume-font-select.is-fluid {
+  flex: 0 0 200px;
+  width: 200px;
+  margin-left: 34px;
+}
+
+/* 字号下限提示：单独占一整行（`.resume-measure-cell` 是 wrap 的 flex 行）。
+   挤在读数后面时这一格只剩几十像素，提示会被压成竖排的窄条。 */
+.resume-font-warning {
+  flex: 1 0 100%;
+  font-size: 12px;
+}
+
+/* `width: 100%` 只在"尾部单独占一个 Space 子项"时给：这样它铺满整格、内容靠右。
+   为什么不写进上面那条基础规则：紧凑模式（工具栏）里没有这条宽度来源，百分比宽度
+   在收缩型 flex 子项里算不稳，而 `.is-compact` 这次不该有任何变化。 */
+.resume-measure-grid.is-stacked .ant-space-item > .resume-measure-tail {
+  width: 100%;
+}
+
+/* 字号那一格不是 Space，而是 `.resume-measure-cell` 这个 flex 行：尾部若也占满 100%
+   就会换行，把读数挤到第二行去。这里把基准换成 0，它只吃标签与控件剩下的宽度。
+   同样只作用于弹窗：紧凑模式里这一格本来就按内容宽度排，读数紧跟控件才是原样。 */
+.resume-measure-grid.is-stacked .resume-measure-cell > .resume-measure-tail {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* 预览工具栏第二行：左边是度量组、右边是「正指向」chip，
+   所以度量组要吃掉剩余宽度（否则又缩回左侧一小条）。 */
+.resume-preview-toolbar-cluster > .resume-measure-grid {
+  flex: 1 1 auto;
+}
+
 /* ===== 个人照片面板 ===== */
 
 /* 照片库弹窗里一行横排、放不下就换行：竖着堆成两行会把弹窗撑得很长。 */
@@ -1586,24 +1835,30 @@
   box-shadow: 0 10px 26px rgba(31, 56, 85, 0.07);
 }
 
+/* 彩条按**阶段**上色（项 8 / D17）：同阶段同色，跨页与「求职进度」一致。
+   编码（这张卡属于哪个阶段）用阶段色；数字仍保留 `--rf-success-strong` 的评价语义。
+   原来按 `:nth-child` 上色——列顺序一变颜色就跟着错位，而且和阶段没有任何对应关系。 */
 .analytics-page .analytics-metric-row .ant-card::before {
   display: block;
   height: 4px;
   margin: -24px -24px 18px;
   content: "";
-  background: var(--rf-info);
+  /* 默认色即"投递"阶段：`.stat-card-applied` 不必单独写规则。 */
+  background: var(--rf-stage-bar-applied, var(--rf-info));
 }
 
-.analytics-page .analytics-metric-row .ant-col:nth-child(2) .ant-card::before {
-  background: var(--rf-accent-green);
+/* `.stat-card-*` 由 StatCard 透传，落在 `Card` 根节点上，与 `.ant-card` 是**同一个**
+   元素（不是父子），所以选择器是 `.ant-card.stat-card-*`。 */
+.analytics-page .analytics-metric-row .ant-card.stat-card-interview::before {
+  background: var(--rf-stage-bar-interview, var(--rf-info));
 }
 
-.analytics-page .analytics-metric-row .ant-col:nth-child(3) .ant-card::before {
-  background: var(--rf-accent-amber);
+.analytics-page .analytics-metric-row .ant-card.stat-card-assessment::before {
+  background: var(--rf-stage-bar-assessment, var(--rf-info));
 }
 
-.analytics-page .analytics-metric-row .ant-col:nth-child(4) .ant-card::before {
-  background: var(--rf-accent-violet);
+.analytics-page .analytics-metric-row .ant-card.stat-card-offer::before {
+  background: var(--rf-stage-bar-offer, var(--rf-info));
 }
 
 .analytics-page .analytics-section {
@@ -1791,4 +2046,40 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 字体下拉的选项行：弹层现在与触发框同宽（140/176px），长名字必须省略，
+   否则会横向溢出或把弹层重新撑宽。 */
+.resume-font-option {
+  display: block;
+  /* 弹层按内容撑开（触发框只有 200px，跟着它走会把每个名字都截掉）；
+     但极端长的文件名会把弹层拉到半屏，所以给一个上限，超出仍然省略。 */
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 字体下拉里的小字文件名：与展示名同排，弱化到 11px。
+   它是最长的那个字段（`aidianqianfengxingkai….ttf`），单独限宽并省略，
+   免得它把展示名挤掉——展示名才是用户认字体的依据。 */
+.resume-font-option-file {
+  display: inline-block;
+  max-width: 180px;
+  margin-left: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+}
+
+/* 卡片标题栏的上下留白（2026-10-20）。
+   antd v6 的 `.ant-card-head` 垂直内边距是 0，标题栏高度全靠 min-height 撑；
+   于是右侧 extra 里的按钮只离上下边框几像素——设置页的数据集卡片、
+   网申页的「智能逐项填表」都能看到这个形态。这里给这两类卡片补一点呼吸。 */
+.settings-card > .ant-card-head,
+.live-mode-card > .ant-card-head {
+  padding-block: 10px;
+  min-height: 0;
 }

@@ -2,14 +2,20 @@
 /**
  * 页头右侧的「当前数据集 + 用户头像」。
  *
- * 两件事放在一起，因为它们回答的是同一个问题：**我现在是在什么上下文里操作**。
+ * 三件事放在一起，因为它们回答的是同一个问题：**我现在是在什么上下文里操作**。
  * - 数据集：简历通支持多套互相独立的数据集（工作一份、私人一份），而界面其余部分长得
  *   一模一样，切错数据集会产生"我的简历怎么不见了"这类误会。
+ * - 我的空间（`beforeAvatar` 插槽）：与头像同属"我是谁 / 我有哪些私有空间"这一组，
+ *   排在头像左侧；它由调用方注入，因为入口列表来自导航配置，不该由页头自己决定。
  * - 头像：用「我的资料」里**当前启用的那张照片**，一眼就能认出这是谁的那份数据。
  *
  * 两个刻意的做法：
  * 1. 数据集在这里可以直接切换，但切换成功后会整页重载，保证岗位、资料和缓存都来自新数据集。
  * 2. **头像不出本机**。照片存在本地数据库里，这里只是把它显示出来，不发给任何模型。
+ *
+ * 为什么用插槽而不是 CSS `order`：视觉顺序要的是 `[数据集][我的空间][头像]`，而
+ * `.app-header-context` 是个独立的 flex 容器——`order` 只在同级之间生效，跨容器排不了。
+ * 插槽把顺序写进 DOM，既显式又能被测试钉住。
  */
 import {
   DatabaseOutlined,
@@ -20,7 +26,8 @@ import {
 } from "@ant-design/icons";
 import { App, Avatar, Dropdown, Skeleton, Tooltip } from "antd";
 import type { MenuProps } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProfile } from "../api/profile";
 import { registerDatasetMenuHandler } from "../features/shortcuts/runtimeTargets";
@@ -34,7 +41,17 @@ import DatasetCreateModal from "./DatasetCreateModal";
 /** 下拉菜单里「新建数据集…」的 key：与数据集 id 不可能冲突。 */
 const CREATE_DATASET_KEY = "create-dataset";
 
-export default function AppHeaderContext() {
+interface Props {
+  /**
+   * 渲染在**头像左侧**的插槽（项 1）：目前是「我的空间」入口。
+   *
+   * 只接受"已经就绪"的节点：它和头像同时出现（都在 `ready` 之后），避免页头先闪出一个
+   * 空位再补内容。
+   */
+  beforeAvatar?: ReactNode;
+}
+
+export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { message, modal } = App.useApp();
@@ -48,6 +65,9 @@ export default function AppHeaderContext() {
   const [createOpen, setCreateOpen] = useState(false);
   // 数据集下拉的受控开关：快捷键要能把它打开（见 R8 的 switchDataset）。
   const [datasetMenuOpen, setDatasetMenuOpen] = useState(false);
+  /** 弹层宽度：打开时按触发框实测，保证两者同宽（见 onOpenChange）。 */
+  const [datasetMenuWidth, setDatasetMenuWidth] = useState<number | undefined>(undefined);
+  const datasetChipRef = useRef<HTMLButtonElement | null>(null);
   const [createName, setCreateName] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -220,7 +240,18 @@ export default function AppHeaderContext() {
               trigger={["click"]}
               // R8：受控开关，供「切换数据集」快捷键打开（Ctrl/⌘+Shift+D）。
               open={datasetMenuOpen}
-              onOpenChange={setDatasetMenuOpen}
+              onOpenChange={(next) => {
+                setDatasetMenuOpen(next);
+                // 弹层宽度跟随触发框（用户反馈：弹层比圆角框宽出一截）。
+                // 打开时量一次即可——chip 的宽度在同一屏里不会变，关着的时候量不到。
+                if (next) setDatasetMenuWidth(datasetChipRef.current?.offsetWidth);
+              }}
+              styles={{
+                root:
+                  datasetMenuWidth && datasetMenuWidth > 0
+                    ? { width: datasetMenuWidth, maxWidth: datasetMenuWidth }
+                    : undefined,
+              }}
               // 数据集名可以很长（导入的名称不受限），弹层不设上限时会被一个名字撑到
               // 半屏宽。宽度约束与省略号都放在 CSS 里（.app-dataset-dropdown），
               // 完整名字通过条目的 title 属性悬停可见。
@@ -243,6 +274,7 @@ export default function AppHeaderContext() {
               }}
             >
               <button
+                ref={datasetChipRef}
                 type="button"
                 className="app-dataset-chip"
                 aria-label={`当前数据集：${dataset.name}`}
@@ -259,6 +291,9 @@ export default function AppHeaderContext() {
               </button>
             </Dropdown>
           ) : null}
+          {/* 「我的空间」在数据集与头像之间：先说明"在哪份数据里"，再给出同一份身份下的
+              私有入口，最后是头像本身。顺序写在 DOM 里（见文件头注释）。 */}
+          {beforeAvatar}
           <button
             type="button"
             className="app-user-avatar-button"

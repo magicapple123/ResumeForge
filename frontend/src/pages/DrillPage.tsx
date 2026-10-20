@@ -16,9 +16,7 @@ import {
   Button,
   Card,
   Checkbox,
-  Empty,
   Listy,
-  Modal,
   Pagination,
   Space,
   Statistic,
@@ -26,6 +24,7 @@ import {
   Tooltip,
   Typography,
 } from "antd";
+import EmptyState from "../components/common/EmptyState";
 import PageSkeleton from "../components/common/PageSkeleton";
 import BatchActionBar from "../components/common/BatchActionBar";
 import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
@@ -50,7 +49,7 @@ import { ReviewPanel } from "./drill/ReviewPanel";
 import { StartPanel } from "./drill/StartPanel";
 
 export default function DrillPage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const navigate = useNavigate();
   const [current, setCurrent] = useState<DrillSession | null>(null);
   const [history, setHistory] = useState<DrillSessionBrief[]>([]);
@@ -140,7 +139,7 @@ export default function DrillPage() {
   const removeSelected = () => {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
-    Modal.confirm({
+    modal.confirm({
       title: `删除选中的 ${ids.length} 场深挖？`,
       okText: "删除",
       okButtonProps: { danger: true },
@@ -296,10 +295,7 @@ export default function DrillPage() {
         {loadingHistory ? (
           <PageSkeleton rows={3} />
         ) : history.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="还没有深挖记录。先在「事实台账」确认几条主张，再回来开一场。"
-          />
+          <EmptyState description="还没有深挖记录。先在「事实台账」确认几条主张，再回来开一场。" />
         ) : (
           <>
             <Listy

@@ -5,7 +5,8 @@
  * 预览这一步不是走过场：面板上每条都写明"会新增 / 会更新 / 没变化"和原因，用户看的是
  * **会发生什么**，而不是一堆等他自己判断的字段。取消或关闭都不会写任何数据。
  */
-import { App, Button, Checkbox, Empty, Input, Modal, Space, Tag, Typography } from "antd";
+import { App, Button, Checkbox, Input, Modal, Space, Tag, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
 import { useEffect, useState } from "react";
 import { applyTracks, parseTracks } from "../../api/tracker";
 import { useRecognitionFiles } from "../../hooks/useRecognitionFiles";
@@ -162,7 +163,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
         ))}
 
         {rows.length === 0 ? (
-          <Empty description="还没有识别结果" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <EmptyState inline description="还没有识别结果" />
         ) : (
           <div className="track-import-list">
             {rows.map((row) => (

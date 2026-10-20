@@ -12,7 +12,8 @@
  * 那类区块本版不处理。一股脑铺开会让用户以为这个功能什么都没干成，其实能填的都已经
  * 列在上面了。
  */
-import { Alert, Card, Collapse, Empty, Listy, Space, Tag, Typography } from "antd";
+import { Alert, Card, Collapse, Listy, Space, Tag, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
 import { Link } from "react-router-dom";
 import { ListyItem } from "../common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
@@ -63,9 +64,7 @@ function LiveExitHint() {
 
 export default function WebFormPendingPanel({ missingData, unrecognized, blocked }: Props) {
   if (!missingData.length && !unrecognized.length && !blocked.length) {
-    return (
-      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这一页没有需要你手动处理的项" />
-    );
+    return <EmptyState description="这一页没有需要你手动处理的项" />;
   }
 
   return (

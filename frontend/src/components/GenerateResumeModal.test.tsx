@@ -67,7 +67,13 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   updateResumeLayout: apiMocks.updateResumeLayout,
   fetchResumeTemplates: apiMocks.fetchResumeTemplates,
 }));
-vi.mock("../api/settings", () => ({ getLLMConfig: apiMocks.getLLMConfig }));
+// 版式栏里的「简历字体」（项 14）挂载时会读一次已上传字体清单；本文件关心的是生成流程，
+// 给它一份空清单即可（字体选择本身由 ResumeFontControl.test.tsx 守）。
+vi.mock("../api/settings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/settings")>()),
+  getLLMConfig: apiMocks.getLLMConfig,
+  listResumeFonts: vi.fn().mockResolvedValue({ items: [], active: null, max_bytes: 1 }),
+}));
 
 /** 一个正在运行的后台生成任务。用函数造值，让每个用例都能按需覆盖字段。 */
 function makeTask(overrides: Partial<ResumeGenerateTask> = {}): ResumeGenerateTask {

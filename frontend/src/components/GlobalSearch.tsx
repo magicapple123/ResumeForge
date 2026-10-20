@@ -13,8 +13,9 @@
  * 不做焦点陷阱——搜索是"顺手看一眼"，不该把整个页面按停。点面板外或按 Esc 就关。
  */
 import { CloseOutlined, SearchOutlined } from "@ant-design/icons";
-import { Button, Empty, Input, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { Button, Input, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import type { InputRef } from "antd";
+import EmptyState from "./common/EmptyState";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -238,7 +239,7 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
                     <Typography.Text type="secondary">搜索中…</Typography.Text>
                   </Space>
                 ) : result && total === 0 ? (
-                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的内容" />
+                  <EmptyState inline description="没有匹配的内容" />
                 ) : result ? (
                   <Space orientation="vertical" size={10} style={{ width: "100%" }}>
                     {result.jobs.length > 0 && (

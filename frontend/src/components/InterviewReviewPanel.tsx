@@ -8,7 +8,8 @@
  * 写回同一条记录。旧版纯文本记录（analysis 为字符串）仅做兼容展示并提示"仅可查看"。
  */
 import { SaveOutlined, SendOutlined, ThunderboltOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Card, Empty, Input, Select, Space, Typography } from "antd";
+import { Alert, App, Button, Card, Input, Select, Space, Typography } from "antd";
+import EmptyState from "./common/EmptyState";
 import { useEffect, useState } from "react";
 import {
   analyzeInterviewQuestion,
@@ -328,9 +329,7 @@ export default function InterviewReviewPanel({
           </Space>
         </Card>
       ) : (
-        !record && (
-          <Empty description="录入问题后，先分析答题思路" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        )
+        !record && <EmptyState description="录入问题后，先分析答题思路" />
       )}
 
       {legacyText ? (

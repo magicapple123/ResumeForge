@@ -8,12 +8,14 @@
  * 复用同一个 `ResumePreview` 组件（而不是再写一个渲染器）是刻意的：两份实现迟早会在
  * 分页、缩放、编辑定位这些细节上分叉，而"看到的和导出的一致"正是这一块的全部意义。
  */
-import { CloseOutlined, DownloadOutlined } from "@ant-design/icons";
+import { DownloadOutlined } from "@ant-design/icons";
 import { Button, Modal, Space, Typography } from "antd";
 import { useRef } from "react";
 import type { ResumeLayout } from "../../types";
-import ResumeLayoutControls from "../ResumeLayoutControls";
+import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
 import ResumePreview, { type ResumePreviewHandle } from "../ResumePreview";
+import ResumeMeasureControls from "./ResumeMeasureControls";
+import ResumeTemplateControls from "./ResumeTemplateControls";
 
 interface Props {
   open: boolean;
@@ -53,13 +55,27 @@ export default function ResumeZoomModal({
   // 调用方给了 ref 就用它（不再在 ref 回调里二次赋值——Compiler 禁止渲染后再改 ref）。
   const fallbackPreviewRef = useRef<ResumePreviewHandle>(null);
   const zoomPreviewRef = previewRef ?? fallbackPreviewRef;
-  const toolbarExtra =
+  // 目录**只取一次**，两个插槽共用（`useApi` 没有跨实例缓存，各取一次就是两个请求）。
+  const { catalog } = useResumeTemplateCatalog();
+  // 大图里同样要有两行工具栏 + 纸面下方的缩放条，否则"大图"里调不了版式也放不大。
+  const templateControls =
     layout && onApplyLayout ? (
-      <ResumeLayoutControls
+      <ResumeTemplateControls
         compact
         layout={layout}
         resumeId={resumeId}
         disabled={relayouting}
+        catalog={catalog}
+        onChange={onApplyLayout}
+      />
+    ) : undefined;
+  const measureControls =
+    layout && onApplyLayout ? (
+      <ResumeMeasureControls
+        compact
+        layout={layout}
+        disabled={relayouting}
+        catalog={catalog}
         previewRef={zoomPreviewRef}
         onChange={onApplyLayout}
       />
@@ -69,7 +85,18 @@ export default function ResumeZoomModal({
       title="查看简历大图"
       open={open}
       onCancel={onClose}
-      footer={null}
+      // 操作区走 Modal 的真 footer 插槽：此前「导出 / 关闭」贴在正文末尾，正文因此长出一条
+      // 假底栏（滚动时跟着内容一起走，与全站其它弹窗的底部操作区不一致）。
+      // 关闭只剩右上角的 × 一个入口（Esc / 点遮罩同样映射 onCancel，见 Modal 的默认行为）。
+      footer={
+        onExport ? (
+          <Space>
+            <Button icon={<DownloadOutlined />} onClick={onExport}>
+              导出
+            </Button>
+          </Space>
+        ) : null
+      }
       width="min(1240px, 96vw)"
       // 弹窗自身滚动：预览的纵向空间本来就归外层管理（见 ResumePreview），内容比视口高时
       // 只滚这里，卡片整体始终完整呈现在视口内，不再需要在弹窗外整页滚动。
@@ -84,13 +111,14 @@ export default function ResumeZoomModal({
       destroyOnHidden
     >
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-        按原始尺寸显示，虚线是分页位置（与当前 {pages} 页的设置一致）。缩放用工具栏， 也可以按住
-        Ctrl 滚滚轮。
+        按原始尺寸显示，虚线是分页位置（与当前 {pages} 页的设置一致）。缩放用纸面下方的控件，
+        也可以按住 Ctrl 滚滚轮。
       </Typography.Paragraph>
       <div className="resume-zoom-body">
         <ResumePreview
           ref={zoomPreviewRef}
-          toolbarExtra={toolbarExtra}
+          templateControls={templateControls}
+          measureControls={measureControls}
           html={html}
           pages={pages}
           warnings={warnings}
@@ -100,16 +128,6 @@ export default function ResumeZoomModal({
           onEditTarget={onEditTarget}
         />
       </div>
-      <Space className="resume-zoom-footer">
-        {onExport ? (
-          <Button icon={<DownloadOutlined />} onClick={onExport}>
-            导出
-          </Button>
-        ) : null}
-        <Button icon={<CloseOutlined />} onClick={onClose}>
-          关闭
-        </Button>
-      </Space>
     </Modal>
   );
 }

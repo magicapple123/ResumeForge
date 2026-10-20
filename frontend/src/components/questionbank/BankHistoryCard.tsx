@@ -5,18 +5,9 @@
  * 传入；零 api 导入（白名单契约：新文件不得触碰 api/interview）。
  */
 import { CheckSquareOutlined, DeleteOutlined, HistoryOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  Button,
-  Card,
-  Checkbox,
-  Collapse,
-  Empty,
-  Pagination,
-  Space,
-  Spin,
-  Typography,
-} from "antd";
+import { Alert, Button, Card, Checkbox, Collapse, Pagination, Space, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
+import LoadingBlock from "../common/LoadingBlock";
 import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
 import BatchActionBar from "../common/BatchActionBar";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
@@ -153,11 +144,11 @@ export default function BankHistoryCard({
         </BatchActionBar>
       )}
       {banks.loading && !banks.data ? (
-        <Spin />
+        <LoadingBlock />
       ) : banks.error ? (
         <Alert type="error" showIcon title={banks.error} />
       ) : (banks.data ?? []).length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有保存过题库" />
+        <EmptyState inline description="还没有保存过题库" />
       ) : (
         <>
           <Collapse items={historyItems} />

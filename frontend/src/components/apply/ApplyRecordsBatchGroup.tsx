@@ -8,7 +8,7 @@
  */
 import { CheckSquareOutlined, DownOutlined, RightOutlined } from "@ant-design/icons";
 import { Table, Tag, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import type { ReactNode } from "react";
 import { RowActions } from "../common/RowActions";
 import { isFromInnerControl } from "../common/recordDetailCore";
@@ -23,7 +23,7 @@ interface BatchGroupProps {
   itemsState: BatchItemsState | undefined;
   onToggle: () => void;
   onItemsPageChange: (page: number) => void;
-  recordColumns: ColumnsType<ApplyRecord>;
+  recordColumns: TableColumnsType<ApplyRecord>;
   onOpenDetail: (record: ApplyRecord) => void;
   onDeleteBatch: (batch: ApplyRecordBatch) => void;
   /** 批内明细的多选模式（多选范围＝批内明细表）。 */

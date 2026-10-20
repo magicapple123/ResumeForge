@@ -101,4 +101,23 @@ describe("ReminderPanel", () => {
     expect(screen.getByText("绑定岗位")).toBeInTheDocument();
     expect(screen.getByText("备注")).toBeInTheDocument();
   });
+
+  it("批量删除的二次确认真的弹得出框（走 App.useApp().modal，不是静态 Modal.confirm）", async () => {
+    renderPanel();
+    await screen.findByText("参加某司二面");
+
+    // 批量选择入口在右键菜单里（R8 把工具栏按钮收进去了）。
+    fireEvent.contextMenu(screen.getByText("参加某司二面"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+    // 多选模式下点整行即切换勾选（点勾选框会把行 onClick 一起触发出两次 toggle，
+    // 见 ReminderListItem 的 selecting 分支——那是既有缺陷，不在本批修）。
+    fireEvent.click(screen.getByText("参加某司二面"));
+    expect(screen.getByText("已选 1 项")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+
+    // modal.confirm 由 Provider 的 holder 渲染（比静态 confirm 多一个 tick，所以走 findBy）；
+    // antd 会把标题同时渲染进内容区与可访问标签，因此按「至少出现一次」断言。
+    expect((await screen.findAllByText("删除选中的 1 条提醒？")).length).toBeGreaterThan(0);
+    expect(document.querySelector(".ant-modal-confirm")).not.toBeNull();
+  });
 });

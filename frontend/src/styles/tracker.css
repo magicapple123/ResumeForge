@@ -35,21 +35,27 @@
 
 /* 上色按**语义类名**而不是位置（T9）。此前用 `:nth-child(2..5)`：一旦网格里多出一个
    兄弟节点（例如 `statsError` 时先渲染的那行错误文案），整排配色就整体串位——错误提示
-   会抢走"总数"的灰边，5 张卡的颜色全部前移一格。骨架占位则保持中性，不按位置变色。 */
+   会抢走"总数"的灰边，5 张卡的颜色全部前移一格。骨架占位则保持中性，不按位置变色。
+
+   配色口径（2026-10-20 修）：**一律取漏斗里那一级的阶段色**，不再混品牌色。
+   之前「本月投递」借的是「面试」紫（语义完全对不上）、「Offer」用的是
+   `--rf-success-strong`（和漏斗里的 Offer 绿并排就是两种绿）。现在：
+   进行中=筛选中、本月投递=已投递、Offer=Offer、已结束=已结束；"总数"是汇总不是阶段，
+   保持中性灰边。 */
 .tracker-summary > .tracker-stat--active {
-  border-top-color: var(--rf-stage-screening);
+  border-top-color: var(--rf-stage-bar-screening);
 }
 
 .tracker-summary > .tracker-stat--month {
-  border-top-color: var(--rf-stage-interview);
+  border-top-color: var(--rf-stage-bar-applied);
 }
 
 .tracker-summary > .tracker-stat--offer {
-  border-top-color: var(--rf-success-strong);
+  border-top-color: var(--rf-stage-bar-offer);
 }
 
 .tracker-summary > .tracker-stat--closed {
-  border-top-color: var(--rf-stage-rejected);
+  border-top-color: var(--rf-stage-bar-rejected);
 }
 
 /* 漏斗：每级一条，宽度按"占最大一级的比例"。用按钮而不是 div，
@@ -106,27 +112,33 @@
    `rejected` 算出来是 -1，永远不会有 `data-stage-index="5"`。 */
 :is(.tracker-funnel-step, .track-card)[data-stage-index="0"] {
   --rf-stage-color: var(--rf-stage-applied);
+  --rf-stage-bar: var(--rf-stage-bar-applied);
 }
 
 :is(.tracker-funnel-step, .track-card)[data-stage-index="1"] {
   --rf-stage-color: var(--rf-stage-screening);
+  --rf-stage-bar: var(--rf-stage-bar-screening);
 }
 
 :is(.tracker-funnel-step, .track-card)[data-stage-index="2"] {
   --rf-stage-color: var(--rf-stage-assessment);
+  --rf-stage-bar: var(--rf-stage-bar-assessment);
 }
 
 :is(.tracker-funnel-step, .track-card)[data-stage-index="3"] {
   --rf-stage-color: var(--rf-stage-interview);
+  --rf-stage-bar: var(--rf-stage-bar-interview);
 }
 
 :is(.tracker-funnel-step, .track-card)[data-stage-index="4"] {
   --rf-stage-color: var(--rf-stage-offer);
+  --rf-stage-bar: var(--rf-stage-bar-offer);
 }
 
 /* 已结束（rejected）不在漏斗里，但卡片要能表达：用一条独立的属性选择器接住 -1。 */
 .track-card[data-stage-index="-1"] {
   --rf-stage-color: var(--rf-stage-rejected);
+  --rf-stage-bar: var(--rf-stage-bar-rejected);
 }
 
 .tracker-funnel-index {
@@ -171,9 +183,9 @@
   display: block;
   height: 100%;
   min-width: 0;
-  /* 实色 + 轻微透明：渐变在 100% 时是一条从灰白到彩色的宽带，像加载条；
-     实色更像"这一阶段占了多少"的数据条，深色下也不会发白。 */
-  background: var(--rf-stage-color, var(--rf-info));
+  /* 颜色条专用色：浅色主题给亮彩、深色主题给暗彩（见 tokens 里的 `--rf-stage-bar-*`）。
+     徽标底色与描边仍用 `--rf-stage-color`——那两处要保证文字/细线的对比度。 */
+  background: var(--rf-stage-bar, var(--rf-stage-color, var(--rf-info)));
   border-radius: inherit;
   opacity: 1;
   transition: width 0.25s ease;
@@ -217,7 +229,7 @@
   bottom: 0;
   width: 4px;
   border-radius: 0 4px 4px 0;
-  background: var(--rf-stage-color, var(--rf-info));
+  background: var(--rf-stage-bar, var(--rf-stage-color, var(--rf-info)));
 }
 
 /* 激活卡整体加一层阶段色调：浅底 + 边框向阶段色靠拢，

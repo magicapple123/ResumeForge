@@ -282,15 +282,15 @@ export default function TrackerPage() {
               className="tracker-stat tracker-stat--offer"
               title="Offer"
               value={stats?.offer_count ?? 0}
-              // --rf-success-strong 是"求职统计页大数字"专用色：比 body 级的
-              // --rf-success-text 更亮，深色下也能在卡片面上立住。
-              styles={{ content: { color: "var(--rf-success-strong)" } }}
+              // 与漏斗里 Offer 那一级同一个阶段色：同一页上"同一个阶段"必须是同一种绿，
+              // 否则并排看就是两种颜色（原来是品牌绿 --rf-success-strong）。
+              styles={{ content: { color: "var(--rf-stage-offer)" } }}
             />
             <Statistic
               className="tracker-stat tracker-stat--closed"
               title="已结束"
               value={stats?.rejected_count ?? 0}
-              styles={{ content: { color: "var(--rf-error-strong)" } }}
+              styles={{ content: { color: "var(--rf-stage-rejected)" } }}
             />
           </>
         )}

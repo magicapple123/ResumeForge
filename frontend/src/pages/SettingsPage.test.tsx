@@ -280,7 +280,11 @@ describe("SettingsPage 查看配置详情", () => {
     expect(screen.getByText("已配置（********）")).toBeInTheDocument();
     expect(screen.queryByText("********:profile:p_7")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "关 闭" }));
+    // 底部栏那只「关闭」已删除（只读详情只保留右上角 ×，见 LLMRecordViewModal），
+    // 所以定位改成关闭图标；断言意图不变：点掉之后详情弹窗消失。
+    const closeButton = document.querySelector<HTMLElement>(".ant-modal-close");
+    expect(closeButton).not.toBeNull();
+    fireEvent.click(closeButton!);
     await waitFor(() => expect(screen.queryByText(/配置详情「/)).toBeNull());
   });
 });

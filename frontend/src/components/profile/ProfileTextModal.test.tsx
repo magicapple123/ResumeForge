@@ -41,6 +41,12 @@ function renderModal(overrides: Partial<React.ComponentProps<typeof ProfileTextM
     onPasteFiles: vi.fn(),
     onClose: vi.fn(),
     onParse: vi.fn(),
+    mode: "profile" as const,
+    rows: null,
+    onRowsChange: vi.fn(),
+    onApply: vi.fn(),
+    onDiscard: vi.fn(),
+    onCancelParse: vi.fn(),
     ...overrides,
   };
   render(
@@ -132,6 +138,60 @@ describe("ProfileTextModal", () => {
 
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.queryByText("正在解析资料…")).toBeNull();
+  });
+
+  it("识别中主按钮是「取消识别」，点了调 onCancelParse（不是转圈到底）", () => {
+    const onCancelParse = vi.fn();
+    renderModal({ parsing: true, onCancelParse });
+
+    // 识别中不该还有一个"看起来在等待"的主按钮：用户此刻唯一想做的事是取消。
+    expect(screen.queryByRole("button", { name: /识别并填入/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "取消识别" }));
+
+    expect(onCancelParse).toHaveBeenCalledOnce();
+  });
+
+  it("rows 非空即进入校对阶段：渲染清单与「确认填入 N 项」，输入视图让位", () => {
+    renderModal({
+      rows: [
+        { id: "name", section: "基本信息", label: "姓名", value: "张三" },
+        { id: "educations.0.school", section: "教育经历", label: "学校", value: "示例大学" },
+      ],
+    });
+
+    expect(document.querySelector('[data-row-id="name"]')).not.toBeNull();
+    expect(document.querySelector('[data-row-id="educations.0.school"]')).not.toBeNull();
+    expect(screen.getByRole("button", { name: /确认填入 2 项/ })).toBeInTheDocument();
+    // 阶段由 rows 推导：校对时不再显示粘贴框。
+    expect(screen.queryByLabelText("个人资料文本")).toBeNull();
+  });
+
+  it("N=0（只有未勾选的新字段）时「确认填入」禁用", () => {
+    renderModal({
+      rows: [
+        {
+          id: "CUSTOM_是否有驾照",
+          section: "待确认的新字段",
+          label: "是否有驾照",
+          value: "C1",
+          isNew: true,
+          selected: false,
+        },
+      ],
+    });
+
+    expect(screen.getByRole("button", { name: /确认填入 0 项/ })).toBeDisabled();
+  });
+
+  it("mode='webform' 换成网申的标题与占位文案（链路下一轮接）", () => {
+    renderModal({ mode: "webform" });
+
+    expect(screen.getByText("粘贴网申资料并识别")).toBeInTheDocument();
+    expect(screen.queryByText("粘贴个人资料并识别")).toBeNull();
+    expect(screen.getByLabelText("个人资料文本")).toHaveAttribute(
+      "placeholder",
+      expect.stringContaining("政治面貌"),
+    );
   });
 
   it("keeps saying whether AI or local rules produced the fields", async () => {

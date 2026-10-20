@@ -36,6 +36,7 @@ export const LiveModeCard = memo(function LiveModeCard({
   return (
     <Card
       size="small"
+      className="live-mode-card"
       title="智能逐项填表"
       extra={
         <Button

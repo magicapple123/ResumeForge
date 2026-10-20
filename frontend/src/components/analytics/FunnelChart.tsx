@@ -20,7 +20,6 @@ interface Props {
 
 export default function FunnelChart({ stages }: Props) {
   const palette = useChartPalette();
-  const firstKey = stages[0]?.status;
   return (
     <HorizontalBarChart
       items={stages.map((stage) => ({
@@ -32,11 +31,13 @@ export default function FunnelChart({ stages }: Props) {
       align="center"
       showPercent
       colorFor={(key) => {
+        // 按**阶段 key** 取色，与「求职进度」页用的是同一套 token：
+        // 已投递=灰、筛选中=蓝、测评=青、面试=紫、Offer=绿、已结束=红。
+        const stageColor = palette.stage[key];
+        if (stageColor) return stageColor;
+        // 后端将来加了新阶段也不至于没颜色：退回系列色（极少数情况）。
         const index = stages.findIndex((stage) => stage.status === key);
-        // 第一阶段是"全部岗位"，用中性灰而不是彩色：它不是一个需要被辨认的阶段。
-        return key === firstKey
-          ? palette.neutral
-          : palette.series[Math.max(1, index) % palette.series.length];
+        return palette.series[Math.max(0, index) % palette.series.length];
       }}
     />
   );

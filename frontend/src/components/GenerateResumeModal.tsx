@@ -28,6 +28,7 @@ import type {
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
 import { buildSectionOrderConfig, DEFAULT_RESUME_SECTION_ORDER } from "../utils/resumeSectionOrder";
+import { useResumeRelayout } from "../features/resume/useResumeRelayout";
 import type { ResumePreviewHandle } from "./ResumePreview";
 import GenerationConfigStage from "./generate-resume/GenerationConfigStage";
 import GenerationProgressStage from "./generate-resume/GenerationProgressStage";
@@ -69,7 +70,6 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   } | null>(null);
   const [measure, setMeasure] = useState<LayoutMeasure | null>(null);
   const [pdfDirectAvailable, setPdfDirectAvailable] = useState(true);
-  const [relayouting, setRelayouting] = useState(false);
   const [modelName, setModelName] = useState("");
   const [llmReady, setLlmReady] = useState(true);
   // 生成改为后台任务：taskId 驱动轮询，task 是最近一次轮询到的状态。
@@ -86,6 +86,34 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   const generationLayoutRef = useRef<ResumeLayout>(layout);
   // 预览句柄：拖动字号时用它把探针 CSS 即时注入预览（本地缩放，无网络往返）。
   const previewRef = useRef<ResumePreviewHandle>(null);
+
+  /**
+   * 版式重排：尾随合并（`useResumeRelayout`，项 6 / D11）。
+   *
+   * 与 `ResumeDetailModal` 的差异只有 `render` 里的最后一步：这里记录已经落库，所以
+   * 重渲染成功后还要把版式写回记录。但**写回失败不回滚 layout**——画面与记录的一致性是
+   * "下次打开才看得见"的问题，此刻把版面弹回旧值只会让用户更困惑；失败用 message 说明。
+   */
+  const { relayouting, request: requestLayout } = useResumeRelayout({
+    render: async (next) => {
+      const detail = result?.detail;
+      if (!detail) return;
+      setPreviewHtml(await renderResume(detail.content, next));
+      if (!detail.id) return;
+      try {
+        await updateResumeLayout(detail.id, next);
+      } catch (err) {
+        // 只提示、不回滚：版式本身已经渲染成功，弹出旧版式会让"我刚调好的"凭空消失。
+        message.error(err instanceof Error ? err.message : "版式写回记录失败");
+      }
+    },
+    onRendered: (next) => setLayout(next),
+    onError: (err) => {
+      message.error(err instanceof Error ? err.message : "按新版式渲染失败");
+      // D13：探针是"我看到的"，渲染失败就必须清掉，不能继续呈现一个不存在的状态。
+      previewRef.current?.setLiveProbe("");
+    },
+  });
 
   // 后台生成是否仍在进行：决定"重新打开弹窗"时是接着看进度，还是回到配置页。
   // 生成中关掉弹窗（后台继续）不 reset，所以 stage 会留在 generating；等它跑到终态
@@ -367,42 +395,12 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   };
 
   /**
-   * 换模板 / 加页数 / 改字号：只重新渲染，不重新调用模型。
+   * 「自动一页」已由诊断卡写回配置，这里只需按新配置重渲染一次（同一条重排通道）。
    *
-   * 记录已经落库，所以同时把版式写回记录——下次从简历中心打开时看到的还是这一套。
+   * 换模板/加页数/改字号直接走 `requestLayout`（不再需要包装函数）。
    */
-  const applyLayout = async (next: ResumeLayout) => {
-    setLayout(next);
-    const detail = result?.detail;
-    if (!detail || relayouting) return;
-    setRelayouting(true);
-    try {
-      const html = await renderResume(detail.content, next);
-      setPreviewHtml(html);
-      if (result?.detail.id) {
-        await updateResumeLayout(result.detail.id, next);
-      }
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "按新版式渲染失败");
-    } finally {
-      setRelayouting(false);
-    }
-  };
-
-  /** 「自动一页」已由诊断卡写回配置，这里只需按新配置重渲染一次。 */
-  const applyFittedFormat = async (formatConfig: ResumeFormatConfig) => {
-    const detail = result?.detail;
-    if (!detail) return;
-    const next: ResumeLayout = { ...layout, format_config: formatConfig };
-    setLayout(next);
-    setRelayouting(true);
-    try {
-      setPreviewHtml(await renderResume(detail.content, next));
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "按新版式渲染失败");
-    } finally {
-      setRelayouting(false);
-    }
+  const applyFittedFormat = (formatConfig: ResumeFormatConfig) => {
+    requestLayout({ ...layout, format_config: formatConfig });
   };
 
   return (
@@ -416,7 +414,15 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       width="min(960px, 96vw)"
       footer={null}
       styles={{
-        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
+        // 与简历中心的预览弹窗保持同一套滚动口径：右侧留 12px 让正文不贴滚动条，
+        // 负外边距把这 12px 从弹窗内边距借回来，内容宽度不变（见 ResumeDetailModal）。
+        body: {
+          maxHeight: "var(--rf-modal-body-max-h)",
+          overflowY: "auto",
+          overflowX: "hidden",
+          paddingRight: 12,
+          marginRight: -12,
+        },
       }}
       destroyOnHidden
     >
@@ -461,8 +467,8 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           previewRef={previewRef}
           setLayoutStatus={setLayoutStatus}
           setMeasure={setMeasure}
-          applyLayout={(next) => void applyLayout(next)}
-          applyFittedFormat={(formatConfig) => void applyFittedFormat(formatConfig)}
+          applyLayout={requestLayout}
+          applyFittedFormat={applyFittedFormat}
           saveEditedResume={(content) => saveEditedResume(content)}
           applyRevisedDetail={(updated) => applyRevisedDetail(updated)}
           suggestionsGenerated={suggestionsGenerated}

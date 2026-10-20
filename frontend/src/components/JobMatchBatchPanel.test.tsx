@@ -226,7 +226,9 @@ describe("JobMatchBatchPanel", () => {
     await waitFor(() =>
       expect(document.querySelector(".batch-score-number")?.textContent).toBe("88分"),
     );
-    // 弹卡有自己的关闭按钮；面板没有被切走（分析设置页签的入口还在）。
-    expect(screen.getAllByRole("button", { name: /关\s*闭/ }).length).toBeGreaterThan(1);
+    // 弹卡自带关闭按钮：面板底部的「关闭」已移除（退出统一走 ×／Esc／点遮罩，见
+    // JobMatchBatchPanel 的 footer 注释），所以此刻页面上只有弹卡这一颗。
+    const closeButtons = screen.getAllByRole("button", { name: /关\s*闭/ });
+    expect(closeButtons).toHaveLength(1);
   });
 });

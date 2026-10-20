@@ -2,7 +2,7 @@
 /** 收藏夹：集中查看收藏的岗位与简历。 */
 import { FileTextOutlined, SearchOutlined, StarFilled } from "@ant-design/icons";
 import { App, Button, Space, Table, Tabs, Tag, Tooltip, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import type { HTMLAttributes } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -141,7 +141,7 @@ export default function FavoritesPage() {
     },
   ];
 
-  const jobColumns: ColumnsType<JobList> = [
+  const jobColumns: TableColumnsType<JobList> = [
     {
       title: "岗位",
       dataIndex: "title",
@@ -173,7 +173,7 @@ export default function FavoritesPage() {
     },
   ];
 
-  const resumeColumns: ColumnsType<ResumeBrief> = [
+  const resumeColumns: TableColumnsType<ResumeBrief> = [
     {
       title: "简历",
       dataIndex: "title",
@@ -262,7 +262,9 @@ export default function FavoritesPage() {
         <Table<JobList | ResumeBrief>
           rowKey="id"
           columns={
-            (kind === "jobs" ? jobColumns : resumeColumns) as ColumnsType<JobList | ResumeBrief>
+            (kind === "jobs" ? jobColumns : resumeColumns) as TableColumnsType<
+              JobList | ResumeBrief
+            >
           }
           dataSource={items}
           loading={loading}

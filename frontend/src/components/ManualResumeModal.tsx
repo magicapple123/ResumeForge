@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 用户手写简历弹窗：岗位模式预填基本信息，通用模式从空白开始（可一键填入全部资料）。 */
-import { App, Modal } from "antd";
+import { App, Input, Modal } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createManualResume } from "../api/resumes";
@@ -24,6 +24,13 @@ interface Props {
 export default function ManualResumeModal({ job, open, initialTitle = "", onClose }: Props) {
   const { message } = App.useApp();
   const [profile, setProfile] = useState<Profile | null>(null);
+  /**
+   * 简历名称（项 11）：输入框从「我的资料」页的通用简历区块搬进了编辑器顶部。
+   *
+   * 页面上那个常驻输入框的问题是"不点开编辑器也得先想名字"，而真正会用到它的地方
+   * 是编辑器内部。这里与 `initialTitle` 保持兼容：打开时以它为初值，用户可以改。
+   */
+  const [title, setTitle] = useState(initialTitle);
   const [loading, setLoading] = useState(false);
   const requestVersion = useRef(0);
   // ref 写入放 effect（Compiler 禁止渲染期写 ref）：onClose 只在异步失败回调里被读。
@@ -63,6 +70,8 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
       setLoading(false);
     } else {
       setLoading(true);
+      // 每次打开都从初始名称重新开始：上一次改了一半的名字不该留到下一份简历。
+      setTitle(initialTitle);
     }
   }
 
@@ -99,7 +108,7 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
   const save = async (nextContent: ResumeContent) => {
     await createManualResume({
       job_id: job?.id ?? null,
-      title: job ? "" : initialTitle.trim(),
+      title: job ? "" : title.trim(),
       content: nextContent,
     });
     // T12：保存成功就广播。列表由订阅方各自重取——「我的资料」的通用简历区块、简历中心，
@@ -122,6 +131,20 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
         open={open && !loading && !!content}
         content={content}
         title={job ? `自行编写「${job.title}」简历` : "从头编写通用简历"}
+        // 项 11：名称输入搬进编辑器顶部（原来是页面上一个常驻输入框）。
+        // 岗位模式不需要它——标题由后端按岗位命名。
+        headerExtra={
+          job ? undefined : (
+            <Input
+              aria-label="简历名称"
+              value={title}
+              maxLength={64}
+              placeholder="简历名称（留空自动命名）"
+              onChange={(event) => setTitle(event.target.value)}
+              style={{ maxWidth: 360, marginBottom: 12 }}
+            />
+          )
+        }
         description={
           job
             ? "已预填基本信息；其他模块留空，可用每个模块顶部的「从我的资料追加一条」按需添加。"

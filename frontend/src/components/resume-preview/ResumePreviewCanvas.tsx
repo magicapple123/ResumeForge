@@ -5,12 +5,14 @@ import {
   A4_WIDTH_PX,
   APPROXIMATE_PAGINATION_NOTE,
   type InteractionMode,
-  PAGE_GAP_PX,
+  OVERFLOW_NOTE,
 } from "./config";
 
 interface Props {
   warnings: string[];
   overflow: boolean;
+  /** 溢出内容被裁掉（1 页上限）而不是排成第二列：决定提示里说哪一句话。 */
+  overflowClipped: boolean;
   pagesNeeded: number;
   pageCount: number;
   overflowAmountText: string;
@@ -24,6 +26,8 @@ interface Props {
   scale: number;
   separatorCount: number;
   totalVisualPages: number;
+  /** 页间隙（未缩放 px）＝ 左右页边距之和；两页并排时按 `pageGap × scale` 画分页条。 */
+  pageGap: number;
   html: string;
   containerRef: RefObject<HTMLDivElement | null>;
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -33,6 +37,7 @@ interface Props {
 export default function ResumePreviewCanvas({
   warnings,
   overflow,
+  overflowClipped,
   pagesNeeded,
   pageCount,
   overflowAmountText,
@@ -46,6 +51,7 @@ export default function ResumePreviewCanvas({
   scale,
   separatorCount,
   totalVisualPages,
+  pageGap,
   html,
   containerRef,
   iframeRef,
@@ -76,7 +82,7 @@ export default function ResumePreviewCanvas({
           title={`按当前设置约需 ${pagesNeeded} 页（上限 ${pageCount} 页）；字号已降到最小，仍然放不下。`}
           description={
             <>
-              {overflowAmountText} {APPROXIMATE_PAGINATION_NOTE}
+              {overflowAmountText} {overflowClipped ? OVERFLOW_NOTE : APPROXIMATE_PAGINATION_NOTE}
             </>
           }
         />
@@ -119,7 +125,7 @@ export default function ResumePreviewCanvas({
                 className="resume-preview-page-separator"
                 style={{
                   left: (index + 1) * A4_WIDTH_PX * scale,
-                  width: PAGE_GAP_PX * scale,
+                  width: pageGap * scale,
                 }}
               >
                 <span className="resume-preview-page-separator-line" />

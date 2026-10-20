@@ -11,8 +11,9 @@
  * 然后去岗位广场里数不出来。
  */
 import { LinkOutlined, SendOutlined, UploadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Space, Table, Tag, Tooltip, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import { Alert, App, Button, Space, Table, Tag, Tooltip, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
+import type { TableColumnsType } from "antd";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { importCandidateJobs, listCandidateJobs } from "../../api/candidateJob";
@@ -162,7 +163,7 @@ export default function CollectResultPanel({
     }
   };
 
-  const columns: ColumnsType<CandidateJob> = [
+  const columns: TableColumnsType<CandidateJob> = [
     {
       title: "岗位",
       dataIndex: "title",
@@ -242,10 +243,7 @@ export default function CollectResultPanel({
         {loading && !data ? (
           <PageSkeleton rows={4} card={false} />
         ) : candidates.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="这次采集还没有待导入的岗位（可能都已导入，或一条都没采到）"
-          />
+          <EmptyState description="这次采集还没有待导入的岗位（可能都已导入，或一条都没采到）" />
         ) : (
           <>
             <Table

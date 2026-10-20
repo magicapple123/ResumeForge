@@ -2,7 +2,7 @@
 /** 自制模板列表：样式模板与格式模板共用一套操作语义。 */
 import { DeleteOutlined, EditOutlined, EyeOutlined, RobotOutlined } from "@ant-design/icons";
 import { Space, Table, Tag, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import type { ResumeTemplateDetail } from "../../types";
 import { RowActions } from "../common/RowActions";
 
@@ -23,7 +23,7 @@ export default function TemplateCustomTable({
   onAsk,
   onDelete,
 }: Props) {
-  const columns: ColumnsType<ResumeTemplateDetail> = [
+  const columns: TableColumnsType<ResumeTemplateDetail> = [
     {
       title: "模板",
       dataIndex: "name",

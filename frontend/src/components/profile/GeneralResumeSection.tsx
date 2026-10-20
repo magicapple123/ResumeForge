@@ -7,7 +7,9 @@
  */
 
 import { FileSearchOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Card, Empty, Input, Listy, Space, Spin, Tag, Typography } from "antd";
+import { App, Button, Card, Input, Listy, Space, Tag, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
+import LoadingBlock from "../common/LoadingBlock";
 import { useEffect, useState } from "react";
 import { RowActions } from "../common/RowActions";
 import { deleteResume, listResumes, renameResume } from "../../api/resumes";
@@ -20,17 +22,16 @@ import { ListyItem, ListyMeta } from "../common/ListyItem";
 const PAGE_SIZE = 50;
 
 interface Props {
-  /** 点「AI 生成」时把当前输入的名称带过去。 */
-  onGenerate: (title: string) => void;
-  /** 点「从头手写」时同上。 */
-  onWrite: (title: string) => void;
+  /** 点「AI 生成」直接打开生成弹窗（名称在弹窗里填，页面不再放常驻输入框）。 */
+  onGenerate: () => void;
+  /** 点「从头手写」直接打开编辑器（名称在编辑器顶部填）。 */
+  onWrite: () => void;
 }
 
 export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
   const { message } = App.useApp();
   const [items, setItems] = useState<ResumeBrief[]>([]);
   const [loading, setLoading] = useState(true);
-  const [title, setTitle] = useState("");
   const [previewId, setPreviewId] = useState<number | null>(null);
   /** 正在就地编辑名称的那一行（不是"正在保存"——两者混用会让保存被守卫挡掉）。 */
   const [renamingId, setRenamingId] = useState<number | null>(null);
@@ -126,27 +127,21 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
           技能和奖项都保留，只受单份简历的篇幅限制），也可以从空白开始自己写。它们同时会出现在简历中心。
         </Typography.Paragraph>
 
+        {/* 项 11：不再放常驻的「新简历名称」输入框——名字在弹窗/编辑器里填，
+            留空由后端自动命名。页面上只留两个入口，视觉上也少一个无主的空框。 */}
         <Space wrap style={{ marginBottom: 8 }}>
-          <Input
-            aria-label="通用简历名称"
-            value={title}
-            maxLength={64}
-            style={{ width: 260 }}
-            placeholder="新简历名称（留空自动命名）"
-            onChange={(event) => setTitle(event.target.value)}
-          />
-          <Button type="primary" icon={<FileSearchOutlined />} onClick={() => onGenerate(title)}>
+          <Button type="primary" icon={<FileSearchOutlined />} onClick={() => onGenerate()}>
             AI 生成
           </Button>
-          <Button icon={<PlusOutlined />} onClick={() => onWrite(title)}>
+          <Button icon={<PlusOutlined />} onClick={() => onWrite()}>
             从头手写
           </Button>
         </Space>
 
         {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
-        <Spin spinning={loading}>
+        <LoadingBlock spinning={loading}>
           {items.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有通用简历" />
+            <EmptyState inline description="还没有通用简历" />
           ) : (
             <Listy
               items={items}
@@ -229,7 +224,7 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
               )}
             />
           )}
-        </Spin>
+        </LoadingBlock>
       </Card>
 
       <ResumeDetailModal

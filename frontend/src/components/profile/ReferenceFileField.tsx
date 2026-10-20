@@ -194,7 +194,8 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
         title={fileName || "补充总结内容"}
         open={viewing}
         onCancel={() => setViewing(false)}
-        footer={<Button onClick={() => setViewing(false)}>关闭</Button>}
+        // 关闭只留右上角 ×（Esc / 点遮罩同样关闭）：单动作的底部栏是重复入口。
+        footer={null}
         width={760}
         destroyOnHidden
       >

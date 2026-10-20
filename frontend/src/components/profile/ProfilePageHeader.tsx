@@ -19,6 +19,8 @@ interface Props {
   profileTextParsing: boolean;
   allExpanded: boolean;
   onOpenProfileTextModal: () => void;
+  /** 网申资料的粘贴识别（项 12）：与简历资料的入口放在**同一个位置**，切换分页即换文字。 */
+  onOpenWebFormParse: () => void;
   onCancelEditing: () => void;
   onSubmitAll: () => Promise<void>;
   onToggleExpandAll: () => void;
@@ -34,6 +36,7 @@ export default function ProfilePageHeader({
   profileTextParsing,
   allExpanded,
   onOpenProfileTextModal,
+  onOpenWebFormParse,
   onCancelEditing,
   onSubmitAll,
   onToggleExpandAll,
@@ -60,7 +63,15 @@ export default function ProfilePageHeader({
               >
                 粘贴文本识别
               </Button>
-            ) : null}
+            ) : (
+              <Button
+                icon={<FileSearchOutlined />}
+                disabled={saving || photoReading || profileTextParsing}
+                onClick={onOpenWebFormParse}
+              >
+                粘贴文本识别
+              </Button>
+            )}
             <Button
               icon={<CloseOutlined />}
               disabled={saving || photoReading}

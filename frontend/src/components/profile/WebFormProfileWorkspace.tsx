@@ -21,7 +21,9 @@
  */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { WebFormExtraEntry, WebFormExtraProfile, WebFormRepeatedGroup } from "../../types";
+import type { RecognitionReviewRow } from "./RecognitionReviewList";
 import WebFormProfileSection from "./WebFormProfileSection";
+import type { WebFormProfileSectionHandle } from "./WebFormProfileSection";
 
 /** 尚未保存的那一份网申资料。 */
 export interface WebFormProfileDraft {
@@ -37,6 +39,13 @@ export interface WebFormProfileWorkspaceHandle {
   adoptSaved: (profile: WebFormExtraProfile) => void;
   /** 取消编辑：回到进入编辑时的基线。 */
   cancel: () => void;
+  /**
+   * 把校对后的识别结果写进草稿（项 12）。
+   *
+   * 字段清单由 Section 自持（页面只改 label、不新增字段），所以这条命令必须由宿主经
+   * 句柄转给 Section——页面拿不到建字段的权力，也就不会绕过"新字段要建目录项"这一步。
+   */
+  applyParsedRows: (rows: RecognitionReviewRow[]) => void;
 }
 
 interface Props {
@@ -48,6 +57,7 @@ interface Props {
   onCatalogLoaded: (profile: WebFormExtraProfile) => void;
   onCatalogFieldLabelChange: (key: string, label: string) => void;
   onCatalogFieldDelete: (key: string) => void;
+  /** 打开「粘贴文本识别」（项 12）：透传给 Section 的入口按钮。 */
 }
 
 /** 服务端返回的整份资料 → 草稿形状。 */
@@ -81,6 +91,8 @@ const WebFormProfileWorkspace = forwardRef<WebFormProfileWorkspaceHandle, Props>
     const [details, setDetails] = useState<Record<string, WebFormExtraEntry>>({});
     const [repeatedGroups, setRepeatedGroups] = useState<WebFormRepeatedGroup[]>([]);
     const [loaded, setLoaded] = useState(false);
+    /** Section 自持字段清单：新增自定义字段、写入识别结果都要经它。 */
+    const sectionRef = useRef<WebFormProfileSectionHandle>(null);
 
     // 编辑态里草稿每击键都在变，而基线快照发生在渲染提交之后——用 ref 读最新值。
     // 与页面里的 submitAllRef 同一写法：ref 只在 effect 里写（渲染期写 ref 会被
@@ -196,12 +208,16 @@ const WebFormProfileWorkspace = forwardRef<WebFormProfileWorkspaceHandle, Props>
         cancel: () => {
           if (baselineRef.current) applyDraft(baselineRef.current);
         },
+        applyParsedRows: (rows: RecognitionReviewRow[]) => {
+          sectionRef.current?.applyParsedRows(rows);
+        },
       }),
       [applyDraft, loaded],
     );
 
     return (
       <WebFormProfileSection
+        ref={sectionRef}
         editing={editing}
         saving={saving}
         values={values}

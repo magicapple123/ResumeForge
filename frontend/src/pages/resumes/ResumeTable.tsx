@@ -6,7 +6,7 @@
  */
 import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
 import { Button, Space, Table, Tag, Tooltip, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import type { SortOrder } from "antd/es/table/interface";
 import { memo, useEffect, useMemo, useRef } from "react";
 import type { HTMLAttributes } from "react";
@@ -242,10 +242,14 @@ export default function ResumeTable({
   /**
    * 列头排序（T2）：排序在服务端做（本地排序在分页下必错），这里只把"点了哪一列、
    * 什么方向"翻译成页面状态。四列的键分别是 title / job(job_title) / created / updated。
+   *
+   * 提示文案（项 3 / D3）只说"这一列按什么排"，三态机制由表头箭头自解释。原来的
+   * "点击排序，再点反向，第三次取消"讲的是**机制**，但用户在一列表头上的疑问是**语义**
+   * （尤其"目标岗位"与"简历标题"容易混）。机制一眼可见，语义不写就没人知道，所以按列名生成。
    */
-  const SORT_TOOLTIP = { title: "点击排序，再点反向，第三次取消" };
+  const sortTooltip = (label: string) => ({ title: `按${label}排序` });
 
-  const columns: ColumnsType<ResumeBrief> = [
+  const columns: TableColumnsType<ResumeBrief> = [
     {
       title: "收藏",
       key: "favorite",
@@ -278,7 +282,7 @@ export default function ResumeTable({
       sorter: true,
       sortOrder: sortOrderFor("title", sortState),
       sortDirections: sortDirectionsFor("title"),
-      showSorterTooltip: SORT_TOOLTIP,
+      showSorterTooltip: sortTooltip("简历标题"),
       // 自定义 render 返回的是按钮，列级 ellipsis 截不到按钮里的文字（按钮自带样式），
       // 所以省略号由按钮自己带（见下）；这里关掉 antd 的原生 title，避免和 Tooltip 弹两次。
       ellipsis: { showTitle: false },
@@ -304,7 +308,7 @@ export default function ResumeTable({
       sorter: true,
       sortOrder: sortOrderFor("job", sortState),
       sortDirections: sortDirectionsFor("job"),
-      showSorterTooltip: SORT_TOOLTIP,
+      showSorterTooltip: sortTooltip("目标岗位"),
       ellipsis: { showTitle: false },
       render: (_, record) => (
         <Space wrap size={[4, 4]}>
@@ -390,7 +394,7 @@ export default function ResumeTable({
       sorter: true,
       sortOrder: sortOrderFor("created_at", sortState),
       sortDirections: sortDirectionsFor("created_at"),
-      showSorterTooltip: SORT_TOOLTIP,
+      showSorterTooltip: sortTooltip("创建时间"),
       render: (value) => formatDateTime(value),
     },
     {
@@ -401,7 +405,7 @@ export default function ResumeTable({
       sorter: true,
       sortOrder: sortOrderFor("updated_at", sortState),
       sortDirections: sortDirectionsFor("updated_at"),
-      showSorterTooltip: SORT_TOOLTIP,
+      showSorterTooltip: sortTooltip("最近修改"),
       render: (value: string | null | undefined) =>
         value ? formatDateTime(value) : <Typography.Text type="secondary">—</Typography.Text>,
     },

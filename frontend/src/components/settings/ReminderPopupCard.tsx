@@ -6,7 +6,8 @@
  * 那个全局编辑态。开关即改即存，不设单独的保存按钮。
  */
 
-import { App, Card, Space, Spin, Switch, Typography } from "antd";
+import { App, Card, Space, Switch, Typography } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import { useEffect, useState } from "react";
 import { getReminderPopupSetting, saveReminderPopupSetting } from "../../api/settings";
 import { isSoundEnabled, playDoneSound, setSoundEnabled } from "../../utils/notifySound";
@@ -69,7 +70,7 @@ export default function ReminderPopupCard() {
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         打开应用时，若还有未完成的日历提醒，是否弹出「近期提醒」列表。
       </Typography.Paragraph>
-      <Spin spinning={loading}>
+      <LoadingBlock spinning={loading}>
         <Space orientation="vertical" size={4}>
           <Switch
             checked={enabled}
@@ -81,7 +82,7 @@ export default function ReminderPopupCard() {
           />
           <Typography.Text type="secondary">默认开启，可随时在这里关闭。</Typography.Text>
         </Space>
-      </Spin>
+      </LoadingBlock>
 
       <Typography.Paragraph type="secondary" style={{ margin: "20px 0 12px" }}>
         生成类任务（简历生成、岗位解读、匹配度分析等）与投递 /

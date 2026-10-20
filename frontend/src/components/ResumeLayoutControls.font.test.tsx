@@ -31,6 +31,14 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   previewResumeTemplate: apiMocks.previewResumeTemplate,
 }));
 
+// 版式栏里的「简历字体」（项 14）挂载时会读一次已上传字体清单。本域守的是**字号拖动**
+// 不该产生网络，所以把这份清单 mock 成常量：否则挂载那一次 fetch 会让下面
+// 「拖动全程零网络」的绝对断言变成"零网络但有一次挂载请求"，反而说不清。
+vi.mock("../api/settings", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/settings")>()),
+  listResumeFonts: vi.fn().mockResolvedValue({ items: [], active: null, max_bytes: 1 }),
+}));
+
 beforeEach(() => {
   apiMocks.fetchResumeTemplates.mockReset();
   apiMocks.previewResumeTemplate.mockReset();
@@ -118,7 +126,8 @@ describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
       previewRef: ref,
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "恢复默认字号" }));
+    // 恢复默认改成双击「字号」标题（原来的 ↺ 按钮已删除）。
+    fireEvent.doubleClick(await screen.findByText("字号"));
 
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0]).toMatchObject({

@@ -3,7 +3,8 @@
  * 预览核对卡：勾选要填的项、手改值、采纳 AI 建议、填充到页面。
  * （自 WebFormPage 拆出：:947-984 整块逐字随迁，纯 props。）
  */
-import { Button, Card, Empty, Space } from "antd";
+import { Button, Card, Space } from "antd";
+import EmptyState from "../../components/common/EmptyState";
 import WebFormPreviewTable from "../../components/webform/WebFormPreviewTable";
 import type { WebFormPreview } from "../../types";
 import type { WebFormBusyState } from "./constants";
@@ -65,7 +66,7 @@ export function PreviewCard({
           onValueChange={onValueChange}
         />
       ) : (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可自动填的字段" />
+        <EmptyState description="没有可自动填的字段" />
       )}
     </Card>
   );

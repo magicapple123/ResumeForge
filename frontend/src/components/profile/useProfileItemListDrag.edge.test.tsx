@@ -14,8 +14,8 @@
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Form, Input } from "antd";
-import type { FormInstance } from "antd";
-import type { FormListFieldData, FormListOperation } from "antd/es/form/FormList";
+import type { FormInstance, FormListFieldData, FormListOperation } from "antd";
+
 import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ProfileSection from "./ProfileSection";

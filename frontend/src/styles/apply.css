@@ -101,17 +101,6 @@
   color: var(--rf-info-strong);
 }
 
-/* 投递队列勾选行：覆盖 antd 默认的灰底（.ant-table-row-selected），
-   换成品牌浅蓝，选中态与悬停态一致，避免"勾一下就变成一坨灰"。 */
-.apply-queue-panel .ant-table-tbody > tr.ant-table-row-selected > td,
-.apply-queue-panel .ant-table-tbody > tr.ant-table-row-selected:hover > td,
-.apply-collect-table .ant-table-tbody > tr.ant-table-row-selected > td,
-.apply-collect-table .ant-table-tbody > tr.ant-table-row-selected:hover > td,
-.jobs-table .ant-table-tbody > tr.ant-table-row-selected > td,
-.jobs-table .ant-table-tbody > tr.ant-table-row-selected:hover > td {
-  background: var(--rf-brand-tint) !important;
-}
-
 .apply-collect-unmapped {
   margin-top: 12px;
 }
@@ -330,4 +319,19 @@
 
 .apply-collect-outcomes .ant-alert {
   margin-bottom: 12px;
+}
+
+/* 投递设置弹窗的底部操作条：贴在滚动区底部（sticky，不是 fixed），
+   背景与弹窗面一致，滚过去时字段不会从按钮下面透出来。 */
+.apply-settings-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 0 4px;
+  background: var(--rf-surface);
+  border-top: 1px solid var(--rf-border-subtle);
 }

@@ -14,6 +14,14 @@ interface Props {
   valueStyle?: CSSProperties;
   /** 外层包一张 Card。顶部指标行用 true；区块内部本来就在 Card 里，用默认 false。 */
   framed?: boolean;
+  /**
+   * 语义类名（项 8）：透传给 `Card` 的**根节点**（与 `.ant-card` 同一元素）。
+   *
+   * 顶部指标行用它编码"这张卡属于哪个阶段"（`stat-card-applied` / `-interview` /
+   * `-assessment` / `-offer`），CSS 据此给彩条上阶段色。非 framed 分支**忽略**它：
+   * 区块内部的小卡没有彩条，上色也没有意义。
+   */
+  className?: string;
 }
 
 export default function StatCard({
@@ -23,6 +31,7 @@ export default function StatCard({
   hint,
   valueStyle,
   framed = false,
+  className,
 }: Props) {
   const body = (
     <>
@@ -30,5 +39,5 @@ export default function StatCard({
       {hint ? <Typography.Text type="secondary">{hint}</Typography.Text> : null}
     </>
   );
-  return framed ? <Card>{body}</Card> : body;
+  return framed ? <Card className={className}>{body}</Card> : body;
 }

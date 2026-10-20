@@ -12,7 +12,8 @@
  */
 
 import { FolderOpenOutlined } from "@ant-design/icons";
-import { App, Button, Card, Space, Spin, Typography } from "antd";
+import { App, Button, Card, Space, Typography } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import { useEffect, useState } from "react";
 import {
   clearExportSaveLocation,
@@ -88,7 +89,7 @@ export default function ExportSaveCard() {
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         默认保存到浏览器默认下载目录；从本机前端选择文件夹后，导出会同时保存一份到那里。
       </Typography.Paragraph>
-      <Spin spinning={loading}>
+      <LoadingBlock spinning={loading}>
         <Space wrap>
           <Button
             type="primary"
@@ -114,7 +115,7 @@ export default function ExportSaveCard() {
         <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>
           同名文件已存在时会自动加时间戳后缀，不会覆盖；落盘失败不影响正常下载。
         </Typography.Text>
-      </Spin>
+      </LoadingBlock>
     </Card>
   );
 }

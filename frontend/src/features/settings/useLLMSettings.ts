@@ -11,6 +11,7 @@
  */
 import { App } from "antd";
 import { useEffect, useState } from "react";
+import { bumpLLMConfig } from "./llmConfigEvents";
 import {
   activateLLMRecord,
   deleteLLMConfigRecord,
@@ -59,6 +60,8 @@ export function useLLMSettings() {
         current.map((item) => ({ ...item, is_active: item.id === activated.id })),
       );
       setConfigSummary(summaryFromConfig(configFromRecord(record)));
+      // 页头下拉与这里是两棵独立的子树：不广播的话它要等下一次路由变化才更新。
+      bumpLLMConfig();
       message.success(`已切换到配置「${record.name}」`);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "切换配置失败");
@@ -92,6 +95,7 @@ export function useLLMSettings() {
         }
       }
       message.success("配置记录已删除");
+      bumpLLMConfig();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "删除配置记录失败");
     } finally {

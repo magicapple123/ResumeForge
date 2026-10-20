@@ -20,7 +20,7 @@ import { readAsDataUrl } from "../../utils/attachments";
 import FileDropZone from "../common/FileDropZone";
 
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
 interface Props {
   /** 当前用于简历的那张（来自资料表单，可能是刚上传还没保存的新照片）。 */
@@ -35,7 +35,7 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
   const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  // 照片上传进度（0-100；null 表示不在上传中）：2 MB 照片 base64 后近 2.7 MB，
+  // 照片上传进度（0-100；null 表示不在上传中）：5 MB 照片 base64 后近 6.7 MB，
   // 在按钮旁画一条进度条比一个 loading 图标更直观。
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -75,7 +75,7 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
       return;
     }
     if (file.size > PHOTO_MAX_BYTES) {
-      message.error("照片不能超过 2 MB");
+      message.error(`照片不能超过 ${PHOTO_MAX_BYTES / (1024 * 1024)} MB`);
       return;
     }
     if (photos.length >= MAX_PROFILE_PHOTOS) {
@@ -196,7 +196,7 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {loading
             ? "正在读取照片…"
-            : `JPG、PNG 或 WebP，最大 2 MB，最多保存 ${MAX_PROFILE_PHOTOS} 张`}
+            : `JPG、PNG 或 WebP，最大 ${PHOTO_MAX_BYTES / (1024 * 1024)} MB，最多保存 ${MAX_PROFILE_PHOTOS} 张`}
         </Typography.Text>
 
         <Modal

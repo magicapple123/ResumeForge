@@ -14,43 +14,58 @@
 
 .recognition-files-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
   margin-top: 12px;
 }
 
-/* 第一行固定成缩略图的高度（T6 起 48px）：截图与文档混排时，删除按钮才会落在同一条线上。
-   文档类的条目在行内左对齐，多出来的宽度由文件名自己省略。 */
+/* 一条文件 = 一整行（D16）：文档类文件名的信息量远大于缩略图，压进"48px 方块 + 下面一行
+   小字"的格子里，长文件名与体积必然被挤成竖排（截图里的「3 7 8 K B」就是这么来的）。
+   **形状跟着信息量走**：图片看内容（48×48 方块），文档看名字（整行）。 */
 .recognition-file-item {
-  display: grid;
-  grid-template-rows: 48px auto;
-  justify-items: center;
+  display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .recognition-file-item .recognition-image {
+  flex: 0 0 auto;
   width: 48px;
   height: 48px;
   object-fit: cover;
   border-radius: 4px;
 }
 
-/* 文档条目：图标 + 文件名 + 体积（+ PDF 的「预览」）。 */
-.recognition-file-summary {
-  max-width: 260px;
+/* 文档条目：图标 + 文件名 + 体积（+ PDF 的「预览」）。整行伸缩，名字自己省略。 */
+.recognition-file-summary,
+.recognition-doc-summary {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
 }
 
 .recognition-file-name {
-  max-width: 160px;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.recognition-file-size {
+/* 体积**不许被压**：它是"这份文件有多大"的唯一读数，被压成竖排就完全读不出来。 */
+.recognition-file-item .recognition-file-size {
   flex: 0 0 auto;
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.recognition-file-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
 }
 
 /* 识别来源标记与"识别到的原文"合为一块：来源要一直看得见，原文默认收起。 */

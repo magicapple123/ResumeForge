@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 按需生成岗位需求总结和通用求职建议（T1：可真取消 / 后台继续 / 订阅模块级状态）。 */
 import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Listy, Modal, Popconfirm, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Listy, Modal, Popconfirm, Space, Tag, Typography } from "antd";
+import EmptyState from "./common/EmptyState";
 import PageSkeleton from "./common/PageSkeleton";
 import { ListyItem } from "./common/ListyItem";
 import { useEffect, useRef, useState } from "react";
@@ -236,7 +237,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
               }}
             />
           ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未提取到明确要求" />
+            <EmptyState inline description="未提取到明确要求" />
           )}
 
           <Typography.Title level={5}>求职建议</Typography.Title>
@@ -257,7 +258,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
               )}
             />
           ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无补充建议" />
+            <EmptyState inline description="暂无补充建议" />
           )}
         </div>
       ) : (

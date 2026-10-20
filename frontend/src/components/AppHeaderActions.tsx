@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 页头右侧动作区（R21 抽出，A3 起承载主题切换）：主题、我的空间、模型切换、
+ * 页头右侧动作区（R21 抽出，A3 起承载主题切换）：主题、模型切换、我的空间、
  * 数据集/头像、后台任务、源码与退出。
  *
  * 单独成文件是为了让 App.tsx 留在单文件行数预算内；这里只做组合，不持有状态。
@@ -27,11 +27,11 @@ export default function AppHeaderActions({ hiddenKeys, onStarClick }: Props) {
     <div className="app-header-actions">
       {/* 主题三档（A3）：放在最前，与语言/空间等"显示偏好"类动作归在一组。 */}
       <ThemeSwitch />
-      {/* 左侧是数据集与照片，右侧是全局动作；中间用细分隔线避免挤成一条。 */}
-      <MySpaceMenu hiddenKeys={hiddenKeys} />
-      {/* 模型切换放在数据集下拉的**左侧**：先说明"用哪套模型"，再说"在哪份数据里"。 */}
+      {/* 模型切换放在数据集与头像的**左侧**：先说明"用哪套模型"，再说"在哪份数据里"。
+          「我的空间」不在这里，而是走 AppHeaderContext 的 beforeAvatar 插槽——视觉顺序
+          要的是 `[数据集][我的空间][头像]`，而它们是两个 flex 容器，`order` 跨不过去。 */}
       <ModelProfileSelect />
-      <AppHeaderContext />
+      <AppHeaderContext beforeAvatar={<MySpaceMenu hiddenKeys={hiddenKeys} />} />
       {/* 有任务在跑时才出现：平时页头不该多一个空按钮。 */}
       <BackgroundTasksIndicator />
       <span className="app-header-divider" aria-hidden="true" />

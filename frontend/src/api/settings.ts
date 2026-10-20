@@ -436,7 +436,10 @@ export function saveGlobalTheme(mode: GlobalThemeMode): Promise<GlobalTheme> {
 
 /** 自定义简历字体（R10）：只影响 PDF 导出用的字体。 */
 export interface ResumeFont {
+  /** 磁盘上的真实文件名；`format_config.font` 存的就是它。 */
   name: string;
+  /** 用户可改的展示名，没改过时等于文件名去扩展名。 */
+  display_name: string;
   size: number;
   uploaded_at: string;
   active: boolean;
@@ -452,10 +455,18 @@ export function listResumeFonts(): Promise<ResumeFonts> {
   return request("/settings/fonts");
 }
 
+/** 改字体的展示名（文件名不变，已引用它的简历不受影响）。 */
+export function renameResumeFont(name: string, displayName: string): Promise<ResumeFont> {
+  return request(`/settings/fonts/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ display_name: displayName }),
+  });
+}
+
 export function uploadResumeFont(file: File): Promise<ResumeFont> {
   const form = new FormData();
   form.append("file", file);
-  // 字体最大 20MB：走上传预算，不吃 15s 的默认超时。
+  // 字体最大 30MB：走上传预算，不吃 15s 的默认超时。
   return request("/settings/fonts", { method: "POST", body: form, budget: "upload" });
 }
 

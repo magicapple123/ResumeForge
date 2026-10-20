@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 专业技能分区。 */
 import { Col, Form, Input, Row } from "antd";
-import type { FormListFieldData } from "antd/es/form/FormList";
+import type { FormListFieldData } from "antd";
 import ProfileSection from "./ProfileSection";
 
 interface Props {

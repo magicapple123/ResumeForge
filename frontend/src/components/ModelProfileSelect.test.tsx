@@ -4,10 +4,14 @@
  * 以及 T8 新增的双击语义——**双击只测连接，绝不切换当前配置**。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ModelProfileSelect from "./ModelProfileSelect";
+import {
+  bumpLLMConfig,
+  resetLLMConfigListenersForTests,
+} from "../features/settings/llmConfigEvents";
 
 const mocks = vi.hoisted(() => ({
   getLLMConfig: vi.fn(),
@@ -186,5 +190,64 @@ describe("页头模型切换下拉", () => {
 
     await waitFor(() => expect(mocks.listLLMConfigRecords).toHaveBeenCalled());
     expect(container.querySelector(".app-model-profile-select")).toBeNull();
+  });
+
+  /**
+   * 项 2 的两处"静默失效"风险都钉在这里：
+   * - base.css 的省略号规则挂在 **antd 6 的内部类名**上，类名猜错不会报错，只是永远不生效。
+   * - 弹层宽度上限走 `styles.popup.root`，写错语义键同样不报错。
+   * 所以断言"渲染出来的 DOM 长这样"，而不是断言"我们写了什么"。
+   */
+  it("选中值落在 .ant-select-content 里，弹层上限 320px（项 2 的选择器守卫）", async () => {
+    mocks.listLLMConfigRecords.mockResolvedValue([
+      makeRecord("p_a", "qwen3-max-preview", "qwen3-max-preview-2026-09-23", true),
+    ]);
+    mocks.getLLMConfig.mockResolvedValue({ record_id: "p_a" });
+
+    const { container } = renderSelect();
+    const longName = "qwen3-max-preview · qwen3-max-preview-2026-09-23";
+    await screen.findByText(longName);
+
+    // 触发框：值文本在 `.ant-select-content` 里。
+    // 单选走 SingleContent（`@rc-component/select/.../SingleContent.js:97`）；
+    // `.ant-select-selection-item` 是多选专用的（`MultipleContent.js:52`），本组件没有 `mode`，
+    // 所以那条类名在这里**必然为空** —— 把它写进 base.css 的省略号规则就是静默失效。
+    const content = container.querySelector(".app-model-profile-select .ant-select-content");
+    expect(content).not.toBeNull();
+    expect(content!.textContent).toBe(longName);
+    expect(
+      container.querySelector(".app-model-profile-select .ant-select-selection-item"),
+    ).toBeNull();
+
+    // 弹层：`popupMatchSelectWidth={false}` + `maxWidth: 320` → 内联 max-width 落在下拉根上。
+    fireEvent.mouseDown(screen.getByRole("combobox"));
+    const dropdown = await waitFor(() => {
+      const node = document.querySelector<HTMLElement>(".ant-select-dropdown");
+      expect(node).not.toBeNull();
+      return node!;
+    });
+    expect(dropdown.style.maxWidth).toBe("320px");
+    // 选项行里的长名字也带 title，省略之后仍能看全。
+    const optionLabel = document.querySelector<HTMLElement>(".model-option-label");
+    expect(optionLabel).not.toBeNull();
+    expect(optionLabel!.getAttribute("title")).toBe(longName);
+  });
+
+  /**
+   * 设置页保存/启用/删除配置后，页头下拉必须立刻跟上（本轮新增）。
+   *
+   * 两棵子树互不相识：没有这条广播，用户只能切一次路由或刷新页面才看得到新配置。
+   */
+  it("设置里改了配置后，页头下拉立刻重新取数", async () => {
+    mocks.listLLMConfigRecords.mockResolvedValue([makeRecord("p_a", "qwen", "qwen3-max", true)]);
+    mocks.getLLMConfig.mockResolvedValue({ record_id: "p_a" });
+    resetLLMConfigListenersForTests();
+
+    renderSelect();
+    await waitFor(() => expect(mocks.listLLMConfigRecords).toHaveBeenCalledTimes(1));
+
+    act(() => bumpLLMConfig());
+
+    await waitFor(() => expect(mocks.listLLMConfigRecords).toHaveBeenCalledTimes(2));
   });
 });

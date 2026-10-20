@@ -2,20 +2,9 @@
 /** 助手技能管理：导入、点击查看详情、启用/停用与删除。 */
 
 import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Card,
-  Empty,
-  Listy,
-  Spin,
-  Space,
-  Switch,
-  Tag,
-  Tooltip,
-  Typography,
-  Upload,
-} from "antd";
+import { App, Button, Card, Listy, Space, Switch, Tag, Tooltip, Typography, Upload } from "antd";
+import EmptyState from "../common/EmptyState";
+import LoadingBlock from "../common/LoadingBlock";
 import type { AssistantSkill } from "../../types";
 import FileDropZone from "../common/FileDropZone";
 import { useCollapsedList } from "../common/useCollapsedList";
@@ -101,10 +90,10 @@ export default function SkillsCard({
       </FileDropZone>
 
       {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
-      <Spin spinning={loading}>
+      <LoadingBlock spinning={loading}>
         {skills.length === 0 ? (
           <div style={{ marginTop: 16 }}>
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有导入技能" />
+            <EmptyState inline description="还没有导入技能" />
           </div>
         ) : (
           <Listy
@@ -166,7 +155,7 @@ export default function SkillsCard({
           />
         )}
         {skillsToggleNode}
-      </Spin>
+      </LoadingBlock>
     </Card>
   );
 }

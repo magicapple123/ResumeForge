@@ -14,7 +14,9 @@
  *   不引入额外订阅，击键重渲仍只发生在 rc-field-form 的 Field 内部。
  */
 import { Input, Typography } from "antd";
-import type { TextAreaProps } from "antd/es/input";
+// 类型从 antd 根导出取（`GetProps` + 组件本身）：`antd/es/input` 的 `TextAreaProps`
+// 是深路径内部类型，antd 升级时不保证保留。
+import type { GetProps } from "antd";
 
 interface MaxLengthHintProps {
   value?: unknown;
@@ -38,7 +40,7 @@ export function MaxLengthHint({ value, maxLength }: MaxLengthHintProps) {
 }
 
 /** Form.Item 直挂版：value/onChange 由 Form.Item 注入（见文件头说明）。 */
-export function HintedTextArea(props: TextAreaProps) {
+export function HintedTextArea(props: GetProps<typeof Input.TextArea>) {
   const { maxLength } = props;
   return (
     <>

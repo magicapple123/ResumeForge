@@ -6,7 +6,8 @@
  * 文案与后端 `engine.core.relaxed_kind` 的注释同源——那里是代码事实，这里是用户可见的
  * 承诺，两者只许同时改。
  */
-import { App, Card, Space, Spin, Switch, Typography } from "antd";
+import { App, Card, Space, Switch, Typography } from "antd";
+import LoadingBlock from "../common/LoadingBlock";
 import { useWebFormRelaxedMode } from "../../features/settings/useWebFormRelaxedMode";
 
 export default function WebFormRelaxedModeCard() {
@@ -27,7 +28,7 @@ export default function WebFormRelaxedModeCard() {
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         默认关闭：网申填表「只填不点」，下拉、勾选、日期都需要你在页面上自己点。
       </Typography.Paragraph>
-      <Spin spinning={loading}>
+      <LoadingBlock spinning={loading}>
         <Space orientation="vertical" size={4}>
           <Switch
             checked={enabled}
@@ -42,7 +43,7 @@ export default function WebFormRelaxedModeCard() {
             填完请核对；日期选择器与文件上传仍不代做。
           </Typography.Text>
         </Space>
-      </Spin>
+      </LoadingBlock>
     </Card>
   );
 }

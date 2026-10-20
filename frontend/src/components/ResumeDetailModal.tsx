@@ -5,7 +5,6 @@
  * 加载 detail/html、错误与骨架屏，以及把「换版式 / 自动一页 / 保存编辑」这些会改
  * 数据与重渲染的动作准备好，交给共享组件渲染。
  */
-import type { ResumeFormatConfig } from "../types/resumeFormat";
 import { Alert, App, Button, Modal, Space, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -19,6 +18,7 @@ import {
 } from "../api/resumes";
 import type { ResumeContent, ResumeDetail, ResumeLayout } from "../types";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
+import { useResumeRelayout } from "../features/resume/useResumeRelayout";
 import ResumeDeliveryInfo from "./resume/ResumeDeliveryInfo";
 import ResumeDetailPreview from "./resume/ResumeDetailPreview";
 import PageSkeleton from "./common/PageSkeleton";
@@ -49,11 +49,28 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     overflow: boolean;
   } | null>(null);
   const [pdfDirectAvailable, setPdfDirectAvailable] = useState(true);
-  const [relayouting, setRelayouting] = useState(false);
   const [layoutSaving, setLayoutSaving] = useState(false);
   // 预览量到的实测高度：只有浏览器能量准，所以由预览上报、这里转交给诊断面板。
   const [measure, setMeasure] = useState<LayoutMeasure | null>(null);
   const previewRef = useRef<ResumePreviewHandle>(null);
+  /**
+   * 版式重排：尾随合并（`useResumeRelayout`，项 6 / D11）。
+   *
+   * 本地草稿只在**渲染成功之后**推进（`onRendered`），所以"读数已经前进、画面还是旧版式"
+   * 这种不一致不可能出现——这正是本项要修掉的既有缺陷（C5 的第一种形态）。
+   * 失败时**不重试**、只提示并清掉探针（D13：探针是"我看到的"，渲染失败就不能继续呈现它）。
+   */
+  const { relayouting, request: requestLayout } = useResumeRelayout({
+    render: async (next) => {
+      if (!detail) return;
+      setHtml(await renderResume(detail.content, next));
+    },
+    onRendered: (next) => setLayout(next),
+    onError: (err) => {
+      message.error(err instanceof Error ? err.message : "按新版式渲染失败");
+      previewRef.current?.setLiveProbe("");
+    },
+  });
   const [suggestionsGenerated, setSuggestionsGenerated] = useState(false);
   const [suggestionsResetKey, setSuggestionsResetKey] = useState(0);
   const loadedRecordId = useRef<number | null>(null);
@@ -152,35 +169,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     setSuggestionsResetKey((value) => value + 1);
   };
 
-  /** 换模板 / 加页数 / 改字号：先改本地草稿并重新渲染，不立即写回记录。 */
-  const applyLayout = async (next: ResumeLayout) => {
-    if (!detail || relayouting) return;
-    setRelayouting(true);
-    setLayout(next);
-    try {
-      setHtml(await renderResume(detail.content, next));
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "按新版式渲染失败");
-    } finally {
-      setRelayouting(false);
-    }
-  };
-
-  /** 「自动一页」也只写入当前草稿，用户确认后再保存。 */
-  const applyFittedFormat = async (formatConfig: ResumeFormatConfig) => {
-    if (!detail) return;
-    const next: ResumeLayout = { ...layout, format_config: formatConfig };
-    setLayout(next);
-    setRelayouting(true);
-    try {
-      setHtml(await renderResume(detail.content, next));
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "按新版式渲染失败");
-    } finally {
-      setRelayouting(false);
-    }
-  };
-
+  /** 换模板 / 加页数 / 改字号：只重排，不立即写回记录。 */
   const saveLayout = async () => {
     if (!detail || !layoutDirty || layoutSaving) return;
     setLayoutSaving(true);
@@ -205,17 +194,10 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     }
   };
 
-  const cancelLayout = async () => {
+  const cancelLayout = () => {
     if (!detail || !layoutDirty || relayouting || layoutSaving) return;
-    setRelayouting(true);
-    setLayout(savedLayout);
-    try {
-      setHtml(await renderResume(detail.content, savedLayout));
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "恢复已保存版式失败");
-    } finally {
-      setRelayouting(false);
-    }
+    // 走同一条重排通道：草稿在渲染成功后才回到 `savedLayout`（一个宿主只有一套口径）。
+    requestLayout(savedLayout);
   };
 
   return (
@@ -227,8 +209,18 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
       footer={null}
       // 弹窗自身滚动：预览区高度已经与上方内容解耦（见 ResumePreview 的固定预算），
       // 内容再长也只是让这里滚动，不去压缩预览。
+      // 正文右缘原本紧贴滚动条（body 自己就是滚动容器，左右内边距为 0）：滚动条一出现
+      // 内容就被顶到它边上。右侧留 12px 让两者分开；再用等量的负外边距把这 12px
+      // 从弹窗内边距里"借"回来，内容宽度因此一点不变——滚动条整条往弹窗边缘挪
+      // 12px，左右看起来也仍然平衡。
       styles={{
-        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
+        body: {
+          maxHeight: "var(--rf-modal-body-max-h)",
+          overflowY: "auto",
+          overflowX: "hidden",
+          paddingRight: 12,
+          marginRight: -12,
+        },
       }}
       destroyOnHidden
     >
@@ -268,16 +260,16 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
             previewRef={previewRef}
             onLayoutStatus={setLayoutStatus}
             onMeasure={setMeasure}
-            onApplyLayout={(next) => void applyLayout(next)}
-            onApplyFittedFormat={(formatConfig) => void applyFittedFormat(formatConfig)}
+            onApplyLayout={(next) => requestLayout(next)}
+            onApplyFittedFormat={(formatConfig) =>
+              // 「自动一页」也只写入当前草稿：同一条重排通道，不另开一份"正在重排"口径。
+              requestLayout({ ...layout, format_config: formatConfig })
+            }
             extraActions={
               layoutDirty ? (
                 <Space size={8}>
-                  <Button
-                    onClick={() => void cancelLayout()}
-                    disabled={relayouting || layoutSaving}
-                  >
-                    取消修改
+                  <Button onClick={cancelLayout} disabled={relayouting || layoutSaving}>
+                    取消
                   </Button>
                   <Button
                     type="primary"
@@ -285,7 +277,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
                     disabled={relayouting}
                     onClick={() => void saveLayout()}
                   >
-                    保存修改
+                    保存
                   </Button>
                 </Space>
               ) : null

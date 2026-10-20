@@ -10,14 +10,12 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import GenerateResumeModal from "../components/GenerateResumeModal";
-import ManualResumeModal from "../components/ManualResumeModal";
 import GeneralResumeSection from "../components/profile/GeneralResumeSection";
 import { DEFAULT_SECTION_ORDER } from "../components/profile/ProfileSectionConfig";
 import type { ProfileSectionKey } from "../components/profile/ProfileSectionConfig";
 import ProfilePageHeader from "../components/profile/ProfilePageHeader";
 import ProfileSectionStack from "../components/profile/ProfileSectionStack";
-import ProfileTextModal from "../components/profile/ProfileTextModal";
+import ProfilePageModals from "../components/profile/ProfilePageModals";
 import ProfileWorkspaceTabs, {
   type ProfileWorkspaceKey,
 } from "../components/profile/ProfileWorkspaceTabs";
@@ -30,13 +28,13 @@ import {
   setProfileSaveControl,
 } from "../features/tou-tou/profileSaveBridge";
 import { useProfilePage } from "../features/profile/useProfilePage";
+import { useWebformParse } from "../features/profile/useWebformParse";
 import { useFormShortcutHistory } from "../features/shortcuts/useFormShortcutHistory";
 import type { WebFormExtraProfile } from "../types";
 
 export default function ProfilePage() {
   const { message } = App.useApp();
-  // 通用简历：名称在两个入口之间共享，用户填一次即可。
-  const [generalTitle, setGeneralTitle] = useState("");
+  // 通用简历：名称在弹窗/编辑器里填（项 11），页面不再持有。
   const [generateOpen, setGenerateOpen] = useState(false);
   const [writeOpen, setWriteOpen] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState<ProfileWorkspaceKey>("resume");
@@ -91,30 +89,28 @@ export default function ProfilePage() {
     setEditing,
     photoReading,
     sectionOrderStore,
-    profileTextOpen,
-    profileText,
-    profileTextWarnings,
     profileTextParsing,
-    profileTextUploadPercent,
-    profileTextRecognized,
-    profileTextSource,
-    files,
-    filesReading,
-    addFiles,
-    removeFile,
-    onPasteFiles,
+    profileTextModal,
     photo,
     submit,
     cancelEditing,
     handleSectionPointerDown,
     moveSectionByOffset,
     openProfileTextModal,
-    handleProfileTextChange,
-    closeProfileTextModal,
-    parseProfile,
   } = useProfilePage({
     activateResumeWorkspace,
     onProfileParsed: markDirty,
+  });
+
+  /**
+   * 网申资料的粘贴识别（项 12）：状态在 hook 里，写入走 workspace 的句柄。
+   *
+   * 为什么必须经句柄：字段清单由 `WebFormProfileSection` 自持（页面只能改 label、不能新增
+   * 字段），所以"新建自定义字段"这一步只有 Section 做得到。
+   */
+  const webformParse = useWebformParse({
+    fields: extraProfile?.fields ?? [],
+    applyRows: (rows) => workspaceRef.current?.applyParsedRows(rows),
   });
 
   // 悬浮球那张「去改资料」提示卡本次进入是否已被关掉。放在页面 state（而不是球、也不写本地存储）：
@@ -169,13 +165,11 @@ export default function ProfilePage() {
     [form, markDirty],
   );
 
-  const openGenerateModal = useCallback((title: string) => {
-    setGeneralTitle(title);
+  const openGenerateModal = useCallback(() => {
     setGenerateOpen(true);
   }, []);
 
-  const openWriteModal = useCallback((title: string) => {
-    setGeneralTitle(title);
+  const openWriteModal = useCallback(() => {
     setWriteOpen(true);
   }, []);
 
@@ -453,6 +447,7 @@ export default function ProfilePage() {
         profileTextParsing={profileTextParsing}
         allExpanded={allExpanded}
         onOpenProfileTextModal={openProfileTextModal}
+        onOpenWebFormParse={webformParse.openModal}
         // 取消编辑即放弃未保存更改（表单回滚到已存值），警示随之解除。
         onCancelEditing={handleCancelEditing}
         onSubmitAll={submitAll}
@@ -463,37 +458,12 @@ export default function ProfilePage() {
       {/* 通用简历放在资料分区之前：它不属于资料表单，以前沉在页面最底下，资料一多就得滚到底才看得到。 */}
       {workspaceTabs}
 
-      <GenerateResumeModal
-        job={null}
-        open={generateOpen}
-        initialTitle={generalTitle}
-        onClose={() => setGenerateOpen(false)}
-      />
-      <ManualResumeModal
-        job={null}
-        open={writeOpen}
-        initialTitle={generalTitle}
-        // T12：保存后由 `resumeListEvents` 广播刷新，入口不再各自 reload；
-        // 关闭（含取消）也不需要任何额外动作。
-        onClose={() => setWriteOpen(false)}
-      />
-
-      <ProfileTextModal
-        open={profileTextOpen}
-        text={profileText}
-        warnings={profileTextWarnings}
-        parsing={profileTextParsing}
-        uploadPercent={profileTextUploadPercent}
-        recognizedText={profileTextRecognized}
-        recognitionSource={profileTextSource}
-        files={files}
-        filesReading={filesReading}
-        onTextChange={handleProfileTextChange}
-        onAddFiles={(incoming) => void addFiles(incoming)}
-        onRemoveFile={removeFile}
-        onPasteFiles={onPasteFiles}
-        onClose={closeProfileTextModal}
-        onParse={() => void parseProfile()}
+      {/* 三个弹窗抽到 `ProfilePageModals`（P5b 预算前置）：本文件守在 500 行内。 */}
+      <ProfilePageModals
+        generate={{ open: generateOpen, onClose: () => setGenerateOpen(false) }}
+        manual={{ open: writeOpen, onClose: () => setWriteOpen(false) }}
+        profileText={profileTextModal}
+        webformText={webformParse.modalProps}
       />
     </div>
   );

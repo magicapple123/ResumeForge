@@ -18,18 +18,8 @@
  * 前端自己划一条线就是在编造一个判断。
  */
 import { BulbOutlined, DeleteOutlined, ReloadOutlined, RobotOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Descriptions,
-  Empty,
-  Modal,
-  Progress,
-  Space,
-  Tag,
-  Typography,
-} from "antd";
+import { Alert, App, Button, Descriptions, Modal, Progress, Space, Tag, Typography } from "antd";
+import EmptyState from "./common/EmptyState";
 import PageSkeleton from "./common/PageSkeleton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteJobMatch, generateJobMatch, getJobMatch } from "../api/jobs";
@@ -66,7 +56,7 @@ const GROUPS: {
 
 function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
   if (conditions.length === 0) {
-    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无条目" />;
+    return <EmptyState inline description="暂无条目" />;
   }
   return (
     <ul className="job-match-conditions">
@@ -250,7 +240,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
         <PageSkeleton rows={8} card={false} />
       ) : !hasResult ? (
         <Space orientation="vertical" style={{ width: "100%" }} size={12}>
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这个岗位还没有做过匹配分析" />
+          <EmptyState inline description="这个岗位还没有做过匹配分析" />
           <Typography.Paragraph type="secondary">
             分析会读取你的个人资料与简历，对每条招聘要求给出「已匹配 / 表达缺口 / 证据不足 /
             真实缺口 / 待确认」五类结论。未配置大模型时会走本地降级（各条均为「待确认」），

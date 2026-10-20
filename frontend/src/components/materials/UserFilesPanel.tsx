@@ -10,7 +10,7 @@
 import { FolderOpenOutlined, SearchOutlined } from "@ant-design/icons";
 import { App, Button, Drawer, Empty, Image, Input, Table, Tag, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
-import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
+import type { TableColumnsType, TablePaginationConfig } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
   listUserFiles,
@@ -95,7 +95,7 @@ export default function UserFilesPanel() {
     }
   };
 
-  const columns: ColumnsType<UserFileItem> = [
+  const columns: TableColumnsType<UserFileItem> = [
     {
       title: "名称",
       dataIndex: "original_name",

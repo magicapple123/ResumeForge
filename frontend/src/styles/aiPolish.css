@@ -80,6 +80,14 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* 整块标题栏是拖动把手：grab 光标 + 关掉文字选择，避免拖的时候把标题选蓝。 */
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.rf-ai-polish-card-head:active {
+  cursor: grabbing;
 }
 
 .rf-ai-polish-privacy {
@@ -116,10 +124,26 @@
   line-height: 1.6;
 }
 
+/* 「继续改写」那一行把卡片撑高了：动作区吸在卡片底边，用户在长结果里滚动时
+   不必先滚到底才能替换/取消。背景必须不透明，否则滚上来的正文会从按钮底下透出来。 */
 .rf-ai-polish-actions {
+  position: sticky;
+  bottom: 0;
   display: flex;
   justify-content: flex-end;
   margin-top: var(--rf-space-2);
+  padding-top: var(--rf-space-2);
+  background: var(--rf-surface);
+}
+
+/* 结果超长时「继续改写」不可用，原因要写在要求框上方（按钮本身的灰态说不清为什么）。 */
+.rf-ai-polish-followup-warning {
+  font-size: 12px;
+}
+
+.rf-ai-polish-followup {
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 /* 窄屏：卡片不能比视口还宽，否则左右都被裁掉。 */

@@ -14,10 +14,8 @@ import {
   Card,
   Checkbox,
   Dropdown,
-  Empty,
   Input,
   Listy,
-  Spin,
   Modal,
   Space,
   Tag,
@@ -25,6 +23,8 @@ import {
   Typography,
   Upload,
 } from "antd";
+import EmptyState from "../common/EmptyState";
+import LoadingBlock from "../common/LoadingBlock";
 import { useState } from "react";
 import { defaultExportName } from "../../utils/exportNaming";
 import { RowActions } from "../common/RowActions";
@@ -249,10 +249,10 @@ export default function DatasetsCard({
         </FileDropZone>
 
         {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
-        <Spin spinning={loading}>
+        <LoadingBlock spinning={loading}>
           {datasets.length === 0 ? (
             <div style={{ marginTop: 16 }}>
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无数据集" />
+              <EmptyState inline description="暂无数据集" />
             </div>
           ) : (
             <Listy
@@ -325,7 +325,7 @@ export default function DatasetsCard({
             />
           )}
           {datasetsToggleNode}
-        </Spin>
+        </LoadingBlock>
       </Card>
 
       <Modal

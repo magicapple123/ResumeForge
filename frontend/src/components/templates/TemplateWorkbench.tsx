@@ -7,7 +7,8 @@ import {
   RobotOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
-import { App, Button, Card, Collapse, Dropdown, Empty, Space, Tag, Typography } from "antd";
+import { App, Button, Card, Collapse, Dropdown, Space, Tag, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchResumeTemplates } from "../../api/resumes";
@@ -252,10 +253,7 @@ export default function TemplateWorkbench({ onChanged }: Props) {
           ]}
         />
         {styleTemplates.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="还没有自制样式模板。点右上角「复制改一份」从内置模板开始。"
-          />
+          <EmptyState description="还没有自制样式模板。点右上角「复制改一份」从内置模板开始。" />
         ) : (
           <TemplateCustomTable
             templates={styleTemplates}
@@ -299,10 +297,7 @@ export default function TemplateWorkbench({ onChanged }: Props) {
             ))}
         </Typography.Paragraph>
         {formatTemplates.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="还没有自制格式模板。想压进一页时，用它调行高与页边距最快。"
-          />
+          <EmptyState description="还没有自制格式模板。想压进一页时，用它调行高与页边距最快。" />
         ) : (
           <TemplateCustomTable
             templates={formatTemplates}

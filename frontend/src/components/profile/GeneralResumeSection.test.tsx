@@ -100,18 +100,17 @@ describe("GeneralResumeSection", () => {
     expect(await screen.findByText("还没有通用简历")).toBeInTheDocument();
   });
 
-  it("hands the typed name to both creation entries", async () => {
+  it("opens both creation entries without a page-level name box (项 11)", async () => {
     const props = renderSection();
     await screen.findByText("研发通用版");
 
-    fireEvent.change(screen.getByLabelText("通用简历名称"), {
-      target: { value: "管培生版" },
-    });
+    // 名称输入已搬进编辑器/弹窗，页面上只剩两个入口。
+    expect(screen.queryByLabelText("通用简历名称")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /AI 生成/ }));
     fireEvent.click(screen.getByRole("button", { name: /从头手写/ }));
 
-    expect(props.onGenerate).toHaveBeenCalledWith("管培生版");
-    expect(props.onWrite).toHaveBeenCalledWith("管培生版");
+    expect(props.onGenerate).toHaveBeenCalledWith();
+    expect(props.onWrite).toHaveBeenCalledWith();
   });
 
   it("renames in place", async () => {

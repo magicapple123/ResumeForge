@@ -2,8 +2,11 @@
 /** 网申填表接口。 */
 import type {
   BrowserStatus,
+  ExtractionDocumentInput,
+  ExtractionImageInput,
   WebFormExtraEntry,
   WebFormExtraProfile,
+  WebFormExtraProfileParse,
   WebFormFields,
   WebFormFillItem,
   WebFormFillRecord,
@@ -19,7 +22,7 @@ import type {
   WebFormBrowserTargetList,
 } from "../types";
 import type { Page } from "../types/common";
-import { buildQuery, request } from "./client";
+import { buildQuery, request, uploadWithProgress } from "./client";
 
 export function listWebFormFields(): Promise<WebFormFields> {
   return request("/webform/fields");
@@ -191,4 +194,27 @@ export function getWebFormRecord(recordId: number): Promise<WebFormFillRecord> {
 /** 移入回收站（软删，可在回收站恢复）。 */
 export function deleteWebFormRecord(recordId: number): Promise<void> {
   return request(`/webform/records/${recordId}`, { method: "DELETE" });
+}
+
+/**
+ * 「网申资料」粘贴识别（项 12）：把网申页面上一屏栏目拆成草稿，**不写库**。
+ *
+ * 与 `api/profile.ts` 的 `parseProfileText` 同形：附件随 JSON 一起发（大文件下请求体可达
+ * 数 MB），走 XHR 进度上传；预算用 recognition 档（90s，含服务端识别时间）。
+ */
+export function parseWebFormExtraProfileText(
+  payload: {
+    text: string;
+    images?: ExtractionImageInput[];
+    documents?: ExtractionDocumentInput[];
+  },
+  onProgress?: (percent: number) => void,
+  /** 取消信号：「取消识别」用它真的掐掉请求。 */
+  signal?: AbortSignal,
+): Promise<WebFormExtraProfileParse> {
+  return uploadWithProgress("/webform/extra-profile/parse-text", JSON.stringify(payload), {
+    budget: "recognition",
+    onProgress,
+    signal,
+  });
 }

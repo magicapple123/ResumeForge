@@ -5,7 +5,8 @@
  * 只负责展示与行内操作；数据的增删改查（删除/重新加载）由父组件经回调提供。
  */
 import { DeleteOutlined, HistoryOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Collapse, Empty, Space, Typography } from "antd";
+import { Alert, Button, Card, Collapse, Space, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
 import { RowActions } from "../common/RowActions";
 import type { InterviewReviewRecord } from "../../types";
 
@@ -101,7 +102,7 @@ export default function ReviewHistoryCard({
       ) : error ? (
         <Alert type="error" showIcon title={error} />
       ) : (reviews ?? []).length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有保存过复盘" />
+        <EmptyState inline description="还没有保存过复盘" />
       ) : (
         <Collapse items={items} />
       )}

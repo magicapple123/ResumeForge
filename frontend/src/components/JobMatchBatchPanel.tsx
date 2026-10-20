@@ -12,7 +12,6 @@ import {
   App,
   Button,
   Checkbox,
-  Empty,
   Listy,
   Modal,
   Progress,
@@ -20,10 +19,11 @@ import {
   Tabs,
   Typography,
 } from "antd";
+import EmptyState from "./common/EmptyState";
 import PageSkeleton from "./common/PageSkeleton";
 import LoadingBlock from "./common/LoadingBlock";
 import { ListyItem, ListyMeta } from "./common/ListyItem";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BatchResultView } from "./jobs/JobMatchBatchResult";
 import {
   getJobMatchBatch,
@@ -280,7 +280,7 @@ export default function JobMatchBatchPanel({
   const historyContent = historyLoading ? (
     <LoadingBlock />
   ) : history.length === 0 ? (
-    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有批量分析记录" />
+    <EmptyState inline description="还没有批量分析记录" />
   ) : (
     <Listy
       items={history}
@@ -302,12 +302,12 @@ export default function JobMatchBatchPanel({
     />
   );
 
-  const resultContent = !batch ? (
-    <PageSkeleton rows={8} />
-  ) : batch ? (
+  // 只分两种：有 batch 就渲染结果，没有就先给骨架屏（第三个分支永远不可达——
+  // `!batch` 已经截住所有空值，写出来只会让人以为存在"无结果但有值"的中间态）。
+  const resultContent: ReactNode = batch ? (
     <BatchResultView batch={batch} />
   ) : (
-    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有可展示的结果" />
+    <PageSkeleton rows={8} />
   );
 
   const phaseContent =
@@ -340,19 +340,12 @@ export default function JobMatchBatchPanel({
           },
         }}
         onCancel={onClose}
+        // 底部只留"这一阶段要做的事"，不再放「关闭」：退出统一走右上角 ×／Esc／点遮罩，
+        // 三者最终都映射到同一个 onClose（Modal 的默认行为），所以不存在"没有出口"。
+        // running / history 阶段没有底部动作，footer 直接不渲染（否则会留一条空底栏）。
         footer={
-          <Space>
-            <Button onClick={onClose}>关闭</Button>
-            {phase === "result" && batch && jobIds.length > 0 ? (
-              <Button
-                icon={<ReloadOutlined />}
-                loading={starting}
-                onClick={() => void startAnalysis(true)}
-              >
-                重新分析这批
-              </Button>
-            ) : null}
-            {phase === "setup" ? (
+          phase === "setup" ? (
+            <Space>
               <Button
                 type="primary"
                 icon={<RobotOutlined />}
@@ -361,8 +354,18 @@ export default function JobMatchBatchPanel({
               >
                 开始分析
               </Button>
-            ) : null}
-          </Space>
+            </Space>
+          ) : phase === "result" && batch && jobIds.length > 0 ? (
+            <Space>
+              <Button
+                icon={<ReloadOutlined />}
+                loading={starting}
+                onClick={() => void startAnalysis(true)}
+              >
+                重新分析这批
+              </Button>
+            </Space>
+          ) : null
         }
       >
         {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} /> : null}
@@ -410,7 +413,11 @@ export default function JobMatchBatchPanel({
         width={900}
         confirmLoading={historyBatchLoading}
         onCancel={() => setHistoryBatch(null)}
-        footer={<Button onClick={() => setHistoryBatch(null)}>关闭</Button>}
+        footer={
+          // 保留：这张弹卡自带「关闭」是有意设计（JobMatchBatchPanel.test.tsx 断言
+          // "此刻页面上只有弹卡这一颗关闭按钮"）；删除需先改测试，并确认只用 × 的可用性。
+          <Button onClick={() => setHistoryBatch(null)}>关闭</Button>
+        }
         styles={{
           body: {
             maxHeight: "var(--rf-modal-body-max-h)",

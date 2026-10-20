@@ -109,16 +109,39 @@ export const darkTheme: ThemeConfig = {
       headerColor: darkPalette.tableHeaderText,
       rowHoverBg: darkPalette.rowHoverBg,
       borderColor: darkPalette.border,
+      // 与 `dark-tokens.css` 的 `--rf-brand-tint: #1e2836` 同值：原先那条 `!important`
+      // 在深色下就是这个色，迁到 token 后视觉不变，但从此由 token 表达。
+      rowSelectedBg: darkPalette.selectedBg,
+      rowSelectedHoverBg: darkPalette.selectedBg,
     },
     Menu: {
       itemSelectedBg: darkPalette.selectedBg,
       itemSelectedColor: darkPalette.selectedText,
+      // 尺寸三项与浅色同样留在 CSS（理由见 appTheme.ts 的 Menu 注释：组件级 token 会
+      // 连带改掉下拉菜单与移动端抽屉的菜单项高度）。
+      activeBarBorderWidth: 0,
     },
     // 与浅色同一处修复（见 appTheme.ts 注释）：antd 默认取 controlItemBgActive，
     // 在深色下会算成一块与表单反差刺眼的灰，这里显式给"蓝灰底 + 浅蓝字"。
     Select: {
       optionSelectedBg: darkPalette.selectedBg,
       optionSelectedColor: darkPalette.selectedText,
+    },
+    /**
+     * 弹窗三段。注意标题条/页脚用的是**卡片面**（`surface`）而不是次级面（`surfaceAlt`）：
+     * `dark-tokens.css` 里记着用户 2026-10-20 的截图反馈——更暗的 surface-alt 会在深色下
+     * 变成两条"黑条"，看起来像渲染残留。token 必须与那条 CSS 同源，否则哪天删掉 CSS
+     * 覆写就会把这个已修的 bug 放回来。
+     *
+     * 只写 `Modal.ComponentToken` 公开的键（antd 6.6.5 只有 6 个）；内边距 / 分隔线
+     * 仍在 `styles/modules.css`，因为那些键只存在于 `prepareComponentToken` 的内部返回类型。
+     */
+    Modal: {
+      headerBg: darkPalette.surface,
+      titleColor: darkPalette.brandText,
+      titleFontSize: 16,
+      contentBg: darkPalette.surface,
+      footerBg: darkPalette.surface,
     },
     Tooltip: { colorBgSpotlight: darkPalette.spotlight },
   },

@@ -12,21 +12,11 @@
  * 只有标题没有时间等于让他一条条点开看。
  */
 import { CheckSquareOutlined, DeleteOutlined, UndoOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Empty,
-  Popconfirm,
-  Segmented,
-  Space,
-  Table,
-  Tag,
-  Typography,
-} from "antd";
+import { Alert, App, Button, Popconfirm, Segmented, Space, Table, Tag, Typography } from "antd";
+import EmptyState from "../components/common/EmptyState";
 import PageSkeleton from "../components/common/PageSkeleton";
 import ErrorState from "../components/common/ErrorState";
-import type { ColumnsType } from "antd/es/table";
+import type { TableColumnsType } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
 import type { HTMLAttributes } from "react";
 import { useMemo, useState } from "react";
@@ -168,7 +158,7 @@ export default function TrashPage() {
     }
   };
 
-  const columns: ColumnsType<TrashItem> = [
+  const columns: TableColumnsType<TrashItem> = [
     {
       title: "类型",
       dataIndex: "type_label",
@@ -342,10 +332,7 @@ export default function TrashPage() {
       ) : loading && !data ? (
         <PageSkeleton rows={5} />
       ) : items.length === 0 ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="回收站是空的。删除内容后，它们会出现在这里，可以随时恢复。"
-        />
+        <EmptyState description="回收站是空的。删除内容后，它们会出现在这里，可以随时恢复。" />
       ) : (
         <Table
           rowKey={(row) => `${row.type}-${row.id}`}

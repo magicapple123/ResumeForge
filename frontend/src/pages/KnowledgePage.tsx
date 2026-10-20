@@ -12,7 +12,6 @@ import {
   Pagination,
   Select,
   Space,
-  Spin,
   Tag,
   Typography,
 } from "antd";
@@ -380,7 +379,7 @@ export default function KnowledgePage() {
       >
         {viewLoading ? (
           <div style={{ textAlign: "center", padding: 24 }}>
-            <Spin />
+            <LoadingBlock />
           </div>
         ) : (
           viewing && (

@@ -1,4 +1,44 @@
 /* SPDX-License-Identifier: Apache-2.0 */
+/* 识别结果的校对列表（项 13）：一行一栏，栏目名左、值右；窄屏自动折成上下两段。 */
+.recognition-review-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.recognition-review-label {
+  display: flex;
+  flex: 0 0 168px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 5px;
+}
+
+.recognition-review-value {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.recognition-review-section {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+@media (max-width: 640px) {
+  .recognition-review-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .recognition-review-label {
+    flex: 0 0 auto;
+    padding-top: 0;
+  }
+}
+
 .profile-page-header,
 .settings-page-header {
   display: flex;
@@ -442,4 +482,14 @@
   .profile-partial-date-select__controls > .ant-select {
     flex: 1 1 88px;
   }
+}
+
+/* 非编辑态的下拉框：**只禁用交互，文字仍用正文色**。
+   antd 的 disabled 会把内容统一降到 rgba(0,0,0,.25)，在浅色卡片上几乎读不清；
+   而同一行的普通输入框（如绩点）还是正文色，两者并排就像"这一格没填"。
+   只覆盖文字与箭头，背景/光标保持原样——仍然点不动，只是看得清。 */
+.profile-page:not(.is-editing) .ant-select-disabled .ant-select-content-has-value,
+.profile-page:not(.is-editing) .ant-select-disabled .ant-select-suffix,
+.profile-page:not(.is-editing) .ant-select-disabled .anticon-down {
+  color: var(--rf-text-body);
 }

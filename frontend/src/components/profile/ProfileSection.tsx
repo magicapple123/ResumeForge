@@ -2,7 +2,7 @@
 /** 资料分区容器：卡片 + 动态列表 + 增删行，各分区共用。 */
 import { DeleteOutlined, HolderOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Tooltip } from "antd";
-import type { FormListFieldData, FormListOperation } from "antd/es/form/FormList";
+import type { FormListFieldData, FormListOperation } from "antd";
 import { useCallback } from "react";
 import type { ReactNode } from "react";
 import { useProfileItemListDrag } from "./useProfileItemListDrag";

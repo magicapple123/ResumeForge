@@ -12,13 +12,19 @@
  * 1. 删除不再是一颗裸露的红色垃圾桶（列表里既抢眼又容易误点），收进「···」菜单；
  * 2. 点字体名可以**先预览再决定**：弹窗里用该字体渲染一段示例，确认后再「设为当前」。
  */
-import { DeleteOutlined, EyeOutlined, MoreOutlined, UploadOutlined } from "@ant-design/icons";
+import {
+  DeleteOutlined,
+  EditOutlined,
+  EyeOutlined,
+  MoreOutlined,
+  UploadOutlined,
+} from "@ant-design/icons";
 import {
   App,
   Button,
   Card,
   Dropdown,
-  Empty,
+  Input,
   Listy,
   Modal,
   Space,
@@ -26,11 +32,13 @@ import {
   Typography,
   Upload,
 } from "antd";
+import EmptyState from "../common/EmptyState";
 import { useCallback, useEffect, useState } from "react";
 import {
   activateResumeFont,
   deleteResumeFont,
   listResumeFonts,
+  renameResumeFont,
   resumeFontPreviewUrl,
   uploadResumeFont,
   type ResumeFonts,
@@ -48,13 +56,16 @@ export default function ResumeFontCard() {
   const [busy, setBusy] = useState(false);
   /** 正在预览的字体文件名；null = 弹窗关闭。 */
   const [previewName, setPreviewName] = useState<string | null>(null);
+  /** 正在重命名的那款字体：`{ name: 文件名, value: 输入中的展示名 }`。 */
+  const [renameTarget, setRenameTarget] = useState<{ name: string; value: string } | null>(null);
+  const [renameBusy, setRenameBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setData(await listResumeFonts());
     } catch {
       // 读不到（老后端）就当作没有自定义字体，不影响其它设置。
-      setData({ items: [], active: null, max_bytes: 20 * 1024 * 1024 });
+      setData({ items: [], active: null, max_bytes: 30 * 1024 * 1024 });
     }
   }, []);
 
@@ -100,6 +111,27 @@ export default function ResumeFontCard() {
     });
   };
 
+  /** 只改展示名：文件名与所有已引用它的简历都不动（后端只写 names.json）。 */
+  const submitRename = async () => {
+    if (!renameTarget) return;
+    const label = renameTarget.value.trim();
+    if (!label) {
+      message.warning("字体名称不能为空");
+      return;
+    }
+    setRenameBusy(true);
+    try {
+      await renameResumeFont(renameTarget.name, label);
+      message.success("已重命名字体");
+      setRenameTarget(null);
+      await load();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "重命名字体失败");
+    } finally {
+      setRenameBusy(false);
+    }
+  };
+
   const items = data?.items ?? [];
   const activeName = data?.active ?? null;
 
@@ -120,7 +152,7 @@ export default function ResumeFontCard() {
           }}
         >
           <Button icon={<UploadOutlined />} loading={busy}>
-            上传字体（ttf / otf / ttc，≤20MB）
+            上传字体（ttf / otf / ttc，≤30MB）
           </Button>
         </Upload>
         <Button disabled={!activeName} onClick={() => void activate(null)}>
@@ -128,10 +160,7 @@ export default function ResumeFontCard() {
         </Button>
       </Space>
       {items.length === 0 ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="还没有上传字体，预览与导出使用系统自带的中文字体"
-        />
+        <EmptyState inline description="还没有上传字体，预览与导出使用系统自带的中文字体" />
       ) : (
         <Listy
           items={items}
@@ -146,9 +175,16 @@ export default function ResumeFontCard() {
                     className="table-text-link"
                     onClick={() => setPreviewName(item.name)}
                   >
-                    {item.name}
+                    {item.display_name || item.name}
                   </Button>
                   <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
+                  {/* 展示名可以随便起，但**原始文件名要一直看得见**：它才是磁盘上的东西，
+                      也是排查"这份简历用的是哪个字体文件"时唯一的线索。 */}
+                  {(item.display_name || item.name) !== item.name ? (
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {item.name}
+                    </Typography.Text>
+                  ) : null}
                   {item.name === activeName ? <Tag color="blue">当前使用</Tag> : null}
                 </Space>
                 <Space size={4}>
@@ -165,6 +201,7 @@ export default function ResumeFontCard() {
                     menu={{
                       items: [
                         { key: "preview", icon: <EyeOutlined />, label: "预览字体" },
+                        { key: "rename", icon: <EditOutlined />, label: "重命名" },
                         {
                           key: "delete",
                           icon: <DeleteOutlined />,
@@ -174,6 +211,8 @@ export default function ResumeFontCard() {
                       ],
                       onClick: ({ key }) => {
                         if (key === "preview") setPreviewName(item.name);
+                        else if (key === "rename")
+                          setRenameTarget({ name: item.name, value: item.display_name });
                         else remove(item.name);
                       },
                     }}
@@ -190,6 +229,33 @@ export default function ResumeFontCard() {
           )}
         />
       )}
+
+      <Modal
+        open={renameTarget !== null}
+        title="重命名字体"
+        onCancel={() => setRenameTarget(null)}
+        onOk={() => void submitRename()}
+        confirmLoading={renameBusy}
+        okText="保存"
+        cancelText="取消"
+        destroyOnHidden
+      >
+        <Input
+          aria-label="字体名称"
+          value={renameTarget?.value ?? ""}
+          maxLength={40}
+          placeholder="给这款字体起个名字"
+          onChange={(event) =>
+            setRenameTarget((current) =>
+              current ? { ...current, value: event.target.value } : current,
+            )
+          }
+          onPressEnter={() => void submitRename()}
+        />
+        <Typography.Paragraph type="secondary" style={{ margin: "8px 0 0", fontSize: 12 }}>
+          只改显示名。原文件名保持不变：{renameTarget?.name}
+        </Typography.Paragraph>
+      </Modal>
 
       <Modal
         open={previewName !== null}
