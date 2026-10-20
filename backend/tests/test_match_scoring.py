@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``match_scoring`` 参考分的纯函数测试。
 
 重点钉住两条性质：

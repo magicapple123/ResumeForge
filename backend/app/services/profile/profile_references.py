@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料参考文件的安全清洗、相关片段提取和上下文准备。"""
 
 from __future__ import annotations

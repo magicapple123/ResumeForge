@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 岗位优化建议的全局提醒：用户关掉建议弹窗后，进度与结果由它接住。
  *

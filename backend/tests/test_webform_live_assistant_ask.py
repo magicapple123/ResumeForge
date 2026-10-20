@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「问投投」：精简版问答通道（从 test_webform_live.py 拆出）。
 
 FakeLiveClient 留在 test_webform_live.py。

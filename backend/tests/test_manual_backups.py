@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """手动备份（backups/）的列表与可恢复删除（RF-25）。
 
 删除的性质必须钉住：**移动到 backups/.trash/，绝不 unlink**；没有自动清理，

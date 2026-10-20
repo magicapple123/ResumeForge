@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位匹配度分析接口（prefix ``/api/jobs``）。
 
 薄路由：只做校验、调 service、返回 schema。匹配分析第一次把 JD 与**用户已确认的资料/

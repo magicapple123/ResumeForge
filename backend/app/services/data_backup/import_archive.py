@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份导入校验：解包、版本核对、迁移与表结构校验（职责⑤）。
 
 安全语义（zip-slip 防护、fail-closed manifest、校验顺序）整函数搬运零改动。

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 生成预览阶段：ResumeDetailPreview 组合 + extraActions 三按钮。
  *
  * 纯展示——版式状态/预览句柄/保存与修订回调全部由 GenerateResumeModal 经 props 回传；

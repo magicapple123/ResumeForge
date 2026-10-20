@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 通用「卡片 → 详情」能力：列表卡片点一下就能看全字段。
  *

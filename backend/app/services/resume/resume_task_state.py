@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成任务的终态仲裁写入（RF-02，从 resume_generate_runner.py 拆出）。
 
 只放"任务终态的原子写入"三件套：终态守卫写入、completed 认领、取消即时落库。

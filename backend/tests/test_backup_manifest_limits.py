@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Reject malformed/duplicated sections before staging and keep archive validation linear."""
 
 import io

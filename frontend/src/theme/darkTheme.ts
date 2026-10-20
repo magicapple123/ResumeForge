@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 深色主题（A2）：与 `appTheme.ts` 并列的第二套 `ThemeConfig`。
  *

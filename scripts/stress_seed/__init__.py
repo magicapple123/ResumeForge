@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Stress-dataset seeding toolkit, split into narrow single-purpose modules.
 
 Package layout (import of every module here is side-effect free: no

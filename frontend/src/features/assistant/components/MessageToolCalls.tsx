@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「助手做了什么」工具调用折叠面板 + 写入提案卡（RF-01）。
  *

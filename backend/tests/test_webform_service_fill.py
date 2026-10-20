@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """服务层编排测试：填充与「可能是这几个」候选排序。
 
 拆分自 test_webform_service.py——apply_fill 的边界（越界索引/无选项/并发冲突/写值校验）

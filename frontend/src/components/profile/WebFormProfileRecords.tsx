@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Typography } from "antd";
 import { memo } from "react";
 import type { WebFormRepeatedGroup, WebFormRepeatedRecord } from "../../types";

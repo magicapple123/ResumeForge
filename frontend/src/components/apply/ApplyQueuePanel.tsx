@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 投递队列：逐条确认准入、编辑招呼语与简历，然后显式开始投递。
  *

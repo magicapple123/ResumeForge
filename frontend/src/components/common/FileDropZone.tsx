@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 统一的"从外面拖文件进来"容器。
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Baseline the schema previously managed by create_all and compatibility columns.
 
 Revision ID: 0001_existing_schema

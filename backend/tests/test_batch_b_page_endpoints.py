@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """批次 B 分页端点测试：面经/资料箱/事实台账的 ``/page``。
 
 钉住的契约：

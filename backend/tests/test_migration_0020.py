@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0020_daily_20260920_columns`` 迁移：只加两列、幂等、完整 downgrade。
 
 与 0015 同性质：**只加列、不改表集合**——这正是"旧备份仍可导入"成立的前提。额外验两件事：

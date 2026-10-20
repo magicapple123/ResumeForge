@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位和个人资料粘贴识别接口的 AI/本地回退回归测试。"""
 
 import json

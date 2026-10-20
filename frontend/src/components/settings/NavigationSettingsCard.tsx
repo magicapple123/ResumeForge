@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { App, Button, Card, Spin, Switch, Tag, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { saveNavigationVisibility } from "../../api/settings";

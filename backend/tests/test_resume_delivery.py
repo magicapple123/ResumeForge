@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递快照（RF-17）：「哪一版投给了谁」的冻结证据与血缘。
 
 核心验收：**投递之后 PUT/revise 改 content，快照与哈希不变**——简历记录保持原地

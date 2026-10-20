@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 用户自制简历模板（后端 /api/resume-templates）。 */
 
 export type ResumeTemplateKind = "style" | "format";

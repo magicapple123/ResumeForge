@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """数据集注册表：活动数据库的指针，以及各数据集文件的路径约定。
 
 刻意不依赖 SQLAlchemy：``app.database`` 需要在建引擎之前就知道该连哪个文件，

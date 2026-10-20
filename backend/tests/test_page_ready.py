@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """页面就绪等待原语的离线测试：就绪 / 拦截 / 超时 / 可中断。
 
 这些用例直接驱动 ``wait_for_page_state``，不碰任何浏览器或网络：``probe`` 是普通回调，

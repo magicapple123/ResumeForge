@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """生成说明（rationale）、未收录清单（coverage_details）与技能误报修复。
 
 这批能力的共同目标：让用户明白"为什么是这样一份简历"，并且不再把资料里

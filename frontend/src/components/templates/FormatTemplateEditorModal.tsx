@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 格式模板编辑器：调行高、页边距、强调色这类版式参数。
  *

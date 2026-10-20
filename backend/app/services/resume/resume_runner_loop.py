@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """工作线程事件循环的显式管理（PR-07 取消即时中止的机制载体）。
 
 模型流可能挂在 socket read 上（对端不发数据）：``_stop`` 的检查点只在

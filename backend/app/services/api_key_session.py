@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """仅会话使用的 API Key 通道（RF-24）。
 
 有些用户不想让密钥以任何形态落盘（哪怕 DPAPI 加密后也不愿意）。这里提供一个

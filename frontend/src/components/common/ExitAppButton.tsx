@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 退出应用：停掉前端与后端进程，并把页面切成"已退出"状态。
  *

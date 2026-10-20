@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历版式与渲染端点（域⑦）：版式调整、版面诊断与 HTML 渲染。
 
 从原 ``api/resumes.py`` 原样搬运（纯切片，无 patch 读取点）；`_to_resume_out` 改从

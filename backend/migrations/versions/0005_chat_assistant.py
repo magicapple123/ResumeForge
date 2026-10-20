@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Add AI assistant conversations and message history.
 
 Revision ID: 0005_chat_assistant

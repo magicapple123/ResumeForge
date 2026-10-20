@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """多标签会话管理（``MultiLiveSession``）。
 
 每个标签页仍是一份普通 ``LiveSession``（从 ``.live`` 单向导入）。

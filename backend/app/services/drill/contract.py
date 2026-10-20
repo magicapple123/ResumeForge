@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """主张挑选与评分契约（先定标准、再提问）。"""
 
 from __future__ import annotations

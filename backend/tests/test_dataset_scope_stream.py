@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """助手流与生成 SSE 的租约/冻结会话行为（RF-03，从 test_dataset_scope.py 拆出）。
 
 原文档超 500 行预算后的拆分：流级集成用例聚在这里，租约单元与切换互斥用例

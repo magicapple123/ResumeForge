@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 技能标签组：按类别着色展示（岗位卡片与详情共用）。 */
 import { Tag } from "antd";
 import type { SkillTag } from "../types";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 备选岗位抽屉的批量动作（跨页全选 / 导出 CSV / 批量删除）：
  * 从 CandidateJobsDrawer 拆出（文件行数预算）——动作本身只依赖选择集与刷新回调，

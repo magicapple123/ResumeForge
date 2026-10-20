@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Database migration orchestration and safe SQLite backups."""
 
 from __future__ import annotations

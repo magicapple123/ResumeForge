@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * `entryFill`：条目级「从资料填入本条」的开关。
  *

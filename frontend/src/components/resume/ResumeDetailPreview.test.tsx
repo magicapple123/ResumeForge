@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历详情预览：**「写作增强」页签必须真的够得着**。
  *

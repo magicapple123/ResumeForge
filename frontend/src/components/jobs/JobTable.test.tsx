@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位表格：来源角标 + 悬停显示导入时间 + 列头排序（R14）。 */
 
 import { App as AntdApp } from "antd";

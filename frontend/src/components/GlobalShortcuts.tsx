@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 全局快捷键的落点（R8）：主题切换、打开设置、打开助手技能。
  *

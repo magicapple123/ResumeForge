@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0039：简历记录加「事实来源标注」一列。"""
 
 from alembic import command

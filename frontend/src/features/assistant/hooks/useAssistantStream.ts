@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 求职助手流式发送 hook：薄封装，状态本体在 assistantStreamStore（跨路由存活）。
  *

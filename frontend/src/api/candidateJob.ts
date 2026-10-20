@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 备选岗位接口：暂存招聘信息、编辑、按批次挑选后导入岗位广场。 */
 import type {
   CandidateCsvImportResult,

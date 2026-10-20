@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """填充失败的**分类**与**重试阶梯**（纯函数；写入/回读副作用留在 FormEngine）。
 
 原因码是闭环的：``ApplyOutcome.reason``、上报里的 ``reason_counts``、重试决策与

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * `ResumeListSection` 的**条目级**填入——「从资料填入本条」（`fillEntry`）。
  *

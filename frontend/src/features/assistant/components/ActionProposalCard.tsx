@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 助手写入提案确认卡（RF-01）。
  *

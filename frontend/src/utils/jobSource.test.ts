@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位来源规则：列表角标与"从备选岗位导入"用的是同一份判断。 */
 
 import { describe, expect, it } from "vitest";

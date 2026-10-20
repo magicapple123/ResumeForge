@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """教育经历加四六级分数两列。
 
 ## 为什么放在教育经历上

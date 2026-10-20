@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 当前招聘网站提示条（含站点健康度 degraded 标记）的交互测试。
  *

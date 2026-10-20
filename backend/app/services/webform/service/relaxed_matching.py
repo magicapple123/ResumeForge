@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """放宽模式下的文本控件与自定义字段匹配。"""
 from __future__ import annotations
 

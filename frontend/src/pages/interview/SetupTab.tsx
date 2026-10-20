@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 面试官设定卡：类型/难度/风格/轮数/考察重点/人设，提交后由页面发起面试。
  * （自 InterviewPage 拆出：CONFIDENCE_TIP 与 SetupForm 接口随迁；form 实例由页面持有，

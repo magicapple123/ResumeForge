@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """OpenAI 兼容协议的 provider 测试：base URL 安全校验、请求头、错误映射与上限。
 
 拆分说明：流式事件装配与思考参数用例已迁至 test_openai_compat_stream.py；

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 浏览器端文件下载与打印工具。 */
 
 /** 触发浏览器下载 blob 文件 */

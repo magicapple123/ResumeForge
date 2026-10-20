@@ -1,4 +1,5 @@
-﻿# ResumeForge launcher: Node.js/npm discovery and bootstrap.
+﻿# SPDX-License-Identifier: Apache-2.0
+# ResumeForge launcher: Node.js/npm discovery and bootstrap.
 
 function Get-NodeVersion {
     param([string]$NodePath)

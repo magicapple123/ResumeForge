@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递快照服务（RF-17 / PR-09 可信交付账本）：把"哪一版简历投给了谁"冻结成不可变证据。
 
 职责只有一件事：:func:`freeze_delivery` 把一份简历在投递/显式关联/导出那一刻的

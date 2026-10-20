@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """实时链路的 AI 兜底 × 自定义字段（CUSTOM_*）。
 
 2026-10 修复：用户把「项目链接」记在「网申资料·自定义」里，AI 建议卡片却永远说

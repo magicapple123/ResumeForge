@@ -1,4 +1,5 @@
-﻿<#
+﻿# SPDX-License-Identifier: Apache-2.0
+<#
 ResumeForge updater.
 
 Updates the program files only. User data lives in data\ (database, datasets,

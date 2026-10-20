@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """模拟面试 / 简历版式，以及只读检索类的提醒 / 内推 / 面经 / 题库 / 复盘 / 知识库 / 统计 / 分享包工具。"""
 from __future__ import annotations
 

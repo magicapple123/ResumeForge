@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // R11: the double-click update entry shipped at the install root.

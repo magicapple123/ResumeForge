@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Alert, App, Button, Input, Modal, Select, Space, Table, Tag } from "antd";
 import { useState } from "react";
 import { downloadDelivery, listDeliveryArchive } from "../../api/resumes";

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """招聘文本解析器测试。"""
 
 import re

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 通用简历区块：只查通用简历、重命名、删除、两个创建入口与 T12 的刷新广播。 */
 
 import { App as AntdApp } from "antd";

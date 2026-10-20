@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { A4_HEIGHT_PX, A4_WIDTH_PX, type AvailableSpace, MAX_ZOOM } from "./config";
 import {
   overflowHeightFor,

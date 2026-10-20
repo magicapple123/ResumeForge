@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Word（.docx）简历导出：用 ``python-docx`` 生成，版式复用 ``pdf_exporter.ResumeLayout``。
 
 **为什么不另写一套排版**：直出 PDF 与预览不一致的教训已经反复出现——任何渲染器只要

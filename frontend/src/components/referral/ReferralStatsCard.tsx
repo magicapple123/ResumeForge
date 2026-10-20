@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 内推转化率统计卡：有效内推 / 已转化 / 转化率三格。
  *
  * `converted` 由后端按关联漏斗后置位派生，前端只展示、不自己算口径。

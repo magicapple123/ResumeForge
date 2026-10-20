@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0046：全局搜索接入 FTS5（trigram）——新增七张外部内容虚拟表 ``search_fts_*``。
 
 只加表、不动任何业务表：``search_fts_<table>`` 是 external content 模式的 FTS5

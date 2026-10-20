@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份包的**资产清单**（PR-15）：按数据库内容收集附件引用，逐文件可校验。
 
 此前备份导出把"数据库同目录的 ``user_files/``、``referral_images/`` **整目录**"

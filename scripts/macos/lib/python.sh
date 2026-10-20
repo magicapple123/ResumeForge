@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # ResumeForge macOS 启动链：Python 解释器的查找与自举。
 #
 # 设计原则与 Windows 侧一致：**不要求用户先装任何东西**。

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 文件副本面板：列表渲染与「打开」动作必须有测试守着——它是这一页的核心交互。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

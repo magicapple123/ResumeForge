@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 助手消息多选删除域：勾选若干条消息后一次删除。
  *
  * 从 AssistantPage 整域下沉：selecting/selectedIds 状态、「换会话就退出多选」effect、

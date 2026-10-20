@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「人工挑选」完整清单：常量表与目录构造（职责④）。
 
 从 ``webform/data.py`` 拆出：给人逐条挑选的目录——子表**逐条列出**，

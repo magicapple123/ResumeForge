@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位广场：搜索筛选、手动添加、详情与生成简历入口。 */
 import { App } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";

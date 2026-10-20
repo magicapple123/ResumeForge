@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """站点原文录制装饰器（``SampleRecordingCdpClient``）与它的接线，全部离线。
 
 为什么单独、认真地测：这块的失败方式都是**静默**的——url/body 配错、把 query 里的令牌一起

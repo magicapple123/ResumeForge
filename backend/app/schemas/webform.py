@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表的请求/响应结构。"""
 from __future__ import annotations
 

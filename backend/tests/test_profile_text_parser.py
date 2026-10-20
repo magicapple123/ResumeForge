@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料粘贴识别的规则测试。"""
 
 from app.services.profile_text_parser import parse_profile_text

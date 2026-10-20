@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { App } from "antd";
 import { DeleteOutlined, LinkOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Input, Space, Tooltip, Typography, theme } from "antd";

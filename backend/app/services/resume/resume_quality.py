@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """带参考文件的简历生成质量门槛。"""
 
 from ...schemas.job import JobOut

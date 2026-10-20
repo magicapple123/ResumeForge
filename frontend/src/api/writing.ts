@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 全局 AI 润色接口（R17）：只发送用户选中的那一段文字。 */
 import { request } from "./client";
 

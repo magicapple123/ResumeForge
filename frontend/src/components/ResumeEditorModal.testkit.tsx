@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * ResumeEditorModal 测试共用夹具：默认简历内容、内容构造器与视口 mock。
  *

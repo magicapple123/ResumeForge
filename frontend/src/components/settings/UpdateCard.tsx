@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 软件更新：检查、下载并安排安全覆盖安装。 */
 
 import {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 模拟面试接口。 */
 import type {
   InterviewAnalysis,

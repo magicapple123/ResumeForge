@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申资料补充记录支持多条。"""
 from collections.abc import Sequence
 

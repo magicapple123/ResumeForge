@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申资料中的可重复补充记录。"""
 from datetime import datetime
 

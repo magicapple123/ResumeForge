@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """API Key 静态加密的单元测试。
 
 roundtrip 类断言跨平台成立：Windows 上走 DPAPI，非 Windows 上 ``encrypt_key`` 是恒等

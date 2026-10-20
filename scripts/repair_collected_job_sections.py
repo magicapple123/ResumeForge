@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """把已入库的采集岗位按小标题重新切回「职位描述 / 任职要求 / 其他招聘信息」。
 
 **为什么需要它**：切分逻辑（``boss_text.split_job_fields``）修好之后只对**新采集**生效，

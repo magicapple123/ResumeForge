@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 离线分享包接口。 */
 import type {
   ShareComments,

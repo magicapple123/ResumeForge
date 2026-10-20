@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """面试深挖的 HTTP 面：契约先锁后问、判定不外泄、复盘与复练队列。
 
 最要紧的两条：

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历模板工作台：浏览、导入、编辑和管理模板。 */
 import {
   CopyOutlined,

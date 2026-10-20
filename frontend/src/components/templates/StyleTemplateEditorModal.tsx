@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 样式模板编辑器：改 HTML/CSS，右侧实时看渲染效果。
  *

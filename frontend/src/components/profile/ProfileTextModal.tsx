@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 粘贴整段个人资料（或资料截图、简历文档）并结构化识别的弹窗。 */
 
 import { FileSearchOutlined } from "@ant-design/icons";

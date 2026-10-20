@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 全局搜索卡：岗位/简历命中带 id 深链（RF-11 搜索直开）；more 域命中维持后端下发的 path。 */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";

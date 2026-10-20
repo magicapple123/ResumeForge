@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 用户手写简历弹窗：岗位模式预填基本信息，通用模式从空白开始（可一键填入全部资料）。 */
 import { App, Modal } from "antd";
 import LoadingBlock from "./common/LoadingBlock";

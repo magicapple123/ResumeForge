@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 列表默认只展示前 `limit` 条的折叠开关（设置页数据集/手动备份/助手技能共用）。
  *

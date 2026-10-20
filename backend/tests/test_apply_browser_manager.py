@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递专用浏览器管理器离线测试：注入假 subprocess 与假 HTTP 传输层。
 
 重点验证三条设计纪律：

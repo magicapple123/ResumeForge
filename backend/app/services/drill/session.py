@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """会话收尾与状态汇总。"""
 
 from __future__ import annotations

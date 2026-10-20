@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """离线分享包（R-18）的生成、检索、评论回传与 token 校验。
 
 分享包 = 一份**脱敏后**的简历产物目录，包含：

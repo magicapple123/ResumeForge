@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 投递专用浏览器工具条的交互测试。
  *

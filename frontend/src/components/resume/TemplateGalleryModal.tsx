@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历样式模板一览：每个模板都渲染一份真实预览，点一下就直接选用。
  *

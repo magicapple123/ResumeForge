@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位排序（R14/E/F）：五个排序键、拼音 collation、发布时间与跨页全选顺序。
 
 从 ``test_api_jobs.py`` 拆出：原文件加完 F 的拼音断言后越过 500 行预算，

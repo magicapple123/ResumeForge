@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """应用内下载与安装更新。
 
 下载只写入 ``runtime`` 临时目录，安装脚本会跳过 ``data``、``.env``、``runtime``

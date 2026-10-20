@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职助手的本地上下文组装与长度边界。"""
 
 import json

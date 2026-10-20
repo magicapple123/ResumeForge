@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """总预算硬 deadline 与多段用量汇总（2026-10-13 生产审计 PR-07）。
 
 离线：MockTransport / 自定义挂起流 / 真实小预算墙钟，无真实 API Key、无付费调用。

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """新增模块的接口测试：资料箱、备选岗位、个人照片、技能工作台、简历版式与备份兼容。"""
 
 import json

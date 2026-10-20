@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """任务配置快照的还原与一次性编排字段解析。"""
 from __future__ import annotations
 

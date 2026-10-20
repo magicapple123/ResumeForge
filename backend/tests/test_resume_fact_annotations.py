@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-13：事实来源标注（fact_annotations）的产出与落库测试。
 
 标注是锚定过程的副产品：grounded（值级替换成功）/ restored（匹配失败回填原文）/

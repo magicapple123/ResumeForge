@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 进行中的会话：当前这一问、契约、逐轮记录。 */
 import { Alert, App, Button, Card, Input, Listy, Popconfirm, Space, Tag, Typography } from "antd";
 import { useState } from "react";

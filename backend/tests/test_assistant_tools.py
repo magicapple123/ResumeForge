@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """助手工具的测试：读写边界、参数校验，以及最容易出事的资料合并。"""
 import json
 

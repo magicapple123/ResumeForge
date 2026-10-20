@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """发布形态下由后端同源提供前端生产静态资产（RF-09 方案 A）。
 
 dev 模式前端由 Vite 独立进程提供（5173 端口 + /api 代理）；发布包携带

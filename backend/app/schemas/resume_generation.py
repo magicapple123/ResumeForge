@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历**生成参数** Schema（从 ``schemas.resume`` 迁出，导入路径保持兼容）。
 
 拆分动机：``schemas/resume.py`` 已达 500 行预算红线，而「生成请求」这一组模型

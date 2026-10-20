@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 备选岗位 CSV 导入弹窗：多文件合并去重、坏文件隔离与粘贴入口。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

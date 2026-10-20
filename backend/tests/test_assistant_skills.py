@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """技能的持久化、系统提示拼装与知识读取。"""
 import pytest
 from app.models.assistant import AssistantSkill, AssistantSkillFile

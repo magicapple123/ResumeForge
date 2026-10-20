@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Anthropic provider 的思考（thinking）强度映射与 400 诊断测试。
 
 拆分自 test_llm_anthropic.py——reasoning_effort → budget_tokens 的映射表、设置页开关

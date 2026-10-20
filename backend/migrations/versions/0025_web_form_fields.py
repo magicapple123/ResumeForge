@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申专用资料字段；并顺手删掉官网采集留下的三张空表。
 
 ## 为什么加这些列

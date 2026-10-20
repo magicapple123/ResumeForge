@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """证据强度计算（匹配共用核心）。"""
 from __future__ import annotations
 

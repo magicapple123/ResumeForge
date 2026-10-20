@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """匹配语料回归：真实页面 case 的期望映射、错填为零与基线门槛。
 
 语料与跑分实现见 ``webform_corpus_support.py``；人读报告用

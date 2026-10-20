@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 列表行的操作区：少量主操作直接显示，其余收进「更多」下拉。
  *

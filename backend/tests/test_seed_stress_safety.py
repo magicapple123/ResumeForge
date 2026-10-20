@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """stress_seed 安全守卫：PR-01 诊断工具安全与可重复造数。
 
 钉住的行为（全部在临时目录运行，绝不触碰真实 runtime/data）：

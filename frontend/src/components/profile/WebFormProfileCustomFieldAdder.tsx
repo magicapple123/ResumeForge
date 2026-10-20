@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { PlusOutlined } from "@ant-design/icons";
 import { Button, Input, Space } from "antd";
 

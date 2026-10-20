@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``privacy`` 脱敏变换的纯函数测试。"""
 from app.schemas.resume import ResumeContent
 from app.services.privacy import MASK, RedactionOptions, redact

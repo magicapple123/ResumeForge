@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """No remote navigation text belongs in a browser process command line."""
 
 import pytest

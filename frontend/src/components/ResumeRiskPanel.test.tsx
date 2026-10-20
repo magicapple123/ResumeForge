@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历风险扫描面板：挂载不请求、点开始才扫、取消、关闭再开保留结果、签名变化提示。 */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

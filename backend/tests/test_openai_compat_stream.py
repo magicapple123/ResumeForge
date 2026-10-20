@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """OpenAI 兼容协议的流式事件与思考参数测试。
 
 拆分自 test_openai_compat.py——stream_chat_events 的事件装配（分片工具调用、并行

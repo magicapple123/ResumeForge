@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申专用浏览器页面的「点哪个填哪个」开关状态。
 
 状态按 CDP target_id 隔离：新页面默认开启，用户关闭某页后只影响该页；

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 事实台账页面：列表渲染、占位符高亮、快捷确认、空态与错误态。
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投投剪贴板：双击悬浮球打开的常用资料片段夹，点一下就复制到系统剪贴板。
  *
  * 与助手卡片（TouTouAssistantCard）同一形态：fixed 小卡片、顶部把手可拖动、

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 全局搜索与首页统计。 */
 import type { SearchResult, Stats } from "../types";
 import { buildQuery, request } from "./client";

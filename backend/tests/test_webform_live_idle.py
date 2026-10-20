@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """实时会话的空闲退避：连续空轮拉长间隔，任何事件立即回快档。
 
 从 test_webform_live.py 主题拆分惯例独立成文（2026-10-05 性能审查 item 10 的

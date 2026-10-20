@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """资料分区切换和连续无标题条目的推断。"""
 
 import re

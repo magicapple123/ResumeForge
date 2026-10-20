@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历风险扫描的本地确定性规则（从 :mod:`app.services.resume.resume_risk` 纯搬迁拆出）。
 
 **只提示、绝不改写**：这里的每条规则都是「读 + 报告」，不回写 ``ResumeContent``。

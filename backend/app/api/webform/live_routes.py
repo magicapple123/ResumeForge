@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「点哪个填哪个」实时填表路由与 ``_start_live_session`` 会话主体（职责③）。
 
 从 ``api/webform.py`` 拆出。服务层符号一律经 ``webform_service`` 属性访问，

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职助手工具的数据类型与联网搜索描述。"""
 from __future__ import annotations
 

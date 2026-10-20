@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 备选岗位抽屉：先收下还没核对的招聘信息，确认后再导入正式岗位。
  *

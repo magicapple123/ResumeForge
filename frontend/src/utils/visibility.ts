@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 页面可见性工具：后台轮询共用（一处逻辑一份实现）。
  *

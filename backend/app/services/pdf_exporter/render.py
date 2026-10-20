@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """绘制编排（``ResumePDF`` 结果对象、字体注册、``_draw_resume`` 主绘制流程）。"""
 from __future__ import annotations
 

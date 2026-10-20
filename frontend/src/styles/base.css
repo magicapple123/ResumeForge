@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Apache-2.0 */
 /* 全局基础样式（组件样式由 antd 管理，这里只做布局兜底） */
 body {
   margin: 0;

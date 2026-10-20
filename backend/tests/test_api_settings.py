@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """设置 API 与 API Key 脱敏边界测试。"""
 
 import pytest

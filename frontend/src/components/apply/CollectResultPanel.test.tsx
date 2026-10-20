@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「本次采集结果」：勾选后导入岗位广场。
  *

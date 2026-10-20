@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职进度接口：增删改查、两步导入（解析预览 → 确认写入）与导出。 */
 import type {
   Track,

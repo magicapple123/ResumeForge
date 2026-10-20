@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 批量选择模式的「删除所选」按钮：Popconfirm 二次确认，文案带已选数量。 */
 import { Button, Popconfirm } from "antd";
 

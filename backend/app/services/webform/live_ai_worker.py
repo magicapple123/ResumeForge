@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """单槽 AI 工作线程（``_AiWorker``：新任务顶掉旧任务）。"""
 from __future__ import annotations
 

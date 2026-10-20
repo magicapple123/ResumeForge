@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """把模型不一定认识的图片格式转成它认识的格式。
 
 只有 bmp/tiff 这类"服务商普遍不接受、浏览器预览也不可靠"的格式会走到这里。PNG/JPEG/

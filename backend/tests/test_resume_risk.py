@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历风险扫描：五类风险、只提示不改写、强主张台账联动、LLM 降级与提示词登记。"""
 
 import asyncio

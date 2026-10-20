@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** SSE 流式响应读取：用于简历生成等长任务，逐事件回调。 */
 
 import { ApiError, extractError } from "./client";

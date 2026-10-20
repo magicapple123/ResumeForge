@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 全应用拖入导入（R17）：把文件拖到窗口任意位置即可开始导入。
  *

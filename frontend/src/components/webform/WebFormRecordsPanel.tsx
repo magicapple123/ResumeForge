@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 填充记录：每次「填充到页面」留下的那一笔，供用户回看。
  *

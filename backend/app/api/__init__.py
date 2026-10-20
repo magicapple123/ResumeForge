@@ -1,1 +1,2 @@
+# SPDX-License-Identifier: Apache-2.0
 """API 路由层：只做参数校验、调用服务、组装响应。"""

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 行距控件（R20）：滑块 + 两端 ±0.05 + 读数 + 恢复默认。
  *

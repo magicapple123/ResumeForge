@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """兼容入口：重导出简历模板领域各单一职责模块的公开接口。"""
 
 from .resume_template_catalog import (

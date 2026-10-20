@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """canary 家族 · AI 徽标与「记住这条」。
 
 AI 正在识别/建议徽标、备选列表、「记住这条」意图分离，以及记忆编辑器（落点只有

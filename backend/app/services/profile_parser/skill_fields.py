@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料技能字段的拆分、别名规范化和等级解析。"""
 
 import re

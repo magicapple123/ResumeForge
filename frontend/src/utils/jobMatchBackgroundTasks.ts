@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位批量适配度分析的全局后台任务登记表。 */
 import { Button } from "antd";
 import { createElement } from "react";

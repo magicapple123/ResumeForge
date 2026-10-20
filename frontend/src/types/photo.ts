@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 个人照片（可保存多张，选择其中一张用于简历）。 */
 
 export interface ProfilePhoto {

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Provider capability 声明（RF-14 §2.3）：静态能力表 + 查询接口。
 
 **本批 capability 只做声明与查询**：供设置页/诊断日志复用与排查，不改变任何请求的

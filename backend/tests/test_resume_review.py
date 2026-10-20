@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-13：待审变更预检接口（POST /api/resumes/{id}/review/prepare）。
 
 verdict 三态 ok / fact_check_needed / blocked，三把闸门**唯一出自既有实现**

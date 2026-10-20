@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """API Key 的静态加密。
 
 Windows 上用系统 DPAPI（``CryptProtectData``），密文绑定到当前用户 + 当前机器，密钥

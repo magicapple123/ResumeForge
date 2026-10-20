@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位接口：列表、新增、文本解析、AI 解读、编辑与删除。"""
 
 import logging

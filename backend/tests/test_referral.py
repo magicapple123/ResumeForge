@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """R-13 内推管理：CRUD、stats 口径、converted 后置位派生。
 
 重点验证：

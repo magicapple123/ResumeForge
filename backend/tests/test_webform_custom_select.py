@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 import json
 
 from app.services.webform.custom_select import select_combobox_option

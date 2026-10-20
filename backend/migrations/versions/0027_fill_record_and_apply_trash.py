@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填充记录表；并给投递记录加 ``deleted_at``（两者都可进退回收站）。
 
 ## 为什么有这张表

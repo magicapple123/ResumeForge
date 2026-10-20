@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """A stale tab's request must never mutate a different dataset with the same numeric ID."""
 
 import logging

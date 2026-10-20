@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「从预览点某一栏进来」时把字段带到可视区中央的滚动选项。
  *

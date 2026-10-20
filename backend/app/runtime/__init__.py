@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """运行时支撑设施：业务操作预算等跨任务的基础原语。
 
 按架构文档（rf-opt-architecture-2026-10-10.md §2.2/§2.1）规划：RF-02 落地

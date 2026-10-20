@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** ATS 本地检测接口。 */
 import type { AtsCheckResult } from "../types/ats";
 import { request } from "./client";

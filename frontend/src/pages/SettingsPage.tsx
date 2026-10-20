@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 设置页：大模型配置（单区块：记录卡列表 + 新增/编辑共用弹窗）。 */
 import { Tabs, Typography } from "antd";
 import { useState } from "react";

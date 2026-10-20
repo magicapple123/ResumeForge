@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历写作增强的请求/响应 schema（R-04~R-07）。
 
 四个 LLM 变换（STAR 改写 / 话术生成器 / 多风格润色 / 中英互译）都是「一段文本进、

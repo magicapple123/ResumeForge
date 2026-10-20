@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """守卫：`frontend/src` 里那些**只有真浏览器才看得出、jsdom 测不到**的样式不变量。
 
 为什么值得一条测试守：投投悬浮球的视觉素材必须保持单一职责——球体只显示表情素材，

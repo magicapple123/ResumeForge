@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """内推管理（R-13）的请求/响应结构。
 
 内推与投递台自动投递是两件事：这里记录的是"通过人脉拿到的一次推荐机会"。``converted``

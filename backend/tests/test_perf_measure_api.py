@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """PR-17：性能测量工具（scripts/measure_api_perf.py）的资格测试。
 
 审计 C-1 指出旧测量脚本用 ``create_all`` 建 fixture——没有 Alembic/FTS 派生

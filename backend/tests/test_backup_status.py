@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份保护状态摘要（RF-05）：protected 判定、快照清单、失败原因透出。"""
 
 from types import SimpleNamespace

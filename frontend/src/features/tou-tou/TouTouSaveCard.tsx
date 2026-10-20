@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 投投悬浮球上的「保存资料 / 取消」浮卡。
  *

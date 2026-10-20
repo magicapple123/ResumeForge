@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 一个统计数字 + 一行说明。整页的指标都走这一个组件，避免 Card/Statistic/副文本
  *  的结构在各处复制十来遍。 */
 import { Card, Statistic, Typography } from "antd";

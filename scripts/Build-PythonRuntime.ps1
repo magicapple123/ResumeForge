@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # Build-PythonRuntime.ps1 - build the bundled Python runtime for the desktop app.
 #
 # Produces desktop/python-runtime.zip containing python/ (<interpreter> +

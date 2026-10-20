@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Static integrity gate for the desktop shell bundle (audit PR-04, 2026-10-13).

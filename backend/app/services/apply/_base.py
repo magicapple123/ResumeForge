@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递台公共常量、异常与通用剪裁。"""
 from __future__ import annotations
 

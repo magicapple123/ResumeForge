@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """全局搜索：同时检索岗位、简历记录，以及内推/提醒/面经/台账/资料/技能。
 
 旧的 ``jobs`` / ``resumes`` 字段保持不变；六个新数据域统一放进 ``more``（``SearchHit``），

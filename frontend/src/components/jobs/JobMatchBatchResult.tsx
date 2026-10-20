@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 批量适配度分析的结果展示层：条件列表、单岗位卡片与整批结果视图。
  *  （自 JobMatchBatchPanel 拆出：面板只管状态机与数据流，展示组件在这里。） */
 import { Alert, Card, Listy, Progress, Space, Tag, Typography } from "antd";

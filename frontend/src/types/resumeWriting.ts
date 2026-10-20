@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历写作增强（R-04~R-07）与版本对比的类型。枚举字符串与后端逐字一致。 */
 
 export type PolishStyle = "big_tech" | "concise_tech" | "campus";

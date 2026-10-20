@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Apply/tracker-domain generator: tasks, items, queue, claims, tracks,
 track events, reminders, referrals and fact-drilling sessions."""
 

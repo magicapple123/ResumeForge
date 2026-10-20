@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 # Build the ResumeForge macOS desktop app (.dmg + .app directory).
 #
 # macOS counterpart of scripts/Build-Desktop.ps1. The PowerShell script is

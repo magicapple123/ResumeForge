@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """事实台账接口。
 
 路由顺序有讲究：``/baseline`` 与 ``/draft`` 必须注册在 ``/{claim_id}`` **之前**，

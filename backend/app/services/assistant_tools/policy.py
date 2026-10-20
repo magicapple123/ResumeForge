@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """工具下发与执行的同源授权策略（RF-01）。
 
 职责：**下发过滤与执行白名单共用同一份实现**——``allowed_tools`` 是唯一判断处，

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """进度分页端点的 job_id 过滤（RF-11：岗位详情「该岗位的投递进度」深链）。
 
 独立成文件的理由：``test_list_pagination.py`` 已贴近 500 行预算，这批用例围绕

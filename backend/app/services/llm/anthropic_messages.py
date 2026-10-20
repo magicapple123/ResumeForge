@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Anthropic Messages 协议的转换纯函数（从 ``anthropic.py`` 拆出）。
 
 只做结构转换，不碰网络与配置：OpenAI 风格消息 → Messages 协议的

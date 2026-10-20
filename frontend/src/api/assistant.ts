@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** AI 求职助手：会话历史、附件和流式消息。 */
 import type {
   AssistantAttachmentInput,

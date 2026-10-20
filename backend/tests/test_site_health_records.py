@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """站点健康度：读库归因与 API 端点（从 test_site_health.py 拆出）。
 
 ``_task`` helper 定义在本文件，被 test_site_health_detail.py 复用；

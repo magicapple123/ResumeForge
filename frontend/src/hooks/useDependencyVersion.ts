@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { type DependencyList, useState } from "react";
 
 /** Convert caller-supplied dependencies into an Object.is-stable effect key. */

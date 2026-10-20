@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 重命名简历弹窗（受控）：输入框 + 确认 loading。
  *
  * 状态与提交逻辑（confirmRename）留在 ResumesPage，经 props 回传。

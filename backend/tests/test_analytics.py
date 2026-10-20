@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """R-14 求职数据看板：四指标口径与 STATUSES 一致、六阶段漏斗、月度趋势。
 
 口径唯一来源 ``models/tracker.py``：投递总量 / 有效投递数 / 面试数 / 面试率 /

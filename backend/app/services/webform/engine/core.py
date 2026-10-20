@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """FormEngine：表单快照 / 读取 / 匹配 / 应用 / 校验的编排。"""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 「记住这条」的资料目标选择器。 */
 import { CheckCircleFilled, DownOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import { App, Button, Card, Empty, Input, Modal, Radio, Space, Tag, Typography } from "antd";

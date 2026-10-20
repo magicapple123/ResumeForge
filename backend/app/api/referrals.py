@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """内推管理接口（prefix ``/api/referrals``）。
 
 内推的增删改查 + 转化率统计。删除走软删除（``trash.live_only`` 列表里不再出现），

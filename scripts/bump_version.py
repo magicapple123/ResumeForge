@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """按改动幅度更新版本号。
 
 用法（在仓库根目录执行）：

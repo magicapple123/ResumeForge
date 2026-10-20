@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """图片 / 文本工具（拼接、照片解码、居中裁剪）。"""
 from __future__ import annotations
 

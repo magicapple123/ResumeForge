@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 知识库：集中沉淀面经总结、简历技巧、求职策略、行业笔记等成文内容。 */
 import { CheckSquareOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import {

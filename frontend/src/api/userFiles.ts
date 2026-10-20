@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 用户文件副本接口：列表、按来源反查、系统程序打开与 raw 直链。 */
 import { buildQuery, request } from "./client";
 

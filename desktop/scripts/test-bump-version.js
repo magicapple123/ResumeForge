@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Self-check for scripts/bump_version.py (audit PR-05, 2026-10-13).

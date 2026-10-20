@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 页头的「后台任务」入口：正在跑的生成任务 + 进度 + 取消。
  *

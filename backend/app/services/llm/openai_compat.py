@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """OpenAI Chat Completions 兼容协议实现。
 
 覆盖 DeepSeek、豆包（火山方舟）、Kimi、智谱、OpenAI、Ollama 等

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """版式常量与 ``ResumeLayout``（PDF 唯一的版式来源）。"""
 
 from __future__ import annotations

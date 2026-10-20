@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Anthropic Claude 的 Messages 原生协议实现。
 
 为什么值得单独写一个 provider（而不是只用 Anthropic 的 OpenAI 兼容层）：

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0044：知识库检索 FTS5（trigram）——``knowledge_fts`` 虚拟表 + 同步触发器。
 
 覆盖四条硬规则：只加表（业务表集合前后不变）、历史残缺库可跳过、探测失败

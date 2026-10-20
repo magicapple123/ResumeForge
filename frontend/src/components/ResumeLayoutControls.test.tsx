@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 版式控件：模板"选中即见预览"与板块顺序。
  *

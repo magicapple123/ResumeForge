@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位 Schema。"""
 
 from datetime import datetime

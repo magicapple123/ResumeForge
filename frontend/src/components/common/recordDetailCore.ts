@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「卡片 → 详情」的共享判定与类型。
  *

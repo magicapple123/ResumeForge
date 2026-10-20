@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """测试夹具：独立的文件型测试数据库 + 测试客户端。
 
 必须在导入 app 之前设置 DATABASE_URL（config 在导入时读取一次）。

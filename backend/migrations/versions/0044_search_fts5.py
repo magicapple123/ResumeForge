@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0044：知识库检索接入 FTS5（trigram）——新增外部内容虚拟表 ``knowledge_fts``。
 
 只加表、不动任何业务表：``knowledge_fts`` 是 external content 模式的 FTS5 虚拟表，

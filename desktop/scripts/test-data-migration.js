@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Probes for desktop/lib/data-migration.js (ADR-0004 legacy-data migration).

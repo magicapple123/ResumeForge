@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位批量适配度分析后台任务测试。"""
 
 import asyncio

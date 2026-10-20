@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成输出校验、隐私边界和增强选项测试。"""
 
 import json

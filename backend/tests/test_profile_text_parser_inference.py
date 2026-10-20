@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料解析器的推断、边界与英文输入测试。"""
 
 from app.services.profile_text_parser import parse_profile_text

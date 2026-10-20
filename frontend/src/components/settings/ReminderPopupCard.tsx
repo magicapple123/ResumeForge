@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 提醒弹窗开关：打开应用时若有未完成提醒，是否弹窗列出。
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """数据库迁移链在"带百分号/空格的库路径"上的守卫。
 
 SQLAlchemy 2.1 的 ``render_as_string`` 会把路径百分号编码（空格 -> %20、% -> %25），

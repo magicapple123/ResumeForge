@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Content-domain generator: knowledge, materials, interviews, assistant chat,
 settings and web-form records."""
 

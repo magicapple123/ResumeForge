@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """从大模型回复中提取受限的 JSON 对象。
 
 模型服务商不一定严格遵守"只输出 JSON"，因此这里提供一个很小的容错层：

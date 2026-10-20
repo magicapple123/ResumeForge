@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** ResumeReviseModal：模式文案、提交与错误路径。 */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntdApp } from "antd";

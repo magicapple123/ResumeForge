@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """浏览器桥接层：CDP 客户端 + 投递专用浏览器管理器。
 
 业务层只依赖本层暴露的抽象（``CdpClient`` / ``BrowserManager``），不直接接触

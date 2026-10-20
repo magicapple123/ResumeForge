@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历事实回填使用的纯匹配、证据和参考事实工具。"""
 
 from __future__ import annotations

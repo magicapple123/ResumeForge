@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「自动一页」的字号下限与收紧阶梯规则。
 
 拆分自 test_resume_layout.py——先动间距还是先动字号、每档只紧不松、用户手调过的值

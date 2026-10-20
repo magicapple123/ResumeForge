@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「用户离开了等待界面，但活儿还在跑」的完成提醒。
  *

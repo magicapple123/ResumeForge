@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Probes for the preload quitApp bridge (desktop/preload.js + desktop/main.js).

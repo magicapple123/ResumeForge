@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位详情抽屉：JD 全文、技能标签、投递链接与操作入口。 */
 import {
   BulbOutlined,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 批次完成全局通知：投递/采集批次结束后弹通知 + 系统级桌面通知。
  *

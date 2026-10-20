@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """技能接口测试：导入（.md / .zip）、启用切换、删除与临时文件清理。"""
 import io
 import zipfile

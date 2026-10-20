@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // RR-06（桌面旧数据迁移的可信度）：WAL 一致快照、临时目录来源核验、标记与库不一致

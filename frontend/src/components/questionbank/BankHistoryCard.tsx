@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 历史题库卡：历史条目 Collapse + 批量选择入口。
  *
  * 纯展示组件——删除确认（removeSelected/removeBank）与 useApi 状态由 QuestionBankPanel

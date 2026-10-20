@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """对抗性测试：在**真实生产库的副本**上验证 0010 迁移与旧备份兼容。
 
 把 ``backend/data/resume_forge.db`` **复制到临时目录**再操作，绝不碰用户真实数据。

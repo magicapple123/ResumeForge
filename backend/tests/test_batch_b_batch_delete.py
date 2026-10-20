@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """批次 B（多选能力补齐·后端侧）的用例：五个域的批量软删除端点。
 
 语义对齐 ``POST /api/resumes/batch-delete``（批次 A 范本）：请求体带去重、上限

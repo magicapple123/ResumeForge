@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 助手技能卡片：重点是"拖进来也能导入"。
  *

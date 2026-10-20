@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """全局模型配置在备份包里的载体（`global_llm.json`）。
 
 为什么单独一个成员而不是塞进 `manifest.json`：清单是**校验元数据**（表行数、sha256、

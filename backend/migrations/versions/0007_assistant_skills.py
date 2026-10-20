@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Add assistant skill packs and their knowledge files.
 
 Revision ID: 0007_assistant_skills

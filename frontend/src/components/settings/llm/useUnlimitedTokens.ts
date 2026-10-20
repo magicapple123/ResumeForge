@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「最大输出 Token 不限制」的表单联动逻辑。
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """首页统计 ``/api/stats`` 的查询条数预算与响应契约（2026-10 万级数据优化批）。
 
 perf-evidence 实测（deliverables/ResumeForge-perf-evidence-20261013.md）：

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """随包资源的完整性检查。
 
 发行包是维护者打包的（正确做法见 ``scripts/Build-Release.ps1``，它会自检压缩包里的必需

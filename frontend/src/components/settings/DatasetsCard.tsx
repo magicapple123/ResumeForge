@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 数据集管理：导入多份备份、在它们之间切换，以及导出/重命名/删除。 */
 
 import {

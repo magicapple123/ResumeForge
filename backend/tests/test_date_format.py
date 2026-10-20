@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 import pytest
 from app.schemas.date_format import normalize_partial_date
 from app.schemas.profile import (

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历风险扫描接口。 */
 import type { ResumeRiskScan } from "../types/resumeRisk";
 import { request } from "./client";

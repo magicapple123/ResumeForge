@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 当前数据集 id 的前端落脚点（RF-13 webform 草稿作用域的前提）。
  *

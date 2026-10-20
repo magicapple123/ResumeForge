@@ -1,1 +1,2 @@
+# SPDX-License-Identifier: Apache-2.0
 """业务逻辑层：API 路由只做参数校验与编排，具体逻辑都在这里。"""

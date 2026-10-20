@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """资料域工具声明（``_TOOLS`` 中 20 条：资料箱/文件副本库/事实台账/备选岗位/助手技能/格式模板（放宽模式工具见 ``_tools_specs_relaxed.py``））。"""
 from __future__ import annotations
 

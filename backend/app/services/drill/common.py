@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """提示词加载、上下文长度上限与文本规整辅助（drill 各子模块的公共底座）。"""
 
 from __future__ import annotations

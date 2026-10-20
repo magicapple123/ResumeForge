@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 快捷入口卡 + 自定义弹窗：用户可勾选展示哪些入口（至少保留 1 项）。
  * （自 HomePage 拆出：shortcut state×3、saveShortcuts、loadShortcutKeys、

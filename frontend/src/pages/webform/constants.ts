@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 网申填表页的共享常量。
  * （自 WebFormPage 拆出，逐字搬运。）

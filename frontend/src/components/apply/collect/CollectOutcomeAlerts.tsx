@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 采集批次的两张账目 Alert：「未生效条件」/「站点侧筛选」，
  * 以及可选的「翻页提前停止」说明。

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「网申资料」：用户专门为网申表单录的补充资料。
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 按条审阅弹窗（RF-13）：逐条接受/拒绝、verdict 提示与台账跳转链接、
  * 确定后只回调被接受的变更。

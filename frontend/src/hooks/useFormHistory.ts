@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 表单级撤回/恢复历史（R5）。
  *

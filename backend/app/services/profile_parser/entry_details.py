@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """经历条目中的课程、描述、亮点等细节分组。"""
 
 import re

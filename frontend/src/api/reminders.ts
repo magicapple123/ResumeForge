@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 日历提醒接口。 */
 import type { Reminder, ReminderPayload, ReminderUpcoming } from "../types";
 import { buildQuery, request } from "./client";

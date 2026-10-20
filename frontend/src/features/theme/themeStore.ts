@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 主题（R18）：浅色 / 深色 / 跟随系统。
  *

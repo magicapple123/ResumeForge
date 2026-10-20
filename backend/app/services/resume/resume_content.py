@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """模型简历 JSON 的容错解析和结构化转换。"""
 
 import json

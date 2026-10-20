@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** GitHub Star 提示弹窗（从 App.tsx 抽出，守住单文件行数预算）。 */
 import { Button, Modal, Typography } from "antd";
 import promoPlane from "../assets/toutou/promo-plane.webp";

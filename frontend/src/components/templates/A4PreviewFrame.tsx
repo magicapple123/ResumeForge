@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * A4 预览画布：把渲染好的简历 HTML 按 **A4 纸的比例**（794×1123）整体等比缩放放进容器。
  *

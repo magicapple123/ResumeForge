@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「网申资料」的读写与**边界**。
 
 这个文件里最重要的一条不是读写本身，而是

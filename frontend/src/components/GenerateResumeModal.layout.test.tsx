@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * R6：生成时定下的版式覆盖（板块顺序 / 字号系数）必须跟着生成请求走。
  *

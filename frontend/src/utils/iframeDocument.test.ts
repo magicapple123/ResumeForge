@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 缩略图 iframe 的展示层加工：隐藏内层滚动条。 */
 
 import { describe, expect, it } from "vitest";

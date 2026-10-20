@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 在线体验模式（demo mode）的请求拦截层。
  *

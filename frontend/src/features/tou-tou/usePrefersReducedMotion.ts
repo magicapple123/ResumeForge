@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 是否开启了系统级的「减弱动态效果」。 */
 
 import { useEffect, useState } from "react";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Consistent SQLite snapshots for the legacy-data migration (RR-06).

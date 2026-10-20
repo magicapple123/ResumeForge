@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """从上传的文档里在本机提取文字（PDF、DOCX）。
 
 为什么不是把文件交给模型：项目只支持 OpenAI Chat Completions 兼容协议，多数服务商

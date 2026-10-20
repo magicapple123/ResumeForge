@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * ResumeSuggestionsModal：打开 ≠ 开始生成（先看说明卡）、关窗不 abort、重新生成需确认、
  * resetKey 变化清空旧建议，以及采纳建议的修订链路。

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """OpenAI 兼容协议的**静态规则**：请求体构造、Base URL 校验、状态码文案、参数拒绝判定。
 
 （RF-14 拆分接缝：从 ``openai_compat.py`` 下沉——那边保留协议编排（HTTP 调用、

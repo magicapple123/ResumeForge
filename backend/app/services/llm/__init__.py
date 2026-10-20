@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """LLM Provider 抽象与工厂。"""
 from ...schemas.setting import LLMConfig
 from .base import BaseLLMProvider, LLMError

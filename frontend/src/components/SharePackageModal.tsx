@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 离线分享包：选择分享版本 + 权限 + 脱敏范围 → 生成 → 展示本地路径 / 文件清单 / 评论导入。 */
 import { CopyOutlined, DownloadOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 任务完成全局监听：transition 语义的守卫——只在"见过进行中 → 消失"时回调。 */
 import { act, render, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

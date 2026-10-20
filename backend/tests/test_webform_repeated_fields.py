@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """重复网申区块解析的纯函数测试。"""
 
 from app.services.webform.fields import FIELD_LABELS

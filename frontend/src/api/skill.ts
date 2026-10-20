@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 助手技能接口：列出、查看详情、导入、创建、更新、启用/停用与删除。 */
 import { request } from "./client";
 import type {

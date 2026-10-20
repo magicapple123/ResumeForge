@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from time import perf_counter
 
 from app.runtime.log_fields import safe_log_text

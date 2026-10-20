@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """运行时配置存取：用户在「设置」页填写的配置保存在本地 SQLite。
 
 安全说明：API Key 在 Windows 上用系统 DPAPI 加密后落库（见 api_key_crypto），

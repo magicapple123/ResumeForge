@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历正文分区顺序的前端归一化与调序工具。
  *
  * 与后端 `services/resume/resume_sections.py` 是同一套规则的两份实现——**刻意不共享**：

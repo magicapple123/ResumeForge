@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """把个人资料转换为岗位筛选和模型提示词使用的结构。"""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """技能标签几何（形状比例 / 尺寸计算 / 调色 / 折行）。"""
 from __future__ import annotations
 

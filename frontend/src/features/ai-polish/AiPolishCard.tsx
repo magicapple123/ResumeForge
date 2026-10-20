@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * AI 润色的浮层卡片：显示选中的文字 → 拿要求 → 显示改写结果 → 由用户决定是否替换。
  *

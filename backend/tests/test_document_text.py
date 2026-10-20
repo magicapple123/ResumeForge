@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """文档识别（PDF/DOCX）的离线测试。
 
 测试用的 PDF 与 DOCX 由本文件自己拼字节：为了几个用例再引入文档生成库不划算，

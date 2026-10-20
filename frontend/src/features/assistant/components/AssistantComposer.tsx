@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职助手消息输入、上下文选择、技能开关与附件预览。 */
 
 import { useEffect, useState } from "react";

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """思考模式：能力表、请求体片段、以及"实测探测"的判定。
 
 上游没有统一标准（OpenAI 系是 ``reasoning_effort``、Claude 原生是 thinking 预算、智谱是

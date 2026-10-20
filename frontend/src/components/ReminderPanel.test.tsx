@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 日历提醒面板：列表渲染、标记完成、删除（软删）。 */
 import { App as AntApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

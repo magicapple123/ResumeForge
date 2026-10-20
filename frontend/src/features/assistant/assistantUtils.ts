@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职助手附件校验和 Markdown 渲染所需的纯函数。 */
 
 import { createElement } from "react";

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-09 方案 A：后端同源提供前端生产静态资产（static_spa）。
 
 覆盖：SPA 回退语义矩阵、缓存头、安全头仅静态路径、/health 与 SSE 头不受

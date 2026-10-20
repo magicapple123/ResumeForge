@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递台配置存取（app_setting 键值，脏数据退回默认）。"""
 from __future__ import annotations
 

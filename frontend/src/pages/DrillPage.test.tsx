@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 面试深挖页：进行中的问答、评分契约的可见性、复盘与复练。
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """浏览器跨站防线：状态变更请求只接受回环来源。"""
 
 from __future__ import annotations

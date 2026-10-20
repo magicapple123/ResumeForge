@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """大附件体积下的行为（RF-25）：列表轻、详情全、导出完整可恢复、快照可用、内存有界。
 
 用 8 份资料 × 4 张 ~1.1 MB 的 PNG data URL（每份图片总量压在 MAX_MATERIAL_IMAGE_CHARS

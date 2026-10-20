@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 收藏夹：集中查看收藏的岗位与简历。 */
 import { FileTextOutlined, SearchOutlined, StarFilled } from "@ant-design/icons";
 import { App, Button, Space, Table, Tabs, Tag, Tooltip, Typography } from "antd";

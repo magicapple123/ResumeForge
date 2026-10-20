@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Canonical IDs, portable names and linear parser separators retain their contracts."""
 
 from time import perf_counter

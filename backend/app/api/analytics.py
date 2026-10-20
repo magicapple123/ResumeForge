@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职数据看板接口（prefix ``/api/analytics``）。
 
 纯本地聚合，不依赖 LLM，离线可用。口径见 ``services/analytics.py`` 的模块 docstring。

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0046：全局搜索 FTS5（trigram）——七张 ``search_fts_*`` 虚拟表 + 同步触发器。
 
 覆盖硬规则：只加表（业务表集合前后不变）、迁移 spec 与检索侧 spec 一致、

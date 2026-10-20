@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Add favorite state to saved resumes.
 
 Revision ID: 0004_resume_favorite

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 识别用的文件暂存：选择、粘贴、移除与限额。
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 前端本地诊断事件：只保留脱敏的错误与状态，不上传简历内容。 */
 
 const MAX_EVENTS = 100;

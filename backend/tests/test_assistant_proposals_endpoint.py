@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """写入提案批准端点的真实 HTTP 路径（PR-02 / PR-03，2026-10-13 生产审计）。
 
 既有 ``test_assistant_authorization.py`` 只覆盖内存状态机；本文件用 TestClient 走

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表引擎 · 基础映射与重复区块。
 
 label / placeholder / aria 的基本命中、重复经历区块按记录序号对号入座、联动

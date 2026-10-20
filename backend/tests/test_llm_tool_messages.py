@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """DeepSeek tool-message fields are scoped to its official protocol."""
 
 import pytest

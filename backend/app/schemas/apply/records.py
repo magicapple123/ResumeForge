@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递记录与招呼语预览 schema。"""
 
 from datetime import datetime

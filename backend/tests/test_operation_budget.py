@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """OperationBudget 的契约测试（RF-02，架构文档 §2.2）。
 
 预算是"由多段网络调用组成的业务操作"的总 deadline + 协作式取消：纯墙钟、

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * LLMRecordModal 的「高级调整」折叠头间距守卫。
  *

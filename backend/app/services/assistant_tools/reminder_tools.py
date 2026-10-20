@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """日历提醒的状态更新工具（标记完成 / 忽略）。
 
 只推进 ``status`` 三态（pending 待办 / done 已完成 / dismissed 已忽略，语义见

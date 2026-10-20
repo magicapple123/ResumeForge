@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 快捷键落点（R8）：翻页靠点分页按钮、数据集下拉靠登记。
  *

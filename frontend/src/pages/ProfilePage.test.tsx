@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 我的资料页：通用页面行为（通用简历/分页/未保存防护/折叠/悬浮球卡/输入性能）。 */
 
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";

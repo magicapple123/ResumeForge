@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位表单的静态字段（岗位名称 → 备注）。
  *
  * 零 props：Form.Item 经 Form context 注册到 JobFormModal 持有的同一个 form 实例。

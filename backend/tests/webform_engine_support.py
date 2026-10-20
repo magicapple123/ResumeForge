@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申引擎离线测试的共享替身：按调用顺序应答的假客户端与执行语料加载。
 
 ``test_webform_engine.py`` 里的 ``FakeCdpClient`` 是"按子串静态应答"，同一轮里

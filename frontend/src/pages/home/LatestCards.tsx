@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 最近动态三卡：最近岗位 / 最近生成的简历 / 最近投出去的。
  * （自 HomePage 拆出，逐字搬运，行为等价。）

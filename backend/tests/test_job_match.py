@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """匹配分析离线测试：五类状态、证据锚定、禁分数、硬门槛、准入映射、本地降级、招呼语。"""
 
 import json

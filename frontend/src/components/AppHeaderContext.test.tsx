@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 页头上下文：当前数据集名 + 头像（取自「我的资料」当前启用的照片）+ 新建数据集入口。 */
 
 import { App as AntdApp } from "antd";

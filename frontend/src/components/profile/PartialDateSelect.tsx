@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Checkbox, Select, Space, Typography } from "antd";
 import { memo, useMemo } from "react";
 import {

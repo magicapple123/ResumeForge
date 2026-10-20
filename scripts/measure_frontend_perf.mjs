@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * RF-09 前端性能对照测量脚本（PR-17 fail-closed 重构版；不修改任何业务代码）。
  *

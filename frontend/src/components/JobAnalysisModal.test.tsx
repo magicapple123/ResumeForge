@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 岗位解读弹窗（T1 语义）：**取消 = 真 abort**，**后台继续 = detach 后继续跑**。
  *

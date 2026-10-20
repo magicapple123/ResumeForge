@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 资料箱：集中管理找工作和面试相关的材料（证书、作品、面经、复盘、链接、笔记）。 */
 import {
   CheckSquareOutlined,

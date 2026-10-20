@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """解析结果的长度和条目数量边界。"""
 
 from .limits import (

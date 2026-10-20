@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「求职助手工具集修复批」的守卫测试。
 
 覆盖两件事：

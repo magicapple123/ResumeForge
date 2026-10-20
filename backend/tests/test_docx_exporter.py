@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Word（.docx）导出：字节可读、版式复用 ResumeLayout、分页与 PDF ±1。"""
 
 from io import BytesIO

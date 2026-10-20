@@ -1,4 +1,5 @@
-﻿# ResumeForge launcher: Python discovery and bootstrap.
+﻿# SPDX-License-Identifier: Apache-2.0
+# ResumeForge launcher: Python discovery and bootstrap.
 
 function Test-PythonCandidate {
     param(

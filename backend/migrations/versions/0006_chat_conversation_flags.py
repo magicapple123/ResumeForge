@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Add pinned and favorite flags to assistant conversations.
 
 Revision ID: 0006_chat_conversation_flags

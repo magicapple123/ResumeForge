@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Apache-2.0 */
 /* 「让 AI 按我的要求改这一栏」面板：从预览点某一栏进来时出现在编辑器最上方。
    淡蓝底 + 左侧色条，与普通表单项区分开——它是一次性动作，不是又一个字段。 */
 .resume-field-rewrite {

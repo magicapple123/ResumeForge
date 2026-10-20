@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 匹配分析进行中登记表：列表/详情上的「分析中」标志依赖它。 */
 import { describe, expect, it, vi } from "vitest";
 import {

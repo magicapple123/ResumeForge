@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """用量/遥测兼容层（RF-14 §2.2）：全部走假传输离线，不碰真实网络。
 
 钉住的核心性质：

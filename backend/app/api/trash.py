@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """回收站接口：查看、恢复、彻底删除、清空。
 
 薄路由：只做校验、调 service、返回 schema。

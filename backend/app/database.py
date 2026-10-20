@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """数据库连接与会话管理。
 
 选用 SQLite：单用户本地应用，零部署成本；后续需要多用户时

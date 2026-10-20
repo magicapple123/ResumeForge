@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
 # ResumeForge 启动器（macOS）。
 #
 # 与 Windows 侧 scripts/Start-ResumeForge.ps1 一一对应，功能相同：

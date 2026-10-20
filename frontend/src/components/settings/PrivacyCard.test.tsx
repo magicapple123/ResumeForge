@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import PrivacyCard from "./PrivacyCard";

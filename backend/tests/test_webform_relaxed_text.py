@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """放宽模式文本匹配与网申资料自定义字段的回归测试。"""
 from app.services.webform import FormEngine
 from app.services.webform.service import build_preview, default_selections

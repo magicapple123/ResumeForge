@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 执行进度面板：全局计数 + 逐岗位状态机 + 熔断警示 + 暂停/停止控制。
  *

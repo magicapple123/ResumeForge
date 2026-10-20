@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 多格式导出与脱敏的类型（R-16 / R-17）。枚举字符串与后端逐字一致。 */
 import type { ResumeFontScale } from "./resume";
 import type { ResumeFormatConfig } from "./resumeFormat";

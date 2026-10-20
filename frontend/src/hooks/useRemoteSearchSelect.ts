@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 远程搜索选择器 hook（P0-1）：把「关键词 → 服务端搜索 → 选项」封装成 antd Select
  * 的 props，替代全站"第 1 页 100 条当全量"的下拉取数方式。

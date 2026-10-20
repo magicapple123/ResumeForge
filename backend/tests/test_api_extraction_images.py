@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位/个人资料识别的图片输入：接口层行为。
 
 两个接口共用一套控制流，所以统一参数化；模型一律用假 Provider，不访问真实服务。

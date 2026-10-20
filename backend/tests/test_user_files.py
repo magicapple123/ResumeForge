@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """用户文件副本库（R6）：去重、data URL 兼容、端点、回填、迁移与备份往返。"""
 
 import base64

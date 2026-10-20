@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 自动投递与采集接口封装（`/api/apply`、`/api/collect`）。 */
 import type {
   ApplyConfig,

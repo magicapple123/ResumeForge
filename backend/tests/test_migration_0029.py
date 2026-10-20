@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0029_education_cet_scores`` 迁移：给教育经历加四六级分数两列。
 
 这两列放教育经历而不是基本信息，是因为成绩是**某段学历期间**考出来的（用户的要求也是

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """JD 技能词典匹配器和文本规范化。"""
 
 import json

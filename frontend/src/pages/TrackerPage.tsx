@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 求职进度：把投出去的岗位收到哪一步了集中在一页看。
  *

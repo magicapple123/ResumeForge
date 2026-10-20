@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位广场批量适配度分析的编排与历史记录。"""
 from __future__ import annotations
 

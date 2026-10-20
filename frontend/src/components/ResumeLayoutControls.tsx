@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历版式控制：样式模板 / 格式模板 / 最大篇幅（页数）/ 字号 / 行距，生成与预览弹窗共用。 */
 
 import {

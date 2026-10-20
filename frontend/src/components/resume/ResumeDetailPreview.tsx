@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历详情预览（B3）：简历中心与「生成简历」预览阶段共用的统一界面。
  *

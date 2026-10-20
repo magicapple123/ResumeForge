@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料接口：读取、整体更新与文本识别草稿。"""
 
 import logging

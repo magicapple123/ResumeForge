@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 岗位筛选栏：搜索框受控化的两条关键行为。
  *

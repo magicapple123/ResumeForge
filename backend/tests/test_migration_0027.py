@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0027_fill_record_and_apply_trash`` 迁移：建填充记录表 + 给投递记录加 ``deleted_at``。
 
 这条迁移做两件事，都跟"用户能不能删"有关：

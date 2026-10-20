@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """软件更新检查接口（只读，不执行任何自动更新）。"""
 import logging
 

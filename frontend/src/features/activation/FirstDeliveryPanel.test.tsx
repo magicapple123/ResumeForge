@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 面板渲染断言：三阶段文案、CTA href、无模型提示、完成态/未来态的呈现。 */
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";

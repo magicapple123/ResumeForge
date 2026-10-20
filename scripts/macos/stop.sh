@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
 # ResumeForge 停止器（macOS）。
 #
 # 与 Windows 侧 stop.cmd / Stop-ResumeForge.ps1 对应：按 PID 记录停掉后端与前端。

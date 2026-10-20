@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 采集条件的历史快照（localStorage 持久化）。
  *

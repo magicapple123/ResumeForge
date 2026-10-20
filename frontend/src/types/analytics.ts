@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职数据看板（后端 /api/analytics）。
  *
  * 字段与 `backend/app/schemas/analytics.py` 的 `DashboardOut` **逐字对应**（snake_case，

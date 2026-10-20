@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 应用生命周期接口。 */
 import { getFilenameFromDisposition, request, requestRaw } from "./client";
 

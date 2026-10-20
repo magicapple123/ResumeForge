@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 <#
 .SYNOPSIS
 Builds the distributable ResumeForge zip from a git ref, then verifies it.

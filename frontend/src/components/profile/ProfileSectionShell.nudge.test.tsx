@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 分区把手上移/下移微调按钮（SectionNudgeButtons）：
  * - 复用键盘排序路径（同一个 onMoveByOffset 回调），点击移动一位；

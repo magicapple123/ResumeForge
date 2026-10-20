@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """用户文件副本库（R6）。
 
 数据库里的用户文件——资料箱附件（``material.files[].data_url``）、个人照片

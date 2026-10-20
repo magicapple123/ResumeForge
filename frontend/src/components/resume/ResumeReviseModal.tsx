@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** AI 修改简历：输入修改要求（可留空整体重写），修订结果直接更新当前记录。 */
 import { ThunderboltOutlined } from "@ant-design/icons";
 import { Alert, App, Input, Modal, Typography } from "antd";

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Apache-2.0 */
 /* Phone layout is separate from the 768px tablet's compact sidebar. */
 @media (max-width: 767px) {
   :root {

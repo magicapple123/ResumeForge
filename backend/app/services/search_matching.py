@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """关键词匹配的**输入语义唯一实现处**：FTS 路径与 LIKE 路径必须逐字等价（RR-07）。
 
 全局搜索（``/api/search``）与知识库检索各有两条执行路径：

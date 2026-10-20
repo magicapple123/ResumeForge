@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """对页面发起**可信**输入事件的共享原语。
 
 ## 为什么需要它

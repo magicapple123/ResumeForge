@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """格式模板字段、校验与 CSS 覆盖。"""
 
 from __future__ import annotations

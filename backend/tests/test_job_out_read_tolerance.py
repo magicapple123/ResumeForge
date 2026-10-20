@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位读取侧必须容忍"写入时的规则后来变了"的历史数据。
 
 真实故障（2026-09-18）：投递台采集把岗位写进库，`recognition_source` 记为「岗位采集」，

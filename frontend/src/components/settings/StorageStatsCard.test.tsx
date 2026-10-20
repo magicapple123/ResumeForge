@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** StorageStatsCard（RF-25 / R19）：分项体积排序展示、错误态、按类别清理。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

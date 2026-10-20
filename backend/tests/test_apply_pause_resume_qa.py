@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """第二轮对抗：定位 pause/resume 在满载下"恢复后卡在 running"的根因。
 
 背景：工程师修复 1 把"一次性读库断言"改成 DB 状态轮询（10s），但**全量满载复跑仍复现**

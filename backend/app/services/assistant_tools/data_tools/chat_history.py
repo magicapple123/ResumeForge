@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """助手历史对话（放宽模式）的工具实现。
 
 ``chat_conversation`` / ``chat_message`` 默认不进助手的工具列表——对话是用户与

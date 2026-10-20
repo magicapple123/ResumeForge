@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 智能逐项填表卡：与「读取当前表单 → 批量填」并存，不是替代。
  * （自 WebFormPage 拆出：:838-909 整块逐字随迁，纯 props——它不做预先快照，

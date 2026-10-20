@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历 CRUD 端点（域⑤）：手写保存、列表、读取、正文修改、重命名、备注、收藏与软删除。
 
 从原 ``api/resumes.py`` 原样搬运（纯切片，无 patch 读取点）；`_to_resume_out` 改从

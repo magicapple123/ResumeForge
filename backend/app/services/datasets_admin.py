@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """数据集的查看与管理操作：列表、重命名、删除、导出，以及**数据集文件的落盘/回收**。
 
 从 :mod:`app.services.datasets` 纯搬迁拆出（PR-18 行数预算）：这里的函数只读

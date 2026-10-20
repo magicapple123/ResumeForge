@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """页面注入 JS 脚本资源：整页扫描（``CONTROLS_SCRIPT``）与焦点面板（``FOCUS_LISTENER_SCRIPT``）。
 
 两个脚本共享 ``_CONTROL_HELPERS_JS``（绝不能再有第二份实现）；脚本字符串逐字符原样保留。

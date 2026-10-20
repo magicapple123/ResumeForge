@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表接口（prefix ``/api/webform``）。
 
 薄路由：只做校验、调 service、返回 schema；错误统一 ``HTTPException(status, detail=中文)``。

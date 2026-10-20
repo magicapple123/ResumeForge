@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // BackendManager - spawn the backend (uvicorn) and wait until it is healthy.

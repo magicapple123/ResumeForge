@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """颜色解析（强调色 / 分隔线：格式模板覆盖 → 模板默认值 → 兜底）。"""
 from __future__ import annotations
 

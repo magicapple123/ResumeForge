@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份/资产用例的共享夹具（``test_backup_asset_manifest.py`` 与
 ``test_backup_asset_restore.py`` 共用；先例：``profile_relevance_fixtures.py``）。
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """新增投递快照表 resume_delivery_record（RF-17），并给两表加血缘/快照列。
 
 - ``resume_delivery_record``：投递/显式关联/导出那一刻的冻结快照（内容、渲染配置、

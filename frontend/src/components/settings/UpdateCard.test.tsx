@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 软件更新卡片：检查、下载进度与后台下载选项。 */
 
 import { App as AntdApp } from "antd";

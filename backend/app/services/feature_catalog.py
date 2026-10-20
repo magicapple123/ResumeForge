@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职助手"了如指掌"的单一事实来源：机器可读的功能目录。
 
 背景：助手"问水印答没有"的根因是能力地图是一份**手写静态清单**（``assistant_system.md``），

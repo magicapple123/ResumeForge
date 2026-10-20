@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * ResumeLayoutControls 测试共用夹具：默认版式、预览假句柄、render 外壳与键盘辅助。
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 侧栏页脚右侧的「检查更新」按钮。
  *

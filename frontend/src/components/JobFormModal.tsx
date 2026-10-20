@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位新增/编辑弹窗：手动添加、识别导入、备注图片与来源标注。 */
 import { App, Form, Modal } from "antd";
 import { useEffect, useRef, useState } from "react";

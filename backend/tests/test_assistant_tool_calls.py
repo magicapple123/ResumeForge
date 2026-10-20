@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """AI 求职助手的工具调用回路：执行、失败兜底、changed 透传与轮次上限。
 
 拆分自 test_assistant.py——工具调用是助手最复杂的控制流（多轮循环、失败不中断、

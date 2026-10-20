@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """题库历史 / 面试复盘历史接口（prefix ``/api/interview``，挂在面试模块下）。
 
 题库与复盘本体「即时生成、不落库」，这里提供「保存成历史 → 列表回看 → 单条查看 → 删除（软删）」

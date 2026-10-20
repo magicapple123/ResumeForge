@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Child event wiring for backend startup. A failed spawn emits "error" rather

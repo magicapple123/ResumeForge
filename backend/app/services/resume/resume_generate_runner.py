@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成后台任务运行器：进程内单例线程 + 状态落库 + 前端轮询。
 
 为什么自建而不用 Celery/RQ：与 ``services/apply/task_runner.py`` 同一条理由——本项目是

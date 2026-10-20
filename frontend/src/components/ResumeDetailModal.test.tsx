@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历预览弹窗的关联上下文行（RF-11）：有 job_id 给三段直达链接，通用简历没有。 */
 import { App as AntdApp } from "antd";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";

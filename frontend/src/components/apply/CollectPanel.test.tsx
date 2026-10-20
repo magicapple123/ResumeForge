@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 采集条件历史：保存写入 localStorage、去重、回填、清空。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

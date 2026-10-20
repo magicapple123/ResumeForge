@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """ResumeForge 后端应用包。"""
 
 from .preflight import ensure_runtime_resources

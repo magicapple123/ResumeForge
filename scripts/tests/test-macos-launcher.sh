@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
 # macOS 启动链的守卫测试。
 #
 # 为什么需要它：项目的维护者手上没有 Mac，macOS 分支的脚本**没法靠人工跑一遍来验证**。

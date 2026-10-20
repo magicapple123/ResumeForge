@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 备选岗位批量工具条：分组显隐与勾选框三态。
  *

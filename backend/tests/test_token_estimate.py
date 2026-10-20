@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """token 估算遥测（RF-14 §2.5）：区间断言（不是精确断言）+ 开关守门。
 
 钉住的性质：

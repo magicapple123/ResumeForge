@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { FolderOpenOutlined, LinkOutlined } from "@ant-design/icons";
 import { App, Button, Descriptions, Divider, Image, Modal, Space, Tag, Typography } from "antd";
 import { useState } from "react";

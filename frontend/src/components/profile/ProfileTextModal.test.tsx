@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 个人资料识别弹窗：截图与文档暂存、识别原文与警告的展示。 */
 
 import { App as AntdApp } from "antd";

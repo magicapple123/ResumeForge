@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 适配器 detail / open_apply / fill_and_submit 与网络捕获兜底
 （从 test_apply_boss_adapter.py 拆出）。
 

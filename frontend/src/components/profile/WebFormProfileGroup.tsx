@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Row, Typography } from "antd";
 import { memo, type CSSProperties } from "react";
 import WebFormProfileField from "./WebFormProfileField";

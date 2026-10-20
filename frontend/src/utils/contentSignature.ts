@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历内容签名（纯函数）：给"这份内容我扫过了"一个可比较的指纹。
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """dataset_scope 的租约/互斥/冻结会话与数据集原子切换（RF-03）。
 
 全部用事件屏障/有限等待协调，禁止毫秒墙钟竞速；数据集文件都建在测试库同级的

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """D5 题库历史 / 面试复盘历史：保存、列表、单条、软删除进回收站。"""
 
 

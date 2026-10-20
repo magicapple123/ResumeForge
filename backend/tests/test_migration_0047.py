@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0047：``resume_record.updated_at`` —— 「最近修改」排序的数据基础。
 
 覆盖硬规则：**只加列**（表集合前后不变，"旧备份仍可导入"的前提）、旧行用

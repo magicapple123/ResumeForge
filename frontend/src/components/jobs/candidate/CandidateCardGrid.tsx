@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 备选岗位卡片网格：勾选/详情/导入/编辑/删除。
  * （自 CandidateJobsDrawer 拆出，closest() 冒泡守卫逐字随迁，行为等价。）

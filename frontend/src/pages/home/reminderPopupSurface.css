@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Apache-2.0 */
 /* 首页「近期提醒」启动弹窗的排版皮肤。
    全站弹窗已有统一新皮肤（flex 居中 + var(--rf-modal-body-max-h)，见 modules.css），
    这里不再写死 maxHeight/top，只管这个弹窗自己的条目排版。 */

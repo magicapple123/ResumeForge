@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """QA 独立验证：第二道防线（``_is_within`` 检查）在真实运行器路径上的"牙齿"。
 
 拆分自 test_sample_recorder_runner_qa.py——用 key 越界的适配器与反斜杠穿越的

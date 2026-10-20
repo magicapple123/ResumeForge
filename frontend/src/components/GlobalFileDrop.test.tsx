@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 全局拖入导入（R17）：按扩展名分发，不支持的给明确提示。
  *

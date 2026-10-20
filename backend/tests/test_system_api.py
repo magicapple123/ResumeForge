@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """退出接口的边界测试。
 
 成功路径**不能真的调用**（那会把 pytest 自己关掉），所以这里用两层保护：

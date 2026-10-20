@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 「去改资料」提示卡：内容、动作与出入场生命周期。 */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";

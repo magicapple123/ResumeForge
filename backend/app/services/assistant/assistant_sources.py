@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """联网来源在「一次回答」内的全局编号。
 
 编号必须**全局单调递增**：自动预搜（``assistant_stream`` 里那次）与模型自主发起的

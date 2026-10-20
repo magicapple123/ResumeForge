@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「问历历」精简问答的纯逻辑单测（不涉轮询与注入，只钉护栏）。"""
 
 import pytest

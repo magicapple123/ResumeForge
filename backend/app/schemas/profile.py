@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料 Schema：In 为写入结构（子表不带 id），Out 为读取结构。"""
 import base64
 import binascii

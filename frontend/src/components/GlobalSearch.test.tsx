@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 全站搜索（R6 / T7）：页头放大镜 + ⌘/Ctrl+K，任何页面都能用。
  *

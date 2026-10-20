@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申字段定义使用的类型、分组和数据来源常量。"""
 
 from dataclasses import dataclass

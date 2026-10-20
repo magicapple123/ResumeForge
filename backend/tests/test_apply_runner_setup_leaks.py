@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """装配段故障注入：run_apply/run_collect 拿到 client 后、进入 try 前的失败也必须关闭 CDP 连接。
 
 从 test_apply_runner_robustness_qa 拆出（该文件触 500 行预算），共享夹具经测试模块导入

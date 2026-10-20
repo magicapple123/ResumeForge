@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** ConversationSidebar 批量选择：勾选若干段对话 → 确认 → 把 id 列表交给父级。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";

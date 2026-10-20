@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 「快速开始」首屏的三条路径卡（数据驱动，便于测试与增删）。
  *
  * 单独成文件而不放进 UserGuideModal：组件文件只导出组件（react-refresh 约定），

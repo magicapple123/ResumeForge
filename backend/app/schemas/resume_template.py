@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """用户自制简历模板的请求/响应结构。"""
 from datetime import datetime
 from typing import Any, Literal

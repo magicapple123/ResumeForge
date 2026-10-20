@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """保存网申目标网址历史。"""
 from collections.abc import Sequence
 

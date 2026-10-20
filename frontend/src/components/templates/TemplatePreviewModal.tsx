@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 单个模板的放大预览：可切字号与版式，看的始终是真实渲染结果。 */
 import { Alert, Modal, Segmented, Space, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";

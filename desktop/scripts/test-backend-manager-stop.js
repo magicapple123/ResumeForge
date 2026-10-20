@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // backend-manager 的停止路径与进程身份核验（RR-02）——从 test-backend-manager.js

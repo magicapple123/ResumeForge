@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 准入徽标：展示后端下发的准入结论与"需逐条确认"标记。
  * （自 ApplyQueuePanel 拆出，逐字搬运，行为等价。）

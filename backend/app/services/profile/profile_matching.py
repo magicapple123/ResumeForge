@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位信号提取、资料相关性评分和候选条目选择。"""
 
 from __future__ import annotations

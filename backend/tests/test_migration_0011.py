@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0011_claim_ledger`` 迁移：建表、幂等与完整 downgrade。
 
 迁移是数据安全的落点，所以这里不只测"能跑通"，还测：重复执行不报错（幂等）、

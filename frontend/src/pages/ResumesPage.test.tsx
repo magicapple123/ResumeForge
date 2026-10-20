@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历页：列提示、收藏、通用简历、备注列、行操作、URL 状态化、深链、批量选择与跨页全选。
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「网申资料」的读写：用户专门为网申表单填的那批补充资料。
 
 与 ``data.py`` 的分工：那份把 ``UserProfile``（简历资料）展开成扁平字段，本模块管**另一张表**

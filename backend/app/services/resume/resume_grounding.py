@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """把模型简历结果锚定回用户资料中的可验证事实。"""
 
 from __future__ import annotations

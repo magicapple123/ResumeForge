@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """AI 求职助手会话、附件、上下文与联网搜索的离线测试。
 
 拆分说明：工具调用回路用例已迁至 test_assistant_tool_calls.py；提示表面

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 事实标注的展示元数据（RF-13）：与 EvidencePanel 组件解耦存放。
  *

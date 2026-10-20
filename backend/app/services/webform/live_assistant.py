@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """专用浏览器悬浮球里的「精简版求职问答」纯逻辑。
 
 为什么抽成独立模块：``LiveSession`` 已经很重（轮询、焦点、填表、记忆），问答的

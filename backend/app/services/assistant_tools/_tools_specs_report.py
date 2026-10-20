@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """报告域工具声明（``_TOOLS`` 中 21 条：面试/深挖/复盘/提醒/投递台/知识库/统计等）。"""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「网申填表放宽模式」控件判类（relaxed_kind）守卫。
 
 从 test_webform_relaxed.py 按主题迁出的第一块：判类是放宽模式的**准入闸门**

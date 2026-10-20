@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位/个人资料识别接口共用的小结构。"""
 
 from pydantic import BaseModel, ConfigDict, Field

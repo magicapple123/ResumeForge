@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 助手流式会话全局化（问题 B）与 stick-to-bottom（问题 A）的页面级测试。
  *

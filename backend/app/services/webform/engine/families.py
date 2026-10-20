@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """跨族否决：控件**自述**属于另一族时，本族字段不许认领它。
 
 与 ``FIELD_EXCLUDE_HINTS`` 的分工：那张表是"某字段自己的排除词"、按**签名**匹配

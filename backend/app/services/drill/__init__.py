@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """按事实台账深挖的面试服务层：契约生成、逐轮判定、复盘与复练队列。
 
 与「模拟面试」（``services/interview/interview.py``）的区别：那边按轮数推进、结束时给一份四维度

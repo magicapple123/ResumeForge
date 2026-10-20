@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Production backup boundaries: untrusted names, strict manifests and publishing races."""
 
 import hashlib

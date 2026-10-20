@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Cheap connection probes, independent of saved thinking preferences."""
 
 from ...schemas.setting import LLMConfig

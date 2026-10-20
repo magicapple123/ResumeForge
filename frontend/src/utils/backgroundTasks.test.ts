@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 后台任务登记表：关掉等待窗口之后，任务仍然被追踪。
  *

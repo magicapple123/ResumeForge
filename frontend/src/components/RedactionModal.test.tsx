@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 一键脱敏：预览遮罩后的字段 + 下载脱敏版（独立文件、不回写）。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

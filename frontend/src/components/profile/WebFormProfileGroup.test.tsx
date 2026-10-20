@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * `WebFormProfileGroup` 自定义 memo 比较器的语义。
  *

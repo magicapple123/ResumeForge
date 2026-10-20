@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「求职助手 P3 工具批」的守卫测试（list_match_analyses / create_interview_experience / create_referral）。
 
 每条工具至少两条：真实落库/返回的正常路径 + 边界。对 ``list_match_analyses`` 另有一条

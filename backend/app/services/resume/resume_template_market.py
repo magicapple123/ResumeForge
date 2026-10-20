@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """离线模板市场预设与字号档位。"""
 
 from __future__ import annotations

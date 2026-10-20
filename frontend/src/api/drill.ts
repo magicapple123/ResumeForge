@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 面试深挖接口：开场、逐轮回答、提前收尾、复盘与复练。 */
 import type {
   DrillAnswerResult,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Provider capability 声明（RF-14 §2.3）与默认请求体快照守卫。
 
 钉住的性质：

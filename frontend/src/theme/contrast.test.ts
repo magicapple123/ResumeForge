@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import designTokensCss from "./design-tokens.css?raw";
 import darkTokensCss from "./dark-tokens.css?raw";

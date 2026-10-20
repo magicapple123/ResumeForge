@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料基本字段的标签和值提取。"""
 
 import re

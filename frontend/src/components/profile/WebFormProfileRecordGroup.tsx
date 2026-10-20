@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Card, Col, Empty, Input, Row, Select, Space, Tag, Typography } from "antd";
 import { memo, useCallback, useEffect, useRef, type ComponentProps } from "react";
 import type { WebFormRepeatedGroup, WebFormRepeatedRecord } from "../../types";

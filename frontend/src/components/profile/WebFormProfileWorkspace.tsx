@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「网申资料」草稿的持有者：自己拿草稿，页面只在提交那一刻来取。
  *

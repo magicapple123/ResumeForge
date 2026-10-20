@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """删掉 ``official_source_trend``：它记录的计数在运行记录里已经有了。
 
 **这是一次删除，理由要说清楚**，因为"删表"通常意味着数据丢失：

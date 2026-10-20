@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 首页：快捷入口、全局搜索（含"更多结果"分组跳转）、近期提醒卡片与启动弹窗。 */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

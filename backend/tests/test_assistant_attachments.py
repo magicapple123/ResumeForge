@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职助手附件校验、持久化和模型消息转换测试。"""
 
 import base64

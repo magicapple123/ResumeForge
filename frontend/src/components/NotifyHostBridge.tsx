@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 把 AntD 的通知 / 弹窗实例注册到统一通知出口（`utils/taskNotify`）。
  *

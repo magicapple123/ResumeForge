@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历记录预览弹窗（历史记录用）：加载详情、调整版式、渲染 HTML 后展示。
  *
  * 预览主体已抽到 ``components/resume/ResumeDetailPreview``（B3）：本弹窗只负责

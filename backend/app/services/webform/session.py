@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """表单快照的进程内暂存。
 
 ## 为什么要暂存

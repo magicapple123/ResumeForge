@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0041：application_track 加渠道列 + 新增状态变化事件表 application_track_event（RF-18）。"""
 
 from alembic import command

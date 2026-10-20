@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「让 AI 按我的要求改这一栏」：用户在预览里点中某一栏后，用一句话让 AI 重写它。
  *

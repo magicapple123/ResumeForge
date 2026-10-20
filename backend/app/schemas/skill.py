@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """助手技能 Schema：列表项、详情、创建与更新。"""
 from datetime import datetime
 

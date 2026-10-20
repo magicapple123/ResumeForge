@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历导出与脱敏端点（域⑧）：导出闸门 + 管线委托 + GET/POST 导出 + 脱敏预览。
 
 从原 ``api/resumes.py`` 原样搬运（纯切片，无 patch 读取点）；`_get_live_resume` 与两个

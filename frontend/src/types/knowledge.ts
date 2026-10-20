@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 知识库条目类型。 */
 
 export interface Knowledge {

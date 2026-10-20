@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Read-only inspection of an existing stress run directory.
 
 ``--check-only`` is the *only* inspection entry point and it is strictly

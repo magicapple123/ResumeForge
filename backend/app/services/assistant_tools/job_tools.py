@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位 / 简历 / 个人资料的读写工具。"""
 from __future__ import annotations
 

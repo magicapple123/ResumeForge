@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Regression probes use only synthetic secrets and PID-isolated test databases."""
 
 import json

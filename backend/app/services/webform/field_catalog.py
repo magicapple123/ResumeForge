@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申单值字段目录。匹配词与排除规则分别位于 field_synonyms / field_matching_rules。
 
 可重复网申补充记录单独定义在 repeated_profile_catalog；原有导入出口是 fields。

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 拖拽重排的渲染成本守卫（React Profiler 计数）。
  *
  * 背景：用户实测拖拽排序仍卡顿。根因不在 memo 链路（QA 审过），而在顺序状态走页面级

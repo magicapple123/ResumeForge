@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 配置记录的只读详情弹窗：点记录卡本体查看。密钥只显示脱敏占位，不回显本体。 */
 import { Descriptions, Modal, Button, Tag } from "antd";
 import type { LLMConfigRecord } from "../../types";

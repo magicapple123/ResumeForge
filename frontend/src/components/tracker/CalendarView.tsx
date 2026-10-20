@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 真实月历（E11）：按 ``remind_at`` 把提醒归集到月格里，色块/状态区分。
  *

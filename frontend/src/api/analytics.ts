@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职数据看板接口。 */
 import type { AnalyticsDashboard } from "../types";
 import { buildQuery, request } from "./client";

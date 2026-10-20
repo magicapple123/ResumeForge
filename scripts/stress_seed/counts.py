@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Row-count presets per scale level.
 
 ``scale`` expresses the target number of ``job`` rows. The classic dataset

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 数据缺口提示：整页唯一的"这张图为什么是空的"实现。 */
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";

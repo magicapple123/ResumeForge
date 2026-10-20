@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投投主动提示：短、可执行，不替代助手对具体简历的判断。 */
 
 export const TOU_TOU_TIPS = [

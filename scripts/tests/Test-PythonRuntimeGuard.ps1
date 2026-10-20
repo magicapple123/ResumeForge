@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # Test-PythonRuntimeGuard.ps1 - regression guard for the stale-runtime defect.
 #
 # Context: on 2026-10-17 the desktop build reused an old desktop\python-runtime.zip

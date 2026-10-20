@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Dataset-domain failures with explicit safe public messages."""
 
 _PUBLIC_MESSAGES = {

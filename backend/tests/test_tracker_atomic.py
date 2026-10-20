@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """PR-10：create_track 的原子事务——record + 首个状态事件 + 投递快照要么整体落库、
 要么整体回滚，任何一步故障注入后数据库都**无半成品**，失败有可解释的 HTTP 错误。
 """

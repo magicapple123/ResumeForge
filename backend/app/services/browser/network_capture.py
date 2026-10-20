@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """从 CDP 网络事件里解析招聘网站的接口响应。
 
 **为什么优先走网络而不是 DOM**：岗位列表与详情都是 XHR 渲染的。直接读接口响应有几个

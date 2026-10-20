@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """快照 / 预览 / 填充路由与填充记录路由（职责④⑤）。
 
 从 ``api/webform.py`` 拆出。服务层符号一律经 ``webform_service`` 属性访问，

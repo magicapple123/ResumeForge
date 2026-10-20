@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """资料箱（materials）域的工具实现。"""
 from __future__ import annotations
 

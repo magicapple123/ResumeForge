@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """AI 求职助手请求、会话和消息结构。"""
 
 import re

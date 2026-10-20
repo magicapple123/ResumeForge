@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """采集编排：岗位类型透传、本地筛选记账、回收站去重（从 test_collector.py 拆出）。
 
 ``FakeCollectAdapter``/``_FakeClock``/``_task``/``_config`` 留在主文件

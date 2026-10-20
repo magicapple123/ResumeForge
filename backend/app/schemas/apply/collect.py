@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """采集配置与采集请求 schema。"""
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """资料分区标题及其兼容别名。"""
 
 _SECTION_ALIASES = {

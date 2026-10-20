@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历生成进度条用的阶段表与文案映射。
  *

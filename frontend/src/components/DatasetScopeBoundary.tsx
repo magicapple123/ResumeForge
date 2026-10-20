@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Alert, Button, Spin } from "antd";
 import { useEffect, useState, type ReactNode } from "react";
 import { initializeDatasetScope } from "../api/datasetScope";

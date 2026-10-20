@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """QA 独立对抗测试（第 4、5 节）：自选浏览器的"绝不静默回退" + "新增站点只需改后端"。
 
 第 4 节：主理人 hard requirement——明确选了 Chrome 却启动 Edge 比报错更坏，所以

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0033_web_form_profile_records`` 迁移：支持多条网申资料补充记录。"""
 from alembic import command
 from app.database_migrations import build_alembic_config

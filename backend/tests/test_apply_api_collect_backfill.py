@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递台 API：投递记录、采集配置/任务与补齐详情（从 test_apply_queue_and_api.py 拆出）。
 
 fake_runner fixture 定义在主文件（test_apply_queue_and_api.py），

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Fictional word pools and small text builders shared by the generators.
 
 Every name/company/school below is invented for stress testing. The pools

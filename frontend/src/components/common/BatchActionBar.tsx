@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 批量选择模式的操作条：已选计数 + 「全选本页」(可选) + 调用方操作 + 退出多选。 */
 import { Button, Checkbox, Space, Typography } from "antd";
 import type { ReactNode } from "react";

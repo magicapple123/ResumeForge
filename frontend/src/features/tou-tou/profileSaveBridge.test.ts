@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 资料保存桥：注册 / 清空 / 订阅通知的最小契约测试。 */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {

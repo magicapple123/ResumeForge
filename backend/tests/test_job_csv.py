@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位 CSV 导入/导出：列集来回一致、逐行报错、重复跳过、编码宽容。"""
 
 from app.services.job.job_csv import decode_csv_bytes, parse_job_csv

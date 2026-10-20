@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 内容签名：稳定、对变化敏感、纯函数。 */
 import { describe, expect, it } from "vitest";
 import { contentSignature } from "./contentSignature";

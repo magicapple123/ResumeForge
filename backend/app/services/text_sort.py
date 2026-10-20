@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """拼音 + 数字自然序的排序键（F）：`rf_pinyin` collation 的唯一实现。
 
 为什么需要它：SQLite 的默认 BINARY collation 按 UTF-8 **字节**比较，于是

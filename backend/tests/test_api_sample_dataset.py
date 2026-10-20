@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """体验示例数据集端点的守卫：创建、切换、播种、幂等复用与主数据隔离。"""
 
 from app.api import settings as settings_api

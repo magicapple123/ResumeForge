@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 内推表单的全部 Form.Items（含图片备注上传块）。
  *
  * 受控组件：form 实例与上传状态由 ReferralPanel 持有，beforeImageUpload（含 message 与

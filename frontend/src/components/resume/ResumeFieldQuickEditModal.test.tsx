@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 「只编辑选中的这一部分」：只改那一栏、保存走同一个回调。 */
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历备注：列表可见、详情可编辑（B5）。"""
 from app.models.resume import ResumeRecord
 

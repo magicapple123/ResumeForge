@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0031_extra_profile_label`` 迁移：给「网申资料」加 ``label`` 列。
 
 这一列服务于 2026-09-27 的**自定义字段**功能：用户可以在「点哪个填按」里把清单外的栏目

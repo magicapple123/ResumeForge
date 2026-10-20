@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Request correlation and bounded request-body handling."""
 from __future__ import annotations
 

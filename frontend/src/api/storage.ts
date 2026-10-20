@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 存储占用与手动备份接口（RF-25）。 */
 import { request } from "./client";
 

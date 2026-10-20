@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 官网与演示实例之间的 postMessage 桥。
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历内容手工修改的 API 测试。"""
 from app.models.resume import ResumeRecord
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 回收站：六类被删除的内容集中在这里，可以恢复，也可以彻底删除。
  *

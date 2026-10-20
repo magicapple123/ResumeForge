@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 柱状图：自绘 SVG，高度需保持紧凑、与整页协调。 */
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";

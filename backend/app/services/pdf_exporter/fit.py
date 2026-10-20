@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """一页适配与入口（测量 / 真实页数 / 决策 / ``build_resume_pdf``）。"""
 
 from __future__ import annotations

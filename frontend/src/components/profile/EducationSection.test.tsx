@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 教育经历分区：四六级分数录在这里（不是基本信息）。
  *

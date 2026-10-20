@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 助手消息的安全 Markdown 子集、附件和来源展示。 */
 
 import {

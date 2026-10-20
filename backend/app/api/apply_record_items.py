@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递批次明细的分页端点（B4 按需加载）。
 
 ``GET /records/grouped`` 走轻量模式（``include_items=false``）时组内不带明细，展开某个

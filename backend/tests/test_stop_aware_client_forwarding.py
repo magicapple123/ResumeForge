@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``StopAwareCdpClient`` 必须覆写 ``CdpClient`` 的**每一个**公开方法。
 
 ## 为什么需要这条测试

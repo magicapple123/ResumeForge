@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """CDP 客户端公共基座：常量、``CdpError`` 与 ``CdpClient`` 抽象基类。"""
 
 from __future__ import annotations

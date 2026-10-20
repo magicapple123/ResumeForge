@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Tag, Tooltip } from "antd";
 import type { EvidenceStatus } from "../../types";
 import { EVIDENCE_COLORS, EVIDENCE_HINTS, EVIDENCE_LABELS } from "../../types";

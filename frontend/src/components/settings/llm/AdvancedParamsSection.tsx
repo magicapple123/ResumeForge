@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 高级调整折叠块的内部内容：Top P / Top K、惩罚项、随机种子、停止词、思考参数形态。
  * （**零 props**——纯 Form.Item name 注册在调用方持有的父 Form 上，弹窗/页面表单通用。）

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """R-12 日历提醒：CRUD、upcoming 升序、绑定对象 SET NULL、软删除。
 
 重点验证：

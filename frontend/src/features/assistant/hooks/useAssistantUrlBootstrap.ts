@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 助手页 URL 引导域：深链定位 / ?new=1 草稿 / 首次进入欢迎草稿三段 effect。
  *
  * 从 AssistantPage 整域下沉，内部代码逐字搬家。**Router 钩子不进 hook**：

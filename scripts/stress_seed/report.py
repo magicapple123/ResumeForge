@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Markdown import report written next to the generated database."""
 
 from __future__ import annotations

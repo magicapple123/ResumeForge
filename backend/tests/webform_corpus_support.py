@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """匹配语料的加载、跑分与报告——pytest 回归与人读报告共用同一份实现。
 
 语料在 ``fixtures/webform/pages/*.json``：每条 = 一页真实页面（脱敏后）的控件清单

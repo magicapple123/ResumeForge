@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 快捷键在既有界面上的两个"外部落点"（R5）。
  *

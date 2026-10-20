@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0040：新增投递快照表 resume_delivery_record 与两条血缘/快照列。"""
 
 from alembic import command

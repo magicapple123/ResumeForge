@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** PageSkeleton：rows / avatar / card 三个变体的渲染结果。 */
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-20：后台线程日志关联上下文（log_context）的守卫测试。
 
 钉住三件事：

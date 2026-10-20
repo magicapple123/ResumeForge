@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """预览数据模型与状态常量（STATUS_* / SOURCE_* / AI_NOTE）。"""
 from __future__ import annotations
 

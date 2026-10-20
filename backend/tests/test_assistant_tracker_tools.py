@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职助手对求职进度的查询与修改工具测试。"""
 
 import json

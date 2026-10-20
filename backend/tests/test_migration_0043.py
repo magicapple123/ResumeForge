@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0043：模拟面试「自动轮数」列 ``interview_session.rounds_min``。
 
 NULL = 固定轮数（历史行为，不回填）；非空 = 自动收尾模式的下限。

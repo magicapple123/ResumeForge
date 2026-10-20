@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备选岗位（candidate_jobs）域的工具实现。"""
 from __future__ import annotations
 

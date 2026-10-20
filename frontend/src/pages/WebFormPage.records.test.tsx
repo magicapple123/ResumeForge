@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 网申填表页面：填充记录、浏览器设置与 URL 快照（拆分自 WebFormPage.test.tsx）。
  *

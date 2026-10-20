@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """写入 / 回读 JS 构造器与 ``_PROTOTYPE_BY_TYPE``。"""
 from __future__ import annotations
 

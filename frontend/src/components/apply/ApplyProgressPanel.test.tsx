@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 进度面板：条目明细里 `failure_detail` 这个字段**有两种含义**，标签必须跟着状态走。
  *

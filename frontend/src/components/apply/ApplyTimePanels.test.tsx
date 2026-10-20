@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投递台时间显示：后端的无时区时间按 UTC 解释，再转换成浏览器本地时间。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";

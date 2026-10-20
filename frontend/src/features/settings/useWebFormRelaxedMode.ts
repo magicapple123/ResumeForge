@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 网申填表「放宽模式」开关的取数与保存。
  *

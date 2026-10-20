@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """数据模型：Control / FieldMapping / SkipNote / MatchResult / ApplyOutcome 与控件类型常量。"""
 from __future__ import annotations
 

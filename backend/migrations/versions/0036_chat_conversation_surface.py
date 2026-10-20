@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """给助手会话增加入口作用域，隔离侧栏与投投悬浮球历史。
 
 Revision ID: 0036_chat_conversation_surface

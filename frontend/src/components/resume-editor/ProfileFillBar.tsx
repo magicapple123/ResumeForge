@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「从我的资料填入」的下拉 + 按钮。两个入口共用这一个组件，靠 `variant` 区分：
  *

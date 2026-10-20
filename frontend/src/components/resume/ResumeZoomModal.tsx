@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「查看大图」：把简历放到一个大窗口里按 1:1 看。
  *

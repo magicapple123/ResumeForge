@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人照片的 API 往返、校验与简历渲染链路测试。"""
 import base64
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「补齐详情」的任务运行器侧：配置还原、目标 id 读取与收尾文案
 （从 test_collect_backfill.py 拆出）。
 

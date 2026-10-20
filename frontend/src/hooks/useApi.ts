@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 通用数据加载 Hook：管理 loading / error / data 三态。 */
 import { DependencyList, useCallback, useEffect, useRef, useState } from "react";
 import { isCancellation } from "../api/client";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 拖拽几何内核的纯计算测试：槽位/前缀和、clamp、行程制换位（48px/槽）、边缘换位、
  * 两端可达、不漂移。 */
 

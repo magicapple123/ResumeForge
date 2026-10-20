@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递专用浏览器管理器：client 入口、启动时打开站点、用户自选浏览器与显示名
 （从 test_apply_browser_manager.py 拆出）。
 

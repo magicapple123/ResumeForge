@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位广场：按来源（手动添加 / 自动采集）筛选的接线。 */
 
 import { App as AntdApp } from "antd";

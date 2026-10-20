@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """应用内更新检查、下载状态与更新包校验的离线测试。"""
 
 import asyncio

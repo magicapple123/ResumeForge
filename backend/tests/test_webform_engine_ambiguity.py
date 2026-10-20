@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表引擎 · 证据消歧与防抢框（占位符权威性与旁文污染见 ``test_webform_engine_placeholders.py``）。
 
 控件自述胜过周围文字、邻居标签不得抢框、占位符并列的消歧与例外（区块 /

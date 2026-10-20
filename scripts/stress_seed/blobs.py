@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Deterministic binary blob builders (PNG / PDF / DOCX / tiny avatar).
 
 Moved verbatim from the original script; the only change is that the random

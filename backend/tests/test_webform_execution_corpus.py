@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """执行语料回归：写入 → 回读 → 结果分类的脚本化场景。
 
 每条语料（``fixtures/webform/execution/*.json``）自带一份**有序调用脚本**：

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 面试复盘面板：录入问题 → 分析答题思路 → 反向优化建议渲染。 */
 import { App as AntApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

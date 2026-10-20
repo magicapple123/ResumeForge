@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """通用 Schema：分页等。"""
 from typing import Generic, TypeVar
 

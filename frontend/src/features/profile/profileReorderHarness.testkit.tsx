@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 分区拖拽重排用例的共享脚手架（行数预算拆分的产物）。
  *

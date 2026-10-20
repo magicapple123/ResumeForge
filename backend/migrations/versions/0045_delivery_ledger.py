@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0045：可信交付账本（PR-09）——给 ``resume_delivery_record`` 加四列。
 
 只加列、不加表：业务表集合前后不变，旧备份没有这四列时按 NULL 读取（UI/详情

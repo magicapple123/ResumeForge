@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职进度的 HTTP 面：路由顺序、两步导入的一致性、导出与错误码。
 
 最要紧的两条：

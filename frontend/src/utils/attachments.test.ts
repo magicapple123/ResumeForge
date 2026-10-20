@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 附件类型判定与限额：助手和识别两条链路共用这一份实现。 */
 
 import { describe, expect, it } from "vitest";

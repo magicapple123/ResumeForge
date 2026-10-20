@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位广场批量适配度分析：设置 → 进行中（后台任务进度）→ 结果，与历史回看。
  *
  * 分析**一律走后台任务**（`startJobMatchBatchTask`）：同步批量端点要等全部岗位

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """回收站接口的出入参。"""
 from datetime import datetime
 

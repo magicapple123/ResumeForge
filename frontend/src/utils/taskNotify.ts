@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「生成 / 批次完成」的统一通知出口：一处负责"弹窗 + 提示声"。
  *

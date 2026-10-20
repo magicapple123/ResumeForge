@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 通用手写简历（`job == null`）的 T11 语义：**默认空白** + 头部「填入我的资料全部数据」。
  *

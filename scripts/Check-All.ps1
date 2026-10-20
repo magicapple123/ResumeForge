@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # Check-All.ps1 - one-shot full quality gate for ResumeForge.
 # Pure ASCII content (PS 5.1 BOM safety). No npx (repo rule).
 param(

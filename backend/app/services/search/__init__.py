@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """联网搜索：多引擎聚合 + 可选正文抓取。
 
 分工：

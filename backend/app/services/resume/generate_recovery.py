@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成任务的启动恢复（RF-02，从 resume_generate_runner.py 拆出）。
 
 只放"跨进程的遗留状态收尾"：运行器本体（线程、预算、仲裁）留在

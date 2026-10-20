@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 备选岗位表单弹窗：招聘原文（粘贴点，导入时预填 JD）的长度治理。
  *

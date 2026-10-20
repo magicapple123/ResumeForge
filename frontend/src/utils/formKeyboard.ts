@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { KeyboardEvent } from "react";
 
 /** Scoped to an editor form so shortcuts cannot save a background page. */

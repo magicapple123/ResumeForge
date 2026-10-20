@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成任务的启动恢复、收拢、总预算与并发守卫（RF-02，从 test_resume_generate_task.py 拆出）。
 
 原文档超 500 行预算后的拆分：生命周期类用例聚在这里，"后台继续"的

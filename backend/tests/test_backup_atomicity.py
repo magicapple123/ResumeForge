@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Real publication faults, stable export snapshots and legacy safety regressions."""
 
 import json

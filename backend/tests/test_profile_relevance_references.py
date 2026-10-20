@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """项目总结文件筛选和引用边界测试。"""
 
 import json

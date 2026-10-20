@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递台 API：任务创建/控制、配置、浏览器生命周期与启动入口
 （从 test_apply_queue_and_api.py 拆出）。
 

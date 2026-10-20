@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「当前批次」必须看得见**采集**批次（2026-09-21 修的回归）。
 
 以前的 ``GET /api/apply/tasks/current`` 写死 ``kind=apply``，采集批次在它眼里永远是

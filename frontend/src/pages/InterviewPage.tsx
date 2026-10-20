@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 模拟面试：设定面试官 → 逐轮问答 → 结束后看评分报告。
  *

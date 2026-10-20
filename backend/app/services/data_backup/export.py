@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份导出：生成压缩包（职责④）。
 
 附件（``user_files``/``referral_images``）**按数据库内容收集引用后装包**（PR-15）：

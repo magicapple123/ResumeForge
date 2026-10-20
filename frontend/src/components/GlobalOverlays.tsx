@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 全局挂件（R17 / R8 / D）：拖入导入、全局快捷键与全站搜索弹层的落点。
  *

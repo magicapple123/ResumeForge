@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 首页顶部的「第一份交付」进度面板：三条路径、当前步高亮、CTA 直达。
  *
  * 只在 `allDone === false` 时由 HomePage 渲染——全完成还挂一块"你还没完成"的

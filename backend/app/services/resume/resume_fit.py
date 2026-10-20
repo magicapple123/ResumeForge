@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「自动一页」：生成逐档收紧的候选版式清单（职责④）。
 
 从 ``resume_layout.py`` 拆出：与诊断段仅通过常量与 ``_round`` 耦合。

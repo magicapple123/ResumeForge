@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Bounded, redacted, single-line logging for operational metadata only."""
 
 from .log_redact import redact_sensitive_text

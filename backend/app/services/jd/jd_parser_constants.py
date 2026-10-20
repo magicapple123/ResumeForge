@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """JD 解析的学历、年限和技能规则常量。"""
 
 import re

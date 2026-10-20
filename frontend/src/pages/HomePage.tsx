@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 首页：数据概览、"接下来做什么"、全局搜索与最近动态。 */
 import {
   AuditOutlined,

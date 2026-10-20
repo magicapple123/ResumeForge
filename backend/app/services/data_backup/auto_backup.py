@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """自动备份：按间隔滚动保留最近 N 份数据库快照，失败按短档退避重试。
 
 用户数据只有 SQLite 一处（见包 docstring），而"记得手动备份"是最不可靠的一环：

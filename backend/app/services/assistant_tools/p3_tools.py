@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """P3 工具批：匹配分析记录（只读）+ 面经 / 内推（写入）。
 
 三个工具合住一份文件的先例与 ``reminder_tools.py`` 相同——report 域的 spec 文件已逼近

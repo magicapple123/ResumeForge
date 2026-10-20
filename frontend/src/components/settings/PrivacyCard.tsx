@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 设置页「数据」分页的「隐私与数据主权」卡片：把隐私承诺说成用户看得懂的条款。 */
 
 import { Card, Typography } from "antd";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历列表的**跨组件刷新广播**（T12）。
  *

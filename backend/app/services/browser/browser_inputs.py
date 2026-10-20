@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Validate browser navigation input independently from process lifecycle handling."""
 
 from urllib.parse import urlsplit

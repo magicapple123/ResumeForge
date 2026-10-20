@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """诊断包导出的守卫：zip 内容、脱敏兜底、文件名。"""
 
 import io

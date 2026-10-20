@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 搜索列表的滚动加载（第 2 页起）。
 
 **为什么存在（用户实测，2026-10-09）**：BOSS 搜索页**不吃 URL 的 page 参数**——换 page

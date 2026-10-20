@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 事实台账接口：条目增删改查、事实基线，以及从一段资料草拟条目。 */
 import type {
   Claim,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 从通知材料导入进度：粘贴/截图 → 识别预览 → 勾选确认 → 写入。
  *

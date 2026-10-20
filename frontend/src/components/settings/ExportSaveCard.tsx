@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 生成内容保存位置卡（设置页 · 数据）。
  *

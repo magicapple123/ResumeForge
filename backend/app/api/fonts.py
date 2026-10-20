@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """自定义简历字体的上传/选用/删除（R10）。
 
 从 `api/settings.py` 拆出来：设置接口已经很拥挤，而字体这一组是唯一涉及文件上传、

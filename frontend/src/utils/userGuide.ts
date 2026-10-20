@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 首次使用引导只保存在当前浏览器，不写入后端或用户业务数据。 */
 export const USER_GUIDE_STORAGE_KEY = "resumeforge.user-guide.seen";
 

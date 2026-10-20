@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """页面"可用于采集/投递"的通用等待原语。
 
 **为什么需要它**：``Page.navigate`` / 打开新标签页只是让浏览器**开始**加载地址，调用返回时

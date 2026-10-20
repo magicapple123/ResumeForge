@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """启动完整性检查：包不完整时要说清缺什么，而不是抛一条导入栈。
 
 背景（真机反馈）：手工打的压缩包漏了 `backend/app/data/`，后端在导入阶段就抛

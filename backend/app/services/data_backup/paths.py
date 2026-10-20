@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份常量、``ExtraDatabase``、``BackupError``、数据库/临时目录路径与启动清理。
 
 从 ``services/data_backup.py`` 拆出（职责①⑥）：成员名与目录名常量、随包数据集

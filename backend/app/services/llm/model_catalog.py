@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """按用户配置拉取服务商可用模型列表（GET {base_url}/models）。
 
 只做一件事：把 OpenAI 兼容的模型列表端点结果整理成字符串列表。所有常见服务商

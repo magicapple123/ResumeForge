@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成的提示词常量与篇幅引导（从 :mod:`app.services.resume.resume_generator` 纯搬迁拆出）。
 
 只含提示词组装侧的常量与纯函数：用量汇总（``usage_records``）、预算接线与流式

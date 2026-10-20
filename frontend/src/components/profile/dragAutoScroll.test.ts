@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 拖拽自动滚动：边缘判定（纯函数）+ 逐帧滚动器 + 滚动父级定位。 */
 
 import { afterEach, describe, expect, it, vi } from "vitest";

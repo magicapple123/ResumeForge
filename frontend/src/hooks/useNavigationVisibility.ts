@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   getHiddenNavigationKeys,

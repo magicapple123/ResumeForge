@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 面经知识库（R-15）：真实面经的增删改查，可绑定岗位、沉淀真实问题清单。 */
 import {
   CheckSquareOutlined,

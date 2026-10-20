@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料业务逻辑：读取与整体更新（子表先删后插）。"""
 from sqlalchemy.orm import Session, selectinload
 

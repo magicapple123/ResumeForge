@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """集中导入全部模型，保证 Base.metadata 注册完整（create_all 依赖此注册）。"""
 
 from .apply import (

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位匹配度分析编排：把 JD 与"用户已确认的资料/简历"逐条对照。
 
 与"岗位需求解读"（``services/job/job_analysis.py``）的区别是**本模块会读取个人资料与简历**：

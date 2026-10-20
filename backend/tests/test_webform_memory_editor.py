@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """逐框记忆的浏览器内联编辑与实时自定义字段识别回归。"""
 
 from app.services.webform.live import LiveSession

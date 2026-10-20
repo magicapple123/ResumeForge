@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """离线分享包接口（prefix ``/api/share-packages``）。
 
 生成一份分享包 = 脱敏 HTML / PDF + 只读快照 + 评论回传文件 + 本地 token，全部落在

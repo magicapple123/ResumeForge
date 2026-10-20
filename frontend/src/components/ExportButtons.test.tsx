@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 导出入口：全页面只有一个「导出」按钮，点击打开统一面板。
  *

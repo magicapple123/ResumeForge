@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { FormOutlined } from "@ant-design/icons";
 import { Switch, Tooltip } from "antd";
 import { useMemo, useState } from "react";

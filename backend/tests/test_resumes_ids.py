@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``GET /api/resumes/ids``：当前筛选下全部简历 id（不分页），跨页全选用。
 
 对齐 ``GET /api/jobs/ids`` 的既有测试写法（test_api_jobs.py）：与列表同一份

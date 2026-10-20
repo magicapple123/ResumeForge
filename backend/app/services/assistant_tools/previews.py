@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """写工具的写入预览（RF-01）。
 
 每个 ``writes=True`` 的工具都必须注册一个 ``preview``：只读复刻 handler 的写入

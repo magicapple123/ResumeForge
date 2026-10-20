@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Read and select options from accessible custom combobox popups.
 
 弹层家族与形态（真机取证 2026-10-06，字节自研 UD Design 页）：

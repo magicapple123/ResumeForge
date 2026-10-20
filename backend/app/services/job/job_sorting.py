@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位列表排序（R14）：``sort`` 键 → ORDER BY，``order`` 显式覆盖方向。
 
 单独成模块的两个理由：

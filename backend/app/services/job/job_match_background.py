@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位批量适配度分析的后台任务状态与单线程运行器。
 
 任务状态只保存轻量的岗位 ID、进度和最终批次 ID，结果仍由 job_match_batch 快照表保存。

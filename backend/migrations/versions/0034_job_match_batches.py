@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位广场批量匹配结果快照。"""
 from collections.abc import Sequence
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Tests for nsis/legacy-data-rescue.nsh (2026-10-14, 1.0.0 upgrade data-preservation fix).

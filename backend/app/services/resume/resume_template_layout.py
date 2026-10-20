@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Built-in template layout defaults used by HTML, PDF, and Word renderers."""
 
 from .resume_template_catalog import DEFAULT_TEMPLATE

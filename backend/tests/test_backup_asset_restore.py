@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份恢复的先验后发布与冲突语义（RR-03）——从 ``test_backup_asset_manifest.py``
 拆出（行数预算）；夹具体现在 ``tests/backup_asset_fixtures.py``，用例原样搬迁。
 """

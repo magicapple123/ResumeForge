@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 个人资料大分区的稳定顺序、标签和归一化规则。 */
 
 export type ProfileSectionKey =

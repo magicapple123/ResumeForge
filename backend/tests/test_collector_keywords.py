@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """采集编排：停止信号、多关键词全局上限、认证失败传播与详情缺失计数
 （从 test_collector.py 拆出）。
 

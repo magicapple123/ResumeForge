@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 备选岗位的批量选择工具条：按「选择区 / 批量操作区 / 退出区」三组排列。
  *

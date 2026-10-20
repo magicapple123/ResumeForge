@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntdApp } from "antd";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

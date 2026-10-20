@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """服务层编排测试：读快照 → 预览 → 填充三段，以及它们之间的边界。"""
 import pytest
 from app.services.browser.cdp_client import CdpClient

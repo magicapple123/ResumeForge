@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 个人资料各大分区的排序布局。 */
 
 import { Card, Form, Input } from "antd";

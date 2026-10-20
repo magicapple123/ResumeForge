@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递快照记录（RF-17）：一份简历在投递/导出那一刻的不可变证据。
 
 为什么单独一张表：简历记录（``resume_record``）保持**原地更新**语义（PUT/revise

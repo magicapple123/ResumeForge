@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Provider-specific assistant envelopes for tool continuations."""
 
 from ...schemas.setting import LLMConfig

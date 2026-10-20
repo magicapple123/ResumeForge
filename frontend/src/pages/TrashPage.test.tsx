@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 回收站页面：查看、恢复、彻底删除、清空。
  *

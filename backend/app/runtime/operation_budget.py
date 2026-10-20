@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """业务操作总预算：monotonic deadline + 共享取消事件 + child() 派生。
 
 给"由多段网络调用/重试/工具轮次组成的业务操作"一个总 deadline 与协作式取消

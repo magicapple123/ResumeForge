@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """共享的资料相关性测试样例。"""
 
 from app.schemas.job import JobOut

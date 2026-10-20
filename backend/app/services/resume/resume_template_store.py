@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """用户自制简历模板：持久化、清洗与校验。
 
 自制模板是**用户自己写的 HTML**，比内置模板多两层保护：

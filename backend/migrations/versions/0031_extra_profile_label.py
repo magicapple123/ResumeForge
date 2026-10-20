@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「网申资料」加 ``label`` 列——让字段清单之外的自定义字段在界面上有人话名字。
 
 ## 为什么需要它

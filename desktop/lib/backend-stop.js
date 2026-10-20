@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Stopping the backend: verify identity, kill the tree, CONFIRM it is gone.

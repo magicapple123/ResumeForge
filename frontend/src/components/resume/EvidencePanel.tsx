@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 事实来源展示（RF-13）：按分区渲染一份简历的 fact_annotations。
  *

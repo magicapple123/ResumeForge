@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 顶部常驻任务条（T1）：三源聚合、无任务不渲染、查看与取消。
  *

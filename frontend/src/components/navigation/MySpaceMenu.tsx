@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { AppstoreOutlined, DownOutlined } from "@ant-design/icons";
 import { Button, Dropdown } from "antd";
 import type { MenuProps } from "antd";

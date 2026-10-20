@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递专用浏览器状态与站点适配器/站点健康度 schema。"""
 
 from typing import Literal

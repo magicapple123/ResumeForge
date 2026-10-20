@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """填充失败的原因码与重试阶梯：有限、保守、不越界。
 
 执行语料（``fixtures/webform/execution/*.json``）覆盖 happy path 与几类恢复；这里

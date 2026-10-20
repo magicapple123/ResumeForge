@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历字体卡（R10）：上传 → 设为当前 → 删除。
  *

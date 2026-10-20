@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """面经知识库（R-15）的请求/响应结构。
 
 与模拟面试（``schemas/interview.py``）分开：模拟面试是对话式练习，这里沉淀的是**真实面经**

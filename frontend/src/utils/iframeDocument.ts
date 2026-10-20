@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 给预览用的 iframe 文档做一点"展示层"加工。
  *

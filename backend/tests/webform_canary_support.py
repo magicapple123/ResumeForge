@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """webform 注入脚本真机验证（canary 家族）的共享支撑模块。
 
 test_webform_js_canary.py 按面板功能拆成主文件 + picker/remember/nav/chrome 四个

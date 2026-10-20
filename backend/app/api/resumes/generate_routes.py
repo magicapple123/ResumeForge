@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成端点（域③④）：同步 SSE 生成 + 后台生成任务三端点。
 
 从原 ``api/resumes.py`` 原样搬运。**patch 锚点契约**：测试通过

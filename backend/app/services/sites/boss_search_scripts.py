@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 搜索/详情采集用的页面脚本构造器与常量（``rf:filter-conditions`` / ``rf:collect`` /
 ``rf:collect-links`` / ``rf:detail`` 等页面协议；JS 字符串逐字符原样保留）。"""
 from __future__ import annotations

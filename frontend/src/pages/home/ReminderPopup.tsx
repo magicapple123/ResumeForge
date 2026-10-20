@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 启动提醒弹窗：打开应用时展示近期提醒（popupVisible 由页面持有）。
  * （自 HomePage 拆出，逐字搬运，行为等价。）

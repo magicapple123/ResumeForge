@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 网申填表页面：智能逐项填表会话与 AI 兜底（拆分自 WebFormPage.test.tsx）。
  *

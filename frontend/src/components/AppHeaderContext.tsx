@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 页头右侧的「当前数据集 + 用户头像」。
  *

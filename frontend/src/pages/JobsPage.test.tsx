@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 岗位页：列表展示、批量补齐详情与选择模式、URL 状态化、详情抽屉的重复打开与竞态。
  *

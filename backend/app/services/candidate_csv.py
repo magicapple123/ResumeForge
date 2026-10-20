@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备选岗位 CSV 导入/导出：与岗位广场 CSV 同一套规则（列集不同）。
 
 - **导出**：勾选的候选序列化成带 UTF-8 BOM 的 CSV；列集与导入共用 ``CSV_COLUMNS``。

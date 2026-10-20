@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """按用户要求修订已有简历（局部修改 / 整体重生成）。
 
 与 :mod:`resume_generator`（从资料库从头生成）和 :mod:`resume_field_rewrite`

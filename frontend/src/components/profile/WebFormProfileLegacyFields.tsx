@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 用户资料模型中原有的网申专用字段。
  *

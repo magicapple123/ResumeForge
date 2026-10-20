@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 资料分区排序的顺序 store（模块级工厂 + `useSyncExternalStore` 协议）。
  *

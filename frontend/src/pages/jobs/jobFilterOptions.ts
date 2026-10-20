@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 岗位广场的筛选选项与批量操作类型。
  * （自 JobsPage 拆出的共享常量：筛选栏与批量工具栏都用 STATUS_OPTIONS。）

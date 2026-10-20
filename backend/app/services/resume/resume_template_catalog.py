@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Built-in resume template catalog and lookup helpers."""
 
 from pathlib import Path

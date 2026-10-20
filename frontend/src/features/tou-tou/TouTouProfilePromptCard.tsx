@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 投投悬浮球上的「去改资料」提示卡。
  *

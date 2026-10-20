@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """通用表单理解与填写引擎（站点无关）。
 
 它回答两个问题：

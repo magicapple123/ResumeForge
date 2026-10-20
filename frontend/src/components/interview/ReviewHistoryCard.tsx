@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 历史复盘折叠列表：加载/错误/空态与「查看详情」富还原入口。
  *
  * 从 InterviewReviewPanel 拆出（2026-10-07，接近 500 行预算的预防性拆分）。

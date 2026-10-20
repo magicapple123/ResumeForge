@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历写作增强接口：STAR / 话术 / 润色 / 翻译 / 版本对比。 */
 import type {
   PhraseMode,

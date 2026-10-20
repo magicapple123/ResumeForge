@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """浏览器上传附件的校验原语：图片与文档的格式白名单、文件头与体积上限。
 
 图片校验只有这一份实现：助手附件（``assistant_service``）和岗位/资料识别

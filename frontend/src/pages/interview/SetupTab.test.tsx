@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 面试官设定卡：深链 ?job_id= 预填关联岗位（RF-11），以及提交时把岗位一起带出。 */
 import { App as AntdApp, Form } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递配置 schema（职责：配置覆盖写与回显）。"""
 
 from pydantic import BaseModel, ConfigDict, Field

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** greetingForHour：分时段问候的边界与恒定 headline。 */
 import { describe, expect, it } from "vitest";
 import { greetingForHour } from "./greetingText";

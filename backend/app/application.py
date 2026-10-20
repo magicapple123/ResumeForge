@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """FastAPI 应用装配与生命周期配置。"""
 
 import json

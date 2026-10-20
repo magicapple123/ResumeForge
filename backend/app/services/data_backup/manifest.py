@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份清单：版本链、表计数与包内清单生成（职责②）。"""
 
 from __future__ import annotations

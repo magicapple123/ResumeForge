@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """共享常量、Literal 类型别名与校验辅助（``schemas/apply`` 各子模块的公共底座）。
 
 从 ``schemas/apply.py`` 拆出：出厂默认常量、状态字符串（与 ``models/apply`` 逐字一致）、

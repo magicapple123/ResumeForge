@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """写工具的两阶段授权：结构化提案 → 用户批准 → 一次性核销执行（RF-01）。
 
 安全性质（全部由测试钉住，见 ``tests/test_assistant_authorization.py``）：

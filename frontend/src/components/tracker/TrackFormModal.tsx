@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 进度记录的新建 / 编辑表单。
  *

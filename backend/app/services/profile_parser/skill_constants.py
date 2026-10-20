@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """技能等级识别规则。"""
 
 import re

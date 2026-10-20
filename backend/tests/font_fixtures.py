@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """测试用的最小字体：现场合成，不往仓库里塞十几 MB 的真字体。
 
 R10 的链路（读字体 → 按字符集子集化 → base64 → 注入 HTML）只依赖 sfnt 结构，一款

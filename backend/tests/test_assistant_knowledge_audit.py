@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """E5 求职助手知识审计：改为对 ``feature_catalog``（单一事实来源）做一致性守卫。
 
 能力地图不再是手写静态清单，而是运行时从 ``feature_catalog`` 渲染。这个文件把三向一致

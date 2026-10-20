@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 页边距控件（T5）：从导出面板搬进预览的版式栏。
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 职责⑦：智能逐项填表（live）会话与「记住资料目标」弹窗的状态域。
  * （自 WebFormPage 拆出：live/liveOptOut/memoryTargets/memoryTargetsLoading/memorySaving/

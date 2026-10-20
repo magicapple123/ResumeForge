@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0014_interview_drill`` 迁移：建表、级联、幂等与完整 downgrade。"""
 from alembic import command
 from app.database_migrations import build_alembic_config

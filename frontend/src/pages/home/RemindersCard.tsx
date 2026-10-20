@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 近期提醒卡：列表 / 月历视图切换 + 提醒列表（点击任一条打开提醒弹窗）。
  * （自 HomePage 拆出：reminderView state、changeReminderView、loadReminderView、

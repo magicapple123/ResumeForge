@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """工具注册表（``_TOOLS``）与执行入口（``execute_tool`` / ``execute_tool_async``）。
 
 下发与执行的过滤逻辑在 ``policy.py``（唯一实现）；本模块只负责组装 OpenAI 声明

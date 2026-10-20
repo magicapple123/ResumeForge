@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """全局 AI 润色（R17）：选区润色接口的校验、模型未配置、提示词约束与失败口径。"""
 
 import json

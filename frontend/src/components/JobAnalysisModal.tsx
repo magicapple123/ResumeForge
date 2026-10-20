@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 按需生成岗位需求总结和通用求职建议（T1：可真取消 / 后台继续 / 订阅模块级状态）。 */
 import { BulbOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Listy, Modal, Popconfirm, Space, Tag, Typography } from "antd";

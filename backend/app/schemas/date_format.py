@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """应用内可保留部分精度的日期规范化。"""
 from __future__ import annotations
 

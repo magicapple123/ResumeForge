@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递批次（执行）schema。"""
 
 from datetime import datetime

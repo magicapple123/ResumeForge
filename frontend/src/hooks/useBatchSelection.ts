@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 批量选择的纯状态逻辑：入口/退出、勾选、全选本页（跨页保留已选）。 */
 import { useCallback, useState } from "react";
 

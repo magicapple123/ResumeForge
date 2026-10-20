@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 版本对比：纯前端、字段级的人性化差异结构。
  *
  * ``computeFieldDiff``（见 ``utils/resumeFieldDiff``）把两份简历的结构化内容切成

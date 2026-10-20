@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历模板目录聚合端点（域①）。
 
 从原 ``api/resumes.py`` 的 ``GET /templates`` 原样搬运：只读拼装样式模板、格式预设、

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Shared VM harness for desktop/main.js lifecycle probes.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 面试评分报告卡：dashboard 分数 + 维度列表 + 强项/改进清单。
  * （自 InterviewPage 拆出，逐字搬运，行为等价。）

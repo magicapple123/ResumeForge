@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 复练队列：点一条就换一个角度出新题。 */
 import { App, Button, Listy, Modal, Space, Tag, Typography } from "antd";
 import PageSkeleton from "../../components/common/PageSkeleton";

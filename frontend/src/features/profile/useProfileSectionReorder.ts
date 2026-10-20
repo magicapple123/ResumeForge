@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 资料分区排序状态与指针拖拽行为（T05 重写；order 外部 store 化）。
  *
  * ## 零 `elementFromPoint`

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历改进建议卡片：反向优化产出的建议列表（优先级标签 + 依据）。
  *
  * 从 InterviewReviewPanel 拆出（2026-10-07，接近 500 行预算的预防性拆分）。

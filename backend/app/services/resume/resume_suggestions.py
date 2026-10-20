@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """根据已保存简历与目标岗位 JD 生成可核对的修改建议。"""
 import json
 import logging

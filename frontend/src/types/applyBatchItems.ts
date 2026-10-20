@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { ApplyRecord } from "./apply";
 
 /** Shared paging contract for batch-item loading and display. */

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 首页统计卡：岗位总数 / 开放中岗位 / 已生成简历 / 近 7 天生成。
  * （自 HomePage 拆出，逐字搬运，行为等价。）

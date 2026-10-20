@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Add materials, candidate jobs, profile photos and module extras.
 
 Revision ID: 0008_materials_and_modules

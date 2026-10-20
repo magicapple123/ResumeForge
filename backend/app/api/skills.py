@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """助手技能接口：列出、查看详情、导入、创建、更新、启用/停用与删除。
 
 导入走**裸二进制请求体**而不是 multipart（项目未装 `python-multipart`，且全仓上传

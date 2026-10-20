@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # ResumeForge macOS 启动链：日志、下载校验、端口探测、进程记录与停止。
 #
 # 由 scripts/macos/start.sh、stop.sh、update.sh 共同 source。

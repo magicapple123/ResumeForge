@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 存储占用卡（RF-25）：数据目录各分项的磁盘占用与文件数。
  *

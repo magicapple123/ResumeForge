@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0017_resume_generate_task`` 迁移：只加表、幂等、完整 downgrade、表集合不变。
 
 「旧备份仍可导入」靠的是"迁移到 head 后表集合对得上"，而只加表会改变表集合，所以

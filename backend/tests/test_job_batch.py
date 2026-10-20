@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位备注与批量操作测试。"""
 
 import pytest

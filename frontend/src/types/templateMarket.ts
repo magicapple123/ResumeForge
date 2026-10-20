@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { ResumeFormatConfig } from "./resumeFormat";
 
 /** 模板市场（后端 ``/api/resumes/templates`` 的 ``market`` 字段，R-19）。 */

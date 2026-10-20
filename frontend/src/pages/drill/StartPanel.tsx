@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 开场面板：选主张、定题数与反馈方式。 */
 import { Alert, App, Button, Empty, Modal, Select, Space, Typography } from "antd";
 import PageSkeleton from "../../components/common/PageSkeleton";

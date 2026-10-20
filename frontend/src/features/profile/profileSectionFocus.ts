@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 分区排序后的**焦点收尾**（R10）：把焦点送回被移动的那个分区。
  *

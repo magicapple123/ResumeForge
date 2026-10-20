@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 统一请求封装：JSON 解析、错误信息提取、请求预算（超时）、取消与友好报错。 */
 
 import { recordClientDiagnostic } from "../utils/clientDiagnostics";

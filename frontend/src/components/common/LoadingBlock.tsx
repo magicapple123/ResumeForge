@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 通用加载占位块：独立的 Spin（居中、带最小高度）或嵌套包裹 children。
  *

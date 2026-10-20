@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """API Key 的**引用占位符**：读取接口发出去的密钥形态（真实密钥永不出现在响应里）。
 
 单独成模块是为了让两个服务都能引用同一份常量而不互相 import：

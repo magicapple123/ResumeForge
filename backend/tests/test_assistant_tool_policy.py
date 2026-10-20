@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-01 工具执行授权策略测试：下发与执行同源 + 负例全部执行层拒绝。"""
 
 import pytest

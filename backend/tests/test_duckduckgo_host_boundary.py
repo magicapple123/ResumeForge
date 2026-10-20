@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Redirect decoding recognises host boundaries and accepts only web schemes."""
 
 import pytest

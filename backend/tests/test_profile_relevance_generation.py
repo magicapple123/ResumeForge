@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位相关资料筛选后的简历生成与事实回填测试。"""
 
 import json

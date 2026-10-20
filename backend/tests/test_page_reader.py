@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """page_reader 的 URL 边界与抓取预算（RF-04），全部离线：httpx.MockTransport + 假 DNS。
 
 防护本身必须在被测路径上（见 ``conftest.fake_public_dns`` 的说明）——这里替换的是

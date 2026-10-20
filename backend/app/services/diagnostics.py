@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """面向用户排障的脱敏运行事件缓冲区。"""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """文件副本库（资料箱「文件副本」页签）的工具实现。
 
 副本由 ``services/user_files.py`` 在各入口保存文件时自动登记；这里只做**只读元数据**

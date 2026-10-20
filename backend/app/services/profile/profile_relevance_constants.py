@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位相关性筛选使用的常量和不可变结果类型。"""
 
 from __future__ import annotations

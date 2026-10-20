@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """生成链预算接入（RF-14 §2.1.a）：假 Provider 离线；预算/延迟比例两侧各留
 4 倍以上余量，使"过期落在哪个检查点"与调度抖动无关（AGENTS 两档等待预算纪律）。
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** LoadingBlock：独立居中模式与嵌套包裹模式的最小行为。 */
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";

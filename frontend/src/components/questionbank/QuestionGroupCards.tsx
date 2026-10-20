@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 三类题库分组卡：岗位基础 / 项目深挖 / 反问 HR 的题目与参考答案展开。
  *
  * 纯展示组件——参考答案的生成与写回（toggleAnswer）留在 QuestionBankPanel，经回调回传；

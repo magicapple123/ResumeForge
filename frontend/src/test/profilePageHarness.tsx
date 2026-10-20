@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * ProfilePage 测试共用的渲染与 mock 重置脚手架。
  *

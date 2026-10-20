@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """目标浏览器里的逐框记忆编辑器；不直接请求本地 API。"""
 from __future__ import annotations
 

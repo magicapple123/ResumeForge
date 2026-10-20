@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from app.services.diagnostics import diagnostic_snapshot, record_event, sanitize_text
 
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职助手会话列表：筛选、按需管理操作与整行右键菜单。 */
 
 import {

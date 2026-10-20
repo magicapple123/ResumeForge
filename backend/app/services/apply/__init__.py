@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """自动投递服务层。
 
 - ``apply_service``：队列 / 配置 / 准入 / 简历与招呼语解析 / 回写 / 记录。

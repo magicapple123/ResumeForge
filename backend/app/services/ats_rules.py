@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """ATS 检测的**规则与评分域**：格式/联系方式/日期/量化/位置判定 + 分项打分。
 
 拆分自 ``services/ats_check.py``（原 834 行超预算）。本模块只做「规则判定」：

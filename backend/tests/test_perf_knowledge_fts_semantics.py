@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """PR-17：知识库检索 FTS/LIKE 语义一致性测试（真实临时库 + Alembic head）。
 
 审计 C-4 指出：FTS 的 literal MATCH 与未转义 LIKE 对 ``%``/``_`` 行为不同

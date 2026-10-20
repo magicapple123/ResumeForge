@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 编辑简历备注弹窗（受控）：多行输入 + 确认 loading。
  *
  * 状态与提交逻辑（confirmNote）留在 ResumesPage，经 props 回传。

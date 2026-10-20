@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 复制文本到剪贴板：优先用 Clipboard API，失败时退回临时输入框。 */
 
 export async function copyText(text: string): Promise<boolean> {

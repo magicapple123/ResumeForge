@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料文本的行、标题和字段起始规范化。"""
 
 import re

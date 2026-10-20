@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位匹配分析所需的个人资料与简历来源快照。"""
 from __future__ import annotations
 

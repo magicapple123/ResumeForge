@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """站点适配器注册表覆盖：按来源 / URL 反查，未知目标给出可展示的中文失败。"""
 from types import SimpleNamespace
 

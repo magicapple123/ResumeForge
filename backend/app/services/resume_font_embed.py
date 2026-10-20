@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """把当前自定义字体子集化后内嵌进简历 HTML（R10）。
 
 为什么要在 HTML 里内嵌：预览、导出 HTML、导出 PDF 必须是**同一款字**。PDF 端已经由

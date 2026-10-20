@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Job-domain generator: jobs, candidate jobs, match analyses and batches."""
 
 from __future__ import annotations

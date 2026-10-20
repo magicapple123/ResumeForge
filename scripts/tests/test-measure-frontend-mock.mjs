@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * PR-17 前端性能测量 mock 的契约测试（node:test，不依赖前端构建）。
  *

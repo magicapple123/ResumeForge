@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 把表单历史接到三个快捷键上（R5）：撤回、恢复、保存。
  *

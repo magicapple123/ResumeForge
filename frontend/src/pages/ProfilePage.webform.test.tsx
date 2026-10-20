@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「网申资料」域：给网申填表用的补充资料，与简历资料分开存。
  *

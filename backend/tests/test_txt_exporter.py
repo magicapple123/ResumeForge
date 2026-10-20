@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """纯文本（txt）导出：复用 Markdown 结构、去掉 Markdown 标记。"""
 from app.schemas.resume import ResumeContent
 from app.services.exporter import export_markdown

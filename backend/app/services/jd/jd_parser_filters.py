@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """JD 技能匹配的上下文误报过滤。"""
 
 import re

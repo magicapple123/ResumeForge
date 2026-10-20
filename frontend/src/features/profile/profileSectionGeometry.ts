@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 分区拖拽的**几何采集**：拖动激活时读一次 DOM，把栈几何与被拖卡的跟手参数算齐。
  *

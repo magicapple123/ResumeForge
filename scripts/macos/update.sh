@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
 # ResumeForge 更新器（macOS）。
 #
 # 与 Windows 侧 scripts/Update-ResumeForge.ps1 对应，只更新**程序文件**。

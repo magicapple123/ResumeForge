@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历风险扫描接口（prefix ``/api/resumes``）。
 
 薄路由：加载简历与事实台账，调 ``services/resume/resume_risk``，返回 schema。风险扫描

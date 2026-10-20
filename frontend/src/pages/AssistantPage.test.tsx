@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";

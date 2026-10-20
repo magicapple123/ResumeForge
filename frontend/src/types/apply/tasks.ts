@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // ===== ② 任务状态机 =====
 export type TaskKind = "collect" | "apply";
 export type TaskStatus =

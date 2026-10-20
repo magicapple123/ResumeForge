@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** useSelectAllResumes 的代次守卫（PR-14）：对齐 useSelectAllJobs 的行为——
  *  请求在途时切换筛选，旧筛选的 id 集合不得装进新视图。 */
 import { App as AntdApp } from "antd";

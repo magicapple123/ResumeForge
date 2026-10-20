@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 助手技能工作台：创建、导入和管理助手技能。
  *

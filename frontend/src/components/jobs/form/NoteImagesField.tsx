@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位表单的备注图片区块：添加截图（转 dataUrl）与缩略图移除。
  *
  * 纯展示——图片的读取/上限校验（addNoteImage）留在 JobFormModal，经回调回传。

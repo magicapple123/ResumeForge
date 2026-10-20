@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 语义设计 token（RF-12：克制的设计体系）。
  *

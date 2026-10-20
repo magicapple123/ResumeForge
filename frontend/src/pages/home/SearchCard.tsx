@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 全局搜索卡：跨岗位/简历/内推/提醒/面经/台账/资料/技能的统一搜索入口。
  * （自 HomePage 拆出：搜索 state×7、searchVersion ref、onSearch、

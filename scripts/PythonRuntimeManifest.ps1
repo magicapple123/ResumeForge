@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # PythonRuntimeManifest.ps1 - shared dependency guard for the bundled runtime.
 #
 # Why this file exists

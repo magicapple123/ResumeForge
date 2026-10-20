@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listRecordBatchItems } from "../api/apply";
 import { BATCH_ITEM_PAGE_SIZE, type BatchItemsState } from "../types/applyBatchItems";

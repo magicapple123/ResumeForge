@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 离线分享包（后端 /api/share-packages，R-18）。 */
 import type { RedactionOptions } from "./export";
 

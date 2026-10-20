@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个性化题库的保存历史（D5）。
 
 题库本体是「即时生成、不落库」的（``services/interview/interview_questions.generate_question_bank``），

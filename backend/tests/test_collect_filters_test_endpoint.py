@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「测试筛选是否实际生效」端点：逐项判定 + 浏览器未启动的 409。
 
 fake 适配器/浏览器管理器全部用 SimpleNamespace 拼装——这里测的是**服务层的编排

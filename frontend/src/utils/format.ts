@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 展示格式化工具。 */
 
 /** 本地当天日期，`YYYY-MM-DD`（与后端 `applied_at` / `status_date` 的格式一致）。

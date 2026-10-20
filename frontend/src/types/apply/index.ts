@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「自动采集 + 匹配度分析 + 自动投递」的前端类型镜像（子模块 barrel）。
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 柱状图：自绘 SVG，不引 echarts/antv/plots。
  *
  * 每个数据点一根柱子，高度与计数成正比（相对最大值）。**通用**而不是只认月度趋势——

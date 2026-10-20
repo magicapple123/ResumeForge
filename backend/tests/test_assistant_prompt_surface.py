@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """AI 求职助手的提示表面：思考开关隔离、技能注入、联网搜索承诺与提示守卫。
 
 拆分自 test_assistant.py——凡是"发给模型的 system 消息 / 工具描述里写了什么"的用例

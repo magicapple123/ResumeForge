@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 全局投投状态：开关持久化由设置 API 负责，页面间只共享当前运行态。 */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";

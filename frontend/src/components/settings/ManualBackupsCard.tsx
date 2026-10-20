@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 手动备份卡（RF-25）：backups/ 目录里的快照清单与逐份可恢复删除。
  *

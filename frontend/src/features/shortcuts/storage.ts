@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 快捷键设置的持久化与订阅（R5 / R7）。
  *

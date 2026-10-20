@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 分区块主题的容器：一张卡讲一件事。
  *
  * `description` 是**口径说明**——把"这个数字是怎么算的"写在数字旁边，而不是藏进

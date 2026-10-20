@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** ATS 本地检测（R-10）的类型。枚举字符串与后端 schemas/ats.py 逐字一致。 */
 
 export type AtsIssueCategory = "format" | "keyword" | "position";

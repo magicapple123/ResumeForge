@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 配没配模型决定 AI 开关能不能用。
  *

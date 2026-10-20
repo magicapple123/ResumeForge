@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申网址历史的持久化服务。"""
 from __future__ import annotations
 

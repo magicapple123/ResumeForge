@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历风险扫描（R-08 查重/敏感词/夸大/深挖风险点 + R-09 合规校验）的类型。
  *
  * 枚举字符串与后端 schemas/resume_risk.py 逐字一致（共享知识第 15 条）。

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """拒信终态与乱序通知的守卫（RF-06，从 test_tracker.py 拆出）。
 
 覆盖两件事：``resolve_status`` 的 7×7 全组合取舍矩阵（rejected 是终态，不能被

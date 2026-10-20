@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递批次执行：逐条投递、失败隔离、熔断与成功回写。"""
 
 from __future__ import annotations

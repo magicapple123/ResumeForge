@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 拖动激活时把**全部**大分区折叠成 52px 紧凑条（P3）。
  *

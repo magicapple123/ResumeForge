@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 个人资料接口。 */
 import type {
   ExtractionDocumentInput,

@@ -1,4 +1,5 @@
-﻿[CmdletBinding()]
+﻿# SPDX-License-Identifier: Apache-2.0
+[CmdletBinding()]
 param(
     [ValidateRange(1024, 65535)]
     [int]$BackendPort = 8005,

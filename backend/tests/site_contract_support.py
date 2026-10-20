@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """站点适配器契约测试的共享替身（RF-19）。
 
 把 test_boss_apply.py 的 ``MarkerClient`` 泛化为 ``ScriptedSiteClient``：按 JS 注释

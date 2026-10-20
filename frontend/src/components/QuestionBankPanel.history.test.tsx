@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 题库面板：生成后自动保存、历史记录富还原（参考答案可点并写回）、旧版纯文本兼容。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

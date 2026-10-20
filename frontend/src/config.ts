@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 前端常量配置：品牌信息与展示类配置集中在此。 */
 
 // 版本号的单源是根 package.json 的 version 字段（CI 有一致性核对把它与后端

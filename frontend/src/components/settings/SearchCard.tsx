@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 联网搜索设置：来源、正文抓取条数、返回条数。
  *

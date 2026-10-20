@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投投悬浮球的状态与跨组件事件契约。 */
 
 export const TOU_TOU_SETTING_EVENT = "resumeforge:assistant-orb-setting";

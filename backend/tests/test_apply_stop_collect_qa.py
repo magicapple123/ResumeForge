@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """对抗性测试（采集路径）：翻页之间停止与无条目批次的提前停止收尾
 （从 test_apply_stop_semantics_qa.py 拆出）。
 

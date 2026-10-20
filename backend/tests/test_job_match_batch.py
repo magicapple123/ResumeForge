@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位广场批量适配度分析的接口与记录测试。"""
 import pytest
 from app.models.job import JOB_STATUS_OPEN, Job

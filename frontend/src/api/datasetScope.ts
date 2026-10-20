@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Per-document scope: do not silently adopt a different dataset into an existing editor.
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """新增用户文件副本表 user_file。
 
 数据库里的用户文件（资料箱附件、个人照片、岗位备注图、备选岗位截图、助手附件）

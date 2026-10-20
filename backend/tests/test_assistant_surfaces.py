@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """侧栏助手与投投悬浮球会话作用域隔离测试。"""
 
 

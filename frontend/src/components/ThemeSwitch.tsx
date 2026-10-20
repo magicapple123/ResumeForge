@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 页头主题切换（A3）：三档图标 —— 浅色 / 深色 / 跟随系统。
  *

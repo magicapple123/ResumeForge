@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """A failed model reply may echo private context; never return it in an error."""
 
 import pytest

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Single-pass tag filtering that preserves raw Jinja/HTML source in allowed tags."""
 
 from html.parser import HTMLParser

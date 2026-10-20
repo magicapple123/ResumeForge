@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """当前站点与投递专用浏览器（进程内单例），以及站点筛选栏可选项。"""
 
 from __future__ import annotations

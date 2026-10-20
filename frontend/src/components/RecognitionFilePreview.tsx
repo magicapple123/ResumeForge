@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 识别前暂存文件的**预览**（T6）：预览的是上传的文件本身，不是识别结果。
  *

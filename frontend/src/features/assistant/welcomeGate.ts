@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「引导对话已经给过了」这个事实的持久化记录。
  *

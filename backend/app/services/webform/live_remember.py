@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「记住这条」的 LiveSession 混入（``LiveRememberMixin``）。
 
 方法体逐字原样搬运；经 ``self.*`` 访问宿主 LiveSession 的成员。

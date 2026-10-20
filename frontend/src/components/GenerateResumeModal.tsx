@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** AI 生成简历弹窗：配置岗位导向美化/篇幅 -> 流式生成 -> 预览结果（自动保存历史）。 */
 import { App, Modal } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";

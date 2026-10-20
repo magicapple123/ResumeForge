@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位批量匹配接口的数据结构。"""
 from __future__ import annotations
 

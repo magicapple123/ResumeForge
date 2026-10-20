@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """资产恢复的**先验后发布**实现（RR-03）。
 
 与 ``asset_manifest.py``（导出侧：按引用收集、逐文件记哈希）相对，这里管导入侧：

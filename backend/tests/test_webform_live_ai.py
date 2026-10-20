@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """实时链路的 AI 兜底（从 test_webform_live.py 拆出）。
 
 FakeLiveClient/raw_control 留在 test_webform_live.py；语义缓存的 autouse 清理

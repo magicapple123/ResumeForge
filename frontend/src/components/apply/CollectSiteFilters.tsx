@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 站点侧筛选项：把招聘网站**自己的筛选栏**搬进采集条件里。
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 大模型设置、数据集与更新检查类型。 */
 
 /** 接口协议：Claude 也能走 OpenAI 兼容层（openai），或原生 Messages 协议（anthropic）。 */

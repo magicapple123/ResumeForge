@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 经历参考资料：读取小型 UTF-8 文本并直接保存在资料表单中。 */
 import { DeleteOutlined, EyeOutlined, FileTextOutlined, UploadOutlined } from "@ant-design/icons";
 import { App, Button, Form, Input, Modal, Space, Tag, Typography, Upload } from "antd";

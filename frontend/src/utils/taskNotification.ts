@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 const KIND_LABEL: Record<string, string> = {
   apply: "投递",
   collect: "采集",

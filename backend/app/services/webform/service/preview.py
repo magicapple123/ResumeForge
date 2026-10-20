@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """快照读取与预览构建（read_snapshot / build_preview）。
 
 AI 兜底采纳（``enrich_preview_with_ai`` / ``_adopt_ai_match`` / ``_adopt_ai_relaxed_match``

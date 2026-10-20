@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表接口的 HTTP 面测试。
 
 浏览器用与投递台同一套桩（``FakeBrowserPort``）：把"调试端口上有没有人在答"变成可控的，

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表引擎 · 日期映射与拆分组件。
 
 文本日期规整、select 日期值、年/月拆分组件（select 与文本）、起止日期分组与

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """PDF 版式合成与真实 PDF 几何：resolve_layout / decide_fit_scale / 行距 / 页边距。
 
 拆分自 test_pdf_exporter.py——纯逻辑的版式合成用例，与"真实 PDF 几何"里量行距、

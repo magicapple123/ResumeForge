@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填充记录的持久化：落一条、按时间回看、删除（软删）。
 
 与 ``services/webform/session.py`` 的分工：那份是**进程内的表单快照**（用户正在核对的那一份，

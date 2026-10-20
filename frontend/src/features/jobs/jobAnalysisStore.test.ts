@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * jobAnalysisStore：模块级岗位解读状态机（T1）。
  *

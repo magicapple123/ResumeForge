@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「受控浏览器」选择字段：自动 / Chrome / Edge / 自定义路径 + 自定义路径输入。
  *

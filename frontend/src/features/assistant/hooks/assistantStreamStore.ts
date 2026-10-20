@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 求职助手流式会话的全局 store（问题 B 修复）。
  *

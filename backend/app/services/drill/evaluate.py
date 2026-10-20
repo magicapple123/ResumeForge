@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """逐轮判定：按提问前锁定的契约给这一答打分。"""
 
 from __future__ import annotations

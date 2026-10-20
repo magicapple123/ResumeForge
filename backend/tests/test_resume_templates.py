@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历模板体系：内置样式、格式模板校验、用户自制模板的清洗与渲染。"""
 
 import pytest

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """全局搜索的 FTS5（trigram）检索支持——``/api/search`` 的多表全文索引层。
 
 2026-10 万级数据优化批：全局搜索此前对 8 张表做 ``LIKE '%kw%'`` 线性扫描

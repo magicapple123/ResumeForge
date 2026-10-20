@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Add common query indexes and repair the legacy resume-to-job foreign key.
 
 Revision ID: 0002_indexes_resume_fk

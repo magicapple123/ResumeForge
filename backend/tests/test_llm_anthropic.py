@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Anthropic Messages 协议的 provider 测试。
 
 没有真机 Key 也能验证的部分全部在这里钉住：请求体怎么转、SSE 怎么解析、思考强度

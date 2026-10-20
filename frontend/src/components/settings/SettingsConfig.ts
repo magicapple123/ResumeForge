@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 设置页的预设、脱敏和表单值转换逻辑。 */
 
 import { LLM_PRESETS } from "../../config";

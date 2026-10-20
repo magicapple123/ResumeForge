@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """生产代码行数预算守卫（PR-18 扩面版）。
 
 2026-10 大规模拆分（55 commits）后确立：生产代码单文件不得超过 500 行

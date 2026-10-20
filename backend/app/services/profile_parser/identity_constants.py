@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """基本信息字段标签和身份识别正则。"""
 
 _BASIC_LABELS = {

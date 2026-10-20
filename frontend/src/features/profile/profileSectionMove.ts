@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 分区「上移/下移一位」：键盘（把手/分区根上的方向键）与微调按钮共用的唯一实现。
  *
  * 从 `useProfileSectionReorder.ts` 抽出以满足单文件 500 行预算（第三轮折叠功能新增了

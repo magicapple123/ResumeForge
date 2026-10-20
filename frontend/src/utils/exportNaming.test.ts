@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 备份包默认下载名：`<名字>-YYYYMMDD-HHMMSS`（与后端同名规则）。 */
 import { describe, expect, it } from "vitest";
 import { defaultExportName } from "./exportNaming";

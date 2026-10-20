@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位排序映射（R14/E）：列头 ↔ 后端 sort/order 的纯函数。 */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_JOB_SORT_STATE, nextSortState, sortOrderFor } from "./jobSort";

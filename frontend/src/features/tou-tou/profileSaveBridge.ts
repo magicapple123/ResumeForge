@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // 简历资料编辑页与投投悬浮球之间的动作桥。
 // 页面侧：条件成立时注册控制块，条件消失时传 null 收起——
 //   · 表单变为脏 → 「保存资料 / 取消」浮卡（setProfileSaveControl）；

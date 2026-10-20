@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填充记录（放宽模式）的工具实现。
 
 ``WebFormFillRecord`` 含用户填进别人网页的**真实值**（证件号、手机号等），默认

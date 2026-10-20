@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";

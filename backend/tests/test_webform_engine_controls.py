@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表引擎 · autocomplete/密码拦截与控件写入分派。
 
 ``autocomplete`` 是站点主动声明的字段类型；密码/验证码/银行卡必须拦下。写入分派那

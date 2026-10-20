@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「网申资料」加 source / reuse 两列——把"学到的"和"手录的"分开，并让用户能定它下次还填不填。
 
 ## 为什么必须有两列，而不是只加一列

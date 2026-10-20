@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 求职助手消息列表的滚动域：吸底跟随（问题 A）、定位到底部与「加载更早」跳过。
  *

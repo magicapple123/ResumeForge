@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { useCallback, useEffect } from "react";
 import type { MutableRefObject, RefObject } from "react";
 import type { InteractionMode, PanStart } from "./config";

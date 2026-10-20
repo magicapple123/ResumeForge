@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """DuckDuckGo 的 HTML 端点（无需 API Key）。
 
 为什么选它作为第二来源：Bing RSS 在国内可用但对长中文问句理解有限，DuckDuckGo 的

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「从我的资料填入」的候选数据（纯函数，便于单测）。
  *

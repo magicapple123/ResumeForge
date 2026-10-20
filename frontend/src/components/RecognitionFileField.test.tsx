@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 识别前的文件暂存区（T6）：三种文件的预览形态与删除入口。
  *

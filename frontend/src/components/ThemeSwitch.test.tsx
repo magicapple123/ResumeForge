@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 页头主题切换（A3）：三档图标、选中态实心、切档即写 localStorage 与 `data-theme`。
  *

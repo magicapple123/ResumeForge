@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """给简历记录加「生成说明」与「未收录清单」两列。
 
 Revision ID: 0037_resume_generation_notes

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button, Result, Space, Typography } from "antd";
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";

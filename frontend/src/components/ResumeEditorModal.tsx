@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历微调表单：编辑结构化内容后交由父组件保存并重新渲染。 */
 import { SaveOutlined, ImportOutlined } from "@ant-design/icons";
 import {

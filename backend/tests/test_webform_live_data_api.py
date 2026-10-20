@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「点哪个填哪个」的数据读取 API 回归测试。"""
 
 from app.services import webform as webform_service

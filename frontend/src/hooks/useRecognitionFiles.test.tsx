@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 识别文件暂存：截图与文档的限额、粘贴、类型与移除。 */
 
 import { App as AntdApp } from "antd";

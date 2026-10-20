@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职数据看板（R-14）的本地聚合，**不依赖 LLM，离线可用**。
 
 口径的唯一来源是 ``models/tracker.py`` 的 ``STATUSES`` / ``STATUS_RANK`` /

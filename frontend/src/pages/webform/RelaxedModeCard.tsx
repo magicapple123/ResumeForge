@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 放宽模式快捷入口（网申填表页顶部，与「AI 兜底卡」并排）。
  *

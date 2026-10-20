@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """页边距单旋钮 + 引擎/溢出响应头 + 预览与导出的页数一致性（R1）。
 
 **用户实测的分歧**：导出面板把「页边距(mm)」写进 ``ExportRequest.margin_mm``，而只有

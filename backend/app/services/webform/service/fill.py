@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """填充互斥与执行（_fill_lock / is_filling / apply_fill / _rebuild_mapping）与字段目录查询。"""
 from __future__ import annotations
 

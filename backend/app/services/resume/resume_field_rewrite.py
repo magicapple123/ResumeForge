@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """按「用户点中的那一栏」定向重写。
 
 **为什么不是又一个"润色整段"接口**：`resume_writing` 的四个变换都是"一段文本进、一段

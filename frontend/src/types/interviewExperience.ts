@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 面经知识库（后端 /api/interview-experiences）。 */
 
 export const EXPERIENCE_SOURCES = ["self", "peer", "public"] as const;

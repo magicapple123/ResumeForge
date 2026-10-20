@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 沟通流程：语义入口、可信点击、跨页进入聊天页、contenteditable、发送与确认。
 
 现版 BOSS 的两个硬约束（2026 年真机实测）：

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递台与采集接口（prefix ``/api/apply`` 与 ``/api/collect``）。
 
 薄路由：只做校验、调 service、返回 schema；错误统一 ``HTTPException(status, detail=中文)``。

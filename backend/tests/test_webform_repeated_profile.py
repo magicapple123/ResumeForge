@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申资料多条补充记录的存储与填表展开。"""
 from app.models.profile import Education, UserProfile
 from app.services.webform import repeated_profile

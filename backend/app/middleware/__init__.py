@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Application middleware."""
 
 from .loopback_origin import LoopbackOriginGuardMiddleware

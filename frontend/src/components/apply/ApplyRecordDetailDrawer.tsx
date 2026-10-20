@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 投递记录详情抽屉（纯展示子组件，PR-18 拆分批从 ApplyRecordsPanel 纯搬迁）：
  * 展示单条记录的完整快照（岗位、简历、招呼语、结果、失败分类与失败信息、时间、批次）。

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** JobsPage 的状态层：筛选/分页/详情 job_id 的 URL 状态化，以及由它驱动的列表查询。 */
 import { App } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

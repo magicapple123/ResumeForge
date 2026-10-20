@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """QA 独立验证：录制器自身行为的补充证据（装饰器透明、配对、畸形 URL）。
 
 拆分自 test_sample_recorder_runner_qa.py：

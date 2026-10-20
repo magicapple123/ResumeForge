@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 版本对比视图：三态高亮（added / removed / unchanged）。
  *
  * 只渲染后端 ``services/resume_diff.py`` 下发的三态结构，不重算 diff——共享知识第 11 条。

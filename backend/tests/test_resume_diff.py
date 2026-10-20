@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历版本三态差异：行级 + 词级，唯一实现于 services/resume/resume_diff.py。"""
 from app.models.resume import ResumeRecord
 from app.services.resume.resume_diff import (

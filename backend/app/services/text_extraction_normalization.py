@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位与个人资料 AI 抽取结果的字段边界、事实锚定和合并。"""
 
 import re

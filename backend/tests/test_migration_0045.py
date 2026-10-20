@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0045：可信交付账本四列（source_content_sha256 / artifact_sha256 / request_params /
 idempotency_key）——只加列、业务表集合不变、历史残缺库跳过、完整 downgrade。
 """

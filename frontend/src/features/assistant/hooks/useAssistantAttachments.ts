@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职助手附件读取、容量预留和待发送状态。 */
 
 import { App } from "antd";

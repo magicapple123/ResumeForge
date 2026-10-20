@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职助手 feature 内共享的展示类型。 */
 
 export interface StarterPrompt {

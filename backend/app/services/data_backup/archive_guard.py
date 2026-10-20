@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Bounded ZIP extraction and strict asset-manifest validation (including extra datasets)."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 设置页「数据」页的**附件完整性 / 增量结果提示**（RR-03、R16）用例。
  *

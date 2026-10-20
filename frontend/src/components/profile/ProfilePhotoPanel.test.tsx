@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历照片面板：上传进度条的出现→推进→消失（C2 XHR 进度上传接线）。 */
 
 import { App as AntdApp } from "antd";

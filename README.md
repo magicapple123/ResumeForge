@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/magicapple123/ResumeForge/actions/workflows/ci.yml/badge.svg)](https://github.com/magicapple123/ResumeForge/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/magicapple123/ResumeForge?label=release&color=2f81f7)](https://github.com/magicapple123/ResumeForge/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/magicapple123/ResumeForge?style=flat&logo=github)](https://github.com/magicapple123/ResumeForge/stargazers)
 [![Python](https://img.shields.io/badge/Python-3.11--3.13-3776AB?logo=python&logoColor=white)](docs/user-guide.md)
 [![Node.js](https://img.shields.io/badge/Node.js-20.19%2B-339933?logo=nodedotjs&logoColor=white)](docs/user-guide.md)
@@ -62,7 +62,7 @@
 | --- | --- | --- |
 | **要不要注册登录** | 不要。装完即用，没有账号体系 | 先注册、先登录、先绑定手机 |
 | **简历和资料存在哪** | 你自己电脑上的本地数据目录（SQLite + 附件），可随时整份拷走 | 对方的服务器，导出要走会员 |
-| **要不要钱** | 永久开源免费（MIT），**没有会员、没有付费墙、没有导出次数限制** | 免费版限制模板 / 导出 / AI 次数 |
+| **要不要钱** | 永久开源免费（Apache-2.0），**没有会员、没有付费墙、没有导出次数限制** | 免费版限制模板 / 导出 / AI 次数 |
 | **AI 怎么用** | 按**每个岗位的 JD** 单独筛选事实、单独生成一版 | 通用模板 + 套话，一份改多处用 |
 | **会不会替你编** | 有「事实台账」挡着：只有你确认过的事实才参与生成 | 无 |
 | **投递要不要管** | 内置自动投递台 + 求职进度 + 提醒 + 内推 + 统计 | 基本不管，投完靠自己记 |
@@ -571,7 +571,12 @@ npm run smoke                                   # 开发形态
 
 ## 📄 许可证
 
-[MIT](LICENSE) © 2026 magicapple123
+本项目采用 [Apache License 2.0](LICENSE) 授权，© 2026 magicapple123。
+
+- 你可以自由商用、修改、闭源分发或再许可，只需保留版权与许可声明、在修改过的文件中标注变更，并在分发时附带许可证副本。
+- 软件按「原样」提供，不附带任何明示或暗示的担保。
+- **代码授权不包含商标授权**：项目名称「简历通 ResumeForge」、图标与 logo 不随许可证一并授权，二次分发请使用自己的名称与标识。
+- 1.0.2 及更早版本以 MIT 授权发布，该授权对这些版本持续有效且不可撤销；Apache-2.0 适用于之后的版本。
 
 ## ⭐ Star 历史
 

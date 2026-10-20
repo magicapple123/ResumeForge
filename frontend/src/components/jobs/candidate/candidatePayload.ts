@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 候选 → 正式岗位表单的预填值。
  *

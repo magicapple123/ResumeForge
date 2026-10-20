@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历页的「按岗位筛选」（R15）：选岗位过滤 + URL 回写、清除只删 job_id、深链按 id 回查。
  *

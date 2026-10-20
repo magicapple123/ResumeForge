@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # Build the "online demo" static bundle.
 #
 # Layout (can be dropped straight into GitHub Pages or the marketing site):

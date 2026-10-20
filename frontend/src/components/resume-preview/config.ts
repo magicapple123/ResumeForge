@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 
 export const A4_WIDTH_PX = 794;

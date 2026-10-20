@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """应用内更新「下载完成 → 重启安装」链路的对抗性边界用例。
 
 与 ``test_api_update_install.py`` 互补：那边守主路径（端点成功、磁盘恢复、错误文案），

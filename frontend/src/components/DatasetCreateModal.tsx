@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 新建数据集弹窗（受控）：输入名称 + 确认 loading。
  *

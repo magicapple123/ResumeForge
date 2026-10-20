@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """P8 · 求职助手对简历（及其它内容）的读取边界与完整性。
 
 两件事一起验：

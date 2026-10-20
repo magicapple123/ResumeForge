@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Cross-platform asset names, containment and atomic no-overwrite publication."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Seed context: everything the generators need, passed explicitly.
 
 The original script kept ``engine`` / ``rng`` / ``NOW`` / count constants as

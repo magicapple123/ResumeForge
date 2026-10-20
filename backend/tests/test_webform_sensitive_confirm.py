@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """敏感字段强制确认（RF-19）：SENSITIVE_FIELD_KEYS 从"仅展示"接线为预览行为。
 
 红线：命中敏感目录的字段，规则命中了也**默认不勾**（needs_confirm），与放宽模式的

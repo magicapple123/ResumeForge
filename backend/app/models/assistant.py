@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """AI 求职助手会话与消息历史。"""
 
 from datetime import datetime

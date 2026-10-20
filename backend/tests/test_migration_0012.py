@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0012_application_tracker`` 迁移：建表、唯一约束、幂等与完整 downgrade。"""
 from alembic import command
 from app.database_migrations import build_alembic_config

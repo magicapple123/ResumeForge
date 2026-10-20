@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """事实台账的 HTTP 面：路由顺序、错误码、草拟接口的两条路径。
 
 路由顺序单独有一条测试：``/baseline`` 与 ``/draft`` 是固定路径，必须排在带路径参数的

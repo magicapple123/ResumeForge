@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """更新下载链的发布源白名单、逐跳重定向与 checksum 复验（RF-26 §12.5 #1-#4）。
 
 全部离线：httpx.MockTransport + conftest 的 ``fake_public_dns`` 假 DNS（它替换

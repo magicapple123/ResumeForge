@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # ResumeForge macOS 启动链：Node.js / npm 的查找与自举。
 #
 # 为什么需要它：这个项目的前端开发服务器由 Node 跑，而 macOS **不自带 Node**。

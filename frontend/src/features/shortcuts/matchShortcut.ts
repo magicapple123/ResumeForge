@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 快捷键匹配的纯函数层（R5）。
  *

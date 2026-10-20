@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """API 冒烟测试：资料、岗位、搜索与统计核心链路。"""
 
 SAMPLE_JOB_TEXT = """AI应用客户端开发工程师 - 剪映CapCut

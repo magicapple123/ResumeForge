@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0034_job_match_batches`` 迁移：保存岗位批量适配度分析快照。"""
 from alembic import command
 from app.database_migrations import build_alembic_config

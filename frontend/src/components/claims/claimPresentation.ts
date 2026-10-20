@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { VerificationStatus } from "../../types";
 
 // Shared by the ledger and resume evidence view: a status must keep the same color.

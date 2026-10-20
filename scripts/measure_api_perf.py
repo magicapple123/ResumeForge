@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-09 后端列表 API 性能基线测量（PR-17 重构版）。
 
 与旧版的关键差异（生产审计 PR-17）：

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 任务进度轮询：一轮完成后才排下一轮（single-flight），任务进入终态后自动停下。
  *

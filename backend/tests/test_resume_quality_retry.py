@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历增强质量门槛与重试策略测试。"""
 
 import pytest

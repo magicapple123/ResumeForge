@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职助手联网搜索引用和降级行为测试。"""
 
 from app.services.assistant.assistant_web_search import AssistantSearchError

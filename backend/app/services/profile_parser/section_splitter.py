@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """按标题和推断结果拆分个人资料分区。"""
 
 import re

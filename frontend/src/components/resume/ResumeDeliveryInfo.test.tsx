@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** PR-09：ResumeDeliveryInfo 的三态语义区分与错误态（失败 ≠ 暂无投递记录）。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

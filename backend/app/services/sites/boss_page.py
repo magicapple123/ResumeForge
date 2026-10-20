@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 页面选择器、页面探针与等待诊断。"""
 from __future__ import annotations
 

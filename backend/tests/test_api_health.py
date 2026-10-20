@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """基础健康检查 API 测试。"""
 
 

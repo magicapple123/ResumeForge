@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 个性化题库面板：无选择校验、三类分组渲染、开始模拟面试回传题目。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-01 写入提案授权测试：一次性核销、参数绑定、数据集绑定、token 不进模型消息。"""
 
 import pytest

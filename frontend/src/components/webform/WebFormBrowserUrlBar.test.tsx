@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 网申地址栏「历史网址」下拉：popupRender 自定义容器的两条用户反馈修复。
  *

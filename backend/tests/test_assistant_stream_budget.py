@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """助手流整链预算（RF-14 §2.1.b）：毫秒级注入，全离线假 Provider。
 
 两档等待预算纪律（AGENTS）：期望**超时**的用例预算/节奏是毫秒级（预算真到期）；

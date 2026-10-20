@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位识别区块：粘贴原文 + 截图/文档上传 + 识别按钮 + 识别结果与警告提示。
  *
  * 纯展示受控组件——识别逻辑（parseImport 防乱序）与文件状态留在 JobFormModal，经回调回传。

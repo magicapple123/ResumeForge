@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """运行时加固的守卫：文件日志轮转与 SQLite 例行维护。"""
 
 import logging

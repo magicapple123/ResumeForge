@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位、搜索与统计 API 冒烟测试。"""
 
 import pytest

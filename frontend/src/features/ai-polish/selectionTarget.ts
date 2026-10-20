@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 判定「当前这段选区能不能被 AI 润色」，并给出改写它所需要的全部信息。
  *

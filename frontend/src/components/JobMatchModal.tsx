@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 岗位匹配度分析弹窗：把 JD 与**你已确认的资料 / 简历**逐条对照。
  *

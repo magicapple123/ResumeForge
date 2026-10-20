@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 风险扫描 store：状态机、取消、重复发起、多简历互不影响。 */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/client";

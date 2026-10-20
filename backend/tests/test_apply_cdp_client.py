@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """CDP 客户端离线测试：注入假的 HTTP 传输层与假的 WebSocket，不发真请求。
 
 这正是"传输层可注入"的意义——整条 CDP 链路（端点解析、命令收发、超时、错误映射）

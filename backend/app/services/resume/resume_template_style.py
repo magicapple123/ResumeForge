@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """安全的可视化简历模板配置。
 
 用户导入的参考简历不应该直接让模型生成可执行 HTML。这里把可调的视觉与版式

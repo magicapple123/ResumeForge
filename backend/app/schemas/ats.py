@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """ATS 本地检测的请求/响应 schema（R-10）。
 
 三类结论：格式风险（format）/ 关键词覆盖（keyword）/ 信息位置（position）。结果里

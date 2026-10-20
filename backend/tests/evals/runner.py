@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-15 离线评测执行器：读样本 + 读录制输出 → 跑全部规则 → 产出结果列表。
 
 **CI 零网络依赖的关键设计**：生成输出来自 `recordings/<case_id>.json`（预先录制

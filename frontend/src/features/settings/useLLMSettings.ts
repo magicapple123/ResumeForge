@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 设置页的大模型配置域 hook：当前配置/记录的加载、「使用」切换与删除。
  *
  * C（全局化）之后，记录与生效配置是**同一份**：`config.record_id` 就是「使用中」的

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Bundled-runtime provisioning and log rotation for the desktop shell.

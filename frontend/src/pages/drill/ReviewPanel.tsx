@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 复盘：三段结论 + 行动清单 + 复练队列。 */
 import { Alert, Listy, Space, Tag, Typography } from "antd";
 import { ListyItem } from "../../components/common/ListyItem";

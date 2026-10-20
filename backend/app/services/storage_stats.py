@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """存储体积统计（RF-25，PR-16 统一作用域）：分项体积、只 stat 不读内容。
 
 只 ``stat`` 不读内容：目录可能很大（``browser-profile`` 是 Chromium 用户目录，

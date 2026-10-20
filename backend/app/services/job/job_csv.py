@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位 CSV 导入/导出（岗位广场批量搬家的离线路径）。
 
 - **导出**：把勾选的岗位序列化成带 UTF-8 BOM 的 CSV（Excel 双击打开不乱码），

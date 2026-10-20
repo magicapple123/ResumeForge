@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 版式控件 · 字号域：0.1px 精度、两端加减按钮、滑块步长与下限、拖动防抖。
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """LLM 传输层的进程级连接池（AI 提速）。
 
 为什么要有这一层：两个 provider 的 ``_client()`` 原本**每次请求都新建**

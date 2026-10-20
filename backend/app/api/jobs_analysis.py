@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位解读端点（R2）：读缓存 / 生成并写回。
 
 从 `api/jobs.py` 拆出来：那里已经接近 500 行预算，而解读是唯一会调用模型、还会

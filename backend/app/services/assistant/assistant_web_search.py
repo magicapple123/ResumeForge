@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """受限的 Bing RSS 搜索，只返回公开结果摘要，不抓取结果页面。"""
 
 import html

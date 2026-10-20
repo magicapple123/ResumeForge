@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * App 级快捷键落点（R8）：新建简历、切换数据集、翻页、聚焦助手。
  *

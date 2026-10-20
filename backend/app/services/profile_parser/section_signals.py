@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """无标题资料的基础信号识别。"""
 
 import re

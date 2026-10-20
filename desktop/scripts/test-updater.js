@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Probes for desktop/updater.js (audit PR-05, 2026-10-13; extended 2026-10-17

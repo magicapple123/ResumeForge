@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """User-file generator: physical copies plus matching ``user_file`` rows.
 
 Each file is written once, hashed, and registered with the exact ``disk_name``

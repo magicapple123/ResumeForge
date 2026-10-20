@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """招聘职责、任职要求和其他信息的章节提取。"""
 
 import re

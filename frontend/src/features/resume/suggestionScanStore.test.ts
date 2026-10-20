@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * suggestionScanStore：模块级生成状态机。
  *

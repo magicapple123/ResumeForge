@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """占位符语义与字段对消歧的支撑实现。
 
 从 evidence.py 拆出（2026-10-07，接近 500 行预算时的预防性拆分）：这里放三块

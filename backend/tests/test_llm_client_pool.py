@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """LLM 共享连接池：两家 provider 复用连接，省掉每次请求的握手开销。"""
 
 import asyncio

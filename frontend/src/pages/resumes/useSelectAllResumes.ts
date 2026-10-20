@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历中心「全选全部简历」的状态与动作（对齐岗位广场的 useSelectAllJobs）。 */
 import { App } from "antd";
 import { useEffect, useRef, useState } from "react";

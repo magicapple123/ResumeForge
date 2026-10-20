@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 城市名称到搜索参数编码的动态解析。"""
 from __future__ import annotations
 

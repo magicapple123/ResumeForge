@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 岗位详情里的「自行编写简历」= `ManualResumeModal` 收到 `job != null`。
  *

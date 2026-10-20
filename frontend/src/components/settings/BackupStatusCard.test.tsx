@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** BackupStatusCard（RF-05）：保护状态、失败缺口与快照清单的展示。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

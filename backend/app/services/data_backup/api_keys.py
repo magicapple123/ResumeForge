@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份密钥安全：明文密钥收集、剥离（secure_delete+VACUUM）与最终闸（职责③）。
 
 安全语义整函数搬运零改动。

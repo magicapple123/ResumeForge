@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """任务查询与批次创建（投递 / 采集 / 补详情）。"""
 from __future__ import annotations
 

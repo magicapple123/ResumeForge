@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * AssistantPage 测试的非 mock 测试基建（先例：src/test/resumeFixtures.ts）。
  *

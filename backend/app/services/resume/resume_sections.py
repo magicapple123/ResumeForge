@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历正文的分区（板块）定义与顺序。
 
 **为什么要有这个模块**：正文的七个分区在四处独立渲染——HTML 模板（预览、HTML 导出、

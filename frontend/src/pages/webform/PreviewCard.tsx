@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 预览核对卡：勾选要填的项、手改值、采纳 AI 建议、填充到页面。
  * （自 WebFormPage 拆出：:947-984 整块逐字随迁，纯 props。）

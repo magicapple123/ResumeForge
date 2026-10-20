@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职助手会话列表、详情加载与会话管理操作。 */
 
 import { App } from "antd";

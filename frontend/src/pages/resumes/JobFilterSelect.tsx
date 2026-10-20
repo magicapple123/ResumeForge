@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历中心的岗位筛选下拉（R15）：远程搜索 + 深链回填。
  *

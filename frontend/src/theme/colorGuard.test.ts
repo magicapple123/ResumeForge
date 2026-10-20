@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 颜色守卫（R18）：业务 CSS 里不允许再出现硬编码的颜色。
  *

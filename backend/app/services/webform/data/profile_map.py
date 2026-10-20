@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """学历/经历挑选纯函数与 ``profile_to_form_data`` 扁平字段映射（职责①②）。
 
 从 ``webform/data.py`` 拆出：挑记录用的纯函数，以及与 ``FORM_FIELDS``/守卫测试

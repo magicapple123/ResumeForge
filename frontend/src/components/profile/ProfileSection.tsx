@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 资料分区容器：卡片 + 动态列表 + 增删行，各分区共用。 */
 import { DeleteOutlined, HolderOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Tooltip } from "antd";

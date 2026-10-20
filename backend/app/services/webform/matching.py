@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """取值决策的纯函数：选哪个下拉项、点哪个单选、日期怎么格式化。
 
 ## 为什么这些判断必须在 Python 里

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0042：岗位「来源」从备注拆成独立列 ``job.origin_source``。"""
 
 from alembic import command

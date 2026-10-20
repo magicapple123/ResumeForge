@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 模拟面试（后端 /api/interview）。 */
 import type { ResumeSuggestion } from "./resume";
 

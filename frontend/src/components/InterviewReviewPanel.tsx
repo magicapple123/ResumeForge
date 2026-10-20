@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 面试复盘（R-11 补）：录入真实被问问题 → 分析答题思路 → 反向优化简历。
  *
  * 复用已就绪的 analyzeInterviewQuestion / optimizeResumeFromInterview 接口，不另造。反向优化只产出

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成记录模型：每次生成都落库，支持历史查看与导出。"""
 
 from datetime import datetime

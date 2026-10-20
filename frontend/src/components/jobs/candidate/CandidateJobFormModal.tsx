@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 备选岗位表单弹窗：受控组件——formState 所有权留在抽屉，经 props 双向联动。
  * （自 CandidateJobsDrawer 拆出：:543-642 整块 + FileDropZone/Upload/截图预览逐字随迁；

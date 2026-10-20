@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料解析的英文标题、日期、技能别名和无标题场景测试。"""
 
 from app.services.profile_text_parser import parse_profile_text

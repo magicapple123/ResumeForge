@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """服务端直接生成 PDF（fpdf2 + 系统中文字体）。
 
 为什么自己排版而不是复用 HTML：浏览器打印要用户再点一次「另存为 PDF」，且分页

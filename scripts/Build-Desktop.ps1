@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # Build-Desktop.ps1 - assemble the desktop payload and package the shell.
 #
 # Phase 3 of the desktop plan. The Electron shell ships with a "payload"

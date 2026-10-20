@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申字段匹配、自动填充和安全规则常量。"""
 
 from .field_synonyms import RELATIVE_HINTS

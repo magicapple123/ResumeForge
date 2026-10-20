@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 一键填充成功率：按「成功填写 / 页面表单控件总数」计。
  * （自 WebFormPage 拆出，逐字搬运。）

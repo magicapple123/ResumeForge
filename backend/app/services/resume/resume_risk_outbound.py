@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """风险扫描的出站最小化与远端响应规范化（从 :mod:`app.services.resume.resume_risk` 纯搬迁拆出）。
 
 这是 PR-11 / RR-01 的**隐私关键路径**：进入远端增强的一切输入都必须经

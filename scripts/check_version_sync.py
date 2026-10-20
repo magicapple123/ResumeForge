@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """版本号单源校验：``backend/app/config.py`` 的 ``app_version`` 是唯一事实来源。
 
 发布打包（``Build-Release.ps1``）、应用内更新器与启动器都用同一条正则从 config.py

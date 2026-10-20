@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Untrusted filenames must not select Windows special files or replace another writer."""
 
 import builtins

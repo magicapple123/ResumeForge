@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """自动备份调度线程（RF-05）：启动即查、周期唤醒、切换唤醒、干净退出。"""
 
 import asyncio

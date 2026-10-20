@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职助手的本地产品文档工具。"""
 
 from sqlalchemy.orm import Session

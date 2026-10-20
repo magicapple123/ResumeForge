@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0048：``job.analysis_cache`` —— 岗位解读结果落库（R2）。
 
 为什么要它：岗位解读是一次真实的模型调用（10–60 秒、按 token 计费）。此前的实现

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 一次粘贴里识别出多份招聘信息时的确认面板。
  *

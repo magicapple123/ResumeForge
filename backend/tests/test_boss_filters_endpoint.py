@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 筛选项：采集前的页面 prepare、API 接口与采集配置（从 test_boss_filters.py 拆出）。
 
 payload helper 与 fake_fetcher 留在主文件；``_StoppedBrowser``/``_no_browser``/

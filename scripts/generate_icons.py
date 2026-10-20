@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Generate the desktop-launcher icon assets (ICO / ICNS) from the brand PNG.
 
 Source of truth: frontend/public/resumeforge-icon.png (512x512 brand logo).

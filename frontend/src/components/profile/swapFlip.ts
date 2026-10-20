@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 换位 FLIP 动画：实时重排提交后，让被挪动的**邻卡**从旧位置平滑滑到新位置。
  *
  * 实时重排（CSS `order` / Form.List move）是同帧瞬移：邻卡从旧槽位直接跳到新槽位。

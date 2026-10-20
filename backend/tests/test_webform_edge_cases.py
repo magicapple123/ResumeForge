@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申表单边界：分离年月输入框与跨标签歧义保护。"""
 
 from app.services.webform.engine import FormEngine

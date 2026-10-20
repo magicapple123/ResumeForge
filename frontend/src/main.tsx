@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import NotifyHostBridge from "./components/NotifyHostBridge";
 import React from "react";
 import ReactDOM from "react-dom/client";

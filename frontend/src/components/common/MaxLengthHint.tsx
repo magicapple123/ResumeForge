@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 输入超限提示：统一替换 antd 输入框的 showCount 常驻计数（「0/2000」这类计数
  * 每击键都在跳，用户反而只顾盯着还剩几个字）。maxLength 继续作为硬上限；

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``WindowAwareMixin``：窗口可见性保障与标签页切换。
 
 私有属性契约：本 mixin 通过 ``self._target`` / ``self._connection`` /

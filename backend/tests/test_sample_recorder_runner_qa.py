@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """QA 独立验证：「保存本次抓到的站点原文」的**运行器级接线**与隐私底线。
 
 为什么要单独一个文件：``test_sample_recorder.py`` 验的是装饰器本身能否配对落盘，

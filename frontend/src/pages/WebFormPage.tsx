@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 网申填表：把本地资料填进公司自建网申系统的表单。
  *

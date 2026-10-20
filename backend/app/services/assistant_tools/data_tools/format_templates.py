@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历格式模板（format_templates）域的工具实现。
 
 助手只能制作「格式模板」，不能改样式模板的 HTML。

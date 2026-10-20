@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """PDF 绘制行为与一页适配：技能标签绘制、overflow/一页适配不变量、强调色覆盖。
 
 拆分自 test_pdf_exporter.py——「框丢了」回归防线（spy rect）、overflow 如实标记、

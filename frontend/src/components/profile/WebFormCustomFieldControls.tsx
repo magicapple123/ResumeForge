@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 「网申资料」自定义字段的改名与删除控件。 */
 import { CheckOutlined, CloseOutlined, DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import { Button, Input, Popconfirm, Space, Typography } from "antd";

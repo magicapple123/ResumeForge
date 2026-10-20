@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职进度的导出层：CSV 行构造、流式分块与 JSON 序列化。
 
 从 ``tracker.py`` 纯搬迁而来（PR-18 豁免拆分批）：导出与查询（``tracker_query.py``）、

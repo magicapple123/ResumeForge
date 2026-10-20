@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 步骤条 + 读取卡：读取当前表单的入口与快照摘要。
  * （自 WebFormPage 拆出：:911-945 整块逐字随迁，纯 props。）

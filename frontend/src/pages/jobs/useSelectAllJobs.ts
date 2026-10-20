@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位广场「全选全部岗位」的状态与动作（自 JobsPage 拆出：文件行数预算）。
  *  状态所有权仍在页面，这里只收"按当前筛选拉全部 id + 上限裁决"这段流程。 */
 import { App } from "antd";

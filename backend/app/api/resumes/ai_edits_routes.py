@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历 AI 编辑端点（域⑥）：岗位化修改建议与按指令修订。
 
 从原 ``api/resumes.py`` 原样搬运。**patch 锚点契约**：测试通过

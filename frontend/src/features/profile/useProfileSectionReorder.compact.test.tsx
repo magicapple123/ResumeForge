@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 拖动激活期「全部大卡片折叠成紧凑条」（P3）+ 跟手与松手落点。
  *

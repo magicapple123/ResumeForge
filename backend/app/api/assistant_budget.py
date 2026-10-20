@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """助手流的整链预算与用量遥测（RF-14 §2.1.b / §2.2 / §2.5）。
 
 从 ``assistant_stream`` 下沉的横切关注点：预算检查点、跨轮用量累计、token 估算

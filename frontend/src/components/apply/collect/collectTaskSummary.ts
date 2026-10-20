@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 采集批次的 task.config 账目纯函数：把后端写进 `task.config` 的筛选账目解析为界面文案。
  *

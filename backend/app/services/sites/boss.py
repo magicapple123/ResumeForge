@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 直聘适配器门面与兼容导出。
 
 站点页面探针、搜索采集和投递流程分别位于 boss_page、boss_search 与 boss_apply；

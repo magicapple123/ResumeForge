@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Add a dedicated field for useful recruitment information.
 
 Revision ID: 0003_job_additional_info

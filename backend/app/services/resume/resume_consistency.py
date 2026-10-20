@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """生成简历与候选资料之间的一致性检查。"""
 
 from __future__ import annotations

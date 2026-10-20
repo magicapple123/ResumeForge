@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """QA 独立对抗测试（第 3 节）：证明"等待真的能被停止/暂停打断"。
 
 用**真实的** ``BossAdapter`` + **真实的** ``TaskRunner`` + 一个"探针永远不就绪"的假 CDP

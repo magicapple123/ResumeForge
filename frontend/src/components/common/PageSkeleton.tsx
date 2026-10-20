@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 页面级骨架屏：数据未返回时的占位，避免整页白屏闪一下。
  *

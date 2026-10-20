@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """表单级标签串（"整表标签列表"）的识别与剥离。
 
 mokahr 类页面把**整张表的标签**串进每个控件的 ``nearby_text``：每个控件的旁文都是

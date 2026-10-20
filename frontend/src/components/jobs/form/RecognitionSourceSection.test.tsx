@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 岗位识别区块：完整招聘信息（粘贴点）的长度治理。
  *

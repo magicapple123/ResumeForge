@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位匹配度分析的数据结构。
 
 两条硬约束：

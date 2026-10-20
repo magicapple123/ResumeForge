@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Profile-domain generator: profile, education, experiences, skills, photo."""
 
 from __future__ import annotations

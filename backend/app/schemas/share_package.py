@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """离线分享包（R-18）的请求/响应结构。
 
 分享包是一份**生成那一刻的只读快照**：脱敏 HTML / PDF 文件清单 + 只读

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 面经知识库接口。 */
 import type { InterviewExperience, InterviewExperiencePayload } from "../types";
 import { buildQuery, request } from "./client";

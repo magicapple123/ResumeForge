@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 适配器 collect_search 全流程与 DOM 兜底（从 test_apply_boss_adapter.py 拆出）。
 
 `boss()`/`ScriptedCdpClient` 留在主文件；`StaleDocumentClient` 只被本文件的

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人照片（可多张）Schema。"""
 from datetime import datetime
 

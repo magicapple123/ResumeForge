@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """手动备份（``backups/`` 目录）的可见与可恢复清理（RF-25）。
 
 ``backups/`` 是迁移前自动快照与手工备份的去处（``database_migrations.

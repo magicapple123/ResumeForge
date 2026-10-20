@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Listy 行内边距常量：迁移自弃用的 List，用于按语义 styles 还原原密度。
  * - List 默认行内边距为 12px 0；

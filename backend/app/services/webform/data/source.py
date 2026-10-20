@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表的 DB 取数与资料合并（职责③）。
 
 从 ``webform/data.py`` 拆出：合并简历资料（``UserProfile``）与网申补充资料，

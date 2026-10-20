@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 手写简历时使用的岗位参考面板：只展示岗位快照，不参与简历保存。 */
 import {
   CheckCircleOutlined,

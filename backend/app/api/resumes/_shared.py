@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历接口子模块共享件：PDF 响应头常量与三个跨域 helper。
 
 从原 ``api/resumes.py`` 原样搬运（Wave5 拆分）：常量与 helper 的实现逻辑零改动，

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 随请求发送的图片或文档：base64 data URL，与助手附件同一种形状。 */
 
 export interface ExtractionImageInput {

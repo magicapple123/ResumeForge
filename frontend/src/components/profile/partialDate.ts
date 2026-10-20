@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 interface PartialDate {
   year: string;
   month: string;

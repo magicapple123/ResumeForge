@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """适配器 collect/detail 集成与采集器包装层（从 test_boss_network.py 拆出）。
 
 ``ScriptedClient``/``_search_payload``/``_response_event``/``_body_event``/

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** uploadWithProgress：XHR 进度上传的契约测试（进度序列、错误口径、取消与预算）。 */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

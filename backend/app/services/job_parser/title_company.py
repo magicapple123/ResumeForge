@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位标题与公司名称的组合识别。"""
 
 from .candidates import (

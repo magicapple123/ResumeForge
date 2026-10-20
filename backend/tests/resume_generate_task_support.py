@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成任务用例的共享脚手架（行数预算拆分的产物）。
 
 ``test_resume_generate_task.py`` 在 R6（生成时定下的版式覆盖落库）新增用例后到 570 行，

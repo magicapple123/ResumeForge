@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BrowserStatus } from "../types";

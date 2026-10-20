@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """助手技能（skills）域的工具实现。"""
 from __future__ import annotations
 

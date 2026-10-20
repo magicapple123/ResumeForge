@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 事实来源展示（RF-13）：四类 origin 的渲染、无标注不渲染、
  * AI 改写永不显示为"已确认"，以及默认折叠（R8）。

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Read-only API self-check (opt-in, runs after a successful seed).
 
 Kept from the original script's ``--check`` but strictly separated from

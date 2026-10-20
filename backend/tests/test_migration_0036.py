@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0036：助手会话作用域迁移。"""
 
 from alembic import command

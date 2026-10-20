@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历编辑器的可重复分区容器。 */
 
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";

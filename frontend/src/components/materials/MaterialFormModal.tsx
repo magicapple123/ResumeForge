@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 资料箱条目编辑：标题、分类、正文、链接、附件与备注。 */
 
 import { DeleteOutlined, FileTextOutlined, PictureOutlined, PlusOutlined } from "@ant-design/icons";

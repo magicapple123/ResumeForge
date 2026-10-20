@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位列表表格、列渲染和分页。 */
 
 import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";

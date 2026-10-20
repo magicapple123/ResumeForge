@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** BatchActionBar：计数、操作区透传与退出。 */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";

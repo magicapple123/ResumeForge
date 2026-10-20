@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """浏览器被关掉后，实时填表会话自动结束。
 
 从 test_webform_live.py 拆出（该文件的行数豁免有 >600 行的书面触发条件，本主题独立

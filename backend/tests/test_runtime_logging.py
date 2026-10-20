@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-20：runtime 日志有界与故障不拖死主功能的守卫测试。
 
 钉住四件事：

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投投悬浮球的拖拽、视口边界限制与四边吸附。 */
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";

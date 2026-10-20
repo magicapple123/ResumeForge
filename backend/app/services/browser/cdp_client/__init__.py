@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """CDP 客户端：用 HTTP 端点 + WebSocket 与"投递专用浏览器"对话。
 
 设计要点（决定了它为什么长这样）：

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Ordered orchestration of the domain generators.
 
 Insertion order mirrors the original script exactly (parents before

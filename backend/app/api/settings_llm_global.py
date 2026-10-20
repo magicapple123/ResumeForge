@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """`/api/settings/llm*` 的全部端点（C）：全局唯一的大模型配置。
 
 R21 曾经并存两套东西：数据集级的「大模型 API 配置」与独立的「全局模型」profiles

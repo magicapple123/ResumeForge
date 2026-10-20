@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递队列端点（自 ``api/apply.py`` 拆出）。
 
 拆分原因与 ``apply_tasks_page.py`` 相同：``api/apply.py`` 的 500 行预算零余量，

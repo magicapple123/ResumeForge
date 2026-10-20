@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """批次 B「按需加载」守卫测试：B4 投递记录分组明细 / B5 助手会话加载更早。
 
 钉住的契约：

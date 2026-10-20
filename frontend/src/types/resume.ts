@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历内容、生成选项和简历建议类型。 */
 import type { TemplateMarketPreset } from "./templateMarket";
 

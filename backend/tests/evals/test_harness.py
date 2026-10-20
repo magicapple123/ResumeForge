@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-15 执行器与汇总的单测：跳过逻辑、聚合正确性、基线对比。
 
 全部用 tmp_path 注入录制目录，不写仓库内任何路径（并行安全）。

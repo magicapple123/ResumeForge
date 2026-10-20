@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """R-11 参考答案/题库 JSON 解析的容错与重试（根因修复）。
 
 覆盖三类真实会发生的脏输出：

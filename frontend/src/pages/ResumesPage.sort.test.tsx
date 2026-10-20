@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历中心列头排序（T2）：从 `ResumesPage.test.tsx` 整段搬来（原文件 479 行贴预算），
  * 并按 v3 口径重写——排序入口从顶部下拉改成**列头三态 + 恢复默认按钮**。

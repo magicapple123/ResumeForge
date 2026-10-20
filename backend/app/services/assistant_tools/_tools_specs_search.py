@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """联网搜索工具声明（``_TOOLS`` 最后 1 条）。"""
 from __future__ import annotations
 

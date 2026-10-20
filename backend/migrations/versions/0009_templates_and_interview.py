@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Add message quoting, user resume templates and the mock interview tables.
 
 Revision ID: 0009_templates_and_interview

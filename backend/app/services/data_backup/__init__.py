@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """用户数据备份：导出为可迁移的压缩包，以及从压缩包恢复。
 
 ResumeForge 的用户数据**主要**在 SQLite 文件里——照片、经历参考文件和助手图片附件

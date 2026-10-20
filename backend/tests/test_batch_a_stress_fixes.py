@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """批次 A（大数据量体检修复）的后端用例：A2/A3/A4/A5/A6/A7。
 
 对应审计 ``stress-static-audit-2026-10-12.md`` 的 P0-2 / P1-6 / P1-2 / P2-1 /

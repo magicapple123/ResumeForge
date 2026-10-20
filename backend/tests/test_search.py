@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """全局搜索扩域：六类新数据域命中 / 未命中 / 软删过滤 / scope 过滤 / 向后兼容。
 
 六个新数据域统一放进 ``SearchResult.more``（``SearchHit``），旧的 ``jobs`` / ``resumes``

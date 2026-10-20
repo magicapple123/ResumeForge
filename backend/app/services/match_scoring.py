@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """匹配度参考分：五维本地规则打分，只读、仅展示、带免责。
 
 与"五类结论 + 准入闸门"完全解耦：结论由 ``models.apply.admission_of`` 收口，本模块

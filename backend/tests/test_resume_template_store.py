@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """自制模板的持久化与解析：清洗、重名、解析回退。
 
 `resolve_style_template` / `resolve_format_config` 是渲染前的最后一道解析：记录里存的

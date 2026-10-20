@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """事实台账 Schema。
 
 这里承担两类职责：

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { MenuOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import { Button, Layout, Menu, Typography } from "antd";
 import AppHeaderActions from "./components/AppHeaderActions";

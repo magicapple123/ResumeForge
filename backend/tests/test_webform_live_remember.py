@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「记住这条」：把面板上的值记进网申资料（Python 侧，从 test_webform_live.py 拆出）。
 
 FakeLiveClient/raw_control 留在 test_webform_live.py；AI_DATA/UNKNOWN_LABEL 定义在

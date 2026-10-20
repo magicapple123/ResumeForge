@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """模板 CSS 与 ``TEMPLATE_LAYOUT_DEFAULTS`` 注册表的漂移守卫。
 
 拆分自 test_resume_layout.py——页边距/行高/间距、字号层级比例、标题形状与配色、

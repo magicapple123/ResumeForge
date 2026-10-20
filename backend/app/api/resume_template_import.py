@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """参考简历识别 API：只分析安全配置，返回前端确认草稿。"""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成运行器的**横切支持**：用量汇总日志（审计 PR-07-6，RF-14 §2.2-5）。
 
 从 ``resume_generate_runner.py`` 抽出（原 501 行，触及 500 行预算红线）。这里只放

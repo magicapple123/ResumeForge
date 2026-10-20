@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """经历条目块、头部字段和日期范围的基础解析。"""
 
 import re

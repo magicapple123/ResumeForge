@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """投递队列：准入、去重、排序，以及简历 / 招呼语解析。"""
 
 from __future__ import annotations

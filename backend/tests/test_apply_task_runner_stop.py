@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """任务运行器：暂停/停止/熔断/单岗位异常隔离与 ``_set_status`` 终态守卫
 （从 test_apply_task_runner.py 拆出）。
 

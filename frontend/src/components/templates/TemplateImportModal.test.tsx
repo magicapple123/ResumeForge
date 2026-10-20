@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 「导入参考模板」弹窗：识别草稿 → 预览微调 → 保存样式模板。 */
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

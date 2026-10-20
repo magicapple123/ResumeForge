@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 内推详情抽屉：状态 Tag / 字段清单 / 备注与图片备注分区 / 编辑入口。
  *
  * 纯展示组合——详情数据与编辑回调由 ReferralPanel 传入。

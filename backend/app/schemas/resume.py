@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历 Schema：生成请求、LLM 输出结构、历史记录。"""
 
 from datetime import datetime

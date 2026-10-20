@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 从一段资料草拟台账条目：粘贴 → 生成草稿 → 逐条核对 → 保存。
  *

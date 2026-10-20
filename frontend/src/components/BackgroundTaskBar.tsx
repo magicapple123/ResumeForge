@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 页头下方的**常驻任务条**：把所有"关掉窗口也还在跑"的任务摊平成一排 chip。
  *

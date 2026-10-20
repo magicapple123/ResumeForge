@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """PDF 图片页（扫描页）识别的离线测试（T03）。
 
 样张自造、零新依赖：文字页沿用 ``test_document_text.build_pdf`` 的手写最小 PDF；

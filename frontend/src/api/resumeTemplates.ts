@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历模板工作台接口：自制样式/格式模板的增删改查。 */
 import type {
   ResumeTemplateDetail,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """把备份包里的全局模型配置合并回本机（H-2）。
 
 从 ``global_llm_profiles`` 拆出：合并规则（只补不覆盖、空壳补全、active 采纳）与

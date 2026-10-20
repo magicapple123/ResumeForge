@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """面试深挖（drill）域的工具实现。"""
 from __future__ import annotations
 

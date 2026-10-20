@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """复盘与本地降级：汇总判定、行动清单与复练队列。"""
 
 from __future__ import annotations

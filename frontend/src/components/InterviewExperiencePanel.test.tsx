@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 面经知识库面板：列表渲染、真实问题清单展示、错误透出、批量删除。 */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App as AntApp } from "antd";

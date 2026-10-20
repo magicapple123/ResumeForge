@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Col, Input, Select, Space, Tag, Tooltip, Typography } from "antd";
 import { memo, useCallback, useMemo, type CSSProperties } from "react";
 import WebFormCustomFieldControls from "./WebFormCustomFieldControls";

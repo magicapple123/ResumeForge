@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历排序映射（T2）：列头三态 ↔ 后端 `sort` 复合键。
  *

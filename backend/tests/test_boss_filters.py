@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 站点侧筛选项：清单读取、来源降级、编码校验与 URL 拼接。
 
 **每个用例都不联网**：要么注入假的 fetcher，要么走内置快照。真实站点行为由

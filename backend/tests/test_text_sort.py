@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """拼音 + 数字自然序的排序键（F）。
 
 `rf_pinyin` collation 的行为完全由 :func:`sort_key` 决定，所以这里按"用户看得见的

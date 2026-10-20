@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 无级字号：绝对像素 ←→「档位 + `font_scale_adjust` 系数」的映射（纯函数，便于单测）。
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 受控浏览器状态：首屏读取、自动轮询与手动刷新共用。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrowserStatus } from "../types";

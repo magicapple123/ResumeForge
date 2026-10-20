@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 助手会话分组编辑弹窗。 */
 
 import { Input, Modal, Typography } from "antd";

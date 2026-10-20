@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 更新说明（Release notes markdown 子集）的轻量渲染器。
  *
  * 后端把 GitHub Release 的正文原样带回来，里面是 `## 新增`、`- **xxx** yyy` 这样的

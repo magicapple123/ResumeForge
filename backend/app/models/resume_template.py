@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """用户自制的简历模板。
 
 模板分两类，这是本模块最重要的约定：

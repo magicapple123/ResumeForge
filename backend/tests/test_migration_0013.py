@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0013_resume_format_config`` 迁移：加列、幂等与完整 downgrade。
 
 加列与加表的性质不同——**旧备份导入靠的是"迁移到 head 后表集合对得上"**，而加列不改

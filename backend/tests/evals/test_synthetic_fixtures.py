@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-15 合成样本库守卫：schema 校验、维度矩阵、对抗边角覆盖、隐私占位合规。
 
 50 份样本是评测集的地基——schema 漂移、维度缺角或混入真实格式的个人信息

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """写入提案的批准/拒绝端点（RF-01，PR-02/PR-03 修复版）。
 
 批准 = "校验 → 置 approved + 签发一次性 token → 核销 → 用**存储的参数**执行

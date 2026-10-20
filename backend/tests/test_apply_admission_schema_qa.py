@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """对抗性测试：准入闸门五分支、未知结论的保守处理、禁百分比 schema。
 
 产品硬要求（P0-2 / P0-3 / US-2）：

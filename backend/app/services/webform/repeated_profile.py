@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申资料可重复记录的读写与填表展开。"""
 from __future__ import annotations
 

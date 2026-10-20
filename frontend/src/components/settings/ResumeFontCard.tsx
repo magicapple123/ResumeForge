@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历字体（R10）：上传字体文件，预览、导出 HTML 与导出 PDF 统一使用。
  *

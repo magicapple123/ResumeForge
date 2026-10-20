@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 拖拽重排的共享几何内核：资料大分区栈与小条目列表共用同一套算法。
  *
  * 全部是纯函数（不读 DOM、不碰 React），因此可以直接单测；两条 hook 只负责

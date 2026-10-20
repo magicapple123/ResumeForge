@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Resume-domain generator: resume records, generate tasks, delivery records,
 templates and share packages."""
 

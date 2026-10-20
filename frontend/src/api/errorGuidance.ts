@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 关键按钮失败时的「原因 + 可做什么 + 编号」指引（RF-20）。
 
 不做全局错误组件改造：各失败面用 formatErrorGuidance 把 ApiError 映射成一句

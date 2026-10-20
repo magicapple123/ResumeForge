@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 在预览的 iframe 里量出「正文实际占了多高」。
  *

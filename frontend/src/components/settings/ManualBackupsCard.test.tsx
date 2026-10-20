@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** ManualBackupsCard（RF-25）：快照清单、逐份确认的可恢复删除与 .trash 提示。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

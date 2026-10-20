@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """检查是否有新版本：只读 GitHub Releases API，不做任何自动更新。
 
 设计取舍：

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``WebsocketCdpClient``：基于 HTTP 端点 + WebSocket 通道的 CDP 客户端实现。"""
 from __future__ import annotations
 

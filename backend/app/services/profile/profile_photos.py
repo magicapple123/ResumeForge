@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人照片管理：多张照片的增删改与主照片切换。
 
 ``UserProfile.photo`` 始终是"当前使用的那一张"的镜像：简历生成、预览和导出全部读

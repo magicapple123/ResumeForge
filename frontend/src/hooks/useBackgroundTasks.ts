@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 订阅后台任务登记表（`utils/backgroundTasks`）的 React 入口。 */
 import { useSyncExternalStore } from "react";
 import {

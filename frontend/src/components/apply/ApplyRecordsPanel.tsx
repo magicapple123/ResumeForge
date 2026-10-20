@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 投递记录：按**投递批次**分组展示，并对失败/跳过的条目单独重投。
  *

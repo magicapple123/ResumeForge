@@ -1,4 +1,5 @@
-﻿# ResumeForge launcher: process probes, health checks and shared lifecycle helpers.
+﻿# SPDX-License-Identifier: Apache-2.0
+# ResumeForge launcher: process probes, health checks and shared lifecycle helpers.
 
 function Test-TcpPortInUse {
     param([int]$Port)

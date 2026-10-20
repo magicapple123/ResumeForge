@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Tests for scripts/check-asar-deps.js (audit PR-04, 2026-10-13).

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """采集批次执行：站点选择、样例录制、失败分类与收尾文案。"""
 
 from __future__ import annotations

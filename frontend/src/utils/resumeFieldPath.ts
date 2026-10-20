@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历字段路径的读写与中文说明——与预览里的 `data-resume-path` 同一套写法。
  *

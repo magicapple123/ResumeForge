@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 对抗性测试：任务轮询在组件卸载后必须停止（避免定时器泄漏与卸载后 setState）。
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """发版脚本的纯逻辑测试。
 
 脚本在仓库根的 `scripts/`（它管的是整个仓库的版本，不是后端自己的），所以这里要

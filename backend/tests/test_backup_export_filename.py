@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份包下载名（R15）：用户可自定义，中文保留、非法字符被替换、缺省带数据集名与时间戳。
 
 此前导出名固定为 ``resumeforge-backup-<时间戳>-<随机>.zip``：用户在下载目录里攒了十几份

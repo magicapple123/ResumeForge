@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 空态（RF-12 固化的通用模式之一）。
  *

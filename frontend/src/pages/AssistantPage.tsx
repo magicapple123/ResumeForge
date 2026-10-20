@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** AI 求职助手：流式对话、历史记录、技能开关、附件与项目上下文联动。 */
 import { ArrowDownOutlined, HistoryOutlined } from "@ant-design/icons";
 import { App, Button, Space, Typography } from "antd";

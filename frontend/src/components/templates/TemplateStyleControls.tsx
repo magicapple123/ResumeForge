@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 可视化模板调节器：只写入后端白名单配置，不让用户必须编辑 CSS。 */
 import { DeleteOutlined, PlusOutlined, UploadOutlined } from "@ant-design/icons";
 import {

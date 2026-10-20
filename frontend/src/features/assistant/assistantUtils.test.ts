@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";

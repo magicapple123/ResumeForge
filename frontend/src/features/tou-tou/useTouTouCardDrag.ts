@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投投浮窗卡片的把手拖拽：视口夹取、键盘微调与「出现在悬浮球旁边」的打开定位。 */
 
 import {

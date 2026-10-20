@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Search failure messages permitted in SSE, persisted history and model context."""
 
 _PUBLIC_MESSAGES = {

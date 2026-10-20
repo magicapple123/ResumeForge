@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """设置 Schema：当前大模型配置、配置记录与联网搜索设置。"""
 
 from datetime import datetime

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 全局 keydown 监听与 handler 注册表（R5）。
  *

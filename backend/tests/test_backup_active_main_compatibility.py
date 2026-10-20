@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The primary database can be an extra archive dataset when a different one is active."""
 
 import io

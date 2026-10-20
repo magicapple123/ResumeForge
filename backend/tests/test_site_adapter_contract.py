@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """站点适配器契约测试（RF-19）：fixtures/sites/boss/*.json 参数化跑 BossAdapter。
 
 每条场景 = 一段**虚构的**页面状态序列（延续 test_site_contract_drift 的哲学：不存真实

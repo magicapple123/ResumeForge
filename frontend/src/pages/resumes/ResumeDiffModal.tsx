@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 版本对比弹窗（受控）：基准版本展示 + 对比版本选择 + 字段级差异视图。
  *
  * 纯展示——diff 状态（diffAgainstId/diffResult/diffLoading）与三并发请求 handler

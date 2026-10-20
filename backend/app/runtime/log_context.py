@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """后台线程的日志关联上下文（RF-20）。
 
 contextvars 不会自动跨线程：任务线程里 ``get_request_id()`` 返回 "-"，日志行无法

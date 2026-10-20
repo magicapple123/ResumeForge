@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位字段标签和长度限制。"""
 
 _FIELD_LIMITS = {

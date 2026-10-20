@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """api/webform 各路由子模块共享的小工具：``WebFormError``→``HTTPException`` 映射与 logger。
 
 logger 显式沿用拆分前单文件的 logger 名（``app.api.webform``），日志观测行为不变。

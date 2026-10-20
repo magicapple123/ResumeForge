@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 内推管理（后端 /api/referrals）。 */
 
 export const REFERRAL_STATUSES = ["active", "submitted", "closed", "invalid"] as const;

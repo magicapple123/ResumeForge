@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-15 已知幻觉负例回归：手写坏输出必须被对应规则捕获。
 
 `recordings/_known_bad/` 下每份文件是一段"曾经真实出现过的坏输出形态"的手写

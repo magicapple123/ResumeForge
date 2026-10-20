@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投递记录（按批次分组）：组头统计、展开看明细、详情 Drawer 完整失败信息（含 URL）。 */
 import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";

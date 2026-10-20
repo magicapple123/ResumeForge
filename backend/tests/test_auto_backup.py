@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """自动备份的守卫（RF-05 新语义）：到期触发、失败短档退避、按数据集隔离、快照验证。"""
 
 import json

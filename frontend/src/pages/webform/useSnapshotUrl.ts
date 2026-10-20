@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 职责①：把「这次读取」记进 URL，并在回到本页时按 URL 重放一次预览。
  * （自 WebFormPage 拆出：restoring state、rememberSnapshot/forgetSnapshot、restore effect

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 资料分区里**小条目**（多条记录）的指针拖拽排序行为。
  *
  * 与更早实现（全部条目折叠成摘要条 + elementFromPoint 命中）的差别：

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 内置样式缩略图墙：每个内置样式一张真实渲染的缩略图，点开看大图。
  *

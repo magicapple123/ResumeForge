@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """资料分区推断的兼容导出层。"""
 
 from .section_signals import (

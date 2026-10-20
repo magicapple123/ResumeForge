@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 三阶段条件的参数化矩阵：全部用纯函数 ``computeActivationStages``，不碰 React。
  *
  * 2026-10-13 审计口径钉住两件事：

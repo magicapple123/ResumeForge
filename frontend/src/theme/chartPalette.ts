@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 图表调色板（R18）：自绘 SVG 图表用的颜色，深 / 浅各一套。
  *

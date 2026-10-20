@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 个人照片接口：多张照片的上传、切换、重命名与删除。 */
 import type { ProfilePhoto } from "../types";
 import { request, uploadWithProgress } from "./client";

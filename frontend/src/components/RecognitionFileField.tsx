@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 识别前的文件暂存区：图片显示缩略图（可点开预览），文档显示名称与体积。 */
 
 import { DeleteOutlined, PictureOutlined } from "@ant-design/icons";

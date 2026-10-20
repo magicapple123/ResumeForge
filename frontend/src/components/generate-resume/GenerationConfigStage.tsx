@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 生成配置阶段：模型状态提示 + 简历名称 + 美化档位 + 篇幅版式 + 补充要求。
  *
  * 纯展示受控组件——全部配置状态与开始动作由 GenerateResumeModal 持有，经 props 回传；

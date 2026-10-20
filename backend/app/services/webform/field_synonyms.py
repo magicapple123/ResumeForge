@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申字段与页面文案的同义词及重复区块提示。"""
 
 from .field_supplement_catalog import SUPPLEMENT_SYNONYMS

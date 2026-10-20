@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 附件与文件的纯函数：限值、类型判定与读取。
  *

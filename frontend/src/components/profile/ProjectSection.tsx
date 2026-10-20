@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 项目经历分区。 */
 import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";

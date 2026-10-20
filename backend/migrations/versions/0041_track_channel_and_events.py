@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-18：application_track 加渠道列，新增状态变化事件表 application_track_event。
 
 - ``application_track.channel``：用户自选的投递渠道（枚举含 ``unknown``，旧行默认

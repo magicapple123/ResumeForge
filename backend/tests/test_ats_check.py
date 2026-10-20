@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """ATS 本地检测：词库可加载、三类结论、免责声明、接口。"""
 
 from app.models.resume import ResumeRecord

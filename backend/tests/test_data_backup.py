@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份导出与备份包校验测试。
 
 导入/切换数据集的往返验证在 ``test_datasets.py``；这里只管"导出物是否安全"和

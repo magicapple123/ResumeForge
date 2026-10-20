@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历编辑器共享的多行字段转换。 */
 
 export const splitLines = (value: string): string[] =>

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """跨工具域共享的 helper 与常量。"""
 from __future__ import annotations
 

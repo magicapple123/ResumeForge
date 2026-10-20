@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """助手流单次工具调用的执行与结构化结果封装。
 
 从 ``assistant_stream`` 下沉的接缝：**一次工具调用怎么执行**（写工具的确认提案、

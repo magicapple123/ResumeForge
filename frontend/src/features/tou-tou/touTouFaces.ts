@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投投的运行时表情素材与「状态 → 素材」映射，保持原始 WebP（有透明通道），不做裁切。 */
 
 import idleFace from "../../assets/toutou/ball-idle.webp";

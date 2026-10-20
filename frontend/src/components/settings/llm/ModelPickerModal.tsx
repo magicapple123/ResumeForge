@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 选模型弹窗：展示「获取可用模型」拉到的模型列表，点「使用」回填表单。
  * （自 LLMConfigCard 拆出，逐字搬运，行为等价。）

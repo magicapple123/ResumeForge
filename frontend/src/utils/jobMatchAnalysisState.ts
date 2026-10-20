@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 匹配度分析「后台进行中」的全局登记表。
  *

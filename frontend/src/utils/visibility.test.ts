@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 可见性工具：轮询降频共用（见 backgroundTasks / useTaskPolling 等调用点）。 */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isDocumentHidden, onVisibilityChange } from "./visibility";

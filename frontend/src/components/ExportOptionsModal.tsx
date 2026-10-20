@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 统一导出面板：格式多选（含照片）+ 水印 + 脱敏。版式与页边距在预览的版式栏（T5）。 */
 import { PrinterOutlined } from "@ant-design/icons";
 import { App, Button, Checkbox, Input, Modal, Space, Switch, Typography } from "antd";

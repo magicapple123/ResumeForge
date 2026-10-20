@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """新增事实台账表：把可对外表达的主张与其依据、边界、核实状态沉淀下来。
 
 与 ``0010`` 一样，本次迁移**只加表**，不改既有列、不动既有表：``data_backup.inspect_archive``

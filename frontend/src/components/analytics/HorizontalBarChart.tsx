@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 横向条形图：自绘 SVG，不引 echarts/antv/plots。
  *
  * 一份几何同时服务两件事——**漏斗**（居中，形状本身是信息）与**排行**（左对齐共享基线，

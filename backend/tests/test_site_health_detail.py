@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """站点健康度：site_key / failure_category 记录层、detail missing 台账与浏览器错误归因
 （从 test_site_health.py 拆出）。
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Sandbox path policy for stress-seed runs.
 
 Security decisions live here and only here:

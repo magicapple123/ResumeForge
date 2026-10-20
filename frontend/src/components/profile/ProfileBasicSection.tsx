@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 个人资料基本信息与简历照片（多张可切换）。 */
 
 import { Card, Col, Form, Input, Row, Select } from "antd";

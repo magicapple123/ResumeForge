@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 量出「选区在屏幕上的哪一块」——AI 润色按钮就浮在这块下方。
  *

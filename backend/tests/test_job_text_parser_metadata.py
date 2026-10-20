@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位文本解析器的英文标题、元数据与分隔符测试。"""
 
 from app.services.job_text_parser import parse_job_text

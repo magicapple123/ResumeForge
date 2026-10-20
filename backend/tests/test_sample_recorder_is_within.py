@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """QA 独立验证：API 输入面（未知字段 422）与第二道防线 ``_is_within`` 的边界。
 
 拆分自 test_sample_recorder_runner_qa.py——``_is_within`` 是"越界即拒写"的第二道

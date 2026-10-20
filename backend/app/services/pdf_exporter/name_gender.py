@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """页头「姓名（+ 性别）」的测量与绘制（量画互逆）。"""
 from __future__ import annotations
 

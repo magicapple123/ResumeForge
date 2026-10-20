@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """数据集切换的 prepare/commit/compensate 与启动指针恢复（PR-03，2026-10-13 审计）。
 
 屏障测试：用 monkeypatch 把提交段的每一步（建引擎/迁移/清理/写指针）逐一注入

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """资料 → 扁平字段字典的展开测试。
 
 ``profile_to_form_data`` 是纯函数（只读传入对象的属性），所以大部分用例用轻量替身即可；

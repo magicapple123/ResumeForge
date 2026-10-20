@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填充记录的分页端点（RF-08）。
 
 契约（rf-opt 架构 §2.5）钉死了路径 ``/api/apply/webform/records/page``——它不在

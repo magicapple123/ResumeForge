@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """AI 粘贴识别的离线单元测试，不访问真实模型服务。"""
 
 import json

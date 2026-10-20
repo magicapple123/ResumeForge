@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """自建 SearXNG 实例的 JSON 接口。
 
 SearXNG 是开源的元搜索服务，自己部署后没有配额限制、也不会被单站限流。公共实例

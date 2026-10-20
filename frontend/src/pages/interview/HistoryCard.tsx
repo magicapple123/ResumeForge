@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 历史面试卡：批量选择 + 历史列表（打开/删除/批量删除经 props 回调页面）。
  * （自 InterviewPage 拆出，逐字搬运，行为等价。）

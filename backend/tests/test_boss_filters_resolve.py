@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 筛选项编码校验与适配器接线（从 test_boss_filters.py 拆出）。
 
 payload helper 与 fake_fetcher 留在主文件（test_boss_filters.py）。

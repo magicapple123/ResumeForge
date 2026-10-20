@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """采集/投递批次的历史分页端点（RF-08 收口增量）。
 
 前端接入分页时发现旧 ``GET /api/apply/tasks`` 只有 ``kind``/``limit(1–100)``——批次

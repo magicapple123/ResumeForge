@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """注入脚本的**真机验证**：把合成 DOM 放进真浏览器跑一遍。
 
 ## 为什么需要它

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """嵌套整包导出（R16，格式 4）。
 
 外层 zip **只装每份数据集自己的完整单数据集包**：``datasets/main.zip`` 与

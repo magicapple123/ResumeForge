@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 日历提醒（R-12）：待办列表、新建、完成、忽略与删除。
  *
  * 提醒列表按 ``remind_at`` 升序展示"接下来要做什么"；pending 的提醒可一键标记完成或忽略，

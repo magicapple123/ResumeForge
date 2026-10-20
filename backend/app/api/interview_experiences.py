@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """面经知识库接口（prefix ``/api/interview-experiences``）。
 
 真实面经的增删改查：正文 + 真实问题清单 + 标签，可绑定岗位。删除走软删除

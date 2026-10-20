@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """风险扫描的出站隐私边界（PR-11 / RR-01）——从 ``test_resume_risk.py`` 拆出。
 
 拆出原因是行数预算（两组合起来 534 行）；夹具沿用 ``test_resume_risk`` 里的假

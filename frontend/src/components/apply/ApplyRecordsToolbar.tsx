@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 投递记录面板的筛选区（纯展示子组件，PR-18 拆分批从 ApplyRecordsPanel 纯搬迁）：
  * 关键词搜索、结果筛选、刷新按钮与「去求职进度跟进」入口。

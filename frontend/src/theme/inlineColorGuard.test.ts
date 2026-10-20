@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 内联样式颜色守卫（R18）：`style={{ ... }}` 里不允许再写死颜色。
  *

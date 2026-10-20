@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // ===== ⑩ 招聘网站（当前站点）=====
 
 /**

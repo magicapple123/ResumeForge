@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """仅依据岗位招聘信息生成结构化需求总结与求职建议。"""
 
 import json

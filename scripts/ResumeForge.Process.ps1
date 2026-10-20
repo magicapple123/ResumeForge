@@ -1,4 +1,5 @@
-﻿# ResumeForge launcher: backend/frontend startup orchestration.
+﻿# SPDX-License-Identifier: Apache-2.0
+# ResumeForge launcher: backend/frontend startup orchestration.
 
 <#
 端口上有一个**健康**的简历通在应答，但它不是从**这个目录**启动的时，启动器会沿用别人的

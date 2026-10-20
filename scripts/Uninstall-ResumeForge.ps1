@@ -1,4 +1,5 @@
-﻿<#
+﻿# SPDX-License-Identifier: Apache-2.0
+<#
 ResumeForge uninstaller.
 
 Removes what the launcher created (virtualenv, node_modules, build output and the

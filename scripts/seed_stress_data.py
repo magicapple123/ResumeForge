@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Generate a fully fictional large-scale stress dataset (isolated sandbox only).
 
 This is the thin CLI entry point; all logic lives in the ``stress_seed``

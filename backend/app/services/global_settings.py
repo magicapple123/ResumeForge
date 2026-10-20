@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """全局设置文件 `data/global_settings.json`：文件 IO、原子写、主题偏好。
 
 为什么不能放进数据库：一份数据集就是一整个 SQLite 文件，"用哪套模型""界面什么主题"

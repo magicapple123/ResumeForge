@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """异常落日志前的脱敏工具（PR-20 审计项：日志脱敏白名单）。
 
 背景：``logger.exception`` 会把整条 traceback（含 ``raise ... from exc`` 链上的

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """PDF 性别字号与照片裁剪：性别不再并入姓名行、object-fit: cover 等价物。
 
 拆分自 test_pdf_exporter.py——性别按 name_extra_ratio 渲染且颜色拆分、无性别行为

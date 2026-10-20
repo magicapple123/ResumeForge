@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 对话消息、流式回复和加载状态展示。 */
 
 import {

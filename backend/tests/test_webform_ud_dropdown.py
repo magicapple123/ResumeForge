@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """UD Design（字节自研）弹层 DOM 守卫测试。
 
 2026-10-06 字节校招页真机取证：7 个弹层代选全失败，因为字节不用 Semi/antd——

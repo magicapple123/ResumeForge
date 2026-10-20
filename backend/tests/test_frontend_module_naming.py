@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """守卫：`frontend/src` 下同一目录不允许出现**仅大小写不同**的文件名。
 
 为什么值得一条测试守：Windows 文件系统大小写不敏感，于是"只差大小写"的两个模块会互相遮蔽，

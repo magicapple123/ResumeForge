@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-18：状态变化事件与真实 cohort 指标。
 
 钉三件事：

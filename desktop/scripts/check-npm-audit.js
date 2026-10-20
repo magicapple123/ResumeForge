@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Desktop supply-chain audit gate (audit PR-06, 2026-10-13).

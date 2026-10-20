@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Expected-dataset identity for HTTP requests, retained until streams finish."""
 
 from __future__ import annotations

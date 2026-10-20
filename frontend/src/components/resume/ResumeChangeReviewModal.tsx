@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 按条审阅弹窗（RF-13）：AI 润色 / 手填在落表单前的 diff 审阅。
  *

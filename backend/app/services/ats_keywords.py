@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """ATS 检测的**关键词域**：词库加载、分区文本抽取、JD 抽词、覆盖率统计。
 
 拆分自 ``services/ats_check.py``（原 834 行超预算）。本模块只做「词」相关的事：

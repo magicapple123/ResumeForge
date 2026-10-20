@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投投运行态上下文；与 Provider 分开，避免热更新把非组件导出当成组件模块。 */
 
 import { createContext, useContext } from "react";

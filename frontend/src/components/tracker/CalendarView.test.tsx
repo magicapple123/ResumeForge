@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 真实月历（E11）：按 remind_at 归集、周一起始的表头、月切换与紧凑色点。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";

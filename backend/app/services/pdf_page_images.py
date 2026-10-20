@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """PDF 扫描页位图渲染（T03）：图片页走现有 LLM 视觉链路。
 
 PDF 里没有文字层的页（扫描件、纯图片导出）无法靠 pypdf 提取文字。这里的做法是

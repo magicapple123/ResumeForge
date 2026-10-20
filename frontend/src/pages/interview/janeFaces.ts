@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简（面试官）的运行时表情素材与「状态 → 素材」映射，透明底 WebP，512×512。 */
 
 import idleFace from "../../assets/jane/jane-idle.webp";

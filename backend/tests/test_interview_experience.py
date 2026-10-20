@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """R-15 面经知识库：CRUD、软删除、绑定岗位快照、真实问题清单落库。
 
 重点验证：

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """运行时配置模型：当前配置与可切换的大模型配置记录。"""
 from datetime import datetime
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 填充结果卡：成功/待确认/失败计数、成功率与未落定项明细。
  * （自 WebFormPage 拆出：:986-1014 整块逐字随迁，内用 FillRateTag，纯 props。）

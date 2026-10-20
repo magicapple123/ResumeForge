@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 站点侧筛选项：清单渲染、来源标注、选中值进入表单、读不到时降级。
  *

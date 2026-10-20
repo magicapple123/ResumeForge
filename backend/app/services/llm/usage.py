@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """模型调用用量的兼容层（RF-14 §2.2）。
 
 返回通道（兼容性核心）：``chat() / stream_chat() / stream_chat_events()`` 的返回签名

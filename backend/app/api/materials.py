@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """资料箱接口：零散资料的增删改查。"""
 
 import logging

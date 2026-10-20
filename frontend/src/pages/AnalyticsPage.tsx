@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职数据看板（R-14）：概览指标 + 四个主题区块。
  *
  * 数据全部来自后端 `/api/analytics/dashboard`，前端只做展示。图表用自绘 SVG

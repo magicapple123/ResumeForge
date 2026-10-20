@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Bounded subprocesses verify real adversarial inputs without hanging the test runner."""
 
 import subprocess

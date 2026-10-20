@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """站点适配器的抽象与公共数据结构。
 
 分工：**通用表单理解引擎**（``services/webform/engine/``）是站点无关的，负责

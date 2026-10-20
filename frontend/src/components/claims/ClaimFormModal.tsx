@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 台账条目的新建 / 编辑表单。
  *

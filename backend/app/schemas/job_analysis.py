@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位需求总结的内部结构，供服务层和后续 API 复用。"""
 
 from typing import Literal

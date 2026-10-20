@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** ATS 本地检测面板：免责声明、三类结论、JD 关键词覆盖、分项分数、建议与关联岗位 JD 自动载入。 */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntdApp } from "antd";

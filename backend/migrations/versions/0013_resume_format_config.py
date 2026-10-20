@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """给简历记录加一列「只属于这份简历的版式覆盖」。
 
 为什么需要它：``resume_record.format_name`` 指向的是**具名**格式模板，改那个模板会让

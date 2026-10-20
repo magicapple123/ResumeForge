@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """自动填充请求游标与单控件建议判定（规则层）。
 
 从 test_webform_live.py 拆出：autofill 的 ack / 页面跳转重装 / 终态错误三条，

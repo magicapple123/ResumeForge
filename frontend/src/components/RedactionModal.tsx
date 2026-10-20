@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 一键脱敏：预览脱敏后的简历 + 下载脱敏版（独立文件，不回写）。 */
 import { App, Button, Checkbox, Descriptions, Modal, Space, Spin, Typography } from "antd";
 import { useState } from "react";

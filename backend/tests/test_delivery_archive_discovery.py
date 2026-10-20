@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Historical evidence must remain discoverable without knowing a deleted resume ID."""
 
 from app.models.resume import ResumeRecord

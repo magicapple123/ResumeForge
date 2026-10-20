@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """进度识别的解析与本地降级。
 
 模型这条路径用脚本化的假 Provider 钉住解析行为；本地这条路径单独测，因为它最容易

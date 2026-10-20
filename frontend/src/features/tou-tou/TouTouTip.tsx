@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投投的低打扰提示气泡。 */
 
 interface TouTouTipProps {

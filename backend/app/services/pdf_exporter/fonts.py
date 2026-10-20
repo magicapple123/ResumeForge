@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """字体解析（系统中文字体查找 + 环境变量兜底）。"""
 
 from __future__ import annotations

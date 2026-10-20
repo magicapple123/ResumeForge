@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 搜索与首页统计类型。 */
 
 import type { JobList } from "./job";

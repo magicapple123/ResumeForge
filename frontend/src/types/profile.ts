@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 个人资料及其粘贴识别结果。 */
 
 import type { RecognitionSource } from "./common";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 投递设置弹窗：间隔、上限、熔断阈值、默认招呼语与专用浏览器端口。
  *

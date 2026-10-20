@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 简历中心：手写简历保存后列表**自己**刷新（T12）。
  *

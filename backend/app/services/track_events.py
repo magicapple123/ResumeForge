@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """状态变化事件（RF-18）的写入与分析指标。
 
 写入侧是**唯一的挂钩点**：所有会改变 ``ApplicationTrack.status`` 的路径（手动编辑、

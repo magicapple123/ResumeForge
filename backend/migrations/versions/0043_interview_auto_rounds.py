@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0043：模拟面试支持「自动轮数」——新增可空列 ``interview_session.rounds_min``。
 
 用户反馈：固定轮数让每场面试都可预期（"还剩 2 题"），想要真实面试的未知感。

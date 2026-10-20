@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """通用导出管线：全仓库**唯一**的导出出口。
 
 任何"把一份简历变成可下载文件"的路径都必须经过 :func:`build_export`：先按需脱敏

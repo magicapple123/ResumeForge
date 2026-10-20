@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 后台任务登记表：让"关掉窗口也继续跑"这件事真的有结果。
  *

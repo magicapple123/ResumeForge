@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Manifest writing: one JSON file per run describing exactly what was built."""
 
 from __future__ import annotations

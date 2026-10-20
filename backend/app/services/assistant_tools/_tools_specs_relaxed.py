@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """放宽模式工具声明（``_TOOLS`` 中 4 条，全部 ``requires_relaxed=True``）。
 
 这些工具会读到敏感信息——网申填表的真实填写值、用户的历史对话——所以只在

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职助手联网搜索与聊天迁移的离线测试。"""
 
 import pytest

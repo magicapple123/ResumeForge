@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 换位 FLIP 动画：First 采集、Invert-Play 参数、被拖卡排除、连续换位重定向。 */
 
 import { afterEach, describe, expect, it, vi } from "vitest";

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备选岗位接口：暂存招聘信息、编辑与导入标记。"""
 
 import logging

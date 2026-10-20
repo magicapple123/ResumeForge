@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0028_web_form_profile`` 迁移：建「网申资料」表。
 
 这张表装的是**用户专门为网申表单录的补充资料**（四六级分数、档案所在地、紧急联系人、

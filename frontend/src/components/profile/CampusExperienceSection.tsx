@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 校园经历分区：学生会、团支部、班级与社团等校内经历。 */
 import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd/es/form/FormList";

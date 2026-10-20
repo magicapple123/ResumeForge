@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """AI 助手的附件校验与模型消息组装纯函数。
 
 附件校验的原语在 ``services/attachments.py``：图片那一支与岗位/资料识别接口共用，

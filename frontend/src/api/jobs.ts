@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位相关接口。 */
 import type {
   ExtractionDocumentInput,

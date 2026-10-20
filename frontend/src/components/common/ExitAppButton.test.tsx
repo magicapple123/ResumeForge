@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 退出按钮：确认后调一次退出接口、页面切成"已退出"。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

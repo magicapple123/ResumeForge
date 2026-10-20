@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 求职助手「放宽模式」卡（设置页 · AI 模型）。
  *

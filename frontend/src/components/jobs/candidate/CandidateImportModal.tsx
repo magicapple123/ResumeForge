@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 备选岗位 CSV 导入弹窗：上传（多选/拖拽/粘贴）→ 预览账目 → 确认导入。
  *

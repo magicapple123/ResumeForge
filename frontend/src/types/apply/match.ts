@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // ===== ① 匹配状态（五类）=====
 export type MatchStatus =
   "matched" | "expression_gap" | "evidence_insufficient" | "real_gap" | "to_confirm";

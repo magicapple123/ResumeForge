@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """经历条目、日期、学历和头部字段识别规则。"""
 
 import re

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """联网搜索工具（模型自主发起）。"""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { isValidReasoningEffort, type ReasoningEffort } from "../../types/assistant";
 
 const REASONING_EFFORT_STORAGE_KEY = "resumeforge.assistant.reasoning_effort";

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-15 合成评测样本 Schema。
 
 同构约定（本任务价值的一半）：

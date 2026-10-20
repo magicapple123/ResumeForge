@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """日志脱敏守卫（PR-20：日志脱敏白名单测试）。
 
 钉住一件事：**异常进日志之前必须脱敏**。``logger.exception`` 会把整条 traceback

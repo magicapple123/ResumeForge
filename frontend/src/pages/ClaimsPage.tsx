@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 事实台账：把写进简历的每一句话沉淀成可核对、可复核的条目。
  *

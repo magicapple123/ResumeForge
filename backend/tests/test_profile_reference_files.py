@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """个人资料条目参考文件的 API 校验与持久化测试。"""
 import pytest
 from app.schemas.profile import (

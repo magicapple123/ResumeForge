@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """浏览器跨站防线（LoopbackOriginGuardMiddleware）与 pick 端点回环校验的边界测试。
 
 成功路径的写端点刻意选「保存搜索设置」（PUT /api/settings/search）这类无害操作；

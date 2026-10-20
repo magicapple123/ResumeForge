@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位、岗位解析和岗位分析类型。 */
 
 import type { RecognitionSource, SkillTag } from "./common";

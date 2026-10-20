@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Subprocess smoke test for the desktop asar dependency gate (audit PR-04).
 
 desktop/scripts/check-asar-deps.js statically verifies that every local

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 卡片拖拽 hook：夹取不越视口、打开时摆到悬浮球旁边、键盘微调。 */
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";

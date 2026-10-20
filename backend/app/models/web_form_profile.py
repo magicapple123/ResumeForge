@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「网申资料」：用户为网申表单专门填的那些资料，与简历资料**分开存**。
 
 ## 为什么要独立一张表，而不是往 ``UserProfile`` 加列

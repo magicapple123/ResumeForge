@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「采集记录」摘要行：搜索采集与「补齐详情」是两种口径，不能混。
  *

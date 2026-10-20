@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历导出：JSON / Markdown / HTML。
 
 PDF 有两条路：浏览器打印（前端打开导出 HTML 后调用 print，零字体依赖、版式与预览

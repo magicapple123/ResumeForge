@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, BUDGETS_MS, buildQuery, isCancellation, request } from "./client";
 import { datasetScopeHeaders, initializeDatasetScope } from "./datasetScope";

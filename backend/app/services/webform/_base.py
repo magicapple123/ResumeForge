@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表的公共异常。形状与 ``services/apply/_base.py`` 一致：``status_code`` 供路由层
 直接映射，``detail`` 为中文（可为结构化 dict）。"""
 from __future__ import annotations

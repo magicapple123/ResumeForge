@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """JD 解析规则测试。"""
 
 from app.services.jd_parser import parse_jd

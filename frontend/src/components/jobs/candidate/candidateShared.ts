@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 备选岗位抽屉的共享常量与表单状态类型。
  * （下沉到第三文件：FormModal/CardGrid 与抽屉都要用，且禁止子文件反向 import 抽屉。）

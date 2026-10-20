@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Discover immutable historical delivery evidence even after its source has been deleted."""
 
 from typing import Literal

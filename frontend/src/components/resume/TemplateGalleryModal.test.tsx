@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 模板一览：缩略图必须反映用户当前设定的版式与字号系数。
  *

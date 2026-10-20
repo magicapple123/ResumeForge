@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位/个人资料识别接口的文档输入测试（离线：不配置模型，全走本地规则）。
 
 PDF 走的服务层与这里完全相同（``extract_documents_text``），只是 PDF 的文字层用

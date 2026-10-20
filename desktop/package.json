@@ -5,6 +5,7 @@
   "description": "ResumeForge desktop shell",
   "main": "main.js",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "start": "electron ."
   },

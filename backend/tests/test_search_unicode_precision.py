@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """FTS candidates must also satisfy the public literal substring contract."""
 
 from app.models.job import Job

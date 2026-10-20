@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """资料箱与备选岗位模型。
 
 两者都是"暂时还没归档进正式流程的原始材料"：

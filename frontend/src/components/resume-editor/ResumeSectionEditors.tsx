@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历编辑器的分区字段表单。 */
 import { Col, Form, Input, Row } from "antd";
 import ResumeListSection from "./ResumeListSection";

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { Profile, ProfileTextParseResult } from "../types";
 
 export type EditableProfileValues = Omit<Profile, "id" | "updated_at">;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 批量「直接加入投递队列」（海投效率路径）：逐条入队、逐条容错。
  *

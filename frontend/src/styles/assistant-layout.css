@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Apache-2.0 */
 /* AI 求职助手：历史侧栏固定宽度，主区将消息与输入区分层。 */
 .assistant-page {
   display: grid;

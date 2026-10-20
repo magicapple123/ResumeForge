@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """知识库条目（第 7 批业务代码的地基）。
 
 第 5 批只建表 + 注册进 ``Base.metadata``，**不实现增删改查业务代码**——那部分属于后续批。

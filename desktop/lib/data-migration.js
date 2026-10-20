@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // ADR-0004 legacy-data migration (the item the ADR explicitly deferred).

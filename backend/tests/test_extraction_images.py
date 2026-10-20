@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """图片识别的离线单元测试：锚点、防虚构与失败形态。"""
 
 import base64

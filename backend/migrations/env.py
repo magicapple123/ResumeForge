@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Alembic environment for ResumeForge."""
 from logging.config import fileConfig
 

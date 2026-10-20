@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 智能逐项填表卡的结束态渲染测试。
  *

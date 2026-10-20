@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位定向资料筛选测试：不调用真实模型，也能验证候选事实是否正确。"""
 
 import json

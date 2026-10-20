@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「仅本会话使用」的临时密钥通道（RF-24）与 DPAPI 失败语义。
 
 从 test_api_settings.py 拆出：该文件超 500 行预算（test_file_size_budget 守门），

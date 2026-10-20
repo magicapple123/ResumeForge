@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 颜色回归（B）：把"装饰图标必须用强调色"钉死，防止再次被换成正文色。
  *

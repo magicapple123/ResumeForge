@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 主题装配：把 antd 的 ThemeConfig 切换与 `<html data-theme>` 绑在一处。
  *

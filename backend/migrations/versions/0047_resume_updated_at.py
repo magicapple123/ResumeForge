@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0047：给 ``resume_record`` 加 ``updated_at`` —— 简历列表支持「最近修改」排序。
 
 为什么需要它：``created_at`` 只能回答"什么时候生成的"。用户在一份旧简历上改了内容、

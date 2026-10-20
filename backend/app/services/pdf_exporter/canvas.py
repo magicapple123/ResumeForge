@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """fpdf2 画布子类 ``_ResumePDF``（所有行距/页边距都从 ``self.layout`` 取）。"""
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备份的自动轮转、调度租约与恢复验证原语（自 PR-15/PR-18 的测试拆分）。
 
 红→绿矩阵钉住的行为：

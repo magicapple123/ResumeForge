@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """存储体积统计（RF-25）：分项体积、只 stat 不读内容、测试库目录隔离。"""
 
 import os

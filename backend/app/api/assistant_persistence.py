@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """助手消息持久化与 SSE 编码助手（从 assistant_stream.py 拆出，500 行预算守卫）。
 
 职责单一：消息上下文写回、收尾落库、浏览器断开兜底、SSE 帧编码。流编排

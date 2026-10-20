@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 跨领域共享的基础类型。 */
 
 export interface Page<T> {

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """招聘前置元数据、类型和发布时间识别。"""
 
 import re

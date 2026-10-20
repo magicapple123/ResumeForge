@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 知识库页面：列表渲染、筛选、新建、编辑、删除确认与 Markdown 预览。
  *

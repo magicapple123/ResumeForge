@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历模板工作台接口：自制模板的增删改查与预览渲染。"""
 
 import logging

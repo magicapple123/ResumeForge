@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 模拟面试页回归（用户实测三连 bug 中的两个）：
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * AI 兜底卡：规则能确定就不调用模型，只有认不出的框才问一次。
  * （自 WebFormPage 拆出：:809-836 整块逐字随迁，纯 props。）

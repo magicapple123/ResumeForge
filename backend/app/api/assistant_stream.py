@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职助手历史快照、SSE 事件和模型流编排。"""
 
 import asyncio

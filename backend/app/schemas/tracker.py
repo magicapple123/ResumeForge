@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职进度 Schema。
 
 识别导入走"**先预览、再确认**"两步：解析接口只算不写，把"这条会新增 / 会更新 /

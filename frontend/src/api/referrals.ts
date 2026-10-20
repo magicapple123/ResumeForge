@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 内推管理接口。 */
 import type { Page, Referral, ReferralImageUpload, ReferralPayload, ReferralStats } from "../types";
 import { buildQuery, request, uploadWithProgress } from "./client";

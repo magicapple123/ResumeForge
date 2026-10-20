@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位模型：保存手动录入或从粘贴文本解析后确认的岗位。"""
 
 from datetime import datetime

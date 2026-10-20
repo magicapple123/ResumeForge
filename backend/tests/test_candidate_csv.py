@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备选岗位 CSV 导入/导出与跨页全选（/ids）：列集往返、逐行报错、重复跳过。"""
 
 from app.services.candidate_jobs import stage_candidate_job

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 求职进度页：漏斗计数、记录卡片、以及导入预览里最要紧的两件事。
  *

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """``0030_extra_profile_source_reuse`` 迁移：给「网申资料」加 source / reuse 两列。
 
 这两列服务于 2026-09-27 的"填表时学到的"功能：

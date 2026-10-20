@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """核心域工具声明（``_TOOLS`` 前 16 条：文档/技能知识/总览/岗位/简历/资料/求职进度）。"""
 from __future__ import annotations
 

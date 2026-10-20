@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历增强与项目总结文件相关性测试。"""
 
 import json

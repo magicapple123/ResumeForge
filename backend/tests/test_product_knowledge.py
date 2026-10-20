@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """产品知识一致性守卫：``product_knowledge`` 的事实快照与实际脚本 / 文档对拍。
 
 ``backend/app/services/product_knowledge.py`` 集中存放启动 / 升级 / 平台支持的事实

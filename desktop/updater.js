@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // Lightweight self-updater for the packaged desktop shell (phase 4).

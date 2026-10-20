@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """知识库：条目的持久化、检索与软删除。
 
 检索口径集中在 ``list_knowledge``：标题/正文按关键词命中（``q``）、分类精确筛选

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """AI 兜底：规则认不出的控件，让模型从字段目录里挑一个。
 
 ## 一条不能破的边界

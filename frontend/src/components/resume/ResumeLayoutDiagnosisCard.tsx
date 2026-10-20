@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 版面诊断面板：告诉你版面是空是挤、按什么顺序改，并提供「自动一页」。
  *

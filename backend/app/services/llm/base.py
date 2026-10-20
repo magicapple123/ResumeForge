@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """LLM Provider 抽象层。
 
 新增模型提供商只需继承 BaseLLMProvider 并实现 chat / stream_chat，

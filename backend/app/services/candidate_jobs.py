@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """备选岗位：还没核对的招聘信息暂存与导入标记。
 
 这里只做暂存；真正的岗位创建仍走 ``job_service``（同一套字段校验与技能标签解析），

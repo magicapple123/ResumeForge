@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历收藏接口与筛选测试。"""
 from app.models.resume import ResumeRecord
 

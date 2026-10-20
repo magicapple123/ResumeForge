@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Lazy app bindings, engine creation, and Alembic schema initialization.
 
 Everything here imports the application lazily and only inside functions,

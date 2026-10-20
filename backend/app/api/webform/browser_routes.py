@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """浏览器生命周期与网址历史路由（职责②）。
 
 从 ``api/webform.py`` 拆出。服务层符号一律经 ``webform_service`` 属性访问，

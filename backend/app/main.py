@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """兼容入口：应用装配位于 :mod:`app.application`。"""
 
 from .application import (

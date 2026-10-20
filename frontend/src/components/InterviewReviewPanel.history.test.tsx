@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 复盘面板：分析后自动保存、历史记录富还原（反向优化简历可点并写回）、旧版纯文本兼容。 */
 import { App as AntApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

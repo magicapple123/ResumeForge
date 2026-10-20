@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历页边距（mm）：取值范围的唯一实现（R1 / T5）。
  *
  * 为什么单独成文件：`react-refresh` 要求组件文件只导出组件；更重要的是这个范围必须

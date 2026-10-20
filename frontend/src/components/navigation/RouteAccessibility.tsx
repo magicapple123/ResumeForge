@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { APP_NAME } from "../../config";

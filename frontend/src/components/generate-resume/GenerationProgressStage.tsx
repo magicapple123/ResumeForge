@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 生成进行中阶段：阶段步骤条 + 进度消息 + 后台继续/取消按钮。
  *
  * 纯展示——轮询与取消逻辑留在 GenerateResumeModal（竞态敏感区红线），经 props 回传；

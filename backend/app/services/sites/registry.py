@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """站点适配器注册表：按站点标识 / URL 主机分发到具体适配器。
 
 业务层只管调用 ``registry.for_job(job)``；加站点时只要新增一个类并在默认注册表里

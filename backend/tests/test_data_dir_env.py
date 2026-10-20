@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF_DATA_DIR 数据目录覆盖（ADR-0004，2026-10-13 生产审计 PR-05）。
 
 config.py 的 DATA_DIR 在设置了 RF_DATA_DIR 时取该值（桌面壳把用户数据指到

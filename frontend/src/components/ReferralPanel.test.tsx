@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 内推管理面板：列表 + 转化率卡 + 删除（软删）+ 状态分色 + 图片备注上传。 */
 import { App as AntApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";

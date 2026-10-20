@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 岗位表单的静态选项常量：岗位类型 / 状态 / 识别内容字段清单。 */
 
 export const JOB_TYPE_OPTIONS = ["校招", "实习", "社招", "其他"].map((value) => ({

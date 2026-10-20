@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """重试治理（RF-14 §2.4）：假传输 + 注入时钟，全离线，不真睡。
 
 钉住的硬性不变式：

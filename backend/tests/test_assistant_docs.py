@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from app.services.assistant_docs import format_product_doc_results, search_product_docs
 from app.services.assistant_tools import execute_tool, tool_names
 

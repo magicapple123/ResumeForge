@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """日历提醒接口（prefix ``/api/reminders``）。
 
 提醒的增删改查：列表 / 待办（upcoming）/ 新增 / 修改（PATCH）/ 删除。删除走软删除

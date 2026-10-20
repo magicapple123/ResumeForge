@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 直聘的接口响应解析：从 XHR 响应体里取出岗位列表与详情。
 
 **为什么值得单独做一条路**：BOSS 的岗位列表是滚动加载的 XHR 渲染出来的，DOM 里能拿到的

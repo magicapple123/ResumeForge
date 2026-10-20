@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 设置页里的「投投」悬浮球卡片：入口开关与提示标语开关，即改即存。 */
 
 import { App, Card, Divider, Space, Spin, Switch, Typography } from "antd";

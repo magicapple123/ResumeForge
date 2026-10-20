@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Split date-control grouping for year/month/day form controls."""
 from __future__ import annotations
 

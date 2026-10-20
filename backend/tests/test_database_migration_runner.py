@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """数据库迁移执行器、降级和备份行为测试。"""
 
 import pytest

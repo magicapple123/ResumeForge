@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 版本信息位（RF-17 / PR-09 可信交付账本）：一份简历的版本血缘与投递记录。
  *

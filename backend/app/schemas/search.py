@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """搜索与统计 Schema。"""
 
 from typing import Literal

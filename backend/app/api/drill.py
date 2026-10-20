@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """按事实台账深挖的面试接口（prefix ``/api/drill``）。
 
 **契约先锁、再提问**是这里唯一的顺序要求：``POST /{id}/answer`` 走的是"读出现有契约 →

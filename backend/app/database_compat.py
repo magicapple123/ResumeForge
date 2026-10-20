@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """早期未版本化数据库所需的兼容字段定义。"""
 
 SQLITE_REQUIRED_COLUMNS = {

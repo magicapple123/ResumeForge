@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 离线分享包：生成只读快照、展示文件清单、下载文件、导入评论。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

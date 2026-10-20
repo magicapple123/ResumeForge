@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 浏览器控制卡：URL 栏 + 状态行 + 启停/配置/刷新/诊断/结束五个按钮组。
  * （自 WebFormPage 拆出：:717-808 整块逐字随迁；纯 props——handler 定义留在页面。）

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成 API 集成冒烟测试。"""
 
 import json

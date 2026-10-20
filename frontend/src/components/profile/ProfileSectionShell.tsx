@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 个人资料大分区的排序外壳与顺序定义。 */
 
 import {

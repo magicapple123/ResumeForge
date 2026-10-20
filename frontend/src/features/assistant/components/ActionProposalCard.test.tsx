@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** ActionProposalCard（RF-01）：待确认写入提案的渲染、批准与拒绝路径。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

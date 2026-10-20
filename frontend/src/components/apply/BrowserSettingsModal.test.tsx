@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 网申页的「浏览器设置」弹窗：读回现值、只改浏览器两个字端、整份提交。
  *

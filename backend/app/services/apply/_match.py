@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """匹配结论的读取、准入判断与持久化。"""
 
 from __future__ import annotations

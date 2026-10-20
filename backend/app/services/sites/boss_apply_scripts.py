@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """boss_apply 的页面脚本构造器（纯 JS 模板片段，无业务流程）。
 
 从 ``boss_apply.py`` 拆出：投递/沟通链路里所有 ``evaluate`` 用的脚本构造函数

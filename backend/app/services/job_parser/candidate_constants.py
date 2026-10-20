@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位标题、公司和地点识别规则。"""
 
 import re

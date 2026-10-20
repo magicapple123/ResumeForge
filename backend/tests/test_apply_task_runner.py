@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """任务运行器离线测试：完成 / 暂停恢复 / 停止 / 熔断 / 异常隔离 / 跨线程会话。
 
 （拆分说明：pause/stop/熔断/异常隔离与 ``_set_status`` 终态守卫在

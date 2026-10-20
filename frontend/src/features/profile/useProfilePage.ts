@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 我的资料页状态、加载保存和拖拽/粘贴操作。 */
 
 import { App, Form, Upload } from "antd";

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """更新下载与本地安装包的安全边界：发布源白名单、逐跳重定向、ZIP/SHA-256 复验。
 
 RF-26 §12.5 #1-#5。单独成模块的原因：`update_download.py` 已接近 500 行纪律上限，

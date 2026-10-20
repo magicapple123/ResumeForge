@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """纯文本（.txt）简历导出：复用 ``export_markdown`` 的正文结构，去掉 Markdown 标记。
 
 纯文本没有页边距 / 字号 / 分页这些概念，所以它**只关心内容**：标题、区块、条目与

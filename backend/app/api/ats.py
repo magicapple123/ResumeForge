@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """ATS 本地检测接口（prefix ``/api/resumes``）。
 
 纯本地计算，不调用模型：加载简历 → 调 ``services/ats_check`` → 返回带免责声明的结论。

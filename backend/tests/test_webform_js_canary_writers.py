@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """写入/回读脚本的真机验证：事件序列、滚入视口、contenteditable 回读。
 
 这些行为**只有真跑 JS 才看得见**：离线假客户端只返回预设字符串，脚本里写了

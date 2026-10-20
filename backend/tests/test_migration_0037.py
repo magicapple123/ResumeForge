@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0037：简历记录加「生成说明」与「未收录清单」两列。"""
 
 from alembic import command

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位提示词和个人资料上下文的长度预算控制。"""
 
 from __future__ import annotations

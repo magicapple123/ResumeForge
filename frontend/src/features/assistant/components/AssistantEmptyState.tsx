@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 新会话的引导提示和常用问题。 */
 
 import { Button, Empty, Typography } from "antd";

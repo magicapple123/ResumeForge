@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """导出参数同源（R1）：请求里的 ``format_config`` 必须真的进入渲染。
 
 "预览一页、导出两页"的**直接原因**是导出请求体没有 ``format_config``：用户在预览里把

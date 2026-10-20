@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """求职数据看板（R-14）的响应结构。
 
 只承载结构，**所有计数口径的唯一来源是 ``models/tracker.py`` 的 ``STATUSES`` /

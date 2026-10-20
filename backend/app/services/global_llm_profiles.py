@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """全局大模型配置（C）：`global_settings.json` 的 `llm` 段语义。
 
 目标形态只有**一个模块**：设置 → AI 模型 →「大模型 API 配置（所有数据集共用）」。

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历写作增强接口（prefix ``/api/resumes``）。
 
 薄路由：只做校验、调 service、返回 schema。写作/润色/翻译依赖模型，未配置时返回清晰

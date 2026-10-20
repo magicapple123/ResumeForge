@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「页面要求但这一轮不会自动填」的清单。
  *

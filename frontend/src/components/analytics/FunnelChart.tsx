@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 求职漏斗：自绘 SVG，不引 echarts/antv/plots。
  *
  * 每个阶段一条**居中**的横条，宽度与计数成正比（相对最大值）——"漏斗形状"本身就是信息，

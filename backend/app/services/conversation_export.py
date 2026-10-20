@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """把一段助手对话导出成可以带走的文本。
 
 两种用途，格式要求不同：

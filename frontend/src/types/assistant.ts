@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** AI 求职助手会话、消息和流式事件类型。 */
 
 export interface AssistantConversationBrief {

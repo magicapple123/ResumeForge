@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """字段目录、「网申资料」与记忆目标路由（职责①）。
 
 从 ``api/webform.py`` 拆出。服务层符号一律经 ``webform_service`` 属性访问，

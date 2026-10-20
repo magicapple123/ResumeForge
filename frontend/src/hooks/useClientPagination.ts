@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 客户端分页：给没有内建分页能力的渲染方式用（Listy 虚拟列表、Collapse、卡片网格）。
  * antd Table 自带 pagination，不要用这个。

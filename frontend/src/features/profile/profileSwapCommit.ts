@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 拖动中的一次「实时换位」提交（顺序 + 高度数组同步 splice + FLIP 动画）。
  *

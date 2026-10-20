@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 面经的新增/编辑表单弹窗（从 InterviewExperiencePanel 拆出：面板顶着 500 行预算）。
  *
  * 表单实例由面板持有（openCreate/openEdit 需要预填字段），jobSelect 由面板传入——

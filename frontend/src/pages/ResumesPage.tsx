@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历中心：生成历史列表、收藏、预览与导出。 */
 import { UndoOutlined } from "@ant-design/icons";
 import { App, Button, Input, Select, Space, Tag, Tooltip } from "antd";

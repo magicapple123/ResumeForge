@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """custom_select 的 JS 页面协议脚本资源。
 
 与 ``engine/scripts.py`` 同等待遇：主体是注入页面的 JS 字符串（弹层根发现、

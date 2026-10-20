@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """版本号一致性：两处真实来源必须相同。
 
 前端界面不显示版本，所以不一致不会在界面上暴露，只会出现在 README、Releases 页、

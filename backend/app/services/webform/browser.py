@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表专用浏览器生命周期。
 
 网申与投递台必须是两个相互隔离的受控浏览器：

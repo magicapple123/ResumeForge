@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 回到助手页时恢复"发送中"的会话视图（问题 B：流式会话全局化）。
  *

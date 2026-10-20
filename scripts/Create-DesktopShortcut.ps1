@@ -1,4 +1,5 @@
-﻿# Create-DesktopShortcut.ps1 - create a desktop shortcut for ResumeForge.
+﻿# SPDX-License-Identifier: Apache-2.0
+# Create-DesktopShortcut.ps1 - create a desktop shortcut for ResumeForge.
 #
 # A downloaded release zip is a folder the user unzips anywhere; double-clicking
 # start.cmd works, but Windows then shows the generic console icon on the

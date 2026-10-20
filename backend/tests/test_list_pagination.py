@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-08 分页端点测试：``/page`` 四兄弟的边界、排序与列表 DTO 收窄。
 
 钉住的契约（rf-opt 架构 §2.5）：

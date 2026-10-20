@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 投递台：投递队列、自动采集、执行进度与投递记录。
  *

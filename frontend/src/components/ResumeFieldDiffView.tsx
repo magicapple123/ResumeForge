@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 版本对比：默认的人性化、字段级视图。
  *
  * 主视图由前端 ``utils/resumeFieldDiff`` 计算出的字段级差异驱动：只展示有变化的区块、

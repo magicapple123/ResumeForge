@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """0042：岗位「来源」从备注拆成独立列 ``job.origin_source``。
 
 历史行为：保存岗位时把「来源：{recognition_source}」一行自动追加在备注末尾

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 版式覆盖的类型定义，单独成文件是为了避免 `resume.ts` ↔ `templateMarket.ts`
  *  互相引用（resume.ts 已经引用了 TemplateMarketPreset）。
  *

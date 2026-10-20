@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """startchat 对话框形态与聊天输入框容器内兜底（从 test_boss_apply.py 拆出）。
 
 ``MarkerClient``/常量/state helper 留在主文件（test_boss_apply.py）。

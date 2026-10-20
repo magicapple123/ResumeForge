@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 分区顺序的前端归一化：与后端 `resume_sections.py` 同一套规则的两份实现，
  *  这里钉住前端这份的行为（补齐、去重、调序边界）。 */
 

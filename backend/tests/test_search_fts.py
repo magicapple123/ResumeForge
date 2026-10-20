@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """全局搜索 FTS 化的对照测试：FTS 路径与 LIKE 路径**逐条一致**。
 
 迁移 ``0046_search_fts`` 给 ``/api/search`` 覆盖的七个数据域建了 FTS5 trigram

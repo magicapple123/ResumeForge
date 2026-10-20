@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """教育、工作、校园、项目和奖项条目的解析。"""
 
 import re

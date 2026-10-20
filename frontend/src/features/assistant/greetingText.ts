@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 分时段问候：深夜/凌晨补一句关怀，其余时段不画蛇添足。 */
 
 export interface AssistantGreeting {

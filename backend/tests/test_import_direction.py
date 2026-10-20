@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """模块依赖方向守卫：AST 静态扫描 ``backend/app/`` 的 import 语句。
 
 钉住架构文档（``deliverables/software-company/rf-opt-architecture-2026-10-10.md``

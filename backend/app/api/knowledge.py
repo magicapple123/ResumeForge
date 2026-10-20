@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """知识库接口：条目的增删改查与分类建议。"""
 
 import logging

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """模拟面试的请求/响应结构。"""
 
 from datetime import datetime

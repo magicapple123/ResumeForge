@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """RF-19 失败分类收紧与投递链路诊断事件的离线测试。
 
 覆盖三件事：

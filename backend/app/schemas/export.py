@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """导出与脱敏的请求 Schema（R-16 / R-17）。
 
 ``ExportRequest`` 是 ``POST /api/resumes/{id}/export`` 的请求体，字段与

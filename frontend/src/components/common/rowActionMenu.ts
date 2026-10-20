@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 列表行操作的菜单项定义与构造。
  *

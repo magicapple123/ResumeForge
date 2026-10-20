@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """「点哪个填哪个」的页面注入脚本构造（状态轮询 / 面板 / 回执 / 清理），纯字符串、零状态。"""
 from __future__ import annotations
 

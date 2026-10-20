@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // ===== ③ 失败分类（与后端 FAILURE_CATEGORY_LABELS 一致）=====
 export const FAILURE_CATEGORIES = [
   "selector_invalid",

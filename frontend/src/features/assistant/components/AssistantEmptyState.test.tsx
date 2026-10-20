@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 助手空态：深夜关怀语的对比度回归。
  *

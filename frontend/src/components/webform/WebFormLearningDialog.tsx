@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 填完之后问一句：「这次填的这几项简历通里没有，要记住下次自动填吗？」
  *

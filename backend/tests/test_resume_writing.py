@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历写作增强：四个 LLM 变换 + LLM 未配置降级 + 提示词登记。"""
 
 import json

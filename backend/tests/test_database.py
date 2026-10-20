@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """SQLite 兼容升级测试。"""
 
 from alembic import command

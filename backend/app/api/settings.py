@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """设置接口：大模型配置的读取、保存与连通性测试。"""
 
 import ipaddress

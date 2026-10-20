@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 数据集导入结果的提示文案（R16 嵌套整包）。
  *

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「让 AI 按我的要求改这一栏」：当前内容区的**折叠**行为。
  *

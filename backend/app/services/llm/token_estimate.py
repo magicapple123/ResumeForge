@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """上下文 token 估算（RF-14 §2.5）：纯字符启发式，**仅遥测**。
 
 **估计值，禁止用于计费或精确展示**：不同 tokenizer 的结果差异可达两位数百分比，

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 岗位排序（R14/E）：antd 列头 ↔ 后端 `sort` / `order` 参数的唯一映射。
  *

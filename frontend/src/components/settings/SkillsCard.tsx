@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 助手技能管理：导入、点击查看详情、启用/停用与删除。 */
 
 import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";

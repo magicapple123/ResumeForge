@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申填表的编排：读表单 → 预览 → 填充。
 
 三段彼此独立，中间靠 ``session.SnapshotStore`` 串起来：

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 岗位广场批量操作条：选择模式下的清空/批量设置状态/导出 CSV/批量删除。
  * （自 JobsPage 拆出：:489-537 整块逐字随迁；applyBatchStatus/removeSelectedJobs

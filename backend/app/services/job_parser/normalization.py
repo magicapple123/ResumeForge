@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """招聘文本的字段匹配、行规范化和基础清洗。"""
 
 import re

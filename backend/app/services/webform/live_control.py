@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """专用浏览器内的实时填表悬浮球「历历」。
 
 页面只负责把用户的开关/拖动动作写进一个受用的 window 状态；

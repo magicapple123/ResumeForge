@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 将预览中的结构化字段路径映射到编辑器标签和表单字段。 */
 
 const TAB_BY_SECTION: Record<string, string> = {

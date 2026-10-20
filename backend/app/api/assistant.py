@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """AI 求职助手：会话历史、显式上下文和流式模型回复。"""
 
 import logging

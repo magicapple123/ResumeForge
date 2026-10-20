@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """D5 题库历史 / 面试复盘历史的持久化。
 
 题库与复盘本体是「即时生成、不落库」的（``services/interview_questions``），本模块只负责把用户

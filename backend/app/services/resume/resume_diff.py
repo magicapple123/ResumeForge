@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历版本三态差异（R-07）。
 
 用标准库 ``difflib.SequenceMatcher`` 做两级对比：先按行，再对「被改写」的成对行按词。

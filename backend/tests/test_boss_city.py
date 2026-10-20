@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 城市编码解析：动态清单、缓存、别名与错误反馈。"""
 from __future__ import annotations
 

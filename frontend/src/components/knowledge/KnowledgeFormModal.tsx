@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 知识库条目编辑：标题、分类、标签、来源与 Markdown 正文。 */
 
 import { Button, Form, Input, Modal, Select, Space, Typography } from "antd";

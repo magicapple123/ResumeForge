@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """把用户资料整理成"可以直接往表单里填"的扁平字段字典。
 
 与 ``services/apply/_queue.py::build_apply_data`` 是**超集**关系：那个只取投递必需的

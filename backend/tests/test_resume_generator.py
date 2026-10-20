@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历生成核心流程测试（使用假 Provider，不发起真实网络请求）。"""
 
 import json

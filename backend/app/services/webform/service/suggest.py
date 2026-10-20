@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """字段识别与实时建议（实时面板用）。"""
 from __future__ import annotations
 

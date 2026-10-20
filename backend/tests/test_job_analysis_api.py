@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """岗位 AI 解读接口测试。"""
 
 import asyncio

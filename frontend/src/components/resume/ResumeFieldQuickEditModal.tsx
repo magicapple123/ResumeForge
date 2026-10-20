@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「只编辑选中的这一部分」：在预览里点中某一栏后，**只**改那一处。
  *

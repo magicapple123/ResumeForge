@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 自动备份保护状态卡（RF-05）：把"是否被保护"如实展示给用户。
  *

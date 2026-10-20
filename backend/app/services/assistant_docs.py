@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """简历通本地文档检索：只读、离线、按标题分块返回相关说明。"""
 
 from __future__ import annotations

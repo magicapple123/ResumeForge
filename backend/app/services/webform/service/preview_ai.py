@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """网申表单的 AI 兜底采纳（enrich_preview_with_ai 与两条采纳路径）。
 
 从 ``preview.py`` 按职责拆出：规则预览（``build_preview``）是**纯计算、不碰模型**；

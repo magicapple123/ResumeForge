@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """无标签经历头部的字段推断。"""
 
 import re

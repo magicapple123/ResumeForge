@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 工作台「找求职助手制作」入口：把用户带到助手页并预填一句提问。
  *

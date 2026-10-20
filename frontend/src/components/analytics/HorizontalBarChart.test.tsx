@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 横向条形图：漏斗与排行共用同一份几何，对齐方式决定读法。 */
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";

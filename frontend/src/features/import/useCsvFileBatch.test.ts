@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** CSV 批量导入状态机（R1）：合并、去重、坏文件隔离、上限与分块账目。 */
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";

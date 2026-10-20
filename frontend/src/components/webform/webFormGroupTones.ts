@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * 「记住这条」弹窗的分组色调（R18）：浅 / 深两套。
  *

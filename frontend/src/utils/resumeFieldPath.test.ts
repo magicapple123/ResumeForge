@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 简历字段路径的读写：预览点中的那一栏要能精确定位，写回时不能动到别处。 */
 
 import { describe, expect, it } from "vitest";

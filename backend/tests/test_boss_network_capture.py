@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """详情响应解析与网络事件/响应体捕获（从 test_boss_network.py 拆出）。
 
 ``_search_payload``/``_response_event``/``_body_event`` 定义在主文件（它们同时被
