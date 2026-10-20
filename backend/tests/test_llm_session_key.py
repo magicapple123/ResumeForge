@@ -3,6 +3,7 @@
 从 test_api_settings.py 拆出：该文件超 500 行预算（test_file_size_budget 守门），
 而这批用例自成一体——会话密钥的 API 往返、零落库、占位符兜底、DPAPI 失败显式报错。
 """
+
 import pytest
 from app.schemas.setting import LLMConfig
 from app.services.api_key_crypto import ApiKeyEncryptionError
@@ -21,9 +22,7 @@ def _clean_session_key():
 def test_session_key_roundtrip_via_api(client):
     assert client.get("/api/settings/llm/session-key").json() == {"configured": False}
 
-    set_response = client.put(
-        "/api/settings/llm/session-key", json={"api_key": "sk-session-only"}
-    )
+    set_response = client.put("/api/settings/llm/session-key", json={"api_key": "sk-session-only"})
     assert set_response.status_code == 200
     assert set_response.json() == {"configured": True}
     # 密钥本体永不回传。
@@ -43,9 +42,10 @@ def test_session_key_is_used_for_llm_config_and_never_persisted(client, db_sessi
     saved = client.put("/api/settings/llm", json=config.model_dump()).json()
 
     # 记录临时密钥（模拟"仅会话使用"的保存动作：密钥进内存通道）。
-    assert client.put(
-        "/api/settings/llm/session-key", json={"api_key": "sk-session-only"}
-    ).status_code == 200
+    assert (
+        client.put("/api/settings/llm/session-key", json={"api_key": "sk-session-only"}).status_code
+        == 200
+    )
     # 常规保存请求只落 Base URL/模型等，api_key 显式为空。
     client.put("/api/settings/llm", json={**saved, "api_key": ""})
 
@@ -90,6 +90,9 @@ def test_dpapi_failure_fails_loudly_and_never_persists_key(client, db_session, m
         raise ApiKeyEncryptionError("本机密钥保护服务（Windows DPAPI）加密失败")
 
     monkeypatch.setattr("app.services.settings_service.encrypt_key", broken_encrypt)
+    # 全局记录走 global_settings 的加密入口（同一套 DPAPI，只是另一个绑定）；
+    # 两个落点都要在失败时明确报错，而不是"数据集没写、全局却写进去了"。
+    monkeypatch.setattr("app.services.global_settings.encrypt_key", broken_encrypt)
     config = LLMConfig(base_url="https://api.example.com/v1", api_key="sk-test", model="m")
 
     response = client.put("/api/settings/llm", json=config.model_dump())

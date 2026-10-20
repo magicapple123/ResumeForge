@@ -24,7 +24,12 @@ from typing import Any
 from sqlalchemy import Engine
 
 from .archive_guard import validate_archive
-from .paths import BACKUP_FORMAT_NESTED_COLLECTION, MANIFEST_MEMBER, BackupError
+from .paths import (
+    BACKUP_FORMAT_GLOBAL_CONFIG,
+    BACKUP_FORMAT_NESTED_COLLECTION,
+    MANIFEST_MEMBER,
+    BackupError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +50,15 @@ def is_nested_collection(archive_path: Path) -> bool:
             manifest = json.loads(archive.read(MANIFEST_MEMBER))
     except (OSError, KeyError, ValueError, zipfile.BadZipFile):
         return False
-    return isinstance(manifest, dict) and manifest.get("format") == BACKUP_FORMAT_NESTED_COLLECTION
+    # 5 = 带全局模型配置的嵌套整包：结构与 4 完全一致，只是多了 global_llm.json。
+    # **必须同时看 type**：单数据集包带上全局配置后也是格式 5，只看格式号会把
+    # 它误判成整包，然后在"缺少 datasets"上报一句与事实无关的错。
+    return (
+        isinstance(manifest, dict)
+        and manifest.get("format") in (BACKUP_FORMAT_NESTED_COLLECTION, BACKUP_FORMAT_GLOBAL_CONFIG)
+        and manifest.get("type") == _COLLECTION_TYPE
+        and isinstance(manifest.get("datasets"), list)
+    )
 
 
 def _read_collection_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
@@ -56,7 +69,8 @@ def _read_collection_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
         raise BackupError("整包备份的元信息已损坏，无法读取") from exc
     if (
         not isinstance(manifest, dict)
-        or manifest.get("format") != BACKUP_FORMAT_NESTED_COLLECTION
+        or manifest.get("format")
+        not in (BACKUP_FORMAT_NESTED_COLLECTION, BACKUP_FORMAT_GLOBAL_CONFIG)
         or manifest.get("type") != _COLLECTION_TYPE
     ):
         raise BackupError("整包备份的元信息不受支持，可能来自其它版本的 ResumeForge")

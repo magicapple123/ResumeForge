@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 
 from starlette.datastructures import Headers, MutableHeaders
@@ -10,6 +11,21 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ..runtime import dataset_scope
 from ..runtime.dataset_scope import DatasetScopeError
+
+logger = logging.getLogger(__name__)
+
+
+def _mismatch_scope_token(lease: dataset_scope.DatasetLease | None) -> str | None:
+    """409 响应里回写的"当前身份"token，让页面能自助重同步而不必整页刷新。
+
+    与正常响应（``scoped_send``）取同一份身份：有租约用租约身份，没有就是当前身份。
+    异常路径里再抛异常会把 409 变成 500，正好毁掉这里要修的那个问题，所以兜底成 None。
+    """
+    try:
+        return dataset_scope.request_scope_token(lease.identity if lease is not None else None)
+    except Exception:  # noqa: BLE001 - 见 docstring：错误路径不得二次失败
+        logger.exception("无法读取当前数据集身份，409 响应不带 X-Dataset-Scope")
+        return None
 
 
 def _is_transition(path: str) -> bool:
@@ -92,8 +108,20 @@ class DatasetRequestMiddleware:
 
             await self.app(scope, receive, scoped_send)
         except DatasetScopeError as exc:
+            # 前端据此区分「token 过期」与「真有任务在跑」：只有前者能自动重同步后重试一次。
+            current_token = _mismatch_scope_token(lease)
+            logger.warning(
+                "dataset scope mismatch path=%s expected=%s current=%s detail=%s",
+                path,
+                expected,
+                current_token,
+                exc.public_message,
+            )
+            headers = {"X-Dataset-Scope": current_token} if current_token else None
             await JSONResponse(
-                {"detail": exc.public_message, "code": "dataset_scope_changed"}, status_code=409
+                {"detail": exc.public_message, "code": "dataset_scope_changed"},
+                status_code=409,
+                headers=headers,
             )(scope, receive, send)
         finally:
             if lease is not None:

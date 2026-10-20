@@ -35,8 +35,10 @@ from ...dataset_registry import (
 )
 from .asset_manifest import file_digest
 from .export import create_backup_archive
+from .global_config import build_global_llm_payload, write_global_llm_member
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME,
+    BACKUP_FORMAT_GLOBAL_CONFIG,
     BACKUP_FORMAT_NESTED_COLLECTION,
     MANIFEST_MEMBER,
     README_MEMBER,
@@ -53,6 +55,7 @@ def create_collection_archive(
     *,
     extras: Sequence[ExtraDatabase] = (),
     include_api_keys: bool = False,
+    include_global_llm: bool = False,
 ) -> Path:
     """生成格式 4 的嵌套整包并返回路径；调用方负责在响应结束后删除。
 
@@ -90,8 +93,15 @@ def create_collection_archive(
                 )
             finally:
                 temporary.dispose()
-        manifest = _collection_manifest(built, active_id)
+        global_payload = (
+            build_global_llm_payload(include_api_keys=include_api_keys)
+            if include_global_llm
+            else None
+        )
+        global_count = len(global_payload["profiles"]) if global_payload is not None else None
+        manifest = _collection_manifest(built, active_id, global_llm_profiles=global_count)
         with zipfile.ZipFile(archive_path, "x", zipfile.ZIP_DEFLATED) as archive:
+            write_global_llm_member(archive, global_payload)
             archive.writestr(MANIFEST_MEMBER, json.dumps(manifest, ensure_ascii=False, indent=2))
             archive.writestr(README_MEMBER, _readme(manifest))
             for entry, sub_archive in built:
@@ -113,7 +123,14 @@ def _build_member(
     """生成一份子包，返回（外层清单条目, 子包路径）。"""
     sub_dir = work / f"sub-{dataset_id}"
     sub_dir.mkdir(parents=True, exist_ok=True)
-    sub_archive = create_backup_archive(bind, sub_dir, include_api_keys=include_api_keys)
+    try:
+        sub_archive = create_backup_archive(bind, sub_dir, include_api_keys=include_api_keys)
+    except BackupError as exc:
+        # 用户点的是"导出全部"：失败时必须说清是**哪一份**，否则只能看到一句
+        # "生成备份失败"而无从下手（哪份数据集、要不要先切过去处理）。
+        raise BackupError(
+            f"数据集「{name}」导出失败：{exc}", status_code=getattr(exc, "status_code", 500)
+        ) from exc
     size, digest = file_digest(sub_archive)
     sub_manifest = _read_sub_manifest(sub_archive)
     entry: dict = {
@@ -144,10 +161,19 @@ def _read_sub_manifest(sub_archive: Path) -> dict:
     return manifest
 
 
-def _collection_manifest(built: Sequence[tuple[dict, Path]], active_id: str) -> dict:
+def _collection_manifest(
+    built: Sequence[tuple[dict, Path]],
+    active_id: str,
+    *,
+    global_llm_profiles: int | None = None,
+) -> dict:
     settings = get_settings()
-    return {
-        "format": BACKUP_FORMAT_NESTED_COLLECTION,
+    manifest = {
+        "format": (
+            BACKUP_FORMAT_GLOBAL_CONFIG
+            if global_llm_profiles is not None
+            else BACKUP_FORMAT_NESTED_COLLECTION
+        ),
         "type": COLLECTION_TYPE,
         "app": settings.app_name,
         "app_version": settings.app_version,
@@ -157,6 +183,9 @@ def _collection_manifest(built: Sequence[tuple[dict, Path]], active_id: str) -> 
         "active_id": active_id,
         "datasets": [entry for entry, _ in built],
     }
+    if global_llm_profiles is not None:
+        manifest["global_llm"] = {"profiles": global_llm_profiles}
+    return manifest
 
 
 def _format_size(size: int) -> str:

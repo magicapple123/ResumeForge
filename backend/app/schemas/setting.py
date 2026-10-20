@@ -180,6 +180,30 @@ class LLMConfigRecordOut(LLMConfigRecordCreate):
     updated_at: datetime
 
 
+class LLMConfigOut(LLMConfig):
+    """当前**生效**配置 + 来源（C）。
+
+    `scope="global"`：来自 `global_settings.json` 的某条记录（所有数据集共用）；
+    `scope="dataset"`：还在用数据集里的旧配置（升级后、全局尚未迁移时的回退态）。
+    前端据此显示"使用中"的记录名，以及"保存后升级为全局"的提示。
+    """
+
+    scope: Literal["global", "dataset"] = "dataset"
+    record_id: str | None = None
+    record_name: str = ""
+
+
+class LLMGlobalRecordOut(LLMConfig):
+    """一条全局模型配置记录；`api_key` 是 `********:profile:<id>` 引用，绝不是密钥本体。"""
+
+    id: str
+    name: str
+    models: list[str] = Field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+    is_active: bool = False
+
+
 class LLMTestRequest(LLMConfig):
     """测试连接使用表单当前值，不一定先保存。"""
 

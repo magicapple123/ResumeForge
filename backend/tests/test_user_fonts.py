@@ -153,3 +153,21 @@ def test_active_font_file_endpoint(client):
     assert response.headers["content-type"] == "font/ttf"
     assert response.headers["cache-control"] == "no-store"
     assert response.content == font_bytes
+
+
+def test_any_font_file_is_readable_for_preview(client):
+    """预览不该要求"先设为当前"：任意已上传字体都要能拿到字节。"""
+    font_bytes = build_test_font()
+    user_fonts.save_font("预览字体.ttf", font_bytes)
+    # 不调用 set_active：这正是重点。
+
+    response = client.get("/api/settings/fonts/%E9%A2%84%E8%A7%88%E5%AD%97%E4%BD%93.ttf/file")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "font/ttf"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.content == font_bytes
+
+    assert client.get("/api/settings/fonts/nope.ttf/file").status_code == 404
+    # 只接受纯文件名：带目录成分的请求一律 404，避免越出 fonts 目录。
+    assert client.get("/api/settings/fonts/..%2Fsecret.ttf/file").status_code == 404

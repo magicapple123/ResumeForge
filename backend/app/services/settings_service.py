@@ -24,7 +24,13 @@ from ..schemas.setting import (
 )
 from .api_key_crypto import decrypt_key, encrypt_key
 from .api_key_session import get_session_key, session_key_configured
-from .global_settings import read_global_llm
+from .global_llm_profiles import read_global_llm
+from .llm_key_refs import (
+    API_KEY_MASK,
+    PROFILE_API_KEY_PREFIX,
+    RECORD_API_KEY_PREFIX,
+    masked_record_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,17 +46,6 @@ _AUTO_BACKUP_INTERVAL_KEY = "auto_backup_interval_days"
 # 求职助手放宽模式：开启后助手可读取完整资料（含姓名、电话等敏感字段）与
 # 网申填写记录、历史对话。默认必须**关**——它扩大的是发往模型的个人信息面。
 _ASSISTANT_RELAXED_MODE_KEY = "assistant_relaxed_mode"
-API_KEY_MASK = "********"
-_RECORD_API_KEY_PREFIX = f"{API_KEY_MASK}:record:"
-
-
-def _masked_api_key(api_key: str, record_id: int | None = None) -> str:
-    """返回可安全发给前端、且能在后续写请求中解析的密钥引用。"""
-    if not api_key:
-        return ""
-    if record_id is None:
-        return API_KEY_MASK
-    return f"{_RECORD_API_KEY_PREFIX}{record_id}"
 
 
 def resolve_llm_config_api_key(db: Session, config: LLMConfig) -> LLMConfig:
@@ -65,8 +60,8 @@ def resolve_llm_config_api_key(db: Session, config: LLMConfig) -> LLMConfig:
         if _normalized_base_url(config.base_url) != _normalized_base_url(current.base_url):
             raise ValueError("Base URL 已修改，请重新填写 API Key 后再保存或测试")
         resolved_key = current.api_key
-    elif api_key.startswith(_RECORD_API_KEY_PREFIX):
-        record_id_text = api_key.removeprefix(_RECORD_API_KEY_PREFIX)
+    elif api_key.startswith(RECORD_API_KEY_PREFIX):
+        record_id_text = api_key.removeprefix(RECORD_API_KEY_PREFIX)
         if not record_id_text.isdigit():
             raise ValueError("API Key 配置引用无效，请重新加载设置后再试")
         record = db.get(LLMConfigRecord, int(record_id_text))
@@ -75,6 +70,17 @@ def resolve_llm_config_api_key(db: Session, config: LLMConfig) -> LLMConfig:
         if _normalized_base_url(config.base_url) != _normalized_base_url(record.base_url):
             raise ValueError("Base URL 与配置记录不一致，请重新加载记录后再试")
         resolved_key = decrypt_key(record.api_key)
+    elif api_key.startswith(PROFILE_API_KEY_PREFIX):
+        # 全局配置记录（C）：密钥存在 global_settings.json，引用的 id 是字符串 profile id。
+        from .global_llm_profiles import read_profile_config
+
+        profile_id = api_key.removeprefix(PROFILE_API_KEY_PREFIX)
+        profile_config = read_profile_config(profile_id)
+        if profile_config is None:
+            raise ValueError("API Key 配置记录已不存在，请重新加载设置后再试")
+        if _normalized_base_url(config.base_url) != _normalized_base_url(profile_config.base_url):
+            raise ValueError("Base URL 与配置记录不一致，请重新填写 API Key 后再试")
+        resolved_key = profile_config.api_key
     else:
         resolved_key = api_key
     return config.model_copy(update={"api_key": resolved_key})
@@ -139,12 +145,12 @@ def mask_llm_config(db: Session, config: LLMConfig) -> LLMConfig:
             None,
         )
         record_id = matching.id if matching is not None else None
-    return config.model_copy(update={"api_key": _masked_api_key(config.api_key, record_id)})
+    return config.model_copy(update={"api_key": masked_record_key(config.api_key, record_id)})
 
 
 def _mask_llm_config_record(record: LLMConfigRecord) -> LLMConfigRecordOut:
     output = LLMConfigRecordOut.model_validate(record)
-    return output.model_copy(update={"api_key": _masked_api_key(record.api_key, record.id)})
+    return output.model_copy(update={"api_key": masked_record_key(record.api_key, record.id)})
 
 
 def get_dataset_llm_config(db: Session) -> LLMConfig:
@@ -171,9 +177,10 @@ def get_dataset_llm_config(db: Session) -> LLMConfig:
 
 
 def get_llm_config(db: Session) -> LLMConfig:
-    """**实际生效**的 LLM 配置（R21）：全局优先，否则用本数据集那一份。
+    """**实际生效**的 LLM 配置（R21/C）：全局优先，否则用本数据集那一份。
 
-    全局配置显式开启且填了 base_url + model 时接管所有调用；否则行为与升级前完全
+    全局有 profile 且填了 base_url + model 时接管所有调用（C 起不再有"开启"开关：
+    保存即生效，见 ``global_llm_profiles``）；没有全局或字段不全时行为与升级前完全
     一致。这一层只做"选哪一份"，不改变各调用点——27 处调用点因此无需逐个修改，
     也不会出现"某条链路忘了支持全局配置"。
     """

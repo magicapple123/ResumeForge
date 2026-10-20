@@ -4,21 +4,16 @@ import ipaddress
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db, session_engine
-from ..models.setting import LLMConfigRecord
 from ..schemas.setting import (
     AssistantOrbSetting,
     AssistantRelaxedModeSetting,
     AutoBackupIntervalSetting,
     ExportSaveLocationIn,
     ExportSaveLocationOut,
-    LLMApiKeyRevealResult,
-    LLMConfig,
-    LLMConfigRecordCreate,
-    LLMConfigRecordOut,
     LLMModelsRequest,
     LLMModelsResult,
     LLMSessionKeyIn,
@@ -32,7 +27,6 @@ from ..schemas.setting import (
     SearchConfig,
     WebFormRelaxedModeSetting,
 )
-from ..services.api_key_crypto import ApiKeyEncryptionError
 from ..services.api_key_session import clear_session_key, session_key_configured, set_session_key
 from ..services.export_save_location import (
     FolderPickerUnavailable,
@@ -45,25 +39,19 @@ from ..services.llm.connection_probe import connection_probe_config
 from ..services.llm.model_catalog import list_available_models
 from ..services.llm.thinking import probe_thinking, thinking_support
 from ..services.settings_service import (
-    delete_llm_config_record,
     get_assistant_orb_setting,
     get_assistant_relaxed_mode,
     get_auto_backup_interval_days,
-    get_dataset_llm_config,
     get_export_save_location,
     get_navigation_visibility,
     get_reminder_popup_on_start,
     get_search_config,
     get_webform_relaxed_mode,
-    list_llm_config_records,
-    mask_llm_config,
     resolve_llm_config_api_key,
     save_assistant_orb_setting,
     save_assistant_relaxed_mode,
     save_auto_backup_interval_days,
     save_export_save_location,
-    save_llm_config,
-    save_llm_config_record,
     save_navigation_visibility,
     save_reminder_popup_on_start,
     save_search_config,
@@ -89,61 +77,6 @@ def _is_loopback_request(request: Request) -> bool:
     # 抛 AttributeError，本该是 403 的请求变成 500。
     mapped = getattr(address, "ipv4_mapped", None)
     return mapped is not None and mapped.is_loopback
-
-
-@router.get("/llm/records", response_model=list[LLMConfigRecordOut])
-def read_llm_config_records(db: Session = Depends(get_db)):
-    return list_llm_config_records(db)
-
-
-@router.post("/llm/records", response_model=LLMConfigRecordOut)
-def write_llm_config_record(payload: LLMConfigRecordCreate, db: Session = Depends(get_db)):
-    try:
-        return save_llm_config_record(db, payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ApiKeyEncryptionError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@router.delete("/llm/records/{record_id}", status_code=204)
-def remove_llm_config_record(record_id: int, db: Session = Depends(get_db)):
-    record = db.get(LLMConfigRecord, record_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="配置记录不存在或已被删除")
-    delete_llm_config_record(db, record_id)
-
-
-@router.get("/llm", response_model=LLMConfig)
-def read_llm_config(db: Session = Depends(get_db)):
-    """设置页表单读的是**本数据集**的配置；全局配置见 `/settings/global-llm`。"""
-    return mask_llm_config(db, get_dataset_llm_config(db))
-
-
-@router.post("/llm/api-key/reveal", response_model=LLMApiKeyRevealResult)
-def reveal_llm_api_key(
-    request: Request,
-    response: Response,
-    db: Session = Depends(get_db),
-):
-    """仅在用户点击显示时临时返回当前密钥，且禁止浏览器和代理缓存。"""
-    if not _is_loopback_request(request):
-        raise HTTPException(status_code=403, detail="API Key 只能在运行后端的本机查看")
-    response.headers["Cache-Control"] = "no-store, private"
-    response.headers["Pragma"] = "no-cache"
-    return LLMApiKeyRevealResult(api_key=get_dataset_llm_config(db).api_key)
-
-
-@router.put("/llm", response_model=LLMConfig)
-def write_llm_config(payload: LLMConfig, db: Session = Depends(get_db)):
-    try:
-        saved = save_llm_config(db, payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ApiKeyEncryptionError as exc:
-        # DPAPI 失败：密钥未落盘（服务层在 commit 前抛出），显式告知而不是伪装成功。
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return mask_llm_config(db, saved)
 
 
 @router.get("/llm/session-key", response_model=LLMSessionKeyOut)

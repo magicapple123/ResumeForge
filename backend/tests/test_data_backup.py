@@ -188,6 +188,25 @@ def test_export_writes_a_manifest_describing_the_data(db_session, tmp_path):
     assert "datasets" not in manifest
 
 
+def test_manifest_treats_missing_tables_as_zero_and_lists_them(db_session, tmp_path):
+    """旧数据集缺表（H1）：按 0 记录并写 `missing_tables`，不能中止整包导出。
+
+    真实案例：停在 0040 的「体验示例」没有 `application_track_event`，按模型全集逐张
+    `COUNT(*)` 会抛 `no such table`，用户点「导出全部数据集」只看到一句 500。
+    """
+    from sqlalchemy import text
+
+    db_session.execute(text("DROP TABLE application_track_event"))
+    db_session.commit()
+
+    manifest = _manifest(_export(tmp_path))
+
+    assert manifest["tables"]["application_track_event"] == 0
+    assert "application_track_event" in manifest["missing_tables"]
+    # 其余表照常计数，缺表不影响导出物本身。
+    assert manifest["tables"]["job"] == 0
+
+
 def test_manifest_marks_the_format_when_datasets_ride_along(tmp_path):
     """带上其余数据集时必须升到多数据集格式（2）。
 

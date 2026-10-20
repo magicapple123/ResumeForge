@@ -21,6 +21,8 @@ ORB_CSS = FRONTEND_SRC / "features" / "tou-tou" / "tou-tou.css"
 CARD_CSS = FRONTEND_SRC / "features" / "tou-tou" / "tou-tou-assistant.css"
 COMPOSER_CSS = FRONTEND_SRC / "styles" / "assistant-composer.css"
 THEME_PROVIDER_TSX = FRONTEND_SRC / "components" / "ThemeProvider.tsx"
+APP_THEME_TS = FRONTEND_SRC / "theme" / "appTheme.ts"
+DARK_THEME_TS = FRONTEND_SRC / "theme" / "darkTheme.ts"
 MAIN_TSX = FRONTEND_SRC / "main.tsx"
 TOKENS_TS = FRONTEND_SRC / "theme" / "tokens.ts"
 
@@ -36,10 +38,10 @@ def test_popup_zindex_base_stays_above_the_floating_cards():
     RF-12 之后基准经语义 token 引用（``layer.popupBase``），所以钉整条链：
     main.tsx 必须引用 token，tokens.ts 必须把值钉在 3100。
     """
-    # 2026-10-19：主题装配搬进 ThemeProvider（切主题要重渲染），这条链也跟着搬；
-    # 两处任一引用都算数，但**必须**引用语义 token，不能写死数字。
-    text = MAIN_TSX.read_text(encoding="utf-8") + THEME_PROVIDER_TSX.read_text(encoding="utf-8")
-    assert "zIndexPopupBase: layer.popupBase" in text
+    # 2026-10-19：深色改用独立 ThemeConfig 后，基准从 ThemeProvider 移进两套主题文件；
+    # 两边**都**要引用语义 token（深色缺了就会出现"弹层被助手卡盖住"），不能写死数字。
+    for path in (APP_THEME_TS, DARK_THEME_TS):
+        assert "zIndexPopupBase: layer.popupBase" in path.read_text(encoding="utf-8"), path.name
     tokens = TOKENS_TS.read_text(encoding="utf-8")
     assert "popupBase: 3100" in tokens
 

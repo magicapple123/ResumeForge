@@ -25,10 +25,13 @@ from sqlalchemy import Engine
 # 当前代码能读/写的**最高**格式，导入侧用它拒绝"来自更新版本"的包。写包时的 format
 # 由 ``build_manifest`` 按内容显式计算，**不能**直接套这个常量——否则"导出全部数据集
 # （不含密钥）"会被错误标成 3，老版本会拒收一份本可以安全读的包。
-BACKUP_FORMAT_VERSION = 4
+BACKUP_FORMAT_VERSION = 5
 BACKUP_FORMAT_MULTI_DATASET = 2
 BACKUP_FORMAT_WITH_KEYS = 3
 BACKUP_FORMAT_NESTED_COLLECTION = 4
+# 5（2026-10）：包内带 global_llm.json（全部全局模型配置）。旧版本必须以"请先升级"
+# 拒收——静默忽略等于把用户以为已备份的配置丢掉，这类损失通常很久以后才发现。
+BACKUP_FORMAT_GLOBAL_CONFIG = 5
 DATABASE_MEMBER = "resume_forge.db"
 MANIFEST_MEMBER = "manifest.json"
 README_MEMBER = "README.txt"

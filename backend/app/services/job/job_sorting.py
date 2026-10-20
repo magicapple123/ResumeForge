@@ -16,19 +16,33 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from sqlalchemy import func
+
 from ...models.job import Job
 
 # 后端接受的排序键（FastAPI 用 Literal 校验，非法值直接 422）。
-JobSort = Literal["created_desc", "updated_desc", "title_asc", "company_asc"]
+# `posted_desc`（E）按**发布时间**排：``posted_at`` 是自由文本（"2026-10-01"、
+# "3 天前"、空串都有），能解析成日期的按日期，解析不出来的回落到导入日期——
+# 否则点一次排序就会出现"没有发布时间的岗位全跑到最前面/最后面"。
+JobSort = Literal["created_desc", "updated_desc", "title_asc", "company_asc", "posted_desc"]
 # 方向覆盖：只在需要"逆着某列的默认方向"时传。
 JobSortOrder = Literal["asc", "desc"]
+
+# 中文按拼音、英文按字母、数字按大小；BINARY collation 会把 ASCII 全排在中文前。
+# 岗位列表与 `/jobs/ids` 共用这一份映射（跨页全选的顺序必须与列表一致）。
+_PINYIN = "rf_pinyin"
 
 # sort 键 → (排序列, 该键自带的方向)。
 _SORT_COLUMNS: dict[str, tuple[Any, str]] = {
     "created_desc": (Job.created_at, "desc"),
     "updated_desc": (Job.updated_at, "desc"),
-    "title_asc": (Job.title, "asc"),
-    "company_asc": (Job.company, "asc"),
+    "title_asc": (Job.title.collate(_PINYIN), "asc"),
+    "company_asc": (Job.company.collate(_PINYIN), "asc"),
+    # date() 对空串/自由文本返回 NULL，COALESCE 兜到导入日期；同日再按 id 稳定排序。
+    "posted_desc": (
+        func.coalesce(func.date(Job.posted_at), func.date(Job.created_at)),
+        "desc",
+    ),
 }
 
 

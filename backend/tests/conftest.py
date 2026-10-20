@@ -39,6 +39,12 @@ from app.dataset_registry import (  # noqa: E402
     write_active_dataset_id,
 )
 from app.main import app  # noqa: E402
+
+# 全局模型/主题（data/global_settings.json）的路径来自 config.DATA_DIR，**不跟随**
+# DATABASE_URL：不隔离的话，`PUT /api/settings/llm` 会在开发机上改写用户真实的
+# 模型配置（2026-10-19 实际发生过一次，从备份恢复）。这里把它指到本进程的测试目录，
+# 用例之间共享同一份纯净起点；需要独立目录的用例（test_global_llm）自己再 monkeypatch。
+from app.services import global_settings as _global_settings  # noqa: E402
 from app.services import (  # noqa: E402
     knowledge_service,
     search_fts,
@@ -46,6 +52,17 @@ from app.services import (  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import event, text  # noqa: E402
 from sqlalchemy.engine import Engine  # noqa: E402
+
+_GLOBAL_SETTINGS_DIR = _TEST_DIR / "global_settings"
+_GLOBAL_SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+_global_settings.DATA_DIR = str(_GLOBAL_SETTINGS_DIR)
+
+
+@pytest.fixture(autouse=True)
+def _clean_global_settings_file():
+    """每个用例从"没有全局配置"开始：模型记录与主题都不该跨用例泄漏。"""
+    (_GLOBAL_SETTINGS_DIR / "global_settings.json").unlink(missing_ok=True)
+    yield
 
 
 @event.listens_for(Engine, "connect")

@@ -119,7 +119,13 @@ def delete_dataset(dataset_id: str) -> None:
     logger.info("数据集已移入回收目录 id=%s", dataset_id)
 
 
-def export_all_datasets(bind: Engine, staging_dir: Path, *, include_api_keys: bool = False) -> Path:
+def export_all_datasets(
+    bind: Engine,
+    staging_dir: Path,
+    *,
+    include_api_keys: bool = False,
+    include_global_llm: bool = True,
+) -> Path:
     """导出**全部数据集**：活动的那份 + 其余每一份都在包里。
 
     为什么需要它：默认的导出只带**当前活动**的那一份，其余数据集（用户可能有好几份，
@@ -144,23 +150,42 @@ def export_all_datasets(bind: Engine, staging_dir: Path, *, include_api_keys: bo
             )
         )
     return create_collection_archive(
-        bind, staging_dir, extras=extras, include_api_keys=include_api_keys
+        bind,
+        staging_dir,
+        extras=extras,
+        include_api_keys=include_api_keys,
+        include_global_llm=include_global_llm,
     )
 
 
 def export_dataset(
-    dataset_id: str, bind: Engine, staging_dir: Path, *, include_api_keys: bool = False
+    dataset_id: str,
+    bind: Engine,
+    staging_dir: Path,
+    *,
+    include_api_keys: bool = False,
+    include_global_llm: bool = True,
 ) -> Path:
     """导出指定数据集为备份包。"""
     target = dataset_database_file(dataset_id)
     if not target.exists():
         raise DatasetError("数据集文件已不存在", status_code=404)
     if dataset_id == read_active_dataset_id():
-        return create_backup_archive(bind, staging_dir, include_api_keys=include_api_keys)
+        return create_backup_archive(
+            bind,
+            staging_dir,
+            include_api_keys=include_api_keys,
+            include_global_llm=include_global_llm,
+        )
     # 非活动数据集：临时建一个引擎取一致快照，用完立即释放（Windows 文件句柄）。
     temporary = database.build_engine(database.database_url_for(target))
     try:
-        return create_backup_archive(temporary, staging_dir, include_api_keys=include_api_keys)
+        return create_backup_archive(
+            temporary,
+            staging_dir,
+            include_api_keys=include_api_keys,
+            include_global_llm=include_global_llm,
+        )
     finally:
         temporary.dispose()
 

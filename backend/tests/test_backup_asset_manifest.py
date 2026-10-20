@@ -15,6 +15,7 @@
 
 import hashlib
 import json
+import sqlite3
 import zipfile
 
 import pytest
@@ -23,8 +24,11 @@ from app.services.data_backup import (
     MANIFEST_MEMBER,
     BackupError,
     create_backup_archive,
+    manifest_asset_counts,
+    manifest_asset_warnings,
 )
 from app.services.data_backup import asset_manifest as asset_manifest_module
+from app.services.data_backup.asset_manifest import build_asset_manifest
 from app.services.datasets import (
     export_all_datasets,
     export_dataset,
@@ -49,6 +53,34 @@ from tests.backup_asset_fixtures import (  # noqa: F401
 # ---------------------------------------------------------------------------
 # 导出侧
 # ---------------------------------------------------------------------------
+
+
+def test_known_missing_is_separated_from_new_missing(tmp_path):
+    """H2：导入时就缺的附件只做说明，不把整份备份标成"不完整"。"""
+    database_file = tmp_path / "data.db"
+    with sqlite3.connect(database_file) as connection:
+        connection.execute("CREATE TABLE user_file (disk_name TEXT, sha256 TEXT)")
+        connection.executemany(
+            "INSERT INTO user_file VALUES (?, ?)",
+            [("gone-at-import.bin", "abc"), ("gone-now.bin", "def")],
+        )
+    (tmp_path / "user_files").mkdir()
+
+    manifest = build_asset_manifest(
+        database_file, tmp_path, known_missing={"user_files": ["gone-at-import.bin"]}
+    )
+
+    assert manifest["user_files"] == []
+    assert manifest["user_files_missing_at_import"] == ["gone-at-import.bin"]
+    assert manifest["user_files_missing"] == ["gone-now.bin"]
+    wrapper = {"asset_manifest": manifest}
+    assert manifest_asset_counts(wrapper) == {
+        "missing": 1,
+        "mismatched": 0,
+        "missing_at_import": 1,
+    }
+    # 只有"新缺失"才产生警告（= 触发 X-Backup-Incomplete）。
+    assert len(manifest_asset_warnings(wrapper)) == 1
 
 
 def test_single_dataset_export_does_not_leak_other_datasets_files(three_datasets, tmp_path):

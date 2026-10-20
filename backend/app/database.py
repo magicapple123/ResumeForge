@@ -4,6 +4,7 @@
 换 PostgreSQL 只需改 DATABASE_URL 并替换 JSON 列写法。
 """
 
+import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -14,8 +15,24 @@ from sqlalchemy.pool import StaticPool
 
 from .config import get_settings
 from .dataset_registry import DatasetError, active_database_file
+from .services.text_sort import compare_text
 
 settings = get_settings()
+
+
+@event.listens_for(Engine, "connect")
+def _register_sqlite_collations(dbapi_connection, _connection_record) -> None:
+    """给**每一个** SQLite 连接注册 `rf_pinyin` collation（F）。
+
+    挂在 `Engine` 类上而不是某个实例上：测试、迁移、备份校验都会各自
+    `create_engine(...)`，逐个补注册一定会漏；漏掉时 `ORDER BY title COLLATE
+    rf_pinyin` 会直接抛 "no such collation sequence"，而不是悄悄退化成 BINARY
+    ——失败倒是响亮的，但修起来要翻遍所有建引擎的地方。
+
+    非 SQLite 连接（理论上换 PostgreSQL 时）跳过：那边的排序规则由数据库侧配置。
+    """
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        dbapi_connection.create_collation("rf_pinyin", compare_text)
 
 
 def database_url_for(path: Path) -> str:

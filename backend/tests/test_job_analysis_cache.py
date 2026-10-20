@@ -223,10 +223,14 @@ def test_post_regenerates_when_the_cache_is_stale(client, db_session, job, monke
 def test_post_does_not_write_cache_when_the_client_already_left(
     client, db_session, job, monkeypatch
 ):
-    """客户端断开后生成完的结果**不落缓存**（R2-b 的落地点）。
+    """客户端断开后**既不落缓存、也不再白跑一次模型**（R2-b + T1 的落地点）。
 
     否则用户点了「取消生成」走开，回来却看到一份"已完成"的解读——那是他明确放弃的那次
     请求，界面却在替它邀功。
+
+    断连的制造方式与 T1 之前相同（打桩 ``is_disconnected``）：这是端到端的那一半——
+    ``_run_until_disconnect`` 返回 ``None`` 时端点必须回 499 且走到"不写缓存"的分支；
+    取消本身的时序由 ``test_job_analysis_api.py`` 的单测覆盖。
     """
     provider = _install_provider(monkeypatch)
 
@@ -237,11 +241,12 @@ def test_post_does_not_write_cache_when_the_client_already_left(
 
     response = client.post(f"/api/jobs/{job.id}/analysis")
 
-    assert response.status_code == 200, response.text
-    # 结果是正常返回的（模型已经跑完了，丢掉浪费）……
-    assert response.json()["summary"] == PROVIDER_PAYLOAD["summary"]
-    assert provider.calls == 1
-    # ……但没有写进缓存：下一次读还是"没有缓存"。
+    # 499：客户端已经走了，这个响应没人收。
+    assert response.status_code == 499, response.text
+    assert "summary" not in response.json()
+    # 生成被取消：第一轮就判了断开，协程根本没机会开跑 —— 没有为了"丢掉浪费"而继续烧 token。
+    assert provider.calls == 0
+    # 也没有写进缓存：下一次读还是"没有缓存"。
     db_session.expire_all()
     assert read_cached_analysis(db_session.get(Job, job.id)) is None
     assert client.get(f"/api/jobs/{job.id}/analysis").json()["cached"] is False

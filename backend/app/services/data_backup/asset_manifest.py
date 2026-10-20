@@ -139,7 +139,12 @@ def _recorded_user_file_digests(database: Path) -> dict[str, str]:
     return digests
 
 
-def build_asset_manifest(database: Path, assets_root: Path) -> dict[str, Any]:
+def build_asset_manifest(
+    database: Path,
+    assets_root: Path,
+    *,
+    known_missing: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """为一份数据库生成资产清单：只收该库引用到的文件，逐文件记 size + sha256。
 
     ``assets_root`` 是磁盘资产的根（该数据库所在目录；类别目录在其下）。库引用了
@@ -148,13 +153,24 @@ def build_asset_manifest(database: Path, assets_root: Path) -> dict[str, Any]:
 
     ``user_file`` 登记过哈希的资产再比一次实际字节：对不上进 ``<category>_mismatched``
     （RR-03：导出侧的"完整备份"标签要以此为准，不能只报"没缺文件"）。
+
+    ``known_missing``（H2）是数据集**导入时**就已缺失的名单。它们现在仍然缺，但
+    不该被算成"这次导出丢了文件"——记到 ``<category>_missing_at_import``，只做说明，
+    不触发 ``X-Backup-Incomplete``。
     """
     referenced = collect_referenced_names(database)
     recorded = _recorded_user_file_digests(database)
+    already_missing = {
+        category: {
+            name for name in (known_missing or {}).get(category, []) if isinstance(name, str)
+        }
+        for category in ASSET_CATEGORIES
+    }
     manifest: dict[str, Any] = {"manifest_version": ASSET_MANIFEST_VERSION}
     for category in ASSET_CATEGORIES:
         entries: list[dict[str, Any]] = []
         missing: list[str] = []
+        missing_at_import: list[str] = []
         mismatched: list[str] = []
         directory = assets_root / category
         for name in sorted(referenced[category]):
@@ -162,7 +178,10 @@ def build_asset_manifest(database: Path, assets_root: Path) -> dict[str, Any]:
             try:
                 size, digest = file_digest(file_path)
             except OSError:
-                missing.append(name)
+                if name in already_missing[category]:
+                    missing_at_import.append(name)
+                else:
+                    missing.append(name)
                 continue
             entries.append({"name": name, "size_bytes": size, "sha256": digest})
             expected = recorded.get(name)
@@ -171,6 +190,8 @@ def build_asset_manifest(database: Path, assets_root: Path) -> dict[str, Any]:
         manifest[category] = entries
         if missing:
             manifest[f"{category}_missing"] = missing
+        if missing_at_import:
+            manifest[f"{category}_missing_at_import"] = missing_at_import
         if mismatched:
             manifest[f"{category}_mismatched"] = mismatched
     return manifest
@@ -179,6 +200,62 @@ def build_asset_manifest(database: Path, assets_root: Path) -> dict[str, Any]:
 def _assert_safe_asset_name(name: Any, category: str) -> str:
     """清单条目里的文件名只认单段安全名字：挡住构造出来的路径穿越。"""
     return safe_asset_name(name, category)
+
+
+def _manifest_sections(manifest: Mapping[str, Any] | None) -> list[tuple[str, Mapping[str, Any]]]:
+    """主段 + 每个随包数据集段的 (标签, 清单)；顺序稳定，便于计数与展示对齐。"""
+    if not isinstance(manifest, Mapping):
+        return []
+    sections: list[tuple[str, Any]] = [("", manifest.get("asset_manifest"))]
+    datasets = manifest.get("datasets")
+    if isinstance(datasets, list):
+        for entry in datasets:
+            if isinstance(entry, dict):
+                sections.append(
+                    (str(entry.get("name") or "随包数据集"), entry.get("asset_manifest"))
+                )
+    return [(label, section) for label, section in sections if isinstance(section, Mapping)]
+
+
+def manifest_asset_counts(manifest: Mapping[str, Any] | None) -> dict[str, int]:
+    """附件告警的**计数**（H2）：新缺失 / 哈希不符 / 导入时就缺。
+
+    导出响应头是 ASCII，只能放数字；前端按这三个数分开写文案，不再把"导入时就缺"
+    也笼统说成"备份不完整"。
+    """
+    counts = {"missing": 0, "mismatched": 0, "missing_at_import": 0}
+    for _label, section in _manifest_sections(manifest):
+        for category in ASSET_CATEGORIES:
+            for key, bucket in (
+                ("missing", "missing"),
+                ("mismatched", "mismatched"),
+                ("missing_at_import", "missing_at_import"),
+            ):
+                names = section.get(f"{category}_{key}")
+                if isinstance(names, list):
+                    counts[bucket] += sum(1 for name in names if isinstance(name, str))
+    return counts
+
+
+def manifest_asset_notes(manifest: Mapping[str, Any] | None) -> list[str]:
+    """只做说明、不算"不完整"的条目：导入时就已缺失的附件。"""
+    notes: list[str] = []
+    for label, section in _manifest_sections(manifest):
+        prefix = f"{label}：" if label else ""
+        for category in ASSET_CATEGORIES:
+            names = [
+                name
+                for name in section.get(f"{category}_missing_at_import") or []
+                if isinstance(name, str)
+            ]
+            if names:
+                notes.append(
+                    f"{prefix}该数据集导入时就缺 {len(names)} 个被引用的附件（"
+                    + "、".join(names[:3])
+                    + ("…" if len(names) > 3 else "")
+                    + "），已在包内清单注明"
+                )
+    return notes
 
 
 def manifest_asset_warnings(manifest: Mapping[str, Any] | None) -> list[str]:
@@ -193,19 +270,7 @@ def manifest_asset_warnings(manifest: Mapping[str, Any] | None) -> list[str]:
     导出侧用它在响应头里标出"这份包不完整"，导入侧用它提示用户别把它当成完整备份。
     """
     warnings: list[str] = []
-    if not isinstance(manifest, Mapping):
-        return warnings
-    sections: list[tuple[str, Any]] = [("", manifest.get("asset_manifest"))]
-    datasets = manifest.get("datasets")
-    if isinstance(datasets, list):
-        for entry in datasets:
-            if isinstance(entry, dict):
-                sections.append(
-                    (str(entry.get("name") or "随包数据集"), entry.get("asset_manifest"))
-                )
-    for label, section in sections:
-        if not isinstance(section, Mapping):
-            continue
+    for label, section in _manifest_sections(manifest):
         prefix = f"{label}：" if label else ""
         for category in ASSET_CATEGORIES:
             missing = [
@@ -281,6 +346,8 @@ __all__ = [
     "build_asset_manifest",
     "collect_referenced_names",
     "file_digest",
+    "manifest_asset_counts",
+    "manifest_asset_notes",
     "manifest_asset_warnings",
     "verify_database_rows",
 ]

@@ -14,7 +14,11 @@ from sqlalchemy import Engine, text
 
 from ...config import get_settings
 from ...database_migrations import _APPLICATION_TABLES, build_alembic_config
-from .paths import BACKUP_FORMAT_MULTI_DATASET, BACKUP_FORMAT_WITH_KEYS
+from .paths import (
+    BACKUP_FORMAT_GLOBAL_CONFIG,
+    BACKUP_FORMAT_MULTI_DATASET,
+    BACKUP_FORMAT_WITH_KEYS,
+)
 
 
 def current_head_revision(bind: Engine) -> str | None:
@@ -30,13 +34,30 @@ def _revision_chain(bind: Engine) -> list[str]:
     return [revision.revision for revision in scripts.iterate_revisions(head, "base")]
 
 
-def _table_counts(bind: Engine) -> dict[str, int]:
+def _table_counts(bind: Engine) -> tuple[dict[str, int], list[str]]:
+    """按**实际存在的表**统计；模型里有、库里没有的表记 0 并单独列出（H1）。
+
+    为什么不能直接按 ``_APPLICATION_TABLES`` 逐张 COUNT：旧数据集（如停在 0040 的
+    「体验示例」）没有后加的表，``COUNT(*)`` 会抛 ``no such table``，整包导出中止。
+    备份工具的职责是"把能带走的都带走、把没有的说清楚"，不是要求每份库都是最新结构。
+    """
     quote = bind.dialect.identifier_preparer.quote
     with bind.connect() as connection:
-        return {
-            name: connection.execute(text(f"SELECT COUNT(*) FROM {quote(name)}")).scalar_one()
-            for name in _APPLICATION_TABLES
+        present = {
+            str(row[0])
+            for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
         }
+        counts: dict[str, int] = {}
+        missing: list[str] = []
+        for name in _APPLICATION_TABLES:
+            if name not in present:
+                counts[name] = 0
+                missing.append(name)
+                continue
+            counts[name] = connection.execute(
+                text(f"SELECT COUNT(*) FROM {quote(name)}")
+            ).scalar_one()
+    return counts, missing
 
 
 def build_manifest(
@@ -46,6 +67,7 @@ def build_manifest(
     api_key_included: bool = False,
     asset_manifest: dict[str, Any] | None = None,
     snapshot: Path | None = None,
+    global_llm_profiles: int | None = None,
 ) -> dict[str, Any]:
     """生成包内清单。
 
@@ -61,19 +83,25 @@ def build_manifest(
     """
     settings = get_settings()
     extras = list(datasets)
-    if api_key_included:
+    if global_llm_profiles is not None:
+        format_version = BACKUP_FORMAT_GLOBAL_CONFIG
+    elif api_key_included:
         format_version = BACKUP_FORMAT_WITH_KEYS
     elif extras:
         format_version = BACKUP_FORMAT_MULTI_DATASET
     else:
         format_version = 1
+    if snapshot is not None:
+        tables, missing_tables = _snapshot_table_counts(snapshot)
+    else:
+        tables, missing_tables = _table_counts(bind)
     manifest: dict[str, Any] = {
         "format": format_version,
         "app": settings.app_name,
         "app_version": settings.app_version,
         "alembic_revision": current_head_revision(bind),
         "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "tables": _snapshot_table_counts(snapshot) if snapshot is not None else _table_counts(bind),
+        "tables": tables,
         # 与 export 侧的剥离/保留逻辑对应：False 是默认（密钥已清空），True 只能来自
         # 用户的显式勾选。导入侧 fail-closed：这个字段缺失或乱值都拒收。
         "api_key_included": bool(api_key_included),
@@ -83,6 +111,13 @@ def build_manifest(
         # 导入逻辑不依赖这个字段：包里有 ``datasets/`` 就逐份恢复，缺失/乱值只影响文案。
         "type": "collection" if extras else "dataset",
     }
+    if global_llm_profiles is not None:
+        # 条数放进清单：导出侧响应头与导入确认都要能不解压就说出"带了几条配置"。
+        manifest["global_llm"] = {"profiles": global_llm_profiles}
+    if missing_tables:
+        # 旧库缺表（H1）：计数按 0 记，同时把名单写进清单，导入侧据此知道"这是历史库，
+        # 不是导出失败"。导入后迁移会把这些表补出来，0 行的校验自然通过。
+        manifest["missing_tables"] = missing_tables
     if asset_manifest is not None:
         manifest["asset_manifest"] = asset_manifest
     if api_key_included:
@@ -99,9 +134,19 @@ def build_manifest(
     return manifest
 
 
-def _snapshot_table_counts(snapshot: Path) -> dict[str, int]:
+def _snapshot_table_counts(snapshot: Path) -> tuple[dict[str, int], list[str]]:
+    """快照库的表计数；缺失的表记 0 并返回名单（与 ``_table_counts`` 同一口径）。"""
     with closing(sqlite3.connect(snapshot.as_uri() + "?mode=ro", uri=True)) as connection:
-        return {
-            name: connection.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
-            for name in _APPLICATION_TABLES
+        present = {
+            str(row[0])
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
+        counts: dict[str, int] = {}
+        missing: list[str] = []
+        for name in _APPLICATION_TABLES:
+            if name not in present:
+                counts[name] = 0
+                missing.append(name)
+                continue
+            counts[name] = connection.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
+    return counts, missing

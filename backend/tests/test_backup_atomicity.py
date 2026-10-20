@@ -103,8 +103,8 @@ def test_asset_change_between_hashing_and_zip_write_rejects_export(
     _add_main_user_file(db_session, "changing.bin", b"stable synthetic bytes")
     build = exporter.build_asset_manifest
 
-    def change_after_manifest(snapshot, root):
-        manifest = build(snapshot, root)
+    def change_after_manifest(snapshot, root, **kwargs):
+        manifest = build(snapshot, root, **kwargs)
         (root / "user_files" / "changing.bin").write_bytes(b"changed synthetic bytes")
         return manifest
 

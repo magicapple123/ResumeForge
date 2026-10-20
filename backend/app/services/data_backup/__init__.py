@@ -49,6 +49,12 @@ from .asset_manifest import (
     file_digest as file_digest,
 )
 from .asset_manifest import (
+    manifest_asset_counts as manifest_asset_counts,
+)
+from .asset_manifest import (
+    manifest_asset_notes as manifest_asset_notes,
+)
+from .asset_manifest import (
     manifest_asset_warnings as manifest_asset_warnings,
 )
 from .asset_manifest import (
@@ -69,6 +75,7 @@ from .collection_export import (
 from .export import (
     create_backup_archive as create_backup_archive,
 )
+from .global_config import GLOBAL_LLM_MEMBER as GLOBAL_LLM_MEMBER
 from .import_archive import (
     _assert_member_is_a_dataset as _assert_member_is_a_dataset,
 )
@@ -128,6 +135,9 @@ from .paths import (
 )
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME as ARCHIVE_DATASETS_DIRNAME,
+)
+from .paths import (
+    BACKUP_FORMAT_GLOBAL_CONFIG as BACKUP_FORMAT_GLOBAL_CONFIG,
 )
 from .paths import (
     BACKUP_FORMAT_MULTI_DATASET as BACKUP_FORMAT_MULTI_DATASET,

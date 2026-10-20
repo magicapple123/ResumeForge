@@ -3,6 +3,7 @@
 import pytest
 from app.schemas.setting import UNLIMITED_MAX_TOKENS, LLMConfig
 from app.services.api_key_session import clear_session_key
+from app.services.llm_key_refs import PROFILE_API_KEY_PREFIX
 from app.services.settings_service import API_KEY_MASK, get_llm_config
 
 
@@ -18,11 +19,13 @@ def test_settings_roundtrip(client, db_session):
     config = LLMConfig(base_url="https://api.example.com/v1", api_key="sk-test", model="test-model")
     response = client.put("/api/settings/llm", json=config.model_dump())
     assert response.status_code == 200
-    assert response.json()["api_key"] == API_KEY_MASK
+    assert response.json()["api_key"].startswith(API_KEY_MASK)
+    assert response.json()["scope"] == "global"
     assert "sk-test" not in response.text
     response = client.get("/api/settings/llm")
     assert response.json()["model"] == "test-model"
-    assert response.json()["api_key"] == API_KEY_MASK
+    assert response.json()["api_key"].startswith(API_KEY_MASK)
+    assert response.json()["scope"] == "global"
     assert "sk-test" not in response.text
 
     # 前端原样回传占位符时必须保留原密钥，不能把星号写入数据库。
@@ -30,7 +33,8 @@ def test_settings_roundtrip(client, db_session):
     masked_config["model"] = "updated-model"
     response = client.put("/api/settings/llm", json=masked_config)
     assert response.status_code == 200
-    assert response.json()["api_key"] == API_KEY_MASK
+    assert response.json()["api_key"].startswith(API_KEY_MASK)
+    assert response.json()["scope"] == "global"
     db_session.expire_all()
     assert get_llm_config(db_session).api_key == "sk-test"
 
@@ -149,7 +153,7 @@ def test_settings_api_key_reveal_is_explicit_and_not_cached(client):
     saved = client.put("/api/settings/llm", json=config.model_dump())
 
     assert saved.status_code == 200
-    assert saved.json()["api_key"] == API_KEY_MASK
+    assert saved.json()["api_key"].startswith(API_KEY_MASK)
     assert "sk-reveal-test" not in client.get("/api/settings/llm").text
     assert client.get("/api/settings/llm/api-key/reveal").status_code == 405
 
@@ -200,7 +204,7 @@ def test_settings_config_records_roundtrip_and_upsert(client):
     record = created.json()
     assert record["name"] == "校招 DeepSeek"
     assert record["model"] == "deepseek-chat"
-    assert record["api_key"] == f"{API_KEY_MASK}:record:{record['id']}"
+    assert record["api_key"] == f"{PROFILE_API_KEY_PREFIX}{record['id']}"
     assert "sk-record" not in created.text
 
     listed = client.get("/api/settings/llm/records")
@@ -224,7 +228,7 @@ def test_settings_config_records_roundtrip_and_upsert(client):
 
 
 def test_settings_record_reference_switches_the_correct_secret(client, db_session):
-    """两个记录仅密钥不同时，也必须按记录 ID 选择正确密钥。"""
+    """两个记录仅密钥不同时，切换「使用中」必须用对应记录的密钥。"""
     common = LLMConfig(
         provider="custom",
         base_url="https://api.example.com/v1",
@@ -242,14 +246,19 @@ def test_settings_record_reference_switches_the_correct_secret(client, db_sessio
 
     assert "secret-a" not in str(first)
     assert "secret-b" not in second_response.text
-    apply_payload = {field: second[field] for field in LLMConfig.model_fields}
-    applied = client.put("/api/settings/llm", json=apply_payload)
+
+    # C：切换记录 = activate（记录与"生效配置"是同一份，不再靠 PUT 复制一份）。
+    applied = client.post(f"/api/settings/llm/records/{second['id']}/activate")
     assert applied.status_code == 200
     assert applied.json()["api_key"] == second["api_key"]
     assert "secret-b" not in applied.text
 
     db_session.expire_all()
     assert get_llm_config(db_session).api_key == "secret-b"
+
+    client.post(f"/api/settings/llm/records/{first['id']}/activate")
+    db_session.expire_all()
+    assert get_llm_config(db_session).api_key == "secret-a"
 
 
 def test_settings_test_connection_resolves_masked_secret(client, monkeypatch):

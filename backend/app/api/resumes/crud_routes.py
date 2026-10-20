@@ -137,17 +137,48 @@ def _filtered_query(
 # 列表排序的取值 → ORDER BY。默认「最近修改」：用户更常找"我刚改过的那份"，
 # 而不是"最久以前生成的那份"。``coalesce`` 兜住 0047 之前的旧行（updated_at 为空时
 # 用创建时间），迁移失败或历史库残留也不会把它们排到最后。
+#
+# T2：每个键都配一个反向键（列头三态排序需要"再点一次反向"）。两条硬约束：
+# 1. 反向键的主排序与二级排序**方向全反**，但 collation 不变（拼音仍是拼音）；
+# 2. 每个键都以 ``id`` 收尾，且方向与主排序一致——同一时刻创建的记录跨页时
+#    才不会重复/漏行（分页稳定性）。company_*/job_title_* 原本没有末位 tie-breaker，
+#    这次一并补上（纯增强，主排序口径未变）。
 RESUME_SORT_ORDERS = {
     "updated_desc": (
         func.coalesce(ResumeRecord.updated_at, ResumeRecord.created_at).desc(),
         ResumeRecord.id.desc(),
     ),
+    "updated_asc": (
+        func.coalesce(ResumeRecord.updated_at, ResumeRecord.created_at).asc(),
+        ResumeRecord.id.asc(),
+    ),
     "created_desc": (ResumeRecord.created_at.desc(), ResumeRecord.id.desc()),
-    # 按标题排序时先按公司/岗位归类更有意义，这里保持纯字典序，中文按 SQLite 的
-    # UTF-8 码点排（与"最近使用"无关，只是另一种浏览方式）。
-    "title_asc": (ResumeRecord.title.asc(), ResumeRecord.id.asc()),
-    "company_asc": (ResumeRecord.company.asc(), ResumeRecord.title.asc()),
-    "job_title_asc": (ResumeRecord.job_title.asc(), ResumeRecord.title.asc()),
+    "created_asc": (ResumeRecord.created_at.asc(), ResumeRecord.id.asc()),
+    # 按标题排序时先按公司/岗位归类更有意义。中文按**拼音**、英文按字母、数字按大小
+    # （`rf_pinyin`，见 services/text_sort.py）：SQLite 默认的 BINARY collation 会把
+    # 所有 ASCII 标题排在中文之前，于是「UI 设计师」永远第一（2026-10 用户反馈）。
+    "title_asc": (ResumeRecord.title.collate("rf_pinyin").asc(), ResumeRecord.id.asc()),
+    "title_desc": (ResumeRecord.title.collate("rf_pinyin").desc(), ResumeRecord.id.desc()),
+    "company_asc": (
+        ResumeRecord.company.collate("rf_pinyin").asc(),
+        ResumeRecord.title.collate("rf_pinyin").asc(),
+        ResumeRecord.id.asc(),
+    ),
+    "company_desc": (
+        ResumeRecord.company.collate("rf_pinyin").desc(),
+        ResumeRecord.title.collate("rf_pinyin").desc(),
+        ResumeRecord.id.desc(),
+    ),
+    "job_title_asc": (
+        ResumeRecord.job_title.collate("rf_pinyin").asc(),
+        ResumeRecord.title.collate("rf_pinyin").asc(),
+        ResumeRecord.id.asc(),
+    ),
+    "job_title_desc": (
+        ResumeRecord.job_title.collate("rf_pinyin").desc(),
+        ResumeRecord.title.collate("rf_pinyin").desc(),
+        ResumeRecord.id.desc(),
+    ),
 }
 
 
@@ -161,8 +192,20 @@ def list_resumes(
     favorite: bool | None = Query(default=None),
     has_job: bool | None = Query(default=None),
     sort: Literal[
-        "updated_desc", "created_desc", "title_asc", "company_asc", "job_title_asc"
-    ] = Query(default="updated_desc", description="排序：最近修改 / 最近生成 / 标题 / 公司 / 岗位"),
+        "updated_desc",
+        "updated_asc",
+        "created_desc",
+        "created_asc",
+        "title_asc",
+        "title_desc",
+        "company_asc",
+        "company_desc",
+        "job_title_asc",
+        "job_title_desc",
+    ] = Query(
+        default="updated_desc",
+        description="排序：最近修改 / 最近生成 / 标题 / 公司 / 岗位（各含升降序）",
+    ),
 ):
     """列出简历。``has_job=false`` 只返回通用简历（未关联任何岗位）。"""
     query = _filtered_query(db, keyword=keyword, job_id=job_id, favorite=favorite, has_job=has_job)

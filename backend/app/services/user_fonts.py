@@ -54,6 +54,17 @@ def _normalize_name(filename: str) -> str:
     return safe[:80]
 
 
+def font_path(name: str) -> Path:
+    """按文件名取字体路径（拒绝任何目录成分，调用方不必再拼路径）。"""
+    safe = Path(name).name
+    if not safe or safe != name or safe == ACTIVE_FILENAME:
+        raise FontError("字体文件名不合法")
+    path = fonts_dir() / safe
+    if not path.is_file():
+        raise FontError("字体文件不存在")
+    return path
+
+
 def list_fonts() -> list[dict[str, Any]]:
     """已上传的字体列表（按修改时间倒序），带"是不是当前使用"的标记。"""
     directory = fonts_dir()
@@ -124,17 +135,13 @@ def set_active(name: str | None) -> None:
     if name is None:
         _active_file().unlink(missing_ok=True)
         return
-    path = fonts_dir() / name
-    if not path.is_file():
-        raise FontError("字体文件不存在，请重新上传")
+    font_path(name)  # 只做存在性/路径校验：字体文件必须已上传
     _active_file().parent.mkdir(parents=True, exist_ok=True)
     _active_file().write_text(json.dumps({"name": name}, ensure_ascii=False), encoding="utf-8")
 
 
 def delete_font(name: str) -> None:
-    path = fonts_dir() / name
-    if not path.is_file():
-        raise FontError("字体文件不存在")
+    path = font_path(name)
     path.unlink()
     if active_font_name() == name:
         _active_file().unlink(missing_ok=True)

@@ -29,10 +29,12 @@ from ..services.data_backup import (
     MANIFEST_MEMBER,
     BackupError,
     export_directory,
+    manifest_asset_counts,
     manifest_asset_warnings,
     purge_stale_restores,
     restore_directory,
 )
+from ..services.data_backup.global_config import read_global_llm_payload
 from ..services.data_backup.naming import default_backup_stem, safe_backup_filename
 from ..services.datasets import (
     activate_dataset,
@@ -45,6 +47,7 @@ from ..services.datasets import (
     rename_dataset,
 )
 from ..services.exporter import sanitize_filename
+from ..services.global_llm_profiles import merge_exported_profiles
 from ..services.sample_dataset import load_sample_dataset
 from . import settings as settings_api
 
@@ -163,6 +166,15 @@ async def import_archive(request: Request) -> dict:
             directory,
             allow_partial_assets=allow_partial,
         )
+        # 全局模型配置是"数据集之外"的一份，导入失败不该把已经落盘的数据集回滚：
+        # 数据集是主体，配置是附带信息，失败时如实附在返回里由界面提示。
+        try:
+            global_payload = read_global_llm_payload(staging)
+            if global_payload is not None:
+                created["global_llm"] = merge_exported_profiles(global_payload)
+        except Exception as exc:  # noqa: BLE001 - 边上信息，不能扩大失败面
+            logger.warning("备份包里的全局模型配置未能导入：%s", exc)
+            created["global_llm"] = {"error": str(exc)}
     except HTTPException:
         staging.unlink(missing_ok=True)
         raise
@@ -224,6 +236,7 @@ def remove(request: Request, dataset_id: str) -> None:
 def export_all(
     request: Request,
     include_api_keys: bool = True,
+    include_global_llm: bool = True,
     filename: str | None = Query(
         default=None,
         max_length=128,
@@ -244,7 +257,10 @@ def export_all(
     staging = export_directory(database.engine)
     try:
         archive_path = export_all_datasets(
-            database.engine, staging, include_api_keys=include_api_keys
+            database.engine,
+            staging,
+            include_api_keys=include_api_keys,
+            include_global_llm=include_global_llm,
         )
     except Exception as exc:
         raise _translate(exc) from exc
@@ -264,6 +280,7 @@ def export(
     request: Request,
     dataset_id: str,
     include_api_keys: bool = True,
+    include_global_llm: bool = True,
     filename: str | None = Query(
         default=None,
         max_length=128,
@@ -279,6 +296,7 @@ def export(
             database.engine,
             staging,
             include_api_keys=include_api_keys,
+            include_global_llm=include_global_llm,
         )
     except Exception as exc:
         raise _translate(exc) from exc
@@ -339,7 +357,15 @@ def _incomplete_backup_headers(archive_path: Path) -> dict[str, str]:
             manifest = json.loads(archive.read(MANIFEST_MEMBER))
     except (OSError, KeyError, ValueError, zipfile.BadZipFile):
         return {}
+    counts = manifest_asset_counts(manifest)
+    headers = {
+        # 三类分开报（H2）：新缺失 / 哈希不符才叫"不完整"；导入时就缺只是说明。
+        "X-Backup-Asset-Missing": str(counts["missing"]),
+        "X-Backup-Asset-Mismatched": str(counts["mismatched"]),
+        "X-Backup-Asset-Missing-At-Import": str(counts["missing_at_import"]),
+    }
     warnings = manifest_asset_warnings(manifest)
-    if not warnings:
-        return {}
-    return {"X-Backup-Incomplete": "1", "X-Backup-Asset-Warnings": str(len(warnings))}
+    if warnings:
+        headers["X-Backup-Incomplete"] = "1"
+        headers["X-Backup-Asset-Warnings"] = str(len(warnings))
+    return headers

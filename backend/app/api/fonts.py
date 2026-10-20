@@ -15,6 +15,7 @@ from ..services.user_fonts import (
     FontError,
     active_font_name,
     delete_font,
+    font_path,
     list_fonts,
     save_font,
     set_active,
@@ -57,6 +58,33 @@ def read_active_font_file() -> Response:
     return Response(
         content=font[1],
         media_type="font/ttf",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+# 媒体类型只按扩展名给：浏览器用不到精确值，但给错会让 @font-face 直接不加载。
+_FONT_MEDIA_TYPES = {
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+    ".ttc": "font/collection",
+}
+
+
+@router.get("/fonts/{name}/file")
+def read_font_file(name: str) -> Response:
+    """任意一个已上传字体的原始字节（设置页"点击预览字体"用）。
+
+    与 ``/fonts/active/file`` 的区别是它不要求字体正在使用：用户要在"设为当前"之前
+    先看看效果，只给当前字体的字节等于让人盲选。仍然强制 no-store。
+    """
+
+    try:
+        path = font_path(name)
+    except FontError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=path.read_bytes(),
+        media_type=_FONT_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream"),
         headers={"Cache-Control": "no-store"},
     )
 

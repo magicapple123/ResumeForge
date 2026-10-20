@@ -2,6 +2,7 @@
 
 安全语义整函数搬运零改动。
 """
+
 from __future__ import annotations
 
 import json
@@ -105,4 +106,3 @@ def _assert_no_plaintext_key(database: Path, secrets_to_find: list[str]) -> None
             "导出已取消：备份中仍能匹配到明文 API Key，请联系维护者",
             status_code=500,
         )
-
