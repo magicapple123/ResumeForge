@@ -200,6 +200,40 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 - PowerShell 5.1 不支持 `&&`；涉及中文 JSON 的命令避免直接内联传参，使用 UTF-8 文件配合 `--data-binary`。
 - 不要停止或覆盖用户未授权的其他进程、端口、数据库和备份。
 
+## Ant Design 使用规范（L1 原生 / L2 薄封装 / L3 禁止重实现）
+
+1. 默认直接用 antd 组件与 token。新增 `<Xxx>` 前先 `grep node_modules/antd/es/<x>/index.d.ts`，确认 antd 6.6.5 没有等价物（例：`Listy` 是 antd 自带，不要再造列表行）。
+2. `message` / `notification` / `modal` 一律取自 `App.useApp()`；**禁止** `import { message }` 与 `Modal.confirm` 等静态方法 —— 静态调用不读 React `ConfigProvider`，深色主题下会退回默认浅色 token。为此渲染的测试必须包 `<AntdApp>`。
+3. `LoadingBlock` 是**块级**加载态的唯一出口（`spinning` 或 `children` 模式）。无 children、无 `spinning` 的裸 `<Spin />` 仍允许出现在 **Modal 内、表格单元格、卡片内嵌的局部刷新位**等空间受限处（`LoadingBlock` 的 `min-height` 会把容器撑高）；`size="small"` 行内转圈与 `<Spin fullscreen>`（启动期全屏遮罩）照旧。
+4. 空态：页级 / Tab 面板主体 / 承担整块信息的 Card 用 `EmptyState`；紧凑容器（表格空数据、Drawer / Modal 内、侧栏列表、`Listy`）用 `EmptyState inline`（不渲染 `.rf-state` 外壳，避免 `min-height:192px` 凭空撑高）。**保留默认大插图、或带富 `description`（含自定义子节点）的站点可以继续用裸 `<Empty>`** —— 换成 `EmptyState` 会改掉插图尺寸与排版。两句冲突时**以插图形态优先**：页级位置但如果该站点刻意保留默认大插图，就继续用裸 `<Empty>`，不要为了"位置对"去换成一个更小的插图。
+5. 禁用语义只传 `true` 或 `undefined`：`disabled={flag || undefined}`。**禁止 `disabled={flag}`** —— 显式 `false` 会短路 `Form disabled` / `ConfigProvider componentDisabled`（正范式样板：`components/profile/PartialDateSelect.tsx:62-63`）。
+6. 不用裸 `button`/`select`/`textarea`/`dialog` 替代 `Button`/`Select`/`Input.TextArea`/`Modal`；**禁止手贴 `.ant-*` 类名**。
+7. `.ant-*` 覆写只允许四种理由：布局无 token、无障碍补偿、私有形态、antd 类名版本迁移。外观/颜色一律走 `theme.components` 或 `--rf-*` 变量，并在注释里写明理由。
+8. 改 `.ant-*` 前先 `grep src/styles/*.test.ts` —— `input-focus-ring.test.ts` / `profile-disabled-select.test.ts` / `color-regression.test.ts` 直接读 CSS 原文断言选择器，删改即断。
+9. 类型从 `antd` 根导出取（`TableColumnsType`、`TablePaginationConfig`、`GetProps`、`FormInstance`、`FormListFieldData`、`FormListOperation`）；仅当根未导出时才用 `antd/es/*` 深路径（当前仅 `SortOrder`、`TableRowSelection` 属此例）。
+10. 原生 `title=` 只用于**截断文本的完整值提示**；功能提示（含「双击恢复默认」这类唯一可发现性入口）必须用 `Tooltip`，并给键盘等价（`role="button"` + `tabIndex` + Enter/空格）。
+11. 特色 UI（投投浮球、划词菜单、月历、拖拽手柄、全站搜索、网页表单浮球）保留自造，但必须：键盘可达（方向键 + Esc）、`role` 正确、颜色只用 `--rf-*`。
+12. 三态（loading / empty / error）各自只有一个出口：`LoadingBlock` / `EmptyState` / `ErrorState` + `PageSkeleton`。**新增页面不许再手写 `useState loading`**；存量站点在**改到它时**顺手迁移，不做一次性大扫除。
+13. 单文件 ≤150 行、入参是 antd 语汇、内部输出 antd 组件的封装才是 L2；其余一律算 L3。
+
+存量未迁移清单不在此维护（会腐烂）；判断依据只有一条——新写的代码必须按上述规范。
+
+### 弹窗与抽屉的关闭语义（与 antd 原生一致）
+
+- 只读弹窗（详情、预览、大图）一律 `footer={null}`，关闭只走右上角 ×；不额外放「关闭」按钮。
+- 有主操作的弹窗，footer 只放动作（开始/保存/用这个模板），不要再补一只「关闭」。
+- 「取消」只用于「有未保存内容、关闭会丢失」的场景，且必须与 × 行为不同（× 可留草稿/提示）。
+- 确实需要并列一个「关闭」（如失败态显式出口）时，在源码该行上方写理由注释。
+- 不要在 body 里自造 footer（`Space` + 按钮），统一用 `Modal` 的 `footer` 插槽。
+
+### 守卫测试
+
+三条守卫测试（新增合法例外用「行内豁免注释」，不要新建白名单文件）：
+
+- `src/theme/antdStaticGuard.test.ts` —— 禁静态 `message` / `notification` / `Modal.*`（豁免：`// antd-static-ok: 理由`）
+- `src/theme/antdOverrideGuard.test.ts` —— `.ant-*` 覆写必须有自定义类前缀或就地 `/* antd-override: 理由 */`（文件级白名单仅 `accessibility.css` / `dark-tokens.css` / `mobile.css`）
+- `src/theme/spinOutletGuard.test.ts` —— `<Spin spinning=>` 只允许出现在 `LoadingBlock` 内部（豁免：`// spin-ok: 理由`）
+
 ## 安全与隐私边界
 
 - `.env`、API Key、SQLite 数据库、照片、简历、导出文件和本地虚拟环境不得提交到 Git。
