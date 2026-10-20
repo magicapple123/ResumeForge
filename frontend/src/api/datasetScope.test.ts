@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { adoptDatasetScope, datasetScopeHeaders, initializeDatasetScope } from "./datasetScope";
+import { datasetScopeHeaders, initializeDatasetScope } from "./datasetScope";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -72,23 +72,8 @@ describe("per-document dataset identity", () => {
     expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("existing:A:1");
   });
 
-  // ===== 响应头采纳：后端每个响应都回写当前身份，页面据此自助重同步 =====
-
-  it("adopts the identity carried by any response so a stale page can resync itself", () => {
-    adoptDatasetScope("instance:A:9");
-    expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("instance:A:9");
-    // 采纳之后发起的新请求就带上了新身份（而不是启动时那一个）。
-    expect(datasetScopeHeaders({ "Content-Type": "application/json" }).get("X-Dataset-Scope")).toBe(
-      "instance:A:9",
-    );
-  });
-
-  it("ignores null or empty values instead of dropping a known identity", () => {
-    adoptDatasetScope("instance:A:7");
-    // 响应没带 X-Dataset-Scope 时 get() 返回 null：这不能把已知身份清空，
-    // 否则下一次写请求会因为"页面尚未确认数据集"再吃一次 409。
-    adoptDatasetScope(null);
-    adoptDatasetScope("");
-    expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("instance:A:7");
-  });
+  // 不变式（刻意）：页面**不**采纳响应头里的 X-Dataset-Scope。静默跟随服务端数据集
+  // 会让一个还开着编辑器的旧标签页把草稿写进另一个数据集里同 id 的记录；
+  // 身份只在启动与用户显式切数据集时变化（见 datasetScope.ts 文件头与
+  // tests/smoke/release-boundaries.spec.ts）。本模块因此只导出 initialize 这一个写入口。
 });

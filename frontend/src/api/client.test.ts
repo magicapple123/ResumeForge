@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, BUDGETS_MS, buildQuery, isCancellation, request } from "./client";
-import { datasetScopeHeaders } from "./datasetScope";
+import { datasetScopeHeaders, initializeDatasetScope } from "./datasetScope";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
 
 afterEach(() => {
@@ -303,8 +303,23 @@ describe("BUDGETS_MS", () => {
   });
 });
 
-describe("数据集身份响应头与业务码", () => {
-  it("采纳成功响应回写的 X-Dataset-Scope", async () => {
+describe("数据集身份与业务码", () => {
+  /** 用显式同步（身份的唯一写入口）把当前身份种成给定值。 */
+  async function seedScope(scope: string) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ scope }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "X-Dataset-Scope": scope },
+        }),
+      ),
+    );
+    await initializeDatasetScope();
+  }
+
+  it("普通响应回写的 X-Dataset-Scope 不被采纳（旧标签页不静默跟随数据集）", async () => {
+    await seedScope("instance:A:1");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -317,10 +332,13 @@ describe("数据集身份响应头与业务码", () => {
 
     await request("/example");
 
-    expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("instance:B:7");
+    // 采纳它会让人以为"页面已经跟到 B 了"：一个还开着编辑器的旧标签页就会把草稿
+    // 写进 B 里同 id 的记录。身份只由 initializeDatasetScope（显式切数据集）改写。
+    expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("instance:A:1");
   });
 
-  it("409 响应头同样被采纳，且 businessCode 取自响应体的 code", async () => {
+  it("409 只取 businessCode，不从响应头改身份", async () => {
+    await seedScope("instance:A:2");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -351,8 +369,8 @@ describe("数据集身份响应头与业务码", () => {
     expect(err.code).toBe("http");
     expect(err.status).toBe(409);
     expect(err.businessCode).toBe("dataset_scope_changed");
-    // 失败响应里的身份也要采纳：否则重试还是拿着旧 token。
-    expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("instance:B:8");
+    // 失败响应同样不改身份：写请求必须继续被拒，直到用户自己去刷新/切换。
+    expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("instance:A:2");
   });
 
   it("响应体没有 code 时 businessCode 为 undefined（普通 409 不被误判成身份过期）", async () => {
@@ -374,31 +392,5 @@ describe("数据集身份响应头与业务码", () => {
     );
 
     expect(err.businessCode).toBeUndefined();
-  });
-
-  it("响应没带 X-Dataset-Scope 时不覆盖已知身份", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { "Content-Type": "application/json", "X-Dataset-Scope": "instance:B:9" },
-        }),
-      ),
-    );
-    await request("/example");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
-
-    await request("/example");
-
-    expect(datasetScopeHeaders().get("X-Dataset-Scope")).toBe("instance:B:9");
   });
 });

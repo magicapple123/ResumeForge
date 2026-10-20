@@ -1,7 +1,7 @@
 /** 统一请求封装：JSON 解析、错误信息提取、请求预算（超时）、取消与友好报错。 */
 
 import { recordClientDiagnostic } from "../utils/clientDiagnostics";
-import { adoptDatasetScope, datasetScopeHeaders } from "./datasetScope";
+import { datasetScopeHeaders } from "./datasetScope";
 
 /** 错误类别：http=后端有响应但非 2xx；network=fetch 失败；timeout=预算到期；cancelled=调用方中止。 */
 export type ApiErrorCode = "http" | "network" | "timeout" | "cancelled";
@@ -203,9 +203,9 @@ export async function requestRaw(path: string, options: RequestOptions = {}): Pr
       headers: datasetScopeHeaders(rest.headers),
       signal: controller.signal,
     });
-    // 所有响应（含 409）都带回后端当前的数据集身份：不采纳的话，页面会一直拿启动时的
-    // 旧 token 写库，后端重启/别的标签页切过之后就每次写都 409。
-    adoptDatasetScope(resp.headers.get("X-Dataset-Scope"));
+    // **不**采纳响应里的 X-Dataset-Scope：静默跟随服务端数据集会让一个还开着编辑器的
+    // 旧标签页把草稿写进另一个数据集（见 datasetScope.ts 的不变式与 release-boundaries 冒烟）。
+    // 身份只在启动与用户显式切数据集时变化；过期就吃 409，由用户决定是否刷新。
     if (!resp.ok) {
       const requestId = resp.headers.get("x-request-id") ?? undefined;
       recordClientDiagnostic("api.error", {
