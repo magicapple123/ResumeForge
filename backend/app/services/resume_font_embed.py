@@ -3,7 +3,7 @@
 
 为什么要在 HTML 里内嵌：预览、导出 HTML、导出 PDF 必须是**同一款字**。PDF 端已经由
 ``pdf_exporter/fonts.py`` 直接读字体文件实现；HTML 端没有任何办法假设"用户机器上装了
-这款字"，所以只能把用到的字形切出来，以 ``data:`` URL 塞进 ``@font-face``。整份 20MB
+这款字"，所以只能把用到的字形切出来，以 ``data:`` URL 塞进 ``@font-face``。整份 30MB
 字体不能塞——一份中文简历只用到几百个字，子集通常是 200–400KB。
 
 失败策略是"绝不让渲染失败"：字体损坏、字体集合读不出、子集化抛错、子集反而变大，一律
@@ -23,6 +23,7 @@ from fontTools import subset
 from fontTools.ttLib import TTCollection, TTFont
 
 from . import user_fonts
+from .resume.resume_template_format import SYSTEM_FONT
 
 logger = logging.getLogger(__name__)
 
@@ -142,9 +143,18 @@ def _embed_css_cached(font_path: str, mtime_ns: int, text_digest: str, text: str
     return _build_css(payload, mime, css_format)
 
 
-def embed_css(text: str) -> str:
-    """返回内嵌当前字体的 CSS；没有可用字体时返回空串（调用方据此不插 style）。"""
-    path = user_fonts.active_font_path()
+def embed_css(text: str, font_name: str | None = None) -> str:
+    """返回内嵌字体的 CSS；没有可用字体时返回空串（调用方据此不插 style）。
+
+    ``font_name`` 是这份简历自己的选择（项 14，存在 ``format_config["font"]``）：
+
+    * ``None`` —— 没设过：用设备上**当前选中的**那个字体（历史行为，零改动）；
+    * ``SYSTEM_FONT`` —— 用户显式要求"这份简历不用自定义字体"：返回空串，模板自带的
+      ``font-family`` 栈生效。**不能**在这里回落到全局字体，否则那个选项等于没写；
+    * 其它 —— 该文件名；文件已不存在时回落到全局当前字体（同一份简历不该因为一个被删掉
+      的字体文件而失去字形）。
+    """
+    path = _embed_font_path(font_name)
     if path is None:
         return ""
     try:
@@ -154,3 +164,18 @@ def embed_css(text: str) -> str:
         return ""
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     return _embed_css_cached(str(path), mtime_ns, digest, text)
+
+
+def _embed_font_path(font_name: str | None) -> Path | None:
+    """把"这份简历的字体选择"解析成一个可读的字体文件路径。
+
+    返回 ``None`` 表示不内嵌（系统字体、或根本没有可用字体）。
+    """
+    if font_name == SYSTEM_FONT:
+        return None
+    if font_name:
+        try:
+            return user_fonts.font_path(font_name)
+        except user_fonts.FontError:
+            logger.warning("「%s」已不存在，回落到当前选中的字体", font_name)
+    return user_fonts.active_font_path()

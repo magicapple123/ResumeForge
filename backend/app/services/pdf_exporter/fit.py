@@ -6,8 +6,9 @@ from __future__ import annotations
 import logging
 
 from ...schemas.resume import MAX_RESUME_PAGES, ResumeContent
+from ..resume.resume_template_format import FONT_KEY
 from .canvas import _ResumePDF
-from .fonts import FONT_ENV_VAR, ResumePDFError, _resolve_font_paths
+from .fonts import FONT_ENV_VAR, ResumePDFError, _resolve_font_paths, resolve_font_paths
 from .layout import (
     _FIT_MAX_PASSES,
     _FIT_MIN_STEP,
@@ -144,9 +145,12 @@ def build_resume_pdf(
     预览同口径缩**字号派生尺寸**来装下，是否"装得下"以**真实渲染的页数**为准（见
     `decide_fit_scale`），实在装不下就如实标记 ``overflow``。
     """
-    from ..resume.resume_templates import FONT_SCALES, template_spec
+    from ..resume.resume_templates import FONT_SCALES, template_spec, validated_format_config
 
-    fonts = _resolve_font_paths()
+    # 格式覆盖要先于字体解析：字体本身也是 `format_config` 的一项（项 14），而且要用
+    # **白名单化之后**的那一份——不存在的字体文件在到这里之前就被丢弃了。
+    overrides = validated_format_config(format_config)
+    fonts = resolve_font_paths(overrides.get(FONT_KEY))
     if fonts is None:
         raise ResumePDFError(
             "未找到可用的中文字体，无法在服务端生成 PDF；请用「打印 / 另存为 PDF」导出，"
@@ -157,9 +161,6 @@ def build_resume_pdf(
     scale = FONT_SCALES.get(font_scale) or FONT_SCALES["standard"]
     base = float(scale["base_px"])
 
-    from ..resume.resume_templates import validated_format_config
-
-    overrides = validated_format_config(format_config)
     accent_adjust = overrides.get("font_scale_adjust")
     if isinstance(accent_adjust, (int, float)):
         base = round(base * float(accent_adjust), 2)

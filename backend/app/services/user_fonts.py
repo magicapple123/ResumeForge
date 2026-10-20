@@ -8,7 +8,7 @@
 跟着"这台机器上有没有这个文件"走的，换个文件就失效，不适合跟模型配置混在一起）。
 
 **永不自动删除用户字体**：删除是显式动作；被删的是当前字体时，active 一并清空，
-导出回到系统字体。上传限制 20MB 与 ttf/otf/ttc，是为了避免把 .exe 或超大文件
+导出回到系统字体。上传限制 30MB 与 ttf/otf/ttc，是为了避免把 .exe 或超大文件
 塞进数据目录——不是安全扫描，做不到也不必假装。
 """
 
@@ -24,7 +24,11 @@ from ..config import DATA_DIR
 
 DIR_NAME = "fonts"
 ACTIVE_FILENAME = "active.json"
-MAX_BYTES = 20 * 1024 * 1024
+# 自定义显示名单独存一份：**文件名保持不动**——它就是磁盘上的真实文件、也是
+# `format_config.font` 里存的键，改文件名会让所有引用它的简历一起断掉。
+NAMES_FILENAME = "names.json"
+MAX_DISPLAY_NAME = 40
+MAX_BYTES = 30 * 1024 * 1024
 ALLOWED_SUFFIXES = {".ttf", ".otf", ".ttc"}
 
 # 文件名里允许的字符：中英文、数字、点、下划线、连字符、空格。其余一律替换成下划线，
@@ -42,6 +46,33 @@ def fonts_dir() -> Path:
 
 def _active_file() -> Path:
     return fonts_dir() / ACTIVE_FILENAME
+
+
+def _names_file() -> Path:
+    return fonts_dir() / NAMES_FILENAME
+
+
+def _read_names() -> dict[str, str]:
+    """读「文件名 → 自定义显示名」。坏文件按空处理，不让字体列表整体挂掉。"""
+    try:
+        raw = json.loads(_names_file().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        key: value.strip()
+        for key, value in raw.items()
+        if isinstance(key, str) and isinstance(value, str) and value.strip()
+    }
+
+
+def _write_names(names: dict[str, str]) -> None:
+    directory = fonts_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    _names_file().write_text(
+        json.dumps(names, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def _normalize_name(filename: str) -> str:
@@ -67,14 +98,19 @@ def font_path(name: str) -> Path:
 
 
 def list_fonts() -> list[dict[str, Any]]:
-    """已上传的字体列表（按修改时间倒序），带"是不是当前使用"的标记。"""
+    """已上传的字体列表（按修改时间倒序），带"是不是当前使用"的标记。
+
+    ``name`` 永远是**磁盘上的真实文件名**（`format_config.font` 存的也是它）；
+    ``display_name`` 是用户可改的展示名，没改过时默认取文件名去扩展名。
+    """
     directory = fonts_dir()
     if not directory.is_dir():
         return []
     active = active_font_name()
+    names = _read_names()
     items: list[dict[str, Any]] = []
     for path in directory.iterdir():
-        if not path.is_file() or path.name == ACTIVE_FILENAME:
+        if not path.is_file() or path.name in {ACTIVE_FILENAME, NAMES_FILENAME}:
             continue
         if path.suffix.lower() not in ALLOWED_SUFFIXES:
             continue
@@ -85,6 +121,7 @@ def list_fonts() -> list[dict[str, Any]]:
         items.append(
             {
                 "name": path.name,
+                "display_name": names.get(path.name) or path.stem,
                 "size": stat.st_size,
                 "uploaded_at": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
                 "active": path.name == active,
@@ -141,11 +178,32 @@ def set_active(name: str | None) -> None:
     _active_file().write_text(json.dumps({"name": name}, ensure_ascii=False), encoding="utf-8")
 
 
+def rename_font(name: str, display_name: str) -> dict[str, Any]:
+    """改字体的**展示名**，文件名一个字节都不动。
+
+    为什么不让用户直接改文件名：`format_config.font` 存的就是文件名，所有用过它的
+    简历都会被写死在这个键上；换名字等于把那些简历的字体一起弄丢。展示名单独存，
+    想叫什么都行，底下的文件仍然可定位。
+    """
+    path = font_path(name)
+    label = (display_name or "").strip()
+    if not label:
+        raise FontError("字体名称不能为空")
+    label = label[:MAX_DISPLAY_NAME]
+    names = _read_names()
+    names[path.name] = label
+    _write_names(names)
+    return {"name": path.name, "display_name": label}
+
+
 def delete_font(name: str) -> None:
     path = font_path(name)
     path.unlink()
     if active_font_name() == name:
         _active_file().unlink(missing_ok=True)
+    names = _read_names()
+    if names.pop(path.name, None) is not None:
+        _write_names(names)
 
 
 __all__ = [
@@ -156,6 +214,7 @@ __all__ = [
     "active_font_path",
     "delete_font",
     "list_fonts",
+    "rename_font",
     "save_font",
     "set_active",
 ]

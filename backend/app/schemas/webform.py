@@ -8,6 +8,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .apply import BrowserStatusOut
+from .webform_extra_parse import (
+    WebFormExtraProfileParsedItem,
+    WebFormExtraProfileParseIn,
+    WebFormExtraProfileParseOut,
+)
 
 MAX_FILL_ITEMS = 500
 
@@ -421,6 +426,9 @@ __all__ = [
     "WebFormExtraFieldOut",
     "WebFormExtraProfileIn",
     "WebFormExtraProfileOut",
+    "WebFormExtraProfileParseIn",
+    "WebFormExtraProfileParseOut",
+    "WebFormExtraProfileParsedItem",
     "WebFormRepeatedFieldOut",
     "WebFormRepeatedGroupOut",
     "WebFormRepeatedRecordIn",

@@ -7,6 +7,8 @@ import logging
 import os
 from pathlib import Path
 
+from ..resume.resume_template_format import SYSTEM_FONT
+
 logger = logging.getLogger(__name__)
 
 FONT_FAMILY = "resume-cjk"
@@ -48,26 +50,57 @@ class ResumePDFError(Exception):
 # 探测结果进程内缓存：字体文件在进程生命周期内不会增减，而每次导出/模板列表都会
 # 走到这里，逐个候选路径 is_file() 纯属重复扫描。探测不到也缓存 None——重扫同样
 # 找不到，只是白花时间。
-_font_paths_cache: tuple[str, str] | None = None
-_font_resolved = False
+#
+# 项 14 起**按字体名分键**（``None`` = 跟随当前全局字体）：同一进程里两份选了不同字体的
+# 简历会先后导出，只留一个标量缓存的话，第二个会拿到第一个的路径（"换了字体导出没变"）。
+# 网格化缓存是这件事唯一正确的形态——不是清缓存，而是让不同选择各自有位置。
+_font_paths_cache: dict[str | None, tuple[str, str] | None] = {}
+
+
+def resolve_font_paths(font_name: str | None = None) -> tuple[str, str] | None:
+    """按"这份简历选的字体"解析出 (常规, 粗体) 字体文件路径。
+
+    ``font_name``：
+
+    * ``None`` —— 没设过/不指定：环境变量 → **当前全局字体** → 系统候选（历史行为）；
+    * ``SYSTEM_FONT`` —— 显式要求系统字体：跳过全局字体，只走环境变量 + 系统候选；
+    * 其它 —— 该上传字体文件；文件已被删则回落到 ``None`` 那一套（同一份简历不该因为
+      一个被删掉的字体文件而导不出 PDF）。
+    """
+    if font_name in _font_paths_cache:
+        return _font_paths_cache[font_name]
+    resolved = _probe_font_paths(font_name)
+    _font_paths_cache[font_name] = resolved
+    return resolved
 
 
 def _resolve_font_paths() -> tuple[str, str] | None:
-    global _font_paths_cache, _font_resolved
-    if _font_resolved:
-        return _font_paths_cache
-    _font_paths_cache = _probe_font_paths()
-    _font_resolved = True
-    return _font_paths_cache
+    """历史入口（无字体选择）：等价于 :func:`resolve_font_paths` 的 ``None``。"""
+    return resolve_font_paths(None)
 
 
-def _probe_font_paths() -> tuple[str, str] | None:
+def _probe_font_paths(font_name: str | None = None) -> tuple[str, str] | None:
     override = os.environ.get(FONT_ENV_VAR, "").strip()
     if override:
         path = Path(override)
         if path.is_file():
             return str(path), str(path)
         logger.warning("环境变量 %s 指向的字体不存在：%s", FONT_ENV_VAR, override)
+    if font_name == SYSTEM_FONT:
+        # 显式系统字体：**不**读全局当前字体——否则"这份简历不用自定义字体"这个选项
+        # 会被设备上的全局选择悄悄推翻。
+        return _probe_system_font_paths()
+    if font_name:
+        try:
+            from ..user_fonts import FontError, font_path
+
+            chosen = font_path(font_name)
+        except FontError:
+            logger.warning("简历选用的字体「%s」已不存在，回落到当前字体", font_name)
+        except Exception:  # noqa: BLE001 - 字体探测失败不该让导出整条链路崩掉
+            chosen = None
+        else:
+            return str(chosen), str(chosen)
     # 用户在设置页上传并选中的字体（R10）优先于系统字体：他明确选了一个，
     # 就该按那个导出；文件被删/移动时自然回落到系统字体，不报错。
     try:
@@ -78,6 +111,11 @@ def _probe_font_paths() -> tuple[str, str] | None:
         user_font = None
     if user_font is not None:
         return str(user_font), str(user_font)
+    return _probe_system_font_paths()
+
+
+def _probe_system_font_paths() -> tuple[str, str] | None:
+    """只按系统候选列表探测（不看任何用户选择）。"""
     for regular, bold in _FONT_CANDIDATES:
         if Path(regular).is_file():
             return regular, bold if Path(bold).is_file() else regular
@@ -86,11 +124,9 @@ def _probe_font_paths() -> tuple[str, str] | None:
 
 def font_available() -> bool:
     """前端据此决定是否展示「下载 PDF」主按钮。"""
-    return _resolve_font_paths() is not None
+    return resolve_font_paths(None) is not None
 
 
 def reset_font_cache() -> None:
     """字体设置变更后调用：下一次探测重新走一遍候选（含用户字体）。"""
-    global _font_paths_cache, _font_resolved
-    _font_paths_cache = None
-    _font_resolved = False
+    _font_paths_cache.clear()

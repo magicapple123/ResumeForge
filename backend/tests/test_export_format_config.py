@@ -15,14 +15,24 @@
 
 from __future__ import annotations
 
+import pytest
 from app.schemas.resume import ResumeContent
+from app.services import user_fonts
 from app.services.export_pipeline import (
     ExportRequest,
     RenderContext,
     build_export,
     render_config_fingerprint,
 )
+from app.services.resume.resume_template_format import (
+    FORMAT_FIELDS,
+    SYSTEM_FONT,
+    format_css,
+    format_field_options,
+    validated_format_config,
+)
 from test_pdf_exporter import needs_font
+from tests.font_fixtures import build_test_font
 
 # 7px = 最小档 11px × 0.636（前端无级字号滑块落库的系数）。
 SMALL_7PX = {"font_scale_adjust": 0.636}
@@ -136,6 +146,78 @@ def test_format_config_is_whitelisted():
     html = artifact.content.decode("utf-8")
     assert "--accent" not in html or "not-a-color" not in html
     assert "evil" not in html.lower()
+
+
+def test_format_css_rules_match_frontend_probes():
+    """行距 / 页边距的 ``css_rule`` 与前端探针**逐字一致**（项 6 / D10）。
+
+    拖动滑块时前端把同一条规则注入预览 iframe（"即时可见"），松手后由这里的
+    :func:`format_css` 生成真正生效的规则。两边只要差一个空格、一个 ``!important``
+    的位置，或者一个数字格式（``1.7`` vs ``1.70000``），用户就会看到"松手后跳一下"
+    ——探针说一套、真实渲染说另一套。
+
+    前端侧的对偶断言在 ``frontend/src/utils/resumeFormatProbe.test.ts``（两端各钉一次）。
+    """
+    rules = {field["key"]: field.get("css_rule") for field in FORMAT_FIELDS}
+    assert rules["line_height"] == "body { line-height: %s !important; }"
+    assert rules["page_padding"] == "body { padding: %smm !important; }"
+
+    # 格式化走 `f"{value:g}"`：整数不带小数点、无意义尾零去掉。
+    # 前端 `formatG` 复刻的就是这个行为。
+    css = format_css({"line_height": 1.7, "page_padding": 14})
+    assert "body { line-height: 1.7 !important; }" in css
+    assert "body { padding: 14mm !important; }" in css
+    assert "1.70000" not in css
+
+
+# ===== 项 14：每份简历选字体（不是 FORMAT_FIELDS 的一项）=====
+
+
+@pytest.fixture()
+def font_dir(tmp_path, monkeypatch):
+    """把字体目录换到临时目录：校验走的是 `user_fonts.font_path`，它要读真实文件。"""
+    monkeypatch.setattr(user_fonts, "DATA_DIR", str(tmp_path))
+    return tmp_path
+
+
+def test_font_key_keeps_an_existing_font(font_dir):
+    user_fonts.save_font("思源黑体.ttf", build_test_font())
+
+    assert validated_format_config({"font": "思源黑体.ttf"}) == {"font": "思源黑体.ttf"}
+
+
+def test_font_key_drops_a_missing_font(font_dir):
+    """字体被删了只能静默丢弃：回落到"跟随全局"，而不是让整份简历打不开。"""
+    assert "font" not in validated_format_config({"font": "没有这个.ttf"})
+
+
+def test_font_key_drops_path_traversal(font_dir):
+    user_fonts.save_font("ok.ttf", build_test_font())
+
+    assert "font" not in validated_format_config({"font": "../ok.ttf"})
+    assert "font" not in validated_format_config({"font": "..\\ok.ttf"})
+
+
+def test_font_key_keeps_the_system_sentinel(font_dir):
+    """``__system__`` 不指向任何文件，但它是一个合法取值。"""
+    assert validated_format_config({"font": SYSTEM_FONT}) == {"font": SYSTEM_FONT}
+
+
+def test_font_key_drops_non_string_values(font_dir):
+    assert "font" not in validated_format_config({"font": 123})
+    assert "font" not in validated_format_config({"font": None})
+    assert "font" not in validated_format_config({"font": ""})
+
+
+def test_font_is_not_a_format_field():
+    """**不能**加进 ``FORMAT_FIELDS``：格式模板编辑器会为它渲染一个数字输入框（D26）。"""
+    assert "font" not in {field["key"] for field in FORMAT_FIELDS}
+    assert "font" not in {item["key"] for item in format_field_options()}
+
+
+def test_font_does_not_leak_into_css():
+    """字体不是 CSS 覆盖项：它由 ``@font-face`` 内嵌那条链路负责。"""
+    assert "font" not in format_css({"font": SYSTEM_FONT})
 
 
 def test_render_fingerprint_changes_with_request_format_config():

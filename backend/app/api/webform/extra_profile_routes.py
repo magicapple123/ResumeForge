@@ -4,19 +4,38 @@
 从 ``api/webform.py`` 拆出。服务层符号一律经 ``webform_service`` 属性访问，
 保证包属性 patch（``app.api.webform.webform_service.*``）继续生效。"""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ...database import get_db
 from ...schemas.webform import (
     WebFormExtraProfileIn,
     WebFormExtraProfileOut,
+    WebFormExtraProfileParsedItem,
+    WebFormExtraProfileParseIn,
+    WebFormExtraProfileParseOut,
     WebFormFieldsOut,
     WebFormMemoryTargetsOut,
 )
 from ...services import webform as webform_service
+from ...services.attachments import (
+    assert_attachment_budget,
+    image_data_urls,
+    normalize_extraction_images,
+    total_attachment_bytes,
+)
+from ...services.document_text import extract_documents_text
+from ...services.llm import create_provider
+from ...services.llm.base import LLMError
+from ...services.settings_service import get_llm_config
+from ...services.text_extraction import ai_failed_warning, llm_is_configured, no_model_warning
 
 router = APIRouter(prefix="/api/webform", tags=["webform"])
+
+logger = logging.getLogger(__name__)
 
 
 # ===== 字段目录 =====
@@ -89,4 +108,80 @@ def write_extra_profile(payload: WebFormExtraProfileIn, db: Session = Depends(ge
 def list_memory_targets(db: Session = Depends(get_db)):
     """返回「记住这条」可以写入的目标。**只有「网申资料」**（理由见 profile_targets）。"""
     return {"targets": webform_service.profile_targets.build_memory_targets(db)}
+
+
+# ===== 「网申资料」粘贴识别（项 12 / D20 / D21 / D22 / D32）=====
+
+
+@router.post("/extra-profile/parse-text", response_model=WebFormExtraProfileParseOut)
+async def parse_extra_profile_text_draft(
+    payload: WebFormExtraProfileParseIn, db: Session = Depends(get_db)
+):
+    """把粘贴的网申资料拆成草稿：目录内进 ``values``，目录外进 ``custom``（待用户勾选）。
+
+    **不写库**（D20）：与简历资料侧的 ``POST /profile/parse-text`` 同语义——"点了识别"不该
+    变成"改了数据"，用户此刻还没校对。写入仍然只走 ``PUT /extra-profile``（整份覆盖），
+    那时用户已经在核对卡片里逐条确认过了。
+    """
+    try:
+        images = normalize_extraction_images(payload.images)
+        # PDF/DOCX 解析是同步 CPU/IO 重活（pypdf 最多 30 页），下沉线程池。
+        documents = await run_in_threadpool(extract_documents_text, payload.documents)
+        assert_attachment_budget(
+            count=len(payload.images) + len(payload.documents),
+            total_bytes=total_attachment_bytes(images) + documents.size_bytes,
+        )
+    except ValueError as exc:
+        # 在路由层抛：只有 HTTPException 的 detail 会被前端原样展示。
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    image_urls = image_data_urls(images) + list(documents.images)
+    has_images = bool(image_urls)
+    has_documents = bool(payload.documents)
+    # 文档文字与粘贴文本合并成同一份 source_text：本地规则与模型看到的材料一致。
+    source_text = "\n\n".join(part for part in (payload.text, documents.text) if part.strip())
+    local_values, _local_custom = webform_service.extra_profile_text.parse_extra_profile_text(
+        source_text
+    )
+
+    def local_result(warnings: list[str]) -> WebFormExtraProfileParseOut:
+        """本地规则的结果（``custom`` 恒空，理由见 D22）。"""
+        return WebFormExtraProfileParseOut(
+            values=local_values,
+            custom=[],
+            warnings=list(dict.fromkeys([*warnings, *documents.warnings])),
+            parse_engine="local",
+            recognized_text=source_text,
+        )
+
+    config = get_llm_config(db)
+    if not llm_is_configured(config):
+        return local_result([no_model_warning(has_images, has_documents)])
+
+    provider = create_provider(config)
+    # 拿到配置就把连接还给池子：模型调用可能几十秒，不该一直占着一个会话。
+    db.close()
+    try:
+        values, custom, warnings, recognized = (
+            await webform_service.extra_profile_text.extract_extra_profile(
+                provider, source_text, local_values, image_urls
+            )
+        )
+    except LLMError as exc:
+        logger.warning("网申资料 AI 识别失败，已回退本地解析：%s", exc)
+        return local_result([ai_failed_warning(has_images, str(exc), has_documents)])
+    except Exception:  # noqa: BLE001 - 外部模型异常不能阻断草稿解析
+        logger.exception("网申资料 AI 识别发生内部错误，已回退本地解析")
+        return local_result([ai_failed_warning(has_images, has_documents=has_documents)])
+    return WebFormExtraProfileParseOut(
+        values=values,
+        # 服务层返回的是 dict 草稿（模型与本地路径同形）；pydantic 运行时会强转，
+        # 但 pyright 的 list 不变性要求这里显式收窄成 schema 项。
+        custom=[
+            WebFormExtraProfileParsedItem.model_validate(item) for item in custom
+        ],
+        warnings=list(dict.fromkeys([*warnings, *documents.warnings])),
+        parse_engine="ai",
+        recognized_text=recognized,
+    )
 

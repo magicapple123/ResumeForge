@@ -15,6 +15,9 @@ from . import (
     browser as browser,
 )
 from . import (
+    extra_profile_text as extra_profile_text,
+)
+from . import (
     live_targets as live_targets,
 )
 from . import (

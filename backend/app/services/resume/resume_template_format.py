@@ -7,6 +7,19 @@ import re
 
 from .resume_sections import normalized_section_order
 
+# ===== 每份简历选字体（项 14）=====
+#
+# **不是** ``FORMAT_FIELDS`` 的一项：那张表是「格式模板编辑器」的字段清单，每一项都会被
+# 渲染成一个输入控件（数字/颜色）。字体是一个"从已上传字体里挑一个"的枚举，塞进去会让
+# 编辑器长出一个"字体 = 18"的数字框（D26）。
+#
+# 但它**必须**和格式配置存在同一个抽屉里（`format_config`）：它同样是"这份简历怎么排"
+# 的一部分，跟着简历走、跟着导出走。所以只在 `validated_format_config` 里单独放行。
+FONT_KEY = "font"
+# 显式"这份简历不使用自定义字体"：与"没设过（跟随全局当前字体）"是**两种**语义，
+# 所以要用一个哨兵值把前者表达出来——删键等于后者。
+SYSTEM_FONT = "__system__"
+
 FORMAT_FIELDS: tuple[dict, ...] = (
     {"key": "accent", "label": "强调色", "type": "color", "css": "--accent"},
     {"key": "text_color", "label": "正文颜色", "type": "color", "css": "--text"},
@@ -63,6 +76,34 @@ def _format_field(key: str) -> dict | None:
     return next((field for field in FORMAT_FIELDS if field["key"] == key), None)
 
 
+def _validated_font_name(value: object) -> str | None:
+    """校验"这份简历用哪个字体文件"，返回可用的字体名；不可用返回 ``None``。
+
+    校验交给 ``user_fonts.font_path``——它已经做了"拒绝目录成分 + 后缀白名单 + 文件必须
+    存在"三件事，这里再抄一份只会漂移。
+
+    **取不到就静默丢弃**（返回 ``None``，调用方据此不写这个键）：字体文件被用户删掉之后，
+    那份简历应当退回"跟随全局当前字体"，而不是整份打不开。这是本条唯一的失败策略——
+    字体是显示细节，不该升级成打开简历的前置条件。
+    """
+    if not isinstance(value, str):
+        return None
+    name = value.strip()
+    if not name:
+        return None
+    if name == SYSTEM_FONT:
+        return name
+    # 局部 import：`resume_template_format` 被模板/渲染链路广泛引用，模块级再拉一个
+    # `user_fonts`（它要读配置目录）会把"只想拿字段表"的调用方也拖进文件系统。
+    from ..user_fonts import FontError, font_path
+
+    try:
+        font_path(name)
+    except FontError:
+        return None
+    return name
+
+
 def validated_format_config(raw: dict | None) -> dict:
     """校验可写入 CSS 或版式渲染器的格式配置。"""
     if not isinstance(raw, dict):
@@ -72,6 +113,11 @@ def validated_format_config(raw: dict | None) -> dict:
         if str(key) == "section_order":
             if isinstance(value, (list, tuple)) and value:
                 result["section_order"] = normalized_section_order(value)
+            continue
+        if str(key) == FONT_KEY:
+            font_name = _validated_font_name(value)
+            if font_name is not None:
+                result[FONT_KEY] = font_name
             continue
         field = _format_field(str(key))
         if field is None or value in (None, ""):
@@ -142,9 +188,12 @@ def page_padding_bounds() -> tuple[float, float]:
 
 
 __all__ = [
+    "FONT_KEY",
     "FORMAT_FIELDS",
     "FORMAT_FIELD_KEYS",
+    "SYSTEM_FONT",
     "_format_field",
+    "_validated_font_name",
     "format_css",
     "format_field_options",
     "page_padding_bounds",

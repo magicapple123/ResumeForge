@@ -17,7 +17,10 @@ from .extraction import (
     ExtractionImageInput,
 )
 
-MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
+# 资料照片（我的资料 → 简历照片）单张上限。base64 后约 ×1.34，仍在 8MB 请求体预算内。
+MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024
+# 岗位备注图片沿用同一套校验，但**单独一档**：一次最多 2 张，若也放宽到 5MB，
+# 两张就会超过 8MB 的请求体上限，用户只会看到 413。
 MAX_REFERENCE_FILE_NAME_CHARS = 255
 MAX_REFERENCE_CONTENT_CHARS = 200_000
 MAX_PROFILE_TEXT_CHARS = 100_000
@@ -33,11 +36,14 @@ PROFILE_SECTION_KEYS = (
     "campus_experiences",
     "summary",
 )
-_MAX_ENCODED_PHOTO_CHARS = 4 * ((MAX_PROFILE_PHOTO_BYTES + 2) // 3)
+def _encoded_char_limit(max_bytes: int) -> int:
+    """base64 后的字符上限：多留 2 字节吸收末尾填充。"""
+
+    return 4 * ((max_bytes + 2) // 3)
 _PHOTO_HEADER_RE = re.compile(r"^data:(image/(?:jpeg|png|webp));base64$", re.IGNORECASE)
 
 
-def validate_photo_data_url(value: str) -> str:
+def validate_photo_data_url(value: str, *, max_bytes: int = MAX_PROFILE_PHOTO_BYTES) -> str:
     """只接受体积受限且文件签名匹配的 JPEG/PNG/WebP data URL。"""
     if not value:
         return ""
@@ -46,15 +52,15 @@ def validate_photo_data_url(value: str) -> str:
     header_match = _PHOTO_HEADER_RE.fullmatch(header)
     if not separator or header_match is None:
         raise ValueError("照片必须是 JPEG、PNG 或 WebP 格式的 base64 data URL")
-    if len(encoded) > _MAX_ENCODED_PHOTO_CHARS:
-        raise ValueError("照片大小不能超过 2 MB")
+    if len(encoded) > _encoded_char_limit(max_bytes):
+        raise ValueError(f"照片大小不能超过 {max_bytes // (1024 * 1024)} MB")
 
     try:
         image_bytes = base64.b64decode(encoded, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise ValueError("照片数据不是有效的 base64 编码") from exc
-    if len(image_bytes) > MAX_PROFILE_PHOTO_BYTES:
-        raise ValueError("照片大小不能超过 2 MB")
+    if len(image_bytes) > max_bytes:
+        raise ValueError(f"照片大小不能超过 {max_bytes // (1024 * 1024)} MB")
 
     mime = header_match.group(1).lower()
     signatures_match = {

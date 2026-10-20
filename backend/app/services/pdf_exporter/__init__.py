@@ -53,6 +53,9 @@ from .fonts import (
 from .fonts import (
     _resolve_font_paths as _resolve_font_paths,
 )
+from .fonts import (
+    resolve_font_paths as resolve_font_paths,
+)
 from .layout import (
     _BODY_TEXT as _BODY_TEXT,
 )
@@ -116,6 +119,7 @@ __all__ = [
     "plan_name_gender",
     "rendered_page_count",
     "resolve_accent",
+    "resolve_font_paths",
     "resolve_layout",
     "resolve_line",
     "skill_tag_metrics",

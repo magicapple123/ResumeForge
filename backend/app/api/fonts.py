@@ -18,6 +18,7 @@ from ..services.user_fonts import (
     delete_font,
     font_path,
     list_fonts,
+    rename_font,
     save_font,
     set_active,
 )
@@ -92,10 +93,10 @@ def read_font_file(name: str) -> Response:
 
 @router.post("/fonts")
 async def upload_resume_font(request: Request, file: UploadFile = File(...)) -> dict:
-    """上传一个字体文件（ttf/otf/ttc，≤20MB）。不会自动设为当前字体。"""
+    """上传一个字体文件（ttf/otf/ttc，≤30MB）。不会自动设为当前字体。"""
 
     _require_loopback(request)
-    data = await file.read(20 * 1024 * 1024 + 1)
+    data = await file.read(MAX_BYTES + 1)
     try:
         item = save_font(file.filename or "font.ttf", data)
     except FontError as exc:
@@ -117,6 +118,20 @@ def activate_resume_font(payload: dict, request: Request) -> dict:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     reset_font_cache()
     return {"active": active_font_name()}
+
+
+@router.patch("/fonts/{name}")
+def rename_resume_font(name: str, payload: dict, request: Request) -> dict:
+    """改字体的**展示名**：文件名与已引用它的简历都不受影响。"""
+
+    _require_loopback(request)
+    label = str(payload.get("display_name") or "").strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="字体名称不能为空")
+    try:
+        return rename_font(name, label)
+    except FontError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.delete("/fonts/{name}", status_code=204)

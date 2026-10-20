@@ -22,6 +22,7 @@ from .api import (
     assistant,
     assistant_proposals,
     ats,
+    attachments,
     candidate_jobs,
     claims,
     datasets,
@@ -432,6 +433,8 @@ def create_app() -> FastAPI:
         assistant.router,
         assistant_proposals.router,
         trash.router,
+        # 附件预览（PDF 首页渲染）：独立前缀 /api/attachments，与识别链路无耦合。
+        attachments.router,
         user_files.router,
         manual_backups.router,
     ):

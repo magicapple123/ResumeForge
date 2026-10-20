@@ -46,7 +46,7 @@ def test_profile_rejects_oversized_photo(client):
     response = client.put("/api/profile", json={"name": "张三", "photo": photo})
 
     assert response.status_code == 422
-    assert "2 MB" in response.text
+    assert "5 MB" in response.text
 
 
 def test_resume_preview_conditionally_renders_photo(client):
@@ -97,3 +97,15 @@ def test_saved_resume_preserves_photo_in_detail_and_exports(client, db_session):
     assert "个人照片" not in markdown.text
     assert exported_json.status_code == 200
     assert "photo" not in exported_json.json()
+
+
+def test_photo_size_limits_are_separate():
+    """资料照片 5 MB、岗位备注图片仍 2 MB（两张 5 MB 会撞 8 MB 请求体上限）。"""
+
+    from app.schemas.job import JOB_NOTE_IMAGE_MAX_BYTES
+    from app.schemas.profile import MAX_PROFILE_PHOTO_BYTES
+
+    assert MAX_PROFILE_PHOTO_BYTES == 5 * 1024 * 1024
+    assert JOB_NOTE_IMAGE_MAX_BYTES == 2 * 1024 * 1024
+    # 备注图片一次两张：必须仍然落在默认 8 MB 请求体预算内。
+    assert JOB_NOTE_IMAGE_MAX_BYTES * 2 * 4 / 3 < 8 * 1024 * 1024

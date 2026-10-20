@@ -172,3 +172,33 @@ def test_any_font_file_is_readable_for_preview(client):
     assert client.get("/api/settings/fonts/nope.ttf/file").status_code == 404
     # 只接受纯文件名：带目录成分的请求一律 404，避免越出 fonts 目录。
     assert client.get("/api/settings/fonts/..%2Fsecret.ttf/file").status_code == 404
+
+
+def test_rename_only_changes_display_name():
+    """重命名只改展示名：文件名（`format_config.font` 的键）必须原封不动。"""
+
+    user_fonts.save_font("思源黑体.ttf", b"\x00\x01" * 64)
+    assert user_fonts.list_fonts()[0]["display_name"] == "思源黑体"
+
+    user_fonts.rename_font("思源黑体.ttf", "  正文宋  ")
+
+    item = user_fonts.list_fonts()[0]
+    assert item["name"] == "思源黑体.ttf"
+    assert item["display_name"] == "正文宋"
+
+    # 改名不影响"能不能按文件名取到文件"，也不影响已选中它的简历。
+    user_fonts.set_active("思源黑体.ttf")
+    assert user_fonts.active_font_path().name == "思源黑体.ttf"
+
+
+def test_rename_rejects_empty_and_cleans_up_on_delete():
+    user_fonts.save_font("思源黑体.ttf", b"\x00\x01" * 64)
+    with pytest.raises(user_fonts.FontError):
+        user_fonts.rename_font("思源黑体.ttf", "   ")
+
+    user_fonts.rename_font("思源黑体.ttf", "正文宋")
+    user_fonts.delete_font("思源黑体.ttf")
+
+    # 删除后展示名条目也要清掉，否则重新上传同名文件会继承一个旧名字。
+    user_fonts.save_font("思源黑体.ttf", b"\x00\x01" * 64)
+    assert user_fonts.list_fonts()[0]["display_name"] == "思源黑体"

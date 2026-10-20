@@ -68,13 +68,24 @@ FORMAT_PRESETS: tuple[dict, ...] = (
         "name": "compact",
         "label": "紧凑",
         "description": "行高与间距收紧、页边距变小，适合想压进一页",
-        "config": {"line_height": 1.45, "page_padding": 11, "section_gap": 0.85},
+        # 字号也跟着收一点：只收行高/页边距时，密排的大字反而更挤。
+        "config": {
+            "line_height": 1.45,
+            "page_padding": 11,
+            "section_gap": 0.85,
+            "font_scale_adjust": 0.94,
+        },
     },
     {
         "name": "spacious",
         "label": "舒展",
         "description": "行高与留白放大，适合内容不多、想显得从容",
-        "config": {"line_height": 2.0, "page_padding": 20, "section_gap": 1.8},
+        "config": {
+            "line_height": 2.0,
+            "page_padding": 20,
+            "section_gap": 1.8,
+            "font_scale_adjust": 1.06,
+        },
     },
     {
         "name": "mono_accent",

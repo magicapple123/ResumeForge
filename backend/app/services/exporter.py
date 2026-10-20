@@ -17,6 +17,7 @@ from jinja2.sandbox import SandboxedEnvironment
 
 from ..schemas.resume import MAX_RESUME_PAGES, ResumeContent
 from .resume.resume_sections import DEFAULT_SECTION_ORDER, resolved_section_order
+from .resume.resume_template_format import FONT_KEY
 from .resume.resume_template_style import style_css, validated_style_config
 from .resume.resume_templates import (
     DEFAULT_FONT_SCALE,
@@ -197,14 +198,17 @@ def _inject_before(html: str, block: str, marker: str) -> str:
     return f"{html}\n{block}"
 
 
-def _active_font_style(resume: ResumeContent) -> str:
-    """当前自定义字体的内嵌样式（R10）；没有可用字体时返回空串。
+def _active_font_style(resume: ResumeContent, font_name: str | None = None) -> str:
+    """这份简历要内嵌的字体样式（R10 / 项 14）；没有可用字体时返回空串。
+
+    ``font_name`` 来自 ``format_config["font"]``（每份简历自己的选择）；``None`` 表示没设过，
+    走设备上当前选中的字体。
 
     字符集取简历全部可见文本（照片的 data URL 排除在外：几千个 base64 字符没有意义）。
     没有字体时**不输出任何标签**——HTML 里不该出现孤零零的 ``@font-face``。
     """
     text = json.dumps(resume.model_dump(exclude={"photo"}), ensure_ascii=False)
-    css = embed_font_css(text)
+    css = embed_font_css(text, font_name)
     if not css:
         return ""
     return f'<style id="rf-font">\n{css}\n</style>'
@@ -271,7 +275,10 @@ def render_html(
         html = _inject_before(html, f"<style>\n{css}\n</style>", "</head>")
     # 字体样式必须**最后**插：风格配置里的 body font-family 也带 !important，
     # 同优先级下后出现的声明生效，否则用户选的字体族会盖掉自定义字体。
-    font_style = _active_font_style(resume)
+    # 字体按**这份简历自己的选择**（`format_config.font`）内嵌；这里读的是
+    # `format_values`（已由 `validated_format_config` 白名单化的那一份），
+    # 所以不存在的字体文件在到达渲染前就已经被丢弃。
+    font_style = _active_font_style(resume, format_values.get(FONT_KEY))
     if font_style:
         html = _inject_before(html, font_style, "</head>")
     return html

@@ -27,6 +27,7 @@ from .profile import validate_photo_data_url
 MAX_SQLITE_INTEGER = 2**63 - 1
 MAX_JOB_TEXT_CHARS = 200_000
 # 备注图片随岗位表单一次性提交，受默认 8 MB 请求体上限约束，所以只放 2 张。
+JOB_NOTE_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 MAX_JOB_NOTE_IMAGES = 2
 
 # 招聘信息的录入方式，用于备注里的溯源标注。
@@ -65,7 +66,9 @@ def validate_note_images(values: list[str]) -> list[str]:
     """备注图片沿用资料照片的校验：JPEG/PNG/WebP、单张不超过 2 MB。"""
     if len(values) > MAX_JOB_NOTE_IMAGES:
         raise ValueError(f"备注图片最多 {MAX_JOB_NOTE_IMAGES} 张")
-    return [validate_photo_data_url(value) for value in values]
+    # 岗位备注沿用资料照片那套校验，但**体积上限单独一档**：一次最多两张，
+    # 若跟着资料照片放宽到 5MB，两张就会超出 8MB 的请求体上限。
+    return [validate_photo_data_url(value, max_bytes=JOB_NOTE_IMAGE_MAX_BYTES) for value in values]
 
 
 def validate_recognition_source(value: str) -> str:
