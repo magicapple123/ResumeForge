@@ -34,6 +34,11 @@ from ..services.data_backup import (
     manifest_asset_warnings,
     purge_stale_restores,
     restore_directory,
+    uncovered_summary,
+)
+from ..services.data_backup.global_assets import (
+    read_global_assets_payload,
+    restore_global_assets,
 )
 from ..services.data_backup.global_config import read_global_llm_payload
 from ..services.data_backup.naming import default_backup_stem, safe_backup_filename
@@ -176,6 +181,22 @@ async def import_archive(request: Request) -> dict:
         except Exception as exc:  # noqa: BLE001 - 边上信息，不能扩大失败面
             logger.warning("备份包里的全局模型配置未能导入：%s", exc)
             created["global_llm"] = {"error": str(exc)}
+        # 字体（格式 6）同理：属于"数据集之外"的全局资产，恢复失败**不回滚**已经落盘
+        # 的数据集，只把计数与原因如实附在返回里——用户至少能看出字体没完全回来。
+        try:
+            assets_payload = read_global_assets_payload(staging)
+            if assets_payload is not None:
+                fonts = restore_global_assets(staging, assets_payload)
+                created["restored_fonts"] = fonts["restored"]
+                created["skipped_fonts"] = fonts["skipped"]
+                created["active_font_set"] = fonts["active_set"]
+                if fonts["names_added"]:
+                    created["restored_font_names"] = fonts["names_added"]
+                if fonts["issues"]:
+                    created["font_issues"] = fonts["issues"]
+        except Exception as exc:  # noqa: BLE001 - 字体是附加物，不能扩大失败面
+            logger.warning("备份包里的字体未能导入：%s", exc)
+            created["font_issues"] = [f"字体未能导入（{exc}）"]
     except HTTPException:
         staging.unlink(missing_ok=True)
         raise
@@ -348,7 +369,7 @@ def _archive_response(
 
 
 def _incomplete_backup_headers(archive_path: Path) -> dict[str, str]:
-    """包内已经存在"附件缺失/内容与登记哈希不符"时，在响应头里如实标出（RR-03）。
+    """包内已经有"不完整"或"未纳入"的信号时，在响应头里如实标出（RR-03 / P3）。
 
     导出响应体是二进制压缩包，没有 JSON 通道；界面若只说"已导出"就等于把一份不完整的
     备份说成完整备份。这里只放**计数**（响应头是 ASCII），细节留在包内清单里。
@@ -369,4 +390,11 @@ def _incomplete_backup_headers(archive_path: Path) -> dict[str, str]:
     if warnings:
         headers["X-Backup-Incomplete"] = "1"
         headers["X-Backup-Asset-Warnings"] = str(len(warnings))
+    # P3：数据目录里"没进包"的东西也要可见。未覆盖不等于导出失败（用户可能只是拷
+    # 当前数据集），所以不进 X-Backup-Incomplete，单独两个计数。
+    coverage = uncovered_summary(manifest)
+    headers["X-Backup-Uncovered"] = str(coverage["count"])
+    headers["X-Backup-Uncovered-Bytes"] = str(coverage["bytes"])
+    if coverage["truncated"]:
+        headers["X-Backup-Uncovered-Truncated"] = "1"
     return headers

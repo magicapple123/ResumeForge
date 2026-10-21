@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 # 1 px = 0.75 pt = 0.2646 mm。行推进量统一按 `字号(px) × _PX_TO_MM × 行高系数` 计算。
 _PX_TO_PT = 0.75
@@ -16,25 +16,6 @@ _MUTED_TEXT = (107, 114, 128)
 # A4 短边宽（mm）。页面所有横向定位都以它为基准，避免在代码里到处写 210。
 PAGE_WIDTH_MM = 210.0
 PAGE_HEIGHT_MM = 297.0
-
-# ===== 一页适配（与 `_resume_fit_script.j2` 同口径）=====
-# 预览的 `--fit-scale` 有没有可缩的余地、缩到多小为止，尽量沿用那套规则，避免又造出
-# 第二套分页/溢出判定。两边是两套引擎（这里是 Python、脚本里是 JS），**无法共享同一份常量**，
-# 只能靠 `test_pdf_exporter.py` 的 `test_fit_scale_constants_match_the_preview_script`
-# 把两边的字面量拿出来逐个数值比对来钉住同步。**改动下面任何一个数值，都必须同步改
-# `backend/app/templates/_resume_fit_script.j2` 里对应的 JS 字面量**，否则那条测试会红。
-MIN_FIT_SCALE = 0.5  # = 脚本 `minScale`；再小就"缩到看不清"了
-_FIT_MAX_PASSES = 3  # = 脚本 `maxPasses`
-_FIT_RATIO_MARGIN = 0.995  # = 脚本里 `Math.min(...) * 0.995`；给"绝对尺寸不参与缩放"留的余量
-_FIT_MIN_STEP = 0.001  # = 脚本里 `scale - 0.001`；一档缩不下去就停
-# 高度比较的容差（mm）：= 脚本里 `referenceHeight + 1` 的 1px（1px = _PX_TO_MM mm）。
-# 它只用来判断"比例跳档有没有意义"，真正的"装不装得下"由真实页数决定。
-_FIT_TOLERANCE_MM = _PX_TO_MM
-# 连续高判断"刚好装得下"、真实分页却超出一页时的**离散收档**步长。这是本模块相对预览脚本
-# 多出来的一档：预览只用 `scrollHeight / referenceHeight` 的比例跳档，当这个比例 ≥ 1
-# （连续高已"达标"）时它跳不动，于是会在**连续高 ≠ 实际分页高**的边界上不动（见
-# `decide_fit_scale` 的说明）。每轮至少收这么多，才能把这类内容真正压回一页。
-_FIT_PAGE_STEP = 0.02
 
 # ===== 字号层级系数 =====
 # 姓名 / 求职意向 / 联系方式 / 区块标题 / 条目标题 / 条目头副行(`.entry-head .meta`) /
@@ -53,8 +34,10 @@ class ResumeLayout:
     页边距（mm）、行高系数、区块间距系数，各层级（姓名 / 求职意向 / 联系方式 /
     区块标题 / 条目标题 / 条目头副行 / 条目下副行 / 技能标签）的字号比例，以及**垂直间距**
     （页头 / 条目 / 副行 / 列表项 / 区块标题与正文之间）与**区块标题的形状**、**照片尺寸**。
-    ``fit_scale`` 是一页适配算出的缩放，**只**乘在字号派生的尺寸上（`scaled_base_px`），
-    mm 页边距不参与——与预览把 `--fit-scale` 吸进 `--fs` 的做法完全一致。
+
+    **这里没有"缩放"这个概念**（2026-10-21 用户要求）：`base_px` 就是用户在版式栏里
+    设定的字号，所有尺寸由它直接派生。装不下时不再压小字号，而是截断到页数上限并标记
+    `overflow`，由界面提示用户加页 / 收紧版式——参数与纸面必须严格一致。
     """
 
     base_px: float
@@ -75,6 +58,10 @@ class ResumeLayout:
     tag_font_ratio: float
     # ===== 垂直间距（× 基准字号的倍数，见 `resume_templates.TEMPLATE_LAYOUT_DEFAULTS`）=====
     header_gap: float
+    # 页头内部的两段上边距：`.header .intent` / `.header .contact` 的 margin-top。它们此前
+    # 只存在于模板 CSS，PDF 画完姓名就紧接着画意向与联系方式，页头因此比预览矮 ~3mm。
+    intent_gap: float
+    contact_gap: float
     entry_gap: float
     sub_gap_top: float
     sub_gap_bottom: float
@@ -97,16 +84,40 @@ class ResumeLayout:
     # ===== 照片尺寸（× 基准字号，来自模板 `.profile-photo` 的 width/height）=====
     photo_width_ratio: float
     photo_height_ratio: float
-    fit_scale: float = 1.0
-
-    @property
-    def scaled_base_px(self) -> float:
-        """一页适配之后的基准字号（px）。所有尺寸都由它派生。"""
-        return self.base_px * self.fit_scale
+    # ===== 技能标签的形状（来自模板 `.skill-list li` 的 CSS，见注册表同名键）=====
+    # 8 个内置模板的标签有 5 种形态（填充 / 描边胶囊 / 左侧色条 / 无框+「·」分隔 / 纯文字），
+    # 圆角与内边距也各不相同。此前 PDF 侧写死 0.71 / 0.57 / 0.4 三个比例、统一画成"带底色的
+    # 圆角框"，于是 7 个模板的标签在导出的 PDF 里长得和预览都不一样。
+    tag_style: str
+    tag_bg: str
+    tag_fg: str
+    tag_border_px: float
+    # 圆角：数字 = "× 标签字号"；`"pill"` = 胶囊（CSS `border-radius: 999px`）。
+    tag_radius: float | str
+    tag_pad_x: float
+    tag_gap_x: float
+    tag_gap_y: float
+    # ===== 技能标签的两个排版开关（来自模板 `.skill-list` / `.skill-list li` 的 CSS）=====
+    # `tag_align`：`left` / `center`——elegant 的 `.skill-list { text-align: center }` 让**整段**
+    # 标签水平居中（单个标签的形状由 `tag_style` 管，两者正交）。
+    tag_align: str
+    # `tag_mono`：technical 的 `.skill-list li` 用等宽字族。PDF 只有一套注册字体，
+    # 纯 ASCII 标签改用 fpdf2 内置的 courier，含中文时退回正文（见 `skill_tags` docstring）。
+    tag_mono: bool
+    # ===== 正文分栏（来自模板 `.resume-sections` 的 CSS）=====
+    # 草稿侧 `split` 是两栏网格（`exporter.py` 把 `column_count` 置 2），其余模板单栏。
+    # `column_gap` 是栏间距（× 基准字号，= CSS `column-gap: calc(var(--fs) * 1.2)`）。
+    # 分栏一开，同一份内容的总高度就变了（并排两段比顺序两段矮），所以 PDF 必须知道它。
+    column_count: int
+    column_gap: float
+    # ===== 列表缩进（来自模板 `ul { padding-left: calc(var(--fs) * N) }`）=====
+    # `li_indent` 是 N（× 基准字号）：列表正文的起始位置与可用宽度都由它派生
+    # （`canvas.bullets`）。此前 PDF 写死 3.0mm，与模板差 1.6~2.3mm，窄栏里足以改变折行行数。
+    li_indent: float
 
     def gap_mm(self, ratio: float) -> float:
-        """把"× 基准字号"的间距系数换成毫米（随一页适配缩放，与预览同口径）。"""
-        return self.scaled_base_px * _PX_TO_MM * ratio
+        """把"× 基准字号"的间距系数换成毫米（与预览的 `calc(var(--fs) * N)` 同口径）。"""
+        return self.base_px * _PX_TO_MM * ratio
 
     @property
     def margin_x(self) -> float:
@@ -127,8 +138,14 @@ class ResumeLayout:
         """一页里正文可用高度（mm）= 页高 − 上下页边距。"""
         return PAGE_HEIGHT_MM - 2 * self.margin_mm
 
-    def with_fit_scale(self, scale: float) -> ResumeLayout:
-        return replace(self, fit_scale=scale)
+    @property
+    def usable_width_mm(self) -> float:
+        """正文可用宽度（mm）= 页宽 − 左右页边距。
+
+        双栏模板要把这个宽度再切成两栏（见 `columns.column_frames`），单栏模板里它就等于
+        整页正文宽度。放在这里而不是各模块自己算，是为了"页宽 − 页边距"只有一处定义。
+        """
+        return PAGE_WIDTH_MM - 2 * self.margin_mm
 
 
 def _resolve_margin_mm(overrides: dict, defaults: dict, margin_mm: float | None) -> float:
@@ -214,6 +231,8 @@ def resolve_layout(
         # 垂直间距、区块标题形状与照片尺寸同样只来自模板——这些此前只存在于模板 CSS，
         # PDF 侧没有，于是排得比预览紧（"被压扁"的主要来源）。
         header_gap=float(defaults["header_gap"]),
+        intent_gap=float(defaults["intent_gap"]),
+        contact_gap=float(defaults["contact_gap"]),
         entry_gap=float(defaults["entry_gap"]),
         sub_gap_top=float(defaults["sub_gap_top"]),
         sub_gap_bottom=float(defaults["sub_gap_bottom"]),
@@ -233,4 +252,25 @@ def resolve_layout(
         section_title_pad_y=float(defaults["section_title_pad_y"]),
         photo_width_ratio=float(defaults["photo_width_ratio"]),
         photo_height_ratio=float(defaults["photo_height_ratio"]),
+        # 技能标签的形态与几何同样只来自模板：`tag_radius` 保留注册表原值（可能是 `"pill"`），
+        # 不在这一层把哨兵解释成数字——"怎么画"是 `skill_tags` 的事。
+        tag_style=str(defaults["tag_style"]),
+        tag_bg=str(defaults["tag_bg"]),
+        tag_fg=str(defaults["tag_fg"]),
+        tag_border_px=float(defaults["tag_border_px"]),
+        tag_radius=defaults["tag_radius"],
+        tag_pad_x=float(defaults["tag_pad_x"]),
+        tag_gap_x=float(defaults["tag_gap_x"]),
+        tag_gap_y=float(defaults["tag_gap_y"]),
+        # 标签的"整段排版"两个开关（居中 / 等宽）与正文分栏同样只来自模板：
+        # 它们决定"画在哪"与"用什么字体画"，都属于模板 CSS 的语义，不在这里另设默认。
+        tag_align=str(defaults["tag_align"]),
+        tag_mono=bool(defaults["tag_mono"]),
+        # 正文分栏：栏数决定 `_draw_resume` 走 `columns.render_sections` 还是顺序路径；
+        # 栏间距参与半栏宽度的计算（见 `columns.column_frames`）。
+        column_count=int(defaults["column_count"]),
+        column_gap=float(defaults["column_gap"]),
+        # 列表缩进同样只来自模板 `ul { padding-left }`：写死 3.0mm 会让每条 li 的行宽
+        # 比草稿宽 1.6~2.3mm，窄栏里少折一行 —— 就是 split 比草稿矮、单栏偏紧的主要来源。
+        li_indent=float(defaults["li_indent"]),
     )

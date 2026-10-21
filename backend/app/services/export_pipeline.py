@@ -7,7 +7,8 @@
 
 渲染器是**既有实现**的适配壳：json/md/html 复用 ``exporter``，pdf 复用 ``pdf_exporter``，
 docx/txt 是 R-16 新增的两个渲染器（Word 复用 ``ResumeLayout``，纯文本复用 Markdown 正文
-结构去标记）。管线不新增任何缩放 / 版式逻辑——fit-scale 两套口径维持现状，由既有测试钉住。
+结构去标记）。管线不新增任何缩放 / 版式逻辑——字号与页边距一律由 `format_config` 决定，
+任何渲染器都不许自行压小字号（2026-10-21 用户要求），由既有测试钉住。
 """
 
 from __future__ import annotations
@@ -76,6 +77,8 @@ class RenderedArtifact:
     content: bytes
     media_type: str
     pages: int | None = None
+    #: 按当前版式**真实需要**几页（未截断）；只有服务端 PDF 能给出精确值。
+    pages_needed: int | None = None
     page_limit: int | None = None
     overflow: bool = False
 
@@ -88,6 +91,7 @@ class ExportArtifact:
     filename: str
     media_type: str
     pages: int | None = None
+    pages_needed: int | None = None
     page_limit: int | None = None
     overflow: bool = False
 
@@ -137,6 +141,7 @@ def _render_pdf(resume: ResumeContent, context: RenderContext) -> RenderedArtifa
         content=pdf.content,
         media_type="application/pdf",
         pages=pdf.pages,
+        pages_needed=pdf.pages_needed,
         page_limit=context.page_limit,
         overflow=pdf.overflow,
     )
@@ -226,6 +231,7 @@ def build_export(
         filename=build_filename(effective_resume, request.format),
         media_type=rendered.media_type,
         pages=rendered.pages,
+        pages_needed=rendered.pages_needed,
         page_limit=rendered.page_limit,
         overflow=rendered.overflow,
     )

@@ -20,7 +20,8 @@ from sqlalchemy import Engine
 
 from ...database_migrations import _APPLICATION_TABLES, run_database_migrations
 from .archive_guard import copy_archive_member, validate_archive, validate_manifest_assets
-from .asset_manifest import ASSET_MANIFEST_VERSION
+from .asset_manifest import ASSET_MANIFEST_VERSION, verify_database_rows
+from .global_assets import GLOBAL_ASSETS_VERSION
 from .manifest import _revision_chain, _table_counts
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME,
@@ -174,6 +175,15 @@ def inspect_extra_dataset(
         _check_candidate_revision(candidate, bind, {"alembic_revision": None})
         _upgrade_candidate(candidate)
         _database_info(candidate, bind)
+        # P4：随包数据集也要按清单复核行数（活动数据集在 ``datasets.import_dataset``
+        # 里做）。不核的话，一份被改过行数的子包会"恢复成功"却少了几十条记录。
+        # 旧包没有 ``tables`` 段 → verify 直接返回空，行为不变。
+        row_issues = verify_database_rows(candidate, entry.get("tables") or {})
+        if row_issues:
+            label = entry.get("name") or entry.get("id") or "随包数据集"
+            raise BackupError(
+                f"备份包里数据集「{label}」的数据库行数与清单不符，已停止导入：{row_issues[0]}"
+            )
     except BaseException:
         _remove_candidate_files(candidate)
         raise
@@ -215,6 +225,17 @@ def _read_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
     ):
         raise BackupError(
             "备份包的资产清单版本不受支持，可能来自其它版本的 ResumeForge；请先升级应用再导入"
+        )
+    # 全局资产（字体，格式 6）fail-closed：段存在就必须是当前代码认识的版本。
+    # 没有这一段的 1–5 包照常导入（它们本来就没有字体）；版本对不上说明来自更新/
+    # 更老的版本，宁可拒收也不按自己读不懂的形状去写用户的字体目录。
+    global_assets_section = manifest.get("global_assets")
+    if global_assets_section is not None and (
+        not isinstance(global_assets_section, dict)
+        or global_assets_section.get("version") != GLOBAL_ASSETS_VERSION
+    ):
+        raise BackupError(
+            "备份包的字体清单版本不受支持，可能来自其它版本的 ResumeForge；请先升级应用再导入"
         )
     validate_manifest_assets(manifest)
     return manifest

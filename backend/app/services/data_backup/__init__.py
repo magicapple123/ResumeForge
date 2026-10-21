@@ -4,14 +4,21 @@
 ResumeForge 的用户数据**主要**在 SQLite 文件里——照片、经历参考文件和助手图片附件
 以 base64 存在数据库列中。**但磁盘上确实还有一类用户文件**：按内容寻址落盘的
 ``user_files/`` 副本（"我的文件"）与内推备注图 ``referral_images/``，数据库里只登记
-引用（``user_file.disk_name`` / ``referral.note_images``），原件不进库。所以备份包 =
+引用（``user_file.disk_name`` / ``referral.note_images``）。所以备份包 =
 一致性快照 + 元信息 + **按引用收集的附件**（``asset_manifest`` 逐文件记 size/SHA-256，
 见 ``asset_manifest.py``）。导入侧先验后发布、绝不覆盖本机同名附件。
+
+**还有两类跨数据集的全局数据**：自定义字体（``DATA_DIR/fonts/``，格式 6 起随包，
+见 ``global_assets.py``）与全局模型配置（``global_llm.json``，格式 5 起）。它们不跟
+某一份数据集走，所以放在外层，只在"用户可见的顶层导出"里带一次。
 
 **但"一份数据"未必只有一个文件**：应用支持多份数据集，每份各占一个数据库文件，而
 一次导出默认只带走**当前活动**的那一份。所以导出分两档：只导活动数据集（格式 1，
 老版本照常可读）与连同其余数据集一并导出（格式 2，老版本会明确拒收而不是安静地
 只恢复一份）。见 ``create_backup_archive`` 与 ``ExtraDatabase``。
+
+**"没进包"必须可见**：磁盘侧的覆盖面靠 ``coverage.py`` 兜底——数据目录里既不在包内、
+也不在已知不覆盖名单的顶层项，会被列进清单的 ``uncovered`` 段与响应头（P3）。
 
 **API Key 默认被剥离**：用户可能长期保存或转发这个包。SECURITY: 清空密钥必须配合
 ``VACUUM`` 重建文件，只 UPDATE 是不够的——见 ``_strip_api_keys``；随包带走的**每一份**
@@ -72,6 +79,12 @@ from .asset_restore import (
 )
 from .collection_export import (
     create_collection_archive as create_collection_archive,
+)
+from .coverage import (
+    scan_uncovered as scan_uncovered,
+)
+from .coverage import (
+    uncovered_summary as uncovered_summary,
 )
 from .export import (
     create_backup_archive as create_backup_archive,
@@ -136,6 +149,9 @@ from .paths import (
 )
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME as ARCHIVE_DATASETS_DIRNAME,
+)
+from .paths import (
+    BACKUP_FORMAT_GLOBAL_ASSETS as BACKUP_FORMAT_GLOBAL_ASSETS,
 )
 from .paths import (
     BACKUP_FORMAT_GLOBAL_CONFIG as BACKUP_FORMAT_GLOBAL_CONFIG,

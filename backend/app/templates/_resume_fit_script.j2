@@ -1,62 +1,128 @@
-{# 版式自适应脚本：把内容缩进所选页数，并把缩放比例与溢出状态写到 body.dataset，
-   供前端预览读取后提示"增加页数 / 缩小字号"。 #}
-{# 关键取舍：**按版式缩放，而不是加一层 transform**。
+{# 溢出探针：只回答"按当前字号 / 行距 / 页边距，正文装不装得进所选页数体"，**绝不改动版式**。
+   结果写在 body.dataset 上（`measured` / `pages` / `overflow`），供前端预览与排查脚本读取。
 
-   以前这里是给 body 挂 `transform: scale(s)`——它只改变**视觉**，不改变**版式**。于是产生了
-   结构性矛盾：预览看起来刚好一页，而打印/导出的分页是按**未缩放的版式**算的，结果多出一页
-   （用户实测反馈："预览一页装得下，浏览器打印却超出一页"）。transform 不改布局盒，分页算法
-   也看不到它，两者永远对不齐。
+   2026-10-21 语义变更（用户要求）：此前这里会把字号乘一个 `--fit-scale` 逐步压小，
+   直到正文塞进页数上限为止。后果是**滑杆上的 18px 不是纸面上的 18px**——用户调的参数
+   与看到的简历不一致，而且缩到 0.5 倍还放不下时仍然只得到一句"字号已降到最小"。
+   现在参数就是权威：装不下就如实标记 `overflow=1`，由界面提示"加页 / 收紧版式 / 精简内容"。
 
-   现在改成设置 `--fit-scale`，由 CSS 的 `--fs` 吸收：
-     --fs: calc(基准字号 * var(--fit-scale))
-   模板里所有尺寸都是 `calc(var(--fs) * k)` 推出来的，因此整份版式**真实变矮**。这样预览、
-   导出 HTML、浏览器打印、服务端 PDF 看到的是同一套版式 + 同一份 `@page` 规则，分页自然一致。
+   为什么保留这个脚本：预览的分页由前端（`layout.ts`）量，但**导出的单文件 HTML** 里没有
+   前端代码，只有它能回答"这份文件超页了没有"。它现在只读不写，不参与任何渲染决策。
 
-   为什么是迭代而不是一次算出：页边距等绝对尺寸（mm）不参与缩放，所以高度与 scale 只是近似
-   成正比。跑 2~3 轮就够了，而且每轮只在"确实还超"时才继续，绝不会来回震荡。 #}
+   **2026-10-21 判据修正**：此前用 `body.scrollHeight > 1122.5 * pageCount + 1`。
+   模板的 body 是 `height: 297mm; padding: 26mm; box-sizing: border-box`，正文只有
+   **略微**超过内容区、落进下页边距时仍整个在 body 盒子内，`scrollHeight` 恒等于
+   1123——于是"246.0mm 正文 / 245.0mm 可用高度"这种刚超一点的文档被漏报成 0，
+   而服务端同时给出 needed=2 / overflow=true。现在改成与
+   `frontend/src/utils/resumeLayoutMeasure.ts` 同一个口径（内容区底边 vs 最后一个
+   可见正文元素的底边）。**这段与那个 TS 函数、以及后端对拍用的
+   `tests/assets/measure_layout.js` 是同一口径的三份镜像，改一处必须同步改另外两处。**
+
+   例外：自定义模板可能不钉 body 高度（高度随内容长），那时"内容区底边"就等于正文
+   自己的底边，比出来永远"刚好放得下"、甚至因下 padding 误报——这种模板退回原来的
+   `scrollHeight > N × 297mm + 1` 判据（对自动高度来说它是正确的）。
+
+   **两处已知残留（2026-10-22 复核后接受，只记录不修）**：
+
+   1. `isCounted` 只排除 `position: fixed`，不排除 `position: absolute`。自制模板里的
+      absolute 装饰元素（色带、水印块、图标）只要自身有直接文本或属于媒体标签，就会被
+      当成正文、抬高"最后一个可见正文元素的底边"，于是**可能误报溢出**（实际放得下却说
+      超了）。这套口径与前端 `frontend/src/utils/resumeLayoutMeasure.ts` **刻意保持完全
+      一致**——导出 HTML 的探针只是用来对齐预览，两处口径一旦不同，就会出现"预览说放得下、
+      导出的 HTML 说超了"这种更难解释的分歧。内置的 8 个模板都没有 absolute 元素，当前
+      没有真实受害样本；等真有自制模板踩到，修法是两侧同时改（TS + 本脚本 + 后端对拍用的
+      `tests/assets/measure_layout.js`）。
+   2. 判定"body 是否被钉成 N 页高"带 2px 容差（`Math.abs(height - 1122.5 * N) <= 2`）。
+      自动高度模板的正文若恰好落在 **297.0~297.5mm**，就会被误判成"钉高 body"，从而走
+      "比内容区底边"那条分支、按单页判溢出。这个误判窗口 ≤0.53mm（2px），比一个正文
+      行高（约 5.93mm）小一个数量级，因此接受：真出问题时的表现是"刚好卡在整页高度上的
+      文档被判成超页"，属可见且可复现，而不是无声漂移。 #}
 <script nonce="{{ csp_nonce }}">
   (() => {
     const pageCount = {{ page_limit }};
-    const referenceWidth = 793.7;                // 210mm ≈ 793.7px（96dpi）
-    const referenceHeight = 1122.5 * pageCount;  // 297mm * 页数
-    // 注意：下面的 minScale / maxPasses / 0.995 / 0.001 / +1px 这几个数值，与
-    // `backend/app/services/pdf_exporter/` 里的 MIN_FIT_SCALE / _FIT_MAX_PASSES /
-    // _FIT_RATIO_MARGIN / _FIT_MIN_STEP / _FIT_TOLERANCE_MM 是同一套口径的两份实现。
-    // 两套引擎（JS 与 Python）无法共享同一份常量，只能靠测试钉住同步：
-    // `tests/test_pdf_exporter.py::test_fit_scale_constants_match_the_preview_script`
-    // 会逐个数值比对两边。**改这里必须同步改那边**，否则测试会红。
-    // 缩放下限：再小就"缩到看不清"了，那不如如实提示用户加页。
-    const minScale = 0.5;   // = pdf_exporter.MIN_FIT_SCALE
-    const maxPasses = 3;    // = pdf_exporter._FIT_MAX_PASSES
 
-    const fit = () => {
-      const page = document.body;
-      if (!page) return;
+    // 与 resumeLayoutMeasure.ts 里 measureResumeLayout() 的镜像：内容区顶边 / 高，
+    // 以及"最后一个可见正文元素的底边（含它的下外边距）"。
+    // 只认「有直接文本」或媒体标签，空容器不算正文——否则一个只有下边距的空 div
+    // 会凭空占掉一行，让本来放得下的版面显示为溢出。
+    const MEDIA_TAGS = ["IMG", "SVG", "CANVAS", "TABLE"];
 
-      page.dataset.pages = String(pageCount);
-      let scale = 1;
-      page.style.setProperty("--fit-scale", "1");
-
-      for (let pass = 0; pass < maxPasses; pass += 1) {
-        const naturalWidth = Math.max(page.scrollWidth, referenceWidth);
-        const naturalHeight = Math.max(page.scrollHeight, referenceHeight);
-        if (naturalHeight <= referenceHeight + 1 && naturalWidth <= referenceWidth + 1) break;  // +1px 容差 = pdf_exporter._FIT_TOLERANCE_MM
-        // 0.995 是给"绝对尺寸不参与缩放"留的余量，避免在边界上反复贴不住。
-        const next = Math.max(
-          minScale,
-          scale * Math.min(referenceWidth / naturalWidth, referenceHeight / naturalHeight) * 0.995,  // = pdf_exporter._FIT_RATIO_MARGIN
-        );
-        if (next >= scale - 0.001) break;  // = pdf_exporter._FIT_MIN_STEP
-        scale = next;
-        page.style.setProperty("--fit-scale", scale.toFixed(4));
+    const hasDirectText = (element) => {
+      for (const node of Array.from(element.childNodes)) {
+        if (node.nodeType === Node.TEXT_NODE && (node.textContent || "").trim()) return true;
       }
-
-      page.dataset.scale = scale.toFixed(3);
-      // 缩到下限仍然放不下：已经尽力了，界面据此提示用户去加页或换字号。
-      page.dataset.overflow = page.scrollHeight > referenceHeight + 1 ? "1" : "0";
+      return false;
     };
 
-    window.addEventListener("load", fit);
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+    {# 已知残留 1（见文件头）：只排除 position:fixed，absolute 装饰元素会被当正文，
+       可能误报溢出；口径与 resumeLayoutMeasure.ts 一致，内置 8 个模板都没有 absolute。 #}
+    const isCounted = (element) => {
+      const style = window.getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+      if (style.position === "fixed") return false;
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      return hasDirectText(element) || MEDIA_TAGS.indexOf(element.tagName) !== -1;
+    };
+
+    const measure = (page) => {
+      const style = window.getComputedStyle(page);
+      const rect = page.getBoundingClientRect();
+      const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+      const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
+      const contentTop = rect.top + paddingTop;
+      const contentHeight = rect.height - paddingTop - paddingBottom;
+      return { contentTop: contentTop, contentHeight: contentHeight, height: rect.height };
+    };
+
+    const probe = () => {
+      const page = document.body;
+      if (!page) return;
+      {# 预览把连续流切成 N 个 A4 列（前端注入 `column-count`）时，`body.scrollHeight` 只剩
+         "一页高"（高度被列折叠了），量出来的结论没有意义；那种形态由前端自己量。
+         这类说明必须写成 Jinja 注释：写成 JS 注释会留在产物的 `<script>` 里，而黄金矩阵的
+         内容指纹按"提取文本"计算，会把注释也算进正文（2026-10-21 踩过）。 #}
+      if (page.dataset.previewColumns === "1") return;
+
+      const geometry = measure(page);
+      // 297mm ≈ 1122.5px（96dpi）；这个页高**只用来判断 body 是否被钉成了 N 页高**，
+      // 不作为溢出阈值（阈值是内容区底边，见下）。
+      const pageBoxHeight = 1122.5 * pageCount;
+      {# 已知残留 2（见文件头）：2px 判定带 ⇒ 自动高度模板的正文若恰好 297.0~297.5mm，
+         会被误判成"钉高 body"（窗口 ≤0.53mm，远小于一个正文行高）。 #}
+      const pinnedToPages = Math.abs(geometry.height - pageBoxHeight) <= 2;
+      let overflow;
+
+      if (pinnedToPages && geometry.contentHeight > 0) {
+        // 内置的 8 个模板都是 `height: N * 297mm; padding: Xmm; border-box`：正文略微
+        // 超过内容区时仍整个在 body 盒子内，`scrollHeight` 不增长，所以必须比
+        // "最后一个可见正文元素的底边"和"内容区底边"。
+        const contentBottom = geometry.contentTop + geometry.contentHeight;
+        let lastBottom = geometry.contentTop;
+        for (const element of Array.from(page.querySelectorAll("*"))) {
+          if (!isCounted(element)) continue;
+          const elementRect = element.getBoundingClientRect();
+          const marginBottom =
+            Number.parseFloat(window.getComputedStyle(element).marginBottom) || 0;
+          lastBottom = Math.max(lastBottom, elementRect.bottom + marginBottom);
+        }
+        // +1px 是亚像素取整容差：内容区底边本身也是小数。
+        overflow = lastBottom > contentBottom + 1;
+        // 兜底：正文真的把 body 盒子撑破时（scrollHeight 增长），一定算溢出。
+        overflow = overflow || page.scrollHeight > geometry.height + 1;
+      } else {
+        // 自定义模板可能不钉 body 高度（高度随内容长）：此时内容区底边就是正文自己的
+        // 底边，拿它比会永远"刚好放得下"甚至误报，只能回到"内容高 vs N 页物理高度"。
+        overflow = page.scrollHeight > pageBoxHeight + 1;
+      }
+
+      page.dataset.pages = String(pageCount);
+      page.dataset.measured = "1";
+      page.dataset.overflow = overflow ? "1" : "0";
+    };
+
+    window.addEventListener("load", probe);
+    // 字体（含内嵌的自定义字体）就位后行高会变，必须再量一次。
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(probe);
   })();
 </script>

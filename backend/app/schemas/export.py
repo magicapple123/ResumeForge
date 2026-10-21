@@ -20,7 +20,7 @@ ExportFormat = Literal["json", "md", "html", "pdf", "docx", "txt"]
 
 
 class RedactionOptions(BaseModel):
-    """脱敏范围。默认遮罩可直接识别身份的四项，其余按需开启（与 privacy 默认值逐字一致）。"""
+    """脱敏范围。默认遮罩可直接识别身份的六项，其余按需开启（与 privacy 默认值逐字一致）。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -31,6 +31,9 @@ class RedactionOptions(BaseModel):
     mask_school: bool = False
     mask_project: bool = False
     mask_product: bool = False
+    # GitHub / 个人主页：一个 handle 或域名足以反查到人，默认遮（见 services/privacy.py）。
+    mask_github: bool = True
+    mask_website: bool = True
 
 
 class ExportRequest(BaseModel):
@@ -62,4 +65,32 @@ class ExportRequest(BaseModel):
     record_delivery: bool = False
 
 
-__all__ = ["ExportFormat", "ExportRequest", "RedactionOptions"]
+class PreviewPdfRequest(BaseModel):
+    """精确预览请求体：只决定"这份 PDF 怎么排"，不做任何后处理。
+
+    为什么单独建一个而不是复用 ``ExportRequest``：预览**不是导出**——它不落盘、不记交付、
+    不允许水印/脱敏（那些会让预览与屏幕上看到的草稿不是同一份内容）。``extra="forbid"``
+    让"顺手加个 watermark"在 422 就被挡住，而不是静默生效。
+
+    **版式字段必须与 ``POST /api/resumes/render`` 对齐**：草稿靠这几个参数排版，少任何一个
+    精确预览都会回落到记录里的旧值——那正是"改完模板 / 版式 / 板块顺序，预览不跟着变"的
+    根因。导出专有的字段（格式、水印、脱敏、落库）一个都不收。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # 这四个字段与 ``POST /api/resumes/render`` 的版式参数**逐一对应**（去掉正文）。
+    #
+    # 为什么必须全都带上：草稿的版式是"样式模板 + 版式模板 + 覆盖"三层叠出来的，任何
+    # 一层没传，精确预览就会按**记录里的旧值**排版——用户换了模板或版式、又还没点保存，
+    # 屏幕上看到的就还是上一版（2026-10-21 用户实测："调整模板、版式、板块顺序，
+    # 精确预览不跟着变"）。``None`` 表示"这次不覆盖，用记录值"（旧客户端兼容）。
+    template: str | None = Field(default=None, max_length=64)
+    format_name: str | None = Field(default=None, max_length=64)
+    page_limit: int | None = Field(default=None, ge=1, le=MAX_RESUME_PAGES)
+    font_scale: ResumeFontScale | None = None
+    format_config: dict | None = None
+    include_photo: bool = True
+
+
+__all__ = ["ExportFormat", "ExportRequest", "PreviewPdfRequest", "RedactionOptions"]

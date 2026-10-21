@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 import sqlite3
 import zipfile
@@ -18,6 +19,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -27,8 +29,10 @@ from ...dataset_registry import DatasetError, read_active_dataset_id, read_metad
 from .api_keys import _assert_no_plaintext_key, _plaintext_api_keys_in, _strip_api_keys
 from .asset_manifest import ASSET_CATEGORIES, build_asset_manifest
 from .asset_safety import safe_asset_path
+from .coverage import data_root, scan_uncovered
+from .global_assets import build_global_assets_payload, write_global_assets_members
 from .global_config import build_global_llm_payload, write_global_llm_member
-from .manifest import build_manifest
+from .manifest import _snapshot_table_counts, build_manifest
 from .paths import (
     ARCHIVE_REFERRAL_IMAGES_PREFIX,
     ARCHIVE_USER_FILES_PREFIX,
@@ -40,6 +44,8 @@ from .paths import (
     dataset_asset_prefix,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def create_backup_archive(
     bind: Engine,
@@ -48,6 +54,8 @@ def create_backup_archive(
     extra_databases: Sequence[ExtraDatabase] = (),
     include_api_keys: bool = False,
     include_global_llm: bool = False,
+    include_global_assets: bool = False,
+    scan_coverage: bool = True,
 ) -> Path:
     """生成导出用的压缩包并返回其路径；调用方负责在响应结束后删除。
 
@@ -56,13 +64,22 @@ def create_backup_archive(
     绑定当前用户与机器；换环境恢复解不开时应用按"未配置"处理，不会半途报错），而不是
     解密成明文——备份包是用户可能长期保存或转发的东西，这次导出不该新造出一份明文密钥。
 
-    **格式号是要紧的**（见 ``build_manifest``）：带全局模型配置标 5、含密钥标 3、
-    带其余数据集标 2，都是让老版本遇到读不懂的包时明确拒收（"请先升级应用再导入"），
-    而不是安静地误读。``include_global_llm`` 默认 False：只有"用户可见的顶层导出"才带上，
-    嵌套整包的子包不能各带一份（配置是跨数据集的，属于外层）。
+    **格式号是要紧的**（见 ``build_manifest``）：带字体标 6、带全局模型配置标 5、含
+    密钥标 3、带其余数据集标 2，都是让老版本遇到读不懂的包时明确拒收（"请先升级应用
+    再导入"），而不是安静地误读。``include_global_llm`` / ``include_global_assets``
+    默认 False：只有"用户可见的顶层导出"才带上，嵌套整包的子包不能各带一份（配置与
+    字体都是跨数据集的，属于外层）。
+
+    ``scan_coverage``（P3）控制是否做"数据目录里还有什么没进包"的兜底扫描：单数据集
+    导出要扫；嵌套整包的**子包**不扫（外层统一扫一次，否则每份子包都会把别人的目录
+    报成未覆盖）。
     """
     active_parent = database_path(bind).parent  # 内存库等无文件情况在此给出明确错误
     staging_dir.mkdir(parents=True, exist_ok=True)
+
+    # P5：拍快照前先把活动数据集的 user_file 副本修一遍。修好就不产生缺失/不符告警；
+    # 修不好照常打包并保留 missing/mismatched——静默丢掉文件比报一条消不掉的告警糟得多。
+    _repair_copies(bind)
 
     snapshot = backup_sqlite_database(bind, output_dir=staging_dir)
     if snapshot is None:
@@ -116,13 +133,20 @@ def create_backup_archive(
             else None
         )
         global_count = len(global_payload["profiles"]) if global_payload is not None else None
+        assets_payload = build_global_assets_payload() if include_global_assets else None
+        assets_count = len(assets_payload["fonts"]) if assets_payload is not None else None
+        # P3：包里没带的东西也要说出来。子包不扫（外层统一扫一次），否则同一份数据目录
+        # 会被每份子包各报一遍。
+        coverage_report = scan_uncovered(data_root(bind)) if scan_coverage else None
         manifest = build_manifest(
             bind,
-            datasets=[item.manifest_entry(copy.stat().st_size) for item, copy in extras],
+            datasets=[_extra_entry(item, copy) for item, copy in extras],
             api_key_included=include_api_keys,
             asset_manifest=active_asset_manifest,
             snapshot=snapshot,
             global_llm_profiles=global_count,
+            global_assets_fonts=assets_count,
+            uncovered=coverage_report,
         )
         with zipfile.ZipFile(archive_path, "x", zipfile.ZIP_DEFLATED) as archive:
             archive.write(snapshot, DATABASE_MEMBER)
@@ -153,6 +177,9 @@ def create_backup_archive(
             written = write_global_llm_member(archive, global_payload)
             if written != (global_count or 0):  # pragma: no cover - 不可达的防御
                 raise BackupError("全局模型配置写入失败，已停止导出", status_code=500)
+            written_assets = write_global_assets_members(archive, assets_payload)
+            if written_assets != (assets_count or 0):  # pragma: no cover - 不可达的防御
+                raise BackupError("字体写入失败，已停止导出", status_code=500)
             archive.writestr(MANIFEST_MEMBER, json.dumps(manifest, ensure_ascii=False, indent=2))
     except BackupError:
         archive_path.unlink(missing_ok=True)
@@ -165,6 +192,39 @@ def create_backup_archive(
         for _, copy in extras:
             copy.unlink(missing_ok=True)
     return archive_path
+
+
+def _extra_entry(item: ExtraDatabase, copy: Path) -> dict[str, Any]:
+    """随包数据集在外层清单里的一条：多带一份**行数快照**（P4）。
+
+    没有这一段，导入侧只能核对它的表集合，行数被改过也"恢复成功"。快照来自刚做好的
+    那份副本（与包内字节同源），因此可以当作"导出时刻"的口径。
+    """
+    entry = item.manifest_entry(copy.stat().st_size)
+    entry["tables"] = _snapshot_table_counts(copy)[0]
+    return entry
+
+
+def _repair_copies(bind: Engine) -> None:
+    """导出前把 ``user_file`` 的磁盘副本修一遍（P5，D5）。
+
+    修好 → 文件正常进包、不留告警；修不好（取不到原件，或原件与行登记哈希不符）
+    → **照常打包并保留** ``missing`` / ``mismatched``：丢掉这份文件等于让用户彻底失去
+    字节，静默成功更糟。任何异常都只记日志——这是附加修复，不能把导出本身变成失败。
+    """
+    try:
+        from ..user_files import ensure_copies
+
+        stats = ensure_copies(bind)
+    except Exception:  # noqa: BLE001 - 附加修复，失败不能让导出失败
+        logger.warning("导出前修复用户文件副本失败", exc_info=True)
+        return
+    if stats.get("repaired"):
+        logger.info(
+            "导出前已修复 %s 个用户文件副本（未修复 %s 个）",
+            stats["repaired"],
+            stats.get("unresolved", 0),
+        )
 
 
 def _import_missing(dataset_id: str) -> dict[str, set[str]]:

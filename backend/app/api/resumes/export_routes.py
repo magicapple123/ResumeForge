@@ -23,6 +23,9 @@ from ...schemas.export import (
     ExportRequest as ExportRequestSchema,
 )
 from ...schemas.export import (
+    PreviewPdfRequest,
+)
+from ...schemas.export import (
     RedactionOptions as RedactionOptionsSchema,
 )
 from ...schemas.resume import ResumeContent
@@ -32,9 +35,13 @@ from ...services.export_pipeline import (
     build_export,
     build_export_delivery,
     effective_format_config,
+    render_config_fingerprint,
 )
 from ...services.export_save_location import save_artifact, validate_directory
 from ...services.pdf_exporter import ResumePDFError
+from ...services.pdf_preview_cache import CachedPreviewPdf
+from ...services.pdf_preview_cache import get as get_cached_preview
+from ...services.pdf_preview_cache import put as put_cached_preview
 from ...services.privacy import RedactionOptions as PrivacyRedactionOptions
 from ...services.privacy import redact
 from ...services.resume.resume_completeness import find_incomplete, incomplete_detail
@@ -43,7 +50,9 @@ from ...services.resume.resume_delivery import (
     freeze_delivery,
 )
 from ...services.resume.resume_record import record_format_config
+from ...services.resume.resume_template_format import validated_format_config
 from ...services.resume.resume_template_store import (
+    resolve_format_config,
     resolve_style_config,
     resolve_style_template,
 )
@@ -55,6 +64,7 @@ from ._shared import (
     PDF_ENGINE_NAME,
     PDF_PAGE_LIMIT_HEADER,
     PDF_PAGES_HEADER,
+    PDF_PAGES_NEEDED_HEADER,
     RESUME_OVERFLOW_HEADER,
     _get_live_resume,
 )
@@ -77,12 +87,30 @@ def _export_record(
     *,
     allow_incomplete: bool,
     record_delivery: bool = False,
+    save_copy: bool = True,
+    inline: bool = False,
+    template_override: str | None = None,
+    format_name_override: str | None = None,
+    cache_result: bool = False,
 ) -> Response:
     """导出闸门 + 管线委托 + 响应头，是 GET / POST 两条导出路径的共用出口。
 
     ``record_delivery``（RF-17）：为真时把这次导出冻结成一份 ``source="export"``
     的投递快照（「正式投递存档」语义）。**默认不落**——预览导出零膨胀。新调用方
     请走 ``POST /export``（GET 上的该参数仅为兼容保留，见 ADR-0002）。
+
+    ``save_copy`` / ``inline`` 只服务**精确预览**（2026-10-21）：预览要拿到与导出逐字节
+    相同的 PDF，但绝不能把每敲一次版式就生成的文件堆进「生成内容保存位置」，也不该让
+    浏览器把它当下载。所以这两个开关默认保持导出的原行为，预览显式传 ``False`` / ``True``。
+
+    ``template_override`` / ``format_name_override`` 同样只服务预览：草稿里换了模板或
+    版式模板、还没点保存时，预览必须按**草稿**排版而不是记录里的旧值。给 ``None`` 时
+    行为与导出完全一致（用记录值）。
+
+    ``cache_result`` 也只服务预览：同一组输入（内容 + 生效参数）第二次进来直接回上一次的
+    字节与响应头。命中发生在渲染之前，所以"来回切口径 / 开大图 / 拖回原值"这类重复是
+    **0ms**（见 ``services.pdf_preview_cache``）。只允许与 ``save_copy=False`` 同用——
+    否则落盘副本会被缓存跳过。
 
     存档口径（PR-09 可信交付账本）：存档 content 与下载产物**同源**（脱敏导出存
     脱敏后内容）；``render_context`` / ``request_params`` 记录**实际生效**的请求
@@ -97,15 +125,39 @@ def _export_record(
         if incomplete:
             raise HTTPException(status_code=409, detail=incomplete_detail(incomplete))
     # 样式模板解析一次，json/md 用不到也不多花一次查询；html/pdf/docx 复用同一份解析结果。
-    export_template, export_html = resolve_style_template(db, record.template)
+    effective_style = template_override or record.template
+    export_template, export_html = resolve_style_template(db, effective_style)
+    if format_name_override is None:
+        base_format_config = record_format_config(db, record)
+    else:
+        # 草稿给了明确的版式模板：只按"样式模板自带 + 该版式预设"起步，再由请求里的
+        # ``format_config``（草稿的完整覆盖）叠加。**不能再叠记录里的旧覆盖**——用户换
+        # 版式时前端已经清掉了该预设管辖的键，旧覆盖会把新预设又盖回去。
+        base_format_config = dict(
+            validated_format_config(resolve_style_config(db, effective_style))
+        )
+        base_format_config.update(resolve_format_config(db, format_name_override))
     context = RenderContext(
         template=export_template,
         template_html=export_html,
-        style_config=resolve_style_config(db, record.template),
+        style_config=resolve_style_config(db, effective_style),
         page_limit=record.page_limit,
         font_scale=record.font_scale,
-        format_config=record_format_config(db, record),
+        format_config=base_format_config,
     )
+    # 预览的重复请求在**渲染之前**就短路：来回切口径、开大图、拖回原值问的都是同一份。
+    # 键 = 内容指纹 + 渲染配置指纹（两者本来就要进响应头，这里只是提前算）。
+    cache_key: str | None = None
+    if cache_result and not save_copy:
+        cache_key = (
+            f"{canonical_content_sha256(resume.model_dump())}:"
+            f"{render_config_fingerprint(request, context)}"
+        )
+        cached = get_cached_preview(cache_key)
+        if cached is not None:
+            return Response(
+                cached.content, media_type=cached.media_type, headers=dict(cached.headers)
+            )
     try:
         # 带交付标识的出口（RF-16）：内容指纹 + 渲染配置指纹与响应头同源。
         delivery = build_export_delivery(request, resume, context, source_resume_id=record.id)
@@ -117,27 +169,37 @@ def _export_record(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     headers: dict[str, str] = {
-        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(artifact.filename, safe='')}",
+        "Content-Disposition": (
+            f"{'inline' if inline else 'attachment'}; "
+            f"filename*=UTF-8''{quote(artifact.filename, safe='')}"
+        ),
         # 交付指纹（RF-17）：用户可拿它核对"下载到的文件"与库里快照的一致性。
         "X-Content-Sha256": delivery.content_sha256,
         "X-Render-Config-Sha256": delivery.rendered_config_sha256,
     }
+    if inline:
+        # 预览是"当前草稿的即时快照"：缓存住它只会让用户改了版式却看到旧页面。
+        headers["Cache-Control"] = "no-store"
     # 服务端 PDF/Word 用的是自己那套排版，页数未必等于用户选的上限（内容多时会多出一页）。
     # 把实际页数带回去，让界面能提示，而不是让用户下载完才发现。
     if artifact.pages is not None:
         headers[PDF_PAGES_HEADER] = str(artifact.pages)
+        # 真实需要几页（未截断）：界面用它说"按当前设置约需 N 页"，与草稿预览同一措辞。
+        if artifact.pages_needed is not None:
+            headers[PDF_PAGES_NEEDED_HEADER] = str(artifact.pages_needed)
         if request.format == "pdf":
             # 只有真的由 PDF 引擎渲染时才声称引擎名：html/json/md/txt 根本没有 PDF 引擎，
             # 给它们也回一个 "fpdf2" 是假话。
             headers[PDF_ENGINE_HEADER] = PDF_ENGINE_NAME
         # overflow 只在"有分页引擎"的格式（pdf/docx）里有意义，而 artifact.pages 非空
-        # 正是这一条件。标志不许说谎：它必须与上面两行的页数结论一致。
+        # 正是这一条件。标志不许说谎：它必须与 ``pages_needed`` / 上限的结论一致。
         headers[RESUME_OVERFLOW_HEADER] = "true" if artifact.overflow else "false"
     if artifact.page_limit is not None:
         headers[PDF_PAGE_LIMIT_HEADER] = str(artifact.page_limit)
     # 「生成内容保存位置」：设置非空且目录合法时，把同一份产物再落盘一份。**best-effort**：
     # 写失败只记日志、不阻断下载——用户已经等了一次生成，不能因为本地磁盘的问题白等。
-    saved_location = get_export_save_location(db)
+    # 预览（``save_copy=False``）跳过这一段：它不是"用户要的文件"，只是屏幕上的一个视图。
+    saved_location = get_export_save_location(db) if save_copy else None
     if saved_location and validate_directory(saved_location) is None:
         try:
             final_path = save_artifact(artifact.content, saved_location, artifact.filename)
@@ -199,6 +261,16 @@ def _export_record(
             idempotency_key=f"export:{record.id}:{delivery.content_sha256}",
         )
         db.commit()
+    if cache_key is not None:
+        # 连响应头一起存：命中与未命中必须逐字节、逐头一致（见 `pdf_preview_cache`）。
+        put_cached_preview(
+            cache_key,
+            CachedPreviewPdf(
+                content=artifact.content,
+                media_type=artifact.media_type,
+                headers=dict(headers),
+            ),
+        )
     return Response(artifact.content, media_type=artifact.media_type, headers=headers)
 
 
@@ -267,6 +339,51 @@ def export_resume_with_options(
         export_options,
         allow_incomplete=payload.allow_incomplete,
         record_delivery=payload.record_delivery,
+    )
+
+
+@router.post("/{resume_id}/preview-pdf")
+def preview_resume_pdf(
+    request: HTTPRequest,
+    resume_id: int,
+    payload: PreviewPdfRequest,
+    db: Session = Depends(get_db),
+):
+    """精确预览：返回**与导出逐字节相同**的 PDF，供前端用浏览器原生查看器渲染。
+
+    为什么要有这条端点：预览此前用 CSS 多列模拟分页（`column-count`），而导出的 PDF 由
+    `pdf_exporter`（fpdf2）另排一遍。两套引擎的断点规则不同，"预览 2 页、导出 3 页"是
+    结构性的，不是 bug。要"严格相同"，唯一可靠的口径是**让预览显示的就是导出产物本身**。
+
+    三个"不是导出"的差别（都通过 `_export_record` 的开关表达，管线仍是同一条）：
+    - `allow_incomplete=True`：预览的是草稿，正文里还有【待补】也该能看；
+    - `save_copy=False`：不写「生成内容保存位置」——拖一次滑块就多一个文件是不可接受的；
+    - `inline=True` + `no-store`：浏览器内联显示，且不缓存（改了版式必须立刻变）。
+
+    `X-Resume-Pages` / `X-Resume-Overflow` 照常返回：界面据此说"实际排了 N 页"，
+    这个数字与用户点「导出 PDF」得到的完全一致。
+    """
+    _require_local_export_request(request)
+    record = _get_live_resume(db, resume_id)
+    return _export_record(
+        db,
+        record,
+        ExportRequest(
+            format="pdf",
+            page_limit=payload.page_limit,
+            font_scale=payload.font_scale,
+            format_config=payload.format_config,
+            include_photo=payload.include_photo,
+        ),
+        allow_incomplete=True,
+        record_delivery=False,
+        save_copy=False,
+        inline=True,
+        # 模板 / 版式模板是草稿值：换完还没保存也要按新的排（见 `_export_record`）。
+        template_override=payload.template,
+        format_name_override=payload.format_name,
+        # 同一组参数（切口径 / 开大图 / 拖回原值）第二次进来直接给上一次的字节。
+        cache_result=True,
     )
 
 

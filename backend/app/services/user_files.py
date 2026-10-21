@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from ..config import DATA_DIR
 from ..models.user_file import UserFile
+from .user_file_repair import ensure_copies, ensure_copy  # noqa: F401 - ensure_copies 对外门面
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,9 @@ def save_from_bytes(
 ) -> None:
     """把一份字节内容登记为用户文件副本。
 
-    同 ``sha256`` 已有行：只把新来源并入 ``sources_json``，不重复落盘、不加行；
+    同 ``sha256`` 已有行：把新来源并入 ``sources_json``，并**校验磁盘副本**
+    （P5：缺失、大小不符或哈希不符就按这份原件补写）——此前命中即直接返回，于是
+    "行在、文件没了"永远补不回来，「我的文件」预览永久 404、导出永久报缺失。
     否则写盘（磁盘上已有同 sha 文件时不重写）并插入一行。``original_name`` 会做
     服务端安全化，客户端给的任何路径成分都不会进落盘名。
     """
@@ -109,6 +112,7 @@ def save_from_bytes(
     existing = db.execute(select(UserFile).where(UserFile.sha256 == sha)).scalar_one_or_none()
     if existing is not None:
         _merge_source(existing, source_type, source_ref)
+        ensure_copy(user_files_dir(db.get_bind()), existing, content)
         db.commit()
         return
 

@@ -133,7 +133,7 @@ def test_plan_name_gender_matches_what_draws():
     "量的就是画的"是 measure_content_height 与渲染互为镜像的前提。"""
     pdf = _pdf_with_font()
     layout = pdf.layout
-    base = layout.scaled_base_px
+    base = layout.base_px
     name_size = base * layout.name_ratio
     extra_size = base * layout.name_extra_ratio
     width = pdf.content_width

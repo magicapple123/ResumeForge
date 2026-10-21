@@ -22,6 +22,8 @@ def _resume() -> ResumeContent:
         name="张三",
         phone="13800000000",
         email="a@example.com",
+        github="github.com/zhangsan",
+        personal_website="https://zhangsan.dev",
         summary="负责后端服务。",
         experience=[{"company": "字节跳动", "role": "工程师", "description": ["实现检索接口"]}],
     )
@@ -60,6 +62,26 @@ def test_build_export_applies_redaction_before_rendering():
     assert "张三" not in text
     assert "字节跳动" not in text
     assert "a@example.com" not in text
+    # 链接同样是可识别身份的信息：一个 handle / 域名就能顺着找到人。
+    assert "github.com/zhangsan" not in text
+    assert "zhangsan.dev" not in text
+
+
+def test_redacted_pdf_does_not_leak_contact_links():
+    """PDF 自 2026-10-21 起把 GitHub 与主页画进页头联系方式，脱敏必须跟着覆盖它们。"""
+    artifact = build_export(
+        ExportRequest(format="pdf", redact=True, redact_options=RedactionOptions()),
+        _resume(),
+        RenderContext(),
+    )
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(artifact.content)).pages)
+    assert "github.com/zhangsan" not in text
+    assert "zhangsan.dev" not in text
+    assert "13800000000" not in text
 
 
 def test_build_export_applies_watermark_to_html():

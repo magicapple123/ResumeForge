@@ -2,8 +2,8 @@
 """导出产物的水印后处理：HTML / PDF / Word 三端统一为「倾斜 + 重复平铺 + 半透明」。
 
 这是水印的**唯一实现处**。水印是"后处理"：输入已经是渲染好的字节，输出加水印后的字节，
-不参与任何排版 / 缩放决策——那部分由 HTML 的 ``_resume_fit_script.j2`` 与 PDF 的
-``pdf_exporter.decide_fit_scale`` 各自负责，本模块不加一层新口径。
+不参与任何排版决策——那部分由 HTML 模板（`_resume_fit_script.j2` 只做溢出探针）与 PDF 的
+``pdf_exporter.build_resume_pdf``（按真实参数排版、超限截断）各自负责，本模块不加一层新口径。
 
 - HTML：注入一层固定定位的覆盖层，背景是一张**内联 SVG 平铺图**（文案旋转后按 repeat 铺满）。
 - PDF：生成一张 A4 水印页（文案按错位网格旋转平铺），再用 pypdf 逐页叠加（``over=True``）。

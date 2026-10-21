@@ -156,6 +156,7 @@ def export_all_datasets(
         extras=extras,
         include_api_keys=include_api_keys,
         include_global_llm=include_global_llm,
+        include_global_assets=True,
     )
 
 
@@ -177,6 +178,7 @@ def export_dataset(
             staging_dir,
             include_api_keys=include_api_keys,
             include_global_llm=include_global_llm,
+            include_global_assets=True,
         )
     # 非活动数据集：临时建一个引擎取一致快照，用完立即释放（Windows 文件句柄）。
     temporary = database.build_engine(database.database_url_for(target))
@@ -186,6 +188,7 @@ def export_dataset(
             staging_dir,
             include_api_keys=include_api_keys,
             include_global_llm=include_global_llm,
+            include_global_assets=True,
         )
     finally:
         temporary.dispose()

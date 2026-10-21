@@ -18,24 +18,26 @@
     模板的 `--accent` 是同一件事的两份定义；
   * 用户在「格式模板」里设过的 `line_height` / `page_padding` / `section_gap` / `accent`
     覆盖它们；
-  * 一页适配复用预览那套 `--fit-scale` 的口径：**只缩字号派生的尺寸，mm 页边距不动**，
-    有下限（`MIN_FIT_SCALE`）、迭代式、装不下就如实标记 overflow。是否"装得下"以
-    **真实渲染出来的页数**为准（见 `decide_fit_scale`），而不是连续内容高度——后者
-    会低估分页后的实际高度（`ensure_space` 为不切断条目会提前换页、留下一段空隙）。
+  * **不缩字号**（2026-10-21 用户要求）：按用户设定的参数原样排版，装不下就截断到页数
+    上限并如实标记 ``overflow``（见 `build_resume_pdf`）。以前那套 `--fit-scale` 会把
+    18px 悄悄压成 9px，滑杆与纸面对不上；现在参数就是权威。
 
-**测量与决策分开**：`measure_content_height` / `rendered_page_count` 只回答"某个缩放下
-内容多高 / 排几页"，`decide_fit_scale` 只回答"该缩到多少 / 是否溢出"。后续要做
-"并排展示多页而不是截断"时，只需替换决策这一步，测量与绘制都不必动。
+**测量与结论分开**：`measure_content_height` / `rendered_page_count` 只回答"内容多高 /
+排几页"，``build_resume_pdf`` 只回答"截不截断、溢出没有"。
 
-本包由 fonts / theme / layout / skill_tags / canvas / media / name_gender / render / fit
+本包由 fonts / theme / layout / skill_tags / canvas / columns / media / name_gender / render / fit
 组成，此 ``__init__`` 作为原 ``pdf_exporter`` 模块路径的兼容门面：``__all__`` 与私有
 符号再导出保持原命名空间全集，外部导入路径零改动。
+
+``columns`` 是双栏正文（``split``）的行级排布：切行、半栏量高、行级分页与"单分区高于一页"
+时的顺序降级。绘制函数仍只有 `render._draw_resume` 里那一批，两条路径共用。
 """
 
 from __future__ import annotations
 
 from .canvas import _ResumePDF as _ResumePDF
-from .fit import build_resume_pdf, decide_fit_scale, measure_content_height, rendered_page_count
+from .columns import column_frames, plan_rows, render_sections
+from .fit import build_resume_pdf, measure_content_height, rendered_page_count
 from .fonts import (
     _FONT_CANDIDATES as _FONT_CANDIDATES,
 )
@@ -60,21 +62,6 @@ from .layout import (
     _BODY_TEXT as _BODY_TEXT,
 )
 from .layout import (
-    _FIT_MAX_PASSES as _FIT_MAX_PASSES,
-)
-from .layout import (
-    _FIT_MIN_STEP as _FIT_MIN_STEP,
-)
-from .layout import (
-    _FIT_PAGE_STEP as _FIT_PAGE_STEP,
-)
-from .layout import (
-    _FIT_RATIO_MARGIN as _FIT_RATIO_MARGIN,
-)
-from .layout import (
-    _FIT_TOLERANCE_MM as _FIT_TOLERANCE_MM,
-)
-from .layout import (
     _MUTED_TEXT as _MUTED_TEXT,
 )
 from .layout import (
@@ -84,15 +71,14 @@ from .layout import (
     _PX_TO_PT as _PX_TO_PT,
 )
 from .layout import (
-    MIN_FIT_SCALE,
-    ResumeLayout,
-    resolve_layout,
-)
-from .layout import (
     PAGE_HEIGHT_MM as PAGE_HEIGHT_MM,
 )
 from .layout import (
     PAGE_WIDTH_MM as PAGE_WIDTH_MM,
+)
+from .layout import (
+    ResumeLayout,
+    resolve_layout,
 )
 from .media import _join as _join
 from .media import _photo_bytes as _photo_bytes
@@ -100,28 +86,33 @@ from .media import crop_image_to_cover
 from .name_gender import NameGenderPlan, draw_name_gender, plan_name_gender
 from .render import ResumePDF
 from .skill_tags import SkillTagMetrics as SkillTagMetrics
-from .skill_tags import skill_tag_metrics, soft_accent, wrap_skill_tags
-from .theme import resolve_accent, resolve_line
+from .skill_tags import draw_skill_tags, skill_tag_metrics, soft_accent, wrap_skill_tags
+from .theme import resolve_accent, resolve_accent_soft, resolve_line, resolve_muted, resolve_text
 
 __all__ = [
-    "MIN_FIT_SCALE",
     "NameGenderPlan",
     "ResumeLayout",
     "ResumePDF",
     "ResumePDFError",
     "build_resume_pdf",
+    "column_frames",
     "crop_image_to_cover",
-    "decide_fit_scale",
     "draw_name_gender",
+    "draw_skill_tags",
     "font_available",
     "reset_font_cache",
     "measure_content_height",
     "plan_name_gender",
+    "plan_rows",
+    "render_sections",
     "rendered_page_count",
     "resolve_accent",
+    "resolve_accent_soft",
     "resolve_font_paths",
     "resolve_layout",
     "resolve_line",
+    "resolve_muted",
+    "resolve_text",
     "skill_tag_metrics",
     "soft_accent",
     "wrap_skill_tags",

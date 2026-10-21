@@ -12,18 +12,18 @@
     },
     "html-classic-zh-watermark-redact": {
       "pages": null,
-      "text_chars": 3949,
-      "text_sha256": "03f2e97c1a8454057095834484dd04606710aa6318e476ac4fe79e8b3f8ff5ff"
+      "text_chars": 402,
+      "text_sha256": "54c3080b6f57a3a3750f881a722f057d11437d60223e94278fc6ecc777cecfdd"
     },
     "html-modern-zh-baseline": {
       "pages": null,
-      "text_chars": 4179,
-      "text_sha256": "c001ee645e1bb47145aa594e50fb59aa3b28a7728d5cb6d877a5106985757d9b"
+      "text_chars": 498,
+      "text_sha256": "393223d19833e6406e1ca6a5ecd933fd5229d6bb3975ccca851a47d480ae7eaa"
     },
     "json-classic-en-redact": {
       "pages": null,
-      "text_chars": 1047,
-      "text_sha256": "f6222e6220df4900d0f4ef13ced5e33385eeb8410f58764b8889db170358e5b0"
+      "text_chars": 977,
+      "text_sha256": "7df3acd91a794f06f65e600900b205191cd9de20f59ba1cbed508a04cd0152a6"
     },
     "md-classic-zh-baseline": {
       "pages": null,
@@ -32,43 +32,43 @@
     },
     "pdf-classic-en-1p-baseline": {
       "pages": 1,
-      "text_chars": 630,
-      "text_sha256": "7ec4f606c594421034a40324f1d8dbe375d030f7b3cd65d7d4a4a31f2b834c8e"
+      "text_chars": 751,
+      "text_sha256": "01415f016ab8ac1f377cf559d26bb1650bdeb0253469d77fea4c99d0fe9d3562"
     },
     "pdf-classic-en-3p-baseline": {
       "pages": 3,
-      "text_chars": 5924,
-      "text_sha256": "d093461003d95541fc43817689121be7a6b121365d02f6b2a7f60a73db388698"
+      "text_chars": 6003,
+      "text_sha256": "7693897a3011410e13d3a91a49f0cb557275c8c6c53b1c22f1f52e53b6f0592c"
     },
     "pdf-classic-zh-1p-baseline": {
       "pages": 1,
-      "text_chars": 418,
-      "text_sha256": "40f0fd0a7df2de6315b3b125995891f594930b46ea20c054f15023881e3fa081"
+      "text_chars": 485,
+      "text_sha256": "228cac66e6f2841ce9900ffb00a2bd3b8eb6904150ea8ed811ab65b163240c2a"
     },
     "pdf-classic-zh-1p-redact": {
       "pages": 1,
-      "text_chars": 383,
-      "text_sha256": "2319d5891617f6da02c918e9b2d3b8bbc9ec3ec3e182f65854b64edbcf9a6953"
+      "text_chars": 389,
+      "text_sha256": "69806501e84b110c29a1dd579cc97be0c0336f88787d8fb107abcaaca5d7843f"
     },
     "pdf-classic-zh-1p-watermark": {
       "pages": 1,
-      "text_chars": 458,
-      "text_sha256": "0855a086aa978ef31eb4ef44cd6565dfe9cef14fd9c630437bb8c74a5aac7f76"
+      "text_chars": 525,
+      "text_sha256": "dda29c1cc218e86a384c72b082e86fea6e62a2632f781df1a81710c66e534922"
     },
     "pdf-classic-zh-3p-redact": {
       "pages": 3,
-      "text_chars": 2295,
-      "text_sha256": "dec8f37c881d5c74aeb869c5e667920a256a94af8dec5616a4958b97611c511c"
+      "text_chars": 2301,
+      "text_sha256": "c65cecbba98b059e1b9257cd9eb94cd6f4258ccf735106e552a60cf0e45a2559"
     },
     "pdf-modern-en-3p-watermark": {
       "pages": 3,
-      "text_chars": 6044,
-      "text_sha256": "9e2257d752cff5a547ce69cf28ab7896c62ff1699756e8172941bf2612314758"
+      "text_chars": 6123,
+      "text_sha256": "5f8bf8f0db29313d47923488635d5527ecb6395937e1cc676e6355061db66fa0"
     },
     "pdf-modern-zh-1p-watermark-redact": {
       "pages": 1,
-      "text_chars": 423,
-      "text_sha256": "55c6b5ceae49918565f57b2df0f2e7f40eb80e144da933c6820b3cec2e176bc0"
+      "text_chars": 429,
+      "text_sha256": "4ef6b124ba38cbead4c1a987013a3a64d11588bd831747f205d4d186f4e7a80c"
     },
     "txt-modern-zh-redact": {
       "pages": null,

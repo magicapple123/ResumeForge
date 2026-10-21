@@ -1,22 +1,49 @@
 # SPDX-License-Identifier: Apache-2.0
-"""技能标签几何（形状比例 / 尺寸计算 / 调色 / 折行）。"""
+"""技能标签：几何（形状比例 / 尺寸计算 / 调色 / 折行）与五种形状的绘制。
+
+**形状与几何全部由模板决定**：8 个内置模板的 `.skill-list li` 有 5 种形态（填充 / 描边胶囊 /
+左侧色条 / 无框 + 「·」分隔 / 纯文字），标签的圆角、内边距、行内与行间间距也各不相同。这些
+数字的唯一结构化来源是 `resume_templates.TEMPLATE_LAYOUT_DEFAULTS` 的 `tag_*` 键
+（`test_resume_layout_templates.py` 拿模板 CSS 逐条核对），本模块**不再保留任何一份比例
+副本**——此前这里写死 0.71 / 0.57 / 0.4 三个比例只对 classic 成立，于是 8 个模板的标签在
+PDF 里被统一画成"带底色的圆角框 + 强调色文字"一种样子。
+
+**等宽字族（technical）的做法与限制**：`technical` 的标签在预览里用 `Consolas` 等宽字族
+（`.skill-list li { font-family: Consolas, "Cascadia Mono", Menlo, monospace; }`）。PDF 只有
+一个注册字体族 `FONT_FAMILY`（中文 TTF），**不为它再引入一个字体包**——多打一份字体文件只
+为让几个 ASCII 单词变等宽并不划算。做法是：注册表 `tag_mono` 为真、且**该标签文本全为
+ASCII** 时，用 fpdf2 内置的 `courier` 画（真等宽、无需嵌入）；文本含中文（或其它非 ASCII）
+时退回 `FONT_FAMILY`——fpdf2 **没有逐字形回退**能力（一个 `cell` 只能有一个字形来源），
+而等宽对中文本来也没有意义，所以"中英混排的标签用正文字体"是这里刻意的取舍，属已知差异。
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
+from .fonts import FONT_FAMILY
 from .layout import _PX_TO_MM, _PX_TO_PT
+from .theme import _hex_to_rgb
 
-# 技能标签的**形状**比例（左右内边距 0.71×标签字号、标签间距 0.57×标签字号、圆角 0.4×）。
-# 标签**字号**比例已随其它层级一起纳入 `resume_templates.TEMPLATE_LAYOUT_DEFAULTS`
-# （`tag_font_ratio`，由 `ResumeLayout` 带进来），这里的三个是 PDF 统一采用的一种标签形状
-# ——各模板的标签形状其实不同（modern 是胶囊、technical 是左侧色条、compact/minimal 刻意
-# 无框），PDF 目前统一画成"带底色的圆角框"，与预览的形状差异属于**既有**、独立的遗留，
-# 不在本次"字号层级结构化"的范围内。
-_TAG_PADDING_RATIO = 0.71
-_TAG_GAP_RATIO = 0.57
-_TAG_RADIUS_RATIO = 0.4
+if TYPE_CHECKING:  # pragma: no cover - 只为类型检查，运行时不能真导入 canvas（会循环导入）
+    from .canvas import _ResumePDF
+    from .layout import ResumeLayout
+
+# 等宽标签用的字体：fpdf2 内置的 core font，不需要 `add_font`、也不嵌入文件。
+# 只有 `tag_mono` 模板（technical）且标签文本全为 ASCII 时才用它。
+_TAG_MONO_FONT = "courier"
+
 # 标签底色 = 强调色调淡到接近白（模板里的 `--accent-soft` 就是这个思路，例如 #0f766e → #e6f4f1）。
+# **只作兜底**：注册表有 `accent_soft` 时用模板写死的真实十六进制（两者有色差，见 theme 模块）。
 _TAG_TINT_RATIO = 0.88
+
+# 胶囊圆角哨兵：注册表 `tag_radius` 取这个值时，圆角画成 `height / 2`
+# （对应 CSS 的 `border-radius: 999px`——浏览器会把它和到短边一半，效果同上）。
+PILL_RADIUS = "pill"
+
+# compact 模板的 `.skill-list li::after { content: "·" }`：标签之间的分隔符。
+_TAG_SEPARATOR = "·"
 
 
 @dataclass(frozen=True)
@@ -29,32 +56,53 @@ class SkillTagMetrics:
     gap_x: float
     gap_y: float
     radius: float
+    # 单边边框宽度（mm）。0 = 无边框；标签外框的总宽度要额外算上左右（或仅左侧）这条边。
+    border_mm: float
 
 
 def skill_tag_metrics(
-    font_size: float, *, line_height: float, tag_ratio: float
+    font_size: float,
+    *,
+    line_height: float,
+    tag_ratio: float,
+    pad_x: float,
+    gap_x: float,
+    gap_y: float,
+    radius: float | str,
+    border_px: float = 0.0,
 ) -> SkillTagMetrics:
     """由基准字号推出标签的整套尺寸（纯函数，便于逐条验证比例）。
 
-    ``tag_ratio`` 是模板里 `.skill-list li` 的字号倍数（来自
-    `TEMPLATE_LAYOUT_DEFAULTS` 的 `tag_font_ratio`）——**必须由调用方传入**，本模块不再
-    保留一份只对 classic 成立的副本。``line_height`` 是模板的行高系数：标签高度 =
-    标签字号的 ``line_height`` 倍，与预览里 `.skill-list li` 继承 body 行高同理。两者都
-    来自 `ResumeLayout`。
+    所有比例系数**必须由调用方传入**（来自 `ResumeLayout` 的 `tag_*` 字段，那一份又由
+    `TEMPLATE_LAYOUT_DEFAULTS` 从模板 CSS 抄过来并被守卫测试核对）。本模块不保留副本：
+    以前写死的 0.71 / 0.57 / 0.4 只对 classic 成立，其余 7 个模板的标签几何全错。
+
+    ``line_height`` 是模板的行高系数：标签高度 = 标签字号的 ``line_height`` 倍，与预览里
+    `.skill-list li` 继承 body 行高同理。
     """
     tag_px = font_size * tag_ratio
+    height = tag_px * _PX_TO_MM * line_height
+    if isinstance(radius, str):
+        # 只有 PILL_RADIUS 这一个哨兵；写错时按"无圆角"处理而不是抛错——标签画不出来比圆角
+        # 不好看严重得多。
+        resolved_radius = height / 2 if radius == PILL_RADIUS else 0.0
+    else:
+        resolved_radius = tag_px * _PX_TO_MM * float(radius)
     return SkillTagMetrics(
         font_pt=tag_px * _PX_TO_PT,
-        height=tag_px * _PX_TO_MM * line_height,
-        padding_x=tag_px * _PX_TO_MM * _TAG_PADDING_RATIO,
-        gap_x=tag_px * _PX_TO_MM * _TAG_GAP_RATIO,
-        gap_y=tag_px * _PX_TO_MM * _TAG_GAP_RATIO,
-        radius=tag_px * _PX_TO_MM * _TAG_RADIUS_RATIO,
+        height=height,
+        padding_x=tag_px * _PX_TO_MM * pad_x,
+        gap_x=tag_px * _PX_TO_MM * gap_x,
+        gap_y=tag_px * _PX_TO_MM * gap_y,
+        radius=resolved_radius,
+        border_mm=float(border_px) * _PX_TO_MM,
     )
 
 
-def soft_accent(color: tuple[int, int, int], ratio: float = _TAG_TINT_RATIO) -> tuple[int, int, int]:
-    """把强调色调成标签底色。"""
+def soft_accent(
+    color: tuple[int, int, int], ratio: float = _TAG_TINT_RATIO
+) -> tuple[int, int, int]:
+    """把强调色调成标签底色（**兜底用**：注册表有 `accent_soft` 时以模板的十六进制为准）。"""
     return tuple(round(channel + (255 - channel) * ratio) for channel in color)  # type: ignore[return-value]
 
 
@@ -85,3 +133,224 @@ def wrap_skill_tags(widths: list[float], *, max_width: float, gap: float) -> lis
     if current:
         rows.append(current)
     return rows
+
+
+def _tag_text_color(
+    choice: str,
+    *,
+    accent: tuple[int, int, int],
+    body_text: tuple[int, int, int],
+    muted_text: tuple[int, int, int],
+) -> tuple[int, int, int]:
+    """标签字色：模板 `.skill-list li` 写的是 `var(--accent)` / `var(--text)` / 没写（继承正文）。"""
+    if choice == "accent":
+        return accent
+    if choice == "muted":
+        return muted_text
+    return body_text
+
+
+def _tag_box_width(text_width: float, metrics: SkillTagMetrics, style: str) -> float:
+    """标签外框宽度（mm）：文字宽 + 左右内边距 + 边框。
+
+    边框**要算进外框宽度**：模板全局是 `box-sizing: border-box`，但 `.skill-list li` 没有
+    显式宽度（`inline-block` 收缩包裹），所以 `border` 仍然会把外框撑宽（描边左右各一条，
+    左侧色条只在左边一条）。
+    """
+    border_extra = 0.0
+    if style == "outline":
+        border_extra = 2 * metrics.border_mm
+    elif style == "left_bar":
+        border_extra = metrics.border_mm
+    return text_width + 2 * metrics.padding_x + border_extra
+
+
+def _text_offset(metrics: SkillTagMetrics, style: str) -> float:
+    """文字相对外框左沿的起点：边框在内，文字要让开它。"""
+    if style in ("outline", "left_bar"):
+        return metrics.border_mm + metrics.padding_x
+    return metrics.padding_x
+
+
+def _rounded_rect(
+    pdf: _ResumePDF,
+    left: float,
+    top: float,
+    width: float,
+    metrics: SkillTagMetrics,
+    *,
+    style: str,
+) -> None:
+    """画一个（可能带圆角的）标签外框，颜色由调用方先 `set_fill_color` / `set_draw_color` 定好。
+
+    fpdf2 的 `corner_radius` 上限是短边的一半，超过会画歪——胶囊（`height/2`）在窄标签上
+    正好顶到上限，所以这里自己 clamp，不指望库兜底。
+    """
+    if metrics.radius <= 0:
+        pdf.rect(left, top, width, metrics.height, style=style)
+        return
+    corner = min(metrics.radius, metrics.height / 2, width / 2)
+    pdf.rect(
+        left,
+        top,
+        width,
+        metrics.height,
+        style=style,
+        round_corners=True,
+        corner_radius=corner,
+    )
+
+
+def _draw_tag_shape(
+    pdf: _ResumePDF,
+    left: float,
+    top: float,
+    width: float,
+    metrics: SkillTagMetrics,
+    *,
+    style: str,
+    fill: tuple[int, int, int] | None,
+    accent: tuple[int, int, int],
+) -> None:
+    """按形状画标签的外框（文字由调用方写）。``plain`` / ``dot`` 什么都不画。"""
+    if style == "fill":
+        if fill is None:
+            return
+        pdf.set_fill_color(*fill)
+        _rounded_rect(pdf, left, top, width, metrics, style="F")
+    elif style == "outline":
+        pdf.set_draw_color(*accent)
+        pdf.set_line_width(metrics.border_mm)
+        _rounded_rect(pdf, left, top, width, metrics, style="D")
+    elif style == "left_bar":
+        # 先铺满底色块，再在**框内**左侧画一条强调色竖条（CSS `border-left: 2px solid`）。
+        if fill is not None:
+            pdf.set_fill_color(*fill)
+            pdf.rect(left, top, width, metrics.height, style="F")
+        pdf.set_fill_color(*accent)
+        pdf.rect(left, top, metrics.border_mm, metrics.height, style="F")
+    # plain / dot：无背景无边框，只写字。
+
+
+def _select_tag_font(pdf: _ResumePDF, metrics: SkillTagMetrics, *, mono: bool) -> None:
+    """选定画**这一个**标签用的字体。
+
+    ``mono`` 只在 `tag_mono` 模板（technical）且文本全为 ASCII 时为真：那时用内置 `courier`，
+    否则用注册的中文字族。逐标签选字体是必需的——同一份简历里既有 `Python` 也有 `数据结构`。
+    """
+    if mono:
+        pdf.set_font(_TAG_MONO_FONT, "", metrics.font_pt)
+    else:
+        pdf.set_font(FONT_FAMILY, "", metrics.font_pt)
+
+
+def draw_skill_tags(
+    pdf: _ResumePDF,
+    labels: list[str],
+    base: float,
+    *,
+    layout: ResumeLayout,
+    accent: tuple[int, int, int],
+    line_color: tuple[int, int, int],
+    body_text: tuple[int, int, int],
+    muted_text: tuple[int, int, int],
+) -> None:
+    """把专业技能按**模板真实的标签形状**画出来。
+
+    形状、圆角、内边距、行内/行间间距全部来自 ``layout`` 的 `tag_*` 字段（模板 CSS 的结构化
+    映射），本函数只负责"按形状画"与折行：
+
+    * ``fill``     —— 填充底色（classic 的硬编码浅灰、elegant 的 accent-soft）；
+    * ``outline``  —— 强调色描边（modern / split 的胶囊，圆角取 `height / 2`）；
+    * ``left_bar`` —— 底色块 + 左侧强调色竖条（technical）；
+    * ``dot``      —— 无框，标签后跟一个「·」分隔符（compact，最后一个不加）；
+    * ``plain``    —— 纯文字（minimal / editorial）。
+
+    两个**整段排版**开关也在这里生效：
+
+    * ``layout.tag_align == "center"``（只有 elegant）—— 每行按"该行标签总宽 + 间距之和"在
+      列框内水平居中，对应 CSS 的 `.skill-list { text-align: center }`。此前 PDF 一律左对齐，
+      于是 elegant 的标签在预览里居中、导出后靠左，是最容易一眼看出的偏差之一。
+    * ``layout.tag_mono``（只有 technical）—— 逐标签决定用 `courier` 还是注册字族，见模块
+      docstring 里"等宽字族"那一段。
+
+    水平范围读的是 `pdf.frame_left` / `pdf.frame_width`（而不是 `layout.margin_x` /
+    `pdf.content_width`）：双栏模板里技能标签画在半栏里，折行与居中都必须按半栏宽算。
+
+    抽到本模块（而不是留在 `canvas._ResumePDF`）有两个原因：形状分支让画布类超 500 行预算，
+    而且标签几何本来就是本模块的主题——放一起才看得清"注册表的比例"与"画出来的形状"对不对得上。
+    """
+    items = [str(label).strip() for label in labels if str(label).strip()]
+    if not items:
+        return
+
+    style = layout.tag_style
+    metrics = skill_tag_metrics(
+        base,
+        line_height=layout.line_height,
+        tag_ratio=layout.tag_font_ratio,
+        pad_x=layout.tag_pad_x,
+        gap_x=layout.tag_gap_x,
+        gap_y=layout.tag_gap_y,
+        radius=layout.tag_radius,
+        border_px=layout.tag_border_px,
+    )
+
+    fill = None if layout.tag_bg == "none" else _hex_to_rgb(layout.tag_bg)
+    text_color = _tag_text_color(
+        layout.tag_fg, accent=accent, body_text=body_text, muted_text=muted_text
+    )
+
+    # 逐标签选字体后量宽度：等宽字体的字宽与正文字体不同，混着量会让折行算错。
+    # `str.isascii()` 对空串也返回 True，但空标签已在上面被过滤掉。
+    use_mono = [layout.tag_mono and item.isascii() for item in items]
+    text_widths: list[float] = []
+    for item, mono in zip(items, use_mono, strict=True):
+        _select_tag_font(pdf, metrics, mono=mono)
+        text_widths.append(pdf.get_string_width(item))
+
+    # 标签外框宽度（**不含** dot 模板的分隔符）。居中对齐要按它算整行宽度。
+    box_widths = [_tag_box_width(text_width, metrics, style) for text_width in text_widths]
+    widths = list(box_widths)
+    separator_width = 0.0
+    if style == "dot":
+        # `.skill-list li::after{ content:"·"; margin-left: .7em }` + li 的 `margin-right`：
+        # 分隔符 与 它右侧的间距都算进**前一项**的宽度里，折行才会和预览同口径
+        # （分隔符跟着前一项走，不会单独漂到下一行行首）。
+        separator_width = pdf.get_string_width(_TAG_SEPARATOR)
+        widths = [
+            width + (metrics.gap_x + separator_width if index < len(items) - 1 else 0.0)
+            for index, width in enumerate(widths)
+        ]
+
+    available = pdf.frame_width
+    center = layout.tag_align == "center"
+    for row in wrap_skill_tags(widths, max_width=available, gap=metrics.gap_x):
+        pdf.ensure_space(metrics.height + metrics.gap_y)
+        top = pdf.get_y()
+        left = pdf.frame_left
+        if center:
+            # 行宽 = 各标签外框宽 + 之间的间距；超宽（单个标签比整栏还宽）时不动，保持左沿对齐，
+            # 与浏览器的 `text-align: center` 在溢出时的表现一致。
+            row_width = sum(box_widths[index] for index in row) + metrics.gap_x * (len(row) - 1)
+            left += max(0.0, (available - row_width) / 2.0)
+        for index in row:
+            width = widths[index]
+            _draw_tag_shape(pdf, left, top, width, metrics, style=style, fill=fill, accent=accent)
+            _select_tag_font(pdf, metrics, mono=use_mono[index])
+            pdf.set_text_color(*text_color)
+            pdf.set_xy(left + _text_offset(metrics, style), top)
+            pdf.cell(text_widths[index], metrics.height, items[index])
+
+            if style == "dot" and index < len(items) - 1:
+                # 分隔符用模板 `--line` 的颜色，跟着前一项的右沿走。
+                pdf.set_text_color(*line_color)
+                pdf.set_xy(left + box_widths[index] + metrics.gap_x, top)
+                pdf.cell(separator_width, metrics.height, _TAG_SEPARATOR)
+
+            left += width + metrics.gap_x
+        pdf.set_y(top + metrics.height + metrics.gap_y)
+        pdf.set_x(pdf.frame_left)
+
+    # 标签用强调色 / 辅助色写字，用完必须把文字颜色还原，否则后面的正文也会跟着变色。
+    pdf.set_text_color(*body_text)

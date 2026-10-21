@@ -1,9 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """简历脱敏变换：把可识别身份的字段替换成占位符，供导出 / 分享 / 脱敏预览复用。
 
-这是全仓库脱敏规则的**唯一实现处**。默认遮罩姓名 / 手机 / 邮箱 / 公司名；学校 / 项目 /
-产品名可配置。脱敏是"导出时变换"，**不回写真实数据**：输入一份 ``ResumeContent``，返回
-一份全新的 ``ResumeContent``，原对象不被改动（deep copy）。
+这是全仓库脱敏规则的**唯一实现处**。默认遮罩姓名 / 手机 / 邮箱 / 公司名，以及
+**GitHub 与个人主页**这两个"能顺着找到人"的链接字段；学校 / 项目 / 产品名可配置。
+脱敏是"导出时变换"，**不回写真实数据**：输入一份 ``ResumeContent``，返回一份全新的
+``ResumeContent``，原对象不被改动（deep copy）。
+
+``mask_github`` / ``mask_website`` 默认开启（2026-10-21 补）：这两个字段此前不在脱敏范围
+里，于是"脱敏导出"的联系方式行里会原样留着 ``github.com/<用户名>`` 与个人域名——一个
+handle 就足以反查到人，与"遮住姓名和手机"的目的直接矛盾。它们能被 HTML / Markdown / Word
+渲染出来，PDF 自 2026-10-21 起也会渲染（页头联系方式补齐字段），所以必须一并遮。
 
 ``mask_product`` 的语义说明：``ResumeContent`` 里没有独立的"产品名"字段，产品名通常就是
 项目名 / 公司名，并以叙事文本的形式出现在总结与描述里。所以这里做**正文级替换**——把
@@ -24,7 +30,7 @@ MASK = "***"
 
 @dataclass(frozen=True)
 class RedactionOptions:
-    """脱敏选项。默认遮罩可直接识别身份的四项，其余按需开启。"""
+    """脱敏选项。默认遮罩可直接识别身份的六项，其余按需开启。"""
 
     mask_name: bool = True
     mask_phone: bool = True
@@ -33,6 +39,9 @@ class RedactionOptions:
     mask_school: bool = False
     mask_project: bool = False
     mask_product: bool = False
+    # 链接类字段：一个 GitHub handle 或个人域名足以反查到人，默认遮。
+    mask_github: bool = True
+    mask_website: bool = True
 
 
 def _mask(value: str) -> str:
@@ -64,6 +73,10 @@ def redact(resume_content: ResumeContent, options: RedactionOptions | None = Non
         resume.phone = _mask(resume.phone)
     if opts.mask_email:
         resume.email = _mask(resume.email)
+    if opts.mask_github:
+        resume.github = _mask(resume.github)
+    if opts.mask_website:
+        resume.personal_website = _mask(resume.personal_website)
     if opts.mask_company:
         for experience in resume.experience:
             experience.company = _mask(experience.company)

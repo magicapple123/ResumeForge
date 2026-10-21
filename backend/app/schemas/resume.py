@@ -396,11 +396,25 @@ class LayoutFitRoomOut(BaseModel):
 
 
 class LayoutAnalyzeRequest(BaseModel):
-    """版面诊断请求：把浏览器量到的两个高度发过来，规则由后端算。"""
+    """版面诊断请求：浏览器量到的两个高度 + **屏幕上这一版**的草稿版式。
+
+    为什么版式也要传：诊断里的「自动一页」清单（`fit_ladder`）与收紧余地
+    （`fit_room`）都是"从当前版式再往紧收一档"算出来的。只按记录值算，用户在
+    拖完滑块、还没点保存时点「自动一页」，就会从一个**他没在看的版式**起步——
+    表现为"诊断说的和我屏幕上的不是一回事"（2026-10-21 用户实测：精确模式里
+    改参数，诊断内容整块不动）。
+
+    ``None`` 表示"这次不覆盖，用记录值"：旧客户端不传这些字段，行为与之前一致。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     measure: ResumeLayoutMeasure
+    # 与 ``PreviewPdfRequest`` / ``POST /resumes/render`` 的版式字段逐一对应。
+    template: str | None = Field(default=None, max_length=64)
+    format_name: str | None = Field(default=None, max_length=64)
+    font_scale: ResumeFontScale | None = None
+    format_config: dict | None = None
 
 
 class LayoutAnalyzeOut(BaseModel):

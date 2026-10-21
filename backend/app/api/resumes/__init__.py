@@ -41,6 +41,9 @@ from ._shared import (
     PDF_PAGES_HEADER as PDF_PAGES_HEADER,
 )
 from ._shared import (
+    PDF_PAGES_NEEDED_HEADER as PDF_PAGES_NEEDED_HEADER,
+)
+from ._shared import (
     RESUME_OVERFLOW_HEADER as RESUME_OVERFLOW_HEADER,
 )
 

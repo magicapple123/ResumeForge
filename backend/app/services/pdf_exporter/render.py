@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """绘制编排（``ResumePDF`` 结果对象、字体注册、``_draw_resume`` 主绘制流程）。"""
+
 from __future__ import annotations
 
 import logging
@@ -12,33 +13,39 @@ from fpdf.enums import XPos, YPos
 from ...schemas.resume import ResumeContent
 from ..resume.resume_sections import resolved_section_order
 from .canvas import _ResumePDF
+from .columns import SectionDrawer, render_sections
 from .fonts import FONT_FAMILY, ResumePDFError
 from .layout import (
-    _BODY_TEXT,
-    _MUTED_TEXT,
     _PX_TO_MM,
     _PX_TO_PT,
     PAGE_WIDTH_MM,
 )
 from .media import _join, _photo_bytes, crop_image_to_cover
 from .name_gender import draw_name_gender, plan_name_gender
-from .skill_tags import soft_accent
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class ResumePDF:
-    """生成好的 PDF，连同它的实际页数与一页适配结果。
+    """生成好的 PDF，连同它的页数与"装不装得下"的结论。
 
-    ``scale`` 是实际使用的字号缩放（1.0 表示没有缩），``overflow`` 表示"缩到下限仍塞不下"。
-    调用方据此提示用户"内容超出所选页数"，而不是让用户下载完才发现。
+    ``pages`` 是**文件里实际排出的页数**（超出上限时被截断，因此恒 <= 上限）；
+    ``pages_needed`` 是按当前参数真实需要的页数（未截断），界面用来说"约需 N 页"；
+    ``overflow`` 表示"按当前参数放不进所选页数，尾部已被截断"。
+
+    三者必须彼此自洽：``overflow`` 为真 ⇔ ``pages_needed > pages``。
+    **这里不再有"缩放"字段**（2026-10-21）：装不下就如实标记并提示用户，绝不替用户
+    把字号压小——滑杆上的字号必须等于纸面上的字号。
     """
 
     content: bytes
     pages: int
-    scale: float = 1.0
+    pages_needed: int | None = None
     overflow: bool = False
+    # 这一趟真正画出去的字。**只给字体预子集化用**（见 `font_subset`）：下一趟同内容的
+    # 渲染据此把字体裁到几百字，解析成本从 ~330ms 掉到 ~10ms。不进任何响应、不落库。
+    chars: frozenset[str] = frozenset()
 
 
 def _register_fonts(pdf: FPDF, regular: str, bold: str) -> None:
@@ -47,6 +54,30 @@ def _register_fonts(pdf: FPDF, regular: str, bold: str) -> None:
         pdf.add_font(FONT_FAMILY, "B", bold)
     except Exception as exc:  # noqa: BLE001 - 字体解析失败要变成可读提示
         raise ResumePDFError(f"加载中文字体失败（{Path(regular).name}）：{exc}") from exc
+
+
+def _section_has_content(resume: ResumeContent, key: str) -> bool:
+    """这个分区**有没有内容可画**（空分区在草稿里根本不产生节点）。
+
+    **为什么必须在这里判、而不是只留在各 drawer 里**：双栏模板把分区**两两一行**并排
+    （见 `columns.plan_rows`），而草稿里的空分区（例如没有校园经历时的 `校园经历`）
+    渲染出来是**零个节点**——它不占网格格位，后面的分区因此往前挪一格。PDF 若按"七个键
+    全都在"来配对，就会把 `项目经历` 和一个空格子并排、把 `专业技能` 与 `荣誉奖项` 拆到
+    两行，整份简历凭空高出 40mm（实测草稿 227.5mm vs 分错组的 PDF 314.7mm）。
+    所以配对之前必须先把空分区剔掉：**配对的是"会画出来的分区"，不是"注册表里的七个键"**。
+    """
+    table = {
+        "summary": lambda: bool(resume.summary.strip()),
+        "education": lambda: bool(resume.education),
+        "experience": lambda: bool(resume.experience),
+        "campus_experience": lambda: bool(resume.campus_experience),
+        "projects": lambda: bool(resume.projects),
+        "skills": lambda: bool(resume.skills),
+        "awards": lambda: bool(resume.awards),
+    }
+    # 未知键（`resolved_section_order` 已保证是七个键之一）按空处理：宁可少画一段，
+    # 也不要为了一个不认识的键让整份导出抛错。
+    return bool(table[key]()) if key in table else False
 
 
 def _draw_resume(
@@ -67,7 +98,7 @@ def _draw_resume(
     所以测量路径也要用同一份配置，否则"量的"与"画的"又分家了。
     """
     layout = pdf.layout
-    base = layout.scaled_base_px
+    base = layout.base_px
 
     # 照片尺寸由模板 `.profile-photo` 的宽高（× 字号）派生——预览里它随字号/缩放走，
     # PDF 此前却是固定 22×28mm，字号一大一小就对不上（用户看到"照片大小与字号不协调"）。
@@ -97,7 +128,19 @@ def _draw_resume(
     extra_size = base * layout.name_extra_ratio
     gender = (resume.gender or "").strip()
     intent_text = f"求职意向：{resume.job_intent}" if resume.job_intent else ""
-    contact = _join([resume.phone, resume.email, resume.city, resume.birth_year], "    ")
+    # 与预览 `_resume_sections.j2` 的 `.contact` 同字段、同顺序、同文案。此前只拼了前四个，
+    # GitHub 与主页整段丢失（预览有、PDF 没有）。`_join` 会丢掉空串，所以空字段不留分隔符。
+    contact = _join(
+        [
+            resume.phone,
+            resume.email,
+            resume.city,
+            resume.birth_year,
+            f"GitHub：{resume.github}" if resume.github else "",
+            f"主页：{resume.personal_website}" if resume.personal_website else "",
+        ],
+        "    ",
+    )
 
     # 先量页头正文的高度（不落笔）：modern 的底色块要按它定尺寸、并画在文字之下。
     # 姓名与性别**各量各的**（`plan_name_gender`，与绘制同一逻辑），性别不再并入
@@ -107,10 +150,14 @@ def _draw_resume(
     )
     text_height = name_plan.height
     if intent_text:
+        # 段前留白 `.header .intent { margin-top }` 与正文一样占高度，必须计入（下面画的时候
+        # 也用同一个 `ln`），否则 modern 的底色块会比文字矮一截。
+        text_height += layout.gap_mm(layout.intent_gap)
         text_height += pdf.text_block_height(
             intent_text, width=text_width, size_px=base * layout.intent_ratio
         )
     if contact:
+        text_height += layout.gap_mm(layout.contact_gap)
         text_height += pdf.text_block_height(
             contact, width=text_width, size_px=base * layout.contact_ratio
         )
@@ -118,7 +165,9 @@ def _draw_resume(
     header_content_h = max(text_height, photo_span)
 
     if header_has_bg:
-        pdf.set_fill_color(*soft_accent(pdf.accent))
+        # 页头底色块用模板 `:root` 的 `--accent-soft` 真值（split 现场调淡约得 #edeae5，
+        # 模板写死的是 #f3eee6，两者有色差——见 `theme.resolve_accent_soft`）。
+        pdf.set_fill_color(*pdf.accent_soft)
         pdf.rect(
             layout.margin_x,
             header_top,
@@ -152,11 +201,14 @@ def _draw_resume(
     draw_name_gender(
         pdf, resume.name, name_plan, width=text_width, name_size=name_size, extra_size=extra_size
     )
-    pdf.set_text_color(*_BODY_TEXT)
+    pdf.set_text_color(*pdf.body_text)
     if intent_text:
         intent_size = base * layout.intent_ratio
         pdf.set_font(FONT_FAMILY, "", intent_size * _PX_TO_PT)
-        pdf.set_text_color(*_MUTED_TEXT)
+        pdf.set_text_color(*pdf.muted_text)
+        # 模板 `.header .intent { margin-top: calc(var(--fs) * N) }`；`ln` 会把 x 复位到左边距，
+        # 所以紧跟着重新 `set_x(content_left)`。
+        pdf.ln(layout.gap_mm(layout.intent_gap))
         pdf.set_x(content_left)
         pdf.multi_cell(
             text_width,
@@ -169,7 +221,9 @@ def _draw_resume(
     if contact:
         contact_size = base * layout.contact_ratio
         pdf.set_font(FONT_FAMILY, "", contact_size * _PX_TO_PT)
-        pdf.set_text_color(*_MUTED_TEXT)
+        pdf.set_text_color(*pdf.muted_text)
+        # 同上：`.header .contact { margin-top: calc(var(--fs) * N) }`。
+        pdf.ln(layout.gap_mm(layout.contact_gap))
         pdf.set_x(content_left)
         pdf.multi_cell(
             text_width,
@@ -179,7 +233,7 @@ def _draw_resume(
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
         )
-    pdf.set_text_color(*_BODY_TEXT)
+    pdf.set_text_color(*pdf.body_text)
 
     # 页头块的底：文字底与照片底取更靠下者；modern 再补下内边距，其余模板补 padding-bottom 后画底边线。
     header_bottom = max(pdf.get_y(), content_top + photo_span)
@@ -197,19 +251,18 @@ def _draw_resume(
     # 第一段之前的留白 = 页头 `.header` 的 margin-bottom（`header_gap`）；之后区块之间 = 上一段
     # `.section` 的 margin-bottom（`section_gap`）。预览里 `.section` 只有 bottom 边距、且页头
     # 自己也有一段 margin-bottom，所以这里必须把两种前导间距分开，否则第一段会比预览紧。
-    first_section = True
+    #
+    # **每个 drawer 都接收"画布"与"本段之前的留白系数"两个参数**：画布是参数而不是闭包，
+    # 双栏量高时才能把同一批 drawer 跑在 `measuring=True` 的孪生画布上（"量的就是画的"）；
+    # 留白是参数而不是内部计数器，双栏才能让同一行的左右两格用同一个值。
+    # 返回值 = 这一段是否真的画了东西：空分区不该把"第一段"的 header_gap 吃掉。
 
-    def section(title: str) -> None:
-        nonlocal first_section
-        leading = layout.header_gap if first_section else layout.section_gap
-        pdf.section_title(title, base, leading_gap=leading)
-        first_section = False
-
-    def body(text: str) -> None:
+    def body(pdf: _ResumePDF, text: str) -> None:
+        """分区正文（一段 `multi_cell`）。宽度与起点都跟着列框走（双栏时是半栏）。"""
         pdf.set_font(FONT_FAMILY, "", base * _PX_TO_PT)
-        pdf.set_x(layout.margin_x)
+        pdf.set_x(pdf.frame_left)
         pdf.multi_cell(
-            pdf.content_width,
+            pdf.frame_width,
             pdf.line_advance(base),
             text,
             align="L",
@@ -217,107 +270,113 @@ def _draw_resume(
             new_y=YPos.NEXT,
         )
 
-    def draw_summary() -> None:
-        if resume.summary.strip():
-            section("个人总结")
-            body(resume.summary.strip())
+    def draw_summary(pdf: _ResumePDF, leading: float) -> bool:
+        text = resume.summary.strip()
+        if not text:
+            return False
+        pdf.section_title("个人总结", base, leading_gap=leading)
+        body(pdf, text)
+        return True
 
-
-    def draw_education() -> None:
-        if resume.education:
-            section("教育经历")
-            for index, edu in enumerate(resume.education):
-                # 同一分区内条目之间的留白 = 模板 `.entry { margin-bottom }`（此前 PDF 没有）。
-                if index:
-                    pdf.ln(layout.gap_mm(layout.entry_gap))
-                pdf.entry_head(
-                    _join([edu.school, edu.major], " · "),
-                    _join([edu.degree, f"{edu.start_date} - {edu.end_date}"], " · "),
-                    base,
-                )
-                if edu.gpa:
-                    pdf.meta_line(f"绩点/排名：{edu.gpa}", base)
-                if edu.courses:
-                    pdf.meta_line(f"核心课程：{'、'.join(edu.courses)}", base)
-                pdf.bullets(edu.achievements, base)
-
-
-    def draw_experience() -> None:
-        if resume.experience:
-            section("实习/工作经历")
-            for index, exp in enumerate(resume.experience):
-                if index:
-                    pdf.ln(layout.gap_mm(layout.entry_gap))
-                pdf.entry_head(
-                    _join([exp.company, exp.role], " · "),
-                    f"{exp.start_date} - {exp.end_date}",
-                    base,
-                )
-                pdf.bullets(exp.description, base)
-
-
-    def draw_campus() -> None:
-        if resume.campus_experience:
-            section("校园经历")
-            for index, item in enumerate(resume.campus_experience):
-                if index:
-                    pdf.ln(layout.gap_mm(layout.entry_gap))
-                pdf.entry_head(
-                    _join([item.organization, item.role], " · "),
-                    f"{item.start_date} - {item.end_date}",
-                    base,
-                )
-                pdf.bullets(item.description, base)
-
-
-    def draw_projects() -> None:
-        if resume.projects:
-            section("项目经历")
-            for index, project in enumerate(resume.projects):
-                if index:
-                    pdf.ln(layout.gap_mm(layout.entry_gap))
-                # 项目名在左、`角色 · 时间` 在右——与预览 `_resume_sections.j2` 一致
-                # （此前把角色并进了左边：`name · role`，看起来与预览不是一回事）。
-                pdf.entry_head(
-                    project.name,
-                    _join([project.role, f"{project.start_date} - {project.end_date}"], " · "),
-                    base,
-                )
-                if project.tech_stack:
-                    pdf.meta_line(f"技术栈/工具：{'、'.join(project.tech_stack)}", base)
-                pdf.bullets(project.description, base)
-                pdf.bullets(project.highlights, base)
-
-
-    def draw_skills() -> None:
-        if resume.skills:
-            section("专业技能")
-            # 标签文案与预览一致：`技能名（等级）`。用标签绘制而不是「、」连接的一行文本——
-            # 后者在预览里是带底色的小框，导出后却看不出任何标签形状。
-            pdf.skill_tags(
-                [
-                    f"{skill.name}（{skill.level}）" if skill.level else skill.name
-                    for skill in resume.skills
-                ],
+    def draw_education(pdf: _ResumePDF, leading: float) -> bool:
+        if not resume.education:
+            return False
+        pdf.section_title("教育经历", base, leading_gap=leading)
+        for index, edu in enumerate(resume.education):
+            # 同一分区内条目之间的留白 = 模板 `.entry { margin-bottom }`（此前 PDF 没有）。
+            if index:
+                pdf.ln(layout.gap_mm(layout.entry_gap))
+            pdf.entry_head(
+                _join([edu.school, edu.major], " · "),
+                _join([edu.degree, f"{edu.start_date} - {edu.end_date}"], " · "),
                 base,
             )
+            if edu.gpa:
+                pdf.meta_line(f"绩点/排名：{edu.gpa}", base)
+            if edu.courses:
+                pdf.meta_line(f"核心课程：{'、'.join(edu.courses)}", base)
+            pdf.bullets(edu.achievements, base)
+        return True
 
-
-    def draw_awards() -> None:
-        if resume.awards:
-            section("荣誉奖项")
-            pdf.bullets(
-                [
-                    _join([award.name, award.date, award.description])
-                    for award in resume.awards
-                ],
+    def draw_experience(pdf: _ResumePDF, leading: float) -> bool:
+        if not resume.experience:
+            return False
+        pdf.section_title("实习/工作经历", base, leading_gap=leading)
+        for index, exp in enumerate(resume.experience):
+            if index:
+                pdf.ln(layout.gap_mm(layout.entry_gap))
+            pdf.entry_head(
+                _join([exp.company, exp.role], " · "),
+                f"{exp.start_date} - {exp.end_date}",
                 base,
             )
+            pdf.bullets(exp.description, base)
+        return True
+
+    def draw_campus(pdf: _ResumePDF, leading: float) -> bool:
+        if not resume.campus_experience:
+            return False
+        pdf.section_title("校园经历", base, leading_gap=leading)
+        for index, item in enumerate(resume.campus_experience):
+            if index:
+                pdf.ln(layout.gap_mm(layout.entry_gap))
+            pdf.entry_head(
+                _join([item.organization, item.role], " · "),
+                f"{item.start_date} - {item.end_date}",
+                base,
+            )
+            pdf.bullets(item.description, base)
+        return True
+
+    def draw_projects(pdf: _ResumePDF, leading: float) -> bool:
+        if not resume.projects:
+            return False
+        pdf.section_title("项目经历", base, leading_gap=leading)
+        for index, project in enumerate(resume.projects):
+            if index:
+                pdf.ln(layout.gap_mm(layout.entry_gap))
+            # 项目名在左、`角色 · 时间` 在右——与预览 `_resume_sections.j2` 一致
+            # （此前把角色并进了左边：`name · role`，看起来与预览不是一回事）。
+            pdf.entry_head(
+                project.name,
+                _join([project.role, f"{project.start_date} - {project.end_date}"], " · "),
+                base,
+            )
+            if project.tech_stack:
+                pdf.meta_line(f"技术栈/工具：{'、'.join(project.tech_stack)}", base)
+            pdf.bullets(project.description, base)
+            pdf.bullets(project.highlights, base)
+        return True
+
+    def draw_skills(pdf: _ResumePDF, leading: float) -> bool:
+        if not resume.skills:
+            return False
+        pdf.section_title("专业技能", base, leading_gap=leading)
+        # 标签文案与预览一致：`技能名（等级）`。用标签绘制而不是「、」连接的一行文本——
+        # 后者在预览里是带底色的小框，导出后却看不出任何标签形状。
+        pdf.skill_tags(
+            [
+                f"{skill.name}（{skill.level}）" if skill.level else skill.name
+                for skill in resume.skills
+            ],
+            base,
+        )
+        return True
+
+    def draw_awards(pdf: _ResumePDF, leading: float) -> bool:
+        if not resume.awards:
+            return False
+        pdf.section_title("荣誉奖项", base, leading_gap=leading)
+        pdf.bullets(
+            [_join([award.name, award.date, award.description]) for award in resume.awards],
+            base,
+        )
+        return True
 
     # 分区顺序由版式配置里的 section_order 决定（见 services/resume/resume_sections.py）。
     # 用字典而不是 if/elif 链：漏一个键时字典会直接 KeyError，而 if 链的表现是
     # "那个分区在 PDF 里默默消失"——同一个错误，早失败比晚失败好。
-    drawers = {
+    drawers: dict[str, SectionDrawer] = {
         "summary": draw_summary,
         "education": draw_education,
         "experience": draw_experience,
@@ -326,5 +385,20 @@ def _draw_resume(
         "skills": draw_skills,
         "awards": draw_awards,
     }
-    for section_key in resolved_section_order(format_config):
-        drawers[section_key]()
+    section_keys = [
+        key for key in resolved_section_order(format_config) if _section_has_content(resume, key)
+    ]
+
+    if layout.column_count > 1:
+        # 双栏（split）：两两一行并排，行级分页。绘制逻辑与单栏**完全是同一批 drawer**——
+        # `columns.render_sections` 只负责"切行 / 量高 / 分页 / 并排放"，见该模块 docstring。
+        render_sections(pdf, section_keys, drawers)
+        return
+
+    # 单栏：顺序排下来。第一个**非空**分区之前用 `header_gap`（页头的 margin-bottom），
+    # 之后每一段之前用 `section_gap`（上一段 `.section` 的 margin-bottom）。
+    first_section = True
+    for section_key in section_keys:
+        leading = layout.header_gap if first_section else layout.section_gap
+        if drawers[section_key](pdf, leading):
+            first_section = False

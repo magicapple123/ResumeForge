@@ -58,12 +58,76 @@ _GLOBAL_SETTINGS_DIR = _TEST_DIR / "global_settings"
 _GLOBAL_SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
 _global_settings.DATA_DIR = str(_GLOBAL_SETTINGS_DIR)
 
+# 自定义字体（``data/fonts/``）同一条理由：路径来自 ``config.DATA_DIR``，不跟随
+# DATABASE_URL。不隔离就会出两种事故——任何一次导出测试都把开发机上的真实字体
+# （本机实测 6 MB）打进包，格式号被推到 6，``format == 5`` 之类的断言随机变红；
+# 反过来导入测试还会往用户的真实字体目录里写文件。这里指到本进程的测试目录。
+from app.services import user_fonts as _user_fonts  # noqa: E402
+
+_FONTS_ROOT = _TEST_DIR / "fonts_root"
+_FONTS_ROOT.mkdir(parents=True, exist_ok=True)
+_user_fonts.DATA_DIR = str(_FONTS_ROOT)
+
+
+@pytest.fixture(autouse=True)
+def _clean_fonts_dir():
+    """每个用例从"没有自定义字体"开始。
+
+    不做这一步，任何一条"上传字体"的用例都会把后面的导出用例推到格式 6（字体进了包
+    格式号就变），失败信息还会指向完全无关的断言。
+    """
+    shutil.rmtree(_FONTS_ROOT, ignore_errors=True)
+    _FONTS_ROOT.mkdir(parents=True, exist_ok=True)
+    yield
+
 
 @pytest.fixture(autouse=True)
 def _clean_global_settings_file():
     """每个用例从"没有全局配置"开始：模型记录与主题都不该跨用例泄漏。"""
     (_GLOBAL_SETTINGS_DIR / "global_settings.json").unlink(missing_ok=True)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _clear_preview_cache():
+    """每个用例从"内存里没有任何排好的 PDF"开始。
+
+    精确预览的结果缓存是**进程级**的（``services/pdf_preview_cache``），而不同用例的简历
+    常常是同一份内容（``_resume()``）+ 同一组参数——缓存键会撞在一起，上一个用例的字节被
+    下一个用例直接端走，"同一组参数只排一趟"这类计数断言就会随执行顺序时红时绿。
+    """
+    from app.services.pdf_preview_cache import clear as clear_preview_cache
+
+    clear_preview_cache()
+    yield
+    clear_preview_cache()
+
+
+@pytest.fixture(autouse=True)
+def _reset_font_subsets():
+    """每个用例从"用全量字体渲染"开始。
+
+    字体预子集化把"这份内容画过哪些字"记在进程级缓存里，第二趟起会换成小字体渲染。
+    子集与全量字体的**几何完全一致**，但 PDF 里的字体名与字节不同（``MPDFAA+`` 前缀、
+    子集化的稠密字形编号）——逐字节比对的用例不该因为"同进程里前面有人排过一次"而变绿
+    或变红。要验证子集路径的用例自己调两次，断言它确实换了字体。
+
+    后台预热也在这里关掉：它是异步的，``stats() == (1, 0)`` 这类"刚排完一趟"的即时断言
+    会变成抛硬币（预热线程可能刚好抢在前面把子集裁好了）。验证预热的用例自己开回来。
+
+    **不要把它改成 `monkeypatch` 参数**：autouse fixture 一旦请求 `monkeypatch`，这个
+    fixture 就会抢先把它实例化，于是 `monkeypatch` 的还原被排到所有 fixture 的收尾**之后**
+    ——`test_sample_recorder_is_within` 那个把 `Path.resolve` 打成抛异常的用例会让本文件
+    的数据目录清理在还原前跑，凭空多一条 teardown ERROR。所以这里手动存取。
+    """
+    from app.services.pdf_exporter import font_subset
+
+    previous = font_subset._warm_enabled
+    font_subset._warm_enabled = False
+    font_subset.reset()
+    yield
+    font_subset.reset()
+    font_subset._warm_enabled = previous
 
 
 @event.listens_for(Engine, "connect")
@@ -375,3 +439,14 @@ def three_datasets(db_session):
     finally:
         # 主库父目录（进程级测试根）不在 conftest 的数据集清理范围内，自己收尾。
         main_file.unlink(missing_ok=True)
+
+
+# ===== 跨引擎对拍（草稿 Chromium vs 服务端 PDF）的共享浏览器夹具 =====
+#
+# 夹具本体在 `browser_parity_support.py`（与 `measure_layout.js` 放在一起，便于"改了
+# 测量口径就一起看"）。这里做一次显式再导出：测试模块里**导入**夹具会让 ruff 把
+# "函数参数与导入同名"判成 F811（pytest 的夹具注入本来就是这么用的），而放在 conftest
+# 里由 pytest 统一发现就没有这个假冲突。
+#
+# `X as X` 是给 ruff 看的"这是再导出，不是未使用导入"。
+from browser_parity_support import chromium_page as chromium_page  # noqa: E402

@@ -78,6 +78,30 @@ def update_resume_layout(
     return _to_resume_out(record)
 
 
+def _analyzed_format_config(
+    db: Session, record: ResumeRecord, payload: LayoutAnalyzeRequest
+) -> dict:
+    """诊断要看的版式：**草稿优先，记录兜底**。
+
+    与 ``_export_record`` 的 ``template_override`` / ``format_name_override`` 是同一套规则：
+    只要前端给了版式模板名，就从"样式模板自带 + 该预设"起步、再由草稿的完整覆盖叠加，
+    **不再叠记录里的旧覆盖**——用户换预设时前端已经清掉了该预设管辖的键，旧覆盖会把新
+    预设又盖回去。
+
+    为什么必须这样：``fit_room`` / ``fit_ladder`` 回答的是"从**现在这一版**再往紧收一档"，
+    基准取错就会给出一个用户没在看的版式（改完滑块点「自动一页」反而变松）。
+    """
+    style = payload.template or record.template
+    if payload.format_name is None:
+        config = record_format_config(db, record)
+    else:
+        config = dict(validated_format_config(resolve_style_config(db, style)))
+        config.update(resolve_format_config(db, payload.format_name))
+    if payload.format_config is not None:
+        config.update(validated_format_config(payload.format_config))
+    return config
+
+
 @router.post("/{resume_id}/layout/analyze", response_model=LayoutAnalyzeOut)
 def analyze_resume_layout(
     resume_id: int, payload: LayoutAnalyzeRequest, db: Session = Depends(get_db)
@@ -86,14 +110,21 @@ def analyze_resume_layout(
 
     **高度必须由浏览器提供**：版面只有真正排版之后才存在，后端没有浏览器，也不该为了
     量一个高度去引一个无头浏览器依赖。所以这里的分工是——客户端负责量，规则全在这边。
+
+    **版式由请求带上**（2026-10-21）：拖完滑块还没保存时，屏幕上那一版就是草稿值。按记录
+    值算的话，诊断面板会与预览各说各话——用户改参数、诊断整块不动，或者给出的「自动一页」
+    从一个他没在看的版式起步。
     """
     record = db.get(ResumeRecord, resume_id)
     if record is None or trash.is_deleted(record):
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
 
     measure = payload.measure
-    current_config = record_format_config(db, record)
-    room = fit_room_report(record.template, record.font_scale, current_config)
+    style = payload.template or record.template
+    # 字号按"能解析的名字"归一：非法值回落到该档默认，不让一个手写请求体换掉基准。
+    font_scale = font_scale_spec(payload.font_scale or record.font_scale)["name"]
+    current_config = _analyzed_format_config(db, record, payload)
+    room = fit_room_report(style, font_scale, current_config)
     diagnosis = diagnose(
         used_height=measure.used_height,
         page_content_height=measure.page_content_height,
@@ -102,7 +133,7 @@ def analyze_resume_layout(
     )
     # 只有真的塞不下才需要给收紧方案：放得下时给一堆"再收紧一点"只会让人白改。
     ladder = (
-        build_fit_ladder(record.template, record.font_scale, current_config)
+        build_fit_ladder(style, font_scale, current_config)
         if diagnosis.status == STATUS_OVERFLOW
         else []
     )

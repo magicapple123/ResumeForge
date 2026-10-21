@@ -6,9 +6,12 @@
 全部 CSS 解析 helper（_selector_block / _fs_scale / _section_title_* / _normalize_hex /
 _RATIO_SELECTORS / _COLOR_KEYS）随用例收在本文件。
 """
+
 import re
 
+import pytest
 from app.services.resume.resume_templates import (
+    FONT_SCALES,
     RESUME_TEMPLATES,
     TEMPLATE_LAYOUT_DEFAULTS,
     TEMPLATES_DIR,
@@ -74,7 +77,9 @@ def test_template_layout_defaults_match_the_template_files():
         assert line_height, f"{spec['file']} 里没找到行高"
         assert float(line_height.group(1)) == defaults["line_height"], name
 
-        gap = re.search(r"\.section\s*\{\s*margin-bottom:\s*calc\(var\(--fs\)\s*\*\s*([\d.]+)\)", css)
+        gap = re.search(
+            r"\.section\s*\{\s*margin-bottom:\s*calc\(var\(--fs\)\s*\*\s*([\d.]+)\)", css
+        )
         assert gap, f"{spec['file']} 里没找到区块间距"
         assert float(gap.group(1)) == defaults["section_gap"], name
 
@@ -100,9 +105,7 @@ def _selector_block(css: str, selector: str) -> str:
 
 def _fs_scale(declarations: str, prop: str) -> float | None:
     """读出某条声明里的 `calc(var(--fs) * N)` 里的 N；没有该属性返回 None。"""
-    match = re.search(
-        re.escape(prop) + r":\s*calc\(var\(--fs\)\s*\*\s*([\d.]+)\)", declarations
-    )
+    match = re.search(re.escape(prop) + r":\s*calc\(var\(--fs\)\s*\*\s*([\d.]+)\)", declarations)
     return float(match.group(1)) if match else None
 
 
@@ -160,6 +163,18 @@ def test_template_vertical_gaps_and_title_style_match_the_template_files():
 
         header = _selector_block(css, ".header")
         assert _fs_scale(header, "margin-bottom") == defaults["header_gap"], name
+        # 页头内部的两段段前留白。**这两项在 PDF 里漏画过**：画完姓名就直接画意向与联系方式，
+        # 于是 PDF 页头比预览矮 3.1mm、整份内容跟着少 12mm。现在它们进注册表、被
+        # `resolve_layout` 读走、由 `_draw_resume` 用 `ln` 画出来——这条守卫让"注册表有、
+        # 模板改了没跟上"或"注册表漏了这两项"都直接变红。
+        assert (
+            _fs_scale(_selector_block(css, ".header .intent"), "margin-top")
+            == defaults["intent_gap"]
+        ), name
+        assert (
+            _fs_scale(_selector_block(css, ".header .contact"), "margin-top")
+            == defaults["contact_gap"]
+        ), name
         # 页头装饰：底边线（宽度/颜色）、padding-bottom，以及 modern 的浅底色块。
         header_border = re.search(r"border-bottom:\s*([\d.]+)px\s+solid\s+var\(--accent\)", header)
         assert (float(header_border.group(1)) if header_border else 0.0) == defaults[
@@ -249,14 +264,187 @@ def test_every_template_has_layout_defaults():
 def test_every_template_sizes_everything_from_the_fs_variable():
     """所有尺寸都必须由 `--fs` 派生，否则整份简历无法按档位整体缩放。
 
-    自动一页最细的一档就是改这一个变量：模板里若混着写死的 px，那一档就会只缩一部分
+    「自动一页」最细的一档就是改这一个变量：模板里若混着写死的 px，那一档就会只缩一部分
     文字，版面看起来"没收紧多少"——而用户完全看不出原因。
     """
     for name, spec in RESUME_TEMPLATES.items():
         css = (TEMPLATES_DIR / spec["file"]).read_text(encoding="utf-8")
-        # `--fs` 除了档位基准值，还挂着一个**版式自适应**系数：自适应靠它把整份版式真实变矮，
-        # 而不是加一层只改视觉的 transform（后者会让预览与打印的页数对不上）。
-        assert "--fs: calc({{ base_px }}px * var(--fit-scale, 1));" in css, name
+        # `--fs` 就是滑杆上的那个像素值，**字面量**、外面不许再挂任何系数
+        # （2026-10-21 用户要求"参数即呈现"：`calc(... * var(--fit-scale, 1))` 已整体删除）。
+        assert "--fs: {{ base_px }}px;" in css, name
         # 正文与标题的主要尺寸都要走 calc(var(--fs) * N)。
         assert "font-size: var(--fs);" in css, name
         assert "calc(var(--fs) *" in css, name
+
+
+# ===== 技能标签的形状（8 个模板共 5 种形态）=====
+#
+# **为什么要有这组守卫**：PDF 曾把 8 个模板的技能标签统一画成一种形状——"带底色的圆角框 +
+# 强调色文字"，比例写死 0.71 / 0.57 / 0.4。于是 classic（硬编码浅灰底、4px 圆角）、modern /
+# split（描边胶囊）、technical（左侧色条）、compact（无框 + 「·」分隔）、minimal（纯文字）、
+# editorial / elegant（无框 / 浅底）七个模板的标签，导出的 PDF 长得**和预览不一样**。现在
+# 形状由注册表的 `tag_*` 键驱动，这组守卫把它与模板 CSS 钉在一起：模板改了标签样式而注册表
+# 没跟上，PDF 与预览就又开始分叉。
+
+# 技能标签在注册表里的键（`accent_soft` 单独核对，它不是标签专属的键）。
+_TAG_KEYS = (
+    "tag_style",
+    "tag_bg",
+    "tag_fg",
+    "tag_border_px",
+    "tag_radius",
+    "tag_pad_x",
+    "tag_gap_x",
+    "tag_gap_y",
+)
+
+
+def _root_hex(css: str, var: str) -> str | None:
+    """取 `:root` 里某个颜色变量的十六进制值（3 位会展开成 6 位）；没有则返回 None。"""
+    match = re.search(re.escape(var) + r"\s*:\s*(#[0-9a-fA-F]{3,6})", css)
+    return _normalize_hex(match.group(1)) if match else None
+
+
+def _tag_style(declarations: str, css: str) -> str:
+    """由 `.skill-list li` 的声明反推标签形态（与 5 种画法一一对应）。"""
+    if "border-left:" in declarations:
+        return "left_bar"
+    if re.search(r"\bborder:", declarations):
+        return "outline"
+    if re.search(r"\bbackground:", declarations):
+        return "fill"
+    if re.search(r'\.skill-list li::after\s*\{[^}]*content:\s*"·"', css):
+        return "dot"
+    return "plain"
+
+
+def _tag_bg(declarations: str, css: str) -> str:
+    """标签底色：CSS `background` 的值；`var(--accent-soft)` 按模板 `:root` 展开成真实十六进制。"""
+    match = re.search(r"(?<!-)\bbackground:\s*(#[0-9a-fA-F]{3,6}|var\(--[a-z-]+\))", declarations)
+    if not match:
+        return "none"
+    token = match.group(1)
+    if token.startswith("var("):
+        resolved = _root_hex(css, token[len("var(") : -1])
+        assert resolved, f"模板里用了 {token} 但 `:root` 没定义它"
+        return resolved
+    return _normalize_hex(token)
+
+
+def _tag_fg(declarations: str) -> str:
+    """标签字色：`var(--accent)` → accent、`var(--text)` → body、没写 color → 继承正文（body）。"""
+    match = re.search(r"(?<!-)\bcolor:\s*(var\(--[a-z-]+\))", declarations)
+    if not match:
+        return "body"
+    token = match.group(1)
+    if token == "var(--accent)":
+        return "accent"
+    if token == "var(--muted)":
+        return "muted"
+    return "body"
+
+
+def _tag_border_px(declarations: str) -> float:
+    """边框宽度（px）：描边模板是 `border`，左侧色条模板是 `border-left`。"""
+    match = re.search(r"\bborder(?:-left)?:\s*([\d.]+)px", declarations)
+    return float(match.group(1)) if match else 0.0
+
+
+def _tag_radius(declarations: str, tag_font_ratio: float) -> float | str:
+    """圆角：CSS 是**固定 px**（`999px` 记作胶囊哨兵），注册表统一用"× 标签字号"。
+
+    `999px` 是浏览器里"圆到短边一半"的通用写法，PDF 侧画成 `height / 2`，所以用 `"pill"`
+    哨兵表达；其余的固定 px 按**标准字号档**的标签字号换算成比例——这是唯一一处"px → 比例"
+    的换算，换成 small/large 档会有 ±0.5px 的视觉误差，可接受。
+    """
+    match = re.search(r"\bborder-radius:\s*([\d.]+)px", declarations)
+    if not match:
+        return 0.0
+    radius_px = float(match.group(1))
+    if radius_px >= 99:
+        return "pill"
+    tag_px = tag_font_ratio * float(FONT_SCALES["standard"]["base_px"])
+    return radius_px / tag_px
+
+
+def _tag_padding_x(declarations: str) -> float:
+    """左右内边距（× 标签字号）：CSS 简写 `padding: 0 <X>`，纵向为 0。"""
+    match = re.search(r"\bpadding:\s*0\s+calc\(var\(--fs\)\s*\*\s*([\d.]+)\)", declarations)
+    return float(match.group(1)) if match else 0.0
+
+
+def _tag_margins(declarations: str) -> tuple[float, float]:
+    """`margin: 0 <右> <下> 0` → (横向间距, 纵向间距)，单位是 × 标签字号。"""
+    match = re.search(
+        r"\bmargin:\s*0\s+calc\(var\(--fs\)\s*\*\s*([\d.]+)\)\s+"
+        r"calc\(var\(--fs\)\s*\*\s*([\d.]+)\)\s+0",
+        declarations,
+    )
+    assert match, "`.skill-list li` 的 margin 不是 `0 <右> <下> 0` 形式"
+    return float(match.group(1)), float(match.group(2))
+
+
+def test_template_tag_shapes_match_the_template_files():
+    """技能标签的形态、底色、字色、边框、圆角与三个间距都必须与模板 CSS 一致。
+
+    期望值从注册表读、拿模板 CSS 反推后比对（不在这里再抄一份取值），理由同上面几条：
+    抄一份就等于又写了一遍"跟自己比"。PDF 曾经把 8 个模板的标签统一画成一种形状，这组
+    守卫是那次返工留下的刻度——模板改了 `.skill-list li` 而注册表没跟上，立刻变红。
+    """
+    for name, spec in RESUME_TEMPLATES.items():
+        css = (TEMPLATES_DIR / spec["file"]).read_text(encoding="utf-8")
+        defaults = TEMPLATE_LAYOUT_DEFAULTS[name]
+        declarations = _selector_block(css, ".skill-list li")
+
+        for key in _TAG_KEYS:
+            assert key in defaults, f"{name} 的注册表缺 {key}"
+
+        assert _tag_style(declarations, css) == defaults["tag_style"], name
+        assert _tag_bg(declarations, css) == (
+            "none" if defaults["tag_bg"] == "none" else _normalize_hex(str(defaults["tag_bg"]))
+        ), name
+        assert _tag_fg(declarations) == defaults["tag_fg"], name
+        assert _tag_border_px(declarations) == defaults["tag_border_px"], name
+
+        radius = _tag_radius(declarations, float(defaults["tag_font_ratio"]))
+        if isinstance(defaults["tag_radius"], str):
+            assert radius == defaults["tag_radius"], name
+        else:
+            assert radius == pytest.approx(float(defaults["tag_radius"]), abs=5e-3), name
+
+        assert _tag_padding_x(declarations) == defaults["tag_pad_x"], name
+        gap_x, gap_y = _tag_margins(declarations)
+        assert gap_x == defaults["tag_gap_x"], name
+        assert gap_y == defaults["tag_gap_y"], name
+
+        # `--accent-soft`：页头底色块与部分模板的标签底色都用它。CSS 没定义这个变量的模板
+        # （classic / compact / editorial）在注册表里写 `"none"`，PDF 侧回落到
+        # `soft_accent(accent)`——"有没有这个键"本身就是需要守住的事实。
+        resolved_soft = _root_hex(css, "--accent-soft")
+        if resolved_soft is None:
+            assert defaults["accent_soft"] == "none", name
+        else:
+            assert resolved_soft == _normalize_hex(str(defaults["accent_soft"])), name
+
+        # compact 的「·」分隔符是标签形态的一部分（`tag_style="dot"`），连同"最后一项不加"
+        # 的 `:last-child` 重置一起核对——只删掉 `:last-child` 那条，每个标签后面都会拖一个点。
+        if defaults["tag_style"] == "dot":
+            after = _selector_block(css, ".skill-list li::after")
+            assert 'content: "·"' in after, name
+            assert "color: var(--line)" in after, name
+            last = _selector_block(css, ".skill-list li:last-child::after")
+            assert 'content: ""' in last, name
+
+
+def test_template_list_indent_matches_the_template_files():
+    """列表缩进 `ul { padding-left: calc(var(--fs) * N) }` 的 N 必须进注册表。
+
+    PDF 侧此前把列表缩进写死成 3.0mm、与字号无关，而 8 个模板的真实值是 1.25（split）~
+    1.43（classic / modern / editorial）。1.6~2.3mm 的行宽差在窄栏里会直接改变折行行数——
+    实测 split 两栏比草稿矮 9.2mm、单栏 A_default 矮 3.0mm，主要就是这一项。这条守卫让
+    "模板改了 `ul` 的 padding-left 而注册表没跟上"立刻变红。
+    """
+    for name, spec in RESUME_TEMPLATES.items():
+        css = (TEMPLATES_DIR / spec["file"]).read_text(encoding="utf-8")
+        block = _selector_block(css, "ul")
+        assert _fs_scale(block, "padding-left") == TEMPLATE_LAYOUT_DEFAULTS[name]["li_indent"], name

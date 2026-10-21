@@ -10,6 +10,8 @@ from __future__ import annotations
 from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile
 
 from ..services.pdf_exporter import reset_font_cache
+from ..services.pdf_exporter.font_subset import reset as reset_font_subset_cache
+from ..services.pdf_preview_cache import clear as clear_preview_cache
 from ..services.resume_font_embed import active_web_font
 from ..services.user_fonts import (
     MAX_BYTES,
@@ -24,6 +26,19 @@ from ..services.user_fonts import (
 )
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+
+def _invalidate_render_caches() -> None:
+    """字体身份变了：三份缓存**都要**失效。
+
+    - `reset_font_cache()`：决定"下次导出用哪个字体"；
+    - `clear_preview_cache()`：把上一次排好的 PDF 字节丢掉（缓存键里没有字体文件本身）；
+    - `font_subset.reset()`：丢掉"按旧字体裁出来的子集"——它的指纹里有字体 mtime，
+      正常换字体不会串，但留着旧文件只是垃圾。
+    """
+    reset_font_cache()
+    clear_preview_cache()
+    reset_font_subset_cache()
 
 
 def _require_loopback(request: Request) -> None:
@@ -102,7 +117,7 @@ async def upload_resume_font(request: Request, file: UploadFile = File(...)) -> 
     except FontError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # 字体文件变了，PDF 导出的探测缓存必须失效，否则新字体会"上传成功但不生效"。
-    reset_font_cache()
+    _invalidate_render_caches()
     return item
 
 
@@ -116,7 +131,7 @@ def activate_resume_font(payload: dict, request: Request) -> dict:
         set_active(str(name) if name else None)
     except FontError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    reset_font_cache()
+    _invalidate_render_caches()
     return {"active": active_font_name()}
 
 
@@ -142,4 +157,4 @@ def remove_resume_font(name: str, request: Request) -> None:
         delete_font(name)
     except FontError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    reset_font_cache()
+    _invalidate_render_caches()

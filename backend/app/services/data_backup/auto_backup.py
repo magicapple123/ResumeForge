@@ -1,9 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """自动备份：按间隔滚动保留最近 N 份数据库快照，失败按短档退避重试。
 
-用户数据只有 SQLite 一处（见包 docstring），而"记得手动备份"是最不可靠的一环：
-后台调度（``scheduler.py``）周期性调用 ``run_auto_backup_if_due``，到期就用与手动
-导出一致的 ``backup_sqlite_database`` 快照一份，并按份数轮转删除最旧的。
+**自动备份只保护数据库**：它拍的是 SQLite 快照，**不含** ``user_files/``、
+``referral_images/`` 等磁盘附件，也不含 ``fonts/`` 里的自定义字体。换机器或重建数据
+目录时，要拿到完整的一套（库 + 附件 + 字体 + 全局配置），必须用设置页的
+「导出数据集 / 导出全部数据集」——这两条链路的覆盖面由 ``coverage.py`` 兜底。
+状态接口用 ``coverage: "database_only"`` 把这个边界明说出来，界面据此写文案。
+
+而"记得手动备份"是最不可靠的一环：后台调度（``scheduler.py``）周期性调用
+``run_auto_backup_if_due``，到期就用与手动导出一致的 ``backup_sqlite_database``
+快照一份，并按份数轮转删除最旧的。
 
 设计要点（RF-05：从"尝试过"升级为"确认被保护"）：
 

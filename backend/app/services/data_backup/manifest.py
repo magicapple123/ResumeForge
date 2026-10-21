@@ -16,6 +16,7 @@ from sqlalchemy import Engine, text
 from ...config import get_settings
 from ...database_migrations import _APPLICATION_TABLES, build_alembic_config
 from .paths import (
+    BACKUP_FORMAT_GLOBAL_ASSETS,
     BACKUP_FORMAT_GLOBAL_CONFIG,
     BACKUP_FORMAT_MULTI_DATASET,
     BACKUP_FORMAT_WITH_KEYS,
@@ -69,6 +70,8 @@ def build_manifest(
     asset_manifest: dict[str, Any] | None = None,
     snapshot: Path | None = None,
     global_llm_profiles: int | None = None,
+    global_assets_fonts: int | None = None,
+    uncovered: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """生成包内清单。
 
@@ -76,15 +79,21 @@ def build_manifest(
     密钥时仍是格式 1，老版本照常可读；带上其余数据集标 2（老版本读不懂 ``datasets/``
     这一段，放行会让用户以为"恢复成功"而实际只恢复了一份）；用户勾选"包含 API Key"
     时标 3——这个选项老版本完全没有对应逻辑，必须让它们拿到"请先升级"的明确信号，
-    所以它的优先级最高。
+    所以它的优先级最高。5 = 带全局模型配置，6 = 再带上字体（P2）；**只有真写了字体
+    才标 6**，字体目录为空时保持 5，不能让格式号虚升。
 
     ``asset_manifest`` 是活动数据集的资产清单（PR-15）：段内自带 ``manifest_version``。
     老版本读到这个**额外的段**会忽略——DB 照常恢复，只是不带附件（与老版本本来的
     行为一致，不会更差）；当前版本的导入侧按段内版本号 fail-closed 处理。
+
+    ``uncovered`` 是导出侧的兜底扫描结果（P3）：只把**名字与字节数**写进清单，
+    ``uncovered_count`` 让界面不必遍历就能报数。
     """
     settings = get_settings()
     extras = list(datasets)
-    if global_llm_profiles is not None:
+    if global_assets_fonts is not None:
+        format_version = BACKUP_FORMAT_GLOBAL_ASSETS
+    elif global_llm_profiles is not None:
         format_version = BACKUP_FORMAT_GLOBAL_CONFIG
     elif api_key_included:
         format_version = BACKUP_FORMAT_WITH_KEYS
@@ -115,6 +124,17 @@ def build_manifest(
     if global_llm_profiles is not None:
         # 条数放进清单：导出侧响应头与导入确认都要能不解压就说出"带了几条配置"。
         manifest["global_llm"] = {"profiles": global_llm_profiles}
+    if global_assets_fonts is not None:
+        # 与 global_llm 同构：清单只放**摘要**（版本 + 字体数），细节在
+        # ``global_assets.json`` 成员里。导入侧按这里的 version fail-closed。
+        manifest["global_assets"] = {"version": 1, "fonts": int(global_assets_fonts)}
+    if uncovered is not None:
+        # P3：数据目录里"既不在包内、也不在已知不覆盖名单"的顶层项。段只增不改，
+        # 旧版本读到会忽略（它们照样能恢复数据库），所以资产清单版本号不动。
+        manifest["uncovered"] = list(uncovered.get("items") or [])
+        manifest["uncovered_count"] = int(uncovered.get("count") or 0)
+        if uncovered.get("truncated"):
+            manifest["uncovered_truncated"] = True
     if missing_tables:
         # 旧库缺表（H1）：计数按 0 记，同时把名单写进清单，导入侧据此知道"这是历史库，
         # 不是导出失败"。导入后迁移会把这些表补出来，0 行的校验自然通过。

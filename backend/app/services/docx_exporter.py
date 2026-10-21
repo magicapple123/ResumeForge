@@ -7,9 +7,11 @@
 ``resume_templates`` 读（与 PDF 同一来源），本模块只负责把结构化简历按这套版式写进
 ``Document``。
 
-分页（Word 没有 fpdf 那种可回读的页数）用与 PDF **同一套 ``decide_fit_scale`` 口径**估算：
-连续内容高 ÷ 每页可用高，再按 ``page_limit`` 做一页适配。这个估算是"连续流"模型，与
-Word 的自动分页一致，因此与 PDF 的真实页数差在 ±1 内（容差断言见 ``test_docx_exporter.py``）。
+分页（Word 没有 fpdf 那种可回读的页数）用与 PDF **同一套连续流模型**估算：
+连续内容高 ÷ 每页可用高。这个估算是"连续流"模型，与 Word 的自动分页一致，因此与
+PDF 的真实页数差在 ±1 内（容差断言见 ``test_docx_exporter.py``）。**不缩字号**
+（2026-10-21 用户要求）：按版式参数原样写入，估算页数超过 ``page_limit`` 时标记
+``overflow``，由界面提示用户——Word 自己会顺延出更多页，文档里不会丢内容。
 没有可用的中文字体时**仍能生成**（python-docx 只写字体名，渲染由 Word 完成），但无法做
 页数估算，此时 ``pages=None``。
 """
@@ -34,7 +36,6 @@ from .pdf_exporter import (
     _photo_bytes,
     _resolve_font_paths,
     crop_image_to_cover,
-    decide_fit_scale,
     measure_content_height,
     resolve_accent,
     resolve_layout,
@@ -51,11 +52,10 @@ _MUTED_COLOR = (107, 114, 128)
 
 @dataclass(frozen=True)
 class ResumeDOCX:
-    """生成好的 Word 文档，连同估算页数与一页适配结果（语义与 ``ResumePDF`` 对齐）。"""
+    """生成好的 Word 文档，连同估算页数与"装不装得下"的结论（语义与 ``ResumePDF`` 对齐）。"""
 
     content: bytes
     pages: int | None
-    scale: float = 1.0
     overflow: bool = False
 
 
@@ -130,7 +130,7 @@ def _entry_head(doc, left: str, right: str, *, base: float, layout) -> None:
 def _header(
     doc, resume: ResumeContent, *, accent: tuple[int, int, int], layout, include_photo: bool
 ) -> None:
-    base = layout.scaled_base_px
+    base = layout.base_px
     photo = _photo_bytes(resume.photo) if (resume.photo and include_photo) else None
     if photo:
         try:
@@ -306,7 +306,7 @@ def _build_document(
     include_photo: bool,
     section_order: list[str],
 ) -> bytes:
-    base = layout.scaled_base_px
+    base = layout.base_px
     doc = Document()
 
     # 页边距：与 PDF 同一份 layout.margin_mm——由 `pdf_exporter.layout._resolve_margin_mm`
@@ -348,6 +348,10 @@ def build_resume_docx(
     版式全部来自 ``ResumeLayout``（复用 PDF 的同一来源），页数用连续流模型估算，与
     PDF 的真实页数差在 ±1 内。没有中文字体时仍能生成文档，只是 ``pages=None``。
 
+    **不缩字号**（2026-10-21 用户要求）：估算页数超过 ``page_limit`` 时只标记 ``overflow``，
+    文档本身按用户设定的版式写入——Word 会自己顺延页数，不会丢内容（与 PDF 的"截断"不同，
+    所以界面提示要说清是"超过所选页数"，而不是"超出部分不会显示"）。
+
     ``margin_mm`` 与 PDF 同一条规则：页边距权威是 ``format_config.page_padding``，
     ``margin_mm`` 只在没给 ``page_padding`` 时作回落值（见 ``layout._resolve_margin_mm``）。
     """
@@ -368,61 +372,51 @@ def build_resume_docx(
     )
     limit = max(1, min(int(page_limit), MAX_RESUME_PAGES))
 
-    fit_scale, pages, overflow = _estimate_fit(
+    pages, overflow = _estimate_pages(
         resume,
         accent=accent,
         layout=layout,
         page_limit=limit,
         include_photo=include_photo,
     )
-    final_layout = layout.with_fit_scale(fit_scale)
     content = _build_document(
         resume,
         accent=accent,
-        layout=final_layout,
+        layout=layout,
         include_photo=include_photo,
         section_order=resolved_section_order(overrides),
     )
-    return ResumeDOCX(content=content, pages=pages, scale=fit_scale, overflow=overflow)
+    return ResumeDOCX(content=content, pages=pages, overflow=overflow)
 
 
-def _estimate_fit(
+def _estimate_pages(
     resume: ResumeContent,
     *,
     accent: tuple[int, int, int],
     layout,
     page_limit: int,
     include_photo: bool,
-) -> tuple[float, int | None, bool]:
-    """复用 ``decide_fit_scale`` 的同一口径估 Word 页数与缩放。
+) -> tuple[int | None, bool]:
+    """估算 Word 页数与"是否超过所选页数"。
 
-    Word 自动分页是"连续流"，所以页数用 ``连续内容高 ÷ 每页可用高`` 估算；一页适配与
-    PDF 共用 ``decide_fit_scale``（只缩字号派生尺寸）。没有中文字体时返回 ``pages=None``。
+    Word 自动分页是"连续流"，所以页数用 ``连续内容高 ÷ 每页可用高`` 估算——与 PDF 的
+    真实分页共用同一份版式与同一段测量代码。没有中文字体时返回 ``(None, False)``：
+    页数未知不等于"装得下"，但也不该凭空报溢出。
     """
     fonts = _resolve_font_paths()
     if fonts is None:
-        return 1.0, None, False
+        return None, False
     regular, bold = fonts
-    usable_per_page = layout.usable_height_per_page
-
-    def height_at(value: float) -> float:
-        return measure_content_height(
-            resume,
-            accent=accent,
-            layout=layout.with_fit_scale(value),
-            regular=regular,
-            bold=bold,
-            include_photo=include_photo,
-        )
-
-    def pages_at(value: float) -> int:
-        return max(1, math.ceil(height_at(value) / usable_per_page))
-
-    fit_scale, overflow = decide_fit_scale(
-        pages_at, height_at, page_limit=page_limit, usable_height=usable_per_page * page_limit
+    height = measure_content_height(
+        resume,
+        accent=accent,
+        layout=layout,
+        regular=regular,
+        bold=bold,
+        include_photo=include_photo,
     )
-    pages = pages_at(fit_scale)
-    return fit_scale, pages, overflow
+    pages = max(1, math.ceil(height / layout.usable_height_per_page))
+    return pages, pages > page_limit
 
 
 __all__ = ["DOCX_FONT", "ResumeDOCX", "build_resume_docx"]

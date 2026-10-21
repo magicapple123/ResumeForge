@@ -36,6 +36,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
+from .asset_categories import ASSET_CATEGORIES
 from .asset_safety import safe_asset_name, safe_asset_path
 
 logger = logging.getLogger(__name__)
@@ -44,8 +45,9 @@ logger = logging.getLogger(__name__)
 # 不能安静地按自己认识的形状误读。
 ASSET_MANIFEST_VERSION = 1
 
-# 资产类别：目录名同时是磁盘目录名（相对数据库所在目录）与清单/包内前缀。
-ASSET_CATEGORIES = ("user_files", "referral_images")
+# 资产类别（目录名同时是磁盘目录名与清单/包内前缀）的唯一定义在
+# ``asset_categories.py``——这里是 re-export，既有的 ``from .asset_manifest import
+# ASSET_CATEGORIES`` 调用面因此不变，而 ``paths.py`` 也能拿到**同一个对象**。
 
 _HASH_CHUNK = 1 << 20  # 1 MB：大附件逐块读，不整份载入内存
 

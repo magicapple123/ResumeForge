@@ -42,26 +42,57 @@ def test_every_builtin_template_renders(name):
 
 
 @pytest.mark.parametrize("name", sorted(RESUME_TEMPLATES))
-def test_every_template_fits_by_layout_not_by_transform(name):
-    """逐模板钉住"分页口径唯一"：自适应必须靠**版式**（`--fit-scale` 吸进 `--fs`），
-    不能靠 `transform`。
+def test_every_template_sets_the_font_size_verbatim(name):
+    """逐模板钉住"字号 = 参数"：**没有**任何整体缩放的挂钩。
 
-    这条是用户实测反馈"预览一页装得下、浏览器打印超出一页"的回归防线。transform 只改视觉、
-    不改版式，而打印/导出按未缩放的版式分页——只要哪个模板（或哪个新同事）把 transform 加
-    回来，预览和打印就又开始各说各话。所以断言要**按模板逐个**做，而不是抽查一个：
-    "只有一个模板坏掉"恰恰是最容易漏掉的形态。
+    历史背景：这里原来断言 `--fs: calc(基准 * var(--fit-scale, 1))`，因为模板靠这个变量把
+    整份简历按比例压小，好塞进页数上限。代价是用户调的 18px 在纸面上可能是 9px——滑杆与
+    呈现不一致（2026-10-21 用户明确要求改掉）。现在 `--fs` 就是基准字号的字面量。
+
+    同时保留原来的两条防线：
+    - 不许用 `transform: scale()` 做"只改视觉、不改版式"的缩放（那会让打印/导出再次分页
+      与预览不一致）；
+    - 分页的唯一来源是唯一的 `@page` 规则。
     """
     html = render_html(sample_resume_content(), template=name)
 
-    # ① 缩放经 CSS 变量进入版式
-    assert "--fit-scale" in html
-    assert "calc({{ base_px }}px * var(--fit-scale, 1))" not in html  # 模板不该残留未渲染的变量
-    assert "* var(--fit-scale, 1)" in html
+    # ① 字号是字面量，且不再有任何缩放变量
+    assert "--fit-scale" not in html
+    assert "calc({{ base_px }}px" not in html  # 模板不该残留未渲染的变量
     # ② 不再有"只改视觉"的 transform 缩放，而且是整个文档里都没有
     assert "style.transform" not in html
     assert "transform = `scale(" not in html
     # ③ 分页的唯一来源：只有一份 @page 规则
     assert html.count("@page { size: A4; margin: 0; }") == 1
+
+
+@pytest.mark.parametrize("name", sorted(RESUME_TEMPLATES))
+def test_overflow_probe_never_touches_the_layout(name):
+    """模板里的脚本只准**量**，不准改字号/行距/页边距。
+
+    2026-10-21 之前这段脚本会迭代地把 `--fit-scale` 压到 0.5，是"字号被悄悄缩小"的实现处。
+    这条断言盯住它不许回来：既不能有 `setProperty`（改样式），也不能再出现缩放系数。
+    """
+    html = render_html(sample_resume_content(), template=name)
+
+    assert "dataset.overflow" in html  # 探针确实在
+    assert 'setProperty("--fit-scale"' not in html
+    assert "setProperty(" not in html
+    assert "minScale" not in html
+
+
+@pytest.mark.parametrize("name", sorted(RESUME_TEMPLATES))
+def test_overflow_probe_stands_down_when_preview_splits_into_columns(name):
+    """多列预览里必须跳过测量。
+
+    预览把连续流切成 N 个 A4 列后 `body.scrollHeight` 只剩一页高（高度被列折叠了），
+    这时量出来的 `data-overflow` 没有意义；列形态由前端自己量（`layout.ts`）。
+    守卫必须写在赋值之前，否则会先写一个错的结论再退出。
+    """
+    html = render_html(sample_resume_content(), template=name)
+
+    assert 'page.dataset.previewColumns === "1"' in html
+    assert html.index('page.dataset.previewColumns === "1"') < html.index("dataset.overflow")
 
 
 @pytest.mark.parametrize("name", sorted(RESUME_TEMPLATES))
@@ -144,9 +175,9 @@ def test_format_config_scales_font_and_accent():
         format_config={"font_scale_adjust": 1.1, "accent": "#abcdef"},
     )
     # 标准字号 14px × 1.1 = 15.4px，同时强调色被覆盖。
-    # 基准字号外面套一层 `calc(... * var(--fit-scale, 1))`：那是**版式自适应**的挂钩，
-    # 默认 1 时结果与不加完全相同（所以这里断言的是"基准值仍按这一档算出来"）。
-    assert "--fs: calc(15.4px * var(--fit-scale, 1))" in html
+    # 字号是**字面量**、外面没有 `calc(--fit-scale)`：参数与纸面必须一比一
+    # （2026-10-21 起不再有任何整体缩放）。
+    assert "--fs: 15.4px" in html
     assert "--accent: #abcdef" in html
 
 
@@ -165,7 +196,7 @@ def test_font_scale_adjust_has_no_css_mapping():
         font_scale="standard",
         format_config={"font_scale_adjust": 0.9},
     )
-    assert "--fs: calc(12.6px * var(--fit-scale, 1))" in html
+    assert "--fs: 12.6px" in html
 
 
 def test_sanitize_removes_scripts_and_adds_csp():
@@ -398,7 +429,7 @@ def test_font_scale_adjust_lower_bound_matches_the_five_pixel_slider():
     html = render_html(
         sample_resume_content(), font_scale="small", format_config={"font_scale_adjust": 0.455}
     )
-    assert "--fs: calc(5.0px * var(--fit-scale, 1));" in html
+    assert "--fs: 5.0px;" in html
 
 
 def test_templates_catalog_exposes_profile_section_order(client):

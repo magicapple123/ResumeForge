@@ -35,10 +35,13 @@ from ...dataset_registry import (
     read_metadata,
 )
 from .asset_manifest import file_digest
+from .coverage import data_root, scan_uncovered
 from .export import create_backup_archive
+from .global_assets import build_global_assets_payload, write_global_assets_members
 from .global_config import build_global_llm_payload, write_global_llm_member
 from .paths import (
     ARCHIVE_DATASETS_DIRNAME,
+    BACKUP_FORMAT_GLOBAL_ASSETS,
     BACKUP_FORMAT_GLOBAL_CONFIG,
     BACKUP_FORMAT_NESTED_COLLECTION,
     MANIFEST_MEMBER,
@@ -57,11 +60,14 @@ def create_collection_archive(
     extras: Sequence[ExtraDatabase] = (),
     include_api_keys: bool = False,
     include_global_llm: bool = False,
+    include_global_assets: bool = False,
 ) -> Path:
     """生成格式 4 的嵌套整包并返回路径；调用方负责在响应结束后删除。
 
     活动数据集与 ``extras`` 里的每一份各生成一份**完整单数据集包**；外层只负责
     装包与逐份记录 sha256（导入侧据此隔离"坏的那一份"，不牵连同包里的其它份）。
+    全局成员（模型配置、字体）**只在最外层带一次**——它们是跨数据集的，塞进子包
+    会让同一份配置在包里出现 N 次，恢复时互相覆盖。
     """
     staging_dir.mkdir(parents=True, exist_ok=True)
     work = staging_dir / f"collection-{secrets.token_hex(8)}"
@@ -100,9 +106,18 @@ def create_collection_archive(
             else None
         )
         global_count = len(global_payload["profiles"]) if global_payload is not None else None
-        manifest = _collection_manifest(built, active_id, global_llm_profiles=global_count)
+        assets_payload = build_global_assets_payload() if include_global_assets else None
+        assets_count = len(assets_payload["fonts"]) if assets_payload is not None else None
+        manifest = _collection_manifest(
+            built,
+            active_id,
+            global_llm_profiles=global_count,
+            global_assets_fonts=assets_count,
+            uncovered=scan_uncovered(data_root(bind)),
+        )
         with zipfile.ZipFile(archive_path, "x", zipfile.ZIP_DEFLATED) as archive:
             write_global_llm_member(archive, global_payload)
+            write_global_assets_members(archive, assets_payload)
             archive.writestr(MANIFEST_MEMBER, json.dumps(manifest, ensure_ascii=False, indent=2))
             archive.writestr(README_MEMBER, _readme(manifest))
             for entry, sub_archive in built:
@@ -125,7 +140,14 @@ def _build_member(
     sub_dir = work / f"sub-{dataset_id}"
     sub_dir.mkdir(parents=True, exist_ok=True)
     try:
-        sub_archive = create_backup_archive(bind, sub_dir, include_api_keys=include_api_keys)
+        # 子包**不带**全局成员（配置/字体属于外层），也不做兜底扫描：同一份数据目录
+        # 会被每份子包各报一遍未覆盖项，那是噪音不是信息。
+        sub_archive = create_backup_archive(
+            bind,
+            sub_dir,
+            include_api_keys=include_api_keys,
+            scan_coverage=False,
+        )
     except BackupError as exc:
         # 用户点的是"导出全部"：失败时必须说清是**哪一份**，否则只能看到一句
         # "生成备份失败"而无从下手（哪份数据集、要不要先切过去处理）。
@@ -144,6 +166,10 @@ def _build_member(
         "alembic_revision": sub_manifest.get("alembic_revision"),
         "api_key_included": sub_manifest.get("api_key_included") is True,
     }
+    # P4：把子包的行数快照带到外层，导入侧才能在**解包前**核一遍"这份包有没有被改过"。
+    # 约 30 个键，体积可忽略；旧包没有这一段，导入侧跳过（行为不变）。
+    if isinstance(sub_manifest.get("tables"), dict):
+        entry["tables"] = sub_manifest["tables"]
     # 子包里的附件告警随外层清单一起走：导出接口只能从外层清单读告警（响应头），
     # 少了这一段，一份"导出时就缺附件"的整包会被界面说成完整备份。
     if isinstance(sub_manifest.get("asset_manifest"), dict):
@@ -167,14 +193,18 @@ def _collection_manifest(
     active_id: str,
     *,
     global_llm_profiles: int | None = None,
+    global_assets_fonts: int | None = None,
+    uncovered: dict | None = None,
 ) -> dict:
     settings = get_settings()
+    if global_assets_fonts is not None:
+        format_version = BACKUP_FORMAT_GLOBAL_ASSETS
+    elif global_llm_profiles is not None:
+        format_version = BACKUP_FORMAT_GLOBAL_CONFIG
+    else:
+        format_version = BACKUP_FORMAT_NESTED_COLLECTION
     manifest = {
-        "format": (
-            BACKUP_FORMAT_GLOBAL_CONFIG
-            if global_llm_profiles is not None
-            else BACKUP_FORMAT_NESTED_COLLECTION
-        ),
+        "format": format_version,
         "type": COLLECTION_TYPE,
         "app": settings.app_name,
         "app_version": settings.app_version,
@@ -186,6 +216,13 @@ def _collection_manifest(
     }
     if global_llm_profiles is not None:
         manifest["global_llm"] = {"profiles": global_llm_profiles}
+    if global_assets_fonts is not None:
+        manifest["global_assets"] = {"version": 1, "fonts": int(global_assets_fonts)}
+    if uncovered is not None:
+        manifest["uncovered"] = list(uncovered.get("items") or [])
+        manifest["uncovered_count"] = int(uncovered.get("count") or 0)
+        if uncovered.get("truncated"):
+            manifest["uncovered_truncated"] = True
     return manifest
 
 

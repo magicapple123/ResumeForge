@@ -12,8 +12,8 @@ PDF 曾经**完全忽略 `format_config`**、还内置了一套与模板不一�
 分四层验：
 1. **几何**（`skill_tag_metrics`）——比例必须与 HTML 模板的 `.skill-list li` 对齐；
 2. **折行**（`wrap_skill_tags`）——算错不会报错，只会让标签悄悄跑出页面，所以逐条钉边界；
-3. **版式合成**（`resolve_layout` / `decide_fit_scale`）——纯逻辑，逐条钉；
-4. **真实 PDF 几何**（pypdf）——行高/页边距/一页适配是否真的作用到排版上。
+3. **版式合成**（`resolve_layout`）——纯逻辑，逐条钉；
+4. **真实 PDF 几何**（pypdf）——行高/页边距是否真的作用到排版上。
 
 拆分说明：resolve/fit 与 measure/rhythm/padding 用例已迁至 test_pdf_exporter_layout.py；
 绘制行为与 overflow/一页适配/强调色用例已迁至 test_pdf_exporter_overflow.py；
@@ -21,19 +21,14 @@ PDF 曾经**完全忽略 `format_config`**、还内置了一套与模板不一�
 跨文件共用的 helper（_pdf_with_font / _text_runs / _body_lines / _hex_to_rgb /
 needs_font / _MM_TO_PT 等）按契约留在本文件，兄弟文件单向导入。
 """
-import re
+
 from io import BytesIO
 
 import pytest
 from app.schemas.resume import ResumeAward, ResumeContent
 from app.services.pdf_exporter import (
-    _FIT_MAX_PASSES,
-    _FIT_MIN_STEP,
-    _FIT_RATIO_MARGIN,
-    _FIT_TOLERANCE_MM,
     _PX_TO_MM,
     _PX_TO_PT,
-    MIN_FIT_SCALE,
     _resolve_font_paths,
     _ResumePDF,
     build_resume_pdf,
@@ -44,10 +39,7 @@ from app.services.pdf_exporter import (
     wrap_skill_tags,
 )
 from app.services.resume.resume_sample import sample_resume_content
-from app.services.resume.resume_templates import (
-    TEMPLATE_LAYOUT_DEFAULTS,
-    TEMPLATES_DIR,
-)
+from app.services.resume.resume_templates import TEMPLATE_LAYOUT_DEFAULTS
 from pypdf import PdfReader
 
 needs_font = pytest.mark.skipif(not font_available(), reason="本机没有可用的中文字体")
@@ -90,7 +82,9 @@ def _text_runs(content: bytes) -> list[tuple[float, float, float, str]]:
         # 断言强度不变。pypdf 支持内嵌 CMap 后此清理自动变成 no-op。
         text = text.replace("\x00", "")
         if text.strip():
-            runs.append((round(float(tm[4]), 3), round(float(tm[5]), 3), round(float(font_size), 4), text))
+            runs.append(
+                (round(float(tm[4]), 3), round(float(tm[5]), 3), round(float(font_size), 4), text)
+            )
 
     for page in reader.pages:
         page.extract_text(visitor_text=visit)
@@ -131,21 +125,22 @@ def _filler(chars: int) -> str:
 _MINIMAL_ACCENT = (23, 24, 26)
 
 
-def _blind_spot_resume() -> ResumeContent:
-    """一份"**连续高说装得下、真实分页却两页**"的简历——一页适配会在此说谎的场景。
+def _one_page_boundary_resume(filler_chars: int) -> ResumeContent:
+    """一份"一页适配正好在边界上"的简历：`filler_chars` 决定它装得下 / 装不下。
 
-    一段几乎填满整页的总结 + 末尾一个只有一行的奖项：结尾区块的 `ensure_space`
-    会为它**预留两行**高度，于是即便只剩一行多一点的空间也会提前换页，在第一页尾部
-    留出一段空隙。结果：连续高约 255.3mm（< 可用 261mm）却真实排成 2 页。只按连续高
-    判定的旧实现会返回 ``(scale=1.0, overflow=False)``——请求 1 页、给了 2 页、还说装得下。
+    一段几乎填满整页的总结 + 末尾一个只有一行的奖项。最小模板（`padding_mm` 18、
+    行高 1.8、`base_px` 14）下实测：1400 字 → 连续高 255.29mm、真实 1 页；
+    1430 字 → 连续高 261.96mm、真实 2 页（可用高 261.00mm）。两次之间正好跨过边界。
 
-    备注：补齐"垂直间距"（页头 / 条目 / 副行 / 列表项 / 标题下间距）后几何整体变高，原先的
-    `_filler(1450)` 已让连续高越过了可用高、不再是盲区。这里按新几何把填充长度收到 1400
-    （连续高 255.3mm），让"连续高 ≤ 可用高但真实 2 页"的盲区重新成立。
+    **2026-10-21（B3）重新取参**：此前这里用 1400 字，靠"末尾奖项的 `ensure_space`
+    固定预留两行"人为制造出"连续高说装得下、真实却两页"的盲区。B3 把列表项的预留改成
+    **整条实测高度**后，那个盲区（它本来就是多留出来的）不再成立——现在每一处预留都等于
+    它守护的内容真实高度，页面因此只在"真的放不下"时提前换页。所以这条 helper 现在用于
+    **跨边界的两个样本**（装得下 / 装不下），而不是伪造一个"连续高撒谎"的场景。
     """
     return ResumeContent(
         name="张三",
-        summary=_filler(1400),
+        summary=_filler(filler_chars),
         awards=[ResumeAward(name="校级奖学金", date="2023")],
     )
 
@@ -153,22 +148,71 @@ def _blind_spot_resume() -> ResumeContent:
 # ===== 几何 =====
 
 
+def _classic_tag_metrics(base: float, *, line_height: float | None = None):
+    """按 classic 模板的注册表值算一套标签尺寸（供下面几条用例复用）。
+
+    比例一律从 `TEMPLATE_LAYOUT_DEFAULTS` 读——`skill_tag_metrics` 不保留任何比例副本，
+    参数全由调用方传入（8 个模板的标签几何各不相同，写死一份只对 classic 成立）。
+    """
+    classic = TEMPLATE_LAYOUT_DEFAULTS["classic"]
+    return skill_tag_metrics(
+        base,
+        line_height=classic["line_height"] if line_height is None else line_height,
+        tag_ratio=classic["tag_font_ratio"],
+        pad_x=classic["tag_pad_x"],
+        gap_x=classic["tag_gap_x"],
+        gap_y=classic["tag_gap_y"],
+        radius=classic["tag_radius"],
+        border_px=classic["tag_border_px"],
+    )
+
+
 def test_tag_metrics_follow_the_html_template_ratios():
     """标签尺寸的比例来自 HTML 模板；两边对不上，PDF 与预览就又开始不一样。
 
-    模板里 `.skill-list li` 是：字号 `tag_font_ratio × --fs`、左右内边距 `0.71 × 标签字号`。
-    期望值从注册表读（它本身又被 `test_resume_layout.py` 拿模板 CSS 逐条核对过），
-    不在这里再抄一份常量——抄一份就等于又写了一遍"跟自己比"。
+    模板里 `.skill-list li` 是：字号 `tag_font_ratio × --fs`、左右内边距
+    `tag_pad_x × 标签字号`、行内间距 `tag_gap_x ×`、行间 `tag_gap_y ×`。期望值从注册表读
+    （它本身又被模板 CSS 逐条核对过），不在这里再抄一份常量——抄一份就等于又写了一遍
+    "跟自己比"。
     """
     classic = TEMPLATE_LAYOUT_DEFAULTS["classic"]
     tag_ratio = classic["tag_font_ratio"]
     base = 14.0
-    metrics = skill_tag_metrics(base, line_height=classic["line_height"], tag_ratio=tag_ratio)
+    metrics = _classic_tag_metrics(base)
 
     assert metrics.font_pt == pytest.approx(base * tag_ratio * _PX_TO_PT)
-    assert metrics.padding_x == pytest.approx(base * tag_ratio * _PX_TO_MM * 0.71)
+    assert metrics.padding_x == pytest.approx(base * tag_ratio * _PX_TO_MM * classic["tag_pad_x"])
+    assert metrics.gap_x == pytest.approx(base * tag_ratio * _PX_TO_MM * classic["tag_gap_x"])
+    assert metrics.gap_y == pytest.approx(base * tag_ratio * _PX_TO_MM * classic["tag_gap_y"])
+    # classic 没有边框；classic 的圆角 CSS 是固定 4px，注册表按标准字号折成 `tag_radius`。
+    assert metrics.border_mm == 0.0
+    assert metrics.radius == pytest.approx(base * tag_ratio * _PX_TO_MM * classic["tag_radius"])
     # 高度要能装下字号本身，否则文字会被裁掉。
     assert metrics.height > base * tag_ratio * _PX_TO_MM
+
+
+def test_pill_radius_is_half_the_tag_height():
+    """胶囊（CSS `border-radius: 999px`）画成 `height / 2`：圆到短边一半，与浏览器一致。
+
+    modern / split 的标签是胶囊，注册表里写 `"pill"` 哨兵——它不能被当成"999 倍字号"的
+    比例，否则圆角会大到把标签画成两段弧。
+    """
+    modern = TEMPLATE_LAYOUT_DEFAULTS["modern"]
+    metrics = skill_tag_metrics(
+        14.0,
+        line_height=modern["line_height"],
+        tag_ratio=modern["tag_font_ratio"],
+        pad_x=modern["tag_pad_x"],
+        gap_x=modern["tag_gap_x"],
+        gap_y=modern["tag_gap_y"],
+        radius=modern["tag_radius"],
+        border_px=modern["tag_border_px"],
+    )
+
+    assert modern["tag_radius"] == "pill"
+    assert metrics.radius == pytest.approx(metrics.height / 2)
+    # 1px 的描边换算成毫米（描边宽度不随字号缩放，CSS 里就是固定 px）。
+    assert metrics.border_mm == pytest.approx(1 * _PX_TO_MM)
 
 
 def test_tag_height_uses_the_template_line_height():
@@ -180,7 +224,7 @@ def test_tag_height_uses_the_template_line_height():
     tag_ratio = classic["tag_font_ratio"]
     base = 14.0
     for line_height in (1.5, 1.7, 1.8):
-        metrics = skill_tag_metrics(base, line_height=line_height, tag_ratio=tag_ratio)
+        metrics = _classic_tag_metrics(base, line_height=line_height)
         assert metrics.height == pytest.approx(base * tag_ratio * _PX_TO_MM * line_height)
 
 
@@ -226,41 +270,6 @@ def test_wrap_never_drops_a_tag():
     assert sorted(index for row in rows for index in row) == list(range(len(widths)))
 
 
-# ===== 与预览脚本的跨侧漂移守卫 =====
-
-
-_FIT_SCRIPT = TEMPLATES_DIR / "_resume_fit_script.j2"
-
-
-def test_fit_scale_constants_match_the_preview_script():
-    """PDF 与预览的 `--fit-scale` 是两套引擎里的两份实现，只能靠测试钉住同步。
-
-    预览脚本是 JS（`_resume_fit_script.j2`），PDF 是本模块的 Python 常量，两者无法共享
-    同一份代码——所以有人只改一边时，另一边不会跟着变，就会让"预览装得下、PDF 却溢出
-    （或反过来）"悄悄发生。这条测试直接读脚本文本、把几个魔法数逐个解析出来，与 PDF
-    侧常量做**数值比对**：期望值不是在本测试里再抄一遍，而是把两边的字面量拿来对。
-    """
-    script = _FIT_SCRIPT.read_text(encoding="utf-8")
-
-    min_scale = re.search(r"const minScale = ([\d.]+)", script)
-    max_passes = re.search(r"const maxPasses = (\d+)", script)
-    ratio_margin = re.search(r"Math\.min\([^)]*\)\s*\*\s*([\d.]+)", script)
-    min_step = re.search(r"scale - ([\d.]+)", script)
-    tolerance = re.search(r"referenceHeight \+ (\d+)", script)
-
-    assert min_scale, "脚本里没找到 minScale"
-    assert max_passes, "脚本里没找到 maxPasses"
-    assert ratio_margin, "脚本里没找到 0.995 的比例余量"
-    assert min_step, "脚本里没找到最小步长"
-    assert tolerance, "脚本里没找到 +1px 容差"
-
-    assert float(min_scale.group(1)) == MIN_FIT_SCALE
-    assert int(max_passes.group(1)) == _FIT_MAX_PASSES
-    assert float(ratio_margin.group(1)) == _FIT_RATIO_MARGIN
-    assert float(min_step.group(1)) == _FIT_MIN_STEP
-    # 容差两侧单位不同：脚本里是 1px，PDF 里是 mm。1px = _PX_TO_MM mm，换算后必须一致。
-    assert float(tolerance.group(1)) * _PX_TO_MM == pytest.approx(_FIT_TOLERANCE_MM)
-
 # ===== 强调色覆盖 =====
 
 
@@ -271,6 +280,7 @@ def _hex_to_rgb(value: str) -> tuple[int, int, int]:
         text = "".join(char * 2 for char in text)
     return (int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16))
 
+
 # ===== 端到端 =====
 
 
@@ -280,3 +290,125 @@ def test_pdf_with_skill_tags_builds():
 
     assert result.content.startswith(b"%PDF-")
     assert result.pages >= 1
+
+
+@needs_font
+def test_fitting_without_scaling_reuses_the_first_render(monkeypatch):
+    """装得下的时候只排**一遍**，不是"数页数一遍 + 出图一遍"。
+
+    2026-10-21 实测：单次渲染 0.48 秒，而精确预览在"内容 2 页、上限 1 页"时要 2.2–2.7 秒
+    ——其中一半是重复渲染。`build_resume_pdf` 现在会在"第一轮就判定装得下"时直接复用
+    那一版产物；这条用例把"复用"钉住，防止将来有人改回两遍（性能直接翻倍，而且没人会
+    在功能测试里发现）。
+
+    计数落在 `_draw_resume` 上：它是"真排一遍"的唯一入口，比计时稳定得多。
+    """
+    from app.services.pdf_exporter import fit as fit_module
+
+    calls: list[int] = []
+    original = fit_module._draw_resume
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(fit_module, "_draw_resume", counting)
+
+    # sample 简历在 3 页上限下本来就装得下 → 走复用分支。
+    result = build_resume_pdf(sample_resume_content(), template="classic", page_limit=3)
+
+    assert result.pages <= 3
+    assert result.overflow is False
+    assert result.pages_needed == result.pages
+    assert len(calls) == 1, f"装得下时应当只排一遍，实际排了 {len(calls)} 遍"
+
+
+# ===== 页头字段（与预览同集合）=====
+
+
+@needs_font
+def test_pdf_header_contact_keeps_every_field_the_preview_renders():
+    """页头联系方式必须包含预览里的**全部六个**字段，一个都不能少。
+
+    预览的 `_resume_sections.j2` 在 `.contact` 里依次渲染 phone / email / city / birth_year /
+    `GitHub：…` / `主页：…`；PDF 侧此前只拼了前四个，GitHub 与主页整段从导出的文件里消失
+    （用 pypdf 提取文本确认过：预览有、PDF 没有）。这里从**真实 PDF 首页**读回文本逐字段核对，
+    而不是断言拼接用的那个字符串——后者只能证明"我拼对了"，不能证明"纸上真的有"。
+    """
+    resume = ResumeContent(
+        name="张三",
+        phone="139-0000-0000",
+        email="zhangsan@example.com",
+        city="杭州",
+        birth_year="1998",
+        github="github.com/zhangsan",
+        personal_website="zhangsan.dev",
+        summary="一句话总结，用来占住一页的下半部分。",
+    )
+    result = build_resume_pdf(resume, template="classic", page_limit=1, font_scale="standard")
+
+    first_page = "".join(
+        page.extract_text() or "" for page in PdfReader(BytesIO(result.content)).pages
+    )
+    # 提取里可能夹 NUL（见 `_text_runs`）与折行空白；联系方式会折成两行，所以整串去空白再比对。
+    compact = "".join(first_page.replace("\x00", "").split())
+
+    for value in (
+        "139-0000-0000",
+        "zhangsan@example.com",
+        "杭州",
+        "1998",
+        "GitHub：github.com/zhangsan",
+        "主页：zhangsan.dev",
+    ):
+        assert value in compact, f"PDF 页头缺少联系方式字段：{value!r}"
+
+
+# ===== 正文 / 辅助文字颜色由模板决定 =====
+
+
+@needs_font
+def test_text_colors_come_from_the_template_not_from_a_module_constant(monkeypatch):
+    """同一份简历用 minimal 与 technical 导出，PDF 里的文字颜色必须**不同**。
+
+    这是"模板 `:root` 的 `--text` / `--muted` 对 PDF 完全无效"这个 bug 的回归防线：旧实现
+    把正文色写死在 `layout._BODY_TEXT`，两个模板导出的 PDF 里 `set_text_color` 的调用序列
+    逐项相同（都是 `#1f2937` / `#6b7280`），这条断言会直接失败。
+
+    期望色从注册表读（minimal `#17181a`、technical `#1c2430` / `#5d6b7a`），不写字面量。
+    抓 `set_text_color` 而不是解析 PDF 内容流：一个是"渲染器真的要了什么色"，另一个还要
+    额外处理颜色空间的编码细节，前者更接近这条 bug 的成因。
+    """
+    seen: list[tuple[int, int, int]] = []
+    original = _ResumePDF.set_text_color
+
+    def recording(self, *args):  # noqa: ANN001, ANN002 - 只是记录 fpdf2 的调用
+        if len(args) == 3:
+            seen.append((int(args[0]), int(args[1]), int(args[2])))
+        return original(self, *args)
+
+    monkeypatch.setattr(_ResumePDF, "set_text_color", recording)
+
+    resume = ResumeContent(
+        name="张三",
+        job_intent="后端开发",
+        phone="13800001234",
+        summary="一句话总结，用来占住一页的下半部分。",
+    )
+    used: dict[str, set[tuple[int, int, int]]] = {}
+    for name in ("minimal", "technical"):
+        seen.clear()
+        build_resume_pdf(resume, template=name, page_limit=1, font_scale="standard")
+        used[name] = set(seen)
+
+    minimal_text = _hex_to_rgb(TEMPLATE_LAYOUT_DEFAULTS["minimal"]["text"])
+    technical_text = _hex_to_rgb(TEMPLATE_LAYOUT_DEFAULTS["technical"]["text"])
+    technical_muted = _hex_to_rgb(TEMPLATE_LAYOUT_DEFAULTS["technical"]["muted"])
+
+    assert minimal_text in used["minimal"]
+    assert technical_text in used["technical"]
+    assert technical_muted in used["technical"]
+    # 关键：两个模板的正文色**互不出现在对方**的绘制调用里。
+    assert minimal_text not in used["technical"]
+    assert technical_text not in used["minimal"]
+    assert minimal_text != technical_text, "两个模板的 --text 相同就测不出这条"

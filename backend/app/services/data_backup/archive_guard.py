@@ -12,13 +12,16 @@ from typing import Any, BinaryIO
 from weakref import WeakKeyDictionary
 
 from ...config import get_settings
+from .asset_categories import ASSET_CATEGORIES
 from .asset_safety import asset_name_key, safe_asset_name
 from .paths import BackupError
 
 MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 20_000
 _HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
-_CATEGORIES = ("user_files", "referral_images")
+# 资产类别只有一份定义（``asset_categories``）：这里再手写一遍就等于给自己留一个
+# "加类别忘了改这里，导入时清单段被静默忽略"的坑。
+_CATEGORIES = ASSET_CATEGORIES
 _CHUNK_BYTES = 1 << 20
 _VALIDATED_READERS: WeakKeyDictionary[zipfile.ZipFile, int] = WeakKeyDictionary()
 

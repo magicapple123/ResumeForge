@@ -103,8 +103,9 @@ def test_a_custom_style_template_reaches_the_rendered_html():
     html = render_html(sample_resume_content(), template_html=custom)
 
     assert SENTINEL in html
-    # 自制模板同样要拿到版式自适应脚本，否则它的预览与打印会对不上。
-    assert "--fit-scale" in html
+    # 自制模板同样要拿到溢出探针，否则它导出的单文件 HTML 无法回答"超页了没有"。
+    # 探针只写 `dataset.overflow`，不改任何样式（2026-10-21 起不再自动缩字号）。
+    assert "dataset.overflow" in html
     # 正文片段也要真的渲染进去（而不是只出了一张空壳）。
     assert "专业技能" in html
 

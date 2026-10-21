@@ -27,6 +27,12 @@ def test_http_client_does_not_log_full_request_urls_at_info():
     assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
 
 
+def test_font_tools_does_not_flood_the_log_when_subsetting():
+    """精确预览每改一次版式就排一遍 PDF，fontTools 的逐表 INFO 会把业务日志冲掉。"""
+    assert app_main.app is not None
+    assert logging.getLogger("fontTools").getEffectiveLevel() >= logging.WARNING
+
+
 async def _collect_response(middleware, scope, request_messages):
     sent = []
 

@@ -98,7 +98,7 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "批量选择与批量删除": ("batch_selection",),
     "通用简历": ("general_resume",),
     "截图与文档识别": ("recognition",),
-    "多格式导出": ("export_formats", "watermark", "redact"),
+    "多格式导出": ("export_formats", "watermark", "redact", "resume_exact_preview"),
     "离线分享包": ("share_package",),
     "首页": ("home_shortcuts", "home_todo"),
     "界面细节": ("ui_details", "navigation_visibility"),

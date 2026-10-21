@@ -87,12 +87,18 @@ def short_zh() -> ResumeContent:
 
 
 def short_en() -> ResumeContent:
-    """1 页英文样本：长公司名、长链接、长 bullet（ASCII 无中文字体路径）。"""
+    """1 页英文样本：长公司名、长链接、长 bullet（ASCII 无中文字体路径）。
+
+    **必须带 `github`**：页头的 `GitHub：…` 是 `_resume_sections.j2` 与 PDF `_draw_resume`
+    都单独拼的一段，此前黄金矩阵里没有任何 case 填 github（只有 `personal_website`），于是
+    `GitHub：` 这个前缀在 PDF 里断掉也不会有人发现。探针与指纹都锁住它。
+    """
     return ResumeContent(
         name="Alex Johnson",
         phone="13900005678",
         email="alex.johnson@example.com",
         city="Hangzhou",
+        github="https://github.com/alex-johnson-dev",
         job_intent="Senior Backend Engineer",
         summary="Ten years of backend engineering across high-throughput commerce systems.",
         experience=[
@@ -266,6 +272,13 @@ def _semantic_text(fmt: str, content: bytes) -> str:
         return re.sub(r"<[^>]+>", "", xml)
     text = content.decode("utf-8")
     if fmt == "html":
+        # 版式与行为（`<style>` / `<script>`）不是"正文"。
+        #
+        # 指纹的用途是"人看得见的内容有没有变"，而此前只剥标签、把样式表与自适应脚本的
+        # 源码也留在了文本里：改一行 CSS 或给脚本加一句守卫，指纹就红成"内容变了"
+        # （2026-10-21 实际踩到——给 `--fit-scale` 补一行注释，text_chars 从 4179 跳到 4405）。
+        # 先整块剔除这两类元素，再剥标签，指纹才真正只跟着正文走。
+        text = re.sub(r"<(script|style)\b[^>]*>.*?</\1\s*>", "", text, flags=re.S | re.I)
         text = re.sub(r"<[^>]+>", "", text)
     return text
 
@@ -285,7 +298,11 @@ def _probes(case: GoldenCase) -> list[str]:
     head = re.sub(r"\s+", "", head)
     tail = re.sub(r"\s+", "", tail)
     if case.fmt == "pdf" and case.sample.startswith("short"):
-        company = "云梯智联科技有限公司" if case.sample.endswith("zh") else "InternationalCloudCommerceSystemsDivision"
+        company = (
+            "云梯智联科技有限公司"
+            if case.sample.endswith("zh")
+            else "InternationalCloudCommerceSystemsDivision"
+        )
     else:
         company = ""
     probes = [name, skill, url, head, tail]
@@ -346,7 +363,9 @@ def test_golden_export_case(case_id: str):
                 assert pii not in value, f"脱敏后 PII 泄漏进 PDF 元数据 {key}"
     if case.fmt == "pdf":
         for key, value in meta.items():
-            assert "13800001234" not in value and "example.com" not in value, f"元数据 {key} 含敏感值"
+            assert "13800001234" not in value and "example.com" not in value, (
+                f"元数据 {key} 含敏感值"
+            )
 
     # 水印：PDF/HTML 的水印文案必须真实出现在产物里。
     if case.watermark:

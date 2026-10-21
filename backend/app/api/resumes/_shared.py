@@ -54,15 +54,22 @@ def _as_font_scale(value: str) -> ResumeFontScale:
 # 因此这两个响应头必须出现在 CORS 的 expose_headers 里（见 application.py）。
 PDF_PAGES_HEADER = "X-Resume-Pages"
 PDF_PAGE_LIMIT_HEADER = "X-Resume-Page-Limit"
+# 按当前版式**真实需要**几页（未截断）。`X-Resume-Pages` 是文件里实际排了几页——超限时
+# 两者不相等，界面用这句话说"按当前设置约需 N 页（上限 M 页）"，与草稿预览同一套措辞。
+PDF_PAGES_NEEDED_HEADER = "X-Resume-Pages-Needed"
 
 # 这份 PDF 由哪个引擎排版（当前唯一实现就是 fpdf2）。以前只能靠"样式像不像"猜，
 # 前端与排查脚本要判断"这份文件到底出自服务端引擎还是浏览器打印"就没有依据。
 PDF_ENGINE_HEADER = "X-Pdf-Engine"
 PDF_ENGINE_NAME = "fpdf2"
 
-# "缩到字号下限仍装不下所选页数"的如实标记（取 ``artifact.overflow``）。界面要能提示
-# 用户加页/删内容，靠的是响应头而不是日志——日志只有开发者看得到。**标志不许说谎**：
-# 它必须与 ``X-Resume-Pages`` / ``X-Resume-Page-Limit`` 的结论一致。
+# "按当前版式放不进所选页数、尾部已被截断"的如实标记（取 ``artifact.overflow``）。界面要能
+# 提示用户加页/删内容，靠的是响应头而不是日志——日志只有开发者看得到。**标志不许说谎**：
+# 它必须与 ``X-Resume-Pages-Needed`` 和 ``X-Resume-Page-Limit`` 的结论一致
+# （``overflow`` 为真 ⇔ ``needed > limit``）。
+#
+# 2026-10-21 起服务端**不再缩字号**：以前会把字号乘一个 0.5~1.0 的系数硬塞进页数上限，
+# 于是滑杆上的 18px 在纸面上可能是 9px。现在按真实参数排版，超限就截断并标记。
 RESUME_OVERFLOW_HEADER = "X-Resume-Overflow"
 
 

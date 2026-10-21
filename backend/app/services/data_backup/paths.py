@@ -15,6 +15,8 @@ from typing import Any
 
 from sqlalchemy import Engine
 
+from .asset_categories import ASSET_CATEGORIES
+
 # 备份包格式号是**给老版本看的信号**：老版本只接受 ≤ 自己常量的格式，遇到更大的会
 # 明确提示"请先升级应用"，而不是安静地误读包内容。按内容分级：
 #   1 = 单数据集、不含密钥（初始格式，所有版本可读）；
@@ -23,16 +25,23 @@ from sqlalchemy import Engine
 #       DPAPI 密文，绑定当前用户与机器）。不认识这个选项的老版本必须拒收。
 #   4 = 嵌套整包（R16）：外层 zip 只装 ``datasets/<id>.zip``（每份都是完整的单数据集
 #       包）+ 清单 + README，不再有包根的事务库。老版本读不懂这个结构，必须拒收。
+#   5 = 包内带 ``global_llm.json``（全部全局模型配置）。
+#   6 = 包内带全局资产（``global_assets.json`` + ``fonts/``，P2）：自定义字体跨数据集
+#       共用，换机器后简历里的字体引用不断。老版本读到 6 必须明确拒收——安静地只恢复
+#       数据库会让用户以为字体也回来了。
 # 当前代码能读/写的**最高**格式，导入侧用它拒绝"来自更新版本"的包。写包时的 format
 # 由 ``build_manifest`` 按内容显式计算，**不能**直接套这个常量——否则"导出全部数据集
 # （不含密钥）"会被错误标成 3，老版本会拒收一份本可以安全读的包。
-BACKUP_FORMAT_VERSION = 5
+BACKUP_FORMAT_VERSION = 6
 BACKUP_FORMAT_MULTI_DATASET = 2
 BACKUP_FORMAT_WITH_KEYS = 3
 BACKUP_FORMAT_NESTED_COLLECTION = 4
 # 5（2026-10）：包内带 global_llm.json（全部全局模型配置）。旧版本必须以"请先升级"
 # 拒收——静默忽略等于把用户以为已备份的配置丢掉，这类损失通常很久以后才发现。
 BACKUP_FORMAT_GLOBAL_CONFIG = 5
+# 6（2026-10）：包内带全局资产（fonts/）。同一条理由：字体丢了不会报错，只会让导出
+# 出来的 PDF 换一款字——用户往往在下一次投递后才发现。
+BACKUP_FORMAT_GLOBAL_ASSETS = 6
 DATABASE_MEMBER = "resume_forge.db"
 MANIFEST_MEMBER = "manifest.json"
 README_MEMBER = "README.txt"
@@ -55,7 +64,6 @@ ARCHIVE_REFERRAL_IMAGES_PREFIX = "referral_images/"
 # manifest 格式不动（缺这些条目的旧包照常导入），导入侧只遍历实际存在的成员。
 ARCHIVE_USER_FILES_PREFIX = "user_files/"
 _DATASET_ID_RE = re.compile(r"(?:main|[0-9a-f]{16})\Z")
-_ASSET_CATEGORIES = frozenset({"user_files", "referral_images"})
 
 # 可恢复删除的统一目录名（手动备份 ``backups/.trash``、自动备份 ``auto-backups/
 # <scope>/.trash`` 同名）：与业务数据回收站同一个"先可恢复，再谈永久"的取舍。
@@ -71,7 +79,7 @@ def dataset_asset_prefix(dataset_id: str | None, category: str) -> str:
       磁盘目录时，整目录装包会把**别的数据集**的文件带进来，按各自前缀隔离
       才能保证"谁的数据跟谁走"。
     """
-    if category not in _ASSET_CATEGORIES:
+    if category not in ASSET_CATEGORIES:
         raise BackupError(f"备份包附件类别无效：{category}")
     if dataset_id is None:
         return f"{category}/"

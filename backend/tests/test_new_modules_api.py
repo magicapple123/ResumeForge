@@ -358,7 +358,8 @@ def test_template_preview_merges_format_name_with_overrides(client):
     assert "line-height: 1.45" in body
     assert "padding: 11mm" in body
     # 2) format_config 的系数也照常叠加：标准档 14 × 1.021 = 14.29px。
-    assert "calc(14.29px" in body
+    #    `--fs` 现在是字面量（不再乘自适应系数），所以断言的就是纸面生效值。
+    assert "--fs: 14.29px" in body
 
 
 # ===== 备份与更新检查 =====

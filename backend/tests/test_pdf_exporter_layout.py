@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""PDF 版式合成与真实 PDF 几何：resolve_layout / decide_fit_scale / 行距 / 页边距。
+"""PDF 版式合成与真实 PDF 几何：resolve_layout / 行距 / 页边距。
 
 拆分自 test_pdf_exporter.py——纯逻辑的版式合成用例，与"真实 PDF 几何"里量行距、
 行高覆盖、页边距起点（x origin）的 pypdf 用例收在这里。
@@ -7,11 +7,13 @@
 _filler / _MM_TO_PT）。
 """
 import pytest
+from app.schemas.resume import ResumeContent
 from app.services.pdf_exporter import (
+    _PX_TO_MM,
     _PX_TO_PT,
-    MIN_FIT_SCALE,
+    PAGE_WIDTH_MM,
+    _ResumePDF,
     build_resume_pdf,
-    decide_fit_scale,
     measure_content_height,
     resolve_layout,
 )
@@ -69,78 +71,36 @@ def test_resolve_layout_ignores_values_out_of_range():
     assert layout.line_height == defaults["line_height"]
 
 
-def test_fit_scale_is_not_used_when_content_fits():
-    # 真实页数 1 页（≤ 上限）、连续高也低于可用高 → 不缩、不溢出。
-    assert decide_fit_scale(
-        lambda _scale: 1, lambda _scale: 50.0, page_limit=1, usable_height=100.0
-    ) == (1.0, False)
+def test_fit_scale_is_gone_from_the_layout():
+    """版式里**没有"缩放"这个自由度**（2026-10-21 用户要求）。
 
-
-def test_fit_scale_shrinks_proportionally_and_marks_no_overflow():
-    # 连续高 190×scale、可用 100 → 缩到 ~0.52 才装得下；一旦**真实页数**降到 1 就停。
-    def pages(scale: float) -> int:
-        return 2 if 190.0 * scale > 100.0 else 1
-
-    scale, overflow = decide_fit_scale(
-        pages, lambda s: 190.0 * s, page_limit=1, usable_height=100.0
-    )
-
-    assert 0.5 < scale < 1.0
-    assert overflow is False
-
-
-def test_fit_scale_respects_the_floor_and_reports_overflow():
-    """缩到下限（`MIN_FIT_SCALE`）仍放不下时，如实标记 overflow，绝不继续缩或裁内容。"""
-    scale, overflow = decide_fit_scale(
-        lambda _scale: 2, lambda s: 400.0 * s, page_limit=1, usable_height=100.0
-    )
-
-    assert scale == MIN_FIT_SCALE
-    assert overflow is True
-
-
-def test_fit_scale_shrinks_until_the_real_page_count_fits_not_just_the_height():
-    """**直接钉 `decide_fit_scale` 的决策行为**——本次修复最关键、又最难被端到端测试守住的一部分。
-
-    用 mock 控制 ``pages(scale)``，绕开真实渲染的边界：构造"连续高**一直在说装得下**（恒低于
-    可用高）、但真实页数要到 ``scale <= 0.99`` 才降到 1 页"的坏情况。旧口径（只看连续高）会
-    **立刻**判定装得下、``scale`` 停在 1.0、真实仍 2 页——把 `decide_fit_scale` 改回按连续高
-    判定，这条必红。
-
-    断言看的是**决策后的真实页数**（``pages(scale) <= page_limit``），**不是** `overflow`：后者
-    可能被 `build_resume_pdf` 末端的硬闸兜成真，单看它就区分不出"真的缩进去了"还是"没缩但标志
-    诚实"——而"按真实页数决定收缩量"才是这次修复的价值所在。这条不依赖字体，纯逻辑。
+    以前 `ResumeLayout.fit_scale` 是"一页适配"的载体，把 18px 悄悄压成 9px 就是它。
+    现在装不下只截断并提示，绝不动字号——所以这个字段不许回来。
     """
-
-    def pages(scale: float) -> int:
-        return 2 if scale > 0.99 else 1
-
-    def height(_scale: float) -> float:
-        # 恒低于可用高：模拟"连续高一直在说装得下"的坏情况（比例跳档失效，只能靠离散档）。
-        return 50.0
-
-    scale, overflow = decide_fit_scale(pages, height, page_limit=1, usable_height=100.0)
-
-    assert pages(scale) <= 1, (
-        f"决策后真实页数仍为 {pages(scale)}（scale={scale}）——没有按真实页数收缩"
-    )
-    assert scale < 1.0
-    assert overflow is False
-
-@needs_font
-def test_measure_content_height_is_linear_in_fit_scale():
-    """内容高度随 fit-scale 单调下降，且缩放只作用在字号派生尺寸上。
-
-    这条守住"缩放只缩字号派生尺寸、mm 边距不动"的口径：scale 变小，内容必须**真的变矮**，
-    否则一页适配就是在做无用功。
-    """
-    resume = _summary_only_resume(_filler(1200))
     layout = resolve_layout(template="classic", base_px=14.0, format_config=None)
 
-    tall = measure_content_height(resume, accent=(15, 118, 110), layout=layout.with_fit_scale(1.0))
-    short = measure_content_height(resume, accent=(15, 118, 110), layout=layout.with_fit_scale(0.6))
+    assert not hasattr(layout, "fit_scale")
+    assert not hasattr(layout, "scaled_base_px")
+    assert not hasattr(layout, "with_fit_scale")
 
-    assert 0 < short < tall
+
+@needs_font
+def test_measure_content_height_follows_the_requested_font_size():
+    """内容高度由**用户设定的字号**决定，且只作用在字号派生尺寸上。
+
+    这条守住"参数与呈现一致"的物理前提：字号变大，内容必须真的变高（否则版式参数就是
+    摆设）；页边距（mm）不随字号变化。
+    """
+    resume = _summary_only_resume(_filler(1200))
+    small = resolve_layout(template="classic", base_px=12.0, format_config=None)
+    large = resolve_layout(template="classic", base_px=18.0, format_config=None)
+
+    small_height = measure_content_height(resume, accent=(15, 118, 110), layout=small)
+    large_height = measure_content_height(resume, accent=(15, 118, 110), layout=large)
+
+    assert 0 < small_height < large_height
+    # mm 页边距不参与字号派生：同一模板、同一覆盖下两者相等。
+    assert small.margin_mm == large.margin_mm
 
 
 # ===== 真实 PDF 几何（直出 PDF 与预览对齐的回归防线） =====
@@ -193,8 +153,14 @@ def test_line_height_override_really_changes_the_pdf_geometry():
         format_config={"line_height": 2.2},
     )
 
-    tight_gap = _body_lines(tight.content, base_px=base_px)[0][1] - _body_lines(tight.content, base_px=base_px)[1][1]
-    loose_gap = _body_lines(loose.content, base_px=base_px)[0][1] - _body_lines(loose.content, base_px=base_px)[1][1]
+    tight_gap = (
+        _body_lines(tight.content, base_px=base_px)[0][1]
+        - _body_lines(tight.content, base_px=base_px)[1][1]
+    )
+    loose_gap = (
+        _body_lines(loose.content, base_px=base_px)[0][1]
+        - _body_lines(loose.content, base_px=base_px)[1][1]
+    )
 
     assert tight_gap == pytest.approx(base_px * _PX_TO_PT * 1.2, rel=1e-3)
     assert loose_gap == pytest.approx(base_px * _PX_TO_PT * 2.2, rel=1e-3)
@@ -246,5 +212,59 @@ def test_template_page_padding_default_is_used_when_not_overridden():
         (TEMPLATE_LAYOUT_DEFAULTS["minimal"]["padding_mm"] - TEMPLATE_LAYOUT_DEFAULTS["compact"]["padding_mm"])
         * _MM_TO_PT,
         abs=0.5,
+    )
+
+
+@needs_font
+def test_modern_header_backdrop_covers_the_whole_header_text(monkeypatch):
+    """modern / split 页头那块浅底色块的**高度**必须把段前留白也算进去（B1 的守卫）。
+
+    `render.py` 里 `header_content_h` 是把三段文字高度**加上** `.header .intent` /
+    `.header .contact` 的 `margin-top` 累加出来的：
+
+        text_height += layout.gap_mm(layout.intent_gap)
+        text_height += layout.gap_mm(layout.contact_gap)
+
+    这两行删掉之后，**文字位置、页数、提取文本全都不变**（底色块只是变矮，盖不住页头下半
+    部分），所以此前没有任何一条测试会红——这正是 QA 指出的覆盖缺口。这里直接抓
+    `_ResumePDF.rect` 的调用，量出色块的真实高度，与"名字行 + 段前留白 + 意向行 + 段前留白
+    + 联系方式行 + 上下内边距"逐项比对。
+
+    期望值全部从 `resolve_layout` 取，不写第二份常量。受控简历里姓名 / 意向 / 联系方式
+    **各占一行**，所以每段的高度就是该字号的一个行推进量——三段都折行的话（真实简历常见）
+    期望式就得跟着 `multi_cell` 的折行数走，测起来反而更脆。
+    """
+    rects: list[tuple[float, float, float, float]] = []
+    original = _ResumePDF.rect
+
+    def recording(self, x, y, w, h, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003 - fpdf2 的签名
+        rects.append((float(x), float(y), float(w), float(h)))
+        return original(self, x, y, w, h, *args, **kwargs)
+
+    monkeypatch.setattr(_ResumePDF, "rect", recording)
+
+    layout = resolve_layout(template="modern", base_px=14.0, format_config={})
+    resume = ResumeContent(name="张三", job_intent="后端", phone="13800001234")
+    build_resume_pdf(resume, template="modern", page_limit=1, font_scale="standard")
+
+    # 页头底色块是**唯一**画满正文宽度的矩形：区块标题的浅色块只有文字那么宽，标签更窄。
+    content_width = PAGE_WIDTH_MM - 2 * layout.margin_mm
+    backdrops = [rect for rect in rects if rect[2] == pytest.approx(content_width)]
+    assert len(backdrops) == 1, f"页头底色块应当只有一个，实际 {len(backdrops)} 个"
+
+    base = layout.base_px
+    line_advance = base * _PX_TO_MM * layout.line_height
+    expected = (
+        layout.name_ratio * line_advance
+        + layout.gap_mm(layout.intent_gap)
+        + layout.intent_ratio * line_advance
+        + layout.gap_mm(layout.contact_gap)
+        + layout.contact_ratio * line_advance
+        + 2 * layout.gap_mm(layout.header_pad_y)
+    )
+
+    assert backdrops[0][3] == pytest.approx(expected, abs=0.2), (
+        "页头底色块的高度没含两段段前留白：删掉 `text_height += layout.gap_mm(...)` 那两行，"
+        "色块会矮约 3mm，页头下半部分就没有底色了"
     )
 

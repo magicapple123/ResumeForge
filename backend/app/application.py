@@ -185,6 +185,9 @@ logging.basicConfig(level=_log_level(settings.log_level), format=_LOG_FORMAT)
 # HTTPX 的 INFO 摘要包含完整 URL，可能暴露助手联网搜索词。
 # 业务层会另行记录不含查询参数的主机、状态码和请求 ID。
 logging.getLogger("httpx").setLevel(logging.WARNING)
+# fontTools 每裁一次字体会逐表打十几条 INFO（"GDEF dropped"…），而精确预览每改一次版式就要
+# 排一遍 PDF、每份新内容还要再裁一次字体——这些行会把业务日志整段冲掉。
+logging.getLogger("fontTools").setLevel(logging.WARNING)
 for handler in logging.getLogger().handlers:
     handler.addFilter(RequestIdFilter())
     # RF-20：所有 handler 都注入后台线程的 task_id/dataset_id 关联字段
@@ -364,8 +367,9 @@ def create_app() -> FastAPI:
         # 自定义头回传，不在这里放行的话跨源部署下前端永远读到 null。
         expose_headers=[
             resumes.PDF_PAGES_HEADER,
+            resumes.PDF_PAGES_NEEDED_HEADER,
             resumes.PDF_PAGE_LIMIT_HEADER,
-            # R1：这次 PDF 是哪个引擎排的、以及"缩到下限仍装不下"的如实标记。
+            # R1：这次 PDF 是哪个引擎排的、以及"按当前版式放不进所选页数"的如实标记。
             # 不放行的话，跨源部署下前端读到的是 null，等于没设。
             resumes.PDF_ENGINE_HEADER,
             resumes.RESUME_OVERFLOW_HEADER,

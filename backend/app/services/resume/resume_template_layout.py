@@ -2,6 +2,11 @@
 """Built-in template layout defaults used by HTML, PDF, and Word renderers."""
 
 from .resume_template_catalog import DEFAULT_TEMPLATE
+from .resume_template_tags import (
+    TEMPLATE_COLUMN_DEFAULTS,
+    TEMPLATE_LIST_DEFAULTS,
+    TEMPLATE_TAG_DEFAULTS,
+)
 
 # 每个样式模板在 CSS 里的版式默认值。**这些数字必须与模板文件一致**——
 # 自动一页要靠它们判断"当前值是多少、还能往紧收多少"，抄错会让它收紧一个
@@ -36,6 +41,8 @@ from .resume_template_catalog import DEFAULT_TEMPLATE
 # 而 PDF 侧完全没有，于是 PDF 排得比预览紧——用户看到的"被压扁"主要就是这些间距缺席造成的
 # （条目之间 `.entry`、副行 `.sub`、列表项 `li`、页头之后 `.header`）。键与 CSS 的对应：
 #   header_gap          ：`.header` 的 margin-bottom（页头与第一段之间的留白）
+#   intent_gap          ：`.header .intent` 的 margin-top（姓名与求职意向之间）
+#   contact_gap         ：`.header .contact` 的 margin-top（求职意向与联系方式之间）
 #   entry_gap           ：`.entry` 的 margin-bottom（同一分区内条目之间的留白）
 #   sub_gap_top         ：`.entry .sub` 的 margin-top
 #   sub_gap_bottom      ：`.entry .sub` 的 margin-bottom
@@ -51,7 +58,16 @@ from .resume_template_catalog import DEFAULT_TEMPLATE
 #                         **浅底色块**（`header_bg` = soft_accent、`header_pad_x/y`、`header_radius`，均 × 字号）。
 #                         此前 PDF 只画了 `header_gap`（下边距），classic 页头下那条 2px 蓝线整条缺失。
 # 这些数字同样由 `test_resume_layout.py` 拿模板 CSS 逐条核对，抄错会让 PDF 与预览再次分叉。
-TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str]] = {
+#
+# ===== 技能标签的形状与正文分栏 =====
+# 这两组键（`tag_style` / `tag_bg` / `tag_fg` / `tag_border_px` / `tag_radius` / `tag_pad_x` /
+# `tag_gap_x-y` / `accent_soft` / `tag_align` / `tag_mono`，以及 `column_count` / `column_gap`）
+# 的来处、取值与"为什么要从模板 CSS 抄过来"的完整说明在 `resume_template_tags.py` 的模块
+# docstring 里：它们是**形状与排版开关**，与上面这堆"字号 / 间距"比例不同类，且本文件贴着
+# 500 行预算（`tests/test_file_size_budget.py`），故拆到同目录的附表模块。
+# **`TEMPLATE_LAYOUT_DEFAULTS` 仍是唯一对外入口**——它是母表 `_BASE_DEFAULTS` 与两张附表的
+# 合并视图，`resolve_layout` / `skill_tags` / `columns` 与守卫测试都只认它，不看附表。
+_BASE_DEFAULTS: dict[str, dict[str, float | str]] = {
     "classic": {
         "padding_mm": 14.0,
         "line_height": 1.7,
@@ -66,6 +82,8 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str]] = {
         "entry_sub_ratio": 0.93,
         "tag_font_ratio": 0.93,
         "header_gap": 1.4,
+        "intent_gap": 0.28,
+        "contact_gap": 0.57,
         "entry_gap": 0.86,
         "sub_gap_top": 0.14,
         "sub_gap_bottom": 0.28,
@@ -104,6 +122,8 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str]] = {
         "entry_sub_ratio": 0.93,
         "tag_font_ratio": 0.93,
         "header_gap": 1.5,
+        "intent_gap": 0.3,
+        "contact_gap": 0.5,
         "entry_gap": 0.9,
         "sub_gap_top": 0.14,
         "sub_gap_bottom": 0.28,
@@ -142,6 +162,8 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str]] = {
         "entry_sub_ratio": 0.9,
         "tag_font_ratio": 0.9,
         "header_gap": 0.9,
+        "intent_gap": 0.2,
+        "contact_gap": 0.3,
         "entry_gap": 0.5,
         "sub_gap_top": 0.1,
         "sub_gap_bottom": 0.2,
@@ -180,6 +202,8 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str]] = {
         "entry_sub_ratio": 0.9,
         "tag_font_ratio": 0.93,
         "header_gap": 1.5,
+        "intent_gap": 0.36,
+        "contact_gap": 0.5,
         "entry_gap": 0.9,
         "sub_gap_top": 0.14,
         "sub_gap_bottom": 0.28,
@@ -218,6 +242,8 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str]] = {
         "entry_sub_ratio": 0.9,
         "tag_font_ratio": 0.86,
         "header_gap": 1.1,
+        "intent_gap": 0.24,
+        "contact_gap": 0.44,
         "entry_gap": 0.64,
         "sub_gap_top": 0.1,
         "sub_gap_bottom": 0.2,
@@ -256,6 +282,8 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str]] = {
         "entry_sub_ratio": 0.9,
         "tag_font_ratio": 0.93,
         "header_gap": 1.7,
+        "intent_gap": 0.28,
+        "contact_gap": 0.44,
         "entry_gap": 0.93,
         "sub_gap_top": 0.14,
         "sub_gap_bottom": 0.28,
@@ -294,6 +322,8 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str]] = {
         "entry_sub_ratio": 0.9,
         "tag_font_ratio": 0.93,
         "header_gap": 1.5,
+        "intent_gap": 0.28,
+        "contact_gap": 0.57,
         "entry_gap": 0.85,
         "sub_gap_top": 0.14,
         "sub_gap_bottom": 0.28,
@@ -332,6 +362,8 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str]] = {
         "entry_sub_ratio": 0.9,
         "tag_font_ratio": 0.86,
         "header_gap": 1.1,
+        "intent_gap": 0.25,
+        "contact_gap": 0.45,
         "entry_gap": 0.64,
         "sub_gap_top": 0.1,
         "sub_gap_bottom": 0.2,
@@ -359,7 +391,21 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str]] = {
 }
 
 
-def template_layout_defaults(name: str) -> dict[str, float | str]:
+TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str | bool | int]] = {
+    # 合并视图：**母表 + 标签附表 + 分栏附表 + 列表缩进附表**。顺序有意义（后者覆盖前者），
+    # 但各表键不重叠，所以实际只是把几组键并成一条 `dict`；`TEMPLATE_LAYOUT_DEFAULTS` 借此
+    # 保持"每个模板一份完整取值"的对外形态，下游不必知道内部拆成了几个文件。
+    name: {
+        **values,
+        **TEMPLATE_TAG_DEFAULTS[name],
+        **TEMPLATE_COLUMN_DEFAULTS[name],
+        **TEMPLATE_LIST_DEFAULTS[name],
+    }
+    for name, values in _BASE_DEFAULTS.items()
+}
+
+
+def template_layout_defaults(name: str) -> dict[str, float | str | bool | int]:
     """某个样式模板的版式与配色默认值；未知模板退回经典模板的那一组。"""
     return TEMPLATE_LAYOUT_DEFAULTS.get(
         (name or "").strip(), TEMPLATE_LAYOUT_DEFAULTS[DEFAULT_TEMPLATE]

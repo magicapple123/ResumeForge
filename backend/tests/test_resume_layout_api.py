@@ -65,6 +65,59 @@ def test_analyze_reports_the_font_floor_so_the_button_is_not_a_surprise(client):
     assert "9pt" in room["font_floor_note"]
 
 
+def test_analyze_uses_the_draft_layout_instead_of_the_saved_one(client):
+    """诊断按**屏幕上这一版**算：拖完滑块还没保存时，记录里还是旧值。
+
+    `fit_room` / `fit_ladder` 回答的是"从当前版式再往紧收一档"。按记录值算的话，
+    用户改完参数看到的还是上一版结论（面板整块不动），点「自动一页」也不是从他正在
+    看的版式起步——2026-10-21 用户实测的正是这一格。
+
+    不传版式字段的那一次同样在这里钉住：`None` = 用记录值，旧客户端行为不变。
+    """
+    resume_id = _make_resume(client)
+    # 记录里存一个很松的版式：20mm 页边距（下限是 12mm，步长 2）。
+    client.patch(f"/api/resumes/{resume_id}/layout", json={"format_config": {"page_padding": 20}})
+    measure = {"used_height": PAGE * 1.3, "page_content_height": PAGE, "page_limit": 1}
+
+    saved = client.post(
+        f"/api/resumes/{resume_id}/layout/analyze", json={"measure": measure}
+    ).json()
+    draft = client.post(
+        f"/api/resumes/{resume_id}/layout/analyze",
+        json={"measure": measure, "format_config": {"page_padding": 12}},
+    ).json()
+
+    # 记录值 20mm → 第一档收到 18mm。
+    assert saved["fit_ladder"][0]["config"]["page_padding"] == 18
+    # 草稿已经是下限 12mm：这一档没有可收的，阶梯直接从下一项开始。
+    assert "page_padding" not in draft["fit_ladder"][0]["config"]
+    assert draft["fit_room"]["steps"] < saved["fit_room"]["steps"]
+
+
+def test_analyze_uses_the_draft_style_template(client):
+    """样式模板也是草稿值：换完模板还没保存，诊断要按新模板的默认版式算。
+
+    各模板的默认页边距不同（classic 14mm / minimal 18mm），所以第一档收紧的目标值
+    也必须不同——同样的数字说明读的还是记录里的旧模板。
+    """
+    resume_id = _make_resume(client)
+    measure = {"used_height": PAGE * 1.3, "page_content_height": PAGE, "page_limit": 1}
+
+    def first_padding(template: str) -> float:
+        body = client.post(
+            f"/api/resumes/{resume_id}/layout/analyze",
+            json={"measure": measure, "template": template},
+        ).json()
+        return next(
+            item["config"]["page_padding"]
+            for item in body["fit_ladder"]
+            if "page_padding" in item["config"]
+        )
+
+    assert first_padding("classic") == 12  # 14 → 12
+    assert first_padding("minimal") == 16  # 18 → 16
+
+
 def test_analyze_rejects_an_impossible_measurement(client):
     resume_id = _make_resume(client)
     response = client.post(
@@ -193,9 +246,9 @@ def test_font_scale_adjust_reaches_the_html(client):
         },
     )
     assert response.status_code == 200
-    # 标准档 14px × 0.9 = 12.6px。外面那层 `calc(... * var(--fit-scale, 1))` 是版式自适应的
-    # 挂钩（默认 1 时不改变结果）——断言基准值按这一档算出来，而不是最终像素。
-    assert "--fs: calc(12.6px * var(--fit-scale, 1))" in response.text
+    # 标准档 14px × 0.9 = 12.6px。`--fs` 是**字面量**（2026-10-21 起不再乘任何自适应系数），
+    # 所以这里断言的就是纸面上真正生效的像素值，滑杆读数与导出结果必须一比一。
+    assert "--fs: 12.6px" in response.text
 
 
 def test_override_wins_over_the_named_format_template(client):
@@ -236,7 +289,7 @@ def test_style_template_format_values_are_included_for_non_html_exporters(client
         db_session,
         name="带版式覆盖的样式",
         kind="style",
-        html="<!doctype html><html><head></head><body>{% include \"_resume_sections.j2\" %}</body></html>",
+        html='<!doctype html><html><head></head><body>{% include "_resume_sections.j2" %}</body></html>',
         config={"line_height": 1.3, "page_padding": 20, "accent": "#aa0000"},
     )
     record = ResumeRecord(

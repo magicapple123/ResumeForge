@@ -53,6 +53,9 @@ def backup_status(bind: Engine, *, now: float | None = None) -> dict[str, Any]:
     return {
         "dataset_id": getattr(bind, "dataset_id", "") or "",
         "protected": protected,
+        # 边界要写在数据里，不能只靠文案：自动备份是**仅数据库**的快照，附件与字体
+        # 不在其中。界面读到这个值才敢说"需要完整备份请手动导出"。
+        "coverage": "database_only",
         "last_success": last_success,
         "last_attempt": marker.get("last_attempt"),
         "consecutive_failures": failures,

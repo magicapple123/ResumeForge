@@ -45,7 +45,9 @@ FORMAT_FIELDS: tuple[dict, ...] = (
         "type": "number",
         "min": 1.2,
         "max": 2.2,
-        "step": 0.05,
+        # 0.05 → 0.01（2026-10-21 用户要求）：行距常常差 0.05 就压不进一页，
+        # 粗档位下只能靠 ± 按钮一点点蹭。前端 `LINE_HEIGHT_STEP` 必须与这里一致。
+        "step": 0.01,
         "css_rule": "body { line-height: %s !important; }",
     },
     {
@@ -54,7 +56,9 @@ FORMAT_FIELDS: tuple[dict, ...] = (
         "type": "number",
         "min": 8,
         "max": 26,
-        "step": 1,
+        # 1 → 0.1（2026-10-21 用户要求）：页边距直接决定"一页能塞多少"，1mm 一档时
+        # 常常"小 1mm 就断行、大了装不下"，没有中间值。前端 `PAGE_PADDING_STEP` 同步。
+        "step": 0.1,
         "css_rule": "body { padding: %smm !important; }",
     },
     {

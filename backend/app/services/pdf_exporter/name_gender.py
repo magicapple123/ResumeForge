@@ -8,7 +8,7 @@ from fpdf.enums import XPos, YPos
 
 from .canvas import _ResumePDF
 from .fonts import FONT_FAMILY
-from .layout import _BODY_TEXT, _MUTED_TEXT, _PX_TO_MM, _PX_TO_PT
+from .layout import _PX_TO_MM, _PX_TO_PT
 
 # fpdf2 在 cell 内放文字基线的规则：基线 = 单元格顶 + 0.5×行高 + 0.3×字号（见其
 # `_render_styled_text_line` 的 `Td` 定位）。同一行画两种字号时若不给性别那半格补偿，
@@ -90,7 +90,7 @@ def draw_name_gender(
         name_width = pdf.get_string_width(name)
         pdf.cell(name_width, plan.height, name, new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_font(FONT_FAMILY, "", extra_size * _PX_TO_PT)
-        pdf.set_text_color(*_MUTED_TEXT)
+        pdf.set_text_color(*pdf.muted_text)
         # 基线对齐补偿：把性别那格加高 2×0.3×字号差，两种字号的基线即重合
         # （cell 文字起点还各带一段左右内边距，两种字号下正好互相抵消，不另补）。
         baseline_gap = _CELL_BASELINE_FONT_FACTOR * (name_size - extra_size) * _PX_TO_MM
@@ -113,7 +113,7 @@ def draw_name_gender(
         )
         if plan.gender_text:
             pdf.set_font(FONT_FAMILY, "", extra_size * _PX_TO_PT)
-            pdf.set_text_color(*_MUTED_TEXT)
+            pdf.set_text_color(*pdf.muted_text)
             pdf.set_x(left)
             pdf.multi_cell(
                 width,
@@ -124,4 +124,4 @@ def draw_name_gender(
                 new_y=YPos.NEXT,
             )
     pdf.set_xy(left, top + plan.height)
-    pdf.set_text_color(*_BODY_TEXT)
+    pdf.set_text_color(*pdf.body_text)
