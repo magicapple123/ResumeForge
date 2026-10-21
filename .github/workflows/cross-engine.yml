@@ -1,0 +1,148 @@
+# 首次在 ubuntu-latest 手动跑绿后，再把 push: [main] 打开。
+name: Cross-engine parity
+
+# 草稿预览（Chromium 排版）与服务端 PDF（fpdf2）的**内容高度 / 页数 / 溢出标志**对拍。
+#
+# 这是唯一需要真实浏览器的作业：`-m cross_engine` 那批用例要起 Chromium 量版面，
+# `test_export_page_parity_browser.py` 里的浏览器对拍要读预览写的 `data-pages` /
+# `data-overflow`。它们回答的是同一个问题——"用户看到的那一页，和下载到的那份 PDF，
+# 是不是同一份东西"。
+#
+# **触发条件：只留 workflow_dispatch（2026-10-22 起，刻意不挂 push/pull_request）**
+# - 这个作业**从未在 ubuntu-latest 上跑绿过**：PDF 侧钉的是 TrueType 的 wqy-zenhei，
+#   浏览器侧此前命中的是 Noto Sans CJK，字体度量天然有差，阈值却是按 Windows 的
+#   msyh↔msyh 标定的。挂上 push 等于让一条从没绿过的守卫长期把主干染红。
+# - 所以先只留手动触发：本文件下方的"统一字体"步骤把两侧钉到同一款字体（见该步骤说明），
+#   先在 ubuntu-latest 手动跑一遍、把真实读数看明白，**跑绿之后再打开**
+#   `push: [main]`（文件头第一行就是那条待办）。
+# - 每个 PR 都跑也要额外下载 Chromium（~170MB）+ apt 依赖，并给每个 PR 增加数分钟，而
+#   跨引擎漂移的源头（模板 CSS、`pdf_exporter` 版式、前端 `layout.ts`）都不是"每天改十次"
+#   的东西；将来这条链路的改动变频繁，再把 `pull_request` 与其 `paths` 过滤加上。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-engine-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-engine:
+    name: Draft preview vs server PDF
+    runs-on: ubuntu-latest
+    # 装依赖 ~1 分钟、下 Chromium ~30 秒，用例本身 <1 分钟；15 分钟是给慢速共享
+    # runner 与 apt 排队留的宽裕上限，不是常规耗时。
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: "1"
+      # 与 ci.yml 同一个理由：Noto CJK 是 CFF 轮廓，fpdf2 子集化会把字形弄丢；
+      # 钉到 TrueType 的 wqy-zenhei 才能让 PDF 侧正常出字。
+      #
+      # **两侧字体一致性**：既然 PDF 侧已被钉死在 wqy-zenhei，统一的方向只能是"让浏览器
+      # 也命中 wqy-zenhei"——由下方 "Unify the CJK font on both sides" 步骤用 fontconfig
+      # 别名 + 移除 Noto CJK 做到。这一步很关键：本作业量的是**排版差异**，不是**字体差异**；
+      # 两侧字体不同时的差值里天然含一份度量差，而阈值是按"同字体"标定的。
+      #
+      # 首次 Linux 运行若仍出现**均匀的整体偏移**，先怀疑字体度量（说明统一没生效，
+      # 去看那一步打出来的 fc-match 输出），不要当成排版回归。失败信息里已经打好分项表
+      # （页头 + 每个分区的累计高度），按这个看：
+      #   * 每一行同向、同量级（例如每个分区都 +2~3mm，最后一行也差不多）→ 字体度量差；
+      #   * 某一行突然多出一大截、后面各行保持这一截增量 → 那个分区真的排得不一样
+      #     （换行位置 / 间距），是排版回归，去查模板 CSS 或 pdf_exporter 版式。
+      # 确认是字体度量差且统一失败之后，就在注释里写明"Linux 侧需按平台放宽阈值，属已知"，
+      # 并把放宽值单列——不在这里偷偷放宽。
+      RESUMEFORGE_PDF_FONT: /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install dependencies
+        # requirements-dev.txt 已 pin playwright==1.63.0。**这一点很关键**：这份清单此前
+        # 完全没声明 playwright（它只存在于开发者本机手工装好的 venv 里），于是任何干净
+        # 环境建出来的 venv 都拿不到它，浏览器对拍只会以 skip 收场——看起来"环境没有
+        # 浏览器"，实际是依赖没进清单。浏览器二进制由稍后的步骤单独装，让"包版本 ↔ 浏览器
+        # 版本"的对应关系（1.63.0 ↔ chromium-1248）显式可见。
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Install Chromium for Playwright
+        # 放在字体统一步骤**之前**：`--with-deps` 会自己 apt 装一批字体包，先让它装完，
+        # 再统一字体，避免被它覆盖。
+        run: python -m playwright install --with-deps chromium
+
+      - name: Unify the CJK font on both sides (wqy-zenhei)
+        # **这个作业的字体一致性在这里决定成败**。两侧各说各的字体时，量的差值里混着
+        # 字体度量差，分不清"排版漂了"还是"字不一样宽"。
+        #
+        # PDF 侧没有选择余地：只能 TrueType（Noto CJK 是 CFF 轮廓，fpdf2 子集化会丢字形，
+        # 见 ci.yml）。所以方向只有一个——**让浏览器也命中 wqy-zenhei**，做法两层：
+        #
+        # 1. 移除 fonts-noto-cjk（含 -extra）：镜像里若存在 Noto CJK，模板里的
+        #    "Noto Sans CJK SC" / "Noto Serif CJK SC" 就解析得到它，永远不会回退到 wqy；
+        # 2. fontconfig 别名：把模板 font-family 列表里出现过的**每一个**族名都优先指向
+        #    WenQuanYi Zen Hei。只靠"移除 Noto"不够——拉丁文（Python / Go / Consolas 那些
+        #    片段）会落到 DejaVu / Liberation，而 PDF 侧同一段拉丁文用的是 wqy-zenhei 的
+        #    字形宽度。别名让浏览器连拉丁文也用同一款字体，两侧才是同一个度量体系。
+        #
+        # 注意这只统一**本作业的测量口径**，不代表 Linux 用户看到的预览就是 wqy-zenhei。
+        # 本步骤末尾打印 fc-match 结果，作为"统一是否生效"的现场证据：三行都应输出
+        # WenQuanYi Zen Hei；若输出 Noto / DejaVu，说明统一没生效，此时才考虑按平台放宽
+        # 阈值（并在注释里写明"Linux 侧需按平台放宽阈值，属已知"）。
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get purge -y fonts-noto-cjk fonts-noto-cjk-extra || true
+          sudo apt-get install -y fonts-wqy-zenhei
+          sudo tee /etc/fonts/conf.d/99-resumeforge-parity.conf >/dev/null <<'XML'
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+          <fontconfig>
+            <!-- 跨引擎对拍专用：把模板里出现过的族名统一指到 PDF 侧那款字体。
+                 内置模板用到的族名：Microsoft YaHei / PingFang SC / Noto Sans CJK SC
+                 / Noto Serif CJK SC / Songti SC / SimSun / Georgia（serif 标题）
+                 / Consolas / Cascadia Mono / Menlo（mono 片段）。 -->
+            <alias binding="same"><family>Microsoft YaHei</family><prefer><family>WenQuanYi Zen Hei</family></prefer></alias>
+            <alias binding="same"><family>PingFang SC</family><prefer><family>WenQuanYi Zen Hei</family></prefer></alias>
+            <alias binding="same"><family>Noto Sans CJK SC</family><prefer><family>WenQuanYi Zen Hei</family></prefer></alias>
+            <alias binding="same"><family>Noto Serif CJK SC</family><prefer><family>WenQuanYi Zen Hei</family></prefer></alias>
+            <alias binding="same"><family>Songti SC</family><prefer><family>WenQuanYi Zen Hei</family></prefer></alias>
+            <alias binding="same"><family>SimSun</family><prefer><family>WenQuanYi Zen Hei</family></prefer></alias>
+            <alias binding="same"><family>Georgia</family><prefer><family>WenQuanYi Zen Hei</family></prefer></alias>
+            <alias binding="same"><family>Consolas</family><prefer><family>WenQuanYi Zen Hei</family></prefer></alias>
+            <alias binding="same"><family>Cascadia Mono</family><prefer><family>WenQuanYi Zen Hei</family></prefer></alias>
+            <alias binding="same"><family>Menlo</family><prefer><family>WenQuanYi Zen Hei</family></prefer></alias>
+          </fontconfig>
+          XML
+          sudo fc-cache -f
+          echo "===== 字体解析结果（三行都应是 WenQuanYi Zen Hei）====="
+          fc-match "Microsoft YaHei"
+          fc-match "Noto Sans CJK SC"
+          fc-match "Georgia"
+          echo "===== 系统里还剩下的 CJK 字体 ====="
+          fc-list :lang=zh-cn family | sort -u
+
+      - name: Run cross-engine parity tests
+        # `-m cross_engine` 覆盖两处（同一个作业，因为它们依赖同一件事：真实 Chromium）：
+        #   * tests/test_cross_engine_height.py —— 草稿 vs PDF 的内容高度对拍，7 个单列
+        #     内置模板全覆盖（含 split 已知差的 xfail 与"空容器不算正文"的镜像守卫）；
+        #   * tests/test_export_page_parity_browser.py —— data-pages / data-overflow /
+        #     极宽页边距下的所需页数，以及"正文只超一点点时导出 HTML 的探针也必须说超了"
+        #     （旧 scrollHeight 判据漏报那个 defect 的回归守卫）。
+        # 两个文件里其余用例不在这里重复跑：纯服务端那 87 条在 ci.yml 已覆盖，若在本作业里
+        # 再跑一遍，本作业会因为"非浏览器问题"变红，掩盖掉真正的跨引擎信号。
+        run: python -m pytest -m cross_engine -v

@@ -223,6 +223,7 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      plugins: true, // 精确预览：内置 PDFium 渲染 blob PDF；默认 false 会让预览区空白
     },
   });
   mainWindow.setMenuBarVisibility(false);
@@ -494,7 +495,6 @@ require("./print").registerPrintHandler(); // R1：Chromium 打印
 // 的既有顺序——绝不从这里另开退出路径。
 ipcMain.on("app:quit-request", () => app.quit());
 
-// Test hooks for the VM-based lifecycle probes
-// (desktop/scripts/test-lifecycle.js). The packaged app runs main.js as its
-// entry and never imports it as a module, so this is inert at runtime.
+// Test hooks for the VM-based lifecycle probes (desktop/scripts/test-lifecycle.js).
+// The packaged app runs main.js as its entry and never imports it as a module, so this is inert.
 module.exports = { requestInstallAndQuit };

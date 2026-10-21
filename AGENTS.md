@@ -234,6 +234,25 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 - `src/theme/antdOverrideGuard.test.ts` —— `.ant-*` 覆写必须有自定义类前缀或就地 `/* antd-override: 理由 */`（文件级白名单仅 `accessibility.css` / `dark-tokens.css` / `mobile.css`）
 - `src/theme/spinOutletGuard.test.ts` —— `<Spin spinning=>` 只允许出现在 `LoadingBlock` 内部（豁免：`// spin-ok: 理由`）
 
+## 版式参数即呈现（禁止自动缩字号）
+
+用户在版式栏里设的字号 / 行距 / 页边距，就是纸面上的值——**任何"装不下就按比例压小"的实现都不许再加回来**
+（2026-10-21 用户明确要求，草稿预览与精确预览同一口径）：
+
+- 模板 `--fs` 只能是字面量（`--fs: {{ base_px }}px;`），不许出现 `calc(... * var(--fit-scale))` 这类系数挂钩；
+  `_resume_fit_script.j2` 只能**读**（写 `body.dataset.pages/measured/overflow`），不许 `setProperty`；
+- 装不下的处理是**如实提示 + 截断到页数上限**，不是缩小：PDF 侧 `build_resume_pdf` 先按真实参数排一遍，
+  超出就以 `max_pages` 截断并标 `overflow`，真实页数走 `X-Resume-Pages-Needed`（Word 只标记不截断）；
+- 前端提示统一为"按当前设置约需 N 页（上限 M 页）"+"字号、行距、页边距都按你设定的值原样渲染，不会自动缩小"，
+  草稿（`ResumePreviewCanvas`）与精确（`ExactPreviewPanel`）必须用同一套措辞；
+- 想压进一页请改参数：加页数、收紧行距/页边距、或「版面诊断 → 自动一页」（它把参数写回滑杆，用户看得见改了
+  什么）。**不要**替用户做隐式降级。
+
+守卫：`frontend/src/components/resume-preview/noAutoShrinkGuard.test.ts`（扫整个 `src/`，去注释后不得出现
+`--fit-scale`）+ `backend/tests/test_resume_templates.py`（逐模板断言 `--fs` 是字面量、脚本里没有
+`setProperty("--fit-scale"`）。注意 `geometry.ts` 的 `fitScale` 是**视口缩放**（整张 A4 等比缩到看得见），
+与"缩字号塞进一页"不是一回事，别把它当违例删掉。
+
 ## 安全与隐私边界
 
 - `.env`、API Key、SQLite 数据库、照片、简历、导出文件和本地虚拟环境不得提交到 Git。
@@ -241,6 +260,36 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 - 岗位描述、参考文件和用户粘贴内容均视为不可信输入，不能当作系统指令执行。
 - 导出 HTML、Markdown、JSON 和预览内容时分别处理转义、资源引用和隐私字段，避免把内部数据或密钥暴露给浏览器或日志。
 - 发现疑似安全问题时遵循 `SECURITY.md`，不要在公开 Issue 中披露可利用细节。
+
+## 备份包与磁盘资产（改这里之前先看）
+
+用户数据不止数据库一处：`user_files/`、`referral_images/` 跟数据集走，`fonts/` 跨数据集共用，
+`datasets/` 下还有别的库。导出覆盖面靠**结构**保证，不靠记忆——判定与清单在
+`backend/app/services/data_backup/`：
+
+| 你要改的东西 | 必须同步的地方 | 漏了会怎样 |
+|---|---|---|
+| 新功能把文件写到**新目录** | 跟数据集走 → `asset_categories.ASSET_CATEGORIES`；跨数据集共用 → 按 `global_assets.py` 的"全局成员"模式做；可重建/敏感 → `coverage.RUNTIME_ONLY` | 该目录会进 `uncovered`（可见但不进包）；若它是运行产物，则是每次导出都报一条噪音 |
+| 落盘**命名规则**（`disk_name`） | 迁移 + 保留旧文件 | 改名等于断链：旧行指向不存在的文件 |
+| 数据库里**引用附件的那一列** | `asset_manifest.collect_referenced_names` | 文件在磁盘上但永远不进包 |
+| 新增 **base64 原件来源**（业务列） | `user_files._backfill_*` 与 `_lookup_original` 加一支 | 副本丢了补不回来，预览 404、导出永久报缺失 |
+| 包内**新增成员/字段语义** | 升 `BACKUP_FORMAT_*` + 导入侧 fail-closed 校验 | 老版本安静地只恢复数据库，用户以为都回来了 |
+| 后端**新增模型表** | 无需手工登记：清单从 `Base.metadata` 推导 | `test_backup_table_coverage` 会红 |
+
+三条永久红灯（写错就红，不需要谁记得去查文档）：
+
+- `test_backup_table_coverage`：`manifest["tables"]` 的表集合 == `application_tables()`；
+- `test_new_data_directory_is_never_silent`：磁盘上不允许存在"既不在清单、也不在 uncovered"的顶层项；
+- `test_asset_categories_and_coverage_agree`：资产类别与覆盖名单同一份，且与 `RUNTIME_ONLY` 不相交。
+
+改包结构时**四处同改**，缺一处视为未完成：`CHANGELOG.md`（用户可见变化）→ `README.md`
+（备份章节的"包含/不包含"清单）→ 本文件 → `deliverables/software-company/resumeforge-backup-coverage-plan-20261020.md`
+的附录 A。新增格式号还要：用 `scripts/make_backup_format_fixtures.py` 重新生成
+`backend/tests/fixtures/backup-formats/` 的样本（`test_backup_format_matrix` 逐个导入）。
+
+反模式（明确禁止）：在 `data_backup` 里手写第二份表/资产清单；用 `try/except: pass` 吞掉附件失败；
+新包成员不升格式号；把"只有新版本认识"的数据塞进既有段；删除或改名 `disk_name` / `format` /
+`api_key_included` / `asset_manifest.manifest_version`。
 
 ## 变更记录要求
 

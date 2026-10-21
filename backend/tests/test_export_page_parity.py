@@ -14,16 +14,21 @@ PDF/Word 读这个字段（``pdf_exporter/layout.py``），预览与 HTML 只认
 2. **``page_limit=1`` ⇒ 恰好 1 页**：8 个内置模板 × 4 档页边距，一个都不能例外——
    界面上"1 页"是对用户的承诺，服务端不许悄悄排成 2 页；
 3. **``page_limit=2`` ⇒ 不超过 2 页**；
-4. **标志不许说谎**：``X-Resume-Overflow`` 必须与 ``artifact.overflow``、以及与
-   ``X-Resume-Pages`` / ``X-Resume-Page-Limit`` 的结论一致；``X-Pdf-Engine`` 只在真的
-   由 PDF 引擎渲染时出现（给 HTML 也回一个 "fpdf2" 是假话）。
+4. **标志不许说谎**：``X-Resume-Overflow`` 必须与 ``X-Resume-Pages-Needed`` /
+   ``X-Resume-Page-Limit`` 的结论一致（``overflow`` 为真 ⇔ ``needed > limit``），且
+   ``X-Resume-Pages`` 恒等于 ``min(needed, limit)``（超限即截断，不再缩字号）；
+   ``X-Pdf-Engine`` 只在真的由 PDF 引擎渲染时出现（给 HTML 也回一个 "fpdf2" 是假话）。
 
 关于 5 与 7：面板的 InputNumber 已收窄到 8–26，这两个值只可能来自旧前端或手工请求；
 ``validated_format_config`` 会把它们丢掉、回落到模板默认值。留在用例里是为了证明
 "越界值不会把页数搞崩"，不是为了让它们生效。
 
-**浏览器对拍没有做**（见文件末尾）——本机的 Playwright 与已下载的 Chromium 版本对不上，
-读不到预览 iframe 的 ``data-pages``。这是环境缺失，**不假装全绿**。
+**浏览器对拍不在本文件**（2026-10-22 拆出）：需要真实 Chromium 的用例（3 组对拍 +
+"只超一点点"的边界回归，共 2 个测试函数 / 4 个用例项）搬到
+``test_export_page_parity_browser.py``，原因是本批新增对拍后本文件从 389 行涨到 572 行、
+越过 ``test_file_size_budget`` 的 500 行预算。拆分缝是"要不要起浏览器"——本文件只留
+不依赖浏览器的部分（响应头口径、预览载荷、页数纯函数），在普通 CI 上就能跑；搬走的那批
+打 ``cross_engine`` marker，只在手动触发的作业里跑。拆分前后收集数不变（91 → 87 + 4）。
 """
 
 from __future__ import annotations
@@ -79,13 +84,13 @@ def _short_resume() -> ResumeContent:
     )
 
 
-def _create_resume(client, template: str) -> int:
+def _create_resume(client, template: str, content: ResumeContent | None = None) -> int:
     """建一份简历并把样式模板钉成 ``template``（导出读的是记录上的模板名）。"""
     created = client.post(
         "/api/resumes/manual",
         json={
             "title": f"页边距-{template}",
-            "content": _short_resume().model_dump(),
+            "content": (content or _short_resume()).model_dump(),
             "job_id": None,
         },
     )
@@ -152,19 +157,23 @@ def test_two_page_limit_never_exceeds_two_pages(client, template):
 @needs_font
 @pytest.mark.parametrize(("template", "padding"), TEMPLATE_PADDING_CASES)
 def test_overflow_flag_never_contradicts_the_page_headers(client, template, padding):
-    """``X-Resume-Overflow`` 与"页数 > 上限"必须同真同假，且引擎头如实。
+    """``X-Resume-Overflow`` 与"真实需要的页数 > 上限"必须同真同假，且引擎头如实。
 
-    这里不预测"该不该溢出"——预测值会随模板字号漂；而"头里说的和文件里排的必须是
-    一回事"是永远成立的不变量（``pdf_exporter/fit.py`` 的"标志不许说谎"契约）。
+    2026-10-21 语义变更：服务端**不再缩字号**，所以"超出上限"不再表现为"文件多排一页"，
+    而是"文件被截断到上限 + overflow=true"。因此这里断言的是三条自洽关系：
+    ``overflow ⇔ needed > limit``、``pages == min(needed, limit)``、``pages <= limit``。
     """
     resume_id = _create_resume(client, template)
 
     response = _export_pdf(client, resume_id, page_padding=padding, page_limit=1)
     pages = int(response.headers["X-Resume-Pages"])
+    needed = int(response.headers["X-Resume-Pages-Needed"])
     limit = int(response.headers["X-Resume-Page-Limit"])
     overflow = response.headers["X-Resume-Overflow"] == "true"
 
-    assert overflow is (pages > limit)
+    assert overflow is (needed > limit)
+    assert pages == min(needed, limit)
+    assert pages <= limit
     assert response.headers["X-Pdf-Engine"] == "fpdf2"
 
 
@@ -182,6 +191,7 @@ def test_headers_match_the_pipeline_artifact(client, template):
     artifact = _replay_artifact(template, page_padding=11, page_limit=1)
 
     assert response.headers["X-Resume-Pages"] == str(artifact.pages)
+    assert response.headers["X-Resume-Pages-Needed"] == str(artifact.pages_needed)
     assert response.headers["X-Resume-Overflow"] == ("true" if artifact.overflow else "false")
 
 
@@ -360,30 +370,3 @@ def test_out_of_range_margin_mm_via_http_does_not_break_the_export(client):
     assert clamped.headers["X-Resume-Pages"] == "1"
     at_max = _export_pdf(client, resume_id, page_padding=26, page_limit=1)
     assert _left_text_x(clamped.content) == _left_text_x(at_max.content)
-
-
-# ===== 浏览器对拍：本环境跑不了，如实跳过（不假装全绿） =====
-
-_BROWSER_PARITY_SKIP = (
-    "本机装不上可用的 Chromium：backend/.venv 里的 playwright 期望 "
-    "chromium_headless_shell-1187，而 %LOCALAPPDATA%/ms-playwright 下只有 "
-    "1234 / 1243 / 1248，launch() 直接报 Executable doesn't exist。"
-    "预览侧的 data-pages / data-overflow 读不到，以下三项**都没有验证过**——"
-    "换一台装得上浏览器的机器时，去掉 skip 并补上真实的 Playwright 驱动。"
-)
-
-# 三项待实机验证的对拍项；跳过而不是空跑，函数体故意写成"没实现就大喊"，
-# 这样谁把 skip 删了都会立刻看到"还没写"，而不是收获一个假绿。
-_BROWSER_PARITY_CHECKS = (
-    "预览 iframe 的 data-pages 与导出响应头 X-Resume-Pages 相等",
-    "预览的 data-overflow 与 X-Resume-Overflow 一致",
-    "极宽页边距下两边页数不分歧"
-    "（已知分歧点：预览自动一页有 0.5 下限，fpdf2 的 MIN_FIT_SCALE 在同样情形下仍装得下）",
-)
-
-
-@pytest.mark.skip(reason=_BROWSER_PARITY_SKIP)
-@pytest.mark.parametrize("check", _BROWSER_PARITY_CHECKS)
-def test_browser_preview_and_export_agree(check):
-    """预览（浏览器算）与导出的页数/溢出标志对拍。"""
-    raise AssertionError(f"浏览器对拍尚未实现：{check}")
