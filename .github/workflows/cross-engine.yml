@@ -1,4 +1,3 @@
-# 首次在 ubuntu-latest 手动跑绿后，再把 push: [main] 打开。
 name: Cross-engine parity
 
 # 草稿预览（Chromium 排版）与服务端 PDF（fpdf2）的**内容高度 / 页数 / 溢出标志**对拍。
@@ -8,18 +7,21 @@ name: Cross-engine parity
 # `data-overflow`。它们回答的是同一个问题——"用户看到的那一页，和下载到的那份 PDF，
 # 是不是同一份东西"。
 #
-# **触发条件：只留 workflow_dispatch（2026-10-22 起，刻意不挂 push/pull_request）**
-# - 这个作业**从未在 ubuntu-latest 上跑绿过**：PDF 侧钉的是 TrueType 的 wqy-zenhei，
-#   浏览器侧此前命中的是 Noto Sans CJK，字体度量天然有差，阈值却是按 Windows 的
-#   msyh↔msyh 标定的。挂上 push 等于让一条从没绿过的守卫长期把主干染红。
-# - 所以先只留手动触发：本文件下方的"统一字体"步骤把两侧钉到同一款字体（见该步骤说明），
-#   先在 ubuntu-latest 手动跑一遍、把真实读数看明白，**跑绿之后再打开**
-#   `push: [main]`（文件头第一行就是那条待办）。
-# - 每个 PR 都跑也要额外下载 Chromium（~170MB）+ apt 依赖，并给每个 PR 增加数分钟，而
-#   跨引擎漂移的源头（模板 CSS、`pdf_exporter` 版式、前端 `layout.ts`）都不是"每天改十次"
-#   的东西；将来这条链路的改动变频繁，再把 `pull_request` 与其 `paths` 过滤加上。
+# **触发条件：push 到 main + 手动触发（2026-10-22 首次跑绿后打开）**
+# - 2026-10-22 在 ubuntu-latest 上首次跑绿（run 39645064902，13 passed / 1 xfailed），
+#   字体统一已验证：`fc-match "Microsoft YaHei" / "Noto Sans CJK SC" / "Georgia"` 三行
+#   全部解析到 `wqy-zenhei.ttc: "WenQuanYi Zen Hei"`，与 PDF 侧同一款字体。
+# - 读数与 Windows 几乎逐位相同（compact +2.21mm / elegant +2.59mm / editorial +2.64mm），
+#   说明字体统一后两套引擎的字宽一致，`max(2.5mm, 1.5%)` 这组阈值可以跨平台通用，
+#   **不需要给 Linux 单独放宽**。
+# - 每个 PR 都跑要额外下载 Chromium（~170MB）+ apt 依赖，并给 PR 增加数分钟，而跨引擎
+#   漂移的源头（模板 CSS、`pdf_exporter` 版式、前端 `layout.ts`）都不是"每天改十次"的
+#   东西，所以只挂 push: main；将来这条链路改动变频繁，可再加 `pull_request` 与其
+#   `paths` 过滤。
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
