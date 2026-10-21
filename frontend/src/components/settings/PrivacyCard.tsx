@@ -16,7 +16,9 @@ export default function PrivacyCard() {
         帮助与诊断）只含脱敏运行事件与日志尾部，不含简历数据与密钥。
       </Typography.Paragraph>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        <strong>带走数据</strong>：本页上方「导出备份包」随时可以把全部数据整份导出为 .zip。
+        <strong>带走数据</strong>：本页上方「导出备份包」随时可以把全部数据整份导出为 .zip
+        ——数据库、被引用的附件、自定义字体与全局模型配置都在包内；数据目录里若有既没进包、
+        也不属于可重建产物的顶层项，导出后会明确提示「另有 N 项未纳入备份」。
         <strong>彻底删除</strong>：删除对应数据集即可；想删得干干净净，退出应用后直接删除
         数据目录（backend/data）即可，卸载不留残余。
       </Typography.Paragraph>

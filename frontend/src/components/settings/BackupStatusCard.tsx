@@ -108,6 +108,14 @@ export default function BackupStatusCard() {
           ) : (
             <Typography.Text type="warning">还没有成功过的自动备份。</Typography.Text>
           )}
+          {/* H3：后端把覆盖范围显式写进 status（coverage=database_only）。不写出来，用户会
+              把「受保护」读成"所有东西都不会丢"，而自动快照里根本没有附件与字体。 */}
+          {status.coverage === "database_only" && (
+            <Typography.Text type="secondary">
+              自动备份只覆盖数据库快照，不含附件与字体；需要连附件与字体一起备份，请用「数据集」卡片的「导出数据集
+              / 导出全部数据集」。
+            </Typography.Text>
+          )}
           {status.consecutive_failures > 0 && status.last_error && (
             <Alert
               type="error"

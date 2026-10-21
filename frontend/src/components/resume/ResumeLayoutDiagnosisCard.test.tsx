@@ -81,8 +81,8 @@ function fakePreview(
   return ref;
 }
 
-function renderCard(props: Partial<React.ComponentProps<typeof ResumeLayoutDiagnosisCard>> = {}) {
-  return render(
+function cardElement(props: Partial<React.ComponentProps<typeof ResumeLayoutDiagnosisCard>> = {}) {
+  return (
     <AntdApp>
       <ResumeLayoutDiagnosisCard
         resumeId={7}
@@ -94,8 +94,12 @@ function renderCard(props: Partial<React.ComponentProps<typeof ResumeLayoutDiagn
         onAddPage={vi.fn()}
         {...props}
       />
-    </AntdApp>,
+    </AntdApp>
   );
+}
+
+function renderCard(props: Partial<React.ComponentProps<typeof ResumeLayoutDiagnosisCard>> = {}) {
+  return render(cardElement(props));
 }
 
 beforeEach(() => {
@@ -114,6 +118,43 @@ describe("ResumeLayoutDiagnosisCard", () => {
     expect(screen.getByText("内容按当前版式需要 2 页，超过所选的 1 页。")).toBeInTheDocument();
     expect(screen.getByText("先看能不能靠重排放下")).toBeInTheDocument();
     expect(screen.getByText(/把最相关的经历提到前面/)).toBeInTheDocument();
+  });
+
+  it("把草稿版式一起送过去：诊断不能按记录里的旧值算", async () => {
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis());
+    renderCard();
+
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalled());
+    const [, measure, layout] = apiMocks.analyzeResumeLayout.mock.calls[0];
+    expect(measure).toMatchObject({
+      used_height: 2800,
+      page_content_height: 2600,
+      page_limit: 1,
+    });
+    // 拖完滑块还没保存时，屏幕上这一版就是草稿值：`fit_room` 与「自动一页」清单都是
+    // "从当前版式再往紧收一档"，基准必须与用户看到的一致。
+    expect(layout).toMatchObject({
+      template: "elegant",
+      format_name: "compact",
+      font_scale: "large",
+    });
+  });
+
+  it("高度没变、版式变了也要重算（否则面板整块不动）", async () => {
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis());
+    const view = renderCard();
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalledTimes(1));
+
+    // 同一份测量，只把页边距 14 → 12：高度可能一点没变，但基准变了结论就得跟着变。
+    // 2026-10-21 用户实测的"改参数、诊断不动"就发生在这一格。
+    view.rerender(cardElement({ layout: { ...LAYOUT, format_config: { page_padding: 12 } } }));
+
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalledTimes(2), {
+      timeout: 3000,
+    });
+    expect(apiMocks.analyzeResumeLayout.mock.calls[1][2]).toMatchObject({
+      format_config: { page_padding: 12 },
+    });
   });
 
   it("hides the whole card when the diagnosis is unavailable and nothing looks wrong", async () => {

@@ -28,8 +28,13 @@ import { pagePaddingProbeCss } from "../../utils/resumeFormatProbe";
  */
 const COMMIT_DEBOUNCE_MS = 120;
 
-/** 滑块步长：与后端 `FORMAT_FIELDS.page_padding.step` 一致，也与两端按钮共用一套边界。 */
-const PAGE_PADDING_STEP = 1;
+/**
+ * 滑块步长：与后端 `FORMAT_FIELDS.page_padding.step` 一致，也与两端按钮共用一套边界。
+ *
+ * 2026-10-21 用户要求从 1mm 收到 0.1mm：页边距直接决定"一页能塞多少"，1mm 一档时
+ * 常常是"再小 1mm 就断行、大了又装不下"，没有可用的中间值。
+ */
+const PAGE_PADDING_STEP = 0.1;
 
 interface Props {
   /** 当前生效的页边距（用户的覆盖值，或模板默认值）；单位 mm。 */
@@ -141,7 +146,9 @@ export default function PagePaddingControl({
           disabled={disabled}
           aria-label="页边距（拖动调整）"
           ariaLabelForHandle="页边距"
-          tooltip={{ formatter: (value) => (value == null ? "" : `${value}mm`) }}
+          tooltip={{
+            formatter: (value) => (value == null ? "" : `${Number(Number(value).toFixed(1))}mm`),
+          }}
           style={{ flex: "1 1 70px", minWidth: 56, margin: "0 2px" }}
           onChange={commit}
         />
@@ -157,7 +164,7 @@ export default function PagePaddingControl({
       {/* 读数与来源标签各占一列（定宽，见 modules.css），与行距那一行落在同一条竖线上。 */}
       <span className="resume-measure-tail">
         <Typography.Text type="secondary" className="resume-measure-value">
-          {shown}mm
+          {Number(shown.toFixed(1))}mm
         </Typography.Text>
         {/* 「随模板」只在没设过覆盖时出现：设过之后这个数字就是用户自己的选择，
             再标"随模板"会让人以为模板一改自己的值也会跟着变。位置始终保留，

@@ -143,6 +143,42 @@ describe("AiPolishLayer 右键菜单", () => {
     expect(screen.queryByRole("dialog", { name: "AI 润色" })).toBeNull();
   });
 
+  it("在卡片里打字时，外层滚动不该把卡片关掉（表现就是「输入框打不上字」）", async () => {
+    const field = mountTextarea(ORIGINAL);
+    renderLayer();
+    selectField(field, 0, ORIGINAL.length);
+    openMenuOn(field);
+    fireEvent.click(menuItem("AI 润色"));
+    await screen.findByRole("dialog", { name: "AI 润色" });
+
+    const area = screen.getByLabelText("润色要求");
+    // 焦点进卡片——真实用户点一下就到这里。
+    (area as HTMLTextAreaElement).focus();
+    fireEvent.change(area, { target: { value: "更简洁" } });
+    expect(area).toHaveValue("更简洁");
+
+    // 输入时 `autoSize` 会让输入框变高，浏览器为了露出光标会把外层容器滚一下。
+    // 那一次滚动与"用户离开了选区"无关，但它落在 document 的捕获阶段——
+    // 2026-10-21 之前这里会直接 setCard(null)，用户看到的就是"卡片还在、字打不进去"。
+    fireEvent.scroll(document);
+    expect(screen.getByRole("dialog", { name: "AI 润色" })).toBeInTheDocument();
+    expect(area).toHaveValue("更简洁");
+  });
+
+  it("焦点不在卡片里时，滚动仍然关掉卡片（fixed 浮层不能与选区脱节）", async () => {
+    const field = mountTextarea(ORIGINAL);
+    renderLayer();
+    selectField(field, 0, ORIGINAL.length);
+    openMenuOn(field);
+    fireEvent.click(menuItem("AI 润色"));
+    await screen.findByRole("dialog", { name: "AI 润色" });
+
+    // 焦点留在外面（用户没点卡片，只是滚了一下页面）→ 卡片跟着选区一起退场。
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.scroll(document);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "AI 润色" })).toBeNull());
+  });
+
   it("点「取消」不替换原文", async () => {
     const field = mountTextarea(ORIGINAL);
     renderLayer();

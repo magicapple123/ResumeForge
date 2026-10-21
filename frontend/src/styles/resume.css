@@ -104,6 +104,13 @@
   margin-left: auto;
 }
 
+/* 精确模式下、度量控件**下面**单独一行的一句说明（2026-10-21 用户要求从第二行右端
+   移到字号调整条下方）。独占一行，所以左对齐——原先靠 `margin-left: auto` 顶到最右，
+   现在会把它推到右边，与"贴着控件说一句"的意图相反。 */
+.resume-preview-exact-hint {
+  font-size: 12px;
+}
+
 /* 版式下拉的触发框：宽度刚好框住 4 个中文字符。
    4em = 4 × 14px 的汉字宽度，+36px 是左右内边距与右侧箭头占位；原来是 min-width:120，
    框比文字宽出一大截，同一行的「样式 / 版式 / 顺序 / 篇幅」看起来疏密不匀。
@@ -188,14 +195,49 @@
   user-select: none;
 }
 
-.resume-preview-viewport.is-editing {
-  cursor: default;
-  touch-action: auto;
-}
-
 .resume-preview-scale-box {
   margin: 0 auto;
   overflow: visible;
+  /* 多页竖排后整块比一屏高，缩放靠内部 `.resume-preview-pages` 的 transform；
+     这里只负责给出"缩放后的实际占位"，滚动交给视口。 */
+  position: relative;
+}
+
+/* 多页竖排：每页一张 A4，上下摞（2026-10-21 取代横向并排）。
+   transform-origin 在左上角，与 scale-box 的宽高（已按 scale 算好）对齐。 */
+.resume-preview-pages {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  transform-origin: top left;
+}
+
+.resume-preview-page {
+  position: relative;
+  flex: 0 0 auto;
+  background: #fff;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 2px;
+  box-shadow: 0 1px 4px rgb(15 40 80 / 0.12);
+  /* 不能 `overflow: hidden`：页标挂在页脚**下方**那条空隙里（`bottom: -20px`），
+     裁掉就再也看不见了。iframe 自身就是 A4 尺寸，不会溢出这张纸。 */
+}
+
+/* 页标放在页脚下方那条空隙里（`PAGE_STACK_GAP_PX` = 24px 够放 12px 的字），
+   不压正文；单页时不渲染。 */
+.resume-preview-page-label {
+  position: absolute;
+  left: 0;
+  bottom: -20px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--rf-text-secondary);
+  background: var(--rf-surface-alt);
+  border-radius: 3px;
+  padding: 0 6px;
+  pointer-events: none;
 }
 
 .resume-iframe {
@@ -205,8 +247,70 @@
   pointer-events: none;
 }
 
-.resume-iframe[data-interaction-mode="edit"] {
-  pointer-events: auto;
+/* 精确预览：显示的是服务端排出的真实 PDF（与「导出」下载的是同一份字节）。
+   所以它只需要一个干净的相框——分页、阴影、缩放条全部交给浏览器 PDF 查看器，
+   任何"预览自己的装饰"在这里都会与查看器的工具栏打架。 */
+.exact-preview {
+  width: 100%;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+  overflow: hidden;
+  position: relative;
+}
+
+.exact-preview-frame {
+  display: block;
+  width: 100%;
+  border: none;
+}
+
+/* 双缓冲的两层叠在一起：可见层在下（不透明），预加载层在上（完全透明）。
+   两者都是 PDF 查看器，位置必须严格重合，否则换上来时会"跳"一下。 */
+.exact-preview-stack {
+  position: relative;
+  width: 100%;
+}
+
+.exact-preview-stack > .exact-preview-frame {
+  position: absolute;
+  inset: 0;
+}
+
+/* 预加载层：`onLoad` 之前谁也看不见它，但浏览器已经在解析新 PDF。 */
+.exact-preview-frame-pending {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 重排遮罩：半透明，让人知道"还在算"，同时仍能看见旧图的轮廓
+   （全遮住会变成一块白板，反而更像卡死）。 */
+.exact-preview-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10px;
+  background: rgb(245 247 250 / 0.55);
+  pointer-events: none;
+}
+
+.exact-preview-overlay-text {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border-subtle);
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.exact-preview-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px 4px;
 }
 
 /* 手写简历在桌面端并排显示岗位参考；**左右两栏各自独立滚动**。
@@ -682,51 +786,6 @@
 .resume-zoom-body {
   min-height: 360px;
 }
-
-/* 预览工具栏第二行右侧的「当前指向」提示：鼠标划过纸面字段时出现，说明现在指向哪一栏。
- *
- * R14：它是工具栏里唯一"长度不可控"的东西——路径文案可以是「实习/工作经历 · 第 2 条 ·
- * 工作内容 · 第 3 条」，而旁边还有「让 AI 改这一栏」按钮。原先它作为 Space 的普通子项
- * 参与 flex 排版，`max-width: 46%` 一到就把按钮挤到下一行（视觉上像是按钮"掉出去了"）。
- * 那之后它被改成绝对定位钉在工具栏右端。
- *
- * P2b / D7：右端换成了核心按钮（结构类控件），绝对定位会**正好盖住**它们，所以改回
- * **参与布局**（`margin-left: auto`）——宽度只会把左侧挤一点，结构上不可能重叠。 */
-.resume-preview-hover-chip {
-  /* 内联 style 由 ResumePreview 直接切换 none/flex（显隐逻辑不变）。 */
-  display: flex;
-  /* 只有剩余空间才占，长文案先压缩自己（label 内部再省略号）。 */
-  flex: 0 1 auto;
-  max-width: min(520px, 60vw);
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  padding: 2px 6px 2px 10px;
-  border: 1px solid var(--rf-focus-ring);
-  border-radius: 999px;
-  background: var(--rf-surface-alt);
-  color: var(--rf-text-body);
-  font-size: 12px;
-}
-
-.resume-preview-hover-label {
-  /* 唯一的可收缩项：长文案只会被省略，不会把按钮顶走。 */
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 按钮与来源角标一律不收缩、不换行——它们是这个 chip 存在的理由。 */
-.resume-preview-hover-chip > .ant-btn,
-.resume-preview-hover-badge {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-/* 窄屏的那条覆盖规则（绝对定位 → 独占一行）随 P2b 一起删除：
-   chip 现在天然就在第二行的右端，父容器的 `flex-wrap` 负责换行，不需要额外断点。 */
 
 /* 列表「目标岗位」列（T3）：列宽固定 200，长岗位名/公司名必须在 Tag 内省略，
    否则整表被撑宽、其它列被挤成一字宽。column 级 ellipsis 负责切 table-layout: fixed，

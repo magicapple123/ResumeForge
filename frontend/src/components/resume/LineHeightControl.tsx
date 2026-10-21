@@ -14,7 +14,14 @@ import { lineHeightProbeCss } from "../../utils/resumeFormatProbe";
 /** 可用区间与步长：与后端 `FORMAT_FIELDS` 的 line_height 逐项一致。 */
 export const LINE_HEIGHT_MIN = 1.2;
 export const LINE_HEIGHT_MAX = 2.2;
-export const LINE_HEIGHT_STEP = 0.05;
+/**
+ * 滑块的步长。
+ *
+ * 2026-10-21 用户要求从 0.05 收到 0.01：行距是"差 0.05 就压不进一页"的旋钮，
+ * 粗档位下只能靠 ± 按钮一点点蹭。0.01 与后端 `FORMAT_FIELDS.line_height.step` 一致
+ * （那边只做区间校验，步长是两边共同的口径声明）。
+ */
+export const LINE_HEIGHT_STEP = 0.01;
 
 /**
  * 提交防抖（毫秒）。

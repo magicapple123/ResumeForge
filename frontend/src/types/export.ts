@@ -15,6 +15,8 @@ export interface RedactionOptions {
   mask_school: boolean;
   mask_project: boolean;
   mask_product: boolean;
+  mask_github: boolean;
+  mask_website: boolean;
 }
 
 /** 全参数导出请求体（与后端 ``ExportRequest`` 逐字一致）。 */
@@ -55,6 +57,18 @@ export interface ExportResult {
   pageLimit: number | null;
 }
 
+/**
+ * 前端本地生成的补充格式：图片（PNG）。
+ *
+ * **故意不进 `ExportFormat`**：后端 `ExportFormat` 枚举里没有 png（也不该有——ATS 能解析的是
+ * PDF，服务端只保留一份排版产物）。选中它时请求仍然发 `format: "pdf"`，再在前端把同一份字节
+ * 光栅化成图片（见 `utils/pdfToPng.ts`）。
+ */
+export type LocalExportFormat = "png";
+
+/** 导出面板里可勾选的格式 = 后端格式 ∪ 前端本地格式。 */
+export type ExportUiFormat = ExportFormat | LocalExportFormat;
+
 /** 可选的导出格式（顺序即「导出选项」里的展示顺序）。 */
 export const EXPORT_FORMATS: { value: ExportFormat; label: string }[] = [
   { value: "pdf", label: "PDF" },
@@ -65,11 +79,22 @@ export const EXPORT_FORMATS: { value: ExportFormat; label: string }[] = [
   { value: "json", label: "JSON" },
 ];
 
+/** 导出面板的完整格式清单 = 六种后端格式 + 前端转出的图片（不重复抄一遍标签）。 */
+export const EXPORT_FORMAT_OPTIONS: { value: ExportUiFormat; label: string }[] = [
+  ...EXPORT_FORMATS,
+  { value: "png", label: "图片（PNG）" },
+];
+
+/** 图片格式的定位说明：一句话讲清"什么时候用图片、什么时候必须用 PDF"。 */
+export const PNG_FORMAT_NOTE = "图片用于必须上传图片的投递平台；需要机器筛选（ATS）时请用 PDF。";
+
 /** 脱敏范围的可配置项（与后端字段一一对应，label 用于勾选界面）。 */
 export const REDACTION_FIELDS: { key: keyof RedactionOptions; label: string }[] = [
   { key: "mask_name", label: "姓名" },
   { key: "mask_phone", label: "手机" },
   { key: "mask_email", label: "邮箱" },
+  { key: "mask_github", label: "GitHub" },
+  { key: "mask_website", label: "个人主页" },
   { key: "mask_company", label: "公司" },
   { key: "mask_school", label: "学校" },
   { key: "mask_project", label: "项目" },
@@ -85,4 +110,6 @@ export const DEFAULT_REDACTION_OPTIONS: RedactionOptions = {
   mask_school: false,
   mask_project: false,
   mask_product: false,
+  mask_github: true,
+  mask_website: true,
 };

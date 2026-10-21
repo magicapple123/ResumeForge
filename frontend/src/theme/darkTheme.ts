@@ -136,13 +136,10 @@ export const darkTheme: ThemeConfig = {
      * 只写 `Modal.ComponentToken` 公开的键（antd 6.6.5 只有 6 个）；内边距 / 分隔线
      * 仍在 `styles/modules.css`，因为那些键只存在于 `prepareComponentToken` 的内部返回类型。
      */
-    Modal: {
-      headerBg: darkPalette.surface,
-      titleColor: darkPalette.brandText,
-      titleFontSize: 16,
-      contentBg: darkPalette.surface,
-      footerBg: darkPalette.surface,
-    },
+    // Modal 段刻意留空：理由同 appTheme.ts —— antd 6 非 wireframe 下 headerBg /
+    // footerBg 默认 transparent，上色会让每个弹窗多出两条色带；深色下 headerBg 若取
+    // surface 又会与 contentBg 同色，色带变成"两条无意义的暗条"。弹窗容器的滚动布局
+    // 仍由 styles/modules.css 的 max-height/flex 承担（那几个属性 antd 不声明，能生效）。
     Tooltip: { colorBgSpotlight: darkPalette.spotlight },
   },
 };

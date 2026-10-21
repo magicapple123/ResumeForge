@@ -13,7 +13,11 @@ import { Button, Modal, Space, Typography } from "antd";
 import { useRef } from "react";
 import type { ResumeLayout } from "../../types";
 import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
-import ResumePreview, { type ResumePreviewHandle } from "../ResumePreview";
+import ResumePreview, {
+  type ExactPreviewOptions,
+  type ResumePreviewHandle,
+} from "../ResumePreview";
+import type { PreviewMode } from "../resume-preview/config";
 import ResumeMeasureControls from "./ResumeMeasureControls";
 import ResumeTemplateControls from "./ResumeTemplateControls";
 
@@ -24,9 +28,6 @@ interface Props {
   /** 与记录里的页数上限一致；预览里那几根虚线就是按它切的。 */
   pages: number;
   onClose: () => void;
-  onEditTarget: (path: string) => void;
-  /** 把字段路径翻译成人话栏名，用于工具栏上的"正指向"提示。 */
-  describePath?: (path: string) => string;
   /** 版式控件（与主预览同一份状态）：在大图里也能边走边调。 */
   layout?: ResumeLayout;
   resumeId?: number;
@@ -34,6 +35,14 @@ interface Props {
   onApplyLayout?: (next: ResumeLayout) => void;
   onExport?: () => void;
   previewRef?: React.RefObject<ResumePreviewHandle | null>;
+  /**
+   * 大图与主预览**共用同一份口径**（2026-10-21 用户要求）：主预览在草稿，大图就是草稿；
+   * 主预览在精确，大图就是精确。切换也双向同步——在大图里切回草稿，外面跟着变。
+   */
+  previewMode?: PreviewMode;
+  onPreviewModeChange?: (mode: PreviewMode) => void;
+  /** 精确预览所需的上下文（与大图外面的那一份逐字段相同）。 */
+  exactPreview?: ExactPreviewOptions;
 }
 
 export default function ResumeZoomModal({
@@ -42,14 +51,15 @@ export default function ResumeZoomModal({
   warnings,
   pages,
   onClose,
-  onEditTarget,
-  describePath,
   layout,
   resumeId,
   relayouting = false,
   onApplyLayout,
   onExport,
   previewRef,
+  previewMode,
+  onPreviewModeChange,
+  exactPreview,
 }: Props) {
   // 大图有自己的预览实例：字号滑块要即时作用在**这一个** iframe 上，不能借用主预览的句柄。
   // 调用方给了 ref 就用它（不再在 ref 回调里二次赋值——Compiler 禁止渲染后再改 ref）。
@@ -58,10 +68,10 @@ export default function ResumeZoomModal({
   // 目录**只取一次**，两个插槽共用（`useApi` 没有跨实例缓存，各取一次就是两个请求）。
   const { catalog } = useResumeTemplateCatalog();
   // 大图里同样要有两行工具栏 + 纸面下方的缩放条，否则"大图"里调不了版式也放不大。
+  // 同上：结构类控件也不走紧凑形态，与主预览的第一行保持一致。
   const templateControls =
     layout && onApplyLayout ? (
       <ResumeTemplateControls
-        compact
         layout={layout}
         resumeId={resumeId}
         disabled={relayouting}
@@ -69,10 +79,12 @@ export default function ResumeZoomModal({
         onChange={onApplyLayout}
       />
     ) : undefined;
+  // 不加 `compact`（2026-10-21 用户截图）：紧凑形态下三条滑杆是"吃掉剩余宽度"的，
+  // 大图弹窗更宽，于是行距/页边距只有 56px、字号 213px，与外面主预览的 200px 对不上。
+  // 大图与主预览必须是**同一种形态**（`is-stacked`），否则同一组控件在两处看起来像两套。
   const measureControls =
     layout && onApplyLayout ? (
       <ResumeMeasureControls
-        compact
         layout={layout}
         disabled={relayouting}
         catalog={catalog}
@@ -124,8 +136,9 @@ export default function ResumeZoomModal({
           warnings={warnings}
           // 视角更大：占满窗口高度，页面就能以 1:1 显示（不必再缩到 0.x 倍）。
           height={Math.round(window.innerHeight * 0.72)}
-          describePath={describePath}
-          onEditTarget={onEditTarget}
+          previewMode={previewMode}
+          onPreviewModeChange={onPreviewModeChange}
+          exactPreview={exactPreview}
         />
       </div>
     </Modal>

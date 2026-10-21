@@ -26,6 +26,21 @@ const STATUS_COLORS: Record<ResumeLayoutStatus, string> = {
   unknown: "default",
 };
 
+/**
+ * 草稿版式的稳定指纹：参数一变，诊断就必须重新取一次。
+ *
+ * 为什么不能只盯着测量值：`measureKey` 只反映"排出来多高"，而 `fit_room` / `fit_ladder`
+ * 是**从当前这一版往紧收**算出来的——基准变了结论就得跟着变，哪怕高度暂时没动。
+ * 排序是为了让"同一组版式"永远得到同一个串（`format_config` 的键序取决于插入顺序）。
+ */
+function draftLayoutKey(layout: ResumeLayout): string {
+  const config = Object.entries(layout.format_config ?? {})
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+    .join(",");
+  return `${layout.template}|${layout.format_name}|${layout.font_scale}|${config}`;
+}
+
 interface Props {
   resumeId: number;
   /** 预览量到的实测高度；还没渲染完时为 null。 */
@@ -67,6 +82,7 @@ export default function ResumeLayoutDiagnosisCard({
   const measureKey = measure
     ? `${measure.usedHeight.toFixed(1)}:${measure.pageContentHeight.toFixed(1)}:${measure.pageLimit}`
     : "";
+  const layoutKey = draftLayoutKey(layout);
 
   // 无度量时清空分析状态。Compiler 规范：随 measure 变化的重置用渲染期守卫式调整。
   const [prevMeasure, setPrevMeasure] = useState(measure);
@@ -82,11 +98,16 @@ export default function ResumeLayoutDiagnosisCard({
     // 轻微防抖：预览刚渲染完时可能连着上报几次（字体就绪、缩放变化）。
     const timer = setTimeout(() => {
       setAnalyzing(true);
-      analyzeResumeLayout(resumeId, {
-        used_height: measure.usedHeight,
-        page_content_height: measure.pageContentHeight,
-        page_limit: measure.pageLimit,
-      })
+      // 版式一起送过去：诊断看的是**屏幕上这一版**，不是记录里存的那一版。
+      analyzeResumeLayout(
+        resumeId,
+        {
+          used_height: measure.usedHeight,
+          page_content_height: measure.pageContentHeight,
+          page_limit: measure.pageLimit,
+        },
+        layout,
+      )
         .then((result) => {
           if (current === requestId.current) setAnalysis(result);
         })
@@ -103,9 +124,12 @@ export default function ResumeLayoutDiagnosisCard({
         });
     }, 250);
     return () => clearTimeout(timer);
-    // measureKey 把「同一个高度重复上报」折叠掉，避免每次渲染都打一次接口。
+    // measureKey 把「同一个高度重复上报」折叠掉，避免每次渲染都打一次接口；
+    // layoutKey 管另一件事——高度没动但版式动了（换模板/换预设/手动改间距）时，
+    // `fit_room` 与「自动一页」清单都必须重算，否则用户改完参数看到的还是上一版结论。
+    // layout 与 measure 都随各自的 key 变化，key 不变就说明送的还是同一份，无需重跑。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeId, measureKey]);
+  }, [resumeId, measureKey, layoutKey]);
 
   const autoFit = useCallback(async () => {
     const ladder = analysis?.fit_ladder ?? [];
@@ -204,13 +228,14 @@ export default function ResumeLayoutDiagnosisCard({
       )}
 
       {/* 诊断接口不可用（后端一时不可达等）时，至少把"塞不下"这件事说出来——
-          只是静默地不显示面板，用户会以为版面没问题。 */}
+          只是静默地不显示面板，用户会以为版面没问题。措辞不再提"整体缩小"：
+          2026-10-21 起预览不再自动缩字号，装不下的部分直接截断。 */}
       {!diagnosis && overflow && (
         <Alert
           type="warning"
           showIcon
           className="resume-diagnosis-floor"
-          title={`内容超出了 ${layout.page_limit} 页：预览已经整体缩小，字会偏小。暂时读不到详细诊断，可以稍后重试。`}
+          title={`内容超出了 ${layout.page_limit} 页：字号按你设定的值渲染，超出的部分不会显示。暂时读不到详细诊断，可以稍后重试。`}
         />
       )}
 

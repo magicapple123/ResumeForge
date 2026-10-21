@@ -7,6 +7,14 @@ export const A4_HEIGHT_PX = 1123;
 // 默认值（左右各 14mm 页边距时 = 28mm ≈ 106px）；真正的间隙由 `layoutFrame` 按
 // 这份简历当前的页边距量出来（`pageGap`），这里只是首次测量前的占位。
 export const PAGE_GAP_PX = 106;
+/**
+ * 竖排多页时页与页之间的空隙（CSS px，随整体缩放一起变）。
+ *
+ * 2026-10-21 用户要求把多页从"横向并排"改成"竖向堆叠"：横向并排要看第二页得先横滚，
+ * 而简历的阅读顺序本来就是从上往下。这里只是**视觉间隔**——每页内部仍是同一套
+ * CSS 多列分页（列宽/列间距由页边距算），断点口径没有变。
+ */
+export const PAGE_STACK_GAP_PX = 24;
 export const PREVIEW_BOTTOM_RESERVE = 150;
 export const PREVIEW_HEIGHT_RATIO = 0.62;
 export const MIN_PREVIEW_HEIGHT = 360;
@@ -25,8 +33,6 @@ export const LIVE_PROBE_STYLE_ID = "resume-font-live-probe";
  * 选 2 / 3 页时不受这个开关影响：多页本来就是横向并排——用户 2026-10-20 再次确认
  * 要保留这种"几张 A4 并排"的形态，不接受上下叠。
  */
-export const EXPAND_OVERFLOW_ON_SINGLE_PAGE = false;
-
 export const APPROXIMATE_PAGINATION_NOTE =
   "多页视图为「按 A4 高度切分的近似分页」，真实分页以「浏览器打印 / 下载 PDF」为准。";
 
@@ -38,14 +44,19 @@ export interface AvailableSpace {
   height: number;
 }
 
+/**
+ * 预览口径：草稿（浏览器实时排版）/ 精确（服务端排出的真实 PDF）。
+ *
+ * 是**受控**状态：主预览与「查看大图」共用它，在一处切换，另一处跟着走。
+ */
+export type PreviewMode = "draft" | "exact";
+
 export interface PanStart {
   clientX: number;
   clientY: number;
   scrollLeft: number;
   scrollTop: number;
 }
-
-export type InteractionMode = "pan" | "edit";
 
 /** 预览暴露给外部的命令式接口，只给「自动一页」等版式控件使用。 */
 export interface ResumePreviewHandle {

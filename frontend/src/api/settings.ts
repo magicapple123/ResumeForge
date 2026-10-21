@@ -22,7 +22,7 @@ import type {
   UpdateStatus,
   WebFormRelaxedModeSetting,
 } from "../types";
-import { getFilenameFromDisposition, request, requestRaw } from "./client";
+import { request } from "./client";
 import type { RequestBudgetKind } from "./client";
 
 export function getLLMConfig(): Promise<LLMConfig> {
@@ -292,100 +292,10 @@ export function deleteDataset(id: string): Promise<void> {
   return request(`/settings/datasets/${id}`, { method: "DELETE" });
 }
 
-/** 导出指定数据集（默认**包含**大模型 API Key；显式取消后剥离）。 */
-export async function exportDataset(
-  id: string,
-  includeApiKeys = true,
-  includeGlobalLLM = true,
-  /** 下载名（可含中文）；省略时后端用「<数据集名>-<时间戳>.zip」。 */
-  filename?: string,
-): Promise<ArchiveDownload> {
-  return downloadArchive(
-    exportUrl(`/settings/datasets/${id}/export`, includeApiKeys, includeGlobalLLM, filename),
-  );
-}
-
-/**
- * 导出**全部数据集**：当前活动的那份 + 列表里其余每一份。
- *
- * 与 `exportDataset` 的区别是"包里有没有其余数据集"。默认的导出只带当前这一份——多份
- * 数据集的用户如果按默认方式备份，其余几份不会进包，而这种事通常要到需要恢复时才发现。
- */
-export async function exportAllDatasets(
-  includeApiKeys = true,
-  includeGlobalLLM = true,
-  filename?: string,
-): Promise<ArchiveDownload> {
-  return downloadArchive(
-    exportUrl("/settings/datasets/export-all", includeApiKeys, includeGlobalLLM, filename),
-  );
-}
-
-/**
- * 拼导出 URL：始终显式带两个开关（后端默认 true），否则"取消勾选"会被当成缺省值
- * 重新包含。`include_global_llm` 控制整个 `global_llm.json` 段，不是只控密钥。
- */
-function exportUrl(
-  base: string,
-  includeApiKeys: boolean,
-  includeGlobalLLM: boolean,
-  filename?: string,
-): string {
-  const params = [
-    `include_api_keys=${includeApiKeys ? "true" : "false"}`,
-    `include_global_llm=${includeGlobalLLM ? "true" : "false"}`,
-  ];
-  const name = (filename || "").trim();
-  if (name) params.push(`filename=${encodeURIComponent(name)}`);
-  return `${base}?${params.join("&")}`;
-}
-
-/** 附件告警计数（H2）：三类分开报，界面按类型写文案。 */
-export interface BackupAssetIssues {
-  /** 这次导出时磁盘上找不到（新缺失）→ 包里不包含。 */
-  missing: number;
-  /** 文件在，但字节与数据库登记的 SHA-256 不符 → 包里是当前磁盘上的那一份。 */
-  mismatched: number;
-  /** 数据集导入时就已缺失 → 只做说明，不算"不完整"。 */
-  missingAtImport: number;
-  /** 仅新缺失或哈希不符时为 true（后端 X-Backup-Incomplete）。 */
-  incomplete: boolean;
-}
-
-export interface ArchiveDownload {
-  blob: Blob;
-  filename: string;
-  /** 兼容既有调用点：等价于 assetIssues.incomplete。 */
-  incompleteBackup: boolean;
-  assetIssues: BackupAssetIssues;
-}
-
-function headerCount(headers: Headers, name: string): number {
-  const raw = Number(headers.get(name) ?? "0");
-  return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : 0;
-}
-
-async function downloadArchive(url: string): Promise<ArchiveDownload> {
-  // 响应是二进制压缩包，不是 JSON：走 requestRaw（错误分类/诊断与 request() 一致），
-  // 导出大包走 export 预算（10 分钟），不吃 15s 的默认超时。
-  const resp = await requestRaw(url, { budget: "export" });
-  // RR-03 / H2：包里有附件缺失/与登记哈希不符时后端会在响应头标出来——不读它就会把
-  // 一份不完整的备份播报成"完整备份成功"。三类计数分开读，文案才能说清是哪一种。
-  const assetIssues: BackupAssetIssues = {
-    missing: headerCount(resp.headers, "X-Backup-Asset-Missing"),
-    mismatched: headerCount(resp.headers, "X-Backup-Asset-Mismatched"),
-    missingAtImport: headerCount(resp.headers, "X-Backup-Asset-Missing-At-Import"),
-    incomplete: resp.headers.get("X-Backup-Incomplete") === "1",
-  };
-  return {
-    blob: await resp.blob(),
-    filename:
-      getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ??
-      "resumeforge-backup.zip",
-    incompleteBackup: assetIssues.incomplete,
-    assetIssues,
-  };
-}
+// 备份包导出与包内范围解析单独成模块（拆分理由见 datasetArchive.ts 的文件头）：
+// 这里只做转发，保持既有 `import ... from "../api/settings"` 的调用点不变。
+export { exportAllDatasets, exportDataset } from "./datasetArchive";
+export type { ArchiveDownload, BackupAssetIssues, BackupCoverage } from "./datasetArchive";
 
 /** 当前数据集的自动备份保护摘要（RF-05）。 */
 export function getBackupStatus(signal?: AbortSignal): Promise<BackupStatus> {

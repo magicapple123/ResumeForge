@@ -118,6 +118,16 @@ describe("BackupStatusCard", () => {
     expect(screen.getByText("还没有成功过的自动备份。")).toBeTruthy();
   });
 
+  it("coverage=database_only：说明自动备份不含附件与字体，并指向手动导出", async () => {
+    // H3：范围必须说清楚，否则用户把「受保护」读成"所有东西都不会丢"。
+    getBackupStatus.mockResolvedValue(status({ coverage: "database_only" }));
+    renderCard();
+    await waitFor(() => {
+      expect(screen.getByText(/自动备份只覆盖数据库快照，不含附件与字体/)).toBeTruthy();
+    });
+    expect(screen.getByText(/导出数据集 \/ 导出全部数据集/)).toBeTruthy();
+  });
+
   it("接口失败：显示错误而不是空白", async () => {
     getBackupStatus.mockRejectedValue(new Error("读取备份状态失败"));
     renderCard();

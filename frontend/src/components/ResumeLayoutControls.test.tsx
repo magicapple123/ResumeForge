@@ -304,16 +304,16 @@ describe("ResumeLayoutControls · 页边距（T5 / 4a）", () => {
     expect(screen.getByRole("button", { name: "增大页边距" })).toBeEnabled();
   });
 
-  it("「增大页边距」一次 +1mm，写进 format_config.page_padding", async () => {
+  it("「增大页边距」一次 +0.1mm，写进 format_config.page_padding", async () => {
     const onChange = renderControls();
 
     const plus = await screen.findByRole("button", { name: "增大页边距" });
     fireEvent.click(plus);
 
     // 读数先跟着走（本地值），提交在 120ms 防抖后。
-    expect(screen.getByText("15mm")).toBeInTheDocument();
+    expect(screen.getByText("14.1mm")).toBeInTheDocument();
     await waitFor(() => expect(onChange).toHaveBeenCalled());
-    expect(lastLayout(onChange).format_config).toEqual({ page_padding: 15 });
+    expect(lastLayout(onChange).format_config).toEqual({ page_padding: 14.1 });
   });
 
   it("没设过时标「随模板」，且没有独立的复位按钮", async () => {
@@ -356,7 +356,8 @@ describe("ResumeLayoutControls · 页边距（T5 / 4a）", () => {
     // 后端白名单之外的值会被整条丢弃（"设了 30mm，导出还是默认"）。
     expect(clampPagePadding(3)).toBe(8);
     expect(clampPagePadding(40)).toBe(26);
-    expect(clampPagePadding(25.7)).toBe(26);
+    // 0.1mm 精度后，范围内的小数原样保留（以前会取整到 26）。
+    expect(clampPagePadding(25.7)).toBe(25.7);
     expect(clampPagePadding(Number.NaN)).toBe(8);
   });
 });

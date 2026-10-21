@@ -88,17 +88,14 @@ describe("darkTheme token", () => {
     );
   });
 
-  it("弹窗 token 与 dark-tokens.css 同源：标题条/页脚用卡片面，不用次级面", () => {
-    // 深色下 surface-alt 会在标题/页脚处压出两条"黑条"（用户 2026-10-20 截图反馈，
-    // 见 dark-tokens.css 的注释）。token 若编码成 surfaceAlt，删掉 CSS 覆写就会复发。
-    expect(darkTheme.components?.Modal).toEqual({
-      headerBg: darkPalette.surface,
-      titleColor: darkPalette.brandText,
-      titleFontSize: 16,
-      contentBg: darkPalette.surface,
-      footerBg: darkPalette.surface,
-    });
-    expect(darkTheme.components?.Modal?.headerBg).not.toBe(darkPalette.surfaceAlt);
+  it("弹窗不设 headerBg/footerBg：antd 6 默认 transparent，上色会长出两条色带", () => {
+    // 2026-10-21 用户截图反馈：弹窗标题栏与底栏出现淡蓝色带。
+    // 根因是上一轮把 `.ant-modal-header{background}` 迁成了 headerBg token —— 但那条
+    // CSS 单类选择器本来就输给 antd 的 `:where(.css-x).ant-modal .ant-modal-header`，
+    // 从未生效；变成 token 之后才第一次真的画出来。
+    // 这里钉住"两套主题都不许再给这两个 token 上色"，避免有人第三次把它加回来。
+    expect(appTheme.components?.Modal).toBeUndefined();
+    expect(darkTheme.components?.Modal).toBeUndefined();
   });
 
   it("Menu 的选中条归零由 token 表达，尺寸仍留在 CSS（跨组件零影响）", () => {

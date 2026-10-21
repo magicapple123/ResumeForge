@@ -45,7 +45,6 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
   const [savedLayout, setSavedLayout] = useState<ResumeLayout>(DEFAULT_LAYOUT);
   const [layoutStatus, setLayoutStatus] = useState<{
     pages: number;
-    scale: number;
     overflow: boolean;
   } | null>(null);
   const [pdfDirectAvailable, setPdfDirectAvailable] = useState(true);

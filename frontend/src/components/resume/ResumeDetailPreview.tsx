@@ -15,7 +15,7 @@
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import { Button, Collapse, Space, Tag, Tooltip, Typography } from "antd";
 import { Alert } from "antd";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { RESUME_ENHANCEMENT_LEVELS } from "../../config";
@@ -23,8 +23,6 @@ import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 import { contentSignature } from "../../utils/contentSignature";
 import ExportOptionsModal from "../ExportOptionsModal";
-import { describeResumeFieldPath } from "../../utils/resumeFieldPath";
-import ResumeFieldQuickEditModal from "./ResumeFieldQuickEditModal";
 import ResumeZoomModal from "./ResumeZoomModal";
 import ResumeEditorModal from "../ResumeEditorModal";
 import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
@@ -35,30 +33,18 @@ import ResumeQualityModal from "../ResumeQualityModal";
 import ResumeSuggestionsModal from "../ResumeSuggestionsModal";
 import ResumeReviseModal from "./ResumeReviseModal";
 import SharePackageModal from "../SharePackageModal";
-import ResumePreview, { type ResumePreviewHandle } from "../ResumePreview";
+import ResumePreview, {
+  type ExactPreviewOptions,
+  type ResumePreviewHandle,
+} from "../ResumePreview";
+import type { PreviewMode } from "../resume-preview/config";
 import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
 import ResumeDetailFooter from "./ResumeDetailFooter";
 import EvidencePanel from "./EvidencePanel";
-import { ORIGIN_LABELS } from "./factAnnotationMeta";
-import type { FactAnnotation } from "../../types";
 
 interface LayoutStatus {
   pages: number;
-  scale: number;
   overflow: boolean;
-}
-
-/** 把一条标注压成预览角标需要的形状（label 显示在角标上，其余进 Popover）。 */
-function toBadge(annotation: FactAnnotation): {
-  label: string;
-  sourceFact: string;
-  boundary: string;
-} {
-  return {
-    label: ORIGIN_LABELS[annotation.origin] ?? annotation.origin,
-    sourceFact: annotation.source_fact ?? "",
-    boundary: annotation.boundary ?? "",
-  };
 }
 
 interface Props {
@@ -131,8 +117,9 @@ export default function ResumeDetailPreview({
     setExportOptionsOpen(true);
   });
   const [zoomOpen, setZoomOpen] = useState(false);
-  // 「只编辑选中的这一部分」：预览里点中哪一栏就只改哪一栏（与「手动调整」分开）。
-  const [quickEditPath, setQuickEditPath] = useState<string | null>(null);
+  // 预览口径（草稿 / 精确）住在这一层：主预览与「查看大图」共用它，任何一处切换，
+  // 另一处和大图都会跟着走（2026-10-21 用户要求）。
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("draft");
   const [sharePackageOpen, setSharePackageOpen] = useState(false);
   // 内部再包一层引用：父组件可能传 null（尚未量到），子组件需要一份稳定的 ref 传入 ResumePreview。
   const fallbackRef = useRef<ResumePreviewHandle>(null);
@@ -160,27 +147,32 @@ export default function ResumeDetailPreview({
     return { fabricationWarnings: rest, legacyCoverageWarnings: legacy };
   }, [detail.warnings]);
   const coverageNotes = detail.coverage_notes ?? [];
-  // 事实来源标注（RF-13）：证据面板 + 预览角标共用同一份数据。
-  const factAnnotations = useMemo(() => detail.fact_annotations ?? [], [detail.fact_annotations]);
-  // 悬停路径（`experience.0.description.1`）与标注路径（`experience.0.description`）
-  // 不是同一粒度：精确命中优先，否则取最长前缀的标注——指向条目里的某一条要点时，
-  // 说得出来源的是它所属的那一栏。
-  const describeAnnotation = useCallback(
-    (path: string): { label: string; sourceFact: string; boundary: string } | null => {
-      let best: FactAnnotation | null = null;
-      for (const annotation of factAnnotations) {
-        if (annotation.path === path) return toBadge(annotation);
-        if (
-          path.startsWith(`${annotation.path}.`) &&
-          (best === null || annotation.path.length > best.path.length)
-        ) {
-          best = annotation;
-        }
-      }
-      return best ? toBadge(best) : null;
-    },
-    [factAnnotations],
+  // 主预览与「查看大图」必须拿到**同一份**精确预览上下文：各自拼一份迟早会漂
+  // （一处带草稿页数、一处带记录页数，用户就会看到"大图少一页"）。
+  const exactPreview = useMemo<ExactPreviewOptions>(
+    () => ({
+      resumeId: detail.id,
+      // 模板与版式模板也走草稿值：换完还没点保存，精确预览就得按新的排。
+      template: layout.template,
+      formatName: layout.format_name,
+      fontScale: layout.font_scale,
+      formatConfig: layout.format_config as unknown as Record<string, unknown>,
+      // 正文签名：改了内容也要重排一次（版式字段已各自进依赖）。
+      // `riskContentSignature` 已经为风险扫描算过，直接复用（同一份 content）。
+      contentSignature: riskContentSignature,
+    }),
+    [
+      detail.id,
+      layout.template,
+      layout.format_name,
+      layout.font_scale,
+      layout.format_config,
+      riskContentSignature,
+    ],
   );
+  // 事实来源标注（RF-13）：证据面板用它列出"这条内容从哪来"。
+  // 预览上的悬停角标随编辑模式一起去掉了（2026-10-21），标注数据本身仍然有效。
+  const factAnnotations = useMemo(() => detail.fact_annotations ?? [], [detail.fact_annotations]);
 
   return (
     <div>
@@ -339,17 +331,15 @@ export default function ResumeDetailPreview({
         }
         html={html}
         pages={layout.page_limit}
+        // 精确预览（方案 A）：拿得到记录 id 就能用真实导出 PDF 渲染。
+        // 草稿值（页数/字号/版式）一并传进去——"拖完滑块还没保存"的版式正是最需要
+        // 在导出里核对的东西，只传记录值就等于让它看不见。
+        exactPreview={exactPreview}
+        previewMode={previewMode}
+        onPreviewModeChange={setPreviewMode}
         warnings={fabricationWarnings}
         onLayoutStatus={onLayoutStatus}
         onMeasure={onMeasure}
-        // 鼠标划过纸面时，工具栏要说出"现在指向的是哪一栏"——这要靠简历内容才起得准
-        // （没有内容只能说出「项目经历的第 2 条要点」，说不出是哪个项目）。
-        describePath={(path) => describeResumeFieldPath(path, detail.content)}
-        // 带标注的路径在悬停工具栏上加一枚来源角标（悬停可看依据与边界）。
-        describeAnnotation={describeAnnotation}
-        // 预览里点中的那一栏 → 只编辑这一栏（快速编辑），不打开整份编辑器。
-        // 通读、跨栏改、写作增强都留给「手动调整」。
-        onEditTarget={(path) => setQuickEditPath(path)}
       />
       {/* 固定在弹窗底部：内容长（版面诊断 + 预览）时不必一路翻到最后才够得着这些按钮。 */}
       <ResumeDetailFooter
@@ -429,14 +419,6 @@ export default function ResumeDetailPreview({
         pdfDirectAvailable={pdfDirectAvailable}
         onClose={() => setExportOptionsOpen(false)}
       />
-      <ResumeFieldQuickEditModal
-        open={quickEditPath !== null}
-        resumeId={detail.id}
-        content={detail.content}
-        path={quickEditPath}
-        onClose={() => setQuickEditPath(null)}
-        onSaved={onSaveEditedResume}
-      />
       <ResumeZoomModal
         open={zoomOpen}
         html={html}
@@ -446,12 +428,10 @@ export default function ResumeDetailPreview({
         resumeId={detail.id}
         relayouting={relayouting}
         onApplyLayout={onApplyLayout}
-        describePath={(path) => describeResumeFieldPath(path, detail.content)}
+        previewMode={previewMode}
+        onPreviewModeChange={setPreviewMode}
+        exactPreview={exactPreview}
         onClose={() => setZoomOpen(false)}
-        onEditTarget={(path) => {
-          setZoomOpen(false);
-          setQuickEditPath(path);
-        }}
         onExport={() => {
           setZoomOpen(false);
           setExportOptionsOpen(true);

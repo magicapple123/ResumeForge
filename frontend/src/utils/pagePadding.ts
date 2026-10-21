@@ -14,8 +14,15 @@ export const MIN_PAGE_PADDING = 8;
 /** 与后端 `services/resume/resume_template_format.py` 的 page_padding max 一致。 */
 export const MAX_PAGE_PADDING = 26;
 
-/** 把任意数字收进 8–26 并取整；NaN 一并挡在外面（回落到下限而不是把 NaN 发出去）。 */
+/**
+ * 把任意数字收进 8–26 并收口到 **0.1mm**；NaN 一并挡在外面（回落到下限而不是把 NaN 发出去）。
+ *
+ * 0.1 而不是整数（2026-10-21 用户要求）：1mm 一档时常常是"小 1mm 就断行、大了装不下"，
+ * 中间没有可用值。收口到一位小数还有个副作用好处——滑块拖动产生的浮点尾巴
+ * （14.300000000000001）不会漏到读数与落库值里。
+ */
 export function clampPagePadding(value: number): number {
   if (!Number.isFinite(value)) return MIN_PAGE_PADDING;
-  return Math.min(MAX_PAGE_PADDING, Math.max(MIN_PAGE_PADDING, Math.round(value)));
+  const clamped = Math.min(MAX_PAGE_PADDING, Math.max(MIN_PAGE_PADDING, value));
+  return Math.round(clamped * 10) / 10;
 }

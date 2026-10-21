@@ -20,23 +20,29 @@ import ResumeDetailPreview from "./ResumeDetailPreview"; // 预览是真的 ifra
 // 与 `styles/color-regression.test.ts` 同一套写法：从磁盘读 CSS 原文（jsdom 不求值网格位置）。
 declare const process: { cwd(): string };
 // 预览本身由 ResumePreview.test.tsx 覆盖；这里把它替成一个**只做插槽接线**的桩：
-// 两个具名插槽（结构类 / 度量类）原样渲染出来，好让"调用点有没有把两组喂进去"被钉住，
-// 同时提供一个能"点中某一栏"的按钮，用来验证点中那一栏应打开"只编辑这一部分"。
+// 两个具名插槽（结构类 / 度量类）原样渲染出来，好让"调用点有没有把两组喂进去"被钉住。
+// 桩不再提供"点中某一栏"的按钮——预览的点击编辑已于 2026-10-21 整块去掉。
 vi.mock("../ResumePreview", () => ({
   default: ({
-    onEditTarget,
     templateControls,
     measureControls,
+    previewMode,
+    onPreviewModeChange,
+    exactPreview,
   }: {
-    onEditTarget?: (path: string) => void;
     templateControls?: ReactNode;
     measureControls?: ReactNode;
+    previewMode?: string;
+    onPreviewModeChange?: (mode: "draft" | "exact") => void;
+    exactPreview?: { resumeId: number };
   }) => (
     <div>
       <div data-testid="toolbar-template-slot">{templateControls}</div>
       <div data-testid="toolbar-measure-slot">{measureControls}</div>
-      <button type="button" onClick={() => onEditTarget?.("summary")}>
-        模拟点中「个人总结」
+      <div data-testid="preview-mode">{previewMode ?? "draft"}</div>
+      <div data-testid="preview-exact-resume">{exactPreview?.resumeId ?? ""}</div>
+      <button type="button" onClick={() => onPreviewModeChange?.("exact")}>
+        切到精确
       </button>
     </div>
   ),
@@ -289,16 +295,25 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     expect(document.querySelector(".resume-zoom-body")).not.toBeNull();
   });
 
-  it("预览里点中某一栏只打开「只编辑这一部分」，不是整份编辑器", async () => {
+  it("「查看大图」与主预览共用同一份口径：切到精确，大图也是精确", async () => {
     renderPreview();
 
-    fireEvent.click(screen.getByRole("button", { name: /模拟点中/ }));
+    // 主预览切到精确 → 状态住在 ResumeDetailPreview，两个预览实例都读它。
+    fireEvent.click(screen.getByRole("button", { name: "切到精确" }));
+    expect(screen.getAllByTestId("preview-mode").map((el) => el.textContent)).toEqual(["exact"]);
 
-    // 打开的是"只改这一栏"的窗口：带保存这一栏的按钮与那一栏的当前内容。
-    expect(await screen.findByRole("button", { name: /保存这一栏/ })).toBeInTheDocument();
-    expect(screen.getByText("编辑：个人总结")).toBeInTheDocument();
-    // 整份编辑器（有「写作增强」页签）没有被打开。
-    expect(screen.queryByText("写作增强")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /查看大图/ }));
+    expect(await screen.findByText("查看简历大图")).toBeInTheDocument();
+
+    // 主预览 + 大图里的预览：口径一致，精确预览的上下文也一致（同一份简历 id）。
+    expect(screen.getAllByTestId("preview-mode").map((el) => el.textContent)).toEqual([
+      "exact",
+      "exact",
+    ]);
+    expect(screen.getAllByTestId("preview-exact-resume").map((el) => el.textContent)).toEqual([
+      String(DETAIL.id),
+      String(DETAIL.id),
+    ]);
   });
 
   it("「手动调整」才打开整份编辑器", async () => {

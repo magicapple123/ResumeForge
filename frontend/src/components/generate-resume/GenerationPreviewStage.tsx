@@ -22,12 +22,12 @@ interface Props {
   result: GenerateResult;
   previewHtml: string;
   layout: ResumeLayout;
-  layoutStatus: { pages: number; scale: number; overflow: boolean } | null;
+  layoutStatus: { pages: number; overflow: boolean } | null;
   measure: LayoutMeasure | null;
   pdfDirectAvailable: boolean;
   relayouting: boolean;
   previewRef: RefObject<ResumePreviewHandle | null>;
-  setLayoutStatus: (status: { pages: number; scale: number; overflow: boolean } | null) => void;
+  setLayoutStatus: (status: { pages: number; overflow: boolean } | null) => void;
   setMeasure: (measure: LayoutMeasure | null) => void;
   applyLayout: (next: ResumeLayout) => void;
   applyFittedFormat: (formatConfig: ResumeFormatConfig) => void;

@@ -1,19 +1,34 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useCallback, useEffect } from "react";
+/**
+ * 预览的交互：**只有"看"**——Ctrl+滚轮缩放、滚轮纵向转交外层、按住拖动平移。
+ *
+ * 这里曾经还有一套"编辑"模式（点纸面上的字段直接改），2026-10-21 按用户要求去掉：
+ * 修改入口已经统一到「选中文字 → 右键 → AI 润色」与「手动调整」两条，预览里再放一套
+ * 点击命中区，等于同一件事有两个入口、两套命中规则。
+ *
+ * 2026-10-21 多页改成竖向堆叠后，画布上同时有 N 个 iframe（一页一个），所以缩放轮的
+ * 绑定从"一个固定 ref"改成 `bindFrame(frame)`：每个 iframe 各自绑、各自清。不绑的那几页
+ * 会把 Ctrl+滚轮吃掉（iframe 是独立文档，事件不冒泡到父文档）。
+ */
+import { useCallback, useEffect, useRef } from "react";
 import type { MutableRefObject, RefObject } from "react";
-import type { InteractionMode, PanStart } from "./config";
+import type { PanStart } from "./config";
 
 interface Options {
   containerRef: RefObject<HTMLDivElement | null>;
-  iframeRef: RefObject<HTMLIFrameElement | null>;
   panStartRef: MutableRefObject<PanStart | null>;
-  frameCleanupRef: MutableRefObject<(() => void) | null>;
-  interactionMode: InteractionMode;
-  onEditTarget?: (path: string) => void;
-  /** 鼠标指到哪一栏（离开纸面或移到空白处时给 null）。用于"看到哪就改哪"。 */
-  onHoverTarget?: (path: string | null) => void;
   onZoomWheel: (event: globalThis.WheelEvent) => void;
   onPanningChange: (value: boolean) => void;
+  /**
+   * 视口元素"换代"的信号：草稿画布在切换预览口径时会被卸载再挂载，
+   * `containerRef.current` 就换成了一个**全新的 div**，而绑定在旧 div 上的
+   * wheel / pointer 监听器随旧元素一起消失。effect 的依赖全是稳定引用（ref、setState），
+   * 不重跑 → 新视口上没有任何监听器。
+   *
+   * 症状很能说明问题：**首次进草稿缩放正常，切到「精确」再切回来就失效**
+   * （2026-10-21 用户实测）。把画布的身份传进来，换代时重绑即可。
+   */
+  viewportKey?: unknown;
 }
 
 /** 找到弹窗或页面真正负责纵向滚动的容器。 */
@@ -49,139 +64,43 @@ export function forwardWheelToParent(container: HTMLElement | null, event: Wheel
 
 export function useFrameInteractions({
   containerRef,
-  iframeRef,
   panStartRef,
-  frameCleanupRef,
-  interactionMode,
-  onEditTarget,
-  onHoverTarget,
   onZoomWheel,
   onPanningChange,
+  viewportKey,
 }: Options) {
-  const bindFrameInteractions = useCallback(() => {
-    frameCleanupRef.current?.();
-    frameCleanupRef.current = null;
-    const document = iframeRef.current?.contentDocument;
-    if (!document) return;
+  /**
+   * 每个 iframe 一份清理函数：同一个 iframe 重新加载（换简历 / 切页数）时会再绑一次，
+   * 先清旧的再绑，避免同一个文档上挂两个监听器（缩放一次跳两格）。
+   */
+  const cleanupsRef = useRef(new Map<HTMLIFrameElement, () => void>());
 
-    document.addEventListener("wheel", onZoomWheel, { passive: false });
-    document.getElementById("resume-preview-interaction-style")?.remove();
+  const clearFrames = useCallback(() => {
+    for (const cleanup of cleanupsRef.current.values()) cleanup();
+    cleanupsRef.current.clear();
+  }, []);
 
-    let handleClick: ((event: MouseEvent) => void) | undefined;
-    let handleKeyDown: ((event: KeyboardEvent) => void) | undefined;
-    let handleHoverOver: ((event: MouseEvent) => void) | undefined;
-    let handleHoverOut: ((event: MouseEvent) => void) | undefined;
-    const targets = Array.from(document.querySelectorAll<HTMLElement>("[data-resume-path]"));
-    const originalAttributes = new Map(
-      targets.map((target) => [
-        target,
-        { role: target.getAttribute("role"), tabIndex: target.getAttribute("tabindex") },
-      ]),
-    );
-
-    if (interactionMode === "edit" && onEditTarget) {
-      const style = document.createElement("style");
-      style.id = "resume-preview-interaction-style";
-      style.textContent =
-        "[data-resume-path]{cursor:pointer;border-radius:2px;outline:1px solid transparent}" +
-        "[data-resume-path]:hover,[data-resume-path]:focus{outline:2px solid #1677ff;outline-offset:2px;background:rgba(22,119,255,.08)}";
-      document.head.appendChild(style);
-      targets.forEach((target) => {
-        target.setAttribute("role", "button");
-        target.setAttribute("tabindex", "0");
+  const bindFrame = useCallback(
+    (frame: HTMLIFrameElement) => {
+      cleanupsRef.current.get(frame)?.();
+      const document = frame.contentDocument;
+      if (!document) return;
+      document.addEventListener("wheel", onZoomWheel, { passive: false });
+      cleanupsRef.current.set(frame, () => {
+        document.removeEventListener("wheel", onZoomWheel);
       });
+    },
+    [onZoomWheel],
+  );
 
-      const resolveTarget = (target: EventTarget | null) => {
-        const ElementConstructor = document.defaultView?.Element;
-        return ElementConstructor && target instanceof ElementConstructor
-          ? target.closest<HTMLElement>("[data-resume-path]")
-          : null;
-      };
-      handleClick = (event) => {
-        const target = resolveTarget(event.target);
-        const path = target?.dataset.resumePath;
-        if (!path) return;
-        event.preventDefault();
-        onEditTarget(path);
-      };
-      handleKeyDown = (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        const target = resolveTarget(event.target);
-        const path = target?.dataset.resumePath;
-        if (!path) return;
-        event.preventDefault();
-        onEditTarget(path);
-      };
-      if (onHoverTarget) {
-        // 用 **mousemove** 而不是 mouseover 来跟踪"指针在哪一栏"。
-        //
-        // 为什么：实测（真实 Chromium + Playwright 移动鼠标）`mouseover` 在这个 iframe
-        // 的文档里收不到——鼠标从工具栏移进纸面时，帧内元素不会收到那一次进入事件，
-        // 于是"看到哪就改哪"在这个最该生效的路径上失效（而合成派发 mouseover 又是好的，
-        // 只在单测里看不出来）。mousemove 在指针停留期间持续冒泡，进入元素后必定会来一次。
-        //
-        // 去重：同一个 path 连续来只 setState 一次，避免每移动一个像素就重渲染工具栏。
-        let lastPath: string | null = null;
-        console.log("HOVER: mousemove 监听器已挂载");
-        handleHoverOver = (event: MouseEvent) => {
-          console.log("HOVER: mousemove 触发", (event.target as HTMLElement)?.dataset?.resumePath);
-          const path = resolveTarget(event.target)?.dataset.resumePath ?? null;
-          if (!path || path === lastPath) return;
-          lastPath = path;
-          onHoverTarget(path);
-        };
-        handleHoverOut = (event) => {
-          const target = resolveTarget(event.target);
-          if (!target) return;
-          if (resolveTarget(event.relatedTarget) === target) return;
-          lastPath = null;
-          onHoverTarget(null);
-        };
-        document.addEventListener("mousemove", handleHoverOver);
-        document.addEventListener("mouseout", handleHoverOut);
-      }
-      document.addEventListener("click", handleClick);
-      document.addEventListener("keydown", handleKeyDown);
-    }
-
-    frameCleanupRef.current = () => {
-      document.removeEventListener("wheel", onZoomWheel);
-      if (handleClick) document.removeEventListener("click", handleClick);
-      if (handleKeyDown) document.removeEventListener("keydown", handleKeyDown);
-      if (handleHoverOver) document.removeEventListener("mousemove", handleHoverOver);
-      if (handleHoverOut) document.removeEventListener("mouseout", handleHoverOut);
-      // 退出编辑态（或组件卸载）时把"当前指向"清掉：不然工具栏那颗提示会一直挂在
-      // 上一个被指过的栏目上，看起来像还在指着它。
-      // 注意：这里**不**清 onHoverTarget——父组件的重渲染会让本 effect 重跑（回调是内联
-      // 函数、每次都是新引用），在 cleanup 里 setState 会形成"清空 → 重渲染 → 又重跑"的
-      // 振荡（实测 hover 一生效就被清掉）。"指针离开"由 mouseout 负责；"离开编辑态"由
-      // ResumePreview 对 interactionMode 变化的响应负责。
-      targets.forEach((target) => {
-        const original = originalAttributes.get(target);
-        if (original?.role === null) target.removeAttribute("role");
-        else if (original?.role !== undefined) target.setAttribute("role", original.role);
-        if (original?.tabIndex === null) target.removeAttribute("tabindex");
-        else if (original?.tabIndex !== undefined)
-          target.setAttribute("tabindex", original.tabIndex);
-      });
-      document.getElementById("resume-preview-interaction-style")?.remove();
-    };
-  }, [frameCleanupRef, iframeRef, interactionMode, onEditTarget, onHoverTarget, onZoomWheel]);
-
-  useEffect(() => {
-    bindFrameInteractions();
-    return () => {
-      frameCleanupRef.current?.();
-      frameCleanupRef.current = null;
-    };
-  }, [bindFrameInteractions, frameCleanupRef, iframeRef]);
+  useEffect(() => clearFrames, [clearFrames]);
 
   useEffect(() => {
     const viewport = containerRef.current;
     if (!viewport) return;
 
     const handlePointerDown = (event: globalThis.PointerEvent) => {
-      if (interactionMode !== "pan" || event.button !== 0) return;
+      if (event.button !== 0) return;
       event.preventDefault();
       panStartRef.current = {
         clientX: event.clientX,
@@ -196,6 +115,7 @@ export function useFrameInteractions({
       const start = panStartRef.current;
       if (!start) return;
       event.preventDefault();
+      // 多页竖排后主要靠纵向看：`scrollTop` 的位移就是"往上拖 = 往下看"。
       viewport.scrollLeft = start.scrollLeft - (event.clientX - start.clientX);
       viewport.scrollTop = start.scrollTop - (event.clientY - start.clientY);
     };
@@ -220,7 +140,7 @@ export function useFrameInteractions({
       viewport.removeEventListener("pointercancel", stopPanning);
       viewport.removeEventListener("lostpointercapture", stopPanning);
     };
-  }, [containerRef, interactionMode, onPanningChange, onZoomWheel, panStartRef]);
+  }, [containerRef, onPanningChange, onZoomWheel, panStartRef, viewportKey]);
 
-  return bindFrameInteractions;
+  return { bindFrame, clearFrames };
 }

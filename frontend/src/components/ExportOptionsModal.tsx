@@ -9,10 +9,12 @@ import type { ResumeFontScale } from "../types";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 import {
   DEFAULT_REDACTION_OPTIONS,
-  EXPORT_FORMATS,
+  EXPORT_FORMAT_OPTIONS,
+  PNG_FORMAT_NOTE,
   REDACTION_FIELDS,
   type ExportFormat,
   type ExportRequest,
+  type ExportUiFormat,
   type RedactionOptions,
 } from "../types/export";
 import { downloadBlob, printHtml } from "../utils/download";
@@ -46,7 +48,8 @@ export default function ExportOptionsModal({
   onClose,
 }: Props) {
   const { message, modal } = App.useApp();
-  const [formats, setFormats] = useState<ExportFormat[]>(["pdf"]);
+  // 「图片（PNG）」是前端本地格式：它不在后端枚举里，勾选后请求的仍是 PDF。
+  const [formats, setFormats] = useState<ExportUiFormat[]>(["pdf"]);
   const [watermarkEnabled, setWatermarkEnabled] = useState(false);
   const [watermark, setWatermark] = useState("");
   const [redact, setRedact] = useState(false);
@@ -103,15 +106,53 @@ export default function ExportOptionsModal({
     }
   };
 
+  /**
+   * 「图片（PNG）」：**请求的仍是 PDF**（`format: "pdf"`），前端把同一份字节逐页光栅化。
+   *
+   * 这样图片与用户下载的 PDF 是同一份排版、同一套分页——不会出现"PDF 两页、图片三页"。
+   * 单页直接下载 png；多页打成一个 zip（内含 `<主名>-1.png`、`<主名>-2.png`…）。
+   *
+   * @returns `cancelled` 表示用户在"还有未完成标记"的确认框里选择了先去改简历。
+   */
+  const exportAsPng = async (): Promise<"done" | "cancelled"> => {
+    // 动态引入：pdfjs + worker 加起来 1.5MB，只有真正导出图片时才值得付这份下载量，
+    // 不该压在简历详情页的首屏 chunk 上。
+    const { runPngExport } = await import("../utils/pngExport");
+    const outcome = await runPngExport(() =>
+      runExport((allowIncomplete) =>
+        exportResumeWithOptions(recordId, {
+          ...buildRequest("pdf"),
+          allow_incomplete: allowIncomplete || undefined,
+        }),
+      ),
+    );
+    if (outcome.status === "cancelled") return "cancelled";
+
+    downloadBlob(outcome.blob, outcome.filename);
+    if (outcome.pages > 1) {
+      message.info(`共 ${outcome.pages} 页，已打包成 ${outcome.filename}`);
+    }
+    return "done";
+  };
+
   const exportAll = async () => {
     if (formats.length === 0) {
       message.warning("请至少选择一种导出格式");
       return;
     }
     if (exporting) return;
+    // 图片是从服务端 PDF 转出来的：没有服务端 PDF 就没有图片可转，先别让用户白等。
+    if (formats.includes("png") && !pdfDirectAvailable) {
+      message.warning("系统里没有找到中文字体，暂时无法生成图片：请先用「浏览器打印」导出 PDF。");
+      return;
+    }
     setExporting(true);
     try {
       for (const format of formats) {
+        if (format === "png") {
+          if ((await exportAsPng()) === "cancelled") return; // 用户选择先去改简历
+          continue;
+        }
         const result = await runExport((allowIncomplete) =>
           exportResumeWithOptions(recordId, {
             ...buildRequest(format),
@@ -194,9 +235,12 @@ export default function ExportOptionsModal({
           <Typography.Text strong>格式</Typography.Text>
           <div style={{ marginTop: 8 }}>
             <Checkbox.Group
-              options={EXPORT_FORMATS.map((item) => ({ label: item.label, value: item.value }))}
+              options={EXPORT_FORMAT_OPTIONS.map((item) => ({
+                label: item.label,
+                value: item.value,
+              }))}
               value={formats}
-              onChange={(values) => setFormats(values as ExportFormat[])}
+              onChange={(values) => setFormats(values as ExportUiFormat[])}
             />
           </div>
           <div style={{ marginTop: 8 }}>
@@ -210,6 +254,14 @@ export default function ExportOptionsModal({
             PDF 与 Word 由服务端排版引擎生成，保证文字可提取；自编 HTML 的复杂版式请在浏览器中打开
             HTML 文件后打印导出。
           </Typography.Text>
+          {formats.includes("png") && (
+            <div style={{ marginTop: 6 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {PNG_FORMAT_NOTE}
+                图片由同一份 PDF 逐页转出（300dpi），多页会打成一个 zip。
+              </Typography.Text>
+            </div>
+          )}
         </div>
 
         <div>

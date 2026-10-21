@@ -175,6 +175,23 @@ export interface DatasetImportResult extends DatasetInfo {
     error?: string;
   };
   /**
+   * 实际恢复到本机 `data/fonts/` 的字体文件数（只在包内带字体时出现）。
+   *
+   * 字体与附件是两套口径：字体是"导出 PDF 用的资源"，不是简历引用的附件文件。所以
+   * 字体没能完全恢复**不算**这份备份「不完整」，`asset_issues` / `assets_incomplete`
+   * 也不包含字体问题——它们的文案是"附件不完整"，混进去会让用户以为简历里的附件丢了。
+   */
+  restored_fonts?: number;
+  /** 本机已有同名文件、为免覆盖用户现有字体而保留本机版本的字体数。 */
+  skipped_fonts?: number;
+  /** 是否把包里的「当前字体」设成了本机当前字体（本机已有其它选择时可能为 false）。 */
+  active_font_set?: boolean;
+  /**
+   * 字体**未能完全恢复**的原因（如单个文件校验失败、超出体积上限）。与附件问题分开
+   * 展示：这些只影响 PDF 导出的字形，不影响这份备份里的数据是否完整。
+   */
+  font_issues?: string[];
+  /**
    * R16 嵌套整包：逐份的结果。整包不再"要么全成、要么不动"——一份子包坏了只跳过
    * 那一份，所以失败/跳过的每一份都要能点名给用户看。
    */
@@ -313,4 +330,10 @@ export interface BackupStatus {
   overdue: boolean;
   snapshot_count: number;
   snapshots: BackupStatusSnapshot[];
+  /**
+   * 备份覆盖范围。`"database_only"` 表示自动备份**只保护数据库快照**——附件文件与
+   * 自定义字体（`data/fonts/`）都不在其中，需要完整备份请手动「导出数据集/导出全部数据集」。
+   * 旧后端没有这个字段（可选），此时界面按既有文案不倒推范围。
+   */
+  coverage?: "database_only";
 }

@@ -161,10 +161,11 @@ export function withFontAdjust(
 /**
  * 拖动过程中的即时反馈 CSS。
  *
- * 与模板里 `--fs` 的写法（`calc({{ base_px }}px * var(--fit-scale, 1))`）**逐字一致**，
- * 只把基准像素换成拖动值：这样无论浏览器如何解析 `var(--fit-scale)`，探针看到的缩放关系
- * 都和"真按这个字号重新渲染"完全一样——中间态因此不会与最终态不一致地跳动。
+ * 与模板里 `--fs` 的写法**逐字一致**（`--fs: {{ base_px }}px`，见
+ * `backend/app/templates/resume.html.j2`），只把基准像素换成拖动值：模板早就不再有
+ * `calc(... * var(--fit-scale))` 这层缩放（2026-10-21 用户要求"参数即呈现"），探针若还
+ * 留着旧的 `var(--fit-scale, 1)`，等于在中间态和最终态各写一种 `--fs` 定义方式。
  */
 export function fontProbeCss(px: number): string {
-  return `:root { --fs: calc(${round(px, 2)}px * var(--fit-scale, 1)); }`;
+  return `:root { --fs: ${round(px, 2)}px; }`;
 }

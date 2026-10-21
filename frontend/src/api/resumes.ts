@@ -14,9 +14,6 @@ import type {
   ResumeDetail,
   ResumeFontScale,
   ResumeGenerateTask,
-  ResumeLayout,
-  ResumeLayoutAnalysis,
-  ResumeLayoutMeasure,
   ResumePendingChange,
   ResumeReviewResult,
   ResumeSuggestions,
@@ -26,6 +23,10 @@ import type {
 } from "../types";
 import { buildQuery, getFilenameFromDisposition, request, requestRaw } from "./client";
 import { consumeSSE } from "./stream";
+
+// 版式三件套（调整 / 诊断 / 渲染）已迁至 `resumeLayout.ts`（单文件 500 行预算）。
+// 这里 re-export 保持既有导入路径不变——调用方与 `vi.mock("../api/resumes")` 都不用改。
+export { analyzeResumeLayout, renderResume, updateResumeLayout } from "./resumeLayout";
 
 export function listResumes(
   params: {
@@ -233,44 +234,6 @@ export async function previewResumeTemplate(payload: {
   return resp.text();
 }
 
-/** 只调整版式参数（模板/页数/字号），不重新生成内容。 */
-export function updateResumeLayout(id: number, layout: ResumeLayout): Promise<ResumeDetail> {
-  return request(`/resumes/${id}/layout`, {
-    method: "PATCH",
-    body: JSON.stringify(layout),
-  });
-}
-
-/**
- * 版面诊断：把预览里量到的两个高度发过去，拿回结论与逐档收紧方案。
- *
- * 规则全在后端（多少算满、先动哪个旋钮、字号缩到哪为止），前端只负责量准和呈现。
- */
-export function analyzeResumeLayout(
-  id: number,
-  measure: ResumeLayoutMeasure,
-): Promise<ResumeLayoutAnalysis> {
-  return request(`/resumes/${id}/layout/analyze`, {
-    method: "POST",
-    body: JSON.stringify({ measure }),
-  });
-}
-
-/** 渲染简历内容为 HTML（生成完成后、落库前的即时预览） */
-export async function renderResume(
-  content: ResumeContent,
-  layout: Partial<ResumeLayout> = {},
-): Promise<string> {
-  const resp = await requestRaw("/resumes/render", {
-    method: "POST",
-    budget: "task",
-    headers: { "Content-Type": "application/json" },
-    // 后端 ResumeRenderRequest 的结构是 { content, template, page_limit, font_scale }。
-    body: JSON.stringify({ content, ...layout }),
-  });
-  return resp.text();
-}
-
 /**
  * 读取「已同时保存到」响应头（URL 编码的本机路径）。
  * 没有该头（未设置保存位置，或落盘失败）时返回 undefined，调用方保持原提示。
@@ -350,6 +313,54 @@ export async function exportResumeWithOptions(
     pages: readCountHeader(resp.headers.get("X-Resume-Pages")),
     pageLimit: readCountHeader(resp.headers.get("X-Resume-Page-Limit")),
     savedTo: readSavedToHeader(resp.headers.get("X-Saved-To")),
+  };
+}
+
+/**
+ * 精确预览：让服务端按**当前草稿版式**排一份真 PDF，交给浏览器原生查看器显示。
+ *
+ * 为什么不让前端模拟分页：预览是 CSS 多列切连续流，导出 PDF 由服务端另排一遍，两套引擎
+ * 断点规则不同，"预览 2 页、导出 3 页"是结构性的——要"严格相同"，唯一可靠的口径是
+ * **预览显示的就是导出产物本身**（同一条管线、同一组参数）。
+ *
+ * **五样版式参数都必须传**（`template` / `format_name` / `page_limit` / `font_scale` /
+ * `format_config`）：草稿靠它们叠加，少任何一样服务端就回落记录里的旧值。预算用 `export`：
+ * 同步渲染，不该吃 15s 的默认超时。
+ */
+export async function fetchResumePreviewPdf(
+  id: number,
+  options: {
+    /** 样式模板 / 版式模板：草稿值，换完没保存也要按新的排。 */
+    template?: string;
+    format_name?: string;
+    page_limit?: number;
+    font_scale?: string;
+    format_config?: Record<string, unknown>;
+    include_photo?: boolean;
+  },
+  signal?: AbortSignal,
+): Promise<{
+  blob: Blob;
+  pages: number | null;
+  pagesNeeded: number | null;
+  pageLimit: number | null;
+  overflow: boolean;
+}> {
+  const resp = await requestRaw(`/resumes/${id}/preview-pdf`, {
+    method: "POST",
+    budget: "export",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+  return {
+    blob: await resp.blob(),
+    pages: readCountHeader(resp.headers.get("X-Resume-Pages")),
+    // 按当前版式**真实需要**几页（未截断）。超限时 `pages` 是被截断后的页数（= 上限），
+    // 界面用这个数说"按当前设置约需 N 页"，与草稿预览同一套措辞。
+    pagesNeeded: readCountHeader(resp.headers.get("X-Resume-Pages-Needed")),
+    pageLimit: readCountHeader(resp.headers.get("X-Resume-Page-Limit")),
+    overflow: resp.headers.get("X-Resume-Overflow") === "true",
   };
 }
 

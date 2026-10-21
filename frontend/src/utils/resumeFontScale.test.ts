@@ -213,7 +213,7 @@ describe("withFontAdjust", () => {
 });
 
 describe("fontProbeCss", () => {
-  it("与模板里 --fs 的写法一致，只换基准像素", () => {
-    expect(fontProbeCss(13.4)).toBe(":root { --fs: calc(13.4px * var(--fit-scale, 1)); }");
+  it("与模板里 --fs 的写法一致：只有字面量，没有再乘任何缩放系数", () => {
+    expect(fontProbeCss(13.4)).toBe(":root { --fs: 13.4px; }");
   });
 });

@@ -5,7 +5,7 @@
  * 行距是"内容差一行就多一页"时最有效的一档，此前只存在于模板工作台，主预览里没有入口。
  * 这里钉住三件事：
  * 1. **默认值取当前模板的真实行距**——写死一个数字会让滑块停在与渲染不同的位置；
- * 2. 拖动/步进按 0.05 提交，且提交的是"当前 layout + 新行距"，不覆盖同期改过的字号；
+ * 2. 拖动/步进按 0.01 提交，且提交的是"当前 layout + 新行距"，不覆盖同期改过的字号；
  * 3. 恢复默认是**删掉这个键**（回到随模板），不是写回一个和默认相等的值。
  */
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -69,7 +69,7 @@ describe("ResumeLayoutControls · 行距（R20）", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("加减按钮按 0.05 提交，并保留 layout 里的其它字段", async () => {
+  it("加减按钮按 0.01 提交，并保留 layout 里的其它字段", async () => {
     const onChange = renderControls({
       layout: { ...DEFAULT_LAYOUT, page_limit: 2, format_name: "compact" },
     });
@@ -84,7 +84,7 @@ describe("ResumeLayoutControls · 行距（R20）", () => {
       format_name: "compact",
       page_limit: 2,
       font_scale: "standard",
-      format_config: { line_height: 1.4 },
+      format_config: { line_height: 1.44 },
     });
   });
 

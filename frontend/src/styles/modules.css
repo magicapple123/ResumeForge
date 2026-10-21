@@ -62,46 +62,20 @@
   overscroll-behavior: contain;
 }
 
-/* ===== 弹窗统一视觉 =====
-   用同一套表面、标题和操作区建立层级，再通过语义 class 给危险/辅助/编辑类弹窗加
-   顶部色带。这样不同模块不会各自长出一套互不相容的卡片外观。 */
+/* ===== 弹窗：只保留 antd 做不到的布局能力 =====
+   标题栏、底栏、标题、关闭按钮**一律走 antd 原生视觉**（2026-10-21 决定，不再覆写）。
+   缘由：这里曾有一组单类选择器（`.ant-modal-header` 等）想改内边距、分隔线与标题字重，
+   但 antd 6 生成的是 `:where(.css-x).ant-modal .ant-modal-xxx` —— `:where()` 权重 0，
+   `.ant-modal` + `.ant-modal-xxx` 仍是 **2 个类**，逐属性竞争时我们的 1 个类必输。
+   实测（Playwright 计算样式）这组规则里的 padding / border / background / color /
+   font-weight / 定位**从未生效**，弹窗留白一直来自 antd 的 `contentPadding`。
+   上一轮把其中的 background 迁成主题 token 后，色带反而第一次被真的画出来（用户截图
+   "蓝色阴影"），于是整组删除。要改外观请用 `theme.components.Modal` 的公开 token
+   （只有 headerBg / titleLineHeight / titleFontSize / titleColor / contentBg / footerBg 六个），
+   或接受原生。下面保留的四条都是 antd **没有声明**的属性，因此确实生效。 */
 /* antd-override: 私有形态 —— 遮罩浓度是产品口径（--rf-scrim-strong），无 token */
 .ant-modal-root .ant-modal-mask {
   background: var(--rf-scrim-strong);
-}
-
-/* antd-override: 私有形态 —— 容器圆角裁切与品牌阴影；Modal 没有 borderRadiusLG/boxShadow 这组 token */
-.ant-modal-container {
-  /* 圆角 + overflow:hidden 让标题条的底色被裁在圆角里；边框与阴影给出"浮在页面之上"。 */
-  border: 1px solid var(--rf-border-strong);
-  border-radius: 16px;
-  box-shadow:
-    0 24px 70px rgb(15 23 42 / 18%),
-    0 8px 24px rgb(15 23 42 / 10%);
-}
-
-/* antd-override: 布局无 token —— headerPadding / headerBorderBottom / headerMarginBottom
-   只存在于 antd 的 prepareComponentToken 内部返回类型，未进入 Modal.ComponentToken */
-.ant-modal-header {
-  margin-bottom: 0;
-  padding: 18px 22px 14px;
-  border-bottom: 1px solid var(--rf-border-subtle);
-}
-
-/* antd-override: 私有形态 —— 标题字重 700；titleFontSize/titleColor 已由 token 给，字重不在 token 面 */
-.ant-modal-title {
-  font-weight: 700;
-}
-
-/*
- * 欢迎卡片（8 步引导）是"封面"而不是表单弹窗：标题下的分割线与渐变底会把品牌图标和
- * 标题切成两截。只覆盖这一个弹窗（.user-guide-modal），其余 Modal 的标题由
- * `theme.components.Modal`（headerBg）+ 上面的 headerPadding 负责——
- * 动全局 .ant-modal-header 会让所有弹窗一起变。
- */
-.user-guide-modal .ant-modal-header {
-  border-bottom: none;
-  background: transparent;
 }
 
 /*
@@ -112,31 +86,6 @@
 .skill-editor-modal .ant-modal-footer {
   margin-top: 0;
   padding-top: 12px;
-  border-top: 1px solid var(--rf-border-subtle);
-}
-
-/* antd-override: 布局无 token —— 关闭按钮的贴角位置 */
-.ant-modal-close {
-  top: 14px;
-  inset-inline-end: 14px;
-  border-radius: 8px;
-}
-
-/* antd-override: 私有形态 —— 关闭按钮 hover 底色用品牌 tint，无对应 token */
-.ant-modal-close:hover {
-  background: var(--rf-brand-tint);
-}
-
-.ant-modal-body {
-  /* antd-override: 布局无 token —— bodyPadding 是单值 token，非对称内边距只能留 CSS */
-  padding: 20px 22px 22px;
-}
-
-/* antd-override: 布局无 token —— footerPadding / footerBorderTop / footerMarginTop
-   同样只在 prepareComponentToken 内部返回类型里，未进入 Modal.ComponentToken */
-.ant-modal-footer {
-  margin-top: 0;
-  padding: 14px 22px 18px;
   border-top: 1px solid var(--rf-border-subtle);
 }
 

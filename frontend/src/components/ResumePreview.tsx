@@ -3,7 +3,7 @@
 import { ReloadOutlined, ZoomInOutlined, ZoomOutOutlined } from "@ant-design/icons";
 import { Button, Tooltip, Typography } from "antd";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, SyntheticEvent } from "react";
 import { measureResumeLayout, type LayoutMeasure } from "../utils/resumeLayoutMeasure";
 import { calculatePreviewGeometry } from "./resume-preview/geometry";
 import {
@@ -12,46 +12,42 @@ import {
   LIVE_PROBE_STYLE_ID,
   MAX_ZOOM,
   MIN_PREVIEW_HEIGHT,
-  PAGE_GAP_PX,
   PREVIEW_BOTTOM_RESERVE,
   PREVIEW_HEIGHT_RATIO,
   PROBE_STYLE_ID,
   type AvailableSpace,
-  type InteractionMode,
   type PanStart,
+  type PreviewMode,
   type ResumePreviewHandle,
 } from "./resume-preview/config";
+import ExactPreviewPanel from "./resume-preview/ExactPreviewPanel";
 import ResumePreviewCanvas from "./resume-preview/ResumePreviewCanvas";
 import ResumePreviewToolbar from "./resume-preview/ResumePreviewToolbar";
 import { layoutFrame } from "./resume-preview/layout";
 import { forwardWheelToParent, useFrameInteractions } from "./resume-preview/useFrameInteractions";
 
+/** 精确预览需要的那组上下文（与 `ResumeDetailPreview` 手里的草稿值一致）。 */
+export interface ExactPreviewOptions {
+  resumeId: number;
+  /** 草稿的样式模板名（内置或自制）。 */
+  template: string;
+  /** 草稿的版式模板名。 */
+  formatName: string;
+  fontScale: string;
+  formatConfig: Record<string, unknown>;
+  /** 正文 + 模板的身份：内容改了也要重排一次 PDF（见 `ExactPreviewPanel`）。 */
+  contentSignature: string;
+}
+
 interface Props {
   html: string;
   warnings: string[];
-  /** 预览页数：与渲染时的 page_limit 一致。溢出时视觉上会横向展开。 */
+  /** 预览页数：与渲染时的 page_limit 一致。溢出时视觉上会多排一页。 */
   pages?: number;
   /** 仅作为首次布局尚未测量时的占位高度。 */
   height?: number;
-  /** 提供后显示“点击编辑”模式，并返回结构化简历字段路径。 */
-  onEditTarget?: (path: string) => void;
-  /**
-   * 把路径翻译成人话栏目名（`experience.0.description.1` → 「实习/工作经历「某某公司」的第 2 条要点」）。
-   *
-   * 由调用方提供：标签要靠简历内容才起得准，而预览组件本身只拿到渲染好的 HTML。
-   */
-  describePath?: (path: string) => string;
-  /**
-   * 事实来源标注（RF-13）：路径带标注时返回角标内容（label 显示在角标上，
-   * sourceFact / boundary 放进悬停 Popover）；null 表示这一栏没有标注。
-   */
-  describeAnnotation?: (path: string) => {
-    label: string;
-    sourceFact: string;
-    boundary: string;
-  } | null;
   /** 渲染完成后的版式状态。pages 始终是用户设置的页数上限。 */
-  onLayoutStatus?: (status: { pages: number; scale: number; overflow: boolean }) => void;
+  onLayoutStatus?: (status: { pages: number; overflow: boolean }) => void;
   /** 实测高度，交给版面诊断使用。 */
   onMeasure?: (measure: LayoutMeasure) => void;
   /**
@@ -67,21 +63,46 @@ interface Props {
    * 缩放条不在工具栏里：它由预览自己渲染在纸面下方（缩放是"看"的动作，不是"改"的动作）。
    */
   measureControls?: ReactNode;
+  /**
+   * 精确预览（方案 A）：给出简历 id 与**当前草稿版式**，就用服务端排出的真实 PDF 渲染。
+   *
+   * 草稿模式用 CSS 多列模拟分页，断点由浏览器多列算法决定；导出 PDF 由 `pdf_exporter`
+   * 另排一遍——两套引擎不可能"严格相同"。精确模式显示的就是导出产物本身，所以它一定相同。
+   *
+   * 缺省不提供：拿不到稳定记录 id 的场景（生成流程的临时预览）不该摆一个必然失败的开关。
+   */
+  exactPreview?: ExactPreviewOptions;
+  /**
+   * 预览口径。**受控**：主预览与「查看大图」共享同一份状态，在一处切换另一处跟着走
+   * （2026-10-21 用户要求："当前在草稿，大图就是草稿；当前在精确，大图就是精确"）。
+   * 不传时组件内部自管（生成流程那种只读场景）。
+   */
+  previewMode?: PreviewMode;
+  onPreviewModeChange?: (mode: PreviewMode) => void;
 }
 
+/**
+ * 预览只"看"不改（2026-10-21）。
+ *
+ * 它曾经有一套"编辑"模式：iframe 接上指针事件、给每个 `[data-resume-path]` 挂
+ * `role=button`，点一下纸面字段就打开对应栏的编辑器。这条路径被去掉了——修改入口
+ * 已经统一到「选中文字 → 右键 → AI 润色」与「手动调整」，预览里再留一套命中区等于
+ * 同一件事两个入口、两套命中规则；而且它要求 iframe 接管指针事件，与"按住拖动平移"
+ * 互斥（iframe 文档里的事件不冒泡到父文档，容器就收不到 pointerdown）。
+ */
 const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePreview(
   {
     html,
     warnings,
     pages = 1,
     height,
-    onEditTarget,
-    describePath,
-    describeAnnotation,
     onLayoutStatus,
     onMeasure,
     templateControls,
     measureControls,
+    exactPreview,
+    previewMode,
+    onPreviewModeChange,
   },
   ref,
 ) {
@@ -90,27 +111,27 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const panStartRef = useRef<PanStart | null>(null);
-  const frameCleanupRef = useRef<(() => void) | null>(null);
   const [availableSpace, setAvailableSpace] = useState<AvailableSpace>({
     width: 0,
     height: height ?? paperHeight,
   });
   const [zoom, setZoom] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
-  const [interactionMode, setInteractionMode] = useState<InteractionMode>("pan");
-  // "鼠标当前指向哪一栏"**不走 React 状态**，直接更新工具栏里的提示 DOM。
-  //
-  // 原因：事件监听器挂在 iframe 的文档上，而回调（onEditTarget / describePath）是父组件
-  // 的内联函数、随父组件重渲染每次都是新引用——交互绑定的 effect 会因此反复重跑，
-  // 若 hover 状态也在 React 里，"hover 生效 → 父重渲染 → effect 重跑 → cleanup 清空状态"
-  // 会形成振荡（实测 hover 一生效就被清掉）。直接改 DOM 让这条链路只依赖监听器本身，
-  // 与任何组件实例的生命周期无关。
   const [measure, setMeasure] = useState<LayoutMeasure | null>(null);
   const [overflow, setOverflow] = useState(false);
   const [naturalWidth, setNaturalWidth] = useState(A4_WIDTH_PX);
-  // 页间隙（未缩放 px）＝ 左右页边距之和：页边距一变，两页之间的空白也跟着变，
-  // 所以它和列宽一样必须由实际渲染量出来（见 layoutFrame），不能写死 28mm。
-  const [pageGap, setPageGap] = useState(PAGE_GAP_PX);
+  // 预览口径：给了 `previewMode` 就是受控（主预览与大图共享一份状态），否则自管。
+  const [innerMode, setInnerMode] = useState<PreviewMode>("draft");
+  const activeMode = previewMode ?? innerMode;
+  const canExactPreview = Boolean(exactPreview?.resumeId);
+
+  const changeMode = useCallback(
+    (mode: PreviewMode) => {
+      setInnerMode(mode);
+      onPreviewModeChange?.(mode);
+    },
+    [onPreviewModeChange],
+  );
 
   const updateAvailableSpace = useCallback(() => {
     const container = containerRef.current;
@@ -125,53 +146,40 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     });
   }, [height, paperHeight]);
 
-  const fitFrameContent = useCallback(() => {
-    const document = iframeRef.current?.contentDocument;
-    if (!document?.body || !document.documentElement) return;
-    const result = layoutFrame({ document, pageCount, paperHeight });
-    if (!result) return;
-    if (result.measure) {
-      setMeasure(result.measure);
-      onMeasure?.(result.measure);
-    }
-    setOverflow(result.overflow);
-    setNaturalWidth(result.naturalWidth);
-    setPageGap(result.pageGap);
-    onLayoutStatus?.({ pages: pageCount, scale: result.scale, overflow: result.overflow });
-  }, [onLayoutStatus, onMeasure, pageCount, paperHeight]);
-
-  // 更新工具栏上的"正指向"提示（直接改 DOM；path 为 null 时隐藏）。
-  const hoverChipRef = useRef<HTMLSpanElement>(null);
-  const applyHoverChip = useCallback(
-    (path: string | null) => {
-      const chip = hoverChipRef.current;
-      if (!chip) return;
-      if (!path) {
-        chip.style.display = "none";
-        return;
-      }
-      chip.dataset.path = path;
-      const label = chip.querySelector(".resume-preview-hover-label");
-      if (label) label.textContent = describePath ? describePath(path) : path;
-      // 事实来源角标（RF-13）：带标注的路径点亮角标；详情写进 data-* 供 Popover 读。
-      const badge = chip.querySelector<HTMLElement>(".resume-preview-hover-badge");
-      const annotation = badge && describeAnnotation ? describeAnnotation(path) : null;
-      if (badge) {
-        if (annotation) {
-          badge.textContent = annotation.label;
-          badge.dataset.sourceFact = annotation.sourceFact ?? "";
-          badge.dataset.boundary = annotation.boundary ?? "";
-          badge.style.display = "inline-flex";
-        } else {
-          badge.textContent = "";
-          badge.style.display = "none";
+  /**
+   * 对**一个** iframe 应用分页样式，并把它滚到第 `index` 列。
+   *
+   * 每个 iframe 都是同一份 HTML 的独立文档：`layoutFrame` 会把 body 撑成 `页数 × 794`
+   * 宽、切成对应数量的列，然后这个 iframe 只开一个 A4 的窗口、横向滚到第 index 列。
+   * 所以"第 i 页"= 同一份排版的第 i 列，断点口径与横向并排时**完全一致**。
+   *
+   * 每页都跑一次测量是刻意的：只有第 1 页上报状态（`index === 0`），但每页都得拿到
+   * 同一份列宽 / 列间距——否则某一页的列宽算错，那一页就会显示成"上一列的尾巴"。
+   */
+  const applyLayoutToFrame = useCallback(
+    (frame: HTMLIFrameElement, index: number) => {
+      const document = frame.contentDocument;
+      if (!document?.body || !document.documentElement) return;
+      const result = layoutFrame({ document, pageCount, paperHeight });
+      if (!result) return;
+      if (index === 0) {
+        if (result.measure) {
+          setMeasure(result.measure);
+          onMeasure?.(result.measure);
         }
+        setOverflow(result.overflow);
+        setNaturalWidth(result.naturalWidth);
+        onLayoutStatus?.({ pages: pageCount, overflow: result.overflow });
       }
-      // R14：chip 是 flex 容器（不是 inline-flex）——它内部要「label 可收缩、按钮不换行」，
-      // inline-flex 的固有宽度会让长 label 把按钮挤出可视区。显隐判定本身不变。
-      chip.style.display = "flex";
+      // `overflow: hidden` 的文档仍然可以编程滚动（只是不给用户拖滚动条）。
+      if (index > 0) {
+        const target = index * A4_WIDTH_PX;
+        document.documentElement.scrollLeft = target;
+        document.body.scrollLeft = target;
+        document.defaultView?.scrollTo(target, 0);
+      }
     },
-    [describePath, describeAnnotation],
+    [onLayoutStatus, onMeasure, pageCount, paperHeight],
   );
 
   const handleWheel = useCallback((event: globalThis.WheelEvent) => {
@@ -187,16 +195,14 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     if (forwardWheelToParent(containerRef.current, event)) event.preventDefault();
   }, []);
 
-  const bindFrameInteractions = useFrameInteractions({
+  const { bindFrame } = useFrameInteractions({
     containerRef,
-    iframeRef,
     panStartRef,
-    frameCleanupRef,
-    interactionMode,
-    onEditTarget,
-    onHoverTarget: applyHoverChip,
     onZoomWheel: handleWheel,
     onPanningChange: setIsPanning,
+    // 草稿画布在「草稿 / 精确」之间切换时会卸载再挂载，视口元素随之换新；
+    // 不把这件事告诉 hook，滚轮/拖动就会绑在已卸载的那个 div 上（缩放失效）。
+    viewportKey: activeMode,
   });
 
   useImperativeHandle(
@@ -255,15 +261,19 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     };
   }, [html, pageCount, updateAvailableSpace]);
 
-  const handleFrameLoad = useCallback(() => {
-    fitFrameContent();
-    updateAvailableSpace();
-    bindFrameInteractions();
-    requestAnimationFrame(() => {
-      fitFrameContent();
-      bindFrameInteractions();
-    });
-  }, [bindFrameInteractions, fitFrameContent, updateAvailableSpace]);
+  const handleFrameLoad = useCallback(
+    (event: SyntheticEvent<HTMLIFrameElement>, index: number) => {
+      const frame = event.currentTarget;
+      bindFrame(frame);
+      applyLayoutToFrame(frame, index);
+      // 立刻量一次"结构已就位"，下一帧再量一次"字体把行高撑开之后"。
+      requestAnimationFrame(() => {
+        bindFrame(frame);
+        applyLayoutToFrame(frame, index);
+      });
+    },
+    [applyLayoutToFrame, bindFrame],
+  );
 
   const geometry = calculatePreviewGeometry({
     availableSpace,
@@ -272,92 +282,132 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     zoom,
     overflow,
     naturalWidth,
-    pageGap,
+    // 竖排后画布自己不再画分页条（页与页之间是真实的空白），这个入参只为兼容旧签名。
+    pageGap: 0,
     measure,
   });
-  // 纵向空间归外层弹窗/页面管理：放大后让外层变长，不再制造第二条内部纵向滚动条，
-  // 因此预览内容不会因为 overflow-y:hidden 被裁掉。
+  // 纵向空间归外层弹窗/页面管理：多页竖排后整块会比一屏高，靠外层滚动看下一页，
+  // 不再制造第二条内部纵向滚动条。
   const viewportHeight = Math.max(geometry.viewportHeightForPage, geometry.scaledHeight);
 
   const adjustZoom = (delta: number) => {
     setZoom((current) => Math.min(MAX_ZOOM, Math.max(0.5, current + delta)));
   };
 
+  /*
+   * 精确模式下草稿画布**不卸载**，只是被裁成 0 高。
+   *
+   * 版面诊断的实测高度、溢出状态与「自动一页」的逐档试版式（`measureWithProbe`）全都来自
+   * 它里面的那个 iframe——卸载它等于把唯一的测量来源掐掉，表现就是"在精确模式里改参数，
+   * 诊断面板整块不动"（2026-10-21 用户实测）。
+   *
+   * 为什么是 `height: 0` + `overflow: hidden` 而不是 `hidden` 属性：后者是 `display: none`，
+   * 里面的 iframe 根本不排版，量出来全是 0。裁成 0 高则照常排版、照常可测，只是看不见。
+   *
+   * 没人听测量结果时（生成流程那种只读场景）就不挂——白挂一个看不见的 iframe 是纯开销。
+   */
+  const measuringOnly = canExactPreview && activeMode === "exact";
+  const mountDraftCanvas = !measuringOnly || Boolean(onMeasure || onLayoutStatus);
+
   return (
     <div>
       <ResumePreviewToolbar
         templateControls={templateControls}
         measureControls={measureControls}
-        canEdit={Boolean(onEditTarget)}
-        interactionMode={interactionMode}
-        hoverChipRef={hoverChipRef}
-        onRewriteHoverTarget={(path) => onEditTarget?.(path)}
-        onInteractionModeChange={setInteractionMode}
+        canExactPreview={canExactPreview}
+        previewMode={activeMode}
+        onPreviewModeChange={changeMode}
       />
-      <ResumePreviewCanvas
-        warnings={warnings}
-        overflow={overflow}
-        overflowClipped={geometry.overflowClipped}
-        pagesNeeded={geometry.pagesNeeded}
-        pageCount={pageCount}
-        overflowAmountText={geometry.overflowAmountText}
-        interactionMode={interactionMode}
-        isPanning={isPanning}
-        viewportHeight={viewportHeight}
-        scaledWidth={geometry.scaledWidth}
-        scaledHeight={geometry.scaledHeight}
-        contentTotalWidth={geometry.contentTotalWidth}
-        contentTotalHeight={geometry.contentTotalHeight}
-        scale={geometry.scale}
-        separatorCount={geometry.separatorCount}
-        totalVisualPages={geometry.totalVisualPages}
-        pageGap={geometry.pageGap}
-        html={html}
-        containerRef={containerRef}
-        iframeRef={iframeRef}
-        onIframeLoad={handleFrameLoad}
-      />
-      {/* 缩放条在**纸面下方**（P2b / D6）：缩放是"看"的动作，不是"改"的动作——
-          "看图 → 想放大 → 手就在图旁边"。它原先挤在工具栏里，把"改版式"的按钮
-          顶到同一行右侧去抢位置。缩放状态本身仍住在本组件（`zoom` / `adjustZoom` /
-          `setZoom`），Ctrl+滚轮与命令式句柄完全不受影响，这里只是换了渲染位置。 */}
-      <div className="resume-preview-zoom-row">
-        <Tooltip title="缩小预览">
-          <Button
-            type="text"
-            size="small"
-            aria-label="缩小预览"
-            icon={<ZoomOutOutlined />}
-            onClick={() => adjustZoom(-0.1)}
+      {/*
+       * 精确面板**常驻**：草稿模式下只是把它藏起来（`hidden`），不卸载。
+       *
+       * 卸载会连同内嵌 PDF 查看器一起销毁，切回来等于重新开一个查看器——用户看到的
+       * 是一次几百毫秒的白屏，此前还会附赠一次完整的服务端重排（2026-10-21 用户实测：
+       * 「什么都没改，跳回精确却还要重排一次」）。`active=false` 时面板不发请求，
+       * 所以"常驻"的代价只是一个空 div。
+       */}
+      {canExactPreview ? (
+        <div hidden={activeMode !== "exact"}>
+          <ExactPreviewPanel
+            active={activeMode === "exact"}
+            resumeId={exactPreview!.resumeId}
+            template={exactPreview!.template}
+            formatName={exactPreview!.formatName}
+            pageLimit={pageCount}
+            fontScale={exactPreview!.fontScale}
+            formatConfig={exactPreview!.formatConfig}
+            contentSignature={exactPreview!.contentSignature}
+            height={Math.max(MIN_PREVIEW_HEIGHT, viewportHeight)}
           />
-        </Tooltip>
-        <Typography.Text type="secondary" className="resume-preview-zoom-label">
-          {Math.round(geometry.scale * 100)}%
-        </Typography.Text>
-        <Tooltip title="放大预览">
-          <Button
-            type="text"
-            size="small"
-            aria-label="放大预览"
-            icon={<ZoomInOutlined />}
-            onClick={() => adjustZoom(0.1)}
+        </div>
+      ) : null}
+      {mountDraftCanvas ? (
+        <div
+          // 精确模式下它只是"测量用的尸体"：看不见、不占位，但仍在排版。
+          style={measuringOnly ? { height: 0, overflow: "hidden" } : undefined}
+          aria-hidden={measuringOnly || undefined}
+        >
+          <ResumePreviewCanvas
+            warnings={warnings}
+            overflow={overflow}
+            overflowClipped={geometry.overflowClipped}
+            pagesNeeded={geometry.pagesNeeded}
+            pageCount={pageCount}
+            overflowAmountText={geometry.overflowAmountText}
+            isPanning={isPanning}
+            viewportHeight={viewportHeight}
+            scaledWidth={geometry.scaledWidth}
+            scaledHeight={geometry.scaledHeight}
+            scale={geometry.scale}
+            totalVisualPages={geometry.totalVisualPages}
+            html={html}
+            containerRef={containerRef}
+            iframeRef={iframeRef}
+            onIframeLoad={handleFrameLoad}
           />
-        </Tooltip>
-        <Tooltip title="适应页面（重置缩放）">
-          <Button
-            type="text"
-            size="small"
-            aria-label="适应页面"
-            icon={<ReloadOutlined />}
-            onClick={() => setZoom(1)}
-          />
-        </Tooltip>
-        {/* 快捷键提示：Ctrl+滚轮缩放早已实现，但没有任何地方告诉用户——用户只能一个个
-            按钮试。常驻在缩放控件旁边而不是做成一次性引导，因为"想放大看一眼"随时会发生。 */}
-        <Typography.Text type="secondary" className="resume-preview-zoom-hint">
-          按住 Ctrl 滚滚轮可缩放
-        </Typography.Text>
-      </div>
+        </div>
+      ) : null}
+      {/* 缩放条只服务**草稿**预览：精确模式里缩放是浏览器 PDF 查看器自己的事，
+          再摆一排"100%"按钮会与查看器的工具栏各说各话。 */}
+      {canExactPreview && activeMode === "exact" ? null : (
+        <div className="resume-preview-zoom-row">
+          <Tooltip title="缩小预览">
+            <Button
+              type="text"
+              size="small"
+              aria-label="缩小预览"
+              icon={<ZoomOutOutlined />}
+              onClick={() => adjustZoom(-0.1)}
+            />
+          </Tooltip>
+          <Typography.Text type="secondary" className="resume-preview-zoom-label">
+            {Math.round(geometry.scale * 100)}%
+          </Typography.Text>
+          <Tooltip title="放大预览">
+            <Button
+              type="text"
+              size="small"
+              aria-label="放大预览"
+              icon={<ZoomInOutlined />}
+              onClick={() => adjustZoom(0.1)}
+            />
+          </Tooltip>
+          <Tooltip title="适应页面（重置缩放）">
+            <Button
+              type="text"
+              size="small"
+              aria-label="适应页面"
+              icon={<ReloadOutlined />}
+              onClick={() => setZoom(1)}
+            />
+          </Tooltip>
+          {/* 快捷键提示：Ctrl+滚轮缩放早已实现，但没有任何地方告诉用户——用户只能一个个
+              按钮试。常驻在缩放控件旁边而不是做成一次性引导，因为"想放大看一眼"随时会发生。 */}
+          <Typography.Text type="secondary" className="resume-preview-zoom-hint">
+            按住 Ctrl 滚滚轮可缩放
+          </Typography.Text>
+        </div>
+      )}
     </div>
   );
 });

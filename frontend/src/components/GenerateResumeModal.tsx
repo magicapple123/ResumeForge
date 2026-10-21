@@ -65,7 +65,6 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   const [customInstruction, setCustomInstruction] = useState("");
   const [layoutStatus, setLayoutStatus] = useState<{
     pages: number;
-    scale: number;
     overflow: boolean;
   } | null>(null);
   const [measure, setMeasure] = useState<LayoutMeasure | null>(null);

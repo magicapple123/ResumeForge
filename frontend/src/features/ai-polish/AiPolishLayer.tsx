@@ -55,6 +55,27 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
+ * 当前打开的 antd 弹窗里，卡片应该挂到哪一层。
+ *
+ * **为什么不能一律挂 body**：antd Modal 用焦点陷阱把焦点限制在 `.ant-modal` 子树里。
+ * 卡片 portal 到 body 时在陷阱之外——点它的输入框，焦点会被拉回弹窗内最近的可聚焦
+ * 元素（实测是右上角的关闭按钮），用户看到的就是"卡片明明在，字却一个也打不进去"
+ * （2026-10-21 用户在手动调整里遇到的正是这个）。
+ *
+ * 挂 `.ant-modal` 而不是它的父层 `.ant-modal-wrap`：陷阱的根是 `role="dialog"` 的
+ * `.ant-modal` 本身，落在 wrap 里仍算"外面"（实测焦点照样被拉走）。`.ant-modal`
+ * 在入场动画结束后不带 transform，卡片自身的 `position: fixed` 仍按视口定位。
+ *
+ * 没有弹窗时返回 null（由调用方退回 body）——普通页面里没有焦点陷阱这回事。
+ */
+function modalPortalHost(): HTMLElement | null {
+  const dialogs = Array.from(document.querySelectorAll<HTMLElement>(".ant-modal")).filter(
+    (element) => element.getClientRects().length > 0 && element.style.display !== "none",
+  );
+  return dialogs.length > 0 ? dialogs[dialogs.length - 1] : null;
+}
+
+/**
  * 卡片贴着**指针/选区**出现（2026-10-20 修）。
  *
  * 原来固定往下让开整个右键菜单的高度（210px），于是卡片总在点击处下方两百多像素，
@@ -85,7 +106,12 @@ export function cardAnchor(menu: MenuState): Anchor {
 
 export default function AiPolishLayer() {
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const [card, setCard] = useState<{ target: SelectionTarget; anchor: Anchor } | null>(null);
+  const [card, setCard] = useState<{
+    target: SelectionTarget;
+    anchor: Anchor;
+    /** 卡片要挂到哪个容器：见 `modalPortalHost()`。 */
+    host: HTMLElement | null;
+  } | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -123,9 +149,16 @@ export default function AiPolishLayer() {
     if (!card) return;
     const close = () => setCard(null);
     const onScroll = (event: Event) => {
-      // 卡片自己的滚动（原文预览、结果框）不该把卡片关掉。
       const node = event.target;
+      // 卡片自己的滚动（原文预览、结果框）不该把卡片关掉。
       if (node instanceof Node && cardRef.current?.contains(node)) return;
+      // **焦点在卡片里时也不关**（2026-10-21）：卡片是 fixed 定位，页面一滚就与选区
+      // 脱节，所以原本"滚动即关闭"。但用户正在卡片里打字时，`autoSize` 让输入框变高、
+      // 浏览器为了露出光标会把外层弹窗滚一下——那次滚动与"用户离开了选区"毫无关系，
+      // 却会让卡片当场消失，表现就是"输入框打不上字"（实际是卡片被关掉了）。
+      const active = document.activeElement;
+      if (active instanceof Node && cardRef.current?.contains(active)) return;
+      // 滚动事件在捕获阶段监听，滚动容器可能是任何祖先：只有"滚动源在卡片外"才关。
       close();
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -147,7 +180,9 @@ export default function AiPolishLayer() {
 
   const openCard = useCallback(() => {
     if (!menu?.target) return;
-    setCard({ target: menu.target, anchor: cardAnchor(menu) });
+    // 宿主在**打开这一刻**算好（不在渲染里读 DOM）：一次定死，避免先挂 body 再搬进
+    // 弹窗导致卡片重新挂载、用户已经输入的要求被清空。
+    setCard({ target: menu.target, anchor: cardAnchor(menu), host: modalPortalHost() });
     setMenu(null);
   }, [menu]);
 
@@ -167,22 +202,26 @@ export default function AiPolishLayer() {
           onAiPolish={openCard}
         />
       )}
-      {card && (
-        <div className="rf-ai-polish-host" ref={cardRef} style={{ zIndex: layer.aiPolish }}>
-          {/* key = 这一段选区的身份（偏移 + 长度，不用全文：超长文本当 key 太重）。
-              不加它，React 会把同一个 `AiPolishCard` 实例复用到下一段文字上，卡片里
-              上一段的改写结果、要求、错误全留着——「替换选中」于是能把**上一段**的
-              结果写进新选区，直接改坏用户数据（2026-10-21 QA 复核 D2）。 */}
-          <AiPolishCard
-            key={`${card.target.start}:${card.target.end}:${card.target.text.length}`}
-            target={card.target}
-            left={card.anchor.left}
-            top={card.anchor.top}
-            onClose={closeCard}
-            onReplaced={closeCard}
-          />
-        </div>
-      )}
+      {card &&
+        createPortal(
+          <div className="rf-ai-polish-host" ref={cardRef} style={{ zIndex: layer.aiPolish }}>
+            {/* key = 这一段选区的身份（偏移 + 长度，不用全文：超长文本当 key 太重）。
+                不加它，React 会把同一个 `AiPolishCard` 实例复用到下一段文字上，卡片里
+                上一段的改写结果、要求、错误全留着——「替换选中」于是能把**上一段**的
+                结果写进新选区，直接改坏用户数据（2026-10-21 QA 复核 D2）。 */}
+            <AiPolishCard
+              key={`${card.target.start}:${card.target.end}:${card.target.text.length}`}
+              target={card.target}
+              left={card.anchor.left}
+              top={card.anchor.top}
+              onClose={closeCard}
+              onReplaced={closeCard}
+            />
+          </div>,
+          // 弹窗里必须挂进 `.ant-modal-wrap`（焦点陷阱之内），否则点输入框就会被
+          // 拉回弹窗的关闭按钮——`modalPortalHost()` 的注释里写了完整原因。
+          card.host ?? document.body,
+        )}
     </>,
     document.body,
   );

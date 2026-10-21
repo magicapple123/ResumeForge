@@ -74,7 +74,7 @@ describe("ResumeMeasureControls · 字号", () => {
 });
 
 describe("ResumeMeasureControls · 行距", () => {
-  it("按当前模板的默认值起步，±0.05 只写 line_height", async () => {
+  it("按当前模板的默认值起步，±0.01 只写 line_height", async () => {
     const onChange = renderGroup();
 
     // classic 的默认行距 1.70 由目录下发，不是写死的 1.7。
@@ -83,7 +83,7 @@ describe("ResumeMeasureControls · 行距", () => {
 
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
     const next = lastLayout(onChange);
-    expect(next.format_config?.line_height).toBe(1.65);
+    expect(next.format_config?.line_height).toBe(1.69);
     expect(next.format_config?.accent).toBe("#123456");
   });
 });
@@ -102,7 +102,7 @@ describe("ResumeMeasureControls · 拖动即时探针（项 6 / D10）", () => {
 
     expect(await screen.findByText("1.60")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "减小行距" }));
-    expect(setLiveProbe).toHaveBeenLastCalledWith("body { line-height: 1.55 !important; }");
+    expect(setLiveProbe).toHaveBeenLastCalledWith("body { line-height: 1.59 !important; }");
 
     // 复位 = 回到随模板：探针必须清掉，否则画面还停在一个已不存在的状态上。
     fireEvent.doubleClick(screen.getByText("行距"));
@@ -118,7 +118,7 @@ describe("ResumeMeasureControls · 拖动即时探针（项 6 / D10）", () => {
 
     expect(await screen.findByText("14mm")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "增大页边距" }));
-    expect(setLiveProbe).toHaveBeenLastCalledWith("body { padding: 15mm !important; }");
+    expect(setLiveProbe).toHaveBeenLastCalledWith("body { padding: 14.1mm !important; }");
 
     fireEvent.doubleClick(screen.getByText("页边距"));
     expect(setLiveProbe).toHaveBeenLastCalledWith("");
@@ -145,14 +145,14 @@ describe("ResumeMeasureControls · 页边距", () => {
     expect(screen.getByText("12mm")).toBeInTheDocument();
   });
 
-  it("「增大页边距」一次 +1mm，只写 page_padding", async () => {
+  it("「增大页边距」一次 +0.1mm，只写 page_padding", async () => {
     const onChange = renderGroup();
 
     fireEvent.click(await screen.findByRole("button", { name: "增大页边距" }));
 
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
     const next = lastLayout(onChange);
-    expect(next.format_config?.page_padding).toBe(15);
+    expect(next.format_config?.page_padding).toBe(14.1);
     expect(next.format_config?.accent).toBe("#123456");
   });
 

@@ -297,4 +297,91 @@ describe("SettingsPage dataset assets", () => {
     expect(screen.queryByText(/备份「不完整」/)).toBeNull();
     click.mockRestore();
   });
+
+  // ===== H3：包外的数据目录项（未纳入备份）与自定义字体的恢复结果 =====
+
+  /**
+   * 当前所有轻提示（antd message）的文本。
+   *
+   * 负向断言只看提示条：设置页正文里的隐私卡本来就写着「另有 N 项未纳入备份」这类说明
+   * 文案，整页搜文本会把页面文案误判成"多弹了一条提示"。
+   */
+  function toastTexts(): string[] {
+    return Array.from(document.querySelectorAll(".ant-message-notice-content")).map(
+      (node) => node.textContent ?? "",
+    );
+  }
+
+  it("names the data-directory items the archive did not cover", async () => {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    apiMocks.exportDataset.mockResolvedValue({
+      blob: new Blob(["zip-bytes"], { type: "application/zip" }),
+      filename: "resumeforge-backup-20260915.zip",
+      incompleteBackup: false,
+      assetIssues: { missing: 0, mismatched: 0, missingAtImport: 0, incomplete: false },
+      coverage: { count: 2, bytes: 2048, truncated: false },
+    });
+    await renderPage();
+
+    await openExportMenu(/导出当前数据集/);
+
+    // 项数与体积都要说，并把用户指到包内 manifest.json 的 uncovered 段。
+    expect(await screen.findByText(/另有 2 项（2 KB）未纳入备份/)).toBeInTheDocument();
+    expect(screen.getByText(/manifest\.json 的 uncovered 段/)).toBeInTheDocument();
+    // 这是"范围"说明，不是"备份不完整"：附件没丢就不该报那个警告。
+    expect(screen.queryByText(/备份「不完整」/)).toBeNull();
+    click.mockRestore();
+  });
+
+  it("stays silent about coverage when the archive covers everything", async () => {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    apiMocks.exportDataset.mockResolvedValue({
+      blob: new Blob(["zip-bytes"], { type: "application/zip" }),
+      filename: "resumeforge-backup-20260915.zip",
+      incompleteBackup: false,
+      assetIssues: { missing: 0, mismatched: 0, missingAtImport: 0, incomplete: false },
+      coverage: { count: 0, bytes: 0, truncated: false },
+    });
+    await renderPage();
+
+    await openExportMenu(/导出当前数据集/);
+
+    // 成功提示照旧，且**不许多出**任何"未纳入备份"的话（既有提示被测试钉住）。
+    expect(await screen.findByText(/已导出「主数据」到浏览器的下载目录/)).toBeInTheDocument();
+    expect(toastTexts().some((text) => text.includes("未纳入备份"))).toBe(false);
+    click.mockRestore();
+  });
+
+  it("reports the custom fonts restored with the archive", async () => {
+    apiMocks.importDataset.mockResolvedValue({
+      ...imported,
+      restored_fonts: 2,
+      skipped_fonts: 1,
+      active_font_set: true,
+    });
+    const { container } = await renderPage();
+
+    chooseBackupFile(container);
+
+    // 恢复了几份、有几份保本机版本，都要在同一句成功提示里说清楚。
+    expect(await screen.findByText(/恢复了 2 个自定义字体/)).toBeInTheDocument();
+    expect(screen.getByText(/1 个同名字体保留本机版本/)).toBeInTheDocument();
+  });
+
+  it("warns about fonts that could not be restored without calling the archive incomplete", async () => {
+    apiMocks.importDataset.mockResolvedValue({
+      ...imported,
+      restored_fonts: 1,
+      font_issues: ["字体「x.ttf」校验失败"],
+    });
+    const { container } = await renderPage();
+
+    chooseBackupFile(container);
+
+    expect(await screen.findByText(/字体未完全恢复：字体「x\.ttf」校验失败/)).toBeInTheDocument();
+    // 字体问题不属于"附件不完整"：否则用户会以为简历里的附件丢了。
+    expect(toastTexts().some((text) => text.includes("不完整"))).toBe(false);
+    // 成功提示也照旧在（数据集本身恢复完整）。
+    expect(screen.getByText(/已导入数据集「备份 A」/)).toBeInTheDocument();
+  });
 });

@@ -3,145 +3,86 @@
  * 预览工具栏（P2b 起是**两行**）。
  *
  * ```
- * row1（primary）: [抓手|编辑] ................ [样式][版式][顺序][页数]
- * row2（measure）: [字号][行距][页边距] ...... [正指向 chip]
+ * row1（primary）: [草稿|精确] ............... [样式][版式][顺序][页数]
+ * row2（measure）: [字号][行距][页边距]
  * ```
  *
- * 为什么分两行（项 4 / D7 / D31）：
- * - 结构类（样式/版式/顺序/页数）与度量类（字号/行距/页边距）是两组不同性质的动作，
- *   挤在一行时"改版式"的四个按钮被挤到同一行右侧去抢位置；
- * - 缩放条**不在工具栏里**了：缩放是"看"的动作，它被移到纸面下方（见 ResumePreview）。
+ * 为什么分两行（项 4 / D7 / D31）：结构类（样式/版式/顺序/页数）与度量类（字号/行距/
+ * 页边距）是两组不同性质的动作，挤在一行时"改版式"的四个按钮被挤到同一行右侧去抢位置。
+ * 缩放条**不在工具栏里**：缩放是"看"的动作，它被移到纸面下方（见 ResumePreview）。
  *
- * 「正指向」chip 从"绝对定位钉在工具栏右端"改成**第二行的普通 flex 项**（`margin-left:auto`）：
- * 绝对定位在"右端是低价值提示文字"时无害，右端换成核心按钮后就会把按钮盖住。
- * 改为参与布局后，它的宽度只会把左侧挤一点，结构上不可能与第一行的控件重叠。
+ * 2026-10-21 去掉了「抓手 / 编辑」切换与「让 AI 改这一栏」：
+ * - 编辑模式（点纸面字段直接改）与「选中文字 → 右键 → AI 润色」「手动调整」重复，
+ *   而它要求 iframe 接管指针事件，与按住拖动平移互斥；
+ * - 「让 AI 改这一栏」原本只在编辑模式下可用（同一个指针事件依赖），随之一并退场。
  *
- * **chip 的内部 DOM 与显隐逻辑一字未改**：`ResumePreview.applyHoverChip` 仍然直接写它的
- * `display` / `dataset.path` / label 文本与角标（原因见那里的注释：iframe 事件监听器 +
- * 父组件重渲染会振荡），这里只换了它的父容器。
+ * 剩下的交互只有"看"：拖动平移、Ctrl+滚轮缩放、草稿 / 精确两种口径。
  */
-import { DragOutlined, EditOutlined } from "@ant-design/icons";
-import { Button, Popover, Segmented, Tooltip, Typography } from "antd";
-import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
-import { useState } from "react";
-import type { InteractionMode } from "./config";
+import { Segmented, Tooltip, Typography } from "antd";
+import type { ReactNode } from "react";
 
 interface Props {
   /** 第一行右侧：结构类版式控件（样式模板 / 版式模板 / 板块顺序 / 最大篇幅）。 */
   templateControls?: ReactNode;
   /** 第二行左侧：度量类版式控件（字号 / 行距 / 页边距）。 */
   measureControls?: ReactNode;
-  canEdit: boolean;
-  /**
-   * 「正指向」提示的占位元素。
-   *
-   * 它的内容由 ResumePreview 在 iframe 的 mousemove 里**直接更新**（不经过 React 状态）：
-   * 事件监听器挂在 iframe 文档上，而回调随父组件重渲染每次都是新引用，若把 hover 放进
-   * React 状态，"hover 生效 → 父重渲染 → 绑定 effect 重跑 → cleanup 清空"会形成振荡
-   * （实测 hover 一生效就被清掉）。
-   */
-  hoverChipRef: RefObject<HTMLSpanElement | null>;
-  onRewriteHoverTarget?: (path: string) => void;
-  interactionMode: InteractionMode;
-  onInteractionModeChange: Dispatch<SetStateAction<InteractionMode>>;
-}
-
-/** 角标 hover 时弹出的标注详情（内容来自角标元素上的 data-*，由 ResumePreview 直写）。 */
-interface BadgeAnnotation {
-  origin: string;
-  sourceFact: string;
-  boundary: string;
+  /** 是否提供「精确预览」：只有拿得到简历 id 的宿主才为真。 */
+  canExactPreview?: boolean;
+  previewMode?: "draft" | "exact";
+  onPreviewModeChange?: (mode: "draft" | "exact") => void;
 }
 
 export default function ResumePreviewToolbar({
   templateControls,
   measureControls,
-  canEdit,
-  hoverChipRef,
-  onRewriteHoverTarget,
-  interactionMode,
-  onInteractionModeChange,
+  canExactPreview = false,
+  previewMode = "draft",
+  onPreviewModeChange,
 }: Props) {
-  // 角标 Popover 的开关状态只由角标自己的 mouseenter/leave 驱动（React 合成事件
-  // 随渲染正常重绑，没有 iframe 监听器那个振荡问题）；内容读 data-*，写入仍走
-  // ResumePreview 的直改 DOM 通道。
-  const [annotation, setAnnotation] = useState<BadgeAnnotation | null>(null);
   return (
     <div className="resume-preview-toolbar">
       <div className="resume-preview-toolbar-row resume-preview-toolbar-row-primary">
         <div className="resume-preview-toolbar-cluster">
-          {canEdit && (
+          {/* 预览口径（方案 A）：草稿 = CSS 多列，改一下立刻看到；精确 = 服务端 PDF，
+              与导出逐点相同。两者不是"新旧版本"，是两种用途，所以做成并列切换。 */}
+          {canExactPreview ? (
             <Segmented
               size="small"
-              aria-label="简历预览交互模式"
-              value={interactionMode}
-              onChange={(value) => onInteractionModeChange(value as InteractionMode)}
+              aria-label="预览口径"
+              value={previewMode}
+              onChange={(value) => onPreviewModeChange?.(value as "draft" | "exact")}
               options={[
                 {
-                  value: "pan",
-                  label: <Tooltip title="按住拖动浏览简历">抓手</Tooltip>,
-                  icon: <DragOutlined />,
+                  value: "draft",
+                  label: <Tooltip title="按浏览器排版实时显示，编辑时用这个">草稿</Tooltip>,
                 },
                 {
-                  value: "edit",
-                  label: <Tooltip title="点击简历中的字段直接修改">编辑</Tooltip>,
-                  icon: <EditOutlined />,
+                  value: "exact",
+                  label: (
+                    <Tooltip title="按导出引擎排出的真实 PDF 显示，与下载到的文件完全一致">
+                      精确
+                    </Tooltip>
+                  ),
                 },
               ]}
             />
-          )}
+          ) : null}
         </div>
         <div className="resume-preview-toolbar-controls">{templateControls}</div>
       </div>
       <div className="resume-preview-toolbar-row resume-preview-toolbar-row-measure">
         <div className="resume-preview-toolbar-cluster">{measureControls}</div>
-        {/* 默认隐藏：iframe 的 mousemove 直接改它的文本与显隐（见 hoverChipRef 注释）。
-            按钮点击时从 data-path 读"当前指向"，保证改的就是用户刚指的那一栏。 */}
-        <span ref={hoverChipRef} className="resume-preview-hover-chip" style={{ display: "none" }}>
-          <span className="resume-preview-hover-label" />
-          {/* 事实来源角标（RF-13）：当前指向的内容带标注时由 ResumePreview 点亮，
-              悬停可看来源事实 / 个人边界 / 来源类型。 */}
-          <Popover
-            open={annotation !== null}
-            placement="bottom"
-            content={
-              <div style={{ maxWidth: 360 }}>
-                <Typography.Paragraph style={{ margin: 0, fontSize: 12 }}>
-                  依据：{annotation?.sourceFact || "（未提供）"}
-                </Typography.Paragraph>
-                {annotation?.boundary ? (
-                  <Typography.Paragraph style={{ margin: 0, fontSize: 12 }}>
-                    个人边界：{annotation.boundary}
-                  </Typography.Paragraph>
-                ) : null}
-              </div>
-            }
-          >
-            <span
-              className="resume-preview-hover-badge"
-              style={{ display: "none" }}
-              onMouseEnter={(event) => {
-                const el = event.currentTarget;
-                if (!el.dataset.origin) return;
-                setAnnotation({
-                  origin: el.dataset.origin,
-                  sourceFact: el.dataset.sourceFact ?? "",
-                  boundary: el.dataset.boundary ?? "",
-                });
-              }}
-              onMouseLeave={() => setAnnotation(null)}
-            />
-          </Popover>
-          <Button
-            size="small"
-            type="primary"
-            ghost
-            onClick={() => onRewriteHoverTarget?.(hoverChipRef.current?.dataset.path ?? "")}
-          >
-            让 AI 改这一栏
-          </Button>
-        </span>
       </div>
+      {/* 说明放在**度量控件下方**单独一行（2026-10-21 用户要求）：它解释的是"你现在拖的
+          这些值在精确模式下由谁排版"，贴在这一组控件下面才对得上；原先挂在第二行右端，
+          窄屏一折行就跑到控件上面去了。 */}
+      {canExactPreview && previewMode === "exact" ? (
+        <div className="resume-preview-toolbar-row resume-preview-toolbar-row-hint">
+          <Typography.Text type="secondary" className="resume-preview-exact-hint">
+            这一版由导出引擎排版，与下载到的 PDF 完全一致；缩放用 PDF 查看器自带的 Ctrl+滚轮
+          </Typography.Text>
+        </div>
+      ) : null}
     </div>
   );
 }

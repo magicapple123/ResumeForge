@@ -1,39 +1,50 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Alert } from "antd";
-import type { RefObject } from "react";
+import type { RefObject, SyntheticEvent } from "react";
 import {
+  A4_HEIGHT_PX,
   A4_WIDTH_PX,
   APPROXIMATE_PAGINATION_NOTE,
-  type InteractionMode,
   OVERFLOW_NOTE,
+  PAGE_STACK_GAP_PX,
 } from "./config";
 
 interface Props {
   warnings: string[];
   overflow: boolean;
-  /** 溢出内容被裁掉（1 页上限）而不是排成第二列：决定提示里说哪一句话。 */
+  /** 溢出内容被裁掉（1 页上限）而不是排成第二页：决定提示里说哪一句话。 */
   overflowClipped: boolean;
   pagesNeeded: number;
   pageCount: number;
   overflowAmountText: string;
-  interactionMode: InteractionMode;
   isPanning: boolean;
   viewportHeight: number;
   scaledWidth: number;
   scaledHeight: number;
-  contentTotalWidth: number;
-  contentTotalHeight: number;
   scale: number;
-  separatorCount: number;
+  /** 视觉上要画几张 A4（正文实际需要几页）。 */
   totalVisualPages: number;
-  /** 页间隙（未缩放 px）＝ 左右页边距之和；两页并排时按 `pageGap × scale` 画分页条。 */
-  pageGap: number;
   html: string;
   containerRef: RefObject<HTMLDivElement | null>;
+  /** 第 1 页的 iframe：版面测量与字号探针都作用在它身上。 */
   iframeRef: RefObject<HTMLIFrameElement | null>;
-  onIframeLoad: () => void;
+  onIframeLoad: (event: SyntheticEvent<HTMLIFrameElement>, index: number) => void;
 }
 
+/**
+ * 草稿画布：**每页一张 A4，竖向堆叠**（2026-10-21 用户要求）。
+ *
+ * 为什么是 N 个 iframe 而不是一个宽 iframe：分页本身仍然靠 CSS 多列——把 body 撑成
+ * `N × 794` 宽、`column-count: N`，第 i 列就是第 i 页。横向排完之后，每个 iframe 只开
+ * 一个 A4 的窗口并**横向滚动到第 i 列**（`scrollLeft = i × 794`），于是同一份排版结果
+ * 被"裁"成 N 张独立的纸，再竖向摞起来。
+ *
+ * 这样断点口径一点没变（列宽 / 列间距仍按页边距算、`break-inside: avoid` 仍生效），
+ * 变的只是观看方式：横向并排要看第 2 页得先横滚，而简历的阅读顺序是从上往下。
+ *
+ * 代价是同一份 HTML 被渲染 N 次（N ≤ 3）：照片这类内嵌 data URL 会各存一份。换成
+ * "一个 iframe + JS 切分 DOM"能省内存，但那要自己复刻浏览器分页，断点必然漂移。
+ */
 export default function ResumePreviewCanvas({
   warnings,
   overflow,
@@ -41,17 +52,12 @@ export default function ResumePreviewCanvas({
   pagesNeeded,
   pageCount,
   overflowAmountText,
-  interactionMode,
   isPanning,
   viewportHeight,
   scaledWidth,
   scaledHeight,
-  contentTotalWidth,
-  contentTotalHeight,
   scale,
-  separatorCount,
   totalVisualPages,
-  pageGap,
   html,
   containerRef,
   iframeRef,
@@ -79,62 +85,56 @@ export default function ResumePreviewCanvas({
           type="warning"
           showIcon
           className="resume-preview-overflow"
-          title={`按当前设置约需 ${pagesNeeded} 页（上限 ${pageCount} 页）；字号已降到最小，仍然放不下。`}
+          // 措辞只说事实（约需几页、超了多少），**不再说"字号已降到最小"**：2026-10-21
+          // 起不再自动缩字号，装不下就是装不下，改法由用户决定（加页 / 收紧版式 / 删内容）。
+          title={`按当前设置约需 ${pagesNeeded} 页（上限 ${pageCount} 页）。`}
           description={
             <>
-              {overflowAmountText} {overflowClipped ? OVERFLOW_NOTE : APPROXIMATE_PAGINATION_NOTE}
+              字号、行距、页边距都按你设定的值原样渲染，不会自动缩小；{overflowAmountText}
+              {overflowClipped ? OVERFLOW_NOTE : APPROXIMATE_PAGINATION_NOTE}
             </>
           }
         />
       )}
       <div
         ref={containerRef}
-        className={`resume-preview-viewport${isPanning ? " is-panning" : ""}${interactionMode === "edit" ? " is-editing" : ""}`}
+        className={`resume-preview-viewport${isPanning ? " is-panning" : ""}`}
         style={{ height: viewportHeight }}
       >
         <div
           className="resume-preview-scale-box"
-          style={{ width: scaledWidth, height: scaledHeight, position: "relative" }}
+          style={{ width: scaledWidth, height: scaledHeight }}
         >
-          <iframe
-            ref={iframeRef}
-            title="简历预览"
-            className="resume-iframe"
-            width={contentTotalWidth}
-            height={contentTotalHeight}
-            srcDoc={html}
-            sandbox="allow-same-origin"
-            scrolling="no"
-            onLoad={onIframeLoad}
-            data-interaction-mode={interactionMode}
-            style={{
-              width: contentTotalWidth,
-              height: contentTotalHeight,
-              transform: `scale(${scale})`,
-              transformOrigin: "top left",
-            }}
-          />
-          {Array.from({ length: separatorCount }, (_, index) => {
-            const pageNumber = index + 2;
-            return (
-              // 页间隙：盖住连续纸面的分页处，露出视口底色 + 双侧纸边阴影，
-              // 观感是两张并排的独立 A4 纸（替代旧的两点虚线）。间隙压住的是
-              // 简历自身的页边距区域，不遮正文。
+          <div
+            className="resume-preview-pages"
+            style={{ gap: PAGE_STACK_GAP_PX, transform: `scale(${scale})` }}
+          >
+            {Array.from({ length: totalVisualPages }, (_, index) => (
               <div
-                key={pageNumber}
-                className="resume-preview-page-separator"
-                style={{
-                  left: (index + 1) * A4_WIDTH_PX * scale,
-                  width: pageGap * scale,
-                }}
+                key={index}
+                className="resume-preview-page"
+                style={{ width: A4_WIDTH_PX, height: A4_HEIGHT_PX }}
               >
-                <span className="resume-preview-page-separator-line" />
-                <span className="resume-preview-page-separator-label">
-                  第 {pageNumber} 页 / 共 {totalVisualPages} 页（近似）
-                </span>
+                <iframe
+                  // 第 1 页挂外部 ref：版面测量与"字号 / 行距"探针只需要一份权威结果。
+                  ref={index === 0 ? iframeRef : undefined}
+                  title={index === 0 ? "简历预览" : `简历预览 第 ${index + 1} 页`}
+                  className="resume-iframe"
+                  width={A4_WIDTH_PX}
+                  height={A4_HEIGHT_PX}
+                  srcDoc={html}
+                  sandbox="allow-same-origin"
+                  scrolling="no"
+                  onLoad={(event) => onIframeLoad(event, index)}
+                />
+                {totalVisualPages > 1 ? (
+                  <span className="resume-preview-page-label">
+                    第 {index + 1} 页 / 共 {totalVisualPages} 页（近似）
+                  </span>
+                ) : null}
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       </div>
     </>

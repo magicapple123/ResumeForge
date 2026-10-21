@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历预览弹窗的关联上下文行（RF-11）：有 job_id 给三段直达链接，通用简历没有。 */
 import { App as AntdApp } from "antd";
+import * as antd from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -252,9 +253,22 @@ describe("ResumeDetailModal 版式重排（P3）", () => {
     renderModal(8);
     await screen.findByTestId("resume-preview-stub");
 
+    // 断言"错误被报出来"的**调用**，而不是等它渲染成 DOM。
+    //
+    // 这条用例此前靠 `findByText("后端渲染失败")`：文案由 `App.useApp()` 的 message 实例
+    // 挂到 body，中间隔着 portal 挂载与进场动画，而全量并行时 CPU 饱和——预算从 1s 加到
+    // 3s 仍偶发红，加到 8s 才稳。那不是"链路慢"，是**断言依赖了渲染时序**。
+    // 注意要 spy `App.useApp` 返回的实例（组件用的不是 antd 的静态 `message`）。
+    const errorSpy = vi.fn();
+    const useAppSpy = vi.spyOn(antd.App, "useApp").mockReturnValue({
+      message: { error: errorSpy, success: vi.fn(), info: vi.fn(), warning: vi.fn() },
+    } as unknown as ReturnType<typeof antd.App.useApp>);
+
     fireEvent.click(screen.getByRole("button", { name: "改版式·2 页" }));
 
-    expect(await screen.findByText("后端渲染失败")).toBeInTheDocument();
+    await waitFor(() => expect(errorSpy).toHaveBeenCalledWith("后端渲染失败"), { timeout: 3000 });
+    useAppSpy.mockRestore();
+
     // 不自动重试（失败 → 重试 → 再失败会变死循环）。
     await waitFor(() => expect(apiMocks.renderResume).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId("resume-preview-stub")).toHaveAttribute("data-page-limit", "1");

@@ -11,13 +11,31 @@ import {
   listDatasets,
   renameDataset,
 } from "../../api/settings";
-import type { BackupAssetIssues } from "../../api/settings";
+import type { BackupAssetIssues, BackupCoverage } from "../../api/settings";
 import type { DatasetInfo } from "../../types";
 import { formatErrorGuidance, isDatasetScopeExpired } from "../../api/errorGuidance";
 import { initializeDatasetScope } from "../../api/datasetScope";
 import { downloadBlob } from "../../utils/download";
+import { formatBytes } from "../../utils/format";
 import { reloadPage } from "../../utils/navigation";
 import { describeImportIssues } from "./datasetImportFeedback";
+
+/**
+ * 未纳入备份的数据目录项（R17/H3）的提示文案；没有未覆盖项时返回 null。
+ *
+ * 这条只说**范围**，不说"备份失败"：包本身是好的，只是数据目录里还有些东西（用户自己
+ * 放进数据目录的文件、新功能写出的新目录等）不在里面。`truncated` 时后端扫描到了上限，
+ * 数量只是下限，必须说成"至少 N 项"，不能让用户以为是精确值。
+ */
+function describeUncovered(coverage?: BackupCoverage): string | null {
+  if (!coverage || coverage.count <= 0) return null;
+  const amount = coverage.truncated ? `至少 ${coverage.count} 项` : `${coverage.count} 项`;
+  const size = coverage.bytes > 0 ? `（${formatBytes(coverage.bytes)}）` : "";
+  return (
+    `另有 ${amount}${size}未纳入备份：它们在数据目录里，但不在这个包里；` +
+    "详见包内 manifest.json 的 uncovered 段"
+  );
+}
 
 /** 设置页「数据」页里数据集的加载、导出、导入、切换、重命名、删除与新建。 */
 export function useSettingsDatasets() {
@@ -76,8 +94,15 @@ export function useSettingsDatasets() {
    * 旧文案把三类合成一句"备份不完整"：用户看到 310 个自导入起就不存在的附件也在报警，
    * 只能学会忽略这条警告。现在只有**这次导出真的丢了文件**才说"不完整"。
    */
-  const reportBackupIssues = (successText: string, issues: BackupAssetIssues) => {
+  const reportBackupIssues = (
+    successText: string,
+    issues: BackupAssetIssues,
+    coverage?: BackupCoverage,
+  ) => {
     const parts: string[] = [];
+    // 未覆盖项是**范围**说明，与上面三类附件问题分开播报：即使这份备份在附件上不完整，
+    // 用户也需要知道"这个包不等于整个数据目录"。
+    const uncovered = describeUncovered(coverage);
     if (issues.missing > 0) {
       parts.push(`有 ${issues.missing} 个被引用的附件在磁盘上找不到，备份里不包含它们`);
     }
@@ -86,6 +111,7 @@ export function useSettingsDatasets() {
     }
     if (parts.length > 0) {
       message.warning(`${successText}，但这份备份「不完整」：${parts.join("；")}`);
+      if (uncovered) message.info(uncovered);
       return;
     }
     message.success(successText);
@@ -94,20 +120,21 @@ export function useSettingsDatasets() {
         `另有 ${issues.missingAtImport} 个附件在该数据集导入时就已缺失，已在包内清单注明`,
       );
     }
+    if (uncovered) message.info(uncovered);
   };
 
   const runDatasetExport = async (dataset: DatasetInfo, downloadName?: string) => {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename, assetIssues } = await exportDataset(
+      const { blob, filename, assetIssues, coverage } = await exportDataset(
         dataset.id,
         includeGlobalLLM,
         includeGlobalLLM,
         downloadName,
       );
       downloadBlob(blob, filename);
-      reportBackupIssues(`已导出「${dataset.name}」到浏览器的下载目录`, assetIssues);
+      reportBackupIssues(`已导出「${dataset.name}」到浏览器的下载目录`, assetIssues, coverage);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "导出数据集失败");
     } finally {
@@ -119,13 +146,17 @@ export function useSettingsDatasets() {
     if (datasetExporting) return;
     setDatasetExporting(true);
     try {
-      const { blob, filename, assetIssues } = await exportAllDatasets(
+      const { blob, filename, assetIssues, coverage } = await exportAllDatasets(
         includeGlobalLLM,
         includeGlobalLLM,
         downloadName,
       );
       downloadBlob(blob, filename);
-      reportBackupIssues(`已把全部 ${datasets.length} 份数据集导出到浏览器的下载目录`, assetIssues);
+      reportBackupIssues(
+        `已把全部 ${datasets.length} 份数据集导出到浏览器的下载目录`,
+        assetIssues,
+        coverage,
+      );
     } catch (err) {
       message.error(err instanceof Error ? err.message : "导出全部数据集失败");
     } finally {
@@ -171,6 +202,13 @@ export function useSettingsDatasets() {
       } else if (globalLlm?.skipped) {
         parts.push(`全局模型配置 ${globalLlm.skipped} 条与本地同名，已保留本地版本`);
       }
+      // 自定义字体（data/fonts/）随包导出：恢复了几份、有几份因为本机已有同名文件而
+      // 保留本机版本，都要说清楚——用户可能正是因为"换机后字体要重新上传"才做备份的。
+      // 注意字体与附件是两套口径：字体问题不进 problems，也不影响"这份备份完整与否"。
+      const restoredFonts = created.restored_fonts ?? 0;
+      if (restoredFonts > 0) parts.push(`恢复了 ${restoredFonts} 个自定义字体`);
+      const skippedFonts = created.skipped_fonts ?? 0;
+      if (skippedFonts > 0) parts.push(`${skippedFonts} 个同名字体保留本机版本`);
       // RR-03：带着附件问题导入时不得呈现成"完整恢复"——问题逐条（最多 3 条）摆出来。
       const problems = [...(created.backup_asset_warnings ?? []), ...(created.asset_issues ?? [])];
       if (created.assets_incomplete || problems.length > 0 || globalFailed) {
@@ -182,6 +220,15 @@ export function useSettingsDatasets() {
         );
       } else {
         message.success(`${parts.join("，")}；当前数据未受影响`);
+      }
+      // 字体没能完全恢复只影响 PDF 导出的字形，**不算**这份备份不完整：单独一条提示，
+      // 绝不并进上面那条"备份不完整"的分支（那会让用户以为简历里的附件丢了）。
+      const fontIssues = created.font_issues ?? [];
+      if (fontIssues.length > 0) {
+        message.warning(
+          `字体未完全恢复：${fontIssues.slice(0, 3).join("；")}` +
+            (fontIssues.length > 3 ? `（共 ${fontIssues.length} 条）` : ""),
+        );
       }
       // R16：整包逐份恢复，坏一份不影响其它份。成功提示之后必须点名没恢复的那几份，
       // 否则用户会把"恢复了一部分"当成"整包都回来了"。

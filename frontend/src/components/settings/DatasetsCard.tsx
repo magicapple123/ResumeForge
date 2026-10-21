@@ -216,6 +216,15 @@ export default function DatasetsCard({
             绑定当前用户与这台电脑，换电脑恢复后可能需要重新填写；macOS/Linux 上密钥以明文随包），
             取消勾选则配置与密钥都不带。勾选后的备份包更敏感，请妥善保管，不要发给不信任的人。
           </Typography.Paragraph>
+          {/* 字体属于「数据目录里但不属于任何一份数据集库」的东西：不说清楚，用户换机后
+              才发现 PDF 导出用的字体没跟过来。同名字体不覆盖，避免把本机正在用的那份换掉。 */}
+          <Typography.Paragraph
+            type="secondary"
+            style={{ marginBottom: 0, marginTop: 4, fontSize: 12 }}
+          >
+            自定义字体（数据目录的「data/fonts/」）会随包一起导出：换机器导入后，简历里引用的
+            字体不会断；本机已有同名字体时保留本机版本，不会被包里那份覆盖。
+          </Typography.Paragraph>
         </div>
 
         <FileDropZone

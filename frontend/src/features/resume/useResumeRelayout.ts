@@ -53,12 +53,16 @@ export function useResumeRelayout({ render, onRendered, onError }: Options): Res
     latestRef.current = { render, onRendered, onError };
   });
 
-  useEffect(
-    () => () => {
+  // 挂载时**必须**置回 true：StrictMode 会"挂载 → 卸载 → 再挂载"，只在 cleanup 里置
+  // false 的话，第二次挂载后它就一直是 false，`onRendered` 再也不调用——开发模式下
+  // 表现为"改完字号、预览重排了、但版式状态没前进"（页数/字号回退、精确预览不刷新）。
+  // 生产构建不会双调用，所以这个坑只在 dev 里发作，更难被发现。
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
       aliveRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   /**
    * 跑一次渲染并收尾。

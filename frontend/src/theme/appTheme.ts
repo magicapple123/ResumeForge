@@ -63,13 +63,15 @@ export const appTheme: ThemeConfig = {
      * `prepareComponentToken` 的**内部**返回类型里，写进 ThemeConfig 会直接 TS 报错。
      * 所以内边距 / 分隔线仍留在 `styles/modules.css`（那里逐条标了 antd-override 理由）。
      */
-    Modal: {
-      headerBg: palette.surfaceAlt,
-      titleColor: palette.brand,
-      titleFontSize: 16,
-      contentBg: palette.surface,
-      footerBg: palette.surfaceAlt,
-    },
+    // Modal 故意**不**设 headerBg / footerBg / contentBg。
+    // antd 6 的非 wireframe 模式下，这两个 token 的默认值就是 transparent，容器自带
+    // contentPadding（20px 24px），标题与按钮的留白由容器给；一旦给它们上色，每个弹窗
+    // 的标题栏与底栏就会凭空多出两条 20px 高的色带（2026-10-21 用户截图反馈）。
+    // 另外 styles/modules.css 里 `.ant-modal-header{...}` 这类**单类**选择器本来就输给
+    // antd 生成的 `:where(.css-x).ant-modal .ant-modal-header`（2 类），所以那边写的
+    // padding / border-bottom 从未生效 —— "把这段 CSS 迁成 token" 会把一个从未存在的
+    // 视觉变成真的。要恢复"标题栏有底色 + 分隔线"的设计，得先提高 CSS 特异性，
+    // 而不是加 token。
     // Select 下拉"当前选中项"的底色：antd 默认取 controlItemBgActive（= colorPrimaryBg），
     // 而本主题品牌色 #16365c 过深过灰，antd 调色板对其算出的 colorPrimaryBg 是 #92989c
     // 中灰——下拉里的选中项就成了深灰底，与浅色表单反差刺眼（2026 用户截图反馈）。

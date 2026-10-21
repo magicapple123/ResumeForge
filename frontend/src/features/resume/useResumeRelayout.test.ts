@@ -7,7 +7,8 @@
  * 2. 在飞时只保留**最新**一版 → 任意长度一次拖动最多 2 次请求，参数序列 `[首个, 最后]`；
  * 3. 失败不重试（失败 → 重试 → 再失败会变死循环），且卸载后不回调。
  */
-import { act, renderHook } from "@testing-library/react";
+import { StrictMode } from "react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ResumeLayout } from "../../types";
 import { useResumeRelayout } from "./useResumeRelayout";
@@ -32,6 +33,20 @@ function defer() {
 }
 
 describe("useResumeRelayout", () => {
+  it("StrictMode 双挂载之后仍然回调 onRendered（存活标记必须能置回 true）", async () => {
+    // React 18/19 的开发模式会"挂载 → 卸载 → 再挂载"。如果存活标记只在 cleanup 里
+    // 置 false、挂载时不置回 true，第二次挂载后它就永远是 false，`onRendered` 再也不
+    // 调用——表现为"版式重排跑完了，但页数 / 字号状态没前进，精确预览也不刷新"。
+    const render = vi.fn(async () => {});
+    const onRendered = vi.fn();
+    const { result } = renderHook(() => useResumeRelayout({ render, onRendered }), {
+      wrapper: StrictMode,
+    });
+
+    act(() => result.current.request(A));
+    await waitFor(() => expect(onRendered).toHaveBeenCalledWith(A));
+  });
+
   it("空闲即渲：request 立刻发起一次渲染，期间 relayouting 为 true", async () => {
     const gate = defer();
     const render = vi.fn(() => gate.promise);

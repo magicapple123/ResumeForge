@@ -7,6 +7,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import JSZip from "jszip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import { clampPagePadding } from "../utils/pagePadding";
@@ -19,10 +20,34 @@ const downloadMocks = vi.hoisted(() => ({
   printHtml: vi.fn(),
 }));
 
+/**
+ * 只 mock 光栅化那一层：`pngExport`（单页 png / 多页 zip 的分流）跑真代码，
+ * 这样"多页打 zip"这条路径才算被覆盖到。
+ */
+const pngMocks = vi.hoisted(() => ({ renderPdfToPng: vi.fn() }));
+
 vi.mock("../api/resumes", () => apiMocks);
 vi.mock("../utils/download", () => downloadMocks);
+vi.mock("../utils/pdfToPng", () => pngMocks);
 
 const RESULT = { blob: new Blob(["x"]), filename: "简历.pdf", pages: null, pageLimit: null };
+
+/** 一页"已渲染好"的占位结果（光栅化本身由 pdfToPng.test.ts 覆盖）。 */
+function renderedPage(index: number) {
+  return {
+    index,
+    blob: new Blob([`png-${index}`], { type: "image/png" }),
+    width: 2480,
+    height: 3508,
+  };
+}
+
+/** 勾掉默认的 PDF、改勾「图片（PNG）」，再点导出。 */
+function exportPngOnly() {
+  fireEvent.click(screen.getByRole("checkbox", { name: "PDF" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "图片（PNG）" }));
+  fireEvent.click(screen.getByRole("button", { name: /导\s*出/ }));
+}
 
 const BLOCKED = new ApiError("个人总结 里还有「【待补」", 409);
 
@@ -44,6 +69,7 @@ beforeEach(() => {
   apiMocks.exportResumeWithOptions.mockReset().mockResolvedValue(RESULT);
   downloadMocks.downloadBlob.mockReset();
   downloadMocks.printHtml.mockReset();
+  pngMocks.renderPdfToPng.mockReset();
 });
 
 afterEach(() => {
@@ -91,7 +117,8 @@ describe("ExportOptionsModal", () => {
     expect(clampPagePadding(5)).toBe(8);
     expect(clampPagePadding(7)).toBe(8);
     expect(clampPagePadding(40)).toBe(26);
-    expect(clampPagePadding(25.7)).toBe(26);
+    // 0.1mm 精度后，范围内的小数原样保留（以前取整到 26）。
+    expect(clampPagePadding(25.7)).toBe(25.7);
     expect(clampPagePadding(14)).toBe(14);
     expect(clampPagePadding(Number.NaN)).toBe(8);
   });
@@ -218,5 +245,67 @@ describe("ExportOptionsModal", () => {
 
     expect(screen.getByText(/PDF 与 Word 由服务端排版引擎生成/)).toBeInTheDocument();
     expect(screen.queryByText(/ATS 通过/)).not.toBeInTheDocument();
+  });
+
+  it("「图片（PNG）」请求的仍是 PDF：图片与用户下载的 PDF 是同一份字节", async () => {
+    pngMocks.renderPdfToPng.mockResolvedValue([renderedPage(1)]);
+    renderModal();
+
+    exportPngOnly();
+
+    await waitFor(() => expect(downloadMocks.downloadBlob).toHaveBeenCalledTimes(1));
+    // 关键断言：后端枚举里没有 png，永远不能把 "png" 发出去。
+    expect(apiMocks.exportResumeWithOptions).toHaveBeenCalledTimes(1);
+    expect(apiMocks.exportResumeWithOptions).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ format: "pdf" }),
+    );
+    expect(apiMocks.exportResumeWithOptions.mock.calls[0][1].format).not.toBe("png");
+  });
+
+  it("单页直接下载 png，文件名沿用导出主名只换后缀", async () => {
+    pngMocks.renderPdfToPng.mockResolvedValue([renderedPage(1)]);
+    renderModal();
+
+    exportPngOnly();
+
+    await waitFor(() => expect(downloadMocks.downloadBlob).toHaveBeenCalledTimes(1));
+    const [blob, filename] = downloadMocks.downloadBlob.mock.calls[0];
+    expect(filename).toBe("简历.png");
+    expect((blob as Blob).type).toBe("image/png");
+  });
+
+  it("多页打成一个 zip（内含 简历-1.png、简历-2.png），且只请求一次 PDF", async () => {
+    pngMocks.renderPdfToPng.mockResolvedValue([renderedPage(1), renderedPage(2)]);
+    renderModal();
+
+    exportPngOnly();
+
+    await waitFor(() => expect(downloadMocks.downloadBlob).toHaveBeenCalledTimes(1));
+    const [blob, filename] = downloadMocks.downloadBlob.mock.calls[0];
+    expect(filename).toBe("简历.zip");
+    expect(apiMocks.exportResumeWithOptions).toHaveBeenCalledTimes(1);
+
+    const zip = await JSZip.loadAsync(await (blob as Blob).arrayBuffer());
+    expect(Object.keys(zip.files).sort()).toEqual(["简历-1.png", "简历-2.png"]);
+  });
+
+  it("光栅化失败时说明「PDF 已生成」，并且不下载半成品", async () => {
+    pngMocks.renderPdfToPng.mockRejectedValue(new Error("画布过大"));
+    renderModal();
+
+    exportPngOnly();
+
+    expect(await screen.findByText(/PDF 已生成，图片转换失败/)).toBeInTheDocument();
+    expect(downloadMocks.downloadBlob).not.toHaveBeenCalled();
+  });
+
+  it("勾上图片格式时才提示定位：投递平台收图片，机器筛选用 PDF", () => {
+    renderModal();
+
+    expect(screen.queryByText(/必须上传图片的投递平台/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "图片（PNG）" }));
+    expect(screen.getByText(/必须上传图片的投递平台/)).toBeInTheDocument();
+    expect(screen.getByText(/需要机器筛选（ATS）时请用 PDF/)).toBeInTheDocument();
   });
 });

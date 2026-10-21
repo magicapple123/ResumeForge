@@ -63,10 +63,12 @@ describe("ResumeLayoutControls · 无级字号滑块（C3）", () => {
     pressArrow(slider, "ArrowRight");
     pressArrow(slider, "ArrowRight");
 
-    // 中间态：预览被本地探针缩放了，但没有外发任何版式请求。
+    // 中间态：预览被本地探针改了字号，但没有外发任何版式请求。
+    // 探针写的就是 `--fs` 的字面量（模板已不再乘任何自适应系数），所以这里断言的是
+    // "纸面真的按这个像素值排"，而不是"外面套了一层缩放"。
     expect(setLiveProbe).toHaveBeenCalled();
     const probeCalls = setLiveProbe.mock.calls;
-    expect(probeCalls[probeCalls.length - 1][0]).toContain("--fs: calc(");
+    expect(probeCalls[probeCalls.length - 1][0]).toMatch(/^:root \{ --fs: [\d.]+px; \}$/);
     expect(onChange).not.toHaveBeenCalled();
 
     // 防抖结束后恰好提交一次 —— 不是每拖一格一次。
