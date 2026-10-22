@@ -6,6 +6,16 @@ import sys
 
 import pytest
 
+# 预算只用来判"卡死"，不是性能断言。
+#
+# 每个用例都要现起一个解释器；`import app` 那串模块冷启动实测 ~1.1s，而 `-n auto`
+# 满载（16 个 worker + 本机别的服务）时同样的启动会冲到 5s 以上——2026-10-22 全量
+# 跑时 7 档集体超时，单跑却全部通过，正是"成败取决于机器当时有多忙"的形态。
+#
+# 用例真正要防的是正则回溯爆炸：30000 字符输入下那是小时量级，30s 与 5s 的判别力
+# 没有区别，但 30s 不会把"机器同时在跑别的测试"误判成解析器退化。
+BOUNDED_INPUT_BUDGET_SECONDS = 30
+
 
 @pytest.mark.parametrize(
     "case", ["email", "separator", "salary", "job-id", "updated", "skill", "template"]
@@ -32,9 +42,9 @@ print('bounded parser completed')
             [sys.executable, "-c", code, case],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=BOUNDED_INPUT_BUDGET_SECONDS,
         )
     except subprocess.TimeoutExpired:
-        pytest.fail(f"{case}: adversarial input exceeded 5 seconds")
+        pytest.fail(f"{case}: adversarial input exceeded {BOUNDED_INPUT_BUDGET_SECONDS} seconds")
     assert result.returncode == 0, result.stderr
     assert "bounded parser completed" in result.stdout
