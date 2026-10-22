@@ -46,12 +46,21 @@ jobs:
 
       # 与 ci.yml 对齐：2026-10 起的 runner 镜像不再预装 CJK 字体，
       # 服务端 PDF 导出用例（test_share_package）会因找不到中文字体 409。
+      #
+      # fonts-wqy-zenhei 是**必须**的那一个（不只是"多装一个"）：fonts-noto-cjk 是
+      # CFF 轮廓，fpdf2 对 CFF 的子集化会把提取文本弄丢——页数对、探针全 miss，
+      # 表现成 `关键内容缺失：'林致远'` 与 `\x00张\x00示\x00例` 这种 CID 交错文本
+      # （连英文 case 也一起崩）。2026-10-21 的 nightly 就是因为这里漏了 TrueType
+      # 字体、又没有下面那条强制指定而红了 10 个金样用例。
       - name: Install a CJK font for PDF export tests
         run: |
           sudo apt-get update
-          sudo apt-get install -y fonts-noto-cjk
+          sudo apt-get install -y fonts-noto-cjk fonts-wqy-zenhei
 
       - name: Run full suite with flaky marking
+        env:
+          # 与 ci.yml 同一条硬约束：金样导出测试必须落在 TrueType 字体上。
+          RESUMEFORGE_PDF_FONT: /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
         run: |
           python -m pytest -n auto \
             --reruns 2 --reruns-delay 1 \
