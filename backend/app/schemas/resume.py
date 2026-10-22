@@ -22,6 +22,11 @@ from .resume_generation import (  # noqa: F401  (re-export：保持既有导入�
     _validate_format_config_shape,
 )
 
+# 简历语言（A 包）：只影响纸面固定文案（小节标题 / 字段前缀），**不翻译正文**。
+# 与 ``ResumeFontScale`` 同一种收口方式：schema 层用 Literal 限值，DB 层不建 CHECK 约束
+# （SQLite 加约束要重建表）；读取侧另有 ``resume_labels.normalize_language`` 兜底。
+ResumeLanguage = Literal["zh-CN", "en-US"]
+
 MAX_RESUME_SECTION_ITEMS = 200
 MAX_RESUME_LIST_ITEMS = 500
 MAX_RESUME_TEXT_CHARS = 50_000
@@ -176,6 +181,8 @@ class ResumeBrief(BaseModel):
     format_config: dict = Field(default_factory=dict)
     page_limit: int = 1
     font_scale: ResumeFontScale = "standard"
+    # 纸面固定文案的语言（小节标题 / 字段前缀）。旧后端或旧缓存缺这个字段时按 "zh-CN" 兜。
+    language: ResumeLanguage = "zh-CN"
     created_at: datetime
     # 最近修改时间（R14-b）：列表新增「最近修改」列，与默认排序 ``updated_desc`` 同源。
     # 由 ``ResumeRecord.updated_at``（ORM ``onupdate``）经 ``from_attributes`` 直接读取；
@@ -325,6 +332,9 @@ class ResumeRenderRequest(BaseModel):
     format_name: str = Field(default="", max_length=64)
     page_limit: int = Field(default=1, ge=1, le=MAX_RESUME_PAGES)
     font_scale: ResumeFontScale = "standard"
+    # 版式语言：只影响小节标题与字段前缀。None = 这次不涉及（用记录里的值）。
+    # **必须收下这个字段**：本 schema 是 extra="forbid"，漏了它前端草稿渲染会直接 422。
+    language: ResumeLanguage | None = None
     # 这份内容的临时版式覆盖（叠加在 format_name 之上）。「自动一页」用它逐档试版式，
     # 试出来之前不落库——不落库的预览走的就是这条路。
     format_config: dict = Field(default_factory=dict)
@@ -339,6 +349,9 @@ class ResumeLayoutUpdate(BaseModel):
     format_name: str = Field(default="", max_length=64)
     page_limit: int = Field(default=1, ge=1, le=MAX_RESUME_PAGES)
     font_scale: ResumeFontScale = "standard"
+    # 语言：**None = 这次不涉及**，绝不能给 "zh-CN" 默认值——本接口是整体替换，
+    # 带默认值就等于"拖动一次字号滑杆"静默把英文简历改回中文，而用户看不出发生了什么。
+    language: ResumeLanguage | None = None
     # 按简历的版式覆盖。「自动一页」把试出来的方案写在这里。
     # **None 表示不动它**（与空字典区分开）：空字典是"清掉覆盖"，None 是"这次不涉及"。
     format_config: dict | None = None

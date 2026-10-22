@@ -33,6 +33,10 @@ export 用产物哈希。同键重放**不重复记账**：:func:`freeze_deliver
 渲染上下文与导出路由走**同一条解析路径**（``record_format_config`` +
 ``resolve_style_template`` / ``resolve_style_config``），不复制逻辑；指纹优先复用
 ``export_pipeline.render_config_fingerprint``，保证与 ``ExportDelivery`` 同口径。
+
+渲染上下文里的 ``language``（纸面固定文案的语言）同样是存档的一部分：**旧快照没有
+这个键时回落 ``zh-CN``**——旧快照产出的本来就是中文，所以这是保真而不是降级；新快照
+按当时的语言重放，字节才能与当初那份对得上。
 """
 
 from __future__ import annotations
@@ -51,6 +55,7 @@ from ..export_pipeline import (
     build_export,
     render_config_fingerprint,
 )
+from .resume_labels import DEFAULT_RESUME_LANGUAGE
 from .resume_record import record_format_config
 from .resume_template_store import resolve_style_config, resolve_style_template
 
@@ -75,6 +80,8 @@ def default_render_context(db: Session, record: ResumeRecord) -> dict:
         "format_config": record_format_config(db, record) or {},
         "page_limit": record.page_limit or 1,
         "font_scale": record.font_scale or "standard",
+        # 标题语言也进存档：快照要能还原出"当初那份文件"的字面。
+        "language": record.language or DEFAULT_RESUME_LANGUAGE,
     }
 
 
@@ -143,6 +150,9 @@ def freeze_delivery(
         page_limit=effective_render_context.get("page_limit") or 1,
         font_scale=effective_render_context.get("font_scale") or "standard",
         format_config=effective_render_context.get("format_config") or {},
+        # 旧快照里没有 language 这个键 → 回落 zh-CN。而旧快照本来就是中文，
+        # 所以这是**保真**（还原当初那两个字），不是降级。
+        language=effective_render_context.get("language") or DEFAULT_RESUME_LANGUAGE,
     )
     delivery = ResumeDeliveryRecord(
         resume_id=record.id,
@@ -221,6 +231,8 @@ def replay_delivery_export(delivery: ResumeDeliveryRecord) -> ExportArtifact:
         format_config=context_data.get("format_config") or {},
         margin_mm=params.get("margin_mm"),
         include_photo=bool(params.get("include_photo", True)),
+        # 同 freeze_delivery：旧快照缺 language 就回落 zh-CN，那是保真而非降级。
+        language=context_data.get("language") or DEFAULT_RESUME_LANGUAGE,
     )
     from ...schemas.resume import ResumeContent
 

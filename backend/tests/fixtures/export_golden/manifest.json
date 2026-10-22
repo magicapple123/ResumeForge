@@ -1,5 +1,10 @@
 {
   "cases": {
+    "docx-classic-en-language": {
+      "pages": 1,
+      "text_chars": 648,
+      "text_sha256": "c6feaf03b9ac8879556e9415518d4ec16f2c680babe2b45034d9061c7304c98c"
+    },
     "docx-classic-zh-redact": {
       "pages": 1,
       "text_chars": 383,
@@ -39,6 +44,11 @@
       "pages": 3,
       "text_chars": 6003,
       "text_sha256": "7693897a3011410e13d3a91a49f0cb557275c8c6c53b1c22f1f52e53b6f0592c"
+    },
+    "pdf-classic-en-language": {
+      "pages": 1,
+      "text_chars": 774,
+      "text_sha256": "1b6a8782bab1bc0c7bf7446c2c9069647654335ca81107081d3ec2e481dd176f"
     },
     "pdf-classic-zh-1p-baseline": {
       "pages": 1,

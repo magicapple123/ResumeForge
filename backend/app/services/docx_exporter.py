@@ -40,6 +40,13 @@ from .pdf_exporter import (
     resolve_accent,
     resolve_layout,
 )
+from .resume.resume_labels import (
+    DEFAULT_RESUME_LANGUAGE,
+    field_labels,
+    level_text,
+    list_separator,
+    section_titles,
+)
 from .resume.resume_sections import resolved_section_order
 
 # Word 里写的是字体名，最终由用户机器上的 Word 解析；用微软雅黑与 PDF 首选字体一致。
@@ -128,7 +135,13 @@ def _entry_head(doc, left: str, right: str, *, base: float, layout) -> None:
 
 
 def _header(
-    doc, resume: ResumeContent, *, accent: tuple[int, int, int], layout, include_photo: bool
+    doc,
+    resume: ResumeContent,
+    *,
+    accent: tuple[int, int, int],
+    layout,
+    include_photo: bool,
+    language: str,
 ) -> None:
     base = layout.base_px
     photo = _photo_bytes(resume.photo) if (resume.photo and include_photo) else None
@@ -164,7 +177,9 @@ def _header(
 
     if resume.job_intent:
         intent_paragraph = _paragraph(doc)
-        intent_run = intent_paragraph.add_run(f"求职意向：{resume.job_intent}")
+        intent_run = intent_paragraph.add_run(
+            f"{field_labels(language)['intent']}：{resume.job_intent}"
+        )
         _set_run_font(
             intent_run, size_pt=base * layout.intent_ratio * _PX_TO_PT, color=_MUTED_COLOR
         )
@@ -178,18 +193,26 @@ def _header(
         )
 
 
-def _section_summary(doc, resume: ResumeContent, *, base: float, layout, accent) -> None:
+def _section_summary(
+    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+) -> None:
     if resume.summary.strip():
-        _section_title(doc, "个人总结", base=base, layout=layout, accent=accent)
+        labels = section_titles(language)
+        _section_title(doc, labels["summary"], base=base, layout=layout, accent=accent)
         paragraph = _paragraph(doc)
         run = paragraph.add_run(resume.summary.strip())
         _set_run_font(run, size_pt=base * _PX_TO_PT, color=_BODY_COLOR)
 
 
-def _section_education(doc, resume: ResumeContent, *, base: float, layout, accent) -> None:
+def _section_education(
+    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+) -> None:
     if not resume.education:
         return
-    _section_title(doc, "教育经历", base=base, layout=layout, accent=accent)
+    labels = section_titles(language)
+    fields = field_labels(language)
+    sep = list_separator(language)
+    _section_title(doc, labels["education"], base=base, layout=layout, accent=accent)
     for edu in resume.education:
         _entry_head(
             doc,
@@ -199,16 +222,21 @@ def _section_education(doc, resume: ResumeContent, *, base: float, layout, accen
             layout=layout,
         )
         if edu.gpa:
-            _meta_line(doc, f"绩点/排名：{edu.gpa}", base=base, layout=layout)
+            _meta_line(doc, f"{fields['gpa']}：{edu.gpa}", base=base, layout=layout)
         if edu.courses:
-            _meta_line(doc, f"核心课程：{'、'.join(edu.courses)}", base=base, layout=layout)
+            _meta_line(
+                doc, f"{fields['courses']}：{sep.join(edu.courses)}", base=base, layout=layout
+            )
         _bullets(doc, edu.achievements, base=base)
 
 
-def _section_experience(doc, resume: ResumeContent, *, base: float, layout, accent) -> None:
+def _section_experience(
+    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+) -> None:
     if not resume.experience:
         return
-    _section_title(doc, "实习/工作经历", base=base, layout=layout, accent=accent)
+    labels = section_titles(language)
+    _section_title(doc, labels["experience"], base=base, layout=layout, accent=accent)
     for exp in resume.experience:
         _entry_head(
             doc,
@@ -220,10 +248,13 @@ def _section_experience(doc, resume: ResumeContent, *, base: float, layout, acce
         _bullets(doc, exp.description, base=base)
 
 
-def _section_campus(doc, resume: ResumeContent, *, base: float, layout, accent) -> None:
+def _section_campus(
+    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+) -> None:
     if not resume.campus_experience:
         return
-    _section_title(doc, "校园经历", base=base, layout=layout, accent=accent)
+    labels = section_titles(language)
+    _section_title(doc, labels["campus_experience"], base=base, layout=layout, accent=accent)
     for item in resume.campus_experience:
         _entry_head(
             doc,
@@ -235,10 +266,13 @@ def _section_campus(doc, resume: ResumeContent, *, base: float, layout, accent) 
         _bullets(doc, item.description, base=base)
 
 
-def _section_projects(doc, resume: ResumeContent, *, base: float, layout, accent) -> None:
+def _section_projects(
+    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+) -> None:
     if not resume.projects:
         return
-    _section_title(doc, "项目经历", base=base, layout=layout, accent=accent)
+    labels = section_titles(language)
+    _section_title(doc, labels["projects"], base=base, layout=layout, accent=accent)
     for project in resume.projects:
         _entry_head(
             doc,
@@ -249,22 +283,27 @@ def _section_projects(doc, resume: ResumeContent, *, base: float, layout, accent
         )
         if project.tech_stack:
             _meta_line(
-                doc, f"技术栈/工具：{'、'.join(project.tech_stack)}", base=base, layout=layout
+                doc,
+                f"{field_labels(language)['tech_stack']}："
+                f"{list_separator(language).join(project.tech_stack)}",
+                base=base,
+                layout=layout,
             )
         _bullets(doc, project.description, base=base)
         _bullets(doc, project.highlights, base=base)
 
 
-def _section_skills(doc, resume: ResumeContent, *, base: float, layout, accent) -> None:
+def _section_skills(
+    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+) -> None:
     if not resume.skills:
         return
-    _section_title(doc, "专业技能", base=base, layout=layout, accent=accent)
-    labels = [
-        f"{skill.name}（{skill.level}）" if skill.level else skill.name for skill in resume.skills
-    ]
-    if labels:
+    labels = section_titles(language)
+    _section_title(doc, labels["skills"], base=base, layout=layout, accent=accent)
+    skill_labels = [level_text(skill.name, skill.level, language) for skill in resume.skills]
+    if skill_labels:
         paragraph = _paragraph(doc)
-        for index, label in enumerate(labels):
+        for index, label in enumerate(skill_labels):
             run = paragraph.add_run(("　" if index else "") + label)
             _set_run_font(
                 run,
@@ -273,10 +312,13 @@ def _section_skills(doc, resume: ResumeContent, *, base: float, layout, accent) 
             )
 
 
-def _section_awards(doc, resume: ResumeContent, *, base: float, layout, accent) -> None:
+def _section_awards(
+    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+) -> None:
     if not resume.awards:
         return
-    _section_title(doc, "荣誉奖项", base=base, layout=layout, accent=accent)
+    labels = section_titles(language)
+    _section_title(doc, labels["awards"], base=base, layout=layout, accent=accent)
     _bullets(
         doc,
         [_join([award.name, award.date, award.description]) for award in resume.awards],
@@ -305,6 +347,7 @@ def _build_document(
     layout,
     include_photo: bool,
     section_order: list[str],
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> bytes:
     base = layout.base_px
     doc = Document()
@@ -323,10 +366,19 @@ def _build_document(
     section.left_margin = Mm(layout.margin_mm)
     section.right_margin = Mm(layout.margin_mm)
 
-    _header(doc, resume, accent=accent, layout=layout, include_photo=include_photo)
+    _header(
+        doc,
+        resume,
+        accent=accent,
+        layout=layout,
+        include_photo=include_photo,
+        language=language,
+    )
 
     for section_key in section_order:
-        _SECTION_RENDERERS[section_key](doc, resume, base=base, layout=layout, accent=accent)
+        _SECTION_RENDERERS[section_key](
+            doc, resume, base=base, layout=layout, accent=accent, language=language
+        )
 
     buffer = BytesIO()
     doc.save(buffer)
@@ -342,6 +394,7 @@ def build_resume_docx(
     format_config: dict | None = None,
     margin_mm: float | None = None,
     include_photo: bool = True,
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> ResumeDOCX:
     """把结构化简历渲染成 Word 文档。
 
@@ -354,6 +407,9 @@ def build_resume_docx(
 
     ``margin_mm`` 与 PDF 同一条规则：页边距权威是 ``format_config.page_padding``，
     ``margin_mm`` 只在没给 ``page_padding`` 时作回落值（见 ``layout._resolve_margin_mm``）。
+
+    ``language`` 决定七个分区标题的文案（唯一来源 ``resume_labels.section_titles``），
+    同时传给页数估算与文档构建两条路——标题文字长度会影响换行，两边必须同值。
     """
     from .resume.resume_templates import FONT_SCALES, template_spec, validated_format_config
 
@@ -378,6 +434,7 @@ def build_resume_docx(
         layout=layout,
         page_limit=limit,
         include_photo=include_photo,
+        language=language,
     )
     content = _build_document(
         resume,
@@ -385,6 +442,7 @@ def build_resume_docx(
         layout=layout,
         include_photo=include_photo,
         section_order=resolved_section_order(overrides),
+        language=language,
     )
     return ResumeDOCX(content=content, pages=pages, overflow=overflow)
 
@@ -396,12 +454,16 @@ def _estimate_pages(
     layout,
     page_limit: int,
     include_photo: bool,
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> tuple[int | None, bool]:
     """估算 Word 页数与"是否超过所选页数"。
 
     Word 自动分页是"连续流"，所以页数用 ``连续内容高 ÷ 每页可用高`` 估算——与 PDF 的
     真实分页共用同一份版式与同一段测量代码。没有中文字体时返回 ``(None, False)``：
     页数未知不等于"装得下"，但也不该凭空报溢出。
+
+    ``language`` 透传给 ``measure_content_height``：标题文字长度随语言变，页数也就跟着变。
+    不传就会出现"文档里是英文标题、估算却按中文标题算"的错位。
     """
     fonts = _resolve_font_paths()
     if fonts is None:
@@ -414,6 +476,7 @@ def _estimate_pages(
         regular=regular,
         bold=bold,
         include_photo=include_photo,
+        language=language,
     )
     pages = max(1, math.ceil(height / layout.usable_height_per_page))
     return pages, pages > page_limit

@@ -18,6 +18,7 @@ import hashlib
 import logging
 
 from ...schemas.resume import MAX_RESUME_PAGES, ResumeContent
+from ..resume.resume_labels import DEFAULT_RESUME_LANGUAGE, section_titles
 from ..resume.resume_template_format import FONT_KEY
 from . import font_subset
 from .canvas import _ResumePDF
@@ -56,6 +57,7 @@ def measure_content_height(
     muted_text: tuple[int, int, int] | None = None,
     accent_soft: tuple[int, int, int] | None = None,
     format_config: dict | None = None,
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> float:
     """量出这份简历在给定版式下的内容高度（mm）。
 
@@ -64,6 +66,9 @@ def measure_content_height(
     （`rendered_page_count` 与 ``build_resume_pdf``）各管一件事。
 
     ``line`` 是分隔线颜色（区块标题下划线用），只影响配色、不影响高度；不传则用兜底浅灰。
+
+    ``language`` 影响标题文字的长度（``Summary`` 与「个人总结」宽度不同），因而影响换行
+    与内容高度——量的时候必须与画的时候用同一个值，否则页数结论不可信。
     """
     if regular is None or bold is None:
         fonts = _resolve_font_paths()
@@ -81,7 +86,13 @@ def measure_content_height(
     )
     _register_fonts(pdf, regular, bold)
     pdf.add_page()
-    _draw_resume(pdf, resume, include_photo=include_photo, format_config=format_config)
+    _draw_resume(
+        pdf,
+        resume,
+        include_photo=include_photo,
+        format_config=format_config,
+        language=language,
+    )
     return pdf.get_y() - layout.margin_top
 
 
@@ -98,11 +109,15 @@ def render_resume_pdf(
     muted_text: tuple[int, int, int] | None = None,
     accent_soft: tuple[int, int, int] | None = None,
     format_config: dict | None = None,
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> ResumePDF:
     """按给定版式**真渲染一份 PDF**（返回产物本身，不只是页数）。
 
     不限页数：这里回答的是"这份内容按这套参数排出来是什么样、几页"。要按上限截断是
     **渲染之后**的事（`truncate_pdf`），不在这里做——见模块 docstring。
+
+    ``language`` 决定分区标题文案，因而影响标题宽度与页数；透传给 ``_draw_resume``，
+    保证"量的"与"画的"是同一份纸面文字。
     """
     if regular is None or bold is None:
         fonts = _resolve_font_paths()
@@ -119,7 +134,13 @@ def render_resume_pdf(
     )
     _register_fonts(pdf, regular, bold)
     pdf.add_page()
-    _draw_resume(pdf, resume, include_photo=include_photo, format_config=format_config)
+    _draw_resume(
+        pdf,
+        resume,
+        include_photo=include_photo,
+        format_config=format_config,
+        language=language,
+    )
     return ResumePDF(
         content=bytes(pdf.output()),
         pages=pdf.pages_count,
@@ -127,15 +148,22 @@ def render_resume_pdf(
     )
 
 
-def _content_signature(resume: ResumeContent) -> tuple[str, str]:
-    """这份内容的「字符集指纹」：把所有文字字段拼起来做 sha256。
+def _content_signature(
+    resume: ResumeContent, language: str = DEFAULT_RESUME_LANGUAGE
+) -> tuple[str, str]:
+    """这份内容的「字符集指纹」：把所有文字字段 + 分区标题拼起来做 sha256。
 
     为什么不直接用 `canonical_content_sha256(resume.model_dump())`：那份指纹把照片
     data URL（几 MB）也算进去，每趟渲染白花十几毫秒；这里只关心"会画出哪些字"，
     照片一个像素都不影响字形集合。
 
+    **``language`` 必须进指纹**：分区标题也是画在纸上的字，而它随语言变（``Summary``
+    与「个人总结」是两套字形）。不算进来的话，"同一份内容先按中文排、再按英文排"会复用
+    前一趟的子集字体，英文标题的字形不在里面——fpdf2 只打一行 missing glyph 警告，
+    纸面上那一行标题就静默消失了。
+
     返回 ``(指纹, 纯文本)``：纯文本用来给字符集兜底（渲染器某次没画到的栏目，它的字
-    仍然在正文里）。
+    仍然在这里）；标题词也并进来（含本语言标题的字形）。
     """
     parts: list[str] = []
 
@@ -151,6 +179,7 @@ def _content_signature(resume: ResumeContent) -> tuple[str, str]:
                 walk(item)
 
     walk(resume.model_dump())
+    parts.extend(section_titles(language).values())
     text = "\x1f".join(parts)
     return hashlib.sha256(text.encode("utf-8")).hexdigest(), text
 
@@ -167,6 +196,7 @@ def _render_with_subset_font(
     body_text: tuple[int, int, int] | None = None,
     muted_text: tuple[int, int, int] | None = None,
     accent_soft: tuple[int, int, int] | None = None,
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> ResumePDF:
     """优先用"上一趟同内容渲染收来的字符集"裁出的小字体，失败就用全量字体。
 
@@ -175,8 +205,11 @@ def _render_with_subset_font(
 
     ``ResumePDFError`` 时**退回全量字体重排一次**并丢掉这份字符集——这是加速，绝不能
     因为它让导出失败。
+
+    ``language`` 原样透传给两条重排路径（子集字体与全量字体）：换语言等于换标题文字，
+    字符集缓存里就会多几个英文字形，但页数结论必须与全量字体那条路一致。
     """
-    signature, text = _content_signature(resume)
+    signature, text = _content_signature(resume, language)
     cached = font_subset.charset_for(signature)
     render_fonts = fonts
     if cached:
@@ -196,6 +229,7 @@ def _render_with_subset_font(
             body_text=body_text,
             muted_text=muted_text,
             accent_soft=accent_soft,
+            language=language,
         )
     except ResumePDFError:
         if render_fonts is fonts:
@@ -216,6 +250,7 @@ def _render_with_subset_font(
             body_text=body_text,
             muted_text=muted_text,
             accent_soft=accent_soft,
+            language=language,
         )
     # 记下这一趟画出去的字，并并上正文里的字：万一某个栏目这趟没被画到（照片关闭、
     # 空栏目），它的字下次也还在集合里，不会出现"少一个字"。
@@ -239,12 +274,15 @@ def rendered_page_count(
     muted_text: tuple[int, int, int] | None = None,
     accent_soft: tuple[int, int, int] | None = None,
     format_config: dict | None = None,
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> int:
     """真实渲染这份简历，返回它**自然**排出来的页数（不设上限、不截断）。
 
     **这是"装不装得下"的唯一权威判据**：``measure_content_height`` 量的是**连续内容高度**，
     而真实分页会因 `ensure_space`（不切断条目）提前换页、留下一段空隙——于是"连续高 < 可用高"
     仍可能排出第二页。按连续高判定会**说谎**（报告 1 页、实际 2 页）。
+
+    ``language`` 影响标题文字长度，因而影响页数与溢出判定；必须与真正出 PDF 时同值。
     """
     return render_resume_pdf(
         resume,
@@ -258,6 +296,7 @@ def rendered_page_count(
         body_text=body_text,
         muted_text=muted_text,
         accent_soft=accent_soft,
+        language=language,
     ).pages
 
 
@@ -270,6 +309,7 @@ def build_resume_pdf(
     format_config: dict | None = None,
     margin_mm: float | None = None,
     include_photo: bool = True,
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> ResumePDF:
     """把结构化简历渲染成 PDF —— **完全按用户设定的版式**。
 
@@ -288,6 +328,9 @@ def build_resume_pdf(
     第 3 步以前是"再排一遍、渲染时就停在第 N 页"，那要多走一整趟绘制（本机 ~400ms，
     其中字体解析占大头）。裁页只要 ~3ms，产物在页数 / 溢出口径上完全一致——差异只有
     一处，也是用户 2026-10-21 确认接受的：末页不再有一条字渗进下边距（详见 `truncate`）。
+
+    ``language`` 决定纸面上的分区标题文案（``resume_labels`` 是唯一来源），标题文字
+    长度会影响换行与页数，所以它一路透传到 ``_draw_resume``——不能只改绘制那一侧。
     """
     from ..resume.resume_templates import FONT_SCALES, template_spec, validated_format_config
 
@@ -331,6 +374,7 @@ def build_resume_pdf(
         body_text=body_text,
         muted_text=muted_text,
         accent_soft=accent_soft,
+        language=language,
     )
     pages_needed = natural.pages
     if pages_needed <= limit:

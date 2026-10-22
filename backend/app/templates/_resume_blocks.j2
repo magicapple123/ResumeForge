@@ -9,7 +9,7 @@
 {% macro summary_block(resume) %}
 {% if resume.summary %}
 <div class="section">
-  <div class="section-title">个人总结</div>
+  <div class="section-title">{{ section_titles.summary }}</div>
   <p class="summary-text" data-resume-path="summary">{{ resume.summary }}</p>
 </div>
 {% endif %}
@@ -18,7 +18,7 @@
 {% macro education_block(resume) %}
 {% if resume.education %}
 <div class="section">
-  <div class="section-title">教育经历</div>
+  <div class="section-title">{{ section_titles.education }}</div>
   {% for edu in resume.education %}
   {% set edu_index = loop.index0 %}
   <div class="entry">
@@ -26,8 +26,8 @@
       <span class="title"><span data-resume-path="education.{{ edu_index }}.school">{{ edu.school }}</span>{% if edu.major %} · <span data-resume-path="education.{{ edu_index }}.major">{{ edu.major }}</span>{% endif %}</span>
       <span class="meta">{% if edu.degree %}<span data-resume-path="education.{{ edu_index }}.degree">{{ edu.degree }}</span> · {% endif %}<span data-resume-path="education.{{ edu_index }}.start_date">{{ edu.start_date }}</span> - <span data-resume-path="education.{{ edu_index }}.end_date">{{ edu.end_date }}</span></span>
     </div>
-    {% if edu.gpa %}<div class="sub">绩点/排名：<span data-resume-path="education.{{ edu_index }}.gpa">{{ edu.gpa }}</span></div>{% endif %}
-    {% if edu.courses %}<div class="sub">核心课程：{% for item in edu.courses %}<span data-resume-path="education.{{ edu_index }}.courses.{{ loop.index0 }}">{{ item }}</span>{% if not loop.last %}、{% endif %}{% endfor %}</div>{% endif %}
+    {% if edu.gpa %}<div class="sub">{{ field_labels.gpa }}：<span data-resume-path="education.{{ edu_index }}.gpa">{{ edu.gpa }}</span></div>{% endif %}
+    {% if edu.courses %}<div class="sub">{{ field_labels.courses }}：{% for item in edu.courses %}<span data-resume-path="education.{{ edu_index }}.courses.{{ loop.index0 }}">{{ item }}</span>{% if not loop.last %}{{ list_separator }}{% endif %}{% endfor %}</div>{% endif %}
     {% if edu.achievements %}<ul>{% for item in edu.achievements %}<li data-resume-path="education.{{ edu_index }}.achievements.{{ loop.index0 }}">{{ item }}</li>{% endfor %}</ul>{% endif %}
   </div>
   {% endfor %}
@@ -38,7 +38,7 @@
 {% macro experience_block(resume) %}
 {% if resume.experience %}
 <div class="section">
-  <div class="section-title">实习/工作经历</div>
+  <div class="section-title">{{ section_titles.experience }}</div>
   {% for exp in resume.experience %}
   {% set exp_index = loop.index0 %}
   <div class="entry">
@@ -56,7 +56,7 @@
 {% macro campus_block(resume) %}
 {% if resume.campus_experience %}
 <div class="section">
-  <div class="section-title">校园经历</div>
+  <div class="section-title">{{ section_titles.campus_experience }}</div>
   {% for item in resume.campus_experience %}
   {% set campus_index = loop.index0 %}
   <div class="entry">
@@ -74,7 +74,7 @@
 {% macro projects_block(resume) %}
 {% if resume.projects %}
 <div class="section">
-  <div class="section-title">项目经历</div>
+  <div class="section-title">{{ section_titles.projects }}</div>
   {% for project in resume.projects %}
   {% set project_index = loop.index0 %}
   <div class="entry">
@@ -82,7 +82,7 @@
       <span class="title" data-resume-path="projects.{{ project_index }}.name">{{ project.name }}</span>
       <span class="meta">{% if project.role %}<span data-resume-path="projects.{{ project_index }}.role">{{ project.role }}</span> · {% endif %}<span data-resume-path="projects.{{ project_index }}.start_date">{{ project.start_date }}</span> - <span data-resume-path="projects.{{ project_index }}.end_date">{{ project.end_date }}</span></span>
     </div>
-    {% if project.tech_stack %}<div class="sub">技术栈/工具：{% for item in project.tech_stack %}<span data-resume-path="projects.{{ project_index }}.tech_stack.{{ loop.index0 }}">{{ item }}</span>{% if not loop.last %}、{% endif %}{% endfor %}</div>{% endif %}
+    {% if project.tech_stack %}<div class="sub">{{ field_labels.tech_stack }}：{% for item in project.tech_stack %}<span data-resume-path="projects.{{ project_index }}.tech_stack.{{ loop.index0 }}">{{ item }}</span>{% if not loop.last %}{{ list_separator }}{% endif %}{% endfor %}</div>{% endif %}
     {% if project.description %}<ul>{% for item in project.description %}<li data-resume-path="projects.{{ project_index }}.description.{{ loop.index0 }}">{{ item }}</li>{% endfor %}</ul>{% endif %}
     {% if project.highlights %}<ul>{% for item in project.highlights %}<li data-resume-path="projects.{{ project_index }}.highlights.{{ loop.index0 }}">{{ item }}</li>{% endfor %}</ul>{% endif %}
   </div>
@@ -94,9 +94,9 @@
 {% macro skills_block(resume) %}
 {% if resume.skills %}
 <div class="section">
-  <div class="section-title">专业技能</div>
+  <div class="section-title">{{ section_titles.skills }}</div>
   <ul class="skill-list">
-    {% for skill in resume.skills %}<li><span data-resume-path="skills.{{ loop.index0 }}.name">{{ skill.name }}</span>{% if skill.level %}（<span data-resume-path="skills.{{ loop.index0 }}.level">{{ skill.level }}</span>）{% endif %}</li>{% endfor %}
+    {% for skill in resume.skills %}<li><span data-resume-path="skills.{{ loop.index0 }}.name">{{ skill.name }}</span>{% if skill.level %}{{ level_parens[0] }}<span data-resume-path="skills.{{ loop.index0 }}.level">{{ skill.level }}</span>{{ level_parens[1] }}{% endif %}</li>{% endfor %}
   </ul>
 </div>
 {% endif %}
@@ -105,7 +105,7 @@
 {% macro awards_block(resume) %}
 {% if resume.awards %}
 <div class="section">
-  <div class="section-title">荣誉奖项</div>
+  <div class="section-title">{{ section_titles.awards }}</div>
   <ul>
     {% for award in resume.awards %}
     <li><span data-resume-path="awards.{{ loop.index0 }}.name">{{ award.name }}</span>{% if award.date %} · <span data-resume-path="awards.{{ loop.index0 }}.date">{{ award.date }}</span>{% endif %}{% if award.description %} · <span data-resume-path="awards.{{ loop.index0 }}.description">{{ award.description }}</span>{% endif %}</li>

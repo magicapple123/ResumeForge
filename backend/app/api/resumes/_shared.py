@@ -19,6 +19,7 @@ from ...schemas.resume import (
     ResumeOut,
 )
 from ...services import trash
+from ...services.resume.resume_labels import normalize_language
 from ...services.resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_TEMPLATE
 
 # 与 ResumeBrief 对应字段上的 Literal 保持一致（schema 里未起别名，这里就近镜像）。
@@ -97,6 +98,9 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         format_config=record.format_config or {},
         page_limit=record.page_limit or 1,
         font_scale=_as_font_scale(record.font_scale or DEFAULT_FONT_SCALE),
+        # 读取侧收口而不是直接透传：库里的值被外部工具改成 "fr" 或空串时按 zh-CN 读，
+        # 否则 schema 的 Literal 校验会让整份简历列表 500（见 resume_labels 的说明）。
+        language=normalize_language(record.language),
         created_at=record.created_at,
         parent_revision_id=record.parent_revision_id,
         content=ResumeContent.model_validate(record.content),

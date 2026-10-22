@@ -322,6 +322,56 @@ def test_share_zip_contains_html_pdf_and_readme(client):
             assert archive.read("简历.pdf").startswith(b"%PDF")
 
 
+def test_share_zip_html_follows_the_record_language(client, db_session):
+    """分享包里的 HTML **与 PDF** 都必须跟着**记录的语言**走（§8.3 第 3 条）。
+
+    分享包是"发给别人看的那一份"：包里固定中文，等于用户明明选了英文简历、发出去的
+    却是中文标题——而他在界面上看不出区别，收件人也不会来问。语言这里直接写进记录
+    （不经 `PATCH /layout`），因为要验的是**导出链路消费记录的语言**，而不是保存接口。
+
+    两条产物各抽一次：HTML 直接读字符串；PDF 用 pypdf 抽文本（包里有没有 PDF 取决于
+    本机中文字体，没有就只验 HTML——不把"没字体"写成"验过了"）。
+    """
+    import io
+    import zipfile
+
+    import pypdf
+    from app.models.resume import ResumeRecord
+
+    resume_id = _manual_resume(
+        client,
+        {
+            "name": "Zhang San",
+            "summary": "Backend engineer.",
+            "education": [
+                {"school": "Example University", "major": "Computer Science", "degree": "Bachelor"}
+            ],
+        },
+    )
+    record = db_session.get(ResumeRecord, resume_id)
+    assert record is not None
+    record.language = "en-US"
+    db_session.commit()
+
+    response = client.get(f"/api/resumes/{resume_id}/share-zip")
+
+    assert response.status_code == 200, response.text
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        names = set(archive.namelist())
+        html_source = archive.read("简历.html").decode("utf-8")
+        pdf_bytes = archive.read("简历.pdf") if "简历.pdf" in names else None
+    assert "Education" in html_source
+    assert "教育经历" not in html_source
+    if pdf_bytes is not None:
+        pdf_text = "".join(
+            page.extract_text() or "" for page in pypdf.PdfReader(io.BytesIO(pdf_bytes)).pages
+        )
+        assert "Education" in pdf_text
+        assert "教育经历" not in pdf_text
+    # 说明.txt 不是简历产物，仍是中文使用说明——它不该跟着简历语言变。
+    assert "说明.txt" in names
+
+
 def test_share_zip_falls_back_to_html_without_pdf(client, monkeypatch):
     """本机没有中文字体时，分享包仍要能生成（HTML + 说明里写清原因）。"""
     import io

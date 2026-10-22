@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .resume import MAX_RESUME_PAGES, ResumeFontScale
+from .resume import MAX_RESUME_PAGES, ResumeFontScale, ResumeLanguage
 
 ExportFormat = Literal["json", "md", "html", "pdf", "docx", "txt"]
 
@@ -79,7 +79,7 @@ class PreviewPdfRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # 这四个字段与 ``POST /api/resumes/render`` 的版式参数**逐一对应**（去掉正文）。
+    # 这几个字段与 ``POST /api/resumes/render`` 的版式参数**逐一对应**（去掉正文）。
     #
     # 为什么必须全都带上：草稿的版式是"样式模板 + 版式模板 + 覆盖"三层叠出来的，任何
     # 一层没传，精确预览就会按**记录里的旧值**排版——用户换了模板或版式、又还没点保存，
@@ -89,6 +89,9 @@ class PreviewPdfRequest(BaseModel):
     format_name: str | None = Field(default=None, max_length=64)
     page_limit: int | None = Field(default=None, ge=1, le=MAX_RESUME_PAGES)
     font_scale: ResumeFontScale | None = None
+    # 纸面固定文案的语言（小节标题 / 字段前缀）。``None`` = 用记录里的语言。
+    # 与上面几个字段同理：**必须收下**，否则草稿里选了英文、精确预览还是中文。
+    language: ResumeLanguage | None = None
     format_config: dict | None = None
     include_photo: bool = True
 

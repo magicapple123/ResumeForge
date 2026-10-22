@@ -48,6 +48,13 @@ class ResumeRecord(Base):
     font_scale: Mapped[str] = mapped_column(
         String(16), default="standard", server_default="standard"
     )
+    # 这份简历的**纸面固定文案**用哪种语言（"zh-CN" / "en-US"，BCP 47 风格）。
+    # 只影响小节标题与字段前缀（见 ``services/resume/resume_labels.py``），
+    # **不翻译正文**（用户写的内容原样输出），也不参与生成链路。
+    # 语言属于内容元数据而不是版式覆盖：换一个版式模板不该悄悄改掉简历的语言。
+    # 旧行为空/未知值（被外部工具改过的库）读取侧一律按 "zh-CN" 处理，
+    # 所以升级后旧简历的导出输出逐字不变（迁移 0049 用 DEFAULT 回填）。
+    language: Mapped[str] = mapped_column(String(16), default="zh-CN", server_default="zh-CN")
     # 用户补充的生成要求原文，留痕以便查看和重新生成。
     custom_instruction: Mapped[str] = mapped_column(Text, default="", server_default="")
     # 用户给这份简历写的备注（列表默认可见、详情可编辑）。

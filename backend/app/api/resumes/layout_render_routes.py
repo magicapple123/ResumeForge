@@ -26,6 +26,7 @@ from ...schemas.resume import (
 )
 from ...services import trash
 from ...services.exporter import normalize_page_limit, render_html
+from ...services.resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 from ...services.resume.resume_layout import (
     STATUS_OVERFLOW,
     build_fit_ladder,
@@ -73,6 +74,11 @@ def update_resume_layout(
         record.format_config = validated_format_config(payload.format_config)
     record.page_limit = normalize_page_limit(payload.page_limit)
     record.font_scale = font_scale_spec(payload.font_scale)["name"]
+    # 语言与本接口的其它字段一样是"整体替换"语义，所以**必须先判 None**：给默认值
+    # 就等于"拖动一次字号滑杆把英文简历静默改回中文"，而用户完全看不出发生了什么。
+    # None = 这次不涉及，保持原样（见 §9.1 R1）。
+    if payload.language is not None:
+        record.language = payload.language
     db.commit()
     db.refresh(record)
     return _to_resume_out(record)
@@ -181,6 +187,9 @@ def render_resume(payload: ResumeRenderRequest, db: Session = Depends(get_db)):
             format_config=config,
             style_config=resolve_style_config(db, payload.template),
             template_html=template_html,
+            # 不落库的即时预览也要跟着草稿的语言走，否则"选了英文、预览还是中文"。
+            # 这里没有记录可回落（本接口只吃请求体），None 就用默认语言。
+            language=payload.language or DEFAULT_RESUME_LANGUAGE,
         ),
         media_type="text/html; charset=utf-8",
     )

@@ -23,6 +23,7 @@ from .docx_exporter import build_resume_docx
 from .exporter import build_filename, export_json, export_markdown, render_html
 from .pdf_exporter import build_resume_pdf
 from .privacy import RedactionOptions, redact
+from .resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 from .resume.resume_sections import resolved_section_order
 from .resume.resume_template_format import validated_format_config
 from .txt_exporter import export_txt
@@ -58,6 +59,11 @@ class RenderContext:
     解析一次后传入，避免每个渲染器各解析一次。``margin_mm`` 是页边距的**兼容回落值**
     （见 ``pdf_exporter.layout._resolve_margin_mm``）：``format_config.page_padding``
     在时它一律不生效。``include_photo`` 决定照片是否进入渲染（txt/md/json 本来就不含照片）。
+
+    ``language`` 是**内容级**字段：它决定纸面上印哪个语言的分区标题，所以产物文本会
+    跟着变——因此它也必须进 ``render_config_fingerprint``（否则"同一份指纹、两种文字"
+    会让交付血缘比对失效）。渲染器只接收这个值，不许自己判断语言，一律走
+    ``resume_labels.section_titles(language)``。
     """
 
     template: str = "classic"
@@ -68,6 +74,7 @@ class RenderContext:
     format_config: dict | None = None
     margin_mm: float | None = None
     include_photo: bool = True
+    language: str = DEFAULT_RESUME_LANGUAGE
 
 
 @dataclass(frozen=True)
@@ -106,7 +113,9 @@ def _render_json(resume: ResumeContent, context: RenderContext) -> RenderedArtif
 def _render_markdown(resume: ResumeContent, context: RenderContext) -> RenderedArtifact:
     return RenderedArtifact(
         content=export_markdown(
-            resume, section_order=resolved_section_order(context.format_config)
+            resume,
+            section_order=resolved_section_order(context.format_config),
+            language=context.language,
         ).encode("utf-8"),
         media_type="text/markdown; charset=utf-8",
     )
@@ -122,6 +131,7 @@ def _render_html(resume: ResumeContent, context: RenderContext) -> RenderedArtif
             format_config=context.format_config,
             style_config=context.style_config,
             template_html=context.template_html,
+            language=context.language,
         ).encode("utf-8"),
         media_type="text/html; charset=utf-8",
     )
@@ -136,6 +146,7 @@ def _render_pdf(resume: ResumeContent, context: RenderContext) -> RenderedArtifa
         format_config=context.format_config,
         margin_mm=context.margin_mm,
         include_photo=context.include_photo,
+        language=context.language,
     )
     return RenderedArtifact(
         content=pdf.content,
@@ -156,6 +167,7 @@ def _render_docx(resume: ResumeContent, context: RenderContext) -> RenderedArtif
         format_config=context.format_config,
         margin_mm=context.margin_mm,
         include_photo=context.include_photo,
+        language=context.language,
     )
     return RenderedArtifact(
         content=docx.content,
@@ -169,7 +181,9 @@ def _render_docx(resume: ResumeContent, context: RenderContext) -> RenderedArtif
 def _render_txt(resume: ResumeContent, context: RenderContext) -> RenderedArtifact:
     return RenderedArtifact(
         content=export_txt(
-            resume, section_order=resolved_section_order(context.format_config)
+            resume,
+            section_order=resolved_section_order(context.format_config),
+            language=context.language,
         ).encode("utf-8"),
         media_type="text/plain; charset=utf-8",
     )
@@ -221,6 +235,9 @@ def build_export(
         format_config=effective_format_config(request, context),
         margin_mm=request.margin_mm,
         include_photo=request.include_photo,
+        # 语言在这里**必须**跟着走：重建上下文是为了叠加"请求里的版式草稿覆盖"，
+        # 漏掉它就会在"预览里拖过字号、还没保存"那条路上悄悄退回中文标题。
+        language=context.language,
     )
     rendered = renderer(effective_resume, effective_context)
     content = rendered.content
@@ -259,6 +276,9 @@ def render_config_fingerprint(request: ExportRequest, context: RenderContext) ->
     请求显式给出的 ``page_limit`` / ``font_scale`` / ``format_config`` 优先于记录值；
     ``margin_mm`` 只在 ``format_config`` 没给 ``page_padding`` 时才有意义，但它照样进
     指纹——同一份请求换了它，「生效后的页边距」也可能跟着换），以及解析后的模板上下文。
+
+    ``language`` 必须在内：它是**内容级**字段，换语言就换掉了纸面上的分区标题，产物
+    文本随之改变。不把它算进来，就会出现"配置指纹相同、下载到的文件却是另一种语言"。
     序列化用排序键的紧凑 JSON，保证同一配置稳定出同一指纹。
     """
     payload = {
@@ -274,6 +294,7 @@ def render_config_fingerprint(request: ExportRequest, context: RenderContext) ->
         "template_html": context.template_html,
         "style_config": context.style_config or {},
         "format_config": effective_format_config(request, context),
+        "language": context.language,
     }
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

@@ -194,8 +194,100 @@ def test_layout_patch_validates_the_override(client):
     assert response.json()["format_config"] == {"page_padding": 12}
 
 
-# ===== 预览与导出必须一致 =====
+# ===== 语言（批 3）：拖字号滑杆不许把英文简历改回中文 =====
 
+
+def test_patching_layout_without_language_keeps_it(client):
+    """§9.1 R1 的自动化钉子。
+
+    `PATCH /layout` 是**整体替换**（`ResumeLayoutUpdate`），所以 `language` 必须是
+    "None = 这次不涉及"。这条用例只传度量参数、不传 `language`：语言必须原样留着，
+    否则用户每拖一次字号滑杆，英文简历就被静默改回中文，而界面上没有任何提示。
+    """
+    resume_id = _make_resume(client)
+    client.patch(f"/api/resumes/{resume_id}/layout", json={"language": "en-US"})
+    assert client.get(f"/api/resumes/{resume_id}").json()["language"] == "en-US"
+
+    client.patch(
+        f"/api/resumes/{resume_id}/layout",
+        # 只动页数与字号——这正是"拖一下滑杆"发出的那份请求体。
+        json={"page_limit": 2, "font_scale": "large"},
+    )
+    body = client.get(f"/api/resumes/{resume_id}").json()
+    assert body["language"] == "en-US"
+    # 顺带确认这次 PATCH 本身是生效的：语言没变不是因为整个请求没被处理。
+    assert body["page_limit"] == 2
+    assert body["font_scale"] == "large"
+
+
+def test_patching_layout_with_language_switches_it(client):
+    """"不传 = 不涉及"不能退化成"永远改不了"：显式传值时必须真的改。"""
+    resume_id = _make_resume(client)
+    client.patch(f"/api/resumes/{resume_id}/layout", json={"language": "en-US"})
+    body = client.patch(f"/api/resumes/{resume_id}/layout", json={"language": "zh-CN"}).json()
+    assert body["language"] == "zh-CN"
+    assert client.get(f"/api/resumes/{resume_id}").json()["language"] == "zh-CN"
+
+
+def test_auto_fit_still_works_on_an_english_resume(client):
+    """§8.3 第 4 条：「自动一页」在英文简历上仍然可用。
+
+    「自动一页」落库的形态就是 `PATCH /layout` 带**诊断给出的那一档** `format_config`
+    （页边距/区块间距/行高/字号系数）+ `page_limit`——前端点「确认」时发的正是这份请求体。
+    所以这里按真实链路走一遍：诊断拿阶梯 → 保存第一档 → 断言 200、`page_limit` 生效、
+    覆盖写入，且**英文没被顺手改回中文**（那是 R1 的另一种表现）。
+    """
+    resume_id = _make_resume(client)
+    client.patch(f"/api/resumes/{resume_id}/layout", json={"language": "en-US", "page_limit": 2})
+
+    ladder = client.post(
+        f"/api/resumes/{resume_id}/layout/analyze",
+        json={"measure": {"used_height": PAGE * 1.3, "page_content_height": PAGE, "page_limit": 1}},
+    ).json()["fit_ladder"]
+    assert ladder, "英文简历没有拿到「自动一页」阶梯"
+    chosen = ladder[0]["config"]
+
+    response = client.patch(
+        f"/api/resumes/{resume_id}/layout",
+        json={"page_limit": 1, "format_config": chosen},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["page_limit"] == 1  # 页数上限真的收回到 1
+    assert body["format_config"] == chosen  # 自动一页试出来的那一档原样落库
+    assert body["language"] == "en-US"  # 保存版式不许顺手改语言
+
+    # 预览与导出同源：导出的 HTML 用这份版式，且标题是英文。
+    html = client.get(f"/api/resumes/{resume_id}/export", params={"format": "html"}).text
+    assert f"padding: {chosen['page_padding']:g}mm" in html
+    assert "Summary" in html
+    assert "个人总结" not in html
+
+
+def test_render_uses_the_requested_language(client):
+    """未落库的即时预览（生成后那一屏）也要按请求里的语言排版面文案。"""
+    content = {"name": "张三", "summary": "软件工程本科生。", "education": []}
+
+    chinese = client.post(
+        "/api/resumes/render",
+        json={"content": content, "template": "classic", "language": "zh-CN"},
+    )
+    assert chinese.status_code == 200
+    assert "个人总结" in chinese.text
+
+    english = client.post(
+        "/api/resumes/render",
+        json={"content": content, "template": "classic", "language": "en-US"},
+    )
+    assert english.status_code == 200
+    assert "Summary" in english.text
+    # 不传 = 默认语言，与历史输出逐字一致。
+    default = client.post("/api/resumes/render", json={"content": content, "template": "classic"})
+    assert default.status_code == 200
+    assert "个人总结" in default.text
+
+
+# ===== 预览与导出必须一致 =====
 
 def test_exported_html_uses_the_per_resume_override(client):
     """自动一页改了预览却没改导出，是这类功能最坏的失败方式。"""

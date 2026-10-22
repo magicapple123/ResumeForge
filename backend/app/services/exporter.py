@@ -16,6 +16,15 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
 
 from ..schemas.resume import MAX_RESUME_PAGES, ResumeContent
+from .resume.resume_labels import (
+    DEFAULT_RESUME_LANGUAGE,
+    field_labels,
+    gender_text,
+    level_parens,
+    level_text,
+    list_separator,
+    section_titles,
+)
 from .resume.resume_sections import DEFAULT_SECTION_ORDER, resolved_section_order
 from .resume.resume_template_format import FONT_KEY
 from .resume.resume_template_style import style_css, validated_style_config
@@ -73,18 +82,27 @@ def export_markdown(
     resume: ResumeContent,
     *,
     section_order: list[str] | None = None,
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> str:
     """导出不包含照片的 Markdown 文本。
 
     照片是**唯一**的例外（内嵌 data URL，放进文本导出没有意义）。除此之外，凡是预览里会
     出现的内容这里都要有——以前漏掉了性别与出生年：预览页眉显示它们、md 里却查无此项，
     属于"同一份简历两个输出说得不一样"（用户报告的正是这类差异，只是发生在别的输出上）。
+
+    ``language`` 决定七个分区标题与字段前缀的文案，与 PDF / Word / HTML 同源
+    （``resume_labels``）；缺省 ``zh-CN``，与历史输出**逐字一致**。语言只换词与分隔符，
+    **不换标点风格**：英文产物里仍是 `Objective：…` 这种全角冒号，这是附录 A 已明确接受
+    的已知瑕疵（本批不做标点本地化）。
     """
     lines: list[str] = []
+    titles = section_titles(language)
+    fields = field_labels(language)
+    sep = list_separator(language)
     header = resume.name
     # 性别在预览里是姓名后缀（与 `_resume_sections.j2` 的位置一致）。
     if resume.gender:
-        header += f"（{resume.gender}）"
+        header += gender_text(resume.gender, language)
     if resume.job_intent:
         header += f" · {resume.job_intent}"
     lines.append(f"# {header}")
@@ -96,26 +114,26 @@ def export_markdown(
 
     def write_summary() -> None:
         if resume.summary:
-            lines.append("## 个人总结\n")
+            lines.append(f"## {titles['summary']}\n")
             lines.append(f"{resume.summary}\n")
 
     def write_education() -> None:
         if resume.education:
-            lines.append("## 教育经历\n")
+            lines.append(f"## {titles['education']}\n")
             for edu in resume.education:
                 lines.append(
                     f"### {edu.school} · {edu.major} · {edu.degree}（{edu.start_date} - {edu.end_date}）\n"
                 )
                 if edu.gpa:
-                    lines.append(f"- 绩点/排名：{edu.gpa}")
+                    lines.append(f"- {fields['gpa']}：{edu.gpa}")
                 if edu.courses:
-                    lines.append(f"- 核心课程：{'、'.join(edu.courses)}")
+                    lines.append(f"- {fields['courses']}：{sep.join(edu.courses)}")
                 lines.append(_join_bullets(edu.achievements))
                 lines.append("")
 
     def write_experience() -> None:
         if resume.experience:
-            lines.append("## 实习/工作经历\n")
+            lines.append(f"## {titles['experience']}\n")
             for exp in resume.experience:
                 lines.append(
                     f"### {exp.company} · {exp.role}（{exp.start_date} - {exp.end_date}）\n"
@@ -125,7 +143,7 @@ def export_markdown(
 
     def write_campus_experience() -> None:
         if resume.campus_experience:
-            lines.append("## 校园经历\n")
+            lines.append(f"## {titles['campus_experience']}\n")
             for item in resume.campus_experience:
                 lines.append(
                     f"### {item.organization} · {item.role}（{item.start_date} - {item.end_date}）\n"
@@ -135,31 +153,30 @@ def export_markdown(
 
     def write_projects() -> None:
         if resume.projects:
-            lines.append("## 项目经历\n")
+            lines.append(f"## {titles['projects']}\n")
             for project in resume.projects:
                 lines.append(
                     f"### {project.name} · {project.role}（{project.start_date} - {project.end_date}）\n"
                 )
                 if project.tech_stack:
-                    lines.append(f"**技术栈/工具**：{'、'.join(project.tech_stack)}")
+                    lines.append(f"**{fields['tech_stack']}**：{sep.join(project.tech_stack)}")
                 lines.append(_join_bullets(project.description))
                 lines.append(_join_bullets(project.highlights))
                 lines.append("")
 
     def write_skills() -> None:
         if resume.skills:
-            lines.append("## 专业技能\n")
+            lines.append(f"## {titles['skills']}\n")
             lines.append(
                 _join_bullets(
-                    f"{skill.name}（{skill.level}）" if skill.level else skill.name
-                    for skill in resume.skills
+                    level_text(skill.name, skill.level, language) for skill in resume.skills
                 )
             )
             lines.append("")
 
     def write_awards() -> None:
         if resume.awards:
-            lines.append("## 荣誉奖项\n")
+            lines.append(f"## {titles['awards']}\n")
             lines.append(
                 _join_bullets(
                     f"{award.name} · {award.date}"
@@ -223,6 +240,7 @@ def render_html(
     format_config: dict | None = None,
     style_config: dict | None = None,
     template_html: str = "",
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> str:
     """渲染简历 HTML。
 
@@ -231,6 +249,13 @@ def render_html(
     ``font_scale`` 只改变一个基准像素变量，所有尺寸都由它推算；
     ``format_config`` 是一组受校验的 CSS 覆盖（格式模板）；
     ``template_html`` 非空时用它渲染——那是用户自制的样式模板，走沙箱环境。
+
+    ``language`` 决定纸面上的分区标题与字段前缀，与 PDF / Word / Markdown **同一张表**
+    （``resume_labels``）；缺省 ``zh-CN``，与历史输出逐字一致。四个文案上下文
+    （``section_titles`` / ``field_labels`` / ``list_separator`` / ``level_parens``）
+    **无条件**放进 Jinja 上下文——只在某些分支放会让 ``{{ section_titles.summary }}``
+    渲染成空串，也就是"整份简历没有分区标题"这种静默故障。自制模板通过
+    ``{% include "_resume_sections.j2" %}`` 同样能取到它们。
     """
     # A per-document nonce authorizes only the fixed A4 fitting script.
     csp_nonce = secrets.token_hex(16)
@@ -254,6 +279,15 @@ def render_html(
         # 正文分区顺序（页眉不参与）。模板里有页码、A4 适配脚本等同样读这个上下文。
         "resume_section_order": resolved_section_order(overrides),
         "template_config": style_values,
+        # 纸面固定文案（分区标题 / 字段前缀 / 分隔符 / 等级括号）。**任何分支都要有**：
+        # 模板里写的是 `{{ section_titles.summary }}`，缺了这个键 Jinja 会渲染成空串——
+        # 产物看起来只是"没有标题"，不会报错，是最难被发现的一类故障。
+        "section_titles": section_titles(language),
+        "field_labels": field_labels(language),
+        "list_separator": list_separator(language),
+        # 等级括号要拆成左右两半：模板得在括号中间放带 `data-resume-path` 的 `<span>`，
+        # 前端靠它做「点纸面字段定位编辑」，所以这里不能直接用 `level_text` 的成品字符串。
+        "level_parens": level_parens(language),
     }
 
     if template_html:

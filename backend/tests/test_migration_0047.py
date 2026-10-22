@@ -13,7 +13,7 @@ from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0046_search_fts"
-HEAD_REVISION = "0048_job_analysis_cache"
+HEAD_REVISION = "0049_resume_language"
 _FTS_PREFIXES = ("knowledge_fts", "search_fts")
 
 

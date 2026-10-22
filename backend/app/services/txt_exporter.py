@@ -8,12 +8,14 @@ data URL 放进纯文本没有意义。
 
 这是 ``FORMAT_RENDERERS`` 里的一个格式渲染器，不新增任何版式口径。
 """
+
 from __future__ import annotations
 
 import re
 
 from ..schemas.resume import ResumeContent
 from .exporter import export_markdown
+from .resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 
 # 无序列表项的前缀（`export_markdown` 用 `- ` 连接条目）。
 _BULLET_RE = re.compile(r"^\s*-\s+")
@@ -37,14 +39,22 @@ def strip_markdown(text: str) -> str:
     return "\n".join(lines)
 
 
-def export_txt(resume: ResumeContent, *, section_order: list[str] | None = None) -> str:
+def export_txt(
+    resume: ResumeContent,
+    *,
+    section_order: list[str] | None = None,
+    language: str = DEFAULT_RESUME_LANGUAGE,
+) -> str:
     """把结构化简历渲染成纯文本。
 
-    直接复用 ``export_markdown`` 生成正文，再剥离标记——保证「个人总结 / 教育 / 经历 /
-    校园 / 项目 / 技能 / 荣誉」的分区与顺序、以及每个字段的文案都和 Markdown 同源。
+    直接复用 ``export_markdown`` 生成正文，再剥离标记——保证七个分区的标题、顺序与
+    每个字段的文案都和 Markdown 同源（``resume_labels.section_titles`` 是唯一来源）。
     分区顺序由 ``section_order`` 决定（用户的版式设置），不传则用默认顺序。
+
+    ``language`` 原样透传给 ``export_markdown``：纯文本的**标题与 Markdown 同源**，
+    不自己判语言、也不自己存文案——否则同一份简历的 .md 与 .txt 会印出两种标题。
     """
-    return strip_markdown(export_markdown(resume, section_order=section_order))
+    return strip_markdown(export_markdown(resume, section_order=section_order, language=language))
 
 
 __all__ = ["export_txt", "strip_markdown"]

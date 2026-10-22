@@ -49,6 +49,7 @@ from ...services.resume.resume_delivery import (
     canonical_content_sha256,
     freeze_delivery,
 )
+from ...services.resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 from ...services.resume.resume_record import record_format_config
 from ...services.resume.resume_template_format import validated_format_config
 from ...services.resume.resume_template_store import (
@@ -144,6 +145,8 @@ def _export_record(
         page_limit=record.page_limit,
         font_scale=record.font_scale,
         format_config=base_format_config,
+        # 纸面固定文案的语言。旧记录该列为空时按 zh-CN 读（与历史输出逐字一致）。
+        language=record.language or DEFAULT_RESUME_LANGUAGE,
     )
     # 预览的重复请求在**渲染之前**就短路：来回切口径、开大图、拖回原值问的都是同一份。
     # 键 = 内容指纹 + 渲染配置指纹（两者本来就要进响应头，这里只是提前算）。
@@ -407,6 +410,8 @@ def share_resume_zip(request: HTTPRequest, resume_id: int, db: Session = Depends
         page_limit=record.page_limit,
         font_scale=record.font_scale,
         format_config=record_format_config(db, record),
+        # 分享包里的 HTML/PDF 也是"发给别人看的那一份"，语言必须跟着记录走。
+        language=record.language or DEFAULT_RESUME_LANGUAGE,
     )
     html = build_export(ExportRequest(format="html"), resume, context)
     pdf_bytes: bytes | None = None

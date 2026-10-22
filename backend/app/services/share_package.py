@@ -46,6 +46,7 @@ from . import trash
 from .export_pipeline import ExportRequest, RenderContext, build_export
 from .pdf_exporter import ResumePDFError
 from .privacy import RedactionOptions, redact
+from .resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 from .resume.resume_record import record_format_config
 from .resume.resume_template_store import resolve_style_config, resolve_style_template
 from .resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_PAGE_LIMIT
@@ -155,6 +156,10 @@ def ensure_package_files(db: Session, package: SharePackage) -> list[str]:
         page_limit=(record.page_limit or DEFAULT_PAGE_LIMIT) if record else DEFAULT_PAGE_LIMIT,
         font_scale=(record.font_scale or DEFAULT_FONT_SCALE) if record else DEFAULT_FONT_SCALE,
         format_config=record_format_config(db, record) if record else {},
+        # 分享包是"发给别人看的那一份"：标题语言必须跟记录一致，否则包里永远是中文。
+        # 简历被删（record 为 None）时回落默认语言——这时只剩快照，没有语言可读。
+        language=(record.language if record else DEFAULT_RESUME_LANGUAGE)
+        or DEFAULT_RESUME_LANGUAGE,
     )
 
     restored: list[str] = []
@@ -271,6 +276,8 @@ def create_share_package(
         page_limit=record.page_limit or DEFAULT_PAGE_LIMIT,
         font_scale=record.font_scale or DEFAULT_FONT_SCALE,
         format_config=record_format_config(db, record),
+        # 同上：这个出口建包时也要带上语言，否则"重新建一个同样的包"会退回中文标题。
+        language=record.language or DEFAULT_RESUME_LANGUAGE,
     )
 
     # 导出唯一复用 export_pipeline：HTML 与 PDF 都从这里出，不另写渲染逻辑。

@@ -6,18 +6,18 @@
    页眉（姓名 / 求职意向 / 联系方式 / 照片）不参与排序，固定在最前。
 
    默认顺序与重排前的写死顺序完全一致，所以没有动过顺序的简历，输出与以前一字不差。 #}
-{% import "_resume_blocks.j2" as blocks %}
+{% import "_resume_blocks.j2" as blocks with context %}
 <div class="header">
   <div class="header-main">
     <div class="name"><span data-resume-path="name">{{ resume.name }}</span>{% if resume.gender %} <span data-resume-path="gender" class="name-extra">{{ resume.gender }}</span>{% endif %}</div>
-    {% if resume.job_intent %}<div class="intent">求职意向：<span data-resume-path="job_intent">{{ resume.job_intent }}</span></div>{% endif %}
+    {% if resume.job_intent %}<div class="intent">{{ field_labels.intent }}：<span data-resume-path="job_intent">{{ resume.job_intent }}</span></div>{% endif %}
   <div class="contact">
       {%- if resume.phone -%}<span data-resume-path="phone">{{ resume.phone }}</span>{%- endif -%}
       {%- if resume.email -%}<span data-resume-path="email">{{ resume.email }}</span>{%- endif -%}
       {%- if resume.city -%}<span data-resume-path="city">{{ resume.city }}</span>{%- endif -%}
       {%- if resume.birth_year -%}<span data-resume-path="birth_year">{{ resume.birth_year }}</span>{%- endif -%}
-      {%- if resume.github -%}<span data-resume-path="github">GitHub：{{ resume.github }}</span>{%- endif -%}
-      {%- if resume.personal_website -%}<span data-resume-path="personal_website">主页：{{ resume.personal_website }}</span>{%- endif -%}
+      {%- if resume.github -%}<span data-resume-path="github">{{ field_labels.github }}：{{ resume.github }}</span>{%- endif -%}
+      {%- if resume.personal_website -%}<span data-resume-path="personal_website">{{ field_labels.website }}：{{ resume.personal_website }}</span>{%- endif -%}
     </div>
     {% if template_config.badges %}
     <div class="template-badges" aria-label="模板装饰">
@@ -30,7 +30,7 @@
     </div>
     {% endif %}
   </div>
-  {% if resume.photo %}<img class="profile-photo" src="{{ resume.photo }}" alt="个人照片" />{% endif %}
+  {% if resume.photo %}<img class="profile-photo" src="{{ resume.photo }}" alt="{{ field_labels.photo_alt }}" />{% endif %}
 </div>
 
 {% set use_section_grid = template_config.column_count|default(1) == 2 %}

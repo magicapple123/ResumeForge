@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+from .resume_labels import DEFAULT_RESUME_LANGUAGE, SECTION_TITLES, section_title
+
 # 默认顺序 = 内置模板沿用至今的顺序。**不要**因为「我的资料」那边改了默认顺序就顺手改这里：
 # 简历是有历史记录的产物，改默认顺序等于把用户已经导出过的简历悄悄换了一个样子。
 DEFAULT_SECTION_ORDER: tuple[str, ...] = (
@@ -29,15 +31,12 @@ DEFAULT_SECTION_ORDER: tuple[str, ...] = (
     "awards",
 )
 
-SECTION_LABELS: dict[str, str] = {
-    "summary": "个人总结",
-    "education": "教育经历",
-    "experience": "实习/工作经历",
-    "campus_experience": "校园经历",
-    "projects": "项目经历",
-    "skills": "专业技能",
-    "awards": "荣誉奖项",
-}
+# 分区标题的唯一来源是 ``resume_labels.SECTION_TITLES``（按语言分组的一张表）。
+# 这里保留 ``SECTION_LABELS`` 这个名字，是因为它被模板清单接口（``templates_routes``）
+# 与 ``normalized_section_order`` 的键校验直接消费；内容与默认语言逐字相同，
+# 所以默认语言的产物零变化。**不要再往这个文件里写字面量**——渲染器取标题一律走
+# ``resume_labels``，这里只是默认语言的一个别名。
+SECTION_LABELS: dict[str, str] = SECTION_TITLES[DEFAULT_RESUME_LANGUAGE]
 
 # 「我的资料」那边的分区名 -> 简历正文的分区名。
 #
@@ -61,8 +60,14 @@ PROFILE_SECTION_TO_RESUME: dict[str, str] = {
 # 这里显式写下来，是为了让"为什么列表里没有它"这个问题有一个能搜到的答案。
 
 
-def section_label(key: str) -> str:
-    return SECTION_LABELS.get(key, key)
+def section_label(key: str, language: str | None = None) -> str:
+    """取单个分区标题。
+
+    ``language`` 缺省（``None``）时用默认语言，行为与加这个参数之前**逐字一致**，
+    因此既有调用方（``templates_routes``）不用改。未知语言/未知键由
+    ``resume_labels`` 收口：前者回落默认语言，后者回落成键名本身。
+    """
+    return section_title(key, language)
 
 
 def normalized_section_order(raw: object) -> list[str]:

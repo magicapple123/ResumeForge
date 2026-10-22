@@ -11,6 +11,13 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
 from ...schemas.resume import ResumeContent
+from ..resume.resume_labels import (
+    DEFAULT_RESUME_LANGUAGE,
+    field_labels,
+    level_text,
+    list_separator,
+    section_titles,
+)
 from ..resume.resume_sections import resolved_section_order
 from .canvas import _ResumePDF
 from .columns import SectionDrawer, render_sections
@@ -60,10 +67,10 @@ def _section_has_content(resume: ResumeContent, key: str) -> bool:
     """这个分区**有没有内容可画**（空分区在草稿里根本不产生节点）。
 
     **为什么必须在这里判、而不是只留在各 drawer 里**：双栏模板把分区**两两一行**并排
-    （见 `columns.plan_rows`），而草稿里的空分区（例如没有校园经历时的 `校园经历`）
-    渲染出来是**零个节点**——它不占网格格位，后面的分区因此往前挪一格。PDF 若按"七个键
-    全都在"来配对，就会把 `项目经历` 和一个空格子并排、把 `专业技能` 与 `荣誉奖项` 拆到
-    两行，整份简历凭空高出 40mm（实测草稿 227.5mm vs 分错组的 PDF 314.7mm）。
+    （见 `columns.plan_rows`），而草稿里的空分区（`campus_experience` 为空、页面上
+    什么都不画的那种）渲染出来是**零个节点**——它不占网格格位，后面的分区因此往前挪一格。
+    PDF 若按"七个键全都在"来配对，就会把 `projects` 和一个空格子并排、把 `skills` 与
+    `awards` 拆到两行，整份简历凭空高出 40mm（实测草稿 227.5mm vs 分错组的 PDF 314.7mm）。
     所以配对之前必须先把空分区剔掉：**配对的是"会画出来的分区"，不是"注册表里的七个键"**。
     """
     table = {
@@ -86,6 +93,7 @@ def _draw_resume(
     *,
     include_photo: bool = True,
     format_config: dict | None = None,
+    language: str = DEFAULT_RESUME_LANGUAGE,
 ) -> None:
     """把结构化简历画进 ``pdf``。测量与最终渲染共用这一段，保证"量的"就是"画的"。
 
@@ -96,9 +104,19 @@ def _draw_resume(
     ``format_config`` 里可能带 ``section_order``（分区顺序）。**分页会受顺序影响**
     （`ensure_space` 不切断条目，于是某个分区被推到下一页时留白多少与顺序有关），
     所以测量路径也要用同一份配置，否则"量的"与"画的"又分家了。
+
+    ``language`` 只决定七个分区标题与字段前缀的文案（取自 ``resume_labels``），
+    本函数**不判断语言**。标题文字长度会影响换行与高度，所以测量路径必须传同一个值——
+    量的和画的用了两种语言，页数结论就不可信了。
+
+    语言只换**词与标点**（``fields`` / ``sep`` / ``level_text``），不换标点风格：英文产物
+    里仍是 ``Objective：…``（全角冒号），这是附录 A 已接受的已知瑕疵，本批不顺手做标点本地化。
     """
     layout = pdf.layout
     base = layout.base_px
+    labels = section_titles(language)
+    fields = field_labels(language)
+    sep = list_separator(language)
 
     # 照片尺寸由模板 `.profile-photo` 的宽高（× 字号）派生——预览里它随字号/缩放走，
     # PDF 此前却是固定 22×28mm，字号一大一小就对不上（用户看到"照片大小与字号不协调"）。
@@ -127,17 +145,17 @@ def _draw_resume(
     name_size = base * layout.name_ratio
     extra_size = base * layout.name_extra_ratio
     gender = (resume.gender or "").strip()
-    intent_text = f"求职意向：{resume.job_intent}" if resume.job_intent else ""
+    intent_text = f"{fields['intent']}：{resume.job_intent}" if resume.job_intent else ""
     # 与预览 `_resume_sections.j2` 的 `.contact` 同字段、同顺序、同文案。此前只拼了前四个，
-    # GitHub 与主页整段丢失（预览有、PDF 没有）。`_join` 会丢掉空串，所以空字段不留分隔符。
+    # GitHub 与个人网站整段丢失（预览有、PDF 没有）。`_join` 会丢掉空串，所以空字段不留分隔符。
     contact = _join(
         [
             resume.phone,
             resume.email,
             resume.city,
             resume.birth_year,
-            f"GitHub：{resume.github}" if resume.github else "",
-            f"主页：{resume.personal_website}" if resume.personal_website else "",
+            f"{fields['github']}：{resume.github}" if resume.github else "",
+            f"{fields['website']}：{resume.personal_website}" if resume.personal_website else "",
         ],
         "    ",
     )
@@ -274,14 +292,14 @@ def _draw_resume(
         text = resume.summary.strip()
         if not text:
             return False
-        pdf.section_title("个人总结", base, leading_gap=leading)
+        pdf.section_title(labels["summary"], base, leading_gap=leading)
         body(pdf, text)
         return True
 
     def draw_education(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.education:
             return False
-        pdf.section_title("教育经历", base, leading_gap=leading)
+        pdf.section_title(labels["education"], base, leading_gap=leading)
         for index, edu in enumerate(resume.education):
             # 同一分区内条目之间的留白 = 模板 `.entry { margin-bottom }`（此前 PDF 没有）。
             if index:
@@ -292,16 +310,16 @@ def _draw_resume(
                 base,
             )
             if edu.gpa:
-                pdf.meta_line(f"绩点/排名：{edu.gpa}", base)
+                pdf.meta_line(f"{fields['gpa']}：{edu.gpa}", base)
             if edu.courses:
-                pdf.meta_line(f"核心课程：{'、'.join(edu.courses)}", base)
+                pdf.meta_line(f"{fields['courses']}：{sep.join(edu.courses)}", base)
             pdf.bullets(edu.achievements, base)
         return True
 
     def draw_experience(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.experience:
             return False
-        pdf.section_title("实习/工作经历", base, leading_gap=leading)
+        pdf.section_title(labels["experience"], base, leading_gap=leading)
         for index, exp in enumerate(resume.experience):
             if index:
                 pdf.ln(layout.gap_mm(layout.entry_gap))
@@ -316,7 +334,7 @@ def _draw_resume(
     def draw_campus(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.campus_experience:
             return False
-        pdf.section_title("校园经历", base, leading_gap=leading)
+        pdf.section_title(labels["campus_experience"], base, leading_gap=leading)
         for index, item in enumerate(resume.campus_experience):
             if index:
                 pdf.ln(layout.gap_mm(layout.entry_gap))
@@ -331,7 +349,7 @@ def _draw_resume(
     def draw_projects(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.projects:
             return False
-        pdf.section_title("项目经历", base, leading_gap=leading)
+        pdf.section_title(labels["projects"], base, leading_gap=leading)
         for index, project in enumerate(resume.projects):
             if index:
                 pdf.ln(layout.gap_mm(layout.entry_gap))
@@ -343,7 +361,7 @@ def _draw_resume(
                 base,
             )
             if project.tech_stack:
-                pdf.meta_line(f"技术栈/工具：{'、'.join(project.tech_stack)}", base)
+                pdf.meta_line(f"{fields['tech_stack']}：{sep.join(project.tech_stack)}", base)
             pdf.bullets(project.description, base)
             pdf.bullets(project.highlights, base)
         return True
@@ -351,14 +369,11 @@ def _draw_resume(
     def draw_skills(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.skills:
             return False
-        pdf.section_title("专业技能", base, leading_gap=leading)
-        # 标签文案与预览一致：`技能名（等级）`。用标签绘制而不是「、」连接的一行文本——
-        # 后者在预览里是带底色的小框，导出后却看不出任何标签形状。
+        pdf.section_title(labels["skills"], base, leading_gap=leading)
+        # 标签文案与预览一致（`level_text`：技能名 + 本语言的等级括号）。用标签绘制而不是
+        # 用分隔符连成一行文本——后者在预览里是带底色的小框，导出后却看不出任何标签形状。
         pdf.skill_tags(
-            [
-                f"{skill.name}（{skill.level}）" if skill.level else skill.name
-                for skill in resume.skills
-            ],
+            [level_text(skill.name, skill.level, language) for skill in resume.skills],
             base,
         )
         return True
@@ -366,7 +381,7 @@ def _draw_resume(
     def draw_awards(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.awards:
             return False
-        pdf.section_title("荣誉奖项", base, leading_gap=leading)
+        pdf.section_title(labels["awards"], base, leading_gap=leading)
         pdf.bullets(
             [_join([award.name, award.date, award.description]) for award in resume.awards],
             base,
