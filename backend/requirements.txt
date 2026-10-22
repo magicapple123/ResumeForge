@@ -21,8 +21,9 @@ alembic==1.20.0
 # wheel-published, no external binaries) so image-only pages can reuse the
 # screenshot vision path.
 pillow==13.0.0
-# 6.19.0 在 2026-10-22 被 pip-audit 判出 5 条已知漏洞（CVE-2026-113786/113792/
-# 113793/113794/113795，修复版分别是 6.21.1/6.20.1）；这条门禁是阻断级，不升就红。
+# 6.19.0 was flagged by pip-audit on 2026-10-22 for five known advisories
+# (CVE-2026-113786/113792/113793/113794/113795, fixed in 6.21.1 / 6.20.1).
+# The audit gate is blocking, so staying on 6.19.0 turns CI red.
 pypdf==6.21.1
 pypdfium2==5.14.0
 # Server-side PDF export: fpdf2 embeds a system CJK font so the resume PDF can be
