@@ -34,6 +34,8 @@ const DEFAULT_LAYOUT: ResumeLayout = {
   format_name: "",
   page_limit: 1,
   font_scale: "standard",
+  // 草稿的初始语言：新记录/还没选过时就是中文（后端旧记录同样是中文）。
+  language: "zh-CN",
 };
 
 export default function ResumeDetailModal({ recordId, onClose }: Props) {
@@ -112,6 +114,8 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
           format_config: data.format_config ?? {},
           page_limit: data.page_limit || DEFAULT_LAYOUT.page_limit,
           font_scale: data.font_scale || DEFAULT_LAYOUT.font_scale,
+          // 语言跟着记录走：打开一份英文简历，版式栏里显示的必须是 English。
+          language: data.language ?? DEFAULT_LAYOUT.language,
         } satisfies ResumeLayout;
         setLayout(nextLayout);
         setSavedLayout(nextLayout);
@@ -180,6 +184,9 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
         format_config: updated.format_config ?? layout.format_config ?? {},
         page_limit: updated.page_limit || layout.page_limit,
         font_scale: updated.font_scale || layout.font_scale,
+        // 逐字段重建最容易漏这一行：漏了会让本地草稿变回 undefined（界面上显示中文），
+        // 与记录里真实的语言不一致——下一次保存又把英文写回中文（§9.1 R1）。
+        language: updated.language ?? layout.language,
       };
       setDetail(updated);
       setLayout(nextLayout);

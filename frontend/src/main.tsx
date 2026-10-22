@@ -7,6 +7,7 @@ import App from "./App";
 import DatasetScopeBoundary from "./components/DatasetScopeBoundary";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import ThemeProvider from "./components/ThemeProvider";
+import I18nProvider from "./i18n/I18nProvider";
 import "./index.css";
 
 /**
@@ -32,22 +33,26 @@ async function start() {
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <ThemeProvider>
-        {/* 把 AntD 的通知/弹窗实例交给 utils/taskNotify：生成完成后"弹窗 + 提示声"这件事
-            需要一个能在任何模块里调用的出口，而 useApp() 只能在组件里用。 */}
-        <NotifyHostBridge />
-        <AppErrorBoundary>
-          <BrowserRouter>
-            {import.meta.env.VITE_DEMO_MODE === "1" ? (
-              <App />
-            ) : (
-              <DatasetScopeBoundary>
+      {/* 语言在最外层：`ThemeProvider` 里的 antd `locale` 与界面文案必须同源，
+          所以它要能读到 `useLocale()`。 */}
+      <I18nProvider>
+        <ThemeProvider>
+          {/* 把 AntD 的通知/弹窗实例交给 utils/taskNotify：生成完成后"弹窗 + 提示声"这件事
+              需要一个能在任何模块里调用的出口，而 useApp() 只能在组件里用。 */}
+          <NotifyHostBridge />
+          <AppErrorBoundary>
+            <BrowserRouter>
+              {import.meta.env.VITE_DEMO_MODE === "1" ? (
                 <App />
-              </DatasetScopeBoundary>
-            )}
-          </BrowserRouter>
-        </AppErrorBoundary>
-      </ThemeProvider>
+              ) : (
+                <DatasetScopeBoundary>
+                  <App />
+                </DatasetScopeBoundary>
+              )}
+            </BrowserRouter>
+          </AppErrorBoundary>
+        </ThemeProvider>
+      </I18nProvider>
     </React.StrictMode>,
   );
 }

@@ -16,6 +16,7 @@ import { Button, Popover, Segmented, Select, Space, Tooltip, Typography } from "
 import { useMemo, useState } from "react";
 import { RESUME_PAGE_LIMITS } from "../../types";
 import type { ResumeFormatConfig, ResumeLayout, ResumeTemplateCatalog } from "../../types";
+import { useI18n } from "../../i18n/I18nProvider";
 import {
   buildSectionOrderConfig,
   DEFAULT_RESUME_SECTION_ORDER,
@@ -23,6 +24,7 @@ import {
   normalizeSectionOrder,
   RESUME_SECTION_LABELS,
 } from "../../utils/resumeSectionOrder";
+import ResumeLanguageSelect from "./ResumeLanguageSelect";
 import TemplateGalleryModal from "./TemplateGalleryModal";
 
 interface Props {
@@ -91,6 +93,7 @@ export default function ResumeTemplateControls({
   // 版式下拉是点击触发的：选定后提示就该收掉，而不是等鼠标移开（受控开关）。
   // 注意下拉选项在 portal 里渲染，点击不会冒泡到触发器，所以 onChange 里也要关。
   const [formatTipOpen, setFormatTipOpen] = useState(false);
+  const { t } = useI18n();
   const templates = catalog?.templates ?? [];
   const formatPresets = catalog?.format_presets ?? [];
 
@@ -184,6 +187,9 @@ export default function ResumeTemplateControls({
               size="small"
               value={layout.format_name || ""}
               disabled={disabled}
+              // 下拉只有一行可见文字时，读屏软件读到的仍是"combobox"——补一个与视觉标签
+              // 同名的无障碍名（工具栏里现在有两个下拉，按名字定位也才稳）。
+              aria-label={t("resume.format.label")}
               // 宽度只够框住 4 个中文字符（见 `.resume-format-select`）：原来是 min-width:120，
               // 框比文字宽出一大截，和同一行的其它控件疏密不匀。名字更长的自制版式
               // （如「宽松（自制）」）在触发框里走省略号，展开后的列表按内容撑开。
@@ -291,6 +297,26 @@ export default function ResumeTemplateControls({
             }))}
             onChange={(value) => onChange({ ...layout, page_limit: value as number })}
           />
+        </Tooltip>
+      </Space>
+      {/* 简历语言：与页数/字号同属"排出来长什么样"，所以跟在结构组最后。
+          提示**必须**用 Tooltip 而不是原生 title——原生 title 在触屏上永远不出现，
+          而"只改小节标题与字段名、不翻译正文"正是最容易被误解的一句：
+          用户选了 English 却发现正文还是中文，会以为功能坏了。
+          `undefined` = 这次不涉及，界面上一律显示中文（后端旧记录也是中文）。 */}
+      <Space size={6}>
+        {!compact && (
+          <Typography.Text type="secondary">{t("resume.language.label")}</Typography.Text>
+        )}
+        <Tooltip title={t("resume.language.hint")}>
+          {/* 包一层 span：禁用态的下拉不接收指针事件，Tooltip 只能挂在外层。 */}
+          <span>
+            <ResumeLanguageSelect
+              value={layout.language ?? "zh-CN"}
+              disabled={disabled}
+              onChange={(language) => onChange({ ...layout, language })}
+            />
+          </span>
         </Tooltip>
       </Space>
     </Space>

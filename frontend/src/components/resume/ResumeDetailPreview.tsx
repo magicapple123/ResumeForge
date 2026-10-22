@@ -156,6 +156,9 @@ export default function ResumeDetailPreview({
       template: layout.template,
       formatName: layout.format_name,
       fontScale: layout.font_scale,
+      // 语言也得走草稿值：选了 English 还没保存，精确预览就必须按英文排——
+      // 这是"草稿选英文、精确预览还是中文"的唯一修复点。
+      language: layout.language ?? "zh-CN",
       formatConfig: layout.format_config as unknown as Record<string, unknown>,
       // 正文签名：改了内容也要重排一次（版式字段已各自进依赖）。
       // `riskContentSignature` 已经为风险扫描算过，直接复用（同一份 content）。
@@ -166,6 +169,7 @@ export default function ResumeDetailPreview({
       layout.template,
       layout.format_name,
       layout.font_scale,
+      layout.language,
       layout.format_config,
       riskContentSignature,
     ],

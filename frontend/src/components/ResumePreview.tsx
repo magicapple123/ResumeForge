@@ -34,6 +34,13 @@ export interface ExactPreviewOptions {
   /** 草稿的版式模板名。 */
   formatName: string;
   fontScale: string;
+  /**
+   * 纸面文案的语言（`zh-CN` / `en-US`）。
+   *
+   * 必须一路传到服务端：精确预览显示的就是导出产物本身，语言传不进去就会
+   * "草稿里选了英文、精确预览还是中文"。
+   */
+  language: string;
   formatConfig: Record<string, unknown>;
   /** 正文 + 模板的身份：内容改了也要重排一次 PDF（见 `ExactPreviewPanel`）。 */
   contentSignature: string;
@@ -335,6 +342,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
             formatName={exactPreview!.formatName}
             pageLimit={pageCount}
             fontScale={exactPreview!.fontScale}
+            language={exactPreview!.language}
             formatConfig={exactPreview!.formatConfig}
             contentSignature={exactPreview!.contentSignature}
             height={Math.max(MIN_PREVIEW_HEIGHT, viewportHeight)}

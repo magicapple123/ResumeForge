@@ -335,6 +335,8 @@ export async function fetchResumePreviewPdf(
     format_name?: string;
     page_limit?: number;
     font_scale?: string;
+    /** 纸面文案的语言（`zh-CN` / `en-US`）；不传 = 后端回落到记录里的值。 */
+    language?: string;
     format_config?: Record<string, unknown>;
     include_photo?: boolean;
   },

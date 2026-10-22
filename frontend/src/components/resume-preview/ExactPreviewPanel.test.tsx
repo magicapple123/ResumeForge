@@ -341,6 +341,25 @@ describe("ExactPreviewPanel", () => {
     expect(fetchPreview).toHaveBeenCalledTimes(1);
   });
 
+  it("切语言要重排：纸面文案变了，缓存键必须跟着变", async () => {
+    fetchPreview.mockResolvedValue(pdf(1));
+
+    const { rerender } = render(panel({ language: "zh-CN" }));
+    await waitForRequest();
+    expect(fetchPreview).toHaveBeenCalledTimes(1);
+
+    // 只改语言也要真的重排一次，并把这个值送到服务端——否则"选了英文、PDF 一个像素没变"。
+    rerender(panel({ language: "en-US" }));
+    await waitForRequest();
+    expect(fetchPreview).toHaveBeenCalledTimes(2);
+    expect(fetchPreview.mock.calls[1][1].language).toBe("en-US");
+
+    // 切回中文：那份字节已经排过了（缓存按语言分开存），直接复用，不再请求。
+    rerender(panel({ language: "zh-CN" }));
+    await waitForRequest();
+    expect(fetchPreview).toHaveBeenCalledTimes(2);
+  });
+
   it("请求失败时给出可操作的错误态，而不是空白", async () => {
     fetchPreview.mockRejectedValue(new Error("未找到可用的中文字体"));
 

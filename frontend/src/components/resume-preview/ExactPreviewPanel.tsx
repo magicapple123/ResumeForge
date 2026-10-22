@@ -46,6 +46,14 @@ interface Props {
   /** 草稿页数上限：与用户点「导出」时用的是同一个值。 */
   pageLimit: number;
   fontScale: string;
+  /**
+   * 纸面文案的语言：只影响小节标题与字段名，**但它改了纸面内容**，所以必须进缓存键。
+   *
+   * 缺省 `zh-CN`：本面板的唯一宿主（`ResumePreview`）一定会传（`ExactPreviewOptions` 里
+   * 该字段是**必填**），缺省值只是为了不把既有测试的每一处构造点都改成必填——
+   * 它与后端 `DEFAULT_RESUME_LANGUAGE` 同一口径，回落方向永远安全。
+   */
+  language?: string;
   /** 草稿版式（未保存也生效）：拖完滑块立刻能在这里看到结果。 */
   formatConfig: Record<string, unknown>;
   /**
@@ -110,6 +118,7 @@ export default function ExactPreviewPanel({
   formatName,
   pageLimit,
   fontScale,
+  language = "zh-CN",
   formatConfig,
   contentSignature,
   height,
@@ -147,9 +156,10 @@ export default function ExactPreviewPanel({
   // 版式是对象，每次父组件重渲染都可能是新引用；用序列化结果当依赖，
   // 否则"只改了一个无关的状态"也会触发一次完整的 PDF 重排。
   const configKey = JSON.stringify(formatConfig ?? {});
-  // **整套版式都进 key**：模板 / 版式模板 / 页数 / 字号 / 覆盖，任何一个变了都要重排。
-  // 只盯着一部分（早先只看 config）会让"换了模板、精确预览不动"。
-  const formatKey = `${contentSignature}|${template}|${formatName}|${pageLimit}|${fontScale}|${configKey}`;
+  // **整套版式都进 key**：模板 / 版式模板 / 页数 / 字号 / 语言 / 覆盖，任何一个变了都要重排。
+  // 只盯着一部分（早先只看 config）会让"换了模板、精确预览不动"；漏掉语言则是
+  // "切了语言、PDF 一个像素都没变"——服务端明明会重排，只是请求根本没发出去。
+  const formatKey = `${contentSignature}|${template}|${formatName}|${pageLimit}|${fontScale}|${language}|${configKey}`;
   // 从字符串还原一份稳定引用：effect 里要用版式对象，而直接依赖 `formatConfig`
   // 会让父组件每渲染一次就重排一次 PDF（对象引用每次都新）。
   const normalizedConfig = useMemo(
@@ -227,6 +237,7 @@ export default function ExactPreviewPanel({
           format_name: formatName,
           page_limit: pageLimit,
           font_scale: fontScale,
+          language,
           format_config: normalizedConfig,
         },
         controller.signal,
@@ -268,6 +279,7 @@ export default function ExactPreviewPanel({
     formatName,
     pageLimit,
     fontScale,
+    language,
     formatKey,
     normalizedConfig,
     keep,

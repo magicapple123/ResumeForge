@@ -76,6 +76,9 @@ export type EnhancementLevel = "light" | "balanced" | "strong";
 /** 字号档位（后端 ResumeFontScale）。 */
 export type ResumeFontScale = "small" | "standard" | "large";
 
+/** 纸面固定文案的语言（后端 ResumeLanguage）：只改小节标题与字段名，不翻译正文。 */
+export type ResumeLanguage = "zh-CN" | "en-US";
+
 /** 最大篇幅：A4 页数，与后端 MAX_RESUME_PAGES 一致。 */
 export const RESUME_PAGE_LIMITS = [1, 2, 3] as const;
 
@@ -185,6 +188,13 @@ export interface ResumeLayout {
   page_limit: ResumePageLimit | number;
   font_scale: ResumeFontScale;
   /**
+   * 纸面固定文案的语言。**可选**：`undefined` = 这次不涉及。
+   *
+   * `PATCH /resumes/{id}/layout` 是**整体替换**，所以"不传"必须能表达"别动它"——
+   * 写成必填带默认值，拖一次字号滑杆就会把英文简历静默改回中文。
+   */
+  language?: ResumeLanguage;
+  /**
    * 按简历的版式覆盖。
    *
    * 三态语义，必须区分开：**不传**（undefined）= 这次不涉及、保持原样；
@@ -239,6 +249,8 @@ export interface ResumeBrief {
   format_config: ResumeFormatConfig;
   page_limit: number;
   font_scale: ResumeFontScale;
+  /** 纸面固定文案的语言：后端必有值（列有 `server_default "zh-CN"`），旧记录同样是中文。 */
+  language?: ResumeLanguage;
   created_at: string;
   /** 最近修改时间（R14-b）：列表「最近修改」列与默认排序 `updated_desc` 同源；旧数据可能缺失。 */
   updated_at?: string | null;

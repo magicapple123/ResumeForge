@@ -155,6 +155,8 @@ export default function ResumeLayoutDiagnosisCard({
           format_name: layout.format_name,
           page_limit: layout.page_limit,
           font_scale: layout.font_scale,
+          // 本接口是整体替换：语言也一并带上（`undefined` 会由后端当成"不涉及"，不会重置）。
+          language: layout.language,
           // 候选版式只描述"怎么收紧"，把它叠在用户已有的版式覆盖之上——
           // 否则「自动一页」会把用户自己调过的板块顺序等覆盖清掉。
           format_config: { ...layout.format_config, ...candidate.config },

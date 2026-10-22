@@ -180,6 +180,8 @@ describe("ResumePreview 预览口径切换（精确 / 草稿）", () => {
     template: "classic",
     formatName: "",
     fontScale: "standard",
+    // 语言是 `ExactPreviewOptions` 的必填项（它决定纸面文案），这里与真实宿主一样显式给出。
+    language: "zh-CN",
     formatConfig: {},
     contentSignature: "c1",
   };

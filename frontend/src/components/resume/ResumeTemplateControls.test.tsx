@@ -100,7 +100,8 @@ describe("ResumeTemplateControls · 版式模板", () => {
   it("选定版式写 format_name，并清掉会被该版式覆盖的手动值", async () => {
     const onChange = renderGroup();
 
-    fireEvent.mouseDown(screen.getByRole("combobox"));
+    // 按无障碍名定位：这一组里现在有两个下拉（版式 / 简历语言），按 role 裸查会命中两个。
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "版式" }));
     fireEvent.click(await screen.findByText("紧凑"));
 
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
