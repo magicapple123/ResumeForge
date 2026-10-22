@@ -26,9 +26,11 @@
 #   - The macOS payload intentionally carries NO python-runtime.zip. The shell
 #     falls back to the shipped launcher (start.command), which provisions the
 #     Python environment on first launch — by design, matching Build-Desktop.ps1.
-#   - The build is UNSIGNED: without an Apple Developer certificate, Gatekeeper
-#     warns on first open (right-click > Open). Signing/notarization needs a real
-#     certificate and is out of scope here.
+#   - The build is UNSIGNED unless RF_MAC_SIGN_IDENTITY / RF_APPLE_ID /
+#     RF_APPLE_TEAM_ID / RF_APPLE_APP_PASSWORD are all set: scripts/sign-macos.sh
+#     then signs, notarizes and staples the .app (and asserts the Gatekeeper
+#     verdict). Without those four variables it prints "未配置签名" and exits 0,
+#     so an unsigned build still succeeds and still needs right-click > Open.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -140,6 +142,26 @@ fi
 UPDATE_EOF
 chmod +x "$PAYLOAD_DIR/update.command"
 
+# 运行时清单（报告任务 10）：mac 的 payload 按设计**不带** python-runtime.zip
+# （见文件头），所以这一步在当前形态下什么也不做。留着它的理由是让两个构建脚本
+# 对 payload 的形状保持对称：一旦 mac 也开始带 zip，清单会跟着出现，而不是等到
+# 已安装的壳报"清单缺失、只能比 zip 摘要"才发现。清单从 zip 里取，不重新计算，
+# 两处指纹才永远同源。
+RUNTIME_MANIFEST_ENTRY="python-runtime.manifest.json"
+RUNTIME_MANIFEST_OUT="$PAYLOAD_DIR/runtime-manifest.json"
+rm -f "$RUNTIME_MANIFEST_OUT"
+if [ ! -f "$PAYLOAD_DIR/python-runtime.zip" ]; then
+  echo "runtime manifest: skipped (the macOS payload ships no python-runtime.zip by design)"
+elif ! command -v unzip >/dev/null 2>&1; then
+  echo "WARNING: unzip not found; skipping runtime-manifest.json (the shell falls back to the zip digest)." >&2
+elif unzip -p "$PAYLOAD_DIR/python-runtime.zip" "$RUNTIME_MANIFEST_ENTRY" >"$RUNTIME_MANIFEST_OUT" 2>/dev/null; then
+  echo "runtime manifest: payload/runtime-manifest.json"
+else
+  # unzip 失败时会留下空文件；删掉它，否则壳会把"空清单"当成损坏并每走一次都白读。
+  rm -f "$RUNTIME_MANIFEST_OUT"
+  echo "WARNING: python-runtime.zip carries no ${RUNTIME_MANIFEST_ENTRY}; runtime-manifest.json skipped." >&2
+fi
+
 
 PAYLOAD_FILES="$(find "$PAYLOAD_DIR" -type f | wc -l | tr -d ' ')"
 echo "Payload assembled: $PAYLOAD_FILES files"
@@ -197,4 +219,23 @@ else
   echo ""
   echo "Next: hdiutil attach \"<dmg>\" to inspect, then launch ResumeForge.app."
   echo "The build is unsigned - first launch needs right-click > Open (Gatekeeper)."
+fi
+
+# --- signing / notarization (report task 13/14, scaffolding) -------------------
+# 证书缺失时这一步是**成功且无动作**的（scripts/sign-macos.sh 缺任一变量就以 0
+# 退出），所以本机与 CI 在没有 Apple 开发者证书的情况下照常构建成功。
+# 配了证书却签失败则让构建失败：一个"以为签好了"的未签名 dmg 比明确的未签名危险。
+#
+# 注意顺序：electron-builder 已经先生成 .app 再打 dmg，所以这里签的是 .app，
+# 已经产出的 dmg 里装的仍是签名前的副本。正式的发布流水线应当把签名放到打包
+# 之前（electron-builder 的 afterSign 钩子或 mac.identity）后再生成 dmg；本脚本
+# 只负责把流程与判据钉在仓库里，避免"签名这一步从来没人写过"。
+SIGN_SCRIPT="$SCRIPT_DIR/sign-macos.sh"
+if [ -f "$SIGN_SCRIPT" ]; then
+  for APP_BUNDLE in "$DESKTOP_DIR"/out/mac*/ResumeForge.app; do
+    [ -d "$APP_BUNDLE" ] || continue
+    if ! bash "$SIGN_SCRIPT" --app "$APP_BUNDLE"; then
+      fail "sign-macos.sh failed for $APP_BUNDLE"
+    fi
+  done
 fi

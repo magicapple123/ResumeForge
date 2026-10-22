@@ -6,6 +6,7 @@ import SettingsPage from "./SettingsPage";
 
 const apiMocks = vi.hoisted(() => ({
   acknowledgeUpdateInstallResult: vi.fn(),
+  getAppForm: vi.fn(),
   getAssistantOrbSetting: vi.fn(),
   checkForUpdate: vi.fn(),
   activateDataset: vi.fn(),
@@ -106,6 +107,12 @@ function makeRecord(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  // 形态探测（桌面壳 / 浏览器）必须给一个明确答复：UpdateCard 挂载时会问一次。
+  apiMocks.getAppForm.mockResolvedValue({
+    desktop: false,
+    platform: "win32",
+    app_version: "1.0.2",
+  });
   apiMocks.getLLMConfig.mockResolvedValue(llmConfig);
   apiMocks.getNavigationVisibility.mockResolvedValue({ hidden: [] });
   apiMocks.getAssistantOrbSetting.mockResolvedValue({ enabled: true, tips_enabled: true });

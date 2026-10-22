@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 设置相关接口。 */
 import type {
+  AppForm,
   BackupStatus,
   AutoBackupIntervalSetting,
   DatasetImportResult,
@@ -65,6 +66,17 @@ export function checkLLMThinking(config: LLMConfig, probe = false): Promise<LLMT
 /** 检查是否有新版本（只对比版本号，不下载、不自动更新）。 */
 export function checkForUpdate(refresh = false): Promise<UpdateCheckResult> {
   return request(`/update/check${refresh ? "?refresh=true" : ""}`);
+}
+
+/**
+ * 当前的运行形态：桌面安装壳，还是控制台/开发态。
+ *
+ * 桌面形态不能走页面内的"下载 zip 并覆盖安装"——桌面 payload 是源码形态整包，
+ * 更新包里没有 python-runtime.zip、也没有 desktop/，那条路补不齐依赖。前端拿它
+ * 来隐藏下载/安装入口并改引到 Setup.exe。只读接口，无副作用。
+ */
+export function getAppForm(): Promise<AppForm> {
+  return request("/system/form");
 }
 
 export function getUpdateDownloadStatus(signal?: AbortSignal): Promise<UpdateStatus> {

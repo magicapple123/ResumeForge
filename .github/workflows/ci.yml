@@ -251,6 +251,98 @@ jobs:
           npx playwright install chromium
           npx playwright test
 
+      - name: Read-only install root (runtime state must leave the payload)
+        # 报告 §1.8 第 4 条的可执行替代，加在本作业里而不新建作业：新建会重复
+        # 下载一遍运行时，而这里要用的正是刚刚验证过的那份工作树。
+        #
+        # 为什么必须有这一步：上面两步跑的是**可写工作树**，而 mac 用户拿到的是
+        # 打包态——payload 里没有 python-runtime.zip（故意如此），桌面壳因此走
+        # 兜底启动器 start.sh；从 dmg 启动的 .app 位于只读卷上（AppTranslocation
+        # 还会把它挂到随机路径），/Applications 里的安装目录同样不可写。
+        # 也就是说"首次启动在项目根下建 runtime/ 与 backend/.venv"这条路径在真实
+        # 用户机器上必然失败，而可写工作树上的 e2e 永远看不见它。
+        #
+        # 这一步把形态真的做出来：复制一份仓库、chmod -R a-w、以 RF_STATE_DIR
+        # 指向临时目录跑同一条 start.sh，断言
+        #   1) 服务真的起来了（/api/health 200）；
+        #   2) 记录/日志/虚拟环境都落在状态目录；
+        #   3) 只读副本**一个文件都没多**（运行期写入没有漏回安装目录）。
+        # 复制时排除 runtime/、node_modules/、backend/.venv：既省时间，也让只读
+        # 副本走一次完整自举——venv 建在错误位置正是要验证的问题之一。
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          ro_root="$tmp/repo"
+          state="$tmp/state"
+
+          cleanup() {
+            status=$?
+            # 先停掉这次起的后端（只在状态目录里有记录，只读副本里没有）。
+            RF_STATE_DIR="$state" bash "$ro_root/scripts/macos/stop.sh" >/dev/null 2>&1 || true
+            if [ "$status" -ne 0 ]; then
+              echo "===== 只读根启动失败：状态目录里的日志 =====" >&2
+              for log in "$state"/runtime/*.log; do
+                [ -f "$log" ] || continue
+                echo "----- $log -----" >&2
+                tail -n 60 "$log" >&2
+              done
+              echo "===== 端口与进程 =====" >&2
+              lsof -nP -iTCP:8124 -sTCP:LISTEN || echo "8124 没有监听者" >&2
+            fi
+            # 只读目录里的 rm -rf 会失败，先恢复写权限。
+            chmod -R u+w "$tmp" 2>/dev/null || true
+            rm -rf "$tmp"
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          mkdir -p "$ro_root"
+          rsync -a \
+            --exclude 'runtime/' \
+            --exclude 'node_modules/' \
+            --exclude 'backend/.venv/' \
+            --exclude '.git/' \
+            ./ "$ro_root/"
+
+          chmod -R a-w "$ro_root"
+          find "$ro_root" | sort >"$tmp/before.txt"
+
+          export RF_STATE_DIR="$state"
+          # 后端的数据目录（数据库、附件、导出）在打包态由桌面壳通过 RF_DATA_DIR
+          # 指定（ADR-0004）；启动器不负责这件事，所以这里照壳的做法给一个可写
+          # 目录，否则 sqlite 会试图在只读安装目录里建库——那是另一个层面的问题，
+          # 不该混进这条用例。
+          export RF_DATA_DIR="$state/data"
+          export RF_UVICORN_LOG_LEVEL=info
+
+          bash "$ro_root/scripts/macos/start.sh" --no-browser --backend-port 8124
+
+          curl -fsS http://127.0.0.1:8124/api/health
+          echo
+
+          for expected in "$state/runtime/backend.macos.pid" \
+                          "$state/runtime/backend.stderr.log"; do
+            if [ ! -f "$expected" ]; then
+              echo "运行期文件没有落在状态目录：$expected" >&2
+              echo "状态目录内容：" >&2
+              ls -la "$state" "$state/runtime" >&2 || true
+              exit 1
+            fi
+          done
+          if [ ! -x "$state/venv/bin/python3" ]; then
+            echo "虚拟环境没有建在状态目录里：$state/venv" >&2
+            ls -la "$state" >&2 || true
+            exit 1
+          fi
+          echo "运行期状态全部落在 $state"
+
+          find "$ro_root" | sort >"$tmp/after.txt"
+          if ! diff -u "$tmp/before.txt" "$tmp/after.txt"; then
+            echo "只读副本里出现了新条目：有运行期写入漏回了安装目录。" >&2
+            exit 1
+          fi
+          echo "只读副本没有任何新增文件，安装目录未被改动。"
+
       - name: Stop the app
         if: always()
         run: bash scripts/macos/stop.sh

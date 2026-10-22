@@ -17,6 +17,9 @@ param()
 #>
 
 $ErrorActionPreference = "Stop"
+# Compress-Archive / Expand-Archive 的进度条在 CI 日志里会刷满整页（还会被 2>&1 抓成
+# 几千个字符），关掉它不影响任何断言。
+$ProgressPreference = "SilentlyContinue"
 
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $UpdaterPath = Join-Path $ProjectRoot "scripts\Update-ResumeForge.ps1"
@@ -95,7 +98,7 @@ foreach ($functionDefinition in $ast.FindAll({
     Invoke-Expression $functionDefinition.Extent.Text
 }
 
-foreach ($required in @("Test-Excluded", "Copy-ProgramFiles", "Resolve-ExtractedPackage", "Write-InstallStatus", "Backup-UserData")) {
+foreach ($required in @("Test-Excluded", "Copy-ProgramFiles", "Resolve-ExtractedPackage", "Write-InstallStatus", "Backup-UserData", "Resolve-BackendPython", "Test-DesktopPayload")) {
     Assert-UpdaterTest -Condition ($null -ne (Get-Command $required -ErrorAction SilentlyContinue)) `
         -Message "更新器里找不到函数 $required。"
 }
@@ -125,8 +128,18 @@ try {
         "frontend/node_modules/.bin/vite.cmd" = $true
         "backend/.venv/Scripts/python.exe"    = $true
         "backend/app/__pycache__/x.pyc"       = $true
-        "frontend/dist/index.html"            = $true
         ".git/config"                         = $true
+        # `frontend/dist` 是**唯一随更新包分发的前端产物**，必须复制：它曾被
+        # "任意层级按名字排除 dist" 整目录跳过，升级后前端还是旧版、version.json 与
+        # 后端版本对不上（2026-10-02 定位）。这里的期望以前写反了，等于把 bug 固化成
+        # 正确行为——所以这三条要一起盯住。
+        "frontend/dist/index.html"            = $false
+        "frontend/dist/version.json"          = $false
+        "frontend/dist/assets/index-abc123.js" = $false
+        # 仓库根部的发布产物目录照旧不能覆盖（那些 zip/exe 是用户下载的安装包，
+        # 被更新包里的旧版本盖掉就是降级）。
+        "dist/ResumeForge-1.0.2.zip"          = $true
+        "dist/ResumeForge-Setup-1.0.2.exe"    = $true
         # `.env` 是按整段名比的，所以这两个示例文件照样要复制。
         ".env.example"                        = $false
         "frontend/.env.demo"                  = $false
@@ -150,7 +163,9 @@ try {
             "backend\app\data",
             "backend\data",
             "runtime",
-            "frontend\node_modules\.bin"
+            "frontend\node_modules\.bin",
+            "frontend\dist",
+            "dist"
         )) {
         New-Item -ItemType Directory -Path (Join-Path $source $relative) -Force | Out-Null
     }
@@ -163,7 +178,10 @@ try {
             "runtime\backend.json",
             ".env",
             ".env.example",
-            "frontend\node_modules\.bin\vite.cmd"
+            "frontend\node_modules\.bin\vite.cmd",
+            "frontend\dist\index.html",
+            "frontend\dist\version.json",
+            "dist\ResumeForge-1.0.2.zip"
         )) {
         Set-Content -LiteralPath (Join-Path $source $relative) -Value "x" -Encoding ascii
     }
@@ -176,7 +194,10 @@ try {
         "backend\app\main.py",
         "backend\app\data\skills.json",  # ← 本次修的那个：新版本的必需资源必须能到用户机器上
         "backend\database.py",
-        ".env.example"
+        ".env.example",
+        # 前端产物：升级后界面得跟着变，否则 version.json 与后端对不上。
+        "frontend\dist\index.html",
+        "frontend\dist\version.json"
     )
     foreach ($relative in $mustBeCopied) {
         Assert-UpdaterTest -Condition (Test-Path -LiteralPath (Join-Path $destination $relative)) `
@@ -187,12 +208,151 @@ try {
         "backend\data\app.db",
         "runtime\backend.json",
         ".env",
-        "frontend\node_modules\.bin\vite.cmd"
+        "frontend\node_modules\.bin\vite.cmd",
+        # 根部的发布产物不能被更新包里的旧版本盖掉。
+        "dist\ResumeForge-1.0.2.zip"
     )
     foreach ($relative in $mustNotBeCopied) {
         Assert-UpdaterTest -Condition (-not (Test-Path -LiteralPath (Join-Path $destination $relative))) `
             -Message "用户数据/本地环境 $relative 绝不能被复制，但它被复制了。"
     }
+
+    # ---- 2.5 后端解释器定位 -------------------------------------------------------
+    # 桌面安装**没有** backend\.venv（用的是 %LOCALAPPDATA%\ResumeForge\runtime\python
+    # 下打包的运行时），而原先只认 venv、找不到就打印"下次启动会创建"然后什么都不装。
+    # 2026-10-02 的 1.0.2 就是这样：新增的 pypdfium2 是顶层 import，老用户机器上缺它，
+    # uvicorn 一加载就崩，应用起不来。所以三种形态各钉一条，缺解释器必须抛错。
+    function Assert-UpdaterSamePath {
+        param(
+            [string]$Actual,
+            [string]$Expected,
+            [string]$Message
+        )
+        $left = [IO.Path]::GetFullPath($Actual)
+        $right = [IO.Path]::GetFullPath($Expected)
+        Assert-UpdaterTest -Condition ($left -eq $right) -Message "$Message（期望 $right，实际 $left）"
+    }
+
+    # 假的 LOCALAPPDATA：桌面形态的运行时放这里。显式传参而不是靠 $env:LOCALAPPDATA，
+    # 否则这台机器上真实存在的运行时会让用例"碰运气通过"。
+    $fakeLocalAppData = Join-Path $TestDirectory "fake-localappdata"
+    $fakeDesktopRuntime = Join-Path $fakeLocalAppData "ResumeForge\runtime\python"
+    New-Item -ItemType Directory -Path $fakeDesktopRuntime -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $fakeDesktopRuntime "python.exe") -Value "x" -Encoding ascii
+
+    $fakeSourceRoot = Join-Path $TestDirectory "fake-source-root"
+    $fakeVenvPython = Join-Path $fakeSourceRoot "backend\.venv\Scripts\python.exe"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $fakeVenvPython) -Force | Out-Null
+    Set-Content -LiteralPath $fakeVenvPython -Value "x" -Encoding ascii
+
+    # 源码形态：有 venv 就用 venv——即使桌面运行时也存在（venv 才是这套代码的依赖所在）。
+    $resolvedPython = Resolve-BackendPython -ProjectRoot $fakeSourceRoot -LocalAppData $fakeLocalAppData
+    Assert-UpdaterSamePath -Actual $resolvedPython -Expected $fakeVenvPython `
+        -Message "有 backend\.venv 时必须优先用它（而不是 LOCALAPPDATA 里的运行时）。"
+
+    # 桌面形态：没有 venv，必须回落到 LOCALAPPDATA 下打包的运行时。
+    $fakeDesktopRoot = Join-Path $TestDirectory "fake-desktop-root"
+    New-Item -ItemType Directory -Path $fakeDesktopRoot -Force | Out-Null
+    $resolvedPython = Resolve-BackendPython -ProjectRoot $fakeDesktopRoot -LocalAppData $fakeLocalAppData
+    Assert-UpdaterSamePath -Actual $resolvedPython -Expected (Join-Path $fakeDesktopRuntime "python.exe") `
+        -Message "没有 venv 时必须回落到桌面形态的打包运行时（否则依赖一行都装不上）。"
+
+    # 便携形态兜底：项目根下自带的 python。
+    $fakePortableRoot = Join-Path $TestDirectory "fake-portable-root"
+    $fakePortablePython = Join-Path $fakePortableRoot "python\python.exe"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $fakePortablePython) -Force | Out-Null
+    Set-Content -LiteralPath $fakePortablePython -Value "x" -Encoding ascii
+    $emptyLocalAppData = Join-Path $TestDirectory "fake-localappdata-empty"
+    New-Item -ItemType Directory -Path $emptyLocalAppData -Force | Out-Null
+    $resolvedPython = Resolve-BackendPython -ProjectRoot $fakePortableRoot -LocalAppData $emptyLocalAppData
+    Assert-UpdaterSamePath -Actual $resolvedPython -Expected $fakePortablePython `
+        -Message "项目根下的 python\python.exe 应当作为便携形态的兜底。"
+
+    # 一个都没有：必须抛错，**不能**静默跳过。静默跳过就是"更新成功但应用起不来"。
+    $fakeBareRoot = Join-Path $TestDirectory "fake-bare-root"
+    New-Item -ItemType Directory -Path $fakeBareRoot -Force | Out-Null
+    $resolveThrew = $false
+    $resolveMessage = ""
+    try {
+        Resolve-BackendPython -ProjectRoot $fakeBareRoot -LocalAppData $emptyLocalAppData | Out-Null
+    }
+    catch {
+        $resolveThrew = $true
+        $resolveMessage = $_.Exception.Message
+    }
+    Assert-UpdaterTest -Condition $resolveThrew `
+        -Message "找不到任何解释器时必须抛错：静默跳过正是桌面用户缺依赖、后端起不来的原因。"
+    Assert-UpdaterTest -Condition ($resolveMessage -match "Python 解释器") `
+        -Message "解释器缺失的报错要说清原因（应含「Python 解释器」）：$resolveMessage"
+
+    # ---- 2.6 桌面形态的重启分流 ---------------------------------------------------
+    # 桌面安装里程序根是 安装目录\resources\payload，`payload\start.cmd` 是源码形态的
+    # 启动器：spawn 它等于另起一套服务（另一个端口/数据目录），该被重启的桌面窗口
+    # 反而不会出现。先钉住"这个目录算不算桌面形态"。
+    Assert-UpdaterTest -Condition (Test-DesktopPayload -ProjectRoot "C:\Program Files\ResumeForge\resources\payload") `
+        -Message "resources\payload 必须被认作桌面形态。"
+    Assert-UpdaterTest -Condition (Test-DesktopPayload -ProjectRoot "C:\Users\me\AppData\Local\Programs\ResumeForge\resources\payload\") `
+        -Message "带尾分隔符的 resources\payload 也必须被认作桌面形态。"
+    Assert-UpdaterTest -Condition (Test-DesktopPayload -ProjectRoot "C:\ResumeForge\RESOURCES\PAYLOAD") `
+        -Message "判定必须不区分大小写（Windows 默认文件系统就是这样）。"
+    foreach ($notPayload in @("C:\ResumeForge", "C:\ResumeForge\resources", "C:\ResumeForge\payload", "")) {
+        Assert-UpdaterTest -Condition (-not (Test-DesktopPayload -ProjectRoot $notPayload)) `
+            -Message "源码形态（'$notPayload'）不能被误判成桌面形态，否则 -Restart 会被跳过。"
+    }
+
+    # ---- 2.7 端到端：桌面形态下 -Restart 绝不 spawn payload\start.cmd --------------
+    # 函数级用例只能证明"这个目录会被认作桌面形态"，证明不了调用点真的照它走。
+    # 这里在临时目录里搭一棵假的桌面 payload（`<app>\resources\payload`），拿一个
+    # 只含 start.cmd 的真 zip 走完整个 -ArchivePath 分支，再检查 start.cmd 有没有被执行。
+    # 全程只碰 $env:TEMP，不下载、不装依赖（-SkipDependencies）。
+    $desktopPayload = Join-Path $TestDirectory "desktop-app\resources\payload"
+    New-Item -ItemType Directory -Path $desktopPayload -Force | Out-Null
+    # 更新器运行时要 dot-source 同目录的 ResumeForge.Common.ps1，所以把 scripts 整份拷过去。
+    Copy-Item -LiteralPath (Split-Path -Parent $UpdaterPath) `
+        -Destination (Join-Path $desktopPayload "scripts") -Recurse -Force
+    $desktopUpdater = Join-Path $desktopPayload "scripts\Update-ResumeForge.ps1"
+    $spawnMarker = Join-Path $desktopPayload "spawned.txt"
+    $packageBuild = Join-Path $TestDirectory "package-build\ResumeForge-99.0.0"
+    New-Item -ItemType Directory -Path $packageBuild -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $packageBuild "start.cmd") -Encoding ascii -Value @"
+@echo off
+echo spawned>"$spawnMarker"
+"@
+    Set-Content -LiteralPath (Join-Path $packageBuild "app-marker.txt") -Value "new" -Encoding ascii
+    $payloadZip = Join-Path $TestDirectory "update-package.zip"
+    Compress-Archive -LiteralPath $packageBuild -DestinationPath $payloadZip -Force
+
+    # 用 Start-Process + 重定向而不是 `&`：子进程里 Expand-Archive 的进度条会直接写到
+    # 控制台，把 CI 日志刷满；重定向到文件既收得干净，失败时也还能把内容贴进断言消息。
+    $desktopStdout = Join-Path $TestDirectory "desktop-update.stdout.log"
+    $desktopStderr = Join-Path $TestDirectory "desktop-update.stderr.log"
+    $desktopProcess = Start-Process -FilePath "powershell" -PassThru -Wait -WindowStyle Hidden `
+        -ArgumentList @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$desktopUpdater`"",
+            "-ArchivePath", "`"$payloadZip`"", "-SkipDependencies", "-Restart",
+            "-InstallId", "test-desktop-install", "-TargetVersion", "99.0.0"
+        ) `
+        -RedirectStandardOutput $desktopStdout -RedirectStandardError $desktopStderr
+    $desktopOutput = @(
+        (Get-Content -LiteralPath $desktopStdout -Raw -ErrorAction SilentlyContinue),
+        (Get-Content -LiteralPath $desktopStderr -Raw -ErrorAction SilentlyContinue)
+    )
+    $desktopExit = $desktopProcess.ExitCode
+    Assert-UpdaterTest -Condition ($desktopExit -eq 0) `
+        -Message "桌面形态的更新必须能跑通（退出码 $desktopExit）：$($desktopOutput -join ' / ')"
+    # 先证明它真的走到了覆盖那一步，否则下面那条"没 spawn"会平凡通过。
+    Assert-UpdaterTest -Condition (Test-Path -LiteralPath (Join-Path $desktopPayload "app-marker.txt")) `
+        -Message "更新包里的程序文件应当被复制到桌面 payload 根（否则这条用例没验到东西）。"
+    Assert-UpdaterTest -Condition (-not (Test-Path -LiteralPath $spawnMarker)) `
+        -Message "桌面形态下绝不能 spawn payload\start.cmd：那是源码形态的启动器，等于另起一套服务。"
+    $desktopStatusPath = Join-Path $desktopPayload "runtime\update-status.json"
+    Assert-UpdaterTest -Condition (Test-Path -LiteralPath $desktopStatusPath) `
+        -Message "桌面形态的更新也要写状态文件（应用靠它告诉用户重开）。"
+    $desktopStatus = Get-Content -LiteralPath $desktopStatusPath -Raw -Encoding utf8 | ConvertFrom-Json
+    Assert-UpdaterTest -Condition ($desktopStatus.state -eq "success") `
+        -Message "桌面形态没人替我们拉起新实例，状态应当是 success（实际 $($desktopStatus.state)）。"
+    Assert-UpdaterTest -Condition ([string]$desktopStatus.message -match "重新打开应用") `
+        -Message "桌面形态的提示必须让用户重新打开应用（实际：$($desktopStatus.message)）。"
 
     # ---- 3. 解压出来的必须是我们的包 -------------------------------------------
     $notAPackage = Join-Path $TestDirectory "staging-not-a-package\__MACOSX"

@@ -33,7 +33,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-from ..config import DATA_DIR, get_settings
+from ..config import DATA_DIR, get_settings, is_desktop_shell
 from ..services.diagnostics import diagnostic_snapshot
 
 logger = logging.getLogger(__name__)
@@ -205,6 +205,26 @@ def shutdown_application(request: Request):
 def diagnostics():
     """返回脱敏运行事件，方便用户连同截图提交排障。"""
     return diagnostic_snapshot()
+
+
+@router.get("/form")
+def app_form():
+    """告诉前端"后端跑在哪一种形态里"（桌面安装壳 / 控制台或开发态）。
+
+    前端据此**分流更新方式**：桌面形态下页面内的"下载 zip 并覆盖安装"在原理上补不齐
+    依赖（桌面 payload 是源码形态整包，没有 ``python-runtime.zip``、没有 ``desktop/``），
+    所以那条路必须在界面上消失，改成"下载 Setup.exe 双击安装"。浏览器/控制台形态
+    保持不变。
+
+    **不做回环限制**：这里只回三个公开的、无副作用的只读信息（形态标记、平台、版本号），
+    拿到它既不能改状态也不能退出应用；限制回环反而会让走代理/容器转发的正常访问变成 403
+    （``/shutdown`` 才是必须限制回环的那个）。
+    """
+    return {
+        "desktop": is_desktop_shell(),
+        "platform": sys.platform,
+        "app_version": get_settings().app_version,
+    }
 
 
 # 日志尾部进诊断包前要再过一道闸：业务日志本身不记密钥（见 AGENTS 约束），但这里

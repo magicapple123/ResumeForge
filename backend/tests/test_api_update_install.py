@@ -9,11 +9,16 @@
 永不执行，应用于是停在原地。
 
 **本文件第一条用例在修复前会拿到 409 而不是 200**，正是这条故障的回归守卫。
+
+第二个守卫是 `test_the_installer_is_started_with_a_hidden_console`：更新器（PowerShell）
+必须以 `CREATE_NO_WINDOW` 而不是 `DETACHED_PROCESS` 启动——分离进程没有控制台，脚本
+压根不执行，后端等不到 `installing` 握手就报「更新器没有启动」。
 """
 
 from __future__ import annotations
 
 import hashlib
+import subprocess
 import threading
 import zipfile
 from types import SimpleNamespace
@@ -72,12 +77,16 @@ def install_env(tmp_path, monkeypatch):
 
     calls: dict[str, object] = {
         "popen": [],
+        # 逐个保存 Popen 的关键字参数：`creationflags` 只在这里能拿到，丢了就没法
+        # 断言更新器到底有没有控制台（2026-10 那次故障正是从这儿溜过去的）。
+        "popen_kwargs": [],
         "stopped": [],
         "stopped_event": threading.Event(),
     }
 
-    def fake_popen(_arguments, **_kwargs):
+    def fake_popen(_arguments, **kwargs):
         calls["popen"].append(_arguments)  # type: ignore[union-attr]
+        calls["popen_kwargs"].append(kwargs)  # type: ignore[union-attr]
         return SimpleNamespace(pid=1)
 
     monkeypatch.setattr(update_download.subprocess, "Popen", fake_popen)
@@ -112,6 +121,38 @@ def test_install_endpoint_schedules_the_installer_and_returns_installing(client,
     # 更新器被拉起之后，停止后端等待重启的协程必须真的被调度（修复前为零）。
     assert install_env.calls["stopped_event"].wait(2.0)  # type: ignore[union-attr]
     assert install_env.calls["stopped"]  # type: ignore[arg-type]
+
+
+def test_the_installer_is_started_with_a_hidden_console(client, install_env, monkeypatch):
+    """更新器必须拿到**隐藏的控制台**，绝不能是分离进程（2026-10 故障的回归守卫）。
+
+    实测过的那次故障：`DETACHED_PROCESS` 让 PowerShell 脚本压根不执行（分离进程没有
+    控制台，而 PowerShell 是控制台宿主程序），退出码 0、零输出；后端 30 秒等不到
+    `installing` 标记，只能报「更新器没有启动，应用没有退出…」。仓库里早有这条知识
+    （`test_system_api.py::test_stopping_the_frontend_uses_a_hidden_console`），但当时
+    只覆盖了停前端那一个调用点——本文件原来的 `fake_popen` 把 `creationflags` 丢掉了，
+    所以安装路径上没有任何断言。
+
+    标志位在这里**显式给值**：Linux CI 上 `subprocess.CREATE_NO_WINDOW` 不存在，
+    `getattr(..., 0)` 会让两个常量都是 0，断言就退化成恒假/恒真。给成两个不同的位，
+    "用了隐藏控制台"与"没用分离进程"这两件事才都真的被测到。
+    """
+    monkeypatch.setattr(update_download, "_CREATE_NO_WINDOW", 0x08000000)
+    monkeypatch.setattr(update_download, "_DETACHED_PROCESS", 0x00000008)
+    archive = _valid_archive(install_env.downloads / "ResumeForge-99.0.0.zip")
+    _make_ready(archive, target_version="99.0.0")
+
+    response = client.post("/api/update/install", json={"restart": True})
+
+    assert response.status_code == 200, response.text
+    popen_kwargs = install_env.calls["popen_kwargs"]  # type: ignore[arg-type]
+    assert len(popen_kwargs) == 1
+    flags = popen_kwargs[0]["creationflags"]
+    assert flags & 0x08000000, "更新器没有隐藏控制台：PowerShell 脚本不会执行"
+    assert not flags & 0x00000008, "更新器是分离进程：没有控制台，PowerShell 脚本不会执行"
+    # 更新器的输出仍要落进日志文件：窗口是隐藏的，日志是唯一线索。
+    assert popen_kwargs[0]["stdout"] is not None
+    assert popen_kwargs[0]["stderr"] == subprocess.STDOUT
 
 
 def test_download_status_restores_a_ready_package_from_disk(install_env):

@@ -23,12 +23,14 @@ import { useEffect, useState } from "react";
 import {
   acknowledgeUpdateInstallResult,
   checkForUpdate,
+  getAppForm,
   getUpdateInstallResult,
   installDownloadedUpdate,
   startUpdateDownload,
 } from "../../api/settings";
 import type { UpdateCheckResult } from "../../types";
 import { useUpdateDownloadStatus } from "../../hooks/useUpdateDownloadStatus";
+import { t } from "../../i18n";
 import { renderReleaseNotes } from "./updateNotesRenderer";
 
 const UPDATE_COMPLETED_KEY = "resumeforge.update.completed";
@@ -50,11 +52,28 @@ export default function UpdateCard() {
   const [installing, setInstalling] = useState(false);
   const [background, setBackground] = useState(false);
   const [error, setError] = useState("");
+  // 桌面安装壳：页面内的"下载 zip 并覆盖"对它无效（桌面 payload 是源码形态整包，
+  // 更新包里没有 python-runtime.zip / desktop/，装上去只会半新半旧），所以要先问形态。
+  const [desktop, setDesktop] = useState(false);
 
   useEffect(() => {
     // 旧版本会在**点击安装时**先写一个"已完成"的标记，于是安装崩了下次打开照样显示
     // "已更新"。这里只把它清掉，改成向后端要真实结果。
     window.localStorage.removeItem(UPDATE_COMPLETED_KEY);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    // 形态探测失败**静默按非桌面处理**：老后端没有这个接口，浏览器/控制台形态才是
+    // 默认路径。绝不能因为多问一句就让设置页报错——检查更新本身仍要能用。
+    void getAppForm()
+      .then((form) => {
+        if (!cancelled) setDesktop(form.desktop);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -152,7 +171,8 @@ export default function UpdateCard() {
   };
 
   const activeStatus = status?.state === "downloading" || status?.state === "installing";
-  const canDownload = Boolean(result?.update_available && result.installable);
+  // 桌面形态一律不给页面内下载：那条路装不上依赖（见 getAppForm 的说明）。
+  const canDownload = Boolean(result?.update_available && result.installable) && !desktop;
 
   return (
     <Card title="软件更新" className="settings-card">
@@ -162,7 +182,7 @@ export default function UpdateCard() {
       </Typography.Paragraph>
       <Descriptions size="small" column={1} style={{ marginBottom: 12 }}>
         <Descriptions.Item label="更新方式">
-          应用内下载，确认后自动覆盖并重启（Windows）。
+          {desktop ? t("update.method.desktop") : t("update.method.in-app")}
         </Descriptions.Item>
         <Descriptions.Item label="当前版本">
           {result?.current_version || status?.current_version || "点击下方按钮获取"}
@@ -204,7 +224,7 @@ export default function UpdateCard() {
             重新检查
           </Button>
         )}
-        {status?.state === "ready" && !statusError && (
+        {status?.state === "ready" && !statusError && !desktop && (
           <Button
             type="primary"
             danger
@@ -261,13 +281,35 @@ export default function UpdateCard() {
       {status?.state === "failed" && status.message && !statusError && (
         <Alert style={{ marginTop: 16 }} type="error" showIcon title={status.message} />
       )}
-      {status?.state === "ready" && !statusError && (
+      {status?.state === "ready" && !statusError && !desktop && (
         <Alert
           style={{ marginTop: 16 }}
           type="success"
           showIcon
-          title="更新包已下载完成"
+          title={t("update.downloaded.title")}
           description="点击「重启并安装」后，应用会在原路径覆盖旧版本并自动重启。"
+        />
+      )}
+      {desktop && (
+        <Alert
+          style={{ marginTop: 16 }}
+          type="info"
+          showIcon
+          title={t("update.desktop.title")}
+          description={
+            <Space orientation="vertical" size={4} style={{ width: "100%" }}>
+              <span>{t("update.desktop.description")}</span>
+              {result?.release_url && (
+                <Typography.Link
+                  href={result.release_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  打开发布页面
+                </Typography.Link>
+              )}
+            </Space>
+          }
         />
       )}
       {result && (
@@ -294,7 +336,8 @@ export default function UpdateCard() {
                   {renderReleaseNotes(result.notes)}
                 </div>
               )}
-              {result.release_url && (
+              {/* 桌面形态下"打开发布页面"已经在上面的指引框里出现，这里不再重复。 */}
+              {result.release_url && !desktop && (
                 <Typography.Link
                   href={result.release_url}
                   target="_blank"

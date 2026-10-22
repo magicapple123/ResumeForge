@@ -46,6 +46,29 @@ DEFAULT_BROWSER_PORT = 9333
 # 这个端口不暴露为投递配置项，避免用户误把两类浏览器配置成同一个实例。
 DEFAULT_WEBFORM_BROWSER_PORT = 9334
 
+# 桌面壳注入的环境变量（见 ``is_desktop_shell``）。放在模块顶层只为让"什么算真值"
+# 只有一个说法；判定本身必须是函数，测试才能靠 monkeypatch 环境变量驱动。
+_DESKTOP_SHELL_ENV = "RF_DESKTOP_SHELL"
+_DESKTOP_SHELL_TRUTHY = frozenset({"1", "true", "yes"})
+
+
+def is_desktop_shell() -> bool:
+    """当前后端是否由桌面壳（Electron）启动。
+
+    桌面壳启动后端时会注入 ``RF_DESKTOP_SHELL=1``（``desktop/backend-manager.js``）。
+    这个形态和"控制台 ``start.cmd`` / 开发态"在**更新方式**上是根本不同的两种东西：
+    桌面安装里 ``PROJECT_ROOT`` 是 ``resources/payload``，仓库自带的更新包是**源码形态
+    整包**（不含 ``python-runtime.zip``、不含 ``desktop/``），所以页面内"下载 zip 并
+    覆盖"这条路在原理上补不齐桌面形态的依赖——它只会把安装目录弄成半新半旧。
+
+    因此前端需要知道"我是哪一种形态"才能决定显示不显示那个按钮。桌面壳没注入时
+    （控制台流程、pytest、开发态）一律按非桌面处理：那是既有的、被验证过的路径。
+
+    写成函数而不是模块级常量：环境变量要在**调用时**读，测试才能用 ``monkeypatch.setenv``
+    驱动两种形态，而不必重载整个模块（``DATA_DIR`` 之类的导入期快照也就不会被牵连）。
+    """
+    return os.environ.get(_DESKTOP_SHELL_ENV, "").strip().lower() in _DESKTOP_SHELL_TRUTHY
+
 
 class Settings(BaseSettings):
     app_name: str = "ResumeForge"

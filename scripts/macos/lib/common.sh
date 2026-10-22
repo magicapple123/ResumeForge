@@ -97,6 +97,98 @@ detect_macos_arch() {
 }
 
 # ---------------------------------------------------------------------------
+# 运行期目录解析：项目根可写性
+#
+# 为什么需要这一层：macOS 打包态的 payload **故意不带 python-runtime.zip**，
+# 于是桌面壳（desktop/backend-manager.js）走兜底启动器 start.sh。而 dmg 安装
+# 出来的 .app 位于只读卷上（AppTranslocation 还会把它挂到随机路径），
+# /Applications 里的安装目录对普通用户同样不可写。于是"在项目根下建 runtime/
+# 与 backend/.venv"在打包态**必然失败**——这不是某个路径写错了，而是设计问题：
+# 程序文件与运行期状态必须分开存。
+#
+# 因此两个目录改由下面这组纯函数决定：
+#   * 项目根可写（源码检出、CI 的可写工作树）→ 与以前完全一致，行为零变化；
+#   * 项目根只读（打包安装）→ 落到 RF_STATE_HOME（~/Library/Application Support）。
+# 只读判断交给 rf_dir_writable 一处实现，start / stop / update 都调它，
+# 三条脚本对"记录在哪儿"的看法才不可能分叉（分叉的表现是"服务停不掉"）。
+# ---------------------------------------------------------------------------
+
+# rf_dir_writable DIR
+# 目录存在、可写，并且**真的能把一个文件写进去**时才返回 0。
+#
+# 为什么不只测 test -w：只读挂载、quarantine、以及被安全软件锁定的目录，
+# 在 test -w 上给出的答案并不可靠（root 身份尤其乐观）。写一个临时文件再删掉，
+# 是唯一能落到"这次启动到底会不会失败"上的判据。临时文件随即删除，
+# 因此本函数对调用方而言没有残留副作用。
+rf_dir_writable() {
+    local dir=$1
+    [ -n "$dir" ] || return 1
+    [ -d "$dir" ] || return 1
+    [ -w "$dir" ] || return 1
+
+    local probe="$dir/.rf-write-probe-$$"
+    if ( : >"$probe" ) 2>/dev/null; then
+        rm -f "$probe" 2>/dev/null || true
+        return 0
+    fi
+    rm -f "$probe" 2>/dev/null || true
+    return 1
+}
+
+# rf_resolve_runtime_dir PROJECT_ROOT STATE_HOME
+# 运行期目录（pid 记录、日志、便携版运行时缓存）。只 echo 路径，不做任何写入。
+rf_resolve_runtime_dir() {
+    local project_root=$1
+    local state_home=$2
+    if rf_dir_writable "$project_root"; then
+        printf '%s\n' "$project_root/runtime"
+    else
+        printf '%s\n' "$state_home/runtime"
+    fi
+}
+
+# rf_resolve_venv_dir PROJECT_ROOT STATE_HOME
+# 后端虚拟环境目录。同样只 echo 路径：建不建由调用方决定（start.sh 才建）。
+rf_resolve_venv_dir() {
+    local project_root=$1
+    local state_home=$2
+    if rf_dir_writable "$project_root"; then
+        printf '%s\n' "$project_root/backend/.venv"
+    else
+        printf '%s\n' "$state_home/venv"
+    fi
+}
+
+# rf_runtime_dir_candidates PROJECT_ROOT STATE_HOME
+# 列出"运行记录可能在这些目录里"，一行一个，第一个是 rf_resolve_runtime_dir
+# 的当前解析结果。只做**只读探测**：目录不存在就不列，绝不创建、绝不迁移。
+#
+# 为什么会有不止一个：1.0.2 及更早的桌面壳在 Electron 的 userData 之下又拼了
+# 一层产品名，于是同一个产品在 mac 上可能留下两个都合法的状态目录：
+#   终端入口（stop.command，没有任何环境变量）：
+#       ~/Library/Application Support/ResumeForge/runtime
+#   1.0.2 及更早的桌面壳写在这里（新版本已改成 userData/runtime，与上面同层）：
+#       ~/Library/Application Support/ResumeForge/ResumeForge/runtime
+# 用户双击 stop.command 想停掉"旧壳刚起的那个后端"时，记录在后者里。只认一个
+# 默认值就会报"没有找到运行记录"，而服务其实还在跑——这正是停不掉的形态。
+# 所以停服务时把所有可能的位置都看一遍；记录本身有 PID+命令行+启动时刻三重
+# 校验（process_record_match），多看一处不会误停无关进程。
+rf_runtime_dir_candidates() {
+    local project_root=$1
+    local state_home=$2
+    local primary
+    local desktop_state_home
+
+    primary=$(rf_resolve_runtime_dir "$project_root" "$state_home")
+    printf '%s\n' "$primary"
+
+    desktop_state_home="$state_home/ResumeForge"
+    if [ -d "$desktop_state_home/runtime" ] && [ "$desktop_state_home/runtime" != "$primary" ]; then
+        printf '%s\n' "$desktop_state_home/runtime"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # 下载与校验
 # ---------------------------------------------------------------------------
 

@@ -16,8 +16,10 @@
 # dev；dev = 强制 Vite；production = dist 必须在，缺失直接报错。backend/.env
 # 里的 FRONTEND_MODE 是可选覆盖，命令行参数优先。
 #
-# 这个脚本**不修改项目之外的任何东西**：Python 与 Node 的便携版都放在
-# runtime/tools/ 里，不写 /usr/local，不弹管理员授权，也不需要 Homebrew。
+# 这个脚本只写两类位置：项目根可写时写 runtime/ 与 backend/.venv；项目根只读
+# （mac 打包安装后的常态，见 lib/common.sh 的说明）时，这两处都改落到
+# ~/Library/Application Support/ResumeForge。便携版 Python 与 Node 也不再进
+# /usr/local，因此不需要管理员授权，也不需要 Homebrew。
 
 set -euo pipefail
 
@@ -27,6 +29,10 @@ RF_PROJECT_ROOT=$(cd "$RF_SCRIPT_DIR/../.." && pwd)
 RF_BACKEND_DIR="$RF_PROJECT_ROOT/backend"
 RF_FRONTEND_DIR="$RF_PROJECT_ROOT/frontend"
 RF_RUNTIME_DIR="$RF_PROJECT_ROOT/runtime"
+# 运行期状态目录：项目根可写时不会被用到；只读的安装目录（mac 打包态）下，
+# runtime/ 与虚拟环境都改落到这里，安装目录里一个字节都不写。
+# RF_STATE_DIR 是给测试与 CI 注入用的覆盖（不设时用 macOS 的用户级目录）。
+RF_STATE_HOME="${RF_STATE_DIR:-$HOME/Library/Application Support/ResumeForge}"
 
 # 端口与 Windows 侧保持一致，文档里的示例才能通用。
 RF_BACKEND_PORT=8005
@@ -172,6 +178,19 @@ rf_parse_arguments() {
 
 # shellcheck source=lib/common.sh
 . "$RF_SCRIPT_DIR/lib/common.sh"
+
+# 运行期目录必须在 source python.sh / node.sh **之前**定下来：那两个库在
+# source 的瞬间就会用 RF_RUNTIME_DIR 派生出 RF_TOOLS_DIR（便携版 Python 与
+# Node 的落地位置）。顺序错了，只读安装目录下就会去尝试写安装目录。
+RF_RUNTIME_DIR=$(rf_resolve_runtime_dir "$RF_PROJECT_ROOT" "$RF_STATE_HOME")
+RF_VENV_DIR=$(rf_resolve_venv_dir "$RF_PROJECT_ROOT" "$RF_STATE_HOME")
+if ! rf_dir_writable "$RF_PROJECT_ROOT"; then
+    # 一句说明就够：用户不需要知道 AppTranslocation 或 SIP 是什么，只需要知道
+    # "程序文件没被改，数据放在自己的用户目录里"。这里刻意不打印系统报错的
+    # 原文（"Read-only file system" 之类只会让人以为软件坏了）。
+    log_warn "安装目录是只读的（打包安装后这是正常现象），运行期的记录、日志与 Python 环境已改放到 ${RF_STATE_HOME}，安装目录不会被改动。"
+fi
+
 # shellcheck source=lib/python.sh
 . "$RF_SCRIPT_DIR/lib/python.sh"
 # shellcheck source=lib/node.sh
@@ -226,34 +245,39 @@ trap rf_cleanup_on_failure EXIT
 # 后端
 # ---------------------------------------------------------------------------
 
-# 准备 backend/.venv。返回时 RF_VENV_PYTHON 指向可用的解释器。
+# 准备后端虚拟环境。返回时 RF_VENV_PYTHON 指向可用的解释器。
+#
+# 位置由 common.sh 的 rf_resolve_venv_dir 决定（可写项目根 → backend/.venv，
+# 只读安装目录 → RF_STATE_HOME/venv），本函数不再假设它一定在项目里。
 rf_prepare_backend_venv() {
-    RF_VENV_PYTHON="$RF_BACKEND_DIR/.venv/bin/python3"
-    venv_config="$RF_BACKEND_DIR/.venv/pyvenv.cfg"
+    RF_VENV_PYTHON="${RF_VENV_DIR}/bin/python3"
+    venv_config="${RF_VENV_DIR}/pyvenv.cfg"
 
     if [ -x "$RF_VENV_PYTHON" ] && ! rf_venv_version_supported "$venv_config"; then
         # 用窗口外的版本建的 venv 永远装不上钉死的轮子，复用它等于每次都以同一种
         # 方式失败。挪开而不是删除：项目保留可恢复的派生产物，同卷改名是零成本。
         stale_dir="$RF_RUNTIME_DIR/venv-unsupported-$(date '+%Y%m%d-%H%M%S')"
-        log_warn "backend/.venv 是用不受支持的 Python 版本建的，已移到 $stale_dir 并重建（原目录没有被删除，需要时可手动找回）。"
-        mv "$RF_BACKEND_DIR/.venv" "$stale_dir"
+        log_warn "后端虚拟环境是用不受支持的 Python 版本建的，已移到 ${stale_dir} 并重建（原目录没有被删除，需要时可手动找回）。"
+        mv "$RF_VENV_DIR" "$stale_dir"
     fi
 
     if [ ! -x "$RF_VENV_PYTHON" ]; then
         rf_ensure_system_python
+        # 只读安装目录下 venv 落在用户目录里，上层目录可能还不存在。
+        mkdir -p "$(dirname "${RF_VENV_DIR}")"
         log_info "首次运行：正在创建 Python 虚拟环境（这一步只做一次）..."
-        if ! "$RF_PYTHON" -m venv "$RF_BACKEND_DIR/.venv"; then
+        if ! "$RF_PYTHON" -m venv "$RF_VENV_DIR"; then
             die "创建 Python 虚拟环境失败。" \
                 "怎么办：" \
-                "  1) 确认 backend 目录可写（没有被设为只读、也没有被安全软件锁定）；" \
-                "  2) 删掉 backend/.venv 后重新双击 start.command；" \
+                "  1) 确认 ${RF_VENV_DIR} 可写（没有被设为只读、也没有被安全软件锁定）；" \
+                "  2) 删掉该目录后重新双击 start.command；" \
                 "  3) 仍失败：把上面的报错原文发到项目的 GitHub Issues。"
         fi
     fi
 
     if [ ! -x "$RF_VENV_PYTHON" ]; then
-        die "没有找到后端的 Python 环境：$RF_VENV_PYTHON" \
-            "怎么办：删掉 backend/.venv 目录后重新双击 start.command，让它重建一次。"
+        die "没有找到后端的 Python 环境：${RF_VENV_PYTHON}" \
+            "怎么办：删掉 ${RF_VENV_DIR} 目录后重新双击 start.command，让它重建一次。"
     fi
 }
 
@@ -277,7 +301,7 @@ rf_ensure_backend_dependencies() {
             "最常见的原因是网络：默认走官方 PyPI，国内经常很慢或直接超时。" \
             "怎么办（按顺序试）：" \
             "  1) 换国内镜像重装（最有效）：" \
-            "     backend/.venv/bin/python3 -m pip install -i https://mirrors.aliyun.com/pypi/simple -r backend/requirements.txt" \
+            "     \"${RF_VENV_PYTHON}\" -m pip install -i https://mirrors.aliyun.com/pypi/simple -r backend/requirements.txt" \
             "  2) 需要代理时，先在终端里 export HTTPS_PROXY=http://127.0.0.1:端口 再重试；" \
             "  3) 确认能打开 https://mirrors.aliyun.com/pypi/simple/（打不开就是网络被拦了）；" \
             "  4) 仍失败：把上面 pip 的报错原文发到 GitHub Issues。"

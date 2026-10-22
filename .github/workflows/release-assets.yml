@@ -102,6 +102,10 @@ jobs:
       - name: Package desktop app (dir + NSIS)
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+          # 代码签名是可选的：变量缺失时 scripts/Sign-Windows.ps1 打印一行说明并以 0
+          # 退出，产物仍是未签名包（当前默认形态）。配好证书后无需改工作流，签名随即生效。
+          RF_WIN_CERT_BASE64: ${{ secrets.RF_WIN_CERT_BASE64 }}
+          RF_WIN_CERT_PASSWORD: ${{ secrets.RF_WIN_CERT_PASSWORD }}
         # Build-Desktop rebuilds desktop/python-runtime.zip automatically when
         # the cached zip is missing or stale (requirements fingerprint guard,
         # scripts/PythonRuntimeManifest.ps1) -- exactly the CI case here.
@@ -194,10 +198,15 @@ jobs:
       - name: Build dmgs (x64 + arm64)
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+          # 与 Windows 侧同一策略：四个变量齐全才签名 + 公证（scripts/sign-macos.sh），
+          # 缺任一则打印说明、产物未签名（当前默认）。证书配好后工作流无需再改。
+          RF_MAC_SIGN_IDENTITY: ${{ secrets.RF_MAC_SIGN_IDENTITY }}
+          RF_APPLE_ID: ${{ secrets.RF_APPLE_ID }}
+          RF_APPLE_TEAM_ID: ${{ secrets.RF_APPLE_TEAM_ID }}
+          RF_APPLE_APP_PASSWORD: ${{ secrets.RF_APPLE_APP_PASSWORD }}
         # The macOS runner is Apple Silicon; --arch both cross-builds the Intel
-        # dmg too so one run serves every Mac. Unsigned by design (no Apple
-        # Developer certificate) -- Gatekeeper guidance lives in the release
-        # notes and docs/mac-build-handoff.md.
+        # dmg too so one run serves every Mac. 未配置证书时产物未签名，发布说明里
+        # 必须写清右键→打开 / xattr -dr com.apple.quarantine（docs/mac-build-handoff.md）。
         run: bash scripts/build-desktop-mac.sh --arch both
 
       - name: Upload workflow artifacts

@@ -6,8 +6,11 @@
 // This mirrors what scripts/Start-ResumeForge.ps1 does for the console flow,
 // reduced to what the desktop shell needs: pick a free loopback port, launch
 // the venv python with uvicorn, poll /api/health, and shut the process tree
-// down cleanly on exit. Console output goes to runtime/logs/desktop-backend.log
-// so no console window is ever involved.
+// down cleanly on exit. Console output goes to <runtimeDir>/logs/
+// desktop-backend.log (user directory) so no console window is ever involved.
+//
+// 故障诊断 P0：安装目录/payload 一律只读。日志与其降级链、pid 记录的位置都
+// 收在 lib/shell-paths.js 里裁决；本文件只保证"写不进去也绝不打断启动"。
 //
 // ADR-0004 (data directory policy): when the shell hands us a user data dir,
 // the backend runs with RF_DATA_DIR pointing at it, so the database,
@@ -18,31 +21,34 @@ const { spawn } = require("child_process");
 const net = require("net");
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const processIdentity = require("./lib/process-identity");
 const { attachBackendChild } = require("./lib/backend-startup");
 const { BACKEND_COMMAND_PATTERNS: BACKEND_COMMAND_PATTERNS_FOR_RECORDS, stopBackend } = require("./lib/backend-stop");
+const { launcherStateEnv, logHint: formatLogHint } = require("./lib/shell-paths");
+const {
+  PID_RECORD_MACOS_NAME, PID_RECORD_NAME, adoptRecordedBackend: adoptRecorded,
+  backendLogFile, captureSpawnedChild, closeLogStream, logDegradedNotice,
+  openBackendLog, pidRecordDir, readPidRecord,
+} = require("./lib/backend-logs");
 const {
   RUNTIME_ZIP_NAME,
+  diagnoseRuntimeFailure,
   extractZip,
   isRuntimeMarkerValid,
+  readBundledManifest,
   resolvePython,
   resolveRuntimePython,
   rotateLogFile,
   runtimeMarkerDigest,
   runtimeMarkerPath,
+  runtimeMatchesManifest,
 } = require("./lib/backend-runtime");
 
 const HEALTH_TIMEOUT_MS = 90_000;
 const HEALTH_POLL_INTERVAL_MS = 300;
-const PORT_SCAN_START = 8010;
-const PORT_SCAN_END = 8099;
-// The fallback launcher (Start-ResumeForge.ps1 / start.sh) records the real
-// backend process here before it exits. Windows writes JSON (backend.json),
-// macOS a flat key=value file (backend.macos.pid) -- same information, two
-// shapes (scripts/macos/lib/common.sh), so both are read (RR-02).
-const ADOPTED_PID_RELATIVE_PATH = path.join("runtime", "backend.json");
-const ADOPTED_PID_MACOS_RELATIVE_PATH = path.join("runtime", "backend.macos.pid");
+// 兜底启动器（Start-ResumeForge.ps1 / start.sh）退出前会记下真后端进程；记录的
+// 位置与形状由 lib/backend-logs.js 裁决（RR-02）。打包态只能写用户目录，payload
+// 下的 runtime/ 只是只读的历史位置：仍然读、绝不再写。
 
 // How long to wait for a process we asked to stop to actually disappear before
 // reporting the stop as unconfirmed.
@@ -103,6 +109,13 @@ class BackendManager {
     this.killFn = killFn;
     this.child = null;
     this.logStream = null;
+    // 实际写出的日志路径（可能已降级到临时目录）；null = 本次运行不写日志。
+    // 绝不能是 payload 下的路径：那里只读，写它只会失败（诊断 P0）。
+    this.logPath = null;
+    this.logDegraded = false;
+    this.logReason = "";
+    // 面向用户的那一句"日志在哪"，openLog() 会整体替换（lib/backend-logs.js）。
+    this.logHintText = formatLogHint(null, false);
     this.stopped = false;
     // Launcher mode: the child is the shipped bootstrap script, which exits
     // after starting the real backend (handoff), not a crash.
@@ -114,6 +127,9 @@ class BackendManager {
     this.adoptedRecord = null;
     this.url = null;
     this.earlyExit = null;
+    // Bounded tail of the child's stderr (lib/backend-startup.js fills it in).
+    // Used to turn an opaque "exited early (code=1)" into the real cause.
+    this.stderrTail = "";
     // Outcome of the last stop(): { ok, reason, verified }. The shell reads it
     // before letting an update installer overwrite this installation.
     this.lastStop = null;
@@ -122,36 +138,57 @@ class BackendManager {
     this.onUnexpectedExit = null;
   }
 
+  // 日志的**首选**路径（永远在用户目录的 runtimeDir 下）。真正打开日志时若
+  // 这里不可写，openLog() 会降级到临时目录，并以 this.logPath 为准。
   logFile() {
-    return path.join(this.projectRoot, "runtime", "logs", "desktop-backend.log");
+    return backendLogFile(this.runtimeDir);
+  }
+
+  // 运行期记录（pid 记录、日志）的写入根，见 lib/backend-logs.js::pidRecordDir；
+  // 更远的只读回退（payload 下的历史位置）由同文件的 pidRecordPaths 负责。
+  pidDir() {
+    return pidRecordDir(this);
   }
 
   adoptedPidFile() {
-    return path.join(this.projectRoot, ADOPTED_PID_RELATIVE_PATH);
+    return path.join(this.pidDir(), PID_RECORD_NAME);
   }
 
   adoptedPidMacosFile() {
-    return path.join(this.projectRoot, ADOPTED_PID_MACOS_RELATIVE_PATH);
+    return path.join(this.pidDir(), PID_RECORD_MACOS_NAME);
   }
 
-  // The console launchers record the real backend process as
-  // {process_id, started_at_unix, started_at} (scripts/ResumeForge.Common.ps1);
-  // macOS writes the same fields flat plus start_signature
-  // (scripts/macos/lib/common.sh). Both shapes resolve to one record.
+  // 打开日志流：runtimeDir -> 系统临时目录 -> 不写日志，逐级降级（lib/backend-logs.js），
+  // 任何一步失败都只标记降级，绝不抛。start() 的日志初始化因此是安全的。
+  openLog(banner) {
+    this.closeLog();
+    const opened = openBackendLog({ runtimeDir: this.runtimeDir, banner });
+    this.logStream = opened.stream;
+    this.logPath = opened.path;
+    this.logDegraded = opened.degraded;
+    this.logReason = opened.reason;
+    this.logHintText = opened.hint;
+    return this.logPath;
+  }
+
+  // 错误信息里给用户看的那一句：有路径给路径，降级说降级，没有就直说不可用。
+  logHint() {
+    return this.logHintText;
+  }
+
+  // 供壳（main.js）展示的降级说明；未降级返回空串。
+  degradedLogNotice() {
+    return logDegradedNotice({
+      path: this.logPath,
+      degraded: this.logDegraded,
+      reason: this.logReason,
+    });
+  }
+
+  // 记录形状、读取顺序与"哪种形状先读"的裁决都在 lib/backend-logs.js；
+  // 这里是壳对外的既有接口（用例与 start() 都按名字调用）。
   readAdoptedRecord() {
-    const candidates =
-      process.platform === "darwin"
-        ? [this.adoptedPidMacosFile(), this.adoptedPidFile()]
-        : [this.adoptedPidFile(), this.adoptedPidMacosFile()];
-    for (const candidate of candidates) {
-      try {
-        const record = processIdentity.parseProcessRecord(fs.readFileSync(candidate, "utf-8"));
-        if (record) return record;
-      } catch {
-        // Missing/unreadable record: try the next shape.
-      }
-    }
-    return null;
+    return readPidRecord(this);
   }
 
   readAdoptedPid() {
@@ -159,37 +196,10 @@ class BackendManager {
     return record ? record.pid : null;
   }
 
-  // Snapshot the identity of the backend this shell spawned itself and record
-  // it in the same format the console launcher uses (RR-02: identity is
-  // recorded on both legs of the handoff). Best effort: a record we cannot
-  // fill with a read start time is worse than no record, so it is skipped.
-  async recordSpawnedChild(pid) {
-    const info = await processIdentity.readProcessInfo(pid, { execFileFn: this.execFileFn });
-    if (!info || typeof info !== "object") return;
-    // The snapshot is ours regardless of what the shared record file says: it
-    // is what stop() re-checks before killing this child.
-    this.childIdentity = info;
-    // The record file is shared with the console launcher (start.cmd): if it
-    // currently describes a DIFFERENT live backend, leave it alone -- the
-    // desktop shell must not shadow a running console session's record, or
-    // stop.cmd would later find a dead pid and report "not running".
-    if (await this.recordHoldsForeignLiveBackend(pid)) return;
-    if (!Number.isInteger(info.startedAtUnix) || info.startedAtUnix <= 0) return;
-    try {
-      const recordPath = this.adoptedPidFile();
-      fs.mkdirSync(path.dirname(recordPath), { recursive: true });
-      fs.writeFileSync(
-        recordPath,
-        JSON.stringify({
-          process_id: pid,
-          started_at_unix: info.startedAtUnix,
-          started_at: new Date(info.startedAtUnix * 1000).toISOString(),
-          recorded_by: "desktop-shell",
-        }),
-      );
-    } catch {
-      // Recording is diagnostic; never block a launch on it.
-    }
+  // 身份快照 + 共享记录文件的写入同样下沉（记录格式只有一个出处）；这里只把
+  // 管理器自己的注入依赖递过去。
+  recordSpawnedChild(pid) {
+    return captureSpawnedChild(this, pid);
   }
 
   // Packaged mode reuses the shipped launchers (python/node bootstrap, venv,
@@ -231,11 +241,23 @@ class BackendManager {
       this.projectRoot,
       this.packaged ? RUNTIME_ZIP_NAME : path.join("desktop", RUNTIME_ZIP_NAME),
     );
+    // Fingerprint of what this build shipped (payload/repo root). Absent on mac
+    // payloads (which carry no zip by design, see build-desktop-mac.sh) and on
+    // builds predating the manifest -> null, and then nothing is compared.
+    const manifest = readBundledManifest(this.projectRoot);
     if (!fs.existsSync(zipPath)) {
       return;
     }
     const python = resolveRuntimePython(this.runtimeDir);
-    if (fs.existsSync(python) && (await isRuntimeMarkerValid(this.runtimeDir, zipPath))) {
+    // Three conditions, in cost order: the interpreter exists, the tree came
+    // from THIS zip, and the tree matches the dependency fingerprint. The
+    // third is what the zip digest cannot express -- a payload whose zip was
+    // replaced by a stale cache produces a perfectly matching digest.
+    if (
+      fs.existsSync(python) &&
+      (await isRuntimeMarkerValid(this.runtimeDir, zipPath)) &&
+      runtimeMatchesManifest(this.runtimeDir, manifest)
+    ) {
       return;
     }
 
@@ -254,9 +276,42 @@ class BackendManager {
       runtimeMarkerPath(this.runtimeDir),
       JSON.stringify({
         sha256: await runtimeMarkerDigest(zipPath),
+        // Stamp the fingerprint this tree was built with, so the next launch can
+        // compare against a newer manifest without reopening the zip. Absent
+        // fields are simply omitted (JSON.stringify drops undefined).
+        python: manifest ? manifest.pythonVersion : undefined,
+        requirementsSha256: manifest ? manifest.requirementsSha256 : undefined,
         createdAt: new Date().toISOString(),
       }),
     );
+  }
+
+  // 三条启动路径（打包运行时 / 兜底启动器 / 开发树 venv）共用同一份 spawn 选项：
+  // 无窗口、管道 IO、注入的 env，任何情况下都不弹控制台。
+  spawnChild(file, args, env, cwd = path.join(this.projectRoot, "backend")) {
+    return this.spawnFn(file, args, {
+      cwd,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env,
+    });
+  }
+
+  // 两条直连路径跑的是同一条 uvicorn 命令，只有解释器不同。收在一处，参数顺序
+  // （健康探测与既有用例都依赖它）就只有这一个出处。
+  spawnUvicorn(pythonPath, port, env) {
+    const args = [
+      "-m",
+      "uvicorn",
+      "app.main:app",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port),
+      "--log-level",
+      "warning",
+    ];
+    return this.spawnChild(pythonPath, args, env);
   }
 
   async start(onStage) {
@@ -265,76 +320,38 @@ class BackendManager {
     this.lastStop = null;
     await this.prepareRuntime(onStage);
     const port = await findFreePort();
-    const logPath = this.logFile();
-    fs.mkdirSync(path.dirname(logPath), { recursive: true });
-    rotateLogFile(logPath);
-    this.logStream = fs.createWriteStream(logPath, { flags: "a" });
-    this.logStream.write(`\n==== desktop launch ${new Date().toISOString()} port=${port} ====\n`);
+    // 日志初始化绝不能让 start() 抛错：安装目录只读是正常形态，不是启动失败。
+    this.openLog(`desktop launch ${new Date().toISOString()} port=${port}`);
 
     if (onStage) onStage("backend-starting");
 
     // ADR-0004: bundled/launcher backends run against the user data dir.
-    const childEnv = { ...process.env, ...buildBackendEnv(this.userDataDir) };
+    // RF_DESKTOP_SHELL 让后端知道自己是"桌面形态"（而不是控制台/服务），
+    // 用于行为与诊断输出上的区分；buildBackendEnv 的签名保持不变。
+    // launcherStateEnv 只在 mac 打包态给出：把状态目录显式告诉 start.sh，
+    // 否则它和壳会各写一份 pid 记录，"退出后后端还在跑"。
+    const childEnv = {
+      ...process.env,
+      ...buildBackendEnv(this.userDataDir),
+      ...(this.packaged ? { RF_DESKTOP_SHELL: "1" } : {}),
+      ...launcherStateEnv({ packaged: this.packaged, runtimeDir: this.runtimeDir }),
+    };
 
     const bundled = resolveRuntimePython(this.runtimeDir);
     this.usingLauncher = false;
     if (fs.existsSync(bundled)) {
       // Preferred: the bundled runtime is a complete env (interpreter +
       // site-packages), so uvicorn starts directly with no provisioning.
-      this.child = this.spawnFn(
-        bundled,
-        [
-          "-m",
-          "uvicorn",
-          "app.main:app",
-          "--host",
-          "127.0.0.1",
-          "--port",
-          String(port),
-          "--log-level",
-          "warning",
-        ],
-        {
-          cwd: path.join(this.projectRoot, "backend"),
-          windowsHide: true,
-          stdio: ["ignore", "pipe", "pipe"],
-          env: childEnv,
-        },
-      );
+      this.child = this.spawnUvicorn(bundled, port, childEnv);
     } else if (this.packaged) {
       // Fallback: defer to the shipped launcher (python/node bootstrap, venv,
       // dependency install). Hidden window, pinned port. Slow on first run -
       // the bundled runtime exists precisely to avoid this path.
       this.usingLauncher = true;
       const launcher = this.launcherCommand(port);
-      this.child = this.spawnFn(launcher.file, launcher.args, {
-        cwd: launcher.cwd,
-        windowsHide: true,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: childEnv,
-      });
+      this.child = this.spawnChild(launcher.file, launcher.args, childEnv, launcher.cwd);
     } else {
-      const venvPython = resolvePython(this.projectRoot);
-      this.child = this.spawnFn(
-        venvPython,
-        [
-          "-m",
-          "uvicorn",
-          "app.main:app",
-          "--host",
-          "127.0.0.1",
-          "--port",
-          String(port),
-          "--log-level",
-          "warning",
-        ],
-        {
-          cwd: path.join(this.projectRoot, "backend"),
-          windowsHide: true,
-          stdio: ["ignore", "pipe", "pipe"],
-          env: childEnv,
-        },
-      );
+      this.child = this.spawnUvicorn(resolvePython(this.projectRoot), port, childEnv);
     }
     attachBackendChild(this);
 
@@ -345,11 +362,20 @@ class BackendManager {
     while (Date.now() < deadline) {
       if (this.startupError) {
         this.closeLog();
-        throw new Error(`Backend spawn failed: ${this.startupError.message}. See ${logPath}`);
+        throw new Error(
+          `Backend spawn failed: ${this.startupError.message}. See ${this.logHint()}`,
+        );
       }
       if (this.earlyExit && !this.usingLauncher) {
+        // A missing dependency is the one early exit a user can act on, and the
+        // raw "exited early (code=1)" tells them nothing. The log hint stays:
+        // the full traceback is there for whoever debugs it.
+        const diagnosis = diagnoseRuntimeFailure(this.stderrTail);
+        if (diagnosis) {
+          throw new Error(`${diagnosis}日志：${this.logHint()}`);
+        }
         throw new Error(
-          `Backend exited early (code=${this.earlyExit.code}). See ${logPath}`,
+          `Backend exited early (code=${this.earlyExit.code}). See ${this.logHint()}`,
         );
       }
       if (this.stopped) throw new Error("Backend startup aborted");
@@ -373,7 +399,7 @@ class BackendManager {
       // Stopping is best effort on the failure path; the timeout below is the
       // error the user sees.
     }
-    throw new Error(`Backend health check timed out. See ${logPath}`);
+    throw new Error(`Backend health check timed out. See ${this.logHint()}`);
   }
 
   // Health probe: /api/health must answer 200 within 2s. Kept on the class
@@ -450,33 +476,17 @@ class BackendManager {
     return verdict.status === processIdentity.STATUS_VERIFIED;
   }
 
-  // Adopt the backend that a launcher handed off (or that we spawned): the pid
-  // AND the evidence needed to re-verify it before any kill. Re-read on every
-  // health success so a crash-restart replaces the stale record instead of
-  // carrying the previous pid forward (RR-02).
+  // Adopt/refresh the record the launcher wrote (record format lives in
+  // lib/backend-logs.js); re-read on every health success so a crash-restart
+  // replaces the stale pid instead of carrying it forward (RR-02).
   adoptRecordedBackend() {
-    const record = this.readAdoptedRecord();
-    if (!record) return;
-    this.adoptedRecord = record;
-    this.adoptedPid = record.pid;
+    adoptRecorded(this);
   }
 
   closeLog() {
-    if (this.logStream) {
-      const stream = this.logStream;
-      this.logStream = null;
-      // Log IO must never take the shell down (same discipline as the shell's
-      // own logLine): a failed flush on a removed/locked file is swallowed.
-      stream.on("error", () => {});
-      if (stream.pending) {
-        // Still opening: destroy cancels the open. end() would wait for the
-        // pending open and race a temp-dir cleanup (post-test ENOENT under
-        // node --test).
-        stream.destroy();
-      } else {
-        stream.end();
-      }
-    }
+    const stream = this.logStream;
+    this.logStream = null;
+    closeLogStream(stream);
   }
 }
 
@@ -485,8 +495,5 @@ module.exports = {
   buildBackendEnv,
   // Runtime helpers live in lib/backend-runtime.js; re-exported here so the
   // existing callers/tests keep their import path.
-  rotateLogFile,
-  runtimeMarkerPath,
-  runtimeMarkerDigest,
-  isRuntimeMarkerValid,
+  rotateLogFile, runtimeMarkerPath, runtimeMarkerDigest, isRuntimeMarkerValid,
 };

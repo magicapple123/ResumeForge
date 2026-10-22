@@ -4,11 +4,13 @@
 import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
 import UpdateCard from "./UpdateCard";
 
 const apiMocks = vi.hoisted(() => ({
   acknowledgeUpdateInstallResult: vi.fn(),
   checkForUpdate: vi.fn(),
+  getAppForm: vi.fn(),
   getUpdateDownloadStatus: vi.fn(),
   getUpdateInstallResult: vi.fn(),
   startUpdateDownload: vi.fn(),
@@ -44,6 +46,12 @@ function renderCard() {
 
 beforeEach(() => {
   window.localStorage.clear();
+  // 默认按浏览器/控制台形态（既有行为）；桌面形态的用例自己覆盖。
+  apiMocks.getAppForm.mockResolvedValue({
+    desktop: false,
+    platform: "win32",
+    app_version: "1.0.2",
+  });
   apiMocks.getUpdateDownloadStatus.mockResolvedValue({
     state: "idle",
     current_version: "0.11.0",
@@ -291,5 +299,85 @@ describe("UpdateCard", () => {
     const card = document.querySelector(".settings-card") as HTMLElement;
     expect(card.textContent ?? "").not.toContain("##");
     expect(card.textContent ?? "").not.toContain("**");
+  });
+
+  it("桌面形态不给页面内下载/安装入口，改成引导用 Setup.exe", async () => {
+    // 桌面安装里 PROJECT_ROOT 是 resources/payload，更新包是源码形态整包（没有
+    // python-runtime.zip、没有 desktop/）：页面内"下载 zip 并安装"补不齐依赖，
+    // 装上去只会半新半旧。所以按钮必须消失，只留检查更新 + 安装包指引。
+    apiMocks.getAppForm.mockResolvedValue({
+      desktop: true,
+      platform: "win32",
+      app_version: "1.0.2",
+    });
+
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    // 有更新（mock 里 update_available=true），但桌面形态不出现下载/安装按钮。
+    expect(await screen.findByText(t("update.desktop.title"))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "下载更新" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重启并安装" })).not.toBeInTheDocument();
+    // 后台下载开关也随之消失（它是下载入口的一部分）。
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    // 检查/重新检查保留；发布页面可以打开。
+    expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "打开发布页面" })).toHaveAttribute(
+      "href",
+      "https://example.com/release",
+    );
+  });
+
+  it("桌面形态即使后端说「已下载完成」也不显示重启并安装", async () => {
+    apiMocks.getAppForm.mockResolvedValue({
+      desktop: true,
+      platform: "win32",
+      app_version: "1.0.2",
+    });
+    apiMocks.getUpdateDownloadStatus.mockResolvedValue({
+      state: "ready",
+      current_version: "0.11.0",
+      target_version: "0.12.0",
+      progress: 100,
+      downloaded_bytes: 2048,
+      total_bytes: 2048,
+      background: false,
+      installable: true,
+      message: "更新包已下载完成，可以重启安装",
+    });
+
+    renderCard();
+
+    // 后端状态是 ready，但桌面形态下那个按钮不该出现（走了也装不成）。
+    expect(await screen.findByText(t("update.desktop.title"))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重启并安装" })).not.toBeInTheDocument();
+    expect(screen.queryByText(t("update.downloaded.title"))).not.toBeInTheDocument();
+  });
+
+  it("浏览器形态保持原有入口：可下载、可安装", async () => {
+    // 非桌面（控制台 start.cmd / 开发态）是既有路径，界面必须逐条不变。
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByRole("button", { name: "下载更新" })).toBeEnabled();
+    expect(screen.getByRole("switch")).toBeInTheDocument();
+    expect(screen.queryByText(t("update.desktop.title"))).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "下载更新" }));
+    expect(await screen.findByText(t("update.downloaded.title"))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重启并安装" })).toBeInTheDocument();
+  });
+
+  it("形态接口失败时静默按浏览器形态处理，设置页不报错", async () => {
+    // 老后端没有 /system/form；不能让多问一句就把整张卡片变成错误框。
+    apiMocks.getAppForm.mockRejectedValueOnce(new Error("SYNTHETIC_FORM_ERROR"));
+
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByRole("button", { name: "下载更新" })).toBeEnabled();
+    expect(screen.queryByText("SYNTHETIC_FORM_ERROR")).not.toBeInTheDocument();
+    expect(screen.queryByText(t("update.desktop.title"))).not.toBeInTheDocument();
   });
 });

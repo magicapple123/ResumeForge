@@ -19,6 +19,14 @@ files:
   - splash.html
   - icon.png
   - backend-manager.js
+  # 运行期可写位置的裁决（诊断 P0）：安装目录只读，日志/pid 记录只能落在用户
+  # 目录。backend-manager.js 与 lib/preflight.js 都 require 它，漏打包即崩。
+  - lib/shell-paths.js
+  # 启动前可写性体检与非阻断提示，main.js 顶层 require。
+  - lib/preflight.js
+  # 更新原子化的文件系统底座（任务 11，本次不接线）：独立库，随包发行以便下一步
+  # 把 NSIS 覆盖安装换成 versions/ + current 指针。
+  - lib/update-apply.js
   - lib/data-migration.js
   # Identity checks for adopted PIDs (RR-02): backend-manager.js requires it,
   # so leaving it out would crash the packaged entry point.
@@ -27,6 +35,9 @@ files:
   - lib/sqlite-snapshot.js
   # Runtime unpacking / log rotation used by backend-manager.js (line-budget split).
   - lib/backend-runtime.js
+  # 日志句柄与 pid 记录（位置裁决、读写）——backend-manager.js 顶层 require 它，
+  # 漏打包即崩（行数预算的下沉，同 backend-runtime.js）。
+  - lib/backend-logs.js
   # Stop/kill decisions (identity re-verification) used by backend-manager.js.
   - lib/backend-stop.js
   - lib/backend-startup.js
@@ -68,6 +79,13 @@ nsis:
   # 辅助向导（非一键安装）：用户可以自主选择安装位置（维护者要求——一键直装让想
   # 装到非默认盘的用户无从下手）。桌面端自动更新仍走 `/S` 静默参数：assisted 安装器
   # 在静默模式下按上一次的安装目录直装，不弹向导，更新体验不受影响。
+  #
+  # **安装形态契约（2026-10-22，故障报告任务 3）**：保留自定义安装目录，但安装目录
+  # 一律按"只读"对待——壳与启动器都不往里面写（日志、pid、venv、运行时全在用户目录，
+  # 见 desktop/lib/shell-paths.js 与 scripts/macos/lib/common.sh）。启动时的写探测
+  # 只用来**告知**（preflight 的非阻断提示 + 打开日志目录），不阻断启动。
+  # 之所以不在安装完成页做写探测：自动更新走 `/S` 静默模式，那里没有界面可弹；
+  # 而"装到只读目录"本身已经不再是故障，只是提示用户日志落在哪里。
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

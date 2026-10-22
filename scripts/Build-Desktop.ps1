@@ -112,6 +112,33 @@ if ($Target -ne "mac") {
         Write-Host "python-runtime.zip rebuilt from the current requirements."
     }
     Copy-Item -Force $runtimeZip (Join-Path $payloadDir "python-runtime.zip")
+
+    # Report task 10: also drop the manifest at the payload root as
+    # runtime-manifest.json. The copy inside the zip is for build time (deciding
+    # whether the cached zip is still reusable); the payload copy is for the
+    # *installed* shell (readBundledManifest in desktop/lib/backend-runtime.js),
+    # which needs to know whether the extracted runtime still matches what this
+    # release shipped.
+    # Read it back from the zip instead of recomputing here so both fingerprints
+    # stay identical by construction -- a second computation is a second place to
+    # drift, and drift shows up as "the runtime is re-extracted on every start".
+    $manifest = Get-PythonRuntimeManifest -ZipPath $runtimeZip
+    if ($null -ne $manifest) {
+        $manifestPath = Join-Path $payloadDir "runtime-manifest.json"
+        # No BOM: Node's JSON.parse throws on a BOM, which makes the manifest look
+        # absent and silently disables the check (harder to notice than an error).
+        # PowerShell 5.1's -Encoding UTF8 writes one, so use .NET's
+        # UTF8Encoding($false) instead.
+        [System.IO.File]::WriteAllText(
+            $manifestPath,
+            ($manifest | ConvertTo-Json -Compress),
+            (New-Object System.Text.UTF8Encoding($false))
+        )
+        Write-Host "runtime manifest -> payload\runtime-manifest.json"
+    }
+    else {
+        Write-Warning "python-runtime.zip carries no manifest entry; runtime-manifest.json skipped (the shell falls back to the zip digest only)."
+    }
 }
 
 $payloadFiles = (Get-ChildItem -Recurse -File $payloadDir).Count
@@ -159,5 +186,25 @@ if ($Target -eq "win") {
         Write-Host "installer sha256 ($(Split-Path -Leaf $setupPath)): $sha"
     } else {
         Write-Warning "installer artifact not found for checksum sidecar: $setupPath"
+    }
+
+    # Report task 13: signing is an optional scaffold (scripts/Sign-Windows.ps1).
+    # The build must still *succeed* without a certificate -- neither this machine
+    # nor CI has one, and failing there would only get the whole path deleted. So
+    # invoke it only when the certificate variables are actually present; the
+    # script itself exits 0 when it has no certificate, and exits non-zero when a
+    # configured certificate fails to sign, which turns into a build failure here
+    # (shipping an unsigned installer must never happen silently).
+    # Kept inside $Target -eq "win": the mac target must not touch Windows output.
+    $signScript = Join-Path $PSScriptRoot "Sign-Windows.ps1"
+    $certConfigured = (-not [string]::IsNullOrWhiteSpace($env:RF_WIN_CERT_BASE64)) -or
+        (-not [string]::IsNullOrWhiteSpace($env:RF_WIN_CERT_PATH))
+    if (Test-Path $signScript) {
+        if ($certConfigured -and (Test-Path $setupPath)) {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $signScript -InstallerPath $setupPath
+            if ($LASTEXITCODE -ne 0) { throw "Sign-Windows.ps1 failed with $LASTEXITCODE" }
+        } elseif (-not $certConfigured) {
+            Write-Host "No Windows code-signing certificate configured (RF_WIN_CERT_BASE64 / RF_WIN_CERT_PATH); shipping the installer unsigned."
+        }
     }
 }

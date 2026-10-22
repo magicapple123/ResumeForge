@@ -57,6 +57,20 @@ _INSTALL_HANDSHAKE_INTERVAL = 1.0
 # `installing` 停留超过这么久，说明更新器半路死了（覆盖到一半、或被杀掉）。
 _STALE_INSTALL_SECONDS = 120.0
 
+# 更新器的启动标志（提成模块级常量只为让测试能跨平台断言——Linux 上没有这几个
+# 常量，`getattr(..., 0)` 会把它们全变成 0，断言就什么也证明不了）。
+#
+# **2026-10 那次的根因**：这里原本是 `CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS`。
+# 完整的分离进程**没有控制台**，而 Windows PowerShell 是控制台宿主程序——脚本压根不
+# 执行、退出码 0、没有任何输出；后端随后 30×1s 轮询 `runtime/update-status.json` 等
+# 不到 `installing` 标记，只能写 `failed` +「更新器没有启动，应用没有退出…」。
+# `CREATE_NO_WINDOW` 给的是**隐藏的控制台**（脚本能跑、用户看不到窗口），
+# 与 `app/api/system.py::_stop_frontend_process` 是同一个结论、同一组标志。
+_CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+# 只用于"**没有**用它"的断言：分离进程没有控制台，见上。
+_DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0)
+
 # 本地安装包的命名约定与白名单/逐跳/复验策略都在 `update_sources`：
 # `ResumeForge-<版本>.zip` 的挑选、ZIP 结构与 SHA-256 复验是它的一部分。
 
@@ -445,9 +459,9 @@ def schedule_install(*, restart: bool = True) -> UpdateStatus:
         arguments.extend(["-StopPids", str(frontend_pid)])
     if restart:
         arguments.append("-Restart")
-    creation_flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
-        subprocess, "DETACHED_PROCESS", 0
-    )
+    # 隐藏的控制台，**不是**分离进程：PowerShell 是控制台宿主程序，没有控制台就
+    # 什么也不做（详见文件头常量处的故障记录）。
+    creation_flags = _CREATE_NEW_PROCESS_GROUP | _CREATE_NO_WINDOW
     # 更新器的输出写进日志文件，不再丢进 DEVNULL：更新失败时那是唯一的线索
     # （窗口是隐藏的，用户看不到任何东西）。
     try:

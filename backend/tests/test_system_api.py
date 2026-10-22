@@ -167,3 +167,43 @@ def test_diagnostics_endpoint_returns_redacted_runtime_events(client):
     assert event["event"] == "test.system"
     assert event["details"]["control_count"] == 3
     assert event["details"]["value"] == "<redacted>"
+
+
+def test_form_reports_the_desktop_shell_when_the_shell_is_running(client, monkeypatch):
+    """桌面壳注入 RF_DESKTOP_SHELL=1 → 前端必须看到 desktop=True。
+
+    这是"桌面版不该出现下载 zip 并安装"的开关：桌面 payload 是源码形态整包，
+    页面内覆盖安装补不齐 python-runtime.zip 之类的依赖，界面得改成引导用 Setup.exe。
+    """
+    monkeypatch.setenv("RF_DESKTOP_SHELL", "1")
+
+    response = client.get("/api/system/form")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["desktop"] is True
+    # 平台与版本号是给"从哪下载、装的是哪一版"用的，顺手一起钉住。
+    assert body["platform"]
+    assert body["app_version"]
+
+
+def test_form_reports_a_non_desktop_run_without_the_env_flag(client, monkeypatch):
+    """没有注入标记（控制台 start.cmd / 开发态 / 老桌面壳）→ 按非桌面处理。
+
+    默认必须是"非桌面"：那是既有的、被验证过的应用内更新路径，宁可给控制台用户
+    看到旧按钮，也不能把桌面用户默认推到一条补不齐依赖的路上。
+    """
+    monkeypatch.delenv("RF_DESKTOP_SHELL", raising=False)
+
+    response = client.get("/api/system/form")
+
+    assert response.status_code == 200
+    assert response.json()["desktop"] is False
+
+
+@pytest.mark.parametrize("flag", ["0", "false", "no", "", "  "])
+def test_form_treats_non_truthy_flags_as_a_console_run(client, monkeypatch, flag):
+    """只有明确说"是"才算桌面：空串、0、false 都不是。"""
+    monkeypatch.setenv("RF_DESKTOP_SHELL", flag)
+
+    assert client.get("/api/system/form").json()["desktop"] is False

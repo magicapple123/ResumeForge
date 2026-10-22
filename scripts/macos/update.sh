@@ -19,6 +19,9 @@ set -euo pipefail
 RF_SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RF_PROJECT_ROOT=$(cd "$RF_SCRIPT_DIR/../.." && pwd)
 RF_RUNTIME_DIR="$RF_PROJECT_ROOT/runtime"
+# 与 start.sh / stop.sh 同一套规则：只读安装目录下运行期状态改落到状态目录，
+# 否则更新器的临时目录会写进一个写不进去的地方（RF_STATE_DIR 是测试注入口）。
+RF_STATE_HOME="${RF_STATE_DIR:-$HOME/Library/Application Support/ResumeForge}"
 
 RF_REPOSITORY=${RESUMEFORGE_UPDATE_REPO:-magicapple123/ResumeForge}
 RF_ARCHIVE_URL="https://github.com/${RF_REPOSITORY}/archive/refs/heads/main.zip"
@@ -28,12 +31,19 @@ RF_SKIP_DEPENDENCIES=0
 RF_ARCHIVE_PATH=""
 RF_RESTART=0
 
-: "${RF_TOOLS_DIR:=$RF_RUNTIME_DIR/tools}"
-
 # shellcheck source=lib/common.sh
 . "$RF_SCRIPT_DIR/lib/common.sh"
 # shellcheck source=lib/node.sh
 . "$RF_SCRIPT_DIR/lib/node.sh"
+
+# 解析放在 RF_TOOLS_DIR 的默认值**之前**：便携版 Node 的落地目录由
+# RF_RUNTIME_DIR 派生，顺序反了就会把工具装到项目根下的 runtime/ 里——
+# 只读安装目录下那正是写不进去的地方。start.sh 里的顺序要求更严（必须在
+# source lib/python.sh 与 lib/node.sh 之前），三条脚本保持同一套解析。
+RF_RUNTIME_DIR=$(rf_resolve_runtime_dir "$RF_PROJECT_ROOT" "$RF_STATE_HOME")
+RF_VENV_DIR=$(rf_resolve_venv_dir "$RF_PROJECT_ROOT" "$RF_STATE_HOME")
+
+: "${RF_TOOLS_DIR:=$RF_RUNTIME_DIR/tools}"
 
 RF_DOWNLOAD_TIMEOUT_SECONDS=1800
 
@@ -179,7 +189,7 @@ rf_sync_dependencies() {
     fi
 
     requirements="$RF_PROJECT_ROOT/backend/requirements.txt"
-    venv_python="$RF_PROJECT_ROOT/backend/.venv/bin/python3"
+    venv_python="${RF_VENV_DIR}/bin/python3"
     if [ -f "$requirements" ] && [ -x "$venv_python" ]; then
         log_info "==> 正在同步后端依赖"
         if ! "$venv_python" -m pip install --disable-pip-version-check -r "$requirements"; then

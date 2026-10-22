@@ -252,6 +252,22 @@ export interface ExportSaveLocation {
   path: string;
 }
 
+/**
+ * 后端运行形态（GET /api/system/form）。
+ *
+ * 桌面安装壳（Electron）与控制台/开发态的**更新方式不同**：桌面安装里 `PROJECT_ROOT`
+ * 是 `resources/payload`，而仓库自带的更新包是源码形态整包（不含 python-runtime.zip、
+ * 不含 desktop/），页面内"下载 zip 覆盖"在原理上补不齐依赖。前端据此决定是否显示
+ * 页面内的下载/安装入口。
+ */
+export interface AppForm {
+  /** 桌面壳启动后端时注入 RF_DESKTOP_SHELL=1；控制台与开发态为 false。 */
+  desktop: boolean;
+  /** 后端所在平台（`sys.platform`，如 `win32` / `darwin`）。 */
+  platform: string;
+  app_version: string;
+}
+
 /** 更新检查结果与可安装包信息。 */
 export interface UpdateCheckResult {
   current_version: string;

@@ -114,26 +114,36 @@ trap {
 
 # 更新时要跳过的路径，分两层——因为"名字叫 data"在不同层级含义完全不同：
 #   * 任何层级都是本地环境或缓存：`.git`、`node_modules`、`.venv`、`__pycache__` 之类；
-#   * 只有项目根下的这几个位置才是用户数据与本地运行时。
+#   * 只有项目根下的这几个位置才是用户数据、本地运行时与发布产物。
 # **必须按相对路径判断**：早先的规则是"任意层级下名为 data 的目录"，于是受跟踪的
 # `backend/app/data/`（skills.json、ats_keywords.json，`preflight.py` 必需）被静默跳过
 # ——新版本往那个目录里加的文件永远到不了老用户机器上，preflight 随后会拒绝启动
 # （2026-10-01 发现）。两条规则都不能省：只按名字会误伤 `backend/app/data`，只按
 # 相对路径又会让 `frontend/node_modules` 这种深层目录被复制进去。
+#
+# `dist` 是同一个坑的第二次（2026-10-02 定位）。它指的是**仓库根部**的发布产物目录
+# （`dist\ResumeForge-1.0.2.zip`、`dist\ResumeForge-Setup-1.0.2.exe`，由
+# `scripts\Build-Release.ps1` 生成），2026-09-17 却被塞进了"任意层级按名字排除"，于是
+# `frontend\dist\**` 被整目录跳过——而 `frontend\dist` 是**唯一会随更新包分发的前端产物**
+# （发布脚本显式收录它），`frontend\dist\version.json` 就是界面上那个版本号的来源。
+# 后果：升级后后端是新的、前端还是旧的，`version.json` 与后端版本对不上，「有新版本」
+# 的提示永远消不掉。所以 `dist` 现在只按根相对排除：根部那份发布产物照旧不覆盖，
+# `frontend\dist` 走正常的复制路径。**不要**再给它加任何特例——加了就等于让前端
+# 永远升不上去。
 $ExcludedAnyDepthNames = @(
     ".git",
     ".venv",
     "node_modules",
     "__pycache__",
     ".pytest_cache",
-    "dist",
     "coverage",
     ".env"
 )
 $ExcludedRootRelative = @(
     "data",
     "runtime",
-    "backend/data"
+    "backend/data",
+    "dist"
 )
 
 function Write-Step {
@@ -189,6 +199,73 @@ function Test-Excluded {
         }
     }
     return $false
+}
+
+<#
+找出"该用哪个 Python 去 pip install 后端依赖"。
+
+原先这里写死了 `backend\.venv\Scripts\python.exe`，找不到就打印一句
+"it will be created on the next start." 然后什么都不装。桌面安装里根本没有这个 venv
+——它用的是打包好的运行时（`%LOCALAPPDATA%\ResumeForge\runtime\python\python.exe`，
+见 `desktop\lib\backend-runtime.js`），于是桌面用户升级时依赖一行都没装过：1.0.2 新增的
+`pypdfium2` 是顶层 import（`backend\app\api\attachments.py`、`services\pdf_page_images.py`），
+缺了它 uvicorn 加载即崩，应用起不来而且没人知道为什么。
+
+候选按"当前是哪种形态"排列，取第一个存在的：
+  1. `backend\.venv\Scripts\python.exe`            源码/开发形态（start.cmd 建的）
+  2. `%LOCALAPPDATA%\ResumeForge\runtime\python\python.exe`  桌面形态的打包运行时
+  3. `<root>\python\python.exe`、`<root>\python-runtime\python.exe`  便携形态兜底
+
+一个都找不到就**抛异常**：静默跳过正是上面那个 bug 的根源，宁可这次更新报失败
+（用户能看到失败原因和日志），也不要"更新成功"地留下一棵装不上依赖的树。
+`$LocalAppData` 做成参数是为了能在测试里造出假布局，不必碰真实用户目录。
+#>
+function Resolve-BackendPython {
+    param(
+        [string]$ProjectRoot,
+        [string]$LocalAppData = $env:LOCALAPPDATA
+    )
+
+    $candidates = @(
+        (Join-Path $ProjectRoot "backend\.venv\Scripts\python.exe")
+    )
+    if ($LocalAppData) {
+        $candidates += (Join-Path $LocalAppData "ResumeForge\runtime\python\python.exe")
+    }
+    $candidates += @(
+        (Join-Path $ProjectRoot "python\python.exe"),
+        (Join-Path $ProjectRoot "python-runtime\python.exe")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (-not $candidate) { continue }
+        if (Test-Path -LiteralPath $candidate) {
+            return (Resolve-Path -LiteralPath $candidate).ProviderPath
+        }
+    }
+
+    $tried = $candidates -join "、"
+    throw ("找不到后端 Python 解释器：已依次尝试 $tried。桌面版请重新运行 Setup.exe 安装包；" +
+        "源码版请先双击 start.cmd 生成 backend\.venv。")
+}
+
+<#
+这个目录是不是桌面安装里的 `resources\payload`？
+
+桌面形态下更新器被复制到 `安装目录\resources\payload\scripts\` 里执行，程序根是
+`resources\payload`（见 `desktop\main.js` 的 payload 布局）。此时 `payload\start.cmd`
+只是源码形态的启动器：从它 `Start-Process` 起来的是**另一套**服务（另找端口、另建数据
+目录、日志落到 payload 里），用户会看到两个简历通，而真正要重启的桌面应用并不知道自己
+应该重启。所以桌面形态下不 spawn 启动器，只提示用户重新打开应用。
+#>
+function Test-DesktopPayload {
+    param([string]$ProjectRoot)
+
+    if (-not $ProjectRoot) { return $false }
+    # 规范化分隔符并去掉尾部分隔符，再匹配末两级目录名；`-match` 本身不区分大小写，
+    # `(?i)` 只是把意图写在正则里。
+    $normalized = $ProjectRoot.Replace("\", "/").TrimEnd("/")
+    return [bool]($normalized -match "(?i)/resources/payload$")
 }
 
 function Wait-ForPidsExit {
@@ -475,7 +552,7 @@ else {
     } elseif ($DryRun) {
         # In a dry run no archive is downloaded or extracted.
         Write-Host "Would download $ArchiveUrl and copy program files over $ProjectRoot." -ForegroundColor Yellow
-        Write-Host "    data, .env, runtime, .venv and node_modules would be kept." -ForegroundColor DarkGray
+        Write-Host "    data, .env, runtime, dist, .venv and node_modules would be kept." -ForegroundColor DarkGray
     } else {
         Write-Step "Downloading the latest archive"
         $staging = Join-Path $ProjectRoot ("runtime\update-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
@@ -545,17 +622,33 @@ if ($SkipDependencies) {
     }
 
     $requirements = Join-Path $ProjectRoot "backend\requirements.txt"
-    $venvPython = Join-Path $ProjectRoot "backend\.venv\Scripts\python.exe"
     $packageJson = Join-Path $ProjectRoot "frontend\package.json"
     $nodeModules = Join-Path $ProjectRoot "frontend\node_modules"
     try {
-        if ((Test-Path $requirements) -and (Test-Path $venvPython)) {
-            Write-Step "Syncing backend dependencies"
-            Invoke-External -FilePath $venvPython -Arguments @(
-                "-m", "pip", "install", "--disable-pip-version-check", "-r", $requirements
-            ) -WorkingDirectory (Join-Path $ProjectRoot "backend")
+        # 只有"没有 requirements.txt"才算没有后端依赖可装——那不是依赖问题（多半是
+        # 目录根本不是我们的包）。解释器找不到**不能**算跳过：那正是桌面用户升级后
+        # 缺 pypdfium2、后端起不来的原因，必须在这里失败并让用户看到提示。
+        if (Test-Path $requirements) {
+            $backendPython = $null
+            if ($DryRun) {
+                # 演练不装任何东西，所以找不到解释器也不该让它失败：用户只是想看流程，
+                # 在一台什么都没装的机器上演练是合理用法。真实运行仍然照抛不误。
+                try {
+                    $backendPython = Resolve-BackendPython -ProjectRoot $ProjectRoot
+                } catch {
+                    Write-Host "    Would fail to sync backend dependencies: $($_.Exception.Message)" -ForegroundColor Yellow
+                }
+            } else {
+                $backendPython = Resolve-BackendPython -ProjectRoot $ProjectRoot
+            }
+            if ($backendPython) {
+                Write-Step "Syncing backend dependencies"
+                Invoke-External -FilePath $backendPython -Arguments @(
+                    "-m", "pip", "install", "--disable-pip-version-check", "-r", $requirements
+                ) -WorkingDirectory (Join-Path $ProjectRoot "backend")
+            }
         } else {
-            Write-Host "    Backend virtual environment not found; it will be created on the next start."
+            Write-Host "    backend\requirements.txt not found; skipping the backend dependency sync."
         }
 
         if ((Test-Path $packageJson) -and (Test-Path $nodeModules) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
@@ -575,8 +668,21 @@ if ($DryRun) {
     Write-Host "Dry run finished: nothing was downloaded, copied or installed." -ForegroundColor Yellow
 } else {
     Write-Host "Update finished." -ForegroundColor Green
-    Write-Host "Start the app again with start.cmd. Your data in data\ was not touched." -ForegroundColor Green
-    if ($Restart) {
+    # 桌面形态下没有"用户自己双击的 start.cmd"这回事，不要教用户去点一个他看不到的东西。
+    $isDesktopPayload = Test-DesktopPayload -ProjectRoot $ProjectRoot
+    if ($isDesktopPayload) {
+        Write-Host "Reopen the ResumeForge app. Your data was not touched." -ForegroundColor Green
+    } else {
+        Write-Host "Start the app again with start.cmd. Your data in data\ was not touched." -ForegroundColor Green
+    }
+    # 桌面形态下 `-Restart` 没有意义：`resources\payload\start.cmd` 是源码形态的启动器，
+    # 拉起它等于另起一套服务（另一个端口、另一个数据目录、日志落在 payload 里），
+    # 而真正该被重启的桌面窗口并不会出现。这里只提示用户重新打开应用。
+    if ($Restart -and $isDesktopPayload) {
+        Write-Step "Restarting ResumeForge"
+        Write-Host "    桌面版请重新打开 简历通；更新文件已就位。" -ForegroundColor Yellow
+    }
+    if ($Restart -and -not $isDesktopPayload) {
         Write-Step "Restarting ResumeForge"
         $launcher = Join-Path $ProjectRoot "start.cmd"
         if (-not (Test-Path -LiteralPath $launcher)) {
@@ -591,12 +697,22 @@ if ($DryRun) {
     # **文件覆盖完不等于更新成功**：依赖同步可能失败、迁移可能中断、端口可能起不来。
     # 只有 `/api/health` 报出来的版本号等于目标版本，才写 success——写早了界面就会
     # 在下次打开时撒谎（"已更新"而其实还在跑旧版本）。
+    #
+    # 桌面形态下没人替我们拉起新实例，`Wait-ForTargetVersion` 只会白等满 240 秒再报
+    # "没等到新版本"——那明明不是失败，用户照提示重新打开应用就升级完成了。所以桌面
+    # 形态按"不需要重启"处理：写 success，文案改成请用户重新打开应用。
+    $shouldRestart = [bool]$Restart -and -not $isDesktopPayload
     if ($InstallId) {
-        if ($Restart) {
+        if ($shouldRestart) {
             Write-Step "Verifying the new version is running"
         }
-        if (-not $Restart) {
-            Write-InstallStatus -State "success" -Message "文件已更新；双击 start.cmd 重新打开即可"
+        if (-not $shouldRestart) {
+            $successMessage = if ($isDesktopPayload) {
+                "文件已更新；请重新打开应用"
+            } else {
+                "文件已更新；双击 start.cmd 重新打开即可"
+            }
+            Write-InstallStatus -State "success" -Message $successMessage
         } elseif (Wait-ForTargetVersion -TimeoutSeconds $VerifyTimeoutSeconds) {
             Write-InstallStatus -State "success" -Message "已更新到 $TargetVersion"
         } else {

@@ -5,7 +5,7 @@
 // Phase 2 scope: phase 1 window/splash/backend hosting plus tray residency,
 // crash supervision with exponential backoff, and bundled-runtime unpacking
 // (delegated to BackendManager). No console window ever appears; everything
-// lands in runtime/logs/.
+// lands in the user-profile <runtimeDir>/logs/ (the payload is read-only).
 //
 // Quit lifecycle (audit PR-05): every exit path (tray exit, window close,
 // update install, window-all-closed) funnels through app.quit() ->
@@ -13,10 +13,11 @@
 // awaited (with a hard cap) and only then is quit allowed to proceed; the
 // update installer is spawned after the stop completes, never before.
 
-const { app, BrowserWindow, Tray, Menu, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
+const { createShellLogging, announceDegradedOnReady } = require("./lib/preflight");
 const { installerWaitCommand, runManualUpdateCheck, scheduleUpdateCheck, wantsManualUpdateCheck } = require("./updater");
 
 // Lifecycle diagnostics use the controlled runtime log; module imports must not write user profiles.
@@ -72,10 +73,14 @@ function shellIcon() {
 }
 
 function runtimeDir() {
-  // Shared by installer and portable forms so switching between them keeps
-  // user data and the unpacked runtime.
+  // Windows: %LOCALAPPDATA%\ResumeForge\runtime（安装版与便携版共用）。
+  // macOS: userData 已按 productName 分好目录，再拼一次会让桌面壳与
+  // scripts/macos/start.sh（默认 ~/Library/Application Support/ResumeForge/runtime）
+  // 各写一套 pid 记录——壳读不到启动器记的后端，退出后端口仍被占。
   const base = process.env.LOCALAPPDATA || app.getPath("userData");
-  return path.join(base, "ResumeForge", "runtime");
+  return process.platform === "darwin"
+    ? path.join(base, "runtime")
+    : path.join(base, "ResumeForge", "runtime");
 }
 
 // ADR-0004: the database, attachments, exports and backups must live under
@@ -85,18 +90,12 @@ function userDataDir() {
   return path.join(app.getPath("userData"), "data");
 }
 
-function logLine(message) {
-  try {
-    const logDir = path.join(projectRoot(), "runtime", "logs");
-    fs.mkdirSync(logDir, { recursive: true });
-    fs.appendFileSync(
-      path.join(logDir, "desktop-main.log"),
-      `${new Date().toISOString()} ${message}\n`,
-    );
-  } catch {
-    // Logging must never take the shell down.
-  }
-}
+// 诊断日志只写用户目录（安装 payload 只读，写它只会 ENOENT/EPERM，见 P0）。
+const shellLogging = createShellLogging({
+  resolveRuntimeDir: runtimeDir,
+  degradedHint: () => (backend && backend.logHint ? backend.logHint() : null),
+});
+const logLine = shellLogging.log;
 
 // ADR-0004 legacy-data migration: asks the user before moving the payload-era
 // data into the user data dir. The module is required lazily (inside the
@@ -171,13 +170,9 @@ function sendStage(stage, detail) {
   }
 }
 
-function trayIconPath() {
-  // Small imagery for the tray; the 512px brand png scales fine on both OSes.
-  return shellIcon();
-}
-
 function createTray() {
-  tray = new Tray(trayIconPath());
+  // 512px 品牌图缩放在两个平台都够清晰，托盘与窗口共用同一张。
+  tray = new Tray(shellIcon());
   tray.setToolTip("简历通");
   const menu = Menu.buildFromTemplate([
     {
@@ -256,7 +251,7 @@ function handleUnexpectedExit(info) {
     dialog.showErrorBox(
       "简历通",
       `后端服务在 ${RESTART_WINDOW_MS / 60000} 分钟内连续异常退出 ${restartTimestamps.length} 次，已停止自动重启。\n` +
-        "请查看 runtime/logs/desktop-backend.log 后重新启动应用。",
+        `诊断日志：${shellLogging.hint()}\n请重新启动应用。`,
     );
     return;
   }
@@ -315,6 +310,8 @@ async function startBackendAndSwap() {
 // Called by the updater once the installer checksum verified: quit first;
 // before-quit stops the backend and spawns the installer afterwards.
 function requestInstallAndQuit(installerPath) {
+  // 更新是最容易"看起来什么都没发生"的路径：三个阶段都留痕（任务 12）。
+  logLine(`install-start ${installerPath}`);
   pendingInstallerPath = installerPath;
   app.quit();
 }
@@ -353,12 +350,12 @@ function spawnPendingInstaller() {
     });
     child.unref();
     child.on("error", (err) => {
-      logLine(`update installer spawn failed: ${err}`);
+      logLine(`install-spawn-failed ${installerPath}: ${err}`);
       try { dialog.showErrorBox("简历通", "更新安装程序未能启动，请保留下载文件后手动重试。"); } catch {}
     });
-    logLine(`update installer wait-and-install scheduled: ${installerPath} (pid ${process.pid})`);
+    logLine(`install-spawned ${installerPath} (waits for shell pid ${process.pid})`);
   } catch (err) {
-    logLine(`update installer spawn failed: ${err}`);
+    logLine(`install-spawn-failed ${installerPath}: ${err}`);
   }
 }
 
@@ -389,9 +386,12 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     try {
+      // 先体检再启动：安装目录只读是正常形态，降级只提示，绝不阻断启动。
+      const preflightInfo = shellLogging.preflight();
       logLine("whenReady reached");
       createWindow();
       createTray();
+      announceDegradedOnReady({ window: mainWindow, dialog, shell, info: preflightInfo });
       await startBackendAndSwap();
       scheduleUpdateCheck(mainWindow, logLine, { installAndQuit: requestInstallAndQuit });
       if (wantsManualUpdateCheck()) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: requestInstallAndQuit });

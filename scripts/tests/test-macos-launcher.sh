@@ -307,6 +307,186 @@ rf_stop_output=$(bash "$rf_stop_proj/scripts/macos/stop.sh" 2>&1)
 rf_stop_status=$?
 rf_expect_equal "$rf_stop_status" "0" "记录指向已死进程（升级前的前端）时 stop.sh 也以 0 退出"
 
+printf '\n== 运行期目录解析（只读安装目录：mac 打包态的落点）==\n'
+# 这一组守的是一个**设计级**问题，不是某条路径笔误：mac 的 payload 不带
+# python-runtime.zip，于是桌面壳走兜底启动器 start.sh；而 .app 从 dmg 启动时
+# 所在的卷是只读的（AppTranslocation 还会把它挂到随机路径），在项目根下建
+# runtime/ 与 backend/.venv 必然失败，首次启动因此永远起不来。
+# 判据只有两条：
+#   1) 项目根可写时必须与以前**完全一致**（CI 的 macos-end-to-end 就是可写工作树）；
+#   2) 项目根只读时必须整体挪到状态目录，安装目录里一个字节都不写。
+rf_roots_probe="$rf_test_tmp/roots"
+rf_state_probe="$rf_test_tmp/state-home"
+mkdir -p "$rf_roots_probe/writable"
+
+rf_expect_equal "$(rf_resolve_runtime_dir "$rf_roots_probe/writable" "$rf_state_probe")" \
+    "$rf_roots_probe/writable/runtime" "可写根：runtime 落在项目根（现有行为不回归）"
+rf_expect_equal "$(rf_resolve_venv_dir "$rf_roots_probe/writable" "$rf_state_probe")" \
+    "$rf_roots_probe/writable/backend/.venv" "可写根：venv 落在 backend/.venv（现有行为不回归）"
+
+# rf_dir_writable 的四种输入：可写目录、不存在的路径、文件路径、只读目录（下面）。
+if rf_dir_writable "$rf_roots_probe/writable"; then
+    rf_check 0 "rf_dir_writable：可写目录返回成功"
+else
+    rf_check 1 "rf_dir_writable：可写目录返回成功"
+fi
+if rf_dir_writable "$rf_roots_probe/does-not-exist"; then
+    rf_check 1 "rf_dir_writable：不存在的目录必须返回失败"
+else
+    rf_check 0 "rf_dir_writable：不存在的目录必须返回失败"
+fi
+printf 'x' >"$rf_roots_probe/plain-file"
+if rf_dir_writable "$rf_roots_probe/plain-file"; then
+    rf_check 1 "rf_dir_writable：文件路径必须返回失败（不是目录）"
+else
+    rf_check 0 "rf_dir_writable：文件路径必须返回失败（不是目录）"
+fi
+# 写探测用的临时文件必须自己清掉：判据函数不能变成"每次启动漏一个文件"。
+rf_expect_equal "$(find "$rf_roots_probe/writable" -name '.rf-write-probe-*' | wc -l | tr -d ' ')" \
+    "0" "rf_dir_writable 不留下写探测的临时文件"
+
+# 三条脚本必须共用 common.sh 那一套解析，且 stop.sh 必须走"遍历候选目录"这条路径。
+#
+# 后半句是这一组里最容易退化成空转的一条：rf_runtime_dir_candidates 一旦没有调用点
+# 就是死代码，而它的死掉**不会让任何单目录用例变红**——只会在用户双击 stop.command
+# 时表现为"没有找到运行记录"，后端却还在跑（1.0.2 及更早的旧壳把记录写在
+# <state>/ResumeForge/runtime 里）。所以这里直接钉住"stop.sh 引用了它"。
+rf_check_shared_runtime_dir_resolution() {
+    if grep -q 'rf_runtime_dir_candidates' "$RF_TEST_ROOT/scripts/macos/stop.sh"; then
+        rf_check 0 "stop.sh 用 rf_runtime_dir_candidates 遍历运行记录可能所在的目录"
+    else
+        rf_check 1 "stop.sh 没有引用 rf_runtime_dir_candidates（只认一个目录，旧壳的记录会被漏掉）"
+    fi
+    rf_expect_equal "$(grep -c 'rf_resolve_runtime_dir' "$RF_TEST_ROOT/scripts/macos/update.sh")" \
+        "1" "update.sh 用 common.sh 的解析函数定位运行期目录"
+}
+
+# chmod 能不能真正取消写权限，是环境能力而不是代码性质：Windows 的 Git Bash 上
+# chmod 基本是空操作（管理员身份更是如此），所以先探测再决定跑还是跳过。
+rf_probe_readonly_capability() {
+    probe_dir=$1
+    mkdir -p "$probe_dir"
+    chmod a-w "$probe_dir" 2>/dev/null || return 1
+    if ( : >"$probe_dir/canary" ) 2>/dev/null; then
+        rm -f "$probe_dir/canary" 2>/dev/null
+        chmod u+w "$probe_dir" 2>/dev/null
+        return 1
+    fi
+    chmod u+w "$probe_dir" 2>/dev/null
+    return 0
+}
+
+readonly_root="$rf_roots_probe/readonly"
+if rf_probe_readonly_capability "$readonly_root"; then
+    chmod a-w "$readonly_root"
+    rf_expect_equal "$(rf_resolve_runtime_dir "$readonly_root" "$rf_state_probe")" \
+        "$rf_state_probe/runtime" "只读根：runtime 改落到状态目录"
+    rf_expect_equal "$(rf_resolve_venv_dir "$readonly_root" "$rf_state_probe")" \
+        "$rf_state_probe/venv" "只读根：venv 改落到状态目录"
+    if rf_dir_writable "$readonly_root"; then
+        rf_check 1 "rf_dir_writable：只读目录必须返回失败"
+    else
+        rf_check 0 "rf_dir_writable：只读目录必须返回失败"
+    fi
+    # 判据函数在只读目录里也不能留下残骸（写失败时那次 rm 是空转）。
+    rf_expect_equal "$(find "$readonly_root" -name '.rf-write-probe-*' | wc -l | tr -d ' ')" \
+        "0" "只读目录里没有写探测的残留"
+
+    # 三条脚本必须共用同一套解析：stop.sh / update.sh 各自写死
+    # $RF_PROJECT_ROOT/runtime 的话，只读安装目录下服务就停不掉（记录在
+    # 状态目录里，而它们去项目根找）。
+    rf_check_shared_runtime_dir_resolution
+
+    # 功能验证：记录放在状态目录里，只读项目根下跑 stop.sh 必须**看到**它。
+    # 记录指向一个已死的 PID，所以正确行为是"记录与当前进程对不上，没有停止
+    # 任何进程"，而反例（去项目根找）会说"没有找到运行记录"。
+    rf_ro_proj="$rf_test_tmp/readonly-proj"
+    mkdir -p "$rf_ro_proj"
+    cp -R "$RF_TEST_ROOT/scripts" "$rf_ro_proj/scripts"
+    mkdir -p "$rf_state_probe/runtime"
+    mkdir -p "$rf_ro_proj/runtime"
+    printf 'process_id=999999999\nstart_signature=Thu Jan  1 00:00:00 1970\n' \
+        >"$rf_state_probe/runtime/backend.macos.pid"
+    chmod -R a-w "$rf_ro_proj"
+    rf_ro_output=$(RF_STATE_DIR="$rf_state_probe" bash "$rf_ro_proj/scripts/macos/stop.sh" 2>&1)
+    rf_ro_status=$?
+    chmod -R u+w "$rf_ro_proj"
+    rf_expect_equal "$rf_ro_status" "0" "只读项目根下 stop.sh 以 0 退出"
+    case "$rf_ro_output" in
+        *对不上*) rf_check 0 "只读项目根下 stop.sh 从状态目录读到了运行记录" ;;
+        *) rf_check 1 "只读项目根下 stop.sh 没有从状态目录读到运行记录（输出：${rf_ro_output}）" ;;
+    esac
+    rm -f "$rf_state_probe/runtime/backend.macos.pid"
+else
+    rf_skip "本机 chmod 无法真正取消写权限（Windows 的 Git Bash 就是这样），跳过只读根用例；它们在 macOS CI 上会真正执行。"
+    rf_check_shared_runtime_dir_resolution
+fi
+
+printf '\n== 运行期目录候选：旧壳留下的双层目录也要看 ==\n'
+# 现场形态：1.0.2 及更早的桌面壳在 Electron userData 之下又拼了一层产品名，记录落在
+# <state>/ResumeForge/runtime；而双击 stop.command 时 RF_STATE_DIR 未设、解析出的
+# primary 是 <state>/runtime。只认 primary 就会打印"没有找到运行记录"，而后端其实
+# 还在跑、端口仍被占着——所以停服务必须遍历候选目录（这是本次修掉的假绿）。
+rf_cand_state="$rf_test_tmp/cand-state"
+rf_cand_root="$rf_test_tmp/cand-proj"
+mkdir -p "$rf_cand_root"
+rf_cand_primary=$(rf_resolve_runtime_dir "$rf_cand_root" "$rf_cand_state")
+rf_cand_legacy="$rf_cand_state/ResumeForge/runtime"
+
+# 1) 只有旧壳的双层目录存在，而且里面还留着一份记录。
+mkdir -p "$rf_cand_legacy"
+printf 'process_id=999999999\nstart_signature=Thu Jan  1 00:00:00 1970\n' \
+    >"$rf_cand_legacy/backend.macos.pid"
+rf_cand_list=$(rf_runtime_dir_candidates "$rf_cand_root" "$rf_cand_state")
+rf_expect_equal "$(printf '%s\n' "$rf_cand_list" | sed -n '1p')" "$rf_cand_primary" \
+    "候选列表第一项是当前解析结果（primary 优先）"
+rf_expect_equal "$(printf '%s\n' "$rf_cand_list" | sed -n '2p')" "$rf_cand_legacy" \
+    "旧壳的双层目录被列出，且排在 primary 之后"
+rf_expect_equal "$(printf '%s\n' "$rf_cand_list" | wc -l | tr -d ' ')" "2" \
+    "只有旧壳目录存在时，候选恰好两行"
+
+# 2) 两个目录都存在：仍然两行、没有重复项、顺序稳定（两次调用同一结果）。
+mkdir -p "$rf_cand_root/runtime"
+rf_cand_list=$(rf_runtime_dir_candidates "$rf_cand_root" "$rf_cand_state")
+rf_expect_equal "$(printf '%s\n' "$rf_cand_list" | wc -l | tr -d ' ')" "2" \
+    "两个目录都存在时候选仍是两行"
+rf_expect_equal "$(printf '%s\n' "$rf_cand_list" | sort -u | wc -l | tr -d ' ')" "2" \
+    "两个目录都存在时候选里没有重复项"
+rf_expect_equal "$(rf_runtime_dir_candidates "$rf_cand_root" "$rf_cand_state")" "$rf_cand_list" \
+    "候选顺序稳定（同样输入两次调用结果一致）"
+
+# 3) 两个来源指向同一个目录（项目根正好是 <state>/ResumeForge）时只列一次。
+rf_cand_overlap="$rf_cand_state/ResumeForge"
+rf_expect_equal "$(rf_runtime_dir_candidates "$rf_cand_overlap" "$rf_cand_state")" "$rf_cand_legacy" \
+    "两个来源指向同一目录时只列一次（去重）"
+
+# 4) 目录不存在就不列：没有任何旧壳痕迹的状态目录只给出 primary。
+rf_cand_clean="$rf_test_tmp/cand-clean-state"
+rf_expect_equal "$(rf_runtime_dir_candidates "$rf_cand_root" "$rf_cand_clean" | wc -l | tr -d ' ')" "1" \
+    "旧壳目录不存在时不额外列候选"
+
+# 5) 端到端：只有旧壳记录时 stop.sh 必须**看到**它。记录指向一个已死 PID，
+#    所以正确行为是"记录与当前进程对不上"（不是"没有找到运行记录"），
+#    并且输出里带上那个目录——用户报"停不掉"时第一个要问的就是"你看了哪个目录"。
+rf_legacy_proj="$rf_test_tmp/legacy-proj"
+mkdir -p "$rf_legacy_proj"
+cp -R "$RF_TEST_ROOT/scripts" "$rf_legacy_proj/scripts"
+rf_legacy_state="$rf_test_tmp/legacy-state"
+mkdir -p "$rf_legacy_state/ResumeForge/runtime"
+printf 'process_id=999999999\nstart_signature=Thu Jan  1 00:00:00 1970\n' \
+    >"$rf_legacy_state/ResumeForge/runtime/backend.macos.pid"
+rf_legacy_output=$(RF_STATE_DIR="$rf_legacy_state" bash "$rf_legacy_proj/scripts/macos/stop.sh" 2>&1)
+rf_legacy_status=$?
+rf_expect_equal "$rf_legacy_status" "0" "只有旧壳记录时 stop.sh 以 0 退出"
+case "$rf_legacy_output" in
+    *"backend：没有找到运行记录"*) rf_check 1 "只有旧壳记录时 stop.sh 不得报告「没有找到运行记录」" ;;
+    *) rf_check 0 "只有旧壳记录时 stop.sh 不报告「没有找到运行记录」" ;;
+esac
+case "$rf_legacy_output" in
+    *"$rf_legacy_state/ResumeForge/runtime"*) rf_check 0 "stop.sh 从旧壳的双层目录读到了记录，并在输出里带上路径" ;;
+    *) rf_check 1 "stop.sh 没有从旧壳的双层目录读到记录（输出：${rf_legacy_output}）" ;;
+esac
+
 printf '\n== 架构识别 ==\n'
 # 用同名函数遮蔽 uname，避免依赖真实的处理器架构。
 uname() { echo "arm64"; }

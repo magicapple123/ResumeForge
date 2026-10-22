@@ -231,6 +231,9 @@ function loadMain() {
       if (spec === "child_process") {
         return childProcessStub;
       }
+      // main.js 的其余相对依赖（如 ./lib/preflight）指向 desktop/ 下的真实模块：
+      // 沙箱里的 require 是 harness 自己的，不按 main.js 的位置解析相对路径。
+      if (spec.startsWith(".")) return require(path.join(REPO_DESKTOP, spec));
       return require(spec);
     },
     module: { exports: {} },
