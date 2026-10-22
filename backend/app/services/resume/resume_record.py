@@ -4,7 +4,7 @@
 这里收拢了简历生成 / 手写 / 导出 / 分享包共用的几段逻辑，避免它们散落在路由层：
 
 - ``save_record``：生成结果落库（流式与后台任务共用）。
-- ``record_format_config``：一份简历**实际生效**的版式配置（具名格式模板 + 覆盖）。
+- ``record_format_config``：一份简历**实际生效**的版式配置（具名版式 + 覆盖）。
   预览、导出、PDF、分享包都必须走这一个函数——各解析一次就会出现"预览收紧了、
   导出的 PDF 没变"，而用户只在下载后才看得到。
 - ``resolved_format_name`` / ``resolved_style_name``：模板名按"能不能解析"归一，
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 def record_format_config(db: Session, record: ResumeRecord) -> dict:
-    """这份简历实际生效的版式配置：具名格式模板 + 只属于它的覆盖。"""
+    """这份简历实际生效的版式配置：具名版式 + 只属于它的覆盖。"""
     config = dict(validated_format_config(resolve_style_config(db, record.template)))
     config.update(resolve_format_config(db, record.format_name))
     config.update(validated_format_config(record.format_config))
@@ -47,7 +47,7 @@ def record_format_config(db: Session, record: ResumeRecord) -> dict:
 
 
 def resolved_format_name(db: Session, name: str) -> str:
-    """格式模板名只有在能解析出配置时才存进记录；否则存空串（用模板自带版式）。"""
+    """版式名只有在能解析出配置时才存进记录；否则存空串（用模板默认的版式）。"""
     key = (name or "").strip()
     if not key:
         return ""
@@ -55,7 +55,7 @@ def resolved_format_name(db: Session, name: str) -> str:
 
 
 def resolved_style_name(db: Session, name: str) -> str:
-    """样式模板名：内置的存规范化名字，自制模板存**用户起的名字**。"""
+    """模板名：内置的存规范化名字，自制模板存**用户起的名字**。"""
     key = (name or "").strip()
     if not key:
         return DEFAULT_TEMPLATE

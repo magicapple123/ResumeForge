@@ -88,7 +88,7 @@ export interface ResumeTemplateOption {
   name: string;
   label: string;
   description: string;
-  /** 用户自制的样式模板；内置模板为 false。 */
+  /** 用户自制的模板；内置模板为 false。 */
   custom?: boolean;
   id?: number | null;
 }
@@ -104,7 +104,7 @@ export interface ResumeFontScaleOption {
   base_px: number;
 }
 
-/** 格式模板的一项可调参数（后端 FORMAT_FIELDS）。 */
+/** 版式的一项可调参数（后端 FORMAT_FIELDS）。 */
 export interface ResumeFormatField {
   key: string;
   label: string;
@@ -138,7 +138,7 @@ export interface ResumeFormatPreset {
 export interface ResumeTemplateCatalog {
   templates: ResumeTemplateOption[];
   font_scales: ResumeFontScaleOption[];
-  /** 格式模板的可调参数清单与内置预设。 */
+  /** 版式的可调参数清单与内置预设。 */
   format_fields: ResumeFormatField[];
   style_fields: ResumeStyleField[];
   format_presets: ResumeFormatPreset[];
@@ -172,12 +172,12 @@ export interface ResumeTemplateCatalog {
     string,
     { line_height: number; padding_mm: number; section_gap: number }
   >;
-  /** 模板市场预设（R-19）：映射既有样式模板 + 格式预设 + 建议字号。 */
+  /** 模板市场预设（R-19）：映射既有模板 + 版式 + 建议字号。 */
   market: TemplateMarketPreset[];
 }
 
 /**
- * 版式参数：样式模板 + 格式模板 + 页数 + 字号。
+ * 版式参数：模板 + 版式 + 页数 + 字号。
  *
  * 拆成"样式"和"格式"两件事：样式决定长什么样（HTML/CSS），格式决定排得多密
  * （行高、页边距、强调色）。用户常常只想换其中一个。
@@ -238,12 +238,12 @@ export interface ResumeBrief {
   enhancement_enabled: boolean;
   enhancement_level: EnhancementLevel;
   template: string;
-  /** 格式模板（版式覆盖）名；空串表示用样式模板自带的版式。 */
+  /** 版式（一组排版覆盖）名；空串表示用模板默认的版式。 */
   format_name: string;
   /**
    * 只属于这份简历的版式覆盖（叠加在 format_name 之上）。
    *
-   * 「自动一页」试出来的方案写在这里，而不是去改具名格式模板——那会让所有引用它的
+   * 「自动一页」试出来的方案写在这里，而不是去改具名版式——那会让所有引用它的
    * 简历一起变，而自动一页的结果只对当前这份内容成立。
    */
   format_config: ResumeFormatConfig;

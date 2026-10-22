@@ -327,7 +327,7 @@ def migrate_from_dataset_once(db: Session) -> None:
     用户之后可以放心删光全局记录，不会下次打开设置页又被"复活"一遍。
     """
     from ..models.setting import LLMConfigRecord
-    from .settings_service import get_dataset_llm_config
+    from .llm_settings import get_dataset_llm_config
 
     state = load_state()
     block = (state or {}).get("llm")

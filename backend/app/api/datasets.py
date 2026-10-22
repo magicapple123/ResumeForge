@@ -132,7 +132,7 @@ async def import_archive(request: Request) -> dict:
     _require_loopback(request)
     content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
     if content_type not in _ZIP_CONTENT_TYPES:
-        raise HTTPException(status_code=415, detail="请上传 ResumeForge 导出的 .zip 备份文件")
+        raise HTTPException(status_code=415, detail="文件不是 ResumeForge 导出的 .zip 备份")
 
     from ..config import get_settings
 

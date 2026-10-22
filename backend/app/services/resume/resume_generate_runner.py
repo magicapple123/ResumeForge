@@ -96,7 +96,7 @@ class ResumeGenerateRunner:
         """启动一个后台简历生成任务；已有任务在跑则抛 ResumeGenerateRunnerError。"""
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
-                raise ResumeGenerateRunnerError("已有简历生成任务正在进行中，请等待其完成")
+                raise ResumeGenerateRunnerError("已有简历生成任务正在进行中")
             # 先取租约再起线程（RF-03 TOCTOU）：切换持锁期间直接失败，调用方回滚
             # 刚建的空任务；只要租约登记成功，切换的排空就一定会等到本任务结束。
             try:
@@ -418,7 +418,7 @@ class ResumeGenerateRunner:
         baseline = build_baseline(session)
         config = get_llm_config(session)
         if not config.base_url or not config.model:
-            raise ResumeGenerateRunnerError("请先在「设置」页配置大模型 API")
+            raise ResumeGenerateRunnerError("尚未配置大模型 API")
         provider = create_provider(config)
         return job_out, profile_out, baseline, provider
 

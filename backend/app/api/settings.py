@@ -175,7 +175,7 @@ def write_export_save_location(
     if not _is_loopback_request(request):
         raise HTTPException(status_code=403, detail="保存位置只能在运行后端的本机设置")
     if not payload.clear:
-        raise HTTPException(status_code=400, detail="请使用「选择文件夹」设置保存位置")
+        raise HTTPException(status_code=400, detail="保存位置只能由「选择文件夹」写入")
     return ExportSaveLocationOut(path=save_export_save_location(db, ""))
 
 

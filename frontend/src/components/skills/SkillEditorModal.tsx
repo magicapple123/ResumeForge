@@ -19,11 +19,26 @@ interface Props {
   /** 传 id 表示编辑已有技能，传 null 表示新建。 */
   skillId: number | null;
   draft?: SkillDraft | null;
+  /**
+   * 只读查看：不渲染「保存」，输入与开关全部禁用。
+   *
+   * 设置页的技能摘要卡是**只读**摘要（技能管理入口统一在工作台），点技能名只是
+   * 看一眼内容；如果沿用可编辑弹窗，等于给设置页留了一个隐形的写入口。
+   * 工作台侧不传它，行为与之前完全一致。
+   */
+  readOnly?: boolean;
   onClose: () => void;
   onSaved: (skillId: number) => void;
 }
 
-export default function SkillEditorModal({ open, skillId, draft, onClose, onSaved }: Props) {
+export default function SkillEditorModal({
+  open,
+  skillId,
+  draft,
+  readOnly = false,
+  onClose,
+  onSaved,
+}: Props) {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -100,10 +115,10 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
   return (
     <Modal
       className="skill-editor-modal"
-      title={skillId === null ? "新建助手技能" : "技能详情与编辑"}
+      title={readOnly ? "技能详情" : skillId === null ? "新建助手技能" : "技能详情与编辑"}
       open={open}
       width={760}
-      mask={{ closable: !saving }}
+      mask={{ closable: false }}
       // 内容长时 body 自己滚动：`--rf-modal-body-max-h` 是弹窗内容区的统一上限
       // （tokens 里定义，深浅主题同值）。只给 maxHeight 不给固定高度，内容少时弹窗
       // 仍按内容收缩。下边距比左右多留一点，最后一个「添加知识文件」按钮才不会贴着
@@ -122,9 +137,12 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
           <Button onClick={onClose} disabled={saving}>
             关闭
           </Button>
-          <Button type="primary" loading={saving} onClick={() => void save()}>
-            保存
-          </Button>
+          {/* 只读查看不提供保存：这条链路（设置页）不允许改动技能。 */}
+          {!readOnly && (
+            <Button type="primary" loading={saving} onClick={() => void save()}>
+              保存
+            </Button>
+          )}
         </Space>
       }
     >
@@ -132,7 +150,9 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
         <Spin />
       ) : (
         <div className="skill-editor-body">
-          <Form layout="vertical">
+          {/* 只读查看时 Form 的 disabled 会把全部控件（含「启用」开关）置灰，
+              让这条链路在视觉上也明确「只能看」。 */}
+          <Form layout="vertical" disabled={readOnly}>
             <Alert
               type="info"
               showIcon
@@ -203,13 +223,18 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
                           )
                         }
                       />
-                      <Button
-                        type="text"
-                        danger
-                        aria-label={`删除知识文件 ${file.path}`}
-                        icon={<DeleteOutlined />}
-                        onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}
-                      />
+                      {/* 按钮不在 Form 的 disabled 上下文里，只读时要单独藏掉。 */}
+                      {!readOnly && (
+                        <Button
+                          type="text"
+                          danger
+                          aria-label={`删除知识文件 ${file.path}`}
+                          icon={<DeleteOutlined />}
+                          onClick={() =>
+                            setFiles((current) => current.filter((_, i) => i !== index))
+                          }
+                        />
+                      )}
                     </Space>
                     <Input.TextArea
                       value={file.content}
@@ -225,12 +250,14 @@ export default function SkillEditorModal({ open, skillId, draft, onClose, onSave
                     />
                   </div>
                 ))}
-                <Button
-                  icon={<PlusOutlined />}
-                  onClick={() => setFiles((current) => [...current, { path: "", content: "" }])}
-                >
-                  添加知识文件
-                </Button>
+                {!readOnly && (
+                  <Button
+                    icon={<PlusOutlined />}
+                    onClick={() => setFiles((current) => [...current, { path: "", content: "" }])}
+                  >
+                    添加知识文件
+                  </Button>
+                )}
               </Space>
             </Form.Item>
           </Form>

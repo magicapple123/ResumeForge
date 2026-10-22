@@ -99,7 +99,7 @@ export default function ResumeReviseModal({
         disabled={submitting}
       />
       <MaxLengthHint value={instructions} maxLength={MAX_CHARS} />
-      {error ? <Alert type="error" showIcon message={error} style={{ marginTop: 12 }} /> : null}
+      {error ? <Alert type="error" showIcon title={error} style={{ marginTop: 12 }} /> : null}
     </Modal>
   );
 }

@@ -4,7 +4,7 @@
  *
  * 数字来自 GET /api/stats/storage，后端只 stat 不读内容。
  * 「清理旧文件」（R19）：清单先给用户看、按类别分组勾选（默认全选）、执行后只把文件
- * 移到数据目录下的 .cleanup-trash/（按时间分文件夹），**永不硬删**。
+ * 移到数据目录下的回收目录（按时间分文件夹），**永不硬删**。
  *
  * 一条固定事实写在弹窗里：最近 3 份备份不会出现在清单里——它们是"出事了能回滚"的那
  * 几条，保留策略在后端（`services/cleanup.py:KEEP_RECENT_BACKUPS`），这里如实告知。
@@ -59,7 +59,7 @@ export default function StorageStatsCard() {
   const [stats, setStats] = useState<StorageStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  // 清理（R19）：先看清单再动手，且只移到回收目录——这里不做任何"永久删除"。
+  // 清理（R19）：先看清单再动手，且只移到回收目录——这里不做任何"彻底删除"。
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [cleanupPlan, setCleanupPlan] = useState<CleanupPlan | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<CleanupCategoryKey[]>([]);
@@ -140,9 +140,7 @@ export default function StorageStatsCard() {
         content: (
           <Space orientation="vertical" size={4} style={{ width: "100%" }}>
             <span>
-              释放 {formatSize(result.freed_bytes)}，已移到「
-              {result.trash_dir || ".cleanup-trash"}
-              」，不会永久删除。
+              释放 {formatSize(result.freed_bytes)}，已移到本地数据目录下的回收目录，不会彻底删除。
             </span>
             <span>
               {RECENT_BACKUPS_HINT}；本次保留 {result.skipped.length} 份。
@@ -169,7 +167,7 @@ export default function StorageStatsCard() {
       className="settings-card"
       extra={
         <Space size={4}>
-          {/* 清理旧文件（R19）：移到 .cleanup-trash，不永久删除；清单先给用户看。 */}
+          {/* 清理旧文件（R19）：移到数据目录下的回收目录，不彻底删除；清单先给用户看。 */}
           <Button size="small" icon={<DeleteOutlined />} onClick={() => void openCleanup()}>
             清理旧文件
           </Button>
@@ -251,7 +249,7 @@ export default function StorageStatsCard() {
               title={`以下文件超过 ${cleanupPlan.older_than_days} 天没有变动，选中类别共 ${formatSize(
                 cleanupPlan.totals.bytes,
               )}（${cleanupPlan.totals.files} 个）`}
-              description="清理会把它们移到数据目录下的 .cleanup-trash/（按时间分文件夹），不会永久删除；确认无误后可自行在文件管理器里删除那个目录。"
+              description="清理会把它们移到本地数据目录下的回收目录（按时间分文件夹），不会彻底删除；确认无误后可自行在文件管理器里删除那个目录。"
             />
             <Typography.Text type="secondary">
               {RECENT_BACKUPS_HINT}（本次已保留 {cleanupPlan.skipped.length} 份）。

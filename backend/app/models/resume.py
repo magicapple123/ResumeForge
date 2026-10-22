@@ -35,12 +35,12 @@ class ResumeRecord(Base):
     enhancement_level: Mapped[str] = mapped_column(String(16), default="balanced")
     # 生成时选择的版式参数：重新预览/导出时按同一套参数渲染，改参数不必重新生成。
     template: Mapped[str] = mapped_column(String(32), default="classic", server_default="classic")
-    # 格式模板：一组版式覆盖的名字（内置预设名或用户自制格式模板名）；空串表示用样式
-    # 模板自带的版式。
+    # 版式：一组排版覆盖的名字（内置预设名或用户自制版式名）；空串表示用模板
+    # 默认的版式。
     format_name: Mapped[str] = mapped_column(String(64), default="", server_default="")
     # 只属于这份简历的版式覆盖，叠加在 format_name 解析出来的配置之上。
     #
-    # 存在的理由：`format_name` 指向的是**具名**格式模板，改了它所有引用它的简历一起变。
+    # 存在的理由：`format_name` 指向的是**具名**版式，改了它所有引用它的简历一起变。
     # 而「自动一页」试出来的方案只对当前这份内容成立（换一份内容就不一样了），不该
     # 反过来去污染用户的模板清单，所以按简历单独存一份。
     format_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
@@ -51,7 +51,7 @@ class ResumeRecord(Base):
     # 这份简历的**纸面固定文案**用哪种语言（"zh-CN" / "en-US"，BCP 47 风格）。
     # 只影响小节标题与字段前缀（见 ``services/resume/resume_labels.py``），
     # **不翻译正文**（用户写的内容原样输出），也不参与生成链路。
-    # 语言属于内容元数据而不是版式覆盖：换一个版式模板不该悄悄改掉简历的语言。
+    # 语言属于内容元数据而不是版式覆盖：换一个版式不该悄悄改掉简历的语言。
     # 旧行为空/未知值（被外部工具改过的库）读取侧一律按 "zh-CN" 处理，
     # 所以升级后旧简历的导出输出逐字不变（迁移 0049 用 DEFAULT 回填）。
     language: Mapped[str] = mapped_column(String(16), default="zh-CN", server_default="zh-CN")

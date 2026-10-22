@@ -2,6 +2,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import SettingsPage from "./SettingsPage";
 import { ApiError } from "../api/client";
 
@@ -167,9 +168,11 @@ describe("SettingsPage datasets", () => {
 
   async function renderPage() {
     const view = render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await waitFor(() => expect(apiMocks.listDatasets).toHaveBeenCalled());
     // 设置默认停在「AI 模型」页，先切到「数据」页（不切换就看不到这张卡片）。

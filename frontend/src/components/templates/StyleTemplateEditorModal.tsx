@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 样式模板编辑器：改 HTML/CSS，右侧实时看渲染效果。
+ * 模板编辑器：改 HTML/CSS，右侧实时看渲染效果。
  *
  * 两个刻意的设计：
  * 1. **从内置模板复制**是新建的默认入口：让用户从一份能用的模板开始改，比面对空白框强，
@@ -167,11 +167,12 @@ export default function StyleTemplateEditorModal({
 
   return (
     <Modal
-      title={templateId ? "编辑样式模板" : "自制样式模板"}
+      title={templateId ? "编辑模板" : "自制模板"}
       open={open}
       onCancel={onClose}
       onOk={() => void save()}
       okText="保存模板"
+      mask={{ closable: false }}
       confirmLoading={saving}
       width="min(1120px, 96vw)"
       styles={{
@@ -208,7 +209,7 @@ export default function StyleTemplateEditorModal({
               style={{ marginBottom: 12 }}
             />
             {fields.length > 0 ? (
-              <Form.Item label="视觉与版式微调">
+              <Form.Item label="视觉与排版微调">
                 <TemplateStyleControls fields={fields} values={config} onChange={setConfig} />
               </Form.Item>
             ) : null}

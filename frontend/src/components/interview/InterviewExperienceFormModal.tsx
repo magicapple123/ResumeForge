@@ -4,13 +4,15 @@
  * 表单实例由面板持有（openCreate/openEdit 需要预填字段），jobSelect 由面板传入——
  * 详情抽屉的「关联岗位」名称回查用的是同一个候选池，拆成两份会出现两套搜索状态。
  */
-import { DatePicker, Form, Input, Modal, Select, Space } from "antd";
+import { DatePicker, Form, Input, Select, Space } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import type { FormInstance } from "antd";
+import { useState } from "react";
 import type { InterviewExperience, InterviewExperiencePayload } from "../../types";
 import { EXPERIENCE_ROUND_TYPES, EXPERIENCE_SOURCES, EXPERIENCE_SOURCE_LABELS } from "../../types";
 import type { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
+import FormModal from "../common/FormModal";
 
 interface Props {
   open: boolean;
@@ -32,17 +34,25 @@ export default function InterviewExperienceFormModal({
   onCancel,
   onOk,
 }: Props) {
+  // 脏值只用来决定"关闭时要不要问一句"：第一次改动之后就一直为真（关掉弹窗即重置）。
+  const [dirty, setDirty] = useState(false);
   return (
-    <Modal
-      title={editing ? "编辑面经" : "新增面经"}
+    <FormModal
+      title={editing ? "编辑面经" : "新建面经"}
       open={open}
       onCancel={onCancel}
-      onOk={onOk}
-      confirmLoading={saving}
-      okText="保存"
-      cancelText="取消"
+      onSubmit={onOk}
+      submitting={saving}
+      okText="保存面经"
+      dirty={dirty}
+      width={720}
     >
-      <Form form={form} layout="vertical" initialValues={{ source: "self" }}>
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{ source: "self" }}
+        onValuesChange={() => setDirty(true)}
+      >
         <Form.Item label="标题" name="title">
           <Input maxLength={200} placeholder="例如：某司后端一面" />
         </Form.Item>
@@ -107,6 +117,6 @@ export default function InterviewExperienceFormModal({
           </Form.Item>
         </Space>
       </Form>
-    </Modal>
+    </FormModal>
   );
 }

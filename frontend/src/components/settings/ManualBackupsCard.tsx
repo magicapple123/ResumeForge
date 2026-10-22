@@ -4,7 +4,7 @@
  *
  * 与「自动备份状态」卡（RF-05）分工：那边是 auto-backups 的保护状态，这里是被
  * 忘在 backups/ 目录里、此前没有任何界面的手动快照。删除是**可恢复**的——服务端
- * 只把它移进 backups/.trash/；没有自动清理、没有"全部删除"，每一份都要单独确认。
+ * 只把它移进本地数据目录下的回收目录；没有自动清理、没有"全部删除"，每一份都要单独确认。
  *
  * 交互（用户反馈两轮）：①「移除」收进每行「···」菜单不再裸露；②右键列表任意位置
  * 可进入批量选择模式（勾选多份 → 移除所选），与备选岗位的批量模式同一套交互。
@@ -75,7 +75,7 @@ export default function ManualBackupsCard() {
     await trashManualBackup(name);
     // 移除后同步退出选区：条目已不在列表里，勾着它只会产生幽灵选中。
     setSelectedNames((current) => current.filter((value) => value !== name));
-    message.success("已移到 backups/.trash/，可在文件管理器里彻底删除或找回");
+    message.success("已移到本地数据目录下的回收目录，可在文件管理器里彻底删除或找回");
   };
 
   const confirmDelete = (item: ManualBackupItem) => {
@@ -88,11 +88,11 @@ export default function ManualBackupsCard() {
             {formatDateTime(new Date(item.modified_at * 1000).toISOString())}。
           </p>
           <p>
-            移除后会放到 backups/.trash/ 文件夹里，随时可以在文件管理器里找回来；系统不会自动清理。
+            移除后会放到本地数据目录下的回收目录里，随时可以在文件管理器里找回来；系统不会自动清理。
           </p>
         </div>
       ),
-      okText: "移到 .trash",
+      okText: "移到回收目录",
       okButtonProps: { danger: true },
       cancelText: "取消",
       onOk: async () => {
@@ -111,10 +111,9 @@ export default function ManualBackupsCard() {
   const confirmBatchRemove = () => {
     if (selectedItems.length === 0) return;
     modal.confirm({
-      title: `移除选中的 ${selectedItems.length} 份备份？`,
-      content:
-        "移除后会放到 backups/.trash/ 文件夹里，随时可以在文件管理器里找回来；系统不会自动清理。",
-      okText: "移到 .trash",
+      title: "移除选中的备份？",
+      content: `这 ${selectedItems.length} 份备份移除后会放到本地数据目录下的回收目录里，随时可以在文件管理器里找回来；系统不会自动清理。`,
+      okText: "移到回收目录",
       okButtonProps: { danger: true },
       cancelText: "取消",
       onOk: async () => {
@@ -128,7 +127,7 @@ export default function ManualBackupsCard() {
           if (failed > 0) {
             message.warning(`已移除 ${done} 份，${failed} 份移除失败`);
           } else {
-            message.success(`已把 ${done} 份备份移到 backups/.trash/`);
+            message.success(`已把 ${done} 份备份移到本地数据目录下的回收目录`);
           }
           await load();
         } finally {
@@ -186,7 +185,7 @@ export default function ManualBackupsCard() {
               style={{ marginBottom: 0, flex: 1, minWidth: 240 }}
             >
               这里是迁移或手工备份留在 backups/ 目录里的数据库快照。不会自动清理； 确认后移除到
-              backups/.trash/，需要时还能找回。
+              本地数据目录下的回收目录，需要时还能找回。
             </Typography.Paragraph>
             {selecting && selectedNames.length > 0 && (
               <Space size={8}>
@@ -281,7 +280,7 @@ function trashed_count_note(count: number) {
       style={{ marginTop: 8 }}
       type="info"
       showIcon
-      title={`backups/.trash/ 里还有 ${count} 份已移除的快照，确认不要了可以在文件管理器里删除。`}
+      title={`本地数据目录下的回收目录里还有 ${count} 份已移除的快照，确认不要了可以在文件管理器里删除。`}
     />
   );
 }

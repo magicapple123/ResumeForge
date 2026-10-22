@@ -9,6 +9,7 @@ import { Alert, Button, Card, Checkbox, Collapse, Pagination, Space, Typography 
 import EmptyState from "../common/EmptyState";
 import LoadingBlock from "../common/LoadingBlock";
 import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
+import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
 import BatchActionBar from "../common/BatchActionBar";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import type { useApi } from "../../hooks/useApi";
@@ -57,6 +58,7 @@ export default function BankHistoryCard({
                   danger: true,
                   icon: <DeleteOutlined />,
                   confirm: "删除这条题库历史？",
+                  confirmBody: TRASH_RECOVERY_NOTE,
                   onClick: () => void onRemoveBank(bank.id),
                 },
               ] satisfies RowActionItem[])
@@ -104,6 +106,7 @@ export default function BankHistoryCard({
                 label: "删除",
                 danger: true,
                 confirm: "删除这条题库历史？",
+                confirmBody: TRASH_RECOVERY_NOTE,
                 onClick: () => void onRemoveBank(bank.id),
               },
             ]}

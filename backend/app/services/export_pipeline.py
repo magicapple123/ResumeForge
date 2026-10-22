@@ -38,6 +38,10 @@ class ExportRequest:
     是**兼容字段**（R1）——只在 ``format_config`` 没给 ``page_padding`` 时作为它的回落值，
     不再单独覆盖页边距。``format_config`` 是本次导出的版式草稿覆盖（可为 None）：给值时
     叠加在记录值之上，让"预览里调过、还没保存"的字号/行距也能进入导出。
+
+    ``language`` 与 ``font_scale`` / ``page_limit`` **同属"请求覆盖记录"**：``None`` =
+    用记录里的语言，给值 = 用这次请求的草稿语言。它必须和它们走同一条路，否则"预览切到
+    English、导出还是中文"——预览的版式草稿与导出的版式是同一份。
     """
 
     format: str = "pdf"
@@ -48,6 +52,7 @@ class ExportRequest:
     font_scale: str | None = None
     page_limit: int | None = None
     format_config: dict | None = None
+    language: str | None = None
     include_photo: bool = True
 
 
@@ -237,7 +242,9 @@ def build_export(
         include_photo=request.include_photo,
         # 语言在这里**必须**跟着走：重建上下文是为了叠加"请求里的版式草稿覆盖"，
         # 漏掉它就会在"预览里拖过字号、还没保存"那条路上悄悄退回中文标题。
-        language=context.language,
+        # 请求值优先（``request.language``）：预览里切的语言就是这次导出的语言，
+        # 与 ``font_scale`` / ``page_limit`` 同一条覆盖规则；``None`` 才回落记录值。
+        language=request.language or context.language,
     )
     rendered = renderer(effective_resume, effective_context)
     content = rendered.content
@@ -294,7 +301,9 @@ def render_config_fingerprint(request: ExportRequest, context: RenderContext) ->
         "template_html": context.template_html,
         "style_config": context.style_config or {},
         "format_config": effective_format_config(request, context),
-        "language": context.language,
+        # 与 ``build_export`` 同一条覆盖规则：请求给了语言就是请求的，否则是记录的。
+        # 两处必须一致，否则会出现"产物是英文、指纹却按中文算"的血缘错配。
+        "language": request.language or context.language,
     }
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

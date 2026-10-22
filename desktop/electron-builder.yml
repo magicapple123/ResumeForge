@@ -24,6 +24,9 @@ files:
   - lib/shell-paths.js
   # 启动前可写性体检与非阻断提示，main.js 顶层 require。
   - lib/preflight.js
+  # Quit lifecycle (before-quit / stop / installer spawn) lifted out of main.js
+  # for the 500-line budget; main.js requires it at top level.
+  - lib/quit-lifecycle.js
   # 更新原子化的文件系统底座（任务 11，本次不接线）：独立库，随包发行以便下一步
   # 把 NSIS 覆盖安装换成 versions/ + current 指针。
   - lib/update-apply.js

@@ -15,6 +15,7 @@ import {
 } from "../api/resumes";
 import { diffResume } from "../api/resumeWriting";
 import BatchActionBar from "../components/common/BatchActionBar";
+import { TRASH_RECOVERY_NOTE } from "../components/common/rowActionMenu";
 import ErrorState from "../components/common/ErrorState";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import ManualResumeModal from "../components/ManualResumeModal";
@@ -228,8 +229,8 @@ export default function ResumesPage() {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: `删除选中的 ${ids.length} 份简历？`,
-      content: "会移入回收站，之后可以在「回收站」里恢复。",
+      title: "删除选中的简历？",
+      content: `这 ${ids.length} 份简历${TRASH_RECOVERY_NOTE}`,
       okText: "删除",
       okButtonProps: { danger: true },
       onOk: async () => {

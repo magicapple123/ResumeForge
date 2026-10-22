@@ -36,12 +36,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchResumePreviewPdf } from "../../api/resumes";
 import LoadingBlock from "../common/LoadingBlock";
 import { readCachedPreview, writeCachedPreview } from "./exactPreviewCache";
+import { EXACT_OVERFLOW_NOTE } from "./config";
 
 interface Props {
   resumeId: number;
-  /** 草稿的样式模板名（内置或自制）：换完还没保存也要按新的排。 */
+  /** 草稿的模板名（内置或自制）：换完还没保存也要按新的排。 */
   template: string;
-  /** 草稿的版式模板名（决定"预设那一层"）。 */
+  /** 草稿的版式名（决定"预设那一层"）。 */
   formatName: string;
   /** 草稿页数上限：与用户点「导出」时用的是同一个值。 */
   pageLimit: number;
@@ -156,7 +157,7 @@ export default function ExactPreviewPanel({
   // 版式是对象，每次父组件重渲染都可能是新引用；用序列化结果当依赖，
   // 否则"只改了一个无关的状态"也会触发一次完整的 PDF 重排。
   const configKey = JSON.stringify(formatConfig ?? {});
-  // **整套版式都进 key**：模板 / 版式模板 / 页数 / 字号 / 语言 / 覆盖，任何一个变了都要重排。
+  // **整套版式都进 key**：模板 / 版式 / 页数 / 字号 / 语言 / 覆盖，任何一个变了都要重排。
   // 只盯着一部分（早先只看 config）会让"换了模板、精确预览不动"；漏掉语言则是
   // "切了语言、PDF 一个像素都没变"——服务端明明会重排，只是请求根本没发出去。
   const formatKey = `${contentSignature}|${template}|${formatName}|${pageLimit}|${fontScale}|${language}|${configKey}`;
@@ -343,7 +344,7 @@ export default function ExactPreviewPanel({
           className="exact-preview-overflow"
           style={{ marginBottom: 8 }}
           title={`按当前设置约需 ${current.pagesNeeded ?? current.pages ?? "?"} 页（上限 ${pageLimit} 页）。`}
-          description="字号、行距、页边距都按你设定的值原样渲染，不会自动缩小；超出上限的部分不会显示——先收紧版式或增加页数才能看全。"
+          description={EXACT_OVERFLOW_NOTE}
         />
       ) : null}
       {/* 版本错位：`X-Resume-Pages-Needed` 是 2026-10-21 才有的响应头。旧后端既不返回它，
@@ -389,7 +390,7 @@ export default function ExactPreviewPanel({
             ) : null}
             {busy ? (
               <div className="exact-preview-overlay" aria-busy="true">
-                <span className="exact-preview-overlay-text">正在按新版式重排…</span>
+                <span className="exact-preview-overlay-text">正在按新设置重新排版…</span>
               </div>
             ) : null}
           </div>
@@ -425,7 +426,7 @@ export default function ExactPreviewPanel({
               {/* 重排期间要说话：PDF 是服务端排的、查看器还要重建，改完参数到新图出来之间
                 必然有一段空窗——静悄悄留着旧图会让人以为"没生效"。 */}
               {busy
-                ? "正在按新版式重排…"
+                ? "正在按新设置重新排版…"
                 : `精确预览 · 实际 ${current.pages} 页（上限 ${pageLimit} 页）`}
             </Typography.Text>
             <Button

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 资料箱：集中管理找工作和面试相关的材料（证书、作品、面经、复盘、链接、笔记）。 */
+/** 资料箱：集中管理找工作和面试相关的资料（证书、作品、面经、复盘、链接、笔记）。 */
 import {
   CheckSquareOutlined,
   DeleteOutlined,
@@ -13,7 +13,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Empty,
   Input,
   Pagination,
   Segmented,
@@ -23,6 +22,7 @@ import {
   Typography,
 } from "antd";
 import LoadingBlock from "../components/common/LoadingBlock";
+import EmptyState from "../components/common/EmptyState";
 import { useMemo, useState } from "react";
 import {
   batchDeleteMaterials,
@@ -41,6 +41,7 @@ import BatchActionBar from "../components/common/BatchActionBar";
 import BatchDeleteButton from "../components/common/BatchDeleteButton";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { useApi } from "../hooks/useApi";
+import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import ErrorState from "../components/common/ErrorState";
 import type { Material, MaterialPayload, MaterialSummary } from "../types";
 import { canPreviewImage } from "../utils/attachments";
@@ -102,7 +103,7 @@ export default function MaterialsPage() {
     try {
       if (editing) {
         await updateMaterial(editing.id, payload);
-        message.success("资料已更新");
+        message.success("已更新这份资料");
       } else {
         await createMaterial(payload);
         message.success("已放进资料箱");
@@ -117,10 +118,18 @@ export default function MaterialsPage() {
     }
   };
 
+  // 软删可撤销：单条删除不再前置确认，Toast 里给 5 秒「撤销」（见 useDeleteUndo）。
+  // 批量删除仍走 BatchDeleteButton（二次确认），不受这里影响。
+  const deleteUndo = useDeleteUndo();
   const remove = async (summary: MaterialSummary) => {
     try {
-      await deleteMaterial(summary.id);
-      message.success("已移入回收站，可在「回收站」里恢复");
+      await deleteUndo.run(
+        { type: "material", ids: [summary.id] },
+        () => deleteMaterial(summary.id),
+        {
+          onRestored: () => load(),
+        },
+      );
       await load();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "删除失败");
@@ -173,7 +182,8 @@ export default function MaterialsPage() {
         label: "删除",
         danger: true,
         icon: <DeleteOutlined />,
-        confirm: `删除资料「${summary.title || summary.category}」？`,
+        // 软删由本页的 useDeleteUndo 兜：这里不再问，撤销入口在 Toast 上。
+        undo: true,
         onClick: () => void remove(summary),
       },
     ];
@@ -198,7 +208,7 @@ export default function MaterialsPage() {
             资料箱
           </Typography.Title>
           <Typography.Text type="secondary">
-            这里放与找工作、面试相关的材料：证书、作品、面经、公司信息、面试复盘、实习材料、链接与笔记。
+            这里放与找工作、面试相关的资料：证书、作品、面经、公司信息、面试复盘、实习材料、链接与笔记。
             助手可以读它们、帮你归类整理、总结某一条，或把某条内容整理进个人资料。
           </Typography.Text>
         </div>
@@ -265,15 +275,13 @@ export default function MaterialsPage() {
           ) : error ? (
             <ErrorState description={`资料箱加载失败：${error}`} onRetry={() => void load()} />
           ) : materials.length === 0 ? (
-            <Empty
-              // total=0 时区分「库里真没东西」和「筛选后没结果」：库空才引导去新增，
-              // 否则提示调整筛选（服务端筛选下 total 就是筛选后的总数）。
-              description={
-                total === 0 && !keyword && !category
-                  ? "资料箱还是空的，点右上角「放入资料」开始"
-                  : "没有符合筛选条件的资料"
-              }
-            />
+            // total=0 时区分「库里真没东西」和「筛选后没结果」：库空时把主按钮内嵌进空态
+            // （不再用「点右上角」这种方位词指路——位置会随响应式变），筛选后为空只提示调整条件。
+            total === 0 && !keyword && !category ? (
+              <EmptyState description="还没有资料" actionLabel="放入资料" onAction={openCreate} />
+            ) : (
+              <EmptyState description="没有符合筛选条件的资料" />
+            )
           ) : (
             <>
               <div className="materials-grid">

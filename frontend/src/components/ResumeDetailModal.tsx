@@ -68,7 +68,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     },
     onRendered: (next) => setLayout(next),
     onError: (err) => {
-      message.error(err instanceof Error ? err.message : "按新版式渲染失败");
+      message.error(err instanceof Error ? err.message : "按新设置重新排版失败");
       previewRef.current?.setLiveProbe("");
     },
   });
@@ -114,7 +114,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
           format_config: data.format_config ?? {},
           page_limit: data.page_limit || DEFAULT_LAYOUT.page_limit,
           font_scale: data.font_scale || DEFAULT_LAYOUT.font_scale,
-          // 语言跟着记录走：打开一份英文简历，版式栏里显示的必须是 English。
+          // 语言跟着记录走：打开一份英文简历，排版栏里显示的必须是 English。
           language: data.language ?? DEFAULT_LAYOUT.language,
         } satisfies ResumeLayout;
         setLayout(nextLayout);
@@ -192,9 +192,9 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
       setLayout(nextLayout);
       setSavedLayout(nextLayout);
       setHtml(await renderResume(updated.content, nextLayout));
-      message.success("简历版式修改已保存");
+      message.success("排版设置已保存");
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "保存版式修改失败");
+      message.error(err instanceof Error ? err.message : "保存排版设置失败");
     } finally {
       setLayoutSaving(false);
     }

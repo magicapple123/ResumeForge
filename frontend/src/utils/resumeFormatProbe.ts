@@ -14,6 +14,9 @@
  * ——探针说一套、真实渲染说另一套。**两端各钉一次**（前端本文件 + 后端
  * `tests/test_export_format_config.py`）。
  */
+// 只借一个数据形状（`{ top, right, bottom, left }`）：`pageMargins.ts` 不 import 本文件，
+// 所以这条依赖是单向的，不会形成循环。
+import type { PageMargins } from "./pageMargins";
 
 /**
  * 复刻 Python 的 `f"{value:g}"`：6 位有效数字，去掉无意义尾零与小数点。
@@ -46,4 +49,41 @@ export function lineHeightProbeCss(value: number): string {
  */
 export function pagePaddingProbeCss(value: number): string {
   return `body { padding: ${formatG(value)}mm !important; }`;
+}
+
+/**
+ * 四向页边距探针：四边相等时**转调** `pagePaddingProbeCss`，逐字回到单值形态。
+ *
+ * 为什么必须转调而不是自己再写一遍 `body { padding: ${v}mm !important; }`：后端
+ * `page_padding_rule` 也是"四边相等 → 单值形态"（`len(set(...)) == 1` 那一支）。
+ * 前端若在这里统一输出四值形态，用户拖完松手就会看到页边距从
+ * `8mm 8mm 8mm 8mm` 跳回 `8mm`——而且"默认参数下的预览字节"会与导出不一致。
+ *
+ * 非对称时输出 CSS 简写顺序（上右下左）的四值形态，与后端逐字一致：
+ * `body { padding: 8mm 12mm 12mm 12mm !important; }`。
+ */
+export function pageMarginsProbeCss(margins: PageMargins): string {
+  const { top, right, bottom, left } = margins;
+  if (top === right && right === bottom && bottom === left) return pagePaddingProbeCss(top);
+  return (
+    `body { padding: ${formatG(top)}mm ${formatG(right)}mm ` +
+    `${formatG(bottom)}mm ${formatG(left)}mm !important; }`
+  );
+}
+
+/**
+ * 照片系数探针：写 `:root { --photo-scale: …; }`，与后端 `format_css` 的 `:root` 声明同形。
+ *
+ * 为什么不是 `body { … }` 规则：照片尺寸由模板写成
+ * `calc(var(--fs) * 6.3 * var(--photo-scale, 1))`，系数是**变量**，不是可覆盖的属性——
+ * 只有改这个变量才能让"拖动中"和"松手后"是同一套几何。
+ *
+ * 等于 1 时返回空串（清掉探针）：后端 `photo_scale_css_value` 在 `= 1` 时返回 `None`，
+ * 一个字符都不写；探针若写 `--photo-scale: 1;`，虽然视觉等价，但会让"没设过"与
+ * "设成 1"在 DOM 上出现差别，属于无意义的漂移。
+ */
+export function photoScaleProbeCss(scale: number): string {
+  const value = Number.isFinite(scale) ? scale : 1;
+  if (Math.abs(value - 1) < 1e-9) return "";
+  return `:root { --photo-scale: ${formatG(value)}; }`;
 }

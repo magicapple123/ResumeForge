@@ -1,0 +1,59 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 公告条（`components/common/AnnouncementBar.tsx`）。
+ *
+ * **它是流内元素，不是弹层。** `sticky top: 64px` 让它在 `.app-main` 这个滚动容器里
+ * 贴住 Header 下沿；`z-index: 9` 刻意低于 Header 的 10——滚动时被 Header 压住，
+ * 视觉上就是"挂在标题栏下面"。
+ *
+ * 不要把它"抬上去"：与投投族（3400+）、antd 弹层（3100+）完全无关，那些数字是
+ * 覆盖层的层级，公告条不参与。改这一行之前先读 `theme/tokens.ts` 的层级注释。
+ */
+.rf-announcement {
+  position: sticky;
+  z-index: 9;
+  top: var(--rf-header-height, 64px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  height: 40px;
+  padding: 0 16px;
+  border-bottom: 1px solid transparent;
+  /* 高度对外暴露：`.app-content` 的 min-height 用它扣掉这 40px，避免多出一屏滚动量。 */
+  --rf-announcement-h: 40px;
+}
+
+.rf-announcement-warning {
+  border-bottom-color: var(--rf-warning-border);
+  background: var(--rf-warning-bg);
+  color: var(--rf-warning-text);
+}
+
+.rf-announcement-error {
+  border-bottom-color: var(--rf-error-border, var(--rf-warning-border));
+  background: var(--rf-error-bg, var(--rf-warning-bg));
+  color: var(--rf-error-text);
+}
+
+.rf-announcement-text {
+  min-width: 0;
+  overflow: hidden;
+  flex: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 设置页「公告提醒」卡片里的一行：文案靠左、恢复按钮靠右。 */
+.announcement-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (width <= 600px) {
+  .rf-announcement {
+    padding: 0 12px;
+  }
+}

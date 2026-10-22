@@ -94,7 +94,7 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
       await load();
       // 第一张上传的照片会自动成为使用中的那张。
       onSelect(created.image);
-      message.success("照片已保存，可在下方切换使用哪一张");
+      message.success("照片已保存，可在这里切换使用哪一张");
     } catch (err) {
       message.error(err instanceof Error ? err.message : "上传照片失败");
     } finally {

@@ -28,6 +28,8 @@ import {
 import type { FormInstance } from "antd";
 import { useState } from "react";
 import type { LLMModelsResult, LLMTestResult, LLMThinkingResult } from "../../types";
+import DraftRestoreBar from "../common/DraftRestoreBar";
+import { useFormDraft } from "../../hooks/useFormDraft";
 import { MaxLengthHint } from "../common/MaxLengthHint";
 import ModelCatalogField from "./llm/ModelCatalogField";
 import { AdvancedParamsSection } from "./llm/AdvancedParamsSection";
@@ -38,10 +40,12 @@ import type { RecordFormValues } from "../../features/settings/useLLMRecordTools
 
 interface Props {
   open: boolean;
-  /** create = 新增配置记录；edit = 编辑已有记录。 */
+  /** create = 新建配置记录；edit = 编辑已有记录。 */
   mode: "create" | "edit";
   /** 编辑态用于标题展示的记录名。 */
   recordName: string;
+  /** 编辑态的记录 id（草稿作用域用它区分"哪一条记录"；新建态不传）。 */
+  recordId?: string;
   form: FormInstance<RecordFormValues>;
   saving: boolean;
   testing: boolean;
@@ -58,7 +62,11 @@ interface Props {
   onEffortCustom: (effort: string) => boolean;
   /** 换了端点/模型/协议后上一次的检测结论不再适用，由弹窗清掉。 */
   onClearThinkingResult: () => void;
-  onSave: () => void;
+  /**
+   * 保存动作。**返回真值表示已落库**（父级保存成功后会关窗）；返回 `null` / `false` /
+   * 空值都按"没存上"处理——那正是草稿该留着的情况。
+   */
+  onSave: () => unknown;
   onClose: () => void;
   onTest: () => void;
   onPresetChange: (provider: string) => void;
@@ -66,10 +74,17 @@ interface Props {
   onFetchModels: () => Promise<LLMModelsResult>;
 }
 
+/**
+ * 空值常量（不是字面量 `{}`）：`useFormDraft` 的 `values` 进依赖数组，每次渲染一个新对象
+ * 会把防抖计时器一直重置。新建弹窗刚挂载、`useWatch` 还没拿到值时用它。
+ */
+const EMPTY_DRAFT_VALUES: Record<string, unknown> = {};
+
 export default function LLMRecordModal({
   open,
   mode,
   recordName,
+  recordId,
   form,
   saving,
   testing,
@@ -94,12 +109,34 @@ export default function LLMRecordModal({
   const thinkingEnabled = Form.useWatch("thinking_enabled", form);
   const thinkingEffort = Form.useWatch("thinking_effort", form) ?? "";
   const { unlimitedTokens, setUnlimitedTokens } = useUnlimitedTokens(form);
+  // 草稿接线（与 TrackFormModal / ClaimFormModal 同一形状）：作用域按"哪一条记录"分，
+  // 新建态固定 `new`。api_key 不额外 omit：`stripSensitive` 的字段名正则
+  // （api[-_]?key）已经会整键剔除它，再抄一份就等于第二处真相。
+  const watchedValues = Form.useWatch<RecordFormValues>([], form) as RecordFormValues | undefined;
+  const draft = useFormDraft({
+    scope: `llm.record#${recordId ?? "new"}`,
+    values: (watchedValues ?? EMPTY_DRAFT_VALUES) as unknown as Record<string, unknown>,
+    open,
+    // 端点与模型都没填的弹窗没什么可恢复：不写草稿，免得每次打开都弹恢复条。
+    isEmpty: (values) => !values.base_url && !values.model,
+  });
+
+  /**
+   * 保存：父级（`submitRecord`）返回真值才算真的落库，**成功之后**才清草稿——
+   * 清早了等于"保存失败也把这一屏配置扔了"。失败时父级在原处报错，弹窗不关。
+   */
+  const handleSave = async (): Promise<void> => {
+    const saved = await onSave();
+    if (saved) draft.clear();
+  };
 
   return (
     <Modal
-      title={mode === "create" ? "新增配置记录" : `编辑配置记录「${recordName}」`}
+      title={mode === "create" ? "新建配置记录" : `编辑配置记录「${recordName}」`}
       open={open}
       onCancel={onClose}
+      // 表单弹层：点蒙层关掉会丢掉一屏配置，禁掉（Esc / × 仍可关）。
+      mask={{ closable: false }}
       destroyOnHidden
       width={720}
       className="llm-record-modal"
@@ -137,12 +174,31 @@ export default function LLMRecordModal({
           <Button disabled={saving} onClick={onClose}>
             取消
           </Button>
-          <Button type="primary" loading={saving} disabled={testing} onClick={onSave}>
+          <Button
+            type="primary"
+            loading={saving}
+            disabled={testing}
+            onClick={() => void handleSave()}
+          >
             {mode === "create" ? "保存记录" : "保存"}
           </Button>
         </Space>
       }
     >
+      {/* 草稿恢复条挂在 body 顶部：命中草稿只提示，**用户点「恢复这份草稿」才应用**。
+          本文件用的仍是裸的 antd Modal（本批不改容器），关闭语义因此保持原样：`onCancel`
+          直接关、有草稿时关闭无损——即 L1，不需要内联确认条。 */}
+      {draft.pending ? (
+        <DraftRestoreBar
+          savedAt={draft.pending.savedAt}
+          fieldCount={Object.keys(draft.pending.values).length}
+          onRestore={() => {
+            const restored = draft.adopt();
+            if (restored) form.setFieldsValue(restored as unknown as RecordFormValues);
+          }}
+          onDiscard={draft.discard}
+        />
+      ) : null}
       <Form
         form={form}
         layout="vertical"

@@ -82,12 +82,12 @@ describe("TemplateWorkbench 的求职助手入口", () => {
 
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe(
-        `/assistant?ask=${encodeURIComponent("帮我新建一个格式模板：")}`,
+        `/assistant?ask=${encodeURIComponent("帮我新建一个版式：")}`,
       ),
     );
   });
 
-  it("格式模板行提供「找助手改这个模板」，并带上模板名", async () => {
+  it("版式行提供「找助手改这个模板」，并带上模板名", async () => {
     templateApiMocks.listResumeTemplates.mockResolvedValue([
       templateDetail({ id: 7, name: "压页版式", kind: "format" }),
     ]);
@@ -99,7 +99,7 @@ describe("TemplateWorkbench 的求职助手入口", () => {
 
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe(
-        `/assistant?ask=${encodeURIComponent("帮我调整格式模板「压页版式」：")}`,
+        `/assistant?ask=${encodeURIComponent("帮我调整版式「压页版式」：")}`,
       ),
     );
   });

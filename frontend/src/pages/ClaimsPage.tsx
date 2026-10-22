@@ -30,10 +30,12 @@ import ClaimCard from "../components/claims/ClaimCard";
 import ClaimDraftModal from "../components/claims/ClaimDraftModal";
 import ClaimFormModal from "../components/claims/ClaimFormModal";
 import { RowContextMenu } from "../components/common/RowActions";
+import { formatErrorGuidance } from "../api/errorGuidance";
 import BatchActionBar from "../components/common/BatchActionBar";
 import BatchDeleteButton from "../components/common/BatchDeleteButton";
 import { useApi } from "../hooks/useApi";
 import { useBatchSelection } from "../hooks/useBatchSelection";
+import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import type { Claim, ClaimSummary } from "../types";
 import { CLAIM_CATEGORIES, VERIFICATION_STATUSES, claimPayload } from "../types";
 
@@ -71,12 +73,21 @@ export default function ClaimsPage() {
     setPage(1);
   }
 
+  // 列表与「事实基线」两个读数都随同一次改动失效：只在删除后刷列表会让统计停在旧值。
+  const refreshAll = async () => {
+    await reload();
+    await baseline.reload();
+  };
+
+  // 软删可撤销：单条删除不再前置确认，Toast 里给 5 秒「撤销」（见 useDeleteUndo）。
+  // 批量删除仍走 BatchDeleteButton（二次确认），不受这里影响。
+  const deleteUndo = useDeleteUndo();
   const remove = async (summary: ClaimSummary) => {
     try {
-      await deleteClaim(summary.id);
-      message.success("已移入回收站，可在「回收站」里恢复");
-      await reload();
-      await baseline.reload();
+      await deleteUndo.run({ type: "claim", ids: [summary.id] }, () => deleteClaim(summary.id), {
+        onRestored: () => refreshAll(),
+      });
+      await refreshAll();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "删除失败");
     }
@@ -100,13 +111,9 @@ export default function ClaimsPage() {
       await reload();
       await baseline.reload();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "操作失败");
+      // 兜底不再是「操作失败」：说清这一步是「标记为已确认」，再拼 errorGuidance 三段（F11）。
+      message.error(formatErrorGuidance(err, "标记为已确认失败"));
     }
-  };
-
-  const refreshAll = async () => {
-    await reload();
-    await baseline.reload();
   };
 
   /** 批量删除：一次请求删完（软删），成功后清空选择并刷新列表与统计。 */
@@ -115,7 +122,7 @@ export default function ClaimsPage() {
     if (ids.length === 0) return;
     try {
       const { deleted } = await batchDeleteClaims(ids);
-      message.success(`已删除 ${deleted} 条台账，可在「回收站」里恢复`);
+      message.success(`已删除 ${deleted} 条台账条目，可在「回收站」里恢复`);
     } catch (err) {
       message.error(err instanceof Error ? err.message : "批量删除失败，请重试");
     }
@@ -158,7 +165,7 @@ export default function ClaimsPage() {
         <Space>
           {/* 深挖的输入就是台账条目，所以入口放在这里——从别处进它都要先绕一圈。 */}
           <Button icon={<ThunderboltOutlined />} onClick={() => navigate("/claims/drill")}>
-            拿去深挖
+            开始深挖
           </Button>
           <Button icon={<FileAddOutlined />} onClick={() => setDraftOpen(true)}>
             从资料生成

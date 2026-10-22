@@ -46,7 +46,8 @@ describe("AppErrorBoundary", () => {
     const reload = renderBroken(BrokenView);
 
     expect(screen.getByText("页面暂时无法显示")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    // 两字中文按钮 antd 会自动插空格（"刷 新"），按正则匹配。
+    fireEvent.click(screen.getByRole("button", { name: /刷\s*新/ }));
     expect(reload).toHaveBeenCalledOnce();
   });
 
@@ -59,7 +60,7 @@ describe("AppErrorBoundary", () => {
   it("动态 import 失败时给出「重启 dev server」的可执行指引", () => {
     renderBroken(ModuleLoadFailureView);
 
-    // 这一类刷新无用（是 dev server 缓存了旧模块解析），所以不能只说"重新加载"。
+    // 这一类刷新无用（是 dev server 缓存了旧模块解析），所以不能只说"刷新"。
     expect(screen.getByText("页面代码没能加载完整")).toBeInTheDocument();
     expect(screen.getByText(/重启前端开发服务器/)).toBeInTheDocument();
     expect(screen.queryByText("页面暂时无法显示")).not.toBeInTheDocument();

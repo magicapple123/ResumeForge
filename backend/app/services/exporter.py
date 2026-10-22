@@ -23,6 +23,7 @@ from .resume.resume_labels import (
     level_parens,
     level_text,
     list_separator,
+    normalize_language,
     section_titles,
 )
 from .resume.resume_sections import DEFAULT_SECTION_ORDER, resolved_section_order
@@ -247,8 +248,8 @@ def render_html(
     ``page_limit`` 决定 body 高度（N × A4），装不下时模板内的探针只标记溢出、
     **不会缩小字号**（2026-10-21 用户要求：参数与纸面严格一致）；
     ``font_scale`` 只改变一个基准像素变量，所有尺寸都由它推算；
-    ``format_config`` 是一组受校验的 CSS 覆盖（格式模板）；
-    ``template_html`` 非空时用它渲染——那是用户自制的样式模板，走沙箱环境。
+    ``format_config`` 是一组受校验的 CSS 覆盖（版式）；
+    ``template_html`` 非空时用它渲染——那是用户自制的模板，走沙箱环境。
 
     ``language`` 决定纸面上的分区标题与字段前缀，与 PDF / Word / Markdown **同一张表**
     （``resume_labels``）；缺省 ``zh-CN``，与历史输出逐字一致。四个文案上下文
@@ -276,6 +277,11 @@ def render_html(
         "csp_nonce": csp_nonce,
         "page_limit": normalize_page_limit(page_limit),
         "base_px": base_px,
+        # `<html lang="{{ language }}">` 的唯一取值点。**无条件注入**（与下面四个文案上下文
+        # 同理）：缺键会让自制模板渲染出 `lang=""`，而内置模板会直接报 Undefined。
+        # 已经 `normalize_language` 收口，所以未知值 / 空值一律落回 `zh-CN`——默认参数下
+        # 产物与今天逐字一致（`lang` 不属于提取文本，黄金基线的指纹不受影响）。
+        "language": normalize_language(language),
         # 正文分区顺序（页眉不参与）。模板里有页码、A4 适配脚本等同样读这个上下文。
         "resume_section_order": resolved_section_order(overrides),
         "template_config": style_values,

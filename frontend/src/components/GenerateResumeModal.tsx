@@ -103,12 +103,12 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
         await updateResumeLayout(detail.id, next);
       } catch (err) {
         // 只提示、不回滚：版式本身已经渲染成功，弹出旧版式会让"我刚调好的"凭空消失。
-        message.error(err instanceof Error ? err.message : "版式写回记录失败");
+        message.error(err instanceof Error ? err.message : "保存排版设置失败");
       }
     },
     onRendered: (next) => setLayout(next),
     onError: (err) => {
-      message.error(err instanceof Error ? err.message : "按新版式渲染失败");
+      message.error(err instanceof Error ? err.message : "按新设置重新排版失败");
       // D13：探针是"我看到的"，渲染失败就必须清掉，不能继续呈现一个不存在的状态。
       previewRef.current?.setLiveProbe("");
     },

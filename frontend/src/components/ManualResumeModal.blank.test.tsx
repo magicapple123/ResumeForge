@@ -177,21 +177,24 @@ describe("ManualResumeModal 通用模式：空白起步 + 一键填入（T11）"
     fireEvent.change(screen.getByLabelText("姓名"), { target: { value: "我自己写的名字" } });
     fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
 
-    // 覆盖确认框（antd 会把标题同时渲染进 aria 节点，按文本查会命中多个，
-    // 所以直接看确认框本体，与确认按钮的定位方式一致）。
-    await waitFor(() => expect(document.querySelector(".ant-modal-confirm")).not.toBeNull());
+    // 覆盖确认：**footer 就地换态**（不再叠一层 modal.confirm）。
+    const bar = await waitFor(() => {
+      const node = document.querySelector<HTMLElement>(".rf-form-modal-discard");
+      if (!node) throw new Error("未出现内联确认条");
+      return node;
+    });
+    expect(bar.textContent).toContain("将用「我的资料」覆盖当前已填写的内容");
 
     // 取消：一个字符都不动。
-    const confirmBox = document.querySelector(".ant-modal-confirm") as HTMLElement;
-    // antd 会在两个汉字的按钮文案里插一个空格，按正则匹配。
-    fireEvent.click(within(confirmBox).getByRole("button", { name: /取\s*消/ }));
+    fireEvent.click(within(bar).getByRole("button", { name: "继续编辑" }));
     expect(screen.getByLabelText("姓名")).toHaveValue("我自己写的名字");
 
     // 再来一次，这次确认覆盖。
     fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
     const ok = await waitFor(() => {
-      const box = document.querySelector(".ant-modal-confirm") as HTMLElement | null;
-      const button = box?.querySelector<HTMLButtonElement>(".ant-btn-primary");
+      const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+        (item) => item.textContent === "覆盖填入" && item.closest(".rf-form-modal-discard"),
+      );
       if (!button) throw new Error("未找到确认按钮");
       return button;
     });

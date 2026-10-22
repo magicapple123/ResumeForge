@@ -29,9 +29,9 @@ import { forwardWheelToParent, useFrameInteractions } from "./resume-preview/use
 /** 精确预览需要的那组上下文（与 `ResumeDetailPreview` 手里的草稿值一致）。 */
 export interface ExactPreviewOptions {
   resumeId: number;
-  /** 草稿的样式模板名（内置或自制）。 */
+  /** 草稿的模板名（内置或自制）。 */
   template: string;
-  /** 草稿的版式模板名。 */
+  /** 草稿的版式名。 */
   formatName: string;
   fontScale: string;
   /**
@@ -58,7 +58,7 @@ interface Props {
   /** 实测高度，交给版面诊断使用。 */
   onMeasure?: (measure: LayoutMeasure) => void;
   /**
-   * 工具栏**第一行右侧**的控件：结构类版式（样式模板 / 版式模板 / 板块顺序 / 最大篇幅）。
+   * 工具栏**第一行右侧**的控件：结构类版式（模板 / 版式 / 板块顺序 / 最大篇幅）。
    *
    * P2 起工具栏是两行、且由两个**具名插槽**分别喂数据（D4）：结构类与度量类性质不同，
    * 同一行里会互相抢位置。传入的是已构造好的节点，预览本身不关心内容。

@@ -99,7 +99,7 @@ def test_list_format_templates_lists_user_format_templates(db_session):
     payload = _payload(db_session, "list_format_templates", {})
 
     assert payload["总数"] == 1
-    row = payload["格式模板"][0]
+    row = payload["版式"][0]
     assert row["id"] == created.id
     assert row["name"] == "紧凑一页"
     assert row["config"]["accent"] == "#2f6feb"

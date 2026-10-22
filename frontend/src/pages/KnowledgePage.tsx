@@ -6,7 +6,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Empty,
   Input,
   Modal,
   Pagination,
@@ -33,7 +32,9 @@ import BatchActionBar from "../components/common/BatchActionBar";
 import BatchDeleteButton from "../components/common/BatchDeleteButton";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { useApi } from "../hooks/useApi";
+import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import ErrorState from "../components/common/ErrorState";
+import EmptyState from "../components/common/EmptyState";
 import { DetailTrigger } from "../components/common/RecordDetail";
 import KnowledgeFormModal from "../components/knowledge/KnowledgeFormModal";
 import { AssistantMessageContent } from "../features/assistant/components/AssistantMessageContent";
@@ -126,10 +127,16 @@ export default function KnowledgePage() {
     }
   };
 
+  // 软删可撤销：单条删除不再前置确认，Toast 里给 5 秒「撤销」（见 useDeleteUndo）。
+  // 批量删除仍走 BatchDeleteButton（二次确认），不受这里影响。
+  const deleteUndo = useDeleteUndo();
   const remove = async (entry: KnowledgeSummary) => {
     try {
-      await deleteKnowledge(entry.id);
-      message.success("已移入回收站，可在「回收站」里恢复");
+      await deleteUndo.run(
+        { type: "knowledge_entry", ids: [entry.id] },
+        () => deleteKnowledge(entry.id),
+        { onRestored: () => load() },
+      );
       await load();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "删除失败");
@@ -192,7 +199,8 @@ export default function KnowledgePage() {
         label: "删除",
         danger: true,
         icon: <DeleteOutlined />,
-        confirm: `删除条目「${entry.title}」？`,
+        // 软删由本页的 useDeleteUndo 兜：这里不再问，撤销入口在 Toast 上。
+        undo: true,
         onClick: () => void remove(entry),
       },
     ];
@@ -225,7 +233,7 @@ export default function KnowledgePage() {
           </Typography.Text>
         </div>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          新增知识
+          新建知识
         </Button>
       </div>
 
@@ -275,15 +283,13 @@ export default function KnowledgePage() {
       ) : error ? (
         <ErrorState description={`知识库加载失败：${error}`} onRetry={() => void load()} />
       ) : entries.length === 0 ? (
-        <Empty
-          // total=0 时区分「库里真没东西」和「筛选后没结果」：库空才引导去新增，
-          // 否则提示调整筛选（服务端筛选下 total 就是筛选后的总数）。
-          description={
-            total === 0 && !keyword && !category && !tag
-              ? "知识库还是空的，点右上角「新增知识」开始"
-              : "没有符合筛选条件的条目"
-          }
-        />
+        // total=0 时区分「库里真没东西」和「筛选后没结果」：库空时把主按钮内嵌进空态
+        // （不再用「点右上角」这种方位词指路——位置会随响应式变），筛选后为空只提示调整条件。
+        total === 0 && !keyword && !category && !tag ? (
+          <EmptyState description="还没有知识条目" actionLabel="新建知识" onAction={openCreate} />
+        ) : (
+          <EmptyState description="没有符合筛选条件的条目" />
+        )
       ) : (
         <>
           <div className="knowledge-grid">

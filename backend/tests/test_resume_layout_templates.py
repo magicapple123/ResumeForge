@@ -104,8 +104,17 @@ def _selector_block(css: str, selector: str) -> str:
 
 
 def _fs_scale(declarations: str, prop: str) -> float | None:
-    """读出某条声明里的 `calc(var(--fs) * N)` 里的 N；没有该属性返回 None。"""
-    match = re.search(re.escape(prop) + r":\s*calc\(var\(--fs\)\s*\*\s*([\d.]+)\)", declarations)
+    """读出某条声明里的 `calc(var(--fs) * N)` 里的 N；没有该属性返回 None。
+
+    尾部允许带一个 ``* var(--photo-scale, 1)``（照片的宽高各乘一次系数）。回退值 ``1``
+    让"没设过照片大小"与今天完全等价，所以**取到的 N 仍是模板原尺寸**——这一点不能松，
+    否则"照片默认尺寸"的漂移守卫就失效了。
+    """
+    match = re.search(
+        re.escape(prop)
+        + r":\s*calc\(var\(--fs\)\s*\*\s*([\d.]+)(?:\s*\*\s*var\(--photo-scale,\s*1\))?\)",
+        declarations,
+    )
     return float(match.group(1)) if match else None
 
 

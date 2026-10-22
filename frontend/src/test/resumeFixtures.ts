@@ -81,7 +81,7 @@ export const TEMPLATE_CATALOG: ResumeTemplateCatalog = {
       step: 0.02,
     },
     { key: "line_height", label: "行高", type: "number", min: 1.2, max: 2.2, step: 0.05 },
-    { key: "page_padding", label: "页边距（mm）", type: "number", min: 8, max: 26, step: 1 },
+    { key: "page_padding", label: "页边距（mm）", type: "number", min: 0, max: 26, step: 0.1 },
     { key: "section_gap", label: "区块间距", type: "number", min: 0.6, max: 2.2, step: 0.1 },
     {
       key: "font_family",

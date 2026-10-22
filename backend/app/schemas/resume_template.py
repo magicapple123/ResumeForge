@@ -15,7 +15,7 @@ MAX_TEMPLATE_DESCRIPTION_CHARS = 255
 
 
 class ResumeTemplateCreate(BaseModel):
-    """新建模板：样式模板给 ``html``，格式模板给 ``config``。"""
+    """新建模板记录：模板给 ``html``，版式给 ``config``。"""
 
     model_config = ConfigDict(extra="forbid")
 

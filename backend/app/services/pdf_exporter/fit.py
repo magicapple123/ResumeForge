@@ -313,8 +313,8 @@ def build_resume_pdf(
 ) -> ResumePDF:
     """把结构化简历渲染成 PDF —— **完全按用户设定的版式**。
 
-    版式（行距/页边距/区块间距**与各层级字号比例**）与预览对齐：默认取所选**样式模板**的
-    版式值，用户在「格式模板」里设过的 `line_height` / `page_padding` / `section_gap` 会
+    版式（行距/页边距/区块间距**与各层级字号比例**）与预览对齐：默认取所选**模板**的
+    版式值，用户在「版式」里设过的 `line_height` / `page_padding` / `section_gap` 会
     覆盖它们；``margin_mm`` 是页边距的**兼容回落值**（只在 ``format_config`` 没给
     ``page_padding`` 时生效，见 ``layout._resolve_margin_mm``）。
 

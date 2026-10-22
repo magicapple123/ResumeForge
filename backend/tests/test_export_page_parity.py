@@ -6,7 +6,7 @@ PDF/Word 读这个字段（``pdf_exporter/layout.py``），预览与 HTML 只认
 ``format_config.page_padding``。于是"改面板值 → 预览不变、PDF 变"——同一件事有两个落点，
 就必然有一天不一致。
 
-修法是把落点收成一个：面板只往 ``format_config.page_padding`` 写（clamp 8–26），
+修法是把落点收成一个：面板只往 ``format_config.page_padding`` 写（clamp 0–26），
 预览、HTML、PDF、Word 全部读它。本文件钉住修完之后的四条不变量：
 
 1. **一处旋钮、两条路径**：``page_padding`` 同时出现在导出的 HTML 与 PDF 里，且真的
@@ -19,9 +19,8 @@ PDF/Word 读这个字段（``pdf_exporter/layout.py``），预览与 HTML 只认
    ``X-Resume-Pages`` 恒等于 ``min(needed, limit)``（超限即截断，不再缩字号）；
    ``X-Pdf-Engine`` 只在真的由 PDF 引擎渲染时出现（给 HTML 也回一个 "fpdf2" 是假话）。
 
-关于 5 与 7：面板的 InputNumber 已收窄到 8–26，这两个值只可能来自旧前端或手工请求；
-``validated_format_config`` 会把它们丢掉、回落到模板默认值。留在用例里是为了证明
-"越界值不会把页数搞崩"，不是为了让它们生效。
+关于 5 与 7：面板下限已放到 0（2026-10-22），这两个值现在是**合法**的窄边距档，
+留在这里是为了证明"正文几乎铺满纸张时也不会把页数搞崩"，而不是靠白名单把它们丢掉。
 
 **浏览器对拍不在本文件**（2026-10-22 拆出）：需要真实 Chromium 的用例（3 组对拍 +
 "只超一点点"的边界回归，共 2 个测试函数 / 4 个用例项）搬到
@@ -45,7 +44,7 @@ from test_pdf_exporter import needs_font
 
 # 8 个内置模板（顺序即模板注册表顺序，新增模板会自动进入本文件的矩阵）。
 TEMPLATES = tuple(RESUME_TEMPLATES)
-# 11 是多数模板的默认页边距；18 是偏宽的一档；5 / 7 低于面板下限 8（见模块 docstring）。
+# 11 是多数模板的默认页边距；18 是偏宽的一档；5 / 7 是极端窄档（面板下限 0）。
 PAGE_PADDINGS = (5, 7, 11, 18)
 # 组合成显式的笛卡尔积：失败时报告直接点名"哪个模板、哪一档页边距"。
 TEMPLATE_PADDING_CASES = [
@@ -259,14 +258,14 @@ def test_page_padding_is_the_single_knob_for_html_and_pdf(client):
 
 @needs_font
 def test_out_of_range_page_padding_falls_back_instead_of_breaking(client):
-    """越界值（<8 或 >26）被白名单丢掉、回落到模板默认，页数不受影响。
+    """越界值（<0 或 >26）被白名单丢掉、回落到模板默认，页数不受影响。
 
-    面板已经收窄到 8–26，这里守的是"旧前端/手工请求"这条来路：不能因为一个越界数字
+    面板已经收窄到 0–26，这里守的是"旧前端/手工请求"这条来路：不能因为一个越界数字
     就排出 0 页或 3 页。
     """
     resume_id = _create_resume(client, "classic")
 
-    for padding in (0, 5, 7, 40, 100):
+    for padding in (-5, 40, 100):
         response = _export_pdf(client, resume_id, page_padding=padding, page_limit=1)
         assert response.headers["X-Resume-Pages"] == "1", f"页边距 {padding}mm"
 
@@ -328,7 +327,7 @@ def test_margin_mm_alone_still_works_for_old_clients(client):
 
 
 def test_out_of_range_margin_mm_is_clamped_not_rejected():
-    """越界的兼容值收进 8–26，既不 500 也不把正文排出纸张。
+    """越界的兼容值收进 0–26，既不 500 也不把正文排出纸张。
 
     这里直接钉解析层：``ExportRequest.margin_mm`` 的 schema 仍是它自己那份历史范围
     4–40（旧客户端照旧被接受），所以 100 这种值在 HTTP 层是 422、到不了解析层——
@@ -341,7 +340,7 @@ def test_out_of_range_margin_mm_is_clamped_not_rejected():
     )
 
     low, high = page_padding_bounds()
-    assert (low, high) == (8.0, 26.0)
+    assert (low, high) == (0.0, 26.0)
 
     def margin(**kwargs) -> float:
         kwargs.setdefault("format_config", None)

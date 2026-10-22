@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
+/**
+ * 设置页「助手能力 → 助手技能」：**只读摘要**。
+ *
+ * 本轮把技能管理入口收归工作台（`/skills`）：同一份技能数据只有一个能改的地方。
+ * 所以这个文件的重点从"能导入 / 能开关 / 能删除"翻转成"这些写入口在设置页真的不存在"，
+ * 外加"点技能名只是只读查看"与"去工作台管理能跳过去"。
+ */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage from "./SettingsPage";
 
@@ -38,11 +46,16 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("../api/settings", () => apiMocks);
 
+// 设置页只用到 listSkills（读取）与 getSkill（只读查看详情）。整个 `../api/skill` 模块
+// 都被 mock 掉了，所以这里把同模块的其余导出也一并列上，避免测试里出现 undefined 调用。
 const skillMocks = vi.hoisted(() => ({
   deleteSkill: vi.fn(),
   importSkill: vi.fn(),
   listSkills: vi.fn(),
   setSkillEnabled: vi.fn(),
+  getSkill: vi.fn(),
+  createSkill: vi.fn(),
+  updateSkill: vi.fn(),
 }));
 
 vi.mock("../api/skill", () => skillMocks);
@@ -145,20 +158,14 @@ describe("SettingsPage skills", () => {
   async function renderPage(skills = [interviewSkill]) {
     skillMocks.listSkills.mockResolvedValue(skills);
     const view = render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await waitFor(() => expect(skillMocks.listSkills).toHaveBeenCalled());
     return view;
-  }
-
-  /** 打开技能行的「更多」菜单（删除收在里面）。 */
-  async function openRowActionsMenu() {
-    // 技能列表异步渲染，「更多操作」按钮要用 findAllByRole 等它出现，而不是同步
-    // getAllByRole——慢速 CI 上后者会因时机不稳报「找不到按钮」。
-    fireEvent.click((await screen.findAllByRole("button", { name: "更多操作" }))[0]);
-    await screen.findByText("删除技能");
   }
 
   it("lists skills with their status and knowledge file count", async () => {
@@ -171,69 +178,57 @@ describe("SettingsPage skills", () => {
     expect(screen.getByText(/仅提示词/)).toBeInTheDocument();
   });
 
-  it("shows an empty state before anything is imported", async () => {
+  it("says the workbench is where skills live when nothing is there yet", async () => {
     await renderPage([]);
 
-    expect(await screen.findByText("还没有导入技能")).toBeInTheDocument();
+    // 措辞随收权改过：这里不再有导入入口，空态不能说「还没有导入技能」。
+    expect(await screen.findByText("还没有技能")).toBeInTheDocument();
   });
 
-  it("imports the chosen file and refreshes the list", async () => {
-    skillMocks.importSkill.mockResolvedValue(interviewSkill);
-    const { container } = await renderPage([]);
-    const input = container.querySelector(
-      'input[type="file"][aria-label="选择技能文件"]',
-    ) as HTMLInputElement;
-    const file = new File(["skill-bytes"], "面试模拟官.zip", { type: "application/zip" });
-    fireEvent.change(input, { target: { files: [file] } });
-
-    await waitFor(() => expect(skillMocks.importSkill).toHaveBeenCalledOnce());
-    // 类型判定在后端，前端只负责把文件原样送过去。
-    expect((skillMocks.importSkill.mock.calls[0][0] as File).name).toBe(file.name);
-    // 导入成功后重新拉一次列表，让新技能出现在界面上。
-    await waitFor(() => expect(skillMocks.listSkills).toHaveBeenCalledTimes(2));
-  });
-
-  it("toggles a skill without reloading the list", async () => {
-    skillMocks.setSkillEnabled.mockResolvedValue(disabledSkill);
-    await renderPage([interviewSkill, disabledSkill]);
-
-    // 技能列表是异步渲染的，用 findByRole 等它出现，而不是同步 getByRole——
-    // 慢速 CI 上后者的时机不稳定，会报「找不到 switch」。
-    fireEvent.click(await screen.findByRole("switch", { name: "停用技能 面试模拟官" }));
-
-    await waitFor(() => expect(skillMocks.setSkillEnabled).toHaveBeenCalledWith(1, false));
-    expect(await screen.findByText("已停用")).toBeInTheDocument();
-  });
-
-  it("deletes a skill only after confirmation", async () => {
-    skillMocks.deleteSkill.mockResolvedValue(undefined);
+  it("给出去工作台管理的链接（技能的唯一管理入口）", async () => {
     await renderPage();
 
-    // 删除收在「更多」菜单里：同岗位/简历/收藏夹/技能工作台四处一致，
-    // 不再是一枚常驻的红色图标。
-    await openRowActionsMenu();
-    fireEvent.click(await screen.findByText("删除技能"));
+    const link = await screen.findByRole("link", { name: "去工作台管理" });
+    expect(link).toHaveAttribute("href", "/skills");
+  });
 
+  it("没有任何技能写入口：导入 / 启用开关 / 删除都不在这页", async () => {
+    const { container } = await renderPage([interviewSkill, disabledSkill]);
+
+    // 页面上别处还有开关（放宽模式等），所以断言要限定在「助手技能」这张卡里。
+    const card = (await screen.findByText("助手技能")).closest(".settings-card") as HTMLElement;
+    expect(card).not.toBeNull();
+
+    // 导入：既是按钮，也是一个真实的文件选择框。
+    expect(within(card).queryByRole("button", { name: /导入技能/ })).toBeNull();
+    expect(card.querySelector('input[type="file"]')).toBeNull();
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    // 启用停用：行内开关。
+    expect(within(card).queryByRole("switch")).toBeNull();
+    // 删除：收在「更多操作」菜单里。
+    expect(within(card).queryByRole("button", { name: "更多操作" })).toBeNull();
+    expect(within(card).queryByText("删除技能")).toBeNull();
+    // 从没因为"界面上的按钮"去调这三个写接口。
+    expect(skillMocks.importSkill).not.toHaveBeenCalled();
+    expect(skillMocks.setSkillEnabled).not.toHaveBeenCalled();
     expect(skillMocks.deleteSkill).not.toHaveBeenCalled();
-    const confirm = await waitFor(() =>
-      document.querySelector<HTMLButtonElement>(".ant-modal-confirm-btns .ant-btn-primary")!,
-    );
-    fireEvent.click(confirm);
-
-    await waitFor(() => expect(skillMocks.deleteSkill).toHaveBeenCalledWith(1));
-    // 删除后就地移除，不需要再拉一次列表。
-    await waitFor(() => expect(screen.queryByText("面试模拟官")).not.toBeInTheDocument());
   });
 
-  it("says what deleting a skill takes with it", async () => {
-    skillMocks.deleteSkill.mockResolvedValue(undefined);
+  it("点技能名只读查看详情：有「关闭」，没有「保存」", async () => {
+    skillMocks.getSkill.mockResolvedValue({
+      ...interviewSkill,
+      prompt: "逐条追问，不许放宽标准。",
+      file_details: [{ path: "题库.md", size_bytes: 12, content: "题一" }],
+      files_truncated: false,
+    });
     await renderPage();
 
-    // 删除范围（含知识文件）要写在确认框里，而不是等用户点下去才发现。
-    await openRowActionsMenu();
-    fireEvent.click(await screen.findByText("删除技能"));
-    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(await screen.findByRole("button", { name: "面试模拟官" }));
 
-    expect(dialog).toHaveTextContent("提示词和它附带的知识文件都会被删除");
+    // 标题与工作台的可编辑弹窗不同：这里只有「技能详情」。
+    expect(await screen.findByText("技能详情")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
+    // 没有任何一条路径能在设置页写回技能。
+    expect(skillMocks.updateSkill).not.toHaveBeenCalled();
   });
 });

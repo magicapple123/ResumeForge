@@ -10,7 +10,8 @@
  * 在网申页铺开只会让人困惑。保存时把当前配置整份提交、只改这两个字段——后端是整份覆盖，
  * 所以必须先取回现值再合并，否则会把其它设置清空。
  */
-import { App, Button, Form, Modal } from "antd";
+import { App, Button, Form } from "antd";
+import FormModal from "../common/FormModal";
 import { useEffect, useState } from "react";
 import { getApplyConfig, updateApplyConfig } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
@@ -86,14 +87,13 @@ export default function BrowserSettingsModal({ open, onClose, onSaved }: Props) 
   };
 
   return (
-    <Modal
+    <FormModal
       open={open}
       title="浏览器设置"
       onCancel={onClose}
-      okText="保存"
-      cancelText="取消"
-      confirmLoading={saving}
-      onOk={() => void submit()}
+      okText="保存浏览器设置"
+      submitting={saving}
+      onSubmit={() => void submit()}
       width={640}
     >
       {loading ? (
@@ -114,6 +114,6 @@ export default function BrowserSettingsModal({ open, onClose, onSaved }: Props) 
           </Button>
         </>
       )}
-    </Modal>
+    </FormModal>
   );
 }

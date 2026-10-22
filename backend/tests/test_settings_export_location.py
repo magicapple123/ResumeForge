@@ -51,7 +51,7 @@ def test_put_rejects_client_supplied_directory_without_filesystem_access(
         json={"path": str(tmp_path / "missing")},
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "请使用「选择文件夹」设置保存位置"
+    assert response.json()["detail"] == "保存位置只能由「选择文件夹」写入"
     assert calls == []
     assert client.get("/api/settings/export-save-location").json()["path"] == ""
 

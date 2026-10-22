@@ -130,7 +130,7 @@ async def analyze_job(
                 logger.warning("岗位解读缓存结构已失效，转为重新生成 job=%s", job_id)
     config = get_llm_config(db)
     if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     provider = create_provider(config)
     job_out = JobOut.model_validate(job)
     # 长调用期间不持有会话：先关掉，拿到结果再开一个写缓存。
@@ -143,7 +143,7 @@ async def analyze_job(
         raise HTTPException(status_code=502, detail=f"生成岗位解读失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 外部模型异常统一转为用户可理解的错误
         log_exception_redacted(logger, "岗位需求解读发生内部错误")
-        raise HTTPException(status_code=502, detail="生成岗位解读失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="生成岗位解读失败") from exc
     if result is None:
         # 用户在生成期间取消/关页：不写缓存（否则下次界面会说"已完成"，而他看的是
         # 自己早已放弃的那次请求）。

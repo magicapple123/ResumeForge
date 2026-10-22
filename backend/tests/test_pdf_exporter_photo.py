@@ -12,6 +12,7 @@ import pytest
 from app.schemas.resume import ResumeContent
 from app.services.pdf_exporter import (
     _PX_TO_PT,
+    _ResumePDF,
     build_resume_pdf,
     crop_image_to_cover,
     draw_name_gender,
@@ -231,3 +232,95 @@ def test_pdf_with_a_broken_photo_falls_back_to_no_photo():
     result = build_resume_pdf(resume, template="classic", page_limit=1, include_photo=True)
     assert result.content.startswith(b"%PDF-")
     assert result.pages >= 1
+
+
+# ===== 照片大小（`photo_scale`，2026-10-22）=====
+#
+# 系数在 `resolve_layout` 里就折进 `photo_width_ratio / photo_height_ratio`，所以渲染侧
+# 一行都不用改。这里必须验的**不是**"注册表里的数变了"，而是"内嵌图片真的按系数画"：
+# 改错落点（比如只改了 CSS、或只乘了宽）在提取文本与页数上都看不出来。
+
+
+def _record_photo_draws(monkeypatch) -> list[tuple[float, float]]:
+    """抓 `pdf.image()` 的 (w, h)：这是照片**真正落到纸面上**的唯一尺寸。"""
+    recorded: list[tuple[float, float]] = []
+    original = _ResumePDF.image
+
+    def recording(self, name, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003 - fpdf2 的签名
+        recorded.append((float(kwargs["w"]), float(kwargs["h"])))
+        return original(self, name, *args, **kwargs)
+
+    monkeypatch.setattr(_ResumePDF, "image", recording)
+    return recorded
+
+
+def _photo_resume() -> ResumeContent:
+    return ResumeContent(name="张三", photo=_png_data_url((300, 400)), summary="带照片的简历。")
+
+
+@needs_font
+def test_photo_scale_enlarges_the_drawn_photo(monkeypatch):
+    """`photo_scale=1.5` 时内嵌图片的 w/h **各乘 1.5**，宽高比不变（取景不重裁）。"""
+    recorded = _record_photo_draws(monkeypatch)
+    resume = _photo_resume()
+
+    build_resume_pdf(
+        resume, template="classic", page_limit=1, include_photo=True, format_config={}
+    )
+    build_resume_pdf(
+        resume,
+        template="classic",
+        page_limit=1,
+        include_photo=True,
+        format_config={"photo_scale": 1.5},
+    )
+
+    assert len(recorded) == 2, "两次导出各应画一张照片"
+    (base_w, base_h), (scaled_w, scaled_h) = recorded
+    assert scaled_w == pytest.approx(base_w * 1.5, rel=1e-6)
+    assert scaled_h == pytest.approx(base_h * 1.5, rel=1e-6)
+    assert scaled_w / scaled_h == pytest.approx(base_w / base_h, rel=1e-9)
+
+
+@needs_font
+def test_photo_scale_is_inert_without_a_photo(monkeypatch):
+    """**没有照片时 `photo_scale` 完全惰性**：页数、正文位置、页头预留空间都不变。
+
+    这是最容易被写坏的一条：谁把系数用进 `text_width` 或页头高度，就会出现"没上传照片
+    但正文变窄/页头变高"——用户在纸面上看不出原因，只会觉得"排版莫名其妙变了"。
+    """
+    recorded = _record_photo_draws(monkeypatch)
+    resume = ResumeContent(name="张三", summary="没有照片的简历。")
+
+    plain = build_resume_pdf(resume, template="classic", page_limit=2, format_config={})
+    scaled = build_resume_pdf(
+        resume, template="classic", page_limit=2, format_config={"photo_scale": 1.6}
+    )
+
+    assert plain.pages == scaled.pages
+    assert recorded == [], "没有照片时不该调用 image()"
+    # 文字块逐个相同（位置 + 字号 + 文本）：连"页头空间预留"都没受影响。
+    assert _text_runs(plain.content) == _text_runs(scaled.content)
+
+
+@needs_font
+def test_photo_scale_is_inert_when_the_photo_is_switched_off(monkeypatch):
+    """`include_photo=False` 时同样完全惰性——"关掉照片"意味着页头不预留任何空间。"""
+    recorded = _record_photo_draws(monkeypatch)
+    resume = _photo_resume()
+
+    plain = build_resume_pdf(
+        resume, template="classic", page_limit=2, include_photo=False, format_config={}
+    )
+    scaled = build_resume_pdf(
+        resume,
+        template="classic",
+        page_limit=2,
+        include_photo=False,
+        format_config={"photo_scale": 1.6},
+    )
+
+    assert plain.pages == scaled.pages
+    assert recorded == [], "关掉照片后不该调用 image()"
+    assert _text_runs(plain.content) == _text_runs(scaled.content)
+

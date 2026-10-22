@@ -6,7 +6,7 @@
  * 生成状态住在模块级 `suggestionScanStore` 里：同一个文件里的用例会共用那份单例，
  * 所以每个用例前后都要 `resetSuggestionScan()`，否则上一条的 done 结果会让弹窗直接进入结果态。
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App as AntdApp } from "antd";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ResumeSuggestionsModal from "./ResumeSuggestionsModal";
@@ -236,11 +236,12 @@ describe("ResumeSuggestionsModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /重新生成建议/ }));
 
-    expect(await screen.findByText(/重新生成会再次调用模型并覆盖当前建议/)).toBeInTheDocument();
-    // 只弹确认，还没真调模型——覆盖已看过的清单必须先问一句。
+    // 覆盖类动作走就地 Popconfirm（不是第二层弹窗）：先出现后果说明，再点确认。
+    expect(await screen.findByText("重新生成会覆盖当前建议")).toBeInTheDocument();
     expect(mockedGenerate).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+    const popover = document.querySelector(".ant-popover") as HTMLElement;
+    fireEvent.click(within(popover).getByRole("button", { name: /重\s*新\s*生\s*成/ }));
 
     await waitFor(() => expect(mockedGenerate).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("技术栈覆盖不足")).toBeInTheDocument();
@@ -303,5 +304,34 @@ describe("ResumeSuggestionsModal", () => {
     expect(onClose).not.toHaveBeenCalled();
     // 采纳失败不该把整份建议列表换掉：清单还在，用户可以换一条或稍后重试。
     expect(screen.getByText("缺少量化结果")).toBeInTheDocument();
+  });
+
+  /**
+   * 叠层回归：重新生成的覆盖确认走**就地 Popconfirm**（Popover 形态），不许退回到
+   * `modal.confirm`（那会是第二层弹窗容器）。断言只看容器层数，不依赖任何界面文案；
+   * 触发器按图标（`ReloadOutlined`）定位。
+   */
+  it("重新生成的覆盖确认不叠第二层弹窗容器", async () => {
+    mockedGenerate
+      .mockResolvedValueOnce(suggestionsPayload())
+      .mockResolvedValueOnce(regeneratedPayload());
+    renderModal();
+
+    await startGeneration();
+    // 不按文案等结果：重新生成那颗按钮（ReloadOutlined）出现即说明已进入结果态。
+    await waitFor(() => expect(document.querySelector(".anticon-reload")).not.toBeNull());
+
+    const trigger = document.querySelector(".anticon-reload")?.closest("button");
+    expect(trigger).not.toBeNull();
+    fireEvent.click(trigger!);
+
+    // 确认浮层出现，但容器层级不变：popover 不是 dialog。
+    await waitFor(() => expect(document.querySelector(".ant-popover")).not.toBeNull());
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+
+    fireEvent.click(document.querySelector<HTMLButtonElement>(".ant-popover .ant-btn-primary")!);
+
+    await waitFor(() => expect(mockedGenerate).toHaveBeenCalledTimes(2));
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
   });
 });

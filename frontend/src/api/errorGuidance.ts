@@ -33,7 +33,7 @@ export function errorGuidance(err: unknown): ErrorGuidance {
   if (!(err instanceof ApiError)) {
     return {
       reason: err instanceof Error ? err.message : "发生未知错误",
-      action: "请重试；若反复出现请导出诊断包反馈",
+      action: "重试；若反复出现，请导出诊断包反馈",
       ref,
     };
   }
@@ -89,13 +89,13 @@ export function errorGuidance(err: unknown): ErrorGuidance {
   if (status >= 500) {
     return {
       reason: err.message || "服务器内部错误",
-      action: "请重试；若反复出现请导出诊断包并附上编号反馈",
+      action: "重试；若反复出现，请导出诊断包并附上编号反馈",
       ref,
     };
   }
   return {
     reason: err.message,
-    action: "请重试；若反复出现请导出诊断包并附上编号反馈",
+    action: "重试；若反复出现，请导出诊断包并附上编号反馈",
     ref,
   };
 }

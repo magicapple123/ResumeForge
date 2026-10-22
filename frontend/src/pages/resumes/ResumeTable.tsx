@@ -12,6 +12,7 @@ import { memo, useEffect, useMemo, useRef } from "react";
 import type { HTMLAttributes } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
+import { TRASH_RECOVERY_NOTE } from "../../components/common/rowActionMenu";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../../config";
 import type { Page } from "../../types";
@@ -80,7 +81,8 @@ function secondaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActio
       key: "delete",
       label: "删除",
       danger: true,
-      confirm: "确定删除这条记录？",
+      confirm: "删除这份简历？",
+      confirmBody: `这份简历${TRASH_RECOVERY_NOTE}`, // i18n-ok: 正文补「对象」段（§4.4 三段式），后果句引用 TRASH_RECOVERY_NOTE 常量，不重写
       onClick: () => void deps.remove(record.id),
     },
   ];

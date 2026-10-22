@@ -22,7 +22,7 @@ import { Segmented, Tooltip, Typography } from "antd";
 import type { ReactNode } from "react";
 
 interface Props {
-  /** 第一行右侧：结构类版式控件（样式模板 / 版式模板 / 板块顺序 / 最大篇幅）。 */
+  /** 第一行右侧：结构类版式控件（模板 / 版式 / 板块顺序 / 最大篇幅）。 */
   templateControls?: ReactNode;
   /** 第二行左侧：度量类版式控件（字号 / 行距 / 页边距）。 */
   measureControls?: ReactNode;

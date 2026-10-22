@@ -10,7 +10,7 @@
  * 保存走的是与完整编辑器同一个回调（父组件的 `onSaved`），所以两条路的落库行为一致。
  */
 import { SaveOutlined } from "@ant-design/icons";
-import { App, Button, Input, Modal, Space, Typography } from "antd";
+import { App, Input, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import type { ResumeContent } from "../../types";
 import {
@@ -19,6 +19,7 @@ import {
   writeResumeValueByPath,
 } from "../../utils/resumeFieldPath";
 import FieldRewritePanel from "../resume-editor/FieldRewritePanel";
+import FormModal from "../common/FormModal";
 
 interface Props {
   open: boolean;
@@ -42,7 +43,7 @@ export default function ResumeFieldQuickEditModal({
   onClose,
   onSaved,
 }: Props) {
-  const { message, modal } = App.useApp();
+  const { message } = App.useApp();
   const [text, setText] = useState("");
   const [draft, setDraft] = useState<ResumeContent>(content);
   const [saving, setSaving] = useState(false);
@@ -93,21 +94,6 @@ export default function ResumeFieldQuickEditModal({
     return () => window.removeEventListener("beforeunload", handler);
   }, [open, dirty]);
 
-  const requestClose = () => {
-    if (saving) return;
-    if (!dirty) {
-      onClose();
-      return;
-    }
-    modal.confirm({
-      title: "未保存的修改将丢失",
-      content: "这一栏还有改动没有保存，确定要关闭吗？",
-      okText: "放弃修改",
-      cancelText: "继续编辑",
-      onOk: onClose,
-    });
-  };
-
   const isList = useMemo(() => {
     if (!path) return false;
     return Array.isArray(readResumeValueByPath(content, path));
@@ -134,30 +120,19 @@ export default function ResumeFieldQuickEditModal({
   };
 
   return (
-    <Modal
+    <FormModal
       title={`编辑：${label}`}
       open={open}
-      onCancel={requestClose}
-      mask={{ closable: !saving }}
-      keyboard={!saving}
+      onCancel={onClose}
+      onSubmit={() => void save()}
+      okText="保存这一栏"
+      okIcon={<SaveOutlined />}
+      submitting={saving}
+      dirty={dirty}
       width={620}
-      destroyOnHidden
-      footer={
-        <Space>
-          <Button onClick={requestClose}>取消</Button>
-          <Button
-            type="primary"
-            icon={<SaveOutlined />}
-            loading={saving}
-            onClick={() => void save()}
-          >
-            保存这一栏
-          </Button>
-        </Space>
-      }
     >
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-        这里只改你选中的这一处，其它内容不受影响。想通读整份简历再改，用底部的「手动调整」。
+        这里只改你选中的这一处，其它内容不受影响。想通读整份简历再改，用「手动调整」。
       </Typography.Paragraph>
 
       <Typography.Text strong>{isList ? "内容（一行一条）" : "内容"}</Typography.Text>
@@ -196,6 +171,6 @@ export default function ResumeFieldQuickEditModal({
           }}
         />
       </div>
-    </Modal>
+    </FormModal>
   );
 }

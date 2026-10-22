@@ -48,6 +48,7 @@ export default function ExportButtons({
           initialPageLimit={layout?.page_limit}
           initialFontScale={layout?.font_scale}
           initialFormatConfig={layout?.format_config}
+          initialLanguage={layout?.language}
           pdfDirectAvailable={pdfDirectAvailable}
           onClose={() => setOpen(false)}
         />

@@ -35,13 +35,20 @@ class ResumeLayout:
     区块标题 / 条目标题 / 条目头副行 / 条目下副行 / 技能标签）的字号比例，以及**垂直间距**
     （页头 / 条目 / 副行 / 列表项 / 区块标题与正文之间）与**区块标题的形状**、**照片尺寸**。
 
-    **这里没有"缩放"这个概念**（2026-10-21 用户要求）：`base_px` 就是用户在版式栏里
+    **这里没有"缩放"这个概念**（2026-10-21 用户要求）：`base_px` 就是用户在排版栏里
     设定的字号，所有尺寸由它直接派生。装不下时不再压小字号，而是截断到页数上限并标记
-    `overflow`，由界面提示用户加页 / 收紧版式——参数与纸面必须严格一致。
+    `overflow`，由界面提示用户加页 / 收紧排版——参数与纸面必须严格一致。
     """
 
     base_px: float
-    margin_mm: float
+    # ===== 页边距（mm）=====
+    # 四边**各存一个值**（2026-10-22「四向页边距」）：此前只有一个 `margin_mm`，四边恒等，
+    # 于是"上 8 / 其余 12"这种设置无处安放。`margin_left/right` 参与宽度、`top/bottom`
+    # 参与高度与自动分页，谁都不许再拿"一个值"当四边。
+    margin_top: float
+    margin_right: float
+    margin_bottom: float
+    margin_left: float
     line_height: float
     section_gap: float
     name_ratio: float
@@ -121,58 +128,60 @@ class ResumeLayout:
 
     @property
     def margin_x(self) -> float:
-        return self.margin_mm
+        """水平页边距（= 左）。保留这个别名是因为 PDF 坐标系里 x 就是左，且已有 6 处调用
+        与 2 条测试读它；四边不对称时"水平边距"没有单一值，凡是要右边界的渲染路径
+        一律读 ``margin_right``。"""
+        return self.margin_left
 
     @property
-    def margin_top(self) -> float:
-        # 预览的 `body { padding: Pmm }` 是四边等距，所以这里上下也跟着页边距走，
-        # 不再用一组自造的 12/13mm。
-        return self.margin_mm
+    def margin_mm(self) -> float:
+        """四边相等时的那一个值。
 
-    @property
-    def margin_bottom(self) -> float:
-        return self.margin_mm
+        四边不等时**没有单一值**，这里返回左页边距，只为了让「四边一致」的历史读取点
+        （`test_pdf_exporter_layout.py` / `test_export_page_parity.py` 的断言、Word 之外的
+        旧调用）继续可读；**渲染路径一律读四边**，不要靠这个属性。
+        """
+        return self.margin_left
 
     @property
     def usable_height_per_page(self) -> float:
-        """一页里正文可用高度（mm）= 页高 − 上下页边距。"""
-        return PAGE_HEIGHT_MM - 2 * self.margin_mm
+        """一页里正文可用高度（mm）= 页高 − 上边距 − 下边距。"""
+        return PAGE_HEIGHT_MM - self.margin_top - self.margin_bottom
 
     @property
     def usable_width_mm(self) -> float:
-        """正文可用宽度（mm）= 页宽 − 左右页边距。
+        """正文可用宽度（mm）= 页宽 − 左边距 − 右边距。
 
         双栏模板要把这个宽度再切成两栏（见 `columns.column_frames`），单栏模板里它就等于
         整页正文宽度。放在这里而不是各模块自己算，是为了"页宽 − 页边距"只有一处定义。
         """
-        return PAGE_WIDTH_MM - 2 * self.margin_mm
+        return PAGE_WIDTH_MM - self.margin_left - self.margin_right
 
 
-def _resolve_margin_mm(overrides: dict, defaults: dict, margin_mm: float | None) -> float:
-    """页边距的**唯一**解析口径：``page_padding`` 权威，``margin_mm`` 只是它的回落值。
+def _resolve_page_margins(
+    overrides: dict, defaults: dict, margin_mm: float | None
+) -> tuple[float, float, float, float]:
+    """页边距的**唯一**解析口径，返回 ``(上, 右, 下, 左)``。
 
     优先级（R1，PDF / Word 共用这一份）：
 
-    1. ``format_config.page_padding``（预览、HTML、PDF、Word 读的都是它）；
-    2. 没有它时，``margin_mm`` 收进 ``page_padding`` 的合法区间后作为回落值——
+    1. ``format_config.page_padding_top/right/bottom/left``（分边覆盖，逐边生效）；
+    2. 缺的边跟 ``format_config.page_padding``（"总"）；
+    3. 没有"总"时 ``margin_mm`` 收进 ``page_padding`` 的合法区间后作回落值——
        旧客户端的"只给 margin_mm"行为保持不变；
-    3. 两者都没有，用模板自带的 ``padding_mm``。
+    4. 三者都没有，用模板自带的 ``padding_mm``。
+
+    实现**刻意委托**给 ``resume_layout_overrides.resolve_page_margins``：草稿 HTML 的
+    ``format_css`` 也读那一份，两边各写一遍判断就会出现"预览 8/12/12/12、PDF 8/8/8/8"
+    这种最难发现的分叉。
 
     为什么 ``margin_mm`` 不能覆盖 ``page_padding``：它是面板历史上的第二个旋钮，只有
     PDF/Word 读，预览不读。两者并存时会出现"面板 30mm、预览 8mm"——同一个页边距有两个
     数字，正是 R1 要消灭的分叉。
     """
-    from ..resume.resume_templates import page_padding_bounds
+    from ..resume.resume_layout_overrides import resolve_page_margins
 
-    page_padding = overrides.get("page_padding")
-    if page_padding is not None:
-        return float(page_padding)
-    if margin_mm is not None:
-        # 兼容值按 page_padding 的区间 clamp：旧请求可能带 4mm / 40mm（它自己那份历史
-        # 范围），越界不该让正文排出纸张，也不该为此回 4xx/5xx——静默收到合法区间即可。
-        low, high = page_padding_bounds()
-        return min(high, max(low, float(margin_mm)))
-    return float(defaults["padding_mm"])
+    return resolve_page_margins(overrides, float(defaults["padding_mm"]), margin_mm)
 
 
 def resolve_layout(
@@ -191,10 +200,12 @@ def resolve_layout(
     与预览不一致"这个 bug 的来源。
 
     ``margin_mm`` 是**兼容字段**，不是第二个旋钮（R1）：页边距的唯一权威是
-    ``format_config.page_padding``（预览、HTML、PDF、Word 都读它）。只有请求**没有**给出
-    ``page_padding`` 时，``margin_mm`` 才作为它的回落值；两者同时出现时以
-    ``page_padding`` 为准——否则旧客户端/手工请求能重新制造"预览 8mm、PDF 30mm"。
+    ``format_config.page_padding`` 与它的四条分边支路（预览、HTML、PDF、Word 都读同一套
+    语义，见 ``resume_layout_overrides``）。只有请求**没有**给出 ``page_padding`` 时，
+    ``margin_mm`` 才作为它的回落值；两者同时出现时以 ``page_padding`` 为准——否则
+    旧客户端/手工请求能重新制造"预览 8mm、PDF 30mm"。
     """
+    from ..resume.resume_layout_overrides import resolve_photo_scale
     from ..resume.resume_templates import (
         template_layout_defaults,
         validated_format_config,
@@ -209,14 +220,23 @@ def resolve_layout(
         # 否则存量简历的 PDF 会因为"凭空多了一个默认值"而无端跳变。
         return float(value) if value is not None else float(defaults[default_key])
 
-    resolved_margin = _resolve_margin_mm(overrides, defaults, margin_mm)
+    margin_top, margin_right, margin_bottom, margin_left = _resolve_page_margins(
+        overrides, defaults, margin_mm
+    )
+    # 照片系数在这里就折进宽高比例：`render.py` / `docx_exporter.py` / `canvas.py` 的
+    # 照片代码一行都不用改——`gap_mm(ratio)` 与 `crop_image_to_cover(w/h)` 自动跟随，
+    # 宽高同乘所以宽高比不变，8 个模板的取景裁剪结果一像素都不变，只有画框变大变小。
+    photo_scale = resolve_photo_scale(overrides)
 
     return ResumeLayout(
         base_px=base_px,
-        margin_mm=resolved_margin,
+        margin_top=margin_top,
+        margin_right=margin_right,
+        margin_bottom=margin_bottom,
+        margin_left=margin_left,
         line_height=pick("line_height", "line_height"),
         section_gap=pick("section_gap", "section_gap"),
-        # 字号层级比例只来自模板（格式模板没有对应的用户覆盖项）。
+        # 字号层级比例只来自模板（版式没有对应的用户覆盖项）。
         name_ratio=float(defaults["name_ratio"]),
         name_extra_ratio=float(defaults["name_extra_ratio"]),
         intent_ratio=float(defaults["intent_ratio"]),
@@ -250,8 +270,8 @@ def resolve_layout(
         section_title_gap=float(defaults["section_title_gap"]),
         section_title_pad_x=float(defaults["section_title_pad_x"]),
         section_title_pad_y=float(defaults["section_title_pad_y"]),
-        photo_width_ratio=float(defaults["photo_width_ratio"]),
-        photo_height_ratio=float(defaults["photo_height_ratio"]),
+        photo_width_ratio=float(defaults["photo_width_ratio"]) * photo_scale,
+        photo_height_ratio=float(defaults["photo_height_ratio"]) * photo_scale,
         # 技能标签的形态与几何同样只来自模板：`tag_radius` 保留注册表原值（可能是 `"pill"`），
         # 不在这一层把哨兵解释成数字——"怎么画"是 `skill_tags` 的事。
         tag_style=str(defaults["tag_style"]),

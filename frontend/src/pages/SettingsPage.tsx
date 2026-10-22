@@ -18,6 +18,7 @@ import ExportSaveCard from "../components/settings/ExportSaveCard";
 import SearchCard from "../components/settings/SearchCard";
 import AssistantRelaxedModeCard from "../components/settings/AssistantRelaxedModeCard";
 import SkillsCard from "../components/settings/SkillsCard";
+import AnnouncementSettingsCard from "../components/settings/AnnouncementSettingsCard";
 import UpdateCard from "../components/settings/UpdateCard";
 import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
 import PrivacyCard from "../components/settings/PrivacyCard";
@@ -91,17 +92,9 @@ export default function SettingsPage() {
     }
   };
 
-  const {
-    skills,
-    skillsLoading,
-    skillImporting,
-    skillTogglingId,
-    skillDeletingId,
-    loadSkillList,
-    importSkillFile,
-    toggleSkill,
-    removeSkill,
-  } = useSettingsSkills();
+  // 这里只读技能摘要：技能的新建 / 导入 / 启用停用 / 删除全在工作台（/skills）。
+  // useSettingsSkills 已收成只读 hook（A2 收权），写路径在本页没有消费方，所以已删除。
+  const { skills, skillsLoading, loadSkillList } = useSettingsSkills();
   const [skillEditorOpen, setSkillEditorOpen] = useState(false);
   const [skillEditorId, setSkillEditorId] = useState<number | null>(null);
 
@@ -164,7 +157,7 @@ export default function SettingsPage() {
                   <div className="settings-section-titles">
                     <Typography.Text type="secondary">
                       简历生成、岗位解读与求职助手用的是同一套模型配置，所有数据集共用；
-                      已保存的配置以记录卡片展示，点「新增配置」或记录卡上的「编辑」在弹窗中填写。
+                      已保存的配置以记录卡片展示，点「新建配置」或记录卡上的「编辑」在弹窗中填写。
                     </Typography.Text>
                   </div>
                 </div>
@@ -219,12 +212,6 @@ export default function SettingsPage() {
                 <SkillsCard
                   skills={skills}
                   loading={skillsLoading}
-                  importing={skillImporting}
-                  togglingId={skillTogglingId}
-                  deletingId={skillDeletingId}
-                  onImport={(file) => void importSkillFile(file)}
-                  onToggle={(skill, enabled) => void toggleSkill(skill, enabled)}
-                  onDelete={(skill) => void removeSkill(skill)}
                   onOpen={(skill) => {
                     setSkillEditorId(skill.id);
                     setSkillEditorOpen(true);
@@ -314,7 +301,7 @@ export default function SettingsPage() {
                 />
                 {/* 主题切换已上移到页头（A3）：设置页只留一句说明，避免两处控件各说一套。 */}
                 <Typography.Paragraph type="secondary" className="settings-theme-note">
-                  主题在页面右上角切换；深色只作用于应用界面，简历预览、导出 PDF 与打印结果
+                  主题用「主题」开关切换；深色只作用于应用界面，简历预览、导出 PDF 与打印结果
                   仍是白纸。
                 </Typography.Paragraph>
                 <ResumeFontCard />
@@ -329,6 +316,7 @@ export default function SettingsPage() {
 
                 <SettingsGroupTitle text="更新与帮助" hint="版本更新、诊断与反馈入口" />
                 <UpdateCard />
+                <AnnouncementSettingsCard />
                 <HelpDiagnosticsCard />
               </>
             ),
@@ -336,10 +324,11 @@ export default function SettingsPage() {
         ]}
       />
 
-      {/* 设置页里点技能名查看详情，与技能工作台共用同一个编辑弹窗。 */}
+      {/* 设置页里点技能名只读查看详情：技能的改动统一在工作台做，弹窗不给保存。 */}
       <SkillEditorModal
         open={skillEditorOpen}
         skillId={skillEditorId}
+        readOnly
         onClose={() => setSkillEditorOpen(false)}
         onSaved={() => void loadSkillList()}
       />

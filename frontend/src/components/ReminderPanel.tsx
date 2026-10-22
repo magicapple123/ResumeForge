@@ -14,13 +14,13 @@ import {
   Form,
   Input,
   Listy,
-  Modal,
   Pagination,
   Segmented,
   Select,
   Space,
   Tag,
 } from "antd";
+import FormModal from "./common/FormModal";
 import LoadingBlock from "./common/LoadingBlock";
 import { useClientPagination } from "../hooks/useClientPagination";
 import dayjs from "dayjs";
@@ -38,6 +38,7 @@ import { formatDateTime } from "../utils/format";
 import { RecordDetailDrawer } from "./common/RecordDetail";
 import { LISTY_ITEM_PADDING_DEFAULT } from "./common/listyPadding";
 import type { RowActionItem } from "./common/RowActions";
+import { TRASH_RECOVERY_NOTE } from "./common/rowActionMenu";
 import BatchActionBar from "./common/BatchActionBar";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import CalendarView from "./tracker/CalendarView";
@@ -159,7 +160,7 @@ export default function ReminderPanel() {
     try {
       if (editing) await updateReminder(editing.id, payload);
       else await createReminder(payload);
-      message.success(editing ? "已更新提醒" : "已新增提醒");
+      message.success(editing ? "已更新提醒" : "已新建提醒");
       setModalOpen(false);
       await loadList();
     } catch (error) {
@@ -197,8 +198,8 @@ export default function ReminderPanel() {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: `删除选中的 ${ids.length} 条提醒？`,
-      content: "删除后可在回收站里找回。",
+      title: "删除选中的提醒？",
+      content: `这 ${ids.length} 条提醒${TRASH_RECOVERY_NOTE}`,
       okText: "删除",
       okButtonProps: { danger: true },
       onOk: async () => {
@@ -217,7 +218,7 @@ export default function ReminderPanel() {
   const remove = async (item: Reminder) => {
     try {
       await deleteReminder(item.id);
-      message.success("已删除");
+      message.success("已删除这条提醒");
       await loadList();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "删除失败");
@@ -236,7 +237,8 @@ export default function ReminderPanel() {
       key: "delete",
       label: "删除",
       danger: true,
-      confirm: "删除这条提醒？删除后可在回收站里找回，不会立刻彻底删除。",
+      confirm: "删除这条提醒？",
+      confirmBody: TRASH_RECOVERY_NOTE,
       onClick: () => void remove(item),
     },
   ];
@@ -257,7 +259,7 @@ export default function ReminderPanel() {
             }))}
           />
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新增提醒
+            新建提醒
           </Button>
           {/* 批量选择入口已收进提醒条目的右键菜单（R8）。 */}
           <Segmented
@@ -333,14 +335,14 @@ export default function ReminderPanel() {
         </>
       )}
 
-      <Modal
-        title={editing ? "编辑提醒" : "新增提醒"}
+      <FormModal
+        title={editing ? "编辑提醒" : "新建提醒"}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
-        onOk={() => void save()}
-        confirmLoading={saving}
-        okText="保存"
-        cancelText="取消"
+        onSubmit={() => void save()}
+        submitting={saving}
+        okText="保存提醒"
+        width={520}
       >
         <Form form={form} layout="vertical" initialValues={{ kind: "other", remind_at: dayjs() }}>
           <Form.Item
@@ -378,7 +380,7 @@ export default function ReminderPanel() {
             <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="补充说明（选填）" />
           </Form.Item>
         </Form>
-      </Modal>
+      </FormModal>
 
       <RecordDetailDrawer
         open={detail !== null}

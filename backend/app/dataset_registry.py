@@ -12,7 +12,7 @@
       active.json            <- {"dataset_id": "..."}；缺失表示主数据
       datasets/<id>.db       <- 导入产生的数据集
       datasets/<id>.json     <- 其元信息
-      datasets/.trash/       <- 删除的数据集移到这里，不做永久删除
+      datasets/.trash/       <- 删除的数据集移到这里，不做彻底删除
 """
 
 from __future__ import annotations

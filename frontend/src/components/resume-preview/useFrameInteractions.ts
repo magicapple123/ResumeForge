@@ -70,7 +70,7 @@ export function useFrameInteractions({
   viewportKey,
 }: Options) {
   /**
-   * 每个 iframe 一份清理函数：同一个 iframe 重新加载（换简历 / 切页数）时会再绑一次，
+   * 每个 iframe 一份清理函数：同一个 iframe 刷新（换简历 / 切页数）时会再绑一次，
    * 先清旧的再绑，避免同一个文档上挂两个监听器（缩放一次跳两格）。
    */
   const cleanupsRef = useRef(new Map<HTMLIFrameElement, () => void>());

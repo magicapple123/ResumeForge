@@ -125,7 +125,7 @@ def create_user_template(
     if count >= MAX_USER_TEMPLATES:
         raise TemplateError(f"自制模板最多 {MAX_USER_TEMPLATES} 个，请先删除不再使用的")
     if kind not in TEMPLATE_KINDS:
-        raise TemplateError("模板类型只有「样式模板」与「格式模板」两种")
+        raise TemplateError("模板类型只有「模板」与「版式」两种")
 
     if kind == TEMPLATE_KIND_STYLE:
         template_html = sanitize_template_html(validate_template_html(html))
@@ -134,7 +134,7 @@ def create_user_template(
         template_html = ""
         normalized = validated_format_config(config)
         if not normalized:
-            raise TemplateError("格式模板至少需要设置一项参数")
+            raise TemplateError("版式至少需要设置一项参数")
 
     template = ResumeTemplate(
         name=cleaned_name,
@@ -178,7 +178,7 @@ def update_user_template(
         elif template.kind == TEMPLATE_KIND_FORMAT:
             normalized = validated_format_config(config)
             if not normalized:
-                raise TemplateError("格式模板至少需要设置一项参数")
+                raise TemplateError("版式至少需要设置一项参数")
             template.config = normalized
     if enabled is not None:
         template.enabled = enabled
@@ -194,7 +194,7 @@ def delete_user_template(db: Session, template: ResumeTemplate) -> None:
 
 
 def resolve_style_template(db: Session, name: str) -> tuple[str, str]:
-    """解析样式模板名 → ``(内置模板名, 用户模板 HTML)``。
+    """解析模板名 → ``(内置模板名, 用户模板 HTML)``。
 
     两者只会有一个生效：内置模板返回 HTML 空串，用户模板返回内置兜底名 + HTML。
     名字既查不到内置也查不到用户模板时退回默认内置模板——记录里的模板名可能是用户
@@ -210,7 +210,7 @@ def resolve_style_template(db: Session, name: str) -> tuple[str, str]:
 
 
 def resolve_style_config(db: Session, name: str) -> dict:
-    """解析用户样式模板的视觉配置；内置模板与旧模板返回空字典。"""
+    """解析用户模板的视觉配置；内置模板与旧模板返回空字典。"""
     key = (name or "").strip()
     if key in RESUME_TEMPLATES:
         return {}
@@ -221,7 +221,7 @@ def resolve_style_config(db: Session, name: str) -> dict:
 
 
 def resolve_format_config(db: Session, name: str) -> dict:
-    """解析格式模板名 → 受校验的覆盖配置（内置预设或用户模板）。"""
+    """解析版式名 → 受校验的覆盖配置（内置预设或用户模板）。"""
     key = (name or "").strip()
     if not key:
         return {}
@@ -250,7 +250,7 @@ def custom_template_options(db: Session) -> list[dict]:
 
 
 def custom_format_options(db: Session) -> list[dict]:
-    """列出用户自制的格式模板选项，供模板清单拼装。"""
+    """列出用户自制的版式选项，供模板清单拼装。"""
     return [
         {
             "id": item.id,

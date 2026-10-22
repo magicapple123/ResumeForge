@@ -82,9 +82,9 @@ _CLAIM_FIELDS = {
 _CANDIDATE_FIELDS = {"title": "岗位名称", "company": "公司", "raw_text": "原文", "note": "备注"}
 _SKILL_FIELDS = {"name": "名称", "description": "适用场景", "prompt": "提示词", "enabled": "启用", "files": "知识文件"}
 _TEMPLATE_FIELDS = {
-    "name": "模板名称",
+    "name": "版式名称",
     "description": "说明",
-    "template": "版式模板",
+    "template": "模板",
     "page_limit": "页数上限",
     "font_scale": "字号系数",
 }
@@ -255,7 +255,7 @@ def preview_update_skill(db: Session, arguments: dict) -> WritePreview:
 
 
 def preview_create_format_template(db: Session, arguments: dict) -> WritePreview:
-    return _create_preview("自制格式模板新模板（只调版式参数）", _create_changes(arguments, _TEMPLATE_FIELDS))
+    return _create_preview("自制版式新记录（只调排版参数）", _create_changes(arguments, _TEMPLATE_FIELDS))
 
 
 def preview_update_format_template(db: Session, arguments: dict) -> WritePreview:
@@ -274,7 +274,7 @@ def preview_update_format_template(db: Session, arguments: dict) -> WritePreview
         for key, value in arguments.items()
         if key not in {"template_id", "template_name"} and value is not None
     ]
-    return _update_preview(f"格式模板「{getattr(record, 'name', '') or arguments.get('template_id')}」", record, changes)
+    return _update_preview(f"版式「{getattr(record, 'name', '') or arguments.get('template_id')}」", record, changes)
 
 
 # ---------------------------------------------------------------------------
@@ -288,10 +288,10 @@ def preview_update_resume(db: Session, arguments: dict) -> WritePreview:
 
 
 def preview_update_resume_layout(db: Session, arguments: dict) -> WritePreview:
-    labels = {"template": "版式模板", "page_limit": "页数上限", "font_scale": "字号系数"}
+    labels = {"template": "模板", "page_limit": "页数上限", "font_scale": "字号系数"}
     record, changes = _update_changes(db, ResumeRecord, int(arguments.get("resume_id") or 0), arguments, labels)
     return _update_preview(
-        f"简历「{getattr(record, 'title', '') or arguments.get('resume_id')}」的版式", record, changes
+        f"简历「{getattr(record, 'title', '') or arguments.get('resume_id')}」的排版设置", record, changes
     )
 
 

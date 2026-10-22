@@ -52,7 +52,7 @@ interface Props {
    * 这份简历当前的版式参数。
    *
    * **必须原样回传**：`PATCH /layout` 是整体替换，漏掉哪个字段就等于把它重置成默认值——
-   * 只想着保存 format_config 而传空模板名，会把用户选好的样式模板和字号悄悄改掉。
+   * 只想着保存 format_config 而传空模板名，会把用户选好的模板和字号悄悄改掉。
    */
   layout: ResumeLayout;
   disabled?: boolean;
@@ -165,7 +165,7 @@ export default function ResumeLayoutDiagnosisCard({
         onApplied(saved.format_config ?? {});
         message.success(`已按「${candidate.label}」收进 ${layout.page_limit} 页`);
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "保存版式失败");
+        message.error(error instanceof Error ? error.message : "保存排版设置失败");
       }
       return;
     }
@@ -173,7 +173,7 @@ export default function ResumeLayoutDiagnosisCard({
     setFitting(null);
     // 收到底也放不下时必须如实说，并把用户指向下一条真正有用的建议。
     message.warning(
-      "版式已经收到最紧了，还是放不下。接下来只能精简内容或增加页数——上面「版面诊断」里列了具体怎么做。",
+      "排版参数已经收到最紧了，还是放不下。接下来只能精简内容或增加页数——上面「版面诊断」里列了具体怎么做。",
     );
   }, [analysis, layout, message, onApplied, previewRef, resumeId]);
 

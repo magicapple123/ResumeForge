@@ -166,8 +166,31 @@ export default function TemplateWorkbench({ onChanged }: Props) {
     }
   };
 
-  const askTemplate = (row: ResumeTemplateDetail) =>
-    askAssistant(`帮我调整格式模板「${row.name}」：`);
+  const askTemplate = (row: ResumeTemplateDetail) => askAssistant(`帮我调整版式「${row.name}」：`);
+
+  /**
+   * 「复制为新模板」入口：卡片右上角与空态里各需要一个。
+   *
+   * 抽成一份而不是复制两遍 JSX——空态里的按钮过去根本不存在，只在文字里写了
+   * 「点右上角」这种方位词加按钮名（位置随响应式一变就找不到）；现在空态
+   * 直接内嵌同一个按钮，两处的文案也不可能分叉。
+   */
+  const copyBuiltinButton = (
+    <Dropdown
+      menu={{
+        items: (catalog?.templates ?? [])
+          .filter((item) => !item.custom)
+          .map((item) => ({
+            key: item.name,
+            label: `${item.label} · ${item.description}`,
+          })),
+        onClick: ({ key }) => void copyBuiltin(key),
+        disabled: catalogLoading,
+      }}
+    >
+      <Button icon={<CopyOutlined />}>复制为新模板</Button>
+    </Dropdown>
+  );
 
   return (
     <div className="template-workbench">
@@ -176,24 +199,11 @@ export default function TemplateWorkbench({ onChanged }: Props) {
       <Card
         size="small"
         className="settings-card"
-        title="样式模板"
+        title="模板"
         style={{ marginTop: 16 }}
         extra={
           <Space wrap>
-            <Dropdown
-              menu={{
-                items: (catalog?.templates ?? [])
-                  .filter((item) => !item.custom)
-                  .map((item) => ({
-                    key: item.name,
-                    label: `${item.label} · ${item.description}`,
-                  })),
-                onClick: ({ key }) => void copyBuiltin(key),
-                disabled: catalogLoading,
-              }}
-            >
-              <Button icon={<CopyOutlined />}>复制改一份</Button>
-            </Dropdown>
+            {copyBuiltinButton}
             <FileDropZone
               accept=".html,.htm,.j2,.jinja,.txt"
               multiple={false}
@@ -237,7 +247,7 @@ export default function TemplateWorkbench({ onChanged }: Props) {
           items={[
             {
               key: "builtin",
-              label: `内置样式（${(catalog?.templates ?? []).filter((item) => !item.custom).length} 个，只读）`,
+              label: `内置模板（${(catalog?.templates ?? []).filter((item) => !item.custom).length} 个，只读）`,
               children: (
                 <BuiltinStyleGallery
                   items={(catalog?.templates ?? [])
@@ -253,7 +263,7 @@ export default function TemplateWorkbench({ onChanged }: Props) {
           ]}
         />
         {styleTemplates.length === 0 ? (
-          <EmptyState description="还没有自制样式模板。点右上角「复制改一份」从内置模板开始。" />
+          <EmptyState description="还没有自制模板">{copyBuiltinButton}</EmptyState>
         ) : (
           <TemplateCustomTable
             templates={styleTemplates}
@@ -269,11 +279,11 @@ export default function TemplateWorkbench({ onChanged }: Props) {
       <Card
         size="small"
         className="settings-card"
-        title="格式模板（版式）"
+        title="版式"
         style={{ marginTop: 16 }}
         extra={
           <Space wrap>
-            <Button icon={<RobotOutlined />} onClick={() => askAssistant("帮我新建一个格式模板：")}>
+            <Button icon={<RobotOutlined />} onClick={() => askAssistant("帮我新建一个版式：")}>
               找求职助手制作
             </Button>
             <Button
@@ -297,7 +307,7 @@ export default function TemplateWorkbench({ onChanged }: Props) {
             ))}
         </Typography.Paragraph>
         {formatTemplates.length === 0 ? (
-          <EmptyState description="还没有自制格式模板。想压进一页时，用它调行高与页边距最快。" />
+          <EmptyState description="还没有自制版式。想压进一页时，用它调行高与页边距最快。" />
         ) : (
           <TemplateCustomTable
             templates={formatTemplates}

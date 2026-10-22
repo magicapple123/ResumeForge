@@ -237,7 +237,7 @@ describe("ApplyQueuePanel 筛选、跨页全选与批量移出", () => {
     fireEvent.click(screen.getByRole("button", { name: "移出所选" }));
 
     // 确认按钮在 Popconfirm 浮层里（两字按钮名会被插空格，用正则匹配）。
-    const popoverTitle = await screen.findByText("确定把选中的 2 个岗位移出队列？");
+    const popoverTitle = await screen.findByText("把选中的岗位移出队列？");
     fireEvent.click(
       within(popoverTitle.closest(".ant-popover") as HTMLElement).getByRole("button", {
         name: /移\s*出/,

@@ -81,7 +81,7 @@ const LIST_ITEM_FIELDS: Record<ListField, Record<string, string>> = {
   },
   experiences: {
     company: "公司",
-    role: "职位",
+    role: "岗位",
     start_date: "开始时间",
     end_date: "结束时间",
     description: "工作内容",

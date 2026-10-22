@@ -101,7 +101,7 @@ def read_user_templates(
 
 @router.post("", response_model=ResumeTemplateDetail, status_code=201)
 def create_template(payload: ResumeTemplateCreate, db: Session = Depends(get_db)):
-    """新建模板。样式模板的 HTML 会被清洗（去掉脚本与外链）并补齐 CSP。"""
+    """新建模板。模板的 HTML 入库前会被清洗（去掉脚本与外链）并补齐 CSP。"""
     try:
         template = create_user_template(
             db,
@@ -132,7 +132,7 @@ def read_builtin_source(name: str = Query(..., min_length=1, max_length=64)):
         raise HTTPException(status_code=404, detail="没有这个内置模板")
     path = TEMPLATES_DIR / spec["file"]
     if not path.exists():
-        raise HTTPException(status_code=404, detail="内置模板文件缺失，请重新安装应用")
+        raise HTTPException(status_code=404, detail="内置模板文件缺失（安装包不完整）")
     return {
         "name": spec["name"],
         "label": spec["label"],

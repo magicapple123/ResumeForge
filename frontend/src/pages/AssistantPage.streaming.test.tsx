@@ -332,9 +332,9 @@ describe("AssistantPage", () => {
     expect(await screen.findByText(/助手做了什么（1）/)).toBeInTheDocument();
     expect(screen.getByText(/改动了 1 项/)).toBeInTheDocument();
     // 逐条明细仍在折叠面板内，展开后可见，且「前往查看」跳转不变。
-    expect(screen.queryByText("新增岗位")).not.toBeInTheDocument();
+    expect(screen.queryByText("新建岗位")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /助手做了什么（1）/ }));
-    expect(await screen.findByText("新增岗位")).toBeInTheDocument();
+    expect(await screen.findByText("新建岗位")).toBeInTheDocument();
     expect(screen.getByText("新增岗位「字节跳动后端实习」")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "前往查看" })).toHaveAttribute("href", "/jobs");
   });

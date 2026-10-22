@@ -14,7 +14,7 @@ describe("PrivacyCard", () => {
     expect(screen.getByText(/没有账号体系、没有埋点上报/)).toBeTruthy();
     expect(screen.getByText(/只在你主动调用时/)).toBeTruthy();
     expect(screen.getByText(/不含简历数据与密钥/)).toBeTruthy();
-    expect(screen.getByText(/导出备份包/)).toBeTruthy();
+    expect(screen.getByText(/导出全部数据集/)).toBeTruthy();
     expect(screen.getByText(/彻底删除/)).toBeTruthy();
   });
 });

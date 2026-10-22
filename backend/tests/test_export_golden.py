@@ -367,3 +367,62 @@ def test_build_export_signature_unchanged():
     assert isinstance(artifact, ExportArtifact)
     assert not hasattr(artifact, "content_sha256")
     assert "林致远" in artifact.content.decode("utf-8")
+
+
+# ===== 默认参数下 HTML 不许多出任何新样式（2026-10-22 四向页边距 + 照片大小）=====
+#
+# 黄金基线只比"规范化提取文本的 sha256"，而 `_semantic_text` 会把 `<style>` 整块剔除——
+# 所以"给 page_padding 补一条规则""照片系数写进 :root"这类**样式层**漂移，基线一条都抓不到。
+# 这里补一条样式层的守卫：默认配置下不许有任何新东西，非默认配置时必须真的出现。
+
+
+def test_default_html_has_no_new_css():
+    """默认参数下的 HTML 不许出现新的 padding 覆盖、也不许出现照片系数变量。
+
+    不比对整份 HTML 的字节：`csp_nonce` 每次都不同，逐字节比必然假红。这里比的是
+    "这批新键有没有在产物里留下痕迹"——它们一个字符都不该留。
+    """
+    from app.services.exporter import render_html
+    from app.services.resume.resume_template_format import format_css
+
+    assert format_css({}) == ""
+    html = render_html(short_zh(), template="classic", format_config={})
+    # 模板本身写的是 `padding: 14mm;`（无 !important），凡是带 !important 的 padding 覆盖
+    # 只可能来自 `format_css`。
+    assert "padding: 14mm !important" not in html
+    # `var(--photo-scale, 1)` 是模板里的回退写法（允许），`--photo-scale: ` 才是声明。
+    assert "--photo-scale: " not in html
+    assert "page_padding" not in html
+
+
+def test_asymmetric_margins_and_photo_scale_do_reach_the_html():
+    """上面那条的**正对照**：非默认配置必须真的落进产物，否则"没多出东西"就毫无意义。"""
+    from app.services.exporter import render_html
+
+    asymmetric = render_html(
+        short_zh(),
+        template="classic",
+        format_config={"page_padding": 14, "page_padding_top": 8},
+    )
+    assert "body { padding: 8mm 14mm 14mm 14mm !important; }" in asymmetric
+
+    scaled = render_html(short_zh(), template="classic", format_config={"photo_scale": 1.5})
+    assert "--photo-scale: 1.5;" in scaled
+    # 模板侧读的就是这个变量（缺键时回退 1，与今天等价）。
+    assert "var(--photo-scale, 1)" in scaled
+
+
+def test_html_lang_attribute_follows_the_language():
+    """`<html lang>` 跟着简历语言走；缺省仍是 `zh-CN`，所以默认产物逐字不变。
+
+    `lang` 不属于提取文本，黄金基线的指纹不受影响；仓库里也没有任何断言写过
+    `lang="zh-CN"` 这个字面量——这是一条纯新增能力，不是行为变更。
+    """
+    from app.services.exporter import render_html
+
+    assert '<html lang="zh-CN">' in render_html(short_zh(), template="classic")
+    assert '<html lang="en-US">' in render_html(short_zh(), template="classic", language="en-US")
+    # 认不出的值收口到 zh-CN（与纸面文案共用同一个 `normalize_language`）。
+    assert '<html lang="zh-CN">' in render_html(short_zh(), template="classic", language="en")
+
+

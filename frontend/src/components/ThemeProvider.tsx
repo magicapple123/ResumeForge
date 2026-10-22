@@ -22,6 +22,7 @@ import { antdLocale } from "../i18n/antdLocale";
 import { useLocale } from "../i18n/I18nProvider";
 import { appTheme } from "../theme/appTheme";
 import { darkTheme } from "../theme/darkTheme";
+import { MESSAGE_CONFIG } from "../theme/feedbackConfig";
 import {
   applyTheme,
   hydrateThemeFromServer,
@@ -53,7 +54,7 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
       theme={dark ? darkTheme : appTheme}
       getPopupContainer={() => document.body}
     >
-      <AntdApp>{children}</AntdApp>
+      <AntdApp message={MESSAGE_CONFIG}>{children}</AntdApp>
     </ConfigProvider>
   );
 }

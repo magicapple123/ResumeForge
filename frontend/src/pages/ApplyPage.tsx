@@ -27,6 +27,7 @@ import CollectPanel from "../components/apply/CollectPanel";
 import CollectRecordsPanel from "../components/apply/CollectRecordsPanel";
 import CurrentSiteBar from "../components/apply/CurrentSiteBar";
 import { isActiveTaskStatus, useTaskPolling } from "../hooks/useTaskPolling";
+import { formatErrorGuidance } from "../api/errorGuidance";
 import type { ApplyTask } from "../types";
 
 /** 投递台的页签 key：URL ?tab= 的合法值域（白名单外回落 queue，不让 Tabs 激活态落空）。 */
@@ -103,7 +104,9 @@ export default function ApplyPage() {
       setTask(updated);
       await refresh();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "操作失败");
+      // 兜底不再是「操作失败」：暂停/继续/停止都是同一个入口，失败时统一给
+      // 「原因 · 建议 · 编号」，用户能照「建议」重试（§4.6）。
+      message.error(formatErrorGuidance(err, "调整任务失败"));
     } finally {
       setBusy(false);
     }

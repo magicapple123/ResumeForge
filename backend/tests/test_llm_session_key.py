@@ -90,7 +90,7 @@ def test_dpapi_failure_fails_loudly_and_never_persists_key(client, db_session, m
     def broken_encrypt(_plaintext):
         raise ApiKeyEncryptionError("本机密钥保护服务（Windows DPAPI）加密失败")
 
-    monkeypatch.setattr("app.services.settings_service.encrypt_key", broken_encrypt)
+    monkeypatch.setattr("app.services.llm_settings.encrypt_key", broken_encrypt)
     # 全局记录走 global_settings 的加密入口（同一套 DPAPI，只是另一个绑定）；
     # 两个落点都要在失败时明确报错，而不是"数据集没写、全局却写进去了"。
     monkeypatch.setattr("app.services.global_settings.encrypt_key", broken_encrypt)

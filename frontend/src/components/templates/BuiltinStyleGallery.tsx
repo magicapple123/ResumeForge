@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 内置样式缩略图墙：给每个内置样式渲染一张**真实效果**的缩略图，点开看大图。
+ * 内置模板缩略图墙：给每个内置模板渲染一张**真实效果**的缩略图，点开看大图。
  *
  * 之前这里只有一排文字标签（「经典」「现代」…），用户看不出它们长什么样，只能一个个
- * 点「复制改一份」才知道——等于把"选样式"变成盲选。缩略图用的是与正式预览同一条渲染
+ * 点「复制为新模板」才知道——等于把"选样式"变成盲选。缩略图用的是与正式预览同一条渲染
  * 接口（``/resume-templates/preview`` + 内置示例简历），所以看到的就是最终效果，
  * 不是另画一版示意图（示意图会随项目演进和真实模板脱节）。
  *
@@ -105,7 +105,7 @@ export default function BuiltinStyleGallery({ items }: Props) {
       </div>
 
       <Modal
-        title={opened ? `内置样式预览 · ${opened.label}` : "内置样式预览"}
+        title={opened ? `内置模板预览 · ${opened.label}` : "内置模板预览"}
         open={!!opened}
         onCancel={() => setOpened(null)}
         footer={null}
@@ -119,7 +119,7 @@ export default function BuiltinStyleGallery({ items }: Props) {
           <Typography.Paragraph type="secondary">{opened.description}</Typography.Paragraph>
         )}
         {openedHtml ? (
-          <A4PreviewFrame html={openedHtml} title="内置样式大图预览" />
+          <A4PreviewFrame html={openedHtml} title="内置模板大图预览" />
         ) : (
           <div className="template-preview-loading">
             <PageSkeleton rows={6} card={false} />

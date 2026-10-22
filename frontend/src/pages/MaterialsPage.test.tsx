@@ -6,7 +6,7 @@
  * 所以"点得开"这件事必须有测试守着——它是这一页唯一的阅读入口。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Material } from "../types";
 import MaterialsPage from "./MaterialsPage";
@@ -79,7 +79,7 @@ describe("MaterialsPage", () => {
     apiMocks.listMaterialsPage.mockRejectedValueOnce(new Error("服务暂不可用"));
     renderPage();
     expect(await screen.findByRole("alert")).toHaveTextContent("服务暂不可用");
-    expect(screen.queryByText(/资料箱还是空的/)).toBeNull();
+    expect(screen.queryByText(/还没有资料/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
     expect(await screen.findByText("护士执业资格证")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -215,7 +215,7 @@ describe("MaterialsPage", () => {
     });
   });
 
-  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除请求带全部 id 并重拉", async () => {
+  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（直接删，撤销在 Toast）→ 一次批量删除请求带全部 id 并重拉", async () => {
     const two: Material[] = [ITEMS[0], { ...ITEMS[0], id: 2, title: "英语六级证书" }];
     apiMocks.listMaterialsPage.mockResolvedValue(makePage(two));
     apiMocks.batchDeleteMaterials.mockResolvedValue({ deleted: 2 });
@@ -230,15 +230,7 @@ describe("MaterialsPage", () => {
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
-    // Popconfirm 确认（文案带数量）；确认前绝不发请求。
-    const popover = await waitFor(() => {
-      const root = document.querySelector(".ant-popover");
-      expect(root).not.toBeNull();
-      return root as HTMLElement;
-    });
-    expect(popover.textContent).toContain("删除选中的 2 份资料");
-    expect(apiMocks.batchDeleteMaterials).not.toHaveBeenCalled();
-    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+    // 软删可撤销：不再前置确认，点一下就直接发请求（撤销在 Toast 上）。
 
     await waitFor(() => {
       expect(apiMocks.batchDeleteMaterials).toHaveBeenCalledTimes(1);

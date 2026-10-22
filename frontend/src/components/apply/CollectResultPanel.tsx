@@ -40,6 +40,16 @@ const OUTCOME_LABELS: Record<string, string> = {
   missing: "这条候选已经不存在了（可能在别处被删掉）",
 };
 
+/**
+ * 一条导入结果算不算「没有建成岗位」。
+ *
+ * 提示语与下面的清单必须用同一份判定：两边各写一遍 `!== "imported"`，提示说 3 个、
+ * 清单列 2 条这种事迟早会发生。
+ */
+function isProblemOutcome(item: { outcome: string }): boolean {
+  return item.outcome !== "imported";
+}
+
 /** 导入按钮的文案/无障碍名称：带上选中数量，用户不必去数勾了几个。 */
 function importLabel(count: number): string {
   return count > 0 ? `导入选中的 ${count} 个岗位` : "导入选中的岗位";
@@ -104,7 +114,9 @@ export default function CollectResultPanel({
           duration: 6,
         });
       } else {
-        message.warning("没有新增岗位，详见下方原因");
+        message.warning(
+          `没有新增岗位，原因见「有 ${result.results.filter(isProblemOutcome).length} 个岗位没有新建」提示`,
+        );
       }
       setSelectedIds([]);
       await reload();
@@ -203,7 +215,7 @@ export default function CollectResultPanel({
     },
   ];
 
-  const problemResults = (lastResult?.results ?? []).filter((item) => item.outcome !== "imported");
+  const problemResults = (lastResult?.results ?? []).filter(isProblemOutcome);
 
   return (
     <div className="apply-collect-result">

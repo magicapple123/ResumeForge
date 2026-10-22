@@ -135,7 +135,7 @@ def reveal_share_package_directory(share_id: int, db: Session = Depends(get_db))
     if not _is_windows():
         raise HTTPException(
             status_code=409,
-            detail="当前系统不支持自动打开文件夹，请手动进入上方「本地目录」查看",
+            detail="当前系统不支持自动打开文件夹",
         )
     subprocess.Popen(["explorer", str(directory)])
     return ShareRevealOut(directory=str(directory))

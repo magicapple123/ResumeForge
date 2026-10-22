@@ -99,7 +99,7 @@ def update_photo(photo_id: int, payload: ProfilePhotoUpdate, db: Session = Depen
     ``is_primary=true`` 指到另一张。
     """
     if payload.name is None and payload.is_primary is not True:
-        raise HTTPException(status_code=422, detail="请提供要修改的照片字段")
+        raise HTTPException(status_code=422, detail="缺少要修改的照片字段")
     photo = None
     if payload.name is not None:
         photo = rename_photo(db, photo_id, payload.name)

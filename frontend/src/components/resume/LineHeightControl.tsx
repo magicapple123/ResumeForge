@@ -103,7 +103,9 @@ export default function LineHeightControl({
   };
 
   return (
-    <Space size={6}>
+    // `wrap`：与页边距那一行同一个理由——窄窗口里宁可把尾部折到第二行，
+    // 也不要把读数与来源胶囊压到 0 宽之后溢出到相邻控件底下。
+    <Space size={6} wrap>
       {/* 双击标题恢复默认（原先是末尾的 ↺ 按钮，四个控件就有四颗图标）。
           提示改用 Tooltip 而不是原生 title：原生 title 只对鼠标可见，键盘用户拿不到
           "这里可双击"这条唯一可发现性信息；Tooltip 同时由 aria-label 兜住读屏。

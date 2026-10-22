@@ -214,7 +214,7 @@ def _trash_snapshot(directory: Path, stale: Path) -> None:
 def _prune_trash(trash_dir: Path) -> None:
     """``.trash`` 只留最近 ``_TRASH_KEEP`` 份：更早的清除，避免 trash 无限膨胀。
 
-    这里是唯一允许对"曾经有效"的快照做永久删除的地方——它们已经先经过"移入
+    这里是唯一允许对"曾经有效"的快照做彻底删除的地方——它们已经先经过"移入
     trash"这一步，且数量上限是明确的、写进文档的保留策略。
     """
     try:

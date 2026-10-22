@@ -29,7 +29,7 @@ export function useApi<T>(fetcher: ApiFetcher<T>, deps: DependencyList = []): Ap
   // 当前 in-flight 请求的中止器：reload 或卸载时中止被替换的旧请求（RF-07）。
   const abortRef = useRef<AbortController | null>(null);
 
-  // 始终调用最新传入的 fetcher；deps 仅控制「何时重新加载」。
+  // 始终调用最新传入的 fetcher；deps 仅控制「何时刷新」。
   // ref 写入放 effect（Compiler 规则禁止渲染期写 ref）：本 effect 声明在
   // reload effect 之前，同一轮提交里先更新 ref 再触发重载，取到的是新 fetcher。
   const fetcherRef = useRef(fetcher);

@@ -99,4 +99,41 @@ describe("ResumeFieldQuickEditModal", () => {
     expect(onSaved).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
+
+  /**
+   * 叠层回归：改过之后取消，确认条**就地**换掉 footer（不叠第二层弹窗容器），
+   * 回到编辑再保存同样只有一层。断言只看容器层数，不依赖界面文案。
+   */
+  it("取消确认与保存都只留一层弹窗容器", async () => {
+    const { onSaved } = renderModal("summary");
+
+    // 这一栏的内容框：必须限定在 `.ant-modal-body` 里——rc-textarea 为 autosize 会在
+    // 文档末尾挂一个隐藏的镜像 textarea，直接取 `document.querySelector("textarea")`
+    // 会命中那个镜像，改了等于没改（本用例第一版就是这么红的）。
+    const textarea = document.querySelector<HTMLTextAreaElement>(".ant-modal-body textarea");
+    expect(textarea).not.toBeNull();
+    fireEvent.change(textarea!, { target: { value: "改过的总结" } });
+
+    fireEvent.click(
+      document.querySelector<HTMLButtonElement>(
+        ".ant-modal-footer .ant-btn:not(.ant-btn-primary)",
+      )!,
+    );
+    // L2：确认条在 footer 里（`.rf-form-modal-discard`），角色是 alert 而不是 dialog。
+    expect(document.querySelector(".rf-form-modal-discard")).not.toBeNull();
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+
+    // 「继续编辑」是确认条里的安全项（非危险按钮），丢掉修改的那颗才带 danger。
+    fireEvent.click(
+      document.querySelector<HTMLButtonElement>(
+        ".rf-form-modal-discard .ant-btn:not(.ant-btn-dangerous)",
+      )!,
+    );
+    fireEvent.click(
+      document.querySelector<HTMLButtonElement>(".ant-modal-footer .ant-btn-primary")!,
+    );
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  });
 });

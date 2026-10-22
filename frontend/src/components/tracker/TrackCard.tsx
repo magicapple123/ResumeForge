@@ -62,7 +62,8 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
                   key: "delete",
                   label: "删除",
                   danger: true,
-                  confirm: "删除这条进度记录？",
+                  // 软删由父级用 useDeleteUndo 兜：这里**不再问**，撤销入口在 Toast 上。
+                  undo: true,
                   onClick: onDelete,
                 },
               ]),

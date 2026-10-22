@@ -8,7 +8,7 @@ export interface TemplateMarketPreset {
   label: string;
   category: string;
   description: string;
-  /** 映射到的内置样式模板名。 */
+  /** 映射到的内置模板名。 */
   template: string;
   /** 映射到的格式预设名（内置 FORMAT_PRESETS）。 */
   format_name: string;

@@ -185,7 +185,7 @@ export default function UpdateCard() {
           {desktop ? t("update.method.desktop") : t("update.method.in-app")}
         </Descriptions.Item>
         <Descriptions.Item label="当前版本">
-          {result?.current_version || status?.current_version || "点击下方按钮获取"}
+          {result?.current_version || status?.current_version || "点「检查更新」获取"}
         </Descriptions.Item>
         {status?.target_version && (
           <Descriptions.Item label="目标版本">{status.target_version}</Descriptions.Item>

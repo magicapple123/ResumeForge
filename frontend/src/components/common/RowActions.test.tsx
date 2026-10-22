@@ -11,11 +11,12 @@
  * （批量选择工具栏），共用同一套断言形态；为了不再多一个几乎重复的夹具文件，
  * 两个 describe 放在一起。
  */
-import { cleanup, render, screen } from "@testing-library/react";
-import { Form } from "antd";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { App as AntdApp, Form } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import BatchDeleteButton from "./BatchDeleteButton";
 import { RowActions } from "./RowActions";
+import { TRASH_RECOVERY_NOTE, useRowActionMenu, type RowMenuItem } from "./rowActionMenu";
 
 afterEach(() => {
   cleanup();
@@ -53,6 +54,46 @@ describe("RowActions 的禁用语义", () => {
 
     expect(screen.getByRole("button", { name: "编辑" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "归档" })).toBeDisabled();
+  });
+});
+
+/** 把菜单项 onClick 暴露成一个真按钮：只为一件事存在，验证确认弹窗带正文。 */
+function ConfirmHarness({ items }: { items: RowMenuItem[] }) {
+  const buildMenu = useRowActionMenu();
+  const menuItems = buildMenu(items);
+  const open = () => {
+    const first = menuItems?.[0] as { onClick?: () => void } | undefined;
+    first?.onClick?.();
+  };
+  return <button onClick={open}>打开确认</button>;
+}
+
+describe("二次确认的正文", () => {
+  it("confirmBody 出现在弹窗正文里（不只有一个标题）", async () => {
+    const onClick = vi.fn();
+    render(
+      <AntdApp>
+        <ConfirmHarness
+          items={[
+            {
+              key: "delete",
+              label: "删除",
+              danger: true,
+              confirm: "删除这条记录？",
+              confirmBody: TRASH_RECOVERY_NOTE,
+              onClick,
+            },
+          ]}
+        />
+      </AntdApp>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "打开确认" }));
+
+    const dialog = await screen.findByRole("dialog");
+    // 标题说动作与对象，正文说后果与可逆性——两段都在，才算 §4.4 的三段式。
+    expect(dialog.textContent).toContain("删除这条记录？");
+    expect(dialog.textContent).toContain(TRASH_RECOVERY_NOTE);
   });
 });
 

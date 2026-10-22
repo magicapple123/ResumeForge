@@ -2,6 +2,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import SettingsPage from "./SettingsPage";
 
 const apiMocks = vi.hoisted(() => ({
@@ -153,9 +154,11 @@ describe("SettingsPage 记录编辑参数往返", () => {
       message: "找到 1 个模型",
     });
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await screen.findByText("测试记录");
     await openRecordEditByName("测试记录");
@@ -172,11 +175,13 @@ describe("SettingsPage 记录编辑参数往返", () => {
   it("uses the newly typed key and endpoint without requiring a model or a saved record", async () => {
     apiMocks.listLLMModels.mockResolvedValue({ models: [], message: "暂无模型" });
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
-    fireEvent.click(await screen.findByRole("button", { name: /新增配置/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /新建配置/ }));
     fireEvent.change(screen.getByLabelText("Base URL"), {
       target: { value: " https://models.example.com/v1 " },
     });
@@ -212,9 +217,11 @@ describe("SettingsPage 记录编辑参数往返", () => {
     }));
 
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await screen.findByText("测试记录");
 
@@ -242,9 +249,11 @@ describe("SettingsPage 记录编辑参数往返", () => {
 describe("SettingsPage 提醒弹窗开关", () => {
   async function renderAppTab() {
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByRole("tab", { name: "应用" }));
@@ -266,9 +275,11 @@ describe("SettingsPage 提醒弹窗开关", () => {
 describe("SettingsPage 投投悬浮球开关", () => {
   async function renderAppTab() {
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByRole("tab", { name: "应用" }));

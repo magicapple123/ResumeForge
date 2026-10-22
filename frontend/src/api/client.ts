@@ -275,7 +275,7 @@ export interface UploadProgressOptions {
 }
 
 /**
- * 基于 XHR 的进度上传：fetch 拿不到上传字节进度，大附件（识别材料、图片、头像）
+ * 基于 XHR 的进度上传：fetch 拿不到上传字节进度，大附件（识别资料、图片、头像）
  * 用它替换 request() 才能给用户画出进度条。错误口径与 request() 完全一致——
  * 非 2xx 抛同结构的 ApiError（message 仍走 extractError）、预算到期 timeout、
  * 调用方取消 cancelled、连接失败 network。

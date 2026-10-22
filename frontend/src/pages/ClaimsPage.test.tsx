@@ -6,7 +6,7 @@
  * 会造成真实后果的失误（用户照着它投出带【待补】的简历）。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Claim, ClaimPageList, ClaimSummary } from "../types";
@@ -85,7 +85,7 @@ const EMPTY_BASELINE = {
 };
 
 function renderPage() {
-  // 页面里有指向「拿去深挖」的跳转，所以要给它一个 Router 上下文。
+  // 页面里有指向「开始深挖」的跳转，所以要给它一个 Router 上下文。
   return render(
     <MemoryRouter>
       <AntdApp>
@@ -202,7 +202,7 @@ describe("ClaimsPage", () => {
     apiMocks.listClaimsPage.mockResolvedValue(makePage([makeClaim()]));
     renderPage();
 
-    expect(await screen.findByRole("button", { name: /拿去深挖/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /开始深挖/ })).toBeInTheDocument();
   });
 
   it("passes the chosen filters to the API", async () => {
@@ -274,7 +274,7 @@ describe("ClaimsPage", () => {
     expect(await screen.findByText("分类命中")).toBeInTheDocument();
   });
 
-  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除请求带全部 id 并刷新", async () => {
+  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（直接删，撤销在 Toast）→ 一次批量删除请求带全部 id 并刷新", async () => {
     apiMocks.listClaimsPage.mockResolvedValue(
       makePage([makeClaim(), makeClaim({ id: 2, title: "数据分析流水线" })]),
     );
@@ -290,15 +290,7 @@ describe("ClaimsPage", () => {
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
-    // Popconfirm 确认（文案带数量）；确认前绝不发请求。
-    const popover = await waitFor(() => {
-      const root = document.querySelector(".ant-popover");
-      expect(root).not.toBeNull();
-      return root as HTMLElement;
-    });
-    expect(popover.textContent).toContain("删除选中的 2 条台账");
-    expect(apiMocks.batchDeleteClaims).not.toHaveBeenCalled();
-    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+    // 软删可撤销：不再前置确认，点一下就直接发请求（撤销在 Toast 上）。
 
     await waitFor(() => {
       expect(apiMocks.batchDeleteClaims).toHaveBeenCalledTimes(1);

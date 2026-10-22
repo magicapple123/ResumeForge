@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 内推管理面板：列表 + 转化率卡 + 删除（软删）+ 状态分色 + 图片备注上传。 */
 import { App as AntApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ReferralPanel from "./ReferralPanel";
 import { REFERRAL_STATUS_COLORS } from "../types";
@@ -107,7 +107,7 @@ describe("ReferralPanel", () => {
     renderPanel();
     await screen.findByText(/张三 · 后端开发/);
 
-    fireEvent.click(screen.getByRole("button", { name: /新增内推/ }));
+    fireEvent.click(screen.getByRole("button", { name: /新建内推/ }));
 
     expect(await screen.findByLabelText("内推码")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /上传备注图/ })).toBeInTheDocument();
@@ -118,7 +118,7 @@ describe("ReferralPanel", () => {
     renderPanel();
     await screen.findByText(/张三 · 后端开发/);
 
-    fireEvent.click(screen.getByRole("button", { name: /新增内推/ }));
+    fireEvent.click(screen.getByRole("button", { name: /新建内推/ }));
     // Modal 渲染在 body 门户里，文件输入要查 document 而不是 render 容器。
     const input = document.querySelector<HTMLInputElement>('input[type="file"]');
     expect(input).not.toBeNull();
@@ -149,7 +149,7 @@ describe("ReferralPanel", () => {
     renderPanel();
     await screen.findByText(/张三 · 后端开发/);
 
-    fireEvent.click(screen.getByRole("button", { name: /新增内推/ }));
+    fireEvent.click(screen.getByRole("button", { name: /新建内推/ }));
     const input = document.querySelector<HTMLInputElement>('input[type="file"]');
     const file = new File(["png-bytes"], "note.png", { type: "image/png" });
     fireEvent.change(input as HTMLInputElement, { target: { files: [file] } });
@@ -183,7 +183,7 @@ describe("ReferralPanel", () => {
     expect(screen.getByText("REF-888")).toBeInTheDocument();
   });
 
-  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除请求带全部 id 并刷新", async () => {
+  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（直接删，撤销在 Toast）→ 一次批量删除请求带全部 id 并刷新", async () => {
     apiMocks.listReferralsPage.mockResolvedValue({
       items: [ITEMS[0], { ...ITEMS[0], id: 2, referrer_name: "李四", converted: false }],
       total: 2,
@@ -200,15 +200,7 @@ describe("ReferralPanel", () => {
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
-    // Popconfirm 确认（文案带数量）；确认前绝不发请求。
-    const popover = await waitFor(() => {
-      const root = document.querySelector(".ant-popover");
-      expect(root).not.toBeNull();
-      return root as HTMLElement;
-    });
-    expect(popover.textContent).toContain("删除选中的 2 条内推");
-    expect(apiMocks.batchDeleteReferrals).not.toHaveBeenCalled();
-    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+    // 软删可撤销：不再前置确认，点一下就直接发请求（撤销在 Toast 上）。
 
     await waitFor(() => {
       expect(apiMocks.batchDeleteReferrals).toHaveBeenCalledTimes(1);

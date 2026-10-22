@@ -14,8 +14,12 @@
  * 显隐规则（用户三轮反馈的最终口径）：整套工具栏只在多选模式渲染（入口=卡片右键
  * 「批量选择」，抽屉控制）；进入多选立即显示批量操作区，未选中时按钮禁用而不是
  * 藏掉；退出多选后整组消失。批量导入入口已移除（产品决策）。
+ *
+ * 批量删除的二次确认留在**这里**（就地 `Popconfirm`），因为它必须在抽屉之中、又不能是
+ * 第二层容器：抽屉(1) + `modal.confirm`(1) 就是 §3.7 禁止的叠层，Popover 不占容器层。
  */
-import { Checkbox, Button, Space, Tooltip, Typography } from "antd";
+import { Checkbox, Button, Popconfirm, Space, Tooltip, Typography } from "antd";
+import { t } from "../../i18n";
 
 interface Props {
   /** 当前页条数 > 0 时才渲染（调用方控制）。 */
@@ -29,6 +33,7 @@ interface Props {
   selecting: boolean;
   batchAction: "import" | "delete" | null;
   onToggleAll: (checked: boolean) => void;
+  /** 用户就地确认之后才回调（参数里不带事件，见 `Popconfirm` 的 onConfirm）。 */
   onDelete: () => void;
   onClear: () => void;
   onExit: () => void;
@@ -113,15 +118,27 @@ export default function CandidateBatchToolbar({
             导出 CSV
           </Button>
         )}
-        <Button
-          size="small"
-          danger
+        {/* 批量删除的二次确认是**就地 Popconfirm**（Popover 形态，不占容器层）：
+            抽屉本身已是一层容器，`modal.confirm` 会是第二层（AGENTS.md 的 §3.7）。
+            文案给全三段：动作 + 条数 + 后果（删除进回收站可恢复）。 */}
+        <Popconfirm
+          title={t("jobs.candidate.batch.delete-confirm", { count: selectedCount })}
+          description={t("jobs.candidate.batch.delete-note", { count: selectedCount })}
+          okText={t("jobs.candidate.batch.delete-action")}
+          cancelText={t("common.action.cancel")}
+          okButtonProps={{ danger: true }}
+          onConfirm={onDelete}
           disabled={!hasSelection || busy}
-          loading={batchAction === "delete"}
-          onClick={onDelete}
         >
-          批量删除
-        </Button>
+          <Button
+            size="small"
+            danger
+            disabled={!hasSelection || busy}
+            loading={batchAction === "delete"}
+          >
+            批量删除
+          </Button>
+        </Popconfirm>
         {/* 一键全清（含跨页选中）；「全选本页」再点一次只清本页。 */}
         <Button size="small" disabled={!hasSelection || busy} onClick={onClear}>
           清空选择

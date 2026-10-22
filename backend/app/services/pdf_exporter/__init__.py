@@ -16,7 +16,7 @@
     悄悄漂移。PDF 曾经自带一份只对 classic 成立的字号副本，于是 technical 等模板的
     姓名 / 区块标题比预览大 7%~10%；也曾经自带一份 `_TEMPLATE_COLORS` 强调色表，与
     模板的 `--accent` 是同一件事的两份定义；
-  * 用户在「格式模板」里设过的 `line_height` / `page_padding` / `section_gap` / `accent`
+  * 用户在「版式」里设过的 `line_height` / `page_padding` / `section_gap` / `accent`
     覆盖它们；
   * **不缩字号**（2026-10-21 用户要求）：按用户设定的参数原样排版，装不下就截断到页数
     上限并如实标记 ``overflow``（见 `build_resume_pdf`）。以前那套 `--fit-scale` 会把

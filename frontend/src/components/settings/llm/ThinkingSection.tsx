@@ -111,7 +111,7 @@ export function ThinkingSection({
       </Row>
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
         「检测思考支持」会发一次最小请求，计入你的模型用量。思考模式只作用于除「求职助手」以外的 AI
-        调用；助手的思考强度在它的输入框下方单独设置。
+        调用；助手的思考强度在求职助手输入框的「思考强度」里单独设置。
       </Typography.Text>
       {thinkingResult && (
         <Alert

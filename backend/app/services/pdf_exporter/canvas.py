@@ -64,7 +64,9 @@ class _ResumePDF(FPDF):
         # 把余下内容继续画在最后一页上——两条截断路径会让"预览看到的末页"与"裁剪得到的
         # 末页"悄悄不同，且要多走一整趟绘制。
         self.set_auto_page_break(auto=not measuring, margin=layout.margin_bottom)
-        self.set_margins(layout.margin_x, layout.margin_top, layout.margin_x)
+        # 左/上/右**各读各的边**：右边界此前写死成左（`margin_x`），四边一旦不对称，
+        # 折行宽度会比正文框宽出「右 − 左」，`multi_cell` 就会越过右边距。
+        self.set_margins(layout.margin_left, layout.margin_top, layout.margin_right)
         self.set_title("简历")
         self.alias_nb_pages()
         # 这一趟**真正画出去**的每一个字。字体预子集化靠它（见 `font_subset`）：

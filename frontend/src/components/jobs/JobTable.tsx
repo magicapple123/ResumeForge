@@ -6,7 +6,7 @@ import { Button, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { SortOrder, TableRowSelection } from "antd/es/table/interface";
 import type { HTMLAttributes } from "react";
-import type { JobList, Page } from "../../types";
+import { JOB_STATUS_META, type JobList, type Page } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
 import SkillTags from "../SkillTags";
@@ -42,14 +42,7 @@ interface Props {
   onSortChange: (state: JobSortState) => void;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  开放中: "green",
-  active: "green",
-  open: "green",
-  已截止: "default",
-  已投递: "blue",
-};
-
+/** `active` / `open` 是历史落库值：显示前先归一到「开放中」，再查 JOB_STATUS_META（兼容层，别删）。 */
 const STATUS_LABELS: Record<string, string> = {
   active: "开放中",
   open: "开放中",
@@ -152,11 +145,13 @@ export default function JobTable({
       title: "状态",
       dataIndex: "status",
       width: 90,
-      render: (value: string) => (
-        <Tag color={STATUS_COLORS[value] ?? "default"}>
-          {STATUS_LABELS[value] ?? (value || "-")}
-        </Tag>
-      ),
+      render: (value: string) => {
+        // 先归一再查 META：`active` / `open` 是历史落库值（见上面的 STATUS_LABELS），
+        // 归一后与 META 的键对齐。标签与颜色都来自 `types/job.ts` 的 JOB_STATUS_META
+        // （唯一来源），不再在这里写一份「中文值当查找键」的颜色表。
+        const meta = JOB_STATUS_META[STATUS_LABELS[value] ?? value];
+        return <Tag color={meta?.color ?? "default"}>{meta?.label ?? (value || "-")}</Tag>;
+      },
     },
     {
       title: "备注",
@@ -228,7 +223,8 @@ export default function JobTable({
       key: "delete",
       label: "删除",
       danger: true,
-      confirm: "确定删除该岗位？",
+      // 软删可撤销：不弹确认，5 秒撤销在 Toast 上。
+      undo: true,
       onClick: () => onDelete(job),
     },
   ];

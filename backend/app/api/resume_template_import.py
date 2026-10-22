@@ -61,14 +61,14 @@ async def import_template_from_file(
     name: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
-    """旧版单文件格式模板导入 API，保留原有请求与响应行为。"""
+    """旧版单文件版式导入 API，保留原有请求与响应行为。"""
     data = await file.read()
     if not data:
-        raise HTTPException(status_code=422, detail="文件是空的，请重新选择")
+        raise HTTPException(status_code=422, detail="文件是空的")
     if len(data) > MAX_ATTACHMENT_BYTES:
         raise HTTPException(
             status_code=422,
-            detail=f"文件不能超过 {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB，请压缩后再试",
+            detail=f"文件超过 {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB 上限",
         )
     filename = file.filename or ""
     image_mime = image_mime_of_content(data)
@@ -78,8 +78,8 @@ async def import_template_from_file(
         raise HTTPException(
             status_code=422,
             detail=(
-                f"这个文件看起来是「{detected}」，不是可用的模板素材。"
-                "请上传简历的图片（PNG / JPG / WEBP）或文档（PDF / DOCX）。"
+                f"这个文件看起来是「{detected}」，不是可用的模板素材；"
+                "只接受简历图片（PNG / JPG / WEBP）或文档（PDF / DOCX）"
             ),
         )
     if image_mime is not None:
@@ -91,7 +91,7 @@ async def import_template_from_file(
         if document_mime is None:  # pragma: no cover - 上面的 422 已挡住"两类都识别不出"
             raise HTTPException(
                 status_code=422,
-                detail="无法识别这个文件的类型。请上传简历的图片（PNG / JPG / WEBP）或文档（PDF / DOCX）。",
+                detail="无法识别这个文件的类型；只接受简历图片（PNG / JPG / WEBP）或文档（PDF / DOCX）",
             )
         data_url = f"data:{document_mime};base64,{base64.b64encode(data).decode('ascii')}"
         extractor = _legacy_dependency("extract_document_text", extract_document_text)
@@ -100,13 +100,13 @@ async def import_template_from_file(
         except ValueError as exc:
             raise HTTPException(
                 status_code=422,
-                detail=f"{exc}。也可以把简历截图成图片上传，或手动新建格式模板。",
+                detail=f"{exc}。也可以把简历截图成图片上传，或手动新建版式。",
             ) from exc
         source = TemplateImportSource(filename=filename, text=extracted.text)
 
     config = _configured_llm(db)
     if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     provider = _provider(config)
     db.close()
     try:
@@ -117,7 +117,7 @@ async def import_template_from_file(
         raise HTTPException(status_code=502, detail=f"分析模板失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 给旧客户端返回稳定错误
         logger.exception("模板导入分析发生内部错误")
-        raise HTTPException(status_code=502, detail="分析模板失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="分析模板失败") from exc
 
     final_name = (name or "").strip() or str(derived["name"])
     try:
@@ -198,7 +198,7 @@ async def _read_sources(
     if not images and not texts:
         raise HTTPException(
             status_code=422,
-            detail="没有可供分析的页面图像或文档文字；扫描 PDF 请先截图后上传。",
+            detail="没有可供分析的页面图像或文档文字（扫描 PDF 提取不到文字）",
         )
 
     return (
@@ -222,7 +222,7 @@ async def analyze_template_from_files(
     source, source_names, extraction_warnings = await _read_sources(files)
     config = _configured_llm(db)
     if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     provider = _provider(config)
     db.close()
     try:
@@ -233,12 +233,12 @@ async def analyze_template_from_files(
         raise HTTPException(status_code=502, detail=f"分析模板失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 对外返回稳定错误
         logger.exception("参考模板视觉分析发生内部错误")
-        raise HTTPException(status_code=502, detail="分析模板失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="分析模板失败") from exc
 
     spec = RESUME_TEMPLATES["classic"]
     html_path = TEMPLATES_DIR / spec["file"]
     if not html_path.is_file():
-        raise HTTPException(status_code=500, detail="内置模板资源缺失，请重新安装应用")
+        raise HTTPException(status_code=500, detail="内置模板资源缺失（安装包不完整）")
     local_name = Path(source_names[0]).stem[:40] if source_names else "导入的模板"
     final_name = (name or "").strip() or (
         local_name if derived["name"] == "用户上传的参考模板" else derived["name"]

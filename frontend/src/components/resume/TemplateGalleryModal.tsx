@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历样式模板一览：每个模板都渲染一份真实预览，点一下就直接选用。
+ * 简历模板一览：每个模板都渲染一份真实预览，点一下就直接选用。
  *
  * 之前只有"经典"一种模板，选模板这件事无从比较；现在内置 8 种 + 用户自制模板，
  * 光看名字（"优雅""技术"）猜不出效果，所以这里用真的渲染结果说话——预览用的是
@@ -219,7 +219,7 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
                   {item.name === selectedName ? <Tag color="green">使用中</Tag> : null}
                 </div>
                 <Typography.Text type="secondary" className="template-gallery-desc">
-                  {item.description || "用户自制的样式模板"}
+                  {item.description || "你自制的模板"}
                 </Typography.Text>
                 <Space size={8}>
                   <Button size="small" onClick={() => void openZoom(item)}>
@@ -245,7 +245,7 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
 
   return (
     <Modal
-      title="选择简历样式模板"
+      title="选择简历模板"
       open={open}
       onCancel={onClose}
       footer={null}

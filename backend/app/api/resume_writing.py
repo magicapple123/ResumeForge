@@ -69,7 +69,7 @@ def _load_record(db: Session, resume_id: int) -> ResumeRecord:
 def _require_provider(db: Session):
     config = get_llm_config(db)
     if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     return create_provider(config)
 
 
@@ -89,7 +89,7 @@ async def star_rewrite(resume_id: int, payload: StarRewriteRequest, db: Session 
         raise HTTPException(status_code=502, detail=f"STAR 改写失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 为用户提供可理解的失败提示
         logger.exception("STAR 改写发生内部错误")
-        raise HTTPException(status_code=502, detail="STAR 改写失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="STAR 改写失败") from exc
     return StarRewriteOut(result=result)
 
 
@@ -104,7 +104,7 @@ async def phrases(resume_id: int, payload: PhrasesRequest, db: Session = Depends
         raise HTTPException(status_code=502, detail=f"生成话术失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001
         logger.exception("生成话术发生内部错误")
-        raise HTTPException(status_code=502, detail="生成话术失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="生成话术失败") from exc
     return PhrasesOut(**result)
 
 
@@ -119,7 +119,7 @@ async def polish_resume(resume_id: int, payload: PolishRequest, db: Session = De
         raise HTTPException(status_code=502, detail=f"润色失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001
         logger.exception("润色发生内部错误")
-        raise HTTPException(status_code=502, detail="润色失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="润色失败") from exc
     return PolishOut(result=result)
 
 
@@ -151,7 +151,7 @@ async def rewrite_resume_field(
         raise HTTPException(status_code=502, detail=f"改写这一栏失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 为用户提供可理解的失败提示
         logger.exception("字段改写发生内部错误")
-        raise HTTPException(status_code=502, detail="改写这一栏失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="改写这一栏失败") from exc
     return RewriteFieldOut(
         path=target.path,
         label=target.label,
@@ -178,7 +178,7 @@ async def translate_resume(
         raise HTTPException(status_code=502, detail=f"翻译失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001
         logger.exception("翻译发生内部错误")
-        raise HTTPException(status_code=502, detail="翻译失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="翻译失败") from exc
     return TranslateOut(result=result)
 
 
@@ -197,7 +197,7 @@ async def polish_selection_endpoint(payload: PolishSelectionRequest, db: Session
         raise HTTPException(status_code=502, detail=f"润色失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 为用户提供可理解的失败提示
         logger.exception("选区润色发生内部错误")
-        raise HTTPException(status_code=502, detail="润色失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="润色失败") from exc
     return PolishSelectionOut(result=result)
 
 

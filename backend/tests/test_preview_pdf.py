@@ -324,6 +324,31 @@ def test_preview_pdf_takes_the_draft_line_height(client):
 
 
 @needs_font
+def test_preview_pdf_honours_the_draft_language(client):
+    """草稿里切了 English、还没保存：精确预览也必须印英文标题。
+
+    记录上钉的是 zh-CN、请求带 en-US——这与 ``POST /export`` 走的是同一条覆盖规则
+    （``ExportRequest.language`` 优先于记录值）。漏掉它就会出现"预览是 Summary、
+    下载到的 PDF 是「个人总结」"：预览显示的就是导出产物，这是它存在的全部理由。
+    """
+    resume_id = _create_resume(client)
+
+    def drawn_text(**payload) -> str:
+        response = client.post(PREVIEW.format(id=resume_id), json={"page_limit": 1, **payload})
+        assert response.status_code == 200, response.text
+        return "".join(run[3] for run in _text_runs(response.content))
+
+    overridden = drawn_text(language="en-US")
+    assert "Summary" in overridden
+    assert "个人总结" not in overridden
+
+    # 不带语言 = 记录值（zh-CN）：覆盖只发生在请求给了值的时候。
+    recorded = drawn_text()
+    assert "个人总结" in recorded
+    assert "Summary" not in recorded
+
+
+@needs_font
 def test_overflowing_draft_is_truncated_without_shrinking_the_font(client):
     """装不下就**截断 + 标记 overflow**，绝不为了塞进一页把 18px 压成 9px。
 

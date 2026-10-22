@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 统一导出面板：格式多选（含照片）+ 水印 + 脱敏。版式与页边距在预览的版式栏（T5）。 */
+/** 统一导出面板：格式多选（含照片）+ 水印 + 脱敏。排版设置与页边距都在预览的排版栏（T5）。 */
 import { PrinterOutlined } from "@ant-design/icons";
-import { App, Button, Checkbox, Input, Modal, Space, Switch, Typography } from "antd";
-import { useState } from "react";
+import { Alert, App, Button, Checkbox, Input, Modal, Space, Switch, Typography } from "antd";
+import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import { exportResumeWithOptions } from "../api/resumes";
-import type { ResumeFontScale } from "../types";
+import type { ResumeFontScale, ResumeLanguage } from "../types";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 import {
   DEFAULT_REDACTION_OPTIONS,
@@ -33,6 +33,14 @@ interface Props {
    * 存的旧版式——那正是"预览一页、导出两页"的来源。
    */
   initialFormatConfig?: ResumeFormatConfig;
+  /**
+   * 预览的**草稿语言**（纸面固定文案：小节标题 / 字段前缀）。
+   *
+   * 与 `initialPageLimit` / `initialFormatConfig` 同源：预览里把语言切成 English、
+   * 还没点「保存」时，导出也必须印英文——否则预览是 Summary、下载到的 PDF 是
+   * 「个人总结」。不传 = 让后端用记录里存的语言。
+   */
+  initialLanguage?: ResumeLanguage;
   /** 服务端是否找到中文字体；为 false 时只有浏览器打印一条路。 */
   pdfDirectAvailable?: boolean;
   onClose: () => void;
@@ -44,10 +52,11 @@ export default function ExportOptionsModal({
   initialPageLimit,
   initialFontScale,
   initialFormatConfig,
+  initialLanguage,
   pdfDirectAvailable = true,
   onClose,
 }: Props) {
-  const { message, modal } = App.useApp();
+  const { message } = App.useApp();
   // 「图片（PNG）」是前端本地格式：它不在后端枚举里，勾选后请求的仍是 PDF。
   const [formats, setFormats] = useState<ExportUiFormat[]>(["pdf"]);
   const [watermarkEnabled, setWatermarkEnabled] = useState(false);
@@ -62,10 +71,14 @@ export default function ExportOptionsModal({
    *
    * 面板**只管导出选项**（格式 / 水印 / 脱敏 / 照片）：字号、页数、页边距全部原样取自
    * 预览的版式草稿。以前面板还能覆盖这三项，结果是"面板 14mm、预览 11mm"两套数字，
-   * 用户改完要再回预览确认——版式归版式栏，面板归一。
+   * 用户改完要再回预览确认——排版设置归排版栏，面板归一。
    *
    * **不发 `margin_mm`**（R1）：页边距只有 `format_config.page_padding` 一个落点，
    * 预览与导出读的是同一个键。
+   *
+   * `language` 同样原样取自预览的草稿（与 `font_scale` / `page_limit` 一致）：它是
+   * "导出什么文字"的一部分——漏发它，用户在预览里切到 English 后下载到的仍是中文标题。
+   * `null` 表示"不覆盖，用记录里的语言"（旧调用方与未切语言时都是这条）。
    */
   const buildRequest = (format: ExportFormat): ExportRequest => ({
     format,
@@ -75,8 +88,41 @@ export default function ExportOptionsModal({
     font_scale: initialFontScale ?? null,
     page_limit: initialPageLimit ?? null,
     format_config: initialFormatConfig,
+    language: initialLanguage ?? null,
     include_photo: includePhoto,
   });
+
+  /**
+   * 「还有未完成标记」的就地询问：渲染一条面板内 Alert，用户点按钮才解开 Promise。
+   *
+   * 为什么不是 `modal.confirm`：导出面板本身就是一个 Modal，叠一个确认框就是第二层容器
+   * （3300），焦点与读屏上下文都会跳走。就地 Alert 不改变层级。
+   */
+  const [incompleteAsk, setIncompleteAsk] = useState<{ message: string } | null>(null);
+  // 解开 Promise 的函数放在 ref 里：它只在"事件/异步路径"里读写，不进渲染期
+  //（渲染期访问 ref 会被 `react-hooks/refs` 判成错误，也确实说明这里不需要它参与渲染）。
+  const incompleteResolve = useRef<((proceed: boolean) => void) | null>(null);
+
+  const askIncomplete = (text: string): Promise<boolean> =>
+    new Promise<boolean>((resolve) => {
+      incompleteResolve.current = resolve;
+      setIncompleteAsk({ message: text });
+    });
+
+  const answerIncomplete = (proceed: boolean): void => {
+    const resolve = incompleteResolve.current;
+    incompleteResolve.current = null;
+    setIncompleteAsk(null);
+    resolve?.(proceed);
+  };
+
+  // 面板被关掉时不能把调用方吊在那个 Promise 上：按"不导出"收尾。
+  useEffect(() => {
+    return () => {
+      incompleteResolve.current?.(false);
+      incompleteResolve.current = null;
+    };
+  }, []);
 
   /**
    * 导出被「正文还有未完成标记」拦下时（409），问一次是否仍要导草稿。
@@ -91,16 +137,9 @@ export default function ExportOptionsModal({
       return await run(false);
     } catch (err) {
       if (!(err instanceof ApiError) || err.status !== 409) throw err;
-      const proceed = await new Promise<boolean>((resolve) => {
-        modal.confirm({
-          title: "简历里还有未完成标记",
-          content: err.message,
-          okText: "仍要导出草稿",
-          cancelText: "我去改简历",
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
-      });
+      // 叠层禁令：这一档**不开二次确认弹窗**（那是 3300 的第二层容器），
+      // 改成面板内就地一条 Alert，用它的两个按钮把 Promise 解开。
+      const proceed = await askIncomplete(err.message);
       if (!proceed) return null;
       return await run(true);
     }
@@ -231,6 +270,24 @@ export default function ExportOptionsModal({
       ]}
     >
       <Space orientation="vertical" style={{ width: "100%" }} size="middle">
+        {incompleteAsk ? (
+          <Alert
+            type="warning"
+            showIcon
+            title="简历里还有未完成标记"
+            description={incompleteAsk.message}
+            action={
+              <Space size={8}>
+                <Button size="small" onClick={() => answerIncomplete(false)}>
+                  我去改简历
+                </Button>
+                <Button size="small" type="primary" onClick={() => answerIncomplete(true)}>
+                  仍要导出草稿
+                </Button>
+              </Space>
+            }
+          />
+        ) : null}
         <div>
           <Typography.Text strong>格式</Typography.Text>
           <div style={{ marginTop: 8 }}>

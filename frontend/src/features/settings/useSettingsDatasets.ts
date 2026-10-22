@@ -267,7 +267,7 @@ export function useSettingsDatasets() {
         await initializeDatasetScope();
         await activateDataset(dataset.id);
       }
-      message.success(`已切换到「${dataset.name}」，正在重新加载页面`);
+      message.success(`已切换到「${dataset.name}」，正在刷新页面`);
       // 整页重载：切换后所有本地状态都要按新数据集重建。失败时保留 loading 以便重试。
       window.setTimeout(reloadPage, 800);
     } catch (err) {

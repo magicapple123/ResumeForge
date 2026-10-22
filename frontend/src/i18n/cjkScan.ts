@@ -74,20 +74,129 @@ export interface ScanResult {
 export type ScanMode = "src" | "tests";
 
 /**
- * 去掉注释。
+ * 去掉注释：**逐字符状态机**（字符串 / 模板串 / 行注释 / 块注释四态）。
  *
- * 两条正则与 `components/resume-preview/noAutoShrinkGuard.test.ts` 的守卫**完全相同**：
- * 一条去块注释、一条去行注释，且行注释正则用 `[^:]` 前缀避免把 `http://` 当注释。
+ * 之前这里是两条正则（块注释一条、行注释一条），靠"最近的块注释收尾符"配对。那在一种
+ * 真实写法上会把**代码整段吞掉**：块注释之后出现含块注释起始符的 MIME 字符串时——
+ * 先例是 `const mime = file.type || "image/<星号>"`（星号是半角），紧接着后面还有一处
+ * JSX 注释的收尾符，两者一配，中间几十行真实代码连同其中的中文全部消失。
+ * `components/materials/MaterialFormModal.tsx` 就是这个形状（ISSUES ③-1）。
+ * 正则没法区分"字符串里的起始符"与"真的注释开头"，所以改为按**引号状态**走。
  *
- * 与那里唯一的不同是**块注释替换成等量换行**而不是空串：本文件按"行"计数，把多行块注释
- * 整段删掉会让后面的行号全部前移，被注释"吞掉"的两行代码会拼成一行，于是少算一行。
- * 保留换行后，`stripComments(text).split("\n")` 的每个下标都与原文行号一一对应——
- * 这正是"豁免注释只看原文、CJK 只看去注释后"能同时成立的前提。
+ * 两条不变量（`countCjkLines` 依赖它们）：
+ * 1. **行数不变**：块注释替换成等量换行（不是删掉），`split("\n")` 的下标仍与原文行号
+ *    一一对应——这是"豁免看原文、CJK 看去注释后"两条规则能同时成立的前提。
+ * 2. **单行字符串不跨行**：`"` / `'` 到行尾还没闭合就当普通字符（JSX 文本里出现的撇号
+ *    `don't` 不该把后面几行拖进"字符串"状态）；模板串允许跨行。
+ *
+ * 已知局限：模板串 `${…}` 里再嵌 `` ` `` 会提前收尾。这种写法在本库不存在，且它只会
+ * 造成"少剥一段注释"（多算而不是少算），不会掩盖新中文。
  */
 export function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (block: string) => block.replace(/[^\n]/g, ""))
-    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+  const out: string[] = [];
+  let index = 0;
+  while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (char === "/" && next === "*") {
+      index += 2;
+      while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) {
+        // 块注释整体消失，但每个换行都要留下：行号必须与原文件一一对应。
+        if (source[index] === "\n") out.push("\n");
+        index += 1;
+      }
+      index = Math.min(index + 2, source.length);
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      while (index < source.length && source[index] !== "\n") index += 1;
+      continue;
+    }
+    if (char === "/" && regexCanStartAfter(source, index)) {
+      // 正则字面量原样拷贝：里面的引号与反引号不是字符串开头（否则会把后面几十行拖进
+      // "字符串"状态，连带把真实注释里的中文算成代码——实测踩过一次）。
+      const end = closingRegexIndex(source, index);
+      if (end !== null) {
+        out.push(source.slice(index, end + 1));
+        index = end + 1;
+        continue;
+      }
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      const end = closingQuoteIndex(source, index, char);
+      if (end !== null) {
+        out.push(source.slice(index, end + 1));
+        index = end + 1;
+        continue;
+      }
+    }
+    out.push(char);
+    index += 1;
+  }
+  return out.join("");
+}
+
+/** `/` 前面出现这些字符时，它是正则开头而不是除号。 */
+const REGEX_PRECEDING_CHARS = new Set("(,=:[!&|?{};+-*%~^<>".split(""));
+
+/** `/` 前面出现这些关键字时，它也可能是正则开头（`return /re/`）。 */
+const REGEX_PRECEDING_WORDS = new Set([
+  "return",
+  "typeof",
+  "instanceof",
+  "in",
+  "of",
+  "new",
+  "delete",
+  "void",
+  "throw",
+  "case",
+  "do",
+  "else",
+  "yield",
+  "await",
+]);
+
+/** 第 `slash` 个字符处的 `/` 是不是正则字面量的开头。 */
+function regexCanStartAfter(source: string, slash: number): boolean {
+  let index = slash - 1;
+  while (index >= 0 && /\s/.test(source[index])) index -= 1;
+  if (index < 0) return true;
+  if (REGEX_PRECEDING_CHARS.has(source[index])) return true;
+  const word = /[A-Za-z_$][A-Za-z0-9_$]*$/.exec(source.slice(Math.max(0, index - 11), index + 1));
+  return word !== null && REGEX_PRECEDING_WORDS.has(word[0]);
+}
+
+/** 从 `start`（`/` 本身）起找正则的收尾 `/`；不吃字符类里的 `/`，跨行则判为判错。 */
+function closingRegexIndex(source: string, start: number): number | null {
+  let inClass = false;
+  for (let index = start + 1; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "\n") return null;
+    if (char === "[") inClass = true;
+    else if (char === "]") inClass = false;
+    else if (char === "/" && !inClass) return index;
+  }
+  return null;
+}
+
+/** 从 `start`（引号本身）起找配对的收尾引号；单行字符串没闭合时返回 `null`。 */
+function closingQuoteIndex(source: string, start: number, quote: string): number | null {
+  const allowNewline = quote === "`";
+  for (let index = start + 1; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "\n" && !allowNewline) return null;
+    if (char === quote) return index;
+  }
+  return null;
 }
 
 /**

@@ -21,6 +21,44 @@ export const JOB_RECOGNITION_SOURCES = [
 
 export type JobRecognitionSource = "" | (typeof JOB_RECOGNITION_SOURCES)[number];
 
+/**
+ * 岗位类型选项（唯一来源）。
+ *
+ * 定义放这里而不是放在 `components/jobs/form/jobFormOptions.ts` 或
+ * `pages/jobs/jobFilterOptions.ts`：那两个文件过去各写一份逐字相同的定义，改一处就会分叉；
+ * `types/` 是 `pages/` 与 `components/` 都合法依赖的唯一公共层。选项值就是落库值。
+ */
+// i18n-ok: 岗位类型是落库的数据值（与后端 job_type 同值），不是可自由改写的文案
+export const JOB_TYPE_OPTIONS = ["校招", "实习", "社招", "其他"].map((value) => ({
+  value,
+  label: value,
+}));
+
+/**
+ * 岗位状态 → 展示名 + Tag 颜色（唯一来源）。
+ *
+ * **三个键是落库的数据值，一个字符都不能改**：`backend/app/models/job.py` 的
+ * `JOB_STATUS_OPEN` / `JOB_STATUS_CLOSED` 就是「开放中」/「已截止」，
+ * `backend/app/schemas/job.py` 的默认值是「开放中」，投递成功时
+ * `backend/app/services/apply/_records.py` 会把岗位状态写成「已投递」。
+ * 改这些键等于改数据语义（需要迁移脚本 + 后端常量同步），不在文案整改范围。
+ *
+ * label 才是给界面看的：将来真要换个叫法，只改 label，键（数据值）不动。
+ * 颜色与标签同源，避免 `JobTable` 再写一份「中文值当查找键」的颜色表——那种写法在
+ * 状态值改名时会静默掉成 `default`，`tsc` 也不报。
+ */
+export const JOB_STATUS_META: Record<string, { label: string; color: string }> = {
+  开放中: { label: "开放中", color: "green" }, // i18n-ok: 岗位状态是落库的数据值（B0 只搬位置）
+  已截止: { label: "已截止", color: "default" }, // i18n-ok: 岗位状态是落库的数据值（B0 只搬位置）
+  已投递: { label: "已投递", color: "blue" }, // i18n-ok: 岗位状态是落库的数据值（B0 只搬位置）
+};
+
+/** 岗位状态选项：由 META 派生，标签与列表里的状态 Tag 同源（下拉顺序 = META 键序）。 */
+export const JOB_STATUS_OPTIONS = Object.entries(JOB_STATUS_META).map(([value, meta]) => ({
+  value,
+  label: meta.label,
+}));
+
 export interface Job {
   id: number;
   title: string;

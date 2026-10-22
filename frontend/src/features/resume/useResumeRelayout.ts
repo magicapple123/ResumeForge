@@ -29,7 +29,7 @@ interface Options {
 }
 
 interface Result {
-  /** 是否有一次渲染在飞（用于"正在按新版式渲染…"文案与防重复提交）。 */
+  /** 是否有一次渲染在飞（用于"正在按新设置重新排版…"文案与防重复提交）。 */
   relayouting: boolean;
   /** 请求渲染这一版版式：空闲即发，在飞则合并到"最后那一版"。 */
   request: (next: ResumeLayout) => void;

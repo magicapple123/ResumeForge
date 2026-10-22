@@ -13,7 +13,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
-import type { ResumeLayout } from "../../types";
+import { t } from "../../i18n";
+import type { ResumeFormatConfig, ResumeLayout } from "../../types";
 import { DEFAULT_LAYOUT, makePreviewRef, pressArrow } from "../ResumeLayoutControls.testkit";
 import ResumeMeasureControls from "./ResumeMeasureControls";
 
@@ -167,5 +168,132 @@ describe("ResumeMeasureControls · 页边距", () => {
     const next = lastLayout(onChange);
     expect(next.format_config).not.toHaveProperty("page_padding");
     expect(next.format_config).toEqual({ accent: "#123456" });
+  });
+});
+
+/**
+ * 四向页边距（2026-10-22）：总滑杆的三态与四条支路的接线。
+ *
+ * 这一组守的是"两种写入语义互不越界"：
+ * - 拖总滑杆 **只写** `page_padding`，并把四条支路清干净（需求 d）；
+ * - 拖某一条支路 **写全四条**，并且不留下一个与它们并存的 `page_padding`
+ *   （否则"总"会在下一次解析时把没动的边拉回去）。
+ */
+describe("ResumeMeasureControls · 四向页边距", () => {
+  /** 四边齐全但上边距不同：这就是"自定义"态（总滑杆上没有一个页边距值）。 */
+  const ASYMMETRIC: ResumeFormatConfig = {
+    accent: "#123456",
+    page_padding_top: 8,
+    page_padding_right: 12,
+    page_padding_bottom: 12,
+    page_padding_left: 12,
+  };
+
+  it("四边不全等时总滑杆读数是「自定义」", async () => {
+    renderGroup({ layout: { ...BASE, format_config: ASYMMETRIC } });
+
+    expect(await screen.findByText(t("resume.pagePadding.custom"))).toBeInTheDocument();
+    // 滑块停在**上边距**（8）：它是"把整体拉回来"最短的那条路。
+    expect(screen.getByRole("slider", { name: /页边距/ })).toHaveAttribute("aria-valuenow", "8");
+  });
+
+  it("拖总滑杆：只写 page_padding，四条支路全部消失（自定义 → 统一）", async () => {
+    const onChange = renderGroup({ layout: { ...BASE, format_config: ASYMMETRIC } });
+
+    fireEvent.click(await screen.findByRole("button", { name: "增大页边距" }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    const next = lastLayout(onChange);
+    expect(next.format_config).toEqual({ accent: "#123456", page_padding: 8.1 });
+    for (const key of ["page_padding_top", "page_padding_right", "page_padding_bottom"])
+      expect(next.format_config).not.toHaveProperty(key);
+    expect(next.format_config).not.toHaveProperty("page_padding_left");
+  });
+
+  it("双击总滑杆标题：total 与四条支路一起清掉（回到随模板）", async () => {
+    const onChange = renderGroup({ layout: { ...BASE, format_config: ASYMMETRIC } });
+
+    // 标题文案走 i18n key：中文断言文案会被 cjkRatchet 计入，新用例不再写死中文。
+    fireEvent.doubleClick(await screen.findByText(t("resume.pagePadding.label")));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    expect(lastLayout(onChange).format_config).toEqual({ accent: "#123456" });
+  });
+
+  it("分边调整默认收起；展开后拖「上」写全四条、且不留下 page_padding", async () => {
+    const onChange = renderGroup({ layout: { ...BASE, format_config: ASYMMETRIC } });
+
+    // 收起态下四条支路不存在（99% 的用户不该看到 4 条额外滑杆）。
+    expect(screen.queryByRole("button", { name: "增大上边距" })).not.toBeInTheDocument();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("resume.pagePadding.sidesToggle") }),
+    );
+    // 「上」此刻是 8mm（离下限 0 还远），减小那只按钮是可用的，但用例要的是"往上加"。
+    fireEvent.click(await screen.findByRole("button", { name: "增大上边距" }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    const next = lastLayout(onChange);
+    expect(next.format_config).toEqual({
+      accent: "#123456",
+      page_padding_top: 8.1,
+      page_padding_right: 12,
+      page_padding_bottom: 12,
+      page_padding_left: 12,
+    });
+    expect(next.format_config).not.toHaveProperty("page_padding");
+  });
+
+  it("只有真的不一样的那一条边出现复位图标（写全四条不等于四条都调整过）", async () => {
+    // classic 的默认页边距是 14：把上边拖到 8 之后四条键都会写下来，
+    // 但只有「上」的值与统一值不同——复位图标只该长在这一条上。
+    renderGroup({
+      layout: {
+        ...BASE,
+        format_config: {
+          accent: "#123456",
+          page_padding_top: 8,
+          page_padding_right: 14,
+          page_padding_bottom: 14,
+          page_padding_left: 14,
+        },
+      },
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("resume.pagePadding.sidesToggle") }),
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: t("resume.pageMargin.resetAction", { side: t("resume.pageMargin.top") }),
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: t("resume.pageMargin.resetAction", { side: t("resume.pageMargin.right") }),
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("没有照片时（hasPhoto=false）照片滑杆禁用并说明原因", async () => {
+    renderGroup({ hasPhoto: false });
+
+    expect(
+      await screen.findByRole("slider", { name: t("resume.photo.scale.sliderLabel") }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(t("resume.photo.scale.noPhoto"))).toBeInTheDocument();
+  });
+
+  it("照片大小拖动：只写 photo_scale（百分比 → 系数）", async () => {
+    const onChange = renderGroup({ hasPhoto: true });
+
+    fireEvent.click(await screen.findByRole("button", { name: t("resume.photo.scale.increase") }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    expect(lastLayout(onChange).format_config).toEqual({
+      accent: "#123456",
+      photo_scale: 1.02,
+    });
   });
 });

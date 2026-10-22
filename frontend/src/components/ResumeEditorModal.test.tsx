@@ -100,6 +100,18 @@ describe("ResumeEditorModal reference panel", () => {
  * （「未保存的修改将丢失」继续编辑/放弃）；保存成功即解除。beforeunload
  * 的挂载/解除模式与 ProfilePage 相同。
  */
+/** 只看 footer 的确认条：页面里另有一个 role="alert" 的页内提示，按 role 找会撞车。 */
+const discardBar = (): HTMLElement | null => document.querySelector(".rf-form-modal-discard");
+
+/** 就地确认条里的主按钮：L2 确认在 footer 内换态，不再叠第二层弹窗。 */
+async function discardBarButton(): Promise<HTMLElement> {
+  return waitFor(() => {
+    const hit = document.querySelector<HTMLElement>(".rf-form-modal-discard .ant-btn-primary");
+    if (!hit) throw new Error("内联确认条未渲染");
+    return hit;
+  });
+}
+
 describe("ResumeEditorModal 未保存守卫", () => {
   function spyBeforeUnload() {
     const addSpy = vi.spyOn(window, "addEventListener");
@@ -131,13 +143,13 @@ describe("ResumeEditorModal 未保存守卫", () => {
     fireEvent.change(screen.getByLabelText("姓名"), { target: { value: "张四" } });
     fireEvent.click(screen.getByRole("button", { name: /取\s*消/ }));
 
-    const confirm = document.querySelector(".ant-modal-confirm");
-    expect(confirm).not.toBeNull();
-    expect(confirm?.textContent).toContain("未保存的修改将丢失");
+    // 内联确认条：同一个 footer 换态，**不叠第二层弹窗**。
+    const bar = discardBar();
+    expect(bar?.textContent).toContain("这份简历还有改动没有保存");
     expect(onClose).not.toHaveBeenCalled();
 
-    // 继续编辑：确认框关闭，弹窗仍开着。
-    fireEvent.click(screen.getByRole("button", { name: /继\s*续\s*编\s*辑/ }));
+    fireEvent.click(screen.getByRole("button", { name: "继续编辑" }));
+    expect(discardBar()).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -151,7 +163,7 @@ describe("ResumeEditorModal 未保存守卫", () => {
 
     fireEvent.change(screen.getByLabelText("姓名"), { target: { value: "张四" } });
     fireEvent.click(screen.getByRole("button", { name: /取\s*消/ }));
-    fireEvent.click(screen.getByRole("button", { name: /放\s*弃\s*修\s*改/ }));
+    fireEvent.click(screen.getByRole("button", { name: "放弃修改" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -446,11 +458,9 @@ describe("ResumeEditorModal 填入我的资料全部数据（T11）", () => {
     expect(screen.getByLabelText("姓名")).toHaveValue("李四");
     expect(screen.getByLabelText("个人总结")).toHaveValue("资料里的个人总结");
 
-    // 脏标记生效：这时点「取消」必须先弹未保存确认。
+    // 脏标记生效：这时点「取消」先出未保存确认条。
     fireEvent.click(screen.getByRole("button", { name: /取\s*消/ }));
-    expect(document.querySelector(".ant-modal-confirm")?.textContent).toContain(
-      "未保存的修改将丢失",
-    );
+    expect(discardBar()?.textContent).toContain("这份简历还有改动没有保存");
   });
 
   it("已有内容时先确认：取消不动，确认后覆盖", async () => {
@@ -458,22 +468,33 @@ describe("ResumeEditorModal 填入我的资料全部数据（T11）", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
 
-    await waitFor(() => expect(document.querySelector(".ant-modal-confirm")).not.toBeNull());
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain(
+        "将用「我的资料」覆盖当前已填写的内容",
+      ),
+    );
     // 取消：原内容一个字符都不动。
-    const box = document.querySelector(".ant-modal-confirm") as HTMLElement;
-    fireEvent.click(box.querySelector(".ant-btn:not(.ant-btn-primary)") as HTMLElement);
+    fireEvent.click(screen.getByRole("button", { name: "继续编辑" }));
     expect(screen.getByLabelText("姓名")).toHaveValue("张三");
 
     // 再来一次并确认覆盖。
     fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
-    const confirm = await waitFor(() => {
-      const button = document.querySelector<HTMLButtonElement>(
-        ".ant-modal-confirm .ant-btn-primary",
-      );
-      if (!button) throw new Error("未找到确认按钮");
-      return button;
-    });
-    fireEvent.click(confirm);
+    fireEvent.click(await discardBarButton());
     await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("李四"));
+  });
+
+  /** 叠层回归：确认条就地出现在 footer，不许退回 `modal.confirm`（那会多出一层弹窗容器）。 */
+  it("覆盖填入只留一层弹窗容器：确认条在 footer 里就地换态", async () => {
+    renderEditor(CONTENT, () => FILLED);
+
+    // 入口按钮按容器定位（编辑栏头部的提示行），不靠文案找。
+    const fillEntry = document.querySelector<HTMLElement>(".resume-editor-hint-row button.ant-btn");
+    expect(fillEntry).not.toBeNull();
+    fireEvent.click(fillEntry!);
+
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    fireEvent.click(await discardBarButton());
+    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("李四"));
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
   });
 });

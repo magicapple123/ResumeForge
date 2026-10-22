@@ -16,7 +16,7 @@ export const STRONG_RESPONSIBILITY_LEVELS: readonly ResponsibilityLevel[] = [
   "项目负责人",
 ];
 
-/** 核实状态：决定这条主张能出现在哪一版材料里。 */
+/** 核实状态：决定这条主张能出现在哪一版资料里。 */
 export const VERIFICATION_STATUSES = ["已确认", "待确认", "已过期", "不采用"] as const;
 export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
 
@@ -24,7 +24,7 @@ export const VERIFICATION_STATUS_HINTS: Record<VerificationStatus, string> = {
   已确认: "可以作为事实写进正式简历",
   待确认: "只能进草稿，必须保留【待补】占位符",
   已过期: "内容会随时间变化，更新前不作为最新事实",
-  不采用: "保留原因供复盘，不进入对外材料",
+  不采用: "保留原因供复盘，不进入对外资料",
 };
 
 export const CLAIM_CATEGORIES = [

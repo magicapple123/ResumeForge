@@ -138,6 +138,7 @@ export default function UserGuideModal({
   const showQuickStart = view === "quick-start";
 
   return (
+    // popup-ok: 只读引导，没有提交动作，关闭无损失
     <Modal
       className="user-guide-modal"
       open={open}

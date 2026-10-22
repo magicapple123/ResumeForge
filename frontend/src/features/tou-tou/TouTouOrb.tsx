@@ -1,17 +1,29 @@
+// SPDX-License-Identifier: Apache-2.0
 /** 投投悬浮球：全局助手入口、拖拽吸附、贴边收纳与低打扰小贴士。 */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Tooltip } from "antd";
 import { useTouTou } from "./touTouContext";
 import { TOU_TOU_TIPS } from "./touTouTips";
 import type { TouTouStatus } from "./touTouTypes";
 import TouTouTip from "./TouTouTip";
 import TouTouSaveCard from "./TouTouSaveCard";
 import TouTouProfilePromptCard from "./TouTouProfilePromptCard";
-import { TOU_TOU_FACE_SOURCES, faceKeyFor } from "./touTouFaces";
+import { faceKeyFor } from "./touTouFaces";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
-import { layer } from "../../theme/tokens";
 import { useTouTouOrbDrag } from "./useTouTouOrbDrag";
+import { useTouTouOrbBlink } from "./useTouTouOrbBlink";
+import { useTouTouOrbTips } from "./useTouTouOrbTips";
+import { useTouTouOrbPet } from "./useTouTouOrbPet";
+import { TouTouOrbButton } from "./TouTouOrbButton";
+import {
+  ASSISTANT_OWNED_STATUSES,
+  CURIOUS_MS,
+  DONE_MS,
+  DOUBLE_CLICK_WINDOW_MS,
+  HIDE_AFTER_MS,
+  SLEEP_AFTER_MS,
+  clearTimer,
+} from "./touTouOrbConstants";
 import {
   getProfileEditControl,
   getProfileSaveControl,
@@ -20,37 +32,6 @@ import {
 } from "./profileSaveBridge";
 import "./tou-tou.css";
 import "./tou-tou-accessibility.css";
-
-const HIDE_AFTER_MS = 12_000;
-const SLEEP_AFTER_MS = 60_000;
-const CURIOUS_MS = 1_500;
-const DONE_MS = 2_400;
-/** 单击 / 双击的判窗：两次激活落在这个间隔内算双击（开剪贴板）。 */
-const DOUBLE_CLICK_WINDOW_MS = 280;
-/** 发呆时眨眼的间隔（带抖动，免得像节拍器）与眨眼时长。 */
-const BLINK_MIN_MS = 6_000;
-const BLINK_MAX_MS = 13_000;
-const BLINK_MS = 130;
-/** 抚摸判定：节流间隔、计数窗口、触发次数与持续时长。 */
-const PET_STROKE_MIN_GAP_MS = 120;
-const PET_WINDOW_MS = 700;
-const PET_COUNT = 3;
-const PET_HOLD_MS = 1_500;
-
-/**
- * 助手的表情优先于本地小动作。
- *
- * 拖拽会切到「好奇」，松手 1.5s 后回到「正常」——如果这时助手正在思考或刚出错，
- * 这两个本地动作会把助手的表情顶掉，而且不会再恢复。这三个状态归助手所有。
- */
-const ASSISTANT_OWNED_STATUSES: ReadonlySet<TouTouStatus> = new Set(["thinking", "done", "error"]);
-
-function clearTimer(timerRef: { current: number | null }) {
-  if (timerRef.current !== null) {
-    window.clearTimeout(timerRef.current);
-    timerRef.current = null;
-  }
-}
 
 export interface TouTouOrbProps {
   isWebform?: boolean;
@@ -84,9 +65,6 @@ export default function TouTouOrb({
   const sleepTimerRef = useRef<number | null>(null);
   const tipTimerRef = useRef<number | null>(null);
   const tipHideTimerRef = useRef<number | null>(null);
-  const petTimerRef = useRef<number | null>(null);
-  const lastStrokeAtRef = useRef<number | null>(null);
-  const strokeCountRef = useRef(0);
   const statusSyncedRef = useRef(false);
   /** 上一次激活（单击落点）的时间戳，配合定时器区分单击与双击。 */
   const lastActivateRef = useRef(0);
@@ -212,28 +190,7 @@ export default function TouTouOrb({
     setTipVisible(false);
   }, [resetInactivity]);
 
-  /**
-   * 被抚摸：窗口期内快速划过球面够次数就换上「很舒服」的脸。
-   *
-   * 助手忙时（thinking/done/error 归助手所有）不触发——抚摸不能把思考脸顶掉。
-   * petted 是**独立 state**，不进标语轮换 effect 的依赖数组，抚摸不会重置或重复
-   * 触发标语计时。
-   */
-  const handlePetStroke = useCallback(() => {
-    if (isBusyRef.current) return;
-    const now = Date.now();
-    const last = lastStrokeAtRef.current;
-    lastStrokeAtRef.current = now;
-    // 节流：一次划过会触发一串 mousemove，只按间隔 ≥120ms 的"一笔"计数。
-    if (last !== null && now - last < PET_STROKE_MIN_GAP_MS) return;
-    strokeCountRef.current =
-      last !== null && now - last <= PET_WINDOW_MS ? strokeCountRef.current + 1 : 1;
-    if (strokeCountRef.current < PET_COUNT) return;
-    strokeCountRef.current = 0;
-    setPetted(true);
-    clearTimer(petTimerRef);
-    petTimerRef.current = window.setTimeout(() => setPetted(false), PET_HOLD_MS);
-  }, []);
+  const { handlePetStroke } = useTouTouOrbPet({ isBusyRef, setPetted });
 
   const { buttonRef, dragging, handlePointerDown, position, shellStyle, suppressClickRef } =
     useTouTouOrbDrag({ scheduleIdle, setVisualStatus: requestVisualStatus, wake });
@@ -272,82 +229,29 @@ export default function TouTouOrb({
     profilePromptRef.current = hasProfilePrompt;
   });
 
-  /**
-   * 发呆时偶尔眨一下眼。
-   *
-   * 眨眼目前**借用睡着的闭眼素材**闪一下（130ms，人眼读作眨眼），有了专门的眨眼
-   * 素材后在 `touTouFaces.ts` 里把它指过去即可。只在"正常"状态下眨：思考、出错、
-   * 睡着时眨眼没有意义，收纳成细边或正在拖拽时也看不见。
-   */
-  useEffect(() => {
-    if (prefersReducedMotion || hidden || dragging || visualStatus !== "idle") return;
-    let blinkTimer = 0;
-    let openTimer = 0;
-    const scheduleBlink = () => {
-      const delay = BLINK_MIN_MS + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
-      blinkTimer = window.setTimeout(() => {
-        setBlinking(true);
-        openTimer = window.setTimeout(() => {
-          setBlinking(false);
-          scheduleBlink();
-        }, BLINK_MS);
-      }, delay);
-    };
-    scheduleBlink();
-    return () => {
-      window.clearTimeout(blinkTimer);
-      window.clearTimeout(openTimer);
-      setBlinking(false);
-    };
-  }, [dragging, hidden, prefersReducedMotion, visualStatus]);
+  useTouTouOrbBlink({ prefersReducedMotion, hidden, dragging, visualStatus, setBlinking });
 
   useEffect(() => {
     context.setEdge(position.side);
   }, [context, position.side]);
 
-  useEffect(() => {
-    // 标语开关独立于球开关：关掉后不再弹新标语，已显示的立即收起；
-    // 重新开启后 5s / 120s 的周期自然恢复，无需刷新页面。
-    //
-    // 依赖只留真正的开关（context.enabled/tipsEnabled）：hidden/dragging/isBusy/
-    // visualStatus 是"到点了再看"的瞬态条件，放进依赖会让表情每次变化都拆掉
-    // 重建 120s interval 并重排 5s 的首次出现——频繁互动时标语出现频率远高于
-    // 设计值。回调里改读 ref 镜像，取到的一定是最新值。
-    if (!context.enabled || !context.tipsEnabled) return;
-    const showTip = () => {
-      if (
-        hiddenRef.current ||
-        draggingRef.current ||
-        isBusyRef.current ||
-        profilePromptRef.current ||
-        visualStatusRef.current !== "idle"
-      )
-        return;
-      setTipVisible(true);
-      clearTimer(tipHideTimerRef);
-      tipHideTimerRef.current = window.setTimeout(() => setTipVisible(false), 8_000);
-    };
-    tipTimerRef.current = window.setTimeout(showTip, 5_000);
-    const interval = window.setInterval(() => {
-      setTipIndex((current) => (current + 1) % TOU_TOU_TIPS.length);
-      showTip();
-    }, 120_000);
-    return () => {
-      clearTimer(tipTimerRef);
-      window.clearInterval(interval);
-      clearTimer(tipHideTimerRef);
-    };
-  }, [context.enabled, context.tipsEnabled]);
-
-  // 标语可见性是多个瞬态条件的派生函数：任何条件成立都要立即藏起标语。
-  // 提示卡在场也算一条：它和标语抢同一块地方（见 profilePromptRef 的说明）。
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (hidden || dragging || isBusy || hasProfilePrompt || !context.tipsEnabled) {
-      setTipVisible(false);
-    }
-  }, [context.tipsEnabled, dragging, hasProfilePrompt, hidden, isBusy]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  useTouTouOrbTips({
+    enabled: context.enabled,
+    tipsEnabled: context.tipsEnabled,
+    hidden,
+    dragging,
+    isBusy,
+    hasProfilePrompt,
+    hiddenRef,
+    draggingRef,
+    isBusyRef,
+    profilePromptRef,
+    visualStatusRef,
+    tipTimerRef,
+    tipHideTimerRef,
+    setTipVisible,
+    setTipIndex,
+  });
 
   const handleActivate = (options: { immediate?: boolean } = {}) => {
     if (suppressClickRef.current) {
@@ -403,7 +307,6 @@ export default function TouTouOrb({
       clearTimer(sleepTimerRef);
       clearTimer(tipTimerRef);
       clearTimer(tipHideTimerRef);
-      clearTimer(petTimerRef);
       clearTimer(singleOpenTimerRef);
     };
   }, []);
@@ -454,47 +357,17 @@ export default function TouTouOrb({
           Zzz
         </span>
       ) : null}
-      <Tooltip
-        title="单击：打开求职助手；双击：打开投递剪贴板"
-        placement="top"
-        /*
-         * 球（.tt-shell）已提到 3650，antd Tooltip 默认的 1070 会被盖住；
-         * 抬到与 .tt-tip 同一地标 3700（见 tou-tou.css）。默认的 hover 事件
-         * 不影响 280ms 的单击/双击判定。
-         */
-        styles={{ root: { zIndex: layer.orbTooltip } }}
-      >
-        <button
-          ref={buttonRef}
-          type="button"
-          className={buttonClasses}
-          aria-label="打开求职助手"
-          onPointerDown={handlePointerDown}
-          onClick={() => handleActivate()}
-          onKeyDown={handleKeyDown}
-          onFocus={wake}
-          onMouseEnter={wake}
-          onMouseMove={handlePetStroke}
-        >
-          <span className="tt-hide">
-            <span className="tt-scale">
-              <span className="tt-float">
-                <span className="tt-breathe">
-                  <span className="tt-turn">
-                    {/* 只渲染当前表情这一张：6 张常驻 img 全量进首屏（约 1.4MB）太贵，
-                        换 src 即换脸，无需淡入淡出。 */}
-                    <img
-                      className="tt-face is-active"
-                      src={TOU_TOU_FACE_SOURCES[activeFace]}
-                      alt=""
-                    />
-                  </span>
-                </span>
-              </span>
-            </span>
-          </span>
-        </button>
-      </Tooltip>
+      <TouTouOrbButton
+        buttonRef={buttonRef}
+        buttonClasses={buttonClasses}
+        activeFace={activeFace}
+        onPointerDown={handlePointerDown}
+        onClick={() => handleActivate()}
+        onKeyDown={handleKeyDown}
+        onFocus={wake}
+        onMouseEnter={wake}
+        onMouseMove={handlePetStroke}
+      />
     </div>
   );
 }

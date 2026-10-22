@@ -92,7 +92,7 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "网申资料": ("web_form_extra_profile",),
     "填表时学到的": ("web_form_learning",),
     "AI 求职助手": ("assistant_chat",),
-    "助手技能": ("skills",),
+    "技能": ("skills",),
     "会话管理": ("conversation_manage",),
     "投投剪贴板": ("tou_tou_clipboard",),
     "批量选择与批量删除": ("batch_selection",),

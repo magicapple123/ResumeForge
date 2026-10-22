@@ -2,7 +2,9 @@
 import { MenuOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import { Button, Layout, Menu, Tooltip, Typography } from "antd";
 import AppHeaderActions from "./components/AppHeaderActions";
+import AnnouncementBar from "./components/common/AnnouncementBar";
 import BackgroundTaskBar from "./components/BackgroundTaskBar";
+import { useUpdateAnnouncement } from "./features/announcements/useUpdateAnnouncement";
 import StarPromptModal from "./components/StarPromptModal";
 import PageSkeleton from "./components/common/PageSkeleton";
 import {
@@ -128,6 +130,8 @@ function MainLayout() {
   useShortcut("assistant", () => setFloatingAssistantOpen((open) => !open));
   useShortcut("newJob", () => location.pathname === "/jobs" && triggerJobCreate());
   useAppShortcuts(() => setFloatingAssistantOpen(true));
+  // 公告条唯一的真实来源（更新可用 / 安装包已下载）；失败静默，不留痕。
+  useUpdateAnnouncement();
   const { hiddenKeys } = useNavigationVisibility();
   const visiblePrimaryItems = useMemo(
     () => filterNavigationItems(PRIMARY_NAVIGATION_ITEMS, hiddenKeys, location.pathname),
@@ -379,6 +383,8 @@ function MainLayout() {
                 onStarClick={() => setStarModalOpen(true)}
               />
             </Header>
+            {/* 顶部公告条：常驻、手关、不自动消失。无公告时自身 return null。 */}
+            <AnnouncementBar />
             {/* 常驻任务条：无任务时组件自身 return null，不占位。 */}
             <BackgroundTaskBar />
             <Content className="app-content" id="main-content" role="main" tabIndex={-1}>

@@ -99,8 +99,8 @@ async def approve_write_proposal(proposal_id: str) -> dict:
             raise _error(exc) from exc
         tool = get_tool(grant["tool_name"])
         if tool is None:
-            mark_failed(proposal_id, f"工具 {grant['tool_name']} 已不存在")
-            raise HTTPException(status_code=409, detail=f"工具 {grant['tool_name']} 已不存在")
+            mark_failed(proposal_id, f"工具 {grant['tool_name']} 不存在或已被删除")
+            raise HTTPException(status_code=409, detail=f"工具 {grant['tool_name']} 不存在或已被删除")
         # 核销用**存储的参数**执行；租约在手，consume 的作用域校验与执行之间
         # 不存在切换窗口（切换必须等租约释放）。
         tool_name, arguments = consume(proposal_id, grant["token"])
@@ -120,7 +120,7 @@ async def approve_write_proposal(proposal_id: str) -> dict:
             )
             raise HTTPException(
                 status_code=503,
-                detail="写入暂不可用（数据库会话打开失败），提案已置为失败，请稍后重试",
+                detail="写入暂不可用（数据库会话打开失败），提案已置为失败",
             ) from exc
         watcher = _CommitWatcher(db)
         try:
@@ -142,11 +142,11 @@ async def approve_write_proposal(proposal_id: str) -> dict:
                     raise HTTPException(
                         status_code=409,
                         detail=(
-                            "写入结果未知（执行过程中数据已经提交，随后步骤失败）："
-                            "请先在数据里核对该动作是否生效，本提案不会再次执行。"
+                            "写入结果未知（执行过程中数据已经提交，随后步骤失败），"
+                            "本提案不会再次执行"
                         ),
                     ) from exc
-                mark_failed(proposal_id, "写入执行失败，本次未提交，请核对输入后重试")
+                mark_failed(proposal_id, "写入执行失败，本次未提交")
                 logger.warning(
                     "提案 %s 执行失败（%s）error_type=%s",
                     safe_log_text(proposal_id),
@@ -154,7 +154,7 @@ async def approve_write_proposal(proposal_id: str) -> dict:
                     type(exc).__name__,
                 )
                 raise HTTPException(
-                    status_code=422, detail="写入执行失败，本次未提交，请核对输入后重试"
+                    status_code=422, detail="写入执行失败，本次未提交"
                 ) from exc
             try:
                 # 收尾提交（写服务的 handler 一般已自行提交；此处幂等且把
@@ -172,7 +172,7 @@ async def approve_write_proposal(proposal_id: str) -> dict:
                 )
                 raise HTTPException(
                     status_code=409,
-                    detail="写入结果未知（提交阶段失败），请核对数据后重新发起；本提案不会再次执行",
+                    detail="写入结果未知（提交阶段失败），本提案不会再次执行",
                 ) from exc
         finally:
             watcher.detach()

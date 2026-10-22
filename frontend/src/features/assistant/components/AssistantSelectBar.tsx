@@ -3,6 +3,7 @@
 
 import { DeleteOutlined, CloseOutlined } from "@ant-design/icons";
 import { App, Button, Space, Typography } from "antd";
+import { HARD_DELETE_NOTE } from "../../../components/common/rowActionMenu";
 
 interface Props {
   disabled: boolean;
@@ -24,8 +25,8 @@ export default function AssistantSelectBar({ disabled, onDelete, onExit, selecte
           disabled={disabled}
           onClick={() =>
             modal.confirm({
-              title: `删除选中的 ${selectedCount} 条消息？`,
-              content: "将移入回收站，可随时恢复。引用这些消息的提问仍会保留引用内容。",
+              title: "删除选中的消息？",
+              content: `这 ${selectedCount} 条消息${HARD_DELETE_NOTE}引用这些消息的提问仍会保留引用内容。`,
               okText: "删除",
               okButtonProps: { danger: true },
               cancelText: "取消",

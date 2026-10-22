@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 从通知材料导入进度：粘贴/截图 → 识别预览 → 勾选确认 → 写入。
+ * 从通知内容导入进度：粘贴/截图 → 识别预览 → 勾选确认 → 写入。
  *
  * 预览这一步不是走过场：面板上每条都写明"会新增 / 会更新 / 没变化"和原因，用户看的是
  * **会发生什么**，而不是一堆等他自己判断的字段。取消或关闭都不会写任何数据。
@@ -35,7 +35,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
   const [busy, setBusy] = useState(false);
   const { files, reading, addFiles, removeFile, clear, onPaste } = useRecognitionFiles();
 
-  // 关闭时清空：否则下次打开会看到上一次的材料和预览，容易误以为已经保存过了。
+  // 关闭时清空：否则下次打开会看到上一次的内容和预览，容易误以为已经保存过了。
   // Compiler 规范：状态重置用渲染期守卫；clear() 外部 store 副作用留在 effect。
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {

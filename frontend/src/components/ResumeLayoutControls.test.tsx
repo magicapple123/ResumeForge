@@ -63,7 +63,7 @@ describe("ResumeLayoutControls · 选模板即见预览（C2）", () => {
     // 弹层自己的模板清单请求 resolve 才会发预览请求。CI 满负载时这条链路实测可到
     // 8~12s（见 src/test/setup.ts），所以先等弹层真正出现、再把调用数预算放宽到
     // 10s——两者都是就绪即返回，预算只是安全网。
-    await screen.findByText("选择简历样式模板");
+    await screen.findByText("选择简历模板");
     await waitFor(
       () =>
         expect(apiMocks.previewResumeTemplate).toHaveBeenCalledTimes(
@@ -340,10 +340,10 @@ describe("ResumeLayoutControls · 页边距（T5 / 4a）", () => {
     expect(next.format_config).toEqual({ line_height: 1.6 });
   });
 
-  it("边界：滑块声明 8–26，两端按钮到边界禁用，程序化赋值再被 clamp 收一道", async () => {
-    renderControls({ layout: { ...DEFAULT_LAYOUT, format_config: { page_padding: 8 } } });
+  it("边界：滑块声明 0–26，两端按钮到边界禁用，程序化赋值再被 clamp 收一道", async () => {
+    renderControls({ layout: { ...DEFAULT_LAYOUT, format_config: { page_padding: 0 } } });
     const slider = await screen.findByRole("slider", { name: /页边距/ });
-    expect(slider).toHaveAttribute("aria-valuemin", "8");
+    expect(slider).toHaveAttribute("aria-valuemin", "0");
     expect(slider).toHaveAttribute("aria-valuemax", "26");
     // 已在下限：只能往上。
     expect(screen.getByRole("button", { name: "减小页边距" })).toBeDisabled();
@@ -354,10 +354,10 @@ describe("ResumeLayoutControls · 页边距（T5 / 4a）", () => {
 
     // 历史草稿 / 粘贴 / 程序化赋值绕过控件时，靠唯一的实现收口：
     // 后端白名单之外的值会被整条丢弃（"设了 30mm，导出还是默认"）。
-    expect(clampPagePadding(3)).toBe(8);
+    expect(clampPagePadding(-2)).toBe(0);
     expect(clampPagePadding(40)).toBe(26);
     // 0.1mm 精度后，范围内的小数原样保留（以前会取整到 26）。
     expect(clampPagePadding(25.7)).toBe(25.7);
-    expect(clampPagePadding(Number.NaN)).toBe(8);
+    expect(clampPagePadding(Number.NaN)).toBe(0);
   });
 });

@@ -301,7 +301,7 @@ async def parse_job_text_multiple(payload: JobTextParseRequest, db: Session = De
     has_documents = bool(payload.documents)
     source_text = "\n\n".join(part for part in (payload.text, documents.text) if part.strip())
     if not source_text.strip() and not image_urls:
-        raise HTTPException(status_code=422, detail="请先粘贴招聘信息或上传截图、文档")
+        raise HTTPException(status_code=422, detail="缺少招聘信息或截图、文档")
 
     def _local_items(reason: str) -> list[JobTextParseResult]:
         drafts = local_multi_drafts(source_text)

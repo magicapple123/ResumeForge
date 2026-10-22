@@ -79,13 +79,13 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
             and not profile.experiences
             and not profile.campus_experiences
         ):
-            raise HTTPException(status_code=400, detail="请先在「我的资料」页完善个人信息")
+            raise HTTPException(status_code=400, detail="个人资料为空，无法生成简历")
 
         # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
         # app.api.resumes.get_llm_config 的 patch 契约。
         config = _api.get_llm_config(db)
         if not config.base_url or not config.model:
-            raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+            raise HTTPException(status_code=400, detail="尚未配置大模型 API")
 
         # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
         # app.api.resumes.create_provider 的 patch 契约。
@@ -192,12 +192,12 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
         and not profile.experiences
         and not profile.campus_experiences
     ):
-        raise HTTPException(status_code=400, detail="请先在「我的资料」页完善个人信息")
+        raise HTTPException(status_code=400, detail="个人资料为空，无法生成简历")
 
     # 经包命名空间调用期读取，与 generate_resume 的 get_llm_config patch 锚点同源。
     config = _api.get_llm_config(db)
     if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
 
     # 防重复：已有进行中的任务就拒绝，绝不因用户连点两次而产生两条任务/两份简历。
     active = (
@@ -206,7 +206,7 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
         .first()
     )
     if active is not None:
-        raise HTTPException(status_code=409, detail="已有简历生成任务正在进行中，请等待其完成")
+        raise HTTPException(status_code=409, detail="已有简历生成任务正在进行中")
 
     task = ResumeGenerateTask(
         job_id=payload.job_id,

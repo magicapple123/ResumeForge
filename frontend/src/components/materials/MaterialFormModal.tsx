@@ -2,24 +2,13 @@
 /** 资料箱条目编辑：标题、分类、正文、链接、附件与备注。 */
 
 import { DeleteOutlined, FileTextOutlined, PictureOutlined, PlusOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Form,
-  Image,
-  Input,
-  Modal,
-  Select,
-  Space,
-  Typography,
-  Upload,
-} from "antd";
+import { Alert, App, Button, Form, Image, Input, Select, Space, Typography, Upload } from "antd";
 import { useId, useState } from "react";
 import { handleEditorSaveKey } from "../../utils/formKeyboard";
 import type { Material, MaterialFile, MaterialPayload } from "../../types";
 import { MATERIAL_CATEGORIES } from "../../types";
 import FileDropZone from "../common/FileDropZone";
+import FormModal from "../common/FormModal";
 import {
   IMAGE_MIME_BY_EXTENSION,
   MAX_ATTACHMENT_BYTES,
@@ -163,32 +152,20 @@ export default function MaterialFormModal({
   };
 
   return (
-    <Modal
-      title={material ? `编辑资料：${material.title || material.category}` : "放入一条新资料"}
+    <FormModal
+      title={material ? "编辑资料" : "放入资料"}
       open={open}
       width={720}
       onCancel={onCancel}
-      mask={{ closable: !submitting }}
-      // 正文与附件清单一多就超出视口：限高让弹窗在卡片内部滚动，底部按钮始终可见。
-      styles={{
-        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
-      }}
-      footer={
-        <Space>
-          <Button onClick={onCancel} disabled={submitting}>
-            取消
-          </Button>
-          <Button type="primary" loading={submitting} onClick={submit}>
-            保存
-          </Button>
-        </Space>
-      }
+      submitting={submitting}
+      onSubmit={submit}
+      okText="保存资料"
     >
       <Alert
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        title="资料箱用来放还没整理进简历的零散材料：证书、作品说明、链接、笔记等。求职助手可以读取这里的内容并按需引用。"
+        title="资料箱用来放还没整理进简历的零散资料：证书、作品说明、链接、笔记等。求职助手可以读取这里的内容并按需引用。"
       />
       <Typography.Paragraph type="secondary">
         Ctrl / ⌘ + Enter 或 S 保存，Esc 取消
@@ -324,6 +301,6 @@ export default function MaterialFormModal({
           />
         </Form.Item>
       </Form>
-    </Modal>
+    </FormModal>
   );
 }

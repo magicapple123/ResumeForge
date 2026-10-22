@@ -6,7 +6,11 @@
  * 公司和岗位是必填：进度要按这两项合并，缺一个就无从判断该并到哪一条上。
  */
 import { SaveOutlined } from "@ant-design/icons";
-import { App, Button, DatePicker, Form, Input, Modal, Select, Space } from "antd";
+import { App, Button, DatePicker, Form, Input, Select } from "antd";
+import FormModal from "../common/FormModal";
+import { useFormDraft } from "../../hooks/useFormDraft";
+import { useToast } from "../../hooks/useToast";
+import { t } from "../../i18n";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
@@ -115,6 +119,17 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
   const resumeSelect = useResumeSearchSelect();
   const [full, setFull] = useState<Track | null>(null);
   const editing = track !== null;
+  // 脏值决定"关闭时要不要问一句"；换一条记录 / 重开弹窗都从干净态开始。
+  const [dirty, setDirty] = useState(false);
+  const toast = useToast();
+  // 草稿按"新增 / 某条记录"分作用域：编辑 12 号时不该看到 13 号的内容。
+  const watched = Form.useWatch<FormValues>([], form) as FormValues | undefined;
+  const draft = useFormDraft({
+    scope: `tracker.edit#${track?.id ?? "new"}`,
+    values: (watched ?? EMPTY) as unknown as Record<string, unknown>,
+    open,
+    isEmpty: (values) => !values.company && !values.position,
+  });
 
   useEffect(() => {
     if (!open) {
@@ -131,6 +146,7 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
     // 先用列表行乐观预填（公司/岗位/日期/状态都是全的），note 与依据可能被后端
     // 截断过，等下面的详情请求回来再覆盖。
     form.setFieldsValue(track ? toValues(track) : EMPTY);
+    setDirty(false);
     if (!track) return;
     // 列表接口的 note/evidence 是**预览**（超长截断加省略号，见后端 _track_brief）：
     // 编辑必须回详情拿全文——否则保存（PUT 是整体替换）会把截断文本写回库。
@@ -164,6 +180,7 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
     const payload = toPayload(values, source);
     try {
       const saved = track ? await updateTrack(track.id, payload) : await createTrack(payload);
+      draft.clear();
       message.success(editing ? "已保存" : "已添加");
       onSaved(saved);
       onClose();
@@ -173,26 +190,36 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
   };
 
   return (
-    <Modal
+    <FormModal
       open={open}
       title={editing ? "编辑进度" : "添加进度"}
-      onCancel={onClose}
-      width={680}
-      destroyOnHidden
-      // 日期字段带说明文字，整体高度容易超出视口：限高让弹窗在内部滚动。
-      styles={{
-        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
+      onCancel={() => {
+        if (dirty) toast.info(t("draft.kept"));
+        onClose();
       }}
-      footer={
-        <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" icon={<SaveOutlined />} onClick={() => void submit()}>
-            保存
-          </Button>
-        </Space>
+      onSubmit={() => void submit()}
+      okText="保存进度"
+      okIcon={<SaveOutlined />}
+      dirty={dirty}
+      hasDraft
+      draftBar={
+        draft.pending
+          ? {
+              savedAt: draft.pending.savedAt,
+              fieldCount: Object.keys(draft.pending.values).length,
+              onRestore: () => form.setFieldsValue(draft.adopt() as unknown as FormValues),
+              onDiscard: draft.discard,
+            }
+          : null
       }
+      width={720}
     >
-      <Form form={form} layout="vertical" initialValues={EMPTY}>
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={EMPTY}
+        onValuesChange={() => setDirty(true)}
+      >
         {/* 用普通 flex 而不是 antd 的 Space：Space 会给每个子项再包一层，
             flex 宽度落不到真正的 flex 子项上。 */}
         <div className="track-form-row">
@@ -317,6 +344,6 @@ export default function TrackFormModal({ open, track, onClose, onSaved }: Props)
           <HintedTextArea rows={3} maxLength={4000} />
         </Form.Item>
       </Form>
-    </Modal>
+    </FormModal>
   );
 }

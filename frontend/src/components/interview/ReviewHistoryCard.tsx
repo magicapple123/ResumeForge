@@ -2,7 +2,7 @@
 /** 历史复盘折叠列表：加载/错误/空态与「查看详情」富还原入口。
  *
  * 从 InterviewReviewPanel 拆出（2026-10-07，接近 500 行预算的预防性拆分）。
- * 只负责展示与行内操作；数据的增删改查（删除/重新加载）由父组件经回调提供。
+ * 只负责展示与行内操作；数据的增删改查（删除/刷新）由父组件经回调提供。
  */
 import { DeleteOutlined, HistoryOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Collapse, Space, Typography } from "antd";

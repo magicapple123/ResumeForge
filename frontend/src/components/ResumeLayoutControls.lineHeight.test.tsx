@@ -27,10 +27,11 @@ vi.mock("../api/resumes", async (importOriginal) => ({
 /**
  * 行距这一行（`LineHeightControl` 的外层容器）。
  *
- * 版式栏里现在有**两处**合法的「随模板」：行距一行、页边距一行（T5 把页边距从导出面板
- * 搬进预览后各留了一个）。所以查这三个字必须限定作用域——全局 `getByText` 会多重命中，
- * 那不是 UI 错了，是断言范围太宽。锚点取「行距」这个标题文字：只有行距这一行有，
- * 再从它向上取到所在的版式行（恢复默认已改成双击标题，不再有独立的 ↺ 按钮）。
+ * 版式栏里现在有**三处**合法的「随模板」：行距、页边距、照片（2026-10-22 加了照片大小
+ * 与四向页边距两条滑杆，它们各自也带一个来源标签）。所以查这三个字必须限定作用域——
+ * 全局 `getByText` 会多重命中，那不是 UI 错了，是断言范围太宽。锚点取「行距」这个标题
+ * 文字：只有行距这一行有，再从它向上取到所在的版式行（恢复默认已改成双击标题，
+ * 不再有独立的 ↺ 按钮）。
  */
 function lineHeightRow(): HTMLElement {
   const anchor = screen.getByText("行距");
@@ -59,9 +60,9 @@ describe("ResumeLayoutControls · 行距（R20）", () => {
 
     // classic 的默认行距是 1.70（后端 TEMPLATE_LAYOUT_DEFAULTS），不是写死的 1.7。
     expect(await screen.findByText("1.70")).toBeInTheDocument();
-    // 行距这一行标「随模板」；页边距那一行也有一个（合法 UI，共两处）。
+    // 行距这一行标「随模板」；页边距与照片各有一个（合法 UI，共三处）。
     expect(within(lineHeightRow()).getByText("随模板")).toBeInTheDocument();
-    expect(screen.getAllByText("随模板")).toHaveLength(2);
+    expect(screen.getAllByText("随模板")).toHaveLength(3);
     // 恢复默认改成双击标题：独立的 ↺ 按钮已删除，已经是默认值时双击不提交。
     expect(screen.queryByRole("button", { name: "恢复默认行距" })).toBeNull();
     fireEvent.doubleClick(within(lineHeightRow()).getByText("行距"));
@@ -104,10 +105,10 @@ describe("ResumeLayoutControls · 行距（R20）", () => {
     });
 
     expect(await screen.findByText("1.45")).toBeInTheDocument();
-    // 行距有了覆盖值就不再标「随模板」——但只能在自己的行里断言：页边距那一行的
-    // 「随模板」仍然在，全局 `queryByText` 会把它算进来。
+    // 行距有了覆盖值就不再标「随模板」——但只能在自己的行里断言：页边距与照片那两行的
+    // 「随模板」仍然在，全局 `queryByText` 会把它们算进来。
     expect(within(lineHeightRow()).queryByText("随模板")).not.toBeInTheDocument();
-    expect(screen.getAllByText("随模板")).toHaveLength(1);
+    expect(screen.getAllByText("随模板")).toHaveLength(2);
 
     fireEvent.doubleClick(within(lineHeightRow()).getByText("行距"));
 

@@ -132,3 +132,66 @@ def test_room_report_explains_the_font_floor():
     )
     assert tight["has_room"] is False
     assert "不会再缩小字号" in tight["font_floor_note"]
+
+
+# ===== 四向页边距下的阶梯（2026-10-22）=====
+#
+# 阶梯每档写的是"总" `page_padding`，而四边可以各自不同。两条性质必须同时成立：
+# 1. 候选配置里**不许**残留分边支路——留着它们，"总"会被覆盖，第一档就是"按了没反应"；
+# 2. 任何一边都不许被放大——`_effective_layout` 取四边**最小值**起步，这是"只紧不松"的保证。
+
+
+def test_ladder_drops_the_side_branches_and_only_ever_tightens():
+    """有分边支路时，每档都从四边**最小值**再往紧收，且候选配置里没有支路。"""
+    ladder = build_fit_ladder(
+        "classic",
+        "standard",
+        {
+            "page_padding": 14,
+            "page_padding_top": 14,
+            "page_padding_right": 13,
+            "page_padding_bottom": 13,
+            "page_padding_left": 13,
+        },
+    )
+    assert ladder, "13mm 仍有收紧余地（下限 12mm）"
+    for item in ladder:
+        assert not [key for key in item.config if key.startswith("page_padding_")], (
+            "支路留在候选配置里会让写入的 page_padding 失效"
+        )
+        assert item.config["page_padding"] <= 13, "页边距反弹了（比当前最小值还大）"
+    # 第一档是「13 → 12」，不是「14 → 12」（后者会让右/下/左先被放大一档）。
+    assert ladder[0].config["page_padding"] == 12
+
+
+def test_ladder_skips_the_margin_rung_when_one_side_is_below_the_floor():
+    """「上 20 / 其余 10」：最小值 10 已在 ‹12mm› 之下，页边距档直接跳过。
+
+    若拿"上"（20）当当前值，第一档会把其余三边从 10 **放大**到 12——正是"只紧不松"
+    契约禁止的反弹。宁可什么都不做，让用户自己决定要不要对称。
+    """
+    ladder = build_fit_ladder(
+        "classic",
+        "standard",
+        {
+            "page_padding_top": 20,
+            "page_padding_right": 10,
+            "page_padding_bottom": 10,
+            "page_padding_left": 10,
+        },
+    )
+    assert "padding" not in {item.key for item in ladder}
+    assert all("page_padding" not in item.config for item in ladder)
+
+
+def test_ladder_keeps_the_users_photo_scale():
+    """自动一页**绝不动**照片大小（设计 §6.1：照片不自动缩小）。
+
+    把 `photo_scale` 从阶梯里抹掉，等于点一次「自动一页」就把用户调好的 150% 悄悄重置
+    回 100%——那是比"调了没变"更糟的一类失败：用户不会发现，只会觉得"照片怎么又小了"。
+    """
+    ladder = build_fit_ladder("classic", "standard", {"photo_scale": 1.5})
+    assert ladder
+    for item in ladder:
+        assert item.config["photo_scale"] == 1.5
+

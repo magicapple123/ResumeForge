@@ -12,7 +12,7 @@ import {
   DownloadOutlined,
   SendOutlined,
 } from "@ant-design/icons";
-import { App, Button, Popconfirm, Select, Space, Tooltip, Typography } from "antd";
+import { App, Button, Select, Space, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 import { exportJobsCsv } from "../../api/jobs";
@@ -142,24 +142,16 @@ export function BatchToolbar({
       >
         导出 CSV
       </Button>
-      <Popconfirm
-        title={`确定删除选中的 ${selectedJobIds.length} 个岗位？`}
-        description="将移入回收站，可随时恢复"
-        okText="删除"
-        cancelText="取消"
-        okButtonProps={{ danger: true }}
+      {/* 软删可撤销：不再前置确认，撤销入口在删除后的 Toast 上（见 useDeleteUndo）。 */}
+      <Button
+        danger
+        icon={<DeleteOutlined />}
         disabled={selectedJobIds.length === 0 || batchAction !== null}
-        onConfirm={() => removeSelectedJobs()}
+        loading={batchAction === "delete"}
+        onClick={() => removeSelectedJobs()}
       >
-        <Button
-          danger
-          icon={<DeleteOutlined />}
-          disabled={selectedJobIds.length === 0 || batchAction !== null}
-          loading={batchAction === "delete"}
-        >
-          批量删除
-        </Button>
-      </Popconfirm>
+        批量删除
+      </Button>
     </Space>
   );
 }

@@ -2,6 +2,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { LLM_PRESETS } from "../config";
 import SettingsPage from "./SettingsPage";
 
@@ -122,8 +123,8 @@ async function choosePreset(label: string) {
 // 单区块后没有「编辑配置」入口：预设交互全部发生在新增/编辑共用的弹窗里。
 async function openCreateModal() {
   await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
-  fireEvent.click(screen.getByRole("button", { name: /新增配置/ }));
-  await screen.findByText("新增配置记录");
+  fireEvent.click(screen.getByRole("button", { name: /新建配置/ }));
+  await screen.findByText("新建配置记录");
 }
 
 async function openRecordEditByName(name: string) {
@@ -192,9 +193,11 @@ describe("SettingsPage model presets", () => {
     ]);
 
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     // 记录卡直接给出预设识别结果（官方 DeepSeek 地址即恢复预设名）。
@@ -211,9 +214,11 @@ describe("SettingsPage model presets", () => {
     ]);
 
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
 
     // 未知 provider 的记录卡上就是「自定义模型（OpenAI 兼容）」。
@@ -222,9 +227,11 @@ describe("SettingsPage model presets", () => {
 
   it("clears the preset fields for a manual configuration", async () => {
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await openCreateModal();
 
@@ -266,9 +273,11 @@ describe("SettingsPage model presets", () => {
     ]);
 
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await screen.findByText("测试记录");
 
@@ -279,9 +288,11 @@ describe("SettingsPage model presets", () => {
 
   it("saves the provider that belongs to the selected preset", async () => {
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await openCreateModal();
     await waitFor(() => expect(screen.getByLabelText("Base URL")).toHaveValue(""));
@@ -305,9 +316,11 @@ describe("SettingsPage model presets", () => {
 
   it("switches the protocol on when the Claude preset is chosen", async () => {
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await openCreateModal();
     await waitFor(() => expect(screen.getByLabelText("Base URL")).toHaveValue(""));
@@ -342,9 +355,11 @@ describe("SettingsPage model presets", () => {
     ]);
 
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await screen.findByText("测试记录");
 
@@ -363,9 +378,11 @@ describe("SettingsPage model presets", () => {
 
   it("saves a custom local model without an API key", async () => {
     render(
-      <AntdApp>
-        <SettingsPage />
-      </AntdApp>,
+      <MemoryRouter>
+        <AntdApp>
+          <SettingsPage />
+        </AntdApp>
+      </MemoryRouter>,
     );
     await openCreateModal();
     await waitFor(() => expect(screen.getByLabelText("Base URL")).toHaveValue(""));

@@ -121,6 +121,38 @@ describe("扫描器自测（不读仓库）", () => {
     expect(countCjkLines(source)).toBe(0);
   });
 
+  it("字符串字面量里的 `/*` 不是块注释开头，后面的代码不许被吞掉", () => {
+    // 真实案例见 ISSUES ③-1：`MaterialFormModal.tsx` 的 `"image/*"` 之后还有一处 JSX
+    // 注释 `{/* … */}`，旧实现（"最近的 `*/`"）于是把两者之间的真实代码整段当注释吃掉，
+    // 那一片中文全部漏统计。
+    const source = [
+      'const mime = "image/*";',
+      'const label = "\u4f60\u597d";',
+      "{/* \u5757\u6ce8\u91ca */}",
+    ].join("\n");
+    expect(countCjkLines(source)).toBe(1);
+    // 行号必须仍然一一对应：多行块注释是换成等量换行、不是删掉。
+    expect(stripComments(source).split("\n")).toHaveLength(3);
+  });
+
+  it("注释在前、含 `/*` 的字符串在后，同样不许吞掉后续代码", () => {
+    const source = [
+      "/* \u6ce8\u91ca */",
+      'const mime = "image/*";',
+      'const label = "\u4f60\u597d";',
+      "/* \u53c8\u4e00\u5757 */",
+    ].join("\n");
+    expect(countCjkLines(source)).toBe(1);
+  });
+
+  it("模板串与正则里的引号不会让注释判定错位", () => {
+    const template = ['const tpl = `a${"}"}b`;', 'const label = "\u4f60\u597d";'].join("\n");
+    expect(countCjkLines(template)).toBe(1);
+    // 正则字面量里的引号/斜杠不是字符串也不是注释。
+    const regex = ["const re = /a\\/\\/b/;", 'const label = "\u4f60\u597d";'].join("\n");
+    expect(countCjkLines(regex)).toBe(1);
+  });
+
   it("有效豁免（行尾或上一行，且写了理由）计 0", () => {
     expect(countCjkLines('const a = "\u4f60\u597d"; // i18n-ok: \u5b58\u91cf\u6587\u6848')).toBe(0);
     const withPreviousLine = [

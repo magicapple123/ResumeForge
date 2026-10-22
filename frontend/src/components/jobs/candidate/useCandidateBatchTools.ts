@@ -34,7 +34,7 @@ export function useCandidateBatchTools({
   /** 批量删除进行中由抽屉置位（工具条按钮据此 loading/禁用）。 */
   onBatchActionChange?: (action: "import" | "delete" | null) => void;
 }) {
-  const { message, modal } = App.useApp();
+  const { message } = App.useApp();
   const [selectAllPagesLoading, setSelectAllPagesLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -86,38 +86,38 @@ export function useCandidateBatchTools({
     }
   };
 
-  const deleteSelected = () => {
+  /**
+   * 删除勾选的候选（`Promise.allSettled` 逐条删，统计成功/失败）。
+   *
+   * **二次确认不在这里**：它由工具条上「批量删除」的就地 `Popconfirm` 承担（Popover 形态，
+   * 不占容器层）。本 hook 是在 `CandidateJobsDrawer` 打开时被调用的，在这里开 `modal.confirm`
+   * 就是抽屉 + confirm 两层容器（AGENTS.md 的 §3.7 明令禁止，`popupStackGuard` 靠文件名抓不到
+   * hook，只能靠这条注释与工具条上的实现守着）。传进来的调用点因此只有"已确认"的这一次。
+   */
+  const deleteSelected = async () => {
     if (selectedIds.length === 0) {
       message.warning("请先选择备选岗位");
       return;
     }
     const ids = [...selectedIds];
-    // 跨页多选/批量删除必须二次确认并写明实际条数与范围（§2.5 规则 4）。
-    modal.confirm({
-      title: `删除选中的 ${ids.length} 条备选岗位？`,
-      content: "删除后进回收站，可恢复。",
-      okText: "删除",
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        onBatchActionChange?.("delete");
-        try {
-          const results = await Promise.allSettled(ids.map((id) => deleteCandidateJob(id)));
-          const deleted = results.filter((result) => result.status === "fulfilled").length;
-          const failed = results.length - deleted;
-          setSelectedIds(() => []);
-          await onMutated();
-          if (failed > 0) {
-            message.warning(`已删除 ${deleted} 个备选岗位，${failed} 个删除失败`);
-          } else {
-            message.success(`已删除 ${deleted} 个备选岗位`);
-          }
-        } catch (error) {
-          message.error(error instanceof Error ? error.message : "批量删除失败");
-        } finally {
-          onBatchActionChange?.(null);
-        }
-      },
-    });
+    // 置位批量动作：工具条据此把按钮切成 loading/禁用（防二次点击）。
+    onBatchActionChange?.("delete");
+    try {
+      const results = await Promise.allSettled(ids.map((id) => deleteCandidateJob(id)));
+      const deleted = results.filter((result) => result.status === "fulfilled").length;
+      const failed = results.length - deleted;
+      setSelectedIds(() => []);
+      await onMutated();
+      if (failed > 0) {
+        message.warning(`已删除 ${deleted} 个备选岗位，${failed} 个删除失败`);
+      } else {
+        message.success(`已删除 ${deleted} 个备选岗位`);
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "批量删除失败");
+    } finally {
+      onBatchActionChange?.(null);
+    }
   };
 
   return {

@@ -75,7 +75,7 @@ describe("BrowserSettingsModal", () => {
   it("提交时**不带 `defaults`**——它是只读回显，后端会以「Extra inputs are not permitted」拒绝", async () => {
     await openModal();
 
-    fireEvent.click(screen.getByRole("button", { name: "保 存" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存浏览器设置" }));
 
     await waitFor(() => expect(apiMocks.updateApplyConfig).toHaveBeenCalled());
     const payload = apiMocks.updateApplyConfig.mock.calls[0][0] as Record<string, unknown>;
@@ -85,7 +85,7 @@ describe("BrowserSettingsModal", () => {
   it("整份提交：改浏览器不会把间隔、上限、招呼语、站点清空", async () => {
     await openModal();
 
-    fireEvent.click(screen.getByRole("button", { name: "保 存" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存浏览器设置" }));
 
     await waitFor(() => expect(apiMocks.updateApplyConfig).toHaveBeenCalled());
     const payload = apiMocks.updateApplyConfig.mock.calls[0][0] as ApplyConfig;
@@ -102,7 +102,7 @@ describe("BrowserSettingsModal", () => {
 
     fireEvent.mouseDown(screen.getByRole("combobox"));
     fireEvent.click(await screen.findByTitle("Microsoft Edge"));
-    fireEvent.click(screen.getByRole("button", { name: "保 存" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存浏览器设置" }));
 
     await waitFor(() => expect(apiMocks.updateApplyConfig).toHaveBeenCalled());
     const payload = apiMocks.updateApplyConfig.mock.calls[0][0] as ApplyConfig;
@@ -120,7 +120,7 @@ describe("BrowserSettingsModal", () => {
     );
     await screen.findByRole("combobox");
 
-    fireEvent.click(screen.getByRole("button", { name: "保 存" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存浏览器设置" }));
 
     expect(await screen.findByText("Extra inputs are not permitted")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();

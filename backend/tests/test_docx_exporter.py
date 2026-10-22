@@ -68,7 +68,7 @@ def test_docx_page_padding_beats_the_legacy_margin_mm():
 
 
 def test_docx_clamps_out_of_range_legacy_margin_mm():
-    """越界的兼容值收进 8–26（不 500、不把正文排出纸张）。"""
+    """越界的兼容值收进 0–26（不 500、不把正文排出纸张）。"""
     result = build_resume_docx(_resume(), template="classic", page_limit=1, margin_mm=40)
 
     section = Document(BytesIO(result.content)).sections[0]
@@ -98,6 +98,49 @@ def test_docx_page_is_a4_not_the_python_docx_default_letter():
     assert round(section.page_width.mm, 2) == pytest.approx(210.0, abs=0.05)
     assert round(section.page_height.mm, 2) == pytest.approx(297.0, abs=0.05)
 
+
+def test_docx_section_margins_follow_all_four_sides():
+    """四向页边距 1:1 落进 ``w:pgMar``：``Mm()`` 与既有路径同一个构造器，无单位坑。
+
+    ``(上, 右, 下, 左)`` 里只给出三条时，缺的边跟"总"走——与 PDF 的解析口径逐字相同
+    （``layout._resolve_page_margins``）。Word 与 PDF 若各算一遍，同一次导出就会给出
+    两种边距，而这在界面上完全看不出来（用户只看 PDF）。
+    """
+    result = build_resume_docx(
+        _resume(),
+        template="classic",
+        page_limit=1,
+        format_config={
+            "page_padding": 14,
+            "page_padding_top": 8,
+            "page_padding_bottom": 12,
+        },
+    )
+
+    section = Document(BytesIO(result.content)).sections[0]
+    assert round(section.top_margin.mm, 2) == pytest.approx(8.0, abs=0.01)
+    assert round(section.bottom_margin.mm, 2) == pytest.approx(12.0, abs=0.01)
+    # 没给的两条边跟"总"（14）走。
+    assert round(section.left_margin.mm, 2) == pytest.approx(14.0, abs=0.01)
+    assert round(section.right_margin.mm, 2) == pytest.approx(14.0, abs=0.01)
+
+
+def test_docx_four_equal_sides_stay_equal_to_the_legacy_value():
+    """四边相等时与"只有一个 margin_mm"的历史行为逐点相同（存量文档不变形）。"""
+    uniform = build_resume_docx(_resume(), template="classic", page_limit=1, margin_mm=20)
+    explicit = build_resume_docx(
+        _resume(), template="classic", page_limit=1, format_config={"page_padding": 20}
+    )
+
+    for build in (uniform, explicit):
+        section = Document(BytesIO(build.content)).sections[0]
+        for margin in (
+            section.top_margin,
+            section.right_margin,
+            section.bottom_margin,
+            section.left_margin,
+        ):
+            assert round(margin.mm, 2) == pytest.approx(20.0, abs=0.01)
 
 def test_docx_excludes_photo_when_include_photo_is_false():
     # 用一张合法 PNG 的 data URL；关闭照片后文档里不应出现任何图片。

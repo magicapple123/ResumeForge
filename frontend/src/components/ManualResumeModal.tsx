@@ -131,6 +131,11 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
         open={open && !loading && !!content}
         content={content}
         title={job ? `自行编写「${job.title}」简历` : "从头编写通用简历"}
+        // 草稿作用域必须带岗位维度：这里不传 `resumeId`，只按 id 分槽会让所有岗位共用
+        // `resume.edit#new`——在岗位 A 放弃修改后打开岗位 B，B 会看到 A 的草稿。
+        // 通用简历（无岗位）仍走缺省槽：它本来就只有一份。
+        draftScopeKey={job ? `resume.edit#new@job-${job.id}` : undefined}
+
         // 项 11：名称输入搬进编辑器顶部（原来是页面上一个常驻输入框）。
         // 岗位模式不需要它——标题由后端按岗位命名。
         headerExtra={
@@ -147,7 +152,7 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
         }
         description={
           job
-            ? "已预填基本信息；其他模块留空，可用每个模块顶部的「从我的资料追加一条」按需添加。"
+            ? "已预填基本信息；其他模块留空，可用每个模块里的「从我的资料追加一条」按需添加。"
             : "从空白开始；可点「填入我的资料全部数据」一次带入，也可以只写这一份需要的内容。"
         }
         saveLabel="保存手写简历"

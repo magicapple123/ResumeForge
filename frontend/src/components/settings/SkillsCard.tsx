@@ -1,28 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 助手技能管理：导入、点击查看详情、启用/停用与删除。 */
+/**
+ * 设置页的助手技能摘要：**只读**。
+ *
+ * 技能有两个能改的地方时，用户在设置页关掉技能、回工作台发现还开着——这类
+ * 「同一份数据两个写入口」的问题比命名不一致严重得多。所以技能的新建 / 导入 /
+ * 启用停用 / 删除全部收归工作台（`pages/SkillsPage.tsx`，路由 `/skills`），
+ * 这张卡只保留「看一眼现状 + 去工作台改」：
+ * 卡片标题、说明段、技能列表（名称 / 状态 / 描述）、点击技能名查看详情（只读）、
+ * 以及超过 5 项时的「显示全部」折叠。
+ */
 
-import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
-import { App, Button, Card, Listy, Space, Switch, Tag, Tooltip, Typography, Upload } from "antd";
+import { Button, Card, Listy, Space, Tag, Typography } from "antd";
+import { Link } from "react-router-dom";
 import EmptyState from "../common/EmptyState";
 import LoadingBlock from "../common/LoadingBlock";
 import type { AssistantSkill } from "../../types";
-import FileDropZone from "../common/FileDropZone";
 import { useCollapsedList } from "../common/useCollapsedList";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
-import { RowActions } from "../common/RowActions";
 import { formatDateTime } from "../../utils/format";
 
 interface Props {
   skills: AssistantSkill[];
   loading: boolean;
-  importing: boolean;
-  togglingId: number | null;
-  deletingId: number | null;
-  onImport: (file: File) => void;
-  onToggle: (skill: AssistantSkill, enabled: boolean) => void;
-  onDelete: (skill: AssistantSkill) => void;
-  /** 点击技能名查看详情（提示词全文与知识文件）。 */
+  /** 点击技能名查看详情（只读展示提示词全文与知识文件；改要在工作台）。 */
   onOpen: (skill: AssistantSkill) => void;
 }
 
@@ -36,20 +37,7 @@ function describe(skill: AssistantSkill): string {
   ].join(" · ");
 }
 
-export default function SkillsCard({
-  skills,
-  loading,
-  importing,
-  togglingId,
-  deletingId,
-  onImport,
-  onToggle,
-  onDelete,
-  onOpen,
-}: Props) {
-  const { message } = App.useApp();
-  // 同一时刻只允许一个改动在进行，避免连点产生互相覆盖的请求。
-  const busy = importing || deletingId !== null;
+export default function SkillsCard({ skills, loading, onOpen }: Props) {
   // 技能多了会淹没页面：默认只展示前 5 项，其余收进「显示全部」（展示层折叠）。
   const { visibleItems: visibleSkills, toggleNode: skillsToggleNode } = useCollapsedList(skills);
 
@@ -58,42 +46,15 @@ export default function SkillsCard({
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         技能是一份<strong>提示词</strong>，也可以再带上一包<strong>知识文件</strong>
         （.md / .txt）。启用的技能会告诉助手「按什么要求作答」，知识文件则由助手在需要时自己去读，
-        不会一次性塞进对话。导入同名技能会覆盖更新，方便反复调整。 想新建或改得更细可以到
-        <strong>技能工作台</strong>。
+        不会一次性塞进对话。想新建或改得更细，请
+        <Link to="/skills">去工作台管理</Link>。
       </Typography.Paragraph>
-
-      <FileDropZone
-        accept=".md,.zip"
-        multiple={false}
-        disabled={busy}
-        hint="松开即可导入技能（.md / .zip）"
-        onFiles={(files) => onImport(files[0])}
-        onRejected={() => message.error("技能只支持 .md 或 .zip")}
-        className="settings-import-drop"
-      >
-        <Upload
-          accept=".md,.zip"
-          showUploadList={false}
-          disabled={busy}
-          // 设置页上有多个上传入口，这个 aria-label 让它们（以及测试）都能精确定位。
-          aria-label="选择技能文件"
-          beforeUpload={(file) => {
-            onImport(file as File);
-            // 与仓库其它上传一致：本地读取后自行提交，不走 antd 的上传通道。
-            return Upload.LIST_IGNORE;
-          }}
-        >
-          <Button icon={<UploadOutlined />} loading={importing} disabled={busy}>
-            导入技能（.md 或 .zip）
-          </Button>
-        </Upload>
-      </FileDropZone>
 
       {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
       <LoadingBlock spinning={loading}>
         {skills.length === 0 ? (
           <div style={{ marginTop: 16 }}>
-            <EmptyState inline description="还没有导入技能" />
+            <EmptyState inline description="还没有技能" />
           </div>
         ) : (
           <Listy
@@ -102,44 +63,11 @@ export default function SkillsCard({
             rowKey={(skill) => skill.id}
             styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
             itemRender={(skill) => (
-              <ListyItem
-                actions={[
-                  <Tooltip
-                    key="toggle"
-                    title={skill.enabled ? "停用后助手不再使用它" : "启用后助手会照它作答"}
-                  >
-                    <Switch
-                      size="small"
-                      checked={skill.enabled}
-                      aria-label={`${skill.enabled ? "停用" : "启用"}技能 ${skill.name}`}
-                      loading={togglingId === skill.id}
-                      disabled={busy || (togglingId !== null && togglingId !== skill.id)}
-                      onChange={(checked) => onToggle(skill, checked)}
-                    />
-                  </Tooltip>,
-                  // 删除收进「更多」里并二次确认：这一处此前漏了，仍是一枚常驻的红色图标，
-                  // 与岗位/简历/收藏夹/技能工作台四处已经统一的"主操作 + 更多"不一致。
-                  <RowActions
-                    key="more"
-                    disabled={busy}
-                    more={[
-                      {
-                        key: "delete",
-                        label: "删除技能",
-                        danger: true,
-                        icon: <DeleteOutlined />,
-                        disabled: deletingId === skill.id,
-                        confirm: `确定删除技能「${skill.name}」？提示词和它附带的知识文件都会被删除，需要时可以重新导入。`,
-                        onClick: () => onDelete(skill),
-                      },
-                    ]}
-                  />,
-                ]}
-              >
+              <ListyItem>
                 <ListyMeta
                   title={
                     <Space size={8} wrap>
-                      {/* 技能名可点击：查看提示词全文与知识文件，也能就地改。 */}
+                      {/* 技能名可点击：只读查看提示词全文与知识文件。 */}
                       <Button type="link" className="table-text-link" onClick={() => onOpen(skill)}>
                         {skill.name}
                       </Button>

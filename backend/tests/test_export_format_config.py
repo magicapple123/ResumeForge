@@ -134,7 +134,7 @@ def test_format_config_is_whitelisted():
             format="html",
             format_config={
                 "line_height": 99,  # 越界（上限 2.2）→ 丢弃
-                "page_padding": 2,  # 越界（下限 8）→ 丢弃
+                "page_padding": -1,  # 越界（下限 0）→ 丢弃
                 "accent": "not-a-color",  # 非十六进制 → 丢弃
                 "font_scale_adjust": 0.636,  # 合法 → 保留
                 "evil_key": 1,  # 未知 → 丢弃

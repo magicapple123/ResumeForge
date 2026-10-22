@@ -47,7 +47,7 @@ describe("BuiltinStyleGallery", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "预览「现代」样式效果" }));
 
-    expect(await screen.findByTitle("内置样式大图预览")).toBeInTheDocument();
+    expect(await screen.findByTitle("内置模板大图预览")).toBeInTheDocument();
     expect(await screen.findByText("强调色标题")).toBeInTheDocument();
   });
 

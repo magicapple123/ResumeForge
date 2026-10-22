@@ -1397,11 +1397,11 @@
   flex: 0 0 auto;
 }
 
-/* 尾部吃掉这一格剩下的宽度：内容**左对齐**（读数与滑杆之间的距离固定），
-   这样三行读数才会落在同一条竖线上——靠右收口时，缺失来源标签的那一行会整体右移。 */
+/* 尾部跟随控件，但**绝不被压扁**：它一被压到 0 宽，读数与来源胶囊就会溢出到
+   相邻控件底下（2026-10-22 用户截图：胶囊的「板」被分边按钮盖住）。
+   真的放不下时由 `Space` 的 `wrap` 把尾部折到第二行，而不是让两件东西叠在一起。 */
 .resume-measure-grid.is-stacked .ant-space-item:has(> .resume-measure-tail) {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1 0 auto;
 }
 
 /* 标签固定宽度：否则「行距」24px、「字号」34px、「页边距」36px 会把后面的
@@ -1502,6 +1502,136 @@
    所以度量组要吃掉剩余宽度（否则又缩回左侧一小条）。 */
 .resume-preview-toolbar-cluster > .resume-measure-grid {
   flex: 1 1 auto;
+}
+
+/* 分边页边距（上/右/下/左）：**占满整行**，四条滑杆才有足够长度。
+   它是度量栅格的第 5 个格子（照片之后），所以必须显式跨满所有列——否则会缩在
+   半列宽里，2mm 的差异在这么短的滑杆上根本对不准。
+   收起态只有一行折叠标题；展开后标题 + 卡片，两者都不与上面几行共用行内宽度。 */
+.resume-margin-sides {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 折叠标题：靠左的一行文字，不给它铺满整行（铺满会像一条分隔条，反而不像按钮）。 */
+.resume-margin-sides-toggle.ant-btn {
+  align-self: flex-start;
+  height: 24px;
+  padding: 0 6px 0 2px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-margin-sides-toggle.ant-btn:hover {
+  color: var(--rf-text-body) !important;
+  background: var(--rf-surface-alt) !important;
+}
+
+/* 展开 / 收起的唯一视觉状态：箭头翻转。文字保持不变，用户不用重读一遍标签。 */
+.resume-margin-sides-chevron {
+  margin-left: 2px;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.resume-margin-sides-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+/* 卡片：四条支路装进一个有边界的区域，读起来是"页边距这一项的子面板"，
+   而不是又一组和上面平级的参数。 */
+.resume-margin-sides-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px 6px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 10px;
+  background: var(--rf-surface-alt);
+}
+
+/* 四条支路排成「自动列数」的栅格：卡片够宽时两列（上/右、下/左），
+   窄下来自动退回一列。用 `auto-fit` 而不是断点——面板的宽度由外层决定，
+   写死断点就会在某个中间宽度上挤成一列半。 */
+.resume-margin-sides-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 2px 20px;
+  min-width: 0;
+}
+
+/* 一行 = 标签 + ± + 滑杆 + 读数 + 复位位。滑杆吃掉剩余宽度（与其它度量控件同一种
+   手感），但**不允许换行**：一条边读成两行会让四行的高度参差。 */
+.resume-margin-side-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 支路标签只放一个字，20px 足够（基础规则里的 min-width: 34px 要一起改掉，
+   只写 width 会被 min-width 顶回去）。 */
+.resume-measure-grid .resume-margin-sides .resume-margin-side-label {
+  display: inline-block;
+  flex: 0 0 20px;
+  min-width: 20px;
+  width: 20px;
+  white-space: nowrap;
+}
+
+.resume-margin-side-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 滑杆所在的那一项吃掉控件组剩下的宽度。选择器要比
+   `.resume-measure-grid.is-stacked .ant-space-item:has(> .ant-slider)`（0,4,0）更具体，
+   否则会被那条"弹窗里滑杆写死 200px"的规则钉住，右边留下一段死白。 */
+.resume-measure-grid
+  .resume-margin-side-row
+  .resume-margin-side-controls
+  .ant-space-item:has(> .ant-slider) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 上面那条"三条滑杆写死 200px"的规则同样命中这里（`.is-stacked .ant-slider`）。
+   卡片里的滑杆要按可用宽度伸缩：窗口一窄，200px 会把读数与复位位顶出行外。 */
+.resume-measure-grid .resume-margin-sides .resume-margin-side-slider.ant-slider {
+  flex: 1 1 160px;
+  width: auto;
+  min-width: 0;
+}
+
+/* 读数列：定宽 + 右对齐 + 等宽数字。四行的 14mm 落在同一条竖线上，
+   位数变化（0.5 ↔ 14）时也不会左右晃。 */
+.resume-margin-side-value {
+  flex: 0 0 46px;
+  width: 46px;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 复位位常驻占位：只有"这一边自己写过键"时才画 ↺。不占位的话，
+   出现图标的那一行滑杆会短一截，四行就不齐了。
+   30px = antd 小号图标按钮的宽度（controlHeightSM），窄一格就会把图标压出边界。 */
+.resume-margin-side-reset {
+  display: inline-flex;
+  flex: 0 0 30px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* 卡片底部的一行说明：交代"没出现 ↺ 的边"是什么语义（原先靠每行一个胶囊）。 */
+.resume-margin-sides-note {
+  margin-top: 2px;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 /* ===== 个人照片面板 ===== */

@@ -73,12 +73,12 @@ export default class AppErrorBoundary extends Component<Props, State> {
         subTitle={
           moduleLoadFailed
             ? "这通常是前端开发服务器缓存了已改名或已移动的文件。先刷新一次；若刷新后仍是这一屏，请重启前端开发服务器——关掉当前窗口后重新运行 start.cmd 即可。"
-            : "界面运行时发生异常，请重新加载后再试。"
+            : "界面运行时发生异常，请刷新后再试。"
         }
         extra={
           <Space orientation="vertical" size={8} style={{ width: "100%" }}>
             <Button type="primary" onClick={this.reload}>
-              重新加载
+              刷新
             </Button>
             {this.state.message && (
               // 把原始报错留在页面上：这类问题以前只能靠猜，一句"运行时异常"提供不了任何线索。

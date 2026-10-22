@@ -29,6 +29,7 @@ import { useBatchSelection } from "../hooks/useBatchSelection";
 import { useJobSearchSelect, useResumeSearchSelect } from "../hooks/remoteSearchOptions";
 import type { QuestionAnswer, QuestionBankOut, QuestionBankRecord } from "../types";
 import QuestionGroupCards from "./questionbank/QuestionGroupCards";
+import { TRASH_RECOVERY_NOTE } from "./common/rowActionMenu";
 import BankHistoryCard from "./questionbank/BankHistoryCard";
 
 interface Props {
@@ -185,7 +186,9 @@ export default function QuestionBankPanel({
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: `删除选中的 ${ids.length} 份题库历史？`,
+      title: "删除选中的题库历史？",
+      // i18n-ok: 条数从标题挪进正文（§4.4 例外），这里的中文就是确认正文本身
+      content: `这 ${ids.length} 份题库历史${TRASH_RECOVERY_NOTE}`,
       okText: "删除",
       okButtonProps: { danger: true },
       onOk: async () => {

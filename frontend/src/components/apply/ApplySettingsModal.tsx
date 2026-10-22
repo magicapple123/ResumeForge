@@ -211,6 +211,7 @@ export default function ApplySettingsModal({ open, onClose, onSaved }: Props) {
       open={open}
       onCancel={onClose}
       footer={null}
+      mask={{ closable: false }}
       width={620}
       destroyOnHidden
       styles={{

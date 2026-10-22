@@ -1,25 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
 """BOSS 搜索列表、岗位详情与网络/DOM 双通道采集（编排层；脚本构造器在
 ``boss_search_scripts``，此处以 ``import x as x`` 显式别名再导出保持原命名空间）。"""
+
 from __future__ import annotations
 
 import logging
-import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 
 from ...models.apply import FAILURE_NETWORK_TIMEOUT, FAILURE_SELECTOR_INVALID
-from ..browser.cdp_client import CdpClient, CdpError
-from .base import CollectQuery, FilterResolution, SearchPage, SearchResult, SiteFailure
+from ..browser.cdp_client import CdpClient
+from .base import CollectQuery, SearchPage, SearchResult, SiteFailure
 from .boss_city import CityResolutionError
-from .boss_filters import (
-    CONDITIONS_ENDPOINT,
-    FILTER_BAR_SCRIPT,
-    fetch_catalogue,
-    parse_filter_bar,
-    resolve_codes,
-)
-from .boss_network import DETAIL_MARKERS, SEARCH_MARKERS, api_error
+from .boss_network import DETAIL_MARKERS, SEARCH_MARKERS
 from .boss_page import (
     _SELECTORS,
     BOSS_DISPLAY_NAME,
@@ -30,6 +24,14 @@ from .boss_page import (
     detect_blocker,
     selector_diagnostic,
 )
+from .boss_search_filters_mixin import BossFilterMixin
+
+# 对外兼容面：boss.py:78 显式 import 了 _with_response_bodies，其余三个由 __all__ 声明；
+# 本文件的 mixin 方法也在用同一批符号，所以这一组 import 同时承担内部使用与对外兼容。
+from .boss_search_parse import _raise_api_error as _raise_api_error
+from .boss_search_parse import _with_response_bodies as _with_response_bodies
+from .boss_search_parse import parse_job_detail as parse_job_detail
+from .boss_search_parse import parse_search_payload as parse_search_payload
 from .boss_search_scripts import (
     CONDITIONS_FETCH_WAIT_SECONDS as CONDITIONS_FETCH_WAIT_SECONDS,
 )
@@ -78,121 +80,11 @@ from .boss_search_scripts import (
 from .boss_search_scripts import (
     _session_conditions_script as _session_conditions_script,
 )
-from .boss_text import looks_like_salary, normalize_text, split_job_fields, split_title_salary
 
 logger = logging.getLogger(__name__)
 
 
-def parse_search_payload(
-    payload: dict[str, Any], page: int, unmapped_conditions: list[str] | None = None
-) -> SearchPage:
-    """把 BOSS 搜索结果响应规整成 SearchPage；薪资缺失或不像薪资时退回标题里拆出的薪资。"""
-    if not isinstance(payload, dict):
-        raise SiteFailure(FAILURE_SELECTOR_INVALID, "搜索结果返回了无法解析的内容")
-    results: list[SearchResult] = []
-    items = payload.get("items")
-    if isinstance(items, list):
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            title, title_salary = split_title_salary(item.get("title", ""))
-            if not title:
-                continue
-            salary = normalize_text(item.get("salary", ""))
-            if not looks_like_salary(salary):
-                salary = title_salary
-            results.append(
-                SearchResult(
-                    title=title,
-                    company=normalize_text(item.get("company", "")),
-                    location=normalize_text(item.get("location", "")),
-                    salary=salary,
-                    url=str(item.get("url", "")),
-                    source=BOSS_DISPLAY_NAME,
-                )
-            )
-    return SearchPage(
-        results=results,
-        page=page,
-        has_next=bool(payload.get("has_next")),
-        unmapped_conditions=list(unmapped_conditions or []),
-    )
-
-
-def parse_job_detail(payload: dict[str, Any]) -> dict[str, Any]:
-    """把 BOSS 岗位详情响应规整成标准字段；需求缺失时退回描述里拆出的需求。"""
-    if not isinstance(payload, dict):
-        raise SiteFailure(FAILURE_SELECTOR_INVALID, "岗位详情返回了无法解析的内容")
-    dom_requirements = normalize_text(payload.get("requirements", ""))
-    sections = split_job_fields(payload.get("description", ""))
-    return {
-        "job_title": normalize_text(payload.get("job_title", "")),
-        "company": normalize_text(payload.get("company", "")),
-        "description": sections.description,
-        "requirements": dom_requirements or sections.requirements,
-        # 福利待遇 / 公司介绍这类第三段（对应 ``Job.additional_info``）。
-        "additional_info": sections.additional,
-        "url": str(payload.get("url", "")),
-    }
-
-
-def _with_response_bodies(client: CdpClient, events: list[dict[str, Any]]) -> list[Any]:
-    from ..browser.network_capture import MAX_PARSED_RESPONSES, collect_bodies, response_urls
-
-    wanted = {
-        url
-        for markers in (SEARCH_MARKERS, DETAIL_MARKERS)
-        for url in response_urls(events, markers=markers)
-    }
-    body_events: list[dict[str, Any]] = []
-    fetched: set[str] = set()
-    for event in events:
-        if len(body_events) >= MAX_PARSED_RESPONSES:
-            break
-        if event.get("method") != NETWORK_RESPONSE_EVENT:
-            continue
-        params = event.get("params")
-        if not isinstance(params, dict):
-            continue
-        request_id = str(params.get("requestId") or "")
-        if not request_id or request_id in fetched:
-            continue
-        response = params.get("response")
-        url = str(response.get("url") or "") if isinstance(response, dict) else ""
-        if url not in wanted:
-            continue
-        try:
-            result = client.send("Network.getResponseBody", {"requestId": request_id})
-        except CdpError:
-            logger.debug("取响应体失败（可能已被回收）：%s", url)
-            continue
-        fetched.add(request_id)
-        body_events.append(
-            {"method": "Network.getResponseBody", "requestId": request_id, "result": result}
-        )
-    if not body_events:
-        return []
-    return collect_bodies([*events, *body_events])
-
-
-def _raise_api_error(responses: list[Any], markers: tuple[str, ...], operation: str) -> None:
-    for response in responses:
-        url = str(getattr(response, "url", "") or "")
-        if not any(marker and marker in url for marker in markers):
-            continue
-        error = api_error(getattr(response, "body", None))
-        if error is None:
-            continue
-        code, message = error
-        suffix = f"：{message}" if message else ""
-        raise SiteFailure(
-            FAILURE_SELECTOR_INVALID,
-            f"BOSS {operation}接口返回错误 code={code}{suffix}。请检查筛选条件后重试",
-            url=url,
-        )
-
-
-class BossSearchMixin:
+class BossSearchMixin(BossFilterMixin):
     """BOSS 搜索与详情采集实现。"""
 
     def build_search_url(self, query: CollectQuery, page: int) -> str:
@@ -222,123 +114,6 @@ class BossSearchMixin:
             if name and code:
                 base = f"{base}&{quote(str(name), safe='')}={quote(str(code), safe='')}"
         return f"{base}&page={max(page, 1)}"
-
-    # ===== 站点侧筛选项 =====
-    #
-    # 两条读取路径，优先"用户自己看到的那份"：
-    # - **页面上直接读**（``FILTER_BAR_SCRIPT``）：筛选栏是站点渲染出来的，正是用户看到的选项；
-    # - **带登录态的接口请求**（``_session_conditions_script``）：在已登录页面上发一次 fetch，
-    #   拿到**这个账号可见**的清单。这一条是必需的——「求职类型」的选项因人而异
-    #   （2026-09-20 实测：登录账号能看到「实习」，未登录看不到），写死一份就等于替所有
-    #   用户决定了他们能选什么。
-    # 浏览器没启动时退回免登录的公开清单（``boss_filters.fetch_catalogue`` 自己会退）。
-
-    def _read_session_filters(self, client: CdpClient) -> tuple[dict[str, Any], Any]:
-        """在用户当前的页面上读筛选项。**三条路各读各的**，谁成功用谁，互不牵连。
-
-        - 页面筛选栏（``FILTER_BAR_SCRIPT``）：搜索页上一定有，且是"这个账号能看到"的那份；
-        - 带登录态的接口请求（``_session_conditions_script``）：任何 zhipin 页面上都能发，
-          但结果要靠轮询取（见那个脚本的说明——它的 Promise 在 geek 页面上不 resolve）。
-        """
-        bar: Any = None
-        try:
-            bar = client.evaluate(FILTER_BAR_SCRIPT, timeout=SESSION_FETCH_TIMEOUT)
-        except Exception:  # noqa: BLE001 - 页面不在搜索结果页时本来就读不到筛选栏
-            logger.debug("读取 BOSS 页面筛选栏失败（页面可能不在搜索结果页）", exc_info=True)
-        if parse_filter_bar(bar):
-            # **页面上已经有清单了，就不再发那次接口请求。** 筛选栏是更完整、更直接的那一份
-            # （它连接口不给的三级行业都有），而且**那次 fetch 在 geek 页面上根本不 resolve**
-            # ——继续等它只会白等满一个轮询预算。
-            return {}, bar
-
-        values: dict[str, Any] = {}
-        try:
-            client.evaluate(_session_conditions_script(), timeout=SESSION_FETCH_TIMEOUT)
-            body = self._await_conditions(client)
-            if isinstance(body, str) and body.strip():
-                values[CONDITIONS_ENDPOINT] = body
-        except Exception:  # noqa: BLE001 - 读不到就走公开清单，不打断界面
-            logger.debug("带登录态读取 BOSS 筛选条件失败，将退回公开清单", exc_info=True)
-        return values, bar
-
-    def _await_conditions(self, client: CdpClient) -> Any:
-        """短轮询取那次 fetch 的结果；超时就放弃（**不等满一个命令超时**）。"""
-        deadline = time.monotonic() + CONDITIONS_FETCH_WAIT_SECONDS
-        while time.monotonic() < deadline:
-            try:
-                result = client.evaluate(_session_conditions_result_script(), timeout=5.0)
-            except Exception:  # noqa: BLE001 - 取不到就是"没读到"
-                return None
-            if result is not None:
-                return result
-            time.sleep(SESSION_FETCH_POLL_SECONDS)
-        return None
-
-    def fetch_filter_options(self, client: CdpClient | None = None) -> tuple[Any, ...]:
-        """当前筛选清单。**有浏览器就优先读页面上的那份**（含账号可见的完整选项）。"""
-        fetcher = getattr(self, "_filter_fetcher", None)
-        timeout = getattr(self, "_filter_timeout", 6.0)
-        if client is not None:
-            values, bar = self._read_session_filters(client)
-            if values or bar:
-                return fetch_catalogue(
-                    fetcher=fetcher, timeout=timeout, session_values=values, bar_payload=bar
-                )
-        return fetch_catalogue(fetcher=fetcher, timeout=timeout)
-
-    def prepare_collect_filters(
-        self, selected: Mapping[str, str] | None, client: CdpClient | None = None
-    ) -> FilterResolution:
-        """解析站点筛选条件。**只在必要时才多走一次页面**。
-
-        采集开始那一刻，浏览器通常停在上一轮留下的岗位上（岗位详情页）——那上面没有筛选栏。
-        免登录的公开清单里又没有「求职类型：实习」这类**只对某些账号可见**的选项，于是用户
-        明明选了、却会被判成"没能生效"。
-
-        所以：先用手头能读到的清单校验一遍；**只有确实有没校验过的项、且浏览器在的时候**，
-        才去搜索页读一次筛选栏再校验一遍。没配站点筛选、或者选的项公开清单就能确认时，
-        一次多余的页面都不会开。
-        """
-        if not selected:
-            return FilterResolution()
-        resolved = resolve_codes(selected, self.fetch_filter_options(client))
-        # 还有没校验过的项、当前页面又没有筛选栏 → 去搜索页读一次再校验。
-        if (
-            resolved.unapplied
-            and client is not None
-            and not _bar_present(client)
-            and self._load_filter_bar(client)
-        ):
-            resolved = resolve_codes(selected, self.fetch_filter_options(client))
-        if resolved.unapplied:
-            logger.warning(
-                "这些筛选条件本次没能生效（编码不在站点当前清单里）：%s", resolved.unapplied
-            )
-        return FilterResolution(
-            params=resolved.params, applied=resolved.applied, unapplied=resolved.unapplied
-        )
-
-    def _load_filter_bar(self, client: CdpClient) -> bool:
-        """去搜索页把筛选栏读出来。**这是唯一一次为读选项而开的页面**，读不到就作罢。"""
-        try:
-            client.navigate(FILTER_BAR_URL)
-        except Exception:  # noqa: BLE001 - 开不了就当没读到，后面照样能采
-            logger.debug("为读取筛选栏打开搜索页失败", exc_info=True)
-            return False
-        deadline = time.monotonic() + FILTER_BAR_WAIT_SECONDS
-        while time.monotonic() < deadline:
-            time.sleep(FILTER_BAR_POLL_SECONDS)
-            try:
-                payload = client.evaluate(FILTER_BAR_SCRIPT, timeout=5.0)
-            except Exception:  # noqa: BLE001 - 页面还在加载
-                continue
-            if parse_filter_bar(payload):
-                return True
-        logger.info("搜索页上没能读到筛选栏，本次按公开清单校验筛选条件")
-        return False
-
-    def unmapped_conditions(self, query: CollectQuery) -> list[str]:
-        return []
 
     def _capture_network(
         self, client: CdpClient, action: Callable[[], Any]
@@ -487,7 +262,6 @@ class BossSearchMixin:
             url=str(state.get("url") or url),
             title=str(state.get("title") or ""),
         )
-
 
 
 __all__ = [

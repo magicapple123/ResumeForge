@@ -98,7 +98,7 @@ def rename_dataset(dataset_id: str, name: str) -> dict[str, Any]:
 
 
 def delete_dataset(dataset_id: str) -> None:
-    """移入 datasets/.trash/ 而不是删除，与项目「不做永久删除」的约定一致。"""
+    """移入 datasets/.trash/ 而不是删除，与项目「不做彻底删除」的约定一致。"""
     if dataset_id == MAIN_DATASET_ID:
         raise DatasetError("主数据不支持删除")
     if dataset_id == read_active_dataset_id():

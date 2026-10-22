@@ -330,7 +330,7 @@ export async function exportResumeWithOptions(
 export async function fetchResumePreviewPdf(
   id: number,
   options: {
-    /** 样式模板 / 版式模板：草稿值，换完没保存也要按新的排。 */
+    /** 模板 / 版式：草稿值，换完没保存也要按新的排。 */
     template?: string;
     format_name?: string;
     page_limit?: number;

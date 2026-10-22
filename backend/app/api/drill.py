@@ -160,7 +160,7 @@ async def create_session(payload: DrillCreate, db: Session = Depends(get_db)):
         db.commit()
         raise HTTPException(
             status_code=400,
-            detail="请先在「设置」页配置大模型：深挖的每一题都要先按你的主张生成评分标准。",
+            detail="尚未配置大模型：深挖的每一题都要先按你的主张生成评分标准",
         )
 
     provider = create_provider(config)
@@ -189,15 +189,15 @@ async def create_session(payload: DrillCreate, db: Session = Depends(get_db)):
     except Exception:  # noqa: BLE001 - 外部模型异常不能变成 500
         logger.exception("生成面试深挖契约发生内部错误")
         await _drop_session()
-        raise HTTPException(status_code=502, detail="生成第一题失败，请稍后重试") from None
+        raise HTTPException(status_code=502, detail="生成第一题失败") from None
 
     with SessionLocal() as write_db:
         stored = write_db.get(DrillSession, session_id)
         if stored is None:  # pragma: no cover - 只在并发删除时发生
-            raise HTTPException(status_code=404, detail="这场深挖记录已不存在")
+            raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")
         claim = write_db.get(type(claims[0]), claims[0].id)
         if claim is None:  # pragma: no cover - 与上面的 stored 同一并发删除窗口
-            raise HTTPException(status_code=404, detail="这道题的事实台账已不存在")
+            raise HTTPException(status_code=404, detail="这道题的事实台账不存在或已被删除")
         open_contract(stored, claim, plan)
         # 立刻 flush：契约的 id 要给后续轮次做外键，None 会让"这轮属于哪道题"对不上。
         write_db.flush()
@@ -223,7 +223,7 @@ async def answer(session_id: int, payload: DrillAnswerRequest, db: Session = Dep
 
     config = get_llm_config(db)
     if not llm_is_configured(config):
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型")
+        raise HTTPException(status_code=400, detail="尚未配置大模型")
 
     provider = create_provider(config)
     db.close()
@@ -239,7 +239,7 @@ async def answer(session_id: int, payload: DrillAnswerRequest, db: Session = Dep
             else None
         )
         if live_contract is None:  # pragma: no cover - 并发改动
-            raise HTTPException(status_code=409, detail="这场深挖的进度已经变化，请刷新后重试")
+            raise HTTPException(status_code=409, detail="这场深挖的进度已经变化")
         try:
             verdict = await evaluate_answer(provider, reloaded, live_contract, payload.answer)
         except LLMError as exc:
@@ -247,17 +247,17 @@ async def answer(session_id: int, payload: DrillAnswerRequest, db: Session = Dep
             raise HTTPException(status_code=502, detail=f"判定这一轮失败：{exc}") from exc
         except Exception:  # noqa: BLE001 - 外部模型异常不能变成 500
             logger.exception("面试深挖判定发生内部错误")
-            raise HTTPException(status_code=502, detail="判定这一轮失败，请稍后重试") from None
+            raise HTTPException(status_code=502, detail="判定这一轮失败") from None
     finally:
         read_db.close()
 
     with SessionLocal() as write_db:
         stored = write_db.get(DrillSession, session_id)
         if stored is None:  # pragma: no cover
-            raise HTTPException(status_code=404, detail="这场深挖记录已不存在")
+            raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")
         current = stored.contracts[-1] if stored.contracts else None
         if current is None or current.id != contract.id:
-            raise HTTPException(status_code=409, detail="这场深挖的进度已经变化，请刷新后重试")
+            raise HTTPException(status_code=409, detail="这场深挖的进度已经变化")
         apply_verdict(
             stored,
             current,
@@ -346,7 +346,7 @@ def _load_session_for_model(session_id: int):
     try:
         record = db.get(DrillSession, session_id)
         if record is None:  # pragma: no cover - 并发删除
-            raise HTTPException(status_code=404, detail="这场深挖记录已不存在")
+            raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")
         # 主动读一遍，把契约与轮次都装进内存，避免调用方在 await 期间触发懒加载。
         for contract in record.contracts:
             _ = (
@@ -395,7 +395,7 @@ async def finish(session_id: int, db: Session = Depends(get_db)):
     with SessionLocal() as write_db:
         stored = write_db.get(DrillSession, session_id)
         if stored is None:  # pragma: no cover
-            raise HTTPException(status_code=404, detail="这场深挖记录已不存在")
+            raise HTTPException(status_code=404, detail="这场深挖记录不存在或已被删除")
         finish_session(stored, review)
         write_db.commit()
         write_db.refresh(stored)
@@ -413,7 +413,7 @@ async def rehearse(session_id: int, payload: DrillRehearseRequest, db: Session =
     _session_or_404(db, session_id)
     config = get_llm_config(db)
     if not llm_is_configured(config):
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型")
+        raise HTTPException(status_code=400, detail="尚未配置大模型")
 
     provider = create_provider(config)
     db.close()

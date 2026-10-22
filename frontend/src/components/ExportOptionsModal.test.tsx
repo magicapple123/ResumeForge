@@ -55,6 +55,7 @@ interface RenderProps {
   initialPageLimit?: number;
   initialFontScale?: "small" | "standard" | "large";
   initialFormatConfig?: Record<string, number | string | string[]>;
+  initialLanguage?: "zh-CN" | "en-US";
 }
 
 function renderModal(props: RenderProps = {}) {
@@ -92,6 +93,8 @@ describe("ExportOptionsModal", () => {
       font_scale: null,
       page_limit: null,
       format_config: undefined,
+      // 没传草稿语言 → null（"不覆盖，用记录里的语言"）。
+      language: null,
       include_photo: true,
       allow_incomplete: undefined,
     });
@@ -110,17 +113,17 @@ describe("ExportOptionsModal", () => {
     expect(screen.getByRole("checkbox", { name: /姓名/ })).toBeInTheDocument();
   });
 
-  it("页边距越界值被 clamp 到 8–26（版式栏的滑块与后端白名单之间只有这一道）", () => {
-    // 直接钉 helper：`PagePaddingControl` 的滑块已经挡在 8–26 内（项 4a 从 InputNumber
-    // 改成滑块，边界不变），clamp 守的是"历史草稿 / 粘贴 / 程序化赋值"这条来路，
-    // 只有单测能覆盖到。
-    expect(clampPagePadding(5)).toBe(8);
-    expect(clampPagePadding(7)).toBe(8);
+  it("页边距越界值被 clamp 到 0–26（版式栏的滑块与后端白名单之间只有这一道）", () => {
+    // 直接钉 helper：`PagePaddingControl` 的滑块已经挡在 0–26 内（项 4a 从 InputNumber
+    // 改成滑块，边界随 2026-10-22 的下限放开一起变），clamp 守的是"历史草稿 / 粘贴 /
+    // 程序化赋值"这条来路，只有单测能覆盖到。
+    expect(clampPagePadding(-2)).toBe(0);
+    expect(clampPagePadding(0)).toBe(0);
     expect(clampPagePadding(40)).toBe(26);
     // 0.1mm 精度后，范围内的小数原样保留（以前取整到 26）。
     expect(clampPagePadding(25.7)).toBe(25.7);
     expect(clampPagePadding(14)).toBe(14);
-    expect(clampPagePadding(Number.NaN)).toBe(8);
+    expect(clampPagePadding(Number.NaN)).toBe(0);
   });
 
   it("页数 / 字号 / 版式草稿全部原样取自预览（面板不再覆盖任何一项，T5）", async () => {
@@ -141,6 +144,18 @@ describe("ExportOptionsModal", () => {
         font_scale: "small",
         format_config: { font_scale_adjust: 0.636, line_height: 1.55, page_padding: 14 },
       }),
+    );
+  });
+
+  it("预览里切了 English：导出请求体带上草稿语言（否则下载到的仍是中文标题）", async () => {
+    renderModal({ initialLanguage: "en-US" });
+
+    fireEvent.click(screen.getByRole("button", { name: /导\s*出/ }));
+
+    await waitFor(() => expect(downloadMocks.downloadBlob).toHaveBeenCalledTimes(1));
+    expect(apiMocks.exportResumeWithOptions).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ format: "pdf", language: "en-US" }),
     );
   });
 
@@ -185,6 +200,8 @@ describe("ExportOptionsModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /导\s*出/ }));
 
     expect(await screen.findByText(/个人总结 里还有/)).toBeInTheDocument();
+    // B3：闸门是面板内的一条 Alert，不是第二层容器——同一时刻仍然只有一个 dialog。
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "仍要导出草稿" }));
 
     await waitFor(() => expect(downloadMocks.downloadBlob).toHaveBeenCalledTimes(1));
@@ -212,14 +229,19 @@ describe("ExportOptionsModal", () => {
       ...RESULT,
       blob: new Blob(["<html>预览</html>"]),
     });
-    renderModal({ initialFormatConfig: { line_height: 1.55 } });
+    renderModal({ initialFormatConfig: { line_height: 1.55 }, initialLanguage: "en-US" });
 
     fireEvent.click(screen.getByRole("button", { name: /浏览器打印/ }));
 
     await waitFor(() => expect(downloadMocks.printHtml).toHaveBeenCalledTimes(1));
     expect(apiMocks.exportResumeWithOptions).toHaveBeenCalledWith(
       7,
-      expect.objectContaining({ format: "html", format_config: { line_height: 1.55 } }),
+      expect.objectContaining({
+        format: "html",
+        format_config: { line_height: 1.55 },
+        // 打印走同一个 buildRequest：语言同样要跟着草稿走。
+        language: "en-US",
+      }),
     );
   });
 

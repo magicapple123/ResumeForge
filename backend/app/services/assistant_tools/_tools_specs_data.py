@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""资料域工具声明（``_TOOLS`` 中 20 条：资料箱/文件副本库/事实台账/备选岗位/助手技能/格式模板（放宽模式工具见 ``_tools_specs_relaxed.py``））。"""
+"""资料域工具声明（``_TOOLS`` 中 20 条：资料箱/文件副本库/事实台账/备选岗位/助手技能/版式（放宽模式工具见 ``_tools_specs_relaxed.py``））。"""
 from __future__ import annotations
 
 from . import previews
@@ -382,18 +382,19 @@ DATA_TOOLS: tuple[Tool, ...] = (
     Tool(
         name="create_format_template",
         description=(
-            "新建一个「格式模板」——只调版式参数（强调色/行高/页边距/区块间距/字号系数），不写 HTML。"
-            "用户说「版式太挤」「帮我压进一页」「换个强调色」「做一个格式模板」时用它。"
+            "新建一个「版式」——只调排版参数（强调色/行高/页边距/区块间距/字号系数），不写 HTML。"
+            "用户说「版式太挤」「帮我压进一页」「换个强调色」「做一个版式」时用它。"
             "至少设置一项参数。名称限 1-40 个字符、只能含中文/字母/数字/空格/下划线/连字符，"
-            "且不能与内置或已有模板重名；自制模板总数上限 40 个。"
-            "注意：**样式模板（完整 HTML）不能用工具创建**，那需要用户到「工作台」页操作。"
+            "且不能与内置或已有的模板、版式重名；自制模板与版式的总数上限 40 个。"
+            "注意：**模板（外观骨架、完整 HTML）这一层不能用工具创建**，那需要用户到「工作台」页操作；"
+            "版式这一层可以，本工具就是做这个的。"
         ),
         parameters={
             "type": "object",
             "properties": {
                 "name": {
                     "type": "string",
-                    "description": "模板名称（1-40 字符，中文/字母/数字/空格/下划线/连字符）",
+                    "description": "版式名称（1-40 字符，中文/字母/数字/空格/下划线/连字符）",
                 },
                 "description": {"type": "string", "description": "可选，一句话说明用途"},
                 **_format_tool_properties(),
@@ -407,22 +408,23 @@ DATA_TOOLS: tuple[Tool, ...] = (
     Tool(
         name="update_format_template",
         description=(
-            "修改一个**自制格式模板**的版式参数（只传要改的项）。用 template_id 或 template_name "
-            "指明目标；只改一项时不会清空其它已设参数。内置版式与样式模板都不能改："
-            "前者不在自制清单里，后者是 HTML，只能由用户到「工作台」页修改。"
+            "修改一个**自制版式**的排版参数（只传要改的项）。用 template_id 或 template_name "
+            "指明目标；只改一项时不会清空其它已设参数。内置版式不能改（它不在自制清单里）；"
+            "模板（外观骨架、完整 HTML）也不能改，只能由用户到「工作台」页修改。"
+            "但版式这一层的参数是可以新建和修改的，别因为模板改不了就说版式也改不了。"
         ),
         parameters={
             "type": "object",
             "properties": {
                 "template_id": {
                     "type": "integer",
-                    "description": "格式模板 id（与 template_name 二选一）",
+                    "description": "版式 id（与 template_name 二选一）",
                 },
                 "template_name": {
                     "type": "string",
-                    "description": "格式模板名称（与 template_id 二选一）",
+                    "description": "版式名称（与 template_id 二选一）",
                 },
-                "name": {"type": "string", "description": "可选，改名（不能与已有模板重名）"},
+                "name": {"type": "string", "description": "可选，改名（不能与已有模板或版式重名）"},
                 "description": {"type": "string", "description": "可选，改说明"},
                 **_format_tool_properties(),
             },
@@ -435,10 +437,10 @@ DATA_TOOLS: tuple[Tool, ...] = (
     Tool(
         name="list_format_templates",
         description=(
-            "列出用户自制的格式模板（id、名称、说明、版式参数如强调色/行高/页边距）。"
-            "用户问「我有哪些格式模板」「之前那个模板参数是什么」时用它，"
+            "列出用户自制的版式（id、名称、说明、排版参数如强调色/行高/页边距）。"
+            "用户问「我有哪些版式」「之前那个版式设了哪些参数」时用它，"
             "也用于在 update_format_template 之前确认要改哪一个。"
-            "内置版式与样式模板（完整 HTML）不在此列，它们只能在「工作台」页查看。"
+            "内置版式与模板（完整 HTML）不在此列，它们只能在「工作台」页查看。"
         ),
         parameters={"type": "object", "properties": {}, "required": []},
         handler=_tool_list_format_templates,

@@ -124,7 +124,7 @@ async def import_skill(request: Request, db: Session = Depends(get_db)):
     elif content_type in _MARKDOWN_CONTENT_TYPES:
         suffix = ".md"
     else:
-        raise HTTPException(status_code=415, detail="请导入 .md 提示词文件或 .zip 技能包")
+        raise HTTPException(status_code=415, detail="需要 .md 提示词文件或 .zip 技能包")
 
     source_name = _source_name(request)
     staging = restore_directory(session_engine(db))
@@ -211,7 +211,7 @@ def update_skill(skill_id: int, payload: AssistantSkillUpdate, db: Session = Dep
 def toggle_skill(skill_id: int, payload: AssistantSkillUpdate, db: Session = Depends(get_db)):
     """快速开关技能（助手页与设置页的 Switch 走这里）。"""
     if payload.enabled is None:
-        raise HTTPException(status_code=422, detail="请提供要切换的启用状态")
+        raise HTTPException(status_code=422, detail="缺少要切换的启用状态")
     skill = set_skill_enabled(db, skill_id, payload.enabled)
     if skill is None:
         raise HTTPException(status_code=404, detail="技能不存在或已被删除")

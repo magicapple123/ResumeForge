@@ -3,7 +3,7 @@
  * 简历版式控制（壳）：生成配置阶段与预览弹窗共用。
  *
  * 自 P2 起这里**只做组合**，两组控件各自成文件（D4）：
- * - `ResumeTemplateControls`：结构类——样式模板 / 版式模板 / 板块顺序 / 最大篇幅；
+ * - `ResumeTemplateControls`：结构类——模板 / 版式 / 板块顺序 / 最大篇幅；
  * - `ResumeMeasureControls`：度量类——字号 / 行距 / 页边距。
  *
  * 壳的职责只有两件：
@@ -36,6 +36,14 @@ interface Props {
    */
   previewRef?: React.RefObject<ResumePreviewHandle | null>;
   /**
+   * 这份简历有没有照片（由持有内容的宿主透传）。
+   *
+   * `false` → 照片滑杆禁用并说明「未上传照片」：`photo_scale` 在没有照片时完全惰性，
+   * 让用户拖一个"什么都没发生"的滑杆是最差的反馈。`undefined`（生成前的配置阶段
+   * 拿不到内容）→ 不禁用，只是没有即时预览。
+   */
+  hasPhoto?: boolean;
+  /**
    * 默认板块顺序是否跟随「我的资料」。
    *
    * 只在**生成**场景为 true：新简历的默认顺序应当等于用户在资料页排好的顺序。
@@ -53,6 +61,7 @@ export default function ResumeLayoutControls({
   compact = false,
   resumeId,
   previewRef,
+  hasPhoto,
   preferProfileOrder = false,
 }: Props) {
   // 目录只在这里取一次：两组的默认值（行距 / 页边距 / 字号档位）都吃这一份数据。
@@ -76,6 +85,7 @@ export default function ResumeLayoutControls({
         compact={compact}
         catalog={catalog}
         previewRef={previewRef}
+        hasPhoto={hasPhoto}
         onChange={onChange}
       />
     </Space>

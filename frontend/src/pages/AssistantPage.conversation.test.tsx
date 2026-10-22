@@ -183,7 +183,7 @@ describe("AssistantPage", () => {
   it("takes the user to the workbench that manages skills", async () => {
     // 一个都没启用时，空态里有直达工作台的入口（本次不再走页头那枚提示）。
     renderPageWithLocationProbe();
-    fireEvent.click(await screen.findByRole("button", { name: "到技能工作台添加技能" }));
+    fireEvent.click(await screen.findByRole("button", { name: "到工作台添加技能" }));
 
     expect(screen.getByTestId("current-path")).toHaveTextContent("/skills");
   });
@@ -191,7 +191,7 @@ describe("AssistantPage", () => {
   it("tells a first-time user that skills exist", async () => {
     renderPage();
 
-    expect(await screen.findByText("到技能工作台添加技能")).toBeInTheDocument();
+    expect(await screen.findByText("到工作台添加技能")).toBeInTheDocument();
   });
 
   it("keeps loaded messages visible while refreshing the active conversation", async () => {

@@ -153,10 +153,11 @@ def test_a_session_needs_confirmed_claims(client, monkeypatch):
 
 
 def test_a_session_needs_a_configured_model(client):
+    """没配模型就开不了深挖：detail 只报原因（"尚未配置"），去哪个页面改由前端拼。"""
     _make_claim(client)
     response = client.post("/api/drill", json={})
     assert response.status_code == 400
-    assert "设置" in response.json()["detail"]
+    assert "尚未配置大模型" in response.json()["detail"]
 
 
 def test_a_failed_first_question_leaves_no_orphan_session(client, monkeypatch):

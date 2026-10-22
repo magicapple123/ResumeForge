@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 "use strict";
 
 // ResumeForge desktop shell - main process.
@@ -18,6 +19,7 @@ const fs = require("fs");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { createShellLogging, announceDegradedOnReady } = require("./lib/preflight");
+const { createQuitLifecycle } = require("./lib/quit-lifecycle");
 const { installerWaitCommand, runManualUpdateCheck, scheduleUpdateCheck, wantsManualUpdateCheck } = require("./updater");
 
 // Lifecycle diagnostics use the controlled runtime log; module imports must not write user profiles.
@@ -28,13 +30,6 @@ let tray = null;
 // True once a quit is actually in progress (vs. a mere window close that
 // hides to tray). Only before-quit sets it.
 let quitting = false;
-// before-quit state machine: quit is held while the backend stops, then
-// resumed exactly once.
-let stopInFlight = false;
-let shutdownComplete = false;
-// Set by the updater's installAndQuit dependency; the installer spawns in
-// before-quit AFTER the backend stop completes.
-let pendingInstallerPath = null;
 let restartAttempts = 0;
 let restartTimer = null;
 
@@ -46,13 +41,6 @@ const RESTART_BACKOFF_MS = 1500;
 // Crash budget (audit PR-05): more than MAX_RESTART_ATTEMPTS unexpected
 // exits inside this window give up on restarting and surface the error.
 const RESTART_WINDOW_MS = 5 * 60_000;
-// Hard cap on how long before-quit waits for the backend to stop. A normal
-// quit is a user waiting in front of the tray menu, so the cap is short: a
-// backend that is still there after 6s is reported in the log, not in a modal
-// dialog (R3). The install path keeps the old, generous budget -- overwriting
-// a live installation is the one case worth waiting (and failing) for.
-const STOP_TIMEOUT_MS = 6_000;
-const INSTALL_STOP_TIMEOUT_MS = 15_000;
 
 const restartTimestamps = [];
 
@@ -307,57 +295,31 @@ async function startBackendAndSwap() {
   }
 }
 
-// Called by the updater once the installer checksum verified: quit first;
-// before-quit stops the backend and spawns the installer afterwards.
-function requestInstallAndQuit(installerPath) {
-  // 更新是最容易"看起来什么都没发生"的路径：三个阶段都留痕（任务 12）。
-  logLine(`install-start ${installerPath}`);
-  pendingInstallerPath = installerPath;
-  app.quit();
-}
-
-// Stop the backend and normalise the outcome to { ok, reason }. The call
-// itself stays synchronous (the quit path must ask immediately); only the
-// result is awaited. A manager that reports nothing is treated as "completed"
-// (the pre-RR-02 contract) -- only an explicit ok:false blocks the install.
-function stopBackendSafely() {
-  if (!backend) return Promise.resolve({ ok: true, reason: "", verified: true });
-  let started;
-  try {
-    started = backend.stop();
-  } catch (err) {
-    return Promise.resolve({ ok: false, reason: String(err), verified: false });
-  }
-  return Promise.resolve(started)
-    .then((result) => (result && typeof result === "object" ? result : { ok: true, reason: "" }))
-    .catch((err) => ({ ok: false, reason: String(err), verified: false }));
-}
-
-function spawnPendingInstaller() {
-  if (!pendingInstallerPath) return;
-  const installerPath = pendingInstallerPath;
-  pendingInstallerPath = null;
-  try {
-    // NSIS 静默安装会覆盖 shell 的程序文件；在 Electron 还没退出、exe 句柄未
-    // 释放时直接 spawn 会撞锁静默失败。改为派生一个**脱离的等待进程**：先等
-    // 本主进程退出，再启动安装器（命令构造在 updater.installerWaitCommand，
-    // 可离线单测）。后台停机已经在本函数被调用之前完成，顺序不变。
-    const { file, args } = installerWaitCommand(installerPath, process.pid);
-    const child = require("child_process").spawn(file, args, {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    child.unref();
-    child.on("error", (err) => {
-      logLine(`install-spawn-failed ${installerPath}: ${err}`);
-      try { dialog.showErrorBox("简历通", "更新安装程序未能启动，请保留下载文件后手动重试。"); } catch {}
-    });
-    logLine(`install-spawned ${installerPath} (waits for shell pid ${process.pid})`);
-  } catch (err) {
-    logLine(`install-spawn-failed ${installerPath}: ${err}`);
-  }
-}
+// Quit lifecycle (audit PR-05) now lives in ./lib/quit-lifecycle: the update
+// install entry (requestInstallAndQuit), the backend stop (stopBackendSafely),
+// the detached installer spawn and the whole before-quit body. Only the
+// registration point below stays here, plus the `quitting` flag -- the window
+// close handler (createWindow) and handleUnexpectedExit read that flag directly,
+// and the lifecycle flips it through setQuitting, so the timing of the write
+// (after preventDefault, before the stop starts) is unchanged.
+//
+// app/dialog are injected because the module must not require("electron"); the
+// timer functions and a lazy child_process accessor are handed down so the VM
+// lifecycle probes still see the shell's own timer venue and stubbed spawn.
+const quitLifecycle = createQuitLifecycle({
+  app,
+  dialog,
+  logLine,
+  getBackend: () => backend,
+  getRestartTimer: () => restartTimer,
+  setQuitting: (value) => {
+    quitting = value;
+  },
+  installerWaitCommand,
+  requireChildProcess: () => require("child_process"),
+  setTimeout,
+  clearTimeout,
+});
 
 // Single instance: a second launch focuses the existing window instead of
 // spawning a competing backend on another port.
@@ -381,7 +343,7 @@ if (!app.requestSingleInstanceLock()) {
       mainWindow.focus();
     }
     // 应用已经在运行时双击更新入口：不启动第二个实例，直接走一次手动检查。
-    if (wantsManualUpdateCheck(argv)) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: requestInstallAndQuit });
+    if (wantsManualUpdateCheck(argv)) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
   });
 
   app.whenReady().then(async () => {
@@ -393,8 +355,8 @@ if (!app.requestSingleInstanceLock()) {
       createTray();
       announceDegradedOnReady({ window: mainWindow, dialog, shell, info: preflightInfo });
       await startBackendAndSwap();
-      scheduleUpdateCheck(mainWindow, logLine, { installAndQuit: requestInstallAndQuit });
-      if (wantsManualUpdateCheck()) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: requestInstallAndQuit });
+      scheduleUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
+      if (wantsManualUpdateCheck()) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
     } catch (err) {
       logLine(`startup failed: ${err}`);
       dialog.showErrorBox(
@@ -405,81 +367,10 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
-  app.on("before-quit", (event) => {
-    // Second pass after the stop completed (and the installer, if any, was
-    // spawned): let quit proceed.
-    if (shutdownComplete) return;
-    if (stopInFlight) {
-      // Re-entrant quit request while the stop is already running.
-      event.preventDefault();
-      return;
-    }
-    event.preventDefault();
-    quitting = true;
-    stopInFlight = true;
-    if (restartTimer) clearTimeout(restartTimer);
-    // Hold quit until the backend tree is down; a dangling uvicorn would
-    // keep file handles and break the next launch/update. The cap bounds
-    // the wait even if the backend's own stop logic hangs.
-    //
-    // RR-02: "we asked it to stop" is not "it stopped". The stop outcome is
-    // checked before the update installer is allowed to overwrite this
-    // installation: an unverified stop (recycled pid, unreadable identity,
-    // timeout) must never be papered over by an install.
-    //
-    // R3: a plain quit (tray exit, window close) must never block on a modal
-    // dialog. Only a pending installer turns an unverified stop into an error
-    // box -- that is the one path where continuing would corrupt an install.
-    const installPending = Boolean(pendingInstallerPath);
-    const stopTimeoutMs = installPending ? INSTALL_STOP_TIMEOUT_MS : STOP_TIMEOUT_MS;
-    const stopPromise = stopBackendSafely();
-    const stopCapped = Promise.race([
-      stopPromise,
-      new Promise((resolve) => {
-        setTimeout(
-          () => resolve({ ok: false, reason: "停止后端超时", verified: false, timedOut: true }),
-          stopTimeoutMs,
-        ).unref();
-      }),
-    ]);
-    stopCapped.then((outcome) => {
-      stopInFlight = false;
-      shutdownComplete = true;
-      const stopOk = Boolean(outcome && outcome.ok);
-      const stopVerified = !outcome || outcome.verified !== false;
-      const reason = (outcome && outcome.reason) || "未知原因";
-      const backendUrl = (backend && backend.url) || "（未知）";
-      const probeDetail = (outcome && outcome.detail) || "（无）";
-      if (stopOk && (!installPending || stopVerified)) {
-        spawnPendingInstaller();
-      } else if (installPending) {
-        // The installer would overwrite files a live backend may still hold.
-        pendingInstallerPath = null;
-        logLine(
-          `backend stop not verified (${reason}); update install blocked; url=${backendUrl}; detail=${probeDetail}`,
-        );
-        try {
-          dialog.showErrorBox(
-            "简历通",
-            `更新未安装：后端服务未被确认停止（${reason}）。\n` +
-              "为避免覆盖仍在使用数据文件的后端进程，安装已取消。" +
-              "请手动结束残留的后端进程后重试更新。",
-          );
-        } catch {
-          // A failing dialog must not block the quit itself.
-        }
-      } else {
-        // Ordinary quit: the user asked to leave, so leave. The evidence goes
-        // to desktop-main.log for the next time someone asks "why is port 8010
-        // still taken?" -- not into a dialog they cannot act on (R3).
-        logLine(`backend stop not verified (${reason}); url=${backendUrl}; detail=${probeDetail}`);
-        if (outcome && outcome.warning) {
-          logLine(`backend stop warning: ${outcome.warning} (url=${backendUrl}; detail=${probeDetail})`);
-        }
-      }
-      app.quit();
-    });
-  });
+  // The single place that stops the backend (audit PR-05). The body lives in
+  // ./lib/quit-lifecycle; the registration stays here so the ordering against
+  // window-all-closed and the ipcMain quit bridge is visible in one file.
+  app.on("before-quit", quitLifecycle.handleBeforeQuit);
 
   app.on("window-all-closed", () => {
     // With tray residency this only fires from an explicit destroy; treat
@@ -497,4 +388,4 @@ ipcMain.on("app:quit-request", () => app.quit());
 
 // Test hooks for the VM-based lifecycle probes (desktop/scripts/test-lifecycle.js).
 // The packaged app runs main.js as its entry and never imports it as a module, so this is inert.
-module.exports = { requestInstallAndQuit };
+module.exports = { requestInstallAndQuit: quitLifecycle.requestInstallAndQuit };

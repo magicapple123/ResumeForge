@@ -153,7 +153,7 @@ export default function LLMConfigCard({
             disabled={cardBusy || recordsLoading}
             onClick={onOpenCreate}
           >
-            新增配置
+            新建配置
           </Button>
         }
       >
@@ -167,7 +167,9 @@ export default function LLMConfigCard({
           {records.length === 0 ? (
             <EmptyState
               inline
-              description="暂无配置记录，点右上「新增配置」创建第一份；当前生效的配置会继续正常使用"
+              // 不再内嵌主按钮：这张卡的 extra 已经有「新建配置」，同一张卡里再放一颗
+              // primary 就是两个同义主动作（§4.1）。改为写明按钮名——它同屏可见（§4.7）。
+              description="还没有配置记录，点「新建配置」创建第一份；当前生效的配置会继续正常使用"
             />
           ) : (
             <Flex vertical gap={12}>
@@ -176,7 +178,7 @@ export default function LLMConfigCard({
                   type="info"
                   showIcon
                   title="当前沿用本数据集旧配置，保存后将升级为全局配置"
-                  description={`正在使用：${configSummary.model || "未填写模型"} · ${configSummary.baseUrl || "未填写地址"}。保存一次（或在下方新建记录后点「使用」）即改为所有数据集共用。`}
+                  description={`正在使用：${configSummary.model || "未填写模型"} · ${configSummary.baseUrl || "未填写地址"}。保存一次（或新建一条记录后点「使用」）即改为所有数据集共用。`}
                 />
               )}
               {visibleRecords.map((record) => {
@@ -292,6 +294,7 @@ export default function LLMConfigCard({
         open={recordModalOpen}
         mode={editingRecord ? "edit" : "create"}
         recordName={editingRecord?.name ?? ""}
+        recordId={editingRecord?.id}
         form={recordForm}
         saving={recordSaving}
         testing={draftTesting}

@@ -80,7 +80,7 @@ def _require_provider(db: Session):
     """模拟面试每一轮都要调用模型，所以必须已配置。"""
     config = get_llm_config(db)
     if not config.base_url.strip() or not config.model.strip():
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     return create_provider(config), config.model
 
 
@@ -265,7 +265,7 @@ async def create_session(payload: InterviewCreate, db: Session = Depends(get_db)
         db.delete(session)
         db.commit()
         raise HTTPException(
-            status_code=502, detail="面试助手暂时无法开始本轮，请稍后重试"
+            status_code=502, detail="面试助手暂时无法开始本轮"
         ) from None
     add_message(
         session,
@@ -291,7 +291,7 @@ async def submit_answer(
     """提交一轮回答：返回点评与下一题；满轮次时自动收尾并出报告。"""
     session = _session_or_404(db, session_id)
     if session.status != INTERVIEW_STATUS_ACTIVE:
-        raise HTTPException(status_code=409, detail="这场面试已经结束，请查看报告或新开一场")
+        raise HTTPException(status_code=409, detail="这场面试已经结束")
     provider, _model = _require_provider(db)
 
     add_message(session, role="user", content=payload.content)
@@ -314,7 +314,7 @@ async def submit_answer(
     except LLMError:
         # 回答已经存下来了，用户不会白写；只是这一轮的追问失败。
         raise HTTPException(
-            status_code=502, detail="面试助手暂时无法完成本轮，请稍后重试"
+            status_code=502, detail="面试助手暂时无法完成本轮"
         ) from None
 
     add_message(
@@ -671,7 +671,7 @@ async def _answer_stream_events(
     except LLMError:
         # Provider errors are deliberately reduced to a fixed public message;
         # model responses and validation details can contain private resume data.
-        yield _sse({"type": "error", "detail": "面试助手暂时无法完成本轮，请稍后重试"})
+        yield _sse({"type": "error", "detail": "面试助手暂时无法完成本轮"})
         return
 
     add_message(
@@ -702,7 +702,7 @@ async def submit_answer_stream(
     """流式提交一轮回答：``question_delta``（问题明文增量）→ ``done``（完整结果）。"""
     session = _session_or_404(db, session_id)
     if session.status != INTERVIEW_STATUS_ACTIVE:
-        raise HTTPException(status_code=409, detail="这场面试已经结束，请查看报告或新开一场")
+        raise HTTPException(status_code=409, detail="这场面试已经结束")
     provider, _model = _require_provider(db)
 
     add_message(session, role="user", content=payload.content)

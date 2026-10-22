@@ -872,7 +872,9 @@ body {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  min-height: calc(100vh - 64px);
+  /* 顶部常驻元素的真实高度由变量给出：公告条出现时多 40px，不扣掉就会多出一屏滚动量。
+     两个 fallback 保证"没有公告条"时计算值与历史完全一致（64px）。 */
+  min-height: calc(100vh - var(--rf-header-height, 64px) - var(--rf-announcement-h, 0px));
   padding: 24px;
   overflow-x: hidden;
 }

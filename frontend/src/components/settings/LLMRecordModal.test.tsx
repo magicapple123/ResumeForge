@@ -15,18 +15,23 @@
  * 这条测试钉住「间距写在内联 style 且值正确」：jsdom 不解析外部 CSS 文件的规则，但能
  * 读取内联样式——若有人把它挪回 modules.css（或改回会塌陷的 margin），测试立刻变红。
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App as AntdApp, ConfigProvider, Form } from "antd";
 import type { LLMThinkingResult } from "../../types";
 import type { RecordFormValues } from "../../features/settings/useLLMRecordTools";
+import { t } from "../../i18n";
+import { clearDraft, writeDraft } from "../../utils/formDraftStorage";
 import LLMRecordModal from "./LLMRecordModal";
 
 afterEach(() => {
   cleanup();
 });
 
-function renderModal() {
+function renderModal({
+  mode = "edit",
+  recordId,
+}: { mode?: "create" | "edit"; recordId?: string } = {}) {
   const thinkingOptions: LLMThinkingResult = {
     style: "openai",
     efforts: ["low", "medium", "high"],
@@ -45,8 +50,9 @@ function renderModal() {
         <ConfigProvider>
           <LLMRecordModal
             open
-            mode="edit"
+            mode={mode}
             recordName="测试配置"
+            recordId={recordId}
             form={form}
             saving={false}
             testing={false}
@@ -108,3 +114,37 @@ describe("LLMRecordModal viewport scrolling", () => {
     expect(screen.getByRole("button", { name: /^保\s*存$/ })).toBeInTheDocument();
   });
 });
+
+/**
+ * 草稿接线（与 `TrackFormModal` / `ClaimFormModal` 同一形状）：作用域按"哪一条记录"分，
+ * 新建态是 `llm.record#new`；命中草稿只出恢复条，**用户点了才应用**。
+ *
+ * 断言里不写中文：恢复条两颗按钮走 `t()` 的 key，输入框按 antd 依字段名生成的 id 取
+ * （本弹窗的 Form 没有 name 前缀，所以 id 就是 `base_url`）。
+ */
+describe("LLMRecordModal 草稿恢复", () => {
+  it("命中草稿不自动填充，点恢复条上的按钮才写进表单", async () => {
+    const scope = "llm.record#new";
+    clearDraft(scope);
+    writeDraft(scope, { base_url: "https://draft.example.com", model: "draft-model" });
+
+    renderModal({ mode: "create" });
+
+    // 恢复条出现 = 读到了草稿；此刻表单仍是空的（自动填充会让用户以为"本来就填过"）。
+    const restore = await screen.findByRole("button", { name: t("draft.restore.action") });
+    expect(readBaseUrl()).toBe("");
+
+    fireEvent.click(restore);
+
+    await waitFor(() => expect(readBaseUrl()).toBe("https://draft.example.com"));
+    // 取用之后恢复条消失：不会重复问第二遍。
+    expect(screen.queryByRole("button", { name: t("draft.restore.action") })).toBeNull();
+  });
+});
+
+/** 表单当前的 Base URL 输入框（每次重新查节点：恢复后 React 可能换掉 DOM）。 */
+function readBaseUrl(): string {
+  const input = document.getElementById("base_url") as HTMLInputElement | null;
+  if (!input) throw new Error("base_url field is not rendered");
+  return input.value;
+}

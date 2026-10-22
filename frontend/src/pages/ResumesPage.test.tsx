@@ -339,8 +339,9 @@ describe("ResumesPage 批量选择", () => {
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
+    // 标题只写动作 + 对象；条数按 §4.4 的例外进正文（见下一条断言）。
     expect(
-      (await screen.findAllByText(/删除选中的 2 份简历/, {}, { timeout: 5000 })).length,
+      (await screen.findAllByText("删除选中的简历？", {}, { timeout: 5000 })).length,
     ).toBeGreaterThan(0);
     // 未确认前绝不能删（单删与批量删都不能调）。
     expect(apiMocks.deleteResume).not.toHaveBeenCalled();
@@ -356,7 +357,8 @@ describe("ResumesPage 批量选择", () => {
       },
       { timeout: 5000 },
     );
-    expect(confirmRoot.textContent).toContain("删除选中的 2 份简历");
+    expect(confirmRoot.textContent).toContain("删除选中的简历");
+    expect(confirmRoot.textContent).toContain("这 2 份简历");
     fireEvent.click(within(confirmRoot).getByRole("button", { name: /删\s*除/ }));
 
     // P2-2：批量删除改为一次 POST /resumes/batch-delete，不再前端逐条 N 连发。
@@ -420,7 +422,8 @@ describe("ResumesPage 跨页全选（C3）", () => {
       expect(root).not.toBeNull();
       return root as HTMLElement;
     });
-    expect(confirmRoot.textContent).toContain("删除选中的 3 份简历");
+    expect(confirmRoot.textContent).toContain("删除选中的简历");
+    expect(confirmRoot.textContent).toContain("这 3 份简历");
     fireEvent.click(within(confirmRoot).getByRole("button", { name: /删\s*除/ }));
 
     // 断言批量删除收到**全部页**的 id，而不是只有当前页的那一条。

@@ -43,7 +43,7 @@ import { formatDateTime } from "../utils/format";
 import { RecordDetailDrawer } from "./common/RecordDetail";
 import { isFromInnerControl } from "./common/recordDetailCore";
 import { ListyItem, ListyMeta } from "./common/ListyItem";
-import { useRowActionMenu } from "./common/rowActionMenu";
+import { TRASH_RECOVERY_NOTE, useRowActionMenu } from "./common/rowActionMenu";
 
 export default function InterviewExperiencePanel() {
   const { message } = App.useApp();
@@ -152,7 +152,7 @@ export default function InterviewExperiencePanel() {
       } else {
         await createInterviewExperience(values);
       }
-      message.success(editing ? "已更新面经" : "已新增面经");
+      message.success(editing ? "已更新面经" : "已新建面经");
       setModalOpen(false);
       await loadList();
     } catch (error) {
@@ -165,7 +165,7 @@ export default function InterviewExperiencePanel() {
   const doRemove = async (experience: InterviewExperience) => {
     try {
       await deleteInterviewExperience(experience.id);
-      message.success("已删除");
+      message.success("已删除这条面经");
       await loadList();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "删除失败");
@@ -208,7 +208,7 @@ export default function InterviewExperiencePanel() {
             }))}
           />
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新增面经
+            新建面经
           </Button>
         </Space>
       </Card>
@@ -280,7 +280,8 @@ export default function InterviewExperiencePanel() {
                               label: "删除",
                               danger: true,
                               icon: <DeleteOutlined />,
-                              confirm: "删除这条面经？删除后可在回收站里找回。",
+                              confirm: "删除这条面经？",
+                              confirmBody: TRASH_RECOVERY_NOTE,
                               onClick: () => void doRemove(item),
                             },
                           ]),

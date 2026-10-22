@@ -113,7 +113,8 @@ describe("ConversationSidebar 批量选择", () => {
       expect(root).not.toBeNull();
       return root as HTMLElement;
     });
-    expect(confirmRoot.textContent).toContain("删除选中的 2 段对话");
+    expect(confirmRoot.textContent).toContain("删除选中的对话");
+    expect(confirmRoot.textContent).toContain("这 2 段对话");
     fireEvent.click(within(confirmRoot).getByRole("button", { name: /删\s*除/ }));
 
     await waitFor(() => expect(onBatchDelete).toHaveBeenCalledWith([1, 2]));
@@ -153,7 +154,8 @@ describe("ConversationSidebar 批量选择", () => {
       expect(root).not.toBeNull();
       return root as HTMLElement;
     });
-    expect(confirmRoot.textContent).toContain("删除选中的 12 段对话");
+    expect(confirmRoot.textContent).toContain("删除选中的对话");
+    expect(confirmRoot.textContent).toContain("这 12 段对话");
     fireEvent.click(within(confirmRoot).getByRole("button", { name: /删\s*除/ }));
 
     await waitFor(() => expect(onBatchDelete).toHaveBeenCalledTimes(1));

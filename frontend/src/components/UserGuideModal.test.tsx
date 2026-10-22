@@ -71,7 +71,7 @@ describe("UserGuideModal", () => {
     expect(screen.getByText(/侧栏最下方、「设置」上面/)).toBeInTheDocument();
     expect(screen.getByText(/只有标成「已确认」的条目/)).toBeInTheDocument();
     // 深挖是台账的延伸，入口在台账页里——不写清用户找不到。
-    expect(screen.getByText(/拿去深挖/)).toBeInTheDocument();
+    expect(screen.getByText(/开始深挖/)).toBeInTheDocument();
     // 断言的是**渲染出来的**文字：`**…**` 会被渲染成粗体，星号不该出现在界面上
     // （此前指南把 `**` 当普通文本渲染，界面上真的显示着星号，而这条断言还把它当成
     // 期望值钉住了——测试写成了 bug 的形状）。
@@ -133,9 +133,10 @@ describe("UserGuideModal", () => {
     expect(screen.getByText("让助手直接帮你处理数据")).toBeInTheDocument();
     expect(screen.getByText(/但它不会替你删除任何数据/)).toBeInTheDocument();
     // 技能在助手页的入口（输入框下方工具条）和新建/编辑入口（工作台）都要指明。
-    // 侧栏那一项已经叫「工作台」了（技能 + 简历模板两页），指南里不能再写旧名字。
+    // 侧栏那一项已经叫「工作台」了（技能 + 简历模板两页），里面的 tab 就叫「技能」，
+    // 指南里不能再写旧名字。
     expect(screen.getByText(/「技能」按钮可以直接开关/)).toBeInTheDocument();
-    expect(screen.getByText(/工作台 → 助手技能/)).toBeInTheDocument();
+    expect(screen.getByText(/工作台 → 技能/)).toBeInTheDocument();
   });
 
   it("finishes by pointing at the data backup step", () => {

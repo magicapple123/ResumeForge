@@ -227,7 +227,7 @@ def test_update_skill_tool_without_files_keeps_existing_files(db_session):
     assert [item["path"] for item in detail["知识文件"]] == ["a.md"]
 
 
-# ===== 格式模板：助手只能做参数化的「格式模板」，不能改样式模板 HTML =====
+# ===== 版式：助手只能做参数化的「版式」，不能改模板的 HTML =====
 
 
 def test_create_format_template_tool_uses_the_shared_config_validation(db_session):
@@ -300,7 +300,7 @@ def test_update_format_template_tool_refuses_style_templates(db_session):
         html="<html><head></head><body>ok</body></html>",
     )
 
-    with pytest.raises(ValueError, match="样式模板"):
+    with pytest.raises(ValueError, match="是模板（完整 HTML），不是版式"):
         execute_tool(
             db_session,
             "update_format_template",

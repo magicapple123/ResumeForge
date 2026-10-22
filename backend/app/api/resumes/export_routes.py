@@ -105,7 +105,7 @@ def _export_record(
     浏览器把它当下载。所以这两个开关默认保持导出的原行为，预览显式传 ``False`` / ``True``。
 
     ``template_override`` / ``format_name_override`` 同样只服务预览：草稿里换了模板或
-    版式模板、还没点保存时，预览必须按**草稿**排版而不是记录里的旧值。给 ``None`` 时
+    版式、还没点保存时，预览必须按**草稿**排版而不是记录里的旧值。给 ``None`` 时
     行为与导出完全一致（用记录值）。
 
     ``cache_result`` 也只服务预览：同一组输入（内容 + 生效参数）第二次进来直接回上一次的
@@ -125,13 +125,13 @@ def _export_record(
         incomplete = find_incomplete(resume)
         if incomplete:
             raise HTTPException(status_code=409, detail=incomplete_detail(incomplete))
-    # 样式模板解析一次，json/md 用不到也不多花一次查询；html/pdf/docx 复用同一份解析结果。
+    # 模板解析一次，json/md 用不到也不多花一次查询；html/pdf/docx 复用同一份解析结果。
     effective_style = template_override or record.template
     export_template, export_html = resolve_style_template(db, effective_style)
     if format_name_override is None:
         base_format_config = record_format_config(db, record)
     else:
-        # 草稿给了明确的版式模板：只按"样式模板自带 + 该版式预设"起步，再由请求里的
+        # 草稿给了明确的版式：只按"模板默认 + 该版式预设"起步，再由请求里的
         # ``format_config``（草稿的完整覆盖）叠加。**不能再叠记录里的旧覆盖**——用户换
         # 版式时前端已经清掉了该预设管辖的键，旧覆盖会把新预设又盖回去。
         base_format_config = dict(
@@ -228,6 +228,9 @@ def _export_record(
             if request.page_limit is not None
             else (record.page_limit or 1),
             "font_scale": request.font_scale or context.font_scale or "standard",
+            # 语言同样是"生效后的版式"：请求覆盖优先，否则记录值。存档要能重放出同一份
+            # 文件（`replay_delivery_export`），漏记它就会在重下存档时把英文简历印成中文。
+            "language": request.language or context.language,
             "margin_mm": request.margin_mm,
             "include_photo": request.include_photo,
         }
@@ -242,6 +245,7 @@ def _export_record(
             "font_scale": effective_render_context["font_scale"],
             "page_limit": effective_render_context["page_limit"],
             "format_config": effective_render_context["format_config"],
+            "language": effective_render_context["language"],
             "include_photo": request.include_photo,
         }
         # 显式存档：哈希原样沿用 ExportDelivery 的产出，库里证据与响应头逐字一致。
@@ -334,6 +338,8 @@ def export_resume_with_options(
         font_scale=payload.font_scale,
         page_limit=payload.page_limit,
         format_config=payload.format_config,
+        # 草稿语言（预览里切的那一个）：与 format_config 同一条覆盖路径——不给就回落记录值。
+        language=payload.language,
         include_photo=payload.include_photo,
     )
     return _export_record(
@@ -376,13 +382,16 @@ def preview_resume_pdf(
             page_limit=payload.page_limit,
             font_scale=payload.font_scale,
             format_config=payload.format_config,
+            # 草稿语言同样必须走这一条：预览显示的就是导出产物，漏掉它就会出现
+            # "预览是 Summary、下载到的 PDF 是「个人总结」"。
+            language=payload.language,
             include_photo=payload.include_photo,
         ),
         allow_incomplete=True,
         record_delivery=False,
         save_copy=False,
         inline=True,
-        # 模板 / 版式模板是草稿值：换完还没保存也要按新的排（见 `_export_record`）。
+        # 模板 / 版式是草稿值：换完还没保存也要按新的排（见 `_export_record`）。
         template_override=payload.template,
         format_name_override=payload.format_name,
         # 同一组参数（切口径 / 开大图 / 拖回原值）第二次进来直接给上一次的字节。

@@ -73,6 +73,14 @@ interface Props {
   onCancelCreate: () => void;
 }
 
+/**
+ * 删除数据集的后果段（唯一出口）。
+ *
+ * 刻意**不**复用 `TRASH_RECOVERY_NOTE`：数据集删除只是把文件移出列表，它不进「回收站」页，
+ * 界面上也就没有恢复入口——写"可在「回收站」里恢复"是承诺一件应用做不到的事（R2）。
+ */
+const DATASET_DELETE_NOTE = "数据集会移出列表，界面上没有恢复入口；删除前请先「导出」备份。"; // i18n-ok: 新增的二次确认正文（R4 不许写内部路径、也不许承诺界面恢复）
+
 function formatSize(bytes: number): string {
   if (bytes <= 0) return "—";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -298,7 +306,10 @@ export default function DatasetsCard({
                           label: "删除",
                           danger: true,
                           disabled: dataset.is_active || isProtected(dataset),
-                          confirm: `确定删除数据集“${dataset.name}”？会移入 data/datasets/.trash/，需要时可以手动找回`,
+                          confirm: `删除数据集“${dataset.name}”？`,
+                          // 后果与可逆性进正文，且必须说实话：数据集删除只是把文件移出列表，
+                          // 界面上没有恢复入口（它不进「回收站」页），所以只能提醒先导出备份。
+                          confirmBody: DATASET_DELETE_NOTE,
                           onClick: () => onDelete(dataset),
                         },
                       ]}
@@ -363,7 +374,7 @@ export default function DatasetsCard({
       <Modal
         title="新建空数据集"
         open={createOpen}
-        okText="创建"
+        okText="新建"
         cancelText="取消"
         confirmLoading={creating}
         destroyOnHidden

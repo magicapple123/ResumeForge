@@ -39,7 +39,7 @@ def take_snapshot(db: Session = Depends(get_db)):
     if not manager.is_active():
         raise HTTPException(
             status_code=409,
-            detail="受控浏览器还没启动，请先点「启动浏览器」并在里面打开网申页面",
+            detail="受控浏览器还没启动",
         )
     try:
         snapshot, page = webform_service.read_snapshot(manager.client())
@@ -129,7 +129,7 @@ def fill(payload: WebFormFillIn, db: Session = Depends(get_db)):
     """
     manager = webform_service.browser.get_browser_manager(db)
     if not manager.is_active():
-        raise HTTPException(status_code=409, detail="受控浏览器已关闭，请重新启动并读取表单")
+        raise HTTPException(status_code=409, detail="受控浏览器已关闭")
     try:
         snapshot = webform_service.get_snapshot_store().get(payload.snapshot_id)
         outcomes = webform_service.apply_fill(

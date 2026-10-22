@@ -92,7 +92,7 @@ def _start_live_session(
     if not manager.is_active():
         raise HTTPException(
             status_code=409,
-            detail="受控浏览器还没启动，请先点「启动浏览器」并打开网申页面",
+            detail="受控浏览器还没启动",
         )
     # 开着 AI 但没配模型时 `build_provider` 返回 None，会话内部把开关一并降级为关——
     # **不报错**：没配模型照样能用规则填，那是这个功能本来的样子。
@@ -235,7 +235,7 @@ def remember_live(payload: WebFormRememberIn):
         reuse=payload.reuse,
     )
     if not saved:
-        raise HTTPException(status_code=400, detail="这条资料没有保存成功，请重新选择目标后再试")
+        raise HTTPException(status_code=400, detail="这条资料没有保存成功")
     return {"saved": True, "live": webform_service.live_status()}
 
 

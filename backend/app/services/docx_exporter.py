@@ -352,19 +352,19 @@ def _build_document(
     base = layout.base_px
     doc = Document()
 
-    # 页边距：与 PDF 同一份 layout.margin_mm——由 `pdf_exporter.layout._resolve_margin_mm`
-    # 解析（format_config.page_padding 权威，margin_mm 只是它的兼容回落值）。Word 与 PDF
-    # 不各自算一遍，否则同一次导出会给出两种边距。
+    # 页边距：与 PDF 同一份 layout 的四边——由 `pdf_exporter.layout._resolve_page_margins`
+    # 解析（format_config 分边支路 > page_padding > margin_mm 兼容值 > 模板默认）。Word 与
+    # PDF 不各自算一遍，否则同一次导出会给出两种边距。
     section = doc.sections[0]
     # 纸张尺寸：python-docx 默认是 Letter（215.9×279.4mm），而预览与 PDF 都是 A4
     # （210×297mm）。不显式设置的话，同一段文字在 Word 里行宽与页高都不同，"页数与
     # PDF 一致"就无从谈起——这是导出侧最容易被忽略的一处口径分叉。
     section.page_width = Mm(PAGE_WIDTH_MM)
     section.page_height = Mm(PAGE_HEIGHT_MM)
-    section.top_margin = Mm(layout.margin_mm)
-    section.bottom_margin = Mm(layout.margin_mm)
-    section.left_margin = Mm(layout.margin_mm)
-    section.right_margin = Mm(layout.margin_mm)
+    section.top_margin = Mm(layout.margin_top)
+    section.bottom_margin = Mm(layout.margin_bottom)
+    section.left_margin = Mm(layout.margin_left)
+    section.right_margin = Mm(layout.margin_right)
 
     _header(
         doc,
@@ -405,8 +405,8 @@ def build_resume_docx(
     文档本身按用户设定的版式写入——Word 会自己顺延页数，不会丢内容（与 PDF 的"截断"不同，
     所以界面提示要说清是"超过所选页数"，而不是"超出部分不会显示"）。
 
-    ``margin_mm`` 与 PDF 同一条规则：页边距权威是 ``format_config.page_padding``，
-    ``margin_mm`` 只在没给 ``page_padding`` 时作回落值（见 ``layout._resolve_margin_mm``）。
+    ``margin_mm`` 与 PDF 同一条规则：页边距权威是 ``format_config`` 的分边支路与总键，
+    ``margin_mm`` 只在没有 ``page_padding`` 时作回落值（见 ``layout._resolve_page_margins``）。
 
     ``language`` 决定七个分区标题的文案（唯一来源 ``resume_labels.section_titles``），
     同时传给页数估算与文档构建两条路——标题文字长度会影响换行，两边必须同值。

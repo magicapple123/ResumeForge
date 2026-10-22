@@ -65,8 +65,8 @@ def update_resume_layout(
     record = db.get(ResumeRecord, resume_id)
     if record is None or trash.is_deleted(record):
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-    # 样式模板名按"内置优先，其次用户自制"解析；格式模板单独存一份名字，渲染时再解析成
-    # 具体的覆盖配置——这样用户改了格式模板，引用它的简历跟着变。
+    # 模板名按"内置优先，其次用户自制"解析；版式单独存一份名字，渲染时再解析成
+    # 具体的覆盖配置——这样用户改了版式，引用它的简历跟着变。
     record.template = resolved_style_name(db, payload.template)
     record.format_name = resolved_format_name(db, payload.format_name)
     # None = 这次不涉及这一项，保持原样；空字典 = 明确清掉覆盖。
@@ -90,7 +90,7 @@ def _analyzed_format_config(
     """诊断要看的版式：**草稿优先，记录兜底**。
 
     与 ``_export_record`` 的 ``template_override`` / ``format_name_override`` 是同一套规则：
-    只要前端给了版式模板名，就从"样式模板自带 + 该预设"起步、再由草稿的完整覆盖叠加，
+    只要前端给了版式名，就从"模板默认 + 该预设"起步、再由草稿的完整覆盖叠加，
     **不再叠记录里的旧覆盖**——用户换预设时前端已经清掉了该预设管辖的键，旧覆盖会把新
     预设又盖回去。
 
@@ -171,7 +171,7 @@ def analyze_resume_layout(
 def render_resume(payload: ResumeRenderRequest, db: Session = Depends(get_db)):
     """渲染为 HTML（生成完成后、未落库前的即时预览也走这里）。
 
-    传入的模板名既可以是内置模板，也可以是用户自制的样式模板；格式模板同理。
+    传入的模板名既可以是内置的，也可以是用户自制的；版式同理。
     ``format_config`` 是这次渲染的临时覆盖（叠加在 format_name 之上），
     「自动一页」逐档试版式时用它，试出结果之前不落库。
     """

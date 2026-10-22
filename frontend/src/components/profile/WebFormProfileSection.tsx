@@ -451,7 +451,7 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
         {!loading && !error && filledCount === 0 && !hasRepeatedValues && !editing ? (
           <EmptyState
             inline
-            description="还没有填过。点右上角「编辑资料」即可补上网申表单常问的那些栏目"
+            description="还没有填过。点「编辑资料」即可补上网申表单常问的那些栏目"
           />
         ) : null}
 

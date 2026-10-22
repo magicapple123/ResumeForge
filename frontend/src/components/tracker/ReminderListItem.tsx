@@ -13,6 +13,7 @@ import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { isFromInnerControl } from "../common/recordDetailCore";
 import { RowActions, RowContextMenu } from "../common/RowActions";
 import type { RowActionItem } from "../common/RowActions";
+import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
 
 interface Props {
   item: Reminder;
@@ -110,7 +111,8 @@ export default function ReminderListItem({
           key: "delete",
           label: "删除",
           danger: true,
-          confirm: "删除这条提醒？删除后可在回收站里找回，不会立刻彻底删除。",
+          confirm: "删除这条提醒？",
+          confirmBody: TRASH_RECOVERY_NOTE,
           onClick: () => onRemove(item),
         },
       ]}

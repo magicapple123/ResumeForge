@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """简历模板目录聚合端点（域①）。
 
-从原 ``api/resumes.py`` 的 ``GET /templates`` 原样搬运：只读拼装样式模板、格式预设、
+从原 ``api/resumes.py`` 的 ``GET /templates`` 原样搬运：只读拼装模板、版式、
 字号档位、分区清单、模板市场与 PDF 直出可用性。真正的模板 CRUD 在 ``api/resume_templates.py``，
 不并入本域。
 """
@@ -43,7 +43,7 @@ router = APIRouter()
 
 @router.get("/templates")
 def read_resume_templates(db: Session = Depends(get_db)):
-    """可选的简历模板、格式模板与字号档位（生成、预览、工作台共用这一份清单）。
+    """可选的简历模板、版式与字号档位（生成、预览、工作台共用这一份清单）。
 
     必须定义在 ``/{resume_id}`` 之前：否则 ``templates`` 会被当成记录 id 匹配，
     请求会以 422 结束。
@@ -103,7 +103,7 @@ def read_resume_templates(db: Session = Depends(get_db)):
             "page_limit": DEFAULT_PAGE_LIMIT,
             "format_name": "",
         },
-        # 模板市场（R-19）：映射既有样式模板 + 格式预设 + 建议字号，不新建样式文件。
+        # 模板市场（R-19）：映射既有模板 + 版式 + 建议字号，不新建样式文件。
         "market": market_options(),
         "pdf_direct_available": font_available(),
     }

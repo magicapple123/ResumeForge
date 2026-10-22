@@ -92,7 +92,7 @@ def build_batch_inputs(db: Session, jobs: list[Job], *, force: bool) -> list[Bat
             )
         )
     if profile_is_empty(profile) and not any(item.resume_text.strip() for item in inputs):
-        raise ValueError("个人资料为空，请先在「我的资料」中填写后再做匹配分析")
+        raise ValueError("个人资料为空，无法做匹配分析")
     return inputs
 
 

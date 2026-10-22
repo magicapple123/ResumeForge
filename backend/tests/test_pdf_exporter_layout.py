@@ -268,3 +268,105 @@ def test_modern_header_backdrop_covers_the_whole_header_text(monkeypatch):
         "色块会矮约 3mm，页头下半部分就没有底色了"
     )
 
+
+# ===== 四向页边距与照片系数（2026-10-22「照片大小 + 四向页边距」）=====
+#
+# `ResumeLayout.margin_mm` 拆成四边之后，`usable_*` 与照片尺寸全部改读四边。这一组钉住
+# 三件事：默认仍四边相等（存量简历不变）、不对称真的生效、以及"可容宽 + 左右边距 ≡ A4"
+# 这条几何不变量（列几何、页数判定都建在它上面）。
+
+
+def test_default_layout_keeps_four_equal_sides():
+    """没设过时四边都等于模板 `padding_mm`——存量简历的 PDF 不许因为这次改动跳变。"""
+    layout = resolve_layout(template="classic", base_px=14.0, format_config={})
+    defaults = TEMPLATE_LAYOUT_DEFAULTS["classic"]
+    expected = float(defaults["padding_mm"])
+
+    assert layout.margin_top == pytest.approx(expected)
+    assert layout.margin_right == pytest.approx(expected)
+    assert layout.margin_bottom == pytest.approx(expected)
+    assert layout.margin_left == pytest.approx(expected)
+    assert layout.usable_width_mm == pytest.approx(PAGE_WIDTH_MM - 2 * expected)
+    assert layout.usable_height_per_page == pytest.approx(297.0 - 2 * expected)
+    # 两个兼容属性在读"四边相等"的旧路径上仍是那一个值。
+    assert layout.margin_mm == pytest.approx(expected)
+    assert layout.margin_x == pytest.approx(expected)
+
+
+def test_asymmetric_sides_reach_the_layout():
+    layout = resolve_layout(
+        template="classic",
+        base_px=14.0,
+        format_config={"page_padding": 12, "page_padding_left": 8},
+    )
+
+    assert layout.margin_left == pytest.approx(8.0)
+    assert layout.margin_right == pytest.approx(12.0)
+    assert layout.margin_top == pytest.approx(12.0)
+    assert layout.margin_bottom == pytest.approx(12.0)
+    assert layout.usable_width_mm == pytest.approx(PAGE_WIDTH_MM - 8.0 - 12.0)
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"page_padding": 14},
+        {"page_padding": 14, "page_padding_left": 8},
+        {"page_padding": 20, "page_padding_right": 26},
+        {"page_padding": 8, "page_padding_top": 26, "page_padding_bottom": 26},
+        {
+            "page_padding_top": 8,
+            "page_padding_right": 9,
+            "page_padding_bottom": 10,
+            "page_padding_left": 11,
+        },
+    ],
+)
+def test_usable_box_plus_margins_is_always_a4(config):
+    """无论怎么不对称，``可用宽 + 左 + 右 ≡ 210mm``、``可用高 + 上 + 下 ≡ 297mm``。
+
+    双栏模板的列几何（`columns.column_frames`）与分页判定都建在这条恒等式上：它一旦不成立，
+    "第 N 页内容起点"就会与预览错开，而这在单页简历上完全看不出来。
+    """
+    layout = resolve_layout(template="split", base_px=14.0, format_config=config)
+
+    assert layout.usable_width_mm + layout.margin_left + layout.margin_right == pytest.approx(
+        PAGE_WIDTH_MM
+    )
+    assert layout.usable_height_per_page + layout.margin_top + layout.margin_bottom == (
+        pytest.approx(297.0)
+    )
+
+
+@pytest.mark.parametrize("name", sorted(RESUME_TEMPLATES))
+def test_photo_scale_multiplies_both_photo_ratios(name):
+    """系数乘在模板自己的两个比例上，宽高同乘 → 宽高比不变 → 取景裁剪一像素都不变。"""
+    defaults = TEMPLATE_LAYOUT_DEFAULTS[name]
+    base = resolve_layout(template=name, base_px=14.0, format_config={})
+    scaled = resolve_layout(template=name, base_px=14.0, format_config={"photo_scale": 1.5})
+
+    assert scaled.photo_width_ratio == pytest.approx(float(defaults["photo_width_ratio"]) * 1.5)
+    assert scaled.photo_height_ratio == pytest.approx(float(defaults["photo_height_ratio"]) * 1.5)
+    assert scaled.photo_width_ratio / scaled.photo_height_ratio == pytest.approx(
+        base.photo_width_ratio / base.photo_height_ratio
+    )
+
+
+@needs_font
+def test_pdf_left_origin_follows_only_the_left_margin():
+    """PDF 正文的 x 起点只由**左**边距决定（右边距只收窄折行宽度）。"""
+    resume = _summary_only_resume(_filler(300))
+    asymmetric = build_resume_pdf(
+        resume, template="classic", page_limit=2, font_scale="standard",
+        format_config={"page_padding": 12, "page_padding_left": 8},
+    )
+    uniform = build_resume_pdf(
+        resume, template="classic", page_limit=2, font_scale="standard",
+        format_config={"page_padding": 8},
+    )
+
+    left_asymmetric = min(run[0] for run in _text_runs(asymmetric.content))
+    left_uniform = min(run[0] for run in _text_runs(uniform.content))
+    assert left_asymmetric == pytest.approx(left_uniform, abs=0.2)
+
+

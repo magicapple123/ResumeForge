@@ -16,6 +16,15 @@ PR-18（2026-10-13 审计）扩面与硬化：
    （实测最大文件 470 行，零豁免起步）。扩面目标是「新增长文件必须自觉登记
    豁免」，不是追溯性大拆。
 
+3. **CSS 纳入范围**（S1，2026-10-22）。此前 ``SCAN_SUFFIXES`` 只有
+   ``.py/.ts/.tsx``，``frontend/src`` 下的样式表**完全不可见**——最大的
+   ``styles/modules.css`` 已到 2056 行（预算的 4.1 倍）却从未被拦过。现在把
+   ``.css`` 纳入同一 500 行预算：存量 5 个超线文件登记带到期日（2026-12-31）
+   的豁免，本批只止血（挡住继续增长），按分段标题拆分另立项。
+4. **幽灵豁免守卫**（S3）：豁免条目指向的文件若已不再超预算，
+   ``test_exemptions_only_for_over_budget_files`` 变红——拆分完成后必须同批
+   删除豁免，否则白名单只会越来越长、无人知道哪条还有效。
+
 豁免必须在本文件登记并附书面理由 + 到期日；豁免是白名单不是许可，新增豁免
 条目应同步到 ``.workbuddy/split-plan/`` 对应方案或交付报告。
 """
@@ -28,7 +37,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCAN_ROOTS = ("backend/app", "frontend/src")
-SCAN_SUFFIXES = {".py", ".ts", ".tsx"}
+# S1（2026-10-22）：样式表纳入同一预算。此前没有 .css，5 个样式表长期超线却
+# 不可见（最大 2056 行）；现在把它们变成「可见但暂时豁免」，净效果是变严。
+SCAN_SUFFIXES = {".py", ".ts", ".tsx", ".css"}
 TEST_NAME_MARKERS = (".test.", ".spec.")
 LINE_BUDGET = 500
 
@@ -64,6 +75,10 @@ _STRUCTURED_BACKSTOP = "2027-06-30"
 # 本会话多 PR 叠加增长导致的过线：拆分与行为修改必须分补丁，本批只豁免；
 # 到期日 2026-11-15，届时拆分或续期（续期需要新理由）。
 _PR18_MULTI_PR_GROWTH = "2026-11-15"
+# CSS 历史存量（S1，2026-10-22）：样式表此前不在扫描范围，存量超线属历史欠账；
+# 本批只「止血」（挡住继续增长），拆分按 styles/modules.css 的分段标题另立项。
+# 到期日 2026-12-31 是拆分立项的最后期限，不是无限期白名单。
+_CSS_BUDGET_BACKSTOP = "2026-12-31"
 
 # 测试文件书面豁免清单（路径相对仓库根；理由必须具体，禁止「暂缓拆分」式空话）
 _TEST_EXEMPTIONS: dict[str, Exemption] = {
@@ -81,13 +96,10 @@ _TEST_EXEMPTIONS: dict[str, Exemption] = {
     "backend/tests/test_webform_live.py": Exemption(
         "过线 27 行，monkeypatch 哨兵与脚手架耦合", _STRUCTURED_BACKSTOP
     ),
-    # 2026-10-13 生产审计 PR-13 批（统计刷新 + 岗位深链 job_id 贯穿 + 导出筛选一致）
-    # 在本文件新增用例后 517 行，超线 17 行；用例与 TrackerPage 的页面级测试夹具
-    # 共置同一套 render/fetch 脚手架，为 17 行拆文件是纯复制。到期拆出
-    # TrackerPage.stats.test.tsx（统计/深链域）或续期（需新理由）。
-    "frontend/src/pages/TrackerPage.test.tsx": Exemption(
-        "过线 17 行，PR-13 用例与页面测试夹具共置", _PR18_MULTI_PR_GROWTH
-    ),
+    # TrackerPage.test.tsx 的豁免（2026-10-13 PR-13 批新增用例后 517 行，超线 17 行）
+    # 已于 2026-10-22 到期执行：按其自身预案拆出 TrackerPage.import-modal.test.tsx
+    # （导入预览/深链域）+ src/test/trackerPageHarness.tsx，不再豁免。
+    # 2026-10-22 之后该文件只守页面通用行为与统计卡配色（T9）。
     # ProfilePage.test.tsx 的豁免（触发条件 >800 行）已于 2026-10-13 到期执行：
     # 按其自身预案拆出 ProfilePage.webform.test.tsx + src/test/profilePageHarness.tsx，
     # 不再豁免。
@@ -161,24 +173,43 @@ _EXEMPTIONS: dict[str, Exemption] = {
     #   datasets.py / resume_generator.py / resume_risk.py 三条豁免也已于专门
     #   拆分批执行并删除：datasets 拆出 datasets_admin，resume_generator 拆出
     #   resume_generator_prompts，resume_risk 拆出 resume_risk_rules 与
-    #   resume_risk_outbound——均为纯搬迁，monkeypatch 落点留在原模块。）
+    #   resume_risk_outbound——均为纯搬迁，monkeypatch 落点留在原模块。
+    #   scripts 的两条（seed_demo_data / measure_api_perf）也已按到期日（2026-11-15）
+    #   执行并删除：seed_demo_data 按数据域拆 scripts/demo_data/（8 个模块），
+    #   measure_api_perf 拆 scripts/perf_slo|perf_env|perf_fixture|perf_measure——
+    #   均为纯搬迁，脚本入口路径、CLI 参数与 --help 输出逐字不变。）
+    # ---- S1（2026-10-22）：CSS 首次纳入预算时的历史存量（到期 2026-12-31）----
+    # 这 5 个样式表在此前版本完全不在扫描范围（SCAN_SUFFIXES 无 .css），从未被拦过；
+    # 本批只把它们变成「可见但暂时豁免」，挡住继续增长，不要求立即拆分。
+    # 拆分必须平铺在 frontend/src/styles/ 下（禁止子目录，否则 antdOverrideGuard 的
+    # 非递归 readdirSync 会看不见新文件），方案见行数预算审计报告 §6.1 / §6.5。
+    "frontend/src/styles/modules.css": Exemption(
+        "CSS 2026-10-22 才纳入预算，存量 2056 行（4.1×）；按 12 个分段标题拆 6 文件另立项",
+        _CSS_BUDGET_BACKSTOP,
+    ),
+    "frontend/src/styles/base.css": Exemption(
+        "CSS 2026-10-22 才纳入预算，存量 1039 行（2.1×）；基础层与组件类混写，需先分段再拆",
+        _CSS_BUDGET_BACKSTOP,
+    ),
+    "frontend/src/styles/resume.css": Exemption(
+        "CSS 2026-10-22 才纳入预算，存量 803 行（1.6×）；纸面渲染样式，拆分需同步跨引擎高度用例",
+        _CSS_BUDGET_BACKSTOP,
+    ),
+    "frontend/src/features/tou-tou/tou-tou.css": Exemption(
+        "CSS 2026-10-22 才纳入预算，存量 554 行；且本就在 antdOverrideGuard 扫描目录之外",
+        _CSS_BUDGET_BACKSTOP,
+    ),
+    "frontend/src/styles/tracker.css": Exemption(
+        "CSS 2026-10-22 才纳入预算，存量 514 行（超线 14 行）；下批触碰该页时先腾位置",
+        _CSS_BUDGET_BACKSTOP,
+    ),
 }
 
-# scripts/（*.py，预算 800）的豁免清单：CLI/工具脚本的结构性长度。
-_SCRIPTS_EXEMPTIONS: dict[str, Exemption] = {
-    # 演示数据造数 CLI：主体是声明式虚构数据模板（人名/公司/简历内容词池）与
-    # 分域生成函数，行数在数据不在逻辑；拆分只会把模板与使用点分到两处。
-    # 到期重审：若届时仍需要维护该脚本，先按数据域拆模块。
-    "scripts/seed_demo_data.py": Exemption(
-        "演示数据造数 CLI，主体为声明式数据模板", _PR18_MULTI_PR_GROWTH
-    ),
-    # 2026-10-13 PR-17 刚重构的性能测量工具（fixture 构造/测量/报告三段）；
-    # 本批行为冻结（只测量不重构），拆分留待下次触碰时先拆 fixture 构造段。
-    "scripts/measure_api_perf.py": Exemption(
-        "PR-17 刚重构的测量工具，行为冻结批；下次触碰先拆 fixture 段",
-        _PR18_MULTI_PR_GROWTH,
-    ),
-}
+# scripts/（*.py，预算 800）的豁免清单：**当前为空**。
+# 2026-10-22 拆分批已按到期日（2026-11-15）执行并删除最后两条
+# （scripts/seed_demo_data.py、scripts/measure_api_perf.py，见上方历史记录）：
+# 拆分后各文件行数均 ≤400，远低于 800 预算，不再需要任何豁免。
+_SCRIPTS_EXEMPTIONS: dict[str, Exemption] = {}
 
 # desktop/（*.js，预算 500）：实测最大文件 470 行，零豁免起步——新增长文件
 # 必须自觉登记豁免 + 到期日。
@@ -207,6 +238,25 @@ def _find_over_budget(
 
 def _missing_exemptions(exemptions: dict[str, Exemption]) -> list[str]:
     return sorted(rel for rel in exemptions if not (REPO_ROOT / rel).exists())
+
+
+def _ghost_exemptions(
+    exemptions: dict[str, Exemption], budget: int, root: Path = REPO_ROOT
+) -> list[str]:
+    """返回「文件仍存在但已不超预算」的豁免条目（S3：幽灵豁免）。
+
+    不存在的文件由 ``_missing_exemptions`` 负责；这里只处理「拆完了忘删条目」——
+    否则白名单只会越来越长，没人知道哪条还有效。
+    """
+    ghosts: list[str] = []
+    for rel, exemption in exemptions.items():
+        path = root / rel
+        if not path.exists():
+            continue
+        lines = _count_lines(path)
+        if lines <= budget:
+            ghosts.append(f"{rel} = {lines} 行 ≤ {budget}（理由：{exemption.reason}）")
+    return sorted(ghosts)
 
 
 def _collect(root: str, suffixes: set[str], excluded_dirs: set[str] = frozenset()) -> list[Path]:
@@ -315,3 +365,35 @@ def test_exemptions_carry_expiry_and_are_not_expired() -> None:
     assert not stale, (
         f"{len(stale)} 条豁免已到期，必须拆分或显式续期（改理由 + 新到期日）：\n" + "\n".join(stale)
     )
+
+
+def test_exemptions_only_for_over_budget_files() -> None:
+    """S3：豁免只能给「确实超预算」的文件；拆分完成后忘删条目即变红。"""
+    registries = (
+        ("_EXEMPTIONS", _EXEMPTIONS, LINE_BUDGET),
+        ("_TEST_EXEMPTIONS", _TEST_EXEMPTIONS, LINE_BUDGET),
+        ("_SCRIPTS_EXEMPTIONS", _SCRIPTS_EXEMPTIONS, SCRIPTS_BUDGET),
+        ("_DESKTOP_EXEMPTIONS", _DESKTOP_EXEMPTIONS, DESKTOP_BUDGET),
+    )
+    ghosts: list[str] = []
+    for name, exemptions, budget in registries:
+        for ghost in _ghost_exemptions(exemptions, budget):
+            ghosts.append(f"{name}: {ghost}")
+    assert not ghosts, (
+        f"{len(ghosts)} 条豁免指向的文件已不再超预算（幽灵豁免），请同批删除：\n"
+        + "\n".join(ghosts)
+    )
+
+
+def test_ghost_exemption_detector_flags_under_budget(tmp_path: Path) -> None:
+    """守卫自检：检测器必须真的能抓到幽灵豁免（防止空转的假绿）。"""
+    (tmp_path / "small.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "big.py").write_text("x = 1\n" * 3, encoding="utf-8")
+    exemptions = {
+        "small.py": Exemption("测试用：已拆完仍留着条目", "2099-01-01"),
+        "big.py": Exemption("测试用：确实超线", "2099-01-01"),
+        "gone.py": Exemption("测试用：文件不存在，交给 _missing_exemptions", "2099-01-01"),
+    }
+    ghosts = _ghost_exemptions(exemptions, 2, root=tmp_path)
+    assert len(ghosts) == 1, ghosts
+    assert "small.py = 1 行 ≤ 2" in ghosts[0]

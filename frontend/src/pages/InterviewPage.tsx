@@ -35,6 +35,7 @@ import type {
 } from "../types";
 import { AUTO_FINISH_MAX_ROUNDS, AUTO_ROUNDS_FLAG } from "../types";
 import { AUTO_ROUNDS_OPTION } from "../pages/interview/SetupTab";
+import { HARD_DELETE_NOTE } from "../components/common/rowActionMenu";
 import { formatDateTime } from "../utils/format";
 
 /** 每页条数之类没有；这里是深链 ?job_id= 的解析：正整数才认，其余按"没带参"处理。 */
@@ -206,8 +207,8 @@ export default function InterviewPage() {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: `删除选中的 ${ids.length} 场面试？`,
-      content: "删除后可在回收站找回。",
+      title: "删除选中的面试记录？",
+      content: `这 ${ids.length} 场面试${HARD_DELETE_NOTE}`,
       okText: "删除",
       okButtonProps: { danger: true },
       onOk: async () => {

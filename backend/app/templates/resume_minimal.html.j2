@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{ language }}">
 <head>
 <meta charset="utf-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; script-src 'nonce-{{ csp_nonce }}'; base-uri 'none'; form-action 'none'" />
@@ -34,7 +34,7 @@
   .header .intent { font-size: calc(var(--fs) * 1.0); color: var(--muted); margin-top: calc(var(--fs) * 0.28); }
   .header .contact { font-size: calc(var(--fs) * 0.9); color: var(--muted); margin-top: calc(var(--fs) * 0.44); }
   .header .contact span { margin-right: calc(var(--fs) * 1.14); }
-  .profile-photo { width: calc(var(--fs) * 5.4); height: calc(var(--fs) * 7); flex: 0 0 auto; object-fit: cover; filter: grayscale(100%); }
+  .profile-photo { width: calc(var(--fs) * 5.4 * var(--photo-scale, 1)); height: calc(var(--fs) * 7 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: cover; filter: grayscale(100%); }
   .section { margin-bottom: calc(var(--fs) * 1.45); }
   .section-title { font-size: calc(var(--fs) * 1.0); font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: calc(var(--fs) * 0.71); }
   .entry { margin-bottom: calc(var(--fs) * 0.93); }

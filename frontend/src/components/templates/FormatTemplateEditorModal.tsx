@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 格式模板编辑器：调行高、页边距、强调色这类版式参数。
+ * 版式编辑器：调行高、页边距、强调色这类排版参数。
  *
- * 与样式模板分开是有意的：用户想"压到一页"时不该去改 CSS。这里每个参数都有范围，
+ * 与模板分开是有意的：用户想"压到一页"时不该去改 CSS。这里每个参数都有范围，
  * 越界值后端会直接丢弃，所以界面上也用 InputNumber 限死，不让用户白改一次。
  */
-import { App, Button, Form, Input, InputNumber, Modal, Space, Typography } from "antd";
+import { App, Button, Form, Input, InputNumber, Space, Typography } from "antd";
+import FormModal from "../common/FormModal";
 import { useState } from "react";
 import { createResumeTemplate, updateResumeTemplate } from "../../api/resumeTemplates";
 import type { ResumeFormatConfig, ResumeFormatField, ResumeTemplateDetail } from "../../types";
@@ -56,13 +57,13 @@ export default function FormatTemplateEditorModal({
       message.warning("请填写模板名称");
       return;
     }
-    // 只提交填过的项：空值代表"沿用样式模板自带的设置"。
+    // 只提交填过的项：空值代表"沿用模板的设置"。
     const config: ResumeFormatConfig = {};
     Object.entries(values).forEach(([key, value]) => {
       if (value !== null && value !== undefined && value !== "") config[key] = value;
     });
     if (Object.keys(config).length === 0) {
-      message.warning("至少设置一项参数，否则这个格式模板没有任何效果");
+      message.warning("至少设置一项参数，否则这个版式没有任何效果");
       return;
     }
     setSaving(true);
@@ -84,15 +85,14 @@ export default function FormatTemplateEditorModal({
   };
 
   return (
-    <Modal
-      title={template ? "编辑格式模板" : "自制格式模板"}
+    <FormModal
+      title={template ? "编辑版式" : "自制版式"}
       open={open}
       onCancel={onClose}
-      onOk={() => void save()}
+      onSubmit={() => void save()}
       okText="保存版式"
-      confirmLoading={saving}
+      submitting={saving}
       width={620}
-      destroyOnHidden
     >
       <Form layout="vertical">
         <Form.Item label="名称" required>
@@ -152,8 +152,8 @@ export default function FormatTemplateEditorModal({
         ))}
       </Form>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        留空表示沿用样式模板自带的设置；只有填过的项才会生效。
+        留空表示沿用模板的设置；只有填过的项才会生效。
       </Typography.Text>
-    </Modal>
+    </FormModal>
   );
 }

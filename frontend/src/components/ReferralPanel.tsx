@@ -3,32 +3,13 @@
  *
  * ``converted`` 由后端按关联漏斗后置位派生，前端只展示、不自己算口径。顶部转化率卡展示
  * 有效内推总数、已转化数与转化率。备注图片先上传拿相对路径，再随表单写入 ``note_images``。
+ *
+ * 视图层拆在 `./referral/` 下，本文件只负责状态与请求：
+ * - `ReferralToolbar`：关键词搜索 / 状态筛选 / 新建入口
+ * - `ReferralListItem`：列表一行的渲染与行菜单
+ * - `ReferralFormModal` + `ReferralFormFields`：新建 / 编辑弹窗
  */
-import {
-  CheckSquareOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  MoreOutlined,
-  PlusOutlined,
-} from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Card,
-  Checkbox,
-  Dropdown,
-  Empty,
-  Form,
-  Input,
-  Listy,
-  Modal,
-  Pagination,
-  Select,
-  Space,
-  Tag,
-  Typography,
-  Upload,
-} from "antd";
+import { App, Empty, Form, Listy, Pagination, Space, Upload } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -40,21 +21,18 @@ import {
   updateReferral,
   uploadReferralImage,
 } from "../api/referrals";
-import { REFERRAL_STATUS_COLORS, REFERRAL_STATUS_LABELS, referralImageUrl } from "../types";
 import type { Referral, ReferralPayload, ReferralStats, ReferralStatus } from "../types";
 import { classifyAttachment, MAX_ATTACHMENT_BYTES } from "../utils/attachments";
 import ReferralStatsCard from "./referral/ReferralStatsCard";
-import ReferralFormFields from "./referral/ReferralFormFields";
+import ReferralToolbar from "./referral/ReferralToolbar";
+import ReferralListItem from "./referral/ReferralListItem";
+import ReferralFormModal from "./referral/ReferralFormModal";
 import ReferralDetailDrawer from "./referral/ReferralDetailDrawer";
-import { REFERRAL_STATUS_LABELS_OPTIONS } from "./referral/ReferralFormFields";
 import { MAX_NOTE_IMAGES } from "./referral/ReferralFormFields";
-import { isFromInnerControl } from "./common/recordDetailCore";
-import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { useRowActionMenu } from "./common/rowActionMenu";
 import BatchActionBar from "./common/BatchActionBar";
 import BatchDeleteButton from "./common/BatchDeleteButton";
 import { useBatchSelection } from "../hooks/useBatchSelection";
-import { RowContextMenu } from "./common/RowActions";
 
 /** 每页条数：与后端 /referrals/page 端点默认值一致。 */
 const REFERRAL_PAGE_SIZE = 10;
@@ -239,7 +217,7 @@ export default function ReferralPanel() {
     try {
       if (editing) await updateReferral(editing.id, payload);
       else await createReferral(payload);
-      message.success(editing ? "已更新内推" : "已新增内推");
+      message.success(editing ? "已更新内推" : "已新建内推");
       setModalOpen(false);
       await loadList();
       await loadStats();
@@ -253,7 +231,7 @@ export default function ReferralPanel() {
   const remove = async (item: Referral) => {
     try {
       await deleteReferral(item.id);
-      message.success("已删除");
+      message.success("已删除这条内推");
       await loadList();
       await loadStats();
     } catch (error) {
@@ -280,27 +258,12 @@ export default function ReferralPanel() {
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <ReferralStatsCard stats={stats} />
 
-      <Card size="small" title="内推记录">
-        <Space wrap>
-          <Input.Search
-            allowClear
-            placeholder="搜索公司 / 岗位 / 内推人"
-            style={{ width: 240 }}
-            onSearch={(value) => setKeyword(value)}
-          />
-          <Select
-            allowClear
-            placeholder="状态筛选"
-            style={{ minWidth: 140 }}
-            value={status}
-            onChange={setStatus}
-            options={REFERRAL_STATUS_LABELS_OPTIONS()}
-          />
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新增内推
-          </Button>
-        </Space>
-      </Card>
+      <ReferralToolbar
+        status={status}
+        onStatusChange={setStatus}
+        onSearch={(value) => setKeyword(value)}
+        onCreate={openCreate}
+      />
 
       {batch.selecting && (
         <BatchActionBar
@@ -330,132 +293,17 @@ export default function ReferralPanel() {
             items={items}
             rowKey={(item) => item.id}
             itemRender={(item) => (
-              <ListyItem
-                className="detail-trigger"
-                // 整条可点开详情；内层的「详情 / 更多」按钮不会被这一层抢走。
-                onClick={(event) => {
-                  if (isFromInnerControl(event)) return;
-                  setDetail(item);
-                }}
-                actions={[
-                  batch.selecting ? (
-                    <Checkbox
-                      key="select"
-                      aria-label={`选择内推 ${item.referrer_name || item.position}`}
-                      checked={batch.isSelected(item.id)}
-                      onChange={() => batch.toggle(item.id)}
-                    />
-                  ) : (
-                    <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
-                      详情
-                    </Button>
-                  ),
-                  ...(batch.selecting
-                    ? []
-                    : [
-                        <Dropdown
-                          key="more"
-                          trigger={["click"]}
-                          menu={{
-                            items: buildMenu([
-                              {
-                                key: "edit",
-                                label: "编辑",
-                                icon: <EditOutlined />,
-                                onClick: () => openEdit(item),
-                              },
-                              {
-                                key: "delete",
-                                label: "删除",
-                                danger: true,
-                                icon: <DeleteOutlined />,
-                                confirm: "删除这条内推？删除后可在回收站里找回。",
-                                onClick: () => void remove(item),
-                              },
-                            ]),
-                          }}
-                        >
-                          <Button
-                            type="text"
-                            size="small"
-                            icon={<MoreOutlined />}
-                            aria-label={`更多操作 ${item.referrer_name || item.position}`}
-                          />
-                        </Dropdown>,
-                      ]),
-                ]}
-              >
-                {/* 右键菜单挂在条目主体上：多选模式收起（入口只在正常模式的菜单里）。 */}
-                <RowContextMenu
-                  items={
-                    batch.selecting
-                      ? []
-                      : [
-                          {
-                            key: "batch_select",
-                            label: "批量选择",
-                            icon: <CheckSquareOutlined />,
-                            onClick: batch.enterSelecting,
-                          },
-                        ]
-                  }
-                >
-                  <div>
-                    <ListyMeta
-                      title={
-                        <Space size={6} wrap>
-                          <span>
-                            {item.referrer_name || "未记内推人"}
-                            {item.position ? ` · ${item.position}` : ""}
-                          </span>
-                          <Tag
-                            color={
-                              REFERRAL_STATUS_COLORS[item.status as ReferralStatus] ?? "default"
-                            }
-                          >
-                            {REFERRAL_STATUS_LABELS[item.status as ReferralStatus] ?? item.status}
-                          </Tag>
-                          {item.converted && <Tag color="green">已转化</Tag>}
-                        </Space>
-                      }
-                      description={
-                        <Space orientation="vertical" size={2} style={{ width: "100%" }}>
-                          <Typography.Text type="secondary">
-                            {item.company}
-                            {item.relation ? ` · ${item.relation}` : ""}
-                            {item.channel ? ` · ${item.channel}` : ""}
-                          </Typography.Text>
-                          {item.referral_code && (
-                            <Typography.Text type="secondary">
-                              内推码：{item.referral_code}
-                            </Typography.Text>
-                          )}
-                          {item.note && (
-                            <Typography.Text type="secondary">{item.note}</Typography.Text>
-                          )}
-                          {(item.note_images ?? []).length > 0 && (
-                            <Space size={4} wrap>
-                              {(item.note_images ?? []).map((path) => (
-                                <img
-                                  key={path}
-                                  src={referralImageUrl(path)}
-                                  alt="备注图"
-                                  style={{
-                                    width: 32,
-                                    height: 32,
-                                    objectFit: "cover",
-                                    borderRadius: 3,
-                                  }}
-                                />
-                              ))}
-                            </Space>
-                          )}
-                        </Space>
-                      }
-                    />
-                  </div>
-                </RowContextMenu>
-              </ListyItem>
+              <ReferralListItem
+                item={item}
+                selecting={batch.selecting}
+                selected={batch.isSelected(item.id)}
+                buildMenu={buildMenu}
+                onToggleSelected={() => batch.toggle(item.id)}
+                onOpenDetail={() => setDetail(item)}
+                onEdit={() => openEdit(item)}
+                onDelete={() => void remove(item)}
+                onEnterSelecting={batch.enterSelecting}
+              />
             )}
           />
 
@@ -473,27 +321,21 @@ export default function ReferralPanel() {
         </>
       )}
 
-      <Modal
-        title={editing ? "编辑内推" : "新增内推"}
+      <ReferralFormModal
         open={modalOpen}
+        editing={editing}
+        saving={saving}
+        form={form}
+        initialJobId={initialJobId}
+        initialTrackId={initialTrackId}
+        noteImages={noteImages}
+        uploadingImages={uploadingImages}
+        imageUploadPercent={imageUploadPercent}
+        beforeImageUpload={beforeImageUpload}
+        removeImage={removeImage}
         onCancel={() => setModalOpen(false)}
         onOk={() => void save()}
-        confirmLoading={saving}
-        okText="保存"
-        cancelText="取消"
-      >
-        <ReferralFormFields
-          form={form}
-          initialJobId={initialJobId}
-          initialTrackId={initialTrackId}
-          noteImages={noteImages}
-          uploadingImages={uploadingImages}
-          imageUploadPercent={imageUploadPercent}
-          beforeImageUpload={beforeImageUpload}
-          removeImage={removeImage}
-        />
-      </Modal>
-
+      />
       <ReferralDetailDrawer detail={detail} onEdit={openEdit} onClose={() => setDetail(null)} />
     </Space>
   );

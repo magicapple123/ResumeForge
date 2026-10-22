@@ -88,7 +88,7 @@ export default function TemplatePreviewModal({ template, formatPresets, onClose 
             size="small"
             value={formatName || ""}
             options={[
-              { value: "", label: "模板自带版式" },
+              { value: "", label: "跟随模板" },
               ...formatPresets.map((item) => ({ value: item.name, label: item.label })),
             ]}
             onChange={(value) => setFormatName(String(value))}

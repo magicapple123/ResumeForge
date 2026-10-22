@@ -234,8 +234,14 @@ export function useAssistantConversations({ message, surface = "page" }: Options
     }
   }, [loadDetail, message, reloadConversations, selectConversation, surface]);
 
+  /**
+   * 删除一段对话。
+   *
+   * @returns 是否真的删掉了。软删的撤销入口（见 `useDeleteUndo`）只应在成功之后出现，
+   *   所以这里必须把失败如实报回来，而不是一律 resolve。
+   */
   const removeConversation = useCallback(
-    async (id: number) => {
+    async (id: number): Promise<boolean> => {
       try {
         if (surface === "page") await deleteAssistantConversation(id);
         else await deleteAssistantConversation(id, surface);
@@ -244,8 +250,10 @@ export function useAssistantConversations({ message, surface = "page" }: Options
           setDetail(null);
         }
         await reloadConversations();
+        return true;
       } catch (error) {
         message.error(error instanceof Error ? error.message : "删除对话失败");
+        return false;
       }
     },
     [message, reloadConversations, selectConversation, surface],

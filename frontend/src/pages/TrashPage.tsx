@@ -21,7 +21,8 @@ import type { TableRowSelection } from "antd/es/table/interface";
 import type { HTMLAttributes } from "react";
 import { useMemo, useState } from "react";
 import { emptyTrash, getTrash, purgeTrashItem, restoreTrashItem } from "../api/trash";
-import { RowContextMenu, type RowActionItem } from "../components/common/RowActions";
+import { RowContextMenu, type RowMenuItem } from "../components/common/RowActions";
+import { formatErrorGuidance } from "../api/errorGuidance";
 import { useApi } from "../hooks/useApi";
 import type { TrashBatchItem, TrashItem } from "../types";
 
@@ -46,7 +47,7 @@ function ContextMenuRow({
   ...rest
 }: ContextMenuRowProps) {
   if (!record) return <tr {...rest} />;
-  const items: RowActionItem[] = selectMode
+  const items: RowMenuItem[] = selectMode
     ? []
     : [
         {
@@ -61,13 +62,16 @@ function ContextMenuRow({
           icon: <UndoOutlined />,
           onClick: () => onRestore(record),
         },
+        // 分隔线把「可逆的恢复」与「不可逆的彻底删除」分开：这两个词挨着排最容易点错，
+        // 而右边那个没有撤销机会（§4.9：危险项单独成组）。
+        { key: "purge_divider", type: "divider" },
         {
           key: "purge",
           label: "彻底删除",
           danger: true,
           icon: <DeleteOutlined />,
           // 确认文案要把后果说白：这是全应用唯一不可逆的动作。
-          confirm: `「${record.title || record.type_label}」将被永久删除，无法恢复。`,
+          confirm: `「${record.title || record.type_label}」将被彻底删除，无法恢复。`,
           onClick: () => onPurge(record),
         },
       ];
@@ -148,15 +152,29 @@ export default function TrashPage() {
       .map(([key, label]) => ({ label: `${label}（${counts[key]}）`, value: key })),
   ];
 
-  const run = async (action: () => Promise<unknown>, success: string) => {
+  const run = async (action: () => Promise<unknown>, success: string, failure: string) => {
     try {
       await action();
       message.success(success);
       await reload();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "操作失败");
+      // 兜底不再是「操作失败」：先说是哪一步失败，再拼 errorGuidance 的「原因 · 建议 · 编号」（F11）。
+      message.error(formatErrorGuidance(err, failure));
     }
   };
+
+  /**
+   * 三个动作各包一层：行内按钮与整行右键菜单共用同一份成功/失败文案。
+   *
+   * 之前同一条恢复在两处各写一份成功文案，改一处就会分叉；包一层后文案只有一份，
+   * 失败时也说得清是「恢复」还是「彻底删除」失败。
+   */
+  const restoreRow = (row: TrashItem) =>
+    run(() => restoreTrashItem(row.type, row.id), `已恢复「${row.title}」`, "恢复失败");
+  const purgeRow = (row: TrashItem) =>
+    run(() => purgeTrashItem(row.type, row.id), `已彻底删除「${row.title}」`, "彻底删除失败");
+  const emptyAll = () =>
+    run(() => emptyTrash(type === ALL ? "" : type), "回收站已清空", "清空回收站失败");
 
   const columns: TableColumnsType<TrashItem> = [
     {
@@ -195,16 +213,14 @@ export default function TrashPage() {
             size="small"
             icon={<UndoOutlined />}
             aria-label={`恢复 ${row.title || row.type_label}`}
-            onClick={() =>
-              void run(() => restoreTrashItem(row.type, row.id), `已恢复「${row.title}」`)
-            }
+            onClick={() => void restoreRow(row)}
           >
             恢复
           </Button>
           <Popconfirm
             title="彻底删除？"
             // 确认文案要把后果说白：这是全应用唯一不可逆的动作。
-            description={`「${row.title || row.type_label}」将被永久删除，无法恢复。`}
+            description={`「${row.title || row.type_label}」将被彻底删除，无法恢复。`}
             okText="彻底删除"
             // 显式 aria-label：antd 会给两字中文按钮自动插空格（"取 消"），
             // 不写死名称则界面与测试都容易踩到这个坑（同 CollectResultPanel 的处理）。
@@ -214,9 +230,7 @@ export default function TrashPage() {
             }}
             cancelText="取消"
             cancelButtonProps={{ "aria-label": `取消彻底删除 ${row.title || row.type_label}` }}
-            onConfirm={() =>
-              void run(() => purgeTrashItem(row.type, row.id), `已彻底删除「${row.title}」`)
-            }
+            onConfirm={() => void purgeRow(row)}
           >
             <Button
               size="small"
@@ -270,14 +284,14 @@ export default function TrashPage() {
           <Space>
             <Popconfirm
               title={`清空${type === ALL ? "回收站" : "这一类"}？`}
-              description={`将永久删除 ${
+              description={`将彻底删除 ${
                 type === ALL ? (data?.total ?? 0) : (counts[type] ?? 0)
               } 条内容，无法恢复。`}
               okText="清空"
               okButtonProps={{ danger: true, "aria-label": "确认清空回收站" }}
               cancelText="取消"
               cancelButtonProps={{ "aria-label": "取消清空回收站" }}
-              onConfirm={() => void run(() => emptyTrash(type === ALL ? "" : type), "回收站已清空")}
+              onConfirm={() => void emptyAll()}
             >
               <Button danger icon={<DeleteOutlined />}>
                 清空{type === ALL ? "回收站" : "这一类"}
@@ -293,8 +307,8 @@ export default function TrashPage() {
               批量恢复（{selectedKeys.length}）
             </Button>
             <Popconfirm
-              title={`彻底删除选中的 ${selectedKeys.length} 条？`}
-              description="将永久删除，无法恢复。"
+              title="彻底删除选中的记录？"
+              description={`这 ${selectedKeys.length} 条将彻底删除，无法恢复。`}
               okText="彻底删除"
               okButtonProps={{ danger: true, "aria-label": "确认批量彻底删除" }}
               cancelText="取消"
@@ -314,7 +328,7 @@ export default function TrashPage() {
         showIcon
         style={{ marginBottom: 16 }}
         title="回收站里的内容不会出现在其它页面"
-        description="岗位、简历、投递记录、事实台账条目、资料箱材料与助手会话——删除后它们立刻从各自的列表、首页统计和搜索里消失，只在这里可见。"
+        description="岗位、简历、投递记录、事实台账条目、资料箱里的资料与助手会话——删除后它们立刻从各自的列表、首页统计和搜索里消失，只在这里可见。"
       />
 
       {data && data.total > 0 && (
@@ -354,12 +368,8 @@ export default function TrashPage() {
                     record={itemsByRowKey.get(rowKey)}
                     selectMode={selectMode}
                     onEnterSelectMode={enterSelectMode}
-                    onRestore={(row) =>
-                      void run(() => restoreTrashItem(row.type, row.id), `已恢复「${row.title}」`)
-                    }
-                    onPurge={(row) =>
-                      void run(() => purgeTrashItem(row.type, row.id), `已彻底删除「${row.title}」`)
-                    }
+                    onRestore={(row) => void restoreRow(row)}
+                    onPurge={(row) => void purgeRow(row)}
                   />
                 );
               },

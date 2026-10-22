@@ -84,7 +84,7 @@ async def create_match_batch(
     except Exception as exc:  # noqa: BLE001 - 记录失败要返回可理解的错误，不泄露堆栈
         session.rollback()
         logger.exception("保存批量岗位匹配记录失败")
-        raise HTTPException(status_code=500, detail="保存批量匹配记录失败，请稍后重试") from exc
+        raise HTTPException(status_code=500, detail="保存批量匹配记录失败") from exc
     finally:
         session.close()
     return JobMatchBatchOut.model_validate(row)
@@ -181,7 +181,7 @@ async def create_match_analysis(
     profile, profile_text, resume_text = match_source_texts(db, job)
     if profile_is_empty(profile) and not resume_text.strip():
         raise HTTPException(
-            status_code=400, detail="个人资料为空，请先在「我的资料」中填写后再做匹配分析"
+            status_code=400, detail="个人资料为空，无法做匹配分析"
         )
 
     payload = job_payload(job)
@@ -202,7 +202,7 @@ async def create_match_analysis(
             raise HTTPException(status_code=502, detail=f"生成匹配分析失败：{exc}") from exc
         except Exception as exc:  # noqa: BLE001 - 外部模型异常统一转为可理解的错误
             log_exception_redacted(logger, "岗位匹配分析发生内部错误")
-            raise HTTPException(status_code=502, detail="生成匹配分析失败，请稍后重试") from exc
+            raise HTTPException(status_code=502, detail="生成匹配分析失败") from exc
         model_name = config.model
 
     session = SessionLocal()

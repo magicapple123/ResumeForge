@@ -86,7 +86,7 @@ export default function ResumePreviewCanvas({
           showIcon
           className="resume-preview-overflow"
           // 措辞只说事实（约需几页、超了多少），**不再说"字号已降到最小"**：2026-10-21
-          // 起不再自动缩字号，装不下就是装不下，改法由用户决定（加页 / 收紧版式 / 删内容）。
+          // 起不再自动缩字号，装不下就是装不下，改法由用户决定（加页 / 收紧排版 / 删内容）。
           title={`按当前设置约需 ${pagesNeeded} 页（上限 ${pageCount} 页）。`}
           description={
             <>

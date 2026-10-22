@@ -70,7 +70,7 @@ export default function AssistantEmptyState({
               用来固定回答风格或流程。
             </Typography.Text>
             <Button type="link" size="small" onClick={onManageSkills}>
-              到技能工作台添加技能
+              到工作台添加技能
             </Button>
           </div>
         )}

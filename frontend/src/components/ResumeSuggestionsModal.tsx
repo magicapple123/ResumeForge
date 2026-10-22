@@ -13,7 +13,19 @@ import {
   ReloadOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Listy, Modal, Space, Tag, Typography, theme } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  Empty,
+  Listy,
+  Modal,
+  Popconfirm,
+  Space,
+  Tag,
+  Typography,
+  theme,
+} from "antd";
 import PageSkeleton from "./common/PageSkeleton";
 import { ListyItem } from "./common/ListyItem";
 import { useEffect, useRef, useState } from "react";
@@ -52,7 +64,7 @@ export default function ResumeSuggestionsModal({
   onGenerated,
   onApplied,
 }: Props) {
-  const { message, modal } = App.useApp();
+  const { message } = App.useApp();
   const { token } = theme.useToken();
   const state = useSuggestionScan(recordId ?? 0);
   /** 正在采纳的建议下标；一次只允许采纳一条，避免两份修订并发写同一份简历。 */
@@ -96,17 +108,6 @@ export default function ResumeSuggestionsModal({
     if (recordId == null) return;
     setAdoptError("");
     startSuggestionScan(recordId);
-  };
-
-  /** 重新生成会覆盖当前建议：先问一句，别让用户手一抖把已看过的清单换掉。 */
-  const restartWithConfirm = () => {
-    modal.confirm({
-      title: "重新生成建议",
-      content: "重新生成会再次调用模型并覆盖当前建议，继续？",
-      okText: "重新生成",
-      cancelText: "取消",
-      onOk: start,
-    });
   };
 
   /**
@@ -173,7 +174,7 @@ export default function ResumeSuggestionsModal({
           adoptingIndex={adoptingIndex}
           token={token}
           onAdopt={adopt}
-          onRestart={restartWithConfirm}
+          onRestart={start}
         />
       ) : (
         <IntroBody onStart={start} onCancel={onClose} />
@@ -245,9 +246,17 @@ function SuggestionList({
           目标岗位：{data.company ? `${data.company} · ` : ""}
           {data.job_title}
         </Typography.Text>
-        <Button type="link" size="small" icon={<ReloadOutlined />} onClick={onRestart}>
-          重新生成建议
-        </Button>
+        {/* 覆盖类动作：就地 Popconfirm（Popover 形态，不占弹层容器层级）。 */}
+        <Popconfirm
+          title="重新生成会覆盖当前建议"
+          okText="重新生成"
+          cancelText="取消"
+          onConfirm={onRestart}
+        >
+          <Button type="link" size="small" icon={<ReloadOutlined />}>
+            重新生成建议
+          </Button>
+        </Popconfirm>
       </Space>
       {adoptError && (
         <Alert type="error" showIcon title={adoptError} style={{ marginBottom: 12 }} />

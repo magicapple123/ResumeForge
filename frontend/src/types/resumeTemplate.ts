@@ -13,10 +13,10 @@ export interface ResumeTemplateDetail {
   source_name: string;
   created_at: string;
   updated_at: string;
-  /** 样式模板的 HTML 源码（格式模板为空）。 */
+  /** 模板的 HTML 源码（版式为空）。 */
   html: string;
-  /** 格式模板的版式覆盖配置（样式模板为空对象）。 */
-  /** 格式模板或样式模板的安全配置。旧格式模板仍使用 ResumeFormatConfig 子集。 */
+  /** 版式的排版覆盖配置（模板为空对象）。 */
+  /** 版式或模板的安全配置。旧版式仍使用 ResumeFormatConfig 子集。 */
   config: Record<string, unknown>;
 }
 

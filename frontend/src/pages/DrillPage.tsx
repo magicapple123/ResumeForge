@@ -27,7 +27,8 @@ import {
 import EmptyState from "../components/common/EmptyState";
 import PageSkeleton from "../components/common/PageSkeleton";
 import BatchActionBar from "../components/common/BatchActionBar";
-import { RowActions, RowContextMenu, type RowActionItem } from "../components/common/RowActions";
+import { RowActions, RowContextMenu, type RowMenuItem } from "../components/common/RowActions";
+import { HARD_DELETE_NOTE } from "../components/common/rowActionMenu";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { ListyItem } from "../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../components/common/listyPadding";
@@ -127,7 +128,7 @@ export default function DrillPage() {
   const remove = async (id: number) => {
     try {
       await deleteDrillSession(id);
-      message.success("已删除");
+      message.success("已删除这条深挖记录");
       if (current?.id === id) setCurrent(null);
       await refreshHistory();
     } catch (error) {
@@ -140,7 +141,10 @@ export default function DrillPage() {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: `删除选中的 ${ids.length} 场深挖？`,
+      title: "删除选中的深挖记录？",
+      // 标题只说动作 + 对象；条数与后果进正文（§4.4 的例外：数量让标题超 12 字）。
+      // i18n-ok: 条数从标题挪进正文（§4.4 例外），这里的中文就是确认正文本身
+      content: `这 ${ids.length} 场深挖${HARD_DELETE_NOTE}`,
       okText: "删除",
       okButtonProps: { danger: true },
       onOk: async () => {
@@ -165,19 +169,26 @@ export default function DrillPage() {
 
   const finished = current?.status === "finished";
 
-  /** 历史条目的右键菜单：批量选择（工具栏按钮已收进这里，R8）+ 删除（二次确认）。 */
-  const contextActions = (item: DrillSessionBrief): RowActionItem[] => [
+  /**
+   * 历史条目的右键菜单：批量选择（工具栏按钮已收进这里，R8）+ 分隔线 + 删除。
+   *
+   * 分隔线不是装饰：「批量选择」与「删除」挨着排、只有一个词宽时很容易点错，而删除是
+   * 危险项（§4.9：普通项与危险项之间用分隔线分组）。
+   */
+  const contextActions = (item: DrillSessionBrief): RowMenuItem[] => [
     {
       key: "batch_select",
       label: "批量选择",
       icon: <CheckSquareOutlined />,
       onClick: batch.enterSelecting,
     },
+    { key: "delete_divider", type: "divider" },
     {
       key: "delete",
       label: "删除",
       danger: true,
       confirm: "删除这场深挖？",
+      confirmBody: HARD_DELETE_NOTE,
       onClick: () => void remove(item.id),
     },
   ];
@@ -186,7 +197,7 @@ export default function DrillPage() {
     <div className="drill-page">
       <div className="drill-page-head">
         <Space orientation="vertical" size={0}>
-          {/* 深挖是从台账「拿去深挖」进来的子页面，但它是独立路由——浏览器后退之外
+          {/* 深挖是从台账「开始深挖」进来的子页面，但它是独立路由——浏览器后退之外
               界面上没有别的出口，用户会以为"进去就出不来了"。 */}
           <Button
             type="link"
@@ -333,6 +344,7 @@ export default function DrillPage() {
                                   label: "删除",
                                   danger: true,
                                   confirm: "删除这场深挖？",
+                                  confirmBody: HARD_DELETE_NOTE,
                                   onClick: () => void remove(item.id),
                                 },
                               ]}

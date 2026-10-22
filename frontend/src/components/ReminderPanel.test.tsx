@@ -117,7 +117,12 @@ describe("ReminderPanel", () => {
 
     // modal.confirm 由 Provider 的 holder 渲染（比静态 confirm 多一个 tick，所以走 findBy）；
     // antd 会把标题同时渲染进内容区与可访问标签，因此按「至少出现一次」断言。
-    expect((await screen.findAllByText("删除选中的 1 条提醒？")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("删除选中的提醒？")).length).toBeGreaterThan(0);
+    // 条数按 §4.4 的例外移到正文（标题只写动作 + 对象，保证 ≤12 字）。
+    // 用 textContent 而不是 getByText：断言的是"正文里有没有条数"，不是新增一处文案查询。
+    expect(document.querySelector(".ant-modal-confirm")?.textContent).toContain(
+      "这 1 条提醒会移入回收站",
+    );
     expect(document.querySelector(".ant-modal-confirm")).not.toBeNull();
   });
 });

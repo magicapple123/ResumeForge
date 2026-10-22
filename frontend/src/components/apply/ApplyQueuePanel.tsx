@@ -7,25 +7,8 @@
  * - `needs_confirm`（证据不足 / 待确认）提示需要用户确认；
  * - 未分析的岗位以「未分析」呈现。
  */
-import {
-  DeleteOutlined,
-  EditOutlined,
-  EyeOutlined,
-  PlayCircleOutlined,
-  ReloadOutlined,
-} from "@ant-design/icons";
-import {
-  App,
-  Alert,
-  Button,
-  Empty,
-  Space,
-  Tag,
-  Tooltip,
-  Typography,
-  Popconfirm,
-  Select,
-} from "antd";
+import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
+import { App, Alert, Button, Empty, Space, Tag, Typography, Popconfirm } from "antd";
 import PageSkeleton from "../common/PageSkeleton";
 import { useEffect, useMemo, useState } from "react";
 import { createApplyTask, getBrowserStatus, listQueue, removeQueueItem } from "../../api/apply";
@@ -41,6 +24,8 @@ import { formatDateTime } from "../../utils/format";
 import { RecordDetailDrawer } from "../common/RecordDetail";
 import { useRowActionMenu } from "../common/rowActionMenu";
 import { AdmissionTag } from "./queue/AdmissionTag";
+import { QueueFilterBar } from "./queue/QueueFilterBar";
+import { UNANALYZED_FILTER, type AdmissionFilterValue } from "./queue/filterOptions";
 import { QueueItemEditor } from "./queue/QueueItemEditor";
 import { QueueTable } from "./queue/QueueTable";
 
@@ -51,24 +36,6 @@ interface Props {
   /** 队列内容变化（增删改）时通知页面刷新概览。 */
   onChanged?: () => void;
 }
-
-/** 状态筛选选项：直接从 QUEUE_STATUS_META 取，文案与表格里的状态标签同源。 */
-const STATUS_FILTER_OPTIONS = (
-  Object.entries(QUEUE_STATUS_META) as [QueueStatus, { label: string; color: string }][]
-).map(([value, meta]) => ({ value, label: meta.label }));
-
-/**
- * 准入筛选选项：与 ADMISSION_META 的标签一致；`admission === null`（未分析）在 Select 里
- * 用哨兵值承载——Select 的 value 不能是 null（会被当成"未选择"）。
- */
-const UNANALYZED_FILTER = "unanalyzed";
-const ADMISSION_FILTER_OPTIONS = [
-  { value: "allow", label: "可投递" },
-  { value: "needs_confirm", label: "需确认" },
-  { value: "block", label: "不投" },
-  { value: UNANALYZED_FILTER, label: "未分析" },
-];
-type AdmissionFilterValue = "allow" | "needs_confirm" | "block" | typeof UNANALYZED_FILTER;
 
 export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Props) {
   const { message } = App.useApp();
@@ -162,7 +129,9 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
         label: "移出队列",
         danger: true,
         icon: <DeleteOutlined />,
-        confirm: "移出投递队列？",
+        confirm: "移出队列？",
+        // 与「删除」区别开：移出队列不动数据，正文要说清"岗位与投递记录都还在"。
+        confirmBody: "只是从队列里拿掉，岗位与投递记录都不会被删除。",
         onClick: () => void remove(record),
       },
     ]);
@@ -268,7 +237,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
             <li>
               勾选本轮要投的岗位（
               <span className="apply-queue-flow-em">不勾选＝按顺序投整个队列</span>
-              ），再点右上角「开始投递」——在那之前不会打开任何招聘网站。
+              ），再点「开始投递」——在那之前不会打开任何招聘网站。
             </li>
           </ol>
         }
@@ -305,70 +274,26 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
         />
       )}
 
-      <div className="apply-queue-head">
-        <Space wrap>
-          <Select
-            allowClear
-            placeholder="按状态筛选"
-            style={{ width: 128 }}
-            value={statusFilter}
-            onChange={(value) => setStatusFilter(value as QueueStatus | undefined)}
-            options={STATUS_FILTER_OPTIONS}
-            aria-label="按状态筛选"
-          />
-          <Select
-            allowClear
-            placeholder="按准入筛选"
-            style={{ width: 128 }}
-            value={admissionFilter}
-            onChange={(value) => setAdmissionFilter(value as AdmissionFilterValue | undefined)}
-            options={ADMISSION_FILTER_OPTIONS}
-            aria-label="按准入筛选"
-          />
-          <Typography.Text type="secondary">
-            共 {queueTotal} 个岗位
-            {filterActive ? `，筛选出 ${filteredItems.length} 个` : ""}，已选 {selectedIds.length}{" "}
-            个
-          </Typography.Text>
-          <Tooltip title="勾选当前列表里的全部可投岗位（跨页生效）；不勾选则整队列按顺序投递">
-            <Button
-              disabled={busy || selectableIds.length === 0}
-              onClick={() => setSelectedIds(selectableIds)}
-            >
-              全选队列
-            </Button>
-          </Tooltip>
-          <Button disabled={busy || selectedIds.length === 0} onClick={() => setSelectedIds([])}>
-            清空选择
-          </Button>
-          <Popconfirm
-            title={`确定把选中的 ${selectedIds.length} 个岗位移出队列？`}
-            okText="移出"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            disabled={busy || selectedIds.length === 0 || batchRemoving}
-            onConfirm={() => void removeSelected()}
-          >
-            <Button danger disabled={busy || selectedIds.length === 0} loading={batchRemoving}>
-              移出所选
-            </Button>
-          </Popconfirm>
-          {/* loading 直接挂 reload 的请求态：本地接口虽快，转圈一闪也是「点到了」的确认
-              （此前点击毫无反馈，用户会以为没点上而连点好几次）。 */}
-          <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void reload()}>
-            刷新
-          </Button>
-        </Space>
-        <Button
-          type="primary"
-          icon={<PlayCircleOutlined />}
-          loading={busy}
-          disabled={disabled || pendingItems.length === 0}
-          onClick={() => void start()}
-        >
-          开始投递
-        </Button>
-      </div>
+      <QueueFilterBar
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        admissionFilter={admissionFilter}
+        onAdmissionChange={setAdmissionFilter}
+        queueTotal={queueTotal}
+        filteredCount={filteredItems.length}
+        filterActive={filterActive}
+        selectedCount={selectedIds.length}
+        selectableCount={selectableIds.length}
+        busy={busy}
+        batchRemoving={batchRemoving}
+        loading={loading}
+        onSelectAll={() => setSelectedIds(selectableIds)}
+        onClearSelection={() => setSelectedIds([])}
+        onRemoveSelected={() => void removeSelected()}
+        onReload={() => void reload()}
+        startDisabled={disabled || pendingItems.length === 0}
+        onStart={() => void start()}
+      />
 
       {items.length === 0 ? (
         <Empty
@@ -443,7 +368,9 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
                 编辑
               </Button>
               <Popconfirm
-                title="移出投递队列？"
+                title="移出队列？"
+                // 后果段与行菜单那一处同措辞：移出队列不动岗位与投递记录。
+                description="只是从队列里拿掉，岗位与投递记录都不会被删除。"
                 okText="移出"
                 cancelText="取消"
                 okButtonProps={{ danger: true }}

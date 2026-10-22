@@ -109,8 +109,8 @@ export default function CollectPanel({ disabled, onStarted, collectTask, progres
       const task = await createCollectTask(saveSamples);
       message.success(
         saveSamples
-          ? "已开始采集，进度见下方；本次会保存站点原文到 backend/data/captures/，完成时也会提示具体目录"
-          : "已开始采集，进度见下方",
+          ? "已开始采集，进度见「采集批次」；本次会保存站点原文，完成时提示位置"
+          : "已开始采集，进度见「采集批次」",
       );
       onStarted(task);
     } catch (err) {

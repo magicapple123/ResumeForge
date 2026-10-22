@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 知识库条目编辑：标题、分类、标签、来源与 Markdown 正文。 */
 
-import { Button, Form, Input, Modal, Select, Space, Typography } from "antd";
+import { Form, Input, Select, Typography } from "antd";
+import FormModal from "../common/FormModal";
 import type { InputRef } from "antd";
 import { useId, useRef, useState } from "react";
 import { handleEditorSaveKey } from "../../utils/formKeyboard";
@@ -70,26 +71,14 @@ export default function KnowledgeFormModal({
   };
 
   return (
-    <Modal
-      title={entry ? `编辑条目：${entry.title}` : "新增一条知识"}
+    <FormModal
+      title={entry ? "编辑知识条目" : "新建知识"}
       open={open}
-      width={760}
+      width={720}
       onCancel={onCancel}
-      mask={{ closable: !submitting }}
-      // 正文（maxRows=20）撑起来很容易超出视口：限高让弹窗内部滚动，底部按钮始终可见。
-      styles={{
-        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
-      }}
-      footer={
-        <Space>
-          <Button onClick={onCancel} disabled={submitting}>
-            取消
-          </Button>
-          <Button type="primary" loading={submitting} onClick={submit}>
-            保存
-          </Button>
-        </Space>
-      }
+      submitting={submitting}
+      onSubmit={submit}
+      okText="保存知识"
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         知识库用来沉淀愿意反复查阅的成文内容：面经总结、简历技巧、求职策略、行业笔记等。 正文支持
@@ -173,6 +162,6 @@ export default function KnowledgeFormModal({
           />
         </Form.Item>
       </Form>
-    </Modal>
+    </FormModal>
   );
 }

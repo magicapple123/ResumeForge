@@ -103,7 +103,7 @@ describe("ProfilePhotoPanel 上传进度（C2）", () => {
       target: { files: [new File(["png"], "photo.png", { type: "image/png" })] },
     });
 
-    expect(await screen.findByText("照片已保存，可在下方切换使用哪一张")).toBeInTheDocument();
+    expect(await screen.findByText("照片已保存，可在这里切换使用哪一张")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull());
   });
 });

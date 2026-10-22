@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Knowledge, KnowledgeSummary } from "../types";
+import { t } from "../i18n";
 import KnowledgePage from "./KnowledgePage";
 
 const apiMocks = vi.hoisted(() => ({
@@ -83,7 +84,7 @@ describe("KnowledgePage", () => {
     apiMocks.listKnowledgePage.mockRejectedValueOnce(new Error("服务暂不可用"));
     renderPage();
     expect(await screen.findByRole("alert")).toHaveTextContent("服务暂不可用");
-    expect(screen.queryByText(/知识库还是空的/)).toBeNull();
+    expect(screen.queryByText(/还没有知识条目/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
     expect(await screen.findByText("STAR 法则")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -176,7 +177,7 @@ describe("KnowledgePage", () => {
     renderPage();
     await screen.findByText("STAR 法则");
 
-    fireEvent.click(screen.getByRole("button", { name: /新增知识/ }));
+    fireEvent.click(screen.getByRole("button", { name: /新建知识/ }));
     fireEvent.change(screen.getByPlaceholderText("如：STAR 法则 / 自我介绍模板"), {
       target: { value: "自我介绍模板" },
     });
@@ -223,7 +224,7 @@ describe("KnowledgePage", () => {
 
     // 编辑弹窗里的「分类」下拉（tags 模式）：曾因 maxCount={1} 把所有未选中项
     // 置灰禁用，导致改选不了其他分类；现在点「求职策略」应正常选中。
-    const modal = (await screen.findByText("编辑条目：STAR 法则")).closest(".ant-modal")!;
+    const modal = (await screen.findByText("编辑知识条目")).closest(".ant-modal")!;
     const categorySelect = within(modal as HTMLElement)
       // 弹窗里分类在前、标签在后。
       .getAllByRole("combobox")[0];
@@ -252,28 +253,25 @@ describe("KnowledgePage", () => {
     expect(screen.getByText("量化结果").tagName).toBe("STRONG");
   });
 
-  it("deletes an entry after confirmation", async () => {
+  it("deletes an entry immediately and offers undo", async () => {
     renderPage();
     await screen.findByText("STAR 法则");
 
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
     fireEvent.click(await screen.findByText("删除"));
 
-    // 二次确认弹窗出现，确认后才真正调用删除。
-    const confirmations = await screen.findAllByText("删除条目「STAR 法则」？");
-    expect(confirmations.length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "OK" }));
-
+    // 软删不再二次确认：点「删除」即执行，回头路是 Toast 上的撤销（useDeleteUndo）。
     await waitFor(() => {
       expect(apiMocks.deleteKnowledge).toHaveBeenCalledWith(1);
     });
+    expect(await screen.findByText(t("toast.deleted.single"))).toBeInTheDocument();
   });
 
   it("shows the empty state when there are no entries", async () => {
     apiMocks.listKnowledgePage.mockResolvedValue({ items: [], total: 0 });
     renderPage();
 
-    expect(await screen.findByText(/知识库还是空的/)).toBeInTheDocument();
+    expect(await screen.findByText(/还没有知识条目/)).toBeInTheDocument();
   });
 
   it("翻到第 2 页取到旧全量之外的新页记录", async () => {
@@ -300,7 +298,7 @@ describe("KnowledgePage", () => {
     expect(await screen.findByText("第 16 条")).toBeInTheDocument();
   });
 
-  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除请求带全部 id 并重拉", async () => {
+  it("批量选择：右键进多选 → 勾 2 条 → 删除所选（直接删，撤销在 Toast）→ 一次批量删除请求带全部 id 并重拉", async () => {
     apiMocks.listKnowledgePage.mockResolvedValue(
       makePage([
         makeKnowledge({ id: 1, title: "条目一" }),
@@ -319,15 +317,7 @@ describe("KnowledgePage", () => {
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
-    // Popconfirm 确认（文案带数量）；确认前绝不发请求。
-    const popover = await waitFor(() => {
-      const root = document.querySelector(".ant-popover");
-      expect(root).not.toBeNull();
-      return root as HTMLElement;
-    });
-    expect(popover.textContent).toContain("删除选中的 2 条知识");
-    expect(apiMocks.batchDeleteKnowledge).not.toHaveBeenCalled();
-    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+    // 软删可撤销：不再前置确认，点一下就直接发请求（撤销在 Toast 上）。
 
     await waitFor(() => {
       expect(apiMocks.batchDeleteKnowledge).toHaveBeenCalledTimes(1);
@@ -355,12 +345,7 @@ describe("KnowledgePage", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "选择知识条目 条目一" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "选择知识条目 条目二" }));
     fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
-    const popover = await waitFor(() => {
-      const root = document.querySelector(".ant-popover");
-      expect(root).not.toBeNull();
-      return root as HTMLElement;
-    });
-    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+    // 软删可撤销：不再前置确认，点一下就直接发请求（撤销在 Toast 上）。
 
     // 删除请求确实发出去了（确认按钮已生效）。
     await waitFor(() => expect(apiMocks.batchDeleteKnowledge).toHaveBeenCalledTimes(1));
@@ -390,7 +375,6 @@ describe("KnowledgePage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
     fireEvent.click(await screen.findByText("删除"));
-    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
 
     // 回到第 1 页并按正确页码重拉；条目与分页控件都在。
     await waitFor(() => {
@@ -403,7 +387,7 @@ describe("KnowledgePage", () => {
     expect(await screen.findByText("条目-1")).toBeInTheDocument();
     // 回到的是有数据的页：空态不出现（hideOnSinglePage 下单页时翻页条本就隐藏，
     // 关键是用户不再被困在删空的页码上）。
-    expect(screen.queryByText(/知识库还是空的/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/还没有知识条目/)).not.toBeInTheDocument();
     expect(screen.queryByText(/没有符合筛选条件的条目/)).not.toBeInTheDocument();
   });
 });

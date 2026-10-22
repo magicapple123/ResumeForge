@@ -8,7 +8,7 @@
  *
  * 三条必须留在本组内部的东西：
  * 1. **`layoutRef` 与写它的 `useEffect`**：防抖回调在松手之后才跑，这期间父组件可能已经
- *    改了其它版式（页数、样式模板），提交时必须读"提交那一刻"的 layout，否则会把那些
+ *    改了其它版式（页数、模板），提交时必须读"提交那一刻"的 layout，否则会把那些
  *    改动覆盖回去。这个语义只有和防抖提交同处一地才成立。
  * 2. 字号那套拖动中状态（`draggingPx` / `debounceRef` / `fontSignature`），
  *    它们描述的是"手指还没松开"的瞬时值，不属于壳也不属于父组件。
@@ -21,9 +21,25 @@ import type { RefObject } from "react";
 import type { ResumeLayout, ResumeTemplateCatalog } from "../../types";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import LineHeightControl from "./LineHeightControl";
+import PageMarginSidesControl from "./PageMarginSidesControl";
 import PagePaddingControl from "./PagePaddingControl";
+import PhotoScaleControl from "./PhotoScaleControl";
 import ResumeFontControl from "./ResumeFontControl";
-import { clampPagePadding } from "../../utils/pagePadding";
+import { t } from "../../i18n";
+import {
+  configuredPhotoScale,
+  hasMarginOverrides,
+  marginsAreUniform,
+  resolvePageMargins,
+  resolvePhotoScale,
+  sidesDifferingFromMaster,
+  toPhotoPercent,
+  withMarginSide,
+  withPhotoScale,
+  withResetMarginSide,
+  withUniformMargin,
+  type MarginSide,
+} from "../../utils/pageMargins";
 import {
   fontProbeCss,
   fontPxBounds,
@@ -67,6 +83,14 @@ interface Props {
    * 没有预览时（生成前的配置阶段）可省略——滑块仍可用，只是没有即时反馈。
    */
   previewRef?: RefObject<ResumePreviewHandle | null>;
+  /**
+   * 这份简历有没有照片（由持有内容的宿主透传）。
+   *
+   * `false` → 照片滑杆禁用并说明「未上传照片」：`photo_scale` 在没有照片时完全惰性
+   * （PDF/Word 连页头空间都不预留），让用户拖一个"什么都没发生"的滑杆是最差的反馈。
+   * `undefined` → 不禁用（生成前的配置阶段拿不到内容），只是没有即时预览。
+   */
+  hasPhoto?: boolean;
   onChange: (layout: ResumeLayout) => void;
 }
 
@@ -76,6 +100,7 @@ export default function ResumeMeasureControls({
   compact = false,
   catalog,
   previewRef,
+  hasPhoto,
   onChange,
 }: Props) {
   const tiers = useMemo(() => fontTiers(catalog?.font_scales ?? []), [catalog?.font_scales]);
@@ -222,18 +247,29 @@ export default function ResumeMeasureControls({
     });
   };
 
-  // ===== 页边距（T5 / 项 4a）：落点仍是 format_config.page_padding =====
+  // ===== 页边距（T5 / 项 4a）：落点仍是 format_config =====
   // 默认值取**当前模板**的 `padding_mm`（目录下发，classic=14 / compact=12），
   // 与行距同理：写死会让滑块停在与渲染不同的位置。
   const templatePagePadding =
     presetPagePadding ??
     catalog?.template_layouts?.[layout.template]?.padding_mm ??
     FALLBACK_PAGE_PADDING;
-  const rawPagePadding = layout.format_config?.page_padding;
-  const configuredPagePadding = typeof rawPagePadding === "number" ? rawPagePadding : null;
+  // 「总」滑杆 + 四条支路的唯一解析口径（与后端 `resolve_page_margins` 同序）：
+  // 支路 > 总 > 模板默认。四边不等时总滑杆读数显示「自定义」，拖动它则把四边重新拉平。
+  const margins = resolvePageMargins(layout.format_config, templatePagePadding);
+  const marginsUniform = marginsAreUniform(margins);
+  const marginsCustomized = hasMarginOverrides(layout.format_config);
+  // 分边控件默认收起：四条常驻滑杆会让排版栏从 2 行涨到 6 行（设计 §9 第 4 条）。
+  const [sidesOpen, setSidesOpen] = useState(false);
+  // 逐行 ↺ 只看"这一边和统一值是否不同"：拖一条边会把四条键一起写全，
+  // 用"写过没有"判断会让四行同时长出复位图标（详见 `sidesDifferingFromMaster`）。
+  const customizedSides = sidesDifferingFromMaster(layout.format_config, templatePagePadding);
+
+  const configuredPhotoPercent = configuredPhotoScale(layout.format_config);
+  const photoPercent = toPhotoPercent(resolvePhotoScale(layout.format_config));
 
   /**
-   * 拖动中的即时反馈通道（项 6）：两个滑块把"与后端 `css_rule` 逐字一致"的 CSS 交出来，
+   * 拖动中的即时反馈通道（项 6）：控件把"与后端 `css_rule` 逐字一致"的 CSS 交出来，
    * 这里注入预览 iframe。没有预览（生成前的配置阶段）时 `previewRef` 为空，
    * 整条链路静默降级——不报错，只是没有即时预览。
    */
@@ -241,18 +277,44 @@ export default function ResumeMeasureControls({
     previewRef?.current?.setLiveProbe(css);
   };
 
+  /**
+   * 总滑杆：写 `page_padding` 并**删掉四条支路**（四边一起变）；`null` = 回到随模板。
+   *
+   * 用 `layoutRef.current` 而不是闭包里的 `layout`：防抖回调在松手 120ms 后才跑，
+   * 这期间父组件可能已经改了页数或字号，用旧快照会把那些改动覆盖回去。
+   */
   const applyPagePadding = (next: number | null) => {
     const current = layoutRef.current;
-    if (next === null) {
-      // 与行距同一语义：删键而不是写回模板默认值，模板更新时这些简历才跟着变。
-      const rest = { ...(current.format_config ?? {}) };
-      delete rest["page_padding"];
-      onChange({ ...current, format_config: rest });
-      return;
-    }
     onChange({
       ...current,
-      format_config: { ...current.format_config, page_padding: clampPagePadding(next) },
+      format_config: withUniformMargin(current.format_config, next),
+    });
+  };
+
+  /** 拖某一条边：四条支路写全（其中一条换成新值），四边重新相等时塌回单键。 */
+  const applyMarginSide = (side: MarginSide, value: number) => {
+    const current = layoutRef.current;
+    onChange({
+      ...current,
+      format_config: withMarginSide(current.format_config, side, value, templatePagePadding),
+    });
+  };
+
+  /** 单边复位：这一边回到"总"（没有总回到模板默认），其余三边不动。 */
+  const resetMarginSide = (side: MarginSide) => {
+    const current = layoutRef.current;
+    onChange({
+      ...current,
+      format_config: withResetMarginSide(current.format_config, side, templatePagePadding),
+    });
+  };
+
+  /** 照片大小：写 `photo_scale`（百分比 → 系数）；回到 100% 即删键（随模板）。 */
+  const applyPhotoScale = (percent: number | null) => {
+    const current = layoutRef.current;
+    onChange({
+      ...current,
+      format_config: withPhotoScale(current.format_config, percent),
     });
   };
 
@@ -261,7 +323,9 @@ export default function ResumeMeasureControls({
       {/* 顺序按「先调版式密度、再调字号、最后换字体」：行距与页边距是同一类
           "压不压得进一页"的旋钮，排在第一行；字号与字体在第二行（用户 2026-10-20 指定）。 */}
       <LineHeightControl
-        defaultHint={presetConfig ? "随版式" : "随模板"}
+        defaultHint={
+          presetConfig ? t("resume.measure.hintPreset") : t("resume.measure.hintTemplate")
+        }
         value={configuredLineHeight ?? templateLineHeight}
         customized={configuredLineHeight !== null}
         disabled={disabled}
@@ -269,9 +333,15 @@ export default function ResumeMeasureControls({
         onChange={applyLineHeight}
       />
       <PagePaddingControl
-        defaultHint={presetConfig ? "随版式" : "随模板"}
-        value={configuredPagePadding ?? templatePagePadding}
-        customized={configuredPagePadding !== null}
+        defaultHint={
+          presetConfig ? t("resume.measure.hintPreset") : t("resume.measure.hintTemplate")
+        }
+        value={margins.top}
+        customized={marginsCustomized}
+        uniform={marginsUniform}
+        // 自定义态下读数只写「自定义」：四边各是多少放在悬停气泡里
+        // （「上 8 · 右 12 · 下 12 · 左 12」），一处不重复维护。
+        margins={margins}
         disabled={disabled}
         onProbe={applyProbe}
         onChange={applyPagePadding}
@@ -371,6 +441,33 @@ export default function ResumeMeasureControls({
           disabled={disabled}
         />
       </div>
+      {/* 照片大小（系数，不是绝对尺寸）：乘在模板自己的宽高上，宽高比不变。
+          排在「字体」之后，与上面三行共用同一套"标签 + ± + 滑杆 + 读数"的视觉语言。 */}
+      <PhotoScaleControl
+        defaultHint={
+          presetConfig ? t("resume.measure.hintPreset") : t("resume.measure.hintTemplate")
+        }
+        value={photoPercent}
+        customized={configuredPhotoPercent !== null}
+        disabled={disabled}
+        hasPhoto={hasPhoto}
+        onProbe={applyProbe}
+        onChange={applyPhotoScale}
+      />
+      {/* 分边页边距：折叠标题常驻、面板默认收起、展开后占满整行
+          （`.resume-margin-sides` 的 grid-column）。入口**不在**页边距那一行里：
+          那一行在窄窗口放不下第四件东西（2026-10-22 用户截图：来源胶囊被它压住）。
+          四条支路各自独立拖动/防抖，写入语义统一在 `utils/pageMargins.ts`。 */}
+      <PageMarginSidesControl
+        open={sidesOpen}
+        onToggle={() => setSidesOpen((open) => !open)}
+        margins={margins}
+        customizedSides={customizedSides}
+        disabled={disabled}
+        onChangeSide={applyMarginSide}
+        onResetSide={resetMarginSide}
+        onProbe={applyProbe}
+      />
     </div>
   );
 }

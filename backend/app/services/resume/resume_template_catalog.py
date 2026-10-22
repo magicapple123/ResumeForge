@@ -64,7 +64,7 @@ def template_spec(name: str) -> dict:
 
 
 def template_options() -> list[dict]:
-    """列出可选样式模板。"""
+    """列出可选模板。"""
     return [
         {
             "name": item["name"],

@@ -25,7 +25,7 @@ export default function DataGapNotice({ missing, label, available, action }: Pro
   if (missing <= 0) return null;
   return (
     <Typography.Text type="warning" className="analytics-gap-notice">
-      有 {missing} 条{label}，未计入下方图表
+      有 {missing} 条{label}，未计入图表
       {typeof available === "number" ? `（共 ${available + missing} 条记录）` : ""}
       {action ? <> {action}</> : null}
     </Typography.Text>

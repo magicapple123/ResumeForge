@@ -32,6 +32,7 @@ import ErrorState from "../common/ErrorState";
 import { deleteWebFormRecord, getWebFormRecord, listWebFormRecordsPage } from "../../api/webform";
 import BatchActionBar from "../../components/common/BatchActionBar";
 import { useApi } from "../../hooks/useApi";
+import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
 import type { WebFormFillRecord, WebFormRecordItem, WebFormRecordSummary } from "../../types";
 
@@ -153,8 +154,8 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: `删除选中的 ${ids.length} 条填充记录？`,
-      content: "会进回收站，之后可以恢复。",
+      title: "删除选中的填充记录？",
+      content: `这 ${ids.length} 条填充记录${TRASH_RECOVERY_NOTE}`,
       okText: "删除",
       okButtonProps: { danger: true },
       onOk: async () => {

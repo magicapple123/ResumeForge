@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 自制模板列表：样式模板与格式模板共用一套操作语义。 */
+/** 自制模板列表：模板与版式共用一套操作语义。 */
 import { DeleteOutlined, EditOutlined, EyeOutlined, RobotOutlined } from "@ant-design/icons";
 import { Space, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";

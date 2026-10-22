@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 配置记录的卡上动作与新增/编辑共用弹窗（同名 upsert 保存）。
  *
- * 「新增配置」与记录卡「编辑」走同一个 Modal、同一份表单（RecordFormValues）：
+ * 「新建配置」与记录卡「编辑」走同一个 Modal、同一份表单（RecordFormValues）：
  * 新增保存后**不自动生效**（仅供切换），编辑保存只改记录本身——若编辑的是使用中的
  * 那条，由调用方（SettingsPage）在拿到返回值后同步当前生效配置。
  */

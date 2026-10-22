@@ -20,7 +20,7 @@
 - skill_style：pill / outline / plain
 - font_scale_adjust：0.35 ~ 1.16（可接受范围已放宽；AI 生成仍建议 0.88 及以上，见判断规则 6）
 - line_height：1.2 ~ 2.2
-- page_padding：8 ~ 26（mm）
+- page_padding：0 ~ 26（mm）
 - section_gap：0.6 ~ 2.2
 
 判断规则：

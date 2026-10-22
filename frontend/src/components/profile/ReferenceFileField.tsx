@@ -126,7 +126,7 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
           <Form.Item
             name={[fieldName, "reference_file_name"]}
             label="补充总结名称"
-            extra="上传文件会自动填入名称；直接输入内容时可自定义名称"
+            extra="导入文件会自动填入名称；直接输入内容时可自定义名称"
           >
             <Input maxLength={MAX_FILE_NAME_CHARS} placeholder="如：项目总结.md" />
           </Form.Item>
@@ -190,6 +190,7 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
           </Button>
         </Space>
       )}
+      // popup-ok: 只读预览，关闭无损失（footer 为空，没有提交动作）
       <Modal
         title={fileName || "补充总结内容"}
         open={viewing}

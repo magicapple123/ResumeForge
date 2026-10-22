@@ -29,6 +29,7 @@ import { useJobQueue } from "./jobs/useJobQueue";
 import { useJobsPageState } from "./jobs/useJobsPageState";
 import { useSelectAllJobs } from "./jobs/useSelectAllJobs";
 import { useJobBatchActions } from "./jobs/useJobBatchActions";
+import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { registerJobCreateHandler } from "../features/shortcuts/runtimeTargets";
 
 export default function JobsPage() {
@@ -159,18 +160,21 @@ export default function JobsPage() {
     .filter((job) => !job.has_description)
     .map((job) => job.id);
 
+  // 软删可撤销：删除不再前置确认，Toast 里给 5 秒「撤销」（见 useDeleteUndo）。
+  const deleteUndo = useDeleteUndo();
   const removeJob = useCallback(
     async (id: number) => {
       try {
-        await deleteJob(id);
+        await deleteUndo.run({ type: "job", ids: [id] }, () => deleteJob(id), {
+          onRestored: () => void reload(),
+        });
         setSelectedJobIds((current) => current.filter((jobId) => jobId !== id));
-        message.success("已移入回收站，可在「回收站」里恢复");
         void reload();
       } catch (err) {
         message.error(err instanceof Error ? err.message : "删除失败");
       }
     },
-    [message, reload],
+    [deleteUndo, message, reload],
   );
 
   const toggleFavorite = useCallback(

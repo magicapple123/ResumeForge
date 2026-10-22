@@ -153,7 +153,7 @@ export default function ResumeChangeReviewModal({
                   type="warning"
                   showIcon
                   style={{ margin: "6px 0" }}
-                  message={
+                  title={
                     <span>
                       涉及事实，建议回台账核实
                       {(change.reasons ?? []).length > 0 && (
@@ -177,7 +177,7 @@ export default function ResumeChangeReviewModal({
                   type="error"
                   showIcon
                   style={{ margin: "6px 0" }}
-                  message={(change.reasons ?? ["内容含未完成标记，请先补全"])[0]}
+                  title={(change.reasons ?? ["内容含未完成标记，请先补全"])[0]}
                 />
               )}
               <div

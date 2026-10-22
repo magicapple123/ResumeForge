@@ -42,6 +42,7 @@ import TrackCard from "../components/tracker/TrackCard";
 import TrackFormModal from "../components/tracker/TrackFormModal";
 import TrackImportModal from "../components/tracker/TrackImportModal";
 import { useApi } from "../hooks/useApi";
+import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { downloadBlob } from "../utils/download";
 import type { Track } from "../types";
 import { FUNNEL_STATUSES, TRACK_STATUSES, TRACK_STATUS_LABELS } from "../types";
@@ -173,10 +174,15 @@ export default function TrackerPage() {
   // 漏斗条的宽度按"这条占最大那条的比例"算，这样条目少时也不会全是一小截。
   const funnelMax = Math.max(1, ...FUNNEL_STATUSES.map((key) => counts[key] ?? 0));
 
+  // 软删可撤销：单条删除不再前置确认，Toast 里给 5 秒「撤销」（见 useDeleteUndo）。
+  // 批量走的是本页之外的路径，不受这里影响。
+  const deleteUndo = useDeleteUndo();
   const remove = async (track: Track) => {
     try {
-      await deleteTrack(track.id);
-      message.success("已移入回收站，可在「回收站」里恢复");
+      await deleteUndo.run({ type: "track", ids: [track.id] }, () => deleteTrack(track.id), {
+        // 恢复回一条记录，列表与漏斗统计要一起追上（否则数字停在删除后的值）。
+        onRestored: () => void reloadAll(),
+      });
       await reloadAll();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "删除失败");

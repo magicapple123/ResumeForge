@@ -130,7 +130,7 @@ def open_in_system(file_id: int, db: Session = Depends(get_db)) -> dict:
             "用系统程序打开副本失败 id=%s error_type=%s", int(file_id), type(exc).__name__
         )
         raise HTTPException(
-            status_code=400, detail="调用系统程序打开失败，请检查文件关联或系统权限"
+            status_code=400, detail="调用系统程序打开失败（文件关联缺失或没有权限）"
         ) from exc
     return {"ok": True}
 
@@ -161,6 +161,6 @@ def reveal_in_folder(file_id: int, db: Session = Depends(get_db)) -> dict:
             "打开副本所在文件夹失败 id=%s error_type=%s", int(file_id), type(exc).__name__
         )
         raise HTTPException(
-            status_code=400, detail="打开所在文件夹失败，请检查文件是否存在及系统权限"
+            status_code=400, detail="打开所在文件夹失败（文件可能已移动或没有权限）"
         ) from exc
     return {"ok": True}

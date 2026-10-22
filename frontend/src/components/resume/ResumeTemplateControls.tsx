@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历版式控件 · 第一组：**结构类**（样式模板 / 版式模板 / 板块顺序 / 最大篇幅）。
+ * 简历版式控件 · 第一组：**结构类**（模板 / 版式 / 板块顺序 / 最大篇幅）。
  *
  * 从 `ResumeLayoutControls` 拆出（P2 / D4）。拆分的三条理由：
  * 1. 主控件已 495 行、贴着单文件预算，再加东西就越线；
- * 2. 项 4 要求第一行摆"样式/版式/顺序/页数"、第二行摆"字号/行距/页边距"——这正是天然的
+ * 2. 项 4 要求第一行摆"模板/版式/顺序/页数"、第二行摆"字号/行距/页边距"——这正是天然的
  *    分组边界，也是本次拆分的**容器边界**（工具栏按这两个插槽分别渲染）；
  * 3. 生成配置阶段仍要"一行全都要"，所以壳必须存在——壳 + 两组同时满足两种形态，零重复。
  *
@@ -152,7 +152,7 @@ export default function ResumeTemplateControls({
     // 预览工具栏里这些类名不匹配任何规则，形态不变。
     <Space size={compact ? 8 : 16} wrap className="resume-template-controls">
       <Space size={6}>
-        {!compact && <Typography.Text type="secondary">样式</Typography.Text>}
+        {!compact && <Typography.Text type="secondary">模板</Typography.Text>}
         {/* 选模板与看效果合并成同一个入口：打开的就是"每种模板的真实渲染"，
             点「用这个模板」即写入并重渲染（没有额外确认步骤）。这样就不必先在下拉里
             按名字盲选、再另外点一次「看效果」——选与看是同一件事。 */}
@@ -196,7 +196,7 @@ export default function ResumeTemplateControls({
               className="resume-format-select"
               popupMatchSelectWidth={false}
               options={[
-                { value: "", label: "模板自带" },
+                { value: "", label: "跟随模板" },
                 ...formatPresets.map((item) => ({
                   value: item.name,
                   label: item.custom ? `${item.label}（自制）` : item.label,

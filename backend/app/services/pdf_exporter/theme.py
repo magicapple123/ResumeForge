@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """颜色解析（正文 / 辅助文字 / 强调色 / 强调色浅底 / 分隔线）。
 
-统一口径：**格式模板覆盖 → 模板 `:root` 默认值 → 兜底常量**。三段的唯一来源分别是
+统一口径：**版式覆盖 → 模板 `:root` 默认值 → 兜底常量**。三段的唯一来源分别是
 `resume_templates.validated_format_config`、`resume_templates.template_layout_defaults`
 与 `layout` 里的兜底常量——本模块不再存任何一份自己的色板。
 """
@@ -11,7 +11,7 @@ from .layout import _BODY_TEXT, _MUTED_TEXT
 
 
 def _hex_to_rgb(value: str) -> tuple[int, int, int] | None:
-    """把格式模板里的十六进制颜色转成 RGB；不合法时返回 None。"""
+    """把版式里的十六进制颜色转成 RGB；不合法时返回 None。"""
     text = (value or "").strip().lstrip("#")
     if len(text) == 3:
         text = "".join(char * 2 for char in text)
@@ -31,7 +31,7 @@ def _resolve_template_color(
     default_key: str,
     fallback: tuple[int, int, int],
 ) -> tuple[int, int, int]:
-    """从"格式模板覆盖 → 模板默认值 → 兜底"里取一个颜色（强调色 / 分隔线共用）。
+    """从"版式覆盖 → 模板默认值 → 兜底"里取一个颜色（强调色 / 分隔线共用）。
 
     颜色唯一来源是 `resume_templates.template_layout_defaults`（共享知识第 10 条）；
     PDF 与 Word 都从这里取同一份颜色，禁止任何渲染器再存一份 `_TEMPLATE_COLORS`。
@@ -52,7 +52,7 @@ def _resolve_template_color(
 
 
 def resolve_accent(template: str, format_config: dict | None) -> tuple[int, int, int]:
-    """导出用的强调色：格式模板覆盖优先，其次模板默认，最后兜底深蓝。"""
+    """导出用的强调色：版式覆盖优先，其次模板默认，最后兜底深蓝。"""
     return _resolve_template_color(
         template, format_config, override_key="accent", default_key="accent", fallback=(22, 54, 92)
     )

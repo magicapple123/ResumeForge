@@ -51,7 +51,7 @@ async def suggest_resume_edits(resume_id: int, db: Session = Depends(get_db)):
     # app.api.resumes.get_llm_config 的 patch 契约。
     config = _api.get_llm_config(db)
     if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     try:
         profile = to_profile_out(get_profile_detail(db))
         resume = ResumeContent.model_validate(record.content)
@@ -71,7 +71,7 @@ async def suggest_resume_edits(resume_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail=f"生成修改建议失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 为用户提供可理解的失败提示
         logger.exception("简历岗位建议发生内部错误")
-        raise HTTPException(status_code=502, detail="生成修改建议失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="生成修改建议失败") from exc
     return ResumeSuggestionsOut(
         job_id=job.id,
         job_title=job.title,
@@ -102,7 +102,7 @@ async def revise_existing_resume(
     # app.api.resumes.get_llm_config 的 patch 契约。
     config = _api.get_llm_config(db)
     if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     try:
         resume = ResumeContent.model_validate(record.content)
         job_out = JobOut.model_validate(job) if job is not None else None
@@ -119,7 +119,7 @@ async def revise_existing_resume(
         raise HTTPException(status_code=502, detail=f"修订简历失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 为用户提供可理解的失败提示
         logger.exception("简历修订发生内部错误")
-        raise HTTPException(status_code=502, detail="修订简历失败，请稍后重试") from exc
+        raise HTTPException(status_code=502, detail="修订简历失败") from exc
 
     record.content = revised.model_dump()
     record.warnings = []

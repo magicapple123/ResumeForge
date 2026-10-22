@@ -15,6 +15,7 @@ import { isFromInnerControl } from "../common/recordDetailCore";
 import { formatDateTime } from "../../utils/format";
 import { TASK_STATUS_META, type ApplyRecord, type ApplyRecordBatch } from "../../types";
 import { BATCH_ITEM_PAGE_SIZE, type BatchItemsState } from "../../types/applyBatchItems";
+import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
 
 interface BatchGroupProps {
   batch: ApplyRecordBatch;
@@ -101,7 +102,9 @@ export default function BatchGroup({
                     key: "delete-batch",
                     label: `删除本批（${matchedCount} 条）`,
                     danger: true,
-                    confirm: `删除这一批的 ${matchedCount} 条记录？会进回收站，之后可以恢复；也会从统计与每日上限里去掉。`,
+                    confirm: "删除这一批的记录？",
+                    // i18n-ok: 标题与正文拆开（§4.4 例外），这里的中文就是确认正文本身
+                    confirmBody: `这 ${matchedCount} 条投递记录${TRASH_RECOVERY_NOTE}统计与每日上限也会一并扣减。`,
                     onClick: () => onDeleteBatch(batch),
                   },
                 ]

@@ -8,7 +8,7 @@ from .resume_template_tags import (
     TEMPLATE_TAG_DEFAULTS,
 )
 
-# 每个样式模板在 CSS 里的版式默认值。**这些数字必须与模板文件一致**——
+# 每个模板在 CSS 里的版式默认值。**这些数字必须与模板文件一致**——
 # 自动一页要靠它们判断"当前值是多少、还能往紧收多少"，抄错会让它收紧一个
 # 用户根本没设置过的值（或反过来该收没收）。`test_resume_templates.py` 会
 # 逐个模板读文件核对，所以这里改了模板不更新会直接测试失败。
@@ -406,7 +406,7 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str | bool | int]] = {
 
 
 def template_layout_defaults(name: str) -> dict[str, float | str | bool | int]:
-    """某个样式模板的版式与配色默认值；未知模板退回经典模板的那一组。"""
+    """某个模板的版式与配色默认值；未知模板退回经典模板的那一组。"""
     return TEMPLATE_LAYOUT_DEFAULTS.get(
         (name or "").strip(), TEMPLATE_LAYOUT_DEFAULTS[DEFAULT_TEMPLATE]
     )

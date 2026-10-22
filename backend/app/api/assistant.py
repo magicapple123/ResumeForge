@@ -392,7 +392,7 @@ async def send_message(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     config = get_llm_config(db)
     if not config.base_url or not config.model:
-        raise HTTPException(status_code=400, detail="请先在「设置」页配置大模型 API")
+        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
 
     history = history_snapshot(db, conversation_id)
     had_messages = bool(history)

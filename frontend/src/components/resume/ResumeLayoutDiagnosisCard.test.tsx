@@ -264,7 +264,7 @@ describe("ResumeLayoutDiagnosisCard", () => {
     renderCard({ previewRef: fakePreview(null) });
     fireEvent.click(await screen.findByRole("button", { name: /自动一页/ }));
 
-    expect(await screen.findByText(/版式已经收到最紧了/)).toBeInTheDocument();
+    expect(await screen.findByText(/排版参数已经收到最紧了/)).toBeInTheDocument();
     // 没成功就不能写库，也不能告诉父组件"已应用"。
     expect(apiMocks.updateResumeLayout).not.toHaveBeenCalled();
   });

@@ -222,7 +222,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       render: (v: string) => v || "（默认）",
     },
     {
-      title: "时间",
+      title: "投递时间",
       key: "finished_at",
       width: 150,
       render: (_, record) => formatDateTime(record.finished_at || record.created_at),

@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /** AI 求职助手：流式对话、历史记录、技能开关、附件与项目上下文联动。 */
-import { ArrowDownOutlined, HistoryOutlined } from "@ant-design/icons";
-import { App, Button, Space, Typography } from "antd";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowDownOutlined } from "@ant-design/icons";
+import { App } from "antd";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { deleteAssistantMessage } from "../api/assistant";
 import AssistantComposer from "../features/assistant/components/AssistantComposer";
 import AssistantGroupModal from "../features/assistant/components/AssistantGroupModal";
 import AssistantMessageList from "../features/assistant/components/AssistantMessageList";
-import AssistantSelectBar from "../features/assistant/components/AssistantSelectBar";
+import AssistantWorkspaceHeader from "../features/assistant/components/AssistantWorkspaceHeader";
 import ConversationSidebar from "../features/assistant/components/ConversationSidebar";
 import { readStoredReasoningEffort } from "../features/assistant/readStoredReasoningEffort";
 import type { StarterPrompt } from "../features/assistant/assistantTypes";
@@ -16,20 +15,19 @@ import { positiveId } from "../features/assistant/assistantUtils";
 import { useAssistantAttachments } from "../features/assistant/hooks/useAssistantAttachments";
 import { useAssistantAutoScroll } from "../features/assistant/hooks/useAssistantAutoScroll";
 import { useAssistantConversations } from "../features/assistant/hooks/useAssistantConversations";
+import {
+  useAssistantMessageActions,
+  useAssistantQuote,
+} from "../features/assistant/hooks/useAssistantMessageActions";
 import { useAssistantMessageSelection } from "../features/assistant/hooks/useAssistantMessageSelection";
+import { useAssistantSidebarActions } from "../features/assistant/hooks/useAssistantSidebarActions";
 import { useAssistantSkills } from "../features/assistant/hooks/useAssistantSkills";
 import { useAssistantStream } from "../features/assistant/hooks/useAssistantStream";
 import { useAssistantUrlBootstrap } from "../features/assistant/hooks/useAssistantUrlBootstrap";
 import { useRestoreStreamingConversation } from "../features/assistant/hooks/useRestoreStreamingConversation";
 import { useAssistantDisplayStream } from "../features/assistant/hooks/useThrottledStreamingText";
 import type { AssistantPageProps } from "./assistantPageTypes";
-import type {
-  AssistantConversationBrief,
-  AssistantMessage,
-  AssistantQuotedMessage,
-  AssistantSurface,
-  ReasoningEffort,
-} from "../types";
+import type { AssistantConversationBrief, AssistantSurface, ReasoningEffort } from "../types";
 
 export {
   AssistantMessageContent,
@@ -47,7 +45,7 @@ export default function AssistantPage({
   const [searchParams] = useSearchParams();
   const surface: AssistantSurface =
     surfaceProp ?? (searchParams.get("surface") === "floating" ? "floating" : "page");
-  // 从工作台等页面跳转过来时可用 ?ask=... 预填提问（例如「帮我把格式模板调松一点」）。
+  // 从工作台等页面跳转过来时可用 ?ask=... 预填提问（例如「帮我把版式调松一点」）。
   // 只预填、**不自动发送**：用户能改完再点发送，避免一个链接就替用户发起一次模型调用。
   const [content, setContent] = useState(() => (searchParams.get("ask") ?? "").slice(0, 4000));
   const [jobId, setJobId] = useState<number | undefined>(() =>
@@ -86,11 +84,6 @@ export default function AssistantPage({
     selectConversation,
     createConversation,
     ensureWelcomeConversation,
-    removeConversation,
-    saveConversationTitle,
-    updateConversation,
-    updateConversationFlags,
-    forkConversation,
   } = conversationsState;
   const { skills, enabledSkills, skillsLoaded, togglingSkillId, toggleSkill, reloadSkills } =
     useAssistantSkills();
@@ -106,36 +99,7 @@ export default function AssistantPage({
     addAttachment,
   } = attachmentsState;
   // 引用追问：右键消息「引用这条继续问」后出现，只对下一次提问有效。
-  const [quoted, setQuoted] = useState<AssistantQuotedMessage | null>(null);
-  const clearQuote = useCallback(() => setQuoted(null), []);
-
-  const quoteMessage = useCallback(
-    (target: AssistantMessage) => {
-      setQuoted({
-        id: target.id,
-        role: target.role,
-        // 与后端快照保持同样的截断长度，避免引用块里显示的长度前后不一致。
-        excerpt: target.content.trim().slice(0, 500) || "[附件消息]",
-      });
-      message.info("已引用这条消息，输入你的追问即可");
-    },
-    [message],
-  );
-
-  const removeMessage = useCallback(
-    async (target: AssistantMessage) => {
-      if (!activeId) return;
-      try {
-        if (surface === "page") await deleteAssistantMessage(activeId, target.id);
-        else await deleteAssistantMessage(activeId, target.id, surface);
-        await loadDetail(activeId);
-        message.success("消息已删除");
-      } catch (error) {
-        message.error(error instanceof Error ? error.message : "删除消息失败");
-      }
-    },
-    [activeId, loadDetail, message, surface],
-  );
+  const { quoted, clearQuote, quoteMessage } = useAssistantQuote({ message });
 
   const { selecting, setSelecting, selectedIds, toggleSelected, removeSelected, exitSelecting } =
     useAssistantMessageSelection({ activeId, loadDetail, message, surface });
@@ -174,15 +138,16 @@ export default function AssistantPage({
     send,
     stop,
   } = stream;
-
   const { displayText, displayReasoning } = useAssistantDisplayStream(stream);
-
-  /** 消息右键菜单「批量选择」的动作（页头按钮已收进这里，R8）。
-   *  多选只在有历史消息时才有意义；流式回复期间也不给进——那两条临时气泡还不在
-   *  数据库里，勾不上。 */
-  const enterMessageSelecting = useCallback(() => {
-    if (messageCount > 0 && !sending) setSelecting(true);
-  }, [messageCount, sending, setSelecting]);
+  const { removeMessage, enterMessageSelecting } = useAssistantMessageActions({
+    activeId,
+    loadDetail,
+    message,
+    surface,
+    messageCount,
+    sending,
+    setSelecting,
+  });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -237,82 +202,30 @@ export default function AssistantPage({
     if (prompt.enableWebSearch) setWebSearch(true);
   };
 
-  const handleToggleSkill = useCallback(
-    async (skill: (typeof skills)[number], enabled: boolean) => {
-      try {
-        await toggleSkill(skill, enabled);
-        message.success(`已${enabled ? "启用" : "停用"}技能「${skill.name}」`);
-      } catch (error) {
-        message.error(error instanceof Error ? error.message : "切换技能失败");
-        await reloadSkills();
-      }
-    },
-    [message, reloadSkills, toggleSkill],
-  );
-
-  // 会话列表的操作回调全部 useCallback：ConversationSidebar 包了 memo，流式期间
-  // 页面级 state（streamingText）每个 delta 都在变，props 引用不稳定的话 memo 形同虚设。
-  const handleSidebarCreate = useCallback(() => {
-    setHistoryOpen(false);
-    void createConversation();
-  }, [createConversation]);
-
-  const handleSidebarSelect = useCallback(
-    (id: number) => {
-      setHistoryOpen(false);
-      selectConversation(id);
-    },
-    [selectConversation],
-  );
-
-  const handleSidebarDelete = useCallback(
-    (id: number) => void removeConversation(id),
-    [removeConversation],
-  );
-
-  const handleSidebarBatchDelete = useCallback(
-    (ids: number[]) => {
-      // 批量删除：逐条走同一条删除通路（内部会刷新列表）。
-      for (const id of ids) void removeConversation(id);
-    },
-    [removeConversation],
-  );
-
-  const handleSidebarRename = useCallback(
-    (id: number, title: string) => void saveConversationTitle(id, title),
-    [saveConversationTitle],
-  );
-
-  const handleSidebarToggleFlag = useCallback(
-    (conversation: AssistantConversationBrief, field: "pinned" | "favorite") =>
-      void updateConversationFlags(conversation, field),
-    [updateConversationFlags],
-  );
-
-  const handleSidebarArchive = useCallback(
-    (conversation: AssistantConversationBrief, archived: boolean) =>
-      void updateConversation(conversation.id, { archived }),
-    [updateConversation],
-  );
-
-  const handleSidebarFork = useCallback(
-    (conversation: AssistantConversationBrief) => void forkConversation(conversation.id),
-    [forkConversation],
-  );
-
-  const openGroupModal = useCallback((conversation: AssistantConversationBrief) => {
-    setGroupTarget(conversation);
-    setGroupValue(conversation.group_name);
-  }, []);
-
-  const confirmGroup = async () => {
-    if (!groupTarget) return;
-    const updated = await updateConversation(groupTarget.id, { group_name: groupValue.trim() });
-    if (updated) {
-      message.success(groupValue.trim() ? `已移动到「${groupValue.trim()}」` : "已移出分组");
-      setGroupTarget(null);
-    }
-  };
+  const {
+    handleToggleSkill,
+    handleSidebarCreate,
+    handleSidebarSelect,
+    handleSidebarDelete,
+    handleSidebarRestored,
+    handleSidebarBatchDelete,
+    handleSidebarRename,
+    handleSidebarToggleFlag,
+    handleSidebarArchive,
+    handleSidebarFork,
+    openGroupModal,
+    confirmGroup,
+  } = useAssistantSidebarActions({
+    conversations: conversationsState,
+    groupTarget,
+    groupValue,
+    message,
+    reloadSkills,
+    setGroupTarget,
+    setGroupValue,
+    setHistoryOpen,
+    toggleSkill,
+  });
 
   // ===== 滚动域（问题 A）：吸底跟随、定位到底部与「加载更早」跳过 =====
   // 整域下沉到 useAssistantAutoScroll；页面只消费回调与「回到底部」显隐。
@@ -369,6 +282,7 @@ export default function AssistantPage({
           onCreate={handleSidebarCreate}
           onSelect={handleSidebarSelect}
           onDelete={handleSidebarDelete}
+          onRestored={handleSidebarRestored}
           onBatchDelete={handleSidebarBatchDelete}
           onRename={handleSidebarRename}
           onToggleFlag={handleSidebarToggleFlag}
@@ -382,35 +296,16 @@ export default function AssistantPage({
         />
       )}
       <section className={`assistant-workspace${selecting ? " is-selecting" : ""}`}>
-        <header className="assistant-header">
-          <div className="assistant-header-titles">
-            <Typography.Title level={3}>{detail?.title || "AI 求职助手"}</Typography.Title>
-            <Typography.Text type="secondary">当前回复由「设置」中的模型配置提供。</Typography.Text>
-          </div>
-          {/* 多选入口已收进消息右键菜单（R8）；浮窗这里只剩历史按钮。
-              header 是 space-between 布局，只剩两个子元素时操作全部靠右。 */}
-          <Space size={4} className="assistant-header-actions">
-            {compact && (
-              <Button
-                type="text"
-                icon={<HistoryOutlined />}
-                aria-label="查看投投历史"
-                aria-expanded={historyOpen}
-                onClick={() => setHistoryOpen((current) => !current)}
-              >
-                历史
-              </Button>
-            )}
-          </Space>
-        </header>
-        {selecting && (
-          <AssistantSelectBar
-            selectedCount={selectedIds.size}
-            disabled={selectedIds.size === 0}
-            onDelete={removeSelected}
-            onExit={exitSelecting}
-          />
-        )}
+        <AssistantWorkspaceHeader
+          compact={compact}
+          historyOpen={historyOpen}
+          onToggleHistory={() => setHistoryOpen((current) => !current)}
+          selecting={selecting}
+          selectedIds={selectedIds}
+          removeSelected={removeSelected}
+          exitSelecting={exitSelecting}
+          title={detail?.title || "AI 求职助手"}
+        />
         <AssistantMessageList
           detail={detail}
           showLoading={awaitingConversation}

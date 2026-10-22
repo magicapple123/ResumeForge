@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{ language }}">
 <head>
 <meta charset="utf-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; script-src 'nonce-{{ csp_nonce }}'; base-uri 'none'; form-action 'none'" />
@@ -34,7 +34,7 @@
   .header .intent { font-size: var(--fs); color: var(--muted); margin-top: calc(var(--fs) * 0.36); letter-spacing: 2px; }
   .header .contact { font-size: calc(var(--fs) * 0.9); color: var(--muted); margin-top: calc(var(--fs) * 0.5); }
   .header .contact span { margin: 0 calc(var(--fs) * 0.57); }
-  .profile-photo { width: calc(var(--fs) * 5.6); height: calc(var(--fs) * 7.2); flex: 0 0 auto; object-fit: cover; border: 1px solid var(--line); }
+  .profile-photo { width: calc(var(--fs) * 5.6 * var(--photo-scale, 1)); height: calc(var(--fs) * 7.2 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: cover; border: 1px solid var(--line); }
   .section { margin-bottom: calc(var(--fs) * 1.35); }
   .section-title { font-family: "Songti SC", "SimSun", Georgia, serif; font-size: calc(var(--fs) * 1.11); font-weight: 600; color: var(--accent); letter-spacing: 3px; text-align: center; border-bottom: 1px solid var(--line); padding-bottom: calc(var(--fs) * 0.28); margin-bottom: calc(var(--fs) * 0.8); }
   .entry { margin-bottom: calc(var(--fs) * 0.9); }

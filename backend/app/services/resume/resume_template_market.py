@@ -61,7 +61,7 @@ FORMAT_PRESETS: tuple[dict, ...] = (
     {
         "name": "standard",
         "label": "标准",
-        "description": "不改动样式模板自身的版式",
+        "description": "不改动模板自身的版式",
         "config": {},
     },
     {

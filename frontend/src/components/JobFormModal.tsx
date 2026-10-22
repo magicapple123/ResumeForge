@@ -179,7 +179,7 @@ export default function JobFormModal({
         setParseWarnings(result.warnings ?? []);
         setRecognizedText("");
         setRecognitionSource(null);
-        message.warning("没有识别到内容，请检查材料或稍后重试");
+        message.warning("没有识别到内容，请检查资料或稍后重试");
         return;
       }
       if (result.items.length > 1) {
@@ -353,7 +353,7 @@ export default function JobFormModal({
       confirmLoading={submitting}
       okButtonProps={{ disabled: parsing || submitting }}
       cancelButtonProps={{ disabled: submitting }}
-      mask={{ closable: !submitting }}
+      mask={{ closable: false }}
       closable={!submitting}
       width={720}
       styles={{

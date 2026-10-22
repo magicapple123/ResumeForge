@@ -267,7 +267,7 @@ export default function SkillsPage() {
         activeKey={tab}
         onChange={(key) => setTab(key as "skills" | "templates")}
         items={[
-          { key: "skills", label: "助手技能" },
+          { key: "skills", label: "技能" },
           { key: "templates", label: "简历模板" },
         ]}
       />

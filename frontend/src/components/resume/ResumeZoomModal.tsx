@@ -32,6 +32,8 @@ interface Props {
   layout?: ResumeLayout;
   resumeId?: number;
   relayouting?: boolean;
+  /** 这份简历有没有照片：没有时照片滑杆禁用并说明原因（与大图外面的主预览一致）。 */
+  hasPhoto?: boolean;
   onApplyLayout?: (next: ResumeLayout) => void;
   onExport?: () => void;
   previewRef?: React.RefObject<ResumePreviewHandle | null>;
@@ -54,6 +56,7 @@ export default function ResumeZoomModal({
   layout,
   resumeId,
   relayouting = false,
+  hasPhoto,
   onApplyLayout,
   onExport,
   previewRef,
@@ -89,6 +92,7 @@ export default function ResumeZoomModal({
         disabled={relayouting}
         catalog={catalog}
         previewRef={zoomPreviewRef}
+        hasPhoto={hasPhoto}
         onChange={onApplyLayout}
       />
     ) : undefined;
@@ -123,8 +127,8 @@ export default function ResumeZoomModal({
       destroyOnHidden
     >
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-        按原始尺寸显示，虚线是分页位置（与当前 {pages} 页的设置一致）。缩放用纸面下方的控件，
-        也可以按住 Ctrl 滚滚轮。
+        按原始尺寸显示，虚线是分页位置（与当前 {pages} 页的设置一致）。缩放用「放大预览」
+        「缩小预览」两个按钮，也可以按住 Ctrl 滚滚轮。
       </Typography.Paragraph>
       <div className="resume-zoom-body">
         <ResumePreview

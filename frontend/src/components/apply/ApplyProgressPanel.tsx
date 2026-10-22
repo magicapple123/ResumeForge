@@ -194,7 +194,7 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
       ) : (
         <Typography.Paragraph type="secondary" className="apply-progress-empty">
           {task.kind === "collect"
-            ? "采集批次不逐条列出岗位，新增数量见上方计数。"
+            ? "采集批次不逐条列出岗位，新增数量见「成功」计数。"
             : "本批次没有可展示的岗位条目。"}
         </Typography.Paragraph>
       )}

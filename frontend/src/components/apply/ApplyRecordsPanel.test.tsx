@@ -293,7 +293,14 @@ describe("删除投递记录", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[0]);
     fireEvent.click(await screen.findByText(/删除本批（2 条）/));
     // 必须二次确认——删除是用户可见的破坏性动作。
-    expect((await screen.findAllByText(/删除这一批的 2 条记录/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("删除这一批的记录？")).length).toBeGreaterThan(0);
+    // 条数按 §4.4 的例外移到正文（标题只写动作 + 对象）。用 textContent 而不是 ByText：
+    // 断言的是"正文里有没有条数"，不是新增一处文案查询。
+    await waitFor(() => {
+      expect(document.querySelector(".ant-modal-confirm")?.textContent).toContain(
+        "这 2 条投递记录会移入回收站",
+      );
+    });
     expect(apiMocks.deleteRecordBatch).not.toHaveBeenCalled();
 
     fireEvent.click(await screen.findByRole("button", { name: "OK" }));
@@ -335,7 +342,7 @@ describe("删除投递记录", () => {
     expect(apiMocks.deleteRecordBatch).not.toHaveBeenCalled();
   });
 
-  it("批内多选：组头菜单进选择模式 → 勾 2 条 → 删除所选（确认文案带数量）→ 一次批量删除并重拉", async () => {
+  it("批内多选：组头菜单进选择模式 → 勾 2 条 → 删除所选（直接删，撤销在 Toast）→ 一次批量删除并重拉", async () => {
     apiMocks.batchDeleteRecords.mockResolvedValue({ deleted: 2 });
     // reload 后 data 必须是**新对象**（真实后端每次返回新响应），明细缓存才会作废重取；
     // mockResolvedValue 会复用同一引用，绕开 prevData 守卫让重取断言失真。
@@ -362,15 +369,7 @@ describe("删除投递记录", () => {
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
-    // Popconfirm 确认（文案带数量）；确认前绝不发请求。
-    const popover = await waitFor(() => {
-      const root = document.querySelector(".ant-popover");
-      expect(root).not.toBeNull();
-      return root as HTMLElement;
-    });
-    expect(popover.textContent).toContain("删除选中的 2 条投递记录");
-    expect(apiMocks.batchDeleteRecords).not.toHaveBeenCalled();
-    fireEvent.click(within(popover).getByRole("button", { name: /删\s*除/ }));
+    // 软删可撤销：不再前置确认，点一下就直接发请求（撤销在 Toast 上）。
 
     await waitFor(() => {
       expect(apiMocks.batchDeleteRecords).toHaveBeenCalledTimes(1);

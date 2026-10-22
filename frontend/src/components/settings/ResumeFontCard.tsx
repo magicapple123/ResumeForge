@@ -105,7 +105,7 @@ export default function ResumeFontCard() {
       cancelText: "取消",
       onOk: async () => {
         await deleteResumeFont(name);
-        message.success("已删除");
+        message.success("已删除这个字体");
         await load();
       },
     });

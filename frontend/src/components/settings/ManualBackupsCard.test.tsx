@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/** ManualBackupsCard（RF-25）：快照清单、逐份确认的可恢复删除与 .trash 提示。 */
+/** ManualBackupsCard（RF-25）：快照清单、逐份确认的可恢复删除与回收目录提示。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -46,12 +46,12 @@ afterEach(() => {
 });
 
 describe("ManualBackupsCard", () => {
-  it("列出快照、体积与时间，并提示 .trash 里还有几份", async () => {
+  it("列出快照、体积与时间，并提示回收目录里还有几份", async () => {
     renderCard();
     expect(await screen.findByText("resume_forge-20261001-000000.db")).toBeTruthy();
     expect(screen.getByText("resume_forge-20260901-000000.db")).toBeTruthy();
     expect(screen.getByText(/5.0 MB/)).toBeTruthy();
-    expect(screen.getByText(/\.trash\/ 里还有 2 份/)).toBeTruthy();
+    expect(screen.getByText(/回收目录里还有 2 份/)).toBeTruthy();
   });
 
   it("快照超过 5 份：默认只展示 5 份，点「显示全部」展开其余", async () => {
@@ -100,9 +100,9 @@ describe("ManualBackupsCard", () => {
     ).toBeGreaterThan(0);
     expect(screen.getAllByText(/5\.0 MB/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/这份备份约占/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/backups\/\.trash\//).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/本地数据目录下的回收目录/).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "移到 .trash" }));
+    fireEvent.click(screen.getByRole("button", { name: "移到回收目录" }));
     await waitFor(() => {
       expect(apiMocks.trashManualBackup).toHaveBeenCalledWith("resume_forge-20261001-000000.db");
     });

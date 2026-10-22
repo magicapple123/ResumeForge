@@ -226,6 +226,60 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 - 确实需要并列一个「关闭」（如失败态显式出口）时，在源码该行上方写理由注释。
 - 不要在 body 里自造 footer（`Space` + 按钮），统一用 `Modal` 的 `footer` 插槽。
 
+### 弹层形态与关闭语义（2026-10-22 起，新增与改到的弹层按此执行）
+
+口径来自《弹出层全链路优化方案》`deliverables/software-company/ResumeForge-overlay-UX-plan-20261022.md`。
+**存量不动**（与三态迁移同一条原则：改到它时顺手修，不做一次性大扫除），新增代码必须遵守。
+
+形态选择——**按内容定，不按容器定**：
+
+- 有「点主按钮提交的一组输入」→ 表单弹层；只读查看 → `Drawer` 或 `common/RecordDetail`；
+  能撤销 → 不弹确认；不可撤销 → 确认弹层；高频低风险 → 就地 `Popconfirm`。
+- 页内静态提示继续用 `<Alert>`；**跨页常驻 + 需用户看见并处理 + 允许先不理**这三条同时满足，
+  才用公告条（`components/common/AnnouncementBar.tsx`）。新增公告来源必须同时登记
+  `features/announcements/announcementCodes.ts`。
+- 公告条的两个关闭动作**语义必须分开**：`×` = 关掉这一条（版本变了会再来）；「不再提醒」=
+  静音该来源，**必须可撤销**（设置页给恢复入口）。静音不可撤销等于让用户永远收不到更新提醒
+  且找不到开关。
+
+关闭语义（Esc / × / 蒙层）：
+
+- **有提交动作的 Modal（含 `<Form>` 或有写入请求）必须禁掉蒙层关闭**：写
+  `mask={{ closable: false }}`。只读预览类（详情 / 预览 / 大图，`footer={null}`）**保留 antd
+  默认 `true`** —— 关闭无损，禁了只会降低可用性（2026-10-22 用户拍板）。
+  ⚠️ 旧写法 `maskClosable={false}` 在 antd 6.6.5 已废弃（`modal/interface.d.ts:71` 标了
+  `@deprecated`，运行时打警告），新代码一律用 `mask.closable`；守卫两种都认，存量改到时顺手换。
+  这件事 `ConfigProvider` 兜不住（`ModalConfig` 只有 `mask`，没有逐弹窗的分级），只能逐个写。
+- **Drawer 按内容定**：详情/列表/导航保留 antd 默认 `true`；里面装表单则必须 `false`。
+- **Esc 与 × 永远同义**；不要只改 `keyboard` 或只改 `onCancel` 中的一个。
+- **有草稿时不问、直接关**（关闭无损，配一条 2.5s Toast 告知）；无草稿且有脏值才出内联确认条
+  ——footer 换态，**不要再开一个 `modal.confirm`**。
+- 提交中（`submitting`）忽略 Esc，并 `closable={false}`。
+
+叠层与文案：
+
+- **同一时刻 `Modal` / `Drawer` / `modal.confirm` 三类容器数量 ≤ 1。** 在 `*Modal.tsx` / `*Drawer.tsx`
+  内部再开 `modal.confirm` 属违规（`popupStackGuard.test.ts` 扫）；替代品是内联确认条、就地
+  `Popconfirm`、页内 `Alert`。抽屉里要放详情/表单时用**视图切换**（`CandidateJobsDrawer` 是样板：
+  `view: "list" | "detail" | "form" | "import"`，标题随视图变，×/Esc 先退一层）。
+  唯一例外是 `utils/taskNotify.ts` 的批次完成打断（行内注 `// popup-stack-ok: 理由`）。
+- 按钮文案禁止「是/否/确定」，必须描述结果（「删除这条」「保存修改」）；危险操作给 `danger`。
+- 标题 ≤7 字、正文 ≤30 字、Toast ≤20 字，不用感叹号与句号。**只约束新增与本批改到的文案。**
+- 新增文案一律 `t()` + `i18n/messages/zh-CN.ts`（否则 `cjkRatchet` 变红）。
+
+草稿：
+
+- 草稿正文**只允许** `sessionStorage`（`resumeforge.form-draft.v1:<scope>@<datasetId>`），
+  **禁止** `localStorage`；凭据类字段（`apiKey`/`token`/`password`/`secret`）写前剔除。
+- 参考实现 `features/webform/webFormSessionStorage.ts`（450ms 防抖 + `pagehide` flush + 按数据集隔离 key）。
+- **偏好**（布尔开关，如公告条静音）可以落 `localStorage`，与正文分开对待。
+
+删除：
+
+- 能恢复的（软删进回收站，15 类）**直接执行** + Toast 给 5 秒「撤销」（`restoreTrashItem`），
+  不再加前置 `Popconfirm`；批量 >100 条仍保留确认。
+- 不能恢复的（清空回收站 / 彻底删除）用 `Modal` + `danger`，文案写清后果。
+
 ### 守卫测试
 
 四条守卫测试（新增合法例外用「行内豁免注释」，不要新建白名单文件）：
@@ -235,9 +289,58 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 - `src/theme/spinOutletGuard.test.ts` —— `<Spin spinning=>` 只允许出现在 `LoadingBlock` 内部（豁免：`// spin-ok: 理由`）
 - `src/i18n/cjkRatchet.test.ts` —— 存量中文不许上涨（豁免：`// i18n-ok: 理由`）
 
-## 版式参数即呈现（禁止自动缩字号）
+弹层相关守卫（《弹出层优化方案》B1–B3 已落地，两条都是启用状态）：
 
-用户在版式栏里设的字号 / 行距 / 页边距，就是纸面上的值——**任何"装不下就按比例压小"的实现都不许再加回来**
+- `src/components/common/popupGuard.test.ts` —— 含 `<Form` 的 `<Modal>` 必须禁蒙层关闭
+  （`mask={{ closable: false }}` 或旧写法 `maskClosable={false}`）；`<Modal>` 必须自带 `footer=`
+  或 `okText=`（禁 antd 默认「确定」）；`<Drawer>` 禁 `width=`，统一 `size=`
+- `src/components/common/popupStackGuard.test.ts` —— `*Modal.tsx` / `*Drawer.tsx` 内禁 `modal.confirm`
+  （叠层；豁免：`// popup-stack-ok: 理由`）。替代品：footer 内联确认条 / 就地 `Popconfirm` / 页内 `Alert`
+- `src/i18n/popupCopy.test.ts` —— 新弹层文案的长度与语气（标题 7 / 正文 30 / Toast 20，禁 `!` `！` `。`）
+
+## 界面文案口径（2026-10-22 起，新增与改到的文案按此执行）
+
+**判定基准的唯一真相是 `docs/ui-copy-guide.md`**（37 条术语 + 24 条动词 + 12 类文案位规则 + 四级严重度 + 冲突裁决原则）。本节只列最容易违反的硬约束与指向，**不复制正文**——两处各写一份必然漂移。
+
+改任何用户可见文案（按钮、标题、提示、空态、占位符、表头、Tooltip、`aria-label`）之前，先在 `docs/ui-copy-guide.md` 里找到它属于哪个实体、哪个动作、哪个位置。**三问都落不到某一行，说明规范有缺口，补规范，不要各自发挥。**
+
+### 十条硬约束（违反即返工）
+
+1. **一词一义**：只用术语表的正名。最容易混的是四层——**模板**（外观骨架）/ **版式**（参数预设）/ **排版参数**（字号行距页边距）/ **版面**（排出来的效果）/ 统称 **排版设置**。禁用「样式」「样式模板」「格式模板」「版式模板」「新版式」。
+2. **按钮写具体动作**，禁用空动词：`确定` / `确认` / `提交` / `处理` / `操作` / `执行`。用「删除」「移出」「彻底删除」「保存」「导出」这类能预测后果的词。
+3. **二次确认必须三段**：动作 + 对象（带数量/名称）+ 后果（可逆性与去哪恢复）。只写「确定删除？」不合格。
+4. **成功提示必须含对象**：`已删除` 不合格，`已删除这条面经` 合格。
+5. **错误提示必须给出路**：说清"发生了什么 + 怎么办"；禁止 `操作失败` 这类无信息兜底。
+6. **空态禁用方位词指路**：「点右上角『放入资料』」不合格（视口一变就失效），主按钮要内嵌在空态里。
+7. **引用别处文案必须逐字一致**：用户指南里写「点『某按钮』」，那个按钮就必须真的叫这个名字、且在本页存在。这是 `glossary` §4.13 三条硬约束，**有守卫**（见下）。
+8. **不用已废弃的组件属性**：antd 6.6.5 里 `Alert` / `notification` 的标题属性是 **`title`**，`message` 已 `@deprecated`。判定依据是 `node_modules/antd` 当前版本的 `.d.ts`，**不是记忆里的 API**。`tsc` 与 eslint 都不报这类问题。
+9. **禁止"正名（旧别名）"写法**：`格式模板（版式）`、`模板（样式）` 这类并列会让旧名长期残留并被当成第二个正名。
+10. **界面改名不动内部命名**：路由 path、DB 列、API 字段、类型名、文件名（`data/datasets`、`format_name`、`template`）全部保留。界面名与内部名不一致不是缺陷。
+
+### 改文案的固定顺序（不按这个顺序会返工）
+
+1. 改实现 → 2. 跑相关 `.test.tsx` 拿失败清单 → 3. 逐条改断言 → 4. **每次 Edit 后 `grep` 复查被改处**（本项目出过三次"改一处吞掉邻行"）→ 5. 全量 `npm test`。
+
+**界面文案改了，必须同一提交改四处**，否则"文档与界面互相矛盾"本身就是 P1：
+
+- `frontend/src/components/userGuideSteps.ts`（就地改那一步的措辞，**不要为新功能随手加一步**）
+- `docs/user-guide.md`（对应章节 + 常见问题排查）
+- `README.md`（功能表受影响时；注意 `## ✨ 功能特性` 的行数守卫）
+- `CHANGELOG.md`
+
+### 守卫（不许豁免、不许调阈值）
+
+- `frontend/src/i18n/cjkRatchet.test.ts`：存量中文只降不升（基线在 `i18nBaseline.json`）。新增硬编码中文走 `// i18n-ok: 理由`。
+- `frontend/src/components/userGuideCopyRef.test.ts`（本轮新增，与 `userGuideSteps.ts` 同目录）：把 `userGuideSteps.ts` 里每个「…」引号内容抽出来，断言它作为字面量存在于 `src/**/*.tsx`。只能证明"字符串出现过"，检不出动态拼接——**动态文案要么改成静态全名，要么显式豁免并写明理由**。
+- `frontend/src/theme/antdDeprecatedProp.test.ts`（本轮新增，与既有 `antdStaticGuard` / `antdOverrideGuard` 同目录）：按 `docs/ui-copy-guide.md` §4.14 的判定表扫 `Alert` / `notification` 的 `message=`。
+
+### 一条成本常识
+
+前端有 665 处 `getByText` 中文断言、804 处 `{ name: "…" }` 查询——**改一处按钮文字，平均连带改 1–3 个测试**。所以改文案要按领域分批：一次改动连带测试超 5 个文件就拆 PR，不要一个 PR 横跨多个领域。
+
+## 排版参数即呈现（禁止自动缩字号）
+
+用户在排版栏里设的字号 / 行距 / 页边距，就是纸面上的值——**任何"装不下就按比例压小"的实现都不许再加回来**
 （2026-10-21 用户明确要求，草稿预览与精确预览同一口径）：
 
 - 模板 `--fs` 只能是字面量（`--fs: {{ base_px }}px;`），不许出现 `calc(... * var(--fit-scale))` 这类系数挂钩；

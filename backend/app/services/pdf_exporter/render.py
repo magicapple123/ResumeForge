@@ -205,7 +205,7 @@ def _draw_resume(
             # 坏图（裁剪/解码失败）由这里的兜底跳过照片，不阻断导出。
             pdf.image(
                 BytesIO(crop_image_to_cover(photo, photo_w / photo_h)),
-                x=PAGE_WIDTH_MM - layout.margin_x - hdr_pad_x - photo_w,
+                x=PAGE_WIDTH_MM - layout.margin_right - hdr_pad_x - photo_w,
                 y=content_top,
                 w=photo_w,
                 h=photo_h,
@@ -262,7 +262,7 @@ def _draw_resume(
         line_y = header_bottom
         pdf.set_draw_color(*pdf.accent)
         pdf.set_line_width(hdr_border_w)
-        pdf.line(layout.margin_x, line_y, PAGE_WIDTH_MM - layout.margin_x, line_y)
+        pdf.line(layout.margin_left, line_y, PAGE_WIDTH_MM - layout.margin_right, line_y)
     pdf.set_y(header_bottom)
 
     # ===== 各分区 =====

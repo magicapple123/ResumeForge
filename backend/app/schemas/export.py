@@ -46,7 +46,7 @@ class ExportRequest(BaseModel):
     redact: bool = False
     redact_options: RedactionOptions = Field(default_factory=RedactionOptions)
     # 页边距**兼容字段**（R1）：只在请求未提供 ``format_config.page_padding`` 时作为它的
-    # 回落值（收进 8–26mm 后生效），**不再单独覆盖**任何东西。页边距的唯一权威是
+    # 回落值（收进 0–26mm 后生效），**不再单独覆盖**任何东西。页边距的唯一权威是
     # ``format_config.page_padding``——预览、HTML、PDF、Word 都读它；两套并存就会出现
     # "预览 8mm、PDF 30mm"。新调用方请只发 ``page_padding``。
     margin_mm: float | None = Field(default=None, ge=4, le=40)
@@ -59,6 +59,11 @@ class ExportRequest(BaseModel):
     # 7px、却没点保存就导出，PDF 仍按旧字号排出两页"的直接原因——预览走 /render 已经带上
     # 了草稿版式，导出却只读记录值。
     format_config: dict | None = None
+    # 本次导出的**草稿语言**（纸面固定文案：小节标题 / 字段前缀）；``None`` = 用记录值。
+    #
+    # 与 ``format_config`` 同一条路：预览里把语言切成 English、还没点「保存版式」时，
+    # 导出也必须按英文排——否则用户眼前是 Summary、下载到的 PDF 里仍是「个人总结」。
+    language: ResumeLanguage | None = None
     include_photo: bool = True
     allow_incomplete: bool = False
     # 正式投递存档（RF-17）：为真时这次导出冻结一份投递快照；默认不落库（预览零膨胀）。
@@ -81,7 +86,7 @@ class PreviewPdfRequest(BaseModel):
 
     # 这几个字段与 ``POST /api/resumes/render`` 的版式参数**逐一对应**（去掉正文）。
     #
-    # 为什么必须全都带上：草稿的版式是"样式模板 + 版式模板 + 覆盖"三层叠出来的，任何
+    # 为什么必须全都带上：草稿的版式是"模板 + 版式 + 覆盖"三层叠出来的，任何
     # 一层没传，精确预览就会按**记录里的旧值**排版——用户换了模板或版式、又还没点保存，
     # 屏幕上看到的就还是上一版（2026-10-21 用户实测："调整模板、版式、板块顺序，
     # 精确预览不跟着变"）。``None`` 表示"这次不覆盖，用记录值"（旧客户端兼容）。

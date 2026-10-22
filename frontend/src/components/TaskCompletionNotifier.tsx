@@ -33,7 +33,7 @@ export default function TaskCompletionNotifier() {
       notification[payload.type]({
         key: `task-finished-${detail.id}`,
         icon: <BellOutlined />,
-        message: payload.message,
+        title: payload.message,
         description: (
           <span
             role="button"

@@ -1,0 +1,56 @@
+/* ── 弹层内部的公共形态 ─────────────────────────────────────
+   这三组都是"弹层里的一块"，不进全局组件：内联确认条、草稿恢复条、带动作的 Toast。
+   颜色一律走 `--rf-*` 变量（深浅主题各一份），不手贴 antd 类名。 */
+
+/* 内联确认条（`FormModalFooter` 的第二态）：底部换成"后果 + 继续编辑 + 放弃修改"。
+   说明文字靠左（`margin-right: auto`），危险动作落在最右——与 antd 主按钮的位置一致，
+   读屏顺序自然是"后果 → 继续编辑 → 放弃修改"。 */
+.rf-form-modal-discard {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rf-form-modal-discard-text {
+  margin-right: auto;
+  color: var(--rf-text-secondary);
+}
+
+/* 草稿恢复条：body 顶部一条，底色说明"这不是报错"，只是待处理的事。 */
+.rf-draft-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--rf-warning-border);
+  border-radius: 8px;
+  background: var(--rf-warning-bg);
+  flex-wrap: wrap;
+}
+
+.rf-draft-bar-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rf-draft-bar-meta {
+  font-size: 12px;
+}
+
+/* 带动作的 Toast：文字与动作按钮同一行，动作靠右但不顶到边缘。 */
+.rf-toast-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rf-toast-action {
+  height: auto;
+  padding: 0;
+  font-size: inherit;
+}

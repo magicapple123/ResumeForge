@@ -289,6 +289,34 @@ def test_export_snapshot_download_replays_from_archive(db_session, client):
     assert replay.headers["X-Content-Sha256"] == replay.headers["X-Artifact-Sha256"]
 
 
+def test_export_snapshot_records_the_draft_language_and_replays_it(db_session, client):
+    """存档记下**生效后的**语言：重下存档必须还是英文（否则英文简历会印回中文）。
+
+    语言是"预览里的排版草稿"的一部分，和 ``page_limit`` / ``font_scale`` 一样会被请求
+    覆盖记录值。存档只记记录值的话，``replay_delivery_export`` 就会用 zh-CN 重放，
+    用户重下一份自己投出去的文件，得到的是另一种文字。
+    """
+    resume = _make_resume(db_session)
+    original = client.post(
+        f"/api/resumes/{resume.id}/export",
+        json={"format": "md", "language": "en-US", "record_delivery": True},
+    )
+    assert original.status_code == 200, original.text
+    assert b"Summary" in original.content
+    assert "个人总结".encode() not in original.content
+
+    delivery = _deliveries(db_session)[0]
+    assert delivery.render_context["language"] == "en-US"
+    assert delivery.request_params["language"] == "en-US"
+
+    replay = client.get(f"/api/resumes/deliveries/{delivery.id}/download")
+    assert replay.status_code == 200, replay.text
+    assert replay.headers["X-Delivery-Replay"] == "true"
+    # md 是确定性渲染：重放产物必须与当时的下载逐字节一致（含纸面语言）。
+    assert replay.content == original.content
+    assert replay.headers["X-Content-Sha256"] == replay.headers["X-Artifact-Sha256"]
+
+
 def test_html_replay_header_tracks_actual_bytes_not_the_stored_hash(db_session, client):
     """HTML 每次渲染换 CSP nonce：重放字节与历史指纹不同，头必须按实际字节算。"""
     resume = _make_resume(db_session)

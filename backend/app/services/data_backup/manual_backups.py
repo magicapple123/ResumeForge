@@ -76,7 +76,7 @@ def list_manual_backups(bind: Engine) -> dict:
 
 
 def trash_manual_backup(bind: Engine, name: str) -> dict:
-    """把一份手动备份移进 ``backups/.trash/``：可恢复，不永久删除。"""
+    """把一份手动备份移进 ``backups/.trash/``：可恢复，不彻底删除。"""
     safe = _safe_name(name)
     directory = manual_backups_directory(bind)
     try:

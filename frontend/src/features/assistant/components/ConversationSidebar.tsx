@@ -44,7 +44,9 @@ import { formatDateTime } from "../../../utils/format";
 import BatchActionBar from "../../../components/common/BatchActionBar";
 import LoadingBlock from "../../../components/common/LoadingBlock";
 import { RowContextMenu, type RowActionItem } from "../../../components/common/RowActions";
+import { TRASH_RECOVERY_NOTE } from "../../../components/common/rowActionMenu";
 import { useBatchSelection } from "../../../hooks/useBatchSelection";
+import { useDeleteUndo } from "../../trash/useDeleteUndo";
 import { ListyItem } from "../../../components/common/ListyItem";
 import { ConversationTitle } from "./AssistantMessageContent";
 
@@ -56,7 +58,10 @@ interface Props {
   activeId: number | null;
   onCreate: () => void;
   onSelect: (id: number) => void;
-  onDelete: (id: number) => void;
+  /** 单条删除：父级负责接口调用与刷新；返回 `false` 表示没删成功（此时不给撤销入口）。 */
+  onDelete: (id: number) => void | Promise<boolean | void>;
+  /** 撤销恢复成功后刷新列表（恢复不经过 `onDelete`，所以单列一个入口）。 */
+  onRestored?: () => void | Promise<void>;
   onRename: (id: number, title: string) => void;
   onToggleFlag: (conversation: AssistantConversationBrief, field: "pinned" | "favorite") => void;
   onArchive: (conversation: AssistantConversationBrief, archived: boolean) => void;
@@ -85,6 +90,7 @@ function ConversationSidebar({
   onFork,
   onMoveToGroup,
   onBatchDelete,
+  onRestored,
   search,
   onSearchChange,
 }: Props) {
@@ -95,6 +101,18 @@ function ConversationSidebar({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [actionMenuId, setActionMenuId] = useState<number | null>(null);
+  // 软删可撤销：单条删除不再前置确认，Toast 里给 5 秒「撤销」（见 useDeleteUndo）。
+  const deleteUndo = useDeleteUndo();
+
+  /** 单条删除：**先删成功，再给撤销入口**——删失败还弹「已删除 / 撤销」比不弹更糟。 */
+  const removeConversation = async (conversation: AssistantConversationBrief) => {
+    const removed = await onDelete(conversation.id);
+    if (removed === false) return;
+    // `remove` 传空操作：接口调用已经在上一行完成，这里只是拿到统一的那张撤销卡。
+    await deleteUndo.run({ type: "conversation", ids: [conversation.id] }, async () => undefined, {
+      onRestored,
+    });
+  };
 
   const visibleConversations = (conversations ?? []).filter((conversation) => {
     if (filter === "archived") return conversation.archived;
@@ -249,10 +267,11 @@ function ConversationSidebar({
       label: "删除",
       danger: true,
       icon: <DeleteOutlined />,
-      confirm: "删除这段对话？",
+      // 软删可撤销：不弹确认，撤销入口在 Toast 上（见 useDeleteUndo）。
+      undo: true,
       onClick: () => {
         setActionMenuId(null);
-        onDelete(conversation.id);
+        void removeConversation(conversation);
       },
     },
   ];
@@ -262,7 +281,9 @@ function ConversationSidebar({
     const ids = [...batch.selectedIds];
     if (!onBatchDelete || ids.length === 0) return;
     modal.confirm({
-      title: `删除选中的 ${ids.length} 段对话？`,
+      title: "删除选中的对话？",
+      // 与单条删除同措辞的后果段：批量删除同样是软删除，能恢复。条数进正文（§4.4 例外）。
+      content: `这 ${ids.length} 段对话${TRASH_RECOVERY_NOTE}`,
       okText: "删除",
       okButtonProps: { danger: true },
       onOk: () => {
@@ -374,6 +395,9 @@ function ConversationSidebar({
                                     <Popconfirm
                                       key={item.key}
                                       title={item.confirm}
+                                      // 这个「···」菜单是手写的 Popover（不走 useRowActionMenu），
+                                      // 所以正文要在这里显式传，否则右键菜单有后果段、这里没有。
+                                      description={item.confirmBody}
                                       onConfirm={() => {
                                         setActionMenuId(null);
                                         item.onClick?.();

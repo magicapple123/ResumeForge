@@ -37,7 +37,17 @@ export const APPROXIMATE_PAGINATION_NOTE =
   "多页视图为「按 A4 高度切分的近似分页」，真实分页以「浏览器打印 / 下载 PDF」为准。";
 
 /** 溢出内容不显示时（1 页上限）的说明。 */
-export const OVERFLOW_NOTE = "超出上限的部分不会显示——先收紧版式或增加页数才能看全。";
+export const OVERFLOW_NOTE = "超出上限的部分不会显示——先收紧排版或增加页数才能看全。";
+
+/**
+ * 精确预览的溢出说明：比 `OVERFLOW_NOTE` 多一句"不自动缩小"。
+ *
+ * **不要在这里另写一份后果句**：精确口径与草稿口径必须说同一句话（"先收紧排版或增加
+ * 页数"），只是精确侧要先补上"字号线距页边距按你设的值原样渲染、不会自动缩小"这条事实。
+ * 2026-10-22 就是这条尾巴各写了一份，常量里改成「排版」之后精确预览还留着「版式」，
+ * 同一个界面上两份互相打架的说明。
+ */
+export const EXACT_OVERFLOW_NOTE = `字号、行距、页边距都按你设定的值原样渲染，不会自动缩小；${OVERFLOW_NOTE}`; // i18n-ok: 前半句是从 ExactPreviewPanel 内联副本原样搬来的既有文案（本轮修「版式→排版」时收敛到常量），不是新增文案
 
 export interface AvailableSpace {
   width: number;
@@ -90,6 +100,13 @@ export interface ColumnsOptions {
  *
  * 这是「横向分页不错位」的唯一口径：列宽 + 间隙恒等于一页宽，所以第 N 列永远落在
  * 第 N 张纸的内容区里。页边距越大，列越窄、页间隙越宽。
+ *
+ * **左、右两个参数是分开传的，所以 `paddingLeft ≠ paddingRight` 天然成立**（2026-10-22
+ * 四向页边距）：`pageGap` 就是"左右之和"，`columnWidth` 就是"210mm − 左 − 右"。于是
+ * "上 14 / 右 20 / 下 14 / 左 8"这种非对称版式下，第 N 页内容起点
+ * `N × 210 + 左` 仍然等于 `N × (columnWidth + pageGap) + 左`——不需要任何额外分支。
+ * 唯一的调用方 `layout.ts` 用的是 body / `.header` 的**实际盒子宽度**，量到的就是
+ * `210mm − 左 − 右`。
  */
 export function columnGeometry(paddingLeft: number, paddingRight: number) {
   const pageGap = Math.max(0, paddingLeft + paddingRight);

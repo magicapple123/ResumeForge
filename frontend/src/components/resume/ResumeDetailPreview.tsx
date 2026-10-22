@@ -152,7 +152,7 @@ export default function ResumeDetailPreview({
   const exactPreview = useMemo<ExactPreviewOptions>(
     () => ({
       resumeId: detail.id,
-      // 模板与版式模板也走草稿值：换完还没点保存，精确预览就得按新的排。
+      // 模板与版式也走草稿值：换完还没点保存，精确预览就得按新的排。
       template: layout.template,
       formatName: layout.format_name,
       fontScale: layout.font_scale,
@@ -241,7 +241,7 @@ export default function ResumeDetailPreview({
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          message="这些资料内容没有写进这份简历"
+          title="这些资料内容没有写进这份简历"
           description={
             <div style={{ display: "grid", gap: 10 }}>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -324,12 +324,15 @@ export default function ResumeDetailPreview({
               layout={layout}
               catalog={catalog}
               previewRef={resolvedPreviewRef}
+              // 没有照片时照片滑杆禁用并说明原因：photo_scale 在没有照片时完全惰性，
+              // 让用户拖一个"什么都没发生"的滑杆是最差的反馈。
+              hasPhoto={Boolean(detail.content?.photo)}
               onChange={(next) => onApplyLayout(next)}
             />
-            {/* 「正在按新版式渲染…」留在度量这一行：它说明的是"你刚拖的那个值正在生效"，
+            {/* 「正在按新设置重新排版…」留在度量这一行：它说明的是"你刚拖的那个值正在生效"，
                 回到第一行会与"改版式"的按钮混在一起。 */}
             {relayouting ? (
-              <Typography.Text type="secondary">正在按新版式渲染…</Typography.Text>
+              <Typography.Text type="secondary">正在按新设置重新排版…</Typography.Text>
             ) : null}
           </>
         }
@@ -420,6 +423,9 @@ export default function ResumeDetailPreview({
         initialPageLimit={layout.page_limit}
         initialFontScale={layout.font_scale}
         initialFormatConfig={layout.format_config}
+        // 语言也是草稿：预览里切成 English 还没保存时，导出必须印英文标题。
+        // 回落值与预览发给 /render 的那份一致（zh-CN），否则两边会各说各的。
+        initialLanguage={layout.language ?? "zh-CN"}
         pdfDirectAvailable={pdfDirectAvailable}
         onClose={() => setExportOptionsOpen(false)}
       />
@@ -431,6 +437,7 @@ export default function ResumeDetailPreview({
         layout={layout}
         resumeId={detail.id}
         relayouting={relayouting}
+        hasPhoto={Boolean(detail.content?.photo)}
         onApplyLayout={onApplyLayout}
         previewMode={previewMode}
         onPreviewModeChange={setPreviewMode}

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 多格式导出与脱敏的类型（R-16 / R-17）。枚举字符串与后端逐字一致。 */
-import type { ResumeFontScale } from "./resume";
+import type { ResumeFontScale, ResumeLanguage } from "./resume";
 import type { ResumeFormatConfig } from "./resumeFormat";
 
 /** 导出格式（与后端 ``ExportFormat`` 逐字一致）。 */
@@ -39,9 +39,16 @@ export interface ExportRequest {
    * 本次导出的版式草稿（字号系数 / 行距 / 页边距 / 区块间距…）。
    *
    * 与预览 `POST /resumes/render` 用的是同一个对象：用户在预览里把字号拖到 7px 但没点
-   * 「保存版式」时，导出也必须按 7px 排——否则就会出现"预览一页、导出两页"。
+   * 「保存」时，导出也必须按 7px 排——否则就会出现"预览一页、导出两页"。
    */
   format_config?: ResumeFormatConfig;
+  /**
+   * 本次导出的**草稿语言**（纸面固定文案：小节标题 / 字段前缀）。
+   *
+   * 与 `format_config` 同属"预览的草稿就是导出的版式"：预览里把语言切成 English、
+   * 还没点「保存」时，导出也必须印英文标题。`null` / 不传 = 后端用记录里的语言。
+   */
+  language?: ResumeLanguage | null;
   include_photo?: boolean;
   allow_incomplete?: boolean;
   /** 正式投递存档：为真时后端把这次导出冻结成一份投递快照；默认不落库。

@@ -36,7 +36,7 @@ export function listManualBackups(): Promise<ManualBackups> {
   return request("/backups/manual");
 }
 
-/** 可恢复删除：服务端把它移进 backups/.trash/，不永久删除。 */
+/** 可恢复删除：服务端把它移进 backups/.trash/，不彻底删除。 */
 export function trashManualBackup(name: string): Promise<{ name: string; trash_path: string }> {
   return request(`/backups/manual/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
@@ -117,7 +117,7 @@ export function previewCleanup(
   return request(`/stats/storage/cleanup-preview?${cleanupQuery(olderThanDays, categories)}`);
 }
 
-/** 执行清理：服务端把候选移进 `.cleanup-trash/<时间戳>/`，不永久删除。 */
+/** 执行清理：服务端把候选移进 `.cleanup-trash/<时间戳>/`，不彻底删除。 */
 export function runCleanup(
   olderThanDays = 30,
   categories?: CleanupCategoryKey[],

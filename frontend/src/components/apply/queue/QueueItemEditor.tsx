@@ -79,6 +79,7 @@ export function QueueItemEditor({
       open
       onCancel={onClose}
       footer={null}
+      mask={{ closable: false }}
       width={560}
     >
       <Form form={form} layout="vertical">

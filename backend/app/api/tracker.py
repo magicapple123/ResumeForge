@@ -217,7 +217,7 @@ async def parse_tracks(payload: TrackParseRequest, db: Session = Depends(get_db)
     urls = image_data_urls(images) + list(documents.images)
     source_text = "\n\n".join(part for part in (payload.text, documents.text) if part.strip())
     if not source_text.strip() and not urls:
-        raise HTTPException(status_code=422, detail="请先粘贴通知内容或上传截图、文档")
+        raise HTTPException(status_code=422, detail="缺少通知内容或截图、文档")
 
     notes: list[str] = list(documents.warnings)
     config = get_llm_config(db)

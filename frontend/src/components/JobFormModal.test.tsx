@@ -315,7 +315,7 @@ describe("JobFormModal 图片识别", () => {
     await waitFor(() => expect(apiMocks.parseJobsMultiple).toHaveBeenCalledOnce());
     // 不能崩、不能抹掉已填内容，并给出人话提示与原因说明
     expect(screen.getByLabelText("岗位名称")).toHaveValue("我手填的岗位");
-    expect(await screen.findByText("没有识别到内容，请检查材料或稍后重试")).toBeInTheDocument();
+    expect(await screen.findByText("没有识别到内容，请检查资料或稍后重试")).toBeInTheDocument();
     expect(await screen.findByText(/图片识别失败/)).toBeInTheDocument();
   });
 });

@@ -2,6 +2,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import SettingsPage from "./SettingsPage";
 
 const apiMocks = vi.hoisted(() => ({
@@ -100,17 +101,19 @@ function makeRecord(overrides: Record<string, unknown> = {}) {
 
 function renderSettingsPage() {
   render(
-    <AntdApp>
-      <SettingsPage />
-    </AntdApp>,
+    <MemoryRouter>
+      <AntdApp>
+        <SettingsPage />
+      </AntdApp>
+    </MemoryRouter>,
   );
 }
 
-// 单区块后没有「编辑配置」入口：所有表单交互都从「新增配置」或记录卡的「···」菜单进入。
+// 单区块后没有「编辑配置」入口：所有表单交互都从「新建配置」或记录卡的「···」菜单进入。
 async function openCreateModal() {
   await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
-  fireEvent.click(screen.getByRole("button", { name: /新增配置/ }));
-  await screen.findByText("新增配置记录");
+  fireEvent.click(screen.getByRole("button", { name: /新建配置/ }));
+  await screen.findByText("新建配置记录");
 }
 
 async function openRecordEditByName(name: string) {
@@ -208,7 +211,7 @@ describe("SettingsPage configuration record lifecycle", () => {
 
     await waitFor(() => expect(apiMocks.deleteLLMConfigRecord).toHaveBeenCalledWith("p_7"));
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledTimes(2), { timeout: 1000 });
-    await screen.findByText(/暂无配置记录/);
+    await screen.findByText(/还没有配置记录/);
     // 记录卡已移除（confirm 的标题不是纯文本匹配，不受其关闭动画影响）。
     expect(screen.queryByText("DeepSeek 校招")).not.toBeInTheDocument();
   });
@@ -227,7 +230,7 @@ describe("SettingsPage configuration record lifecycle", () => {
   });
 });
 
-describe("SettingsPage 新增配置记录", () => {
+describe("SettingsPage 新建配置记录", () => {
   it("saves a new record from the modal without applying it", async () => {
     renderSettingsPage();
     await openCreateModal();

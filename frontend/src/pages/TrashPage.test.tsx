@@ -161,7 +161,7 @@ describe("TrashPage", () => {
     expect(apiMocks.purgeTrashItem).not.toHaveBeenCalled();
     expect(await screen.findByText("彻底删除？")).toBeInTheDocument();
     // 确认文案要把后果说白（这是全应用唯一不可逆的动作）。
-    expect(screen.getByText(/将被永久删除，无法恢复/)).toBeInTheDocument();
+    expect(screen.getByText(/将被彻底删除，无法恢复/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "确认彻底删除 全栈工程师" }));
 
@@ -248,7 +248,7 @@ describe("TrashPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /清空回收站/ }));
 
     expect(apiMocks.emptyTrash).not.toHaveBeenCalled();
-    expect(await screen.findByText(/将永久删除 2 条内容/)).toBeInTheDocument();
+    expect(await screen.findByText(/将彻底删除 2 条内容/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "确认清空回收站" }));
 

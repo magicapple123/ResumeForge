@@ -20,9 +20,34 @@ from .resume_layout import (
     MIN_SECTION_GAP,
     _round,
 )
-from .resume_templates import font_scale_spec, format_css, template_layout_defaults
+from .resume_layout_overrides import PAGE_MARGIN_KEYS, resolve_page_margins
+from .resume_templates import (
+    font_scale_spec,
+    format_css,
+    template_layout_defaults,
+    validated_format_config,
+)
 
 # ===== 自动一页 =====
+
+# 阶梯的每一档都从"用户当前配置"出发、只摘掉**四个版式旋钮**，其余（配色、字体、分区顺序、
+# 照片大小…）原样保留。
+#
+# **四条分边支路也在摘除之列**：阶梯每档写的是 ``page_padding: target``，支路留着就会覆盖
+# 它——"按了自动一页却什么都没变"。摘掉之后四边自动平到 target（取舍见设计 §6.2：这是
+# 有意把不对称抹平，用户要保留不对称就别点自动一页）。
+#
+# ⚠️ ``photo_scale`` **刻意不摘**：设计 §6.1 的红线是"照片绝不自动缩小"，把它从阶梯里抹掉
+# 等于点一次「自动一页」就把用户调好的 150% 悄悄重置回 100%——正是那条红线禁止的失败。
+_LADDER_STRIPPED_KEYS: frozenset[str] = frozenset(
+    {
+        "page_padding",
+        "line_height",
+        "section_gap",
+        "font_scale_adjust",
+        *PAGE_MARGIN_KEYS.values(),
+    }
+)
 
 # 「自动一页」的收紧下限，**与格式字段自身的下限是两件事**。
 #
@@ -37,15 +62,24 @@ def _effective_layout(template: str, format_config: dict | None) -> dict[str, fl
     """把"模板默认值 + 用户已设的覆盖"合成一组当前生效的版式值。
 
     自动一页只会**在用户当前的基础上往紧收**，所以必须先知道当前是多少。
+
+    页边距取**四边的最小值**（不是某一个边、也不是平均值）：阶梯只承诺"更紧、不反弹"，
+    用最小值保证任何一边都不会被放大。用户设成"上 20 / 其余 10"时取 10，页边距档直接
+    跳过（10 < ``MIN_PADDING_MM``），阶梯从区块间距开始——什么都没被放大。
     """
     defaults = template_layout_defaults(template)
-    config = format_config or {}
-    padding = config.get("page_padding")
+    # 先过一遍白名单：越界值在渲染侧是**丢弃**的，这里若照原样用，阶梯就会按一个
+    # 根本没生效的值去收（"按了自动一页，页边距收了个寂寞"）。
+    config = validated_format_config(format_config or {})
+    # 与 PDF/Word 同一个解析口径（分边支路 > page_padding > 模板默认）。
+    margin_top, margin_right, margin_bottom, margin_left = resolve_page_margins(
+        config, float(defaults["padding_mm"])
+    )
     line_height = config.get("line_height")
     section_gap = config.get("section_gap")
     font_adjust = config.get("font_scale_adjust")
     return {
-        "page_padding": float(padding) if padding else float(defaults["padding_mm"]),
+        "page_padding": min(margin_top, margin_right, margin_bottom, margin_left),
         "line_height": float(line_height) if line_height else float(defaults["line_height"]),
         "section_gap": float(section_gap) if section_gap else float(defaults["section_gap"]),
         # 没设过系数就等于 1（渲染时 base_px 不做任何缩放）。
@@ -120,12 +154,13 @@ def build_fit_ladder(
     """
     current = _effective_layout(template, format_config)
     floor_adjust = font_adjust_floor(font_scale)
-    # 保留用户已经调好的其它项（强调色、正文色等）——自动一页只该动版式，不该顺手
-    # 把人选的颜色丢掉。四个版式旋钮先摘掉，下面由阶梯逐档重新写入。
+    # 保留用户已经调好的其它项（强调色、正文色、照片大小等）——自动一页只该动版式旋钮，
+    # 不该顺手把人选的颜色/照片尺寸丢掉。四个版式旋钮与四条分边支路先摘掉，
+    # 下面由阶梯逐档重新写入（见 `_LADDER_STRIPPED_KEYS` 的注释）。
     base = {
         key: value
         for key, value in (format_config or {}).items()
-        if key not in {"page_padding", "line_height", "section_gap", "font_scale_adjust"}
+        if key not in _LADDER_STRIPPED_KEYS
     }
 
     ladder: list[FitCandidate] = []

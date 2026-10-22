@@ -10,21 +10,14 @@
  *    更快也更不容易点错。
  */
 import { DeleteOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  DatePicker,
-  Form,
-  Input,
-  Modal,
-  Select,
-  Space,
-  Switch,
-  Typography,
-} from "antd";
+import { App, Button, DatePicker, Form, Input, Select, Space, Switch, Typography } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import FormModal from "../common/FormModal";
+import { useFormDraft } from "../../hooks/useFormDraft";
+import { useToast } from "../../hooks/useToast";
+import { t } from "../../i18n";
 import { createClaim, updateClaim } from "../../api/claims";
 import type { Claim, ClaimPayload, ClaimSource, SourceType } from "../../types";
 import { HintedTextArea } from "../common/MaxLengthHint";
@@ -169,10 +162,21 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const editing = claim !== null;
+  const [dirty, setDirty] = useState(false);
+  const toast = useToast();
+  // 草稿只进 sessionStorage，且按"编辑对象"分作用域（12 号与 13 号各一份）。
+  const watched = Form.useWatch<FormValues>([], form) as FormValues | undefined;
+  const draft = useFormDraft({
+    scope: `claims.edit#${claim?.id ?? "new"}`,
+    values: (watched ?? EMPTY_VALUES) as unknown as Record<string, unknown>,
+    open,
+    isEmpty: (values) => !values.title && !values.source_fact,
+  });
 
   useEffect(() => {
     if (!open) return;
     form.setFieldsValue(claim ? toValues(claim) : EMPTY_VALUES);
+    setDirty(false);
   }, [open, claim, form]);
 
   const submit = async () => {
@@ -185,7 +189,9 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
     const payload = toPayload(values);
     try {
       const saved = editing ? await updateClaim(claim.id, payload) : await createClaim(payload);
-      message.success(editing ? "已保存" : "已加入事实台账");
+      // 提交成功才清草稿：清早了等于"保存失败也把内容扔了"。
+      draft.clear();
+      message.success(editing ? "已保存这条台账条目" : "已加入事实台账");
       onSaved(saved);
       onClose();
     } catch (error) {
@@ -196,27 +202,37 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
   };
 
   return (
-    <Modal
+    <FormModal
       open={open}
-      title={editing ? "编辑事实台账条目" : "新建事实台账条目"}
-      onCancel={onClose}
-      width={760}
-      destroyOnHidden
-      // 表单字段多（证据来源 + 面试细节两组），全展开很容易超出视口：限高让弹窗
-      // 在内部滚动、垂直居中，底部「保存」不会被推出屏幕外。
-      styles={{
-        body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
+      title={editing ? "编辑台账" : "新建台账"}
+      onCancel={() => {
+        // L1：有草稿时关闭无损，只告知一句（短、不打断）。
+        if (dirty) toast.info(t("draft.kept"));
+        onClose();
       }}
-      footer={
-        <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" icon={<SaveOutlined />} onClick={() => void submit()}>
-            保存
-          </Button>
-        </Space>
+      onSubmit={() => void submit()}
+      okText="保存台账"
+      okIcon={<SaveOutlined />}
+      dirty={dirty}
+      hasDraft
+      draftBar={
+        draft.pending
+          ? {
+              savedAt: draft.pending.savedAt,
+              fieldCount: Object.keys(draft.pending.values).length,
+              onRestore: () => form.setFieldsValue(draft.adopt() as unknown as FormValues),
+              onDiscard: draft.discard,
+            }
+          : null
       }
+      width={760}
     >
-      <Form form={form} layout="vertical" initialValues={EMPTY_VALUES}>
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={EMPTY_VALUES}
+        onValuesChange={() => setDirty(true)}
+      >
         {/* 这里刻意用普通 div 而不是 antd 的 Space：Space 会给每个子项再包一层
             `.ant-space-item`，flex 宽度落在内层 Form.Item 上、管不到真正的 flex 子项，
             结果就是窄列被挤成一条竖排文字。 */}
@@ -385,6 +401,6 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
           />
         </Form.Item>
       </Form>
-    </Modal>
+    </FormModal>
   );
 }

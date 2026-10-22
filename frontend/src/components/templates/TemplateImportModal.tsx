@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「导入参考模板」：先识别出可编辑视觉草稿，再让用户预览、微调并保存为样式模板。
+ * 「导入参考模板」：先识别出可编辑视觉草稿，再让用户预览、微调并保存为模板。
  *
  * 为什么需要它：用户手里常有"我就想要这种样子"的简历，但让他照着参考件重做版式不现实。
  * 这里先返回安全的视觉配置草稿，再让用户检查实际 A4 预览和手动微调。
@@ -118,7 +118,7 @@ export default function TemplateImportModal({
           kind: "style",
           source_name: draft.source_names.join("、"),
         });
-        message.success("已保存样式模板「" + created.name + "」");
+        message.success("已保存模板「" + created.name + "」");
         onImported(created);
         reset();
         onClose();
@@ -141,6 +141,7 @@ export default function TemplateImportModal({
       }}
       okText={draft ? "保存为我的模板" : "识别并预览"}
       cancelText="取消"
+      mask={{ closable: false }}
       confirmLoading={running}
       okButtonProps={{ disabled: fileList.length === 0 }}
       onOk={() => void submit()}
@@ -287,7 +288,7 @@ export default function TemplateImportModal({
           type="info"
           showIcon
           title="识别需要已配置的大模型"
-          description="参考图片会发给你配置的大模型；若含真实姓名、电话或邮箱，建议先遮挡。PDF / DOCX 原文留在本机，仅发送本地生成的脱敏结构统计。识别结果会先预览和微调，再保存为样式模板。"
+          description="参考图片会发给你配置的大模型；若含真实姓名、电话或邮箱，建议先遮挡。PDF / DOCX 原文留在本机，仅发送本地生成的脱敏结构统计。识别结果会先预览和微调，再保存为模板。"
         />
       )}
     </Modal>

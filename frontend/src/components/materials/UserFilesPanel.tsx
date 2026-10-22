@@ -205,7 +205,7 @@ export default function UserFilesPanel() {
       <Drawer
         title={pdfPreview?.original_name || "PDF 预览"}
         open={pdfPreview !== null}
-        width={720}
+        size={720}
         onClose={() => setPdfPreview(null)}
         destroyOnHidden
       >

@@ -15,6 +15,7 @@ import {
   Typography,
 } from "antd";
 import { RowActions } from "./common/RowActions";
+import { TRASH_RECOVERY_NOTE } from "./common/rowActionMenu";
 import { useState } from "react";
 import {
   createSharePackage,
@@ -288,7 +289,7 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
                   "把整个文件夹发给对方，对方用浏览器打开 resume.html 即可查看；HTML 与 PDF 由同一份版式生成。"
                 }
                 {result.permission === "comment"
-                  ? " 如需评论，让对方填写 comments.md 后回传给你，你在下方「导入评论」导入。"
+                  ? " 如需评论，让对方填写 comments.md 后回传给你，你用「导入评论」导入。"
                   : ""}
               </Typography.Paragraph>
             </div>
@@ -373,7 +374,8 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
                   key: "delete",
                   label: "删除此分享包",
                   danger: true,
-                  confirm: "删除此分享包？删除后可在回收站里找回，不会立刻彻底删除。",
+                  confirm: "删除此分享包？",
+                  confirmBody: TRASH_RECOVERY_NOTE,
                   onClick: () => void removePackage(),
                 },
               ]}

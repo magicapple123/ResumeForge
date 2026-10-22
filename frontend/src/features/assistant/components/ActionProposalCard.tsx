@@ -18,6 +18,7 @@ import {
   rejectWriteProposal,
 } from "../../../api/assistant";
 import type { AssistantWriteProposal } from "../../../types";
+import { formatErrorGuidance } from "../../../api/errorGuidance";
 
 const STATUS_META: Record<AssistantWriteProposal["status"], { label: string; color: string }> = {
   pending: { label: "待确认", color: "warning" },
@@ -73,8 +74,9 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
         setProposal(result.proposal);
       }
     } catch (error) {
-      const text = error instanceof Error ? error.message : "操作失败";
-      message.error(text);
+      // 兜底不再是「操作失败」：统一走 errorGuidance 的「原因 · 建议 · 编号」三段，
+      // 用户能照着「建议」做，也能把「编号」报给维护者（§4.6）。
+      message.error(formatErrorGuidance(error, "执行提案失败"));
       // 404/409（失效、已执行、跨数据集等）后刷新一次真实状态，卡片不再可操作。
       try {
         const result = await getWriteProposal(proposal.proposal_id);

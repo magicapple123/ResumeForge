@@ -54,7 +54,7 @@ class GenerateOptions(BaseModel):
     page_limit: int = Field(default=1, ge=1, le=MAX_RESUME_PAGES)
     font_scale: ResumeFontScale = "standard"
     template: str = Field(default="classic", max_length=64)
-    # 格式模板（版式覆盖）的名字：内置预设或用户自制格式模板；空串表示用样式模板自带的版式。
+    # 版式（一组排版覆盖）的名字：内置预设或用户自制版式；空串表示用模板默认的版式。
     format_name: str = Field(default="", max_length=64)
     # 生成时就要生效的版式覆盖（板块顺序、字号系数等）：用户在生成界面上调过的顺序
     # 必须跟着简历一起落库，否则"生成 → 关掉 → 从简历中心重开"顺序就丢了。

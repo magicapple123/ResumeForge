@@ -123,7 +123,8 @@ export default function ClaimCard({
                       label: "删除",
                       danger: true,
                       icon: <DeleteOutlined />,
-                      confirm: "删除这条事实台账记录？",
+                      // 软删由父级用 useDeleteUndo 兜：这里**不再问**，撤销入口在 Toast 上。
+                      undo: true,
                       onClick: onDelete,
                     },
                   ]),

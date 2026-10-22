@@ -82,7 +82,7 @@ describe("ResumeTemplateControls · 样式模板", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "选择简历模板并预览效果" }));
-    await screen.findByText("选择简历样式模板");
+    await screen.findByText("选择简历模板");
 
     // 按卡片定位而不是按下标：画廊里"当前使用"的那个按钮是不可点的，
     // 下标会随选中状态漂移，钉住"现代这张卡"才稳。
