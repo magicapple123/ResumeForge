@@ -297,11 +297,16 @@ jobs:
           trap cleanup EXIT
 
           mkdir -p "$ro_root"
+          # 排除模式**必须锚定到传输根**：rsync 的 `runtime/` 会匹配任意层级的同名目录，
+          # 而 `backend/app/runtime/` 是业务模块——被它一起排掉的后果是
+          # `ModuleNotFoundError: No module named 'app.runtime'`（2026-10-22 实测）。
+          # 与本次修复的更新器 `dist` 规则是同一个坑：按名字排除只能锚定后再用。
+          # node_modules 反过来要按任意层级排除（frontend/ 里那份几百 MB，静态模式用不到）。
           rsync -a \
-            --exclude 'runtime/' \
+            --exclude '/runtime/' \
             --exclude 'node_modules/' \
-            --exclude 'backend/.venv/' \
-            --exclude '.git/' \
+            --exclude '/backend/.venv/' \
+            --exclude '/.git/' \
             ./ "$ro_root/"
 
           chmod -R a-w "$ro_root"
@@ -723,11 +728,15 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           Start-Process -FilePath "desktop\out\win-unpacked\ResumeForge.exe"
-          # BackendManager writes the pinned loopback port into
-          # resources\payload\runtime\logs\desktop-backend.log
-          # ("==== desktop launch ... port=NNNN ===="). First run unpacks the
-          # python runtime and installs requirements, hence the 10 min budget.
-          $log = "desktop\out\win-unpacked\resources\payload\runtime\logs\desktop-backend.log"
+          # BackendManager writes the pinned loopback port into the **user directory**
+          # (%LOCALAPPDATA%\ResumeForge\runtime\logs\desktop-backend.log,
+          # "==== desktop launch ... port=NNNN ===="). It used to live under
+          # resources\payload\runtime\logs, i.e. inside the install directory --
+          # which is read-only on macOS and admin-only on Windows, so the shell now
+          # never writes there (see desktop/lib/shell-paths.js).
+          # First run unpacks the python runtime and installs requirements, hence
+          # the 10 min budget.
+          $log = Join-Path $env:LOCALAPPDATA "ResumeForge\runtime\logs\desktop-backend.log"
           $deadline = (Get-Date).AddMinutes(10)
           $port = $null
           while ((Get-Date) -lt $deadline) {
@@ -796,12 +805,31 @@ jobs:
           if ($alive) { throw "backend still listening on port $port after the shell was killed" }
           Write-Host "backend no longer listening on port $port after shell exit"
 
+      - name: Collect smoke logs on failure
+        if: failure()
+        shell: pwsh
+        # 运行期日志在用户目录（payload 只读，壳不再往里写），而 artifact 的 path 表达
+        # 不了 %LOCALAPPDATA%，所以先把两份都收进工作目录再上传。
+        run: |
+          $dest = "desktop\out\smoke-logs"
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          $userLogs = Join-Path $env:LOCALAPPDATA "ResumeForge\runtime\logs"
+          if (Test-Path $userLogs) {
+            Copy-Item -Recurse -Force $userLogs (Join-Path $dest "user-runtime")
+          }
+          $payloadLogs = "desktop\out\win-unpacked\resources\payload\runtime\logs"
+          if (Test-Path $payloadLogs) {
+            Copy-Item -Recurse -Force $payloadLogs (Join-Path $dest "payload-runtime")
+          }
+          Get-ChildItem -Recurse -File $dest | ForEach-Object { Write-Host $_.FullName }
+
       - name: Upload smoke logs on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-smoke-logs
           path: |
+            desktop/out/smoke-logs/
             desktop/out/win-unpacked/resources/payload/runtime/logs/
             desktop/out/smoke-port.txt
           retention-days: 7
