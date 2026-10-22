@@ -228,11 +228,12 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 
 ### 守卫测试
 
-三条守卫测试（新增合法例外用「行内豁免注释」，不要新建白名单文件）：
+四条守卫测试（新增合法例外用「行内豁免注释」，不要新建白名单文件）：
 
 - `src/theme/antdStaticGuard.test.ts` —— 禁静态 `message` / `notification` / `Modal.*`（豁免：`// antd-static-ok: 理由`）
 - `src/theme/antdOverrideGuard.test.ts` —— `.ant-*` 覆写必须有自定义类前缀或就地 `/* antd-override: 理由 */`（文件级白名单仅 `accessibility.css` / `dark-tokens.css` / `mobile.css`）
 - `src/theme/spinOutletGuard.test.ts` —— `<Spin spinning=>` 只允许出现在 `LoadingBlock` 内部（豁免：`// spin-ok: 理由`）
+- `src/i18n/cjkRatchet.test.ts` —— 存量中文不许上涨（豁免：`// i18n-ok: 理由`）
 
 ## 版式参数即呈现（禁止自动缩字号）
 
