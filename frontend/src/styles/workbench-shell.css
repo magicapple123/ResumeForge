@@ -1,0 +1,107 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历制作台（1/4）：整屏弹窗外壳与 56px 动作条。
+   拆分自 resume-workbench.css（原 492 行，逼近 500 行预算），纯搬迁：
+   选择器、声明与顺序逐字不变，层叠顺序由 resume-workbench.css 的 @import 顺序保证。 */
+/* ===== 外壳：铺满视口 ===== */
+/* 2026-10 起制作台是**整屏**形态：不再有 12px 视口留白与圆角卡片。
+   留白会从弹窗四周露出遮罩，看起来就是一条黑边（用户截图反馈），而圆角 + 投影在这个
+   尺寸下也只是把"整屏"画成一个巨大的对话框。`padding: 0` 之后遮罩完全被盖住。 */
+.resume-zoom-workbench-wrap {
+  padding: 0;
+}
+
+.resume-zoom-workbench-wrap .ant-modal-container {
+  overflow: hidden;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* 56px 动作条：标题节点就是它，所以这里把 antd header 的内边距/边框全部接管。 */
+.resume-zoom-workbench-wrap .ant-modal-header {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  margin: 0;
+  /* 64px 右内边距：antd 6 的 `.ant-modal-close` 是 **40px** 宽的按钮，`inset-inline-end`
+     是 14px，所以它占 14–54px；留 64px 才有 10px 呼吸位。（按 32px 的旧印象算过 56px，
+     那在 40px 按钮下只剩 2px —— 动作条一窄，「导出」就贴到 × 上。） */
+  padding: 0 64px 0 16px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.resume-zoom-workbench-wrap .ant-modal-title {
+  /* 原来是 `width: 100%`：flex 子项写百分比宽度会与父项的 padding 抢空间（100% 是
+     header 的内容宽度，再叠上 56px 右侧内边距就溢出），改成让 flex 决定。 */
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+/* 关闭按钮落在动作条垂直居中的位置（默认是 header 顶部对齐）。
+   算术：header 56px 高、按钮 40px 高 → (56 - 40) / 2 = 8。写 16 会让按钮整体偏低 8px。 */
+.resume-zoom-workbench-wrap .ant-modal-close {
+  top: 8px;
+  inset-inline-end: 14px;
+}
+
+.resume-wb-actionbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.resume-wb-actionbar-title {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 简历名：只是"我在改哪一份"的辅助信息，所以 12px 次色 + 单行省略。 */
+.resume-wb-actionbar-name {
+  flex: 0 1 auto;
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-wb-actionbar-spacer {
+  flex: 1 1 auto;
+}
+
+/* 动作条里的按钮不许被压缩：antd Button 默认 `flex-shrink: 1`，动作条一窄（简历名很长、
+   以后再加一颗保存按钮）「导出」就会被压得比文字还窄，文字溢出到盒子外面，看起来正压在
+   右上角的关闭按钮上（用户 2026-10-23 截图）。`flex: 0 0 auto` = 按内容宽度占位，
+   被牺牲的是 `.resume-wb-actionbar-name`（它本来就有 ellipsis）。 */
+.resume-wb-actionbar > .ant-btn {
+  flex: 0 0 auto;
+}
+
+/* 动作条进入"就地确认"态（`.resume-wb-actionbar-discard`，中栏「取消修改」的第二态）时，
+   让确认条独占剩余宽度。它和 `.resume-wb-actionbar-spacer` 都是 `flex: 1 1 auto`，
+   两根平分剩余空间：确认句（20 来个字 + 两颗按钮 ≈ 400px）在中等窗口下会被压到换行，
+   而 header 是固定 `height: 56px`，折成两行的确认条会顶出标题栏、压在正文上。
+   让 spacer 在确认态收起，被牺牲的是简历名（`flex: 0 1 auto` + ellipsis），
+   标题保持自然宽度——它是这一屏唯一的标识，不该先掉。
+   纯 CSS（`:has()`），宿主组件不需要加任何 class；不支持 `:has()` 的浏览器里这条被忽略，
+   退化成现在的样子（确认条折行，但不报错）。 */
+.resume-wb-actionbar:has(> .resume-wb-actionbar-discard) > .resume-wb-actionbar-spacer {
+  flex: 0 1 0;
+}
+
+/* 草稿提示（0051）：和简历名同一条横排，所以必须**单行省略**——header 是固定 56px 高，
+   让它折行会把动作条顶出标题栏、压在正文上。`.ant-typography` 自带 `margin-bottom`，
+   这里显式清掉，否则行高会多出 8px（与旁边那颗按钮错位）。 */
+.resume-wb-actionbar .resume-wb-actionbar-hint {
+  flex: 0 1 auto;
+  max-width: 280px;
+  margin-bottom: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

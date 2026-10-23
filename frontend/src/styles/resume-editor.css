@@ -68,6 +68,40 @@
   }
 }
 
+/* ===== 「从我的资料追加一条」/「从资料填入本条」 ===== */
+/* 三段一行：文字 / 下拉 / 按钮（条目模式再加一句「只填空字段」）。
+   为什么不用 antd 的 `Space`：它给每一项都写 `flex: none`，宽度不够时既不缩也不换行，
+   整段直接溢出容器——在中栏里表现成「填入」按钮被推出右边界、压在标签条上
+   （用户 2026-10-23 截图："后面的内容穿透出来了"）。
+   这里改成 flex：下拉吃掉剩余宽度，文字与按钮不缩，最窄时换行而不是溢出。 */
+.resume-profile-fill {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 上边距 10px 来自用户口径「和上面的边界挨得太近」：它上面是模块标题或上一条的卡片，
+   原来是 0（`Space` 只贡献自身的行高），视觉上两块粘在一起。 */
+.resume-profile-fill[data-fill-variant="append"] {
+  margin: 10px 0 2px;
+}
+
+.resume-profile-fill-label,
+.resume-profile-fill-hint {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 下拉是唯一可伸缩的一段。`min-width` 不能省：再窄就只剩一个箭头，用户看不出要选什么。 */
+.resume-profile-fill-select {
+  flex: 1 1 160px;
+  min-width: 120px;
+  max-width: 100%;
+}
+
 .resume-editor-reference {
   grid-area: reference;
   /* 曾经是 sticky：那时整块 body 一起滚，参考栏靠 sticky 跟手。现在两栏各自滚动，
@@ -79,7 +113,7 @@
 }
 
 /* 窄屏（单列）：回到"整块一起滚"，参考内容收进「查看岗位要求」折叠面板里。 */
-@media (max-width: 992px) {
+@media (max-width: 1092px) {
   .resume-editor-layout--with-reference {
     display: block;
     height: auto;

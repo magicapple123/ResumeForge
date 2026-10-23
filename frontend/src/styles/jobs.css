@@ -9,8 +9,17 @@
   gap: 16px;
 }
 
+/* 搜索框可伸缩：260 是舒适宽，160 是"还能看清关键词"的下限。
+   真正参与收缩的是它外面的 .ant-space-item——.jobs-search-input 自己不是 flex 项，
+   只写 flex 会静默失效（这是 768–991 把筛选行挤成两行的直接原因）。 */
+.jobs-filter-bar > .ant-space-item:has(> .jobs-search-input) {
+  flex: 1 1 200px;
+  min-width: 160px;
+  max-width: 260px;
+}
+
 .jobs-search-input {
-  width: 260px;
+  width: 100%;
 }
 
 .table-text-link {

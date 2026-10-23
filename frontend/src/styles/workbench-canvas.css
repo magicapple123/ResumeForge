@@ -1,0 +1,149 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历制作台（3/4）：中栏（内容编辑）与画布（A4 纸面）。 */
+/* ===== 中栏 ===== */
+.resume-wb-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.resume-wb-editor-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.resume-wb-editor-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.resume-wb-editor-status {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* 面板自己滚（不整块滚）：动作条要一直贴在中栏底部。
+   `padding-top: 0` 是修"滚动时内容从标签条上方透出来"的关键：sticky 的标签条贴在
+   **padding box 的顶边**，只要这里留了内边距，滚上去的内容就会从那条缝里露出来一条
+   （用户 2026-10-23 截图：标签条上方浮着半行正文）。上边距改由标签条自己的
+   `padding-top` 提供，它跟着内容一起被背景色盖住。 */
+.resume-wb-editor-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* 横向必须**显式** hidden：只写 `overflow-y: auto` 时，`overflow-x` 会按规范从
+     `visible` 计算成 `auto`，于是任何 1px 的横向余量都会在底部变成一条横条
+     （用户 2026-11-06 截图：中栏内容底部多出一条横向滚动条）。
+     不能写 `overflow: hidden`——那会把纵向滚动一起关掉，中栏就滚不动了。 */
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-top: 0;
+  scrollbar-color: var(--rf-border) transparent;
+  scrollbar-width: thin;
+}
+
+.resume-wb-editor-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface);
+}
+
+/* 动作条被摘掉之后（`hideActions`：制作台里只留顶部那一对整体动作），中栏最后一屏
+   会直接顶到窗口底边——中栏那一栏的 `padding: 16px 16px 0` 是"底部由动作条自己补"
+   的写法。用 `:has()` 把那段补回来；不补的话最后一行内容贴着屏幕边缘，看着像被裁掉。 */
+.resume-wb-editor:not(:has(.resume-wb-editor-actions)) .resume-wb-editor-body {
+  padding-bottom: 16px;
+}
+
+/* ===== 画布 ===== */
+.resume-wb-canvas {
+  /* 中性灰画布：从既有变量派生，深浅两套主题各自成立（不新增十六进制）。 */
+  --rf-wb-canvas: color-mix(in srgb, var(--rf-surface-alt) 86%, var(--rf-border) 14%);
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--rf-wb-canvas);
+}
+
+.resume-wb-canvas-bar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 12px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface);
+}
+
+.resume-wb-canvas-note.ant-typography {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.resume-wb-canvas-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 12px 16px 16px;
+  scrollbar-color: var(--rf-border) transparent;
+  scrollbar-width: thin;
+}
+
+.resume-wb-canvas-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.resume-wb-canvas-scroll::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--rf-border);
+}
+
+/* 纸张：投影 + 2px 圆角（真实纸张是有切边的，纯直角看起来像截图拼的）。 */
+.resume-wb-canvas-scroll .resume-preview-page {
+  margin: 0 auto;
+  border-radius: 2px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+
+/* 窄屏提示：**由 JS 决定渲染**（只在内容栏不在栅格里时出现），所以这里不再
+   `display: none` —— 那句隐藏规则会让"渲染了但看不见"。
+   样式只负责"它是次要说明"，占位与否则是 `ResumeZoomModal` 的 `tier` 判断。 */
+.resume-wb-narrow-hint {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 矮屏（≤839 高）：说明条折成一行，把 20px 还给纸张。
+   为什么值得收：工作台的可用高 = 弹窗体高 − 动作条 56 − 说明条 − 画布内边距，而纸的缩放
+   由**高度**决定（宽度再宽也不会让纸变大，见方案 §4.6.1 的读表要点）。只留第一句分页说明，
+   第二句"怎么缩放"在矮屏上属于可发现性的锦上添花，不收起来就换不回纸。 */
+@media (max-height: 839px) {
+  .resume-wb-canvas-bar {
+    padding: 4px 8px 0;
+  }
+
+  .resume-wb-canvas-bar .resume-wb-canvas-note + .resume-wb-canvas-note {
+    display: none;
+  }
+}

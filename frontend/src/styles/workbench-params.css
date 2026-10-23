@@ -1,0 +1,182 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历制作台（2/4）：三栏分宽、拖动分隔条、左栏分组与参数行定宽。 */
+/* ===== 三栏 ===== */
+/* 2026-10 起从 grid 改成 flex + 显式宽度：三栏要能**拖动改宽**，而 grid 的列宽由轨道
+   定义决定，拖动只能反复拼 `grid-template-columns` 字符串——既难读也难做 clamp。
+   flex 下参数栏与内容栏各拿一个自定义属性定宽，预览栏 `flex: 1` 吃掉剩余，拖拽只改
+   一个数字。属性由 `useWorkbenchColumns` 内联写在元素上；这里的值是"JS 还没挂上"的兜底。 */
+.resume-wb-body {
+  /* 与 `useWorkbenchColumns` 的 `WORKBENCH_DEFAULT_WIDTHS` 逐值相等：JS 还没挂上时
+     （首帧）左栏就是 380，不会先画一个低于新下限（380）的栏再跳一下。 */
+  --resume-wb-params: 380px;
+  --resume-wb-editor: 448px;
+
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* 分隔线画在**栏元素**上而不是滚动容器里：滚动时不跟着内容走，也不与滚动条重叠。 */
+.resume-wb-col {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-right: 1px solid var(--rf-border-subtle);
+  scrollbar-color: var(--rf-border) transparent;
+  scrollbar-width: thin;
+}
+
+.resume-wb-col:last-child {
+  border-right: 0;
+}
+
+.resume-wb-col::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.resume-wb-col::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--rf-border);
+}
+
+/* 参数栏与内容栏的宽度来自自定义属性；预览栏吃掉剩下的全部（折叠态与只读态也一样：
+   中栏不渲染时它自动变宽，不需要另写一套列宽规则）。 */
+.resume-wb-col-params {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 18px;
+  width: var(--resume-wb-params);
+  padding: 20px;
+  background: var(--rf-surface);
+}
+
+.resume-wb-col-editor {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  /* 中栏自己滚的是面板本体（`.resume-wb-editor-body`），这一层再滚一次就是两条滚动条。 */
+  overflow: hidden;
+  width: var(--resume-wb-editor);
+  padding: 16px 16px 0;
+  background: var(--rf-surface);
+}
+
+/* 画布自己控制内边距与滚动，所以这一栏不设 overflow-y（否则会出现两条滚动条）。 */
+.resume-wb-col-canvas {
+  flex: 1 1 auto;
+  overflow: hidden;
+  border-right: 0;
+}
+
+/* ===== 分隔条（拖动改宽） ===== */
+/* 6px 命中区，`margin-left: -1px` 让它正好压住左栏那 1px `border-right`：视觉上仍是一条
+   分隔线（不会出现两条并排的细线），但可拖的范围是 6px。
+   键盘等价物在 `ResumeZoomModal`：←/→ 每次 16px、双击复位默认宽度。 */
+.resume-wb-resizer {
+  flex: 0 0 6px;
+  width: 6px;
+  margin-left: -1px;
+  border-left: 1px solid var(--rf-border-subtle);
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resume-wb-resizer:hover,
+.resume-wb-resizer:focus-visible,
+.resume-wb-resizer.is-dragging {
+  border-left-color: var(--rf-focus-visible);
+  outline: none;
+  background: var(--rf-brand-tint);
+}
+
+/* 拖动期间整屏都不该选中文字：鼠标划过左栏会把标签涂蓝，看起来像界面坏了。
+   `useWorkbenchColumns` 在拖拽期间给 `body` 加 `is-resizing`，松手即摘。 */
+body.is-resizing,
+body.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* 拖动期间让指针"穿过"预览 iframe：iframe 是独立的文档，指针滑到它上面之后父页面再也
+   收不到 mousemove / mouseup——这正是"松手了却还在拖"的第二个来源（第一个是松在窗口外，
+   由 `useWorkbenchColumns` 的 `buttons === 0` 兜底）。关掉 `pointer-events` 之后，
+   指针划过预览区时事件仍然落在父文档上，拖动跟手、松手必被感知。 */
+body.is-resizing iframe,
+/* 同一条性质用到**滑杆**上（简历预览界面：滑杆右边紧挨着预览 iframe，拖动时松手事件
+   会被 iframe 吃掉，滑杆停在"正在拖"。见 `hooks/useSliderDragGuard`）。 */
+body.is-slider-dragging iframe {
+  pointer-events: none;
+}
+
+/* ===== 左栏分组 ===== */
+.resume-wb-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 折叠标题：一行文字 + 箭头，不给它铺满整行（铺满会像一条分隔条，反而不像按钮）。 */
+.resume-wb-group-title.ant-btn {
+  align-self: flex-start;
+  height: 24px;
+  padding: 0 6px 0 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-wb-group-title.ant-btn:hover {
+  color: var(--rf-text-body) !important;
+  background: var(--rf-surface-alt) !important;
+}
+
+.resume-wb-group-label {
+  font-weight: 600;
+}
+
+/* 展开 / 收起的唯一视觉状态：箭头翻转。文字保持不变，用户不用重读一遍标签。 */
+.resume-wb-group-chevron {
+  margin-left: 4px;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.resume-wb-group-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.resume-wb-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* 侧栏里的滑杆由本栏定宽：不做这一步会继承弹窗的 200px（modules-layout.css 的
+   `.is-stacked` 规则），在 300px 栏宽里把读数与来源胶囊顶出格子。 */
+.resume-wb-col-params .resume-measure-grid.is-stacked {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.resume-wb-col-params .resume-measure-grid.is-stacked .ant-space-item:has(> .ant-slider) {
+  flex: 0 1 132px;
+  min-width: 112px;
+}
+
+.resume-wb-col-params .resume-measure-grid.is-stacked .ant-slider {
+  width: 132px;
+  max-width: 100%;
+}
+
+.resume-wb-col-params .resume-measure-grid.is-stacked .resume-measure-cell > .ant-space {
+  flex: 1 1 auto;
+  min-width: 0;
+}

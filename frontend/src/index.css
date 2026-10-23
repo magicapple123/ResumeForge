@@ -16,6 +16,7 @@
 @import "./styles/modules.css";
 @import "./styles/overlay.css";
 @import "./styles/announcement.css";
+@import "./styles/responsive-narrow.css";
 @import "./styles/responsive.css";
 @import "./styles/foundation.css";
 @import "./styles/accessibility.css";

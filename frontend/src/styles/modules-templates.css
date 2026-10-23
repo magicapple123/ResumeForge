@@ -81,12 +81,12 @@
 
 .style-template-editor {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
+  grid-template-columns: minmax(0, 1fr) minmax(min(320px, 100%), 460px);
   gap: 16px;
   align-items: start;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1092px) {
   .style-template-editor {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -212,7 +212,7 @@
   justify-content: center;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1092px) {
   .template-recognition-editor {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -248,36 +248,31 @@
   box-shadow: 0 0 0 2px rgba(22, 54, 92, 0.12);
 }
 
-/* 缩略图容器：宽度随卡片（栅格自适应），高度固定为"缩放后的一页 A4"。
-   为什么必须固定高度：iframe 的逻辑尺寸是 794×1123，`transform: scale()` **不影响布局**，
-   它的布局盒仍然是 794px 宽——放在窄卡片里就会溢出裁掉，而且缩放后的页面贴在左边，
-   卡片右侧留一条空白（用户看到的就是"没居中 + 右边有空"）。 */
+/* 缩略图容器：**高度由宽度决定**（2026-10-23）。
+   原先写死 `height: 405px` + `scale(0.36)` + `margin-left: -143px`：那三个数只在卡片
+   恰好 286px 宽时成立，栅格一变（minmax(280px, 1fr)）就左右各裁 4px、右侧留白。
+   现在交给 `A4PreviewFrame` 的 `fit="width"`：它按容器实测宽算比例，高度由
+   `aspect-ratio` 反推，所以任何卡片宽度下都是一整页、不裁也不留白。 */
 .template-gallery-preview {
   position: relative;
-  height: 405px; /* 1123 × 0.36 ≈ 404.3，取整避免露出一条底边 */
   background: var(--rf-surface-alt);
   overflow: hidden;
 }
 
-/* A4 页面按缩放后的大小渲染并**水平居中**：
-   `left: 50%` 把 794px 的布局盒推到容器中线，再用半页宽的负 margin 把"缩放后可见区"
-   （794 × 0.36 = 286px）拉回正中间。 */
-.template-gallery-frame {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 794px;
-  height: 1123px;
-  margin-left: -143px; /* 286 / 2 */
+/* 卡片自己已经有边框与圆角：把 A4 纸舞台那一层外壳去掉，避免"卡里还有一张卡"。 */
+.template-gallery-preview .a4-preview-stage {
   border: 0;
-  transform: scale(0.36);
-  transform-origin: top left;
-  pointer-events: none;
+  border-radius: 0;
+  background: transparent;
 }
 
-/* 缩略图整块可点（iframe 本身 pointer-events: none，点击由这层接收）。 */
+/* 缩略图整块可点：iframe 吃不到指针事件，点击由这层接收（与旧写法同一语义）。 */
 .template-gallery-preview {
   cursor: zoom-in;
+}
+
+.template-gallery-preview .a4-preview-frame {
+  pointer-events: none;
 }
 
 .template-gallery-preview:focus-visible {

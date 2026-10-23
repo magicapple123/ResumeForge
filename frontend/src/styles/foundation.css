@@ -151,7 +151,7 @@
   display: flex;
   max-width: 100%;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: var(--rf-grid-gap);
   margin-bottom: 16px;
 }
 

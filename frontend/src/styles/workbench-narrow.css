@@ -1,0 +1,71 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历制作台（4/4）：窄档形态（三栏 → 两栏 → 单栏）。
+ *
+ * 2026-10-23 的两处结构性改动（方案 §4.5）：
+ * 1. **中栏不再"在栅格里绝对定位"**——那会盖死参数栏，而且 `collapsed` / 栏宽只作用于
+ *    grid，对 `position: absolute` 的孩子无效（AUDIT P0-1 / F1）。现在它是真正的
+ *    `<Drawer size="default">`，由 `ResumeZoomModal` 按档位渲染。
+ * 2. **哪一栏进抽屉由 JS 决定**（`tier`），CSS 只回答"在栅格里的那一栏怎么排"。
+ *    这样 <1000 时不再是"中栏 display:none 所以编辑功能不存在"（F2），而是"编辑内容
+ *    在抽屉里，动作条上有入口"。
+ *
+ * 阈值仍是 1280 / 1000（方案 §4.5.3 明确"不上移"）。制作台铺满视口之后，弹窗体宽恒等于
+ * 视口宽，所以容器查询与视口媒体查询得到的是同一个数——两套都写，是为了拿到容器查询的
+ * 语义（判据是"这一块有多宽"）同时保住不支持 `@container` 时的精确降级。
+ */
+@media (max-width: 1280px) {
+  /* 中栏已成抽屉浮层，拖它没有意义；窄屏上拖动只会把某一栏压到 0。 */
+  .resume-wb-resizer {
+    display: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  /* 只剩画布一栏：纵向排列，让它吃满剩余高度。 */
+  .resume-wb-body {
+    flex-direction: column;
+  }
+
+  .resume-wb-canvas-bar {
+    margin: 6px 8px 0;
+  }
+
+  .resume-wb-canvas-scroll {
+    padding: 8px;
+  }
+}
+
+/* 抽屉里的列：铺满抽屉，不继承栅格里的定宽 / 绝对定位 / 自己的滚动条。
+   参数栏在栅格里是 `flex: 0 0 380px`（content-box），原样搬进 378px 的抽屉会横向溢出。 */
+.resume-wb-drawer .resume-wb-col-params,
+.resume-wb-drawer .resume-wb-col-editor {
+  position: static;
+  width: auto;
+  max-width: none;
+  height: 100%;
+  flex: 1 1 auto;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  overflow-y: auto;
+}
+
+/* 容器查询版本：判据换成"这个弹窗体自己有多宽"。数值与上面两组完全相同（见文件头）。 */
+@supports (container-type: inline-size) {
+  .resume-zoom-workbench-wrap .ant-modal-body {
+    container-type: inline-size;
+    container-name: wb;
+  }
+
+  @container wb (max-width: 1280px) {
+    .resume-wb-resizer {
+      display: none;
+    }
+  }
+
+  @container wb (max-width: 1000px) {
+    .resume-wb-body {
+      flex-direction: column;
+    }
+  }
+}

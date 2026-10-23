@@ -10,12 +10,12 @@ import type { Stats } from "../../types";
 export function StatsCards({ stats, loading }: { stats: Stats | undefined; loading: boolean }) {
   return (
     <Row gutter={[16, 16]}>
-      <Col xs={24} sm={12} xl={6}>
+      <Col xs={24} sm={12} lg={6}>
         <Card loading={loading}>
           <Statistic title="岗位总数" value={stats?.job_count ?? 0} prefix={<SearchOutlined />} />
         </Card>
       </Col>
-      <Col xs={24} sm={12} xl={6}>
+      <Col xs={24} sm={12} lg={6}>
         <Card loading={loading}>
           <Statistic
             title="开放中岗位"
@@ -24,7 +24,7 @@ export function StatsCards({ stats, loading }: { stats: Stats | undefined; loadi
           />
         </Card>
       </Col>
-      <Col xs={24} sm={12} xl={6}>
+      <Col xs={24} sm={12} lg={6}>
         <Card loading={loading}>
           <Statistic
             title="已生成简历"
@@ -33,7 +33,7 @@ export function StatsCards({ stats, loading }: { stats: Stats | undefined; loadi
           />
         </Card>
       </Col>
-      <Col xs={24} sm={12} xl={6}>
+      <Col xs={24} sm={12} lg={6}>
         <Card loading={loading}>
           <Statistic
             title="近 7 天生成"

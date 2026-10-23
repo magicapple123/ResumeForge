@@ -16,10 +16,23 @@
   justify-content: space-between;
 }
 
+/* 自适应列：这里用 164 而不是 --rf-stat-min（150）——那 14px 的差额是**为 5 张卡**留的：
+   1092 视口的内容盒 986，6 列只要 6×150+5×12 = 960 就放得下，于是 auto-fit 会排出 6 列，
+   第 6 格空着（只有 5 张卡），右边凭空多一块留白。164 让 6 列需要 1044 > 986、
+   1280 的内容盒 1030 也不够，因此 1092–1365 稳定是 5 列。
+   768 视口不是靠这里降到 2 列的——tracker-form.css 的 ≤900 规则接管（方案 §4.7）。 */
 .tracker-summary {
   display: grid;
-  grid-template-columns: repeat(5, minmax(130px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 164px), 1fr));
+  gap: var(--rf-grid-gap);
+}
+
+/* 基线及以上固定 5 列：auto-fit 在 1108 时也能算出 5 列（798 ≤ 1108），但列宽会到
+   213 而显得过宽；固定 5 列让 5 张卡等宽铺满。 */
+@media (min-width: 1366px) {
+  .tracker-summary {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 /* 统计卡片与加载骨架共用同一套卡片外观：骨架占位与真实卡片同形，加载完成后不跳动。 */
@@ -64,7 +77,7 @@
 .tracker-funnel {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  gap: var(--rf-grid-gap);
   padding: 16px;
   /* 平面而不是渐变：旧写法在末尾混了一块写死的浅紫，浅色下像褪色的紫晕，深色下更是
      一块亮斑（2026-10-20 用户截图）。层级交给边框与卡片本身的明度。 */

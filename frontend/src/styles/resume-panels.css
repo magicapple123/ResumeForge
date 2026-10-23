@@ -249,140 +249,15 @@
   white-space: nowrap;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1092px) {
   .resume-preview-zoom-hint {
     display: none;
   }
 }
 
-/* 全屏简历工作台：参数面板与预览各自滚动，避免改参数时失去预览位置。 */
-.resume-zoom-body {
-  display: grid;
-  grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  background: var(--rf-surface-alt);
-}
-
-.resume-zoom-body.is-preview-only {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.resume-zoom-settings {
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 20px;
-  background: var(--rf-surface);
-  border-right: 1px solid var(--rf-border-subtle);
-}
-
-.resume-zoom-settings-template {
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--rf-border-subtle);
-}
-
-.resume-zoom-settings-measure {
-  padding-top: 18px;
-}
-
-.resume-zoom-settings .resume-template-controls {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  width: 100%;
-}
-
-.resume-zoom-settings .resume-template-controls > .ant-space-item {
-  width: 100%;
-  min-width: 0;
-}
-
-.resume-zoom-settings .resume-template-controls > .ant-space-item > .ant-space {
-  max-width: 100%;
-  flex-wrap: wrap;
-}
-
-.resume-zoom-settings .resume-measure-grid.is-stacked {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
-}
-
-/* Sidebar controls inherit the dialog's wider slider defaults; constrain them to this panel. */
-.resume-zoom-settings .resume-measure-grid.is-stacked .ant-space-item:has(> .ant-slider) {
-  flex: 0 1 132px;
-  min-width: 112px;
-}
-
-.resume-zoom-settings .resume-measure-grid.is-stacked .ant-slider {
-  width: 132px;
-  max-width: 100%;
-}
-
-.resume-zoom-settings .resume-measure-grid.is-stacked .resume-measure-cell > .ant-space {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.resume-zoom-preview-pane {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  padding: 14px 20px 0;
-}
-
-.resume-zoom-workbench-note {
-  flex: 0 0 auto;
-  margin: 0 0 10px !important;
-  font-size: 12px;
-}
-
-.resume-zoom-preview-scroll {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding: 0 4px 16px;
-}
-
-@media (max-width: 1000px) {
-  .resume-zoom-body {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(180px, 32dvh) minmax(0, 1fr);
-  }
-
-  .resume-zoom-settings {
-    border-right: 0;
-    border-bottom: 1px solid var(--rf-border-subtle);
-    padding: 12px 16px;
-  }
-
-  .resume-zoom-settings-template {
-    padding-bottom: 12px;
-  }
-
-  .resume-zoom-settings-measure {
-    padding-top: 12px;
-  }
-
-  .resume-zoom-preview-pane {
-    padding: 10px 12px 0;
-  }
-}
-
-@media (max-width: 640px) {
-  .resume-zoom-body {
-    grid-template-rows: minmax(210px, 36dvh) minmax(0, 1fr);
-  }
-
-  .resume-zoom-settings {
-    padding: 10px 12px;
-  }
-}
+/* 全屏简历制作台的三栏外壳（`.resume-wb-*` / `.resume-zoom-workbench-wrap`）在
+   `resume-workbench.css`：那一块随三栏化重写过，不是纯搬迁，留在 400 行的本文件里
+   会把"版式工具条"和"整屏弹窗外壳"两件事混在同一份样式表里。 */
 
 /* 列表「目标岗位」列（T3）：列宽固定 200，长岗位名/公司名必须在 Tag 内省略，
    否则整表被撑宽、其它列被挤成一字宽。column 级 ellipsis 负责切 table-layout: fixed，
