@@ -10,7 +10,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import AiPolishCard from "./AiPolishCard";
-import { cardAnchor } from "./AiPolishLayer";
+import { cardAnchor } from "./overlayGeometry";
 import type { SelectionTarget } from "./selectionTarget";
 
 function makeTarget(): SelectionTarget {

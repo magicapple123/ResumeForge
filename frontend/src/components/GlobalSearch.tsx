@@ -49,6 +49,13 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   /** 打开即聚焦（portal 里 `autoFocus` 不可靠，显式 focus）。 */
   const inputRef = useRef<InputRef | null>(null);
+  /**
+   * 当前这一次搜索的序号。
+   *
+   * 关面板或换关键词时自增，于是"上一条回来的结果"能被认出来并丢弃——否则关闭之后
+   * 迟到的响应会把结果写回一份已经作废的状态，下次输入时会先闪一眼上次的旧结果。
+   */
+  const requestIdRef = useRef(0);
 
   // ⌘/Ctrl+K：任何页面都能唤起。录制快捷键时 keymap 会让位（见 isShortcutRecording）。
   useShortcut("search", (event) => {
@@ -62,6 +69,8 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
     setOpen(false);
     setQuery("");
     setResult(null);
+    setLoading(false);
+    setError("");
     setActiveIndex(-1);
   }, []);
 
@@ -95,27 +104,36 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, close]);
 
+  // 输入防抖：连打不连发请求。空关键词直接不跑——"清空输入"那一下由输入框的
+  // onChange 顺手把结果收掉（见 `onChange` 处的注释：effect 里同步 setState 会级联渲染）。
   useEffect(() => {
     const keyword = query.trim();
-    if (!open || !keyword) {
-      setResult(null);
-      setLoading(false);
-      setError("");
-      return undefined;
-    }
-    setLoading(true);
-    setError("");
+    if (!open || !keyword) return undefined;
     const timer = window.setTimeout(() => {
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
       searchAll(keyword)
         .then((data) => {
+          // 已经关掉面板、或者又敲了字：这条结果不属于当前输入，丢弃。
+          if (requestIdRef.current !== requestId) return;
           setResult(data);
           // 新结果：旧的选中项已经没有意义，下一次 ↓ 从第一条开始。
           setActiveIndex(-1);
         })
-        .catch((err) => setError(err instanceof Error ? err.message : "搜索失败"))
-        .finally(() => setLoading(false));
+        .catch((err) => {
+          if (requestIdRef.current !== requestId) return;
+          setError(err instanceof Error ? err.message : "搜索失败");
+        })
+        .finally(() => {
+          if (requestIdRef.current !== requestId) return;
+          setLoading(false);
+        });
     }, DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      // 换词或关闭：作废在飞的那一条（它的结果属于上一段输入）。
+      requestIdRef.current += 1;
+    };
   }, [open, query]);
 
   const total = useMemo(() => {
@@ -221,8 +239,20 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
                 placeholder="搜索岗位、简历、内推、提醒、面经、台账、资料…"
                 aria-label="搜索关键词"
                 onChange={(event) => {
-                  setQuery(event.target.value);
+                  const next = event.target.value;
+                  const keyword = next.trim();
+                  setQuery(next);
                   setActiveIndex(-1);
+                  setError("");
+                  // 加载态与"清空即清空结果"都放在这里，而不是 effect 里：用户是这次
+                  // 状态变化的发起者，事件处理器就是它的正确位置。放进 effect 会变成
+                  // "effect 里同步 setState"（`react-hooks/set-state-in-effect`）。
+                  if (keyword) {
+                    setLoading(true);
+                  } else {
+                    setResult(null);
+                    setLoading(false);
+                  }
                 }}
                 onKeyDown={onKeyDown}
               />

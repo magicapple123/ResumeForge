@@ -275,7 +275,9 @@ export default function FavoritesPage() {
           }}
           // 简历列的固定宽度加起来约 620px，比岗位列更窄，在普通窗口里根本不会横向溢出；
           // 硬套 `x: 760` 会在「简历」页签下画出一条用不上的横向滚动条。岗位列更宽，仍保留兜底。
-          scroll={kind === "jobs" ? { x: 760 } : undefined}
+          // 两个页签都要"空表不启用"（与 `JobTable` 同口径）：0 行时 `.ant-table-content`
+          // 只剩一个可横滚却没有任何可聚焦元素的容器（axe `scrollable-region-focusable`）。
+          scroll={kind === "jobs" && items.length ? { x: 760 } : undefined}
           components={{
             body: {
               row: (props: HTMLAttributes<HTMLTableRowElement>) => {

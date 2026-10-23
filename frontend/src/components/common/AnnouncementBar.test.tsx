@@ -3,7 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { t } from "../../i18n";
-import AnnouncementBar, { pickVisible, severityRank } from "./AnnouncementBar";
+import AnnouncementBar from "./AnnouncementBar";
+import { pickVisible, severityRank } from "../../features/announcements/announcementVisibility";
 import type { Announcement } from "../../features/announcements/announcementStore";
 import {
   postAnnouncement,

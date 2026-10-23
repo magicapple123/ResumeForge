@@ -260,6 +260,7 @@
       "components/resume/PageMarginSidesControl.tsx": 0,
       "components/resume/PagePaddingControl.tsx": 8,
       "components/resume/PhotoScaleControl.tsx": 0,
+      "components/resume/ResumeBasicInfoTab.tsx": 13,
       "components/resume/ResumeChangeReviewModal.tsx": 18,
       "components/resume/ResumeDeliveryInfo.tsx": 20,
       "components/resume/ResumeDetailFooter.tsx": 8,

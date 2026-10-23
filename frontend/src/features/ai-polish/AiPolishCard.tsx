@@ -62,8 +62,21 @@ export default function AiPolishCard({
   const [error, setError] = useState<string | null>(null);
   const [modelMissing, setModelMissing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  /** 卡片位置：初始来自浮层算好的锚点，之后由拖动改写（不写回浮层，关掉即丢）。 */
-  const [pos, setPos] = useState({ left, top });
+  /**
+   * 拖动产生的卡片位置，连同"产生它时的锚点"一起存。
+   *
+   * 位置只在同一个锚点下有效：锚点变了（用户在别处又发起一次润色）就回到新位置。
+   * 把锚点和位置放进同一条 state，"锚点变了即失效"就是**读出来的**，不需要一条
+   * effect 再去 setState 同步——那正是 `set-state-in-effect` 要拦的级联渲染。
+   */
+  const [dragged, setDragged] = useState<{
+    anchor: { left: number; top: number };
+    pos: { left: number; top: number };
+  } | null>(null);
+  const pos =
+    dragged && dragged.anchor.left === left && dragged.anchor.top === top
+      ? dragged.pos
+      : { left, top };
   const cardRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
   const tooLong = target.text.length > MAX_SELECTION_CHARS;
@@ -74,9 +87,6 @@ export default function AiPolishCard({
    * 后端会整段拒掉，白等一次往返。
    */
   const followUpTooLong = rewritten.length > MAX_SELECTION_CHARS;
-
-  // 锚点变了（用户在别处又发起一次润色）就回到新位置。
-  useEffect(() => setPos({ left, top }), [left, top]);
 
   // 卡片关掉（或页面切走）时中止在飞的请求：结果已经没人看了。
   useEffect(
@@ -247,12 +257,19 @@ export default function AiPolishCard({
     const width = rect?.width ?? 344;
     const height = rect?.height ?? 0;
     const margin = 8;
-    setPos({
-      left: Math.min(Math.max(margin, event.clientX - drag.dx), window.innerWidth - width - margin),
-      top: Math.min(
-        Math.max(margin, event.clientY - drag.dy),
-        window.innerHeight - height - margin,
-      ),
+    setDragged({
+      // 记下拖动开始时的锚点：props 的锚点一变，这次拖动的位置自动作废。
+      anchor: { left, top },
+      pos: {
+        left: Math.min(
+          Math.max(margin, event.clientX - drag.dx),
+          window.innerWidth - width - margin,
+        ),
+        top: Math.min(
+          Math.max(margin, event.clientY - drag.dy),
+          window.innerHeight - height - margin,
+        ),
+      },
     });
   };
 

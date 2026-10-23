@@ -113,3 +113,60 @@ describe("ApplyProgressPanel 条目明细", () => {
     expect(screen.queryByText("跳过原因")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * 横向滚动区（C-20 收尾核验）。
+ *
+ * 面板里的 Table 带 `scroll={{ x: "max-content" }}`，antd 会把它包进带 `overflow-x: auto`
+ * 的 `.ant-table-content`。理论上这条路径也能触发 axe 的 `scrollable-region-focusable`
+ * （可滚动区域里没有可聚焦元素），但**空态根本走不到 Table**：
+ *
+ *   {task.items.length > 0 ? <Table … scroll={{ x: "max-content" }} /> : <Typography.Paragraph …>}
+ *
+ * 0 条时渲染的是一句说明（ApplyProgressPanel.tsx:183—200），DOM 里连
+ * `.ant-table-content` 都没有，因此空态**不适用**该规则。有数据时滚动区里带
+ * 「展开行」按钮，属于可聚焦内容，规则也不会命中。
+ */
+describe("ApplyProgressPanel 横向滚动区（a11y）", () => {
+  // 空态文案已经由生产代码给出、且已被 `src` 口径统计；这里只按结构定位
+  // （`.apply-progress-empty` 存在 + 没有表格），不新增中文 `ByText` 断言
+  // ——`cjkRatchet` 的 tests 口径只降不升。
+  it("空态（0 条）不渲染表格，因此不存在可滚动区域（不适用 scrollable-region-focusable）", () => {
+    const { container } = renderPanel([]);
+
+    const empty = container.querySelector<HTMLElement>(".apply-progress-empty");
+    expect(empty).not.toBeNull();
+    expect(empty?.textContent?.trim().length).toBeGreaterThan(0);
+    expect(container.querySelector(".ant-table-content")).toBeNull();
+    expect(container.querySelector(".ant-table")).toBeNull();
+  });
+
+  it("采集批次的空态走同一个分支：一句说明，同样不渲染表格", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <AntdApp>
+          <ApplyProgressPanel
+            task={{ ...task([]), kind: "collect" }}
+            busy={false}
+            onPause={() => {}}
+            onResume={() => {}}
+            onStop={() => {}}
+          />
+        </AntdApp>
+      </MemoryRouter>,
+    );
+
+    expect(container.querySelector(".apply-progress-empty")).not.toBeNull();
+    expect(container.querySelector(".ant-table-content")).toBeNull();
+  });
+
+  it("有数据时滚动区里有可聚焦的「展开行」按钮，规则不会命中", async () => {
+    const { container } = renderPanel([item({ id: 1 })]);
+
+    const content = container.querySelector<HTMLElement>(".ant-table-content");
+    expect(content?.style.overflowX).toBe("auto");
+    expect(
+      await within(content as HTMLElement).findByRole("button", { name: /展开行|Expand row/i }),
+    ).toBeEnabled();
+  });
+});

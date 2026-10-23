@@ -81,7 +81,10 @@ export default function DeliveryArchiveModal({ onClose }: { onClose: () => void 
         rowKey="id"
         loading={loading}
         dataSource={data?.items ?? []}
-        scroll={{ x: 600 }}
+        // 条件与 `dataSource` 同一口径：空表不启用横向滚动，否则 `.ant-table-content`
+        // 会成为"可横滚、区域内没有任何可聚焦元素"的容器（axe
+        // `scrollable-region-focusable`，serious）。有行时照旧按列宽固定横滚。
+        scroll={data?.items?.length ? { x: 600 } : undefined}
         pagination={{
           current: page,
           pageSize: 10,

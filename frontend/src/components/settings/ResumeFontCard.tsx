@@ -50,6 +50,21 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * 读一次字体列表。读不到（老后端没有这个接口、或请求失败）就当作没有自定义字体，
+ * 不影响其它设置——这条降级是刻意保留的，不能因为接口报错就让整个设置页打不开。
+ *
+ * 兜底留在函数内部（`try` 而不是调用方的 `.catch`）：接口可能**同步**抛（模块里没有
+ * 这个导出时就是这样），那种抛出连 promise 都拿不到。调用方因此只需要 `await`。
+ */
+async function fetchResumeFonts(): Promise<ResumeFonts> {
+  try {
+    return await listResumeFonts();
+  } catch {
+    return { items: [], active: null, max_bytes: 30 * 1024 * 1024 };
+  }
+}
+
 export default function ResumeFontCard() {
   const { message, modal } = App.useApp();
   const [data, setData] = useState<ResumeFonts | null>(null);
@@ -61,17 +76,22 @@ export default function ResumeFontCard() {
   const [renameBusy, setRenameBusy] = useState(false);
 
   const load = useCallback(async () => {
-    try {
-      setData(await listResumeFonts());
-    } catch {
-      // 读不到（老后端）就当作没有自定义字体，不影响其它设置。
-      setData({ items: [], active: null, max_bytes: 30 * 1024 * 1024 });
-    }
+    setData(await fetchResumeFonts());
   }, []);
 
+  // 挂载即读一次。请求与 setData 都在这里内联展开：`load()` 是 hook 内部的函数，
+  // 规则无法证明它不会同步改状态，内联成"await 之后才 setData"就不存在这个疑问。
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      const next = await fetchResumeFonts();
+      // 卸载后不再写状态（列表页来回切时不至于对已卸载组件 setState）。
+      if (!cancelled) setData(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const upload = async (file: File) => {
     setBusy(true);

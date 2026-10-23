@@ -89,11 +89,11 @@ export function useTouTouOrbTips({
 
   // 标语可见性是多个瞬态条件的派生函数：任何条件成立都要立即藏起标语。
   // 提示卡在场也算一条：它和标语抢同一块地方（见 profilePromptRef 的说明）。
-  /* eslint-disable react-hooks/set-state-in-effect */
+  // （原先这里包着一对 set-state-in-effect 的 disable；规则不再命中后那对指令成了
+  // "没抑制任何东西的死指令"，所以随本批一并删掉——留着会反过来变成一条 warning。）
   useEffect(() => {
     if (hidden || dragging || isBusy || hasProfilePrompt || !tipsEnabled) {
       setTipVisible(false);
     }
   }, [tipsEnabled, dragging, hasProfilePrompt, hidden, isBusy, setTipVisible]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 }

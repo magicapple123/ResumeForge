@@ -14,7 +14,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { antdLocale } from "./antdLocale";
-import I18nProvider, { useI18n, useLocale } from "./I18nProvider";
+import I18nProvider from "./I18nProvider";
+import { useI18n, useLocale } from "./i18nContext";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, t, translate } from "./index";
 import type { MessageKey } from "./index";
 

@@ -2,6 +2,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { expectNoUnfocusableScroller } from "../../test/a11yScrollRegion";
 import type { DeliverySummary } from "../../types";
 
 const apiMocks = vi.hoisted(() => ({
@@ -94,5 +95,36 @@ describe("DeliveryArchiveModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /刷\s*新/ }));
     await waitFor(() => expect(screen.getByText("后端岗位简历")).toBeTruthy());
     expect(screen.queryByText("交付存档加载失败")).toBeNull();
+  });
+});
+
+/**
+ * 横向滚动区（C-20 收尾核验）。
+ *
+ * `scroll={{ x: 600 }}` 让 antd 把表格放进带 `overflow-x: auto` 的 `.ant-table-content`，
+ * 但这个容器没有 tabindex。存档为空时区内一个可聚焦元素都没有，窄窗 / 200% 缩放下容器
+ * 收窄到 600px 以下就会命中 axe 的 `scrollable-region-focusable`（WCAG 2.1.1，serious）。
+ * 弹窗渲染在 portal 里，只能从 `document` 上查，`render` 返回的 container 查不到。
+ */
+describe("DeliveryArchiveModal 横向滚动区（a11y）", () => {
+  it("存档为空：不产生「可横滚、区内却无可聚焦元素」的容器（axe scrollable-region-focusable）", async () => {
+    apiMocks.listDeliveryArchive.mockResolvedValue({ items: [], total: 0 });
+    renderModal();
+    // 等首屏请求落地：加载中与加载完是两种 DOM，别把骨架当成终态。
+    await screen.findByRole("searchbox", { name: "搜索交付存档" });
+    await waitFor(() => expect(document.querySelector(".ant-table-placeholder")).not.toBeNull());
+
+    expectNoUnfocusableScroller(document);
+  });
+
+  it("有存档时保持原行为：600px 定宽 + 横向滚动，区内有「下载存档」按钮可聚焦", async () => {
+    renderModal();
+    // 用 role 定位等待首屏落地，不用中文文案做 ByText 断言（i18n 棘轮只降不升）。
+    await screen.findByRole("button", { name: "下载存档" });
+
+    const content = document.querySelector<HTMLElement>(".ant-table-content");
+    expect(content?.style.overflowX).toBe("auto");
+    expect(document.querySelector<HTMLElement>(".ant-table table")?.style.width).toBe("600px");
+    expect(screen.getByRole("button", { name: "下载存档" })).toBeEnabled();
   });
 });

@@ -49,9 +49,14 @@ export function useDiscardGuard({
   });
 
   // 关闭后确认条不该留着：下次打开是一张干净的弹窗。
-  useEffect(() => {
-    if (!open) setConfirming(false);
-  }, [open]);
+  // 用"渲染期比较上一次的 `open`"来做，而不是 effect：effect 里同步 setState 会多一轮
+  // 级联渲染（`react-hooks/set-state-in-effect`），而"入参变了就重置派生状态"正是 React
+  // 给这类场景的推荐做法。守卫条件保证它只发生一次，不会自我循环。
+  const [lastOpen, setLastOpen] = useState(open);
+  if (lastOpen !== open) {
+    setLastOpen(open);
+    if (!open && confirming) setConfirming(false);
+  }
 
   const keepEditing = useCallback(() => setConfirming(false), []);
 

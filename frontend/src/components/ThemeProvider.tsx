@@ -19,7 +19,7 @@ import { App as AntdApp, ConfigProvider } from "antd";
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { antdLocale } from "../i18n/antdLocale";
-import { useLocale } from "../i18n/I18nProvider";
+import { useLocale } from "../i18n/i18nContext";
 import { appTheme } from "../theme/appTheme";
 import { darkTheme } from "../theme/darkTheme";
 import { MESSAGE_CONFIG } from "../theme/feedbackConfig";

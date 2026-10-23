@@ -173,10 +173,13 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
     isEmpty: (values) => !values.title && !values.source_fact,
   });
 
+  // 打开时把表单回填成"正在编辑的那一条"或空白。
+  // `dirty` 不在这里重置：它说的是"本次打开期间用户改过没"，收掉的正确时机是关闭
+  // （见 `onCancel` 与保存成功两处）。在这里 setState 属于 effect 内同步改状态，
+  // 会触发级联渲染（`react-hooks/set-state-in-effect`），而且它本来也不是回填的一部分。
   useEffect(() => {
     if (!open) return;
     form.setFieldsValue(claim ? toValues(claim) : EMPTY_VALUES);
-    setDirty(false);
   }, [open, claim, form]);
 
   const submit = async () => {
@@ -193,6 +196,8 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
       draft.clear();
       message.success(editing ? "已保存这条台账条目" : "已加入事实台账");
       onSaved(saved);
+      // 保存成功同样是"一次编辑结束"：标记清掉，别把下次打开的弹窗说成有未保存修改。
+      setDirty(false);
       onClose();
     } catch (error) {
       // 「已确认却还留着【待补】」这类自相矛盾由后端挡下，原样把中文原因显示出来，
@@ -208,6 +213,8 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
       onCancel={() => {
         // L1：有草稿时关闭无损，只告知一句（短、不打断）。
         if (dirty) toast.info(t("draft.kept"));
+        // 闭即清"脏"标记：下次打开是一张干净的弹窗（回填在 effect 里，与它无关）。
+        setDirty(false);
         onClose();
       }}
       onSubmit={() => void submit()}

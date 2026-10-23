@@ -181,7 +181,10 @@ export function QueueTable({
         }}
         rowSelection={rowSelection}
         tableLayout="fixed"
-        scroll={{ x: 880 }}
+        // 空表时不启用横向滚动（与 `JobTable` 同一口径）：否则 `.ant-table-content` 会变成
+        // "可横滚、区域内却没有任何可聚焦元素"的容器，命中 axe 的
+        // `scrollable-region-focusable`（serious）。有数据时照旧按列宽固定横滚。
+        scroll={items.length ? { x: 880 } : undefined}
         onRow={(record) => ({
           onContextMenu: (event) => {
             event.preventDefault();

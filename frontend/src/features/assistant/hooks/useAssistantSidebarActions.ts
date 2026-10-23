@@ -67,14 +67,14 @@ export function useAssistantSidebarActions({
   const handleSidebarCreate = useCallback(() => {
     setHistoryOpen(false);
     void createConversation();
-  }, [createConversation]);
+  }, [createConversation, setHistoryOpen]);
 
   const handleSidebarSelect = useCallback(
     (id: number) => {
       setHistoryOpen(false);
       selectConversation(id);
     },
-    [selectConversation],
+    [selectConversation, setHistoryOpen],
   );
   const handleSidebarDelete = useCallback(
     (id: number) => removeConversation(id),
@@ -113,10 +113,13 @@ export function useAssistantSidebarActions({
     [forkConversation],
   );
 
-  const openGroupModal = useCallback((conversation: AssistantConversationBrief) => {
-    setGroupTarget(conversation);
-    setGroupValue(conversation.group_name);
-  }, []);
+  const openGroupModal = useCallback(
+    (conversation: AssistantConversationBrief) => {
+      setGroupTarget(conversation);
+      setGroupValue(conversation.group_name);
+    },
+    [setGroupTarget, setGroupValue],
+  );
 
   const confirmGroup = async () => {
     if (!groupTarget) return;

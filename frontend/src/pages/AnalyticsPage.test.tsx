@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 求职数据看板：概览指标 + 四个主题区块 + 诚实空态。 */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 // @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
 import { readFileSync } from "node:fs";
 import { MemoryRouter } from "react-router-dom";
@@ -205,7 +205,11 @@ describe("AnalyticsPage", () => {
 
     // C6：`color-regression.test.ts` 只读 4 个 CSS + tracker.css，不读 modules.css，
     // 所以项 8 的守卫落在这里——直接读文件原文，断言"按阶段上色"而不是"按列序上色"。
-    const css = readFileSync([process.cwd(), "src", "styles", "modules.css"].join("/"), "utf8");
+    // 2026 年样式表拆分后，求职统计页的规则落在 modules-home.css（modules.css 现为 @import 清单）。
+    const css = readFileSync(
+      [process.cwd(), "src", "styles", "modules-home.css"].join("/"),
+      "utf8",
+    );
     expect(css).toContain(
       ".analytics-page .analytics-metric-row .ant-card.stat-card-interview::before",
     );
@@ -272,10 +276,15 @@ describe("AnalyticsPage", () => {
   it("没有缺口时不显示任何缺口文案", async () => {
     // 日期都填了、投递也都关联了简历 —— 两个缺口都为 0，页面不该出现任何提示。
     apiMocks.getAnalyticsDashboard.mockResolvedValue(dashboard({ track_resume_linked_count: 7 }));
-    renderPage();
+    const { container } = renderPage();
 
     await screen.findByText("转化与卡点");
-    expect(screen.queryByText(/未计入下方图表/)).toBeNull();
+    // 按**容器里的组件出口**查，而不是全页匹配一句文案：`DataGapNotice` 是缺口提示的
+    // 唯一出口，`missing <= 0` 时它整块返回 null。这样将来它叠进更多区块时，只有
+    // "本页真的一条缺口提示都没有"才会绿，不会因为某个区块恰好没渲染就漏判。
+    expect(container.querySelectorAll(".analytics-gap-notice")).toHaveLength(0);
+    // 再补一条按可见文案的检查：class 被改名时这条仍然拦得住。
+    expect(within(container).queryByText(/未计入图表/)).toBeNull();
   });
 
   it("投递没关联简历时如实说明这是一个缺口", async () => {

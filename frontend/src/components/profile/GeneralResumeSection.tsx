@@ -77,6 +77,10 @@ export default function GeneralResumeSection({ onGenerate, onWrite }: Props) {
   const resumeListVersion = useResumeListVersion();
   useEffect(() => {
     if (resumeListVersion === 0) return;
+    // 这里刻意继续走 `load()`：它第一句就是同步的 `setLoading(true)`，于是刷新期间
+    // 列表会显示加载态。改写成"内联 IIFE + await 之后 setState"虽然能消掉这条告警，
+    // 但会把加载态一起消掉——那是用户可见的行为变化。所以在这一行做单点豁免。
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load() 首句的 setLoading(true) 是"刷新中"的唯一来源
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load 每次渲染都是新函数，只跟版本走
   }, [resumeListVersion]);

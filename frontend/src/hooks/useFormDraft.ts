@@ -59,8 +59,13 @@ export function useFormDraft<T extends Record<string, unknown>>({
   // 契约：`too-large` 一次会话只提示一次，否则每次击键都会弹一条。
   const warnedRef = useRef(false);
 
+  // 打开时重新读一次：关闭期间可能刚被别的标签页写脏。
+  // 这是**读外部系统**（sessionStorage），只能在 effect 里做；而 `readDraft` 是同步的，
+  // 没有 await 可以把它推到回调里。这一条 setState 只喂恢复条、没有任何 effect 依赖它，
+  // 所以不会级联渲染——单点豁免并写明理由，而不是为了消警告把读取改成异步。
   useEffect(() => {
     if (!enabled || !open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 同步读 sessionStorage，无处可延后
     setPending(readDraft(scope));
   }, [scope, enabled, open]);
 

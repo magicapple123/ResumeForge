@@ -3,6 +3,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { expectNoUnfocusableScroller } from "../test/a11yScrollRegion";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import FavoritesPage from "./FavoritesPage";
 
@@ -158,5 +159,51 @@ describe("FavoritesPage", () => {
     // URL 指定 resumes 时直接落在简历页签上，而不是先渲染岗位再切换。
     expect(await screen.findByText("数据分析岗位简历")).toBeInTheDocument();
     expect(apiMocks.listResumes).toHaveBeenCalledWith(expect.objectContaining({ favorite: true }));
+  });
+});
+
+/**
+ * 横向滚动区（C-20 收尾核验）。
+ *
+ * 岗位页签带 `scroll={{ x: 760 }}`，antd 因此把表格放进带 `overflow-x: auto` 的
+ * `.ant-table-content`，但那个容器**没有 tabindex**。收藏为空时区内没有任何可聚焦
+ * 元素（空态只有一句说明），窄窗 / 200% 缩放下容器收窄到 760px 以下就会命中 axe 的
+ * `scrollable-region-focusable`（WCAG 2.1.1，serious）——键盘用户滚不到也进不去。
+ *
+ * jsdom 不算布局，规则本身在单测里命不中，所以这里跟 JobTable / ResumeTable 一样按结构
+ * 钉住：空收藏时那个滚动容器要么不存在，要么能被 Tab 到（判定逻辑见
+ * `src/test/a11yScrollRegion.ts`）。
+ */
+describe("FavoritesPage 空收藏的横向滚动区（a11y）", () => {
+  beforeEach(() => {
+    apiMocks.listJobs.mockReset().mockResolvedValue({ items: [], total: 0 });
+    apiMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
+  });
+
+  /**
+   * 等首屏请求落地：加载中 antd 渲染转圈占位，加载完才换成空态，两者 DOM 不同。
+   * 按结构等（`.ant-table-placeholder`），不按中文文案——`cjkRatchet` 的 tests 口径
+   * 只降不升，新增用例不该再引入中文 `ByText` 断言。
+   */
+  async function waitForEmptyTable() {
+    await waitFor(() => expect(document.querySelector(".ant-table-placeholder")).not.toBeNull());
+  }
+
+  it("岗位页签空收藏：不产生「可横滚、区内却无可聚焦元素」的容器（axe scrollable-region-focusable）", async () => {
+    renderPage();
+    await waitForEmptyTable();
+
+    expectNoUnfocusableScroller(document);
+  });
+
+  it("简历页签没有 scroll.x，空收藏时本来就没有横向滚动区（对照组）", async () => {
+    renderPage(["/favorites?kind=resumes"]);
+    await waitForEmptyTable();
+
+    const content = document.querySelector<HTMLElement>(".ant-table-content");
+    expect(content?.style.overflowX).toBe("");
+    expect(
+      document.querySelector(".ant-table")?.classList.contains("ant-table-scroll-horizontal"),
+    ).toBe(false);
   });
 });
