@@ -10,7 +10,12 @@
 // harness lives in lifecycle-harness.js; the preload quitApp bridge probes
 // live in test-quit-bridge.js.
 //
-// Run with: node scripts/test-lifecycle.js   (or: node --test scripts/)
+// 本文件只守**退出生命周期**（tray 退出 / before-quit / 安装包派生 / 崩溃重启
+// 预算）。启动失败与可操作对话框（日志失效链、openPath 的各种失败形态）是同一条
+// 生命周期的另一个关注点，放在 test-lifecycle-startup.js —— 两个文件共用同一份
+// lifecycle-harness.js，桩只有一处。
+//
+// Run with: node scripts/test-lifecycle.js   (or: node --test "scripts/test-*.js")
 
 const assert = require("assert");
 const { test } = require("node:test");

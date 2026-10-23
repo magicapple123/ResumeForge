@@ -13,6 +13,7 @@
 输出解码出错）都必须被吞掉并记日志——否则退出线程会半途死掉，变成"前端收到 202、
 后端却不退"这种最难查的状态。
 """
+
 import io
 import ipaddress
 import json
@@ -235,6 +236,13 @@ _LOG_SECRET_PATTERNS = (
 )
 
 
+def _redact_log_line(line: str) -> str:
+    """给日志行兜底脱敏：疑似令牌/长随机串一律换成占位符。"""
+    for pattern in _LOG_SECRET_PATTERNS:
+        line = pattern.sub("<redacted>", line)
+    return line
+
+
 def _recent_log_tail(max_lines: int = 300) -> str:
     """读滚动文件日志的尾部并做兜底脱敏；文件不存在（被关闭/尚未产生）时返回空。"""
     log_file = DATA_DIR / "logs" / "backend.log"
@@ -244,12 +252,58 @@ def _recent_log_tail(max_lines: int = 300) -> str:
         lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()[-max_lines:]
     except OSError:
         return ""
-    cleaned = []
-    for line in lines:
-        for pattern in _LOG_SECRET_PATTERNS:
-            line = pattern.sub("<redacted>", line)
-        cleaned.append(line)
-    return "\n".join(cleaned)
+    return "\n".join(_redact_log_line(line) for line in lines)
+
+
+# 桌面壳通过 RF_DESKTOP_LOG_DIR 告诉后端它的日志目录（desktop/backend-manager.py
+# 注入，目录由 desktop/lib/shell-paths.js 裁决）。两份日志**按原名**进包，方便
+# 维护者对号入座；只点读这两个名字，**不递归目录**——那里还有轮转文件
+# （desktop-backend.log.1 之类）与其它运行产物，整目录打包会把包撑大并带进
+# 与本次故障无关的内容。
+_DESKTOP_LOG_NAMES = ("desktop-main.log", "desktop-backend.log")
+# 尾部上限：桌面日志是"每次启动都会追加"的文件，长的可以到几十 MB；诊断包是给
+# 用户直接转发的，没有理由把几百 KB 的无关历史一起发出去。
+_DESKTOP_LOG_TAIL_LINES = 400
+_DESKTOP_LOG_MAX_BYTES = 256 * 1024
+
+
+def _read_log_tail(path: Path, max_lines: int, max_bytes: int) -> str:
+    """按字节窗口读文件尾部（先丢掉被截断的半行），失败一律返回空串。"""
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            if size > max_bytes:
+                handle.seek(size - max_bytes)
+                handle.readline()  # 丢弃截断处的残行，避免把半条日志当成一条
+            payload = handle.read()
+    except OSError:
+        return ""
+    text = payload.decode("utf-8", errors="replace")
+    return "\n".join(text.splitlines()[-max_lines:])
+
+
+def _desktop_log_entries() -> list[tuple[str, str]]:
+    """桌面壳日志的 ``[(原文件名, 脱敏后的尾部)]``；未注入目录时恒为空列表。
+
+    未设置 ``RF_DESKTOP_LOG_DIR``（控制台启动 / 纯后端 / 开发态直接跑 uvicorn）时
+    返回空列表，诊断包内容与本功能加入前完全一致。
+
+    这些日志的价值在于"后端起不来"：那一刻这个端点本身不可达，所以它们只能在
+    **后端起得来**的那一次导出里，把上一次起不来的证据带出去。
+    """
+    raw = (os.environ.get("RF_DESKTOP_LOG_DIR") or "").strip()
+    if not raw:
+        return []
+    directory = Path(raw)
+    if not directory.is_dir():
+        return []
+    entries: list[tuple[str, str]] = []
+    for name in _DESKTOP_LOG_NAMES:
+        content = _read_log_tail(directory / name, _DESKTOP_LOG_TAIL_LINES, _DESKTOP_LOG_MAX_BYTES)
+        if not content:
+            continue
+        entries.append((name, "\n".join(_redact_log_line(line) for line in content.splitlines())))
+    return entries
 
 
 def _system_snapshot() -> dict:
@@ -297,6 +351,9 @@ def preview_diagnostics():
     log_tail = _recent_log_tail()
     if log_tail:
         files.append({"name": "backend-recent.log", "bytes": len(log_tail.encode("utf-8"))})
+    # 桌面日志同样列出来：预览说"包里有什么"，就必须和导出真正打进去的一致。
+    for name, content in _desktop_log_entries():
+        files.append({"name": name, "bytes": len(content.encode("utf-8"))})
     categories = sorted({str(event.get("event", "")) for event in events})
     return {
         "event_count": len(events),
@@ -328,6 +385,10 @@ def export_diagnostics():
         log_tail = _recent_log_tail()
         if log_tail:
             archive.writestr("backend-recent.log", log_tail)
+        # 桌面壳的两份日志按原名进包：起不来时它们是唯一有内容的那两份，而后端
+        # 日志恰好什么都没写下来。名字与 backend-recent.log 不冲突。
+        for name, content in _desktop_log_entries():
+            archive.writestr(name, content)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"resumeforge-diagnostics-{timestamp}.zip"
     return Response(

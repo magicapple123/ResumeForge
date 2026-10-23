@@ -52,6 +52,48 @@ test("buildBackendEnv maps the user data dir to RF_DATA_DIR (ADR-0004)", () => {
   });
 });
 
+test("buildBackendEnv passes the desktop log dir as RF_DESKTOP_LOG_DIR", () => {
+  // 诊断包要带走桌面壳的两份日志（desktop-main.log / desktop-backend.log）：后端
+  // 只能从环境变量知道它们在哪个目录，而目录本身仍由 lib/shell-paths.js 裁决。
+  assert.deepStrictEqual(buildBackendEnv(null, "C:/logs/ResumeForge/runtime/logs"), {
+    RF_DESKTOP_LOG_DIR: "C:/logs/ResumeForge/runtime/logs",
+  });
+  assert.deepStrictEqual(
+    buildBackendEnv("D:/userdata/ResumeForge/data", "C:/logs/ResumeForge/runtime/logs"),
+    {
+      RF_DATA_DIR: "D:/userdata/ResumeForge/data",
+      RF_DESKTOP_LOG_DIR: "C:/logs/ResumeForge/runtime/logs",
+    },
+  );
+  // 没解析出目录（安装目录与临时目录都不可写）时不注入，后端保持既有行为。
+  assert.deepStrictEqual(buildBackendEnv(null, null), {});
+});
+
+// --- 1b. desktopLogDir --------------------------------------------------------
+// 这个目录是诊断包能带上桌面壳日志的唯一线索（→ RF_DESKTOP_LOG_DIR）。两个来源
+// 必须与 openLog() 的裁决一致：已经打开过日志就以那个文件为准（它可能已降级到
+// 系统临时目录），还没打开才回退到 lib/shell-paths.js 的裁决。
+test("desktopLogDir falls back to resolveLogDir before any log is opened", () => {
+  const root = makeTempRoot("logdir");
+  try {
+    const runtimeDir = path.join(root, "runtime");
+    const manager = new BackendManager(root, runtimeDir);
+    assert.strictEqual(manager.logPath, null, "no log is opened before start()");
+    assert.strictEqual(
+      manager.desktopLogDir(),
+      path.join(runtimeDir, "logs"),
+      "without an opened log the decision comes from shell-paths, not a hand-built path",
+    );
+
+    // 打开日志之后以真实文件所在目录为准（降级时也一样）。
+    const opened = manager.openLog("probe");
+    assert.strictEqual(manager.desktopLogDir(), path.dirname(opened));
+    manager.closeLog();
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // --- 2. runtime marker versioning ---------------------------------------------
 
 test("runtime marker: missing, stale or mismatched markers are invalid", async () => {
@@ -246,6 +288,13 @@ test("start() spawns the backend with RF_DATA_DIR pointing at the user data dir"
       spawnCalls[0].options.env.RF_DATA_DIR,
       path.join(root, "userdata"),
       "the backend env must point RF_DATA_DIR at the user data directory",
+    );
+    // 桌面壳的日志目录随 env 一起下去：后端起不来时，诊断端点正是靠它把
+    // desktop-main.log / desktop-backend.log 打进诊断包。
+    assert.strictEqual(
+      spawnCalls[0].options.env.RF_DESKTOP_LOG_DIR,
+      path.join(runtimeDir, "logs"),
+      "the backend env must name the shell's log directory",
     );
     const childEnvKeys = Object.keys(spawnCalls[0].options.env);
     assert.ok(

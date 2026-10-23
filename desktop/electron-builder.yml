@@ -44,6 +44,9 @@ files:
   # Stop/kill decisions (identity re-verification) used by backend-manager.js.
   - lib/backend-stop.js
   - lib/backend-startup.js
+  # 后端进程 env 构造（RF_DATA_DIR / RF_DESKTOP_LOG_DIR）与桌面日志目录裁决——
+  # backend-manager.js 顶层 require 它，漏打包即崩（行数预算的下沉，同 backend-logs.js）。
+  - lib/backend-env.js
   # main.js has a top-level require("./updater"); omitting it here shipped an
   # app.asar whose entry crashed before any error handling (2026-10-13 audit
   # PR-04). scripts/check-asar-deps.js now gates the require graph against

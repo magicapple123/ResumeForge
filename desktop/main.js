@@ -15,10 +15,10 @@
 // update installer is spawned after the stop completes, never before.
 
 const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell } = require("electron");
-const fs = require("fs");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { createShellLogging, announceDegradedOnReady } = require("./lib/preflight");
+const { resolveLogDir } = require("./lib/shell-paths");
 const { createQuitLifecycle } = require("./lib/quit-lifecycle");
 const { installerWaitCommand, runManualUpdateCheck, scheduleUpdateCheck, wantsManualUpdateCheck } = require("./updater");
 
@@ -291,8 +291,70 @@ async function startBackendAndSwap() {
     restartAttempts = 0;
   } catch (err) {
     logLine(`backend start failed: ${err}`);
+    // 双保险：启动图先显示原因（用户至少看得见"哪一步坏了"），再把错误抛给
+    // whenReady 的 catch 去弹可操作的对话框。**绝不能在这里吞掉**——只 logLine +
+    // sendStage 的话外层永远收不到，用户就停在启动图的红框上，而关窗只是
+    // hide() 到托盘（createWindow 的 close handler），应用既起不来也退不掉。
     sendStage("error", String(err && err.message ? err.message : err));
+    throw err;
   }
+}
+
+// 启动失败时给用户的那条"打开日志目录"。日志目录的裁决只有一个出处
+// （lib/shell-paths.js::resolveLogDir），这里只是把 runtimeDir 递进去，绝不另拼
+// 一套路径；不可写时返回 null，由对话框如实说明"本次没写下日志"。
+function startupLogDir() {
+  return resolveLogDir({ runtimeDir: runtimeDir() }).dir;
+}
+
+// 启动失败的可操作出口（日志失效链修复）：启动图上的红框只有一行原因和一个需要
+// 手动复制的路径，用户拿它没办法。这里收尾成一个**带按钮**的原生对话框：
+// 「打开日志目录」/「退出」。刻意不用 dialog.showErrorBox —— 它不能带按钮
+// （崩溃预算那条用它是对的：那条路没有可操作的下一步）。
+//
+// 两个按钮都以退出收尾：「打开日志目录」只是让日志可见，失败本身没有修复，
+// 而留在托盘里的进程会让下一次启动撞上单实例锁、再失败一次。
+function reportStartupFailure(err) {
+  const message = err && err.message ? err.message : String(err);
+  logLine(`startup failed: ${message}`);
+  // 双保险：对话框被系统策略静默掉时，启动图仍然显示错误原因。
+  sendStage("error", message);
+  const logDir = startupLogDir();
+  // 默认取「退出」：连对话框都弹不出来时必须收摊，不能留在半启动状态。
+  let choice = 1;
+  if (typeof dialog.showMessageBoxSync === "function") {
+    try {
+      choice = dialog.showMessageBoxSync({
+        type: "error",
+        title: "简历通",
+        message: "启动失败",
+        detail:
+          `${message}\n\n` +
+          (logDir
+            ? "诊断日志目录：\n" +
+              `${logDir}\n\n` +
+              "把这里的 desktop-main.log 与 desktop-backend.log 提供给维护者，" +
+              "可以定位这次启动失败。"
+            : "本次运行没能写下诊断日志（安装目录与系统临时目录都不可写）。"),
+        buttons: ["打开日志目录", "退出"],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      });
+    } catch (dialogError) {
+      logLine(`startup failure dialog unavailable: ${dialogError}`);
+    }
+  }
+  if (choice === 0 && logDir && shell && typeof shell.openPath === "function") {
+    // openPath 用"返回错误字符串"而不是抛异常来报告失败；打不开不改变下面的结论。
+    Promise.resolve(shell.openPath(logDir)).catch((openError) =>
+      logLine(`open log dir failed: ${openError}`),
+    );
+  }
+  // 必须先置 quitting：否则 createWindow 的 close handler 会 preventDefault
+  // 把窗口藏进托盘，app.quit() 就再也走不完（本条正是"退不掉"的成因）。
+  quitting = true;
+  app.quit();
 }
 
 // Quit lifecycle (audit PR-05) now lives in ./lib/quit-lifecycle: the update
@@ -324,16 +386,11 @@ const quitLifecycle = createQuitLifecycle({
 // Single instance: a second launch focuses the existing window instead of
 // spawning a competing backend on another port.
 if (!app.requestSingleInstanceLock()) {
-  try {
-    const probeDir = path.join(
-      process.env.LOCALAPPDATA || app.getPath("userData"),
-      "ResumeForge",
-    );
-    fs.appendFileSync(
-      path.join(probeDir, "startup-probe.log"),
-      `${new Date().toISOString()} single-instance-lock-denied\n`,
-    );
-  } catch {}
+  // 这里原本自己拼一条 <LOCALAPPDATA>\ResumeForge\startup-probe.log 并追加一行：
+  // 那是第二套路径逻辑，而且桌面测试套件加载 main.js 时会把它写进真实用户目录。
+  // 诊断信息改走壳的唯一日志出口 desktop-main.log（位置仍由 lib/shell-paths.js
+  // 裁决，写不进去也只是丢一行诊断，绝不阻断退出）。
+  logLine("single-instance lock denied; another ResumeForge instance owns the shell");
   app.quit();
 } else {
   app.on("second-instance", (_event, argv) => {
@@ -358,12 +415,9 @@ if (!app.requestSingleInstanceLock()) {
       scheduleUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
       if (wantsManualUpdateCheck()) runManualUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
     } catch (err) {
-      logLine(`startup failed: ${err}`);
-      dialog.showErrorBox(
-        "简历通",
-        `启动失败：${err && err.message ? err.message : err}`,
-      );
-      app.quit();
+      // 一条可操作的出口：打开日志目录 / 退出（见 reportStartupFailure）。
+      // 这里不再用 showErrorBox —— 它没有按钮，用户只能看着启动图。
+      reportStartupFailure(err);
     }
   });
 

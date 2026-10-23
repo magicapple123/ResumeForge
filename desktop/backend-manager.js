@@ -24,7 +24,8 @@ const path = require("path");
 const processIdentity = require("./lib/process-identity");
 const { attachBackendChild } = require("./lib/backend-startup");
 const { BACKEND_COMMAND_PATTERNS: BACKEND_COMMAND_PATTERNS_FOR_RECORDS, stopBackend } = require("./lib/backend-stop");
-const { launcherStateEnv, logHint: formatLogHint } = require("./lib/shell-paths");
+const { buildBackendEnv, buildChildEnv, resolveDesktopLogDir } = require("./lib/backend-env");
+const { logHint: formatLogHint } = require("./lib/shell-paths");
 const {
   PID_RECORD_MACOS_NAME, PID_RECORD_NAME, adoptRecordedBackend: adoptRecorded,
   backendLogFile, captureSpawnedChild, closeLogStream, logDegradedNotice,
@@ -64,16 +65,6 @@ function findFreePort() {
       server.close(() => resolve(port));
     });
   });
-}
-
-// --- ADR-0004: user data directory --------------------------------------------
-
-// Build the extra environment for the backend process. The backend's config
-// (backend/app/config.py) resolves its data directory from RF_DATA_DIR when
-// set, so the database/attachments/exports follow the user profile instead of
-// the install payload.
-function buildBackendEnv(userDataDir) {
-  return userDataDir ? { RF_DATA_DIR: userDataDir } : {};
 }
 
 // --- runtime marker versioning (audit PR-05) -----------------------------------
@@ -169,6 +160,13 @@ class BackendManager {
     this.logReason = opened.reason;
     this.logHintText = opened.hint;
     return this.logPath;
+  }
+
+  // 桌面壳日志的真实落点（→ RF_DESKTOP_LOG_DIR）。裁决在
+  // lib/backend-env.js::resolveDesktopLogDir：openLog() 打开的日志在哪个目录就看
+  // 那个目录，没打开才回退 lib/shell-paths.js（绝不在这里另拼路径）。
+  desktopLogDir() {
+    return resolveDesktopLogDir({ logPath: this.logPath, runtimeDir: this.runtimeDir });
   }
 
   // 错误信息里给用户看的那一句：有路径给路径，降级说降级，没有就直说不可用。
@@ -325,17 +323,15 @@ class BackendManager {
 
     if (onStage) onStage("backend-starting");
 
-    // ADR-0004: bundled/launcher backends run against the user data dir.
-    // RF_DESKTOP_SHELL 让后端知道自己是"桌面形态"（而不是控制台/服务），
-    // 用于行为与诊断输出上的区分；buildBackendEnv 的签名保持不变。
-    // launcherStateEnv 只在 mac 打包态给出：把状态目录显式告诉 start.sh，
-    // 否则它和壳会各写一份 pid 记录，"退出后后端还在跑"。
-    const childEnv = {
-      ...process.env,
-      ...buildBackendEnv(this.userDataDir),
-      ...(this.packaged ? { RF_DESKTOP_SHELL: "1" } : {}),
-      ...launcherStateEnv({ packaged: this.packaged, runtimeDir: this.runtimeDir }),
-    };
+    // 子进程 env 的组装（RF_DATA_DIR / RF_DESKTOP_LOG_DIR / RF_DESKTOP_SHELL /
+    // mac 打包态的 RF_STATE_DIR）全部在 lib/backend-env.js::buildChildEnv，
+    // 连同"为什么要有这几个变量"的理由一起收在那里。
+    const childEnv = buildChildEnv({
+      userDataDir: this.userDataDir,
+      desktopLogDir: this.desktopLogDir(),
+      packaged: this.packaged,
+      runtimeDir: this.runtimeDir,
+    });
 
     const bundled = resolveRuntimePython(this.runtimeDir);
     this.usingLauncher = false;
@@ -492,6 +488,8 @@ class BackendManager {
 
 module.exports = {
   BackendManager,
+  // 后端 env 构造已下沉到 lib/backend-env.js；re-export 保持既有 import 路径
+  // （用例与 main.js 都从本模块取 buildBackendEnv）。
   buildBackendEnv,
   // Runtime helpers live in lib/backend-runtime.js; re-exported here so the
   // existing callers/tests keep their import path.

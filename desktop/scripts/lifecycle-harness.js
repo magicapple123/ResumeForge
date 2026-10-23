@@ -41,12 +41,25 @@ function loadMain() {
     order: [],
     preventCalls: [],
     errorBoxes: [],
+    // showMessageBoxSync 的每次调用（启动失败的可操作对话框就是这个出口）。
+    messageBoxes: [],
+    openPathCalls: [],
+    stages: [],
     spawnCalls: [],
     installerChildren: [],
     timers: [],
   };
 
   const mainTmp = fs.mkdtempSync(path.join(os.tmpdir(), "rf-main-vm-"));
+  // 桌面壳的日志目录来自 LOCALAPPDATA（见 main.js::runtimeDir）。把它指到本次
+  // 用例的临时目录，加载 main.js 时就不会往真实用户 profile 里写 desktop-main.log
+  // （C-10：桌面测试不许污染用户目录）。用例结束时由 cleanup() 复原并删目录。
+  const realLocalAppData = process.env.LOCALAPPDATA;
+  process.env.LOCALAPPDATA = mainTmp;
+  const restoreEnv = () => {
+    if (realLocalAppData === undefined) delete process.env.LOCALAPPDATA;
+    else process.env.LOCALAPPDATA = realLocalAppData;
+  };
 
   const appStub = {
     isPackaged: false,
@@ -74,7 +87,12 @@ function loadMain() {
   const browserWindowInstances = [];
   class BrowserWindowStub {
     constructor() {
-      this.webContents = { send() {} };
+      this.webContents = {
+        send: (channel, payload) => events.stages.push(payload),
+      };
+      // 记录注册过的窗口事件（close / ready-to-show）：用例要断言"启动失败后
+      // 关窗不会被 preventDefault 拦成隐藏到托盘"。
+      this.handlers = {};
       browserWindowInstances.push(this);
     }
     setMenuBarVisibility() {}
@@ -84,8 +102,12 @@ function loadMain() {
     loadURL() {
       return Promise.resolve();
     }
-    once() {}
-    on() {}
+    once(name, handler) {
+      this.handlers[name] = handler;
+    }
+    on(name, handler) {
+      this.handlers[name] = handler;
+    }
     show() {}
     hide() {}
     focus() {}
@@ -110,9 +132,37 @@ function loadMain() {
     buildFromTemplate: (template) => ({ template }),
   };
 
+  // 「启动失败」的用例把 state.startBackend 设成一个抛错的函数，start() 就失败——
+  // 这是唯一不需要真的起后端就能走到 whenReady catch 的办法。
+  //
+  // 另外三个开关专供边界用例：对话框被系统策略挡掉（抛异常）、系统缺少
+  // showMessageBoxSync（连方法都没有）、以及 shell.openPath 用"返回错误字符串"或
+  // "reject" 报告打不开目录——这些都必须只影响"日志有没有被打开"，不能影响"退出"。
+  const state = {
+    stopBackend: () => Promise.resolve({ ok: true, reason: "" }),
+    startBackend: () => Promise.resolve("http://127.0.0.1:8010"),
+    messageBoxThrows: false,
+    openPathError: "",
+    openPathRejects: null,
+  };
+
   const dialogStub = {
     showErrorBox: (title, message) => {
       events.errorBoxes.push(message);
+    },
+    // 启动失败的可操作对话框：记录选项并返回用例预设的按钮序号（默认「退出」）。
+    showMessageBoxSync(options) {
+      events.messageBoxes.push(options);
+      if (state.messageBoxThrows) throw new Error("dialog blocked by system policy");
+      return state.messageBoxResponse ?? 1;
+    },
+  };
+
+  const shellStub = {
+    openPath(target) {
+      events.openPathCalls.push(target);
+      if (state.openPathRejects) return Promise.reject(new Error(state.openPathRejects));
+      return Promise.resolve(state.openPathError || "");
     },
   };
 
@@ -126,16 +176,14 @@ function loadMain() {
   };
 
   const backendInstances = [];
-  // The tests set `stopBackend` to control the stop() promise; it resolves to
-  // the stop outcome ({ ok, reason }) that RR-02 introduced.
-  const state = { stopBackend: () => Promise.resolve({ ok: true, reason: "" }) };
   class BackendManagerStub {
     constructor() {
       backendInstances.push(this);
       this.onUnexpectedExit = null;
+      this.url = "http://127.0.0.1:8010";
     }
-    async start() {
-      return "http://127.0.0.1:8010";
+    start() {
+      return state.startBackend();
     }
     stop() {
       events.stopCalls.push("stop");
@@ -216,6 +264,7 @@ function loadMain() {
           Menu: MenuStub,
           dialog: dialogStub,
           ipcMain: ipcMainStub,
+          shell: shellStub,
         };
       }
       if (spec === "./backend-manager") {
@@ -249,9 +298,18 @@ function loadMain() {
     appStub,
     menuHolder,
     backendInstances,
+    // 启动失败的可操作对话框用例要读窗口上的 close 处理器。
+    windowInstances: browserWindowInstances,
     exports: sandbox.module.exports,
     state,
-    cleanup: () => fs.rmSync(mainTmp, { recursive: true, force: true }),
+    // 「系统里没有这个方法」的边界用例要能把它们删掉（模拟旧版 Electron /
+    // 平台不支持），所以把 stub 本体也交出去。
+    dialogStub,
+    shellStub,
+    cleanup: () => {
+      restoreEnv();
+      fs.rmSync(mainTmp, { recursive: true, force: true });
+    },
   };
 }
 
