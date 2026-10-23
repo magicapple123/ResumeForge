@@ -42,7 +42,7 @@ from app import database
 from app.services import cleanup, user_fonts
 from app.services.data_backup import MANIFEST_MEMBER, BackupError
 from app.services.datasets import export_all_datasets, import_dataset
-from tests.font_fixtures import build_test_font
+from tests.font_fixtures import build_test_font, write_font
 
 # ===== R14：并列项要稳定（id 兜底），分页不重不漏 =====
 
@@ -172,7 +172,7 @@ def fonts_root(tmp_path, monkeypatch):
 def test_render_survives_a_truncated_font(client, fonts_root):
     """上传中断留下半截字体（能选中、解析必失败）时，``/render`` 仍 200 且正文完整。"""
     whole = build_test_font()
-    user_fonts.save_font("截断.ttf", whole[:200])
+    write_font("截断.ttf", whole[:200])
     user_fonts.set_active("截断.ttf")
 
     response = client.post(

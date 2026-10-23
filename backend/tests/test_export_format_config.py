@@ -38,7 +38,7 @@ from app.services.resume.resume_template_format import (
     validated_format_config,
 )
 from test_pdf_exporter import needs_font
-from tests.font_fixtures import build_test_font
+from tests.font_fixtures import build_test_font, write_font
 
 # 7px = 最小档 11px × 0.636（前端无级字号滑块落库的系数）。
 SMALL_7PX = {"font_scale_adjust": 0.636}
@@ -270,7 +270,7 @@ def font_dir(tmp_path, monkeypatch):
 
 
 def test_font_key_keeps_an_existing_font(font_dir):
-    user_fonts.save_font("思源黑体.ttf", build_test_font())
+    write_font("思源黑体.ttf", build_test_font())
 
     assert validated_format_config({"font": "思源黑体.ttf"}) == {"font": "思源黑体.ttf"}
 
@@ -281,7 +281,7 @@ def test_font_key_drops_a_missing_font(font_dir):
 
 
 def test_font_key_drops_path_traversal(font_dir):
-    user_fonts.save_font("ok.ttf", build_test_font())
+    write_font("ok.ttf", build_test_font())
 
     assert "font" not in validated_format_config({"font": "../ok.ttf"})
     assert "font" not in validated_format_config({"font": "..\\ok.ttf"})

@@ -53,6 +53,9 @@ from .api import (
     webform,
 )
 from .api import (
+    font_builtin as font_builtin_api,
+)
+from .api import (
     fonts as fonts_api,
 )
 from .api import (
@@ -429,6 +432,9 @@ def create_app() -> FastAPI:
         tracker.router,
         settings_api.router,
         settings_llm_global.router,
+        # 必须排在 fonts_api 之前：fonts_api 有 DELETE/PATCH /fonts/{name} 的参数段，
+        # 先注册的话 `GET|DELETE /fonts/builtin` 会被它当成"操作一个叫 builtin 的字体"。
+        font_builtin_api.router,
         fonts_api.router,
         datasets.router,
         skills.router,

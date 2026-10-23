@@ -18,6 +18,7 @@ from ..resume.resume_labels import (
     list_separator,
     section_titles,
 )
+from ..resume.resume_rich_text import has_bold
 from ..resume.resume_sections import resolved_section_order
 from .canvas import _ResumePDF
 from .columns import SectionDrawer, render_sections
@@ -235,6 +236,7 @@ def _draw_resume(
             align="L",
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
+            markdown=has_bold(intent_text),
         )
     if contact:
         contact_size = base * layout.contact_ratio
@@ -250,6 +252,7 @@ def _draw_resume(
             align="L",
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
+            markdown=has_bold(contact),
         )
     pdf.set_text_color(*pdf.body_text)
 
@@ -286,6 +289,7 @@ def _draw_resume(
             align="L",
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
+            markdown=has_bold(text),
         )
 
     def draw_summary(pdf: _ResumePDF, leading: float) -> bool:

@@ -1,49 +1,41 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历字体（R10）：上传字体文件，预览、导出 HTML 与导出 PDF 统一使用。
+ * 简历字体（R10）：选用一款字体，预览、导出 HTML 与导出 PDF 统一使用。
  *
  * 同源性要说清楚：选中的字体会被渲染层按用到的字形子集化，内嵌进预览 HTML，
  * 导出的 HTML 里也带着同一份子集，PDF 直接读同一个字体文件。**界面本身**（设置页、
  * 列表页）仍跟系统字体走——把"设置页没变"说成 bug 是最容易发生的误会。
- * 字体不随应用分发：一款中文字体动辄十几 MB，体积与授权都该由用户自己决定，
- * 所以这里只做"上传 → 选用"这一条路。
+ *
+ * ## 字体从哪来（2026-11 起）
+ *
+ * **上传入口已下线**：`POST /settings/fonts` 仍在，但界面不再提供按钮（自备字体文件这条路
+ * 对普通用户成本太高，且授权责任落在用户身上）。现在只有两条路：
+ *
+ * 1. **内置的思源黑体**，按需联网下载（约 32MB，SIL OFL 1.1，可商用）——见 `BuiltinFontRow`；
+ * 2. **已导入的历史字体**：升级前导入过的文件仍在磁盘上，继续可用、可改名、可删除。
+ *
+ * 所以这一页的主语从"上传"变成了"选用"。
  *
  * 2026-10-20 两处交互调整：
  * 1. 删除不再是一颗裸露的红色垃圾桶（列表里既抢眼又容易误点），收进「···」菜单；
  * 2. 点字体名可以**先预览再决定**：弹窗里用该字体渲染一段示例，确认后再「设为当前」。
  */
-import {
-  DeleteOutlined,
-  EditOutlined,
-  EyeOutlined,
-  MoreOutlined,
-  UploadOutlined,
-} from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Card,
-  Dropdown,
-  Input,
-  Listy,
-  Modal,
-  Space,
-  Tag,
-  Typography,
-  Upload,
-} from "antd";
-import EmptyState from "../common/EmptyState";
+import { DeleteOutlined, EditOutlined, EyeOutlined, MoreOutlined } from "@ant-design/icons";
+import { App, Button, Card, Dropdown, Input, Listy, Modal, Space, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
   activateResumeFont,
   deleteResumeFont,
+  getBuiltinFont,
   listResumeFonts,
   renameResumeFont,
   resumeFontPreviewUrl,
-  uploadResumeFont,
+  type BuiltinFontStatus,
   type ResumeFonts,
 } from "../../api/settings";
+import { t } from "../../i18n";
 import { ListyItem } from "../common/ListyItem";
+import BuiltinFontRow from "./BuiltinFontRow";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -65,46 +57,53 @@ async function fetchResumeFonts(): Promise<ResumeFonts> {
   }
 }
 
+/**
+ * 读一次内置字体状态。同样把兜底留在函数内部：老后端没有 `/settings/fonts/builtin` 时
+ * 返回 `null`，调用方据此**不渲染**内置那一行，其余设置照常可用。
+ */
+async function fetchBuiltinFont(): Promise<BuiltinFontStatus | null> {
+  try {
+    return await getBuiltinFont();
+  } catch {
+    return null;
+  }
+}
+
 export default function ResumeFontCard() {
   const { message, modal } = App.useApp();
   const [data, setData] = useState<ResumeFonts | null>(null);
-  const [busy, setBusy] = useState(false);
+  /** 内置（按需下载）字体状态；`null` = 该后端没有这个接口，整行不渲染。 */
+  const [builtin, setBuiltin] = useState<BuiltinFontStatus | null>(null);
   /** 正在预览的字体文件名；null = 弹窗关闭。 */
   const [previewName, setPreviewName] = useState<string | null>(null);
   /** 正在重命名的那款字体：`{ name: 文件名, value: 输入中的展示名 }`。 */
   const [renameTarget, setRenameTarget] = useState<{ name: string; value: string } | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
 
+  /**
+   * 重拉字体清单。内置行下载完成后也调它（清单里会多出这一款，`active` 也可能变了）。
+   * 内置**状态**不在这里刷新：那份状态由 `BuiltinFontRow` 自己轮询，两件事不该互相触发。
+   */
   const load = useCallback(async () => {
     setData(await fetchResumeFonts());
   }, []);
 
-  // 挂载即读一次。请求与 setData 都在这里内联展开：`load()` 是 hook 内部的函数，
+  // 挂载即并行读两份数据。请求与 setData 都在这里内联展开：`load()` 是 hook 内部的函数，
   // 规则无法证明它不会同步改状态，内联成"await 之后才 setData"就不存在这个疑问。
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const next = await fetchResumeFonts();
+      const [next, builtinStatus] = await Promise.all([fetchResumeFonts(), fetchBuiltinFont()]);
       // 卸载后不再写状态（列表页来回切时不至于对已卸载组件 setState）。
-      if (!cancelled) setData(next);
+      if (!cancelled) {
+        setData(next);
+        setBuiltin(builtinStatus);
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
-
-  const upload = async (file: File) => {
-    setBusy(true);
-    try {
-      const item = await uploadResumeFont(file);
-      message.success(`已上传「${item.name}」，点「设为当前」后预览与导出即生效`);
-      await load();
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "上传字体失败");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const activate = async (name: string | null) => {
     try {
@@ -120,7 +119,9 @@ export default function ResumeFontCard() {
   const remove = (name: string) => {
     modal.confirm({
       title: `删除字体「${name}」？`,
-      content: "删除后如果它正在使用，预览与导出会回到系统字体。",
+      // 直删，没有回收站：这句话必须写明"没有恢复入口"，否则用户会按"删除先进回收站"的
+      // 既有印象去找，而字体文件不在回收站里。
+      content: t("fonts.card.delete-body"),
       okText: "删除",
       cancelText: "取消",
       onOk: async () => {
@@ -152,35 +153,27 @@ export default function ResumeFontCard() {
     }
   };
 
-  const items = data?.items ?? [];
+  // 内置条目（`builtin: true`）由上面的内置行专门渲染：下载、设为当前、体积说明都在那里。
+  // 若把它同时塞进下面这张历史列表，它会出现两次，还会多出「删除 / 重命名」这两条对内置
+  // 文件没有意义的操作——所以这里只列**用户自己导入过的**字体。
+  const items = (data?.items ?? []).filter((item) => !item.builtin);
   const activeName = data?.active ?? null;
 
   return (
     <Card className="settings-card" title="简历字体">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        用于预览、HTML 与 PDF：选中的字体在预览里立刻生效，导出的 HTML / PDF 也是同一款字。
-        界面本身（设置页、列表页）仍使用系统字体。
-        系统字体缺少你需要的字形（生僻字、繁体）时，上传一个字体文件即可。
+        {t("fonts.card.description")}
       </Typography.Paragraph>
+      {/* 内置字体排在最前：它是"开箱即可用"的那一款，历史导入的字体随后。 */}
+      <BuiltinFontRow status={builtin} onChanged={() => void load()} />
       <Space wrap style={{ marginBottom: 12 }}>
-        <Upload
-          accept=".ttf,.otf,.ttc"
-          showUploadList={false}
-          beforeUpload={(file) => {
-            void upload(file as File);
-            return false;
-          }}
-        >
-          <Button icon={<UploadOutlined />} loading={busy}>
-            上传字体（ttf / otf / ttc，≤30MB）
-          </Button>
-        </Upload>
         <Button disabled={!activeName} onClick={() => void activate(null)}>
           回到系统字体
         </Button>
       </Space>
       {items.length === 0 ? (
-        <EmptyState inline description="还没有上传字体，预览与导出使用系统自带的中文字体" />
+        // 内置条目常驻，所以这里不再是"什么都没有"的空态：只说清"还没有导入其它字体"。
+        <Typography.Text type="secondary">{t("fonts.card.empty")}</Typography.Text>
       ) : (
         <Listy
           items={items}

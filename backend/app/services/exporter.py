@@ -27,6 +27,7 @@ from .resume.resume_labels import (
     normalize_language,
     section_titles,
 )
+from .resume.resume_rich_text import apply_rich_html, strip_markers
 from .resume.resume_sections import DEFAULT_SECTION_ORDER, resolved_section_order
 from .resume.resume_template_format import FONT_KEY
 from .resume.resume_template_style import style_css, validated_style_config
@@ -66,7 +67,8 @@ def sanitize_filename(name: str) -> str:
 
 
 def build_filename(resume: ResumeContent, suffix: str) -> str:
-    parts = [resume.name or "简历", resume.job_intent or "求职简历"]
+    # 文件名是**纯文本消费方**：`**加粗**` 的标记不该出现在用户下载到的文件名里。
+    parts = [strip_markers(resume.name) or "简历", strip_markers(resume.job_intent) or "求职简历"]
     date = datetime.now().strftime("%Y%m%d")
     return f"{sanitize_filename('-'.join(parts))}-{date}.{suffix}"
 
@@ -323,4 +325,9 @@ def render_html(
     font_style = _active_font_style(resume, format_values.get(FONT_KEY))
     if font_style:
         html = _inject_before(html, font_style, "</head>")
-    return html
+    # ===== 字符级加粗的唯一 HTML 收口 =====
+    # 八套内置模板、版式缩略图、`/api/resumes/render`、导出 HTML、分享包全部走这个函数，
+    # 所以 `**…**` → `<strong>` 只在这里做一次。只处理**文本段**（见
+    # `resume_rich_text.apply_rich_html`）：标签属性、注释、`<style>`/`<script>` 一律跳过，
+    # 否则样式表里出现 `**` 会把整页写坏。
+    return apply_rich_html(html)

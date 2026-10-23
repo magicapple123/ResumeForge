@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历字体选择（项 14）：这份简历用哪一款**已上传**的字体。
+ * 简历字体选择（项 14）：这份简历用哪一款**本机已有文件**的字体。
+ *
+ * 2026-11 起"本机已有"包含两类：内置的思源黑体（设置页里按需下载）与升级前导入的历史字体。
+ * 内置那款**没下载时**在后端清单里带 `downloaded: false`——磁盘上没有文件，选中它既预览不出
+ * 字形、导出也拿不到字体，所以在这里禁用并指路，而不是让它看起来能选。
  *
  * ## 为什么不是"整站字体"的第二个开关
  *
@@ -21,19 +25,24 @@
 import { Select, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { listResumeFonts, resumeFontPreviewUrl } from "../../api/settings";
+import { t } from "../../i18n";
 import { useApi } from "../../hooks/useApi";
 import type { ResumeLayout } from "../../types";
 
 /** 与后端 `resume_template_format.SYSTEM_FONT` **逐字一致**（两处只有一个含义）。 */
 export const SYSTEM_FONT_VALUE = "__system__";
 
-/** 下拉选项：`family` 只有"已上传字体"才有（系统字体没有文件可注入）。 */
+/** 下拉选项：`family` 只有"本机已有该字体文件"的才给（系统字体、未下载的内置字体都没有）。 */
 interface FontOption {
   value: string;
   label: string;
   /** 已上传字体的原始文件名（显示的是展示名，旁边仍标出磁盘上的文件）。 */
   fileName?: string;
   family?: string;
+  /** 第二行的次要说明（内置字体还没下载时，指向"去哪里把它下下来"）。 */
+  note?: string;
+  /** 不可选：内置字体还没下载，选中它既没有字形可预览、也导不出效果。 */
+  disabled?: boolean;
 }
 
 const SYSTEM_OPTION: FontOption = {
@@ -92,6 +101,16 @@ export default function ResumeFontControl({
     const fonts = items.map((font, index) => {
       // 显示名可自定义；文件名保持可见（悬停时给出），排查问题时才对得上磁盘。
       const display = font.display_name || font.name;
+      // 内置条目还没下载：磁盘上没有这个文件，选中它既渲染不出字形、导出也拿不到字体，
+      // 所以只能禁用 + 指路（第二行说明）。只有内置条目会带 `downloaded: false`。
+      if (font.downloaded === false) {
+        return {
+          value: font.name,
+          label: t("fonts.control.undownloaded", { name: display }),
+          disabled: true,
+          note: t("fonts.control.download-hint"),
+        };
+      }
       return {
         value: font.name,
         // 「当前全局」标在设备上当前选中的那一项后面：它与"这份简历选了它"是两件事。
@@ -127,11 +146,11 @@ export default function ResumeFontControl({
   }, [open, previewCss]);
 
   if (items.length === 0) {
-    // 没有任何已上传字体时不渲染 Select：一个只能选"系统字体"的下拉没有信息量，
-    // 直接告诉用户去哪里加字体更有用。
+    // 一款可用字体都没有时不渲染 Select：一个只能选"系统字体"的下拉没有信息量，
+    // 直接告诉用户最近的那条路（下载内置的思源黑体）更有用。
     return (
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        还没有导入字体，去 设置 → 应用 → 简历字体 上传
+        {t("fonts.control.empty")}
       </Typography.Text>
     );
   }
@@ -181,6 +200,11 @@ export default function ResumeFontControl({
               真正能区分它们的是磁盘上的文件名。 */}
           {option.data.fileName ? (
             <span className="resume-font-option-file">{option.data.fileName}</span>
+          ) : null}
+          {/* 未下载的内置字体：第二行说清去哪儿下。没选它就没有字形可预览，光禁用会让人
+              以为"这功能坏了"。 */}
+          {option.data.note ? (
+            <span className="resume-font-option-file">{option.data.note}</span>
           ) : null}
         </span>
       )}

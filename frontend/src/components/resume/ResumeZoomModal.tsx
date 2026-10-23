@@ -34,7 +34,7 @@ import ResumeParamGroup from "./ResumeParamGroup";
 import ResumeSpacingControls from "./ResumeSpacingControls";
 import ResumeTemplateControls from "./ResumeTemplateControls";
 import ResumeWorkbenchActionBar from "./ResumeWorkbenchActionBar";
-import ResumeWorkbenchCanvas from "./ResumeWorkbenchCanvas";
+import ResumeWorkbenchLiveCanvas, { type RichTextEditAdapter } from "./ResumeWorkbenchLiveCanvas";
 import ResumeWorkbenchEditorColumn from "./ResumeWorkbenchEditorColumn";
 import WorkbenchPanelsDrawer from "./WorkbenchPanelsDrawer";
 import type { ResumeWorkbenchEditorHandle } from "./ResumeWorkbenchEditorColumn";
@@ -117,6 +117,10 @@ interface Props {
   isDraft?: boolean;
   /** 草稿里什么都没脏时点「保存到简历中心」走这条：宿主发一次内容 PATCH 清掉草稿标记。 */
   onPublishDraft?: () => Promise<boolean>;
+  richEdit?: RichTextEditAdapter; // 右键加粗契约（右栏纸面用）；不传 = 右键交给浏览器
+  liveContent?: ResumeContent | null; // 右栏实时预览吃的正文（叠加了未保存的加粗）
+  richDirty?: boolean; // 纸面加粗还没保存：参与脏值与关闭确认
+  onDiscardRichText?: () => void; // 丢掉这些 overlay（取消修改 / 放弃并关闭）
 }
 
 export default function ResumeZoomModal({
@@ -143,9 +147,12 @@ export default function ResumeZoomModal({
   fillSources,
   isDraft = false,
   onPublishDraft,
+  richEdit,
+  liveContent,
+  richDirty,
+  onDiscardRichText,
 }: Props) {
-  // 制作台有自己的预览实例：字号滑块要即时作用在**这一个** iframe 上，不能借用主预览的句柄。
-  // 调用方给了 ref 就用它（不再在 ref 回调里二次赋值——Compiler 禁止渲染后再改 ref）。
+  // 制作台有自己的预览实例：字号滑块要即时作用在**这一个** iframe 上（调用方给了 ref 就用它）。
   const fallbackPreviewRef = useRef<ResumePreviewHandle>(null);
   const workbenchPreviewRef = previewRef ?? fallbackPreviewRef;
   // 目录**只取一次**，四个分组共用（`useApi` 没有跨实例缓存，各取一次就是四个请求）。
@@ -153,7 +160,6 @@ export default function ResumeZoomModal({
   // 中栏**不再可折叠**（2026-10-23 用户口径："去掉右上角的收起内容栏按钮"）。理由不只是
   // 少一颗按钮：折叠会把中栏整个卸载，那份未保存的草稿只留在 sessionStorage 里，用户回来
   // 时看到的是"上次的改动不见了"。中栏是这一屏的主场，藏起来只会让人找不到它。
-  //
   // 中栏脏值同时上报给宿主（底部「手动调整」要用），这里再留一份，好让关闭前的那次
   // 判断（Esc / × / 遮罩）自己就能决定"要不要问"。
   const [editorDirty, setEditorDirty] = useState(false);
@@ -161,23 +167,21 @@ export default function ResumeZoomModal({
   const [editorSaving, setEditorSaving] = useState(false);
   // 顶部动作条上的两颗按钮靠这个句柄打到中栏的状态机上（表单实例、脏值、内联确认都在那一层）。
   const editorRef = useRef<ResumeWorkbenchEditorHandle>(null);
-  // 「有没有改动 / 保存 / 取消 / 就地确认」这一整套状态判断在 hook 里（纯状态，一行 JSX 都不需要）：
-  // 脏值有两个来源（中栏内容 + 左栏版式），判定与两步提交都只有一份实现。
+  // 「有没有改动 / 保存 / 取消 / 就地确认」全在 hook 里：脏值有三个来源（中栏内容 + 左栏版式 +
+  // 纸面加粗）。加粗必须并进 `editorDirty`——`save()` 只有看到它才会去点中栏的保存。
   const { dirty, layoutDirty, saving, save, cancel, discardConfirm, setDiscardConfirm } =
     useWorkbenchOverallSave({
       open,
       layout,
-      editorDirty,
+      editorDirty: editorDirty || Boolean(richDirty),
       isDraft,
       editorRef,
       onApplyLayout,
       onCommitLayout,
       onPublishDraft,
     });
-  /**
-   * 「点纸面字段 → 定位中栏的输入框」。每次点击都换一个新对象（`nonce` 自增）：同一条路径连点
-   * 两次时引用也会变，中栏那条 effect 才会重新滚一遍并聚焦（只比路径的话第二次点击毫无反应）。
-   */
+  // 「点纸面字段 → 定位中栏输入框」。每次点击换新对象（`nonce` 自增）：同一条路径连点两次
+  // 引用也会变，中栏那条 effect 才会重新滚一遍并聚焦（只比路径的话第二次点击毫无反应）。
   const [pickTarget, setPickTarget] = useState<{ path: string; nonce: number } | null>(null);
   const handlePickField = (path: string) =>
     setPickTarget((previous) => ({ path, nonce: (previous?.nonce ?? 0) + 1 }));
@@ -222,20 +226,14 @@ export default function ResumeZoomModal({
     [onEditorDirtyChange],
   );
 
-  // 有**任何**改动（内容脏 **或** 版式与快照不同）→ 先问一句；否则直接关。
-  // 只看内容是不够的：只改了版式时以前会直接关掉，这一半改动静默消失、连提示都没有。
-  //
-  // 确认卡片长在动作条最右那颗 × 上（2026-10-24）。以前它塞在中栏底部、由 `closeSignal`
-  // 驱动：用户按的是关闭、确认却出现在屏幕另一侧，中栏不渲染时（窄屏 / 只读宿主）那个
-  // 信号还会被吃掉——**关不掉**。现在 × 自带卡片，Esc 与遮罩走同一个函数。
+  // 有**任何**改动（内容脏 / 版式与快照不同 / 纸面加粗）→ 先问一句；否则直接关。
+  // 确认卡片长在动作条最右那颗 × 上：用户按的是关闭，卡片就该在那儿展开（Esc 与遮罩同一条路）。
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   /**
-   * 关闭前要不要问一句。
-   *
-   * 除了"有改动"，**草稿本身**也要问：那份记录还没进过简历中心，关掉等于把它扔掉——
-   * 而这时 `dirty` 是 false（内容与版式都是它被建出来时的样子），只按脏值判断会静默丢弃。
+   * 关闭前要不要问一句：除了"有改动"，**草稿本身**也要问——那份记录还没进过简历中心，
+   * 关掉等于把它扔掉，而这时 `dirty` 是 false，只按脏值判断会静默丢弃。
    */
-  const needsCloseConfirm = dirty || isDraft;
+  const needsCloseConfirm = dirty || isDraft || Boolean(richDirty);
   // 判断只写在这里、不写在按钮的 `onClick` 上：antd 会把 `Popconfirm` 自己的 onClick 与
   // 子元素的 onClick 合并，两处各写一份就会出现"问完又立刻关掉"或"关了卡片还亮着"。
   const handleCloseRequest = (next: boolean) => {
@@ -244,11 +242,17 @@ export default function ResumeZoomModal({
     else onClose();
   };
   const handleCancel = () => handleCloseRequest(true);
-  /** 「放弃并关闭」：先丢掉中栏那份未保存的内容再关，否则下次打开会冒出"已放弃的改动"。 */
+  /** 「放弃并关闭」：丢掉中栏未保存的内容与纸面加粗，再关（否则下次打开会冒出已放弃的改动）。 */
   const confirmDiscardAndClose = () => {
     editorRef.current?.discard();
+    onDiscardRichText?.();
     setCloseConfirmOpen(false);
     onClose();
+  };
+  /** 取消修改：内容回填 + 版式回滚（在 `cancel` 里）+ 丢掉纸面加粗（overlay 不在编辑器里）。 */
+  const cancelAll = () => {
+    onDiscardRichText?.();
+    cancel();
   };
   // 描述跟着"丢什么"走：只说"没保存"会让用户猜不出丢的是内容还是排版。
   const closeBody =
@@ -391,7 +395,7 @@ export default function ResumeZoomModal({
         <ResumeWorkbenchActionBar
           resumeName={content?.name}
           editorEnabled={editorEnabled}
-          dirty={dirty}
+          dirty={dirty || Boolean(richDirty)}
           isDraft={isDraft}
           layoutSaving={layoutSaving}
           editorSaving={editorSaving}
@@ -401,7 +405,7 @@ export default function ResumeZoomModal({
           closeBody={closeBody}
           onSave={() => void save()}
           onRequestDiscardConfirm={setDiscardConfirm}
-          onDiscard={cancel}
+          onDiscard={cancelAll}
           onExport={onExport}
           // 两栏及以下：内容栏不在栅格里，必须给一个入口（否则「编辑内容」不可达）。
           onOpenContent={
@@ -461,7 +465,7 @@ export default function ResumeZoomModal({
         {showEditorColumn ? editorColumn : null}
         {showEditorColumn ? resizer() : null}
         <div className="resume-wb-col resume-wb-col-canvas">
-          <ResumeWorkbenchCanvas
+          <ResumeWorkbenchLiveCanvas
             html={html}
             warnings={warnings}
             pages={pages}
@@ -471,6 +475,11 @@ export default function ResumeZoomModal({
             exactPreview={exactPreview}
             // 勾上「草稿模式编辑」后，右栏纸面点哪里，中栏就跳到哪一栏的输入框。
             onPickField={editorEnabled ? pickFromPaper : undefined}
+            // 实时预览：中栏一改右栏就重排；保存期间让路给宿主返回的 html。
+            content={liveContent ?? content ?? null}
+            layout={layout}
+            richEdit={richEdit}
+            suspended={saving || editorSaving}
           />
         </div>
       </div>

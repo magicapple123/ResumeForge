@@ -5,6 +5,17 @@
  * 形状必须和后端 `GET /api/resumes/templates` 一致（`services/resume_templates.py`）。
  * 放在这里而不是每个测试文件各写一份，是因为这份形状会随功能变——散在各处时，
  * 后端加一个档位就要记得改六份，实际情况是没人记得。
+ *
+ * ## `templates` 为什么是 5 条（2026-11）
+ *
+ * `template_options()` 只吐 5 套（`classic` / `modern` / `compact` / `elegant` / `minimal`，
+ * 顺序固定），`GET /api/resume-templates/builtin` 与 `GET /api/resumes/templates` 同源。
+ * 夹具要跟着**生产会返回的东西**走：留 8 条会让组件测试跑在真机永远不会出现的状态上
+ * （例如"选择器一屏 8 张卡片"的布局断言，实际只有 5 张）。
+ *
+ * **技术 / 社论 / 分栏**三套已不再出现在选择器里，但**没有删除**：`RESUME_TEMPLATES`
+ * 仍保留 8 条的解析、`.j2` 与 `TEMPLATE_LAYOUT_DEFAULTS` 一律没动，引用它们的旧简历
+ * 仍按原模板渲染。夹具描述的是"选择器里有什么"，所以这里也不列它们。
  */
 
 import type { ResumeTemplateCatalog, ResumeLayout } from "../types";
@@ -15,14 +26,7 @@ export const TEMPLATE_CATALOG: ResumeTemplateCatalog = {
     { name: "modern", label: "现代", description: "青绿配色与圆角标签，适合互联网岗位" },
     { name: "compact", label: "精简", description: "细线分隔、排版紧凑，适合内容多、想压在一页" },
     { name: "elegant", label: "优雅", description: "居中标题与衬线字，留白舒展" },
-    { name: "technical", label: "技术", description: "色块标题与等宽辅助信息，信息密度高" },
     { name: "minimal", label: "极简", description: "只用黑灰与字号层级，没有色块与装饰" },
-    {
-      name: "editorial",
-      label: "社论",
-      description: "衬线字体与细线分隔，适合文商科、内容与管理岗位",
-    },
-    { name: "split", label: "分栏", description: "正文双栏、信息密度高，适合经历与技能较多的简历" },
   ],
   font_scales: [
     {

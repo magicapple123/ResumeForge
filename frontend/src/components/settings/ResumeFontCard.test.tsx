@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历字体卡（R10）：上传 → 设为当前 → 删除。
+ * 简历字体卡（R10）：选用 → 设为当前 → 删除。
  *
  * 关键边界是"预览、HTML 与 PDF 同一款字"，界面上必须写明（旧文案说"只影响 PDF"，
  * 会让用户以为预览没变是 bug）；以及删除当前字体后要回到系统字体。
+ *
+ * 2026-11：**上传入口下线**。字体只剩两条路——内置的思源黑体（按需下载）与升级前导入的
+ * 历史字体。所以这里还钉一条"页面上没有上传按钮"，防止旧入口被合并回来。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
 import ResumeFontCard from "./ResumeFontCard";
 
 const apiMocks = vi.hoisted(() => ({
@@ -15,12 +19,26 @@ const apiMocks = vi.hoisted(() => ({
   uploadResumeFont: vi.fn(),
   activateResumeFont: vi.fn(),
   deleteResumeFont: vi.fn(),
+  /** 内置字体状态：默认"还没下载"，于是那一行只出现「下载」，不干扰下面的列表断言。 */
+  getBuiltinFont: vi.fn(),
   resumeFontPreviewUrl: vi.fn(
     (name: string) => `/api/settings/fonts/${encodeURIComponent(name)}/file`,
   ),
 }));
 
 vi.mock("../../api/settings", () => apiMocks);
+
+/** 内置字体的未下载态（与后端 `GET /settings/fonts/builtin` 同一形状）。 */
+const BUILTIN_IDLE = {
+  id: "source-han-sans-sc",
+  label: "思源黑体",
+  size_total: 33493260,
+  downloaded: false,
+  downloaded_bytes: 0,
+  total_bytes: 33493260,
+  state: "idle" as const,
+  error: "",
+};
 
 const FONT = {
   name: "思源黑体.ttf",
@@ -44,6 +62,7 @@ beforeEach(() => {
   apiMocks.uploadResumeFont.mockReset();
   apiMocks.activateResumeFont.mockReset().mockResolvedValue({ active: "思源黑体.ttf" });
   apiMocks.deleteResumeFont.mockReset().mockResolvedValue(undefined);
+  apiMocks.getBuiltinFont.mockReset().mockResolvedValue(BUILTIN_IDLE);
 });
 
 afterEach(() => {
@@ -56,6 +75,39 @@ describe("ResumeFontCard", () => {
     renderCard();
     expect(await screen.findByText(/用于预览、HTML 与 PDF/)).toBeInTheDocument();
     expect(screen.queryByText(/只影响 PDF 导出/)).not.toBeInTheDocument();
+  });
+
+  it("字体上传入口已下线，内置思源黑体那一行常驻", async () => {
+    // 后端把内置条目放在 `items` 第 1 位（`builtin: true`）。它必须**只由内置行渲染一次**，
+    // 不能同时出现在下面的历史列表里——那里还挂着「删除 / 重命名」，对内置文件没有意义。
+    apiMocks.listResumeFonts.mockResolvedValue({
+      items: [
+        {
+          name: "SourceHanSansSC-Regular.otf",
+          display_name: "思源黑体",
+          size: 33493260,
+          uploaded_at: "",
+          active: false,
+          builtin: true,
+          downloaded: true,
+        },
+        FONT,
+      ],
+      active: null,
+      max_bytes: 20971520,
+    });
+    renderCard();
+
+    // 内置行：名字 + 体积提示 + 下载按钮（未下载态）。
+    expect(await screen.findByText(t("fonts.builtin.name"))).toBeInTheDocument();
+    // 名字只出现一次（历史列表里没有重复的第二条内置条目）。
+    expect(screen.getAllByText(t("fonts.builtin.name"))).toHaveLength(1);
+    expect(
+      screen.getByRole("button", { name: t("fonts.builtin.download-aria", { size: "32 MB" }) }),
+    ).toBeInTheDocument();
+    // 上传按钮与"上传字体"这类说明都不该再出现。
+    expect(screen.queryByRole("button", { name: /上传/ })).toBeNull();
+    expect(apiMocks.uploadResumeFont).not.toHaveBeenCalled();
   });
 
   it("列表里显示当前使用，并可设为当前", async () => {

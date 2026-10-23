@@ -1,0 +1,17 @@
+[
+  { "raw": "abcdef", "start": 1, "end": 3, "next": "a**bc**def" },
+  { "raw": "abcdef", "start": 0, "end": 6, "next": "**abcdef**" },
+  { "raw": "**abc**", "start": 0, "end": 3, "next": "abc" },
+  { "raw": "**ab**cd", "start": 0, "end": 2, "next": "abcd" },
+  { "raw": "**a**bc", "start": 0, "end": 2, "next": "**ab**c" },
+  { "raw": "**abc**def", "start": 0, "end": 6, "next": "**abcdef**" },
+  { "raw": "**abc**def", "start": 2, "end": 4, "next": "**abcd**ef" },
+  { "raw": "前**中**后", "start": 0, "end": 1, "next": "**前中**后" },
+  { "raw": "**a**b**c**", "start": 1, "end": 2, "next": "**abc**" },
+  { "raw": "第一行\n**第二行**", "start": 0, "end": 3, "next": "**第一行**\n**第二行**" },
+  { "raw": "a*b", "start": 0, "end": 3, "next": "**a*b**" },
+  { "raw": "abc", "start": 2, "end": 2, "next": "abc" },
+  { "raw": "abc", "start": -5, "end": 99, "next": "**abc**" },
+  { "raw": "****", "start": 0, "end": 0, "next": "****" },
+  { "raw": "", "start": 0, "end": 0, "next": "" }
+]

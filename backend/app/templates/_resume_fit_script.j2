@@ -85,7 +85,7 @@
       if (page.dataset.previewColumns === "1") return;
 
       const geometry = measure(page);
-      // 297mm ≈ 1122.5px（96dpi）；这个页高**只用来判断 body 是否被钉成了 N 页高**，
+      // 297mm ≈ 1122.5px（96dpi）；这个页高「只用来判断 body 是否被钉成了 N 页高」，
       // 不作为溢出阈值（阈值是内容区底边，见下）。
       const pageBoxHeight = 1122.5 * pageCount;
       {# 已知残留 2（见文件头）：2px 判定带 ⇒ 自动高度模板的正文若恰好 297.0~297.5mm，

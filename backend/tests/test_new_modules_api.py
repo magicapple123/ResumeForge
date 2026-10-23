@@ -242,17 +242,9 @@ def test_resume_template_catalog_and_layout_update(client):
     assert catalog.status_code == 200
     body = catalog.json()
     names = {item["name"] for item in body["templates"]}
-    # 内置样式模板（自制模板以 custom=True 追加在后面，未创建时应为空）。
-    assert {
-        "classic",
-        "modern",
-        "compact",
-        "elegant",
-        "technical",
-        "minimal",
-        "editorial",
-        "split",
-    } <= names
+    # 内置模板只列 5 套（2026-11 收敛）；technical / editorial / split 不再出现在可选清单里，
+    # 但仍留在 catalog 中供老简历按原模板渲染。
+    assert names == {"classic", "modern", "compact", "elegant", "minimal"}
     assert [item for item in body["templates"] if item["custom"]] == []
     assert {item["name"] for item in body["font_scales"]} == {"small", "standard", "large"}
     # 每个档位都必须带 `base_px`，且**与后端唯一的档位表 FONT_SCALES 完全一致**：

@@ -46,33 +46,47 @@ def test_resolve_format_preset(db_session):
     assert resolve_format_config(db_session, "standard") == {}
 
 
-def test_custom_template_lifecycle(client, db_session):
+def test_style_template_is_offline_for_writes(client, db_session):
+    """自制样式模板已下线：写路径一律 400，错误文案只说原因。"""
     created = client.post(
         "/api/resume-templates",
         json={"name": "自定义A", "kind": "style", "html": STYLE_HTML},
     )
-    assert created.status_code == 201
-    template_id = created.json()["id"]
+    assert created.status_code == 400
+    assert created.json()["detail"] == "自制模板已下线，只能创建版式"
 
-    # 创建之后按名字能解析到它自己的 HTML。
-    name, html = resolve_style_template(db_session, "自定义A")
-    assert name == "classic"  # 内置兜底名（沙箱渲染时用不到它的文件）
-    assert "resume.name" in html
-
-    # 重名拒绝：模板名是选择模板时的唯一标识。
-    duplicate = client.post(
-        "/api/resume-templates", json={"name": "自定义A", "kind": "style", "html": STYLE_HTML}
-    )
-    assert duplicate.status_code == 400
-    assert "同名" in duplicate.json()["detail"]
-
-    # 停用后不再出现在可选清单里。
-    assert client.put(f"/api/resume-templates/{template_id}", json={"enabled": False}).status_code == 200
+    # 读不到也不该抛异常：记录里可能还存着这个名字。
+    assert resolve_style_template(db_session, "自定义A") == ("classic", "")
     assert custom_template_options(db_session) == []
 
-    # 删除后按名字解析退回默认模板，而不是抛异常。
-    assert client.delete(f"/api/resume-templates/{template_id}").status_code == 204
-    assert resolve_style_template(db_session, "自定义A") == ("classic", "")
+
+def test_existing_style_rows_are_not_read_anymore(client, db_session):
+    """DB 里存量的 style 行**不删**，但读路径必须彻底不认它。
+
+    这是"零迁移"下线的关键：老记录里的模板名还在，导出时不能拿到用户模板 HTML
+    （那会把一条已经下线的渲染路径重新激活），只能安静地退回默认内置模板。
+    """
+    from app.models.resume_template import TEMPLATE_KIND_STYLE, ResumeTemplate
+
+    row = ResumeTemplate(
+        name="存量样式",
+        kind=TEMPLATE_KIND_STYLE,
+        description="",
+        html=STYLE_HTML,
+        config={},
+        source_name="",
+        enabled=True,
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    assert resolve_style_template(db_session, "存量样式") == ("classic", "")
+    assert custom_template_options(db_session) == []
+    # 行还在（用户能在列表里看到并删除），只是不再参与渲染。
+    assert client.get("/api/resume-templates", params={"kind": "style"}).json()[0]["name"] == "存量样式"
+    # 编辑同样被拒：能改只会让人以为"改了有用"。
+    edited = client.put(f"/api/resume-templates/{row.id}", json={"name": "改名试试"})
+    assert edited.status_code == 400
 
 
 def test_format_template_requires_a_real_setting(client, db_session):
@@ -98,14 +112,15 @@ def test_format_template_requires_a_real_setting(client, db_session):
     }
 
 
-def test_builtin_source_is_readable(client):
-    response = client.get("/api/resume-templates/builtin-source?name=modern")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["label"] == "现代"
-    assert "_resume_sections.j2" in body["html"]
+def test_builtin_source_endpoint_is_gone(client):
+    """`GET /builtin-source` 只服务「复制内置模板」，随自制模板一起下线。
 
-    assert client.get("/api/resume-templates/builtin-source?name=nope").status_code == 404
+    现在这条路径落到 `GET /{template_id}` 上——`builtin-source` 不是整数，所以是 422
+    而不是 404。两种都表示"这个端点不存在了"，重要的是它不再返回模板源码。
+    """
+    response = client.get("/api/resume-templates/builtin-source?name=modern")
+    assert response.status_code in (404, 422)
+    assert "html" not in response.text
 
 
 def test_name_validation_rejects_markup():

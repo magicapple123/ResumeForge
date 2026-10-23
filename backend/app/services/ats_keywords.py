@@ -22,6 +22,7 @@ from typing import NamedTuple
 
 from ..schemas.ats import AtsIssue
 from ..schemas.resume import ResumeContent
+from .resume.resume_rich_text import strip_markers
 
 _ATS_KEYWORDS_PATH = Path(__file__).resolve().parent.parent / "data" / "ats_keywords.json"
 
@@ -234,7 +235,13 @@ def load_keywords() -> list[str]:
 
 
 def _join_parts(*parts: str) -> str:
-    return " ".join(part for part in parts if part and part.strip())
+    """拼接可检索文本；**先剥字符级加粗标记**。
+
+    关键词匹配比的是用户读到的字。``**Python**`` 里的标记会让 ``Python`` 与
+    ``**Python**`` 变成两个不同的串，词库命中率凭空下降——同一个词在预览里加粗一次，
+    ATS 分数就掉一档，这种"看不见的扣分"最难解释。
+    """
+    return strip_markers(" ".join(part for part in parts if part and part.strip()))
 
 
 def _section_texts(resume: ResumeContent) -> dict[str, str]:
@@ -244,7 +251,7 @@ def _section_texts(resume: ResumeContent) -> dict[str, str]:
     告诉用户"这个词出现在技能区"而不是笼统说"出现在简历里"。
     """
     return {
-        "summary": resume.summary,
+        "summary": strip_markers(resume.summary),
         "education": _join_parts(
             *[
                 _join_parts(

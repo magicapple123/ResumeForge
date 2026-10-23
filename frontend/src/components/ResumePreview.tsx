@@ -23,6 +23,7 @@ import ExactPreviewPanel from "./resume-preview/ExactPreviewPanel";
 import ResumePreviewCanvas from "./resume-preview/ResumePreviewCanvas";
 import PreviewZoomBar from "./resume-preview/PreviewZoomBar";
 import ResumePreviewToolbar from "./resume-preview/ResumePreviewToolbar";
+import BoldContextMenu, { type RichTextEditAdapter } from "./resume-preview/BoldContextMenu";
 import { useClickToEditPreview } from "./resume-preview/useClickToEditPreview";
 import { layoutFrame } from "./resume-preview/layout";
 import { forwardWheelToParent, useFrameInteractions } from "./resume-preview/useFrameInteractions";
@@ -102,6 +103,7 @@ interface Props {
    * 只读宿主因此一行都不用改。
    */
   onPickField?: (path: string) => void;
+  richEdit?: RichTextEditAdapter; // 右键加粗的最小契约；不传 = 整条链路不渲染
 }
 
 /**
@@ -144,6 +146,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     previewMode,
     onPreviewModeChange,
     onPickField,
+    richEdit,
   },
   ref,
 ) {
@@ -273,13 +276,15 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
    * 「草稿模式编辑」：状态机与监听注册全在 `resume-preview/useClickToEditPreview`。
    * `bindDocument` 是稳定引用，所以 `handleFrameLoad` 的依赖里只写它一个。
    */
+  const draftMode = activeMode === "draft";
   const {
     checked,
     setChecked,
     available,
     active,
     bindDocument: bindClickToEdit,
-  } = useClickToEditPreview({ containerRef, draftMode: activeMode === "draft", onPickField });
+    boldMenu,
+  } = useClickToEditPreview({ containerRef, draftMode, onPickField, richEdit });
 
   useImperativeHandle(
     ref,
@@ -483,6 +488,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
           onReset={() => setZoom(1)}
         />
       )}
+      {boldMenu ? <BoldContextMenu {...boldMenu} /> : null}
     </div>
   );
 });

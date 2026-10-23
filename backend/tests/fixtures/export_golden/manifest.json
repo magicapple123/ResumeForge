@@ -82,8 +82,8 @@
     },
     "txt-modern-zh-redact": {
       "pages": null,
-      "text_chars": 376,
-      "text_sha256": "909a22381d6ea9cf0ac96044ddbd7de8e3a835426e24e7d1e448a8e94d430358"
+      "text_chars": 380,
+      "text_sha256": "8b1eeda88ca4da0a33ee50e783f7a6b08deee9348d82c8ec46010439b6980d06"
     }
   },
   "description": "RF-16 黄金导出矩阵内容指纹基线：页数 + 规范化提取文本 sha256（非文件字节哈希）。预期内的内容变更应显式重新生成本文件并连同改动一起评审。",

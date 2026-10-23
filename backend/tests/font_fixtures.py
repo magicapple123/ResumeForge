@@ -8,6 +8,7 @@ R10 的链路（读字体 → 按字符集子集化 → base64 → 注入 HTML�
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
@@ -52,3 +53,19 @@ def build_test_font(text: str = DEFAULT_TEXT, family: str = "Test Sans") -> byte
     buffer = io.BytesIO()
     builder.save(buffer)
     return buffer.getvalue()
+
+
+def write_font(name: str, data: bytes) -> Path:
+    """把字体字节直接写进字体目录，返回文件路径。
+
+    上传接口（``POST /api/settings/fonts``）已于 2026-11 下线，服务层的 ``save_font``
+    随之删除。测试仍然需要"磁盘上有一个字体文件"这个前提——这就是它唯一要做的事，
+    刻意不复刻任何校验逻辑（文件名白名单、体积上限那些都属于已经不存在的那条链路）。
+    """
+    from app.services import user_fonts
+
+    directory = user_fonts.fonts_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / name
+    path.write_bytes(data)
+    return path

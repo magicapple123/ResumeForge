@@ -176,128 +176,57 @@ def test_style_config_accepts_embedded_raster_and_rejects_external_image_urls():
     assert config["badges"] == [{"image": valid, "label": "证书", "alt": "证书"}]
 
 
-# ===== 接口层 =====
+# ===== 接口层：这两条端点已下线 =====
+#
+# `/api/resume-templates/import-from-file` 与 `/api/resume-templates/analyze-from-files`
+# 随「自制模板下线」（2026-11）一起**停止注册**。这里刻意不用 `skip`——skip 会变成永久
+# 遗忘，而"端点确实不在了"本身值得一条守卫：路由被谁不小心加回去时，下面两条会立刻变红。
+#
+# 原来那 6 条接口用例（空文件 / 内容不是图片 / 未配置模型 / 落库 / 视觉草稿 / PDF 取文字）
+# 已删除：它们测的是**一条不存在的路由**的输入校验与副作用，逐条改成"断言 405"只会得到
+# 6 条互相重复的负向用例，读的人反而看不出重点。这些行为在服务层仍有覆盖（见上面的
+# 函数级用例：图片消息形态、文档只发结构统计、全文截断、分析摘要、视觉配置白名单），
+# 服务实现 `services/resume/resume_template_import.py` 也原样保留，供随时回滚。
+
+_IMPORT_PATH = "/api/resume-templates/import-from-file"
+_ANALYZE_PATH = "/api/resume-templates/analyze-from-files"
 
 
-def test_endpoint_rejects_an_empty_file(client):
-    response = client.post(
-        "/api/resume-templates/import-from-file",
-        files={"file": ("empty.png", b"", "image/png")},
-    )
-    assert response.status_code == 422
-    assert "空的" in response.json()["detail"]
+def _png_bytes() -> bytes:
+    return b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 
 
-def test_endpoint_rejects_a_file_whose_content_is_not_an_image(client):
-    """扩展名说是图片、内容不是图片：必须按内容判，否则就是把任意文件转给了模型。"""
-    response = client.post(
-        "/api/resume-templates/import-from-file",
-        files={"file": ("fake.png", b"MZ\x90\x00 not really an image", "image/png")},
-    )
-    assert response.status_code == 422
-
-
-def test_endpoint_requires_a_model(client, monkeypatch):
-    """没配模型时说清楚，而不是给一个"分析失败"的含糊错误。"""
-    from app.api import resume_templates as api_module
-
-    monkeypatch.setattr(
-        api_module, "get_llm_config", lambda _db: LLMConfig(base_url="", api_key="", model="")
-    )
-    response = client.post(
-        "/api/resume-templates/import-from-file",
-        files={"file": ("t.png", TINY_PNG, "image/png")},
-    )
-    assert response.status_code == 400
-    assert "配置大模型" in response.json()["detail"]
-
-
-def test_endpoint_creates_a_format_template_that_can_be_used(client, db_session, monkeypatch):
-    """正常路径：分析结果落成一份格式模板，并且能被列表读出来（生成简历时可选）。"""
-    from app.api import resume_templates as api_module
-
-    png = TINY_PNG
-    provider = ImportProvider(
-        '{"name": "导入的深蓝版式", "description": "按上传图片取样", '
-        '"config": {"accent": "#1F4E79", "page_padding": 18}}'
-    )
-    monkeypatch.setattr(api_module, "get_llm_config", lambda _db: provider.config)
-    monkeypatch.setattr(api_module, "create_provider", lambda _config: provider)
+def test_import_endpoint_removed_from_the_api_surface(client):
+    """`import-from-file` 不再是路由：OpenAPI 里没有它，POST 也不通。"""
+    paths = client.get("/openapi.json").json()["paths"]
+    assert _IMPORT_PATH not in paths
 
     response = client.post(
-        "/api/resume-templates/import-from-file",
-        files={"file": ("目标.png", png, "image/png")},
+        _IMPORT_PATH,
+        files={"file": ("a.png", _png_bytes(), "image/png")},
     )
-
-    assert response.status_code == 201, response.text
-    body = response.json()
-    assert body["name"] == "导入的深蓝版式"
-    assert body["kind"] == "format"
-    assert body["source_name"] == "目标.png"
-
-    listed = client.get("/api/resume-templates", params={"kind": "format"}).json()
-    assert any(item["id"] == body["id"] for item in listed)
+    # 路径形状与 `/{template_id}` 相同，所以是 405（方法不匹配）而不是 404；
+    # 两者都表达"这条端点不在了"，钉住集合而不是某一个值，避免路由形状微调就假红。
+    assert response.status_code in (404, 405)
 
 
-def test_analyze_endpoint_returns_a_style_draft_without_saving(client, monkeypatch):
-    from app.api import resume_templates as api_module
-
-    provider = ImportProvider(
-        '{"name":"参考样式","description":"酒红居中","config":{"accent":"#8B3A3A",'
-        '"header_align":"center","column_count":2},"confidence":{"accent":0.9},'
-        '"evidence":["标题为酒红色"],"warnings":[]}'
-    )
-    monkeypatch.setattr(api_module, "get_llm_config", lambda _db: provider.config)
-    monkeypatch.setattr(api_module, "create_provider", lambda _config: provider)
+def test_analyze_endpoint_removed_from_the_api_surface(client):
+    """`analyze-from-files`（返回视觉草稿）同样不再是路由。"""
+    paths = client.get("/openapi.json").json()["paths"]
+    assert _ANALYZE_PATH not in paths
 
     response = client.post(
-        "/api/resume-templates/analyze-from-files",
-        files=[
-            ("files", ("第一页.png", TINY_PNG, "image/png")),
-            ("files", ("第二页.png", TINY_PNG, "image/png")),
-        ],
+        _ANALYZE_PATH,
+        files={"files": ("a.png", _png_bytes(), "image/png")},
     )
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["kind"] == "style"
-    assert body["config"]["column_count"] == 2
-    assert body["source_names"] == ["第一页.png", "第二页.png"]
-    assert client.get("/api/resume-templates").json() == []
+    assert response.status_code in (404, 405)
 
 
-def test_endpoint_accepts_a_pdf_and_uses_its_text(client, db_session, monkeypatch):
-    """PDF 走本地抽文字：断言模型收到的是文档文字，而不是被塞了图片。"""
-    from app.api import resume_templates as api_module
-    from app.services.document_text import ExtractedDocument
+def test_style_template_routes_are_not_registered_either(client):
+    """顺带钉住"下线"的另一半：自制样式模板的写路径整组都不在。
 
-    captured: dict[str, object] = {}
-
-    class CapturingProvider(ImportProvider):
-        async def chat(self, messages, *, thinking: bool = True):
-            captured["messages"] = messages
-            return self.payload
-
-    provider = CapturingProvider('{"name": "文档版式", "config": {"line_height": 1.5}}')
-    monkeypatch.setattr(api_module, "get_llm_config", lambda _db: provider.config)
-    monkeypatch.setattr(api_module, "create_provider", lambda _config: provider)
-    monkeypatch.setattr(
-        api_module,
-        "extract_document_text",
-        lambda name, mime, data: ExtractedDocument(
-            name=name or "x.pdf",
-            mime_type=mime,
-            size_bytes=10,
-            text="张三 求职意向 前端开发",
-            warnings=[],
-        ),
-    )
-
-    response = client.post(
-        "/api/resume-templates/import-from-file",
-        files={"file": ("目标.pdf", b"%PDF-1.4 fake", "application/pdf")},
-    )
-
-    assert response.status_code == 201, response.text
-    messages = captured["messages"]
-    assert isinstance(messages[-1]["content"], str)
-    assert "张三" in messages[-1]["content"]
+    单独一条而不是散落在各处的 `assert 400`：这一组是**同一个决策**的产物，
+    哪天真要恢复，一眼就知道还有哪些入口需要重新接上。
+    """
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/api/resume-templates/builtin-source" not in paths

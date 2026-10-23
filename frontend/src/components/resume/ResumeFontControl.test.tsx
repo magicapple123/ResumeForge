@@ -14,6 +14,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
 import type { ResumeLayout } from "../../types";
 import ResumeFontControl, { SYSTEM_FONT_VALUE } from "./ResumeFontControl";
 
@@ -68,15 +69,45 @@ afterEach(() => {
 });
 
 describe("ResumeFontControl", () => {
-  it("没有任何已上传字体时只给一句指引，不渲染下拉", async () => {
+  it("一款可用字体都没有时只给一句指引，不渲染下拉", async () => {
     apiMocks.listResumeFonts.mockResolvedValue({ items: [], active: null, max_bytes: 1 });
 
     renderControl();
 
-    expect(
-      await screen.findByText("还没有导入字体，去 设置 → 应用 → 简历字体 上传"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(t("fonts.control.empty"))).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("内置字体还没下载时在下拉里禁用，并在第二行指出下载位置", async () => {
+    apiMocks.listResumeFonts.mockResolvedValue({
+      items: [
+        {
+          name: "SourceHanSansSC-Regular.otf",
+          display_name: "思源黑体",
+          size: 33493260,
+          uploaded_at: "",
+          active: false,
+          builtin: true,
+          downloaded: false,
+        },
+        ...FONTS.items,
+      ],
+      active: FONTS.active,
+      max_bytes: 30 * 1024 * 1024,
+    });
+    renderControl();
+    await openDropdown();
+
+    // 选中它没有意义（磁盘上没有文件），所以只能禁用 + 指路，不能让它看起来能选。
+    const label = t("fonts.control.undownloaded", { name: "思源黑体" });
+    const node = await screen.findByText(label);
+    const option = node.closest(".ant-select-item") as HTMLElement;
+    expect(option.className).toContain("ant-select-item-option-disabled");
+    expect(option.textContent).toContain(t("fonts.control.download-hint"));
+
+    // 未下载的那一款不注入 @font-face：磁盘上没有文件，注入只会换来一次 404。
+    const css = document.head.querySelector("style[data-rf-font-options]")?.textContent ?? "";
+    expect(css).not.toContain("SourceHanSansSC-Regular.otf");
   });
 
   it("没设过字体时显示设备上当前那一款，并标注「（当前全局）」", async () => {

@@ -16,6 +16,7 @@ import re
 from ..schemas.resume import ResumeContent
 from .exporter import export_markdown
 from .resume.resume_labels import DEFAULT_RESUME_LANGUAGE
+from .resume.resume_rich_text import strip_markers
 
 # 无序列表项的前缀（`export_markdown` 用 `- ` 连接条目）。
 _BULLET_RE = re.compile(r"^\s*-\s+")
@@ -28,13 +29,17 @@ def strip_markdown(text: str) -> str:
 
     只移除标题 / 列表 / 行内加粗三类标记，不重排段落、不改文案；空行保留下来作为
     区块之间的视觉分隔。这样纯文本输出与 Markdown 输出**逐字同源**，差异仅在于标记。
+
+    加粗走 ``strip_markers`` 而不是 ``text.replace("**", "")``：后者会把用户**没有配对**
+    的 ``**``（他真想印出来的星号）一起吞掉。纯文本是投递用的最终产物，静默吞字符是
+    最难解释的一类 bug。
     """
     lines: list[str] = []
     for raw_line in text.splitlines():
         line = raw_line.rstrip()
         line = _HEADING_RE.sub("", line)
         line = _BULLET_RE.sub("", line)
-        line = line.replace("**", "")
+        line = strip_markers(line)
         lines.append(line)
     return "\n".join(lines)
 

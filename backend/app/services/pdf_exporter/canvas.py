@@ -6,6 +6,7 @@ from __future__ import annotations
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
+from ..resume.resume_rich_text import has_bold
 from .fonts import FONT_FAMILY
 from .layout import (
     _BODY_TEXT,
@@ -157,14 +158,22 @@ class _ResumePDF(FPDF):
         """
         return font_px * _PX_TO_MM * self.layout.line_height
 
-    def _dry_run_height(self, width: float, line_height: float, text: str) -> float:
+    def _dry_run_height(
+        self, width: float, line_height: float, text: str, *, markdown: bool = False
+    ) -> float:
         """`multi_cell` 的"只算不画"高度（mm）。
 
         fpdf2 的返回类型是"取决于 `output` 取值的联合"（`float | list[str] | 元组`），
         所以不能直接 `float(...)`。这里只取 `HEIGHT` 那一支：真的拿到了别的类型就
         明确报错——把量高错误静默成 0 会让页头条压到文字上，比崩更难查。
+
+        ``markdown`` **必须与真正绘制时同参**：``**加粗**`` 的标记在 markdown 模式下
+        不占宽度，量的时候不开、画的时候开，算出来的行数会比实际少（或反之），
+        于是"量出来一行、画出来两行"，页底就会溢出一行。
         """
-        measured = self.multi_cell(width, line_height, text, dry_run=True, output="HEIGHT")
+        measured = self.multi_cell(
+            width, line_height, text, dry_run=True, output="HEIGHT", markdown=markdown
+        )
         if not isinstance(measured, (int, float)):
             raise TypeError(f"multi_cell(output='HEIGHT') 返回了 {type(measured).__name__}")
         return float(measured)
@@ -178,7 +187,9 @@ class _ResumePDF(FPDF):
         文字，要么先画文字再补底色（把文字也盖住）。`dry_run=True` 只算不画。
         """
         self.set_font(FONT_FAMILY, "B" if bold else "", size_px * _PX_TO_PT)
-        return self._dry_run_height(width, self.line_advance(size_px), text)
+        return self._dry_run_height(
+            width, self.line_advance(size_px), text, markdown=has_bold(text)
+        )
 
     def ensure_space(self, height: float) -> None:
         """剩余空间不足时换页，避免条目被从中间截断。测量模式不换页。
@@ -240,7 +251,10 @@ class _ResumePDF(FPDF):
         top = self.get_y()
 
         self.set_font(FONT_FAMILY, "B", size * _PX_TO_PT)
-        text_width = self.get_string_width(text)
+        # 量宽与绘制同一个 markdown 口径：否则色块/居中会把 `**` 的宽度也算进去，
+        # 标题色块比文字宽出两个星号。
+        title_markdown = has_bold(text)
+        text_width = self.get_string_width(text, markdown=title_markdown)
         # 区块标题**跟着列框走**：双栏模板里标题色块/竖条/下划线只覆盖所在那一栏。
         text_x = self.frame_left + pad_x
 
@@ -268,7 +282,14 @@ class _ResumePDF(FPDF):
 
         self.set_text_color(*self._section_title_color())
         self.set_xy(text_x, top + pad_y)
-        self.cell(0, title_height, text, new_x=XPos.RIGHT, new_y=YPos.TOP)
+        self.cell(
+            0,
+            title_height,
+            text,
+            new_x=XPos.RIGHT,
+            new_y=YPos.TOP,
+            markdown=title_markdown,
+        )
 
         if style == "underline":
             line_y = top + title_height + pad_y
@@ -321,7 +342,9 @@ class _ResumePDF(FPDF):
             if not text:
                 continue
             # 先量整条高度：**纯文本**、与下面绘制时同一个宽度（`dry_run` 只算不画）。
-            height = self._dry_run_height(width, line_height, text)
+            # markdown 与下面 multi_cell 同参：成对 `**` 不占行宽，量的时候少开一次就会
+            # "量一行、画两行"，页底溢出一行。
+            height = self._dry_run_height(width, line_height, text, markdown=has_bold(text))
             # 列表项之间的留白 = 模板 `li { margin-bottom }`。gap 必须**并进预留量**里
             # 一起算：先换页再补 gap，gap 就落到了新页顶端，段落之间凭空多一截空白。
             gap = 0.0 if first else li_gap
@@ -357,6 +380,7 @@ class _ResumePDF(FPDF):
                 align="L",
                 new_x=XPos.LMARGIN,
                 new_y=YPos.NEXT,
+                markdown=has_bold(text),
             )
 
     def entry_head(self, left: str, right: str, base: float) -> None:
@@ -371,12 +395,25 @@ class _ResumePDF(FPDF):
         right_width = available - left_width
         self.set_font(FONT_FAMILY, "B", title_size * _PX_TO_PT)
         self.set_x(self.frame_left)
-        self.cell(left_width, line_height, left, new_x=XPos.RIGHT, new_y=YPos.TOP)
+        self.cell(
+            left_width,
+            line_height,
+            left,
+            new_x=XPos.RIGHT,
+            new_y=YPos.TOP,
+            markdown=has_bold(left),
+        )
         if right:
             self.set_font(FONT_FAMILY, "", base * self.layout.entry_meta_ratio * _PX_TO_PT)
             self.set_text_color(*self.muted_text)
             self.cell(
-                right_width, line_height, right, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT
+                right_width,
+                line_height,
+                right,
+                align="R",
+                new_x=XPos.LMARGIN,
+                new_y=YPos.NEXT,
+                markdown=has_bold(right),
             )
             self.set_text_color(*self.body_text)
         else:
@@ -430,6 +467,7 @@ class _ResumePDF(FPDF):
             align="L",
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
+            markdown=has_bold(text),
         )
         self.ln(layout.gap_mm(layout.sub_gap_bottom))
         self.set_text_color(*self.body_text)

@@ -19,7 +19,7 @@ from app.services.exporter import render_html
 from app.services.pdf_exporter import reset_font_cache
 from app.services.pdf_exporter.fonts import FONT_ENV_VAR, resolve_font_paths
 from app.services.resume.resume_template_format import SYSTEM_FONT
-from tests.font_fixtures import build_test_font
+from tests.font_fixtures import build_test_font, write_font
 
 A_FONT = "思源黑体.ttf"
 B_FONT = "霞鹜文楷.ttf"
@@ -40,8 +40,8 @@ def _resume() -> ResumeContent:
 
 
 def _save_two_fonts() -> None:
-    user_fonts.save_font(A_FONT, build_test_font())
-    user_fonts.save_font(B_FONT, build_test_font())
+    write_font(A_FONT, build_test_font())
+    write_font(B_FONT, build_test_font())
 
 
 # ===== HTML：@font-face 跟着这份简历的选择走 =====

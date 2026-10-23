@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 工作台「找求职助手制作」入口：把用户带到助手页并预填一句提问。
+ * 工作台「版式」页：助手入口、自制版式的列表/删除，以及**自制模板下线**的钉子。
  *
- * 这条链路横跨两个页面（工作台 → `/assistant?ask=`），只靠代码审阅很容易在重构时被
- * 悄悄改坏（改了 query 参数名、忘了带上下文、或把行内入口也给了样式模板），所以在这里
- * 钉住跳转 URL 与"只有格式模板行才提供让助手改"这两件事。
+ * 2026-11 的改造把「模板」卡片整块撤掉了（导入 HTML / 导入参考模板 / 复制为新模板 / 内置
+ * 模板缩略图墙 / 自制模板列表），只留「版式」。撤掉的东西最容易悄悄回来——把一个被删的
+ * import 加回去、或者从旧分支合并时带回来，界面上就又多出两个点了没反应的按钮。所以这里
+ * 既钉"还在的"（版式、自制版式、找助手），也钉"不该再出现的"。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
 import type { ResumeTemplateDetail } from "../../types";
 import TemplateWorkbench from "./TemplateWorkbench";
 
 // 只拦真正会发请求的两个模块：
-// - `api/resumes` 提供内置目录与缩略图渲染；
-// - `api/resumeTemplates` 提供自制模板列表（点击/删除/复制在内置目录测试里不需要）。
+// - `api/resumes` 提供内置版式目录；
+// - `api/resumeTemplates` 提供自制版式列表（点击/删除/复制在内置目录测试里不需要）。
 const resumeApiMocks = vi.hoisted(() => ({
   fetchResumeTemplates: vi.fn(),
   previewResumeTemplate: vi.fn(),
@@ -71,7 +73,12 @@ beforeEach(() => {
   templateApiMocks.fetchBuiltinTemplateSource.mockReset();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // antd 的 confirm holder 挂在 body 上：不清掉会让下一条用例的
+  // `.ant-modal-confirm-title` 断言读到上一条的残留。
+  document.body.innerHTML = "";
+});
 
 describe("TemplateWorkbench 的求职助手入口", () => {
   it("「找求职助手制作」跳转时带上编码后的预填提问", async () => {
@@ -103,32 +110,59 @@ describe("TemplateWorkbench 的求职助手入口", () => {
       ),
     );
   });
-
-  it("样式模板行不提供「找助手改这个模板」——助手不生成 HTML", async () => {
-    templateApiMocks.listResumeTemplates.mockResolvedValue([
-      templateDetail({ id: 3, name: "我的样式", kind: "style", html: "<html></html>" }),
-    ]);
-    renderWorkbench();
-    await screen.findByText("我的样式");
-
-    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[0]);
-    // 菜单确实打开了（预览/编辑/删除都在），但唯独没有交给助手的那一项。
-    await screen.findByText("预览效果");
-    expect(screen.queryByText("找助手改这个模板")).not.toBeInTheDocument();
-  });
 });
 
-describe("TemplateWorkbench 的导入 HTML 入口", () => {
-  it("点击「导入 HTML」按钮触发隐藏 file input 的选择文件", async () => {
-    // 回归钉子：按钮点击必须显式调用 input.click()。此前按钮只有
-    // preventDefault()，指望 label 的激活转发把点击转给 hidden input，
-    // 但点击落在交互式后代 button 上时浏览器不会转发，按钮因此无响应。
-    const clickSpy = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+describe("TemplateWorkbench 下线自制模板后的现状", () => {
+  /**
+   * 本批从组件里删掉的入口文案。用**整段文本包含**判断而不是 `queryByText`：
+   * 这些词出现在任何位置（按钮、空态、说明卡）都算回退。
+   */
+  const REMOVED_COPY = ["导入 HTML", "导入参考模板", "复制为新模板", "自制模板"];
+
+  it("「版式」卡片还在，自制模板的入口与空态文案一条都不剩", async () => {
     renderWorkbench();
 
-    fireEvent.click(await screen.findByRole("button", { name: /导入 HTML/ }));
+    // 卡片标题与页签同一个词：改造后页面只有这一张卡。
+    expect(await screen.findByText(t("skills.tab.layout"))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /自制版式/ })).toBeInTheDocument();
 
-    expect(clickSpy).toHaveBeenCalledTimes(1);
-    clickSpy.mockRestore();
+    const text = document.body.textContent ?? "";
+    for (const copy of REMOVED_COPY) {
+      expect(text).not.toContain(copy);
+    }
+    // 内置模板的行数提示（"内置模板（8 个，只读）"）也随缩略图墙一起下线。
+    expect(text).not.toContain("（只读）");
+  });
+
+  it("内置版式的标签行仍然渲染（目录里已有的预设）", async () => {
+    renderWorkbench();
+
+    // 标签来自 `format_presets`，是"点不了但看得见"的那部分信息。
+    expect(await screen.findByText("标准")).toBeInTheDocument();
+    expect(screen.getByText("紧凑")).toBeInTheDocument();
+  });
+
+  it("自制版式的列表与删除仍然可用", async () => {
+    templateApiMocks.listResumeTemplates.mockResolvedValue([
+      templateDetail({ id: 9, name: "一页版式", kind: "format" }),
+    ]);
+    renderWorkbench();
+    await screen.findByText("一页版式");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[0]);
+    // 菜单项的可访问名会带上图标与 antd 的自动空格，按文案在节点上找更稳；
+    // 这也是为了不给 `cjkRatchet` 的 tests 口径添一条中文断言。
+    const deleteItem = await waitFor(() => {
+      const found = Array.from(document.querySelectorAll('[role="menuitem"]')).find((node) =>
+        (node.textContent ?? "").includes("删除"),
+      );
+      expect(found).toBeTruthy();
+      return found as HTMLElement;
+    });
+    fireEvent.click(deleteItem);
+
+    // 删除仍走二次确认（不可撤销的模板删除保留确认），确认前不发请求。
+    await waitFor(() => expect(document.querySelector(".ant-modal-confirm-title")).not.toBeNull());
+    expect(templateApiMocks.deleteResumeTemplate).not.toHaveBeenCalled();
   });
 });

@@ -52,14 +52,21 @@ export function analyzeResumeLayout(
   });
 }
 
-/** 渲染简历内容为 HTML（生成完成后、落库前的即时预览） */
+/**
+ * 渲染简历内容为 HTML（生成完成后、落库前的即时预览）。
+ *
+ * `signal` 只给「制作台实时预览」用：连续输入会连发几次，前一次的结果已经没有意义时应当
+ * 真的取消（而不是等它回来再丢弃）。缺省不传 = 行为与之前逐字相同。
+ */
 export async function renderResume(
   content: ResumeContent,
   layout: Partial<ResumeLayout> = {},
+  signal?: AbortSignal,
 ): Promise<string> {
   const resp = await requestRaw("/resumes/render", {
     method: "POST",
     budget: "task",
+    signal,
     headers: { "Content-Type": "application/json" },
     // 后端 ResumeRenderRequest 的结构是 { content, template, page_limit, font_scale }。
     body: JSON.stringify({ content, ...layout }),

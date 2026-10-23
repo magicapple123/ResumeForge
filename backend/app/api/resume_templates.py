@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""简历模板工作台接口：自制模板的增删改查与预览渲染。"""
+"""简历模板工作台接口：版式模板的增删改查与模板预览。
+
+自制样式模板（自己写 HTML 的那类）已于 2026-11 下线，本文件只保留"版式"这条链路；
+下线的是**写路径**与**读路径**，DB 里的存量行一个都没删（零迁移）。
+"""
 
 import logging
 import re
@@ -30,24 +34,23 @@ from ..services.resume.resume_template_store import (
     get_user_template,
     list_user_templates,
     resolve_format_config,
-    resolve_style_config,
-    resolve_style_template,
     update_user_template,
 )
-from ..services.resume.resume_template_style import validated_style_config
 from ..services.resume.resume_templates import (
-    RESUME_TEMPLATES,
-    TEMPLATES_DIR,
     font_scale_spec,
+    template_options,
     template_spec,
     validated_format_config,
 )
 from ..services.settings_service import get_llm_config  # noqa: F401 - legacy monkeypatch surface
-from .resume_template_import import router as template_import_router
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/resume-templates", tags=["resume-templates"])
+
+# 自制样式模板（kind='style'）已下线（2026-11）。错误文案只写**原因**，动作由前端拼
+# （见 docs/ui-copy-guide.md §2.4 与 tests/test_detail_copy.py）。
+STYLE_OFFLINE_DETAIL = "自制模板已下线，只能创建版式"
 
 # Jinja 报错原文对用户没有意义（"…ResumeContent object has no attribute 'basic'"），
 # 而这类错误在自制模板里最常见——写在右侧的字段名与真实字段名差一个词。所以把
@@ -83,11 +86,12 @@ def _template_or_404(db: Session, template_id: int):
 
 @router.get("/builtin")
 def read_builtin_templates():
-    """内置模板清单（只读）。用户模板见 ``GET /api/resume-templates``。"""
-    return [
-        {"name": item["name"], "label": item["label"], "description": item["description"]}
-        for item in RESUME_TEMPLATES.values()
-    ]
+    """内置模板清单（只读，**只列可选的那 5 套**）。用户版式见 ``GET /api/resume-templates``。
+
+    下线的三套（technical / editorial / split）不在这里出现：它们仍然可渲染（老简历
+    按原样打开），只是不再参与"挑一个模板"这个决策。
+    """
+    return template_options()
 
 
 @router.get("", response_model=list[ResumeTemplateOut])
@@ -101,7 +105,13 @@ def read_user_templates(
 
 @router.post("", response_model=ResumeTemplateDetail, status_code=201)
 def create_template(payload: ResumeTemplateCreate, db: Session = Depends(get_db)):
-    """新建模板。模板的 HTML 入库前会被清洗（去掉脚本与外链）并补齐 CSP。"""
+    """新建**版式**模板（``kind='format'``）。
+
+    自制样式模板（自己写 HTML 的那类）已下线，``kind='style'`` 直接 400。已存在的
+    style 行不删：它们只是不再被读取，用户可以在列表里看到并删除。
+    """
+    if payload.kind != "format":
+        raise HTTPException(status_code=400, detail=STYLE_OFFLINE_DETAIL)
     try:
         template = create_user_template(
             db,
@@ -117,30 +127,6 @@ def create_template(payload: ResumeTemplateCreate, db: Session = Depends(get_db)
     return _to_detail(template)
 
 
-router.include_router(template_import_router)
-
-
-@router.get("/builtin-source")
-def read_builtin_source(name: str = Query(..., min_length=1, max_length=64)):
-    """读取某个内置模板的源码，用于「从内置模板复制一份」开始自制。
-
-    内置模板本身是随包的 Jinja 文件，只能读不能改；给用户一份可编辑的副本，比让
-    他从空白页开始写要容易得多。
-    """
-    spec = RESUME_TEMPLATES.get(name.strip())
-    if spec is None:
-        raise HTTPException(status_code=404, detail="没有这个内置模板")
-    path = TEMPLATES_DIR / spec["file"]
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="内置模板文件缺失（安装包不完整）")
-    return {
-        "name": spec["name"],
-        "label": spec["label"],
-        "html": path.read_text(encoding="utf-8"),
-        "config": {},
-    }
-
-
 @router.get("/{template_id}", response_model=ResumeTemplateDetail)
 def read_template(template_id: int, db: Session = Depends(get_db)):
     return _to_detail(_template_or_404(db, template_id))
@@ -149,6 +135,10 @@ def read_template(template_id: int, db: Session = Depends(get_db)):
 @router.put("/{template_id}", response_model=ResumeTemplateDetail)
 def update_template(template_id: int, payload: ResumeTemplateUpdate, db: Session = Depends(get_db)):
     template = _template_or_404(db, template_id)
+    # 存量自制样式模板不允许再编辑：它们已经不参与渲染，能改只会让人以为"改了有用"。
+    # 删除与重命名列表展示仍然照旧（用户要能清理掉）。
+    if template.kind == "style":
+        raise HTTPException(status_code=400, detail=STYLE_OFFLINE_DETAIL)
     try:
         template = update_user_template(
             db,
@@ -181,26 +171,13 @@ def _preview_content(payload: TemplatePreviewRequest, db: Session) -> ResumeCont
 
 @router.post("/preview")
 def preview_template(payload: TemplatePreviewRequest, db: Session = Depends(get_db)):
-    """渲染模板预览（工作台的实时预览与"每个模板一眼看效果"都走这里）。
+    """渲染模板预览（模板卡片的缩略图与"每个模板一眼看效果"都走这里）。
 
-    传 ``html`` 就渲染这段（未保存的编辑内容）；否则用已保存模板或内置模板。
+    **自制模板已下线（2026-11）**：``html`` 与 ``style_config`` 两个字段仍留在
+    schema 里（删字段会让还没更新的前端直接 422），但**不再生效**——渲染一律走
+    ``template_name`` 对应的内置模板 + ``format_name`` / ``format_config`` 的版式参数。
+    ``template_id`` 同样被忽略：库里那些 style 行已经不参与渲染。
     """
-    template_name = payload.template_name
-    template_html = payload.html
-    style_config = validated_style_config(payload.style_config)
-    if not template_html:
-        if payload.template_id is not None:
-            saved = _template_or_404(db, payload.template_id)
-            if saved.kind == "style":
-                template_name = saved.name
-                style_config = {
-                    **validated_style_config(saved.config),
-                    **style_config,
-                }
-        template_name, template_html = resolve_style_template(db, template_name)
-        if not style_config:
-            style_config = resolve_style_config(db, payload.template_name)
-
     # 与真实渲染同口径：`/api/resumes/render` 与记录落库都是"先 resolve(format_name)、
     # 再用 format_config 逐键覆盖"（见 api/resumes.py 的 render_resume 与
     # _record_format_config）。预览此前是"有 format_config 就整份顶替 format_name"，
@@ -213,12 +190,12 @@ def preview_template(payload: TemplatePreviewRequest, db: Session = Depends(get_
     try:
         html = render_html(
             content,
-            template=template_spec(template_name)["name"],
+            template=template_spec(payload.template_name)["name"],
             page_limit=payload.page_limit,
             font_scale=font_scale_spec(payload.font_scale)["name"],
             format_config=format_config,
-            style_config=style_config,
-            template_html=template_html,
+            style_config={},
+            template_html="",
         )
     except TemplateError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

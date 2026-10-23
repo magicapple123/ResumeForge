@@ -1,5 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 简历模板工作台接口：自制模板与版式的增删改查。 */
+/**
+ * 简历模板工作台接口：自制模板与版式的增删改查。
+ *
+ * ## 2026-11：自制模板的 UI 入口已下线，但这里**一个导出都不删**
+ *
+ * 界面撤掉的是"写 HTML/CSS 的模板"这一路（`fetchBuiltinTemplateSource`、`createResumeTemplate`
+ * 的 style 分支等现在没有调用点）。函数留着有两个理由：
+ *
+ * 1. 未引用的文件仍会被 `tsc` 检查，删导出只会换来编译失败或连带删掉一片类型；
+ * 2. **旧简历仍在用**这些数据：已有自制模板必须继续按原样渲染、继续能读列表，
+ *    只是不再能新建。
+ *
+ * 真要彻底删，应该是一次单独的后端 + 迁移动作（先给存量模板找归宿），不在"下线 UI"这一批里做。
+ */
 import type {
   ResumeTemplateDetail,
   ResumeTemplatePayload,

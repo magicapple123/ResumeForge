@@ -7,7 +7,7 @@
  */
 import { CloseOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Modal, Popconfirm, Space, Typography } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   fetchResumeHtml,
@@ -22,6 +22,8 @@ import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
 import { t } from "../i18n";
 import { bumpResumeList } from "../features/resume/resumeListEvents";
 import { useResumeRelayout } from "../features/resume/useResumeRelayout";
+import { useRichTextOverrides } from "../features/resume/useRichTextOverrides";
+import type { RichTextEditAdapter } from "./resume-preview/richText";
 import ResumeDeliveryInfo from "./resume/ResumeDeliveryInfo";
 import ResumeDetailPreview from "./resume/ResumeDetailPreview";
 import PageSkeleton from "./common/PageSkeleton";
@@ -59,6 +61,28 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
   // 预览量到的实测高度：只有浏览器能量准，所以由预览上报、这里转交给诊断面板。
   const [measure, setMeasure] = useState<LayoutMeasure | null>(null);
   const previewRef = useRef<ResumePreviewHandle>(null);
+  /**
+   * 「右键加粗」的乐观叠加层：把还没保存的粗体记在 `detail.content` 之外（见
+   * `useRichTextOverrides` 文件头）。这里是它唯一合适的宿主——只有这一层同时握着
+   * `detail.content`、`setHtml` 与保存链路。
+   */
+  const overlays = useRichTextOverrides(detail?.content ?? null);
+  /**
+   * 预览用的加粗契约。**这里刻意不重渲染 html**：
+   *
+   * 纸面上那一栏已经被 `useClickToEditPreview` 就地改过（立刻看到粗体），随后由制作台的实时
+   * 预览（合并内容整份重排）或保存后的重渲染收口。若在这里再发一次 `/render`，iframe 会白屏
+   * 重载一次，把用户刚恢复的选区一并丢掉——用户的感受是"点加粗，页面闪了一下"。
+   */
+  const richEdit = useMemo<RichTextEditAdapter | undefined>(() => {
+    if (!detail) return undefined;
+    return {
+      read: (path) => overlays.read(path),
+      toggle: (path, next, base) => {
+        overlays.apply(path, next, base);
+      },
+    };
+  }, [detail, overlays]);
   /**
    * 版式重排：尾随合并（`useResumeRelayout`，项 6 / D11）。
    *
@@ -114,6 +138,8 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     setHtml("");
     setError("");
     setLayoutStatus(null);
+    // 换一份简历：上一条留下的加粗 overlay 绝不能跟过来（同名字段很可能就是同一句原文）。
+    overlays.clear();
     // 换一份简历：上一份留下的"要不要丢弃排版"卡片不能跟过来。
     setCloseConfirmOpen(false);
   }
@@ -171,7 +197,10 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     if (!detail) return;
     const requestAtStart = requestVersion.current;
     const saveAtStart = ++saveRequestVersion.current;
-    const updated = await updateResume(detail.id, content);
+    // overlay 里**仍然有效**的那几条叠在表单值上：`base` 对得上的说明用户没在中栏改过这个
+    // 字段（改了 base 就变了，overlay 自动失效）。合并只在这一处做，另一处不再重复。
+    const merged = overlays.merge(content) ?? content;
+    const updated = await updateResume(detail.id, merged);
     if (requestAtStart !== requestVersion.current || saveAtStart !== saveRequestVersion.current) {
       return;
     }
@@ -184,6 +213,8 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     // 「保存到简历中心」的形态上）。
     setDetail({ ...updated, draft: false });
     setHtml(rendered);
+    // 内容已经落到服务端：overlay 再留着就会"盖住"刚存下去的值。
+    overlays.clear();
     setSuggestionsGenerated(false);
     setSuggestionsResetKey((value) => value + 1);
     // 刷新广播放在**保存成功之后**：进制作台、点开预览都不该让列表白跑一次请求。
@@ -217,12 +248,19 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     // 已经不是草稿：没什么可发布（按钮本就不会出现，这里只是把契约写清）。
     if (!detail.draft) return true;
     try {
-      const updated = await updateResume(detail.id, detail.content);
+      // 纸面上加过的粗体也要一起落库：`merged` 在没有 overlay 时**就是** `detail.content`
+      // （同一引用），所以"什么都没改"的路径一个字节都没变。
+      const merged = overlays.merge(detail.content) ?? detail.content;
+      const updated = await updateResume(detail.id, merged);
       // 正文一个字节都没变：不重渲染 html（省一次 /render），也**保留 `content` 的旧引用**
       // ——编辑器靠内容签名判断要不要回填，换一个等值的新引用虽不会误判，但没必要。
+      // 真有 overlay 时就必须换成 `merged` 并重渲染，否则粗体只存在于这一次点击里。
+      const changed = merged !== detail.content;
+      if (changed) setHtml(await renderResume(merged, layout));
       setDetail((prev) =>
-        prev ? { ...updated, content: prev.content, draft: false } : { ...updated, draft: false },
+        prev ? { ...updated, content: merged, draft: false } : { ...updated, draft: false },
       );
+      overlays.clear();
       bumpResumeList();
       message.success(t("workbench.draft.published"));
       return true;
@@ -369,6 +407,12 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
             html={html}
             layout={layout}
             autoOpenWorkbench={autoOpenWorkbench}
+            // 叠加了纸面上加粗的那几条：只给制作台的实时预览用（中栏编辑器仍吃服务端内容）。
+            liveContent={overlays.merged ?? undefined}
+            // 加粗也是"还没保存的改动"：不并进脏值，关制作台时会静默丢掉。
+            richDirty={overlays.dirty}
+            onDiscardRichText={overlays.clear}
+            richEdit={richEdit}
             layoutStatus={layoutStatus}
             measure={measure}
             pdfDirectAvailable={pdfDirectAvailable}

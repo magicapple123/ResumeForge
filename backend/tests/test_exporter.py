@@ -25,7 +25,7 @@ from app.services.exporter import (
 )
 from app.services.resume.resume_sample import sample_resume_content
 from app.services.resume.resume_template_catalog import RESUME_TEMPLATES
-from tests.font_fixtures import build_test_font
+from tests.font_fixtures import build_test_font, write_font
 
 RESUME = ResumeContent(
     name="张三",
@@ -76,7 +76,7 @@ def font_dir(tmp_path, monkeypatch):
 
 
 def _activate_test_font() -> None:
-    user_fonts.save_font("测试字体.ttf", build_test_font())
+    write_font("测试字体.ttf", build_test_font())
     user_fonts.set_active("测试字体.ttf")
 
 
@@ -241,7 +241,7 @@ def test_render_html_inlines_font_for_custom_templates_too():
 
 
 def test_render_html_survives_a_broken_font_file():
-    user_fonts.save_font("broken.ttf", b"not a font at all")
+    write_font("broken.ttf", b"not a font at all")
     user_fonts.set_active("broken.ttf")
 
     html = render_html(RESUME)

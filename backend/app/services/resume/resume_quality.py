@@ -10,6 +10,7 @@ from .resume_grounding import (
     _source_list,
     _source_value,
 )
+from .resume_rich_text import strip_markers
 
 
 def _quality_reference_points(source: dict) -> list[str]:
@@ -95,13 +96,15 @@ def _quality_shortfalls(
         # 通用简历（job 为空）也有兜底文本可以比对——_build_grounded_summary 支持无岗位，
         # 因此这里不再用 ``if job else ""`` 跳过，否则通用模式的这条检查永远不会触发。
         grounded_summary = _build_grounded_summary(selected_data, job)
-        if not resume.summary.strip():
+        # 比对的是**可见文本**：摘要里给几个字加了粗，不该让"这是系统兜底文本"漏判。
+        summary_text = strip_markers(resume.summary).strip()
+        if not summary_text:
             shortfalls.append(
                 "个人总结为空，未概括与目标岗位相关的能力"
                 if job
                 else "个人总结为空，未概括能力与经历全貌"
             )
-        elif grounded_summary and resume.summary.strip() == grounded_summary.strip():
+        elif grounded_summary and summary_text == strip_markers(grounded_summary).strip():
             shortfalls.append(
                 "个人总结只是系统兜底文本，未体现岗位化表达"
                 if job

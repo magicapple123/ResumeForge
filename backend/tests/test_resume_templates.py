@@ -213,72 +213,66 @@ def test_template_name_validation():
         validate_template_name("<script>")
 
 
-def test_user_style_template_crud_and_render(client, db_session):
+def test_builtin_template_list_has_five_items(client):
+    """「选择模板」只列 5 套；下线的三套仍能渲染，但不再出现在清单里。"""
+    builtin = client.get("/api/resume-templates/builtin").json()
+
+    assert [item["name"] for item in builtin] == [
+        "classic",
+        "modern",
+        "compact",
+        "elegant",
+        "minimal",
+    ]
+    # 下线的三套保留在 catalog 里（老简历继续按原模板渲染）。
+    for name in ("technical", "editorial", "split"):
+        assert name in RESUME_TEMPLATES
+        assert name not in [item["name"] for item in builtin]
+
+
+def test_style_template_cannot_be_created_or_copied(client, db_session):
+    """自制样式模板已下线：创建 400，目录里也不再出现「自制」条目。"""
     created = client.post(
         "/api/resume-templates",
         json={"name": "我的深色模板", "kind": "style", "html": CUSTOM_STYLE, "description": "测试"},
     )
-    assert created.status_code == 201
-    body = created.json()
-    assert body["kind"] == "style"
-    # 返回的 HTML 已清洗：脚本被去掉、CSP 已补齐。
-    assert "alert(" not in body["html"]
-    template_id = body["id"]
+    assert created.status_code == 400
+    assert created.json()["detail"] == "自制模板已下线，只能创建版式"
 
-    # 出现在可选模板清单里，并被标记为自制。
     catalog = client.get("/api/resumes/templates").json()
-    custom = [item for item in catalog["templates"] if item["custom"]]
-    assert [item["name"] for item in custom] == ["我的深色模板"]
+    assert [item for item in catalog["templates"] if item["custom"]] == []
+    assert [item["name"] for item in catalog["templates"]] == [
+        "classic",
+        "modern",
+        "compact",
+        "elegant",
+        "minimal",
+    ]
 
-    # 用它渲染：走沙箱环境，include 的正文片段仍能命中。
-    rendered = client.post(
-        "/api/resumes/render",
+
+def test_preview_ignores_html_and_style_config(client):
+    """预览端点保留（版式缩略图还在用），但 `html` / `style_config` 不再生效。
+
+    字段仍留在 schema 里：删字段会让还没更新的前端直接 422。这里钉住「传了也不生效」，
+    而不是「传了报错」——后者会把缩略图请求打成 400。
+    """
+    preview = client.post(
+        "/api/resume-templates/preview",
         json={
-            "content": sample_resume_content().model_dump(),
-            "template": "我的深色模板",
-            "page_limit": 1,
-            "font_scale": "standard",
-        },
-    )
-    assert rendered.status_code == 200
-    assert "白" in rendered.text or "示例" in rendered.text
-
-    # 重名拒绝：名称是选择模板时的唯一标识。
-    duplicate = client.post(
-        "/api/resume-templates",
-        json={"name": "我的深色模板", "kind": "style", "html": CUSTOM_STYLE},
-    )
-    assert duplicate.status_code == 400
-
-    assert client.delete(f"/api/resume-templates/{template_id}").status_code == 204
-    assert client.get(f"/api/resume-templates/{template_id}").status_code == 404
-
-
-def test_user_style_template_visual_config_is_previewable(client):
-    created = client.post(
-        "/api/resume-templates",
-        json={
-            "name": "分栏视觉模板",
-            "kind": "style",
-            "html": CUSTOM_STYLE,
-            "config": {
+            "template_name": "modern",
+            "html": "<html><head></head><body>{% if %}</body></html>",
+            "style_config": {
                 "accent": "#8b3a3a",
                 "column_count": 2,
-                "section_title_style": "accent_box",
                 "badges": [{"label": "作品集"}],
             },
         },
     )
-    assert created.status_code == 201, created.text
-    assert created.json()["config"]["column_count"] == 2
-    preview = client.post(
-        "/api/resume-templates/preview",
-        json={"template_id": created.json()["id"]},
-    )
     assert preview.status_code == 200, preview.text
-    assert "resume-sections" in preview.text
-    assert "作品集" in preview.text
-    assert "grid-template-columns" in preview.text
+    # 坏 HTML 没有被渲染（渲染了会 400），自定义视觉配置也没生效。
+    assert "作品集" not in preview.text
+    assert "#8b3a3a" not in preview.text
+    assert "示例" in preview.text or "张" in preview.text
 
 
 def test_user_format_template_changes_layout(client):
@@ -306,11 +300,7 @@ def test_user_format_template_changes_layout(client):
     assert "--accent: #111827" in html
 
 
-def test_layout_update_stores_custom_name_and_ignores_unknown(client):
-    client.post(
-        "/api/resume-templates",
-        json={"name": "我的深色模板", "kind": "style", "html": CUSTOM_STYLE},
-    )
+def test_layout_update_stores_builtin_name_and_ignores_unknown(client):
     created = client.post(
         "/api/resumes/manual",
         json={"title": "版式测试", "content": {"name": "张三"}},
@@ -320,14 +310,14 @@ def test_layout_update_stores_custom_name_and_ignores_unknown(client):
     patched = client.patch(
         f"/api/resumes/{record_id}/layout",
         json={
-            "template": "我的深色模板",
+            "template": "elegant",
             "format_name": "不存在",
             "page_limit": 2,
             "font_scale": "small",
         },
     )
     assert patched.status_code == 200
-    assert patched.json()["template"] == "我的深色模板"
+    assert patched.json()["template"] == "elegant"
     # 无法解析的格式模板名不会写进记录，否则导出时会拿到一个空配置。
     assert patched.json()["format_name"] == ""
     assert patched.json()["page_limit"] == 2
@@ -342,13 +332,14 @@ def test_template_preview_uses_sample_content(client):
     assert "示例" in response.text or "张" in response.text
 
 
-def test_template_preview_reports_broken_html(client):
+def test_template_preview_no_longer_renders_user_html(client):
+    """坏的自制 HTML 不会再让预览 400——那段 HTML 根本不再参与渲染。"""
     response = client.post(
         "/api/resume-templates/preview",
         json={"html": "<html><head></head><body>{% if %}</body></html>"},
     )
-    assert response.status_code == 400
-    assert "模板渲染失败" in response.json()["detail"]
+    assert response.status_code == 200
+    assert "模板渲染失败" not in response.text
 
 
 def test_format_presets_are_valid():
@@ -359,20 +350,13 @@ def test_format_presets_are_valid():
         assert not (preset["name"] != "standard" and preset["config"] and not validated)
 
 
-def test_generating_with_a_custom_style_keeps_its_name(client, monkeypatch):
-    """用自制样式模板生成的简历，记录里必须存**这个名字**，而不是退回 classic。
+def test_resolved_style_name_falls_back_after_the_shutdown(client, monkeypatch):
+    """记录的模板名解析：内置名字原样保留，其余一律退回 classic。
 
-    生成路径此前用的是 `template_spec(name)["name"]`，那个函数会把不认识的模板名换成
-    默认内置模板——于是用户用自制模板生成后一重开预览就变回内置样式，看起来像"我选的
-    模板没生效"。PATCH 路径一直是对的，两条路径现在共用同一个解析。
+    自制模板下线后，「其余」包括用户以前建的那些模板名——它们的 HTML 已经不参与渲染，
+    记录里继续存着那个名字只会让一条已下线的路径看起来还活着。
     """
     from app.services.resume.resume_record import resolved_style_name, save_record
-
-    created = client.post(
-        "/api/resume-templates",
-        json={"name": "我的深色模板", "kind": "style", "html": CUSTOM_STYLE},
-    )
-    assert created.status_code == 201
 
     # 直接走落库那一步（生成接口要流式调模型，这里不引入假 provider 也测得到同一行代码）。
     with SessionLocal() as db:
@@ -385,12 +369,13 @@ def test_generating_with_a_custom_style_keeps_its_name(client, monkeypatch):
             model="test-model",
             enhancement_enabled=False,
             enhancement_level="balanced",
-            template="我的深色模板",
-            requested_title="自制模板测试",
+            template="elegant",
+            requested_title="模板名解析测试",
         )
-        assert record.template == "我的深色模板"
-        # 内置模板名仍然规范化，未知名字才退回默认内置模板。
+        assert record.template == "elegant"
+        # 内置模板名仍然规范化，未知名字（含已下线的自制模板名）退回默认内置模板。
         assert resolved_style_name(db, "modern") == "modern"
+        assert resolved_style_name(db, "我的深色模板") == "classic"
         assert resolved_style_name(db, "不存在的模板") == "classic"
 
 

@@ -8,19 +8,20 @@
 跟着"这台机器上有没有这个文件"走的，换个文件就失效，不适合跟模型配置混在一起）。
 
 **永不自动删除用户字体**：删除是显式动作；被删的是当前字体时，active 一并清空，
-导出回到系统字体。上传限制 30MB 与 ttf/otf/ttc，是为了避免把 .exe 或超大文件
-塞进数据目录——不是安全扫描，做不到也不必假装。
+导出回到系统字体。字体文件的来源只有两条：内置思源黑体（按需下载，见
+``resume_font_builtin``）与本机已有的历史文件——**上传接口已于 2026-11 下线**。
+``MAX_BYTES`` 保留下来只用于接口里回给前端的体积上限提示。
 """
 
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..config import DATA_DIR
+from .resume_font_builtin import BUILTIN_FILES
 
 DIR_NAME = "fonts"
 ACTIVE_FILENAME = "active.json"
@@ -31,9 +32,13 @@ MAX_DISPLAY_NAME = 40
 MAX_BYTES = 30 * 1024 * 1024
 ALLOWED_SUFFIXES = {".ttf", ".otf", ".ttc"}
 
-# 文件名里允许的字符：中英文、数字、点、下划线、连字符、空格。其余一律替换成下划线，
-# 顺带挡掉路径分隔符与 ".."（拼路径时再做一次只取 basename 的兜底）。
-_UNSAFE = re.compile(r"[^\w.\- ]+", re.UNICODE)
+# 内置字体（思源黑体）的文件名清单与"常规 → 粗体"配对。清单的唯一来源是
+# ``resume_font_builtin.BUILTIN_FILES``（下载模块），这里只做形状转换——
+# 两处各写一份文件名，早晚会有一处漏改。
+BUILTIN_FONT_NAMES = frozenset(str(item["name"]) for item in BUILTIN_FILES)
+BUILTIN_PAIR: dict[str, str] = {
+    str(BUILTIN_FILES[0]["name"]): str(BUILTIN_FILES[1]["name"]),
+}
 
 
 class FontError(Exception):
@@ -75,17 +80,6 @@ def _write_names(names: dict[str, str]) -> None:
     )
 
 
-def _normalize_name(filename: str) -> str:
-    base = Path(filename).name.strip()
-    safe = _UNSAFE.sub("_", base).strip(" ._")
-    if not safe:
-        raise FontError("字体文件名不合法")
-    suffix = Path(safe).suffix.lower()
-    if suffix not in ALLOWED_SUFFIXES:
-        raise FontError(f"只支持 {' / '.join(sorted(ALLOWED_SUFFIXES))} 字体文件")
-    return safe[:80]
-
-
 def font_path(name: str) -> Path:
     """按文件名取字体路径（拒绝任何目录成分，调用方不必再拼路径）。"""
     safe = Path(name).name
@@ -97,11 +91,16 @@ def font_path(name: str) -> Path:
     return path
 
 
-def list_fonts() -> list[dict[str, Any]]:
+def list_fonts(include_builtin: bool = False) -> list[dict[str, Any]]:
     """已上传的字体列表（按修改时间倒序），带"是不是当前使用"的标记。
 
     ``name`` 永远是**磁盘上的真实文件名**（`format_config.font` 存的也是它）；
     ``display_name`` 是用户可改的展示名，没改过时默认取文件名去扩展名。
+
+    ``include_builtin=False``（默认）会把**内置思源黑体**的两个文件滤掉：它们在界面上
+    只出现一条"思源黑体（可下载）"，由 ``api/fonts.py`` 手动插到列表首位。要是留在这里，
+    用户会看到"Regular"和"Bold"两条互不相干的字体，还能单独选走 Bold——那是把一个字重
+    当成一款字体。备份与体检走目录遍历，不走这里，所以不受影响。
     """
     directory = fonts_dir()
     if not directory.is_dir():
@@ -113,6 +112,8 @@ def list_fonts() -> list[dict[str, Any]]:
         if not path.is_file() or path.name in {ACTIVE_FILENAME, NAMES_FILENAME}:
             continue
         if path.suffix.lower() not in ALLOWED_SUFFIXES:
+            continue
+        if not include_builtin and path.name in BUILTIN_FONT_NAMES:
             continue
         try:
             stat = path.stat()
@@ -132,10 +133,7 @@ def list_fonts() -> list[dict[str, Any]]:
 
 
 def active_font_name() -> str | None:
-    """当前选中的字体文件名；没有选就是 None。
-
-    只认**用户自己上传**的字体：不随包分发任何字体文件（体积与授权都留给用户自己决定）。
-    """
+    """当前选中的字体文件名；没有选就是 None。"""
     try:
         data = json.loads(_active_file().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -153,19 +151,34 @@ def active_font_path() -> Path | None:
     return path if path.is_file() else None
 
 
-def save_font(filename: str, data: bytes) -> dict[str, Any]:
-    if len(data) > MAX_BYTES:
-        raise FontError(f"字体文件不能超过 {MAX_BYTES // (1024 * 1024)}MB")
-    if not data:
-        raise FontError("字体文件是空的")
-    name = _normalize_name(filename)
-    directory = fonts_dir()
-    directory.mkdir(parents=True, exist_ok=True)
-    target = directory / name
-    temp = target.with_suffix(target.suffix + ".tmp")
-    temp.write_bytes(data)
-    temp.replace(target)
-    return {"name": name, "size": len(data), "active": name == active_font_name()}
+def font_pair(name: str) -> tuple[Path, Path]:
+    """字体文件名 → ``(常规字面, 粗体字面)``。
+
+    内置思源黑体带两个文件，返回各自路径（PDF 的粗体因此是**真字面**，不是描边）。
+    其它字体（用户历史上传的 ttf/otf/ttc）只有一个文件，常规与粗体都是它——行为与本
+    功能上线前**完全一致**。
+
+    Raises:
+        FontError: 文件不存在（与 ``font_path`` 同语义）。
+    """
+    regular = font_path(name)
+    bold_name = BUILTIN_PAIR.get(regular.name)
+    if bold_name:
+        bold = fonts_dir() / bold_name
+        if bold.is_file():
+            return regular, bold
+    return regular, regular
+
+
+def active_font_paths() -> tuple[Path, Path] | None:
+    """当前字体的 ``(常规, 粗体)``；没有选中或文件缺失时返回 None。"""
+    path = active_font_path()
+    if path is None:
+        return None
+    try:
+        return font_pair(path.name)
+    except FontError:
+        return None
 
 
 def set_active(name: str | None) -> None:
@@ -207,14 +220,18 @@ def delete_font(name: str) -> None:
 
 
 __all__ = [
+    "BUILTIN_FONT_NAMES",
+    "BUILTIN_PAIR",
     "DIR_NAME",
     "MAX_BYTES",
     "FontError",
     "active_font_name",
     "active_font_path",
+    "active_font_paths",
     "delete_font",
+    "font_pair",
+    "font_path",
     "list_fonts",
     "rename_font",
-    "save_font",
     "set_active",
 ]

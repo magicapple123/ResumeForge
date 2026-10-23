@@ -42,18 +42,21 @@ class _DATA_BLOB(ctypes.Structure):
 
 
 def _protect(data: bytes) -> bytes:
+    # windll 只在 Windows 存在；本模块的两个入口都有 sys.platform == "win32" 守卫，
+    # Linux/macOS 不会走到这里——按行豁免 pyright 的跨平台属性检查（CI 在 ubuntu 上
+    # 跑 pyright，ctypes 的 Linux stubs 没有 windll）。
     data_in = _DATA_BLOB(
         len(data), ctypes.cast(ctypes.create_string_buffer(data), ctypes.POINTER(ctypes.c_char))
     )
     data_out = _DATA_BLOB()
-    if not ctypes.windll.crypt32.CryptProtectData(
+    if not ctypes.windll.crypt32.CryptProtectData(  # pyright: ignore[reportAttributeAccessIssue]
         ctypes.byref(data_in), None, None, None, None, 0, ctypes.byref(data_out)
     ):
         raise OSError("CryptProtectData 失败")
     try:
         return ctypes.string_at(data_out.pbData, data_out.cbData)
     finally:
-        ctypes.windll.kernel32.LocalFree(data_out.pbData)
+        ctypes.windll.kernel32.LocalFree(data_out.pbData)  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def _unprotect(data: bytes) -> bytes:
@@ -61,14 +64,14 @@ def _unprotect(data: bytes) -> bytes:
         len(data), ctypes.cast(ctypes.create_string_buffer(data), ctypes.POINTER(ctypes.c_char))
     )
     data_out = _DATA_BLOB()
-    if not ctypes.windll.crypt32.CryptUnprotectData(
+    if not ctypes.windll.crypt32.CryptUnprotectData(  # pyright: ignore[reportAttributeAccessIssue]
         ctypes.byref(data_in), None, None, None, None, 0, ctypes.byref(data_out)
     ):
         raise OSError("CryptUnprotectData 失败")
     try:
         return ctypes.string_at(data_out.pbData, data_out.cbData)
     finally:
-        ctypes.windll.kernel32.LocalFree(data_out.pbData)
+        ctypes.windll.kernel32.LocalFree(data_out.pbData)  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def encrypt_key(plaintext: str) -> str:

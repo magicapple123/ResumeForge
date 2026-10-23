@@ -12,7 +12,7 @@
     --line: #d9dee7;
     --accent: #16365c;
     --bg: #ffffff;
-    /* 正文字号就是控件上的值：这里**不得**再乘任何缩放系数（2026-10-21 用户要求）。 */
+    /* 正文字号就是控件上的值：这里「不得」再乘任何缩放系数（2026-10-21 用户要求）。 */
     --fs: {{ base_px }}px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -50,7 +50,7 @@
   @media print {
     .section, .entry { break-inside: avoid; }
     /* 让背景色与边框在打印时保留：技能标签的底色/左侧色条就靠这句。
-       浏览器默认**不打印背景图形**，这正是"预览里有小框、打印出来没有"的原因；
+       浏览器默认「不打印背景图形」，这正是"预览里有小框、打印出来没有"的原因；
        `print-color-adjust: exact` 会强制按屏幕样式绘制，不依赖用户在打印对话框里勾选。 */
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }

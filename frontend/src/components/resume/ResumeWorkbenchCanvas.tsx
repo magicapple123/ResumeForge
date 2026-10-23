@@ -29,12 +29,13 @@
  */
 import { Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import ResumePreview, {
   type ExactPreviewOptions,
   type ResumePreviewHandle,
 } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
+import type { RichTextEditAdapter } from "../resume-preview/richText";
 import { t } from "../../i18n";
 
 interface Props {
@@ -53,6 +54,15 @@ interface Props {
    * 不传时预览不渲染那个复选框，也不挂任何监听。
    */
   onPickField?: (path: string) => void;
+  /** 右键加粗的最小契约：不传 = 纸面上没有加粗菜单（右键交给浏览器）。 */
+  richEdit?: RichTextEditAdapter;
+  /**
+   * 滚动容器的句柄。实时预览替换 html 后要按它恢复滚动位置，而容器住在这里——
+   * 不传时用组件自己的内部 ref（行为与之前逐字相同）。
+   */
+  scrollRef?: RefObject<HTMLDivElement | null>;
+  /** 画布条尾部的一小块状态（实时预览的「更新中…」/「上一次成功预览 + 重试」）。 */
+  status?: ReactNode;
 }
 
 /**
@@ -78,8 +88,13 @@ export default function ResumeWorkbenchCanvas({
   onPreviewModeChange,
   exactPreview,
   onPickField,
+  richEdit,
+  scrollRef: externalScrollRef,
+  status,
 }: Props) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const internalScrollRef = useRef<HTMLDivElement>(null);
+  // 宿主给了句柄就用它（实时预览靠它恢复滚动位置），没给时这一层自管。
+  const scrollRef = externalScrollRef ?? internalScrollRef;
   // `undefined` = 还没量到：预览据此退回它自己的窗口比例口径（主预览即这一支）。
   const [availableHeight, setAvailableHeight] = useState<number | undefined>(undefined);
 
@@ -98,7 +113,7 @@ export default function ResumeWorkbenchCanvas({
     });
     observer.observe(node);
     return () => observer.disconnect();
-  }, []);
+  }, [scrollRef]);
 
   return (
     <div className="resume-wb-canvas">
@@ -110,6 +125,7 @@ export default function ResumeWorkbenchCanvas({
         <Typography.Text type="secondary" className="resume-wb-canvas-note">
           {t("workbench.note.zoom")}
         </Typography.Text>
+        {status}
       </div>
       <div className="resume-wb-canvas-scroll" ref={scrollRef}>
         <ResumePreview
@@ -122,6 +138,7 @@ export default function ResumeWorkbenchCanvas({
           exactPreview={exactPreview}
           availableHeight={availableHeight}
           onPickField={onPickField}
+          richEdit={richEdit}
         />
       </div>
     </div>

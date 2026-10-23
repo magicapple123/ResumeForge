@@ -23,6 +23,7 @@ import re
 from dataclasses import dataclass
 
 from ..schemas.resume import ResumeContent
+from .resume.resume_rich_text import strip_markers
 
 # 遮罩占位符：三颗星足够醒目又不会泄露长度信息。
 MASK = "***"
@@ -47,6 +48,36 @@ class RedactionOptions:
 def _mask(value: str) -> str:
     """非空值替换为占位符，空值保持为空。"""
     return MASK if value else ""
+
+
+# 照片是 base64 data URL，不是"文字"：脱敏时不碰它（也不该被标记剥离改写）。
+_PLAIN_SKIP_FIELDS = frozenset({"photo"})
+
+
+def _strip_plain(value):
+    """递归剥掉字符串里的字符级加粗标记；其它类型原样返回。"""
+    if isinstance(value, str):
+        return strip_markers(value)
+    if isinstance(value, list):
+        return [_strip_plain(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _strip_plain(item) for key, item in value.items()}
+    return value
+
+
+def plain_text_content(resume: ResumeContent) -> ResumeContent:
+    """把简历里所有文本字段的 ``**`` 加粗标记剥掉，返回新对象。
+
+    脱敏预览是**纯文本**消费方：显示 ``**李**四`` 既不是用户想要的加粗，也不是他
+    想看到的脱敏结果。逐字段剥离而不是整份 JSON 替换，是因为 ``photo`` 这类字段
+    里的内容不该被改动。
+    """
+    data = resume.model_dump()
+    for key in list(data):
+        if key in _PLAIN_SKIP_FIELDS:
+            continue
+        data[key] = _strip_plain(data[key])
+    return ResumeContent.model_validate(data)
 
 
 def _mask_tokens(text: str, tokens: set[str]) -> str:
@@ -98,7 +129,7 @@ def redact(resume_content: ResumeContent, options: RedactionOptions | None = Non
             ]
             project.highlights = [_mask_tokens(line, product_tokens) for line in project.highlights]
 
-    return resume
+    return plain_text_content(resume)
 
 
 # ===== 敏感信息与合规风险的「识别」模式（R-08 与 R-17 共用） =====
@@ -158,7 +189,8 @@ def mask_outbound_text(text: str) -> str:
     遮罩不等于可证明的匿名化——任意自由文本里仍可能出现没被模式覆盖的第三方信息，
     所以调用方必须先做**结构最小化**（不发原文），这里只是最后一道兜底。
     """
-    masked = text
+    # 出站文本同样只发**可见文本**：`**` 是本地排版标记，没有出站的必要。
+    masked = strip_markers(text)
     for _label, pattern in (*OUTBOUND_FREETEXT_PATTERNS, *SENSITIVE_PATTERNS):
         masked = re.sub(pattern, MASK, masked)
     return re.sub(r"\d{7,}", MASK, masked)

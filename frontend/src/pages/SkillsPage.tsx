@@ -31,6 +31,7 @@ import { deleteSkill, importSkill, listSkills, setSkillEnabled } from "../api/sk
 import { RowActions, RowContextMenu } from "../components/common/RowActions";
 import SkillEditorModal, { type SkillDraft } from "../components/skills/SkillEditorModal";
 import TemplateWorkbench from "../components/templates/TemplateWorkbench";
+import { t } from "../i18n";
 import type { AssistantSkill } from "../types";
 import { formatDateTime } from "../utils/format";
 
@@ -237,9 +238,7 @@ export default function SkillsPage() {
           <Typography.Title level={3} style={{ margin: 0 }}>
             工作台
           </Typography.Title>
-          <Typography.Text type="secondary">
-            技能决定助手怎么回答，简历模板决定简历长什么样——两件事都在这里管。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("skills.page.subtitle")}</Typography.Text>
         </div>
         {tab === "skills" && (
           <Space>
@@ -268,7 +267,9 @@ export default function SkillsPage() {
         onChange={(key) => setTab(key as "skills" | "templates")}
         items={[
           { key: "skills", label: "技能" },
-          { key: "templates", label: "简历模板" },
+          // key 保持 `templates`：它同时是路由 query 与状态机里的名字，改名要连带改
+          // 跳转与测试；界面上的名字已改成「版式」（自制模板下线后只剩版式）。
+          { key: "templates", label: t("skills.tab.layout") },
         ]}
       />
 

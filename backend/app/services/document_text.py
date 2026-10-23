@@ -37,6 +37,7 @@ from .pdf_page_images import (
     page_image_data_url,
     render_pdf_page_images,
 )
+from .resume.resume_rich_text import strip_markers
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +218,7 @@ def extract_document_text(name: str, mime_type: str, data: str) -> ExtractedDocu
     text = extracted.strip()
     if not text:
         raise ValueError(f"附件“{safe_name}”：{_EMPTY_TEXT_MESSAGE}")
-    body, warnings = _truncate(text)
+    body, warnings = _truncate(strip_markers(text))
     return ExtractedDocument(
         name=safe_name,
         mime_type=canonical_mime,
@@ -279,7 +280,9 @@ def extract_documents_text(documents: Sequence[Any]) -> ExtractedDocuments:
         remaining -= len(body)
         blocks.append(body)
     return ExtractedDocuments(
-        text="\n\n".join(blocks),
+        # 提取出的文字会被当成**纯文本**喂给本地规则与模型：文档里的 `**加粗**`
+        # 是排版标记，不该留在解析输入里（否则关键词、日期、字数都跟着偏）。
+        text="\n\n".join(strip_markers(block) for block in blocks),
         warnings=list(dict.fromkeys(warnings)),
         size_bytes=total_bytes,
         images=tuple(images),

@@ -37,6 +37,8 @@ import ResumePreview, {
   type ResumePreviewHandle,
 } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
+import { buildExactPreviewOptions } from "../resume-preview/exactPreviewOptions";
+import type { RichTextEditAdapter } from "../resume-preview/richText";
 import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
 import ResumeDetailFooter from "./ResumeDetailFooter";
 import EvidencePanel from "./EvidencePanel";
@@ -85,6 +87,14 @@ interface Props {
   showReviseAction?: boolean;
   /** 额外操作（如生成弹窗里的「重新生成 / 去简历中心 / 完成」）插在底部按钮区。 */
   extraActions?: ReactNode;
+  /** 叠加「右键加粗」overlay 之后的正文：只喂制作台的实时预览（编辑器仍用服务端那份）。 */
+  liveContent?: ResumeContent;
+  /** 加粗契约：只传给制作台——主预览没有内容保存入口，在这里加粗关窗就会静默丢掉。 */
+  richEdit?: RichTextEditAdapter;
+  /** 纸面加粗还没保存：并入制作台脏值（否则"加了粗、关窗即丢"，且顶部不出保存按钮）。 */
+  richDirty?: boolean;
+  /** 丢掉这些 overlay（取消修改 / 放弃并关闭）。 */
+  onDiscardRichText?: () => void;
 }
 
 export default function ResumeDetailPreview({
@@ -111,6 +121,10 @@ export default function ResumeDetailPreview({
   onResumeRevised,
   showReviseAction,
   extraActions,
+  liveContent,
+  richEdit,
+  richDirty,
+  onDiscardRichText,
 }: Props) {
   const navigate = useNavigate();
   const [editorOpen, setEditorOpen] = useState(false);
@@ -126,8 +140,7 @@ export default function ResumeDetailPreview({
     setExportOptionsOpen(true);
   });
   const [zoomOpen, setZoomOpen] = useState(autoOpenWorkbench);
-  // 制作台中栏有没有未保存的内容：有值时禁用底部「手动调整」（两个编辑器各持一份
-  // form，同时开会互相覆盖草稿，见设计 §9 Q6）。
+  // 制作台中栏有没有未保存的内容：有值时禁用底部「手动调整」（两个编辑器同时开会互相覆盖草稿）。
   const [workbenchDirty, setWorkbenchDirty] = useState(false);
   // 预览口径（草稿 / 精确）住在这一层：主预览与「简历制作台」共用它，任何一处切换，
   // 另一处和制作台都会跟着走（2026-10-21 用户要求）。
@@ -159,33 +172,17 @@ export default function ResumeDetailPreview({
     return { fabricationWarnings: rest, legacyCoverageWarnings: legacy };
   }, [detail.warnings]);
   const coverageNotes = detail.coverage_notes ?? [];
-  // 主预览与「简历制作台」必须拿到**同一份**精确预览上下文：各自拼一份迟早会漂（一处带草稿页数、一处带记录页数，用户就会看到"制作台少一页"）。
+  // 精确预览上下文只在这里构造一次：主预览与制作台必须拿到同一份（各拼一份必然漂）。
   const exactPreview = useMemo<ExactPreviewOptions>(
-    () => ({
-      resumeId: detail.id,
-      // 模板与版式也走草稿值：换完还没点保存，精确预览就得按新的排。
-      template: layout.template,
-      formatName: layout.format_name,
-      fontScale: layout.font_scale,
-      // 语言也得走草稿值：选了 English 还没保存，精确预览就必须按英文排——这是"草稿选英文、精确预览还是中文"的唯一修复点。
-      language: layout.language ?? "zh-CN",
-      formatConfig: layout.format_config as unknown as Record<string, unknown>,
-      // 正文签名：改了内容也要重排一次（版式字段已各自进依赖）。
-      // `riskContentSignature` 已经为风险扫描算过，直接复用（同一份 content）。
-      contentSignature: riskContentSignature,
-    }),
-    [
-      detail.id,
-      layout.template,
-      layout.format_name,
-      layout.font_scale,
-      layout.language,
-      layout.format_config,
-      riskContentSignature,
-    ],
+    () => buildExactPreviewOptions(detail, layout, riskContentSignature),
+    [detail, layout, riskContentSignature],
   );
   // 事实来源标注（RF-13）：证据面板用它列出"这条内容从哪来"；预览上的悬停角标随编辑模式一起去掉了（2026-10-21），标注数据本身仍然有效。
   const factAnnotations = useMemo(() => detail.fact_annotations ?? [], [detail.fact_annotations]);
+  const openAtPath = (path: string) => {
+    setEditorTarget(path);
+    setEditorOpen(true);
+  };
   return (
     <div>
       <Space style={{ marginBottom: 12 }} wrap>
@@ -358,11 +355,8 @@ export default function ResumeDetailPreview({
         exactPreview={exactPreview}
         previewMode={previewMode}
         onPreviewModeChange={setPreviewMode}
-        // 草稿模式编辑：点纸面字段 → 打开「手动调整」并定位到那条路径对应的输入框。
-        onPickField={(path) => {
-          setEditorTarget(path);
-          setEditorOpen(true);
-        }}
+        // 点纸面字段 → 打开「手动调整」并定位；右键加粗只在制作台提供（主预览没有保存入口）。
+        onPickField={openAtPath}
         warnings={fabricationWarnings}
         onLayoutStatus={onLayoutStatus}
         onMeasure={onMeasure}
@@ -471,11 +465,16 @@ export default function ResumeDetailPreview({
         previewMode={previewMode}
         onPreviewModeChange={setPreviewMode}
         exactPreview={exactPreview}
-        // 中栏编辑：内容与保存都走宿主已有的那一份（PATCH + setDetail + 重渲染），
-        // 制作台因此与「手动调整」共用同一条落库链路。
+        // 中栏编辑与保存都走宿主已有的那份（PATCH + setDetail + 重渲染）。
         content={detail.content}
+        // 右栏实时预览要按"加上还没保存的粗体"那一版重排。
+        liveContent={liveContent}
+        richDirty={richDirty}
+        onDiscardRichText={onDiscardRichText}
         onSaveContent={onSaveEditedResume}
-        onEditorDirtyChange={setWorkbenchDirty}
+        // 加粗也算中栏的改动：并进上报值，宿主才会禁用「手动调整」（两个编辑器各持一份内容）。
+        onEditorDirtyChange={(next) => setWorkbenchDirty(next || Boolean(richDirty))}
+        richEdit={richEdit}
         // 中栏与「手动调整」共用同一份候选（只给一处开，用户就得关掉制作台才能从资料带一条进来）。
         fillSources={fillSources}
         onClose={() => {

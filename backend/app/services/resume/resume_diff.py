@@ -12,6 +12,7 @@ import json
 from typing import Any
 
 from ...schemas.resume_writing import DiffLine, DiffStats, DiffToken, ResumeDiffOut
+from .resume_rich_text import strip_markers
 
 
 def _to_lines(content: dict[str, Any]) -> list[str]:
@@ -29,7 +30,9 @@ def _to_lines(content: dict[str, Any]) -> list[str]:
     if serializable.get("photo"):
         serializable["photo"] = "[图片]"
     serialized = json.dumps(serializable, ensure_ascii=False, indent=2, sort_keys=True)
-    return serialized.splitlines()
+    # 差异对比是**纯文本消费方**：只把 `**` 标记从每行里剥掉（成对的才剥），
+    # 让"只给一句话加粗"不被报成"这一行改写了"。
+    return [strip_markers(line) for line in serialized.splitlines()]
 
 
 def _split_words(line: str) -> list[str]:

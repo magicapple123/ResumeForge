@@ -111,36 +111,68 @@ def _subset_bytes(data: bytes, text: str) -> tuple[bytes, str, str]:
         font.close()
 
 
-def _build_css(payload: bytes, mime: str, css_format: str) -> str:
+def _font_face(payload: bytes, mime: str, css_format: str, weight: int) -> str:
+    """一条 ``@font-face``。``weight`` 必须写死：两条同族名的 face 靠它区分字重。"""
     encoded = base64.b64encode(payload).decode("ascii")
     return (
-        f'@font-face{{font-family:"{CSS_FAMILY}";'
+        f'@font-face{{font-family:"{CSS_FAMILY}";font-weight:{weight};'
         f'src:url(data:font/{mime};base64,{encoded}) format("{css_format}");}}'
+    )
+
+
+def _build_css(regular: tuple[bytes, str, str], bold: tuple[bytes, str, str] | None) -> str:
+    """常规 + 粗体两条 ``@font-face``，再加一条 body 覆盖。
+
+    只有**内置双字重字体**才给 ``bold``；单文件的历史字体只出一条 ``font-weight:400``，
+    浏览器对 700 走自身的合成加粗——那是本功能上线前的行为，不回退它。
+    """
+    faces = [_font_face(*regular, 400)]
+    if bold is not None:
+        faces.append(_font_face(*bold, 700))
+    return "\n".join(faces) + (
         f'\nbody{{font-family:"{CSS_FAMILY}",{_FALLBACK_STACK} !important}}'
     )
 
 
 @functools.lru_cache(maxsize=8)
-def _embed_css_cached(font_path: str, mtime_ns: int, text_digest: str, text: str) -> str:
-    """按 (字体路径, mtime, 文本 sha256) 缓存；缓存未命中才真的切一次字。
+def _embed_css_cached(
+    font_path: str,
+    mtime_ns: int,
+    bold_path: str,
+    bold_mtime_ns: int,
+    text_digest: str,
+    text: str,
+) -> str:
+    """按 (常规路径/mtime, 粗体路径/mtime, 文本 sha256) 缓存；未命中才真的切字。
 
-    文件换了（mtime 变）或简历文本变了（digest 变）都会落到新键上，所以不需要手动失效。
+    粗体的 mtime 必须进缓存键：内置字体两个文件是分别下载的，只按 Regular 的 mtime
+    做键的话，"Bold 换了但 Regular 没变"（例如先删后单独补下 Bold）会命中旧 CSS，
+    用户看到的是"换了粗体不生效"。
     """
-    del mtime_ns, text_digest  # 只作为缓存键使用
+    del mtime_ns, bold_mtime_ns, text_digest  # 只作为缓存键使用
+    bold: tuple[bytes, str, str] | None = None
     try:
-        _, data = _read_font_bytes(Path(font_path))
-        payload, mime, css_format = _subset_bytes(data, text)
+        _family, regular_data = _read_font_bytes(Path(font_path))
+        regular = _subset_bytes(regular_data, text)
+        if bold_path and bold_path != font_path:
+            try:
+                _, bold_data = _read_font_bytes(Path(bold_path))
+                bold = _subset_bytes(bold_data, text)
+            except Exception as exc:  # noqa: BLE001 - 缺粗体只该少一档字重，不该整体失败
+                logger.warning("读取粗体字面失败，仅内嵌常规字重：%s", exc)
+                bold = None
     except Exception as exc:  # noqa: BLE001 - 子集化失败不该让渲染失败
         logger.warning("内嵌自定义字体失败，回退系统字体：%s", exc)
         return ""
-    if len(payload) > MAX_EMBED_BYTES:
+    payload_size = len(regular[0]) + (len(bold[0]) if bold else 0)
+    if payload_size > MAX_EMBED_BYTES:
         logger.warning(
             "自定义字体子集有 %d 字节，超过 %d 上限，回退系统字体",
-            len(payload),
+            payload_size,
             MAX_EMBED_BYTES,
         )
         return ""
-    return _build_css(payload, mime, css_format)
+    return _build_css(regular, bold)
 
 
 def embed_css(text: str, font_name: str | None = None) -> str:
@@ -154,28 +186,53 @@ def embed_css(text: str, font_name: str | None = None) -> str:
     * 其它 —— 该文件名；文件已不存在时回落到全局当前字体（同一份简历不该因为一个被删掉
       的字体文件而失去字形）。
     """
-    path = _embed_font_path(font_name)
-    if path is None:
+    paths = _embed_font_paths(font_name)
+    if paths is None:
         return ""
+    regular_path, bold_path = paths
     try:
-        mtime_ns = path.stat().st_mtime_ns
+        mtime_ns = regular_path.stat().st_mtime_ns
     except OSError as exc:
-        logger.warning("读取自定义字体信息失败（%s）：%s", path.name, exc)
+        logger.warning("读取自定义字体信息失败（%s）：%s", regular_path.name, exc)
         return ""
+    bold_key = ""
+    bold_mtime = 0
+    if bold_path is not None:
+        try:
+            bold_mtime = bold_path.stat().st_mtime_ns
+            bold_key = str(bold_path)
+        except OSError:
+            bold_key, bold_mtime = "", 0
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    return _embed_css_cached(str(path), mtime_ns, digest, text)
+    return _embed_css_cached(str(regular_path), mtime_ns, bold_key, bold_mtime, digest, text)
 
 
-def _embed_font_path(font_name: str | None) -> Path | None:
-    """把"这份简历的字体选择"解析成一个可读的字体文件路径。
+def _embed_font_paths(font_name: str | None) -> tuple[Path, Path | None] | None:
+    """把"这份简历的字体选择"解析成 ``(常规文件, 粗体文件或 None)``。
 
-    返回 ``None`` 表示不内嵌（系统字体、或根本没有可用字体）。
+    返回 ``None`` 表示不内嵌（系统字体、或根本没有可用字体）。粗体为 ``None`` 有两种
+    情况：单文件字体（常规自身就是粗体来源）、以及取不到当前选择。
     """
     if font_name == SYSTEM_FONT:
         return None
     if font_name:
         try:
-            return user_fonts.font_path(font_name)
+            regular = user_fonts.font_path(font_name)
         except user_fonts.FontError:
             logger.warning("「%s」已不存在，回落到当前选中的字体", font_name)
-    return user_fonts.active_font_path()
+        else:
+            return _pair_for(regular)
+    pair = user_fonts.active_font_paths()
+    if pair is None:
+        return None
+    regular, bold = pair
+    return regular, (bold if bold != regular else None)
+
+
+def _pair_for(path: Path) -> tuple[Path, Path | None]:
+    """单个字体文件 → ``(常规, 粗体或 None)``；只有内置双字重才给出不同的粗体。"""
+    try:
+        regular, bold = user_fonts.font_pair(path.name)
+    except user_fonts.FontError:
+        return path, None
+    return regular, (bold if bold != regular else None)

@@ -11,16 +11,7 @@
  * 这里只做"把一条记录画成一张卡"。
  */
 import { MoreOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
-import {
-  Button,
-  Checkbox,
-  Dropdown,
-  Empty,
-  Pagination,
-  Popconfirm,
-  Select,
-  Space,
-} from "antd";
+import { Button, Checkbox, Dropdown, Empty, Pagination, Popconfirm, Select, Space } from "antd";
 import type { Dispatch, SetStateAction } from "react";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { TRASH_RECOVERY_NOTE } from "../../components/common/rowActionMenu";

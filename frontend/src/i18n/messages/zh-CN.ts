@@ -23,8 +23,10 @@
  *
  * 不许放 HTML/JSX（`<b>`、`{'\n'}`）。需要强调或换行时，由调用方拆成多段 `t()`。
  */
+import fonts from "./zh-CN.fonts";
 import preview from "./zh-CN.preview";
 import responsive from "./zh-CN.responsive";
+import rich from "./zh-CN.rich";
 import workbench from "./zh-CN.workbench";
 
 const zhCN = {
@@ -464,6 +466,13 @@ const zhCN = {
 
   // ── 多分辨率适配（2026-10-23）────────────────────────────
   ...responsive,
+
+  // ── 简历字体（内置思源黑体按需下载）与工作台「版式」页签（2026-11）
+  // 同上：`zh-CN.ts` 只剩几十行余量，新增文案放独立命名空间文件。
+  ...fonts,
+
+  // ── 字符级加粗（右键菜单）与制作台实时预览（R4 / R5）────────
+  ...rich,
 } as const;
 
 export type ZhCNMessages = typeof zhCN;

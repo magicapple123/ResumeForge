@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from ...schemas.resume import ResumeContent
+from .resume_rich_text import strip_markers
 
 # 高置信度的互联网黑话。宁可漏检也不扩大名单：误判会让一次生成多花一次模型调用，
 # 还可能把用户原本通顺的句子改坏。提示词里列的"落地""推动""梳理"等是正当的简历动词，
@@ -40,15 +41,18 @@ _FIELDS = ("achievements", "description", "highlights")
 
 
 def _descriptive_points(resume: ResumeContent) -> list[str]:
-    """收集会被写进简历的描述性文本。"""
+    """收集会被写进简历的描述性文本（**可见文本**：字符级加粗标记先剥掉）。
+
+    黑话检测比对的是用户读到的字；``**闭环**`` 与 ``闭环`` 是同一种陈词滥调。
+    """
     points: list[str] = []
     if resume.summary and resume.summary.strip():
-        points.append(resume.summary.strip())
+        points.append(strip_markers(resume.summary.strip()))
     for section in _SECTIONS:
         for item in getattr(resume, section, []) or []:
             for field in _FIELDS:
                 for value in getattr(item, field, None) or []:
-                    text = str(value).strip()
+                    text = strip_markers(str(value).strip())
                     if text:
                         points.append(text)
     return points

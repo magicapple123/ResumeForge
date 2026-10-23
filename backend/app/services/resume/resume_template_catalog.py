@@ -7,6 +7,13 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent / "templates"
 DEFAULT_TEMPLATE = "classic"
 DEFAULT_PAGE_LIMIT = 1
 
+# 「选择模板」里列出的 5 套（2026-11 收敛：8 套太多，用户挑不出来）。
+#
+# 其余三套（technical / editorial / split）**仍然保留在 RESUME_TEMPLATES 里**，理由：
+# 已经用它生成过的简历，记录里存的就是这三个名字，`template_spec` 必须还能解析到对应
+# 的 `.j2` 文件——否则老简历重开预览会静默变成经典款，等于偷改用户的成品外观。
+VISIBLE_TEMPLATE_NAMES: tuple[str, ...] = ("classic", "modern", "compact", "elegant", "minimal")
+
 RESUME_TEMPLATES: dict[str, dict] = {
     "classic": {
         "name": "classic",
@@ -64,15 +71,24 @@ def template_spec(name: str) -> dict:
 
 
 def template_options() -> list[dict]:
-    """列出可选模板。"""
-    return [
-        {
-            "name": item["name"],
-            "label": item["label"],
-            "description": item["description"],
-        }
-        for item in RESUME_TEMPLATES.values()
-    ]
+    """列出**可选**模板（决策类 UI 用），顺序固定为 ``VISIBLE_TEMPLATE_NAMES``。
+
+    与 ``RESUME_TEMPLATES`` 的区别是这里的清单会**少于**字典条目：下线的三套仍可渲染，
+    但不再出现在"挑一个模板"的列表里。
+    """
+    options: list[dict] = []
+    for name in VISIBLE_TEMPLATE_NAMES:
+        item = RESUME_TEMPLATES.get(name)
+        if item is None:  # 名字表写错时宁可少一项，也不要在这里抛异常
+            continue
+        options.append(
+            {
+                "name": item["name"],
+                "label": item["label"],
+                "description": item["description"],
+            }
+        )
+    return options
 
 
 def template_options_with_custom(custom: list[dict]) -> list[dict]:
@@ -93,4 +109,4 @@ def template_options_with_custom(custom: list[dict]) -> list[dict]:
     return options
 
 
-__all__ = ["DEFAULT_PAGE_LIMIT", "DEFAULT_TEMPLATE", "RESUME_TEMPLATES", "TEMPLATES_DIR", "template_options", "template_options_with_custom", "template_spec"]
+__all__ = ["DEFAULT_PAGE_LIMIT", "DEFAULT_TEMPLATE", "RESUME_TEMPLATES", "TEMPLATES_DIR", "VISIBLE_TEMPLATE_NAMES", "template_options", "template_options_with_custom", "template_spec"]

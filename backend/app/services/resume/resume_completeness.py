@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from ...models.claim import placeholder_hit
 from ...schemas.resume import ResumeContent
+from .resume_rich_text import strip_markers
 
 # 一次最多回报多少处：简历里到处是【待补】时，列一百条没有意义，
 # 用户只需要知道"确实还有、去哪儿改"。
@@ -20,8 +21,11 @@ MAX_REPORTED = 8
 
 
 def _check(label: str, text: str) -> str:
-    """命中占位符时返回一句可直接展示给用户的定位说明。"""
-    hit = placeholder_hit(text or "")
+    """命中占位符时返回一句可直接展示给用户的定位说明。
+
+    先剥掉字符级加粗标记：``**…**`` 只是排版，占位符判定看的是**用户看到的字**。
+    """
+    hit = placeholder_hit(strip_markers(text or ""))
     if not hit:
         return ""
     return f"{label} 里还有「{hit}」"

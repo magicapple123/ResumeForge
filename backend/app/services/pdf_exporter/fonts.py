@@ -79,6 +79,22 @@ def _resolve_font_paths() -> tuple[str, str] | None:
     return resolve_font_paths(None)
 
 
+def _pair_paths(path: Path) -> tuple[str, str]:
+    """字体文件 → ``(常规, 粗体)`` 字符串路径。
+
+    内置思源黑体带独立的 Bold 字面，必须成对返回：fpdf2 拿不到真粗体时会用描边伪造，
+    中文笔画密、描边后糊成一团（"PDF 里加粗不明显"的根因）。其它字体仍返回同一路径
+    两次，与本功能上线前逐字一致。
+    """
+    try:
+        from ..user_fonts import font_pair
+
+        regular, bold = font_pair(path.name)
+    except Exception:  # noqa: BLE001 - 配对失败退回单文件，导出链路不该因此中断
+        return str(path), str(path)
+    return str(regular), str(bold)
+
+
 def _probe_font_paths(font_name: str | None = None) -> tuple[str, str] | None:
     override = os.environ.get(FONT_ENV_VAR, "").strip()
     if override:
@@ -100,17 +116,17 @@ def _probe_font_paths(font_name: str | None = None) -> tuple[str, str] | None:
         except Exception:  # noqa: BLE001 - 字体探测失败不该让导出整条链路崩掉
             chosen = None
         else:
-            return str(chosen), str(chosen)
-    # 用户在设置页上传并选中的字体（R10）优先于系统字体：他明确选了一个，
+            return _pair_paths(chosen)
+    # 用户在设置页选中的字体（R10）优先于系统字体：他明确选了一个，
     # 就该按那个导出；文件被删/移动时自然回落到系统字体，不报错。
     try:
-        from ..user_fonts import active_font_path
+        from ..user_fonts import active_font_paths
 
-        user_font = active_font_path()
+        pair = active_font_paths()
     except Exception:  # noqa: BLE001 - 字体探测失败不该让导出整条链路崩掉
-        user_font = None
-    if user_font is not None:
-        return str(user_font), str(user_font)
+        pair = None
+    if pair is not None:
+        return str(pair[0]), str(pair[1])
     return _probe_system_font_paths()
 
 

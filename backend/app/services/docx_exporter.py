@@ -28,6 +28,7 @@ from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
 
 from ..schemas.resume import MAX_RESUME_PAGES, ResumeContent
+from .docx_rich import add_rich_runs
 from .pdf_exporter import (
     _PX_TO_MM,
     _PX_TO_PT,
@@ -97,8 +98,9 @@ def _section_title(doc, text: str, *, base: float, layout, accent: tuple[int, in
     size = base * layout.section_title_ratio
     gap_mm = base * _PX_TO_MM * layout.section_gap
     paragraph = _paragraph(doc, space_before_mm=gap_mm, space_after_mm=base * _PX_TO_MM * 0.4)
-    run = paragraph.add_run(text)
-    _set_run_font(run, size_pt=size * _PX_TO_PT, bold=True, color=accent)
+    add_rich_runs(
+        paragraph, text, _set_run_font, bold=True, size_pt=size * _PX_TO_PT, color=accent
+    )
 
 
 def _bullets(doc, items: list[str], *, base: float, indent_mm: float = 3.0) -> None:
@@ -107,24 +109,31 @@ def _bullets(doc, items: list[str], *, base: float, indent_mm: float = 3.0) -> N
         if not text:
             continue
         paragraph = _paragraph(doc, indent_mm=indent_mm)
-        run = paragraph.add_run(f"· {text}")
-        _set_run_font(run, size_pt=base * _PX_TO_PT, color=_BODY_COLOR)
+        add_rich_runs(
+            paragraph, f"· {text}", _set_run_font, size_pt=base * _PX_TO_PT, color=_BODY_COLOR
+        )
 
 
 def _meta_line(doc, text: str, *, base: float, layout) -> None:
     if not text.strip():
         return
     paragraph = _paragraph(doc)
-    run = paragraph.add_run(text)
-    _set_run_font(run, size_pt=base * layout.entry_sub_ratio * _PX_TO_PT, color=_MUTED_COLOR)
+    add_rich_runs(
+        paragraph,
+        text,
+        _set_run_font,
+        size_pt=base * layout.entry_sub_ratio * _PX_TO_PT,
+        color=_MUTED_COLOR,
+    )
 
 
 def _entry_head(doc, left: str, right: str, *, base: float, layout) -> None:
     """条目标题：左侧加粗、右侧辅助信息，与预览 ``.entry-head`` 一致。"""
     title_size = base * layout.entry_title_ratio
     paragraph = _paragraph(doc, space_before_mm=base * _PX_TO_MM * 0.2)
-    run = paragraph.add_run(left)
-    _set_run_font(run, size_pt=title_size * _PX_TO_PT, bold=True, color=_BODY_COLOR)
+    add_rich_runs(
+        paragraph, left, _set_run_font, bold=True, size_pt=title_size * _PX_TO_PT, color=_BODY_COLOR
+    )
     if right:
         meta_run = paragraph.add_run(f"　{right}")
         _set_run_font(
@@ -200,8 +209,13 @@ def _section_summary(
         labels = section_titles(language)
         _section_title(doc, labels["summary"], base=base, layout=layout, accent=accent)
         paragraph = _paragraph(doc)
-        run = paragraph.add_run(resume.summary.strip())
-        _set_run_font(run, size_pt=base * _PX_TO_PT, color=_BODY_COLOR)
+        add_rich_runs(
+            paragraph,
+            resume.summary.strip(),
+            _set_run_font,
+            size_pt=base * _PX_TO_PT,
+            color=_BODY_COLOR,
+        )
 
 
 def _section_education(

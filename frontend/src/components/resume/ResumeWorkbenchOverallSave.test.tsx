@@ -71,11 +71,17 @@ const OPENING_LAYOUT: ResumeLayout = { ...DEFAULT_LAYOUT, format_config: {} };
  * 那条退化路径。
  */
 function renderWorkbench(
-  options: { commitLayout?: () => Promise<boolean>; withoutCommitLayout?: boolean } = {},
+  options: {
+    commitLayout?: () => Promise<boolean>;
+    withoutCommitLayout?: boolean;
+    /** 纸面上还没保存的加粗（overlay 脏值）：证明它和"内容脏"走同一条保存链路。 */
+    richDirty?: boolean;
+  } = {},
 ) {
   const onApplyLayout = vi.fn<(next: ResumeLayout) => void>();
   const onSaveContent = vi.fn<(next: ResumeContent) => Promise<void>>(async () => undefined);
   const onCommitLayout = vi.fn(options.commitLayout ?? (async () => true));
+  const onDiscardRichText = vi.fn();
   const onClose = vi.fn();
 
   function Harness() {
@@ -97,13 +103,15 @@ function renderWorkbench(
           }}
           {...(options.withoutCommitLayout ? {} : { onCommitLayout })}
           onSaveContent={onSaveContent}
+          richDirty={options.richDirty}
+          onDiscardRichText={onDiscardRichText}
         />
       </AntdApp>
     );
   }
 
   render(<Harness />);
-  return { onApplyLayout, onSaveContent, onCommitLayout, onClose };
+  return { onApplyLayout, onSaveContent, onCommitLayout, onDiscardRichText, onClose };
 }
 
 /**
