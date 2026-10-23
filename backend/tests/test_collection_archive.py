@@ -317,3 +317,173 @@ def test_legacy_format_two_archive_still_imports(client, tmp_path):
 
     assert result["id"]
     assert [item["name"] for item in result.get("restored_datasets", [])] == ["数据集B"]
+
+
+def test_old_collection_without_sha256_still_imports(client, tmp_path):
+    """更早版本导出的整包清单里没有 ``sha256``：视为"无校验"，照样能恢复。
+
+    这份备份是用户手上唯一的一份数据，因为"我们后来给清单补了个字段"就拒收，等于让
+    他永远打不开自己的备份。但只要清单**写了**摘要，就必须核对——所以这条用例同时钉住
+    "没有摘要"与"摘要写错"是两种完全不同的处置。
+    """
+    extra_id = _two_datasets(client)
+    archive = export_all_datasets(database.engine, tmp_path / "staging")
+    with zipfile.ZipFile(archive) as outer:
+        manifest = json.loads(outer.read(MANIFEST_MEMBER))
+        payloads = {entry["file"]: outer.read(entry["file"]) for entry in manifest["datasets"]}
+    for entry in manifest["datasets"]:
+        # 模拟"摘要字段还没有被引入"的那一版清单。
+        entry.pop("sha256", None)
+    legacy = tmp_path / "no-sha256.zip"
+    with zipfile.ZipFile(legacy, "w", zipfile.ZIP_DEFLATED) as dst:
+        for name, payload in payloads.items():
+            dst.writestr(name, payload)
+        dst.writestr(MANIFEST_MEMBER, json.dumps(manifest, ensure_ascii=False, indent=2))
+
+    result = _import(legacy, tmp_path)
+
+    assert result["summary"] == {"restored": 2, "skipped": 0, "failed": 0}
+    assert {item["source_id"] for item in result["restored"]} == {"main", extra_id}
+
+
+def test_malformed_sha256_is_still_rejected(client, tmp_path):
+    """"没有摘要"放行，但"摘要写错了"必须拒收——两者不是同一件事。"""
+    _two_datasets(client)
+    archive = export_all_datasets(database.engine, tmp_path / "staging")
+    with zipfile.ZipFile(archive) as outer:
+        manifest = json.loads(outer.read(MANIFEST_MEMBER))
+        payloads = {entry["file"]: outer.read(entry["file"]) for entry in manifest["datasets"]}
+    manifest["datasets"][0]["sha256"] = "not-a-digest"
+    broken = tmp_path / "bad-digest.zip"
+    with zipfile.ZipFile(broken, "w", zipfile.ZIP_DEFLATED) as dst:
+        for name, payload in payloads.items():
+            dst.writestr(name, payload)
+        dst.writestr(MANIFEST_MEMBER, json.dumps(manifest, ensure_ascii=False, indent=2))
+
+    with pytest.raises(Exception, match="校验字段不合法"):
+        _import(broken, tmp_path)
+
+
+def test_restored_subpackages_survive_a_later_failure(client, tmp_path):
+    """E19：坏子包隔离的**另一半**——已恢复的那一份不能被后来的失败收回。
+
+    上一条只断言"返回值里有 main"。返回值是服务层生成的，和"数据真的留在库里"是两件事：
+    旧的 ``discard_created_datasets()`` 式全量回滚会让返回值说成功、库里却没有
+    （或反过来）。这里把已恢复的数据集**真的切过去读一次**，钉住"成功就是成功"。
+    """
+    extra_id = _two_datasets(client)
+    archive = export_all_datasets(database.engine, tmp_path / "staging")
+    before_ids = {item["id"] for item in list_datasets()}
+    entry = _sub_member(_outer_manifest(archive), extra_id)
+    with zipfile.ZipFile(archive) as outer:
+        original = outer.read(entry["file"])
+    tampered = _repack(
+        archive,
+        tmp_path / "wrong-size.zip",
+        replace={entry["file"]: b"0" * (len(original) - 1)},
+        update_manifest=False,
+    )
+
+    result = _import(tampered, tmp_path)
+
+    assert result["summary"] == {"restored": 1, "skipped": 0, "failed": 1}
+    restored_id = result["restored"][0]["id"]
+    # 真的存在、真的可用：切到它之后能读到主数据里那条岗位。
+    assert restored_id in {item["id"] for item in list_datasets()}
+    assert client.post(f"/api/settings/datasets/{restored_id}/activate").status_code == 200
+    assert _job_titles(client) == {"主数据岗位"}
+    # 失败的那一份没有留下半个数据集：新增的 id 只有成功那一份。
+    after_ids = {item["id"] for item in list_datasets()}
+    assert after_ids - before_ids == {restored_id}
+    assert result["failed"][0]["name"] == "数据集B"
+    assert result["failed"][0]["error"]
+
+
+# ---------------------------------------------------------------------------
+# QA 补第二轮：老包（清单里没有 sha256）的**容差边界**
+# ---------------------------------------------------------------------------
+
+
+def _repack_manifest(source: Path, target: Path, mutate) -> Path:
+    """重写外层包，让用例直接改清单条目（成员字节由 ``mutate`` 决定）。"""
+    with zipfile.ZipFile(source) as src:
+        manifest = json.loads(src.read(MANIFEST_MEMBER))
+        payloads = {name: src.read(name) for name in src.namelist() if name != MANIFEST_MEMBER}
+    mutate(manifest, payloads)
+    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as dst:
+        for name, payload in payloads.items():
+            dst.writestr(name, payload)
+        dst.writestr(MANIFEST_MEMBER, json.dumps(manifest, ensure_ascii=False, indent=2))
+    return target
+
+
+def test_old_collection_without_sha256_still_checks_the_size(client, tmp_path):
+    """"没有摘要"只免掉**内容**核对，字节数照样要核。
+
+    放宽 sha256 的那次改动很容易顺手把大小核对一起放过（"反正没摘要，就都不管了"），
+    而大小是唯一还能挡住"文件被截断/换错了一份"的东西：截断的子包解出来会是一份坏 zip，
+    报错点会飘到子包内部（"元信息已损坏"），用户根本看不出是哪一步出的问题。
+    """
+    extra_id = _two_datasets(client)
+    archive = export_all_datasets(database.engine, tmp_path / "staging")
+    with zipfile.ZipFile(archive) as outer:
+        manifest = json.loads(outer.read(MANIFEST_MEMBER))
+        entry = _sub_member(manifest, extra_id)
+        original = outer.read(entry["file"])
+
+    def mutate(mf: dict, payloads: dict[str, bytes]) -> None:
+        for item in mf["datasets"]:
+            item.pop("sha256", None)  # 更早版本导出的清单
+        payloads[entry["file"]] = original[:-64]  # 但这一份内容被截短了
+
+    legacy = _repack_manifest(archive, tmp_path / "legacy-truncated.zip", mutate)
+
+    result = _import(legacy, tmp_path)
+
+    assert result["summary"] == {"restored": 1, "skipped": 0, "failed": 1}
+    assert [item["id"] for item in result["failed"]] == [extra_id]
+    assert "字节数" in result["failed"][0]["error"] or "大小" in result["failed"][0]["error"]
+    assert [item["source_id"] for item in result["restored"]] == ["main"]
+
+
+def test_empty_sha256_string_counts_as_no_digest(client, tmp_path):
+    """``"sha256": ""``（字段在、值为空）与"字段不存在"同处置。
+
+    导出侧从来不会写空串，但手工拼过的包、或者某次 JSON 序列化把 ``None`` 写成 ``""``
+    的第三方工具会产生这种清单。把它判成"摘要格式错误"会让整包被拒收——而整包拒收是
+    "用户打不开自己唯一的备份"那个后果，代价远高于"这一份不做内容校验"。
+    """
+    _two_datasets(client)
+    archive = export_all_datasets(database.engine, tmp_path / "staging")
+
+    def mutate(mf: dict, _payloads: dict[str, bytes]) -> None:
+        for item in mf["datasets"]:
+            item["sha256"] = ""
+
+    legacy = _repack_manifest(archive, tmp_path / "empty-digest.zip", mutate)
+
+    result = _import(legacy, tmp_path)
+
+    assert result["summary"] == {"restored": 2, "skipped": 0, "failed": 0}
+    assert result["failed"] == []
+
+
+def test_old_collection_still_requires_size_bytes(client, tmp_path):
+    """``size_bytes`` 从第一个版本就有：放宽 sha256 时不能把它一起放宽掉。
+
+    大小是"清单说了多少字节"的唯一登记，没有它连"文件被换过"都发现不了。缺字段属于
+    清单不合法 → 整包拒收，且**一份也不写**（此时还在写任何数据之前）。
+    """
+    _two_datasets(client)
+    archive = export_all_datasets(database.engine, tmp_path / "staging")
+
+    def mutate(mf: dict, _payloads: dict[str, bytes]) -> None:
+        for item in mf["datasets"]:
+            item.pop("sha256", None)
+            item.pop("size_bytes", None)
+
+    legacy = _repack_manifest(archive, tmp_path / "no-size.zip", mutate)
+
+    with pytest.raises(BackupError, match="成员路径或校验字段不合法"):
+        _import(legacy, tmp_path)
+    assert len(list_datasets()) == 2, "清单不合法时不该写入任何数据集"

@@ -87,7 +87,14 @@ def _read_collection_manifest(archive: zipfile.ZipFile) -> dict[str, Any]:
 
 
 def _validate_entry(raw: Any) -> dict[str, Any]:
-    """校验清单条目：成员路径只认 ``datasets/<合法 id>.zip``，校验字段必须齐全。"""
+    """校验清单条目：成员路径只认 ``datasets/<合法 id>.zip``，校验字段必须齐全。
+
+    ``sha256`` 是**后来才补进清单**的字段（见 ``collection_export._build_member``）。
+    更早导出的整包没有它：那种包视为"无校验"照常导入，**不能拒收**——用户手上那份
+    备份是他唯一的一份数据，因为"我们后来加了个字段"就拒绝恢复是不可接受的。
+    但**写在清单里的** ``sha256`` 必须是合法摘要：拼错/截断的摘要与"没有摘要"是两件事，
+    前者只能说明包被改坏了。``size_bytes`` 从第一个版本就有，继续要求存在。
+    """
     if not isinstance(raw, dict):
         raise BackupError("整包备份的数据集清单格式不合法，已停止导入")
     dataset_id = raw.get("id")
@@ -95,17 +102,25 @@ def _validate_entry(raw: Any) -> dict[str, Any]:
         not isinstance(dataset_id, str)
         or not _ID_RE.fullmatch(dataset_id)
         or raw.get("file") != f"datasets/{dataset_id}.zip"
-        or not isinstance(raw.get("sha256"), str)
-        or not _HASH_RE.fullmatch(raw["sha256"])
         or type(raw.get("size_bytes")) is not int
         or raw["size_bytes"] < 0
     ):
         raise BackupError("整包备份的数据集成员路径或校验字段不合法，已停止导入")
-    return raw
+    digest = raw.get("sha256")
+    if digest is None or digest == "":
+        # 老包：没有摘要 → None 表示"这一份不做内容校验"。
+        digest = None
+    elif not isinstance(digest, str) or not _HASH_RE.fullmatch(digest):
+        raise BackupError("整包备份的数据集校验字段不合法，已停止导入")
+    return {**raw, "sha256": digest}
 
 
 def _extract_member(archive: zipfile.ZipFile, entry: dict[str, Any], destination: Path) -> None:
-    """把一份子包写到 destination，并核对大小与 SHA-256（不符即删掉半成品）。"""
+    """把一份子包写到 destination，并核对大小与 SHA-256（不符即删掉半成品）。
+
+    ``entry["sha256"]`` 为 ``None`` 时（更早版本导出的、清单里还没有摘要字段的整包）
+    只核大小、不核内容，并把这件事记一条日志：静默跳过与"验过了"对排障是两回事。
+    """
     try:
         info = archive.getinfo(entry["file"])
     except KeyError as exc:
@@ -124,7 +139,18 @@ def _extract_member(archive: zipfile.ZipFile, entry: dict[str, Any], destination
     except (zipfile.BadZipFile, OSError) as exc:
         destination.unlink(missing_ok=True)
         raise BackupError("子包已损坏，无法读取") from exc
-    if size != entry["size_bytes"] or digest.hexdigest() != entry["sha256"]:
+    expected = entry["sha256"]
+    if size != entry["size_bytes"]:
+        destination.unlink(missing_ok=True)
+        raise BackupError(
+            f"子包解出的字节数与清单不符（清单 {entry['size_bytes']} 字节，实际 {size} 字节）"
+        )
+    if expected is None:
+        logger.info(
+            "整包导入：子包 %s 的清单没有 SHA-256（更早版本导出的包），只核大小", entry["id"]
+        )
+        return
+    if digest.hexdigest() != expected:
         destination.unlink(missing_ok=True)
         raise BackupError("子包内容与清单的 SHA-256 不符（文件可能已损坏或被改动）")
 
