@@ -71,6 +71,14 @@ export interface EditorDraftBarApi {
   confirming: EditorPendingAction;
   /** 关闭入口（取消 / Esc / × 统一走这里）。 */
   requestClose: () => void;
+  /**
+   * 「放弃修改」入口：**直接**进确认态，不先判断脏不脏。
+   *
+   * 与 `requestClose` 分开是因为两个入口问的不是同一件事：`requestClose` 是"我要关掉"，
+   * 没有未保存内容就直接关；`requestDiscard` 是"我要撤销这次修改"（中栏那颗按钮），
+   * 它天然就是一次丢弃动作，所以该问就问，不该静默什么都不发生。
+   */
+  requestDiscard: () => void;
   /** 「填入我的资料全部数据」需要覆盖确认时调用。 */
   requestFillAll: () => void;
   /** 确认条上的「继续编辑」。 */
@@ -116,6 +124,11 @@ export function useEditorDraftBar({
 
   const requestFillAll = (): void => setConfirming("fill-all");
 
+  const requestDiscard = (): void => {
+    if (saving) return;
+    setConfirming("discard");
+  };
+
   const keepEditing = (): void => setConfirming(null);
 
   const confirmPending = (): void => {
@@ -143,6 +156,7 @@ export function useEditorDraftBar({
     clearDraft: draft.clear,
     confirming,
     requestClose,
+    requestDiscard,
     requestFillAll,
     keepEditing,
     confirmPending,

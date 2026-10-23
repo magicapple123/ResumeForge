@@ -147,10 +147,11 @@ export default function ResumeFontControl({
       // 弹窗（对齐滑杆）：宽度与左侧偏移交给 CSS（`.is-stacked .resume-font-select`），
       // 因为要对齐的是滑杆的像素位置，而不是"把剩余宽度吃掉"。
       style={alignWithSlider ? undefined : { width: compact ? 140 : 176 }}
-      // 弹层按内容撑开，**不跟着触发框**：触发框只有 200px（与页边距滑杆对齐），
-      // 跟着它走会把每一个字体名都截成「系统字体（不使用自定义…」。
-      // 选项自身有宽度上限（见 `.resume-font-option`），长文件名不会把弹层拉到半屏。
+      // 弹层**不**跟着触发框，也**不**按内容撑开（2026-11-06 用户截图：长字体名把弹层
+      // 拉到半屏，甚至被窗口右缘裁掉）。宽度由 `.resume-params-dropdown` 定在参数栏
+      // 内容宽 340px，选项文字单行省略、悬停看全称（见 `optionRender`）。
       popupMatchSelectWidth={false}
+      classNames={{ popup: { root: "resume-params-dropdown" } }}
       // 选中态用短名（见 `SYSTEM_FONT_SHORT_LABEL`）：这一格与页边距滑杆同宽 200px，
       // 全称必然被截成「系统字体（不使用自定义…」。展开的列表与 title 仍是完整说明。
       labelRender={(props) =>
@@ -164,10 +165,20 @@ export default function ResumeFontControl({
           style={
             option.data.family ? { fontFamily: `"${option.data.family}", sans-serif` } : undefined
           }
+          // 弹层宽度定死之后长名字必然被截断，完整文本靠原生 title 兜住。
+          // 只在"展示名 ≠ 文件名"时才挂：两者相同时 antd 已经用 label 生成过一个
+          // **同名** title，再挂一层会让 `getByTitle` 命中两个节点（测试与读屏都会懵）。
+          title={
+            option.data.fileName && option.data.fileName !== option.data.label
+              ? `${option.data.label} · ${option.data.fileName}`
+              : undefined
+          }
         >
-          {option.data.label}
+          {/* 展示名单独一层：它与文件名各自单行省略，只给外层省略时文件名会把展示名
+              挤掉，而展示名才是用户认字体的依据。 */}
+          <span className="resume-font-option-name">{option.data.label}</span>
           {/* 展示名可以自定义，但原始文件名要在选项里看得见：两份字体长得像时，
-              真正能区分它们的是磁盘上的文件名。标题（title）仍由 antd 用 label 生成。 */}
+              真正能区分它们的是磁盘上的文件名。 */}
           {option.data.fileName ? (
             <span className="resume-font-option-file">{option.data.fileName}</span>
           ) : null}

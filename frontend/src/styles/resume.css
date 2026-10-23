@@ -6,3 +6,6 @@
 @import "./resume-canvas.css";
 @import "./resume-editor.css";
 @import "./resume-panels.css";
+@import "./resume-workbench-controls.css";
+@import "./resume-workbench.css";
+@import "./resume-workbench-tabs.css";

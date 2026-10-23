@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import type { ResumeLayout } from "../types";
 import { DEFAULT_LAYOUT, renderControls } from "./ResumeLayoutControls.testkit";
+import { t } from "../i18n";
 import { clampPagePadding } from "../utils/pagePadding";
 
 const apiMocks = vi.hoisted(() => ({
@@ -359,5 +360,39 @@ describe("ResumeLayoutControls · 页边距（T5 / 4a）", () => {
     // 0.1mm 精度后，范围内的小数原样保留（以前会取整到 26）。
     expect(clampPagePadding(25.7)).toBe(25.7);
     expect(clampPagePadding(Number.NaN)).toBe(0);
+  });
+});
+
+/**
+ * P0-6 的第二个宿主：**生成配置页**（`GenerationConfigStage` → `ResumeLayoutControls`）。
+ *
+ * 分边控件在 2026-10-23 搬进「简历制作台」，主预览与生成配置页都不再渲染它。主预览那一侧
+ * 由 `ResumeDetailPreview.test.tsx` 以 `showMarginSides={false}` 钉住；这里补的是**生成配置页
+ * 这一条调用链**——它没有显式传 prop，靠的是 `ResumeMeasureControls` 的缺省 false。
+ *
+ * 为什么值得单独一条：缺省值一旦被改成 true（或有人给这个宿主补上 `showMarginSides`），
+ * 表现是"生成前那一行排版栏突然多出一行折叠块"，而那正是 2026-10-22 用户截图的成因
+ * （来源胶囊被顶宽、读数被压成 0 宽）。也顺手钉住"能力没被删"：页边距总滑杆仍在。
+ */
+describe("生成配置页 · 分边页边距只在制作台出现（P0-6）", () => {
+  it("不渲染分边控件，页边距总滑杆照常可用", async () => {
+    renderControls();
+
+    // 分边控件（折叠标题 + 四条支路）整块不出现。
+    expect(document.querySelector(".resume-margin-sides")).toBeNull();
+
+    // 五个度量行：行距 / 页边距 / 字号 / 字体 / 照片。分边若被渲染出来会是第 6 个直接子项。
+    const grid = document.querySelector(".resume-measure-grid");
+    expect(grid).not.toBeNull();
+    expect(grid!.children).toHaveLength(5);
+
+    // 能力没被删掉：总页边距滑杆仍在（读屏名来自 i18n，不写死中文）。
+    // 无障碍名取 `resume.pagePadding.label`：rc-slider 用的是 `ariaLabelForHandle`，
+    // 那个 prop 接的正是这个 key，而不是段落级的 `sliderLabel`。
+    expect(
+      await screen.findByRole("slider", {
+        name: new RegExp(t("resume.pagePadding.label")),
+      }),
+    );
   });
 });

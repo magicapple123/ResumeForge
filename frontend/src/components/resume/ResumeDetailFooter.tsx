@@ -22,9 +22,10 @@ import {
   ThunderboltOutlined,
   ZoomInOutlined,
 } from "@ant-design/icons";
-import { Button } from "antd";
+import { Button, Tooltip } from "antd";
 import type { ReactNode } from "react";
 import type { ResumeLayout } from "../../types";
+import { t } from "../../i18n";
 import ExportButtons from "../ExportButtons";
 
 interface Props {
@@ -41,6 +42,13 @@ interface Props {
   suggestionsGenerated: boolean;
   /** 没有对应岗位时「岗位建议」「查看对应岗位」禁用。 */
   jobId: number | null;
+  /**
+   * 制作台的中栏有未保存的内容：此时禁用「手动调整」。
+   *
+   * 两个编辑器各持一份 form 实例，同时开会各自往同一份草稿槽位里写，互相覆盖
+   * （设计 §9 Q6）。禁用而不是隐藏：位置跳动的代价比"看见但暂时不能点"更大。
+   */
+  editorBlocked?: boolean;
   onOpenEditor: () => void;
   onOpenZoom: () => void;
   onOpenRevise: () => void;
@@ -60,6 +68,7 @@ export default function ResumeDetailFooter({
   showRevise,
   suggestionsGenerated,
   jobId,
+  editorBlocked = false,
   onOpenEditor,
   onOpenZoom,
   onOpenRevise,
@@ -74,11 +83,21 @@ export default function ResumeDetailFooter({
     // 固定在弹窗底部：内容长（版面诊断 + 预览）时不必一路翻到最后才够得着这些按钮。
     // 按钮区是 CSS Grid：每个按钮独占一格、block 拉满整格，自动铺满整行不留右侧空当。
     <div className="resume-detail-footer">
-      <Button block icon={<EditOutlined />} onClick={onOpenEditor}>
-        手动调整
-      </Button>
+      {/* 中栏有未保存内容时禁用并说明原因（只在禁用时才套 Tooltip：套着会让 antd
+          在悬停时给按钮外层补一个 span，网格里那一格会跟着抖一下）。 */}
+      {editorBlocked ? (
+        <Tooltip title={t("workbench.editor.blocked")}>
+          <Button block icon={<EditOutlined />} disabled onClick={onOpenEditor}>
+            手动调整
+          </Button>
+        </Tooltip>
+      ) : (
+        <Button block icon={<EditOutlined />} onClick={onOpenEditor}>
+          手动调整
+        </Button>
+      )}
       <Button block icon={<ZoomInOutlined />} onClick={onOpenZoom}>
-        查看大图
+        {t("workbench.title")}
       </Button>
       {showRevise && (
         <Button block icon={<ThunderboltOutlined />} onClick={onOpenRevise}>

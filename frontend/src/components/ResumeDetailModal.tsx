@@ -5,7 +5,8 @@
  * 加载 detail/html、错误与骨架屏，以及把「换版式 / 自动一页 / 保存编辑」这些会改
  * 数据与重渲染的动作准备好，交给共享组件渲染。
  */
-import { Alert, App, Button, Modal, Space, Typography } from "antd";
+import { CloseOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Modal, Popconfirm, Space, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -18,6 +19,8 @@ import {
 } from "../api/resumes";
 import type { ResumeContent, ResumeDetail, ResumeLayout } from "../types";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
+import { t } from "../i18n";
+import { bumpResumeList } from "../features/resume/resumeListEvents";
 import { useResumeRelayout } from "../features/resume/useResumeRelayout";
 import ResumeDeliveryInfo from "./resume/ResumeDeliveryInfo";
 import ResumeDetailPreview from "./resume/ResumeDetailPreview";
@@ -27,6 +30,8 @@ import type { ResumePreviewHandle } from "./ResumePreview";
 interface Props {
   recordId: number | null;
   onClose: () => void;
+  /** 打开就进制作台（「新建简历 → 前往简历制作台」）。见 `ResumeDetailPreview`。 */
+  autoOpenWorkbench?: boolean;
 }
 
 const DEFAULT_LAYOUT: ResumeLayout = {
@@ -38,7 +43,7 @@ const DEFAULT_LAYOUT: ResumeLayout = {
   language: "zh-CN",
 };
 
-export default function ResumeDetailModal({ recordId, onClose }: Props) {
+export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench = false }: Props) {
   const { message } = App.useApp();
   const [detail, setDetail] = useState<ResumeDetail | null>(null);
   const [html, setHtml] = useState("");
@@ -78,6 +83,27 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
   const requestVersion = useRef(0);
   const saveRequestVersion = useRef(0);
   const layoutDirty = JSON.stringify(layout) !== JSON.stringify(savedLayout);
+  /**
+   * 关闭前的确认卡片（2026-10-24）：排版设置改了没保存时，关窗会把它一起丢掉。
+   *
+   * 内容那一半不在这里管——「手动调整」子弹窗有自己的守卫（`useResumeEditorPanel` 的
+   * 脏值确认），两层各问一句会让用户连点两次才关得掉。
+   *
+   * 判断写在 `Popconfirm` 的 `onOpenChange` 里而不是按钮的 `onClick` 上：antd 会把
+   * `Popconfirm` 自己的 onClick 与子元素的合并，两处各写一份就会"问完又立刻关掉"。
+   */
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const handleCloseRequest = (next: boolean) => {
+    if (!next) return setCloseConfirmOpen(false);
+    if (layoutDirty) setCloseConfirmOpen(true);
+    else onClose();
+  };
+  // 确认后先收起卡片再关：这张卡片住在弹窗里，留着 `open` 的话换一份简历再打开会直接
+  // 亮着一张"要不要丢弃"的卡片。
+  const confirmClose = () => {
+    setCloseConfirmOpen(false);
+    onClose();
+  };
 
   // Compiler 规范：随 recordId 变化的重置用渲染期守卫式调整（含首次挂载）；
   // ref 失效递增与异步取数留在 effect。
@@ -88,6 +114,8 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     setHtml("");
     setError("");
     setLayoutStatus(null);
+    // 换一份简历：上一份留下的"要不要丢弃排版"卡片不能跟过来。
+    setCloseConfirmOpen(false);
   }
 
   useEffect(() => {
@@ -151,10 +179,15 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     if (requestAtStart !== requestVersion.current || saveAtStart !== saveRequestVersion.current) {
       return;
     }
-    setDetail(updated);
+    // 保存成功 = 这份简历"存在了"（0051）：制作台草稿要到这里才出现在简历中心。
+    // `draft: false` 显式写上（后端也会这么返回，但旧后端不返回该字段时不能把按钮留在
+    // 「保存到简历中心」的形态上）。
+    setDetail({ ...updated, draft: false });
     setHtml(rendered);
     setSuggestionsGenerated(false);
     setSuggestionsResetKey((value) => value + 1);
+    // 刷新广播放在**保存成功之后**：进制作台、点开预览都不该让列表白跑一次请求。
+    bumpResumeList();
     message.success("简历修改已保存");
   };
 
@@ -172,9 +205,47 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
     setSuggestionsResetKey((value) => value + 1);
   };
 
-  /** 换模板 / 加页数 / 改字号：只重排，不立即写回记录。 */
-  const saveLayout = async () => {
-    if (!detail || !layoutDirty || layoutSaving) return;
+  /**
+   * 「保存到简历中心」（0051）：这份记录还是草稿，而用户什么都没改就点了保存。
+   *
+   * 实现只发**一次内容 PATCH**——后端"内容写入即转正"，不需要新接口。宿主里另外两个
+   * 保存分支（内容 / 版式）都会顺带转正，但它们在"什么都没脏"时一个请求都不发，所以
+   * 草稿要现身只能靠这一条。
+   */
+  const publishDraft = async (): Promise<boolean> => {
+    if (!detail) return false;
+    // 已经不是草稿：没什么可发布（按钮本就不会出现，这里只是把契约写清）。
+    if (!detail.draft) return true;
+    try {
+      const updated = await updateResume(detail.id, detail.content);
+      // 正文一个字节都没变：不重渲染 html（省一次 /render），也**保留 `content` 的旧引用**
+      // ——编辑器靠内容签名判断要不要回填，换一个等值的新引用虽不会误判，但没必要。
+      setDetail((prev) =>
+        prev ? { ...updated, content: prev.content, draft: false } : { ...updated, draft: false },
+      );
+      bumpResumeList();
+      message.success(t("workbench.draft.published"));
+      return true;
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t("workbench.draft.publish-failed"));
+      return false;
+    }
+  };
+
+  /**
+   * 换模板 / 加页数 / 改字号：**只重排不落库**的是 `requestLayout`，真正写回记录的是本函数
+   * （`PATCH /resumes/{id}/layout`）。
+   *
+   * 返回值是"版式有没有落库"，两个调用点都要用它：底部「保存」按钮不看，制作台顶部的
+   * 「保存修改」必须看——它要靠这个结果决定"要不要把版式快照对齐"，而对齐等于告诉用户
+   * "已经存上了"。失败提示只在这里弹一次，调用点只看返回值，不重复弹。
+   */
+  const saveLayout = async (): Promise<boolean> => {
+    // 没改动 = 已经与记录一致（对齐快照是安全的）；上一次还在飞则既不能再发，
+    // 也不能声称已存——两种情况必须分开，合成一个 `return` 就分不出真假了。
+    if (!detail) return false;
+    if (!layoutDirty) return true;
+    if (layoutSaving) return false;
     setLayoutSaving(true);
     try {
       const updated = await updateResumeLayout(detail.id, layout);
@@ -188,13 +259,24 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
         // 与记录里真实的语言不一致——下一次保存又把英文写回中文（§9.1 R1）。
         language: updated.language ?? layout.language,
       };
-      setDetail(updated);
+      // 版式 PATCH 返回的 `content` 是 JSON 重新解析出来的**新引用**，但正文一个字节都没变。
+      // 直接 `setDetail(updated)` 会让编辑器的"内容换了"守卫命中，把用户还没保存的正文覆盖掉。
+      // `draft: false`：版式写入同样让草稿转正（0051）。
+      setDetail((prev) => ({
+        ...updated,
+        content: prev?.content ?? updated.content,
+        draft: false,
+      }));
       setLayout(nextLayout);
       setSavedLayout(nextLayout);
       setHtml(await renderResume(updated.content, nextLayout));
+      // 同上：版式保存成功也让草稿转正（用户没改内容、只把版面排好了也算）。
+      bumpResumeList();
       message.success("排版设置已保存");
+      return true;
     } catch (err) {
       message.error(err instanceof Error ? err.message : "保存排版设置失败");
+      return false;
     } finally {
       setLayoutSaving(false);
     }
@@ -208,9 +290,36 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
 
   return (
     <Modal
-      title={detail?.title ?? "简历预览"}
+      title={
+        // 标题行右侧自绘 ×（`closable={false}`）：卡片长在用户刚点的地方，不用把视线
+        // 拉到底部去找确认。
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>{detail?.title ?? "简历预览"}</span>
+          <Popconfirm
+            open={closeConfirmOpen}
+            onOpenChange={handleCloseRequest}
+            title={t("workbench.close.title")}
+            description={t("resume.preview.close.body")}
+            okText={t("workbench.close.confirm")}
+            cancelText={t("common.action.keep-editing")}
+            okButtonProps={{ danger: true }}
+            onConfirm={confirmClose}
+            placement="bottomRight"
+          >
+            <Button
+              type="text"
+              size="small"
+              icon={<CloseOutlined />}
+              aria-label={t("common.action.close")}
+              style={{ marginLeft: "auto" }}
+            />
+          </Popconfirm>
+        </div>
+      }
       open={!!recordId}
-      onCancel={onClose}
+      onCancel={() => handleCloseRequest(true)}
+      // × 由标题行自绘（见上），弹窗自带的那个会和它并排出现两颗。
+      closable={false}
       width="min(960px, 96vw)"
       footer={null}
       // 弹窗自身滚动：预览区高度已经与上方内容解耦（见 ResumePreview 的固定预算），
@@ -259,6 +368,7 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
             detail={detail}
             html={html}
             layout={layout}
+            autoOpenWorkbench={autoOpenWorkbench}
             layoutStatus={layoutStatus}
             measure={measure}
             pdfDirectAvailable={pdfDirectAvailable}
@@ -267,6 +377,16 @@ export default function ResumeDetailModal({ recordId, onClose }: Props) {
             onLayoutStatus={setLayoutStatus}
             onMeasure={setMeasure}
             onApplyLayout={(next) => requestLayout(next)}
+            // 制作台顶部「保存修改」要落库版式：把这条已有的 PATCH 链路直接交给它。
+            // 底部那颗「保存」按钮仍在（定位不同：它只存版式，不动内容），两者共用本函数
+            // 内部的 `layoutDirty / layoutSaving` 守卫，谁先点都不会发两次请求。
+            onCommitLayout={saveLayout}
+            // 草稿且什么都没脏时点「保存到简历中心」：见 `publishDraft`。
+            onPublishDraft={publishDraft}
+            // 版式 PATCH 在飞时制作台顶部的「保存修改」必须禁用：这条链路此刻返回 `false`
+            // （同一时刻不许发两次 PATCH），若按钮还能点，用户会看到"点了、按钮还在、没有提示"，
+            // 而内容其实一次都没存。
+            layoutSaving={layoutSaving}
             onApplyFittedFormat={(formatConfig) =>
               // 「自动一页」也只写入当前草稿：同一条重排通道，不另开一份"正在重排"口径。
               requestLayout({ ...layout, format_config: formatConfig })

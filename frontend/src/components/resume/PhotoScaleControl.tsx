@@ -176,7 +176,12 @@ export default function PhotoScaleControl({
           aria-label={t("resume.photo.scale.sliderLabel")}
           ariaLabelForHandle={t("resume.photo.scale.sliderLabel")}
           tooltip={{ formatter: (value) => (value == null ? "" : `${Math.round(value)}%`) }}
-          style={{ flex: "1 1 70px", minWidth: 56, margin: "0 2px" }}
+          // 宽度可收缩：`flex-basis` 70px 是"舒服的宽度"，但下限必须是 0——滑杆写死
+          // `minWidth: 56` 时，内联样式优先级高于任何 CSS 规则，制作台左栏（三列 grid）
+          // 在 360–380px 时这一行会横向溢出 10px，把「+」画到读数胶囊底下。
+          // 弹窗里这条下限本来也走不到：那里的滑杆宽度由 `.is-stacked .ant-slider`
+          // 的 `width: 200px` 决定（200 > 56），压缩只在侧栏这类窄宿主里发生。
+          style={{ flex: "1 1 70px", minWidth: 0, margin: "0 2px" }}
           onChange={commit}
         />
         <Button

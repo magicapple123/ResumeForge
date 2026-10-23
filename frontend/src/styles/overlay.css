@@ -42,6 +42,74 @@
   font-size: 12px;
 }
 
+/* 「查看差异」展开区：一行一个变化分组，左侧分组名、右侧「当前 → 上次未提交」。
+   `flex-basis: 100%` 让它独占草稿条的第二行（条本身是 `wrap` 的 flex）。 */
+.rf-draft-bar-diff {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  margin: 4px 0 0;
+  padding: 8px 0 0;
+  overflow-y: auto;
+  border-top: 1px dashed var(--rf-warning-border);
+  list-style: none;
+}
+
+.rf-draft-bar-diff > li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rf-draft-bar-diff-label {
+  flex: 0 0 84px;
+  color: var(--rf-text-body);
+  font-weight: 600;
+}
+
+/* 两侧并列；窄容器里 `wrap` 会把它折成上下两段，仍然读得懂。 */
+.rf-draft-bar-diff-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rf-draft-bar-diff-side {
+  flex: 0 0 auto;
+  color: var(--rf-text-tertiary);
+}
+
+/* 值本身允许换行：一段工作描述可能很长，截断到一行会看不出改了什么。 */
+.rf-draft-bar-diff-value {
+  flex: 1 1 120px;
+  min-width: 0;
+  color: var(--rf-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.rf-draft-bar-diff-arrow {
+  flex: 0 0 auto;
+  color: var(--rf-text-tertiary);
+}
+
+/* 有草稿、但一行差异都没有（内容一致 / 差异不在 diff 覆盖范围）：与展开区同一条分隔线，
+   一句话说清"恢复不会改任何东西"，而不是给一张空表。 */
+.rf-draft-bar-diff-empty {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px dashed var(--rf-warning-border);
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 /* 带动作的 Toast：文字与动作按钮同一行，动作靠右但不顶到边缘。 */
 .rf-toast-content {
   display: inline-flex;

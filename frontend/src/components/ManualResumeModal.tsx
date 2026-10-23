@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 用户手写简历弹窗：岗位模式预填基本信息，通用模式从空白开始（可一键填入全部资料）。 */
-import { App, Input, Modal } from "antd";
+import { App, Button, Input, Modal } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createManualResume } from "../api/resumes";
 import { getProfile } from "../api/profile";
+import { t } from "../i18n";
 import type { Job, Profile, ResumeContent } from "../types";
 import { blankResumeContent, profileToResumeContent } from "../utils/profileToResume";
 import { buildProfileFillSources } from "../features/profile/profileFillOptions";
@@ -19,9 +20,22 @@ interface Props {
   /** 通用简历的初始名称，留空则由后端按「姓名-自定义简历-时间」命名。 */
   initialTitle?: string;
   onClose: () => void;
+  /**
+   * 「前往简历制作台」：拿到新建简历的 id 后由宿主打开详情页里的制作台。
+   *
+   * 制作台需要一份**已落库**的简历（它要渲染 html、要能 PATCH 内容），所以这个入口
+   * 先用空白/预填内容创建、再进制作台——顺序不能反。不传就不渲染这颗按钮。
+   */
+  onOpenWorkbench?: (resumeId: number) => void;
 }
 
-export default function ManualResumeModal({ job, open, initialTitle = "", onClose }: Props) {
+export default function ManualResumeModal({
+  job,
+  open,
+  initialTitle = "",
+  onClose,
+  onOpenWorkbench,
+}: Props) {
   const { message } = App.useApp();
   const [profile, setProfile] = useState<Profile | null>(null);
   /**
@@ -115,8 +129,41 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
     // 以及以后新增的入口，都不必再各自记着"保存完要 reload"。
     bumpResumeList();
     message.success(
-      job ? "手写简历已保存到简历中心" : "通用简历已保存，可在「我的资料」和简历中心查看",
+      // 「我的资料」里那个通用简历区块 2026-10-24 已移除，提示里不能再指路到那里。
+      job ? "手写简历已保存到简历中心" : "通用简历已保存，可在简历中心查看",
     );
+  };
+
+  /**
+   * 「前往简历制作台」：不经过编辑器里的表单，直接用**初始内容**（空白或资料预填）建一份，
+   * 然后让宿主打开制作台。
+   *
+   * 为什么用初始内容而不是表单当前值：用户在这一步的意图是"我要去制作台里排"，而不是
+   * "先把这张表填完"。用初始内容建出来正是他说的"从空白界面开始制作简历"；
+   * 若要带上他刚填的东西，先点「保存手写简历」再进制作台即可。
+   *
+   * 建的是**草稿**（0051）：用户在制作台里保存过（内容或排版任一）它才出现在简历中心；
+   * 点进去看一眼就关掉，简历中心里永远不会有它。所以这里**不广播**列表刷新——草稿本
+   * 来就不该让任何列表重取一次。转正后的那一次广播由制作台宿主负责（`ResumeDetailModal`）。
+   */
+  const [startingInWorkbench, setStartingInWorkbench] = useState(false);
+  const startInWorkbench = async () => {
+    if (!content || startingInWorkbench || !onOpenWorkbench) return;
+    setStartingInWorkbench(true);
+    try {
+      const created = await createManualResume({
+        job_id: job?.id ?? null,
+        title: job ? "" : title.trim(),
+        content,
+        draft: true,
+      });
+      onOpenWorkbench(created.id);
+    } catch (error) {
+      // 不额外造一句中文兜底：`error.message` 已经是后端的原因，缺它时给个通用串。
+      message.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setStartingInWorkbench(false);
+    }
   };
 
   return (
@@ -164,6 +211,13 @@ export default function ManualResumeModal({ job, open, initialTitle = "", onClos
         // T11：通用模式才给「填入我的资料全部数据」。岗位模式不传——那份表单的经历
         // 是照岗位写的，一键把资料全倒进去等于替用户做决定。
         fillAll={job || !profile ? undefined : () => profileToResumeContent(profile)}
+        footerExtra={
+          onOpenWorkbench ? (
+            <Button loading={startingInWorkbench} onClick={() => void startInWorkbench()}>
+              {t("workbench.action.open-from-new")}
+            </Button>
+          ) : undefined
+        }
         onClose={onClose}
         onSave={save}
       />

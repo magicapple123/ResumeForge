@@ -162,6 +162,30 @@ describe("ResumeTemplateControls · 板块顺序", () => {
   });
 });
 
+describe("ResumeTemplateControls · 版式下拉的弹层", () => {
+  it("弹层定宽（参数栏内容宽）而不是按内容撑开；每个选项带全名 title", async () => {
+    renderGroup();
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "版式" }));
+
+    // 弹层 class：宽度由 `.resume-params-dropdown` 定在 340px（另有 `max-width` 兜底），
+    // 不再按内容撑开——长自制版式名会把弹层拉出参数栏，甚至被窗口右缘裁掉（用户截图）。
+    await waitFor(() => expect(document.querySelector(".resume-params-dropdown")).not.toBeNull());
+
+    // 每个名字外面包一层带 `title` 的 span：名字被省略时悬停看到的是**名字本身**。
+    // （选项自己的 `title` 是"行高与间距收紧…"那句说明，答非所问。）
+    const options = Array.from(document.querySelectorAll(".resume-format-option")).map((node) => [
+      node.textContent,
+      node.getAttribute("title"),
+    ]);
+    expect(options).toEqual([
+      ["跟随模板", "跟随模板"],
+      ["标准", "标准"],
+      ["紧凑", "紧凑"],
+    ]);
+  });
+});
+
 describe("ResumeTemplateControls · 最大篇幅", () => {
   it("点「2 页」只写 layout.page_limit", async () => {
     const onChange = renderGroup();

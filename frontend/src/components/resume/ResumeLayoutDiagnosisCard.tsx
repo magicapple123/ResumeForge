@@ -14,6 +14,7 @@ import { App, Alert, Button, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { analyzeResumeLayout, updateResumeLayout } from "../../api/resumes";
 import type { ResumeLayout, ResumeLayoutAnalysis, ResumeLayoutStatus } from "../../types";
+import { t } from "../../i18n";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 
@@ -73,6 +74,15 @@ export default function ResumeLayoutDiagnosisCard({
 }: Props) {
   const { message } = App.useApp();
   const [analysis, setAnalysis] = useState<ResumeLayoutAnalysis | null>(null);
+  /**
+   * `analysis` 是**基于哪一版版式**算出来的（`draftLayoutKey` 的结果）。
+   *
+   * 没有它就会出现 2026-10-24 那个 bug：用户拖完滑杆立刻点「自动一页」，而 effect 里
+   * 那份 `fit_ladder` 还是 250ms 防抖之前那一版 layout 算出来的——照着陈旧清单逐档试、
+   * 再把试出来的 `candidate.config` 落库，落库的参数与实测的那一版根本不是同一套，
+   * 用户看到的就是"点了没变"。所以这里记下基准，对不上就**先重新诊断**再试。
+   */
+  const [analysisKey, setAnalysisKey] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [fitting, setFitting] = useState<{ index: number; total: number; label: string } | null>(
     null,
@@ -89,6 +99,7 @@ export default function ResumeLayoutDiagnosisCard({
   if (prevMeasure !== measure && !measure) {
     setPrevMeasure(measure);
     setAnalysis(null);
+    setAnalysisKey(null);
     setAnalyzing(false);
   }
 
@@ -109,11 +120,18 @@ export default function ResumeLayoutDiagnosisCard({
         layout,
       )
         .then((result) => {
-          if (current === requestId.current) setAnalysis(result);
+          if (current === requestId.current) {
+            setAnalysis(result);
+            // 记下这份清单的基准：`autoFit` 要拿它判断"是不是上一版算出来的"。
+            setAnalysisKey(layoutKey);
+          }
         })
         .catch(() => {
           // 诊断失败不该打扰正在看简历的用户：面板退回"只说溢出"的兜底形态。
-          if (current === requestId.current) setAnalysis(null);
+          if (current === requestId.current) {
+            setAnalysis(null);
+            setAnalysisKey(null);
+          }
         })
         .finally(() => {
           // ★ 复位不能加 `current === requestId.current` 条件：防抖期间连续上报时，
@@ -131,18 +149,58 @@ export default function ResumeLayoutDiagnosisCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeId, measureKey, layoutKey]);
 
+  /**
+   * 「自动一页」：从**当前这一版**版式出发逐档收紧，够放下就停。
+   *
+   * 第一步永远是"确认清单是这一版算的"：`analysis` 可能是防抖/网络往返期间留下的上一版
+   * 结论（见 `analysisKey` 的说明）。拿陈旧清单去 `measureWithProbe` 并落库，落库的参数与
+   * 实测那一版不是同一套，用户看到的就是"点了没变"——这是本条要修的根因。
+   */
   const autoFit = useCallback(async () => {
-    const ladder = analysis?.fit_ladder ?? [];
     const preview = previewRef.current;
-    if (ladder.length === 0 || !preview) return;
+    if (!preview || !measure) return;
+
+    let current = analysis;
+    if (!current || analysisKey !== layoutKey) {
+      setAnalyzing(true);
+      try {
+        current = await analyzeResumeLayout(
+          resumeId,
+          {
+            used_height: measure.usedHeight,
+            page_content_height: measure.pageContentHeight,
+            page_limit: measure.pageLimit,
+          },
+          layout,
+        );
+        setAnalysis(current);
+        setAnalysisKey(layoutKey);
+      } catch (error) {
+        // 拿不到这一版的结论就不能猜着收：宁可什么都不做，也不要存下一套没量过的参数。
+        message.error(
+          error instanceof Error ? error.message : t("workbench.autofit.analyze-failed"),
+        );
+        return;
+      } finally {
+        setAnalyzing(false);
+      }
+    }
+
+    const ladder = current.fit_ladder ?? [];
+    if (ladder.length === 0) return;
 
     // 逐档试：够放下就停在这里，不会一步把字号缩到最小。
+    let measured = true;
     for (let index = 0; index < ladder.length; index += 1) {
       const candidate = ladder[index];
       setFitting({ index: index + 1, total: ladder.length, label: candidate.label });
-      const measured = preview.measureWithProbe(candidate.css);
-      if (!measured) break;
-      const fits = measured.usedHeight <= measured.pageContentHeight + 0.5;
+      const result = preview.measureWithProbe(candidate.css);
+      if (!result) {
+        // 探针量不到（iframe 还没排版完 / 被卸载）：如实说一句，别静默什么都不做。
+        measured = false;
+        break;
+      }
+      const fits = result.usedHeight <= result.pageContentHeight + 0.5;
       if (!fits) {
         // 让浏览器有机会把「正在试第 N 档」画出来，否则循环会把整段时间占满。
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -163,19 +221,24 @@ export default function ResumeLayoutDiagnosisCard({
         });
         // 后端只回显它接受的部分；以它为准，别用本地算的值假装成功。
         onApplied(saved.format_config ?? {});
-        message.success(`已按「${candidate.label}」收进 ${layout.page_limit} 页`);
+        // 不写死"已收进 N 页"：重排之后才知道到底进没进，那句话此前会说谎。
+        message.success(t("workbench.autofit.applied", { label: candidate.label }));
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "保存排版设置失败");
+        message.error(error instanceof Error ? error.message : t("workbench.autofit.save-failed"));
       }
       return;
     }
 
     setFitting(null);
+    if (!measured) {
+      message.warning(t("workbench.autofit.no-measure"));
+      return;
+    }
     // 收到底也放不下时必须如实说，并把用户指向下一条真正有用的建议。
     message.warning(
       "排版参数已经收到最紧了，还是放不下。接下来只能精简内容或增加页数——上面「版面诊断」里列了具体怎么做。",
     );
-  }, [analysis, layout, message, onApplied, previewRef, resumeId]);
+  }, [analysis, analysisKey, layout, layoutKey, measure, message, onApplied, previewRef, resumeId]);
 
   const diagnosis = analysis?.diagnosis;
   const fitRoom = analysis?.fit_room;
@@ -209,7 +272,8 @@ export default function ResumeLayoutDiagnosisCard({
             size="small"
             type="primary"
             loading={fitting !== null}
-            disabled={disabled}
+            // 诊断在飞时也禁用：这一档的清单还没到，点下去要么什么都不做、要么按旧清单做。
+            disabled={disabled || analyzing || fitting !== null}
             onClick={() => void autoFit()}
           >
             自动一页

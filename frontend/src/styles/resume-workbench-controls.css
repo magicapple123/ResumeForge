@@ -1,0 +1,390 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历制作台 · **左栏参数行与色板**（从 `resume-workbench.css` 按分段标题拆出的平铺分片）。
+
+   拆出的唯一理由是行数预算（单文件 500 行零豁免）：本段是三组参数控件共用的行布局与
+   色块样式，与"三栏怎么分宽、分隔条怎么拖"没有关系，所以它先被搬走。
+   搬迁是**纯搬迁**——选择器、声明、层叠顺序逐字不变；`resume.css` 的 `@import` 顺序
+   保证它仍然在 `resume-workbench.css` 之前生效（两段之间没有互相覆盖的规则）。
+   2026-10-23 追加的「参数行三列对齐」**不是**搬迁：那是新规则，理由写在它自己的段首。 */
+
+/* ===== 参数行（间距 / 外观两组） ===== */
+.resume-wb-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resume-wb-row {
+  width: 100%;
+}
+
+/* 控件组吃掉标签剩下的宽度：`±` 固定、滑杆伸缩，读数与胶囊才落在同一条竖线上。 */
+.resume-wb-row-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ===== 参数行三列对齐（2026-10-23 / 修订 2026-11-06） ===== */
+/* 症状分两阶段：
+   ① 最早四行的「读数 + 来源胶囊」右边界各不相同（用户截图："随模板"标签没对齐）；
+   ② 右边界修好之后仍未对齐（2026-11-06 用户截图）：第二列起点随标签长度漂移——
+      「小节标题大小」6 字 72px、其余 4 字 48px，于是第 4 行的减号与滑杆整体右移；
+      读数「0.8×」与「1.00×」宽度又不同（第三列是 `auto`），`+` 再被推一次。
+   根因是两种行结构混用，且三列里有**两列是内容宽**：
+   · 「层次与间距」的 `SpacingRow` 用 `<Space wrap>`：宽度不够时第三段（`resume-measure-tail`）
+     整段掉到第二行，尾巴从"贴右"变成"另起一行靠左"；
+   · 「照片」那一行用**不换行**的 `<Space>`：tail 紧跟控件，x 位置由控件宽度决定。
+
+   定案：三列**全部定宽**（标签 72 / 控件 152 / 尾部吃掉剩余），于是
+   `−`、滑杆左缘、滑杆右缘、`+`、读数左缘在四行里落在同一批竖线上——
+   与标签字数、读数宽度都无关。
+
+   宽度算式：72 + 6 + 152 + 6 + 尾部。参数栏是 `width: 380` + `padding: 20`，而本项目
+   没有全局 `box-sizing` 重置（antd 的 common style 只覆盖 `[class^="ant-"]`），
+   所以内容是 **content-box 的 380**；尾部那一列用 `minmax(0, 1fr)` 把余量全吸收，
+   胶囊再由 `margin-left: auto` 贴行右缘——**列宽固定之后，余量多少都不影响对齐**。
+   按"若哪天补回 border-box 重置"的紧口径算，尾部只剩 104，而它至少要 44 + 6 + 52 = 102，
+   所以两种解释下都不溢出（`workbenchLayoutContract.test.ts` 钉住这条算式）。
+
+   顺带解决换行：`flex-wrap: wrap` 对 **grid 容器完全无效**，`SpacingRow` 那个 `wrap`
+   从此失效——这就是"窄宽度不再掉到第二行"的真正原因（不是靠 `nowrap` 去盖它）。 */
+.resume-wb-col-params,
+.resume-wb-rows {
+  /* 标签列：最长的一条是「小节标题大小」（6 字 × 12px = 72）。用固定值而不是
+     `max-content`——每行都是**独立**的 grid，`max-content` 会各自算各自的，
+     第二列起点就又错开了（那正是第二阶段截图里的症状）。 */
+  --resume-wb-label-w: 72px;
+  /* 控件列：± 各 30（controlHeightSM = 40 × 0.75）+ 两道 2px 间距 + 滑杆 88 = 152。
+     滑杆的左右外边距在参数栏里被清零（见下面的滑杆段），所以 88 就是它占的全部宽度。 */
+  --resume-wb-controls-w: 152px;
+}
+
+.resume-wb-rows > .resume-wb-row.ant-space {
+  display: grid;
+  grid-template-columns: var(--resume-wb-label-w) var(--resume-wb-controls-w) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  width: 100%;
+}
+
+/* 尾部（读数 + 来源胶囊）**铺满**第三列，而不是 `justify-self: end` 收缩靠右：
+   收缩靠右时整条尾巴被右推，而「字号」那行没有来源胶囊、尾巴只有 44px，
+   它的读数就比别的行右移 60px——这正是第二阶段截图里的第二种错位。
+   现在读数钉在第三列左缘（四条竖线之一），胶囊由 `margin-left: auto` 贴行右缘。
+   用 `:last-child` 而不是 `:nth-child(3)`：`SpacingRow` 的三段是
+   Tooltip(label) / 控件 Space / `span.resume-measure-tail`，但 antd 6 给 Tooltip 多加一层
+   包装时序号会整体后移，`:last-child` 不受内部结构影响。 */
+.resume-wb-rows > .resume-wb-row.ant-space > .ant-space-item:last-child {
+  justify-self: stretch;
+}
+
+/* 标签列定宽之后，比 72 更长的文案（以后再加参数）必须省略，而不是顶进控件列。
+   `display: inline-block` 是必需的：行距/页边距的标签在 `.ant-space-item` 里是行内元素，
+   行内元素上 `max-width` 与 `text-overflow` 都不生效。 */
+.resume-wb-col-params .resume-measure-label,
+.resume-wb-rows .resume-measure-label {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「排版参数」组的那几行不是 `.resume-wb-row`：它们是 `.resume-measure-grid.is-stacked`
+   的直接子级（照片 / 行距 / 页边距），列宽算式与上面完全一致。
+   用 `:has(.resume-measure-tail)` **只命中带尾部的行**：「字体」那行是 label + Select
+   两段、没有 tail，命中它会把它塞进三列网格（见下面单独那一条）。 */
+.resume-wb-col-params .resume-measure-grid.is-stacked > .ant-space:has(.resume-measure-tail) {
+  display: grid;
+  grid-template-columns: var(--resume-wb-label-w) var(--resume-wb-controls-w) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  width: 100%;
+}
+
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  > .ant-space:has(.resume-measure-tail)
+  > .ant-space-item:last-child {
+  justify-self: stretch;
+}
+
+/* 字号那一格不是 Space，而 `FontSizeControl` 自己渲染的 `.resume-measure-cell`（flex 行）：
+   它的 `.resume-measure-tail` 是这一格的**直接子级**、与控件 Space 平级，所以上一条
+   `> .ant-space:has(tail)` 在这里是空选择器。改成把这一格本身转成三列 grid——
+   `> .resume-measure-cell:has(.resume-measure-tail)` 同样只命中"有尾部"的那一格。 */
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  > .resume-measure-cell:has(.resume-measure-tail) {
+  display: grid;
+  grid-template-columns: var(--resume-wb-label-w) var(--resume-wb-controls-w) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+}
+
+/* 同样铺满第三列（理由与 `.resume-wb-rows` 那条一致）：读数左缘落在同一条竖线上。 */
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  > .resume-measure-cell:has(.resume-measure-tail)
+  > .resume-measure-tail {
+  justify-self: stretch;
+}
+
+/* 「字体」那一格只有两段（label + Select，没有 tail），不能套进上面那套三列网格：
+   给它两列，并让下拉与滑杆**左缘**对齐（72 + 6 + 30 + 2 = 110px），宽度取控件列 152px。
+   `:not(:has(...))` 的特异性取参数本身（0,1,0），所以这一条压得住
+   `modules-layout.css` 里那条 `.is-stacked .resume-font-select.is-fluid`（0,3,0）。 */
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  > .resume-measure-cell:not(:has(.resume-measure-tail)) {
+  display: grid;
+  grid-template-columns: var(--resume-wb-label-w) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+}
+
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  > .resume-measure-cell:not(:has(.resume-measure-tail))
+  > .resume-font-select.is-fluid {
+  width: var(--resume-wb-controls-w);
+  max-width: 100%;
+  /* 30px 减号 + 2px 间距：下拉的左缘因此落在滑杆左缘（110px）上。 */
+  margin-left: 32px;
+}
+
+/* 读数定宽 44：第三列里「读数 44 + 6 + 胶囊 52」= 102，配上 104 的列宽刚好不溢出
+   （`1.00×` 在 14px 等宽数字下约 36px，44 够放）。全局那条是 56——弹窗里要给
+   「13.2px」这种最长读数留位置，这里只改参数栏。 */
+.resume-wb-col-params .resume-measure-value {
+  flex: 0 0 44px;
+  width: 44px;
+}
+
+/* 来源胶囊贴行右缘（与同一栏的颜色行、以及行的右边界是同一条竖线）。
+   `margin-left: auto` 而不是 `justify-self`：尾巴是铺满整列的 flex，
+   靠右收口只能在这一层做——在 item 上靠右会把读数一起右推。 */
+.resume-wb-col-params .resume-measure-source {
+  margin-left: auto;
+}
+
+/* 字号下限提示（"小于 9px 打印可能看不清"）：`modules-layout.css` 里它靠
+   `flex: 1 0 100%` 独占一整行，而 grid 容器里 flex 属性一律失效——不补这一条它会挤进
+   第一列、被压成竖排窄条。跨满三列 = 原来那一整行。 */
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  > .resume-measure-cell:has(.resume-measure-tail)
+  > .resume-font-warning {
+  grid-column: 1 / -1;
+}
+
+/* ===== 统一滑杆长度（2026-10-23 / 修订 2026-11-06：88px） ===== */
+/* 症状：左栏四组的滑杆长度各不相同——行距/页边距 132、层次与间距 90、分边四条更长、
+   字号与照片又各是一个值。四条控制项摆在同一栏里像四套控件（用户截图）。
+   根因是各组历史规则分别写死了自己的 `flex-basis` / `min-width` / `width`，而"谁更长"
+   取决于那一条规则落在这个 flex 行里剩多少空间。
+   改法：给左栏定一个唯一的宽度变量，**所有**滑杆都按它取固定宽（既不长也不缩）。
+   88 不是拍的：它等于"内容宽 340 − 标签列 72 − 控件列里两块按钮与两道间距 62 −
+   尾部列 104 − 两道列间距 12"，也就是"尾部胶囊仍贴行右缘"的前提下滑杆能有的最大宽度。
+   `!important` 是必需的：`PhotoScaleControl` 给它的滑杆写了内联
+   `style={{ flex: "1 1 70px", minWidth: 0 }}`，内联声明只有 `!important` 能压过。
+   `margin-inline: 0` 同样必须 `!important`（`LineHeightControl` / `FontSizeControl`
+   写的是内联 `margin: "0 2px"`）：antd 的 `.ant-slider` 自带 `margin: 14px 6px`，
+   不清零时"88px 的滑杆"实际占 100px，控件列就不是 152 而是 164，四行的 `+` 又各自偏一点。
+   代价：滑块圆点按轨道端点居中，值在两端时各自溢出轨道 6px——它落在 ± 按钮那片
+   透明内边距上（按钮 30px 宽、图标只占中间 12px），看不出重叠。
+   只作用于 `.resume-wb-col-params`：弹窗与预览工具栏里的滑杆由各自的 `.is-stacked`
+   规则定宽（200px），不受影响。 */
+.resume-wb-col-params {
+  --resume-wb-slider-w: 88px;
+}
+
+.resume-wb-col-params .ant-slider {
+  flex: 0 0 var(--resume-wb-slider-w) !important;
+  width: var(--resume-wb-slider-w) !important;
+  min-width: var(--resume-wb-slider-w) !important;
+  max-width: var(--resume-wb-slider-w) !important;
+  margin-inline: 0 !important;
+}
+
+/* 滑杆外面那一格也要定宽，否则它仍按 `flex: 1 1 90px` 抢空间，滑杆固定 88 之后
+   会在格子里左右乱飘（`±` 与读数之间的间距就不一致了）。
+   两个选择器各自比"常规版"多一层祖先类，靠特异性压过去：
+   · `.resume-wb-rows` 那条压 `resume-workbench.css` 的
+     `.resume-wb-row .ant-space-item:has(> .resume-wb-slider)`（0,3,0，且源序在后）；
+   · `.ant-space .ant-space-item` 那条压同文件里
+     `.resume-measure-grid.is-stacked .ant-space-item:has(> .ant-slider)` 的
+     `min-width: 112px`（0,5,0）——那是为"窄栏里让滑杆缩一点"写的，现在滑杆已经
+     定死 88，再留 112 的下限会让格子里凭空多出 24px 空档。
+     注意这里写的是**后代** `.ant-space .ant-space-item`（不是 `> .ant-space >`）：
+     antd 的 `Space` 给每个子节点各包一层 `.ant-space-item`，滑杆那一格实际在
+     「行 Space → item → 控件 Space → item → slider」的第四层上。 */
+.resume-wb-col-params .resume-wb-rows .ant-space-item:has(> .resume-wb-slider),
+.resume-wb-col-params
+  .resume-measure-grid.is-stacked
+  .ant-space
+  .ant-space-item:has(> .ant-slider) {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* ===== 滑杆宽度（2026-10-23 回退） ===== */
+/* 这里曾经有一段"把滑杆格 `min-width` 降到 0 让它在窄栏里让位"的规则。它解决了溢出，
+   却把滑杆本身压成了 0 宽——用户截图里「条目间距 / 姓名大小 / 小节标题大小」三行只剩
+   `— +`，中间的轨道整条消失。
+   根因不在滑杆，在于当时的参数栏下限 380 比"所有行一行放下"所需的 400 少了 20px。
+   现在参数栏是**固定 380 且不可拖动**（`WORKBENCH_PARAMS_WIDTH`），空间够用，
+   所以把 `min-width` 还原成两条既有规则里的值（70 / 112），滑杆不再被压没。
+   教训：**窄容器要压的是"哪一项"，不能在没验证渲染结果的情况下把 `min-width` 归零**。 */
+
+.resume-wb-row .ant-space-item:has(> .resume-wb-slider) {
+  flex: 1 1 90px;
+  min-width: 70px;
+}
+
+.resume-wb-col-editor .resume-wb-slider,
+.resume-wb-slider {
+  min-width: 0;
+}
+
+/* ===== 颜色行：色板与取色器 / 尾部共用同一条竖线（2026-11-05） ===== */
+/* 症状（用户截图）：四组颜色里，「标签 + 取色器 + 色值 + 来源」那一行与它下面的色板行
+   右边界对不齐；四组之间也各偏一点（标签文案长度不同）。
+   根因三条，缺一不可：
+   1. 行是 flex 纵排，色板行是一条独立的 flex——它的宽度只由 5 个 20px 色块决定，
+      与上面那一行的宽度毫无关系；
+   2. 标签是 `min-width: 34px` + 内容宽（「强调色」36 /「辅助文字颜色」72），四行的
+      第二列起点因此各不相同；
+   3. 来源胶囊靠 `margin-left: auto` 收口，而色板行里没有那一条"auto"。
+   改法：把行本身做成四列 grid，`head` 用 `display: contents` 让它的四段**直接**落进列里，
+   色板跨"第 2 列 → 行尾"——于是"色板左边界 = 取色器左边界"、"右边界 = 尾部右边界"，
+   标签列定宽之后四行共用同一条起跑线。 */
+.resume-wb-rows {
+  /* 颜色行的标签列宽：目录里最长的一条是「辅助文字颜色」（6 字 × 12px = 72px，78 留一点
+     字宽取整的余量）。用固定值而不是 `max-content`——每一行都是**独立的** grid，
+     `max-content` 会各自算各自的，第二列起点就又错开了（那正是截图里的症状）。 */
+  --resume-wb-color-label-w: 78px;
+}
+
+.resume-wb-color-row {
+  display: grid;
+  grid-template-columns: var(--resume-wb-color-label-w) auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 6px;
+  min-width: 0;
+}
+
+/* 四段直接成为行 grid 的项：中间再包一层 flex，列宽就由内容各自决定，跨列对不上。 */
+.resume-wb-color-head {
+  display: contents;
+}
+
+/* 标签列定宽后不再需要 `min-width`；`overflow: hidden` 是兜底——将来出现更长的标签时
+   截断，而不是顶进取色器那一列。 */
+.resume-wb-color-row .resume-measure-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 读数留在自己那一格的左端（`minmax(0, 1fr)` 会把格子撑满，不写会居中/拉伸）。 */
+.resume-wb-color-row .resume-measure-value {
+  justify-self: start;
+}
+
+/* 来源胶囊落在最后一列的右缘：与同栏其它参数行尾部那条竖线是同一条（那些行的尾部走
+   `justify-self: end`，右边界都是行的内容盒右缘）。 */
+.resume-wb-color-row .resume-measure-source {
+  justify-self: end;
+}
+
+/* 色板：从**取色器那一列**起，一直铺到行尾。`padding-left` 去掉了——它正是当初
+   "色板比上面那行左移 2px"的来源。 */
+.resume-wb-swatches {
+  display: flex;
+  grid-column: 2 / -1;
+  grid-row: 2;
+  gap: 6px;
+}
+
+/* 色块：颜色值来自内联自定义属性（用户选的颜色是**数据**，不是主题 token）。 */
+.resume-wb-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 4px;
+  background: var(--resume-wb-swatch);
+  cursor: pointer;
+}
+
+.resume-wb-swatch:hover {
+  border-color: var(--rf-border);
+}
+
+.resume-wb-swatch.is-active {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 1px;
+}
+
+.resume-wb-swatch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ===== 参数栏下拉的弹层宽度（2026-11-06） ===== */
+/* 症状（用户截图）：字体 / 版式两个下拉的弹层按内容撑开，长字体名与自制版式名
+   把弹层拉到半屏，甚至被窗口右缘裁掉——面板只有 380px，而弹层能到 600px+。
+   改法：弹层宽度钉在参数栏的**内容宽 340**（380 − 左右 padding 20×2），
+   与上面那一行滑杆同宽；视口更窄时用 `max-width` 兜底（永远留 32px 呼吸）。
+   注意只约束**弹层**：触发框的宽度仍由各自的规则管（`compact` 工具栏形态不变）。
+   弹层是 portal 到 `body` 的，所以左对齐触发框时右侧会盖住中栏——那是下拉的常规行为，
+   比"被窗口裁掉"好。 */
+.resume-params-dropdown {
+  width: 340px;
+  max-width: calc(100vw - 32px);
+}
+
+/* 选项行单行省略：弹层宽度定死之后，长字体名 / 长文件名不能换行把行高撑乱。
+   完整文本由 `optionRender` 里那层 `title` 提供（悬停可见）。 */
+.resume-params-dropdown .ant-select-item-option-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 版式选项：名字与说明共用一行宽度，名字单行省略（完整名字在 `title` 里）。 */
+.resume-params-dropdown .resume-format-option {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 字体选项：展示名 + 小字文件名同排。两者**各自**单行省略——
+   只给外层省略时，文件名会把展示名挤掉，而展示名才是用户认字体的依据。 */
+.resume-params-dropdown .resume-font-option {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.resume-params-dropdown .resume-font-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 文件名可以更短：它是"排查时才看"的第二信息，让位给展示名。 */
+.resume-params-dropdown .resume-font-option-file {
+  flex: 0 1 auto;
+  max-width: 40%;
+  margin-left: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

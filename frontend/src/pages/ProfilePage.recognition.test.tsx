@@ -131,6 +131,16 @@ function row(id: string): HTMLElement {
   return element;
 }
 
+/**
+ * 「页面已就绪」的同步点。
+ *
+ * 以前这里等的是「还没有通用简历」，而那个区块 2026-10-24 已从本页移除——拿它当信号
+ * 会永远等不到。现在等「基本信息」分区的折叠标题：它只在资料表单渲染出来之后才存在。
+ */
+async function waitForProfileReady() {
+  await screen.findByRole("button", { name: "收起基本信息" });
+}
+
 beforeEach(() => {
   resetProfileApiMocks(apiMocks);
   apiMocks.parseProfileText.mockResolvedValue(PARSED);
@@ -145,7 +155,7 @@ afterEach(() => {
 describe("ProfilePage 粘贴识别 · 两阶段", () => {
   it("识别成功不直接改表单：弹窗留着，结果先列成可编辑的校对清单", async () => {
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
     await openAndParse();
 
     // 校对清单出现（这是"阶段二"的唯一标志）。
@@ -160,7 +170,7 @@ describe("ProfilePage 粘贴识别 · 两阶段", () => {
 
   it("改一行再确认：只写这一行，空值字段不会被清空", async () => {
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
     await openAndParse();
 
     await waitFor(() => expect(document.querySelector('[data-row-id="name"]')).not.toBeNull());
@@ -177,7 +187,7 @@ describe("ProfilePage 粘贴识别 · 两阶段", () => {
 
   it("点「取消」：弹窗关闭、表单一个字都不动", async () => {
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
     await openAndParse();
 
     await waitFor(() => expect(document.querySelector('[data-row-id="name"]')).not.toBeNull());
@@ -199,7 +209,7 @@ describe("ProfilePage 粘贴识别 · 两阶段", () => {
         }),
     );
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
     await openAndParse();
 
     // 识别中主按钮变成「取消识别」（不是一直转圈的 loading 按钮）。
@@ -230,7 +240,7 @@ describe("ProfilePage 粘贴识别 · 两阶段", () => {
 describe("ProfilePage 粘贴识别 · 网申资料", () => {
   it("目录外的字段列成待确认项：标「新增字段」，且勾选框默认不选", async () => {
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
     await openWebFormAndParse();
 
     const newRow = row("CUSTOM_是否有驾照");
@@ -247,7 +257,7 @@ describe("ProfilePage 粘贴识别 · 网申资料", () => {
 
   it("勾选后确认填入：字段进目录、值进草稿，保存时按后端给的 key 提交", async () => {
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
     await openWebFormAndParse();
 
     fireEvent.click(within(row("CUSTOM_是否有驾照")).getByRole("checkbox"));
@@ -278,7 +288,7 @@ describe("ProfilePage 粘贴识别 · 网申资料", () => {
 
   it("一个都不勾时「确认填入」按钮禁用：不能靠点它把零项当成确认", async () => {
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
     await openWebFormAndParse();
 
     const applyButton = within(modalFooter()).getByRole("button", { name: /确认填入\s*0\s*项/ });
@@ -300,7 +310,7 @@ describe("ProfilePage 粘贴识别 · 网申资料", () => {
 
   it("点「取消」：草稿与字段目录零变化，也不置脏", async () => {
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
     await openWebFormAndParse();
 
     fireEvent.click(within(modalFooter()).getByRole("button", { name: /取\s*消/ }));

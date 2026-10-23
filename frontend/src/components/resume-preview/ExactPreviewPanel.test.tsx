@@ -68,6 +68,12 @@ function pdf(pages = 1, extra: { pagesNeeded?: number; overflow?: boolean } = {}
 
 type PanelProps = Parameters<typeof ExactPreviewPanel>[0];
 
+/**
+ * iframe 的 src 契约：blob URL + `#zoom=page-width`。
+ * 相框高度按 A4 比例算（页数 × 页高），这个算式只在查看器"按宽度缩放"时成立，
+ * 所以缩放口径是契约的一部分，不能悄悄丢（见 `withPageWidthZoom`）。
+ */
+const zoomed = (url: string) => `${url}#zoom=page-width`;
 /** 版式默认值与真实宿主一致（草稿值原样传进来）；各用例只写自己要改的那一项。 */
 function panel(overrides: Partial<PanelProps> = {}) {
   return (
@@ -137,18 +143,7 @@ describe("ExactPreviewPanel", () => {
   it("去抖之后只发一次请求，并把 PDF 挂到 iframe 上", async () => {
     fetchPreview.mockResolvedValue(pdf(1));
 
-    render(
-      <ExactPreviewPanel
-        resumeId={7}
-        template="classic"
-        formatName=""
-        pageLimit={1}
-        fontScale="standard"
-        formatConfig={{ page_padding: 14 }}
-        contentSignature="c1"
-        height={600}
-      />,
-    );
+    render(panel());
 
     // 去抖窗口内还没发。
     expect(fetchPreview).not.toHaveBeenCalled();
@@ -163,7 +158,7 @@ describe("ExactPreviewPanel", () => {
     expect(options.format_config).toEqual({ page_padding: 14 });
 
     const frame = await screen.findByTitle("简历精确预览（导出 PDF）");
-    expect(frame.getAttribute("src")).toBe("blob:preview-1");
+    expect(frame.getAttribute("src")).toBe(zoomed("blob:preview-1"));
     expect(screen.getByText(/实际 1 页/)).toBeTruthy();
   });
 
@@ -201,9 +196,12 @@ describe("ExactPreviewPanel", () => {
 
     expect(fetchPreview).toHaveBeenCalledTimes(2);
     // 新图先挂在透明的预加载层上：**旧图仍然可见**，用户不会看到一块白。
-    expect(screen.getByTitle("简历精确预览（导出 PDF）")).toHaveAttribute("src", "blob:preview-1");
+    expect(screen.getByTitle("简历精确预览（导出 PDF）")).toHaveAttribute(
+      "src",
+      zoomed("blob:preview-1"),
+    );
     const pending = screen.getByTitle("正在加载的精确预览");
-    expect(pending).toHaveAttribute("src", "blob:preview-2");
+    expect(pending).toHaveAttribute("src", zoomed("blob:preview-2"));
     // 遮罩与状态行都会说"正在重排"，这里只钉遮罩本身（它是"旧图仍在、但看得出在算"的载体）。
     expect(document.querySelector(".exact-preview-overlay")).not.toBeNull();
 
@@ -212,7 +210,7 @@ describe("ExactPreviewPanel", () => {
     await waitFor(() =>
       expect(screen.getByTitle("简历精确预览（导出 PDF）")).toHaveAttribute(
         "src",
-        "blob:preview-2",
+        zoomed("blob:preview-2"),
       ),
     );
     expect(revoked).toContain("blob:preview-1");
@@ -363,18 +361,7 @@ describe("ExactPreviewPanel", () => {
   it("请求失败时给出可操作的错误态，而不是空白", async () => {
     fetchPreview.mockRejectedValue(new Error("未找到可用的中文字体"));
 
-    render(
-      <ExactPreviewPanel
-        resumeId={7}
-        template="classic"
-        formatName=""
-        pageLimit={1}
-        fontScale="standard"
-        formatConfig={{}}
-        contentSignature="c1"
-        height={600}
-      />,
-    );
+    render(panel({ formatConfig: {} }));
     await waitForRequest();
 
     expect(await screen.findByText("精确预览生成失败")).toBeTruthy();
@@ -418,10 +405,13 @@ describe("ExactPreviewPanel", () => {
 
     expect(fetchPreview).toHaveBeenCalledTimes(1);
     // 图还在（切换没有把它弄丢），用户看到的仍是同一份 PDF。
-    expect(screen.getByTitle("简历精确预览（导出 PDF）")).toHaveAttribute("src", "blob:preview-1");
+    expect(screen.getByTitle("简历精确预览（导出 PDF）")).toHaveAttribute(
+      "src",
+      zoomed("blob:preview-1"),
+    );
   });
 
-  it("同一组参数重新挂载（关掉再开「查看大图」）直接用缓存，不再排一次", async () => {
+  it("同一组参数重新挂载（关掉再开「简历制作台」）直接用缓存，不再排一次", async () => {
     fetchPreview.mockResolvedValue(pdf(1));
 
     const first = render(panel());
@@ -442,22 +432,58 @@ describe("ExactPreviewPanel", () => {
   it("卸载时释放 objectURL", async () => {
     fetchPreview.mockResolvedValue(pdf(1));
 
-    const { unmount } = render(
-      <ExactPreviewPanel
-        resumeId={7}
-        template="classic"
-        formatName=""
-        pageLimit={1}
-        fontScale="standard"
-        formatConfig={{}}
-        contentSignature="c1"
-        height={600}
-      />,
-    );
+    const { unmount } = render(panel({ formatConfig: {} }));
     await waitForRequest();
     expect(created).toEqual(["blob:preview-1"]);
 
     unmount();
     expect(revoked).toContain("blob:preview-1");
   });
+
+  it("请求在飞时切走、再切回已有的一版：不能永久停在「正在重新排版」（2026-11-06 回归）", async () => {
+    fetchPreview.mockResolvedValue(pdf(1));
+    const { rerender } = render(panel());
+    await waitForRequest();
+    expect(fetchPreview).toHaveBeenCalledTimes(1);
+
+    // 切到另一组版式：这次的响应手动控制，先让它挂在"已排好、等查看器加载"（pending）。
+    let resolveB: (value: ReturnType<typeof pdf>) => void = () => undefined;
+    fetchPreview.mockReturnValue(new Promise((resolve) => (resolveB = resolve)));
+    rerender(panel({ formatConfig: { page_padding: 18 } }));
+    await waitForRequest();
+    resolveB(pdf(1));
+    const pending = await screen.findByTitle("正在加载的精确预览");
+    expect(pending).toBeTruthy();
+
+    // 立刻切回原来那一版：命中 `shownRef` 的 key，一次请求都不发——但"重排中"必须收回来，
+    // 且那份**另一个版本**的 pending 必须作废（否则它 onLoad 之后仍会把旧版式顶上来）。
+    rerender(panel());
+    await waitFor(() => expect(document.querySelector(".exact-preview-overlay")).toBeNull());
+    expect(screen.queryByTitle("正在加载的精确预览")).toBeNull();
+    expect(revoked).toContain("blob:preview-2");
+    expect(fetchPreview).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { pages: 1, pageLimit: 3, blanks: 2 },
+    { pages: 3, pageLimit: 3, blanks: 0 },
+  ])(
+    "按实际页数记页、空白纸紧接最后一页（$pages 页 / 上限 $pageLimit 页）",
+    async ({ pages, pageLimit, blanks }) => {
+      fetchPreview.mockResolvedValue(pdf(pages));
+
+      render(panel({ pageLimit }));
+      const stack = await waitFor(() => {
+        const node = document.querySelector<HTMLElement>(".exact-preview-stack");
+        expect(node).not.toBeNull();
+        return node as HTMLElement;
+      });
+
+      expect(stack.dataset.pages).toBe(String(pages));
+      // jsdom 量不到宽度（`ResizeObserverMock` 不投递回调）→ 相框退回传入的 height（600），
+      // 绝不能算出 0 高。按宽度定高的算术由 `useExactPreviewFrameHeight.test.ts` 直接测。
+      expect(stack.dataset.frameHeight).toBe("600");
+      expect(document.querySelectorAll(".exact-preview-blank")).toHaveLength(blanks);
+    },
+  );
 });

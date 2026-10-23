@@ -1,5 +1,5 @@
 /** 我的资料：基础信息 + 各分区动态列表，整体保存。 */
-import { App, ConfigProvider, Form, Input } from "antd";
+import { App, Form, Input } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
 import ErrorState from "../components/common/ErrorState";
 import {
@@ -10,7 +10,6 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import GeneralResumeSection from "../components/profile/GeneralResumeSection";
 import { DEFAULT_SECTION_ORDER } from "../components/profile/ProfileSectionConfig";
 import type { ProfileSectionKey } from "../components/profile/ProfileSectionConfig";
 import ProfilePageHeader from "../components/profile/ProfilePageHeader";
@@ -34,9 +33,6 @@ import type { WebFormExtraProfile } from "../types";
 
 export default function ProfilePage() {
   const { message } = App.useApp();
-  // 通用简历：名称在弹窗/编辑器里填（项 11），页面不再持有。
-  const [generateOpen, setGenerateOpen] = useState(false);
-  const [writeOpen, setWriteOpen] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState<ProfileWorkspaceKey>("resume");
   // 未保存防护：这一页是整页表单、只有「保存全部资料」一个提交口，中途刷新/关闭
   // 浏览器会**静默丢掉**全部未保存编辑。dirty 时挂 beforeunload，触发浏览器原生的
@@ -164,14 +160,6 @@ export default function ProfilePage() {
     },
     [form, markDirty],
   );
-
-  const openGenerateModal = useCallback(() => {
-    setGenerateOpen(true);
-  }, []);
-
-  const openWriteModal = useCallback(() => {
-    setWriteOpen(true);
-  }, []);
 
   const handleStartEditing = useCallback(() => {
     if (!loading && !loadError) setEditing(true);
@@ -335,22 +323,17 @@ export default function ProfilePage() {
   // 这正是用户实测拖拽卡顿的根因，顺序的渲染消费必须止步于分区栈内部。
   const resumeContent = useMemo(
     () => (
-      <>
-        <ConfigProvider componentDisabled={false}>
-          <GeneralResumeSection onGenerate={openGenerateModal} onWrite={openWriteModal} />
-        </ConfigProvider>
-        <ProfileSectionStack
-          reorderStore={sectionOrderStore}
-          editing={editing}
-          saving={saving}
-          photo={photo}
-          collapsedSections={collapsedSections}
-          onToggleCollapsed={toggleSection}
-          onPhotoSelect={handlePhotoSelect}
-          onHandlePointerDown={handleSectionPointerDownStable}
-          onMoveByOffset={moveSectionByOffsetStable}
-        />
-      </>
+      <ProfileSectionStack
+        reorderStore={sectionOrderStore}
+        editing={editing}
+        saving={saving}
+        photo={photo}
+        collapsedSections={collapsedSections}
+        onToggleCollapsed={toggleSection}
+        onPhotoSelect={handlePhotoSelect}
+        onHandlePointerDown={handleSectionPointerDownStable}
+        onMoveByOffset={moveSectionByOffsetStable}
+      />
     ),
     [
       collapsedSections,
@@ -358,8 +341,6 @@ export default function ProfilePage() {
       handlePhotoSelect,
       handleSectionPointerDownStable,
       moveSectionByOffsetStable,
-      openGenerateModal,
-      openWriteModal,
       photo,
       saving,
       sectionOrderStore,
@@ -455,16 +436,10 @@ export default function ProfilePage() {
         onStartEditing={handleStartEditing}
       />
 
-      {/* 通用简历放在资料分区之前：它不属于资料表单，以前沉在页面最底下，资料一多就得滚到底才看得到。 */}
       {workspaceTabs}
 
-      {/* 三个弹窗抽到 `ProfilePageModals`（P5b 预算前置）：本文件守在 500 行内。 */}
-      <ProfilePageModals
-        generate={{ open: generateOpen, onClose: () => setGenerateOpen(false) }}
-        manual={{ open: writeOpen, onClose: () => setWriteOpen(false) }}
-        profileText={profileTextModal}
-        webformText={webformParse.modalProps}
-      />
+      {/* 粘贴识别两个弹窗抽到 `ProfilePageModals`（P5b 预算前置）：本文件守在 500 行内。 */}
+      <ProfilePageModals profileText={profileTextModal} webformText={webformParse.modalProps} />
     </div>
   );
 }

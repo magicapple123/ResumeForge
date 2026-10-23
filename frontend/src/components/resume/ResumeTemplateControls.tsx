@@ -168,6 +168,10 @@ export default function ResumeTemplateControls({
               // （如「宽松（自制）」）在触发框里走省略号，展开后的列表按内容撑开。
               className="resume-format-select"
               popupMatchSelectWidth={false}
+              // 弹层宽度钉在参数栏内容宽（340px，见 `.resume-params-dropdown`）：
+              // 按内容撑开时，长自制版式名会把弹层拉出栏外甚至被窗口右缘裁掉
+              // （2026-11-06 用户截图）。触发框宽度不受影响（仍由 `.resume-format-select` 管）。
+              classNames={{ popup: { root: "resume-params-dropdown" } }}
               options={[
                 { value: "", label: "跟随模板" },
                 ...formatPresets.map((item) => ({
@@ -176,6 +180,17 @@ export default function ResumeTemplateControls({
                   title: item.description,
                 })),
               ]}
+              // 弹层定宽 + 单行省略之后，"这个名字到底叫什么"只能靠悬停：
+              // 这里包一层带 `title` 的 span（选项自己的 `title` 是**说明**，不是名字，
+              // 名字被截断时指上去看到的会是"行高 1.45、页边距 12mm…"，答非所问）。
+              optionRender={(option) => (
+                <span
+                  className="resume-format-option"
+                  title={typeof option.data.label === "string" ? option.data.label : undefined}
+                >
+                  {option.data.label}
+                </span>
+              )}
               onChange={(value) => {
                 setFormatTipOpen(false);
                 onChange(layoutWithFormatPreset(layout, value, formatPresets));

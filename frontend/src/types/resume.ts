@@ -322,6 +322,14 @@ export interface ResumeDetail extends ResumeBrief {
   coverage_notes: ResumeCoverageNote[];
   /** 事实来源标注（RF-13）：每段内容来自哪条资料事实；旧记录为空。 */
   fact_annotations?: FactAnnotation[];
+  /**
+   * 这是**制作台草稿**（0051）：还没保存过，所以不在简历中心的任何列表里。
+   *
+   * 制作台靠它把「保存」常驻——一份刚建出来、内容与版式都没动过的草稿没有别的
+   * 保存入口，只能靠这个标志知道"有一件事必须被做"。旧后端不返回该字段时按
+   * `false`（不是草稿）处理，行为与此前逐字一致。
+   */
+  draft?: boolean;
 }
 
 /** 一条"没写进这份简历"的分区级清单。 */

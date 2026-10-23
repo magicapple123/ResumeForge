@@ -136,6 +136,43 @@ describe("ResumeFontControl", () => {
     expect(await screen.findByText("系统字体（不使用自定义字体）")).toBeInTheDocument();
   });
 
+  it("弹层定宽在参数栏内容宽（340px）：长展示名与长文件名各自省略，悬停看全", async () => {
+    apiMocks.listResumeFonts.mockResolvedValue({
+      ...FONTS,
+      // 展示名可自定义，于是"展示名 ≠ 磁盘文件名"——两个都是长串，正是会撑破弹层的那种。
+      items: [
+        {
+          name: "source-han-serif-sc-heavy.otf",
+          display_name: "思源宋体（超粗·正式版）",
+          size: 4096,
+          uploaded_at: "2026-10-01T10:00:00",
+          active: false,
+        },
+      ],
+      active: null,
+    });
+    renderControl();
+
+    fireEvent.mouseDown(await screen.findByRole("combobox", { name: "简历字体" }));
+
+    // 弹层宽度钉在 340px（+ `max-width` 兜底），不再按内容撑开。
+    await waitFor(() => expect(document.querySelector(".resume-params-dropdown")).not.toBeNull());
+
+    // 悬停给出"展示名 · 磁盘文件名"两件事：宽度定死之后名字必然被截断，靠它看全。
+    const option = await screen.findByTitle(
+      "思源宋体（超粗·正式版） · source-han-serif-sc-heavy.otf",
+    );
+    expect(option.className).toContain("resume-font-option");
+    // 展示名与文件名各有自己的省略层（只给外层省略时，文件名会把展示名挤掉）。
+    // 按类名取而不是 `ByText`：`cjkRatchet` 只允许测试里的中文**断言参数**不涨。
+    expect(option.querySelector(".resume-font-option-name")?.textContent).toBe(
+      "思源宋体（超粗·正式版）",
+    );
+    expect(option.querySelector(".resume-font-option-file")?.textContent).toBe(
+      "source-han-serif-sc-heavy.otf",
+    );
+  });
+
   it("打开下拉才注入字形 @font-face，关掉就移除", async () => {
     renderControl();
     await screen.findByRole("combobox", { name: "简历字体" });

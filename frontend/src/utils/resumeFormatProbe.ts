@@ -17,6 +17,7 @@
 // 只借一个数据形状（`{ top, right, bottom, left }`）：`pageMargins.ts` 不 import 本文件，
 // 所以这条依赖是单向的，不会形成循环。
 import type { PageMargins } from "./pageMargins";
+import { DEFAULT_SCALE, SCALE_CSS_VARS, type ScaleKey } from "./resumeScaleParams";
 
 /**
  * 复刻 Python 的 `f"{value:g}"`：6 位有效数字，去掉无意义尾零与小数点。
@@ -86,4 +87,64 @@ export function photoScaleProbeCss(scale: number): string {
   const value = Number.isFinite(scale) ? scale : 1;
   if (Math.abs(value - 1) < 1e-9) return "";
   return `:root { --photo-scale: ${formatG(value)}; }`;
+}
+
+/**
+ * 系数探针：`name_scale` / `section_title_scale` / `entry_gap` 各自写一条 `:root` 声明。
+ *
+ * 与后端 `resume_layout_overrides.scale_css_vars` **逐字一致**（`:root { --name-scale: 1.1; }`，
+ * 数字走 `f"{value:g}"` ↔ `formatG`）。为什么不是 `body { … }` 规则：这三个系数乘在
+ * **模板基准**上（`calc(var(--fs) * 1.86 * var(--name-scale, 1))`），只有改变量才能让
+ * "拖动中"与"松手后"是同一套几何。
+ *
+ * ≈1 时返回空串：后端在 1 时一个字符都不写，探针若写 `--name-scale: 1;` 虽然视觉等价，
+ * 但会让"没设过"与"设成 1"在 DOM 上出现差别（无意义的漂移）。
+ */
+export function scaleProbeCss(key: ScaleKey, scale: number): string {
+  const cssVar = SCALE_CSS_VARS[key];
+  if (!cssVar) return "";
+  const value = Number.isFinite(scale) ? scale : DEFAULT_SCALE;
+  if (Math.abs(value - DEFAULT_SCALE) < 1e-9) return "";
+  return `:root { ${cssVar}: ${formatG(value)}; }`;
+}
+
+/**
+ * 颜色键 → CSS 变量名。与后端 `FORMAT_FIELDS` 的 `"css"` 字段逐字一致
+ * （`resume_template_format.py:41-44`）。
+ *
+ * 为什么在前端再写一份映射：后端只在目录接口里下发 `format_fields`（含 label），
+ * **不含** `css` 变量名——那是渲染内部约定。探针要即时生效就必须知道变量名，
+ * 所以这里列一份，并由 `resumeFormatProbe.test.ts` 钉住四个键。
+ */
+export const COLOR_CSS_VARS: Record<string, string> = {
+  accent: "--accent",
+  text_color: "--text",
+  muted_color: "--muted",
+  line_color: "--line",
+};
+
+/**
+ * 颜色探针：写一条 `:root` 声明，与后端 `format_css` 的 `:root` 同形
+ * （`root_parts.append(f"{field['css']}: {value};")`）。
+ *
+ * 颜色是不可插值的字符串（`#123456`），所以不过 `formatG`：后端也是 `str(value)` 直出。
+ * 空值返回空串（清掉探针），与"删键 = 随模板"一致。
+ */
+export function colorProbeCss(key: string, value: string): string {
+  const cssVar = COLOR_CSS_VARS[key];
+  const text = value.trim();
+  if (!cssVar || !text) return "";
+  return `:root { ${cssVar}: ${text}; }`;
+}
+
+/**
+ * 区块间距探针：`.section { margin-bottom: calc(var(--fs) * 1.3) !important; }`。
+ *
+ * 与后端 `FORMAT_FIELDS` 的 `section_gap.css_rule` 逐字一致
+ * （`resume_template_format.py:90`，数字走 `f"{value:g}"` ↔ `formatG`）。
+ * 它和行距/页边距一样是**绝对覆盖**（不是乘在模板基准上的系数），所以走 `body`/选择器规则
+ * 而不是 `:root` 变量。
+ */
+export function sectionGapProbeCss(value: number): string {
+  return `.section { margin-bottom: calc(var(--fs) * ${formatG(value)}) !important; }`;
 }

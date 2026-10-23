@@ -24,7 +24,7 @@
  *
  * **同一份 PDF 只排一次（2026-10-21）**：`formatKey` 把内容签名与整组版式参数压成一个
  * 稳定字符串，它既是请求依赖也是缓存键。已经有这一版就不再请求——切回精确模式、打开
- * 「查看大图」、把滑块拖回原值，走的都是这条路。缓存只存 Blob（见 `exactPreviewCache`），
+ * 「简历制作台」、把滑块拖回原值，走的都是这条路。缓存只存 Blob（见 `exactPreviewCache`），
  * URL 仍归本组件所有。
  *
  * `active` 区分"看得见"与"还在页面上"：草稿模式下本组件**保留挂载**（这样切回来时
@@ -34,9 +34,12 @@
 import { Alert, Button, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchResumePreviewPdf } from "../../api/resumes";
+import { t } from "../../i18n";
 import LoadingBlock from "../common/LoadingBlock";
 import { readCachedPreview, writeCachedPreview } from "./exactPreviewCache";
 import { EXACT_OVERFLOW_NOTE } from "./config";
+import { INLINE_PDF_OK, withPageWidthZoom } from "./pdfViewerSupport";
+import { useExactPreviewFrameHeight } from "./useExactPreviewFrameHeight";
 
 interface Props {
   resumeId: number;
@@ -94,25 +97,6 @@ interface Shot {
   overflow: boolean;
 }
 
-/**
- * 当前环境能不能内嵌显示 PDF。
- *
- * `navigator.pdfViewerEnabled` 是 Chromium 96+ 的标准信号：Electron 在
- * `webPreferences.plugins=false`（**默认值**）时为 `false`，某些精简版 Chromium 也是。
- * 那种环境下 `<iframe src="blob:…pdf">` 只会留一块空白——用户完全不知道发生了什么，
- * 所以宁可直接说清楚并给一条"在新标签打开"的出口。
- *
- * 读不到（老浏览器 / 非 Chromium）时按"可以"处理：宁可让查看器自己决定，也不要把
- * 本来能用的环境误判成不能用。
- */
-function canShowPdfInline(): boolean {
-  if (typeof navigator === "undefined") return true;
-  return (navigator as Navigator & { pdfViewerEnabled?: boolean }).pdfViewerEnabled !== false;
-}
-
-/** 模块级求值一次即可：`pdfViewerEnabled` 在同一次页面生命周期里不会变。 */
-const INLINE_PDF_OK = canShowPdfInline();
-
 export default function ExactPreviewPanel({
   resumeId,
   template,
@@ -142,6 +126,12 @@ export default function ExactPreviewPanel({
    */
   const shownRef = useRef<Shot | null>(null);
   const pendingRef = useRef<Shot | null>(null);
+  /**
+   * 请求的**世代号**：每轮 effect 领一个自增号，异步回调只在自己还是"当代"时写状态。
+   * 起因（2026-11-06 实测"永久卡在正在排版"）：abort 之后 `.catch` 直接 return、
+   * 不复位 `loading`，而新 effect 若命中"已经有这一版"就什么都不做。
+   */
+  const seqRef = useRef(0);
 
   const release = useCallback((url: string | null) => {
     if (!url) return;
@@ -202,15 +192,33 @@ export default function ExactPreviewPanel({
   useEffect(() => {
     // 隐藏（草稿模式）时不排：拖一次草稿滑块不该白排一份看不见的 PDF。
     if (!active) return;
-    // 已经有这一版：切回精确模式、把滑块拖回原值都走这里，一次请求都不发。
-    // `shown` 与 `pending` 都要看——后者是"已经排好、正在等查看器加载"。
-    if (shownRef.current?.key === formatKey || pendingRef.current?.key === formatKey) return;
+    // 本轮的世代号：闭包里记着它，异步回来时先问"我还是当代吗"（见 `seqRef` 的注释）。
+    const seq = seqRef.current + 1;
+    seqRef.current = seq;
+    const isCurrent = () => seq === seqRef.current;
+
+    // 已经有这一版：切回精确模式、拖回原值都走这里，一次请求都不发（`shown` 与 `pending`
+    // 都要看）。并且必须把"重排中"收回来，否则界面永久停在"正在按新设置重新排版…"。
+    if (shownRef.current?.key === formatKey || pendingRef.current?.key === formatKey) {
+      const settleTimer = setTimeout(() => {
+        if (!isCurrent()) return;
+        // 可见的已是目标版本 → 手上这份 pending 一定是另一个版本，不作废它会顶上来。
+        if (shownRef.current?.key === formatKey && pendingRef.current) {
+          release(pendingRef.current.url);
+          pendingRef.current = null;
+          setPending(null);
+        }
+        setLoading(false);
+      }, 0);
+      return () => clearTimeout(settleTimer);
+    }
 
     // 缓存命中：直接上屏，连去抖都不用等。仍然走定时器——effect 体里同步 setState 会
     // 触发级联渲染（`react-hooks/set-state-in-effect`），与下面请求那条路径同一口径。
     const cached = readCachedPreview(formatKey);
     if (cached) {
       const cachedTimer = setTimeout(() => {
+        if (!isCurrent()) return;
         setLoading(false);
         setError(null);
         showShot({
@@ -229,6 +237,7 @@ export default function ExactPreviewPanel({
     // 置"加载中"放在去抖之后：effect body 里同步 setState 会触发级联渲染
     // （`react-hooks/set-state-in-effect`）。
     const timer = setTimeout(() => {
+      if (!isCurrent()) return;
       setLoading(true);
       setError(null);
       fetchResumePreviewPdf(
@@ -244,8 +253,10 @@ export default function ExactPreviewPanel({
         controller.signal,
       )
         .then((result) => {
-          if (controller.signal.aborted) return;
-          // 这份字节下次（切口径 / 开大图 / 拖回原值）还要用，别再让服务端排一遍。
+          // 两道闸都要过：`aborted` 是"用户还在拖滑块"，`!isCurrent` 是"这一轮已经不是当代"
+          // ——被作废的请求一个字都不许写，包括 `loading`（见 `seqRef` 的注释）。
+          if (controller.signal.aborted || !isCurrent()) return;
+          // 这份字节下次（切口径 / 开制作台 / 拖回原值）还要用，别再让服务端排一遍。
           writeCachedPreview(formatKey, {
             blob: result.blob,
             pages: result.pages,
@@ -263,7 +274,7 @@ export default function ExactPreviewPanel({
         })
         .catch((err: unknown) => {
           // 取消不是错误：用户还在拖滑块，这次请求本来就该被丢弃。
-          if (controller.signal.aborted) return;
+          if (controller.signal.aborted || !isCurrent()) return;
           setLoading(false);
           setError(err instanceof Error ? err.message : "精确预览生成失败");
         });
@@ -283,14 +294,25 @@ export default function ExactPreviewPanel({
     language,
     formatKey,
     normalizedConfig,
+    release,
     keep,
     showShot,
   ]);
 
-  /** 新图加载完成：顶替可见层、释放旧 URL、收起"重排中"。 */
+  /**
+   * 新图加载完成：顶替可见层、释放旧 URL、收起"重排中"。
+   * 这里必须再问一次"这份 pending 还是当代吗"（`onLoad` 与兜底定时器都可能在新旧版本
+   * 之间那几毫秒里到达）：不判 `key` 的话，旧版本会顶上来——切回 A 却看到 B。
+   */
   const swapIn = useCallback(() => {
     const shot = pendingRef.current;
     if (!shot) return;
+    if (shot.key !== formatKey) {
+      release(shot.url);
+      pendingRef.current = null;
+      setPending(null);
+      return;
+    }
     pendingRef.current = null;
     // 等一帧再换：`onLoad` 只代表文档就绪，紧接着的绘制才让它真正可见。
     requestAnimationFrame(() => {
@@ -300,7 +322,7 @@ export default function ExactPreviewPanel({
       setPending(null);
       release(previous?.url ?? null);
     });
-  }, [release]);
+  }, [release, formatKey]);
 
   // 兜底：新 PDF 一直不 load（查看器卡住 / 被策略拦）时也要把状态收回来。
   useEffect(() => {
@@ -308,6 +330,18 @@ export default function ExactPreviewPanel({
     const timer = setTimeout(swapIn, SWAP_FALLBACK_MS);
     return () => clearTimeout(timer);
   }, [pending, swapIn]);
+
+  /** 请求在飞，或新图还没顶上来——都算"正在重排"，界面必须一直有反馈。 */
+  const busy = loading || Boolean(pending);
+  const current = shown;
+  // PDF 实际排出来的页数。`null` 时**按 1 页算**，不按 0：老后端不返回 `X-Resume-Pages`
+  // 时按 0 算会得到 `pageLimit - 0` 张空白纸，把"不知道"放大成"一页都没有"；按 1 算是
+  // 唯一诚实的下界（用户 2026-10-23 反馈"选了 3 页却没补白纸"，成因就是走了 `?? 0`）。
+  const renderedPages = current ? (current.pages ?? 1) : 0;
+  const blankPageCount = renderedPages > 0 ? Math.max(0, pageLimit - renderedPages) : 0;
+
+  // 高度按**实际页数**算（算式见 `useExactPreviewFrameHeight`）；必须在提前 `return` 之前调用。
+  const { frameRef, frameHeight } = useExactPreviewFrameHeight(renderedPages, height);
 
   if (error) {
     return (
@@ -327,10 +361,6 @@ export default function ExactPreviewPanel({
       />
     );
   }
-
-  /** 请求在飞，或新图还没顶上来——都算"正在重排"，界面必须一直有反馈。 */
-  const busy = loading || Boolean(pending);
-  const current = shown;
 
   return (
     <>
@@ -360,7 +390,8 @@ export default function ExactPreviewPanel({
           description="运行中的后端是旧版本（没有返回「按当前设置约需几页」），旧版本会自动缩小字号。完全退出应用后重新启动，精确预览就会严格按滑杆上的值排版。"
         />
       ) : null}
-      <div className="exact-preview" style={{ height }}>
+      {/* 相框**不设**高度：高度只给 stack（纸）与 iframe，外层自然包住"纸 + 状态行"——写死会裁掉状态行。 */}
+      <div className="exact-preview" ref={frameRef}>
         {/* 只在这个口径可见时才摆加载占位：草稿模式下这块是隐藏的，占位没有意义
             （而且会让每份简历的弹窗里都多一个空壳）。 */}
         {active && busy && !current ? (
@@ -368,23 +399,29 @@ export default function ExactPreviewPanel({
         ) : null}
 
         {current && INLINE_PDF_OK ? (
-          <div className="exact-preview-stack" style={{ height }}>
+          <div
+            className="exact-preview-stack"
+            style={{ height: frameHeight }}
+            // jsdom 量不出像素，把"这版实际几页 / 相框多高"写进 data 属性供测试断言。
+            data-pages={renderedPages}
+            data-frame-height={frameHeight}
+          >
             <iframe
-              // 与导出的 PDF 是同一份字节：这里看到什么，下载下来就是什么。
-              src={current.url}
+              // 与导出的 PDF 是同一份字节。`#zoom=page-width` 是相框高度的契约（见 `withPageWidthZoom`）。
+              src={withPageWidthZoom(current.url)}
               title="简历精确预览（导出 PDF）"
               className="exact-preview-frame"
-              style={{ height }}
+              style={{ height: frameHeight }}
             />
             {pending ? (
               // 透明的预加载层：`onLoad` 前谁也看不见它，但浏览器已经在解析新 PDF。
               <iframe
-                src={pending.url}
+                src={withPageWidthZoom(pending.url)}
                 title="正在加载的精确预览"
                 aria-hidden="true"
                 tabIndex={-1}
                 className="exact-preview-frame exact-preview-frame-pending"
-                style={{ height }}
+                style={{ height: frameHeight }}
                 onLoad={swapIn}
               />
             ) : null}
@@ -419,26 +456,45 @@ export default function ExactPreviewPanel({
             />
           </div>
         ) : null}
-
-        {current ? (
-          <div className="exact-preview-status" aria-busy={busy}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {/* 重排期间要说话：PDF 是服务端排的、查看器还要重建，改完参数到新图出来之间
-                必然有一段空窗——静悄悄留着旧图会让人以为"没生效"。 */}
-              {busy
-                ? "正在按新设置重新排版…"
-                : `精确预览 · 实际 ${current.pages} 页（上限 ${pageLimit} 页）`}
-            </Typography.Text>
-            <Button
-              size="small"
-              type="link"
-              onClick={() => window.open(current.url, "_blank", "noopener,noreferrer")}
-            >
-              在新标签打开
-            </Button>
-          </div>
-        ) : null}
       </div>
+      {/* 空白页也要有纸张（2026-10-23 用户口径）。PDF 只包含**有内容**的页，"上限 3 页、
+          内容 1 页"时精确预览就只有一张纸，与草稿模式（`totalVisualPages` 恒等于上限）
+          看起来像两个功能。这里按差值补同比例的空白纸（`pageLimit <= pages` 时为 0）。
+          不做成"让 PDF 多出几页"：精确预览与导出是同一份字节，补页会让下载到的文件凭空多出空白页。 */}
+      {blankPageCount > 0 && !busy ? (
+        <div className="exact-preview-blanks">
+          {Array.from({ length: blankPageCount }, (_, index) => (
+            <div key={index} className="exact-preview-blank">
+              <span>
+                {t("workbench.exact.blankPage", {
+                  page: renderedPages + index + 1,
+                  total: pageLimit,
+                })}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {/* 状态行是**整块预览的页脚**，不是相框的一部分：放进 `.exact-preview` 会在"最后一页
+          纸"与"补出来的空白纸"之间夹一条横栏（草稿模式也把页码条放在整块最底部）。 */}
+      {current ? (
+        <div className="exact-preview-status" aria-busy={busy}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {/* 重排期间要说话：PDF 是服务端排的、查看器还要重建，改完参数到新图出来之间
+              必然有一段空窗——静悄悄留着旧图会让人以为"没生效"。 */}
+            {busy
+              ? "正在按新设置重新排版…"
+              : `精确预览 · 实际 ${current.pages} 页（上限 ${pageLimit} 页）`}
+          </Typography.Text>
+          <Button
+            size="small"
+            type="link"
+            onClick={() => window.open(current.url, "_blank", "noopener,noreferrer")}
+          >
+            在新标签打开
+          </Button>
+        </div>
+      ) : null}
     </>
   );
 }

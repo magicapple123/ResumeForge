@@ -17,9 +17,15 @@
  * - 「让 AI 改这一栏」原本只在编辑模式下可用（同一个指针事件依赖），随之一并退场。
  *
  * 剩下的交互只有"看"：拖动平移、Ctrl+滚轮缩放、草稿 / 精确两种口径。
+ *
+ * 2026-11 又回来了**一个**编辑入口：「草稿模式编辑」复选框（点纸面字段 → 跳输入框）。
+ * 它与被去掉的那套"编辑模式"不是同一件事：不接管指针事件（只挂 `click`，拖动平移照旧），
+ * 也不在纸面上加任何节点（路径由后端模板的 `data-resume-path` 提供），所以不会重演
+ * 当初那条"点一下纸面就抢走拖动"的毛病。精确模式下它是禁用的——纸面是一张 PDF。
  */
-import { Segmented, Tooltip, Typography } from "antd";
+import { Checkbox, Segmented, Tooltip, Typography } from "antd";
 import type { ReactNode } from "react";
+import { t } from "../../i18n";
 
 interface Props {
   /** 第一行右侧：结构类版式控件（模板 / 版式 / 板块顺序 / 最大篇幅）。 */
@@ -30,6 +36,19 @@ interface Props {
   canExactPreview?: boolean;
   previewMode?: "draft" | "exact";
   onPreviewModeChange?: (mode: "draft" | "exact") => void;
+  /**
+   * 「草稿模式编辑」的勾选值。
+   *
+   * 语义由宿主决定（`useClickToEdit`），工具栏只负责显示与回传——它不知道勾了之后
+   * 谁来接收路径，也不知道路径长什么样。
+   */
+  clickToEdit?: boolean;
+  onClickToEditChange?: (next: boolean) => void;
+  /**
+   * 宿主有没有提供落点回调。为假时**整颗复选框都不渲染**：摆一个勾了也没反应的开关，
+   * 比不摆更让人困惑（导出/分享那种只读宿主就是这一支）。
+   */
+  clickToEditAvailable?: boolean;
 }
 
 export default function ResumePreviewToolbar({
@@ -38,7 +57,15 @@ export default function ResumePreviewToolbar({
   canExactPreview = false,
   previewMode = "draft",
   onPreviewModeChange,
+  clickToEdit = false,
+  onClickToEditChange,
+  clickToEditAvailable = false,
 }: Props) {
+  const draftMode = previewMode === "draft";
+  // 一句还是两句：草稿模式下解释"勾了能干什么"，精确模式下解释"为什么点不了"。
+  const clickToEditHint = draftMode
+    ? t("preview.clickToEdit.hint")
+    : t("preview.clickToEdit.exact");
   return (
     <div className="resume-preview-toolbar">
       <div className="resume-preview-toolbar-row resume-preview-toolbar-row-primary">
@@ -66,6 +93,22 @@ export default function ResumePreviewToolbar({
                 },
               ]}
             />
+          ) : null}
+          {clickToEditAvailable ? (
+            // Tooltip 包一层 `<span>` 而不是直接包 Checkbox：禁用的表单控件收不到
+            // mouseenter，antd 的 Tooltip 也就永远不显示——而"为什么不能用"正是这一档
+            // 唯一需要解释的东西。
+            <Tooltip title={clickToEditHint}>
+              <span className="resume-preview-click-edit">
+                <Checkbox
+                  checked={clickToEdit}
+                  disabled={!draftMode}
+                  onChange={(event) => onClickToEditChange?.(event.target.checked)}
+                >
+                  {t("preview.clickToEdit.label")}
+                </Checkbox>
+              </span>
+            </Tooltip>
           ) : null}
         </div>
         <div className="resume-preview-toolbar-controls">{templateControls}</div>

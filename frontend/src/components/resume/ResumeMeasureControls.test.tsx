@@ -220,8 +220,19 @@ describe("ResumeMeasureControls · 四向页边距", () => {
     expect(lastLayout(onChange).format_config).toEqual({ accent: "#123456" });
   });
 
+  it("分边控件默认不渲染（只有制作台会打开它）", async () => {
+    renderGroup();
+
+    // `showMarginSides` 缺省 false：两个既有宿主（生成配置页 / 主预览）零改动即隐藏。
+    expect(await screen.findByRole("slider", { name: /页边距/ })).toBeInTheDocument();
+    expect(document.querySelector(".resume-margin-sides")).toBeNull();
+  });
+
   it("分边调整默认收起；展开后拖「上」写全四条、且不留下 page_padding", async () => {
-    const onChange = renderGroup({ layout: { ...BASE, format_config: ASYMMETRIC } });
+    const onChange = renderGroup({
+      layout: { ...BASE, format_config: ASYMMETRIC },
+      showMarginSides: true,
+    });
 
     // 收起态下四条支路不存在（99% 的用户不该看到 4 条额外滑杆）。
     expect(screen.queryByRole("button", { name: "增大上边距" })).not.toBeInTheDocument();
@@ -258,6 +269,7 @@ describe("ResumeMeasureControls · 四向页边距", () => {
           page_padding_left: 14,
         },
       },
+      showMarginSides: true,
     });
 
     fireEvent.click(

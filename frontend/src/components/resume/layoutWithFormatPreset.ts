@@ -11,7 +11,17 @@ import type { ResumeFormatConfig, ResumeLayout } from "../../types";
 /**
  * 版式预设会覆盖的键。换版式时先清掉这些**手动覆盖**，让预设真正生效
  * （优先级：模板默认 < 版式预设 < 手动微调，手动值不清就会盖住新预设）。
- * 字号不在其中：预设本来就不管字号，用户调过的大小应当保留。
+ * 字号（`font_scale_adjust`）不在其中：预设本来就不管字号，用户调过的大小应当保留。
+ *
+ * ## 2026-10-23 补齐 5 个键
+ *
+ * `text_color` / `muted_color` 是**既有遗漏**：它们在 `FORMAT_FIELDS` 里、也进指纹，却
+ * 一直没进这张表——于是"选一个配色不同的版式，发现文字颜色没变"，正是这条表要消灭的
+ * 老问题（PRD §7.3 第 2 条）。
+ *
+ * 三个新系数（`name_scale` / `section_title_scale` / `entry_gap`）同理：版式预设不一定带
+ * 它们，但用户手动调过的值留着就会盖住"紧凑"这类预设——切了版式却只改了名字，是同一个
+ * 缺陷的另一种表现。
  */
 const PRESET_OVERRIDABLE_KEYS = [
   "line_height",
@@ -19,6 +29,11 @@ const PRESET_OVERRIDABLE_KEYS = [
   "section_gap",
   "accent",
   "line_color",
+  "text_color",
+  "muted_color",
+  "name_scale",
+  "section_title_scale",
+  "entry_gap",
 ] as const;
 
 /**

@@ -7,7 +7,12 @@
  * 后端侧由 `backend/tests/test_export_format_config.py` 钉住同一对字面量（两端各钉一次）。
  */
 import { describe, expect, it } from "vitest";
-import { formatG, lineHeightProbeCss, pagePaddingProbeCss } from "./resumeFormatProbe";
+import {
+  formatG,
+  lineHeightProbeCss,
+  pagePaddingProbeCss,
+  scaleProbeCss,
+} from "./resumeFormatProbe";
 
 describe('formatG 复刻 Python 的 f"{value:g}"', () => {
   it("整数不带小数点，尾零被去掉", () => {
@@ -44,5 +49,27 @@ describe("两个探针与后端 FORMAT_FIELDS 的 css_rule 逐字一致", () => 
     expect(pagePaddingProbeCss(14)).toBe("body { padding: 14mm !important; }");
     expect(pagePaddingProbeCss(8)).toBe("body { padding: 8mm !important; }");
     expect(pagePaddingProbeCss(26)).toBe("body { padding: 26mm !important; }");
+  });
+
+  /**
+   * 三个系数走 `:root` 变量，与后端 `scale_css_vars` 逐字一致。
+   *
+   * 后端那一侧由 `tests/test_export_format_config.py` 的
+   * `test_scale_css_vars_emit_exact_declarations` 钉住（两端各钉一次）。
+   */
+  it("三个系数（name / section-title / entry）", () => {
+    expect(scaleProbeCss("name_scale", 1.1)).toBe(":root { --name-scale: 1.1; }");
+    expect(scaleProbeCss("section_title_scale", 0.9)).toBe(":root { --section-title-scale: 0.9; }");
+    expect(scaleProbeCss("entry_gap", 1.25)).toBe(":root { --entry-gap: 1.25; }");
+    // 整数不带小数点，与 `f"{value:g}"` 一致。
+    expect(scaleProbeCss("name_scale", 1.2)).toBe(":root { --name-scale: 1.2; }");
+  });
+
+  it("系数 ≈1 时返回空串：后端在 1 时一个字符都不写", () => {
+    expect(scaleProbeCss("name_scale", 1)).toBe("");
+    expect(scaleProbeCss("section_title_scale", 1 + 1e-12)).toBe("");
+    expect(scaleProbeCss("entry_gap", 1)).toBe("");
+    // 非有限值退回"没设过"，不是 NaN 字符串。
+    expect(scaleProbeCss("name_scale", Number.NaN)).toBe("");
   });
 });

@@ -8,17 +8,46 @@
  * 助手时只能得到"暂不可达"。组件级测试抓不到这种断链，必须在**调用点**这一层钉住。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 // @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
 import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResumeDetail, ResumeLayout } from "../../types";
 import ResumeDetailPreview from "./ResumeDetailPreview"; // 预览是真的 iframe + 量高，与本用例无关，替掉以免拖慢/拖挂。
 
 // 与 `styles/color-regression.test.ts` 同一套写法：从磁盘读 CSS 原文（jsdom 不求值网格位置）。
 declare const process: { cwd(): string };
+
+/**
+ * 「从我的资料填入」的候选来自 `/profile`：这条入口是**按需**取的（打开编辑器/制作台才
+ * 请求），所以这里既要钉住"什么时候请求"，也要钉住"请求失败不能挡住编辑器"。
+ */
+const profileMocks = vi.hoisted(() => ({ getProfile: vi.fn() }));
+vi.mock("../../api/profile", () => ({ getProfile: profileMocks.getProfile }));
+
+/** 只需要让 `profileToResumeContent` 走得通：六个列表给空数组，个人总结非空即可。 */
+const PROFILE = {
+  photo: "",
+  name: "张三",
+  gender: "",
+  birth_year: "",
+  phone: "",
+  email: "",
+  city: "",
+  personal_website: "",
+  github: "",
+  job_intent: "",
+  summary: "Backend engineer, five years.",
+  educations: [],
+  experiences: [],
+  campus_experiences: [],
+  projects: [],
+  skills: [],
+  awards: [],
+};
+
 // 预览本身由 ResumePreview.test.tsx 覆盖；这里把它替成一个**只做插槽接线**的桩：
 // 两个具名插槽（结构类 / 度量类）原样渲染出来，好让"调用点有没有把两组喂进去"被钉住。
 // 桩不再提供"点中某一栏"的按钮——预览的点击编辑已于 2026-10-21 整块去掉。
@@ -53,8 +82,14 @@ vi.mock("./ResumeLayoutDiagnosisCard", () => ({ default: () => null }));
 vi.mock("./ResumeTemplateControls", () => ({
   default: () => <span data-testid="template-controls">结构类版式控件</span>,
 }));
+// 度量类控件的桩会把**收到的 props** 记下来：P0-6 的验收口径原话就是
+// "以 `showMarginSides={false}` 断言"，而它是调用点决定的，桩以外看不见。
+const mockMeasureProps: { current?: Record<string, unknown> } = {};
 vi.mock("./ResumeMeasureControls", () => ({
-  default: () => <span data-testid="measure-controls">度量类版式控件</span>,
+  default: (props: Record<string, unknown>) => {
+    mockMeasureProps.current = props;
+    return <span data-testid="measure-controls">度量类版式控件</span>;
+  },
 }));
 // 导出按钮渲染成真按钮：footer 的"左确认 / 右导出"顺序断言需要一个可定位的导出节点
 // （`导出选项` 是弹出面板里的另一个文案，不会撞）。
@@ -146,6 +181,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+beforeEach(() => {
+  // 缺省有一份可用的资料：绝多数用例只关心"入口在不在"，不关心接口本身。
+  profileMocks.getProfile.mockResolvedValue(PROFILE);
+});
+
 describe("ResumeDetailPreview 的「手动调整」", () => {
   it("打开整份编辑器后能拿到「写作增强」页签", async () => {
     renderPreview();
@@ -171,6 +211,15 @@ describe("ResumeDetailPreview 的工具栏两行插槽", () => {
     expect(
       within(screen.getByTestId("toolbar-measure-slot")).getByText("度量类版式控件"),
     ).toBeInTheDocument();
+  });
+
+  it("主预览显式关掉分边页边距控件（P0-6：它只在制作台里出现）", () => {
+    renderPreview();
+
+    // 能力不删、只在制作台提供：主预览的工具栏是两行紧凑形态，多一行折叠标题就会顶宽。
+    // 缺省值虽然是 false，但调用点必须**显式**写出来——否则将来把缺省改成 true 时，
+    // 这里会静默地多出四行滑杆。
+    expect(mockMeasureProps.current?.showMarginSides).toBe(false);
   });
 });
 
@@ -284,43 +333,44 @@ describe("生成说明与警告分级", () => {
 });
 
 describe("ResumeDetailPreview 底部按钮排满整行", () => {
-  it("「查看大图」打开全屏工作台，并把当前页数带过去", async () => {
+  it("「简历制作台」打开三栏工作台，并把当前页数带过去", async () => {
     renderPreview();
 
-    fireEvent.click(screen.getByRole("button", { name: /查看大图/ }));
+    fireEvent.click(screen.getByRole("button", { name: /简历制作台/ }));
 
-    // 弹窗里复用同一个预览组件：页数必须与外面一致，否则"大图"看到的又是另一种分页。
+    // 弹窗里复用同一个预览组件：页数必须与外面一致，否则制作台里看到的又是另一种分页。
     // 弹窗打开、并且说明里带上了当前页数（页数一致是这一块的重点）。
-    expect(await screen.findByText("查看简历大图")).toBeInTheDocument();
-    expect(
-      screen.getByText(new RegExp(`与当前 ${LAYOUT.page_limit} 页的设置一致`)),
-    ).toBeInTheDocument();
-    // 大图改成全屏工作台：排版控件留在左侧，预览仍由同一个 ResumePreview 渲染。
-    const workbench = document.querySelector(".resume-zoom-body");
-    const settings = workbench?.querySelector(".resume-zoom-settings");
-    const preview = workbench?.querySelector(".resume-zoom-preview-pane");
-    expect(settings).not.toBeNull();
-    expect(preview).not.toBeNull();
-    expect(settings?.querySelector('[data-testid="template-controls"]')).not.toBeNull();
-    expect(settings?.querySelector('[data-testid="measure-controls"]')).not.toBeNull();
-    expect(within(preview as HTMLElement).getByTestId("preview-mode")).toHaveTextContent("draft");
+    expect(await screen.findByText(new RegExp(`与当前 ${LAYOUT.page_limit} 页的设置一致`)));
+    // 三栏：左参数（两组控件都在里面）/ 中内容 / 右画布，预览仍由同一个 ResumePreview 渲染。
+    const workbench = document.querySelector(".resume-wb-body");
+    const params = workbench?.querySelector(".resume-wb-col-params");
+    const editor = workbench?.querySelector(".resume-wb-col-editor");
+    const canvas = workbench?.querySelector(".resume-wb-canvas");
+    expect(params).not.toBeNull();
+    expect(editor).not.toBeNull();
+    expect(canvas).not.toBeNull();
+    expect(params?.querySelector('[data-testid="template-controls"]')).not.toBeNull();
+    expect(params?.querySelector('[data-testid="measure-controls"]')).not.toBeNull();
+    expect(within(canvas as HTMLElement).getByTestId("preview-mode")).toHaveTextContent("draft");
 
-    const dialog = screen.getByRole("dialog", { name: "查看简历大图" });
-    expect((dialog as HTMLElement).style.width).toBe("100vw");
-    expect((dialog as HTMLElement).style.height).toBe("100dvh");
-    expect((dialog as HTMLElement).style.top).toBe("0px");
+    const dialog = screen.getByRole("dialog", { name: "简历制作台" });
+    // 铺满视口（2026-10）：高度整屏、四周没有留白。尺寸读 style 属性比读 CSSOM 稳
+    // （jsdom 对 calc 的解析实现随版本变化），所以这里断言的正是"不再有 calc"。
+    const style = (dialog as HTMLElement).getAttribute("style") ?? "";
+    expect(style).toContain("100dvh");
+    expect(style).not.toContain("calc(");
     expect(dialog.closest(".ant-modal-wrap")).toHaveClass("resume-zoom-workbench-wrap");
   });
 
-  it("「查看大图」与主预览共用同一份口径：切到精确，大图也是精确", async () => {
+  it("「简历制作台」与主预览共用同一份口径：切到精确，制作台也是精确", async () => {
     renderPreview();
 
     // 主预览切到精确 → 状态住在 ResumeDetailPreview，两个预览实例都读它。
     fireEvent.click(screen.getByRole("button", { name: "切到精确" }));
     expect(screen.getAllByTestId("preview-mode").map((el) => el.textContent)).toEqual(["exact"]);
 
-    fireEvent.click(screen.getByRole("button", { name: /查看大图/ }));
-    expect(await screen.findByText("查看简历大图")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /简历制作台/ }));
+    expect(await screen.findByRole("dialog", { name: "简历制作台" })).toBeInTheDocument();
 
     // 主预览 + 大图里的预览：口径一致，精确预览的上下文也一致（同一份简历 id）。
     expect(screen.getAllByTestId("preview-mode").map((el) => el.textContent)).toEqual([
@@ -341,6 +391,21 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     expect(await screen.findByText("写作增强")).toBeInTheDocument();
   });
 
+  it("中栏有未保存内容时，底部「手动调整」被禁用（设计 §9 Q6）", async () => {
+    renderPreview();
+
+    fireEvent.click(screen.getByRole("button", { name: /简历制作台/ }));
+    await screen.findByRole("dialog", { name: "简历制作台" });
+
+    // 中栏改一个字 → 脏值上报到宿主 → 底部那颗按钮禁用：两个编辑器同时开会各自持有
+    // 一份 form 实例，在同一个草稿槽上互相覆盖。
+    const nameInput = document.getElementById("name") as HTMLInputElement;
+    expect(nameInput).not.toBeNull();
+    fireEvent.change(nameInput, { target: { value: "李四" } });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /手动调整/ })).toBeDisabled());
+  });
+
   it("底部操作条使用 grid 布局类，且所有动作按钮都渲染出来", () => {
     renderPreview();
 
@@ -351,7 +416,7 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     // 动作按钮都在（ExportButtons 在测试里被替成 null，不影响这一层）。
     for (const name of [
       "手动调整",
-      "查看大图",
+      "简历制作台",
       "生成岗位优化建议",
       "查看对应岗位",
       "咨询求职助手",

@@ -254,6 +254,42 @@ describe("ResumeLayoutDiagnosisCard", () => {
     expect(payload.page_limit).toBe(1);
   });
 
+  it("改完版式立刻点「自动一页」：先按这一版重算，绝不用上一版留下的清单", async () => {
+    // 2026-10-24 用户实测"点了没变"的根因：`fit_ladder` 是 250ms 防抖之前那一版 layout
+    // 算出来的，而 autoFit 直接拿它去实测、再把结果落库——落库的参数与实测那一版不是
+    // 同一套。这条用例把"陈旧清单不会被使用"钉住。
+    const stale = [candidate("padding", "页边距收到 12mm", { page_padding: 12 })];
+    const fresh = [candidate("line_height", "行高收到 1.55", { line_height: 1.55 })];
+    apiMocks.analyzeResumeLayout
+      .mockResolvedValueOnce(analysis({ fit_ladder: stale }))
+      .mockResolvedValue(analysis({ fit_ladder: fresh }));
+    apiMocks.updateResumeLayout.mockResolvedValue({ format_config: fresh[0].config });
+
+    const view = renderCard({ previewRef: fakePreview("1.55") });
+    // 等第一次诊断落地——此刻清单是按**旧版式**算的。
+    await screen.findByRole("button", { name: /自动一页/ });
+
+    // 换一版版式，但**不等**防抖那 250ms，立刻点按钮（用户就是这么操作的）。
+    view.rerender(
+      cardElement({
+        previewRef: fakePreview("1.55"),
+        layout: { ...LAYOUT, format_config: { page_padding: 10 } },
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /自动一页/ }));
+
+    await waitFor(() => expect(apiMocks.updateResumeLayout).toHaveBeenCalledTimes(1));
+    // 重算用的是当前这一版：诊断调用的第二个参数就是它。
+    expect(apiMocks.analyzeResumeLayout.mock.calls[1][2]).toMatchObject({
+      format_config: { page_padding: 10 },
+    });
+    // 落库的是新清单里放得下的那一档（叠在当前的排版覆盖之上），不是旧清单那一档。
+    expect(apiMocks.updateResumeLayout.mock.calls[0][1].format_config).toEqual({
+      page_padding: 10,
+      ...fresh[0].config,
+    });
+  });
+
   it("says it plainly when nothing fits, instead of pretending it worked", async () => {
     const ladder = [
       candidate("font_scale_adjust", "字号收到 0.88 倍", { font_scale_adjust: 0.88 }),

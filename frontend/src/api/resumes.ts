@@ -101,11 +101,18 @@ export function updateResumeFavorite(id: number, favorite: boolean): Promise<Res
   });
 }
 
-/** 保存用户自行编写的简历，可选关联岗位。 */
+/**
+ * 保存用户自行编写的简历，可选关联岗位。
+ *
+ * `draft` = 建一份**制作台草稿**（0051）：它不出现在简历中心/搜索/统计里，只有用户在
+ * 制作台里保存过（内容或版式任一）才会转正。目前只有「前往简历制作台」这一个入口传它——
+ * 那个入口的意图是"我要去里面排版"，不是"我现在就要这份简历"。
+ */
 export function createManualResume(payload: {
   job_id?: number | null;
   title?: string;
   content: ResumeContent;
+  draft?: boolean;
 }): Promise<ResumeDetail> {
   return request("/resumes/manual", {
     method: "POST",

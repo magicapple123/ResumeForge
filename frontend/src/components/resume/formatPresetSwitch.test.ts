@@ -56,4 +56,41 @@ describe("layoutWithFormatPreset", () => {
     expect(next.template).toBe("classic");
     expect(next.font_scale).toBe("standard");
   });
+
+  /**
+   * 补齐的 5 个键（`text_color` / `muted_color` + 三个系数）。
+   *
+   * 前两个是**既有遗漏**：它们在 `FORMAT_FIELDS` 里、也进指纹，却一直没进这张表——于是
+   * "选一个配色不同的版式，文字颜色没变"。三个系数同理：用户手动调过的姓名大小会盖住
+   * 新预设，切版式看起来"只改了个名字"。
+   */
+  it("文字颜色与三个系数都属于「版式会管」的键", () => {
+    const next = layoutWithFormatPreset(
+      {
+        ...BASE,
+        format_config: {
+          ...BASE.format_config,
+          text_color: "#111111",
+          muted_color: "#666666",
+          name_scale: 1.2,
+          section_title_scale: 0.9,
+          entry_gap: 1.5,
+        },
+      },
+      "standard",
+      PRESETS,
+    );
+
+    for (const key of [
+      "text_color",
+      "muted_color",
+      "name_scale",
+      "section_title_scale",
+      "entry_gap",
+    ]) {
+      expect(next.format_config).not.toHaveProperty(key);
+    }
+    // 字号系数仍然保留：版式预设不管字号。
+    expect(next.format_config?.font_scale_adjust).toBe(1.1);
+  });
 });

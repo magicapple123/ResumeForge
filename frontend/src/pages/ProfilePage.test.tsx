@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 我的资料页：通用页面行为（通用简历/分页/未保存防护/折叠/悬浮球卡/输入性能）。 */
+/** 我的资料页：通用页面行为（分页/未保存防护/折叠/悬浮球卡/输入性能）。 */
 
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -91,6 +91,16 @@ vi.mock("../components/profile/PartialDateSelect", async (importOriginal) => {
   };
 });
 
+/**
+ * 「页面已就绪」的同步点。
+ *
+ * 以前这里等的是「还没有通用简历」，而那个区块 2026-10-24 已从本页移除——拿它当信号
+ * 会永远等不到。现在等「基本信息」分区的折叠标题：它只在资料表单渲染出来之后才存在。
+ */
+async function waitForProfileReady() {
+  await screen.findByRole("button", { name: "收起基本信息" });
+}
+
 beforeEach(() => {
   resetProfileApiMocks(apiMocks);
 });
@@ -99,57 +109,11 @@ afterEach(() => {
   cleanupProfilePage();
 });
 
-describe("ProfilePage 通用简历", () => {
-  it("renders the general-resume card outside of edit mode, above the profile sections", async () => {
-    renderProfilePage();
-
-    // 非编辑状态也要能用：写简历不是改资料
-    // 项 11：名称输入已移进编辑器，页面上只剩两个入口按钮。
-    expect(await screen.findByRole("button", { name: /AI 生成/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: /从头手写/ })).toBeEnabled();
-    expect(await screen.findByText("还没有通用简历")).toBeInTheDocument();
-
-    // 「通用简历」不再沉在资料最底部：它要出现在资料分区（基本信息）之前。
-    const general = document.getElementById("general-resume-section");
-    const basicSectionToggle = screen.getByRole("button", { name: "收起基本信息" });
-    expect(general).not.toBeNull();
-    expect(
-      (general as HTMLElement).compareDocumentPosition(basicSectionToggle) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("opens the generate modal without a page-level name box", async () => {
-    renderProfilePage();
-    await screen.findByText("还没有通用简历");
-
-    expect(screen.queryByLabelText("通用简历名称")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /AI 生成/ }));
-
-    expect(await screen.findByText("生成通用简历")).toBeInTheDocument();
-    // 名称在弹窗里填：页面不再预先带一个值过来。
-    await waitFor(() => expect(screen.getByLabelText("简历名称")).toHaveValue(""));
-  });
-
-  it("lets the manual editor name the resume (项 11)", async () => {
-    renderProfilePage();
-    await screen.findByText("还没有通用简历");
-
-    fireEvent.click(screen.getByRole("button", { name: /从头手写/ }));
-
-    expect(await screen.findByText("从头编写通用简历")).toBeInTheDocument();
-    fireEvent.change(await screen.findByLabelText("简历名称"), {
-      target: { value: "管培生版" },
-    });
-    expect(screen.getByLabelText("简历名称")).toHaveValue("管培生版");
-  });
-});
-
 describe("ProfilePage 资料分页", () => {
   it("默认显示简历资料，切换后显示独立的网申资料板块", async () => {
     renderProfilePage();
 
-    expect(await screen.findByText("还没有通用简历")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "收起基本信息" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "简历资料" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "网申资料" })).toHaveAttribute("aria-selected", "false");
 
@@ -192,7 +156,7 @@ describe("ProfilePage 资料分页", () => {
 
   it("切换资料分页不会丢失当前编辑状态", async () => {
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
 
     fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
@@ -220,7 +184,7 @@ describe("ProfilePage 未保存防护", () => {
   it("表单有更改后挂上 beforeunload 监听，刷新/关闭不再静默丢稿", async () => {
     const { addSpy, removeSpy } = spyBeforeUnload();
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
 
     fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
@@ -234,7 +198,7 @@ describe("ProfilePage 未保存防护", () => {
   it("保存全部成功后移除 beforeunload 监听", async () => {
     const { addSpy, removeSpy } = spyBeforeUnload();
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
 
     fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
@@ -262,7 +226,7 @@ describe("ProfilePage 分区折叠", () => {
       educations: [{ school: "示例大学", start_date: "2022-09", end_date: "2026-06" }],
     });
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
 
     const yearCombobox = await screen.findByRole("combobox", { name: "教育经历1开始时间年份" });
     expect(yearCombobox.closest(".ant-select")).toHaveClass("ant-select-disabled");
@@ -270,7 +234,7 @@ describe("ProfilePage 分区折叠", () => {
 
   it("默认展开每个分区，点标题可收起", async () => {
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
 
     // 默认全展开：这一页是"我的资料"，进来就是要看内容的（用户反馈过"应该默认展开"）。
     const basicToggle = screen.getByRole("button", { name: "收起基本信息" });
@@ -284,7 +248,7 @@ describe("ProfilePage 分区折叠", () => {
 
   it("「全部收起」一键收回，再点「全部展开」一键展开", async () => {
     renderProfilePage();
-    await screen.findByText("还没有通用简历");
+    await waitForProfileReady();
 
     // 页头按钮带图标，可访问名是「图标名 + 文字」，用正则匹配文字部分即可。
     const collapseAll = screen.getByRole("button", { name: /全部收起/ });

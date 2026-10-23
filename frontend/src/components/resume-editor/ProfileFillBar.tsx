@@ -20,7 +20,7 @@
  */
 
 import { ImportOutlined } from "@ant-design/icons";
-import { Button, Select, Space, Tooltip, Typography } from "antd";
+import { Button, Select, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import type { ProfileFillItem } from "../../features/profile/profileFillOptions";
 
@@ -96,13 +96,17 @@ export default function ProfileFillBar({
   };
 
   return (
-    <Space size={6} wrap className="resume-profile-fill" data-fill-variant={variant}>
-      <Typography.Text type="secondary">
+    // 用 `div` + flex 而不是 antd 的 `Space`：`Space` 的每一项都是 `flex: none`，
+    // 宽度不够时它不会缩、只会整体溢出容器——中栏（400–448px）里表现成"按钮被推出
+    // 右边界、压在标签条上"（用户 2026-10-23 截图："后面的内容穿透出来了"）。
+    // 改成 flex 之后，中间那颗下拉吃掉剩余宽度，文字与按钮固定，最窄时换行而不是溢出。
+    <div className="resume-profile-fill" data-fill-variant={variant}>
+      <Typography.Text type="secondary" className="resume-profile-fill-label">
         {isEntry ? "从资料填入本条" : "从我的资料追加一条"}
       </Typography.Text>
       <Select
         size="small"
-        style={{ minWidth: isEntry ? 180 : 220 }}
+        className="resume-profile-fill-select"
         placeholder={isEntry ? "选择资料条目" : `选择${label}`}
         aria-label={isEntry ? "从我的资料选择填入本条" : `从我的资料选择${label}`}
         showSearch
@@ -125,7 +129,11 @@ export default function ProfileFillBar({
       </Tooltip>
       {/* 条目模式必须说清语义：它和顶部的"追加一条"在同一屏里，用户有权知道
           这里不会覆盖他已经写好的内容。 */}
-      {isEntry && <Typography.Text type="secondary">只填空字段</Typography.Text>}
-    </Space>
+      {isEntry && (
+        <Typography.Text type="secondary" className="resume-profile-fill-hint">
+          只填空字段
+        </Typography.Text>
+      )}
+    </div>
   );
 }

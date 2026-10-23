@@ -13,8 +13,7 @@
  * 避免循环依赖（设计 §9 ⑨）。
  */
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
-import { Button, Collapse, Space, Tag, Tooltip, Typography } from "antd";
-import { Alert } from "antd";
+import { Alert, Button, Collapse, Space, Tag, Tooltip, Typography } from "antd";
 import { useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useNavigate } from "react-router-dom";
@@ -41,12 +40,12 @@ import type { PreviewMode } from "../resume-preview/config";
 import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
 import ResumeDetailFooter from "./ResumeDetailFooter";
 import EvidencePanel from "./EvidencePanel";
+import { useProfileFillSources } from "./useProfileFillSources";
 
 interface LayoutStatus {
   pages: number;
   overflow: boolean;
 }
-
 interface Props {
   detail: ResumeDetail;
   /** 已渲染的预览 HTML（由父组件负责取数 / 重渲染后传入）。 */
@@ -62,19 +61,25 @@ interface Props {
   onLayoutStatus: (status: LayoutStatus | null) => void;
   onMeasure: (measure: LayoutMeasure | null) => void;
   onApplyLayout: (next: ResumeLayout) => void;
+  /**
+   * 版式落库：`PATCH /resumes/{id}/layout`。`onApplyLayout` 只重排不落库，缺了这根线就
+   * 只存内容、版式静默丢掉。返回 `false` = 没落库（宿主已弹过原因），保存流程据此不对齐快照。
+   */
+  onCommitLayout?: () => Promise<boolean>;
+  /** 版式 PATCH 在飞：顶部「保存修改」据此禁用。 */ layoutSaving?: boolean;
+  /** 草稿发布（0051）：什么都没脏时点「保存到简历中心」，宿主发一次内容 PATCH 清掉 draft。 */
+  onPublishDraft?: () => Promise<boolean>;
   /** 「自动一页」试出方案并保存后的重渲染（只重渲染，不再写回版式）。 */
   onApplyFittedFormat: (formatConfig: ResumeFormatConfig) => void;
   onSaveEditedResume: (content: ResumeContent) => Promise<void>;
+  /** 初次挂载就打开制作台（「新建 → 前往制作台」专用，由 `zoomOpen` 的初值消费）。 */
+  autoOpenWorkbench?: boolean;
   /** 是否已经生成过岗位优化建议：决定按钮文案是「生成」还是「查看」。 */
   suggestionsGenerated: boolean;
   suggestionsResetKey: number;
   onSuggestionsGenerated: () => void;
-  /**
-   * 修订（AI 修改 / 采纳建议）成功后刷新预览的回调：父组件负责 setDetail + 重渲染。
-   * 建议「采纳并修改」依赖它刷新预览，两个宿主都应该传；「AI 修改 / 重新生成」
-   * 按钮的显隐由 ``showReviseAction`` 单独控制——生成弹窗预览阶段已有自己的
-   * 「重新生成」向导，再显示一个同名入口只会让人困惑。
-   */
+  /** 修订（AI 修改 / 采纳建议）成功后刷新预览：父组件负责 setDetail + 重渲染。
+   * 按钮显隐由 ``showReviseAction`` 单独控制（生成弹窗已自带「重新生成」向导）。 */
   onResumeRevised?: (detail: ResumeDetail) => Promise<void> | void;
   /** 是否显示「AI 修改 / 重新生成」按钮；缺省跟随 ``onResumeRevised`` 是否传入。 */
   showReviseAction?: boolean;
@@ -94,8 +99,12 @@ export default function ResumeDetailPreview({
   onLayoutStatus,
   onMeasure,
   onApplyLayout,
+  onCommitLayout,
+  layoutSaving = false,
+  onPublishDraft,
   onApplyFittedFormat,
   onSaveEditedResume,
+  autoOpenWorkbench = false,
   suggestionsGenerated,
   suggestionsResetKey,
   onSuggestionsGenerated,
@@ -116,11 +125,17 @@ export default function ResumeDetailPreview({
     event.preventDefault();
     setExportOptionsOpen(true);
   });
-  const [zoomOpen, setZoomOpen] = useState(false);
-  // 预览口径（草稿 / 精确）住在这一层：主预览与「查看大图」共用它，任何一处切换，
-  // 另一处和大图都会跟着走（2026-10-21 用户要求）。
+  const [zoomOpen, setZoomOpen] = useState(autoOpenWorkbench);
+  // 制作台中栏有没有未保存的内容：有值时禁用底部「手动调整」（两个编辑器各持一份
+  // form，同时开会互相覆盖草稿，见设计 §9 Q6）。
+  const [workbenchDirty, setWorkbenchDirty] = useState(false);
+  // 预览口径（草稿 / 精确）住在这一层：主预览与「简历制作台」共用它，任何一处切换，
+  // 另一处和制作台都会跟着走（2026-10-21 用户要求）。
   const [previewMode, setPreviewMode] = useState<PreviewMode>("draft");
   const [sharePackageOpen, setSharePackageOpen] = useState(false);
+  // 「从我的资料追加一条」的候选：**打开编辑器/制作台时才取一次**（`useProfileFillSources`），
+  // 资料接口失败则静默降级成"没有这条入口"，编辑器照常可开。中栏与弹窗共用同一份。
+  const { fillSources } = useProfileFillSources(editorOpen || zoomOpen);
   // 内部再包一层引用：父组件可能传 null（尚未量到），子组件需要一份稳定的 ref 传入 ResumePreview。
   const fallbackRef = useRef<ResumePreviewHandle>(null);
   const resolvedPreviewRef = previewRef ?? fallbackRef;
@@ -128,14 +143,11 @@ export default function ResumeDetailPreview({
   const { catalog } = useResumeTemplateCatalog();
   // 缺省跟随 onResumeRevised：能刷新预览就有意义，不能刷新就不该摆出这个入口。
   const showRevise = showReviseAction ?? Boolean(onResumeRevised);
-
   const enhancementLabel = RESUME_ENHANCEMENT_LEVELS.find(
     (item) => item.value === detail.enhancement_level,
   )?.label;
-
   // 风险扫描的"内容签名"：只随 content 变化重算，用来判断"扫描之后正文是不是改过了"。
   const riskContentSignature = useMemo(() => contentSignature(detail.content), [detail.content]);
-
   /**
    * 警告分级（#3）：「疑似虚构」与「岗位筛选没选上」性质完全不同，不该共用一面
    * 红墙。新生成的记录直接用结构化 coverage_notes；旧记录的未收录警告混在
@@ -147,8 +159,7 @@ export default function ResumeDetailPreview({
     return { fabricationWarnings: rest, legacyCoverageWarnings: legacy };
   }, [detail.warnings]);
   const coverageNotes = detail.coverage_notes ?? [];
-  // 主预览与「查看大图」必须拿到**同一份**精确预览上下文：各自拼一份迟早会漂
-  // （一处带草稿页数、一处带记录页数，用户就会看到"大图少一页"）。
+  // 主预览与「简历制作台」必须拿到**同一份**精确预览上下文：各自拼一份迟早会漂（一处带草稿页数、一处带记录页数，用户就会看到"制作台少一页"）。
   const exactPreview = useMemo<ExactPreviewOptions>(
     () => ({
       resumeId: detail.id,
@@ -156,8 +167,7 @@ export default function ResumeDetailPreview({
       template: layout.template,
       formatName: layout.format_name,
       fontScale: layout.font_scale,
-      // 语言也得走草稿值：选了 English 还没保存，精确预览就必须按英文排——
-      // 这是"草稿选英文、精确预览还是中文"的唯一修复点。
+      // 语言也得走草稿值：选了 English 还没保存，精确预览就必须按英文排——这是"草稿选英文、精确预览还是中文"的唯一修复点。
       language: layout.language ?? "zh-CN",
       formatConfig: layout.format_config as unknown as Record<string, unknown>,
       // 正文签名：改了内容也要重排一次（版式字段已各自进依赖）。
@@ -174,10 +184,8 @@ export default function ResumeDetailPreview({
       riskContentSignature,
     ],
   );
-  // 事实来源标注（RF-13）：证据面板用它列出"这条内容从哪来"。
-  // 预览上的悬停角标随编辑模式一起去掉了（2026-10-21），标注数据本身仍然有效。
+  // 事实来源标注（RF-13）：证据面板用它列出"这条内容从哪来"；预览上的悬停角标随编辑模式一起去掉了（2026-10-21），标注数据本身仍然有效。
   const factAnnotations = useMemo(() => detail.fact_annotations ?? [], [detail.fact_annotations]);
-
   return (
     <div>
       <Space style={{ marginBottom: 12 }} wrap>
@@ -327,6 +335,12 @@ export default function ResumeDetailPreview({
               // 没有照片时照片滑杆禁用并说明原因：photo_scale 在没有照片时完全惰性，
               // 让用户拖一个"什么都没发生"的滑杆是最差的反馈。
               hasPhoto={Boolean(detail.content?.photo)}
+              // 显式写 false：分边页边距只在「简历制作台」里出现（那一栏有纵向空间），
+              // 主预览的工具栏是两行紧凑形态，多一行折叠标题会把它顶宽。
+              showMarginSides={false}
+              // 照片大小滑杆只留在简历制作台：主预览这一栏只放"改一下就能在纸面上看出
+              // 差别"的高频项（2026-10-23 用户口径："预览界面只展示部分功能"）。
+              showPhotoScale={false}
               onChange={(next) => onApplyLayout(next)}
             />
             {/* 「正在按新设置重新排版…」留在度量这一行：它说明的是"你刚拖的那个值正在生效"，
@@ -344,6 +358,11 @@ export default function ResumeDetailPreview({
         exactPreview={exactPreview}
         previewMode={previewMode}
         onPreviewModeChange={setPreviewMode}
+        // 草稿模式编辑：点纸面字段 → 打开「手动调整」并定位到那条路径对应的输入框。
+        onPickField={(path) => {
+          setEditorTarget(path);
+          setEditorOpen(true);
+        }}
         warnings={fabricationWarnings}
         onLayoutStatus={onLayoutStatus}
         onMeasure={onMeasure}
@@ -357,6 +376,7 @@ export default function ResumeDetailPreview({
         showRevise={showRevise}
         suggestionsGenerated={suggestionsGenerated}
         jobId={detail.job_id ?? null}
+        editorBlocked={workbenchDirty}
         onOpenEditor={() => {
           setEditorTarget(null);
           setEditorOpen(true);
@@ -386,6 +406,10 @@ export default function ResumeDetailPreview({
           setEditorOpen(false);
           setEditorTarget(null);
         }}
+        // 「从我的资料追加一条」：编辑**已有**简历也要这条入口（新建简历那边一直有）。
+        // 只给候选项，不给 `fillAll`——那是"从空白开始"的捷径，编辑已有简历时会把整份
+        // 内容替换掉；`entryFill` 用缺省 true（条目级填进本条同样需要）。
+        fillSources={fillSources}
         onSave={onSaveEditedResume}
       />
       <ResumeSuggestionsModal
@@ -439,12 +463,30 @@ export default function ResumeDetailPreview({
         relayouting={relayouting}
         hasPhoto={Boolean(detail.content?.photo)}
         onApplyLayout={onApplyLayout}
+        onCommitLayout={onCommitLayout}
+        layoutSaving={layoutSaving}
+        // 草稿靠这两个把「保存」常驻（刚建出来的草稿内容与版式都没动过，0051）。
+        isDraft={Boolean(detail.draft)}
+        onPublishDraft={onPublishDraft}
         previewMode={previewMode}
         onPreviewModeChange={setPreviewMode}
         exactPreview={exactPreview}
-        onClose={() => setZoomOpen(false)}
-        onExport={() => {
+        // 中栏编辑：内容与保存都走宿主已有的那一份（PATCH + setDetail + 重渲染），
+        // 制作台因此与「手动调整」共用同一条落库链路。
+        content={detail.content}
+        onSaveContent={onSaveEditedResume}
+        onEditorDirtyChange={setWorkbenchDirty}
+        // 中栏与「手动调整」共用同一份候选（只给一处开，用户就得关掉制作台才能从资料带一条进来）。
+        fillSources={fillSources}
+        onClose={() => {
           setZoomOpen(false);
+          // 制作台关掉后中栏已经销毁，它的脏值不再有出口——不清掉会永久禁用「手动调整」。
+          setWorkbenchDirty(false);
+        }}
+        onExport={() => {
+          // 只开导出弹窗，**不**关制作台（用户 2026-10-23：导出后不该被踢回主预览界面）。
+          // 关掉会同时丢掉中栏未保存的内容与"导出完还要接着调"的位置；层级由 antd 解决
+          // （`ExportOptionsModal` 是 `.resume-wb-body` 之外的兄弟，后打开的拿到更高 z-index）。
           setExportOptionsOpen(true);
         }}
       />

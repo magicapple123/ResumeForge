@@ -9,6 +9,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import type { ResumeBrief } from "../types";
 import ResumesPage from "./ResumesPage";
@@ -301,8 +302,9 @@ describe("ResumesPage ?resume_id= 深链（RF-11）", () => {
     renderPageWithProbe(["/resumes?resume_id=8"]);
     await screen.findByTestId("resume-preview-stub");
 
-    // antd 弹窗右上角的关闭键可访问名是 Close。
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    // 2026-10-24 起弹窗自绘右上角的 ×（`closable={false}`）：可访问名走
+    // `common.action.close`，与全站「关闭」同一个词。
+    fireEvent.click(screen.getByRole("button", { name: t("common.action.close") }));
 
     // 只断 URL：jsdom 里 antd 的离场动画等不到 transitionend，弹窗内容不会真正
     // 卸载（onClose 已同步触发），断 DOM 移除会假红。

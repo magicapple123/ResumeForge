@@ -29,6 +29,13 @@ interface Props {
   /** 第 1 页的 iframe：版面测量与字号探针都作用在它身上。 */
   iframeRef: RefObject<HTMLIFrameElement | null>;
   onIframeLoad: (event: SyntheticEvent<HTMLIFrameElement>, index: number) => void;
+  /**
+   * 「草稿模式编辑」是否生效：只用来给视口加一个 `is-click-to-edit` 标记。
+   *
+   * 真正"哪里能点"的样式必须注入 iframe **内部**（纸面是后端 HTML，父页面样式进不去，
+   * 见 `./clickToEdit.ts`）；这里这个 class 是给宿主与测试用的外层标记。
+   */
+  clickToEdit?: boolean;
 }
 
 /**
@@ -62,6 +69,7 @@ export default function ResumePreviewCanvas({
   containerRef,
   iframeRef,
   onIframeLoad,
+  clickToEdit = false,
 }: Props) {
   return (
     <>
@@ -98,7 +106,9 @@ export default function ResumePreviewCanvas({
       )}
       <div
         ref={containerRef}
-        className={`resume-preview-viewport${isPanning ? " is-panning" : ""}`}
+        className={`resume-preview-viewport${isPanning ? " is-panning" : ""}${
+          clickToEdit ? " is-click-to-edit" : ""
+        }`}
         style={{ height: viewportHeight }}
       >
         <div

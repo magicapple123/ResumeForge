@@ -1,15 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 简历微调表单：编辑结构化内容后交由父组件保存并重新渲染。
+/**
+ * 简历微调表单的**弹窗壳**：编辑已保存简历（「手动调整」）与自行编写简历共用。
  *
- *  弹窗骨架（Modal + 两栏布局 + Form）与提交收在这里；「基本信息」那一组字段在
- *  `resume/ResumeBasicInfoTab.tsx`，未保存修改的 beforeunload 守卫在
- *  `resume/useBeforeUnloadGuard.ts`（均为纯搬迁，DOM 结构与文案未变）。
+ * 2026-10-23 起主体被抽成两个可复用文件，这里只剩三件事：
+ *
+ * 1. `Modal` 的壳（宽窄两档、层级、禁蒙层关闭、body 滚动方式）；
+ * 2. `footer`（`EditorFooterBar` 的两态：正常按钮组 / 内联确认条）；
+ * 3. 把宿主参数转成 `useResumeEditorPanel` 的入参。
+ *
+ * 表单主体、草稿条、标签页与那个唯一的 `<Form>` 在
+ * `resume-editor/ResumeEditorPanel.tsx`；脏值/草稿/历史/提交的判据在
+ * `resume-editor/useResumeEditorPanel.tsx`。抽出来的原因不是"文件太长"本身，而是
+ * **制作台中栏要挂同一份主体**：两份实现迟早在"能不能改照片、有没有写作增强"上分叉。
  */
-import { App, Collapse, Form, Grid, Modal, Tabs } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Grid, Modal, Space } from "antd";
 import type { ReactNode } from "react";
 import type { ResumeContent } from "../types";
-import ResumeWritingPanel from "./ResumeWritingPanel";
+import type { ProfileFillSources } from "../features/profile/profileFillOptions";
+import { layer } from "../theme/tokens";
+import EditorFooterBar from "./resume-editor/EditorFooterBar";
+import ResumeEditorPanel from "./resume-editor/ResumeEditorPanel";
+import { useResumeEditorPanel } from "./resume-editor/useResumeEditorPanel";
 
 interface Props {
   open: boolean;
@@ -56,31 +67,17 @@ interface Props {
    * 简历都不传——前者会替用户做决定，后者要的是改这一份而不是换成资料里的内容。
    */
   fillAll?: () => ResumeContent;
+  /**
+   * footer 左侧的额外动作（「前往简历制作台」）。
+   *
+   * 只在**新建**场景由 `ManualResumeModal` 传入：那条入口的语义是"先落库、再去制作台
+   * 从空白开始排版"，没有这份简历的 id 就无从进制作台。编辑已保存简历时不传——
+   * 那里本来就能从预览页直达制作台。
+   *
+   * 确认态（`api.confirming`）下不渲染：那一行整条让给确认句与两颗按钮。
+   */
+  footerExtra?: ReactNode;
 }
-
-import {
-  EducationEditor,
-  ExperienceEditor,
-  CampusEditor,
-  ProjectEditor,
-  SkillEditor,
-  AwardEditor,
-} from "./resume-editor/ResumeSectionEditors";
-import EditorHeader from "./resume-editor/EditorHeader";
-import EditorFooterBar from "./resume-editor/EditorFooterBar";
-import FieldRewritePanel from "./resume-editor/FieldRewritePanel";
-import DraftRestoreBar from "./common/DraftRestoreBar";
-import { resolveEditorTarget } from "./resume-editor/ResumeEditorTarget";
-import { EDITOR_FIELD_SCROLL_OPTIONS } from "./resume-editor/editorFieldScroll";
-import { ProfileFillProvider } from "./resume-editor/profileFillContext";
-import { useEditorDraftBar } from "./resume-editor/useEditorDraftBar";
-import ResumeBasicInfoTab from "./resume/ResumeBasicInfoTab";
-import { useBeforeUnloadGuard } from "./resume/useBeforeUnloadGuard";
-import { readResumeValueByPath } from "../utils/resumeFieldPath";
-import { hasAnyResumeContent } from "../utils/profileToResume";
-import type { ProfileFillSources } from "../features/profile/profileFillOptions";
-import { useFormShortcutHistory } from "../features/shortcuts/useFormShortcutHistory";
-import { layer } from "../theme/tokens";
 
 export default function ResumeEditorModal({
   open,
@@ -98,204 +95,27 @@ export default function ResumeEditorModal({
   fillSources,
   entryFill = true,
   fillAll,
+  footerExtra,
 }: Props) {
-  const { message } = App.useApp();
-  const [form] = Form.useForm<ResumeContent>();
-  // `setFieldValue` 只接受字面量路径联合，而字段名是 `resolveEditorTarget` 算出来的数组
-  // （同一份映射），这里做一次显式类型擦除；useCallback 固定引用：它是 tabItems 的依赖。
-  const setFormValue = useCallback(
-    (name: (string | number)[], value: unknown) =>
-      (form.setFieldValue as unknown as (n: (string | number)[], v: unknown) => void)(name, value),
-    [form],
-  );
-  const [saving, setSaving] = useState(false);
-  // 草稿（B6）只把受控值递进去：作用域、防抖写入、"点了才应用"全在 `useEditorDraftBar`。
-  const watched = Form.useWatch<ResumeContent>([], form) as ResumeContent | undefined;
-  // R5：撤回/恢复作用于这份表单，保存与「保存并更新预览」同走 `form.submit()`。
-  const formHistory = useFormShortcutHistory(form, {
-    onSave: () => form.submit(),
-    historyEnabled: open && !saving,
-    saveEnabled: open && !saving,
+  // 弹窗形态 = 「面板可见」跟着 open 走：关掉时既不读也不写草稿、也不挂 beforeunload。
+  // `onExit` 就是关窗：保存成功、放弃修改、无脏值关闭都汇到这一个出口。
+  const api = useResumeEditorPanel({
+    active: open,
+    content,
+    resumeId,
+    initialTarget,
+    draftScopeKey,
+    fillSources,
+    entryFill,
+    fillAll,
+    onSave,
+    onExit: onClose,
   });
-  // `reset` 是稳定引用：直接依赖 formHistory 会在 canUndo/canRedo 翻转时重跑载入 effect。
-  const resetFormHistory = formHistory.reset;
-  // 未保存守卫（RF-13）：改过还没保存时，取消/遮罩/ESC 都要先过确认；保存成功即清脏。
-  const [dirty, setDirty] = useState(false);
-  const [activeTab, setActiveTab] = useState("basic");
-  // AI 改写后的完整内容快照（表单里只落了被改的那一栏），父组件的 content 在弹窗
-  // 生命周期内不变，这里留一份给面板回显「当前内容」。
-  const [rewrittenContent, setRewrittenContent] = useState<ResumeContent | null>(null);
+
+  // "两栏独立滚动"：要有参考栏、且屏幕够宽（两处判据必须一致，见 `ResumeEditorPanel`：
+  // 判两次不一致会出现"body 不滚 + grid 不是双栏"，内容就滚不动了）。
   const screens = Grid.useBreakpoint();
-  // "两栏独立滚动"：要有参考栏且屏幕够宽。这一个布尔值同时决定 body 的滚动方式与 grid
-  // 的 class——判两次会出现"body 不滚 + grid 不是双栏"，内容是滚不动的。
   const wideLayout = Boolean(referencePanel) && Boolean(screens.lg);
-
-  // 基本信息里只有「个人总结」能从资料填入（见 `resume/ResumeBasicInfoTab`）：
-  // 姓名/手机/邮箱是身份信息，用户可能就在这份简历里改过它们，从资料覆盖回去等于把
-  // 他刚改的抹掉。
-  const summarySource = fillSources?.summary?.trim() ?? "";
-  const fillSummary = useCallback(() => {
-    setFormValue(["summary"], summarySource);
-    setDirty(true);
-  }, [setFormValue, summarySource]);
-  // 上下文的值必须稳定：每次渲染新建一个对象会让所有消费它的分区重渲染（表单很大）。
-  const fillContextValue = useMemo(
-    () =>
-      fillSources ? { sources: fillSources, onFilled: () => setDirty(true), entryFill } : null,
-    [fillSources, entryFill],
-  );
-
-  /**
-   * 「填入我的资料全部数据」：整份表单被覆盖，所以先看有没有东西会被冲掉。
-   *
-   * `getFieldsValue(true)` 取**全部**已注册值而不是当前标签页的：antd 的 Tabs 惰性渲染，
-   * 只看当前页会把"教育里已经填好的两条"当成空，于是一声不响地覆盖掉用户的内容。
-   */
-  const applyFillAll = () => {
-    if (!fillAll) return;
-    form.setFieldsValue(fillAll() as never);
-    setDirty(true);
-    formHistory.push();
-    message.success("已填入「我的资料」的内容");
-  };
-
-  // 草稿恢复与关闭分级：状态机在 `resume-editor/useEditorDraftBar` 里，
-  // 这里只提供"恢复后怎么落到表单"和"确认后各自做什么"。
-  const draftBar = useEditorDraftBar({
-    open,
-    saving,
-    dirty,
-    scope: draftScopeKey ?? `resume.edit#${resumeId ?? "new"}`,
-    values: watched,
-    onRestored: (restored) => {
-      form.setFieldsValue(restored as never);
-      setDirty(true);
-      // 恢复也算一次编辑：撤回要能退回到恢复之前的样子。
-      formHistory.push();
-    },
-    onClose,
-    onDiscard: () => {
-      setDirty(false);
-      onClose();
-    },
-    onFillAll: applyFillAll,
-  });
-  const requestClose = draftBar.requestClose;
-
-  const fillAllFromProfile = () => {
-    if (!fillAll) return;
-    if (!hasAnyResumeContent(form.getFieldsValue(true) as ResumeContent)) {
-      applyFillAll();
-      return;
-    }
-    draftBar.requestFillAll();
-  };
-
-  // Compiler 规范：随 open/content/initialTarget 变化的回填用渲染期守卫式调整；
-  // 表单实例写入与滚动聚焦的定时器副作用留在 effect。
-  const [prevSync, setPrevSync] = useState<{
-    open: boolean;
-    content: ResumeContent | null;
-    initialTarget: string | null | undefined;
-  } | null>(null);
-  if (
-    prevSync === null ||
-    prevSync.open !== open ||
-    prevSync.content !== content ||
-    prevSync.initialTarget !== initialTarget
-  ) {
-    setPrevSync({ open, content, initialTarget });
-    if (open && content) {
-      setRewrittenContent(null);
-      setDirty(false);
-      const target = initialTarget ? resolveEditorTarget(initialTarget) : null;
-      setActiveTab(target?.tab ?? "basic");
-    }
-  }
-
-  // 弹窗开着且没保存的修改还在时，挂 beforeunload（照抄 ProfilePage 的模式）：
-  // 刷新/关闭浏览器出原生确认，不再静默丢稿。实现在 resume/useBeforeUnloadGuard。
-  useBeforeUnloadGuard(open && dirty);
-
-  useEffect(() => {
-    if (!open || !content) return;
-    form.setFieldsValue(content);
-    // 换了/重开了这份简历：历史清空，以刚载入的内容为基线（撤回不该跨简历生效）。
-    resetFormHistory();
-    const target = initialTarget ? resolveEditorTarget(initialTarget) : null;
-    if (!target || target.name.length === 0) return;
-    // `scrollMode: "if-needed"`：字段已经在可视区内就别再滚一次——那会把用户正在看的
-    // 上下文顶走（尤其两栏布局下光标根本没动，界面却跳了）。
-    const scrollOptions = EDITOR_FIELD_SCROLL_OPTIONS;
-    let rafId = 0;
-    const timer = window.setTimeout(() => {
-      form.scrollToField(target.name, scrollOptions);
-      const field = form.getFieldInstance(target.name) as { focus?: () => void } | undefined;
-      field?.focus?.();
-      // 表单刚挂载时行高还没稳定（TextArea 的 autoSize、图片等），第一枪可能落在旧位置。
-      // 下一帧补一次：`if-needed` 保证已经对准时它什么也不做。
-      rafId = window.requestAnimationFrame(() => {
-        form.scrollToField(target.name, scrollOptions);
-      });
-    });
-    return () => {
-      window.clearTimeout(timer);
-      if (rafId) window.cancelAnimationFrame(rafId);
-    };
-  }, [content, form, initialTarget, open, resetFormHistory]);
-
-  const tabItems = useMemo(
-    () => [
-      {
-        key: "basic",
-        label: "基本信息",
-        children: <ResumeBasicInfoTab summarySource={summarySource} onFillSummary={fillSummary} />,
-      },
-      { key: "education", label: "教育", children: <EducationEditor /> },
-      { key: "experience", label: "实习/工作", children: <ExperienceEditor /> },
-      { key: "campus", label: "校园经历", children: <CampusEditor /> },
-      { key: "projects", label: "项目", children: <ProjectEditor /> },
-      { key: "skills", label: "技能", children: <SkillEditor /> },
-      { key: "awards", label: "荣誉", children: <AwardEditor /> },
-      ...(resumeId
-        ? [
-            {
-              key: "writing",
-              label: "写作增强",
-              children: (
-                <ResumeWritingPanel
-                  resumeId={resumeId}
-                  initialText={content?.summary ?? ""}
-                  onApply={(text) => form.setFieldValue("summary", text)}
-                />
-              ),
-            },
-          ]
-        : []),
-    ],
-    // summarySource 决定「填入个人总结」是否出现；fillSummary 已用 useCallback 固定
-    // （它自己依赖 setFormValue），只在值真的变时才重建标签页。
-    [resumeId, content, form, summarySource, fillSummary],
-  );
-
-  const handleFinish = async (values: ResumeContent) => {
-    if (!content) return;
-    setSaving(true);
-    try {
-      // 照片不在本次编辑表单中，始终保留已校验的原始值。
-      await onSave({ ...content, ...values, photo: content.photo });
-      setDirty(false);
-      // 存进去了就没有"没提交的草稿"了：清早了等于"保存失败也把内容扔了"，所以放在这里。
-      draftBar.clearDraft();
-      // 已保存的内容成为新基线：这次编辑不再可撤回（撤回已落库的改动会让人以为没存上）。
-      resetFormHistory();
-      onClose();
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存简历修改失败，请重试");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <Modal
@@ -308,21 +128,35 @@ export default function ResumeEditorModal({
       // 「手动调整」卡片被挡住了。
       zIndex={layer.editorModal}
       destroyOnHidden
-      // 必须垂直居中：body 限高后弹窗总高仍接近满视口，antd 默认 top:100px 会让
-      // 底部（保存按钮一带）被推出视口外，看起来就是"弹出的卡片被挡住了"。
       mask={{ closable: false }}
-      keyboard={!saving}
-      onCancel={requestClose}
+      keyboard={!api.saving}
+      onCancel={api.requestClose}
       footer={
-        <EditorFooterBar
-          confirming={draftBar.confirming}
-          saving={saving}
-          saveLabel={saveLabel}
-          onRequestClose={requestClose}
-          onConfirmPending={draftBar.confirmPending}
-          onKeepEditing={draftBar.keepEditing}
-          onSubmit={() => form.submit()}
-        />
+        // 确认态独占整行：那一刻用户在回答"要不要放弃"，旁边多一颗"去制作台"只会分心。
+        api.confirming || !footerExtra ? (
+          <EditorFooterBar
+            confirming={api.confirming}
+            saving={api.saving}
+            saveLabel={saveLabel}
+            onRequestClose={api.requestClose}
+            onConfirmPending={api.confirmPending}
+            onKeepEditing={api.keepEditing}
+            onSubmit={api.submit}
+          />
+        ) : (
+          <Space size={8} wrap>
+            {footerExtra}
+            <EditorFooterBar
+              confirming={api.confirming}
+              saving={api.saving}
+              saveLabel={saveLabel}
+              onRequestClose={api.requestClose}
+              onConfirmPending={api.confirmPending}
+              onKeepEditing={api.keepEditing}
+              onSubmit={api.submit}
+            />
+          </Space>
+        )
       }
       styles={{
         // 宽屏 + 岗位参考：**body 不滚**，左右两栏各滚各的（见 styles/resume.css）。
@@ -340,82 +174,14 @@ export default function ResumeEditorModal({
           : { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto", overflowX: "hidden" },
       }}
     >
-      {/* 草稿恢复条：**点了才应用**。恢复后按"未保存的修改"处理——它确实还没落库。 */}
-      {draftBar.draftPending ? (
-        <DraftRestoreBar
-          savedAt={draftBar.draftPending.savedAt}
-          fieldCount={Object.keys(draftBar.draftPending.values).length}
-          onRestore={draftBar.restoreDraft}
-          onDiscard={draftBar.discardDraft}
-        />
-      ) : null}
-      {/* 候选为 null 时这个 Provider 等于不存在：`useProfileFill()` 返回 null，
-          各分区据此完全不渲染「从我的资料填入」。 */}
-      <ProfileFillProvider value={fillContextValue}>
-        <div
-          className={`resume-editor-layout${referencePanel ? " resume-editor-layout--with-reference" : ""}`}
-        >
-          {referencePanel && (
-            <div className="resume-editor-reference">
-              {wideLayout ? (
-                referencePanel
-              ) : (
-                <Collapse
-                  size="small"
-                  items={[
-                    {
-                      key: "job-reference",
-                      label: "查看岗位要求",
-                      children: referencePanel,
-                    },
-                  ]}
-                />
-              )}
-            </div>
-          )}
-          <div className="resume-editor-main">
-            <EditorHeader
-              description={description}
-              onFillAll={fillAll ? fillAllFromProfile : undefined}
-              headerExtra={headerExtra}
-            />
-            <Form
-              form={form}
-              layout="vertical"
-              onValuesChange={() => {
-                setDirty(true);
-                formHistory.push();
-              }}
-              onFinish={(values) => void handleFinish(values as ResumeContent)}
-            >
-              {/* 从预览点某一栏进来时，先把"按我的要求改这一栏"摆在最上面：
-                用户的意图就是改他刚点的那一处，不该让他先自己找到对应标签页。
-                写入的是表单值（不落库），仍要点「保存并更新预览」才算改过简历。 */}
-              {resumeId && initialTarget && content ? (
-                <FieldRewritePanel
-                  resumeId={resumeId}
-                  content={rewrittenContent ?? content}
-                  path={initialTarget}
-                  onChange={(next) => {
-                    // 只更新被改写的那一栏对应的表单值：整份 setFieldsValue 会把用户
-                    // 在这个弹窗里已经手改过、但还没保存的内容一起覆盖掉。
-                    //
-                    // 表单字段名要与编辑器一致：列表里的某一条要点在表单里是整个数组
-                    // （`projects.0.description`），所以按**解析后的字段名**从新内容里取值，
-                    // 而不是按原始路径取那一条字符串。
-                    const target = resolveEditorTarget(initialTarget);
-                    setFormValue(target.name, readResumeValueByPath(next, target.name));
-                    setRewrittenContent(next);
-                    // AI 填入也是"没保存的修改"：未保存守卫必须同样看住它。
-                    setDirty(true);
-                  }}
-                />
-              ) : null}
-              <Tabs activeKey={activeTab} items={tabItems} onChange={setActiveTab} />
-            </Form>
-          </div>
-        </div>
-      </ProfileFillProvider>
+      <ResumeEditorPanel
+        api={api}
+        variant="modal"
+        description={description}
+        headerExtra={headerExtra}
+        referencePanel={referencePanel}
+        onFillAll={api.fillAllData ?? undefined}
+      />
     </Modal>
   );
 }
