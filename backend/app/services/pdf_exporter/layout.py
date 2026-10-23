@@ -205,7 +205,7 @@ def resolve_layout(
     ``margin_mm`` 才作为它的回落值；两者同时出现时以 ``page_padding`` 为准——否则
     旧客户端/手工请求能重新制造"预览 8mm、PDF 30mm"。
     """
-    from ..resume.resume_layout_overrides import resolve_photo_scale
+    from ..resume.resume_layout_overrides import resolve_photo_scale, resolve_scale
     from ..resume.resume_templates import (
         template_layout_defaults,
         validated_format_config,
@@ -236,12 +236,17 @@ def resolve_layout(
         margin_left=margin_left,
         line_height=pick("line_height", "line_height"),
         section_gap=pick("section_gap", "section_gap"),
-        # 字号层级比例只来自模板（版式没有对应的用户覆盖项）。
-        name_ratio=float(defaults["name_ratio"]),
+        # 姓名字号与小节标题字号是"模板基准 × 用户系数"——**与 HTML 侧同一个口径**：
+        # `format_css` 往 `:root` 写 `--name-scale` / `--section-title-scale`，模板 CSS 写
+        # `calc(var(--fs) * 1.86 * var(--name-scale, 1))`。只改模板不改这里，就会重现
+        # "预览缩小了、导出的 PDF 没变"——本轮 T02 与 T03 必须同批发布的原因。
+        # `resolve_scale` 缺键返回 1.0（= 模板基准原样），所以不传新键时 PDF 字节不变。
+        name_ratio=float(defaults["name_ratio"]) * resolve_scale(overrides, "name_scale"),
         name_extra_ratio=float(defaults["name_extra_ratio"]),
         intent_ratio=float(defaults["intent_ratio"]),
         contact_ratio=float(defaults["contact_ratio"]),
-        section_title_ratio=float(defaults["section_title_ratio"]),
+        section_title_ratio=float(defaults["section_title_ratio"])
+        * resolve_scale(overrides, "section_title_scale"),
         entry_title_ratio=float(defaults["entry_title_ratio"]),
         # `.entry-head .meta`（条目头右侧）与 `.entry .sub`（条目下副行）是**两个**选择器，
         # 比例多数模板相同、technical 却是 0.86 / 0.9，所以各取各的，不合并。
@@ -250,10 +255,12 @@ def resolve_layout(
         tag_font_ratio=float(defaults["tag_font_ratio"]),
         # 垂直间距、区块标题形状与照片尺寸同样只来自模板——这些此前只存在于模板 CSS，
         # PDF 侧没有，于是排得比预览紧（"被压扁"的主要来源）。
+        # `entry_gap` 是唯一的例外：模板里它是 `calc(var(--fs) * 0.86 * var(--entry-gap, 1))`，
+        # 所以这里也要乘同一个系数（缺键 = 1.0）。
         header_gap=float(defaults["header_gap"]),
         intent_gap=float(defaults["intent_gap"]),
         contact_gap=float(defaults["contact_gap"]),
-        entry_gap=float(defaults["entry_gap"]),
+        entry_gap=float(defaults["entry_gap"]) * resolve_scale(overrides, "entry_gap"),
         sub_gap_top=float(defaults["sub_gap_top"]),
         sub_gap_bottom=float(defaults["sub_gap_bottom"]),
         li_gap=float(defaults["li_gap"]),

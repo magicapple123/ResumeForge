@@ -28,15 +28,15 @@
   }
   .header { display: flex; align-items: flex-start; gap: calc(var(--fs) * 1.7); border-bottom: 1px solid var(--accent); padding-bottom: calc(var(--fs) * 1); margin-bottom: calc(var(--fs) * 1.5); }
   .header-main { flex: 1; min-width: 0; text-align: center; }
-  .header .name { font-size: calc(var(--fs) * 1.9); font-weight: 700; color: var(--accent); letter-spacing: 1.5px; }
+  .header .name { font-size: calc(var(--fs) * 1.9 * var(--name-scale, 1)); font-weight: 700; color: var(--accent); letter-spacing: 1.5px; }
   .name-extra { font-size: calc(var(--fs) * .93); font-weight: 400; color: var(--muted); }
   .header .intent { font-size: var(--fs); color: var(--muted); margin-top: calc(var(--fs) * .28); }
   .header .contact { font-size: calc(var(--fs) * .9); color: var(--muted); margin-top: calc(var(--fs) * .57); }
   .header .contact span { margin-right: calc(var(--fs) * 1.14); }
   .profile-photo { width: calc(var(--fs) * 6.2 * var(--photo-scale, 1)); height: calc(var(--fs) * 6.2 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: cover; border: 1px solid var(--line); border-radius: 50%; }
   .section { margin-bottom: calc(var(--fs) * 1.35); }
-  .section-title { font-size: calc(var(--fs) * 1.11); font-weight: 700; color: var(--accent); text-align: center; padding-bottom: calc(var(--fs) * .25); border-bottom: 1px solid var(--line); margin-bottom: calc(var(--fs) * .75); }
-  .entry { margin-bottom: calc(var(--fs) * .85); }
+  .section-title { font-size: calc(var(--fs) * 1.11 * var(--section-title-scale, 1)); font-weight: 700; color: var(--accent); text-align: center; padding-bottom: calc(var(--fs) * .25); border-bottom: 1px solid var(--line); margin-bottom: calc(var(--fs) * .75); }
+  .entry { margin-bottom: calc(var(--fs) * .85 * var(--entry-gap, 1)); }
   .entry-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--fs); }
   .entry-head .title { font-size: calc(var(--fs) * 1.05); font-weight: 600; }
   .entry-head .meta { font-size: calc(var(--fs) * .9); color: var(--muted); white-space: nowrap; }

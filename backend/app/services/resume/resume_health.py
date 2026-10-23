@@ -19,7 +19,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from ...models.claim import VERIFICATION_PENDING, ClaimRecord
-from ...models.resume import ResumeRecord
+from ...models.resume import ResumeRecord, saved_only
 from ...schemas.resume import ResumeContent
 from .. import trash
 from .resume_completeness import find_incomplete
@@ -33,7 +33,7 @@ MAX_RESUME_SCAN = 200
 
 def resume_health(db: Session) -> dict:
     """简历库与台账的健康度计数（全部来自未软删除的行）。"""
-    live = db.query(ResumeRecord).filter(trash.live_only(ResumeRecord))
+    live = db.query(ResumeRecord).filter(trash.live_only(ResumeRecord), saved_only())
     resume_count = live.count()
     rows = (
         live.order_by(ResumeRecord.created_at.desc(), ResumeRecord.id.desc())

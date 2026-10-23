@@ -29,15 +29,15 @@
   }
   .header { display: flex; flex-direction: row-reverse; align-items: center; gap: calc(var(--fs) * 1.6); text-align: center; border-bottom: 1px solid var(--accent); padding-bottom: calc(var(--fs) * 0.9); margin-bottom: calc(var(--fs) * 1.5); }
   .header-main { flex: 1; min-width: 0; }
-  .header .name { font-family: "Songti SC", "SimSun", Georgia, serif; font-size: calc(var(--fs) * 1.9); font-weight: 600; color: var(--accent); letter-spacing: 4px; }
+  .header .name { font-family: "Songti SC", "SimSun", Georgia, serif; font-size: calc(var(--fs) * 1.9 * var(--name-scale, 1)); font-weight: 600; color: var(--accent); letter-spacing: 4px; }
   .name-extra { font-size: calc(var(--fs) * 0.93); font-weight: 400; color: var(--muted); letter-spacing: 1px; }
   .header .intent { font-size: var(--fs); color: var(--muted); margin-top: calc(var(--fs) * 0.36); letter-spacing: 2px; }
   .header .contact { font-size: calc(var(--fs) * 0.9); color: var(--muted); margin-top: calc(var(--fs) * 0.5); }
   .header .contact span { margin: 0 calc(var(--fs) * 0.57); }
   .profile-photo { width: calc(var(--fs) * 5.6 * var(--photo-scale, 1)); height: calc(var(--fs) * 7.2 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: cover; border: 1px solid var(--line); }
   .section { margin-bottom: calc(var(--fs) * 1.35); }
-  .section-title { font-family: "Songti SC", "SimSun", Georgia, serif; font-size: calc(var(--fs) * 1.11); font-weight: 600; color: var(--accent); letter-spacing: 3px; text-align: center; border-bottom: 1px solid var(--line); padding-bottom: calc(var(--fs) * 0.28); margin-bottom: calc(var(--fs) * 0.8); }
-  .entry { margin-bottom: calc(var(--fs) * 0.9); }
+  .section-title { font-family: "Songti SC", "SimSun", Georgia, serif; font-size: calc(var(--fs) * 1.11 * var(--section-title-scale, 1)); font-weight: 600; color: var(--accent); letter-spacing: 3px; text-align: center; border-bottom: 1px solid var(--line); padding-bottom: calc(var(--fs) * 0.28); margin-bottom: calc(var(--fs) * 0.8); }
+  .entry { margin-bottom: calc(var(--fs) * 0.9 * var(--entry-gap, 1)); }
   .entry-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--fs); }
   .entry-head .title { font-size: calc(var(--fs) * 1.05); font-weight: 600; }
   .entry-head .meta { font-size: calc(var(--fs) * 0.9); color: var(--muted); white-space: nowrap; }

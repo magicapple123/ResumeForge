@@ -26,7 +26,7 @@ from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect, text
 
 BASE_REVISION = "0038_user_files"
-HEAD_REVISION = "0050_candidate_job_soft_delete"
+HEAD_REVISION = "0051_resume_draft"
 _FTS_PREFIXES = ("knowledge_fts", "search_fts")
 
 

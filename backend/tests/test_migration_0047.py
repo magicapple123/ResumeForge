@@ -13,7 +13,7 @@ from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0046_search_fts"
-HEAD_REVISION = "0050_candidate_job_soft_delete"
+HEAD_REVISION = "0051_resume_draft"
 _FTS_PREFIXES = ("knowledge_fts", "search_fts")
 
 

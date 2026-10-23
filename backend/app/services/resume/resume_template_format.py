@@ -12,11 +12,15 @@ from .resume_layout_overrides import (
     PAGE_PADDING_KEY,
     PHOTO_SCALE_CSS_VAR,
     PHOTO_SCALE_KEY,
+    SCALE_CSS_VARS,
+    SCALE_KEYS,
+    SCALE_STEPS,
     extra_bounds,
     page_padding_rule,
     photo_scale_css_value,
     resolve_page_margins,
     resolve_photo_scale,
+    scale_css_vars,
 )
 from .resume_sections import normalized_section_order
 
@@ -90,10 +94,11 @@ FORMAT_FIELDS: tuple[dict, ...] = (
 FORMAT_FIELD_KEYS = tuple(field["key"] for field in FORMAT_FIELDS)
 _HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
-# `page_padding`、四条支路与 `photo_scale` **不走** `css_rule` 通用循环：
+# `page_padding`、四条支路、`photo_scale` 与三个"乘在模板基准上"的系数（`name_scale` /
+# `section_title_scale` / `entry_gap`）**不走** `css_rule` 通用循环：
 # 四条边必须合成**一条** CSS `padding` 简写（两条独立规则会互相覆盖，后出现的赢），
-# 照片系数走 `:root` 的自定义变量。它们由 `page_padding_rule` / `photo_scale_css_value`
-# 在循环之后显式产出（见 T01 设计 §2.3）。
+# 照片与三个系数走 `:root` 的自定义变量（模板侧写 `* var(--x, 1)` 兜底）。
+# 它们由 `page_padding_rule` / `photo_scale_css_value` / `scale_css_vars` 在循环之后显式产出。
 _CSS_MANUAL_KEYS: frozenset[str] = frozenset({PAGE_PADDING_KEY, *EXTRA_FORMAT_KEYS})
 
 
@@ -137,7 +142,8 @@ def validated_format_config(raw: dict | None) -> dict:
 
     * ``section_order``（分区顺序，列表）与 ``font``（这份简历用哪个字体文件）——各有自己的
       校验函数；
-    * ``EXTRA_FORMAT_KEYS``：四条分边页边距 + ``photo_scale``。走 ``extra_bounds`` 的区间，
+    * ``EXTRA_FORMAT_KEYS``：四条分边页边距 + ``photo_scale`` + 三个系数（``name_scale`` /
+      ``section_title_scale`` / ``entry_gap``）。走 ``extra_bounds`` 的区间，
       **越界丢弃**（与 ``page_padding`` 及 ``test_format_config_is_whitelisted`` 同一条契约）。
     """
     if not isinstance(raw, dict):
@@ -184,7 +190,8 @@ def format_css(config: dict | None) -> str:
 
     三条链路（草稿 HTML / 导出 HTML / 自动一页的探针）都读这一份产出，所以它必须：
     1. **默认参数下逐字节不变**——``page_padding`` 的四边相等时仍输出单值形态，
-       ``photo_scale`` 等于 1 时一个字符都不写；
+       ``photo_scale`` 与三个系数（``name_scale`` / ``section_title_scale`` / ``entry_gap``）
+       等于 1 时一个字符都不写；
     2. 四边不等时输出 CSS 简写顺序（上右下左）的四值形态；
     3. 什么都不设时返回空串，让模板 CSS 成为唯一权威。
     """
@@ -213,6 +220,10 @@ def format_css(config: dict | None) -> str:
     photo_scale = photo_scale_css_value(values)
     if photo_scale is not None:
         root_parts.append(f"{PHOTO_SCALE_CSS_VAR}: {photo_scale};")
+    # 三个系数的顺序由 `SCALE_KEYS_ORDER` 固定（name → section-title → entry），且 ≈1 的键
+    # **一个字符都不写**——`format_css({"name_scale": 1})` 必须仍是空串。
+    for key, value in scale_css_vars(values):
+        root_parts.append(f"{SCALE_CSS_VARS[key]}: {value};")
     blocks: list[str] = []
     if root_parts:
         blocks.append(":root { " + " ".join(root_parts) + " }")
@@ -263,6 +274,9 @@ __all__ = [
     "PAGE_MARGIN_SIDES",
     "PAGE_PADDING_KEY",
     "PHOTO_SCALE_KEY",
+    "SCALE_CSS_VARS",
+    "SCALE_KEYS",
+    "SCALE_STEPS",
     "SYSTEM_FONT",
     "_format_field",
     "_validated_font_name",
@@ -274,5 +288,6 @@ __all__ = [
     "photo_scale_css_value",
     "resolve_page_margins",
     "resolve_photo_scale",
+    "scale_css_vars",
     "validated_format_config",
 ]

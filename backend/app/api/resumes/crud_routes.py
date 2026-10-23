@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from ...database import get_db
 from ...models.job import Job
-from ...models.resume import ResumeRecord
+from ...models.resume import ResumeRecord, saved_only
 from ...schemas.common import Page
 from ...schemas.resume import (
     DeliveryDetail,
@@ -40,7 +40,7 @@ from ...services.resume.resume_delivery import (
     replay_delivery_export,
 )
 from ...services.resume.resume_record import build_manual_title
-from ._shared import _to_resume_out
+from ._shared import _mark_saved, _to_resume_out
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,7 @@ def create_manual_resume(payload: ManualResumeRequest, db: Session = Depends(get
         enhancement_enabled=False,
         enhancement_level="balanced",
         parse_error="",
+        draft=payload.draft,
     )
     db.add(record)
     db.commit()
@@ -112,8 +113,11 @@ def _filtered_query(
     同源：两处各写一遍迟早会改漏一边（``jobs`` 域的 ``_filtered_query`` 同一模式）。
     keyword 仍走标题/岗位/公司/正文 LIKE——content 是 JSON 文本（cast 后整段扫描），
     不适合 FTS 分词，与全局搜索的简历分支口径一致，保持不动。
+
+    **一律排除草稿**（0051）：制作台草稿是"用户点进去看过、还没保存"的落脚点，
+    出现在简历中心里等于凭空多出一份空白简历。
     """
-    query = db.query(ResumeRecord).filter(trash.live_only(ResumeRecord))
+    query = db.query(ResumeRecord).filter(trash.live_only(ResumeRecord), saved_only())
     if job_id is not None:
         query = query.filter(ResumeRecord.job_id == job_id)
     if has_job is not None:
@@ -263,6 +267,8 @@ def update_resume(resume_id: int, payload: ResumeContent, db: Session = Depends(
     # AI 生成阶段的告警不再适用于用户已手工确认过的内容。
     record.warnings = []
     record.parse_error = ""
+    # 保存成功 = 这份简历"存在了"：制作台草稿到这一步才进简历中心（0051）。
+    _mark_saved(record)
     db.commit()
     db.refresh(record)
     return _to_resume_out(record)
@@ -279,6 +285,8 @@ def rename_resume(
     if record is None or trash.is_deleted(record):
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
     record.title = payload.title
+    # 改名同样是"用户认了这一份"：他给这份简历取了名字，就该在简历中心看到它（0051）。
+    _mark_saved(record)
     db.commit()
     db.refresh(record)
     return _to_resume_out(record)

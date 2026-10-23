@@ -149,6 +149,9 @@ class ManualResumeRequest(BaseModel):
     job_id: int | None = Field(default=None, ge=1)
     title: str = Field(default="", max_length=256)
     content: ResumeContent
+    # 建**草稿**（见 ``models.resume`` 的 ``draft`` 说明）：只有「前往简历制作台」传 true，
+    # 缺省 false 让手写保存与通用简历的调用方逐字不变；草稿在制作台里保存过才进列表。
+    draft: bool = Field(default=False)
 
 
 class ResumeReviseRequest(BaseModel):
@@ -184,9 +187,8 @@ class ResumeBrief(BaseModel):
     # 纸面固定文案的语言（小节标题 / 字段前缀）。旧后端或旧缓存缺这个字段时按 "zh-CN" 兜。
     language: ResumeLanguage = "zh-CN"
     created_at: datetime
-    # 最近修改时间（R14-b）：列表新增「最近修改」列，与默认排序 ``updated_desc`` 同源。
-    # 由 ``ResumeRecord.updated_at``（ORM ``onupdate``）经 ``from_attributes`` 直接读取；
-    # 迁移 0047 已用 ``created_at`` 回填旧行，这里给默认值只是兼容只读投影缺该属性的场景。
+    # 最近修改时间（R14-b）：与默认排序 ``updated_desc`` 同源，由 ``ResumeRecord.updated_at``
+    # （ORM ``onupdate``）经 ``from_attributes`` 读取；迁移 0047 已回填旧行，默认值只兼容缺属性。
     updated_at: datetime | None = None
 
 
@@ -196,12 +198,14 @@ class ResumeOut(ResumeBrief):
     parse_error: str = ""
     # 版本血缘（RF-17）：由哪份简历派生而来；NULL = 独立版本，不做推断。
     parent_revision_id: int | None = None
-    # 生成说明与"没写进这份简历"的结构化清单：只对 AI 生成的记录有意义，
-    # 手写/修订后的记录为空（修订后筛选状态已不再适用）。
+    # 生成说明与"没写进这份简历"的结构化清单：只对 AI 生成记录有意义，手写/修订后为空。
     rationale: str = ""
     coverage_notes: list[dict] = []
     # 事实来源标注：只对 AI 生成的记录有意义；旧记录读取 `or []` 兜底。
     fact_annotations: list[FactAnnotation] = []
+    # 制作台草稿（0051）：还没保存过，所以不进任何列表；必须回传给详情接口，否则制作台
+    # 顶部没有「保存」可点，草稿永远进不了简历中心。
+    draft: bool = False
 
 
 class DeliverySummary(BaseModel):

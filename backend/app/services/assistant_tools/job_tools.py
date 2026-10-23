@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ...models.job import JOB_STATUSES, Job
-from ...models.resume import ResumeRecord
+from ...models.resume import ResumeRecord, saved_only
 from ...schemas.job import JobCreate, JobOut, JobUpdate
 from ...schemas.profile import (
     AwardIn,
@@ -48,7 +48,9 @@ def _tool_get_overview(db: Session, _arguments: dict) -> ToolResult:
     """给"分析我已经填过的信息"用的概览。"""
     counts = {
         "岗位": db.query(Job).filter(trash.live_only(Job)).count(),
-        "简历": db.query(ResumeRecord).filter(trash.live_only(ResumeRecord)).count(),
+        "简历": db.query(ResumeRecord)
+        .filter(trash.live_only(ResumeRecord), saved_only())
+        .count(),
     }
     recent_jobs = [
         _job_brief(job)
@@ -123,7 +125,8 @@ def _tool_list_resumes(db: Session, arguments: dict) -> ToolResult:
     limit = min(int(arguments.get("limit") or DEFAULT_LIST_LIMIT), MAX_LIST_LIMIT)
     records = (
         db.query(ResumeRecord)
-        .filter(trash.live_only(ResumeRecord))
+        # 助手替用户列简历时同样不该看到还没保存的草稿（0051）。
+        .filter(trash.live_only(ResumeRecord), saved_only())
         .order_by(ResumeRecord.id.desc())
         .limit(limit)
         .all()

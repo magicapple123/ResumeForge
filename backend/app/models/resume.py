@@ -27,6 +27,14 @@ class ResumeRecord(Base):
     # 历史记录没有该字段时由 SQLite 迁移默认标记为 AI 生成。
     source: Mapped[str] = mapped_column(String(16), default="ai", nullable=False)
     favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 简历制作台的**草稿**（0051）：点「前往简历制作台」时先建一行，但它还不是一份
+    # 用户认可的简历。存在这一列之前，那个入口会立刻 POST 出一条记录，于是用户只是
+    # "点进去看了看、什么都没存就关掉"，简历中心里也多出一份空白简历。
+    #
+    # 判据与落点：所有**面向用户的列表/搜索/统计**都必须排除草稿（`saved_only()`），
+    # 而内容写入（`PUT /resumes/{id}`）或版式写入（`PATCH /resumes/{id}/layout`）任一
+    # 成功即置 False——用户点过保存，这份简历就"存在"了。
+    draft: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
     model: Mapped[str] = mapped_column(String(64), default="")
     # 旧数据库中的 tone 列为 NOT NULL 且没有服务端默认值。继续写入默认值仅为
     # 兼容历史表结构；API 和前端均不再暴露定制风格功能。
@@ -92,6 +100,23 @@ class ResumeRecord(Base):
     parent_revision_id: Mapped[int | None] = mapped_column(
         ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
     )
+
+
+# ===== 查询口径 =====
+
+
+def saved_only() -> Any:
+    """查询条件：只取**已保存**的简历（排除简历制作台的草稿）。
+
+    与 ``services.trash.live_only`` 是同一种东西（"判据只写一次"）：草稿一旦漏进某个
+    读取入口，用户就会在简历中心/搜索/统计里看到一份自己没打算建的空白简历，而且
+    没有任何办法把它和真简历区分开。所以凡是"给人看简历清单"的查询都必须带上它，
+    只有按 id 取详情（制作台自己要读那份草稿）不加。
+
+    单独成函数而不是写死在各处的理由与 ``live_only`` 相同：写错了**不会报错**，只会
+    静默地多出一份简历，而这正是本列要消灭的现象。
+    """
+    return ResumeRecord.draft.is_(False)
 
 
 # ===== 简历生成后台任务状态机 =====

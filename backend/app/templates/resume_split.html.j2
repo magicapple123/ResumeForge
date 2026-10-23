@@ -29,7 +29,7 @@
   }
   .header { display: flex; align-items: center; gap: calc(var(--fs) * 1.6); background: var(--accent-soft); border-radius: calc(var(--fs) * .5); padding: calc(var(--fs) * 1) calc(var(--fs) * 1.1); margin-bottom: calc(var(--fs) * 1.1); }
   .header-main { flex: 1; min-width: 0; }
-  .header .name { font-size: calc(var(--fs) * 1.8); font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+  .header .name { font-size: calc(var(--fs) * 1.8 * var(--name-scale, 1)); font-weight: 700; color: var(--accent); letter-spacing: 1px; }
   .name-extra { font-size: calc(var(--fs) * .95); font-weight: 400; color: var(--muted); }
   .header .intent { font-size: calc(var(--fs) * 1.04); color: var(--accent); margin-top: calc(var(--fs) * .25); }
   .header .contact { font-size: calc(var(--fs) * .86); color: var(--muted); margin-top: calc(var(--fs) * .45); }
@@ -37,8 +37,8 @@
   .profile-photo { width: calc(var(--fs) * 5.8 * var(--photo-scale, 1)); height: calc(var(--fs) * 7.4 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: cover; border: 1px solid var(--line); border-radius: 4px; }
   .resume-sections { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); column-gap: calc(var(--fs) * 1.2); align-items: start; }
   .section { margin-bottom: calc(var(--fs) * 1); }
-  .section-title { font-size: calc(var(--fs) * 1.04); font-weight: 700; color: #fff; background: var(--accent); display: inline-block; padding: calc(var(--fs) * .1) calc(var(--fs) * .71); margin-bottom: calc(var(--fs) * .57); }
-  .entry { margin-bottom: calc(var(--fs) * .64); }
+  .section-title { font-size: calc(var(--fs) * 1.04 * var(--section-title-scale, 1)); font-weight: 700; color: #fff; background: var(--accent); display: inline-block; padding: calc(var(--fs) * .1) calc(var(--fs) * .71); margin-bottom: calc(var(--fs) * .57); }
+  .entry { margin-bottom: calc(var(--fs) * .64 * var(--entry-gap, 1)); }
   .entry-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--fs); }
   .entry-head .title { font-size: calc(var(--fs) * 1.04); font-weight: 600; }
   .entry-head .meta { font-size: calc(var(--fs) * .86); color: var(--muted); white-space: nowrap; }

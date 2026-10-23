@@ -14,6 +14,13 @@
 | ``page_padding`` | float mm | 0 – 26 | 模板 ``padding_mm`` |
 | ``page_padding_top/right/bottom/left`` | float mm | 0 – 26 | ``page_padding`` → 模板 ``padding_mm`` |
 | ``photo_scale`` | float 系数 | 0.6 – 1.6 | ``1.0``（= 模板原尺寸） |
+| ``name_scale`` | float 系数 | 0.8 – 1.3 | ``1.0``（= 模板基准 1.86/1.6/…） |
+| ``section_title_scale`` | float 系数 | 0.85 – 1.25 | ``1.0``（= 模板基准 1.14/1.05/…） |
+| ``entry_gap`` | float 系数 | 0.6 – 1.8 | ``1.0``（= 模板基准 0.86/0.5/…） |
+
+三个 ``*_scale`` / ``entry_gap`` 与 ``photo_scale`` **完全同构**：不是绝对覆盖值，而是"乘在
+模板基准上的系数"，所以只能走 ``:root`` 变量注入（模板侧写 ``* var(--name-scale, 1)``）。
+Python 侧抄一份 1.86 / 1.14 / 0.86 必然与 8 套模板漂移——每个模板的基准都不一样。
 
 ``page_padding`` **保留为"总"**：它是四边的兜底值来源（``支路 > 总 > 模板默认``）。改总
 滑杆 = 写 ``page_padding`` 并删掉四条支路 → 四边一起变。
@@ -55,8 +62,53 @@ PHOTO_SCALE_KEY = "photo_scale"
 # `--photo-scale` 声明——两处必须是同一个字面量，所以常量只在这里定义。
 PHOTO_SCALE_CSS_VAR = "--photo-scale"
 
-# 需要白名单放行、但不进 ``FORMAT_FIELDS`` 的全部键。
-EXTRA_FORMAT_KEYS: frozenset[str] = frozenset({*PAGE_MARGIN_KEYS.values(), PHOTO_SCALE_KEY})
+# ===== 三个"乘在模板基准上"的系数 =====
+#
+# 为什么同样**不进** ``FORMAT_FIELDS``：那张表直接喂「自制版式」编辑器与
+# ``resume_template_import.missing_format_keys()``。加进去会让编辑器凭空多 3 条滑杆，
+# 并且**所有存量自定义版式**在导入时报"缺 name_scale"——这是一次纯粹的界面回归。
+#
+# 书写顺序就是 ``scale_css_vars()`` 的产出顺序（name → section-title → entry），
+# 让"变量顺序"只有一个出处，测试可以逐字钉住。
+SCALE_KEYS_ORDER: tuple[str, ...] = ("name_scale", "section_title_scale", "entry_gap")
+
+# 区间：下限/上限都取"还能救回一行、但比例不崩"的那一档。
+# name 0.8 → 姓名比正文字号只大 49%（1.86×0.8），再小就不像姓名了；
+# 1.3 → 1.86×1.3≈2.4 倍，页头仍不超过正文宽的一半。
+# section_title 0.85 → 与正文几乎同高（层次仍在，靠字重和颜色区分）；1.25 → 明显强于姓名。
+# entry 1.8 → 三条实习之间能空出近两行，再大就是"故意分开"，用户会用 section_gap。
+_SCALE_MIN_MAX: dict[str, tuple[float, float]] = {
+    "name_scale": (0.8, 1.3),
+    "section_title_scale": (0.85, 1.25),
+    "entry_gap": (0.6, 1.8),
+}
+
+# 步长：姓名/小节标题是字号，0.02 已是肉眼可辨的一档；条目间距是垂直距离，0.05 一档够用。
+# 前端 ``resumeScaleParams.SCALE_BOUNDS`` 必须与这两张表逐键相等（有漂移守卫）。
+SCALE_STEPS: dict[str, float] = {
+    "name_scale": 0.02,
+    "section_title_scale": 0.02,
+    "entry_gap": 0.05,
+}
+
+SCALE_KEYS: frozenset[str] = frozenset(SCALE_KEYS_ORDER)
+
+# CSS 变量名（**连字符**，不是配置键名）：8 个模板写的是
+# `calc(var(--fs) * 1.86 * var(--name-scale, 1))`，`format_css` 写的是 `:root` 里那条
+# `--name-scale` 声明——两处必须是同一个字面量，所以常量只在这里定义。
+SCALE_CSS_VARS: dict[str, str] = {
+    "name_scale": "--name-scale",
+    "section_title_scale": "--section-title-scale",
+    "entry_gap": "--entry-gap",
+}
+
+# "没设过"时系数就是 1（模板基准原样）。写成常量而不是各处 ``1.0``，
+# 是为了让"缺键 = 不变"这条性质只有一个出处——它正是"默认参数产物逐字节不变"的地基。
+DEFAULT_SCALE = 1.0
+
+# 需要白名单放行、但不进 ``FORMAT_FIELDS`` 的全部键：
+# 四条分边页边距 + ``photo_scale`` + 三个系数。
+EXTRA_FORMAT_KEYS = frozenset({*PAGE_MARGIN_KEYS.values(), PHOTO_SCALE_KEY, *SCALE_KEYS})
 
 # ===== 区间（与 ``FORMAT_FIELDS["page_padding"]`` 完全一致）=====
 #
@@ -108,6 +160,9 @@ def extra_bounds(key: str) -> tuple[float, float]:
     """
     if key == PHOTO_SCALE_KEY:
         return PHOTO_SCALE_MIN, PHOTO_SCALE_MAX
+    scale_bounds = _SCALE_MIN_MAX.get(key)
+    if scale_bounds is not None:
+        return scale_bounds
     return PAGE_MARGIN_MIN, PAGE_MARGIN_MAX
 
 
@@ -257,8 +312,57 @@ def photo_scale_css_value(config: dict | None) -> str | None:
     return f"{scale:g}"
 
 
+def resolve_scale(config: dict | None, key: str) -> float:
+    """解析某个"乘在模板基准上"的系数：缺键 = ``1.0``，越界值收进自己的区间。
+
+    与 :func:`resolve_photo_scale` 是同一个口径（缺键不变、越界夹紧），只是区间按 ``key``
+    取。``key`` 不在 ``SCALE_KEYS`` 里时返回 ``1.0`` 而不是抛异常——调用方（``format_css``、
+    ``pdf_exporter.resolve_layout``）都是"按表取值"的循环，一个未知键应当表现为"这一项没设过"。
+
+    系数的落点只有三处，**三处必须同口径**：
+    1. ``format_css`` 的 ``:root`` 变量（HTML 预览 / 导出 HTML）；
+    2. ``pdf_exporter.resolve_layout`` 乘进 ``name_ratio`` / ``section_title_ratio`` / ``entry_gap``；
+    3. 前端 ``resumeScaleParams.resolveScale``（滑杆与探针）。
+    """
+    bounds = _SCALE_MIN_MAX.get(key)
+    if bounds is None:
+        return DEFAULT_SCALE
+    values = config if isinstance(config, dict) else {}
+    raw = _as_float(values.get(key))
+    if raw is None:
+        return DEFAULT_SCALE
+    return min(bounds[1], max(bounds[0], raw))
+
+
+def scale_css_vars(config: dict | None) -> list[tuple[str, str]]:
+    """逐键产出 ``(配置键, 值字符串)``，供 ``format_css`` 拼成 ``:root`` 声明。
+
+    两条硬性质：
+
+    1. **≈1 的键一个都不产出**——默认参数下 HTML 必须逐字节不变（``format_css({})`` 仍是
+       空串，``format_css({"name_scale": 1})`` 也是空串）。模板侧靠 ``var(--name-scale, 1)``
+       兜底，所以"不写"与"写 1"渲染结果完全相同。
+    2. **顺序固定** ``name → section-title → entry``（``SCALE_KEYS_ORDER``），不依赖 dict 或
+       frozenset 的遍历顺序——``:root`` 里的声明顺序参与字节对比。
+
+    值的形式与 ``photo_scale_css_value`` 一致（``f"{value:g}"``）：整数不带小数点、
+    无意义尾零去掉。前端 ``scaleProbeCss`` 逐字复刻这一条。
+    """
+    values = config if isinstance(config, dict) else {}
+    produced: list[tuple[str, str]] = []
+    for key in SCALE_KEYS_ORDER:
+        if key not in values:
+            continue
+        scale = resolve_scale(values, key)
+        if abs(scale - DEFAULT_SCALE) <= _EPSILON:
+            continue
+        produced.append((key, f"{scale:g}"))
+    return produced
+
+
 __all__ = [
     "DEFAULT_PHOTO_SCALE",
+    "DEFAULT_SCALE",
     "EXTRA_FORMAT_KEYS",
     "PAGE_MARGIN_KEYS",
     "PAGE_MARGIN_MAX",
@@ -271,6 +375,10 @@ __all__ = [
     "PHOTO_SCALE_MAX",
     "PHOTO_SCALE_MIN",
     "PHOTO_SCALE_STEP",
+    "SCALE_CSS_VARS",
+    "SCALE_KEYS",
+    "SCALE_KEYS_ORDER",
+    "SCALE_STEPS",
     "clamp_page_margin",
     "clamp_photo_scale",
     "extra_bounds",
@@ -278,4 +386,6 @@ __all__ = [
     "photo_scale_css_value",
     "resolve_page_margins",
     "resolve_photo_scale",
+    "resolve_scale",
+    "scale_css_vars",
 ]

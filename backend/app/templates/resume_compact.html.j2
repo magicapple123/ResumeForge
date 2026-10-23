@@ -28,15 +28,15 @@
   }
   .header { display: flex; align-items: flex-start; gap: calc(var(--fs) * 1.4); border-bottom: 1px solid var(--accent); padding-bottom: calc(var(--fs) * 0.7); margin-bottom: calc(var(--fs) * 0.9); }
   .header-main { flex: 1; min-width: 0; }
-  .header .name { font-size: calc(var(--fs) * 1.6); font-weight: 700; letter-spacing: 1px; }
+  .header .name { font-size: calc(var(--fs) * 1.6 * var(--name-scale, 1)); font-weight: 700; letter-spacing: 1px; }
   .name-extra { font-size: calc(var(--fs) * 0.93); font-weight: 400; color: var(--muted); }
   .header .intent { font-size: calc(var(--fs) * 1); color: var(--muted); margin-top: calc(var(--fs) * 0.2); }
   .header .contact { font-size: calc(var(--fs) * 0.9); color: var(--muted); margin-top: calc(var(--fs) * 0.3); }
   .header .contact span { margin-right: var(--fs); }
   .profile-photo { width: calc(var(--fs) * 5.4 * var(--photo-scale, 1)); height: calc(var(--fs) * 7 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: cover; border: 1px solid var(--line); }
   .section { margin-bottom: calc(var(--fs) * 0.85); }
-  .section-title { font-size: calc(var(--fs) * 1.05); font-weight: 700; letter-spacing: 0.5px; border-bottom: 1px solid var(--line); padding-bottom: calc(var(--fs) * 0.14); margin-bottom: calc(var(--fs) * 0.5); }
-  .entry { margin-bottom: calc(var(--fs) * 0.5); }
+  .section-title { font-size: calc(var(--fs) * 1.05 * var(--section-title-scale, 1)); font-weight: 700; letter-spacing: 0.5px; border-bottom: 1px solid var(--line); padding-bottom: calc(var(--fs) * 0.14); margin-bottom: calc(var(--fs) * 0.5); }
+  .entry { margin-bottom: calc(var(--fs) * 0.5 * var(--entry-gap, 1)); }
   .entry-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--fs); }
   .entry-head .title { font-size: var(--fs); font-weight: 600; }
   .entry-head .meta { font-size: calc(var(--fs) * 0.9); color: var(--muted); white-space: nowrap; }

@@ -47,7 +47,7 @@ from ...services.resume.resume_templates import (
     font_scale_spec,
     validated_format_config,
 )
-from ._shared import _to_resume_out
+from ._shared import _mark_saved, _to_resume_out
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +79,10 @@ def update_resume_layout(
     # None = 这次不涉及，保持原样（见 §9.1 R1）。
     if payload.language is not None:
         record.language = payload.language
+    # 版式保存成功 = 这份简历"存在了"：制作台草稿到这一步才进简历中心（0051）。
+    # 与内容保存同一条规则——用户点过「保存修改」，无论那一刻脏的是内容还是排版，
+    # 都说明他认了这一份。
+    _mark_saved(record)
     db.commit()
     db.refresh(record)
     return _to_resume_out(record)

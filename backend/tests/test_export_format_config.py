@@ -25,10 +25,16 @@ from app.services.export_pipeline import (
     render_config_fingerprint,
 )
 from app.services.resume.resume_template_format import (
+    FORMAT_FIELD_KEYS,
     FORMAT_FIELDS,
+    SCALE_CSS_VARS,
+    SCALE_KEYS,
+    SCALE_STEPS,
     SYSTEM_FONT,
+    extra_bounds,
     format_css,
     format_field_options,
+    scale_css_vars,
     validated_format_config,
 )
 from test_pdf_exporter import needs_font
@@ -168,6 +174,89 @@ def test_format_css_rules_match_frontend_probes():
     assert "body { line-height: 1.7 !important; }" in css
     assert "body { padding: 14mm !important; }" in css
     assert "1.70000" not in css
+
+# ===== 三个"乘在模板基准上"的系数（name_scale / section_title_scale / entry_gap）=====
+#
+# 它们与 `photo_scale` 同构：**不是**绝对覆盖值，只往 `:root` 写一条变量，模板侧写
+# `* var(--x, 1)` 兜底。所以验收只有两条：设过时逐字出变量、没设过时一个字节都不出。
+
+
+def test_scale_keys_are_not_format_fields():
+    """**不能**进 ``FORMAT_FIELDS``：那会让自制版式编辑器多 3 条滑杆，
+    并让所有存量自定义版式在导入时报"缺 name_scale"（`missing_format_keys()` 遍历它）。"""
+    assert not (SCALE_KEYS & set(FORMAT_FIELD_KEYS))
+    assert not (SCALE_KEYS & {item["key"] for item in format_field_options()})
+
+
+def test_scale_css_vars_are_silent_at_default():
+    """默认配置、显式 1.0、以及"没设过"三者必须都是空串——默认参数产物逐字节不变。"""
+    assert format_css({}) == ""
+    assert format_css({key: 1.0 for key in SCALE_KEYS}) == ""
+    assert scale_css_vars({}) == []
+    assert scale_css_vars({key: 1 for key in SCALE_KEYS}) == []
+
+
+def test_scale_css_vars_emit_exact_declarations():
+    """值的形式与 `photo_scale` 一致（`f"{value:g}"`），变量名是连字符字面量。"""
+    assert SCALE_CSS_VARS == {
+        "name_scale": "--name-scale",
+        "section_title_scale": "--section-title-scale",
+        "entry_gap": "--entry-gap",
+    }
+    assert format_css({"name_scale": 1.1}) == ":root { --name-scale: 1.1; }"
+    assert format_css({"section_title_scale": 0.9}) == ":root { --section-title-scale: 0.9; }"
+    assert format_css({"entry_gap": 1.25}) == ":root { --entry-gap: 1.25; }"
+
+
+def test_scale_css_vars_keep_a_fixed_order():
+    """`name → section-title → entry`：顺序参与字节对比，不能交给 dict 遍历顺序。"""
+    css = format_css({"entry_gap": 1.2, "section_title_scale": 0.9, "name_scale": 1.1})
+
+    assert css == ":root { --name-scale: 1.1; --section-title-scale: 0.9; --entry-gap: 1.2; }"
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "accepted"),
+    [
+        ("name_scale", 0.8, True),
+        ("name_scale", 1.3, True),
+        ("name_scale", 0.79, False),
+        ("name_scale", 1.31, False),
+        ("section_title_scale", 0.85, True),
+        ("section_title_scale", 1.25, True),
+        ("section_title_scale", 0.84, False),
+        ("section_title_scale", 1.26, False),
+        ("entry_gap", 0.6, True),
+        ("entry_gap", 1.8, True),
+        ("entry_gap", 0.59, False),
+        ("entry_gap", 1.81, False),
+    ],
+)
+def test_scale_bounds_clamp_at_the_edge_and_drop_outside(key: str, value: float, accepted: bool):
+    """边界值收、越界丢弃（与 `page_padding` 同一条白名单契约）。"""
+    assert (key in validated_format_config({key: value})) is accepted
+
+
+def test_scale_bounds_match_the_frontend_contract():
+    """区间常量只定义一次：前端 `resumeScaleParams.SCALE_BOUNDS` 逐键断言等于这里。"""
+    assert extra_bounds("name_scale") == (0.8, 1.3)
+    assert extra_bounds("section_title_scale") == (0.85, 1.25)
+    assert extra_bounds("entry_gap") == (0.6, 1.8)
+    assert SCALE_STEPS == {"name_scale": 0.02, "section_title_scale": 0.02, "entry_gap": 0.05}
+
+
+def test_scale_keys_do_not_disturb_existing_format_css():
+    """既有配置的产出逐字节不变：新键只在末尾追加，不重排也不改既有声明。"""
+    legacy = format_css({"line_height": 1.7, "page_padding": 14})
+
+    assert legacy == ("body { line-height: 1.7 !important; }\nbody { padding: 14mm !important; }")
+    assert "--name-scale" not in legacy
+    assert "--section-title-scale" not in legacy
+    assert "--entry-gap" not in legacy
+
+    with_scales = format_css({"line_height": 1.7, "page_padding": 14, "name_scale": 1.1})
+    # `:root` 永远排在规则之前，既有两条规则原样跟在后面。
+    assert with_scales == ":root { --name-scale: 1.1; }\n" + legacy
 
 
 # ===== 项 14：每份简历选字体（不是 FORMAT_FIELDS 的一项）=====

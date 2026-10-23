@@ -27,6 +27,7 @@ from app.services.resume.resume_layout_overrides import (
     PHOTO_SCALE_MAX,
     PHOTO_SCALE_MIN,
     PHOTO_SCALE_STEP,
+    SCALE_KEYS,
     clamp_page_margin,
     clamp_photo_scale,
     extra_bounds,
@@ -61,14 +62,22 @@ def test_margin_bounds_match_the_page_padding_field():
     )
 
 
-def test_extra_keys_are_exactly_the_four_sides_and_the_photo_scale():
+def test_extra_keys_are_the_sides_the_photo_scale_and_the_three_scales():
+    """``EXTRA_FORMAT_KEYS`` 的**完整**清单：多一个少一个都要在这里显形。
+
+    三个系数（``name_scale`` / ``section_title_scale`` / ``entry_gap``）与 ``photo_scale``
+    同属"乘在模板基准上"的可调系数，走同一条白名单路径；它们**不进** ``FORMAT_FIELDS``
+    （见下一个用例），所以这张表是它们唯一的登记处。
+    """
     assert set(EXTRA_FORMAT_KEYS) == {
         "page_padding_top",
         "page_padding_right",
         "page_padding_bottom",
         "page_padding_left",
         PHOTO_SCALE_KEY,
+        *SCALE_KEYS,
     }
+    assert {"name_scale", "section_title_scale", "entry_gap"} == SCALE_KEYS
     assert PAGE_MARGIN_SIDES == ("top", "right", "bottom", "left")
 
 

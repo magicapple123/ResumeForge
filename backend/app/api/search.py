@@ -29,7 +29,7 @@ from ..models.material import Material
 from ..models.profile import Skill
 from ..models.referral import Referral
 from ..models.reminder import Reminder
-from ..models.resume import ResumeRecord
+from ..models.resume import ResumeRecord, saved_only
 from ..schemas.job import JobListOut
 from ..schemas.resume import ResumeBrief
 from ..schemas.search import SearchHit, SearchResult
@@ -280,7 +280,8 @@ def search(
     if scope in ("all", "resumes"):
         rows = (
             db.query(ResumeRecord)
-            .filter(trash.live_only(ResumeRecord))
+            # 制作台草稿不进搜索结果：用户没保存过它（0051）。
+            .filter(trash.live_only(ResumeRecord), saved_only())
             .filter(_keyword_filter(db, ResumeRecord, "resume_record", q, _RESUMES_COLUMNS))
             .order_by(ResumeRecord.created_at.desc(), ResumeRecord.id.desc())
             .limit(limit)

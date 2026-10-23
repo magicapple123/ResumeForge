@@ -113,6 +113,8 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         fact_annotations=[
             FactAnnotation.model_validate(item) for item in (record.fact_annotations or [])
         ],
+        # 制作台靠它决定要不要把「保存」常驻（见 schema 里的说明）。
+        draft=bool(record.draft),
     )
 
 
@@ -121,3 +123,19 @@ def _get_live_resume(db: Session, resume_id: int) -> ResumeRecord:
     if record is None or trash.is_deleted(record):
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
     return record
+
+
+def _mark_saved(record: ResumeRecord) -> None:
+    """把**制作台草稿**转成一份真正的简历（0051）。
+
+    "用户保存过"= 他点了保存、而且写入真的成功了：只有到这一步，这份简历才该出现在
+    简历中心的列表/搜索/统计里。所以这个调用点必须落在**写入成功之后**（``db.commit()``
+    之前），不能放在进入制作台、打开编辑器这类"用户看了一眼"的动作上。
+
+    写入本身不提交：调用方各自 ``db.commit()``，与它们原有的提交点保持同一处——
+    多一次 commit 就会把"内容存了、草稿标记没存"拆成两笔事务。
+
+    非草稿记录不受影响（``if`` 判掉），所以重复调用是安全的。
+    """
+    if record.draft:
+        record.draft = False

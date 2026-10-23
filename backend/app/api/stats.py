@@ -31,7 +31,7 @@ from ..models.apply import (
 from ..models.claim import VERIFICATION_PENDING, ClaimRecord
 from ..models.job import JOB_STATUS_OPEN, Job
 from ..models.profile import utcnow
-from ..models.resume import ResumeRecord
+from ..models.resume import ResumeRecord, saved_only
 from ..models.tracker import ACTIVE_STATUSES, STALLED_DAYS, ApplicationTrack
 from ..schemas.job import JobListOut
 from ..schemas.resume import ResumeBrief
@@ -196,7 +196,8 @@ def get_stats(db: Session = Depends(get_db)):
     )
     latest_resumes = (
         db.query(ResumeRecord)
-        .filter(trash.live_only(ResumeRecord))
+        # 「最近简历」里不该出现还没保存的草稿（0051）。
+        .filter(trash.live_only(ResumeRecord), saved_only())
         .order_by(ResumeRecord.created_at.desc())
         .limit(_LATEST_LIMIT)
         .all()
@@ -220,11 +221,12 @@ def get_stats(db: Session = Depends(get_db)):
             _live_count(Job),
             _live_count(Job, Job.status == JOB_STATUS_OPEN),
             _live_count(Job, Job.favorite.is_(True)),
-            _live_count(ResumeRecord),
+            # 三个简历计数都排除草稿：一份还没保存的空白简历算进"我有几份简历"是错的（0051）。
+            _live_count(ResumeRecord, saved_only()),
             # "第一份交付"进度用的两个总量：关联了岗位的简历数与台账总数
             # （含各核实状态的活跃行）。都排除回收站。
-            _live_count(ResumeRecord, ResumeRecord.job_id.isnot(None)),
-            _live_count(ResumeRecord, ResumeRecord.created_at >= week_ago),
+            _live_count(ResumeRecord, saved_only(), ResumeRecord.job_id.isnot(None)),
+            _live_count(ResumeRecord, saved_only(), ResumeRecord.created_at >= week_ago),
             _live_count(ClaimRecord),
             _live_count(ClaimRecord, ClaimRecord.verification_status == VERIFICATION_PENDING),
             # 进行中的投递里久未更新的单独计数："卡住了"比"在推进"更需要用户去看。

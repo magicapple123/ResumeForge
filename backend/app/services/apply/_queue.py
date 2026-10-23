@@ -17,7 +17,7 @@ from ...models.apply import (
 )
 from ...models.job import Job
 from ...models.profile import utcnow
-from ...models.resume import ResumeRecord
+from ...models.resume import ResumeRecord, saved_only
 from ...schemas.apply import ApplyConfigIn, ApplyQueueItemOut, QueueStatus
 from .. import trash
 from ..profile.profile_service import get_profile_detail
@@ -271,7 +271,8 @@ def resolve_resume(db: Session, job_id: int | None, resume_id: int | None) -> Re
         return None
     return (
         db.query(ResumeRecord)
-        .filter(trash.live_only(ResumeRecord), ResumeRecord.job_id == job_id)
+        # 只挑**已保存**的简历：草稿里的内容用户还没认可，拿去投递是不可接受的（0051）。
+        .filter(trash.live_only(ResumeRecord), saved_only(), ResumeRecord.job_id == job_id)
         .order_by(ResumeRecord.created_at.desc(), ResumeRecord.id.desc())
         .first()
     )

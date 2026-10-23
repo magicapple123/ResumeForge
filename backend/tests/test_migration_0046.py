@@ -14,7 +14,7 @@ from app.services import search_fts
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0045_delivery_ledger"
-HEAD_REVISION = "0050_candidate_job_soft_delete"
+HEAD_REVISION = "0051_resume_draft"
 
 # 0044 也建 FTS 派生索引（knowledge_fts）：升到 0045 时它已经在库里，
 # "业务表集合"的口径必须把两代派生索引都排除。

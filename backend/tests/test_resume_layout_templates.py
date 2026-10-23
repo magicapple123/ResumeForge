@@ -41,12 +41,26 @@ _RATIO_SELECTORS: dict[str, str] = {
 }
 
 
+# 字号 / 间距的 `calc(var(--fs) * N ...)` 尾部允许挂**一个**系数变量（回退值都是 1）。
+#
+# 目前有四个：`--photo-scale`（照片宽高各乘一次）与新加的 `--name-scale` /
+# `--section-title-scale` / `--entry-gap`（"乘在模板基准上"的系数，见
+# `resume_layout_overrides.SCALE_CSS_VARS`）。回退值 `1` 让"没设过"与改动前完全等价，
+# 所以**取到的 N 仍是模板基准**——这条不能松，否则比例漂移守卫就失效了。
+#
+# 这四处必须**先**放宽再改模板：顺序反了会让 8 个模板 × 2 条断言一起红，
+# 而报错信息（"字号既不是 calc(var(--fs)*N) 也不是 var(--fs)"）会指向完全无关的地方。
+_SCALE_TAIL = r"(?:\s*\*\s*var\(--(?:photo-scale|name-scale|section-title-scale|entry-gap),\s*1\))?"
+
+
 def _selector_font_size_ratio(css: str, selector: str) -> float:
     """读出某条选择器的 `font-size` 是 `--fs` 的多少倍（`var(--fs)` 记作 1.0）。"""
     block = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
     assert block, f"模板里没找到选择器 {selector}"
     declarations = block.group(1)
-    scaled = re.search(r"font-size:\s*calc\(var\(--fs\)\s*\*\s*([\d.]+)\)", declarations)
+    scaled = re.search(
+        r"font-size:\s*calc\(var\(--fs\)\s*\*\s*([\d.]+)" + _SCALE_TAIL + r"\)", declarations
+    )
     if scaled:
         return float(scaled.group(1))
     assert re.search(r"font-size:\s*var\(--fs\)", declarations), (
@@ -106,13 +120,13 @@ def _selector_block(css: str, selector: str) -> str:
 def _fs_scale(declarations: str, prop: str) -> float | None:
     """读出某条声明里的 `calc(var(--fs) * N)` 里的 N；没有该属性返回 None。
 
-    尾部允许带一个 ``* var(--photo-scale, 1)``（照片的宽高各乘一次系数）。回退值 ``1``
-    让"没设过照片大小"与今天完全等价，所以**取到的 N 仍是模板原尺寸**——这一点不能松，
-    否则"照片默认尺寸"的漂移守卫就失效了。
+    尾部允许带一个系数变量（`_SCALE_TAIL`）：照片的宽高各乘一次 `--photo-scale`，
+    `.header .name` / `.section-title` 自带 `--name-scale` / `--section-title-scale`，
+    `.entry` 的 `margin-bottom` 带 `--entry-gap`。回退值 ``1`` 让"没设过"与今天完全等价，
+    所以**取到的 N 仍是模板基准**——这一点不能松，否则"默认尺寸/间距"的漂移守卫就失效了。
     """
     match = re.search(
-        re.escape(prop)
-        + r":\s*calc\(var\(--fs\)\s*\*\s*([\d.]+)(?:\s*\*\s*var\(--photo-scale,\s*1\))?\)",
+        re.escape(prop) + r":\s*calc\(var\(--fs\)\s*\*\s*([\d.]+)" + _SCALE_TAIL + r"\)",
         declarations,
     )
     return float(match.group(1)) if match else None

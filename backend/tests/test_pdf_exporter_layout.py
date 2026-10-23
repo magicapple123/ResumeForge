@@ -6,6 +6,7 @@
 复用主文件的 helper（needs_font / _text_runs / _body_lines / _summary_only_resume /
 _filler / _MM_TO_PT）。
 """
+
 import pytest
 from app.schemas.resume import ResumeContent
 from app.services.pdf_exporter import (
@@ -69,6 +70,55 @@ def test_resolve_layout_ignores_values_out_of_range():
     layout = resolve_layout(template="classic", base_px=14.0, format_config={"line_height": 9.9})
 
     assert layout.line_height == defaults["line_height"]
+
+
+@pytest.mark.parametrize("name", sorted(RESUME_TEMPLATES))
+def test_scale_keys_are_silent_by_default(name):
+    """不传三个系数时，PDF 的字号/间距与模板默认值**严格相等**（历史产物不变）。
+
+    这条是"HTML 与 PDF 同口径"的反向钉子：`resolve_scale` 缺键必须返回 1.0，
+    而不是某个"合理默认"——否则存量简历的 PDF 会凭空跳变。
+    """
+    defaults = TEMPLATE_LAYOUT_DEFAULTS[name]
+
+    layout = resolve_layout(template=name, base_px=14.0, format_config={})
+
+    assert layout.name_ratio == defaults["name_ratio"]
+    assert layout.section_title_ratio == defaults["section_title_ratio"]
+    assert layout.entry_gap == defaults["entry_gap"]
+
+
+@pytest.mark.parametrize("name", sorted(RESUME_TEMPLATES))
+def test_scale_keys_multiply_the_template_ratio(name):
+    """设了系数后 = 模板基准 × 系数（与模板 CSS 的 `* var(--x, 1)` 同一个算式）。"""
+    defaults = TEMPLATE_LAYOUT_DEFAULTS[name]
+
+    layout = resolve_layout(
+        template=name,
+        base_px=14.0,
+        format_config={
+            "name_scale": 1.2,
+            "section_title_scale": 0.9,
+            "entry_gap": 1.5,
+        },
+    )
+
+    assert layout.name_ratio == pytest.approx(defaults["name_ratio"] * 1.2)
+    assert layout.section_title_ratio == pytest.approx(defaults["section_title_ratio"] * 0.9)
+    assert layout.entry_gap == pytest.approx(defaults["entry_gap"] * 1.5)
+
+
+def test_scale_keys_only_touch_their_own_axis():
+    """姓名字号不该连带改性别字号/正文字号：`name_extra_ratio` 等原样不动。"""
+    defaults = TEMPLATE_LAYOUT_DEFAULTS["classic"]
+
+    layout = resolve_layout(template="classic", base_px=14.0, format_config={"name_scale": 1.3})
+
+    assert layout.name_extra_ratio == defaults["name_extra_ratio"]
+    assert layout.intent_ratio == defaults["intent_ratio"]
+    assert layout.contact_ratio == defaults["contact_ratio"]
+    assert layout.section_title_ratio == defaults["section_title_ratio"]
+    assert layout.entry_gap == defaults["entry_gap"]
 
 
 def test_fit_scale_is_gone_from_the_layout():
@@ -145,11 +195,17 @@ def test_line_height_override_really_changes_the_pdf_geometry():
     base_px = 14.0
 
     tight = build_resume_pdf(
-        resume, template="classic", page_limit=2, font_scale="standard",
+        resume,
+        template="classic",
+        page_limit=2,
+        font_scale="standard",
         format_config={"line_height": 1.2},
     )
     loose = build_resume_pdf(
-        resume, template="classic", page_limit=2, font_scale="standard",
+        resume,
+        template="classic",
+        page_limit=2,
+        font_scale="standard",
         format_config={"line_height": 2.2},
     )
 
@@ -173,11 +229,17 @@ def test_page_padding_override_moves_the_text_origin():
     resume = _summary_only_resume(_filler(300))
 
     narrow = build_resume_pdf(
-        resume, template="classic", page_limit=2, font_scale="standard",
+        resume,
+        template="classic",
+        page_limit=2,
+        font_scale="standard",
         format_config={"page_padding": 8},
     )
     wide = build_resume_pdf(
-        resume, template="classic", page_limit=2, font_scale="standard",
+        resume,
+        template="classic",
+        page_limit=2,
+        font_scale="standard",
         format_config={"page_padding": 18},
     )
 
@@ -197,19 +259,26 @@ def test_template_page_padding_default_is_used_when_not_overridden():
     compact_x = min(
         run[0]
         for run in _text_runs(
-            build_resume_pdf(resume, template="compact", page_limit=2, font_scale="standard").content
+            build_resume_pdf(
+                resume, template="compact", page_limit=2, font_scale="standard"
+            ).content
         )
     )
     minimal_x = min(
         run[0]
         for run in _text_runs(
-            build_resume_pdf(resume, template="minimal", page_limit=2, font_scale="standard").content
+            build_resume_pdf(
+                resume, template="minimal", page_limit=2, font_scale="standard"
+            ).content
         )
     )
 
     assert minimal_x > compact_x  # minimal 18mm > compact 12mm
     assert (minimal_x - compact_x) == pytest.approx(
-        (TEMPLATE_LAYOUT_DEFAULTS["minimal"]["padding_mm"] - TEMPLATE_LAYOUT_DEFAULTS["compact"]["padding_mm"])
+        (
+            TEMPLATE_LAYOUT_DEFAULTS["minimal"]["padding_mm"]
+            - TEMPLATE_LAYOUT_DEFAULTS["compact"]["padding_mm"]
+        )
         * _MM_TO_PT,
         abs=0.5,
     )
@@ -357,16 +426,20 @@ def test_pdf_left_origin_follows_only_the_left_margin():
     """PDF 正文的 x 起点只由**左**边距决定（右边距只收窄折行宽度）。"""
     resume = _summary_only_resume(_filler(300))
     asymmetric = build_resume_pdf(
-        resume, template="classic", page_limit=2, font_scale="standard",
+        resume,
+        template="classic",
+        page_limit=2,
+        font_scale="standard",
         format_config={"page_padding": 12, "page_padding_left": 8},
     )
     uniform = build_resume_pdf(
-        resume, template="classic", page_limit=2, font_scale="standard",
+        resume,
+        template="classic",
+        page_limit=2,
+        font_scale="standard",
         format_config={"page_padding": 8},
     )
 
     left_asymmetric = min(run[0] for run in _text_runs(asymmetric.content))
     left_uniform = min(run[0] for run in _text_runs(uniform.content))
     assert left_asymmetric == pytest.approx(left_uniform, abs=0.2)
-
-
