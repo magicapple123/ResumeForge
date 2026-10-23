@@ -50,8 +50,12 @@ vi.mock("../ResumePreview", () => ({
 vi.mock("./ResumeLayoutDiagnosisCard", () => ({ default: () => null }));
 // 工具栏两行的两组控件：P2 起由具名插槽渲染（不再经过 `ResumeLayoutControls` 壳）。
 // 这里给它们各自一句可辨认的文案，配合上面的插槽桩判断"组长有没有被接上"。
-vi.mock("./ResumeTemplateControls", () => ({ default: () => <span>结构类版式控件</span> }));
-vi.mock("./ResumeMeasureControls", () => ({ default: () => <span>度量类版式控件</span> }));
+vi.mock("./ResumeTemplateControls", () => ({
+  default: () => <span data-testid="template-controls">结构类版式控件</span>,
+}));
+vi.mock("./ResumeMeasureControls", () => ({
+  default: () => <span data-testid="measure-controls">度量类版式控件</span>,
+}));
 // 导出按钮渲染成真按钮：footer 的"左确认 / 右导出"顺序断言需要一个可定位的导出节点
 // （`导出选项` 是弹出面板里的另一个文案，不会撞）。
 vi.mock("../ExportButtons", () => ({ default: () => <button type="button">导出</button> }));
@@ -280,7 +284,7 @@ describe("生成说明与警告分级", () => {
 });
 
 describe("ResumeDetailPreview 底部按钮排满整行", () => {
-  it("「查看大图」打开 1:1 预览弹窗，并把当前页数带过去", async () => {
+  it("「查看大图」打开全屏工作台，并把当前页数带过去", async () => {
     renderPreview();
 
     fireEvent.click(screen.getByRole("button", { name: /查看大图/ }));
@@ -291,8 +295,21 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     expect(
       screen.getByText(new RegExp(`与当前 ${LAYOUT.page_limit} 页的设置一致`)),
     ).toBeInTheDocument();
-    // 弹窗里复用同一个预览组件（渲染细节由 ResumePreview 自己的测试覆盖，这里只钉"用的是它"）。
-    expect(document.querySelector(".resume-zoom-body")).not.toBeNull();
+    // 大图改成全屏工作台：排版控件留在左侧，预览仍由同一个 ResumePreview 渲染。
+    const workbench = document.querySelector(".resume-zoom-body");
+    const settings = workbench?.querySelector(".resume-zoom-settings");
+    const preview = workbench?.querySelector(".resume-zoom-preview-pane");
+    expect(settings).not.toBeNull();
+    expect(preview).not.toBeNull();
+    expect(settings?.querySelector('[data-testid="template-controls"]')).not.toBeNull();
+    expect(settings?.querySelector('[data-testid="measure-controls"]')).not.toBeNull();
+    expect(within(preview as HTMLElement).getByTestId("preview-mode")).toHaveTextContent("draft");
+
+    const dialog = screen.getByRole("dialog", { name: "查看简历大图" });
+    expect((dialog as HTMLElement).style.width).toBe("100vw");
+    expect((dialog as HTMLElement).style.height).toBe("100dvh");
+    expect((dialog as HTMLElement).style.top).toBe("0px");
+    expect(dialog.closest(".ant-modal-wrap")).toHaveClass("resume-zoom-workbench-wrap");
   });
 
   it("「查看大图」与主预览共用同一份口径：切到精确，大图也是精确", async () => {
@@ -393,7 +410,12 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     expect(footer.querySelectorAll(".resume-detail-footer-export")).toHaveLength(1);
 
     // 位置在 CSS 里、jsdom 不求值：读原文断言它占第 4-5 列且靠右收尾。
-    const css = readFileSync([process.cwd(), "src", "styles", "resume.css"].join("/"), "utf8");
+    // 2026 年样式表拆分后，`.resume-detail-footer*` 落在 resume-panels.css
+    // （resume.css 现为 @import 清单，读它只剩两行 import）。
+    const css = readFileSync(
+      [process.cwd(), "src", "styles", "resume-panels.css"].join("/"),
+      "utf8",
+    );
     expect(css).toContain("grid-column: 4 / 6");
     expect(css).toContain("justify-self: end");
   });

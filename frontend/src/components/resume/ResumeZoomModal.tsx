@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「查看大图」：把简历放到一个大窗口里按 1:1 看。
+ * 「查看大图」：全屏工作台，左侧调整排版参数、右侧查看简历效果。
  *
  * 为什么不复用外面的预览：外面那份为了塞进列表页，视口高度只有几百像素、还带缩放，
  * "这一页到底排得满不满、分页在哪"看不清。这里换一个大视口重新量一次，页面就是原尺寸。
@@ -70,8 +70,7 @@ export default function ResumeZoomModal({
   const zoomPreviewRef = previewRef ?? fallbackPreviewRef;
   // 目录**只取一次**，两个插槽共用（`useApi` 没有跨实例缓存，各取一次就是两个请求）。
   const { catalog } = useResumeTemplateCatalog();
-  // 大图里同样要有两行工具栏 + 纸面下方的缩放条，否则"大图"里调不了版式也放不大。
-  // 同上：结构类控件也不走紧凑形态，与主预览的第一行保持一致。
+  // 结构类参数在工作台左栏集中编辑；主预览仍使用它自己的工具栏插槽。
   const templateControls =
     layout && onApplyLayout ? (
       <ResumeTemplateControls
@@ -82,9 +81,7 @@ export default function ResumeZoomModal({
         onChange={onApplyLayout}
       />
     ) : undefined;
-  // 不加 `compact`（2026-10-21 用户截图）：紧凑形态下三条滑杆是"吃掉剩余宽度"的，
-  // 大图弹窗更宽，于是行距/页边距只有 56px、字号 213px，与外面主预览的 200px 对不上。
-  // 大图与主预览必须是**同一种形态**（`is-stacked`），否则同一组控件在两处看起来像两套。
+  // 维持 `is-stacked` 的命名与输入布局；工作台侧栏用专属 CSS 把滑杆宽度收进栏宽。
   const measureControls =
     layout && onApplyLayout ? (
       <ResumeMeasureControls
@@ -96,6 +93,7 @@ export default function ResumeZoomModal({
         onChange={onApplyLayout}
       />
     ) : undefined;
+  const hasSettings = Boolean(templateControls || measureControls);
   return (
     <Modal
       title="查看简历大图"
@@ -113,37 +111,69 @@ export default function ResumeZoomModal({
           </Space>
         ) : null
       }
-      width="min(1240px, 96vw)"
-      // 弹窗自身滚动：预览的纵向空间本来就归外层管理（见 ResumePreview），内容比视口高时
-      // 只滚这里，卡片整体始终完整呈现在视口内，不再需要在弹窗外整页滚动。
+      width="100vw"
+      style={{ top: 0, height: "100dvh", maxWidth: "none", margin: 0 }}
+      classNames={{ wrapper: "resume-zoom-workbench-wrap" }}
       styles={{
-        body: {
-          maxHeight: "var(--rf-modal-body-max-h)",
-          overflowY: "auto",
-          overflowX: "hidden",
-          paddingTop: 8,
+        wrapper: {
+          inset: 0,
+          display: "flex",
+          alignItems: "stretch",
+          overflow: "hidden",
+          padding: 0,
         },
+        container: {
+          display: "flex",
+          flexDirection: "column",
+          height: "100dvh",
+          maxHeight: "100dvh",
+          margin: 0,
+          padding: 0,
+          borderRadius: 0,
+          overflow: "hidden",
+        },
+        header: { flex: "0 0 auto", marginBottom: 0, borderRadius: 0 },
+        body: {
+          display: "flex",
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflow: "hidden",
+          padding: 0,
+        },
+        footer: { flex: "0 0 auto", marginTop: 0 },
       }}
       destroyOnHidden
     >
-      <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-        按原始尺寸显示，虚线是分页位置（与当前 {pages} 页的设置一致）。缩放用「放大预览」
-        「缩小预览」两个按钮，也可以按住 Ctrl 滚滚轮。
-      </Typography.Paragraph>
-      <div className="resume-zoom-body">
-        <ResumePreview
-          ref={zoomPreviewRef}
-          templateControls={templateControls}
-          measureControls={measureControls}
-          html={html}
-          pages={pages}
-          warnings={warnings}
-          // 视角更大：占满窗口高度，页面就能以 1:1 显示（不必再缩到 0.x 倍）。
-          height={Math.round(window.innerHeight * 0.72)}
-          previewMode={previewMode}
-          onPreviewModeChange={onPreviewModeChange}
-          exactPreview={exactPreview}
-        />
+      <div className={`resume-zoom-body${hasSettings ? "" : " is-preview-only"}`}>
+        {hasSettings ? (
+          <div className="resume-zoom-settings">
+            {templateControls ? (
+              <div className="resume-zoom-settings-template">{templateControls}</div>
+            ) : null}
+            {measureControls ? (
+              <div className="resume-zoom-settings-measure">{measureControls}</div>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="resume-zoom-preview-pane">
+          <Typography.Paragraph type="secondary" className="resume-zoom-workbench-note">
+            按原始尺寸显示，虚线是分页位置（与当前 {pages} 页的设置一致）。缩放用「放大预览」
+            「缩小预览」两个按钮，也可以按住 Ctrl 滚滚轮。
+          </Typography.Paragraph>
+          <div className="resume-zoom-preview-scroll">
+            <ResumePreview
+              ref={zoomPreviewRef}
+              html={html}
+              pages={pages}
+              warnings={warnings}
+              // 大图与主预览共用版式状态和渲染器，左右分栏只改变编辑器布局。
+              height={Math.round(window.innerHeight * 0.72)}
+              previewMode={previewMode}
+              onPreviewModeChange={onPreviewModeChange}
+              exactPreview={exactPreview}
+            />
+          </div>
+        </div>
       </div>
     </Modal>
   );

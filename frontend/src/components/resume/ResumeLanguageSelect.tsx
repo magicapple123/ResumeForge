@@ -19,7 +19,7 @@
  * 了两次；下拉在排版栏这种密集的工具条里也更省横向空间（这一行已经有页数、字号）。
  */
 import { Select } from "antd";
-import { useI18n } from "../../i18n/I18nProvider";
+import { useI18n } from "../../i18n/i18nContext";
 import type { ResumeLanguage } from "../../types";
 
 /**

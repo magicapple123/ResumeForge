@@ -19,20 +19,8 @@ import type { PdfPreviewPage } from "../api/attachments";
 import { previewPdf } from "../api/attachments";
 import type { StagedFile } from "../hooks/useRecognitionFiles";
 import { canPreviewImage } from "../utils/attachments";
-
-/** 体积文案：B / KB / MB（MB 保留一位小数）。 */
-export function formatFileSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  if (bytes < 1024) return `${Math.round(bytes)} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/** 是否按 PDF 处理：MIME 与扩展名任一命中即可（用户给的 MIME 不一定可信）。 */
-export function isPdfFile(file: StagedFile): boolean {
-  const mime = file.mime_type.split(";", 1)[0].trim().toLowerCase();
-  return mime === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-}
+// 体积文案与 PDF 判定是纯函数，住在 `utils/` 里：本文件只导出组件，热更新才只换这一个。
+import { formatFileSize, isPdfFile } from "../utils/recognitionFileMeta";
 
 function FileSummary({ file, icon }: { file: StagedFile; icon: ReactNode }) {
   return (

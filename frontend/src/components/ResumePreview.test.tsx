@@ -363,8 +363,9 @@ describe("ResumePreview 溢出时的多页视图", () => {
   });
 
   it("分页阴影收在页间隙内，不覆盖紧贴页边的简历内容", () => {
+    // 2026 年样式表拆分后，页间隙规则落在 resume-canvas.css（resume.css 现为 @import 清单）。
     const css: string = readFileSync(
-      [process.cwd(), "src", "styles", "resume.css"].join("/"),
+      [process.cwd(), "src", "styles", "resume-canvas.css"].join("/"),
       "utf8",
     );
     const separator = css.match(/\.resume-preview-page-separator-line\s*\{([^}]*)\}/)?.[1] ?? "";

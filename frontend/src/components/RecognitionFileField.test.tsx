@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StagedFile } from "../hooks/useRecognitionFiles";
 import RecognitionFileField from "./RecognitionFileField";
-import { formatFileSize, isPdfFile } from "./RecognitionFilePreview";
+import { formatFileSize, isPdfFile } from "../utils/recognitionFileMeta";
 
 // 与 `styles/color-regression.test.ts` 同一套写法：从磁盘读 CSS 原文（jsdom 测不出布局）。
 declare const process: { cwd(): string };

@@ -1,20 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 简历微调表单：编辑结构化内容后交由父组件保存并重新渲染。 */
-import { ImportOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Col,
-  Collapse,
-  Form,
-  Grid,
-  Input,
-  Modal,
-  Row,
-  Space,
-  Tabs,
-  Tooltip,
-} from "antd";
+/** 简历微调表单：编辑结构化内容后交由父组件保存并重新渲染。
+ *
+ *  弹窗骨架（Modal + 两栏布局 + Form）与提交收在这里；「基本信息」那一组字段在
+ *  `resume/ResumeBasicInfoTab.tsx`，未保存修改的 beforeunload 守卫在
+ *  `resume/useBeforeUnloadGuard.ts`（均为纯搬迁，DOM 结构与文案未变）。
+ */
+import { App, Collapse, Form, Grid, Modal, Tabs } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ResumeContent } from "../types";
@@ -83,6 +74,8 @@ import { resolveEditorTarget } from "./resume-editor/ResumeEditorTarget";
 import { EDITOR_FIELD_SCROLL_OPTIONS } from "./resume-editor/editorFieldScroll";
 import { ProfileFillProvider } from "./resume-editor/profileFillContext";
 import { useEditorDraftBar } from "./resume-editor/useEditorDraftBar";
+import ResumeBasicInfoTab from "./resume/ResumeBasicInfoTab";
+import { useBeforeUnloadGuard } from "./resume/useBeforeUnloadGuard";
 import { readResumeValueByPath } from "../utils/resumeFieldPath";
 import { hasAnyResumeContent } from "../utils/profileToResume";
 import type { ProfileFillSources } from "../features/profile/profileFillOptions";
@@ -137,9 +130,14 @@ export default function ResumeEditorModal({
   // 的 class——判两次会出现"body 不滚 + grid 不是双栏"，内容是滚不动的。
   const wideLayout = Boolean(referencePanel) && Boolean(screens.lg);
 
-  // 基本信息里只有「个人总结」能从资料填入：姓名/手机/邮箱是身份信息，用户可能就在这份
-  // 简历里改过它们，从资料覆盖回去等于把他刚改的抹掉。
+  // 基本信息里只有「个人总结」能从资料填入（见 `resume/ResumeBasicInfoTab`）：
+  // 姓名/手机/邮箱是身份信息，用户可能就在这份简历里改过它们，从资料覆盖回去等于把
+  // 他刚改的抹掉。
   const summarySource = fillSources?.summary?.trim() ?? "";
+  const fillSummary = useCallback(() => {
+    setFormValue(["summary"], summarySource);
+    setDirty(true);
+  }, [setFormValue, summarySource]);
   // 上下文的值必须稳定：每次渲染新建一个对象会让所有消费它的分区重渲染（表单很大）。
   const fillContextValue = useMemo(
     () =>
@@ -216,17 +214,8 @@ export default function ResumeEditorModal({
   }
 
   // 弹窗开着且没保存的修改还在时，挂 beforeunload（照抄 ProfilePage 的模式）：
-  // 刷新/关闭浏览器出原生确认，不再静默丢稿。
-  useEffect(() => {
-    if (!open || !dirty) return;
-    const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      // Chrome/Edge 只认 returnValue，两者都给。
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [open, dirty]);
+  // 刷新/关闭浏览器出原生确认，不再静默丢稿。实现在 resume/useBeforeUnloadGuard。
+  useBeforeUnloadGuard(open && dirty);
 
   useEffect(() => {
     if (!open || !content) return;
@@ -260,76 +249,7 @@ export default function ResumeEditorModal({
       {
         key: "basic",
         label: "基本信息",
-        children: (
-          <Row gutter={12}>
-            <Col xs={24} md={8}>
-              <Form.Item name="name" label="姓名">
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col xs={12} md={8}>
-              <Form.Item name="gender" label="性别">
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col xs={12} md={8}>
-              <Form.Item name="birth_year" label="出生年份">
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={8}>
-              <Form.Item name="phone" label="手机">
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={8}>
-              <Form.Item name="email" label="邮箱">
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={8}>
-              <Form.Item name="city" label="所在城市">
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={8}>
-              <Form.Item name="github" label="GitHub 主页">
-                <Input placeholder="https://github.com/用户名" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={8}>
-              <Form.Item name="personal_website" label="个人主页">
-                <Input placeholder="https://example.com" />
-              </Form.Item>
-            </Col>
-            <Col span={24}>
-              <Form.Item name="job_intent" label="求职意向">
-                <Input />
-              </Form.Item>
-            </Col>
-            <Col span={24}>
-              <Form.Item name="summary" label="个人总结">
-                <Input.TextArea rows={5} />
-              </Form.Item>
-              {summarySource && (
-                <Space size={6} style={{ marginTop: -8, marginBottom: 12 }}>
-                  <Tooltip title="把「我的资料」里的个人总结写到这一栏（会覆盖当前内容，可再用撤销前的原文改回）">
-                    <Button
-                      size="small"
-                      icon={<ImportOutlined />}
-                      onClick={() => {
-                        setFormValue(["summary"], summarySource);
-                        setDirty(true);
-                      }}
-                    >
-                      从我的资料填入个人总结
-                    </Button>
-                  </Tooltip>
-                </Space>
-              )}
-            </Col>
-          </Row>
-        ),
+        children: <ResumeBasicInfoTab summarySource={summarySource} onFillSummary={fillSummary} />,
       },
       { key: "education", label: "教育", children: <EducationEditor /> },
       { key: "experience", label: "实习/工作", children: <ExperienceEditor /> },
@@ -353,8 +273,9 @@ export default function ResumeEditorModal({
           ]
         : []),
     ],
-    // summarySource 决定「填入个人总结」是否出现；setFormValue 已用 useCallback 固定。
-    [resumeId, content, form, summarySource, setFormValue],
+    // summarySource 决定「填入个人总结」是否出现；fillSummary 已用 useCallback 固定
+    // （它自己依赖 setFormValue），只在值真的变时才重建标签页。
+    [resumeId, content, form, summarySource, fillSummary],
   );
 
   const handleFinish = async (values: ResumeContent) => {

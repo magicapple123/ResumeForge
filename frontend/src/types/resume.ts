@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历内容、生成选项和简历建议类型。 */
+import type { ResumeFormatConfig } from "./resumeFormat";
 import type { TemplateMarketPreset } from "./templateMarket";
 
 export interface ResumeEducation {
@@ -294,64 +295,20 @@ export interface DeliveryDetail extends DeliverySummary {
 
 /** 版式覆盖：键取自 `ResumeFormatField.key`，值都是数值（颜色也是十六进制字符串）。
  *  例外是 `section_order`：它是一串分区键，不是 CSS 数值（见 resumeSectionOrder.ts）。 */
-import type { ResumeFormatConfig } from "./resumeFormat";
+export type { ResumeFormatConfig } from "./resumeFormat";
 
-export type { ResumeFormatConfig };
-
-/** 「自动一页」用的实测高度，单位随意、只要两者同单位（前端传的是 CSS 像素）。 */
-export interface ResumeLayoutMeasure {
-  used_height: number;
-  page_content_height: number;
-  page_limit: number;
-}
-
-export type ResumeLayoutStatus =
-  "overflow" | "dense" | "healthy" | "sparse" | "too_sparse" | "unknown";
-
-export interface ResumeLayoutSuggestion {
-  kind: string;
-  title: string;
-  detail: string;
-}
-
-export interface ResumeLayoutPageFill {
-  page: number;
-  fill: number;
-}
-
-export interface ResumeLayoutDiagnosis {
-  status: ResumeLayoutStatus;
-  status_label: string;
-  summary: string;
-  /** 整体填充度（0~1 的小数，可能大于 1 表示溢出）。 */
-  fill: number;
-  pages_needed: number;
-  page_limit: number;
-  pages: ResumeLayoutPageFill[];
-  suggestions: ResumeLayoutSuggestion[];
-}
-
-/** 一档候选版式：把 `css` 注入预览、量一次，够放下就用它。 */
-export interface ResumeFitCandidate {
-  key: string;
-  label: string;
-  config: ResumeFormatConfig;
-  css: string;
-}
-
-export interface ResumeFitRoom {
-  has_room: boolean;
-  steps: number;
-  font_floor_px: number;
-  font_adjust_floor: number;
-  font_floor_note: string;
-}
-
-export interface ResumeLayoutAnalysis {
-  diagnosis: ResumeLayoutDiagnosis;
-  fit_ladder: ResumeFitCandidate[];
-  fit_room: ResumeFitRoom;
-}
+/** 版式诊断与「自动一页」的类型组：定义在 `resumeLayout.ts`，此处 re-export
+ *  保持所有既有 `@/types/resume` 导入路径不变（纯搬迁，未改字段）。 */
+export type {
+  ResumeFitCandidate,
+  ResumeFitRoom,
+  ResumeLayoutAnalysis,
+  ResumeLayoutDiagnosis,
+  ResumeLayoutMeasure,
+  ResumeLayoutPageFill,
+  ResumeLayoutStatus,
+  ResumeLayoutSuggestion,
+} from "./resumeLayout";
 
 export interface ResumeDetail extends ResumeBrief {
   content: ResumeContent;

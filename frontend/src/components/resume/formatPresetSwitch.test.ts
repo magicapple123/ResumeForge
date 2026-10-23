@@ -9,7 +9,7 @@
  * 纯函数，直接测（不必渲染整套控件再模拟 antd Select）。
  */
 import { describe, expect, it } from "vitest";
-import { layoutWithFormatPreset } from "./ResumeTemplateControls";
+import { layoutWithFormatPreset } from "./layoutWithFormatPreset";
 import type { ResumeFormatConfig, ResumeLayout } from "../../types";
 
 const PRESETS: { name: string; config: ResumeFormatConfig }[] = [
