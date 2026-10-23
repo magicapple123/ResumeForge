@@ -166,8 +166,8 @@ class AssetRestorePlan:
     ) -> None:
         try:
             name = _assert_safe_asset_name(entry.get("name"), category)
-        except BackupError as exc:
-            self.integrity_issues.append(f"{label} {exc}")
+        except BackupError:
+            self.integrity_issues.append(f"{label} 附件名不合法，已跳过")
             return
         member = f"{prefix}{name}"
         if member not in members:
@@ -177,8 +177,9 @@ class AssetRestorePlan:
         try:
             size, digest = _stream_member_to_file(archive, member, staged)
         except (OSError, zipfile.BadZipFile) as exc:
+            logger.warning("附件 %s/%s 读出失败：%s", category, name, exc)
             self.integrity_issues.append(
-                f"{label} {category}/{name}：附件无法从备份包读出（{exc}）"
+                f"{label} {category}/{name}：附件无法从备份包读出，详情见服务端日志"
             )
             return
 
@@ -203,7 +204,10 @@ class AssetRestorePlan:
                 _, existing = file_digest(target)
             except OSError as exc:
                 staged.unlink(missing_ok=True)
-                self.conflicts.append(f"{label} {category}/{name}：本机同名文件无法读取（{exc}）")
+                logger.warning("本机同名附件 %s/%s 读取失败：%s", category, name, exc)
+                self.conflicts.append(
+                    f"{label} {category}/{name}：本机同名文件无法读取，详情见服务端日志"
+                )
                 return
             if existing == digest:
                 # 本机已经是这一份内容：无需写入，也不算冲突。
@@ -286,7 +290,10 @@ class AssetRestorePlan:
                 )
                 restored[item.category] += 1
             except OSError as exc:
-                issues.append(f"{item.section} {item.category}/{item.name}：附件发布失败（{exc}）")
+                logger.warning("附件 %s/%s 发布失败：%s", item.category, item.name, exc)
+                issues.append(
+                    f"{item.section} {item.category}/{item.name}：附件发布失败，详情见服务端日志"
+                )
         return restored, issues
 
     def rollback(self) -> None:
@@ -356,7 +363,8 @@ def _verify_one(path: Path, category: str, name: str, entry: Mapping[str, Any]) 
     try:
         size, digest = file_digest(path)
     except OSError as exc:
-        return [f"{category}/{name}：恢复后无法读取（{exc}）"]
+        logger.warning("附件 %s/%s 恢复后读取失败：%s", category, name, exc)
+        return [f"{category}/{name}：恢复后无法读取，详情见服务端日志"]
     expected_size = entry.get("size_bytes")
     if isinstance(expected_size, int) and size != expected_size:
         return [f"{category}/{name}：恢复后大小不符（期望 {expected_size}，实际 {size}）"]

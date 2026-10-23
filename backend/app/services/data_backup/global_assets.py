@@ -191,14 +191,16 @@ def restore_global_assets(archive_path: Path, payload: dict[str, Any] | None) ->
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        result["issues"].append(f"无法创建字体目录（{exc}）")
+        logger.warning("字体目录创建失败：%s", exc)
+        result["issues"].append("无法创建字体目录，详情见服务端日志")
         return result
 
     staging = directory.parent / f".rf-fonts-{secrets.token_hex(8)}"
     try:
         staging.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        result["issues"].append(f"无法创建字体暂存目录（{exc}）")
+        logger.warning("字体暂存目录创建失败：%s", exc)
+        result["issues"].append("无法创建字体暂存目录，详情见服务端日志")
         return result
     try:
         with zipfile.ZipFile(archive_path) as archive:
@@ -206,7 +208,8 @@ def restore_global_assets(archive_path: Path, payload: dict[str, Any] | None) ->
             _restore_names(archive, directory, result)
             _restore_active(archive, directory, result)
     except (OSError, zipfile.BadZipFile) as exc:
-        result["issues"].append(f"字体恢复中断（{exc}）")
+        logger.warning("字体恢复中断：%s", exc)
+        result["issues"].append("字体恢复中断，详情见服务端日志")
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return result
@@ -243,7 +246,8 @@ def _restore_font_files(
             digest, size = _extract_verified(archive, info, temporary)
         except BackupError as exc:
             temporary.unlink(missing_ok=True)
-            result["issues"].append(f"字体「{name}」校验失败（{exc}）")
+            logger.warning("字体「%s」校验失败：%s", name, exc)
+            result["issues"].append(f"字体「{name}」校验失败，详情见服务端日志")
             continue
         expected_size = entry.get("size_bytes")
         if size != expected_size or digest != entry.get("sha256"):
@@ -257,7 +261,8 @@ def _restore_font_files(
             # 本机已有同名字体：保留本机那份（可能是用户自己换过的版本）。
             result["skipped"] += 1
         except OSError as exc:
-            result["issues"].append(f"字体「{name}」写入失败（{exc}）")
+            logger.warning("字体「%s」写入失败：%s", name, exc)
+            result["issues"].append(f"字体「{name}」写入失败，详情见服务端日志")
 
 
 def _extract_verified(
@@ -314,7 +319,8 @@ def _restore_names(archive: zipfile.ZipFile, directory: Path, result: dict[str, 
         user_fonts._write_names(local)  # noqa: SLF001 - 同上
         result["names_added"] = added
     except OSError as exc:
-        result["issues"].append(f"字体显示名写入失败（{exc}）")
+        logger.warning("字体显示名写入失败：%s", exc)
+        result["issues"].append("字体显示名写入失败，详情见服务端日志")
 
 
 def _restore_active(archive: zipfile.ZipFile, directory: Path, result: dict[str, Any]) -> None:
@@ -331,7 +337,8 @@ def _restore_active(archive: zipfile.ZipFile, directory: Path, result: dict[str,
         user_fonts.set_active(name)
         result["active_set"] = True
     except (OSError, user_fonts.FontError) as exc:
-        result["issues"].append(f"当前字体未能设置（{exc}）")
+        logger.warning("当前字体设置失败：%s", exc)
+        result["issues"].append("当前字体未能设置，详情见服务端日志")
 
 
 __all__ = [
