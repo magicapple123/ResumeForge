@@ -59,7 +59,7 @@ describe("颜色守卫", () => {
         // 唯一的白字例外：`color: #fff` / `color: #ffffff`。
         if (property === "color" && /^#(fff|ffffff)$/i.test(match[2].trim())) return;
         offenders.push({
-          file: file.replace(/\.\.\//g, ""),
+          file: file.startsWith("../") ? file.slice(3) : file,
           line: index + 1,
           text: text.trim(),
         });

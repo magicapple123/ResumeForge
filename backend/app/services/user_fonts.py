@@ -82,18 +82,22 @@ def _write_names(names: dict[str, str]) -> None:
 def font_path(name: str) -> Path:
     """按文件名取字体路径（拒绝任何目录成分，调用方不必再拼路径）。
 
-    分隔符先归一再取末段（``os.path.basename`` 是 CodeQL 认可的目录成分剥离）：
-    Windows 上 ``\\`` 也是分隔符，只认 ``/`` 会把 ``..\\x.ttf`` 这类名字在 POSIX
-    上当普通文件名放过去。``safe != name`` 一道闸把任何带目录成分的名字全拒掉。
+    分隔符先归一再取末段，把任何带目录成分的名字（含 Windows 反斜杠写法）全部
+    拒在门外；文件从目录清单里**按名字对号**取，返回值由 ``iterdir`` 构造——
+    路径的每一段都来自磁盘清单而不是用户输入（CodeQL 的 path-injection 口径下
+    ``basename`` 不算消毒，拼出来的路径仍会被盯上）。
     """
     normalized = name.replace("\\", "/")
     safe = os.path.basename(normalized)
     if not safe or safe in {".", ".."} or safe != normalized or safe == ACTIVE_FILENAME:
         raise FontError("字体文件名不合法")
-    path = fonts_dir() / safe
-    if not path.is_file():
+    directory = fonts_dir()
+    if not directory.is_dir():
         raise FontError("字体文件不存在")
-    return path
+    for candidate in directory.iterdir():
+        if candidate.name == safe and candidate.is_file():
+            return candidate
+    raise FontError("字体文件不存在")
 
 
 def list_fonts(include_builtin: bool = False) -> list[dict[str, Any]]:
