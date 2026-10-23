@@ -41,8 +41,12 @@ export function trashManualBackup(name: string): Promise<{ name: string; trash_p
   return request(`/backups/manual/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
-/** 清理类别（R19）：后端 `cleanup.CATEGORY_KEYS` 的镜像，用作 `categories` 参数取值。 */
-export type CleanupCategoryKey = "backups" | "backup-trash" | "auto-backups" | "logs" | "old-logs";
+/** 清理类别（R19）：后端 `cleanup.CATEGORY_KEYS` 的镜像，用作 `categories` 参数取值。
+ *
+ * 日志只有一类 `logs`：曾与 `old-logs` 并存（后者指向无人写入的 `runtime/logs`，
+ * 界面因此多出一个永远清不到东西的选项），后端已合并删除。
+ */
+export type CleanupCategoryKey = "backups" | "backup-trash" | "auto-backups" | "logs";
 
 /** 清理候选（R19）：超期备份与滚动日志；preview 不删任何东西。 */
 export interface CleanupCandidate {

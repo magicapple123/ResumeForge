@@ -141,19 +141,43 @@ def test_trash_and_auto_backups_have_no_retention_policy():
 def test_categories_select_only_the_named_kinds():
     _write("backups/.trash/r1.zip", 5, age_days=40)
     _write("auto-backups/main/s1.db", 6, age_days=40)
-    _write("runtime/logs/old.log", 7, age_days=40)
+    _write("logs/old.log", 7, age_days=40)
 
     plan = plan_cleanup(older_than_days=30, categories={"logs"})
 
-    assert [item["path"] for item in plan["candidates"]] == ["runtime/logs/old.log"]
+    assert [item["path"] for item in plan["candidates"]] == ["logs/old.log"]
     assert plan["totals"] == {"files": 1, "bytes": 7}
     # 未选中的类别仍然报出体积：弹窗里取消勾选后，用户还要看到这一堆有多少东西。
     assert plan["by_category"]["auto-backups"]["files"] == 1
     assert plan["by_category"]["logs"] == {"label": "运行日志", "files": 1, "bytes": 7}
 
 
+def test_the_logs_category_points_at_the_directory_that_is_actually_written():
+    """「运行日志」必须指 ``logs/``，不是 ``runtime/logs/``。
+
+    这条是 2026-10 那处死路径的回归：``runtime/logs`` 从来没有人写（全后端不存在
+    ``DATA_DIR / "runtime"`` 的写入点），但界面上「运行日志」指向它，于是用户点清理
+    永远清不到东西；真正在滚动的 ``logs/backend.log``（+ 4 个轮转）反被标成「旧日志」。
+    """
+    live = _write("logs/backend.log.1", 11, age_days=40)
+    dead = _write("runtime/logs/old.log", 13, age_days=40)
+
+    plan = plan_cleanup(older_than_days=30)
+
+    listed = {item["path"] for item in plan["candidates"]}
+    assert "logs/backend.log.1" in listed
+    assert "runtime/logs/old.log" not in listed, "无人写入的目录不该出现在清单里"
+    assert dead.exists() and live.exists()
+    # 类别表就是弹窗的选项表：不允许再出现一个指向空目录的类别。
+    relative_paths = {category.relative for category in cleanup.CATEGORIES}
+    assert "logs" in relative_paths
+    assert "runtime/logs" not in relative_paths
+    assert [item["key"] for item in plan["categories"]].count("logs") == 1
+    assert "old-logs" not in [item["key"] for item in plan["categories"]]
+
+
 def test_an_empty_category_set_cleans_nothing(client, data_dir):
-    _write("runtime/logs/old.log", 8, age_days=40)
+    _write("logs/old.log", 8, age_days=40)
 
     plan = plan_cleanup(older_than_days=30, categories=set())
     assert plan["candidates"] == []
@@ -161,7 +185,7 @@ def test_an_empty_category_set_cleans_nothing(client, data_dir):
 
     result = run_cleanup(older_than_days=30, categories=set())
     assert result["moved"] == 0 and result["freed_bytes"] == 0
-    assert (data_dir / "runtime/logs/old.log").exists()
+    assert (data_dir / "logs/old.log").exists()
 
     # 接口层同样区分"没传 categories"（=全部）与"传了空"（=什么都不清）。
     preview = client.get("/api/stats/storage/cleanup-preview", params={"categories": ""})
@@ -171,7 +195,7 @@ def test_an_empty_category_set_cleans_nothing(client, data_dir):
         "/api/stats/storage/cleanup", json={"older_than_days": 30, "categories": []}
     )
     assert response.status_code == 200 and response.json()["moved"] == 0
-    assert (data_dir / "runtime/logs/old.log").exists()
+    assert (data_dir / "logs/old.log").exists()
 
 
 def test_unknown_category_is_rejected_with_the_legal_values(client):
@@ -179,31 +203,42 @@ def test_unknown_category_is_rejected_with_the_legal_values(client):
 
     assert response.status_code == 400
     detail = response.json()["detail"]
-    for key in ("backups", "backup-trash", "auto-backups", "logs", "old-logs"):
+    for key in ("backups", "backup-trash", "auto-backups", "logs"):
         assert key in detail
+    # 已退役的旧类别：要么被拒绝，要么被当成合法值——绝不允许"接受了但永远清不到东西"。
+    assert "old-logs" not in detail
 
     preview = client.get("/api/stats/storage/cleanup-preview", params={"categories": "bogus"})
     assert preview.status_code == 400
+    # 显式传退役类别同样被拒绝（而不是静默当成"全部"）。
+    retired = client.get("/api/stats/storage/cleanup-preview", params={"categories": "old-logs"})
+    assert retired.status_code == 400
+    # 执行端与预览端同一口径：退役类别在 POST 上也是 400，不能"预览拒绝、执行照做"。
+    retired_run = client.post("/api/stats/storage/cleanup", json={"categories": ["old-logs"]})
+    assert retired_run.status_code == 400
+    assert "old-logs" in retired_run.json()["detail"]
+    # 400 的 detail 里要列出**当前**合法值，否则用户照着一个不存在的选项继续试。
+    assert "logs" in retired_run.json()["detail"]
 
 
 def test_preview_and_execute_honour_the_same_categories(client, data_dir):
-    _write("runtime/logs/old.log", 12, age_days=60)
+    _write("logs/old.log", 12, age_days=60)
     trashed = _write("backups/.trash/old.zip", 9, age_days=60)
 
     preview = client.get("/api/stats/storage/cleanup-preview", params={"categories": "logs"})
     assert preview.status_code == 200
-    assert [item["path"] for item in preview.json()["candidates"]] == ["runtime/logs/old.log"]
+    assert [item["path"] for item in preview.json()["candidates"]] == ["logs/old.log"]
 
     result = client.post("/api/stats/storage/cleanup", json={"categories": ["logs"]})
     assert result.status_code == 200
     assert result.json()["moved"] == 1
     # 没选中的类别一个都没动；选中的那个已经移进回收目录。
     assert trashed.exists()
-    assert not (data_dir / "runtime/logs/old.log").exists()
+    assert not (data_dir / "logs/old.log").exists()
 
 
 def test_preview_and_execute_agree(client):
-    _write("runtime/logs/old.log", 32, age_days=60)
+    _write("logs/old.log", 32, age_days=60)
 
     before = client.get("/api/stats/storage/cleanup-preview", params={"older_than_days": 30})
     assert before.status_code == 200

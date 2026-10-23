@@ -87,14 +87,12 @@ const PLAN: CleanupPlan = {
     "backup-trash": { label: "备份回收目录", files: 0, bytes: 0 },
     "auto-backups": { label: "自动备份", files: 1, bytes: 8 * 1024 },
     logs: { label: "运行日志", files: 0, bytes: 0 },
-    "old-logs": { label: "旧日志", files: 0, bytes: 0 },
   },
   categories: [
     { key: "backups", label: "手动与迁移备份" },
     { key: "backup-trash", label: "备份回收目录" },
     { key: "auto-backups", label: "自动备份" },
     { key: "logs", label: "运行日志" },
-    { key: "old-logs", label: "旧日志" },
   ],
 };
 
@@ -150,12 +148,12 @@ describe("StorageStatsCard", () => {
     await waitFor(() => expect(mocks.getStorageStats).toHaveBeenCalled());
     await openCleanupModal();
 
-    // 五个类别都在，且各自带本类别的文件数与体积。
+    // 四个类别都在，且各自带本类别的文件数与体积。
     expect(screen.getByText("手动与迁移备份")).toBeTruthy();
     expect(screen.getByText("1 个文件 · 4 KB")).toBeTruthy();
     expect(screen.getByText("1 个文件 · 8 KB")).toBeTruthy();
-    // 三个空类别都是 0 个文件 / 0 B。
-    expect(screen.getAllByText("0 个文件 · 0 B")).toHaveLength(3);
+    // 两个空类别都是 0 个文件 / 0 B。
+    expect(screen.getAllByText("0 个文件 · 0 B")).toHaveLength(2);
     // 固定提示：保留策略在后端，界面必须说清楚否则用户会以为最新那份也被清了。
     expect(screen.getByText(/最近 3 份备份不会出现在清单里/)).toBeTruthy();
     // 候选清单里只有可清理的那两个，被保留的三份不在清单里。
@@ -175,7 +173,6 @@ describe("StorageStatsCard", () => {
         "backups",
         "backup-trash",
         "logs",
-        "old-logs",
       ]),
     );
   });

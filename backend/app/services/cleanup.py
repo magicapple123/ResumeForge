@@ -15,7 +15,11 @@
   用户已经决定要扔的东西；
 - ``auto-backups/``：每 6 小时堆积的自动快照（``services/data_backup/auto_backup.py``）。
   与 ``.trash`` 一样不做保留：它是滚动产物，数量会自己长起来；
-- ``runtime/logs`` / ``logs``：滚动日志（当前那一个按"最近写入"天然不会入选）。
+- ``logs/``：滚动日志（``backend.log`` 与它的 ``.1``…``.4`` 轮转，当前那一个按"最近
+  写入"天然不会入选）。**只有这一个日志目录**：它曾经被拆成"运行日志（
+  ``runtime/logs``）"与"旧日志（``logs``）"两类，而 ``runtime/logs`` 从来没有人写
+  （全后端不存在 ``DATA_DIR / "runtime"`` 的写入点），于是界面上多了一个永远清不到
+  东西的选项，真正在长的 ``logs/`` 反被标成"旧日志"。
 
 "当前在用的文件"必须排除：数据库文件、附件目录、``datasets/`` 一律不在扫描范围内。
 
@@ -50,7 +54,6 @@ CATEGORY_BACKUPS = "backups"
 CATEGORY_BACKUP_TRASH = "backup-trash"
 CATEGORY_AUTO_BACKUPS = "auto-backups"
 CATEGORY_LOGS = "logs"
-CATEGORY_OLD_LOGS = "old-logs"
 
 
 @dataclass(frozen=True)
@@ -76,8 +79,10 @@ CATEGORIES: tuple[CleanupCategory, ...] = (
         CATEGORY_BACKUP_TRASH, "备份回收目录", f"{BACKUPS_DIRNAME}/{BACKUP_TRASH_DIRNAME}"
     ),
     CleanupCategory(CATEGORY_AUTO_BACKUPS, "自动备份", AUTO_BACKUP_DIRNAME),
-    CleanupCategory(CATEGORY_LOGS, "运行日志", "runtime/logs"),
-    CleanupCategory(CATEGORY_OLD_LOGS, "旧日志", "logs"),
+    # 日志只有一类：``logs``。曾经还有一个指向 ``runtime/logs`` 的 "old-logs"——
+    # 那个目录没有任何写入者，等于给用户一个永远清不到东西的选项，已合并删除
+    # （传 ``old-logs`` 现在会被 resolve_categories 当未知类别拒绝）。
+    CleanupCategory(CATEGORY_LOGS, "运行日志", "logs"),
 )
 CATEGORY_KEYS: tuple[str, ...] = tuple(category.key for category in CATEGORIES)
 
