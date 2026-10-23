@@ -116,6 +116,7 @@
 - **后端**：`backend/tests/`，与被测模块同层拆分（`test_xxx.py` 管规则、`test_xxx_api.py` 管 HTTP 面、`test_migration_00NN.py` 管迁移）。命令见 [AGENTS.md](../AGENTS.md)。
 - **前端**：Vitest，测试与被测文件同目录（`XxxPage.tsx` 旁就是 `XxxPage.test.tsx`）。
 - **浏览器冒烟**：`frontend/tests/smoke/`（Playwright + 真实 Chromium，CI 双平台 e2e 作业末尾运行；配置见 `frontend/playwright.config.ts`，端口默认对准启动链的 5199/8123）。
+- **响应式门槛**：`frontend/tests/responsive/overflow.spec.ts`（8 视口 × 18 路由，判 R1/R2/R3，进 CI；配置见 `frontend/playwright.responsive.config.ts`）。截图与指标 harness 在 `docs/verification/responsive-20261023/`（`capture.mjs` → `rubric.mjs` → `report.mjs`），判据 R1–R8 见该目录 `README.md`。
 
 ## 想了解得更深
 
