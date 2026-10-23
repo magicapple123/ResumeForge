@@ -276,7 +276,7 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 
 删除：
 
-- 能恢复的（软删进回收站，15 类）**直接执行** + Toast 给 5 秒「撤销」（`restoreTrashItem`），
+- 能恢复的（软删进回收站，16 类）**直接执行** + Toast 给 5 秒「撤销」（`restoreTrashItem`），
   不再加前置 `Popconfirm`；批量 >100 条仍保留确认。
 - 不能恢复的（清空回收站 / 彻底删除）用 `Modal` + `danger`，文案写清后果。
 

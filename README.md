@@ -198,7 +198,7 @@
 <td width="50%"><img src="docs/images/skills.png" alt="工作台"><br><sub><b>工作台</b>：技能与简历模板，可导入参考简历识别、预览微调，也可导入 HTML</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/images/trash.png" alt="回收站"><br><sub><b>回收站</b>：十五类内容删除后先进回收站，可多选批量恢复或彻底删除</sub></td>
+<td width="50%"><img src="docs/images/trash.png" alt="回收站"><br><sub><b>回收站</b>：十六类内容删除后先进回收站，可多选批量恢复或彻底删除</sub></td>
 <td width="50%"><img src="docs/images/guide.png" alt="内置使用指南"><br><sub><b>使用指南</b>：首次启动自动弹出，之后随时可查</sub></td>
 </tr>
 </table>
@@ -281,7 +281,7 @@
 | 🔍 全局搜索 | 一个框同时搜岗位、简历、内推、提醒、面经、台账、资料箱与技能 |
 | 🛡 防虚构校验 | 生成结果里的学校 / 公司 / 项目名自动与资料库比对，不一致时给出警告 |
 | 🔄 检查与更新 | 设置页可检查新版本、新建 / 导出 / 导入数据集；数据集备份**默认包含大模型 API Key**（可取消勾选；Windows 上以 DPAPI 加密形态随包）；**Windows 双击 `start.cmd` / `stop.cmd` / `update.cmd`，macOS 双击 `start.command` / `stop.command` / `update.command`**，都是零依赖一键启动，`uninstall.cmd` 可清理本机环境 |
-| ♻️ 回收站 | 十五类内容删除后先进回收站，可批量恢复或彻底删除；只有二次确认才真正销毁 |
+| ♻️ 回收站 | 十六类内容删除后先进回收站，可批量恢复或彻底删除；只有二次确认才真正销毁 |
 | 🔑 你的 Key 你做主 | 内置 16 个服务预设（DeepSeek / Claude / 豆包 / OpenAI / Ollama …），可取可用模型、调高级参数，并可切换接口协议 |
 
 </details>
