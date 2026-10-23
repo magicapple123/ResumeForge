@@ -281,6 +281,22 @@ class ProfileUpdate(BaseModel):
         ]
 
 
+class ProfilePatch(ProfileUpdate):
+    """PATCH 语义：**只改传了的字段**，未传的原样保留（``PUT`` 仍是整体替换）。
+
+    刻意**继承** ``ProfileUpdate`` 而不是再写一套字段：两套字段定义必然漂移，而漂移的
+    表现是"PUT 能存进去的字段，PATCH 存不进去"（或反过来），用户只会看到"改了没生效"。
+    所有字段本身都有默认值，所以 ``model_dump(exclude_unset=True)`` 天然就是"这次传了
+    什么"——一个字段是"没传"还是"显式传了空值"，Pydantic 用 ``model_fields_set`` 区分，
+    这正是 PATCH 需要的语义：
+
+    - 没传 ``educations`` → 教育经历原样保留；
+    - 传 ``"educations": []`` → **清空**教育经历（显式传空数组是"清空"，不是"不动"）。
+
+    校验规则（长度、日期格式、照片签名…）全部继承，不必重复一遍。
+    """
+
+
 class ProfileTextParseRequest(BaseModel):
     """粘贴的个人资料文本、资料截图或文档（可同时给）。"""
 

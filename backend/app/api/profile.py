@@ -11,6 +11,7 @@ from ..database import get_db
 from ..schemas.photo import ProfilePhotoCreate, ProfilePhotoOut, ProfilePhotoUpdate
 from ..schemas.profile import (
     ProfileOut,
+    ProfilePatch,
     ProfileTextParseRequest,
     ProfileTextParseResult,
     ProfileUpdate,
@@ -31,7 +32,12 @@ from ..services.profile.profile_photos import (
     rename_photo,
     set_primary_photo,
 )
-from ..services.profile.profile_service import get_profile_detail, to_profile_out, update_profile
+from ..services.profile.profile_service import (
+    get_profile_detail,
+    patch_profile,
+    to_profile_out,
+    update_profile,
+)
 from ..services.profile_text_parser import parse_profile_text
 from ..services.settings_service import get_llm_config
 from ..services.text_extraction import (
@@ -70,6 +76,28 @@ def get_profile(db: Session = Depends(get_db)):
 @router.put("", response_model=ProfileOut)
 def save_profile(payload: ProfileUpdate, db: Session = Depends(get_db)):
     profile = update_profile(db, payload)
+    if payload.photo:
+        _save_photo_copy(db, payload.photo, f"profile:{profile.id}", f"profile-{profile.id}")
+    return to_profile_out(profile)
+
+
+@router.patch("", response_model=ProfileOut)
+def patch_profile_fields(payload: ProfilePatch, db: Session = Depends(get_db)):
+    """**局部合并**：只改请求里出现过的字段，没出现的原样保留。
+
+    与 ``PUT /api/profile`` 的分工（两个都留着，语义不同、互不替代）：
+
+    - ``PUT`` 是**整体替换**：没传的字段落回默认值（空串 / 空数组）。它服务"这一页就是
+      全部资料"的老界面，行为一字未改，向后兼容。
+    - ``PATCH`` 是**合并**：只写传了的键。子资源数组按"整个数组替换"处理，
+      所以显式传 ``"educations": []`` 是清空，不传才是"不动"。
+
+    为什么要两套：只有 PUT 的时候，任何"只改一个字段"的调用方都被迫把整份资料读出来再
+    整份写回去——中间任何一次并发编辑都会互相覆盖（"我在改手机号，另一处把简历教育经历
+    存空了"）。PATCH 让"只改这一项"变成一个原子请求。
+    """
+    profile = patch_profile(db, payload)
+    # 只有真的传了 photo 且非空才落磁盘副本（没传时 payload.photo 是默认空串，不会命中）。
     if payload.photo:
         _save_photo_copy(db, payload.photo, f"profile:{profile.id}", f"profile-{profile.id}")
     return to_profile_out(profile)

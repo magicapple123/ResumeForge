@@ -100,7 +100,7 @@ def _text(value: Any) -> str | None:
     return text if len(text) <= 200 else text[:200] + "…"
 
 
-def _create_changes(arguments: dict, labels: dict[str, str]) -> list[FieldChange]:
+def _create_changes(arguments: dict[str, Any], labels: dict[str, str]) -> list[FieldChange]:
     """新建类工具：把 arguments 里出现的已知字段列成"新增"差异。"""
     return [
         FieldChange(field=labels.get(key, key), before=None, after=_text(value))
@@ -146,7 +146,7 @@ def preview_update_job(db: Session, arguments: dict) -> WritePreview:
     return _update_preview(f"岗位「{title or arguments.get('job_id')}」", record, changes)
 
 
-def preview_update_profile(db: Session, arguments: dict) -> WritePreview:
+def preview_update_profile(db: Session, arguments: dict[str, Any]) -> WritePreview:
     changes = [
         FieldChange(field=_PROFILE_FIELDS.get(key, key), before=None, after=_text(value))
         for key, value in arguments.items()
@@ -258,7 +258,7 @@ def preview_create_format_template(db: Session, arguments: dict) -> WritePreview
     return _create_preview("自制版式新记录（只调排版参数）", _create_changes(arguments, _TEMPLATE_FIELDS))
 
 
-def preview_update_format_template(db: Session, arguments: dict) -> WritePreview:
+def preview_update_format_template(db: Session, arguments: dict[str, Any]) -> WritePreview:
     record = None
     template_id = arguments.get("template_id")
     if template_id:
