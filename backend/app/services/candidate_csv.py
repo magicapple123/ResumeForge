@@ -25,6 +25,7 @@ from .csv_io import (
     parse_csv_table,
     records_to_csv_text,
 )
+from .trash import live_only
 
 # 列定义：[(中文表头, 字段名)]。与「添加备选岗位」表单的字段名一致；
 # 「来源 / 状态 / 截图」是系统侧的溯源信息，不参与 CSV 往返。
@@ -98,8 +99,13 @@ def _row_to_payload(row: dict[str, str]) -> dict[str, str]:
 
 
 def find_duplicate(db: Session, title: str, company: str, source_url: str) -> CandidateJob | None:
-    """与既有候选判重：链接相同必是同一条；没链接时退回「岗位名 + 公司」。"""
-    query = db.query(CandidateJob)
+    """与既有候选判重：链接相同必是同一条；没链接时退回「岗位名 + 公司」。
+
+    只看**未删除**的候选（0050 起候选进回收站）：导入 CSV 的意图是"把这些岗位加进待办
+    清单"，一条已删掉的候选不该拦住它——否则用户删了再导同一份 CSV，每一行都会被判
+    "已有这一条"却看不见任何东西。
+    """
+    query = db.query(CandidateJob).filter(live_only(CandidateJob))
     if source_url:
         return query.filter(CandidateJob.source_url == source_url).first()
     if title and company:

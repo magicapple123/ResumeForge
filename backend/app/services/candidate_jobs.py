@@ -22,7 +22,7 @@ from ..schemas.job import RECOGNITION_SOURCE_OFFICIAL, JobCreate
 from ..schemas.material import CandidateJobCreate, CandidateJobUpdate
 from .job.job_service import create_job_record, find_by_job_identity, find_job_by_identity
 from .job_parser.metadata import job_type_from_title
-from .trash import is_deleted
+from .trash import get_live, is_deleted, live_only, soft_delete
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,12 @@ def _filtered_query(
     """list_candidate_jobs 与 list_candidate_jobs_page **共用的过滤口径**。
 
     两处各写一遍过滤条件，迟早会改漏一边（与 tracker._filtered_query 同一取舍）。
+
+    ``deleted_at IS NULL`` 也写在这里：0050 起备选岗位是软删除的，漏掉这一句的后果是
+    "删了还在列表里"（用户以为删除失败）——而这条路径有三个入口（列表 / 分页 / 全选
+    id），四处各写一遍必然漂移，所以收在唯一一处。
     """
-    query = db.query(CandidateJob)
+    query = db.query(CandidateJob).filter(live_only(CandidateJob))
     if status in CANDIDATE_JOB_STATUSES:
         query = query.filter(CandidateJob.status == status)
     if collect_task_ids:
@@ -128,7 +132,13 @@ def list_candidate_jobs_page(
 
 
 def candidate_or_none(db: Session, candidate_id: int) -> CandidateJob | None:
-    return db.get(CandidateJob, candidate_id)
+    """按 id 取一条**未删除**的候选；已在回收站里的当作不存在（返回 None）。
+
+    不用 ``db.get``：它会绕过查询过滤，等于给"单条读取 / 修改 / 标记已导入"开一个后门
+    ——列表里看不到、但知道 id 就能继续编辑一条已删的候选。``trash.get_live`` 是这套
+    语义的共用实现（与岗位、简历、投递记录同一份）。
+    """
+    return get_live(db, CandidateJob, candidate_id)
 
 
 def create_candidate_job(db: Session, payload: CandidateJobCreate) -> CandidateJob:
@@ -162,11 +172,18 @@ def mark_candidate_imported(db: Session, candidate: CandidateJob, job_id: int) -
 
 
 def delete_candidate_job(db: Session, candidate_id: int) -> bool:
-    """软删一条备选岗位。"""
-    candidate = db.get(CandidateJob, candidate_id)
+    """软删一条备选岗位（移入回收站，可恢复）。
+
+    与用户真正在乎的其它内容一样走 ``trash.soft_delete``：这条记录只是从列表里消失，
+    回收站里能找回，彻底删除是另一个显式动作（``DELETE /api/trash/...``）。
+
+    已在回收站里的候选按"不存在"处理（返回 False → 接口 404「不存在或已被删除」），
+    与 ``DELETE /api/jobs/{id}`` 同一口径：重复删除不需要给出"又删了一次"这种伪成功。
+    """
+    candidate = get_live(db, CandidateJob, candidate_id)
     if candidate is None:
         return False
-    db.delete(candidate)
+    soft_delete(db, "candidate_job", candidate)
     db.commit()
     return True
 
@@ -217,9 +234,19 @@ def find_staged_candidate(
 
     不按 ``status`` 过滤：已经导入过的候选，它的正式岗位必然在 ``job`` 表里，
     调用方查岗位表那一遍就会命中，这里再筛一次状态只会让"重复"被漏判。
+
+    **但按 ``deleted_at`` 过滤**（``skip_deleted=True``，0050 起备选岗位可进回收站）：
+    与岗位广场那条"回收站里的也算已存在"**刻意相反**。用户在暂存区删掉一条候选，意思是
+    "这条我不要了"，若它继续算已存在，采集就会一直跳过这条岗位——用户既看不到它（列表里
+    没有），也采不回来，只能靠想起来去回收站恢复。删掉就该能重新采。
     """
     return find_by_job_identity(
-        db, CandidateJob, title=title, company=company, source_url=source_url
+        db,
+        CandidateJob,
+        title=title,
+        company=company,
+        source_url=source_url,
+        skip_deleted=True,
     )
 
 
@@ -240,7 +267,9 @@ def import_candidates(db: Session, candidate_ids: list[int]) -> dict:
     results: list[dict] = []
     # 去重且保序：同一个 id 传两次不该被导入两次。
     for candidate_id in dict.fromkeys(candidate_ids):
-        candidate = db.get(CandidateJob, candidate_id)
+        # 已软删的候选按"不存在"处理：它在待办列表里本来就看不到，能导进来只会让用户
+        # 莫名其妙地看到一条自己删过的岗位进了岗位广场。
+        candidate = get_live(db, CandidateJob, candidate_id)
         if candidate is None:
             missing += 1
             results.append({"candidate_id": candidate_id, "title": "", "outcome": "missing"})

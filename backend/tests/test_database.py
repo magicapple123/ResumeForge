@@ -36,7 +36,7 @@ _FTS_DERIVED_TABLES = {
     for suffix in ("", "_data", "_idx", "_docsize", "_config")
 }
 # 当前迁移 head；每次新增 revision 时同步这里。
-_HEAD_REVISION = "0049_resume_language"
+_HEAD_REVISION = "0050_candidate_job_soft_delete"
 
 
 def _assert_head_schema(bind) -> None:

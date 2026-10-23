@@ -334,10 +334,15 @@ class Collector:
         **两张表都要查**，少查一边都会出问题：只查岗位广场，暂存区里会堆出同一岗位的多条
         候选（用户勾一次就重复导入一次）；只查暂存区，则会把已经在岗位广场里的岗位重新捞回来，
         让用户以为采到了新东西。去重判据本身走 ``find_by_job_identity``——与后续"勾选导入"
-        的重复判定是同一份实现，且**刻意不过滤软删除**。
+        的重复判定是同一份实现，且对岗位广场**刻意不过滤软删除**。
 
         区分"在回收站里"是因为这两种"跳过"对用户的含义完全不同：一种是"早就在库里了"，
         另一种是"你之前删过它"——后者得说清楚，否则用户会以为删除没生效（或者以为工具坏了）。
+
+        **暂存区那一句不区分**：候选岗位（0050 起也在回收站范围内）的去重显式排除已删的
+        （``find_staged_candidate`` 传 ``skip_deleted=True``），所以走到这里的候选必定没删。
+        这是刻意的——用户删掉一条候选正是让它从待办里消失，把已删的仍算"采过"等于让这条
+        岗位再也采不回来。
         """
         identity = {"title": result.title, "company": result.company, "source_url": result.url}
         job = find_job_by_identity(session, **identity)
@@ -345,9 +350,7 @@ class Collector:
             return "trashed" if trash.is_deleted(job) else "existing"
         candidate = find_staged_candidate(session, **identity)
         if candidate is not None:
-            # 候选岗位（暂存区）不在回收站范围内，is_deleted 恒为 False——这里照样走一遍，
-            # 以后它进了回收站范围也不需要回来改。
-            return "trashed" if trash.is_deleted(candidate) else "existing"
+            return "existing"
         return ""
 
     @staticmethod

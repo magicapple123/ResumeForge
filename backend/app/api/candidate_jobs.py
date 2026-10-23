@@ -24,6 +24,7 @@ from ..schemas.material import (
     CandidateJobOut,
     CandidateJobUpdate,
 )
+from ..services import trash
 from ..services.candidate_csv import (
     candidates_to_csv_text,
     decode_csv_bytes,
@@ -225,8 +226,16 @@ def import_candidate_csv(payload: CandidateCsvImportRequest, db: Session = Depen
 
 
 def _get_candidates_or_404(db: Session, candidate_ids: list[int]) -> list:
-    """按 id 取候选，缺任何一个都 404（导出的勾选必须全部真实存在）。"""
-    candidates = db.query(CandidateJob).filter(CandidateJob.id.in_(candidate_ids)).all()
+    """按 id 取候选，缺任何一个都 404（导出的勾选必须全部真实存在）。
+
+    已在回收站里的候选算"不存在"：列表里看不到它就勾不到它，能拿到 id 只可能来自
+    过期页面——导出一份用户以为已经删掉的数据是更糟的结果。
+    """
+    candidates = (
+        db.query(CandidateJob)
+        .filter(CandidateJob.id.in_(candidate_ids), trash.live_only(CandidateJob))
+        .all()
+    )
     found_ids = {candidate.id for candidate in candidates}
     missing = [candidate_id for candidate_id in candidate_ids if candidate_id not in found_ids]
     if missing:

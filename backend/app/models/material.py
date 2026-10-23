@@ -8,6 +8,7 @@
 - ``CandidateJob``（备选岗位）：还没核对的招聘信息（粘贴文本或截图），确认后
   再走识别流程导入成正式岗位。
 """
+
 from datetime import datetime
 from typing import Any
 
@@ -49,10 +50,11 @@ class Material(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
-
     # 软删除时间戳：NULL 表示「没删」。列表查询一律加 `deleted_at IS NULL`，
     # 回收站里则只看非 NULL 的行（见 ``services/trash.py``）。
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class CandidateJob(Base):
     __tablename__ = "candidate_job"
 
@@ -90,3 +92,12 @@ class CandidateJob(Base):
     imported_job_id: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    # 软删除时间戳：NULL 表示「没删」。列表查询一律加 `deleted_at IS NULL`，
+    # 回收站里则只看非 NULL 的行（见 ``services/trash.py``）。
+    #
+    # 备选岗位也从硬删除改成软删除（迁移 0050）：它与「岗位」只差一步导入，用户误删一条
+    # 待处理候选的代价和删掉一条正式岗位一样大，而硬删除没有任何回退路径。**但去重判据
+    # 反过来要排除已删的候选**（``find_staged_candidate`` 传 ``skip_deleted=True``）：
+    # 已删的候选若继续算"已存在"，用户就再也采集不回同一条岗位了。
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

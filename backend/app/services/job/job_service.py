@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ...models.job import Job
 from ...schemas.job import JobCreate, JobUpdate
+from .. import trash
 from ..jd_parser import parse_jd
 
 
@@ -37,7 +38,13 @@ MAX_JOB_NOTE_CHARS = 2000
 
 
 def find_by_job_identity(
-    db: Session, model: type, *, title: str = "", company: str = "", source_url: str = ""
+    db: Session,
+    model: type,
+    *,
+    title: str = "",
+    company: str = "",
+    source_url: str = "",
+    skip_deleted: bool = False,
 ):
     """按"同一投递链接，或同一公司下的同名岗位"在 ``model`` 表里找已存在的记录。
 
@@ -46,16 +53,33 @@ def find_by_job_identity(
     "岗位广场里已经有了"，同一件事给出两个相反的答复。
 
     ``model`` 传表类（``Job`` / ``CandidateJob``），因此不绑死在某一张表上。
+
+    ``skip_deleted`` 是**两张表语义不同**的那一处差异，默认 ``False``（= 回收站里的也算
+    已存在）：
+
+    - 岗位广场（``Job``）：必须算。否则"删掉 → 再采集一次"会造出第二条同一岗位，
+      而用户以为自己只是删了一条；调用方据此给出「在回收站里」的提示。
+    - 暂存区（``CandidateJob``）：必须不算。删掉一条候选正是让它从待办里消失，
+      若它继续算"已存在"，这条岗位就再也采集不回来了（用户看不到它、也没法恢复成候选）。
     """
     url = (source_url or "").strip()
-    if url:
-        existing = db.query(model).filter(model.source_url == url).first()
-        if existing is not None:
-            return existing
     name = (title or "").strip()
     employer = (company or "").strip()
+
+    def _query():
+        query = db.query(model)
+        # 只有带 ``deleted_at`` 列的表才需要过滤；用 hasattr 判断而不是传死模型：
+        # ``model`` 是调用方给的，判据本身不该假设它一定软删。
+        if skip_deleted and hasattr(model, "deleted_at"):
+            query = query.filter(trash.live_only(model))
+        return query
+
+    if url:
+        existing = _query().filter(model.source_url == url).first()
+        if existing is not None:
+            return existing
     if name and employer:
-        return db.query(model).filter(model.company == employer, model.title == name).first()
+        return _query().filter(model.company == employer, model.title == name).first()
     return None
 
 

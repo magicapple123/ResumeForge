@@ -149,7 +149,7 @@ def cleanup_preview(
     categories: list[str] | None = Query(
         default=None,
         description="要扫描的类别（可重复传，也可逗号分隔）：backups / backup-trash / "
-        "auto-backups / logs / old-logs。不传=全部；传空=什么都不清。",
+        "auto-backups / logs。不传=全部；传空=什么都不清。",
     ),
 ) -> dict:
     """清理预览（R19）：列出超过保留期的备份与日志，只 stat 不读内容、不做任何删除。

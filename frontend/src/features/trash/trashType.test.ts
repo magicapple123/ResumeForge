@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest";
 import { TRASH_TYPES, UNDO_MAX_IDS } from "./trashType";
 
 describe("回收站类型闭集", () => {
-  it("与后端 TRASH_SPECS 一样是 15 类", () => {
+  it("与后端 TRASH_SPECS 一样是 16 类", () => {
     // backend/app/services/trash.py 的 TRASH_SPECS 是本表的唯一来源；两边不一致时，
     // 撤销会传一个后端不认识的 type_key，表现是"点了撤销什么都没恢复"。
-    expect(TRASH_TYPES).toHaveLength(15);
+    expect(TRASH_TYPES).toHaveLength(16);
+  });
+
+  it("备选岗位在闭集里（0050 起它进回收站）", () => {
+    expect(TRASH_TYPES).toContain("candidate_job");
   });
 
   it("key 唯一且都是下划线小写", () => {

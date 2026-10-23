@@ -14,18 +14,18 @@ from ....schemas.material import CandidateJobCreate
 from ... import trash
 from ...candidate_jobs import candidate_brief, candidate_detail_text, mark_candidate_imported
 from ...job.job_service import create_job_record
-from .._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
+from .._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, int_argument
 from .._types import ToolResult
 
 logger = logging.getLogger(__name__)
 
 
 def _candidate_or_error(db: Session, arguments: dict) -> CandidateJob:
-    try:
-        candidate_id = int(arguments.get("candidate_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供备选岗位 id（可以先用 list_candidate_jobs 查）") from None
-    candidate = db.get(CandidateJob, candidate_id)
+    candidate_id = int_argument(
+        arguments, "candidate_id", "需要提供备选岗位 id（可以先用 list_candidate_jobs 查）"
+    )
+    # 与 HTTP 侧同一个访问器：已进回收站的候选当作不存在，助手不能读到/改到用户删掉的东西。
+    candidate = trash.get_live(db, CandidateJob, candidate_id)
     if candidate is None:
         raise ValueError(f"备选岗位 {candidate_id} 不存在")
     return candidate
@@ -34,7 +34,7 @@ def _candidate_or_error(db: Session, arguments: dict) -> CandidateJob:
 def _tool_list_candidate_jobs(db: Session, arguments: dict) -> ToolResult:
     limit = min(int(arguments.get("limit") or DEFAULT_LIST_LIMIT), MAX_LIST_LIMIT)
     status = str(arguments.get("status") or "").strip()
-    query = db.query(CandidateJob)
+    query = db.query(CandidateJob).filter(trash.live_only(CandidateJob))
     if status in {"pending", "imported"}:
         query = query.filter(CandidateJob.status == status)
     keyword = str(arguments.get("keyword") or "").strip()

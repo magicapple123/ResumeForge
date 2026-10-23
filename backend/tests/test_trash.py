@@ -9,7 +9,7 @@ import pytest
 from app.models.assistant import ChatConversation
 from app.models.claim import ClaimRecord
 from app.models.job import Job
-from app.models.material import Material
+from app.models.material import CandidateJob, Material
 from app.models.question_bank_record import QuestionBankRecord
 from app.models.resume import ResumeRecord
 from app.models.tracker import ApplicationTrack
@@ -28,6 +28,9 @@ def _count(payload) -> int:
 
 MAKERS = {
     "job": lambda db: Job(title="待删岗位", company="某公司"),
+    # 0050 起备选岗位也进回收站：它与岗位只差一步导入，误删一条待处理候选的代价
+    # 和删掉一条正式岗位一样大，而硬删除没有回退路径。
+    "candidate_job": lambda db: CandidateJob(title="待删候选", company="某公司"),
     "resume": lambda db: ResumeRecord(title="待删简历"),
     "track": lambda db: ApplicationTrack(title="待删投递", company="某公司"),
     "claim": lambda db: ClaimRecord(title="待删台账", source_fact="负责过服务端开发"),
@@ -37,6 +40,7 @@ MAKERS = {
 
 LIST_URLS = {
     "job": "/api/jobs",
+    "candidate_job": "/api/candidate-jobs",
     "resume": "/api/resumes",
     "track": "/api/tracker",
     "claim": "/api/claims",
@@ -46,6 +50,7 @@ LIST_URLS = {
 
 DELETE_URLS = {
     "job": "/api/jobs/{id}",
+    "candidate_job": "/api/candidate-jobs/{id}",
     "resume": "/api/resumes/{id}",
     "track": "/api/tracker/{id}",
     "claim": "/api/claims/{id}",
@@ -330,9 +335,15 @@ def test_every_deleted_at_table_is_registered():
         name for name, table in Base.metadata.tables.items() if "deleted_at" in table.columns
     }
     assert soft_deleted == set(trash.TRASHED_TABLES)
-    # 6（0016）+ 4（0018）+ 3（0019）+ 2（0027）= 15 类。
-    assert len(trash.TRASHED_TABLES) == 15
+    # 6（0016）+ 4（0018）+ 3（0019）+ 2（0027）+ 1（0050，备选岗位）= 16 类。
+    assert len(trash.TRASHED_TABLES) == 16
     assert "job" in trash.TRASHED_TABLES and "chat_conversation" in trash.TRASHED_TABLES
+    # 0050：备选岗位也进回收站，而且**必须紧挨着岗位**（回收站的展示顺序即注册表顺序，
+    # 用户在回收站里找"刚才删的那个岗位"时这两类想的是同一件事）。
+    assert "candidate_job" in trash.TRASHED_TABLES
+    assert trash.TRASHED_TABLES.index("candidate_job") == (
+        trash.TRASHED_TABLES.index("job") + 1
+    )
     assert {
         "interview_experience",
         "referral",

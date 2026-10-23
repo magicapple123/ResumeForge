@@ -188,9 +188,8 @@ const zhCN = {
   "jobs.candidate.delete-failed": "删除失败",
   /** 批量删除的就地确认标题（Popconfirm）：动作 + 对象。条数让标题超 12 字，所以移入正文（§4.4 例外）。 */
   "jobs.candidate.batch.delete-confirm": "删除选中的备选岗位？",
-  /** 就地确认的正文：条数 + 后果。备选岗位是**硬删除**（不进回收站），如实说无法恢复。 */
-  "jobs.candidate.batch.delete-note":
-    "这 {count} 条备选岗位会直接删除，不进「回收站」，也无法恢复。已导入的正式岗位不受影响。",
+  /** 就地确认的正文：条数 + 后果。备选岗位是**软删除**（进回收站，可恢复），如实说去哪找回。 */
+  "jobs.candidate.batch.delete-note": "这 {count} 条会移入「回收站」，之后可以恢复。",
   /** 确认按钮：写具体动作，不用「确定」。 */
   "jobs.candidate.batch.delete-action": "删除",
   /** 单张截图超过体积上限。 */

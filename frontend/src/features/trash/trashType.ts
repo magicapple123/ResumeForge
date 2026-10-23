@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 回收站的 15 类 key（**编译期闭集**）。
+ * 回收站的 16 类 key（**编译期闭集**）。
  *
  * 为什么要抄一份 key 清单：撤销要传对 `type_key`，写错一个字母的表现是"点了撤销什么都没恢复"
  * ——没有任何报错。`types/trash.ts` 里的 `type` 是 `string`，抄不出错才怪。
@@ -13,6 +13,8 @@
  */
 export const TRASH_TYPES = [
   "job",
+  // 0050 起备选岗位也进回收站：与「岗位」只差一步导入，顺序也紧挨着它。
+  "candidate_job",
   "resume",
   "track",
   "claim",

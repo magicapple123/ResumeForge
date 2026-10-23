@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-"""回收站：十五类内容的软删除、恢复与彻底删除。
+"""回收站：十六类内容的软删除、恢复与彻底删除。
 
 **为什么是软删除**（一个 ``deleted_at`` 时间戳）而不是把行搬到另一张表：搬表意味着外键、快照
 字段、去重判据全部要重建一遍，而这些现在都是好的。软删除只多一句"什么时候删的"，列表查询加
 ``IS NULL``、回收站看非 NULL、恢复就是清空时间戳——三处都极难写错。
 
-**范围克制**：只覆盖用户真正会心疼的十五类——岗位、简历记录、投递记录、事实台账条目、资料箱
-材料、助手会话、面经、内推、提醒、分享包、题库历史、复盘历史、知识库、网申填充记录。列级别、
-模板副本、数据集这类要么有明确的沿用关系、要么本来就能重建，不做回收站；每个可删项都进回收站，
-只会让回收站自己变成垃圾场。
+**范围克制**：只覆盖用户真正会心疼的十六类——岗位、备选岗位、简历记录、投递记录、事实台账
+条目、资料箱材料、助手会话、面经、内推、提醒、分享包、题库历史、复盘历史、知识库、网申填充
+记录。列级别、模板副本、数据集这类要么有明确的沿用关系、要么本来就能重建，不做回收站；
+每个可删项都进回收站，只会让回收站自己变成垃圾场。
 
 **完整性红线**：凡是模型里带 ``deleted_at`` 列的表，都必须在这里登记（``TRASH_SPECS``），否则
 就会出现"半软删"——列表里消失、回收站里也找不到、既不能恢复也无法彻底删除，形成永久僵尸行。
@@ -18,8 +18,11 @@
 **三个最容易漏的接合点**（都在调用方，这里负责提供正确的判据）：
 
 1. **去重必须把回收站里的也算"已存在"**。否则"删掉 → 再采集一次"会造出第二条同一岗位，
-   而用户以为自己只是删了一条。判据 `job_service.find_by_job_identity` **刻意不过滤**
+   而用户以为自己只是删了一条。判据 `job_service.find_by_job_identity` **默认不过滤**
    ``deleted_at``，调用方据此给出「在回收站里」的提示。
+   **唯一的例外是备选岗位**（``candidate_job``，0050 起进回收站）：它是"还没核对的暂存
+   候选"，用户删掉它往往正是为了让它从待办里消失后重新采集；把它算作"已存在"会让同一
+   条岗位再也采不回来。所以 ``find_staged_candidate`` 显式传 ``skip_deleted=True``。
 2. **列表 / 匹配分析 / 投递准入 / 数据集导出都不该看到已删除内容**，统一用 ``live_only()``。
 3. **彻底删除是真删、不可恢复**，所以它是唯一需要用户二次确认的动作；`restore` 与 `purge`
    分开两个接口，不允许一个"删除"按钮同时具备两种语义。
@@ -45,7 +48,7 @@ from ..models.interview_experience import InterviewExperience
 from ..models.interview_review_record import InterviewReviewRecord
 from ..models.job import Job
 from ..models.knowledge_entry import KnowledgeEntry
-from ..models.material import Material
+from ..models.material import CandidateJob, Material
 from ..models.profile import utcnow
 from ..models.question_bank_record import QuestionBankRecord
 from ..models.referral import Referral
@@ -89,10 +92,14 @@ def _referral_title(item: Any) -> str:
 
 
 # 顺序即回收站的展示顺序（越靠前越常用）。
-# 前六类来自迁移 0016，中四类来自迁移 0018，后三类来自迁移 0019，最后两类来自迁移 0027
+# 前六类来自迁移 0016，中四类来自迁移 0018，后三类来自迁移 0019，再两类来自迁移 0027
+# （``apply_record`` / ``web_form_record``），最后是 0050 的 ``candidate_job``
 # ——**全部含 ``deleted_at`` 列**，缺一类就是"半软删"。
 TRASH_SPECS: tuple[TrashSpec, ...] = (
     TrashSpec("job", "岗位", Job, "title", "company"),
+    # 备选岗位紧挨着岗位：两者只差一步导入，用户在回收站里找它们时想的是同一件事
+    # （"我刚才删的那个岗位去哪了"），中间夹一堆别的类型只会让它更难找。
+    TrashSpec("candidate_job", "备选岗位", CandidateJob, "title", "company"),
     TrashSpec("resume", "简历记录", ResumeRecord, "title", "company"),
     TrashSpec("track", "投递记录", ApplicationTrack, "title", "company"),
     TrashSpec("claim", "事实台账", ClaimRecord, "title", "category"),

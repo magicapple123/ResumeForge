@@ -9,6 +9,7 @@
 import { CheckSquareOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import { Card, Checkbox, Space, Tag, Typography } from "antd";
 import { RowActions, RowContextMenu, type RowMenuItem } from "../../common/RowActions";
+import { TRASH_RECOVERY_NOTE } from "../../common/rowActionMenu";
 import type { CandidateJob } from "../../../types";
 import { formatDateTime } from "../../../utils/format";
 
@@ -72,6 +73,9 @@ export function CandidateCardGrid({
                 danger: true,
                 icon: <DeleteOutlined />,
                 confirm: "删除这条备选岗位？",
+                // 0050 起备选岗位是软删除：文案必须说"进回收站、可恢复"，
+                // 不能再说"无法恢复"（说了就会让用户不敢删，也说不清去哪找回来）。
+                confirmBody: TRASH_RECOVERY_NOTE,
                 onClick: () => void onRemove(candidate),
               },
             ];
