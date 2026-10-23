@@ -199,11 +199,7 @@ def parse_profile_text(text: str) -> ProfileTextParseResult:
     basic, summary, parsed_sections, was_truncated = _bound_parse_result(
         basic, summary, parsed_sections
     )
-    result = ProfileTextParseResult(
-        **basic,
-        summary=summary,
-        **parsed_sections,
-    )
+    result = ProfileTextParseResult.model_validate({**basic, "summary": summary, **parsed_sections})
     warnings: list[str] = []
     if not result.name:
         warnings.append("未识别到姓名，请手动填写。")

@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
+from typing import cast
 
 from ...models.claim import ClaimRecord
 from ...schemas.resume import ResumeContent
@@ -60,8 +62,11 @@ async def _close_provider_quietly(provider: BaseLLMProvider) -> None:
     aclose = getattr(provider, "aclose", None)
     if not callable(aclose):
         return
+    # `BaseLLMProvider` 没有声明 `aclose`（各实现自己决定），所以上面用 `getattr` 探测。
+    # 探测成功即约定它是"关闭连接"的异步方法——把这条约定写进类型，才能 `await`。
+    close_provider = cast(Callable[[], Awaitable[None]], aclose)
     try:
-        await aclose()
+        await close_provider()
     except Exception as exc:  # 清理失败不影响结果，只记简短类型与描述。
         logger.warning("关闭模型连接失败：%s: %s", type(exc).__name__, str(exc)[:200])
 

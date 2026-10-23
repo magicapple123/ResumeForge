@@ -75,8 +75,8 @@ jobs:
         working-directory: .
         run: python -m ruff check scripts/
 
-      - name: Type check models and schemas (pyright)
-        # pyrightconfig 只把 app/models + app/schemas 纳入 basic 检查（渐进策略）。
+      - name: Type check backend (pyright)
+        # pyrightconfig 覆盖全部 app/（2026-10-23 扩面完成，535 个文件 0 error）。
         # CI 把包装在全局解释器里，显式把解释器交给 pyright 才能解析第三方导入；
         # 本地开发走 backend/.venv（pyrightconfig 的 venvPath）。
         shell: bash

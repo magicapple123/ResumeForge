@@ -5,23 +5,21 @@
 所有写入路径都不接受 `verification_status`，新建的条目一律是「待确认」。让模型把某条
 主张标成「已确认」，等于让它可以自己给自己发通行证——那正是台账要防的事。
 """
+
 from __future__ import annotations
 
 import json
 
 from sqlalchemy.orm import Session
 
-from .._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
+from .._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, int_argument
 from .._types import ToolResult
 
 
 def _claim_or_error(db: Session, arguments: dict):
     from ...claims import claim_or_none
 
-    try:
-        claim_id = int(arguments.get("claim_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供台账条目 id（可以先用 list_claims 查）") from None
+    claim_id = int_argument(arguments, "claim_id", "需要提供台账条目 id（可以先用 list_claims 查）")
     record = claim_or_none(db, claim_id)
     if record is None:
         raise ValueError(f"台账条目 {claim_id} 不存在")

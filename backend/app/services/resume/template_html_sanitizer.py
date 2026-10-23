@@ -26,7 +26,9 @@ class _TemplateFilter(HTMLParser):
             return
         if tag == "meta" and any(name.casefold() == "http-equiv" for name, _ in attrs):
             return  # Never allow a refresh or a template-provided policy override.
-        self.parts.append(self.get_starttag_text())
+        # `get_starttag_text()` 的标注是 Optional（历史原因）；走到这里说明确实有开始
+        # 标签文本，`or ""` 只是把这条保证写给类型检查。
+        self.parts.append(self.get_starttag_text() or "")
         if tag == "head" and not self.policy_inserted:
             self.parts.append('\n<meta charset="utf-8" />\n' + self.security_meta + "\n")
             self.policy_inserted = True
@@ -36,7 +38,7 @@ class _TemplateFilter(HTMLParser):
             return
         if tag == "meta" and any(name.casefold() == "http-equiv" for name, _ in attrs):
             return
-        self.parts.append(self.get_starttag_text())
+        self.parts.append(self.get_starttag_text() or "")
 
     def handle_endtag(self, tag: str) -> None:
         if self.suppressed:

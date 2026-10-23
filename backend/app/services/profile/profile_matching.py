@@ -66,18 +66,16 @@ def build_job_focus(job: JobOut, profile: ProfileOut | None = None) -> JobFocus:
     text = _job_text(job)
     parsed = parse_jd(text)
     parsed_skills = [item.name for item in parsed["skills"]]
-    saved_skills = [
-        item.name if hasattr(item, "name") else str(item.get("name", ""))
-        for item in (job.keywords or [])
-    ]
+    # `JobOut.keywords` 是 `list[SkillTag]`（pydantic 已把历史 dict 形状归一成模型），
+    # 直接读 `.name`：之前那句 `hasattr(item, "name")` 是 dict 时代的残留，静态检查也
+    # 无法据此收窄。
+    saved_skills = [item.name for item in job.keywords]
     skills = _unique(parsed_skills + saved_skills)
 
     # 用户自定义技能不一定在内置词典中；若其名称出现在 JD，就把它作为硬信号。
     if profile is not None:
         skills.extend(
-            item.name
-            for item in profile.skills
-            if item.name and _contains(text, item.name)
+            item.name for item in profile.skills if item.name and _contains(text, item.name)
         )
         skills = _unique(skills)
 
@@ -88,10 +86,7 @@ def build_job_focus(job: JobOut, profile: ProfileOut | None = None) -> JobFocus:
     ]
     title_terms = [term for term in _TITLE_SPLIT_RE.split(job.title) if len(term.strip()) >= 2]
     domain_terms = [
-        signal
-        for domain in domains
-        for signal in DOMAIN_SIGNALS[domain]
-        if _contains(text, signal)
+        signal for domain in domains for signal in DOMAIN_SIGNALS[domain] if _contains(text, signal)
     ]
     terms = _unique(skills + title_terms + domain_terms)
     return JobFocus(skills=tuple(skills), domains=tuple(domains), terms=tuple(terms))
@@ -125,9 +120,7 @@ def _score_item(item: dict[str, Any], section: str, focus: JobFocus) -> int:
             continue
         score += sum(2 for signal in signals if _contains(text, signal))
         score += sum(
-            1
-            for signal in DOMAIN_CONTEXT_SIGNALS.get(domain, ())
-            if _contains(text, signal)
+            1 for signal in DOMAIN_CONTEXT_SIGNALS.get(domain, ()) if _contains(text, signal)
         )
     if section == "skills":
         score += _skill_domain_score(item.get("name", ""), focus.domains)
@@ -162,9 +155,7 @@ def _select_ranked_items(
     return [item for index, item, _, _ in ranked if index in selected_indexes]
 
 
-def _prioritize_item_details(
-    item: dict[str, Any], section: str, focus: JobFocus
-) -> dict[str, Any]:
+def _prioritize_item_details(item: dict[str, Any], section: str, focus: JobFocus) -> dict[str, Any]:
     """将直接命中 JD 的要点前置，供后续预算压缩优先保留。"""
     result = deepcopy(item)
     for field in _LIST_DETAIL_FIELDS:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from ...models.apply import FAILURE_NETWORK_TIMEOUT, FAILURE_SELECTOR_INVALID
@@ -84,8 +84,31 @@ from .boss_search_scripts import (
 logger = logging.getLogger(__name__)
 
 
+if TYPE_CHECKING:
+    from .boss_city import CityResolver
+
+
 class BossSearchMixin(BossFilterMixin):
     """BOSS 搜索与详情采集实现。"""
+
+    # 宿主契约：下面这些由 `BossAdapter.__init__` 注入、或由同族的
+    # `BossPageMixin` / `BossScrollMixin` 提供——它们只在组合成 `BossAdapter`
+    # 之后才同时存在。声明在 `TYPE_CHECKING` 里，运行期不产生任何属性。
+    if TYPE_CHECKING:
+        _city_resolver: CityResolver
+
+        def _await_ready(
+            self,
+            client: CdpClient,
+            *,
+            selector: str,
+            expected: str,
+            allow_empty: bool,
+            target_url: str = "",
+            previous_url: str = "",
+        ) -> dict[str, Any]: ...
+
+        def _collect_scroll_page(self, client: CdpClient, page: int) -> SearchPage: ...
 
     def build_search_url(self, query: CollectQuery, page: int) -> str:
         """拼搜索页 URL：城市名解析成站点编码，站点筛选条件与页码逐一转义拼入。"""

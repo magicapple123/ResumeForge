@@ -32,6 +32,7 @@ from typing import Any
 import httpx
 
 from ...config import DATA_DIR, DEFAULT_BROWSER_PORT
+from ...schemas.apply.base import BrowserState
 from .browser_inputs import BrowserError, validated_browser_url
 from .cdp_client import DEFAULT_HOST, WebsocketCdpClient
 
@@ -90,14 +91,16 @@ def browser_display_name(path: str | Path | None) -> str:
 # ``BrowserStatus.state`` 的取值之一：调试端口在答，采集/投递都能用。
 # 定义成常量是因为调用方要拿它做判断（例如"浏览器在跑才去读登录态清单"），
 # 而字符串字面量散在各处时，改一处就会漏一处。
-BROWSER_STATE_RUNNING = "running"
+BROWSER_STATE_RUNNING: BrowserState = "running"
 
 
 @dataclass(frozen=True)
 class BrowserStatus:
     """浏览器状态快照。"""
 
-    state: str
+    # 与 `BrowserStatusOut.state` 同一个 Literal：这个值会原样下发给前端，
+    # 两边各写一份字符串迟早对不上。
+    state: BrowserState
     port: int
     profile_dir: str
     browser_path: str

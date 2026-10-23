@@ -10,10 +10,12 @@
 单独成文件：BossSearchMixin 已经顶着 500 行预算线，滚动是自成一体的第三种页面交互
 （导航 / 滚动 / 详情），塞回去只会让下一次改动再次爆线。
 """
+
 from __future__ import annotations
 
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from ...models.apply import FAILURE_SELECTOR_INVALID
 from ..browser.cdp_client import CdpClient
@@ -33,8 +35,16 @@ from .boss_search_scripts import (
 logger = logging.getLogger(__name__)
 
 
+if TYPE_CHECKING:
+    from ..browser.page_ready import ReadyWait
+
+
 class BossScrollMixin:
     """由搜索采集共用的"下滑加载更多"逻辑。"""
+
+    # 宿主契约：`BossAdapter.__init__` 注入（见 boss.py）。
+    if TYPE_CHECKING:
+        _ready_wait: ReadyWait
 
     def _collect_scroll_page(self, client: CdpClient, page: int) -> SearchPage:
         """第 2 页起：滚动列表加载下一批，整表读取（重复由采集器去重筛掉）。

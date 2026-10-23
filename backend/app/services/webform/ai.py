@@ -34,6 +34,7 @@
 密码 / 验证码 / 他人信息 / 同意项 / 声明类是终局判定，**模型没有投票权**。顺序不能反
 ——先问模型再拦，等于让模型有机会说服我们填验证码。
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -231,8 +232,11 @@ def _parse_matches(
     for item in raw:
         if not isinstance(item, dict):
             continue
+        raw_index = item.get("index")
+        if raw_index is None:
+            continue
         try:
-            index = int(item.get("index"))
+            index = int(raw_index)
         except (TypeError, ValueError):
             continue
         if index not in allowed:

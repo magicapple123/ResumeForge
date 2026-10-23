@@ -31,6 +31,7 @@ from collections import OrderedDict
 from collections.abc import Iterable
 from contextlib import suppress
 from pathlib import Path
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
@@ -275,9 +276,13 @@ def _write_subset(source: str, target: Path, chars: frozenset[str]) -> None:
 
     font = TTFont(source, fontNumber=0, recalcTimestamp=False, lazy=True)
     options = subset.Options()
-    options.name_IDs = ["*"]
+    # fontTools 的类型标注把这两个字段写成 `list[int]`，但运行时明确支持 `"*"`
+    # （subset 里对 `"*" in options.name_IDs` 有专门分支，语义是"全部保留"）。
+    # 这里按实际语义传，用 `cast` 记录"上游标注与运行时不一致"——换成整数列表会
+    # 丢掉 name 记录，那是产物差异，不只是类型问题。
+    options.name_IDs = cast("list[int]", ["*"])
     options.name_legacy = True
-    options.name_languages = ["*"]
+    options.name_languages = cast("list[int]", ["*"])
     options.layout_features = ["*"]
     options.notdef_outline = True
     options.recalc_bounds = True

@@ -45,27 +45,26 @@ def _alias_pattern(alias: str, canonical_name: str) -> re.Pattern[str] | None:
     return re.compile(rf"{left_boundary}{escaped}{right_boundary}", re.IGNORECASE)
 
 
-def _build_skill_matchers() -> list[tuple[re.Pattern[str] | None, str, str]]:
+def _build_skill_matchers() -> list[tuple[re.Pattern[str], str, str]]:
     """编译规范名及其别名，保持词典顺序并返回规范技能名。"""
     data = json.loads(SKILLS_PATH.read_text(encoding="utf-8"))
-    matchers: list[tuple[re.Pattern[str] | None, str, str]] = []
-    for category, words in data["categories"].items():
+    # 词典文件的形状在这里固定下来：静态检查才知道 `word`/`canonical_name` 是 str，
+    # 而不是从 `json.loads` 的 Any 一路漏下去。
+    categories: dict[str, list[str]] = data["categories"]
+    matchers: list[tuple[re.Pattern[str], str, str]] = []
+    for category, words in categories.items():
         for word in words:
             canonical_name = _SKILL_CANONICAL_OVERRIDES.get(word, word)
             aliases = (word, *_SKILL_ALIASES.get(word, ()))
             for alias in aliases:
                 pattern = _alias_pattern(alias, canonical_name)
-                if pattern is None and re.search(r"[A-Za-z]", alias):
-                    continue
-                matchers.append(
-                    (
-                        pattern
-                        if pattern is not None
-                        else re.compile(re.escape(_normalize_text(alias)), re.IGNORECASE),
-                        canonical_name,
-                        category,
-                    )
-                )
+                if pattern is None:
+                    # 纯中文别名不区分大小写，直接按字面量匹配；含 ASCII 字母的
+                    # 别名却连不出一条正则，说明这个名字没法安全匹配，跳过。
+                    if re.search(r"[A-Za-z]", alias):
+                        continue
+                    pattern = re.compile(re.escape(_normalize_text(alias)), re.IGNORECASE)
+                matchers.append((pattern, canonical_name, category))
     return matchers
 
 

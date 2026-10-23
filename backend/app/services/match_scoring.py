@@ -9,6 +9,7 @@
 固定 5 维常量表 ``MATCH_SCORE_DIMENSIONS``（``list[DimensionSpec]``），预留扩展——新增
 维度只需向表中追加一条并给 ``_SUB_SCORERS`` 注册一个同 key 的打分函数。
 """
+
 from __future__ import annotations
 
 import json
@@ -39,9 +40,31 @@ _STATUS_ATTAINMENT = {
 
 # 关键词提取时剔除的常见停用词（避免把"经验/能力"这类词算成命中）。
 _STOP_TOKENS = {
-    "的", "与", "和", "及", "等", "或", "熟悉", "精通", "优先", "经验", "以上",
-    "相关", "能力", "负责", "要求", "任职", "岗位", "工作", "具有", "具备", "有",
-    "年", "加分", "者", "优先考虑",
+    "的",
+    "与",
+    "和",
+    "及",
+    "等",
+    "或",
+    "熟悉",
+    "精通",
+    "优先",
+    "经验",
+    "以上",
+    "相关",
+    "能力",
+    "负责",
+    "要求",
+    "任职",
+    "岗位",
+    "工作",
+    "具有",
+    "具备",
+    "有",
+    "年",
+    "加分",
+    "者",
+    "优先考虑",
 }
 
 
@@ -78,8 +101,7 @@ def _normalize(value: str) -> str:
 def _jd_tokens(job_payload: dict[str, Any]) -> set[str]:
     """从 JD 里提取关键词集合（含中文与英文，过滤停用词）。"""
     text = " ".join(
-        str(job_payload.get(key, ""))
-        for key in ("description", "requirements", "additional_info")
+        str(job_payload.get(key, "")) for key in ("description", "requirements", "additional_info")
     )
     tokens: set[str] = set()
     for item in re.findall(r"[\w\u4e00-\u9fff]+", text):
@@ -92,8 +114,7 @@ def _jd_tokens(job_payload: dict[str, Any]) -> set[str]:
 
 def _required_years(job_payload: dict[str, Any]) -> int | None:
     text = " ".join(
-        str(job_payload.get(key, ""))
-        for key in ("description", "requirements", "additional_info")
+        str(job_payload.get(key, "")) for key in ("description", "requirements", "additional_info")
     )
     matches = re.findall(r"(\d+)\s*年", text)
     if not matches:
@@ -108,7 +129,7 @@ def _year(value: str) -> int | None:
 
 def _estimate_years(profile_text: str, resume_text: str) -> float:
     """粗略估算工作年限：从资料 / 简历 JSON 里取经历起止年份求和。"""
-    entries: list[tuple[int | None, int | None]] = []
+    entries: list[tuple[int, int | None]] = []
     for text in (profile_text, resume_text):
         try:
             data = json.loads(text)
@@ -170,7 +191,9 @@ def _score_skill_coverage(
         return _NEUTRAL_SCORE, "无核心能力/加分项条目，无法估算"
     total = sum(_attainment(item) for item in conditions)
     matched = sum(1 for item in conditions if item.status == "matched")
-    return _clamp(total / len(conditions) * 100), f"核心/加分项共 {len(conditions)} 条，已匹配 {matched} 条"
+    return _clamp(
+        total / len(conditions) * 100
+    ), f"核心/加分项共 {len(conditions)} 条，已匹配 {matched} 条"
 
 
 def _score_experience_years(

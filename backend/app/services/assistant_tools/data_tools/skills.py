@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """助手技能（skills）域的工具实现。"""
+
 from __future__ import annotations
 
 import json
@@ -23,6 +24,7 @@ from .._shared import (
     MAX_ASSISTANT_SKILL_TOTAL_CHARS,
     MAX_PROFILE_RESULT_CHARS,
     _trim,
+    int_argument,
 )
 from .._types import ToolResult
 
@@ -48,10 +50,7 @@ def _tool_list_skills(db: Session, _arguments: dict) -> ToolResult:
 
 
 def _tool_get_skill(db: Session, arguments: dict) -> ToolResult:
-    try:
-        skill_id = int(arguments.get("skill_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供技能 id（可以先用 list_skills 查）") from None
+    skill_id = int_argument(arguments, "skill_id", "需要提供技能 id（可以先用 list_skills 查）")
     skill = db.get(AssistantSkill, skill_id)
     if skill is None:
         raise ValueError(f"技能 {skill_id} 不存在")
@@ -140,10 +139,7 @@ def _tool_create_skill(db: Session, arguments: dict) -> ToolResult:
 
 
 def _tool_update_skill(db: Session, arguments: dict) -> ToolResult:
-    try:
-        skill_id = int(arguments.get("skill_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供技能 id（可以先用 list_skills 查）") from None
+    skill_id = int_argument(arguments, "skill_id", "需要提供技能 id（可以先用 list_skills 查）")
     files = _skill_files_from_arguments(arguments)
     fields = {
         key: value

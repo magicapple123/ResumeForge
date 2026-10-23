@@ -9,6 +9,7 @@
 
 import json
 import logging
+from typing import TypeVar
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import ValidationError
@@ -31,11 +32,17 @@ logger = logging.getLogger(__name__)
 _LLM_CONFIG_KEY = "llm_config"
 
 
-def resolve_llm_config_api_key(db: Session, config: LLMConfig) -> LLMConfig:
+_ConfigT = TypeVar("_ConfigT", bound=LLMConfig)
+
+
+def resolve_llm_config_api_key(db: Session, config: _ConfigT) -> _ConfigT:
     """把前端回传的脱敏占位符还原为本地保存的密钥。
 
     配置记录必须携带记录 ID，否则两个仅密钥不同的记录会在切换时混淆。
     该引用只在本地 API 内流转，真实密钥始终不会进入读取接口响应。
+
+    返回值与入参**同一个模型类**（`model_copy` 保留子类）：保存命名记录时入参是
+    `LLMConfigRecordCreate`，它的 `name` 在返回值为 `LLMConfig` 的写法下会丢掉。
     """
     api_key = config.api_key
     if api_key == API_KEY_MASK:
@@ -205,12 +212,15 @@ def list_llm_config_records(db: Session) -> list[LLMConfigRecordOut]:
 
 def save_llm_config_record(db: Session, payload: LLMConfigRecordCreate) -> LLMConfigRecordOut:
     """保存一条命名配置记录（API Key 加密落库）。"""
-    payload = resolve_llm_config_api_key(db, payload)
-    row = db.query(LLMConfigRecord).filter(LLMConfigRecord.name == payload.name).one_or_none()
-    values = payload.model_dump(exclude={"name"})
-    values["api_key"] = encrypt_key(_strip_session_key(payload).api_key)
+    # `resolve_llm_config_api_key` 把"新建声明"解析成完整配置（会话密钥 → 现有密钥）。
+    # 用一个新的局部名而不是覆盖入参：入参的声明类型是 `LLMConfigRecordCreate`，
+    # 覆盖会让同一个名字在下面两种类型之间反复，读代码的人也没法一眼看出用的是哪一份。
+    resolved = resolve_llm_config_api_key(db, payload)
+    row = db.query(LLMConfigRecord).filter(LLMConfigRecord.name == resolved.name).one_or_none()
+    values = resolved.model_dump(exclude={"name"})
+    values["api_key"] = encrypt_key(_strip_session_key(resolved).api_key)
     if row is None:
-        row = LLMConfigRecord(name=payload.name, **values)
+        row = LLMConfigRecord(name=resolved.name, **values)
         db.add(row)
     else:
         for field, value in values.items():

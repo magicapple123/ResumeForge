@@ -27,7 +27,7 @@ from ...models.claim import (
     ClaimRecord,
 )
 from ...schemas.resume import ResumeContent
-from ...schemas.resume_risk import RiskPoint
+from ...schemas.resume_risk import RiskPoint, RiskSeverity
 from ...services.llm.base import LLMError
 from ..privacy import MASK, mask_outbound_text, redact
 from .resume_risk_rules import _resume_full_text
@@ -174,11 +174,17 @@ def _build_enhancement_messages(
     ]
 
 
-_RISK_SEVERITIES = ("high", "medium", "low")
+_RISK_SEVERITIES: tuple[RiskSeverity, ...] = ("high", "medium", "low")
+# 名字 → 档位。用查表而不是 `value in (...)` + 原样返回：`object` 经 `==` 比较不会
+# 被静态收窄成 Literal，查表则天然给出 `RiskSeverity`。
+_SEVERITY_BY_NAME: dict[str, RiskSeverity] = {name: name for name in _RISK_SEVERITIES}
 
 
-def _safe_severity(value: object) -> str:
-    return value if isinstance(value, str) and value in _RISK_SEVERITIES else "medium"
+def _safe_severity(value: object) -> RiskSeverity:
+    """模型给的风险等级只认这三档；认不出的一律按 `medium`（宁可留着提示，不要吞掉）。"""
+    if isinstance(value, str):
+        return _SEVERITY_BY_NAME.get(value, "medium")
+    return "medium"
 
 
 def _safe_scalar_str(value: object, limit: int) -> str:

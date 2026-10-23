@@ -224,9 +224,12 @@ async def derive_style_template(
             "没能从这份文件里读出可用的视觉配置。可以换更清晰的图片，"
             "或直接用工作台里的视觉调节器手动设置。"
         )
-    confidence = data.get("confidence") if isinstance(data.get("confidence"), dict) else {}
-    evidence = data.get("evidence") if isinstance(data.get("evidence"), list) else []
-    warnings = data.get("warnings") if isinstance(data.get("warnings"), list) else []
+    raw_confidence = data.get("confidence")
+    confidence: dict[str, Any] = raw_confidence if isinstance(raw_confidence, dict) else {}
+    raw_evidence = data.get("evidence")
+    evidence: list[Any] = raw_evidence if isinstance(raw_evidence, list) else []
+    raw_warnings = data.get("warnings")
+    warnings: list[Any] = raw_warnings if isinstance(raw_warnings, list) else []
     normalized_confidence = {
         key: round(max(0.0, min(1.0, float(value))), 2)
         for key, value in confidence.items()

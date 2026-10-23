@@ -193,7 +193,7 @@ def delete_user_template(db: Session, template: ResumeTemplate) -> None:
     db.commit()
 
 
-def resolve_style_template(db: Session, name: str) -> tuple[str, str]:
+def resolve_style_template(db: Session, name: str | None) -> tuple[str, str]:
     """解析模板名 → ``(内置模板名, 用户模板 HTML)``。
 
     两者只会有一个生效：内置模板返回 HTML 空串，用户模板返回内置兜底名 + HTML。

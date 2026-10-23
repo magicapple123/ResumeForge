@@ -5,6 +5,7 @@
 ``models/reminder``），不改提醒时间、绑定与备注——那些在「求职进度 → 提醒」页编辑。
 与其它域一致，删除不提供（软删在页面上做）。
 """
+
 from __future__ import annotations
 
 import json
@@ -15,6 +16,7 @@ from ...models.reminder import REMINDER_STATUSES
 from ...schemas.reminder import ReminderUpdate
 from ..reminder_service import reminder_or_none
 from ..reminder_service import update_reminder as update_reminder_record
+from ._shared import int_argument
 from ._types import ToolResult
 
 _STATUS_LABELS = {
@@ -25,10 +27,9 @@ _STATUS_LABELS = {
 
 
 def _tool_update_reminder(db: Session, arguments: dict) -> ToolResult:
-    try:
-        reminder_id = int(arguments.get("reminder_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供提醒 id（可以先用 list_reminders 查）") from None
+    reminder_id = int_argument(
+        arguments, "reminder_id", "需要提供提醒 id（可以先用 list_reminders 查）"
+    )
     reminder = reminder_or_none(db, reminder_id)
     if reminder is None:
         raise ValueError(f"提醒 {reminder_id} 不存在")

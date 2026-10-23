@@ -6,6 +6,7 @@ AI 兜底采纳（``enrich_preview_with_ai`` / ``_adopt_ai_match`` / ``_adopt_ai
 本模块按**原命名空间**再导出这几个名字，``service`` 包门面与既有调用方 / 测试的
 导入路径零改动；``preview_ai`` 不反向导入本模块，无循环。
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -71,7 +72,9 @@ def read_snapshot(
 
 
 # 带标记注释，与其它注入脚本一致——离线测试靠它把不同的调用区分开。
-_PAGE_INFO_SCRIPT = "(() => { /* rf:page-info */ return { url: location.href, title: document.title || '' }; })()"
+_PAGE_INFO_SCRIPT = (
+    "(() => { /* rf:page-info */ return { url: location.href, title: document.title || '' }; })()"
+)
 
 
 def build_preview(
@@ -137,9 +140,7 @@ def build_preview(
         if mapping.low_confidence:
             report.requires_confirmation.add(mapping.control.index)
         field_label = (
-            (custom_labels or {}).get(
-                mapping.field, mapping.field.removeprefix("CUSTOM_")
-            )
+            (custom_labels or {}).get(mapping.field, mapping.field.removeprefix("CUSTOM_"))
             if mapping.field.startswith("CUSTOM_")
             else field_label_for_key(mapping.field, FIELD_LABELS.get(base_field, base_field))
         )
@@ -151,11 +152,7 @@ def build_preview(
                 value=mapping.write_value(),
                 control_label=_describe(mapping.control),
                 control_type=mapping.control.type,
-                status=(
-                    STATUS_LOW_CONFIDENCE
-                    if mapping.low_confidence
-                    else STATUS_READY
-                ),
+                status=(STATUS_LOW_CONFIDENCE if mapping.low_confidence else STATUS_READY),
                 current_value=mapping.control.current_display(),
                 note=RELAXED_TEXT_NOTE,
             )
@@ -198,9 +195,7 @@ def build_preview(
             continue
         field_name = recognize_field(control)
         if field_name:
-            field_name = field_key_for_block(
-                field_name, control.block_family, control.block_index
-            )
+            field_name = field_key_for_block(field_name, control.block_family, control.block_index)
         base_field = split_repeated_key(field_name)[0] if field_name else ""
         pending = PendingItem(
             index=control.index,
@@ -224,11 +219,12 @@ def build_preview(
             # （含文件 / 日期 / 密码类等终局判定）仍留在 blocked 并保持原文案。
             route = relaxed_route(note.control, data)
             if route is not None:
-                kind, payload = route
-                if kind == "row":
-                    report.items.append(payload)
+                # 按下标取而不是解包：`relaxed_route` 的返回值是"字面量 + 载荷"的
+                # 判别式元组，用 `route[0]` 判断去向，`route[1]` 才能被收窄成对应类型。
+                if route[0] == "row":
+                    report.items.append(route[1])
                 else:
-                    report.missing_data.append(payload)
+                    report.missing_data.append(route[1])
                 continue
             if is_relaxed_ai_candidate(note.control):
                 report.blocked.append(

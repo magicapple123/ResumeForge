@@ -3,6 +3,7 @@
 
 import json
 import re
+from typing import Any
 
 from ...schemas.resume import ResumeContent
 from ..profile.profile_context import split_lines
@@ -88,11 +89,14 @@ def coerce_resume(data: dict | None) -> ResumeContent:
         sections[section] = _item_list(
             data.get(section), config["str_fields"], config["list_fields"]
         )
-    skills = [
+    # 技能与荣誉是"交给 pydantic 转成模型的草稿 dict"（元素来自模型输出的 JSON，
+    # 形状由 `_item_list` 归一）。真正的校验发生在 `ResumeContent` 构造时，所以这里
+    # 声明成 `Any`——写下 `ResumeSkill` 反而是假的（此刻它们还不是模型实例）。
+    skills: list[Any] = [
         {"name": item.get("name", ""), "level": item.get("level", "")}
         for item in _item_list(data.get("skills"), {"name", "level"}, set())
     ]
-    awards = [
+    awards: list[Any] = [
         {
             "name": item.get("name", ""),
             "date": item.get("date", ""),

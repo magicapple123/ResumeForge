@@ -56,7 +56,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from datetime import date, timedelta
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -81,6 +83,12 @@ from .referral_service import referral_stats, referral_status_counts
 from .reminder_service import reminder_urgency_counts
 from .resume.resume_health import resume_health
 from .track_events import track_cohort_metrics
+
+# `build_dashboard` 只查参与聚合的那几列（B7，省掉整表 ORM 实例化），拿到的是
+# SQLAlchemy `Row` 而不是 `ApplicationTrack` 实例：两者都能按列名/属性名读到同一批值，
+# 但 `Row` 的"列名"对静态检查不可见。所以辅助函数用这个别名收参数——它表达的是
+# "只读的一行"，具体字段由上面的查询与既有 analytics 用例钉住。
+TrackRow = Any
 
 TREND_MONTHS = 6
 # 「投递最多的公司」展示前几名；其余合成一个"其他"计数，避免长尾把图撑满。
@@ -136,7 +144,7 @@ def _month_window(count: int) -> list[str]:
     return months
 
 
-def _applied_date(track: ApplicationTrack) -> date | None:
+def _applied_date(track: TrackRow) -> date | None:
     """把 ``applied_at`` 解析成日期；空串或写坏的值返回 ``None``。
 
     "这条记录有没有可用的投递日期"**只在这一处判定**：趋势、周内分布、缺口计数必须给出
@@ -155,7 +163,7 @@ def _applied_date(track: ApplicationTrack) -> date | None:
         return None
 
 
-def _weekday_buckets(tracks: list[ApplicationTrack]) -> list[dict]:
+def _weekday_buckets(tracks: Sequence[TrackRow]) -> list[dict]:
     """按投递日期的星期分七桶（周一→周日，恒为 7 项，含计数为 0 的桶）。"""
     counts = [0] * 7
     for track in tracks:
@@ -168,7 +176,7 @@ def _weekday_buckets(tracks: list[ApplicationTrack]) -> list[dict]:
     ]
 
 
-def _company_ranking(tracks: list[ApplicationTrack]) -> tuple[list[dict], int]:
+def _company_ranking(tracks: Sequence[TrackRow]) -> tuple[list[dict], int]:
     """按 ``company_key`` 归并的公司排行，返回 ``(前 N 名, 其余家数)``。
 
     显示名取该组里**最新一条**记录的清洗后公司名（见 :func:`clean_company_label`）；
@@ -197,7 +205,7 @@ def _company_ranking(tracks: list[ApplicationTrack]) -> tuple[list[dict], int]:
     return ranked[:TOP_COMPANY_LIMIT], max(0, len(ranked) - TOP_COMPANY_LIMIT)
 
 
-def _source_counts(tracks: list[ApplicationTrack]) -> list[dict]:
+def _source_counts(tracks: Sequence[TrackRow]) -> list[dict]:
     """按记录来源分桶（只认 ``SOURCES`` 里的取值，标签取 ``SOURCE_LABELS``）。"""
     counts = {source: 0 for source in SOURCES}
     for track in tracks:

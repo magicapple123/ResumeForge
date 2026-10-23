@@ -15,6 +15,7 @@
   覆盖所有跳），只取文本类内容；
 - 只抽取正文标签的可见文字，不执行任何脚本。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -89,7 +90,9 @@ class _ArticleParser(HTMLParser):
 def _sync_resolve(host: str) -> set[str]:
     """DNS 解析（同步）。失败返回空集，由策略层据此拒绝而不是抛出。"""
     try:
-        return {item[4][0] for item in socket.getaddrinfo(host, None)}
+        # `getaddrinfo` 的地址元组第 0 项通常是 IP 字符串；IPv6 场景下个别平台给的是
+        # 整型/字节，统一 `str()` 收口，返回值声明才站得住（下游按字符串比较网段）。
+        return {str(item[4][0]) for item in socket.getaddrinfo(host, None)}
     except (socket.gaierror, OSError):
         return set()
 

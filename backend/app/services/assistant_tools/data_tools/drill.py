@@ -1,12 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """面试深挖（drill）域的工具实现。"""
+
 from __future__ import annotations
 
 import json
 
 from sqlalchemy.orm import Session
 
-from .._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, MAX_PROFILE_RESULT_CHARS
+from .._shared import (
+    DEFAULT_LIST_LIMIT,
+    MAX_LIST_LIMIT,
+    MAX_PROFILE_RESULT_CHARS,
+    int_argument,
+)
 from .._types import ToolResult
 
 
@@ -45,10 +51,9 @@ def _tool_get_drill_report(db: Session, arguments: dict) -> ToolResult:
     from ....models.drill import DrillSession
     from ...drill import session_summary
 
-    try:
-        session_id = int(arguments.get("session_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供深挖记录 id（可以先用 list_drill_sessions 查）") from None
+    session_id = int_argument(
+        arguments, "session_id", "需要提供深挖记录 id（可以先用 list_drill_sessions 查）"
+    )
     record = db.get(DrillSession, session_id)
     if record is None:
         raise ValueError(f"深挖记录 {session_id} 不存在")

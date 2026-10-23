@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """预览数据模型与状态常量（STATUS_* / SOURCE_* / AI_NOTE）。"""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any
 
 # 预览里一条映射的状态。
@@ -50,7 +52,9 @@ class PreviewItem:
     control_type: str
     status: str = STATUS_READY
     current_value: str = ""
-    options: list[dict[str, str]] = field(default_factory=list)
+    # 注意别写成 `field(...)`：本类有一个同名的数据字段 `field: str`，类体里的 `field`
+    # 因此指向那条注解（类型检查会报"未绑定"）。`dataclass_field` 是它的别名。
+    options: list[dict[str, str]] = dataclass_field(default_factory=list)
     note: str = ""
     # rule | ai —— 界面据此打「AI 建议」标签，并且**不默认勾选**。
     source: str = SOURCE_RULE
@@ -69,17 +73,17 @@ class PendingItem:
 
 @dataclass
 class PreviewReport:
-    items: list[PreviewItem] = field(default_factory=list)
-    missing_data: list[PendingItem] = field(default_factory=list)
-    unrecognized: list[PendingItem] = field(default_factory=list)
-    blocked: list[PendingItem] = field(default_factory=list)
+    items: list[PreviewItem] = dataclass_field(default_factory=list)
+    missing_data: list[PendingItem] = dataclass_field(default_factory=list)
+    unrecognized: list[PendingItem] = dataclass_field(default_factory=list)
+    blocked: list[PendingItem] = dataclass_field(default_factory=list)
     # 放宽模式下"点选类控件规则没认出字段"的候选（控件 index），交给 AI 兜底识别。
     # **只在本进程内当路由用，不进 as_dict()**——API 载荷里它们仍然是 blocked，
     # AI 采纳成功后才搬进 items / missing_data。
-    relaxed_ai_candidates: list[int] = field(default_factory=list)
+    relaxed_ai_candidates: list[int] = dataclass_field(default_factory=list)
     # 放宽模式弱上下文文本匹配需用户明确确认；该集合仅用于后端默认勾选决策，
     # 不序列化到 API 响应。
-    requires_confirmation: set[int] = field(default_factory=set)
+    requires_confirmation: set[int] = dataclass_field(default_factory=set)
 
     def as_dict(self) -> dict[str, Any]:
         return {

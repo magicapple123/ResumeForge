@@ -19,6 +19,7 @@ import base64
 import io
 import logging
 from collections.abc import Sequence
+from typing import cast
 
 import pypdfium2 as pdfium
 
@@ -51,7 +52,10 @@ def render_pdf_page_images(raw: bytes, page_numbers: Sequence[int]) -> list[tupl
             scale = (
                 min(RENDER_SCALE, MAX_RENDER_LONG_EDGE / long_edge) if long_edge else RENDER_SCALE
             )
-            pil_image = page.render(scale=scale).to_pil()
+            # pypdfium2 的 `scale` 没有类型标注（默认值 `1` 让静态检查以为只收 int），
+            # 运行时是浮点缩放系数：取整会让 150 DPI 掉到 144，识别质量跟着变，所以按
+            # 浮点传，`cast` 说明"这里是上游标注缺失，不是我们要 int"。
+            pil_image = page.render(scale=cast(int, scale)).to_pil()
             if pil_image.mode != "RGB":
                 # JPEG 不支持 alpha：PDF 渲染常见 RGBA，先并成不透明 RGB。
                 pil_image = pil_image.convert("RGB")

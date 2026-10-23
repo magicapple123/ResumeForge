@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """资料箱（materials）域的工具实现。"""
+
 from __future__ import annotations
 
 import json
@@ -20,15 +21,14 @@ from ...materials import (
 from ...materials import (
     update_material as update_material_record,
 )
-from .._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
+from .._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, int_argument
 from .._types import ToolResult
 
 
 def _material_or_error(db: Session, arguments: dict) -> Material:
-    try:
-        material_id = int(arguments.get("material_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供资料 id（可以先用 list_materials 查）") from None
+    material_id = int_argument(
+        arguments, "material_id", "需要提供资料 id（可以先用 list_materials 查）"
+    )
     material = trash.get_live(db, Material, material_id)
     if material is None:
         raise ValueError(f"资料 {material_id} 不存在")

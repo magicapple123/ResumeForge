@@ -292,7 +292,9 @@ def active_record_summary() -> dict[str, Any] | None:
     profile = active_profile_of(state) if state else None
     if profile is None:
         return None
-    raw_config = profile.get("config") if isinstance(profile.get("config"), dict) else {}
+    raw = profile.get("config")
+    # 配置段可能被旧版本写坏（不是 dict）：当作空配置，后面各字段都会回落到空串。
+    raw_config: dict[str, Any] = raw if isinstance(raw, dict) else {}
     return {
         "id": str(profile.get("id") or ""),
         "name": str(profile.get("name") or ""),

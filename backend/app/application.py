@@ -83,7 +83,10 @@ from .runtime.log_redact import RedactExceptionFilter
 from .services.apply import apply_service
 from .services.apply.task_runner import get_task_runner
 from .services.data_backup import cleanup_temp_directories
-from .services.job.job_match_background import get_job_match_background_runner
+from .services.job.job_match_background import (
+    JobMatchBackgroundRunner,
+    get_job_match_background_runner,
+)
 from .services.resume.generate_recovery import fail_orphaned_generate_tasks
 from .services.resume.resume_generate_runner import get_resume_generate_runner
 from .services.webform import browser as webform_browser
@@ -296,7 +299,7 @@ def health():
     return {"status": "ok", "name": settings.app_name, "version": settings.app_version}
 
 
-def _shutdown_runtime_services(job_match_runner: object) -> None:
+def _shutdown_runtime_services(job_match_runner: JobMatchBackgroundRunner) -> None:
     """退出前收拢应用拥有的线程、监听器和专用浏览器。"""
     # 先停后台任务，避免浏览器关闭后工作线程还在发 CDP 请求。
     try:

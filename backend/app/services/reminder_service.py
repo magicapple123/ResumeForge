@@ -8,6 +8,7 @@
 - ``upcoming`` 只看 pending，作为"下一步"的轻量日程。
 - 删除走软删除（``trash.live_only`` 列表里不再出现），彻底删除在回收站另做。
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,7 +21,7 @@ from ..models.profile import utcnow
 from ..models.reminder import REMINDER_STATUS_PENDING, Reminder
 from ..models.resume import ResumeRecord
 from ..models.tracker import ApplicationTrack
-from ..schemas.reminder import ReminderCreate, ReminderUpcomingOut, ReminderUpdate
+from ..schemas.reminder import ReminderCreate, ReminderUpcomingOut, ReminderUpdate, ReminderUrgency
 from . import trash
 
 logger = logging.getLogger(__name__)
@@ -28,10 +29,12 @@ logger = logging.getLogger(__name__)
 MAX_REMINDER_LIST = 500
 
 # ===== 首页紧急度（前后端共用一份取值）=====
-REMINDER_URGENCY_OVERDUE = "overdue"
-REMINDER_URGENCY_SOON = "soon"
-REMINDER_URGENCY_UPCOMING = "upcoming"
-REMINDER_URGENCY_LATER = "later"
+# 四档同时是 `ReminderUpcomingOut.urgency` 的取值域：这里标成 `ReminderUrgency`，
+# `reminder_urgency()` 的返回值才能直接赋给那个 Literal 字段（否则每个赋值点都要 cast）。
+REMINDER_URGENCY_OVERDUE: ReminderUrgency = "overdue"
+REMINDER_URGENCY_SOON: ReminderUrgency = "soon"
+REMINDER_URGENCY_UPCOMING: ReminderUrgency = "upcoming"
+REMINDER_URGENCY_LATER: ReminderUrgency = "later"
 REMINDER_URGENCIES = (
     REMINDER_URGENCY_OVERDUE,
     REMINDER_URGENCY_SOON,
@@ -65,7 +68,7 @@ def _due_label(remind_at: datetime, now: datetime) -> str:
     return f"{days_until} 天后"
 
 
-def reminder_urgency(remind_at: datetime, now: datetime) -> tuple[str, str]:
+def reminder_urgency(remind_at: datetime, now: datetime) -> tuple[ReminderUrgency, str]:
     """计算紧急度与展示标签。**紧急度口径只在这里实现一处**。
 
     口径：overdue=``remind_at < now``；soon≤24h；upcoming≤3 天；later 更远。
@@ -218,4 +221,3 @@ __all__ = [
     "upcoming_reminders_out",
     "update_reminder",
 ]
-

@@ -4,6 +4,7 @@
 进度记录属于用户明确维护的数据：助手可以在用户要求时新增或修改，但不提供删除工具；
 删除仍由用户在「求职进度」或「回收站」页面完成。
 """
+
 from __future__ import annotations
 
 import json
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 from ...models.tracker import STATUSES, ApplicationTrack, status_label
 from ...schemas.tracker import TrackCreate, TrackUpdate
 from ..tracker import create_track, list_tracks, track_or_none, update_track
-from ._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
+from ._shared import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, int_argument
 from ._types import ToolResult
 
 _TRACK_FIELDS = {
@@ -54,10 +55,9 @@ def _track_brief(record: ApplicationTrack) -> dict:
 
 
 def _track_or_error(db: Session, arguments: dict) -> ApplicationTrack:
-    try:
-        track_id = int(arguments.get("track_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供求职进度 id（可以先用 list_application_tracks 查）") from None
+    track_id = int_argument(
+        arguments, "track_id", "需要提供求职进度 id（可以先用 list_application_tracks 查）"
+    )
     record = track_or_none(db, track_id)
     if record is None:
         raise ValueError(f"求职进度 {track_id} 不存在")
@@ -128,7 +128,9 @@ def _tool_update_application_track(db: Session, arguments: dict) -> ToolResult:
     updated = update_track(db, record, payload)
     changed = sorted(key for key in _TRACK_FIELDS if key in arguments)
     return ToolResult(
-        text=json.dumps({"id": updated.id, "updated": changed, **_track_brief(updated)}, ensure_ascii=False),
+        text=json.dumps(
+            {"id": updated.id, "updated": changed, **_track_brief(updated)}, ensure_ascii=False
+        ),
         summary=f"更新了「{updated.company} · {updated.title}」的求职进度",
         link="/tracker",
         changed=True,

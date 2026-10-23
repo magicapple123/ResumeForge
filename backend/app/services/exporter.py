@@ -9,6 +9,7 @@ HTML 渲染在这里，同时负责把模板、页数与字号档位写进版式
 import json
 import re
 import secrets
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -75,7 +76,7 @@ def export_json(resume: ResumeContent) -> str:
     return json.dumps(resume.model_dump(exclude={"photo"}), ensure_ascii=False, indent=2)
 
 
-def _join_bullets(items: list[str]) -> str:
+def _join_bullets(items: Iterable[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
 
 

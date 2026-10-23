@@ -157,6 +157,18 @@ class _ResumePDF(FPDF):
         """
         return font_px * _PX_TO_MM * self.layout.line_height
 
+    def _dry_run_height(self, width: float, line_height: float, text: str) -> float:
+        """`multi_cell` 的"只算不画"高度（mm）。
+
+        fpdf2 的返回类型是"取决于 `output` 取值的联合"（`float | list[str] | 元组`），
+        所以不能直接 `float(...)`。这里只取 `HEIGHT` 那一支：真的拿到了别的类型就
+        明确报错——把量高错误静默成 0 会让页头条压到文字上，比崩更难查。
+        """
+        measured = self.multi_cell(width, line_height, text, dry_run=True, output="HEIGHT")
+        if not isinstance(measured, (int, float)):
+            raise TypeError(f"multi_cell(output='HEIGHT') 返回了 {type(measured).__name__}")
+        return float(measured)
+
     def text_block_height(
         self, text: str, *, width: float, size_px: float, bold: bool = False
     ) -> float:
@@ -166,9 +178,7 @@ class _ResumePDF(FPDF):
         文字，要么先画文字再补底色（把文字也盖住）。`dry_run=True` 只算不画。
         """
         self.set_font(FONT_FAMILY, "B" if bold else "", size_px * _PX_TO_PT)
-        return float(
-            self.multi_cell(width, self.line_advance(size_px), text, dry_run=True, output="HEIGHT")
-        )
+        return self._dry_run_height(width, self.line_advance(size_px), text)
 
     def ensure_space(self, height: float) -> None:
         """剩余空间不足时换页，避免条目被从中间截断。测量模式不换页。
@@ -311,7 +321,7 @@ class _ResumePDF(FPDF):
             if not text:
                 continue
             # 先量整条高度：**纯文本**、与下面绘制时同一个宽度（`dry_run` 只算不画）。
-            height = float(self.multi_cell(width, line_height, text, dry_run=True, output="HEIGHT"))
+            height = self._dry_run_height(width, line_height, text)
             # 列表项之间的留白 = 模板 `li { margin-bottom }`。gap 必须**并进预留量**里
             # 一起算：先换页再补 gap，gap 就落到了新页顶端，段落之间凭空多一截空白。
             gap = 0.0 if first else li_gap

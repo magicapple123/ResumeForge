@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """BOSS 页面选择器、页面探针与等待诊断。"""
+
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, urlparse
 
 from ...models.apply import (
@@ -39,8 +40,7 @@ SELECTOR_SEARCH_LOCATION = "span.company-location, .job-area, .job-card-right .j
 SELECTOR_SEARCH_LINK = f"a.job-name, {SELECTOR_JOB_LINK}"
 SELECTOR_SEARCH_NEXT = ".options-pages a:last-child, a.next"
 SELECTOR_JOB_DESCRIPTION = (
-    ".job-sec-text, .job-detail-section .text, [data-testid='job-description'], "
-    ".job-detail-content"
+    ".job-sec-text, .job-detail-section .text, [data-testid='job-description'], .job-detail-content"
 )
 SELECTOR_JOB_REQUIREMENTS = (
     "[data-testid='job-requirements'], .job-requirements, .job-detail-section.requirements .text"
@@ -116,7 +116,7 @@ def _js(selector: str) -> str:
 
 
 def _blocker_js() -> str:
-    """"是否被拦截"的公共 JS 片段：定义 ``CAPTCHA`` / ``LOGIN`` 与 ``shown()``。
+    """ "是否被拦截"的公共 JS 片段：定义 ``CAPTCHA`` / ``LOGIN`` 与 ``shown()``。
 
     **必须判可见性，只看存在与否是个致命的误报源。** BOSS 把登录弹窗的整套模板
     （``.sign-form.sign-sms`` / ``-scan`` / ``-register`` / ``-miniapp`` / ``-succ`` /
@@ -288,9 +288,7 @@ def diagnostic_tail(state: dict[str, Any], expected: str) -> str:
     return f"当前地址：{url}；页面标题：{title}；匹配到的控件数：{matched}；期望：{expected}"
 
 
-def readiness_timeout_failure(
-    state: dict[str, Any], expected: str, *, fresh: bool
-) -> SiteFailure:
+def readiness_timeout_failure(state: dict[str, Any], expected: str, *, fresh: bool) -> SiteFailure:
     """页面就绪超时的结构化失败：按「未切换地址 / 已加载但结构变 / 加载超时」给出不同文案。"""
     tail = diagnostic_tail(state, expected)
     ready_state = str(state.get("ready_state", ""))
@@ -314,8 +312,16 @@ def readiness_timeout_failure(
     )
 
 
+if TYPE_CHECKING:
+    from ..browser.page_ready import ReadyWait
+
+
 class BossPageMixin:
     """由搜索与投递流程共用的页面等待逻辑。"""
+
+    # 宿主契约：`BossAdapter.__init__` 注入（见 boss.py）。
+    if TYPE_CHECKING:
+        _ready_wait: ReadyWait
 
     def _await_ready(
         self,

@@ -16,7 +16,10 @@
 ``engine`` 既有路径（``_apply_select`` / ``select_combobox_option`` / ``_apply_choice``），
 不另写一份执行器。
 """
+
 from __future__ import annotations
+
+from typing import Literal
 
 from ..engine import Control, FormEngine, has_ambiguous_field_evidence, relaxed_kind
 from ..fields import FIELD_LABELS
@@ -92,7 +95,7 @@ def relaxed_preview_item(control: Control, data: dict[str, str]) -> PreviewItem 
 
 def relaxed_route(
     control: Control, data: dict[str, str]
-) -> tuple[str, PreviewItem | PendingItem] | None:
+) -> tuple[Literal["row"], PreviewItem] | tuple[Literal["missing"], PendingItem] | None:
     """放宽模式下把一个被 ``skip_reason`` 挡住的控件分到三个去处之一。
 
     返回 ``("row", PreviewItem)`` / ``("missing", PendingItem)``；``None`` = 保持 blocked
@@ -137,25 +140,19 @@ def relaxed_route(
             label=_describe(control),
             required=control.required,
             field=shown_field,
-            field_label=field_label_for_key(
-                shown_field, FIELD_LABELS.get(base_field, base_field)
-            ),
+            field_label=field_label_for_key(shown_field, FIELD_LABELS.get(base_field, base_field)),
         )
     return "row", PreviewItem(
         index=control.index,
         field=shown_field,
-        field_label=field_label_for_key(
-            shown_field, FIELD_LABELS.get(base_field, base_field)
-        ),
+        field_label=field_label_for_key(shown_field, FIELD_LABELS.get(base_field, base_field)),
         value=value,
         control_label=_describe(control),
         control_type=control.type,
         status=STATUS_RELAXED_READY,
         # 原生下拉的选项原样带上：用户可以在预览里把值改成页面上真正存在的另一项，
         # 与 ready 行的手改能力一致。
-        options=[
-            {"value": option.value, "text": option.display()} for option in control.options
-        ],
+        options=[{"value": option.value, "text": option.display()} for option in control.options],
         note=RELAXED_NOTE,
     )
 

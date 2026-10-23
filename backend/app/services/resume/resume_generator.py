@@ -7,8 +7,9 @@
 
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
@@ -111,7 +112,7 @@ class ResumeGenerator:
         *,
         baseline: ClaimDigestOut | None = None,
         budget: OperationBudget | None = None,
-    ) -> AsyncIterator[dict]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """执行生成流程，依次产出进度、增量、完成或错误事件。
 
         ``job is None`` 表示**通用简历**：不针对任何岗位，候选资料是完整资料库，

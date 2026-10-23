@@ -20,6 +20,7 @@ import re
 from dataclasses import dataclass
 
 from ...runtime import dataset_scope
+from ._types import Tool
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,7 @@ def build_context(
     )
 
 
-def tool_visible(tool: object, *, web_search: bool, relaxed: bool) -> bool:
+def tool_visible(tool: Tool, *, web_search: bool, relaxed: bool) -> bool:
     """单条工具的可见性判断（``allowed_tools`` 的唯一实现）。
 
     语义与历史行为一致：关联网搜索不下发联网工具、关放宽模式不下发敏感读取

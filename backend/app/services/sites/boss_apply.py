@@ -32,10 +32,11 @@
 发送按钮同样用可信点击；发送成功以聊天页出现包含招呼语的**本人消息气泡**（或对话框
 「已发送」态）为准。
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ...models.apply import FAILURE_GREETING_MISSING, FAILURE_SELECTOR_INVALID
 from ..browser.cdp_client import CdpClient, CdpError
@@ -103,8 +104,17 @@ def classify_submit_state(state: dict[str, Any], greeting: str = "") -> ApplyOut
     )
 
 
+if TYPE_CHECKING:
+    from ..browser.page_ready import ReadyWait
+
+
 class BossApplyMixin:
     """BOSS 自动沟通流程：可信点击沟通入口 → 跨页进入聊天页 → 填招呼语 → 可信点击发送。"""
+
+    # 宿主契约：`BossAdapter.__init__` 注入的页面就绪参数（见 boss.py）。
+    # 只写在 `TYPE_CHECKING` 里——运行期不能替宿主声明一份空实现。
+    if TYPE_CHECKING:
+        _ready_wait: ReadyWait
 
     def _wait_state(
         self,
@@ -203,8 +213,9 @@ class BossApplyMixin:
             client,
             state,
             _apply_entry_script(),
-            ready=lambda item: bool(item.get("found"))
-            and same_target_page(str(item.get("url") or ""), url),
+            ready=lambda item: (
+                bool(item.get("found")) and same_target_page(str(item.get("url") or ""), url)
+            ),
             expected="“立即沟通 / 继续沟通”入口",
         )
         self._ensure_apply_entry(state)
@@ -220,8 +231,7 @@ class BossApplyMixin:
             client,
             state,
             _entry_rect_script(),
-            ready=lambda item: bool(item.get("found"))
-            and float(item.get("width", 0) or 0) > 0,
+            ready=lambda item: bool(item.get("found")) and float(item.get("width", 0) or 0) > 0,
             expected="可点击的“立即沟通 / 继续沟通”入口",
         )
         self._ensure_apply_entry(state)
@@ -302,9 +312,11 @@ class BossApplyMixin:
             client,
             state,
             _send_rect_script(),
-            ready=lambda item: bool(item.get("found"))
-            and not item.get("disabled")
-            and float(item.get("width", 0) or 0) > 0,
+            ready=lambda item: (
+                bool(item.get("found"))
+                and not item.get("disabled")
+                and float(item.get("width", 0) or 0) > 0
+            ),
             expected="可点击的“发送”按钮（填入招呼语后启用）",
         )
         return state

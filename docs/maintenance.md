@@ -139,8 +139,8 @@ ResumeForge/
   启动器都按同一条正则解析它）；发版用 `python scripts/bump_version.py` 同步 5 处，
   `scripts/check_version_sync.py` 在 CI 核对 config.py 与 package.json 不漂移。
 - **后端静态检查双件套**：`ruff check .`（E/F/I/UP/B/SIM）与
-  `python -m pyright`（basic，范围见 `backend/pyrightconfig.json`，当前仅
-  `app/models` + `app/schemas`，其余目录随注解补齐渐进纳入）。
+  `python -m pyright`（basic，范围见 `backend/pyrightconfig.json`；2026-10-23 起覆盖
+  全部 `app/`，535 个文件 0 error。扩面按批次做、每批记录改法与理由，见该文件的注释）。
 - **两个端到端作业**（`macos-end-to-end` / `windows-end-to-end`）从**干净检出**走完整启动链并
   真的取一次前端入口模块——"端口活着但页面一片空白"只有它们捕得到（2026-09-29 用户在虚拟机
   上解压新版本后只看到空白页，当时 Windows 侧没有这个作业）。改了启动链要跑它们。

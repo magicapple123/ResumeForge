@@ -1,6 +1,6 @@
 {
-  // 渐进类型检查（工程师评审 P1-4）：先钉住类型边界最清晰的两层。
-  // 新增代码按 basic 通过；其余子目录在存量类型注解补齐后逐个加进 include。
+  // 渐进类型检查（工程师评审 P1-4）：从"类型边界最清晰的两层"起步，现已覆盖全部 `app/`。
+  // 新增代码按 basic 通过；扩面过程见下面的批次记录。
   // RF-21 评估（2026-10-11）：app/runtime 试跑 0 错误，直接纳入；services/llm
   // 3 错、services/assistant_tools 32 错（集中在 reportArgumentType 的 None 收窄），
   // 扩面需先修存量，见 deliverables 的 RF-21 交付报告。
@@ -17,19 +17,31 @@
   // database.session_engine 收窄为 Engine、webform 包属性显式 re-export、
   // JobImportRow/CandidateCsvRow/DrillTurnOut 显式构造、_page_after_fill 参数
   // 改声明 set[int]。其中 stats.py 1 错由并行实例处理（复用 session_engine 即清）。
+  // 第四批扩面（2026-10-23，C-07）：把剩余 `app/services/*` 与 `app/*.py` 一次纳入，
+  // 全量 `app/` 覆盖后 error 归零。这一批 153 错按族消化，改法都在"让类型说真话"：
+  // - 工具参数的 id 收口：20 处 `int(arguments.get(...))`（模型给的 id 可能是 str 也
+  //   可能是 int，缺失是 None）合并成 `_shared.int_argument()` 一处实现；
+  // - 宿主契约：`webform/live_remember.py`（27）与 `sites/boss_{apply,page,scroll,
+  //   search}.py`（5）在 `if TYPE_CHECKING:` 里声明混入依赖的宿主成员——运行期不定义
+  //   任何属性，避免空实现遮蔽宿主（静默返回 None 比 AttributeError 难查）；
+  // - SQLAlchemy Row：`analytics.py` 刻意只查聚合列（B7），拿到的是 Row 而不是 ORM
+  //   实例，辅助函数统一用 `TrackRow = Any` 收参并在注释里写明理由；
+  // - pydantic 边界：`profile_text_parser` / `resume_content` 把"草稿 dict 交给模型
+  //   校验"这件事显式化（`model_validate` / `list[Any]`），不假装它们已是模型实例；
+  // - Literal 出口收窄：`SiteHealth.status`、`BrowserStatus.state`、
+  //   `ReminderUrgency`、`RiskSeverity` 的取值域在**判定处**就固定成 Literal，
+  //   下游（`SiteHealthOut` / `BrowserStatusOut` / `ReminderUpcomingOut`）不再各写一份；
+  // - 第三方标注缺口：`fontTools` 的 `name_IDs`/`name_languages`、`pypdfium2` 的
+  //   `scale`（默认值 1 ⇒ 静态推成 int）与 `fpdf2` 的 `multi_cell` 联合返回类型，
+  //   四处用 `cast` / `isinstance` 收窄并就地写明"上游标注与运行时不一致"。
+  // 剩余：0 error；1 warning（`previews.py` 的 `__all__` 动态导出，pyright 自身限制）。
   "include": [
-    "app/models",
-    "app/schemas",
-    "app/runtime",
-    "app/services/data_backup",
-    "app/services/apply",
-    "app/services/browser",
-    "app/api"
+    "app"
   ],
   "typeCheckingMode": "basic",
   "pythonVersion": "3.11",
   // 本地开发用 backend/.venv；CI 里全局装包时 pyright 会回退到当前解释器的
-  // site-packages（缺失导入只是 warning，不挡门禁——门禁目标是这两层的类型错误）。
+  // site-packages（缺失导入只是 warning，不挡门禁——门禁目标是这些层的类型错误）。
   "venvPath": ".",
   "venv": ".venv",
   "reportMissingImports": "warning",

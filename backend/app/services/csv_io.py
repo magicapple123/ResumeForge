@@ -11,7 +11,7 @@ from __future__ import annotations
 import csv
 import io
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 
 # 字段内换行（含前后空白）折叠成单个空格：JD/要求是多段文本，直接进 CSV 会在
 # Excel 里把一条记录撑成十几行（每个换行一行），表格没法看。折叠后每条记录
@@ -73,7 +73,7 @@ def decode_csv_bytes(raw: bytes) -> str:
         raise ValueError("无法识别文件编码：请用 UTF-8 或 GBK 保存 CSV 后重试") from exc
 
 
-def records_to_csv_text(headers: list[str], records: list[list[object]]) -> str:
+def records_to_csv_text(headers: list[str], records: Iterable[Iterable[object]]) -> str:
     """按表头+行值写出带 UTF-8 BOM 的 CSV 文本（Excel 双击打开不乱码）。"""
     buffer = io.StringIO()
     writer = csv.writer(buffer)

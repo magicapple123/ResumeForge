@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """跨工具域共享的 helper 与常量。"""
+
 from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 from sqlalchemy.orm import Session, selectinload
 
@@ -36,8 +38,26 @@ PROFILE_EDITABLE_FIELDS = (
     "github",
     "summary",
 )
+
+
 def _trim(value: str, limit: int) -> str:
     return value if len(value) <= limit else f"{value[:limit].rstrip()}…"
+
+
+def int_argument(arguments: dict[str, Any], key: str, error: str) -> int:
+    """把工具参数里的整数 id 收成 `int`，缺失或不是数字时抛 `error`（中文提示）。
+
+    工具参数是模型生成的 JSON：同一个 id 既可能给成 `"12"` 也可能给成 `12`，缺失时是
+    `None`。三者要落到同一个出口——"先用 list_xxx 查"这句提示对模型来说是唯一有用的
+    下一步。写成一处实现，免得二十个工具各抄一份 `try: int(...) except ...`。
+    """
+    value = arguments.get(key)
+    if value is None:
+        raise ValueError(error)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValueError(error) from None
 
 
 # 读简历时留给正文的预算（从总预算里扣掉元信息与版式那部分）。

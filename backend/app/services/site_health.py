@@ -22,7 +22,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
@@ -60,15 +60,18 @@ HEALTH_SAMPLE_STATUSES = (TASK_STATUS_COMPLETED, TASK_STATUS_FAILED)
 # 为覆盖"中间夹着一堆别站点任务"的情况，先按时间取一段再过滤。
 _RECENT_SCAN_LIMIT = 200
 
-STATUS_OK = "ok"
-STATUS_DEGRADED = "degraded"
+# 健康度只有两档：`SiteHealthOut.status` 也是同一个 Literal，两处必须同源——
+# 判定在这里、展示在那里，中间不允许出现第三种取值。
+SiteHealthStatus = Literal["ok", "degraded"]
+STATUS_OK: SiteHealthStatus = "ok"
+STATUS_DEGRADED: SiteHealthStatus = "degraded"
 
 
 @dataclass(frozen=True)
 class SiteHealth:
     """纯判断的结论：状态 + 可操作原因 + 统计明细。"""
 
-    status: str = STATUS_OK
+    status: SiteHealthStatus = STATUS_OK
     reasons: list[str] = field(default_factory=list)
     sampled: int = 0
     selector_failures: int = 0
@@ -239,6 +242,7 @@ __all__ = [
     "RECENT_COLLECT_WINDOW",
     "STATUS_DEGRADED",
     "STATUS_OK",
+    "SiteHealthStatus",
     "SiteHealth",
     "evaluate_site_health",
     "recent_collect_summaries",

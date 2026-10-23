@@ -82,7 +82,12 @@ def _install_spa_404_fallback(app: FastAPI, dist_dir: Path) -> None:
     的默认处理；非回退分支逐字复刻该默认行为，含 405 的 Allow 头透传）。"""
     index_html = dist_dir / "index.html"
 
-    async def spa_404_handler(request: Request, exc: StarletteHTTPException):
+    async def spa_404_handler(request: Request, exc: Exception) -> FileResponse | JSONResponse:
+        # 本函数只注册在 `StarletteHTTPException` 上（见下面的 add_exception_handler），
+        # 框架保证传进来的就是它。`add_exception_handler` 的形状要求处理函数收
+        # `Exception`，所以这里就地收窄——非 HTTP 异常原样抛回去，仍走框架默认处理。
+        if not isinstance(exc, StarletteHTTPException):
+            raise exc
         if exc.status_code == 404 and _should_spa_fallback(request):
             return FileResponse(
                 index_html,

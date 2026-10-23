@@ -324,7 +324,9 @@ def normalize_profile_result(
     data = _canonical_section_keys(data)
     state = {"truncated": False}
     local_data = local.model_dump()
-    values = {
+    # 基础字段是 str，子表是 list[dict]：这张草稿字典生来就是混装的，之后整体交给
+    # `ProfileTextParseResult` 校验，所以这里显式声明成 Any。
+    values: dict[str, Any] = {
         field: _bounded_text(data.get(field), limit, state)
         for field, limit in _PROFILE_BASIC_LIMITS.items()
     }

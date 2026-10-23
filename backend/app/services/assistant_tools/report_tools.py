@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """模拟面试 / 简历版式，以及只读检索类的提醒 / 内推 / 面经 / 题库 / 复盘 / 知识库 / 统计 / 分享包工具。"""
+
 from __future__ import annotations
 
 import json
@@ -37,6 +38,7 @@ from ._shared import (
     MAX_LIST_LIMIT,
     MAX_PROFILE_RESULT_CHARS,
     _trim,
+    int_argument,
 )
 from ._types import ToolResult
 
@@ -45,10 +47,9 @@ logger = logging.getLogger(__name__)
 
 
 def _interview_or_error(db: Session, arguments: dict) -> InterviewSession:
-    try:
-        session_id = int(arguments.get("session_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供 session_id（可以先用 list_interview_sessions 查）") from None
+    session_id = int_argument(
+        arguments, "session_id", "需要提供 session_id（可以先用 list_interview_sessions 查）"
+    )
     session = db.get(InterviewSession, session_id)
     if session is None:
         raise ValueError(f"模拟面试 {session_id} 不存在")
@@ -112,10 +113,7 @@ def _tool_get_interview_report(db: Session, arguments: dict) -> ToolResult:
 
 
 def _tool_update_resume_layout(db: Session, arguments: dict) -> ToolResult:
-    try:
-        resume_id = int(arguments.get("resume_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供简历 id（可以先用 list_resumes 查）") from None
+    resume_id = int_argument(arguments, "resume_id", "需要提供简历 id（可以先用 list_resumes 查）")
     record = trash.get_live(db, ResumeRecord, resume_id)
     if record is None:
         raise ValueError(f"简历 {resume_id} 不存在")
@@ -143,6 +141,8 @@ def _tool_update_resume_layout(db: Session, arguments: dict) -> ToolResult:
         link="/resumes",
         changed=True,
     )
+
+
 # ===== 知识审计补齐：提醒 / 内推 / 面经 / 题库 / 复盘 / 知识库 / 统计 / 分享包 =====
 #
 # 这些域此前只有界面、没有工具：用户问「我有几个提醒 / 内推 / 面经 / 知识」，助手答不上来，
@@ -327,10 +327,9 @@ def _tool_list_knowledge(db: Session, arguments: dict) -> ToolResult:
 
 
 def _tool_get_knowledge(db: Session, arguments: dict) -> ToolResult:
-    try:
-        knowledge_id = int(arguments.get("knowledge_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供知识库条目 id（可以先用 list_knowledge 查）") from None
+    knowledge_id = int_argument(
+        arguments, "knowledge_id", "需要提供知识库条目 id（可以先用 list_knowledge 查）"
+    )
     entry = knowledge_or_none(db, knowledge_id)
     if entry is None:
         raise ValueError(f"知识库条目 {knowledge_id} 不存在")
@@ -370,10 +369,9 @@ def _tool_create_knowledge(db: Session, arguments: dict) -> ToolResult:
 
 
 def _tool_update_knowledge(db: Session, arguments: dict) -> ToolResult:
-    try:
-        knowledge_id = int(arguments.get("knowledge_id"))
-    except (TypeError, ValueError):
-        raise ValueError("需要提供知识库条目 id（可以先用 list_knowledge 查）") from None
+    knowledge_id = int_argument(
+        arguments, "knowledge_id", "需要提供知识库条目 id（可以先用 list_knowledge 查）"
+    )
     entry = knowledge_or_none(db, knowledge_id)
     if entry is None:
         raise ValueError(f"知识库条目 {knowledge_id} 不存在")

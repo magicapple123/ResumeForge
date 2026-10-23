@@ -3,10 +3,12 @@
 
 方法体逐字原样搬运；经 ``self.*`` 访问宿主 LiveSession 的成员。
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from .engine import Control
 from .extra_profile import custom_key
@@ -15,10 +17,32 @@ from .live_scripts import _HIDE_REMEMBER_SCRIPT
 from .repeated_fields import field_key_for_block, field_label_for_key, split_repeated_key
 from .service import recognize_field
 
+if TYPE_CHECKING:
+    from ..browser.cdp_client import CdpClient
+
 logger = logging.getLogger(__name__)
 
 
 class LiveRememberMixin:
+    # ===== 宿主契约 =====
+    # 下面这些成员由宿主 `LiveSession`（及其它混入）提供，本混入只用不实现。
+    # 声明写在 `TYPE_CHECKING` 里：类型检查期看得见，**运行期什么都不定义**——写一份
+    # 空实现会遮蔽宿主真实实现，而"静默返回 None"比 AttributeError 难查得多。
+    if TYPE_CHECKING:
+        _client: CdpClient
+        _store: Callable[[dict[str, str]], bool] | None
+        _require_memory_choice: bool
+        state: dict[str, Any]
+
+        @staticmethod
+        def _build_control(raw: dict[str, Any]) -> Control | None: ...
+
+        def _current_control(self) -> Control | None: ...
+
+        def _refresh_data(self) -> None: ...
+
+        def _publish(self, panel: dict[str, Any]) -> None: ...
+
     # ===== 用户点了「记住这条」 =====
 
     def _on_remember(self, remember: dict[str, Any]) -> None:
@@ -60,7 +84,9 @@ class LiveRememberMixin:
         if self._require_memory_choice:
             control_label = ""
             if control is not None:
-                control_label = (control.label or control.placeholder or control.nearby_text or control.name).strip()
+                control_label = (
+                    control.label or control.placeholder or control.nearby_text or control.name
+                ).strip()
             self._publish_remember_pending(
                 {
                     "field_key": key,
@@ -200,13 +226,10 @@ class LiveRememberMixin:
         if ok:
             destination = str(entry.get("destination") or "").strip()
             self._publish_remember(
-                
-                    f"已保存到「{destination}」，下次遇到就能使用"
-                    if destination
-                    else f"已更新「{label or pending.get('field_label') or '网申资料'}」，下次遇到相同类型的框可以继续使用"
-                
+                f"已保存到「{destination}」，下次遇到就能使用"
+                if destination
+                else f"已更新「{label or pending.get('field_label') or '网申资料'}」，下次遇到相同类型的框可以继续使用"
             )
         else:
             self._publish_remember_pending(pending, "这条资料没能保存，请检查目标后重试")
         return ok
-
