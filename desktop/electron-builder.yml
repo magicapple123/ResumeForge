@@ -34,6 +34,9 @@ files:
   # Identity checks for adopted PIDs (RR-02): backend-manager.js requires it,
   # so leaving it out would crash the packaged entry point.
   - lib/process-identity.js
+  # 窗口尺寸/位置/缩放的持久化（2026-10-23 适配）：main.js 顶层 require，
+  # 漏打包会让 createWindow 直接崩（和 updater.js 当年同一类事故）。
+  - lib/window-state.js
   # SQLite snapshot helpers used by lib/data-migration.js (RR-06).
   - lib/sqlite-snapshot.js
   # Runtime unpacking / log rotation used by backend-manager.js (line-budget split).

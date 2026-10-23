@@ -89,6 +89,14 @@ function loadMain() {
     constructor() {
       this.webContents = {
         send: (channel, payload) => events.stages.push(payload),
+        // 2026-10-23：main.js 现在会读缩放系数（Ctrl+± 持久化）并监听 zoom-changed，
+        // 桩必须覆盖这两个方法，否则 createWindow 直接抛，整条生命周期链都测不到。
+        on: (name, handler) => {
+          this.webContentsHandlers = this.webContentsHandlers ?? {};
+          this.webContentsHandlers[name] = handler;
+        },
+        getZoomFactor: () => 1,
+        setZoomFactor: () => undefined,
       };
       // 记录注册过的窗口事件（close / ready-to-show）：用例要断言"启动失败后
       // 关窗不会被 preventDefault 拦成隐藏到托盘"。
@@ -116,6 +124,16 @@ function loadMain() {
     }
     isMinimized() {
       return false;
+    }
+    isMaximized() {
+      return false;
+    }
+    maximize() {}
+    getBounds() {
+      return { x: 0, y: 0, width: 1440, height: 900 };
+    }
+    getNormalBounds() {
+      return this.getBounds();
     }
     restore() {}
   }
@@ -264,6 +282,14 @@ function loadMain() {
           Menu: MenuStub,
           dialog: dialogStub,
           ipcMain: ipcMainStub,
+          // 屏幕信息：默认尺寸按工作区算（方案 §2.3.1），桩给一块 1920x1040 的主屏。
+          screen: {
+            getPrimaryDisplay: () => ({
+              workArea: { x: 0, y: 0, width: 1920, height: 1040 },
+              workAreaSize: { width: 1920, height: 1040 },
+            }),
+            getAllDisplays: () => [{ workArea: { x: 0, y: 0, width: 1920, height: 1040 } }],
+          },
           shell: shellStub,
         };
       }

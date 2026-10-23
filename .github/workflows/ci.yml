@@ -251,6 +251,15 @@ jobs:
           npx playwright install chromium
           npx playwright test
 
+      - name: Responsive layout gate (8 viewports x 18 routes)
+        # 多分辨率适配的硬指标（R1/R2/R3）：8 个视口 × 18 条路由 = 144 条断言，
+        # 不复用默认配置——那套的 testDir 是 tests/smoke，断言按 1200px 校准过，
+        # 把 144 次导航塞进去会让"冒烟"失去意义（方案 §7.7）。
+        working-directory: frontend
+        env:
+          SMOKE_FRONTEND_URL: "http://127.0.0.1:8123"
+        run: npx playwright test -c playwright.responsive.config.ts
+
       - name: Read-only install root (runtime state must leave the payload)
         # 报告 §1.8 第 4 条的可执行替代，加在本作业里而不新建作业：新建会重复
         # 下载一遍运行时，而这里要用的正是刚刚验证过的那份工作树。

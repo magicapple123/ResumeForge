@@ -14,11 +14,16 @@
 // awaited (with a hard cap) and only then is quit allowed to proceed; the
 // update installer is spawned after the stop completes, never before.
 
-const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, screen, shell } = require("electron");
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { createShellLogging, announceDegradedOnReady } = require("./lib/preflight");
 const { resolveLogDir } = require("./lib/shell-paths");
+const {
+  clampToWorkArea,
+  createWindowStateStore,
+  initialBounds,
+} = require("./lib/window-state");
 const { createQuitLifecycle } = require("./lib/quit-lifecycle");
 const { installerWaitCommand, runManualUpdateCheck, scheduleUpdateCheck, wantsManualUpdateCheck } = require("./updater");
 
@@ -192,11 +197,28 @@ function createTray() {
   });
 }
 
+/** 窗口尺寸 / 位置 / 缩放的读写（纯函数在 lib/window-state.js，有离线用例）。 */
+const windowState = createWindowStateStore({ app, getWindow: () => mainWindow });
+
 function createWindow() {
+  const remembered = windowState.read();
+  const workAreaSize = screen.getPrimaryDisplay().workAreaSize;
+  const primaryWorkArea = screen.getPrimaryDisplay().workArea;
+  // 有记忆就夹回可见区（拔掉副屏会落到屏幕外），没有就按工作区比例算（方案 §2.3.1）。
+  const targetBounds =
+    clampToWorkArea(remembered, screen.getAllDisplays()) ??
+    initialBounds({
+      x: primaryWorkArea.x,
+      y: primaryWorkArea.y,
+      width: workAreaSize.width,
+      height: workAreaSize.height,
+    });
+
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1080,
+    ...targetBounds,
+    // 1120：比 D 档下沿（1092）高，窗口再小也不会掉进 E 档；同时 1366×768 的笔记本
+    // 仍能拖动窗口（minWidth 不是"支持下限"，方案附录 D4）。
+    minWidth: 1120,
     minHeight: 700,
     show: false,
     autoHideMenuBar: true,
@@ -210,6 +232,32 @@ function createWindow() {
     },
   });
   mainWindow.setMenuBarVisibility(false);
+  if (remembered && remembered.maximized) mainWindow.maximize();
+
+  // 尺寸/位置：400ms 防抖后落盘（拖动时每一帧都写盘没有意义）。
+  let saveTimer = null;
+  const scheduleSave = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(windowState.save, 400);
+  };
+  mainWindow.on("resize", scheduleSave);
+  mainWindow.on("move", scheduleSave);
+
+  // 缩放：`Ctrl+±` 由 Chromium 处理，这里只负责"记住"。写盘同样节流，且落盘时再夹一次
+  // [0.8, 1.5]（`buildStatePayload`），超出范围说明用户已把自己放进未验收的档位。
+  let zoomTimer = null;
+  mainWindow.webContents.on("zoom-changed", () => {
+    if (zoomTimer) clearTimeout(zoomTimer);
+    zoomTimer = setTimeout(windowState.save, 500);
+  });
+  // 缩放系数必须在**导航完成之后**设置：对 about:blank 设置会被 loadURL 重置。
+  const rememberedZoom = remembered?.zoomFactor;
+  if (typeof rememberedZoom === "number" && rememberedZoom !== 1) {
+    mainWindow.webContents.on("did-finish-load", () => {
+      mainWindow.webContents.setZoomFactor(rememberedZoom);
+    });
+  }
+
   mainWindow.loadFile(path.join(__dirname, "splash.html"));
   mainWindow.once("ready-to-show", () => mainWindow.show());
 
@@ -219,7 +267,10 @@ function createWindow() {
     if (!quitting) {
       event.preventDefault();
       mainWindow.hide();
+      return;
     }
+    // 只有真实退出才写：hide-to-tray 时窗口还在，值可能是最大化前的。
+    windowState.save();
   });
 }
 
