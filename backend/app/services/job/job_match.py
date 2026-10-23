@@ -186,7 +186,7 @@ def build_match_messages(
 def parse_match_result(raw: str) -> JobMatchResult:
     """严格解析模型返回的匹配 JSON；仅兼容整段 Markdown 围栏包裹。"""
     if not raw or len(raw) > MAX_MATCH_RESPONSE_CHARS:
-        raise LLMError("模型返回的匹配结果为空或过长，请重试")
+        raise LLMError("模型返回的匹配结果为空或过长，请重试", retryable=True)
     cleaned = raw.strip()
     fenced = _MARKDOWN_JSON_RE.fullmatch(cleaned)
     if fenced is not None:
@@ -194,13 +194,13 @@ def parse_match_result(raw: str) -> JobMatchResult:
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        raise LLMError("模型未返回有效的匹配结果 JSON，请重试") from exc
+        raise LLMError("模型未返回有效的匹配结果 JSON，请重试", retryable=True) from exc
     if not isinstance(data, dict):
-        raise LLMError("模型返回的匹配结果结构无效，请重试")
+        raise LLMError("模型返回的匹配结果结构无效，请重试", retryable=True)
     try:
         return JobMatchResult.model_validate(data)
     except ValidationError as exc:
-        raise LLMError("模型返回的匹配结果字段不完整或超出限制，请重试") from exc
+        raise LLMError("模型返回的匹配结果字段不完整或超出限制，请重试", retryable=True) from exc
 
 
 def _normalize(value: str) -> str:
@@ -267,7 +267,7 @@ def validate_evidence(result: JobMatchResult, jd_source: str, personal_source: s
         if quote and not _candidate_in_sources(
             _normalize(quote), [normalized_jd], _INCLUSION_THRESHOLD
         ):
-            raise LLMError("模型返回的匹配结论缺少招聘原文依据，请重试")
+            raise LLMError("模型返回的匹配结论缺少招聘原文依据，请重试", retryable=True)
         evidence = condition.evidence.strip()
         if not evidence:
             continue
@@ -278,7 +278,7 @@ def validate_evidence(result: JobMatchResult, jd_source: str, personal_source: s
             [normalized_personal, normalized_jd],
             _INCLUSION_THRESHOLD,
         ):
-            raise LLMError("模型返回的匹配证据无法在资料或简历中核对，请重试")
+            raise LLMError("模型返回的匹配证据无法在资料或简历中核对，请重试", retryable=True)
 
 
 def _all_statuses(result: JobMatchResult) -> list[str]:

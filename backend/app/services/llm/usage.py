@@ -10,6 +10,7 @@
 「未知」，**禁止伪造 0**，也禁止用字符数折算成"精确" token 数冒充真实值。
 本模块不含 prompt/response 内容（隐私边界：日志与落库都不允许记录它们）。
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -102,7 +103,14 @@ def summarize_usages(
         return None
 
     def _sum(values: list[int | None]) -> int | None:
-        return sum(values) if all(value is not None for value in values) else None
+        # 逐项累加而不是 `sum(values)`：只有**每一项都有值**才给和，缺一个就整体
+        # 报"未知"——部分和会被误读成完整值。逐个判空也让类型收窄成立。
+        total = 0
+        for value in values:
+            if value is None:
+                return None
+            total += value
+        return total
 
     last = records[-1]
     return {
@@ -148,9 +156,7 @@ def merge_openai_stream_usage(
     )
 
 
-def usage_log_line(
-    usage: LLMUsage, *, estimated_prompt_tokens: int | None = None
-) -> str:
+def usage_log_line(usage: LLMUsage, *, estimated_prompt_tokens: int | None = None) -> str:
     """把用量记录拼成结构化日志字段串（生成任务的模型用量日志与未来消费方共用）。
 
     只含 model / token 计数 / 耗时 / 结束原因 / 重试次数——**绝不包含 prompt/

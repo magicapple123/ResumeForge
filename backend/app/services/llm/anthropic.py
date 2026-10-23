@@ -198,7 +198,7 @@ class AnthropicProvider(BaseLLMProvider):
                 retries=gate.retries,
             )
 
-    async def stream_chat(self, messages: list[dict]) -> AsyncIterator[str]:
+    async def stream_chat(self, messages: list[dict]) -> AsyncGenerator[str, None]:
         async for delta in self.stream_chat_events(messages):
             if delta.text:
                 yield delta.text
