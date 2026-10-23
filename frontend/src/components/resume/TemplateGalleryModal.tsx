@@ -8,6 +8,7 @@
  */
 import { App, Button, Empty, Modal, Segmented, Space, Tag, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
+import A4PreviewFrame from "../templates/A4PreviewFrame";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchResumeTemplates, previewResumeTemplate } from "../../api/resumes";
 import type { ResumeFontScale, ResumeLayout, ResumeTemplateOption } from "../../types";
@@ -196,13 +197,12 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
                 }}
               >
                 {previews[item.name] ? (
-                  <iframe
+                  // 复用 A4PreviewFrame 的 `fit="width"`：宽度决定高度、按实测比例缩放，
+                  // 不再写死 `scale(0.36)` —— 卡片宽一变就会左右各裁 4px、右边留白。
+                  <A4PreviewFrame
+                    html={withHiddenScrollbar(previews[item.name])}
                     title={`${item.label} 预览`}
-                    className="template-gallery-frame"
-                    sandbox=""
-                    // 内层滚动条在缩略图上是一根多余的竖条（用户反馈"不美观"）；
-                    // 完整内容走「查看大图」，那里该滚就滚。
-                    srcDoc={withHiddenScrollbar(previews[item.name])}
+                    fit="width"
                   />
                 ) : failed[item.name] ? (
                   <div className="template-gallery-error">{failed[item.name]}</div>

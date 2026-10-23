@@ -415,6 +415,9 @@ export default function ResumeTable({
       title: "操作",
       key: "actions",
       width: 150,
+      // 钉在右侧：窄屏（≤1536）表格要横滚 216–660px，不钉住的话「预览 / 导出」整列在首屏外，
+      // 而滚动条落在表体底部、首屏根本看不到（AUDIT P1-11）。
+      fixed: "right",
       render: (_, record) => (
         // 三点「更多」下拉已移除：重命名/备注/对比/收藏/删除统一走整行右键菜单，
         // 键盘用户可用 ContextMenu 键 / Shift+F10 打开（见 RowContextMenu）。
@@ -431,6 +434,9 @@ export default function ResumeTable({
     <div ref={tableWrapRef}>
       <Table
         rowKey="id"
+        // 10 列宽度之和 = 64+220+200+100+150+180+110+160+160+150 = 1494。
+        // 必须写 ≥ 各列之和：写小了会把 220 的标题列与 180 的备注列**压扁**（不是横滚）。
+        scroll={{ x: 1494 }}
         columns={columns}
         dataSource={data?.items ?? []}
         loading={loading}

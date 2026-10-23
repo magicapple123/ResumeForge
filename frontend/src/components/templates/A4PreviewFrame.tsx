@@ -22,9 +22,22 @@ interface Props {
   title: string;
   /** 画布高度上限，默认 72vh。 */
   maxHeight?: string;
+  /**
+   * 缩放口径（2026-10-23 增加第二种）：
+   * - `contain`（默认）：宽高都放得下，用于"查看大图"这类给定高度上限的场景；
+   * - `width`：**宽度决定高度**（容器按 A4 比例撑开、纸铺满卡片宽），用于模板缩略图卡片。
+   *   原先缩略图写死 `scale(0.36)` + `margin-left: -143px`，卡片宽一变就左右各裁 4px，
+   *   而且高度不会跟着卡片走——这正是这里加一个口径的原因。
+   */
+  fit?: "contain" | "width";
 }
 
-export default function A4PreviewFrame({ html, title, maxHeight = "72vh" }: Props) {
+export default function A4PreviewFrame({
+  html,
+  title,
+  maxHeight = "72vh",
+  fit = "contain",
+}: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   // 初值给 1 而不是 0：容器尺寸量不到时（jsdom 不做布局）仍要渲染出内容，
   // 否则组件在测试里会"什么都不显示"，那是比缩放不准更糟的失败方式。
@@ -33,29 +46,38 @@ export default function A4PreviewFrame({ html, title, maxHeight = "72vh" }: Prop
   useLayoutEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
-    const fit = () => {
+    const measure = () => {
       const width = stage.clientWidth;
       const height = stage.clientHeight;
       // 量不到尺寸（布局尚未完成 / 测试环境）就保持当前比例，不要缩成 0。
       if (!width || !height) return;
-      setScale(Math.min(width / A4_WIDTH_PX, height / A4_HEIGHT_PX));
+      // `width` 口径只认宽度：高度由 aspect-ratio 反推，所以两者永远同比例，不会被裁。
+      setScale(
+        fit === "width"
+          ? width / A4_WIDTH_PX
+          : Math.min(width / A4_WIDTH_PX, height / A4_HEIGHT_PX),
+      );
     };
     // 放在 layout effect 里：首帧就按正确比例绘制，不会先大后小闪一下。
-    fit();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(stage);
-    window.addEventListener("resize", fit);
+    window.addEventListener("resize", measure);
     return () => {
       observer?.disconnect();
-      window.removeEventListener("resize", fit);
+      window.removeEventListener("resize", measure);
     };
-  }, [html]);
+  }, [fit, html]);
 
   return (
     <div
       ref={stageRef}
       className="a4-preview-stage"
-      style={{ height: `min(${maxHeight}, ${A4_HEIGHT_PX}px)` }}
+      style={
+        fit === "width"
+          ? { aspectRatio: `${A4_WIDTH_PX} / ${A4_HEIGHT_PX}`, height: "auto" }
+          : { height: `min(${maxHeight}, ${A4_HEIGHT_PX}px)` }
+      }
     >
       <div
         className="a4-preview-paper"

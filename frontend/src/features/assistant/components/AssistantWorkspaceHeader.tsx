@@ -3,10 +3,16 @@
 
 import { HistoryOutlined } from "@ant-design/icons";
 import { Button, Space, Typography } from "antd";
+import { t } from "../../../i18n";
 import AssistantSelectBar from "./AssistantSelectBar";
 
 interface Props {
   compact: boolean;
+  /**
+   * 平板档（768–1092）把历史列表收进抽屉时，页头要有入口。
+   * 浮窗（`compact`）本来就有这颗按钮，两者共用一个渲染分支。
+   */
+  showHistoryButton?: boolean;
   historyOpen: boolean;
   onToggleHistory: () => void;
   selecting: boolean;
@@ -18,6 +24,7 @@ interface Props {
 
 export default function AssistantWorkspaceHeader({
   compact,
+  showHistoryButton = false,
   historyOpen,
   onToggleHistory,
   selecting,
@@ -36,7 +43,7 @@ export default function AssistantWorkspaceHeader({
         {/* 多选入口已收进消息右键菜单（R8）；浮窗这里只剩历史按钮。
             header 是 space-between 布局，只剩两个子元素时操作全部靠右。 */}
         <Space size={4} className="assistant-header-actions">
-          {compact && (
+          {compact || showHistoryButton ? (
             <Button
               type="text"
               icon={<HistoryOutlined />}
@@ -44,9 +51,9 @@ export default function AssistantWorkspaceHeader({
               aria-expanded={historyOpen}
               onClick={onToggleHistory}
             >
-              历史
+              {compact ? t("responsive.assistant.historyShort") : t("responsive.assistant.history")}
             </Button>
-          )}
+          ) : null}
         </Space>
       </header>
       {selecting && (

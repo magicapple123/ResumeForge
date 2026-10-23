@@ -34,7 +34,7 @@ import {
   toResumeSort,
   type ResumeSortState,
 } from "../utils/resumeSort";
-import ResumeTable from "./resumes/ResumeTable";
+import ResumeResultList from "./resumes/ResumeResultList";
 import DeliveryArchiveModal from "../components/resume/DeliveryArchiveModal";
 import ResumeRenameModal from "./resumes/ResumeRenameModal";
 import ResumeNoteModal from "./resumes/ResumeNoteModal";
@@ -90,6 +90,8 @@ export default function ResumesPage() {
     const raw = searchParams.get("resume_id");
     return raw && /^\d+$/.test(raw) ? Number(raw) : null;
   });
+  // 新建 → 前往制作台：只作用于**这一次**打开（关掉详情就复位，见 onClose）。
+  const [autoWorkbench, setAutoWorkbench] = useState(false);
   const [favoriteResumeId, setFavoriteResumeId] = useState<number | null>(null);
   const favoriteResumeIdRef = useRef<number | null>(null);
   const [renameTarget, setRenameTarget] = useState<ResumeBrief | null>(null);
@@ -310,6 +312,13 @@ export default function ResumesPage() {
         // T12：保存成功后 `resumeListEvents` 广播会让下面 useApi 重取；
         // 关闭弹窗（含取消）不再无条件 reload——那是白跑一次请求。
         onClose={() => setManualOpen(false)}
+        // 「前往简历制作台」：先建一份空白简历，再直接把详情弹窗打开到制作台那一屏。
+        // 没有这一步的话，用户建完还要经过"打开列表项 → 点放大 → 进制作台"三次点击。
+        onOpenWorkbench={(resumeId) => {
+          setManualOpen(false);
+          setAutoWorkbench(true);
+          setPreviewId(resumeId);
+        }}
       />
       {/* 筛选栏整体收进一个 Space（gap 12px，wrap 换行时同样吃 gap）：
           之前「交付存档」按钮、搜索框、两个筛选 Select 各写各的 marginBottom，
@@ -393,7 +402,7 @@ export default function ResumesPage() {
       {error ? (
         <ErrorState description={error} onRetry={() => void reload()} />
       ) : (
-        <ResumeTable
+        <ResumeResultList
           data={data}
           loading={loading}
           batch={batch}
@@ -419,8 +428,12 @@ export default function ResumesPage() {
       )}
       <ResumeDetailModal
         recordId={previewId}
+        // 只在"新建 → 前往制作台"那一次为 true；关掉详情就复位，下次从列表点开
+        // 仍然停在预览（用户要看的是这一份长什么样）。
+        autoOpenWorkbench={autoWorkbench}
         onClose={() => {
           setPreviewId(null);
+          setAutoWorkbench(false);
           // 深链参数随关闭一起清掉（replace，不打历史）；列表页点击打开的不带参数，
           // 删除一个不存在的键是无操作。
           setSearchParams(

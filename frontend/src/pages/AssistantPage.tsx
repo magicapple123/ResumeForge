@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** AI 求职助手：流式对话、历史记录、技能开关、附件与项目上下文联动。 */
 import { ArrowDownOutlined } from "@ant-design/icons";
-import { App } from "antd";
+import { App, Drawer } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AssistantComposer from "../features/assistant/components/AssistantComposer";
@@ -9,6 +9,9 @@ import AssistantGroupModal from "../features/assistant/components/AssistantGroup
 import AssistantMessageList from "../features/assistant/components/AssistantMessageList";
 import AssistantWorkspaceHeader from "../features/assistant/components/AssistantWorkspaceHeader";
 import ConversationSidebar from "../features/assistant/components/ConversationSidebar";
+import { useMediaQuery } from "../hooks/useMediaQuery";
+import { t } from "../i18n";
+import { mqMax } from "../theme/breakpoints";
 import { readStoredReasoningEffort } from "../features/assistant/readStoredReasoningEffort";
 import type { StarterPrompt } from "../features/assistant/assistantTypes";
 import { positiveId } from "../features/assistant/assistantUtils";
@@ -253,6 +256,17 @@ export default function AssistantPage({
     loadEarlier,
   });
 
+  /**
+   * 平板档（≤1092 且 >767）：历史列表从"压成 220px 横条"改成抽屉（方案 §4.8）。
+   * 为什么要换：横条把消息区高度吃掉 220px，而 768 高的屏本来就紧；抽屉只在需要时出现，
+   * 关掉就把高度还给对话。≤767 保持原样——手机档的横条是 `mobile.css` 里成型的形态。
+   * 浮窗（`compact`）有自己的浮层，不参与。
+   */
+  const narrowViewport = useMediaQuery(mqMax("narrow"));
+  const phoneViewport = useMediaQuery(mqMax("phone"));
+  const historyDrawer = narrowViewport && !phoneViewport && !compact;
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+
   // 浮窗的历史抽屉是盖在内容上的：除了点背板，键盘用户还需要一条直接退出的路。
   useEffect(() => {
     if (!compact || !historyOpen) return;
@@ -263,6 +277,32 @@ export default function AssistantPage({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [compact, historyOpen]);
 
+  /**
+   * 历史列表**只有一份 JSX**：宽档内联、平板档进抽屉、浮窗进浮层，三处共用同一个节点。
+   * 写三遍的话（曾经有过两遍）"会话搜索""批量删除"这类能力会在某一处悄悄缺失。
+   */
+  const sidebarNode = (
+    <ConversationSidebar
+      surface={surface}
+      conversations={conversations}
+      loading={conversationsLoading}
+      activeId={activeId}
+      onCreate={handleSidebarCreate}
+      onSelect={handleSidebarSelect}
+      onDelete={handleSidebarDelete}
+      onRestored={handleSidebarRestored}
+      onBatchDelete={handleSidebarBatchDelete}
+      onRename={handleSidebarRename}
+      onToggleFlag={handleSidebarToggleFlag}
+      onArchive={handleSidebarArchive}
+      onFork={handleSidebarFork}
+      onMoveToGroup={openGroupModal}
+      // 会话搜索（P0-2）：输入防抖后走服务端 keyword 过滤。
+      search={conversationSearch}
+      onSearchChange={handleConversationSearch}
+      className={compact ? "assistant-sidebar--floating" : undefined}
+    />
+  );
   return (
     <div className={`assistant-page${compact ? " assistant-page--floating" : ""}`}>
       {compact && historyOpen && (
@@ -273,33 +313,30 @@ export default function AssistantPage({
           onClick={() => setHistoryOpen(false)}
         />
       )}
-      {(!compact || historyOpen) && (
-        <ConversationSidebar
-          surface={surface}
-          conversations={conversations}
-          loading={conversationsLoading}
-          activeId={activeId}
-          onCreate={handleSidebarCreate}
-          onSelect={handleSidebarSelect}
-          onDelete={handleSidebarDelete}
-          onRestored={handleSidebarRestored}
-          onBatchDelete={handleSidebarBatchDelete}
-          onRename={handleSidebarRename}
-          onToggleFlag={handleSidebarToggleFlag}
-          onArchive={handleSidebarArchive}
-          onFork={handleSidebarFork}
-          onMoveToGroup={openGroupModal}
-          // 会话搜索（P0-2）：输入防抖后走服务端 keyword 过滤。
-          search={conversationSearch}
-          onSearchChange={handleConversationSearch}
-          className={compact ? "assistant-sidebar--floating" : undefined}
-        />
-      )}
+      {(!compact && !historyDrawer) || (compact && historyOpen) ? sidebarNode : null}
+      {historyDrawer ? (
+        <Drawer
+          className="assistant-history-drawer"
+          open={historyDrawerOpen}
+          onClose={() => setHistoryDrawerOpen(false)}
+          title={t("responsive.assistant.history.title")}
+          size="default"
+          destroyOnHidden
+        >
+          {sidebarNode}
+        </Drawer>
+      ) : null}
       <section className={`assistant-workspace${selecting ? " is-selecting" : ""}`}>
         <AssistantWorkspaceHeader
           compact={compact}
-          historyOpen={historyOpen}
-          onToggleHistory={() => setHistoryOpen((current) => !current)}
+          // 平板档把历史收进抽屉时，页头那颗按钮改开抽屉（`aria-expanded` 也跟着走）。
+          showHistoryButton={historyDrawer}
+          historyOpen={historyDrawer ? historyDrawerOpen : historyOpen}
+          onToggleHistory={() =>
+            historyDrawer
+              ? setHistoryDrawerOpen((current) => !current)
+              : setHistoryOpen((current) => !current)
+          }
           selecting={selecting}
           selectedIds={selectedIds}
           removeSelected={removeSelected}
