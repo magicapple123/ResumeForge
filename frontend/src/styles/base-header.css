@@ -249,28 +249,37 @@
   font-size: 12px;
 }
 
-@media (max-width: 700px) {
+/* 紧凑档（≤1092）：页头右侧动作区允许换行，退出按钮不收缩。
+   `flex-wrap` 只有在容器**能变窄**时才生效——原来 `.app-header-actions` 是 `flex: 0 0 auto`，
+   宽度等于内容宽，永远不会换行。768 视口实测内容宽 702px、可用 672px，越界 30px 被
+   `.app-main{overflow-x:hidden}` 裁掉，「退出」彻底不可达（AUDIT P0-2 / 方案附录 D6）。
+   页头高度随之改成 auto：换行后两行控件需要 80px 左右，固定 64px 会把它们压出边界。 */
+@media (max-width: 1092px) {
   .app-header {
-    gap: 8px;
+    height: auto;
+    min-height: 64px;
+    padding: 0 var(--rf-content-pad);
   }
 
   .app-header-actions {
-    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
-  .app-space-menu-button {
-    width: 34px;
-    padding: 0;
-    justify-content: center;
-    font-size: 0;
+  .app-exit-button {
+    flex: 0 0 auto;
   }
 
-  .app-space-menu-button .anticon {
-    font-size: 14px;
+  .app-model-profile-select {
+    width: 168px;
   }
 
   .app-dataset-chip {
-    max-width: 120px;
-    padding-inline: 7px;
+    max-width: 160px;
   }
 }
+
+/* 原来的 700px 档已并入上面这一档：700 与 767 只差 67px，两级规则几乎完全重叠，
+   而 ≤767 的形态由 mobile.css 的两行网格 + 48px 触控目标接管，不需要在这里再写一遍。 */

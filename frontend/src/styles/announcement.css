@@ -52,7 +52,9 @@
   gap: 12px;
 }
 
-@media (width <= 600px) {
+/* 600 是存量非标准值（登记在 breakpointGuard 的 LEGACY），但语法统一为 max-width：
+   range 语法会让断点扫描失效。改为标准值属于行为变更，留给归一那一步。 */
+@media (max-width: 600px) {
   .rf-announcement {
     padding: 0 12px;
   }

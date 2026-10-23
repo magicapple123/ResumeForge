@@ -72,11 +72,13 @@ body {
   scrollbar-width: thin;
 }
 
+/* 左偏移与侧栏宽度读同一个变量（theme/design-tokens.css）：改宽度只改一处，
+   不再出现「App.tsx 写 200、这里写 200、responsive.css 又写 64」的三份真相。 */
 .app-main {
   height: 100vh;
   min-height: 0;
   min-width: 0;
-  margin-left: 200px;
+  margin-left: var(--rf-sider-width);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: contain;

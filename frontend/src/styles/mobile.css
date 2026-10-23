@@ -105,7 +105,7 @@
 
   .app-content {
     min-height: calc(100dvh - var(--rf-header-height));
-    padding: 16px;
+    /* 内边距统一由 --rf-content-pad 给（≤1092 档为 16px），这里不再重复写死。 */
   }
 
   .app-content :is(.ant-btn, .ant-select-single, .ant-input-affix-wrapper, .ant-input-number) {

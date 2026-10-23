@@ -109,7 +109,9 @@
   min-width: 0;
   /* 顶部常驻元素的真实高度由变量给出：公告条出现时多 40px，不扣掉就会多出一屏滚动量。
      两个 fallback 保证"没有公告条"时计算值与历史完全一致（64px）。 */
+  /* 内边距读 --rf-content-pad：这一处取代了 responsive.css 与 mobile.css 里各自的
+     16px 写法，D 档自动收紧，不需要再写媒体查询。 */
   min-height: calc(100vh - var(--rf-header-height, 64px) - var(--rf-announcement-h, 0px));
-  padding: 24px;
+  padding: var(--rf-content-pad);
   overflow-x: hidden;
 }

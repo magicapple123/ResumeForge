@@ -5,7 +5,7 @@
   "src": {
     "total": 5615,
     "files": {
-      "App.tsx": 7,
+      "App.tsx": 0,
       "api/analytics.ts": 0,
       "api/apply.ts": 0,
       "api/assistant.ts": 0,
@@ -305,6 +305,7 @@
       "components/settings/llm/thinkingMeta.ts": 12,
       "components/settings/llm/useUnlimitedTokens.ts": 0,
       "components/settings/updateNotesRenderer.tsx": 0,
+      "components/shell/AppShell.tsx": 7,
       "components/skills/SkillEditorModal.tsx": 24,
       "components/templates/A4PreviewFrame.tsx": 0,
       "components/templates/BuiltinStyleGallery.tsx": 4,

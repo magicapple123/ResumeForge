@@ -83,8 +83,14 @@ describe("颜色守卫", () => {
 
     // 与主题无关的 token（间距、圆角、动效时长、页头高度、弹窗高度上限、层级）
     // 不要求有深色覆盖：它们是**长度**不是颜色，深浅两套主题共用同一个值。
+    // 2026-10 适配批新增的几何/断点令牌同理：`--rf-bp-*`、侧栏与内边距、栅格间距、
+    // 统计卡与正文的最小/最大宽、A4 缩放系数都是长度/数值——它们**不应该**有深色副本
+    // （有副本反而会让深色主题的密度与浅色分叉）。
     const colorTokens = tokens.filter(
-      (token: string) => !/-space-|-radius-|-duration|-height|-max-h|layer-/i.test(token),
+      (token: string) =>
+        !/-space-|-radius-|-duration|-height|-max-h|layer-|-bp-|-width|-pad|-gap|-min|-max|-scale|prose-/i.test(
+          token,
+        ),
     );
     const missing = colorTokens.filter((token: string) => !dark.includes(`${token}:`));
 

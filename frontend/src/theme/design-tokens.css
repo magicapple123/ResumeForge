@@ -107,6 +107,31 @@
   --rf-radius-panel: 16px;
   --rf-motion-duration: 180ms;
   --rf-header-height: 64px;
+  /* 断点镜像：与 theme/breakpoints.ts 一一对应，由 breakpointGuard.test.ts 逐值比对。
+     媒体查询本身不能引用变量（`@media (max-width: var(--x))` 无效）——这里存在的意义是
+     "让 CSS 侧也能读到同一个数"，例如 @container 的档位判断要与 TS 侧算出的侧栏宽度对上。 */
+  --rf-bp-phone: 767px;
+  --rf-bp-narrow: 1092px;
+  --rf-bp-base: 1366px;
+  --rf-bp-wide: 1536px;
+  --rf-bp-huge: 1920px;
+  --rf-bp-ultra: 2048px;
+  /* 外壳几何：唯一来源。Sider 的 width 与 .app-main 的 margin-left 都读它，
+     消灭「App.tsx 写 200 / base-shell.css 写 200 / responsive.css 写 64」三处耦合。 */
+  --rf-sider-width: 200px;
+  /* 内容区内边距：取代 base-tasks.css 的 24px、responsive.css 的 16px、mobile.css 的 16px。 */
+  --rf-content-pad: 24px;
+  /* 卡片内边距与栅格间距（供各页复用；值全部落在 4/8 网格上）。 */
+  --rf-card-pad: 20px;
+  --rf-grid-gap: 16px;
+  /* 统计卡的最小可读宽度：标签 12px×8 汉字 96 + 左右内边距 32 + 余量 → 150。 */
+  --rf-stat-min: 150px;
+  /* 正文列的最小可读宽度与最大舒适宽度（rubric R4 / R8 的判据来源）。 */
+  --rf-prose-min: 280px;
+  --rf-prose-max: 900px;
+  /* A4 画布：窄容器可读下限与大屏放大上限（见方案 §4.6）。 */
+  --rf-a4-min-scale: 0.55;
+  --rf-a4-max-fit: 1;
   /* 弹窗内容区统一高度上限：替代各弹窗散落的 170/180/200/220/230px 多档写法。
      240px ≈ header + footer + 视口上下安全边距的总和（弹窗距视口上下各 ≥ 48px）。
      移动端在 mobile.css 的媒体查询里另给一档（页头更高、边距更小）。
@@ -153,6 +178,54 @@
 @supports (height: 100dvh) {
   :root {
     --rf-modal-body-max-h: calc(100dvh - 240px);
+  }
+}
+
+/*
+ * 窄高屏（≤760 高）：弹窗内容区上限从 `dvh − 240` 放到 `dvh − 200`。
+ *
+ * 240 是按"上下各留 48px 安全边距"算的，在 768 高的屏上等于把可用高度压到 528——
+ * 而 1366×768 的笔记本正是最常见的底线机型：底部按钮会被推到折线以下。
+ * 收到 200 之后同一块屏多出 40px，按钮重新露出来。
+ * **这是全站唯一按高度分档的媒体查询**：宽度决定"几栏"，高度只决定"弹窗能有多高"。
+ */
+@media (max-height: 760px) {
+  :root {
+    --rf-modal-body-max-h: calc(100dvh - 200px);
+  }
+}
+
+/*
+ * 密度分级（只动"留白"，不动字号与控件圆角——13/14px 中文在 100% 缩放下已偏小，
+ * 为了"放得下"而缩正文是本方案明确禁止的）。三档与断点一一对应：
+ *   D 档 ≤1092、C 档 1366–1535（基准）、A 档 ≥1920。
+ * 用 max-width 向下覆盖、min-width 向上覆盖，互不重叠，避免依赖 @import 顺序。
+ */
+@media (max-width: 1092px) {
+  :root {
+    --rf-sider-width: 64px;
+    --rf-content-pad: 16px;
+    --rf-card-pad: 14px;
+    --rf-grid-gap: 12px;
+  }
+}
+
+/* E 档：侧栏整个让位（mobile.css 里 .app-sider{display:none} 仍保留，
+   因为它是 position:fixed，需要显式退出布局）。 */
+@media (max-width: 767px) {
+  :root {
+    --rf-sider-width: 0px;
+  }
+}
+
+/* A 档：只在大屏才放宽，避免 1366 用户看到"大屏样式"。
+   侧栏宽度仍是 200——"大屏加宽到 216"属 P2，不在本次范围（方案附录 D.2）。 */
+@media (min-width: 1920px) {
+  :root {
+    --rf-content-pad: 32px;
+    --rf-card-pad: 24px;
+    --rf-grid-gap: 20px;
+    --rf-a4-max-fit: 1.35;
   }
 }
 
