@@ -247,7 +247,26 @@
   display: block;
   border: none;
   flex: 0 0 auto;
+  /* 平时把指针交给父容器（`.resume-preview-viewport`）：iframe 是独立文档，指针一旦进去，
+     父页面就收不到 pointerup，拖拽平移会卡在"正在拖"（与制作台分隔条同一个坑）。
+     代价是纸面本身不可点——那正是「草稿模式编辑」要打开的一扇门，见下面那条覆盖。 */
   pointer-events: none;
+}
+
+/* 「草稿模式编辑」：把指针还给 iframe。
+   点纸面字段靠的是 iframe **自己文档**里的 click 监听（`useClickToEditPreview` 注入的），
+   父容器拦着就永远收不到事件——2026-10-23 用户实测"勾了还是抓手、点不动"就是这个原因：
+   光标停在父容器上（`cursor: grab`），点击也落在父容器上。
+
+   光标一并让回默认：抓手会让人以为"这里只能拖"，那就不会去试点击。
+   代价（有意接受）：编辑模式下在纸面上按住不能平移——那一刻用户的意图是选字段而不是挪纸；
+   纸张两侧的间隙、以及滚动条仍然可拖。 */
+.resume-preview-viewport.is-click-to-edit {
+  cursor: default;
+}
+
+.resume-preview-viewport.is-click-to-edit .resume-iframe {
+  pointer-events: auto;
 }
 
 /* 精确预览：显示的是服务端排出的真实 PDF（与「导出」下载的是同一份字节）。
@@ -273,6 +292,38 @@
 .exact-preview-stack {
   position: relative;
   width: 100%;
+}
+
+/* ===== 精确预览的空白页（2026-10-23 / 修订 2026-11-06） ===== */
+/* 用户把「最大篇幅」调到 3 页、内容只有 1 页时，精确预览原来只画 1 张纸，与草稿模式
+   （`totalVisualPages` 恒等于上限）看起来像两个功能。这里按差值补同比例的白纸。
+
+   2026-11-06 两处修订（用户截图：精确预览"中间空一大截才出现空白页"）：
+   1. 宽度取 **100%**（原来 `min(100%, 794px)` + 居中）：相框宽度就是 PDF 页的宽度，
+      空白纸必须与它严格同宽，否则两张纸的左右边线会错开一截；
+   2. 间距与 `BLANK_PAGE_GAP_PX` 一致（8px）：相框现在按**实际页数**定高
+      （见 `ExactPreviewPanel` 的 `frameHeight`），空白纸紧接在最后一页之后，
+      间距只留"两张纸之间那一道"，不再是原来那 12px + 居中收窄。 */
+.exact-preview-blanks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.exact-preview-blank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 0;
+  aspect-ratio: 210 / 297;
+  border: 1px dashed var(--rf-border);
+  border-radius: 2px;
+  background: var(--rf-surface);
+  box-shadow: 0 1px 4px rgb(15 40 80 / 0.08);
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
 }
 
 .exact-preview-stack > .exact-preview-frame {
@@ -309,9 +360,25 @@
   line-height: 18px;
 }
 
+/* 状态行是**整块预览的页脚**（在 `.exact-preview` 与 `.exact-preview-blanks` 之后），
+   不是相框的一部分：夹在"最后一页纸"与"补出来的空白纸"之间时，一条横栏会把两张纸读成
+   断开的两块（用户口径："有内容的页上直接接下一页"）。
+   `margin-top` 与 `.exact-preview-blanks` 的 8px 同档，让它离最后一张纸有一口气，
+   同时不与 `padding: 2px 10px 4px` 打架。 */
 .exact-preview-status {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 8px;
   padding: 2px 10px 4px;
+}
+
+/* 缩放读数触底（`MIN_READABLE_SCALE`）：它不再是"当前比例"，而是一句提示的入口——
+   纸已经不能再小，再缩就看不清了。用警示色区分"正常 42%"与"触底 55%"，并给出指针反馈，
+   否则用户会以为缩放按钮坏了（点了没变化）。 */
+.resume-preview-zoom-label.is-min-scale {
+  color: var(--rf-warning-text);
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
 }

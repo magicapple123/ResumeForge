@@ -464,9 +464,13 @@
   min-width: 0;
 }
 
+/* 三个下拉各留一个**宽度下限**：`flex: 1 1 0` 在窄列里会把「月」「日」压到 8px，
+   值是 "03"、scrollWidth 18 —— 数字被横着裁掉一半（2026-10-23 的 1280 实测）。
+   64px 是"两位数 + 箭头"的最小可用宽度（56px 时内容盒只剩 14px，两位数是 18px，
+   仍会横裁 4px——2026-10-23 二次实测），`flex-basis: 80px` 让宽容器里仍按比例分配。 */
 .profile-partial-date-select__controls > .ant-select {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 1 1 80px;
+  min-width: 64px;
 }
 
 .profile-partial-date-select__controls > .ant-select:first-child {

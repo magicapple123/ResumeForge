@@ -1,25 +1,57 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「查看大图」：全屏工作台，左侧调整排版参数、右侧查看简历效果。
+ * 「简历制作台」：左栏排版参数 · 中栏编辑内容 · 右栏看版面，三栏同屏。
  *
- * 为什么不复用外面的预览：外面那份为了塞进列表页，视口高度只有几百像素、还带缩放，
- * "这一页到底排得满不满、分页在哪"看不清。这里换一个大视口重新量一次，页面就是原尺寸。
+ * 为什么不再沿用旧名：改名是为了把它的定位说清——它不止"放大看一遍"，而是**改一句措辞 →
+ * 看版面变化 → 再调一个参数**的闭环。外面那份预览塞在列表页里，视口高度只有几百像素、还带
+ * 缩放，看不出"这一页排得满不满、分页在哪"；这里换一个大视口重新量一次，页面就是原尺寸。
  *
- * 复用同一个 `ResumePreview` 组件（而不是再写一个渲染器）是刻意的：两份实现迟早会在
- * 分页、缩放、编辑定位这些细节上分叉，而"看到的和导出的一致"正是这一块的全部意义。
+ * 三个刻意的复用（都不另写第二份实现）：预览仍是同一个 `ResumePreview`
+ * （`ResumeWorkbenchCanvas` 里）；中栏的编辑器仍是同一份主体（`ResumeWorkbenchEditorColumn` →
+ * `resume-editor/ResumeEditorPanel`）；版式参数仍是同一组控件（`ResumeTemplateControls` /
+ * `ResumeMeasureControls`），只是多了两个只在此处出现的分组（间距 / 外观）。
+ *
+ * 降级是"少一栏"而不是"换一套实现"：没有 `onSaveContent`（生成流程那种只读宿主）→ 中栏不渲染，
+ * 退回两栏；`<1280px` 中栏变成覆盖在左栏上的抽屉，`<1000px` 中栏不渲染（内容编辑走「手动调整」）。
+ *
+ * 2026-10 两处形态变化（都由用户截图驱动，见 `resume-workbench.css`）：**铺满视口**——不再有 12px
+ * 留白与圆角外壳（那圈留白会露出遮罩，看起来像一条黑边）；**三栏可拖宽**——宽度状态机与持久化
+ * 在 `useWorkbenchColumns`，这里只渲染两条分隔条。
  */
-import { DownloadOutlined } from "@ant-design/icons";
-import { Button, Modal, Space, Typography } from "antd";
-import { useRef } from "react";
-import type { ResumeLayout } from "../../types";
+import { Modal } from "antd";
+import { useCallback, useRef, useState } from "react";
+import type { RefObject } from "react";
+import type { ResumeContent, ResumeLayout } from "../../types";
+import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
-import ResumePreview, {
-  type ExactPreviewOptions,
-  type ResumePreviewHandle,
-} from "../ResumePreview";
+import type { ExactPreviewOptions, ResumePreviewHandle } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
+import { t } from "../../i18n";
+import ResumeColorControls from "./ResumeColorControls";
 import ResumeMeasureControls from "./ResumeMeasureControls";
+import ResumeParamGroup from "./ResumeParamGroup";
+import ResumeSpacingControls from "./ResumeSpacingControls";
 import ResumeTemplateControls from "./ResumeTemplateControls";
+import ResumeWorkbenchActionBar from "./ResumeWorkbenchActionBar";
+import ResumeWorkbenchCanvas from "./ResumeWorkbenchCanvas";
+import ResumeWorkbenchEditorColumn from "./ResumeWorkbenchEditorColumn";
+import WorkbenchPanelsDrawer from "./WorkbenchPanelsDrawer";
+import type { ResumeWorkbenchEditorHandle } from "./ResumeWorkbenchEditorColumn";
+import {
+  useWorkbenchColumns,
+  WORKBENCH_KEYBOARD_STEP,
+  WORKBENCH_WIDTH_LIMITS,
+} from "./useWorkbenchColumns";
+import { useWorkbenchOverallSave } from "./useWorkbenchOverallSave";
+
+/**
+ * 分隔条的无障碍名。**只剩内容栏那一条**：参数栏自 2026-10-23 起是固定宽（`WORKBENCH_PARAMS_WIDTH`，
+ * 用户口径"第一列没必要调整宽度"），没有分隔条可念。
+ */
+const RESIZER_LABEL_KEY = {
+  editor: "workbench.resizer.editor",
+} as const;
 
 interface Props {
   open: boolean;
@@ -28,23 +60,63 @@ interface Props {
   /** 与记录里的页数上限一致；预览里那几根虚线就是按它切的。 */
   pages: number;
   onClose: () => void;
-  /** 版式控件（与主预览同一份状态）：在大图里也能边走边调。 */
+  /** 版式控件（与主预览同一份状态）：在制作台里也能边走边调。 */
   layout?: ResumeLayout;
   resumeId?: number;
   relayouting?: boolean;
-  /** 这份简历有没有照片：没有时照片滑杆禁用并说明原因（与大图外面的主预览一致）。 */
+  /** 这份简历有没有照片：没有时照片滑杆禁用并说明原因（与外面的主预览一致）。 */
   hasPhoto?: boolean;
   onApplyLayout?: (next: ResumeLayout) => void;
-  onExport?: () => void;
-  previewRef?: React.RefObject<ResumePreviewHandle | null>;
   /**
-   * 大图与主预览**共用同一份口径**（2026-10-21 用户要求）：主预览在草稿，大图就是草稿；
-   * 主预览在精确，大图就是精确。切换也双向同步——在大图里切回草稿，外面跟着变。
+   * 版式落库（宿主那条 `PATCH /resumes/{id}/layout`）。`onApplyLayout` 只重排**不落库**，
+   * 少了这根线，用户调完参数点「保存修改」就只存了内容。返回 `false` = 没落库。
+   * 缺省时退化为"只存内容"：不报错、也不弹"没有保存"（只读宿主没有这条链路很正常）。
+   */
+  onCommitLayout?: () => Promise<boolean>;
+  /**
+   * 宿主的版式 PATCH 在飞（底部那颗「保存」点下去之后）。
+   *
+   * 那段时间里 `onCommitLayout` 会返回 `false`（同一时刻不许发两次 PATCH），顶部「保存修改」
+   * 若还能点，用户看到的只是"按钮点不动、界面没变"——内容却一次都没存。所以直接禁用。
+   */
+  layoutSaving?: boolean;
+  onExport?: () => void;
+  previewRef?: RefObject<ResumePreviewHandle | null>;
+  /**
+   * 制作台与主预览**共用同一份口径**（2026-10-21 用户要求）：主预览在草稿，制作台就是
+   * 草稿；主预览在精确，制作台就是精确。切换也双向同步。
    */
   previewMode?: PreviewMode;
   onPreviewModeChange?: (mode: PreviewMode) => void;
-  /** 精确预览所需的上下文（与大图外面的那一份逐字段相同）。 */
+  /** 精确预览所需的上下文（与外面的那一份逐字段相同）。 */
   exactPreview?: ExactPreviewOptions;
+  /**
+   * 中栏编辑：这份简历当前**已保存**的内容。
+   *
+   * 缺省（或没给 `onSaveContent`）时中栏不渲染——生成流程的只读预览、窄屏都走这条路。
+   */
+  content?: ResumeContent | null;
+  /** 中栏保存：PATCH 后由宿主 setDetail + 重渲染，右栏按新内容重排。 */
+  onSaveContent?: (content: ResumeContent) => Promise<void>;
+  /**
+   * 中栏是否有未保存的内容：宿主据此禁用底部「手动调整」（两个编辑器同时开会在草稿上
+   * 互相覆盖，见设计 §9 Q6）。
+   */
+  onEditorDirtyChange?: (dirty: boolean) => void;
+  /**
+   * 「从我的资料追加一条」的候选：中栏与「手动调整」弹窗**同一份实现**。
+   * `null`（或还没取到资料）时中栏里没有这条入口，其余功能照旧。
+   */
+  fillSources?: ProfileFillSources | null;
+  /**
+   * 这份记录还是**制作台草稿**（0051）：没保存过，所以简历中心里还看不到它。
+   *
+   * 有了它，「保存」就不能只在"有改动"时出现——草稿刚建出来时内容与版式都没动过，
+   * 按钮不出现用户就没有任何办法让它进入简历中心（那正是这条需求要消灭的现象）。
+   */
+  isDraft?: boolean;
+  /** 草稿里什么都没脏时点「保存到简历中心」走这条：宿主发一次内容 PATCH 清掉草稿标记。 */
+  onPublishDraft?: () => Promise<boolean>;
 }
 
 export default function ResumeZoomModal({
@@ -58,81 +130,316 @@ export default function ResumeZoomModal({
   relayouting = false,
   hasPhoto,
   onApplyLayout,
+  onCommitLayout,
+  layoutSaving = false,
   onExport,
   previewRef,
   previewMode,
   onPreviewModeChange,
   exactPreview,
+  content,
+  onSaveContent,
+  onEditorDirtyChange,
+  fillSources,
+  isDraft = false,
+  onPublishDraft,
 }: Props) {
-  // 大图有自己的预览实例：字号滑块要即时作用在**这一个** iframe 上，不能借用主预览的句柄。
+  // 制作台有自己的预览实例：字号滑块要即时作用在**这一个** iframe 上，不能借用主预览的句柄。
   // 调用方给了 ref 就用它（不再在 ref 回调里二次赋值——Compiler 禁止渲染后再改 ref）。
   const fallbackPreviewRef = useRef<ResumePreviewHandle>(null);
-  const zoomPreviewRef = previewRef ?? fallbackPreviewRef;
-  // 目录**只取一次**，两个插槽共用（`useApi` 没有跨实例缓存，各取一次就是两个请求）。
+  const workbenchPreviewRef = previewRef ?? fallbackPreviewRef;
+  // 目录**只取一次**，四个分组共用（`useApi` 没有跨实例缓存，各取一次就是四个请求）。
   const { catalog } = useResumeTemplateCatalog();
-  // 结构类参数在工作台左栏集中编辑；主预览仍使用它自己的工具栏插槽。
-  const templateControls =
-    layout && onApplyLayout ? (
-      <ResumeTemplateControls
-        layout={layout}
+  // 中栏**不再可折叠**（2026-10-23 用户口径："去掉右上角的收起内容栏按钮"）。理由不只是
+  // 少一颗按钮：折叠会把中栏整个卸载，那份未保存的草稿只留在 sessionStorage 里，用户回来
+  // 时看到的是"上次的改动不见了"。中栏是这一屏的主场，藏起来只会让人找不到它。
+  //
+  // 中栏脏值同时上报给宿主（底部「手动调整」要用），这里再留一份，好让关闭前的那次
+  // 判断（Esc / × / 遮罩）自己就能决定"要不要问"。
+  const [editorDirty, setEditorDirty] = useState(false);
+  // 保存中：顶部「保存修改」上 loading，同一时刻「取消修改」禁用（避免保存还没落库就先清掉）。
+  const [editorSaving, setEditorSaving] = useState(false);
+  // 顶部动作条上的两颗按钮靠这个句柄打到中栏的状态机上（表单实例、脏值、内联确认都在那一层）。
+  const editorRef = useRef<ResumeWorkbenchEditorHandle>(null);
+  // 「有没有改动 / 保存 / 取消 / 就地确认」这一整套状态判断在 hook 里（纯状态，一行 JSX 都不需要）：
+  // 脏值有两个来源（中栏内容 + 左栏版式），判定与两步提交都只有一份实现。
+  const { dirty, layoutDirty, saving, save, cancel, discardConfirm, setDiscardConfirm } =
+    useWorkbenchOverallSave({
+      open,
+      layout,
+      editorDirty,
+      isDraft,
+      editorRef,
+      onApplyLayout,
+      onCommitLayout,
+      onPublishDraft,
+    });
+  /**
+   * 「点纸面字段 → 定位中栏的输入框」。每次点击都换一个新对象（`nonce` 自增）：同一条路径连点
+   * 两次时引用也会变，中栏那条 effect 才会重新滚一遍并聚焦（只比路径的话第二次点击毫无反应）。
+   */
+  const [pickTarget, setPickTarget] = useState<{ path: string; nonce: number } | null>(null);
+  const handlePickField = (path: string) =>
+    setPickTarget((previous) => ({ path, nonce: (previous?.nonce ?? 0) + 1 }));
+  // 三栏宽度：拖动 / 键盘 / 复位 / 持久化都在这个 hook 里（渲染仍归这个文件）。
+  const {
+    containerRef: bodyRef,
+    style: bodyStyle,
+    widths,
+    draggingKind,
+    startDrag,
+    nudge,
+    reset: resetWidths,
+  } = useWorkbenchColumns();
+  const editorEnabled = Boolean(onSaveContent);
+  /**
+   * 三档形态。判据是**弹窗体自己的宽**——2026-10 起制作台铺满视口（`.ant-modal-body`
+   * 的宽度就等于视口宽，见 `resume-workbench.css` 的"外壳"段），所以这里用视口媒体查询
+   * 与 CSS 侧 `@container wb (max-width: …)` 得到的是同一个数，不需要第二份阈值。
+   *
+   * 三个档位（方案 §4.5.6）：
+   *   three → 参数常驻 + 内容常驻；two → 参数常驻 + 内容进抽屉；one → 画布独占 + 两个抽屉。
+   * jsdom 的 `matchMedia` 桩恒 false ⇒ 三栏，既有断言的 DOM 一字不变。
+   */
+  const twoColumn = useMediaQuery("(max-width: 1280px)");
+  const oneColumn = useMediaQuery("(max-width: 1000px)");
+  const tier: "three" | "two" | "one" = oneColumn ? "one" : twoColumn ? "two" : "three";
+  /** 两个抽屉互斥（同一个状态）：768 宽时两个 378 会把画布全盖住。 */
+  const [openPanel, setOpenPanel] = useState<"params" | "content" | null>(null);
+  const hasSettings = Boolean(layout && onApplyLayout);
+  const showParamsColumn = hasSettings && tier !== "one";
+  const showEditorColumn = editorEnabled && tier === "three";
+  // 内容栏不在栅格里时，纸面点击也要能把用户带到输入框：先开抽屉再定位。
+  const pickFromPaper = (path: string) => {
+    if (!showEditorColumn) setOpenPanel("content");
+    handlePickField(path);
+  };
+  const handleEditorDirty = useCallback(
+    (dirty: boolean) => {
+      setEditorDirty(dirty);
+      onEditorDirtyChange?.(dirty);
+    },
+    [onEditorDirtyChange],
+  );
+
+  // 有**任何**改动（内容脏 **或** 版式与快照不同）→ 先问一句；否则直接关。
+  // 只看内容是不够的：只改了版式时以前会直接关掉，这一半改动静默消失、连提示都没有。
+  //
+  // 确认卡片长在动作条最右那颗 × 上（2026-10-24）。以前它塞在中栏底部、由 `closeSignal`
+  // 驱动：用户按的是关闭、确认却出现在屏幕另一侧，中栏不渲染时（窄屏 / 只读宿主）那个
+  // 信号还会被吃掉——**关不掉**。现在 × 自带卡片，Esc 与遮罩走同一个函数。
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  /**
+   * 关闭前要不要问一句。
+   *
+   * 除了"有改动"，**草稿本身**也要问：那份记录还没进过简历中心，关掉等于把它扔掉——
+   * 而这时 `dirty` 是 false（内容与版式都是它被建出来时的样子），只按脏值判断会静默丢弃。
+   */
+  const needsCloseConfirm = dirty || isDraft;
+  // 判断只写在这里、不写在按钮的 `onClick` 上：antd 会把 `Popconfirm` 自己的 onClick 与
+  // 子元素的 onClick 合并，两处各写一份就会出现"问完又立刻关掉"或"关了卡片还亮着"。
+  const handleCloseRequest = (next: boolean) => {
+    if (!next) return setCloseConfirmOpen(false);
+    if (needsCloseConfirm) setCloseConfirmOpen(true);
+    else onClose();
+  };
+  const handleCancel = () => handleCloseRequest(true);
+  /** 「放弃并关闭」：先丢掉中栏那份未保存的内容再关，否则下次打开会冒出"已放弃的改动"。 */
+  const confirmDiscardAndClose = () => {
+    editorRef.current?.discard();
+    setCloseConfirmOpen(false);
+    onClose();
+  };
+  // 描述跟着"丢什么"走：只说"没保存"会让用户猜不出丢的是内容还是排版。
+  const closeBody =
+    layoutDirty && editorDirty
+      ? "workbench.actionbar.discard.close-body"
+      : layoutDirty
+        ? "workbench.actionbar.discard.close-layout"
+        : dirty
+          ? "workbench.close.body-content"
+          : "workbench.close.body-draft";
+
+  /**
+   * 内容栏的分隔条。**参数栏没有**：它是固定宽（用户口径"第一列没必要调整宽度"），
+   * 给一条拖不动的分隔条只会让人以为坏了。
+   *
+   * 只在中栏可见时渲染；`<1280px` / `<1000px` 两档由 CSS 直接 `display: none`
+   * （既不占布局，也不进 Tab 序列）。
+   */
+  const resizer = () => {
+    // 栏位常量写死在这里而不是当参数传：参数栏没有分隔条之后，"可传的值"只剩一个，
+    // 留一个 `kind` 参数只会让人以为还有第二条（`RESIZER_LABEL_KEY` 也只剩一个键）。
+    const kind = "editor" as const;
+    return (
+      <div
+        key={kind}
+        className={`resume-wb-resizer${draggingKind === kind ? " is-dragging" : ""}`}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t(RESIZER_LABEL_KEY[kind])}
+        aria-valuenow={widths[kind]}
+        aria-valuemin={WORKBENCH_WIDTH_LIMITS[kind].min}
+        aria-valuemax={WORKBENCH_WIDTH_LIMITS[kind].max}
+        tabIndex={0}
+        onMouseDown={(event) => startDrag(kind, event)}
+        onDoubleClick={resetWidths}
+        onKeyDown={(event) => {
+          // 只有左右方向键有意义（分隔条是竖直的）；`preventDefault` 挡住页面横向滚动。
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            nudge(kind, -WORKBENCH_KEYBOARD_STEP);
+          } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            nudge(kind, WORKBENCH_KEYBOARD_STEP);
+          }
+        }}
+      />
+    );
+  };
+
+  const paramsColumn = hasSettings ? (
+    <div className="resume-wb-col resume-wb-col-params">
+      <ResumeParamGroup title={t("workbench.group.layout")} storageKey="layout">
+        <ResumeTemplateControls
+          layout={layout as ResumeLayout}
+          resumeId={resumeId}
+          disabled={relayouting}
+          catalog={catalog}
+          // 制作台里「板块顺序」的默认值跟随「我的资料」（2026-10-23 用户口径）。
+          // 只在 `format_config.section_order` **没设过**时生效：设过自定义顺序的简历
+          // 仍然按它自己的顺序走，这条不会追溯改掉用户已经排好的版面。
+          preferProfileOrder
+          onChange={onApplyLayout as (next: ResumeLayout) => void}
+        />
+      </ResumeParamGroup>
+      <ResumeParamGroup title={t("workbench.group.measure")} storageKey="measure">
+        <ResumeMeasureControls
+          layout={layout as ResumeLayout}
+          disabled={relayouting}
+          catalog={catalog}
+          previewRef={workbenchPreviewRef}
+          hasPhoto={hasPhoto}
+          // 分边页边距**只在这里**出现：左栏有纵向空间，四条支路摊开不挤。
+          showMarginSides
+          // 制作台内**默认展开**（PRD P0-5）：分边控件是「页边距」这一项的解释，紧跟在它的
+          // 总滑杆之后；默认收起会让用户先点一次折叠标题才知道它存在。
+          // 另两个宿主（主预览、生成配置页）不传这个 prop，仍取缺省 false（见该组件头注释）。
+          defaultSidesOpen
+          onChange={onApplyLayout as (next: ResumeLayout) => void}
+        />
+      </ResumeParamGroup>
+      <ResumeParamGroup title={t("workbench.group.spacing")} storageKey="spacing">
+        <ResumeSpacingControls
+          layout={layout as ResumeLayout}
+          catalog={catalog}
+          disabled={relayouting}
+          previewRef={workbenchPreviewRef}
+          onChange={onApplyLayout as (next: ResumeLayout) => void}
+        />
+      </ResumeParamGroup>
+      <ResumeParamGroup title={t("workbench.group.appearance")} storageKey="appearance">
+        <ResumeColorControls
+          layout={layout as ResumeLayout}
+          catalog={catalog}
+          disabled={relayouting}
+          previewRef={workbenchPreviewRef}
+          onChange={onApplyLayout as (next: ResumeLayout) => void}
+        />
+      </ResumeParamGroup>
+      {/* 只在内容栏不在栅格里时显示（两栏 / 单栏）：告诉用户它去哪了，而不是让他找。
+          三栏时这句描述的是不存在的问题（`display: none` 也在管这件事，两处同源）。 */}
+      {tier !== "three" && editorEnabled ? (
+        <span className="resume-wb-narrow-hint">{t("workbench.narrow.editor")}</span>
+      ) : null}
+    </div>
+  ) : null;
+
+  /**
+   * 内容栏本体：三栏时常驻中栏，两栏/单栏时搬进抽屉。
+   * 只写一份 JSX —— 两处各写一遍必然分叉（隐藏动作条、pickTarget 这些细节很容易漏）。
+   */
+  const editorColumn = editorEnabled ? (
+    <div className="resume-wb-col resume-wb-col-editor">
+      <ResumeWorkbenchEditorColumn
+        ref={editorRef}
+        active
+        content={content ?? null}
         resumeId={resumeId}
-        disabled={relayouting}
-        catalog={catalog}
-        onChange={onApplyLayout}
+        fillSources={fillSources}
+        relayouting={relayouting}
+        onSave={onSaveContent as (next: ResumeContent) => Promise<void>}
+        onDirtyChange={handleEditorDirty}
+        onSavingChange={setEditorSaving}
+        // 点右栏纸面上的字段 → 这一栏切标签页 + 滚到对应输入框并聚焦。
+        pickTarget={pickTarget}
+        // 底部不再有一对局部的保存/取消：整屏顶部那一对是**整体**的（内容 + 排版），
+        // 两对并排放着，用户得先猜"这两颗管的是不是同一件事"。
+        hideActions
       />
-    ) : undefined;
-  // 维持 `is-stacked` 的命名与输入布局；工作台侧栏用专属 CSS 把滑杆宽度收进栏宽。
-  const measureControls =
-    layout && onApplyLayout ? (
-      <ResumeMeasureControls
-        layout={layout}
-        disabled={relayouting}
-        catalog={catalog}
-        previewRef={zoomPreviewRef}
-        hasPhoto={hasPhoto}
-        onChange={onApplyLayout}
-      />
-    ) : undefined;
-  const hasSettings = Boolean(templateControls || measureControls);
+    </div>
+  ) : null;
+
   return (
     <Modal
-      title="查看简历大图"
-      open={open}
-      onCancel={onClose}
-      // 操作区走 Modal 的真 footer 插槽：此前「导出 / 关闭」贴在正文末尾，正文因此长出一条
-      // 假底栏（滚动时跟着内容一起走，与全站其它弹窗的底部操作区不一致）。
-      // 关闭只剩右上角的 × 一个入口（Esc / 点遮罩同样映射 onCancel，见 Modal 的默认行为）。
-      footer={
-        onExport ? (
-          <Space>
-            <Button icon={<DownloadOutlined />} onClick={onExport}>
-              导出
-            </Button>
-          </Space>
-        ) : null
+      // 标题节点**就是**动作条：56px 一行放"名字 + 保存/取消 + 导出"，关掉默认 header 的
+      // 内边距与关闭按钮位置（见 resume-workbench.css 的 `.resume-zoom-workbench-wrap`）。
+      title={
+        // 标题节点**就是**动作条（实现见 `ResumeWorkbenchActionBar`）：56px 一行放
+        // "名字 + 保存/取消 + 导出 + ×"，关掉默认 header 的内边距与关闭按钮位置
+        // （见 resume-workbench.css 的 `.resume-zoom-workbench-wrap`）。
+        <ResumeWorkbenchActionBar
+          resumeName={content?.name}
+          editorEnabled={editorEnabled}
+          dirty={dirty}
+          isDraft={isDraft}
+          layoutSaving={layoutSaving}
+          editorSaving={editorSaving}
+          saving={saving}
+          discardConfirm={discardConfirm}
+          closeConfirmOpen={closeConfirmOpen}
+          closeBody={closeBody}
+          onSave={() => void save()}
+          onRequestDiscardConfirm={setDiscardConfirm}
+          onDiscard={cancel}
+          onExport={onExport}
+          // 两栏及以下：内容栏不在栅格里，必须给一个入口（否则「编辑内容」不可达）。
+          onOpenContent={
+            editorEnabled && tier !== "three" ? () => setOpenPanel("content") : undefined
+          }
+          // 单栏：参数栏也不在栅格里了。
+          onOpenParams={hasSettings && tier === "one" ? () => setOpenPanel("params") : undefined}
+          onCloseRequest={handleCloseRequest}
+          onCloseConfirmed={confirmDiscardAndClose}
+        />
       }
-      width="100vw"
-      style={{ top: 0, height: "100dvh", maxWidth: "none", margin: 0 }}
+      open={open}
+      onCancel={handleCancel}
+      // 关闭按钮改由动作条最右那颗自绘 × 承担（它自带就地确认卡片，见上）。
+      closable={false}
+      // 有写入请求的弹层必须显式禁蒙层关闭：误点遮罩丢掉一整屏未保存的编辑代价太大。
+      mask={{ closable: false }}
+      // 动作区在标题行（导出），没有底部按钮组——写 `footer` 而不是省略，是为了让
+      // `popupGuard` P2（"Modal 必须自带 footer 或 okText"）看得到这个决定。
+      footer={null}
+      // 铺满视口：宽度用 `100%`（= wrapper 的宽度，不含滚动条）而不是 `100vw`——后者把
+      // 竖向滚动条的宽度也算进去，横向会多出十几像素溢出。`padding: 0` 必须显式写：
+      // antd 给 `.ant-modal` 的 `padding-bottom: 24px` 会让底部露出遮罩（又一条"黑边"）。
+      width="100%"
+      style={{ top: 0, height: "100dvh", maxWidth: "none", margin: 0, padding: 0 }}
       classNames={{ wrapper: "resume-zoom-workbench-wrap" }}
       styles={{
-        wrapper: {
-          inset: 0,
-          display: "flex",
-          alignItems: "stretch",
-          overflow: "hidden",
-          padding: 0,
-        },
+        wrapper: { inset: 0, display: "flex", alignItems: "stretch", overflow: "hidden" },
         container: {
           display: "flex",
           flexDirection: "column",
-          height: "100dvh",
-          maxHeight: "100dvh",
+          height: "100%",
+          maxHeight: "100%",
           margin: 0,
           padding: 0,
-          borderRadius: 0,
           overflow: "hidden",
         },
-        header: { flex: "0 0 auto", marginBottom: 0, borderRadius: 0 },
+        header: { flex: "0 0 auto", marginBottom: 0 },
         body: {
           display: "flex",
           flex: "1 1 auto",
@@ -140,41 +447,41 @@ export default function ResumeZoomModal({
           overflow: "hidden",
           padding: 0,
         },
-        footer: { flex: "0 0 auto", marginTop: 0 },
       }}
       destroyOnHidden
     >
-      <div className={`resume-zoom-body${hasSettings ? "" : " is-preview-only"}`}>
-        {hasSettings ? (
-          <div className="resume-zoom-settings">
-            {templateControls ? (
-              <div className="resume-zoom-settings-template">{templateControls}</div>
-            ) : null}
-            {measureControls ? (
-              <div className="resume-zoom-settings-measure">{measureControls}</div>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="resume-zoom-preview-pane">
-          <Typography.Paragraph type="secondary" className="resume-zoom-workbench-note">
-            按原始尺寸显示，虚线是分页位置（与当前 {pages} 页的设置一致）。缩放用「放大预览」
-            「缩小预览」两个按钮，也可以按住 Ctrl 滚滚轮。
-          </Typography.Paragraph>
-          <div className="resume-zoom-preview-scroll">
-            <ResumePreview
-              ref={zoomPreviewRef}
-              html={html}
-              pages={pages}
-              warnings={warnings}
-              // 大图与主预览共用版式状态和渲染器，左右分栏只改变编辑器布局。
-              height={Math.round(window.innerHeight * 0.72)}
-              previewMode={previewMode}
-              onPreviewModeChange={onPreviewModeChange}
-              exactPreview={exactPreview}
-            />
-          </div>
+      <div
+        ref={bodyRef}
+        style={bodyStyle}
+        className={`resume-wb-body${hasSettings ? "" : " is-preview-only"}${
+          editorEnabled ? "" : " is-editor-hidden"
+        }`}
+      >
+        {showParamsColumn ? paramsColumn : null}
+        {showEditorColumn ? editorColumn : null}
+        {showEditorColumn ? resizer() : null}
+        <div className="resume-wb-col resume-wb-col-canvas">
+          <ResumeWorkbenchCanvas
+            html={html}
+            warnings={warnings}
+            pages={pages}
+            previewRef={workbenchPreviewRef}
+            previewMode={previewMode}
+            onPreviewModeChange={onPreviewModeChange}
+            exactPreview={exactPreview}
+            // 勾上「草稿模式编辑」后，右栏纸面点哪里，中栏就跳到哪一栏的输入框。
+            onPickField={editorEnabled ? pickFromPaper : undefined}
+          />
         </div>
       </div>
+      <WorkbenchPanelsDrawer
+        openPanel={openPanel}
+        onClose={() => setOpenPanel(null)}
+        editorEnabled={editorEnabled}
+        hasSettings={hasSettings}
+        editor={editorColumn}
+        params={paramsColumn}
+      />
     </Modal>
   );
 }

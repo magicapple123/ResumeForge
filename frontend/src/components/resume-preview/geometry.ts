@@ -3,7 +3,9 @@ import {
   A4_HEIGHT_PX,
   A4_WIDTH_PX,
   type AvailableSpace,
+  MAX_FIT_SCALE_DEFAULT,
   MAX_ZOOM,
+  MIN_READABLE_SCALE,
   PAGE_STACK_GAP_PX,
 } from "./config";
 import {
@@ -22,6 +24,11 @@ interface PreviewGeometryInput {
   /** 两页之间的间隙（未缩放 px）＝ 左右页边距之和，由 `layoutFrame` 按当前页边距量出。 */
   pageGap: number;
   measure: LayoutMeasure | null;
+  /**
+   * 大屏放大上限（`--rf-a4-max-fit`，A 档 1.35）。
+   * 不传 = 1，即"永不放大"——与 2026-10-23 之前的行为逐像素一致。
+   */
+  maxFitScale?: number;
 }
 
 export interface PreviewGeometry {
@@ -32,6 +39,11 @@ export interface PreviewGeometry {
   contentTotalHeight: number;
   fitScale: number;
   scale: number;
+  /**
+   * fit 被可读下限抬起来了（容器根本放不下 55%）。
+   * 为真时界面要给提示：纸比容器大，要滚动才能看全——不是"坏了"。
+   */
+  clampedToMin: boolean;
   viewportHeightForPage: number;
   scaledWidth: number;
   scaledHeight: number;
@@ -54,6 +66,7 @@ export function calculatePreviewGeometry({
   overflow,
   pageGap,
   measure,
+  maxFitScale = MAX_FIT_SCALE_DEFAULT,
 }: PreviewGeometryInput): PreviewGeometry {
   const viewportWidth = availableSpace.width || A4_WIDTH_PX;
   const viewportHeight = availableSpace.height || paperHeight;
@@ -72,8 +85,13 @@ export function calculatePreviewGeometry({
   const contentTotalHeight = stackedPages
     ? A4_HEIGHT_PX * totalVisualPages + PAGE_STACK_GAP_PX * (totalVisualPages - 1)
     : paperHeight;
-  const fitScale = Math.min(1, viewportWidth / A4_WIDTH_PX, viewportHeight / contentUnitHeight);
-  const scale = Math.min(MAX_ZOOM, fitScale * zoom);
+  // 两个夹取，顺序不能反：
+  // 1) `maxFitScale` 封顶（大屏允许放大，默认 1）；
+  // 2) 可读下限往上抬——**fit 不做吸附**，它必须"恰好装得下"，否则纸比容器宽一像素
+  //    就会凭空多出一条横向滚动条。手动 `zoom` 另有一档，同样不许低于下限。
+  const rawFit = Math.min(viewportWidth / A4_WIDTH_PX, viewportHeight / contentUnitHeight);
+  const fitScale = Math.min(maxFitScale, Math.max(MIN_READABLE_SCALE, rawFit));
+  const scale = Math.min(MAX_ZOOM, Math.max(MIN_READABLE_SCALE, fitScale * zoom));
   const viewportHeightForPage = Math.min(contentUnitHeight * fitScale, viewportHeight);
   const scaledWidth = contentTotalWidth * scale;
   const scaledHeight = contentTotalHeight * scale;
@@ -96,6 +114,9 @@ export function calculatePreviewGeometry({
     contentTotalHeight,
     fitScale,
     scale,
+    // 只在「确实停在下限上」时为真：放大之后纸不再被下限约束，读数就该回到普通百分比，
+    // 否则 100% 也会挂着"已到最小可读缩放"，反而让人以为缩不动。
+    clampedToMin: rawFit < MIN_READABLE_SCALE && Math.abs(scale - MIN_READABLE_SCALE) < 1e-9,
     viewportHeightForPage,
     scaledWidth,
     scaledHeight,

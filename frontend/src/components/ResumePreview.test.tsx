@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
 import ResumePreview from "./ResumePreview";
 import { clearPreviewCache } from "./resume-preview/exactPreviewCache";
 
@@ -89,7 +90,9 @@ describe("ResumePreview 两行工具栏与缩放下移（P2b）", () => {
     // 基准不是 100%：jsdom 没有真实布局，fitScale 由"窗口高度预算"算出来是个小数。
     // 这里只关心"滚了之后变大"，不关心起点落在哪。
     const label = () => container.querySelector(".resume-preview-zoom-label")?.textContent ?? "";
-    const before = Number(label().replace("%", ""));
+    // 触底时读数是 `55% · 已到最小可读缩放`，所以取前导数字，不能直接 Number()。
+    const percent = () => Number.parseInt(label(), 10);
+    const before = percent();
     expect(before).toBeGreaterThan(0);
 
     const wheel = new WheelEvent("wheel", {
@@ -106,7 +109,7 @@ describe("ResumePreview 两行工具栏与缩放下移（P2b）", () => {
     // 阻止浏览器的默认"整页缩放"是这条功能的另一半——没拦住的后果是简历没变、
     // 整个应用连同弹窗一起被放大。
     expect(wheel.defaultPrevented).toBe(true);
-    expect(Number(label().replace("%", ""))).toBeGreaterThan(before);
+    expect(percent()).toBeGreaterThan(before);
 
     // 不带 Ctrl 的滚轮不缩放（交给外层滚动）。
     const zoomed = label();
@@ -375,5 +378,85 @@ describe("ResumePreview 溢出时的多页视图", () => {
     const layers = shadows.split(",").map((layer: string) => layer.trim());
     expect(layers).toHaveLength(4);
     expect(layers.every((layer) => layer.startsWith("inset "))).toBe(true);
+  });
+
+  it("草稿模式编辑打开时，指针要还给 iframe（否则纸面点不动、光标一直是抓手）", () => {
+    // 2026-10-23 用户实测：「勾选后鼠标放在预览简历上仍然是抓手，无法点击」。
+    // 根因在 `.resume-iframe { pointer-events: none }`：平时把指针交给父容器做拖拽平移，
+    // 于是点击也落在父容器上，iframe 文档里的 click 监听永远收不到事件。
+    // 这两条覆盖一旦被删，JS 侧无论怎么测都不会红——所以只能钉样式表本身。
+    const css: string = readFileSync(
+      [process.cwd(), "src", "styles", "resume-canvas.css"].join("/"),
+      "utf8",
+    );
+    const ruleOf = (selector: string) => {
+      const start = css.indexOf(selector);
+      expect(start, `找不到规则：${selector}`).toBeGreaterThanOrEqual(0);
+      return css.slice(start, css.indexOf("}", start));
+    };
+
+    expect(ruleOf(".resume-preview-viewport.is-click-to-edit .resume-iframe")).toContain(
+      "pointer-events: auto",
+    );
+    expect(ruleOf(".resume-preview-viewport.is-click-to-edit {")).toContain("cursor: default");
+  });
+});
+
+describe("ResumePreview · 宿主给的真实高度（简历制作台右栏）", () => {
+  /**
+   * 主预览按 `window.innerHeight × 0.62` 估算可用高度；制作台右栏的高度由三栏布局决定，
+   * 与窗口高度没有固定比例。给了 `availableHeight` 就必须**只**用它，否则"打开制作台
+   * 看到一页纸缩在中间、四周一片留白"（2026-10 用户截图）。
+   */
+  it("给了 availableHeight 就按它算 fit，不再用窗口比例", () => {
+    // jsdom 的 innerHeight 是 768 → 旧口径会得到 round(768 × 0.62) = 476px。
+    render(
+      <ResumePreview
+        html="<!doctype html><html><body></body></html>"
+        warnings={[]}
+        availableHeight={500}
+      />,
+    );
+
+    // 容器高度仍是宿主给的 500；但 500/1123 ≈ 44.5% 已经低于可读下限（0.55），
+    // 2026-10-23 起停在 55%（方案附录 D0：宁可滚动，不把纸缩到看不清）。
+    // 于是纸比容器高，viewport 跟着纸长到 618 —— 交给外层滚动，不再制造内部横条。
+    const viewport = document.querySelector<HTMLElement>(".resume-preview-viewport");
+    expect(viewport).not.toBeNull();
+    expect(Number.parseFloat(viewport!.style.height)).toBeCloseTo(1123 * 0.55, 0);
+    expect(screen.getByText(t("responsive.a4.minScaleLabel", { value: 55 }))).toBeInTheDocument();
+  });
+
+  it("不传 availableHeight 时仍用窗口比例口径，且同样受可读下限约束", () => {
+    render(<ResumePreview html="<!doctype html><html><body></body></html>" warnings={[]} />);
+
+    // 预算仍是 round(768 × 0.62) = 476（这一半没变）；但 476/1123 = 42% 低于下限，
+    // 纸按 55% 渲染 → 618 高，viewport 随之变高，由页面滚动看全。
+    const viewport = document.querySelector<HTMLElement>(".resume-preview-viewport");
+    expect(Number.parseFloat(viewport!.style.height)).toBeCloseTo(1123 * 0.55, 0);
+  });
+
+  it("「适应页面」把缩放重置回一页完整", () => {
+    render(
+      <ResumePreview
+        html="<!doctype html><html><body></body></html>"
+        warnings={[]}
+        availableHeight={500}
+      />,
+    );
+
+    // 读数就是"一页完整可见"的那个比例——而 500/1123 低于下限，所以是触底胶囊 55%。
+    const zoomLabel = () =>
+      document.querySelector<HTMLElement>(".resume-preview-zoom-label")?.textContent;
+    const atFloor = t("responsive.a4.minScaleLabel", { value: 55 });
+    expect(zoomLabel()).toBe(atFloor);
+
+    fireEvent.click(screen.getByRole("button", { name: /放大预览/ }));
+    // 放大之后不再停在下限上：读数回到普通百分比，胶囊消失。
+    expect(zoomLabel()).not.toBe(atFloor);
+    expect(document.querySelector(".resume-preview-zoom-label.is-min-scale")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /适应页面/ }));
+    expect(zoomLabel()).toBe(atFloor);
   });
 });

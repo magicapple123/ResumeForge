@@ -1,0 +1,169 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 中栏栏目条（`EditorTabStrip`）与中栏容器查询。
+   分四段：① 粘顶外壳 ② 轨道 + 溢出渐隐 ③ 栏目按钮与选中指示条 ④ 中栏变窄时表单竖排。
+   规则全部挂在自定义类名下（`.resume-wb-*`），不碰 antd 的主题口径。 */
+
+/* ===== ① 外壳：粘顶 ===== */
+/* 简历内容下滑时标签条不能跟着走（用户口径：不要把最顶上的标签一并下滑掉）。它的滚动
+   容器是中栏的 `.resume-wb-editor-body`，所以 `sticky` 就够，不需要单独钉一个 fixed 层。 */
+.resume-wb-tabstrip {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 10px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface);
+}
+
+/* ===== ② 轨道：横向滚动 + 右缘渐隐 ===== */
+.resume-wb-tabstrip-track {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 18px;
+  min-width: 0;
+  overflow-x: auto;
+  /* 平滑交给 JS 的 `scrollTo({ behavior })`：CSS 的平滑会和"首次挂载不许滑"打架。 */
+  scroll-behavior: auto;
+  scrollbar-width: none;
+}
+
+.resume-wb-tabstrip-track::-webkit-scrollbar {
+  display: none;
+}
+
+/* 溢出时只渐隐"没显示完"的那一段：起点是最后一个**完整**可见栏目的右边界（由
+   `EditorTabStrip` 写进 `--wb-tab-fade-from`），所以完整显示的栏目一个字都不会被淡掉。
+   这里的 `#000` 是遮罩的不透明度（黑色 = 完全不透明），不是画在页面上的颜色；
+   `colorGuard` 把 `mask-image` 列在白名单里正是为了这一类写法。 */
+.resume-wb-tabstrip-track.is-overflowing {
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(var(--wb-tab-fade-from, 100%) - 0px),
+    transparent 100%
+  );
+}
+
+/* ===== ③ 栏目按钮与选中指示条 ===== */
+.resume-wb-tabstrip button[role="tab"] {
+  flex: 0 0 auto;
+  padding: 0 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.resume-wb-tabstrip button[role="tab"]:hover {
+  color: var(--rf-text-body);
+}
+
+/* 选中态靠颜色 + 字重 + 指示条三重信号：只靠指示条时，滚动到视口外就看不出选的是哪一栏。 */
+.resume-wb-tabstrip button[role="tab"][aria-selected="true"] {
+  color: var(--rf-text-body);
+  font-weight: 500;
+}
+
+.resume-wb-tabstrip button[role="tab"]:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: -2px;
+}
+
+.resume-wb-tabstrip-ink {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--rf-brand);
+  pointer-events: none;
+  transition:
+    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 三角下拉：纯图标（可访问名走 aria-label），宽度必须与 `EditorTabStrip` 里的
+   `MORE_BUTTON_WIDTH` 一致，否则"可用宽度"与真实按钮宽度对不上，最后几像素会错位。 */
+.resume-wb-tabstrip-more.ant-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  color: var(--rf-text-secondary);
+}
+
+/* 顶部动作条里的就地确认（点「取消修改」之后）：占掉动作条这一行的剩余宽度，文字 12px、
+   按钮 `size="small"`，56px 一行放得下，不新开第二层弹窗。
+   复用 `.rf-form-modal-discard` 那套类名，与弹窗/编辑器里的确认是同一种视觉语言。 */
+.resume-wb-actionbar-discard {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+}
+
+/* 内容面板仍由 antd Tabs 管，导航由 `.resume-wb-tabstrip` 自绘：把 antd 自己的 nav 藏掉，
+   否则一屏两条标签；antd 的「…」折叠菜单在中栏里还会被制作台弹窗压住（见组件头注释）。 */
+.resume-wb-editor .resume-wb-tabs-body > .ant-tabs-nav {
+  display: none;
+}
+
+/* ===== ③ 内容面板的横向余量与首行留白（2026-11-06） ===== */
+/* 症状（用户截图）：中栏内容最下面多出一条横向滚动条，且「姓名」贴着顶部栏目条。
+   根因：`ResumeBasicInfoTab` 用 `<Row gutter={12}>`，antd 给行加 `margin-inline: -6px`
+   （每列再补 6px 内边距），于是行的盒子比滚动容器的内容盒左右各宽 6px → 12px 横向溢出。
+   在滚动容器里那就是一条横条（`.resume-wb-editor-body` 的 `overflow-x` 已显式 hidden，
+   但**光靠裁剪会切掉首末字段获得焦点时的光圈**）。
+   补 6px 内边距正好抵消那段负边距：行的盒子回到内容盒宽度，光标圈也有地方画。
+   只加在内容面板上而不是滚动容器上：栏目条要贴着中栏左右边线（`border-bottom`
+   短一截会像"浮在中间的一条线"）。
+   类名是 antd 6 的 `.ant-tabs-body-holder`（v5 的 `.ant-tabs-content-holder` 已改名，
+   所以这里用后代选择器而不是 `>`：antd 在 body 外面可能再套一层 div）。
+   `padding-top` 是 10–12px 的第二件事：栏目条紧贴第一个字段，姓名输入框看起来
+   像从边框里长出来的。加在这一层（面板内容盒）而不是给 `Form.Item` 加 margin——
+   后者会改掉**所有**字段的行间距，那是另一件事。 */
+.resume-wb-editor .resume-wb-tabs-body .ant-tabs-body-holder {
+  padding-inline: 6px;
+  padding-top: 12px;
+}
+
+/* ===== ④ 中栏变窄时表单改竖排 ===== */
+/* 用容器查询而不是媒体查询：同一份表单既在整屏弹窗（很宽）里渲染，也在中栏（窄）里渲染，
+   而两者的视口宽度是同一个值——只有"这一列有多宽"才说明字段该不该并排。 */
+.resume-wb-col-editor {
+  container-type: inline-size;
+  container-name: wb-editor;
+}
+
+/* 阈值 480px 不是拍脑袋：中栏**默认宽度就是 448**（`WORKBENCH_DEFAULT_WIDTHS.editor`），
+   而基本信息里那一行是三列（`md={8}`）——448 平分到每格只剩约 138px，输入框里的
+   "138" 都看不全，那正是用户截图里的样子。所以 480 以下一律单列：中栏可调区间是
+   380–760（`WORKBENCH_WIDTH_LIMITS.editor`），于是 380–480 单列、480 以上才恢复多列。
+   `.ant-row > [class*="ant-col-"]` 的特异性（0,3,0）高于 antd 的 `.ant-col-md-8`（0,1,0），
+   所以不需要 `!important`。 */
+@container wb-editor (max-width: 480px) {
+  .resume-wb-col-editor .ant-row > [class*="ant-col-"] {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+}
+
+/* 三列在"刚好放得下三栏"的中栏里仍然太窄：481 宽的三等分只剩 138px，邮箱会被截成
+   `user@exa…`（AUDIT 的 1366 截图）。按"这一栏有多宽"降成两列——每格约 230px，
+   邮箱、「跟随模板」都完整。`md={4}` / `md={6}` 这类更细的行同样降两列：
+   它们在 481 宽里只分到 80–120px，比三列更没法用。
+   超过 760（用户把中栏拖大）回到模板原本的三/四/六列——那时每格 ≥190px。 */
+@container wb-editor (min-width: 481px) and (max-width: 760px) {
+  .resume-wb-col-editor .ant-row > .ant-col-md-8,
+  .resume-wb-col-editor .ant-row > .ant-col-md-6,
+  .resume-wb-col-editor .ant-row > .ant-col-md-4 {
+    flex: 0 0 50%;
+    max-width: 50%;
+  }
+}

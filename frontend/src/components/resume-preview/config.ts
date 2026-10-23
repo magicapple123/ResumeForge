@@ -20,6 +20,17 @@ export const PREVIEW_HEIGHT_RATIO = 0.62;
 export const MIN_PREVIEW_HEIGHT = 360;
 export const MIN_ZOOM = 0.5;
 export const MAX_ZOOM = 3.5;
+/**
+ * 可读下限：0.55 → 纸面宽 437px、14px 正文渲染成约 7.7px（≈8pt 脚注）。
+ *
+ * 低于这个值「整页看全」已经没有意义——2026-10-23 实测 1092×614 时纸面只有 269px、
+ * 正文 4.7px。约定：触底后**不再缩小**，改为纵向滚动（方案附录 D0 已拍板）。
+ * 注意它夹的是 `fitScale`（视口缩放），与"缩字号把内容塞进一页"无关：
+ * 纸面字号永远是用户设定的值（见 AGENTS.md「排版参数即呈现」）。
+ */
+export const MIN_READABLE_SCALE = 0.55;
+/** `--rf-a4-max-fit` 的兜底：大屏允许放大到 1.35，读不到变量时保持原来的"永不放大"。 */
+export const MAX_FIT_SCALE_DEFAULT = 1;
 export const PROBE_STYLE_ID = "resume-fit-probe";
 export const LIVE_PROBE_STYLE_ID = "resume-font-live-probe";
 
@@ -57,7 +68,7 @@ export interface AvailableSpace {
 /**
  * 预览口径：草稿（浏览器实时排版）/ 精确（服务端排出的真实 PDF）。
  *
- * 是**受控**状态：主预览与「查看大图」共用它，在一处切换，另一处跟着走。
+ * 是**受控**状态：主预览与「简历制作台」共用它，在一处切换，另一处跟着走。
  */
 export type PreviewMode = "draft" | "exact";
 

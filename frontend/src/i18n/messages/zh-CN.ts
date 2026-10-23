@@ -23,6 +23,9 @@
  *
  * 不许放 HTML/JSX（`<b>`、`{'\n'}`）。需要强调或换行时，由调用方拆成多段 `t()`。
  */
+import preview from "./zh-CN.preview";
+import responsive from "./zh-CN.responsive";
+import workbench from "./zh-CN.workbench";
 
 const zhCN = {
   /** 版式下拉的无障碍名（视觉标签是同一句，见 `ResumeTemplateControls`）。 */
@@ -450,6 +453,17 @@ const zhCN = {
   "announcement.settings.restore": "恢复提醒",
   /** 恢复后的告知：用户在设置页当场看不到公告条（hideOnPaths），所以要说"回到页面"。 */
   "toast.announcement.unmuted": "已恢复提醒，回到页面就能看到",
+
+  // ── 简历制作台（2026-10-23）────────────────────────────────
+  // 本轮新增的四十来条文案单独放在 `zh-CN.workbench.ts`：这个文件只剩几十行余量，
+  // 而单文件 500 行是零豁免的硬预算。spread 保持字面量类型，`MessageKey` 自动包含新 key。
+  ...workbench,
+
+  // ── 简历预览的缩放条（2026-10-23）────────────────────────
+  ...preview,
+
+  // ── 多分辨率适配（2026-10-23）────────────────────────────
+  ...responsive,
 } as const;
 
 export type ZhCNMessages = typeof zhCN;
