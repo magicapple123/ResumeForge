@@ -132,7 +132,7 @@ describe("内联样式颜色守卫", () => {
     const offenders: Offender[] = [];
 
     for (const [key, source] of Object.entries(SOURCE_FILES)) {
-      const file = key.replace("../", "");
+      const file = key.replace(/\.\.\//g, "");
       if (EXCLUDED_PATTERNS.some((pattern) => pattern.test(file))) continue;
 
       for (const region of styleRegions(source)) {

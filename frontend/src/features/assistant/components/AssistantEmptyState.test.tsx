@@ -33,7 +33,7 @@ function renderEmptyState() {
 
 /** 从样式表源码里取某个类选择器规则的颜色声明（可能是 var() 引用）。 */
 function declaredColor(selector: string) {
-  const escaped = selector.replace(/\./g, "\\.");
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const block = accessibilityStyles.match(new RegExp(`${escaped}[^{]*\\{([^}]*)\\}`));
   const color = block?.[1].match(/color:\s*([^;]+);/);
   return color ? color[1].trim() : "";

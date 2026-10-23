@@ -77,7 +77,7 @@ def _pdf_text(content: bytes) -> str:
 # ===== HTML =====
 
 
-_SCRIPT_RE = re.compile(r"<script[\s\S]*?</script>", re.IGNORECASE)
+_SCRIPT_RE = re.compile(r"<script[\s\S]*?</script\s*>", re.IGNORECASE)
 
 
 @pytest.mark.parametrize("template", sorted(RESUME_TEMPLATES))

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -75,15 +76,19 @@ def _read_names() -> dict[str, str]:
 def _write_names(names: dict[str, str]) -> None:
     directory = fonts_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    _names_file().write_text(
-        json.dumps(names, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    _names_file().write_text(json.dumps(names, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def font_path(name: str) -> Path:
-    """按文件名取字体路径（拒绝任何目录成分，调用方不必再拼路径）。"""
-    safe = Path(name).name
-    if not safe or safe != name or safe == ACTIVE_FILENAME:
+    """按文件名取字体路径（拒绝任何目录成分，调用方不必再拼路径）。
+
+    分隔符先归一再取末段（``os.path.basename`` 是 CodeQL 认可的目录成分剥离）：
+    Windows 上 ``\\`` 也是分隔符，只认 ``/`` 会把 ``..\\x.ttf`` 这类名字在 POSIX
+    上当普通文件名放过去。``safe != name`` 一道闸把任何带目录成分的名字全拒掉。
+    """
+    normalized = name.replace("\\", "/")
+    safe = os.path.basename(normalized)
+    if not safe or safe in {".", ".."} or safe != normalized or safe == ACTIVE_FILENAME:
         raise FontError("字体文件名不合法")
     path = fonts_dir() / safe
     if not path.is_file():

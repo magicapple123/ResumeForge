@@ -180,7 +180,7 @@ async def import_archive(request: Request) -> dict:
                 created["global_llm"] = merge_exported_profiles(global_payload)
         except Exception as exc:  # noqa: BLE001 - 边上信息，不能扩大失败面
             logger.warning("备份包里的全局模型配置未能导入：%s", exc)
-            created["global_llm"] = {"error": str(exc)}
+            created["global_llm"] = {"error": f"全局模型配置未能导入（{type(exc).__name__}）"}
         # 字体（格式 6）同理：属于"数据集之外"的全局资产，恢复失败**不回滚**已经落盘
         # 的数据集，只把计数与原因如实附在返回里——用户至少能看出字体没完全回来。
         try:
@@ -196,7 +196,7 @@ async def import_archive(request: Request) -> dict:
                     created["font_issues"] = fonts["issues"]
         except Exception as exc:  # noqa: BLE001 - 字体是附加物，不能扩大失败面
             logger.warning("备份包里的字体未能导入：%s", exc)
-            created["font_issues"] = [f"字体未能导入（{exc}）"]
+            created["font_issues"] = [f"字体未能导入（{type(exc).__name__}）"]
     except HTTPException:
         staging.unlink(missing_ok=True)
         raise
