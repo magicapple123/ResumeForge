@@ -82,12 +82,24 @@ describe("颜色回归：求职进度不写字面量颜色（T9）", () => {
   const HEX_LITERAL = /#[0-9a-fA-F]{3,8}\b/;
   const WHITE_TEXT = /^\s*color:\s*#(fff|ffffff);?\s*$/;
 
-  it("tracker.css 里除白字外没有 hex 字面量", () => {
-    const offenders = readCss("styles", "tracker.css")
-      .split("\n")
-      .map((text, index) => ({ text: text.trim(), line: index + 1 }))
-      .filter((item) => HEX_LITERAL.test(item.text) && !WHITE_TEXT.test(item.text));
+  /**
+   * tracker.css 在 2026 年样式表拆分中按分段标题切成两个分片（原 514 行，超 500 行预算）。
+   * 守卫必须**逐片**都读：只读其中一个文件的话，搬走的那一半再长出字面量颜色就没人拦了——
+   * 而 `tracker.css` 现在只剩两行 `@import`，读它等于测空。
+   */
+  const TRACKER_CSS_FILES: string[][] = [
+    ["styles", "tracker-board.css"],
+    ["styles", "tracker-form.css"],
+  ];
 
-    expect(offenders.map((item) => `tracker.css:${item.line}  ${item.text}`)).toEqual([]);
+  it("tracker.css 的全部分片里除白字外没有 hex 字面量", () => {
+    const offenders = TRACKER_CSS_FILES.flatMap((segments) =>
+      readCss(...segments)
+        .split("\n")
+        .map((text, index) => ({ file: segments[1], text: text.trim(), line: index + 1 }))
+        .filter((item) => HEX_LITERAL.test(item.text) && !WHITE_TEXT.test(item.text)),
+    );
+
+    expect(offenders.map((item) => `${item.file}:${item.line}  ${item.text}`)).toEqual([]);
   });
 });

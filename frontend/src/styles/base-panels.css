@@ -1,0 +1,162 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 全局基础（5/5）：通用详情卡片与抽屉、全局拖入导入遮罩、全站搜索浮层。
+拆分自 base.css，纯搬迁、规则内容与顺序不变。 */
+
+/* ===== 通用详情：可点击卡片 + 详情抽屉 =====
+   卡片整块可点（role="button"），所以焦点态必须自己画——默认的浏览器描边在
+   antd 的白底卡片上几乎看不见。 */
+.detail-trigger {
+  cursor: pointer;
+}
+
+.detail-trigger:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.detail-trigger:hover .ant-card,
+.detail-trigger:focus-visible .ant-card {
+  border-color: var(--rf-focus-ring);
+  box-shadow: 0 2px 8px rgb(22 119 255 / 12%);
+}
+
+.record-detail-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.record-detail-field {
+  display: flex;
+  gap: 12px;
+}
+
+.record-detail-label {
+  flex: 0 0 96px;
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+}
+
+.record-detail-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.record-detail-section-body {
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.record-detail-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+/*
+ * 全局拖入导入（R17）：拖文件进窗口时的遮罩。
+ * pointer-events: none 是必须的——遮罩出现后如果接住指针，dragleave/drop 会打到遮罩上，
+ * 用户松手时反而收不到 drop。
+ */
+.global-file-drop {
+  position: fixed;
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inset: 0;
+  background: color-mix(in srgb, var(--rf-brand-fill) 28%, transparent);
+  pointer-events: none;
+}
+
+.global-file-drop-inner {
+  padding: 28px 44px;
+  border: 2px dashed var(--rf-on-brand);
+  border-radius: 16px;
+  background: var(--rf-brand, var(--rf-brand-fill));
+  box-shadow: 0 18px 48px rgb(15 23 42 / 28%);
+  color: #fff;
+  text-align: center;
+}
+
+.global-file-drop-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.global-file-drop-hint {
+  margin-top: 6px;
+  color: var(--rf-on-brand);
+  font-size: 12px;
+}
+
+/* 全站搜索（R6）：结果行整行可点，左右两端信息对齐。 */
+/* 全站搜索浮层（T7）：右上角的**非模态**面板——没有遮罩、不锁滚动、不做焦点陷阱，
+   搜索是"顺手看一眼"，不该把整个页面按停。层级压过编辑器弹窗（3110）。 */
+.global-search-popover {
+  position: fixed;
+  top: 64px;
+  right: 24px;
+  z-index: 3120;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(520px, calc(100vw - 32px));
+  max-height: 70vh;
+  overflow: auto;
+  padding: 12px 14px 14px;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgb(15 23 42 / 28%);
+}
+
+.global-search-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 结果区自己滚：面板限高后，头部的标题与输入框不该跟着一起滚出去。 */
+.global-search-results {
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (max-width: 720px) {
+  .global-search-popover {
+    top: 56px;
+    right: 8px;
+    width: calc(100vw - 16px);
+  }
+}
+
+.global-search-hit {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.global-search-hit:hover,
+.global-search-hit:focus-visible,
+.global-search-hit[aria-selected="true"] {
+  background: var(--rf-brand-tint);
+}

@@ -1,0 +1,119 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 模块样式（1/7）：全局设计变量、弹窗滚动链与「antd 做不到的弹窗布局」覆写。
+拆分自 modules.css（原 2164 行，超 500 行预算），纯搬迁、规则内容与顺序不变。 */
+
+/* ===== 全局设计变量 ===== */
+:root {
+  /* 弹窗内容区高度上限 `--rf-modal-body-max-h` 定义在 theme/design-tokens.css：
+     那是 token 的唯一出口，深浅两套主题都在那里声明同值。这里不再重复定义，
+     否则后加载的这条会静默盖掉它（此前就是如此）。 */
+  /* 「我的空间」下拉菜单选中项的浅色底（替代 colorPrimary 派生的深藏青实底）。 */
+  --rf-nav-selected-bg: var(--rf-brand-tint);
+  /* 加载占位块的最小高度：居中的 Spin 不会把区域塌成一条线。 */
+  --rf-loading-min-h: 160px;
+}
+
+/* ===== 弹窗滚动 =====
+   内容高的弹窗（投递设置、生成简历…）在卡片内部滚动，而不是把整页撑高。
+   两件事配合才成立：ConfigProvider 把弹窗挂到 body（见 main.tsx，卡片因此脱离文档流、
+   不再撑大 <body>），这里再给卡片一个高度上限，超出部分由卡片自己的内容区滚动。
+   只给上限不给固定高度：内容少时卡片仍然按内容收缩，不会留一大片空白。
+
+   **antd 6.6.5 的容器类名是 `.ant-modal-container`**：@rc-component/dialog 的
+   DOM 已改为 `div.ant-modal > div.ant-modal-container > (close, header, body, footer)`，
+   旧版的 content 容器类名已被删除。此前这里 9 条规则全部写的是旧类名，于是
+   max-height / body 滚动 / 边框圆角阴影一条都没生效，长内容弹窗才会"上下顶格"。 */
+/* antd-override: 布局无 token —— 弹窗容器需要 flex，margin:auto 才能垂直居中 */
+.ant-modal-wrap {
+  display: flex;
+}
+
+/* antd-override: 布局无 token —— top:0 + margin:auto 让高弹窗从顶部整体滚动 */
+.ant-modal {
+  /* flex + margin:auto 的标准解法：矮弹窗垂直居中；高弹窗不会被 flex 居中裁切，
+     而是从视口顶部开始整体滚动（margin:auto 在溢出时退化为 0）。 */
+  top: 0;
+  margin: auto;
+}
+
+/* antd-override: 布局无 token —— 弹窗高度上限与容器内的滚动前提（antd 无 max-height token） */
+.ant-modal-container {
+  display: flex;
+  flex-direction: column;
+  /* 视口上下各留 48px：1280×720 下弹窗距上下沿 ≥ 40px（验收口径）。
+     先 vh 后 dvh：移动端地址栏收放时 vh 不是真实可见高度，不认 dvh 的浏览器
+     留在前一条上。 */
+  max-height: calc(100vh - 96px);
+  max-height: calc(100dvh - 96px);
+  overflow: hidden;
+}
+
+/* antd-override: 布局无 token —— 高度链要求 header/footer 不参与伸缩 */
+.ant-modal-container > .ant-modal-header,
+.ant-modal-container > .ant-modal-footer {
+  flex: 0 0 auto;
+}
+
+/* antd-override: 布局无 token —— 内容区独立滚动（min-height:0 + overflow-y），antd 无对应 token */
+.ant-modal-container > .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ===== 弹窗：只保留 antd 做不到的布局能力 =====
+   标题栏、底栏、标题、关闭按钮**一律走 antd 原生视觉**（2026-10-21 决定，不再覆写）。
+   缘由：这里曾有一组单类选择器（`.ant-modal-header` 等）想改内边距、分隔线与标题字重，
+   但 antd 6 生成的是 `:where(.css-x).ant-modal .ant-modal-xxx` —— `:where()` 权重 0，
+   `.ant-modal` + `.ant-modal-xxx` 仍是 **2 个类**，逐属性竞争时我们的 1 个类必输。
+   实测（Playwright 计算样式）这组规则里的 padding / border / background / color /
+   font-weight / 定位**从未生效**，弹窗留白一直来自 antd 的 `contentPadding`。
+   上一轮把其中的 background 迁成主题 token 后，色带反而第一次被真的画出来（用户截图
+   "蓝色阴影"），于是整组删除。要改外观请用 `theme.components.Modal` 的公开 token
+   （只有 headerBg / titleLineHeight / titleFontSize / titleColor / contentBg / footerBg 六个），
+   或接受原生。下面保留的四条都是 antd **没有声明**的属性，因此确实生效。 */
+/* antd-override: 私有形态 —— 遮罩浓度是产品口径（--rf-scrim-strong），无 token */
+.ant-modal-root .ant-modal-mask {
+  background: var(--rf-scrim-strong);
+}
+
+/*
+ * 技能详情弹窗：内容有 3 屏时，首行 Alert 与最后一个「添加知识文件」按钮会分别贴住
+ * 标题和页脚。body 多留一点下边距、footer 加一条分隔线，视觉上不再"顶格"。
+ * 用 styles.body 传内边距（组件里），这里只补 footer 的边界。
+ */
+.skill-editor-modal .ant-modal-footer {
+  margin-top: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+/* antd-override: 私有形态 —— 确认弹窗顶部的焦点色带（其余弹窗按语义换色） */
+.ant-modal-confirm .ant-modal-container {
+  border-top: 3px solid var(--rf-focus-ring);
+}
+
+/* antd-override: 私有形态 —— 确认弹窗标题用品牌色 + 700，与普通弹窗区分 */
+.ant-modal-confirm .ant-modal-confirm-title {
+  color: var(--rf-brand);
+  font-weight: 700;
+}
+
+/* antd-override: 私有形态 —— 确认弹窗正文的行高与正文色（--rf-text-body） */
+.ant-modal-confirm .ant-modal-confirm-content {
+  color: var(--rf-text-body);
+  line-height: 1.7;
+}
+
+.rf-modal-danger .ant-modal-container {
+  border-top: 3px solid var(--rf-accent-red);
+}
+
+.rf-modal-assist .ant-modal-container {
+  border-top: 3px solid var(--rf-accent-violet);
+}
+
+.rf-modal-editor .ant-modal-container {
+  border-top: 3px solid var(--rf-accent-green);
+}

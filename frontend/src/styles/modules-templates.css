@@ -1,0 +1,449 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 模块样式（5/7）：工作台的简历模板（模板一览、导入 HTML、拖拽覆盖层、预览弹窗与顶栏）。
+拆分自 modules.css，纯搬迁、规则内容与顺序不变。 */
+
+/* ===== 工作台：简历模板 ===== */
+.workbench-page .ant-tabs {
+  margin-top: 4px;
+}
+
+.template-chip {
+  margin-bottom: 4px;
+}
+
+/* 内置样式缩略图墙：每个内置样式一张真实渲染的 A4 缩略图，点开看大图。
+   缩略图是缩放的 iframe（不是截图），所以永远和真实模板一致。 */
+.builtin-style-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.builtin-style-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: var(--rf-surface, var(--rf-surface));
+  border: 1px solid var(--rf-border, var(--rf-border));
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.builtin-style-card:hover,
+.builtin-style-card:focus-visible {
+  border-color: var(--rf-focus-ring);
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.12);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.builtin-style-thumb {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: var(--rf-surface);
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 4px;
+}
+
+.builtin-style-frame {
+  display: block;
+  border: 0;
+  /* 缩略图只作展示：让点击/滚动都落到外层按钮上，否则 iframe 会把事件吃掉。 */
+  pointer-events: none;
+}
+
+.builtin-style-name {
+  font-size: 13px;
+  color: var(--rf-text-body);
+}
+
+/* 包住"导入 HTML"按钮的 label：让点击落到里面的按钮上。 */
+.template-upload-button {
+  display: inline-flex;
+}
+
+/*
+ * 模板区卡片头部：「样式模板」卡的按钮组较宽（复制改一份 / 导入 HTML / 导入参考模板），
+ * 与标题挤在同一行时会贴死（用户截图反馈）。加最小间距并允许换行：
+ * 宽屏仍是"标题左、按钮组右"的默认节奏，窄一档时按钮组整体换到标题下方（右对齐）。
+ */
+.template-workbench .ant-card-head-wrapper {
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.style-template-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .style-template-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.style-template-code textarea {
+  font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.style-template-preview,
+.template-preview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface-alt);
+  overflow: hidden;
+}
+
+.style-template-preview {
+  min-height: 420px;
+}
+
+/*
+ * A4 预览画布（A4PreviewFrame 组件用）。
+ *
+ * 取代了此前两套各写一半的写法：`.style-template-frame` 写死 `scale(0.54)`（列宽是可变的，
+ * 于是要么没铺满、要么被裁掉 —— 用户反馈"没有一次性展示全"），`.template-preview-frame`
+ * 则把 iframe 拉成"容器宽 × 72vh"（A4 的比例荡然无存）。现在两种场景共用一张按实测尺寸
+ * 等比缩放的 A4 纸，完整一页永远可见。
+ */
+.a4-preview-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+}
+
+.a4-preview-paper {
+  overflow: hidden;
+  /* 纸面恒白（R18）：--rf-surface 在深色下会变暗，纸不能跟着变——导出/打印
+     看到的就是这张纸。深色主题下由 --rf-paper 显式保持 #ffffff。 */
+  background: var(--rf-paper);
+  box-shadow: 0 2px 12px rgb(15 23 42 / 12%);
+}
+
+.a4-preview-frame {
+  display: block;
+  border: 0;
+  transform-origin: top left;
+}
+
+.format-color-input {
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--rf-border-strong);
+  border-radius: 4px;
+  background: var(--rf-surface);
+  cursor: pointer;
+}
+
+.template-style-controls {
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface-alt);
+}
+
+.template-style-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 14px;
+}
+
+.template-style-control-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.template-badge-editor {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+.template-badge-editor-row {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.template-badge-editor-image {
+  width: 72px;
+  height: 32px;
+  object-fit: contain;
+  border: 1px solid var(--rf-border-strong);
+  border-radius: 4px;
+  background: var(--rf-surface);
+}
+
+.template-recognition-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+  gap: 16px;
+  align-items: start;
+}
+
+.template-recognition-preview {
+  min-height: 520px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 900px) {
+  .template-recognition-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 模板一览：每个模板一列缩略图 + 说明，缩略图是真的渲染结果（缩放到卡片里）。 */
+.template-gallery-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.template-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.template-gallery-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--rf-surface);
+}
+
+.template-gallery-card.is-active {
+  border-color: var(--rf-brand);
+  box-shadow: 0 0 0 2px rgba(22, 54, 92, 0.12);
+}
+
+/* 缩略图容器：宽度随卡片（栅格自适应），高度固定为"缩放后的一页 A4"。
+   为什么必须固定高度：iframe 的逻辑尺寸是 794×1123，`transform: scale()` **不影响布局**，
+   它的布局盒仍然是 794px 宽——放在窄卡片里就会溢出裁掉，而且缩放后的页面贴在左边，
+   卡片右侧留一条空白（用户看到的就是"没居中 + 右边有空"）。 */
+.template-gallery-preview {
+  position: relative;
+  height: 405px; /* 1123 × 0.36 ≈ 404.3，取整避免露出一条底边 */
+  background: var(--rf-surface-alt);
+  overflow: hidden;
+}
+
+/* A4 页面按缩放后的大小渲染并**水平居中**：
+   `left: 50%` 把 794px 的布局盒推到容器中线，再用半页宽的负 margin 把"缩放后可见区"
+   （794 × 0.36 = 286px）拉回正中间。 */
+.template-gallery-frame {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 794px;
+  height: 1123px;
+  margin-left: -143px; /* 286 / 2 */
+  border: 0;
+  transform: scale(0.36);
+  transform-origin: top left;
+  pointer-events: none;
+}
+
+/* 缩略图整块可点（iframe 本身 pointer-events: none，点击由这层接收）。 */
+.template-gallery-preview {
+  cursor: zoom-in;
+}
+
+.template-gallery-preview:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 2px;
+}
+
+/* 「查看大图」里的整页预览：1:1 A4，比缩略图清楚得多；滚动条在这里是必要的。 */
+.template-gallery-zoom-frame {
+  display: block;
+  width: 794px;
+  height: 1123px;
+  margin: 0 auto;
+  border: 0;
+  background: var(--rf-surface);
+  box-shadow: 0 6px 24px rgb(15 23 42 / 12%);
+}
+
+.template-gallery-zoom-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+}
+
+.template-gallery-loading,
+.template-gallery-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+}
+
+.template-gallery-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px 12px;
+}
+
+.template-gallery-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.template-gallery-desc {
+  font-size: 12px;
+  min-height: 32px;
+}
+
+/* 多份招聘信息确认面板：每份一张小卡片，勾选框在标题左侧。 */
+.multi-draft-list {
+  padding: 4px 0;
+}
+
+.multi-draft-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.multi-draft-title {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.multi-draft-excerpt {
+  margin: 6px 0 0 !important;
+  font-size: 12px;
+}
+
+.multi-draft-warning {
+  font-size: 12px;
+}
+
+/* 拖拽导入容器：默认不改变布局，只在拖拽中显示覆盖提示。 */
+.file-drop-zone {
+  position: relative;
+}
+
+/*
+ * 按钮型拖拽区：只包住按钮本身，不接管整行。
+ *
+ * 设置页的一行里常常并排放着好几个导入入口（导出/导入备份、导入技能、导入 HTML），
+ * 整行接管拖拽会让"到底拖进了哪一个"变得含糊；贴住按钮反而指哪打哪。
+ */
+.settings-import-drop,
+.template-upload-drop {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* 拖拽覆盖层默认是 inset:-6px 的整块高亮，贴在按钮上时收窄一点免得压到邻居。 */
+.settings-import-drop .file-drop-overlay,
+.template-upload-drop .file-drop-overlay {
+  inset: -3px;
+  padding: 0 8px;
+  text-align: center;
+}
+
+.file-drop-overlay {
+  position: absolute;
+  inset: -6px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--rf-accent-blue);
+  border-radius: 8px;
+  background: var(--rf-brand-wash);
+  pointer-events: none;
+}
+
+.file-drop-overlay-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rf-brand);
+}
+
+/* 简历预览页脚：按钮多时换行，而不是把最后一个按钮挤出弹窗。 */
+.generate-preview-footer {
+  margin-top: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.generate-preview-footer .ant-space {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* 顶栏右侧的退出入口：低调但可点，和仓库链接并排。 */
+.app-exit-button {
+  /* RF-12 a11y：rgba 黑 45% 对白底只有 3.36:1，换成达标的次级文字色。 */
+  color: var(--rf-text-description);
+}
+
+.app-exit-button:hover {
+  color: var(--rf-text-body) !important;
+}
+
+/* 窄屏放不下"退出"两个字时只留图标，避免顶栏被挤到换行。 */
+@media (max-width: 575px) {
+  .app-exit-label {
+    display: none;
+  }
+}
+
+/* 退出后盖住整个界面：此时所有接口都不可用，继续操作只会到处报错。 */
+.app-exited-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rf-surface);
+}

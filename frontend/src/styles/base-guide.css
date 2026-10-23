@@ -1,0 +1,326 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 全局基础（2/5）：侧栏导航菜单、侧栏页脚（使用指南 / 仓库 / 检查更新）、使用指南与快速开始。
+拆分自 base.css，纯搬迁、规则内容与顺序不变。 */
+
+.app-nav-menu {
+  flex: 1;
+  padding: 12px 10px;
+  border-inline-end: 0 !important;
+  background: transparent !important;
+}
+
+/* 选中底色由 `theme.components.Menu` 的 itemSelectedBg / itemSelectedColor 表达，
+   选中条由 activeBarBorderWidth: 0 归零；这里只留 token 覆盖不到的尺寸语义
+   （尺寸刻意**不**迁 token：Menu 的 itemHeight 是组件级全局值，会把下拉菜单与
+   移动端抽屉的菜单项高度一起改掉，而这份 44px 只属于侧栏）与字色字重。 */
+.app-nav-menu .ant-menu-item {
+  height: 44px;
+  margin: 4px 0;
+  border-radius: 8px;
+  color: var(--rf-text-secondary);
+  font-weight: 500;
+}
+
+.app-nav-menu .ant-menu-item .anticon {
+  color: var(--rf-text-tertiary);
+  font-size: 17px;
+}
+
+.app-nav-menu .ant-menu-item-selected {
+  font-weight: 600;
+}
+
+.app-nav-menu .ant-menu-item-selected .anticon {
+  color: var(--rf-brand);
+}
+
+.app-sider-footer {
+  padding: 10px 10px 16px;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+/* 「使用指南」占满页脚宽度。留成行容器是为了折叠态（64px 宽）能整行居中。 */
+.app-sider-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-guide-button {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 40px;
+  justify-content: flex-start;
+  color: var(--rf-text-secondary);
+  font-weight: 500;
+}
+
+.app-guide-button:hover {
+  color: var(--rf-brand) !important;
+  background: var(--rf-surface-alt) !important;
+}
+
+/* 开源仓库入口：页头右上角、退出按钮左边的**纯图标**按钮。
+   含义由悬浮提示与 aria-label 承担；尺寸与页头 64px 高对齐，不与标题抢注意力。 */
+/* antd-override: 尺寸压 antd Button 的 CSS-in-JS，去 !important 需渲染验证（见审计报告 §P2-3 待定） */
+.app-repo-button {
+  flex: 0 0 auto;
+  width: 36px !important;
+  min-width: 36px;
+  height: 36px !important;
+  padding: 0;
+  color: var(--rf-text-tertiary);
+}
+
+.app-repo-button .anticon {
+  /* 用户反馈过小：17px 在 1440 宽屏上几乎看不出是 GitHub。20px 与「退出」的字号同档，
+     仍是纯图标、不抢标题的位置。 */
+  font-size: 20px;
+}
+
+.app-repo-button:hover {
+  color: var(--rf-brand) !important;
+  background: var(--rf-surface-alt) !important;
+}
+
+/* 「检查更新」：页脚最右侧的纯图标按钮，与「使用指南」同一行。
+   检查中图标会自转（SyncOutlined spin），所以宽度固定，避免转动时把整行挤动。 */
+/* antd-override: 尺寸压 antd Button 的 CSS-in-JS，去 !important 需渲染验证（见审计报告 §P2-3 待定） */
+.app-update-button {
+  flex: 0 0 auto;
+  width: 32px !important;
+  min-width: 32px;
+  height: 32px !important;
+  padding: 0;
+  color: var(--rf-text-tertiary);
+}
+
+.app-update-button .anticon {
+  font-size: 16px;
+}
+
+.app-update-button:hover {
+  color: var(--rf-brand) !important;
+  background: var(--rf-surface-alt) !important;
+}
+
+.user-guide-brand-image {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+/* 使用指南：左侧步骤导航 + 右侧内容。
+   **列数必须与子元素个数对上**：这里曾是 `172px 1fr` 两列，而 DOM 里是三个孩子
+   （步骤条、竖分隔线、内容区），于是分隔线占了第二列、内容被挤到**下一行的第一列**——
+   正文只有 196px 宽，中文每行两三个字就折行，整页被拉到 3000px 高（截图反馈）。
+   现在用命名区域显式指定每个孩子的位置，孩子个数变了也不会再悄悄错位。 */
+.user-guide-body {
+  display: grid;
+  grid-template-columns: minmax(132px, 168px) 1px minmax(0, 1fr);
+  grid-template-areas: "steps divider content";
+  gap: 0 12px;
+  align-items: start;
+}
+
+.user-guide-steps {
+  grid-area: steps;
+  padding-top: 4px;
+}
+
+/* 标题允许换行：中文标题在窄列里必须能折行，否则会被裁掉。 */
+.user-guide-steps .ant-steps-item-title {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: normal;
+  word-break: keep-all;
+}
+
+.user-guide-steps .ant-steps-item {
+  padding-bottom: 2px;
+}
+
+.user-guide-divider {
+  grid-area: divider;
+  align-self: stretch;
+  height: auto;
+  min-height: 100%;
+  margin: 0;
+}
+
+.user-guide-step-content {
+  display: flex;
+  grid-area: content;
+  gap: 20px;
+  min-width: 0;
+  padding: 0 0 12px;
+}
+
+.user-guide-step-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: var(--rf-brand-tint);
+  color: var(--rf-brand);
+  font-size: 26px;
+}
+
+.user-guide-step-copy {
+  min-width: 0;
+  /* 正文自己占满剩下的宽度：不设 max-width，否则在宽弹窗里会留一大片空白。 */
+  flex: 1 1 auto;
+}
+
+.user-guide-step-copy .ant-typography {
+  max-width: 100%;
+  margin-bottom: 10px;
+}
+
+/* 步骤标题是"这一步是什么"的主锚点，要比正文/要点明显更重、更醒目：
+   用强调色 + 略大字号，并留出比正文更大的下间距，和下方要点拉开层级。 */
+.user-guide-step-copy h4.ant-typography {
+  margin-bottom: 16px;
+  color: var(--rf-brand);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* 描述是"这一步做什么"的导读，与下方要点列表区分层级：浅一档的灰、更宽的行距，
+   并留出更多下边距，避免和要点粘在一起。 */
+.user-guide-description {
+  margin: 0 0 18px;
+  color: var(--rf-text-body);
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.user-guide-points {
+  margin: 10px 0 0;
+  /* ul 用 flex 布局时浏览器不渲染默认的 ::marker 圆点，于是每个要点之间只剩 6px
+     空隙，长条目视觉上连成"一整段"。这里显式取消默认圆点、改用统一的小圆点标记，
+     让每一条都一眼可辨，又不抢正文的注意力。 */
+  padding-left: 0;
+  color: var(
+    --rf-text-secondary
+  ); /* 行高从 2 收到 1.75：每条要点现在都由粗体短标签领起，靠**标签**断句就够，
+     不必再靠超宽行距硬撑，收紧后一屏能看到更多条。 */
+  line-height: 1.75;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.user-guide-points li {
+  position: relative;
+  padding-left: 18px;
+}
+
+.user-guide-points li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rf-brand);
+  opacity: 0.35;
+}
+
+/* 一条要点的**短标签**：用户扫读时先看它。用强调色 + 半粗，和后面的说明文字拉开层级——
+   此前每条都是一整段普通文字，八十多条排在一起"抓不到重点"（截图反馈）。
+   行内而不是定宽分栏：标签从 2 字到 8 字不等，定宽列要么浪费横向空间、要么把长标签
+   挤折行；行内 + 加粗已经足够让眼睛停住。 */
+.user-guide-point-lead {
+  margin-right: 8px;
+  color: var(--rf-brand);
+  font-weight: 600;
+}
+
+.user-guide-point-text {
+  color: var(--rf-text-secondary);
+}
+
+.user-guide-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 「快速开始」首屏：三条路径卡竖排，点击直达对应页面或载入示例。
+   克制样式：与 8 步视图共用同一套层级（标题 / 描述），卡片只是可点的行。 */
+.user-guide-quickstart-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.user-guide-quickstart-path {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-guide-quickstart-path:hover:not(:disabled) {
+  border-color: var(--rf-brand);
+  background: var(--rf-surface-alt);
+}
+
+.user-guide-quickstart-path:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.user-guide-quickstart-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--rf-brand-tint);
+  color: var(--rf-brand);
+  font-size: 18px;
+}
+
+.user-guide-quickstart-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-guide-quickstart-lead {
+  color: var(--rf-brand);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-guide-quickstart-text {
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+}
+
+.user-guide-quickstart-arrow {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--rf-text-description);
+  font-size: 12px;
+}

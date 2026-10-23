@@ -1,0 +1,400 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历面板（3/3）：设置分页、预览弹窗底部操作条、版面诊断/自动一页、板块顺序与缩放弹窗。
+拆分自 resume.css，纯搬迁、规则内容与顺序不变。 */
+
+.settings-card {
+  margin-bottom: 16px;
+}
+
+/* 设置分页：三个标签各自装一类设置，切换时不留空档。 */
+.settings-tabs {
+  margin-top: 4px;
+}
+
+.settings-tabs .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+/* 每页开头的一行说明 + 该页的操作按钮（只有「AI 模型」有）。 */
+.settings-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* 页签内分组标题：组名 + 一句说明的轻量分层，让一页里的多张卡能按主题对号入座。
+   上下间距与卡片间距（16px）保持同一节奏。 */
+.settings-group-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0 12px;
+}
+
+.settings-section-titles {
+  min-width: 0;
+}
+
+.settings-section-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 分页里最后一张卡不要再留底边距。 */
+.settings-tabs .ant-tabs-tabpane > .settings-card:last-child,
+.settings-tabs .ant-tabs-tabpane > *:last-child .settings-card:last-child {
+  margin-bottom: 0;
+}
+
+/* 简历预览弹窗的底部操作条：**吸附在弹窗底部**，内容再长也不用翻到最后才点得到。
+   按钮区是 CSS Grid：每个按钮独占一格、block 拉满整格，自动铺满整行、不留右侧空当
+   （原先 flex space-between 在窄一档时右边会留出大片空白）。「下载 PDF」主按钮独占
+   底部一整行，保持醒目。 */
+.resume-detail-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px 12px;
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px 0 4px;
+  background: var(--rf-surface, var(--rf-surface));
+  border-top: 1px solid var(--rf-border, var(--rf-border));
+}
+
+/* 「下载 PDF」主按钮组：独占整行、保持醒目，不再和上方按钮挤在同一排抢宽度。 */
+/* T4：导出按钮落到「离线分享」所在行的**最后一格**（`auto-fill` 网格的 `-2 / -1`
+   就是这一行的末尾），也就是整张卡片的右下角——导出是这一步的终点动作，位置对了
+   才不必在整排按钮里找它。 */
+.resume-detail-footer-export {
+  grid-column: -2 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+/* 最后一行：左侧三个次动作（咨询 / 质量 / 离线分享）与右侧的
+   「取消修改 / 保存修改 / 导出」**合并成同一行**（2026-10-20 用户要求）。
+   容器用 subgrid 复用页脚的列，左侧按钮因此仍与上面两排逐列对齐；
+   右侧动作只在第 4、5 列里靠右收尾，按内容宽度排（比整格窄）。 */
+.resume-detail-footer-tail {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+@supports (grid-template-columns: subgrid) {
+  .resume-detail-footer-tail {
+    display: grid;
+    grid-template-columns: subgrid;
+  }
+}
+
+.resume-detail-footer-tail > .resume-detail-footer-confirm-row,
+.resume-detail-footer-tail > .resume-detail-footer-export {
+  grid-column: 4 / 6;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.resume-detail-footer-confirm-row > .resume-detail-footer-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resume-detail-footer-confirm-row .ant-space {
+  display: inline-flex;
+}
+
+/* 右侧三个动作比左侧按钮小一档：这里只按内容宽度渲染，不再铺满整格。 */
+.resume-detail-footer-confirm-row .ant-btn,
+.resume-detail-footer-tail > .resume-detail-footer-export .ant-btn {
+  width: auto;
+}
+
+/* 窄屏：塌成一列，左侧三个在上、右侧动作在下并靠右。 */
+@media (max-width: 720px) {
+  .resume-detail-footer-tail {
+    grid-template-columns: 1fr;
+  }
+
+  .resume-detail-footer-tail > .resume-detail-footer-confirm-row,
+  .resume-detail-footer-tail > .resume-detail-footer-export {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    margin-left: 0;
+  }
+}
+
+/* ===== 版面诊断与「自动一页」 ===== */
+
+.resume-diagnosis {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--rf-surface, var(--rf-surface));
+  border: 1px solid var(--rf-border, var(--rf-border));
+  border-radius: 8px;
+}
+
+.resume-diagnosis-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.resume-diagnosis-progress {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.resume-diagnosis-summary {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.resume-diagnosis-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  /* 建议可能有 5~6 条，整块展开会把下方的简历预览挤到很矮（预览区高度以前是跟随
+     上方内容算的）。这里给列表一个固定上限、超出内部滚动：诊断仍然完整可读，
+     但永远不会因为"建议条数多"而占掉预览的空间。 */
+  max-height: 176px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.resume-diagnosis-list li {
+  margin-bottom: 4px;
+}
+
+.resume-diagnosis-floor {
+  margin-top: 10px;
+}
+
+/* ── 板块顺序（预览工具条里的「顺序」弹层） ───────────────────────────── */
+/* 弹层里的每行是「序号 + 名称 + 上下移」，宽度固定是为了让 7 行的上下按钮
+   竖向对齐——用 auto 宽度时按钮会跟着名称长短左右跳，点起来很费劲。 */
+.resume-section-order-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resume-section-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 232px;
+}
+
+.resume-section-order-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.resume-section-order-row:hover {
+  background: var(--rf-surface-alt);
+}
+
+.resume-section-order-index {
+  flex: 0 0 18px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--rf-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.resume-section-order-label {
+  flex: 1 1 auto;
+  font-size: 13px;
+}
+
+.resume-section-order-hint {
+  margin: 10px 0 0 !important;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 「按住 Ctrl 滚滚轮可缩放」：与缩放百分比同一行、字号更小。
+   窄屏（预览区被压扁）时隐藏——那一行会被挤到换行，反而更乱。 */
+.resume-preview-zoom-hint {
+  margin-left: 2px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .resume-preview-zoom-hint {
+    display: none;
+  }
+}
+
+/* 全屏简历工作台：参数面板与预览各自滚动，避免改参数时失去预览位置。 */
+.resume-zoom-body {
+  display: grid;
+  grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--rf-surface-alt);
+}
+
+.resume-zoom-body.is-preview-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.resume-zoom-settings {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+  background: var(--rf-surface);
+  border-right: 1px solid var(--rf-border-subtle);
+}
+
+.resume-zoom-settings-template {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.resume-zoom-settings-measure {
+  padding-top: 18px;
+}
+
+.resume-zoom-settings .resume-template-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+}
+
+.resume-zoom-settings .resume-template-controls > .ant-space-item {
+  width: 100%;
+  min-width: 0;
+}
+
+.resume-zoom-settings .resume-template-controls > .ant-space-item > .ant-space {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.resume-zoom-settings .resume-measure-grid.is-stacked {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+/* Sidebar controls inherit the dialog's wider slider defaults; constrain them to this panel. */
+.resume-zoom-settings .resume-measure-grid.is-stacked .ant-space-item:has(> .ant-slider) {
+  flex: 0 1 132px;
+  min-width: 112px;
+}
+
+.resume-zoom-settings .resume-measure-grid.is-stacked .ant-slider {
+  width: 132px;
+  max-width: 100%;
+}
+
+.resume-zoom-settings .resume-measure-grid.is-stacked .resume-measure-cell > .ant-space {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resume-zoom-preview-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 20px 0;
+}
+
+.resume-zoom-workbench-note {
+  flex: 0 0 auto;
+  margin: 0 0 10px !important;
+  font-size: 12px;
+}
+
+.resume-zoom-preview-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 4px 16px;
+}
+
+@media (max-width: 1000px) {
+  .resume-zoom-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(180px, 32dvh) minmax(0, 1fr);
+  }
+
+  .resume-zoom-settings {
+    border-right: 0;
+    border-bottom: 1px solid var(--rf-border-subtle);
+    padding: 12px 16px;
+  }
+
+  .resume-zoom-settings-template {
+    padding-bottom: 12px;
+  }
+
+  .resume-zoom-settings-measure {
+    padding-top: 12px;
+  }
+
+  .resume-zoom-preview-pane {
+    padding: 10px 12px 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .resume-zoom-body {
+    grid-template-rows: minmax(210px, 36dvh) minmax(0, 1fr);
+  }
+
+  .resume-zoom-settings {
+    padding: 10px 12px;
+  }
+}
+
+/* 列表「目标岗位」列（T3）：列宽固定 200，长岗位名/公司名必须在 Tag 内省略，
+   否则整表被撑宽、其它列被挤成一字宽。column 级 ellipsis 负责切 table-layout: fixed，
+   这里负责让 Tag 自身收敛（antd Tag 默认 white-space: nowrap 但不限宽）。 */
+.resume-job-tag,
+.resume-company-tag {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* 「填入我的资料全部数据」的样式已随项 9 并进 `.resume-editor-hint-row`：
+   它不再是说明文字下方独立的一行，而是同一行里贴最右的按钮（见上方规则）。 */

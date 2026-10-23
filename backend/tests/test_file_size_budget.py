@@ -19,8 +19,10 @@ PR-18（2026-10-13 审计）扩面与硬化：
 3. **CSS 纳入范围**（S1，2026-10-22）。此前 ``SCAN_SUFFIXES`` 只有
    ``.py/.ts/.tsx``，``frontend/src`` 下的样式表**完全不可见**——最大的
    ``styles/modules.css`` 已到 2056 行（预算的 4.1 倍）却从未被拦过。现在把
-   ``.css`` 纳入同一 500 行预算：存量 5 个超线文件登记带到期日（2026-12-31）
-   的豁免，本批只止血（挡住继续增长），按分段标题拆分另立项。
+   ``.css`` 纳入同一 500 行预算。S1 当时只止血：存量 5 个超线文件登记带到期日
+   （2026-12-31）的豁免，按分段标题拆分另立项。**该拆分已于 2026-12-31 到期日
+   执行完毕**（5 个聚合清单 + 19 个平铺分片，均为纯搬迁），CSS 豁免清单现为空，
+   与既有 ``.ts/.tsx`` 一样零豁免。
 4. **幽灵豁免守卫**（S3）：豁免条目指向的文件若已不再超预算，
    ``test_exemptions_only_for_over_budget_files`` 变红——拆分完成后必须同批
    删除豁免，否则白名单只会越来越长、无人知道哪条还有效。
@@ -75,10 +77,8 @@ _STRUCTURED_BACKSTOP = "2027-06-30"
 # 本会话多 PR 叠加增长导致的过线：拆分与行为修改必须分补丁，本批只豁免；
 # 到期日 2026-11-15，届时拆分或续期（续期需要新理由）。
 _PR18_MULTI_PR_GROWTH = "2026-11-15"
-# CSS 历史存量（S1，2026-10-22）：样式表此前不在扫描范围，存量超线属历史欠账；
-# 本批只「止血」（挡住继续增长），拆分按 styles/modules.css 的分段标题另立项。
-# 到期日 2026-12-31 是拆分立项的最后期限，不是无限期白名单。
-_CSS_BUDGET_BACKSTOP = "2026-12-31"
+# CSS 历史存量（S1，2026-10-22）的豁免已于 2026-12-31 到期日执行拆分并全部删除，
+# 因此不再需要 `_CSS_BUDGET_BACKSTOP` 常量——CSS 现在与 .py/.ts/.tsx 同档，零豁免。
 
 # 测试文件书面豁免清单（路径相对仓库根；理由必须具体，禁止「暂缓拆分」式空话）
 _TEST_EXEMPTIONS: dict[str, Exemption] = {
@@ -180,29 +180,20 @@ _EXEMPTIONS: dict[str, Exemption] = {
     #   均为纯搬迁，脚本入口路径、CLI 参数与 --help 输出逐字不变。）
     # ---- S1（2026-10-22）：CSS 首次纳入预算时的历史存量（到期 2026-12-31）----
     # 这 5 个样式表在此前版本完全不在扫描范围（SCAN_SUFFIXES 无 .css），从未被拦过；
-    # 本批只把它们变成「可见但暂时豁免」，挡住继续增长，不要求立即拆分。
+    # S1 只把它们变成「可见但暂时豁免」，挡住继续增长，不要求立即拆分。
     # 拆分必须平铺在 frontend/src/styles/ 下（禁止子目录，否则 antdOverrideGuard 的
     # 非递归 readdirSync 会看不见新文件），方案见行数预算审计报告 §6.1 / §6.5。
-    "frontend/src/styles/modules.css": Exemption(
-        "CSS 2026-10-22 才纳入预算，存量 2056 行（4.1×）；按 12 个分段标题拆 6 文件另立项",
-        _CSS_BUDGET_BACKSTOP,
-    ),
-    "frontend/src/styles/base.css": Exemption(
-        "CSS 2026-10-22 才纳入预算，存量 1039 行（2.1×）；基础层与组件类混写，需先分段再拆",
-        _CSS_BUDGET_BACKSTOP,
-    ),
-    "frontend/src/styles/resume.css": Exemption(
-        "CSS 2026-10-22 才纳入预算，存量 803 行（1.6×）；纸面渲染样式，拆分需同步跨引擎高度用例",
-        _CSS_BUDGET_BACKSTOP,
-    ),
-    "frontend/src/features/tou-tou/tou-tou.css": Exemption(
-        "CSS 2026-10-22 才纳入预算，存量 554 行；且本就在 antdOverrideGuard 扫描目录之外",
-        _CSS_BUDGET_BACKSTOP,
-    ),
-    "frontend/src/styles/tracker.css": Exemption(
-        "CSS 2026-10-22 才纳入预算，存量 514 行（超线 14 行）；下批触碰该页时先腾位置",
-        _CSS_BUDGET_BACKSTOP,
-    ),
+    #
+    # 已按 2026-12-31 到期日执行拆分（样式表拆分批），**CSS 豁免清单现为空**：
+    #   styles/modules.css   2164 行 → 聚合清单 + modules-{dialog,webform,workspace,interview,
+    #                        templates,layout,home}.css（按文件内 12 个分段标题切 7 片）
+    #   styles/base.css      1039 行 → 聚合清单 + base-{shell,guide,header,tasks,panels}.css
+    #   styles/resume.css     925 行 → 聚合清单 + resume-{canvas,editor,panels}.css（按分段切）
+    #   features/tou-tou/tou-tou.css 554 行 → 聚合清单 + styles/tou-tou-{orb,cards}.css
+    #   styles/tracker.css    514 行 → 聚合清单 + tracker-{board,form}.css（按分段标题切）
+    # 全部为纯搬迁（分片首尾拼接与拆分前原文逐字节一致），选择器 / 声明 / 媒体查询 /
+    # 层叠顺序未变；`@import` 位于各聚合文件最前，入口仍是 index.css 与 TouTouOrb.tsx
+    # 各自的那一条 import，没有第二套入口。
 }
 
 # scripts/（*.py，预算 800）的豁免清单：**当前为空**。

@@ -1,0 +1,210 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 求职进度（2/2）：导入预览、表单排版与深色主题覆盖。
+拆分自 tracker.css，纯搬迁、规则内容与顺序不变。 */
+
+/* ===== 导入预览 ===== */
+
+.track-import-note {
+  display: block;
+  font-size: 12px;
+}
+
+.track-import-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 42vh;
+  overflow-y: auto;
+}
+
+.track-import-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid var(--rf-border, var(--rf-border));
+  border-radius: 8px;
+}
+
+.track-import-fields {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.track-import-reason,
+.track-import-evidence {
+  font-size: 12px;
+}
+
+/* ===== 表单 ===== */
+
+/* 用普通 flex 而不是 antd 的 Space：Space 会把子项再包一层，
+   flex 宽度落不到真正的 flex 子项上（表现为窄列被挤成竖排文字）。 */
+.track-form-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.track-form-grow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.track-form-date {
+  flex: 0 0 160px;
+}
+
+/* 真实月历（E11）：自绘 grid。周一起始，单元格按 7 列铺开。 */
+.calendar-view-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+/* 月份标题加重：它是这一行的"锚点"，翻月时视线先落在它上面。 */
+.calendar-view-head .ant-typography {
+  color: var(--rf-brand);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.calendar-view-head .ant-btn:not(:disabled):hover {
+  color: var(--rf-brand);
+  border-color: var(--rf-focus-ring);
+  background: var(--rf-brand-tint);
+}
+
+.calendar-view-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar-view-weekday {
+  padding: 4px 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--rf-text-description);
+}
+
+.calendar-view-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* 1fr 轨道的默认最小宽是内容的 min-content：事件标题 nowrap 时会把整列
+     撑到标题宽度、整块栅格顶出弹窗（月历排版炸掉的根因）。必须显式归零，
+     让列宽只由轨道决定，标题交给条目自身的 nowrap+ellipsis 截断。 */
+  min-width: 0;
+  overflow: hidden;
+  min-height: 64px;
+  padding: 4px;
+  border: 1px solid var(--rf-border);
+  border-radius: 6px;
+  background: var(--rf-surface);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.calendar-view-cell:hover {
+  border-color: var(--rf-focus-ring);
+  background: var(--rf-surface-alt);
+}
+
+.calendar-view-cell.is-today {
+  border-color: var(--rf-focus-ring);
+  background: var(--rf-brand-wash);
+  box-shadow: 0 1px 4px rgba(91, 143, 249, 0.18);
+}
+
+.calendar-view-cell.is-dimmed {
+  opacity: 0.45;
+}
+
+/* 今日的日期数字做成圆形徽标：主题色实底 + 白字，
+   不只换底色——扫一眼月历就能立刻锁到"今天"。 */
+.calendar-view-cell.is-today .calendar-view-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-bottom: 2px;
+  color: #fff;
+  font-weight: 700;
+  background: var(--rf-info);
+  border-radius: 50%;
+}
+
+.calendar-view-day {
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+  margin-bottom: 2px;
+}
+
+.calendar-view-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.calendar-view-item {
+  padding-left: 4px;
+  border-left: 3px solid var(--rf-info);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-view-more {
+  font-size: 11px;
+  color: var(--rf-text-description);
+}
+
+.calendar-view-dots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 2px;
+  flex-wrap: wrap;
+}
+
+/* 有提醒日的色点：小圆点 + 浅 halo（box-shadow 微光），
+   紧凑模式下不铺标题，靠这点光斑示意"这天有事"。 */
+.calendar-view-dot.ant-tag {
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
+}
+
+@media (max-width: 900px) {
+  .tracker-summary {
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
+  }
+}
+
+/* ===== 深色主题（T9）=====
+   深色背景对低透明度的外发光几乎不敏感：浅色下 12% 的环已经看得见，深色下会糊掉。
+   这里只把这一条提到 16%，其余阶段色全部走 token（见 theme/dark-tokens.css）。 */
+[data-theme="dark"] .tracker-funnel-step.is-selected {
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--rf-stage-color, var(--rf-focus-ring)) 16%, transparent);
+}

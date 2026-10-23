@@ -18,7 +18,13 @@ from pathlib import Path
 
 FRONTEND_SRC = Path(__file__).resolve().parents[2] / "frontend" / "src"
 ORB_TSX = FRONTEND_SRC / "features" / "tou-tou" / "TouTouOrb.tsx"
-ORB_CSS = FRONTEND_SRC / "features" / "tou-tou" / "tou-tou.css"
+# 2026 年样式表拆分：tou-tou.css（554 行，超 500 行预算）按分段标题切成两个分片，
+# 平铺在 styles/ 下（antdOverrideGuard 的非递归扫描要求平铺），tou-tou.css 只剩 `@import` 清单。
+# 分片清单与 tou-tou.css 的 import 顺序一一对应；守卫读全部片，不读聚合清单。
+ORB_CSS_PARTS = (
+    FRONTEND_SRC / "styles" / "tou-tou-orb.css",
+    FRONTEND_SRC / "styles" / "tou-tou-cards.css",
+)
 CARD_CSS = FRONTEND_SRC / "features" / "tou-tou" / "tou-tou-assistant.css"
 COMPOSER_CSS = FRONTEND_SRC / "styles" / "assistant-composer.css"
 THEME_PROVIDER_TSX = FRONTEND_SRC / "components" / "ThemeProvider.tsx"
@@ -26,6 +32,11 @@ APP_THEME_TS = FRONTEND_SRC / "theme" / "appTheme.ts"
 DARK_THEME_TS = FRONTEND_SRC / "theme" / "darkTheme.ts"
 MAIN_TSX = FRONTEND_SRC / "main.tsx"
 TOKENS_TS = FRONTEND_SRC / "theme" / "tokens.ts"
+
+
+def _orb_css() -> str:
+    """悬浮球样式表的全文（拼接全部拆分片，聚合清单本身不含规则）。"""
+    return "\n".join(path.read_text(encoding="utf-8") for path in ORB_CSS_PARTS)
 
 
 def test_popup_zindex_base_stays_above_the_floating_cards():
@@ -49,7 +60,7 @@ def test_popup_zindex_base_stays_above_the_floating_cards():
 
 def test_orb_no_longer_renders_satellite_icons():
     component = ORB_TSX.read_text(encoding="utf-8")
-    stylesheet = ORB_CSS.read_text(encoding="utf-8")
+    stylesheet = _orb_css()
     assert "PlaneIcon" not in component
     assert "StarIcon" not in component
     assert "tt-orbit" not in component
@@ -109,7 +120,7 @@ def test_peek_and_petted_presentations_stay_retrievable():
     球就会静静躺在边上毫无反应——jsdom 不加载 CSS，只能在这里钉住两半都还在。
     """
     component = ORB_TSX.read_text(encoding="utf-8")
-    stylesheet = " ".join(ORB_CSS.read_text(encoding="utf-8").split())
+    stylesheet = " ".join(_orb_css().split())
 
     # 被抚摸：组件叠 is-petted 类，样式表有对应的摇摆关键帧。
     assert '"is-petted"' in component

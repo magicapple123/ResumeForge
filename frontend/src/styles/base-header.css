@@ -1,0 +1,276 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 全局基础（3/5）：页头、全局模型选择器、当前数据集/我的空间/头像与页头窄屏媒体查询。
+拆分自 base.css，纯搬迁、规则内容与顺序不变。 */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  position: sticky;
+  z-index: 10;
+  top: 0;
+  height: 64px;
+  padding: 0 24px;
+  background: var(--rf-surface);
+  border-bottom: 1px solid var(--rf-border);
+  box-shadow: 0 1px 8px rgb(15 23 42 / 3%);
+}
+
+.app-header-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 标题靠左，右侧依次是「我的空间 + 数据集 + 头像 │ 后台任务 + GitHub + 退出」。 */
+.app-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-space-menu-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 999px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.app-space-menu-button:hover {
+  color: var(--rf-brand) !important;
+  background: var(--rf-brand-wash) !important;
+  border-color: var(--rf-border-strong) !important;
+}
+
+/* 页头全局模型选择器（R21）：只在配了 profile 时渲染。 */
+/* 模型下拉的每一行（T8）：双击 = 只测连接。测试中在行尾转圈，标签不换行。
+   `max-width: 100%` 让行宽跟住弹层（弹层有 320px 上限，见 ModelProfileSelect 的
+   `styles.popup.root`），否则长模型名会把行撑出弹层。 */
+.model-option {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* `min-width: 0` / `flex: 1 1 auto`：标签是 flex 项，默认的 `min-width: auto` 会按内容
+   撑开，省略号就永远不出现。 */
+.model-option-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-option-testing {
+  flex: 0 0 auto;
+  color: var(--rf-brand);
+}
+
+/* 触发框固定 200px（项 2 / D2）：只负责回答"当前是谁"，所以宽度不该随名字长短跳。
+   完整名字看弹层（上限 320px）+ hover 的 title。 */
+.app-model-profile-select {
+  flex: 0 0 auto;
+  width: 200px;
+}
+
+/* 选中值也要省略：antd 6 **单选**把值文本渲染在 `.ant-select-content` 里
+   （`@rc-component/select/lib/SelectInput/Content/SingleContent.js:97`，文本是它的直接子节点，
+   所以 overflow/text-overflow 挂在这里就能出省略号）。
+   `.ant-select-selection-item` 只在**多选**里出现（`MultipleContent.js:52`）——本组件没有
+   `mode`，写那条选择器等于静默失效；`.ant-select-content-value` 只在选项自带
+   className/style 时才渲染（`SingleContent.js:84`），我们的 options 没有，也不写。 */
+.app-model-profile-select .ant-select-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 页头右侧的「当前数据集 + 我的空间 + 头像」：只读展示，尺寸与页头 64px 高对齐。
+   gap 与 `.app-header-actions` 对齐（都是 8px），否则「我的空间」搬进来后这一段会
+   比左边的模型下拉更松。 */
+.app-header-context {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-dataset-chip {
+  display: inline-flex;
+  max-width: 220px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 999px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.app-dataset-chip:hover {
+  border-color: var(--rf-border-strong);
+  background: var(--rf-brand-wash);
+  color: var(--rf-brand);
+}
+
+.app-dataset-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * 数据集下拉：条目宽度设上限，超长名字省略而不是把弹层撑到半屏。
+ * chip 自己已经限到 220px，弹层此前没有任何约束——名字一长，菜单比页面还宽。
+ */
+/* 弹层宽度由 JS 按触发框实测后写成内联 width（见 AppHeaderContext 的 onOpenChange）；
+   这里只兜一个上限，并把条目/标签的省略边界改成"跟着弹层走"——写死 340/300 时，
+   弹层被收窄到 chip 的 220px，长名字会横向溢出。 */
+.app-dataset-dropdown {
+  max-width: 360px;
+  /* 弹层宽度 = 触发框宽度（JS 实测后写内联），所以长名字必然放不下：
+     这里全部走"省略号 + title 悬停看全名"，不要出现横向滚动条。 */
+  overflow: hidden;
+  border-radius: 10px;
+  /* antd 的 Dropdown 弹层不像 Select 那样默认带阴影，和模型下拉并排看会显得"贴"在页面上。
+     这里补一层与 Select 同量级的浮起阴影（深色下加深，否则黑底上的黑影看不见）。 */
+  box-shadow:
+    0 6px 16px rgb(15 23 42 / 10%),
+    0 3px 6px -4px rgb(15 23 42 / 14%),
+    0 9px 28px 8px rgb(15 23 42 / 5%);
+}
+
+[data-theme="dark"] .app-dataset-dropdown {
+  box-shadow:
+    0 6px 16px rgb(0 0 0 / 45%),
+    0 3px 6px -4px rgb(0 0 0 / 55%),
+    0 9px 28px 8px rgb(0 0 0 / 30%);
+}
+
+.app-dataset-dropdown .ant-dropdown-menu {
+  overflow: hidden;
+}
+
+.app-dataset-dropdown .ant-dropdown-menu-item {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* antd 的标题容器默认是 inline-flex，不给 min-width:0 的话子项的 max-width:100%
+   会以"内容宽度"为基准，省略号永远不出现（上一版就是这样滑动的）。 */
+.app-dataset-dropdown .ant-dropdown-menu-title-content {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-dataset-dropdown .app-dataset-menu-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+/* 「示例」小徽标：chip 旁与下拉条目共用，提示当前是体验数据、与真实资料独立。 */
+.app-dataset-sample-tag {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid var(--rf-warning-border);
+  border-radius: 4px;
+  background: var(--rf-warning-bg);
+  color: var(--rf-text-body);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.app-dataset-menu-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 「回到我的数据」：示例数据集里的一键返回入口，颜色醒目但只是菜单项。 */
+.app-dataset-return {
+  color: var(--rf-brand);
+  font-weight: 600;
+}
+
+.app-user-avatar {
+  flex: 0 0 auto;
+  border: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-tertiary);
+}
+
+.app-user-avatar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.app-user-avatar-button:focus-visible,
+.app-dataset-chip:focus-visible,
+.app-brand-mark-button:focus-visible {
+  outline: 2px solid var(--rf-focus-ring);
+  outline-offset: 2px;
+}
+
+.app-dataset-arrow {
+  color: var(--rf-text-tertiary);
+  font-size: 9px;
+}
+
+.app-header-context-error {
+  max-width: 220px;
+  color: var(--rf-danger);
+  font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  .app-header {
+    gap: 8px;
+  }
+
+  .app-header-actions {
+    gap: 4px;
+  }
+
+  .app-space-menu-button {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+
+  .app-space-menu-button .anticon {
+    font-size: 14px;
+  }
+
+  .app-dataset-chip {
+    max-width: 120px;
+    padding-inline: 7px;
+  }
+}

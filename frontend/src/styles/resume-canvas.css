@@ -1,0 +1,317 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历预览（1/3）：栏改写面板、预览工具栏、页间隙、纸面画布与「精确」PDF 预览。
+拆分自 resume.css（原 925 行，超 500 行预算），纯搬迁、规则内容与顺序不变。 */
+
+/* 「让 AI 按我的要求改这一栏」面板：从预览点某一栏进来时出现在编辑器最上方。
+   淡蓝底 + 左侧色条，与普通表单项区分开——它是一次性动作，不是又一个字段。 */
+.resume-field-rewrite {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--rf-info);
+  border-radius: 0 10px 10px 0;
+  background: var(--rf-surface-alt);
+}
+
+/* 「当前内容」预览。
+ *
+ * 这里以前是 `max-height: 72px; overflow-y: auto`——内容一长右边就竖着一根滚动条，
+ * 在一个以"改写一段文字"为主的小面板里显得很扎眼（用户反馈"不太好看"）。改成
+ * **收起 + 底部渐隐 + 「展开全文」**：默认只显示前几行，要看全的点一下展开，
+ * 既不出现滚动条，也不丢内容。 */
+.resume-field-rewrite-original {
+  display: block;
+  position: relative;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* 收起时按"视觉行数"截断：个人总结是一条长文本，靠条数折叠挡不住它。
+   `pre-line` 让多条要点各占一行，`-webkit-line-clamp` 再把整块压到 N 行。 */
+.resume-field-rewrite-original.is-collapsed .resume-field-rewrite-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.resume-field-rewrite-text {
+  margin: 4px 0 0 !important;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.resume-field-rewrite-more {
+  height: auto !important;
+  padding: 0 !important;
+  font-size: 12px;
+}
+
+/* 一段内容的每条要点各自成行：整段改写的结果必须一行一条，糊成一段就看不出条数了。 */
+.resume-field-rewrite-line {
+  display: block;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.resume-field-rewrite-result {
+  padding: 10px 12px;
+  border: 1px dashed var(--rf-focus-ring);
+  border-radius: 8px;
+  background: var(--rf-surface);
+}
+/* 页与页之间的“裁切间隙”：把连续纸面在分页处切开，观感等同两张并排的独立 A4 纸。
+   间隙里露出预览视口的底色（#f5f7fa），两侧的柔和阴影扮演每张纸的纸边。
+   宽度由组件按 PAGE_GAP_PX × scale 内联给出；压住的是简历自身的页边距区域，不遮正文。 */
+/* 预览工具栏（P2b 起是两行：上=结构类、下=度量类）与下方警告条、画布之间的呼吸间距：
+   之前工具栏没有下缘间距，与黄色警告条、画布三层全部贴死（用户截图反馈）。 */
+.resume-preview-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* 每一行都是可换行的 flex：窄屏时行内的簇各自换行，而不是把整行挤成横向滚动。 */
+.resume-preview-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 第一行：左侧交互模式、右侧结构类控件（`margin-left:auto` 顶到最右）。 */
+.resume-preview-toolbar-row-primary {
+  justify-content: space-between;
+}
+
+.resume-preview-toolbar-cluster {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 度量那一行：cluster 是行的子项，不给 grow 就只占内容宽度（544px），
+   右边留一大块空白——与生成弹窗里铺满的两列不一致。 */
+.resume-preview-toolbar-row > .resume-preview-toolbar-cluster {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resume-preview-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* 精确模式下、度量控件**下面**单独一行的一句说明（2026-10-21 用户要求从第二行右端
+   移到字号调整条下方）。独占一行，所以左对齐——原先靠 `margin-left: auto` 顶到最右，
+   现在会把它推到右边，与"贴着控件说一句"的意图相反。 */
+.resume-preview-exact-hint {
+  font-size: 12px;
+}
+
+/* 版式下拉的触发框：宽度刚好框住 4 个中文字符。
+   4em = 4 × 14px 的汉字宽度，+36px 是左右内边距与右侧箭头占位；原来是 min-width:120，
+   框比文字宽出一大截，同一行的「样式 / 版式 / 顺序 / 篇幅」看起来疏密不匀。
+   预设名更长时（如「宽松（自制）」）触发框走省略号，展开后的列表按内容撑开
+   （`popupMatchSelectWidth={false}`），不会跟着被裁掉。 */
+.resume-format-select {
+  width: calc(4em + 36px);
+  min-width: calc(4em + 36px);
+}
+
+/* 缩放条：在纸面**下方**居中（P2b / D6）。缩放是"看"的动作，手应该落在图旁边。 */
+.resume-preview-zoom-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* 溢出警告条与画布之间同样留一档；首条警告已有内联 marginBottom: 12。 */
+.resume-preview-overflow {
+  margin-bottom: 12px;
+}
+
+/* 页与页之间的“裁切间隙”：把连续纸面在分页处切开，观感等同两张并排的独立 A4 纸。
+   间隙里露出预览视口的底色（#f5f7fa），两侧的柔和阴影扮演每张纸的纸边。
+   宽度由组件按 PAGE_GAP_PX × scale 内联给出；压住的是简历自身的页边距区域，不遮正文。 */
+.resume-preview-page-separator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1;
+  transform: translateX(-50%);
+}
+
+/* 盖住列间距，露出视口底色：观感是"两张并排的 A4 纸"而不是一张宽纸。
+   宽度=column-gap（28mm），两侧各加一道纸边阴影，边界才立得住。 */
+.resume-preview-page-separator-line {
+  display: block;
+  height: 100%;
+  background: var(--rf-surface-alt);
+  /* 阴影留在页间隙内部；外投影会盖住紧贴纸边的日期、照片和正文末字。 */
+  box-shadow:
+    inset 7px 0 16px -6px rgb(15 40 80 / 0.28),
+    inset -7px 0 16px -6px rgb(15 40 80 / 0.28),
+    inset 1px 0 0 rgb(15 40 80 / 0.06),
+    inset -1px 0 0 rgb(15 40 80 / 0.06);
+}
+
+.resume-preview-page-separator-label {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  background: var(--rf-warning-bg);
+  color: var(--rf-warning-text);
+  border: 1px solid var(--rf-warning-border);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.resume-preview-viewport {
+  display: block;
+  width: 100%;
+  /* 横向放大只在预览内滚动；纵向空间由外层弹窗/页面承接，避免双滚动条。 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+  cursor: grab;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.resume-preview-viewport.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.resume-preview-scale-box {
+  margin: 0 auto;
+  overflow: visible;
+  /* 多页竖排后整块比一屏高，缩放靠内部 `.resume-preview-pages` 的 transform；
+     这里只负责给出"缩放后的实际占位"，滚动交给视口。 */
+  position: relative;
+}
+
+/* 多页竖排：每页一张 A4，上下摞（2026-10-21 取代横向并排）。
+   transform-origin 在左上角，与 scale-box 的宽高（已按 scale 算好）对齐。 */
+.resume-preview-pages {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  transform-origin: top left;
+}
+
+.resume-preview-page {
+  position: relative;
+  flex: 0 0 auto;
+  background: #fff;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 2px;
+  box-shadow: 0 1px 4px rgb(15 40 80 / 0.12);
+  /* 不能 `overflow: hidden`：页标挂在页脚**下方**那条空隙里（`bottom: -20px`），
+     裁掉就再也看不见了。iframe 自身就是 A4 尺寸，不会溢出这张纸。 */
+}
+
+/* 页标放在页脚下方那条空隙里（`PAGE_STACK_GAP_PX` = 24px 够放 12px 的字），
+   不压正文；单页时不渲染。 */
+.resume-preview-page-label {
+  position: absolute;
+  left: 0;
+  bottom: -20px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--rf-text-secondary);
+  background: var(--rf-surface-alt);
+  border-radius: 3px;
+  padding: 0 6px;
+  pointer-events: none;
+}
+
+.resume-iframe {
+  display: block;
+  border: none;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+/* 精确预览：显示的是服务端排出的真实 PDF（与「导出」下载的是同一份字节）。
+   所以它只需要一个干净的相框——分页、阴影、缩放条全部交给浏览器 PDF 查看器，
+   任何"预览自己的装饰"在这里都会与查看器的工具栏打架。 */
+.exact-preview {
+  width: 100%;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+  overflow: hidden;
+  position: relative;
+}
+
+.exact-preview-frame {
+  display: block;
+  width: 100%;
+  border: none;
+}
+
+/* 双缓冲的两层叠在一起：可见层在下（不透明），预加载层在上（完全透明）。
+   两者都是 PDF 查看器，位置必须严格重合，否则换上来时会"跳"一下。 */
+.exact-preview-stack {
+  position: relative;
+  width: 100%;
+}
+
+.exact-preview-stack > .exact-preview-frame {
+  position: absolute;
+  inset: 0;
+}
+
+/* 预加载层：`onLoad` 之前谁也看不见它，但浏览器已经在解析新 PDF。 */
+.exact-preview-frame-pending {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 重排遮罩：半透明，让人知道"还在算"，同时仍能看见旧图的轮廓
+   （全遮住会变成一块白板，反而更像卡死）。 */
+.exact-preview-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10px;
+  background: rgb(245 247 250 / 0.55);
+  pointer-events: none;
+}
+
+.exact-preview-overlay-text {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border-subtle);
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.exact-preview-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px 4px;
+}

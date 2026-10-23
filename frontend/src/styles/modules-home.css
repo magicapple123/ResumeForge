@@ -1,0 +1,468 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 模块样式（7/7）：首页（待办/快捷入口）与求职统计页（指标卡配色、图表区块与来源小卡）。
+拆分自 modules.css，纯搬迁、规则内容与顺序不变。 */
+
+/* ===== 首页 =====
+
+   首页此前只有四个计数卡加两个列表，功能变多之后它没跟上：进了首页看不出"我现在该做什么"。
+   这里补两块——「接下来做什么」（只列待办，带数字和去处）与「快捷入口」（按"要做的事"而不是
+   按菜单名组织）。两块都是纯展示，没有额外交互状态。 */
+
+.home-todo-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.home-todo-item + .home-todo-item {
+  border-top: 1px solid var(--rf-border, var(--rf-border));
+}
+
+.home-todo-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--rf-brand-tint);
+  color: var(--rf-brand);
+  font-size: 16px;
+}
+
+.home-todo-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home-todo-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.home-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+}
+
+.home-shortcut {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--rf-border, var(--rf-border-subtle));
+  border-radius: 8px;
+  background: var(--rf-surface);
+  color: inherit;
+}
+
+.home-shortcut:hover {
+  border-color: var(--rf-brand);
+  background: var(--rf-surface-alt);
+}
+
+.home-shortcut-icon {
+  color: var(--rf-brand);
+  font-size: 18px;
+}
+
+.home-shortcut-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.home-shortcut-hint {
+  color: var(--rf-text-description);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 「第一份交付」进度面板：只在全部完成前出现。完成态置灰、当前态高亮、未来态弱化。 */
+.first-delivery-stages {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.first-delivery-stage {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.first-delivery-stage + .first-delivery-stage {
+  border-top: 1px solid var(--rf-border, var(--rf-border));
+}
+
+/* 未来态弱化：用显式灰而非 opacity——半透明黑在白底上的等效对比度只有 ~3.5:1，
+   过不了 axe 的 color-contrast（2026-10-11 CI 端到端 a11y 冒烟实测）。description
+   灰（#5f6b7a，RF-12 对比度修正后的 token）≈5.4:1，AA 通过，弱化层级感仍在。 */
+.first-delivery-stage.is-upcoming .first-delivery-stage-title,
+.first-delivery-stage.is-upcoming .ant-typography {
+  color: var(--rf-text-description, var(--rf-text-secondary));
+}
+
+.first-delivery-stage-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--rf-border, var(--rf-border-strong));
+  color: var(--rf-text-description);
+  font-size: 14px;
+}
+
+.first-delivery-stage.is-current .first-delivery-stage-icon {
+  border-color: var(--rf-brand);
+  background: var(--rf-brand-tint);
+  color: var(--rf-brand);
+  font-weight: 600;
+}
+
+.first-delivery-stage.is-done .first-delivery-stage-icon {
+  border: none;
+  background: transparent;
+  color: var(--rf-accent-green);
+  font-size: 18px;
+}
+
+.first-delivery-stage.is-done .first-delivery-stage-title {
+  color: var(--rf-text-description);
+}
+
+.first-delivery-stage-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.first-delivery-stage-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.first-delivery-stage.is-current .first-delivery-stage-title {
+  color: var(--rf-brand);
+}
+
+.first-delivery-cta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.first-delivery-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 12px;
+  border: 1px solid var(--rf-brand);
+  border-radius: 6px;
+  background: var(--rf-brand-fill);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.first-delivery-cta:hover {
+  color: #fff;
+  background: var(--rf-brand-fill);
+}
+
+/* 全局搜索扩域后，结果区与"更多结果"分组要收紧，避免首页搜索区越拉越长。 */
+.home-search-results {
+  margin-top: 12px;
+}
+
+.home-more-group + .home-more-group {
+  margin-top: 6px;
+}
+
+.home-more-heading {
+  margin: 4px 0 2px;
+  color: var(--rf-text-description);
+}
+
+/* 求职统计页：缩小字号让一屏装下更多指标，避免四张卡 + 两张图被撑得太高。 */
+.analytics-page .ant-statistic-title {
+  font-size: 13px;
+}
+
+.analytics-page .analytics-metric-row .ant-card {
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--rf-border-strong);
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgba(31, 56, 85, 0.07);
+}
+
+/* 彩条按**阶段**上色（项 8 / D17）：同阶段同色，跨页与「求职进度」一致。
+   编码（这张卡属于哪个阶段）用阶段色；数字仍保留 `--rf-success-strong` 的评价语义。
+   原来按 `:nth-child` 上色——列顺序一变颜色就跟着错位，而且和阶段没有任何对应关系。 */
+.analytics-page .analytics-metric-row .ant-card::before {
+  display: block;
+  height: 4px;
+  margin: -24px -24px 18px;
+  content: "";
+  /* 默认色即"投递"阶段：`.stat-card-applied` 不必单独写规则。 */
+  background: var(--rf-stage-bar-applied, var(--rf-info));
+}
+
+/* `.stat-card-*` 由 StatCard 透传，落在 `Card` 根节点上，与 `.ant-card` 是**同一个**
+   元素（不是父子），所以选择器是 `.ant-card.stat-card-*`。 */
+.analytics-page .analytics-metric-row .ant-card.stat-card-interview::before {
+  background: var(--rf-stage-bar-interview, var(--rf-info));
+}
+
+.analytics-page .analytics-metric-row .ant-card.stat-card-assessment::before {
+  background: var(--rf-stage-bar-assessment, var(--rf-info));
+}
+
+.analytics-page .analytics-metric-row .ant-card.stat-card-offer::before {
+  background: var(--rf-stage-bar-offer, var(--rf-info));
+}
+
+.analytics-page .analytics-section {
+  overflow: hidden;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(31, 56, 85, 0.06);
+}
+
+/* 区块之间拉开一点：之前 16px 的间距配上浅阴影，两块卡看起来像连在一起，
+   用户反馈"各个图的界限不太分明"里有一半是块与块之间没分开。 */
+.analytics-page .analytics-section + .analytics-section {
+  margin-top: 20px !important;
+}
+
+.analytics-page .analytics-section .ant-card-head {
+  background: linear-gradient(90deg, var(--rf-surface-alt), var(--rf-surface));
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+/* 区块里的一张图 = 一个浅色面板 + 一行小标题。
+   面板边框给出"图到这里为止"，小标题给出"这张图叫什么"——两者都不可省。 */
+.analytics-page .analytics-chart-block {
+  height: 100%;
+  padding: 12px 14px 10px;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 10px;
+}
+
+.analytics-page .analytics-chart-block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.analytics-page .analytics-chart-block-title {
+  font-size: 13px;
+  color: var(--rf-text-body);
+}
+
+.analytics-page .analytics-chart-block-hint {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.analytics-page .ant-statistic-content {
+  font-size: 20px;
+}
+
+.analytics-page .ant-typography-secondary {
+  font-size: 12px;
+}
+
+/* 区块的一行口径说明。占整行、与下方图表拉开一点距离，但不要抢标题的层级。 */
+.analytics-page .analytics-section-note {
+  display: block;
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+/* 数据缺口提示：只有真有缺口时才渲染（组件本身在 missing<=0 时返回 null），
+   所以这里不需要额外的显隐控制。 */
+.analytics-page .analytics-gap-notice {
+  display: block;
+  margin-bottom: 12px;
+}
+
+/* 区块内的数字比顶部指标行低一档：顶部是"这一页的结论"，区块里是"支撑它的细节"。
+   字号一样会让层级变平，扫读时分不出主次。 */
+.analytics-page .analytics-section .ant-statistic-content {
+  font-size: 18px;
+}
+
+/* 「渠道与去向」顶部的口径提示 tile：把描述里的长句收敛成一张可扫读的小卡，
+   与左右两张数字 StatCard 并排，层级一致。 */
+.analytics-page .analytics-hint-tile {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 16px;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+/* 底部三种记录来源的小 tile：轻边框 + 圆角，区别于上方带数字的核心指标卡。 */
+.analytics-page .analytics-source-tile {
+  height: 100%;
+  padding: 8px 12px;
+  background: var(--rf-surface-alt);
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+}
+
+/* 网申预览表「需你确认」行（同意/声明类勾选，放宽模式）：淡警示底色，
+   与事实类行区分——勾上它等于代你做出表态，视觉上不能和普通值混在一起。 */
+.webform-row-needs-confirm > td {
+  background: var(--rf-surface-alt);
+}
+
+/* 「我的空间」下拉菜单：选中项用浅底深字，替代 colorPrimary 派生的深藏青实底。
+   选择器挂在 Dropdown 的 classNames.root 上（见 MySpaceMenu.tsx，落在 .ant-dropdown
+   弹层根节点）。 specificity 必须压过 antd 运行时注入的同级规则——antd 的样式
+   标签在静态样式表之后插入，同权重会被它赢回去，所以这里用四段选择器。 */
+.ant-dropdown.rf-nav-dropdown
+  .ant-dropdown-menu
+  li.ant-dropdown-menu-item.ant-dropdown-menu-item-selected {
+  background: var(--rf-nav-selected-bg);
+  color: var(--rf-brand);
+}
+
+.ant-dropdown.rf-nav-dropdown
+  .ant-dropdown-menu
+  li.ant-dropdown-menu-item.ant-dropdown-menu-item-selected
+  .ant-dropdown-menu-title-content {
+  color: var(--rf-brand);
+}
+
+/* 面经等"卡片化列表"（Listy + className="rf-card-list"）：antd 6 的 Listy 默认
+   是纯分隔线的扁列表，多条记录挤在一起分不出边界；这里把每条升级成独立卡片
+   （描边+圆角+浅 hover 阴影），列表整体更像一叠卡片而不是一页流水。 */
+.rf-card-list .ant-listy-item {
+  border: 1px solid var(--rf-border-strong);
+  border-radius: 10px;
+  background: var(--rf-surface);
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.rf-card-list .ant-listy-item:hover {
+  border-color: var(--rf-border-strong);
+  box-shadow: 0 2px 12px rgba(22, 54, 92, 0.07);
+}
+
+.rf-card-list .ant-listy-item:last-child {
+  margin-bottom: 0;
+}
+
+/* 批量适配度分析的评分行：圆环分档配色 + 右侧元信息纵向排布。
+   窄卡片时整行换行而不是把右侧文字截断；模型名超长时省略。 */
+.batch-score-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.batch-score-number {
+  color: var(--rf-brand);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.batch-score-unit {
+  margin-left: 2px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.batch-score-meta {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.batch-score-meta .ant-tag {
+  margin-inline-end: 0;
+}
+
+.batch-score-model {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 字体下拉的选项行：弹层现在与触发框同宽（140/176px），长名字必须省略，
+   否则会横向溢出或把弹层重新撑宽。 */
+.resume-font-option {
+  display: block;
+  /* 弹层按内容撑开（触发框只有 200px，跟着它走会把每个名字都截掉）；
+     但极端长的文件名会把弹层拉到半屏，所以给一个上限，超出仍然省略。 */
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 字体下拉里的小字文件名：与展示名同排，弱化到 11px。
+   它是最长的那个字段（`aidianqianfengxingkai….ttf`），单独限宽并省略，
+   免得它把展示名挤掉——展示名才是用户认字体的依据。 */
+.resume-font-option-file {
+  display: inline-block;
+  max-width: 180px;
+  margin-left: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+}
+
+/* 卡片标题栏的上下留白（2026-10-20）。
+   antd v6 的 `.ant-card-head` 垂直内边距是 0，标题栏高度全靠 min-height 撑；
+   于是右侧 extra 里的按钮只离上下边框几像素——设置页的数据集卡片、
+   网申页的「智能逐项填表」都能看到这个形态。这里给这两类卡片补一点呼吸。 */
+.settings-card > .ant-card-head,
+.live-mode-card > .ant-card-head {
+  padding-block: 10px;
+  min-height: 0;
+}

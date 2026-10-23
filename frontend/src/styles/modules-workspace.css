@@ -1,0 +1,271 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 模块样式（3/7）：资料箱、知识库、技能工作台与助手补充信息。
+拆分自 modules.css，纯搬迁、规则内容与顺序不变。 */
+
+/* ===== 资料箱 ===== */
+
+.materials-page-header,
+.skills-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.materials-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.material-card {
+  height: 100%;
+}
+
+/* 卡片外层套了一层可点击容器，网格的等高要交给它传下去，否则同一行的卡片高矮不齐。 */
+.materials-grid > .detail-trigger,
+.knowledge-grid > .detail-trigger {
+  display: block;
+  height: 100%;
+}
+
+.material-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.material-card-content {
+  margin-bottom: 8px !important;
+}
+
+.material-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.material-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.material-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+}
+
+.material-file-icon {
+  color: var(--rf-text-tertiary);
+}
+
+.material-file-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+/* ===== 知识库 ===== */
+
+.knowledge-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.knowledge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.knowledge-card {
+  height: 100%;
+}
+
+/* 等高链路：grid 的 stretch 只拉到无类名包装 div；中间的 .detail-trigger 是普通
+   block（高度=内容），不补 height:100% 的话 Card 的 100% 相对它就断了——
+   这正是知识库卡片高度不齐的根因。 */
+.knowledge-grid > div,
+.knowledge-grid .detail-trigger {
+  height: 100%;
+}
+
+.knowledge-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.knowledge-card-tags {
+  margin-bottom: 8px;
+}
+
+.knowledge-card-content {
+  margin-bottom: 8px !important;
+  white-space: pre-wrap;
+}
+
+.knowledge-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+
+/* ===== 技能工作台 ===== */
+
+.skills-intro-card {
+  margin-bottom: 16px;
+}
+
+.skills-intro-steps {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  color: var(--rf-text-secondary);
+  line-height: 1.9;
+}
+
+.skill-file-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+}
+
+/*
+ * 技能弹窗的内容容器（SkillEditorModal）：表单条目之间统一 16px 节奏。
+ * 弹窗 body 自己限高滚动（maxHeight 走 --rf-modal-body-max-h，写在组件的 inline
+ * style 里），这里只负责"内容多时首行与末行都不贴边"的内部间距——body 的 padding
+ * 20/24/28 加上这层 gap，最后一个「添加知识文件」按钮才不会压在页脚分隔线上。
+ */
+.skill-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/*
+ * 清理旧文件的候选清单（StorageStatsCard）：
+ * 类别勾选与说明留在弹窗上层不滚动，只有这份清单内部滚动——30 个文件时
+ * 头部 Alert 与底部「移走 N 个文件」都还在原位。
+ */
+.cleanup-candidate-list {
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+/* ===== 助手补充信息 ===== */
+
+.assistant-message-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assistant-message-time {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.assistant-conversation-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.assistant-conversation-meta {
+  font-size: 12px;
+}
+
+.assistant-reasoning-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.assistant-reasoning-label {
+  font-size: 12px;
+  color: var(--rf-text-body);
+  white-space: nowrap;
+}
+
+/* 说明问号：灰色小号、随文字标签垂直居中（父级 flex 已对齐），悬停它才显示思考强度说明。 */
+.assistant-reasoning-help {
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+  cursor: help;
+}
+
+.assistant-reasoning-select {
+  min-width: 84px;
+}
+
+/* 自定义档位：输入框与"用预设"并排，宽度与下拉相当——换过去时工具条不该跳一下。 */
+.assistant-reasoning-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.assistant-reasoning-input {
+  width: 120px;
+}
+
+.assistant-reasoning-back {
+  padding: 0;
+  height: auto;
+}
+
+/* 技能下拉：用真实勾选框表达"已启用"（菜单自带高亮在浅色主题下几乎看不出来）。 */
+.assistant-skill-menu-hint {
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+}
+
+.assistant-skill-option {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 320px;
+}
+
+.assistant-skill-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.assistant-skill-option-name {
+  font-weight: 500;
+}
+
+.assistant-skill-option-desc {
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+  white-space: normal;
+}

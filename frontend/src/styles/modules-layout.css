@@ -1,0 +1,442 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 模块样式（6/7）：简历版式控件（版式/篇幅/度量/页边距）、个人照片面板与大模型配置。
+拆分自 modules.css，纯搬迁、规则内容与顺序不变。 */
+
+/* ===== 简历版式控件 ===== */
+
+.resume-layout-controls {
+  row-gap: 8px;
+}
+
+/* 生成配置阶段（就是这个壳）：结构行铺满整行，
+   「样式 / 版式 / 板块」靠左，「最大篇幅」靠右。
+   页数是这一行里"另起一类"的选择（排几页 A4），与前面三个"长什么样"的选项分开站；
+   预览工具栏用的是同一个组件，但不匹配下面这两条规则，形态不变。 */
+.resume-layout-controls > .ant-space-item:first-child {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.resume-layout-controls .resume-template-controls {
+  width: 100%;
+}
+
+/* 最大篇幅顶到最右（窄到换行时它自己占一行，仍然靠右）。 */
+.resume-layout-controls
+  .resume-template-controls
+  > .ant-space-item:has(> .resume-page-limit-group) {
+  margin-left: auto;
+}
+
+/* 度量控件（字号 / 行距 / 页边距 / 字体）：等宽四列铺满可用宽度。
+   之前是一串 inline 分组左对齐，宽弹窗里右侧空出半屏、控件全挤在左边；
+   现在每列 = 常驻小标签 + 控件，列宽自动均分，窄屏按 minmax 下限折行。 */
+/* antd 的 Space 会给每个子项包一层不可伸缩的 `.ant-space-item`：里面的度量栅格
+   就算写了 `width:100%`，也会按内容的收缩宽度算（这就是弹窗里四列挤成一团的另一半原因）。
+   让装栅格的那一项占满整行。 */
+.resume-layout-controls > .ant-space-item:has(.resume-measure-grid) {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.resume-measure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  align-items: center;
+  gap: 10px 20px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* 弹窗里一行只放一个控件：这一格最宽（标签 + 减/加 + 滑块 + 数值 + 警告 + 复位），
+   四列排会互相压穿（2026-10-20 用户截图：警告竖排、数值叠到"行距"上）。 */
+/* 方案 A（用户选定）：两行两列铺满整宽——第一行 行距 / 页边距，第二行 字号 / 字体。
+   顺序在 DOM 里就改了（不是 CSS order），键盘 Tab 顺序与视觉顺序一致。 */
+.resume-measure-grid.is-stacked {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 28px;
+}
+
+/* 弹窗窄下来时退回单列，否则两列的滑块会短到不好拖。 */
+/* 两列的断点从 720 提到 900（QA 实测），再提到 1000（读数改定宽列后）。
+   三条滑杆写死 200px、读数 56px、来源标签 52px 之后，一行的固定开销是
+   「标签 44 + 间距 6 + 控件 264 + 间距 6 + 读数 56 + 间距 6 + 来源 52 = 434px」；
+   两列需要弹窗内容宽 896px，而弹窗是 min(960px, 96vw) 再减左右 24px 内边距——
+   窗口要到 983px 才够，900~1000px 之间读数会被画到「+」和滑杆上。
+   所以窗口窄于 1000px 时直接退回单列，每格 800px 以上，读数与滑杆都放得下。 */
+@media (max-width: 1000px) {
+  .resume-measure-grid.is-stacked {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 预览工具栏才并排：列宽下限 300px，窗口变窄自动折行，不会挤成一团。 */
+.resume-measure-grid.is-compact {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 8px 16px;
+}
+
+.resume-measure-cell {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 滑块所在的那一格吃掉剩余宽度：固定 150px 在窄格里必然顶出去。
+   antd 的 Space 会把每个子项包一层 `.ant-space-item`，所以要让这一层可伸缩。 */
+.resume-measure-cell .ant-space {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resume-measure-cell .ant-space-item:has(.ant-slider) {
+  flex: 1 1 auto;
+  min-width: 48px;
+}
+
+.resume-measure-cell .ant-slider {
+  min-width: 0;
+}
+
+.resume-measure-label {
+  flex: 0 0 auto;
+  min-width: 34px;
+  /* 双击标题 = 恢复默认，所以标题不能被双击选中文字。 */
+  cursor: default;
+  user-select: none;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* 三条滑杆长度统一（2026-10-21 用户截图：字号约 260px、行距约 90px、页边距约 60px）。
+   原因是滑杆写的 `flex: 1 1 auto`——宽度取决于"这一格还剩多少"，于是三行读起来像三套
+   不同的控件。现在把三条滑杆写死同一宽度，读数与来源标签各占一列（`.resume-measure-value`
+   / `.resume-measure-source`）排在滑杆之后，三行因此形成两条竖线：滑杆一条、读数一条。
+   只作用于弹窗（`.is-stacked`）：工具栏（`.is-compact`）里每格宽度本来就不一样，
+   写死会顶穿自己的格子。 */
+/* 滑杆所在的那一格定宽 200px。**必须是直接子选择器**（`> .ant-slider`）：
+   行距/页边距外面还套着一层 `.ant-space-item`，它内部也有滑杆——用 `:has(.ant-slider)`
+   会把这层外壳一起钉成 200px，而它的内容其实是 264px（两个按钮 + 滑杆），
+   多出来的 64px 会溢到尾部下面，读数直接压在「+」上。 */
+.resume-measure-grid.is-stacked .ant-space-item:has(> .ant-slider) {
+  flex: 0 0 200px;
+  min-width: 200px;
+}
+
+.resume-measure-grid.is-stacked .ant-slider {
+  /* 滑块自带 2px 左右外边距。注意：这一格实际内容宽是 264px（两个 30px 图标按钮 + 200px 滑杆），
+     不是 200px——所以窗口太窄时必须靠断点退回单列，不能只指望"刚好放得下"。 */
+  width: 200px;
+}
+
+/* 字号那一格的 Space 是 `.resume-measure-cell` 的直接子项，基础规则让它
+   `flex: 1 1 auto` 吃掉剩余宽度（紧凑模式需要）。到了弹窗里它必须与另外两行的控件
+   同宽，否则尾部被挤到格子最右端，读数与上一行错开整整 61px（实测）。 */
+.resume-measure-grid.is-stacked .resume-measure-cell > .ant-space {
+  flex: 0 0 auto;
+}
+
+/* 尾部跟随控件，但**绝不被压扁**：它一被压到 0 宽，读数与来源胶囊就会溢出到
+   相邻控件底下（2026-10-22 用户截图：胶囊的「板」被分边按钮盖住）。
+   真的放不下时由 `Space` 的 `wrap` 把尾部折到第二行，而不是让两件东西叠在一起。 */
+.resume-measure-grid.is-stacked .ant-space-item:has(> .resume-measure-tail) {
+  flex: 1 0 auto;
+}
+
+/* 标签固定宽度：否则「行距」24px、「字号」34px、「页边距」36px 会把后面的
+   减号与滑杆整体推开，三行滑杆虽然等长却不在同一条竖线上（实测差 10px）。
+   `display:inline-block` 不能省：行距/页边距的标签在 antd 的 `.ant-space-item`
+   里是行内元素，行内元素上 `width` 不生效（实测仍是 24/36）。 */
+.resume-measure-grid.is-stacked .resume-measure-label {
+  display: inline-block;
+  flex: 0 0 44px;
+  width: 44px;
+  white-space: nowrap;
+}
+
+.resume-measure-tail {
+  display: flex;
+  align-items: center;
+  /* 左对齐（原先是 flex-end）：尾部宽度由这一格剩余空间决定，靠右收口时
+     「1.45 随版式」与没有标签的「13.2px」会各自贴到右边界，读数就错开了。 */
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 读数列：定宽 + 等宽数字。读数是"这一格当前的量"，三行读数的左边界必须对齐
+   （用户 2026-10-20 截图：1.45 在左、13.2px 在右）。56px 取 14px 字号下
+   「13.2px」这种最长读数的宽度，够放且不晃。 */
+.resume-measure-value {
+  flex: 0 0 56px;
+  width: 56px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 来源标签（随模板 / 随版式）做成小胶囊：一段裸露的文字紧挨着读数时，
+   会被读成"读数的后半句"，也分不清它是说明还是可点的操作。
+   没设过覆盖才显示内容；但**位置始终占着**（`.is-empty` 只留空位、不画胶囊）——
+   否则用户一拖滑杆标签消失，读数就向右跳一格，三行又对不齐了。
+   min-width 按 3 个 12px 汉字 + 左右内边距算，两种标签同宽。 */
+.resume-measure-source {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  /* 这一层没有 antd 的边框盒重置：不写 border-box 时 padding 与边框会加在
+     min-width 之外（实测 50px 被撑到 64px），读数与标签一起把整行顶宽 4px。 */
+  box-sizing: border-box;
+  min-width: 52px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 999px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.resume-measure-source.is-empty {
+  border-color: transparent;
+  background: none;
+}
+
+/* 字体下拉与上一行的页边距滑杆**同宽同起点**（用户 2026-10-20 指定）。
+   滑杆左侧的开销是「减号按钮 30 + 间距 2 + 滑杆自身左右外边距 2」＝ 34px
+   （小号图标按钮宽 = controlHeightSM = controlHeight 40 × 0.75 = 30），
+   而下拉左侧只有 44px 标签 + 6px 间距；补 34px 才落在同一条竖线上，
+   宽度取滑杆的 200px，右边界因此也对齐。 */
+.resume-measure-grid.is-stacked .resume-font-select.is-fluid {
+  flex: 0 0 200px;
+  width: 200px;
+  margin-left: 34px;
+}
+
+/* 字号下限提示：单独占一整行（`.resume-measure-cell` 是 wrap 的 flex 行）。
+   挤在读数后面时这一格只剩几十像素，提示会被压成竖排的窄条。 */
+.resume-font-warning {
+  flex: 1 0 100%;
+  font-size: 12px;
+}
+
+/* `width: 100%` 只在"尾部单独占一个 Space 子项"时给：这样它铺满整格、内容靠右。
+   为什么不写进上面那条基础规则：紧凑模式（工具栏）里没有这条宽度来源，百分比宽度
+   在收缩型 flex 子项里算不稳，而 `.is-compact` 这次不该有任何变化。 */
+.resume-measure-grid.is-stacked .ant-space-item > .resume-measure-tail {
+  width: 100%;
+}
+
+/* 字号那一格不是 Space，而是 `.resume-measure-cell` 这个 flex 行：尾部若也占满 100%
+   就会换行，把读数挤到第二行去。这里把基准换成 0，它只吃标签与控件剩下的宽度。
+   同样只作用于弹窗：紧凑模式里这一格本来就按内容宽度排，读数紧跟控件才是原样。 */
+.resume-measure-grid.is-stacked .resume-measure-cell > .resume-measure-tail {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* 预览工具栏第二行：左边是度量组、右边是「正指向」chip，
+   所以度量组要吃掉剩余宽度（否则又缩回左侧一小条）。 */
+.resume-preview-toolbar-cluster > .resume-measure-grid {
+  flex: 1 1 auto;
+}
+
+/* 分边页边距（上/右/下/左）：**占满整行**，四条滑杆才有足够长度。
+   它是度量栅格的第 5 个格子（照片之后），所以必须显式跨满所有列——否则会缩在
+   半列宽里，2mm 的差异在这么短的滑杆上根本对不准。
+   收起态只有一行折叠标题；展开后标题 + 卡片，两者都不与上面几行共用行内宽度。 */
+.resume-margin-sides {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 折叠标题：靠左的一行文字，不给它铺满整行（铺满会像一条分隔条，反而不像按钮）。 */
+.resume-margin-sides-toggle.ant-btn {
+  align-self: flex-start;
+  height: 24px;
+  padding: 0 6px 0 2px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-margin-sides-toggle.ant-btn:hover {
+  color: var(--rf-text-body) !important;
+  background: var(--rf-surface-alt) !important;
+}
+
+/* 展开 / 收起的唯一视觉状态：箭头翻转。文字保持不变，用户不用重读一遍标签。 */
+.resume-margin-sides-chevron {
+  margin-left: 2px;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.resume-margin-sides-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+/* 卡片：四条支路装进一个有边界的区域，读起来是"页边距这一项的子面板"，
+   而不是又一组和上面平级的参数。 */
+.resume-margin-sides-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px 6px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 10px;
+  background: var(--rf-surface-alt);
+}
+
+/* 四条支路排成「自动列数」的栅格：卡片够宽时两列（上/右、下/左），
+   窄下来自动退回一列。用 `auto-fit` 而不是断点——面板的宽度由外层决定，
+   写死断点就会在某个中间宽度上挤成一列半。 */
+.resume-margin-sides-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 2px 20px;
+  min-width: 0;
+}
+
+/* 一行 = 标签 + ± + 滑杆 + 读数 + 复位位。滑杆吃掉剩余宽度（与其它度量控件同一种
+   手感），但**不允许换行**：一条边读成两行会让四行的高度参差。 */
+.resume-margin-side-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 支路标签只放一个字，20px 足够（基础规则里的 min-width: 34px 要一起改掉，
+   只写 width 会被 min-width 顶回去）。 */
+.resume-measure-grid .resume-margin-sides .resume-margin-side-label {
+  display: inline-block;
+  flex: 0 0 20px;
+  min-width: 20px;
+  width: 20px;
+  white-space: nowrap;
+}
+
+.resume-margin-side-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 滑杆所在的那一项吃掉控件组剩下的宽度。选择器要比
+   `.resume-measure-grid.is-stacked .ant-space-item:has(> .ant-slider)`（0,4,0）更具体，
+   否则会被那条"弹窗里滑杆写死 200px"的规则钉住，右边留下一段死白。 */
+.resume-measure-grid
+  .resume-margin-side-row
+  .resume-margin-side-controls
+  .ant-space-item:has(> .ant-slider) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 上面那条"三条滑杆写死 200px"的规则同样命中这里（`.is-stacked .ant-slider`）。
+   卡片里的滑杆要按可用宽度伸缩：窗口一窄，200px 会把读数与复位位顶出行外。 */
+.resume-measure-grid .resume-margin-sides .resume-margin-side-slider.ant-slider {
+  flex: 1 1 160px;
+  width: auto;
+  min-width: 0;
+}
+
+/* 读数列：定宽 + 右对齐 + 等宽数字。四行的 14mm 落在同一条竖线上，
+   位数变化（0.5 ↔ 14）时也不会左右晃。 */
+.resume-margin-side-value {
+  flex: 0 0 46px;
+  width: 46px;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 复位位常驻占位：只有"这一边自己写过键"时才画 ↺。不占位的话，
+   出现图标的那一行滑杆会短一截，四行就不齐了。
+   30px = antd 小号图标按钮的宽度（controlHeightSM），窄一格就会把图标压出边界。 */
+.resume-margin-side-reset {
+  display: inline-flex;
+  flex: 0 0 30px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* 卡片底部的一行说明：交代"没出现 ↺ 的边"是什么语义（原先靠每行一个胶囊）。 */
+.resume-margin-sides-note {
+  margin-top: 2px;
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* ===== 个人照片面板 ===== */
+
+/* 照片库弹窗里一行横排、放不下就换行：竖着堆成两行会把弹窗撑得很长。 */
+.profile-photo-library {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.profile-photo-thumb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.profile-photo-thumb-button {
+  position: relative;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.profile-photo-thumb-button img {
+  width: 56px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.profile-photo-thumb.is-active .profile-photo-thumb-button {
+  border-color: var(--rf-brand);
+}
+
+.profile-photo-thumb .ant-tag {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-inline-end: 0;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+/* ===== 大模型配置 ===== */
+
+.llm-fetch-models-button {
+  padding-inline: 0;
+  height: auto;
+}
+
+/* .llm-advanced-toggle（LLMRecordModal 的「高级调整」折叠头）的间距/去 padding 规则
+   不能写在这里：antd 6 Button 的 cssinjs 样式运行时注入 <head>、排在静态样式表之后，
+   同特异性下这里写的 padding-inline / margin-block 会被 antd 的 padding 压掉
+   （2026 返工实测无效的根因）。规则已移到组件内联 style（LLMRecordModal.tsx），
+   由 LLMRecordModal.test.tsx 钉住。同理注意 .llm-fetch-models-button 的 padding-inline
+   在 cssinjs 面前同样不可靠，后续如需真生效也应改内联。 */

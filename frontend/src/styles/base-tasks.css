@@ -1,0 +1,115 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 全局基础（4/5）：后台任务入口/面板/常驻任务条、岗位解读弹窗与内容区高度链。
+拆分自 base.css，纯搬迁、规则内容与顺序不变。 */
+
+/* 页头的「后台任务」入口：只在真有任务在跑时渲染，所以它出现即意味着"有活在干"。 */
+/* antd-override: 尺寸压 antd Button 的 CSS-in-JS，去 !important 需渲染验证（见审计报告 §P2-3 待定） */
+.background-tasks-button {
+  flex: 0 0 auto;
+  height: 32px !important;
+  padding: 0 8px;
+  color: var(--rf-brand);
+  font-size: 12px;
+}
+
+.background-tasks-panel {
+  width: 320px;
+}
+
+.background-task-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.background-task-row:last-of-type {
+  border-bottom: 0;
+}
+
+.background-task-spin {
+  margin-top: 3px;
+  color: var(--rf-info);
+}
+
+.background-task-label,
+.background-task-progress {
+  display: block;
+  font-size: 13px;
+}
+
+.background-task-progress {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.background-tasks-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* 页头下方的常驻任务条（T1）：无任务时组件不渲染，所以它出现即意味着"有活在跑"。 */
+.background-task-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface-alt);
+}
+
+.background-task-bar-title {
+  font-size: 12px;
+}
+
+.background-task-bar-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 2px 8px;
+}
+
+.background-task-bar-spin {
+  color: var(--rf-info);
+}
+
+.background-task-bar-label {
+  font-size: 12px;
+}
+
+.background-task-bar-meta {
+  font-size: 12px;
+}
+
+/* 岗位解读弹窗：计时文案与操作按钮（此前是内联 style，颜色/间距统一收到这里）。 */
+.job-analysis-elapsed {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.job-analysis-actions {
+  margin-top: 12px;
+  text-align: right;
+}
+
+/* 「上下文」与「全局动作」之间的一根细线：四个元素排一行时，靠它分组才不糊成一片。 */
+.app-header-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--rf-border);
+}
+
+.app-content {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  /* 顶部常驻元素的真实高度由变量给出：公告条出现时多 40px，不扣掉就会多出一屏滚动量。
+     两个 fallback 保证"没有公告条"时计算值与历史完全一致（64px）。 */
+  min-height: calc(100vh - var(--rf-header-height, 64px) - var(--rf-announcement-h, 0px));
+  padding: 24px;
+  overflow-x: hidden;
+}
