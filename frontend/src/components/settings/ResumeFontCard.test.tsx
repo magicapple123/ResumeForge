@@ -9,16 +9,20 @@
  * 历史字体。所以这里还钉一条"页面上没有上传按钮"，防止旧入口被合并回来。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import ResumeFontCard from "./ResumeFontCard";
 
 const apiMocks = vi.hoisted(() => ({
+  BUILTIN_FONT_FILE: "SourceHanSansSC-Regular.otf",
   listResumeFonts: vi.fn(),
   uploadResumeFont: vi.fn(),
   activateResumeFont: vi.fn(),
   deleteResumeFont: vi.fn(),
+  deleteBuiltinFont: vi.fn(),
+  startBuiltinFontDownload: vi.fn(),
+  cancelBuiltinFontDownload: vi.fn(),
   /** 内置字体状态：默认"还没下载"，于是那一行只出现「下载」，不干扰下面的列表断言。 */
   getBuiltinFont: vi.fn(),
   resumeFontPreviewUrl: vi.fn(
@@ -26,7 +30,7 @@ const apiMocks = vi.hoisted(() => ({
   ),
 }));
 
-vi.mock("../../api/settings", () => apiMocks);
+vi.mock("../../api/fonts", () => apiMocks);
 
 /** 内置字体的未下载态（与后端 `GET /settings/fonts/builtin` 同一形状）。 */
 const BUILTIN_IDLE = {
@@ -62,6 +66,9 @@ beforeEach(() => {
   apiMocks.uploadResumeFont.mockReset();
   apiMocks.activateResumeFont.mockReset().mockResolvedValue({ active: "思源黑体.ttf" });
   apiMocks.deleteResumeFont.mockReset().mockResolvedValue(undefined);
+  apiMocks.deleteBuiltinFont.mockReset().mockResolvedValue(undefined);
+  apiMocks.startBuiltinFontDownload.mockReset().mockResolvedValue(BUILTIN_IDLE);
+  apiMocks.cancelBuiltinFontDownload.mockReset().mockResolvedValue(BUILTIN_IDLE);
   apiMocks.getBuiltinFont.mockReset().mockResolvedValue(BUILTIN_IDLE);
 });
 
@@ -124,7 +131,7 @@ describe("ResumeFontCard", () => {
     await waitFor(() => expect(apiMocks.activateResumeFont).toHaveBeenCalledWith("思源黑体.ttf"));
   });
 
-  it("点字体名先预览，弹窗里可以「设为当前」", async () => {
+  it("点字体名先看样张，弹窗里可以「设为当前」", async () => {
     apiMocks.listResumeFonts.mockResolvedValue({
       items: [FONT],
       active: null,
@@ -134,12 +141,13 @@ describe("ResumeFontCard", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "思源黑体.ttf" }));
 
-    expect(await screen.findByText(/字体预览「思源黑体.ttf」/)).toBeInTheDocument();
-    expect(screen.getByText("张三 · 后端开发工程师")).toBeInTheDocument();
-    expect(apiMocks.resumeFontPreviewUrl).toHaveBeenCalledWith("思源黑体.ttf");
+    // 样张是**只读**弹窗：四行固定内容 + 底部「设为当前」，与内置字体那一行共用同一个组件。
+    expect(await screen.findByTestId("font-sample")).toBeInTheDocument();
+    expect(screen.getByText(t("fontDownload.sampleLineTitle"))).toBeInTheDocument();
+    expect(screen.getByText(t("fontDownload.sampleLineBold"))).toBeInTheDocument();
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "设为当前" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: t("fontDownload.sampleActivate") }));
     await waitFor(() => expect(apiMocks.activateResumeFont).toHaveBeenCalledWith("思源黑体.ttf"));
   });
 
@@ -161,6 +169,29 @@ describe("ResumeFontCard", () => {
       ),
     );
     expect(apiMocks.deleteResumeFont).not.toHaveBeenCalled();
+  });
+
+  it("点「设为当前」后按钮与标签**当场**变化，不用等清单重拉（2026-10-24 回归）", async () => {
+    // 用户报的是"点了没反应"：切换成功后要等 `load()` 走一次网络，那段空窗里界面读到的
+    // 还是旧的 `active`。这里把重拉清单按住不放，界面只能靠乐观值——它必须已经变了。
+    const stale = { items: [FONT], active: null, max_bytes: 20971520 };
+    apiMocks.listResumeFonts.mockResolvedValue(stale);
+    renderCard();
+
+    const button = await screen.findByRole("button", { name: /设为当前/ });
+    let release: () => void = () => undefined;
+    apiMocks.listResumeFonts.mockReturnValue(
+      new Promise((resolve) => {
+        release = () => resolve(stale);
+      }),
+    );
+
+    fireEvent.click(button);
+
+    expect(await screen.findByText(t("fonts.card.active-tag"))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /设为当前/ })).toBeDisabled();
+
+    await act(async () => release());
   });
 
   it("当前字体所在行的「设为当前」不可点，且可以从系统字体切回", async () => {

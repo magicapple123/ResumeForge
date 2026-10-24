@@ -134,6 +134,7 @@ $RequiredFiles = @(
     "backend/app/templates/resume_elegant.html.j2",
     "backend/app/templates/resume_technical.html.j2",
     "backend/app/templates/resume_minimal.html.j2",
+    "backend/app/templates/resume_scholar.html.j2",
     "backend/app/templates/resume_editorial.html.j2",
     "backend/app/templates/resume_split.html.j2",
     "backend/app/templates/_resume_blocks.j2",

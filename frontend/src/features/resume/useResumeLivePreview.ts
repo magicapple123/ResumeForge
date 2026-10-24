@@ -267,8 +267,22 @@ export function useResumeLivePreview({
     suspend();
   }, [enabled, suspend]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    /**
+     * **挂载（再挂载）时把闸门复位**。
+     *
+     * `disposedRef` 描述的是"这一次挂载还活着吗"，所以它必须由 setup 归零：只在 cleanup 里
+     * 置真、setup 里不管，第一次 cleanup 之后它就**永远**是真。而 cleanup 不只发生在"真卸载、
+     * ref 跟着销毁"那条路上——React 的 StrictMode 会把每个 effect「挂载 → 清理 → 再挂载」
+     * 跑一遍，这一轮里 **ref 是被复用的**，于是第二次挂载起来时闸门已经关着，而这次挂载才是
+     * 真正在用的那一次。
+     *
+     * 漏了这一句的症状正是本批缺陷的原形：`pump` 第一道门就 `return`，于是
+     * 「内容变了 → state=typing → 定时器到点 → pump 直接退出」——状态条永久停在
+     * 「预览更新中…」，`render` 一次都不发，直到用户点保存（那条 html 走宿主，不经过本 hook）。
+     */
+    disposedRef.current = false;
+    return () => {
       // 卸载后一律不再 setState：`disposedRef` 是唯一的闸门。
       disposedRef.current = true;
       clearTimer();
@@ -276,10 +290,8 @@ export function useResumeLivePreview({
       seqRef.current += 1;
       controllerRef.current?.abort();
       controllerRef.current = null;
-    },
-    [clearTimer],
-  );
-
+    };
+  }, [clearTimer]);
   useEffect(() => {
     stateCbRef.current?.(state);
   }, [state]);

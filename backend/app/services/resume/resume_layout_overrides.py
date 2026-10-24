@@ -229,6 +229,7 @@ def resolve_page_margins(
     config: dict | None,
     template_padding_mm: float,
     legacy_margin_mm: float | None = None,
+    template_sides: tuple[float, float] | None = None,
 ) -> tuple[float, float, float, float]:
     """解析"这份简历最终四边各是多少 mm"，返回 ``(上, 右, 下, 左)``。
 
@@ -237,6 +238,11 @@ def resolve_page_margins(
         template_padding_mm: 模板自带的 ``padding_mm``，四边的最终兜底值。
         legacy_margin_mm: ``ExportRequest.margin_mm`` 这个历史旋钮；只在 ``config`` 没有
             ``page_padding`` 时作回落值（旧客户端兼容）。
+        template_sides: 模板自带的**左右**两道页边距 ``(左, 右)``，来自注册表
+            ``padding_sides_mm``。模板 CSS 允许 ``padding: 16mm 18mm`` 这种两值简写
+            （上下 / 左右），只存一个 ``padding_mm`` 时 PDF 只能四边相等，左右各差 2mm。
+            **只在"零覆盖"状态下生效**（见下面第 4 条优先级）——用户显式设过页边距时
+            四边一律以用户的值为准，产物逐字节不变。
 
     Returns:
         ``(top, right, bottom, left)``，单位 mm。**顺序就是 CSS ``padding`` 简写的顺序**，
@@ -246,7 +252,9 @@ def resolve_page_margins(
 
     1. 四条支路（``page_padding_top/right/bottom/left``）逐边覆盖；
     2. 缺的边跟"总"（``page_padding``，没有则 ``legacy_margin_mm``，再没有则模板默认）；
-    3. 支路不足四条且没有"总"时**整组作废**——否则 HTML 与 PDF 会得出不同结论。
+    3. 支路不足四条且没有"总"时**整组作废**——否则 HTML 与 PDF 会得出不同结论；
+    4. 一条支路、"总"、``legacy_margin_mm`` **全都没有**时，左右改用 ``template_sides``
+       （上下仍是 ``template_padding_mm``）。
     """
     values = config if isinstance(config, dict) else {}
     master = _master_margin(
@@ -258,8 +266,38 @@ def resolve_page_margins(
     if sides is None:
         # 这里的出口不是"模板 CSS 权威"而是"四边都等于总"——因为调用方（PDF/Word）必须
         # 拿到一个确定值；"总"此刻就是 ``page_padding`` / 兼容值 / 模板默认。
+        # 只有"一条支路都没有、没有总、也没有 legacy_margin_mm"这一种状态才认模板的分边：
+        # "支路不全"那个兜底分支的语义是**整组作废、等价于没设过**，但它同时意味着调用方
+        # 已经拿到过用户的输入，四边一律按老口径相等更安全（这条边界一个字节都不动）。
+        if not _has_any_side(values) and _as_float(values.get(PAGE_PADDING_KEY)) is None and (
+            legacy_margin_mm is None
+        ):
+            side_pair = _template_side_pair(template_sides)
+            if side_pair is not None:
+                left, right = side_pair
+                return (master, right, master, left)
         return (master, master, master, master)
     return (sides["top"], sides["right"], sides["bottom"], sides["left"])
+
+
+def _has_any_side(values: dict) -> bool:
+    """这份配置里**有没有任何一条**分边页边距键（``page_padding_top/right/bottom/left``）。"""
+    return any(_as_float(values.get(PAGE_MARGIN_KEYS[side])) is not None for side in PAGE_MARGIN_SIDES)
+
+
+def _template_side_pair(template_sides: object) -> tuple[float, float] | None:
+    """把注册表的 ``padding_sides_mm`` 读成 ``(左, 右)``；缺键 / 畸形值返回 ``None``。
+
+    返回 ``None`` 的语义是"这个模板没有分边声明"，调用方据此走原来的"四边相等"分支——
+    这条分支正是"非 elegant/compact 模板产物逐字节不变"的开关。
+    """
+    if not isinstance(template_sides, (tuple, list)) or len(template_sides) != 2:
+        return None
+    left = _as_float(template_sides[0])
+    right = _as_float(template_sides[1])
+    if left is None or right is None:
+        return None
+    return left, right
 
 
 def resolve_photo_scale(config: dict | None) -> float:

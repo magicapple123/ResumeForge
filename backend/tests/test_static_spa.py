@@ -294,3 +294,21 @@ def test_index_html_not_shadowed_by_root_file_routes(tmp_path):
         r = client.get(path, headers=HTML_ACCEPT)
         assert r.status_code == 200
         assert "spa-entry" in r.text
+
+
+# 浏览器只执行 MIME 为 JavaScript 的 ES module。Windows 注册表把 `.mjs` 记成
+# `text/plain`，`FileResponse` 照抄 `mimetypes.guess_type()`，pdfjs 的 worker 因此
+# 被拒（「导出图片」失败在 fake worker 上）。这条守卫钉住"服务端必须自己定 MIME"。
+_JS_MIME_TYPES = ("text/javascript", "application/javascript", "application/ecmascript")
+
+
+@pytest.mark.parametrize("name", ["pdf.worker.min-CjEcRF4W.mjs", "entry-abc123.js"])
+def test_assets_are_served_with_a_javascript_mime_type(tmp_path, name):
+    dist = build_dist(tmp_path)
+    (dist / "assets" / name).write_text("export const x = 1;", encoding="utf-8")
+    app = build_app(dist)
+    client = use(app)
+    r = client.get(f"/assets/{name}")
+    assert r.status_code == 200
+    declared = r.headers["content-type"].split(";")[0].strip()
+    assert declared in _JS_MIME_TYPES, f"{name} 被当成 {declared}，浏览器不会执行它"

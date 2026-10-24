@@ -96,10 +96,10 @@ def short_en() -> ResumeContent:
     )
 
 
-def _long_experiences(lang: str) -> list[dict]:
-    """8 段经历 × 3 条长 bullet：让内容在字号缩放后仍稳定超出 2 页。"""
+def _long_experiences(lang: str, count: int = 8) -> list[dict]:
+    """``count`` 段经历 × 3 条长 bullet：让内容在字号缩放后仍稳定超出 2 页。"""
     items = []
-    for i in range(8):
+    for i in range(count):
         if lang == "zh":
             company = f"云梯智联科技有限公司第{i}事业部"
             bullets = [
@@ -132,7 +132,12 @@ def _long_experiences(lang: str) -> list[dict]:
 
 
 def long_zh() -> ResumeContent:
-    """3 页中文样本：内容量确保 page_limit=3 下真实渲染 3 页。"""
+    """3 页中文样本：内容量确保 page_limit=3 下真实渲染 3 页。
+
+    比英文样本多一段（9 vs 8）：这条 case 带 ``redact=True``，脱敏会把姓名/电话/邮箱
+    换成更短的掩码，整篇会掉回两页——而"3 页"正是这条 case 要覆盖的形态，所以补一段
+    余量把它顶回第三页。
+    """
     return ResumeContent(
         name="林致远",
         phone="13800001234",
@@ -140,7 +145,7 @@ def long_zh() -> ResumeContent:
         city="杭州",
         job_intent="高级后端开发工程师",
         summary="十年后端开发经验，长期负责高并发交易系统的架构设计与稳定性治理，作品集：" + ZH_URL,
-        experience=_long_experiences("zh"),
+        experience=_long_experiences("zh", 9),
         skills=[
             {"name": "Python", "level": "精通"},
             {"name": "MySQL", "level": "精通"},

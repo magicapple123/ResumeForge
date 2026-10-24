@@ -180,3 +180,27 @@ body.is-slider-dragging iframe {
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/* ===== 参数行右侧的「恢复到打开时的值」（2026-10-24） ===== */
+/* 它占用的是来源胶囊（「随模板」）那一格：参数一改，那一格本来就是空的。
+   `:has` 让胶囊壳在装着按钮时退成透明——一颗 ↺ 外面再套一圈胶囊边框会读成两个控件。 */
+.resume-measure-source:has(.resume-param-restore) {
+  padding: 0;
+  border-color: transparent;
+  background: none;
+}
+
+/* 图标按钮压到 20×20、无内边距：胶囊格高 20px，默认小号按钮是 30px，会把读数挤走。 */
+.resume-param-restore.ant-btn {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-param-restore.ant-btn:hover {
+  color: var(--rf-brand) !important;
+  background: var(--rf-brand-tint) !important;
+}

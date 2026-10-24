@@ -12,21 +12,23 @@ export type ProfileSectionKey =
   | "summary";
 
 /**
- * 资料大分区的默认顺序。
+ * 资料大分区的默认顺序（2026-10 起，与简历正文默认顺序同一口径）。
  *
- * 这是**有意的产品决策**，不是随手排列：简历阅读者（HR、面试官）最关心的是
- * 「最近在做什么、做过什么项目」，所以把实习/工作经历与项目经历提到教育经历之前；
- * 教育经历只保留一段可查证的信息，放在技能之后。后端 `PROFILE_SECTION_KEYS`
+ * 这是**有意的产品决策**，不是随手排列：默认值唯一的可见语义是"新建资料 / 新建简历
+ * 长什么样"。校招场景下读者先确认学历与专业，再往工作与项目看，所以教育经历排在最前；
+ * 「个人总结」是概括性文字，读完经历再看更顺，排在最后。后端 `PROFILE_SECTION_KEYS`
  * 必须与本数组逐项一致（`PROFILE_SECTION_KEYS` 决定旧数据缺失分区时的补位顺序）。
+ *
+ * 只改默认值：用户资料里已有的 `section_order` 是显式 JSON，不得迁移或覆盖。
  */
 export const DEFAULT_SECTION_ORDER: ProfileSectionKey[] = [
   "basic_info",
+  "educations",
   "experiences",
   "projects",
   "skills",
-  "educations",
-  "awards",
   "campus_experiences",
+  "awards",
   "summary",
 ];
 

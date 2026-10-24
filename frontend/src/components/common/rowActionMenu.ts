@@ -36,6 +36,14 @@ export interface RowActionItem {
    * 会缺一段。软删除类一律用下面导出的 `TRASH_RECOVERY_NOTE`，不要在调用点各写一份。
    */
   confirmBody?: string;
+  /**
+   * 子菜单（如「复制」下面的一组字段）。
+   *
+   * 加了它之后行操作可以「一类动作一个入口」：右键菜单本来就窄，把"复制标题 / 复制岗位 /
+   * 复制整行"三条平铺进去，会把真正要点的「重命名 / 删除」挤到菜单下半页。
+   * 子项只支持普通动作（不嵌套 divider、不再套一层 children）。
+   */
+  children?: RowActionItem[];
 }
 
 /**
@@ -77,46 +85,59 @@ interface BuildOptions {
 /** 把 `RowMenuItem` 列表转成 antd 菜单项（含二次确认；divider 原样透传）。 */
 export function useRowActionMenu() {
   const { modal } = App.useApp();
-  return (items: RowMenuItem[], options: BuildOptions = {}): MenuProps["items"] =>
-    items.map((item) => {
-      if (item.type === "divider") {
-        return { key: item.key, type: "divider" as const };
-      }
-      // 解构成 const：嵌套 onClick 闭包里拿不到参数的收窄类型，解构后没问题。
-      const { key, danger, disabled, icon, label, confirm, confirmBody, undo, onClick } = item;
-      return {
-        key,
-        danger,
-        disabled,
-        icon,
-        label,
-        onClick: () => {
-          if (undo) {
-            // 直接执行：撤销入口由调用方在 Toast 上给（见 useDeleteUndo）。
-            onClick?.();
-            options.onDone?.();
-            return;
-          }
-          if (confirm) {
-            modal.confirm({
-              title: confirm,
-              // 正文放后果与可逆性（§4.4 三段式的第三段）；没有就不传，别输出空段落。
-              content: confirmBody,
-              // confirm 的 holder 挂在根 <AntdApp>，不经过卡片内的局部 ConfigProvider，
-              // 默认 z（3100）落在投投卡（3400/3500）与简历编辑器 Modal（3110）之后，
-              // 看起来就是"点了删除没反应"。统一抬到卡片内弹层基准 3550。
-              zIndex: layer.cardPopup,
-              okButtonProps: { danger },
-              onOk: () => {
-                onClick?.();
-                options.onDone?.();
-              },
-            });
-            return;
-          }
+  /**
+   * 递归构造菜单项：`children` 支持一层子菜单（见 `RowActionItem.children`）。
+   * 子项与顶层共用同一套语义（二次确认、danger、disabled），所以两边必须是同一段代码——
+   * 复制一份迟早漂成两种行为。
+   */
+  const toMenuItem = (
+    item: RowMenuItem,
+    options: BuildOptions,
+  ): NonNullable<MenuProps["items"]>[number] => {
+    if (item.type === "divider") {
+      return { key: item.key, type: "divider" as const };
+    }
+    // 解构成 const：嵌套 onClick 闭包里拿不到参数的收窄类型，解构后没问题。
+    const { key, danger, disabled, icon, label, confirm, confirmBody, undo, onClick, children } =
+      item;
+    return {
+      key,
+      danger,
+      disabled,
+      icon,
+      label,
+      ...(children && children.length > 0
+        ? { children: children.map((child) => toMenuItem(child, options)) }
+        : {}),
+      onClick: () => {
+        if (undo) {
+          // 直接执行：撤销入口由调用方在 Toast 上给（见 useDeleteUndo）。
           onClick?.();
           options.onDone?.();
-        },
-      };
-    });
+          return;
+        }
+        if (confirm) {
+          modal.confirm({
+            title: confirm,
+            // 正文放后果与可逆性（§4.4 三段式的第三段）；没有就不传，别输出空段落。
+            content: confirmBody,
+            // confirm 的 holder 挂在根 <AntdApp>，不经过卡片内的局部 ConfigProvider，
+            // 默认 z（3100）落在投投卡（3400/3500）与简历编辑器 Modal（3110）之后，
+            // 看起来就是"点了删除没反应"。统一抬到卡片内弹层基准 3550。
+            zIndex: layer.cardPopup,
+            okButtonProps: { danger },
+            onOk: () => {
+              onClick?.();
+              options.onDone?.();
+            },
+          });
+          return;
+        }
+        onClick?.();
+        options.onDone?.();
+      },
+    };
+  };
+  return (items: RowMenuItem[], options: BuildOptions = {}): MenuProps["items"] =>
+    items.map((item) => toMenuItem(item, options));
 }

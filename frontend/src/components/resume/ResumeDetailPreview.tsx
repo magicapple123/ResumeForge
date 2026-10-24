@@ -13,7 +13,7 @@
  * 避免循环依赖（设计 §9 ⑨）。
  */
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
-import { Alert, Button, Collapse, Space, Tag, Tooltip, Typography } from "antd";
+import { Collapse, Space, Tag, Tooltip, Typography } from "antd";
 import { useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useNavigate } from "react-router-dom";
@@ -40,6 +40,7 @@ import type { PreviewMode } from "../resume-preview/config";
 import { buildExactPreviewOptions } from "../resume-preview/exactPreviewOptions";
 import type { RichTextEditAdapter } from "../resume-preview/richText";
 import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
+import ResumeCoverageNotes from "./ResumeCoverageNotes";
 import ResumeDetailFooter from "./ResumeDetailFooter";
 import EvidencePanel from "./EvidencePanel";
 import { useProfileFillSources } from "./useProfileFillSources";
@@ -95,6 +96,11 @@ interface Props {
   richDirty?: boolean;
   /** 丢掉这些 overlay（取消修改 / 放弃并关闭）。 */
   onDiscardRichText?: () => void;
+  /**
+   * 合并加粗 overlay 的纯函数（宿主的 `overlays.merge`）。只交给制作台的实时预览：
+   * 中栏草稿里没有 overlay，不合并就会"改了字、纸面上的加粗消失"。
+   */
+  mergeLive?: (content: ResumeContent | null) => ResumeContent | null;
 }
 
 export default function ResumeDetailPreview({
@@ -125,6 +131,7 @@ export default function ResumeDetailPreview({
   richEdit,
   richDirty,
   onDiscardRichText,
+  mergeLive,
 }: Props) {
   const navigate = useNavigate();
   const [editorOpen, setEditorOpen] = useState(false);
@@ -173,9 +180,10 @@ export default function ResumeDetailPreview({
   }, [detail.warnings]);
   const coverageNotes = detail.coverage_notes ?? [];
   // 精确预览上下文只在这里构造一次：主预览与制作台必须拿到同一份（各拼一份必然漂）。
+  // `catalog` 一并传进去：衬线标题的说明（P1-2）只需要目录里那一个布尔值，目录本身已经取过了。
   const exactPreview = useMemo<ExactPreviewOptions>(
-    () => buildExactPreviewOptions(detail, layout, riskContentSignature),
-    [detail, layout, riskContentSignature],
+    () => buildExactPreviewOptions(detail, layout, riskContentSignature, catalog),
+    [catalog, detail, layout, riskContentSignature],
   );
   // 事实来源标注（RF-13）：证据面板用它列出"这条内容从哪来"；预览上的悬停角标随编辑模式一起去掉了（2026-10-21），标注数据本身仍然有效。
   const factAnnotations = useMemo(() => detail.fact_annotations ?? [], [detail.fact_annotations]);
@@ -240,67 +248,21 @@ export default function ResumeDetailPreview({
         onApplied={(formatConfig) => onApplyFittedFormat(formatConfig)}
         onAddPage={() => onApplyLayout({ ...layout, page_limit: layout.page_limit + 1 })}
       />
-      {/* 「没写进这份简历」的中性分组（#3/#5）：与"疑似虚构"分开呈现，并给出处理入口。 */}
-      {(coverageNotes.length > 0 || legacyCoverageWarnings.length > 0) && (
-        <Alert
-          type="info"
-          showIcon
-          style={{ marginBottom: 12 }}
-          title="这些资料内容没有写进这份简历"
-          description={
-            <div style={{ display: "grid", gap: 10 }}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                这是岗位导向筛选的正常结果：与岗位关键词交集不足的内容不会进入生成，资料本身没有任何丢失。
-              </Typography.Text>
-              {coverageNotes.map((note) => (
-                <div key={note.section}>
-                  <Typography.Text strong style={{ fontSize: 13 }}>
-                    {note.section_label}（{note.total} 条）：
-                  </Typography.Text>
-                  <Typography.Text style={{ fontSize: 13 }}>
-                    {note.names.map((name) => `「${name}」`).join("、")}
-                  </Typography.Text>
-                  <Space size={8} style={{ marginTop: 6 }} wrap>
-                    <Button
-                      size="small"
-                      type="primary"
-                      ghost
-                      onClick={() => {
-                        setReviseInstructions(
-                          `请把资料中的以下内容补进这份简历的${note.section_label}（只新增这些内容，其余部分保持不变）：` +
-                            note.names.map((name) => `「${name}」`).join("、") +
-                            "。补充时使用这些条目在个人资料中的原文事实，不要虚构细节。",
-                        );
-                        setReviseOpen(true);
-                      }}
-                    >
-                      AI 补上这段
-                    </Button>
-                  </Space>
-                </div>
-              ))}
-              {legacyCoverageWarnings.map((warning) => (
-                <Typography.Paragraph key={warning} style={{ margin: 0, fontSize: 13 }}>
-                  {warning}
-                </Typography.Paragraph>
-              ))}
-              {coverageNotes.length > 0 && (
-                <Space size={8} wrap>
-                  <Button
-                    size="small"
-                    onClick={() => {
-                      setEditorTarget(null);
-                      setEditorOpen(true);
-                    }}
-                  >
-                    打开手动调整
-                  </Button>
-                </Space>
-              )}
-            </div>
-          }
-        />
-      )}
+      {/* 「没写进这份简历」的中性分组（#3/#5）：与"疑似虚构"分开呈现，并给出处理入口。
+          展示细节搬到了 `ResumeCoverageNotes`（本文件贴着 500 行预算），两类数据都空时它自己
+          不渲染——调用方不需要再判一次。 */}
+      <ResumeCoverageNotes
+        notes={coverageNotes}
+        legacyWarnings={legacyCoverageWarnings}
+        onRevise={(instructions) => {
+          setReviseInstructions(instructions);
+          setReviseOpen(true);
+        }}
+        onOpenEditor={() => {
+          setEditorTarget(null);
+          setEditorOpen(true);
+        }}
+      />
       {/* 事实来源展示（RF-13）：与"没写进简历"分开——它回答的是"写进去的内容
           从哪来"，挂在 coverage Alert 之后、预览之前，先看筛选结果再看来源。 */}
       {factAnnotations.length > 0 && (
@@ -318,7 +280,6 @@ export default function ResumeDetailPreview({
           // 长得不一样（2026-10-20 用户反馈）。
           <ResumeTemplateControls
             layout={layout}
-            resumeId={detail.id}
             catalog={catalog}
             onChange={(next) => onApplyLayout(next)}
           />
@@ -392,9 +353,8 @@ export default function ResumeDetailPreview({
         open={editorOpen}
         content={detail.content}
         initialTarget={editorTarget}
-        // 传 resumeId 才会挂出「写作增强」页签（STAR 量化改写 / 话术生成器 / 多风格润色 /
-        // 中英互译）——那几个接口都按简历 id 调。此前这里没传，于是后端与组件都齐了、
-        // 界面上却点不到，而 README 与使用指南都写着它可用。
+        // `resumeId` 决定编辑器的草稿作用域（`resume.edit#<id>`）；写作增强搬到右键之后
+        // 不再由它挂页签，但"这份草稿属于哪份简历"仍然只能靠它区分。
         resumeId={detail.id}
         onClose={() => {
           setEditorOpen(false);
@@ -469,6 +429,7 @@ export default function ResumeDetailPreview({
         content={detail.content}
         // 右栏实时预览要按"加上还没保存的粗体"那一版重排。
         liveContent={liveContent}
+        mergeLive={mergeLive}
         richDirty={richDirty}
         onDiscardRichText={onDiscardRichText}
         onSaveContent={onSaveEditedResume}

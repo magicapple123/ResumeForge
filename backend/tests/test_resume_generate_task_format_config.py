@@ -67,8 +67,68 @@ def test_generation_persists_validated_format_config(client, monkeypatch):
     assert "evil_key" not in config
 
 
-def test_generation_without_format_config_stores_an_empty_override(client, monkeypatch):
-    """不传 `format_config` 时存的仍是 `{}`：老简历那种"没有自己的版式覆盖"的形态。"""
+def test_generation_without_format_config_materializes_the_profile_order(client, monkeypatch):
+    """不传 `format_config` 时，板块顺序按「我的资料」**物化**一次（P0-5），而不是留空。
+
+    旧断言是 `== {}`（"这份简历没有自己的版式覆盖"）。P0-5 之后那种形态**不再想要**：
+    卡片（「调整板块顺序」）与四个渲染器读的都是 `format_config.section_order`，留空就会
+    出现"卡片显示内置默认、资料顺序只在生成那一刻临时生效"的两套结果，而"显示的顺序必须
+    等于渲染的顺序"正是这条需求的目的。
+
+    这里先把资料顺序调成与内置默认不同（项目在最前），再生成：期望值 = 资料顺序翻译成
+    正文分区键的结果，即 ``projects → education → experience → skills → campus_experience
+    → awards → summary``。
+    """
+    _seed_profile(client)
+    # 资料顺序与内置默认不同，才需要物化（相同的情形见下一个用例）。
+    assert (
+        client.patch(
+            "/api/profile",
+            json={
+                "section_order": [
+                    "basic_info",
+                    "projects",
+                    "educations",
+                    "experiences",
+                    "skills",
+                    "campus_experiences",
+                    "awards",
+                    "summary",
+                ]
+            },
+        ).status_code
+        == 200
+    )
+    _configure(client)
+    job = _job(client)
+    monkeypatch.setattr(
+        "app.services.resume.resume_generate_runner.create_provider",
+        lambda resolved: SuccessfulProvider(resolved),
+    )
+
+    started = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]})
+    final = _wait_terminal(client, started.json()["id"])
+    record = client.get(f"/api/resumes/{final['resume_id']}").json()
+    assert record["format_config"] == {
+        "section_order": [
+            "projects",
+            "education",
+            "experience",
+            "skills",
+            "campus_experience",
+            "awards",
+            "summary",
+        ]
+    }
+
+
+def test_generation_omits_section_order_when_profile_matches_the_default(client, monkeypatch):
+    """资料顺序 == 内置默认 → **不写**这个键（"没调过"与"调成一样"同一种形态）。
+
+    资料页的默认值与简历正文的默认值现在是同一口径（教育优先），所以从没排过顺序的
+    用户生成出来的简历不该多出一条恰好等于默认值的覆盖——那会让以后调整默认顺序对这批
+    简历失效（它们被钉在旧默认上）。
+    """
     _seed_profile(client)
     _configure(client)
     job = _job(client)
@@ -80,7 +140,7 @@ def test_generation_without_format_config_stores_an_empty_override(client, monke
     started = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]})
     final = _wait_terminal(client, started.json()["id"])
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
-    assert record["format_config"] == {}
+    assert "section_order" not in record["format_config"]
 
 
 @pytest.mark.parametrize(

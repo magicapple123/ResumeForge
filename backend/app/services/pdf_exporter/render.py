@@ -137,11 +137,23 @@ def _draw_resume(
 
     header_top = pdf.get_y()
     content_left = layout.margin_x + hdr_pad_x
+    content_right = PAGE_WIDTH_MM - layout.margin_right - hdr_pad_x
     content_top = header_top + hdr_pad_y
     inner_width = pdf.content_width - 2 * hdr_pad_x
 
     photo = _photo_bytes(resume.photo) if (resume.photo and include_photo) else None
-    text_width = inner_width - (photo_w + 6 if photo else 0)
+    # 照片占哪一侧由模板 `.header` 的 `flex-direction` 决定（elegant 是 `row-reverse`，
+    # DOM 顺序 `[文字块, 照片]` ⇒ 照片在**左**）。此前 PDF 恒画右侧、文字恒从左边距起笔。
+    # 两侧的"文字块宽度"是同一个式子（少掉照片宽 + 固定 6mm 间隙），差别只在**起点**平移；
+    # `header_photo_side` 缺省 `"right"` 时 `text_left` 就退回原 `content_left`，逐字节不变。
+    photo_left = bool(photo) and layout.header_photo_side == "left"
+    photo_box = photo_w + 6 if photo else 0.0
+    text_width = inner_width - photo_box
+    text_left = content_left + photo_box if photo_left else content_left
+    # 页头文字对齐：模板 `.header` 的 `text-align`（elegant 是 `center`）。
+    # `left` 是**原行为**，其余 7 个模板读到的就是它。
+    header_centered = layout.header_align == "center"
+    header_text_align = "C" if header_centered else "L"
 
     name_size = base * layout.name_ratio
     extra_size = base * layout.name_extra_ratio
@@ -206,7 +218,8 @@ def _draw_resume(
             # 坏图（裁剪/解码失败）由这里的兜底跳过照片，不阻断导出。
             pdf.image(
                 BytesIO(crop_image_to_cover(photo, photo_w / photo_h)),
-                x=PAGE_WIDTH_MM - layout.margin_right - hdr_pad_x - photo_w,
+                # 照片在左时贴着文字起点画；在右时贴着正文右边界（原行为）。
+                x=content_left if photo_left else content_right - photo_w,
                 y=content_top,
                 w=photo_w,
                 h=photo_h,
@@ -215,10 +228,17 @@ def _draw_resume(
             logger.warning("简历照片无法写入 PDF，已跳过")
 
     pdf.set_y(content_top)
-    pdf.set_x(content_left)
+    pdf.set_x(text_left)
     # 姓名（姓名字号/粗体/强调色）与性别（extra 字号/常规/muted）同块绘制，见 plan。
+    # `align` 决定这一块在 `text_width` 内居中还是贴左（模板 `.header` 的 `text-align`）。
     draw_name_gender(
-        pdf, resume.name, name_plan, width=text_width, name_size=name_size, extra_size=extra_size
+        pdf,
+        resume.name,
+        name_plan,
+        width=text_width,
+        name_size=name_size,
+        extra_size=extra_size,
+        align=layout.header_align,
     )
     pdf.set_text_color(*pdf.body_text)
     if intent_text:
@@ -226,14 +246,14 @@ def _draw_resume(
         pdf.set_font(FONT_FAMILY, "", intent_size * _PX_TO_PT)
         pdf.set_text_color(*pdf.muted_text)
         # 模板 `.header .intent { margin-top: calc(var(--fs) * N) }`；`ln` 会把 x 复位到左边距，
-        # 所以紧跟着重新 `set_x(content_left)`。
+        # 所以紧跟着重新 `set_x(text_left)`。
         pdf.ln(layout.gap_mm(layout.intent_gap))
-        pdf.set_x(content_left)
+        pdf.set_x(text_left)
         pdf.multi_cell(
             text_width,
             pdf.line_advance(intent_size),
             intent_text,
-            align="L",
+            align=header_text_align,
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
             markdown=has_bold(intent_text),
@@ -244,12 +264,12 @@ def _draw_resume(
         pdf.set_text_color(*pdf.muted_text)
         # 同上：`.header .contact { margin-top: calc(var(--fs) * N) }`。
         pdf.ln(layout.gap_mm(layout.contact_gap))
-        pdf.set_x(content_left)
+        pdf.set_x(text_left)
         pdf.multi_cell(
             text_width,
             pdf.line_advance(contact_size),
             contact,
-            align="L",
+            align=header_text_align,
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
             markdown=has_bold(contact),

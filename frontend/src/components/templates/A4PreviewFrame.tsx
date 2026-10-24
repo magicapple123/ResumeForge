@@ -30,6 +30,16 @@ interface Props {
    *   而且高度不会跟着卡片走——这正是这里加一个口径的原因。
    */
   fit?: "contain" | "width";
+  /**
+   * 文档是**几页 A4**（默认 1）。
+   *
+   * 「查看大图」要看的是一整份简历（上限 1–3 页），而页面 HTML 的 body 高度就是
+   * `页数 × A4`（后端 `render_html` 的 `page_limit`）。把 iframe 开成 1 页高会裁掉
+   * 后面几页、开成 1123px 固定高则会在 iframe **内部**多出一条滚动条——那正是
+   * "大图界面三个滚动条"里的一条。按页数给足高度后，iframe 自己不再滚，
+   * 整块只剩弹窗本体一条竖向滚动条。
+   */
+  pages?: number;
 }
 
 export default function A4PreviewFrame({
@@ -37,7 +47,10 @@ export default function A4PreviewFrame({
   title,
   maxHeight = "72vh",
   fit = "contain",
+  pages = 1,
 }: Props) {
+  /** 文档总高度：页数 × 单页高（取整页，避免半页露出下一条白边）。 */
+  const docHeight = A4_HEIGHT_PX * Math.max(1, Math.round(pages));
   const stageRef = useRef<HTMLDivElement>(null);
   // 初值给 1 而不是 0：容器尺寸量不到时（jsdom 不做布局）仍要渲染出内容，
   // 否则组件在测试里会"什么都不显示"，那是比缩放不准更糟的失败方式。
@@ -53,9 +66,7 @@ export default function A4PreviewFrame({
       if (!width || !height) return;
       // `width` 口径只认宽度：高度由 aspect-ratio 反推，所以两者永远同比例，不会被裁。
       setScale(
-        fit === "width"
-          ? width / A4_WIDTH_PX
-          : Math.min(width / A4_WIDTH_PX, height / A4_HEIGHT_PX),
+        fit === "width" ? width / A4_WIDTH_PX : Math.min(width / A4_WIDTH_PX, height / docHeight),
       );
     };
     // 放在 layout effect 里：首帧就按正确比例绘制，不会先大后小闪一下。
@@ -67,7 +78,7 @@ export default function A4PreviewFrame({
       observer?.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [fit, html]);
+  }, [fit, html, docHeight]);
 
   return (
     <div
@@ -75,13 +86,13 @@ export default function A4PreviewFrame({
       className="a4-preview-stage"
       style={
         fit === "width"
-          ? { aspectRatio: `${A4_WIDTH_PX} / ${A4_HEIGHT_PX}`, height: "auto" }
-          : { height: `min(${maxHeight}, ${A4_HEIGHT_PX}px)` }
+          ? { aspectRatio: `${A4_WIDTH_PX} / ${docHeight}`, height: "auto" }
+          : { height: `min(${maxHeight}, ${docHeight}px)` }
       }
     >
       <div
         className="a4-preview-paper"
-        style={{ width: Math.round(A4_WIDTH_PX * scale), height: Math.round(A4_HEIGHT_PX * scale) }}
+        style={{ width: Math.round(A4_WIDTH_PX * scale), height: Math.round(docHeight * scale) }}
       >
         <iframe
           className="a4-preview-frame"
@@ -91,7 +102,7 @@ export default function A4PreviewFrame({
           srcDoc={html}
           style={{
             width: A4_WIDTH_PX,
-            height: A4_HEIGHT_PX,
+            height: docHeight,
             transform: `scale(${scale})`,
           }}
         />

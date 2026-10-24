@@ -127,6 +127,25 @@
 .user-guide-steps {
   grid-area: steps;
   padding-top: 4px;
+  /* 左栏跟随滚动（2026-10-24 用户口径："上下滑时最左侧栏固定不动"）。
+     滚动容器是弹窗本体（`.ant-modal-body` 的 `overflowY: auto`），所以 sticky 的参照系
+     就是它；`align-self: start` 来自父级 `align-items: start`，不必重复写。
+     底色必须给：右栏正文会从它下面滚过去，透明会让两块文字叠在一起。 */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--rf-surface);
+}
+
+/* sticky 贴的是**滚动容器的 padding box 顶边**：body 自带 20px 上内边距时，滑起来会在
+   左栏上方漏出一条 20px 的正文（2026-10 踩过的同一个坑）。把内边距挪到内容容器上，
+   左栏就严格贴在弹窗标题栏下沿。 */
+.user-guide-modal .ant-modal-container > .ant-modal-body {
+  padding-top: 0;
+}
+
+.user-guide-modal-content {
+  padding-top: 20px;
 }
 
 /* 标题允许换行：中文标题在窄列里必须能折行，否则会被裁掉。 */

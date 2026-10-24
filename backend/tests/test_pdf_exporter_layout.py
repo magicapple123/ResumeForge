@@ -41,12 +41,21 @@ def test_resolve_layout_uses_template_defaults(name):
     期望值从 `TEMPLATE_LAYOUT_DEFAULTS` 读——它又被 `test_resume_layout.py` 拿模板 CSS
     逐条核对过。于是"PDF 默认行距 == 模板 CSS 行距"是**传递成立**的，而不是在测试里
     再抄一份常量（抄一份就等于又写了一遍"跟自己比"）。
+
+    **左右与上下分开断言**（P0-8）：模板 CSS 允许 `padding: 16mm 18mm` 这种两值简写，
+    上下取 `padding_mm`、左右取 `padding_sides_mm`（没声明则同为 `padding_mm`）。此前这里
+    断的是"四边都等于 `padding_mm`"——那恰好把"elegant 左右各窄 2mm"这个偏差写成了契约。
     """
     defaults = TEMPLATE_LAYOUT_DEFAULTS[name]
+    sides = defaults.get("padding_sides_mm")
 
     layout = resolve_layout(template=name, base_px=14.0, format_config={})
 
-    assert layout.margin_mm == defaults["padding_mm"]
+    horizontal = float(sides[0]) if sides is not None else float(defaults["padding_mm"])
+    assert layout.margin_left == horizontal
+    assert layout.margin_right == horizontal
+    assert layout.margin_top == defaults["padding_mm"]
+    assert layout.margin_bottom == defaults["padding_mm"]
     assert layout.line_height == defaults["line_height"]
     assert layout.section_gap == defaults["section_gap"]
 
@@ -253,7 +262,12 @@ def test_page_padding_override_moves_the_text_origin():
 
 @needs_font
 def test_template_page_padding_default_is_used_when_not_overridden():
-    """没设覆盖时，x 起点由**模板自己的页边距**决定，而不是某个统一常数。"""
+    """没设覆盖时，x 起点由**模板自己的页边距**决定，而不是某个统一常数。
+
+    比较的是 `resolve_layout` 给出的**左边距**而不是 `padding_mm`：模板 CSS 的两值简写
+    （compact `12mm 14mm`）让左右与上下不再相等（P0-8），拿 `padding_mm` 当左右边距会
+    算出一个渲染时根本不存在的差值。期望值仍从注册表派生，不抄常量。
+    """
     resume = _summary_only_resume(_filler(300))
 
     compact_x = min(
@@ -273,14 +287,16 @@ def test_template_page_padding_default_is_used_when_not_overridden():
         )
     )
 
-    assert minimal_x > compact_x  # minimal 18mm > compact 12mm
+    compact_left = resolve_layout(
+        template="compact", base_px=14.0, format_config=None
+    ).margin_left
+    minimal_left = resolve_layout(
+        template="minimal", base_px=14.0, format_config=None
+    ).margin_left
+
+    assert minimal_left > compact_left  # minimal 18mm > compact 14mm
     assert (minimal_x - compact_x) == pytest.approx(
-        (
-            TEMPLATE_LAYOUT_DEFAULTS["minimal"]["padding_mm"]
-            - TEMPLATE_LAYOUT_DEFAULTS["compact"]["padding_mm"]
-        )
-        * _MM_TO_PT,
-        abs=0.5,
+        (minimal_left - compact_left) * _MM_TO_PT, abs=0.5
     )
 
 

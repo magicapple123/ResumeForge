@@ -34,8 +34,10 @@
 import { SaveOutlined } from "@ant-design/icons";
 import { Button, Space } from "antd";
 import type { Ref } from "react";
-import { useEffect, useImperativeHandle, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useState } from "react";
 import type { ResumeContent } from "../../types";
+import { contentSignature } from "../../utils/contentSignature";
+import type { ResumeDraftStore } from "../../features/resume/resumeDraftContent";
 import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
 import { t } from "../../i18n";
 import EditorFooterBar from "../resume-editor/EditorFooterBar";
@@ -123,6 +125,15 @@ interface Props {
    * 时丢的东西完全不同，用同一句话会把"版式也会丢"这件事藏起来。
    */
   closeConfirmBody?: string;
+  /**
+   * 草稿通道（P0-7）：每次表单值变化把「按保存口径合并后的整份内容」写进去。
+   *
+   * 为什么是 store 而不是再挂一个回调：右栏（`ResumeWorkbenchLiveCanvas`）与中栏是三栏里的
+   * 两个兄弟，走 props 回传就会穿过 `ResumeZoomModal` 的 state，等于让"每键输入"重渲染
+   * 整个弹窗，而且草稿会沿着 props 变成 `content`（回灌，设计 §7 R1）。store 是外部对象，
+   * 只有订阅它的那个薄壳会重渲染。
+   */
+  draftStore?: ResumeDraftStore;
 }
 
 export default function ResumeWorkbenchEditorColumn({
@@ -140,7 +151,25 @@ export default function ResumeWorkbenchEditorColumn({
   pickTarget,
   hideActions = false,
   closeConfirmBody,
+  draftStore,
 }: Props) {
+  /**
+   * 两个草稿回调必须是**稳定引用**。
+   *
+   * 理由不是性能，是正确性：`useResumeEditorPanel` 里"表单被服务端内容重填"那条 effect
+   * 依赖 `onDraftReset`。每次渲染换一个新箭头函数 → 那条 effect 每渲染都跑 → `form.setFieldsValue`
+   * 把用户刚打的字一遍遍覆盖、草稿被一遍遍清空（表现为"输入框打不进字"）。
+   */
+  const handleDraftContent = useCallback(
+    (next: ResumeContent) => {
+      draftStore?.set(next, contentSignature(next));
+    },
+    [draftStore],
+  );
+  const handleDraftReset = useCallback(() => {
+    draftStore?.clear();
+  }, [draftStore]);
+
   const api = useResumeEditorPanel({
     active,
     content,
@@ -153,6 +182,9 @@ export default function ResumeWorkbenchEditorColumn({
     // 保存成功**不关**制作台：用户刚改完一句措辞，下一步往往是接着调参数、看右栏排版。
     // 保存成功的提示由宿主（`saveEditedResume`）给，这里不重复弹。
     onSaved: () => undefined,
+    // 只上行：签名用内容签名（同一份内容重复上报不会二次渲染，见 `resumeDraftContent`）。
+    onDraftContent: handleDraftContent,
+    onDraftReset: handleDraftReset,
   });
 
   // 脏值上报：底部那一排动作里的「手动调整」在有未保存内容时要禁用（两个编辑器同时开

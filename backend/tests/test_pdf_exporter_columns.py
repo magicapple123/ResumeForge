@@ -213,17 +213,26 @@ def test_plan_rows_pairs_in_order_and_keeps_a_lone_tail():
 
 @needs_font
 def test_an_empty_section_does_not_take_a_grid_cell():
-    """没有校园经历时，`项目经历` 必须与 `实习/工作经历` 同行——而不是与一个空格子并排。
+    """没有校园经历时，配对不该出现空洞——第一行仍是 `教育经历` + `实习/工作经历` 并排。
 
     这正是分栏第一版的真实 bug：按"注册表里七个键"配对，空分区占掉一格，后面全错位，
     同一份简历从 218mm 涨到 314mm。
+
+    默认分区顺序是 教育 → 实习 → 项目 → 技能 → 校园 → 荣誉 → 总结，所以去掉校园之后
+    的正确配对是 (教育, 实习) / (项目, 技能) / (荣誉, 总结)：空分区被跳过，后面的格子
+    只往前补，不会整行错位。
     """
     resume = _resume(campus=[])
     runs = _text_runs(build_resume_pdf(resume, template=_SPLIT, page_limit=1).content)
+    education = _title_run(runs, TITLES["education"])
     experience = _title_run(runs, TITLES["experience"])
+    assert experience[1] == pytest.approx(education[1], abs=0.5), "第一行没有并排"
+    assert experience[0] > education[0], "两个分区没有并排（x 相同）"
+
+    # 第二行从「项目经历」开始：空分区没有把后面的格子挤错位。
+    # 注意 PDF 的 y 轴朝上：下一行的 y **更小**。
     projects = _title_run(runs, TITLES["projects"])
-    assert experience[1] == pytest.approx(projects[1], abs=0.5), "两个分区不在同一行"
-    assert projects[0] > experience[0], "两个分区没有并排（x 相同）"
+    assert projects[1] < experience[1], "项目经历没有落到第二行"
 
 
 # ===== 5. 高于一页的分区降级为顺序渲染 =====

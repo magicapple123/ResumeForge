@@ -57,6 +57,16 @@ from .resume_template_tags import (
 #                         文字与底边线之间的 `header_pad_bottom`（× 字号），以及 modern 那种
 #                         **浅底色块**（`header_bg` = soft_accent、`header_pad_x/y`、`header_radius`，均 × 字号）。
 #                         此前 PDF 只画了 `header_gap`（下边距），classic 页头下那条 2px 蓝线整条缺失。
+#   header_align       ：页头文字的对齐（`left` / `center`）——对应模板 `.header` 的 `text-align`。
+#                         elegant 是 `text-align: center`，而 PDF 此前一律从左边距起笔、`align="L"`，
+#                         于是"优雅模板的姓名在草稿里居中、导出的 PDF 靠左"。
+#   header_photo_side  ：页头照片在哪一侧（`left` / `right`）——对应模板 `.header` 的 `flex-direction`
+#                         （`row-reverse` ⇒ 照片在左，DOM 顺序是 `[文字块, 照片]`）。PDF 此前恒画右侧。
+#   padding_sides_mm   ：左右两道页边距（mm，`(左, 右)`）；缺键 = 沿用 `padding_mm`。
+#                         模板 CSS 允许 `padding: 16mm 18mm` 这种"上下 / 左右"两值简写，
+#                         而注册表此前只有一个 `padding_mm`，PDF 只能四边相等（elegant 16/18、
+#                         compact 12/14 各差 2mm）。`padding_mm` **保持不变**，它是"上下"的默认值
+#                         （页边距滑杆的默认值与 `template_layouts` 仍在读它）。
 # 这些数字同样由 `test_resume_layout.py` 拿模板 CSS 逐条核对，抄错会让 PDF 与预览再次分叉。
 #
 # ===== 技能标签的形状与正文分栏 =====
@@ -67,9 +77,11 @@ from .resume_template_tags import (
 # 500 行预算（`tests/test_file_size_budget.py`），故拆到同目录的附表模块。
 # **`TEMPLATE_LAYOUT_DEFAULTS` 仍是唯一对外入口**——它是母表 `_BASE_DEFAULTS` 与两张附表的
 # 合并视图，`resolve_layout` / `skill_tags` / `columns` 与守卫测试都只认它，不看附表。
-_BASE_DEFAULTS: dict[str, dict[str, float | str]] = {
+_BASE_DEFAULTS: dict[str, dict[str, float | str | tuple[float, float]]] = {
     "classic": {
         "padding_mm": 14.0,
+        "header_align": "left",
+        "header_photo_side": "right",
         "line_height": 1.7,
         "section_gap": 1.3,
         "name_ratio": 1.86,
@@ -110,6 +122,8 @@ _BASE_DEFAULTS: dict[str, dict[str, float | str]] = {
     },
     "modern": {
         "padding_mm": 14.0,
+        "header_align": "left",
+        "header_photo_side": "right",
         "line_height": 1.72,
         "section_gap": 1.2,
         "name_ratio": 2.0,
@@ -150,6 +164,11 @@ _BASE_DEFAULTS: dict[str, dict[str, float | str]] = {
     },
     "compact": {
         "padding_mm": 12.0,
+        # 模板 CSS 是两值简写 `padding: 12mm 14mm`：上下 12、左右 14。注册表只有
+        # `padding_mm` 时 PDF 只能四边 12，正文比草稿宽 4mm（每行多塞一两个字）。
+        "padding_sides_mm": (14.0, 14.0),
+        "header_align": "left",
+        "header_photo_side": "right",
         "line_height": 1.55,
         "section_gap": 0.85,
         "name_ratio": 1.6,
@@ -190,6 +209,13 @@ _BASE_DEFAULTS: dict[str, dict[str, float | str]] = {
     },
     "elegant": {
         "padding_mm": 16.0,
+        # 模板 CSS `padding: 16mm 18mm`：上下 16、左右 18（差 2mm，已超过 1mm 的可见阈值）。
+        "padding_sides_mm": (18.0, 18.0),
+        # 优雅模板是唯一"页头居中 + 照片在左"的模板：
+        # `.header { flex-direction: row-reverse; text-align: center }`（DOM 顺序是
+        # `[文字块, 照片]`，`row-reverse` 之后照片落到左侧）。PDF 此前一律左对齐、照片画右侧。
+        "header_align": "center",
+        "header_photo_side": "left",
         "line_height": 1.76,
         "section_gap": 1.35,
         "name_ratio": 1.9,
@@ -230,6 +256,8 @@ _BASE_DEFAULTS: dict[str, dict[str, float | str]] = {
     },
     "technical": {
         "padding_mm": 12.0,
+        "header_align": "left",
+        "header_photo_side": "right",
         "line_height": 1.6,
         "section_gap": 1.0,
         "name_ratio": 1.8,
@@ -270,6 +298,8 @@ _BASE_DEFAULTS: dict[str, dict[str, float | str]] = {
     },
     "minimal": {
         "padding_mm": 18.0,
+        "header_align": "left",
+        "header_photo_side": "right",
         "line_height": 1.8,
         "section_gap": 1.45,
         "name_ratio": 1.75,
@@ -308,8 +338,56 @@ _BASE_DEFAULTS: dict[str, dict[str, float | str]] = {
         "muted": "#767a80",
         "line": "#e6e6e6",
     },
+    "scholar": {
+        "padding_mm": 12.0,
+        # 模板 CSS `padding: 12mm 13mm`：上下 12、左右 13（两值简写，PDF 四边相等会宽 1mm）。
+        "padding_sides_mm": (13.0, 13.0),
+        "header_align": "left",
+        "header_photo_side": "right",
+        "line_height": 1.5,
+        "section_gap": 0.75,
+        "name_ratio": 2.0,
+        "name_extra_ratio": 0.9,
+        "intent_ratio": 0.95,
+        "contact_ratio": 0.88,
+        "section_title_ratio": 1.06,
+        "entry_title_ratio": 1.0,
+        "entry_meta_ratio": 0.88,
+        "entry_sub_ratio": 0.88,
+        "tag_font_ratio": 0.9,
+        "header_gap": 0.6,
+        "intent_gap": 0.3,
+        "contact_gap": 0.15,
+        "entry_gap": 0.42,
+        "sub_gap_top": 0.08,
+        "sub_gap_bottom": 0.16,
+        "li_gap": 0.1,
+        # 页头不画线（参考版式靠留白分段），所以底边线宽度/颜色都留空。
+        "header_border_width": 0.0,
+        "header_border_color": "none",
+        "header_pad_bottom": 0.0,
+        "header_bg": "none",
+        "header_pad_x": 0.0,
+        "header_pad_y": 0.0,
+        "header_radius": 0.0,
+        "section_title_style": "underline",
+        "section_title_text": "body",
+        "section_title_align": "left",
+        "section_title_gap": 0.35,
+        "section_title_pad_x": 0.0,
+        "section_title_pad_y": 0.14,
+        # 右上角方形照片：宽高同比（无照片时宏不渲染，不留空洞）。
+        "photo_width_ratio": 5.0,
+        "photo_height_ratio": 5.0,
+        "accent": "#1a1a1a",
+        "text": "#1a1a1a",
+        "muted": "#4f4f4f",
+        "line": "#8f8f8f",
+    },
     "editorial": {
         "padding_mm": 18.0,
+        "header_align": "left",
+        "header_photo_side": "right",
         "line_height": 1.75,
         "section_gap": 1.35,
         "name_ratio": 1.9,
@@ -350,6 +428,8 @@ _BASE_DEFAULTS: dict[str, dict[str, float | str]] = {
     },
     "split": {
         "padding_mm": 12.0,
+        "header_align": "left",
+        "header_photo_side": "right",
         "line_height": 1.6,
         "section_gap": 1.0,
         "name_ratio": 1.8,
@@ -391,7 +471,7 @@ _BASE_DEFAULTS: dict[str, dict[str, float | str]] = {
 }
 
 
-TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str | bool | int]] = {
+TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str | bool | int | tuple[float, float]]] = {
     # 合并视图：**母表 + 标签附表 + 分栏附表 + 列表缩进附表**。顺序有意义（后者覆盖前者），
     # 但各表键不重叠，所以实际只是把几组键并成一条 `dict`；`TEMPLATE_LAYOUT_DEFAULTS` 借此
     # 保持"每个模板一份完整取值"的对外形态，下游不必知道内部拆成了几个文件。
@@ -405,7 +485,9 @@ TEMPLATE_LAYOUT_DEFAULTS: dict[str, dict[str, float | str | bool | int]] = {
 }
 
 
-def template_layout_defaults(name: str) -> dict[str, float | str | bool | int]:
+def template_layout_defaults(
+    name: str,
+) -> dict[str, float | str | bool | int | tuple[float, float]]:
     """某个模板的版式与配色默认值；未知模板退回经典模板的那一组。"""
     return TEMPLATE_LAYOUT_DEFAULTS.get(
         (name or "").strip(), TEMPLATE_LAYOUT_DEFAULTS[DEFAULT_TEMPLATE]

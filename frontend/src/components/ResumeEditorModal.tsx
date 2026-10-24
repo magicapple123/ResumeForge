@@ -11,7 +11,7 @@
  * 表单主体、草稿条、标签页与那个唯一的 `<Form>` 在
  * `resume-editor/ResumeEditorPanel.tsx`；脏值/草稿/历史/提交的判据在
  * `resume-editor/useResumeEditorPanel.tsx`。抽出来的原因不是"文件太长"本身，而是
- * **制作台中栏要挂同一份主体**：两份实现迟早在"能不能改照片、有没有写作增强"上分叉。
+ * **制作台中栏要挂同一份主体**：两份实现迟早在"能不能改照片、有没有草稿"上分叉。
  */
 import { Grid, Modal, Space } from "antd";
 import type { ReactNode } from "react";
@@ -35,7 +35,12 @@ interface Props {
   referencePanel?: ReactNode;
   /** 从预览点击进入时使用的结构化字段路径，如 projects.0.description.1。 */
   initialTarget?: string | null;
-  /** 提供后启用「写作增强」标签页（STAR/润色/翻译/话术，结果回填个人总结）。 */
+  /**
+   * 这份草稿属于哪份简历（`resume.edit#<id>`）。
+   *
+   * 原「写作增强」页签已搬到右键菜单（2026-10-24），这个字段现在只用来给草稿分槽——
+   * 没有它，所有"自行编写"的入口会共用 `resume.edit#new` 同一个槽。
+   */
   resumeId?: number;
   /** 草稿作用域（缺省 `resume.edit#<resumeId|new>`）。
    *

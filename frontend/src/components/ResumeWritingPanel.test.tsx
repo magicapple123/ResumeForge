@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 简历写作增强面板：操作切换、调用接口、结果展示与回填。 */
+/** 简历写作增强面板：操作切换、调用接口、结果展示与复制。 */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
 import ResumeWritingPanel from "./ResumeWritingPanel";
 
 const apiMocks = vi.hoisted(() => ({
@@ -12,18 +13,23 @@ const apiMocks = vi.hoisted(() => ({
   translateResumeText: vi.fn(),
 }));
 
-vi.mock("../api/resumeWriting", () => apiMocks);
+const clipboardMock = vi.hoisted(() => ({ copyText: vi.fn() }));
 
-function renderPanel(onApply: (text: string) => void = vi.fn()) {
+vi.mock("../api/resumeWriting", () => apiMocks);
+vi.mock("../utils/clipboard", () => clipboardMock);
+
+function renderPanel() {
   return render(
     <AntdApp>
-      <ResumeWritingPanel resumeId={7} initialText="负责后端服务开发" onApply={onApply} />
+      <ResumeWritingPanel resumeId={7} initialText="负责后端服务开发" />
     </AntdApp>,
   );
 }
 
 beforeEach(() => {
   for (const mock of Object.values(apiMocks)) mock.mockReset();
+  clipboardMock.copyText.mockReset();
+  clipboardMock.copyText.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -32,18 +38,47 @@ afterEach(() => {
 });
 
 describe("ResumeWritingPanel", () => {
-  it("STAR 改写调用接口、展示结果并可回填", async () => {
+  it("没有可写目标时动作是「复制」（回填无处可去）", async () => {
     apiMocks.rewriteStar.mockResolvedValue({ result: "负责后端服务开发，性能提升 30%" });
-    const onApply = vi.fn();
-    renderPanel(onApply);
+    renderPanel();
 
     fireEvent.click(screen.getByRole("button", { name: /生\s*成/ }));
 
     expect(await screen.findByText(/性能提升 30%/)).toBeInTheDocument();
     expect(apiMocks.rewriteStar).toHaveBeenCalledWith(7, "负责后端服务开发");
 
-    fireEvent.click(screen.getByRole("button", { name: "回填" }));
-    expect(onApply).toHaveBeenCalledWith("负责后端服务开发，性能提升 30%");
+    // 不传 `onApply` = 宿主没有可写目标（右键落在普通段落上），此时只能复制。
+    expect(screen.queryByRole("button", { name: "回填" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /复\s*制/ }));
+    expect(clipboardMock.copyText).toHaveBeenCalledWith("负责后端服务开发，性能提升 30%");
+  });
+
+  it("有可写目标时动作是「回填」：结果交给宿主写回选区，不碰剪贴板", async () => {
+    apiMocks.rewriteStar.mockResolvedValue({ result: "改写后的句子" });
+    const onApply = vi.fn();
+    render(
+      <AntdApp>
+        <ResumeWritingPanel resumeId={7} initialText="负责后端服务开发" onApply={onApply} />
+      </AntdApp>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /生\s*成/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /回\s*填/ }));
+
+    expect(onApply).toHaveBeenCalledWith("改写后的句子");
+    // 回填与复制是两条互斥的出路：能写回就不该再往剪贴板塞一份。
+    expect(clipboardMock.copyText).not.toHaveBeenCalled();
+  });
+
+  it("复制失败时给出可操作的提示，而不是假装成功", async () => {
+    apiMocks.rewriteStar.mockResolvedValue({ result: "结果文本" });
+    clipboardMock.copyText.mockResolvedValue(false);
+    renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: /生\s*成/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /复\s*制/ }));
+
+    expect(await screen.findByText(t("writing.copy.failed"))).toBeInTheDocument();
   });
 
   it("话术生成展示三种版式", async () => {

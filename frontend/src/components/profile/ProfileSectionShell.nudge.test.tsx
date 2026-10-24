@@ -90,10 +90,10 @@ describe("分区微调按钮（上移/下移）", () => {
   });
 
   it("边界 disabled：第 1 个可拖分区的 ↑ 禁用，末位的 ↓ 禁用，中间两者可用", () => {
-    // 默认序 experiences（order 1，basic_info 之后第一位）。
-    const { unmount: unmountFirst } = render(<NudgeHarness order="experiences" />);
-    expect(screen.getByRole("button", { name: "上移实习/工作经历" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "下移实习/工作经历" })).toBeEnabled();
+    // 默认序第一项是页眉 basic_info（不可拖），第 1 个**可拖**分区是 educations（order 1）。
+    const { unmount: unmountFirst } = render(<NudgeHarness order="educations" />);
+    expect(screen.getByRole("button", { name: "上移教育经历" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "下移教育经历" })).toBeEnabled();
     unmountFirst();
 
     // 末位 summary。

@@ -73,6 +73,13 @@ class ResumeLayout:
     sub_gap_top: float
     sub_gap_bottom: float
     li_gap: float
+    # ===== 页头的"对齐"与"照片侧"（来自模板 `.header` 的 CSS）=====
+    # 模板 `.header` 除了装饰（底边线 / 底色块）还声明了两件**版面**上的事，此前 PDF 完全没读：
+    # `text-align`（elegant = center）与 `flex-direction`（elegant = row-reverse ⇒ 照片在左）。
+    # 于是"优雅模板在草稿里姓名居中、照片在左；导出的 PDF 姓名靠左、照片在右"。
+    # 缺省 `left` / `right` 与改动前逐字节等价，其余 7 个模板走原分支。
+    header_align: str
+    header_photo_side: str
     # ===== 页头装饰（底边线 / modern 的浅底色块，见模板 `.header` 的 CSS）=====
     header_border_width: float
     header_border_color: str
@@ -169,7 +176,9 @@ def _resolve_page_margins(
     2. 缺的边跟 ``format_config.page_padding``（"总"）；
     3. 没有"总"时 ``margin_mm`` 收进 ``page_padding`` 的合法区间后作回落值——
        旧客户端的"只给 margin_mm"行为保持不变；
-    4. 三者都没有，用模板自带的 ``padding_mm``。
+    4. 三者都没有，用模板自带的 ``padding_mm``；**左右两道边**改为模板声明的
+       ``padding_sides_mm``（`padding: 16mm 18mm` 这种两值简写的右半段）。第 4 条只在
+       "零覆盖"时成立——用户显式设过页边距时四边一律以用户的值为准，产物逐字节不变。
 
     实现**刻意委托**给 ``resume_layout_overrides.resolve_page_margins``：草稿 HTML 的
     ``format_css`` 也读那一份，两边各写一遍判断就会出现"预览 8/12/12/12、PDF 8/8/8/8"
@@ -181,7 +190,12 @@ def _resolve_page_margins(
     """
     from ..resume.resume_layout_overrides import resolve_page_margins
 
-    return resolve_page_margins(overrides, float(defaults["padding_mm"]), margin_mm)
+    return resolve_page_margins(
+        overrides,
+        float(defaults["padding_mm"]),
+        margin_mm,
+        defaults.get("padding_sides_mm"),
+    )
 
 
 def resolve_layout(
@@ -264,6 +278,11 @@ def resolve_layout(
         sub_gap_top=float(defaults["sub_gap_top"]),
         sub_gap_bottom=float(defaults["sub_gap_bottom"]),
         li_gap=float(defaults["li_gap"]),
+        # 页头的对齐与照片侧：模板 `.header` 的 `text-align` / `flex-direction` 的结构化映射。
+        # `left` / `right` 是**原行为**（改动前 PDF 恒为左对齐、照片恒在右），所以缺键或
+        # 非 elegant 模板读到的就是"什么都不变"。
+        header_align=str(defaults.get("header_align", "left")),
+        header_photo_side=str(defaults.get("header_photo_side", "right")),
         header_border_width=float(defaults["header_border_width"]),
         header_border_color=str(defaults["header_border_color"]),
         header_pad_bottom=float(defaults["header_pad_bottom"]),

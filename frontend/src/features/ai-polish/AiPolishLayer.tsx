@@ -18,15 +18,18 @@ import { createPortal } from "react-dom";
 import { layer } from "../../theme/tokens";
 import AiPolishCard from "./AiPolishCard";
 import SelectionContextMenu from "./SelectionContextMenu";
+import { useActiveWritingResume } from "../resume-writing/activeResume";
+import ResumeWritingModal from "../resume-writing/ResumeWritingModal";
 import { cardAnchor, clamp, VIEWPORT_MARGIN } from "./overlayGeometry";
 import type { Anchor, MenuState } from "./overlayGeometry";
+import { replaceSelection } from "./replaceSelection";
 import { getSelectionTarget, type SelectionTarget } from "./selectionTarget";
 import "../../styles/aiPolish.css";
 
-/** 菜单尺寸的估算值：只用于"不要整块掉出视口"的夹取（5 项 ≈ 150×210）。 */
-const MENU_WIDTH = 150;
+/** 菜单尺寸的估算值：只用于"不要整块掉出视口"的夹取（6 项 ≈ 160×252）。 */
+const MENU_WIDTH = 160;
 /** 右键菜单的高度估算：只用于把菜单本身夹进视口。 */
-const MENU_HEIGHT = 210;
+const MENU_HEIGHT = 252;
 
 /**
  * 当前打开的 antd 弹窗里，卡片应该挂到哪一层。
@@ -62,6 +65,19 @@ export default function AiPolishLayer() {
     host: HTMLElement | null;
   } | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  /** 当前打开的简历（由详情弹窗登记）；`null` 时右键菜单不显示「写作增强」。 */
+  const activeResumeId = useActiveWritingResume();
+  /**
+   * 写作增强弹窗：打开时选中的那段文字，**以及它的可写位置**。
+   *
+   * `target` 必须一起存下来：面板关掉时选区的 DOM 选区早就没了，但 `target` 里带着
+   * 元素与偏移，`replaceSelection` 仍能精确换掉那一段——这就是「回填」。
+   * `target === null`（右键落在普通段落上）时没有可写目标，面板只能给「复制」。
+   */
+  const [writing, setWriting] = useState<{
+    text: string;
+    target: SelectionTarget | null;
+  } | null>(null);
 
   useEffect(() => {
     const onContextMenu = (event: MouseEvent) => {
@@ -139,6 +155,40 @@ export default function AiPolishLayer() {
     setCard(null);
   }, []);
 
+  /**
+   * 打开写作增强：把选中的文字带进去。
+   *
+   * 选区的 `text` 在菜单项被点掉之后就没了（菜单会先 `onClose`），所以必须在
+   * **打开这一刻**从 `menu` 里取值存下来，不能等弹窗渲染时再去读选区。
+   */
+  const openWriting = useCallback(() => {
+    const text = menu?.text ?? "";
+    if (!text.trim()) return;
+    setWriting({ text, target: menu?.target ?? null });
+    setMenu(null);
+  }, [menu]);
+
+  /**
+   * 回填：把结果写回刚才选中的那一段。
+   *
+   * **只有真的写进去了才关弹窗**：写不进去（选区已随页面刷新失效、超出 `maxLength`）
+   * 时留着面板，用户还能改个动作重来，或者手动复制。
+   */
+  const applyWriting = useCallback(
+    (result: string): boolean => {
+      const target = writing?.target;
+      if (!target) return false;
+      const outcome = replaceSelection(target, result);
+      if (outcome.ok) setWriting(null);
+      return outcome.ok;
+    },
+    [writing],
+  );
+
+  const closeWriting = useCallback(() => {
+    setWriting(null);
+  }, []);
+
   return createPortal(
     <>
       {menu && (
@@ -149,8 +199,20 @@ export default function AiPolishLayer() {
           text={menu.text}
           onClose={closeMenu}
           onAiPolish={openCard}
+          // 只有"当前在看某份简历"时才有写作增强：四个动作都要 resume_id。
+          onWriting={activeResumeId === null ? null : openWriting}
         />
       )}
+      {writing && activeResumeId !== null ? (
+        <ResumeWritingModal
+          open
+          resumeId={activeResumeId}
+          text={writing.text}
+          // 有可写目标才给「回填」；否则面板退回「复制」（见 `ResumeWritingPanel`）。
+          onApply={writing.target ? applyWriting : undefined}
+          onClose={closeWriting}
+        />
+      ) : null}
       {card &&
         createPortal(
           <div className="rf-ai-polish-host" ref={cardRef} style={{ zIndex: layer.aiPolish }}>

@@ -27,6 +27,25 @@ export interface CachedPreview {
   overflow: boolean;
 }
 
+/**
+ * 面板手上的一份"已经排好的那一版"：这份是按哪组参数排的 + 面板持有的 objectURL +
+ * 缓存里那三个数量。字段与 `CachedPreview` 同名同义，但**多出 `key` / `url`、没有 `blob`**
+ * （字节已经在面板手里变成 URL 了），所以是并列的类型而不是继承。
+ *
+ * 定义放在这里而不是面板里（2026-11）：`ExactPreviewPanel` 贴着 500 行预算，而这个类型
+ * 就是"缓存的读结果 + URL"这一组合。URL 的生命周期仍归面板，本模块一行都不碰。
+ */
+export interface PreviewShot {
+  /** 这份是按哪一组参数排的（面板的 `formatKey`）：切回同一组参数时据此判定"已经有图了"。 */
+  key: string;
+  /** 面板持有的 objectURL；释放时机由面板决定。 */
+  url: string;
+  pages: number | null;
+  /** 按当时那份版式真实需要的页数（未截断）。 */
+  pagesNeeded: number | null;
+  overflow: boolean;
+}
+
 /** 最多留几份：一轮"改字号 → 改行距 → 改回来"最多用到 3~4 份。 */
 const MAX_ENTRIES = 8;
 /** 总字节上限：单份约 100–400KB，8 份仍在 3MB 内；字体/照片多的简历也不会失控。 */

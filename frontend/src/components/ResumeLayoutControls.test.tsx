@@ -132,7 +132,7 @@ describe("ResumeLayoutControls · 生成时默认顺序跟随「我的资料」�
     const labels = Array.from(list.querySelectorAll(".resume-section-order-label")).map(
       (node) => node.textContent,
     );
-    expect(labels[0]).toBe("个人总结");
+    expect(labels[0]).toBe("教育经历");
   });
 
   it("生成场景的「恢复默认」写回资料顺序", async () => {
@@ -210,13 +210,13 @@ describe("ResumeLayoutControls · 板块顺序", () => {
       (node) => node.textContent,
     );
     expect(labels).toEqual([
-      "个人总结",
       "教育经历",
       "实习/工作经历",
-      "校园经历",
       "项目经历",
       "专业技能",
+      "校园经历",
       "荣誉奖项",
+      "个人总结",
     ]);
   });
 
@@ -224,19 +224,19 @@ describe("ResumeLayoutControls · 板块顺序", () => {
     const onChange = renderControls();
     await openOrderPanel();
 
-    // 把「项目经历」（默认第 5 位）上移一格。
+    // 把「项目经历」（默认第 3 位）上移一格。
     fireEvent.click(screen.getByRole("button", { name: "把项目经历上移" }));
 
     expect(onChange).toHaveBeenCalledTimes(1);
     const nextLayout = onChange.mock.calls[0][0] as ResumeLayout;
     expect(nextLayout.format_config?.section_order).toEqual([
-      "summary",
       "education",
-      "experience",
       "projects",
-      "campus_experience",
+      "experience",
       "skills",
+      "campus_experience",
       "awards",
+      "summary",
     ]);
     // 其余版式覆盖不被这次操作清掉。
     expect(nextLayout.template).toBe("classic");

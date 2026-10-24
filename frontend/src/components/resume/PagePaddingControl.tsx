@@ -38,6 +38,7 @@ import {
   clampPageMargin,
 } from "../../utils/pageMargins";
 import { pagePaddingProbeCss } from "../../utils/resumeFormatProbe";
+import ParamResetButton from "./ParamResetButton";
 
 /**
  * 提交防抖（毫秒）。
@@ -73,6 +74,8 @@ interface Props {
   disabled?: boolean;
   /** 没设过覆盖时显示的来源标签：随模板 / 随版式（选了版式预设时）。 */
   defaultHint?: string;
+  /** 「恢复到打开时的值」：`visible` 为真时长出右侧那颗 ↺（见 `utils/paramRestore`）。 */
+  restore?: { visible: boolean; onReset: () => void };
   /** 传数值 = 写入覆盖（并清掉四条支路）；传 `null` = 连四条支路一起清（回到随模板）。 */
   onChange: (pagePadding: number | null) => void;
   /**
@@ -89,6 +92,7 @@ export default function PagePaddingControl({
   margins,
   disabled = false,
   defaultHint,
+  restore,
   onChange,
   onProbe,
 }: Props) {
@@ -229,7 +233,13 @@ export default function PagePaddingControl({
             再标"随模板"会让人以为模板一改自己的值也会跟着变。位置始终保留，
             否则拖一下滑杆读数就会右移。 */}
         <span className={`resume-measure-source${customized ? " is-empty" : ""}`}>
-          {customized ? "" : (defaultHint ?? t("resume.measure.hintTemplate"))}
+          {restore?.visible ? (
+            <ParamResetButton label={t("resume.pagePadding.label")} onReset={restore.onReset} />
+          ) : customized ? (
+            ""
+          ) : (
+            (defaultHint ?? t("resume.measure.hintTemplate"))
+          )}
         </span>
       </span>
     </Space>

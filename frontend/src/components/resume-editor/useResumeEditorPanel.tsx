@@ -33,7 +33,6 @@ import { summarizeDraftDiff, type DraftDiffEntry } from "../../utils/draftDiff";
 import { formatErrorGuidance } from "../../api/errorGuidance";
 import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
 import { useFormShortcutHistory } from "../../features/shortcuts/useFormShortcutHistory";
-import ResumeWritingPanel from "../ResumeWritingPanel";
 import ResumeBasicInfoTab from "../resume/ResumeBasicInfoTab";
 import { useBeforeUnloadGuard } from "../resume/useBeforeUnloadGuard";
 import {
@@ -81,6 +80,25 @@ export interface ResumeEditorPanelOptions {
    * 这两件事时，中栏只能在"存完就关"与"Esc 关不掉"之间二选一。
    */
   onSaved?: () => void;
+  /**
+   * **只上行**的草稿通道（制作台右栏实时预览用，P0-7）。
+   *
+   * 每次表单值变化都上报「按保存口径合并后的整份内容」——合并口径与 `onSave` 里那一句
+   * **是同一份实现**（`mergePartial`），所以"预览所见"与"保存所得"在机械上不可能不同。
+   *
+   * 刻意**不是** `content` 的回传：让草稿沿着 props 变成 `content`，本文件那条"内容签名
+   * 变了就重填表单"的守卫会命中，用户每打一个字就被服务端那份覆盖（设计 §7 R1，数据丢失）。
+   */
+  onDraftContent?: (content: ResumeContent) => void;
+  /**
+   * 草稿作废：右栏回落到宿主那一版 html。
+   *
+   * **三个调用点缺一不可**（漏一处就是"存完预览闪回旧内容"，设计 §7 R2）：
+   * 1. 内容签名变化的重填（`form.setFieldsValue(syncedContent)` 那条 effect）；
+   * 2. 放弃修改（`handleDiscard`）；
+   * 3. 保存成功（`handleFinish`）。
+   */
+  onDraftReset?: () => void;
 }
 
 export interface ResumeEditorPanelApi {
@@ -104,12 +122,15 @@ export interface ResumeEditorPanelApi {
   fillSummary: () => void;
   fillContextValue: ProfileFillContextValue | null;
   /**
-   * `<Form onValuesChange>` 的处理：置脏 + 记一次可撤回的历史。
+   * `<Form onValuesChange>` 的处理：置脏 + 记一次可撤回的历史 + 上报草稿通道。
    *
    * 放在 API 里而不是让视图自己写一个空函数：脏值与历史是**状态机的两件事**，
    * 视图重复实现一次就会出现"改了但保存按钮不亮"。
+   *
+   * `allValues`（第二个参数，antd 已透传）是上报实时预览的依据：只拿 `changedValues`
+   * 拼不出整份内容，而预览要的是整份。
    */
-  onValuesChange: () => void;
+  onValuesChange: (changed: unknown, allValues: ResumeContent) => void;
   /** `<Form onFinish>`：合并照片后交给宿主的 `onSave`。 */
   onFinish: (values: ResumeContent) => void;
   /** 提交（= `form.submit()` → `onSave`）；弹窗 footer 与中栏动作条共用。 */
@@ -154,6 +175,8 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     onSave,
     onExit,
     onSaved,
+    onDraftContent,
+    onDraftReset,
   } = options;
   const { message } = App.useApp();
   const [form] = Form.useForm<ResumeContent>();
@@ -165,6 +188,22 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     [form],
   );
   const [saving, setSaving] = useState(false);
+  /**
+   * 表单值 → 完整正文的**唯一**合并口径（保存与实时预览共用这一句）。
+   *
+   * 为什么必须共用：`photo` 不在编辑表单里（它是 base64 图片，走单独的上传校验），所以
+   * "表单值"永远缺这一项。保存时保留原始的 `photo`、预览时也保留原始的 `photo`——两处
+   * 各写一份，就会出现"预览里照片没了、保存后又回来"这种谁也说不清的差异。
+   *
+   * 返回 `null` = 还没有服务端内容（新建流程的只读场景），调用方自己决定怎么处理。
+   */
+  const mergePartial = useCallback(
+    (values: Partial<ResumeContent> | undefined): ResumeContent | null => {
+      if (!content) return null;
+      return { ...content, ...(values ?? {}), photo: content.photo };
+    },
+    [content],
+  );
   /** 清草稿的稳定入口（见 `handleDiscard` 里的说明：绕开 onDiscard ↔ clearDraft 的循环）。 */
   const clearDraftRef = useRef<() => void>(() => {});
   // 草稿（B6）只把受控值递进去：作用域、防抖写入、"点了才应用"全在 `useEditorDraftBar`。
@@ -221,8 +260,11 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     if (content) form.setFieldsValue(content);
     resetFormHistory();
     clearDraftRef.current();
+    // 草稿通道也要一起复位（R2 第 2 处）：右栏此刻还显示着"被放弃的那一版"，
+    // 不复位就会出现"界面上写着已放弃、纸上还是放弃前的内容"。
+    onDraftReset?.();
     onExit?.();
-  }, [content, form, onExit, resetFormHistory]);
+  }, [content, form, onDraftReset, onExit, resetFormHistory]);
 
   // 草稿恢复与关闭分级：状态机在 `resume-editor/useEditorDraftBar` 里，
   // 这里只提供"恢复后怎么落到表单"和"确认后各自做什么"。
@@ -320,6 +362,10 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
   useEffect(() => {
     if (!active || !syncedContent) return;
     form.setFieldsValue(syncedContent);
+    // 表单被服务端内容覆盖了 → 草稿通道必须作废（R2 第 1 处）。放在这条 effect 里而不是
+    // 上面那个渲染期守卫里：守卫是在 render 阶段跑的，从那里触发 store 通知会让别的组件
+    // 在本次渲染还没结束时就 setState（React 会警告并可能丢更新）。
+    onDraftReset?.();
     // 换了/重开了这份简历：历史清空，以刚载入的内容为基线（撤回不该跨简历生效）。
     resetFormHistory();
     const target = initialTarget ? resolveEditorTarget(initialTarget) : null;
@@ -327,7 +373,7 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     // 滚动 + 聚焦的实现在 `editorFieldScroll`：与"点纸面定位"共用同一条，
     // 两个入口的"滚几次、什么时候聚焦"才不会各自漂。
     return scrollAndFocusEditorField(form, target.name);
-  }, [active, form, initialTarget, resetFormHistory, syncedContent]);
+  }, [active, form, initialTarget, onDraftReset, resetFormHistory, syncedContent]);
 
   /*
    * 「点纸面字段 → 定位输入框」（制作台专用）。
@@ -366,36 +412,27 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
       { key: "projects", label: t("editor.tab.projects"), children: <ProjectEditor /> },
       { key: "skills", label: t("editor.tab.skills"), children: <SkillEditor /> },
       { key: "awards", label: t("editor.tab.awards"), children: <AwardEditor /> },
-      ...(resumeId
-        ? [
-            {
-              key: "writing",
-              label: t("editor.tab.writing"),
-              children: (
-                <ResumeWritingPanel
-                  resumeId={resumeId}
-                  initialText={content?.summary ?? ""}
-                  onApply={(text) => form.setFieldValue("summary", text)}
-                />
-              ),
-            },
-          ]
-        : []),
     ],
+    // 原「写作增强」页签已搬到右键菜单（2026-10-24）：选中一段文字右键即可，
+    // 不必"复制 → 切页签 → 粘贴"三步。入口见 `features/resume-writing/ResumeWritingModal`。
     // summarySource 决定「填入个人总结」是否出现；fillSummary 已用 useCallback 固定
     // （它自己依赖 setFormValue），只在值真的变时才重建标签页。
-    [resumeId, content, form, summarySource, fillSummary],
+    [summarySource, fillSummary],
   );
 
   const handleFinish = async (values: ResumeContent) => {
-    if (!content) return;
+    const merged = mergePartial(values);
+    if (!merged) return;
     setSaving(true);
     try {
-      // 照片不在本次编辑表单中，始终保留已校验的原始值。
-      await onSave({ ...content, ...values, photo: content.photo });
+      // 照片不在本次编辑表单中，始终保留已校验的原始值（口径见 `mergePartial`）。
+      await onSave(merged);
       setDirty(false);
       // 存进去了就没有"没提交的草稿"了：清早了等于"保存失败也把内容扔了"，所以放在这里。
       draftBar.clearDraft();
+      // 草稿通道复位（R2 第 3 处）：宿主保存完会把权威 html 换上来，不清这里右栏还留着
+      // "保存前那一刻"的草稿，看起来就像保存没生效。
+      onDraftReset?.();
       // 已保存的内容成为新基线：这次编辑不再可撤回（撤回已落库的改动会让人以为没存上）。
       resetFormHistory();
       // 出口二选一：中栏"存完继续调参数"（`onSaved`），弹窗"存完就关"（`onExit`）。
@@ -424,9 +461,12 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     summarySource,
     fillSummary,
     fillContextValue,
-    onValuesChange: () => {
+    onValuesChange: (_changed, allValues) => {
       setDirty(true);
       formHistory.push();
+      // 只上行：把"按保存口径合并后的整份内容"交给宿主（制作台右栏实时预览订阅它）。
+      const drafted = mergePartial(allValues);
+      if (drafted) onDraftContent?.(drafted);
     },
     onFinish: (values: ResumeContent) => void handleFinish(values),
     submit: () => form.submit(),

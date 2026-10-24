@@ -1,13 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { App as AntdApp } from "antd";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+import { t } from "../../i18n";
+import { setActiveWritingResume } from "../resume-writing/activeResume";
 import AiPolishLayer from "./AiPolishLayer";
 import { getLLMConfig } from "../../api/settings";
 import { polishSelection } from "../../api/writing";
 
+const writingApiMocks = vi.hoisted(() => ({
+  rewriteStar: vi.fn(),
+  generatePhrases: vi.fn(),
+  polishResumeText: vi.fn(),
+  translateResumeText: vi.fn(),
+}));
+
 vi.mock("../../api/settings", () => ({ getLLMConfig: vi.fn() }));
 vi.mock("../../api/writing", () => ({ polishSelection: vi.fn() }));
+vi.mock("../../api/resumeWriting", () => writingApiMocks);
 
 const getLLMConfigMock = vi.mocked(getLLMConfig);
 const polishSelectionMock = vi.mocked(polishSelection);
@@ -349,5 +360,90 @@ describe("AiPolishLayer 菜单关闭", () => {
     fireEvent.pointerDown(document.body);
 
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  });
+});
+
+// ── 写作增强：入口在右键菜单（2026-10-24 从编辑器页签搬过来）─────────────
+//
+// 这一组钉的是"入口真的够得着"：写作增强的四个动作都要 `resume_id`，而右键菜单是全局的，
+// 中间靠 `activeResume` store 传递。没有登记简历时菜单里不该出现它；登记了就必须能打开，
+// 并且**带着刚选中的那段文字**——否则用户还得再粘一次，等于没省事。
+function renderLayerWithApp() {
+  return render(
+    <AntdApp>
+      <MemoryRouter>
+        <AiPolishLayer />
+      </MemoryRouter>
+    </AntdApp>,
+  );
+}
+
+describe("AiPolishLayer 右键菜单里的写作增强", () => {
+  afterEach(() => {
+    act(() => setActiveWritingResume(null));
+  });
+
+  it("没有登记的简历时不出现这一项（它需要 resume_id，摆出来也点不动）", () => {
+    const field = mountTextarea(ORIGINAL);
+    renderLayerWithApp();
+    selectField(field, 0, ORIGINAL.length);
+
+    openMenuOn(field);
+    expect(screen.queryByRole("menuitem", { name: t("writing.menu.entry") })).toBeNull();
+  });
+
+  it("登记了简历：点开后面板带着选中的文字", async () => {
+    act(() => setActiveWritingResume(7));
+    const field = mountTextarea(ORIGINAL);
+    renderLayerWithApp();
+    selectField(field, 0, ORIGINAL.length);
+
+    openMenuOn(field);
+    fireEvent.click(await screen.findByRole("menuitem", { name: t("writing.menu.entry") }));
+
+    // 面板出现（用它的常驻提示定位，避免依赖弹窗标题的双份渲染）。
+    expect(await screen.findByText(t("writing.hint.title"))).toBeInTheDocument();
+    // 输入框已经填好刚才选中的那段：不用再复制粘贴一次。
+    // 限定在弹窗里找——外面那个被选中的 textarea 也有同样的值。
+    expect(within(screen.getByRole("dialog")).getByDisplayValue(ORIGINAL)).toBeInTheDocument();
+    // 有可写目标 → 说明文案是"写回选中的那一段"，动作是回填而不是复制。
+    expect(screen.getByText(t("writing.modal.hint-apply"))).toBeInTheDocument();
+  });
+
+  it("回填：生成的结果写回原来的选区，弹窗随后关闭", async () => {
+    writingApiMocks.rewriteStar.mockResolvedValue({ result: REWRITTEN });
+    act(() => setActiveWritingResume(7));
+    const field = mountTextarea(ORIGINAL);
+    renderLayerWithApp();
+    selectField(field, 0, ORIGINAL.length);
+
+    openMenuOn(field);
+    fireEvent.click(await screen.findByRole("menuitem", { name: t("writing.menu.entry") }));
+    const dialog = await screen.findByRole("dialog");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /生\s*成/ }));
+    fireEvent.click(await within(dialog).findByRole("button", { name: /回\s*填/ }));
+
+    // 选中的那段被整段替换 = 回填成功（不是追加、也不是复制）。
+    await waitFor(() => expect(field.value).toBe(REWRITTEN));
+    await waitFor(() => expect(screen.queryByText(t("writing.hint.title"))).toBeNull());
+  });
+
+  it("弹窗压在承载输入框的那层弹窗之上（否则用户只看到「点了没反应」）", async () => {
+    act(() => setActiveWritingResume(7));
+    const field = mountTextarea(ORIGINAL);
+    renderLayerWithApp();
+    selectField(field, 0, ORIGINAL.length);
+
+    openMenuOn(field);
+    fireEvent.click(await screen.findByRole("menuitem", { name: t("writing.menu.entry") }));
+    await screen.findByText(t("writing.hint.title"));
+
+    // antd Modal 默认 z-index 1000，而简历编辑器是 3110——不显式抬层时弹窗整个藏在后面，
+    // 用户看到的就是"右键点了写作增强，什么都没有"。
+    const wraps = Array.from(document.querySelectorAll<HTMLElement>(".ant-modal-wrap"));
+    expect(wraps.length).toBeGreaterThan(0);
+    const top = Math.max(...wraps.map((node) => Number(node.style.zIndex) || 0));
+    expect(top).toBeGreaterThanOrEqual(3700);
   });
 });

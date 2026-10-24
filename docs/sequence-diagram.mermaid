@@ -1,0 +1,192 @@
+%% SPDX-License-Identifier: Apache-2.0
+%% ResumeForge 增量批次 · 关键调用时序
+%% 本文件含 5 张 sequenceDiagram，按 `%% ===== n. 标题 =====` 分隔（多数预览器只渲染第一张，
+%% 需要看其余时把对应段落单独粘进 Mermaid Live）。与 docs/system_design.md §1 一一对应。
+
+%% ===== 1. P0-7 中栏改内容 → 右栏实时预览（只上行、不回灌） =====
+sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant F as Form(antd)
+  participant H as useResumeEditorPanel
+  participant C as ResumeWorkbenchEditorColumn
+  participant S as ResumeDraftStore
+  participant V as ResumeWorkbenchLiveCanvas
+  participant L as useResumeLivePreview
+  participant API as POST /api/resumes/render
+  participant Z as ResumeZoomModal
+  participant HOST as 宿主(ResumeDetailModal)
+  participant OV as useRichTextOverrides
+
+  Note over Z: 打开制作台：content = 服务端已保存内容（唯一且不回灌）
+  Z->>S: useRef(createResumeDraftStore()) 创建（本层不订阅）
+  Z->>C: draftStore, content
+  Z->>V: draftStore, mergeLive=overlays.merge, content, liveContent
+  V->>S: useSyncExternalStore(subscribe, getSnapshot)
+  V->>L: enabled=Boolean(content) && mode!=exact
+  Note over L: 首帧只记基线（不发请求）
+
+  U->>F: 在「实习/工作经历」改一行文字
+  F->>H: onValuesChange(changed, allValues)
+  H->>H: setDirty(true) + formHistory.push()
+  H->>H: mergePartial(allValues) = {...content, ...values, photo: content.photo}
+  H->>S: onDraftContent(merged)（store 内 150ms 尾随节流 + 签名去重）
+  S-->>V: notify() → getSnapshot() 返回新快照（仅画布子树重渲染）
+  V->>V: content = mergeLive(draft)
+  V->>L: content 变化 → schedule(job)
+  Note over L: state=typing；防抖 600ms（每次变化都重置）
+  U->>F: 停手
+  L->>L: 600ms 后 pump()：budget 2 → 1，state=rendering
+  L->>API: renderResume(content, layout, signal)
+  API-->>L: html
+  L->>V: onHtml(html)（记 source=宿主那份 html）
+  V-->>U: 右栏出现新值（此时尚未保存）
+
+  U->>Z: 点顶部「保存修改」
+  Z->>C: editorRef.save() → form.submit()
+  C->>H: onFinish(values) → onSave(mergePartial 同口径)
+  Z->>V: suspended=true
+  V->>L: suspend()（abort 在飞 + 清 pending + state=idle）
+  HOST->>API: PATCH /resumes/{id}（内容）
+  API-->>HOST: 新 ResumeDetail
+  HOST->>Z: content 换成新对象（新内容签名）
+  H->>H: 渲染期守卫命中 contentSig 变化 → setSyncedContent
+  H->>S: onDraftReset() → store.clear()
+  H->>F: form.setFieldsValue(syncedContent)（不触发 onValuesChange）
+  Z->>V: suspended=false
+  V->>V: live.source !== html → 直接用宿主 html（保存返回的优先级最高，不闪回）
+
+%% ===== 2. P0-1 取消内置字体下载（含竞态裁决） =====
+sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant UI as ResumeFontControl / BuiltinFontRow
+  participant HOOK as useBuiltinFontDownload
+  participant API as FontApi
+  participant SVC as resume_font_builtin
+  participant W as 下载线程
+  participant FS as 字体目录
+
+  U->>UI: 点「下载」
+  UI->>HOOK: start(activate)
+  HOOK->>API: POST /fonts/builtin/download?activate=…
+  API->>SVC: start_download()
+  SVC->>SVC: 持锁：state!=downloading 且磁盘够 → state=downloading, _stop.clear()
+  SVC->>W: _spawn_worker()
+  SVC-->>API: status()
+  API-->>HOOK: 202 {state:"downloading"}
+  loop 每 500ms（仅 downloading 期间）
+    HOOK->>API: GET /fonts/builtin
+    API->>SVC: status()
+    SVC-->>HOOK: downloaded_bytes / total_bytes
+  end
+  W->>FS: 写 SourceHanSansSC-Regular.otf.tmp
+  W->>SVC: _advance(chunk)
+
+  U->>UI: 点「取消」
+  UI->>HOOK: cancel()
+  HOOK->>API: POST /fonts/builtin/download/cancel
+  API->>SVC: cancel()
+  SVC->>SVC: 持锁读 state
+  alt state != downloading（含刚好 done）
+    SVC-->>API: 原状态（done/idle）
+    API-->>U: 文件保留（以完成为准）
+  else state == downloading
+    SVC->>SVC: _stop.set()
+    SVC->>W: _client.close()（打断阻塞读，毫秒级生效）
+    SVC->>W: join(timeout=5s)
+    W->>W: iter_bytes 抛异常 → 判 _stop → 抛 Cancelled
+    W->>FS: 删 .tmp（本轮）
+    W->>FS: 删 _run_written 里的正式文件（Regular 若已 rename）
+    W->>SVC: state=idle, error="", downloaded_bytes=0
+    SVC-->>API: status()
+    API-->>U: 200 {state:"idle", downloaded_bytes:0, downloaded:false}
+    Note over FS: 目录既无正式文件也无 .tmp；当前字体未被改动；无失败文案
+  end
+
+%% ===== 3. P0-3 制作台下拉里直接下载并自动设为这份简历的字体 =====
+sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant SEL as ResumeFontControl(Select)
+  participant HOOK as useBuiltinFontDownload
+  participant API as FontApi
+  participant LAY as ResumeZoomModal(layout)
+
+  U->>SEL: 打开字体下拉（未下载的内置项不再 disabled）
+  U->>SEL: 点「思源黑体（未下载）」
+  SEL->>HOOK: start(activate=false)
+  Note over SEL: 不关闭弹层，不离开制作台
+  HOOK->>API: POST /fonts/builtin/download?activate=false
+  API-->>HOOK: 202 downloading
+  loop 轮询
+    HOOK->>API: GET /fonts/builtin
+    API-->>HOOK: downloaded_bytes / total_bytes
+    HOOK-->>SEL: 该项行内进度 + 「取消」
+  end
+  U->>SEL: （可选）点其它项 → 正常切换，不打断下载
+  U->>SEL: （可选）关闭下拉 → 下载继续（hook 不随弹层卸载）
+  API-->>HOOK: state="done"
+  HOOK-->>SEL: 完成事件（pendingRef 一次性）
+  SEL->>LAY: onChange({...layout, format_config:{...cfg, font:"SourceHanSansSC-Regular.otf"}})
+  Note over LAY: 只写这一份简历的字体，写一次；全局字体不变（activate=false）
+  SEL-->>U: message「已下载并设为这份简历的字体」
+
+%% ===== 4. P0-5 / P0-6 板块顺序卡片 = 实际渲染顺序 / 一键快照 =====
+sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant TC as ResumeTemplateControls
+  participant CAT as ResumeTemplateCatalog(后端下发)
+  participant LAY as layout.format_config
+  participant R as 渲染器(HTML/PDF/Word/文本)
+
+  Note over TC: 制作台不再传 preferProfileOrder（P0-5 的唯一改点）
+  TC->>CAT: default_section_order / profile_section_order / profile_section_keys
+  TC->>TC: defaultSectionOrder = default_section_order（内置默认）
+  TC->>LAY: 读 section_order
+  alt 有 section_order
+    TC-->>U: 卡片显示这份简历自己的顺序
+  else 没有 section_order
+    TC-->>U: 卡片显示内置默认顺序
+  end
+  R->>LAY: resolved_section_order(format_config)
+  R-->>R: 同一份数据 → 显示与渲染不可能分叉
+
+  U->>TC: 点「按我的资料顺序排列」
+  alt profile_section_order == 内置默认
+    TC-->>U: 按钮 disabled（提示：资料顺序与默认相同）
+  else profile_section_keys 为空
+    TC-->>U: 按钮 disabled（提示：资料里还没有可排序的板块）
+  else 可用
+    TC->>LAY: buildSectionOrderConfig(profileOrder, builtInOrder, cfg)
+    Note over LAY: 等于内置默认 → 删键；否则写入快照
+    TC-->>U: 卡片顺序变为资料顺序（一次性快照）
+  end
+  U->>U: 之后去资料页改顺序 → 这份简历不变（快照语义）
+  U->>TC: 点「恢复默认」→ buildSectionOrderConfig(内置默认) → 删键
+  U->>LAY: 保存（PATCH /resumes/{id}/layout）→ 四个渲染器同时生效
+
+%% ===== 5. P0-2 删除已下载的内置字体 =====
+sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant ROW as BuiltinFontRow
+  participant API as FontApi
+  participant FONTS as user_fonts
+
+  Note over ROW: 只在 downloaded && !downloading 时渲染「删除」
+  U->>ROW: 点「删除」
+  ROW-->>U: 二次确认（正文：直接删除、没有恢复入口；正在使用它的简历回到系统字体）
+  U->>ROW: 确认
+  ROW->>API: DELETE /fonts/builtin
+  alt 正在下载
+    API-->>ROW: 409 字体正在下载中 → 提示，不删
+  else 已下载
+    API->>API: delete()（删 Regular + Bold）
+    API->>FONTS: 若 active ∈ removed → set_active(None)
+    API->>API: _invalidate_render_caches()
+    API-->>ROW: 204
+    ROW->>ROW: setOverride(idle 快照) + onChanged() 重拉清单
+    ROW-->>U: 按钮回到「下载」+ 提示「已删除，简历字体已回到系统字体」（若是当前字体）
+  end

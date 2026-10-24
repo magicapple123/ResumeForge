@@ -166,7 +166,10 @@ def _preview_content(payload: TemplatePreviewRequest, db: Session) -> ResumeCont
         record = db.get(ResumeRecord, payload.resume_id)
         if record is not None:
             return ResumeContent.model_validate(record.content)
-    return sample_resume_content()
+    # 内置示例按档位给详略：小字号一页装得下更多字，示例就该更密——否则大字号档的
+    # 缩略图里只剩半页内容，用户会以为"选大字号以后模板就变空了"。模板名一并传：
+    # compact / scholar 的默认行高比其余模板低约 25%，同一份内容在它们里面会显得空。
+    return sample_resume_content(payload.font_scale, payload.template_name)
 
 
 @router.post("/preview")

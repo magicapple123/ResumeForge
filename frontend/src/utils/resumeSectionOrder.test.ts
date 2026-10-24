@@ -15,11 +15,11 @@ describe("normalizeSectionOrder", () => {
     expect(normalizeSectionOrder(["projects", "experience"])).toEqual([
       "projects",
       "experience",
-      "summary",
       "education",
-      "campus_experience",
       "skills",
+      "campus_experience",
       "awards",
+      "summary",
     ]);
   });
 
@@ -29,8 +29,8 @@ describe("normalizeSectionOrder", () => {
       "summary",
       "education",
       "experience",
-      "campus_experience",
       "skills",
+      "campus_experience",
       "awards",
     ]);
   });

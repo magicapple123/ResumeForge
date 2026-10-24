@@ -48,6 +48,8 @@ def read_resume_templates(db: Session = Depends(get_db)):
     必须定义在 ``/{resume_id}`` 之前：否则 ``templates`` 会被当成记录 id 匹配，
     请求会以 422 结束。
     """
+    # 资料行只取一次：下面两个字段（翻译后的顺序 / 原样排过的键）读的是同一行。
+    profile = get_or_create_profile(db)
     return {
         "templates": template_options_with_custom(custom_template_options(db)),
         # 每个内置模板的版式默认值（只放用户可调的三项）。行距/页边距控件在"用户没设过
@@ -74,7 +76,13 @@ def read_resume_templates(db: Session = Depends(get_db)):
         # **不改**上面的 ``default_section_order``——它是"内置默认"，已保存简历在没有
         # 自己的 ``section_order`` 时读的是它；把两者混成一个字段，等于让资料页的一次
         # 拖动把用户已经导出过的简历悄悄换一个样子。
-        "profile_section_order": profile_to_resume_order(get_or_create_profile(db).section_order),
+        "profile_section_order": profile_to_resume_order(profile.section_order),
+        # 【新增】「我的资料」里**原样**排过的分区键（`educations` / `projects` …）：
+        # 不补齐、不映射成简历键。它与上面那个字段回答的是两个问题——
+        # 上面是"翻译后的完整排列"（新简历的默认值来源），这里是"资料里到底有没有可排序的
+        # 分区"这个事实本身：空数组意味着「按我的资料顺序排列」这个动作无从谈起，前端据此
+        # 禁用那颗按钮并说明原因，而不是给一个点了也没反应的入口。
+        "profile_section_keys": [str(item) for item in (profile.section_order or [])],
         "format_presets": [
             {
                 "name": item["name"],

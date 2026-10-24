@@ -33,8 +33,6 @@ interface Props {
   disabled?: boolean;
   /** 紧凑模式：只留控件、不显示分组标签（放在工具栏里时用）。 */
   compact?: boolean;
-  /** 用哪份简历做模板预览；为空时后端用内置示例内容。 */
-  resumeId?: number;
   /** 模板目录（由壳 `ResumeLayoutControls` 取一次后下发，避免两组各拉一次）。 */
   catalog?: ResumeTemplateCatalog;
   /**
@@ -57,7 +55,6 @@ export default function ResumeTemplateControls({
   layout,
   disabled = false,
   compact = false,
-  resumeId,
   catalog,
   preferProfileOrder = false,
   onChange,
@@ -92,7 +89,14 @@ export default function ResumeTemplateControls({
     () => normalizeSectionOrder(layout.format_config?.section_order, defaultSectionOrder),
     [layout.format_config?.section_order, defaultSectionOrder],
   );
-  const isCustomOrder = sectionOrder.join(",") !== defaultSectionOrder.join(",");
+  /**
+   * 「顺序·已调整」的判据 = **`section_order` 这个键在不在**（P0-5），不是"和默认顺序比"。
+   *
+   * 两者只在"用户把顺序调成了恰好等于默认"时给出不同答案，而那时键还在存储里——它确实是
+   * 被调过的（也解释了为什么"恢复默认"这个入口该出现）。更关键的是：键存在与否是**渲染器
+   * 用的同一个判据**（`resolved_section_order`），显示与渲染从此看同一件事。
+   */
+  const isCustomOrder = "section_order" in (layout.format_config ?? {});
 
   const handleSectionMove = (index: number, direction: -1 | 1) => {
     const next = moveSection(sectionOrder, index, direction);
@@ -100,6 +104,48 @@ export default function ResumeTemplateControls({
     onChange({
       ...layout,
       format_config: { ...layout.format_config, section_order: next },
+    });
+  };
+
+  /**
+   * 「按我的资料顺序排列」（P0-6）——**一次性快照**，不是一条持续的跟随。
+   *
+   * 语义：把资料页当前那套顺序写进**这份简历**的 `format_config.section_order`。写完就与资料
+   * 脱钩：用户再去资料页拖动，这份简历不会跟着变（"老简历不追溯改变"是这条功能的前提）。
+   * 与内置默认相同时 `buildSectionOrderConfig` 会删掉这个键——"调成和默认一样"与"没调过"
+   * 在存储里是同一种形态。
+   */
+  const profileSectionOrder = useMemo(
+    () => catalog?.profile_section_order ?? builtInSectionOrder,
+    [catalog?.profile_section_order, builtInSectionOrder],
+  );
+  /**
+   * 可用性的两个否决项（顺序即提示优先级：先说"根本没有可排序的分区"，再谈"顺序相同"）。
+   *
+   * 判 `profile_section_keys` 时**必须先滤掉 `basic_info`**：它是页眉（姓名 / 联系方式 /
+   * 照片），不参与正文排序，而资料行几乎总是带着它——直接判数组是否为空会让这个分支永远
+   * 不成立，用户点下去的按钮实际上什么都不会变。
+   */
+  const sortableProfileKeys = (catalog?.profile_section_keys ?? []).filter(
+    (key) => key !== "basic_info",
+  );
+  const profileOrderSameAsDefault = profileSectionOrder.join(",") === builtInSectionOrder.join(",");
+  const canArrangeByProfile = sortableProfileKeys.length > 0 && !profileOrderSameAsDefault;
+  const arrangeByProfileHint =
+    sortableProfileKeys.length === 0
+      ? t("sections.profileOrderUnavailable")
+      : profileOrderSameAsDefault
+        ? t("sections.profileOrderSame")
+        : t("sections.arrangeByProfileHint");
+
+  const handleArrangeByProfile = () => {
+    onChange({
+      ...layout,
+      format_config: buildSectionOrderConfig(
+        profileSectionOrder,
+        builtInSectionOrder,
+        layout.format_config ?? {},
+      ),
     });
   };
 
@@ -168,10 +214,12 @@ export default function ResumeTemplateControls({
               // （如「宽松（自制）」）在触发框里走省略号，展开后的列表按内容撑开。
               className="resume-format-select"
               popupMatchSelectWidth={false}
-              // 弹层宽度钉在参数栏内容宽（340px，见 `.resume-params-dropdown`）：
-              // 按内容撑开时，长自制版式名会把弹层拉出栏外甚至被窗口右缘裁掉
-              // （2026-11-06 用户截图）。触发框宽度不受影响（仍由 `.resume-format-select` 管）。
-              classNames={{ popup: { root: "resume-params-dropdown" } }}
+              // 弹层宽度：字体下拉与版式下拉共用 `.resume-params-dropdown`（216px，字体是
+              // 竖排两层，需要那个宽度），版式下拉再由 `.resume-format-dropdown` 收窄到
+              // 6 个中文字符宽（见 resume-workbench-controls.css）。触发框宽度不受影响
+              // （仍由 `.resume-format-select` 管）。两个类都要带上：只写专属类会丢掉共用的
+              // `max-width` 兜底与选项单行省略规则。
+              classNames={{ popup: { root: "resume-params-dropdown resume-format-dropdown" } }}
               options={[
                 { value: "", label: "跟随模板" },
                 ...formatPresets.map((item) => ({
@@ -202,7 +250,9 @@ export default function ResumeTemplateControls({
       <TemplateGalleryModal
         open={galleryOpen}
         layout={layout}
-        resumeId={resumeId}
+        // 字号档位写回这份简历：所有者（预览 / 制作台 / 生成配置）负责重排，
+        // 于是"在模板界面选字号"与"看到新字号"是同一次动作。
+        onFontScaleChange={(font_scale) => onChange({ ...layout, font_scale })}
         onSelect={(template) => onChange({ ...layout, template })}
         onClose={() => setGalleryOpen(false)}
       />
@@ -215,6 +265,20 @@ export default function ResumeTemplateControls({
           title={
             <span className="resume-section-order-title">
               调整板块顺序
+              {/* 一次性快照：把资料页当前那套顺序写进这份简历（见 `handleArrangeByProfile`）。 */}
+              <Tooltip title={arrangeByProfileHint}>
+                {/* 包一层 span：禁用态的按钮不接收指针事件，Tooltip 只能挂在外层。 */}
+                <span>
+                  <Button
+                    size="small"
+                    type="link"
+                    disabled={!canArrangeByProfile}
+                    onClick={handleArrangeByProfile}
+                  >
+                    {t("sections.arrangeByProfile")}
+                  </Button>
+                </span>
+              </Tooltip>
               {isCustomOrder && (
                 <Button size="small" type="link" onClick={handleSectionOrderReset}>
                   恢复默认

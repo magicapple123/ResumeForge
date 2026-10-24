@@ -258,6 +258,11 @@ describe("ResumeDetailModal 版式重排（P3）", () => {
     // 这条用例此前靠 `findByText("后端渲染失败")`：文案由 `App.useApp()` 的 message 实例
     // 挂到 body，中间隔着 portal 挂载与进场动画，而全量并行时 CPU 饱和——预算从 1s 加到
     // 3s 仍偶发红，加到 8s 才稳。那不是"链路慢"，是**断言依赖了渲染时序**。
+    //
+    // 2026-11 复盘：改成 spy 之后渲染时序已经解耦，但 3000 仍会偶发红（实测单跑 14 次红 1 次，
+    // 与 `ResumeDetailModal` 的改动无关：那条路径上既没有新增请求，也没有新增 effect）。
+    // 所以这里把**下面那个 waitFor** 的预算按上面这段结论对齐到 8s——改的是预算，不是断言：
+    // 断言仍是"error 被调用过且原因是后端那条"，一次都不许少。
     // 注意要 spy `App.useApp` 返回的实例（组件用的不是 antd 的静态 `message`）。
     const errorSpy = vi.fn();
     const useAppSpy = vi.spyOn(antd.App, "useApp").mockReturnValue({
@@ -266,7 +271,7 @@ describe("ResumeDetailModal 版式重排（P3）", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "改版式·2 页" }));
 
-    await waitFor(() => expect(errorSpy).toHaveBeenCalledWith("后端渲染失败"), { timeout: 3000 });
+    await waitFor(() => expect(errorSpy).toHaveBeenCalledWith("后端渲染失败"), { timeout: 8000 });
     useAppSpy.mockRestore();
 
     // 不自动重试（失败 → 重试 → 再失败会变死循环）。

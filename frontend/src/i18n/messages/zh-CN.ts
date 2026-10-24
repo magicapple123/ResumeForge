@@ -23,7 +23,9 @@
  *
  * 不许放 HTML/JSX（`<b>`、`{'\n'}`）。需要强调或换行时，由调用方拆成多段 `t()`。
  */
+import fontDownload from "./zh-CN.fontDownload";
 import fonts from "./zh-CN.fonts";
+import params from "./zh-CN.params";
 import preview from "./zh-CN.preview";
 import responsive from "./zh-CN.responsive";
 import rich from "./zh-CN.rich";
@@ -473,6 +475,10 @@ const zhCN = {
 
   // ── 字符级加粗（右键菜单）与制作台实时预览（R4 / R5）────────
   ...rich,
+  // 本批（字体下载/取消/删除/样张 · 板块顺序 · 精确模式字族说明）的新句子。
+  ...fontDownload,
+  // 本批（模板一览口径 · 参数复位 · 写作增强提示 · 精确预览补页）的新句子。
+  ...params,
 } as const;
 
 export type ZhCNMessages = typeof zhCN;

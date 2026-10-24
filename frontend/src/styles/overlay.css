@@ -122,3 +122,18 @@
   padding: 0;
   font-size: inherit;
 }
+
+/* ===== 下拉"已选中项"的悬停底色 ===== */
+/* antd 的选中项底色走 `optionSelectedBg`（本主题 = 品牌浅 tint），但**悬停**会再叠一层
+   `optionActiveBg`；在某些子树里这个组合会变成中灰底 + 深色字，看起来像"选中项被按黑"
+   （2026-10-24 用户截图，模型下拉）。这里把"已选中"的两种状态钉回同一个浅底：悬停只该
+   给"我正指着它"的反馈，不该改变选中态的观感。 */
+/* antd-override: 选中态 + 悬停的组合底色没有可用的 component token 表达 */
+.ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled),
+.ant-select-dropdown
+  .ant-select-item-option-selected.ant-select-item-option-active:not(
+    .ant-select-item-option-disabled
+  ) {
+  background: var(--rf-brand-tint);
+  color: var(--rf-brand);
+}

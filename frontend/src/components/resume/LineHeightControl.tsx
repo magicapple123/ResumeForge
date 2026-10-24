@@ -9,7 +9,9 @@
 import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Slider, Space, Tooltip, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
+import { t } from "../../i18n";
 import { lineHeightProbeCss } from "../../utils/resumeFormatProbe";
+import ParamResetButton from "./ParamResetButton";
 
 /** 可用区间与步长：与后端 `FORMAT_FIELDS` 的 line_height 逐项一致。 */
 export const LINE_HEIGHT_MIN = 1.2;
@@ -39,6 +41,11 @@ interface Props {
   defaultHint?: string;
   /** 用户是否设过覆盖：没设过时显示来源标签，恢复按钮不可用。 */
   customized: boolean;
+  /**
+   * 「恢复到打开时的值」（与上面那个"删键回默认"是两件事，见 `utils/paramRestore`）：
+   * `visible` 为真时才长出右侧那颗 ↺。
+   */
+  restore?: { visible: boolean; onReset: () => void };
   disabled?: boolean;
   /** 传数值 = 写入覆盖；传 null = 删掉覆盖（回到随模板）。 */
   onChange: (lineHeight: number | null) => void;
@@ -52,6 +59,7 @@ interface Props {
 export default function LineHeightControl({
   value,
   customized,
+  restore,
   disabled = false,
   defaultHint = "随模板",
   onChange,
@@ -169,9 +177,16 @@ export default function LineHeightControl({
         </Typography.Text>
         {/* 来源标签做成小胶囊：一段裸露的说明文字紧挨着读数时，会被读成"读数的后半句"。
             没设过覆盖才显示内容，但**位置始终占着**——否则用户一拖滑杆，
-            读数就会向右跳一格，三行读数又对不齐了。 */}
+            读数就会向右跳一格，三行读数又对不齐了。
+            改过这一项之后这一格由 ↺ 接管（同一格，不新增列，三行读数仍对齐）。 */}
         <span className={`resume-measure-source${customized ? " is-empty" : ""}`}>
-          {customized ? "" : defaultHint}
+          {restore?.visible ? (
+            <ParamResetButton label={t("workbench.param.line-height")} onReset={restore.onReset} />
+          ) : customized ? (
+            ""
+          ) : (
+            defaultHint
+          )}
         </span>
       </span>
     </Space>

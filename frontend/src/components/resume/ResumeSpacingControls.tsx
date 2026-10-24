@@ -41,12 +41,16 @@ import {
   type ScaleKey,
 } from "../../utils/resumeScaleParams";
 import { scaleProbeCss, sectionGapProbeCss } from "../../utils/resumeFormatProbe";
+import { formatKeysDiffer, restoreFormatKeys } from "../../utils/paramRestore";
+import ParamResetButton from "./ParamResetButton";
 
 /** 提交防抖（毫秒）：与行距 / 页边距同一档，一次拖动折叠成一次重渲染请求。 */
 const COMMIT_DEBOUNCE_MS = 120;
 
 interface Props {
   layout: ResumeLayout;
+  /** 打开这份简历时的版式快照：每行右侧那颗 ↺ 恢复的就是它（只有制作台传）。 */
+  baseline?: ResumeLayout;
   catalog?: ResumeTemplateCatalog;
   disabled?: boolean;
   /** 拖动中的即时反馈通道（与制作台右栏的预览句柄是同一个）。 */
@@ -61,6 +65,8 @@ interface RowProps {
   bounds: ScaleBounds;
   customized: boolean;
   defaultHint: string;
+  /** 「恢复到打开时的值」：`visible` 为真时占用来来源胶囊那一格。 */
+  restore?: { visible: boolean; onReset: () => void };
   disabled: boolean;
   /** 读数格式（含 `×`）：拖动中跟着手指走，所以是函数而不是字符串。 */
   format: (value: number) => string;
@@ -80,6 +86,7 @@ function SpacingRow({
   bounds,
   customized,
   defaultHint,
+  restore,
   disabled,
   format,
   probe,
@@ -187,7 +194,13 @@ function SpacingRow({
           {format(shown)}
         </Typography.Text>
         <span className={`resume-measure-source${customized ? " is-empty" : ""}`}>
-          {customized ? "" : defaultHint}
+          {restore?.visible ? (
+            <ParamResetButton label={label} onReset={restore.onReset} />
+          ) : customized ? (
+            ""
+          ) : (
+            defaultHint
+          )}
         </span>
       </span>
     </Space>
@@ -196,6 +209,7 @@ function SpacingRow({
 
 export default function ResumeSpacingControls({
   layout,
+  baseline,
   catalog,
   disabled = false,
   previewRef,
@@ -267,6 +281,23 @@ export default function ResumeSpacingControls({
   /** 系数读数：两位小数 + `×`（系数是乘子，不写 `%`，见设计 §7.1）。 */
   const formatScale = (value: number): string => `${roundToStep(value, 0.01).toFixed(2)}×`;
 
+  /**
+   * 每行右侧那颗 ↺（只有制作台传了 `baseline`）。判据与搬键在 `utils/paramRestore`：
+   * 与"双击标题"的删键不同，这里是把打开时的取值（可能是覆盖）原样搬回来。
+   */
+  const baseConfig = baseline?.format_config;
+  const restoreFor = (key: string): { visible: boolean; onReset: () => void } | undefined =>
+    baseline
+      ? {
+          visible: formatKeysDiffer(layout.format_config, baseConfig, [key]),
+          onReset: () =>
+            onChange({
+              ...layout,
+              format_config: restoreFormatKeys(layout.format_config, baseConfig, [key]),
+            }),
+        }
+      : undefined;
+
   return (
     <div className="resume-wb-rows">
       <SpacingRow
@@ -275,6 +306,7 @@ export default function ResumeSpacingControls({
         bounds={gapBounds}
         customized={ownGap !== null}
         defaultHint={defaultHint}
+        restore={restoreFor("section_gap")}
         disabled={disabled}
         format={(value) => `${Number(value.toFixed(1))}×`}
         probe={sectionGapProbeCss}
@@ -288,6 +320,7 @@ export default function ResumeSpacingControls({
         bounds={SCALE_BOUNDS["entry_gap"]}
         customized={typeof config?.["entry_gap"] === "number"}
         defaultHint={defaultHint}
+        restore={restoreFor("entry_gap")}
         disabled={disabled}
         format={formatScale}
         probe={(value) => scaleProbeCss("entry_gap", value)}
@@ -301,6 +334,7 @@ export default function ResumeSpacingControls({
         bounds={SCALE_BOUNDS["name_scale"]}
         customized={typeof config?.["name_scale"] === "number"}
         defaultHint={defaultHint}
+        restore={restoreFor("name_scale")}
         disabled={disabled}
         format={formatScale}
         probe={(value) => scaleProbeCss("name_scale", value)}
@@ -314,6 +348,7 @@ export default function ResumeSpacingControls({
         bounds={SCALE_BOUNDS["section_title_scale"]}
         customized={typeof config?.["section_title_scale"] === "number"}
         defaultHint={defaultHint}
+        restore={restoreFor("section_title_scale")}
         disabled={disabled}
         format={formatScale}
         probe={(value) => scaleProbeCss("section_title_scale", value)}

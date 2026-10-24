@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import base64
 import functools
-import hashlib
 import io
 import logging
 from pathlib import Path
@@ -93,13 +92,13 @@ def active_web_font() -> tuple[str, bytes] | None:
         return None
 
 
-def _subset_bytes(data: bytes, text: str) -> tuple[bytes, str, str]:
-    """按 ``text`` 的字符集子集化，返回 (字节, MIME 子类型, CSS format() 关键字)。"""
+def _subset_bytes(data: bytes, charset: str) -> tuple[bytes, str, str]:
+    """按 ``charset`` 的字符集子集化，返回 (字节, MIME 子类型, CSS format() 关键字)。"""
     font = TTFont(io.BytesIO(data))
     try:
         options = subset.Options()
         subsetter = subset.Subsetter(options=options)
-        subsetter.populate(text="".join(sorted(set(text) | set(_EXTRA_CHARS))))
+        subsetter.populate(text="".join(sorted(set(charset) | set(_EXTRA_CHARS))))
         subsetter.subset(font)
         buffer = io.BytesIO()
         font.save(buffer)
@@ -140,24 +139,30 @@ def _embed_css_cached(
     mtime_ns: int,
     bold_path: str,
     bold_mtime_ns: int,
-    text_digest: str,
-    text: str,
+    charset: str,
 ) -> str:
-    """按 (常规路径/mtime, 粗体路径/mtime, 文本 sha256) 缓存；未命中才真的切字。
+    """按 (常规路径/mtime, 粗体路径/mtime, **字符集**) 缓存；未命中才真的切字。
+
+    缓存键里放的是字符集而不是全文，这是"停手 1 秒内看到实时预览"的关键：子集产物
+    只取决于"用到哪些字"，与字符顺序、字数、重复次数都无关——改名、改一句句子只要
+    没引入新字符，切出来的字体字节完全一样，因此可以直接命中上一次的 CSS（数百 KB
+    base64，不必重新跑 fontTools）。改前键里含全文 sha256，改一个字就必然失配，每次
+    输入都要现场重切 CJK 子集（实测约 1.2s）。字符集变大时确实还得重切一次，但那是
+    用户真的写入了新字，且前端每 3 秒最多 3 次的预算兜得住。
 
     粗体的 mtime 必须进缓存键：内置字体两个文件是分别下载的，只按 Regular 的 mtime
     做键的话，"Bold 换了但 Regular 没变"（例如先删后单独补下 Bold）会命中旧 CSS，
     用户看到的是"换了粗体不生效"。
     """
-    del mtime_ns, bold_mtime_ns, text_digest  # 只作为缓存键使用
+    del mtime_ns, bold_mtime_ns  # 只作为缓存键使用
     bold: tuple[bytes, str, str] | None = None
     try:
         _family, regular_data = _read_font_bytes(Path(font_path))
-        regular = _subset_bytes(regular_data, text)
+        regular = _subset_bytes(regular_data, charset)
         if bold_path and bold_path != font_path:
             try:
                 _, bold_data = _read_font_bytes(Path(bold_path))
-                bold = _subset_bytes(bold_data, text)
+                bold = _subset_bytes(bold_data, charset)
             except Exception as exc:  # noqa: BLE001 - 缺粗体只该少一档字重，不该整体失败
                 logger.warning("读取粗体字面失败，仅内嵌常规字重：%s", exc)
                 bold = None
@@ -203,8 +208,9 @@ def embed_css(text: str, font_name: str | None = None) -> str:
             bold_key = str(bold_path)
         except OSError:
             bold_key, bold_mtime = "", 0
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    return _embed_css_cached(str(regular_path), mtime_ns, bold_key, bold_mtime, digest, text)
+    # 字符集 = 排序去重的字符集合：只影响命中率，不影响子集结果（见 _embed_css_cached）。
+    charset = "".join(sorted(set(text)))
+    return _embed_css_cached(str(regular_path), mtime_ns, bold_key, bold_mtime, charset)
 
 
 def _embed_font_paths(font_name: str | None) -> tuple[Path, Path | None] | None:

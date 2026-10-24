@@ -331,7 +331,7 @@ def test_pdf_header_contact_keeps_every_field_the_preview_renders():
     """页头联系方式必须包含预览里的**全部六个**字段，一个都不能少。
 
     预览的 `_resume_sections.j2` 在 `.contact` 里依次渲染 phone / email / city / birth_year /
-    `GitHub：…` / `主页：…`；PDF 侧此前只拼了前四个，GitHub 与主页整段从导出的文件里消失
+    `GitHub：…` / `个人主页：…`；PDF 侧此前只拼了前四个，GitHub 与个人主页整段从导出的文件里消失
     （用 pypdf 提取文本确认过：预览有、PDF 没有）。这里从**真实 PDF 首页**读回文本逐字段核对，
     而不是断言拼接用的那个字符串——后者只能证明"我拼对了"，不能证明"纸上真的有"。
     """
@@ -359,7 +359,7 @@ def test_pdf_header_contact_keeps_every_field_the_preview_renders():
         "杭州",
         "1998",
         "GitHub：github.com/zhangsan",
-        "主页：zhangsan.dev",
+        "个人主页：zhangsan.dev",
     ):
         assert value in compact, f"PDF 页头缺少联系方式字段：{value!r}"
 
@@ -412,3 +412,34 @@ def test_text_colors_come_from_the_template_not_from_a_module_constant(monkeypat
     assert minimal_text not in used["technical"]
     assert technical_text not in used["minimal"]
     assert minimal_text != technical_text, "两个模板的 --text 相同就测不出这条"
+
+
+@needs_font
+@pytest.mark.parametrize("template", ["modern", "technical"])
+def test_section_title_fill_spans_the_full_column(template):
+    """区块标题的底色块必须**铺满列框**，而不是只包住文字。
+
+    模板里 `.section-title` 是 block 元素（`background` + `padding`），浏览器画出来是一条
+    通栏色带；PDF 若按 `text_width` 画，短标题（「个人总结」四个字）只得到一小块色块——
+    草稿与精确预览因此"绿色背景分布不一样"（2026-10-24 用户截图：modern 模板）。
+    technical 的实心底色块（`accent_box`）同理。
+    """
+    from app.services.pdf_exporter import resolve_layout
+    from app.services.pdf_exporter.canvas import _ResumePDF
+    from app.services.pdf_exporter.fonts import _resolve_font_paths
+    from app.services.pdf_exporter.render import _register_fonts
+
+    layout = resolve_layout(template=template, base_px=14.0, format_config=None)
+    canvas = _ResumePDF((22, 90, 80), layout)
+    _register_fonts(canvas, *_resolve_font_paths())
+    canvas.add_page()
+
+    drawn: list[tuple[float, float, float, float]] = []
+    canvas.rect = lambda x, y, w, h, **kwargs: drawn.append((x, y, w, h))
+
+    canvas.section_title("个人总结", 14.0, leading_gap=0.0)
+
+    assert drawn, "标题没有画底色块"
+    left, _top, width, _height = drawn[0]
+    assert left == pytest.approx(layout.margin_x)
+    assert width == pytest.approx(layout.usable_width_mm)

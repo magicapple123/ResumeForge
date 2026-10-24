@@ -15,11 +15,15 @@
  * 精确模式下不挂实时预览：那一栏显示的是服务端排的 PDF，重排草稿 html 纯属浪费。
  */
 import { Button, Space, Typography } from "antd";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { RefObject } from "react";
 import { renderResume } from "../../api/resumeLayout";
 import { t } from "../../i18n";
 import type { ResumeContent, ResumeLayout } from "../../types";
+import {
+  createResumeDraftStore,
+  type ResumeDraftStore,
+} from "../../features/resume/resumeDraftContent";
 import { useResumeLivePreview } from "../../features/resume/useResumeLivePreview";
 import type { ExactPreviewOptions, ResumePreviewHandle } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
@@ -28,6 +32,15 @@ import ResumeWorkbenchCanvas from "./ResumeWorkbenchCanvas";
 
 /** 让调用方（`ResumeZoomModal`）只多一条 import 就能拿到这个类型。 */
 export type { RichTextEditAdapter } from "../resume-preview/richText";
+
+/**
+ * 没有草稿通道时的替身（只读宿主 / 生成流程的预览态）。
+ *
+ * 必须是**模块级常量**：`useSyncExternalStore` 拿它当 `subscribe` 的依赖，每次渲染新建一个
+ * 对象会让它每次重新订阅（每帧一次订阅/退订），而 `getSnapshot` 也必须返回稳定引用。
+ * 这里的 `getSnapshot` 恒返回 `null`——语义正是"没有草稿，用宿主那一版"。
+ */
+const NO_DRAFT_STORE: ResumeDraftStore = createResumeDraftStore(0);
 
 interface Props {
   html: string;
@@ -44,6 +57,18 @@ interface Props {
   layout?: ResumeLayout;
   /** 保存（内容或版式）在飞：实时预览让路，别用旧结果盖住保存返回的 html。 */
   suspended?: boolean;
+  /**
+   * 中栏的草稿通道（P0-7）。**订阅只发生在这个薄壳里**：三栏（参数 / 中栏 / 画布外壳）
+   * 不因每键输入而重渲染（设计 §7 R3）。
+   */
+  draftStore?: ResumeDraftStore;
+  /**
+   * 草稿内容的再加工（加粗 overlay）：`overlays.merge`。
+   *
+   * `mergeOverlays` 只在"路径当前值 === overlay.base"时生效，所以用户在编辑器里改过这个
+   * 字段后 overlay 自动作废——"加粗 + 改字"叠加时显示的是合并后的结果，不需要额外通知。
+   */
+  mergeLive?: (content: ResumeContent | null) => ResumeContent | null;
 }
 
 export default function ResumeWorkbenchLiveCanvas({
@@ -59,8 +84,35 @@ export default function ResumeWorkbenchLiveCanvas({
   content,
   layout,
   suspended = false,
+  draftStore,
+  mergeLive,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  /**
+   * 中栏正在编辑的那一版（`null` = 没有草稿，用宿主那一版）。
+   *
+   * `content` prop 永远是**服务端已保存**的那一份（宿主传下来的 `liveContent ?? content`）；
+   * 草稿只从这里进来，绝不回写成 `content`——那是"用户每打一个字就被服务端覆盖"的成因。
+   */
+  const store = draftStore ?? NO_DRAFT_STORE;
+  const draft = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  /**
+   * 草稿 + 加粗 overlay 的合并结果。
+   *
+   * **必须 memo**：`mergeOverlays` 在真的叠了 overlay 时会返回**新对象**，每次渲染都调一遍
+   * 就等于每帧给 `useResumeLivePreview` 一个"内容变了"的信号——那条 effect 会重新排一次
+   * 防抖，于是每次渲染都重置计时器，实时预览永远停在"更新中"（自激）。按"草稿这一版"缓存
+   * 之后，同一份草稿在整个渲染期间是同一个引用。
+   */
+  const mergedDraft = useMemo(
+    () => (draft ? (mergeLive?.(draft) ?? draft) : null),
+    [draft, mergeLive],
+  );
+  /**
+   * 正文优先级（只此三条分支，不许多一条）：
+   * 草稿（叠加加粗）→ 宿主的实时正文。
+   */
+  const previewContent = mergedDraft ?? content;
   /**
    * 实时结果与它**基于哪一版宿主 html**。
    *
@@ -79,8 +131,8 @@ export default function ResumeWorkbenchLiveCanvas({
   const handleHtml = useCallback((next: string) => setLive({ source: html, html: next }), [html]);
 
   const { state, retry, suspend, resume } = useResumeLivePreview({
-    enabled: Boolean(content) && previewMode !== "exact",
-    content,
+    enabled: Boolean(previewContent) && previewMode !== "exact",
+    content: previewContent,
     layout,
     render: runRender,
     onHtml: handleHtml,

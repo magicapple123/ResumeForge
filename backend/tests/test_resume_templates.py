@@ -213,8 +213,8 @@ def test_template_name_validation():
         validate_template_name("<script>")
 
 
-def test_builtin_template_list_has_five_items(client):
-    """「选择模板」只列 5 套；下线的三套仍能渲染，但不再出现在清单里。"""
+def test_builtin_template_list_has_six_items(client):
+    """「选择模板」只列 6 套；下线的三套仍能渲染，但不再出现在清单里。"""
     builtin = client.get("/api/resume-templates/builtin").json()
 
     assert [item["name"] for item in builtin] == [
@@ -223,6 +223,9 @@ def test_builtin_template_list_has_five_items(client):
         "compact",
         "elegant",
         "minimal",
+        # 2026-10 新增的第 6 套（学术）：参考一份学术简历的版式移植，
+        # 与前面 5 套在配色 / 标题形状 / 短条目排法上都明显不同，所以进入可选清单。
+        "scholar",
     ]
     # 下线的三套保留在 catalog 里（老简历继续按原模板渲染）。
     for name in ("technical", "editorial", "split"):
@@ -247,6 +250,7 @@ def test_style_template_cannot_be_created_or_copied(client, db_session):
         "compact",
         "elegant",
         "minimal",
+        "scholar",
     ]
 
 

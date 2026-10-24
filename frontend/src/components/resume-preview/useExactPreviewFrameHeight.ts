@@ -7,10 +7,10 @@
  * 宿主（`ResumePreview`）传给 `ExactPreviewPanel` 的 `height` 是按 **pageLimit** 推出来的
  * 视口高度（`Math.max(MIN_PREVIEW_HEIGHT, …)`）。上限选 2/3 页、内容其实只有 1 页时，
  * iframe 仍占满上限高度：浏览器 PDF 查看器把那一页画在顶部，剩下的全是它自己的底色；
- * 而我们补的空白纸又是相框**之后**的兄弟节点——于是"中间空一大截灰，然后才出现空白页"
- * （2026-11-06 用户截图）。
+ * 而下方又按上限补齐了空白纸——于是"中间空一大截灰，然后才出现空白页"（2026-11-06
+ * 用户截图；补页本身已在 2026-10-24 按用户口径去掉）。
  *
- * 相框高度改成"页数 × 单页高 + 页间距"之后，空白纸紧接在最后一页之后，中间不再有灰。
+ * 相框高度改成"页数 × 单页高 + 页间距"之后，纸与页脚之间不再有那道灰。
  *
  * ## 单页高从哪来
  *
@@ -35,13 +35,14 @@ import type { RefObject } from "react";
 import { A4_HEIGHT_PX, A4_WIDTH_PX } from "./config";
 
 /**
- * 空白纸与最后一页 PDF 之间的间距（px）。
+ * PDF 里相邻两页之间的间距（px），计入相框高度。
  *
- * 与 `.exact-preview-blanks` 的 `gap` 必须一致（CSS 里也写着 8）。刻意不用
- * `PAGE_STACK_GAP_PX`（24）：那是**草稿**多页堆叠的未缩放间距，而草稿预览整体带缩放，
- * 屏幕上真正看到的大约就是 8px 上下；精确预览不缩放，直接沿用 24 会显得两张纸离得很远。
+ * 纸是 PDF 查看器自己排的，它内部页与页之间会留一道缝；相框按"页数 × 单页高"算会短一截，
+ * 最后一页的下沿因此被裁掉。8 是与查看器实测最接近的一档（刻意不用草稿的
+ * `PAGE_STACK_GAP_PX` = 24：那是**草稿**多页堆叠的未缩放间距，精确预览不缩放，
+ * 沿用 24 会让相框凭空长出两倍多的空白）。
  */
-export const BLANK_PAGE_GAP_PX = 8;
+export const FRAME_PAGE_GAP_PX = 8;
 
 /** A4 的高宽比（297 / 210）。用 `config.ts` 的常量相除，两处只有一个 794/1123 口径。 */
 export const A4_RATIO = A4_HEIGHT_PX / A4_WIDTH_PX;
@@ -69,8 +70,7 @@ export function exactPreviewPageHeight(widthPx: number): number {
  * 下载），它盖住的是 iframe 的顶部——也就是说第一页顶部会被遮掉一截、末页可能要多滚一点。
  * 2026-11-06 明确**先不加这个常数**（是否真的压住最后一页要等真机截图确认）。
  * 若确认需要补偿，**唯一该改的位置就是这个函数的返回值**：给 `pages × 单页高` 再加一个
- * `VIEWER_CHROME_PX`（并同步 `.exact-preview-blanks` 的 `margin-top`，否则空白纸会贴着
- * 被遮住的那一截）。别在组件里加偏移——否则"相框高度只有这一处来源"这条就不成立了。
+ * `VIEWER_CHROME_PX`。别在组件里加偏移——否则"相框高度只有这一处来源"这条就不成立了。
  *
  * @param widthPx 相框实测宽度；0 或负数表示"没量到"。
  * @param pages 已排出的实际页数（调用方已把 `null` 归一成 1）。
@@ -82,7 +82,7 @@ export function exactPreviewFrameHeight(
   fallbackHeight: number,
 ): number {
   if (pages <= 0 || widthPx <= 0) return fallbackHeight;
-  return pages * exactPreviewPageHeight(widthPx) + (pages - 1) * BLANK_PAGE_GAP_PX;
+  return pages * exactPreviewPageHeight(widthPx) + (pages - 1) * FRAME_PAGE_GAP_PX;
 }
 
 export interface ExactPreviewFrame {
@@ -97,10 +97,14 @@ export interface ExactPreviewFrame {
  *
  * @param pages 已排出的实际页数（`0` = 还没有结果）。
  * @param fallbackHeight 量不到宽度 / 还没有结果时的占位高度。
+ * @param scale 纸宽相对相框宽度的比例（精确预览的缩放：1 = 适应宽度）。
+ *   纸宽 = 相框宽 × scale，页高必须跟着这条式子走——查看器按 `page-width` 排版，
+ *   它看到的宽度就是 iframe 的宽度，而不是外层容器的宽度。
  */
 export function useExactPreviewFrameHeight(
   pages: number,
   fallbackHeight: number,
+  scale = 1,
 ): ExactPreviewFrame {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [frameWidth, setFrameWidth] = useState(0);
@@ -116,5 +120,11 @@ export function useExactPreviewFrameHeight(
     return () => observer.disconnect();
   }, []);
 
-  return { frameRef, frameHeight: exactPreviewFrameHeight(frameWidth, pages, fallbackHeight) };
+  // 缩放只改变"纸有多宽"，相框宽度本身不变（水平滚动条不影响 clientWidth），
+  // 所以这里不会出现"变宽 → 出滚动条 → 变窄"的自激。
+  const paperWidth = frameWidth * scale;
+  return {
+    frameRef,
+    frameHeight: exactPreviewFrameHeight(paperWidth, pages, fallbackHeight),
+  };
 }

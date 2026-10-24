@@ -149,6 +149,22 @@ TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
         "tag_align": "left",
         "tag_mono": False,
     },
+    "scholar": {
+        # 纯文字标签：三列并排的项目符号列表（`li::before` 画「•」），没有底色也没有边框。
+        # PDF 侧按 plain 绘制——分栏靠 CSS grid，PDF 只排成一行行文字，这是已知差异。
+        "tag_style": "plain",
+        "tag_bg": "none",
+        "tag_fg": "body",
+        "tag_border_px": 0.0,
+        "tag_radius": 0.0,
+        "tag_pad_x": 0.0,
+        "tag_gap_x": 0.5,
+        "tag_gap_y": 0.2,
+        # 模板 `:root` 的 `--accent-soft`：首段信息区的浅灰底用它，标签不用。
+        "accent_soft": "#f1f1f1",
+        "tag_align": "left",
+        "tag_mono": False,
+    },
     "editorial": {
         "tag_style": "plain",
         "tag_bg": "none",
@@ -188,6 +204,11 @@ TEMPLATE_COLUMN_DEFAULTS: dict[str, dict[str, float | int]] = {
     "technical": {"column_count": 1, "column_gap": 0.0},
     "minimal": {"column_count": 1, "column_gap": 0.0},
     "editorial": {"column_count": 1, "column_gap": 0.0},
+    # scholar 的正文仍是单栏：它的"三列"只作用于**技能列表内部**
+    # （`.skill-list { display: grid; grid-template-columns: repeat(3, 1fr) }`），
+    # 不是把七个分区切成两栏。所以这里填 1 —— `column_count` 的语义是"分区网格的栏数"，
+    # 与 `.skill-list` 的列数不是同一件事，混用会让 PDF 也去收窄正文列框。
+    "scholar": {"column_count": 1, "column_gap": 0.0},
     "split": {"column_count": 2, "column_gap": 1.2},
 }
 
@@ -202,6 +223,7 @@ TEMPLATE_LIST_DEFAULTS: dict[str, dict[str, float]] = {
     "technical": {"li_indent": 1.29},
     "minimal": {"li_indent": 1.35},
     "editorial": {"li_indent": 1.43},
+    "scholar": {"li_indent": 1.28},
     "split": {"li_indent": 1.25},
 }
 

@@ -28,8 +28,6 @@ interface Props {
   onChange: (layout: ResumeLayout) => void;
   /** 紧凑模式：只留控件、不显示分组标签（放在工具栏里时用）。 */
   compact?: boolean;
-  /** 用哪份简历做模板预览；为空时后端用内置示例内容。 */
-  resumeId?: number;
   /**
    * 预览句柄：拖动字号时用它把探针 CSS 即时注入预览（本地缩放，无网络往返）。
    * 没有预览时（生成前的配置阶段）可省略——滑块仍可用，只是没有即时反馈。
@@ -59,7 +57,6 @@ export default function ResumeLayoutControls({
   disabled = false,
   onChange,
   compact = false,
-  resumeId,
   previewRef,
   hasPhoto,
   preferProfileOrder = false,
@@ -74,7 +71,6 @@ export default function ResumeLayoutControls({
         layout={layout}
         disabled={disabled}
         compact={compact}
-        resumeId={resumeId}
         catalog={catalog}
         preferProfileOrder={preferProfileOrder}
         onChange={onChange}

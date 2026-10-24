@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import { t } from "../../i18n";
 import { layer } from "../../theme/tokens";
 import { replaceSelection } from "./replaceSelection";
 import { elementRect, getCaretInsertion, type SelectionTarget } from "./selectionTarget";
@@ -29,6 +30,13 @@ export interface SelectionContextMenuProps {
   text: string;
   onClose: () => void;
   onAiPolish: () => void;
+  /**
+   * 打开「写作增强」；`null` = 当前没有归属的简历（不在简历详情里），这一项不渲染。
+   *
+   * 写作增强的四个动作都要 `resume_id`，而右键菜单是全局的——没有简历作用域时
+   * 摆出来也点不动，不如不显示（见 `features/resume-writing/activeResume`）。
+   */
+  onWriting: (() => void) | null;
 }
 
 /** 执行一条编辑命令；环境不支持（jsdom、部分 WebView）时返回 `false`。 */
@@ -76,6 +84,7 @@ export default function SelectionContextMenu({
   text,
   onClose,
   onAiPolish,
+  onWriting,
 }: SelectionContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -240,6 +249,22 @@ export default function SelectionContextMenu({
       {target && (
         <>
           <div className="rf-ai-polish-menu-separator" role="separator" />
+          {/* 写作增强排在 AI 润色前面：它是一组**有明确产物**的动作（STAR / 话术 /
+              风格 / 翻译），用户更常来点它；AI 润色是"按一句话要求随便改改"。 */}
+          {onWriting && (
+            <button
+              type="button"
+              role="menuitem"
+              className="rf-ai-polish-menu-item"
+              onMouseDown={keepSelection}
+              onClick={() => {
+                onClose();
+                onWriting();
+              }}
+            >
+              {t("writing.menu.entry")}
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"

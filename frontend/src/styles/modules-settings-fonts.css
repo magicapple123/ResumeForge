@@ -1,0 +1,116 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 设置页「简历字体」卡片：内置字体那块主推面板、历史字体的行、页脚。
+ *
+ * 为什么要单独一片：`modules-templates.css` 已经 446 行（500 行零豁免），这批样式
+ * 塞不进去；而它们只服务于这一张卡片，和模板画廊没有关系。
+ *
+ * 2026-10-24 的排版口径（用户截图：一行里名字、体积、标签、两颗按钮挤在一起，
+ * 「回到系统字体」旁边紧跟着"还没有导入其它字体"）：
+ * 1. **每个字体一条行**，行内两行式——第一行名字 + 状态标签，第二行次要信息（体积 / 文件名）；
+ * 2. 内置字体用一层浅底 + 细边包起来，表示"这是应用自带的那一款"，与历史字体区分；
+ * 3. 页脚独立成段（上边一条分隔线），「回到系统字体」与它的说明各占其位。 */
+
+/* 卡片说明与列表之间留一口气，说明本身不再靠 inline style 控制间距。 */
+.settings-font-intro {
+  margin-bottom: 14px !important;
+}
+
+/* ── 内置字体（主推那一款）──────────────────────────────── */
+.settings-font-featured {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-panel);
+  background: var(--rf-surface-alt);
+}
+
+/* 正在使用：左侧一道主题色细条 + 稍亮的底色，扫一眼就能定位"我现在用的是哪款"。 */
+.settings-font-featured.is-active {
+  border-color: color-mix(in srgb, var(--rf-brand) 35%, var(--rf-border-subtle));
+  background: color-mix(in srgb, var(--rf-brand) 5%, var(--rf-surface));
+  box-shadow: inset 3px 0 0 var(--rf-brand);
+}
+
+.settings-font-featured-main {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.settings-font-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+/* 名字做成链接按钮，但不要 antd 链接按钮自带的内边距（它会把整行撑高、名字与标签错位）。 */
+.settings-font-name.ant-btn {
+  height: auto;
+  padding: 0;
+  font-weight: 600;
+}
+
+.settings-font-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 2px;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 次要信息之间用一枚小圆点分隔，比堆一串括号好读。 */
+.settings-font-meta > span + span::before {
+  content: "·";
+  margin-right: 10px;
+  color: var(--rf-text-quaternary, var(--rf-text-tertiary));
+}
+
+.settings-font-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.settings-font-error {
+  flex: 1 1 100%;
+  margin: 2px 0 0 !important;
+  font-size: 12px;
+}
+
+/* ── 历史导入的字体 ─────────────────────────────────────── */
+.settings-font-list .listy-item {
+  padding: 10px 2px;
+}
+
+/* ── 页脚：回到系统字体 ─────────────────────────────────── */
+.settings-font-empty {
+  display: block;
+  padding: 10px 2px;
+}
+
+.settings-font-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+.settings-font-footnote {
+  flex: 1 1 280px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+}

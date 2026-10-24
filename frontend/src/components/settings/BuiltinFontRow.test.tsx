@@ -11,21 +11,27 @@
  *    原样给出来，并且给一条"再试一次"的路，而不是留一个点了没反应的按钮。
  */
 import { App as AntdApp } from "antd";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BuiltinFontStatus } from "../../api/settings";
 import { t } from "../../i18n";
 import BuiltinFontRow, { BUILTIN_FONT_FILE } from "./BuiltinFontRow";
 
 const apiMocks = vi.hoisted(() => ({
+  BUILTIN_FONT_FILE: "SourceHanSansSC-Regular.otf",
+  resumeFontPreviewUrl: vi.fn(
+    (name: string) => `/api/settings/fonts/${encodeURIComponent(name)}/file`,
+  ),
   getBuiltinFont: vi.fn(),
   startBuiltinFontDownload: vi.fn(),
+  cancelBuiltinFontDownload: vi.fn(),
+  deleteBuiltinFont: vi.fn(),
   activateResumeFont: vi.fn(),
   /** 收尾时要读一次清单，判断"当前字体"是不是用户自己选的（决定要不要接管）。 */
   listResumeFonts: vi.fn(),
 }));
 
-vi.mock("../../api/settings", () => apiMocks);
+vi.mock("../../api/fonts", () => apiMocks);
 
 /** 轮询间隔：与组件里的常量同值（500ms），改一处要改两处。 */
 const POLL_MS = 500;
@@ -58,10 +64,20 @@ const FAILED: BuiltinFontStatus = { ...BASE, state: "failed", error: "网络中�
 /** 预估体积那一行的文案来源（32MB 取整后就是「约 32 MB」）。 */
 const APPROX = "32 MB";
 
-function renderRow(status: BuiltinFontStatus | null, onChanged: () => void = () => undefined) {
+/**
+ * 「删除」按钮的可访问名：antd 会在两个汉字之间插入一个空格（渲染成「删 除」），
+ * 所以按整串取会命中不到。从 i18n key 现造正则，避免在测试里另写一份中文。
+ */
+const DELETE_BUTTON = new RegExp(t("fontDownload.delete").split("").join("\\s*"));
+
+function renderRow(
+  status: BuiltinFontStatus | null,
+  onChanged: () => void = () => undefined,
+  activeName: string | null = null,
+) {
   return render(
     <AntdApp>
-      <BuiltinFontRow status={status} onChanged={onChanged} />
+      <BuiltinFontRow status={status} onChanged={onChanged} activeName={activeName} />
     </AntdApp>,
   );
 }
@@ -83,6 +99,8 @@ beforeEach(() => {
   vi.useFakeTimers();
   apiMocks.getBuiltinFont.mockReset().mockResolvedValue(DONE);
   apiMocks.startBuiltinFontDownload.mockReset().mockResolvedValue(DOWNLOADING);
+  apiMocks.cancelBuiltinFontDownload.mockReset().mockResolvedValue(IDLE);
+  apiMocks.deleteBuiltinFont.mockReset().mockResolvedValue(undefined);
   apiMocks.activateResumeFont.mockReset().mockResolvedValue({ active: BUILTIN_FONT_FILE });
   apiMocks.listResumeFonts
     .mockReset()
@@ -224,5 +242,94 @@ describe("BuiltinFontRow", () => {
     // 清单仍要刷新：列表里多了一款可选的字体，界面得看见。
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(screen.getByText(t("fonts.builtin.downloaded"))).toBeInTheDocument();
+  });
+
+  // ── P0-2：已下载可删除 ──────────────────────────────────────────
+
+  it("未下载时没有「删除」；已下载才出现（下载中也不出现）", async () => {
+    const idle = renderRow(IDLE);
+    expect(screen.queryByRole("button", { name: DELETE_BUTTON })).toBeNull();
+    idle.unmount();
+
+    renderRow(DOWNLOADING);
+    expect(screen.queryByRole("button", { name: DELETE_BUTTON })).toBeNull();
+    cleanup();
+
+    renderRow(DONE);
+    expect(screen.getByRole("button", { name: DELETE_BUTTON })).toBeInTheDocument();
+  });
+
+  it("删除要二次确认：正文写明没有恢复入口，确认后才真的删", async () => {
+    const onChanged = vi.fn();
+    renderRow(DONE, onChanged);
+
+    fireEvent.click(screen.getByRole("button", { name: DELETE_BUTTON }));
+    // 确认弹窗出现且删除尚未发生。
+    await flush();
+    expect(screen.getByText(t("fontDownload.deleteConfirmBody"))).toBeInTheDocument();
+    expect(apiMocks.deleteBuiltinFont).not.toHaveBeenCalled();
+
+    await flush();
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: DELETE_BUTTON }));
+    await flush();
+
+    expect(apiMocks.deleteBuiltinFont).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain(t("fontDownload.deleted"));
+    // 清单要重拉：列表里那一款消失了，界面得如实反映。
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("删掉的正是当前字体：提示写明已回到系统字体", async () => {
+    renderRow(DONE, () => undefined, BUILTIN_FONT_FILE);
+
+    fireEvent.click(screen.getByRole("button", { name: DELETE_BUTTON }));
+    await flush();
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: DELETE_BUTTON }));
+    await flush();
+
+    expect(document.body.textContent).toContain(t("fontDownload.deletedAndResetToSystem"));
+  });
+
+  it("删除失败（文件被占用）时给原因，并且不弹成功", async () => {
+    apiMocks.deleteBuiltinFont.mockRejectedValueOnce(new Error("字体文件正被占用，无法删除"));
+    renderRow(DONE);
+
+    fireEvent.click(screen.getByRole("button", { name: DELETE_BUTTON }));
+    await flush();
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: DELETE_BUTTON }));
+    await flush();
+
+    expect(document.body.textContent).toContain(
+      t("fontDownload.deleteFailed", { error: "字体文件正被占用，无法删除" }),
+    );
+    expect(document.body.textContent).not.toContain(t("fontDownload.deleted"));
+    // 状态保持：Tag 还在，行仍显示"已下载"。
+    expect(screen.getByText(t("fonts.builtin.downloaded"))).toBeInTheDocument();
+  });
+
+  // ── P1-1：点名字看样张 ──────────────────────────────────────────
+
+  it("已下载时点字体名打开样张（四行都渲染）", async () => {
+    renderRow(DONE);
+
+    fireEvent.click(screen.getByRole("button", { name: t("fonts.builtin.name") }));
+
+    await flush();
+    expect(screen.getByTestId("font-sample")).toBeInTheDocument();
+    expect(screen.getByText(t("fontDownload.sampleLineTitle"))).toBeInTheDocument();
+    expect(screen.getByText(t("fontDownload.sampleLineBold"))).toBeInTheDocument();
+  });
+
+  it("未下载时点字体名只给一句提示，不打开空弹窗", async () => {
+    renderRow(IDLE);
+
+    fireEvent.click(screen.getByRole("button", { name: t("fonts.builtin.name") }));
+    await flush();
+
+    expect(screen.queryByTestId("font-sample")).toBeNull();
+    expect(document.body.textContent).toContain(t("fontDownload.sampleNotDownloaded"));
   });
 });

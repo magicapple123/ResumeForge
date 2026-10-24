@@ -27,8 +27,8 @@ import { COMPACT_SECTION_HEIGHT_PX } from "./profileCompactDrag";
 /** 每个分区的高度（jsdom 无布局，测试里用 getBoundingClientRect 桩出栈式布局）。
  *
  * summary 刻意给 140px：行程制下「一次激活内拖到 clamp 上限」的可用行程 =
- * stackBottom − 被拖项高 − 其静止槽位。projects（index 2）到末位需要 5 步 =
- * 5×48 = 240px 行程，stub 栈在 projects 之下必须留足这个余量——真实分区都在几百
+ * stackBottom − 被拖项高 − 其静止槽位。projects（默认顺序 index 3）到末位需要 4 步 =
+ * 4×48 = 192px 行程，stub 栈在 projects 之下必须留足这个余量——真实分区都在几百
  * 像素以上，该前提天然成立。 */
 const HEIGHTS: Record<ProfileSectionKey, number> = {
   basic_info: 100,
@@ -47,8 +47,8 @@ export const COMPACT_HEIGHT_PX = COMPACT_SECTION_HEIGHT_PX;
 export const COMPACT_CLASS = "is-compact";
 
 /** 默认顺序下的分区栈几何（gap=0）：
- * basic 200-300、exp 300-380、projects 380-440、skills 440-480、edu 480-510、
- * awards 510-530、campus 530-550、summary 550-690。 */
+ * basic 200-300、edu 300-330、exp 330-410、projects 410-470、skills 470-510、
+ * campus 510-530、awards 530-550、summary 550-690。 */
 export function currentOrder(): ProfileSectionKey[] {
   const raw = screen.getByTestId("section-stack").getAttribute("data-order") ?? "";
   return raw.split(",").filter(Boolean) as ProfileSectionKey[];

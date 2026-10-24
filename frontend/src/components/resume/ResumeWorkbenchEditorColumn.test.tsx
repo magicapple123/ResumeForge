@@ -393,8 +393,9 @@ describe("中栏 · 栏目条与溢出三角下拉（需求 4）", () => {
       t("editor.tab.projects"),
       t("editor.tab.skills"),
       t("editor.tab.awards"),
-      t("editor.tab.writing"),
     ]);
+    // 「写作增强」已搬到右键菜单（2026-10-24），不再是中栏的一个页签。
+    expect(labels).not.toContain(t("editor.tab.writing"));
   });
 
   it("点某个栏目会切换内容面板", async () => {

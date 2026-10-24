@@ -394,7 +394,9 @@ def test_overflowing_draft_is_truncated_without_shrinking_the_font(client):
     assert response.headers["X-Resume-Pages"] == "1"
     assert int(response.headers["X-Resume-Pages-Needed"]) > 1
     # 关键：正文仍然是 18px。缩过字号的话这里会冒出一个 9pt 上下的正文档。
-    assert _size_of(response.content, "三年后端开发经验") == pytest.approx(13.5, abs=0.01)
+    # 探针取**第一段经历**里的字：默认分区顺序是 教育 → 实习/工作 → … → 个人总结，
+    # 截断到一页时末尾的「个人总结」会被裁掉，用 summary 里的文案会找不到。
+    assert _size_of(response.content, "负责订单核心链路优化") == pytest.approx(13.5, abs=0.01)
 
 
 @needs_font

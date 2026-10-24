@@ -23,6 +23,7 @@ from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
 from ...schemas.resume import ResumeContent
 from ..exporter import normalize_page_limit
+from .resume_sections import default_section_order_config
 from .resume_template_store import (
     resolve_format_config,
     resolve_style_config,
@@ -110,9 +111,18 @@ def save_record(
     过一遍 ``validated_format_config``：请求体里的这个字段只做了形状校验（见
     ``schemas/resume.py``），未知键与越界数值都要在落库前丢掉——否则一份"存了却渲染
     时不生效"的配置会让用户以为自己的调整丢了。
+
+    落库前还补一道 **P0-5 的兜底**：``section_order`` 缺键时用「我的资料」的顺序物化一次
+    （``default_section_order_config``，等于内置默认则不写键）。放在这里而不是各自的
+    调用点，是因为生成有两条链路（SSE 与后台任务 runner）都走本函数，而"卡片显示的顺序
+    必须等于渲染顺序"这条不变量对两条链路同样成立；前端已经写好快照时这个键存在，
+    **原样保留、绝不覆盖**。
     """
     name = str(content.get("name") or "简历").strip()[:48]
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
+    merged_config = dict(format_config or {})
+    if "section_order" not in merged_config:
+        merged_config = {**(default_section_order_config(db) or {}), **merged_config}
     if job is None:
         company = ""
         job_title = str(content.get("job_intent") or "").strip()[:128]
@@ -137,7 +147,7 @@ def save_record(
         format_name=resolved_format_name(db, format_name),
         page_limit=normalize_page_limit(page_limit),
         font_scale=font_scale_spec(font_scale)["name"],
-        format_config=validated_format_config(format_config),
+        format_config=validated_format_config(merged_config),
         custom_instruction=custom_instruction.strip()[:2000],
         coverage_notes=coverage_notes or [],
         rationale=rationale or "",

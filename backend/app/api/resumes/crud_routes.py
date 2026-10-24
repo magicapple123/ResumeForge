@@ -40,6 +40,8 @@ from ...services.resume.resume_delivery import (
     replay_delivery_export,
 )
 from ...services.resume.resume_record import build_manual_title
+from ...services.resume.resume_sections import default_section_order_config
+from ...services.resume.resume_template_format import validated_format_config
 from ._shared import _mark_saved, _to_resume_out
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,18 @@ def create_manual_resume(payload: ManualResumeRequest, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="关联岗位不存在或已被删除")
 
     content = payload.content.model_dump()
+    # P0-5：板块顺序在**创建时物化**，不再靠前端 UI 的默认值临时生效。
+    #
+    # 为什么不留给前端：卡片（「调整板块顺序」）与四个渲染器读的都是
+    # ``format_config.section_order``；前端 UI 的默认值只是"显示成什么"，渲染器看不见它，
+    # 于是老简历会出现"卡片显示资料顺序、PDF 按内置默认排"的两套结果。落库之后只有一个来源。
+    #
+    # 两处顺序：先铺``默认``（资料顺序；与内置默认相同时 ``default_section_order_config``
+    # 返回 ``None``，即**不写键**），再叠请求体里显式给的那份——显式值永远赢。
+    format_config = {
+        **(default_section_order_config(db) or {}),
+        **validated_format_config(payload.format_config),
+    }
     record = ResumeRecord(
         title=build_manual_title(payload.content, job, payload.title),
         job_id=job.id if job else None,
@@ -67,6 +81,7 @@ def create_manual_resume(payload: ManualResumeRequest, db: Session = Depends(get
         enhancement_enabled=False,
         enhancement_level="balanced",
         parse_error="",
+        format_config=format_config,
         draft=payload.draft,
     )
     db.add(record)

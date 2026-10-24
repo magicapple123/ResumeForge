@@ -12,6 +12,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
 import type { ResumeLayout } from "../../types";
 import { DEFAULT_LAYOUT } from "../ResumeLayoutControls.testkit";
@@ -126,13 +127,13 @@ describe("ResumeTemplateControls · 板块顺序", () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
     const next = lastLayout(onChange);
     expect(next.format_config?.section_order).toEqual([
-      "summary",
       "education",
-      "experience",
       "projects",
-      "campus_experience",
+      "experience",
       "skills",
+      "campus_experience",
       "awards",
+      "summary",
     ]);
     // 强调色是另一项覆盖，不该被这次移动覆盖掉。
     expect(next.format_config?.accent).toBe("#123456");
@@ -163,14 +164,18 @@ describe("ResumeTemplateControls · 板块顺序", () => {
 });
 
 describe("ResumeTemplateControls · 版式下拉的弹层", () => {
-  it("弹层定宽（参数栏内容宽）而不是按内容撑开；每个选项带全名 title", async () => {
+  it("弹层带专属收窄类（6 个汉字宽）而不是按内容撑开；每个选项带全名 title", async () => {
     renderGroup();
 
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "版式" }));
 
-    // 弹层 class：宽度由 `.resume-params-dropdown` 定在 340px（另有 `max-width` 兜底），
-    // 不再按内容撑开——长自制版式名会把弹层拉出参数栏，甚至被窗口右缘裁掉（用户截图）。
+    // 弹层同时带两个类：`resume-params-dropdown` 给共用的 max-width 兜底与选项省略，
+    // `resume-format-dropdown` 才是版式专属的 112px 收窄（字体下拉共用前者，不能被收窄）。
     await waitFor(() => expect(document.querySelector(".resume-params-dropdown")).not.toBeNull());
+    const popup = document.querySelector(".resume-params-dropdown");
+    expect(popup?.classList.contains("resume-format-dropdown")).toBe(true);
+    // 字体下拉的弹层**不能**带这个类（它是竖排两层，需要 216px）。
+    expect(document.querySelectorAll(".resume-format-dropdown")).toHaveLength(1);
 
     // 每个名字外面包一层带 `title` 的 span：名字被省略时悬停看到的是**名字本身**。
     // （选项自己的 `title` 是"行高与间距收紧…"那句说明，答非所问。）
@@ -194,5 +199,106 @@ describe("ResumeTemplateControls · 最大篇幅", () => {
 
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
     expect(lastLayout(onChange)).toEqual({ ...BASE, page_limit: 2 });
+  });
+});
+
+/**
+ * 「按我的资料顺序排列」（P0-6）：**一次性快照** + 三分支可用性。
+ *
+ * 为什么把它当契约测：这个按钮的全部语义都在"点完之后与资料脱钩"——如果它被实现成一条
+ * 持续的跟随（比如渲染时直接读 `profile_section_order`），用户在资料页拖一下，所有点过它的
+ * 简历都会跟着变脸，而"老简历不追溯改变"是整条功能的前提。所以断言必须落在
+ * **写进 `format_config.section_order` 的那份快照**上。
+ *
+ * 三个不可用分支各有独立理由，提示语也不同：
+ * 1. 资料顺序与内置默认相同 → 点了没有任何变化；
+ * 2. 资料里没有**可排序分区**（`basic_info` 不算：它是页眉）→ 这动作无从谈起；
+ * 3. 其余 → 可用。
+ */
+describe("ResumeTemplateControls · 按我的资料顺序排列", () => {
+  /** 资料顺序与内置默认不同（项目在第一），且资料里有可排序分区。 */
+  const PROFILE_FIRST_CATALOG = {
+    ...TEMPLATE_CATALOG,
+    profile_section_order: [
+      "projects",
+      "summary",
+      "education",
+      "experience",
+      "campus_experience",
+      "skills",
+      "awards",
+    ],
+    profile_section_keys: [
+      "basic_info",
+      "projects",
+      "educations",
+      "experiences",
+      "campus_experiences",
+      "skills",
+      "awards",
+      "summary",
+    ],
+  };
+
+  function arrangeButton(): HTMLElement {
+    return screen.getByRole("button", { name: t("sections.arrangeByProfile") });
+  }
+
+  it("可用时点击：把资料顺序写成这份简历的快照，其它覆盖原样保留", async () => {
+    const onChange = renderGroup({ catalog: PROFILE_FIRST_CATALOG });
+
+    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
+    await screen.findByRole("list", { name: "简历板块顺序" });
+    fireEvent.click(arrangeButton());
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    const next = lastLayout(onChange);
+    // 快照 = 目录里那份完整排列（补齐成七个键），项目排在第一。
+    expect(next.format_config?.section_order).toEqual([
+      "projects",
+      "summary",
+      "education",
+      "experience",
+      "campus_experience",
+      "skills",
+      "awards",
+    ]);
+    // 强调色是另一项覆盖，不该被这次快照清掉。
+    expect(next.format_config?.accent).toBe("#123456");
+  });
+
+  it("资料顺序与内置默认相同 → 不可用（点了没有任何变化）", async () => {
+    renderGroup();
+
+    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
+    await screen.findByRole("list", { name: "简历板块顺序" });
+
+    expect(arrangeButton()).toBeDisabled();
+  });
+
+  it("资料里只有页眉（`basic_info`）→ 不可用（页眉不参与正文排序）", async () => {
+    renderGroup({
+      catalog: {
+        ...PROFILE_FIRST_CATALOG,
+        profile_section_keys: ["basic_info"],
+      },
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
+    await screen.findByRole("list", { name: "简历板块顺序" });
+
+    expect(arrangeButton()).toBeDisabled();
+  });
+
+  it("旧后端不下发 `profile_section_keys` → 不可用（不提供这个动作）", async () => {
+    // 显式摘掉这个字段：`undefined` 与空数组同义（当作"资料里没有可排序分区"）。
+    renderGroup({
+      catalog: { ...PROFILE_FIRST_CATALOG, profile_section_keys: undefined },
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
+    await screen.findByRole("list", { name: "简历板块顺序" });
+
+    expect(arrangeButton()).toBeDisabled();
   });
 });

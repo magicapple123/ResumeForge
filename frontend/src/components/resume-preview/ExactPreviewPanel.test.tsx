@@ -465,11 +465,11 @@ describe("ExactPreviewPanel", () => {
   });
 
   it.each([
-    { pages: 1, pageLimit: 3, blanks: 2 },
-    { pages: 3, pageLimit: 3, blanks: 0 },
+    { pages: 1, pageLimit: 3 },
+    { pages: 3, pageLimit: 3 },
   ])(
-    "按实际页数记页、空白纸紧接最后一页（$pages 页 / 上限 $pageLimit 页）",
-    async ({ pages, pageLimit, blanks }) => {
+    "按实际页数记页、不为凑上限补空白页（$pages 页 / 上限 $pageLimit 页）",
+    async ({ pages, pageLimit }) => {
       fetchPreview.mockResolvedValue(pdf(pages));
 
       render(panel({ pageLimit }));
@@ -483,7 +483,9 @@ describe("ExactPreviewPanel", () => {
       // jsdom 量不到宽度（`ResizeObserverMock` 不投递回调）→ 相框退回传入的 height（600），
       // 绝不能算出 0 高。按宽度定高的算术由 `useExactPreviewFrameHeight.test.ts` 直接测。
       expect(stack.dataset.frameHeight).toBe("600");
-      expect(document.querySelectorAll(".exact-preview-blank")).toHaveLength(blanks);
+      // 精确预览显示的就是导出产物本身：PDF 里有几页就画几页，多出来的纸会让人
+      // 以为"我的简历有 3 页"（2026-10-24 用户口径：空白页要去掉）。
+      expect(document.querySelectorAll(".exact-preview-blank")).toHaveLength(0);
     },
   );
 });

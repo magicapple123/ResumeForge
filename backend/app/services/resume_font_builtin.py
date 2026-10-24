@@ -20,7 +20,6 @@ Bold 16.2MB）。中国的简历用户几乎都需要一套能用的中文字体
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import shutil
 import threading
@@ -30,6 +29,21 @@ from typing import cast
 import httpx
 
 from ..config import DATA_DIR
+from .resume_font_download import (
+    CANCEL_JOIN_TIMEOUT,
+    TMP_SUFFIX,
+    Cancelled,
+    ChecksumError,
+    cleanup,
+    close_inflight,
+    fetch,
+    raise_if_cancelled,
+    reset_run_locked,
+    written_paths,
+)
+from .resume_font_download import lock as _lock
+from .resume_font_download import stop as _stop
+from .resume_font_download import written as _run_written
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +69,6 @@ BUILTIN_FILES: tuple[dict[str, object], ...] = (
 )
 
 DIR_NAME = "fonts"
-_TMP_SUFFIX = ".tmp"
-# 每读一块就更新一次内存进度：轮询接口的进度条要"动起来"，但锁竞争不能太频繁。
-CHUNK_SIZE = 64 * 1024
 # 磁盘预检倍数：下载要写临时文件再 rename，峰值占用略高于最终体积。
 DISK_HEADROOM = 1.2
 _TIMEOUT = httpx.Timeout(connect=10, read=60, write=10, pool=10)
@@ -79,10 +90,18 @@ class FontNotDownloaded(RuntimeError):
     """本机没有下载过内置字体（API 映射 404）。"""
 
 
-# 进程内单例：状态与进度都在这里，接口只读它。
-_lock = threading.Lock()
+class FontDeleteError(RuntimeError):
+    """删除字体文件失败（被占用 / 无权限）：文件保留原样，API 映射 500，不假装成功。"""
+
+
+# 进程内单例：状态与进度都在这里，接口只读它。取消信号（``_stop``）、在飞连接、本轮
+# 文件清单（``_run_written``）与**这把锁**住在 ``resume_font_download``：它们的生命周期
+# 是"一次下载"，和这里的"一份状态"不同源，但必须共用同一把锁（理由见那个模块的 docstring）。
 _state: dict[str, object] = {"state": "idle", "error": "", "downloaded_bytes": 0}
 _worker: threading.Thread | None = None
+# 本轮的"下载完成后是否接管当前字体"（P0-3：在制作台里下载不该改全局字体）。
+# 唯一消费者是 ``take_auto_activate()``；三条终止路径都会把它复位成 True（见 ``_apply``）。
+_auto_activate = True
 
 
 def fonts_dir() -> Path:
@@ -118,11 +137,16 @@ def downloaded_names() -> list[str]:
 
 
 def status() -> dict:
-    """下载状态；``state`` ∈ ``idle | downloading | failed | done``。"""
+    """下载状态；``state`` ∈ ``idle | downloading | failed | done``。
+
+    ``cancelling`` 只是**提示位**（取消信号已发出、线程正在收尾），**不是**第五种状态：
+    任何分支判断都必须读 ``state``（见 docs/system_design.md §5.3）。
+    """
     with _lock:
         state = str(_state.get("state") or "idle")
         error = str(_state.get("error") or "")
         progress = cast(int, _state.get("downloaded_bytes") or 0)
+        cancelling = bool(_state.get("cancelling"))
     total = total_bytes()
     present = [_is_present(item) for item in BUILTIN_FILES]
     downloaded = all(present)
@@ -134,6 +158,9 @@ def status() -> dict:
         progress = sum(
             cast(int, item["bytes"]) for item, ok in zip(BUILTIN_FILES, present, strict=True) if ok
         )
+    if state != "downloading":
+        # 收尾完成（或根本没在下）时这个提示位没有意义，一律清掉。
+        cancelling = False
     return {
         "id": FONT_ID,
         "label": FONT_LABEL,
@@ -143,6 +170,7 @@ def status() -> dict:
         "total_bytes": total,
         "state": state,
         "error": error,
+        "cancelling": cancelling,
     }
 
 
@@ -156,27 +184,53 @@ def _available_bytes() -> int | None:
     return None
 
 
-def start_download() -> dict:
+def start_download(activate: bool = True) -> dict:
     """启动后台下载并立刻返回当前状态（HTTP 202 的语义）。
 
+    Args:
+        activate: 下载完成后是否接管当前字体。``False`` 供"制作台里下载"用（P0-3：那
+            只该成为这份简历的字体，不该改掉全局选择）。缺省 ``True`` = 今天的行为。
+
     Raises:
-        FontBusy: 已有一个下载在跑。
+        FontBusy: 已有一个下载在跑。**这种情况下不动** ``activate``：改它等于污染
+            正在跑的那一轮（它会读到别人的开关）。
         FontDiskFull: 剩余空间不足 ``total_bytes * DISK_HEADROOM``。
     """
+    global _auto_activate
     with _lock:
         if str(_state.get("state") or "") == "downloading":
             raise FontBusy("字体正在下载中")
+        _auto_activate = activate
         if all(_is_present(item) for item in BUILTIN_FILES):
-            _state.update({"state": "done", "error": "", "downloaded_bytes": total_bytes()})
+            # 没有下载就没有"本轮"：保持今天的行为（轮询照常接管），也别把 False 留在
+            # 全局给下一次普通下载继承。
+            _auto_activate = True
+            _apply("done", progress=total_bytes(), keep_switch=True)
         else:
             free = _available_bytes()
             if free is not None and free < total_bytes() * DISK_HEADROOM:
                 raise FontDiskFull("磁盘空间不足，无法保存字体")
             fonts_dir().mkdir(parents=True, exist_ok=True)
-            # 清掉上一次失败的残留说明：新一次下载从干净状态开始。
-            _state.update({"state": "downloading", "error": "", "downloaded_bytes": 0})
+            # 取消信号与文件清单必须在**起线程之前、持锁**复位：晚一步清，上一轮的信号
+            # 会让新线程一出场就退出，上一轮的清单会让"紧接着取消"误删刚下好的文件。
+            reset_run_locked()
+            _apply("downloading", keep_switch=True)
             _spawn_worker()
     return status()
+
+
+def take_auto_activate() -> bool:
+    """取出并复位"本轮下载完成后是否接管当前字体"。
+
+    唯一消费者是 ``api/font_builtin._ensure_active``：它在下一次轮询到 ``done`` 时读
+    一次，然后**无论结果如何都复位成 True**。不复位的话，一次"从制作台下载"会让之后
+    所有普通下载都静默地不设当前字体——表现是"下载完没生效，重下也没用"，极难查。
+    """
+    global _auto_activate
+    with _lock:
+        value = _auto_activate
+        _auto_activate = True
+        return value
 
 
 def _spawn_worker() -> None:
@@ -186,6 +240,22 @@ def _spawn_worker() -> None:
     _worker.start()
 
 
+def _apply(state: str, *, error: str = "", progress: int = 0, keep_switch: bool = False) -> None:
+    """写状态（**调用方必须已持锁**）：四条路径共用同一个形状，免得字段慢慢漂开。
+
+    ``keep_switch=False`` 时顺带把"下载完成后是否接管当前字体"复位：done / failed /
+    cancelled 三条终止路径**都必须**做这一步，集中在这里才不会漏（漏一处的表现是
+    "上一次从制作台下载，之后所有下载都不设当前字体"）。``done`` 那一笔是例外
+    （``keep_switch=True``）——开关要留给下一次轮询去取用。
+    """
+    global _auto_activate
+    _state.update(
+        {"state": state, "error": error, "downloaded_bytes": progress, "cancelling": False}
+    )
+    if not keep_switch:
+        _auto_activate = True
+
+
 def _advance(delta: int) -> None:
     with _lock:
         _state["downloaded_bytes"] = cast(int, _state.get("downloaded_bytes") or 0) + delta
@@ -193,72 +263,69 @@ def _advance(delta: int) -> None:
 
 def _run_download() -> None:
     """后台线程主体：顺序下两个文件，全成功才置 done。"""
-    written: list[Path] = []
+    written = _run_written
     try:
         fonts_dir().mkdir(parents=True, exist_ok=True)
         for entry in BUILTIN_FILES:
             _download_one(entry, written)
         with _lock:
-            _state.update({"state": "done", "error": "", "downloaded_bytes": total_bytes()})
+            # 【竞态唯一裁决点】两个文件都已 rename 成功 → **以完成为准**：此刻哪怕
+            # ``_stop`` 已被置位（取消与完成撞车），也保留文件、落 done。删掉刚下好的
+            # 32MB 是净损失——他要的就是这份字体，只是慢了一步，``status()`` 会如实说。
+            _stop.clear()
+            _apply("done", progress=total_bytes(), keep_switch=True)
         logger.info("内置字体下载完成：%s", FONT_LABEL)
+    except Cancelled:
+        _finish_cancelled(written)
     except Exception as exc:  # noqa: BLE001 - 任何失败都要落成可读状态，不能让线程静默死掉
+        if _stop.is_set():
+            # 关客户端会让阻塞中的读抛错（StreamClosed / ReadError）：这仍然是**取消**，
+            # 不能写成 failed——否则界面上会冒出"下载失败"，而用户明明是自己点的取消。
+            _finish_cancelled(written)
+            return
         logger.warning("内置字体下载失败：%s", exc)
-        _cleanup(written)
+        cleanup(written, fonts_dir())
         with _lock:
-            _state.update({"state": "failed", "error": _failure_message(exc)})
+            _apply("failed", error=_failure_message(exc))
+
+
+def _finish_cancelled(written: list[Path]) -> None:
+    """取消收尾（线程侧）：清本轮文件与所有 ``.tmp``，状态回 ``idle``，**不留 failed 文案**。"""
+    logger.info("内置字体下载已取消")
+    cleanup(written, fonts_dir())
+    with _lock:
+        _apply("idle")
+
+
+def _open_client() -> httpx.Client:
+    """建一个下载客户端。``httpx`` **从本模块**取：测试替换的就是这里的这个名字。"""
+    return httpx.Client(timeout=_TIMEOUT, follow_redirects=True)
 
 
 def _download_one(entry: dict, written: list[Path]) -> None:
     """下载一个文件到 ``<name>.tmp``，校验通过后 rename 成正式文件。"""
+    raise_if_cancelled()
     target = _target(entry)
-    temp = target.with_name(target.name + _TMP_SUFFIX)
-    url = f"{BASE_URL}{entry['name']}"
-    digest = hashlib.sha256()
-    size = 0
-    temp.parent.mkdir(parents=True, exist_ok=True)
-    temp.unlink(missing_ok=True)
+    temp = target.with_name(target.name + TMP_SUFFIX)
     try:
-        with (
-            httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client,
-            client.stream("GET", url) as response,
-        ):
-            response.raise_for_status()
-            with temp.open("wb") as handle:
-                for chunk in response.iter_bytes(CHUNK_SIZE):
-                    if not chunk:
-                        continue
-                    handle.write(chunk)
-                    digest.update(chunk)
-                    size += len(chunk)
-                    _advance(len(chunk))
-    except Exception:
+        fetch(
+            f"{BASE_URL}{entry['name']}",
+            temp,
+            expected_bytes=int(entry["bytes"]),
+            expected_sha256=str(entry["sha256"]),
+            new_client=_open_client,
+            on_progress=_advance,
+        )
+    except ChecksumError as exc:
+        # 校验失败是**业务失败**（文案可直接给用户看），不是取消：翻成业务异常。
+        raise FontDownloadError(str(exc)) from exc
+    if _stop.is_set():
+        # rename 之前再看一眼：已经取消就别把这一份落成正式文件（落一个"半对"更糟）。
         temp.unlink(missing_ok=True)
-        raise
-    if size != int(entry["bytes"]) or digest.hexdigest() != str(entry["sha256"]):
-        temp.unlink(missing_ok=True)
-        raise FontDownloadError("校验失败，文件不完整")
+        raise Cancelled
     temp.replace(target)
-    written.append(target)
-
-
-def _cleanup(written: list[Path]) -> None:
-    """失败收尾：删掉所有 ``.tmp``，以及本轮已落地但**凑不成一对**的正式文件。
-
-    只留一半（Regular 在、Bold 不在）对用户毫无价值，还会白占 15MB；下一次点击下载
-    会完整重来一遍。
-    """
-    directory = fonts_dir()
-    if directory.is_dir():
-        for path in directory.glob(f"*{_TMP_SUFFIX}"):
-            try:
-                path.unlink()
-            except OSError as exc:  # noqa: BLE001 - 清理失败不该盖住原始错误
-                logger.warning("清理临时字体文件失败（%s）：%s", path.name, exc)
-    for path in written:
-        try:
-            path.unlink()
-        except OSError as exc:  # noqa: BLE001 - 同上
-            logger.warning("清理未完成的字体文件失败（%s）：%s", path.name, exc)
+    with _lock:
+        written.append(target)
 
 
 def _failure_message(exc: Exception) -> str:
@@ -271,12 +338,65 @@ def _failure_message(exc: Exception) -> str:
     return f"字体下载失败：{text}" if text else "字体下载失败"
 
 
+def cancel() -> dict:
+    """取消正在进行的下载，返回取消后的状态（**幂等**：没有下载在跑就原样返回）。
+
+    时序：① 持锁读 ``state``，不是 ``downloading`` 就返回 ``status()``（磁盘一字节不动，
+    顺带兜住"刚好下完"的竞态：以完成为准）；② 置 ``_stop`` + ``cancelling``，取出线程
+    句柄；③ **关掉在飞连接**（``close_inflight()``）——只置 Event 的话线程会阻塞在
+    ``iter_bytes()`` 上直到 60s 读超时，用户等不了；④ ``join(CANCEL_JOIN_TIMEOUT)`` 等
+    线程自己收尾（在下载线程**自己**里调用时跳过 join，否则 join 自己会抛）；⑤ 复核，
+    见 ``_settle_after_cancel``。
+
+    这里**不碰**当前字体：取消不改 ``user_fonts`` 的选择。
+    """
+    with _lock:
+        running = str(_state.get("state") or "") == "downloading"
+        if running:
+            _stop.set()
+            _state["cancelling"] = True
+        worker = _worker
+    if not running:
+        # 幂等分支：状态与磁盘都保持原样（覆盖 done / idle / failed 三种实况）。
+        return status()
+    close_inflight()
+    if worker is not None and worker is not threading.current_thread() and worker.is_alive():
+        worker.join(CANCEL_JOIN_TIMEOUT)
+    _settle_after_cancel(worker)
+    return status()
+
+
+def _settle_after_cancel(worker: threading.Thread | None) -> None:
+    """取消的收尾复核：只有**线程确实退出了**才由这里清磁盘与复位状态。
+
+    ``join`` 超时（线程还卡在慢盘写入上）时不碰任何文件、也不假装已取消：状态留在
+    ``downloading`` + ``cancelling=True``，由线程自己走到 ``idle``，前端继续轮询即可。
+    ``cancel()`` 返回的永远是"此刻的真相"，不是一个愿望。
+    """
+    with _lock:
+        if worker is not None and worker.is_alive():
+            return
+        if str(_state.get("state") or "idle") == "done":
+            # 【以完成为准】两个文件都已落地：取消来晚了一步，文件保留、状态 done。
+            _state["cancelling"] = False
+            return
+        _apply("idle")
+    written = written_paths()
+    # 线程侧已清过一遍，这里是幂等的第二道保险；文件 IO 放在锁外，别把状态接口拖住。
+    cleanup(written, fonts_dir())
+
+
 def delete() -> list[str]:
     """删除已下载的两个字体文件，返回被删掉的文件名。
 
     Raises:
+        FontBusy: 正在下载中——删到一半会让状态与磁盘彻底对不上。
+        FontDeleteError: 删不掉（文件被占用 / 无权限）；**文件保留原样**，不假装成功。
         FontNotDownloaded: 本机没有这两个文件。
     """
+    with _lock:
+        if str(_state.get("state") or "") == "downloading":
+            raise FontBusy("字体正在下载中")
     removed: list[str] = []
     for entry in BUILTIN_FILES:
         path = _target(entry)
@@ -285,10 +405,15 @@ def delete() -> list[str]:
         except FileNotFoundError:
             continue
         except OSError as exc:
-            raise FontDownloadError(f"字体文件删除失败：{exc}") from exc
+            # 绝不静默成功：删不掉就如实抛，由路由翻成 500 + 原因（文件原样留着，
+            # 用户关掉占用它的程序后可以再点一次删除）。
+            logger.warning("删除内置字体文件失败（%s）：%s", path.name, exc)
+            if isinstance(exc, PermissionError):
+                raise FontDeleteError("字体文件正被占用，无法删除") from exc
+            raise FontDeleteError("字体文件删除失败") from exc
         removed.append(str(entry["name"]))
     with _lock:
-        _state.update({"state": "idle", "error": "", "downloaded_bytes": 0})
+        _apply("idle")
     if not removed:
         raise FontNotDownloaded("字体尚未下载")
     logger.info("已删除内置字体：%s", "、".join(removed))
@@ -296,25 +421,35 @@ def delete() -> list[str]:
 
 
 def reset_state() -> None:
-    """把进程内状态复位（测试与"取消下载"用；不动磁盘上的文件）。"""
+    """把进程内状态复位（测试用；不动磁盘上的文件）。
+
+    连取消信号与在飞连接一起复位：留着上一轮的 ``_stop`` 会让下一次下载一出场就自我取消。
+    """
+    global _worker
     with _lock:
-        _state.update({"state": "idle", "error": "", "downloaded_bytes": 0})
+        reset_run_locked()
+        _worker = None
+        _apply("idle")
 
 
 __all__ = [
     "BASE_URL",
     "BUILTIN_FILES",
+    "CANCEL_JOIN_TIMEOUT",
     "FONT_ID",
     "FONT_LABEL",
     "FontBusy",
+    "FontDeleteError",
     "FontDiskFull",
     "FontDownloadError",
     "FontNotDownloaded",
+    "cancel",
     "delete",
     "downloaded_names",
     "fonts_dir",
     "reset_state",
     "start_download",
     "status",
+    "take_auto_activate",
     "total_bytes",
 ]

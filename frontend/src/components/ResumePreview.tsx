@@ -20,6 +20,7 @@ import {
   type ResumePreviewHandle,
 } from "./resume-preview/config";
 import ExactPreviewPanel from "./resume-preview/ExactPreviewPanel";
+import type { ExactPreviewOptions } from "./resume-preview/exactPreviewOptions";
 import ResumePreviewCanvas from "./resume-preview/ResumePreviewCanvas";
 import PreviewZoomBar from "./resume-preview/PreviewZoomBar";
 import ResumePreviewToolbar from "./resume-preview/ResumePreviewToolbar";
@@ -28,25 +29,9 @@ import { useClickToEditPreview } from "./resume-preview/useClickToEditPreview";
 import { layoutFrame } from "./resume-preview/layout";
 import { forwardWheelToParent, useFrameInteractions } from "./resume-preview/useFrameInteractions";
 
-/** 精确预览需要的那组上下文（与 `ResumeDetailPreview` 手里的草稿值一致）。 */
-export interface ExactPreviewOptions {
-  resumeId: number;
-  /** 草稿的模板名（内置或自制）。 */
-  template: string;
-  /** 草稿的版式名。 */
-  formatName: string;
-  fontScale: string;
-  /**
-   * 纸面文案的语言（`zh-CN` / `en-US`）。
-   *
-   * 必须一路传到服务端：精确预览显示的就是导出产物本身，语言传不进去就会
-   * "草稿里选了英文、精确预览还是中文"。
-   */
-  language: string;
-  formatConfig: Record<string, unknown>;
-  /** 正文 + 模板的身份：内容改了也要重排一次 PDF（见 `ExactPreviewPanel`）。 */
-  contentSignature: string;
-}
+// `ExactPreviewOptions` 的定义搬到了 `resume-preview/exactPreviewOptions.ts`（本文件贴着
+// 500 行预算，而那个类型只被"构造它的人"与"消费它的组件"用到），这里 re-export 保持
+// `import type { ExactPreviewOptions } from "../ResumePreview"` 那几处调用不变。
 
 interface Props {
   html: string;
@@ -446,7 +431,11 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
             language={exactPreview!.language}
             formatConfig={exactPreview!.formatConfig}
             contentSignature={exactPreview!.contentSignature}
+            headingSerif={exactPreview!.headingSerif}
             height={Math.max(MIN_PREVIEW_HEIGHT, viewportHeight)}
+            // 精确模式的缩放与草稿共用同一个 `zoom`：两边都从 100% 起，
+            // 用户的心理模型只有"这张纸现在多大"，没有第二套比例。
+            scale={zoom}
           />
         </div>
       ) : null}
@@ -478,20 +467,24 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
           />
         </div>
       ) : null}
-      {/* 缩放条只服务**草稿**预览：精确模式里缩放是浏览器 PDF 查看器自己的事。 */}
-      {canExactPreview && activeMode === "exact" ? null : (
-        <PreviewZoomBar
-          scale={geometry.scale}
-          clampedToMin={geometry.clampedToMin}
-          onZoomOut={() => adjustZoom(-0.1)}
-          onZoomIn={() => adjustZoom(0.1)}
-          onReset={() => setZoom(1)}
-        />
-      )}
+      {/* 缩放条两个口径都有（2026-10-24）：精确模式原先把它藏起来，理由是"缩放交给
+          浏览器的 PDF 查看器"——但补出来的空白纸是父页面的 DOM，查看器的缩放管不到它，
+          于是"PDF 变大了、空白纸没变"。现在两边共用同一条缩放条与同一个 `zoom`：
+          精确模式放大 = 把纸列改宽（查看器重新排版，矢量不糊）。 */}
+      <PreviewZoomBar
+        scale={canExactPreview && activeMode === "exact" ? zoom : geometry.scale}
+        // `clampedToMin` 的文案说的是"容器装不下"，只对草稿的按宽自适应成立；
+        // 精确模式的 50% 是用户自己缩到的，不该冒出一句对不上的解释。
+        clampedToMin={canExactPreview && activeMode === "exact" ? false : geometry.clampedToMin}
+        onZoomOut={() => adjustZoom(-0.1)}
+        onZoomIn={() => adjustZoom(0.1)}
+        onReset={() => setZoom(1)}
+      />
       {boldMenu ? <BoldContextMenu {...boldMenu} /> : null}
     </div>
   );
 });
 
 export type { ResumePreviewHandle } from "./resume-preview/config";
+export type { ExactPreviewOptions } from "./resume-preview/exactPreviewOptions";
 export default ResumePreview;

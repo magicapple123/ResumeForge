@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历写作增强面板：STAR 改写 / 话术生成 / 风格润色 / 中英互译。
  *
- * 自包含：一段文本进、一段文本出。结果既可复制，也可一键回填——由父组件决定
- * 「回填到哪个字段」，这里只负责把结果交回去。
+ * 自包含：一段文本进、一段文本出。
+ *
+ * **结果默认回填**（2026-10-24 最终口径）：面板现在是从**右键菜单**打开的弹窗，入参就是
+ * 用户刚选中的那一段，`onApply` 由宿主直接写回那个选区——所见即所得，不用再复制粘贴。
+ * 没有可写目标时（右键落在普通段落上）宿主不传 `onApply`，面板退回「复制」，
+ * 因为那种情况下"回填到哪里"根本没有答案，按钮点下去只会静默失败。
  */
-import { App, Button, Checkbox, Input, Radio, Segmented, Space, Typography } from "antd";
+import { CheckOutlined, CopyOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Checkbox, Input, Radio, Segmented, Space, Typography } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
 import { useMemo, useState } from "react";
 import {
@@ -13,12 +18,14 @@ import {
   rewriteStar,
   translateResumeText,
 } from "../api/resumeWriting";
+import { t, type MessageKey } from "../i18n";
 import type {
   PhraseMode,
   PhrasesResult,
   PolishStyle,
   TranslateDirection,
 } from "../types/resumeWriting";
+import { copyText } from "../utils/clipboard";
 
 type Operation = "star" | "phrases" | "polish" | "translate";
 
@@ -28,6 +35,19 @@ const OPERATIONS: { value: Operation; label: string }[] = [
   { value: "polish", label: "风格润色" },
   { value: "translate", label: "中英互译" },
 ];
+
+/**
+ * 每个动作**一句话**的用途说明（2026-10-24 用户口径："功能不太明确"）。
+ *
+ * 放在动作选择器**下面**随选中项切换，而不是写成一段总说明：用户此刻只关心
+ * "我选的这个动作会怎么改我的句子"。文案说"改什么"，不说"用了什么模型"。
+ */
+const OPERATION_HINTS: Record<Operation, MessageKey> = {
+  star: "writing.hint.star",
+  phrases: "writing.hint.phrases",
+  polish: "writing.hint.polish",
+  translate: "writing.hint.translate",
+};
 
 const POLISH_STYLES: { value: PolishStyle; label: string }[] = [
   { value: "big_tech", label: "大厂风" },
@@ -44,8 +64,12 @@ const PHRASE_MODES: { value: PhraseMode; label: string }[] = [
 interface Props {
   resumeId: number;
   initialText?: string;
-  /** 把某条结果回填到父组件选定的字段。 */
-  onApply: (text: string) => void;
+  /**
+   * 把结果写回宿主指定的位置（右键时选中的那段文字）。
+   *
+   * 缺省 = 没有可写目标，结果块显示「复制」而不是「回填」。
+   */
+  onApply?: (result: string) => boolean | void;
 }
 
 export default function ResumeWritingPanel({ resumeId, initialText = "", onApply }: Props) {
@@ -83,14 +107,38 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
     }
   };
 
+  /**
+   * 回填：交给宿主写回选区（选区偏移由它记着），这里只负责给反馈。
+   *
+   * 宿主返回 `false` 表示没写进去（选区已失效、超出 `maxLength`）——这时不能说"已回填"，
+   * 否则用户会以为正文改好了、其实一个字没动。
+   */
   const apply = (result: string) => {
+    if (!result || !onApply) return;
+    const applied = onApply(result);
+    if (applied === false) message.warning(t("writing.apply.failed"));
+    else message.success(t("writing.apply.success"));
+  };
+
+  const copy = async (result: string) => {
     if (!result) return;
-    onApply(result);
-    message.success("已回填");
+    const ok = await copyText(result);
+    if (ok) message.success(t("writing.copy.success"));
+    else message.warning(t("writing.copy.failed"));
   };
 
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
+      {/* 用法提示（2026-10-24 用户口径："功能不太明确"）：三件事说清——贴什么、
+          选什么、结果去哪。常驻而不是一次性引导：这几个动作对应的是不同场景，
+          用户是"想不起来该选哪个"时才回来看，藏起来等于没写。 */}
+      <Alert
+        type="info"
+        showIcon
+        className="resume-writing-hint"
+        title={t("writing.hint.title")}
+        description={t("writing.hint.body")}
+      />
       <Input.TextArea
         rows={4}
         value={text}
@@ -105,6 +153,10 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
         value={operation}
         onChange={(value) => setOperation(value as Operation)}
       />
+
+      <Typography.Text type="secondary" className="resume-writing-hint-line">
+        {t(OPERATION_HINTS[operation])}
+      </Typography.Text>
 
       {operation === "polish" && (
         <Radio.Group
@@ -147,7 +199,11 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
       {loading && <LoadingBlock />}
 
       {!loading && singleResult && (
-        <ResultBlock label="结果" onApply={() => apply(singleResult)}>
+        <ResultBlock
+          label="结果"
+          onApply={onApply ? () => apply(singleResult) : undefined}
+          onCopy={() => void copy(singleResult)}
+        >
           <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
             {singleResult}
           </Typography.Paragraph>
@@ -165,7 +221,12 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
           )
             .filter(([key]) => phrasesResult[key])
             .map(([key, label]) => (
-              <ResultBlock key={key} label={label} onApply={() => apply(phrasesResult[key])}>
+              <ResultBlock
+                key={key}
+                label={label}
+                onApply={onApply ? () => apply(phrasesResult[key]) : undefined}
+                onCopy={() => void copy(phrasesResult[key])}
+              >
                 <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
                   {phrasesResult[key]}
                 </Typography.Paragraph>
@@ -180,18 +241,27 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
 function ResultBlock({
   label,
   onApply,
+  onCopy,
   children,
 }: {
   label: string;
-  onApply: () => void;
+  /** 有可写目标时优先回填；没有才退回复制。 */
+  onApply?: () => void;
+  onCopy: () => void;
   children: React.ReactNode;
 }) {
+  const run = onApply ?? onCopy;
   return (
     <div style={{ border: "1px solid var(--rf-border)", borderRadius: 8, padding: 12 }}>
       <Space style={{ width: "100%", justifyContent: "space-between" }}>
         <Typography.Text strong>{label}</Typography.Text>
-        <Button size="small" type="link" onClick={onApply}>
-          回填
+        <Button
+          size="small"
+          type="link"
+          icon={onApply ? <CheckOutlined /> : <CopyOutlined />}
+          onClick={run}
+        >
+          {onApply ? t("writing.action.apply") : t("writing.action.copy")}
         </Button>
       </Space>
       {children}

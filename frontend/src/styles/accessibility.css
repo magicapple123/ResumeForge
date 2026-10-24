@@ -92,11 +92,14 @@
   outline-color: var(--rf-focus-visible);
 }
 
-/* 文本输入框的聚焦环：**实色 outline 取代半透明 box-shadow 光晕**。
-   antd 的光晕是 `0 0 0 2px rgba(…, .43)`，叠在 1px 描边上，圆角处会透出底色、
-   像素边界也不干净——看起来就是一圈"毛边"。outline 由浏览器按 border-radius 绘制，
-   边界清晰，也顺手把深色主题的环色对齐到 `--rf-focus-visible`。
-   只改文本类字段：下拉/开关等控件的光晕形状不同，保持原样。 */
+/* 文本输入框的聚焦环：**1px 描边 + 一圈很淡的光晕**。
+   2026-10-20 曾用 `outline: 2px solid` + `outline-offset: 1px` 取代 antd 的半透明光晕
+   （后者在圆角处会透出底色，像一圈毛边）。但实色 2px 叠在 1px 边框上，肉眼看到的是
+   一道约 4px 的纯蓝框——在浅色表单里像"报错"，比毛边更难受（2026-10-24 用户口径：
+   "太扎眼，不和谐"）。
+   现在：描边交给边框本身（1px，antd 已经把它染成主题色），再补一圈 14% 的混色光晕，
+   边界仍然清楚，但不再抢走视线。去掉 outline 是安全的——聚焦态同时还有边框变色与
+   光晕两重提示，键盘用户不会失去焦点位置。 */
 .app-shell .ant-input:focus,
 .app-shell .ant-input-affix-wrapper:focus-within,
 .app-shell .ant-input-number:focus-within,
@@ -109,15 +112,16 @@
 .ant-drawer .ant-input-affix-wrapper:focus-within,
 .ant-drawer .ant-input-number:focus-within,
 .ant-drawer .ant-picker:focus-within {
-  box-shadow: none;
-  outline: 2px solid var(--rf-focus-visible);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rf-focus-visible) 14%, transparent);
 }
 
-/* 带前缀/后缀图标的输入框：外框（`.ant-input-affix-wrapper`）已经画了聚焦环，
-   里面的 `<input>` 还会 `:focus`，不排除就会画出**两层**环。 */
+/* 带前缀/后缀图标的输入框：外框（`.ant-input-affix-wrapper`）已经画了聚焦光晕，
+   里面的 `<input>` 仍是 `.ant-input`，会**再画一层**贴在里面——两层叠起来比原来的
+   2px 实色还花。这里把它彻底按住。 */
 .app-shell .ant-input-affix-wrapper .ant-input:focus,
 .ant-modal .ant-input-affix-wrapper .ant-input:focus,
 .ant-drawer .ant-input-affix-wrapper .ant-input:focus {
   outline: none;
+  box-shadow: none;
 }

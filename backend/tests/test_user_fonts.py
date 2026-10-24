@@ -13,10 +13,12 @@
 from __future__ import annotations
 
 import base64
+import io
 
 import pytest
 from app.services import resume_font_builtin, resume_font_embed, user_fonts
 from app.services.pdf_exporter import reset_font_cache
+from fontTools.ttLib import TTFont
 from tests.font_fixtures import build_test_font, write_font
 
 
@@ -260,3 +262,61 @@ def test_embed_css_emits_two_faces_for_the_builtin_pair():
 
 def test_active_font_paths_returns_none_without_choice():
     assert user_fonts.active_font_paths() is None
+
+
+# ===== 子集缓存按「字符集」分键（实时预览提速）=====
+#
+# 子集产物只取决于"用到哪些字"，与顺序、字数、重复次数无关。改前缓存键里含全文 sha256，
+# 改一个字必然失配 → 每次按键都要现场重切 CJK 子集（实测 1.2s），实时预览被拖垮。
+
+
+def _cmap_of(css: str) -> set[int]:
+    """从内嵌的 base64 子集里解析出真实存在的码位（证明"字形真的进了子集"）。"""
+    font = TTFont(io.BytesIO(_payload_from_css(css)))
+    try:
+        return set(font.getBestCmap())
+    finally:
+        font.close()
+
+
+def test_embed_css_hits_the_cache_for_the_same_charset():
+    """同字符集、不同顺序/字数的两段文本：CSS 必须逐字节相同，且第二次是缓存命中。
+
+    这是"停手 1 秒内看到实时预览"的核心：改名字里的一个字不引入新字符时，不该重切字体。
+    """
+    write_font("测试字体.ttf", build_test_font())
+    user_fonts.set_active("测试字体.ttf")
+    resume_font_embed._embed_css_cached.cache_clear()
+    try:
+        first = resume_font_embed.embed_css("简历张三测试")
+        misses_after_first = resume_font_embed._embed_css_cached.cache_info().misses
+        # 字符完全相同、顺序与重复次数不同（真实场景：改名、改一句话的字序）。
+        second = resume_font_embed.embed_css("试测三张历简测试试")
+    finally:
+        info = resume_font_embed._embed_css_cached.cache_info()
+        resume_font_embed._embed_css_cached.cache_clear()
+
+    assert first == second
+    assert misses_after_first == 1
+    # 第二次没有真的去切字：命中数 +1，未命中数不变。
+    assert info.hits == 1
+    assert info.misses == 1
+
+
+def test_embed_css_recuts_when_a_new_character_appears():
+    """引入原字符集里没有的字（龘）：必须真的重切，且该字形确实进入了子集。"""
+    # 字体本身要含"龘"，否则子集化会静默丢弃它，测不出"有没有重切"。
+    write_font("测试字体.ttf", build_test_font("简历张三龘"))
+    user_fonts.set_active("测试字体.ttf")
+    resume_font_embed._embed_css_cached.cache_clear()
+    try:
+        before = resume_font_embed.embed_css("简历张三")
+        after = resume_font_embed.embed_css("简历张龘")
+    finally:
+        resume_font_embed._embed_css_cached.cache_clear()
+
+    # 字符集不同 → 不命中 → 产物不同，且新字形真的进了子集。
+    assert after != before
+    assert 0x9F98 in _cmap_of(after)
+    assert 0x9F98 not in _cmap_of(before)
+

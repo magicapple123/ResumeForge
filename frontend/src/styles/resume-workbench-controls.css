@@ -333,17 +333,45 @@
   opacity: 0.5;
 }
 
-/* ===== 参数栏下拉的弹层宽度（2026-11-06） ===== */
+/* ===== 参数栏下拉的弹层宽度（2026-11-06 → 2026-11 收窄到 260 → 2026-10-24 收到 216） ===== */
 /* 症状（用户截图）：字体 / 版式两个下拉的弹层按内容撑开，长字体名与自制版式名
    把弹层拉到半屏，甚至被窗口右缘裁掉——面板只有 380px，而弹层能到 600px+。
-   改法：弹层宽度钉在参数栏的**内容宽 340**（380 − 左右 padding 20×2），
-   与上面那一行滑杆同宽；视口更窄时用 `max-width` 兜底（永远留 32px 呼吸）。
+   经历过三档：按内容撑开 → 340 → 260 → **216**。最后一档来自用户截图：240 以上时
+   选项右边会留出一大片空白（「标准」「紧凑」这类两字预设只占三分之一宽度），
+   看着比触发框宽太多。216 仍容得下「虚构版式模板（2）（自制）」这类长名字，
+   再长的走单行省略 + `title` 悬停。视口更窄时用 `max-width` 兜底（永远留 32px 呼吸）。
    注意只约束**弹层**：触发框的宽度仍由各自的规则管（`compact` 工具栏形态不变）。
    弹层是 portal 到 `body` 的，所以左对齐触发框时右侧会盖住中栏——那是下拉的常规行为，
    比"被窗口裁掉"好。 */
 .resume-params-dropdown {
-  width: 340px;
+  width: 216px;
   max-width: calc(100vw - 32px);
+}
+
+/* 版式下拉专属收窄（2026-10-24，用户口径：「能显示 6 个中文字符就够」）。
+   只覆盖**版式**那一份，字体下拉仍用上面的 216px——它是竖排两层（展示名 + 状态/进度），
+   收窄会把展示名截成半截。
+
+   130px 是这条验收线（第 6 个汉字完整、第 7 个起省略）的**最小**宽度，算式：
+     6 个汉字 84px（14px 字号 × 6）
+   + 单行省略要给省略号本身留的 14px（text-overflow 的 `…` 也是 1em）
+   + 选项左右内边距 24px（antd `.ant-select-item-option` 的 12px × 2）
+   + 弹层内边距 8px（`.ant-select-dropdown` 的 4px × 2）
+   = 130px，内容区正好 98px = 84 + 14。
+
+   走过的两档都不够：112px 内容只有 80px（`二号（自制）` scrollWidth 84 > clientWidth 80）；
+   116px 内容 84px，刚好只放得下 6 个字、没给省略号留位置，于是第 6 个字被 `…` 顶掉——
+   真机截图上 `三号版（自制）` 只显示到 `三号版（自…`。
+
+   130px 的真机实测（Chromium 1440×900，antd 6）：弹层 130、内边距 4+4、选项内边距 12+12，
+   内容区 98px；`三号版（自制）` 的文本宽正好 98px，**7 个字全部显示、不出现省略号**
+   （精确贴合，没有余量）；更长的自制名（`自制定宽测试版式（自制）` 168px）落到
+   `自制定宽测试…`——第 6 个汉字完整、第 7 个起省略。也就是说 98px 是这条验收线的**下界**：
+   名字再长一点（或被选中时的 600 字重撑宽 2%）都只会退化成"6 字 + `…`"，不会再吃掉第 6 个字。
+   antd 的选项内边距若变了，按「6 个字 + 省略号刚好放得下」重新校准，并同步
+   `resume-dropdown-width.test.ts`。 */
+.resume-params-dropdown.resume-format-dropdown {
+  width: 130px;
 }
 
 /* 选项行单行省略：弹层宽度定死之后，长字体名 / 长文件名不能换行把行高撑乱。
@@ -362,12 +390,11 @@
   white-space: nowrap;
 }
 
-/* 字体选项：展示名 + 小字文件名同排。两者**各自**单行省略——
-   只给外层省略时，文件名会把展示名挤掉，而展示名才是用户认字体的依据。 */
+/* 字体选项：**竖排两层**——展示名一行、状态/进度一行。横排（展示名 + 文件名）在
+   260px 里两边都会被截成半截，展示名才是用户认字体的依据。 */
 .resume-params-dropdown .resume-font-option {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  flex-direction: column;
   max-width: 100%;
   overflow: hidden;
 }
@@ -379,12 +406,28 @@
   white-space: nowrap;
 }
 
-/* 文件名可以更短：它是"排查时才看"的第二信息，让位给展示名。 */
-.resume-params-dropdown .resume-font-option-file {
-  flex: 0 1 auto;
-  max-width: 40%;
-  margin-left: 0;
+/* 第二行：未下载 / 下载中（+ 取消）/ 失败（+ 重试）。整行单行省略，
+   行内按钮自己收住宽度——它比文字重要，不该被文字挤掉。 */
+.resume-params-dropdown .resume-font-option-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.resume-params-dropdown .resume-font-option-note > span:first-child {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.resume-params-dropdown .resume-font-option-note .ant-btn {
+  flex: none;
+  height: auto;
+  padding: 0;
+  font-size: 11px;
 }

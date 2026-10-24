@@ -159,8 +159,8 @@ const workbench = {
   "workbench.draftDiff.modified": "改动 {count} 条",
 
   // ── 精确预览的空白页 ─────────────────────────────────────
-  /** 精确预览里补齐的空白纸上的标注（`{page}` 是页码，`{total}` 是设定的篇幅上限）。 */
-  "workbench.exact.blankPage": "第 {page} 页 · 空白（上限 {total} 页）",
+  // 精确预览不再补空白纸（2026-10-24 用户口径：多页时后面补出来的空白页要去掉），
+  // 所以原来那条「第 N 页 · 空白（上限 M 页）」的标注文案一并下线。
 
   /** 新建简历弹窗 footer 上的入口：先建一份空白简历，再去制作台排版。 */
   "workbench.action.open-from-new": "前往简历制作台",

@@ -186,20 +186,15 @@ async function flushCollapse() {
   await act(async () => {});
 }
 
-/** 激活后分三档移动，制造 3 次实时 splice（跨 3 个分区）。 */
+/**
+ * 激活后移动三档：每档指针行程 50px（≥ 一档步长 48px），制造 2 次实时 splice；
+ * 最后一档已经贴到栈底 clamp（`stackBottom − 卡高`），按设计不再换位。
+ */
 async function dragSteps(key: ProfileSectionKey, fromY: number, toY: number) {
   dragHandle(key, fromY);
-  fireEvent.pointerMove(document, {
-    clientX: 10,
-    clientY: fromY + (toY - fromY) / 3,
-    pointerId: 1,
-  });
+  fireEvent.pointerMove(document, { clientX: 10, clientY: fromY + 50, pointerId: 1 });
   await flushCollapse();
-  fireEvent.pointerMove(document, {
-    clientX: 10,
-    clientY: fromY + (2 * (toY - fromY)) / 3,
-    pointerId: 1,
-  });
+  fireEvent.pointerMove(document, { clientX: 10, clientY: fromY + 100, pointerId: 1 });
   fireEvent.pointerMove(document, { clientX: 10, clientY: toY, pointerId: 1 });
   fireEvent.pointerUp(document, { clientX: 10, clientY: toY, pointerId: 1 });
 }
@@ -210,7 +205,7 @@ afterEach(() => {
 });
 
 describe("拖拽重排渲染成本（Profiler 计数）", () => {
-  it("拖 projects 跨 3 个分区：分区内容零重渲、提交数有界、DOM 节点不换", async () => {
+  it("拖 projects 跨 2 个分区：分区内容零重渲、提交数有界、DOM 节点不换", async () => {
     stubSectionRects();
     // 用 holder 而不是 let + 闭包赋值：TS 对闭包内的赋值不做收窄，let 会被推成 never。
     const holder: { current: ReorderRenderCounters | null } = { current: null };
@@ -227,17 +222,17 @@ describe("拖拽重排渲染成本（Profiler 计数）", () => {
     expect(commitsAtMount).toBeGreaterThan(0);
     expect(contentRendersAtMount).toBe(DEFAULT_SECTION_ORDER.length);
 
-    // projects 在视觉栈的 380-440；拖到 y=560，每档指针行程 50px ≥ 步长 48，
-    // 三档各推进一格（实测每档一次实时 splice，共 3 次）。
+    // projects 在视觉栈的 410-470（默认顺序第 4 位）。指针从 440 拖到底：栈底 clamp
+    // （stackBottom − 卡高）只留出 2 档行程（48px/档），所以是 2 次实时 splice、跨 2 个分区。
     const projectsNode = document.querySelector<HTMLElement>(
       '[data-profile-section-key="projects"]',
     );
-    await dragSteps("projects", 410, 560);
+    await dragSteps("projects", 440, 620);
 
     // 核心不变量：分区内容子树一次都没重渲（memo + 稳定 children 真实生效）。
     expect(counters.contentRenders.current).toBe(contentRendersAtMount);
 
-    // 提交次数有界：激活 1 + 实时 splice 3 + 松手清理 1 ≈ 5；给点余量防 React
+    // 提交次数有界：激活 1 + 实时 splice 2 + 松手清理 1 ≈ 4；给点余量防 React
     // 版本差异导致的拆分 commit，但绝不允许随分区数/拖动距离线性增长。
     const commitDelta = counters.commits.current - commitsAtMount;
     expect(commitDelta).toBeLessThanOrEqual(8);

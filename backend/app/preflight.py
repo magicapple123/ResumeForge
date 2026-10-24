@@ -69,6 +69,7 @@ _REQUIRED_FILES: Final[tuple[tuple[str, str], ...]] = (
     ("app/templates/resume_elegant.html.j2", "优雅简历模板"),
     ("app/templates/resume_technical.html.j2", "技术简历模板"),
     ("app/templates/resume_minimal.html.j2", "极简简历模板"),
+    ("app/templates/resume_scholar.html.j2", "学术简历模板"),
     ("app/templates/resume_editorial.html.j2", "社论简历模板"),
     ("app/templates/resume_split.html.j2", "分栏简历模板"),
     # `_resume_sections.j2` 里 `{% import "_resume_blocks.j2" %}`：少了它，任何一次

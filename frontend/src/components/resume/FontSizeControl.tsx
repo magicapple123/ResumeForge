@@ -27,6 +27,7 @@ import type { RefObject } from "react";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import { t } from "../../i18n";
 import { SMALL_FONT_WARNING_PX, fontProbeCss } from "../../utils/resumeFontScale";
+import ParamResetButton from "./ParamResetButton";
 
 /**
  * 拖动字号后多久提交一次（毫秒）。
@@ -57,6 +58,8 @@ interface Props {
   signature: string;
   /** 用户是否设过覆盖（档位或系数）。没设过时双击标题是空操作。 */
   customized: boolean;
+  /** 「恢复到打开时的值」：`visible` 为真时长出读数右侧那颗 ↺。 */
+  restore?: { visible: boolean; onReset: () => void };
   disabled?: boolean;
   /** 紧凑模式：不显示"字号偏小"那一行提示（工具栏里没地方）。 */
   compact?: boolean;
@@ -73,6 +76,7 @@ export default function FontSizeControl({
   bounds,
   signature,
   customized,
+  restore,
   disabled = false,
   compact = false,
   previewRef,
@@ -213,6 +217,10 @@ export default function FontSizeControl({
         <Typography.Text type="secondary" className="resume-measure-value">
           {shownPxText}
         </Typography.Text>
+        {/* 与行距/页边距同一处入口：改过之后在读数右侧长出 ↺（同一格，不新增列）。 */}
+        {restore?.visible ? (
+          <ParamResetButton label={t("resume.measure.fontSize")} onReset={restore.onReset} />
+        ) : null}
       </span>
       {/* 提示而不是禁用：字号偏小是用户自己的判断题（偶尔确实要压进一页），
           我们的责任是把"打印出来可能看不清"这件事说在动手之前。

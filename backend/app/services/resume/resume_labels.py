@@ -43,22 +43,22 @@ DEFAULT_RESUME_LANGUAGE: ResumeLanguage = "zh-CN"
 # 顺序也按那里的默认顺序排列，方便逐行对照。
 SECTION_TITLES: dict[str, dict[str, str]] = {
     "zh-CN": {
-        "summary": "个人总结",
         "education": "教育经历",
         "experience": "实习/工作经历",
-        "campus_experience": "校园经历",
         "projects": "项目经历",
         "skills": "专业技能",
+        "campus_experience": "校园经历",
         "awards": "荣誉奖项",
+        "summary": "个人总结",
     },
     "en-US": {
-        "summary": "Summary",
         "education": "Education",
         "experience": "Experience",
-        "campus_experience": "Campus Activities",
         "projects": "Projects",
         "skills": "Skills",
+        "campus_experience": "Campus Activities",
         "awards": "Honors & Awards",
+        "summary": "Summary",
     },
 }
 
@@ -68,7 +68,7 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
     "zh-CN": {
         "intent": "求职意向",
         "github": "GitHub",
-        "website": "主页",
+        "website": "个人主页",
         "gpa": "绩点/排名",
         "courses": "核心课程",
         "tech_stack": "技术栈/工具",

@@ -348,6 +348,11 @@ def export_resume_with_options(
         export_options,
         allow_incomplete=payload.allow_incomplete,
         record_delivery=payload.record_delivery,
+        # 预览（`preview=true`）：只服务"屏幕上的一次查看"，不落盘副本、结果进缓存。
+        # 两个开关必须成对：`cache_result` 只在 `save_copy=False` 时生效（否则落盘副本
+        # 会被缓存跳过），所以这里用同一个布尔量表达，不给它们各自传参的机会。
+        save_copy=not payload.preview,
+        cache_result=payload.preview,
     )
 
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
 import SelectionContextMenu from "./SelectionContextMenu";
 import type { SelectionTarget } from "./selectionTarget";
 
@@ -26,7 +27,7 @@ function makeTarget(field: HTMLTextAreaElement): SelectionTarget {
   };
 }
 
-function renderMenu(target: SelectionTarget | null) {
+function renderMenu(target: SelectionTarget | null, onWriting: (() => void) | null = null) {
   const onClose = vi.fn();
   const onAiPolish = vi.fn();
   render(
@@ -37,6 +38,7 @@ function renderMenu(target: SelectionTarget | null) {
       text={TEXT}
       onClose={onClose}
       onAiPolish={onAiPolish}
+      onWriting={onWriting}
     />,
   );
   return { onClose, onAiPolish };
@@ -103,5 +105,22 @@ describe("SelectionContextMenu", () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onAiPolish).toHaveBeenCalledTimes(1);
+  });
+
+  it("写作增强只在有归属简历时出现，且排在 AI 润色前面", () => {
+    const field = makeField(TEXT);
+    // 没有简历作用域（onWriting = null）：不渲染这一项，否则点了也调不通。
+    renderMenu(makeTarget(field));
+    expect(screen.queryByRole("menuitem", { name: t("writing.menu.entry") })).toBeNull();
+    cleanup();
+
+    const onWriting = vi.fn();
+    renderMenu(makeTarget(field), onWriting);
+    const items = screen.getAllByRole("menuitem").map((item) => item.textContent);
+    expect(items).toContain(t("writing.menu.entry"));
+    expect(items.indexOf(t("writing.menu.entry"))).toBeLessThan(items.indexOf("AI 润色"));
+
+    fireEvent.click(screen.getByRole("menuitem", { name: t("writing.menu.entry") }));
+    expect(onWriting).toHaveBeenCalledTimes(1);
   });
 });

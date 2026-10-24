@@ -28,6 +28,8 @@ import type { ResumeLayout, ResumeTemplateCatalog } from "../../types";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import { t, type MessageKey } from "../../i18n";
 import { colorProbeCss } from "../../utils/resumeFormatProbe";
+import { formatKeysDiffer, restoreFormatKeys } from "../../utils/paramRestore";
+import ParamResetButton from "./ParamResetButton";
 
 /** 四个颜色键（顺序即左栏里的行序，与目录 `FORMAT_FIELDS` 同序）。 */
 const COLOR_KEYS = ["accent", "text_color", "muted_color", "line_color"] as const;
@@ -53,6 +55,8 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 interface Props {
   layout: ResumeLayout;
+  /** 打开这份简历时的版式快照：每行右侧那颗 ↺ 恢复的就是它（只有制作台传）。 */
+  baseline?: ResumeLayout;
   catalog?: ResumeTemplateCatalog;
   disabled?: boolean;
   /** 拖动取色时的即时反馈通道（与制作台右栏的预览句柄是同一个）。 */
@@ -62,6 +66,7 @@ interface Props {
 
 export default function ResumeColorControls({
   layout,
+  baseline,
   catalog,
   disabled = false,
   previewRef,
@@ -125,12 +130,28 @@ export default function ResumeColorControls({
     writeColor(key, null);
   };
 
+  /**
+   * 「恢复到打开时的值」：把基线里这个键的取值搬回来（基线没有就删掉）。
+   * 与 `reset`（删键回模板/版式）是两件事，见 `utils/paramRestore` 的表。
+   */
+  const restoreColor = (key: ColorKey) => {
+    applyProbe("");
+    onChange({
+      ...layout,
+      format_config: restoreFormatKeys(layout.format_config, baseline?.format_config, [key]),
+    });
+  };
+
   return (
     <div className="resume-wb-rows">
       {COLOR_KEYS.map((key) => {
         const label = catalog?.format_fields?.find((field) => field.key === key)?.label ?? key;
         const current = effectiveColor(key);
         const customized = ownColor(key) !== null;
+        // 与打开时不同才长出 ↺：这一格本来就是"来源说明"的位置，两者互斥。
+        const canRestore = baseline
+          ? formatKeysDiffer(config, baseline.format_config, [key])
+          : false;
         return (
           <div className="resume-wb-color-row" key={key}>
             <div className="resume-wb-color-head">
@@ -164,7 +185,13 @@ export default function ResumeColorControls({
                 {current ?? "—"}
               </Typography.Text>
               <span className={`resume-measure-source${customized ? " is-empty" : ""}`}>
-                {customized ? "" : defaultHint}
+                {canRestore ? (
+                  <ParamResetButton label={label} onReset={() => restoreColor(key)} />
+                ) : customized ? (
+                  ""
+                ) : (
+                  defaultHint
+                )}
               </span>
             </div>
             {/* 预设色板：一行 5 个色块，键名说明色相；色值经自定义属性交给 CSS。 */}

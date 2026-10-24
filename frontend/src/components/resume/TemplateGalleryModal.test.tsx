@@ -7,7 +7,7 @@
  * `format_name`（基础版式）与 `format_config`（含 `font_scale_adjust`）都要带上。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
 import type { ResumeLayout } from "../../types";
@@ -45,12 +45,19 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function renderModal(layout: ResumeLayout) {
+function renderModal(layout: ResumeLayout, onFontScaleChange = vi.fn()) {
   render(
     <AntdApp>
-      <TemplateGalleryModal open layout={layout} onSelect={() => {}} onClose={() => {}} />
+      <TemplateGalleryModal
+        open
+        layout={layout}
+        onFontScaleChange={onFontScaleChange}
+        onSelect={() => {}}
+        onClose={() => {}}
+      />
     </AntdApp>,
   );
+  return { onFontScaleChange };
 }
 
 describe("TemplateGalleryModal · 缩略图反映字号系数（洞2）", () => {
@@ -88,5 +95,72 @@ describe("TemplateGalleryModal · 缩略图反映字号系数（洞2）", () => 
     expect(firstCall.format_name).toBe("compact");
     // 没有系数就不该凭空造一个：后端会把空覆盖与 format_name 正常叠加。
     expect(firstCall.format_config ?? {}).toEqual({});
+  });
+
+  it("预览内容固定是内置示例：请求里不带 resume_id", async () => {
+    renderModal(LAYOUT_WITH_ADJUST);
+    await waitFor(() => expect(apiMocks.previewResumeTemplate).toHaveBeenCalled());
+
+    // 用户口径（2026-10-24）：模板一览的预览不该读自己的简历——既慢，也分不清
+    // "这是模板的效果还是我内容的效果"。
+    for (const [payload] of apiMocks.previewResumeTemplate.mock.calls) {
+      expect("resume_id" in (payload as Record<string, unknown>)).toBe(false);
+    }
+  });
+
+  it("换字号档位会写回当前简历（受控），而不是只改缩略图", async () => {
+    const { onFontScaleChange } = renderModal(LAYOUT_WITH_ADJUST);
+    await waitFor(() => expect(apiMocks.previewResumeTemplate).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("radio", { name: "大字号" }));
+
+    // 只动这一份简历的 `font_scale`：owner 收到回调后会重排，缩略图也跟着重取。
+    expect(onFontScaleChange).toHaveBeenCalledWith("large");
+  });
+});
+
+// ── "一直加载不出来"（2026-10-24 用户反馈）───────────────────────────────
+//
+// 旧实现要等 `Promise.all` 全部返回才一次性 setState：六张卡里**任意一张**慢，
+// 整屏就一直是三个灰点，看起来就是"模板加载失败"。现在逐张上屏、失败逐张给重试。
+
+describe("TemplateGalleryModal · 缩略图不会整屏卡在加载中", () => {
+  function labelOf(name: string): string {
+    const item = TEMPLATE_CATALOG.templates.find((entry) => entry.name === name);
+    return item ? item.label : name;
+  }
+
+  it("一张卡挂住时，先回来的那张照常显示", async () => {
+    apiMocks.previewResumeTemplate.mockImplementation((payload: { template_name?: string }) =>
+      payload.template_name === "classic"
+        ? Promise.resolve("<html><body>ok</body></html>")
+        : new Promise<string>(() => {}),
+    );
+
+    renderModal(LAYOUT_WITH_ADJUST);
+
+    expect(await screen.findByTitle(`${labelOf("classic")} 预览`)).toBeInTheDocument();
+    // 其余卡还在等：证明没有"等最慢的一起上屏"。
+    expect(screen.queryByTitle(`${labelOf("modern")} 预览`)).toBeNull();
+  });
+
+  it("渲染失败的卡给原因与「重试」，点了会重新取数", async () => {
+    apiMocks.previewResumeTemplate.mockImplementation((payload: { template_name?: string }) =>
+      payload.template_name === "modern"
+        ? Promise.reject(new Error("boom"))
+        : Promise.resolve("<html><body>ok</body></html>"),
+    );
+
+    renderModal(LAYOUT_WITH_ADJUST);
+
+    expect(await screen.findByText("boom")).toBeInTheDocument();
+    const before = apiMocks.previewResumeTemplate.mock.calls.length;
+
+    // antd 会在两个汉字之间插一个空格（「重 试」），按整串取会命中不到。
+    fireEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
+
+    await waitFor(() =>
+      expect(apiMocks.previewResumeTemplate.mock.calls.length).toBeGreaterThan(before),
+    );
   });
 });

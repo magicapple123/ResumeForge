@@ -114,14 +114,16 @@
   font-size: 12px;
 }
 
-/* 版式下拉的触发框：宽度刚好框住 4 个中文字符。
-   4em = 4 × 14px 的汉字宽度，+36px 是左右内边距与右侧箭头占位；原来是 min-width:120，
-   框比文字宽出一大截，同一行的「样式 / 版式 / 顺序 / 篇幅」看起来疏密不匀。
-   预设名更长时（如「宽松（自制）」）触发框走省略号，展开后的列表按内容撑开
-   （`popupMatchSelectWidth={false}`），不会跟着被裁掉。 */
+/* 版式下拉的触发框（2026-10-24 收窄）。
+   上一版是 `calc(4em + 36px)`（≈ 100px，按 antd 的 16px 字号算），比「标准」这类
+   两字预设宽出一大截，同一行的「版式 / 板块 / 顺序」看着疏密不匀（用户截图）。
+   现在钉成 **88px**：刚好容下四字预设（「跟随模板」）+ 箭头与内边距，更长的自制版式名
+   在触发框里走省略号，展开后的列表仍按内容撑开（`popupMatchSelectWidth={false}`），
+   完整名字由选项自带的 `title` 提供。写 px 而不是 em：em 跟着 antd 的字号 token 漂，
+   同一个框在不同主题下会悄悄变宽/变窄。 */
 .resume-format-select {
-  width: calc(4em + 36px);
-  min-width: calc(4em + 36px);
+  width: 88px;
+  min-width: 88px;
 }
 
 /* 缩放条：在纸面**下方**居中（P2b / D6）。缩放是"看"的动作，手应该落在图旁边。 */
@@ -277,7 +279,11 @@
   border: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
   background: var(--rf-surface-alt);
-  overflow: hidden;
+  /* 放大（`scale > 1`）时纸会比相框宽：允许横向滚动看右边，而不是把纸裁掉。
+     只开横向——纵向高度是按页数算出来的，再出一条竖向滚动条就回到"两个滚动条"。
+     横向滚动条只会压缩高度，不影响 `clientWidth`，所以宽度测量不会自激。 */
+  overflow-x: auto;
+  overflow-y: hidden;
   position: relative;
 }
 
@@ -294,36 +300,14 @@
   width: 100%;
 }
 
-/* ===== 精确预览的空白页（2026-10-23 / 修订 2026-11-06） ===== */
-/* 用户把「最大篇幅」调到 3 页、内容只有 1 页时，精确预览原来只画 1 张纸，与草稿模式
-   （`totalVisualPages` 恒等于上限）看起来像两个功能。这里按差值补同比例的白纸。
-
-   2026-11-06 两处修订（用户截图：精确预览"中间空一大截才出现空白页"）：
-   1. 宽度取 **100%**（原来 `min(100%, 794px)` + 居中）：相框宽度就是 PDF 页的宽度，
-      空白纸必须与它严格同宽，否则两张纸的左右边线会错开一截；
-   2. 间距与 `BLANK_PAGE_GAP_PX` 一致（8px）：相框现在按**实际页数**定高
-      （见 `ExactPreviewPanel` 的 `frameHeight`），空白纸紧接在最后一页之后，
-      间距只留"两张纸之间那一道"，不再是原来那 12px + 居中收窄。 */
-.exact-preview-blanks {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.exact-preview-blank {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  margin: 0;
-  aspect-ratio: 210 / 297;
-  border: 1px dashed var(--rf-border);
-  border-radius: 2px;
-  background: var(--rf-surface);
-  box-shadow: 0 1px 4px rgb(15 40 80 / 0.08);
-  color: var(--rf-text-tertiary);
-  font-size: 12px;
+/* ===== 精确预览的纸列（2026-10-24 起不再补空白页） ===== */
+/* 2026-10-23 曾经按"上限 − 实际页数"补同比例的白纸，让精确预览与草稿模式的纸数看起来
+   一致。2026-10-24 用户口径把它推翻了：**多页状态下后面补出来的空白页要去掉**——
+   那些纸在导出的 PDF 里根本不存在，画出来只是让人以为"我的简历有 3 页"。
+   现在只画 PDF 实际排出来的页，预览与下载到的文件永远一致。 */
+.exact-preview-paper-column {
+  /* 高度由相框（`frameHeight`）决定，不需要额外预留：宽度一变，纸高自己跟着变。 */
+  margin: 0 auto;
 }
 
 .exact-preview-stack > .exact-preview-frame {
@@ -360,11 +344,9 @@
   line-height: 18px;
 }
 
-/* 状态行是**整块预览的页脚**（在 `.exact-preview` 与 `.exact-preview-blanks` 之后），
-   不是相框的一部分：夹在"最后一页纸"与"补出来的空白纸"之间时，一条横栏会把两张纸读成
-   断开的两块（用户口径："有内容的页上直接接下一页"）。
-   `margin-top` 与 `.exact-preview-blanks` 的 8px 同档，让它离最后一张纸有一口气，
-   同时不与 `padding: 2px 10px 4px` 打架。 */
+/* 状态行是**整块预览的页脚**（在 `.exact-preview` 之后），不是相框的一部分：
+   夹在"最后一页纸"与页脚之间时，一条横栏会把纸和页码读成断开的两块。
+   `margin-top` 8px 让它离最后一张纸有一口气，同时不与 `padding: 2px 10px 4px` 打架。 */
 .exact-preview-status {
   display: flex;
   align-items: center;

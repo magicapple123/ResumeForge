@@ -34,13 +34,11 @@
 import { Alert, Button, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchResumePreviewPdf } from "../../api/resumes";
-import { t } from "../../i18n";
 import LoadingBlock from "../common/LoadingBlock";
-import { readCachedPreview, writeCachedPreview } from "./exactPreviewCache";
-import { EXACT_OVERFLOW_NOTE } from "./config";
+import { ExactPreviewAlerts, ExactPreviewStatus } from "./ExactPreviewNotes";
+import { readCachedPreview, writeCachedPreview, type PreviewShot } from "./exactPreviewCache";
 import { INLINE_PDF_OK, withPageWidthZoom } from "./pdfViewerSupport";
 import { useExactPreviewFrameHeight } from "./useExactPreviewFrameHeight";
-
 interface Props {
   resumeId: number;
   /** 草稿的模板名（内置或自制）：换完还没保存也要按新的排。 */
@@ -74,6 +72,22 @@ interface Props {
    * PDF 与查看器实例，又不让一次看不见的版式变化去触发服务端重排。
    */
   active?: boolean;
+  /**
+   * 这个模板的标题字族是衬线（`elegant` / `editorial`）。
+   *
+   * 精确预览用嵌入 PDF 的中文黑体，草稿里的衬线标题是 CSS 字族——两条链路在这里**必然
+   * 不同**，而用户看到"标题字变了"只会以为出了问题。为真时状态行常驻一句说明（P1-2）；
+   * 切回草稿（`active=false`）或换到非衬线模板后它自然消失，不需要额外的状态。
+   */
+  headingSerif?: boolean;
+  /**
+   * 整块纸张的缩放（1 = 适应宽度）。
+   *
+   * 精确预览由 PDF 查看器按 `#zoom=page-width` 铺满相框，浏览器自己的工具栏只作用于
+   * **PDF 那几页**；缩放由**这一层**承担：纸宽按比例改，查看器会重新排一遍
+   * （矢量，放大不糊），而不是把位图拉大。
+   */
+  scale?: number;
 }
 
 /**
@@ -87,16 +101,6 @@ const DEBOUNCE_MS = 150;
 /** 新 PDF 迟迟不 load 时的兜底：宁可先换上去，也不要永远停在旧图。 */
 const SWAP_FALLBACK_MS = 4000;
 
-interface Shot {
-  /** 这一份是按哪一组参数排的（`formatKey`）：切回同一组参数时据此判定"已经有图了"。 */
-  key: string;
-  url: string;
-  pages: number | null;
-  /** 按当前版式真实需要的页数（未截断）。 */
-  pagesNeeded: number | null;
-  overflow: boolean;
-}
-
 export default function ExactPreviewPanel({
   resumeId,
   template,
@@ -108,11 +112,13 @@ export default function ExactPreviewPanel({
   contentSignature,
   height,
   active = true,
+  headingSerif = false,
+  scale = 1,
 }: Props) {
   /** 当前**可见**的那一份（旧图，双缓冲里留在下面）。 */
-  const [shown, setShown] = useState<Shot | null>(null);
+  const [shown, setShown] = useState<PreviewShot | null>(null);
   /** 正在加载、完全透明的那一份；`onLoad` 后顶替成 `shown`。 */
-  const [pending, setPending] = useState<Shot | null>(null);
+  const [pending, setPending] = useState<PreviewShot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   /** 所有还活着的 objectURL：统一登记、统一释放，避免双缓冲下漏掉某一个。 */
@@ -124,8 +130,8 @@ export default function ExactPreviewPanel({
    * （闭包捕获）。更关键的是：不能在 `setState` 的 updater 里去调另一个 `setState` 或
    * 释放 URL——updater 可能被执行多次（StrictMode 就双调），副作用会重复发生。
    */
-  const shownRef = useRef<Shot | null>(null);
-  const pendingRef = useRef<Shot | null>(null);
+  const shownRef = useRef<PreviewShot | null>(null);
+  const pendingRef = useRef<PreviewShot | null>(null);
   /**
    * 请求的**世代号**：每轮 effect 领一个自增号，异步回调只在自己还是"当代"时写状态。
    * 起因（2026-11-06 实测"永久卡在正在排版"）：abort 之后 `.catch` 直接 return、
@@ -175,7 +181,7 @@ export default function ExactPreviewPanel({
    * 因此不可能不一致。
    */
   const showShot = useCallback(
-    (shot: Shot) => {
+    (shot: PreviewShot) => {
       if (!shownRef.current) {
         shownRef.current = shot;
         setShown(shot);
@@ -338,10 +344,11 @@ export default function ExactPreviewPanel({
   // 时按 0 算会得到 `pageLimit - 0` 张空白纸，把"不知道"放大成"一页都没有"；按 1 算是
   // 唯一诚实的下界（用户 2026-10-23 反馈"选了 3 页却没补白纸"，成因就是走了 `?? 0`）。
   const renderedPages = current ? (current.pages ?? 1) : 0;
-  const blankPageCount = renderedPages > 0 ? Math.max(0, pageLimit - renderedPages) : 0;
 
   // 高度按**实际页数**算（算式见 `useExactPreviewFrameHeight`）；必须在提前 `return` 之前调用。
-  const { frameRef, frameHeight } = useExactPreviewFrameHeight(renderedPages, height);
+  // 纸宽 = 相框宽 × 缩放：PDF 查看器按 `#zoom=page-width` 铺满 iframe，所以把 iframe 宽度
+  // 按比例改掉，查看器会**重新排一遍**（矢量，放大不糊），而不是把位图拉大。
+  const { frameRef, frameHeight } = useExactPreviewFrameHeight(renderedPages, height, scale);
 
   if (error) {
     return (
@@ -364,32 +371,7 @@ export default function ExactPreviewPanel({
 
   return (
     <>
-      {/* 溢出提示与草稿侧同一口径、同一措辞（2026-10-21 用户要求"对草稿和精确模式都生效"）。
-          放在 PDF 相框**上方**：它要说的是"你看到的这份文件已按上限截断"，藏在相框底部
-          那行小字里等于没提示。 */}
-      {current && current.overflow && !busy ? (
-        <Alert
-          type="warning"
-          showIcon
-          className="exact-preview-overflow"
-          style={{ marginBottom: 8 }}
-          title={`按当前设置约需 ${current.pagesNeeded ?? current.pages ?? "?"} 页（上限 ${pageLimit} 页）。`}
-          description={EXACT_OVERFLOW_NOTE}
-        />
-      ) : null}
-      {/* 版本错位：`X-Resume-Pages-Needed` 是 2026-10-21 才有的响应头。旧后端既不返回它，
-          又**会自动缩小字号**把内容塞进页数上限。没有这条提示，用户只看到"滑杆 18px、PDF
-          却明显更小"，根本猜不到原因是"跑着的后端进程还是旧代码"（2026-10-21 实测踩到）。 */}
-      {current && current.pagesNeeded == null ? (
-        <Alert
-          type="warning"
-          showIcon
-          className="exact-preview-stale"
-          style={{ marginBottom: 8 }}
-          title="这版 PDF 可能不是按你设定的字号排的"
-          description="运行中的后端是旧版本（没有返回「按当前设置约需几页」），旧版本会自动缩小字号。完全退出应用后重新启动，精确预览就会严格按滑杆上的值排版。"
-        />
-      ) : null}
+      <ExactPreviewAlerts current={current} busy={busy} pageLimit={pageLimit} />
       {/* 相框**不设**高度：高度只给 stack（纸）与 iframe，外层自然包住"纸 + 状态行"——写死会裁掉状态行。 */}
       <div className="exact-preview" ref={frameRef}>
         {/* 只在这个口径可见时才摆加载占位：草稿模式下这块是隐藏的，占位没有意义
@@ -399,37 +381,44 @@ export default function ExactPreviewPanel({
         ) : null}
 
         {current && INLINE_PDF_OK ? (
-          <div
-            className="exact-preview-stack"
-            style={{ height: frameHeight }}
-            // jsdom 量不出像素，把"这版实际几页 / 相框多高"写进 data 属性供测试断言。
-            data-pages={renderedPages}
-            data-frame-height={frameHeight}
-          >
-            <iframe
-              // 与导出的 PDF 是同一份字节。`#zoom=page-width` 是相框高度的契约（见 `withPageWidthZoom`）。
-              src={withPageWidthZoom(current.url)}
-              title="简历精确预览（导出 PDF）"
-              className="exact-preview-frame"
+          /* 缩放靠**改纸宽**而不是 `transform: scale()`：PDF 查看器按 `page-width` 铺满
+             iframe，宽度一变它就重新排一遍（矢量，放大不糊）；而 `transform` 只是把位图
+             拉大，还会让"外层高度"与"看得见的纸"脱节。
+             只画**实际排出来的页**：PDF 里没有的页这里也不补（2026-10-24 用户口径：
+             "多页状态下后面补出来的空白页要去掉"），预览与下载到的文件永远一致。 */
+          <div className="exact-preview-paper-column" style={{ width: `${scale * 100}%` }}>
+            <div
+              className="exact-preview-stack"
               style={{ height: frameHeight }}
-            />
-            {pending ? (
-              // 透明的预加载层：`onLoad` 前谁也看不见它，但浏览器已经在解析新 PDF。
+              // jsdom 量不出像素，把"这版实际几页 / 相框多高"写进 data 属性供测试断言。
+              data-pages={renderedPages}
+              data-frame-height={frameHeight}
+            >
               <iframe
-                src={withPageWidthZoom(pending.url)}
-                title="正在加载的精确预览"
-                aria-hidden="true"
-                tabIndex={-1}
-                className="exact-preview-frame exact-preview-frame-pending"
+                // 与导出的 PDF 是同一份字节。`#zoom=page-width` 是相框高度的契约（见 `withPageWidthZoom`）。
+                src={withPageWidthZoom(current.url)}
+                title="简历精确预览（导出 PDF）"
+                className="exact-preview-frame"
                 style={{ height: frameHeight }}
-                onLoad={swapIn}
               />
-            ) : null}
-            {busy ? (
-              <div className="exact-preview-overlay" aria-busy="true">
-                <span className="exact-preview-overlay-text">正在按新设置重新排版…</span>
-              </div>
-            ) : null}
+              {pending ? (
+                // 透明的预加载层：`onLoad` 前谁也看不见它，但浏览器已经在解析新 PDF。
+                <iframe
+                  src={withPageWidthZoom(pending.url)}
+                  title="正在加载的精确预览"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  className="exact-preview-frame exact-preview-frame-pending"
+                  style={{ height: frameHeight }}
+                  onLoad={swapIn}
+                />
+              ) : null}
+              {busy ? (
+                <div className="exact-preview-overlay" aria-busy="true">
+                  <span className="exact-preview-overlay-text">正在按新设置重新排版…</span>
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -457,43 +446,17 @@ export default function ExactPreviewPanel({
           </div>
         ) : null}
       </div>
-      {/* 空白页也要有纸张（2026-10-23 用户口径）。PDF 只包含**有内容**的页，"上限 3 页、
-          内容 1 页"时精确预览就只有一张纸，与草稿模式（`totalVisualPages` 恒等于上限）
-          看起来像两个功能。这里按差值补同比例的空白纸（`pageLimit <= pages` 时为 0）。
-          不做成"让 PDF 多出几页"：精确预览与导出是同一份字节，补页会让下载到的文件凭空多出空白页。 */}
-      {blankPageCount > 0 && !busy ? (
-        <div className="exact-preview-blanks">
-          {Array.from({ length: blankPageCount }, (_, index) => (
-            <div key={index} className="exact-preview-blank">
-              <span>
-                {t("workbench.exact.blankPage", {
-                  page: renderedPages + index + 1,
-                  total: pageLimit,
-                })}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {/* 状态行是**整块预览的页脚**，不是相框的一部分：放进 `.exact-preview` 会在"最后一页
-          纸"与"补出来的空白纸"之间夹一条横栏（草稿模式也把页码条放在整块最底部）。 */}
+      {/* 状态行是**整块预览的页脚**，不是相框的一部分：放进 `.exact-preview` 会在
+          最后一页纸上盖一条横栏（草稿模式也把页码条放在整块最底部）。 */}
       {current ? (
-        <div className="exact-preview-status" aria-busy={busy}>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {/* 重排期间要说话：PDF 是服务端排的、查看器还要重建，改完参数到新图出来之间
-              必然有一段空窗——静悄悄留着旧图会让人以为"没生效"。 */}
-            {busy
-              ? "正在按新设置重新排版…"
-              : `精确预览 · 实际 ${current.pages} 页（上限 ${pageLimit} 页）`}
-          </Typography.Text>
-          <Button
-            size="small"
-            type="link"
-            onClick={() => window.open(current.url, "_blank", "noopener,noreferrer")}
-          >
-            在新标签打开
-          </Button>
-        </div>
+        <ExactPreviewStatus
+          current={current}
+          busy={busy}
+          pageLimit={pageLimit}
+          headingSerif={headingSerif}
+          active={active}
+          onOpenInNewTab={() => window.open(current.url, "_blank", "noopener,noreferrer")}
+        />
       ) : null}
     </>
   );

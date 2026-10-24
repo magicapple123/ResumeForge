@@ -40,47 +40,47 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     const elementFromPoint = document.elementFromPoint as unknown as ReturnType<typeof vi.fn>;
     render(<Harness />);
 
-    // projects 卡片在默认布局的 380-440；手柄按在 410（距卡片上缘 30）。
+    // projects 卡片在默认布局的 410-470；手柄按在 440（距卡片上缘 30）。
     fireEvent.pointerDown(screen.getByLabelText("拖动调整projects顺序"), {
       clientX: 10,
-      clientY: 410,
+      clientY: 440,
       pointerId: 1,
     });
     // 未过阈值（6px）：不激活、不重排。
-    fireEvent.pointerMove(document, { clientX: 10, clientY: 412, pointerId: 1 });
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 442, pointerId: 1 });
     expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
 
-    // 拖到 460：越过阈值激活（激活时不改布局），行程 = 430−380 = 50 ≥ 步长 48
-    // → 推进一格，目标位 3，实时重排。
-    fireEvent.pointerMove(document, { clientX: 10, clientY: 460, pointerId: 1 });
+    // 拖到 490：越过阈值激活（激活时不改布局），行程 = 460−410 = 50 ≥ 步长 48
+    // → 推进一格，目标位 4，实时重排。
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 490, pointerId: 1 });
     expect(currentOrder()).toEqual([
       "basic_info",
+      "educations",
       "experiences",
       "skills",
       "projects",
-      "educations",
-      "awards",
       "campus_experiences",
+      "awards",
       "summary",
     ]);
-    // 跟手：desiredTop = 460-30 = 430；重排后 projects 在第 3 位，
-    // 布局上缘 = 200+100+80+40 = 420 → transform = 430-420 = +10。
-    // 视觉位置 = 420+10 = 430 = 指针 460 - grabOffset 30，卡片钉在鼠标下。
+    // 跟手：desiredTop = 490-30 = 460；重排后 projects 在第 5 位（index 4），
+    // 布局上缘 = 200+100+30+80+40 = 450 → transform = 460-450 = +10。
+    // 视觉位置 = 450+10 = 460 = 指针 490 - grabOffset 30，卡片钉在鼠标下。
     expect(draggedTransform("projects")).toBe("translateY(10px)");
     // 拖动中挂 is-dragging（置顶 + 合成层提示，见 profile.css）；顺序虽变，DOM 节点不换。
     const dragged = document.querySelector<HTMLElement>('[data-profile-section-key="projects"]');
     expect(dragged?.classList.contains("is-dragging")).toBe(true);
 
     // 松手保留：顺序就是拖动中的最终态；同时退出拖拽态（content-visibility 复位）。
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 440, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 490, pointerId: 1 });
     expect(currentOrder()).toEqual([
       "basic_info",
+      "educations",
       "experiences",
       "skills",
       "projects",
-      "educations",
-      "awards",
       "campus_experiences",
+      "awards",
       "summary",
     ]);
     expect(dragged?.classList.contains("is-dragging")).toBe(false);
@@ -96,20 +96,20 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     stubSectionRects();
     render(<Harness />);
 
-    // 按下 experiences（290-370，按在 330），只移动 8px（刚过 6px 阈值）。
+    // 按下 experiences（330-410，按在 370），只移动 8px（刚过 6px 阈值）。
     fireEvent.pointerDown(screen.getByLabelText("拖动调整experiences顺序"), {
       clientX: 10,
-      clientY: 330,
+      clientY: 370,
       pointerId: 1,
     });
-    fireEvent.pointerMove(document, { clientX: 10, clientY: 338, pointerId: 1 });
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 378, pointerId: 1 });
     // 顺序不变（旧实现塌缩后这里会凭空上移两位）。
     expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
-    // 跟手：grabOffset = 330-300 = 30，desiredTop = 338-30 = 308，
-    // 布局上缘 300 → transform = +8px，与指针位移完全一致（没有跳变、没有被甩出去）。
+    // 跟手：grabOffset = 370-330 = 40，desiredTop = 378-40 = 338，
+    // 布局上缘 330 → transform = +8px，与指针位移完全一致（没有跳变、没有被甩出去）。
     expect(draggedTransform("experiences")).toBe("translateY(8px)");
     // 卡片没有被甩出栈顶，也没有脱离指针。
-    expect(308).toBeGreaterThanOrEqual(STACK_TOP);
+    expect(338).toBeGreaterThanOrEqual(STACK_TOP);
   });
 
   it("末位可达：拖到 clamp 上限一定换到最后一格并错开", () => {
@@ -117,15 +117,15 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     render(<Harness />);
 
     // 指针拖到很远（10000）：desiredTop 被钳到 stackBottom-60 = 630，
-    // 行程 = 630−380 = 250 = 5 步 → 2+5 钳到 7（末位）。
-    dragTo("projects", 410, 10_000);
+    // 行程 = 630−410 = 220 = 4 步 → 3+4 钳到 7（末位）。
+    dragTo("projects", 440, 10_000);
     expect(currentOrder()).toEqual([
       "basic_info",
+      "educations",
       "experiences",
       "skills",
-      "educations",
-      "awards",
       "campus_experiences",
+      "awards",
       "summary",
       "projects",
     ]);
@@ -137,17 +137,17 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     stubSectionRects();
     render(<Harness />);
 
-    dragTo("projects", 410, 210);
+    dragTo("projects", 440, 210);
     // 指针已到栈顶以上：desiredTop 钳为 200，插入位钳为 1，basic_info 仍在首位。
     expect(currentOrder()[0]).toBe("basic_info");
     expect(currentOrder()).toEqual([
       "basic_info",
       "projects",
+      "educations",
       "experiences",
       "skills",
-      "educations",
-      "awards",
       "campus_experiences",
+      "awards",
       "summary",
     ]);
     // 视觉目标位置 200；重排后 projects 在第 1 位，布局上缘 300 → transform = -100。
@@ -160,7 +160,7 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
 
     fireEvent.pointerDown(screen.getByLabelText("拖动调整projects顺序"), {
       clientX: 10,
-      clientY: 410,
+      clientY: 440,
       pointerId: 1,
     });
 
@@ -170,38 +170,39 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     // 本用例必挂；修复后（flushSync 包住 commitOrder）顺序提交与 transform 同帧生效。
     act(() => {
       document.dispatchEvent(
-        new MouseEvent("pointermove", { bubbles: true, clientX: 10, clientY: 460 }),
+        new MouseEvent("pointermove", { bubbles: true, clientX: 10, clientY: 490 }),
       );
 
       const dragged = document.querySelector<HTMLElement>('[data-profile-section-key="projects"]');
-      // 顺序已提交：projects 的 CSS order 内联样式是 3（新序）。
-      expect(dragged?.style.order).toBe("3");
-      // 跟手 transform 与新布局一致：desiredTop = 430，新布局上缘 420 → +10。
+      // 顺序已提交：projects 的 CSS order 内联样式是 4（新序）。
+      expect(dragged?.style.order).toBe("4");
+      // 跟手 transform 与新布局一致：desiredTop = 460，新布局上缘 450 → +10。
       expect(dragged?.style.transform).toBe("translateY(10px)");
     });
 
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 460, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 490, pointerId: 1 });
   });
 
   it("上移/下移按钮（键盘可访问性）语义不变，basic_info 不可被顶替", () => {
     stubSectionRects();
     render(<Harness />);
 
+    // educations 紧跟在页眉之后：目标位 ≤ 0 直接放弃（页眉固定在首位）。
     fireEvent.click(screen.getByLabelText("上移educations"));
+    expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
+
+    // experiences 的上一位是 educations，不是页眉：按上移真的换位。
+    fireEvent.click(screen.getByLabelText("上移experiences"));
     expect(currentOrder()).toEqual([
       "basic_info",
       "experiences",
-      "projects",
       "educations",
+      "projects",
       "skills",
-      "awards",
       "campus_experiences",
+      "awards",
       "summary",
     ]);
-
-    // experiences 的上一位是 basic_info：按上移不动。
-    fireEvent.click(screen.getByLabelText("上移experiences"));
-    expect(currentOrder()[1]).toBe("experiences");
 
     // basic_info 自身不可移动。
     fireEvent.click(screen.getByLabelText("上移basic_info"));
@@ -222,8 +223,8 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     });
     render(<Harness />);
 
-    // experiences（300-370）按在 330，移动 8px 激活：desiredTop = 308，闩锁锚点 = 300。
-    dragTo("experiences", 330, 338);
+    // experiences（330-410）按在 370，移动 8px 激活：desiredTop = 338，闩锁锚点 = 330。
+    dragTo("experiences", 370, 378);
     expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
     expect(draggedTransform("experiences")).toBe("translateY(8px)");
 
@@ -235,15 +236,15 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
       document.documentElement.dispatchEvent(new Event("scroll"));
     });
     expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
-    // 几何平移后第 2 位布局上缘 = 140+100 = 240 → transform = 308-240 = 68（跟手不漂移）。
+    // 几何平移后第 3 位布局上缘 = 200+100+30-60 = 270 → transform = 338-270 = 68（跟手不漂移）。
     expect(draggedTransform("experiences")).toBe("translateY(68px)");
 
     // 之后再微抖 ±2px：锚点没被推开，仍然不换位。
-    fireEvent.pointerMove(document, { clientX: 10, clientY: 340, pointerId: 1 });
-    fireEvent.pointerMove(document, { clientX: 10, clientY: 336, pointerId: 1 });
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 380, pointerId: 1 });
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 376, pointerId: 1 });
     expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
 
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 336, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 376, pointerId: 1 });
     Reflect.deleteProperty(document.documentElement, "scrollTop");
   });
 
@@ -261,11 +262,11 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     document.documentElement.style.setProperty("overflow-anchor", "auto");
     render(<Harness />);
 
-    dragTo("projects", 410, 418);
+    dragTo("projects", 440, 448);
     // 激活即关锚定（换位造成的布局变动不会再被 anchoring 反向补偿）。
     expect(document.documentElement.style.getPropertyValue("overflow-anchor")).toBe("none");
 
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 418, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 448, pointerId: 1 });
     // 补偿 rAF 执行之前不能恢复，否则 anchoring 会和补偿双重补偿。
     expect(document.documentElement.style.getPropertyValue("overflow-anchor")).toBe("none");
 
@@ -300,12 +301,12 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     const anchorAttr = () => document.documentElement.style.getPropertyValue("overflow-anchor");
 
     // 拖拽 A：激活 → 关闭锚定；松手 → 补偿开始按帧收敛（帧还没跑）
-    dragTo("projects", 410, 418);
+    dragTo("projects", 440, 448);
     expect(anchorAttr()).toBe("none");
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 418, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 448, pointerId: 1 });
 
     // A 还在收敛窗口里，立刻开始拖拽 B
-    dragTo("skills", 690, 698);
+    dragTo("skills", 490, 498);
     expect(anchorAttr()).toBe("none");
 
     // 排空 A 的收敛帧（含 A 的恢复回调）：B 仍持有一份，锚定必须还是 none
@@ -319,7 +320,7 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     expect(anchorAttr()).toBe("none");
 
     // B 松手并排空：两次都释放后才真正清空
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 698, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 498, pointerId: 1 });
     act(() => {
       let guard = 0;
       while (frames.length > 0 && guard < 30) {
@@ -334,11 +335,11 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     stubSectionRects();
     render(<Harness />);
 
-    dragTo("projects", 410, 460);
-    expect(currentOrder()[3]).toBe("projects");
+    dragTo("projects", 440, 490);
+    expect(currentOrder()[4]).toBe("projects");
     const orderAtDrag = [...currentOrder()];
 
-    fireEvent.pointerCancel(document, { clientX: 10, clientY: 470, pointerId: 1 });
+    fireEvent.pointerCancel(document, { clientX: 10, clientY: 500, pointerId: 1 });
     const dragged = document.querySelector<HTMLElement>('[data-profile-section-key="projects"]');
     expect(dragged?.style.transform).toBe("");
 
@@ -351,9 +352,9 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     stubSectionRects();
     render(<Harness />);
 
-    dragTo("projects", 410, 460);
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 460, pointerId: 1 });
-    expect(currentOrder()[2]).toBe("skills");
+    dragTo("projects", 440, 490);
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 490, pointerId: 1 });
+    expect(currentOrder()[3]).toBe("skills");
 
     fireEvent.click(screen.getByLabelText("重置projects"));
     expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
@@ -363,7 +364,7 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     stubSectionRects();
     render(<Harness editing={false} />);
 
-    dragTo("projects", 410, 440);
+    dragTo("projects", 440, 470);
     expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
     const dragged = document.querySelector<HTMLElement>('[data-profile-section-key="projects"]');
     expect(dragged?.style.transform).toBe("");

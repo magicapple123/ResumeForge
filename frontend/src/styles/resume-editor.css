@@ -217,7 +217,11 @@
 }
 
 /* 字体预览（2026-10-20）：示例文字使用用户字体，容器仍是应用表面。 */
-.font-preview-sample {
+/* 字体样张（P1-1）：只读弹窗，内置字体与历史字体共用。
+   四行的字号 22 / 14 / 14 / 14 与行高 1.7 **写死在这四条规则里**，不引入变量：
+   它是"看字"的标尺，随主题或断点浮动就失去了比较意义。
+   旧的一套 `.font-preview-sample*` 随预览弹窗一起撤掉（本批换成同一个样张组件）。 */
+.font-sample {
   padding: 18px 20px;
   color: var(--rf-text-body);
   background: var(--rf-surface-alt);
@@ -225,27 +229,26 @@
   border-radius: 12px;
 }
 
-.font-preview-sample-title {
-  margin-bottom: 4px;
-  font-size: 24px;
+.font-sample-title {
+  font-size: 22px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.7;
 }
 
-.font-preview-sample-meta {
-  margin-bottom: 12px;
-  color: var(--rf-text-secondary);
-  font-size: 13px;
-}
-
-.font-preview-sample-body {
-  margin: 0 0 8px;
+.font-sample-mixed {
   font-size: 14px;
-  line-height: 1.8;
+  line-height: 1.7;
 }
 
-.font-preview-sample-body:last-child {
-  margin-bottom: 0;
-  color: var(--rf-text-secondary);
-  font-size: 12px;
+.font-sample-punct {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* 粗体行：缺粗体字面时这一行会"发虚"（浏览器/fpdf2 都用描边顶替），
+   所以它的字重必须是 700，且不继承上面的 600。 */
+.font-sample-bold {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.7;
 }

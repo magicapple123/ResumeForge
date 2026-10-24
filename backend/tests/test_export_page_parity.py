@@ -39,6 +39,7 @@ from app.services.export_pipeline import (
     RenderContext,
     build_export,
 )
+from app.services.pdf_exporter import build_resume_pdf
 from app.services.resume.resume_template_catalog import RESUME_TEMPLATES
 from test_pdf_exporter import needs_font
 
@@ -369,3 +370,41 @@ def test_out_of_range_margin_mm_via_http_does_not_break_the_export(client):
     assert clamped.headers["X-Resume-Pages"] == "1"
     at_max = _export_pdf(client, resume_id, page_padding=26, page_limit=1)
     assert _left_text_x(clamped.content) == _left_text_x(at_max.content)
+
+
+# ===== 零覆盖时的页数：P0-8 的回归护栏（页头对齐 / 照片侧 / 模板四边都不许改页数）=====
+#
+# `elegant` 的页头从"靠左 + 照片在右"改成"居中 + 照片在左"，`compact` / `elegant` 的左右
+# 页边距各宽了 2mm——三处都会让正文可用宽度变窄，理论上可能多排一页。**为什么不断言绝对
+# 页数**：改动前的页数没有留档（本批之前没有针对零覆盖的页数快照），钉一个猜出来的数字
+# 等于给未来埋一条假护栏。这里改断三条**结构性**性质，它们同样能逮住"排版炸了"：
+# 页数非零、未被截断（`pages == pages_needed`）、以及套模板之间不出现离群值。
+
+
+@needs_font
+@pytest.mark.parametrize("template", TEMPLATES)
+def test_zero_override_pages_stay_structurally_sane(template):
+    """零覆盖（不发任何 ``format_config``）时页数必须正常：≥1 且没有被截断。"""
+    artifact = build_resume_pdf(_short_resume(), template=template, page_limit=3)
+    assert artifact.pages >= 1, template
+    assert artifact.pages_needed is not None and artifact.pages_needed >= 1, template
+    assert artifact.pages == artifact.pages_needed, (
+        f"{template} 在 3 页上限下就被截断了（needed={artifact.pages_needed}），"
+        "零覆盖不该出现溢出"
+    )
+    assert artifact.overflow is False, template
+
+
+@needs_font
+def test_elegant_and_classic_need_a_similar_number_of_pages():
+    """同一份内容下 elegant 与 classic 的页数差 ≤ 1（离群值检测）。
+
+    elegant 的正文比 classic 窄 4mm（左右各 18 vs 14），页头还多占了照片那一列；页数因此
+    本来就该略多。**差 ≤ 1 是"合理"的上限**：再多就说明某处改错了（比如居中把正文挤成了
+    半栏、或照片与文字块重叠后重新折行）。这两个模板的页头形态差别最大，所以拿它们对拍。
+    """
+    elegant = build_resume_pdf(_short_resume(), template="elegant", page_limit=3)
+    classic = build_resume_pdf(_short_resume(), template="classic", page_limit=3)
+    assert abs(elegant.pages_needed - classic.pages_needed) <= 1, (
+        f"elegant 需要 {elegant.pages_needed} 页、classic 需要 {classic.pages_needed} 页"
+    )

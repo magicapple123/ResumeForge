@@ -26,6 +26,7 @@ import PagePaddingControl from "./PagePaddingControl";
 import PhotoScaleControl from "./PhotoScaleControl";
 import ResumeFontControl from "./ResumeFontControl";
 import { t } from "../../i18n";
+import ParamResetButton from "./ParamResetButton";
 import {
   configuredPhotoScale,
   hasMarginOverrides,
@@ -40,6 +41,12 @@ import {
   withUniformMargin,
   type MarginSide,
 } from "../../utils/pageMargins";
+import {
+  FONT_ADJUST_KEY,
+  PAGE_MARGIN_KEYS,
+  formatKeysDiffer,
+  restoreFormatKeys,
+} from "../../utils/paramRestore";
 import {
   fontPxBounds,
   fontTiers,
@@ -61,6 +68,13 @@ const FALLBACK_PAGE_PADDING = 14;
 
 interface Props {
   layout: ResumeLayout;
+  /**
+   * 打开这份简历时的版式快照：每个参数右侧那颗 ↺ 恢复的就是它。
+   *
+   * 不传 = 这个宿主不提供"恢复到打开时"的入口（生成配置页、主预览工具栏走的都是这条路），
+   * 控件外观与从前逐字一致。制作台左栏由 `WorkbenchParamsColumn` 传入。
+   */
+  baseline?: ResumeLayout;
   disabled?: boolean;
   /** 紧凑模式：只留控件、不显示分组标签（放在工具栏里时用）。 */
   compact?: boolean;
@@ -102,6 +116,7 @@ interface Props {
 
 export default function ResumeMeasureControls({
   layout,
+  baseline,
   disabled = false,
   compact = false,
   catalog,
@@ -269,6 +284,55 @@ export default function ResumeMeasureControls({
     });
   };
 
+  /**
+   * 逐项「恢复到打开时的值」（2026-10-24）。
+   *
+   * 只有传了 `baseline` 的宿主（制作台左栏）才长出按钮。判据是"这一组键的取值与基线不同"，
+   * 恢复动作是**把基线里的取值搬回来**（基线没有这个键就删掉），所以它既区别于
+   * 双击标题的"删键回模板默认"，也不会把用户上次存下的覆盖清掉。
+   */
+  const baseConfig = baseline?.format_config;
+  const restoreFor = (
+    keys: readonly string[],
+    build: (current: ResumeLayout) => ResumeLayout,
+  ): { visible: boolean; onReset: () => void } | undefined =>
+    baseline
+      ? {
+          visible: formatKeysDiffer(layout.format_config, baseConfig, keys),
+          onReset: () => onChange(build(layout)),
+        }
+      : undefined;
+  const restoreLineHeight = restoreFor(["line_height"], (current) => ({
+    ...current,
+    format_config: restoreFormatKeys(current.format_config, baseConfig, ["line_height"]),
+  }));
+  const restorePagePadding = restoreFor(PAGE_MARGIN_KEYS, (current) => ({
+    ...current,
+    format_config: restoreFormatKeys(current.format_config, baseConfig, PAGE_MARGIN_KEYS),
+  }));
+  const restorePhoto = restoreFor(["photo_scale"], (current) => ({
+    ...current,
+    format_config: restoreFormatKeys(current.format_config, baseConfig, ["photo_scale"]),
+  }));
+  const restoreFont = restoreFor(["font"], (current) => ({
+    ...current,
+    format_config: restoreFormatKeys(current.format_config, baseConfig, ["font"]),
+  }));
+  // 字号是"档位 + 系数"两处，必须一起回到基线，否则会出现"档位回去了、系数还留着"。
+  const restoreFontSize = baseline
+    ? {
+        visible:
+          (layout.font_scale ?? "") !== (baseline.font_scale ?? "") ||
+          formatKeysDiffer(layout.format_config, baseConfig, [FONT_ADJUST_KEY]),
+        onReset: () =>
+          onChange({
+            ...layout,
+            font_scale: baseline.font_scale,
+            format_config: restoreFormatKeys(layout.format_config, baseConfig, [FONT_ADJUST_KEY]),
+          }),
+      }
+    : undefined;
+
   return (
     <div className={`resume-measure-grid ${compact ? "is-compact" : "is-stacked"}`}>
       {/* 顺序按「先调版式密度、再调字号、最后换字体」：行距与页边距是同一类
@@ -281,6 +345,7 @@ export default function ResumeMeasureControls({
         }
         value={configuredLineHeight ?? templateLineHeight}
         customized={configuredLineHeight !== null}
+        restore={restoreLineHeight}
         disabled={disabled}
         onProbe={applyProbe}
         onChange={applyLineHeight}
@@ -291,6 +356,7 @@ export default function ResumeMeasureControls({
         }
         value={margins.top}
         customized={marginsCustomized}
+        restore={restorePagePadding}
         uniform={marginsUniform}
         // 自定义态下读数只写「自定义」：四边各是多少放在悬停气泡里
         // （「上 8 · 右 12 · 下 12 · 左 12」），一处不重复维护。
@@ -319,6 +385,7 @@ export default function ResumeMeasureControls({
         bounds={pxBounds}
         signature={fontSignature}
         customized={fontCustomized}
+        restore={restoreFontSize}
         disabled={disabled}
         compact={compact}
         previewRef={previewRef}
@@ -338,6 +405,10 @@ export default function ResumeMeasureControls({
           alignWithSlider={!compact}
           disabled={disabled}
         />
+        {/* 字体这一格没有来源胶囊，所以 ↺ 直接跟在选择器后面（同一行，不新增一行）。 */}
+        {restoreFont?.visible ? (
+          <ParamResetButton label={t("resume.measure.fontLabel")} onReset={restoreFont.onReset} />
+        ) : null}
       </div>
       {/* 照片大小（系数，不是绝对尺寸）：乘在模板自己的宽高上，宽高比不变。
           排在「字体」之后，与上面三行共用同一套"标签 + ± + 滑杆 + 读数"的视觉语言。
@@ -349,6 +420,7 @@ export default function ResumeMeasureControls({
           }
           value={photoPercent}
           customized={configuredPhotoPercent !== null}
+          restore={restorePhoto}
           disabled={disabled}
           hasPhoto={hasPhoto}
           onProbe={applyProbe}

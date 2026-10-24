@@ -280,16 +280,18 @@
   outline-offset: 2px;
 }
 
-/* 「查看大图」里的整页预览：1:1 A4，比缩略图清楚得多；滚动条在这里是必要的。 */
-.template-gallery-zoom-frame {
-  display: block;
-  width: 794px;
-  height: 1123px;
-  margin: 0 auto;
-  border: 0;
-  background: var(--rf-surface);
-  box-shadow: 0 6px 24px rgb(15 23 42 / 12%);
+/* 工具栏左侧那句说明：允许换行，但不许把右侧的字号档位挤成两行。
+   `flex: 1 1 320px` 而不是 `auto`：说明是长句，短句时它不该把档位推到最右缘。 */
+.template-gallery-note {
+  flex: 1 1 320px;
+  min-width: 0;
+  font-size: 12px;
 }
+
+/* 「查看大图」不再有专属 iframe 样式：它复用 `A4PreviewFrame` 的 `fit="width"`
+   （794×1123 的文档整体缩放到弹窗宽度，高度按页数走），纸张外框由
+   `.a4-preview-paper` 提供。原先那颗固定 794×1123 的 iframe 正是"三个滚动条"的成因：
+   弹窗窄于 794px 出横向滚动条，文档高于一页时 iframe 内部再出一条竖向滚动条。 */
 
 .template-gallery-zoom-loading {
   display: flex;
@@ -301,6 +303,8 @@
 .template-gallery-loading,
 .template-gallery-error {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
   align-items: center;
   justify-content: center;
   height: 100%;

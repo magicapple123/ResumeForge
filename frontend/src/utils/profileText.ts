@@ -51,7 +51,7 @@ const SCALAR_LABELS: Record<ScalarField, string> = {
   city: "城市",
   target_city: "期望城市",
   job_intent: "求职意向",
-  personal_website: "个人网站",
+  personal_website: "个人主页",
   github: "GitHub",
   summary: "个人总结",
 };

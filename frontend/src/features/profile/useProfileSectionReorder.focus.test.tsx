@@ -31,7 +31,8 @@ describe("useProfileSectionReorder 焦点收尾（R10）", () => {
 
     fireEvent.click(screen.getByLabelText("上移projects"));
     const orderAfterMove = currentOrder();
-    expect(orderAfterMove[1]).toBe("projects");
+    // 默认顺序里 projects 在第 4 位（index 3），上移一格落到 index 2。
+    expect(orderAfterMove[2]).toBe("projects");
 
     // 焦点在下一帧落定（hook 用 rAF 等 DOM 的 order 生效）。
     drainAnimationFrames(frames);

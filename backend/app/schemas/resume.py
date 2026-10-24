@@ -8,6 +8,20 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .profile import validate_photo_data_url
 
+# 版面诊断（「自动一页」）那一组模型已迁至 ``schemas/resume_analysis.py`` 以满足单文件
+# 500 行预算；这里 re-export，保持
+# ``from app.schemas.resume import LayoutAnalyzeRequest`` 等既有导入路径不变。
+from .resume_analysis import (  # noqa: F401  (re-export：保持既有导入路径)
+    LayoutAnalyzeOut,
+    LayoutAnalyzeRequest,
+    LayoutDiagnosisOut,
+    LayoutFitCandidateOut,
+    LayoutFitRoomOut,
+    LayoutPageOut,
+    LayoutSuggestionOut,
+    ResumeLayoutMeasure,
+)
+
 # 生成参数（版式常量 + ``GenerateOptions``/``GenerateRequest``）已迁至
 # ``schemas/resume_generation.py`` 以满足单文件 500 行预算；这里 re-export，
 # 保持 ``from app.schemas.resume import GenerateOptions`` 等既有导入路径不变。
@@ -152,6 +166,10 @@ class ManualResumeRequest(BaseModel):
     # 建**草稿**（见 ``models.resume`` 的 ``draft`` 说明）：只有「前往简历制作台」传 true，
     # 缺省 false 让手写保存与通用简历的调用方逐字不变；草稿在制作台里保存过才进列表。
     draft: bool = Field(default=False)
+    # 这份简历自己的版式覆盖（P0-5）：缺省时后端用「我的资料」的顺序物化一次
+    # （``default_section_order_config``）。**缺省是"不涉及"而不是"清空"**：请求体里没有这个
+    # 字段的既有调用方（手写保存、通用简历）行为逐字不变，只是多得到一份默认板块顺序。
+    format_config: dict | None = None
 
 
 class ResumeReviseRequest(BaseModel):
@@ -359,86 +377,6 @@ class ResumeLayoutUpdate(BaseModel):
     # 按简历的版式覆盖。「自动一页」把试出来的方案写在这里。
     # **None 表示不动它**（与空字典区分开）：空字典是"清掉覆盖"，None 是"这次不涉及"。
     format_config: dict | None = None
-
-
-class ResumeLayoutMeasure(BaseModel):
-    """「自动一页」时浏览器量出来的两个高度（单位随意，只要两者同单位）。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    # 正文实际占用的高度：内容顶边到最后一个可见元素底边（含其下外边距）。
-    used_height: float = Field(ge=0)
-    # 一页里正文可用的高度：页高减去上下页边距。
-    page_content_height: float = Field(gt=0)
-    page_limit: int = Field(default=1, ge=1, le=MAX_RESUME_PAGES)
-
-
-class LayoutSuggestionOut(BaseModel):
-    kind: str
-    title: str
-    detail: str
-
-
-class LayoutPageOut(BaseModel):
-    page: int
-    fill: float
-
-
-class LayoutDiagnosisOut(BaseModel):
-    status: str
-    status_label: str
-    summary: str
-    fill: float
-    pages_needed: int
-    page_limit: int
-    pages: list[LayoutPageOut] = Field(default_factory=list)
-    suggestions: list[LayoutSuggestionOut] = Field(default_factory=list)
-
-
-class LayoutFitCandidateOut(BaseModel):
-    """一档候选版式：客户端把它注入预览、量一次，够放下就采用。"""
-
-    key: str
-    label: str
-    config: dict = Field(default_factory=dict)
-    css: str = ""
-
-
-class LayoutFitRoomOut(BaseModel):
-    has_room: bool
-    steps: int
-    font_floor_px: float
-    font_adjust_floor: float
-    font_floor_note: str
-
-
-class LayoutAnalyzeRequest(BaseModel):
-    """版面诊断请求：浏览器量到的两个高度 + **屏幕上这一版**的草稿版式。
-
-    为什么版式也要传：诊断里的「自动一页」清单（`fit_ladder`）与收紧余地
-    （`fit_room`）都是"从当前版式再往紧收一档"算出来的。只按记录值算，用户在
-    拖完滑块、还没点保存时点「自动一页」，就会从一个**他没在看的版式**起步——
-    表现为"诊断说的和我屏幕上的不是一回事"（2026-10-21 用户实测：精确模式里
-    改参数，诊断内容整块不动）。
-
-    ``None`` 表示"这次不覆盖，用记录值"：旧客户端不传这些字段，行为与之前一致。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    measure: ResumeLayoutMeasure
-    # 与 ``PreviewPdfRequest`` / ``POST /resumes/render`` 的版式字段逐一对应。
-    template: str | None = Field(default=None, max_length=64)
-    format_name: str | None = Field(default=None, max_length=64)
-    font_scale: ResumeFontScale | None = None
-    format_config: dict | None = None
-
-
-class LayoutAnalyzeOut(BaseModel):
-    diagnosis: LayoutDiagnosisOut
-    # 逐档收紧的版式清单。内容本来就放得下时为空。
-    fit_ladder: list[LayoutFitCandidateOut] = Field(default_factory=list)
-    fit_room: LayoutFitRoomOut
 
 
 # ===== 待审变更预检（RF-13）：编辑器里的 AI 改写/手填，先过三把既有闸门再落表单 =====

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="{{ language }}">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; script-src 'nonce-{{ csp_nonce }}'; base-uri 'none'; form-action 'none'" />
+<title>{{ resume.name }} - {{ resume.job_intent }} - 简历</title>
+<style>
+  /* 学术模板：纯黑白、无彩色色块。姓名大而重、右上角方形照片；
+     分区标题加粗靠左 + 一条整宽细线（不是色块、不是竖条）；
+     短条目（技能 / 证书）走三列项目符号列表，整体行距紧、信息密度高。 */
+  :root {
+    --text: #1a1a1a;
+    --muted: #4f4f4f;
+    --line: #8f8f8f;
+    --accent: #1a1a1a;
+    /* 首段信息区的浅灰底：学术模板是唯一用到它的地方（页头不用底色块）。 */
+    --accent-soft: #f1f1f1;
+    --bg: #ffffff;
+    /* 正文字号就是控件上的值：这里不得再乘任何缩放系数（2026-10-21 用户要求）。 */
+    --fs: {{ base_px }}px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    font-size: var(--fs);
+    line-height: 1.5;
+    width: 210mm;
+    height: {{ page_limit * 297 }}mm;
+    padding: 12mm 13mm;
+  }
+  /* 页头不画横线：参考版式里姓名/联系方式与首段信息区之间只靠留白分开。 */
+  .header { display: flex; align-items: flex-start; gap: calc(var(--fs) * 1.1); margin-bottom: calc(var(--fs) * 0.6); }
+  .header-main { flex: 1; min-width: 0; }
+  .header .name { font-size: calc(var(--fs) * 2 * var(--name-scale, 1)); font-weight: 700; letter-spacing: 2px; line-height: 1.2; }
+  .name-extra { font-size: calc(var(--fs) * 0.9); font-weight: 400; color: var(--muted); letter-spacing: 0; }
+  .header .intent { font-size: calc(var(--fs) * 0.95); color: var(--muted); margin-top: calc(var(--fs) * 0.3); }
+  .header .contact { font-size: calc(var(--fs) * 0.88); color: var(--muted); margin-top: calc(var(--fs) * 0.15); }
+  .header .contact span { margin-right: calc(var(--fs) * 0.9); }
+  /* 有照片时是右上角的方形块；没有照片时宏不渲染这个元素，所以不会留空洞。 */
+  .profile-photo { width: calc(var(--fs) * 5 * var(--photo-scale, 1)); height: calc(var(--fs) * 5 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: cover; }
+  .section { margin-bottom: calc(var(--fs) * 0.75); }
+  .section-title { font-size: calc(var(--fs) * 1.06 * var(--section-title-scale, 1)); font-weight: 700; letter-spacing: 1px; border-bottom: 1px solid var(--line); padding-bottom: calc(var(--fs) * 0.14); margin-bottom: calc(var(--fs) * 0.35); }
+  .entry { margin-bottom: calc(var(--fs) * 0.42 * var(--entry-gap, 1)); }
+  /* 条目头：左侧「机构 + 角色」加粗，右侧日期右对齐在同一基线上。 */
+  .entry-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--fs); }
+  .entry-head .title { font-size: var(--fs); font-weight: 700; }
+  .entry-head .meta { font-size: calc(var(--fs) * 0.88); color: var(--muted); white-space: nowrap; }
+  .entry .sub { font-size: calc(var(--fs) * 0.88); color: var(--muted); margin: calc(var(--fs) * 0.08) 0 calc(var(--fs) * 0.16); }
+  ul { padding-left: calc(var(--fs) * 1.28); }
+  li { margin-bottom: calc(var(--fs) * 0.1); }
+  /* 首段信息区：浅灰底 + 内边距，对应参考图里那块「意向方向 + 三个小标题」的底色。 */
+  .summary-text { font-size: calc(var(--fs) * 0.96); background: var(--accent-soft); padding: calc(var(--fs) * 0.55) calc(var(--fs) * 0.75); }
+  /* 技能 / 证书类是短条目：三列并排的项目符号列表（参考版式的特色）。 */
+  .skill-list { padding-left: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: calc(var(--fs) * 0.9); }
+  .skill-list li { list-style: none; margin: 0 calc(var(--fs) * 0.5) calc(var(--fs) * 0.2) 0; font-size: calc(var(--fs) * 0.9); }
+  .skill-list li::before { content: "•"; margin-right: calc(var(--fs) * 0.3); }
+  @page { size: A4; margin: 0; }
+  @media print {
+    .section, .entry { break-inside: avoid; }
+    /* 让背景色与边框在打印时保留：首段信息区的浅灰底就靠这句。
+       浏览器默认「不打印背景图形」，这正是"预览里有底色、打印出来没有"的原因；
+       `print-color-adjust: exact` 会强制按屏幕样式绘制，不依赖用户在打印对话框里勾选。 */
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+{% include "_resume_sections.j2" %}
+{% include "_resume_fit_script.j2" %}
+</body>
+</html>

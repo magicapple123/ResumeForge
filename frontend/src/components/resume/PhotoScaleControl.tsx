@@ -30,6 +30,7 @@ import {
   toPhotoPercent,
 } from "../../utils/pageMargins";
 import { photoScaleProbeCss } from "../../utils/resumeFormatProbe";
+import ParamResetButton from "./ParamResetButton";
 
 /**
  * 提交防抖（毫秒）。与页边距 / 行距同值：一次提交就要后端重渲染一次。
@@ -57,6 +58,8 @@ interface Props {
   disabled?: boolean;
   /** 没设过覆盖时显示的来源标签：随模板。 */
   defaultHint?: string;
+  /** 「恢复到打开时的值」：`visible` 为真时占用来来源胶囊那一格。 */
+  restore?: { visible: boolean; onReset: () => void };
   /** 传百分比 = 写入覆盖；传 `null` = 删掉覆盖（回到 100% 随模板）。 */
   onChange: (percent: number | null) => void;
   /** 拖动中的即时反馈：`:root { --photo-scale: …; }`。空串 = 清掉探针。 */
@@ -69,6 +72,7 @@ export default function PhotoScaleControl({
   hasPhoto,
   disabled = false,
   defaultHint,
+  restore,
   onChange,
   onProbe,
 }: Props) {
@@ -201,11 +205,16 @@ export default function PhotoScaleControl({
         {/* 没有照片时这个位置写原因，而不是留空：滑杆灰着又没有任何解释，用户会以为
             控件坏了。位置始终占着，读数才不会左右跳。 */}
         <span className={`resume-measure-source${customized && !noPhoto ? " is-empty" : ""}`}>
-          {noPhoto
-            ? t("resume.photo.scale.noPhoto")
-            : customized
-              ? ""
-              : (defaultHint ?? t("resume.photo.scale.hintTemplate"))}
+          {noPhoto ? (
+            t("resume.photo.scale.noPhoto")
+          ) : restore?.visible ? (
+            // 改过之后这一格由 ↺ 接管（与行距/页边距同一处入口）。
+            <ParamResetButton label={t("resume.photo.scale.label")} onReset={restore.onReset} />
+          ) : customized ? (
+            ""
+          ) : (
+            (defaultHint ?? t("resume.photo.scale.hintTemplate"))
+          )}
         </span>
       </span>
     </Space>

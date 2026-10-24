@@ -68,6 +68,12 @@ class ExportRequest(BaseModel):
     allow_incomplete: bool = False
     # 正式投递存档（RF-17）：为真时这次导出冻结一份投递快照；默认不落库（预览零膨胀）。
     record_delivery: bool = False
+    # **预览请求**（2026-10-24）：简历中心每次点开一份简历都要取一次渲染产物（`format=html`），
+    # 走的是同一条导出管线。默认行为（落一份副本、不进结果缓存）对"用户真的要一个文件"
+    # 是对的，对"屏幕上的一次查看"纯属浪费：既写盘，又让每次重新打开都重排一遍。
+    # 为真时只做两件事：不落盘副本 + 结果进预览缓存（同一组输入第二次 0ms）。
+    # 产物字节与从前的预览请求**完全一致**，所以前端可以无感切换。
+    preview: bool = False
 
 
 class PreviewPdfRequest(BaseModel):

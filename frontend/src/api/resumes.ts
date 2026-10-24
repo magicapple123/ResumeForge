@@ -230,13 +230,21 @@ export async function previewResumeTemplate(payload: {
   page_limit?: number;
   font_scale?: ResumeFontScale;
   resume_id?: number;
+  /** 调用方取消：换字号 / 关弹窗时把还在飞的渲染掐掉，别让它一直占着那张卡。 */
+  signal?: AbortSignal;
 }): Promise<string> {
+  // `signal` 只属于 fetch 选项，**不能**随请求体发出去：后端 `TemplatePreviewRequest`
+  // 是 `extra="forbid"`，多一个 `"signal": {}`（AbortSignal 的 JSON 序列化结果）就会
+  // 422，而前端只会显示 Pydantic 的 "Extra inputs are not permitted"——正是模板卡片
+  // 缩略图全部报错、而「查看大图」（那条路径不传 signal）正常的原因。
+  const { signal, ...body } = payload;
   const resp = await requestRaw("/resume-templates/preview", {
     method: "POST",
     // 渲染整份简历可能超出 15s 默认预算，走 task 档（30s）。
     budget: "task",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
+    signal,
   });
   return resp.text();
 }
@@ -406,8 +414,17 @@ function readCountHeader(value: string | null): number | null {
 
 /** 读取导出 HTML 文本（用于打开打印窗口生成 PDF） */
 export async function fetchResumeHtml(id: number, allowIncomplete = false): Promise<string> {
-  const { blob } = await exportResume(id, "html", allowIncomplete);
-  return blob.text();
+  // 走 POST 的 `preview: true`（2026-10-24）：它不落盘副本、结果进服务端预览缓存。
+  // 从前这里用的是 GET 导出——每次点开一份简历都写一份文件、且每次都要重排一遍，
+  // 这是"简历中心点开预览要等很久"的直接原因（同一条管线，只是多了两件不必做的事）。
+  // 产物字节与 GET 完全一致（同一条 `_export_record`），所以显示口径没有任何变化。
+  const resp = await requestRaw(`/resumes/${id}/export`, {
+    method: "POST",
+    budget: "export",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ format: "html", allow_incomplete: allowIncomplete, preview: true }),
+  });
+  return resp.text();
 }
 
 /**

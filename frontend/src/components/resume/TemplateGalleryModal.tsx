@@ -3,22 +3,35 @@
  * 简历模板一览：每个模板都渲染一份真实预览，点一下就直接选用。
  *
  * 之前只有"经典"一种模板，选模板这件事无从比较；现在内置 8 种 + 用户自制模板，
- * 光看名字（"优雅""技术"）猜不出效果，所以这里用真的渲染结果说话——预览用的是
- * 用户自己的简历（没有简历时用内置示例内容）。
+ * 光看名字（"优雅""技术"）猜不出效果，所以这里用真的渲染结果说话。
+ *
+ * **预览内容固定是内置示例**（2026-10 用户口径）：预览一栏回答的是"这个模板长什么样"，
+ * 换成用户自己的简历会让每开一次都触发一份大简历的排版（慢），也让人分不清
+ * "这是模板的效果还是我内容的效果"。要看自己的内容，制作台右栏一直是实时预览。
  */
 import { App, Button, Empty, Modal, Segmented, Space, Tag, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import A4PreviewFrame from "../templates/A4PreviewFrame";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchResumeTemplates, previewResumeTemplate } from "../../api/resumes";
 import type { ResumeFontScale, ResumeLayout, ResumeTemplateOption } from "../../types";
+import { t } from "../../i18n";
 import { withHiddenScrollbar } from "../../utils/iframeDocument";
 
 interface Props {
   open: boolean;
   layout: ResumeLayout;
-  /** 用哪份简历做预览；为空时后端用内置示例内容。 */
-  resumeId?: number;
+  /**
+   * 换字号档位 = **改这份简历**（受控）。
+   *
+   * 以前这个 Segmented 是"只读对比"：选了只影响缩略图，用户按缩略图挑完字号、
+   * 回到制作台却发现正文没变。现在它直接写 `layout.font_scale`，所有者负责重排，
+   * 于是"选字号"与"看到新字号"是同一次动作。
+   *
+   * 作用范围只有**当前这份简历**：`font_scale` 是记录级字段，改它不会波及任何其它
+   * 已存在的简历（那是"老简历不追溯改变"的前提）。
+   */
+  onFontScaleChange: (scale: ResumeFontScale) => void;
   onSelect: (template: string) => void;
   onClose: () => void;
 }
@@ -29,17 +42,38 @@ const FONT_SCALES: { value: ResumeFontScale; label: string }[] = [
   { value: "large", label: "大字号" },
 ];
 
-export default function TemplateGalleryModal({ open, layout, resumeId, onSelect, onClose }: Props) {
+/** 浅拷贝去掉一个键：`setFailed` 里直接 delete 会改到上一次的 state 对象。 */
+function withoutKey(map: Record<string, string>, key: string): Record<string, string> {
+  if (!(key in map)) return map;
+  const next = { ...map };
+  delete next[key];
+  return next;
+}
+
+export default function TemplateGalleryModal({
+  open,
+  layout,
+  onFontScaleChange,
+  onSelect,
+  onClose,
+}: Props) {
   const { message } = App.useApp();
   const [templates, setTemplates] = useState<ResumeTemplateOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [failed, setFailed] = useState<Record<string, string>>({});
-  const [previewScale, setPreviewScale] = useState<ResumeFontScale>(layout.font_scale);
+  /** 预览请求的世代号：只有最新一轮的结果允许写状态（见下面的预览 effect）。 */
+  const previewGeneration = useRef(0);
+  /** 「重试」的令牌：+1 就重跑一遍预览取数（失败是逐张的，重试整批最省心）。 */
+  const [retryTick, setRetryTick] = useState(0);
+  // 字号档位**就是这份简历的档位**（不再另存一份预览档位，见 Props 注释）。
+  const previewScale = layout.font_scale ?? "standard";
   // 「查看大图」：整页渲染另取一份（缩略图只渲染 1 页，看不到后面的内容）。
   const [zoomTemplate, setZoomTemplate] = useState<ResumeTemplateOption | null>(null);
   const [zoomHtml, setZoomHtml] = useState("");
   const [zoomLoading, setZoomLoading] = useState(false);
+  /** 大图按几页排：与用户设定的「最大篇幅」同口径（后端上限 3）。 */
+  const zoomPages = Number(layout.page_limit) || 1;
   // 用户当前真实设定的格式覆盖（含 `font_scale_adjust` 字号系数）。缩略图必须带上它，
   // 否则"用户把字号拖到 14.3px、缩略图却仍是 14px"，选出来才发现不一样。
   const formatConfig = layout.format_config;
@@ -81,25 +115,29 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
   // 预览跟着"字号 + 格式覆盖"走：换档位、换版式、或在外面拖过字号系数后，缩略图
   // 都要一起变，否则用户按缩略图选出来的效果和实际生成的不一致。
   // Compiler 规范：随预览键变化的重置用渲染期守卫；取数留在 effect 的 IIFE 里。
-  const previewKey = `${open}:${templates.length}:${formatConfigKey}:${layout.format_name}:${previewScale}:${resumeId ?? ""}`;
+  const previewKey = `${open}:${templates.length}:${formatConfigKey}:${layout.format_name}:${previewScale}`;
   const [prevPreviewKey, setPrevPreviewKey] = useState(previewKey);
   if (prevPreviewKey !== previewKey) {
     setPrevPreviewKey(previewKey);
-    setLoading(true);
-    setPreviews({});
+    // **不清 `previews`**：换字号/换版式时旧缩略图先留着，新图到了再逐张替换。
+    // 清空过一次的代价是整屏回到三个灰点——请求一慢（6 个模板并发渲染）看起来就是
+    // "一直加载不出来"（2026-10-24 用户反馈）。旧图只是几秒内"偏旧"，比一片空白好。
+    // 失败记录要清：换参数后值得再试一次。
     setFailed({});
   }
 
   useEffect(() => {
     if (!open || templates.length === 0) return;
-    let cancelled = false;
+    // 世代号：只认"最新一轮"的结果。上一轮的请求可能比新一轮慢，放任它写状态会把
+    // 新字号/新版式的缩略图覆盖回旧的。
+    const generation = previewGeneration.current + 1;
+    previewGeneration.current = generation;
+    const controller = new AbortController();
     void (async () => {
-      const next: Record<string, string> = {};
-      const errors: Record<string, string> = {};
       await Promise.all(
         templates.map(async (item) => {
           try {
-            next[item.name] = await previewResumeTemplate({
+            const html = await previewResumeTemplate({
               template_name: item.name,
               format_name: layout.format_name,
               // 把当前格式覆盖（含字号系数）一并传出：后端把 format_name 的基础版式
@@ -107,24 +145,29 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
               format_config: formatConfig,
               page_limit: 1,
               font_scale: previewScale,
-              resume_id: resumeId,
+              // **刻意不传 `resume_id`**：预览内容是固定示例（见文件头）。
+              signal: controller.signal,
             });
+            if (previewGeneration.current !== generation) return;
+            // 逐张上屏：先回来的先显示，不再等最慢的那一张（`Promise.all` 之后再统一
+            // setState 会让 6 张卡一起干等，任何一张慢都表现为"全都加载不出来"）。
+            setPreviews((prev) => ({ ...prev, [item.name]: html }));
+            setFailed((prev) => withoutKey(prev, item.name));
           } catch (error) {
-            errors[item.name] = error instanceof Error ? error.message : "预览渲染失败";
+            if (previewGeneration.current !== generation || controller.signal.aborted) return;
+            setFailed((prev) => ({
+              ...prev,
+              [item.name]: error instanceof Error ? error.message : "预览渲染失败",
+            }));
           }
         }),
       );
-      if (cancelled) return;
-      setPreviews(next);
-      setFailed(errors);
-      setLoading(false);
     })();
-    return () => {
-      cancelled = true;
-    };
+    // 关弹窗 / 换参数时把还在飞的请求掐掉：不取消的话它们会占着连接与后端渲染槽。
+    return () => controller.abort();
     // format_config 用序列化签名 formatConfigKey 做依赖，避免对象引用每次渲染都变。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, templates, layout.format_name, formatConfigKey, previewScale, resumeId]);
+  }, [open, templates, layout.format_name, formatConfigKey, previewScale, retryTick]);
 
   const openZoom = useCallback(
     async (template: ResumeTemplateOption) => {
@@ -138,11 +181,10 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
             format_name: layout.format_name,
             format_config: formatConfig,
             // 用**用户当前设定的页数**（1~3，后端 MAX_RESUME_PAGES 上限即 3）：
-            // 大图要看的是"这个模板在我这份简历、这个页数下长什么样"，与导出同口径。
+            // 大图要看的是"这个模板、这个页数下长什么样"，与导出同口径。
             // 曾经写死 6，直接被后端校验挡下（page_limit 的取值上限是 3）。
-            page_limit: Number(layout.page_limit) || 1,
+            page_limit: zoomPages,
             font_scale: previewScale,
-            resume_id: resumeId,
           }),
         );
       } catch (error) {
@@ -153,7 +195,7 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layout.format_name, formatConfigKey, previewScale, resumeId, message],
+    [layout.format_name, formatConfigKey, previewScale, zoomPages, message],
   );
 
   const selectedName = layout.template;
@@ -161,20 +203,18 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
     () => (
       <div className="template-gallery">
         <div className="template-gallery-toolbar">
-          <Typography.Text type="secondary">
-            预览用的是{resumeId ? "你选中的这份简历" : "内置示例内容"}
-            ，已带上你当前的版式与字号系数；上面的档位只作对比用。
+          <Typography.Text type="secondary" className="template-gallery-note">
+            {t("gallery.preview.demo")}；{t("gallery.fontScale.scope")}
           </Typography.Text>
-          {/* 这个档位 Segmented 是**只读对比**入口：它不写回 layout.font_scale，也不自带
-              系数，只决定缩略图用哪个基准档渲染。用户真实设定的字号系数
-              （format_config.font_scale_adjust）由外面的滑块独占——两条路径不会各存一份
-              字号，避免出现第二个"字号口径"。默认档位就是用户当前档位，所以缩略图默认
-              显示的就是用户真实字号；换档位只是拿同一份系数去看另一个基准档。 */}
+          {/* 档位是**写回这份简历**的入口（受控）：改它 = 改 `layout.font_scale`，
+              制作台右栏会立刻按新字号重排。作用范围只有当前简历与之后新建的简历
+              ——`font_scale` 是记录级字段，已保存的其它简历一个都不动。 */}
           <Segmented
             size="small"
             value={previewScale}
             options={FONT_SCALES}
-            onChange={(value) => setPreviewScale(value as ResumeFontScale)}
+            aria-label={t("gallery.fontScale.label")}
+            onChange={(value) => onFontScaleChange(value as ResumeFontScale)}
           />
         </div>
         <div className="template-gallery-grid">
@@ -205,7 +245,12 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
                     fit="width"
                   />
                 ) : failed[item.name] ? (
-                  <div className="template-gallery-error">{failed[item.name]}</div>
+                  <div className="template-gallery-error">
+                    <span>{failed[item.name]}</span>
+                    <Button size="small" onClick={() => setRetryTick((tick) => tick + 1)}>
+                      {t("gallery.preview.retry")}
+                    </Button>
+                  </div>
                 ) : (
                   <div className="template-gallery-loading">
                     <LoadingBlock size="small" minHeight={120} />
@@ -240,7 +285,16 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
         </div>
       </div>
     ),
-    [templates, previews, failed, selectedName, resumeId, previewScale, onSelect, openZoom],
+    [
+      templates,
+      previews,
+      failed,
+      selectedName,
+      previewScale,
+      onSelect,
+      onFontScaleChange,
+      openZoom,
+    ],
   );
 
   return (
@@ -256,8 +310,10 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
       destroyOnHidden
     >
       {templates.length === 0 && !loading ? <Empty description="还没有可选模板" /> : body}
-      {/* 大图：整页、按 1:1 渲染、允许滚动。缩略图是 0.36 倍且只渲染一页，
-          想看"这个模板的正文排布到底什么样"必须有一处不打折的地方。 */}
+      {/* 大图：整页缩放到窗口宽度（`fit="width"`，纸张按「最大篇幅」给足 1–3 页）。
+          这里**不再**用固定 794×1123 的 iframe —— 那是"大图界面三个滚动条"的成因：
+          弹窗窄于 794px 时出横向滚动条，文档比一页高时 iframe 内部再出一条竖向滚动条，
+          加上弹窗本体那条，一共三条。缩放成自适应宽度后，整块只剩弹窗本体一条。 */}
       <Modal
         title={zoomTemplate ? `${zoomTemplate.label} · 完整预览` : "完整预览"}
         open={zoomTemplate !== null}
@@ -282,7 +338,10 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
         styles={{
           body: {
             maxHeight: "var(--rf-modal-body-max-h)",
-            overflow: "auto",
+            // 只留竖向滚动：横向由 `fit="width"` 消化掉，`overflowX: hidden` 是
+            // 那道保险——纸张宽度就是容器宽度，不该再出现第二条横向滚动条。
+            overflowY: "auto",
+            overflowX: "hidden",
             // 模板预览底色：深色主题下必须暗下去，否则 iframe 周围是一圈白边。
             background: "var(--rf-surface-alt)",
           },
@@ -294,11 +353,11 @@ export default function TemplateGalleryModal({ open, layout, resumeId, onSelect,
             <LoadingBlock />
           </div>
         ) : (
-          <iframe
+          <A4PreviewFrame
+            html={withHiddenScrollbar(zoomHtml)}
             title="模板完整预览"
-            className="template-gallery-zoom-frame"
-            sandbox=""
-            srcDoc={zoomHtml}
+            fit="width"
+            pages={zoomPages}
           />
         )}
       </Modal>

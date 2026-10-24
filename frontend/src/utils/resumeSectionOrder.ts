@@ -11,23 +11,24 @@ import type { ResumeFormatConfig } from "../types/resumeFormat";
 
 /** 分区键 → 界面文案。与后端 SECTION_LABELS 保持逐字一致。 */
 export const RESUME_SECTION_LABELS: Record<string, string> = {
-  summary: "个人总结",
   education: "教育经历",
   experience: "实习/工作经历",
-  campus_experience: "校园经历",
   projects: "项目经历",
   skills: "专业技能",
+  campus_experience: "校园经历",
   awards: "荣誉奖项",
+  summary: "个人总结",
 };
 
+/** 与后端 `resume_sections.DEFAULT_SECTION_ORDER` 逐项一致（两侧各有测试钉住）。 */
 export const DEFAULT_RESUME_SECTION_ORDER: string[] = [
-  "summary",
   "education",
   "experience",
-  "campus_experience",
   "projects",
   "skills",
+  "campus_experience",
   "awards",
+  "summary",
 ];
 
 /**

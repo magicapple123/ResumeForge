@@ -111,7 +111,18 @@ def export_markdown(
         header += f" · {resume.job_intent}"
     lines.append(f"# {header}")
     contacts = " | ".join(
-        item for item in [resume.phone, resume.email, resume.city, resume.birth_year] if item
+        item
+        for item in [
+            resume.phone,
+            resume.email,
+            resume.city,
+            resume.birth_year,
+            # 主页与 GitHub 在预览/PDF/Word 的页眉里都带字段名前缀印出来，md 少这两项就是
+            # "同一份简历两个输出说得不一样"（与性别/出生年那次漏字段同一类问题）。
+            f"{fields['github']}：{resume.github}" if resume.github else "",
+            f"{fields['website']}：{resume.personal_website}" if resume.personal_website else "",
+        ]
+        if item
     )
     if contacts:
         lines.append(f"{contacts}\n")

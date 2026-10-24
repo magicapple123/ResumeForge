@@ -1,0 +1,319 @@
+%% SPDX-License-Identifier: Apache-2.0
+%% ResumeForge 增量批次 · 类图（数据模型 + 服务类）
+%% 生成自 docs/system_design.md §3 / §4。三块：后端字体服务 / 后端排版注册表 / 前端实时预览与字体 UI。
+
+classDiagram
+
+  %% ===================== P0-1 / P0-2 字体下载服务 =====================
+  class BuiltinFontModule {
+    <<module>> resume_font_builtin
+    +str FONT_ID
+    +str FONT_LABEL
+    +tuple BUILTIN_FILES
+    +int CHUNK_SIZE
+    +Lock _lock
+    +dict _state
+    +Thread _worker
+    +Event _stop
+    +httpx.Client _client
+    +list~Path~ _run_written
+    +fonts_dir() Path
+    +total_bytes() int
+    +status() dict
+    +start_download() dict
+    +cancel() dict
+    +delete() list~str~
+    +reset_state() None
+    -_run_download() None
+    -_download_one(entry dict, written list) None
+    -_cleanup(written list) None
+    -_failure_message(exc Exception) str
+    -_spawn_worker() None
+  }
+
+  class FontBusy {
+    <<exception>> 409
+  }
+  class FontDiskFull {
+    <<exception>> 507
+  }
+  class FontDownloadError {
+    <<exception>> 500
+  }
+  class FontNotDownloaded {
+    <<exception>> 404
+  }
+  class Cancelled {
+    <<internal>> 取消哨兵，不产出失败文案
+  }
+
+  class BuiltinFontStatus {
+    <<DTO>>
+    +str id
+    +str label
+    +int size_total
+    +bool downloaded
+    +int downloaded_bytes
+    +int total_bytes
+    +str state
+    +str error
+    +bool cancelling
+  }
+
+  class FontApi {
+    <<router>> /api/settings
+    +read_builtin_font() BuiltinFontStatus
+    +download_builtin_font(request Request, activate bool) BuiltinFontStatus
+    +read_builtin_download() BuiltinFontStatus
+    +cancel_builtin_download(request Request) BuiltinFontStatus
+    +remove_builtin_font(request Request) None
+    -_ensure_active(result dict) dict
+  }
+
+  BuiltinFontModule ..> FontBusy : raises
+  BuiltinFontModule ..> FontDiskFull : raises
+  BuiltinFontModule ..> FontDownloadError : raises
+  BuiltinFontModule ..> FontNotDownloaded : raises
+  BuiltinFontModule ..> Cancelled : raises(内部)
+  BuiltinFontModule --> BuiltinFontStatus : status() 产出
+  FontApi --> BuiltinFontModule : 调用
+  FontApi --> FontBusy : 映射 409
+  FontApi --> FontDiskFull : 映射 507
+  FontApi --> FontNotDownloaded : 映射 404
+
+  %% ===================== P0-8 排版注册表与 PDF 版式 =====================
+  class TemplateLayoutDefaults {
+    <<module>> resume_template_layout
+    +dict TEMPLATE_LAYOUT_DEFAULTS
+    +header_align str
+    +header_photo_side str
+    +padding_sides_mm tuple
+    +padding_mm float
+    +name_ratio float
+    +section_title_align str
+    +section_title_style str
+    +section_title_text str
+    +line_height float
+    +column_count int
+    +tag_align str
+    +tag_mono bool
+  }
+
+  class ResumeLayout {
+    <<dataclass frozen>> pdf_exporter.layout
+    +float base_px
+    +float margin_top
+    +float margin_right
+    +float margin_bottom
+    +float margin_left
+    +str header_align
+    +str header_photo_side
+    +float name_ratio
+    +float section_title_ratio
+    +str section_title_align
+    +float usable_width_mm()
+    +float gap_mm(ratio float)
+  }
+
+  class LayoutResolver {
+    <<module>> resume_layout_overrides
+    +resolve_page_margins(config dict, template_padding_mm float, legacy_margin_mm float, template_sides tuple) tuple
+    +page_padding_rule(config dict) str
+    +resolve_photo_scale(config dict) float
+  }
+
+  class NameGenderPlan {
+    <<dataclass frozen>>
+    +bool same_line
+    +str gender_text
+    +float gender_width
+    +float height
+  }
+
+  class NameGenderModule {
+    <<module>> pdf_exporter.name_gender
+    +plan_name_gender(pdf, name str, gender str, width float, name_size float, extra_size float, align str) NameGenderPlan
+    +draw_name_gender(pdf, name str, plan NameGenderPlan, width float, name_size float, extra_size float, align str) None
+  }
+
+  class RenderModule {
+    <<module>> pdf_exporter.render
+    +_draw_resume(pdf, resume ResumeContent, include_photo bool, format_config dict, language str) None
+    -_section_has_content(resume ResumeContent, key str) bool
+    -_register_fonts(pdf FPDF, regular str, bold str) None
+  }
+
+  class ResumeTemplateCatalog {
+    <<module>>
+    +dict RESUME_TEMPLATES
+    +template_spec(name str) dict
+    +template_options() list
+    +template_options_with_custom(custom list) list
+  }
+
+  ResumeTemplateCatalog --> TemplateLayoutDefaults : template_layout_defaults()
+  TemplateLayoutDefaults --> ResumeLayout : resolve_layout() 读取
+  LayoutResolver --> ResumeLayout : 页边距四边
+  ResumeLayout --> RenderModule : 传入 pdf.layout
+  RenderModule --> NameGenderModule : 页头姓名(+性别)
+  NameGenderModule --> NameGenderPlan : 量(plan) / 画(draw)
+
+  %% ===================== P0-5 / P0-6 分区顺序 =====================
+  class ResumeSections {
+    <<module>> resume_sections
+    +tuple DEFAULT_SECTION_ORDER
+    +dict PROFILE_SECTION_TO_RESUME
+    +resolved_section_order(format_config dict) list
+    +normalized_section_order(raw object) list
+    +profile_to_resume_order(raw object) list
+    +profile_section_keys(raw object) list
+    +default_section_order_config(db Session) dict
+  }
+
+  class SectionOrderUtils {
+    <<module>> utils/resumeSectionOrder.ts
+    +DEFAULT_RESUME_SECTION_ORDER string[]
+    +normalizeSectionOrder(stored unknown, defaultOrder string[]) string[]
+    +moveSection(order string[], index number, direction -1|1) string[]
+    +buildSectionOrderConfig(profileOrder string[], builtInDefaultOrder string[], base ResumeFormatConfig) ResumeFormatConfig
+  }
+
+  ResumeSections <.. SectionOrderUtils : 同规则的两份实现(刻意不共享)
+
+  %% ===================== P0-7 实时预览单向通道 =====================
+  class ResumeDraftStore {
+    <<interface>> features/resume/resumeDraftContent.ts
+    +set(content ResumeContent, signature string) void
+    +clear() void
+    +subscribe(listener Function) Function
+    +getSnapshot() ResumeContent
+  }
+
+  class ResumeEditorPanelApi {
+    <<interface>>
+    +bool dirty
+    +bool saving
+    +FormInstance form
+    +onValuesChange(changed unknown, allValues ResumeContent) void
+    +onFinish(values ResumeContent) void
+    +submit() void
+    +requestDiscard() void
+    +discardEdits() void
+  }
+
+  class UseResumeEditorPanel {
+    <<hook>>
+    +onDraftContent(content ResumeContent) void
+    +onDraftReset() void
+    -mergePartial(values ResumeContent) ResumeContent
+    -handleFinish(values ResumeContent) Promise~void~
+  }
+
+  class ResumeWorkbenchEditorColumn {
+    <<component>>
+    +draftStore ResumeDraftStore
+    +content ResumeContent
+    +onSaveContent(content ResumeContent) Promise~void~
+    +ref ResumeWorkbenchEditorHandle
+  }
+
+  class ResumeWorkbenchLiveCanvas {
+    <<component>>
+    +html string
+    +content ResumeContent
+    +liveContent ResumeContent
+    +draftStore ResumeDraftStore
+    +mergeLive(content ResumeContent) ResumeContent
+    +suspended bool
+  }
+
+  class UseResumeLivePreview {
+    <<hook>>
+    +state string
+    +retry() void
+    +suspend() void
+    +resume() void
+    -schedule(job ResumeLivePreviewJob) void
+    -pump() void
+  }
+
+  class ResumeZoomModal {
+    <<component>>
+    +layout ResumeLayout
+    +content ResumeContent
+    +onSaveContent(content ResumeContent) Promise~void~
+    +exactPreview ExactPreviewOptions
+    +liveContent ResumeContent
+  }
+
+  class WorkbenchParamsColumn {
+    <<component 新增>>
+    +layout ResumeLayout
+    +catalog ResumeTemplateCatalog
+    +previewRef RefObject
+    +onApplyLayout(next ResumeLayout) void
+  }
+
+  class ResumeTemplateControls {
+    <<component>>
+    +layout ResumeLayout
+    +catalog ResumeTemplateCatalog
+    +preferProfileOrder bool
+    +onChange(next ResumeLayout) void
+    -handleSectionMove(index number, direction -1|1) void
+    -handleSectionOrderReset() void
+    -applyProfileOrder() void
+  }
+
+  UseResumeEditorPanel --> ResumeEditorPanelApi : 产出
+  UseResumeEditorPanel ..> ResumeDraftStore : onDraftContent / onDraftReset
+  ResumeWorkbenchEditorColumn --> UseResumeEditorPanel : 调用
+  ResumeWorkbenchEditorColumn --> ResumeDraftStore : set/clear(透传)
+  ResumeWorkbenchLiveCanvas --> ResumeDraftStore : useSyncExternalStore 订阅
+  ResumeWorkbenchLiveCanvas --> UseResumeLivePreview : content = mergeLive(draft) ?? liveContent
+  ResumeZoomModal --> ResumeDraftStore : useRef 创建(不订阅)
+  ResumeZoomModal --> WorkbenchParamsColumn : 抽取参数栏
+  ResumeZoomModal --> ResumeWorkbenchEditorColumn : 中栏
+  ResumeZoomModal --> ResumeWorkbenchLiveCanvas : 右栏
+  WorkbenchParamsColumn --> ResumeTemplateControls : 结构组
+  ResumeTemplateControls --> SectionOrderUtils : 归一化 / 快照写入
+
+  %% ===================== P0-3 / P1-1 前端字体 UI =====================
+  class UseBuiltinFontDownload {
+    <<hook 新增>>
+    +BuiltinFontStatus status
+    +bool busy
+    +start(activate bool) Promise~void~
+    +cancel() Promise~void~
+    +remove() Promise~void~
+  }
+
+  class ResumeFontControl {
+    <<component>>
+    +layout ResumeLayout
+    +onChange(next ResumeLayout) void
+    +compact bool
+    +alignWithSlider bool
+  }
+
+  class BuiltinFontRow {
+    <<component>>
+    +BuiltinFontStatus status
+    +onChanged() void
+  }
+
+  class FontSampleModal {
+    <<component 新增>>
+    +bool open
+    +str name
+    +str displayName
+    +bool downloadable
+    +onClose() void
+    +onActivate() void
+  }
+
+  ResumeFontControl --> UseBuiltinFontDownload : 下拉内下载/进度/取消
+  BuiltinFontRow --> UseBuiltinFontDownload : 设置页下载/删除
+  BuiltinFontRow --> FontSampleModal : 点字体名看样张
+  ResumeFontControl ..> FontSampleModal : 未下载 → 提示"下载后即可预览"
+  UseBuiltinFontDownload --> FontApi : GET/POST/DELETE

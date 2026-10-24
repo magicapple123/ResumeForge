@@ -92,6 +92,14 @@ export interface ResumeTemplateOption {
   /** 用户自制的模板；内置模板为 false。 */
   custom?: boolean;
   id?: number | null;
+  /**
+   * 这个模板的**标题字族是衬线**（当前 `elegant` / `editorial` 为 true，自制模板恒 false）。
+   *
+   * 精确预览用的是嵌入 PDF 的那一款中文字体（本机黑体），而草稿里的衬线标题是 CSS 字族，
+   * 两条链路在这里**必然不同**。有了这个标志，精确模式才能只在"真的不一样"时给一句说明，
+   * 而不是对所有模板都摆一条与事实无关的提示。旧后端不下发时按 `false`（不提示）。
+   */
+  serif_heading?: boolean;
 }
 
 export interface ResumeFontScaleOption {
@@ -154,6 +162,15 @@ export interface ResumeTemplateCatalog {
    * 拖一下顺序，所有老简历的外观都会跟着变。
    */
   profile_section_order?: string[];
+  /**
+   * 「我的资料」里**原样**排过的分区键（`educations` / `projects` …，不补齐、不映射）。
+   *
+   * 与上面的 `profile_section_order` 分工不同：那个是"翻译成简历分区键的完整排列"（给新简历
+   * 的默认值用），这个是"资料里到底有没有可排序的分区"这个事实本身——空数组意味着
+   * 「按我的资料顺序排列」这个动作**无从谈起**，界面上那颗按钮必须禁用并说明原因。
+   * 旧后端不下发时按 `undefined` 处理（与空数组同义：不提供这个动作）。
+   */
+  profile_section_keys?: string[];
   /** 三个版式参数的默认值由后端下发，前端不写死——改默认值只改一处。 */
   defaults: {
     template: string;

@@ -17,6 +17,7 @@ dev 模式前端由 Vite 独立进程提供（5173 端口 + /api 代理）；发
 
 import json
 import logging
+import mimetypes
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -35,6 +36,32 @@ _STATIC_SECURITY_HEADERS = {
 }
 # /assets 下是 Vite 内容哈希文件名，文件内容变了名字就变，可以永久缓存。
 _ASSETS_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+# 静态资产的 MIME 类型**不能交给宿主机猜**。
+#
+# `FileResponse` 直接拿 `mimetypes.guess_type()` 的结果当 Content-Type，而 Windows 的
+# 注册表把 `.mjs` 登记成 `text/plain`（Python 3.12 实测；`.js` 在某些机器上同样是
+# `text/plain`）。浏览器会以"不是 JavaScript MIME"为由**拒绝执行** ES module，于是
+# pdfjs 的 worker 加载失败、退回 fake worker 也失败——就是导出图片时那句
+# `Setting up fake worker failed: Failed to fetch dynamically imported module:
+# …/assets/pdf.worker.min-*.mjs`。PDF 其实早就生成好了，塌的只有最后一步像素化。
+#
+# `.js` 一并钉死：单页应用的入口脚本一旦被拒，整页直接白屏，故障形态比这张图更糟。
+_STATIC_MIME_TYPES: dict[str, tuple[str, ...]] = {
+    "text/javascript": (".mjs", ".js"),
+    "text/css": (".css",),
+    "font/woff2": (".woff2",),
+}
+
+
+def _register_static_mime_types() -> None:
+    """把静态资产的扩展名映射成规范 MIME，覆盖注册表带来的错误登记。"""
+    for mime, extensions in _STATIC_MIME_TYPES.items():
+        for extension in extensions:
+            mimetypes.add_type(mime, extension)
+
+
+_register_static_mime_types()
 
 
 class _StaticHeadersMiddleware(BaseHTTPMiddleware):

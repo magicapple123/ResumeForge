@@ -18,11 +18,21 @@ import { t } from "../../i18n";
 import type { ResumeLayout } from "../../types";
 import ResumeFontControl, { SYSTEM_FONT_VALUE } from "./ResumeFontControl";
 
-const apiMocks = vi.hoisted(() => ({ listResumeFonts: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({
+  listResumeFonts: vi.fn(),
+  startBuiltinFontDownload: vi.fn(),
+  cancelBuiltinFontDownload: vi.fn(),
+  deleteBuiltinFont: vi.fn(),
+  getBuiltinFont: vi.fn(),
+}));
 
-vi.mock("../../api/settings", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../api/settings")>()),
+vi.mock("../../api/fonts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../api/fonts")>()),
   listResumeFonts: apiMocks.listResumeFonts,
+  startBuiltinFontDownload: apiMocks.startBuiltinFontDownload,
+  cancelBuiltinFontDownload: apiMocks.cancelBuiltinFontDownload,
+  deleteBuiltinFont: apiMocks.deleteBuiltinFont,
+  getBuiltinFont: apiMocks.getBuiltinFont,
 }));
 
 const LAYOUT: ResumeLayout = {
@@ -51,6 +61,11 @@ function renderControl(layout: ResumeLayout = LAYOUT) {
   return onChange;
 }
 
+/** 弹层元素的类名串（弹层没渲染时是空串）：`*-leave` 表示"正在关闭"。 */
+function popupClass(): string {
+  return document.querySelector(".resume-params-dropdown")?.className ?? "";
+}
+
 /** 打开下拉，返回那个 combobox 元素（后续按键要打回它身上）。 */
 async function openDropdown(): Promise<HTMLElement> {
   const select = await screen.findByRole("combobox", { name: "简历字体" });
@@ -60,6 +75,19 @@ async function openDropdown(): Promise<HTMLElement> {
 
 beforeEach(() => {
   apiMocks.listResumeFonts.mockReset().mockResolvedValue(FONTS);
+  apiMocks.getBuiltinFont.mockReset().mockResolvedValue({
+    id: "source-han-sans-sc",
+    label: "思源黑体",
+    size_total: 33493260,
+    downloaded: false,
+    downloaded_bytes: 0,
+    total_bytes: 33493260,
+    state: "idle",
+    error: "",
+  });
+  apiMocks.startBuiltinFontDownload.mockReset();
+  apiMocks.cancelBuiltinFontDownload.mockReset();
+  apiMocks.deleteBuiltinFont.mockReset();
 });
 
 afterEach(() => {
@@ -69,6 +97,19 @@ afterEach(() => {
 });
 
 describe("ResumeFontControl", () => {
+  it("下拉未展开时挂载**不发任何字体状态请求**，展开后才发一次", async () => {
+    // 这一格就挂在字号滑杆旁边，会被参数栏反复渲染；「拖动字号滑杆全程零网络」是那条
+    // 控件的性能红线（`ResumeLayoutControls.font.test.tsx` 用 fetchSpy 钉着它），
+    // 所以内置字体状态必须等到**用户真的要挑字体**（展开下拉）时才读。
+    renderControl();
+
+    await screen.findByRole("combobox", { name: "简历字体" });
+    expect(apiMocks.getBuiltinFont).not.toHaveBeenCalled();
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "简历字体" }));
+    await waitFor(() => expect(apiMocks.getBuiltinFont).toHaveBeenCalledTimes(1));
+  });
+
   it("一款可用字体都没有时只给一句指引，不渲染下拉", async () => {
     apiMocks.listResumeFonts.mockResolvedValue({ items: [], active: null, max_bytes: 1 });
 
@@ -78,7 +119,7 @@ describe("ResumeFontControl", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
-  it("内置字体还没下载时在下拉里禁用，并在第二行指出下载位置", async () => {
+  it("内置字体还没下载：**不再禁用**，点它就是去下载（带 activate=false）", async () => {
     apiMocks.listResumeFonts.mockResolvedValue({
       items: [
         {
@@ -95,19 +136,83 @@ describe("ResumeFontControl", () => {
       active: FONTS.active,
       max_bytes: 30 * 1024 * 1024,
     });
-    renderControl();
+    apiMocks.startBuiltinFontDownload.mockResolvedValue({
+      ...(await apiMocks.getBuiltinFont()),
+      state: "downloading",
+    });
+    const onChange = renderControl();
     await openDropdown();
 
-    // 选中它没有意义（磁盘上没有文件），所以只能禁用 + 指路，不能让它看起来能选。
-    const label = t("fonts.control.undownloaded", { name: "思源黑体" });
-    const node = await screen.findByText(label);
-    const option = node.closest(".ant-select-item") as HTMLElement;
-    expect(option.className).toContain("ant-select-item-option-disabled");
-    expect(option.textContent).toContain(t("fonts.control.download-hint"));
+    const option = (await screen.findByText(t("fontDownload.optionHint"))).closest(
+      ".ant-select-item",
+    ) as HTMLElement;
+    // 这一行现在是"可点的下载入口"，不是"不能选的灰条"。
+    expect(option.className).not.toContain("ant-select-item-option-disabled");
+    expect(option.textContent).toContain(t("fontDownload.optionHint"));
 
+    fireEvent.click(option);
+    await waitFor(() =>
+      // **关键**：`activate: false` —— 只下文件，不接管全局当前字体。
+      expect(apiMocks.startBuiltinFontDownload).toHaveBeenCalledWith({ activate: false }),
+    );
+    // 还没下完就不写这份简历的字体（等真的下完再写一次）。
+    expect(onChange).not.toHaveBeenCalled();
+    // 弹层留在原地：进度就在这一行里走，不该把人踢出下拉（antd 关掉时会加 `hidden`）。
+    const popup = document
+      .querySelector(".resume-params-dropdown")
+      ?.closest(".ant-select-dropdown");
+    expect(popup).not.toBeNull();
+    expect(popup?.className ?? "").not.toContain("hidden");
     // 未下载的那一款不注入 @font-face：磁盘上没有文件，注入只会换来一次 404。
     const css = document.head.querySelector("style[data-rf-font-options]")?.textContent ?? "";
     expect(css).not.toContain("SourceHanSansSC-Regular.otf");
+  });
+
+  it("下载完成后：写成这份简历的字体一次，并提示已下载", async () => {
+    apiMocks.listResumeFonts.mockResolvedValue({
+      items: [
+        {
+          name: "SourceHanSansSC-Regular.otf",
+          display_name: "思源黑体",
+          size: 33493260,
+          uploaded_at: "",
+          active: false,
+          builtin: true,
+          downloaded: false,
+        },
+      ],
+      active: null,
+      max_bytes: 30 * 1024 * 1024,
+    });
+    apiMocks.startBuiltinFontDownload.mockResolvedValue({
+      ...(await apiMocks.getBuiltinFont()),
+      state: "downloading",
+      downloaded_bytes: 1024,
+    });
+    apiMocks.getBuiltinFont.mockResolvedValue({
+      id: "source-han-sans-sc",
+      label: "思源黑体",
+      size_total: 33493260,
+      downloaded: true,
+      downloaded_bytes: 33493260,
+      total_bytes: 33493260,
+      state: "done",
+      error: "",
+    });
+    const onChange = renderControl();
+    await openDropdown();
+
+    fireEvent.click(await screen.findByText(t("fontDownload.optionHint")));
+
+    // 500ms 一拍轮询到 done → 只写一次这份简历的字体。
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    expect(onChange).toHaveBeenCalledWith({
+      ...LAYOUT,
+      format_config: { font: "SourceHanSansSC-Regular.otf" },
+    });
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(t("fontDownload.downloadedAndSet")),
+    );
   });
 
   it("没设过字体时显示设备上当前那一款，并标注「（当前全局）」", async () => {
@@ -167,7 +272,52 @@ describe("ResumeFontControl", () => {
     expect(await screen.findByText("系统字体（不使用自定义字体）")).toBeInTheDocument();
   });
 
-  it("弹层定宽在参数栏内容宽（340px）：长展示名与长文件名各自省略，悬停看全", async () => {
+  it("收起下拉不中止已开始的下载轮询", async () => {
+    // 「关闭下拉不中止」：下拉的开合只是 antd 的 UI 状态，轮询挂在组件层的 hook 上
+    // （effect 只依赖 `state`），所以关掉弹层不会把这一轮下载停掉。
+    apiMocks.listResumeFonts.mockResolvedValue({
+      items: [
+        {
+          name: "SourceHanSansSC-Regular.otf",
+          display_name: "思源黑体",
+          size: 33493260,
+          uploaded_at: "",
+          active: false,
+          builtin: true,
+          downloaded: false,
+        },
+      ],
+      active: null,
+      max_bytes: 30 * 1024 * 1024,
+    });
+    const downloading = {
+      id: "source-han-sans-sc",
+      label: "思源黑体",
+      size_total: 33493260,
+      downloaded: false,
+      downloaded_bytes: 1024,
+      total_bytes: 33493260,
+      state: "downloading" as const,
+      error: "",
+    };
+    apiMocks.startBuiltinFontDownload.mockResolvedValue(downloading);
+    apiMocks.getBuiltinFont.mockResolvedValue(downloading);
+
+    renderControl();
+    const select = await screen.findByRole("combobox", { name: "简历字体" });
+    fireEvent.mouseDown(select);
+    fireEvent.click(await screen.findByText(t("fontDownload.optionHint")));
+    await waitFor(() => expect(apiMocks.startBuiltinFontDownload).toHaveBeenCalledTimes(1));
+
+    // 收起下拉（Esc），然后等一拍：轮询必须继续打在状态接口上。
+    fireEvent.keyDown(select, { key: "Escape", keyCode: 27, which: 27 });
+    const before = apiMocks.getBuiltinFont.mock.calls.length;
+    await waitFor(() => expect(apiMocks.getBuiltinFont.mock.calls.length).toBeGreaterThan(before), {
+      timeout: 3000,
+    });
+  });
+
+  it("弹层收窄到 260px：选项只留展示名 + 说明两层，完整信息进 title", async () => {
     apiMocks.listResumeFonts.mockResolvedValue({
       ...FONTS,
       // 展示名可自定义，于是"展示名 ≠ 磁盘文件名"——两个都是长串，正是会撑破弹层的那种。
@@ -186,7 +336,6 @@ describe("ResumeFontControl", () => {
 
     fireEvent.mouseDown(await screen.findByRole("combobox", { name: "简历字体" }));
 
-    // 弹层宽度钉在 340px（+ `max-width` 兜底），不再按内容撑开。
     await waitFor(() => expect(document.querySelector(".resume-params-dropdown")).not.toBeNull());
 
     // 悬停给出"展示名 · 磁盘文件名"两件事：宽度定死之后名字必然被截断，靠它看全。
@@ -194,14 +343,12 @@ describe("ResumeFontControl", () => {
       "思源宋体（超粗·正式版） · source-han-serif-sc-heavy.otf",
     );
     expect(option.className).toContain("resume-font-option");
-    // 展示名与文件名各有自己的省略层（只给外层省略时，文件名会把展示名挤掉）。
-    // 按类名取而不是 `ByText`：`cjkRatchet` 只允许测试里的中文**断言参数**不涨。
+    // 展示名单独一层（省略由 CSS 负责）；磁盘文件名**不再**单独占一层，
+    // 类名 `.resume-font-option-file` 本批起不再被引用（样式块留待清理）。
     expect(option.querySelector(".resume-font-option-name")?.textContent).toBe(
       "思源宋体（超粗·正式版）",
     );
-    expect(option.querySelector(".resume-font-option-file")?.textContent).toBe(
-      "source-han-serif-sc-heavy.otf",
-    );
+    expect(option.querySelector(".resume-font-option-file")).toBeNull();
   });
 
   it("打开下拉才注入字形 @font-face，关掉就移除", async () => {
@@ -225,5 +372,10 @@ describe("ResumeFontControl", () => {
     await waitFor(() =>
       expect(document.head.querySelector("style[data-rf-font-options]")).toBeNull(),
     );
+    // 关闭后 antd 给弹层加上 `hidden`——上面"下载中弹层不关"那条断言正是靠这个类判断的，
+    // 这里顺手把它钉住，免得那个断言变成空转。
+    // 关闭后弹层进入 `*-leave` 动画态（jsdom 不会有 transitionend，类名停在这里）。
+    // 上面"下载中弹层不关"那条断言正是靠这个反向判断的，这里把它钉住，免得断言空转。
+    expect(popupClass()).toContain("-leave");
   });
 });

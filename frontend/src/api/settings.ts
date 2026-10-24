@@ -356,125 +356,22 @@ export function saveGlobalTheme(mode: GlobalThemeMode): Promise<GlobalTheme> {
   });
 }
 
-/** 自定义简历字体（R10）：只影响 PDF 导出用的字体。 */
-export interface ResumeFont {
-  /** 磁盘上的真实文件名；`format_config.font` 存的就是它。 */
-  name: string;
-  /** 用户可改的展示名，没改过时等于文件名去扩展名。 */
-  display_name: string;
-  size: number;
-  uploaded_at: string;
-  active: boolean;
-  /**
-   * 应用**自带清单**里的条目（当前只有思源黑体）。它固定排在第 1 位，用户删不掉。
-   * 老后端没有这个字段，所以是可选的：`undefined` 与 `false` 都按"用户导入的字体"处理。
-   */
-  builtin?: boolean;
-  /**
-   * 内置条目是否**已经下载到本机**。`false` 时磁盘上还没有这个文件，选中它没有意义
-   * （预览/导出的 `@font-face` 会 404），界面必须把它标成「未下载」并禁用。
-   */
-  downloaded?: boolean;
-}
-
-export interface ResumeFonts {
-  items: ResumeFont[];
-  active: string | null;
-  max_bytes: number;
-}
-
-export function listResumeFonts(): Promise<ResumeFonts> {
-  return request("/settings/fonts");
-}
-
-/**
- * 内置字体的下载状态（`state` 是唯一的状态源，`downloaded` 只是它的派生快照）。
- *
- * `POST .../builtin/download` 是**异步启动**（202 立即返回 `state="downloading"`），
- * 进度靠轮询 `GET .../builtin` 读 `downloaded_bytes / total_bytes`。两次请求返回同一结构，
- * 所以前端只需要一个类型。
- */
-export interface BuiltinFontStatus {
-  /** 稳定标识（`source-han-sans-sc`）；文件名用 `BUILTIN_FONT_FILE`，不要拿它当文件名。 */
-  id: string;
-  /** 界面上显示的名字（「思源黑体」）。 */
-  label: string;
-  /** 字体总字节数（未下载时也拿得到，用来显示"约 32 MB"）。 */
-  size_total: number;
-  downloaded: boolean;
-  /** 已下载字节数（轮询进度用，`state="downloading"` 时才有意义）。 */
-  downloaded_bytes: number;
-  /** 进度分母；后端拿不到时会是 0，此时界面只显示已下载量。 */
-  total_bytes: number;
-  state: "idle" | "downloading" | "failed" | "done";
-  /** 失败原因（`state="failed"` 时给中文人话），其它状态为空串。 */
-  error: string;
-}
-
-/**
- * 内置字体当前状态。轮询也用它——**只读**，不会重试或触发下载。
- *
- * 与 `listResumeFonts` 分开是刻意的：字体清单是"有哪些字体可用"，状态是"那个大文件下到哪了"。
- * 把它塞进清单会让每次轮询都重读一遍字体目录。
- */
-export function getBuiltinFont(): Promise<BuiltinFontStatus> {
-  return request("/settings/fonts/builtin");
-}
-
-/**
- * 启动下载（202）。重复调用在 `state="downloading"` 时后端回 409「字体正在下载中」，
- * 磁盘写不进去回 507「磁盘空间不足，无法保存字体」——两条错误都要原样透传给用户。
- */
-export function startBuiltinFontDownload(): Promise<BuiltinFontStatus> {
-  return request("/settings/fonts/builtin/download", { method: "POST" });
-}
-
-/**
- * 删除已下载的内置字体文件（204）。
- *
- * 当前界面**没有入口**（本批只做下载与设为当前）：这个函数留给"将来要腾空间"的需求，
- * 以及一键重置/诊断脚本。直删、没有回收站——真要接到界面上，确认正文必须写明这一点。
- */
-export function deleteBuiltinFont(): Promise<void> {
-  return request("/settings/fonts/builtin", { method: "DELETE" });
-}
-
-/** 改字体的展示名（文件名不变，已引用它的简历不受影响）。 */
-export function renameResumeFont(name: string, displayName: string): Promise<ResumeFont> {
-  return request(`/settings/fonts/${encodeURIComponent(name)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ display_name: displayName }),
-  });
-}
-
-/**
- * **已下线：`POST /settings/fonts` 现在返回 405。**
- *
- * 字体上传入口在 2026-11 一并撤掉（体积与授权责任改由应用统一承担，用户侧只剩"内置思源
- * 黑体按需下载"与"历史导入字体"两条路）。这个函数**没有任何调用点**，留着只是为了不
- * 打断既有的 import 与测试夹具；**不要把它接回界面**——真接回去只会得到 405。
- * 要恢复上传能力，得先在后端把端点加回来，再删掉这段注释。
- */
-export function uploadResumeFont(file: File): Promise<ResumeFont> {
-  const form = new FormData();
-  form.append("file", file);
-  // 字体最大 30MB：走上传预算，不吃 15s 的默认超时。
-  return request("/settings/fonts", { method: "POST", body: form, budget: "upload" });
-}
-
-/** 设为当前字体；`null` = 回到系统字体。 */
-/** 任意已上传字体的原始文件 URL（设置页点击预览用；同源相对路径，开发态走 Vite 代理）。 */
-export function resumeFontPreviewUrl(name: string): string {
-  return `/api/settings/fonts/${encodeURIComponent(name)}/file`;
-}
-
-export function activateResumeFont(name: string | null): Promise<{ active: string | null }> {
-  return request("/settings/fonts/active", {
-    method: "PUT",
-    body: JSON.stringify({ name }),
-  });
-}
-
-export function deleteResumeFont(name: string): Promise<void> {
-  return request(`/settings/fonts/${encodeURIComponent(name)}`, { method: "DELETE" });
-}
+// 简历字体（内置思源黑体的下载/取消/删除、历史导入字体）单独成模块：字体这一组在依赖上
+// 是自洽的最小闭包，而本文件已到 480 行（单文件 500 行零豁免）。拆分理由见 fonts.ts 的文件头。
+// 这里只做转发，保持既有 `import { ... } from "../api/settings"` 的调用点一处都不用改。
+export {
+  BUILTIN_FONT_FILE,
+  BUILTIN_FONT_SIZE,
+  activateResumeFont,
+  cancelBuiltinFontDownload,
+  deleteBuiltinFont,
+  deleteResumeFont,
+  getBuiltinFont,
+  getResumeFonts,
+  listResumeFonts,
+  renameResumeFont,
+  resumeFontPreviewUrl,
+  startBuiltinFontDownload,
+  uploadResumeFont,
+} from "./fonts";
+export type { BuiltinFontStatus, ResumeFont, ResumeFonts } from "./fonts";

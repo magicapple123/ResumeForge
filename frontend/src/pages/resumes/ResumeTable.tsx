@@ -5,7 +5,7 @@
  * 传入（navigate 留页面）；行操作清单（primary/secondary/context）随表格一起下沉。
  */
 import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
-import { Button, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { SortOrder } from "antd/es/table/interface";
 import { memo, useEffect, useMemo, useRef } from "react";
@@ -25,6 +25,7 @@ import {
   sortOrderFor,
   type ResumeSortState,
 } from "../../utils/resumeSort";
+import { copyMenuFor } from "./resumeRowCopyActions";
 
 /** 行操作动作的依赖集：全部是 setState 与 useCallback 回调，引用跨渲染稳定，
  * 行组件据此做 memo——页面其它 state 变化时已渲染的行不必重跑。 */
@@ -116,6 +117,8 @@ const ContextMenuRow = memo(function ContextMenuRow({
   deps,
   ...rest
 }: ContextMenuRowProps) {
+  // 必须在提前 return 之前调用（Hook 顺序），`record` 为空时用不上也无妨。
+  const { message } = App.useApp();
   if (!record) return <tr {...rest} />;
   return (
     <RowContextMenu
@@ -125,6 +128,9 @@ const ContextMenuRow = memo(function ContextMenuRow({
           : [
               batchSelectAction(enterSelecting),
               ...primaryActionsFor(record, deps),
+              // 「复制」子菜单：把标题 / 目标岗位 / 公司 / 备注 / 整行拿出去（贴招聘表单、
+              // 发内推、粘进表格）。它是一次性的取数动作，不该占列表宽度，所以只在右键里。
+              copyMenuFor(record, message),
               ...secondaryActionsFor(record, deps),
             ]
       }

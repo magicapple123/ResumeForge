@@ -18,19 +18,42 @@ PDF 的真实页数差在 ±1 内（容差断言见 ``test_docx_exporter.py``）
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from io import BytesIO
 
 from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
-from docx.shared import Mm, Pt, RGBColor
+from docx.shared import Mm
 
 from ..schemas.resume import MAX_RESUME_PAGES, ResumeContent
+from .docx_blocks import (
+    _BODY_COLOR,
+    _MUTED_COLOR,
+    DOCX_FONT,
+    decorate_paragraph,
+    float_picture,
+)
+from .docx_blocks import (
+    bullets as _bullets,
+)
+from .docx_blocks import (
+    entry_head as _entry_head,
+)
+from .docx_blocks import (
+    meta_line as _meta_line,
+)
+from .docx_blocks import (
+    paragraph as _paragraph,
+)
+from .docx_blocks import (
+    section_title as _section_title,
+)
+from .docx_blocks import (
+    set_run_font as _set_run_font,
+)
 from .docx_rich import add_rich_runs
 from .pdf_exporter import (
-    _PX_TO_MM,
     _PX_TO_PT,
     PAGE_HEIGHT_MM,
     PAGE_WIDTH_MM,
@@ -39,6 +62,7 @@ from .pdf_exporter import (
     crop_image_to_cover,
     measure_content_height,
     resolve_accent,
+    resolve_accent_soft,
     resolve_layout,
 )
 from .resume.resume_labels import (
@@ -50,12 +74,7 @@ from .resume.resume_labels import (
 )
 from .resume.resume_sections import resolved_section_order
 
-# Word 里写的是字体名，最终由用户机器上的 Word 解析；用微软雅黑与 PDF 首选字体一致。
-DOCX_FONT = "微软雅黑"
-
-# 正文 / 辅助文字颜色与 PDF 的 `set_text_color` 保持一致（强调色另从模板解析）。
-_BODY_COLOR = (31, 41, 55)
-_MUTED_COLOR = (107, 114, 128)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -71,109 +90,24 @@ def _join(values: list[str], separator: str = " · ") -> str:
     return separator.join(str(item).strip() for item in values if str(item).strip())
 
 
-def _set_run_font(
-    run, *, size_pt: float, bold: bool = False, color: tuple[int, int, int] | None = None
-) -> None:
-    """统一设置 run 的字体 / 字号 / 颜色，并补上 east-asian 字体（否则中文会回退默认字体）。"""
-    run.font.name = DOCX_FONT
-    run.font.size = Pt(size_pt)
-    run.font.bold = bold
-    run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), DOCX_FONT)
-    if color is not None:
-        run.font.color.rgb = RGBColor(color[0], color[1], color[2])
-
-
-def _paragraph(
-    doc, *, indent_mm: float = 0.0, space_after_mm: float = 0.0, space_before_mm: float = 0.0
-):
-    paragraph = doc.add_paragraph()
-    paragraph.paragraph_format.left_indent = Mm(indent_mm)
-    paragraph.paragraph_format.space_after = Mm(space_after_mm)
-    paragraph.paragraph_format.space_before = Mm(space_before_mm)
-    return paragraph
-
-
-def _section_title(doc, text: str, *, base: float, layout, accent: tuple[int, int, int]) -> None:
-    """区块标题：字号用 ``section_title_ratio``，颜色用强调色，间距与预览 ``section_gap`` 同口径。"""
-    size = base * layout.section_title_ratio
-    gap_mm = base * _PX_TO_MM * layout.section_gap
-    paragraph = _paragraph(doc, space_before_mm=gap_mm, space_after_mm=base * _PX_TO_MM * 0.4)
-    add_rich_runs(
-        paragraph, text, _set_run_font, bold=True, size_pt=size * _PX_TO_PT, color=accent
-    )
-
-
-def _bullets(doc, items: list[str], *, base: float, indent_mm: float = 3.0) -> None:
-    for item in items:
-        text = str(item).strip()
-        if not text:
-            continue
-        paragraph = _paragraph(doc, indent_mm=indent_mm)
-        add_rich_runs(
-            paragraph, f"· {text}", _set_run_font, size_pt=base * _PX_TO_PT, color=_BODY_COLOR
-        )
-
-
-def _meta_line(doc, text: str, *, base: float, layout) -> None:
-    if not text.strip():
-        return
-    paragraph = _paragraph(doc)
-    add_rich_runs(
-        paragraph,
-        text,
-        _set_run_font,
-        size_pt=base * layout.entry_sub_ratio * _PX_TO_PT,
-        color=_MUTED_COLOR,
-    )
-
-
-def _entry_head(doc, left: str, right: str, *, base: float, layout) -> None:
-    """条目标题：左侧加粗、右侧辅助信息，与预览 ``.entry-head`` 一致。"""
-    title_size = base * layout.entry_title_ratio
-    paragraph = _paragraph(doc, space_before_mm=base * _PX_TO_MM * 0.2)
-    add_rich_runs(
-        paragraph, left, _set_run_font, bold=True, size_pt=title_size * _PX_TO_PT, color=_BODY_COLOR
-    )
-    if right:
-        meta_run = paragraph.add_run(f"　{right}")
-        _set_run_font(
-            meta_run,
-            size_pt=base * layout.entry_meta_ratio * _PX_TO_PT,
-            color=_MUTED_COLOR,
-        )
-
-
 def _header(
     doc,
     resume: ResumeContent,
     *,
     accent: tuple[int, int, int],
+    accent_soft: tuple[int, int, int],
     layout,
     include_photo: bool,
     language: str,
 ) -> None:
     base = layout.base_px
     photo = _photo_bytes(resume.photo) if (resume.photo and include_photo) else None
-    if photo:
-        try:
-            picture_paragraph = doc.add_paragraph()
-            picture_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            picture_paragraph.paragraph_format.space_after = Mm(0)
-            # 与 PDF 同一口径：先按模板照片框的比例做 object-fit: cover 的居中裁剪
-            # （`crop_image_to_cover`，一处实现两处共用），宽度给了之后高度随图片
-            # 自身宽高比走——裁过之后它恰好就是模板的 `photo_height_ratio`。
-            picture_paragraph.add_run().add_picture(
-                BytesIO(
-                    crop_image_to_cover(photo, layout.photo_width_ratio / layout.photo_height_ratio)
-                ),
-                width=Mm(layout.gap_mm(layout.photo_width_ratio)),
-            )
-        except Exception:  # noqa: BLE001 - 照片坏了不能阻断导出
-            pass
 
     # 姓名与性别各用各的 run：姓名是姓名字号/粗体/强调色，性别是 `.name-extra` 的口径
     # （extra 字号/常规字重/muted 灰）——此前拼成一个 run，性别跟着姓名一起变大变粗。
     name_paragraph = _paragraph(doc)
+    # 页头那几段要一起加底色（见函数末尾）：先收集，别用"最后 N 段"去猜。
+    header_paragraphs = [name_paragraph]
     name_run = name_paragraph.add_run(resume.name)
     _set_run_font(name_run, size_pt=base * layout.name_ratio * _PX_TO_PT, bold=True, color=accent)
     if resume.gender:
@@ -184,8 +118,29 @@ def _header(
             color=_MUTED_COLOR,
         )
 
+    if photo:
+        try:
+            # 与 PDF 同一口径：先按模板照片框的比例做 object-fit: cover 的居中裁剪
+            # （`crop_image_to_cover`，一处实现两处共用），宽度给了之后高度随图片
+            # 自身宽高比走——裁过之后它恰好就是模板的 `photo_height_ratio`。
+            picture_run = name_paragraph.add_run()
+            picture_run.add_picture(
+                BytesIO(
+                    crop_image_to_cover(photo, layout.photo_width_ratio / layout.photo_height_ratio)
+                ),
+                width=Mm(layout.gap_mm(layout.photo_width_ratio)),
+            )
+            # **浮于文字上方**（2026-10-24 用户实测的解法）：嵌入型会让照片独占一行、
+            # 把姓名整体下推，页头因此比预览高一截。详见 `docx_blocks.float_picture`。
+            float_picture(
+                picture_run, align="left" if layout.header_photo_side == "left" else "right"
+            )
+        except Exception:  # noqa: BLE001 - 照片坏了不能阻断导出
+            logger.warning("简历照片无法写入 Word，已跳过")
+
     if resume.job_intent:
         intent_paragraph = _paragraph(doc)
+        header_paragraphs.append(intent_paragraph)
         intent_run = intent_paragraph.add_run(
             f"{field_labels(language)['intent']}：{resume.job_intent}"
         )
@@ -196,18 +151,33 @@ def _header(
     contact = _join([resume.phone, resume.email, resume.city, resume.birth_year], "　　")
     if contact:
         contact_paragraph = _paragraph(doc)
+        header_paragraphs.append(contact_paragraph)
         contact_run = contact_paragraph.add_run(contact)
         _set_run_font(
             contact_run, size_pt=base * layout.contact_ratio * _PX_TO_PT, color=_MUTED_COLOR
         )
 
+    # 页头底色块（modern 的浅绿块）：模板里 `.header` 有 `background` + `padding`，
+    # 导出后若只有文字没有底色，"Word 与预览不一样"就又回来了。三段各加同色底纹，
+    # 段间距为 0 时它们会连成一整块；四边同色边框把底纹撑开，模拟 CSS 的 padding。
+    if getattr(layout, "header_bg", "none") == "soft_accent":
+        for node in header_paragraphs:
+            decorate_paragraph(
+                node,
+                fill=accent_soft,
+                edges=("top", "left", "bottom", "right"),
+                border_color=accent_soft,
+                border_sz=4,
+                space_pt=6,
+            )
+
 
 def _section_summary(
-    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+    doc, resume: ResumeContent, *, base: float, layout, accent, accent_soft, language: str
 ) -> None:
     if resume.summary.strip():
         labels = section_titles(language)
-        _section_title(doc, labels["summary"], base=base, layout=layout, accent=accent)
+        _section_title(doc, labels["summary"], base, layout, accent, accent_soft)
         paragraph = _paragraph(doc)
         add_rich_runs(
             paragraph,
@@ -219,14 +189,14 @@ def _section_summary(
 
 
 def _section_education(
-    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+    doc, resume: ResumeContent, *, base: float, layout, accent, accent_soft, language: str
 ) -> None:
     if not resume.education:
         return
     labels = section_titles(language)
     fields = field_labels(language)
     sep = list_separator(language)
-    _section_title(doc, labels["education"], base=base, layout=layout, accent=accent)
+    _section_title(doc, labels["education"], base, layout, accent, accent_soft)
     for edu in resume.education:
         _entry_head(
             doc,
@@ -245,12 +215,12 @@ def _section_education(
 
 
 def _section_experience(
-    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+    doc, resume: ResumeContent, *, base: float, layout, accent, accent_soft, language: str
 ) -> None:
     if not resume.experience:
         return
     labels = section_titles(language)
-    _section_title(doc, labels["experience"], base=base, layout=layout, accent=accent)
+    _section_title(doc, labels["experience"], base, layout, accent, accent_soft)
     for exp in resume.experience:
         _entry_head(
             doc,
@@ -263,12 +233,19 @@ def _section_experience(
 
 
 def _section_campus(
-    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+    doc, resume: ResumeContent, *, base: float, layout, accent, accent_soft, language: str
 ) -> None:
     if not resume.campus_experience:
         return
     labels = section_titles(language)
-    _section_title(doc, labels["campus_experience"], base=base, layout=layout, accent=accent)
+    _section_title(
+        doc,
+        labels["campus_experience"],
+        base=base,
+        layout=layout,
+        accent=accent,
+        accent_soft=accent_soft,
+    )
     for item in resume.campus_experience:
         _entry_head(
             doc,
@@ -281,12 +258,12 @@ def _section_campus(
 
 
 def _section_projects(
-    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+    doc, resume: ResumeContent, *, base: float, layout, accent, accent_soft, language: str
 ) -> None:
     if not resume.projects:
         return
     labels = section_titles(language)
-    _section_title(doc, labels["projects"], base=base, layout=layout, accent=accent)
+    _section_title(doc, labels["projects"], base, layout, accent, accent_soft)
     for project in resume.projects:
         _entry_head(
             doc,
@@ -308,12 +285,12 @@ def _section_projects(
 
 
 def _section_skills(
-    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+    doc, resume: ResumeContent, *, base: float, layout, accent, accent_soft, language: str
 ) -> None:
     if not resume.skills:
         return
     labels = section_titles(language)
-    _section_title(doc, labels["skills"], base=base, layout=layout, accent=accent)
+    _section_title(doc, labels["skills"], base, layout, accent, accent_soft)
     skill_labels = [level_text(skill.name, skill.level, language) for skill in resume.skills]
     if skill_labels:
         paragraph = _paragraph(doc)
@@ -327,12 +304,12 @@ def _section_skills(
 
 
 def _section_awards(
-    doc, resume: ResumeContent, *, base: float, layout, accent, language: str
+    doc, resume: ResumeContent, *, base: float, layout, accent, accent_soft, language: str
 ) -> None:
     if not resume.awards:
         return
     labels = section_titles(language)
-    _section_title(doc, labels["awards"], base=base, layout=layout, accent=accent)
+    _section_title(doc, labels["awards"], base, layout, accent, accent_soft)
     _bullets(
         doc,
         [_join([award.name, award.date, award.description]) for award in resume.awards],
@@ -358,6 +335,7 @@ def _build_document(
     resume: ResumeContent,
     *,
     accent: tuple[int, int, int],
+    accent_soft: tuple[int, int, int],
     layout,
     include_photo: bool,
     section_order: list[str],
@@ -384,6 +362,7 @@ def _build_document(
         doc,
         resume,
         accent=accent,
+        accent_soft=accent_soft,
         layout=layout,
         include_photo=include_photo,
         language=language,
@@ -391,7 +370,13 @@ def _build_document(
 
     for section_key in section_order:
         _SECTION_RENDERERS[section_key](
-            doc, resume, base=base, layout=layout, accent=accent, language=language
+            doc,
+            resume,
+            base=base,
+            layout=layout,
+            accent=accent,
+            accent_soft=accent_soft,
+            language=language,
         )
 
     buffer = BytesIO()
@@ -436,6 +421,9 @@ def build_resume_docx(
     if isinstance(accent_adjust, (int, float)):
         base_px = round(base_px * float(accent_adjust), 2)
     accent = resolve_accent(spec["name"], overrides)
+    # 区块标题与页头的底色块用模板真实的 `--accent-soft`（不是现场调淡，见
+    # `resolve_accent_soft` 的注释）。
+    accent_soft = resolve_accent_soft(spec["name"], overrides)
 
     layout = resolve_layout(
         template=spec["name"], base_px=base_px, format_config=overrides, margin_mm=margin_mm
@@ -453,6 +441,7 @@ def build_resume_docx(
     content = _build_document(
         resume,
         accent=accent,
+        accent_soft=accent_soft,
         layout=layout,
         include_photo=include_photo,
         section_order=resolved_section_order(overrides),

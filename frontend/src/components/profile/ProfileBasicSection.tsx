@@ -101,7 +101,7 @@ export default function ProfileBasicSection({ photo, editing, saving, onPhotoSel
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} lg={8}>
-              <Form.Item name="personal_website" label="个人网站 / 博客">
+              <Form.Item name="personal_website" label="个人主页">
                 <Input placeholder="选填" />
               </Form.Item>
             </Col>

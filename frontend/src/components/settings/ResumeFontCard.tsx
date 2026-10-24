@@ -20,8 +20,14 @@
  * 1. 删除不再是一颗裸露的红色垃圾桶（列表里既抢眼又容易误点），收进「···」菜单；
  * 2. 点字体名可以**先预览再决定**：弹窗里用该字体渲染一段示例，确认后再「设为当前」。
  */
-import { DeleteOutlined, EditOutlined, EyeOutlined, MoreOutlined } from "@ant-design/icons";
-import { App, Button, Card, Dropdown, Input, Listy, Modal, Space, Tag, Typography } from "antd";
+import {
+  CheckOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  EyeOutlined,
+  MoreOutlined,
+} from "@ant-design/icons";
+import { App, Button, Card, Dropdown, Input, Listy, Modal, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
   activateResumeFont,
@@ -29,13 +35,13 @@ import {
   getBuiltinFont,
   listResumeFonts,
   renameResumeFont,
-  resumeFontPreviewUrl,
   type BuiltinFontStatus,
   type ResumeFonts,
 } from "../../api/settings";
 import { t } from "../../i18n";
 import { ListyItem } from "../common/ListyItem";
 import BuiltinFontRow from "./BuiltinFontRow";
+import FontSampleModal from "./FontSampleModal";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -79,6 +85,14 @@ export default function ResumeFontCard() {
   /** 正在重命名的那款字体：`{ name: 文件名, value: 输入中的展示名 }`。 */
   const [renameTarget, setRenameTarget] = useState<{ name: string; value: string } | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
+  /**
+   * 刚切换成功、清单还没重拉回来时的**乐观当前字体**。
+   *
+   * 没有它，"点了「设为当前」按钮没变化"会稳定复现：`activate()` 之后要等 `load()` 走一次
+   * 网络，那一瞬间界面读到的还是旧的 `data.active`（2026-10-24 用户反馈）。
+   * `null` = 没有待确认的覆盖值；`{ value: null }` = 明确切回了系统字体。
+   */
+  const [pendingActive, setPendingActive] = useState<{ value: string | null } | null>(null);
 
   /**
    * 重拉字体清单。内置行下载完成后也调它（清单里会多出这一款，`active` 也可能变了）。
@@ -108,11 +122,17 @@ export default function ResumeFontCard() {
   const activate = async (name: string | null) => {
     try {
       await activateResumeFont(name);
+      // 先乐观改本地值再刷新：按钮与「当前使用」标签必须当场变，不能让用户对着
+      // 一颗没反应的按钮猜"到底生效没生效"。
+      setPendingActive({ value: name });
       message.success(name ? `已切换到「${name}」` : "已回到系统字体");
       setPreviewName(null);
       await load();
     } catch (err) {
       message.error(err instanceof Error ? err.message : "切换字体失败");
+    } finally {
+      // 清单已经是服务端的新结果，覆盖值完成使命（失败时也要清，界面回到真实状态）。
+      setPendingActive(null);
     }
   };
 
@@ -157,91 +177,106 @@ export default function ResumeFontCard() {
   // 若把它同时塞进下面这张历史列表，它会出现两次，还会多出「删除 / 重命名」这两条对内置
   // 文件没有意义的操作——所以这里只列**用户自己导入过的**字体。
   const items = (data?.items ?? []).filter((item) => !item.builtin);
-  const activeName = data?.active ?? null;
+  // 乐观值优先：切换成功后立刻反映，不必等清单回来。
+  const activeName = pendingActive ? pendingActive.value : (data?.active ?? null);
 
   return (
-    <Card className="settings-card" title="简历字体">
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+    <Card className="settings-card settings-font-card" title="简历字体">
+      <Typography.Paragraph type="secondary" className="settings-font-intro">
         {t("fonts.card.description")}
       </Typography.Paragraph>
-      {/* 内置字体排在最前：它是"开箱即可用"的那一款，历史导入的字体随后。 */}
-      <BuiltinFontRow status={builtin} onChanged={() => void load()} />
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Button disabled={!activeName} onClick={() => void activate(null)}>
-          回到系统字体
-        </Button>
-      </Space>
+
+      {/* 内置字体排在最前：它是"开箱即可用"的那一款，历史导入的字体随后。
+          `activeName` 只用于删除成功后的提示语（删的正是当前字体 → 简历已回到系统字体）。 */}
+      <BuiltinFontRow status={builtin} onChanged={() => void load()} activeName={activeName} />
+
       {items.length === 0 ? (
         // 内置条目常驻，所以这里不再是"什么都没有"的空态：只说清"还没有导入其它字体"。
-        <Typography.Text type="secondary">{t("fonts.card.empty")}</Typography.Text>
+        <Typography.Text type="secondary" className="settings-font-empty">
+          {t("fonts.card.empty")}
+        </Typography.Text>
       ) : (
         <Listy
+          className="settings-font-list"
           items={items}
           rowKey={(item) => item.name}
           itemRender={(item) => (
-            <ListyItem>
-              <Space style={{ width: "100%", justifyContent: "space-between" }} wrap>
-                <Space>
-                  {/* 点名字直接预览：用户要在「设为当前」之前先确认字形，不该逼他先切换。 */}
-                  <Button
-                    type="link"
-                    className="table-text-link"
-                    onClick={() => setPreviewName(item.name)}
-                  >
-                    {item.display_name || item.name}
-                  </Button>
-                  <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
-                  {/* 展示名可以随便起，但**原始文件名要一直看得见**：它才是磁盘上的东西，
-                      也是排查"这份简历用的是哪个字体文件"时唯一的线索。 */}
-                  {(item.display_name || item.name) !== item.name ? (
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {item.name}
-                    </Typography.Text>
-                  ) : null}
-                  {item.name === activeName ? <Tag color="blue">当前使用</Tag> : null}
-                </Space>
-                <Space size={4}>
+            <ListyItem
+              actions={[
+                <Button
+                  key="activate"
+                  size="small"
+                  disabled={item.name === activeName || undefined}
+                  icon={item.name === activeName ? <CheckOutlined /> : undefined}
+                  onClick={() => void activate(item.name)}
+                >
+                  设为当前
+                </Button>,
+                // 删除收进「···」：原来是一颗裸露的红色垃圾桶，密集列表里既抢眼又容易误点。
+                <Dropdown
+                  key="more"
+                  trigger={["click"]}
+                  menu={{
+                    items: [
+                      { key: "preview", icon: <EyeOutlined />, label: "预览字体" },
+                      { key: "rename", icon: <EditOutlined />, label: "重命名" },
+                      {
+                        key: "delete",
+                        icon: <DeleteOutlined />,
+                        label: "删除",
+                        danger: true,
+                      },
+                    ],
+                    onClick: ({ key }) => {
+                      if (key === "preview") setPreviewName(item.name);
+                      else if (key === "rename")
+                        setRenameTarget({ name: item.name, value: item.display_name });
+                      else remove(item.name);
+                    },
+                  }}
+                >
                   <Button
                     size="small"
-                    disabled={item.active}
-                    onClick={() => void activate(item.name)}
-                  >
-                    设为当前
-                  </Button>
-                  {/* 删除收进「···」：原来是一颗裸露的红色垃圾桶，密集列表里既抢眼又容易误点。 */}
-                  <Dropdown
-                    trigger={["click"]}
-                    menu={{
-                      items: [
-                        { key: "preview", icon: <EyeOutlined />, label: "预览字体" },
-                        { key: "rename", icon: <EditOutlined />, label: "重命名" },
-                        {
-                          key: "delete",
-                          icon: <DeleteOutlined />,
-                          label: "删除",
-                          danger: true,
-                        },
-                      ],
-                      onClick: ({ key }) => {
-                        if (key === "preview") setPreviewName(item.name);
-                        else if (key === "rename")
-                          setRenameTarget({ name: item.name, value: item.display_name });
-                        else remove(item.name);
-                      },
-                    }}
-                  >
-                    <Button
-                      size="small"
-                      icon={<MoreOutlined />}
-                      aria-label={`更多字体操作（${item.name}）`}
-                    />
-                  </Dropdown>
-                </Space>
-              </Space>
+                    icon={<MoreOutlined />}
+                    aria-label={`更多字体操作（${item.name}）`}
+                  />
+                </Dropdown>,
+              ]}
+            >
+              <div className="settings-font-title">
+                {/* 点名字直接预览：用户要在「设为当前」之前先确认字形，不该逼他先切换。 */}
+                <Button
+                  type="link"
+                  className="table-text-link settings-font-name"
+                  onClick={() => setPreviewName(item.name)}
+                >
+                  {item.display_name || item.name}
+                </Button>
+                {item.name === activeName ? (
+                  <Tag color="blue">{t("fonts.card.active-tag")}</Tag>
+                ) : null}
+              </div>
+              {/* 展示名可以随便起，但**原始文件名要一直看得见**：它才是磁盘上的东西，
+                  也是排查"这份简历用的是哪个字体文件"时唯一的线索。 */}
+              <div className="settings-font-meta">
+                <span>{formatSize(item.size)}</span>
+                {(item.display_name || item.name) !== item.name ? <span>{item.name}</span> : null}
+              </div>
             </ListyItem>
           )}
         />
       )}
+
+      {/* 页脚与列表之间加一条分隔线：原来「回到系统字体」和"还没有导入其它字体"挤在同一行，
+          读起来像按钮的说明文字（2026-10-24 用户截图）。现在两者各归各位。 */}
+      <div className="settings-font-footer">
+        <Button disabled={!activeName || undefined} onClick={() => void activate(null)}>
+          回到系统字体
+        </Button>
+        <Typography.Text type="secondary" className="settings-font-footnote">
+          {t("fonts.card.reset-hint")}
+        </Typography.Text>
+      </div>
 
       <Modal
         open={renameTarget !== null}
@@ -270,56 +305,16 @@ export default function ResumeFontCard() {
         </Typography.Paragraph>
       </Modal>
 
-      <Modal
-        open={previewName !== null}
-        title={previewName ? `字体预览「${previewName}」` : "字体预览"}
-        onCancel={() => setPreviewName(null)}
-        destroyOnHidden
-        width={640}
-        footer={[
-          <Button key="close" onClick={() => setPreviewName(null)}>
-            关闭
-          </Button>,
-          <Button
-            key="use"
-            type="primary"
-            disabled={previewName === null || previewName === activeName}
-            onClick={() => previewName && void activate(previewName)}
-          >
-            {previewName === activeName ? "当前已在使用" : "设为当前"}
-          </Button>,
-        ]}
-      >
-        {previewName ? (
-          <>
-            {/* 字体文件同源提供，直接喂给 @font-face；不下载到内存再转 base64。 */}
-            <style>
-              {`@font-face{font-family:"rf-font-preview";src:url("${resumeFontPreviewUrl(
-                previewName,
-              )}");font-display:swap;}`}
-            </style>
-            <div
-              className="font-preview-sample"
-              style={{ fontFamily: '"rf-font-preview", "Microsoft YaHei", sans-serif' }}
-            >
-              <div className="font-preview-sample-title">张三 · 后端开发工程师</div>
-              <div className="font-preview-sample-meta">
-                2022.07 – 2024.09 ｜ 示例科技有限公司 ｜ 高级后端工程师
-              </div>
-              <p className="font-preview-sample-body">
-                负责核心交易链路的接口设计与性能优化，QPS 从 1,200 提升到 8,500； 主导 Python /
-                FastAPI 服务拆分，P99 延迟下降 42%。
-              </p>
-              <p className="font-preview-sample-body">
-                ABCDEFG abcdefg 0123456789 ！？、；：「」（）——·…
-              </p>
-            </div>
-            <Typography.Paragraph type="secondary" style={{ margin: "12px 0 0", fontSize: 12 }}>
-              预览只改变这段示例文字；点「设为当前」后，简历预览、导出 HTML 与 PDF 才会一起使用它。
-            </Typography.Paragraph>
-          </>
-        ) : null}
-      </Modal>
+      {/* 样张：只读弹窗，与内置字体那一行共用同一个组件（四行固定内容 + 设为当前）。
+          点字体名先看字形，确认后再切换——这是 2026-10-20 那两处交互调整的第二条。 */}
+      <FontSampleModal
+        name={previewName}
+        active={previewName !== null && previewName === activeName}
+        onActivate={() => {
+          if (previewName) void activate(previewName);
+        }}
+        onClose={() => setPreviewName(null)}
+      />
     </Card>
   );
 }

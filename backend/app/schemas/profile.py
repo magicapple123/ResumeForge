@@ -28,12 +28,12 @@ MAX_PROFILE_DETAIL_CHARS = 200_000
 MAX_PROFILE_SECTION_ITEMS = 200
 PROFILE_SECTION_KEYS = (
     "basic_info",
+    "educations",
     "experiences",
     "projects",
     "skills",
-    "educations",
-    "awards",
     "campus_experiences",
+    "awards",
     "summary",
 )
 def _encoded_char_limit(max_bytes: int) -> int:

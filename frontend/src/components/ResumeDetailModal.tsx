@@ -21,6 +21,7 @@ import type { ResumeContent, ResumeDetail, ResumeLayout } from "../types";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
 import { t } from "../i18n";
 import { bumpResumeList } from "../features/resume/resumeListEvents";
+import { setActiveWritingResume } from "../features/resume-writing/activeResume";
 import { useResumeRelayout } from "../features/resume/useResumeRelayout";
 import { useRichTextOverrides } from "../features/resume/useRichTextOverrides";
 import type { RichTextEditAdapter } from "./resume-preview/richText";
@@ -67,6 +68,19 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
    * `detail.content`、`setHtml` 与保存链路。
    */
   const overlays = useRichTextOverrides(detail?.content ?? null);
+
+  /**
+   * 把"正在看哪份简历"登记给全局右键菜单（写作增强的四个动作都要 `resume_id`）。
+   *
+   * 登记在**详情弹窗**这一层而不是编辑器面板：制作台、手动调整、只看预览三种形态下
+   * 用户都可能选中文字右键，而它们是同一个弹窗的三个子视图。关掉弹窗即注销，
+   * 免得在岗位页右键时冒出一个属于上一份简历的写作增强。
+   */
+  const activeResumeId = detail?.id ?? null;
+  useEffect(() => {
+    setActiveWritingResume(activeResumeId);
+    return () => setActiveWritingResume(null);
+  }, [activeResumeId]);
   /**
    * 预览用的加粗契约。**这里刻意不重渲染 html**：
    *
@@ -412,6 +426,8 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
             // 加粗也是"还没保存的改动"：不并进脏值，关制作台时会静默丢掉。
             richDirty={overlays.dirty}
             onDiscardRichText={overlays.clear}
+            // 中栏草稿也要叠上加粗再送预览：草稿里没有 overlay，不合并就会"改了字、加粗消失"。
+            mergeLive={overlays.merge}
             richEdit={richEdit}
             layoutStatus={layoutStatus}
             measure={measure}

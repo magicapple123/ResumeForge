@@ -12,13 +12,17 @@ from __future__ import annotations
 import io
 import re
 
+from app.schemas.profile import PROFILE_SECTION_KEYS
 from app.schemas.resume import ResumeContent
 from app.services.docx_exporter import build_resume_docx
 from app.services.exporter import export_markdown, render_html
+from app.services.profile.profile_service import get_or_create_profile
 from app.services.resume.resume_sections import (
     DEFAULT_SECTION_ORDER,
     PROFILE_SECTION_TO_RESUME,
+    default_section_order_config,
     normalized_section_order,
+    profile_order_to_section_order,
     profile_to_resume_order,
     resolved_section_order,
 )
@@ -28,7 +32,7 @@ from app.services.txt_exporter import export_txt
 # resume_sections.py 的 SECTION_LABELS 里定义，这里只负责"顺序"这一件事。
 TITLES = ("个人总结", "教育经历", "实习/工作经历", "校园经历", "项目经历", "专业技能", "荣誉奖项")
 
-# 挑一个与默认顺序差异最大的排列：默认是 总结 → 教育 → 实习 → 校园 → 项目 → 技能 → 奖项。
+# 挑一个与默认顺序差异最大的排列：默认是 教育 → 实习 → 项目 → 技能 → 校园 → 奖项 → 总结。
 CUSTOM_ORDER = [
     "projects",
     "experience",
@@ -77,21 +81,21 @@ def _assert_follows_order(texts: dict[str, str]) -> None:
         ], f"{name} 的分区顺序不对：{order_in_output}"
 
 
-def test_default_order_matches_the_templates_current_order():
-    """默认顺序必须等于重排前的写死顺序。
+def test_default_order_matches_the_product_decision():
+    """默认顺序 = 产品拍板的「教育优先」口径（2026-10）。
 
     这条是刻意的护栏：分区顺序是**有历史记录的产物**的呈现方式，改默认顺序等于把
-    用户已经导出过的简历悄悄换一个样子。要改它必须显式改这里并说清理由，
-    而不是「我的资料」那边改了默认顺序就顺手跟。
+    没有自己的 ``section_order`` 的简历换一个样子。要改它必须显式改这里并说清理由；
+    已保存简历读的是自己那条 ``format_config.section_order``，不受这里影响。
     """
     assert list(DEFAULT_SECTION_ORDER) == [
-        "summary",
         "education",
         "experience",
-        "campus_experience",
         "projects",
         "skills",
+        "campus_experience",
         "awards",
+        "summary",
     ]
 
 
@@ -100,11 +104,11 @@ def test_normalized_order_is_always_a_complete_permutation():
     assert normalized_section_order(["projects", "experience"]) == [
         "projects",
         "experience",
-        "summary",
         "education",
-        "campus_experience",
         "skills",
+        "campus_experience",
         "awards",
+        "summary",
     ]
     # 重复键只保留一次；未知键被丢掉而不是报错（它是版式配置的一部分，
     # 抛异常会让整份版式配置失效）。
@@ -113,8 +117,8 @@ def test_normalized_order_is_always_a_complete_permutation():
         "summary",
         "education",
         "experience",
-        "campus_experience",
         "skills",
+        "campus_experience",
         "awards",
     ]
     assert normalized_section_order(None) == list(DEFAULT_SECTION_ORDER)
@@ -154,20 +158,20 @@ def test_profile_order_is_translated_kept_and_completed():
         "experience",
         "summary",
         "education",
-        "campus_experience",
         "skills",
+        "campus_experience",
         "awards",
     ]
     # 已经排好的资料顺序原样保留。
     assert profile_to_resume_order(
         [
-            "summary",
             "educations",
             "experiences",
-            "campus_experiences",
             "projects",
             "skills",
+            "campus_experiences",
             "awards",
+            "summary",
         ]
     ) == list(DEFAULT_SECTION_ORDER)
 
@@ -185,6 +189,128 @@ def test_profile_order_falls_back_on_dirty_input():
     """脏输入一律回落到内置默认顺序，而不是抛异常：它是可随手改的 JSON 字段。"""
     for dirty in (None, "projects", 42, {"projects": 1}, ["unknown_key"], []):
         assert profile_to_resume_order(dirty) == list(DEFAULT_SECTION_ORDER), dirty
+
+
+# ===== 新建简历时"物化"的默认顺序（P0-5）=====
+# 卡片（「调整板块顺序」）与四个渲染器必须读同一份 `format_config.section_order`；靠前端 UI 的
+# 默认值临时生效会出现"卡片显示资料顺序、PDF 按内置默认排"的两套结果。落库之后只有一个来源。
+
+
+def test_profile_order_to_section_order_appends_missing_at_the_end():
+    """缺失的简历板块**补在末尾**，彼此相对顺序取内置默认。
+
+    为什么不补在"原地"：资料顺序是用户唯一表达过的偏好，翻译过来的那几项就是他心里的
+    前后关系；没被资料覆盖的板块他根本没表达过意见，把它们塞进已排好的队列中间，等于
+    替用户做了一次他没做过的决定。
+    """
+    order = profile_order_to_section_order(["basic_info", "projects", "unknown_key", "educations"])
+
+    assert order == [
+        "projects",
+        "education",
+        "experience",
+        "skills",
+        "campus_experience",
+        "awards",
+        "summary",
+    ]
+    # 与归一化同一口径：结果永远是七个键的完整排列。
+    assert sorted(order) == sorted(DEFAULT_SECTION_ORDER)
+
+
+def test_default_section_order_config_is_none_when_equal_to_default(db_session):
+    """资料顺序翻译后正好等于内置默认 → **不写键**（"没调过就不写"的口径）。"""
+    profile = get_or_create_profile(db_session)
+    profile.section_order = [
+        "basic_info",
+        "educations",
+        "experiences",
+        "projects",
+        "skills",
+        "campus_experiences",
+        "awards",
+        "summary",
+    ]
+    db_session.commit()
+
+    assert default_section_order_config(db_session) is None
+
+
+def test_default_section_order_config_is_none_for_a_never_saved_profile(db_session):
+    """从没在资料页排过顺序（数据库里还是空列表）→ 等于内置默认 → 不写键。"""
+    profile = get_or_create_profile(db_session)
+    profile.section_order = []
+    db_session.commit()
+
+    assert default_section_order_config(db_session) is None
+
+
+def test_default_section_order_config_materializes_profile_order(db_session):
+    """资料里把「项目经历」拖到最前 → 落库片段里项目在最前，其余照资料里的先后。"""
+    profile = get_or_create_profile(db_session)
+    profile.section_order = [
+        "basic_info",
+        "projects",
+        "summary",
+        "educations",
+        "experiences",
+        "skills",
+        "campus_experiences",
+        "awards",
+    ]
+    db_session.commit()
+
+    assert default_section_order_config(db_session) == {
+        "section_order": [
+            "projects",
+            # 资料里把「个人总结」放在了第二行：翻译结果照它走（用户表达过的偏好优先），
+            # 而不是被内置默认顺序（summary 在末位）"纠正"回去。
+            "summary",
+            "education",
+            "experience",
+            "skills",
+            "campus_experience",
+            "awards",
+        ]
+    }
+
+
+def test_a_saved_custom_order_is_only_rewritten_by_an_explicit_put(client):
+    """「只改默认值」的证据：读路径与 PATCH 都不动老数据；PUT 的语义是既有契约。
+
+    - GET：原样返回存的显式 JSON，**没有任何读时迁移或补写**；
+    - PATCH 一个无关字段：``section_order`` 原样保留；
+    - PUT 不带 ``section_order``：落回**默认值**——这是 ``PUT /api/profile`` 一直以来的
+      "整体替换"语义（``update_profile`` 的 docstring 写着"没传的字段落回默认值"），
+      不是这次改默认顺序引入的，也不会去改写任何**没被 PUT 过**的记录。
+    """
+    custom = ["basic_info", "skills", "awards"]
+    assert client.patch("/api/profile", json={"section_order": custom}).status_code == 200
+    # 校验器把缺的键按 ``PROFILE_SECTION_KEYS`` 补在后面，这就是"用户存的显式顺序"。
+    stored = client.get("/api/profile").json()["section_order"]
+    assert stored[:3] == ["basic_info", "skills", "awards"]
+    # 读两次结果一样：读路径不写库。
+    assert client.get("/api/profile").json()["section_order"] == stored
+
+    # 之后改一个与顺序无关的字段（PATCH）：顺序必须原样保留。
+    assert client.patch("/api/profile", json={"name": "李四"}).status_code == 200
+    assert client.get("/api/profile").json()["section_order"] == stored
+
+    # 模板清单接口下发的 ``profile_section_order`` 也仍按这份显式顺序翻译。
+    catalog = client.get("/api/resumes/templates").json()
+    assert catalog["profile_section_order"] == [
+        "skills",
+        "awards",
+        "education",
+        "experience",
+        "projects",
+        "campus_experience",
+        "summary",
+    ]
+
+    # PUT 的整体替换语义（既有契约）：不带 section_order 时落回**默认值**。
+    assert client.put("/api/profile", json={"name": "李四"}).status_code == 200
+    assert client.get("/api/profile").json()["section_order"] == list(PROFILE_SECTION_KEYS)
 
 
 def test_html_preview_follows_the_custom_order():

@@ -23,20 +23,17 @@ import { useCallback, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { ResumeContent, ResumeLayout } from "../../types";
 import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
+import { createResumeDraftStore } from "../../features/resume/resumeDraftContent";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
 import type { ExactPreviewOptions, ResumePreviewHandle } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
 import { t } from "../../i18n";
-import ResumeColorControls from "./ResumeColorControls";
-import ResumeMeasureControls from "./ResumeMeasureControls";
-import ResumeParamGroup from "./ResumeParamGroup";
-import ResumeSpacingControls from "./ResumeSpacingControls";
-import ResumeTemplateControls from "./ResumeTemplateControls";
 import ResumeWorkbenchActionBar from "./ResumeWorkbenchActionBar";
 import ResumeWorkbenchLiveCanvas, { type RichTextEditAdapter } from "./ResumeWorkbenchLiveCanvas";
 import ResumeWorkbenchEditorColumn from "./ResumeWorkbenchEditorColumn";
 import WorkbenchPanelsDrawer from "./WorkbenchPanelsDrawer";
+import WorkbenchParamsColumn from "./WorkbenchParamsColumn";
 import type { ResumeWorkbenchEditorHandle } from "./ResumeWorkbenchEditorColumn";
 import {
   useWorkbenchColumns,
@@ -121,6 +118,13 @@ interface Props {
   liveContent?: ResumeContent | null; // 右栏实时预览吃的正文（叠加了未保存的加粗）
   richDirty?: boolean; // 纸面加粗还没保存：参与脏值与关闭确认
   onDiscardRichText?: () => void; // 丢掉这些 overlay（取消修改 / 放弃并关闭）
+  /**
+   * 加粗 overlay 的合并函数（宿主的 `overlays.merge`）。
+   *
+   * 中栏改内容时草稿要先叠上加粗再送预览：不叠的话"在纸面上加了粗、又在编辑器里改了一句话"
+   * 会让加粗凭空消失（草稿里没有 overlay）。
+   */
+  mergeLive?: (content: ResumeContent | null) => ResumeContent | null;
 }
 
 export default function ResumeZoomModal({
@@ -151,18 +155,42 @@ export default function ResumeZoomModal({
   liveContent,
   richDirty,
   onDiscardRichText,
+  mergeLive,
 }: Props) {
   // 制作台有自己的预览实例：字号滑块要即时作用在**这一个** iframe 上（调用方给了 ref 就用它）。
   const fallbackPreviewRef = useRef<ResumePreviewHandle>(null);
   const workbenchPreviewRef = previewRef ?? fallbackPreviewRef;
   // 目录**只取一次**，四个分组共用（`useApi` 没有跨实例缓存，各取一次就是四个请求）。
   const { catalog } = useResumeTemplateCatalog();
+  /**
+   * 中栏 → 右栏的**单向**草稿通道（P0-7）。
+   *
+   * 在**这一层**创建、只往下传，**这一层自己不订阅**——订阅放在
+   * `ResumeWorkbenchLiveCanvas` 那个薄壳里，否则每键输入都会重渲染整个三栏弹窗。
+   * 用 `useState` 的惰性初始化（而不是 `useRef(...).current`）：ref 的值不允许在渲染期读取
+   * （`react-hooks/refs`），而这里就是要在渲染期把它传给子组件。惰性初始化同样只执行一次，
+   * 生命周期跟随弹窗实例：关掉再开是一份新的（不会带上次的残留草稿）。
+   */
+  const [draftStore] = useState(createResumeDraftStore);
   // 中栏**不再可折叠**（2026-10-23 用户口径："去掉右上角的收起内容栏按钮"）。理由不只是
   // 少一颗按钮：折叠会把中栏整个卸载，那份未保存的草稿只留在 sessionStorage 里，用户回来
   // 时看到的是"上次的改动不见了"。中栏是这一屏的主场，藏起来只会让人找不到它。
   // 中栏脏值同时上报给宿主（底部「手动调整」要用），这里再留一份，好让关闭前的那次
   // 判断（Esc / × / 遮罩）自己就能决定"要不要问"。
   const [editorDirty, setEditorDirty] = useState(false);
+  /**
+   * 「刚打开这份简历时」的版式快照：左栏每个参数右侧那颗 ↺ 恢复的就是它。
+   *
+   * 与"随模板"（删掉覆盖、回到模板默认）是**两件事**：用户要的是"我刚才调坏了，
+   * 退回我进来时看到的那个样子"。所以这里存的是一份完整 layout，且在每次打开时重取
+   * （保存后再打开，基线就是保存后的那一版）。
+   */
+  const [baseline, setBaseline] = useState<ResumeLayout | null>(layout ?? null);
+  const [prevOpenState, setPrevOpenState] = useState(open);
+  if (prevOpenState !== open) {
+    setPrevOpenState(open);
+    if (open) setBaseline(layout ?? null);
+  }
   // 保存中：顶部「保存修改」上 loading，同一时刻「取消修改」禁用（避免保存还没落库就先清掉）。
   const [editorSaving, setEditorSaving] = useState(false);
   // 顶部动作条上的两颗按钮靠这个句柄打到中栏的状态机上（表单实例、脏值、内联确认都在那一层）。
@@ -303,60 +331,17 @@ export default function ResumeZoomModal({
   };
 
   const paramsColumn = hasSettings ? (
-    <div className="resume-wb-col resume-wb-col-params">
-      <ResumeParamGroup title={t("workbench.group.layout")} storageKey="layout">
-        <ResumeTemplateControls
-          layout={layout as ResumeLayout}
-          resumeId={resumeId}
-          disabled={relayouting}
-          catalog={catalog}
-          // 制作台里「板块顺序」的默认值跟随「我的资料」（2026-10-23 用户口径）。
-          // 只在 `format_config.section_order` **没设过**时生效：设过自定义顺序的简历
-          // 仍然按它自己的顺序走，这条不会追溯改掉用户已经排好的版面。
-          preferProfileOrder
-          onChange={onApplyLayout as (next: ResumeLayout) => void}
-        />
-      </ResumeParamGroup>
-      <ResumeParamGroup title={t("workbench.group.measure")} storageKey="measure">
-        <ResumeMeasureControls
-          layout={layout as ResumeLayout}
-          disabled={relayouting}
-          catalog={catalog}
-          previewRef={workbenchPreviewRef}
-          hasPhoto={hasPhoto}
-          // 分边页边距**只在这里**出现：左栏有纵向空间，四条支路摊开不挤。
-          showMarginSides
-          // 制作台内**默认展开**（PRD P0-5）：分边控件是「页边距」这一项的解释，紧跟在它的
-          // 总滑杆之后；默认收起会让用户先点一次折叠标题才知道它存在。
-          // 另两个宿主（主预览、生成配置页）不传这个 prop，仍取缺省 false（见该组件头注释）。
-          defaultSidesOpen
-          onChange={onApplyLayout as (next: ResumeLayout) => void}
-        />
-      </ResumeParamGroup>
-      <ResumeParamGroup title={t("workbench.group.spacing")} storageKey="spacing">
-        <ResumeSpacingControls
-          layout={layout as ResumeLayout}
-          catalog={catalog}
-          disabled={relayouting}
-          previewRef={workbenchPreviewRef}
-          onChange={onApplyLayout as (next: ResumeLayout) => void}
-        />
-      </ResumeParamGroup>
-      <ResumeParamGroup title={t("workbench.group.appearance")} storageKey="appearance">
-        <ResumeColorControls
-          layout={layout as ResumeLayout}
-          catalog={catalog}
-          disabled={relayouting}
-          previewRef={workbenchPreviewRef}
-          onChange={onApplyLayout as (next: ResumeLayout) => void}
-        />
-      </ResumeParamGroup>
-      {/* 只在内容栏不在栅格里时显示（两栏 / 单栏）：告诉用户它去哪了，而不是让他找。
-          三栏时这句描述的是不存在的问题（`display: none` 也在管这件事，两处同源）。 */}
-      {tier !== "three" && editorEnabled ? (
-        <span className="resume-wb-narrow-hint">{t("workbench.narrow.editor")}</span>
-      ) : null}
-    </div>
+    <WorkbenchParamsColumn
+      layout={layout as ResumeLayout}
+      baseline={baseline ?? (layout as ResumeLayout)}
+      relayouting={relayouting}
+      catalog={catalog}
+      hasPhoto={hasPhoto}
+      previewRef={workbenchPreviewRef}
+      tier={tier}
+      editorEnabled={editorEnabled}
+      onChange={onApplyLayout as (next: ResumeLayout) => void}
+    />
   ) : null;
 
   /**
@@ -375,6 +360,8 @@ export default function ResumeZoomModal({
         onSave={onSaveContent as (next: ResumeContent) => Promise<void>}
         onDirtyChange={handleEditorDirty}
         onSavingChange={setEditorSaving}
+        // 只上行：中栏把草稿写进 store，右栏订阅它；`content` 永远是服务端那一份。
+        draftStore={draftStore}
         // 点右栏纸面上的字段 → 这一栏切标签页 + 滚到对应输入框并聚焦。
         pickTarget={pickTarget}
         // 底部不再有一对局部的保存/取消：整屏顶部那一对是**整体**的（内容 + 排版），
@@ -476,7 +463,10 @@ export default function ResumeZoomModal({
             // 勾上「草稿模式编辑」后，右栏纸面点哪里，中栏就跳到哪一栏的输入框。
             onPickField={editorEnabled ? pickFromPaper : undefined}
             // 实时预览：中栏一改右栏就重排；保存期间让路给宿主返回的 html。
+            // 优先级在画布里定：草稿（叠加加粗）→ 这里这一版（宿主已保存 / 已加粗）。
             content={liveContent ?? content ?? null}
+            draftStore={draftStore}
+            mergeLive={mergeLive}
             layout={layout}
             richEdit={richEdit}
             suspended={saving || editorSaving}

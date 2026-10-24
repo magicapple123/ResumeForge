@@ -83,7 +83,7 @@ describe("拖动激活期全部折叠成紧凑条（P3）", () => {
     // 折叠前：一张紧凑的都没有。
     expect(sectionElements().some((el) => el.classList.contains(COMPACT_CLASS))).toBe(false);
 
-    dragTo("projects", 410, 460);
+    dragTo("projects", 440, 490);
 
     const sections = sectionElements();
     expect(sections).toHaveLength(8);
@@ -93,7 +93,7 @@ describe("拖动激活期全部折叠成紧凑条（P3）", () => {
     // 被拖卡也一样折叠（不再是"只有它变小"）：它的高度就是紧凑条高度。
     expect(section("projects")?.getBoundingClientRect().height).toBe(COMPACT_HEIGHT_PX);
 
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 460, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 490, pointerId: 1 });
 
     for (const element of sectionElements()) {
       expect(element.classList.contains(COMPACT_CLASS)).toBe(false);
@@ -101,14 +101,14 @@ describe("拖动激活期全部折叠成紧凑条（P3）", () => {
     // 跟手位移一并清空（否则卡片会停在半路）。
     expect(section("projects")?.style.transform).toBe("");
     // 顺序保留拖动中的最终态。
-    expect(currentOrder()[3]).toBe("projects");
+    expect(currentOrder()[4]).toBe("projects");
   });
 
   it("跟手的是卡片本身：没有浮条、没有占位类，transform 随指针改变", () => {
     stubSectionRects({ compactHeight: COMPACT_HEIGHT_PX });
     render(<Harness />);
 
-    dragTo("projects", 410, 460);
+    dragTo("projects", 440, 490);
     const dragged = section("projects");
 
     // 浮条与"原位占位"都已删除：页面里不存在 .profile-section-drag-ghost，
@@ -118,52 +118,52 @@ describe("拖动激活期全部折叠成紧凑条（P3）", () => {
     // 被拖卡是可见的紧凑条，并带拖动置顶类（z-index + 合成层）。
     expect(dragged).toHaveClass(COMPACT_CLASS);
     expect(dragged).toHaveClass("is-dragging");
-    // 跟手模型未变：desiredTop 354 − 新布局上缘 356 = −2。
+    // 跟手模型未变：desiredTop 406 − 新布局上缘 408 = −2。
     expect(draggedTransform("projects")).toBe("translateY(-2px)");
 
     // 指针继续下行 10px（不足一档行程 48px，不换位）：卡片跟着走。
-    fireEvent.pointerMove(document, { clientX: 10, clientY: 470, pointerId: 1 });
-    expect(currentOrder()[3]).toBe("projects");
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 500, pointerId: 1 });
+    expect(currentOrder()[4]).toBe("projects");
     expect(draggedTransform("projects")).toBe("translateY(8px)");
     expect(ghostBar()).toBeNull();
 
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 470, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 500, pointerId: 1 });
   });
 
   it("紧凑布局下换位与 transform 都按 52px 计算", () => {
     stubSectionRects({ compactHeight: COMPACT_HEIGHT_PX });
     render(<Harness />);
 
-    // projects 折叠后在第 3 槽（200 + 2×52 = 304），指针从 410 拖到 460。
-    // 折叠 + 补偿后被拖卡上缘 304，指针按下点 410 已落在 52px 条外（410−304 = 106），
-    // 于是抓取偏移重设为 106：desiredTop = 460−106 = 354，行程 50 ≥ 48 → 推进一格。
-    dragTo("projects", 410, 460);
+    // projects 折叠后在第 4 槽（200 + 3×52 = 356），指针从 440 拖到 490。
+    // 折叠 + 补偿后被拖卡上缘 356，指针按下点 440 已落在 52px 条外（440−356 = 84），
+    // 于是抓取偏移重设为 84：desiredTop = 490−84 = 406，行程 50 ≥ 48 → 推进一格。
+    dragTo("projects", 440, 490);
 
-    expect(currentOrder()[3]).toBe("projects");
-    // 新布局上缘 = 200 + 3×52 = 356 → transform = 354 − 356 = −2。
+    expect(currentOrder()[4]).toBe("projects");
+    // 新布局上缘 = 200 + 4×52 = 408 → transform = 406 − 408 = −2。
     expect(draggedTransform("projects")).toBe("translateY(-2px)");
 
-    // 继续下拖 60px：行程再推一格，布局上缘 200 + 4×52 = 408 → transform = +6。
-    fireEvent.pointerMove(document, { clientX: 10, clientY: 520, pointerId: 1 });
-    expect(currentOrder()[4]).toBe("projects");
+    // 继续下拖 60px：行程再推一格，布局上缘 200 + 5×52 = 460 → transform = +6。
+    fireEvent.pointerMove(document, { clientX: 10, clientY: 550, pointerId: 1 });
+    expect(currentOrder()[5]).toBe("projects");
     expect(draggedTransform("projects")).toBe("translateY(6px)");
     // 换位会重写分区壳的 className（React），紧凑态必须还在。
     expect(section("projects")?.classList.contains(COMPACT_CLASS)).toBe(true);
 
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 520, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 550, pointerId: 1 });
   });
 
   it("未越过阈值时不会进入紧凑态", () => {
     stubSectionRects({ compactHeight: COMPACT_HEIGHT_PX });
     render(<Harness />);
 
-    pressWithoutActivating("projects", 410);
+    pressWithoutActivating("projects", 440);
 
     expect(sectionElements().some((el) => el.classList.contains(COMPACT_CLASS))).toBe(false);
     expect(document.querySelector(".profile-section-drag-ghost")).toBeNull();
     expect(section("projects")?.style.transform).toBe("");
 
-    fireEvent.pointerUp(document, { clientX: 10, clientY: 414, pointerId: 1 });
+    fireEvent.pointerUp(document, { clientX: 10, clientY: 444, pointerId: 1 });
     expect(sectionElements().some((el) => el.classList.contains(COMPACT_CLASS))).toBe(false);
   });
 
@@ -171,10 +171,10 @@ describe("拖动激活期全部折叠成紧凑条（P3）", () => {
     stubSectionRects({ compactHeight: COMPACT_HEIGHT_PX });
     render(<Harness />);
 
-    dragTo("projects", 410, 460);
+    dragTo("projects", 440, 490);
     expect(section("skills")?.classList.contains(COMPACT_CLASS)).toBe(true);
 
-    fireEvent.pointerCancel(document, { clientX: 10, clientY: 460, pointerId: 1 });
+    fireEvent.pointerCancel(document, { clientX: 10, clientY: 490, pointerId: 1 });
 
     expect(sectionElements().some((el) => el.classList.contains(COMPACT_CLASS))).toBe(false);
   });
@@ -201,12 +201,12 @@ describe("拖动激活期全部折叠成紧凑条（P3）", () => {
     try {
       render(<Harness />);
 
-      // 折叠前 projects 上缘 380（200 + 100 + 80），折叠后 304（200 + 2×52）：
-      // 文档整体上移 76px，scrollTop 反向补 76 → 400 − 76 = 324，卡片留在原处。
-      dragTo("projects", 410, 460);
-      expect(scrollTopValue).toBe(324);
+      // 折叠前 projects 上缘 410（200 + 100 + 30 + 80），折叠后 356（200 + 3×52）：
+      // 文档整体上移 54px，scrollTop 反向补 54 → 400 − 54 = 346，卡片留在原处。
+      dragTo("projects", 440, 490);
+      expect(scrollTopValue).toBe(346);
 
-      fireEvent.pointerUp(document, { clientX: 10, clientY: 460, pointerId: 1 });
+      fireEvent.pointerUp(document, { clientX: 10, clientY: 490, pointerId: 1 });
     } finally {
       Reflect.deleteProperty(document.documentElement, "scrollTop");
       Reflect.deleteProperty(document.documentElement, "scrollHeight");
@@ -244,32 +244,32 @@ describe("拖动激活期全部折叠成紧凑条（P3）", () => {
     const frames = captureAnimationFrames();
     try {
       render(<Harness />);
-      // 8px：越过阈值激活，但不足一档行程 —— 不换位，projects 仍在第 3 槽。
-      // 折叠后上缘 304，指针 410 落在 52px 条外 → 抓取偏移 106，transform = (418−106)−304 = 8。
-      dragTo("projects", 410, 418);
-      expect(currentOrder()[2]).toBe("projects");
+      // 8px：越过阈值激活，但不足一档行程 —— 不换位，projects 仍在第 4 槽。
+      // 折叠后上缘 356，指针 440 落在 52px 条外 → 抓取偏移 84，transform = (448−84)−356 = 8。
+      dragTo("projects", 440, 448);
+      expect(currentOrder()[3]).toBe("projects");
 
       const dragged = section("projects");
       expect(dragged).not.toBeNull();
       // 折叠期 scrollTop 被夹在 0（页顶），补偿无处可写。
       expect(scrollTopValue).toBe(0);
 
-      // 让被拖卡的 rect 像真机一样随 scrollTop 变化：折叠态上缘 304、展开态上缘 380。
+      // 让被拖卡的 rect 像真机一样随 scrollTop 变化：折叠态上缘 356、展开态上缘 410。
       Object.defineProperty(dragged as HTMLElement, "getBoundingClientRect", {
         configurable: true,
         value: () =>
           (dragged as HTMLElement).classList.contains(COMPACT_CLASS)
-            ? rectOf(304 - scrollTopValue, COMPACT_HEIGHT_PX)
-            : rectOf(380 - scrollTopValue, 60),
+            ? rectOf(356 - scrollTopValue, COMPACT_HEIGHT_PX)
+            : rectOf(410 - scrollTopValue, 60),
       });
 
-      // 松手：展开位移先由 compensateReleaseShift 收敛（beforeLayoutTop = 304 − 8 = 296，
-      // 首帧残差 380 − 296 = 84 → scrollTop 84，随后两帧残差 0 判定稳定）。
-      fireEvent.pointerUp(document, { clientX: 10, clientY: 418, pointerId: 1 });
-      // 再跑到 afterRestore 里的居中：84 + (380−84) − (400−60)/2 = 210。
+      // 松手：展开位移先由 compensateReleaseShift 收敛（beforeLayoutTop = 356 − 8 = 348，
+      // 首帧残差 410 − 348 = 62 → scrollTop 62，随后两帧残差 0 判定稳定）。
+      fireEvent.pointerUp(document, { clientX: 10, clientY: 448, pointerId: 1 });
+      // 再跑到 afterRestore 里的居中：62 + (410−62) − (400−60)/2 = 240。
       drainAnimationFrames(frames);
 
-      expect(scrollTopValue).toBe(210);
+      expect(scrollTopValue).toBe(240);
       // 语义断言：卡片（60px）在 400px 视口里垂直居中 —— 上缘 170、中线 200。
       const settled = (dragged as HTMLElement).getBoundingClientRect();
       expect(settled.top - 0).toBe((400 - settled.height) / 2);
@@ -287,7 +287,7 @@ describe("拖动激活期全部折叠成紧凑条（P3）", () => {
   it("拖动中途卸载：紧凑类与跟手位移随 DOM 一起消失（不留浮条）", () => {
     stubSectionRects({ compactHeight: COMPACT_HEIGHT_PX });
     const { unmount } = render(<Harness />);
-    dragTo("projects", 410, 460);
+    dragTo("projects", 440, 490);
     expect(section("projects")?.classList.contains(COMPACT_CLASS)).toBe(true);
     expect(section("projects")?.style.transform).not.toBe("");
     expect(ghostBar()).toBeNull();

@@ -263,19 +263,24 @@ class _ResumePDF(FPDF):
             self.set_fill_color(*self.accent)
             self.rect(self.frame_left, top, bar_w, title_height, style="F")
         elif style == "soft_box":
+            # **铺满整个列框**，不是只包住文字：模板里 `.section-title` 是 block 元素
+            # （`background` + `padding`），浏览器把它画成一条通栏色带。此前按
+            # `text_width` 画，短标题（「个人总结」四个字）只得到一小块色块，
+            # 草稿与精确预览因此"绿色背景分布不一样"（2026-10-24 用户截图）。
             self.set_fill_color(*self.accent_soft)
             self.rect(
                 self.frame_left,
                 top,
-                text_width + 2 * pad_x,
+                self.frame_width,
                 block_height,
                 style="F",
                 round_corners=True,
                 corner_radius=base * _PX_TO_MM * 0.4,
             )
         elif style == "accent_box":
+            # 同 `soft_box`：CSS 里它也是 block 级通栏底色，不能只包住文字。
             self.set_fill_color(*self.accent)
-            self.rect(self.frame_left, top, text_width + 2 * pad_x, block_height, style="F")
+            self.rect(self.frame_left, top, self.frame_width, block_height, style="F")
 
         if layout.section_title_align == "center":
             text_x = self.frame_left + max(0.0, (self.frame_width - text_width) / 2)

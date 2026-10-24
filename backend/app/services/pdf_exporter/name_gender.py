@@ -76,18 +76,33 @@ def draw_name_gender(
     width: float,
     name_size: float,
     extra_size: float,
+    align: str = "left",
 ) -> None:
     """按 `plan` 画"姓名（+ 性别）"块：姓名用姓名字号/粗体/强调色，性别用 extra 口径。
+
+    ``align`` 来自模板 `.header` 的 `text-align`（见 `layout.ResumeLayout.header_align`）：
+    ``"center"`` 时整块（姓名 + 性别）在 ``width`` 内水平居中，``"left"`` 时与原行为
+    **逐字节一致**（其余 7 个模板读到的就是它）。
+
+    **居中为什么不用 `cell(align="C")`**：同行分支里姓名与性别是**两个** cell，各自按自己
+    的字号画，性别那一格还要做基线补偿（见 `_CELL_BASELINE_FONT_FACTOR`）。把对齐交给
+    cell 会让"两格的宽度之和"由 fpdf2 各自居中算，姓名与性别之间凭空多出半格空白；
+    所以这里自己把起笔 x 算出来，两个 cell 的相对位置与左对齐时**完全相同**。
 
     画完把光标放回块左下角（x 回到起笔处、y 前进 ``plan.height``），与 multi_cell 的
     收尾行为一致，调用方不必知道这块是几个 cell 画出来的。
     """
     left = pdf.get_x()
     top = pdf.get_y()
+    centered = align == "center"
     pdf.set_text_color(*pdf.accent)
     if plan.same_line:
         pdf.set_font(FONT_FAMILY, "B", name_size * _PX_TO_PT)
         name_width = pdf.get_string_width(name)
+        if centered:
+            # 整块宽度 = 姓名 + 性别（含前导空格）；超出可用宽度时不左移（max(0, ...)）。
+            block_width = name_width + plan.gender_width
+            pdf.set_x(left + max(0.0, (width - block_width) / 2))
         pdf.cell(name_width, plan.height, name, new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_font(FONT_FAMILY, "", extra_size * _PX_TO_PT)
         pdf.set_text_color(*pdf.muted_text)
@@ -102,12 +117,15 @@ def draw_name_gender(
             new_y=YPos.TOP,
         )
     else:
+        # 折行分支：两段各是一次 `multi_cell`，对齐交给它自己的 `align`——这里没有跨字号的
+        # 相对定位，用 `"C"` 才是与草稿 `text-align: center` 等价的行为。
+        line_align = "C" if centered else "L"
         pdf.set_font(FONT_FAMILY, "B", name_size * _PX_TO_PT)
         pdf.multi_cell(
             width,
             pdf.line_advance(name_size),
             name,
-            align="L",
+            align=line_align,
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
         )
@@ -119,7 +137,7 @@ def draw_name_gender(
                 width,
                 pdf.line_advance(extra_size),
                 plan.gender_text,
-                align="L",
+                align=line_align,
                 new_x=XPos.LMARGIN,
                 new_y=YPos.NEXT,
             )

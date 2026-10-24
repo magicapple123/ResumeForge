@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历详情预览：**「写作增强」页签必须真的够得着**。
+ * 简历详情预览：**编辑器内容页签必须真的够得着**。
  *
- * 这条用例防的是一类很隐蔽的失效：`ResumeEditorModal` 的「写作增强」页签只在拿到
- * `resumeId` 时才挂载，而后端、面板组件、接口、README 与使用指南早就都齐了——
- * 唯独**调用点没有把简历 id 传进去**。于是功能"存在"却在界面上点不到，用户问到
- * 助手时只能得到"暂不可达"。组件级测试抓不到这种断链，必须在**调用点**这一层钉住。
+ * 这条用例防的是一类很隐蔽的失效：`ResumeEditorModal` 的内容页签要由调用点把
+ * 简历 id / 详情传进去才挂得出来，而组件级测试抓不到这种断链——功能"存在"却在界面上
+ * 点不到，用户问到助手时只能得到"暂不可达"。所以必须在**调用点**这一层钉住。
+ *
+ * 2026-10-24：原「写作增强」页签搬到右键菜单（`features/ai-polish/AiPolishLayer`），
+ * 页签列表少一项；这里同时断言它**没有**作为空壳页签留下来。
  */
 import { App as AntdApp } from "antd";
+import { t } from "../../i18n";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 // @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
 import { readFileSync } from "node:fs";
@@ -187,13 +190,15 @@ beforeEach(() => {
 });
 
 describe("ResumeDetailPreview 的「手动调整」", () => {
-  it("打开整份编辑器后能拿到「写作增强」页签", async () => {
+  it("打开整份编辑器后能看到内容页签（写作增强已搬到右键，不再是页签）", async () => {
     renderPreview();
 
     fireEvent.click(await screen.findByRole("button", { name: /手动调整/ }));
 
-    // 页签出现 = 调用点确实把简历 id 传给了编辑弹窗；没传的话这里会一直找不到。
-    expect(await screen.findByText("写作增强")).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: t("editor.tab.basic") })).toBeInTheDocument();
+    // 入口搬走了就别留一个空壳页签：写作增强的入口在右键菜单里
+    // （见 `features/ai-polish/AiPolishLayer.test.tsx` 的那两条）。
+    expect(screen.queryByText(t("editor.tab.writing"))).toBeNull();
   });
 });
 
@@ -388,7 +393,7 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /手动调整/ }));
 
-    expect(await screen.findByText("写作增强")).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: t("editor.tab.basic") })).toBeInTheDocument();
   });
 
   it("中栏有未保存内容时，底部「手动调整」被禁用（设计 §9 Q6）", async () => {

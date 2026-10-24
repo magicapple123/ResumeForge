@@ -31,13 +31,13 @@ needs_font = pytest.mark.skipif(not font_available(), reason="本机没有可用
 
 # 分区键顺序 = `resume_sections.DEFAULT_SECTION_ORDER`，与 `SECTION_TITLES` 的排列一致。
 SECTION_KEYS: tuple[str, ...] = (
-    "summary",
     "education",
     "experience",
-    "campus_experience",
     "projects",
     "skills",
+    "campus_experience",
     "awards",
+    "summary",
 )
 ZH_TITLES: tuple[str, ...] = tuple(SECTION_TITLES["zh-CN"][key] for key in SECTION_KEYS)
 EN_TITLES: tuple[str, ...] = tuple(SECTION_TITLES["en-US"][key] for key in SECTION_KEYS)
